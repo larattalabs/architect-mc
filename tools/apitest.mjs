@@ -11,6 +11,10 @@
 //                                       backend, started by the launcher): structured, an agent job with apitest's tools,
 //                                       a tool call across a paused game, cancel, a budget stop, blobs from Java read by a
 //                                       job, a resume after the sidecar is killed mid tool call, events on the server thread
+//   node tools/apitest.mjs sets         phase 4b without Claude (--sim): a bible, a group of 3 with an anchor wave and a sidecar
+//                                       restart mid-group (itemKey + ext round trip), the estimate, a soft-budget pause / extend /
+//                                       resume, the group-wide usage hold, a re-skin, an open type with a profile, and
+//                                       Sites.survival() / WORLD_MODE_CHANGED in a fresh creative and a fresh survival world
 //
 // Evidence goes to artifacts/apitest/<step>.json (APITEST_OUT overrides), screenshots to the client's ARCHITECT_SHOTS_DIR.
 
@@ -24,7 +28,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = process.env.APITEST_OUT ? path.resolve(process.env.APITEST_OUT) : path.join(root, 'artifacts', 'apitest');
 fs.mkdirSync(OUT, { recursive: true });
 const OWNER = 'apitest:village/1';
-const API_VERSION = '1.1.0';
+const API_VERSION = '1.2.0';
 // the dev client's game dir (tools/run-apitest-client.sh runs it in mod/)
 const GAME_DIR = process.env.APITEST_GAME_DIR ? path.resolve(process.env.APITEST_GAME_DIR) : path.join(root, 'mod', 'run');
 const SIDECAR_DATA = path.join(GAME_DIR, 'architect', 'sidecar-data');
@@ -485,6 +489,200 @@ switch (step) {
     results.events = jobEvents;
     break;
   }
+  case 'sets': {
+    // phase 4b through the API (docs/CONTRACT.md "Phase 4b gate" and "4b review folded in", the Java half), against the real
+    // sidecar's sim backend (tools/run-apitest-client.sh --sim; no Claude): a bible, a group of 3 with an anchor wave surviving a
+    // sidecar restart, the estimate, a soft-budget pause / extend / resume, the group-wide usage hold, a re-skin, an open type,
+    // and the survival toggle in a creative and a survival world. The sim's steps are slowed and priced through
+    // <data>/config.json (restored after).
+    const cfgFile = path.join(SIDECAR_DATA, 'config.json');
+    const oldCfg = fs.existsSync(cfgFile) ? fs.readFileSync(cfgFile, 'utf8') : null;
+    const b64 = (o) => Buffer.from(typeof o === 'string' ? o : JSON.stringify(o)).toString('base64');
+    const tag = Date.now().toString(36);
+    const restart = async () => {
+      await call('dev.launcher.restart');
+      for (let i = 0; i < 100; i++) {
+        await sleep(300);
+        if ((await call('dev.sidecar.state')).link === 'synced' && (await call('dev.launcher.state')).state === 'running') return;
+      }
+      throw new Error('the helper did not come back');
+    };
+    const waitWorld = async () => {
+      for (let i = 0; i < 300; i++) {
+        await sleep(500);
+        const s = await call('dev.state').catch(() => null);
+        if (s?.inWorld && s.ready) return s;
+      }
+      throw new Error('the world did not load');
+    };
+    const groupDone = (id, ms = 180_000) => waitEvent((e) => e.event === 'GROUP_DONE' && e.id === id, ms);
+    const SIZE = [21, 30, 21];
+    fs.writeFileSync(cfgFile, JSON.stringify({ ...(oldCfg ? JSON.parse(oldCfg) : {}), simStepMs: 1200, simDesignUsd: 0.1, simLimitMs: 8000, designConcurrency: 3 }));
+    try {
+      await restart();
+      await api('clear');
+      const v = await api('version');
+      check(v.version === API_VERSION && ['bibles', 'designGroups', 'namedParts', 'openTypes', 'estimates', 'reskin', 'survivalInfo'].every((f) => v.features.includes(f)),
+        `VERSION ${v.version}, 4b features: ${v.features.filter((f) => !['sites', 'events', 'designs', 'library', 'survey'].includes(f)).join(', ')}`, v);
+
+      // ---- a bible from a prompt (sim): BIBLE_DONE with its sheet
+      const bj = await result(await api(`bible ${tag} ${b64({ prompt: 'ash-grey mining hamlet under a red sky', name: `Ashfall ${tag}` })}`), 30_000);
+      check(/^b\d+$/.test(bj.id ?? '') && /^bib_/.test(bj.bibleId ?? '') && bj._thread === 'Server thread',
+        `Bibles.request -> job ${bj.id} for ${bj.bibleId} v${bj.version} (${bj.status}, on ${bj._thread})`, bj);
+      const bDone = await waitEvent((e) => e.event === 'BIBLE_DONE' && e.id === bj.id, 180_000);
+      check(bDone?.status === 'DONE' && bDone.bible?.sheetExists === true && bDone.serverThread === 'Server thread',
+        `BIBLE_DONE ${bj.id}: ${bDone?.step}; sheet ${bDone?.bible?.sheetPath}`, bDone);
+      const bUpd = (await events()).filter((e) => e.event === 'BIBLE_UPDATED' && e.id === bj.id);
+      check(bUpd.length >= 2, `BIBLE_UPDATED ${bUpd.length}x (${[...new Set(bUpd.map((e) => e.status))].join(' > ')})`);
+      const bible = await api(`bibleget ${bj.bibleId}`);
+      check(bible?.sheetExists && bible.version === 1 && Object.keys(bible.roles ?? {}).length >= 8 && bible.components.length >= 5 && bible.owner === OWNER
+        && bible.ext?.['apitest:bible'] === tag && bible.proseChars > 0,
+        `Bibles.get(${bj.bibleId}): v${bible?.version}, ${Object.keys(bible?.roles ?? {}).length} roles, ${bible?.components?.length} components, owner ${bible?.owner}, prose ${bible?.proseChars} chars`, bible);
+      const mine = await api(`bibles ${OWNER}`);
+      const allB = await api('bibles -');
+      check(mine.some((b) => b.id === bj.bibleId) && allB.some((b) => b.builtin && b.id === 'oak') && !mine.some((b) => b.builtin),
+        `Bibles.list(owner): ${mine.length} of apitest; list(null): ${allB.length} (${allB.filter((b) => b.builtin).length} built in)`);
+      const bEst = await result(await api('bibleestimate'), 20_000);
+      check(bEst.usdHigh >= bEst.usdLow && bEst.usdLow > 0 && bEst.minutesHigh > 0, `Bibles.estimate: $${bEst.usdLow}-${bEst.usdHigh}, ${bEst.minutesLow}-${bEst.minutesHigh} min (${bEst.basis})`, bEst);
+
+      // ---- a group of 3 (an anchor tower, then a cabin and a tavern) with that bible: the estimate first
+      const set3 = {
+        name: `Set ${tag}`, bible: bj.bibleId, concurrency: 3, ext: { 'apitest:set': tag },
+        items: [
+          { itemKey: 'lot/tower', anchor: true, role: 'landmark', type: 'tower', style: 'ashen', name: `Tower ${tag}`, size: SIZE, ext: { 'apitest:lot': 'T' } },
+          { itemKey: 'lot/cabin', type: 'cabin', style: 'ashen', name: `Cabin ${tag}`, size: SIZE, ext: { 'apitest:lot': 'C', 'apitest:n': 2 } },
+          { itemKey: 'lot/tavern', type: 'tavern', style: 'ashen', name: `Tavern ${tag}`, size: SIZE, ext: { 'apitest:lot': 'V' } },
+        ],
+      };
+      const est = await result(await api(`estimate ${b64(set3)}`), 20_000);
+      check(est.usdLow > 0 && est.usdHigh >= est.usdLow && est.minutesLow > 0 && est.minutesHigh >= est.minutesLow && typeof est.basis === 'string' && est._thread === 'Server thread',
+        `Designs.estimate(group of 3) before submit: $${est.usdLow}-${est.usdHigh}, ${est.minutesLow}-${est.minutesHigh} min (${est.basis})`, est);
+      const est1 = await result(await api(`estimate1 ${b64({ type: 'cabin', style: 'rustic', size: SIZE })}`), 20_000);
+      check(est1.usdLow > 0 && est1.usdHigh <= est.usdHigh, `Designs.estimate(one design): $${est1.usdLow}-${est1.usdHigh}`, est1);
+      const g1 = await result(await api(`group g1 ${b64(set3)}`), 30_000);
+      check(/^g\d+$/.test(g1.value ?? '') && g1._thread === 'Server thread', `requestGroup -> ${g1.value} (on ${g1._thread})`, g1);
+      const gid = g1.value;
+      // kill the sidecar while wave 1 runs (after the anchor), the launcher restarts it, the group carries on
+      let mid = null;
+      for (let i = 0; i < 300; i++) {
+        mid = await api(`groupget ${gid}`);
+        if (mid?.items?.some((it) => it.wave === 1 && ['DESIGNING', 'CHECKING', 'RENDERING'].includes(it.status))) break;
+        await sleep(200);
+      }
+      const anchorBefore = mid?.items?.find((it) => it.itemKey === 'lot/tower');
+      const pid = (await call('dev.launcher.state')).pid;
+      process.kill(pid, 'SIGKILL');
+      for (let i = 0, l = 'synced'; i < 50 && l === 'synced'; i++) {
+        await sleep(200);
+        l = (await call('dev.sidecar.state')).link;
+      }
+      await restart();
+      const after = await call('dev.launcher.state');
+      check(anchorBefore?.status === 'DONE' && after.pid !== pid, `killed the sidecar (pid ${pid}) while wave 1 ran (the anchor ${anchorBefore?.status}); restarted as pid ${after.pid}`, mid);
+      const gDone = await groupDone(gid);
+      const gv = await api(`groupget ${gid}`);
+      const byKey = Object.fromEntries((gv?.items ?? []).map((it) => [it.itemKey, it]));
+      check(gDone?.status === 'DONE' && gDone.done === 3 && gDone.serverThread === 'Server thread', `GROUP_DONE ${gid}: ${gDone?.status}, ${gDone?.done} done, $${gDone?.cost?.usd}`, gDone);
+      check(byKey['lot/tower']?.ext?.['apitest:lot'] === 'T' && byKey['lot/cabin']?.ext?.['apitest:n'] === 2 && byKey['lot/tavern']?.ext?.['apitest:lot'] === 'V'
+        && Object.values(byKey).every((it) => it.entryId && it.status === 'DONE'), `group(${gid}) items by itemKey, ext round trip across the restart: ${Object.keys(byKey).join(', ')}`, gv);
+      check(byKey['lot/tower']?.wave === 0 && byKey['lot/cabin']?.wave === 1 && byKey['lot/tower']?.role === 'landmark' && byKey['lot/cabin']?.role === 'ordinary',
+        `waves: tower ${byKey['lot/tower']?.wave} (landmark, ${byKey['lot/tower']?.model}), cabin ${byKey['lot/cabin']?.wave}, tavern ${byKey['lot/tavern']?.wave}`);
+      check(gDone?.entriesLoaded?.length === 3, `the 3 entries are loaded when GROUP_DONE fires (${gDone?.entriesLoaded?.join(', ')})`);
+      const agg = Math.round(gv.items.reduce((s, it) => s + it.cost.usd, 0) * 1e6) / 1e6;
+      check(Math.abs(gv.cost.usd - agg) < 1e-6 && gv.cost.usd > 0, `aggregate cost $${gv.cost.usd} = the items' sum`);
+      const entries = [];
+      for (const it of gv.items) entries.push(await api(`entry ${it.entryId}`));
+      check(entries.every((e) => e?.bible === `${bj.bibleId}@1` && e.group === gid && Object.keys(e.parts ?? {}).length >= 2) && entries.map((e) => e.groupItem).sort().join() === 'lot/cabin,lot/tavern,lot/tower',
+        `entries carry bible, group, groupItem and parts: ${entries.map((e) => `${e?.id} [${Object.keys(e?.parts ?? {}).join('/')}]`).join(', ')}`, entries);
+      const evAll = await events();
+      const dd = {};
+      for (const e of evAll.filter((x) => x.event === 'DESIGN_DONE')) dd[e.id] = (dd[e.id] ?? 0) + 1;
+      check(gv.items.every((it) => dd[it.designId] === 1) && evAll.filter((e) => e.event === 'GROUP_DONE' && e.id === gid).length === 1,
+        `DESIGN_DONE once per item (${gv.items.map((it) => `${it.designId}:${dd[it.designId]}`).join(', ')}), GROUP_DONE once`);
+      const anchorDoneAt = evAll.find((e) => e.event === 'DESIGN_DONE' && e.id === byKey['lot/tower'].designId)?.t ?? Infinity;
+      const wave1Start = Math.min(...evAll.filter((e) => e.event === 'DESIGN_UPDATED' && [byKey['lot/cabin'].designId, byKey['lot/tavern'].designId].includes(e.id) && e.status === 'DESIGNING').map((e) => e.t));
+      check(anchorDoneAt <= wave1Start, `anchor first: the tower was done ${wave1Start - anchorDoneAt} ms before wave 1 started designing`);
+      const gList = await api(`groups ${OWNER}`);
+      check(gList.includes(gid), `Designs.listGroups(owner) has ${gid}`);
+
+      // ---- a soft-budget pause, extend, resume: $0.1 per sim step, 3 steps a design; budget $0.35 -> paused at $0.30 (80% = $0.28)
+      const setB = { name: `Budget ${tag}`, bible: 'oak', concurrency: 1, budgetUsd: 0.35, items: [
+        { itemKey: 'b1', type: 'cabin', style: 'rustic', size: SIZE }, { itemKey: 'b2', type: 'cabin', style: 'rustic', size: SIZE }] };
+      const gb = (await result(await api(`group gb ${b64(setB)}`), 30_000)).value;
+      const paused = await waitEvent((e) => e.event === 'GROUP_UPDATED' && e.id === gb && e.status === 'PAUSED_BUDGET', 90_000);
+      check(!!paused && /soft budget/.test(paused.reason ?? '') && paused.items.find((i) => i.itemKey === 'b2')?.status === 'QUEUED',
+        `soft budget: ${gb} PAUSED_BUDGET at $${paused?.cost?.usd} ("${paused?.reason}"), b2 still queued`, paused);
+      const ext = await result(await api(`groupextend ${gb} 1.0`), 20_000);
+      await sleep(1500);
+      const stillPaused = await api(`groupget ${gb}`);
+      check(ext.value === true && stillPaused.status === 'PAUSED_BUDGET' && stillPaused.budgetUsd === 1, `extendGroup to $1.00: still paused (${stillPaused.status}), budget $${stillPaused.budgetUsd}`);
+      const res = await result(await api(`groupresume ${gb}`), 20_000);
+      const gbDone = await groupDone(gb, 90_000);
+      check(res.value === true && gbDone?.status === 'DONE' && gbDone.done === 2, `resumeGroup: ${gb} ${gbDone?.status} with ${gbDone?.done} done, $${gbDone?.cost?.usd}`, gbDone);
+
+      // ---- the group-wide usage hold: one item hits the (sim) usage limit, every item holds, all resume together
+      const setH = { name: `Hold ${tag}`, bible: 'oak', concurrency: 3, items: [
+        { itemKey: 'h1', type: 'cabin', style: 'rustic', size: SIZE, notes: 'sim:usage_limit' },
+        { itemKey: 'h2', type: 'cabin', style: 'rustic', size: SIZE }, { itemKey: 'h3', type: 'cabin', style: 'rustic', size: SIZE }] };
+      const gh = (await result(await api(`group gh ${b64(setH)}`), 30_000)).value;
+      const held = await waitEvent((e) => e.event === 'GROUP_UPDATED' && e.id === gh && e.status === 'HELD_USAGE', 60_000);
+      check(!!held && held.usageLimitUntil > Date.now() - 60_000 && held.items.every((i) => ['QUEUED', 'DESIGNING'].includes(i.status) && i.status !== 'DONE'),
+        `usage hold: ${gh} HELD_USAGE until ${held ? new Date(held.usageLimitUntil).toISOString() : '?'}; items ${held?.items?.map((i) => `${i.itemKey}:${i.status}`).join(' ')}`, held);
+      const ghDone = await groupDone(gh, 120_000);
+      const ghEv = (await events()).filter((e) => e.event === 'DESIGN_DONE' && ghDone?.items?.some((i) => i.designId === e.id));
+      const spread = ghEv.length ? Math.max(...ghEv.map((e) => e.t)) - Math.min(...ghEv.map((e) => e.t)) : -1;
+      check(ghDone?.status === 'DONE' && ghDone.done === 3 && ghEv.every((e) => e.t >= held.usageLimitUntil - 500),
+        `all 3 resumed after the reset and finished (${ghDone?.status}; the DONEs within ${spread} ms, all after the reset)`, ghDone);
+
+      // ---- re-skin the group's collection with a built-in bible: one future, RESKIN_DONE with the new entries
+      const rk = await result(await api(`reskin r1 dark group ${gid}`), 120_000);
+      const rkEv = await waitEvent((e) => e.event === 'RESKIN_DONE' && e.id === rk.id, 30_000);
+      check(rk.status === 'DONE' && rk.entries?.length === 3 && rk.completedOn === 'Server thread' && rk.loaded?.length === 3 && rk.loaded.every((e) => e.bible === 'dark@1' && e.variantOf),
+        `reskinCollection(dark, group ${gid}) -> ${rk.id}: ${rk.entries?.join(', ')} (bible ${rk.loaded?.map((e) => e.bible).join('/')})`, rk);
+      check(rkEv?.entriesLoaded?.length === 3 && (await events()).filter((e) => e.event === 'RESKIN_DONE' && e.id === rk.id).length === 1,
+        `RESKIN_DONE once, entries loaded (${rkEv?.entriesLoaded?.join(', ')})`, rkEv);
+      const rv = await result(await api(`reskinvariant ${byKey['lot/cabin'].entryId} cherry`), 60_000);
+      check(rv.bible === 'cherry@1' && rv.variantOf === byKey['lot/cabin'].entryId, `makeVariant(..., bible cherry): ${rv.id} (${rv.bible})`, rv);
+
+      // ---- an open type with a profile
+      const ot = await result(await api(`opentype o1 ${b64({ type: 'hellish_lair', style: 'spiky', name: `Lair ${tag}`, size: SIZE, profile: ['door', 'lit', 'no_floating'], bible: bj.bibleId })}`), 30_000);
+      const otDone = await waitEvent((e) => e.event === 'DESIGN_DONE' && e.id === ot.value, 120_000);
+      const otEntry = otDone?.entryId ? await api(`entry ${otDone.entryId}`) : null;
+      check(otDone?.status === 'DONE' && otEntry?.type === 'hellish_lair' && otEntry.bible === `${bj.bibleId}@1`,
+        `open type: ${ot.value} -> ${otEntry?.id} type ${otEntry?.type}, profile ${JSON.stringify(otDone?.request?.profile)}`, { otDone, otEntry });
+
+      // ---- Sites.survival() and WORLD_MODE_CHANGED: the toggle in this world, then a fresh creative and a fresh survival world
+      const s0 = await api('survival');
+      const mark = (await events()).length;
+      await cmd(`/architect survival ${s0.enabled ? 'off' : 'on'}`);
+      await cmd(`/architect survival ${s0.enabled ? 'on' : 'off'}`);
+      await sleep(500);
+      const wm = (await api(`events ${mark}`)).filter((e) => e.event === 'WORLD_MODE_CHANGED');
+      check(wm.length === 2 && wm[0].enabled === !s0.enabled && wm[1].enabled === s0.enabled && wm.every((e) => e.serverThread === 'Server thread') && s0.mayToggleNull === false,
+        `toggled twice in ${s0.world} (${s0.gameType}): WORLD_MODE_CHANGED ${wm.map((e) => e.enabled).join(' > ')}; mayToggle(player) ${s0.mayTogglePlayer}, mayToggle(null) ${s0.mayToggleNull}`, { s0, wm });
+      for (const [mode, expect] of [['creative', false], ['survival', true]]) {
+        const name = `API Sets ${mode} ${tag}`;
+        await api('clear');
+        await call('dev.world.leave');
+        await call('dev.world.open', { name, mode, preset: 'flat', cheats: true });
+        await waitWorld();
+        await sleep(1000);
+        const first = (await events()).filter((e) => e.event === 'WORLD_MODE_CHANGED');
+        const s = await api('survival');
+        check(s.world === name && s.gameType === mode && s.enabled === expect && first.length >= 1 && first[first.length - 1].enabled === expect,
+          `a fresh ${mode} world: Sites.survival() enabled ${s.enabled}, ${s.blocksPerTick} blocks/tick, mayToggle(player) ${s.mayTogglePlayer}; WORLD_MODE_CHANGED at the first load (${first.map((e) => e.enabled).join(',')})`, { s, first });
+      }
+      await call('dev.world.leave');
+      await call('dev.world.open', {});
+      await waitWorld();
+    } finally {
+      if (oldCfg === null) fs.rmSync(cfgFile, { force: true });
+      else fs.writeFileSync(cfgFile, oldCfg);
+      await restart().catch((e) => console.log('restart:', e.message));
+    }
+    results.events = (await events()).filter((e) => !e.event.startsWith('SITE_'));
+    break;
+  }
   case 'catchup': {
     // designs and variants that finish while no world is loaded fire DESIGN_DONE / VARIANT_DONE when one loads (sim sidecar:
     // its steps slowed to 1.5 s through <data>/config.json and a helper restart, so the design outlasts leaving the world)
@@ -585,7 +783,7 @@ switch (step) {
     break;
   }
   default:
-    console.error('usage: node tools/apitest.mjs survival|jobs|catchup|preview');
+    console.error('usage: node tools/apitest.mjs survival|jobs|catchup|sets|preview');
     process.exit(2);
 }
 
