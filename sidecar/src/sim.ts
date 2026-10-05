@@ -90,7 +90,10 @@ export class SimDesigner implements Designer {
     return this.runJob(id, r)
       .then((): RunOutcome => 'finished')
       .catch((e): RunOutcome => {
-        if (e instanceof Limited) return 'requeue';
+        if (e instanceof Limited) {
+          this.sc.designStep(id, 'queued', 'usage limit (simulated): waiting for the reset');
+          return 'requeue';
+        }
         if (e instanceof Cancelled) return this.stopped ? 'stopped' : 'finished';
         this.sc.designFailed(id, (e as Error).message);
         return 'finished';
