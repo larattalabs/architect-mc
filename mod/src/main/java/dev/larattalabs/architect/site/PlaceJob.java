@@ -281,6 +281,16 @@ final class PlaceJob implements Placement.Job {
 
 	@Override
 	public boolean step(MinecraftServer server, long deadline) {
+		int p0 = phase;
+		long t0 = System.nanoTime();
+		boolean r = step0(server, deadline);
+		if (System.getenv("ARCHITECT_TRACE_JOBS") != null) {
+			dev.larattalabs.architect.Architect.LOGGER.info("TRACE tick {} {} phase {} -> {} {} ms{}", server.getTickCount(), siteId, p0, phase, (System.nanoTime() - t0) / 1e6, r ? " done" : "");
+		}
+		return r;
+	}
+
+	private boolean step0(MinecraftServer server, long deadline) {
 		ServerLevel level = Sites.levelOf(server, dimension);
 		if (level == null) {
 			broken = dimension + " is not loaded";

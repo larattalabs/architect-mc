@@ -544,6 +544,14 @@ public final class Batches {
 
 	/** Checks an item and starts it, makes it wait, or fails it. */
 	private static void tryStart(MinecraftServer server, QBatch b, QItem i) {
+		long t0 = System.nanoTime();
+		tryStart0(server, b, i);
+		if (System.getenv("ARCHITECT_TRACE_JOBS") != null) {
+			Architect.LOGGER.info("TRACE tick {} tryStart {} {} ms", server.getTickCount(), i.key, (System.nanoTime() - t0) / 1e6);
+		}
+	}
+
+	private static void tryStart0(MinecraftServer server, QBatch b, QItem i) {
 		if (!"building".equals(i.itemKind)) {
 			tryStartInfra(server, b, i);
 			return;
