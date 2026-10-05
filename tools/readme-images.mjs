@@ -19,19 +19,26 @@ const out = path.join(repo, 'docs', 'img', 'readme');
 
 // [output jpg, raw png, width, crop? (WxH+X+Y in raw pixels, before the resize)]
 export const IMAGES = [
-  ['hero.jpg', 'hero5.png', 1600],
+  ['hero.jpg', 'hero_p3.png', 1600], // retaken: the Log Cabin was hidden in hero5
   ['design-form.jpg', 'design_form.png', 1280],
   ['plot.jpg', 'plot1.png', 1280],
   ['ghost.jpg', 'ghost_slope1.png', 1280],
   ['placed.jpg', 'ext1.png', 1280],
   ['interior.jpg', 'int1.png', 1280],
-  ['library.jpg', 'library2.png', 1280],
+  ['library.jpg', 'library3.png', 1280, '1280x796+320+140'], // retaken at GUI scale 2: three whole card rows; the panel only
   ['variants.jpg', 'variants.png', 1280],
   ['palettes.jpg', 'palettes3.png', 1600],
   ['remove-before.jpg', 'remove_before2.png', 1280],
   ['remove-after.jpg', 'remove_after2.png', 1280],
   ['designs.jpg', 'designs_progress_stub.png', 1280],
   ['status.jpg', 'status_helper.png', 935, '935x550+960+155'], // the Claude access column; the left one lists local paths
+  // phase 3, survival (tools/readme-survival.mjs, a survival world)
+  ['site-building.jpg', 'site_mid.png', 1280],
+  ['site-before.jpg', 'site_before.png', 1280],
+  ['site-after.jpg', 'site_after.png', 1280],
+  ['hoppers.jpg', 'hoppers.png', 1280],
+  ['crate.jpg', 'crate.png', 1150, '1150x905+385+84'], // the crate screen only
+  ['library-survival.jpg', 'library_bom.png', 750, '750x790+1132+148'], // the Library's detail panel only
 ];
 
 function check() {

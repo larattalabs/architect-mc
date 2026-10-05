@@ -4,7 +4,8 @@
     "World: the dev client's own 'Architect Dev' (AutoWorld: creative, peaceful, natural terrain, seed 2026). Never a real world.",
     "Library: mod/run/architect/library/ holds a copy of the phase 2 gate run's Claude design gen_gate_two_house and its birch and fortress variants (in the copies, name 'Gate Two House' was changed to 'Town House'). The bundled kit examples (cabin, tower, tavern, gatehouse) come with the mod.",
     "The variant jobs below are v1-v4 only in a fresh sidecar-data dir, and the site ids (s1) only in a fresh world. Placements (in each shot's requests/after) come before the shots that need them.",
-    "designs-progress and status need the other modes: designs.jpg with --stub (tools/run-readme-client.sh --stub; submit a design and shoot while its status is 'designing'), status.jpg with --helper (no credentials; never submit a design there)."
+    "designs-progress and status need the other modes: designs.jpg with --stub (tools/run-readme-client.sh --stub; submit a design and shoot while its status is 'designing'), status.jpg with --helper (no credentials; never submit a design there).",
+    "Phase 3 README pass: hero_p3 and library3 retake hero.jpg and library.jpg in the same world (a copy of the earlier Architect Dev save with its 10 sites). library3 was taken with guiScale:2 in mod/run/options.txt so three card rows fit; the other shots use guiScale:3. The survival images come from tools/readme-survival.mjs in a separate survival world."
   ],
   "setup": [
     "/time set 3000",
@@ -639,6 +640,56 @@
         [
           "dev.build.cancel",
           {}
+        ]
+      ]
+    },
+    {
+      "name": "raw/hero_p3",
+      "camera": {
+        "x": 30.5,
+        "y": 104,
+        "z": -76.5,
+        "lookAt": {
+          "x": 17,
+          "y": 70,
+          "z": -130
+        },
+        "fov": 62,
+        "mode": "spectator"
+      },
+      "commands": [
+        "/time set 11800"
+      ]
+    },
+    {
+      "name": "raw/library3",
+      "requests": [
+        [
+          "dev.ui.open",
+          {
+            "tab": "library"
+          }
+        ],
+        [
+          "dev.library.filter",
+          {
+            "reset": true
+          }
+        ],
+        [
+          "dev.library.select",
+          {
+            "entry": "gen_gate_two_house"
+          }
+        ]
+      ],
+      "hideHud": false,
+      "after": [
+        [
+          "dev.screen",
+          {
+            "open": null
+          }
         ]
       ]
     }
