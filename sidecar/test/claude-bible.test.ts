@@ -170,6 +170,25 @@ describe.skipIf(!hasKit)('a bible job on the Claude backend (fake SDK, real kit)
     sc.config.designConcurrency = 3;
   }, 90_000);
 
+  it('a component pass cut short by the budget is still checked, and installed when it passes', async () => {
+    calls.length = 0;
+    script = async function* (_prompt, opts) {
+      const s = opts.resume ?? sid();
+      yield init(s);
+      if (opts.outputFormat) {
+        yield result(s, { structured_output: { ...DRAFT, roles: { ...DRAFT.roles, roof: 'minecraft:spruce_planks' } }, total_cost_usd: 0.3 });
+        return;
+      }
+      fs.writeFileSync(path.join(opts.cwd!, 'bible', 'components.mjs'), fs.readFileSync(REF, 'utf8'));
+      yield result(s, { subtype: 'error_max_budget_usd', is_error: true, total_cost_usd: 0.7 });
+    };
+    const j = sc.bibles.request({ prompt: 'tight budget', budgetUsd: 1 });
+    await until(() => ['done', 'failed'].includes(sc.bibles.get(j.id)!.status), 30_000);
+    const done = sc.bibles.get(j.id)!;
+    expect(done.status, done.error).toBe('done');
+    expect(done.cost.usd).toBeCloseTo(1, 5);
+  }, 60_000);
+
   it('the budget stops a bible job', async () => {
     calls.length = 0;
     script = async function* (_prompt, opts) {

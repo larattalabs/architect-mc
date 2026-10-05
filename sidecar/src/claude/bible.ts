@@ -290,6 +290,12 @@ export class ClaudeBibleBackend implements BibleBackend {
     work.cost = meter.commit();
     this.sc.bibles.setCost(job.id, work.cost);
     const reason = res.reason === 'cancel' || res.reason === 'shutdown' ? res.reason : undefined;
+    // the budget ran out during the pass: what the agent wrote is still checked (the runner fails the job with
+    // "budget" only when the check fails and nothing is left for another round)
+    if (!reason && !res.stats.limited && !res.stats.authFailed && res.stats.subtype === 'error_max_budget_usd') {
+      this.sc.log.warn(`bible ${job.id}: the budget ran out during the component pass; checking what is there`);
+      return { ok: true };
+    }
     const end = this.ended(job.id, res.stats, reason, job.request.budgetUsd, work.cost.usd);
     if (end) return end;
     // a turn that ended in an error still gets its file checked (it may have written it before)
