@@ -122,20 +122,47 @@ public final class Sections {
 	 */
 	public static Plan plan(SortedSet<Long> sections, Function<Long, Collection<Entry>> slices, Collection<String> ids, String group, long at,
 		Journal.World world, Journal.Match match) {
-		Set<String> undo = new HashSet<>(ids);
-		List<Journal.Write> writes = new ArrayList<>();
-		Map<String, Map<Long, List<Cell>>> cells = new LinkedHashMap<>();
-		Map<String, Map<Long, Value>> written = new LinkedHashMap<>();
-		Map<String, List<HandDown>> handed = new LinkedHashMap<>();
-		Map<String, int[]> stats = new LinkedHashMap<>();
-		for (String id : ids) {
-			written.put(id, new LinkedHashMap<>());
-			handed.put(id, new ArrayList<>());
-			stats.put(id, new int[3]);
-		}
-		int offset = 0;
+		Planner p = new Planner(ids, group, at, world, match);
 		for (long section : sections) {
-			Collection<Entry> loaded = slices.apply(section);
+			p.add(section, slices.apply(section));
+		}
+		return p.finish();
+	}
+
+	/**
+	 * {@link #plan} one section at a time, for a caller that spreads the sections over ticks: {@link #add} each section in
+	 * ascending order, then {@link #finish}.
+	 */
+	public static final class Planner {
+		private final Set<String> undo;
+		private final List<String> ids;
+		private final String group;
+		private final long at;
+		private final Journal.World world;
+		private final Journal.Match match;
+		private final List<Journal.Write> writes = new ArrayList<>();
+		private final Map<String, Map<Long, List<Cell>>> cells = new LinkedHashMap<>();
+		private final Map<String, Map<Long, Value>> written = new LinkedHashMap<>();
+		private final Map<String, List<HandDown>> handed = new LinkedHashMap<>();
+		private final Map<String, int[]> stats = new LinkedHashMap<>();
+		private int offset;
+
+		public Planner(Collection<String> ids, String group, long at, Journal.World world, Journal.Match match) {
+			this.ids = List.copyOf(ids);
+			this.undo = new HashSet<>(ids);
+			this.group = group;
+			this.at = at;
+			this.world = world;
+			this.match = match;
+			for (String id : ids) {
+				written.put(id, new java.util.HashMap<>());
+				handed.put(id, new ArrayList<>());
+				stats.put(id, new int[3]);
+			}
+		}
+
+		/** Plans one section: {@code loaded} is every active entry with a cell in it, each holding only its cells there. */
+		public void add(long section, Collection<Entry> loaded) {
 			List<String> here = new ArrayList<>();
 			for (Entry e : loaded) {
 				if (undo.contains(e.id()) && !e.cells().isEmpty()) {
@@ -143,7 +170,7 @@ public final class Sections {
 				}
 			}
 			if (here.isEmpty()) {
-				continue;
+				return;
 			}
 			Journal.UndoPlan p = Journal.planUndo(loaded, here, group, at, world, match);
 			writes.addAll(p.writes());
@@ -162,21 +189,24 @@ public final class Sections {
 				}
 			}
 			offset += top + 1;
-			p.stats().forEach((id, s) -> {
+			p.stats().forEach((id, st) -> {
 				int[] a = stats.get(id);
-				a[0] += s.restored();
-				a[1] += s.changed();
-				a[2] += s.covered();
+				a[0] += st.restored();
+				a[1] += st.changed();
+				a[2] += st.covered();
 			});
 		}
-		Map<String, Undo> undos = new LinkedHashMap<>();
-		Map<String, Stats> st = new LinkedHashMap<>();
-		for (String id : ids) {
-			undos.put(id, new Undo(group, at, written.get(id), handed.get(id)));
-			int[] a = stats.get(id);
-			st.put(id, new Stats(a[0], a[1], a[2]));
+
+		public Plan finish() {
+			Map<String, Undo> undos = new LinkedHashMap<>();
+			Map<String, Stats> st = new LinkedHashMap<>();
+			for (String id : ids) {
+				undos.put(id, new Undo(group, at, written.get(id), handed.get(id)));
+				int[] a = stats.get(id);
+				st.put(id, new Stats(a[0], a[1], a[2]));
+			}
+			return new Plan(List.copyOf(writes), cells, undos, st);
 		}
-		return new Plan(List.copyOf(writes), cells, undos, st);
 	}
 
 	/**

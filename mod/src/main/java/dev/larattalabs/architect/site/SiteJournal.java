@@ -588,6 +588,34 @@ public final class SiteJournal {
 	}
 
 	/** {@link #undo} of these entries (active ones; a move's new entries share the site id with the old ones). */
+	/** R1 over ticks: the planner of undoing {@code siteIds}' active entries as {@code group} ({@link #submitUndo} when it is done). */
+	static WorldJournal.UndoPlanner undoPlanner(ServerLevel level, Collection<String> siteIds, String group) throws Sites.SiteException {
+		requireAvailable();
+		List<String> ids = new ArrayList<>();
+		for (String sid : siteIds) {
+			for (JournalStore.Meta m : active(sid)) {
+				ids.add(m.id());
+			}
+		}
+		if (ids.isEmpty()) {
+			throw new Sites.SiteException(Reason.OTHER, "No journal entry for " + String.join(", ", siteIds) + ": it can't be restored");
+		}
+		try {
+			return new WorldJournal.UndoPlanner(level, ids, group);
+		} catch (IOException e) {
+			throw new Sites.SiteException(Reason.JOURNAL_UNAVAILABLE, "The journal of " + String.join(", ", siteIds) + " can't be read (" + e.getMessage() + ")");
+		}
+	}
+
+	/** R2 of a planned undo: its one commit, submitted. */
+	static Undone submitUndo(WorldJournal.UndoWork w) throws Sites.SiteException {
+		try {
+			return new Undone(w, store().submit(WorldJournal.undoTxn(w)));
+		} catch (IOException e) {
+			throw new Sites.SiteException(Reason.JOURNAL_UNAVAILABLE, "The journal can't be read (" + e.getMessage() + ")");
+		}
+	}
+
 	static Undone undoEntries(ServerLevel level, Collection<String> entryIds, String group) throws Sites.SiteException {
 		requireAvailable();
 		List<String> ids = new ArrayList<>();

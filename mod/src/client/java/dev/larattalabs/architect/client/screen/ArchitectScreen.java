@@ -760,6 +760,9 @@ public final class ArchitectScreen extends Screen {
 							.map(Sites::describe).toList()) + "; they stay until " + (over.size() == 1 ? "it is" : "they are") + " removed";
 					}
 				}
+				if (Sites.removeLarge(sl == null ? level : sl, s.id(), force, covered == null ? Sites.Covered.KEEP : covered) != null) {
+					return "Removing " + s.id() + " over ticks (a large site)";
+				}
 				Sites.Removed gone = Sites.removeDetailed(sl == null ? level : sl, s.id(), force, covered == null ? Sites.Covered.KEEP : covered);
 				String both = gone.cascaded().isEmpty() ? "" : " (with " + String.join(", ", gone.cascaded()) + ")";
 				return gone.site().construction() != null ? "Deconstructed " + gone.site().id() + both + "; refunds dropped where its crate stood, the terrain "

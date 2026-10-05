@@ -50,6 +50,9 @@ public final class QItem {
 	 * meanwhile (it captures the world after these writes). It is PLACED at P8 as before.
 	 */
 	public transient boolean committing;
+	/** Phase 4e, not saved: a large item checked in this batch tick (its start follows in the next) and its snapshot box. */
+	public transient long checkedAt = -1;
+	public transient dev.larattalabs.architect.placement.Anchors.@org.jspecify.annotations.Nullable Bounds checkedSnap;
 	public @Nullable JsonObject spec;
 
 	public Status status = Status.QUEUED;

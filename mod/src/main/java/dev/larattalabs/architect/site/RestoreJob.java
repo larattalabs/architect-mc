@@ -2,6 +2,7 @@ package dev.larattalabs.architect.site;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
+import dev.larattalabs.architect.api.Reason;
 import dev.larattalabs.architect.journal.Journal;
 import dev.larattalabs.architect.journal.JournalStore;
 import dev.larattalabs.architect.journal.UpdateMask;
@@ -49,6 +50,7 @@ final class RestoreJob implements Placement.Job {
 	int phase = PLAN;
 	transient @Nullable CompletableFuture<Void> commit;
 	transient WorldJournal.@Nullable UndoWork work;
+	transient WorldJournal.@Nullable UndoPlanner planner;
 	@Nullable TemplateWriter writer;
 	transient SiteJournal.@Nullable Restore restore;
 	@Nullable List<String> dropsBefore;
@@ -140,10 +142,26 @@ final class RestoreJob implements Placement.Job {
 		}
 		try {
 			if (phase == PLAN) {
-				group = SiteJournal.group(purpose + "-" + siteId);
-				SiteJournal.Undone u = SiteJournal.undo(level, List.of(siteId), group);
+				// R1 sliced per section over ticks (a size-cap site plans 600k cells), then the one commit (R2)
+				if (planner == null) {
+					group = SiteJournal.group(purpose + "-" + siteId);
+					planner = SiteJournal.undoPlanner(level, List.of(siteId), group);
+				}
+				try {
+					if (!planner.step(deadline)) {
+						return false;
+					}
+				} catch (java.io.IOException e) {
+					throw new Sites.SiteException(Reason.JOURNAL_UNAVAILABLE, "the journal can't be read (" + e.getMessage() + ")");
+				}
+				WorldJournal.kill("K5");
+				SiteJournal.Undone u = SiteJournal.submitUndo(planner.work());
+				planner = null;
 				work = u.work();
 				commit = u.commit();
+				if (REMOVE.equals(purpose)) {
+					handed = Sites.handedBySite(u.work());
+				}
 				dropsBefore = Sites.Drops.before(level, s.restoreBox()).uuids();
 				phase = COMMIT;
 				return false;
@@ -215,6 +233,7 @@ final class RestoreJob implements Placement.Job {
 			: Sites.finishTickedRemove(server, level, s, drops, restore.ring(), st, handed);
 		phase = DONE;
 		done = true;
+		futures.forEach(f -> f.complete(result));
 		return true;
 	}
 
@@ -227,8 +246,19 @@ final class RestoreJob implements Placement.Job {
 		}
 		try {
 			if (phase == PLAN) {
-				group = SiteJournal.group(purpose + "-" + siteId);
-				SiteJournal.Undone u = SiteJournal.undo(level, List.of(siteId), group);
+				if (planner == null) {
+					group = SiteJournal.group(purpose + "-" + siteId);
+					planner = SiteJournal.undoPlanner(level, List.of(siteId), group);
+				}
+				try {
+					if (!planner.step(deadline)) {
+						return false;
+					}
+				} catch (java.io.IOException e) {
+					throw new Sites.SiteException(Reason.JOURNAL_UNAVAILABLE, "the journal can't be read (" + e.getMessage() + ")");
+				}
+				SiteJournal.Undone u = SiteJournal.submitUndo(planner.work());
+				planner = null;
 				work = u.work();
 				commit = u.commit();
 				handed = Sites.handedBySite(u.work());

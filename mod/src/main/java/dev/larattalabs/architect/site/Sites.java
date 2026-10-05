@@ -543,15 +543,16 @@ public final class Sites {
 		// phase 4e: standing roads' surface cells near the box (the approach stops at a road)
 		int reach = bp.approach().length() + Approach.EXTEND + 2;
 		it.unimi.dsi.fastutil.longs.LongOpenHashSet roads = dev.larattalabs.architect.site.roads.Roads.roadCells(dimensionId(level), box.grow(reach));
+		BlockPos.MutableBlockPos mp = new BlockPos.MutableBlockPos();
 		TerrainFit.World world = dryRun ? (x, y, z) -> {
 			if (!level.hasChunk(x >> 4, z >> 4)) {
 				unloaded[0] = true;
 				return 0;
 			}
-			int fl = TerrainFit.flags(level, new BlockPos(x, y, z));
+			int fl = TerrainFit.flags(level, mp.set(x, y, z));
 			return !roads.isEmpty() && roads.contains(BlockPos.asLong(x, y, z)) ? fl | TerrainFit.ROAD : fl;
 		} : (x, y, z) -> {
-			int fl = TerrainFit.flags(level, new BlockPos(x, y, z));
+			int fl = TerrainFit.flags(level, mp.set(x, y, z));
 			return !roads.isEmpty() && roads.contains(BlockPos.asLong(x, y, z)) ? fl | TerrainFit.ROAD : fl;
 		};
 		TerrainFit.Plan plan = TerrainFit.plan(model, box.minX(), box.minY(), box.minZ(), world);
@@ -712,6 +713,10 @@ public final class Sites {
 			return "is a construction site still building";
 		}
 		if (Groups.removing(siteId)) {
+			return "is being removed";
+		}
+		Placement.Job job = Placement.job(siteId);
+		if (job != null && "remove".equals(job.kind())) {
 			return "is being removed";
 		}
 		Infra i = Infras.get(siteId);
@@ -1262,6 +1267,54 @@ public final class Sites {
 		}
 		tr.done();
 		return last;
+	}
+
+	/**
+	 * A large site's removal over ticks (phase 4e, the size cap: no tick over 50 ms): R1 planned per section over ticks, R2,
+	 * R3, then R4 written by a {@link RestoreJob}. Null when the site is small (more than {@link SiteJournal#SYNC_CELLS} cells
+	 * in its restore box qualify), a construction site, placing, or covered with CASCADE: those remove at once
+	 * ({@link #removeDetailed}). The checks are the atomic removal's (a player in the box, the player's things, REFUSE). Server
+	 * thread.
+	 */
+	public static java.util.concurrent.@Nullable CompletableFuture<Removed> removeLarge(ServerLevel level, String id, boolean force, Covered covered)
+		throws SiteException {
+		Site b = get(id);
+		if (b == null || b.placing() || b.construction() != null || b.restoreBox().volume() <= SiteJournal.SYNC_CELLS) {
+			return null;
+		}
+		Placement.Job running = Placement.job(id);
+		if (running instanceof RestoreJob rj && RestoreJob.REMOVE.equals(rj.purpose)) {
+			java.util.concurrent.CompletableFuture<Removed> f = new java.util.concurrent.CompletableFuture<>();
+			rj.futures.add(f);
+			return f;
+		}
+		if (!b.dimension().equals(dimensionId(level))) {
+			throw new SiteException(id + " is in " + b.dimension() + ", not in " + dimensionId(level) + ": remove it from there");
+		}
+		SiteJournal.requireAvailable();
+		List<String> cover = SiteJournal.coveringSites(id);
+		if (!cover.isEmpty()) {
+			if (covered == Covered.REFUSE) {
+				throw new SiteException(Reason.COVERED, cover.size() + " site(s) cover cells of " + id + " (" + String.join(", ", cover.stream()
+					.map(Sites::describe).toList()) + "); remove them first, or remove with KEEP or CASCADE");
+			}
+			if (covered == Covered.CASCADE) {
+				return null;
+			}
+		}
+		refusePlayerIn(level, b.restoreBox(), id, "removing it");
+		if (!force) {
+			List<String> blockers = removalBlockers(level, b);
+			if (!blockers.isEmpty()) {
+				throw new SiteException(blockersMessage(id, blockers));
+			}
+		}
+		RestoreJob job = new RestoreJob(id, RestoreJob.REMOVE, null, null);
+		java.util.concurrent.CompletableFuture<Removed> f = new java.util.concurrent.CompletableFuture<>();
+		job.futures.add(f);
+		Placement.add(level.getServer(), job);
+		Architect.LOGGER.info("Removing {} over ticks ({} cells in its restore box)", id, b.restoreBox().volume());
+		return f;
 	}
 
 	/** The sites covering {@code id}, recursively, top-down (the highest layer first). */

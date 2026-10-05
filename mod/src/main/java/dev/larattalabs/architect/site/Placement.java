@@ -64,6 +64,11 @@ public final class Placement {
 
 	private static final List<Job> JOBS = new ArrayList<>();
 	private static long deadline;
+
+	/** This tick's placement deadline ({@link System#nanoTime}). */
+	static long deadline() {
+		return deadline;
+	}
 	private static int rotate;
 	private static @Nullable MinecraftServer server;
 	private static final Stats STATS = new Stats();
@@ -298,6 +303,11 @@ public final class Placement {
 				// a single road or cell site removal: its futures were completed
 			} else if (RestoreJob.ROLLBACK.equals(rj.purpose)) {
 				Batches.rolledBack(srv, rj);
+			} else if (rj.group != null && rj.group.startsWith("u:remove-")) {
+				// a single site removed over ticks (a large one): its futures were completed
+				if (rj.broken != null) {
+					rj.futures.forEach(f -> f.completeExceptionally(new IllegalStateException(rj.broken)));
+				}
 			} else {
 				Groups.removed(srv, rj);
 			}

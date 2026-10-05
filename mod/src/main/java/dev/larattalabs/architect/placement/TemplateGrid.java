@@ -123,6 +123,15 @@ public record TemplateGrid(Blueprint blueprint, int[] xyz, BlockState[] states, 
 
 	/** The template's own block entities after {@code turns}, as offsets from the rotated box's minimum corner (x,y,z triples). */
 	public List<Integer> blockEntityOffsets(int turns) {
+		int t = Math.floorMod(turns, 4);
+		Object[] r = rotated();
+		synchronized (r) {
+			if (r[4 + t] != null) {
+				@SuppressWarnings("unchecked")
+				List<Integer> c = (List<Integer>) r[4 + t];
+				return c;
+			}
+		}
 		GhostModel m = ghost(turns);
 		List<Integer> out = new ArrayList<>();
 		for (int i = 0; i < m.count(); i++) {
@@ -132,7 +141,11 @@ public record TemplateGrid(Blueprint blueprint, int[] xyz, BlockState[] states, 
 				out.add(m.z(i));
 			}
 		}
-		return out;
+		List<Integer> done = List.copyOf(out);
+		synchronized (r) {
+			r[4 + t] = done;
+		}
+		return done;
 	}
 
 	/** As ghost cells: {@code colour} per state (alpha 0 = air: written, not drawn). */
@@ -144,8 +157,32 @@ public record TemplateGrid(Blueprint blueprint, int[] xyz, BlockState[] states, 
 		return new GhostModel.Cells(blueprint.sizeX(), blueprint.sizeY(), blueprint.sizeZ(), blueprint.groundY(), xyz.clone(), argb);
 	}
 
-	/** The rotated model with plain colours (non-air opaque white): what the server needs (no drawing). */
+	/** Per grid (a record of arrays: identity in effect), its rotated models and block-entity offsets, cached. */
+	private static final Map<TemplateGrid, Object[]> ROTATED = Collections.synchronizedMap(new WeakHashMap<>());
+
+	private Object[] rotated() {
+		return ROTATED.computeIfAbsent(this, g -> new Object[8]);
+	}
+
+	/** The rotated model with plain colours (non-air opaque white): what the server needs (no drawing). Cached per rotation. */
 	public GhostModel ghost(int turns) {
-		return GhostModel.of(cells(s -> s.isAir() ? 0 : 0xFFFFFFFF), turns);
+		int t = Math.floorMod(turns, 4);
+		Object[] r = rotated();
+		synchronized (r) {
+			GhostModel g = (GhostModel) r[t];
+			if (g == null) {
+				g = GhostModel.of(cells(s -> s.isAir() ? 0 : 0xFFFFFFFF), t);
+				r[t] = g;
+			}
+			return g;
+		}
+	}
+
+	/** Warms the caches of every rotation (off the server thread when a large design is queued). */
+	public TemplateGrid warm() {
+		for (int t = 0; t < 4; t++) {
+			blockEntityOffsets(t);
+		}
+		return this;
 	}
 }

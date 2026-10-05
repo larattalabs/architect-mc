@@ -176,30 +176,34 @@ final class SitesImpl implements dev.larattalabs.architect.api.Sites {
 		return onServer(() -> {
 			Site s = Sites.get(siteId);
 			if (s == null) {
-				return refused("No site " + siteId);
+				return CompletableFuture.completedFuture(refused("No site " + siteId));
 			}
 			String owner = ApiRules.removeRefusal(siteId, s.owner(), o == null ? null : o.requester(), o != null && o.force());
 			if (owner != null) {
-				return refused(owner);
+				return CompletableFuture.completedFuture(refused(owner));
 			}
 			ServerLevel level = Sites.levelOf(server, s);
 			if (level == null) {
-				return refused(s.dimension() + " is not loaded");
+				return CompletableFuture.completedFuture(refused(s.dimension() + " is not loaded"));
 			}
 			if (!loaded(level, s.restoreBox())) {
-				return refused(siteId + " is not loaded on the server (a player must be near it)");
+				return CompletableFuture.completedFuture(refused(siteId + " is not loaded on the server (a player must be near it)"));
 			}
 			List<String> blockers = Sites.removalBlockers(level, s);
 			if (!blockers.isEmpty()) {
-				return new RemoveResult(false, blockers, Map.of());
+				return CompletableFuture.completedFuture(new RemoveResult(false, blockers, Map.of()));
 			}
 			try {
+				CompletableFuture<Sites.Removed> large = Sites.removeLarge(level, siteId, false, covered(o));
+				if (large != null) {
+					return large.thenApply(SitesImpl::result);
+				}
 				Sites.Removed done = Sites.removeDetailed(level, siteId, false, covered(o));
-				return result(done);
+				return CompletableFuture.completedFuture(result(done));
 			} catch (Sites.SiteException e) {
-				return refused(e.getMessage());
+				return CompletableFuture.completedFuture(refused(e.getMessage()));
 			}
-		});
+		}).thenCompose(f -> f);
 	}
 
 	static RemoveResult result(Sites.Removed done) {

@@ -479,62 +479,109 @@ public final class WorldJournal {
 	 * {@code level}: per section, the stacks of every active entry there. Pure apart from reading the journal and the world.
 	 */
 	public static UndoWork planUndo(ServerLevel level, Collection<String> ids, String group) throws IOException {
-		JournalStore s = store();
-		String dim = level.dimension().identifier().toString();
-		TreeSet<Long> sections = new TreeSet<>();
-		for (String id : ids) {
-			JournalStore.Meta m = s.meta(id);
-			if (m == null || !m.active()) {
-				throw new IOException("not an active journal entry: " + id);
-			}
-			for (long k : m.sections()) {
-				sections.add(k);
-			}
-		}
-		Set<String> undo = new HashSet<>(ids);
-		Set<String> covering = new LinkedHashSet<>();
-		Map<Long, List<Entry>> slices = new HashMap<>();
-		for (long k : sections) {
-			List<Entry> l = new ArrayList<>();
-			for (String id : s.inSection(dim, k)) {
+		UndoPlanner p = new UndoPlanner(level, ids, group);
+		p.step(Long.MAX_VALUE);
+		return p.work();
+	}
+
+	/**
+	 * {@link #planUndo} spread over ticks (docs/CONTRACT.md phase 4e: undo planning sliced per section): {@link #step} plans
+	 * sections until a deadline; {@link #work} once it says done. Server thread.
+	 */
+	public static final class UndoPlanner {
+		private final ServerLevel level;
+		private final JournalStore s;
+		private final String dim;
+		private final List<String> ids;
+		private final String group;
+		private final long at = System.currentTimeMillis();
+		private final TreeSet<Long> sections = new TreeSet<>();
+		private final java.util.Iterator<Long> next;
+		private final Set<String> undo;
+		private final Set<String> covering = new LinkedHashSet<>();
+		private final Sections.Planner planner;
+		private int planned;
+
+		public UndoPlanner(ServerLevel level, Collection<String> ids, String group) throws IOException {
+			this.level = level;
+			this.s = store();
+			this.dim = level.dimension().identifier().toString();
+			this.ids = List.copyOf(ids);
+			this.group = group;
+			for (String id : ids) {
 				JournalStore.Meta m = s.meta(id);
-				if (m != null && m.active()) {
-					Entry e = s.slice(id, k);
-					if (e != null) {
-						l.add(e);
-					}
+				if (m == null || !m.active()) {
+					throw new IOException("not an active journal entry: " + id);
+				}
+				for (long k : m.sections()) {
+					sections.add(k);
 				}
 			}
-			slices.put(k, l);
-			// covering entries: on top of an undone cell and staying
-			if (l.size() > 1) {
-				Map<Long, Entry> top = new HashMap<>();
-				Map<Long, Long> topLayer = new HashMap<>();
-				Set<Long> undonePos = new HashSet<>();
-				for (Entry e : l) {
-					for (Cell c : e.cells()) {
-						if (undo.contains(e.id())) {
-							undonePos.add(c.pos());
-						}
-						Long tl = topLayer.get(c.pos());
-						if (tl == null || c.layer() > tl || c.layer() == tl && e.id().compareTo(top.get(c.pos()).id()) > 0) {
-							topLayer.put(c.pos(), c.layer());
-							top.put(c.pos(), e);
-						}
-					}
-				}
-				for (long p : undonePos) {
-					Entry t = top.get(p);
-					if (t != null && !undo.contains(t.id())) {
-						covering.add(t.id());
-					}
-				}
-			}
+			this.undo = new HashSet<>(ids);
+			this.next = sections.iterator();
+			this.planner = new Sections.Planner(ids, group, at, (pos, after) -> holds(level, pos, after), WorldJournal::same);
 		}
-		Journal.World w = (pos, after) -> holds(level, pos, after);
-		Journal.Match m = WorldJournal::same;
-		Sections.Plan plan = Sections.plan(sections, slices::get, ids, group, System.currentTimeMillis(), w, m);
-		return new UndoWork(group, System.currentTimeMillis(), dim, List.copyOf(ids), plan, covering, sections);
+
+		/** Plans sections until {@code deadline} (at least one); true when every section is planned. */
+		public boolean step(long deadline) throws IOException {
+			int n = 0;
+			while (next.hasNext()) {
+				if (n > 0 && System.nanoTime() >= deadline) {
+					return false;
+				}
+				long k = next.next();
+				List<Entry> l = new ArrayList<>();
+				for (String id : s.inSection(dim, k)) {
+					JournalStore.Meta m = s.meta(id);
+					if (m != null && m.active()) {
+						Entry e = s.slice(id, k);
+						if (e != null) {
+							l.add(e);
+						}
+					}
+				}
+				// covering entries: on top of an undone cell and staying
+				if (l.size() > 1) {
+					Map<Long, Entry> top = new HashMap<>();
+					Map<Long, Long> topLayer = new HashMap<>();
+					Set<Long> undonePos = new HashSet<>();
+					for (Entry e : l) {
+						for (Cell c : e.cells()) {
+							if (undo.contains(e.id())) {
+								undonePos.add(c.pos());
+							}
+							Long tl = topLayer.get(c.pos());
+							if (tl == null || c.layer() > tl || c.layer() == tl && e.id().compareTo(top.get(c.pos()).id()) > 0) {
+								topLayer.put(c.pos(), c.layer());
+								top.put(c.pos(), e);
+							}
+						}
+					}
+					for (long p : undonePos) {
+						Entry t = top.get(p);
+						if (t != null && !undo.contains(t.id())) {
+							covering.add(t.id());
+						}
+					}
+				}
+				planner.add(k, l);
+				planned++;
+				n++;
+			}
+			return true;
+		}
+
+		public int planned() {
+			return planned;
+		}
+
+		public int sections() {
+			return sections.size();
+		}
+
+		public UndoWork work() {
+			return new UndoWork(group, at, dim, ids, planner.finish(), covering, sections);
+		}
 	}
 
 	/**

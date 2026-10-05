@@ -20,6 +20,7 @@ import dev.larattalabs.architect.placement.Anchors;
 import dev.larattalabs.architect.placement.Blueprint;
 import dev.larattalabs.architect.placement.BlueprintTransform;
 import dev.larattalabs.architect.placement.Blueprints;
+import dev.larattalabs.architect.placement.TemplateGrid;
 import dev.larattalabs.architect.placement.LeafGuard;
 import dev.larattalabs.architect.survival.SurvivalWorld;
 import java.util.ArrayList;
@@ -577,6 +578,21 @@ public final class Batches {
 		if (b.loadChunks > 0) {
 			ticketItem(server, b, i, level, bp);
 		}
+		// a large design (phase 4e, the size cap): its grid is built off the server thread first, and its checks and its start
+		// (the second checks, the capture) go in separate ticks
+		boolean large = (long) bp.sizeX() * bp.sizeY() * bp.sizeZ() > LARGE_CELLS;
+		Blueprints.Entry entry = Blueprints.entry(bp.id());
+		if (large && entry != null) {
+			CompletableFuture<?> w = WARMING.computeIfAbsent(entry, e -> CompletableFuture.runAsync(() -> TemplateGrid.of(e).warm()));
+			if (!w.isDone()) {
+				return; // tried again next tick
+			}
+		}
+		if (large && i.checkedAt == tick - 1 && i.checkedSnap != null) {
+			i.checkedAt = -1;
+			startChecked(server, b, i, level, bp, origin, rot, i.checkedSnap);
+			return;
+		}
 		Sites.Verdict v = Sites.verdict(level, bp, origin, rot, i.force, null, true, i.construction, i.layer, b.owner);
 		if (!v.ok()) {
 			Sites.Refusal hard = v.typed().stream().filter(r -> !TEMPORARY.contains(r.reason())).findFirst().orElse(null);
@@ -594,6 +610,20 @@ public final class Batches {
 			waitFor(b, i, Reason.NOT_LOADED, "the area around the site is not loaded on the server (walk closer)");
 			return;
 		}
+		if (large) {
+			i.checkedAt = tick;
+			i.checkedSnap = snap;
+			return; // the start goes in the next tick
+		}
+		startChecked(server, b, i, level, bp, origin, rot, snap);
+	}
+
+	/** Items larger than this many cells (a design's box) check and start in separate ticks, after their grid is warm. */
+	static final long LARGE_CELLS = 100_000;
+	private static final Map<Blueprints.Entry, CompletableFuture<?>> WARMING = java.util.Collections.synchronizedMap(new java.util.WeakHashMap<>());
+
+	private static void startChecked(MinecraftServer server, QBatch b, QItem i, ServerLevel level, Blueprint bp, BlockPos origin, Rotation rot,
+		Anchors.@Nullable Bounds snap) {
 		Site.Member member = new Site.Member(b.group, b.id, i.key);
 		try {
 			// instant or construction: written over ticks; a construction site is converted when its last cell is written

@@ -53,6 +53,10 @@ public final class Groups {
 		Map<String, Integer> handed = new TreeMap<>();
 		/** The cells the undo restores (its plan's stats). */
 		int restoredCells;
+		/** R1 in progress (not saved: a load plans again). */
+		transient dev.larattalabs.architect.journal.WorldJournal.@Nullable UndoPlanner planner;
+		transient List<String> planIds = List.of();
+		transient @Nullable String planGroup;
 		transient @Nullable CompletableFuture<Void> commit;
 		/** Construction members' deconstruct items (computed before the undo is planned, rule 7) and where they drop. */
 		final Map<String, Map<String, Integer>> decItems = new LinkedHashMap<>();
@@ -426,6 +430,22 @@ public final class Groups {
 
 	/** R1-R2 of a group undo: checks every member, tallies construction refunds, plans and submits one commit. */
 	private static void plan(MinecraftServer server, Removal r) {
+		if (r.planner != null) {
+			// R1 over ticks (a large group plans per section; phase 4e budget)
+			try {
+				if (!r.planner.step(Placement.deadline())) {
+					return;
+				}
+				dev.larattalabs.architect.journal.WorldJournal.kill("K5");
+				SiteJournal.Undone u = SiteJournal.submitUndo(r.planner.work());
+				r.planner = null;
+				committed(server, r, u);
+			} catch (java.io.IOException | Sites.SiteException e) {
+				r.planner = null;
+				end(server, r, new Removed(false, List.of(e.getMessage()), Map.copyOf(r.refund)));
+			}
+			return;
+		}
 		while (!r.sites.isEmpty() && Sites.get(r.sites.get(0)) == null && Infras.get(r.sites.get(0)) == null) {
 			r.sites.remove(0);
 		}
@@ -517,19 +537,29 @@ public final class Groups {
 				end(server, r, new Removed(false, List.of("nothing of group " + r.group + " is in the world journal"), Map.copyOf(r.refund)));
 				return;
 			}
-			dev.larattalabs.architect.journal.WorldJournal.kill("K5");
-			SiteJournal.Undone u = SiteJournal.undoEntries(level, entries, group);
-			r.undo = group;
-			r.undoSites.clear();
-			r.undoSites.addAll(ids);
-			r.handed = new TreeMap<>(Sites.handedBySite(u.work()));
-			r.handedAll = new TreeMap<>(r.handed);
-			r.restoredCells = u.work().plan().stats().values().stream().mapToInt(Journal.Stats::restored).sum();
-			r.commit = u.commit();
-			Placement.save(server, false);
+			r.planIds = List.copyOf(ids);
+			r.planGroup = group;
+			try {
+				r.planner = new dev.larattalabs.architect.journal.WorldJournal.UndoPlanner(level, entries, group);
+			} catch (java.io.IOException e) {
+				throw new Sites.SiteException(dev.larattalabs.architect.api.Reason.JOURNAL_UNAVAILABLE, "the journal can't be read (" + e.getMessage() + ")");
+			}
+			plan(server, r); // as far as this tick's budget goes
 		} catch (Sites.SiteException e) {
 			end(server, r, new Removed(false, List.of(e.getMessage()), Map.copyOf(r.refund)));
 		}
+	}
+
+	/** R2 submitted: the removal waits for its commit, then marks the records pending and writes. */
+	private static void committed(MinecraftServer server, Removal r, SiteJournal.Undone u) {
+		r.undo = r.planGroup;
+		r.undoSites.clear();
+		r.undoSites.addAll(r.planIds);
+		r.handed = new TreeMap<>(Sites.handedBySite(u.work()));
+		r.handedAll = new TreeMap<>(r.handed);
+		r.restoredCells = u.work().plan().stats().values().stream().mapToInt(Journal.Stats::restored).sum();
+		r.commit = u.commit();
+		Placement.save(server, false);
 	}
 
 	private static String dimensionOf(String id) {

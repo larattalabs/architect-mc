@@ -439,6 +439,8 @@ public final class SiteCommands {
 			if (forgetOnly) {
 				Sites.forget(src.getServer(), id);
 				src.sendSuccess(() -> Component.literal("Forgot " + id + "; its blocks stay in the world"), true);
+			} else if (Sites.removeLarge(src.getLevel(), id, force, Sites.Covered.KEEP) != null) {
+				src.sendSuccess(() -> Component.literal("Removing " + id + " over ticks (a large site)"), true);
 			} else {
 				Site b = Sites.remove(src.getLevel(), id, force);
 				src.sendSuccess(() -> Component.literal((b.construction() != null ? "Deconstructed " : "Removed ") + id + " (" + b.blueprint()
