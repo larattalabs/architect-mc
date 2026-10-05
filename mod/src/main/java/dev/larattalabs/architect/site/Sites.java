@@ -1345,6 +1345,50 @@ public final class Sites {
 		return afterRestore(level, b, null, drops, false, true);
 	}
 
+	/** A dry-run plan of a placement: its snapshot (restore) box and its approach's end, for choosing a shared crate's cell. */
+	public record Prediction(Anchors.Bounds snapBox, int[] end, int[] out) {
+	}
+
+	/**
+	 * Plans a placement without changing anything or loading a chunk (as the dry-run verdict does) and predicts its restore
+	 * box and approach end. When its chunks are not loaded, a conservative guess: the template box grown by the worst-case
+	 * approach on every side and the deepest foundation below, and the end {@code approach.length} rows out from the
+	 * entrance. Server thread.
+	 */
+	public static Prediction predict(ServerLevel level, Blueprint bp, BlockPos origin, Rotation rotation) {
+		int turns = rotation.ordinal();
+		int[] out = Approach.outward(BlueprintTransform.rotateDirection(bp.front(), turns));
+		SitePlan p = null;
+		try {
+			p = checkSite(level, bp, origin, rotation, true, null, (r, m) -> {
+			}, true, false);
+		} catch (SiteException | RuntimeException e) {
+			p = null;
+		}
+		Anchor entrance = BlueprintTransform.worldAnchors(bp, turns, origin.getX(), origin.getY(), origin.getZ()).get(Blueprint.ENTRANCE);
+		if (p != null) {
+			double[] end = p.approach().end();
+			int[] e;
+			if (end != null && p.approach().rows() > 0) {
+				e = new int[] {(int) Math.floor(end[0]), (int) Math.floor(end[1]), (int) Math.floor(end[2])};
+			} else if (entrance != null) {
+				e = new int[] {(int) Math.floor(entrance.x()) + out[0], (int) Math.floor(entrance.y()), (int) Math.floor(entrance.z()) + out[1]};
+			} else {
+				e = new int[] {(p.snapBox().minX() + p.snapBox().maxX()) / 2, p.box().minY() + bp.groundY(), (p.snapBox().minZ() + p.snapBox().maxZ()) / 2};
+			}
+			return new Prediction(p.snapBox(), e, out);
+		}
+		int sx = BlueprintTransform.rotatedSizeX(bp.sizeX(), bp.sizeZ(), turns);
+		int sz = BlueprintTransform.rotatedSizeZ(bp.sizeX(), bp.sizeZ(), turns);
+		int m = dev.larattalabs.architect.batch.LotFitting.frontMargin(bp);
+		Anchors.Bounds guess = new Anchors.Bounds(origin.getX() - m, origin.getY() - TerrainFit.MAX_FILL - 1, origin.getZ() - m, origin.getX() + sx - 1 + m,
+			origin.getY() + bp.sizeY() - 1 + Approach.MAX_CUT, origin.getZ() + sz - 1 + m);
+		int len = bp.approach().enabled() ? bp.approach().length() : 1;
+		int[] e = entrance == null ? new int[] {origin.getX() + sx / 2, origin.getY() + bp.groundY(), origin.getZ() + sz / 2}
+			: new int[] {(int) Math.floor(entrance.x()) + out[0] * len, origin.getY() + bp.groundY(), (int) Math.floor(entrance.z()) + out[1] * len};
+		return new Prediction(guess, e, out);
+	}
+
 	// ------------------------------------------------------------------ site groups (docs/CONTRACT.md phase 4d)
 
 	/** Every site group, in creation order. Any thread. */

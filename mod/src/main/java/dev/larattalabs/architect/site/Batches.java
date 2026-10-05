@@ -11,6 +11,7 @@ import dev.larattalabs.architect.api.Stage;
 import dev.larattalabs.architect.apiimpl.ApiEvents;
 import dev.larattalabs.architect.apiimpl.ApiRules;
 import dev.larattalabs.architect.batch.BatchRules;
+import dev.larattalabs.architect.batch.CratePlacement;
 import dev.larattalabs.architect.batch.LotFitting;
 import dev.larattalabs.architect.batch.QBatch;
 import dev.larattalabs.architect.batch.QItem;
@@ -154,6 +155,9 @@ public final class Batches {
 		}
 		Batch.WaitPolicy w = spec.waitPolicy();
 		int[] crateAt = spec.crateAt() == null ? null : new int[] {spec.crateAt().getX(), spec.crateAt().getY(), spec.crateAt().getZ()};
+		if (spec.sharedCrate() && crateAt == null && (g == null || g.crate() == null && g.crateAt() == null)) {
+			crateAt = defaultCrate(server, spec, items);
+		}
 		String groupId = g != null ? g.id() : Sites.newGroupId();
 		QBatch b = new QBatch(id, spec.owner(), spec.ext(), groupId, items, plan.stages(), (long) w.maxWaitSeconds() * 20L, spec.load().maxChunks(),
 			spec.nearestFirst(), spec.stopOnFailure(), spec.autoApprove(), spec.sharedCrate(), crateAt, System.currentTimeMillis());
@@ -188,6 +192,49 @@ public final class Batches {
 		}
 		CHANGED.add(id);
 		return id;
+	}
+
+	/**
+	 * The shared crate's cell when the batch names none (R6): beside the first construction item's approach end, outside every
+	 * item's predicted restore box and every standing site's ({@link CratePlacement}). Refuses the batch when there is none.
+	 */
+	private static int @Nullable [] defaultCrate(MinecraftServer server, Batch spec, List<QItem> items) {
+		Batch.Item first = null;
+		for (int k = 0; k < items.size(); k++) {
+			if (items.get(k).construction && items.get(k).status != QItem.Status.FAILED) {
+				first = spec.items().get(k);
+				break;
+			}
+		}
+		if (first == null) {
+			return null;
+		}
+		List<Anchors.Bounds> boxes = new ArrayList<>();
+		Sites.Prediction start = null;
+		for (Batch.Item it : spec.items()) {
+			Blueprint bp = Blueprints.get(it.request().blueprintId());
+			if (bp == null) {
+				continue;
+			}
+			Sites.Prediction p = Sites.predict(it.request().level(), bp, it.request().origin(), it.request().rotation());
+			boxes.add(p.snapBox());
+			if (it == first) {
+				start = p;
+			}
+		}
+		String dim = Sites.dimensionId(first.request().level());
+		for (Site s : Sites.all()) {
+			if (s.dimension().equals(dim)) {
+				boxes.add(s.restoreBox());
+			}
+		}
+		int[] c = start == null ? null : CratePlacement.choose(start.end(), start.out(), boxes);
+		if (c == null) {
+			throw new IllegalArgumentException("OTHER: no free cell for the shared crate within " + CratePlacement.MAX_STEPS
+				+ " cells of " + first.itemKey() + "'s approach end (every candidate lies in an item's restore box); pass crateAt");
+		}
+		Architect.LOGGER.info("Shared crate of the batch: {} (beside {}'s approach end)", java.util.Arrays.toString(c), first.itemKey());
+		return c;
 	}
 
 	/**
