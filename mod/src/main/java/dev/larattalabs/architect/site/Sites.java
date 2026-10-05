@@ -691,7 +691,9 @@ public final class Sites {
 	/** The box a placement snapshots and restores: the template's box, grown down to the foundation and out over the approach. */
 	public static Anchors.Bounds snapshotBox(Anchors.Bounds box, TerrainFit.Plan plan, Approach.Plan approach) {
 		Anchors.Bounds u = approach.union(box);
-		return new Anchors.Bounds(u.minX(), Math.min(u.minY(), plan.minY()), u.minZ(), u.maxX(), u.maxY(), u.maxZ());
+		// one row more below the lowest written cell: the ground under the foundation changes while the site stands (grass
+		// under a solid block turns to dirt), and Remove must put that back too
+		return new Anchors.Bounds(u.minX(), Math.min(u.minY(), plan.minY()) - 1, u.minZ(), u.maxX(), u.maxY(), u.maxZ());
 	}
 
 	private static void applyApproach(ServerLevel level, Blueprint bp, Approach.Plan a, BlockState foundation) {

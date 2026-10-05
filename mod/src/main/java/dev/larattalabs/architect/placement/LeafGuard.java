@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.LeavesBlock;
 import net.minecraft.world.level.block.state.BlockState;
 
@@ -21,6 +22,15 @@ import net.minecraft.world.level.block.state.BlockState;
 public final class LeafGuard {
 	/** Leaves decay at distance 7, so nothing further than 6 from the box can depend on a log inside it. */
 	public static final int RADIUS = 6;
+
+	/**
+	 * Hold and release never notify neighbours ({@link Block#UPDATE_KNOWN_SHAPE}): a shape update makes neighbouring leaves
+	 * recompute their {@code distance}, and world generation leaves many of them stale (overlapping trees), so a recompute
+	 * would change cells nobody recorded and Remove would not be exact.
+	 */
+	private static int quiet(int flags) {
+		return flags | Block.UPDATE_KNOWN_SHAPE;
+	}
 
 	/** Manhattan distance from a cell to the box (0 inside). */
 	public static int distanceTo(Anchors.Bounds box, int x, int y, int z) {
@@ -60,7 +70,7 @@ public final class LeafGuard {
 					if (!mayDependOnBox(d, from)) {
 						continue;
 					}
-					level.setBlock(p, s.setValue(LeavesBlock.PERSISTENT, true), flags);
+					level.setBlock(p, s.setValue(LeavesBlock.PERSISTENT, true), quiet(flags));
 					out.add(x);
 					out.add(y);
 					out.add(z);
@@ -83,7 +93,7 @@ public final class LeafGuard {
 			if (!(s.getBlock() instanceof LeavesBlock) || !s.getValue(LeavesBlock.PERSISTENT)) {
 				continue;
 			}
-			level.setBlock(p, s.setValue(LeavesBlock.PERSISTENT, false).setValue(LeavesBlock.DISTANCE, held.get(i + 3)), flags);
+			level.setBlock(p, s.setValue(LeavesBlock.PERSISTENT, false).setValue(LeavesBlock.DISTANCE, held.get(i + 3)), quiet(flags));
 			n++;
 		}
 		return n;
