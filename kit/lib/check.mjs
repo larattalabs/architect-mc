@@ -291,7 +291,9 @@ export function checkStructure(sidecar, structure, opts = {}) {
     const a = anchors[n];
     if (!a || !Number.isFinite(a.x)) continue;
     const [x, y, z] = cellOf(a);
-    if (!g.inBox(x, y, z)) { err(`anchor ${n} (${a.x},${a.y},${a.z}) is outside the template`); continue; }
+    // outside the template is fine near it (e.g. spawn on the approach strip): there, rows below groundY are terrain
+    const [sx, sy, sz] = size;
+    if (y < 1 || y >= sy || x < -16 || z < -16 || x >= sx + 16 || z >= sz + 16) { err(`anchor ${n} (${a.x},${a.y},${a.z}) is too far outside the template`); continue; }
     if (!Number.isInteger(a.y)) warn(`anchor ${n}: y ${a.y} is not on a block boundary`);
     const below = g.at(x, y - 1, z);
     if (!g.floor(x, y - 1, z)) err(`anchor ${n}: no solid block to stand on (${below ? below.name : 'nothing written'} at ${fmt(x, y - 1, z)})`);
@@ -354,7 +356,10 @@ export const MIN_VOLUME = { cabin: 60, cottage: 80, house: 120, shop: 80, smithy
  * as a half step) or on/in a climbable block. Moves: to a horizontal neighbour up 1 (a jump needs headroom, unless
  * the target rests on stairs or a bottom slab or we are climbing), level, or down up to 3; up and down ladders.
  */
-export function walker(g) {
+export function walker(g, margin = 0) {
+  const [sx, sy, sz] = g.size;
+  // the walk may leave the template by `margin` cells (the ground around it: terrain below groundY, air above)
+  const inArea = (x, y, z) => y >= 1 && y < sy && x >= -margin && z >= -margin && x < sx + margin && z < sz + margin;
   const pass = (x, y, z) => {
     const c = g.at(x, y, z);
     if (c) return isPassable(c);
@@ -364,10 +369,10 @@ export function walker(g) {
   const familyAt = (x, y, z) => BLOCKS[g.at(x, y, z)?.name]?.family;
   const halfStep = (x, y, z) => familyAt(x, y, z) === 'stairs' || (familyAt(x, y, z) === 'slab' && g.at(x, y, z).props.type === 'bottom');
   const support = (x, y, z) => g.floor(x, y, z) || (familyAt(x, y, z) === 'slab');
-  const feet = (x, y, z) => g.inBox(x, y, z) && y >= 1 && pass(x, y, z) && pass(x, y + 1, z)
+  const feet = (x, y, z) => inArea(x, y, z) && pass(x, y, z) && pass(x, y + 1, z)
     && (support(x, y - 1, z) || climb(x, y, z) || climb(x, y - 1, z));
   /** standing (not just hanging on a ladder) */
-  const stands = (x, y, z) => g.inBox(x, y, z) && pass(x, y, z) && pass(x, y + 1, z) && support(x, y - 1, z);
+  const stands = (x, y, z) => inArea(x, y, z) && pass(x, y, z) && pass(x, y + 1, z) && support(x, y - 1, z);
   function reach(start) {
     const seen = new Set();
     if (!start || !feet(...start)) return seen;
@@ -455,7 +460,7 @@ function floating({ g }) {
 /** A door on the front face that the entrance reaches; every interior floor level reachable from the entrance. */
 function reachability({ g, sidecar, anchors, interior: w, outside, outsideDoors }) {
   const out = [];
-  const wk = walker(g);
+  const wk = walker(g, (sidecar.approach?.length ?? 4) + 2);
   const reached = wk.reach(startOf(anchors.entrance));
   const [fx, fz] = H_VEC[sidecar.front];
   // a door on the front face: its outward side (front) is outside

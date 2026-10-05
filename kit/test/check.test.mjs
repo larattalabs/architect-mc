@@ -90,6 +90,19 @@ test('anchors: entrance and spawn present and standable', () => {
   assert.ok(has(checkBlueprint(floating).errors, /anchor spawn: no solid block to stand on/));
 });
 
+test('anchors may stand just outside the template, on the ground', () => {
+  const out = hut();
+  out.spot('spawn', 2, 8, 180); // two rows beyond the box (size z = 7), on the terrain
+  out.spot('entrance', 2, 7, 180);
+  clean(checkBlueprint(out));
+  const high = hut();
+  high.spot('spawn', 2, 8, 180, { y: 3 });
+  assert.ok(has(checkBlueprint(high).errors, /anchor spawn: no solid block to stand on/));
+  const far = hut();
+  far.spot('spawn', 2, 40, 180);
+  assert.ok(has(checkBlueprint(far).errors, /too far outside/));
+});
+
 test('size limit (--max) and type (--type)', () => {
   assert.ok(has(checkBlueprint(hut(), { max: { x: 4, y: 9, z: 9 } }).errors, /exceeds the limit/));
   clean(checkBlueprint(hut(), { max: { x: 5, y: 5, z: 7 } }));

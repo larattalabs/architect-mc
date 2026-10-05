@@ -64,6 +64,25 @@ test('build: bad usage and unknown designs exit 2', () => {
   assert.equal(JSON.parse(r.stdout).ok, false);
 });
 
+test('build --json keeps stdout to one line when the design logs', () => {
+  const file = path.join(KIT, 'designs', 'zzlogtest.mjs');
+  fs.writeFileSync(file, `import build0 from './cabin.mjs';
+console.log('top-level chatter');
+export const id = 'zzlogtest';
+export default function build() { console.log('design chatter'); console.info('more'); const bp = build0(); bp.id = id; return bp; }
+`);
+  try {
+    const r = run('build.mjs', ['zzlogtest', '--out', tmp, '--json']);
+    assert.equal(r.status, 0, r.stderr);
+    const lines = r.stdout.trim().split('\n');
+    assert.equal(lines.length, 1, r.stdout);
+    assert.equal(JSON.parse(lines[0]).ok, true);
+    assert.match(r.stderr, /design chatter/);
+  } finally {
+    fs.rmSync(file, { force: true });
+  }
+});
+
 test('render writes the three previews', () => {
   run('build.mjs', ['tower', '--out', tmp]);
   const r = run('render.mjs', [path.join(tmp, 'tower.nbt'), '--out', tmp]);

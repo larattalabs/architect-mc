@@ -65,22 +65,28 @@ async function main() {
   let o;
   try { o = parseArgs(process.argv.slice(2)); } catch (e) {
     console.error(`${e.message}\n${USAGE}`);
-    process.exit(2);
+    process.exitCode = 2;
+    return;
   }
   if (o.help) { console.log(USAGE); return; }
   const id = o.ids[0];
   const fail2 = (msg) => {
     if (o.json) console.log(JSON.stringify({ ok: false, errors: [msg], warnings: [], nbt: null, sidecar: null }));
     else console.error(`error: ${msg}`);
-    process.exit(2);
+    process.exitCode = 2;
   };
-  if (!/^[a-z0-9_]+$/.test(id)) fail2(`design id '${id}' must match [a-z0-9_]+`);
+  if (!/^[a-z0-9_]+$/.test(id)) return fail2(`design id '${id}' must match [a-z0-9_]+`);
+  // --json: stdout carries exactly one line, so whatever the design logs goes to stderr
+  const saved = { log: console.log, info: console.info, debug: console.debug };
+  if (o.json) console.log = console.info = console.debug = console.error;
   let r;
   try {
     r = await buildDesign(id, { out: o.out ?? DEFAULT_OUT, max: o.max, type: o.type });
   } catch (e) {
-    fail2(`design ${id} threw: ${e.stack ?? e.message}`);
+    Object.assign(console, saved);
+    return fail2(`design ${id} threw: ${e.stack ?? e.message}`);
   }
+  Object.assign(console, saved);
   const { bp, written, result } = r;
   if (o.json) {
     console.log(JSON.stringify({ ok: result.ok, errors: result.errors, warnings: result.warnings, nbt: written.nbtPath, sidecar: written.jsonPath }));
@@ -92,7 +98,7 @@ async function main() {
     for (const e of result.errors) console.log(`error: ${e}`);
     console.log(result.ok ? 'check: OK' : 'check: FAILED');
   }
-  process.exit(result.ok ? 0 : 1);
+  process.exitCode = result.ok ? 0 : 1;
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) await main();
