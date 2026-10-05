@@ -408,7 +408,7 @@ it creates nothing. Free clearing (trees and dirt removed without drops) is the 
      - candles cost their count; sea pickles cost their count;
      - wall torches, wall signs and wall banners cost their standing item;
      - `minecraft:fire` and other blocks with no item cost nothing.
-     - Waterlogged cells cost a water bucket? No: waterlogging is dropped in survival builds (written as not waterlogged). Note it.
+     - Waterlogged cells are built not waterlogged in survival (no water bucket cost); the crate screen notes it.
    - The **bill of materials** (BOM) is the sum over the queue. It is computed from the template on the server, and on the client for the
      Library ("needs: 412 spruce planks, ...").
 4. **The crate.**
