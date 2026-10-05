@@ -274,7 +274,7 @@ designers. Snapshot `features` adds `massing`.
   from the latest version plus the notes (the scratch dir gets `massing/<id>.*` of the old version). One at a time per
   massing. A group's massing goes through `group.approve` rules (owner, cap).
 - `massing.list { owner?, massingId? }` -> ack `{ massings }` (the latest of each; with `massingId`, every version).
-- `massing.delete { massingId }` -> ack `{ massingId, versions }`: immediate, refused while a job makes or details it or its
+- `massing.delete { massingId }` -> ack `{ massingId, versions }` (`versions` = how many versions were deleted, a number): immediate, refused while a job makes or details it or its
   group is not final. **GC** at start and hourly: a group's massings 7 days after the group is final; a stand-alone one 7
   days after its detail design finished, else 30 days after its latest version.
 - **The detail pass:** `design.request { request: { ...DesignRequest, fromMassing, massingVersion? } }` -> ack `{ designId,

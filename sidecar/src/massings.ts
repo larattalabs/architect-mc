@@ -136,7 +136,8 @@ export class Massings {
     if (d.request.fromMassing) {
       if (res.conformance) this.sc.designs.update(d.id, { conformance: res.conformance });
       else if (res.ok) this.sc.log.warn(`design ${d.id}: the kit printed no massing conformance (does its build.mjs know --massing?)`);
-      if (res.ok && res.conformance && (!res.conformance.ok || res.conformance.errors.length)) return `the massing conformance check failed:\n${res.conformance.errors.map((e) => `- ${e}`).join('\n')}`;
+      // only errors (the size cap) fail the round; issues stay warnings even though the kit's `ok` is false for them
+      if (res.ok && res.conformance && res.conformance.errors.length) return `the massing conformance check failed:\n${res.conformance.errors.map((e) => `- ${e}`).join('\n')}`;
     }
     if (!res.ok || !d.request.massing) return undefined;
     const sc = res.sidecar!;

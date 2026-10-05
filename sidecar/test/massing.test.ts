@@ -153,6 +153,14 @@ describe('massings (sim backend, fixture kit)', () => {
     expect(() => h!.sc.requestDesign(DesignRequest.parse(request({ fromMassing: 'mas_nope' })))).toThrow(/no massing "mas_nope"/);
   }, 60_000);
 
+  it('conformance issues alone never fail a detail round; only errors (the size cap) do', async () => {
+    h = await harness('fixture');
+    const d = { id: 'dx', request: { ...massingReq({ massing: false }), fromMassing: 'mas_x' } } as unknown as Design;
+    const res = (conformance: { ok: boolean; errors: string[]; issues: string[] }) => ({ ok: true, conformance }) as never;
+    expect(h.sc.checkOutcome(d, res({ ok: false, errors: [], issues: ['massing: part `tower` roof hip, detail gable'] }))).toBeUndefined();
+    expect(h.sc.checkOutcome(d, res({ ok: false, errors: ['massing: size 30x20x20 exceeds the massing 22x20x20 + 2'], issues: [] }))).toMatch(/conformance check failed:\n- massing: size/);
+  });
+
   it('garbage collection: 30 days undetailed, 7 days after the detail, 7 days after the group is final; delete is immediate unless in use', async () => {
     h = await harness('fixture');
     const a = h.sc.requestDesign(massingReq({ name: 'Alpha' }));
