@@ -10,6 +10,7 @@ export default function build({ palette: p = PALETTES.fortress } = {}) {
   const m = massing(bp);
   m.mass('main', [0, 0, 0, 10, 8, 6], { wall: 'foundation', roof: 'flat', roofPart: 'roof', crenels: true });
   for (const face of ['south', 'north']) m.opening('main', face, [4, 1], [3, 4], { kind: 'arch' }); // the passage
+  for (const x of [2, 8]) m.opening('main', 'south', [x, 7], [1, 1]); // the hall's windows (glass)
   bp.part('main', () => bp.floor(4, -2, 6, 7, 0, p.path)); // the road through
   bp.spot('entrance', 5, 7, 180);
   bp.spot('spawn', 5, 7, 180);

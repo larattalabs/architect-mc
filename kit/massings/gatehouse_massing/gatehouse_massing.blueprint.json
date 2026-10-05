@@ -14,7 +14,8 @@
   "materials": [
     "minecraft:stone_bricks",
     "minecraft:deepslate_tiles",
-    "minecraft:dirt_path"
+    "minecraft:dirt_path",
+    "minecraft:glass"
   ],
   "foundationBlock": "minecraft:stone_bricks",
   "approach": {

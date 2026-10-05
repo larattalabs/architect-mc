@@ -17,8 +17,9 @@
     "minecraft:dark_oak_stairs",
     "minecraft:dark_oak_planks",
     "minecraft:spruce_planks",
+    "minecraft:spruce_door",
     "minecraft:dirt_path",
-    "minecraft:spruce_door"
+    "minecraft:glass"
   ],
   "foundationBlock": "minecraft:cobblestone",
   "approach": {

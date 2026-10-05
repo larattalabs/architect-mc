@@ -10,6 +10,8 @@ export default function build({ palette: p = PALETTES.rustic } = {}) {
   const m = massing(bp);
   m.mass('main', [0, 0, 0, 8, 5, 6], { roof: 'gable', ridge: 'x', roofPart: 'roof' });
   m.opening('main', 'south', [4, 1], [1, 2]); // the front door
+  for (const x of [2, 6]) m.opening('main', 'south', [x, 2], [1, 2]); // a window either side (glass)
+  for (const face of ['east', 'west']) m.opening('main', face, [3, 2], [1, 2]);
   m.mass('chimney', [9, 0, 3, 9, 11, 3], { wall: 'foundation' });
   // the porch: a deck, two posts, a slab roof against the front wall, and the start of the path
   bp.part('porch', () => {

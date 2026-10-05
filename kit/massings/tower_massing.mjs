@@ -10,6 +10,10 @@ export default function build({ palette: p = PALETTES.fortress } = {}) {
   const m = massing(bp);
   m.mass('shaft', [0, 0, 0, 6, 15, 6], { wall: 'foundation', storeys: 3 });
   m.opening('shaft', 'south', [3, 1], [1, 2]);
+  for (const y of [2, 7, 12]) {
+    for (const face of ['east', 'west']) m.opening('shaft', face, [3, y], [1, 2]); // window slits on every floor (glass)
+    if (y > 2) m.opening('shaft', 'south', [3, y], [1, 2]);
+  }
   m.mass('crown', [0, 16, 0, 6, 19, 6], { roof: 'hip' });
   for (const face of ['north', 'south', 'east', 'west']) m.opening('crown', face, [1, 17], [5, 2], { kind: 'arch' }); // the open lookout
   bp.part('landing', () => bp.floor(2, 7, 4, 9, 0, p.path));
