@@ -1,0 +1,32 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: sidecar/package-lock.json
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 25
+      - name: Kit tests
+        run: node --test kit/test/*.test.mjs
+      - name: Sidecar check and bundle
+        working-directory: sidecar
+        run: |
+          npm ci
+          npm run check
+          npm run build
+      - name: Mod build and tests
+        working-directory: mod
+        run: ./gradlew --no-daemon build
