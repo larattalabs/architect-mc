@@ -129,14 +129,15 @@ export function designBrief(req: DesignRequest, bp: string, opts: BriefOptions):
     '',
     '- Coordinates are relative to the template origin (minimum corner); +x east, +y up, +z south. `front` is the side the entrance faces: keep `south` unless the notes say otherwise. Every door is written closed.',
     '- `groundY` is the feet row; row groundY-1 is the floor. Set `foundationBlock` (a vanilla block the mod fills below the floor down to the ground) and `approach` to match the style.',
-    '- Required anchors: `entrance` (just inside or at the front door) and `spawn` (outside, in front of the entrance), both on a standable cell; add `cam_overview` for a nice first view.',
-    '- Declare `interior` (the inside box). Every standable interior cell must be lit by vanilla light sources (lanterns, torches, candles, glowstone, sea lanterns, froglights, shroomlights, lit campfires): mind the corners, each floor and the stairwells. Every floor must be reachable from the entrance by walking (stairs, ladders; max step 1). The roof must close the interior (no sky straight down into it except declared skylights / courtyards). Nothing may float.',
+    '- Required anchors: `entrance` (just outside the front door, as the examples do with `bp.spot(\'entrance\', ...)`) and `spawn` (a little further out in front), both on a standable cell; add a `cam_overview` camera for a nice first view.',
+    `- Declare \`interior\` (the inside box)${req.type === 'custom' ? '' : `: it is required for a ${req.type} (a checker error without it)`}. Every standable interior cell must be lit by vanilla light sources (lanterns, torches, candles, glowstone, sea lanterns, froglights, shroomlights, lit campfires): mind the corners, each floor and the stairwells. Every floor must be reachable from the entrance by walking (stairs, ladders; max step 1). The roof must close the interior (no sky straight down into it except declared skylights / courtyards). Nothing may float.`,
     '- An outside door on the front face, reachable from the entrance. Wooden doors are fine; an iron door needs a button on both sides.',
-    '- Only blocks listed in `kit/lib/blocks.mjs` can be used, with every property explicit and valid (the checker refuses anything else). When the style wants a block that is not there, use the closest one and say so in your summary.',
+    '- Only blocks listed in `kit/lib/blocks.mjs` can be used, with every property explicit and valid (the checker refuses anything else). It is a large generated table (every vanilla block): grep it for the blocks you need, never read it whole. When the style wants a block that is not there, use the closest one and say so in your summary.',
     '',
     '## How you work',
     '',
     `- Only \`kit/designs/${bp}.mjs\` is yours: you cannot write anywhere else, and the sidecar re-checks your design with a fresh copy of the kit, so changes to the kit would not count anyway.`,
+    '- Read `kit/README.md` first: it has the kit API and a complete small design. A design\'s default export takes `{ palette }` (`palette({ wood, stone, roof, accent })` and the presets `PALETTES` are in kit.mjs); read materials from the palette (`p.planks`, `p.log`, `p.stone`, `p.roofStairs`, ...) so the design can be re-run in other materials, picking the palette that fits the request as the default.',
     `- Build it semantically with the kit helpers in \`kit/lib/kit.mjs\` (walls with openings, floors, doors, roofs with overhang, stairs and ladders, windows, chimney, porch, lighting, \`anchor()\`), not as a dump of raw coordinates. ${ex.length ? `Start by reading the closest example${ex.length > 1 ? 's' : ''}: ${ex.map((e) => `\`kit/designs/${e}.mjs\``).join(', ')}.` : 'Look at the examples in `kit/designs/`.'}`,
     `- Build and check: \`node kit/build.mjs ${bp} --max ${m.x},${m.y},${m.z} --type ${req.type}\` (writes kit/out/${bp}.nbt and the sidecar, then runs the checker). "check: OK" is required; fix the warnings too.`,
     opts.renderer
@@ -154,13 +155,13 @@ export function designSystemPrompt(): string {
   return [
     "# You are Architect's building designer",
     'You design Minecraft buildings (houses, cabins, towers, shops, taverns, barns, chapels, gatehouses, ...) as parametric code with the Architect blueprint kit. The player placing your design will walk through it: it must be well built, lit, reachable and beautiful.',
-    "Your working directory is a scratch folder, not a git repository and not anyone's project. Everything you need is in it: BRIEF.md (the request: read it first), CONTRACT.md (the blueprint contract and the checker rules), kit/ (the kit: lib/kit.mjs helpers, lib/blocks.mjs, the checker lib/check.mjs, build.mjs, render.mjs and example designs in designs/).",
+    "Your working directory is a scratch folder, not a git repository and not anyone's project. Everything you need is in it: BRIEF.md (the request: read it first), CONTRACT.md (the blueprint contract and the checker rules), kit/ (the kit: README.md with its API, lib/kit.mjs helpers, lib/blocks.mjs, the checker lib/check.mjs, build.mjs, render.mjs and example designs in designs/).",
     'Work only inside this folder and write only your own design file. Your turn ends when the design passes the checker, fits the size limit and looks right.',
   ].join('\n');
 }
 
 export function designPrompt(bp: string): string {
-  return `Design the building described in BRIEF.md as kit/designs/${bp}.mjs. Read BRIEF.md and CONTRACT.md, look at kit/lib/kit.mjs and the closest example design, write the design, then build, check, look at the renders and iterate as BRIEF.md says until the checker passes and it looks right. End with a one-line summary.`;
+  return `Design the building described in BRIEF.md as kit/designs/${bp}.mjs. Read BRIEF.md, CONTRACT.md and kit/README.md, look at the closest example design, write the design, then build, check, look at the renders and iterate as BRIEF.md says until the checker passes and it looks right. End with a one-line summary.`;
 }
 
 export function designFixPrompt(bp: string, problem: string, round: number): string {
