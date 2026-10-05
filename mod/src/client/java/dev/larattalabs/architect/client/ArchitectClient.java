@@ -21,6 +21,7 @@ public class ArchitectClient implements ClientModInitializer {
 		PlacementFeature.init();
 		ScreenFeature.init();
 		DesignFeature.init();
+		dev.larattalabs.architect.client.design.SetFeature.init();
 		dev.larattalabs.architect.client.library.LibraryFeature.init();
 		dev.larattalabs.architect.client.survival.SurvivalFeature.init();
 		dev.larattalabs.architect.client.api.ApiClientBridge.init(); // the public API's client side (docs/CONTRACT.md phase 4a)

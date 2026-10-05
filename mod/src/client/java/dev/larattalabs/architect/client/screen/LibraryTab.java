@@ -312,22 +312,139 @@ final class LibraryTab {
 			LibraryFeature.setQuery(LibraryFeature.query().withFavoritesOnly(!LibraryFeature.query().favoritesOnly()));
 			s.resetScroll();
 		}) + 3;
+		// collections (phase 4b, R10): the entries of one bible or one design set
+		List<LibraryQuery.CollectionInfo> cols = LibraryQuery.collections(all);
+		String colLabel = TextUtil.ellipsize(font, q.collection() == null ? "Collection ▾" : collectionName(q.collection()) + " ▾", 78);
+		int colX = cx;
+		cx += s.chip(g, "filter:collection", colLabel, cx, fy, q.collection() != null, !cols.isEmpty() || q.collection() != null, mx, my, () -> {
+			List<ArchitectScreen.Option> opts = new ArrayList<>();
+			opts.add(new ArchitectScreen.Option("all", "All entries", LibraryFeature.query().collection() == null));
+			for (LibraryQuery.CollectionInfo c : cols) {
+				opts.add(new ArchitectScreen.Option(c.key(), collectionName(c.key()) + " (" + c.count() + ")", c.key().equals(LibraryFeature.query()
+					.collection())));
+			}
+			s.openPopup("collection", colX, fy + 16, 260, opts, v -> {
+				LibraryFeature.setQuery(LibraryFeature.query().withCollection("all".equals(v) ? null : v));
+				s.resetScroll();
+			});
+		}) + 3;
 		// sort chips, right-aligned in the grid column
 		int sortW = 0;
 		for (LibraryQuery.Sort so : LibraryQuery.Sort.values()) {
 			sortW += font.width(so.label()) + 12 + 2;
 		}
-		int sortX = Math.max(cx + 4, gx + gridW - sortW + 2);
-		for (LibraryQuery.Sort so : LibraryQuery.Sort.values()) {
-			sortX += s.chip(g, "sort:" + so.id(), so.label(), sortX, fy, q.sort() == so, true, mx, my, () -> LibraryFeature.setQuery(LibraryFeature
-				.query().withSort(so))) + 2;
+		if (cx + 4 + sortW <= gx + gridW + 2) {
+			int sortX = gx + gridW - sortW + 2;
+			for (LibraryQuery.Sort so : LibraryQuery.Sort.values()) {
+				sortX += s.chip(g, "sort:" + so.id(), so.label(), sortX, fy, q.sort() == so, true, mx, my, () -> LibraryFeature.setQuery(LibraryFeature
+					.query().withSort(so))) + 2;
+			}
+		} else {
+			// no room for three chips (a collection is picked): one that opens the sort choices
+			String sl = "↕ " + q.sort().label() + " ▾";
+			int sw0 = font.width(sl) + 12;
+			int sortX = Math.max(cx + 2, gx + gridW - sw0);
+			s.chip(g, "sort", sl, sortX, fy, false, true, mx, my, () -> {
+				List<ArchitectScreen.Option> opts = new ArrayList<>();
+				for (LibraryQuery.Sort so : LibraryQuery.Sort.values()) {
+					opts.add(new ArchitectScreen.Option(so.id(), so.label(), LibraryFeature.query().sort() == so));
+				}
+				s.openPopup("sort", sortX, fy + 16, 160, opts, v -> LibraryFeature.setQuery(LibraryFeature.query().withSort(LibraryQuery.Sort.of(v))));
+			});
 		}
-		// grid
+		// grid (under the collection's header when one is picked)
 		int gy = fy + 19;
+		if (q.collection() != null) {
+			gy = drawCollectionHeader(g, q.collection(), gx, gy, gridW, mx, my) + 3;
+		}
 		int gh = footerY - 16 - gy;
 		drawGrid(g, gx, gy, gridW, gh, mx, my);
 		// detail
 		drawDetail(g, x + gridW + 12, top - 3, detailW, footerY - 16 - (top - 3), mx, my);
+	}
+
+	/** "Ashfall" for {@code bible:<id>}, "Set: Ashfall hamlet" for {@code group:<id>}. */
+	static String collectionName(String key) {
+		if (key.startsWith(LibraryQuery.BIBLE_PREFIX)) {
+			String id = key.substring(LibraryQuery.BIBLE_PREFIX.length());
+			return "Bible: " + dev.larattalabs.architect.client.design.SetFeature.bible(id).map(dev.larattalabs.architect.api.Bible::name).orElse(id);
+		}
+		String id = key.substring(LibraryQuery.GROUP_PREFIX.length());
+		com.google.gson.JsonObject gr = Sidecar.state().group(id);
+		return "Set: " + (gr != null && gr.has("name") ? gr.get("name").getAsString() : id);
+	}
+
+	/** The bible of a collection: the bible itself, or the set's (from the helper, else its entries). */
+	static @Nullable String collectionBible(String key) {
+		if (key.startsWith(LibraryQuery.BIBLE_PREFIX)) {
+			return key.substring(LibraryQuery.BIBLE_PREFIX.length());
+		}
+		String id = key.substring(LibraryQuery.GROUP_PREFIX.length());
+		com.google.gson.JsonObject gr = Sidecar.state().group(id);
+		if (gr != null && gr.has("bible") && gr.get("bible").isJsonObject()) {
+			return gr.getAsJsonObject("bible").get("id").getAsString();
+		}
+		for (LibraryCard c : LibraryFeature.cards()) {
+			if (id.equals(c.group()) && c.bible() != null) {
+				return c.bible();
+			}
+		}
+		return null;
+	}
+
+	/**
+	 * The collection header (R10): the bible's sample sheet, the collection's name and size, the bible's roles as block icons,
+	 * "Re-skin collection…" (pick another bible: a variant of every entry with its roles, free) and a way out of the filter.
+	 * Returns its bottom.
+	 */
+	private int drawCollectionHeader(GuiGraphicsExtractor g, String key, int x, int y, int w, int mx, int my) {
+		Font font = font();
+		int h = 44;
+		Panels.inset(g, x, y, w, h);
+		String bibleId = collectionBible(key);
+		dev.larattalabs.architect.api.Bible bible = bibleId == null ? null : dev.larattalabs.architect.client.design.SetFeature.bible(bibleId).orElse(null);
+		int tx = x + 4;
+		PreviewImages.Found sheet = bible == null ? null : RolesSwatch.sheet(bible);
+		if (sheet != null) {
+			g.fill(x + 2, y + 2, x + 2 + 64, y + h - 2, 0x22FFFFFF);
+			PreviewImages.draw(g, sheet, x + 3, y + 3, 62, h - 6);
+			tx = x + 70;
+		}
+		long n = LibraryFeature.cards().stream().filter(c -> c.collections().contains(key)).count();
+		String title = collectionName(key) + " · " + n + (n == 1 ? " entry" : " entries");
+		String go = "Re-skin…";
+		int gw = s.bw(go);
+		int clearW = font.width("×") + 12;
+		int textW = x + w - 4 - gw - 4 - clearW - 4 - tx;
+		g.text(font, TextUtil.ellipsize(font, title, textW), tx, y + 4, UiBits.ink(), false);
+		String sub = bible == null ? "bible unknown (not installed here)" : (bible.builtin() ? "built-in bible" : "bible v" + bible.version() + (bible
+			.versions().size() > 1 ? " of " + bible.versions().size() : "")) + " · " + bible.roles().size() + " roles";
+		if (key.startsWith(LibraryQuery.GROUP_PREFIX) && bible != null) {
+			sub = bible.name() + " · " + sub;
+		}
+		g.text(font, TextUtil.ellipsize(font, sub, textW), tx, y + 14, UiBits.muted(), false);
+		if (bible != null) {
+			RolesSwatch.draw(g, bible, tx, y + h - 19, x + w - 4 - tx);
+		}
+		int bx = x + w - 4 - clearW - 4 - gw;
+		String cur = bibleId;
+		s.button(g, "collection:reskin", go, bx, y + 3, gw, false, dev.larattalabs.architect.client.design.SetFeature.has("reskin") && n > 0, mx, my,
+			() -> {
+				List<ArchitectScreen.Option> opts = new ArrayList<>();
+				for (var b : dev.larattalabs.architect.client.design.SetFeature.bibles()) {
+					if (!b.id().equals(cur)) {
+						opts.add(new ArchitectScreen.Option(b.id(), b.builtin() ? b.name() : b.name() + " v" + b.version(), false));
+					}
+				}
+				s.openPopup("reskin", bx - 150, y + 24, Math.max(240, gw + 150), opts, v -> dev.larattalabs.architect.client.design.SetFeature.reskin(key, v)
+					.whenComplete((id, err) -> LibraryFeature.say(dev.larattalabs.architect.client.design.SetFeature.message(),
+						dev.larattalabs.architect.client.design.SetFeature.messageError())));
+			});
+		s.chip(g, "collection:clear", "×", x + w - 4 - clearW, y + 6, false, true, mx, my, () -> {
+			LibraryFeature.setQuery(LibraryFeature.query().withCollection(null));
+			s.resetScroll();
+		});
+		return y + h;
 	}
 
 	private void drawGrid(GuiGraphicsExtractor g, int x, int y, int w, int h, int mx, int my) {
@@ -509,6 +626,11 @@ final class LibraryTab {
 		g.text(font, TextUtil.ellipsize(font, facts, w), x, ty, UiBits.muted(), false);
 		ty += 10;
 		String prov = c.provenance(LibraryFeature::nameOf) + (c.name().equals(c.baseName()) ? "" : " · was “" + c.baseName() + "”");
+		if (c.bible() != null) {
+			// phase 4b: the bible it was built with (and its set)
+			prov = (c.group() != null ? collectionName(LibraryQuery.GROUP_PREFIX + c.group()) + " · " : "") + collectionName(LibraryQuery.BIBLE_PREFIX
+				+ c.bible()) + " v" + c.bibleVersion() + " · " + prov;
+		}
 		g.text(font, TextUtil.ellipsize(font, prov, w), x, ty, UiStyle.CLAY_DARK, false);
 		ty += 10;
 		if (!c.userTags().isEmpty()) {
@@ -678,9 +800,34 @@ final class LibraryTab {
 				px = lx;
 				ly += ArchitectScreen.CHIP_H + 3;
 			}
-			px += s.chip(g, "preset:" + name, name, px, ly, name.equals(f.preset()), true, mx, my, () -> f.choosePreset(name)) + 3;
+			px += s.chip(g, "preset:" + name, name, px, ly, name.equals(f.preset()) && f.bible() == null, true, mx, my, () -> f.choosePreset(name)) + 3;
 		}
 		ly += ArchitectScreen.CHIP_H + 6;
+		// phase 4b: style bibles (the presets above are the built-in ones); a bible re-skins with its roles
+		List<dev.larattalabs.architect.api.Bible> mine = dev.larattalabs.architect.client.design.SetFeature.bibles().stream().filter(b -> !b.builtin())
+			.toList();
+		if (dev.larattalabs.architect.client.design.SetFeature.has("reskin")) {
+			g.text(font, "Style bible", lx, ly, UiStyle.CLAY_DARK, false);
+			String bnote = "the presets are the built-in ones";
+			g.text(font, TextUtil.ellipsize(font, bnote, colW - font.width("Style bible") - 8), lx + colW - Math.min(font.width(bnote), colW - font.width(
+				"Style bible") - 8), ly, UiBits.muted(), false);
+			ly += 11;
+			int bx = lx;
+			if (mine.isEmpty()) {
+				g.text(font, TextUtil.ellipsize(font, "none of your own yet (Design a set… drafts one)", colW), lx, ly + 3, UiBits.muted(), false);
+			}
+			for (var b : mine) {
+				String label = b.name() + " v" + b.version();
+				int cw = font.width(label) + 12;
+				if (bx > lx && bx + cw > lx + colW) {
+					bx = lx;
+					ly += ArchitectScreen.CHIP_H + 3;
+				}
+				bx += s.chip(g, "bible:" + b.id(), label, bx, ly, b.id().equals(f.bible()), true, mx, my, () -> f.chooseBible(b.id().equals(f.bible())
+					? null : b.id())) + 3;
+			}
+			ly += ArchitectScreen.CHIP_H + 6;
+		}
 		g.text(font, "Advanced", lx, ly, UiStyle.CLAY_DARK, false);
 		String note = f.preset() == null && f.paletteChanged() ? "custom mix" : "";
 		if (!note.isEmpty()) {
@@ -814,6 +961,11 @@ final class LibraryTab {
 	static String summary(VariantForm f) {
 		JsonObject r = f.requestJson();
 		List<String> bits = new ArrayList<>();
+		if (r.has("bible")) {
+			String id = r.get("bible").getAsString();
+			bits.add("re-skinned with " + dev.larattalabs.architect.client.design.SetFeature.bible(id).map(dev.larattalabs.architect.api.Bible::name)
+				.orElse(id));
+		}
 		if (r.has("palette")) {
 			bits.add(r.get("palette").isJsonPrimitive() ? r.get("palette").getAsString() + " palette" : "palette " + String.join("/",
 				r.getAsJsonObject("palette").entrySet().stream().map(e -> e.getValue().getAsString()).toList()));

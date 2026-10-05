@@ -92,7 +92,16 @@ public final class ArchitectScreen extends Screen {
 	private static final int ROW_H = 24;
 
 	enum Focus {
-		NONE, STYLE, MATERIALS, NAME, NOTES, KEY, SEARCH, RENAME, TAGS, VNAME
+		NONE, STYLE, MATERIALS, NAME, NOTES, KEY, SEARCH, RENAME, TAGS, VNAME, OTYPE, SET_NAME, SET_PROMPT, SET_TYPE, SET_INAME, SET_NOTES;
+
+		/** A field of the set dialog's item rows (focused with an index). */
+		boolean perItem() {
+			return this == SET_TYPE || this == SET_INAME || this == SET_NOTES;
+		}
+
+		boolean set() {
+			return name().startsWith("SET_");
+		}
 	}
 
 	/** A choice in a popup (the type/tag filters, the palette dropdowns). */
@@ -104,7 +113,7 @@ public final class ArchitectScreen extends Screen {
 	}
 
 	/** A text field drawn this frame (for click-to-focus). */
-	private record FieldRect(Focus focus, TextFieldView view, TextModel model, int x, int y, int w, TextFieldView.Style style) {
+	private record FieldRect(Focus focus, int index, TextFieldView view, TextModel model, int x, int y, int w, TextFieldView.Style style) {
 	}
 
 	record Hit(String id, String label, int x, int y, int w, int h, boolean enabled, boolean on, Runnable action) {
@@ -121,6 +130,10 @@ public final class ArchitectScreen extends Screen {
 
 	private Tab tab;
 	private Focus focus = Focus.NONE;
+	/** The item row of a per-item set field ({@link Focus#perItem()}), else -1. */
+	private int focusIndex = -1;
+	private final SetDialog set = new SetDialog(this);
+	private final TextFieldView openTypeView = new TextFieldView();
 	private final List<Hit> hits = new ArrayList<>();
 	private final List<Hit> overlayHits = new ArrayList<>();
 	private final List<FieldRect> fieldRects = new ArrayList<>();
@@ -144,6 +157,9 @@ public final class ArchitectScreen extends Screen {
 	private int listAvailable;
 	private int scrollStep = ROW_H;
 	private int[] listArea = new int[4];
+	/** The Designs tab's set detail: its item list (wheel-scrolled by rows). */
+	private int[] groupArea = new int[4];
+	private int groupScroll;
 
 	public ArchitectScreen(@Nullable Tab tab) {
 		super(Component.literal("Architect"));
@@ -189,10 +205,15 @@ public final class ArchitectScreen extends Screen {
 	}
 
 	private void setFocus(Focus f) {
+		setFocus(f, f.perItem() ? focusIndex : -1);
+	}
+
+	private void setFocus(Focus f, int index) {
 		if ((f != Focus.NONE) != (focus != Focus.NONE) && minecraft != null) {
 			minecraft.onTextInputFocusChange(this, f != Focus.NONE);
 		}
 		focus = f;
+		focusIndex = f.perItem() ? index : -1;
 		TextModel m = model();
 		if (m != null) {
 			m.touch();
@@ -200,7 +221,7 @@ public final class ArchitectScreen extends Screen {
 	}
 
 	String focusName() {
-		return focus.name().toLowerCase(Locale.ROOT);
+		return focus.name().toLowerCase(Locale.ROOT) + (focus.perItem() ? ":" + focusIndex : "");
 	}
 
 	private @Nullable TextModel model() {
@@ -211,6 +232,8 @@ public final class ArchitectScreen extends Screen {
 			case NAME -> f.name;
 			case NOTES -> f.notes;
 			case SEARCH, RENAME, TAGS, VNAME -> library.model(focus);
+			case OTYPE -> f.openType;
+			case SET_NAME, SET_PROMPT, SET_TYPE, SET_INAME, SET_NOTES -> set.model(focus, focusIndex);
 			default -> null;
 		};
 	}
@@ -231,6 +254,8 @@ public final class ArchitectScreen extends Screen {
 				library.cancelEdit();
 			} else if (focus != Focus.NONE) {
 				setFocus(Focus.NONE);
+			} else if (tab == Tab.DESIGN && dev.larattalabs.architect.client.design.SetFeature.form() != null) {
+				closeSet();
 			} else if (!(tab == Tab.LIBRARY && library.escape())) {
 				onClose();
 			}
@@ -250,8 +275,13 @@ public final class ArchitectScreen extends Screen {
 			keyMessage = null;
 			return true;
 		}
+		if (k == InputConstants.KEY_TAB && tab == Tab.DESIGN && dev.larattalabs.architect.client.design.SetFeature.form() != null) {
+			tabSet(e.hasShiftDown() ? -1 : 1);
+			return true;
+		}
 		if (k == InputConstants.KEY_TAB && tab == Tab.DESIGN) {
-			Focus[] order = {Focus.STYLE, Focus.MATERIALS, Focus.NAME, Focus.NOTES};
+			Focus[] order = DesignForm.OTHER.equals(DesignFeature.form().type) ? new Focus[] {Focus.OTYPE, Focus.STYLE, Focus.MATERIALS, Focus.NAME,
+				Focus.NOTES} : new Focus[] {Focus.STYLE, Focus.MATERIALS, Focus.NAME, Focus.NOTES};
 			int i = java.util.Arrays.asList(order).indexOf(focus);
 			setFocus(order[Math.floorMod(i + (e.hasShiftDown() ? -1 : 1), order.length)]);
 			return true;
@@ -260,7 +290,9 @@ public final class ArchitectScreen extends Screen {
 			if (library.enter(focus)) {
 				return true;
 			}
-			if (tab == Tab.DESIGN && e.hasControlDown()) {
+			if (tab == Tab.DESIGN && e.hasControlDown() && dev.larattalabs.architect.client.design.SetFeature.form() != null) {
+				submitSet();
+			} else if (tab == Tab.DESIGN && e.hasControlDown()) {
 				submit();
 			} else if (focus == Focus.NOTES) {
 				DesignFeature.form().notes.insert("\n");
@@ -277,11 +309,7 @@ public final class ArchitectScreen extends Screen {
 				return true;
 			}
 			TextKeys.handle(e, m);
-			if (libraryField()) {
-				library.edited(focus);
-			} else {
-				DesignFeature.form().sendError = null;
-			}
+			edited();
 			return true; // a focused field swallows the rest
 		}
 		if (focus == Focus.NONE && k >= InputConstants.KEY_1 && k <= InputConstants.KEY_4 && !e.hasControlDown()) {
@@ -289,6 +317,50 @@ public final class ArchitectScreen extends Screen {
 			return true;
 		}
 		return super.keyPressed(e);
+	}
+
+	/** After a keystroke in the focused field. */
+	private void edited() {
+		if (libraryField()) {
+			library.edited(focus);
+		} else if (focus.set()) {
+			var sf = dev.larattalabs.architect.client.design.SetFeature.form();
+			if (sf != null) {
+				sf.sendError = null;
+			}
+		} else {
+			DesignFeature.form().sendError = null;
+		}
+	}
+
+	/** Tab in the set dialog: name, prompt (a new bible), then each row's type, name and notes. */
+	private void tabSet(int dir) {
+		var sf = dev.larattalabs.architect.client.design.SetFeature.form();
+		if (sf == null) {
+			return;
+		}
+		List<Object[]> order = new ArrayList<>();
+		order.add(new Object[] {Focus.SET_NAME, -1});
+		if (sf.newBible) {
+			order.add(new Object[] {Focus.SET_PROMPT, -1});
+		}
+		for (int i = 0; i < sf.items.size(); i++) {
+			for (Focus f : SetDialog.ITEM_FIELDS) {
+				order.add(new Object[] {f, i});
+			}
+		}
+		int at = -1;
+		for (int i = 0; i < order.size(); i++) {
+			if (order.get(i)[0] == focus && (int) order.get(i)[1] == (focus.perItem() ? focusIndex : -1)) {
+				at = i;
+			}
+		}
+		Object[] next = order.get(Math.floorMod(at + dir, order.size()));
+		setFocus((Focus) next[0], (int) next[1]);
+		TextModel m = model();
+		if (m != null) {
+			m.moveTo(m.length(), false);
+		}
 	}
 
 	@Override
@@ -303,11 +375,7 @@ public final class ArchitectScreen extends Screen {
 		TextModel m = model();
 		if (m != null && e.codepoint() >= 32) {
 			m.insert(e.codepointAsString());
-			if (libraryField()) {
-				library.edited(focus);
-			} else {
-				DesignFeature.form().sendError = null;
-			}
+			edited();
 			return true;
 		}
 		return false;
@@ -315,6 +383,10 @@ public final class ArchitectScreen extends Screen {
 
 	@Override
 	public boolean mouseScrolled(double x, double y, double scrollX, double scrollY) {
+		if (tab == Tab.DESIGNS && x >= groupArea[0] && x < groupArea[0] + groupArea[2] && y >= groupArea[1] && y < groupArea[1] + groupArea[3]) {
+			groupScroll = Math.max(0, groupScroll + (scrollY > 0 ? -1 : 1));
+			return true;
+		}
 		if (listNeeded > listAvailable && x >= listArea[0] && x < listArea[0] + listArea[2] + 8 && y >= listArea[1] && y < listArea[1] + listArea[3]) {
 			listScroll = Math.max(0, Math.min(listNeeded - listAvailable, listScroll + (scrollY > 0 ? -scrollStep : scrollStep)));
 			return true;
@@ -351,7 +423,7 @@ public final class ArchitectScreen extends Screen {
 				if (focus != r.focus() && (focus == Focus.RENAME || focus == Focus.TAGS)) {
 					library.commitEdit(); // clicking another field keeps what was typed
 				}
-				setFocus(r.focus());
+				setFocus(r.focus(), r.index());
 				r.model().moveTo(at, false);
 				return true;
 			}
@@ -381,9 +453,18 @@ public final class ArchitectScreen extends Screen {
 		return false;
 	}
 
-	/** Focuses a text field by name (style, materials, name, notes, key, search, rename, tags, vname) for the DevBridge. */
+	/**
+	 * Focuses a text field by name (style, materials, name, notes, key, search, rename, tags, vname, otype, set_name,
+	 * set_prompt, and set_type:<row>, set_iname:<row>, set_notes:<row>) for the DevBridge.
+	 */
 	public void focus(String name) {
-		setFocus(Focus.valueOf(name.toUpperCase(Locale.ROOT)));
+		int colon = name.indexOf(':');
+		Focus f = Focus.valueOf((colon < 0 ? name : name.substring(0, colon)).toUpperCase(Locale.ROOT));
+		setFocus(f, colon < 0 ? -1 : Integer.parseInt(name.substring(colon + 1)));
+		TextModel m = model();
+		if (m != null) {
+			m.moveTo(m.length(), false);
+		}
 	}
 
 	/** The Library tab shows the designs (not the placed sites). */
@@ -441,16 +522,23 @@ public final class ArchitectScreen extends Screen {
 
 	/** Draws a text field and registers it for click-to-focus. */
 	void textField(GuiGraphicsExtractor g, Focus f, TextFieldView view, TextModel m, int x, int y, int w, TextFieldView.Style st) {
+		textField(g, f, -1, view, m, x, y, w, st);
+	}
+
+	/** A text field of an item row ({@code index} >= 0) or a single one (-1). */
+	void textField(GuiGraphicsExtractor g, Focus f, int index, TextFieldView view, TextModel m, int x, int y, int w, TextFieldView.Style st) {
 		int[] r = fields[f.ordinal() - 1];
 		r[0] = x;
 		r[1] = y;
 		r[2] = w;
-		fieldRects.add(new FieldRect(f, view, m, x, y, w, st));
-		hits.add(new Hit("field:" + f.name().toLowerCase(Locale.ROOT), "text field", x, y, w, TextFieldView.BASE_H, true, focus == f, () -> {
-			setFocus(f);
-			m.moveTo(m.length(), false);
-		}));
-		view.draw(g, font, m, x, y, w, focus == f, st);
+		fieldRects.add(new FieldRect(f, index, view, m, x, y, w, st));
+		boolean on = focus == f && (index < 0 || focusIndex == index);
+		hits.add(new Hit("field:" + f.name().toLowerCase(Locale.ROOT) + (index >= 0 ? ":" + index : ""), "text field", x, y, w, TextFieldView.BASE_H,
+			true, on, () -> {
+				setFocus(f, index);
+				m.moveTo(m.length(), false);
+			}));
+		view.draw(g, font, m, x, y, w, on, st);
 	}
 
 	/** A dropdown-looking chip (fixed width, the label ellipsized). */
@@ -551,6 +639,32 @@ public final class ArchitectScreen extends Screen {
 		DesignFeature.submit().thenAccept(sent -> {
 			if (sent.designId() != null && minecraft != null && minecraft.gui.screen() == this) {
 				selectedDesign = sent.designId();
+				setTab(Tab.DESIGNS);
+			}
+		});
+	}
+
+	/** "Design a set…": the set dialog takes the Design tab's body. */
+	void openSet() {
+		setFocus(Focus.NONE);
+		closePopup();
+		dev.larattalabs.architect.client.design.SetFeature.open();
+		setTab(Tab.DESIGN);
+		listScroll = 0;
+	}
+
+	void closeSet() {
+		setFocus(Focus.NONE);
+		closePopup();
+		dev.larattalabs.architect.client.design.SetFeature.close();
+		listScroll = 0;
+	}
+
+	void submitSet() {
+		setFocus(Focus.NONE);
+		dev.larattalabs.architect.client.design.SetFeature.submit().thenAccept(id -> {
+			if (minecraft != null && minecraft.gui.screen() == this) {
+				selectedDesign = id;
 				setTab(Tab.DESIGNS);
 			}
 		});
@@ -722,7 +836,8 @@ public final class ArchitectScreen extends Screen {
 	private String badge(Tab t) {
 		if (t == Tab.DESIGNS) {
 			long running = Sidecar.state().designs().stream().filter(d -> d.status().isRunning()).count()
-				+ Sidecar.state().variants().stream().filter(v -> v.status().isRunning()).count();
+				+ Sidecar.state().variants().stream().filter(v -> v.status().isRunning()).count()
+				+ Sidecar.state().bibleJobs().stream().filter(b -> !dev.larattalabs.architect.apiimpl.Wire4b.bibleJob(b).finished()).count();
 			return running > 0 ? " (" + running + ")" : "";
 		}
 		return "";
@@ -792,6 +907,7 @@ public final class ArchitectScreen extends Screen {
 			case MATERIALS -> new TextFieldView.Style(null, 0, "optional, e.g. spruce and cobblestone", null, null, 0, 1);
 			case NAME -> new TextFieldView.Style(null, 0, "optional, e.g. Lakeside cabin", null, form.name.length() + "/" + DesignSpec.MAX_NAME,
 				UiBits.muted(), 1);
+			case OTYPE -> new TextFieldView.Style(null, 0, "your type, e.g. hellish_lair", null, null, 0, 1);
 			default -> notesStyle();
 		};
 	}
@@ -806,11 +922,24 @@ public final class ArchitectScreen extends Screen {
 		r[0] = x;
 		r[1] = y;
 		r[2] = w;
-		fieldRects.add(new FieldRect(f, view, m, x, y, w, styleFor(f)));
+		fieldRects.add(new FieldRect(f, -1, view, m, x, y, w, styleFor(f)));
 		view.draw(g, font, m, x, y, w, focus == f, styleFor(f));
 	}
 
+	/** The type chips with "Other…" (an open type, phase 4b) at the end. */
+	private static final List<DesignSpec.Choice> TYPE_CHIPS;
+
+	static {
+		List<DesignSpec.Choice> l = new ArrayList<>(DesignSpec.TYPES);
+		l.add(new DesignSpec.Choice(DesignForm.OTHER, "Other…", "your own type, checked by the profile you pick"));
+		TYPE_CHIPS = List.copyOf(l);
+	}
+
 	private void drawDesign(GuiGraphicsExtractor g, int x, int top, int w, int footerY, int mx, int my) {
+		if (dev.larattalabs.architect.client.design.SetFeature.form() != null) {
+			set.draw(g, x, top, w, footerY, mx, my);
+			return;
+		}
 		DesignForm f = DesignFeature.form();
 		Map<String, String> errors = f.errors();
 		int colW = (w - 14) / 2;
@@ -820,9 +949,30 @@ public final class ArchitectScreen extends Screen {
 		int y = top;
 		// left: type, style, materials, features
 		y = label(g, "Building type", errors, lx, y, colW, "type");
-		y = chips(g, "type:", DesignSpec.TYPES, f.type, lx, y, colW, mx, my, id -> f.type = id);
+		boolean openTypes = dev.larattalabs.architect.client.design.SetFeature.has("open.types");
+		y = chips(g, "type:", openTypes || DesignForm.OTHER.equals(f.type) ? TYPE_CHIPS : DesignSpec.TYPES, f.type, lx, y, colW, mx, my, id -> {
+			f.type = id;
+			if (DesignForm.OTHER.equals(id)) {
+				setFocus(Focus.OTYPE);
+			}
+		});
 		DesignSpec.Choice tc = DesignSpec.find(DesignSpec.TYPES, f.type);
-		if (tc != null) {
+		if (DesignForm.OTHER.equals(f.type)) {
+			// an open type: its name, and the checker rules it wants
+			int tw = Math.min(150, colW / 2);
+			field(g, Focus.OTYPE, openTypeView, f.openType, lx, y - 3, tw);
+			String pl = "Profile: " + (f.profile.isEmpty() ? "default" : String.join(", ", f.profile)) + " ▾";
+			int px = lx + tw + 4;
+			int py = y;
+			dropdown(g, "design:profile", pl, px, py - 1, colW - tw - 4, mx, my, () -> {
+				List<Option> opts = new ArrayList<>();
+				for (DesignSpec.Choice c : DesignSpec.PROFILE_RULES) {
+					opts.add(new Option(c.id(), c.label(), f.profile.contains(c.id())));
+				}
+				openPopup("design:profile", px, py + CHIP_H, Math.max(240, colW - tw - 4), opts, f::toggleProfile);
+			});
+			y += TextFieldView.BASE_H - 1;
+		} else if (tc != null) {
 			g.text(font, TextUtil.ellipsize(font, tc.label() + ": " + tc.description(), colW), lx, y - 2, muted, false);
 			y += 10;
 		}
@@ -891,7 +1041,25 @@ public final class ArchitectScreen extends Screen {
 				+ p.front(), colW), rx, ry, muted, false);
 			ry += 10;
 		}
-		ry += 4;
+		ry += 2;
+		// the style bible (phase 4b): none = today's behaviour
+		g.text(font, "Style bible", rx, ry + 3, UiStyle.CLAY_DARK, false);
+		int bdx = rx + font.width("Style bible") + 6;
+		int bdy = ry;
+		boolean bibles = dev.larattalabs.architect.client.design.SetFeature.has("bibles");
+		String bibleLabel = (f.bible == null ? "none" : dev.larattalabs.architect.client.design.SetFeature.bible(f.bible).map(b -> b.name()
+			+ (b.builtin() ? "" : " v" + b.version())).orElse(f.bible)) + " ▾";
+		if (bibles || f.bible != null) {
+			dropdown(g, "design:bible", bibleLabel, bdx, bdy, Math.min(160, rx + colW - bdx), mx, my, () -> {
+				List<Option> opts = new ArrayList<>();
+				opts.add(new Option("none", "None (no bible)", f.bible == null));
+				opts.addAll(SetDialog.bibleOptions(f.bible, false));
+				openPopup("design:bible", bdx, bdy + CHIP_H + 1, Math.max(240, colW), opts, v -> f.bible = "none".equals(v) ? null : v);
+			});
+		} else {
+			g.text(font, TextUtil.ellipsize(font, "none (the helper has no bibles)", rx + colW - bdx), bdx, ry + 3, muted, false);
+		}
+		ry += CHIP_H + 4;
 		ry = label(g, "Name", errors, rx, ry, colW, "name");
 		field(g, Focus.NAME, nameView, f.name, rx, ry, colW);
 		ry += TextFieldView.BASE_H + 4;
@@ -929,6 +1097,10 @@ public final class ArchitectScreen extends Screen {
 		String reset = "Clear";
 		bx -= bw(reset) + 6;
 		button(g, "reset", reset, bx, footerY, bw(reset), false, true, mx, my, DesignFeature::resetForm);
+		String setL = "Design a set…";
+		bx -= bw(setL) + 6;
+		button(g, "design_set", setL, bx, footerY, bw(setL), false, dev.larattalabs.architect.client.design.SetFeature.has("design.groups"), mx, my,
+			this::openSet);
 		if (f.remix != null) {
 			String rl = "Remix of " + LibraryFeature.nameOf(f.remix) + "  ×";
 			int rw = Math.min(font.width(rl) + 12, bx - x - 8);
@@ -1093,12 +1265,54 @@ public final class ArchitectScreen extends Screen {
 
 	/** A row of the Designs tab: a design (Claude), a variant or an import (the variant pipeline). */
 	record Job(String id, String kind, String title, String fam, String status, String step, @Nullable String blueprintId, int @Nullable [] size,
-		@Nullable String error, long createdAt, boolean running, SidecarState.@Nullable Design design, SidecarState.@Nullable Variant variant) {
+		@Nullable String error, long createdAt, boolean running, SidecarState.@Nullable Design design, SidecarState.@Nullable Variant variant,
+		dev.larattalabs.architect.api.@Nullable Group group, dev.larattalabs.architect.api.@Nullable BibleJob bible) {
+		Job(String id, String kind, String title, String fam, String status, String step, @Nullable String blueprintId, int @Nullable [] size,
+			@Nullable String error, long createdAt, boolean running, SidecarState.@Nullable Design design, SidecarState.@Nullable Variant variant) {
+			this(id, kind, title, fam, status, step, blueprintId, size, error, createdAt, running, design, variant, null, null);
+		}
+	}
+
+	/** A group's status as a dot family. */
+	static String fam(dev.larattalabs.architect.api.Group.Status st) {
+		return switch (st) {
+			case DONE -> "done";
+			case FAILED -> "error";
+			case CANCELLED -> "idle";
+			case QUEUED, HELD_USAGE, PAUSED_BUDGET -> "waiting";
+			default -> "working";
+		};
 	}
 
 	static List<Job> jobs() {
 		List<Job> out = new ArrayList<>();
+		// (4b) design sets: one row each (their items' designs show in the set's detail, not as rows)
+		for (JsonObject raw : Sidecar.state().groups()) {
+			dev.larattalabs.architect.api.Group gr = dev.larattalabs.architect.apiimpl.Wire4b.group(raw);
+			String st = gr.status().wire();
+			String step = gr.done() + "/" + gr.items().size() + " done" + (gr.failed() > 0 ? ", " + gr.failed() + " failed" : "")
+				+ String.format(Locale.ROOT, " · $%.2f", gr.cost().usd());
+			out.add(new Job(gr.id(), "set", gr.name(), fam(gr.status()), st.replace('_', ' '), step, null, null, gr.reason().orElse(null), gr.createdAt(),
+				!gr.finished(), null, null, gr, null));
+		}
+		for (JsonObject raw : Sidecar.state().bibleJobs()) {
+			dev.larattalabs.architect.api.BibleJob bj = dev.larattalabs.architect.apiimpl.Wire4b.bibleJob(raw);
+			String f = switch (bj.status()) {
+				case DONE -> "done";
+				case FAILED -> "error";
+				case CANCELLED -> "idle";
+				case QUEUED -> "waiting";
+				default -> "working";
+			};
+			String name = bj.bible().map(dev.larattalabs.architect.api.Bible::name).orElse(bj.request().has("name") ? bj.request().get("name").getAsString()
+				: bj.bibleId());
+			out.add(new Job(bj.id(), "bible", (bj.kind().equals("revise") ? "Revise " : "Bible ") + name + " v" + bj.version(), f, bj.status().name()
+				.toLowerCase(Locale.ROOT), bj.step(), null, null, bj.error().orElse(null), bj.createdAt(), !bj.finished(), null, null, null, bj));
+		}
 		for (SidecarState.Design d : Sidecar.state().designs()) {
+			if (d.request().has("group")) {
+				continue; // shown in its set
+			}
 			String fam = switch (d.status()) {
 				case DONE -> "done";
 				case FAILED -> "error";
@@ -1126,6 +1340,7 @@ public final class ArchitectScreen extends Screen {
 	}
 
 	private void drawDesigns(GuiGraphicsExtractor g, int x, int top, int w, int footerY, int mx, int my) {
+		groupArea = new int[4];
 		List<Job> jobs = jobs();
 		int listW = Math.min(240, (w - 12) / 2);
 		int lh = footerY - 16 - top;
@@ -1182,6 +1397,14 @@ public final class ArchitectScreen extends Screen {
 		int dx = x + listW + 12;
 		int dw = w - listW - 12;
 		int y = top;
+		if (j.group() != null) {
+			drawGroup(g, j.group(), dx, y, dw, footerY, mx, my);
+			return;
+		}
+		if (j.bible() != null) {
+			drawBibleJob(g, j.bible(), dx, y, dw, footerY, mx, my);
+			return;
+		}
 		g.text(font, TextUtil.ellipsize(font, j.title() + "  (" + j.id() + ")", dw), dx, y, UiBits.ink(), false);
 		y += 12;
 		g.text(font, TextUtil.ellipsize(font, j.status() + (j.step().isEmpty() ? "" : ": " + j.step()), dw), dx, y, UiBits.muted(), false);
@@ -1251,6 +1474,168 @@ public final class ArchitectScreen extends Screen {
 				setTab(Tab.LIBRARY);
 			});
 		}
+	}
+
+	/** A design set's detail: status, bible, cost and budget, every item's progress, and its actions. */
+	private void drawGroup(GuiGraphicsExtractor g, dev.larattalabs.architect.api.Group gr, int dx, int top, int dw, int footerY, int mx, int my) {
+		int y = top;
+		g.text(font, TextUtil.ellipsize(font, gr.name() + "  (" + gr.id() + ")", dw), dx, y, UiBits.ink(), false);
+		y += 12;
+		var st = gr.status();
+		String head = st.wire().replace('_', ' ') + " · " + gr.done() + " of " + gr.items().size() + " done" + (gr.failed() > 0 ? ", " + gr.failed()
+			+ " failed" : "") + (gr.wave() >= 0 && !gr.finished() ? " · wave " + gr.wave() : "");
+		Panels.dot(g, fam(st), dx, y + 1, false);
+		g.text(font, TextUtil.ellipsize(font, head, dw - 10), dx + 10, y, st == dev.larattalabs.architect.api.Group.Status.FAILED ? UiBits.errorText()
+			: UiBits.ink(), false);
+		y += 11;
+		String bibleName = dev.larattalabs.architect.client.design.SetFeature.bible(gr.bible().id()).map(dev.larattalabs.architect.api.Bible::name)
+			.orElse(gr.bible().id());
+		String cost = String.format(Locale.ROOT, "$%.2f", gr.cost().usd()) + gr.budgetUsd().map(b -> String.format(Locale.ROOT, " of $%.2f budget", b))
+			.orElse(" (no budget)");
+		g.text(font, TextUtil.ellipsize(font, "bible " + bibleName + " v" + gr.bible().version() + " · " + gr.concurrency() + " at a time · " + cost, dw),
+			dx, y, UiBits.muted(), false);
+		y += 10;
+		if (st == dev.larattalabs.architect.api.Group.Status.HELD_USAGE) {
+			String until = gr.usageLimitUntil() > 0 ? UiBits.clock(gr.usageLimitUntil()) : "the reset";
+			g.text(font, TextUtil.ellipsize(font, "Held by a usage limit: every building waits until " + until + ", then all resume.", dw), dx, y,
+				UiStyle.CLAY_DARK, false);
+			y += 10;
+		} else if (gr.reason().isPresent()) {
+			for (String line : TextUtil.wrapPlain(font, gr.reason().get(), dw).stream().limit(2).toList()) {
+				g.text(font, line, dx, y, st == dev.larattalabs.architect.api.Group.Status.PAUSED_BUDGET ? UiStyle.CLAY_DARK : UiBits.errorText(), false);
+				y += 10;
+			}
+		}
+		y += 3;
+		// the items
+		int by = footerY - 16 - 20;
+		int rowH = 20;
+		int listH = by - 4 - y;
+		Panels.inset(g, dx, y, dw, listH);
+		int fit = Math.max(1, (listH - 4) / rowH);
+		groupArea = new int[] {dx, y, dw, listH};
+		groupScroll = Math.max(0, Math.min(groupScroll, Math.max(0, gr.items().size() - fit)));
+		int first = groupScroll;
+		for (int i = first; i < Math.min(gr.items().size(), first + fit); i++) {
+			var it = gr.items().get(i);
+			int ry = y + 3 + (i - first) * rowH;
+			String f = switch (it.status()) {
+				case DONE -> "done";
+				case FAILED -> "error";
+				case CANCELLED -> "idle";
+				case QUEUED -> "waiting";
+				default -> "working";
+			};
+			Panels.dot(g, f, dx + 4, ry + 2, false);
+			String name = it.name().orElse(it.itemKey());
+			String right = String.format(Locale.ROOT, "$%.2f", it.cost().usd());
+			int rw = font.width(right);
+			String role = it.role() == dev.larattalabs.architect.api.GroupRequest.Role.LANDMARK ? " ★" : "";
+			g.text(font, TextUtil.ellipsize(font, name + role + " · " + it.type() + (it.wave() == 0 ? " · anchor" : " · wave " + it.wave()), dw - 30 - rw),
+				dx + 14, ry, UiBits.ink(), false);
+			g.text(font, right, dx + dw - 10 - rw, ry, UiBits.muted(), false);
+			String line = it.status().name().toLowerCase(Locale.ROOT) + (it.step().isEmpty() ? "" : " · " + it.step()) + it.entryId().map(e -> " → " + e)
+				.orElse("") + it.error().map(e -> " · " + e).orElse("");
+			g.text(font, TextUtil.ellipsize(font, line, dw - 24), dx + 14, ry + 9, it.status() == dev.larattalabs.architect.api.Design.Status.FAILED
+				? UiBits.errorText() : UiBits.muted(), false);
+		}
+		if (gr.items().size() > fit) {
+			TextUtil.Scroll sc = new TextUtil.Scroll().update(gr.items().size() * rowH, fit * rowH);
+			sc.scrollBy(-1_000_000);
+			sc.scrollBy(first * rowH);
+			Panels.scrollbar(g, dx + dw - 6, y, listH, sc, false);
+		}
+		// actions
+		int bx = dx;
+		boolean live = Sidecar.connected() && !gr.finished();
+		if (st == dev.larattalabs.architect.api.Group.Status.PAUSED_BUDGET) {
+			String res = "Resume";
+			button(g, "group:resume", res, bx, by, bw(res), true, live, mx, my, () -> dev.larattalabs.architect.client.design.SetFeature.resumeGroup(gr
+				.id()));
+			bx += bw(res) + 4;
+		}
+		if (gr.budgetUsd().isPresent() && !gr.finished()) {
+			double to = extendTo(gr.budgetUsd().get(), gr.cost().usd());
+			String ext = String.format(Locale.ROOT, "Budget → $%.0f", to);
+			button(g, "group:extend", ext, bx, by, bw(ext), false, live, mx, my, () -> dev.larattalabs.architect.client.design.SetFeature.extendGroup(gr
+				.id(), to));
+			bx += bw(ext) + 4;
+		}
+		String cancel = "Cancel set";
+		button(g, "group:cancel", cancel, bx, by, bw(cancel), false, live, mx, my, () -> dev.larattalabs.architect.client.design.SetFeature
+			.cancelGroup(gr.id()));
+		bx += bw(cancel) + 4;
+		String show = "Show in Library";
+		if (bx + bw(show) <= dx + dw) {
+			button(g, "group:library", show, bx, by, bw(show), gr.finished(), gr.done() > 0, mx, my, () -> showCollection(
+				dev.larattalabs.architect.library.LibraryQuery.GROUP_PREFIX + gr.id()));
+		}
+		String msg = dev.larattalabs.architect.client.design.SetFeature.message();
+		if (msg != null) {
+			statusLine(g, msg, dev.larattalabs.architect.client.design.SetFeature.messageError(), dx, footerY - 13, dw);
+		}
+	}
+
+	/** The next budget step: half again, at least $1 above what was spent, rounded up to a dollar. */
+	static double extendTo(double budget, double spent) {
+		return Math.ceil(Math.max(budget * 1.5, spent + 1));
+	}
+
+	/** A bible job's detail: status, step, cost, the sheet once done. */
+	private void drawBibleJob(GuiGraphicsExtractor g, dev.larattalabs.architect.api.BibleJob bj, int dx, int top, int dw, int footerY, int mx, int my) {
+		int y = top;
+		g.text(font, TextUtil.ellipsize(font, (bj.kind().equals("revise") ? "Revise " : "Bible ") + bj.bibleId() + " v" + bj.version() + "  (" + bj.id()
+			+ ")", dw), dx, y, UiBits.ink(), false);
+		y += 12;
+		g.text(font, TextUtil.ellipsize(font, bj.status().name().toLowerCase(Locale.ROOT) + (bj.step().isEmpty() ? "" : ": " + bj.step()), dw), dx, y,
+			UiBits.muted(), false);
+		y += 11;
+		String prompt = bj.request().has("prompt") ? bj.request().get("prompt").getAsString() : "";
+		for (String line : TextUtil.wrapPlain(font, "prompt: " + prompt, dw).stream().limit(2).toList()) {
+			g.text(font, line, dx, y, UiBits.ink(), false);
+			y += 10;
+		}
+		g.text(font, String.format(Locale.ROOT, "cost $%.2f · %d component round%s", bj.cost().usd(), bj.rounds(), bj.rounds() == 1 ? "" : "s"), dx, y,
+			UiBits.muted(), false);
+		y += 10;
+		if (bj.error().isPresent()) {
+			for (String line : TextUtil.wrapPlain(font, bj.error().get(), dw).stream().limit(3).toList()) {
+				g.text(font, line, dx, y, UiBits.errorText(), false);
+				y += 10;
+			}
+		}
+		int by = footerY - 16 - 20;
+		var bible = bj.bible().or(() -> bj.finished() ? dev.larattalabs.architect.client.design.SetFeature.bible(bj.bibleId()) : java.util.Optional.empty());
+		if (bible.isPresent()) {
+			RolesSwatch.draw(g, bible.get(), dx, y + 2, dw);
+			y += 20;
+			var sheet = RolesSwatch.sheet(bible.get());
+			int sh = by - 4 - y;
+			if (sheet != null && sh > 30) {
+				Panels.inset(g, dx, y, dw, sh);
+				PreviewImages.draw(g, sheet, dx + 2, y + 2, dw - 4, sh - 4);
+			}
+		}
+		int bx = dx;
+		String cancel = "Cancel";
+		button(g, "bible:cancel", cancel, bx, by, bw(cancel), false, !bj.finished() && Sidecar.connected(), mx, my,
+			() -> dev.larattalabs.architect.client.design.SetFeature.cancelBible(bj.id()));
+		bx += bw(cancel) + 4;
+		String use = "Design a set with it…";
+		button(g, "bible:use", use, bx, by, bw(use), true, bj.status() == dev.larattalabs.architect.api.BibleJob.Status.DONE, mx, my, () -> {
+			var f = dev.larattalabs.architect.client.design.SetFeature.open();
+			f.bible = bj.bibleId();
+			f.newBible = false;
+			openSet();
+		});
+	}
+
+	/** Shows the Library filtered to a collection ({@code bible:<id>} / {@code group:<id>}). */
+	void showCollection(String key) {
+		LibraryFeature.setQuery(dev.larattalabs.architect.library.LibraryQuery.ALL.withSort(LibraryFeature.query().sort()).withCollection(key));
+		LibraryTab.dialog = LibraryTab.Dialog.NONE;
+		showPlaced = false;
+		setTab(Tab.LIBRARY);
 	}
 
 	// ------------------------------------------------------------------ Status tab
@@ -1432,6 +1817,7 @@ public final class ArchitectScreen extends Screen {
 		o.addProperty("selectedEntry", selectedEntry);
 		o.addProperty("selectedSite", selectedSite);
 		o.addProperty("selectedDesign", selectedDesign);
+		o.addProperty("setDialog", dev.larattalabs.architect.client.design.SetFeature.form() != null);
 		JsonArray a = new JsonArray();
 		List<Hit> all = new ArrayList<>(overlayHits);
 		all.addAll(hits);

@@ -59,6 +59,34 @@ public final class DesignSpec {
 		new Choice("big_windows", "Big windows", "tall windows"),
 		new Choice("basement", "Basement", "a floor below the ground"));
 
+	/**
+	 * The checker rules an open type's profile picks from (phase 4b, R4): the plain ones and a few parametrised examples
+	 * ({@code min_interior_volume:<n>}, {@code passage:<w>x<h>}, {@code tall:<ratio>} take any value the pattern allows).
+	 */
+	public static final List<Choice> PROFILE_RULES = List.of(
+		new Choice("door", "door", "an entrance a player can walk through"),
+		new Choice("roof_closed", "roof closed", "no hole in the roof"),
+		new Choice("floors_reachable", "floors reachable", "every floor reachable by stairs or ladders"),
+		new Choice("lit", "lit", "no dark interior cells (needs interior)"),
+		new Choice("no_floating", "no floating", "nothing hangs in the air"),
+		new Choice("interior", "interior", "an enclosed interior"),
+		new Choice("min_interior_volume:200", "volume ≥ 200", "at least 200 interior cells"),
+		new Choice("passage:3x4", "passage 3×4", "a passage at least 3 wide and 4 high"),
+		new Choice("tall:2", "tall ×2", "at least twice as tall as wide"));
+	/** A non-preset type without a profile gets these. */
+	public static final List<String> DEFAULT_PROFILE = List.of("door", "lit", "no_floating");
+	/** An open type ({@code hellish_lair}). */
+	public static final Pattern OPEN_TYPE = Blueprint.OPEN_TYPE;
+	/** One profile rule. */
+	public static final Pattern PROFILE_RULE = Pattern.compile(
+		"door|roof_closed|floors_reachable|lit|no_floating|interior|min_interior_volume:\\d{1,5}|passage:\\d{1,2}x\\d{1,2}|tall:\\d+(\\.\\d+)?");
+	public static final int MAX_PROFILE = 12;
+
+	/** Whether {@code type} is one of the 11 preset types. */
+	public static boolean isPreset(@Nullable String type) {
+		return find(TYPES, type) != null;
+	}
+
 	/** Size choices of the form: presets, a marked plot, or a custom limit. */
 	public static final List<String> SIZES = List.of("S", "M", "L", "plot", "custom");
 
@@ -125,9 +153,16 @@ public final class DesignSpec {
 
 	/** What the form would send (blank strings mean "omitted"). */
 	public record Draft(String type, String style, @Nullable String materials, List<String> features, int maxX, int maxY, int maxZ,
-		@Nullable Plot plot, @Nullable String remix, @Nullable String name, @Nullable String notes) {
+		@Nullable Plot plot, @Nullable String remix, @Nullable String name, @Nullable String notes, List<String> profile, @Nullable String bible) {
 		public Draft {
 			features = List.copyOf(features);
+			profile = profile == null ? List.of() : List.copyOf(profile);
+		}
+
+		/** The phase 1-3 draft (a preset type, no profile, no bible). */
+		public Draft(String type, String style, @Nullable String materials, List<String> features, int maxX, int maxY, int maxZ, @Nullable Plot plot,
+			@Nullable String remix, @Nullable String name, @Nullable String notes) {
+			this(type, style, materials, features, maxX, maxY, maxZ, plot, remix, name, notes, List.of(), null);
 		}
 	}
 
@@ -137,8 +172,20 @@ public final class DesignSpec {
 	 */
 	public static Map<String, String> validate(Draft d) {
 		Map<String, String> e = new LinkedHashMap<>();
-		if (find(TYPES, d.type()) == null) {
-			e.put("type", "pick a building type");
+		if (blank(d.type())) {
+			e.put("type", "pick a building type, or type your own");
+		} else if (!isPreset(d.type()) && !OPEN_TYPE.matcher(d.type()).matches()) {
+			e.put("type", "your own type: a-z, 0-9 and _, starting with a letter, at most 40 (e.g. hellish_lair)");
+		} else if (!isPreset(d.type())) {
+			if (d.profile().size() > MAX_PROFILE) {
+				e.put("type", "at most " + MAX_PROFILE + " profile rules");
+			}
+			for (String r : d.profile()) {
+				if (!PROFILE_RULE.matcher(r).matches()) {
+					e.put("type", "unknown profile rule " + r);
+					break;
+				}
+			}
 		}
 		if (blank(d.style())) {
 			e.put("style", "pick a style or type one");
@@ -217,6 +264,14 @@ public final class DesignSpec {
 		}
 		if (!blank(d.notes()) ) {
 			r.addProperty("notes", d.notes());
+		}
+		if (!isPreset(d.type())) {
+			JsonArray p = new JsonArray();
+			(d.profile().isEmpty() ? DEFAULT_PROFILE : d.profile()).forEach(p::add);
+			r.add("profile", p);
+		}
+		if (!blank(d.bible())) {
+			r.addProperty("bible", d.bible().strip());
 		}
 		return r;
 	}

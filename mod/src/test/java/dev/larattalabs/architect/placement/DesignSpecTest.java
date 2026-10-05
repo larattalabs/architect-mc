@@ -40,7 +40,7 @@ class DesignSpecTest {
 
 	@Test
 	void limitsAreTheSidecars() {
-		Map<String, String> e = DesignSpec.validate(draft("castle", 6, 65, 97));
+		Map<String, String> e = DesignSpec.validate(draft("Castle Keep", 6, 65, 97));
 		assertEquals(List.of("type", "maxSize"), List.copyOf(e.keySet()));
 		assertTrue(e.get("maxSize").contains("width 6"));
 		assertTrue(e.get("maxSize").contains("height 65"));

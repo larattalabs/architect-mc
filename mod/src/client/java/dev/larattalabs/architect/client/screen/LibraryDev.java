@@ -71,7 +71,8 @@ final class LibraryDev {
 		DevBridge.register("dev.library.state", 10_000, "{} - the library: query, visible cards, selected (detail), user tags, the Variants "
 			+ "form, the import list, the last export, messages", (req, mc) -> DevBridge.onClient(mc, () -> state(mc)));
 		DevBridge.register("dev.library.filter", 10_000, "{reset?, buildingType? (all|<type>), tag? (all|<tag>), favorites?, text?, sort?: "
-			+ "newest|name|size} - set the Library tab's search/filters/sort", (req, mc) -> {
+			+ "newest|name|size, collection?: all|bible:<id>|group:<id>} - set the Library tab's search/filters/sort and the Collection filter",
+			(req, mc) -> {
 				Fields f = Fields.of(req);
 				return DevBridge.onClient(mc, () -> {
 					ArchitectScreen s = library(mc);
@@ -86,6 +87,10 @@ final class LibraryDev {
 					}
 					if (f.has("favorites")) {
 						q = q.withFavoritesOnly(f.bool("favorites"));
+					}
+					if (f.has("collection")) {
+						String c = f.isExplicitNull("collection") ? null : f.str("collection");
+						q = q.withCollection(c == null || "all".equals(c) ? null : c);
 					}
 					if (f.has("sort")) {
 						LibraryQuery.Sort so = LibraryQuery.Sort.of(f.str("sort"));
@@ -250,8 +255,8 @@ final class LibraryDev {
 					return state(mc);
 				});
 			});
-		DevBridge.register("dev.library.variants.set", 10_000, "{preset?, wood?, stone?, roof?, accent?, values?: {param: value}, steps?: {param: "
-			+ "delta}, toggle?: [param], name?} - change the open Variants dialog", (req, mc) -> {
+		DevBridge.register("dev.library.variants.set", 10_000, "{preset?, wood?, stone?, roof?, accent?, bible?: id|null (a re-skin), values?: "
+			+ "{param: value}, steps?: {param: delta}, toggle?: [param], name?} - change the open Variants dialog", (req, mc) -> {
 				Fields f = Fields.of(req);
 				return DevBridge.onClient(mc, () -> {
 					ArchitectScreen s = library(mc);
@@ -267,6 +272,9 @@ final class LibraryDev {
 							if (f.has(field)) {
 								form.setField(field, f.str(field));
 							}
+						}
+						if (f.has("bible")) {
+							form.chooseBible(f.isExplicitNull("bible") ? null : f.str("bible"));
 						}
 						if (f.has("values")) {
 							for (var e : f.json().getAsJsonObject("values").entrySet()) {

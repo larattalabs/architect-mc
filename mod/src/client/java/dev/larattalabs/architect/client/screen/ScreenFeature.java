@@ -44,6 +44,7 @@ public final class ScreenFeature {
 		}
 		registerDev();
 		LibraryDev.register();
+		SetDev.register();
 	}
 
 	private static ArchitectScreen screen(Minecraft mc) {
@@ -112,7 +113,8 @@ public final class ScreenFeature {
 				return o;
 			});
 		});
-		DevBridge.register("dev.design.fill", 10_000, "{reset?, buildingType? (not type: that is the message type), style? (chip id or any text), materials?, features?: [..] | \"a,b\", size?: "
+		DevBridge.register("dev.design.fill", 10_000, "{reset?, buildingType? (not type: that is the message type; a non-preset one is an open type), openType?, profile?: [rules], "
+			+ "bible?: id|none, style? (chip id or any text), materials?, features?: [..] | \"a,b\", size?: "
 			+ "S|M|L|custom|plot, custom?: [x,y,z], remix?, name?, notes?} - set the Design tab's fields", (req, mc) -> {
 				Fields f = Fields.of(req);
 				return DevBridge.onClient(mc, () -> {
@@ -270,6 +272,24 @@ public final class ScreenFeature {
 		}
 		if (f.has("notes")) {
 			form.notes.set(f.str("notes"));
+		}
+		// phase 4b: an open type (buildingType "other" + openType, or any non-preset buildingType), its profile, a bible
+		if (f.has("openType")) {
+			form.type = DesignForm.OTHER;
+			form.openType.set(f.str("openType"));
+		} else if (f.has("buildingType") && !DesignForm.OTHER.equals(form.type)
+			&& !dev.larattalabs.architect.design.DesignSpec.isPreset(form.type)) {
+			form.openType.set(form.type);
+			form.type = DesignForm.OTHER;
+		}
+		if (f.has("profile")) {
+			form.profile.clear();
+			for (JsonElement e : f.json().getAsJsonArray("profile")) {
+				form.profile.add(e.getAsString());
+			}
+		}
+		if (f.has("bible")) {
+			form.bible = f.isExplicitNull("bible") || "none".equals(f.str("bible")) ? null : f.str("bible");
 		}
 		form.sendError = null;
 	}
