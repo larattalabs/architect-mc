@@ -448,11 +448,16 @@ public final class JournalStore {
 	 * no cells there.
 	 */
 	public @Nullable Entry slice(String id, long key) throws IOException {
+		return slice(id, key, null);
+	}
+
+	/** {@link #slice} from a region already read ({@code r}: this entry's region of {@code key}, current; null reads it). */
+	public @Nullable Entry slice(String id, long key, JournalNbt.@Nullable Region given) throws IOException {
 		Meta m = head.entries().get(id);
 		if (m == null) {
 			return null;
 		}
-		JournalNbt.Region r = region(id, Sections.region(key));
+		JournalNbt.Region r = given != null ? given : region(id, Sections.region(key));
 		SectionCells s = r.sections().get(key);
 		if (s == null) {
 			return null;

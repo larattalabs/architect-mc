@@ -524,6 +524,7 @@ public final class WorldJournal {
 		}
 
 		private java.util.concurrent.@Nullable CompletableFuture<Void> warm;
+		private final Map<String, JournalNbt.Region> read = new java.util.concurrent.ConcurrentHashMap<>();
 		/** {@link #planUndo}: everything in one call (no warming). */
 		boolean sync;
 
@@ -547,8 +548,9 @@ public final class WorldJournal {
 							try {
 								for (String id : s.inSection(dim, k)) {
 									JournalStore.Meta m = s.meta(id);
-									if (m != null && m.active()) {
-										s.region(id, r);
+									String key = id + "@" + r;
+									if (m != null && m.active() && !read.containsKey(key)) {
+										read.put(key, s.region(id, r)); // held here: a large region may not stay in the store's cache
 									}
 								}
 							} catch (IOException e) {
@@ -576,7 +578,7 @@ public final class WorldJournal {
 				for (String id : s.inSection(dim, k)) {
 					JournalStore.Meta m = s.meta(id);
 					if (m != null && m.active()) {
-						Entry e = s.slice(id, k);
+						Entry e = s.slice(id, k, read.get(id + "@" + Sections.region(k)));
 						if (e != null) {
 							l.add(e);
 						}
