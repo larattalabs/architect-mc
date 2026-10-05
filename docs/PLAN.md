@@ -181,6 +181,15 @@ usage hold, re-skin, open type). Caveats:
 - Real runs went over the WebSocket; the Java path is sim-only.
 - The bible set is cluttered and less legible, which is 5a's (critique loop) job.
 
+**Phase 4c status: PASSED 2026-10-05** (gate-verifier, every item reproduced; `artifacts/gate4c/REPORT.md`, local). API 1.3.0 / mod
+0.6.0.
+- **Real massing:** $0.21 / 0.9 min, 8 masses.
+- **Redirect to an L-shape with a lookout tower:** $0.17 / 0.8 min, 12 masses.
+- **Detail from it:** $3.40 / 13.8 min, conformance 0 errors and 0 issues. The verifier rebuilt it independently.
+- **The estimate's first out-of-sample check:** +31% on both cost and time, within ±50%. That closes the 4b caveat, with one sample.
+- **Sim:** 35/35 (massingFirst approval with a restart, owner enforcement); the composite preview shows all 5 styles and the cell cap.
+- One sidecar bug (conformance issues failed detail rounds) was found and fixed before the gate.
+
 **Phase 4a status: PASSED 2026-10-05** (gate-verifier; `artifacts/gate4a/REPORT.md`, local). Public API 1.1.0 / mod 0.4.1,
 published to GitHub Packages (0.4.0, 0.4.1) and resolved by Steward's CI. API checks 44-47 per run with 0 failures
 (stub/protocol 1 and real sidecar/protocol 2). Jobs: 32 sim checks plus 8 catch-up checks. Real Claude: structured jobs on
