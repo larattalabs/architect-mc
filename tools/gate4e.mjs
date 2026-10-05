@@ -989,22 +989,17 @@ steps.sizecap = async () => {
   check((await hash(KB)).sha256 === h0, 'sizecap: the keep\'s Remove is exact (box + 8)');
   out.flat = { place: pa.stats, remove: ra.stats, wallPlace: pa.wall, wallRemove: ra.wall };
   await leaveWorld();
-  // (b) natural terrain next to a worldgen tree, randomTickSpeed 300 while it places
-  const NW = 'G4E Normal';
-  if (!fs.existsSync(path.join(SAVES, NW, 'level.dat'))) {
-    await openWorld(NW, { mode: 'creative', preset: 'normal', seed: '4e', cheats: true });
-    await setRules();
-    await cmd('/save-all flush');
-    await leaveWorld();
+  // (b) worldgen trees (the oak and birch features, placed by /place feature) along the keep's box, randomTickSpeed 300
+  await fresh('G4E KeepTree', FLAT);
+  const w = { x: 0, z: 0, mean: 64 };
+  const trees = [];
+  for (const [x, z, f] of [[-4, 20, 'oak'], [-4, 60, 'birch'], [100, 30, 'oak'], [100, 70, 'fancy_oak'], [40, -4, 'oak'], [70, 101, 'birch']]) {
+    await tp(x + 0.5, 90, z + 0.5);
+    const r = await cmd(`/place feature minecraft:${f} ${x} 65 ${z}`);
+    trees.push({ x, z, f, r: (r.messages ?? []).join(' ') });
   }
-  await fresh('G4E KeepTree', NW);
-  await setRules();
-  const cols = await surveyAround(176, 4);
-  const w = flattest(new Map([...cols].filter(([, c]) => !c.tree)), 96, 96);
-  const trees = [...cols.values()].filter((c) => c.tree && c.x >= w.x - 8 && c.x <= w.x + 104 && c.z >= w.z - 8 && c.z <= w.z + 104
-    && !(c.x >= w.x && c.x <= w.x + 95 && c.z >= w.z && c.z <= w.z + 95));
-  log(`  keep window ${JSON.stringify(w)}, ${trees.length} tree columns within 8 of it`);
-  check(trees.length > 0, `sizecap: worldgen trees beside the keep's box (${trees.length} columns)`, trees.slice(0, 5));
+  log(`  trees: ${JSON.stringify(trees.map((t) => [t.x, t.z, t.f, t.r.slice(0, 40)]))}`);
+  check(trees.length === 6, 'sizecap: six worldgen-feature trees beside the keep\'s box', trees);
   const at = [w.x, w.mean + 1, w.z];
   const KB2 = [w.x - 10, w.mean - 30, w.z - 10, w.x + 106, w.mean + 80, w.z + 110];
   await tp(w.x + 48.5, w.mean + 90, w.z + 48.5);
@@ -1025,7 +1020,7 @@ steps.sizecap = async () => {
   await cmd('/gamerule random_tick_speed 300');
   await call('dev.placement.stats', { reset: true });
   const t0 = Date.now();
-  const cs = await call('dev.cells.place', { kind: 'gate4e:big', pad: { minX: c0[0], maxX: c0[0] + 99, minZ: c0[2], maxZ: c0[2] + 99, y: c0[1], depth: 4, clear: 25 }, force: true }, 1_200_000);
+  const cs = await call('dev.cells.place', { kind: 'gate4e:big', pad: { minX: c0[0], maxX: c0[0] + 100, minZ: c0[2], maxZ: c0[2] + 99, y: c0[1] + 2, depth: 4, clear: 25 }, force: true }, 1_200_000);
   const cst = await call('dev.placement.stats', {});
   await cmd('/gamerule random_tick_speed 0');
   const j = await journal();

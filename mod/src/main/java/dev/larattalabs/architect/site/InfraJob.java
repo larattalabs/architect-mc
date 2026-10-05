@@ -184,6 +184,17 @@ final class InfraJob implements Placement.Job {
 
 	@Override
 	public boolean step(MinecraftServer server, long deadline) {
+		long t0 = System.nanoTime();
+		int p0 = phase;
+		boolean r = step0(server, deadline);
+		if (Sites.Trace.ON) {
+			dev.larattalabs.architect.Architect.LOGGER.info("TRACE tick {} infra {} phase {} -> {} {} ms{}", server.getTickCount(), siteId, p0, phase,
+				(System.nanoTime() - t0) / 1e6, r ? " done" : "");
+		}
+		return r;
+	}
+
+	private boolean step0(MinecraftServer server, long deadline) {
 		// phases follow each other inside the budget (a commit is waited for there): no tick lost per phase
 		while (true) {
 			int was = phase;
