@@ -14,7 +14,7 @@ import {
   BLOCKS, collisionOf, normalize, emissionOf, opticsOf, voxelsOf, faceMask, lightCost, isConductor, isFloor,
   isPassable, isClimbable, supportOf, topOf,
 } from './blocks.mjs';
-import { BUILDING_TYPES, PORT_KINDS, resolvePalette, stoneFamilyOf, woodFamilyOf } from './kit.mjs';
+import { BUILDING_TYPES, DEFAULT_PROFILE, PORT_KINDS, TYPE_RE, isPresetType, parseProfile, resolvePalette, stoneFamilyOf, woodFamilyOf } from './kit.mjs';
 
 const DIRS6 = [['east', 1, 0, 0], ['west', -1, 0, 0], ['up', 0, 1, 0], ['down', 0, -1, 0], ['south', 0, 0, 1], ['north', 0, 0, -1]];
 const OPP = { east: 'west', west: 'east', up: 'down', down: 'up', south: 'north', north: 'south' };
@@ -291,8 +291,24 @@ export function checkStructure(sidecar, structure, opts = {}) {
   // ---- sidecar basics
   for (const f of ['id', 'name', 'type', 'size', 'groundY', 'front', 'anchors']) if (sidecar[f] === undefined) err(`sidecar: '${f}' missing`);
   if (!/^[a-z0-9_]+$/.test(sidecar.id ?? '')) err(`sidecar: id '${sidecar.id}' must match [a-z0-9_]+`);
-  if (sidecar.type !== undefined && !BUILDING_TYPES.includes(sidecar.type)) err(`sidecar: type '${sidecar.type}' must be one of ${BUILDING_TYPES.join(', ')}`);
+  if (sidecar.type !== undefined && !(typeof sidecar.type === 'string' && TYPE_RE.test(sidecar.type))) err(`sidecar: type '${sidecar.type}' must be a preset (${BUILDING_TYPES.join(', ')}) or an open type matching ${TYPE_RE}`);
   if (opts.type && sidecar.type !== opts.type) err(`sidecar: type '${sidecar.type}' but the request asked for '${opts.type}'`);
+  // open types (R4): a non-preset type is checked with its profile's rules; preset types keep their own profiles
+  const open = typeof sidecar.type === 'string' && !isPresetType(sidecar.type);
+  let prof = null;
+  if (sidecar.profile !== undefined) {
+    try { parseProfile(sidecar.profile); } catch (e) { err(`sidecar: ${e.message}`); }
+  }
+  if (opts.profile !== undefined && open) {
+    const want = parseProfile(opts.profile).list;
+    if (JSON.stringify(sidecar.profile ?? null) !== JSON.stringify(want)) err(`sidecar: profile ${JSON.stringify(sidecar.profile ?? null)} but the request asked for ${JSON.stringify(want)} (set \`profile\` on the Blueprint)`);
+  }
+  if (open) {
+    try { prof = parseProfile(sidecar.profile ?? opts.profile ?? DEFAULT_PROFILE); } catch { prof = parseProfile(DEFAULT_PROFILE); }
+  }
+  /** does this building get rule `r` (a preset type: every rule of its own profile, as before 4b) */
+  const rule = (r) => !open || prof.rules.has(r);
+  const needsInterior = open ? ['interior', 'lit', 'floors_reachable', 'roof_closed', 'min_interior_volume'].filter((r) => prof.rules.has(r)) : [];
   if (!(sidecar.front in H_VEC)) err(`sidecar: front '${sidecar.front}' invalid`);
   if (sidecar.size && (sidecar.size.x !== size[0] || sidecar.size.y !== size[1] || sidecar.size.z !== size[2])) {
     err(`sidecar size ${sidecar.size?.x}x${sidecar.size?.y}x${sidecar.size?.z} != structure size ${size.join('x')}`);
@@ -304,7 +320,8 @@ export function checkStructure(sidecar, structure, opts = {}) {
   if (sidecar.materials !== undefined && !(Array.isArray(sidecar.materials) && sidecar.materials.every((t) => typeof t === 'string' && BLOCKS[t]))) err('sidecar: materials must be a list of vanilla block ids');
   const w = sidecar.interior ?? null;
   // without an interior the light rule (an error) would be skipped: every type but custom declares one
-  if (!w && sidecar.type !== 'custom') err(`sidecar: interior is required for type '${sidecar.type}' (the box agents and players live in; only 'custom' may omit it)`);
+  if (!w && !open && sidecar.type !== 'custom') err(`sidecar: interior is required for type '${sidecar.type}' (the box agents and players live in; only 'custom' may omit it)`);
+  if (!w && open && needsInterior.length) err(`sidecar: interior is required: the profile of '${sidecar.type}' has ${needsInterior.join(', ')}`);
   if (w) {
     for (const f of ['minX', 'minY', 'minZ', 'maxX', 'maxY', 'maxZ']) if (!Number.isInteger(w[f])) err(`sidecar: interior.${f} must be an int`);
     if (w.minX > w.maxX || w.minY > w.maxY || w.minZ > w.maxZ) err('sidecar: interior min > max');
@@ -364,17 +381,17 @@ export function checkStructure(sidecar, structure, opts = {}) {
     const [fx, fz] = H_VEC[state.props.facing];
     return [[fx, fz], [-fx, -fz]].some(([dx, dz]) => outside.has(fmt(x + dx, y, z + dz)) || outside.has(fmt(x + dx, y + 1, z + dz)));
   });
-  if (!outsideDoors.length && sidecar.type !== 'barn') inherited('no outside door: a building needs at least one closed door to the outside on its front');
+  if (!outsideDoors.length && sidecar.type !== 'barn' && rule('door')) inherited('no outside door: a building needs at least one closed door to the outside on its front');
 
   // ---- light: every standable interior cell gets block light >= 1 from vanilla sources
-  if (w) {
+  if (w && rule('lit')) {
     const light = lightLevels(g);
     const dark = interiorCells(w).filter(([x, y, z]) => g.standable(x, y, z) && light(x, y, z) < 1).map(([x, y, z]) => fmt(x, y, z));
     if (dark.length) inherited(`light: ${dark.length} standable interior cell(s) get no block light (mobs spawn there at night), e.g. ${dark.slice(0, 6).join('; ')}`);
   }
 
   // ================================================================ rules new in Architect: warnings in phase 1
-  const ctx = { g, sidecar, anchors, interior: w, outside, doors: doors.doors, outsideDoors, imported };
+  const ctx = { g, sidecar, anchors, interior: w, outside, doors: doors.doors, outsideDoors, imported, open, prof, rule };
   for (const rule of NEW_RULES) {
     try { warnings.push(...rule(ctx)); } catch (e) { warnings.push(`checker: rule ${rule.name} failed: ${e.message}`); }
   }
@@ -477,7 +494,8 @@ const startOf = (a) => (a ? [Math.floor(a.x), Math.floor(a.y + 1e-6), Math.floor
 const sample = (list, n = 5) => list.slice(0, n).join('; ') + (list.length > n ? '; ...' : '');
 
 /** Nothing floating: every block connects to the ground through other blocks (attachables through their support). */
-function floating({ g }) {
+function floating({ g, rule }) {
+  if (!rule('no_floating')) return [];
   const nodes = [];
   for (const [k, c] of g.cells) {
     const fam = BLOCKS[c.name]?.family;
@@ -512,8 +530,9 @@ function floating({ g }) {
 }
 
 /** A door on the front face that the entrance reaches; every interior floor level reachable from the entrance. */
-function reachability({ g, sidecar, anchors, interior: w, outside, outsideDoors }) {
+function reachability({ g, sidecar, anchors, interior: w, outside, outsideDoors, rule }) {
   const out = [];
+  if (!rule('door') && !rule('floors_reachable')) return out;
   const wk = walker(g, (sidecar.approach?.length ?? 4) + 2);
   const reached = wk.reach(startOf(anchors.entrance));
   const [fx, fz] = H_VEC[sidecar.front];
@@ -525,11 +544,11 @@ function reachability({ g, sidecar, anchors, interior: w, outside, outsideDoors 
   });
   const frontReached = front.filter(({ x, y, z }) => [0, 1, -1].some((dy) => reached.has(fmt(x + fx, y + dy, z + fz))));
   const opening = sidecar.type === 'barn' && barnOpening(g, sidecar, w);
-  if (!opening) {
+  if (!opening && rule('door')) {
     if (!front.length) out.push(`doors: no outside door on the ${sidecar.front} (front) face`);
     else if (!frontReached.length) out.push(`doors: the front door${front.length > 1 ? 's' : ''} at ${front.map((d) => fmt(d.x, d.y, d.z)).join('; ')} cannot be walked to from the entrance`);
   }
-  if (w) {
+  if (w && rule('floors_reachable')) {
     const levels = floorLevels(g, w, wk);
     if (!levels.length) out.push('reachability: the interior has no floor level (no row with enough standing room)');
     let ok = 0;
@@ -545,8 +564,8 @@ function reachability({ g, sidecar, anchors, interior: w, outside, outsideDoors 
 }
 
 /** The interior is enclosed: walls without gaps and a roof over every cell (any block above counts as cover). */
-function enclosure({ g, sidecar, interior: w }) {
-  if (!w) return [];
+function enclosure({ g, sidecar, interior: w, rule }) {
+  if (!w || !rule('roof_closed')) return [];
   const out = [];
   const sy = g.size[1];
   const open = [];
@@ -593,7 +612,9 @@ function barnOpening(g, sidecar, w) {
 }
 
 /** Profile geometry: tower proportions, the barn's big entrance, the gatehouse passage, interior volume. */
-function profile({ g, sidecar, interior: w }) {
+function profile(ctx) {
+  if (ctx.open) return openProfile(ctx);
+  const { g, sidecar, interior: w } = ctx;
   const out = [];
   const t = sidecar.type;
   if (t === 'tower') {
@@ -608,19 +629,7 @@ function profile({ g, sidecar, interior: w }) {
   }
   if (t === 'barn' && !barnOpening(g, sidecar, w)) out.push(`barn: no entrance at least 3 wide and 3 tall on the ${sidecar.front} face (a door or an open arch)`);
   if (t === 'gatehouse') {
-    const [sx, , sz] = g.size;
-    const wk = walker(g);
-    const alongZ = sidecar.front === 'south' || sidecar.front === 'north';
-    const n = alongZ ? sx : sz;
-    const depth = alongZ ? sz : sx;
-    let run = 0;
-    let best = 0;
-    for (let u = 0; u < n; u++) {
-      let ok = true;
-      for (let d = 0; d < depth && ok; d++) for (let dy = 0; dy < 3 && ok; dy++) ok = wk.pass(...(alongZ ? [u, g.groundY + dy, d] : [d, g.groundY + dy, u]));
-      run = ok ? run + 1 : 0;
-      best = Math.max(best, run);
-    }
+    const best = widestPassage(g, sidecar.front, 3);
     if (best < 3) out.push(`gatehouse: no passage through the building front to back at least 3 wide and 3 tall (widest: ${best})`);
   }
   if (MIN_VOLUME[t] !== undefined) {
@@ -686,4 +695,73 @@ function survival({ g, sidecar }) {
   return [...n].map(([b, c]) => `survival: this design uses ${b.replace('minecraft:', '')} (${c} block${c === 1 ? '' : 's'}), which survival can't build: a survival world refuses to place it`);
 }
 
-const NEW_RULES = [floating, reachability, enclosure, profile, paletteFamilies, survival];
+/** The widest run of columns with a walkable passage, front to back, `h` cells tall (the gatehouse rule). */
+function widestPassage(g, front, h) {
+  const [sx, , sz] = g.size;
+  const wk = walker(g);
+  const alongZ = front === 'south' || front === 'north';
+  const n = alongZ ? sx : sz;
+  const depth = alongZ ? sz : sx;
+  let run = 0;
+  let best = 0;
+  for (let u = 0; u < n; u++) {
+    let ok = true;
+    for (let d = 0; d < depth && ok; d++) for (let dy = 0; dy < h && ok; dy++) ok = wk.pass(...(alongZ ? [u, g.groundY + dy, d] : [d, g.groundY + dy, u]));
+    run = ok ? run + 1 : 0;
+    best = Math.max(best, run);
+  }
+  return best;
+}
+
+/** An open type's profile geometry (R4): tall:<ratio>, passage:<w>x<h>, min_interior_volume:<n>. */
+function openProfile({ g, sidecar, interior: w, prof }) {
+  const out = [];
+  const t = sidecar.type;
+  if (prof.tall !== undefined) {
+    if (!w) out.push(`${t}: tall:${prof.tall} needs an interior (to measure the footprint)`);
+    else {
+      const side = Math.min(w.maxX - w.minX + 3, w.maxZ - w.minZ + 3);
+      let top = -1;
+      for (const [k, c] of g.cells) if (BLOCKS[c.name]?.family !== 'air') top = Math.max(top, unfmt(k)[1]);
+      const h = top - g.groundY + 1;
+      if (h < prof.tall * side) out.push(`${t}: ${h} blocks tall above the ground on a ${side}-wide footprint (tall:${prof.tall} wants at least ${Math.ceil(prof.tall * side)})`);
+    }
+  }
+  if (prof.passage) {
+    const best = widestPassage(g, sidecar.front, prof.passage.h);
+    if (best < prof.passage.w) out.push(`${t}: no passage through the building front to back at least ${prof.passage.w} wide and ${prof.passage.h} tall (widest: ${best})`);
+  }
+  if (prof.minVolume !== undefined && w) {
+    const vol = interiorCells(w).filter(([x, y, z]) => g.free(x, y, z)).length;
+    if (vol < prof.minVolume) out.push(`${t}: interior volume ${vol} is under the ${prof.minVolume} its profile asks for`);
+  }
+  return out;
+}
+
+/**
+ * Named parts (R3, phase 4b: warnings): `parts: { name: { box, cells } }`, at least 2, and at most 20% of the template's
+ * cells outside every part. Imports have none (a structure the player built).
+ */
+function parts({ g, sidecar, imported }) {
+  if (imported) return [];
+  const out = [];
+  const p = sidecar.parts;
+  const total = g.cells.size;
+  if (p === undefined) return [`parts: no named parts (wrap every major mass in bp.part('<name>', () => { ... }): main, roof, porch, tower, wing_east...; at least 2)`];
+  if (!p || typeof p !== 'object' || Array.isArray(p)) return ['parts: must be an object { name: { box, cells } }'];
+  let inParts = 0;
+  for (const [n, v] of Object.entries(p)) {
+    if (!/^[a-z][a-z0-9_]{0,39}$/.test(n)) out.push(`parts: name '${n}' must match [a-z][a-z0-9_]{0,39}`);
+    const box = v?.box;
+    if (!Array.isArray(box) || box.length !== 6 || !box.every(Number.isInteger) || box.slice(0, 3).some((b, i) => b < 0 || b > box[i + 3] || box[i + 3] >= g.size[i])) out.push(`parts: ${n}: box must be [x0,y0,z0,x1,y1,z1] inside the template`);
+    if (!Number.isInteger(v?.cells) || v.cells < 1) out.push(`parts: ${n}: cells must be a positive integer`);
+    else inParts += v.cells;
+  }
+  const n = Object.keys(p).length;
+  if (n < 2) out.push(`parts: ${n} named part${n === 1 ? '' : 's'}; declare at least 2 (every major mass: bp.part('main', ...), bp.part('roof', ...), ...)`);
+  const outside = total - inParts;
+  if (total > 0 && outside > 0.2 * total) out.push(`parts: ${outside} of ${total} cells (${Math.round((100 * outside) / total)}%) are outside every named part (at most 20%): wrap the rest in bp.part()`);
+  return out;
+}
+
+const NEW_RULES = [floating, reachability, enclosure, profile, paletteFamilies, survival, parts];

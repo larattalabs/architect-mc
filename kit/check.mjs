@@ -9,7 +9,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { checkFiles, parseMax } from './lib/check.mjs';
-import { BUILDING_TYPES } from './lib/kit.mjs';
+import { BUILDING_TYPES, TYPE_RE } from './lib/kit.mjs';
 
 const USAGE = 'usage: node kit/check.mjs <file.nbt> <sidecar.json> [--max x,y,z] [--type <t>] [--imported] [--json]';
 
@@ -21,7 +21,7 @@ export function parseCheckArgs(argv) {
     if (a === '--max') o.max = parseMax(val());
     else if (a === '--type') {
       o.type = val();
-      if (!BUILDING_TYPES.includes(o.type)) throw new Error(`--type '${o.type}' must be one of ${BUILDING_TYPES.join(', ')}`);
+      if (!TYPE_RE.test(o.type)) throw new Error(`--type '${o.type}' must be a preset (${BUILDING_TYPES.join(', ')}) or an open type matching ${TYPE_RE}`);
     } else if (a === '--imported') o.imported = true;
     else if (a === '--json') o.json = true;
     else if (a.startsWith('-')) throw new Error(`unknown option ${a}`);

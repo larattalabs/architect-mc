@@ -125,5 +125,84 @@
     "length": 14,
     "roof": "gable",
     "chimney": true
+  },
+  "parts": {
+    "ground_storey": {
+      "box": [
+        1,
+        0,
+        1,
+        14,
+        9,
+        9
+      ],
+      "cells": 943
+    },
+    "upper_storey": {
+      "box": [
+        1,
+        6,
+        1,
+        14,
+        10,
+        9
+      ],
+      "cells": 258
+    },
+    "openings": {
+      "box": [
+        1,
+        1,
+        1,
+        14,
+        8,
+        10
+      ],
+      "cells": 80
+    },
+    "roof": {
+      "box": [
+        0,
+        0,
+        0,
+        15,
+        17,
+        10
+      ],
+      "cells": 326
+    },
+    "taproom": {
+      "box": [
+        4,
+        1,
+        2,
+        13,
+        4,
+        8
+      ],
+      "cells": 47
+    },
+    "stairs": {
+      "box": [
+        2,
+        1,
+        4,
+        3,
+        7,
+        8
+      ],
+      "cells": 29
+    },
+    "guest_rooms": {
+      "box": [
+        5,
+        6,
+        2,
+        13,
+        9,
+        8
+      ],
+      "cells": 35
+    }
   }
 }

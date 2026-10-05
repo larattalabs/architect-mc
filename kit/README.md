@@ -15,6 +15,11 @@ node kit/tools/describe.mjs cabin                                              #
 node kit/check.mjs <file.nbt> <sidecar.json> [--max x,y,z] [--type <t>] [--imported] [--json]  # check a pair, no source
 node kit/import.mjs <file.nbt> --id <id> --out <dir> [--name <n>] [--json]     # a structure-block save -> entry
 node kit/tools/examples.mjs                                                    # rebuild kit/examples/<id>/
+node kit/build.mjs cabin --bible kit/out/my_bible.json                         # build under a style bible (or --bible cherry)
+node kit/build.mjs lair --type hellish_lair --profile door,lit,no_floating      # an open type with its profile
+node kit/tools/components.mjs <components.mjs> --bible <bible.json|name> --out <dir> [--json]  # component test frame + sheet.png
+node kit/tools/bible.mjs validate <bible.json> [--scope settlement] | builtin [<name>] | roles  # style bibles
+node kit/tools/preset-builds.mjs                                               # the presets still build byte-identically
 node --test kit/test/*.test.mjs                                                # tests (incl. the param x palette sweep)
 ```
 
@@ -91,6 +96,37 @@ Helpers (`lib/kit.mjs`): `set/fill/hollow/carve`, `walls` (with `openings`), `ro
 under each course so nothing floats) / `roofFlat` (parapet, crenels), `chimney`, `porch`, `lantern`, `torch`,
 `candle`, `ceilingLights`, `plant`, `rug`, `table`, `chair`, `bed`, `anchor`, `spot`, `camera`.
 
+## Style bibles, components, named parts, open types (phase 4b)
+
+**Roles.** A style bible (`lib/bible.mjs`, docs/CONTRACT.md "Style bible") names a vanilla block per role: `wall`, `wall_alt`,
+`trim`, `roof`, `floor`, `frame`, `accent`, `light`, `glass`, `foundation`, `path` (plus any extra named roles; a
+settlement-scope bible adds `rock`, `surface`, `subsurface`, `rubble`, `rail`, `structure`). `palette({ bible })` derives
+every palette field from a role (`ROLE_FIELDS` in `lib/kit.mjs`: wall -> `wall`, wall_alt -> `plaster`, trim -> `stoneTrim`,
+roof -> `roofBlock/roofStairs/roofSlab`, frame -> `frame` and the wood set of its wood, accent -> the accent wood set, glass ->
+`pane`/`glass`, foundation -> `foundation` and the stone set, ...), so a palette-driven design re-skins under any bible. Every
+palette has `p.roles` (presets too). The 10 presets are the built-in bibles (`builtinBible(name)`, no prose):
+`palette({ bible: 'cherry' })` is field for field `PALETTES.cherry`, and the examples build byte-identically under both
+(`test/bible.test.mjs`, `tools/preset-builds.mjs`). A bible build records `palette: { bible: { id, version, roles } }` (it
+round-trips through `resolvePalette`) and `bible: { id, version }`. A design in a group loads its bible with
+`loadBible(new URL('../../bible/bible.json', import.meta.url))` and defaults to `palette({ bible: BIBLE })`.
+
+**Components.** A bible's `components.mjs` exports `(bp, at, opts)` functions that place a small part with the roles:
+`window`, `door_surround`, `lantern_post`, `roof_trim`, `chimney` at least (`lib/components.mjs` has the rules and the `at`
+of each). It imports nothing (it is copied between folders): materials come from `bp.p` / `bp.p.roles`, directions from
+`bp.kit`. `tools/components.mjs` builds each component into a test frame (a small lit house in the roles), checks it (an
+error fails the component; warnings are reported) and renders `sheet.png` (a swatch of the roles, then one tile per
+component). `bibles/rustic/components.mjs` is the reference library.
+
+**Named parts.** `bp.part('wing_east', () => { ... })` records the cells a part writes (the innermost part; a later write
+takes a cell over). The sidecar gets `parts: { name: { box: [x0,y0,z0,x1,y1,z1], cells } }`. Warnings: fewer than 2 parts,
+or more than 20% of the template's cells outside every part. The examples declare theirs.
+
+**Open types.** `type` may be any short string (`/^[a-z][a-z0-9_]{0,39}$/`). A non-preset type is checked with its `profile`
+(`new Blueprint({ type: 'hellish_lair', profile: ['door', 'lit', 'no_floating'] })`), rules from the menu `door`,
+`roof_closed`, `floors_reachable`, `lit`, `no_floating`, `interior`, `min_interior_volume:<n>`, `passage:<w>x<h>`,
+`tall:<ratio>`; without one it gets `door`, `lit`, `no_floating`. `lit` (and the other interior rules) require `interior`.
+Preset types keep their profiles. `build.mjs --profile` passes the request's profile; the design must declare the same one.
+
 ## Checker (`lib/check.mjs`)
 
 Errors: vanilla blocks with every property explicit and valid, sidecar fields, `entrance` + `spawn` standable,
@@ -98,7 +134,8 @@ doors closed, an outside door, iron doors with a button on both sides on a condu
 interior cell lit by vanilla emitters, `--max`, `--type`. Warnings (phase 1): floating blocks, a reachable front
 door, interior floor levels reachable from the entrance, enclosure (roof, wall gaps), unwritten interior cells,
 the tower / barn / gatehouse geometry and the minimum interior volume per type. Phase 2 warning: a wood or stone
-family that isn't from the sidecar's `palette`.
+family that isn't from the sidecar's `palette`. Phase 4b warnings: named parts (fewer than 2, more than 20% of the cells
+outside); an open type's profile geometry.
 
 **Imports** (`--imported`, `import.mjs`): a structure the player built is theirs, so the rules about how a building
 works (anchors standable, doors closed / with buttons, an outside door, light) and a size that doesn't match the block

@@ -42,72 +42,82 @@ export default function build({ palette: p = PALETTES.fortress, floors = 3, widt
     approach: { length: 4, width: 3 },
   });
 
-  // ---------------------------------------------------------------- shell, floors
-  bp.floor(0, 0, N, N, 0, p.stone);
-  bp.carve([1, 1, 1, N - 1, deck - 1, N - 1]);
-  bp.walls(0, 0, N, N, 1, deck - 1, { block: p.stone, corners: p.stone });
-  for (let y = 5; y < deck; y += 5) {
-    bp.walls(0, 0, N, N, y, y, { block: p.stoneTrim, corners: p.stoneTrim }); // band where the floors are
-    bp.floor(1, 1, N - 1, N - 1, y, p.planks);
-  }
-  bp.floor(0, 0, N, N, deck, p.stone); // lookout deck
-  // plinth: stone stairs around the foot of the walls
-  for (let i = 0; i <= N; i++) {
-    bp.stairs(i, 1, -1, 'south', { block: p.stoneStairs });
-    bp.stairs(-1, 1, i, 'east', { block: p.stoneStairs });
-    bp.stairs(N + 1, 1, i, 'west', { block: p.stoneStairs });
-    if (i < C - 1 || i > C + 1) bp.stairs(i, 1, N + 1, 'north', { block: p.stoneStairs });
-  }
-  for (const [x, z, f, shape] of [[-1, -1, 'south', 'outer_right'], [N + 1, -1, 'south', 'outer_left'], [-1, N + 1, 'north', 'outer_left'], [N + 1, N + 1, 'north', 'outer_right']]) {
-    bp.stairs(x, 1, z, f, { block: p.stoneStairs, shape });
-  }
-
-  // ---------------------------------------------------------------- door, windows
-  bp.ironDoor(C, 1, N, 'south', { buttonSide: 1, jamb: p.stone });
-  for (let f = 0; f < floors; f++) {
-    const y = 5 * f + 2;
-    for (const x of [0, N]) bp.window(x, y, C, x, y + 1, C);
-    if (f === 0) continue;
-    bp.window(C, y, N, C, y + 1, N);
-    for (const x of [C - 1, C + 1]) bp.window(x, y, 0, x, y, 0);
-  }
-
-  // ---------------------------------------------------------------- ladder (inside the north wall) up to the deck
-  bp.ladder(C, 1, 1, deck, 'south');
-
-  // ---------------------------------------------------------------- lights: a lantern under each ceiling
-  for (let y = 4; y < deck; y += 5) bp.lantern(C, y, C, true);
-
-  // ---------------------------------------------------------------- the crown
-  if (roof === 'hip') {
-    for (const [x, z] of [[0, 0], [N, 0], [0, N], [N, N]]) bp.post(x, z, deck + 1, deck + 3, p.log);
-    for (let i = 1; i < N; i++) {
-      bp.set(i, deck + 1, 0, p.fence);
-      bp.set(i, deck + 1, N, p.fence);
-      bp.set(0, deck + 1, i, p.fence);
-      bp.set(N, deck + 1, i, p.fence);
+  bp.part('shaft', () => {
+    // ---------------------------------------------------------------- shell, floors
+    bp.floor(0, 0, N, N, 0, p.stone);
+    bp.carve([1, 1, 1, N - 1, deck - 1, N - 1]);
+    bp.walls(0, 0, N, N, 1, deck - 1, { block: p.stone, corners: p.stone });
+    for (let y = 5; y < deck; y += 5) {
+      bp.walls(0, 0, N, N, y, y, { block: p.stoneTrim, corners: p.stoneTrim }); // band where the floors are
+      bp.floor(1, 1, N - 1, N - 1, y, p.planks);
     }
-    bp.roofHip(-1, -1, N + 1, N + 1, deck + 4);
-    bp.set(C, top, C, 'minecraft:lightning_rod', { facing: 'up' });
-    bp.fill([C, deck + 4, C, C, deck + 2 + rise, C], 'minecraft:iron_chain', { axis: 'y' });
-    bp.lantern(C, deck + 3, C, true);
-  } else {
-    // a parapet ring, merlons on every other cell, taller corner merlons with a lantern on each
+    bp.floor(0, 0, N, N, deck, p.stone); // lookout deck
+    // plinth: stone stairs around the foot of the walls
     for (let i = 0; i <= N; i++) {
-      for (const [x, z] of [[i, 0], [i, N], [0, i], [N, i]]) {
-        bp.set(x, deck + 1, z, p.stone);
-        if ((x + z) % 2 === 0) bp.set(x, deck + 2, z, p.stone);
+      bp.stairs(i, 1, -1, 'south', { block: p.stoneStairs });
+      bp.stairs(-1, 1, i, 'east', { block: p.stoneStairs });
+      bp.stairs(N + 1, 1, i, 'west', { block: p.stoneStairs });
+      if (i < C - 1 || i > C + 1) bp.stairs(i, 1, N + 1, 'north', { block: p.stoneStairs });
+    }
+    for (const [x, z, f, shape] of [[-1, -1, 'south', 'outer_right'], [N + 1, -1, 'south', 'outer_left'], [-1, N + 1, 'north', 'outer_left'], [N + 1, N + 1, 'north', 'outer_right']]) {
+      bp.stairs(x, 1, z, f, { block: p.stoneStairs, shape });
+    }
+  });
+
+  bp.part('openings', () => {
+    // ---------------------------------------------------------------- door, windows
+    bp.ironDoor(C, 1, N, 'south', { buttonSide: 1, jamb: p.stone });
+    for (let f = 0; f < floors; f++) {
+      const y = 5 * f + 2;
+      for (const x of [0, N]) bp.window(x, y, C, x, y + 1, C);
+      if (f === 0) continue;
+      bp.window(C, y, N, C, y + 1, N);
+      for (const x of [C - 1, C + 1]) bp.window(x, y, 0, x, y, 0);
+    }
+  });
+
+  bp.part('fittings', () => {
+    // ---------------------------------------------------------------- ladder (inside the north wall) up to the deck
+    bp.ladder(C, 1, 1, deck, 'south');
+
+    // ---------------------------------------------------------------- lights: a lantern under each ceiling
+    for (let y = 4; y < deck; y += 5) bp.lantern(C, y, C, true);
+  });
+
+  bp.part('crown', () => {
+    // ---------------------------------------------------------------- the crown
+    if (roof === 'hip') {
+      for (const [x, z] of [[0, 0], [N, 0], [0, N], [N, N]]) bp.post(x, z, deck + 1, deck + 3, p.log);
+      for (let i = 1; i < N; i++) {
+        bp.set(i, deck + 1, 0, p.fence);
+        bp.set(i, deck + 1, N, p.fence);
+        bp.set(0, deck + 1, i, p.fence);
+        bp.set(N, deck + 1, i, p.fence);
+      }
+      bp.roofHip(-1, -1, N + 1, N + 1, deck + 4);
+      bp.set(C, top, C, 'minecraft:lightning_rod', { facing: 'up' });
+      bp.fill([C, deck + 4, C, C, deck + 2 + rise, C], 'minecraft:iron_chain', { axis: 'y' });
+      bp.lantern(C, deck + 3, C, true);
+    } else {
+      // a parapet ring, merlons on every other cell, taller corner merlons with a lantern on each
+      for (let i = 0; i <= N; i++) {
+        for (const [x, z] of [[i, 0], [i, N], [0, i], [N, i]]) {
+          bp.set(x, deck + 1, z, p.stone);
+          if ((x + z) % 2 === 0) bp.set(x, deck + 2, z, p.stone);
+        }
+      }
+      for (const [x, z] of [[0, 0], [N, 0], [0, N], [N, N]]) {
+        bp.post(x, z, deck + 2, deck + 3, p.stoneTrim);
+        bp.lantern(x, deck + 4, z);
       }
     }
-    for (const [x, z] of [[0, 0], [N, 0], [0, N], [N, N]]) {
-      bp.post(x, z, deck + 2, deck + 3, p.stoneTrim);
-      bp.lantern(x, deck + 4, z);
-    }
-  }
+  });
 
-  // ---------------------------------------------------------------- landing + path
-  bp.floor(C - 1, N + 1, C + 1, N + 3, 0, p.stone);
-  bp.floor(C, N + 1, C, N + 3, 0, p.path);
+  bp.part('landing', () => {
+    // ---------------------------------------------------------------- landing + path
+    bp.floor(C - 1, N + 1, C + 1, N + 3, 0, p.stone);
+    bp.floor(C, N + 1, C, N + 3, 0, p.path);
+  });
 
   // ---------------------------------------------------------------- anchors
   bp.spot('entrance', C, N + 1, 180);

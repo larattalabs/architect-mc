@@ -44,60 +44,70 @@ export default function build({ palette: p = PALETTES.fortress, passage = 3, dep
     approach: { length: 4, width: 3 },
   });
 
-  // ---------------------------------------------------------------- base, walls
-  bp.floor(0, 0, X, Z, 0, p.stone);
-  bp.floor(4, -2, E - 1, Z + 1, 0, p.stoneTrim); // the road through
-  bp.floor(1, 1, 2, Z - 1, 0, p.planks);
-  bp.floor(E + 1, 1, X - 1, Z - 1, 0, p.planks);
-  // guard-room blocks on each side of the passage (rows 1..4)
-  for (const [x0, x1] of [[0, 3], [E, X]]) {
-    bp.carve([x0 + 1, 1, 1, x1 - 1, 4, Z - 1]);
-    bp.walls(x0, 0, x1, Z, 1, 4, { block: p.stone, corners: p.stone });
-  }
-  bp.carve([4, 1, 0, E - 1, 4, Z]); // the passage
-  // the hall over everything (a band of trim stone outside, where the floor is)
-  bp.floor(0, 0, X, Z, 5, p.stoneTrim);
-  bp.floor(1, 1, X - 1, Z - 1, 5, p.planks);
-  bp.carve([1, 6, 1, X - 1, 8, Z - 1]);
-  bp.walls(0, 0, X, Z, 6, 8, { block: p.stone, corners: p.stone });
-  // arch trim over both mouths: upside-down stairs at the passage corners
-  for (const z of [0, Z]) {
-    bp.stairs(4, 4, z, 'west', { block: p.stoneStairs, half: 'top' });
-    bp.stairs(E - 1, 4, z, 'east', { block: p.stoneStairs, half: 'top' });
-  }
+  bp.part('main', () => {
+    // ---------------------------------------------------------------- base, walls
+    bp.floor(0, 0, X, Z, 0, p.stone);
+    bp.floor(4, -2, E - 1, Z + 1, 0, p.stoneTrim); // the road through
+    bp.floor(1, 1, 2, Z - 1, 0, p.planks);
+    bp.floor(E + 1, 1, X - 1, Z - 1, 0, p.planks);
+    // guard-room blocks on each side of the passage (rows 1..4)
+    for (const [x0, x1] of [[0, 3], [E, X]]) {
+      bp.carve([x0 + 1, 1, 1, x1 - 1, 4, Z - 1]);
+      bp.walls(x0, 0, x1, Z, 1, 4, { block: p.stone, corners: p.stone });
+    }
+    bp.carve([4, 1, 0, E - 1, 4, Z]); // the passage
+    // the hall over everything (a band of trim stone outside, where the floor is)
+    bp.floor(0, 0, X, Z, 5, p.stoneTrim);
+    bp.floor(1, 1, X - 1, Z - 1, 5, p.planks);
+    bp.carve([1, 6, 1, X - 1, 8, Z - 1]);
+    bp.walls(0, 0, X, Z, 6, 8, { block: p.stone, corners: p.stone });
+    // arch trim over both mouths: upside-down stairs at the passage corners
+    for (const z of [0, Z]) {
+      bp.stairs(4, 4, z, 'west', { block: p.stoneStairs, half: 'top' });
+      bp.stairs(E - 1, 4, z, 'east', { block: p.stoneStairs, half: 'top' });
+    }
+  });
 
-  // ---------------------------------------------------------------- roof
-  bp.roofFlat(0, 0, X, Z, 9, { deck: p.stone, parapet: p.stone, crenels });
-  bp.floor(1, 1, X - 1, Z - 1, 9, p.stoneSlab);
-  for (const [x, z] of [[1, 1], [X - 1, 1], [1, Z - 1], [X - 1, Z - 1]]) bp.slab(x, 9, z, 'double', p.stoneSlab);
+  bp.part('roof', () => {
+    // ---------------------------------------------------------------- roof
+    bp.roofFlat(0, 0, X, Z, 9, { deck: p.stone, parapet: p.stone, crenels });
+    bp.floor(1, 1, X - 1, Z - 1, 9, p.stoneSlab);
+    for (const [x, z] of [[1, 1], [X - 1, 1], [1, Z - 1], [X - 1, Z - 1]]) bp.slab(x, 9, z, 'double', p.stoneSlab);
+  });
 
-  // ---------------------------------------------------------------- doors, windows, torches
-  bp.door(2, 1, Z, 'south');
-  bp.door(X - 2, 1, Z, 'south', { hinge: 'right' });
-  for (const z of [0, Z]) for (const x of [2, M, X - 2]) bp.window(x, 7, z, x, 7, z, 'minecraft:iron_bars');
-  for (const x of [0, X]) bp.window(x, 7, 2, x, 7, Z - 2, 'minecraft:iron_bars');
-  for (const x of [0, X]) bp.window(x, 2, zc, x, 3, zc, 'minecraft:iron_bars');
-  for (const x of [3, E]) for (const z of [Z + 1, -1]) bp.torch(x, 3, z, z > 0 ? 'south' : 'north');
+  bp.part('openings', () => {
+    // ---------------------------------------------------------------- doors, windows, torches
+    bp.door(2, 1, Z, 'south');
+    bp.door(X - 2, 1, Z, 'south', { hinge: 'right' });
+    for (const z of [0, Z]) for (const x of [2, M, X - 2]) bp.window(x, 7, z, x, 7, z, 'minecraft:iron_bars');
+    for (const x of [0, X]) bp.window(x, 7, 2, x, 7, Z - 2, 'minecraft:iron_bars');
+    for (const x of [0, X]) bp.window(x, 2, zc, x, 3, zc, 'minecraft:iron_bars');
+    for (const x of [3, E]) for (const z of [Z + 1, -1]) bp.torch(x, 3, z, z > 0 ? 'south' : 'north');
+  });
 
-  // ---------------------------------------------------------------- ladder (west guard room) to the hall
-  bp.ladder(1, 1, 1, 5, 'south');
+  bp.part('ladder', () => {
+    // ---------------------------------------------------------------- ladder (west guard room) to the hall
+    bp.ladder(1, 1, 1, 5, 'south');
+  });
 
-  // ---------------------------------------------------------------- rooms
-  for (const x of [2, X - 2]) bp.lantern(x, 4, zc, true);
-  bp.lantern(M, 4, zc, true); // over the road
-  bp.set(2, 1, 1, 'minecraft:barrel', { facing: 'up' });
-  bp.set(X - 2, 1, 1, 'minecraft:chest', { facing: 'south' });
-  bp.set(X - 1, 1, 1, 'minecraft:barrel', { facing: 'up' });
-  bp.set(X - 1, 1, Z - 1, 'minecraft:barrel', { facing: 'up' });
-  bp.set(1, 1, Z - 1, 'minecraft:crafting_table');
-  bp.ceilingLights(1, 1, X - 1, Z - 1, 8, { spacing: 5 });
-  bp.bed(3, 6, 1, 'north', 'blue');
-  bp.bed(E, 6, 1, 'north', 'blue');
-  bp.table(M, 6, zc);
-  bp.chair(M - 1, 6, zc, 'east');
-  bp.chair(M + 1, 6, zc, 'west');
-  bp.set(X - 1, 6, Z - 1, 'minecraft:chest', { facing: 'west' });
-  for (const z of [Z - 3, Z - 2]) if (z >= 1) bp.set(X - 1, 6, z, 'minecraft:bookshelf');
+  bp.part('rooms', () => {
+    // ---------------------------------------------------------------- rooms
+    for (const x of [2, X - 2]) bp.lantern(x, 4, zc, true);
+    bp.lantern(M, 4, zc, true); // over the road
+    bp.set(2, 1, 1, 'minecraft:barrel', { facing: 'up' });
+    bp.set(X - 2, 1, 1, 'minecraft:chest', { facing: 'south' });
+    bp.set(X - 1, 1, 1, 'minecraft:barrel', { facing: 'up' });
+    bp.set(X - 1, 1, Z - 1, 'minecraft:barrel', { facing: 'up' });
+    bp.set(1, 1, Z - 1, 'minecraft:crafting_table');
+    bp.ceilingLights(1, 1, X - 1, Z - 1, 8, { spacing: 5 });
+    bp.bed(3, 6, 1, 'north', 'blue');
+    bp.bed(E, 6, 1, 'north', 'blue');
+    bp.table(M, 6, zc);
+    bp.chair(M - 1, 6, zc, 'east');
+    bp.chair(M + 1, 6, zc, 'west');
+    bp.set(X - 1, 6, Z - 1, 'minecraft:chest', { facing: 'west' });
+    for (const z of [Z - 3, Z - 2]) if (z >= 1) bp.set(X - 1, 6, z, 'minecraft:bookshelf');
+  });
 
   // ---------------------------------------------------------------- anchors
   bp.spot('entrance', M, Z + 1, 180);

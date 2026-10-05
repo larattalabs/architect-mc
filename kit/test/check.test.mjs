@@ -10,20 +10,23 @@ const P = palette({ wood: 'oak', stone: 'cobblestone' });
 /** A closed 5x5 hut (walls x/z 0..4, rows 1..3, flat roof on row 4), door south at x=2, lantern inside. */
 function hut({ type = 'custom', size = [5, 5, 7], origin = [0, 0, 0], interior = [1, 1, 1, 3, 3, 3], door = true, light = true } = {}) {
   const bp = new Blueprint({ id: 'hut', type, size, origin, palette: P, interior, front: 'south' });
-  bp.floor(0, 0, 4, 6, 0, P.stone);
-  bp.carve([1, 1, 1, 3, 3, 3]);
-  bp.walls(0, 0, 4, 4, 1, 3);
-  bp.floor(0, 0, 4, 4, 4, P.planks);
-  if (door) bp.door(2, 1, 4, 'south');
-  if (light) bp.lantern(2, 3, 2, true);
+  bp.part('main', () => {
+    bp.floor(0, 0, 4, 6, 0, P.stone);
+    bp.carve([1, 1, 1, 3, 3, 3]);
+    bp.walls(0, 0, 4, 4, 1, 3);
+    if (door) bp.door(2, 1, 4, 'south');
+    if (light) bp.lantern(2, 3, 2, true);
+  });
+  bp.part('roof', () => bp.floor(0, 0, 4, 4, 4, P.planks));
   bp.spot('entrance', 2, 5, 180);
   bp.spot('spawn', 2, 6, 180);
   return bp;
 }
 const has = (list, re) => list.some((m) => re.test(m));
-const clean = (r) => { assert.deepEqual(r.errors, []); assert.deepEqual(r.warnings, []); };
+/** no errors and no warnings (the fixtures of the other rules declare no named parts: that rule has its own tests) */
+const clean = (r, { parts = false } = {}) => { assert.deepEqual(r.errors, []); assert.deepEqual(parts ? r.warnings : r.warnings.filter((w) => !w.startsWith('parts:')), []); };
 
-test('the hut fixture passes with no warnings', () => clean(checkBlueprint(hut())));
+test('the hut fixture passes with no warnings', () => clean(checkBlueprint(hut()), { parts: true }));
 
 // ---------------------------------------------------------------- inherited rules: errors
 

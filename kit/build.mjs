@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-// node kit/build.mjs <id> [--out <dir>] [--max x,y,z] [--type <t>] [--palette <preset>|<json>] [--values <json>] [--json]
+// node kit/build.mjs <id> [--out <dir>] [--max x,y,z] [--type <t>] [--profile <rules>] [--palette <preset>|<json> | --bible <file|name>]
+//                        [--values <json>] [--json]
 //
 // Imports kit/designs/<id>.mjs (`export const id`, `export const params` (optional), a default export taking
 // `{ palette, ...values }` and returning the Blueprint), writes
@@ -10,18 +11,23 @@
 // --palette: a preset name (lib/kit.mjs PALETTE_PRESETS) or JSON { preset?, wood?, stone?, roof?, accent? }; without it
 // the design's own default palette. --values: JSON { name: value } over the params' defaults. The sidecar JSON records
 // `palette` (inputs), `params` and `values`.
+// --bible (phase 4b): a style bible's bible.json, or a built-in bible name (the palette presets): the palette comes from its
+// roles (lib/kit.mjs palette({ bible })), and the sidecar records `palette: { bible: { id, version, roles } }` and `bible`.
+// --type takes a preset or an open type (`hellish_lair`); --profile <rule,rule,...> is the profile the request asked for
+// (an open type's checker rules; the design must declare the same `profile`).
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { writeBlueprint } from './lib/write.mjs';
 import { checkFiles, parseMax } from './lib/check.mjs';
-import { BUILDING_TYPES, resolvePalette } from './lib/kit.mjs';
+import { BUILDING_TYPES, TYPE_RE, parseProfile, resolvePalette } from './lib/kit.mjs';
+import { readBibleArg } from './lib/bible.mjs';
 import { resolveValues, validateParams } from './lib/params.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 export const DESIGNS = path.join(HERE, 'designs');
 export const DEFAULT_OUT = path.join(HERE, 'out');
-const USAGE = 'usage: node kit/build.mjs <id> [--out <dir>] [--max x,y,z] [--type <t>] [--palette <preset>|<json>] [--values <json>] [--json]';
+const USAGE = 'usage: node kit/build.mjs <id> [--out <dir>] [--max x,y,z] [--type <t>] [--profile <rules>] [--palette <preset>|<json> | --bible <file|name>] [--values <json>] [--json]';
 
 /** A request the design cannot build (bad palette or values): exit 2, but not the design's fault. */
 export class UsageError extends Error {}
@@ -68,10 +74,10 @@ export async function loadDesign(id, { palette, values } = {}) {
 }
 
 /** Build + check one design. */
-export async function buildDesign(id, { out = DEFAULT_OUT, max, type, palette, values } = {}) {
+export async function buildDesign(id, { out = DEFAULT_OUT, max, type, profile, palette, values } = {}) {
   const bp = await loadDesign(id, { palette, values });
   const written = writeBlueprint(bp, out);
-  const result = checkFiles(written.nbtPath, written.jsonPath, { max, type });
+  const result = checkFiles(written.nbtPath, written.jsonPath, { max, type, ...(profile !== undefined ? { profile } : {}) });
   return { bp, written, result };
 }
 
@@ -84,8 +90,14 @@ function parseArgs(argv) {
     else if (a === '--max') o.max = parseMax(val());
     else if (a === '--type') {
       o.type = val();
-      if (!BUILDING_TYPES.includes(o.type)) throw new Error(`--type '${o.type}' must be one of ${BUILDING_TYPES.join(', ')}`);
+      if (!TYPE_RE.test(o.type)) throw new Error(`--type '${o.type}' must be a preset (${BUILDING_TYPES.join(', ')}) or an open type matching ${TYPE_RE}`);
+    } else if (a === '--profile') {
+      o.profile = parseProfile(val()).list;
+    } else if (a === '--bible') {
+      if (o.palette !== undefined) throw new Error('--bible and --palette exclude each other');
+      o.palette = { bible: readBibleArg(val()) };
     } else if (a === '--palette') {
+      if (o.palette !== undefined) throw new Error('--bible and --palette exclude each other');
       const v = val();
       if (v.trim().startsWith('{')) {
         try { o.palette = JSON.parse(v); } catch (e) { throw new Error(`--palette: bad JSON (${e.message})`); }
@@ -124,7 +136,7 @@ async function main() {
   if (o.json) console.log = console.info = console.debug = console.error;
   let r;
   try {
-    r = await buildDesign(id, { out: o.out ?? DEFAULT_OUT, max: o.max, type: o.type, palette: o.palette, values: o.values });
+    r = await buildDesign(id, { out: o.out ?? DEFAULT_OUT, max: o.max, type: o.type, profile: o.profile, palette: o.palette, values: o.values });
   } catch (e) {
     Object.assign(console, saved);
     if (e instanceof UsageError) return fail2(e.message);
