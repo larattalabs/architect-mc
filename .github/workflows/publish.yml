@@ -1,0 +1,39 @@
+name: Publish
+# Release tags publish dev.larattalabs:architect_mc to GitHub Packages (docs/PLAN.md decision 2026-10-05).
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+permissions:
+  contents: read
+  packages: write
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: sidecar/package-lock.json
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 25
+      - name: Sidecar bundle
+        working-directory: sidecar
+        run: |
+          npm ci
+          npm run build
+      - name: Check the tag matches mod_version
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          v=$(grep '^mod_version=' mod/gradle.properties | cut -d= -f2)
+          [ "v$v" = "${GITHUB_REF_NAME}" ] || { echo "tag ${GITHUB_REF_NAME} != mod_version $v"; exit 1; }
+      - name: Build and publish
+        working-directory: mod
+        env:
+          GITHUB_ACTOR: ${{ github.actor }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: ./gradlew --no-daemon build publish

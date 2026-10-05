@@ -166,6 +166,19 @@ publishing {
 			from components.java
 		}
 	}
+	// CI on release tags (.github/workflows/publish.yml): GitHub Packages, only when the workflow's token is there
+	if (System.getenv("GITHUB_TOKEN")) {
+		repositories {
+			maven {
+				name = 'GitHubPackages'
+				url = uri('https://maven.pkg.github.com/larattalabs/architect-mc')
+				credentials {
+					username = System.getenv('GITHUB_ACTOR')
+					password = System.getenv('GITHUB_TOKEN')
+				}
+			}
+		}
+	}
 }
 
 // The dev-only API test mod (../apitest) joins the dev client's classpath only when asked for (ARCHITECT_APITEST=1 or
