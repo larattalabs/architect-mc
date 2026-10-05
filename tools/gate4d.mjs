@@ -444,7 +444,7 @@ async function relog() {
   await leaveWorld();
   const qf = JSON.parse(fs.readFileSync(path.join(SAVES, 'G4D Relog', 'architect-queue.json'), 'utf8'));
   const savedJob = qf.jobs.find((j) => j.kind === 'place');
-  check(qf.clean === true && !!savedJob, `relog: the queue file kept the job (clean stop, ${savedJob?.siteId} phase ${savedJob?.phase} cursor ${savedJob?.cursor})`,
+  check(qf.clean === true && !!savedJob, `relog: the queue file kept the job (clean stop, ${savedJob?.siteId} template cursor ${savedJob?.writer?.cursor} of its cells)`,
     { clean: qf.clean, job: savedJob && { siteId: savedJob.siteId, phase: savedJob.phase, cursor: savedJob.cursor, writer: savedJob.writer?.cursor } });
   await openWorld('G4D Relog');
   await call('dev.placement.slow', { on: false });
@@ -532,58 +532,71 @@ async function stages() {
 }
 
 async function lotfit() {
-  await openWorld('G4D Wait');
-  await tpCenter();
+  // a flat world: on a slope the approach legitimately extends past the lot edge (up to extendMax) until it meets the ground
+  await leaveWorld();
+  fs.rmSync(path.join(SAVES, 'G4D Flat'), { recursive: true, force: true });
+  await openWorld('G4D Flat', { mode: 'creative', preset: 'flat', cheats: true });
+  await setRules();
+  await cmd('/kill @e[type=!minecraft:player]');
+  await cmd('/tp @s 60 66 60');
+  await call('dev.waitChunks', { timeoutMs: 60_000 }, 90_000).catch(() => {});
+  await sleep(2000);
+  await cmd('/kill @e[type=minecraft:item]');
+  const feet = await groundAt(60, 60);
   const sides = ['north', 'east', 'south', 'west'];
-  const facing = { north: 'NORTH', east: 'EAST', south: 'SOUTH', west: 'WEST' };
+  const turns = { north: 2, east: 3, south: 0, west: 1 }; // the kit designs' entrances face south unrotated
   const rows = [];
-  for (const side of sides) {
-    for (const l of ctx.lots.slice(0, 4)) {
-      const d = await fit(l.bp, l.lot, side);
-      const into = await fit(l.bp, l.lot, side, 'into');
-      const lot = l.lot;
+  const items = [];
+  for (const [r, side] of sides.entries()) {
+    for (const [c, bp] of KINDS.entries()) {
+      const lot = [c * 36, feet, r * 36, c * 36 + 23, feet + 40, r * 36 + 23];
+      const d = await fit(bp, lot, side);
+      const into = await fit(bp, lot, side, 'into');
       const pr = d.predictedRestoreBox;
-      const inLot = pr && pr[0] >= lot[0] && pr[3] <= lot[3] && pr[2] >= lot[2] && pr[5] <= lot[5];
+      const inLot = !!pr && pr[0] >= lot[0] && pr[3] <= lot[3] && pr[2] >= lot[2] && pr[5] <= lot[5];
       const ip = into.predictedRestoreBox;
-      const out = ip && (side === 'north' ? ip[2] < lot[2] : side === 'south' ? ip[5] > lot[5] : side === 'west' ? ip[0] < lot[0] : ip[3] > lot[3]);
-      rows.push({ side, lot: l.key, bp: l.bp, rot: d.rot, at: d.at, inLot, intoStreet: out, refusals: d.refusals.map((r) => r.reason) });
+      const out = !!ip && (side === 'north' ? ip[2] < lot[2] : side === 'south' ? ip[5] > lot[5] : side === 'west' ? ip[0] < lot[0] : ip[3] > lot[3]);
+      const key = `F${r}${c}`;
+      rows.push({ key, side, bp, lot, rot: d.rot, at: d.at, predicted: pr, inLot, intoStreet: out, refusals: d.refusals.map((x) => x.reason) });
+      items.push({ key, bp, at: d.at, rot: d.rot, mode: 'INSTANT', force: true });
     }
   }
-  // the entrance faces the street: each kit design's entrance faces south unrotated, so the turns are (side - south)
-  const turns = { north: 2, east: 3, south: 0, west: 1 };
-  check(rows.every((r) => r.rot === turns[r.side]), 'fitToLot: 4 lots x 4 street sides, the entrance faces the street', rows);
+  check(rows.every((r) => r.rot === turns[r.side]), 'fitToLot: 4 lots x 4 street sides, the entrance faces the street', rows.map((r) => `${r.key} ${r.side} rot ${r.rot}`));
   check(rows.every((r) => r.inLot), 'fitToLot: the predicted restore box (approach included) stays inside the lot by default', rows.filter((r) => !r.inLot));
   check(rows.every((r) => r.intoStreet), 'fitToLot: with approachIntoStreet the approach runs out into the street', rows.filter((r) => !r.intoStreet));
-  const tiny = await fit('tavern', [0, 64, 0, 9, 90, 9], 'north');
+  const tiny = await fit('tavern', [0, feet, 200, 9, feet + 30, 209], 'north');
   check(tiny.refusals.some((r) => r.reason === 'LOT_TOO_SMALL'), 'fitToLot: a lot too small refuses LOT_TOO_SMALL', tiny.refusals);
   const margin = await api('margin cabin');
   check(margin.front === 4 + 8 && margin.sides === 0 && margin.back === 0, `overlapMargin(cabin) = front ${margin.front}, sides 0, back 0`, margin);
-  // place one lot per street side from its fit, and check the placed site against it
+  // place all 16 from their fits; each placed site must face its street with its restore box inside its lot
   await mark();
-  const placeLots = [];
-  for (let k = 0; k < 4; k++) {
-    const l = ctx.lots[k + 4 === 5 ? 3 : k];
-    placeLots.push(l);
-  }
-  const fits = [];
-  for (let k = 0; k < 4; k++) {
-    const l = [ctx.lots[0], ctx.lots[1], ctx.lots[2], ctx.lots[3]][k];
-    const d = await fit(l.bp, l.lot, sides[k]);
-    fits.push({ key: `F${k}`, bp: l.bp, at: d.at, rot: d.rot, force: true, lot: l.lot, side: sides[k] });
-  }
-  const id = await queue({ id: 'fits', proximity: false, items: fits.map((f) => ({ key: f.key, bp: f.bp, at: f.at, rot: f.rot, mode: 'INSTANT', force: true })) });
-  const done = await waitBatch(id, 120_000);
+  const id = await queue({ id: 'fits', proximity: false, items });
+  const done = await waitBatch(id, 300_000);
   const sitesNow = (await api('sites')).all;
-  const placed = [];
-  for (const f of fits) {
-    const it = done.items.find((i) => i.key === f.key);
-    const s = sitesNow.find((x) => x.id === it.site);
-    const rb = s ? box6(s.restoreBox) : null;
-    placed.push({ key: f.key, side: f.side, status: it.status, reason: it.reason, restoreBox: rb,
-      inLot: rb && rb[0] >= f.lot[0] && rb[3] <= f.lot[3] && rb[2] >= f.lot[2] && rb[5] <= f.lot[5] });
-  }
-  check(placed.every((p) => p.status === 'PLACED' && p.inLot), 'fitToLot: one lot per street side placed from its fit, restore box inside the lot', placed);
+  const placed = rows.map((r) => {
+    const it = done.items.find((i) => i.key === r.key);
+    const st = sitesNow.find((x) => x.id === it.site);
+    const rb = st ? box6(st.restoreBox) : null;
+    return { key: r.key, side: r.side, status: it.status, reason: it.reason, rotation: st?.rotation, restoreBox: rb,
+      inLot: !!rb && rb[0] >= r.lot[0] && rb[3] <= r.lot[3] && rb[2] >= r.lot[2] && rb[5] <= r.lot[5],
+      matchesPrediction: JSON.stringify(rb) === JSON.stringify(r.predicted) };
+  });
+  check(placed.every((p) => p.status === 'PLACED' && p.inLot && p.matchesPrediction),
+    'fitToLot: the 16 placed from their fits, each restore box inside its lot and equal to predictedRestoreBox', placed);
+  await shot('g4d-lotfit', [60, feet + 60, -30], [60, feet, 60]);
+  await leaveWorld();
   return { rows, placed };
+}
+
+async function shot(name, eye, at) {
+  try {
+    await call('dev.camera', { x: eye[0], y: eye[1], z: eye[2], lookAt: { x: at[0], y: at[1], z: at[2] }, mode: 'spectator' }, 30_000);
+    const r = await call('dev.screenshot', { name }, 120_000);
+    await call('dev.release', {});
+    return r.path;
+  } catch (e) {
+    return String(e);
+  }
 }
 
 async function gap0() {
