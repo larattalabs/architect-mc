@@ -6,6 +6,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { loadSdk } from './claude/sdk.js';
+import { zeroCost } from './jobs/cost.js';
 import { checkDesign, designBaseId, freeLibraryId, installDesign, KIT, renderPreviews, withDesignId } from './designs.js';
 import type { Design } from './protocol.js';
 import { prepareScratch } from './scratch.js';
@@ -44,6 +45,7 @@ export class SimDesigner implements Designer {
   ) {}
 
   async start(): Promise<void> {
+    this.sc.heavy.onFree(() => this.kick());
     this.sc.setAuth({ auth: 'ok', authSource: 'sim (no Claude)', sdk: await sdkResolvable() ? 'ready' : 'missing', message: 'sim designer: installs kit examples, no Claude' });
   }
 
@@ -82,7 +84,9 @@ export class SimDesigner implements Designer {
   }
 
   private kick(): void {
-    if (this.runP || this.stopped) return;
+    if (this.runP || this.stopped || !this.queue.length) return;
+    // one design or agent job at a time (agent jobs share the design queue's slot)
+    if (!this.sc.heavy.tryAcquire('design')) return;
     this.runP = (async () => {
       try {
         while (!this.stopped && this.queue.length) {
@@ -101,6 +105,7 @@ export class SimDesigner implements Designer {
         }
       } finally {
         this.runP = undefined;
+        this.sc.heavy.release('design');
       }
     })();
   }
@@ -138,6 +143,8 @@ export class SimDesigner implements Designer {
       sc.designStep(id, s.status, `${s.step} (simulated)`);
       await this.sleep(this.stepMs, id);
     }
+    // no Claude, no spend: the cost record still shows the steps
+    sc.designCost(id, { ...zeroCost(), turns: STEPS.length });
     // the "design": the example under the new id
     const design = path.join(scratch, KIT, 'designs', `${bp}.mjs`);
     fs.writeFileSync(design, withDesignId(fs.readFileSync(path.join(scratch, KIT, 'designs', `${src}.mjs`), 'utf8'), bp));
@@ -162,6 +169,7 @@ export class SimDesigner implements Designer {
         description: `Simulated design (a copy of the kit example ${src})${req.notes ? `: ${truncate(req.notes, 200)}` : ''}`,
         request: req,
         createdAt: sc.now(),
+        ...(req.ext && Object.keys(req.ext).length ? { extra: { ext: req.ext } } : {}),
       },
     });
     const s = res.sidecar!.size!;

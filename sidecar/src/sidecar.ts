@@ -5,9 +5,16 @@ import path from 'node:path';
 import type { Config } from './config.js';
 import { VERSION } from './config.js';
 import type { Logger } from './context.js';
+import { BlobError, BlobStore } from './blobs.js';
 import { DesignBook, describeRequest, isFinalDesign, runNode, type Installed } from './designs.js';
-import { KitPalettes, type ClientMessage, type PaletteInfo, type Design, type DesignRequest, type Outbound, type PaletteSpec, type ParamValues, type Status, type Variant } from './protocol.js';
+import { ClaudeJobDriver, type ClaudeHost } from './jobs/claude.js';
+import type { JobDriver } from './jobs/driver.js';
+import { JobRunner } from './jobs/runner.js';
+import { SimJobDriver } from './jobs/sim.js';
+import { FEATURES, KitPalettes, type ClientMessage, type Cost, type PaletteInfo, type Design, type DesignRequest, type Outbound, type PaletteSpec, type ParamValues, type Protocol, type Status, type Variant } from './protocol.js';
 import { readSecrets, updateSecrets, type Secrets } from './secrets.js';
+import type { ClientHandle } from './server.js';
+import { Slot } from './slot.js';
 import type { Store } from './store.js';
 import { truncate } from './util/text.js';
 import { checkImportPath, findVariantSource, VariantBook, VariantRefused, VariantRunner } from './variants.js';
@@ -28,6 +35,8 @@ export interface Designer {
   runningId(): string | undefined;
   /** credentials or the login opt-in changed (auth.set) */
   authChanged(): void;
+  /** the shared usage limit changed (a job hit one): re-arm the wake-up */
+  limitChanged?(): void;
   stop(): Promise<void>;
 }
 
@@ -43,6 +52,14 @@ export class Sidecar {
   /** variant and import jobs (no Claude), on their own queue */
   readonly variants: VariantBook;
   readonly variantRunner: VariantRunner;
+  /** (protocol 2) blobs: job inputs such as a survey, and big job results */
+  readonly blobs: BlobStore;
+  /** (protocol 2) Claude jobs */
+  readonly jobs: JobRunner;
+  /** one design or agent job at a time */
+  readonly heavy = new Slot();
+  /** trusted connections */
+  private connected = new Set<ClientHandle>();
   /** the kit's palette presets and choices, for the snapshot (loaded at start) */
   private palettes: PaletteInfo | undefined;
   private listeners = new Set<(m: Outbound) => void>();
@@ -63,6 +80,24 @@ export class Sidecar {
     this.designs = new DesignBook({ store, emit: (m) => this.emit(m), now: () => this.now() });
     this.variants = new VariantBook({ store, emit: (m) => this.emit(m), now: () => this.now() });
     this.variantRunner = new VariantRunner(this);
+    this.blobs = new BlobStore(config.dataDir, store, () => this.now());
+    this.jobs = new JobRunner(this);
+  }
+
+  /** trusted, open connections */
+  clients(): ClientHandle[] {
+    return [...this.connected].filter((c) => c.open);
+  }
+
+  clientGone(c: ClientHandle): void {
+    this.connected.delete(c);
+    this.jobs.clientGone(c);
+  }
+
+  /** The shared usage limit changed: both queues re-arm their wake-ups. */
+  limitChanged(): void {
+    this.designer?.limitChanged?.();
+    this.jobs.limitChanged();
   }
 
   // ---- outbound -------------------------------------------------------------------------------
@@ -98,6 +133,7 @@ export class Sidecar {
   setAuth(view: AuthView): void {
     this.authView = { ...view };
     this.statusChanged();
+    this.jobs.kick();
   }
 
   status(): Status {
@@ -126,8 +162,17 @@ export class Sidecar {
     for (const fn of this.listeners) fn({ type: 'status', status: s });
   }
 
-  snapshot(): Outbound {
-    return { type: 'snapshot', version: VERSION, status: this.status(), designs: this.designs.recent(), variants: this.variants.recent(), ...(this.palettes ? { palettes: this.palettes } : {}) };
+  /** The snapshot for a connection (the server strips the protocol-2 parts for a protocol-1 client). */
+  snapshot(protocol: Protocol = 2): Outbound {
+    return {
+      type: 'snapshot',
+      version: VERSION,
+      status: this.status(),
+      designs: this.designs.recent(),
+      variants: this.variants.recent(),
+      ...(this.palettes ? { palettes: this.palettes } : {}),
+      ...(protocol >= 2 ? { protocol, features: [...FEATURES], jobs: this.jobs.book.recent() } : {}),
+    };
   }
 
   // ---- lifecycle ------------------------------------------------------------------------------
@@ -136,7 +181,7 @@ export class Sidecar {
    * Hand the designer the designs that were queued or running when the sidecar stopped, then start
    * it (the Claude designer checks auth first; queued designs wait for that).
    */
-  async start(designer: Designer): Promise<void> {
+  async start(designer: Designer, jobDriver?: JobDriver): Promise<void> {
     this.designer = designer;
     this.variantRunner.start();
     void this.loadKitInfo();
@@ -144,6 +189,8 @@ export class Sidecar {
       this.designs.update(d.id, { status: 'queued', step: 'picked up again after a restart' });
       designer.request(d);
     }
+    // jobs run on the designer's backend: the sim, or Claude through the designer's SDK and auth
+    this.jobs.start(jobDriver ?? (designer.name === 'sim' ? new SimJobDriver(this.config.simStepMs, this.config.jobs.simStepUsd) : new ClaudeJobDriver(designer as unknown as ClaudeHost, this.log)));
     this.statusChanged();
     await designer.start();
     this.statusChanged();
@@ -168,21 +215,22 @@ export class Sidecar {
 
   async close(): Promise<void> {
     await this.variantRunner.stop();
+    await this.jobs.stop();
     await this.designer?.stop();
     this.store.close();
   }
 
   // ---- client messages ------------------------------------------------------------------------
 
-  async handle(msg: ClientMessage, reply: (m: Outbound) => void): Promise<void> {
+  async handle(msg: ClientMessage, reply: (m: Outbound) => void, client?: ClientHandle): Promise<void> {
     const ack = (ok: boolean, extra: { error?: string; result?: Record<string, unknown> } = {}) => {
       if (msg.id) reply({ type: 'ack', re: msg.id, ok, ...extra });
     };
     try {
-      const result = this.dispatch(msg, reply);
+      const result = this.dispatch(msg, reply, client);
       ack(true, result ? { result } : {});
     } catch (e) {
-      const known = e instanceof ClientError;
+      const known = e instanceof ClientError || e instanceof BlobError;
       const message = known ? (e as Error).message : `internal error: ${(e as Error).message}`;
       if (!known) this.log.error(`${msg.type}: ${(e as Error).stack ?? e}`);
       reply({ type: 'error', message, ...(msg.id ? { re: msg.id } : {}) });
@@ -190,11 +238,38 @@ export class Sidecar {
     }
   }
 
-  private dispatch(msg: ClientMessage, reply: (m: Outbound) => void): Record<string, unknown> | undefined {
+  private dispatch(msg: ClientMessage, reply: (m: Outbound) => void, client?: ClientHandle): Record<string, unknown> | undefined {
     switch (msg.type) {
       case 'hello':
-        reply(this.snapshot());
+        reply(this.snapshot(client?.protocol ?? 1));
+        if (client) {
+          this.connected.add(client);
+          // tool calls that wait for a client of this name (it reconnected, or the sidecar restarted)
+          this.jobs.clientReady(client);
+        }
         return undefined;
+      case 'job.run':
+        return { jobId: this.jobs.run(msg.job, client).id };
+      case 'job.cancel':
+        this.jobs.cancel(msg.jobId);
+        return { jobId: msg.jobId };
+      case 'job.tool.result':
+        this.jobs.toolResult(msg.jobId, msg.callId, msg.result, msg.error);
+        return {};
+      case 'blob.put': {
+        const r = this.blobs.put(msg);
+        if (r.complete) this.log.info(`blob ${r.blobId} (${msg.kind ?? this.blobs.get(r.blobId)?.kind ?? '?'}, ${r.size} bytes) stored`);
+        return r;
+      }
+      case 'blob.delete':
+        if (!this.blobs.delete(msg.blobId)) throw new ClientError(`no blob "${msg.blobId}"`);
+        return { blobId: msg.blobId };
+      case 'client.paused':
+        if (client) {
+          client.paused = msg.paused;
+          this.jobs.pausedChanged(client);
+        }
+        return {};
       case 'design.request':
         return { designId: this.requestDesign(msg.request).id };
       case 'design.cancel':
@@ -301,10 +376,15 @@ export class Sidecar {
     this.log.info(`design ${id} is ready: ${installed.blueprintId} (${size.x}x${size.y}x${size.z}) in ${path.dirname(installed.json)}`);
   }
 
-  designFailed(id: string, error: string): void {
+  designFailed(id: string, error: string, step?: string): void {
     const d = this.designs.get(id);
     if (!d || isFinalDesign(d)) return;
-    this.designs.update(id, { status: 'failed', step: `failed: ${error.split('\n')[0]}`, error });
-    this.log.warn(`design ${id} failed: ${truncate(error.split('\n')[0] ?? error, 200)}`);
+    this.designs.update(id, { status: 'failed', step: step ?? `failed: ${error.split('\n')[0]}`, error });
+    this.log.warn(`design ${id} failed: ${truncate(step ?? error.split('\n')[0] ?? error, 200)}`);
+  }
+
+  /** (protocol 2) a design's cost so far */
+  designCost(id: string, cost: Cost): void {
+    this.designs.update(id, { cost });
   }
 }

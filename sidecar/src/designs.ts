@@ -13,6 +13,7 @@
 //   - installing the result into the library as <library>/<id>/, never overwriting anything
 import fs from 'node:fs';
 import path from 'node:path';
+import { zeroCost } from './jobs/cost.js';
 import type { Store } from './store.js';
 import type { Design, DesignRequest, DesignStatus, Outbound } from './protocol.js';
 import { truncate } from './util/text.js';
@@ -27,7 +28,7 @@ const FINAL: ReadonlySet<DesignStatus> = new Set(['done', 'failed', 'cancelled']
 
 export const isFinalDesign = (d: Design): boolean => FINAL.has(d.status);
 
-export type DesignPatch = Partial<Pick<Design, 'status' | 'step' | 'blueprintId' | 'size' | 'previews' | 'error'>>;
+export type DesignPatch = Partial<Pick<Design, 'status' | 'step' | 'blueprintId' | 'size' | 'previews' | 'error' | 'cost'>>;
 
 export interface BookCtx {
   store: Store;
@@ -64,7 +65,7 @@ export class DesignBook {
 
   create(request: DesignRequest): Design {
     const now = this.ctx.now();
-    const d: Design = { id: this.ctx.store.nextId('d'), request: structuredClone(request), status: 'queued', step: 'waiting for the designer', createdAt: now, updatedAt: now };
+    const d: Design = { id: this.ctx.store.nextId('d'), request: structuredClone(request), status: 'queued', step: 'waiting for the designer', cost: zeroCost(), createdAt: now, updatedAt: now };
     this.all.push(d);
     this.trim();
     this.ctx.store.markDirty();

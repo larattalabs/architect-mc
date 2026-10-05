@@ -4,7 +4,8 @@
 //                      [--use-claude-login] [--parent-pid <pid>] [--backend claude|sim] [--debug]
 //
 // <data>/config.json (optional, hand-edited): { "designModel", "effort", "maxTurns", "maxBudgetUsd",
-// "simStepMs" }. ARCHITECT_DESIGN_MODEL overrides designModel.
+// "simStepMs", "jobModel", "jobConcurrency", "simJobStepUsd" }. ARCHITECT_DESIGN_MODEL overrides
+// designModel, ARCHITECT_JOB_MODEL jobModel.
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -21,6 +22,7 @@ function readVersion(): string {
 export const VERSION = readVersion();
 export const DEFAULT_PORT = 7890;
 export const DEFAULT_DESIGN_MODEL = 'claude-opus-5-5';
+export const DEFAULT_JOB_MODEL = 'claude-sonnet-5-5';
 export const EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'] as const;
 export type Effort = (typeof EFFORTS)[number];
 
@@ -47,6 +49,17 @@ export interface Config {
   claude: ClaudeConfig;
   /** sim: ms per fake progress step */
   simStepMs: number;
+  /** (protocol 2) Claude jobs */
+  jobs: JobsConfig;
+}
+
+export interface JobsConfig {
+  /** the default model of a job (config jobModel, ARCHITECT_JOB_MODEL) */
+  model: string;
+  /** structured jobs running at once (config jobConcurrency); agent jobs share the design queue's one slot */
+  concurrency: number;
+  /** sim: the estimated cost of each step (config simJobStepUsd) */
+  simStepUsd: number;
 }
 
 export const HELP = `Architect sidecar ${VERSION}
@@ -136,6 +149,11 @@ export function loadConfig(argv: string[], env: NodeJS.ProcessEnv = process.env)
       useClaudeLoginFlag: flags['use-claude-login'] === true,
     },
     simStepMs: num(file.simStepMs, 400),
+    jobs: {
+      model: env.ARCHITECT_JOB_MODEL?.trim() || (typeof file.jobModel === 'string' && file.jobModel.trim()) || DEFAULT_JOB_MODEL,
+      concurrency: Math.max(1, Math.min(16, Math.round(num(file.jobConcurrency, 4)))),
+      simStepUsd: typeof file.simJobStepUsd === 'number' && file.simJobStepUsd >= 0 ? file.simJobStepUsd : 0.01,
+    },
   };
 }
 
