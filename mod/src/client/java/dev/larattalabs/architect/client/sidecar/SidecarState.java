@@ -193,6 +193,14 @@ public final class SidecarState {
 		/** (4b) {@code reskin.upsert {reskin}} or a re-skin of a snapshot that changed. */
 		default void onReskin(JsonObject reskin) {
 		}
+
+		/** (4c) {@code massing.upsert {massing}} or a massing of a snapshot that changed: the version as received. */
+		default void onMassing(JsonObject massing) {
+		}
+
+		/** (4c) {@code massing.removed {massingId, reason}}: deleted or garbage-collected. */
+		default void onMassingRemoved(String massingId, String reason) {
+		}
 	}
 
 	private LinkStatus link = new LinkStatus(LinkStatus.Phase.DISABLED, "", 0, null, 0, 0, false);
@@ -205,6 +213,8 @@ public final class SidecarState {
 	private final Map<String, JsonObject> groups = new LinkedHashMap<>();
 	private final Map<String, JsonObject> bibleJobs = new LinkedHashMap<>();
 	private final Map<String, JsonObject> reskins = new LinkedHashMap<>();
+	/** (4c) the latest version of each massing, as received ({@code snapshot.massings} merges, {@code massing.upsert} updates). */
+	private final Map<String, JsonObject> massings = new LinkedHashMap<>();
 	/** (4b) the sidecar's bible index (installed + built in), as last received. */
 	private List<JsonObject> bibleIndex = List.of();
 	/** {@code snapshot.palettes} when the sidecar sends it (optional; see Palettes). */
@@ -311,6 +321,15 @@ public final class SidecarState {
 		return newest(reskins);
 	}
 
+	/** (4c) The latest version of each massing (newest first), as received. */
+	public List<JsonObject> massings() {
+		return newest(massings);
+	}
+
+	public @Nullable JsonObject massing(String id) {
+		return massings.get(id);
+	}
+
 	public @Nullable JsonObject group(String id) {
 		return groups.get(id);
 	}
@@ -332,6 +351,18 @@ public final class SidecarState {
 		List<JsonObject> out = new ArrayList<>(m.values());
 		out.sort((a, b) -> Long.compare(ts(b, "createdAt"), ts(a, "createdAt")));
 		return Collections.unmodifiableList(out);
+	}
+
+	private static List<JsonObject> snapshotArray(JsonObject snapshot, String key) {
+		List<JsonObject> out = new ArrayList<>();
+		if (snapshot.has(key) && snapshot.get(key).isJsonArray()) {
+			for (JsonElement e : snapshot.getAsJsonArray(key)) {
+				if (e.isJsonObject() && e.getAsJsonObject().has("id")) {
+					out.add(e.getAsJsonObject());
+				}
+			}
+		}
+		return out;
 	}
 
 	private static long ts(JsonObject o, String k) {
@@ -405,6 +436,16 @@ public final class SidecarState {
 				List<JsonObject> changedGroups = mergeAll(json, "groups", groups);
 				List<JsonObject> changedBibles = mergeAll(json, "bibles", bibleJobs);
 				List<JsonObject> changedReskins = mergeAll(json, "reskins", reskins);
+				List<JsonObject> changedMassings = new ArrayList<>();
+				for (JsonObject m : snapshotArray(json, "massings")) {
+					JsonObject prev = massings.get(str(m, "id", "?"));
+					if (prev == null || ts(m, "version") >= ts(prev, "version")) {
+						massings.put(str(m, "id", "?"), m);
+						if (prev == null || !prev.equals(m)) {
+							changedMassings.add(m);
+						}
+					}
+				}
 				List<JsonObject> index = new ArrayList<>();
 				if (json.has("bibleIndex") && json.get("bibleIndex").isJsonArray()) {
 					json.getAsJsonArray("bibleIndex").forEach(e -> {
@@ -437,6 +478,9 @@ public final class SidecarState {
 					}
 					for (JsonObject r : changedReskins) {
 						guard(() -> l.onReskin(r));
+					}
+					for (JsonObject m : changedMassings) {
+						guard(() -> l.onMassing(m));
 					}
 					for (Design d : designs.values()) {
 						Design prev = old.get(d.id());
@@ -509,6 +553,30 @@ public final class SidecarState {
 							guard(() -> l.onReskin(o));
 						}
 					}
+				}
+			}
+			case "massing.upsert" -> {
+				if (!json.has("massing") || !json.get("massing").isJsonObject()) {
+					return;
+				}
+				JsonObject m = json.getAsJsonObject("massing");
+				JsonObject prev = massings.get(str(m, "id", "?"));
+				if (prev == null || ts(m, "version") >= ts(prev, "version")) {
+					massings.put(str(m, "id", "?"), m);
+				}
+				for (Listener l : listeners) {
+					guard(() -> l.onMassing(m));
+				}
+			}
+			case "massing.removed" -> {
+				String id = str(json, "massingId", null);
+				if (id == null) {
+					return;
+				}
+				massings.remove(id);
+				String reason = str(json, "reason", "deleted");
+				for (Listener l : listeners) {
+					guard(() -> l.onMassingRemoved(id, reason));
 				}
 			}
 			case "bible.index" -> {
@@ -610,6 +678,18 @@ public final class SidecarState {
 			rs.add(r);
 		}
 		o.add("reskins", rs);
+		JsonArray ms = new JsonArray();
+		for (JsonObject m : massings()) {
+			JsonObject v = new JsonObject();
+			for (String k : new String[] {"id", "version", "versions", "designId", "type", "name", "itemKey", "owner", "group", "size", "nbt", "redirect",
+				"detail", "createdAt"}) {
+				if (m.has(k)) {
+					v.add(k, m.get(k));
+				}
+			}
+			ms.add(v);
+		}
+		o.add("massings", ms);
 		JsonArray bi = new JsonArray();
 		for (JsonObject b : bibleIndex) {
 			JsonObject v = new JsonObject();

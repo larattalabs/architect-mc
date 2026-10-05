@@ -88,6 +88,14 @@ public final class ApiEvents {
 		guard("GROUP_DONE", () -> SiteEvents.GROUP_DONE.invoker().onDone(g));
 	}
 
+	public static void groupAwaitingApproval(dev.larattalabs.architect.api.Group g) {
+		guard("GROUP_AWAITING_APPROVAL", () -> SiteEvents.GROUP_AWAITING_APPROVAL.invoker().onAwaiting(g));
+	}
+
+	public static void massingDone(dev.larattalabs.architect.api.Massing m) {
+		guard("MASSING_DONE", () -> SiteEvents.MASSING_DONE.invoker().onDone(m));
+	}
+
 	public static void bibleUpdated(dev.larattalabs.architect.api.BibleJob j) {
 		guard("BIBLE_UPDATED", () -> SiteEvents.BIBLE_UPDATED.invoker().onUpdated(j));
 	}

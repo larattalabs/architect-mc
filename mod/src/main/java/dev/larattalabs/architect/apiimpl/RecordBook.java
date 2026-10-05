@@ -43,14 +43,42 @@ final class RecordBook {
 	private final Function<JsonObject, JobLedger.Mark> mark;
 	private final Map<String, JsonObject> records = new LinkedHashMap<>();
 	private final JobLedger ledger = new JobLedger();
+	/** What a record is kept under (default: its {@code id}) and what its events are deduplicated by (default {@link #key}). */
+	private final Function<JsonObject, String> recordId;
+	private final Function<JsonObject, String> eventKey;
 	private boolean loaded;
 
 	RecordBook(String kind, Path file, int keep, Predicate<JsonObject> finished, Function<JsonObject, JobLedger.Mark> mark) {
+		this(kind, file, keep, finished, mark, o -> str(o, "id"), RecordBook::key);
+	}
+
+	RecordBook(String kind, Path file, int keep, Predicate<JsonObject> finished, Function<JsonObject, JobLedger.Mark> mark,
+		Function<JsonObject, String> recordId, Function<JsonObject, String> eventKey) {
 		this.kind = kind;
 		this.file = file;
 		this.keep = keep;
 		this.finished = finished;
 		this.mark = mark;
+		this.recordId = recordId;
+		this.eventKey = eventKey;
+	}
+
+	/** Drops every record {@code drop} matches (a massing deleted); persists. Returns how many. */
+	synchronized int removeIf(Predicate<JsonObject> drop) {
+		load();
+		int before = records.size();
+		records.values().removeIf(drop);
+		int n = before - records.size();
+		if (n > 0) {
+			save();
+		}
+		return n;
+	}
+
+	/** Persists the records now (a merge that fires nothing, e.g. massing.list on a connect). */
+	synchronized void flush() {
+		load();
+		save();
 	}
 
 	static String str(JsonObject o, String k) {
@@ -84,8 +112,8 @@ final class RecordBook {
 			ledger.restoreDone(keys);
 			if (o.has("records") && o.get("records").isJsonArray()) {
 				for (JsonElement e : o.getAsJsonArray("records")) {
-					if (e.isJsonObject() && !str(e.getAsJsonObject(), "id").isEmpty()) {
-						records.putIfAbsent(str(e.getAsJsonObject(), "id"), e.getAsJsonObject());
+					if (e.isJsonObject() && !recordId.apply(e.getAsJsonObject()).isEmpty()) {
+						records.putIfAbsent(recordId.apply(e.getAsJsonObject()), e.getAsJsonObject());
 					}
 				}
 			}
@@ -115,7 +143,7 @@ final class RecordBook {
 	/** Merges a record as received (a copy is kept); returns it. A record with no id is dropped (null). */
 	synchronized @Nullable JsonObject merge(JsonObject raw) {
 		load();
-		String id = str(raw, "id");
+		String id = recordId.apply(raw);
 		if (id.isEmpty()) {
 			return null;
 		}
@@ -124,7 +152,7 @@ final class RecordBook {
 		// trim: the oldest finished ones beyond twice what is persisted
 		if (records.size() > 2 * keep) {
 			List<String> old = records.values().stream().filter(finished).sorted(Comparator.comparingLong(r -> num(r, "updatedAt")))
-				.map(r -> str(r, "id")).toList();
+				.map(recordId).toList();
 			for (int i = 0; i < old.size() && records.size() > 2 * keep; i++) {
 				records.remove(old.get(i));
 			}
@@ -139,7 +167,7 @@ final class RecordBook {
 	 */
 	synchronized Firing fire(JsonObject raw) {
 		load();
-		String key = key(raw);
+		String key = eventKey.apply(raw);
 		if (ledger.isDone(key)) {
 			return new Firing(raw, false, false);
 		}
@@ -154,7 +182,7 @@ final class RecordBook {
 	/** Finished records not reported DONE yet (a world loaded), oldest first. */
 	synchronized List<JsonObject> pendingDone() {
 		load();
-		return records.values().stream().filter(finished).filter(r -> !ledger.isDone(key(r))).sorted(Comparator.comparingLong(r -> num(r, "updatedAt")))
+		return records.values().stream().filter(finished).filter(r -> !ledger.isDone(eventKey.apply(r))).sorted(Comparator.comparingLong(r -> num(r, "updatedAt")))
 			.toList();
 	}
 
@@ -173,6 +201,6 @@ final class RecordBook {
 
 	synchronized boolean isDone(JsonObject raw) {
 		load();
-		return ledger.isDone(key(raw));
+		return ledger.isDone(eventKey.apply(raw));
 	}
 }

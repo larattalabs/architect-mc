@@ -87,10 +87,10 @@ class ApiRulesTest {
 	@Test
 	void featureNamesAreStable() {
 		// pinned: Steward depends on these names (docs/CONTRACT.md phase 4a, stable within major 1)
-		assertEquals(java.util.Set.of("sites", "events", "designs", "library", "survey", "survivalInfo"), ApiRules.features(0, List.of()));
-		assertEquals(java.util.Set.of("sites", "events", "designs", "library", "survey", "survivalInfo"), ApiRules.features(1, List.of("job.run")),
+		assertEquals(java.util.Set.of("sites", "events", "designs", "library", "survey", "survivalInfo", "compositePreview"), ApiRules.features(0, List.of()));
+		assertEquals(java.util.Set.of("sites", "events", "designs", "library", "survey", "survivalInfo", "compositePreview"), ApiRules.features(1, List.of("job.run")),
 			"protocol 1: no job or blob features even if named");
-		assertEquals(java.util.Set.of("sites", "events", "designs", "library", "survey", "survivalInfo", "protocol2", "jobs", "jobTools", "blobs",
+		assertEquals(java.util.Set.of("sites", "events", "designs", "library", "survey", "survivalInfo", "compositePreview", "protocol2", "jobs", "jobTools", "blobs",
 			"budget"), ApiRules.features(2, List.of("job.run", "job.tools", "blob.put", "budget")));
 	}
 
@@ -106,5 +106,15 @@ class ApiRulesTest {
 		for (String raw : List.of("design.groups", "named.parts", "open.types")) {
 			org.junit.jupiter.api.Assertions.assertFalse(f.contains(raw), raw);
 		}
+	}
+
+	@Test
+	void phase4cFeatureNames() {
+		// the 4c sidecar adds "massing" (passed through); the composite preview is Java-side, always there
+		var f = ApiRules.features(2, List.of("job.run", "design.groups", "massing"));
+		org.junit.jupiter.api.Assertions.assertTrue(f.contains("massing"));
+		org.junit.jupiter.api.Assertions.assertTrue(f.contains("compositePreview"));
+		org.junit.jupiter.api.Assertions.assertFalse(ApiRules.features(1, List.of("massing")).contains("massing"), "protocol 1 has no massings");
+		org.junit.jupiter.api.Assertions.assertTrue(ApiRules.features(0, List.of()).contains("compositePreview"));
 	}
 }

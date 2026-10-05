@@ -1,6 +1,8 @@
 package dev.larattalabs.architect.api;
 
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import com.google.gson.JsonPrimitive;
 import java.util.List;
 import java.util.Locale;
 import org.jspecify.annotations.Nullable;
@@ -17,15 +19,64 @@ import org.jspecify.annotations.Nullable;
  *     caps all groups together
  * @param budgetUsd a hard cap on the group's total (queued items are cancelled with error "budget" when reached; at
  *     {@code softBudgetFraction} (0.8) nothing new starts: {@link Group.Status#PAUSED_BUDGET}), or null
+ * @param massingFirst (since 1.3.0, a helper with {@code "massing"}) every item gets a massing first (in waves); then the
+ *     group is {@link Group.Status#AWAITING_APPROVAL} and {@link SiteEvents#GROUP_AWAITING_APPROVAL} fires; approve, redirect
+ *     or cancel items with {@link Designs#approveGroup}. Massings and redirects count toward the budget
+ * @param approvalUi (since 1.3.0) who approves: {@link ApprovalUi#ARCHITECT} (Architect's UI shows the massings and an
+ *     Approve / Redirect bar; the default when null) or {@link ApprovalUi#OWNER} (no bar: only
+ *     {@link Designs#approveGroup(String, List, java.util.Map, List, String)} naming the group's {@code owner} counts)
+ * @param maxRedirects (since 1.3.0) redirect rounds per item, 0-10; null = the helper's default (3)
+ * @param context (since 1.3.0) text (at most 4000 characters, a {@link JsonPrimitive}) or a JSON object (at most 4000 as JSON)
+ *     that goes into every item's brief, massing and detail: a concept card, the site and purpose, neighbour lots, the street
  */
 public record GroupRequest(String name, String bible, @Nullable Integer bibleVersion, @Nullable String owner, JsonObject ext,
-	@Nullable Integer concurrency, @Nullable Double budgetUsd, List<Item> items) {
+	@Nullable Integer concurrency, @Nullable Double budgetUsd, List<Item> items, boolean massingFirst, @Nullable ApprovalUi approvalUi,
+	@Nullable Integer maxRedirects, @Nullable JsonElement context) {
 	/** The most items a group holds. */
 	public static final int MAX_ITEMS = 24;
+	/** The most redirect rounds per item. */
+	public static final int MAX_REDIRECTS = 10;
 
 	public GroupRequest {
 		ext = ext == null ? new JsonObject() : ext;
 		items = items == null ? List.of() : List.copyOf(items);
+		if (context != null && context.isJsonNull()) {
+			context = null;
+		}
+	}
+
+	/** The 1.2.0 constructor (no massing pass, no context). */
+	public GroupRequest(String name, String bible, @Nullable Integer bibleVersion, @Nullable String owner, JsonObject ext, @Nullable Integer concurrency,
+		@Nullable Double budgetUsd, List<Item> items) {
+		this(name, bible, bibleVersion, owner, ext, concurrency, budgetUsd, items, false, null, null, null);
+	}
+
+	/** A copy with massings first ({@code approvalUi} null = architect, {@code maxRedirects} null = the default). Since 1.3.0. */
+	public GroupRequest withMassingFirst(@Nullable ApprovalUi ui, @Nullable Integer redirects) {
+		return new GroupRequest(name, bible, bibleVersion, owner, ext, concurrency, budgetUsd, items, true, ui, redirects, context);
+	}
+
+	/** A copy with a context text (null or blank = none). Since 1.3.0. */
+	public GroupRequest withContext(@Nullable String text) {
+		return withContext(text == null || text.isBlank() ? null : new JsonPrimitive(text));
+	}
+
+	/** A copy with a context: a JSON object, or text as a {@link JsonPrimitive}. Since 1.3.0. */
+	public GroupRequest withContext(@Nullable JsonElement ctx) {
+		return new GroupRequest(name, bible, bibleVersion, owner, ext, concurrency, budgetUsd, items, massingFirst, approvalUi, maxRedirects, ctx);
+	}
+
+	/** Who approves a massingFirst group's massings. Since 1.3.0. */
+	public enum ApprovalUi {
+		ARCHITECT, OWNER;
+
+		public String wire() {
+			return name().toLowerCase(Locale.ROOT);
+		}
+
+		public static ApprovalUi of(@Nullable String s) {
+			return "owner".equalsIgnoreCase(s) ? OWNER : ARCHITECT;
+		}
 	}
 
 	/** {@code landmark} designs with the landmark model (claude-opus-5-5), {@code ordinary} with claude-sonnet-5-5. */

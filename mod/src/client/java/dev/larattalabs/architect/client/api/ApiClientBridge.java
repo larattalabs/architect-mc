@@ -46,6 +46,19 @@ public final class ApiClientBridge implements ClientBridge {
 				if (Sidecar.state().protocol() >= 2) {
 					ApiImpl.jobsSnapshot(Sidecar.state().jobsRaw());
 				}
+				if (Sidecar.state().protocol() >= 2 && Sidecar.state().features().contains("massing")) {
+					ApiImpl.massingsSync(); // the snapshot holds only the open massings and the last 20
+				}
+			}
+
+			@Override
+			public void onMassing(JsonObject massing) {
+				ApiImpl.massingChanged(massing);
+			}
+
+			@Override
+			public void onMassingRemoved(String massingId, String reason) {
+				ApiImpl.massingRemoved(massingId);
 			}
 
 			@Override
