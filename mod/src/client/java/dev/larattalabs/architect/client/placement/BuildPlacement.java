@@ -199,6 +199,10 @@ public final class BuildPlacement {
 		if (b == null) {
 			throw new IllegalArgumentException("No site " + id);
 		}
+		String noMove = Sites.moveRefusal(b);
+		if (noMove != null) {
+			throw new IllegalArgumentException(noMove);
+		}
 		start(b.blueprint());
 		moving = id;
 		update(Minecraft.getInstance(), true);
@@ -340,6 +344,7 @@ public final class BuildPlacement {
 		BlockPos origin = new BlockPos(v.ox(), v.oy(), v.oz());
 		Rotation rotation = Rotation.values()[v.turns()];
 		String moveId = moving;
+		String owner = mc.player.getUUID().toString();
 		CompletableFuture<Result> f = new CompletableFuture<>();
 		pending = true;
 		inFlight = f;
@@ -365,9 +370,12 @@ public final class BuildPlacement {
 					r = new Result(true, moved.id(), "Moved " + moved.id() + " (" + b.name() + "); its old place is as it was before"
 						+ (note == null ? "" : " (" + note + ")"));
 				} else {
-					Site placed = Sites.place(sl, b, origin, rotation, useForce);
+					Site placed = Sites.place(sl, b, origin, rotation, useForce, owner);
 					String note = Sites.lastNote();
-					r = new Result(true, placed.id(), "Placed " + placed.id() + " (" + b.name() + ")" + (note == null ? "" : " (" + note + ")")
+					r = placed.building()
+						? new Result(true, placed.id(), "Construction site " + placed.id() + " (" + b.name() + ") placed: feed its crate (right-click it, "
+							+ "or hoppers); it builds as the items arrive")
+						: new Result(true, placed.id(), "Placed " + placed.id() + " (" + b.name() + ")" + (note == null ? "" : " (" + note + ")")
 						+ ". Undo: Library > Placed > Remove, or /architect remove " + placed.id());
 				}
 			} catch (Sites.SiteException e) {

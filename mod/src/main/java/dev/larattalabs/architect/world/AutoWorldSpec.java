@@ -11,12 +11,21 @@ import java.util.function.Function;
  * ARCHITECT_AUTOWORLD_PRESET  normal (default: natural terrain, for placement on uneven ground) | flat (a superflat meadow)
  * ARCHITECT_AUTOWORLD_SEED    seed for a new world (number, or any text hashed like the vanilla seed box);
  *                              default: "architect-dev".hashCode() for flat, {@link #DEFAULT_NATURAL_SEED} for normal
+ * ARCHITECT_AUTOWORLD_MODE    creative (default) | survival | hardcore: the new world's game mode (phase 3 survival checks)
+ * ARCHITECT_AUTOWORLD_CHEATS  1 | 0: allow commands in the new world; default on, off for hardcore (a no-cheats world)
  * </pre>
  *
- * An existing world is loaded as it is (preset and seed only apply when it is created).
+ * An existing world is loaded as it is (preset, seed, mode and cheats only apply when it is created).
  */
-public record AutoWorldSpec(String name, Preset preset, long seed) {
+public record AutoWorldSpec(String name, Preset preset, long seed, Mode mode, boolean cheats) {
 	public enum Preset { FLAT, NORMAL }
+
+	/** The game mode of a new world. */
+	public enum Mode { CREATIVE, SURVIVAL, HARDCORE }
+
+	public AutoWorldSpec(String name, Preset preset, long seed) {
+		this(name, preset, seed, Mode.CREATIVE, true);
+	}
 
 	/** Natural-terrain default: spawn in a birch meadow on a hill (y~118), forest, lakes and a cherry grove within ~150 blocks. */
 	public static final long DEFAULT_NATURAL_SEED = 2026L;
@@ -39,7 +48,20 @@ public record AutoWorldSpec(String name, Preset preset, long seed) {
 		};
 		String s = raw.apply("ARCHITECT_AUTOWORLD_SEED");
 		long seed = s == null || s.isBlank() ? (preset == Preset.FLAT ? DEFAULT_FLAT_SEED : DEFAULT_NATURAL_SEED) : parseSeed(s.trim());
-		return new AutoWorldSpec(name, preset, seed);
+		String m = raw.apply("ARCHITECT_AUTOWORLD_MODE");
+		Mode mode = switch (m == null ? "" : m.trim().toLowerCase(Locale.ROOT)) {
+			case "", "creative" -> Mode.CREATIVE;
+			case "survival" -> Mode.SURVIVAL;
+			case "hardcore" -> Mode.HARDCORE;
+			default -> throw new IllegalArgumentException("ARCHITECT_AUTOWORLD_MODE must be creative, survival or hardcore: " + m);
+		};
+		String c = raw.apply("ARCHITECT_AUTOWORLD_CHEATS");
+		boolean cheats = c == null || c.isBlank() ? mode != Mode.HARDCORE : switch (c.trim().toLowerCase(Locale.ROOT)) {
+			case "1", "true", "on", "yes" -> true;
+			case "0", "false", "off", "no" -> false;
+			default -> throw new IllegalArgumentException("ARCHITECT_AUTOWORLD_CHEATS must be 1 or 0: " + c);
+		};
+		return new AutoWorldSpec(name, preset, seed, mode, cheats);
 	}
 
 	/** Like the vanilla "Seed" box: a number is used as is, other text is hashed. */

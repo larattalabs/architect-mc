@@ -20,6 +20,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.block.Rotation;
 import net.minecraft.world.phys.Vec3;
+import dev.larattalabs.architect.survival.SurvivalWorld;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -35,7 +36,11 @@ import org.jspecify.annotations.Nullable;
  *                                   forget: only drop the record, the blocks stay)
  * /architect reload                 reload the library (bundled + yours)
  * /architect list                   list the library and the sites in this world
+ * /architect survival [on|off]      show / change this world's survival toggle (changing it needs permission level 2)
+ * /architect site finish &lt;site&gt;     build a construction site's remaining cells at once, free (permission 2, creative mode)
+ * /architect site state &lt;site&gt;      a construction site's progress and what it still needs
  * </pre>
+ * In a survival world (docs/CONTRACT.md phase 3) place makes a construction site and remove deconstructs it.
  */
 public final class SiteCommands {
 	/** Blocks between the player and the near edge of a design placed in front of them. */
@@ -80,7 +85,79 @@ public final class SiteCommands {
 					})
 					.executes(ctx -> remove(ctx, false, false))
 					.then(Commands.literal("forget").executes(ctx -> remove(ctx, true, false)))
-					.then(Commands.literal("force").executes(ctx -> remove(ctx, false, true)))))));
+					.then(Commands.literal("force").executes(ctx -> remove(ctx, false, true)))))
+			.then(Commands.literal("survival")
+				.executes(SiteCommands::survivalShow)
+				.then(Commands.literal("on").requires(Commands.hasPermission(Commands.LEVEL_GAMEMASTERS)).executes(ctx -> survivalSet(ctx, true)))
+				.then(Commands.literal("off").requires(Commands.hasPermission(Commands.LEVEL_GAMEMASTERS)).executes(ctx -> survivalSet(ctx, false))))
+			.then(Commands.literal("site")
+				.then(Commands.literal("finish").requires(Commands.hasPermission(Commands.LEVEL_GAMEMASTERS))
+					.then(Commands.argument("site", StringArgumentType.word()).suggests((ctx, b) -> {
+						Sites.all().stream().filter(Site::building).forEach(x -> b.suggest(x.id()));
+						return b.buildFuture();
+					}).executes(SiteCommands::finish)))
+				.then(Commands.literal("state")
+					.then(Commands.argument("site", StringArgumentType.word()).suggests((ctx, b) -> {
+						Sites.all().stream().filter(x -> x.construction() != null).forEach(x -> b.suggest(x.id()));
+						return b.buildFuture();
+					}).executes(SiteCommands::siteState))))));
+	}
+
+	private static int survivalShow(CommandContext<CommandSourceStack> ctx) {
+		boolean on = SurvivalWorld.on();
+		ctx.getSource().sendSuccess(() -> Component.literal("Survival construction sites are " + (on ? "on" : "off") + " in this world"
+			+ (on ? ": Place makes a construction site that builds as its crate is fed" : ": placement is instant")
+			+ ". Changing it needs cheats (permission level 2): /architect survival on|off"), false);
+		return on ? 1 : 0;
+	}
+
+	private static int survivalSet(CommandContext<CommandSourceStack> ctx, boolean on) {
+		SurvivalWorld.set(ctx.getSource().getServer(), on);
+		ctx.getSource().sendSuccess(() -> Component.literal("Survival construction sites turned " + (on ? "on" : "off") + " for this world"
+			+ (on ? "" : " (construction sites already placed keep building)")), true);
+		return 1;
+	}
+
+	private static int finish(CommandContext<CommandSourceStack> ctx) {
+		CommandSourceStack src = ctx.getSource();
+		String id = StringArgumentType.getString(ctx, "site");
+		ServerPlayer player = src.getPlayer();
+		if (player != null && !player.isCreative()) {
+			src.sendFailure(Component.literal("/architect site finish is for a player in creative mode (it builds for free)"));
+			return 0;
+		}
+		try {
+			int n = Builder.finish(src.getServer(), id);
+			src.sendSuccess(() -> Component.literal("Finished " + id + ": " + n + " cells placed free (a deconstruct refunds nothing for them)"), true);
+			return 1;
+		} catch (Sites.SiteException e) {
+			src.sendFailure(Component.literal(e.getMessage()));
+			return 0;
+		}
+	}
+
+	private static int siteState(CommandContext<CommandSourceStack> ctx) {
+		CommandSourceStack src = ctx.getSource();
+		String id = StringArgumentType.getString(ctx, "site");
+		try {
+			com.google.gson.JsonObject o = Builder.state(src.getServer(), id);
+			String head = id + " (" + (o.has("name") ? o.get("name").getAsString() : o.get("blueprint").getAsString()) + "): " + o.get("state").getAsString()
+				+ (o.has("percent") ? ", " + o.get("percent").getAsInt() + "% (" + o.get("built").getAsInt() + "/" + o.get("queue").getAsInt() + " cells)" : "")
+				+ (o.has("paused") && o.get("paused").getAsBoolean() ? ", paused" : "");
+			src.sendSuccess(() -> Component.literal(head), false);
+			if (o.has("rows")) {
+				for (var e : o.getAsJsonArray("rows")) {
+					var r = e.getAsJsonObject();
+					if (r.get("missing").getAsInt() > 0) {
+						src.sendSuccess(() -> Component.literal("  needs " + r.get("missing").getAsInt() + " " + r.get("name").getAsString()), false);
+					}
+				}
+			}
+			return 1;
+		} catch (Sites.SiteException e) {
+			src.sendFailure(Component.literal(e.getMessage()));
+			return 0;
+		}
 	}
 
 	private static int open(CommandContext<CommandSourceStack> ctx) {
@@ -158,8 +235,15 @@ public final class SiteCommands {
 		int[] o = BlueprintTransform.originInFront(feet.getX(), feet.getY(), feet.getZ(), facing.getName(), rsx, rsz, bp.groundY(), gap);
 		ServerLevel level = src.getLevel();
 		try {
-			Site b = Sites.place(level, bp, new BlockPos(o[0], o[1], o[2]), Rotation.values()[turns], force);
+			ServerPlayer owner = src.getPlayer();
+			Site b = Sites.place(level, bp, new BlockPos(o[0], o[1], o[2]), Rotation.values()[turns], force,
+				owner == null ? null : owner.getUUID().toString());
 			String note = Sites.lastNote();
+			if (b.building()) {
+				src.sendSuccess(() -> Component.literal("Construction site " + b.id() + " (" + bp.name() + ") placed: feed its crate (right-click it, or "
+					+ "hoppers). Deconstruct: /architect remove " + b.id()), true);
+				return 1;
+			}
 			src.sendSuccess(() -> Component.literal("Placed " + b.id() + " (" + bp.name() + "), " + b.rotation() + ", box " + Anchors.str(b.box())
 				+ (note == null ? "" : " (" + note + ")") + ". Undo: /architect remove " + b.id()), true);
 			return 1;
@@ -182,7 +266,8 @@ public final class SiteCommands {
 				src.sendSuccess(() -> Component.literal("Forgot " + id + "; its blocks stay in the world"), true);
 			} else {
 				Site b = Sites.remove(src.getLevel(), id, force);
-				src.sendSuccess(() -> Component.literal("Removed " + id + " (" + b.blueprint() + "); restored " + Anchors.str(b.restoreBox())), true);
+				src.sendSuccess(() -> Component.literal((b.construction() != null ? "Deconstructed " : "Removed ") + id + " (" + b.blueprint()
+					+ "); restored " + Anchors.str(b.restoreBox()) + (b.construction() != null ? "; refunds and the crate's items dropped where the crate stood" : "")), true);
 			}
 			return 1;
 		} catch (Sites.SiteException e) {
