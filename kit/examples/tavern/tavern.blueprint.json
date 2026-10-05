@@ -1,0 +1,94 @@
+{
+  "id": "tavern",
+  "name": "The Crooked Tankard",
+  "description": "A two-storey timber-framed tavern: a stone taproom with a bar and tables, guest beds upstairs, a chimney.",
+  "type": "tavern",
+  "tags": [
+    "medieval",
+    "timber-frame",
+    "two-storey",
+    "chimney"
+  ],
+  "size": {
+    "x": 16,
+    "y": 18,
+    "z": 12
+  },
+  "groundY": 1,
+  "front": "south",
+  "materials": [
+    "minecraft:spruce_planks",
+    "minecraft:cobblestone",
+    "minecraft:dark_oak_stairs",
+    "minecraft:stripped_dark_oak_log",
+    "minecraft:dark_oak_planks",
+    "minecraft:calcite",
+    "minecraft:glass_pane",
+    "minecraft:spruce_log",
+    "minecraft:barrel",
+    "minecraft:brown_carpet",
+    "minecraft:spruce_stairs",
+    "minecraft:lantern",
+    "minecraft:dark_oak_slab",
+    "minecraft:spruce_fence",
+    "minecraft:dirt_path",
+    "minecraft:green_carpet",
+    "minecraft:red_bed",
+    "minecraft:spruce_door",
+    "minecraft:chest",
+    "minecraft:spruce_pressure_plate",
+    "minecraft:candle",
+    "minecraft:green_bed",
+    "minecraft:wall_torch",
+    "minecraft:bookshelf",
+    "minecraft:campfire",
+    "minecraft:crafting_table",
+    "minecraft:potted_red_tulip"
+  ],
+  "foundationBlock": "minecraft:cobblestone",
+  "approach": {
+    "length": 4,
+    "width": 3,
+    "block": "minecraft:dirt_path",
+    "slab": "minecraft:cobblestone_slab"
+  },
+  "interior": {
+    "minX": 2,
+    "minY": 1,
+    "minZ": 2,
+    "maxX": 13,
+    "maxY": 9,
+    "maxZ": 8
+  },
+  "anchors": {
+    "entrance": {
+      "x": 7.5,
+      "y": 1,
+      "z": 10.5,
+      "yaw": 180,
+      "pitch": 0
+    },
+    "spawn": {
+      "x": 8.5,
+      "y": 1,
+      "z": 11.5,
+      "yaw": 180,
+      "pitch": 0
+    },
+    "cam_overview": {
+      "x": -8,
+      "y": 14,
+      "z": 25,
+      "yaw": -142.224,
+      "pitch": 19.58
+    },
+    "cam_taproom": {
+      "x": 12.5,
+      "y": 2.6,
+      "z": 7.5,
+      "yaw": 124.695,
+      "pitch": 7.921
+    }
+  },
+  "source": "tavern.mjs"
+}
