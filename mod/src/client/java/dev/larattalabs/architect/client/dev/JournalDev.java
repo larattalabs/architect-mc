@@ -129,6 +129,72 @@ public final class JournalDev {
 				int max = f.optInt("max", 20, 0, 10_000);
 				return DevBridge.onClient(mc, () -> ServerTasks.callAsPlayer((level, player) -> verify(level, site, list, max))).thenCompose(r -> r);
 			});
+		DevBridge.register("dev.heap", 10_000, "{reset?: false} - phase 4e: the JVM heap: used and the peak since the last reset (sum of the heap "
+			+ "pools' peak usage), MB", (req, mc) -> {
+				boolean reset = Fields.of(req).optBool("reset", false);
+				JsonObject o = new JsonObject();
+				long peak = 0;
+				for (java.lang.management.MemoryPoolMXBean b : java.lang.management.ManagementFactory.getMemoryPoolMXBeans()) {
+					if (b.getType() == java.lang.management.MemoryType.HEAP && b.getPeakUsage() != null) {
+						peak += b.getPeakUsage().getUsed();
+						if (reset) {
+							b.resetPeakUsage();
+						}
+					}
+				}
+				o.addProperty("usedMb", java.lang.management.ManagementFactory.getMemoryMXBean().getHeapMemoryUsage().getUsed() / 1048576.0);
+				o.addProperty("peakMb", peak / 1048576.0);
+				o.addProperty("maxMb", Runtime.getRuntime().maxMemory() / 1048576.0);
+				return CompletableFuture.completedFuture(o);
+			});
+		DevBridge.register("dev.journal.stackBench", 120_000, "{box: [6], depth: 4, n: 2000} - phase 4e: Sites.stack() (the API) timed at random "
+			+ "cells of the box whose stack is exactly depth deep: {cells, p50us, p99us, maxus, firstus}", (req, mc) -> {
+				Fields f = Fields.of(req);
+				int[] b = six(f.json().get("box"));
+				int depth = f.optInt("depth", 4, 1, 64);
+				int n = f.optInt("n", 2000, 1, 1_000_000);
+				return DevBridge.onClient(mc, () -> ServerTasks.callAsPlayer((level, player) -> {
+					dev.larattalabs.architect.api.Sites api = dev.larattalabs.architect.api.ArchitectApi.get().sites(level.getServer());
+					List<BlockPos> at = new ArrayList<>();
+					long t0 = System.nanoTime();
+					long first = -1;
+					for (int y = b[1]; y <= b[4]; y++) {
+						for (int z = b[2]; z <= b[5]; z++) {
+							for (int x = b[0]; x <= b[3]; x++) {
+								BlockPos p = new BlockPos(x, y, z);
+								long s0 = System.nanoTime();
+								int d = api.stack(level.dimension(), p).size();
+								if (first < 0) {
+									first = System.nanoTime() - s0;
+								}
+								if (d == depth) {
+									at.add(p);
+								}
+							}
+						}
+					}
+					long scan = System.nanoTime() - t0;
+					JsonObject o = new JsonObject();
+					o.addProperty("cells", at.size());
+					o.addProperty("scanMs", scan / 1e6);
+					o.addProperty("firstus", first / 1e3);
+					if (!at.isEmpty()) {
+						java.util.Random r = new java.util.Random(4);
+						long[] t = new long[n];
+						for (int i = 0; i < n; i++) {
+							BlockPos p = at.get(r.nextInt(at.size()));
+							long s0 = System.nanoTime();
+							api.stack(level.dimension(), p);
+							t[i] = System.nanoTime() - s0;
+						}
+						java.util.Arrays.sort(t);
+						o.addProperty("p50us", t[n / 2] / 1e3);
+						o.addProperty("p99us", t[(int) Math.min(n - 1, Math.floor(n * 0.99))] / 1e3);
+						o.addProperty("maxus", t[n - 1] / 1e3);
+					}
+					return o;
+				})).thenCompose(r -> r);
+			});
 		DevBridge.register("dev.region.hash", 120_000, "{box: [minX,minY,minZ,maxX,maxY,maxZ], exclude?: [[6]...], cells?: false} - phase 4e: SHA-256 "
 			+ "over every block state and block-entity NBT in the box, cells inside an excluded box left out (the order tests)", (req, mc) -> {
 				Fields f = Fields.of(req);

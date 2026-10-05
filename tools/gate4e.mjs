@@ -675,7 +675,7 @@ const intersects = (a, b) => a[0] <= b[3] && a[3] >= b[0] && a[1] <= b[4] && a[4
 
 async function village(order, budget, name) {
   await fresh(name, 'G4E VBase');
-  await tp(VOX + 50.5, 100, VOZ + 60.5);
+  await tp(VOX + 50.5, 120, VOZ + 60.5);
   await cmd(`/architect budget ${budget}`);
   await call('dev.placement.stats', { reset: true });
   const roads = vRoads();
@@ -737,6 +737,7 @@ steps.roads = async () => {
   await leaveWorld();
   copyWorld('G4E VA', 'G4E VA1');
   await openWorld('G4E VA');
+  await tp(VOX + 50.5, 120, VOZ + 60.5); // out of every site's box (a player inside one makes a removal wait)
   // the group undo
   const ga = await result(await api(`sgremove ${a.done.group}`), 20 * 60_000);
   const ha = (await hash(V_BOX)).sha256;
@@ -768,6 +769,7 @@ steps.roads = async () => {
   await leaveWorld();
   // (B) lots first, then the roads: they skip lot cells
   const b = await village('B', 4, 'G4E VB');
+  await tp(VOX + 50.5, 120, VOZ + 60.5);
   out.B = { wall: b.wall, stats: b.stats, failed: b.failed };
   check(b.failed.length === 0, `roads (B): 12 lots then 4 roads placed (${b.failed.join(' ') || 'none'})`, b.done);
   const lotsB = await ownedNow(fits.map((f) => b.ids[f.key]));
@@ -1025,6 +1027,304 @@ steps.sizecap = async () => {
   out.cells = { place: cst, remove: rc.stats, cells: ce?.cells };
   await leaveWorld();
   return out;
+};
+
+// ------------------------------------------------------------------ gate 10: mega-lite, bench.json
+
+/** The mega-lite generator over an n x n pad: a CELL terrain pad, stub lots LAYERed on it, roads between the rows and columns. */
+function megaSpec(n, id) {
+  const cols = Math.max(1, Math.floor(n / 32));
+  const rows = Math.max(1, Math.floor(n / 50));
+  const want = Math.round(40 * (n / 256) ** 2);
+  const items = [{ key: 'P', cells: { kind: 'gate4e:terrain', pad: { minX: 0, maxX: n - 1, minZ: 0, maxZ: n - 1, y: 66, depth: 3, clear: 6 } } }];
+  const roads = [];
+  for (let r = 0; r < rows - 1 && roads.length < Math.round(4 * n / 256); r++) {
+    const z = 10 + r * 50 + 33;
+    roads.push({ key: `RE${r}`, road: { points: [[2, 67, z], [n - 3, 67, z]], width: 3 }, after: ['P'] });
+  }
+  for (let c = 0; c < cols && roads.length < Math.round(8 * n / 256); c += 2) {
+    const x = 8 + c * 31 + 20;
+    roads.push({ key: `RN${c}`, road: { points: [[x, 67, 2], [x, 67, n - 3]], width: 3 }, after: ['P'] });
+  }
+  items.push(...roads);
+  let k = 0;
+  for (let r = 0; r < rows && k < want; r++) {
+    for (let c = 0; c < cols && k < want; c++) {
+      items.push({ key: `L${k++}`, bp: 'cabin', at: [8 + c * 31, 67, 10 + r * 50], rot: 0, mode: 'INSTANT', force: true, after: roads.map((x) => x.key) });
+    }
+  }
+  return { id, overlap: 'LAYER', proximity: false, loadChunks: 64, items };
+}
+const MEGA_BOX = [-8, 54, -8, 263, 90, 263];
+
+async function megaRun(name, budget, opts = {}) {
+  await fresh(name, FLAT);
+  await tp(128.5, 160, 128.5);
+  await cmd(`/architect budget ${budget}`);
+  await call('dev.heap', { reset: true });
+  await call('dev.placement.stats', { reset: true });
+  const spec = megaSpec(opts.n ?? 256, `mega${budget}`);
+  await mark();
+  const t0 = Date.now();
+  const id = await queue(spec);
+  let relog = null;
+  if (opts.relog) {
+    await sleep(15_000);
+    const before = (await api(`batch ${id}`)).items?.filter((i) => i.status === 'PLACED').length;
+    await stopClient();
+    await startClient(name);
+    await tp(128.5, 160, 128.5);
+    await mark();
+    relog = { placedBefore: before };
+  }
+  const done = await waitBatch(id, 120 * 60_000);
+  const wall = (Date.now() - t0) / 1000;
+  const stats = await call('dev.placement.stats', {});
+  const heap = await call('dev.heap', {});
+  const j = await journal();
+  const cells = (j.entries ?? []).reduce((a, e) => a + (e.cells ?? 0), 0);
+  const failed = done.items.filter((i) => i.status !== 'PLACED').map((i) => `${i.key}:${i.status}:${i.reason}`);
+  return { id, done, wall, stats, heap, journalBytes: j.bytesOnDisk, cells, bytesPerCell: j.bytesOnDisk / cells, failed, relog, items: spec.items.length };
+}
+
+steps.megalite = async () => {
+  if (!dev) await connect();
+  await flatBase();
+  await fresh('G4E MegaPre', FLAT);
+  await tp(128.5, 160, 128.5);
+  const h0 = (await hash(MEGA_BOX)).sha256;
+  await leaveWorld();
+  const runs = {};
+  const r4 = await megaRun('G4E Mega4', 4, { relog: true });
+  runs[4] = r4;
+  check(r4.failed.length === 0, `megalite: the 256x256 pad, ${r4.items - 9} lots LAYERed on it and 8 roads placed through the queue (LOAD_BOUNDED), `
+    + `${r4.cells} cells (${r4.failed.join(' ') || 'none failed'})`, r4.done);
+  check(!!r4.relog, `megalite: resumed across a relog (${r4.relog?.placedBefore} items placed before it)`);
+  const pad = r4.done.items.find((i) => i.key === 'P').site;
+  const lot = r4.done.items.find((i) => i.key === 'L7').site;
+  await cmd('/save-all flush');
+  await leaveWorld();
+  copyWorld('G4E Mega4', 'G4E Mega4b');
+  // one lot's undo leaves the pad exact
+  await openWorld('G4E Mega4b');
+  await tp(128.5, 160, 128.5);
+  const pv0 = await verify(pad);
+  const t1 = Date.now();
+  const rl = await result(await api(`remove ${lot} - noforce keep`), 600_000);
+  const lotUndo = (Date.now() - t1) / 1000;
+  await settle(2000);
+  const pv1 = await verify(pad);
+  check(rl.removed && pv1.mismatches === 0 && pv1.owned > pv0.owned, `megalite: one lot's undo leaves the pad exact (the pad owns ${pv0.owned} -> ${pv1.owned} cells, `
+    + `${pv1.mismatches} differ from its after; ${lotUndo.toFixed(2)} s)`, { pv0, pv1, rl });
+  await leaveWorld();
+  // the group undo
+  await openWorld('G4E Mega4');
+  await tp(128.5, 160, 128.5);
+  const t2 = Date.now();
+  const g = await result(await api(`sgremove ${r4.done.group}`), 60 * 60_000);
+  const groupUndo = (Date.now() - t2) / 1000;
+  const h1 = (await hash(MEGA_BOX)).sha256;
+  check(g.removed && h1 === h0, `megalite: the group undo is exact (${g.restored} cells in ${groupUndo.toFixed(1)} s)`, g);
+  await leaveWorld();
+  for (const ms of [1, 10]) {
+    runs[ms] = await megaRun(`G4E Mega${ms}`, ms);
+    check(runs[ms].failed.length === 0 && runs[ms].stats.ticksOver50ms === 0, `megalite ${ms} ms: ${Math.round(runs[ms].stats.cellsPerSecond)} cells/s, `
+      + `wall ${runs[ms].wall.toFixed(1)} s, MSPT max ${runs[ms].stats.msptMax?.toFixed(2)} ms`, runs[ms].stats);
+    await leaveWorld();
+  }
+  check(r4.stats.ticksOver50ms === 0, `megalite 4 ms: ${Math.round(r4.stats.cellsPerSecond)} cells/s, wall ${r4.wall.toFixed(1)} s, MSPT max ${r4.stats.msptMax?.toFixed(2)} ms`, r4.stats);
+  const rec = Object.fromEntries(Object.entries(runs).map(([k, r]) => [k, { cellsPerSecond: r.stats.cellsPerSecond, wallSeconds: r.wall, msptMax: r.stats.msptMax,
+    msptMean: r.stats.msptMean, ticksOver50ms: r.stats.ticksOver50ms, peakHeapMb: r.heap.peakMb, journalBytes: r.journalBytes, cells: r.cells, bytesPerCell: r.bytesPerCell }]));
+  ctx.mega = { runs: rec, lotUndoSeconds: lotUndo, groupUndoSeconds: groupUndo, relog: r4.relog };
+  saveCtx();
+  return ctx.mega;
+};
+
+/** `megabig`: the same generator at 1000x1000 (recorded for Steward's mega_bench, not gated). */
+steps.megabig = async () => {
+  if (!dev) await connect();
+  await flatBase();
+  const r = await megaRun('G4E Mega1000', 4, { n: 1000 });
+  ctx.megaBig = { items: r.items, cells: r.cells, wallSeconds: r.wall, cellsPerSecond: r.stats.cellsPerSecond, msptMax: r.stats.msptMax,
+    ticksOver50ms: r.stats.ticksOver50ms, peakHeapMb: r.heap.peakMb, journalBytes: r.journalBytes, bytesPerCell: r.bytesPerCell, failed: r.failed };
+  saveCtx();
+  log(`  1000x1000: ${JSON.stringify(ctx.megaBig)}`);
+  await leaveWorld();
+  return ctx.megaBig;
+};
+
+steps.bench = async () => {
+  if (!dev) await connect();
+  await flatBase();
+  // journal bytes per cell: the 256x256 pad alone
+  await fresh('G4E BenchPad', FLAT);
+  await tp(128.5, 160, 128.5);
+  const pad = await call('dev.cells.place', { kind: 'gate4e:terrain', pad: { minX: 0, maxX: 255, minZ: 0, maxZ: 255, y: 66, depth: 3, clear: 6 } }, 1_200_000);
+  await settle(3000);
+  const j = await journal();
+  const e = (j.entries ?? []).find((x) => x.site === pad.siteId);
+  const padBytes = { cells: e?.cells, bytes: j.bytesOnDisk, bytesPerCell: j.bytesOnDisk / e?.cells };
+  await leaveWorld();
+  // Sites.stack() at depth 4: the fixture with a second extension over H and X
+  copyWorld('G4E OrdBase', 'G4E BenchStack');
+  await openWorld('G4E BenchStack');
+  await tp(48.5, 80, 30.5);
+  const x2 = await result(await api('place gatehouse 33 67 -19 INSTANT unowned noactor 0 layer'));
+  const st = await call('dev.journal.stackBench', { box: [33, 63, -19, 43, 78, -4], depth: 4, n: 5000 }, 120_000);
+  const st3 = await call('dev.journal.stackBench', { box: [20, 63, -24, 59, 78, 15], depth: 1, n: 5000 }, 120_000);
+  await leaveWorld();
+  const bench = {
+    journalBytesPerCell: { pad256: padBytes, megaLite: ctx.mega ? { bytesPerCell: ctx.mega.runs[4]?.bytesPerCell, cells: ctx.mega.runs[4]?.cells,
+      bytes: ctx.mega.runs[4]?.journalBytes } : null, mega1000: ctx.megaBig ? { bytesPerCell: ctx.megaBig.bytesPerCell, cells: ctx.megaBig.cells } : null },
+    stack: { depth4: st, depth1: st3, placedX2: x2.placed },
+    megaLite: ctx.mega ?? null,
+    mega1000: ctx.megaBig ?? null,
+  };
+  check(padBytes.bytesPerCell <= 10, `bench: the 256x256 pad's journal is ${padBytes.bytesPerCell.toFixed(2)} bytes/cell (${padBytes.cells} cells)`, padBytes);
+  check(st.cells > 0, `bench: Sites.stack() at depth 4: p50 ${st.p50us?.toFixed(1)} µs, p99 ${st.p99us?.toFixed(1)} µs over ${st.cells} cells`, st);
+  fs.writeFileSync(path.join(OUT, 'bench.json'), JSON.stringify(bench, null, 2));
+  return bench;
+};
+
+// ------------------------------------------------------------------ gate 11: the 1.5.0 API through apitest
+
+const reasonsOf = (v) => (v.refusals ?? []).map((r) => r.reason ?? r);
+const j1 = (o) => JSON.stringify(o);
+
+steps.api = async () => {
+  if (!dev) await connect();
+  await flatBase();
+  await fresh('G4E Api', FLAT);
+  await tp(48.5, 90, 30.5);
+  const v = await api('api15');
+  const want = ['journal', 'overlapLayer', 'roads', 'cellSites', 'stackQuery'];
+  check(v.version === '1.5.0' && want.every((f) => v.features.includes(f)), `api: version ${v.version}, features ${want.filter((f) => v.features.includes(f)).join(' ')}`, v);
+  check(j1(v.overlapPolicies) === j1(['REFUSE', 'LAYER']) && j1(v.coveredPolicies) === j1(['KEEP', 'CASCADE', 'REFUSE']), 'api: OverlapPolicy and CoveredPolicy values', v);
+  const reasons = await api('reasons');
+  const NEW = ['OVERLAP_BUSY', 'OVERLAP_OWNED', 'LAYER_DEPTH', 'COVERED', 'TOO_STEEP', 'DEEP_WATER', 'TOO_LARGE', 'JOURNAL_UNAVAILABLE'];
+  check(j1(reasons.slice(-NEW.length)) === j1(NEW), `api: the 1.5.0 reasons are appended (${reasons.length} in all)`, reasons);
+  // placeCells / checkCells
+  const padReq = { kind: 'apitest:pad', pad: PAD, tag: 'T', owner: 'apitest:a' };
+  const cc = await api(`cellscheck ${j1(padReq)}`);
+  check(cc.ok && cc.cells === 19200, `api: checkCells verdict ok, ${cc.cells} cells`, cc);
+  const T = await result(await api(`cells ${j1(padReq)}`), 600_000);
+  check(T.placed, `api: placeCells -> ${T.siteId}`, T);
+  // placeRoad / checkRoad over it (the road's owner is the pad's: it layers)
+  const roadReq = { points: [[10, 67, 0], [80, 67, 0]], width: 3, tag: 'R', owner: 'apitest:a' };
+  const rc = await api(`roadcheck ${j1(roadReq)}`);
+  check(rc.ok && rc.cells > 0 && (rc.overlaps ?? []).some((o) => o.site === T.siteId), `api: checkRoad ok, ${rc.cells} cells, over ${T.siteId}`, rc);
+  const R = await result(await api(`road ${j1(roadReq)}`), 300_000);
+  check(R.placed, `api: placeRoad -> ${R.siteId}`, R);
+  // OVERLAP_OWNED: another owner's road over the pad
+  const ro = await api(`roadcheck ${j1({ ...roadReq, points: [[30, 67, -20], [30, 67, 10]], owner: 'apitest:b' })}`);
+  check(reasonsOf(ro).includes('OVERLAP_OWNED'), `api: a road over another owner's cells refuses OVERLAP_OWNED (${reasonsOf(ro)})`, ro);
+  // a LAYER placement, the stack, the site views
+  const H = await result(await api('place cabin 28 67 -19 INSTANT unowned noactor 0 layer'));
+  const st = await api('stack 30 67 -10');
+  check(H.placed && st.length >= 2 && st.at(-1).site === H.siteId && st.at(-1).top && st[0].site === T.siteId,
+    `api: Sites.stack() bottom first: ${st.map((x) => `${x.site}/${x.kind}/${x.policy}/L${x.layer}${x.top ? '/top' : ''}`).join(' ')}`, st);
+  const views = await sites();
+  const vt = views.find((x) => x.id === T.siteId);
+  const vh = views.find((x) => x.id === H.siteId);
+  check(vt?.kind?.startsWith('cells:') && vt.policy === 'CELL' && vt.coveredBy.includes(H.siteId) && vh.covers.includes(T.siteId) && vh.policy === 'BOX',
+    'api: SiteView kind, policy, covers, coveredBy', { vt, vh });
+  // COVERED: removing the pad under H with REFUSE
+  const rr = await result(await api(`remove ${T.siteId} - noforce refuse`), 120_000);
+  check(!rr.removed && rr.blockers.some((b) => /COVERED/.test(b)), `api: CoveredPolicy.REFUSE refuses a covered site (${rr.blockers})`, rr);
+  await cmd('/save-all flush');
+  await leaveWorld();
+  copyWorld('G4E Api', 'G4E Api2');
+  await openWorld('G4E Api');
+  const rk = await result(await api(`remove ${T.siteId} - noforce keep`), 300_000);
+  check(rk.removed && Object.keys(rk.handedDown).length > 0 && rk.restored > 0, `api: KEEP removes the pad, hands cells down (${j1(rk.handedDown)}), restored ${rk.restored}`, rk);
+  await leaveWorld();
+  await openWorld('G4E Api2');
+  const rcas = await result(await api(`remove ${T.siteId} - noforce cascade`), 300_000);
+  check(rcas.removed && rcas.cascaded.includes(H.siteId) && rcas.cascaded.includes(R.siteId), `api: CASCADE removes the covering sites first (${rcas.cascaded})`, rcas);
+  // LAYER_DEPTH: nine cell sites on one cell
+  const one = (i) => ({ kind: `apitest:d${i}`, cells: [[100, 70, 100, i % 2 ? 'minecraft:stone' : 'minecraft:dirt']], overlap: 'LAYER' });
+  let depthRefusal = null;
+  for (let i = 0; i < 9; i++) {
+    const r = await result(await api(`cells ${j1({ ...one(i), tag: `d${i}` })}`), 60_000);
+    if (!r.placed) {
+      depthRefusal = { i, reasons: reasonsOf(r) };
+      break;
+    }
+  }
+  check(depthRefusal?.i === 8 && depthRefusal.reasons.includes('LAYER_DEPTH'), `api: the 9th layer on a cell refuses LAYER_DEPTH (${j1(depthRefusal)})`);
+  // TOO_STEEP and DEEP_WATER
+  await cmd('/fill 120 65 -10 130 75 10 minecraft:stone');
+  const steep = await api(`roadcheck ${j1({ points: [[110, 66, 0], [140, 66, 0]], width: 3 })}`);
+  check(reasonsOf(steep).includes('TOO_STEEP'), `api: a road over a 11-block cliff refuses TOO_STEEP (${reasonsOf(steep)})`, steep);
+  await cmd('/fill 150 58 -10 160 64 10 minecraft:water');
+  const wet = await api(`roadcheck ${j1({ points: [[145, 65, 0], [165, 65, 0]], width: 3 })}`);
+  check(reasonsOf(wet).includes('DEEP_WATER'), `api: a road across 7-deep water refuses DEEP_WATER (${reasonsOf(wet)})`, wet);
+  // TOO_LARGE
+  const big = await api(`cellscheck ${j1({ kind: 'apitest:big', fill: { min: [200, 0, 200], max: [300, 99, 299], id: 'minecraft:stone' } })}`);
+  check(reasonsOf(big).includes('TOO_LARGE'), `api: a cell site over 1M cells refuses TOO_LARGE (${reasonsOf(big)})`, big);
+  // OVERLAP_BUSY: a check over a site still being placed
+  await cmd('/architect budget 1');
+  await mark();
+  const bq = await queue({ id: 'busy', proximity: false, items: [{ key: 'b', bp: 'tavern', at: [60, 65, 40], rot: 0, mode: 'INSTANT', force: true }] });
+  await sleep(1500);
+  const busy = await api(`cellscheck ${j1({ kind: 'apitest:busy', fill: { min: [62, 66, 42], max: [64, 66, 44], id: 'minecraft:stone' }, overlap: 'LAYER' })}`);
+  check(reasonsOf(busy).includes('OVERLAP_BUSY'), `api: layering over a site still being placed refuses OVERLAP_BUSY (${reasonsOf(busy)})`, busy);
+  await waitBatch(bq, 300_000);
+  await cmd('/architect budget 4');
+  // undoStage(RemoveOptions)
+  await mark();
+  const sg = await queue({ id: 'st2', autoApprove: true, items: [{ key: 'a', bp: 'cabin', at: [0, 65, 60], rot: 0, mode: 'INSTANT', force: true, stage: 's1' },
+    { key: 'b', bp: 'cabin', at: [20, 65, 60], rot: 0, mode: 'INSTANT', force: true, stage: 's2' }], stages: [{ name: 's1', items: ['a'] }, { name: 's2', items: ['b'] }] });
+  const sgd = await waitBatch(sg, 300_000);
+  const u2 = await result(await api(`sundo2 ${sgd.group} s2 keep`), 300_000);
+  check(u2.removed, `api: undoStage(group, stage, RemoveOptions) (${u2.restored} cells)`, u2);
+  await cmd('/save-all flush');
+  await leaveWorld();
+  // JOURNAL_UNAVAILABLE: an unreadable index refuses every change and is not touched
+  copyWorld('G4E Api', 'G4E ApiBad');
+  const ix = path.join(SAVES, 'G4E ApiBad', 'architect-journal', 'journal.json');
+  fs.writeFileSync(ix, '{"version":1,"entries":[');
+  await openWorld('G4E ApiBad');
+  const un = await api(`cellscheck ${j1({ kind: 'apitest:x', fill: { min: [0, 66, 200], max: [2, 66, 202], id: 'minecraft:stone' } })}`);
+  const pl = await result(await api('place cabin 0 65 200 INSTANT unowned noactor 0'));
+  check(reasonsOf(un).includes('JOURNAL_UNAVAILABLE') && reasonsOf(pl).includes('JOURNAL_UNAVAILABLE'), `api: an unreadable journal refuses with JOURNAL_UNAVAILABLE (${reasonsOf(un)}; ${reasonsOf(pl)})`, { un, pl });
+  await leaveWorld();
+  check(fs.readFileSync(ix, 'utf8') === '{"version":1,"entries":[', 'api: the unreadable index was not touched');
+  return {};
+};
+
+/** `api14`: the 1.4.0 apitest jar (0.7.0), unchanged, against 0.8.0 - tools/apitest.mjs survival of v0.7.0. */
+steps.api14 = async () => {
+  const jar = path.join(V070, 'apitest', 'build', 'libs', 'architect_apitest-0.7.0.jar');
+  const mods = path.join(GAME_DIR, 'mods');
+  if (dev) await stopClient();
+  else if (clientPids().length) {
+    await connect(PORT, GAME_DIR, 10_000).catch(() => null);
+    await stopClient();
+  }
+  fs.mkdirSync(mods, { recursive: true });
+  fs.copyFileSync(jar, path.join(mods, 'architect_apitest-0.7.0.jar'));
+  const outDir = path.join(OUT, 'api14');
+  let code = 0;
+  let text = '';
+  try {
+    await startClient('G4E Api14', { ARCHITECT_APITEST: '0' });
+    try {
+      text = execFileSync('node', [path.join(V070, 'tools', 'apitest.mjs'), 'survival'], {
+        env: { ...process.env, ARCHITECT_DEV_PORT: String(PORT), APITEST_OUT: outDir, APITEST_GAME_DIR: GAME_DIR }, timeout: 3_600_000 }).toString();
+    } catch (e) {
+      code = e.status ?? 1;
+      text = `${e.stdout ?? ''}${e.stderr ?? ''}`;
+    }
+  } finally {
+    await stopClient();
+    fs.rmSync(path.join(mods, 'architect_apitest-0.7.0.jar'), { force: true });
+  }
+  fs.writeFileSync(path.join(OUT, 'api14.log'), text);
+  const fails = text.split('\n').filter((l) => l.startsWith('FAIL'));
+  check(code === 0 && fails.length === 0, `api14: the 1.4.0 apitest jar (unchanged) passes tools/apitest.mjs survival (v0.7.0) against 0.8.0 (${fails.length} FAIL)`, fails);
+  await startClient('G4E Smoke');
+  return { code, fails };
 };
 
 // ------------------------------------------------------------------ gate 5: crash mid-write (K1-K8)
