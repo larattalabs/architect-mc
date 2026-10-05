@@ -21,7 +21,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import path from 'node:path';
 import type { CanUseTool, McpServerConfig, Options, PermissionResult, Query, SDKMessage } from '@anthropic-ai/claude-agent-sdk';
 import { VERSION } from '../config.js';
-import { checkDesign, designBaseId, freeLibraryId, installDesign, isFinalDesign, KIT, renderPreviews } from '../designs.js';
+import { checkDesign, designBaseId, freeLibraryId, isFinalDesign, renderPreviews } from '../designs.js';
 import { classifyToolUse, describeToolCall, foremanPrivateVerdict, GIT_REDIRECT_VARS, type PolicyContext } from '../policy.js';
 import type { Design } from '../protocol.js';
 import { prepareScratch } from '../scratch.js';
@@ -32,7 +32,7 @@ import { descendantsOf, killSnapshot, killTree, orphansOf, processTable, type Pr
 import { truncate } from '../util/text.js';
 import { ClaudeBibleBackend } from './bible.js';
 import { ARCHITECT_NO_API_AUTH_MESSAGE, authEnv, authSourceOf, checkApiKey, directApiKey, type KeyCheck } from './auth.js';
-import { designFixPrompt, designPrompt, designStepFor, designSystemPrompt, MAX_DESIGN_ROUNDS, RESTART_PROMPT } from './brief.js';
+import { designFixPrompt, designPrompt, designStepFor, designSystemPrompt, massingFixPrompt, massingPrompt, massingSystemPrompt, MAX_DESIGN_ROUNDS, RESTART_PROMPT } from './brief.js';
 import { isAuthText, probeFailure } from './failures.js';
 import { costFromResult, CostMeter, zeroCost } from '../jobs/cost.js';
 import { connectorHook, denyHook, designVerdict } from './permissions.js';
@@ -94,6 +94,9 @@ export interface TurnSpec {
   system?: string;
   /** the log label */
   label?: string;
+  /** (4c) a massing job's effort and agent steps (default the designer's) */
+  effort?: import('../config.js').Effort;
+  maxTurns?: number;
 }
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
@@ -448,12 +451,14 @@ export class ClaudeDesigner implements Designer {
     const d = sc.designs.get(id);
     if (!d || isFinalDesign(d)) return 'finished';
     const req = d.request;
-    const w = (this.work[id] ??= { bp: freeLibraryId(cfg.libraryDir, designBaseId(req), this.takenIds(id)), round: 0 });
+    // (4c) a massing job builds under its massing id
+    const w = (this.work[id] ??= { bp: d.massing ? d.massing.id : freeLibraryId(cfg.libraryDir, designBaseId(req), this.takenIds(id)), round: 0 });
+    const isMassing = !!d.massing;
     sc.store.markDirty();
     const scratch = prepareScratch({ dataDir: cfg.dataDir, kitDir: cfg.kitDir, libraryDir: cfg.libraryDir, design: d, bp: w.bp, ...sc.scratchExtras(d) });
     const sessionKey = `design:${id}`;
     const meter = new CostMeter(w.cost ?? zeroCost());
-    const model = req.model ?? this.cfg.designModel;
+    const model = req.model ?? (isMassing ? cfg.massing.model : this.cfg.designModel);
     for (;;) {
       if (this.cancelled(id)) return 'finished';
       // a group item's budget is what is left of the group's (Sidecar.designBudget)
@@ -463,7 +468,7 @@ export class ClaudeDesigner implements Designer {
         return 'finished';
       }
       const resume = sc.store.data.sessions[sessionKey]?.sessionId;
-      const prompt = w.pending ?? (resume ? RESTART_PROMPT : designPrompt(w.bp));
+      const prompt = w.pending ?? (resume ? RESTART_PROMPT : isMassing ? massingPrompt(w.bp) : designPrompt(w.bp));
       w.round++;
       sc.store.markDirty();
       sc.designStep(id, 'designing', w.round === 1 ? 'the designer is reading the brief' : `revising the design (round ${w.round} of ${MAX_DESIGN_ROUNDS})`);
@@ -482,6 +487,7 @@ export class ClaudeDesigner implements Designer {
         ...(caps.length ? { maxBudgetUsd: Math.min(...caps) } : {}),
         mcp: await this.designMcp(id),
         ...(resume ? { resume } : {}),
+        ...(isMassing ? { effort: cfg.massing.effort, maxTurns: cfg.massing.maxTurns, system: massingSystemPrompt() } : {}),
         onMessage: (msg) => {
           const step = designStepFor(msg, w.bp);
           if (step) sc.designStep(id, 'designing', step);
@@ -518,12 +524,15 @@ export class ClaudeDesigner implements Designer {
       sc.designStep(id, 'checking', `checking the design (round ${w.round})`);
       // the bible files again from their source (Bash in the scratch dir could have changed them)
       sc.syncScratchBible(scratch, d);
-      const res = await checkDesign(cfg.kitDir, scratch, w.bp, { maxSize: req.maxSize, type: req.type, profile: req.profile });
+      // (4c) a massing: the massing profile; a detail pass: the hard size cap and the massing conformance
+      const plan = sc.checkPlan(d);
+      const res = await checkDesign(cfg.kitDir, scratch, w.bp, plan.limits, 120_000, plan.extra);
       if (this.cancelled(id)) return 'finished';
-      if (!res.ok) {
-        const problem = res.problem ?? 'the check failed';
+      const outcome = sc.checkOutcome(d, res);
+      if (!res.ok || outcome) {
+        const problem = (res.ok ? outcome : res.problem) ?? 'the check failed';
         if (w.round < MAX_DESIGN_ROUNDS) {
-          w.pending = designFixPrompt(w.bp, problem, w.round + 1);
+          w.pending = (isMassing ? massingFixPrompt : designFixPrompt)(w.bp, problem, w.round + 1);
           sc.store.markDirty();
           sc.designStep(id, 'designing', `check failed: ${truncate(problem.split('\n')[0] ?? problem, 80)}`);
           continue;
@@ -535,20 +544,8 @@ export class ClaudeDesigner implements Designer {
       sc.designStep(id, 'rendering', 'rendering previews');
       const r = await renderPreviews(scratch, res.nbt!);
       if (this.cancelled(id)) return 'finished';
-      const installed = installDesign({
-        library: cfg.libraryDir,
-        baseId: designBaseId(req),
-        taken: this.takenIds(id),
-        nbt: res.nbt!,
-        sidecar: res.sidecar!,
-        source: path.join(scratch, KIT, 'designs', `${w.bp}.mjs`),
-        previews: r.files,
-        files: sc.entryFiles(d, scratch),
-        meta: { name: req.name, request: req, createdAt: sc.now(), extra: sc.entryExtra(d) },
-      });
-      const s = res.sidecar!.size!;
-      const notes = [r.skipped ? 'no renderer' : r.error ? `previews: ${truncate(r.error, 80)}` : '', res.warnings.length ? `${res.warnings.length} checker warning(s)` : ''].filter(Boolean).join('; ');
-      sc.designDone(id, installed, { x: s.x, y: s.y, z: s.z }, notes);
+      const notes = [r.skipped ? 'no renderer' : r.error ? `previews: ${truncate(r.error, 80)}` : '', res.warnings.length ? `${res.warnings.length} checker warning(s)` : ''];
+      sc.installChecked(d, { scratch, bp: w.bp, baseId: designBaseId(req), res, previews: r.files, taken: this.takenIds(id), name: req.name, notes });
       return 'finished';
     }
   }
@@ -614,8 +611,8 @@ export class ClaudeDesigner implements Designer {
     return {
       cwd,
       model: spec.model ?? this.cfg.designModel,
-      effort: this.cfg.effort,
-      maxTurns: this.cfg.maxTurns,
+      effort: spec.effort ?? this.cfg.effort,
+      maxTurns: spec.maxTurns ?? this.cfg.maxTurns,
       settingSources: [],
       // never auto mode: every call the CLI does not allow by itself reaches canUseTool
       permissionMode: 'default',
@@ -644,7 +641,7 @@ export class ClaudeDesigner implements Designer {
   async runTurn(turn: Running, spec: TurnSpec & { id: string; sessionKey: string; prompt: string; onMessage?(msg: SDKMessage): void }): Promise<{ stats: TurnStats; reason?: AbortReason }> {
     const label = spec.label ?? `designer ${spec.id}`;
     const mapper = new StreamMapper(this.sc.log, label, (r) => this.onRateLimit(r));
-    this.sc.log.info(`${label}: ${spec.resume ? 'resuming' : 'starting'} (${spec.model ?? this.cfg.designModel}, effort ${this.cfg.effort}${spec.maxBudgetUsd !== undefined ? `, budget left $${spec.maxBudgetUsd}` : ''})`);
+    this.sc.log.info(`${label}: ${spec.resume ? 'resuming' : 'starting'} (${spec.model ?? this.cfg.designModel}, effort ${spec.effort ?? this.cfg.effort}${spec.maxBudgetUsd !== undefined ? `, budget left $${spec.maxBudgetUsd}` : ''})`);
     let stats: TurnStats;
     const timer = setTimeout(() => this.abortTurn(turn, 'timeout'), DESIGN_TURN_TIMEOUT_MS);
     timer.unref?.();

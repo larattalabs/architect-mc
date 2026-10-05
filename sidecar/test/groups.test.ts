@@ -89,7 +89,7 @@ describe('the design pool', () => {
 // ---------------------------------------------------------------- estimates
 
 describe('estimates', () => {
-  const ctx = { designConcurrency: 3, now: 1_000_000, designModel: 'claude-opus-5-5', landmarkModel: 'claude-opus-5-5', ordinaryModel: 'claude-sonnet-5-5', bibleModel: 'claude-opus-5-5' };
+  const ctx = { designConcurrency: 3, now: 1_000_000, designModel: 'claude-opus-5-5', landmarkModel: 'claude-opus-5-5', ordinaryModel: 'claude-sonnet-5-5', bibleModel: 'claude-opus-5-5', massingModel: 'claude-sonnet-5-5' };
   const item = (o: Record<string, unknown> = {}) => ({ ...request(), ...o }) as unknown as GroupRequest['items'][number];
 
   it('seeds Opus at $2.0-3.2 / 8-13 min, Sonnet at $0.8-2.5 / 4-10 min, a bible at $1.2-2.0; waves and concurrency shape the time', () => {

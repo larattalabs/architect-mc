@@ -10,11 +10,17 @@
 // tested. A request whose notes contain `sim:usage_limit` hits a usage limit once (it lasts
 // `simLimitMs`): every design holds (the running ones stop at their next step and go back to the
 // front of their lane) and all resume together after the reset.
+//
+// Phase 4c: a massing job installs the kit's example massing for the type (kit/massings/<type>_massing.mjs, else the
+// cabin's, else the type's design example), with the requested type written in (the massing profile has no type rules).
+// A redirect starts from the previous version and changes it: the first int param's default goes up by one (the fixture
+// massing grows a wing), else the first gable roof becomes a hip (a visibly different silhouette, still within the
+// example's size). A detail pass builds the type's design example with --massing, so the example pairs conform.
 import fs from 'node:fs';
 import path from 'node:path';
 import { loadSdk } from './claude/sdk.js';
 import { zeroCost } from './jobs/cost.js';
-import { checkDesign, designBaseId, freeLibraryId, installDesign, isFinalDesign, KIT, renderPreviews, withDesignId } from './designs.js';
+import { checkDesign, designBaseId, freeLibraryId, isFinalDesign, KIT, renderPreviews, withDesignId } from './designs.js';
 import type { Design } from './protocol.js';
 import { BUILDING_TYPES } from './protocol.js';
 import { prepareScratch } from './scratch.js';
@@ -39,6 +45,31 @@ export function simSource(kitDir: string, type: string): string | undefined {
   if (has(type)) return type;
   if (has('cabin')) return 'cabin';
   return undefined;
+}
+
+/** The kit's example massing for a type (massings/<type>_massing.mjs, else the cabin's, else the first), as a path. */
+export function simMassingSource(kitDir: string, type: string): string | undefined {
+  const dir = path.join(kitDir, 'massings');
+  for (const f of [`${type}_massing.mjs`, `${type}.mjs`, 'cabin_massing.mjs', 'cabin.mjs']) if (fs.existsSync(path.join(dir, f))) return path.join(dir, f);
+  const any = fs.existsSync(dir) ? fs.readdirSync(dir).filter((f) => f.endsWith('.mjs')).sort()[0] : undefined;
+  return any ? path.join(dir, any) : undefined;
+}
+
+/** A redirect in the sim: bump the first int param's default (if it can grow), else turn the first gable roof into a hip. */
+export function simRedirect(source: string): { source: string; change: string } {
+  const params = /export\s+const\s+params\s*=\s*\{([\s\S]*?)\n\};/.exec(source);
+  if (params) {
+    const re = /(\w+)\s*:\s*\{([^}]*type:\s*'int'[^}]*)\}/g;
+    for (let m = re.exec(params[1]!); m; m = re.exec(params[1]!)) {
+      const max = /max:\s*(-?\d+)/.exec(m[2]!);
+      const def = /default:\s*(-?\d+)/.exec(m[2]!);
+      if (!max || !def || Number(def[1]) >= Number(max[1])) continue;
+      const block = m[0].replace(/default:\s*-?\d+/, `default: ${Number(def[1]) + 1}`);
+      return { source: source.replace(m[0], block), change: `${m[1]} ${def[1]} -> ${Number(def[1]) + 1}` };
+    }
+  }
+  if (/roof:\s*'gable'/.test(source)) return { source: source.replace(/roof:\s*'gable'/, "roof: 'hip'"), change: 'a gable roof became a hip' };
+  return { source, change: 'no change the sim knows how to make' };
 }
 
 interface Run {
@@ -198,8 +229,9 @@ export class SimDesigner implements Designer {
     const req = d.request;
     const src = simSource(cfg.kitDir, req.type);
     if (!src) throw new Error(`the sim copies a kit example, but ${path.join(cfg.kitDir, 'designs')} has neither ${req.type}.mjs nor cabin.mjs`);
-    const bp = freeLibraryId(cfg.libraryDir, designBaseId(req), new Set([...this.taken].filter(([k]) => k !== id).map(([, v]) => v)));
-    this.taken.set(id, bp);
+    // (4c) a massing job builds under its massing id
+    const bp = d.massing ? d.massing.id : freeLibraryId(cfg.libraryDir, designBaseId(req), new Set([...this.taken].filter(([k]) => k !== id).map(([, v]) => v)));
+    if (!d.massing) this.taken.set(id, bp);
     const scratch = prepareScratch({ dataDir: cfg.dataDir, kitDir: cfg.kitDir, libraryDir: cfg.libraryDir, design: d, bp, ...sc.scratchExtras(d) });
     let cost = d.cost ?? zeroCost();
     for (const s of STEPS) {
@@ -216,43 +248,60 @@ export class SimDesigner implements Designer {
       sc.designCost(id, cost);
     }
     this.check(id, r);
-    // the "design": the example under the new id (an open type and its profile written in)
     const design = path.join(scratch, KIT, 'designs', `${bp}.mjs`);
-    let source = withDesignId(fs.readFileSync(path.join(scratch, KIT, 'designs', `${src}.mjs`), 'utf8'), bp);
     const open = !(BUILDING_TYPES as readonly string[]).includes(req.type);
-    if (open) source = source.replace(new RegExp(`type: '${src}'`), `type: '${req.type}', profile: ${JSON.stringify(req.profile ?? ['door', 'lit', 'no_floating'])}`);
+    let source: string;
+    let what: string;
+    let note = '';
+    if (d.massing) {
+      // (4c) a massing: the previous version changed (a redirect), else the kit's example massing
+      const prev = req.redirect ? sc.massings.get(d.massing.id, req.redirect.fromVersion) : undefined;
+      if (prev) {
+        const r2 = simRedirect(fs.readFileSync(path.join(prev.dir, `${prev.id}.mjs`), 'utf8'));
+        source = withDesignId(r2.source, bp);
+        what = `massing ${prev.id} v${prev.version} redirected (${r2.change})`;
+        note = r2.change;
+      } else {
+        const ex = simMassingSource(cfg.kitDir, req.type);
+        source = withDesignId(fs.readFileSync(ex ?? path.join(scratch, KIT, 'designs', `${src}.mjs`), 'utf8'), bp);
+        what = ex ? `the kit example massing ${path.basename(ex, '.mjs')}` : `the kit example ${src} (the kit has no example massing)`;
+        if (!ex) note = 'no example massing in the kit';
+      }
+      // the massing profile has no type rules: the requested type is written in
+      source = source.replace(/type:\s*'(?!(?:int|bool|enum)')[a-z0-9_]+'/, `type: '${req.type}'`);
+    } else {
+      // the "design": the example under the new id (an open type and its profile written in)
+      source = withDesignId(fs.readFileSync(path.join(scratch, KIT, 'designs', `${src}.mjs`), 'utf8'), bp);
+      if (open) source = source.replace(new RegExp(`type: '${src}'`), `type: '${req.type}', profile: ${JSON.stringify(req.profile ?? ['door', 'lit', 'no_floating'])}`);
+      what = `the kit example ${src}`;
+      if (src !== req.type) note = `copied ${src} (no ${req.type} example)`;
+    }
     fs.writeFileSync(design, source);
-    sc.designStep(id, 'checking', 'checking the design (simulated designer)');
-    // a fallback example (cabin for a tower) is checked as what it is, not as the requested type
-    const checkType = src === req.type || open ? req.type : undefined;
+    sc.designStep(id, 'checking', `checking the ${d.massing ? 'massing' : 'design'} (simulated designer)`);
     const bibleArgs = req.bible && fs.existsSync(path.join(scratch, 'bible', 'bible.json')) ? ['--bible', path.join('bible', 'bible.json')] : [];
     sc.syncScratchBible(scratch, d);
-    const res = await checkDesign(cfg.kitDir, scratch, bp, { maxSize: req.maxSize, type: checkType, ...(open ? { profile: req.profile ?? ['door', 'lit', 'no_floating'] } : {}) }, 120_000, bibleArgs);
+    // (4c) the plan every designer checks with: the massing profile, or a detail pass's hard cap and --massing
+    const plan = sc.checkPlan(d, bibleArgs);
+    // a fallback example (cabin for a tower) is checked as what it is, not as the requested type
+    const limits = d.massing ? plan.limits : { ...plan.limits, type: src === req.type || open ? req.type : undefined, profile: open ? (req.profile ?? ['door', 'lit', 'no_floating']) : undefined };
+    const res = await checkDesign(cfg.kitDir, scratch, bp, limits, 120_000, plan.extra);
     this.check(id, r);
-    if (!res.ok) throw new Error(`the sim installs the kit example ${src}, which did not pass: ${res.problem ?? 'the check failed'}`);
+    const problem = res.ok ? sc.checkOutcome(d, res) : (sc.checkOutcome(d, res), res.problem ?? 'the check failed');
+    if (problem) throw new Error(`the sim installs ${what}, which did not pass: ${problem}`);
     sc.designStep(id, 'rendering', 'rendering previews');
     const rp = await renderPreviews(scratch, res.nbt!);
     this.check(id, r);
-    const installed = installDesign({
-      library: cfg.libraryDir,
+    sc.installChecked(d, {
+      scratch,
+      bp,
       baseId: designBaseId(req),
-      taken: new Set([...this.taken].filter(([k]) => k !== id).map(([, v]) => v)),
-      nbt: res.nbt!,
-      sidecar: res.sidecar!,
-      source: design,
+      res,
       previews: rp.files,
-      files: sc.entryFiles(d, scratch),
-      meta: {
-        name: req.name ?? `Sim ${req.style} ${req.type}`,
-        description: `Simulated design (a copy of the kit example ${src})${req.notes ? `: ${truncate(req.notes, 200)}` : ''}`,
-        request: req,
-        createdAt: sc.now(),
-        extra: sc.entryExtra(d),
-      },
+      taken: new Set([...this.taken].filter(([k]) => k !== id).map(([, v]) => v)),
+      name: req.name ?? `Sim ${req.style} ${req.type}`,
+      description: `Simulated ${d.massing ? 'massing' : 'design'} (${what})${req.notes ? `: ${truncate(req.notes, 200)}` : ''}`,
+      notes: [note, rp.skipped ? 'no renderer' : rp.error ? `previews: ${truncate(rp.error, 80)}` : '', res.warnings.length ? `${res.warnings.length} checker warning(s)` : ''],
     });
-    const s = res.sidecar!.size!;
-    const notes = [src !== req.type ? `copied ${src} (no ${req.type} example)` : '', rp.skipped ? 'no renderer' : rp.error ? `previews: ${truncate(rp.error, 80)}` : '', res.warnings.length ? `${res.warnings.length} checker warning(s)` : ''].filter(Boolean).join('; ');
-    sc.designDone(id, installed, { x: s.x, y: s.y, z: s.z }, notes);
   }
 }
 

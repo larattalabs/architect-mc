@@ -9,15 +9,16 @@ import { VERSION } from './config.js';
 import type { Logger } from './context.js';
 import { BibleIndex, Bibles, SimBibleBackend, type BibleBackend, type RunOutcome } from './bibles.js';
 import { BlobError, BlobStore } from './blobs.js';
-import { DesignBook, describeRequest, isFinalDesign, runNode, type Installed } from './designs.js';
+import { DesignBook, describeRequest, installDesign, isFinalDesign, KIT, runNode, type CheckResult, type Installed, type Limits } from './designs.js';
 import { Estimates, type EstimateCtx } from './estimates.js';
 import { Groups } from './groups.js';
+import { conformanceNote, GC_INTERVAL_MS, Massings } from './massings.js';
 import { ClaudeJobDriver, type ClaudeHost } from './jobs/claude.js';
 import type { JobDriver } from './jobs/driver.js';
 import { JobRunner } from './jobs/runner.js';
 import { SimJobDriver } from './jobs/sim.js';
 import { Pool } from './pool.js';
-import { FEATURES, KitPalettes, type BibleRef, type ClientMessage, type Cost, type PaletteInfo, type Design, type DesignRequest, type Outbound, type PaletteSpec, type ParamValues, type Protocol, type Status, type Variant } from './protocol.js';
+import { FEATURES, KitPalettes, type BibleRef, type ClientMessage, type Cost, type PaletteInfo, type Design, type DesignRequest, type Massing, type Outbound, type PaletteSpec, type ParamValues, type Protocol, type Status, type Variant } from './protocol.js';
 import { DesignScheduler, designKey } from './scheduler.js';
 import { readSecrets, updateSecrets, type Secrets } from './secrets.js';
 import type { ClientHandle } from './server.js';
@@ -26,6 +27,14 @@ import { truncate } from './util/text.js';
 import { checkImportPath, findVariantSource, Reskins, VariantBook, VariantRefused, VariantRunner } from './variants.js';
 
 export type { RunOutcome } from './bibles.js';
+
+/** (4c) what a scratch dir gets of a massing: the one a detail pass is bound to, or the version a redirect starts from. */
+export interface ScratchMassing {
+  record: Massing;
+  role: 'detail' | 'redirect';
+  /** a detail pass: its hard size cap, min(massing size + 2, request.maxSize) */
+  maxSize?: DesignRequest['maxSize'];
+}
 
 /** A message the client caused that cannot be done (answered with ack ok:false). */
 export class ClientError extends Error {}
@@ -83,6 +92,9 @@ export class Sidecar {
   readonly bibles: Bibles;
   /** (4b) cost and time estimates */
   readonly estimates: Estimates;
+  /** (4c) massings: records, install, delete, garbage collection */
+  readonly massings: Massings;
+  private gcTimer: NodeJS.Timeout | undefined;
   /** trusted connections */
   private connected = new Set<ClientHandle>();
   /** the kit's palette presets and choices, for the snapshot (loaded at start) */
@@ -113,6 +125,7 @@ export class Sidecar {
     this.bibleIndex = new BibleIndex(this);
     this.bibles = new Bibles(this);
     this.estimates = new Estimates(store, () => this.now());
+    this.massings = new Massings(this);
     this.jobs = new JobRunner(this);
   }
 
@@ -150,6 +163,7 @@ export class Sidecar {
     }
     // a design changing state changes the queue counts, and its group
     if (m.type === 'design.upsert') {
+      this.massings.designChanged(m.design);
       this.groups.designChanged(m.design);
       this.statusChanged();
     }
@@ -210,7 +224,7 @@ export class Sidecar {
       variants: this.variants.recent(),
       ...(this.palettes ? { palettes: this.palettes } : {}),
       ...(protocol >= 2
-        ? { protocol, features: [...FEATURES], jobs: this.jobs.book.recent(), groups: this.groups.recent(), bibles: this.bibles.recent(), bibleIndex: this.bibleIndex.list(), reskins: this.reskins.recent() }
+        ? { protocol, features: [...FEATURES], jobs: this.jobs.book.recent(), groups: this.groups.recent(), bibles: this.bibles.recent(), bibleIndex: this.bibleIndex.list(), reskins: this.reskins.recent(), massings: this.massings.recent() }
         : {}),
     } as Outbound;
   }
@@ -241,6 +255,10 @@ export class Sidecar {
     this.reskins.start();
     // jobs run on the designer's backend: the sim, or Claude through the designer's SDK and auth
     this.jobs.start(jobDriver ?? (designer.name === 'sim' ? new SimJobDriver(this.config.simStepMs, this.config.jobs.simStepUsd) : new ClaudeJobDriver(designer as unknown as ClaudeHost, this.log)));
+    // (4c) massing garbage collection: now, then hourly
+    this.runGc();
+    this.gcTimer = setInterval(() => this.runGc(), GC_INTERVAL_MS);
+    this.gcTimer.unref?.();
     this.statusChanged();
     await designer.start();
     this.statusChanged();
@@ -264,7 +282,16 @@ export class Sidecar {
     }
   }
 
+  private runGc(): void {
+    try {
+      this.massings.gc();
+    } catch (e) {
+      this.log.error(`massing gc: ${(e as Error).stack ?? e}`);
+    }
+  }
+
   async close(): Promise<void> {
+    if (this.gcTimer) clearInterval(this.gcTimer);
     this.pool.stop();
     await this.variantRunner.stop();
     await this.jobs.stop();
@@ -347,8 +374,10 @@ export class Sidecar {
           this.jobs.pausedChanged(client);
         }
         return {};
-      case 'design.request':
-        return { designId: this.requestDesign(msg.request).id };
+      case 'design.request': {
+        const d = this.requestDesign(msg.request);
+        return { designId: d.id, ...(d.massing ? { massingId: d.massing.id, version: d.massing.version } : {}), ...(d.request.fromMassing ? { massing: { id: d.request.fromMassing, version: d.request.massingVersion } } : {}) };
+      }
       case 'design.cancel':
         this.cancelDesign(msg.designId);
         return { designId: msg.designId };
@@ -396,6 +425,17 @@ export class Sidecar {
         const r = this.reskins.request(msg.bibleId, msg.version, msg.from);
         return { reskinId: r.id, variantIds: r.variants, bible: r.bible };
       }
+      // ---- 4c
+      case 'massing.redirect': {
+        const d = this.redirectMassing(msg.massingId, msg.notes, { owner: msg.owner, model: msg.model, budgetUsd: msg.budgetUsd });
+        return { designId: d.id, massingId: d.massing!.id, version: d.massing!.version };
+      }
+      case 'massing.list':
+        return { massings: this.massings.list(msg.owner, msg.massingId) };
+      case 'massing.delete':
+        return { massingId: msg.massingId, versions: this.massings.delete(msg.massingId) };
+      case 'group.approve':
+        return { ...this.groups.approve(msg.groupId, { approve: msg.approve ?? [], redirect: msg.redirect ?? {}, cancel: msg.cancel ?? [], owner: msg.owner }) };
     }
   }
 
@@ -409,6 +449,7 @@ export class Sidecar {
       landmarkModel: this.config.groups.landmarkModel,
       ordinaryModel: this.config.groups.ordinaryModel,
       bibleModel: this.config.bibleModel,
+      massingModel: this.config.massing.model,
     };
   }
 
@@ -455,16 +496,53 @@ export class Sidecar {
   requestDesign(request: DesignRequest): Design {
     this.ensureClaudeAvailable();
     if (request.group || request.itemKey) throw new ClientError('group, itemKey, wave and role are set by design.group, not by design.request');
+    if (request.redirect) throw new ClientError('redirect is set by massing.redirect, not by design.request');
     // (auth `checking`, also while the SDK is still being installed: the design queues and starts
     // once the check passes)
     let req = request;
+    // (4c) the detail pass of a massing: pin its version; it inherits the massing's bible
+    if (req.fromMassing) {
+      const m = this.massings.get(req.fromMassing, req.massingVersion);
+      if (!m) throw new ClientError(req.massingVersion ? `no massing "${req.fromMassing}" v${req.massingVersion}` : `no massing "${req.fromMassing}"`);
+      if (m.group) throw new ClientError(`massing ${m.id} belongs to group ${m.group}: approve it with group.approve`);
+      req = { ...req, massingVersion: m.version, ...(!req.bible && m.bible ? { bible: m.bible.id, bibleVersion: m.bible.version } : {}) };
+    }
     if (req.bible) {
       const pin = this.bibleIndex.resolve(req.bibleVersion ? { id: req.bible, version: req.bibleVersion } : req.bible).pin;
       req = { ...req, bible: pin.id, bibleVersion: pin.version };
     }
-    const d = this.designs.create(req);
+    // (4c) a massing job: its id is reserved now (version 1); the massing model unless the request names one
+    let massing: Design['massing'];
+    if (req.massing) {
+      req = { ...req, model: req.model ?? this.config.massing.model };
+      massing = { id: this.massings.reserveId(req), version: 1 };
+    }
+    const d = this.designs.create(req, massing);
     const ahead = this.designs.active().filter((x) => x.id !== d.id).length;
     this.log.info(`design ${d.id} requested: ${describeRequest(req)}${ahead ? ` (${ahead} ahead in the queue)` : ''}`);
+    this.scheduler.enqueue(d.id);
+    return d;
+  }
+
+  /**
+   * (4c) massing.redirect: a new version of a massing from the latest one plus notes. A group's massing goes through its
+   * group (the approval owner and the redirect cap apply).
+   */
+  redirectMassing(massingId: string, notes: string, opts: { owner?: string | undefined; model?: string | undefined; budgetUsd?: number | undefined } = {}): Design {
+    this.ensureClaudeAvailable();
+    const m = this.massings.get(massingId);
+    if (!m) throw new ClientError(`no massing "${massingId}"`);
+    if (m.group) {
+      if (!m.itemKey) throw new ClientError(`massing ${m.id} has no group item`);
+      this.groups.approve(m.group, { approve: [], redirect: { [m.itemKey]: notes }, cancel: [], owner: opts.owner });
+      return this.designs.get(this.groups.get(m.group)!.items.find((it) => it.itemKey === m.itemKey)!.designId)!;
+    }
+    const open = this.massings.openJob(m.id);
+    if (open) throw new ClientError(`massing ${m.id} already has a job running (design ${open.id})`);
+    const { redirect: _r, ...base } = m.request;
+    const req: DesignRequest = { ...base, redirect: { fromVersion: m.version, notes }, ...(opts.model ? { model: opts.model } : {}), ...(opts.budgetUsd !== undefined ? { budgetUsd: opts.budgetUsd } : {}) };
+    const d = this.designs.create(req, { id: m.id, version: this.massings.nextVersion(m.id) });
+    this.log.info(`massing ${m.id} redirected (v${m.version} -> v${d.massing!.version}, design ${d.id}): ${notes.split('\n')[0]}`);
     this.scheduler.enqueue(d.id);
     return d;
   }
@@ -525,14 +603,25 @@ export class Sidecar {
   }
 
   /** prepareScratch's extras: the bible's files and up to 4 iso renders of finished earlier-wave siblings. */
-  scratchExtras(d: Design): { bible?: { files: import('./bibles.js').BibleFiles; info: import('./protocol.js').BibleInfo; pin: import('./protocol.js').BiblePin }; neighbours?: Array<{ entryId: string; name?: string; type: string; png: string }> } {
+  scratchExtras(d: Design): { bible?: { files: import('./bibles.js').BibleFiles; info: import('./protocol.js').BibleInfo; pin: import('./protocol.js').BiblePin }; neighbours?: Array<{ entryId: string; name?: string; type: string; png: string }>; massing?: ScratchMassing } {
     const b = this.designBible(d);
-    const neighbours = this.groups
-      .earlierFinished(d)
-      .map((it) => ({ entryId: it.entryId!, ...(it.name ? { name: it.name } : {}), type: it.type, png: path.join(this.config.libraryDir, it.entryId!, `${it.entryId}.preview-iso.png`) }))
+    // a massing job's neighbours are the earlier waves' massings; a design's, their finished entries
+    const neighbours = (
+      d.request.massing
+        ? this.groups.earlierMassings(d).map((m) => ({ entryId: m.id, ...(m.name ? { name: m.name } : {}), type: m.type, png: path.join(m.dir, `${m.id}.preview-iso.png`) }))
+        : this.groups.earlierFinished(d).map((it) => ({ entryId: it.entryId!, ...(it.name ? { name: it.name } : {}), type: it.type, png: path.join(this.config.libraryDir, it.entryId!, `${it.entryId}.preview-iso.png`) }))
+    )
       .filter((n) => fs.existsSync(n.png))
       .slice(0, 4);
-    return { ...(b ? { bible: { files: b.files, info: b.info, pin: b.pin } } : {}), ...(neighbours.length ? { neighbours } : {}) };
+    // (4c) the massing a detail pass is bound to, or the version a redirect starts from
+    let massing: ScratchMassing | undefined;
+    const src = this.massings.sourceOf(d);
+    if (src) massing = { record: src, role: 'detail', maxSize: this.checkPlan(d).limits.maxSize! };
+    else if (d.request.massing && d.request.redirect && d.massing) {
+      const prev = this.massings.get(d.massing.id, d.request.redirect.fromVersion);
+      if (prev) massing = { record: prev, role: 'redirect' };
+    }
+    return { ...(b ? { bible: { files: b.files, info: b.info, pin: b.pin } } : {}), ...(neighbours.length ? { neighbours } : {}), ...(massing ? { massing } : {}) };
   }
 
   /** Before the pristine check: the bible files again from their source (Bash in the scratch dir could change them). */
@@ -556,7 +645,61 @@ export class Sidecar {
       ...(r.group ? { group: r.group } : {}),
       ...(r.itemKey ? { groupItem: r.itemKey } : {}),
       ...(r.profile ? { profile: r.profile } : {}),
+      ...(r.fromMassing ? { fromMassing: { id: r.fromMassing, version: r.massingVersion ?? 1 } } : {}),
     };
+  }
+
+  // ---- (4c) the check and the install every designer shares -------------------------------------
+
+  /** How a design is checked: the limits (the detail pass's hard size cap) and the extra build args (`--massing`). */
+  checkPlan(d: Design, extra: string[] = []): { limits: Limits; extra: string[] } {
+    const p = this.massings.checkPlan(d, { maxSize: d.request.maxSize, type: d.request.type, profile: d.request.profile });
+    return { limits: p.limits, extra: [...extra, ...p.extra] };
+  }
+
+  /** After the pristine check: the problem that fails the round (a massing that is not one; conformance errors), if any. */
+  checkOutcome(d: Design, res: CheckResult): string | undefined {
+    return this.massings.checkOutcome(d, res);
+  }
+
+  /**
+   * Install a design that passed its check, then report it done: a massing job as a massing version, anything else as a
+   * library entry under a fresh id from `baseId` (never overwriting).
+   */
+  installChecked(d: Design, input: { scratch: string; bp: string; baseId: string; res: CheckResult; previews: string[]; taken?: ReadonlySet<string> | undefined; name?: string | undefined; description?: string | undefined; notes?: string[] }): void {
+    const res = input.res;
+    const source = path.join(input.scratch, KIT, 'designs', `${input.bp}.mjs`);
+    const s = res.sidecar!.size!;
+    const size = { x: s.x, y: s.y, z: s.z };
+    if (d.massing) {
+      const m = this.massings.install(d, { nbt: res.nbt!, sidecar: res.sidecar!, source, previews: input.previews, files: this.entryFiles(d, input.scratch), createdAt: this.now() });
+      this.massingDone(d.id, m, (input.notes ?? []).filter(Boolean).join('; '));
+      return;
+    }
+    const installed = installDesign({
+      library: this.config.libraryDir,
+      baseId: input.baseId,
+      ...(input.taken ? { taken: input.taken } : {}),
+      nbt: res.nbt!,
+      sidecar: res.sidecar!,
+      source,
+      previews: input.previews,
+      files: this.entryFiles(d, input.scratch),
+      meta: { name: input.name, description: input.description, request: d.request, createdAt: this.now(), extra: this.entryExtra(d) },
+    });
+    this.designDone(d.id, installed, size, [...(input.notes ?? []), conformanceNote(this.designs.get(d.id)?.conformance)].filter(Boolean).join('; '));
+  }
+
+  /** (4c) a massing job installed its version. */
+  massingDone(id: string, m: Massing, note = ''): void {
+    const d = this.designs.get(id);
+    if (!d || isFinalDesign(d)) return;
+    this.designs.update(id, { status: 'done', step: `done: massing ${m.id} v${m.version} (${m.size.x}x${m.size.y}x${m.size.z}, ${Object.keys(m.parts).length} masses)${note ? `; ${note}` : ''}`, size: m.size, previews: m.previews });
+    const started = this.estimates.startedAt(id);
+    if (this.designer?.name === 'claude' && started !== undefined) this.estimates.record('massing', d.request.model ?? this.config.massing.model, d.cost?.usd ?? 0, this.now() - started);
+    this.estimates.forget(id);
+    this.store.flush();
+    this.log.info(`design ${id}: massing ${m.id} v${m.version} is ready (${m.size.x}x${m.size.y}x${m.size.z}, masses ${Object.keys(m.parts).join(', ')}) in ${m.dir}`);
   }
 
   // ---- what designers report ------------------------------------------------------------------

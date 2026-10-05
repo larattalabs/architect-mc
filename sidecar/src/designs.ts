@@ -15,7 +15,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { zeroCost } from './jobs/cost.js';
 import type { Store } from './store.js';
-import type { Design, DesignRequest, DesignStatus, Outbound } from './protocol.js';
+import type { Conformance, Design, DesignRequest, DesignStatus, Outbound } from './protocol.js';
 import { truncate } from './util/text.js';
 import { run } from './util/proc.js';
 import { withPathFirst } from './util/env.js';
@@ -28,7 +28,7 @@ const FINAL: ReadonlySet<DesignStatus> = new Set(['done', 'failed', 'cancelled']
 
 export const isFinalDesign = (d: Design): boolean => FINAL.has(d.status);
 
-export type DesignPatch = Partial<Pick<Design, 'status' | 'step' | 'blueprintId' | 'size' | 'previews' | 'error' | 'cost'>>;
+export type DesignPatch = Partial<Pick<Design, 'status' | 'step' | 'blueprintId' | 'size' | 'previews' | 'error' | 'cost' | 'massing' | 'conformance'>>;
 
 export interface BookCtx {
   store: Store;
@@ -63,9 +63,10 @@ export class DesignBook {
     return [...extra, ...tail].sort((a, b) => a.createdAt - b.createdAt).map((d) => structuredClone(d));
   }
 
-  create(request: DesignRequest): Design {
+  /** A new queued design; `massing` (4c) marks a massing job and the massing version it makes. */
+  create(request: DesignRequest, massing?: Design['massing']): Design {
     const now = this.ctx.now();
-    const d: Design = { id: this.ctx.store.nextId('d'), request: structuredClone(request), status: 'queued', step: 'waiting for the designer', cost: zeroCost(), createdAt: now, updatedAt: now };
+    const d: Design = { id: this.ctx.store.nextId('d'), request: structuredClone(request), status: 'queued', step: 'waiting for the designer', cost: zeroCost(), ...(massing ? { massing: { ...massing } } : {}), createdAt: now, updatedAt: now };
     this.all.push(d);
     this.trim();
     this.ctx.store.markDirty();
@@ -247,16 +248,21 @@ export interface CheckResult {
   sidecar?: Sidecar;
   nbt?: string;
   json?: string;
+  /** (4c) a detail pass: the kit's massing conformance result (`--massing`), when it printed one */
+  conformance?: Conformance;
 }
 
 /** The kit's `--json` line (`{ ok, errors[], warnings[], nbt, sidecar }`), if it printed one. */
-export function parseBuildJson(stdout: string): { ok?: boolean; errors: string[]; warnings: string[] } | undefined {
+export function parseBuildJson(stdout: string): { ok?: boolean; errors: string[]; warnings: string[]; conformance?: Conformance } | undefined {
   const lines = stdout.split(/\r?\n/).map((l) => l.trim()).filter((l) => l.startsWith('{') && l.endsWith('}'));
   for (let i = lines.length - 1; i >= 0; i--) {
     try {
-      const j = JSON.parse(lines[i]!) as { ok?: unknown; errors?: unknown; warnings?: unknown };
+      const j = JSON.parse(lines[i]!) as { ok?: unknown; errors?: unknown; warnings?: unknown; conformance?: unknown };
       const list = (v: unknown) => (Array.isArray(v) ? v.map((x) => (typeof x === 'string' ? x : JSON.stringify(x))) : []);
-      return { ...(typeof j.ok === 'boolean' ? { ok: j.ok } : {}), errors: list(j.errors), warnings: list(j.warnings) };
+      const c = j.conformance && typeof j.conformance === 'object' ? (j.conformance as Record<string, unknown>) : undefined;
+      // (4c) `conformance: { ok, errors[], issues[] }` (warnings is accepted for issues)
+      const conformance = c ? { ok: c.ok !== false && !list(c.errors).length, errors: list(c.errors), issues: list(c.issues ?? c.warnings) } : undefined;
+      return { ...(typeof j.ok === 'boolean' ? { ok: j.ok } : {}), errors: list(j.errors), warnings: list(j.warnings), ...(conformance ? { conformance } : {}) };
     } catch {
       /* not it */
     }
@@ -289,24 +295,26 @@ export async function checkDesign(kitSrc: string, scratch: string, bp: string, l
 export function finishCheck(r: NodeRun, out: string, bp: string, limits: Limits, timeoutMs: number): CheckResult {
   const j = parseBuildJson(r.stdout);
   const warnings = j?.warnings ?? [];
+  const conf = j?.conformance ? { conformance: j.conformance } : {};
   const nbt = path.join(out, `${bp}.nbt`);
   const json = path.join(out, `${bp}.blueprint.json`);
   if (!r.ok) {
-    if (r.timedOut) return { ok: false, problem: `build.mjs timed out after ${timeoutMs / 1000}s`, output: r.output, warnings };
+    if (r.timedOut) return { ok: false, problem: `build.mjs timed out after ${timeoutMs / 1000}s`, output: r.output, warnings, ...conf };
     const what = r.code === 1 ? 'the checker refused the design' : 'the kit failed (the design threw, or bad usage)';
-    const detail = j?.errors.length ? j.errors.map((e) => `- ${e}`).join('\n') : outputTail(r.output);
-    return { ok: false, problem: `${what}:\n${truncate(detail, 1500)}`, output: r.output, warnings };
+    const errs = [...(j?.errors ?? []), ...(j?.conformance?.errors ?? []).filter((e) => !j!.errors.includes(e))];
+    const detail = errs.length ? errs.map((e) => `- ${e}`).join('\n') : outputTail(r.output);
+    return { ok: false, problem: `${what}:\n${truncate(detail, 1500)}`, output: r.output, warnings, ...conf };
   }
-  if (!fs.existsSync(nbt) || !fs.existsSync(json)) return { ok: false, problem: `the kit did not write ${bp}.nbt and ${bp}.blueprint.json`, output: r.output, warnings };
+  if (!fs.existsSync(nbt) || !fs.existsSync(json)) return { ok: false, problem: `the kit did not write ${bp}.nbt and ${bp}.blueprint.json`, output: r.output, warnings, ...conf };
   let sc: Sidecar;
   try {
     sc = JSON.parse(fs.readFileSync(json, 'utf8')) as Sidecar;
   } catch (e) {
-    return { ok: false, problem: `the sidecar is not valid JSON: ${(e as Error).message}`, output: r.output, warnings };
+    return { ok: false, problem: `the sidecar is not valid JSON: ${(e as Error).message}`, output: r.output, warnings, ...conf };
   }
   const p = sidecarProblem(sc, limits);
-  if (p) return { ok: false, problem: p, output: r.output, warnings, sidecar: sc };
-  return { ok: true, output: r.output, warnings, sidecar: sc, nbt, json };
+  if (p) return { ok: false, problem: p, output: r.output, warnings, sidecar: sc, ...conf };
+  return { ok: true, output: r.output, warnings, sidecar: sc, nbt, json, ...conf };
 }
 
 /**
