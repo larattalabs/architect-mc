@@ -16,6 +16,20 @@ import { copyKit, request, rmrf, tempDir, until } from './helpers.js';
 
 // ---------------------------------------------------------------- pure parts
 
+describe('the brief asks for parametric, palette-driven designs', () => {
+  it('mentions params, their corners and palette-driven materials', async () => {
+    const { designBrief } = await import('../src/claude/brief.js');
+    const { CONTRACT_EXCERPT } = await import('../src/claude/contract.js');
+    const { DesignRequest } = await import('../src/protocol.js');
+    const b = designBrief(DesignRequest.parse(request()), 'gen_x', { renderer: true, examples: ['cabin', 'tower'] });
+    expect(b).toMatch(/export const params = \{\.\.\.\}` with 2 to 4 meaningful params/);
+    expect(b).toMatch(/Materials come from the palette/);
+    expect(b).toMatch(/--palette cherry/);
+    expect(CONTRACT_EXCERPT).toMatch(/## Parametric designs/);
+    expect(CONTRACT_EXCERPT).toMatch(/"values": \{ "width": 9/);
+  });
+});
+
 describe('variant naming', () => {
   it('ids: <from>_<palette>, then _2; <from>_v2, _v3 without a palette', () => {
     const lib = tempDir();

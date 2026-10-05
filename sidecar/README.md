@@ -44,6 +44,7 @@ sidecar's files are left alone), and `1` for anything else.
 | `<data>/secrets.json` | on `auth.set` | `{ apiKey?, useClaudeLogin? }` (mode 0600). It is never logged or echoed. |
 | `<data>/state.json` | always | Designs, id counters, SDK sessions, job progress and the usage-limit hold. It holds no credentials. |
 | `<data>/logs/sidecar.log` | always | The log, which is also written to stdout/stderr. |
+| `<data>/variants/<v>/` | a variant / import job | Its scratch dir: a fresh `kit/`, `check/`, `previews/`, `in/` (the import copy). |
 | `<library>/<id>/` | a design finished | `<id>.nbt`, `<id>.blueprint.json` (with `source`, `createdAt` and `request` added), `<id>.mjs` and the `<id>.preview-*.png` files. An existing folder is never overwritten: ids go `gen_<slug>`, then `gen_<slug>_2`, and so on. |
 
 ### For the launcher
@@ -74,10 +75,17 @@ The connection is `ws://127.0.0.1:<port>`, with one JSON object per text frame:
   - `auth.set { apiKey?: string | null, useClaudeLogin?: boolean }`: a string sets the key, `null` clears
     it, and an absent field keeps it.
   - `shutdown {}`.
+  - `variant.request { from, palette?, values?, name? }` is acked with `result: { variantId }` (phase 2, see
+    "Variants and imports"). `from` is a library id; `palette` a preset name or `{ preset?, wood?, stone?, roof?,
+    accent? }`; `values` `{ name: int | bool | string }`; `name` (<= 40) the new entry's displayName.
+  - `import.request { path }` is acked with `result: { variantId }`.
 - **Sidecar → client**
-  - `snapshot { version, status, designs }` in reply to a valid hello.
+  - `snapshot { version, status, designs, variants, kit? }` in reply to a valid hello. `variants`: the last 20
+    variant/import jobs plus any unfinished one. `kit` (an addition): `{ palettes: [{ name, preset, wood, stone, roof,
+    accent }], choices: { woods, stones, roofs } }` from `kit/tools/describe.mjs --palettes`, for the palette picker.
   - `status { status }` whenever the status changes.
   - `design.upsert { design }`, to be replaced by `design.id`.
+  - `variant.upsert { variant }`, to be replaced by `variant.id`. Imports report on this same channel.
   - `ack { re, ok, error?, result? }`, for every client message that carries an `id`.
   - `error { message, re? }`.
 - `Status`: `{ auth: ok|missing|failed|checking, authSource?, useClaudeLogin, sdk: ready|missing, designing?,
@@ -91,6 +99,48 @@ The connection is `ws://127.0.0.1:<port>`, with one JSON object per text frame:
 - `Design.status` moves `queued → designing → checking → rendering → done`, or ends at `failed` or
   `cancelled`. Final states never change. When a design is `done`, its files are already in
   `<library>/<blueprintId>/`, and `previews` holds their absolute paths.
+
+## Variants and imports
+
+Neither uses Claude, and they run one at a time on their own queue, so a variant never waits behind a design.
+
+`Variant = { id: "v<n>", kind: "variant" | "import", from, status: queued|building|done|failed, step, palette?,
+values?, name?, blueprintId?, size?, previews?, error?, createdAt, updatedAt }`. `kind`, `palette`, `values`, `name`
+and `previews` are additions to the contract. For an import, `from` is the absolute `.nbt` path. `done` and `failed` are
+final; `error` keeps the kit's lines (one per line).
+
+**A variant** of `from`:
+- The source is `<library>/<from>/<from>.mjs`. For a bundled example, which lives in the mod's jar and not in the
+  library, it is the kit's `designs/<from>.mjs`, with `kit/examples/<from>/` for its sidecar.
+- `variant.request` is refused at once (`ack ok:false`) when there is no such entry, when the entry is `imported`, or
+  when it has no source.
+- The job works in `<data>/variants/<v>/`, which holds a fresh copy of the kit. It copies the source to
+  `kit/designs/<newId>.mjs`, rewrites its `export const id`, and points any relative `…/lib/<x>.mjs` import at
+  `../lib/<x>.mjs`. That covers library sources, which import `../lib/kit.mjs` from `<library>/<id>/`.
+- Then it runs `kit/build.mjs <newId> --type <entry type> --palette … --values … --json` in a child process with the
+  minimal environment, against the pristine kit. There is no `--max`, so a variant may grow.
+- A palette preset is used as given. Palette inputs are merged over the entry's recorded `palette`, and values over
+  its `values`. An entry with no recorded palette first builds once to learn the design's default.
+- It renders the previews and installs the result, never overwriting. The id is `<from>_<preset or wood>`, then `_2`
+  and so on; without a palette it is `<from>_v2`, `_v3`, and so on.
+- The sidecar JSON gets `variantOf: from`, the entry's `name`, `description` and `request`, and
+  `displayName = name ?? "<entry name> (<palette>, floors 2, no porch)"`, which lists only the values that changed.
+  The build also writes `palette`, `params` and `values`. `favorite` and `userTags` are never written.
+
+**An import** (`import.request { path }`):
+- The path must be absolute and end in `.nbt`, and its real path (links resolved) must be under one of two folders.
+  Both are derived from `--library` (`<gameDir>/architect/library`):
+  - `<gameDir>/architect/imports/`
+  - `<gameDir>/saves/<world>/generated/<namespace>/structures/`
+- Anything else is refused at once with the reason.
+- The job copies the file into the scratch dir and runs `kit/import.mjs <copy> --id imp_<slug> --out check --json`.
+  That writes the template (first palette, entities dropped) and a sidecar: type `custom`, groundY 1, front south,
+  entrance at the front centre, spawn 2 out, `imported: true`, and a name from the file name.
+- The kit checks the result with the custom profile in import mode:
+  - These are warnings: the anchor, door and light rules, and an extent mismatch.
+  - These stay errors: palette validity, the format, the sidecar, and the 96x64x96 size cap.
+  - Non-vanilla or unknown blocks fail the job with one line listing every id and its count.
+- It renders the previews and installs `imp_<slug>` (then `_2`, …) with no `.mjs`, so the entry can have no variants.
 
 ## Auth
 

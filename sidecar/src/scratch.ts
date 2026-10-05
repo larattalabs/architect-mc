@@ -55,7 +55,7 @@ export function prepareScratch(input: PrepareInput): string {
       fs.mkdirSync(path.join(scratch, 'remix'), { recursive: true });
       fs.copyFileSync(src, path.join(scratch, 'remix', `${r}.mjs`));
       if (fs.existsSync(sidecar)) fs.copyFileSync(sidecar, path.join(scratch, 'remix', `${r}.blueprint.json`));
-      remix = `Its source is remix/${r}.mjs (with its sidecar remix/${r}.blueprint.json): copy it into your file, set your id, fix its kit imports to point into kit/lib/, and change it as the request says.`;
+      remix = `Its source is remix/${r}.mjs (with its sidecar remix/${r}.blueprint.json): copy it into your file, set your id, fix its kit imports to point into kit/lib/, and change it as the request says (keep it parametric: its params, and every material from the palette).`;
     } else if (fs.existsSync(path.join(scratch, KIT, 'designs', `${r}.mjs`))) {
       remix = `Its source is kit/designs/${r}.mjs (a kit example): copy it into your file, set your id and change it as the request says.`;
     } else if (fs.existsSync(sidecar)) {
