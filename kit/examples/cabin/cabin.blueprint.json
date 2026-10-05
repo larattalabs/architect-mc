@@ -154,7 +154,8 @@
         9,
         8
       ],
-      "cells": 164
+      "cells": 164,
+      "roof": "gable"
     },
     "chimney": {
       "box": [

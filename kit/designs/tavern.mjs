@@ -46,7 +46,7 @@ export default function build({ palette: p = PALETTES.rustic, length = 14, roof 
     // ---------------------------------------------------------------- ground storey (stone)
     bp.floor(0, 0, X, Z, 0, p.stone);
     bp.floor(1, 1, X - 1, Z - 1, 0, p.planks);
-    bp.carve([1, 1, 1, X - 1, 9, Z - 1]);
+    bp.carve([1, 1, 1, X - 1, 4, Z - 1]);
     bp.walls(0, 0, X, Z, 1, 4, { block: p.stone, corners: p.log });
     // upper floor + beams
     bp.floor(1, 1, X - 1, Z - 1, 5, p.planks);
@@ -57,6 +57,7 @@ export default function build({ palette: p = PALETTES.rustic, length = 14, roof 
   });
   bp.part('upper_storey', () => {
     // ---------------------------------------------------------------- upper storey (timber frame)
+    bp.carve([1, 6, 1, X - 1, 9, Z - 1]);
     bp.walls(0, 0, X, Z, 6, 9, { block: infill, corners: frame });
     for (const x of [3, D, D + 1, X - 3]) for (const z of [0, Z]) bp.post(x, z, 6, 9, frame);
     for (const z of [3, 5]) for (const x of [0, X]) bp.post(x, z, 6, 9, frame);
@@ -100,7 +101,7 @@ export default function build({ palette: p = PALETTES.rustic, length = 14, roof 
       bp.roofHip(-1, -1, X + 1, Z + 1, 10);
     }
     if (chimney) bp.chimney(X + 1, 4, 0, ridge + 1, { block: p.stone });
-  });
+  }, { roof });
 
   bp.part('taproom', () => {
     // ---------------------------------------------------------------- taproom

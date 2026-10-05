@@ -1,0 +1,78 @@
+{
+  "id": "gatehouse_massing",
+  "name": "Gatehouse (massing)",
+  "description": "",
+  "type": "gatehouse",
+  "tags": [],
+  "size": {
+    "x": 11,
+    "y": 12,
+    "z": 10
+  },
+  "groundY": 1,
+  "front": "south",
+  "materials": [
+    "minecraft:stone_bricks",
+    "minecraft:deepslate_tiles",
+    "minecraft:dirt_path"
+  ],
+  "foundationBlock": "minecraft:stone_bricks",
+  "approach": {
+    "length": 4,
+    "width": 3,
+    "block": "minecraft:dirt_path",
+    "slab": "minecraft:stone_brick_slab"
+  },
+  "anchors": {
+    "entrance": {
+      "x": 5.5,
+      "y": 1,
+      "z": 9.5,
+      "yaw": 180,
+      "pitch": 0
+    },
+    "spawn": {
+      "x": 5.5,
+      "y": 1,
+      "z": 9.5,
+      "yaw": 180,
+      "pitch": 0
+    }
+  },
+  "source": "gatehouse_massing.mjs",
+  "palette": {
+    "preset": "fortress",
+    "wood": "spruce",
+    "stone": "stone_bricks",
+    "roof": "deepslate_tiles",
+    "accent": "dark_oak"
+  },
+  "parts": {
+    "main": {
+      "box": [
+        0,
+        0,
+        0,
+        10,
+        8,
+        9
+      ],
+      "cells": 702,
+      "storeys": 1,
+      "roof": "flat"
+    },
+    "roof": {
+      "box": [
+        0,
+        9,
+        2,
+        10,
+        11,
+        8
+      ],
+      "cells": 125,
+      "roof": "flat"
+    }
+  },
+  "massing": true
+}
