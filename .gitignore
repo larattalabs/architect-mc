@@ -12,3 +12,5 @@ mod/.gradle/
 sidecar/scratch/
 .claude/
 _import/
+artifacts/
+artifacts-*.log

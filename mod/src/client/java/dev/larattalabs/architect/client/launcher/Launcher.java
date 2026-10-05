@@ -468,6 +468,8 @@ public final class Launcher {
 			}
 		}
 		int code = p.waitFor();
+		// first run: the sidecar has not created its data dir yet
+		Files.createDirectories(Sidecar.dataDir());
 		Files.write(Sidecar.dataDir().resolve("npm-install.log"), lines, StandardCharsets.UTF_8);
 		if (code != 0) {
 			logTail = LauncherPlan.tail(lines, 20);
