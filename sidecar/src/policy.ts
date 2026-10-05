@@ -1674,7 +1674,7 @@ export function isReadOnlyCommand(command: string, ctx: PolicyContext): boolean 
 // actually protects the Foreman's WebSocket; these rules keep agents from reading it.
 
 /** Folders under <home>/<profile>/ that agents work in (their worktrees, memory notes, skills plugin, design scratch). */
-const AGENT_SUBDIRS = new Set(['designs']);
+const AGENT_SUBDIRS = new Set(['designs', 'bibles']); // (4b) bibles/<jobId>/: a bible job's scratch dir
 const TOKEN_NAME = 'client.token';
 
 /** `abs` with its deepest existing ancestor resolved through links. */
