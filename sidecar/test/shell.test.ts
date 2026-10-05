@@ -26,7 +26,7 @@ describe('shell lexer module', () => {
     expect(shellItems(`cd x && (cd ~/.agent"craft" ; cat $(echo y))`, true)).toEqual([
       { kind: 'cmd', words: ['cd', 'x'], redirects: [] },
       { kind: 'open' },
-      { kind: 'cmd', words: ['cd', '~/.architect'], redirects: [] },
+      { kind: 'cmd', words: ['cd', '~/.agentcraft'], redirects: [] },
       { kind: 'cmd', words: ['cat'], redirects: [] },
       { kind: 'open' },
       { kind: 'cmd', words: ['echo', 'y'], redirects: [] },
