@@ -9,7 +9,6 @@ import dev.larattalabs.architect.api.SiteEvents;
 import dev.larattalabs.architect.api.Sites;
 import dev.larattalabs.architect.api.Survey;
 import java.util.Set;
-import java.util.TreeSet;
 import java.util.concurrent.CompletableFuture;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.minecraft.server.MinecraftServer;
@@ -20,8 +19,6 @@ import org.jspecify.annotations.Nullable;
  * {@code ArchitectApi.get()} before Architect's initializer ran); {@link #init} hooks the server lifecycle. Internal.
  */
 public final class ApiImpl implements ArchitectApi {
-	/** Java-side features, always present. */
-	static final Set<String> JAVA_FEATURES = Set.of("sites", "events", "survey", "designs", "library", "variants", "preview");
 
 	private static final class Holder {
 		static final ApiImpl INSTANCE = new ApiImpl();
@@ -145,14 +142,8 @@ public final class ApiImpl implements ArchitectApi {
 
 	@Override
 	public Set<String> features() {
-		Set<String> out = new TreeSet<>(JAVA_FEATURES);
 		ClientBridge b = bridge;
-		if (b != null && b.connected()) {
-			out.addAll(b.sidecarFeatures());
-			if (b.protocol() >= 2) {
-				out.add("protocol2");
-			}
-		}
-		return Set.copyOf(out);
+		boolean on = b != null && b.connected();
+		return ApiRules.features(on ? b.protocol() : 0, on ? b.sidecarFeatures() : Set.of());
 	}
 }

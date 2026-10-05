@@ -23,6 +23,7 @@ public class ArchitectClient implements ClientModInitializer {
 		DesignFeature.init();
 		dev.larattalabs.architect.client.library.LibraryFeature.init();
 		dev.larattalabs.architect.client.survival.SurvivalFeature.init();
+		dev.larattalabs.architect.client.api.ApiClientBridge.init(); // the public API's client side (docs/CONTRACT.md phase 4a)
 		Launcher.init();
 		HudElementRegistry.addLast(Architect.id("hud/toasts"), dev.larattalabs.architect.client.ui.GuardedHud.of("hud.toasts", new Toasts()));
 		ClientLifecycleEvents.CLIENT_STARTED.register(ArchitectClient::onStarted);

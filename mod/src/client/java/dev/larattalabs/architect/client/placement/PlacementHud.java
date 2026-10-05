@@ -69,6 +69,9 @@ final class PlacementHud implements HudElement {
 				} else if (!sv.ok()) {
 					verdict = "Server would refuse: " + String.join("; ", sv.refusals());
 					vc = RED;
+				} else if (BuildPlacement.preview()) {
+					verdict = "Preview: the server would place it here";
+					vc = UiStyle.SAGE;
 				} else {
 					verdict = BuildPlacement.moving() != null ? "Ready: Enter moves it here (the old site comes back as it was)" : "Ready: Enter places it";
 					vc = UiStyle.SAGE;
@@ -103,7 +106,7 @@ final class PlacementHud implements HudElement {
 				lines.add(new Line(l, BuildPlacement.statusError() ? RED : cream, null, 0));
 			}
 		}
-		String[] hints = v == null ? new String[0] : v.forceArmed()
+		String[] hints = v == null || BuildPlacement.preview() ? new String[0] : v.forceArmed()
 			? new String[] {"Shift+Enter", "force", "R", "rotate", "Esc", "cancel"}
 			: new String[] {"R", "rotate", "Arrows", "nudge", "PgUp/Dn", "raise", "L", v.locked() ? "unlock" : "lock", "Enter", "place", "Esc", "cancel"};
 		if (hints.length > 0 && UiBits.hintsWidth(font, hints) > inner) {

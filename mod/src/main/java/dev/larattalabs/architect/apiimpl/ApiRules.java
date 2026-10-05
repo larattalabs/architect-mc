@@ -17,7 +17,34 @@ public final class ApiRules {
 	/** A namespaced ext key: {@code <modid>:<key>}. */
 	public static final Pattern EXT_KEY = Pattern.compile("[a-z0-9_.-]+:[^\\s]+");
 
+	/**
+	 * The Java-side feature names, always present (docs/CONTRACT.md phase 4a: STABLE within major version 1, never renamed or
+	 * removed).
+	 */
+	public static final java.util.Set<String> JAVA_FEATURES = java.util.Set.of("sites", "events", "designs", "library", "survey");
+
 	private ApiRules() {
+	}
+
+	/**
+	 * {@code ArchitectApi.features()}: the Java-side names, plus, only when the sidecar chose protocol 2, {@code "protocol2"}
+	 * and the sidecar's features under their stable names ({@code job.run} / {@code jobs} -> "jobs", {@code job.tools} /
+	 * {@code jobTools} -> "jobTools", {@code blob.put} / {@code blobs} -> "blobs"; other names as the sidecar sends them).
+	 */
+	public static java.util.Set<String> features(int protocol, java.util.Collection<String> sidecarFeatures) {
+		java.util.Set<String> out = new java.util.TreeSet<>(JAVA_FEATURES);
+		if (protocol >= 2) {
+			out.add("protocol2");
+			for (String f : sidecarFeatures) {
+				out.add(switch (f) {
+					case "job.run", "jobs" -> "jobs";
+					case "job.tools", "jobTools" -> "jobTools";
+					case "blob.put", "blobs" -> "blobs";
+					default -> f;
+				});
+			}
+		}
+		return java.util.Set.copyOf(out);
 	}
 
 	/** The reason of an occupancy refusal: a player in the box wins over every other entity. */

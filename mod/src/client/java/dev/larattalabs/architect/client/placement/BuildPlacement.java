@@ -162,6 +162,24 @@ public final class BuildPlacement {
 		return active;
 	}
 
+	/** A preview from the public API ({@code ArchitectClientApi.preview}): a locked ghost with the HUD verdict, no keys, no confirm. */
+	private static boolean preview;
+
+	public static boolean preview() {
+		return active && preview;
+	}
+
+	/**
+	 * Shows {@code blueprintId} as a locked ghost at {@code origin} (the rotated box's minimum corner) with the HUD verdict
+	 * until {@link #cancel} / {@code clearPreview}. The placement keys stay with the game. Throws IllegalArgumentException
+	 * with a player-facing message.
+	 */
+	public static void startPreview(String blueprintId, int x, int y, int z, int turns) {
+		start(blueprintId);
+		preview = true;
+		lockAt(x, y, z, turns);
+	}
+
 	/** Enters placement mode (closes any screen). Throws IllegalArgumentException with a player-facing message. */
 	public static void start(String blueprintId) {
 		Minecraft mc = Minecraft.getInstance();
@@ -247,6 +265,7 @@ public final class BuildPlacement {
 
 	private static void cancelQuietly() {
 		active = false;
+		preview = false;
 		moving = null;
 		bp = null;
 		entry = null;
@@ -319,6 +338,9 @@ public final class BuildPlacement {
 	 * only counts when armed by a refusal over block entities (a second, deliberate confirm).
 	 */
 	public static CompletableFuture<Result> confirm(boolean force) {
+		if (preview()) {
+			return CompletableFuture.completedFuture(new Result(false, null, "A preview: nothing to place"));
+		}
 		Minecraft mc = Minecraft.getInstance();
 		View v = view;
 		if (!active || v == null) {

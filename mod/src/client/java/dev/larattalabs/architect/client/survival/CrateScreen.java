@@ -139,6 +139,11 @@ public final class CrateScreen extends Screen {
 	}
 
 	public void deconstruct() {
+		Site owned = Sites.get(siteId);
+		if (owned != null && owned.owner() != null && confirmDeconstruct
+			&& !dev.larattalabs.architect.client.ui.OwnedConfirm.ask(owned, this::flash)) {
+			return; // a site another mod owns asks once more (R5)
+		}
 		if (!confirmDeconstruct) {
 			confirmDeconstruct = true;
 			flash("Press Deconstruct again: the terrain comes back, placed blocks are refunded here", false);
