@@ -932,7 +932,9 @@ public final class Sites {
 			pinFor(site.grid(), turns), null, moving != null ? moving.owner() : who.siteOwner(), moving != null ? moving.ext() : who.ext(),
 			moving != null ? moving.member() : who.member(), true);
 		// P2-P3: the PLACING commit (a single Place commits synchronously); positions changed meanwhile are captured again
-		SiteJournal.Placing placing = SiteJournal.begin(level, id, WorldJournal.SITE, rec.group(), snapBox, held, rec.toJson(), ring, null);
+		List<BlockPos> cutPlants = straddlingPositions(level, snapBox, false);
+		long[] cutAt = cutPlants.stream().mapToLong(BlockPos::asLong).toArray();
+		SiteJournal.Placing placing = SiteJournal.begin(level, id, WorldJournal.SITE, rec.group(), snapBox, held, cutAt, rec.toJson(), ring, null);
 		try {
 			SiteJournal.await(placing.commit, "the terrain of " + id);
 			for (java.util.concurrent.CompletableFuture<Void> f; (f = SiteJournal.retake(level, placing)) != null;) {

@@ -270,8 +270,8 @@ final class PlaceJob implements Placement.Job {
 			tracker = null;
 		}
 		Site rec = java.util.Objects.requireNonNull(record, "record");
-		placing = SiteJournal.begin(level, siteId, dev.larattalabs.architect.journal.WorldJournal.SITE, rec.group(), snapBox, heldLeaves, rec.toJson(),
-			ring, c);
+		placing = SiteJournal.begin(level, siteId, dev.larattalabs.architect.journal.WorldJournal.SITE, rec.group(), snapBox, heldLeaves, plants,
+			rec.toJson(), ring, c);
 		siteEntry = placing.siteEntry;
 		leavesEntry = placing.leavesEntry;
 		commit = placing.commit;

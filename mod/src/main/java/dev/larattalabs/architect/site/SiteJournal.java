@@ -282,6 +282,15 @@ public final class SiteJournal {
 	 */
 	static Placing begin(ServerLevel level, String siteId, String kind, @Nullable String group, Anchors.Bounds box, List<Integer> held, JsonObject meta,
 		int[] ring, WorldJournal.@Nullable Captured captured) throws Sites.SiteException {
+		return begin(level, siteId, kind, group, box, held, new long[0], meta, ring, captured);
+	}
+
+	/**
+	 * {@link #begin} with the outside halves of the tall plants the box cuts ({@code cut}): the placement writes air there, so
+	 * they are guard cells of the {@code leaves} entry (written back before the box on removal, so the plant is whole again).
+	 */
+	static Placing begin(ServerLevel level, String siteId, String kind, @Nullable String group, Anchors.Bounds box, List<Integer> held, long[] cut,
+		JsonObject meta, int[] ring, WorldJournal.@Nullable Captured captured) throws Sites.SiteException {
 		requireAvailable();
 		JournalStore s = store();
 		WorldJournal.Captured before = captured != null ? captured : WorldJournal.capture(level, box);
@@ -293,11 +302,18 @@ public final class SiteJournal {
 		t.create(JournalStore.Meta.header(id, kind, siteId, group, dim, Policy.BOX, layer, Status.PLACING, now), WorldJournal.sections(before, null,
 			layer, null), new JournalNbt.Head(meta, ring));
 		String leaves = null;
-		if (!held.isEmpty()) {
+		if (!held.isEmpty() || cut.length > 0) {
 			leaves = s.newId();
 			long ll = s.newLayer();
+			List<Cell> guard = leafCells(level, held, ll);
+			BlockPos.MutableBlockPos cp = new BlockPos.MutableBlockPos();
+			for (long c : cut) {
+				if (!box.contains(BlockPos.getX(c), BlockPos.getY(c), BlockPos.getZ(c))) {
+					guard.add(new Cell(c, ll, WorldJournal.valueAt(level, cp.set(c)), Journal.AIR));
+				}
+			}
 			t.create(JournalStore.Meta.header(leaves, WorldJournal.LEAVES, siteId, group, dim, Policy.CELL, ll, Status.PLACING, now),
-				JournalStore.bySection(leafCells(level, held, ll)), JournalNbt.Head.EMPTY);
+				JournalStore.bySection(guard), JournalNbt.Head.EMPTY);
 		}
 		// the capture is the world at P1 (one tick, as 4d's snapshot); a sliced capture tracked its changes until here (PlaceJob)
 		CompletableFuture<Void> f = s.submit(t);
@@ -654,7 +670,7 @@ public final class SiteJournal {
 	}
 
 	/** What an undo does to one site (R4): its BOX template and mask, its other cells, its ring. */
-	record Restore(String site, Anchors.@Nullable Bounds box, @Nullable CompoundTag template, @Nullable LongPredicate mask, List<CellWrite> cells, int[] ring,
+	record Restore(String site, Anchors.@Nullable Bounds box, @Nullable CompoundTag template, @Nullable LongPredicate mask, List<CellWrite> cells, List<CellWrite> pre, int[] ring,
 		int holes) {
 	}
 
@@ -693,6 +709,7 @@ public final class SiteJournal {
 		int holes = 0;
 		int[] ring = new int[0];
 		List<CellWrite> cells = new ArrayList<>();
+		List<CellWrite> pre = new ArrayList<>();
 		try {
 			for (JournalStore.Meta m : undone(siteId, group)) {
 				Map<Long, Value> written = new LinkedHashMap<>();
@@ -723,14 +740,22 @@ public final class SiteJournal {
 				} else {
 					int flags = m.kind().equals(WorldJournal.LEAVES) ? Sites.FLAGS | Block.UPDATE_KNOWN_SHAPE : m.policy() == Policy.BOX ? Sites.FLAGS
 						: Sites.CELL_FLAGS;
-					written.forEach((p, v) -> cells.add(new CellWrite(p, v, flags)));
+					boolean guard = m.kind().equals(WorldJournal.LEAVES);
+					written.forEach((p, v) -> {
+						// a cut plant's outside half goes back before the box, so its inside half stays when the box is written
+						if (guard && !v.name().endsWith("_leaves")) {
+							pre.add(new CellWrite(p, v, Sites.FLAGS | Block.UPDATE_KNOWN_SHAPE));
+						} else {
+							cells.add(new CellWrite(p, v, flags));
+						}
+					});
 				}
 			}
 		} catch (IOException e) {
 			throw new Sites.SiteException(Reason.JOURNAL_UNAVAILABLE, "The journal of " + siteId + " can't be read (" + e.getMessage() + ")");
 		}
 		cells.sort(Comparator.comparingInt(c -> Journal.y(c.pos())));
-		return new Restore(siteId, box, tpl, mask, cells, ring, holes);
+		return new Restore(siteId, box, tpl, mask, cells, pre, ring, holes);
 	}
 
 	/** The cells of the entries that stay on top of {@code holes} (positions not written because they are covered). */
@@ -777,6 +802,7 @@ public final class SiteJournal {
 	 */
 	static Restore writeNow(ServerLevel level, String siteId, String group) throws Sites.SiteException {
 		Restore r = restore(level, siteId, group);
+		writeCells(level, r.pre());
 		if (r.template() != null && r.box() != null) {
 			if (r.mask() != null) {
 				UpdateMask.begin(r.mask());

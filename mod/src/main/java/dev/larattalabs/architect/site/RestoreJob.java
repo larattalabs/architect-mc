@@ -250,6 +250,7 @@ final class RestoreJob implements Placement.Job {
 				prepared = null;
 			}
 			restore = (SiteJournal.Restore) ready[0];
+			SiteJournal.writeCells(level, restore.pre()); // cut plants' outside halves before the box
 			if (ready[1] != null) {
 				BlockPos min = new BlockPos(restore.box().minX(), restore.box().minY(), restore.box().minZ());
 				writer = new TemplateWriter((TemplateWriter.Cells) ready[1], min, Sites.FLAGS);
