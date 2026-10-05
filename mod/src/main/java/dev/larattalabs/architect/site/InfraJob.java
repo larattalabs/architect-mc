@@ -184,6 +184,19 @@ final class InfraJob implements Placement.Job {
 
 	@Override
 	public boolean step(MinecraftServer server, long deadline) {
+		// phases follow each other inside the budget (a commit is waited for there): no tick lost per phase
+		while (true) {
+			int was = phase;
+			if (stepPhase(server, deadline)) {
+				return true;
+			}
+			if (phase == was || System.nanoTime() >= deadline) {
+				return false;
+			}
+		}
+	}
+
+	private boolean stepPhase(MinecraftServer server, long deadline) {
 		ServerLevel level = Sites.levelOf(server, dimension);
 		if (level == null) {
 			broken = dimension + " is not loaded";
@@ -203,7 +216,7 @@ final class InfraJob implements Placement.Job {
 				}
 				case COMMIT -> {
 					CompletableFuture<Void> f = commit;
-					if (f != null && !f.isDone()) {
+					if (f != null && !PlaceJob.waitFor(f, deadline)) {
 						return false;
 					}
 					if (f != null && f.isCompletedExceptionally()) {
@@ -259,7 +272,7 @@ final class InfraJob implements Placement.Job {
 				}
 				case AFTER_COMMIT -> {
 					CompletableFuture<Void> f = commit;
-					if (f != null && !f.isDone()) {
+					if (f != null && !PlaceJob.waitFor(f, deadline)) {
 						return false;
 					}
 					if (f != null && f.isCompletedExceptionally()) {

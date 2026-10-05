@@ -115,6 +115,19 @@ final class RestoreJob implements Placement.Job {
 
 	@Override
 	public boolean step(MinecraftServer server, long deadline) {
+		// phases follow each other inside the budget (a commit is waited for there): no tick lost per phase
+		while (true) {
+			int was = phase;
+			if (stepPhase(server, deadline)) {
+				return true;
+			}
+			if (phase == was || System.nanoTime() >= deadline) {
+				return false;
+			}
+		}
+	}
+
+	private boolean stepPhase(MinecraftServer server, long deadline) {
 		Infra inf = Sites.get(siteId) == null && Sites.pendingRecord(siteId) == null ? infra() : null;
 		if (inf != null) {
 			return stepInfra(server, inf, deadline);
@@ -137,7 +150,7 @@ final class RestoreJob implements Placement.Job {
 			}
 			if (phase == COMMIT) {
 				CompletableFuture<Void> f = commit;
-				if (f != null && !f.isDone()) {
+				if (f != null && !PlaceJob.waitFor(f, deadline)) {
 					return false;
 				}
 				if (f != null && f.isCompletedExceptionally()) {
@@ -224,7 +237,7 @@ final class RestoreJob implements Placement.Job {
 			}
 			if (phase == COMMIT) {
 				CompletableFuture<Void> f = commit;
-				if (f != null && !f.isDone()) {
+				if (f != null && !PlaceJob.waitFor(f, deadline)) {
 					return false;
 				}
 				if (f != null && f.isCompletedExceptionally()) {

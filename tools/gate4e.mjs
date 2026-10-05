@@ -1327,6 +1327,162 @@ steps.api14 = async () => {
   return { code, fails };
 };
 
+// ------------------------------------------------------------------ gate 9 additions: adjacent lots with the toggle, held leaves
+
+/** Cells that differ between two lists, split into persistent-leaf-only diffs and others. */
+function leafSplit(a, b) {
+  const ma = cellMap(a);
+  const mb = cellMap(b);
+  const leaf = [];
+  const other = [];
+  for (const [k, v] of ma) {
+    const w = mb.get(k);
+    if (v === w) continue;
+    const norm = (x) => (x ?? '').replace(/persistent:"(true|false)"/, '').replace(/distance:"\d"/, '');
+    if (/_leaves"/.test(v) && /_leaves"/.test(w ?? '') && norm(v) === norm(w)) leaf.push([k, v, w]);
+    else other.push([k, v, w]);
+  }
+  return { leaf, other };
+}
+
+steps.leaves = async () => {
+  if (!dev) await connect();
+  const NW = 'G4E Normal';
+  if (!fs.existsSync(path.join(SAVES, NW, 'level.dat'))) {
+    await openWorld(NW, { mode: 'creative', preset: 'normal', seed: '4e', cheats: true });
+    await setRules();
+    await cmd('/save-all flush');
+    await leaveWorld();
+  }
+  await fresh('G4E Leaves', NW);
+  await setRules();
+  const cols = await surveyAround(160, 4);
+  // a tree with dry ground west and east of it
+  const trees = [...cols.values()].filter((c) => c.tree);
+  let t = null;
+  for (const c of trees) {
+    const ok = [-16, -12, -8, 8, 12, 16].every((dx) => { const g = cols.get(`${c.x + dx},${c.z}`); return g && !g.water; });
+    if (ok) {
+      t = c;
+      break;
+    }
+  }
+  check(!!t, `leaves: a worldgen tree at ${t?.x},${t?.z}`);
+  await tp(t.x + 0.5, t.h + 30, t.z + 20.5);
+  const yA = await groundAt(t.x - 8, t.z);
+  const yB = await groundAt(t.x + 6, t.z);
+  const A = { bp: 'cabin', at: [t.x - 13, yA + 1, t.z - 6] };
+  const B = { bp: 'cabin', at: [t.x + 2, yB + 1, t.z - 6] };
+  const R = [t.x - 24, Math.min(yA, yB) - 12, t.z - 20, t.x + 24, Math.max(yA, yB) + 30, t.z + 30];
+  const pre = await cellsOf(R);
+  await cmd('/save-all flush');
+  await leaveWorld();
+  // held leaves, both orders
+  const res = {};
+  for (const [w, order] of [['G4E LeavesAB', ['A', 'B']], ['G4E LeavesBA', ['B', 'A']]]) {
+    copyWorld('G4E Leaves', w);
+    await openWorld(w);
+    await tp(t.x + 0.5, t.h + 40, t.z + 40.5);
+    const pa = await result(await api(`place ${A.bp} ${A.at.join(' ')} INSTANT unowned noactor 0 force`));
+    const ja = await journal();
+    const held = (ja.entries ?? []).filter((e) => e.site === pa.siteId && e.kind === 'leaves');
+    const pb = await result(await api(`place ${B.bp} ${B.at.join(' ')} INSTANT unowned noactor 0 force`));
+    check(pa.placed && pb.placed, `leaves [${order.join('')}]: A (${pa.siteId}, ${held.reduce((n, e) => n + e.cells, 0)} held leaves) and B (${pb.siteId}) placed`, { pa, pb, held });
+    const ids = { A: pa.siteId, B: pb.siteId };
+    for (const k of order) {
+      const r = await result(await api(`remove ${ids[k]} - noforce keep`), 300_000);
+      check(r.removed, `leaves [${order.join('')}]: remove ${k}`, r);
+    }
+    await settle(3000);
+    const post = await cellsOf(R);
+    const d = leafSplit(pre, post);
+    check(d.other.length === 0 && d.leaf.length === 0, `leaves [${order.join(' then ')}]: the region is back (${d.leaf.length} leaf-only diffs, ${d.other.length} others)`,
+      { leaf: d.leaf.slice(0, 10), other: d.other.slice(0, 10) });
+    res[order.join('')] = { leaf: d.leaf.length, other: d.other.length };
+    await leaveWorld();
+  }
+  // the toggle step on adjacent (0-gap) lots by the tree: only persistent-leaf diffs allowed in the failed lot's region
+  copyWorld('G4E Leaves', 'G4E LeavesT');
+  await openWorld('G4E LeavesT');
+  await tp(t.x + 0.5, t.h + 40, t.z + 40.5);
+  const A2 = { ...A };
+  const fa = await result(await api(`check ${A.bp} ${A.at.join(' ')} INSTANT unowned noactor 0 force`)).catch(() => null);
+  const aBox = fa?.restoreBox ? box6(fa.restoreBox) : [A.at[0], 0, A.at[2], A.at[0] + 10, 0, A.at[2] + 15];
+  const B2 = { bp: 'cabin', at: [aBox[3] + 1, yB + 1, A.at[2]] };
+  const preT = await cellsOf(R);
+  await call('dev.placement.slow', { on: true });
+  await mark();
+  const id = await queue({ id: 'tog', proximity: false, items: [{ key: 'A', ...A2, rot: 0, mode: 'INSTANT', force: true }, { key: 'B', ...B2, rot: 0, mode: 'INSTANT', force: true }] });
+  for (let i = 0; i < 300; i++) {
+    const j = await call('dev.placement.jobs');
+    if ((j.jobs ?? []).some((x) => x.batch === id && x.progress > 0)) break;
+    await sleep(100);
+  }
+  await call('dev.survival.set', { on: true });
+  await call('dev.placement.slow', { on: false });
+  const done = await waitBatch(id, 300_000);
+  const st = done.items.map((i) => `${i.key}:${i.status}${i.reason ? ':' + i.reason : ''}`);
+  await call('dev.survival.set', { on: false });
+  const aSite = done.items[0].site;
+  const ab = box6((await sites()).find((x) => x.id === aSite).restoreBox);
+  const inA = (k) => { const [x, y, z] = k.split(',').map(Number); return x >= ab[0] && x <= ab[3] && y >= ab[1] && y <= ab[4] && z >= ab[2] && z <= ab[5]; };
+  const dS = leafSplit(preT, await cellsOf(R));
+  const outside = dS.other.filter(([k]) => !inA(k));
+  check(outside.length === 0, `leaves: with A standing, B's side (everything outside A's box) has only persistent-leaf diffs (${dS.leaf.length} leaf, ${outside.length} other)`,
+    { leaf: dS.leaf.slice(0, 10), other: outside.slice(0, 10) });
+  const ra = await result(await api(`remove ${aSite} - noforce keep`), 300_000);
+  await settle(3000);
+  const postT = await cellsOf(R);
+  const dT = leafSplit(preT, postT);
+  check(done.items[0].status === 'PLACED' && done.items[1].reason === 'NOT_ALLOWED' && ra.removed && dT.other.length === 0,
+    `leaves: the toggle on adjacent 0-gap lots (${st.join(' ')}): after A's removal only persistent-leaf diffs remain (${dT.leaf.length} leaf, ${dT.other.length} other)`,
+    { st, leaf: dT.leaf.slice(0, 10), other: dT.other.slice(0, 10) });
+  await leaveWorld();
+  return { tree: t, res, toggle: { st, leaf: dT.leaf.length, other: dT.other.length } };
+};
+
+// ------------------------------------------------------------------ gate 6: the client ghost of a lot facing a road
+
+async function shot(name, eye, at) {
+  await call('dev.camera', { x: eye[0], y: eye[1], z: eye[2], lookAt: { x: at[0], y: at[1], z: at[2] }, mode: 'spectator' }, 30_000);
+  await sleep(1500);
+  const r = await call('dev.screenshot', { name }, 120_000);
+  await call('dev.release', {}).catch(() => {});
+  return r.path;
+}
+
+steps.ghost = async () => {
+  if (!dev) await connect();
+  if (!ctx.village) throw new Error('run `roads` first');
+  const f = ctx.village.fits[1];
+  const out = {};
+  for (const withRoad of [false, true]) {
+    await fresh(withRoad ? 'G4E GhostR' : 'G4E Ghost', 'G4E VBase');
+    if (withRoad) {
+      const r = await call('dev.road.place', vRoads()[0].road, 180_000);
+      check(r.placed, `ghost: road R0 placed (${r.siteId})`);
+    }
+    await tp(f.lot[0] + 10.5, 80, f.lot[2] - 14.5);
+    await settle(2000);
+    await call('dev.build.start', { blueprint: f.bp, origin: f.at, turns: f.rot }, 30_000);
+    let st = null;
+    for (let i = 0; i < 40; i++) {
+      st = await call('dev.build.state');
+      if (st.ready || st.serverVerdict) break;
+      await sleep(250);
+    }
+    await sleep(1500);
+    const cx = f.lot[0] + 11;
+    const p = await shot(withRoad ? 'g4e-ghost-road' : 'g4e-ghost-noroad', [cx + 0.5, 92, f.lot[2] - 14.5], [cx, 64, f.lot[2] + 2]);
+    out[withRoad ? 'road' : 'noRoad'] = { shot: p, approach: st?.conflicts?.approach ?? st?.approach ?? null, box: st?.box };
+    await call('dev.build.cancel', {}).catch(() => {});
+    await leaveWorld();
+  }
+  log(`  ghost: ${JSON.stringify(out)}`);
+  check(!!out.road.shot && !!out.noRoad.shot, `ghost: screenshots ${path.basename(out.noRoad.shot)} (no road) and ${path.basename(out.road.shot)} (road) taken: look at them`, out);
+  return out;
+};
+
 // ------------------------------------------------------------------ gate 5: crash mid-write (K1-K8)
 
 /** Every file the on-disk index names exists; the files it does not name (orphans). Read straight from the world folder. */

@@ -288,7 +288,13 @@ final class PlaceJob implements Placement.Job {
 		}
 		try {
 			if (phase == CAPTURE || phase == COMMIT) {
-				return journalBefore(server, level, deadline);
+				// the commit is waited for inside the budget (the I/O thread does the work): a site does not lose a tick per phase
+				if (journalBefore(server, level, deadline)) {
+					return true;
+				}
+				if (phase != START || System.nanoTime() >= deadline) {
+					return false;
+				}
 			}
 			if (phase == AFTER || phase == AFTER_COMMIT || phase == CONSTRUCTION_CLEAR) {
 				return journalAfter(server, level, deadline);
@@ -321,6 +327,9 @@ final class PlaceJob implements Placement.Job {
 		if (phase == FINISH) {
 			try {
 				finish(server, level);
+				if ((phase == AFTER || phase == AFTER_COMMIT) && broken == null && System.nanoTime() < deadline) {
+					return journalAfter(server, level, deadline);
+				}
 			} catch (Sites.SiteException e) {
 				broken = e.getMessage();
 				return true;
@@ -348,7 +357,6 @@ final class PlaceJob implements Placement.Job {
 				}
 			}
 			submitBefore(level, c);
-			return false;
 		}
 		var f = commit;
 		if (f == null) {
@@ -356,7 +364,7 @@ final class PlaceJob implements Placement.Job {
 			phase = START;
 			return false;
 		}
-		if (!f.isDone()) {
+		if (!waitFor(f, deadline)) {
 			return false;
 		}
 		if (f.isCompletedExceptionally()) {
@@ -402,6 +410,28 @@ final class PlaceJob implements Placement.Job {
 		cursor = 0;
 	}
 
+	/** Waits for {@code f} until {@code deadline} at most (the server thread only waits inside the placement budget). */
+	static boolean waitFor(java.util.concurrent.CompletableFuture<?> f, long deadline) {
+		if (f.isDone()) {
+			return true;
+		}
+		long left = deadline - System.nanoTime();
+		if (left <= 0) {
+			return false;
+		}
+		try {
+			f.get(left, java.util.concurrent.TimeUnit.NANOSECONDS);
+		} catch (java.util.concurrent.TimeoutException e) {
+			return false;
+		} catch (java.util.concurrent.ExecutionException | java.util.concurrent.CancellationException e) {
+			return true;
+		} catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+			return false;
+		}
+		return f.isDone();
+	}
+
 	/** P6-P7 (and a construction site's clearing), then P8. */
 	private boolean journalAfter(MinecraftServer server, ServerLevel level, long deadline) throws Sites.SiteException {
 		if (phase == AFTER) {
@@ -427,11 +457,10 @@ final class PlaceJob implements Placement.Job {
 			commit = SiteJournal.complete(siteId, c, null);
 			capture = null;
 			phase = AFTER_COMMIT;
-			return false;
 		}
 		if (phase == AFTER_COMMIT) {
 			var f = commit;
-			if (f != null && !f.isDone()) {
+			if (f != null && !waitFor(f, deadline)) {
 				return false;
 			}
 			if (f != null && f.isCompletedExceptionally()) {
