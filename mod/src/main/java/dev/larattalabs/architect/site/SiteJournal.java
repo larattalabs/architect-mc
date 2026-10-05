@@ -607,6 +607,20 @@ public final class SiteJournal {
 		}
 	}
 
+	/** R2's commit built (pure reads of the store: any thread). */
+	static JournalStore.Txn undoTxn(WorldJournal.UndoWork w) throws Sites.SiteException {
+		try {
+			return WorldJournal.undoTxn(w);
+		} catch (IOException e) {
+			throw new Sites.SiteException(Reason.JOURNAL_UNAVAILABLE, "The journal can't be read (" + e.getMessage() + ")");
+		}
+	}
+
+	/** R2: a built commit submitted (server thread). */
+	static Undone submitUndo(WorldJournal.UndoWork w, JournalStore.Txn t) throws Sites.SiteException {
+		return new Undone(w, store().submit(t));
+	}
+
 	/** R2 of a planned undo: its one commit, submitted. */
 	static Undone submitUndo(WorldJournal.UndoWork w) throws Sites.SiteException {
 		try {

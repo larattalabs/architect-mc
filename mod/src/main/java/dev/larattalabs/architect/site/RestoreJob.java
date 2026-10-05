@@ -52,6 +52,7 @@ final class RestoreJob implements Placement.Job {
 	transient WorldJournal.@Nullable UndoWork work;
 	transient WorldJournal.@Nullable UndoPlanner planner;
 	transient boolean planned;
+	transient @Nullable CompletableFuture<Object[]> txn;
 	/** A restore's writer, prepared off the server thread for a large site (the template of 600k cells). */
 	transient @Nullable CompletableFuture<Object[]> prepared;
 	/** Undos over more sections than this commit in the tick after planning; restores of more cells prepare off-thread. */
@@ -171,13 +172,40 @@ final class RestoreJob implements Placement.Job {
 				} catch (java.io.IOException e) {
 					throw new Sites.SiteException(Reason.JOURNAL_UNAVAILABLE, "the journal can't be read (" + e.getMessage() + ")");
 				}
-				if (!planned && planner.sections() > SPLIT_SECTIONS) {
-					planned = true; // a large undo commits in the next tick
-					return false;
+				SiteJournal.Undone u;
+				if (planner.sections() > SPLIT_SECTIONS) {
+					// a large undo: its commit is built off the server thread, then submitted
+					if (txn == null) {
+						WorldJournal.UndoWork w = planner.work();
+						planned = true;
+						txn = CompletableFuture.supplyAsync(() -> {
+							try {
+								return new Object[] {w, SiteJournal.undoTxn(w)};
+							} catch (Sites.SiteException e) {
+								throw new java.util.concurrent.CompletionException(e);
+							}
+						});
+						return false;
+					}
+					if (!txn.isDone()) {
+						return false;
+					}
+					Object[] built;
+					try {
+						built = txn.join();
+					} catch (java.util.concurrent.CompletionException e) {
+						broken = e.getCause() != null ? e.getCause().getMessage() : e.getMessage();
+						return true;
+					} finally {
+						txn = null;
+					}
+					WorldJournal.kill("K5");
+					u = SiteJournal.submitUndo((WorldJournal.UndoWork) built[0], (dev.larattalabs.architect.journal.JournalStore.Txn) built[1]);
+				} else {
+					WorldJournal.kill("K5");
+					u = SiteJournal.submitUndo(planner.work());
 				}
 				planned = false;
-				WorldJournal.kill("K5");
-				SiteJournal.Undone u = SiteJournal.submitUndo(planner.work());
 				planner = null;
 				work = u.work();
 				commit = u.commit();
@@ -185,6 +213,9 @@ final class RestoreJob implements Placement.Job {
 					handed = Sites.handedBySite(u.work());
 				}
 				dropsBefore = Sites.Drops.before(level, s.restoreBox()).uuids();
+				if (Sites.Trace.ON) {
+					dev.larattalabs.architect.Architect.LOGGER.info("TRACE restore {} submitted", siteId);
+				}
 				phase = COMMIT;
 				return false;
 			}
