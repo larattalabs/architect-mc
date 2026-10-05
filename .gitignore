@@ -1,0 +1,13 @@
+node_modules/
+build/
+.gradle/
+.gradle-home/
+run/
+dist/
+*.log
+.env
+mod/run/
+mod/build/
+mod/.gradle/
+sidecar/scratch/
+.claude/
