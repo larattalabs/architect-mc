@@ -156,7 +156,17 @@ export function palette(o = {}) {
   if (o.preset !== undefined) {
     const base = PALETTE_PRESETS[o.preset];
     if (!base) throw new Error(`palette: unknown preset '${o.preset}' (one of ${Object.keys(PALETTE_PRESETS).join(', ')})`);
-    o = { ...base, ...o };
+    // a preset's extras belong to its own stone / wood: an override of those drops the extras tied to them
+    const extras = Object.fromEntries(Object.entries(base).filter(([k, v]) => {
+      if (PALETTE_INPUTS.includes(k)) return false;
+      const stoneTied = k === 'stoneTrim' || !!stoneFamilyOf(v);
+      const woodTied = !!woodFamilyOf(v);
+      if (stoneTied && o.stone !== undefined && qualify(o.stone) !== qualify(base.stone)) return false;
+      if (woodTied && o.wood !== undefined && o.wood !== base.wood) return false;
+      return true;
+    }));
+    const inputs = Object.fromEntries(Object.entries(base).filter(([k]) => PALETTE_INPUTS.includes(k)));
+    o = { ...inputs, ...extras, ...o };
   }
   const wood = o.wood ?? 'oak';
   if (!WOODS.includes(wood)) throw new Error(`palette: unknown wood '${wood}' (one of ${WOODS.join(', ')})`);

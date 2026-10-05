@@ -76,6 +76,28 @@ test('custom palettes: inputs only, validated', () => {
   for (const n of PRESETS) assert.deepEqual(palette(PALETTES[n].inputs).inputs, PALETTES[n].inputs);
 });
 
+test('a preset with its stone or wood overridden drops the extras tied to them', async () => {
+  for (const [preset, base] of Object.entries(PALETTE_PRESETS)) {
+    const stone = base.stone === 'mud_bricks' ? 'red_sandstone' : 'mud_bricks';
+    const wood = base.wood === 'acacia' ? 'birch' : 'acacia';
+    const p = palette({ preset, stone, wood });
+    const stones = new Set([stoneFamilyOf(stone), stoneFamilyOf(p.roofBlock)].filter(Boolean));
+    for (const [k, v] of Object.entries(p)) {
+      if (typeof v !== 'string' || !v.startsWith('minecraft:')) continue;
+      const sf = stoneFamilyOf(v);
+      if (sf) assert.ok(stones.has(sf), `${preset} + ${stone}: ${k} = ${v}`);
+    }
+    for (const id of EXAMPLES) {
+      const r = checkBlueprint(await loadDesign(id, { palette: { preset, stone, wood } }));
+      assert.deepEqual([...r.errors, ...r.warnings], [], `${id} ${preset}+${stone}/${wood}`);
+      const mats = (await loadDesign(id, { palette: { preset, stone, wood } })).materials();
+      for (const m of mats) { const sf = stoneFamilyOf(m); if (sf) assert.ok(stones.has(sf), `${id} ${preset}+${stone}: ${m}`); }
+    }
+  }
+  // unchanged inputs keep the extras (a recorded palette rebuilds the same)
+  assert.equal(palette({ preset: 'fortress', stone: 'stone_bricks' }).stoneTrim, 'minecraft:polished_andesite');
+});
+
 test('values: defaults, overrides, and every kind of bad value', () => {
   const params = { floors: { type: 'int', min: 1, max: 3, default: 1 }, porch: { type: 'bool', default: true }, roof: { type: 'enum', options: ['gable', 'hip'], default: 'gable' } };
   validateParams(params);
