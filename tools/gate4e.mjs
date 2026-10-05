@@ -554,7 +554,8 @@ steps.orders = async () => {
 /** Every file the on-disk index names exists; the files it does not name (orphans). Read straight from the world folder. */
 function journalFiles(world) {
   const dir = path.join(SAVES, world, 'architect-journal');
-  const idx = JSON.parse(fs.readFileSync(path.join(dir, 'journal.json'), 'utf8'));
+  const ix = path.join(dir, 'journal.json');
+  const idx = fs.existsSync(ix) ? JSON.parse(fs.readFileSync(ix, 'utf8')) : { entries: [], none: true };
   const named = new Set();
   const missing = [];
   for (const e of idx.entries ?? []) {
@@ -573,7 +574,7 @@ function journalFiles(world) {
       if (!named.has(rel)) orphans.push(rel);
     }
   }
-  return { entries: (idx.entries ?? []).map((e) => `${e.id}:${e.site}:${e.status}`), missing, orphans };
+  return { index: !idx.none, entries: (idx.entries ?? []).map((e) => `${e.id}:${e.site}:${e.status}`), missing, orphans };
 }
 
 /** Removes every site and road standing (top of the stacks first), then hashes the fixture box. */
