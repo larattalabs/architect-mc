@@ -17,7 +17,7 @@ export const PROTOCOL_VERSION = 1 as const;
 export const PROTOCOLS = [1, 2] as const;
 export type Protocol = (typeof PROTOCOLS)[number];
 /** What a protocol-2 snapshot lists in `features`. */
-export const FEATURES = ['job.run', 'job.tools', 'blobs', 'budget', 'designs.v2', 'bibles', 'design.groups', 'named.parts', 'open.types', 'estimates', 'reskin'] as const;
+export const FEATURES = ['job.run', 'job.tools', 'blobs', 'budget', 'designs.v2', 'bibles', 'design.groups', 'named.parts', 'open.types', 'estimates', 'reskin', 'massing'] as const;
 
 const Ts = z.number().int().nonnegative();
 const Id = z.string().min(1).max(64);
@@ -107,6 +107,16 @@ export const BibleId = z.string().regex(BIBLE_ID, 'bible ids are [a-z0-9_]{1,64}
 export const ItemKey = z.string().min(1).max(100).regex(/^[A-Za-z0-9_.:/-]+$/, 'item keys are [A-Za-z0-9_.:/-]{1,100}');
 export const ItemRole = z.enum(['landmark', 'ordinary']);
 export type ItemRole = z.infer<typeof ItemRole>;
+/** (4c) a massing id: mas_<slug> (stable across versions) */
+export const MASSING_ID = /^[a-z0-9_]{1,64}$/;
+export const MassingId = z.string().regex(MASSING_ID, 'massing ids are [a-z0-9_]{1,64}');
+/** (4c) group / design context: text up to 4000 chars, or JSON (at most 4000 chars as JSON) */
+export const MAX_CONTEXT = 4000;
+export const Context = z.union([
+  z.string().trim().min(1).max(MAX_CONTEXT),
+  z.record(z.string(), z.unknown()).refine((v) => JSON.stringify(v).length <= MAX_CONTEXT, `context JSON is longer than ${MAX_CONTEXT} chars`),
+]);
+export type Context = z.infer<typeof Context>;
 
 export const DesignRequest = DesignRequestBase.extend({
   type: OpenType.describe('(protocol 2: any open type; protocol 1: the 11 presets) the building type'),
@@ -121,7 +131,15 @@ export const DesignRequest = DesignRequestBase.extend({
   itemKey: ItemKey.optional().describe('(4b) set by the sidecar for a group item: the caller\'s key'),
   wave: z.number().int().min(0).max(8).optional().describe('(4b) a group item\'s wave (0 = anchor)'),
   role: ItemRole.optional().describe('(4b) a group item\'s role'),
-}).superRefine(noDuplicateFeatures);
+  massing: z.literal(true).optional().describe('(4c) a massing job: a coarse volume design (kit/lib/massing.mjs), installed into <gameDir>/architect/massings/<id>/'),
+  fromMassing: MassingId.optional().describe('(4c) the detail pass of this massing (binding: part names, boxes, size, roof forms)'),
+  massingVersion: z.number().int().min(1).optional().describe('(4c) with fromMassing: the massing version (default: its latest; the sidecar pins it)'),
+  context: Context.optional().describe('(4c) text (<= 4000 chars) or JSON for the brief: site, purpose, neighbour lots; a group sets it on every item'),
+  redirect: z.object({ fromVersion: z.number().int().min(1), notes: z.string().max(2000) }).optional().describe('(4c) set by the sidecar: a massing redirect (the version it starts from and the notes)'),
+}).superRefine(noDuplicateFeatures).superRefine((r, ctx) => {
+  if (r.massing && r.fromMassing) ctx.addIssue({ code: 'custom', path: ['fromMassing'], message: 'a request is a massing or the detail of one, not both' });
+  if (r.massingVersion !== undefined && !r.fromMassing) ctx.addIssue({ code: 'custom', path: ['massingVersion'], message: 'massingVersion needs fromMassing' });
+});
 export type DesignRequest = z.infer<typeof DesignRequest>;
 
 /** (protocol 2) the SDK's estimate: total_cost_usd plus the modelUsage token totals. Not a billing statement. */
@@ -134,6 +152,10 @@ export const Cost = z.object({
   turns: z.number().int().nonnegative(),
 });
 export type Cost = z.infer<typeof Cost>;
+
+/** (4c) the kit's massing conformance result (`build.mjs --massing <file> --json`) */
+export const Conformance = z.object({ ok: z.boolean(), errors: z.array(z.string()), issues: z.array(z.string()) });
+export type Conformance = z.infer<typeof Conformance>;
 
 const designFields = {
   id: Id.describe('"d<n>"'),
@@ -152,6 +174,8 @@ export const Design = z.object({
   ...designFields,
   request: DesignRequest,
   cost: Cost.optional().describe('(protocol 2) the estimated cost so far, with cache tokens'),
+  massing: z.object({ id: MassingId, version: z.number().int().min(1) }).optional().describe('(4c) a massing job: the massing (id, version) it makes; it never gets a blueprintId'),
+  conformance: Conformance.optional().describe('(4c) a detail pass: the massing conformance result (errors failed a round; issues are warnings)'),
 });
 export type Design = z.infer<typeof Design>;
 
@@ -233,16 +257,21 @@ export const GroupRequest = z
     concurrency: z.number().int().min(1).max(6).optional().describe('default 3; the sidecar-wide designConcurrency caps all groups'),
     budgetUsd: BudgetUsd.optional().describe("hard cap on the group's total; queued items are cancelled with error \"budget\" when it is reached"),
     items: z.array(GroupItemInput).min(1).max(MAX_GROUP_ITEMS),
+    massingFirst: z.boolean().optional().describe('(4c) every item gets a massing first (in waves); then the group awaits approval (group.approve)'),
+    approvalUi: z.enum(['architect', 'owner']).optional().describe('(4c) who approves: architect (the mod\'s UI, default) or owner (only group.approve with the group\'s owner)'),
+    maxRedirects: z.number().int().min(0).max(10).optional().describe('(4c) redirect rounds per item (default 3)'),
+    context: Context.optional().describe('(4c) goes into every item\'s brief (massing and detail)'),
   })
   .superRefine((g, ctx) => {
     const keys = g.items.map((it, i) => it.itemKey ?? `item${i + 1}`);
     if (new Set(keys).size !== keys.length) ctx.addIssue({ code: 'custom', path: ['items'], message: 'duplicate itemKey' });
+    if (g.approvalUi === 'owner' && !g.owner) ctx.addIssue({ code: 'custom', path: ['approvalUi'], message: 'approvalUi "owner" needs the group\'s owner' });
   });
 export type GroupRequest = z.infer<typeof GroupRequest>;
 
 export const GroupStatus = z
-  .enum(['queued', 'running', 'held_usage', 'paused_budget', 'done', 'failed', 'cancelled'])
-  .describe('held_usage: a usage limit holds every item; paused_budget: the soft budget stopped dispatching (extend / resume); done: every item ended and at least one is done; failed: none is; done, failed and cancelled are final');
+  .enum(['queued', 'running', 'held_usage', 'paused_budget', 'awaiting_approval', 'done', 'failed', 'cancelled'])
+  .describe('held_usage: a usage limit holds every item; paused_budget: the soft budget stopped dispatching (extend / resume); awaiting_approval (4c, massingFirst): an item waits for group.approve and no massing of the group is still open; done: every item ended and at least one is done; failed: none is; done, failed and cancelled are final');
 export type GroupStatus = z.infer<typeof GroupStatus>;
 
 export const GroupItem = z.object({
@@ -259,6 +288,10 @@ export const GroupItem = z.object({
   type: z.string(),
   name: z.string().optional(),
   error: z.string().optional(),
+  stage: z.enum(['massing', 'approval', 'detail']).optional().describe('(4c, massingFirst) massing: its massing (or a redirect) is designing; approval: it waits for group.approve; detail: its detail pass'),
+  massing: z.object({ id: MassingId, version: z.number().int().min(1) }).optional().describe('(4c) the item\'s massing (the latest version)'),
+  rounds: z.number().int().min(0).optional().describe('(4c) redirect rounds so far (capped at the group\'s maxRedirects)'),
+  designIds: z.array(Id).optional().describe('(4c) every design of the item, oldest first (massings, redirects, the detail); designId is the latest'),
 });
 export type GroupItem = z.infer<typeof GroupItem>;
 
@@ -280,10 +313,41 @@ export const Group = z.object({
   failed: z.number().int(),
   cost: Cost.describe('the sum of the items'),
   usageLimitUntil: Ts.optional(),
+  massingFirst: z.boolean().optional().describe('(4c)'),
+  approvalUi: z.enum(['architect', 'owner']).optional().describe('(4c) default architect'),
+  maxRedirects: z.number().int().optional().describe('(4c) massingFirst: redirect rounds per item'),
+  context: Context.optional().describe('(4c)'),
+  awaiting: z.array(ItemKey).optional().describe('(4c) the items waiting for group.approve'),
   createdAt: Ts,
   updatedAt: Ts,
 });
 export type Group = z.infer<typeof Group>;
+
+/** (4c) a massing version (docs/CONTRACT.md "4c review folded in" item 2); listed by massing.list, sent by massing.upsert. */
+export const Massing = z.object({
+  id: MassingId,
+  version: z.number().int().min(1),
+  versions: z.array(z.number().int()).describe('every installed version of this massing'),
+  designId: Id.describe('the massing job (design) that made this version'),
+  type: z.string(),
+  name: z.string().optional(),
+  itemKey: ItemKey.optional(),
+  ext: Ext.optional(),
+  owner: z.string().optional(),
+  group: z.string().optional(),
+  bible: BiblePin.optional().describe('the bible pin'),
+  parts: z.record(z.string(), z.unknown()).describe('the named masses: { <name>: { box, cells, ... } } from the blueprint JSON'),
+  size: z.object({ x: z.number().int(), y: z.number().int(), z: z.number().int() }),
+  request: DesignRequest,
+  cost: Cost,
+  dir: z.string().describe('absolute path of the version folder (<massings>/<id>/versions/<v>/); <massings>/<id>/ holds a copy of the latest'),
+  nbt: z.string().describe('absolute path of the .nbt in the version folder'),
+  previews: z.array(z.string()),
+  redirect: z.object({ fromVersion: z.number().int(), notes: z.string() }).optional().describe('this version is a redirect of fromVersion'),
+  detail: z.object({ designId: Id, status: DesignStatus, entryId: z.string().optional(), at: Ts.optional() }).optional().describe('the latest detail pass made from this massing (any version)'),
+  createdAt: Ts,
+});
+export type Massing = z.infer<typeof Massing>;
 
 export const Estimate = z.object({
   usdLow: z.number(),
@@ -494,6 +558,7 @@ export const SnapshotMsg = z.object({
   bibles: z.array(BibleJob).optional().describe('(4b) the last 20 bible jobs plus any unfinished one'),
   bibleIndex: z.array(BibleInfo).optional().describe('(4b) every installed bible (latest version) and the built-in ones'),
   reskins: z.array(Reskin).optional().describe('(4b) the last 20 re-skins plus any unfinished one'),
+  massings: z.array(Massing).optional().describe('(4c) the latest version of every open massing (not detailed, its group not final) plus the last 20'),
 });
 export const StatusMsg = z.object({ ...envelope('status'), status: Status });
 export const DesignUpsertMsgV1 = z.object({ ...envelope('design.upsert'), design: DesignV1 });
@@ -528,8 +593,10 @@ export const GroupUpsertMsg = z.object({ ...envelope('group.upsert'), group: Gro
 export const BibleUpsertMsg = z.object({ ...envelope('bible.upsert'), bible: BibleJob });
 export const BibleIndexMsg = z.object({ ...envelope('bible.index'), bibles: z.array(BibleInfo).describe('every installed bible and the built-in ones (sent when one is installed)') });
 export const ReskinUpsertMsg = z.object({ ...envelope('reskin.upsert'), reskin: Reskin });
+export const MassingUpsertMsg = z.object({ ...envelope('massing.upsert'), massing: Massing });
+export const MassingRemovedMsg = z.object({ ...envelope('massing.removed'), massingId: MassingId, reason: z.enum(['deleted', 'gc']) });
 
-export const ServerMessage = z.discriminatedUnion('type', [SnapshotMsg, StatusMsg, DesignUpsertMsg, VariantUpsertMsg, AckMsg, ErrorMsg, JobUpsertMsg, JobEventMsg, JobToolCallMsg, GroupUpsertMsg, BibleUpsertMsg, BibleIndexMsg, ReskinUpsertMsg]);
+export const ServerMessage = z.discriminatedUnion('type', [SnapshotMsg, StatusMsg, DesignUpsertMsg, VariantUpsertMsg, AckMsg, ErrorMsg, JobUpsertMsg, JobEventMsg, JobToolCallMsg, GroupUpsertMsg, BibleUpsertMsg, BibleIndexMsg, ReskinUpsertMsg, MassingUpsertMsg, MassingRemovedMsg]);
 export type ServerMessage = z.infer<typeof ServerMessage>;
 /** What protocol 1 knows: the phase 1-3 messages, with their phase 1-3 fields. */
 export const ServerMessageV1 = z.discriminatedUnion('type', [SnapshotMsgV1, StatusMsg, DesignUpsertMsgV1, VariantUpsertMsg, AckMsg, ErrorMsg]);
@@ -605,6 +672,25 @@ export const BibleReviseMsg = z.object({ ...envelope('bible.revise'), id: BibleI
 export const BibleEstimateMsg = z.object({ ...envelope('bible.estimate'), request: BibleRequest.optional() });
 export const BibleCancelMsg = z.object({ ...envelope('bible.cancel'), jobId: Id });
 export const ReskinRequestMsg = z.object({ ...envelope('reskin.request'), bibleId: BibleId, version: z.number().int().min(1).optional(), from: ReskinFrom });
+// 4c
+export const MassingRedirectMsg = z.object({
+  ...envelope('massing.redirect'),
+  massingId: MassingId,
+  notes: z.string().trim().min(1).max(2000),
+  owner: Owner.optional().describe('a group massing with approvalUi "owner": must be the group\'s owner'),
+  model: ModelId.optional(),
+  budgetUsd: BudgetUsd.optional(),
+});
+export const MassingListMsg = z.object({ ...envelope('massing.list'), owner: Owner.optional(), massingId: MassingId.optional().describe('every version of this massing (default: the latest of each)') });
+export const MassingDeleteMsg = z.object({ ...envelope('massing.delete'), massingId: MassingId });
+export const GroupApproveMsg = z.object({
+  ...envelope('group.approve'),
+  groupId: Id,
+  approve: z.array(ItemKey).max(MAX_GROUP_ITEMS).optional().describe('items whose detail pass starts'),
+  redirect: z.record(ItemKey, z.string().trim().min(1).max(2000)).optional().describe('itemKey -> notes: a new massing version'),
+  cancel: z.array(ItemKey).max(MAX_GROUP_ITEMS).optional().describe('(addition) items to drop (they end cancelled)'),
+  owner: Owner.optional().describe('who approves: must be the group\'s owner when its approvalUi is "owner"'),
+});
 
 export const ClientMessage = z.discriminatedUnion('type', [
   HelloMsg,
@@ -630,6 +716,10 @@ export const ClientMessage = z.discriminatedUnion('type', [
   BibleEstimateMsg,
   BibleCancelMsg,
   ReskinRequestMsg,
+  MassingRedirectMsg,
+  MassingListMsg,
+  MassingDeleteMsg,
+  GroupApproveMsg,
 ]);
 export type ClientMessage = z.infer<typeof ClientMessage>;
 /** What a protocol-1 client may send (exactly the phase 1-3 messages and fields). */
@@ -658,6 +748,10 @@ export function chooseProtocol(offered: number[] | undefined): Protocol | undefi
  * snapshot `protocol` / `features` / `jobs`).
  */
 export function toProtocol1(full: Record<string, unknown>): Record<string, unknown> | undefined {
+  // (4c) massing jobs and detail passes are protocol-2 work: a protocol-1 client never sees them
+  const v2Only = (d: unknown) => !!d && typeof d === 'object' && !!(((d as { request?: Record<string, unknown> }).request ?? {}).massing || ((d as { request?: Record<string, unknown> }).request ?? {}).fromMassing);
+  if (full.type === 'design.upsert' && v2Only(full.design)) return undefined;
+  if (full.type === 'snapshot' && Array.isArray(full.designs)) full = { ...full, designs: (full.designs as unknown[]).filter((d) => !v2Only(d)) };
   const r = ServerMessageV1.safeParse(full);
   return r.success ? (r.data as Record<string, unknown>) : undefined;
 }

@@ -1,7 +1,7 @@
 // Launch flags (docs/CONTRACT.md "Sidecar process") and the optional <data>/config.json.
 //
 //   node dist/main.mjs --port 7890 --data <dir> --library <dir> --kit <dir>
-//                      [--use-claude-login] [--parent-pid <pid>] [--backend claude|sim] [--debug]
+//                      [--use-claude-login] [--parent-pid <pid>] [--backend claude|sim] [--debug] [--bibles <dir>] [--massings <dir>]
 //
 // <data>/config.json (optional, hand-edited): { "designModel", "effort", "maxTurns", "maxBudgetUsd",
 // "simStepMs", "jobModel", "jobConcurrency", "simJobStepUsd" }. ARCHITECT_DESIGN_MODEL overrides
@@ -63,6 +63,21 @@ export interface Config {
   simDesignUsd: number;
   /** sim: how long a simulated usage limit lasts (config simLimitMs) */
   simLimitMs: number;
+  /** (4c) massing jobs */
+  massing: MassingConfig;
+}
+
+export interface MassingConfig {
+  /** <gameDir>/architect/massings (the library dir's sibling; --massings overrides) */
+  dir: string;
+  /** the default model of a massing job (config massingModel, default claude-sonnet-5-5) */
+  model: string;
+  /** (config massingEffort, default low) */
+  effort: Effort;
+  /** agent steps per massing turn (config massingMaxTurns, default 20) */
+  maxTurns: number;
+  /** redirect rounds per group item unless the group says (config maxRedirects, default 3) */
+  maxRedirects: number;
 }
 
 export interface GroupsConfig {
@@ -93,6 +108,7 @@ export const HELP = `Architect sidecar ${VERSION}
   --library <dir>      the design library (<gameDir>/architect/library): installs go to <library>/<id>/
   --kit <dir>          the blueprint kit (kit/build.mjs, kit/render.mjs, kit/lib, kit/designs)
   --bibles <dir>       style bibles (default: <library>/../bibles, i.e. <gameDir>/architect/bibles)
+  --massings <dir>     massings (default: <library>/../massings, i.e. <gameDir>/architect/massings)
   --use-claude-login   use your local \`claude\` login instead of an API key (personal use only)
   --parent-pid <pid>   exit when this process is gone (checked every 5 s)
   --backend <name>     claude (default) or sim (no Claude: installs a kit example; tests, offline UI work)
@@ -122,7 +138,7 @@ export function parseFlags(argv: string[]): Record<string, string | true> {
 }
 
 const BOOL_FLAGS = new Set(['use-claude-login', 'debug', 'help']);
-const VALUE_FLAGS = new Set(['port', 'data', 'library', 'kit', 'parent-pid', 'backend', 'bibles']);
+const VALUE_FLAGS = new Set(['port', 'data', 'library', 'kit', 'parent-pid', 'backend', 'bibles', 'massings']);
 
 export function loadConfig(argv: string[], env: NodeJS.ProcessEnv = process.env): Config {
   const flags = parseFlags(argv);
@@ -186,6 +202,13 @@ export function loadConfig(argv: string[], env: NodeJS.ProcessEnv = process.env)
     },
     simDesignUsd: typeof file.simDesignUsd === 'number' && file.simDesignUsd >= 0 ? file.simDesignUsd : 0,
     simLimitMs: num(file.simLimitMs, 1500),
+    massing: {
+      dir: str('massings') ? path.resolve(str('massings')!) : path.join(path.dirname(need('library')), 'massings'),
+      model: (typeof file.massingModel === 'string' && file.massingModel.trim()) || DEFAULT_JOB_MODEL,
+      effort: typeof file.massingEffort === 'string' && (EFFORTS as readonly string[]).includes(file.massingEffort) ? (file.massingEffort as Effort) : 'low',
+      maxTurns: Math.round(num(file.massingMaxTurns, 20)),
+      maxRedirects: typeof file.maxRedirects === 'number' && Number.isInteger(file.maxRedirects) && file.maxRedirects >= 0 && file.maxRedirects <= 10 ? file.maxRedirects : 3,
+    },
   };
 }
 
