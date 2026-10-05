@@ -1,0 +1,36 @@
+{
+	"schemaVersion": 1,
+	"id": "architect_mc",
+	"version": "${version}",
+	"name": "Architect",
+	"description": "Design buildings with Claude: describe one or mark a plot, review it as a ghost, place it, keep it in your library.",
+	"authors": [
+		"Laratta Labs"
+	],
+	"contributors": [
+		"AgentCraft authors (placement code, MIT)"
+	],
+	"license": "MIT",
+	"icon": "assets/architect_mc/icon.png",
+	"environment": "*",
+	"entrypoints": {
+		"main": [
+			"dev.larattalabs.architect.Architect"
+		],
+		"client": [
+			"dev.larattalabs.architect.client.ArchitectClient"
+		]
+	},
+	"mixins": [
+		{
+			"config": "architect_mc.client.mixins.json",
+			"environment": "client"
+		}
+	],
+	"depends": {
+		"fabricloader": ">=0.19.5",
+		"minecraft": "~26.3",
+		"java": ">=25",
+		"fabric-api": "*"
+	}
+}

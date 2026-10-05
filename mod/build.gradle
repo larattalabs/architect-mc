@@ -1,0 +1,129 @@
+plugins {
+	// Minecraft 26.x is unobfuscated: the non-remapping Loom plugin is used (no mappings, no remapJar).
+	id 'net.fabricmc.fabric-loom' version "${loom_version}"
+}
+
+version = project.mod_version
+group = project.maven_group
+
+base {
+	archivesName = project.archives_base_name
+}
+
+repositories {
+	mavenCentral()
+}
+
+loom {
+	splitEnvironmentSourceSets()
+
+	mods {
+		"architect_mc" {
+			sourceSet sourceSets.main
+			sourceSet sourceSets.client
+		}
+	}
+
+	runs {
+		client {
+			// Dev run: offline player named after you (ARCHITECT_PLAYER, else the OS user name), 1080p window.
+			// World auto-load/creation and mute are handled by the mod itself in dev runs (mod/DEV.md).
+			def player = (System.getenv("ARCHITECT_PLAYER") ?: System.getProperty("user.name") ?: "Player").replaceAll(/[^A-Za-z0-9_]/, "").take(16) ?: "Player"
+			programArgs "--username", player, "--width", "1920", "--height", "1080"
+			vmArgs "-Xmx4G", "--enable-native-access=ALL-UNNAMED"
+			runDir "run"
+		}
+		server {
+			runDir "run/server"
+		}
+	}
+}
+
+dependencies {
+	minecraft "com.mojang:minecraft:${project.minecraft_version}"
+	implementation "net.fabricmc:fabric-loader:${project.loader_version}"
+	implementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
+
+	// WebSocket (DevBridge server, sidecar client). slf4j-api comes with Minecraft, so only the websocket
+	// jar itself is nested (jar-in-jar).
+	clientImplementation("org.java-websocket:Java-WebSocket:${project.java_websocket_version}") {
+		exclude group: 'org.slf4j'
+	}
+	include("org.java-websocket:Java-WebSocket:${project.java_websocket_version}") {
+		exclude group: 'org.slf4j'
+	}
+
+	// Unit tests (src/test/java) for pure logic: placement math, design spec, launcher plan.
+	testImplementation platform("org.junit:junit-bom:${project.junit_version}")
+	testImplementation "org.junit.jupiter:junit-jupiter"
+	testRuntimeOnly "org.junit.platform:junit-platform-launcher"
+}
+
+test {
+	useJUnitPlatform()
+	testLogging {
+		events "failed"
+		exceptionFormat "full"
+	}
+}
+
+processResources {
+	def version = project.version
+	inputs.property "version", version
+
+	filesMatching("fabric.mod.json") {
+		expand "version": version
+	}
+
+	// The sidecar bundle (docs/CONTRACT.md "Launcher"): the built sidecar and the blueprint kit, copied into the
+	// jar's architect-sidecar/ when they exist. Missing source dirs are simply empty, so the mod builds without
+	// them (the launcher then reports "no sidecar bundled").
+	from("../sidecar/dist") {
+		into "architect-sidecar/dist"
+	}
+	from("../sidecar") {
+		include "package.json", "package-lock.json"
+		into "architect-sidecar"
+	}
+	from("../kit") {
+		exclude "node_modules/**", "out/**", "**/.DS_Store"
+		into "architect-sidecar/kit"
+	}
+}
+
+tasks.withType(JavaCompile).configureEach {
+	it.options.release = 25
+	it.options.encoding = "UTF-8"
+}
+
+java {
+	sourceCompatibility = JavaVersion.VERSION_25
+	targetCompatibility = JavaVersion.VERSION_25
+}
+
+// Seed mod/run with a dev options.txt (muted, 1080p GUI scale, no onboarding noise, no pause on focus
+// loss). Only copied when mod/run/options.txt does not exist yet. Delete mod/run/options.txt to reset.
+def runOptionsFile = file("run/options.txt")
+def prepareRunDir = tasks.register("prepareRunDir", Copy) {
+	from("run-template")
+	into("run")
+	onlyIf("options.txt not present yet") { !runOptionsFile.exists() }
+}
+
+tasks.matching { it.name == "runClient" }.configureEach {
+	dependsOn(prepareRunDir)
+}
+
+// Unpack the decompiled Minecraft sources into build/mcsrc (`gradlew mcSources`, then grep build/mcsrc/net/minecraft/...).
+tasks.register("mcSources", Sync) {
+	group = "architect"
+	description = "Decompile (genSources) and unpack Minecraft sources into build/mcsrc"
+	dependsOn("genSources")
+	notCompatibleWithConfigurationCache("reads Loom's cache directory at execution time")
+	def loomCache = file(".gradle/loom-cache/minecraftMaven")
+	from {
+		fileTree(loomCache) { include "**/*-sources.jar" }.files.collect { zipTree(it) }
+	}
+	into(layout.buildDirectory.dir("mcsrc"))
+	duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+}
