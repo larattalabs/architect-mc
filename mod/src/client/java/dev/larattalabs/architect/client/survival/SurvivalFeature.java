@@ -79,9 +79,9 @@ public final class SurvivalFeature {
 					return o;
 				})).thenCompose(x -> x);
 			});
-		DevBridge.register("dev.site.state", 10_000, "{id} - a construction site: state, queue length, built count, BOM rows, ledger, blocked "
+		DevBridge.register("dev.site.state", 10_000, "{site} - a construction site: state, queue length, built count, BOM rows, ledger, blocked "
 			+ "cells, notes, the last deconstruct's tally", (req, mc) -> {
-				String id = Fields.of(req).nonBlank("id");
+				String id = Fields.of(req).nonBlank("site");
 				return DevBridge.onClient(mc, () -> ServerTasks.callOnServer(server -> {
 					try {
 						return Builder.state(server, id);
@@ -90,10 +90,10 @@ public final class SurvivalFeature {
 					}
 				})).thenCompose(x -> x);
 			});
-		DevBridge.register("dev.crate.insert", 30_000, "{id, items?: {item: count}, inventory?: true} - book items into the crate as a hopper "
+		DevBridge.register("dev.crate.insert", 30_000, "{site, items?: {item: count}, inventory?: true} - book items into the crate as a hopper "
 			+ "would (counting equivalents), or move the player's needed items in (Insert from inventory) -> what went in", (req, mc) -> {
 				Fields f = Fields.of(req);
-				String id = f.nonBlank("id");
+				String id = f.nonBlank("site");
 				boolean inv = f.optBool("inventory", false);
 				Map<String, Integer> items = new LinkedHashMap<>();
 				if (f.json().has("items")) {
@@ -115,8 +115,8 @@ public final class SurvivalFeature {
 					return o;
 				})).thenCompose(x -> x);
 			});
-		DevBridge.register("dev.crate.open", 10_000, "{id} - open the crate screen of a site (as a right-click on its crate does)", (req, mc) -> {
-			String id = Fields.of(req).nonBlank("id");
+		DevBridge.register("dev.crate.open", 10_000, "{site} - open the crate screen of a site (as a right-click on its crate does)", (req, mc) -> {
+			String id = Fields.of(req).nonBlank("site");
 			return DevBridge.onClient(mc, () -> {
 				CrateScreen s = new CrateScreen(id);
 				mc.gui.setScreen(s);
@@ -142,9 +142,9 @@ public final class SurvivalFeature {
 				return s.json();
 			});
 		});
-		DevBridge.register("dev.site.finish", 30_000, "{id} - /architect site finish (dev hook: no permission check): the remaining cells, free",
+		DevBridge.register("dev.site.finish", 30_000, "{site} - /architect site finish (dev hook: no permission check): the remaining cells, free",
 			(req, mc) -> {
-				String id = Fields.of(req).nonBlank("id");
+				String id = Fields.of(req).nonBlank("site");
 				return DevBridge.onClient(mc, () -> ServerTasks.callOnServer(server -> {
 					JsonObject o = new JsonObject();
 					try {
@@ -155,10 +155,10 @@ public final class SurvivalFeature {
 					return o;
 				})).thenCompose(x -> x);
 			});
-		DevBridge.register("dev.site.deconstruct", 60_000, "{id, force?: false} - Deconstruct (as the crate screen / Library Remove): refunds, "
+		DevBridge.register("dev.site.deconstruct", 60_000, "{site, force?: false} - Deconstruct (as the crate screen / Library Remove): refunds, "
 			+ "the player's blocks and the crate's stock drop at the crate; the terrain comes back -> the tally", (req, mc) -> {
 				Fields f = Fields.of(req);
-				String id = f.nonBlank("id");
+				String id = f.nonBlank("site");
 				boolean force = f.optBool("force", false);
 				return DevBridge.onClient(mc, () -> ServerTasks.callAsPlayer((level, player) -> {
 					JsonObject o = new JsonObject();

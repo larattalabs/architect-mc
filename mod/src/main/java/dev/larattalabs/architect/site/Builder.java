@@ -1131,7 +1131,7 @@ public final class Builder {
 		}
 		Construction c = s.construction();
 		JsonObject o = new JsonObject();
-		o.addProperty("id", id);
+		o.addProperty("site", id); // not "id": DevBridge replies carry the request id there
 		o.addProperty("blueprint", s.blueprint());
 		if (c == null) {
 			o.addProperty("state", "instant");

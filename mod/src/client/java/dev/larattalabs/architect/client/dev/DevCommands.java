@@ -113,8 +113,16 @@ public final class DevCommands {
 			}
 			return serverCommand(mc, "weather " + type);
 		});
-		DevBridge.register("dev.command", 30_000, "{cmd} - run a command as the player with full permissions -> {messages[], success, result}",
-			(req, mc) -> serverCommand(mc, Fields.of(req).nonBlank("cmd")));
+		DevBridge.register("dev.command", 30_000, "{cmd, asPlayer?: false} - run a command as the player with full permissions (asPlayer: with the "
+			+ "player's own permissions, as if typed; refused in a Hardcore world unless asPlayer) -> {messages[], success, result}",
+			(req, mc) -> {
+				Fields f = Fields.of(req);
+				boolean asPlayer = f.optBool("asPlayer", false);
+				if (!asPlayer && mc.level != null && mc.level.getLevelData().isHardcore()) {
+					throw new DevBridge.DevException("dev.command with full permissions is refused in a Hardcore world (use asPlayer: true)");
+				}
+				return serverCommand(mc, f.nonBlank("cmd"), asPlayer);
+			});
 		DevBridge.register("dev.screen", 10_000, "{open: name|null} - open a screen (title|pause|chat|inventory|options|<registered>) or close it",
 			DevCommands::screen);
 		DevBridge.register("dev.key", 10_000, "{key:'escape'|'key.keyboard.f3', modifiers?} or {mapping:'key.chat'} - press a key (to the open screen, else key mappings)",
@@ -845,6 +853,11 @@ public final class DevCommands {
 	// ------------------------------------------------------------------ dev.command
 
 	public static CompletableFuture<JsonObject> serverCommand(Minecraft mc, String cmd) {
+		return serverCommand(mc, cmd, false);
+	}
+
+	/** {@code asPlayer}: the player's own permission level (a permission check is really tested), else full permissions. */
+	public static CompletableFuture<JsonObject> serverCommand(Minecraft mc, String cmd, boolean asPlayer) {
 		return DevBridge.onClient(mc, () -> new Object[] {needServer(mc), mc.player.getUUID()}).thenCompose(arr -> {
 			var server = (net.minecraft.client.server.IntegratedServer) arr[0];
 			UUID uuid = (UUID) arr[1];
@@ -876,7 +889,7 @@ public final class DevCommands {
 					}
 				};
 				CommandSourceStack base = sp != null ? sp.createCommandSourceStack() : server.createCommandSourceStack();
-				CommandSourceStack source = base.withSource(capture).withPermission(LevelBasedPermissionSet.OWNER)
+				CommandSourceStack source = (asPlayer ? base.withSource(capture) : base.withSource(capture).withPermission(LevelBasedPermissionSet.OWNER))
 					.withCallback((ok, value) -> {
 						callbackFired.set(true);
 						if (!ok) {
