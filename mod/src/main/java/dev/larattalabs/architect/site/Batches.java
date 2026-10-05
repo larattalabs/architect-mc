@@ -80,6 +80,15 @@ public final class Batches {
 
 	// ------------------------------------------------------------------ reads
 
+	/** Phase 4e: a job's writes are done and its P7 commit is submitted: the batch may start its next item meanwhile. */
+	static void committing(@Nullable String batchId, @Nullable String itemKey) {
+		QBatch b = batchId == null ? null : BATCHES.get(batchId);
+		QItem i = b == null || itemKey == null ? null : b.item(itemKey);
+		if (i != null && i.status == QItem.Status.PLACING) {
+			i.committing = true;
+		}
+	}
+
 	public static @Nullable QBatch get(String id) {
 		return BATCHES.get(id);
 	}
@@ -798,7 +807,7 @@ public final class Batches {
 			untickItem(server, b, q.key);
 			ApiEvents.itemFailed(b, q);
 		}
-		QItem placing = b.placing();
+		QItem placing = b.blocking(); // an item committing its after finishes (its writes are done)
 		if (placing != null && placing.siteId != null && rollBackPlacing) {
 			Placement.rollBack(server, placing.siteId, why);
 		}

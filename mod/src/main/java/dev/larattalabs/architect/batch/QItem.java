@@ -45,6 +45,11 @@ public final class QItem {
 	public boolean layer;
 	/** Phase 4e: {@code building}, {@code road} or {@code cells}; a road's or cell site's request ({@code spec}). */
 	public String itemKind = "building";
+	/**
+	 * Phase 4e, not saved: its writes are done and its ACTIVE commit (P7) is on the I/O thread; the batch's next item may start
+	 * meanwhile (it captures the world after these writes). It is PLACED at P8 as before.
+	 */
+	public transient boolean committing;
 	public @Nullable JsonObject spec;
 
 	public Status status = Status.QUEUED;

@@ -272,6 +272,7 @@ final class InfraJob implements Placement.Job {
 				}
 				case AFTER_COMMIT -> {
 					CompletableFuture<Void> f = commit;
+					Batches.committing(batchId, itemKey);
 					if (f != null && !PlaceJob.waitFor(f, deadline)) {
 						return false;
 					}

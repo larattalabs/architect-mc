@@ -460,6 +460,9 @@ final class PlaceJob implements Placement.Job {
 		}
 		if (phase == AFTER_COMMIT) {
 			var f = commit;
+			if (convert == null) {
+				Batches.committing(batchId, itemKey); // the writes are done: the next item may start while this commit runs
+			}
 			if (f != null && !waitFor(f, deadline)) {
 				return false;
 			}
