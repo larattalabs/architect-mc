@@ -574,8 +574,10 @@ public interface ArchitectApi {
   SiteEvents events();               // Fabric Events (R7)
   Jobs jobs();                       // Claude jobs (R2), see "Jobs": thread-safe, callable from the server thread
   Designs designs();                 // building design requests (review 1), see "Designs"
-  Set<String> features();            // review 6: "protocol2", "jobs", "jobTools", "blobs", "designs", later "siteGroups",
-                                     // "jobGroups", "massing", "deltaApply"... matching the sidecar's features plus Java-only ones
+  Set<String> features();            // review 6. STABLE names (never renamed or removed within major 1): "sites",
+                                     // "events", "designs", "library", "survey", "protocol2", "jobs", "jobTools",
+                                     // "blobs"; later "siteGroups", "jobGroups", "massing", "deltaApply"... Java-only ones
+                                     // plus the sidecar's (prefixed as above when they come from the snapshot)
 }
 
 interface Library {
