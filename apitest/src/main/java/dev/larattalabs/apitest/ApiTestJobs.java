@@ -117,6 +117,29 @@ final class ApiTestJobs {
 			}
 			return f.whenComplete((v, e) -> answered("tickwait"));
 		});
+		for (String mid : List.of("mid1", "mid2")) {
+			// ~150 KB each: inline answers (under 256 KB) whose sum makes the job's own result go as a resultBlob
+			jobs.registerTool(OWNER, mid, ToolHandler.threadSafe((jobId, input) -> {
+				called(mid);
+				JsonArray arr = new JsonArray();
+				for (int i = 0; i < 3000; i++) {
+					arr.add(mid + " row " + i + " " + "y".repeat(36));
+				}
+				JsonObject o = new JsonObject();
+				o.add("rows", arr);
+				answered(mid);
+				return CompletableFuture.completedFuture(o);
+			}));
+		}
+		jobs.registerTool(OWNER, "timer", ToolHandler.threadSafe((jobId, input) -> {
+			// answers after 4 s of wall time (not ticks: it answers while the world is closing)
+			called("timer");
+			return CompletableFuture.supplyAsync(() -> {
+				JsonObject o = new JsonObject();
+				o.addProperty("timer", 4000);
+				return (JsonElement) o;
+			}, CompletableFuture.delayedExecutor(4, java.util.concurrent.TimeUnit.SECONDS)).whenComplete((v, e) -> answered("timer"));
+		}));
 		jobs.registerTool(OWNER, "hold", (jobId, input) -> {
 			called("hold");
 			CompletableFuture<JsonElement> f = new CompletableFuture<>();
@@ -173,6 +196,12 @@ final class ApiTestJobs {
 				tool("tickwait", "Answers after 60 game ticks", EMPTY, 10_000L, false)), 1.0, null, OWNER, "apitest-paused", null, ext, blobs);
 			case "hold" -> new JobSpec("agent", "Wait for the hold.", null, null, "low", null, List.of(
 				tool("hold", "Answers when released", EMPTY, 600_000L, false)), 1.0, null, OWNER, "apitest-hold", null, ext, blobs);
+			case "bigresult" -> new JobSpec("agent", "Collect a lot.", null, null, "low", null, List.of(
+				tool("mid1", "150 KB", EMPTY, null, true), tool("mid2", "150 KB", EMPTY, null, true)), 1.0, null, OWNER, "apitest-bigresult", null, ext,
+				blobs);
+			case "noworld" -> new JobSpec("agent", "Outlive the world.", null, null, "low", null, List.of(
+				tool("timer", "Answers after 4 s", EMPTY, 30_000L, true), tool("fast", "Answers at once", EMPTY, 30_000L, true)), 1.0, null, OWNER,
+				"apitest-noworld", null, ext, blobs);
 			case "budget" -> new JobSpec("agent", "Spend.", null, null, "low", null, List.of(
 				tool("fast", "Answers at once", EMPTY, null, true), tool("slowro", "Answers at once", EMPTY, null, true),
 				tool("missing", "Nobody", EMPTY, null, false)), 0.015, null, OWNER, "apitest-budget", null, ext, blobs);
@@ -272,7 +301,11 @@ final class ApiTestJobs {
 		o.addProperty("tag", j.spec().has("tag") ? j.spec().get("tag").getAsString() : null);
 		o.addProperty("error", j.error().orElse(null));
 		o.addProperty("resultBlob", j.resultBlob().orElse(null));
-		j.result().ifPresent(r -> o.add("result", r.toString().length() > 20_000 ? new JsonPrimitive(r.toString().substring(0, 20_000)) : r));
+		j.result().ifPresent(r -> {
+			String text = r.toString();
+			o.addProperty("resultBytes", text.getBytes(StandardCharsets.UTF_8).length);
+			o.add("result", text.length() > 20_000 ? new JsonPrimitive(text.substring(0, 20_000)) : r);
+		});
 		JsonObject cost = new JsonObject();
 		cost.addProperty("usd", j.cost().usd());
 		cost.addProperty("turns", j.cost().turns());

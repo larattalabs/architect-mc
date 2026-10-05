@@ -363,6 +363,14 @@ switch (step) {
     const bigRows = bigFile && fs.existsSync(bigFile) ? JSON.parse(fs.readFileSync(bigFile, 'utf8')).rows?.length : 0;
     check(!!bigBlob && by.big.result.bytes > 256 * 1024 && bigRows === 6000, `a ${by.big?.result?.bytes}-byte answer went as blob ${bigBlob} (${bigRows} rows on disk)`, by.big);
 
+    // ---- a job result over 256 KB: the sidecar puts it in a blob (resultBlob); the mod reads it back before JOB_DONE
+    const br = await run('bigresult');
+    const brDone = await jobDone(br.id, 60_000);
+    const brGot = await api(`job ${br.id}`);
+    check(brDone?.status === 'done' && /^b/.test(brDone.resultBlob ?? '') && brDone.resultBytes > 256 * 1024 && brGot?.resultBytes === brDone.resultBytes,
+      `job ${br.id}: a ${brDone?.resultBytes}-byte result came as blob ${brDone?.resultBlob} and is in JOB_DONE and Jobs.get().result()`,
+      { ...brDone, result: undefined });
+
     // ---- a tool call across a paused game: tool timeout 10 s, the game paused 15 s while the handler waits for 60 ticks
     const pz = await run('paused');
     const called = await waitCalled('tickwait', 1);
@@ -440,6 +448,30 @@ switch (step) {
     check(rjDone?.status === 'done' && rOut?.results?.[0]?.result?.held === true, `job ${rj.id} resumed and finished with the held answer: ${JSON.stringify(rOut?.results?.[0])}`, rjDone);
     check(holds1 === holds0 + 1, `the handler ran once (${holds0} -> ${holds1}); the re-sent call got the cached answer`);
     check(/re-sent tool call \S+ \(hold\): sending the cached answer/.test(logSince(logMark2)), 'the log shows the cached answer re-sent');
+
+    // ---- the same, but the handler still runs when the call comes again: it is not run twice, its answer goes out later
+    const holds2 = (await toolstats()).hold?.calls ?? 0;
+    const rj2 = await run('hold');
+    await waitCalled('hold', holds2 + 1);
+    const pid2 = (await call('dev.launcher.state')).pid;
+    process.kill(pid2, 'SIGKILL');
+    for (let i = 0, l = 'synced'; i < 50 && l === 'synced'; i++) {
+      await sleep(200);
+      l = (await call('dev.sidecar.state')).link;
+    }
+    await sleep(500);
+    const logMark3 = logSize();
+    await call('dev.launcher.restart');
+    let resentWhileRunning = false;
+    for (let i = 0; i < 100 && !resentWhileRunning; i++) {
+      await sleep(200);
+      resentWhileRunning = /re-sent tool call \S+ \(hold\): its handler is still running/.test(logSince(logMark3));
+    }
+    await api('release');
+    const rj2Done = await jobDone(rj2.id, 90_000);
+    const holds3 = (await toolstats()).hold?.calls ?? 0;
+    check(resentWhileRunning && rj2Done?.status === 'done' && resultJson(rj2Done)?.results?.[0]?.result?.held === true && holds3 === holds2 + 1,
+      `re-sent while its handler still ran: not run again (${holds2} -> ${holds3}), answered on release, job ${rj2.id} ${rj2Done?.status}`, rj2Done);
 
     // ---- events: on the server thread, DONE once per job (the reconnect snapshots did not fire it again)
     const all = await events();
@@ -519,6 +551,32 @@ switch (step) {
       // tidy: the new entries go to the trash
       for (const f of futs) if (f.id) await result(await api(`delete ${f.id}`), 30_000).catch(() => null);
       if (dDone?.entryId) await result(await api(`delete ${dDone.entryId}`), 30_000).catch(() => null);
+
+      // a tool call that arrives while no world runs gets an error answer (the job goes on); JOB_DONE fires on the next load
+      const timerCalls = (await api('toolstats')).timer?.calls ?? 0;
+      const nw = await result(await api('jobrun noworld'));
+      for (let i = 0; i < 100 && ((await api('toolstats')).timer?.calls ?? 0) <= timerCalls; i++) await sleep(100);
+      await call('dev.world.leave');
+      let nwJob;
+      for (let i = 0; i < 120; i++) {
+        await sleep(500);
+        nwJob = (await call('dev.sidecar.state')).jobs.find((j) => j.id === nw.value);
+        if (['done', 'failed', 'cancelled'].includes(nwJob?.status)) break;
+      }
+      const tOpen2 = Date.now();
+      await call('dev.world.open');
+      await waitInWorld();
+      const nwDone = await waitEvent((e) => e.event === 'JOB_DONE' && e.id === nw.value, 30_000);
+      let nwOut = null;
+      try {
+        nwOut = JSON.parse(nwDone?.result?.text ?? 'null');
+      } catch {
+        /* checked below */
+      }
+      const byTool = Object.fromEntries((nwOut?.results ?? []).map((r) => [r.tool, r]));
+      check(nwJob?.status === 'done' && byTool.timer?.result?.timer === 4000 && /no world is running/.test(byTool.fast?.error ?? ''),
+        `job ${nw.value} finished on the title screen: timer answered, fast got "${byTool.fast?.error}"`, nwOut);
+      check(!!nwDone && nwDone.t >= tOpen2 && nwDone.serverThread === 'Server thread', `its JOB_DONE fired after the world loaded (${nwDone ? nwDone.t - tOpen2 : '?'} ms)`);
     } finally {
       if (oldCfg === null) fs.rmSync(cfgFile, { force: true });
       else fs.writeFileSync(cfgFile, oldCfg);

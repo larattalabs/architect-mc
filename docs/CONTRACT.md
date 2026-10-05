@@ -824,10 +824,12 @@ arguments and results, as a semi-stable test surface: changes are noted in its c
 
 ## Phase 4a mod jobs as built (Java side, API 1.1.0, recorded 2026-10-05)
 
-- **API 1.1.0 (minor, additive):** `Jobs.putBlob(String kind, @Nullable String owner, JsonElement data)` and
+- **API 1.1.0 (minor):** `Jobs.putBlob(String kind, @Nullable String owner, JsonElement data)` and
   `Jobs.putBlob(String kind, @Nullable String owner, byte[] data)` -> `CompletableFuture<String>` (the blob id, on the server
   thread); `ToolHandler.threadSafe()` (default false) and `static ToolHandler.threadSafe(ToolHandler)`; `Job` gains the
   component `Optional<String> resultBlob` (the 1.0.0 nine-argument constructor is kept) and `Optional<String> owner()`.
+  Not purely additive for `Job`: a record pattern with nine components no longer compiles, and equals/hashCode/toString
+  include `resultBlob` (no known caller deconstructs `Job`; Steward only reads it).
   `features()` already mapped the sidecar's `blobs`.
 - **available()** = the link is synced, the sidecar chose protocol 2 and lists `job.run`. Against a protocol-1 helper `run()`
   fails with "jobs need protocol 2; this helper speaks protocol 1".
