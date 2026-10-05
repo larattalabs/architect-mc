@@ -1141,9 +1141,11 @@ public final class ArchitectScreen extends Screen {
 		ry += 24;
 		statusLine(g, keyMessage, keyMessageError, rx, ry, colW);
 		ry += 12;
-		g.text(font, TextUtil.ellipsize(font, "Stored by the helper in sidecar-data/secrets.json, never in the game's files.", colW), rx, ry, UiBits.muted(),
-			false);
-		ry += 16;
+		for (String line : TextUtil.wrapPlain(font, "Stored by the helper in sidecar-data/secrets.json, never in the game's files.", colW)) {
+			g.text(font, line, rx, ry, UiBits.muted(), false);
+			ry += 10;
+		}
+		ry += 6;
 		boolean on = s.useClaudeLogin();
 		String toggle = "Use my claude.ai login instead";
 		int tw = 13 + font.width(toggle);

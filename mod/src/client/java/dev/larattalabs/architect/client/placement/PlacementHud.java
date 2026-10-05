@@ -16,7 +16,7 @@ import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.util.Util;
 
 /**
- * The placement HUD: an ink panel above the hotbar with the blueprint, the repos, the rotation, the
+ * The placement HUD: an ink panel above the hotbar with the design, the rotation, the
  * verdict (ready / what {@code place} would refuse), the conflict counts and the keys. After a
  * placement (or a cancel) the last status line stays for a few seconds.
  */

@@ -129,7 +129,7 @@ public final class Occupancy {
 
 	/**
 	 * Everything in the way of a placement over {@code box} in {@code level}, client or server. {@code ignore}
-	 * skips entities that are not really there (the client's AgentCraft NPCs).
+	 * skips entities that are not really there (client-only entities).
 	 */
 	public static List<Found> scan(Level level, Anchors.Bounds box, Predicate<Entity> ignore) {
 		AABB area = aabb(box);

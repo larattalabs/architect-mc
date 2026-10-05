@@ -48,7 +48,7 @@ try {
       for (const cmd of shot.commands ?? []) await dev.call('dev.command', { cmd });
       if (shot.camera) await dev.call('dev.camera', { mode: 'keep', ...shot.camera });
       if (shot.ui) await dev.call('dev.ui.open', { tab: shot.ui });
-      for (const id of shot.uiClicks ?? []) await dev.call('dev.ui.click', { id });
+      for (const id of shot.uiClicks ?? []) await dev.call('dev.ui.click', { control: id });
       if (shot.screen !== undefined) await dev.call('dev.screen', { open: shot.screen });
       if (shot.delayMs) await sleep(shot.delayMs);
       const res = await dev.call('dev.screenshot', {

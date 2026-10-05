@@ -335,21 +335,23 @@ public final class PlacementFeature {
 					}
 				})).thenCompose(x -> x);
 			});
-		DevBridge.register("dev.box.hash", 60_000, "{min: [x,y,z], max: [x,y,z]} - SHA-256 over every block state and block-entity NBT in the "
+		DevBridge.register("dev.box.hash", 60_000, "{min: [x,y,z], max: [x,y,z], cells?: false} - SHA-256 over every block state and block-entity NBT in the "
 			+ "box (the player's dimension, loads chunks): before/after a place + remove proves the terrain came back exactly", (req, mc) -> {
 				Fields f = Fields.of(req);
 				int[] a = xyz(f, "min");
 				int[] b = xyz(f, "max");
+				boolean withCells = f.optBool("cells", false);
 				long volume = (long) (Math.abs(b[0] - a[0]) + 1) * (Math.abs(b[1] - a[1]) + 1) * (Math.abs(b[2] - a[2]) + 1);
 				if (volume > 4_000_000) {
 					throw new DevBridge.DevException("box too large (" + volume + " blocks)");
 				}
-				return DevBridge.onClient(mc, () -> ServerTasks.callAsPlayer((level, player) -> hashBox(level, a, b))).thenCompose(x -> x);
+				return DevBridge.onClient(mc, () -> ServerTasks.callAsPlayer((level, player) -> hashBox(level, a, b, withCells))).thenCompose(x -> x);
 			});
 	}
 
 	/** {@code dev.box.hash}: SHA-256 of every cell's state and block entity NBT, plus counts. Server thread. */
-	static JsonObject hashBox(ServerLevel level, int[] a, int[] b) {
+	static JsonObject hashBox(ServerLevel level, int[] a, int[] b, boolean withCells) {
+		java.util.List<String> cells = withCells ? new java.util.ArrayList<>() : null;
 		try {
 			MessageDigest md = MessageDigest.getInstance("SHA-256");
 			BlockPos.MutableBlockPos p = new BlockPos.MutableBlockPos();
@@ -363,7 +365,11 @@ public final class PlacementFeature {
 						if (s.isAir()) {
 							air++;
 						}
-						md.update(NbtUtils.writeBlockState(s).toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+						String st = NbtUtils.writeBlockState(s).toString();
+						if (cells != null) {
+							cells.add(x + "," + y + "," + z + " " + st);
+						}
+						md.update(st.getBytes(java.nio.charset.StandardCharsets.UTF_8));
 						BlockEntity be = level.getBlockEntity(p);
 						if (be != null) {
 							blockEntities++;
@@ -381,6 +387,11 @@ public final class PlacementFeature {
 			o.addProperty("air", air);
 			o.addProperty("blockEntities", blockEntities);
 			o.addProperty("dimension", Sites.dimensionId(level));
+			if (cells != null) {
+				com.google.gson.JsonArray ca = new com.google.gson.JsonArray();
+				cells.forEach(ca::add);
+				o.add("cells", ca);
+			}
 			return o;
 		} catch (java.security.NoSuchAlgorithmException e) {
 			throw new IllegalStateException(e);

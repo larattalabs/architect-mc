@@ -36,7 +36,7 @@ import net.minecraft.world.phys.HitResult;
 import org.jspecify.annotations.Nullable;
 
 /**
- * Placement mode (the ghost) (client thread only): the chosen blueprint and repos, where
+ * Placement mode (the ghost) (client thread only): the chosen design, where
  * the ghost is (origin = the rotated box's minimum corner, as {@link Sites#place} takes it), its
  * rotation, the conflicts under it and what {@link Sites#place} would refuse.
  *

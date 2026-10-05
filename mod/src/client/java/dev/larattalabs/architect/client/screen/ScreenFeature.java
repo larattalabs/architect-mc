@@ -68,8 +68,8 @@ public final class ScreenFeature {
 		});
 		DevBridge.register("dev.ui.state", 10_000, "{} - the open Architect screen: tab, focus, controls [{id, label, state, x, y}] (GUI px)",
 			(req, mc) -> DevBridge.onClient(mc, () -> screen(mc).stateJson()));
-		DevBridge.register("dev.ui.click", 10_000, "{id} - press a control of the Architect screen by id (see dev.ui.state controls)", (req, mc) -> {
-			String id = Fields.of(req).nonBlank("id");
+		DevBridge.register("dev.ui.click", 10_000, "{control} - press a control of the Architect screen by id (the field is not 'id': that is the request id) (see dev.ui.state controls)", (req, mc) -> {
+			String id = Fields.of(req).nonBlank("control");
 			return DevBridge.onClient(mc, () -> {
 				ArchitectScreen s = screen(mc);
 				boolean ran = s.click(id);
@@ -111,7 +111,7 @@ public final class ScreenFeature {
 				return o;
 			});
 		});
-		DevBridge.register("dev.design.fill", 10_000, "{reset?, type?, style? (chip id or any text), materials?, features?: [..] | \"a,b\", size?: "
+		DevBridge.register("dev.design.fill", 10_000, "{reset?, buildingType? (not type: that is the message type), style? (chip id or any text), materials?, features?: [..] | \"a,b\", size?: "
 			+ "S|M|L|custom|plot, custom?: [x,y,z], remix?, name?, notes?} - set the Design tab's fields", (req, mc) -> {
 				Fields f = Fields.of(req);
 				return DevBridge.onClient(mc, () -> {
@@ -221,8 +221,8 @@ public final class ScreenFeature {
 			DesignFeature.resetForm();
 		}
 		DesignForm form = DesignFeature.form();
-		if (f.has("type")) {
-			form.type = f.str("type");
+		if (f.has("buildingType")) {
+			form.type = f.str("buildingType");
 		}
 		if (f.has("style")) {
 			String s = f.str("style");

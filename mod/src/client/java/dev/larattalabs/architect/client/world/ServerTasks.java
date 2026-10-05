@@ -11,8 +11,8 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.Level;
 
 /**
- * Run world changes driven by Foreman state (lamp status, podium open, merge station active, ...)
- * on the integrated server thread. Singleplayer only: AgentCraft's HQ is a local world. Keep the
+ * Run world changes from the client (place, remove, reload the library)
+ * on the integrated server thread. Singleplayer only. Keep the
  * work small and idempotent (only set a block state when it actually differs).
  *
  * <pre>

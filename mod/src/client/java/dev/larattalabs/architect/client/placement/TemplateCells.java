@@ -15,7 +15,7 @@ import org.jspecify.annotations.Nullable;
  * A blueprint's template as {@link GhostModel.Cells}: every cell the template writes (air included,
  * structure voids are not in a template), coloured by the block's map colour. Read once per loaded
  * blueprint entry ({@link TemplateGrid}), so a
- * {@code /agentcraft blueprints reload} (new entries) is picked up. Also the top-down preview of the
+ * {@code /architect reload} (new entries) is picked up. Also the top-down preview of the
  * blueprint screen.
  */
 final class TemplateCells {
