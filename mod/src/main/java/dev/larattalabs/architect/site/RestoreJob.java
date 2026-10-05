@@ -282,6 +282,7 @@ final class RestoreJob implements Placement.Job {
 		TickDeferral.release(level, TickDeferral.withoutLeaves(held));
 		held.clear();
 		SiteJournal.writeCells(level, restore.cells());
+		SiteJournal.fixHalves(level, restore.halves());
 		Sites.Drops drops = Sites.Drops.of(level, s.restoreBox(), dropsBefore);
 		Journal.Stats st = work != null ? Sites.statsOf(work, siteId) : new Journal.Stats(restore.cells().size(), 0, restore.holes());
 		result = ROLLBACK.equals(purpose) ? Sites.finishRollback(server, level, s, drops, restore.ring(), st)

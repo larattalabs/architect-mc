@@ -670,7 +670,8 @@ public final class SiteJournal {
 	}
 
 	/** What an undo does to one site (R4): its BOX template and mask, its other cells, its ring. */
-	record Restore(String site, Anchors.@Nullable Bounds box, @Nullable CompoundTag template, @Nullable LongPredicate mask, List<CellWrite> cells, List<CellWrite> pre, int[] ring,
+	record Restore(String site, Anchors.@Nullable Bounds box, @Nullable CompoundTag template, @Nullable LongPredicate mask, List<CellWrite> cells, List<CellWrite> pre,
+		List<CellWrite> halves, int[] ring,
 		int holes) {
 	}
 
@@ -710,6 +711,7 @@ public final class SiteJournal {
 		int[] ring = new int[0];
 		List<CellWrite> cells = new ArrayList<>();
 		List<CellWrite> pre = new ArrayList<>();
+		List<CellWrite> halves = new ArrayList<>();
 		try {
 			for (JournalStore.Meta m : undone(siteId, group)) {
 				Map<Long, Value> written = new LinkedHashMap<>();
@@ -732,6 +734,14 @@ public final class SiteJournal {
 					int[] b = m.box();
 					box = new Anchors.Bounds(b[0], b[1], b[2], b[3], b[4], b[5]);
 					tpl = JournalNbt.toTemplate(written, b[0], b[1], b[2], b[3] - b[0] + 1, b[4] - b[1] + 1, b[5] - b[2] + 1, 0);
+					// two-block plants and doors: a box write can lose them (each half is written next to the other half's old
+					// neighbour); put back quietly afterwards where the world does not hold them
+					written.forEach((p, v) -> {
+						if (v.state().get("properties") instanceof CompoundTag pr && pr.contains("half") && WorldJournal.state(v).hasProperty(
+							net.minecraft.world.level.block.state.properties.BlockStateProperties.DOUBLE_BLOCK_HALF)) {
+							halves.add(new CellWrite(p, v, Block.UPDATE_CLIENTS | Block.UPDATE_KNOWN_SHAPE));
+						}
+					});
 					ring = s.head(m.id()).ring();
 					holes = unwritten.size();
 					if (!unwritten.isEmpty()) {
@@ -755,7 +765,7 @@ public final class SiteJournal {
 			throw new Sites.SiteException(Reason.JOURNAL_UNAVAILABLE, "The journal of " + siteId + " can't be read (" + e.getMessage() + ")");
 		}
 		cells.sort(Comparator.comparingInt(c -> Journal.y(c.pos())));
-		return new Restore(siteId, box, tpl, mask, cells, pre, ring, holes);
+		return new Restore(siteId, box, tpl, mask, cells, pre, halves, ring, holes);
 	}
 
 	/** The cells of the entries that stay on top of {@code holes} (positions not written because they are covered). */
@@ -814,7 +824,20 @@ public final class SiteJournal {
 			}
 		}
 		writeCells(level, r.cells());
+		fixHalves(level, r.halves());
 		return r;
+	}
+
+	/** Puts back the two-block halves a restore wrote that the world does not hold any more (quietly). */
+	static void fixHalves(ServerLevel level, List<CellWrite> halves) {
+		BlockPos.MutableBlockPos m = new BlockPos.MutableBlockPos();
+		for (CellWrite c : halves) {
+			m.set(Journal.x(c.pos()), Journal.y(c.pos()), Journal.z(c.pos()));
+			BlockState want = WorldJournal.state(c.value());
+			if (level.getBlockState(m) != want) {
+				level.setBlock(m, want, c.flags());
+			}
+		}
 	}
 
 	/** Writes CELL undo cells (lowest first): the state with its kind's flags, then the block entity data. */
