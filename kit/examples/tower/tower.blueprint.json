@@ -159,7 +159,8 @@
         24,
         8
       ],
-      "cells": 167
+      "cells": 167,
+      "roof": "hip"
     },
     "landing": {
       "box": [

@@ -1,7 +1,12 @@
 // Blueprint checker: validates a structure template + its sidecar against docs/CONTRACT.md "Checker profiles".
 //   checkFiles(nbtPath, jsonPath, opts) / checkBlueprint(bp, opts) / checkStructure(sidecar, structure, opts)
 //     -> { ok, errors: string[], warnings: string[] }
-//   opts: { max?: {x,y,z}, type?: string, imported?: boolean }
+//   opts: { max?: {x,y,z}, type?: string, imported?: boolean, profile?: string[]|'massing', massing?: <massing sidecar> }
+// The `massing` profile (phase 4c) applies to a sidecar with `massing: true` (or when opts.profile is 'massing'): the
+// structure, palette, sidecar, anchor and size rules, no floating, parts, and the entrance reaching into the building; no
+// door, light, interior or type-geometry rules. opts.massing (a massing's sidecar) adds massing conformance
+// (lib/massing.mjs checkConformance): its errors join the errors, its issues the warnings (prefixed `massing:`), and the
+// result gets `conformance: { ok, errors, issues }`.
 // `imported` (an .nbt the player built and saved, docs/CONTRACT.md "Import / export"): the rules inherited from
 // AgentCraft about how the building works (anchors, doors, light) and the size-vs-extent match become warnings; the
 // structure format, palette validity (vanilla blocks with valid properties), the sidecar and --max stay errors.
@@ -15,6 +20,7 @@ import {
   isPassable, isClimbable, supportOf, topOf,
 } from './blocks.mjs';
 import { BUILDING_TYPES, DEFAULT_PROFILE, PORT_KINDS, TYPE_RE, isPresetType, parseProfile, resolvePalette, stoneFamilyOf, woodFamilyOf } from './kit.mjs';
+import { checkConformance } from './massing.mjs';
 
 const DIRS6 = [['east', 1, 0, 0], ['west', -1, 0, 0], ['up', 0, 1, 0], ['down', 0, -1, 0], ['south', 0, 0, 1], ['north', 0, 0, -1]];
 const OPP = { east: 'west', west: 'east', up: 'down', down: 'up', south: 'north', north: 'south' };
@@ -293,13 +299,17 @@ export function checkStructure(sidecar, structure, opts = {}) {
   if (!/^[a-z0-9_]+$/.test(sidecar.id ?? '')) err(`sidecar: id '${sidecar.id}' must match [a-z0-9_]+`);
   if (sidecar.type !== undefined && !(typeof sidecar.type === 'string' && TYPE_RE.test(sidecar.type))) err(`sidecar: type '${sidecar.type}' must be a preset (${BUILDING_TYPES.join(', ')}) or an open type matching ${TYPE_RE}`);
   if (opts.type && sidecar.type !== opts.type) err(`sidecar: type '${sidecar.type}' but the request asked for '${opts.type}'`);
+  // phase 4c: a massing is checked with the massing profile only
+  const isMassing = sidecar.massing === true || opts.profile === 'massing';
+  if (sidecar.massing !== undefined && sidecar.massing !== true) err('sidecar: massing must be true or absent');
+  if (opts.profile === 'massing' && sidecar.massing !== true) err('sidecar: the request asked for a massing, but the sidecar has no massing: true (build it with lib/massing.mjs massing(bp), or new Blueprint({ massing: true }))');
   // open types (R4): a non-preset type is checked with its profile's rules; preset types keep their own profiles
-  const open = typeof sidecar.type === 'string' && !isPresetType(sidecar.type);
+  const open = !isMassing && typeof sidecar.type === 'string' && !isPresetType(sidecar.type);
   let prof = null;
   if (sidecar.profile !== undefined) {
     try { parseProfile(sidecar.profile); } catch (e) { err(`sidecar: ${e.message}`); }
   }
-  if (opts.profile !== undefined && open) {
+  if (opts.profile !== undefined && opts.profile !== 'massing' && open) {
     const want = parseProfile(opts.profile).list;
     if (JSON.stringify(sidecar.profile ?? null) !== JSON.stringify(want)) err(`sidecar: profile ${JSON.stringify(sidecar.profile ?? null)} but the request asked for ${JSON.stringify(want)} (set \`profile\` on the Blueprint)`);
   }
@@ -307,7 +317,7 @@ export function checkStructure(sidecar, structure, opts = {}) {
     try { prof = parseProfile(sidecar.profile ?? opts.profile ?? DEFAULT_PROFILE); } catch { prof = parseProfile(DEFAULT_PROFILE); }
   }
   /** does this building get rule `r` (a preset type: every rule of its own profile, as before 4b) */
-  const rule = (r) => !open || prof.rules.has(r);
+  const rule = (r) => (isMassing ? r === 'no_floating' : !open || prof.rules.has(r));
   const needsInterior = open ? ['interior', 'lit', 'floors_reachable', 'roof_closed', 'min_interior_volume'].filter((r) => prof.rules.has(r)) : [];
   if (!(sidecar.front in H_VEC)) err(`sidecar: front '${sidecar.front}' invalid`);
   if (sidecar.size && (sidecar.size.x !== size[0] || sidecar.size.y !== size[1] || sidecar.size.z !== size[2])) {
@@ -320,7 +330,7 @@ export function checkStructure(sidecar, structure, opts = {}) {
   if (sidecar.materials !== undefined && !(Array.isArray(sidecar.materials) && sidecar.materials.every((t) => typeof t === 'string' && BLOCKS[t]))) err('sidecar: materials must be a list of vanilla block ids');
   const w = sidecar.interior ?? null;
   // without an interior the light rule (an error) would be skipped: every type but custom declares one
-  if (!w && !open && sidecar.type !== 'custom') err(`sidecar: interior is required for type '${sidecar.type}' (the box agents and players live in; only 'custom' may omit it)`);
+  if (!w && !open && !isMassing && sidecar.type !== 'custom') err(`sidecar: interior is required for type '${sidecar.type}' (the box agents and players live in; only 'custom' may omit it)`);
   if (!w && open && needsInterior.length) err(`sidecar: interior is required: the profile of '${sidecar.type}' has ${needsInterior.join(', ')}`);
   if (w) {
     for (const f of ['minX', 'minY', 'minZ', 'maxX', 'maxY', 'maxZ']) if (!Number.isInteger(w[f])) err(`sidecar: interior.${f} must be an int`);
@@ -391,12 +401,21 @@ export function checkStructure(sidecar, structure, opts = {}) {
   }
 
   // ================================================================ rules new in Architect: warnings in phase 1
-  const ctx = { g, sidecar, anchors, interior: w, outside, doors: doors.doors, outsideDoors, imported, open, prof, rule };
+  const ctx = { g, sidecar, anchors, interior: w, outside, doors: doors.doors, outsideDoors, imported, open, prof, rule, isMassing };
   for (const rule of NEW_RULES) {
     try { warnings.push(...rule(ctx)); } catch (e) { warnings.push(`checker: rule ${rule.name} failed: ${e.message}`); }
   }
 
-  return { ok: errors.length === 0, errors, warnings };
+  // ---- massing conformance (phase 4c): the size cap is an error, the rest warnings
+  let conformance;
+  if (opts.massing !== undefined) {
+    const c = checkConformance(sidecar, opts.massing);
+    conformance = { ok: c.ok, errors: c.errors, issues: c.issues };
+    for (const m of c.errors) err(`massing: ${m}`);
+    for (const m of c.issues) warn(`massing: ${m}`);
+  }
+
+  return { ok: errors.length === 0, errors, warnings, ...(conformance ? { conformance } : {}) };
 }
 
 /** Check a Blueprint object (serialised exactly as write.mjs would). */
@@ -613,6 +632,7 @@ function barnOpening(g, sidecar, w) {
 
 /** Profile geometry: tower proportions, the barn's big entrance, the gatehouse passage, interior volume. */
 function profile(ctx) {
+  if (ctx.isMassing) return [];
   if (ctx.open) return openProfile(ctx);
   const { g, sidecar, interior: w } = ctx;
   const out = [];
@@ -764,4 +784,31 @@ function parts({ g, sidecar, imported }) {
   return out;
 }
 
-const NEW_RULES = [floating, reachability, enclosure, profile, paletteFamilies, survival, parts];
+/**
+ * The massing profile's walking rule (phase 4c, a warning): from the entrance a player walks to spawn and into the
+ * building (a cell the outside flood doesn't reach: through a door or an arch).
+ */
+function massingEntrance({ g, sidecar, anchors, outside, isMassing }) {
+  if (!isMassing) return [];
+  const out = [];
+  const wk = walker(g, (sidecar.approach?.length ?? 4) + 2);
+  const reached = wk.reach(startOf(anchors.entrance));
+  if (!reached.size) return ['massing: the entrance is not a place to stand (solid ground below, 2 free cells)'];
+  const sp = startOf(anchors.spawn);
+  if (sp && !reached.has(fmt(...sp))) out.push(`massing: spawn ${fmt(...sp)} cannot be walked to from the entrance`);
+  // inside: a cell the outside flood doesn't reach (behind a door), or one under cover with blocks on both sides (an arch, a passage)
+  const [sx, sy, sz] = g.size;
+  const any = (x, y, z) => { const c = g.at(x, y, z); return !!c && BLOCKS[c.name]?.family !== 'air'; };
+  const covered = (x, y, z) => { for (let yy = y + 2; yy < sy; yy++) if (any(x, yy, z)) return true; return false; };
+  const sides = (x, y, z, dx, dz) => [1, -1].every((s) => { for (let i = 1; ; i++) { const nx = x + s * i * dx; const nz = z + s * i * dz; if (nx < 0 || nz < 0 || nx >= sx || nz >= sz) return false; if (any(nx, y, nz)) return true; } });
+  const inside = [...reached].some((k) => {
+    const [x, y, z] = unfmt(k);
+    if (!g.inBox(x, y, z)) return false;
+    if (!outside.has(k)) return true;
+    return covered(x, y, z) && (sides(x, y, z, 1, 0) || sides(x, y, z, 0, 1)) && (sides(x, y + 1, z, 1, 0) || sides(x, y + 1, z, 0, 1));
+  });
+  if (!inside) out.push('massing: no way into the building from the entrance (put a door or an arch on the front: m.opening(<mass>, front, at, size))');
+  return out;
+}
+
+const NEW_RULES = [floating, reachability, enclosure, profile, paletteFamilies, survival, parts, massingEntrance];

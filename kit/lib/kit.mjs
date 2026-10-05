@@ -27,6 +27,8 @@ export const isPresetType = (t) => BUILDING_TYPES.includes(t);
 /** The checker rules a non-preset type may list in its profile (`min_interior_volume:<n>`, `passage:<w>x<h>`, `tall:<ratio>` take an argument). */
 export const PROFILE_RULES = ['door', 'roof_closed', 'floors_reachable', 'lit', 'no_floating', 'interior', 'min_interior_volume', 'passage', 'tall'];
 export const DEFAULT_PROFILE = ['door', 'lit', 'no_floating'];
+/** Roof forms a named part may record (`bp.part(name, fn, { roof })`, phase 4c massing conformance compares them). */
+export const ROOF_FORMS = ['gable', 'hip', 'flat', 'shed', 'none'];
 
 /**
  * Parse a profile (a list of rule strings, or a comma-separated string) into { rules: Set, minVolume?, passage?: {w,h},
@@ -506,6 +508,10 @@ export class Blueprint {
     this.partNames = [];
     this.cellPart = new Map();
     this.partStack = [];
+    /** part name -> metadata the sidecar records next to its box (`roof`, `storeys`; phase 4c) */
+    this.partInfo = new Map();
+    /** phase 4c: a massing (coarse volumes, lib/massing.mjs): the sidecar records `massing: true`, checked with the massing profile */
+    this.massing = !!o.massing;
   }
 
   /**
@@ -513,10 +519,13 @@ export class Blueprint {
    * write elsewhere takes the cell over). The sidecar gets `parts: { name: { box, cells } }`, which delta apply diffs
    * by: give every major mass a stable name (`main`, `wing_east`, `tower`, `porch`, `roof`). Calling it again with the
    * same name adds to the part. The checker warns with fewer than 2 parts or more than 20% of the cells in none.
+   * `info` (optional, phase 4c) is recorded next to the part's box: `roof` (one of ROOF_FORMS: the roof form this part
+   * carries, which massing conformance compares) and `storeys` (a whole number >= 1).
    */
-  part(name, fn) {
+  part(name, fn, info) {
     if (typeof name !== 'string' || !/^[a-z][a-z0-9_]{0,39}$/.test(name)) throw new Error(`${this.id}: part name '${name}' must match [a-z][a-z0-9_]{0,39}`);
     if (typeof fn !== 'function') throw new Error(`${this.id}: part('${name}', fn): fn must be a function that writes the part`);
+    if (info !== undefined) this.partMeta(name, info);
     if (!this.partNames.includes(name)) this.partNames.push(name);
     this.partStack.push(name);
     try {
@@ -527,7 +536,27 @@ export class Blueprint {
     return this;
   }
 
-  /** The parts as the sidecar writes them: { name: { box: [x0,y0,z0,x1,y1,z1] (template coordinates), cells } }. */
+  /** Record metadata on a part (see part()): `{ roof?: 'gable'|'hip'|'flat'|'shed'|'none', storeys?: int >= 1 }`. */
+  partMeta(name, info) {
+    if (!info || typeof info !== 'object' || Array.isArray(info)) throw new Error(`${this.id}: part '${name}': info must be an object { roof?, storeys? }`);
+    const out = { ...(this.partInfo.get(name) ?? {}) };
+    for (const [k, v] of Object.entries(info)) {
+      if (v === undefined) continue;
+      if (k === 'roof') {
+        if (!ROOF_FORMS.includes(v)) throw new Error(`${this.id}: part '${name}': roof '${v}' must be one of ${ROOF_FORMS.join(', ')}`);
+      } else if (k === 'storeys') {
+        if (!Number.isInteger(v) || v < 1) throw new Error(`${this.id}: part '${name}': storeys must be a whole number >= 1 (got ${JSON.stringify(v)})`);
+      } else throw new Error(`${this.id}: part '${name}': unknown info '${k}' (roof, storeys)`);
+      out[k] = v;
+    }
+    this.partInfo.set(name, out);
+    return this;
+  }
+
+  /**
+   * The parts as the sidecar writes them: { name: { box: [x0,y0,z0,x1,y1,z1] (template coordinates), cells, roof?,
+   * storeys? } }.
+   */
   partBoxes() {
     const acc = new Map(this.partNames.map((n) => [n, { min: [Infinity, Infinity, Infinity], max: [-Infinity, -Infinity, -Infinity], cells: 0 }]));
     for (const [k, n] of this.cellPart) {
@@ -538,7 +567,7 @@ export class Blueprint {
       a.cells++;
     }
     const out = {};
-    for (const [n, a] of acc) if (a.cells) out[n] = { box: [...a.min, ...a.max], cells: a.cells };
+    for (const [n, a] of acc) if (a.cells) out[n] = { box: [...a.min, ...a.max], cells: a.cells, ...(this.partInfo.get(n) ?? {}) };
     return out;
   }
 
@@ -1094,6 +1123,7 @@ export class Blueprint {
     // phase 4b: named parts (R3) and an open type's checker profile (R4)
     if (this.partNames.length) s.parts = this.partBoxes();
     if (this.profile !== undefined) s.profile = [...this.profile];
+    if (this.massing) s.massing = true;
     return s;
   }
 }

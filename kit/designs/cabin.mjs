@@ -79,7 +79,7 @@ export default function build({ palette = PALETTES.rustic, width = 9, depth = 7,
     bp.roofGable(-1, -1, X + 1, Z + 1, 5, { ridge: 'x', pitch: 1, gable: p.planks, gableInset: 1, gableFrom: 6 });
     // a small window in each gable
     for (const x of [0, X]) bp.window(x, 7, mid, x, 7, mid);
-  });
+  }, { roof: 'gable' });
 
   bp.part('chimney', () => {
     // ---------------------------------------------------------------- chimney (east side, through the overhang)
