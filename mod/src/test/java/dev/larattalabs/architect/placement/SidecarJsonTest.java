@@ -131,6 +131,26 @@ class SidecarJsonTest {
 		assertEquals(0, Site.idNumber("b3"));
 	}
 
+	/** The kit's examples (the bundled library) parse without warnings: anchors on the approach strip are fine. */
+	@Test
+	void kitExamplesParse() throws Exception {
+		java.nio.file.Path dir = java.nio.file.Path.of("..", "kit", "examples");
+		org.junit.jupiter.api.Assumptions.assumeTrue(java.nio.file.Files.isDirectory(dir), "no kit/examples in this checkout");
+		int n = 0;
+		try (var s = java.nio.file.Files.list(dir)) {
+			for (java.nio.file.Path ex : s.filter(java.nio.file.Files::isDirectory).toList()) {
+				String id = ex.getFileName().toString();
+				Blueprint bp = Blueprint.fromJson(JsonParser.parseString(java.nio.file.Files.readString(ex.resolve(id + ".blueprint.json")))
+					.getAsJsonObject());
+				assertEquals(id, bp.id());
+				assertEquals(List.of(), bp.warnings(), id);
+				assertNotNull(bp.interior(), id);
+				n++;
+			}
+		}
+		assertTrue(n >= 2);
+	}
+
 	@Test
 	void boxesIntersect() {
 		Anchors.Bounds a = new Anchors.Bounds(0, 0, 0, 4, 4, 4);

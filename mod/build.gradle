@@ -85,6 +85,11 @@ processResources {
 		include "package.json", "package-lock.json"
 		into "architect-sidecar"
 	}
+	// the kit's hand-written examples are the bundled library (data/architect_mc/library/<id>/, the library layout)
+	from("../kit/examples") {
+		exclude "**/.DS_Store"
+		into "data/architect_mc/library"
+	}
 	from("../kit") {
 		exclude "node_modules/**", "out/**", "**/.DS_Store"
 		into "architect-sidecar/kit"

@@ -39,6 +39,8 @@ public record Blueprint(String id, String name, String description, String type,
 	public static final String ENTRANCE = "entrance";
 	public static final String SPAWN = "spawn";
 	public static final String CAM_PREFIX = "cam_";
+	/** How far outside the template a non-camera anchor may lie (the approach strip). */
+	public static final int OUTSIDE_SLACK = 16;
 	/** What fills below a building's floor when the sidecar names no {@code foundationBlock}. */
 	public static final String DEFAULT_FOUNDATION = "minecraft:stone_bricks";
 	private static final Pattern BLOCK_ID = Pattern.compile("[a-z0-9_.\\-]+:[a-z0-9_./\\-]+");
@@ -175,9 +177,11 @@ public record Blueprint(String id, String name, String description, String type,
 			}
 		}
 		for (Anchor a : anchors.values()) {
-			boolean outside = a.name().startsWith(CAM_PREFIX) || a.name().equals(SPAWN); // cameras and the spawn (on the approach) may lie outside
-			if (!outside && (a.x() < 0 || a.y() < 0 || a.z() < 0 || a.x() > sizeX || a.y() > sizeY + 2 || a.z() > sizeZ)) {
-				w.add("anchor " + a.name() + " lies outside the template");
+			// cameras may stand anywhere; entrance, spawn and the rest may sit on the approach strip, up to 16 cells out
+			int m = OUTSIDE_SLACK;
+			if (!a.name().startsWith(CAM_PREFIX) && (a.x() < -m || a.y() < -m || a.z() < -m || a.x() > sizeX + m || a.y() > sizeY + m
+				|| a.z() > sizeZ + m)) {
+				w.add("anchor " + a.name() + " lies more than " + m + " cells outside the template");
 			}
 		}
 		if (interior != null && (interior.minX() < 0 || interior.minY() < 0 || interior.minZ() < 0 || interior.maxX() >= sizeX
