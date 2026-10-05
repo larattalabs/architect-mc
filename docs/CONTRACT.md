@@ -1182,7 +1182,7 @@ redirects it with notes. The detail design then takes the approved massing as bi
 
 ---
 
-# Phase 4d contract: batch placement, site groups, stages (A7, R1 minimum, R6, R7 queue) - DRAFT for Steward review
+# Phase 4d contract: batch placement, site groups, stages (A7, R1 minimum, R6, R7 queue) - FROZEN after Steward review
 
 Goal: place a whole set (8-20+ buildings, roads later) **over ticks, near the player, without lag spikes**, surviving relogs,
 with **one undo** for the group and **stages** that can be approved, skipped, reordered and undone. This phase stays on the
@@ -1271,3 +1271,96 @@ current box-snapshot backend; 4e swaps the backend for the journal underneath wi
 - **Survival shared crate:** 3 construction sites fed from one hopper chain, each finishes identical to instant placement, and the
   stock query matches.
 - gate-verifier checks the result.
+
+## Changes from Steward's review (steward-mc/docs/A4D-REVIEW.md), all accepted
+
+Where this section and the text above disagree, this section wins.
+
+### Lot fitting (MUST 1)
+
+- `Library.Entry` gains (1.4.0) `front` (the direction the entrance faces in the unrotated template), `anchors` (named template
+  cells, at least `entrance` and `spawn` when the design has them), `groundY` (the template y of the entrance's feet row, i.e. the
+  ground level the design expects) and `approach` (`{length, width, extendMax}`; `extendMax` = `Approach.EXTEND`, 8).
+- `Sites.fitToLot(blueprintId, BoundingBox lot, Direction streetSide, FitOptions)` -> `LotFit {origin, rotation, box,
+  predictedRestoreBox, Verdict}`. It does the geometry Steward would otherwise copy:
+  - **rotation** so the entrance faces `streetSide`;
+  - **across the street**: the box centred on the lot's street-side span (the entrance column centred when `centreOn = ENTRANCE`,
+    the default; `BOX` centres the footprint);
+  - **depth**: the front face set back from the lot's street edge by `setback` (default: the approach length, so the approach ends
+    on the lot edge and stays inside the lot); `approachIntoStreet: true` puts the front face on the lot edge and lets the approach
+    run out into the street;
+  - **y**: `lot.minY` is the ground height Steward gives; `origin.y = lot.minY - groundY`;
+  - the Verdict is the normal `check()` at that origin and rotation. A footprint that doesn't fit the lot (after rotation and
+    setback) refuses with the new reason `LOT_TOO_SMALL`. No placement happens; the caller passes `origin` and `rotation` into
+    a `PlaceRequest` (or a batch item).
+
+### Overlap rule (MUST 2)
+
+- The overlap check is **restore box against restore box** (`Sites.java` `check`): the new site's snapshot box against every
+  standing site's restore box, same dimension, inclusive bounds. It is **not** box+7: box+7 is only the region the gate hashes
+  to prove Remove exact.
+- A restore box = the template box, plus the approach strip in front of the entrance, plus one row below the lowest written
+  cell. Foundation fill stays inside the footprint. So **sides and back add nothing**: two lots side by side with **any gap,
+  including 0** (touching, not sharing a cell), never overlap. Only the front grows, by at most `approach.length + extendMax` rows
+  (the extension only happens while the path hasn't met the ground).
+- `Sites.overlapMargin(blueprintId)` -> `{front, sides: 0, back: 0}` with `front = length + extendMax` (worst case), and
+  `LotFit.predictedRestoreBox` gives the box for the actual terrain. Steward's default 3-block gap is fine.
+- **Approach into a street (4e):** in 4d roads aren't sites, so an approach running onto a road is ordinary terrain. In 4e, when
+  a road is a site, an approach stops at the first road cell it meets (the road counts as ground; the approach writes nothing
+  there) and that does not count as overlap. The 4e contract states it in full.
+
+### Actor and mode in a persisted queue (MUST 3)
+
+- An item persists `actor` (UUID, nullable) and its **mode resolved at queue time** (`INSTANT` or `CONSTRUCTION`), from the same
+  Verdict `check()` returns. It never stores a `ServerPlayer`.
+- Placement does not need the actor: INSTANT writes cells, CONSTRUCTION is fed from its crate. The actor is only attribution
+  (`owner` default) and is resolved by UUID when an event wants a name. An actor who logged out or left changes nothing.
+- An API caller may queue **without an actor** (`actor = null`). Then INSTANT is allowed only where an actorless INSTANT is
+  allowed: a creative world, or a world whose survival toggle is off. Elsewhere `queue` refuses the item with `NOT_ALLOWED`.
+  That is Steward's Patron mode.
+- If the world's survival toggle is switched on while INSTANT items are still queued, those items are **not converted**: each
+  fails with `NOT_ALLOWED` ("survival was switched on after this was queued"); the caller re-queues them. The reverse (toggle off,
+  CONSTRUCTION queued) keeps them as construction sites.
+
+### Mapping back to lots (SHOULD 4)
+
+- `SiteView` gains `batchId` and `itemKey` (both nullable), and a site's `ext` is the batch `ext` merged with the item's own
+  `ext` (item keys win). Every item event (`ITEM_PLACED/FAILED/WAITING`) carries `batchId`, `itemKey` and that merged `ext`. All
+  of it survives restarts.
+
+### Proximity ordering (SHOULD 5)
+
+- `Batch.proximityFirst` (default `true` with `LOADED_ONLY`, `false` with `LOAD_BOUNDED`): within a stage, among items whose
+  `after` dependencies are met, the one nearest any player goes first; ties keep list order.
+
+### Cancel and remove semantics (SHOULD 6)
+
+- `cancelBatch(id)`: placed items stay placed and stay in the group; the item being placed is **rolled back** (restored from its
+  snapshot, exact, as Remove during `placing`); items not started are dropped, each with `ITEM_FAILED(reason CANCELLED)`; then
+  `BATCH_DONE(cancelled)`. The group remains.
+- `removeGroup` while a batch of that group is still running: cancels that batch first (as above), then removes every placed site
+  in reverse placement order.
+- New Reason values: `CANCELLED`, `LOT_TOO_SMALL`, `TIMED_OUT` (the wait limit).
+
+### Throughput numbers (SHOULD 7)
+
+- The gate records cells/s at the 4 ms default (and at 1 and 10 ms), and the wall time of the 12-lot village with the player
+  standing in the middle (`LOADED_ONLY`), in `artifacts/gate4d/REPORT.md` and a machine-readable `throughput.json` for Steward's
+  estimates and mega_bench.
+
+### Growing a group (SHOULD 8)
+
+- A `queue(Batch)` naming an existing `group` appends its sites to that group, and its stages are appended after the group's
+  existing stages, in the order given. Stage names must be unique within the group (a duplicate refuses the batch). The batch
+  owner must equal the group owner. `removeGroup` and stage undo cover the appended sites like the original ones.
+
+### Gate additions
+
+- `fitToLot` on 4 lots of each street side gives entrances facing the street, with the approach inside the lot by default and
+  out in the street with `approachIntoStreet`.
+- Two lots with a 0-block side gap both place; a third whose approach would cross a neighbour's front refuses `OVERLAP`.
+- Relog mid-batch with the actor gone, and an actorless Patron batch in a creative world, both finish identically.
+- Toggle survival on with INSTANT items queued: they fail `NOT_ALLOWED`, nothing half-placed.
+- `cancelBatch` mid-item leaves that item's region exactly as before; a second batch appends a stage to an existing group and
+  `removeGroup` takes both batches' sites down exactly.
+- Throughput numbers recorded.
