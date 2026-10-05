@@ -150,7 +150,8 @@ public final class Journal {
 	 */
 	public record Undo(String group, long at, Map<Long, Value> written, List<HandDown> handed) {
 		public Undo {
-			written = Map.copyOf(written);
+			// not Map.copyOf: its open addressing degrades to quadratic on packed block positions (Long hash collisions)
+			written = java.util.Collections.unmodifiableMap(new java.util.HashMap<>(written));
 			handed = List.copyOf(handed);
 		}
 	}

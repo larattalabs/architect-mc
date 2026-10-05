@@ -351,7 +351,7 @@ public final class JournalStore {
 	/** Every section key of {@code dimension} that has entries (DevBridge, sync). Server thread. */
 	public Set<Long> sectionsOf(String dimension) {
 		Long2ObjectOpenHashMap<List<String>> m = sectionMap.get(dimension);
-		return m == null ? Set.of() : Set.copyOf(m.keySet());
+		return m == null ? Set.of() : java.util.Collections.unmodifiableSet(new java.util.HashSet<>(m.keySet()));
 	}
 
 	Path entryDir(String id) {
