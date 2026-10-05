@@ -251,7 +251,7 @@ and make variants before you add a key.
 
 1. `ANTHROPIC_API_KEY` in the environment;
 2. the key pasted into the Status tab, which the helper stores in `architect/sidecar-data/secrets.json`
-   (owner-only, never logged, never in the game's files);
+   (readable only by you, never logged, never in the mod's config or your worlds);
 3. a cloud provider supported by the Agent SDK: Amazon Bedrock, Google Vertex AI or Microsoft Foundry.
 
 **Personal use only: your claude.ai login.** If you use the Claude Code CLI, the Status toggle **Use my claude.ai
@@ -338,9 +338,9 @@ Point it at your checkout's helper with `ARCHITECT_SIDECAR_DIR=$PWD/../sidecar`.
 localhost API in dev runs (port 7891) that scripts use to drive the screen, the ghost and the camera and to take
 screenshots: `node tools/devcli.mjs help`.
 
-Every in-game image in this README was taken that way, in a dev world and without any Claude calls:
-`tools/run-readme-client.sh`, `node tools/shoot.mjs tools/scenes/readme.json --port 7991`, then
-`node tools/readme-images.mjs`. The Town House is a real Claude design from the phase 2 gate run. Its variants and
+Every in-game image in this README was taken that way, in a dev world and without any Claude calls.
+`tools/run-readme-client.sh` starts that client, the world, placements and camera positions are recorded in
+`tools/scenes/readme.json`, and `tools/readme-images.mjs` converts the raw shots. The Town House is a real Claude design from the phase 2 gate run. Its variants and
 the import were made through the UI. The cabin, tower, tavern and gatehouse are the kit's hand-written examples.
 
 <br>

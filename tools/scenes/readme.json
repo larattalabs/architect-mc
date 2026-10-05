@@ -1,9 +1,9 @@
 {
   "notes": [
-    "README screenshots (docs/img/readme/). Run: tools/run-readme-client.sh, then node tools/shoot.mjs tools/scenes/readme.json --port 7991; then node tools/readme-images.mjs.",
+    "A record of how the README screenshots (docs/img/readme/) were set up: world, placements, cameras and UI steps. It was written from the session that took them and has not been replayed end to end; to replay it, use a fresh dev world and sidecar-data. Run: tools/run-readme-client.sh, then node tools/shoot.mjs tools/scenes/readme.json --port 7991; then node tools/readme-images.mjs.",
     "World: the dev client's own 'Architect Dev' (AutoWorld: creative, peaceful, natural terrain, seed 2026). Never a real world.",
     "Library: mod/run/architect/library/ holds a copy of the phase 2 gate run's Claude design gen_gate_two_house and its birch and fortress variants (in the copies, name 'Gate Two House' was changed to 'Town House'). The bundled kit examples (cabin, tower, tavern, gatehouse) come with the mod.",
-    "The variant jobs below are v1-v4 only in a fresh sidecar-data dir. Shots are in the order they were taken: placements come before the shots that need them.",
+    "The variant jobs below are v1-v4 only in a fresh sidecar-data dir, and the site ids (s1) only in a fresh world. Placements (in each shot's requests/after) come before the shots that need them.",
     "designs-progress and status need the other modes: designs.jpg with --stub (tools/run-readme-client.sh --stub; submit a design and shoot while its status is 'designing'), status.jpg with --helper (no credentials; never submit a design there)."
   ],
   "setup": [
