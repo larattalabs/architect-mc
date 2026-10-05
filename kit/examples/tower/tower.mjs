@@ -111,7 +111,7 @@ export default function build({ palette: p = PALETTES.fortress, floors = 3, widt
         bp.lantern(x, deck + 4, z);
       }
     }
-  });
+  }, { roof: roof === 'hip' ? 'hip' : 'flat' });
 
   bp.part('landing', () => {
     // ---------------------------------------------------------------- landing + path

@@ -73,7 +73,7 @@ export default function build({ palette: p = PALETTES.fortress, passage = 3, dep
     bp.roofFlat(0, 0, X, Z, 9, { deck: p.stone, parapet: p.stone, crenels });
     bp.floor(1, 1, X - 1, Z - 1, 9, p.stoneSlab);
     for (const [x, z] of [[1, 1], [X - 1, 1], [1, Z - 1], [X - 1, Z - 1]]) bp.slab(x, 9, z, 'double', p.stoneSlab);
-  });
+  }, { roof: 'flat' });
 
   bp.part('openings', () => {
     // ---------------------------------------------------------------- doors, windows, torches

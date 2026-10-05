@@ -1,17 +1,21 @@
 #!/usr/bin/env node
-// node kit/check.mjs <file.nbt> <sidecar.json> [--max x,y,z] [--type <t>] [--imported] [--json]
+// node kit/check.mjs <file.nbt> <sidecar.json> [--max x,y,z] [--type <t>] [--profile massing] [--massing <massing.blueprint.json>] [--imported] [--json]
 //
 // Checks a template + sidecar pair that has no design source (an import, a library entry) with lib/check.mjs: the
 // same rules and output as build.mjs (warning/error lines and `check: OK` / `check: FAILED`, or with --json one line
 // { ok, errors[], warnings[], nbt, sidecar }). --imported applies the import severity (lib/check.mjs header).
+// --profile massing: the request was a massing (the sidecar must say massing: true; a massing sidecar is checked with the
+// massing profile anyway). --massing <file>: the massing this design was detailed from; adds massing conformance
+// (errors: the size cap; warnings `massing: ...`) and, with --json, `conformance: { ok, errors[], issues[] }`.
 // Exit code 0 = OK, 1 = the check failed, 2 = bad usage / unreadable files.
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { checkFiles, parseMax } from './lib/check.mjs';
+import { readMassingArg } from './lib/massing.mjs';
 import { BUILDING_TYPES, TYPE_RE } from './lib/kit.mjs';
 
-const USAGE = 'usage: node kit/check.mjs <file.nbt> <sidecar.json> [--max x,y,z] [--type <t>] [--imported] [--json]';
+const USAGE = 'usage: node kit/check.mjs <file.nbt> <sidecar.json> [--max x,y,z] [--type <t>] [--profile massing] [--massing <massing.blueprint.json>] [--imported] [--json]';
 
 export function parseCheckArgs(argv) {
   const o = { files: [] };
@@ -22,7 +26,12 @@ export function parseCheckArgs(argv) {
     else if (a === '--type') {
       o.type = val();
       if (!TYPE_RE.test(o.type)) throw new Error(`--type '${o.type}' must be a preset (${BUILDING_TYPES.join(', ')}) or an open type matching ${TYPE_RE}`);
-    } else if (a === '--imported') o.imported = true;
+    } else if (a === '--profile') {
+      const v = val();
+      if (v !== 'massing') throw new Error(`--profile '${v}': check.mjs takes only --profile massing (an open type's profile is read from the sidecar)`);
+      o.profile = 'massing';
+    } else if (a === '--massing') o.massing = readMassingArg(val());
+    else if (a === '--imported') o.imported = true;
     else if (a === '--json') o.json = true;
     else if (a.startsWith('-')) throw new Error(`unknown option ${a}`);
     else o.files.push(path.resolve(a));
@@ -33,7 +42,7 @@ export function parseCheckArgs(argv) {
 
 /** Print a check result the way build.mjs does. */
 export function report(result, { json, nbt, sidecar }) {
-  if (json) console.log(JSON.stringify({ ok: result.ok, errors: result.errors, warnings: result.warnings, nbt, sidecar }));
+  if (json) console.log(JSON.stringify({ ok: result.ok, errors: result.errors, warnings: result.warnings, nbt, sidecar, ...(result.conformance ? { conformance: result.conformance } : {}) }));
   else {
     for (const w of result.warnings) console.log(`warning: ${w}`);
     for (const e of result.errors) console.log(`error: ${e}`);
@@ -59,7 +68,7 @@ function main() {
       return;
     }
   }
-  const result = checkFiles(nbt, sidecar, { max: o.max, type: o.type, imported: o.imported });
+  const result = checkFiles(nbt, sidecar, { max: o.max, type: o.type, imported: o.imported, ...(o.profile ? { profile: o.profile } : {}), ...(o.massing ? { massing: o.massing } : {}) });
   report(result, { json: o.json, nbt, sidecar });
   process.exitCode = result.ok ? 0 : 1;
 }

@@ -1,0 +1,108 @@
+{
+  "id": "cabin_massing",
+  "name": "Log Cabin (massing)",
+  "description": "",
+  "type": "cabin",
+  "tags": [],
+  "size": {
+    "x": 11,
+    "y": 12,
+    "z": 12
+  },
+  "groundY": 1,
+  "front": "south",
+  "materials": [
+    "minecraft:spruce_planks",
+    "minecraft:dark_oak_stairs",
+    "minecraft:cobblestone",
+    "minecraft:dark_oak_planks",
+    "minecraft:dark_oak_slab",
+    "minecraft:glass",
+    "minecraft:spruce_log",
+    "minecraft:dirt_path",
+    "minecraft:spruce_door"
+  ],
+  "foundationBlock": "minecraft:cobblestone",
+  "approach": {
+    "length": 4,
+    "width": 3,
+    "block": "minecraft:dirt_path",
+    "slab": "minecraft:cobblestone_slab"
+  },
+  "anchors": {
+    "entrance": {
+      "x": 5.5,
+      "y": 1,
+      "z": 8.5,
+      "yaw": 180,
+      "pitch": 0
+    },
+    "spawn": {
+      "x": 5.5,
+      "y": 1,
+      "z": 11.5,
+      "yaw": 180,
+      "pitch": 0
+    }
+  },
+  "source": "cabin_massing.mjs",
+  "palette": {
+    "preset": "rustic",
+    "wood": "spruce",
+    "stone": "cobblestone",
+    "roof": "dark_oak",
+    "accent": "dark_oak"
+  },
+  "parts": {
+    "main": {
+      "box": [
+        1,
+        0,
+        1,
+        9,
+        5,
+        7
+      ],
+      "cells": 378,
+      "storeys": 1,
+      "roof": "gable"
+    },
+    "roof": {
+      "box": [
+        0,
+        5,
+        0,
+        10,
+        9,
+        8
+      ],
+      "cells": 164,
+      "roof": "gable"
+    },
+    "chimney": {
+      "box": [
+        10,
+        0,
+        4,
+        10,
+        11,
+        4
+      ],
+      "cells": 12,
+      "storeys": 1,
+      "roof": "none"
+    },
+    "porch": {
+      "box": [
+        2,
+        0,
+        8,
+        8,
+        4,
+        11
+      ],
+      "cells": 51
+    }
+  },
+  "massing": true
+}

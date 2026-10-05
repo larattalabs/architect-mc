@@ -128,7 +128,8 @@
         11,
         8
       ],
-      "cells": 125
+      "cells": 125,
+      "roof": "flat"
     },
     "openings": {
       "box": [

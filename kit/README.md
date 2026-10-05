@@ -20,6 +20,8 @@ node kit/build.mjs lair --type hellish_lair --profile door,lit,no_floating      
 node kit/tools/components.mjs <components.mjs> --bible <bible.json|name> --out <dir> [--json]  # component test frame + sheet.png
 node kit/tools/bible.mjs validate <bible.json> [--scope settlement] | builtin [<name>] | roles  # style bibles
 node kit/tools/preset-builds.mjs                                               # the presets still build byte-identically
+node kit/build.mjs tavern --massing kit/massings/tavern_massing/tavern_massing.blueprint.json  # detail vs its massing
+node kit/tools/massings.mjs                                                    # build + render the example massings
 node --test kit/test/*.test.mjs                                                # tests (incl. the param x palette sweep)
 ```
 
@@ -126,6 +128,74 @@ or more than 20% of the template's cells outside every part. The examples declar
 `roof_closed`, `floors_reachable`, `lit`, `no_floating`, `interior`, `min_interior_volume:<n>`, `passage:<w>x<h>`,
 `tall:<ratio>`; without one it gets `door`, `lit`, `no_floating`. `lit` (and the other interior rules) require `interior`.
 Preset types keep their profiles. `build.mjs --profile` passes the request's profile; the design must declare the same one.
+
+## Massing designs (phase 4c)
+
+A massing is the cheap first pass: the building's volumes, roof forms and major openings, no detail. It is an ordinary
+design (`designs/<id>.mjs`) that builds with `lib/massing.mjs`; its sidecar says `massing: true`, and the detail design
+that follows keeps its **part names** and **boxes**.
+
+```js
+import { Blueprint, PALETTES } from '../lib/kit.mjs';
+import { massing } from '../lib/massing.mjs';
+export const id = 'inn_massing';
+export default function build({ palette: p = PALETTES.rustic } = {}) {
+  const bp = new Blueprint({ id, type: 'tavern', size: [16, 17, 12], origin: [1, 0, 1], palette: p });
+  const m = massing(bp);                                   // marks it massing: true
+  m.mass('hall', [0, 0, 0, 13, 5, 8], { wall: 'foundation' });                    // stone ground storey
+  m.opening('hall', 'south', [6, 1], [2, 2]);              // the double door (a door: it starts on the feet row)
+  m.mass('lodging', [0, 6, 0, 13, 10, 8], { wall: 'wall_alt', roof: 'gable', ridge: 'x', roofPart: 'roof' });
+  bp.part('roof', () => bp.fill([14, 0, 4, 14, 16, 4], p.foundation));  // the chimney goes with the roof
+  bp.floor(5, 9, 8, 10, 0, p.path);
+  bp.spot('entrance', 6, 9, 180);
+  bp.spot('spawn', 7, 10, 180);
+  return bp;
+}
+```
+
+- `m.mass(name, [x0,y0,z0,x1,y1,z1], { roof, ridge, storeys, overhang, wall, roofPart, high, parapet, crenels })`: a closed
+  shell over the box (design coordinates; y0 the floor row, y1 the top row, where a sloped roof's eaves sit). `roof`:
+  `gable` | `hip` | `shed` (stairs and slabs of the roof role, overhang 1 by default) | `flat` (a roof-role deck on row
+  y1+1 inside a wall parapet, `crenels` for merlons) | `none` (default). `ridge` `x`/`z` (default the longer side; for a
+  shed the axis of the high edge, `high` its side, default the back). `storeys` puts floors inside and is recorded.
+  `wall` is the shell's role (`wall` by default; `foundation` reads as stone, `wall_alt` as plaster). The roof goes in
+  part `roofPart` (default the mass itself). Every mass is a named part; its roof form is recorded as `parts.<name>.roof`
+  (and on `roofPart`).
+- `m.opening(mass, face, [u, y], [w, h], { kind })`: a door (doors on the bottom two rows, glass above; the default when
+  it starts on the mass's first feet row and is 2+ tall), `window` (glass) or `arch` (open) in the `face` wall of that
+  mass. `u` is the first column along the face (x on north/south, z on east/west). It stays in the mass's part.
+- `m.stilts(name, box, spacing)`: frame-role posts every `spacing` cells (corners always) from y0 to y1; put a mass on
+  top at y1 + 1.
+- The materials are the roles in flat form (shell, foundation on the ground row, floor, roof, glass, frame), so a
+  massing reads in the bible's colours and re-skins with the palette. Plain `bp.part(name, () => bp.floor(...))` adds
+  ground, paths or a chimney column to a part.
+
+**Names.** Name masses by what they are for: `hall`, `lodging`, `wing_east`, `tower`, `porch`, `roof`, not `box1`. The
+names carry over: the detail design wraps the same volumes in `bp.part('<same name>', fn, { roof: '<same form>' })`,
+inside the same boxes (each face within 1), and may add parts of its own (`openings`, `furnishings`):
+
+```js
+bp.part('hall', () => { /* stone walls, the taproom floor, ... */ });
+bp.part('lodging', () => { /* timber frame, plaster infill, ... */ });
+bp.part('roof', () => { bp.roofGable(-1, -1, X + 1, Z + 1, 10, { ridge: 'x' }); bp.chimney(X + 1, 4, 0, ridge + 1); }, { roof: 'gable' });
+bp.part('openings', () => { /* doors and windows: an extra part is fine */ });
+```
+
+**Checker profile `massing`** (any sidecar with `massing: true`; `--profile massing` says the request was one): the
+structure, palette, sidecar and anchor rules and `--max` as errors; warnings for floating blocks, the named parts (at
+least 2) and the walk from the entrance to spawn and into the building (a door or an arch). No door, light, interior or
+type-geometry rules.
+
+**Conformance** (`build.mjs <id> --massing <massing.blueprint.json>`, `check.mjs ... --massing <file>`, lib:
+`checkConformance(detailSidecar, massingSidecar)`): the detail's size is at most the massing's + 2 on every axis (an
+**error**, the cap binds; with `--max` the request's limit applies too). Warnings, prefixed `massing:`: a massing part
+missing from the detail, a part box more than 1 off on any face, the size more than 2 under, a roof form that differs
+where both record one. `--json` adds `conformance: { ok, errors[], issues[] }`.
+
+**Examples.** `massings/<id>_massing.mjs` are massings of the four examples (same part names, boxes within 1, the
+examples record their roofs); `node kit/tools/massings.mjs` builds and renders them into `massings/<id>_massing/` (not
+`examples/`, which is the mod's bundled library) and checks each example against its massing (0 issues).
+`test/fixtures/massing/` holds a deliberately non-conforming pair.
 
 ## Checker (`lib/check.mjs`)
 
