@@ -436,7 +436,9 @@ public final class Batches {
 		Site.Member member = new Site.Member(b.group, b.id, i.key);
 		try {
 			// instant or construction: written over ticks; a construction site is converted when its last cell is written
+			long t0 = System.nanoTime();
 			PlaceJob job = Sites.beginPlacing(level, bp, origin, rot, i.force, b.owner, i.ext, member, i.construction, i.actor);
+			Placement.noteStart(job.siteId, System.nanoTime() - t0);
 			i.status = QItem.Status.PLACING;
 			i.siteId = job.siteId;
 			i.reason = null;

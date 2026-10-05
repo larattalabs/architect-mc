@@ -483,6 +483,8 @@ public final class Placement {
 		}
 
 		long tickStart;
+		long startMax;
+		long convertMax;
 		boolean tickActive;
 		long serverMax;
 
@@ -503,7 +505,7 @@ public final class Placement {
 
 		void reset() {
 			tickActive = false;
-			ticks = tickSum = tickMax = serverMax = workTicks = workSum = workMax = cells = firstWorkAt = lastWorkAt = 0;
+			ticks = tickSum = tickMax = serverMax = startMax = convertMax = workTicks = workSum = workMax = cells = firstWorkAt = lastWorkAt = 0;
 			over50 = 0;
 		}
 
@@ -515,6 +517,8 @@ public final class Placement {
 			o.addProperty("msptMean", ticks == 0 ? 0 : tickSum / 1e6 / ticks);
 			o.addProperty("ticksOver50ms", over50);
 			o.addProperty("serverMsptMax", serverMax / 1e6);
+			o.addProperty("jobStartMsMax", startMax / 1e6);
+			o.addProperty("convertMsMax", convertMax / 1e6);
 			o.addProperty("placementTicks", workTicks);
 			o.addProperty("placementMsMax", workMax / 1e6);
 			o.addProperty("placementMsMean", workTicks == 0 ? 0 : workSum / 1e6 / workTicks);
@@ -526,6 +530,18 @@ public final class Placement {
 			o.addProperty("jobs", JOBS.size());
 			return o;
 		}
+	}
+
+	/** A job's start (checks, snapshot capture and write, leaf hold), timed: the unsliced part of a placement. */
+	static void noteStart(String siteId, long nanos) {
+		STATS.startMax = Math.max(STATS.startMax, nanos);
+		Architect.LOGGER.info("Placement of {} started in {} ms (checks, snapshot, leaf ring and hold)", siteId, String.format("%.2f", nanos / 1e6));
+	}
+
+	/** A construction site's conversion (target capture and write, clearing its cells, the crate), timed. */
+	static void noteConvert(String siteId, long nanos) {
+		STATS.convertMax = Math.max(STATS.convertMax, nanos);
+		Architect.LOGGER.info("Construction site {} converted in {} ms", siteId, String.format("%.2f", nanos / 1e6));
 	}
 
 	/** The stats as JSON ({@code reset}: start over after reading). Server thread. */

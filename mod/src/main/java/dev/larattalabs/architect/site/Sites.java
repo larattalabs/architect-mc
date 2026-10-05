@@ -1388,7 +1388,9 @@ public final class Sites {
 			SiteGroupRec g = cur.group() == null ? null : group(cur.group());
 			Builder.SHARED_CRATE.set(g != null && g.sharedCrate() ? g.id() : null);
 			try {
+				long t0 = System.nanoTime();
 				done = done.withConstruction(Builder.convert(level, bp, built, cur.id(), job.placer));
+				Placement.noteConvert(cur.id(), System.nanoTime() - t0);
 			} catch (SiteException | RuntimeException e) {
 				Architect.LOGGER.error("Making {} a construction site failed; rolling it back", cur.id(), e);
 				job.broken = "making the construction site failed (" + e.getMessage() + ")";
