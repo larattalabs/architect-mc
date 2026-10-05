@@ -104,6 +104,23 @@ public final class TickDeferral {
 		}
 	}
 
+	/**
+	 * The held ticks without leaf ticks: a restore drops these, so leaves keep the distances the snapshot (and the leaf ring)
+	 * put back instead of relaxing to new ones.
+	 */
+	static List<Held> withoutLeaves(List<Held> held) {
+		List<Held> out = new ArrayList<>();
+		for (Held h : held) {
+			Identifier key = Identifier.tryParse(h.type());
+			boolean leaves = !h.fluid() && key != null && BuiltInRegistries.BLOCK.getOptional(key).map(b -> b instanceof net.minecraft.world.level.block.LeavesBlock)
+				.orElse(false);
+			if (!leaves) {
+				out.add(h);
+			}
+		}
+		return out;
+	}
+
 	static JsonArray toJson(List<Held> held) {
 		JsonArray a = new JsonArray();
 		held.forEach(h -> a.add(h.toJson()));

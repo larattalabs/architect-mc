@@ -282,12 +282,21 @@ async function base() {
     const f = await fit('cabin', [x - 11, y, -15, x + 11, y + 30, 15], 'north');
     far[k] = { key: k, bp: 'cabin', lot: [x - 11, y, -15, x + 11, y + 30, 15], at: f.at, rot: f.rot, box: f.box, force: true, fit: f };
   }
+  await cmd(`/tp @s ${p.x} ${p.y + 2} ${p.z}`);
+  await call('dev.waitChunks', { timeoutMs: 60_000 }, 90_000).catch(() => {});
+  await sleep(3000);
   const ox = Math.floor(p.x) - 50;
   const oz = Math.floor(p.z) - 57;
   const center = [ox + 26 * 2 - 2 + 0.5, 0, oz + 38 + 4 + 0.5]; // the column gap between columns 1 and 2, in row 1's street
   center[1] = (await groundAt(Math.floor(center[0]), Math.floor(center[2]))) + 0;
   ctx.center = center;
   await tpCenter();
+  // animals and stray drops in a lot make it wait (OCCUPIED): the gate's base world has none (mob spawning is off)
+  await cmd('/kill @e[type=!minecraft:player]');
+  await sleep(1000);
+  await cmd('/kill @e[type=minecraft:item]');
+  await cmd('/kill @e[type=minecraft:experience_orb]');
+  await sleep(500);
   const lots = [];
   for (let i = 0; i < 12; i++) {
     const b = lotBox(i, ox, oz);
@@ -793,6 +802,37 @@ async function toggle() {
   await leaveWorld();
 }
 
+async function undodebug() {
+  await fresh('G4D Dbg');
+  const keys = (process.argv[3] ?? 'L0,L2').split(',');
+  const ls = ctx.lots.filter((l) => keys.includes(l.key));
+  const pre = {};
+  for (const l of ls) pre[l.key] = await hash(region(l), true);
+  await mark();
+  let rm;
+  if (process.argv[4] === 'atomic') {
+    const sites = [];
+    for (const k of ctx.order) {
+      const l = ctx.lots.find((x) => x.key === k);
+      sites.push((await result(await api(`place ${l.bp} ${l.at[0]} ${l.at[1]} ${l.at[2]} INSTANT unowned noactor ${l.rot} force`))).siteId);
+    }
+    rm = [];
+    for (const s of sites.reverse()) rm.push(await result(await api(`remove ${s} - noforce`)));
+  } else {
+    const id = await queue({ id: 'dbg', items: ctx.lots.map((l) => item(l)) });
+    const done = await waitBatch(id, 600_000);
+    rm = await result(await api(`sgremove ${done.group}`), 600_000);
+  }
+  const out = {};
+  for (const l of ls) {
+    const b = await hash(region(l), true);
+    out[l.key] = diff(pre[l.key].cells, b.cells, 40);
+  }
+  const events = (await since()).filter((e) => /SITE_|ITEM_PLACED/.test(e.event)).map((e) => `${e.event} ${e.id ?? e.site} ${e.key ?? ''}`);
+  await leaveWorld();
+  return { rm, out, events };
+}
+
 async function all() {
   for (const s of ['base', 'equality', 'relog', 'waiting', 'stages', 'lotfit', 'gap0', 'survival', 'patron', 'toggle', 'throughput']) {
     log(`== ${s}`);
@@ -800,7 +840,7 @@ async function all() {
   }
 }
 
-const steps = { probe, base, equality, relog, waiting, stages, lotfit, gap0, survival, patron, toggle, throughput, all };
+const steps = { probe, undodebug, base, equality, relog, waiting, stages, lotfit, gap0, survival, patron, toggle, throughput, all };
 
 async function run(name) {
   for (const k of Object.keys(results)) delete results[k];

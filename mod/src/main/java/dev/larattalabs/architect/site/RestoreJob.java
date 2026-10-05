@@ -34,6 +34,8 @@ final class RestoreJob implements Placement.Job {
 	final @Nullable String itemKey;
 	final List<TickDeferral.Held> held = new ArrayList<>();
 	@Nullable TemplateWriter writer;
+	/** The snapshot being restored (its leaf ring is applied at the end). */
+	@Nullable CompoundTag tag;
 	@Nullable List<String> dropsBefore;
 	@Nullable String broken;
 	boolean done;
@@ -75,7 +77,6 @@ final class RestoreJob implements Placement.Job {
 			return true;
 		}
 		if (writer == null) {
-			CompoundTag tag;
 			try {
 				tag = Sites.readSnapshot(s.snapshot());
 			} catch (IOException | RuntimeException e) {
@@ -99,10 +100,11 @@ final class RestoreJob implements Placement.Job {
 		if (!writer.done()) {
 			return false;
 		}
-		TickDeferral.release(level, held);
+		// as Sites.restoreQuietly: the leaf ticks the restore scheduled are dropped
+		TickDeferral.release(level, TickDeferral.withoutLeaves(held));
 		held.clear();
 		Sites.Drops drops = Sites.Drops.of(level, s.restoreBox(), dropsBefore);
-		result = ROLLBACK.equals(purpose) ? Sites.finishRollback(server, level, s, drops) : Sites.finishTickedRemove(server, level, s, drops);
+		result = ROLLBACK.equals(purpose) ? Sites.finishRollback(server, level, s, drops, tag) : Sites.finishTickedRemove(server, level, s, drops, tag);
 		done = true;
 		return true;
 	}

@@ -689,7 +689,7 @@ public final class Sites {
 		CompoundTag before;
 		String snapshot = id + "-" + System.currentTimeMillis() + ".nbt";
 		try {
-			before = capture(level, snapBox);
+			before = captureWithRing(level, snapBox);
 			writeSnapshot(snapshot, before);
 		} catch (IOException e) {
 			Architect.LOGGER.warn("Could not save the snapshot of {}", Anchors.str(snapBox), e);
@@ -896,8 +896,8 @@ public final class Sites {
 			// Remove during placing cancels the job and restores the snapshot (phase 4d): it was never placed
 			Placement.abort(server, id, "removed while it was being placed");
 			Drops drops = Drops.before(level, b.restoreBox());
-			restoreTemplate(level, b.restoreBox(), before);
-			return finishRollback(server, level, b, drops);
+			restoreQuietly(level, b.restoreBox(), before);
+			return finishRollback(server, level, b, drops, before);
 		}
 		if (!force) {
 			List<String> blockers = removalBlockers(level, b);
@@ -908,15 +908,41 @@ public final class Sites {
 		// a construction site deconstructs: refunds for paid cells still standing, the player's blocks and the crate's stock
 		Builder.Deconstruction dec = b.construction() != null ? Builder.prepareDeconstruct(level, b, before) : null;
 		Drops drops = Drops.before(level, b.restoreBox());
-		restoreTemplate(level, b.restoreBox(), before);
-		return afterRestore(level, b, dec, drops, force, true);
+		restoreQuietly(level, b.restoreBox(), before);
+		return afterRestore(level, b, dec, drops, force, true, before);
+	}
+
+	/** The key of the leaf ring in a snapshot tag ({@link LeafGuard#ring}). */
+	static final String RING = "architect_leafRing";
+
+	/** {@link #capture}, plus the leaf ring around the box (phase 4d), so Remove can give the leaves around it back their distances. */
+	static CompoundTag captureWithRing(ServerLevel level, Anchors.Bounds box) throws IOException {
+		CompoundTag tag = capture(level, box);
+		tag.putIntArray(RING, LeafGuard.ring(level, box));
+		return tag;
+	}
+
+	/**
+	 * {@link #restoreTemplate} with the leaf ticks it schedules dropped (the other ticks run as usual): the restored leaves
+	 * keep the snapshot's distances instead of relaxing (phase 4d).
+	 */
+	static void restoreQuietly(ServerLevel level, Anchors.Bounds box, CompoundTag tpl) {
+		List<TickDeferral.Held> held = new ArrayList<>();
+		TickDeferral.begin(level, held);
+		try {
+			restoreTemplate(level, box, tpl);
+		} finally {
+			TickDeferral.end();
+		}
+		TickDeferral.release(level, TickDeferral.withoutLeaves(held));
 	}
 
 	/**
 	 * The rest of a removal once the box holds its snapshot again: drops cleared (and a deconstruct's items dropped), the
 	 * record gone, held leaves given back, a pending entry kept until the next world start. {@code event}: fire SITE_REMOVED.
 	 */
-	private static Removed afterRestore(ServerLevel level, Site b, Builder.@Nullable Deconstruction dec, Drops drops, boolean force, boolean event) {
+	private static Removed afterRestore(ServerLevel level, Site b, Builder.@Nullable Deconstruction dec, Drops drops, boolean force, boolean event,
+		@Nullable CompoundTag snapshot) {
 		MinecraftServer server = level.getServer();
 		String id = b.id();
 		drops.clearNew(level);
@@ -931,6 +957,13 @@ public final class Sites {
 			releaseHeld(level, b.pin().heldLeaves());
 		}
 		reholdNear(level, b.restoreBox());
+		// the leaves around the box get the distances they had before the site (worldgen leaves relax once touched)
+		if (snapshot != null && snapshot.contains(RING)) {
+			String here = dimensionId(level);
+			List<Anchors.Bounds> others = state.byId().values().stream().filter(x -> x.dimension().equals(here)).map(Site::restoreBox).toList();
+			LeafGuard.restoreRing(level, snapshot.getIntArray(RING).orElse(new int[0]),
+				p -> others.stream().anyMatch(o -> o.contains(p.getX(), p.getY(), p.getZ())), FLAGS);
+		}
 		s = state;
 		map = new LinkedHashMap<>(s.byId());
 		List<Site.Pending> pending = new ArrayList<>(s.pending());
@@ -1243,7 +1276,7 @@ public final class Sites {
 		try {
 			releaseHeldInside(level, snapBox);
 			try {
-				writeSnapshot(snapshot, capture(level, snapBox));
+				writeSnapshot(snapshot, captureWithRing(level, snapBox));
 			} catch (IOException e) {
 				Architect.LOGGER.warn("Could not save the snapshot of {}", Anchors.str(snapBox), e);
 				throw new SiteException("Could not save the terrain snapshot (" + e.getMessage() + "); nothing was placed");
@@ -1335,14 +1368,14 @@ public final class Sites {
 	}
 
 	/** A placing site's box holds its snapshot again: the record goes (it was never placed: no SITE_REMOVED). */
-	static Removed finishRollback(MinecraftServer server, ServerLevel level, Site b, Drops drops) {
+	static Removed finishRollback(MinecraftServer server, ServerLevel level, Site b, Drops drops, @Nullable CompoundTag snapshot) {
 		Architect.LOGGER.info("Rolled back site {} ({}) that was still being placed", b.id(), b.blueprint());
-		return afterRestore(level, b, null, drops, true, false);
+		return afterRestore(level, b, null, drops, true, false, snapshot);
 	}
 
 	/** An instant site restored over ticks ({@link RestoreJob}): the rest of the removal. Fires SITE_REMOVED. */
-	static Removed finishTickedRemove(MinecraftServer server, ServerLevel level, Site b, Drops drops) {
-		return afterRestore(level, b, null, drops, false, true);
+	static Removed finishTickedRemove(MinecraftServer server, ServerLevel level, Site b, Drops drops, @Nullable CompoundTag snapshot) {
+		return afterRestore(level, b, null, drops, false, true, snapshot);
 	}
 
 	/** A dry-run plan of a placement: its snapshot (restore) box and its approach's end, for choosing a shared crate's cell. */
