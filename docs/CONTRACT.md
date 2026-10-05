@@ -1179,3 +1179,95 @@ redirects it with notes. The detail design then takes the approved massing as bi
   - a library entry wins over a massing with the same id, and `id@version` names a version;
   - a 200k-cell key costs 5-7 ms of CPU per frame (vertex streaming).
 - **UI:** a Design-tab review bar (Enter approves, R redirects, Esc dismisses and keeps the massing); a set's massings stand in a row with a numbered legend; the Designs tab shows item stages, rounds and conformance.
+
+---
+
+# Phase 4d contract: batch placement, site groups, stages (A7, R1 minimum, R6, R7 queue) - DRAFT for Steward review
+
+Goal: place a whole set (8-20+ buildings, roads later) **over ticks, near the player, without lag spikes**, surviving relogs,
+with **one undo** for the group and **stages** that can be approved, skipped, reordered and undone. This phase stays on the
+current box-snapshot backend; 4e swaps the backend for the journal underneath without changing this API.
+
+## Ticked placement (instant mode)
+
+- Today an instant placement writes everything in one tick. In 4d it becomes a **placement job**:
+  1. checks plus the snapshot, as now;
+  2. the cell list (template cells, foundation fill, clears, approach) is precomputed in the same order the atomic path
+     writes;
+  3. cells are written over ticks with the same FLAGS, under a **per-tick time budget** (default 4 ms of server time per tick
+     across all jobs; config `placementBudgetMs`, 1-20);
+  4. leaf hold, bed safety and the block-entity NBT are applied exactly as in the atomic path.
+- The result **must equal the atomic placement cell for cell, BE NBT included**. That's the gate's acceptance bar. A small site
+  (under one tick's budget) still completes in one tick.
+- While placing, the site is `placing`, and its ghost shows progress. A crash or relog mid-job resumes from the persisted cursor
+  (`<world>/architect-queue.json`), because the snapshot was written first. Remove during `placing` cancels the job and restores.
+- **Construction sites** (survival) already build over ticks. Their builder adopts the same time budget.
+
+## The placement queue (R7)
+
+- `Sites.queue(Batch)` -> `batchId`. `Batch { id?, owner, ext, group?, items: [PlaceRequest & {itemKey, stage?, after?: [itemKey]}],
+  waitPolicy }`.
+- **Order:** by stage, then by `after` dependencies, then by list order.
+- **Waiting instead of refusing:** an item whose site is blocked by something temporary waits and re-checks every 20 ticks. That
+  covers a player in or next to the box, mobs that would refuse, and unloaded chunks. Blockers that won't go away refuse the item
+  with a typed reason (lava, block entities, overlap, build height, a door cut, creative-only blocks). `waitPolicy` sets the
+  maximum wait (default 10 min), and an item that waits that long fails with its reason. The batch goes on with the other items
+  unless `stopOnFailure`.
+- **Chunks:** an item proceeds only when every chunk its snapshot box touches is loaded. Default `LOADED_ONLY` (it waits for the
+  player to come near); `LOAD_BOUNDED(n)` adds short-lived tickets for at most n chunks at a time.
+- **Persistence:** the queue survives relogs and restarts (`<world>/architect-queue.json`).
+- **Events:** `BATCH_PROGRESS` (at most 1/s), `ITEM_PLACED` / `ITEM_FAILED` (with the reason) / `ITEM_WAITING` (with the reason),
+  and `BATCH_DONE`.
+
+## Site groups and undo (R1 minimum)
+
+- A **site group**: `{id, owner, ext, sites[], stages[], state}`, recorded in `<world>/architect-sites.json` next to the sites. A batch
+  with `group` adds its sites to it. Group membership is visible in the Library's Placed view and in `SiteView.group`.
+- `Sites.removeGroup(groupId, options)` removes all its sites **in reverse placement order**, ticked under the same budget, and
+  completes when all are restored. Survival groups deconstruct with refunds.
+- **Overlap is still refused in 4d.** 4e's journal makes it legal.
+
+## Stages (Steward A5B-SPEC §6a)
+
+- `stages: [{name, items: [itemKey]}]`, ordered, on the batch or group. Each stage is a unit with its own state: `planned |
+  approved | placing | placed | partial | skipped | undone`.
+- `Sites.approveStage(group, name)`, `skipStage`, `reorderStages(group, [names])` (planned stages only), and `undoStage(group,
+  name)`, which removes that stage's sites in reverse order. **Undoing a stage that later placed stages depend on is refused**
+  unless `force`. In 4d the dependency is "a later stage is placed".
+- `autoApprove: true` places stages as they come.
+- Events `STAGE_STATE(group, stage, state)`.
+
+## Group crate and stockpile (R6)
+
+- In survival, a batch with `group` may set `sharedCrate: true`. One crate (at the first site's approach end, or at
+  `crateAt`) feeds every construction site of the group, item by item, in placement order. The ledger is per group.
+- `Sites.stock(groupId)` returns delivered, credit and the outstanding BOM per site and in total. Deconstruct refunds go to the
+  shared crate's cell.
+
+## Shared cell lists
+
+- Repeated placements of the same blueprint and rotation reuse one cached cell list (TemplateGrid plus the ordered write list).
+  The terrain-dependent parts (foundation, approach) stay per site.
+
+## Java API (1.4.0)
+
+- `Sites`: `queue(Batch)`, `batch(id)`, `cancelBatch(id)`, `groups(owner)`, `group(id)`, `removeGroup(id, RemoveOptions)`,
+  `approveStage`, `skipStage`, `reorderStages`, `undoStage`, `stock(groupId)`.
+- New records: Batch, BatchView, SiteGroup, Stage, Stock.
+- `SiteView` gains `group` and `state` (`PLACING`).
+- New events, and features `"batchPlacement"`, `"siteGroups"`, `"stages"`, `"groupCrate"`.
+
+## Phase 4d gate
+
+- **Equality:** a batch of 12 lots (the 4 kit examples, 3 each, on varied terrain) placed via the queue gives a world identical
+  to placing them atomically one by one, every cell plus BE NBT, compared region by region in two copies of the same world.
+- **Ticks:** no server tick over 50 ms during the batch; record the MSPT max and mean and the per-tick budget used.
+- **Relog mid-batch** resumes, and the final result is still identical.
+- **Waiting:** a lot with the player standing in it waits, then places when the player leaves. A lot in unloaded chunks waits until
+  the player walks near.
+- **Group undo:** removing the group restores the whole region exactly (box + 7), in reverse order.
+- **Stages:** 3 stages: approve 1, skip 2, place 3, undo 3, then undo 1, with each state change observed. Undoing 1 while 3 is
+  placed is refused.
+- **Survival shared crate:** 3 construction sites fed from one hopper chain, each finishes identical to instant placement, and the
+  stock query matches.
+- gate-verifier checks the result.
