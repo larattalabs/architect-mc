@@ -264,7 +264,8 @@ public final class Launcher {
 	private static void spawn(LauncherPlan.Source src, Path nodePath, Path data) throws IOException {
 		Path library = Blueprints.userDir();
 		Files.createDirectories(library);
-		List<String> cmd = LauncherPlan.command(nodePath, src.dir(), Sidecar.port(), data, library, src.kit(), ProcessHandle.current().pid(), false);
+		List<String> cmd = LauncherPlan.command(nodePath, src.dir(), Sidecar.port(), data, library, src.kit(), ProcessHandle.current().pid(), false,
+			ClientEnv.raw("ARCHITECT_SIDECAR_BACKEND"));
 		Path log = logFile();
 		Files.writeString(log, "", StandardCharsets.UTF_8, java.nio.file.StandardOpenOption.CREATE, java.nio.file.StandardOpenOption.APPEND);
 		ProcessBuilder pb = new ProcessBuilder(cmd).directory(src.dir().toFile()).redirectErrorStream(true)

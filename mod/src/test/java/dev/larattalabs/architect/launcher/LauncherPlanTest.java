@@ -146,6 +146,9 @@ class LauncherPlanTest {
 		List<String> login = LauncherPlan.command(Path.of("node"), Path.of("/s"), 7999, Path.of("/d"), Path.of("/l"), null, 1, true);
 		assertFalse(login.contains("--kit"));
 		assertEquals("--use-claude-login", login.get(login.size() - 1));
+		List<String> sim = LauncherPlan.command(Path.of("node"), Path.of("/s"), 7999, Path.of("/d"), Path.of("/l"), null, 1, false, "sim");
+		assertEquals(List.of("--backend", "sim"), sim.subList(sim.size() - 2, sim.size()));
+		assertFalse(LauncherPlan.command(Path.of("node"), Path.of("/s"), 7999, Path.of("/d"), Path.of("/l"), null, 1, false, "--evil").contains("--evil"));
 		assertEquals(List.of("/n/npm", "ci", "--omit=dev", "--no-audit", "--no-fund"), LauncherPlan.installCommand(Path.of("/n/npm"), true));
 		assertEquals("install", LauncherPlan.installCommand(Path.of("/n/npm"), false).get(1));
 	}
