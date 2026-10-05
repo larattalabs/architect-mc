@@ -1399,13 +1399,21 @@ public final class Sites {
 		String dim = dimensionId(level);
 		forEachBlockEntity(level, box, be -> {
 			BlockPos p = be.getBlockPos();
-			String top = SiteJournal.ownerSite(dim, p.asLong());
-			if (top != null && !top.equals(b.id())) {
+			List<WorldJournal.Layer> st;
+			try {
+				st = WorldJournal.stack(dim, p.asLong());
+			} catch (java.io.IOException e) {
+				st = List.of();
+			}
+			WorldJournal.Layer top = st.isEmpty() ? null : st.get(st.size() - 1);
+			if (top != null && !b.id().equals(top.meta().site())) {
 				return; // another site's cell (it covers this one)
 			}
+			// phase 4e: a block entity in the site's journal after (a BOX site layered over another keeps what it stood on) is the site's
+			boolean journalOwn = top != null && top.cell().after() != null && WorldJournal.holds(level, p.asLong(), top.cell().after());
 			String what = be.getBlockState().getBlock().getName().getString().toLowerCase(java.util.Locale.ROOT) + " at " + p.toShortString();
 			if (be instanceof LecternBlockEntity lectern) {
-				if (lectern.hasBook() || !own.contains(p)) {
+				if (lectern.hasBook() || !own.contains(p) && !journalOwn) {
 					out.add(what + (lectern.hasBook() ? " (with a book)" : ""));
 				}
 				return;
@@ -1414,7 +1422,7 @@ public final class Sites {
 				out.add(what + " (" + items(c) + ")");
 				return;
 			}
-			if (!own.contains(p)) {
+			if (!own.contains(p) && !journalOwn) {
 				out.add(what);
 			}
 		});

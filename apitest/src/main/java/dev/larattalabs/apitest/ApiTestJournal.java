@@ -39,6 +39,7 @@ import net.minecraft.world.level.block.state.BlockState;
  * sundo2 &lt;group&gt; &lt;stage&gt; &lt;keep|cascade|refuse&gt; [force]   undoStage(RemoveOptions) -> pending "sundo2:&lt;group&gt;:&lt;stage&gt;"
  * reasons             every Reason name (the 1.5.0 ones appended)
  * api15               version, the 1.5.0 features
+ * heights &lt;x1&gt; &lt;z1&gt; &lt;x2&gt; &lt;z2&gt; &lt;res&gt;   Survey.sample (loaded chunks): every column as [x, z, height, water?1:0, tree?1:0] (gate scouting)
  * </pre>
  */
 final class ApiTestJournal {
@@ -85,6 +86,31 @@ final class ApiTestJournal {
 					r.add(x.name());
 				}
 				return r;
+			}
+			case "heights": {
+				int[] n = java.util.Arrays.stream(a, 1, 6).mapToInt(Integer::parseInt).toArray();
+				net.minecraft.world.level.levelgen.structure.BoundingBox box = new net.minecraft.world.level.levelgen.structure.BoundingBox(n[0], src.getLevel()
+					.getMinY(), n[1], n[2], src.getLevel().getMaxY(), n[3]);
+				return ApiTest.later("heights:" + String.join(",", java.util.Arrays.copyOfRange(a, 1, 6)), ArchitectApi.get().survey().sample(src.getLevel(), box,
+					n[4], dev.larattalabs.architect.api.LoadPolicy.LOADED_ONLY).thenApply(s -> {
+						JsonArray out = new JsonArray();
+						for (int j = 0; j < s.depth(); j++) {
+							for (int i = 0; i < s.width(); i++) {
+								if (s.isMissing(i, j)) {
+									continue;
+								}
+								int k = s.index(i, j);
+								JsonArray c = new JsonArray();
+								c.add(s.worldX(i));
+								c.add(s.worldZ(j));
+								c.add(s.height()[k]);
+								c.add(s.water().get(k) ? 1 : 0);
+								c.add(s.tree().get(k) ? 1 : 0);
+								out.add(c);
+							}
+						}
+						return out;
+					}));
 			}
 			case "api15": {
 				JsonObject o = new JsonObject();

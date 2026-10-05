@@ -205,6 +205,7 @@ public class ApiTest implements ModInitializer {
 			case "stack":
 			case "sundo2":
 			case "reasons":
+			case "heights":
 			case "api15": {
 				return ApiTestJournal.step(src, a);
 			}
