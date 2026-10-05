@@ -403,6 +403,148 @@ steps.smoke = async () => {
   return { f, ids };
 };
 
+// ------------------------------------------------------------------ gate 2: any-order exactness
+
+const PAD = { minX: 20, maxX: 59, minZ: -24, maxZ: 15, y: 66, top: 'minecraft:coarse_dirt', depth: 3, clear: 8 };
+const FIXTURE = {
+  id: 'fix', overlap: 'LAYER', items: [
+    { key: 'T', cells: { kind: 'gate4e:pad', pad: PAD } },
+    { key: 'R', road: { points: [[10, 67, 0], [80, 67, 0]], width: 3 }, after: ['T'] },
+    { key: 'H', bp: 'cabin', at: [28, 67, -19], rot: 0, mode: 'INSTANT', after: ['R'] },
+    { key: 'X', bp: 'gatehouse', at: [37, 67, -19], rot: 0, mode: 'INSTANT', after: ['H'] },
+  ],
+};
+function perms(a) {
+  if (a.length <= 1) return [a];
+  return a.flatMap((x, i) => perms([...a.slice(0, i), ...a.slice(i + 1)]).map((p) => [x, ...p]));
+}
+/** A deterministic shuffle (mulberry32). */
+function shuffled(a, seed) {
+  let t = seed >>> 0;
+  const rnd = () => {
+    t = (t + 0x6d2b79f5) >>> 0;
+    let r = Math.imul(t ^ (t >>> 15), 1 | t);
+    r ^= r + Math.imul(r ^ (r >>> 7), 61 | r);
+    return ((r ^ (r >>> 14)) >>> 0) / 4294967296;
+  };
+  const b = [...a];
+  for (let i = b.length - 1; i > 0; i--) {
+    const j = Math.floor(rnd() * (i + 1));
+    [b[i], b[j]] = [b[j], b[i]];
+  }
+  return b;
+}
+const inside = (a, outer) => a[0] >= outer[0] && a[1] >= outer[1] && a[2] >= outer[2] && a[3] <= outer[3] && a[4] <= outer[4] && a[5] <= outer[5];
+
+/** The fixture's base worlds: G4E OrdBase (T, R, H, X through one LAYER batch) and G4E OrdBaseL (plus L over R's edge). */
+async function ordersBase() {
+  await flatBase();
+  await fresh('G4E OrdBase', FLAT);
+  await tp(48.5, 80, 30.5);
+  const h0 = await hash(FIX_BOX);
+  await mark();
+  const id = await queue(FIXTURE);
+  const done = await waitBatch(id, 600_000);
+  const ev = await since();
+  const ids = {};
+  for (const e of ev.filter((x) => x.event === 'ITEM_PLACED' && x.batch === id)) ids[e.key] = e.site;
+  check(Object.keys(ids).length === 4, `orders: the LAYER batch placed T, R, H, X (${JSON.stringify(ids)})`, { done, ids });
+  const all = await sites();
+  const ub = all.map((x) => box6(x.restoreBox)).reduce(union);
+  check(inside(grow(ub, 8), FIX_BOX), `orders: the union box + 8 ${JSON.stringify(grow(ub, 8))} lies inside the hashed box`, { ub, FIX_BOX });
+  // the seam between H and X: which blocks meet there (shape-sensitive ones make the no-leak check bite)
+  const seam = await call('dev.region.hash', { box: [36, 65, -19, 39, 78, -4], cells: true }, 60_000);
+  const seamKinds = [...new Set(seam.list.map((l) => /id:"([^"]+)"/.exec(l)?.[1]))].sort();
+  log(`  seam blocks: ${seamKinds.join(' ')}`);
+  await cmd('/save-all flush');
+  await settle(2000);
+  const j = await journal();
+  const act = (j.entries ?? []).filter((e) => e.status === 'ACTIVE');
+  check(act.length >= 4 && (j.unreferenced ?? []).length === 0, `orders: the journal holds ${act.length} ACTIVE entries, nothing unreferenced`, j);
+  const base = await ownedNow(Object.values(ids));
+  // L: a cabin LAYERed over R's edge, east of the pad
+  await leaveWorld();
+  copyWorld('G4E OrdBase', 'G4E OrdBaseL');
+  await openWorld('G4E OrdBaseL');
+  const L = await result(await api('place cabin 63 65 -14 INSTANT unowned noactor 0 layer'));
+  check(L.placed, `orders: L layered over R's edge (${L.siteId})`, L);
+  const allL = await sites();
+  const lSite = allL.find((x) => x.id === L.siteId);
+  check(lSite && (lSite.covers ?? []).includes(ids.R), `orders: L covers R (covers ${JSON.stringify(lSite?.covers)})`, lSite);
+  const ubL = allL.map((x) => box6(x.restoreBox)).reduce(union);
+  check(inside(grow(ubL, 8), FIX_BOX), 'orders: with L the union box + 8 lies inside the hashed box', { ubL });
+  await cmd('/save-all flush');
+  await leaveWorld();
+  ctx.orders = { h0: h0.sha256, ids, L: L.siteId, group: done.group, seamKinds };
+  saveCtx();
+  return { h0, ids, done, L, seamKinds, owned: Object.fromEntries(Object.entries(base).map(([k, v]) => [k, v.owned])) };
+}
+
+/** Removes {@code order} (keys) one by one in a fresh copy of {@code world}; checks the no-leak rule after each and the hash at the end. */
+async function removeInOrder(world, ids, order, h0, label) {
+  copyWorld(world, 'G4E Ord');
+  await openWorld('G4E Ord');
+  let standing = Object.keys(ids);
+  let snap = await ownedNow(standing.map((k) => ids[k]));
+  const steps0 = [];
+  let leaked = {};
+  let refused = null;
+  for (const k of order) {
+    const r = await result(await api(`remove ${ids[k]} - noforce keep`), 300_000);
+    steps0.push({ k, removed: r.removed, restored: r.restored, handedDown: r.handedDown, blockers: r.blockers });
+    if (!r.removed) {
+      refused = { k, r };
+      break;
+    }
+    standing = standing.filter((x) => x !== k);
+    await settle(1500);
+    const now = await ownedNow(standing.map((x) => ids[x]));
+    const l = leaks(snap, now);
+    if (Object.keys(l).length) leaked[k] = l;
+    snap = now;
+  }
+  const h = await hash(FIX_BOX);
+  const exact = h.sha256 === h0;
+  const ok = !refused && Object.keys(leaked).length === 0 && exact;
+  check(ok, `${label} ${order.join('')}: ${refused ? `refused at ${refused.k}` : 'all removed'}, ${Object.keys(leaked).length ? 'LEAK' : 'no leak'}, `
+    + `${exact ? 'box + 8 exact' : 'NOT exact'}`, { steps: steps0, leaked, refused, h: h.sha256, h0 });
+  if (!exact) {
+    const now = await hash(FIX_BOX, [], true);
+    await leaveWorld();
+    copyWorld(FLAT, 'G4E OrdRef');
+    await openWorld('G4E OrdRef');
+    const ref = await hash(FIX_BOX, [], true);
+    results[`${label} ${order.join('')} diff`] = { ok: false, data: diff(ref.list, now.list, 30) };
+  }
+  await leaveWorld();
+  return ok;
+}
+
+steps.orders = async () => {
+  if (!dev) await connect();
+  const b = await ordersBase();
+  const h0 = b.h0.sha256;
+  let passed = 0;
+  const all = perms(['T', 'R', 'H', 'X']);
+  for (const o of all) if (await removeInOrder('G4E OrdBase', b.ids, o, h0, 'orders')) passed++;
+  check(passed === 24, `orders: ${passed}/24 removal orders exact with no leak`);
+  // one group removal of all four
+  copyWorld('G4E OrdBase', 'G4E Ord');
+  await openWorld('G4E Ord');
+  const g = await result(await api(`sgremove ${b.done.group}`), 600_000);
+  const hg = await hash(FIX_BOX);
+  check(g.removed === true && hg.sha256 === h0, `orders: the group removal of all four is exact (${JSON.stringify(g).slice(0, 160)})`, { g, h: hg.sha256, h0 });
+  await leaveWorld();
+  // L: 6 random orders of five
+  const idsL = { ...b.ids, L: b.L.siteId };
+  let passedL = 0;
+  for (let i = 0; i < 6; i++) {
+    if (await removeInOrder('G4E OrdBaseL', idsL, shuffled(['T', 'R', 'H', 'X', 'L'], 4242 + i), h0, 'orders+L')) passedL++;
+  }
+  check(passedL === 6, `orders: ${passedL}/6 random orders with L exact with no leak`);
+  return { ids: b.ids, L: b.L.siteId, seam: b.seamKinds };
+};
+
 /** `stop`: quits the gate client (by PID if it hangs). `start [world]`: moves the run worktree to this worktree's HEAD and starts it. */
 steps.stop = async () => {
   try {

@@ -33,6 +33,7 @@ import net.minecraft.world.level.block.state.BlockState;
  *                                                         owner?, force?, actor?, tag?}
  * roadcheck &lt;json&gt;     checkRoad
  * cells &lt;json&gt;         placeCells -> pending "cells:&lt;tag&gt;"  {kind, policy?, cells?: [[x,y,z,"id"]..], fill?: {min, max, id},
+ *                                                         pad?: {minX, minZ, maxX, maxZ, y, top?, fill?, depth?, clear?},
  *                                                         naturalOnly?, overlap?, mode?, owner?, force?, actor?, tag?}
  * cellscheck &lt;json&gt;    checkCells
  * stack &lt;x&gt; &lt;y&gt; &lt;z&gt;     Sites.stack in the player's dimension
@@ -169,6 +170,27 @@ final class ApiTestJournal {
 				for (int z = mn.get(2).getAsInt(); z <= mx.get(2).getAsInt(); z++) {
 					for (int x = mn.get(0).getAsInt(); x <= mx.get(0).getAsInt(); x++) {
 						cells.add(CellWrite.of(new BlockPos(x, y, z), s));
+					}
+				}
+			}
+		}
+		if (j.has("pad")) {
+			// a flattened pad: fill below y, top at y, air above (the gate fixture's T)
+			JsonObject p = j.getAsJsonObject("pad");
+			int y = p.get("y").getAsInt();
+			BlockState top = block(p.has("top") ? p.get("top").getAsString() : "minecraft:grass_block");
+			BlockState fill = block(p.has("fill") ? p.get("fill").getAsString() : "minecraft:dirt");
+			BlockState air = block("minecraft:air");
+			int depth = p.has("depth") ? p.get("depth").getAsInt() : 3;
+			int clear = p.has("clear") ? p.get("clear").getAsInt() : 6;
+			for (int z = p.get("minZ").getAsInt(); z <= p.get("maxZ").getAsInt(); z++) {
+				for (int x = p.get("minX").getAsInt(); x <= p.get("maxX").getAsInt(); x++) {
+					for (int d = depth; d >= 1; d--) {
+						cells.add(CellWrite.of(new BlockPos(x, y - d, z), fill));
+					}
+					cells.add(CellWrite.of(new BlockPos(x, y, z), top));
+					for (int c = 1; c <= clear; c++) {
+						cells.add(CellWrite.of(new BlockPos(x, y + c, z), air));
 					}
 				}
 			}
