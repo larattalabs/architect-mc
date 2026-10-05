@@ -83,9 +83,9 @@ public class ApiTest implements ModInitializer {
 		SiteEvents.DESIGN_UPDATED.register(d -> event("DESIGN_UPDATED", design(d)));
 		SiteEvents.DESIGN_DONE.register(d -> event("DESIGN_DONE", design(d)));
 		SiteEvents.VARIANT_DONE.register(e -> event("VARIANT_DONE", entry(e)));
-		SiteEvents.JOB_UPDATED.register(j -> event("JOB_UPDATED", new JsonObject()));
-		SiteEvents.JOB_DONE.register(j -> event("JOB_DONE", new JsonObject()));
-		ArchitectApi.get().jobs().registerTool("apitest", "survey", (jobId, input) -> CompletableFuture.completedFuture(new JsonObject()));
+		SiteEvents.JOB_UPDATED.register(j -> event("JOB_UPDATED", ApiTestJobs.job(j)));
+		SiteEvents.JOB_DONE.register(j -> event("JOB_DONE", ApiTestJobs.job(j)));
+		ApiTestJobs.init();
 		CommandRegistrationCallback.EVENT.register((d, ctx, env) -> d.register(Commands.literal("apitest")
 			.then(Commands.argument("args", StringArgumentType.greedyString()).executes(ApiTest::run))));
 	}
@@ -116,7 +116,7 @@ public class ApiTest implements ModInitializer {
 	}
 
 	/** Stores a future's result under {@code key} (or its error) and answers {"pending": key}. */
-	private static JsonObject later(String key, CompletableFuture<? extends JsonElement> f) {
+	static JsonObject later(String key, CompletableFuture<? extends JsonElement> f) {
 		RESULTS.remove(key);
 		f.whenComplete((v, e) -> {
 			if (e != null) {
@@ -150,8 +150,18 @@ public class ApiTest implements ModInitializer {
 				return o;
 			}
 			case "jobs": {
-				return later("jobs", api.jobs().run(new dev.larattalabs.architect.api.JobSpec("structured", "hi", null, null, null, null, List.of(), null,
-					null, "apitest", null, null, new JsonObject(), List.of())).thenApply(id -> new com.google.gson.JsonPrimitive(id)));
+				// a minimal structured job: refused by a protocol-1 helper, run by a protocol-2 one
+				return later("jobs", api.jobs().run(ApiTestJobs.spec("structured", List.of())).thenApply(id -> new com.google.gson.JsonPrimitive(id)));
+			}
+			case "jobrun":
+			case "job":
+			case "joblist":
+			case "jobcancel":
+			case "blobput":
+			case "release":
+			case "toolstats":
+			case "ticks": {
+				return ApiTestJobs.step(src, a);
 			}
 			case "place":
 			case "check": {
