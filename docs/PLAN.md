@@ -137,6 +137,33 @@ Carried forward:
 - **Gate:** in a survival dev world, place a site, feed it from a hopper chain, watch it finish, then
   deconstruct it and check that the refund matches the materials put in.
 
+## After phase 3: asks from Steward (accepted 2026-10-05)
+
+Steward (`~/Developer/LarattaLabs/steward-mc`, a sibling mod that founds whole settlements and depends on Architect) asked
+for A1-A9 (`steward-mc/docs/ARCHITECT-ASKS.md`). All are accepted. Each must also be useful to Architect players on its
+own. A9 is phase 3 itself. Order (Noah can reorder):
+
+| Phase | Asks | What it is for Architect players | Notes |
+|---|---|---|---|
+| 4a | **A8** public API + protocol version | Other mods (and scripts) can use the library, jobs, ghost and sites | First because it unblocks Steward. A Java API package `dev.larattalabs.architect.api` (a Fabric entrypoint, semver'd), and `protocol` in `hello`/`snapshot` with negotiation. A generic structured job (`job.run {schema, prompt, model}`) so a sibling mod reuses this sidecar instead of shipping a second one. |
+| 4b | **A1** style bible + **A2** parallel/hierarchical jobs | "Design a matching set": one style for N buildings, designed in parallel | Bible = JSON + prose in `<gameDir>/architect/bibles/<id>.json`, referenced from entries. Job groups with concurrency N, per-job model (Opus/Sonnet), per-job and aggregate cost (the turn cost is already measured). |
+| 4c | **A3** massing pass | A cheap coarse ghost to approve before paying for detail | Massing = a kit design with volumes only; the detail job takes it as input. |
+| 4d | **A7** batch placement over ticks, one undo group | Placing a set at once; big builds without a lag spike | Generalises phase 3's builder; one undo group = one snapshot set released together. |
+| 5a | **A4** critique loop | Better designs without the player reviewing every one | A separate, cheaper reviewer turn on the renders (and neighbours'), bounded rounds. |
+| 5b | **A6** delta apply | Edit a placed building ("add a wing") without rebuilding it | Diff old and new templates of a pinned site. Applying a delta grows the snapshot for new cells first, so Remove stays exact. |
+| 6 | **A5** macro kit + macro checker | Terraforming builds: platforms, bridges, carved stairs, terraces | Largest. Needs nested sites (see conflicts) and snapshots past today's 96x64x96 cap (chunked). |
+
+Conflicts with Architect's current contracts, to resolve in those phases:
+- **Sites never overlap**, and placement refuses an overlap. Settlements put buildings on top of a macro terrain site, so
+  they need **nested sites**: a child inside a parent, with remove order child-first and the parent's snapshot unaffected.
+- **Size cap** 96x64x96 per template and per snapshot. Macro sites need chunked snapshots and region-sized programs.
+- **Survival is per world** and its change needs permission 2. Steward's per-settlement "Patron" (free builds) in a
+  survival world would bypass that, so the API takes a placement mode only within what the world allows.
+- **Occupancy refuses** when the player is in the box. Batch placement near the player needs a "wait until clear" mode,
+  not a refusal.
+- **One sidecar.** Two mods must not each install the SDK (~200 MB) and keep separate auth. Steward's Claude calls go
+  through Architect's sidecar via A8.
+
 ## Open questions
 - Track AgentCraft fixes to the copied placement code, or treat the copy as independent from now on?
 - Cost: measure tokens and time per design in phase 1, and show an estimate in the form.
