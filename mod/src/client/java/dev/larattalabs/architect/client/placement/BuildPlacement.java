@@ -362,6 +362,11 @@ public final class BuildPlacement {
 				// the server's verdict on the exact site first (S4): a refusal lists every reason, not only the first
 				checked = Sites.verdict(sl, b, origin, rotation, useForce, moveId, false); // reads the site as place() does
 				if (!checked.ok()) {
+					if (moveId == null) {
+						// a refused placement attempt (not the ghost's live verdict): PLACE_FAILED, as the API and commands fire it
+						dev.larattalabs.architect.apiimpl.ApiEvents.placeFailed(sl, bpId, origin, rotation, useForce, null, null, null,
+							Sites.playerOf(server, owner), checked.typed());
+					}
 					throw new Sites.SiteException(String.join("; ", checked.refusals()));
 				}
 				if (moveId != null) {
