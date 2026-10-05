@@ -99,6 +99,21 @@ Carried forward (known issues):
 - **Gate:** generate one design, make 3 palette and size variants without a Claude call, export one and
   import it into another world.
 
+**Status: PASSED 2026-10-05** (gate-verifier PASS; its two caveats closed afterwards, see `artifacts/gate2/REPORT.md`, local).
+A Claude town house came out parametric (width, depth, balcony) and palette-driven. 3 variants (birch, fortress, width 11 +
+no balcony) took about 0.5 s each with no Claude call, and rebuilt byte-identical from their recorded inputs. The export
+loads with vanilla `/place template`. A world-1 structure-block save imported in world 2 matches block for block. Metadata
+survives a restart. Remove is exact over the snapshot box + 7 blocks after two fixes found in the run (leaf hold/release
+without neighbour updates; the snapshot covers the ground row under the foundation).
+
+Carried forward:
+- **Natural drops refuse placement (fix first):** leaf litter, sticks and saplings from decay lying in a box refuse it
+  ("pick them up first"). `NaturalDrops` must treat them as natural; it hit the gate run twice.
+- **Stale bundled sidecar:** the launcher re-extracts only when the mod version changes; use a content hash of the bundle.
+- **Exports carry no source:** an imported export is a plain structure (no variants). Export could include the `.mjs`
+  and import could recognise an Architect export.
+- **Nether ground:** the ghost's "ground" starts on the bedrock roof (see phase 1 notes).
+
 ### Phase 3: Survival (per-world toggle)
 - **Construction site:** placing a design in survival puts down a persistent ghost plus a site block. The
   ghost is server-side, synced to clients and kept across relogs.
