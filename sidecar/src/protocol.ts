@@ -131,7 +131,7 @@ export const DesignRequest = DesignRequestBase.extend({
   itemKey: ItemKey.optional().describe('(4b) set by the sidecar for a group item: the caller\'s key'),
   wave: z.number().int().min(0).max(8).optional().describe('(4b) a group item\'s wave (0 = anchor)'),
   role: ItemRole.optional().describe('(4b) a group item\'s role'),
-  massing: z.literal(true).optional().describe('(4c) a massing job: a coarse volume design (kit/lib/massing.mjs), installed into <gameDir>/architect/massings/<id>/'),
+  massing: z.boolean().optional().describe('(4c) true: a massing job (false = absent): a coarse volume design (kit/lib/massing.mjs), installed into <gameDir>/architect/massings/<id>/'),
   fromMassing: MassingId.optional().describe('(4c) the detail pass of this massing (binding: part names, boxes, size, roof forms)'),
   massingVersion: z.number().int().min(1).optional().describe('(4c) with fromMassing: the massing version (default: its latest; the sidecar pins it)'),
   context: Context.optional().describe('(4c) text (<= 4000 chars) or JSON for the brief: site, purpose, neighbour lots; a group sets it on every item'),

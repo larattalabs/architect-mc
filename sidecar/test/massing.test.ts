@@ -144,6 +144,11 @@ describe('massings (sim backend, fixture kit)', () => {
     expect(f.status).toBe('failed');
     expect(f.error).toMatch(/size .*y 17|exceeds/);
     expect(f.conformance).toMatchObject({ ok: false, errors: [expect.stringMatching(/size y 17 is over the massing's 9 \+ 2/)] });
+    // massing: false (a Java boolean) is an ordinary design
+    const plain = h.sc.requestDesign(DesignRequest.parse(request({ massing: false, name: 'Plain', maxSize: { x: 40, y: 30, z: 40 } })));
+    expect(plain.massing).toBeUndefined();
+    await finished(h, plain.id);
+    expect(h.sc.designs.get(plain.id)).toMatchObject({ status: 'done', blueprintId: 'gen_plain' });
     // refusals: an unknown massing, a group's massing
     expect(() => h!.sc.requestDesign(DesignRequest.parse(request({ fromMassing: 'mas_nope' })))).toThrow(/no massing "mas_nope"/);
   }, 60_000);
