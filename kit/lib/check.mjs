@@ -251,6 +251,8 @@ export function checkStructure(sidecar, structure, opts = {}) {
   if (sidecar.tags !== undefined && !(Array.isArray(sidecar.tags) && sidecar.tags.every((t) => typeof t === 'string'))) err('sidecar: tags must be a list of strings');
   if (sidecar.materials !== undefined && !(Array.isArray(sidecar.materials) && sidecar.materials.every((t) => typeof t === 'string' && BLOCKS[t]))) err('sidecar: materials must be a list of vanilla block ids');
   const w = sidecar.interior ?? null;
+  // without an interior the light rule (an error) would be skipped: every type but custom declares one
+  if (!w && sidecar.type !== 'custom') err(`sidecar: interior is required for type '${sidecar.type}' (the box agents and players live in; only 'custom' may omit it)`);
   if (w) {
     for (const f of ['minX', 'minY', 'minZ', 'maxX', 'maxY', 'maxZ']) if (!Number.isInteger(w[f])) err(`sidecar: interior.${f} must be an int`);
     if (w.minX > w.maxX || w.minY > w.maxY || w.minZ > w.maxZ) err('sidecar: interior min > max');
