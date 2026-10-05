@@ -1135,3 +1135,27 @@ redirects it with notes. The detail design then takes the approved massing as bi
 - **The composite preview** shows MASSING, ADDED, REMOVED and CHANGED tints at once, in a screenshot that has been looked at.
 - **Estimates** include the massing pass.
 - gate-verifier checks the result.
+
+### 4c review folded in (Steward, `steward-mc/docs/A4C-REVIEW.md`, all accepted 2026-10-05)
+
+1. **Who approves:** `GroupRequest.approvalUi: "architect" | "owner"` (default `architect`). With `owner`, Architect shows no
+   Approve/Redirect bar. It emits `GROUP_AWAITING_APPROVAL` (with the owner) and accepts `approveGroup` from that owner only.
+2. **Massing records and lifecycle:** `Massing { id, version, itemKey?, ext, owner?, group?, bible pin, parts, size, request,
+   cost, createdAt }`, and `Designs.listMassings(owner)`, `massing(id[, version])`, `deleteMassing(id)`. `ext` round-trips across a
+   sidecar restart. **Garbage collection:**
+   - a group's massings are deleted 7 days after the group is final;
+   - a stand-alone massing is deleted 7 days after its detail design finishes, or 30 days after creation if it's never detailed;
+   - `deleteMassing` is immediate.
+   Protocol: `massing.list` / `massing.delete`, and `snapshot.massings` (unfinished ones, plus the last 20).
+3. **The size cap binds:** the massing job stays inside `request.maxSize`, and the detail pass's size is at most
+   `min(massing size + 2, request.maxSize)` per axis. Both are errors, not warnings.
+4. **Group context:** `GroupRequest.context` (text up to 4000 chars, or JSON: concept-card summary, site/purpose, neighbour lot
+   rectangles and street side) goes into every item's brief, for massing and detail.
+5. **Budget:** massings and redirects count toward the group's aggregate cost and its soft/hard budget. Redirect rounds are capped
+   per item (`maxRedirects`, default 3); `item.rounds` reports them.
+6. **Composite preview at scale:**
+   - at most 200,000 cells per key;
+   - layers past the cap, or further than 160 blocks, draw as box outlines;
+   - composites clear on world leave;
+   - **client-only:** a server-side mod sends its layers over its own packet and calls `previewComposite` on the client.
+7. **Auto-approve** needs no change (the owner calls `approveGroup` on the event).
