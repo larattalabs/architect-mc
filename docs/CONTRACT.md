@@ -536,3 +536,166 @@ gate-verifier checks the result.
 - **The creative-only list** exists twice (`survival_items.json` and `kit/lib/check.mjs`), kept in sync by hand.
 - **Dev worlds:** `ARCHITECT_AUTOWORLD_MODE=creative|survival|hardcore`, `ARCHITECT_AUTOWORLD_CHEATS`, and
   `ARCHITECT_DEV_HARDCORE=1` (lets the dev tool drive a hardcore world).
+
+---
+
+# Phase 4a contract: public API (A8 + R2, R5, R7, R11) - DRAFT for Steward review
+
+The stable surface other mods (first: Steward, `steward_mc`) build on. **Everything outside `dev.larattalabs.architect.api`
+and the documented protocol messages stays internal**, and may change without notice.
+
+## Versioning
+
+- **Java API:** `ArchitectApi.VERSION` (semver string, starts at `1.0.0`). A minor bump adds methods; a major bump breaks.
+  A dependent mod declares `"depends": {"architect_mc": ">=0.4.0"}` in fabric.mod.json and checks
+  `ArchitectApi.VERSION` at runtime if it needs a newer minor version.
+- **Sidecar protocol:** an integer `protocol`, starting at `2`. Phases 1-3 are protocol 1. `hello` carries `protocols: [1, 2]` (what the
+  client speaks) and the `snapshot` answers `protocol: <chosen>` and `features: [..]` (e.g. `"job.run"`, `"job.tools"`,
+  `"budget"`). A protocol-1 client keeps working unchanged.
+- **Build artifact:** `./gradlew publishToMavenLocal` publishes `dev.larattalabs:architect_mc:<version>` (the mod jar plus a
+  sources jar). Steward compiles against it with `modImplementation` from mavenLocal. There is no separate API jar; the package boundary is the contract.
+
+## Java API (server side, the integrated server)
+
+Entry: `ArchitectApi.get()`, a singleton available after the mod initialised. All calls are on the server thread unless
+noted. Async results use `CompletableFuture` completed on the server thread.
+
+```java
+public interface ArchitectApi {
+  String VERSION = "1.0.0";
+  static ArchitectApi get();
+
+  Library library();                 // read-only view of the library (bundled + user)
+  Sites sites(MinecraftServer s);    // the sites of this world
+  Survey survey();                   // terrain sampling (R1/A5b section 7.1)
+  SiteEvents events();               // Fabric Events (R7)
+}
+
+interface Library {
+  List<Entry> list();  Optional<Entry> get(String id);  void reload();
+  record Entry(String id, String name, String type, BlockSize size, List<String> tags, Optional<String> source,
+               Map<String, JsonElement> params, Map<String, JsonElement> values, Optional<JsonObject> palette,
+               Map<String, Port> ports, JsonObject ext, boolean bundled, boolean imported, Optional<String> variantOf) {}
+  record Port(String name, String kind, BlockPos offset, Direction facing) {}   // R5, template coordinates
+}
+
+interface Sites {
+  List<SiteView> list();  Optional<SiteView> get(String siteId);
+  CompletableFuture<PlaceResult> place(PlaceRequest r);
+  CompletableFuture<RemoveResult> remove(String siteId, RemoveOptions o);
+  Verdict check(PlaceRequest r);     // dry run: what place() would do (refusals, notes, BOM, boxes), no side effects
+}
+record PlaceRequest(String blueprintId, ServerLevel level, BlockPos origin, Rotation rotation, Mode mode,
+                    String owner, JsonObject ext, boolean force) {}
+enum Mode { AUTO, INSTANT, CONSTRUCTION }  // AUTO = the world's toggle; INSTANT in a survival world needs permission
+                                           // level 2 for the owner's acting player, else refused (NOT_ALLOWED)
+record SiteView(String id, String blueprintId, String owner, JsonObject ext, BoundingBox box, BoundingBox restoreBox,
+                Rotation rotation, ResourceKey<Level> dimension, State state, int built, int queued) {}
+enum State { BUILT, BUILDING }
+record PlaceResult(boolean placed, Optional<String> siteId, List<Refusal> refusals, List<String> notes) {}
+record Refusal(Reason reason, String message) {}
+enum Reason { PLAYER_IN_BOX, OCCUPIED, OVERLAP, LAVA, BLOCK_ENTITIES, BUILD_HEIGHT, DOOR_CUT, CREATIVE_ONLY_BLOCK,
+              NOT_ALLOWED, NOT_LOADED, UNKNOWN_BLUEPRINT, OTHER }
+record RemoveOptions(boolean force, String requester) {}  // removing a site owned by someone else needs force
+record RemoveResult(boolean removed, List<String> blockers, Map<Item, Integer> refund) {}
+```
+
+- **Owner (R5):** a free string, by convention `<modid>:<thing>` (e.g. `steward_mc:settlement/set_ab12`); `null` = the
+  player's own site. It's stored in the site record and shown in the Library's Placed view ("owned by steward_mc").
+  Architect's UI asks for a second confirmation before removing an owned site. The API refuses `remove` from a
+  different requester unless `force`.
+- **ext (R5):** a JSON object, keys namespaced (`"steward_mc:lot": "L3"`). Stored on the site; on library entries it lives in the
+  blueprint JSON's `ext`. Architect never interprets it, and builds/variants/imports keep it.
+- **Ports (R5):** the kit's `bp.port(name, kind, x, y, z, facing)` writes `ports` into the blueprint JSON. Known kinds:
+  `item_out`, `item_in`, `water_in`, `water_out`, `redstone_in`, `redstone_out`, `bed`, `door`, plus any `<modid>:<kind>`.
+  The checker validates that a port's cell is inside the template and its facing is horizontal.
+
+## Events (R7)
+
+Fabric `Event`s on `ArchitectApi.get().events()`:
+`SITE_PLACED(SiteView)`, `SITE_REMOVED(SiteView, RemoveResult)`, `PLACE_FAILED(PlaceRequest, List<Refusal>)`,
+`SITE_PROGRESS(SiteView)` (construction sites, at most once per second per site), `SITE_BUILT(SiteView)`. All fire on
+the server thread. UI and commands fire them too, not only API calls.
+
+## Survey (for Steward's site survey; A5b section 7.1)
+
+`Survey.sample(ServerLevel, BoundingBox area, int resolution)` returns a `Sample`:
+- `heights`: motion-blocking without leaves;
+- `floor`: ocean floor;
+- `biome` per 4x4;
+- `water` mask.
+Resolution is 1 up to 256x256 cells, else 4. Only loaded chunks are sampled; the rest are reported as missing. Its JSON form
+(`Sample.toJson()`) is what `job.run` passes to the agent.
+
+## Client side
+
+`ArchitectClientApi.get()` (client thread):
+- `preview(String blueprintId, BlockPos origin, Rotation rotation, PreviewStyle style)` shows a locked ghost with the HUD verdict
+  until `clearPreview()`. It's the placement ghost without the keys.
+- `jobs()` is the job client below. It uses the mod's one sidecar link, so another mod never starts its own helper.
+
+## Jobs (R2): protocol 2
+
+Client -> sidecar:
+- `job.run { job: JobSpec }` -> ack `{ jobId }`
+  ```
+  JobSpec = { kind: "structured" | "agent",
+              prompt: string, system?: string,
+              model?: string (default "claude-sonnet-5-5"; designs keep their own default), effort?: low|medium|high|xhigh,
+              schema?: JSONSchema            (structured: the final answer must validate; one retry on a schema miss)
+              tools?: [{ name, description, inputSchema }]   (mod-provided tools, see below)
+              budgetUsd?: number             (hard stop, enforced by the sidecar)
+              maxTurns?: number, owner?: string, tag?: string, group?: string, ext?: object }
+  ```
+  `structured` is a single-shot answer (no file tools, no Bash). `agent` is a multi-turn agent with ONLY the
+  mod-provided tools (plus `job_status` for progress): no file system, no Bash, no network. It runs under the same
+  refuse-by-default permission policy as design jobs.
+- `job.cancel { jobId }`
+- `job.tool.result { jobId, callId, result?: any, error?: string }`
+
+Sidecar -> client:
+- `job.upsert { job: Job }`, and `snapshot.jobs[]` (the last 20 plus any unfinished)
+  ```
+  Job = { id: "j<n>", spec (without the prompt text past 2000 chars), status: queued|running|waiting_tool|held|done|failed|cancelled,
+          step, result?: any (structured: the validated JSON; agent: the final text plus an optional JSON),
+          error?, cost: { usd, inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens, turns },
+          createdAt, updatedAt }
+  ```
+- `job.event { jobId, kind: "text" | "step" | "tool", data }`: streamed progress, not persisted.
+- `job.tool.call { jobId, callId, name, input }`: the agent called a mod-provided tool. The **client that started the job** answers
+  with `job.tool.result` within 60 s, or the tool returns an error to the agent ("the game did not answer").
+  While waiting, the job's status is `waiting_tool`. The answer must be JSON, at most 256 KB.
+
+Other job rules:
+- **Budget (hard stop):** the sidecar passes `budgetUsd` to the SDK (`maxBudgetUsd`) and also checks the reported cost
+  after every turn. Over budget -> the turn is aborted and the job `failed` with `error: "budget"`. The cost so far is kept.
+- **Resume after restart:** jobs persist in the sidecar's state (prompt, session id, cost). An unfinished job resumes on
+  the next start (the SDK session resume). A pending tool call is re-sent when the client reconnects.
+- **Usage limits:** a job is `held` with `usageLimitUntil`, as designs are. Groups (4b) hold together.
+- **Concurrency:** structured jobs run up to 4 at once (config `jobConcurrency`). Agent jobs share the design queue's limit
+  until 4b brings job groups.
+- **Design requests gain** optional `owner`, `ext`, `model`, `budgetUsd` (the same meaning as for jobs) and report `cost` with
+  cache tokens.
+
+## DevBridge for other mods (R11)
+
+`tools/lib/devclient.mjs` is importable by path. Ports come from `ARCHITECT_DEV_PORT` (and the client's `ARCHITECT_PORT`),
+and the token from `<gameDir>/architect/devbridge.token`. `docs/DEVBRIDGE.md` (new) lists the `dev.*` hooks, with their
+arguments and results, as a semi-stable test surface: changes are noted in its changelog, but it isn't semver'd.
+
+## Phase 4a gate
+
+- An in-repo test mod `apitest/` (a Gradle subproject, dev only, never shipped) depends only on
+  `dev.larattalabs.architect.api`. In a dev world it:
+  - places a site through the API with an owner and ext, and gets SITE_PLACED;
+  - is refused with typed reasons (PLAYER_IN_BOX, OVERLAP);
+  - in a survival world, gets SITE_PROGRESS and SITE_BUILT;
+  - removes the site (refused without force from another requester; RemoveResult with the refund in survival);
+  - samples a survey;
+  - shows a client preview.
+- **Jobs, without Claude** (the sim backend): run, events, cancel, a tool round trip (the test mod answers a tool call
+  with a survey), resume after a sidecar restart, and a budget stop (the sim reports a cost).
+- **Jobs, with Claude, once:** a `structured` job with a schema (a concept-card-like parse) and an `agent` job that
+  calls one mod-provided tool. Cheap model, small budget. The cost report includes cache tokens.
+- A protocol-1 client (today's mod build, or the stub) still works against the new sidecar.
+- gate-verifier checks the result.
