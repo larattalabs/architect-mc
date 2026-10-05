@@ -405,6 +405,12 @@ public final class Batches {
 
 	// ------------------------------------------------------------------ the tick
 
+	/** {@link #tick} again in the same game tick (after a job finished), without advancing the wait clock. */
+	static void startNext(MinecraftServer server, long deadline) {
+		tick--;
+		tick(server, deadline);
+	}
+
 	static void tick(MinecraftServer server, long deadline) {
 		tick++;
 		for (QBatch b : List.copyOf(BATCHES.values())) {

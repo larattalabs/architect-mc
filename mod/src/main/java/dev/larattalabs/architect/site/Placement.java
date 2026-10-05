@@ -119,7 +119,14 @@ public final class Placement {
 		try {
 			Batches.tick(srv, deadline);
 			Groups.tick(srv, deadline);
+			completedNow = false;
 			runJobs(srv);
+			// phase 4e: a job that finished leaves budget: its batch starts the next item in this tick, not the next one
+			for (int again = 0; again < 4 && completedNow && !slow && System.nanoTime() < deadline; again++) {
+				completedNow = false;
+				Batches.startNext(srv, deadline);
+				runJobs(srv);
+			}
 			syncGhosts(srv);
 		} catch (RuntimeException e) {
 			Architect.LOGGER.error("Placement tick failed", e);
@@ -131,6 +138,7 @@ public final class Placement {
 	}
 
 	private static int finishedWork;
+	private static boolean completedNow;
 
 	private static int workDone() {
 		int n = 0;
@@ -182,6 +190,7 @@ public final class Placement {
 				}
 			}
 			if (complete) {
+				completedNow = true;
 				JOBS.remove(j);
 				finishedWork += Math.max(0, j.total() - was);
 				completed(srv, j);

@@ -695,6 +695,16 @@ async function village(order, budget, name) {
   return { id, done, wall, stats, ids, failed };
 }
 
+/** `village <A|B> <ms>`: one village run (throughput probing). */
+steps.village = async () => {
+  if (!dev) await connect();
+  const r = await village(process.argv[3] ?? 'A', Number(process.argv[4] ?? 4), 'G4E VProbe');
+  log(`  village ${process.argv[3] ?? 'A'} at ${process.argv[4] ?? 4} ms: wall ${r.wall.toFixed(2)} s, ${Math.round(r.stats.cellsPerSecond)} cells/s, ticks ${r.stats.ticks}, `
+    + `MSPT max ${r.stats.msptMax?.toFixed(2)}, failed ${r.failed.length}`);
+  await leaveWorld();
+  return { wall: r.wall, stats: r.stats };
+};
+
 steps.roads = async () => {
   if (!dev) await connect();
   await flatBase();
