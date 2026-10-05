@@ -100,8 +100,25 @@ final class RestoreJob implements Placement.Job {
 		return s != null ? s : Sites.pendingRecord(siteId);
 	}
 
+	/** A road's or cell site's record (standing or pending). */
+	private @Nullable Infra infra() {
+		Infra i = Infras.get(siteId);
+		return i != null ? i : Infras.pending(siteId);
+	}
+
+	/** The cell writes done so far (roads and cell sites are written over ticks too). */
+	int cellCursor;
+	/** Who waits for a removal of a road or cell site (the API). */
+	transient final List<CompletableFuture<Sites.Removed>> futures = new ArrayList<>();
+	/** The infra record as it was taken down. */
+	transient @Nullable Infra infraDone;
+
 	@Override
 	public boolean step(MinecraftServer server, long deadline) {
+		Infra inf = Sites.get(siteId) == null && Sites.pendingRecord(siteId) == null ? infra() : null;
+		if (inf != null) {
+			return stepInfra(server, inf, deadline);
+		}
 		Site s = record();
 		ServerLevel level = s == null ? null : Sites.levelOf(server, s);
 		if (s == null || level == null) {
@@ -188,13 +205,83 @@ final class RestoreJob implements Placement.Job {
 		return true;
 	}
 
+	/** A road's or cell site's undo: plan and commit (when this job planned it), the record pending, the cells lowest first over ticks. */
+	private boolean stepInfra(MinecraftServer server, Infra inf, long deadline) {
+		ServerLevel level = Sites.levelOf(server, inf.dimension());
+		if (level == null) {
+			broken = inf.dimension() + " is not loaded";
+			return true;
+		}
+		try {
+			if (phase == PLAN) {
+				group = SiteJournal.group(purpose + "-" + siteId);
+				SiteJournal.Undone u = SiteJournal.undo(level, List.of(siteId), group);
+				work = u.work();
+				commit = u.commit();
+				handed = Sites.handedBySite(u.work());
+				phase = COMMIT;
+				return false;
+			}
+			if (phase == COMMIT) {
+				CompletableFuture<Void> f = commit;
+				if (f != null && !f.isDone()) {
+					return false;
+				}
+				if (f != null && f.isCompletedExceptionally()) {
+					broken = "its undo could not be saved to the world journal";
+					return true;
+				}
+				commit = null;
+				WorldJournal.kill("K6");
+				Infras.markPending(server, siteId);
+				phase = WRITE;
+				return false;
+			}
+			if (restore == null) {
+				restore = SiteJournal.restore(level, siteId, group);
+				cellCursor = 0;
+			}
+		} catch (Sites.SiteException e) {
+			broken = e.getMessage();
+			return true;
+		}
+		List<SiteJournal.CellWrite> cells = restore.cells();
+		int from = cellCursor;
+		while (cellCursor < cells.size()) {
+			int to = Math.min(cells.size(), cellCursor + 64);
+			SiteJournal.writeCells(level, cells.subList(cellCursor, to));
+			cellCursor = to;
+			if (cellCursor > from) {
+				WorldJournal.kill("K7");
+			}
+			if (System.nanoTime() >= deadline && cellCursor < cells.size()) {
+				return false;
+			}
+		}
+		Journal.Stats st = work != null ? Sites.statsOf(work, siteId) : new Journal.Stats(cells.size(), 0, restore.holes());
+		infraDone = inf;
+		result = new Sites.Removed(null, Map.of(), st.restored(), st.changed(), handed, List.of(), List.of());
+		if (!ROLLBACK.equals(purpose)) {
+			dev.larattalabs.architect.apiimpl.ApiEvents.removedInfra(server, inf, st.restored());
+		}
+		dev.larattalabs.architect.Architect.LOGGER.info("Removed {}: {} cells restored, {} kept (changed since), {} handed down", inf.describe(), st.restored(),
+			st.changed(), handed);
+		phase = DONE;
+		done = true;
+		futures.forEach(f -> f.complete(result));
+		return true;
+	}
+
 	@Override
 	public int progress() {
-		return writer == null ? 0 : writer.progress();
+		return writer == null ? cellCursor : writer.progress();
 	}
 
 	@Override
 	public int total() {
+		if (restore != null && writer == null) {
+			return Math.max(1, restore.cells().size());
+		}
 		return writer == null ? 1 : writer.done() ? writer.total() : writer.cells.size() * 2;
 	}
 

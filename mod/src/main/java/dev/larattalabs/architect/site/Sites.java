@@ -152,6 +152,7 @@ public final class Sites {
 
 	public static void init() {
 		WorldJournal.init(); // the journal opens (and imports 4d worlds) before the sites load
+		dev.larattalabs.architect.journal.JournalMigration.init();
 		ServerLifecycleEvents.SERVER_STARTED.register(server -> {
 			worldDir = server.getWorldPath(LevelResource.ROOT);
 			load(server);
@@ -249,9 +250,16 @@ public final class Sites {
 	public static Site place(ServerLevel level, Blueprint bp, BlockPos origin, Rotation rotation, boolean force, @Nullable String placer,
 		@Nullable Boolean construction, @Nullable String siteOwner, @Nullable JsonObject ext, @Nullable ServerPlayer actor,
 		Site.@Nullable Member member) throws SiteException {
+		return place(level, bp, origin, rotation, force, placer, construction, siteOwner, ext, actor, member, false);
+	}
+
+	/** {@link #place}; {@code layer}: the LAYER overlap policy (phase 4e), else REFUSE. Server thread. */
+	public static Site place(ServerLevel level, Blueprint bp, BlockPos origin, Rotation rotation, boolean force, @Nullable String placer,
+		@Nullable Boolean construction, @Nullable String siteOwner, @Nullable JsonObject ext, @Nullable ServerPlayer actor,
+		Site.@Nullable Member member, boolean layer) throws SiteException {
 		Site placed;
 		try {
-			placed = placeInternal(level, bp, origin, rotation, force, placer, construction, siteOwner, ext, member);
+			placed = placeInternal(level, bp, origin, rotation, force, placer, construction, siteOwner, ext, member, layer);
 		} catch (SiteException e) {
 			ApiEvents.placeFailed(level, bp.id(), origin, rotation, force, construction, siteOwner, ext, actor,
 				List.of(new Refusal(e.reason(), e.getMessage())));
@@ -635,7 +643,7 @@ public final class Sites {
 	}
 
 	/** "site s3 (cabin)", "road r2", "cell site c1 (steward_mc:terrain)". */
-	static String describe(String siteId) {
+	public static String describe(String siteId) {
 		Site b = get(siteId);
 		if (b != null) {
 			return "site " + siteId + " " + Anchors.str(b.box());
@@ -648,7 +656,7 @@ public final class Sites {
 	}
 
 	/** The owner of a site, road or cell site (null: the player's). */
-	static @Nullable String ownerOf(String siteId) {
+	public static @Nullable String ownerOf(String siteId) {
 		Site b = get(siteId);
 		if (b != null) {
 			return b.owner();
@@ -739,11 +747,17 @@ public final class Sites {
 
 	/** The server's verdict on a site: every reason {@link #place} (or {@link #move}) would refuse it for, and its notes. */
 	public record Verdict(List<String> refusals, List<String> notes, List<Refusal> typed, Anchors.@Nullable Bounds box,
-		Anchors.@Nullable Bounds snapshotBox, boolean construction) {
+		Anchors.@Nullable Bounds snapshotBox, boolean construction, List<SiteJournal.Hit> overlaps) {
 		public Verdict {
 			refusals = List.copyOf(refusals);
 			notes = List.copyOf(notes);
 			typed = List.copyOf(typed);
+			overlaps = List.copyOf(overlaps);
+		}
+
+		public Verdict(List<String> refusals, List<String> notes, List<Refusal> typed, Anchors.@Nullable Bounds box, Anchors.@Nullable Bounds snapshotBox,
+			boolean construction) {
+			this(refusals, notes, typed, box, snapshotBox, construction, List.of());
 		}
 
 		public Verdict(List<String> refusals, List<String> notes) {
@@ -768,6 +782,12 @@ public final class Sites {
 	/** {@link #verdict}; {@code construction}: null = the world's toggle, else whether it would be a construction site. */
 	public static Verdict verdict(ServerLevel level, Blueprint bp, BlockPos origin, Rotation rotation, boolean force, @Nullable String movingId,
 		boolean dryRun, @Nullable Boolean construction) {
+		return verdict(level, bp, origin, rotation, force, movingId, dryRun, construction, false, null);
+	}
+
+	/** {@link #verdict}; {@code layer}: the LAYER overlap policy, {@code owner} the request's owner (phase 4e). */
+	public static Verdict verdict(ServerLevel level, Blueprint bp, BlockPos origin, Rotation rotation, boolean force, @Nullable String movingId,
+		boolean dryRun, @Nullable Boolean construction, boolean layer, @Nullable String owner) {
 		List<Refusal> typed = new ArrayList<>();
 		Refusals out = (r, m) -> typed.add(new Refusal(r, m));
 		boolean survival = construction != null ? construction : SurvivalWorld.on();
@@ -805,8 +825,12 @@ public final class Sites {
 					}
 				}
 			}
-			site = checkSite(level, bp, origin, rotation, force, moving, out, dryRun, survival && moving == null);
-			return verdictOf(typed, site == null ? List.of() : siteNotes(site, site.found()), site, survival);
+			site = checkSite(level, bp, origin, rotation, force, moving, out, dryRun, survival && moving == null, layer, owner);
+			List<String> notes = new ArrayList<>(site == null ? List.of() : siteNotes(site, site.found()));
+			if (site != null) {
+				notes.addAll(site.layerNotes());
+			}
+			return verdictOf(typed, notes, site, survival);
 		} catch (SiteException | RuntimeException e) {
 			typed.add(new Refusal(e instanceof SiteException se ? se.reason() : Reason.OTHER, e.getMessage() == null ? e.toString() : e.getMessage()));
 			return verdictOf(typed, List.of(), site, survival);
@@ -815,7 +839,7 @@ public final class Sites {
 
 	private static Verdict verdictOf(List<Refusal> typed, List<String> notes, @Nullable SitePlan site, boolean construction) {
 		return new Verdict(typed.stream().map(Refusal::message).toList(), notes, typed, site == null ? null : site.box(),
-			site == null ? null : site.snapBox(), construction);
+			site == null ? null : site.snapBox(), construction, site == null ? List.of() : site.overlaps());
 	}
 
 	private static List<String> siteNotes(SitePlan s, List<Occupancy.Found> found) {
@@ -1589,7 +1613,7 @@ public final class Sites {
 		return settings(rotation);
 	}
 
-	static @Nullable ServerLevel levelOf(MinecraftServer server, String dimension) {
+	public static @Nullable ServerLevel levelOf(MinecraftServer server, String dimension) {
 		Identifier key = Identifier.tryParse(dimension);
 		return key == null ? null : server.getLevel(ResourceKey.create(Registries.DIMENSION, key));
 	}

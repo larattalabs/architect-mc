@@ -767,7 +767,7 @@ final class PlaceJob implements Placement.Job {
 		if (o.has("ring")) {
 			j.ring = intArray(o, "ring");
 		}
-		j.beforeRecord = !o.has("beforeRecord") || o.get("beforeRecord").getAsBoolean();
+		j.beforeRecord = o.has("beforeRecord") && o.get("beforeRecord").getAsBoolean(); // a 4d job (migrated) had its record
 		if (o.has("convert")) {
 			j.convert = Construction.fromJson(o.getAsJsonObject("convert"));
 			j.newCrate = o.has("newCrate") && o.get("newCrate").getAsBoolean();

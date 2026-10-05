@@ -56,18 +56,24 @@ final class SitesImpl implements dev.larattalabs.architect.api.Sites {
 
 	@Override
 	public List<SiteView> list() {
-		return Sites.all().stream().map(s -> Views.site(server, s)).toList();
+		List<SiteView> out = new ArrayList<>(Sites.all().stream().map(s -> Views.site(server, s)).toList());
+		dev.larattalabs.architect.site.Infras.all().forEach(i -> out.add(Views.infra(i)));
+		return out;
 	}
 
 	@Override
 	public List<SiteView> list(@Nullable String owner) {
-		return Sites.all().stream().filter(s -> ApiRules.ownerMatches(s.owner(), owner)).map(s -> Views.site(server, s)).toList();
+		return list().stream().filter(s -> ApiRules.ownerMatches(s.owner(), owner)).toList();
 	}
 
 	@Override
 	public Optional<SiteView> get(String siteId) {
 		Site s = Sites.get(siteId);
-		return s == null ? Optional.empty() : Optional.of(Views.site(server, s));
+		if (s != null) {
+			return Optional.of(Views.site(server, s));
+		}
+		dev.larattalabs.architect.site.Infra i = dev.larattalabs.architect.site.Infras.get(siteId);
+		return i == null ? Optional.empty() : Optional.of(Views.infra(i));
 	}
 
 	/** Runs on the server thread: now when already there, else queued. */
@@ -86,6 +92,10 @@ final class SitesImpl implements dev.larattalabs.architect.api.Sites {
 		return p != null && p.createCommandSourceStack().permissions().hasPermission(net.minecraft.server.permissions.Permissions.COMMANDS_GAMEMASTER);
 	}
 
+	private static boolean layer(PlaceRequest r) {
+		return r.overlap() == dev.larattalabs.architect.api.OverlapPolicy.LAYER;
+	}
+
 	/** The checks before the world is touched: design, actor rule, the dry-run verdict. Empty = place it. */
 	private List<Refusal> precheck(PlaceRequest r, boolean construction, @Nullable Blueprint bp, Sites.@Nullable Verdict[] out) {
 		if (bp == null) {
@@ -96,7 +106,7 @@ final class SitesImpl implements dev.larattalabs.architect.api.Sites {
 			return List.of(new Refusal(Reason.NOT_ALLOWED, no));
 		}
 		// the dry run first: it never loads a chunk, and it lists every reason, not only the first
-		Sites.Verdict v = Sites.verdict(r.level(), bp, r.origin(), r.rotation(), r.force(), null, true, construction);
+		Sites.Verdict v = Sites.verdict(r.level(), bp, r.origin(), r.rotation(), r.force(), null, true, construction, layer(r), r.owner());
 		out[0] = v;
 		return v.typed().stream().map(x -> new Refusal(x.reason(), x.message())).toList();
 	}
@@ -113,7 +123,7 @@ final class SitesImpl implements dev.larattalabs.architect.api.Sites {
 			}
 			try {
 				Site s = Sites.place(r.level(), bp, r.origin(), r.rotation(), r.force(), r.actor() == null ? null : r.actor().getStringUUID(),
-					construction, r.owner(), r.ext(), r.actor());
+					construction, r.owner(), r.ext(), r.actor(), null, layer(r));
 				String note = Sites.lastNote();
 				return new PlaceResult(true, Optional.of(s.id()), List.of(), note == null ? List.of() : Arrays.asList(note.split("; ")));
 			} catch (Sites.SiteException e) {
@@ -136,11 +146,33 @@ final class SitesImpl implements dev.larattalabs.architect.api.Sites {
 		Anchors.Bounds box = v[0] == null ? null : v[0].box();
 		Anchors.Bounds snap = v[0] == null ? null : v[0].snapshotBox();
 		return new Verdict(refused, v[0] == null ? List.of() : v[0].notes(), construction, Views.items(bom),
-			Optional.ofNullable(box).map(Views::box), Optional.ofNullable(snap).map(Views::box));
+			Optional.ofNullable(box).map(Views::box), Optional.ofNullable(snap).map(Views::box), v[0] == null ? List.of() : overlaps(v[0].overlaps(),
+				refused), 0);
+	}
+
+	/** The overlapped sites per site: owner, cells, whether one of the refusals is about it. */
+	static List<dev.larattalabs.architect.api.Overlap> overlaps(List<dev.larattalabs.architect.site.SiteJournal.Hit> hits, List<Refusal> refused) {
+		java.util.Map<String, Integer> by = new java.util.LinkedHashMap<>();
+		hits.forEach(h -> by.merge(h.site(), h.cells(), Integer::sum));
+		boolean blocking = refused.stream().anyMatch(x -> x.reason() == Reason.OVERLAP || x.reason() == Reason.OVERLAP_BUSY
+			|| x.reason() == Reason.OVERLAP_OWNED || x.reason() == Reason.LAYER_DEPTH);
+		List<dev.larattalabs.architect.api.Overlap> out = new ArrayList<>();
+		by.forEach((s, n) -> out.add(new dev.larattalabs.architect.api.Overlap(s, Sites.ownerOf(s), n, blocking)));
+		return out;
+	}
+
+	static Sites.Covered covered(@Nullable RemoveOptions o) {
+		if (o == null || o.covered() == null) {
+			return Sites.Covered.KEEP;
+		}
+		return Sites.Covered.valueOf(o.covered().name());
 	}
 
 	@Override
 	public CompletableFuture<RemoveResult> remove(String siteId, RemoveOptions o) {
+		if (Sites.get(siteId) == null && dev.larattalabs.architect.site.Infras.get(siteId) != null) {
+			return onServer(() -> removeInfra(siteId, o)).thenCompose(f -> f);
+		}
 		return onServer(() -> {
 			Site s = Sites.get(siteId);
 			if (s == null) {
@@ -162,12 +194,34 @@ final class SitesImpl implements dev.larattalabs.architect.api.Sites {
 				return new RemoveResult(false, blockers, Map.of());
 			}
 			try {
-				Sites.Removed done = Sites.removeDetailed(level, siteId, false);
-				return new RemoveResult(true, List.of(), Views.items(done.returned()));
+				Sites.Removed done = Sites.removeDetailed(level, siteId, false, covered(o));
+				return result(done);
 			} catch (Sites.SiteException e) {
 				return refused(e.getMessage());
 			}
 		});
+	}
+
+	static RemoveResult result(Sites.Removed done) {
+		return new RemoveResult(true, List.of(), Views.items(done.returned()), done.restored(), done.kept(), done.handedDown(), done.cascaded());
+	}
+
+	/** A road's or cell site's removal (over ticks): the owner rule, then the job. */
+	private CompletableFuture<RemoveResult> removeInfra(String siteId, @Nullable RemoveOptions o) {
+		dev.larattalabs.architect.site.Infra i = dev.larattalabs.architect.site.Infras.get(siteId);
+		String owner = ApiRules.removeRefusal(siteId, i.owner(), o == null ? null : o.requester(), o != null && o.force());
+		if (owner != null) {
+			return CompletableFuture.completedFuture(refused(owner));
+		}
+		ServerLevel level = Sites.levelOf(server, i.dimension());
+		if (level == null) {
+			return CompletableFuture.completedFuture(refused(i.dimension() + " is not loaded"));
+		}
+		try {
+			return dev.larattalabs.architect.site.InfraApi.remove(level, siteId, covered(o)).thenApply(SitesImpl::result);
+		} catch (Sites.SiteException e) {
+			return CompletableFuture.completedFuture(refused(e.getMessage()));
+		}
 	}
 
 	private static RemoveResult refused(String why) {
@@ -226,7 +280,7 @@ final class SitesImpl implements dev.larattalabs.architect.api.Sites {
 
 	@Override
 	public CompletableFuture<RemoveResult> removeGroup(String groupId, RemoveOptions o) {
-		return onServer(() -> Groups.removeGroup(server, groupId, o == null ? null : o.requester(), o != null && o.force())).thenCompose(f -> f)
+		return onServer(() -> Groups.removeGroup(server, groupId, o == null ? null : o.requester(), o != null && o.force(), covered(o))).thenCompose(f -> f)
 			.thenApply(SitesImpl::result);
 	}
 
@@ -247,11 +301,16 @@ final class SitesImpl implements dev.larattalabs.architect.api.Sites {
 
 	@Override
 	public CompletableFuture<RemoveResult> undoStage(String groupId, String stage, boolean force) {
-		return onServer(() -> Groups.undoStage(server, groupId, stage, force)).thenCompose(f -> f).thenApply(SitesImpl::result);
+		return onServer(() -> Groups.undoStage(server, groupId, stage, force, Sites.Covered.KEEP)).thenCompose(f -> f).thenApply(SitesImpl::result);
+	}
+
+	@Override
+	public CompletableFuture<RemoveResult> undoStage(String groupId, String stage, RemoveOptions o) {
+		return onServer(() -> Groups.undoStage(server, groupId, stage, o != null && o.force(), covered(o))).thenCompose(f -> f).thenApply(SitesImpl::result);
 	}
 
 	private static RemoveResult result(Groups.Removed r) {
-		return new RemoveResult(r.removed(), r.blockers(), Views.items(r.refund()));
+		return new RemoveResult(r.removed(), r.blockers(), Views.items(r.refund()), r.restored(), 0, r.handedDown(), r.cascaded());
 	}
 
 	@Override
@@ -294,5 +353,32 @@ final class SitesImpl implements dev.larattalabs.architect.api.Sites {
 			throw new IllegalArgumentException("No design " + blueprintId + " in the library");
 		}
 		return new OverlapMargin(LotFitting.frontMargin(bp), 0, 0);
+	}
+
+	// ------------------------------------------------------------------ 1.5.0 (docs/CONTRACT.md phase 4e)
+
+	@Override
+	public CompletableFuture<PlaceResult> placeRoad(dev.larattalabs.architect.api.RoadRequest r) {
+		return onServer(() -> dev.larattalabs.architect.site.InfraApi.placeRoad(r)).thenCompose(f -> f);
+	}
+
+	@Override
+	public Verdict checkRoad(dev.larattalabs.architect.api.RoadRequest r) {
+		return dev.larattalabs.architect.site.InfraApi.checkRoad(r);
+	}
+
+	@Override
+	public CompletableFuture<PlaceResult> placeCells(dev.larattalabs.architect.api.CellsRequest r) {
+		return onServer(() -> dev.larattalabs.architect.site.InfraApi.placeCells(r)).thenCompose(f -> f);
+	}
+
+	@Override
+	public Verdict checkCells(dev.larattalabs.architect.api.CellsRequest r) {
+		return dev.larattalabs.architect.site.InfraApi.checkCells(r);
+	}
+
+	@Override
+	public List<dev.larattalabs.architect.api.Layer> stack(net.minecraft.resources.ResourceKey<net.minecraft.world.level.Level> dimension, BlockPos pos) {
+		return dev.larattalabs.architect.site.InfraApi.stack(dimension.identifier().toString(), pos);
 	}
 }

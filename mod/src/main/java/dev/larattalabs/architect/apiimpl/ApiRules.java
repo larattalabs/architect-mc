@@ -22,7 +22,8 @@ public final class ApiRules {
 	 * removed).
 	 */
 	public static final java.util.Set<String> JAVA_FEATURES = java.util.Set.of("sites", "events", "designs", "library", "survey", "survivalInfo",
-		"compositePreview", "batchPlacement", "siteGroups", "stages", "groupCrate");
+		"compositePreview", "batchPlacement", "siteGroups", "stages", "groupCrate", "journal", "overlapLayer", "roads", "cellSites",
+		"stackQuery");
 
 	private ApiRules() {
 	}

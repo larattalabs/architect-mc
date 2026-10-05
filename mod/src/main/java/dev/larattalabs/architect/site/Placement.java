@@ -265,8 +265,29 @@ public final class Placement {
 			} else {
 				Batches.placed(srv, pj);
 			}
+		} else if (j instanceof InfraJob ij) {
+			if (ij.broken != null && ij.beforeRecord) {
+				Architect.LOGGER.warn("Placing {} failed before its first cell ({})", ij.siteId, ij.broken);
+				ij.aborted(srv);
+				SiteJournal.releaseGroup(SiteJournal.entries(ij.siteId).stream().filter(m -> m.status() == dev.larattalabs.architect.journal.Journal.Status.PLACING)
+					.map(dev.larattalabs.architect.journal.JournalStore.Meta::id).toList());
+				ij.failed(ij.broken);
+				Batches.infraFailed(srv, ij, ij.broken);
+			} else if (ij.broken != null) {
+				Architect.LOGGER.warn("Placing {} can't go on ({}); rolling it back", ij.siteId, ij.broken);
+				ij.failed(ij.broken);
+				RestoreJob rb = new RestoreJob(ij.siteId, RestoreJob.ROLLBACK, ij.batchId, ij.itemKey);
+				rb.why = ij.broken;
+				JOBS.add(rb);
+			} else {
+				Batches.infraPlaced(srv, ij);
+			}
 		} else if (j instanceof RestoreJob rj) {
-			if (RestoreJob.ROLLBACK.equals(rj.purpose)) {
+			if (rj.infraDone != null && RestoreJob.REMOVE.equals(rj.purpose) && rj.group != null && !rj.group.startsWith("u:remove-")) {
+				Groups.removed(srv, rj);
+			} else if (rj.infraDone != null && RestoreJob.REMOVE.equals(rj.purpose)) {
+				// a single road or cell site removal: its futures were completed
+			} else if (RestoreJob.ROLLBACK.equals(rj.purpose)) {
 				Batches.rolledBack(srv, rj);
 			} else {
 				Groups.removed(srv, rj);
@@ -477,9 +498,31 @@ public final class Placement {
 			}
 			JOBS.add(pj);
 			Architect.LOGGER.info("Resuming the placement of {} ({}) at phase {}", pj.siteId, pj.blueprint, pj.phase);
+		} else if ("infra".equals(kind)) {
+			InfraJob ij = InfraJob.fromJson(o);
+			if (ij.beforeRecord && !clean) {
+				Batches.infraRequeue(srv, ij);
+				return;
+			}
+			if (ij.beforeRecord && ij.phase == InfraJob.CAPTURE) {
+				Batches.infraRequeue(srv, ij); // its capture was not saved: planned again
+				return;
+			}
+			if (!ij.beforeRecord && !clean) {
+				boolean active = SiteJournal.main(ij.siteId) != null && SiteJournal.main(ij.siteId).status() == dev.larattalabs.architect.journal.Journal.Status.ACTIVE;
+				if (!active) {
+					RestoreJob rb = new RestoreJob(ij.siteId, RestoreJob.ROLLBACK, ij.batchId, ij.itemKey);
+					rb.requeue = true;
+					rb.why = "the game stopped without saving while it was being placed";
+					JOBS.add(rb);
+					return;
+				}
+				ij.phase = InfraJob.AFTER_COMMIT;
+			}
+			JOBS.add(ij);
 		} else {
 			RestoreJob rj = RestoreJob.fromJson(o);
-			if (Sites.get(rj.siteId) != null) {
+			if (Sites.get(rj.siteId) != null || Sites.pendingRecord(rj.siteId) != null || Infras.get(rj.siteId) != null || Infras.pending(rj.siteId) != null) {
 				JOBS.add(rj);
 			}
 		}
@@ -500,7 +543,8 @@ public final class Placement {
 			boolean clean = root.has("clean") && root.get("clean").getAsBoolean();
 			for (JsonElement e : root.has("jobs") ? root.getAsJsonArray("jobs") : new JsonArray()) {
 				JsonObject o = e.getAsJsonObject();
-				boolean before = "place".equals(o.get("kind").getAsString()) && (!o.has("beforeRecord") || o.get("beforeRecord").getAsBoolean());
+				String k = o.get("kind").getAsString();
+				boolean before = ("place".equals(k) || "infra".equals(k)) && o.has("beforeRecord") && o.get("beforeRecord").getAsBoolean();
 				if (clean || !before) {
 					out.add(o.get("siteId").getAsString());
 				}

@@ -299,13 +299,9 @@ public final class SiteJournal {
 			t.create(JournalStore.Meta.header(leaves, WorldJournal.LEAVES, siteId, group, dim, Policy.CELL, ll, Status.PLACING, now),
 				JournalStore.bySection(leafCells(level, held, ll)), JournalNbt.Head.EMPTY);
 		}
-		Set<Long> secs = new LinkedHashSet<>(WorldJournal.sectionsOf(box));
-		for (int i = 0; i + 3 < held.size(); i += 4) {
-			secs.add(Sections.key(held.get(i) >> 4, held.get(i + 1) >> 4, held.get(i + 2) >> 4));
-		}
-		ChangeTracker tracker = ChangeTracker.start(level, secs);
+		// the capture is the world at P1 (one tick, as 4d's snapshot); a sliced capture tracked its changes until here (PlaceJob)
 		CompletableFuture<Void> f = s.submit(t);
-		return new Placing(siteId, id, leaves, box, before, held, f, tracker);
+		return new Placing(siteId, id, leaves, box, before, held, f, null);
 	}
 
 	/** The held leaves as journal cells: {@code before} the natural leaf (its distance as read), {@code after} the same leaf persistent. */
@@ -513,8 +509,18 @@ public final class SiteJournal {
 		return null;
 	}
 
-	/** The sites covering any cell of this site (active entries above its cells), nearest first. */
+	/** The sites covering any cell of this site (active entries above its cells). */
 	static List<String> coveringSites(String siteId) {
+		return related(siteId, true);
+	}
+
+	/** The sites this site lies on top of (active entries below its cells). */
+	public static List<String> coveredSites(String siteId) {
+		return related(siteId, false);
+	}
+
+	/** The sites above ({@code above}) or below any cell of this site. Any thread (reads the journal's view). */
+	public static List<String> related(String siteId, boolean above) {
 		Set<String> out = new LinkedHashSet<>();
 		JournalStore s = WorldJournal.storeOrNull();
 		if (s == null) {
@@ -538,7 +544,7 @@ public final class SiteJournal {
 						}
 						for (int a = 0; a < mine.size(); a++) {
 							int j = their.find(mine.index(a));
-							if (j >= 0 && their.layer(j) > mine.layer(a)) {
+							if (j >= 0 && (above ? their.layer(j) > mine.layer(a) : their.layer(j) < mine.layer(a))) {
 								out.add(om.site());
 								break;
 							}

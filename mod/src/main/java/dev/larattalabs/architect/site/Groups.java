@@ -37,6 +37,9 @@ public final class Groups {
 		final List<String> sites = new ArrayList<>();
 		final @Nullable String requester;
 		final boolean force;
+		Sites.Covered covered = Sites.Covered.KEEP;
+		final List<String> cascaded = new ArrayList<>();
+		Map<String, Integer> handedAll = new TreeMap<>();
 		boolean started;
 		@Nullable String current;
 		long waited;
@@ -72,6 +75,7 @@ public final class Groups {
 				o.addProperty("requester", requester);
 			}
 			o.addProperty("force", force);
+			o.addProperty("covered", covered.name());
 			o.addProperty("started", started);
 			if (current != null) {
 				o.addProperty("current", current);
@@ -109,6 +113,7 @@ public final class Groups {
 				o.has("requester") ? o.get("requester").getAsString() : null, o.get("force").getAsBoolean());
 			o.getAsJsonArray("sites").forEach(e -> r.sites.add(e.getAsString()));
 			r.started = o.get("started").getAsBoolean();
+			r.covered = o.has("covered") ? Sites.Covered.valueOf(o.get("covered").getAsString()) : Sites.Covered.KEEP;
 			r.current = o.has("current") ? o.get("current").getAsString() : null;
 			r.waited = o.get("waited").getAsLong();
 			o.getAsJsonObject("refund").entrySet().forEach(e -> r.refund.put(e.getKey(), e.getValue().getAsInt()));
@@ -131,7 +136,11 @@ public final class Groups {
 	}
 
 	/** What a removal ended with: removed, or stopped at a site with its blockers; every refund so far. */
-	public record Removed(boolean removed, List<String> blockers, Map<String, Integer> refund) {
+	public record Removed(boolean removed, List<String> blockers, Map<String, Integer> refund, int restored, Map<String, Integer> handedDown,
+		List<String> cascaded) {
+		public Removed(boolean removed, List<String> blockers, Map<String, Integer> refund) {
+			this(removed, blockers, refund, 0, Map.of(), List.of());
+		}
 	}
 
 	private static final List<Removal> REMOVALS = new ArrayList<>();
@@ -198,6 +207,12 @@ public final class Groups {
 	 * group needs {@code force}. Server thread.
 	 */
 	public static CompletableFuture<Removed> removeGroup(MinecraftServer server, String groupId, @Nullable String requester, boolean force) {
+		return removeGroup(server, groupId, requester, force, Sites.Covered.KEEP);
+	}
+
+	/** {@link #removeGroup} with a covered policy for cells of its sites that sites outside the group cover (phase 4e). */
+	public static CompletableFuture<Removed> removeGroup(MinecraftServer server, String groupId, @Nullable String requester, boolean force,
+		Sites.Covered covered) {
 		SiteGroupRec g = Sites.group(groupId);
 		if (g == null) {
 			return CompletableFuture.failedFuture(new IllegalArgumentException("no site group " + groupId));
@@ -220,6 +235,7 @@ public final class Groups {
 		}
 		Sites.putGroup(server, g.withState(SiteGroupRec.REMOVING));
 		Removal r = new Removal(groupId, null, requester, force);
+		r.covered = covered;
 		CompletableFuture<Removed> f = new CompletableFuture<>();
 		r.futures.add(f);
 		REMOVALS.add(r);
@@ -230,6 +246,11 @@ public final class Groups {
 
 	/** Undoes a placed (or partial) stage: its sites, last placed first; then the stage is UNDONE. Server thread. */
 	public static CompletableFuture<Removed> undoStage(MinecraftServer server, String groupId, String stage, boolean force) {
+		return undoStage(server, groupId, stage, force, Sites.Covered.KEEP);
+	}
+
+	/** {@link #undoStage} with a covered policy (phase 4e). */
+	public static CompletableFuture<Removed> undoStage(MinecraftServer server, String groupId, String stage, boolean force, Sites.Covered covered) {
 		SiteGroupRec g = Sites.group(groupId);
 		if (g == null) {
 			return CompletableFuture.failedFuture(new IllegalArgumentException("no site group " + groupId));
@@ -248,6 +269,7 @@ public final class Groups {
 			}
 		}
 		Removal r = new Removal(groupId, stage, null, true);
+		r.covered = covered;
 		r.started = true;
 		List<String> sites = new ArrayList<>(g.stages().get(i).sites());
 		java.util.Collections.reverse(sites);
@@ -334,15 +356,22 @@ public final class Groups {
 			pendAll(server, r); // after a load: the records go pending if they did not yet (R3)
 		}
 		// R4: the writes, last placed first
-		while (!r.sites.isEmpty() && (!r.undoSites.contains(r.sites.get(0)) || Sites.pendingRecord(r.sites.get(0)) == null && Sites.get(r.sites.get(0)) == null)) {
+		while (!r.sites.isEmpty() && (!r.undoSites.contains(r.sites.get(0)) || Sites.pendingRecord(r.sites.get(0)) == null && Sites.get(r.sites.get(0)) == null
+			&& Infras.pending(r.sites.get(0)) == null)) {
 			r.sites.remove(0);
 		}
 		if (r.sites.isEmpty()) {
-			end(server, r, new Removed(true, List.of(), Map.copyOf(r.refund)));
+			end(server, r, new Removed(true, List.of(), Map.copyOf(r.refund), r.undoSites.size(), Map.copyOf(r.handedAll), List.copyOf(r.cascaded)));
 			return;
 		}
 		String id = r.sites.get(0);
 		Site s = Sites.pendingRecord(id);
+		if (s == null && Infras.pending(id) != null) {
+			// a road or cell site of the group: its cells over ticks
+			r.current = id;
+			Placement.add(server, RestoreJob.writing(id, r.undo, Map.of()));
+			return;
+		}
 		ServerLevel level = s == null ? null : Sites.levelOf(server, s);
 		if (s == null || level == null) {
 			r.sites.remove(0);
@@ -428,6 +457,27 @@ public final class Groups {
 			}
 		}
 		r.waited = 0;
+		// sites outside the removal covering its cells (phase 4e): KEEP hands down, REFUSE refuses, CASCADE takes them first
+		java.util.LinkedHashSet<String> outside = new java.util.LinkedHashSet<>();
+		java.util.ArrayDeque<String> todo = new java.util.ArrayDeque<>(ids);
+		while (!todo.isEmpty()) {
+			for (String c : SiteJournal.coveringSites(todo.poll())) {
+				if (!ids.contains(c) && outside.add(c) && r.covered == Sites.Covered.CASCADE) {
+					todo.add(c);
+				}
+			}
+		}
+		if (!outside.isEmpty() && r.covered == Sites.Covered.REFUSE) {
+			end(server, r, new Removed(false, List.of("COVERED: " + String.join(", ", outside) + " cover cells of the sites"), Map.copyOf(r.refund)));
+			return;
+		}
+		if (!outside.isEmpty() && r.covered == Sites.Covered.CASCADE) {
+			List<String> top = new ArrayList<>(outside);
+			java.util.Collections.reverse(top);
+			ids.addAll(0, top);
+			r.sites.addAll(0, top);
+			r.cascaded.addAll(top);
+		}
 		for (String id : ids) {
 			Site s = Sites.get(id);
 			if (s == null) {
@@ -468,6 +518,7 @@ public final class Groups {
 			r.undoSites.clear();
 			r.undoSites.addAll(ids);
 			r.handed = new TreeMap<>(Sites.handedBySite(u.work()));
+			r.handedAll = new TreeMap<>(r.handed);
 			r.commit = u.commit();
 			Placement.save(server, false);
 		} catch (Sites.SiteException e) {

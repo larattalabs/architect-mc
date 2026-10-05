@@ -150,4 +150,51 @@ public interface Sites {
 	default OverlapMargin overlapMargin(String blueprintId) {
 		throw new UnsupportedOperationException("Sites.overlapMargin needs Architect API 1.4.0");
 	}
+
+	// ------------------------------------------------------------------ 1.5.0: journal-backed sites (docs/CONTRACT.md phase 4e)
+	// place, check and queue honour PlaceRequest.overlap / Batch.overlap; remove, removeGroup and undoStage honour
+	// RemoveOptions.covered. Default methods throw UnsupportedOperationException, so implementations written against 1.4.0 link.
+
+	/**
+	 * Places a road along a polyline (docs/CONTRACT.md phase 4e "Roads as sites"): a CELL site whose undo restores a cell only
+	 * where the world still holds the road's block. A road never layers over buildings or roads: it skips every cell a site or
+	 * road owns (and notes it); it layers over cell sites ({@link Reason#OVERLAP_OWNED} over another owner's, unless forced).
+	 * Refusals: {@link Reason#TOO_STEEP}, {@link Reason#DEEP_WATER}, {@link Reason#OTHER} (too long: split it), the actor rules.
+	 * Fires SITE_PLACED. Since 1.5.0.
+	 */
+	default java.util.concurrent.CompletableFuture<PlaceResult> placeRoad(RoadRequest r) {
+		throw new UnsupportedOperationException("Sites.placeRoad needs Architect API 1.5.0");
+	}
+
+	/** A dry run of {@link #placeRoad}: refusals, notes, the cell count and box. Never loads a chunk. Since 1.5.0. */
+	default Verdict checkRoad(RoadRequest r) {
+		throw new UnsupportedOperationException("Sites.checkRoad needs Architect API 1.5.0");
+	}
+
+	/**
+	 * Places a caller's cell list as a site (docs/CONTRACT.md phase 4e "Cell sites"). INSTANT only: refused
+	 * {@link Reason#NOT_ALLOWED} for CONSTRUCTION, and where INSTANT is not allowed; {@link Reason#TOO_LARGE} over 1,000,000
+	 * cells. Written over ticks. Fires SITE_PLACED. Since 1.5.0.
+	 */
+	default java.util.concurrent.CompletableFuture<PlaceResult> placeCells(CellsRequest r) {
+		throw new UnsupportedOperationException("Sites.placeCells needs Architect API 1.5.0");
+	}
+
+	/** A dry run of {@link #placeCells}. Since 1.5.0. */
+	default Verdict checkCells(CellsRequest r) {
+		throw new UnsupportedOperationException("Sites.checkCells needs Architect API 1.5.0");
+	}
+
+	/**
+	 * {@link #undoStage(String, String, boolean)} with remove options: {@code force} and the covered policy (cells of the stage's
+	 * sites another site covers: KEEP, CASCADE or REFUSE). Since 1.5.0.
+	 */
+	default java.util.concurrent.CompletableFuture<RemoveResult> undoStage(String groupId, String stage, RemoveOptions o) {
+		throw new UnsupportedOperationException("Sites.undoStage(RemoveOptions) needs Architect API 1.5.0");
+	}
+
+	/** The stack at a cell: every standing site's layer there, bottom first (the last one is what the world shows). Since 1.5.0. */
+	default List<Layer> stack(net.minecraft.resources.ResourceKey<net.minecraft.world.level.Level> dimension, net.minecraft.core.BlockPos pos) {
+		throw new UnsupportedOperationException("Sites.stack needs Architect API 1.5.0");
+	}
 }
