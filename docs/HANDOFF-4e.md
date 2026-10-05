@@ -22,27 +22,22 @@ ticks use a normal world (`G4E Normal`, seed `4e`).
 
 ## Gate status
 
-| Gate | Step | Status |
+Evidence is local, under `~/Developer/LarattaLabs/architect-mc/artifacts/gate4e/<step>.json` (+ all.log). Steps run on a build
+older than the latest commit must be re-run on the final build (every step, plus gate 9's gate4d/gate3/phase 1 re-runs).
+
+| Gate | Step | Status (evidence) |
 |---|---|---|
-| 2 any order | `orders` | PASS: 24/24 orders, group removal, L in 6 orders (no leak, box + 8 exact) |
-| 3 player edits | `edits` | PASS |
-| 5 crash K1-K8 | `crash` | PASS (and K3 clean resume) |
+| 2 any order | `orders` | PASS earlier build: 24/24, group, L 6/6 (orders.json) |
+| 3 player edits | `edits` | PASS earlier build (edits.json) |
+| 5 crash K1-K8 | `crash` | PASS earlier build, incl. K3 clean (crash.json) |
+| 6 roads + village | `roads` | PASS earlier build (roads.json); 4 ms throughput 19.5k cells/s after the same-tick start fix (village probe), roads.json older |
+| 7 survival layering | `survival` | PASS (survival.json) after the rule 3b fix |
+| 8 size cap | `sizecap` | FAIL: keep placement spikes (tryStart 260 ms: cold TemplateGrid 118 ms + two checkSite passes; P3 submit 30 ms, start 30 ms, first template step 45 ms); single Remove of the keep took 1.4 s in one tick (plan 417, commit 199, write 776 ms). Work in progress: ticked/sliced removal and placement start |
 | 4 migration, downgrade | `migration`, `downgrade` | written, not run |
-| 6 roads + village, 8 throughput | `roads` | running |
-| 7 survival layering | `survival` | written, not run |
-| 8 size cap, sliced 300k | `sizecap` | written, not run |
-| 9 4d regression | gate4d.mjs on the 4e client | earlier run: all pass but L3 (pre-existing, also on v0.7.0); adjacent-lot leaf check not written |
+| 9 4d regression | gate4d.mjs + gate3 + phase 1 | earlier: all pass but L3 (pre-existing on v0.7.0: worldgen gravel over a cave at the lot edge); `leaves` step written, not run |
 | 10 mega-lite, bench | `megalite`, `bench`, `megabig` | written, not run |
 | 11 API | `api`, `api14` | written, not run |
-
-Bugs the gate found and fixed so far: `Journal.Value` helpers used `Name`/`Properties` (26.x writes `id`/`properties`;
-`Journal.AIR` never equalled a world value); removal blockers ignored block entities a LAYERed BOX site owns by its journal
-`after`; a group removal reported sites as restored cells; K4 (record still placing, journal ACTIVE) rolled back instead of
-placing; K6 (undo committed, record not pending) left the site's entries UNDONE; pending roads and cell sites were never
-settled; group-undo evidence compared against the entry's own `before` instead of the group's written value; DevBridge could
-not rebind its port after a halted client (SO_REUSEADDR).
-
-Old 4d note: the 4d gate's L3 lot fails group-undo equality on v0.7.0 too (floating worldgen gravel, `regress4d/`).
+| 6 ghost | `ghost` | written, not run |
 
 ## Known issues
 
