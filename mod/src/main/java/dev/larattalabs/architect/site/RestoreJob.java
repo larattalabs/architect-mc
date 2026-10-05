@@ -51,6 +51,12 @@ final class RestoreJob implements Placement.Job {
 	transient @Nullable CompletableFuture<Void> commit;
 	transient WorldJournal.@Nullable UndoWork work;
 	transient WorldJournal.@Nullable UndoPlanner planner;
+	transient boolean planned;
+	/** A restore's writer, prepared off the server thread for a large site (the template of 600k cells). */
+	transient @Nullable CompletableFuture<Object[]> prepared;
+	/** Undos over more sections than this commit in the tick after planning; restores of more cells prepare off-thread. */
+	static final int SPLIT_SECTIONS = 24;
+	static final int OFF_THREAD_CELLS = 100_000;
 	@Nullable TemplateWriter writer;
 	transient SiteJournal.@Nullable Restore restore;
 	@Nullable List<String> dropsBefore;
@@ -159,12 +165,17 @@ final class RestoreJob implements Placement.Job {
 					planner = SiteJournal.undoPlanner(level, List.of(siteId), group);
 				}
 				try {
-					if (!planner.step(deadline)) {
+					if (!planned && !planner.step(deadline)) {
 						return false;
 					}
 				} catch (java.io.IOException e) {
 					throw new Sites.SiteException(Reason.JOURNAL_UNAVAILABLE, "the journal can't be read (" + e.getMessage() + ")");
 				}
+				if (!planned && planner.sections() > SPLIT_SECTIONS) {
+					planned = true; // a large undo commits in the next tick
+					return false;
+				}
+				planned = false;
 				WorldJournal.kill("K5");
 				SiteJournal.Undone u = SiteJournal.submitUndo(planner.work());
 				planner = null;
@@ -199,23 +210,49 @@ final class RestoreJob implements Placement.Job {
 			return true;
 		}
 		if (writer == null) {
-			try {
-				restore = SiteJournal.restore(level, siteId, group);
-			} catch (Sites.SiteException e) {
-				broken = e.getMessage();
-				return true;
-			}
 			if (dropsBefore == null) {
 				dropsBefore = Sites.Drops.before(level, s.restoreBox()).uuids();
 			}
-			if (restore.template() != null && restore.box() != null) {
-				StructureTemplate t = new StructureTemplate();
-				t.load(level.registryAccess().lookupOrThrow(Registries.BLOCK), restore.template());
+			String g = group;
+			if (prepared == null) {
+				java.util.function.Supplier<Object[]> prep = () -> {
+					try {
+						SiteJournal.Restore rs = SiteJournal.restore(level, siteId, g);
+						TemplateWriter.Cells cs = null;
+						if (rs.template() != null && rs.box() != null) {
+							StructureTemplate t = new StructureTemplate();
+							t.load(level.registryAccess().lookupOrThrow(Registries.BLOCK), rs.template());
+							cs = TemplateWriter.cells(level, t, Sites.placeSettings(Rotation.NONE));
+						}
+						return new Object[] {rs, cs};
+					} catch (Sites.SiteException e) {
+						throw new java.util.concurrent.CompletionException(e);
+					}
+				};
+				prepared = s.restoreBox().volume() > OFF_THREAD_CELLS ? CompletableFuture.supplyAsync(prep) : CompletableFuture.completedFuture(prep.get());
+			}
+			if (!prepared.isDone()) {
+				return false;
+			}
+			Object[] ready;
+			try {
+				ready = prepared.join();
+			} catch (java.util.concurrent.CompletionException e) {
+				broken = e.getCause() != null ? e.getCause().getMessage() : e.getMessage();
+				return true;
+			} finally {
+				prepared = null;
+			}
+			restore = (SiteJournal.Restore) ready[0];
+			if (ready[1] != null) {
 				BlockPos min = new BlockPos(restore.box().minX(), restore.box().minY(), restore.box().minZ());
-				writer = new TemplateWriter(TemplateWriter.cells(level, t, Sites.placeSettings(Rotation.NONE)), min, Sites.FLAGS);
+				writer = new TemplateWriter((TemplateWriter.Cells) ready[1], min, Sites.FLAGS);
 			} else {
 				writer = new TemplateWriter(new TemplateWriter.Cells(new int[0], new net.minecraft.world.level.block.state.BlockState[0],
 					new net.minecraft.nbt.CompoundTag[0]), BlockPos.ZERO, Sites.FLAGS);
+			}
+			if (System.nanoTime() >= deadline) {
+				return false;
 			}
 		}
 		TickDeferral.begin(level, held);
