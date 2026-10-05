@@ -1,0 +1,15 @@
+{
+	"required": true,
+	"package": "dev.larattalabs.architect.mixin",
+	"compatibilityLevel": "JAVA_25",
+	"mixins": [
+		"LevelTicksMixin",
+		"StructureTemplateAccessor"
+	],
+	"injectors": {
+		"defaultRequire": 1
+	},
+	"overwrites": {
+		"requireAnnotations": true
+	}
+}

@@ -38,6 +38,8 @@ public final class QBatch {
 	public long doneAt;
 	/** cancelBatch was called: the item being placed is rolling back; the batch ends CANCELLED when it is done. */
 	public boolean cancelling;
+	/** stopOnFailure stopped it: it ends STOPPED (not CANCELLED) once the item being placed is done. */
+	public boolean stopping;
 	/** Why a stopped batch stopped. */
 	public String note = "";
 
@@ -122,6 +124,9 @@ public final class QBatch {
 		if (cancelling) {
 			o.addProperty("cancelling", true);
 		}
+		if (stopping) {
+			o.addProperty("stopping", true);
+		}
 		if (!note.isEmpty()) {
 			o.addProperty("note", note);
 		}
@@ -150,6 +155,7 @@ public final class QBatch {
 		b.status = Status.valueOf(o.get("status").getAsString());
 		b.doneAt = o.has("doneAt") ? o.get("doneAt").getAsLong() : 0L;
 		b.cancelling = o.has("cancelling") && o.get("cancelling").getAsBoolean();
+		b.stopping = o.has("stopping") && o.get("stopping").getAsBoolean();
 		b.note = o.has("note") ? o.get("note").getAsString() : "";
 		return b;
 	}

@@ -335,6 +335,29 @@ public final class PlacementFeature {
 					}
 				})).thenCompose(x -> x);
 			});
+		DevBridge.register("dev.placement.stats", 10_000, "{reset?: false} - phase 4d: the placement budget's use while placement is active: budgetMs, "
+			+ "ticks, msptMax, msptMean (the server's own tick times), ticksOver50ms, placementMsMax/Mean (Architect's time per tick), cells, "
+			+ "workSeconds, cellsPerSecond, active, jobs; reset starts over after the answer", (req, mc) -> {
+				boolean reset = Fields.of(req).optBool("reset", false);
+				return DevBridge.onClient(mc, () -> ServerTasks.callAsPlayer((level, player) -> dev.larattalabs.architect.site.Placement.stats(reset)))
+					.thenCompose(x -> x);
+			});
+		DevBridge.register("dev.placement.jobs", 10_000, "{} - phase 4d: the ticked jobs running now: site, kind (place|rollback|remove), batch, item, phase, "
+			+ "progress, total, held (ticks held back)", (req, mc) -> DevBridge.onClient(mc, () -> ServerTasks.callAsPlayer((level, player) -> {
+				JsonObject o = new JsonObject();
+				o.add("jobs", dev.larattalabs.architect.site.Placement.jobsJson());
+				o.addProperty("slow", dev.larattalabs.architect.site.Placement.slow());
+				o.addProperty("budgetMs", dev.larattalabs.architect.survival.SurvivalWorld.placementBudgetMs());
+				return o;
+			})).thenCompose(x -> x));
+		DevBridge.register("dev.placement.slow", 10_000, "{on: bool} - phase 4d test hook: jobs write about 16 cells per tick (to act in the middle of "
+			+ "an item: cancel, relog)", (req, mc) -> {
+				boolean on = Fields.of(req).bool("on");
+				dev.larattalabs.architect.site.Placement.setSlow(on);
+				JsonObject o = new JsonObject();
+				o.addProperty("slow", on);
+				return java.util.concurrent.CompletableFuture.completedFuture(o);
+			});
 		DevBridge.register("dev.box.hash", 60_000, "{min: [x,y,z], max: [x,y,z], cells?: false} - SHA-256 over every block state and block-entity NBT in the "
 			+ "box (the player's dimension, loads chunks): before/after a place + remove proves the terrain came back exactly", (req, mc) -> {
 				Fields f = Fields.of(req);

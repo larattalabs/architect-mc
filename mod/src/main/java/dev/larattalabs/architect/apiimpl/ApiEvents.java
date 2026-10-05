@@ -35,6 +35,32 @@ public final class ApiEvents {
 		}
 	}
 
+	// ------------------------------------------------------------------ phase 4d: batches and stages
+
+	public static void batchProgress(dev.larattalabs.architect.batch.QBatch b) {
+		guard("BATCH_PROGRESS", () -> SiteEvents.BATCH_PROGRESS.invoker().onProgress(Views.batch(b)));
+	}
+
+	public static void batchDone(dev.larattalabs.architect.batch.QBatch b) {
+		guard("BATCH_DONE", () -> SiteEvents.BATCH_DONE.invoker().onDone(Views.batch(b)));
+	}
+
+	public static void itemPlaced(dev.larattalabs.architect.batch.QBatch b, dev.larattalabs.architect.batch.QItem i) {
+		guard("ITEM_PLACED", () -> SiteEvents.ITEM_PLACED.invoker().onPlaced(Views.itemEvent(b, i)));
+	}
+
+	public static void itemFailed(dev.larattalabs.architect.batch.QBatch b, dev.larattalabs.architect.batch.QItem i) {
+		guard("ITEM_FAILED", () -> SiteEvents.ITEM_FAILED.invoker().onFailed(Views.itemEvent(b, i)));
+	}
+
+	public static void itemWaiting(dev.larattalabs.architect.batch.QBatch b, dev.larattalabs.architect.batch.QItem i) {
+		guard("ITEM_WAITING", () -> SiteEvents.ITEM_WAITING.invoker().onWaiting(Views.itemEvent(b, i)));
+	}
+
+	public static void stageState(String groupId, dev.larattalabs.architect.site.SiteGroupRec.StageRec st) {
+		guard("STAGE_STATE", () -> SiteEvents.STAGE_STATE.invoker().onState(groupId, Views.stage(st)));
+	}
+
 	public static void placed(MinecraftServer server, Site s) {
 		guard("SITE_PLACED", () -> SiteEvents.SITE_PLACED.invoker().onPlaced(Views.site(server, s)));
 	}

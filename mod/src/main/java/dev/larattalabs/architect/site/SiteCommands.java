@@ -39,6 +39,14 @@ import org.jspecify.annotations.Nullable;
  * /architect survival [on|off]      show / change this world's survival toggle (changing it needs permission level 2)
  * /architect site finish &lt;site&gt;     build a construction site's remaining cells at once, free (permission 2, creative mode)
  * /architect site state &lt;site&gt;      a construction site's progress and what it still needs
+ * /architect batches                the placement batches of this world (phase 4d)
+ * /architect batch cancel &lt;batch&gt;   cancel a batch: placed items stay, the one placing rolls back, the rest are dropped
+ * /architect groups                 the site groups and their stages
+ * /architect group remove &lt;group&gt; [force]
+ *                                   take a group's sites down, last placed first (force: a group another mod owns)
+ * /architect group approve|skip|undo &lt;group&gt; &lt;stage&gt; [force]
+ *                                   approve or skip a planned stage, or undo a placed one (force: although a later one is placed)
+ * /architect budget [ms]            show / set the server time per tick placements may use (1-20 ms; setting needs permission 2)
  * </pre>
  * In a survival world (docs/CONTRACT.md phase 3) place makes a construction site and remove deconstructs it.
  */
@@ -100,7 +108,151 @@ public final class SiteCommands {
 					.then(Commands.argument("site", StringArgumentType.word()).suggests((ctx, b) -> {
 						Sites.all().stream().filter(x -> x.construction() != null).forEach(x -> b.suggest(x.id()));
 						return b.buildFuture();
-					}).executes(SiteCommands::siteState))))));
+					}).executes(SiteCommands::siteState))))
+			.then(Commands.literal("batches").executes(SiteCommands::batches))
+			.then(Commands.literal("batch")
+				.then(Commands.literal("cancel")
+					.then(Commands.argument("batch", StringArgumentType.word()).suggests((ctx, b) -> {
+						Batches.all().stream().filter(x -> x.running()).forEach(x -> b.suggest(x.id));
+						return b.buildFuture();
+					}).executes(SiteCommands::batchCancel))))
+			.then(Commands.literal("groups").executes(SiteCommands::groups))
+			.then(Commands.literal("group")
+				.then(Commands.literal("remove")
+					.then(Commands.argument("group", StringArgumentType.word()).suggests(SiteCommands::suggestGroups)
+						.executes(ctx -> groupRemove(ctx, false))
+						.then(Commands.literal("force").executes(ctx -> groupRemove(ctx, true)))))
+				.then(stageCommand("approve"))
+				.then(stageCommand("skip"))
+				.then(stageCommand("undo")))
+			.then(Commands.literal("budget")
+				.executes(ctx -> budget(ctx, -1))
+				.then(Commands.argument("ms", com.mojang.brigadier.arguments.IntegerArgumentType.integer(1, 20))
+					.executes(ctx -> budget(ctx, com.mojang.brigadier.arguments.IntegerArgumentType.getInteger(ctx, "ms")))))));
+	}
+
+	// ------------------------------------------------------------------ phase 4d: batches, groups, stages, budget
+
+	private static java.util.concurrent.CompletableFuture<com.mojang.brigadier.suggestion.Suggestions> suggestGroups(
+		CommandContext<CommandSourceStack> ctx, com.mojang.brigadier.suggestion.SuggestionsBuilder b) {
+		Sites.groups().stream().filter(g -> !SiteGroupRec.REMOVED.equals(g.state())).forEach(g -> b.suggest(g.id()));
+		return b.buildFuture();
+	}
+
+	private static com.mojang.brigadier.builder.LiteralArgumentBuilder<CommandSourceStack> stageCommand(String verb) {
+		return Commands.literal(verb)
+			.then(Commands.argument("group", StringArgumentType.word()).suggests(SiteCommands::suggestGroups)
+				.then(Commands.argument("stage", StringArgumentType.word()).suggests((ctx, b) -> {
+					SiteGroupRec g = Sites.group(StringArgumentType.getString(ctx, "group"));
+					if (g != null) {
+						g.stageNames().forEach(b::suggest);
+					}
+					return b.buildFuture();
+				})
+					.executes(ctx -> stage(ctx, verb, false))
+					.then(Commands.literal("force").executes(ctx -> stage(ctx, verb, true)))));
+	}
+
+	private static int batches(CommandContext<CommandSourceStack> ctx) {
+		List<dev.larattalabs.architect.batch.QBatch> all = Batches.all();
+		if (all.isEmpty()) {
+			ctx.getSource().sendSuccess(() -> Component.literal("No placement batches in this world"), false);
+			return 0;
+		}
+		for (dev.larattalabs.architect.batch.QBatch b : all) {
+			long placed = b.items.stream().filter(i -> i.status == dev.larattalabs.architect.batch.QItem.Status.PLACED).count();
+			long failed = b.items.stream().filter(i -> i.status == dev.larattalabs.architect.batch.QItem.Status.FAILED).count();
+			long waiting = b.items.stream().filter(i -> i.status == dev.larattalabs.architect.batch.QItem.Status.WAITING).count();
+			ctx.getSource().sendSuccess(() -> Component.literal(b.id + " (group " + b.group + "): " + b.status.name().toLowerCase(Locale.ROOT) + ", "
+				+ placed + "/" + b.items.size() + " placed" + (failed > 0 ? ", " + failed + " failed" : "") + (waiting > 0 ? ", " + waiting + " waiting" : "")
+				+ (b.note.isEmpty() ? "" : " (" + b.note + ")")), false);
+		}
+		return all.size();
+	}
+
+	private static int batchCancel(CommandContext<CommandSourceStack> ctx) {
+		String id = StringArgumentType.getString(ctx, "batch");
+		if (Batches.get(id) == null) {
+			ctx.getSource().sendFailure(Component.literal("No batch " + id + " (see /architect batches)"));
+			return 0;
+		}
+		CommandSourceStack src = ctx.getSource();
+		Batches.cancel(src.getServer(), id).whenComplete((b, e) -> src.sendSuccess(() -> Component.literal(e != null ? "Cancelling " + id + " failed: "
+			+ e.getMessage() : "Batch " + id + " cancelled: placed items stay, the rest were dropped"), false));
+		return 1;
+	}
+
+	private static int groups(CommandContext<CommandSourceStack> ctx) {
+		List<SiteGroupRec> all = Sites.groups();
+		if (all.isEmpty()) {
+			ctx.getSource().sendSuccess(() -> Component.literal("No site groups in this world"), false);
+			return 0;
+		}
+		for (SiteGroupRec g : all) {
+			StringBuilder st = new StringBuilder();
+			for (SiteGroupRec.StageRec x : g.stages()) {
+				st.append(st.isEmpty() ? "" : ", ").append(x.name()).append(" ").append(x.state().name().toLowerCase(Locale.ROOT));
+			}
+			ctx.getSource().sendSuccess(() -> Component.literal(g.id() + (g.owner() == null ? "" : " (owned by " + g.owner() + ")") + ": " + g.state() + ", "
+				+ g.sites().size() + " site(s) " + g.sites() + "; stages: " + st), false);
+		}
+		return all.size();
+	}
+
+	private static int groupRemove(CommandContext<CommandSourceStack> ctx, boolean force) {
+		String id = StringArgumentType.getString(ctx, "group");
+		CommandSourceStack src = ctx.getSource();
+		Groups.removeGroup(src.getServer(), id, null, force).whenComplete((r, e) -> {
+			if (e != null) {
+				src.sendFailure(Component.literal(e.getMessage()));
+			} else {
+				src.sendSuccess(() -> Component.literal(r.removed() ? "Group " + id + " removed: every site restored" : "Group " + id + " was not removed: "
+					+ String.join("; ", r.blockers())), false);
+			}
+		});
+		return 1;
+	}
+
+	private static int stage(CommandContext<CommandSourceStack> ctx, String verb, boolean force) {
+		String g = StringArgumentType.getString(ctx, "group");
+		String st = StringArgumentType.getString(ctx, "stage");
+		CommandSourceStack src = ctx.getSource();
+		try {
+			switch (verb) {
+				case "approve" -> Groups.approve(src.getServer(), g, st);
+				case "skip" -> Groups.skip(src.getServer(), g, st);
+				default -> {
+					Groups.undoStage(src.getServer(), g, st, force).whenComplete((r, e) -> {
+						if (e != null) {
+							src.sendFailure(Component.literal("Undo refused: " + (e.getCause() != null ? e.getCause().getMessage() : e.getMessage())));
+						} else {
+							src.sendSuccess(() -> Component.literal(r.removed() ? "Stage " + st + " of " + g + " undone" : "Stage " + st + " was not undone: "
+								+ String.join("; ", r.blockers())), false);
+						}
+					});
+					return 1;
+				}
+			}
+		} catch (IllegalArgumentException | IllegalStateException e) {
+			src.sendFailure(Component.literal(e.getMessage()));
+			return 0;
+		}
+		src.sendSuccess(() -> Component.literal("Stage " + st + " of " + g + ": " + verb + (verb.equals("skip") ? "ped" : "d")), false);
+		return 1;
+	}
+
+	private static int budget(CommandContext<CommandSourceStack> ctx, int ms) {
+		CommandSourceStack src = ctx.getSource();
+		if (ms > 0) {
+			if (!gamemaster(src)) {
+				src.sendFailure(Component.literal("Changing the placement budget needs permission level 2 (cheats on, or an operator)"));
+				return 0;
+			}
+			SurvivalWorld.setPlacementBudget(src.getServer(), ms);
+		}
+		int now = SurvivalWorld.placementBudgetMs();
+		src.sendSuccess(() -> Component.literal("Placements may use " + now + " ms of server time per tick (1-20; /architect budget <ms>)"), false);
+		return now;
 	}
 
 	private static int survivalShow(CommandContext<CommandSourceStack> ctx) {

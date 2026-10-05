@@ -88,6 +88,7 @@ public class ApiTest implements ModInitializer {
 		ApiTestJobs.init();
 		ApiTestSets.init();
 		ApiTestMassing.init();
+		ApiTestBatch.init();
 		CommandRegistrationCallback.EVENT.register((d, ctx, env) -> d.register(Commands.literal("apitest")
 			.then(Commands.argument("args", StringArgumentType.greedyString()).executes(ApiTest::run))));
 	}
@@ -196,6 +197,22 @@ public class ApiTest implements ModInitializer {
 			case "composite":
 			case "compositeclear": {
 				return ApiTestMassing.step(src, a);
+			}
+			case "bqueue":
+			case "batch":
+			case "batches":
+			case "bcancel":
+			case "sgroups":
+			case "sgroup":
+			case "sgremove":
+			case "sapprove":
+			case "sskip":
+			case "sreorder":
+			case "sundo":
+			case "stock":
+			case "fit":
+			case "margin": {
+				return ApiTestBatch.step(src, a);
 			}
 			case "place":
 			case "check": {
@@ -343,6 +360,9 @@ public class ApiTest implements ModInitializer {
 		o.addProperty("state", v.state().name());
 		o.addProperty("built", v.built());
 		o.addProperty("queued", v.queued());
+		o.addProperty("group", v.group());
+		o.addProperty("batchId", v.batchId());
+		o.addProperty("itemKey", v.itemKey());
 		return o;
 	}
 

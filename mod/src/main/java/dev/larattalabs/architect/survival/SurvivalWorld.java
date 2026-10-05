@@ -20,35 +20,45 @@ import org.jspecify.annotations.Nullable;
 
 /**
  * The per-world survival toggle (docs/CONTRACT.md phase 3 "The toggle"): {@code <world>/architect-world.json}
- * {@code {"survival": bool, "blocksPerTick": 4}}. At the first load it defaults to on for survival and hardcore worlds and
+ * {@code {"survival": bool, "blocksPerTick": 4, "placementBudgetMs": 4}}. At the first load it defaults to on for survival and hardcore worlds and
  * off for creative (and adventure/spectator) ones, and is written then. Off: placement is instant (phases 1-2). On: Place
  * creates a construction site. Changing it needs permission level 2 ({@code /architect survival on|off}, the Status tab).
- * {@code blocksPerTick} is the builder's speed per site (1-64, default 4). Loaded before the sites when a world starts.
+ * {@code blocksPerTick} is the builder's speed per site (1-64, default 4). {@code placementBudgetMs} (phase 4d) is the server time
+ * per tick that ticked placements, restores and the builder share (1-20, default 4). Loaded before the sites when a world starts.
  * Every real change (on to off or back), and the default written at the first load, fires the API's {@code WORLD_MODE_CHANGED}
  * (server thread).
  */
 public final class SurvivalWorld {
 	public static final String FILE = "architect-world.json";
 	public static final int DEFAULT_BLOCKS_PER_TICK = 4;
+	/** The default per-tick placement budget in ms (docs/CONTRACT.md phase 4d). */
+	public static final int DEFAULT_PLACEMENT_BUDGET_MS = 4;
 	private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
 
 	/** The world's settings. */
-	public record Settings(boolean survival, int blocksPerTick) {
+	public record Settings(boolean survival, int blocksPerTick, int placementBudgetMs) {
 		public Settings {
 			blocksPerTick = Math.max(1, Math.min(64, blocksPerTick));
+			placementBudgetMs = Math.max(1, Math.min(20, placementBudgetMs));
+		}
+
+		public Settings(boolean survival, int blocksPerTick) {
+			this(survival, blocksPerTick, DEFAULT_PLACEMENT_BUDGET_MS);
 		}
 
 		public JsonObject toJson() {
 			JsonObject o = new JsonObject();
 			o.addProperty("survival", survival);
 			o.addProperty("blocksPerTick", blocksPerTick);
+			o.addProperty("placementBudgetMs", placementBudgetMs);
 			return o;
 		}
 
 		/** Parses the file; a missing {@code survival} takes {@code def}. */
 		public static Settings fromJson(JsonObject o, boolean def) {
 			return new Settings(o.has("survival") ? o.get("survival").getAsBoolean() : def,
-				o.has("blocksPerTick") ? o.get("blocksPerTick").getAsInt() : DEFAULT_BLOCKS_PER_TICK);
+				o.has("blocksPerTick") ? o.get("blocksPerTick").getAsInt() : DEFAULT_BLOCKS_PER_TICK,
+				o.has("placementBudgetMs") ? o.get("placementBudgetMs").getAsInt() : DEFAULT_PLACEMENT_BUDGET_MS);
 		}
 	}
 
@@ -77,6 +87,21 @@ public final class SurvivalWorld {
 	public static int blocksPerTick() {
 		Settings s = current;
 		return s == null ? DEFAULT_BLOCKS_PER_TICK : s.blocksPerTick();
+	}
+
+	/** The per-tick placement budget in ms (1-20). */
+	public static int placementBudgetMs() {
+		Settings s = current;
+		return s == null ? DEFAULT_PLACEMENT_BUDGET_MS : s.placementBudgetMs();
+	}
+
+	/** Sets the per-tick placement budget (1-20 ms) for this world and saves it. Server thread. */
+	public static void setPlacementBudget(MinecraftServer server, int ms) {
+		Settings s = current;
+		Settings n = s == null ? new Settings(false, DEFAULT_BLOCKS_PER_TICK, ms) : new Settings(s.survival(), s.blocksPerTick(), ms);
+		current = n;
+		write(server, n);
+		Architect.LOGGER.info("Placement budget set to {} ms per tick", n.placementBudgetMs());
 	}
 
 	/** Whether a world is loaded (the toggle has a value). */
@@ -121,7 +146,7 @@ public final class SurvivalWorld {
 	/** Turns construction sites on or off for this world (the caller checked permission level 2). Server thread. */
 	public static void set(MinecraftServer server, boolean on) {
 		Settings s = current;
-		Settings n = new Settings(on, s == null ? DEFAULT_BLOCKS_PER_TICK : s.blocksPerTick());
+		Settings n = new Settings(on, s == null ? DEFAULT_BLOCKS_PER_TICK : s.blocksPerTick(), s == null ? DEFAULT_PLACEMENT_BUDGET_MS : s.placementBudgetMs());
 		boolean changed = s == null || s.survival() != on;
 		current = n;
 		write(server, n);
