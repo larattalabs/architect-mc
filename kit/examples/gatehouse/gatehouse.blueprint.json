@@ -1,0 +1,78 @@
+{
+  "id": "gatehouse",
+  "name": "Gatehouse",
+  "description": "A stone gatehouse over a road: a 3-wide passage, two guard rooms, a hall above and a crenellated roof.",
+  "type": "gatehouse",
+  "tags": [
+    "medieval",
+    "stone",
+    "fortification"
+  ],
+  "size": {
+    "x": 11,
+    "y": 12,
+    "z": 10
+  },
+  "groundY": 1,
+  "front": "south",
+  "materials": [
+    "minecraft:stone_bricks",
+    "minecraft:spruce_planks",
+    "minecraft:stone_brick_slab",
+    "minecraft:polished_andesite",
+    "minecraft:cobblestone",
+    "minecraft:iron_bars",
+    "minecraft:ladder",
+    "minecraft:lantern",
+    "minecraft:blue_bed",
+    "minecraft:spruce_door",
+    "minecraft:stone_brick_stairs",
+    "minecraft:wall_torch",
+    "minecraft:barrel",
+    "minecraft:bookshelf",
+    "minecraft:chest",
+    "minecraft:spruce_stairs",
+    "minecraft:crafting_table",
+    "minecraft:spruce_fence",
+    "minecraft:spruce_pressure_plate"
+  ],
+  "foundationBlock": "minecraft:stone_bricks",
+  "approach": {
+    "length": 4,
+    "width": 3,
+    "block": "minecraft:dirt_path",
+    "slab": "minecraft:stone_brick_slab"
+  },
+  "interior": {
+    "minX": 1,
+    "minY": 6,
+    "minZ": 3,
+    "maxX": 9,
+    "maxY": 8,
+    "maxZ": 7
+  },
+  "anchors": {
+    "entrance": {
+      "x": 5.5,
+      "y": 1,
+      "z": 9.5,
+      "yaw": 180,
+      "pitch": 0
+    },
+    "spawn": {
+      "x": 5.5,
+      "y": 1,
+      "z": 9.5,
+      "yaw": 180,
+      "pitch": 0
+    },
+    "cam_overview": {
+      "x": -8,
+      "y": 12,
+      "z": 21,
+      "yaw": -140.906,
+      "pitch": 21.209
+    }
+  },
+  "source": "gatehouse.mjs"
+}
