@@ -15,35 +15,39 @@ the frozen 4e contract). Spec: docs/CONTRACT.md "Phase 4e contract", including "
 
 ## State
 
-Built (compiles, 291 unit tests green):
-- journal package: Journal (AgentCraft ab08a02 rules + PLACING + interned values), Sections (per-section planning), JournalStore
-  (per-entry per-region files, generations, index commit point, section map, LRU cache, I/O thread), JournalNbt, WorldJournal
-  (capture, stacks, per-section undo planning against the world, kill points), StillOurs (volatile properties), UpdateMask +
-  BlockStateUpdateMixin (no updates into covered cells during a restore with holes), ChangeTracker + LevelChunkMixin (sliced
-  captures), JournalMigration (4d import, late import).
-- sites on the journal: SiteJournal (P1-P3, P6-P7, undo R1-R4, restore template from `written`), Sites (place/remove/move/forget/
-  settle), PlaceJob (CAPTURE/COMMIT/START ... AFTER/AFTER_COMMIT/CONSTRUCTION_CLEAR), RestoreJob (plans its own rollback; writes
-  committed undos; roads and cell sites), Groups (a group or stage removal is one undo), Builder (target = site entry's after,
-  crate entries).
-- roads and cell sites: RoadPlan (pure), RoadTerrain, Roads, InfraPlace, InfraJob, InfraApi, Infra/Infras records (`infra` array).
-- API 1.5.0 surface, mod 0.8.0.
-
-Not yet: DevBridge hooks (dev.journal.*, dev.road.*, dev.cells.place, dev.region.hash), apitest 1.5.0 steps, commands
-(/architect road, /architect journal), the approach ROAD rule + road_cells sync + client ghost, UI (Place on top, Remove both),
-survival layering refund rules, gate4e.mjs, bench, docs.
+Built (compiles, unit tests green) and the gate is being run: `tools/gate4e.mjs <step>` (steps: smoke, orders, edits, crash,
+migration, downgrade, roads, survival, sizecap, megalite, megabig, bench, api, api14; `start [world]` / `stop` manage the
+gate client by PID, `eval '<js>'` runs ad-hoc checks). The fixture worlds are flat meadows (`G4E Flat`); size-cap random
+ticks use a normal world (`G4E Normal`, seed `4e`).
 
 ## Gate status
 
-- 4d gate re-run (`artifacts/gate4e/regress4d/`, tools/gate4d.mjs on the 4e client): every step passes except "group undo:
-  every lot region back exactly", which fails on lot L3. The same base world fails the same check on the **v0.7.0 jar**
-  (`equality-v070.json`, `undodebug-v070.json`: identical 40-cell diff): worldgen gravel floating over a cave at L3's box edge
-  is written back by Remove and then falls (its restore schedules the falling-block tick). Pre-existing, not a 4e regression;
-  gate4e uses a base world without it and REPORT.md records it.
+| Gate | Step | Status |
+|---|---|---|
+| 2 any order | `orders` | PASS: 24/24 orders, group removal, L in 6 orders (no leak, box + 8 exact) |
+| 3 player edits | `edits` | PASS |
+| 5 crash K1-K8 | `crash` | PASS (and K3 clean resume) |
+| 4 migration, downgrade | `migration`, `downgrade` | written, not run |
+| 6 roads + village, 8 throughput | `roads` | running |
+| 7 survival layering | `survival` | written, not run |
+| 8 size cap, sliced 300k | `sizecap` | written, not run |
+| 9 4d regression | gate4d.mjs on the 4e client | earlier run: all pass but L3 (pre-existing, also on v0.7.0); adjacent-lot leaf check not written |
+| 10 mega-lite, bench | `megalite`, `bench`, `megabig` | written, not run |
+| 11 API | `api`, `api14` | written, not run |
+
+Bugs the gate found and fixed so far: `Journal.Value` helpers used `Name`/`Properties` (26.x writes `id`/`properties`;
+`Journal.AIR` never equalled a world value); removal blockers ignored block entities a LAYERed BOX site owns by its journal
+`after`; a group removal reported sites as restored cells; K4 (record still placing, journal ACTIVE) rolled back instead of
+placing; K6 (undo committed, record not pending) left the site's entries UNDONE; pending roads and cell sites were never
+settled; group-undo evidence compared against the entry's own `before` instead of the group's written value; DevBridge could
+not rebind its port after a halted client (SO_REUSEADDR).
+
+Old 4d note: the 4d gate's L3 lot fails group-undo equality on v0.7.0 too (floating worldgen gravel, `regress4d/`).
 
 ## Known issues
 
-- A first 4e version re-captured positions changed during the async PLACING commit; that let a neighbour's falling gravel into
-  a site's `before`. Fixed: a one-tick capture is the world at P1 (as 4d), only sliced captures track changes (until P3).
+- A building's `after` (P6) is captured before the placement's deferred block ticks run, so a few cells differ from it
+  afterwards (dirt_path under a solid block turns to dirt). Removal is unaffected (BOX); `dev.site.verify` reports them.
 
 ## Resume
 
