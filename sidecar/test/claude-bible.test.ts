@@ -4,7 +4,7 @@
 // budget stop.
 import fs from 'node:fs';
 import path from 'node:path';
-import type { Options, SDKMessage } from '@anthropic-ai/claude-agent-sdk';
+import type { HookInput, Options, SDKMessage } from '@anthropic-ai/claude-agent-sdk';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { ClaudeDesigner } from '../src/claude/designer.js';
 import { loadConfig } from '../src/config.js';
@@ -50,6 +50,18 @@ function fakeQuery(script: () => Script, calls: Call[]) {
   };
 }
 
+/** The PreToolUse hooks' decisions for a call ([] = no objection). */
+async function runHooks(opts: Options, tool: string, input: Record<string, unknown>): Promise<string[]> {
+  const out: string[] = [];
+  for (const m of opts.hooks!.PreToolUse!) {
+    for (const hook of m.hooks) {
+      const r = (await hook({ hook_event_name: 'PreToolUse', tool_name: tool, tool_input: input, session_id: 's', transcript_path: '', cwd: opts.cwd!, tool_use_id: 't' } as unknown as HookInput, 't', { signal: new AbortController().signal })) as { hookSpecificOutput?: { permissionDecision?: string } };
+      if (r.hookSpecificOutput?.permissionDecision) out.push(r.hookSpecificOutput.permissionDecision);
+    }
+  }
+  return out;
+}
+
 const canUse = (opts: Options, tool: string, input: Record<string, unknown>) => opts.canUseTool!(tool, input, { signal: new AbortController().signal, toolUseID: 'x', requestId: 'r' } as never) as Promise<{ behavior: string; message?: string }>;
 
 describe.skipIf(!hasKit)('a bible job on the Claude backend (fake SDK, real kit)', () => {
@@ -75,6 +87,7 @@ describe.skipIf(!hasKit)('a bible job on the Claude backend (fake SDK, real kit)
 
   it('drafts (one re-ask after the kit refuses a role), writes the components (one fix round), checks, renders and installs', async () => {
     const verdicts: Record<string, string> = {};
+    const hooks: Record<string, string[]> = {};
     let drafts = 0;
     let rounds = 0;
     script = async function* (prompt, opts) {
@@ -95,6 +108,17 @@ describe.skipIf(!hasKit)('a bible job on the Claude backend (fake SDK, real kit)
       verdicts.design = (await canUse(opts, 'Write', { file_path: path.join(cwd, 'kit', 'designs', 'x.mjs'), content: 'x' })).behavior;
       verdicts.bibleJson = (await canUse(opts, 'Edit', { file_path: path.join(cwd, 'bible', 'bible.json'), old_string: 'a', new_string: 'b' })).behavior;
       verdicts.check = (await canUse(opts, 'Bash', { command: 'node kit/tools/components.mjs bible/components.mjs --bible bible/bible.json --out sheet' })).behavior;
+      verdicts.readRef = (await canUse(opts, 'Read', { file_path: path.join(cwd, 'kit', 'bibles', 'rustic', 'components.mjs') })).behavior;
+      verdicts.readSheet = (await canUse(opts, 'Read', { file_path: path.join(cwd, 'sheet', 'sheet.png') })).behavior;
+      // the PreToolUse hooks (they run even for calls the CLI allows by itself)
+      hooks.readRules = await runHooks(opts, 'Read', { file_path: path.join(cwd, 'kit', 'lib', 'components.mjs') });
+      hooks.readRef = await runHooks(opts, 'Read', { file_path: path.join(cwd, 'kit', 'bibles', 'rustic', 'components.mjs') });
+      hooks.readBrief = await runHooks(opts, 'Read', { file_path: path.join(cwd, 'BIBLE.md') });
+      hooks.check = await runHooks(opts, 'Bash', { command: 'node kit/tools/components.mjs bible/components.mjs --bible bible/bible.json --out sheet' });
+      hooks.own = await runHooks(opts, 'Write', { file_path: own, content: 'x' });
+      hooks.bibleJson = await runHooks(opts, 'Edit', { file_path: path.join(cwd, 'bible', 'bible.json'), old_string: 'a', new_string: 'b' });
+      hooks.design = await runHooks(opts, 'Write', { file_path: path.join(cwd, 'kit', 'designs', 'x.mjs'), content: 'x' });
+      hooks.state = await runHooks(opts, 'Read', { file_path: path.join(sc.config.dataDir, 'state.json') });
       const ref = fs.readFileSync(REF, 'utf8');
       // round 1 leaves a broken chimney; round 2 fixes it
       fs.writeFileSync(own, rounds === 1 ? ref.replace('export function chimney(bp, at) {', "export function chimney(bp, at) {\n  throw new Error('chimney not finished');") : ref);
@@ -119,7 +143,8 @@ describe.skipIf(!hasKit)('a bible job on the Claude backend (fake SDK, real kit)
     const agent = calls.filter((c) => !c.opts.outputFormat);
     expect(agent[1]!.prompt).toMatch(/did not pass \(round 2 of 3\)[\s\S]*chimney not finished/);
     expect((agent[0]!.opts.systemPrompt as { append: string }).append).toMatch(/component designer/);
-    expect(verdicts).toEqual({ own: 'allow', design: 'deny', bibleJson: 'deny', check: 'allow' });
+    expect(verdicts).toEqual({ own: 'allow', design: 'deny', bibleJson: 'deny', check: 'allow', readRef: 'allow', readSheet: 'allow' });
+    expect(hooks).toEqual({ readRules: [], readRef: [], readBrief: [], check: [], own: [], bibleJson: ['deny'], design: ['deny'], state: ['deny'] });
     // installed
     const dir = path.join(sc.config.biblesDir, j.bibleId);
     const bible = JSON.parse(fs.readFileSync(path.join(dir, 'versions', '1', 'bible.json'), 'utf8')) as Record<string, unknown>;

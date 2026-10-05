@@ -379,6 +379,8 @@ export class ClaudeDesigner implements Designer {
       delete this.sc.store.data.limit;
       this.sc.store.markDirty();
       this.sc.statusChanged();
+      // groups leave held_usage now, not at their next design event
+      this.sc.groups.refreshActive();
       this.kick();
       return;
     }

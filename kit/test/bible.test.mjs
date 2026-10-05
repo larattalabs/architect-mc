@@ -126,6 +126,15 @@ test('validateBible: roles, macro roles for a settlement, the typed rest', () =>
     const r = validateBible(b);
     assert.ok(!r.ok && r.errors.some((e) => re.test(e)), `${re}: ${r.errors.join(' | ')}`);
   }
+  // roles that cannot build a sound house are refused at once (the component check could not fix them)
+  for (const [roles, re] of [
+    [{ light: 'minecraft:candle' }, /light:/],
+    [{ path: 'minecraft:oak_fence' }, /approach\.block/],
+    [{ foundation: 'minecraft:glass' }, /foundationBlock/],
+  ]) {
+    const r = validateBible({ ...ASHFALL, roles: { ...ASHFALL.roles, ...roles } });
+    assert.ok(!r.ok && r.errors.some((e) => /test house/.test(e) && re.test(e)), `${JSON.stringify(roles)}: ${r.errors.join(' | ')}`);
+  }
   const town = validateBible(ASHFALL, { scope: 'settlement' });
   assert.ok(!town.ok && town.errors.some((e) => /macro roles; missing rock, surface/.test(e)), town.errors.join(' | '));
   const macro = Object.fromEntries(MACRO_ROLES.map((r, i) => [r, ['minecraft:stone', 'minecraft:grass_block', 'minecraft:dirt', 'minecraft:cobblestone', 'minecraft:rail', 'minecraft:oak_planks'][i]]));

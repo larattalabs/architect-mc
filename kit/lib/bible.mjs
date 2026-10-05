@@ -12,7 +12,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { CORE_ROLES, MACRO_ROLES, PALETTES, PALETTE_PRESETS, ROLE_NAME, palette, rolesOfPalette } from './kit.mjs';
 import { qualify } from './blocks.mjs';
-import { REQUIRED_COMPONENTS } from './components.mjs';
+import { REQUIRED_COMPONENTS, buildFrame } from './components.mjs';
+import { checkBlueprint } from './check.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 /** Built-in bibles that ship a reference component library (kit/bibles/<name>/components.mjs). */
@@ -75,7 +76,7 @@ const isStrList = (v, max) => Array.isArray(v) && v.length <= max && v.every((x)
  * palette (lib/kit.mjs palette({ bible })): a roof with stairs and slab variants, and so on. A settlement-scope bible also
  * needs the macro roles. Returns { ok, errors, bible } (bible: the normalised copy).
  * @param {object} j
- * @param {{scope?: 'building'|'settlement', requireId?: boolean}} [opts]
+ * @param {{scope?: 'building'|'settlement', requireId?: boolean, frame?: boolean}} [opts] frame: false skips the test-house check
  */
 export function validateBible(j, opts = {}) {
   const errors = [];
@@ -108,10 +109,22 @@ export function validateBible(j, opts = {}) {
       if (m.length) err(`roles: a settlement bible also names the macro roles; missing ${m.join(', ')}`);
     }
     if (!errors.length) {
+      let p;
       try {
-        palette({ bible: { id: BIBLE_ID.test(b.id ?? '') ? b.id : 'bible', version: Number.isInteger(b.version) ? b.version : 1, roles } });
+        p = palette({ bible: { id: BIBLE_ID.test(b.id ?? '') ? b.id : 'bible', version: Number.isInteger(b.version) ? b.version : 1, roles } });
       } catch (e) {
         err(e.message.replace(/^palette: /, 'roles: '));
+      }
+      // the roles must build a sound small house (the component test frame): a light role that gives light, a path to
+      // walk on, a full foundation... (the component check could not fix a role)
+      if (p && opts.frame !== false) {
+        let r;
+        try {
+          r = checkBlueprint(buildFrame(p));
+        } catch (e) {
+          r = { ok: false, errors: [e.message] };
+        }
+        if (!r.ok) err(`roles: a small test house built from these roles fails the checker (fix the roles): ${r.errors.slice(0, 4).join('; ')}`);
       }
     }
   }

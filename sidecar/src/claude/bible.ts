@@ -16,10 +16,14 @@ import { truncate } from '../util/text.js';
 import type { ClaudeDesigner, Running } from './designer.js';
 import { StreamMapper, type TurnStats } from './stream.js';
 
-/** The JSON schema of the structured pass (the kit validates the blocks afterwards). */
+/**
+ * The JSON schema of the structured pass. It keeps to what phase 4a proved on real Claude (types, required, minLength /
+ * maxLength / maxItems, descriptions): no `pattern`, no numeric bounds, no schema-valued additionalProperties. The kit
+ * validates the blocks and the rest afterwards (one re-ask on a miss).
+ */
 export function bibleSchema(scope: 'building' | 'settlement'): Record<string, unknown> {
   const roleNames = [...CORE_ROLES, ...(scope === 'settlement' ? MACRO_ROLES : [])];
-  const block = { type: 'string', pattern: '^minecraft:[a-z0-9_]+$', description: 'a vanilla Minecraft 26.3 block id' };
+  const block = { type: 'string', description: 'a vanilla Minecraft 26.3 block id, "minecraft:..."' };
   return {
     type: 'object',
     properties: {
@@ -28,21 +32,26 @@ export function bibleSchema(scope: 'building' | 'settlement'): Record<string, un
         type: 'object',
         properties: Object.fromEntries(roleNames.map((r) => [r, block])),
         required: roleNames,
-        additionalProperties: block,
-        description: 'role -> block; extra named roles are allowed (e.g. "banner", "rail_post")',
+        description: 'role -> block id; extra named roles may be added the same way (e.g. "banner", "rail_post")',
       },
       proportions: {
         type: 'object',
-        properties: { storey: { type: 'integer', minimum: 3, maximum: 8 }, roofPitch: { type: 'number', minimum: 0, maximum: 2 }, overhang: { type: 'integer', minimum: 0, maximum: 3 }, windowRhythm: { type: 'integer', minimum: 1, maximum: 8 }, plinth: { type: 'integer', minimum: 0, maximum: 3 } },
+        properties: {
+          storey: { type: 'integer', description: 'blocks per storey, 3-8' },
+          roofPitch: { type: 'number', description: 'rise per block in, 0.5-2' },
+          overhang: { type: 'integer', description: '0-3' },
+          windowRhythm: { type: 'integer', description: 'a window every n blocks, 1-8' },
+          plinth: { type: 'integer', description: 'plinth height, 0-3' },
+        },
         required: ['storey', 'roofPitch', 'overhang', 'windowRhythm', 'plinth'],
       },
       roofLanguage: { type: 'string', maxLength: 200 },
       silhouette: { type: 'string', maxLength: 200 },
       motifs: { type: 'array', items: { type: 'string', maxLength: 120 }, maxItems: 8 },
-      tiers: { type: 'object', properties: { humble: { type: 'array', items: { type: 'string' } }, important: { type: 'array', items: { type: 'string' } } }, required: ['humble', 'important'] },
+      tiers: { type: 'object', properties: { humble: { type: 'array', items: { type: 'string' } }, important: { type: 'array', items: { type: 'string' } } }, required: ['humble', 'important'], description: 'role names' },
       lighting: { type: 'string', maxLength: 200 },
       avoid: { type: 'array', items: { type: 'string', maxLength: 120 }, maxItems: 8 },
-      components: { type: 'array', items: { type: 'string', pattern: '^[a-z][a-z0-9_]{0,39}$' }, maxItems: 10, description: `the component library: always ${REQUIRED_COMPONENTS.join(', ')}, plus up to 4 the style needs` },
+      components: { type: 'array', items: { type: 'string', description: 'lower_snake_case' }, maxItems: 10, description: `the component library: always ${REQUIRED_COMPONENTS.join(', ')}, plus up to 4 the style needs` },
       prose: { type: 'string', minLength: 200, maxLength: 6000, description: 'bible.md for designers (markdown): mood, silhouette, what each material means, do and don\'t' },
     },
     required: ['name', 'roles', 'proportions', 'roofLanguage', 'silhouette', 'motifs', 'tiers', 'lighting', 'avoid', 'components', 'prose'],
