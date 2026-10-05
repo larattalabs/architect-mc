@@ -16,6 +16,8 @@ fork and does not track upstream.
 | 2026-10-04 | **Singleplayer only.** Same architecture as AgentCraft: the mod talks to a local Node sidecar over a localhost WebSocket. The sidecar runs Claude through the Claude Agent SDK, and the design agent's kit code runs locally. Dedicated servers are out of scope; supporting them would first require sandboxing the agent-written code. |
 | 2026-10-04 | **Auth:** an Anthropic API key is the supported path. An opt-in `--use-claude-login` / `useClaudeLogin` runs on the user's local `claude` CLI login instead. It is off by default and documented as personal use only, because Anthropic does not allow third-party products to offer claude.ai login ([Agent SDK overview](https://code.claude.com/docs/en/agent-sdk/overview)). Pattern: AgentCraft `foreman/src/agents/claude/auth.ts`. |
 | 2026-10-04 | **Survival is a per-world toggle.** Off: placement is instant, as in AgentCraft. On: placing creates a construction site that builds as it is fed materials. |
+| 2026-10-04 | **The mod launches the sidecar itself** (finds node, installs the Agent SDK on first run, reuses a running one, stops what it started). AgentCraft should get the same feature; requested in its session. |
+| 2026-10-04 | Mod id `architect_mc`: the Modrinth slug `architect` is taken (an old biome mod). The display name stays Architect for now. |
 | 2026-10-04 | Branding: "Powered by Claude" is fine. The name must never include "Claude Code". |
 
 ## Architecture
@@ -33,9 +35,9 @@ Minecraft (Fabric mod)                         Architect sidecar (Node, localhos
   dirs, the aux turn runner, the permission policy that refuses network, subagents and prompts,
   usage-limit hold and resume, session resume, the state store, WebSocket and protocol, and auth. No goals, tasks,
   agents, git or PRs.
-- **Mod:** placement, ghost, plot marking, design form, library, and survival sites. The mod can start
-  the sidecar itself (it detects `node` and spawns the bundled sidecar) so players don't run it by hand;
-  that needs checking with the Prism/launcher setups.
+- **Mod:** placement, ghost, plot marking, design form, library, and survival sites. The mod starts the
+  sidecar itself (it finds `node`, installs the Agent SDK on first run, then spawns the bundled sidecar), so
+  players never run it by hand. Details: docs/CONTRACT.md "Launcher".
 - **Blueprint kit:** `tools/blueprints` from AgentCraft (kit, block table, checker, renderer), with
   checker **profiles per building type** instead of AgentCraft's office anchors.
 
@@ -97,6 +99,5 @@ Each phase ends at a gate that is checked in a dev client (DevBridge screenshots
   deconstruct it and check that the refund matches the materials put in.
 
 ## Open questions
-- Does the mod start the sidecar itself, or is it a separate launcher step as in AgentCraft? (Phase 1)
 - Track AgentCraft fixes to the copied placement code, or treat the copy as independent from now on?
 - Cost: measure tokens and time per design in phase 1, and show an estimate in the form.
