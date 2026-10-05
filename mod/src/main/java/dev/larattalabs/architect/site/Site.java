@@ -34,11 +34,42 @@ import org.jspecify.annotations.Nullable;
  *              player's own site. A guardrail, not security: the UI asks twice before removing an owned site, and the API
  *              refuses a remove from another requester without force. (Not {@link Construction#owner()}, the placing player.)
  * @param ext namespaced extra data ({@code "steward_mc:lot": "L3"}); never interpreted by Architect, never null
+ * @param member (phase 4d) the site group, batch and item key it was placed for, or null
+ * @param placing (phase 4d) an instant placement whose cells are still being written over ticks ({@code PlaceJob}); its
+ *                snapshot was written first, so Remove (a cancel) restores it exactly
  */
 public record Site(String id, String blueprint, String rotation, Anchors.Bounds box, Anchors.Bounds interior, Map<String, Anchor> anchors,
 	long placedAt, String dimension, Anchors.@Nullable Bounds snapshotBox, String snapshot, @Nullable Location movedFrom, @Nullable Pin pin,
-	@Nullable Construction construction, @Nullable String owner, JsonObject ext) {
+	@Nullable Construction construction, @Nullable String owner, JsonObject ext, @Nullable Member member, boolean placing) {
 	public static final String OVERWORLD = "minecraft:overworld";
+
+	/** Phase 4a shape: no group membership, not placing. */
+	public Site(String id, String blueprint, String rotation, Anchors.Bounds box, Anchors.Bounds interior, Map<String, Anchor> anchors,
+		long placedAt, String dimension, Anchors.@Nullable Bounds snapshotBox, String snapshot, @Nullable Location movedFrom, @Nullable Pin pin,
+		@Nullable Construction construction, @Nullable String owner, JsonObject ext) {
+		this(id, blueprint, rotation, box, interior, anchors, placedAt, dimension, snapshotBox, snapshot, movedFrom, pin, construction, owner, ext, null,
+			false);
+	}
+
+	/** What a batch placed a site for: its site group, the batch and the item key (phase 4d, SHOULD 4). */
+	public record Member(String group, @Nullable String batchId, @Nullable String itemKey) {
+		public JsonObject toJson() {
+			JsonObject o = new JsonObject();
+			o.addProperty("group", group);
+			if (batchId != null) {
+				o.addProperty("batchId", batchId);
+			}
+			if (itemKey != null) {
+				o.addProperty("itemKey", itemKey);
+			}
+			return o;
+		}
+
+		public static Member fromJson(JsonObject o) {
+			return new Member(o.get("group").getAsString(), o.has("batchId") ? o.get("batchId").getAsString() : null,
+				o.has("itemKey") ? o.get("itemKey").getAsString() : null);
+		}
+	}
 
 	/** A site placed instantly (phases 1-2): no construction data, no owner. */
 	public Site(String id, String blueprint, String rotation, Anchors.Bounds box, Anchors.Bounds interior, Map<String, Anchor> anchors,
@@ -62,12 +93,13 @@ public record Site(String id, String blueprint, String rotation, Anchors.Bounds 
 	/** The same site with another owner and ext (carried over by move, pin and construction changes). */
 	public Site withOwnership(@Nullable String owner, @Nullable JsonObject ext) {
 		return new Site(id, blueprint, rotation, box, interior, anchors, placedAt, dimension, snapshotBox, snapshot, movedFrom, pin, construction, owner,
-			ext == null ? new JsonObject() : ext);
+			ext == null ? new JsonObject() : ext, member, placing);
 	}
 
 	/** The same site with another pin. */
 	public Site withPin(@Nullable Pin p) {
-		return new Site(id, blueprint, rotation, box, interior, anchors, placedAt, dimension, snapshotBox, snapshot, movedFrom, p, construction, owner, ext);
+		return new Site(id, blueprint, rotation, box, interior, anchors, placedAt, dimension, snapshotBox, snapshot, movedFrom, p, construction, owner, ext,
+			member, placing);
 	}
 
 	/** A construction site still building (survival, docs/CONTRACT.md phase 3): not every queued cell is in the world yet. */
@@ -76,7 +108,25 @@ public record Site(String id, String blueprint, String rotation, Anchors.Bounds 
 	}
 
 	public Site withConstruction(@Nullable Construction c) {
-		return new Site(id, blueprint, rotation, box, interior, anchors, placedAt, dimension, snapshotBox, snapshot, movedFrom, pin, c, owner, ext);
+		return new Site(id, blueprint, rotation, box, interior, anchors, placedAt, dimension, snapshotBox, snapshot, movedFrom, pin, c, owner, ext, member,
+			placing);
+	}
+
+	/** The same site in (or out of) a group. */
+	public Site withMember(@Nullable Member m) {
+		return new Site(id, blueprint, rotation, box, interior, anchors, placedAt, dimension, snapshotBox, snapshot, movedFrom, pin, construction, owner,
+			ext, m, placing);
+	}
+
+	/** The same site, still placing or done placing. */
+	public Site withPlacing(boolean p) {
+		return new Site(id, blueprint, rotation, box, interior, anchors, placedAt, dimension, snapshotBox, snapshot, movedFrom, pin, construction, owner,
+			ext, member, p);
+	}
+
+	/** The site group it belongs to, or null. */
+	public @Nullable String group() {
+		return member == null ? null : member.group();
 	}
 
 	/** A site's former place: its box's minimum corner, rotation and dimension. */
@@ -214,6 +264,12 @@ public record Site(String id, String blueprint, String rotation, Anchors.Bounds 
 		if (ext.size() > 0) {
 			o.add("ext", ext.deepCopy());
 		}
+		if (member != null) {
+			o.add("member", member.toJson());
+		}
+		if (placing) {
+			o.addProperty("placing", true);
+		}
 		return o;
 	}
 
@@ -242,7 +298,9 @@ public record Site(String id, String blueprint, String rotation, Anchors.Bounds 
 			o.has("pin") && o.get("pin").isJsonObject() ? Pin.fromJson(o.getAsJsonObject("pin")) : null,
 			o.has("construction") && o.get("construction").isJsonObject() ? Construction.fromJson(o.getAsJsonObject("construction")) : null,
 			o.has("owner") && o.get("owner").isJsonPrimitive() ? o.get("owner").getAsString() : null,
-			o.has("ext") && o.get("ext").isJsonObject() ? o.getAsJsonObject("ext") : new JsonObject());
+			o.has("ext") && o.get("ext").isJsonObject() ? o.getAsJsonObject("ext") : new JsonObject(),
+			o.has("member") && o.get("member").isJsonObject() ? Member.fromJson(o.getAsJsonObject("member")) : null,
+			o.has("placing") && o.get("placing").getAsBoolean());
 	}
 
 	/**
@@ -270,6 +328,11 @@ public record Site(String id, String blueprint, String rotation, Anchors.Bounds 
 
 	/** The sites file: {@code {"version":1, "next": 4, "sites": [...], "pending": [...]}}; {@code next} never goes back. */
 	public static JsonObject fileJson(List<Site> sites, int next, List<Pending> pending) {
+		return fileJson(sites, next, pending, List.of(), 1);
+	}
+
+	/** The sites file with the site groups (phase 4d): {@code "groups": [...]} and {@code "nextGroup"}. */
+	public static JsonObject fileJson(List<Site> sites, int next, List<Pending> pending, List<SiteGroupRec> groups, int nextGroup) {
 		JsonObject root = new JsonObject();
 		root.addProperty("version", 1);
 		root.addProperty("next", next);
@@ -281,14 +344,25 @@ public record Site(String id, String blueprint, String rotation, Anchors.Bounds 
 			pending.forEach(x -> p.add(x.toJson()));
 			root.add("pending", p);
 		}
+		if (!groups.isEmpty() || nextGroup > 1) {
+			JsonArray g = new JsonArray();
+			groups.forEach(x -> g.add(x.toJson()));
+			root.add("groups", g);
+			root.addProperty("nextGroup", nextGroup);
+		}
 		return root;
 	}
 
 	/** Parsed sites file. */
-	public record FileData(List<Site> sites, int next, List<Pending> pending) {
+	public record FileData(List<Site> sites, int next, List<Pending> pending, List<SiteGroupRec> groups, int nextGroup) {
 		public FileData {
 			sites = List.copyOf(sites);
 			pending = List.copyOf(pending);
+			groups = List.copyOf(groups);
+		}
+
+		public FileData(List<Site> sites, int next, List<Pending> pending) {
+			this(sites, next, pending, List.of(), 1);
 		}
 	}
 
@@ -306,8 +380,28 @@ public record Site(String id, String blueprint, String rotation, Anchors.Bounds 
 			pending.add(p);
 			maxId = Math.max(maxId, idNumber(p.site().id()));
 		}
+		List<SiteGroupRec> groups = new ArrayList<>();
+		int maxGroup = 0;
+		for (JsonElement e : root.has("groups") ? root.getAsJsonArray("groups") : new JsonArray()) {
+			SiteGroupRec g = SiteGroupRec.fromJson(e.getAsJsonObject());
+			groups.add(g);
+			maxGroup = Math.max(maxGroup, number(g.id(), 'g'));
+		}
 		int next = root.has("next") ? root.get("next").getAsInt() : 1;
-		return new FileData(list, Math.max(next, maxId + 1), pending);
+		int nextGroup = root.has("nextGroup") ? root.get("nextGroup").getAsInt() : 1;
+		return new FileData(list, Math.max(next, maxId + 1), pending, groups, Math.max(nextGroup, maxGroup + 1));
+	}
+
+	/** {@code g12 -> 12} (for prefix 'g'); 0 for other ids. */
+	public static int number(@Nullable String id, char prefix) {
+		if (id == null || id.length() < 2 || id.charAt(0) != prefix) {
+			return 0;
+		}
+		try {
+			return Integer.parseInt(id.substring(1));
+		} catch (NumberFormatException e) {
+			return 0;
+		}
 	}
 
 	/** {@code s12 -> 12}; 0 for other ids. */

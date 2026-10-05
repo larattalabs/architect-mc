@@ -16,8 +16,9 @@ public interface ArchitectApi {
 	/**
 	 * 1.2.0: bibles, design groups, estimates, re-skins, open types, named parts, the survival toggle (docs/CONTRACT.md phase 4b).
 	 * 1.3.0: massings, redirects, massingFirst groups and their approval, context, the composite preview (phase 4c).
+	 * 1.4.0: batches over ticks, site groups, stages, the group crate, lot fitting (phase 4d).
 	 */
-	String VERSION = "1.3.0";
+	String VERSION = "1.4.0";
 
 	/** The singleton. Safe to call from any mod's initializer (it does not depend on Architect's init order). */
 	static ArchitectApi get() {
@@ -51,6 +52,7 @@ public interface ArchitectApi {
 	 * Since 1.2.0, a 4b helper adds {@code "bibles"}, {@code "designGroups"}, {@code "namedParts"}, {@code "openTypes"},
 	 * {@code "estimates"} and {@code "reskin"}; {@code "survivalInfo"} is always there. Since 1.3.0, a 4c helper adds
 	 * {@code "massing"}, and {@code "compositePreview"} ({@code ArchitectClientApi.previewComposite}) is always there.
+	 * Since 1.4.0, {@code "batchPlacement"}, {@code "siteGroups"}, {@code "stages"} and {@code "groupCrate"} are always there.
 	 */
 	Set<String> features();
 }

@@ -87,10 +87,10 @@ class ApiRulesTest {
 	@Test
 	void featureNamesAreStable() {
 		// pinned: Steward depends on these names (docs/CONTRACT.md phase 4a, stable within major 1)
-		assertEquals(java.util.Set.of("sites", "events", "designs", "library", "survey", "survivalInfo", "compositePreview"), ApiRules.features(0, List.of()));
-		assertEquals(java.util.Set.of("sites", "events", "designs", "library", "survey", "survivalInfo", "compositePreview"), ApiRules.features(1, List.of("job.run")),
+		assertEquals(java.util.Set.of("sites", "events", "designs", "library", "survey", "survivalInfo", "compositePreview", "batchPlacement", "siteGroups", "stages", "groupCrate"), ApiRules.features(0, List.of()));
+		assertEquals(java.util.Set.of("sites", "events", "designs", "library", "survey", "survivalInfo", "compositePreview", "batchPlacement", "siteGroups", "stages", "groupCrate"), ApiRules.features(1, List.of("job.run")),
 			"protocol 1: no job or blob features even if named");
-		assertEquals(java.util.Set.of("sites", "events", "designs", "library", "survey", "survivalInfo", "compositePreview", "protocol2", "jobs", "jobTools", "blobs",
+		assertEquals(java.util.Set.of("sites", "events", "designs", "library", "survey", "survivalInfo", "compositePreview", "batchPlacement", "siteGroups", "stages", "groupCrate", "protocol2", "jobs", "jobTools", "blobs",
 			"budget"), ApiRules.features(2, List.of("job.run", "job.tools", "blob.put", "budget")));
 	}
 

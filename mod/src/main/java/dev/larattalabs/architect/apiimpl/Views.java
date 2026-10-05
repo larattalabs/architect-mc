@@ -84,7 +84,31 @@ public final class Views {
 			j.has("palette") && j.get("palette").isJsonObject() ? Optional.of(j.getAsJsonObject("palette").deepCopy()) : Optional.empty(),
 			ports(j), j.has("ext") && j.get("ext").isJsonObject() ? j.getAsJsonObject("ext").deepCopy() : new JsonObject(), e.bundled(),
 			j.has("imported") && j.get("imported").isJsonPrimitive() && j.get("imported").getAsBoolean(), Optional.ofNullable(str(j, "variantOf")),
-			Wire4b.pin(j.get("bible")), Optional.ofNullable(str(j, "group")), Optional.ofNullable(str(j, "groupItem")), Wire4b.parts(j));
+			Wire4b.pin(j.get("bible")), Optional.ofNullable(str(j, "group")), Optional.ofNullable(str(j, "groupItem")), Wire4b.parts(j),
+			direction(bp.front()), anchorCells(bp), bp.groundY(), approach(bp));
+	}
+
+	/** {@code north/east/south/west} -> the Direction (south when unknown). */
+	public static Direction direction(String name) {
+		Direction d = Direction.byName(name);
+		return d == null || d.getAxis().isVertical() ? Direction.SOUTH : d;
+	}
+
+	/** The blueprint's anchors as template cells (the cell holding each anchor's point), cameras left out. Pure. */
+	public static Map<String, BlockPos> anchorCells(Blueprint bp) {
+		Map<String, BlockPos> out = new LinkedHashMap<>();
+		bp.anchors().forEach((name, a) -> {
+			if (!name.startsWith(Blueprint.CAM_PREFIX)) {
+				out.put(name, new BlockPos((int) Math.floor(a.x()), (int) Math.floor(a.y()), (int) Math.floor(a.z())));
+			}
+		});
+		return out;
+	}
+
+	/** The design's approach for the API ({@code length} 0 when it has none). */
+	public static Library.Approach approach(Blueprint bp) {
+		return new Library.Approach(bp.approach().enabled() ? bp.approach().length() : 0, bp.approach().width(),
+			dev.larattalabs.architect.placement.Approach.EXTEND);
 	}
 
 	private static @Nullable String str(JsonObject j, String k) {

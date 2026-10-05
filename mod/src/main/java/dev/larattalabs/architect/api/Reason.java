@@ -15,9 +15,14 @@ package dev.larattalabs.architect.api;
  * <li>{@code NOT_LOADED}: part of the site is in an unloaded chunk (or the dimension is not loaded).</li>
  * <li>{@code UNKNOWN_BLUEPRINT}: no loaded design with that id.</li>
  * <li>{@code OTHER}: anything else (an I/O error, the world's sites file could not be read, an internal problem).</li>
+ * <li>{@code CANCELLED} (1.4.0): a batch item dropped or rolled back by {@link Sites#cancelBatch} (or a skipped stage, a stopped batch).</li>
+ * <li>{@code LOT_TOO_SMALL} (1.4.0): {@link Sites#fitToLot}: the footprint does not fit the lot after rotation and setback.</li>
+ * <li>{@code TIMED_OUT} (1.4.0): a batch item waited longer than its {@code WaitPolicy} for a temporary blocker; the message
+ * names the blocker.</li>
  * </ul>
+ * New values are only ever appended.
  */
 public enum Reason {
 	PLAYER_IN_BOX, OCCUPIED, OVERLAP, LAVA, BLOCK_ENTITIES, BUILD_HEIGHT, DOOR_CUT, CREATIVE_ONLY_BLOCK, NOT_ALLOWED, NOT_LOADED,
-	UNKNOWN_BLUEPRINT, OTHER
+	UNKNOWN_BLUEPRINT, OTHER, CANCELLED, LOT_TOO_SMALL, TIMED_OUT
 }

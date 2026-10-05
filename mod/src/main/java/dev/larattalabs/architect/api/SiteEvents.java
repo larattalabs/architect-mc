@@ -138,6 +138,43 @@ public interface SiteEvents {
 		}
 	});
 
+	/** A batch made progress (at most once per second per batch). Since 1.4.0. */
+	Event<BatchProgress> BATCH_PROGRESS = EventFactory.createArrayBacked(BatchProgress.class, ls -> b -> {
+		for (BatchProgress l : ls) {
+			Guard.run(() -> l.onProgress(b), "BATCH_PROGRESS");
+		}
+	});
+	/** A batch item was placed (an instant one fully written, a construction site put down). Since 1.4.0. */
+	Event<ItemPlaced> ITEM_PLACED = EventFactory.createArrayBacked(ItemPlaced.class, ls -> e -> {
+		for (ItemPlaced l : ls) {
+			Guard.run(() -> l.onPlaced(e), "ITEM_PLACED");
+		}
+	});
+	/** A batch item failed (refused for good, timed out, cancelled), with the reason. Since 1.4.0. */
+	Event<ItemFailed> ITEM_FAILED = EventFactory.createArrayBacked(ItemFailed.class, ls -> e -> {
+		for (ItemFailed l : ls) {
+			Guard.run(() -> l.onFailed(e), "ITEM_FAILED");
+		}
+	});
+	/** A batch item waits for a temporary blocker (fired when the reason changes). Since 1.4.0. */
+	Event<ItemWaiting> ITEM_WAITING = EventFactory.createArrayBacked(ItemWaiting.class, ls -> e -> {
+		for (ItemWaiting l : ls) {
+			Guard.run(() -> l.onWaiting(e), "ITEM_WAITING");
+		}
+	});
+	/** A batch ended: done, cancelled or stopped. Since 1.4.0. */
+	Event<BatchDone> BATCH_DONE = EventFactory.createArrayBacked(BatchDone.class, ls -> b -> {
+		for (BatchDone l : ls) {
+			Guard.run(() -> l.onDone(b), "BATCH_DONE");
+		}
+	});
+	/** A stage of a site group changed state ({@code stage.state()} is the new one). Since 1.4.0. */
+	Event<StageState> STAGE_STATE = EventFactory.createArrayBacked(StageState.class, ls -> (g, st) -> {
+		for (StageState l : ls) {
+			Guard.run(() -> l.onState(g, st), "STAGE_STATE");
+		}
+	});
+
 	@FunctionalInterface
 	interface SitePlaced {
 		void onPlaced(SiteView site);
@@ -231,6 +268,36 @@ public interface SiteEvents {
 	@FunctionalInterface
 	interface WorldModeChanged {
 		void onChanged(SurvivalInfo info);
+	}
+
+	@FunctionalInterface
+	interface BatchProgress {
+		void onProgress(BatchView batch);
+	}
+
+	@FunctionalInterface
+	interface ItemPlaced {
+		void onPlaced(ItemEvent item);
+	}
+
+	@FunctionalInterface
+	interface ItemFailed {
+		void onFailed(ItemEvent item);
+	}
+
+	@FunctionalInterface
+	interface ItemWaiting {
+		void onWaiting(ItemEvent item);
+	}
+
+	@FunctionalInterface
+	interface BatchDone {
+		void onDone(BatchView batch);
+	}
+
+	@FunctionalInterface
+	interface StageState {
+		void onState(String groupId, Stage stage);
 	}
 
 	/** Runs one listener; a throw is logged, never passed on. */
