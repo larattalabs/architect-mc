@@ -204,7 +204,7 @@ you are within 64 blocks, a HUD line shows the progress and what the site needs 
 - **The bill of materials** counts every block the instant placement would write: the building, plus that spot's
   foundation and entrance approach. The Library shows the design's own count before you place it. A door, bed or tall
   plant costs one item, a double slab costs two slabs, and wall torches and wall signs cost the standing item. Path
-  blocks, farmland and grass cost **dirt**, since survival can't pick those blocks up. A design that uses a block
+  blocks, farmland and grass blocks cost **dirt**. A design that uses a block
   survival can't get (a spawner, bedrock, a command block...) is refused at placement. Waterlogged cells are built dry.
 - **Raw materials count, one way, at vanilla yields.** One log is 4 planks of its wood, one plank is 2 slabs, and a
   stonecutter block counts as what it cuts into (stone to stone bricks, cobblestone to its slab, stairs or wall).
@@ -220,7 +220,7 @@ you are within 64 blocks, a HUD line shows the progress and what the site needs 
 
 <table>
 <tr>
-<td width="50%"><img src="docs/img/readme/site-before.jpg" alt="A fresh construction site: the cabin as a translucent ghost on a cleared patch of forest, with the crate next to the end of the path"></td>
+<td width="50%"><img src="docs/img/readme/site-before.jpg" alt="A fresh construction site: the cabin as a translucent ghost in a forest clearing, with the crate next to the end of the path"></td>
 <td width="50%"><img src="docs/img/readme/site-after.jpg" alt="The finished log cabin with a smoking chimney, the hopper chain beside the path, and a toast: Log Cabin is built"></td>
 </tr>
 <tr>
@@ -234,7 +234,8 @@ you are within 64 blocks, a HUD line shows the progress and what the site needs 
 **In the Library**, a survival world shows each design's bill of materials and "Needs: N items", and Place becomes
 **Place construction site**.
 
-**Deconstruct** (from the crate screen, the Library's **Placed here** list, or `/architect remove <site>`):
+**Deconstruct** (the crate screen's **Deconstruct**, **Remove** in the Library's **Placed here** list, or
+`/architect remove <site>`):
 
 - Blocks the site placed and you paid for, still in place, are **refunded** as items at the crate's spot.
 - **Blocks you mined from the site aren't refunded**: you already have them. In the gate run, mining 3 logs and then
