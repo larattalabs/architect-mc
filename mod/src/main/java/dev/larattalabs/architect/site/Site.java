@@ -30,16 +30,44 @@ import org.jspecify.annotations.Nullable;
  *            same id never changes what this site is
  * @param construction a survival construction site's queue, crate and free cells ({@link Construction}); null for a site
  *                     placed instantly
+ * @param owner who owns it (docs/CONTRACT.md phase 4a, R5): a free string, by convention {@code <modid>:<thing>}; null = the
+ *              player's own site. A guardrail, not security: the UI asks twice before removing an owned site, and the API
+ *              refuses a remove from another requester without force. (Not {@link Construction#owner()}, the placing player.)
+ * @param ext namespaced extra data ({@code "steward_mc:lot": "L3"}); never interpreted by Architect, never null
  */
 public record Site(String id, String blueprint, String rotation, Anchors.Bounds box, Anchors.Bounds interior, Map<String, Anchor> anchors,
 	long placedAt, String dimension, Anchors.@Nullable Bounds snapshotBox, String snapshot, @Nullable Location movedFrom, @Nullable Pin pin,
-	@Nullable Construction construction) {
+	@Nullable Construction construction, @Nullable String owner, JsonObject ext) {
 	public static final String OVERWORLD = "minecraft:overworld";
 
-	/** A site placed instantly (phases 1-2): no construction data. */
+	/** A site placed instantly (phases 1-2): no construction data, no owner. */
 	public Site(String id, String blueprint, String rotation, Anchors.Bounds box, Anchors.Bounds interior, Map<String, Anchor> anchors,
 		long placedAt, String dimension, Anchors.@Nullable Bounds snapshotBox, String snapshot, @Nullable Location movedFrom, @Nullable Pin pin) {
-		this(id, blueprint, rotation, box, interior, anchors, placedAt, dimension, snapshotBox, snapshot, movedFrom, pin, null);
+		this(id, blueprint, rotation, box, interior, anchors, placedAt, dimension, snapshotBox, snapshot, movedFrom, pin, null, null, new JsonObject());
+	}
+
+	/** Phase 3 shape: no owner, no ext. */
+	public Site(String id, String blueprint, String rotation, Anchors.Bounds box, Anchors.Bounds interior, Map<String, Anchor> anchors,
+		long placedAt, String dimension, Anchors.@Nullable Bounds snapshotBox, String snapshot, @Nullable Location movedFrom, @Nullable Pin pin,
+		@Nullable Construction construction) {
+		this(id, blueprint, rotation, box, interior, anchors, placedAt, dimension, snapshotBox, snapshot, movedFrom, pin, construction, null,
+			new JsonObject());
+	}
+
+	/** Whether the site has an owner other than the player (R5). */
+	public boolean owned() {
+		return owner != null;
+	}
+
+	/** The same site with another owner and ext (carried over by move, pin and construction changes). */
+	public Site withOwnership(@Nullable String owner, @Nullable JsonObject ext) {
+		return new Site(id, blueprint, rotation, box, interior, anchors, placedAt, dimension, snapshotBox, snapshot, movedFrom, pin, construction, owner,
+			ext == null ? new JsonObject() : ext);
+	}
+
+	/** The same site with another pin. */
+	public Site withPin(@Nullable Pin p) {
+		return new Site(id, blueprint, rotation, box, interior, anchors, placedAt, dimension, snapshotBox, snapshot, movedFrom, p, construction, owner, ext);
 	}
 
 	/** A construction site still building (survival, docs/CONTRACT.md phase 3): not every queued cell is in the world yet. */
@@ -48,7 +76,7 @@ public record Site(String id, String blueprint, String rotation, Anchors.Bounds 
 	}
 
 	public Site withConstruction(@Nullable Construction c) {
-		return new Site(id, blueprint, rotation, box, interior, anchors, placedAt, dimension, snapshotBox, snapshot, movedFrom, pin, c);
+		return new Site(id, blueprint, rotation, box, interior, anchors, placedAt, dimension, snapshotBox, snapshot, movedFrom, pin, c, owner, ext);
 	}
 
 	/** A site's former place: its box's minimum corner, rotation and dimension. */
@@ -119,6 +147,8 @@ public record Site(String id, String blueprint, String rotation, Anchors.Bounds 
 
 	public Site {
 		anchors = Collections.unmodifiableMap(new LinkedHashMap<>(anchors));
+		ext = ext == null ? new JsonObject() : ext.deepCopy();
+		owner = owner == null || owner.isBlank() ? null : owner;
 		if (snapshotBox != null && snapshotBox.equals(box)) {
 			snapshotBox = null;
 		}
@@ -135,6 +165,12 @@ public record Site(String id, String blueprint, String rotation, Anchors.Bounds 
 	}
 
 	// ------------------------------------------------------------------ JSON
+
+	/** A copy: the record must not be changed through it. */
+	@Override
+	public JsonObject ext() {
+		return ext.deepCopy();
+	}
 
 	public JsonObject toJson() {
 		JsonObject o = new JsonObject();
@@ -172,6 +208,12 @@ public record Site(String id, String blueprint, String rotation, Anchors.Bounds 
 		if (construction != null) {
 			o.add("construction", construction.toJson());
 		}
+		if (owner != null) {
+			o.addProperty("owner", owner);
+		}
+		if (ext.size() > 0) {
+			o.add("ext", ext.deepCopy());
+		}
 		return o;
 	}
 
@@ -198,7 +240,9 @@ public record Site(String id, String blueprint, String rotation, Anchors.Bounds 
 			o.has("snapshotBox") ? Anchors.boundsFromJson(o.getAsJsonObject("snapshotBox")) : null,
 			o.has("snapshot") ? o.get("snapshot").getAsString() : id + ".nbt", moved,
 			o.has("pin") && o.get("pin").isJsonObject() ? Pin.fromJson(o.getAsJsonObject("pin")) : null,
-			o.has("construction") && o.get("construction").isJsonObject() ? Construction.fromJson(o.getAsJsonObject("construction")) : null);
+			o.has("construction") && o.get("construction").isJsonObject() ? Construction.fromJson(o.getAsJsonObject("construction")) : null,
+			o.has("owner") && o.get("owner").isJsonPrimitive() ? o.get("owner").getAsString() : null,
+			o.has("ext") && o.get("ext").isJsonObject() ? o.getAsJsonObject("ext") : new JsonObject());
 	}
 
 	/**
