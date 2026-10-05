@@ -882,7 +882,7 @@ async function run(name) {
     error = String(e?.stack ?? e);
     failures++;
   }
-  if (name !== 'all') write(`${name}.json`, { step: name, seconds: (Date.now() - t0) / 1000, error, results: { ...results }, data });
+  if (name !== 'all') write(name === 'throughput' ? 'throughput-step.json' : `${name}.json`, { step: name, seconds: (Date.now() - t0) / 1000, error, results: { ...results }, data });
 }
 
 const which = process.argv[2] ?? 'probe';
