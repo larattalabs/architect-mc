@@ -1057,3 +1057,81 @@ Real samples replace the seeds per model as they accrue.
   size M, the bible's name as style, a live estimate); sets with per-item progress in the Designs tab; a Library collection
   filter and header with re-skin; bibles in the Variants dialog. The 4b controls are hidden for a protocol-1 helper.
 - **DONE events** (bible, group, re-skin) fire once each, persisted and caught up after a world load, like JOB_DONE.
+
+---
+
+# Phase 4c contract: massing pass (A3) and composite preview (A8 review item 7) - DRAFT for Steward review
+
+Goal: **approve the shape cheaply before paying for detail.** A massing is a coarse volume design: masses, roof forms
+and openings, no detail. Making one costs cents and takes a minute or two. The player approves it as a ghost or
+redirects it with notes. The detail design then takes the approved massing as binding input.
+
+## Kit: massing designs
+
+- `kit/lib/massing.mjs`:
+  - `m.mass(name, [x0,y0,z0,x1,y1,z1], { roof: 'gable'|'hip'|'flat'|'shed'|'none', ridge: 'x'|'z', storeys })`
+  - `m.opening(name, face, at, size)`: door or major opening
+  - `m.stilts(name, box, spacing)`: piles, posts
+  - The masses use the bible's roles in flat form: wall, roof, foundation, and `glass` for openings, so a massing reads in
+    the bible's colours. Every mass is a named part (it uses `bp.part`), and **the part names carry over to the detail
+    design**.
+- A massing is an ordinary blueprint with `massing: true`, its `parts`, `type` and `size`. Checker profile `massing`: size, parts
+  (at least 2), no floating, entrance reachable. No light or interior rules.
+
+## Sidecar
+
+- `design.request { request: DesignRequest & { massing: true } }` runs a **massing job**.
+  - Default model `claude-sonnet-5-5`, effort `low`, maxTurns about 20, about $0.10-0.40 and 1-3 min (seed; measured in the gate).
+  - It writes `kit/designs/<id>.mjs` with massing.mjs, and the brief asks for mass names that describe function
+    (`hall`, `wing_east`, `tower`, `porch`).
+  - Massings install into `<gameDir>/architect/massings/<id>/`, the same files as a library entry. They don't appear in the
+    library list.
+- `design.request { request: DesignRequest & { fromMassing: id } }` runs the detail pass.
+  - The scratch dir gets `massing/<id>.mjs` plus its renders.
+  - The brief says the massing is binding: the same part names, each part's box within ±1 per face, the total size within ±2,
+    and the same roof forms. Detail goes inside and on the masses.
+  - The re-check adds the **massing conformance** rule: a warning in 4c (per the phase 1 rule), promoted once real runs
+    pass it.
+- `massing.redirect { massingId, notes }` makes a new massing (version +1) from the old one plus notes. It's cheap.
+- **Groups:** `design.group { group: { ..., massingFirst: true } }`.
+  - All items get massings first, in waves like designs.
+  - Then the group goes `awaiting_approval`.
+  - `group.approve { groupId, approve: [itemKey], redirect: { itemKey: notes } }` approves some items (their detail passes start)
+    and redirects others (new massing versions). The group finishes when every item is detailed or cancelled.
+- **Estimates:** a `massing` kind joins the rolling averages, and a group with `massingFirst` estimates both passes.
+
+## Java API (1.3.0)
+
+- `DesignRequest.massing(boolean)` / `fromMassing(String)`.
+- `Designs.massing(id)`, `redirectMassing(id, notes)`, `approveGroup(groupId, approve, redirect)`.
+- Events `MASSING_DONE` and `GROUP_AWAITING_APPROVAL`.
+- **Composite preview** (`ArchitectClientApi`), for massing and delta ghosts (5b) and Steward's site plans:
+  ```java
+  void previewComposite(String key, List<PreviewLayer> layers);   // replaces the layers under `key`
+  void clearComposite(String key);
+  record PreviewLayer(String blueprintId /* or massing id */, BlockPos origin, Rotation rotation, PreviewStyle style,
+                      @Nullable Set<BlockPos> onlyCells /* null = all */) {}
+  enum PreviewStyle { GHOST, MASSING, ADDED, REMOVED, CHANGED }    // distinct tints; REMOVED draws red outlines
+  ```
+  Several layers, and several keys, at once. Steward shows a whole settlement's massings and lot outlines this way.
+  Without a HUD verdict per layer, so it's a preview only; placement still goes one site at a time (until 4d batches).
+- Features: `"massing"`, `"compositePreview"`.
+
+## UI
+
+- **Design tab:** a "Massing first" toggle (default on for L and plot sizes). When the massing is done, it shows as a ghost at the
+  player's look target, with an **Approve** / **Redirect…** (notes) / **Cancel** bar.
+- **Set dialog:** "Massing first" (default on). An awaiting-approval set shows all its massings at once as a composite preview
+  in a row (or at a plot), with per-item Approve / Redirect.
+
+## Phase 4c gate
+
+- **One real massing** (tavern, preset L): cost at most $0.40, at most 3 min; its parts at least 3; looks right.
+- **A redirect** ("make it L-shaped with a tower at the corner") gives a visibly different massing with a new part.
+- **Detail from the approved massing** (real): the same part names; every part's box within ±1 per face; size within ±2.
+  Report the conformance warning count, which should be 0.
+- **A set of 3 with massingFirst** (sim): awaiting_approval; approve 2, redirect 1; the redirected item gets a new massing, then
+  approval; all 3 detailed.
+- **The composite preview** shows MASSING, ADDED, REMOVED and CHANGED tints at once, in a screenshot that has been looked at.
+- **Estimates** include the massing pass.
+- gate-verifier checks the result.
