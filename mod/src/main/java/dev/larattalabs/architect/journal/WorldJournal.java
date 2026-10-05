@@ -480,6 +480,7 @@ public final class WorldJournal {
 	 */
 	public static UndoWork planUndo(ServerLevel level, Collection<String> ids, String group) throws IOException {
 		UndoPlanner p = new UndoPlanner(level, ids, group);
+		p.sync = true;
 		p.step(Long.MAX_VALUE);
 		return p.work();
 	}
@@ -522,8 +523,49 @@ public final class WorldJournal {
 			this.planner = new Sections.Planner(ids, group, at, (pos, after) -> holds(level, pos, after), WorldJournal::same);
 		}
 
+		private java.util.concurrent.@Nullable CompletableFuture<Void> warm;
+		/** {@link #planUndo}: everything in one call (no warming). */
+		boolean sync;
+
+		/**
+		 * Reads the region files of the sections to plan off the server thread first (a large entry's region decodes in tens of
+		 * milliseconds); false while that runs. A small undo plans at once.
+		 */
+		public boolean ready() {
+			if (sync || sections.size() <= 24) {
+				return true;
+			}
+			if (warm == null) {
+				Set<Long> regions = new TreeSet<>();
+				sections.forEach(k -> regions.add(Sections.region(k)));
+				warm = java.util.concurrent.CompletableFuture.runAsync(() -> {
+					for (long r : regions) {
+						for (long k : sections) {
+							if (Sections.region(k) != r) {
+								continue;
+							}
+							try {
+								for (String id : s.inSection(dim, k)) {
+									JournalStore.Meta m = s.meta(id);
+									if (m != null && m.active()) {
+										s.region(id, r);
+									}
+								}
+							} catch (IOException e) {
+								// planning reads it again and reports
+							}
+						}
+					}
+				});
+			}
+			return warm.isDone();
+		}
+
 		/** Plans sections until {@code deadline} (at least one); true when every section is planned. */
 		public boolean step(long deadline) throws IOException {
+			if (!ready()) {
+				return false;
+			}
 			int n = 0;
 			while (next.hasNext()) {
 				if (n > 0 && System.nanoTime() >= deadline) {
