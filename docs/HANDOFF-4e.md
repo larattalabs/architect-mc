@@ -39,6 +39,13 @@ older than the latest commit must be re-run on the final build (every step, plus
 | 11 API | `api`, `api14` | written, not run |
 | 6 ghost | `ghost` | written, not run |
 
+Bugs the gate found and fixed so far: `Journal.Value` helpers used `Name`/`Properties` (26.x writes `id`/`properties`);
+removal blockers ignored block entities a LAYERed BOX site owns by its journal `after`; a group removal reported sites as
+restored cells; K4 rolled back instead of placing; K6 left entries UNDONE; pending roads and cell sites were never settled;
+group-undo evidence used the entry's own `before`; DevBridge could not rebind after a halted client; survival rule 3b refunded
+a block the covering site kept (duplicate); a batch lost a tick per item (commit waits, next item a tick late);
+`Map.copyOf` on packed positions went quadratic in undo planning (a size-cap undo planned for minutes).
+
 ## Known issues
 
 - A building's `after` (P6) is captured before the placement's deferred block ticks run, so a few cells differ from it
