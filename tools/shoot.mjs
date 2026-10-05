@@ -7,7 +7,9 @@
 //
 // Scene: {"setup": ["/time set 6000", ...], "shots": [{"name", "camera": {x,y,z,yaw,pitch | lookAt:{x,y,z}, fov?},
 //   "commands"?: [...], "ui"?: "design"|"library"|"designs"|"status" (opens the Architect screen), "uiClicks"?: [ids],
-//   "screen"?: name|null, "hideHud"?: true, "frames"?: 3, "delayMs"?: 0, "waitChunks"?: true}]} or a bare array of shots.
+//   "screen"?: name|null, "hideHud"?: true, "frames"?: 3, "delayMs"?: 0, "waitChunks"?: true,
+//   "requests"?: [[type, payload], ...] (any DevBridge requests, run before the camera; also allowed as "setupRequests" at the top),
+//   "after"?: [[type, payload], ...] (run after the shot)}]} or a bare array of shots.
 // Prints a JSON summary; exit code 1 if a shot failed.
 
 import fs from 'node:fs';
@@ -41,11 +43,13 @@ await dev.waitInWorld({ timeoutMs: 300_000 });
 const results = [];
 try {
   for (const cmd of scene.setup ?? []) await dev.call('dev.command', { cmd });
+  for (const [type, payload] of scene.setupRequests ?? []) await dev.call(type, payload ?? {});
   for (const shot of scene.shots ?? []) {
     if (only && !only.has(shot.name)) continue;
     const r = { name: prefix + shot.name, ok: false };
     try {
       for (const cmd of shot.commands ?? []) await dev.call('dev.command', { cmd });
+      for (const [type, payload] of shot.requests ?? []) await dev.call(type, payload ?? {});
       if (shot.camera) await dev.call('dev.camera', { mode: 'keep', ...shot.camera });
       if (shot.ui) await dev.call('dev.ui.open', { tab: shot.ui });
       for (const id of shot.uiClicks ?? []) await dev.call('dev.ui.click', { control: id });
@@ -56,6 +60,7 @@ try {
       });
       Object.assign(r, { ok: true, path: res.path, width: res.width, height: res.height });
       if (shot.ui) await dev.call('dev.screen', { open: null });
+      for (const [type, payload] of shot.after ?? []) await dev.call(type, payload ?? {});
     } catch (e) {
       r.error = e.message;
       if ((await dev.health()).stalled) { r.hung = true; results.push(r); break; }
