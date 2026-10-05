@@ -1039,3 +1039,21 @@ The seeded estimates were wrong by more than 2x on the first real group ($1.8-2.
 measured values: an Opus design $2.0-3.2 and 8-13 min, a Sonnet design $0.8-2.5 and 4-10 min, a bible job $1.2-2.0 and 5-8 min.
 For the gate group (1 Opus anchor plus 2 Sonnet) that gives $3.6-8.2 and 12-23 min; the measured $6.68 and 22.7 min fall inside.
 Real samples replace the seeds per model as they accrue.
+
+### Phase 4b mod as built (API 1.2.0, mod 0.5.0)
+
+- **Java surface:** `ArchitectApi.bibles()` (request/revise/cancel/estimate/get/list/job/jobs), `Designs` groups (requestGroup, group,
+  listGroups, cancel/extend/resumeGroup, estimate), `Library.makeVariant(..., bible[, version])`, `reskinCollection(bibleId,
+  version, CollectionRef)`, `Sites.survival()`. New records: Bible, BiblePin, BibleRequest, BibleJob, Estimate, GroupRequest (Item,
+  Role), Group (Item, Status), Reskin, SurvivalInfo, Library.Part and CollectionRef. Six events; features `bibles`,
+  `designGroups`, `namedParts`, `openTypes`, `estimates`, `reskin`, `survivalInfo`.
+- **Not purely additive** (as with `Job` in 1.1.0):
+  - record patterns and equals change for `DesignRequest` and `Library.Entry` (the old constructors are kept);
+  - new abstract methods on `ArchitectApi`, `Designs`, `Library` and `Sites` (a breaking change only for implementers);
+  - a single `DesignRequest` with `group` set now fails, because the sidecar refuses it.
+- **Completion:** `Bibles.request` / `revise` complete at the ack, with the queued job. `reskinCollection` completes when the
+  re-skin is final, after the library reload. Bundled and imported entries are never re-skinned (no `.mjs`).
+- **UI:** the Design tab (open type plus profile, bible picker); "Design a set…" (a landmark = anchor at size L, ordinary items at
+  size M, the bible's name as style, a live estimate); sets with per-item progress in the Designs tab; a Library collection
+  filter and header with re-skin; bibles in the Variants dialog. The 4b controls are hidden for a protocol-1 helper.
+- **DONE events** (bible, group, re-skin) fire once each, persisted and caught up after a world load, like JOB_DONE.
