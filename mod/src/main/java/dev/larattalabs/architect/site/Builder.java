@@ -407,6 +407,16 @@ public final class Builder {
 
 	private static @Nullable MinecraftServer server;
 
+	/** Whether any construction site is building (the placement stats count those ticks). */
+	static boolean anyBuilding() {
+		for (Site s : Sites.all()) {
+			if (s.building()) {
+				return true;
+			}
+		}
+		return false;
+	}
+
 	/** Whether {@code siteId} is a construction site still building (the crate is unbreakable then). Any thread. */
 	public static boolean siteBuilding(String siteId) {
 		Site s = siteId == null || siteId.isEmpty() ? null : Sites.get(siteId);
@@ -475,6 +485,14 @@ public final class Builder {
 		return out;
 	}
 
+	/** A shared crate about to go: its delivered counts stay on the group record ({@code Sites.stock} after the build). */
+	private static void keepDelivered(MinecraftServer srv, Site s, @Nullable CrateBlockEntity crate, boolean keep) {
+		SiteGroupRec g = sharedGroup(s);
+		if (g != null && crate != null && !keep) {
+			Sites.putGroup(srv, g.withDelivered(crate.ledger().delivered()));
+		}
+	}
+
 	/** What a group's stockpile holds (R6, {@code Sites.stock}). */
 	public record GroupStock(Map<String, Integer> delivered, Map<String, Integer> credit, Map<String, Map<String, Integer>> outstandingBySite,
 		Map<String, Integer> outstanding, @Nullable BlockPos crate) {
@@ -511,6 +529,10 @@ public final class Builder {
 			}
 		}
 		Construction.Crate gc = g.crate();
+		SiteGroupRec now = Sites.group(g.id());
+		if (crates.isEmpty() && now != null) {
+			delivered.putAll(now.delivered()); // the shared crate is gone (every site built): its ledger was kept on the group
+		}
 		return new GroupStock(delivered, credit, bySite, total, gc == null ? null : new BlockPos(gc.x(), gc.y(), gc.z()));
 	}
 
@@ -937,6 +959,7 @@ public final class Builder {
 		Construction c = s.construction();
 		// a group's shared crate stays while another of its sites still builds (R6)
 		boolean keepCrate = !otherBuildingShared(s).isEmpty();
+		keepDelivered(srv, s, crate, keepCrate);
 		Map<String, Integer> left = crate != null && !keepCrate ? crate.ledger().takeStock() : Map.of();
 		BlockPos at = c.crate() != null ? new BlockPos(c.crate().x(), c.crate().y(), c.crate().z()) : dropPos(s);
 		if (c.crate() != null && !keepCrate && (crate != null || level.isLoaded(at))) {
@@ -1293,6 +1316,7 @@ public final class Builder {
 			CrateBlockEntity crate = crate(level, s, true);
 			// a shared crate other sites still build from stays; this site's refunds drop at its cell (R6)
 			if (crate != null && otherBuildingShared(s).isEmpty()) {
+				keepDelivered(srv, s, crate, false);
 				stock = crate.ledger().takeStock();
 				restoreCrateCell(level, c.crate());
 			}

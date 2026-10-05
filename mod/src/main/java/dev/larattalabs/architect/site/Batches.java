@@ -435,29 +435,17 @@ public final class Batches {
 		}
 		Site.Member member = new Site.Member(b.group, b.id, i.key);
 		try {
-			if (i.construction) {
-				Site s;
-				Builder.SHARED_CRATE.set(b.sharedCrate || groupShared(b) ? b.group : null);
-				try {
-					s = Sites.place(level, bp, origin, rot, i.force, i.actor, true, b.owner, i.ext, null, member);
-				} finally {
-					Builder.SHARED_CRATE.remove();
-				}
-				i.siteId = s.id();
-				startStage(server, b, i);
-				placedItem(server, b, i);
-			} else {
-				PlaceJob job = Sites.beginPlacing(level, bp, origin, rot, i.force, b.owner, i.ext, member);
-				i.status = QItem.Status.PLACING;
-				i.siteId = job.siteId;
-				i.reason = null;
-				i.message = "";
-				startStage(server, b, i);
-				untickItem(server, b, i.key);
-				ticketJob(server, b, i, level, job.snapBox);
-				Placement.add(server, job);
-				CHANGED.add(b.id);
-			}
+			// instant or construction: written over ticks; a construction site is converted when its last cell is written
+			PlaceJob job = Sites.beginPlacing(level, bp, origin, rot, i.force, b.owner, i.ext, member, i.construction, i.actor);
+			i.status = QItem.Status.PLACING;
+			i.siteId = job.siteId;
+			i.reason = null;
+			i.message = "";
+			startStage(server, b, i);
+			untickItem(server, b, i.key);
+			ticketJob(server, b, i, level, job.snapBox);
+			Placement.add(server, job);
+			CHANGED.add(b.id);
 		} catch (Sites.SiteException e) {
 			if (TEMPORARY.contains(e.reason())) {
 				waitFor(b, i, e.reason(), e.getMessage());
@@ -465,11 +453,6 @@ public final class Batches {
 				fail(b, i, e.reason(), e.getMessage());
 			}
 		}
-	}
-
-	private static boolean groupShared(QBatch b) {
-		SiteGroupRec g = Sites.group(b.group);
-		return g != null && g.sharedCrate();
 	}
 
 	private static void startStage(MinecraftServer server, QBatch b, QItem i) {

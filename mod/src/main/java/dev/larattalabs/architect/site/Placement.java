@@ -108,7 +108,7 @@ public final class Placement {
 
 	/** Whether anything uses the budget now (a job, a running batch or a removal). Any thread. */
 	public static boolean active() {
-		return !JOBS.isEmpty() || Batches.anyRunning() || Groups.anyRemoving();
+		return !JOBS.isEmpty() || Batches.anyRunning() || Groups.anyRemoving() || Builder.anyBuilding();
 	}
 
 	private static void tick(MinecraftServer srv) {

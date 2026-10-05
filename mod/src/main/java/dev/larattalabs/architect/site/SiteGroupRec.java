@@ -19,9 +19,10 @@ import org.jspecify.annotations.Nullable;
  * @param sharedCrate whether its construction sites share one crate (R6)
  * @param crate the shared crate's cell and what it replaced, once it is down (null before and after)
  * @param crateAt where the shared crate goes (null: beside the first construction site's approach end)
+ * @param delivered what the shared crate was given, kept once its last site is built and the crate is gone (the ledger lived in it)
  */
 public record SiteGroupRec(String id, @Nullable String owner, JsonObject ext, List<String> sites, List<StageRec> stages, String state,
-	boolean sharedCrate, Construction.@Nullable Crate crate, int @Nullable [] crateAt, long createdAt) {
+	boolean sharedCrate, Construction.@Nullable Crate crate, int @Nullable [] crateAt, long createdAt, java.util.Map<String, Integer> delivered) {
 	public static final String ACTIVE = "active";
 	public static final String REMOVING = "removing";
 	public static final String REMOVED = "removed";
@@ -32,6 +33,16 @@ public record SiteGroupRec(String id, @Nullable String owner, JsonObject ext, Li
 		ext = ext == null ? new JsonObject() : ext.deepCopy();
 		sites = List.copyOf(sites);
 		stages = List.copyOf(stages);
+		delivered = delivered == null ? java.util.Map.of() : java.util.Map.copyOf(delivered);
+	}
+
+	public SiteGroupRec(String id, @Nullable String owner, JsonObject ext, List<String> sites, List<StageRec> stages, String state, boolean sharedCrate,
+		Construction.@Nullable Crate crate, int @Nullable [] crateAt, long createdAt) {
+		this(id, owner, ext, sites, stages, state, sharedCrate, crate, crateAt, createdAt, java.util.Map.of());
+	}
+
+	public SiteGroupRec withDelivered(java.util.Map<String, Integer> d) {
+		return new SiteGroupRec(id, owner, ext, sites, stages, state, sharedCrate, crate, crateAt, createdAt, d);
 	}
 
 	/** A stage: its items, state, placed sites (placement order) and the batch that added it. */
@@ -96,11 +107,11 @@ public record SiteGroupRec(String id, @Nullable String owner, JsonObject ext, Li
 	}
 
 	public SiteGroupRec withSites(List<String> s) {
-		return new SiteGroupRec(id, owner, ext, s, stages, state, sharedCrate, crate, crateAt, createdAt);
+		return new SiteGroupRec(id, owner, ext, s, stages, state, sharedCrate, crate, crateAt, createdAt, delivered);
 	}
 
 	public SiteGroupRec withStages(List<StageRec> s) {
-		return new SiteGroupRec(id, owner, ext, sites, s, state, sharedCrate, crate, crateAt, createdAt);
+		return new SiteGroupRec(id, owner, ext, sites, s, state, sharedCrate, crate, crateAt, createdAt, delivered);
 	}
 
 	/** The same group with one stage changed. */
@@ -113,11 +124,11 @@ public record SiteGroupRec(String id, @Nullable String owner, JsonObject ext, Li
 	}
 
 	public SiteGroupRec withState(String s) {
-		return new SiteGroupRec(id, owner, ext, sites, stages, s, sharedCrate, crate, crateAt, createdAt);
+		return new SiteGroupRec(id, owner, ext, sites, stages, s, sharedCrate, crate, crateAt, createdAt, delivered);
 	}
 
 	public SiteGroupRec withCrate(Construction.@Nullable Crate c) {
-		return new SiteGroupRec(id, owner, ext, sites, stages, state, sharedCrate, c, crateAt, createdAt);
+		return new SiteGroupRec(id, owner, ext, sites, stages, state, sharedCrate, c, crateAt, createdAt, delivered);
 	}
 
 	public SiteGroupRec withSharedCrate(boolean shared, int @Nullable [] at) {
@@ -159,6 +170,11 @@ public record SiteGroupRec(String id, @Nullable String owner, JsonObject ext, Li
 			o.add("crateAt", c);
 		}
 		o.addProperty("createdAt", createdAt);
+		if (!delivered.isEmpty()) {
+			JsonObject d = new JsonObject();
+			new java.util.TreeMap<>(delivered).forEach(d::addProperty);
+			o.add("delivered", d);
+		}
 		return o;
 	}
 
@@ -178,7 +194,15 @@ public record SiteGroupRec(String id, @Nullable String owner, JsonObject ext, Li
 			o.has("ext") && o.get("ext").isJsonObject() ? o.getAsJsonObject("ext") : new JsonObject(), strings(o, "sites"), stages,
 			o.has("state") ? o.get("state").getAsString() : ACTIVE, o.has("sharedCrate") && o.get("sharedCrate").getAsBoolean(),
 			o.has("crate") && o.get("crate").isJsonObject() ? Construction.Crate.fromJson(o.getAsJsonObject("crate")) : null, at,
-			o.has("createdAt") ? o.get("createdAt").getAsLong() : 0L);
+			o.has("createdAt") ? o.get("createdAt").getAsLong() : 0L, counts(o));
+	}
+
+	private static java.util.Map<String, Integer> counts(JsonObject o) {
+		java.util.Map<String, Integer> out = new java.util.TreeMap<>();
+		if (o.has("delivered") && o.get("delivered").isJsonObject()) {
+			o.getAsJsonObject("delivered").entrySet().forEach(e -> out.put(e.getKey(), e.getValue().getAsInt()));
+		}
+		return out;
 	}
 
 	private static List<String> strings(JsonObject o, String key) {

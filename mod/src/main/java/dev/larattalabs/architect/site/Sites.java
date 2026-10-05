@@ -1248,6 +1248,16 @@ public final class Sites {
 	 */
 	static PlaceJob beginPlacing(ServerLevel level, Blueprint bp, BlockPos origin, Rotation rotation, boolean force, @Nullable String siteOwner,
 		@Nullable JsonObject ext, Site.@Nullable Member member) throws SiteException {
+		return beginPlacing(level, bp, origin, rotation, force, siteOwner, ext, member, false, null);
+	}
+
+	/**
+	 * {@link #beginPlacing}; {@code construction}: a survival construction site, written over ticks like an instant placement
+	 * and then turned into a construction site ({@link Builder#convert}) when its last cell is written, as {@link #place}
+	 * does in one tick. {@code placer}: the placing player's UUID (the HUD line).
+	 */
+	static PlaceJob beginPlacing(ServerLevel level, Blueprint bp, BlockPos origin, Rotation rotation, boolean force, @Nullable String siteOwner,
+		@Nullable JsonObject ext, Site.@Nullable Member member, boolean construction, @Nullable String placer) throws SiteException {
 		MinecraftServer server = level.getServer();
 		if (loadFailed) {
 			throw new SiteException(Reason.OTHER, FILE + " could not be read when the world started (see the log); fix or move it, then restart");
@@ -1258,7 +1268,7 @@ public final class Sites {
 			next++;
 		}
 		String id = "s" + next;
-		SitePlan site = checkSite(level, bp, origin, rotation, force, null, THROW, false, false);
+		SitePlan site = checkSite(level, bp, origin, rotation, force, null, THROW, false, construction);
 		if (site == null) {
 			throw new SiteException("Internal: no site for " + bp.id());
 		}
@@ -1342,9 +1352,13 @@ public final class Sites {
 		boolean a = approach.rows() > 0;
 		Architect.LOGGER.info("Placing site {} ({}) over ticks at {} rotation {}: box {}, snapshot {} over {}", id, bp.id(), origin.toShortString(),
 			rec.rotation(), Anchors.str(box), snapshot, Anchors.str(snapBox));
-		return new PlaceJob(id, dimensionId(level), bp.id(), turns, box, snapBox, site.placePos(), plan.fill(), plan.clear(), a ? approach.clear() : none,
-			a ? approach.fill() : none, a ? approach.path() : none, a ? approach.slabs() : none, cut, drops.uuids(), notes, held,
-			member == null ? null : member.batchId(), member == null ? null : member.itemKey());
+		PlaceJob job = new PlaceJob(id, dimensionId(level), bp.id(), turns, box, snapBox, site.placePos(), plan.fill(), plan.clear(),
+			a ? approach.clear() : none, a ? approach.fill() : none, a ? approach.path() : none, a ? approach.slabs() : none, cut, drops.uuids(), notes,
+			held, member == null ? null : member.batchId(), member == null ? null : member.itemKey());
+		job.construction = construction;
+		job.placer = placer;
+		job.approachEnd = a ? approach.end() : null;
+		return job;
 	}
 
 	/** A ticked placement wrote its last cell: the pin gets the beds bed safety left out, the site is placed. Fires SITE_PLACED. */
@@ -1359,6 +1373,30 @@ public final class Sites {
 			pin = pinFor(grid, job.turns, bedCells, cur.box()).withHeldLeaves(pin.heldLeaves());
 		}
 		Site done = cur.withPin(pin).withPlacing(false);
+		if (job.construction) {
+			// the construction site: what convert does after the atomic build, now that the last cell is written
+			ServerLevel level = levelOf(server, cur);
+			Blueprint bp = Blueprints.get(cur.blueprint());
+			if (level == null || bp == null || grid == null) {
+				job.broken = "its level or design is gone; it can't become a construction site";
+				return null;
+			}
+			int[] none = new int[0];
+			Built built = new Built(job.turns, cur.box(), cur.restoreBox(), cur.interior(), cur.anchors(), pin, note, cur.snapshot(), null, grid,
+				new TerrainFit.Plan(job.fill, job.clear, none, 0, none, 0, cur.restoreBox().minY() + 1), new Approach.Plan(job.aPath, job.aSlabs,
+					job.aFill, job.aClear, none, 0, none, 0, none, none, null, job.approachEnd, Integer.MIN_VALUE));
+			SiteGroupRec g = cur.group() == null ? null : group(cur.group());
+			Builder.SHARED_CRATE.set(g != null && g.sharedCrate() ? g.id() : null);
+			try {
+				done = done.withConstruction(Builder.convert(level, bp, built, cur.id(), job.placer));
+			} catch (SiteException | RuntimeException e) {
+				Architect.LOGGER.error("Making {} a construction site failed; rolling it back", cur.id(), e);
+				job.broken = "making the construction site failed (" + e.getMessage() + ")";
+				return null;
+			} finally {
+				Builder.SHARED_CRATE.remove();
+			}
+		}
 		replace(server, done);
 		lastNote = note;
 		Architect.LOGGER.info("Placed site {} ({}) over ticks: box {}, snapshot {} over {}{}", done.id(), done.blueprint(), Anchors.str(done.box()),

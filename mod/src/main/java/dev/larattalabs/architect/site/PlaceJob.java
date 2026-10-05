@@ -71,6 +71,12 @@ final class PlaceJob implements Placement.Job {
 	final Set<Long> bedCells = new HashSet<>();
 	final Set<Long> bedHeads = new HashSet<>();
 	@Nullable TemplateWriter writer;
+	/** A survival construction site: converted when its last cell is written ({@link Sites#finishPlacing}). */
+	boolean construction;
+	/** The placing player's UUID, or null. */
+	@Nullable String placer;
+	/** The approach's end (the crate goes beside it), or null. */
+	double @Nullable [] approachEnd;
 	/** Set when the job can't go on (its design changed, its level is gone): it is rolled back instead. */
 	@Nullable String broken;
 	/** The ghost clients see while it places: the template's non-air cells, built as the writer passes them. */
@@ -324,7 +330,9 @@ final class PlaceJob implements Placement.Job {
 		if (bedNote != null) {
 			notes.add(0, bedNote);
 		}
-		Sites.finishPlacing(server, this, bedCells, notes.isEmpty() ? null : String.join("; ", notes));
+		if (Sites.finishPlacing(server, this, bedCells, notes.isEmpty() ? null : String.join("; ", notes)) == null && broken == null) {
+			broken = "its site record is gone";
+		}
 	}
 
 	@Override
@@ -398,6 +406,19 @@ final class PlaceJob implements Placement.Job {
 		if (itemKey != null) {
 			o.addProperty("itemKey", itemKey);
 		}
+		if (construction) {
+			o.addProperty("construction", true);
+		}
+		if (placer != null) {
+			o.addProperty("placer", placer);
+		}
+		if (approachEnd != null) {
+			JsonArray e = new JsonArray();
+			for (double v : approachEnd) {
+				e.add(v);
+			}
+			o.add("approachEnd", e);
+		}
 		o.addProperty("phase", phase);
 		o.addProperty("cursor", cursor);
 		JsonArray bc = new JsonArray();
@@ -429,6 +450,12 @@ final class PlaceJob implements Placement.Job {
 			intArray(o, "aClear"), intArray(o, "aFill"), intArray(o, "aPath"), intArray(o, "aSlabs"), plants, db, nt,
 			new ArrayList<>(TickDeferral.fromJson(o.get("held"))), o.has("batchId") ? o.get("batchId").getAsString() : null,
 			o.has("itemKey") ? o.get("itemKey").getAsString() : null);
+		j.construction = o.has("construction") && o.get("construction").getAsBoolean();
+		j.placer = o.has("placer") ? o.get("placer").getAsString() : null;
+		if (o.has("approachEnd")) {
+			JsonArray e = o.getAsJsonArray("approachEnd");
+			j.approachEnd = new double[] {e.get(0).getAsDouble(), e.get(1).getAsDouble(), e.get(2).getAsDouble()};
+		}
 		j.phase = o.get("phase").getAsInt();
 		j.cursor = o.get("cursor").getAsInt();
 		o.getAsJsonArray("bedCells").forEach(e -> j.bedCells.add(e.getAsLong()));
