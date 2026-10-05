@@ -10,6 +10,10 @@ import java.util.concurrent.CompletableFuture;
  * Library's client-held state (the bundled-entry overlay, the trash). The client registers it at init
  * ({@link ApiImpl#setClientBridge}); on a dedicated server there is none and these features report unavailable.
  * Every method is thread-safe; futures may complete on any thread (the API hops to the server thread). Internal.
+ *
+ * <p>The client side reports what the sidecar sends back through {@link ApiImpl}'s static notifications
+ * ({@code designChanged}, {@code variantFinished}, {@code jobsSnapshot}, {@code jobChanged}, {@code toolCall},
+ * {@code linkChanged}).
  */
 public interface ClientBridge {
 	/** The link is synced with a sidecar. */
@@ -37,4 +41,13 @@ public interface ClientBridge {
 
 	/** The Library's tag edit (in place, or the overlay for bundled entries). */
 	CompletableFuture<Void> setTags(String id, List<String> tags);
+
+	/**
+	 * Sends one protocol message ({@code v} and {@code id} are added); completes with its ack as {@code {ok, error?, result?}}
+	 * ({@code ok:false} is a normal completion), or fails when the link is down, on the ack timeout or when the link drops.
+	 */
+	CompletableFuture<JsonObject> send(JsonObject message);
+
+	/** The bytes of a blob the sidecar stored ({@code <data>/blobs/<id>}), read off the calling thread. */
+	CompletableFuture<byte[]> readBlob(String blobId);
 }

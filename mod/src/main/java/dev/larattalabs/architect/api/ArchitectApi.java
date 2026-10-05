@@ -13,7 +13,7 @@ import net.minecraft.server.MinecraftServer;
  * {@link #VERSION} at runtime when it needs a newer minor version.
  */
 public interface ArchitectApi {
-	String VERSION = "1.0.0";
+	String VERSION = "1.1.0";
 
 	/** The singleton. Safe to call from any mod's initializer (it does not depend on Architect's init order). */
 	static ArchitectApi get() {

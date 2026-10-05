@@ -174,7 +174,26 @@ final class DesignsImpl implements Designs {
 			save();
 			return id;
 		});
-		return ApiImpl.onServerFuture(out);
+		// completes at the ack: the link's ack timeout and a dropped link already fail it; this is the backstop
+		return ApiImpl.onServerFuture(out.orTimeout(ApiTimeouts.DESIGN_MS, java.util.concurrent.TimeUnit.MILLISECONDS));
+	}
+
+	/**
+	 * A world loaded (server thread): DESIGN_DONE for the designs that finished while no world was loaded (their changes were
+	 * dropped then). Designs reported before are skipped (the persisted done set).
+	 */
+	void catchUp(MinecraftServer server, List<JsonObject> raws) {
+		load();
+		for (JsonObject raw : raws) {
+			Design d = view(raw);
+			boolean seen;
+			synchronized (this) {
+				seen = handled.contains(d.id() + "@" + d.createdAt());
+			}
+			if (d.status().isFinal() && !seen) {
+				changed(server, raw);
+			}
+		}
 	}
 
 	@Override

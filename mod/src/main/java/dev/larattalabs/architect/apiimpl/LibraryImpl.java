@@ -13,10 +13,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
 import net.minecraft.server.MinecraftServer;
 import org.jspecify.annotations.Nullable;
 
@@ -25,8 +23,11 @@ import org.jspecify.annotations.Nullable;
  * (variants). Internal.
  */
 final class LibraryImpl implements Library {
-	/** Variant jobs a {@link #makeVariant} waits for: variant id -> future. */
-	private final Map<String, CompletableFuture<Entry>> waiting = new ConcurrentHashMap<>();
+	/**
+	 * Variant jobs a {@link #makeVariant} waits for, by variant id, with the variant timeout; an outcome that arrives before
+	 * the ack registered its future is kept for a minute (a fast variant finishes before the ack is processed).
+	 */
+	private final PendingFutures<Entry> waiting = new PendingFutures<>("variant", 60_000);
 
 	@Override
 	public List<Entry> list() {
@@ -86,21 +87,32 @@ final class LibraryImpl implements Library {
 		CompletableFuture<Entry> done = new CompletableFuture<>();
 		b.variantRequest(payload).whenComplete((id, err) -> {
 			if (err != null) {
-				ApiImpl.runOnServer(() -> done.completeExceptionally(err));
+				done.completeExceptionally(err);
 			} else {
-				waiting.put(id, done);
+				waiting.await(id, done, System.currentTimeMillis(), ApiTimeouts.VARIANT_MS);
 			}
 		});
-		return done;
+		return ApiImpl.onServerFuture(done);
 	}
 
-	/** A variant job finished (from the client's sidecar state, server thread): reloads, then completes and fires VARIANT_DONE. */
+	/** Fails the variant futures past their timeout (any thread). */
+	void expire(long now) {
+		waiting.expire(now);
+	}
+
+	/** The link dropped: every waiting variant future fails. Returns how many. */
+	int linkLost() {
+		return waiting.failAll("the Architect helper disconnected before the variant finished");
+	}
+
+	/**
+	 * A variant job finished (from the client's sidecar state, server thread; deferred to the next world when none ran):
+	 * reloads, then completes its future (also one registered later) and fires VARIANT_DONE.
+	 */
 	void variantFinished(MinecraftServer server, String variantId, boolean ok, @Nullable String blueprintId, @Nullable String error, boolean isImport) {
-		CompletableFuture<Entry> f = waiting.remove(variantId);
+		long now = System.currentTimeMillis();
 		if (!ok || blueprintId == null) {
-			if (f != null) {
-				f.completeExceptionally(new IllegalStateException(error == null ? "the variant failed" : error));
-			}
+			waiting.fail(variantId, new IllegalStateException(error == null ? "the variant failed" : error), now);
 			return;
 		}
 		if (Blueprints.entry(blueprintId) == null) {
@@ -108,14 +120,10 @@ final class LibraryImpl implements Library {
 		}
 		Optional<Entry> e = get(blueprintId);
 		if (e.isEmpty()) {
-			if (f != null) {
-				f.completeExceptionally(new IllegalStateException("variant " + blueprintId + " is not in the library after a reload"));
-			}
+			waiting.fail(variantId, new IllegalStateException("variant " + blueprintId + " is not in the library after a reload"), now);
 			return;
 		}
-		if (f != null) {
-			f.complete(e.get());
-		}
+		waiting.complete(variantId, e.get(), now);
 		if (!isImport) {
 			ApiEvents.variantDone(e.get());
 		}

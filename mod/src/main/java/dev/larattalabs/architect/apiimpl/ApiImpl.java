@@ -25,11 +25,20 @@ public final class ApiImpl implements ArchitectApi {
 	}
 
 	private static volatile @Nullable MinecraftServer server;
+	private static volatile boolean stopping;
 	private static volatile @Nullable ClientBridge bridge;
+	private static volatile boolean linkUp;
+	/** Work that needs a running server, from while none ran (a variant that finished on the title screen). */
+	private static final java.util.Queue<Runnable> DEFERRED = new java.util.concurrent.ConcurrentLinkedQueue<>();
+	private static final java.util.concurrent.ScheduledExecutorService TIMERS = java.util.concurrent.Executors.newSingleThreadScheduledExecutor(r -> {
+		Thread t = new Thread(r, "Architect-ApiTimers");
+		t.setDaemon(true);
+		return t;
+	});
 
 	private final LibraryImpl library = new LibraryImpl();
 	private final SurveyImpl survey = new SurveyImpl();
-	private final JobsStub jobs = new JobsStub();
+	private final JobsImpl jobs = new JobsImpl();
 	private final DesignsImpl designs = new DesignsImpl();
 	private final SiteEvents events = new SiteEvents() {
 	};
@@ -43,9 +52,43 @@ public final class ApiImpl implements ArchitectApi {
 
 	/** Called from Architect's initializer. */
 	public static void init() {
-		ServerLifecycleEvents.SERVER_STARTING.register(s -> server = s);
-		ServerLifecycleEvents.SERVER_STOPPED.register(s -> server = null);
+		ServerLifecycleEvents.SERVER_STARTING.register(s -> {
+			server = s;
+			stopping = false;
+		});
+		ServerLifecycleEvents.SERVER_STARTED.register(ApiImpl::started);
+		ServerLifecycleEvents.SERVER_STOPPING.register(s -> stopping = true);
+		ServerLifecycleEvents.SERVER_STOPPED.register(s -> {
+			server = null;
+			stopping = false;
+		});
 		SurveyImpl.init();
+		TIMERS.scheduleAtFixedRate(() -> {
+			try {
+				instance().library.expire(System.currentTimeMillis());
+			} catch (Throwable t) {
+				dev.larattalabs.architect.Architect.LOGGER.warn("API timers failed", t);
+			}
+		}, 1, 1, java.util.concurrent.TimeUnit.SECONDS);
+	}
+
+	/**
+	 * A world loaded (server thread): what finished while none was loaded fires now: deferred variants, designs and jobs not
+	 * reported yet (DESIGN_DONE / VARIANT_DONE / JOB_DONE).
+	 */
+	private static void started(MinecraftServer s) {
+		for (Runnable r; (r = DEFERRED.poll()) != null;) {
+			try {
+				r.run();
+			} catch (Throwable t) {
+				dev.larattalabs.architect.Architect.LOGGER.warn("Deferred API work failed", t);
+			}
+		}
+		ClientBridge b = bridge;
+		if (b != null) {
+			instance().designs.catchUp(s, b.designs());
+		}
+		instance().jobs.catchUp(s);
 	}
 
 	/** The client side registers its sidecar link and Library feature here (client init). */
@@ -59,6 +102,23 @@ public final class ApiImpl implements ArchitectApi {
 
 	static @Nullable MinecraftServer server() {
 		return server;
+	}
+
+	/** The server, unless none runs or it is stopping (work queued on a stopping server may never run). */
+	static @Nullable MinecraftServer workingServer() {
+		return stopping ? null : server;
+	}
+
+	/** Runs on the server thread, or, when no server runs (or it is stopping), once the next world has loaded. */
+	static void runOnServerOrDefer(Runnable r) {
+		MinecraftServer s = workingServer();
+		if (s == null) {
+			DEFERRED.add(r);
+		} else if (s.isSameThread()) {
+			r.run();
+		} else {
+			s.execute(r);
+		}
 	}
 
 	/** Runs on the server thread (now when already there); dropped when no server runs. */
@@ -103,9 +163,36 @@ public final class ApiImpl implements ArchitectApi {
 		runOnServer(() -> instance().designs.changed(server, copy));
 	}
 
-	/** A variant or import job finished. */
+	/** A variant or import job finished (VARIANT_DONE now, or when the next world has loaded). */
 	public static void variantFinished(String variantId, boolean ok, @Nullable String blueprintId, @Nullable String error, boolean isImport) {
-		runOnServer(() -> instance().library.variantFinished(server, variantId, ok, blueprintId, error, isImport));
+		runOnServerOrDefer(() -> instance().library.variantFinished(server, variantId, ok, blueprintId, error, isImport));
+	}
+
+	/** {@code snapshot.jobs} (protocol 2), as received. */
+	public static void jobsSnapshot(java.util.List<JsonObject> jobs) {
+		instance().jobs.snapshot(jobs.stream().map(JsonObject::deepCopy).toList());
+	}
+
+	/** {@code job.upsert {job}}. */
+	public static void jobChanged(JsonObject job) {
+		instance().jobs.upsert(job.deepCopy());
+	}
+
+	/** {@code job.tool.call}: the handler registered for (owner, name) answers. */
+	public static void toolCall(JsonObject call) {
+		instance().jobs.toolCall(call.deepCopy());
+	}
+
+	/** The link synced, or dropped: futures waiting for a variant fail when it drops. */
+	public static void linkChanged(boolean synced) {
+		boolean was = linkUp;
+		linkUp = synced;
+		if (was && !synced) {
+			int n = instance().library.linkLost();
+			if (n > 0) {
+				dev.larattalabs.architect.Architect.LOGGER.info("API: the helper disconnected; {} variant request(s) failed", n);
+			}
+		}
 	}
 
 	// ------------------------------------------------------------------ ArchitectApi
