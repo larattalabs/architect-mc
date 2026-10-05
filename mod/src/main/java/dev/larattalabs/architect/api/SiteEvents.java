@@ -78,6 +78,46 @@ public interface SiteEvents {
 		}
 	});
 
+	/** A bible job changed status or step (since 1.2.0). */
+	Event<BibleUpdated> BIBLE_UPDATED = EventFactory.createArrayBacked(BibleUpdated.class, ls -> j -> {
+		for (BibleUpdated l : ls) {
+			Guard.run(() -> l.onUpdated(j), "BIBLE_UPDATED");
+		}
+	});
+	/** A bible job finished (done: {@code bible()} is the installed bible), once per job (since 1.2.0). */
+	Event<BibleDone> BIBLE_DONE = EventFactory.createArrayBacked(BibleDone.class, ls -> j -> {
+		for (BibleDone l : ls) {
+			Guard.run(() -> l.onDone(j), "BIBLE_DONE");
+		}
+	});
+	/** A design group changed: status, an item's status or step, the cost (since 1.2.0). */
+	Event<GroupUpdated> GROUP_UPDATED = EventFactory.createArrayBacked(GroupUpdated.class, ls -> g -> {
+		for (GroupUpdated l : ls) {
+			Guard.run(() -> l.onUpdated(g), "GROUP_UPDATED");
+		}
+	});
+	/** A design group finished (done, failed or cancelled), once per group; its done items' entries are loaded (since 1.2.0). */
+	Event<GroupDone> GROUP_DONE = EventFactory.createArrayBacked(GroupDone.class, ls -> g -> {
+		for (GroupDone l : ls) {
+			Guard.run(() -> l.onDone(g), "GROUP_DONE");
+		}
+	});
+	/** A collection re-skin finished, once per re-skin; its new entries are loaded (since 1.2.0). */
+	Event<ReskinDone> RESKIN_DONE = EventFactory.createArrayBacked(ReskinDone.class, ls -> r -> {
+		for (ReskinDone l : ls) {
+			Guard.run(() -> l.onDone(r), "RESKIN_DONE");
+		}
+	});
+	/**
+	 * The world's survival toggle changed ({@code /architect survival}, the Status tab), or was set to its default at the
+	 * world's first load with Architect (since 1.2.0).
+	 */
+	Event<WorldModeChanged> WORLD_MODE_CHANGED = EventFactory.createArrayBacked(WorldModeChanged.class, ls -> i -> {
+		for (WorldModeChanged l : ls) {
+			Guard.run(() -> l.onChanged(i), "WORLD_MODE_CHANGED");
+		}
+	});
+
 	@FunctionalInterface
 	interface SitePlaced {
 		void onPlaced(SiteView site);
@@ -131,6 +171,36 @@ public interface SiteEvents {
 	@FunctionalInterface
 	interface JobDone {
 		void onDone(Job job);
+	}
+
+	@FunctionalInterface
+	interface BibleUpdated {
+		void onUpdated(BibleJob job);
+	}
+
+	@FunctionalInterface
+	interface BibleDone {
+		void onDone(BibleJob job);
+	}
+
+	@FunctionalInterface
+	interface GroupUpdated {
+		void onUpdated(Group group);
+	}
+
+	@FunctionalInterface
+	interface GroupDone {
+		void onDone(Group group);
+	}
+
+	@FunctionalInterface
+	interface ReskinDone {
+		void onDone(Reskin reskin);
+	}
+
+	@FunctionalInterface
+	interface WorldModeChanged {
+		void onChanged(SurvivalInfo info);
 	}
 
 	/** Runs one listener; a throw is logged, never passed on. */

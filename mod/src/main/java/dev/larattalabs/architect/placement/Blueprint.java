@@ -19,7 +19,8 @@ import org.jspecify.annotations.Nullable;
  * <p>All coordinates are template-local (origin = the template's minimum corner), unrotated. {@code size}, {@code groundY},
  * {@code front}, {@code foundationBlock} and {@code approach} keep their AgentCraft meaning (docs/BUILDINGS.md in AgentCraft).
  *
- * @param type the building type ({@link #TYPES}); unknown types read as {@code custom}
+ * @param type the building type: a preset ({@link #TYPES}) or an open type ({@link #OPEN_TYPE}, phase 4b R4, e.g. {@code hellish_lair});
+ *     anything else reads as {@code custom}
  * @param front the direction the entrance faces in the unrotated template ({@code north/east/south/west})
  * @param interior the interior region (template-local, inclusive); null when absent
  * @param foundationBlock the vanilla block the placement fills below the floor with ({@link #DEFAULT_FOUNDATION} when absent)
@@ -36,6 +37,8 @@ public record Blueprint(String id, String name, String description, String type,
 	/** The building types (docs/CONTRACT.md "Building types"). */
 	public static final List<String> TYPES = List.of("house", "cabin", "cottage", "tower", "shop", "tavern", "barn", "smithy", "chapel",
 		"gatehouse", "custom");
+	/** An open building type (phase 4b, R4): {@code [a-z][a-z0-9_]{0,39}}. */
+	public static final Pattern OPEN_TYPE = Pattern.compile("[a-z][a-z0-9_]{0,39}");
 	public static final String ENTRANCE = "entrance";
 	public static final String SPAWN = "spawn";
 	public static final String CAM_PREFIX = "cam_";
@@ -81,7 +84,7 @@ public record Blueprint(String id, String name, String description, String type,
 			throw new IllegalArgumentException("\"front\" must be north/east/south/west, not " + front);
 		}
 		String type = str(o, "type", "custom").toLowerCase(Locale.ROOT);
-		if (!TYPES.contains(type)) {
+		if (!TYPES.contains(type) && !OPEN_TYPE.matcher(type).matches()) {
 			type = "custom";
 		}
 		Anchors.Bounds interior = null;

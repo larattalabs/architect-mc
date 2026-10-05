@@ -10,7 +10,10 @@ import dev.larattalabs.architect.api.DesignRequest;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
-/** A design request's wire form: review 1's fields (and the reserved bible, group) only for a protocol-2 sidecar. */
+/**
+ * A design request's wire form: review 1's fields and 4b's (bible, bibleVersion, profile) only for a protocol-2 sidecar;
+ * {@code group} never (the 4b sidecar refuses a design.request that carries it).
+ */
 class DesignWireTest {
 	private static DesignRequest req() {
 		JsonObject ext = new JsonObject();
@@ -37,6 +40,23 @@ class DesignWireTest {
 		assertEquals("claude-haiku-5", w.get("model").getAsString());
 		assertTrue(w.has("budgetUsd"));
 		assertEquals("bible1", w.get("bible").getAsString());
-		assertEquals("group1", w.get("group").getAsString());
+		assertFalse(w.has("group"), "group is never sent");
+		assertFalse(w.has("profile"), "a preset type sends no profile");
+	}
+
+	@Test
+	void openTypeProfileAndBibleVersion() {
+		DesignRequest r = new DesignRequest("hellish_lair", "spiky", null, List.of(), new BlockSize(21, 20, 21), null, null, null, null, null, null,
+			null, null, null).withProfile(List.of("door", "lit", "no_floating")).withBible("bib_ashfall", 2);
+		JsonObject w = DesignsImpl.wire(r, 2);
+		assertEquals("hellish_lair", w.get("type").getAsString());
+		assertEquals(3, w.getAsJsonArray("profile").size());
+		assertEquals("bib_ashfall", w.get("bible").getAsString());
+		assertEquals(2, w.get("bibleVersion").getAsInt());
+		JsonObject w1 = DesignsImpl.wire(r, 1);
+		assertFalse(w1.has("profile") || w1.has("bible") || w1.has("bibleVersion"));
+		// the 1.1.0 constructor still works: no profile, no version
+		assertTrue(req().profile().isEmpty());
+		assertEquals(null, req().bibleVersion());
 	}
 }

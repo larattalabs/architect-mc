@@ -87,10 +87,24 @@ class ApiRulesTest {
 	@Test
 	void featureNamesAreStable() {
 		// pinned: Steward depends on these names (docs/CONTRACT.md phase 4a, stable within major 1)
-		assertEquals(java.util.Set.of("sites", "events", "designs", "library", "survey"), ApiRules.features(0, List.of()));
-		assertEquals(java.util.Set.of("sites", "events", "designs", "library", "survey"), ApiRules.features(1, List.of("job.run")),
+		assertEquals(java.util.Set.of("sites", "events", "designs", "library", "survey", "survivalInfo"), ApiRules.features(0, List.of()));
+		assertEquals(java.util.Set.of("sites", "events", "designs", "library", "survey", "survivalInfo"), ApiRules.features(1, List.of("job.run")),
 			"protocol 1: no job or blob features even if named");
-		assertEquals(java.util.Set.of("sites", "events", "designs", "library", "survey", "protocol2", "jobs", "jobTools", "blobs", "budget"),
-			ApiRules.features(2, List.of("job.run", "job.tools", "blob.put", "budget")));
+		assertEquals(java.util.Set.of("sites", "events", "designs", "library", "survey", "survivalInfo", "protocol2", "jobs", "jobTools", "blobs",
+			"budget"), ApiRules.features(2, List.of("job.run", "job.tools", "blob.put", "budget")));
+	}
+
+	@Test
+	void phase4bFeatureNames() {
+		// the 4b sidecar's snapshot features (sidecar/src/protocol.ts FEATURES) -> the stable Java names
+		var f = ApiRules.features(2, List.of("job.run", "job.tools", "blobs", "budget", "designs.v2", "bibles", "design.groups", "named.parts",
+			"open.types", "estimates", "reskin"));
+		for (String n : List.of("bibles", "designGroups", "namedParts", "openTypes", "estimates", "reskin", "survivalInfo", "jobs", "jobTools",
+			"blobs")) {
+			org.junit.jupiter.api.Assertions.assertTrue(f.contains(n), n);
+		}
+		for (String raw : List.of("design.groups", "named.parts", "open.types")) {
+			org.junit.jupiter.api.Assertions.assertFalse(f.contains(raw), raw);
+		}
 	}
 }

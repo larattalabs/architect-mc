@@ -13,7 +13,8 @@ import net.minecraft.server.MinecraftServer;
  * {@link #VERSION} at runtime when it needs a newer minor version.
  */
 public interface ArchitectApi {
-	String VERSION = "1.1.0";
+	/** 1.2.0: bibles, design groups, estimates, re-skins, open types, named parts, the survival toggle (docs/CONTRACT.md phase 4b). */
+	String VERSION = "1.2.0";
 
 	/** The singleton. Safe to call from any mod's initializer (it does not depend on Architect's init order). */
 	static ArchitectApi get() {
@@ -35,12 +36,17 @@ public interface ArchitectApi {
 	/** Claude jobs (R2). Until the sidecar speaks protocol 2 this reports {@code available() == false}. */
 	Jobs jobs();
 
-	/** Building design requests (the Design tab's pipeline). */
+	/** Building design requests (the Design tab's pipeline) and, since 1.2.0, design groups. */
 	Designs designs();
+
+	/** Style bibles (phase 4b). Since 1.2.0. */
+	Bibles bibles();
 
 	/**
 	 * What this game can do: the sidecar's {@code features} (when the snapshot names any; {@code "protocol2"} when it chose
 	 * protocol 2) plus Java-only ones ({@code "designs"}, {@code "survey"}, {@code "sites"}, {@code "events"}, ...). Any thread.
+	 * Since 1.2.0, a 4b helper adds {@code "bibles"}, {@code "designGroups"}, {@code "namedParts"}, {@code "openTypes"},
+	 * {@code "estimates"} and {@code "reskin"}; {@code "survivalInfo"} is always there.
 	 */
 	Set<String> features();
 }

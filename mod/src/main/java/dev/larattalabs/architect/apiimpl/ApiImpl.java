@@ -40,6 +40,7 @@ public final class ApiImpl implements ArchitectApi {
 	private final SurveyImpl survey = new SurveyImpl();
 	private final JobsImpl jobs = new JobsImpl();
 	private final DesignsImpl designs = new DesignsImpl();
+	private final BiblesImpl bibles = new BiblesImpl();
 	private final SiteEvents events = new SiteEvents() {
 	};
 
@@ -89,6 +90,9 @@ public final class ApiImpl implements ArchitectApi {
 			instance().designs.catchUp(s, b.designs());
 		}
 		instance().jobs.catchUp(s);
+		instance().designs.catchUpGroups();
+		instance().bibles.catchUp();
+		instance().library.catchUpReskins();
 	}
 
 	/** The client side registers its sidecar link and Library feature here (client init). */
@@ -183,6 +187,31 @@ public final class ApiImpl implements ArchitectApi {
 		instance().jobs.toolCall(call.deepCopy());
 	}
 
+	/** (4b) {@code snapshot.groups} / {@code group.upsert {group}}, as received. */
+	public static void groupChanged(JsonObject group) {
+		instance().designs.groupChanged(group);
+	}
+
+	/** (4b) {@code snapshot.bibles} / {@code bible.upsert {bible}}: a bible job. */
+	public static void bibleJobChanged(JsonObject job) {
+		instance().bibles.jobChanged(job);
+	}
+
+	/** (4b) {@code snapshot.bibleIndex} / {@code bible.index {bibles}}. */
+	public static void bibleIndex(java.util.List<JsonObject> bibles) {
+		instance().bibles.index(bibles);
+	}
+
+	/** (4b) {@code snapshot.reskins} / {@code reskin.upsert {reskin}}. */
+	public static void reskinChanged(JsonObject reskin) {
+		instance().library.reskinChanged(reskin);
+	}
+
+	/** The bibles, for the client UI (installed + built in). */
+	public static BiblesImpl biblesImpl() {
+		return instance().bibles;
+	}
+
 	/** The link synced, or dropped: futures waiting for a variant fail when it drops. */
 	public static void linkChanged(boolean synced) {
 		boolean was = linkUp;
@@ -225,6 +254,11 @@ public final class ApiImpl implements ArchitectApi {
 	@Override
 	public Designs designs() {
 		return designs;
+	}
+
+	@Override
+	public dev.larattalabs.architect.api.Bibles bibles() {
+		return bibles;
 	}
 
 	@Override

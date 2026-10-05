@@ -21,7 +21,7 @@ public final class ApiRules {
 	 * The Java-side feature names, always present (docs/CONTRACT.md phase 4a: STABLE within major version 1, never renamed or
 	 * removed).
 	 */
-	public static final java.util.Set<String> JAVA_FEATURES = java.util.Set.of("sites", "events", "designs", "library", "survey");
+	public static final java.util.Set<String> JAVA_FEATURES = java.util.Set.of("sites", "events", "designs", "library", "survey", "survivalInfo");
 
 	private ApiRules() {
 	}
@@ -40,7 +40,7 @@ public final class ApiRules {
 					case "job.run", "jobs" -> "jobs";
 					case "job.tools", "jobTools" -> "jobTools";
 					case "blob.put", "blobs" -> "blobs";
-					default -> f;
+					default -> Wire4b.FEATURE_NAMES.getOrDefault(f, f);
 				});
 			}
 		}

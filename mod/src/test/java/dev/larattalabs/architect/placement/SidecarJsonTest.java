@@ -81,10 +81,15 @@ class SidecarJsonTest {
 		assertNull(m.request());
 		assertTrue(m.warnings().contains("missing anchor entrance"));
 		assertTrue(m.warnings().contains("missing anchor spawn"));
-		// an unknown type reads as custom; an AgentCraft-style "materials" string is kept as one entry
-		min.addProperty("type", "castle");
-		min.addProperty("materials", "vanilla");
+		// an open type (4b, R4) is kept; one that is not [a-z][a-z0-9_]{0,39} reads as custom; an AgentCraft-style "materials"
+		// string is kept as one entry
+		min.addProperty("type", "hellish_lair");
+		assertEquals("hellish_lair", Blueprint.fromJson(min).type());
+		min.addProperty("type", "Castle Keep!");
 		assertEquals("custom", Blueprint.fromJson(min).type());
+		min.addProperty("type", "x".repeat(41));
+		assertEquals("custom", Blueprint.fromJson(min).type());
+		min.addProperty("materials", "vanilla");
 		assertEquals(List.of("vanilla"), Blueprint.fromJson(min).materials());
 	}
 

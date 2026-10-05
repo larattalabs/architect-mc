@@ -64,6 +64,26 @@ public final class ApiClientBridge implements ClientBridge {
 			}
 
 			@Override
+			public void onGroup(JsonObject group) {
+				ApiImpl.groupChanged(group.deepCopy());
+			}
+
+			@Override
+			public void onBibleJob(JsonObject job) {
+				ApiImpl.bibleJobChanged(job.deepCopy());
+			}
+
+			@Override
+			public void onBibleIndex(List<JsonObject> bibles) {
+				ApiImpl.bibleIndex(bibles.stream().map(JsonObject::deepCopy).toList());
+			}
+
+			@Override
+			public void onReskin(JsonObject reskin) {
+				ApiImpl.reskinChanged(reskin.deepCopy());
+			}
+
+			@Override
 			public void onDesign(SidecarState.@Nullable Design previous, SidecarState.Design d) {
 				DESIGNS.put(d.id(), d.raw().deepCopy());
 				ApiImpl.designChanged(d.raw());

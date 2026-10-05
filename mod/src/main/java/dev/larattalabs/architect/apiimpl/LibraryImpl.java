@@ -69,14 +69,36 @@ final class LibraryImpl implements Library {
 
 	@Override
 	public CompletableFuture<Entry> makeVariant(String entryId, @Nullable JsonElement palette, @Nullable JsonObject values, @Nullable String name) {
+		return makeVariant(entryId, palette, values, name, null, null);
+	}
+
+	@Override
+	public CompletableFuture<Entry> makeVariant(String entryId, @Nullable JsonElement palette, @Nullable JsonObject values, @Nullable String name,
+		@Nullable String bible) {
+		return makeVariant(entryId, palette, values, name, bible, null);
+	}
+
+	@Override
+	public CompletableFuture<Entry> makeVariant(String entryId, @Nullable JsonElement palette, @Nullable JsonObject values, @Nullable String name,
+		@Nullable String bible, @Nullable Integer bibleVersion) {
 		ClientBridge b = ApiImpl.bridge();
 		if (b == null || !b.connected()) {
 			return ApiImpl.onServerFuture(CompletableFuture.failedFuture(new IllegalStateException("the design helper is not running")));
 		}
+		boolean hasPalette = palette != null && !palette.isJsonNull();
+		if (bible != null) {
+			String why = hasPalette ? "a variant takes a palette or a bible, not both" : DesignsImpl.unavailable4b(b, "reskin", "re-skins with a bible");
+			if (why != null) {
+				return ApiImpl.onServerFuture(CompletableFuture.failedFuture(new IllegalArgumentException(why)));
+			}
+		}
 		JsonObject payload = new JsonObject();
 		payload.addProperty("from", entryId);
-		if (palette != null && !palette.isJsonNull()) {
+		if (hasPalette) {
 			payload.add("palette", palette.deepCopy());
+		}
+		if (bible != null) {
+			payload.add("bible", Wire4b.bibleRef(bible, bibleVersion));
 		}
 		if (values != null && values.size() > 0) {
 			payload.add("values", values.deepCopy());
@@ -95,14 +117,81 @@ final class LibraryImpl implements Library {
 		return ApiImpl.onServerFuture(done);
 	}
 
-	/** Fails the variant futures past their timeout (any thread). */
+	/** Fails the variant and re-skin futures past their timeout (any thread). */
 	void expire(long now) {
 		waiting.expire(now);
+		reskinWaiting.expire(now);
 	}
 
-	/** The link dropped: every waiting variant future fails. Returns how many. */
+	/**
+	 * The link dropped: every waiting variant future fails. Returns how many. (A re-skin's future keeps waiting: its record
+	 * lives in the sidecar's state and comes back with the next snapshot.)
+	 */
 	int linkLost() {
 		return waiting.failAll("the Architect helper disconnected before the variant finished");
+	}
+
+	// ------------------------------------------------------------------ re-skins (4b)
+
+	/** Re-skin futures by reskin id (completed with the final record after the library reload). */
+	private final PendingFutures<dev.larattalabs.architect.api.Reskin> reskinWaiting = new PendingFutures<>("re-skin", 10 * 60_000L);
+	final RecordBook reskins = new RecordBook("re-skin", Blueprints.gameDataDir().resolve("api-reskins.json"), 50,
+		r -> dev.larattalabs.architect.api.Reskin.Status.of(RecordBook.str(r, "status")).isFinal(), r -> new JobLedger.Mark(RecordBook.str(r, "status"),
+			RecordBook.str(r, "step"), RecordBook.num(r, "updatedAt"), 0));
+
+	@Override
+	public CompletableFuture<dev.larattalabs.architect.api.Reskin> reskinCollection(String bibleId, @Nullable Integer version, CollectionRef from) {
+		JsonObject m = DesignsImpl.msg("reskin.request");
+		m.addProperty("bibleId", bibleId);
+		if (version != null) {
+			m.addProperty("version", version);
+		}
+		m.add("from", Wire4b.collection(from));
+		CompletableFuture<dev.larattalabs.architect.api.Reskin> done = new CompletableFuture<>();
+		DesignsImpl.ask("reskin", "re-skins", m).whenComplete((res, err) -> {
+			if (err != null) {
+				done.completeExceptionally(err);
+				return;
+			}
+			String id = res.has("reskinId") ? res.get("reskinId").getAsString() : null;
+			if (id == null) {
+				done.completeExceptionally(new IllegalStateException("the helper sent no reskinId"));
+				return;
+			}
+			Architect.LOGGER.info("API: re-skin {} with {} ({} variant(s))", id, bibleId, res.has("variantIds") ? res.getAsJsonArray("variantIds").size()
+				: 0);
+			// one that finished before the ack was processed left its outcome in reskinWaiting: await settles it at once
+			reskinWaiting.await(id, done, System.currentTimeMillis(), 10 * 60_000L);
+		});
+		return ApiImpl.onServerFuture(done);
+	}
+
+	/** {@code reskin.upsert} / a snapshot's reskin (any thread). */
+	void reskinChanged(JsonObject raw) {
+		JsonObject r = reskins.merge(raw);
+		if (r != null) {
+			ApiImpl.runOnServer(() -> fireReskin(r));
+		}
+	}
+
+	/** Server thread: once final, reload (its entries), complete its future and fire RESKIN_DONE, once. */
+	void fireReskin(JsonObject raw) {
+		RecordBook.Firing f = reskins.fire(raw);
+		if (!f.done()) {
+			return;
+		}
+		dev.larattalabs.architect.api.Reskin r = Wire4b.reskin(raw);
+		MinecraftServer s = ApiImpl.server();
+		if (s != null && r.entries().stream().anyMatch(id -> Blueprints.entry(id) == null)) {
+			Blueprints.reload(s);
+		}
+		reskinWaiting.complete(r.id(), r, System.currentTimeMillis());
+		ApiEvents.reskinDone(r);
+	}
+
+	/** A world loaded (server thread). */
+	void catchUpReskins() {
+		reskins.pendingDone().forEach(this::fireReskin);
 	}
 
 	/**
