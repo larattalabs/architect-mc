@@ -807,5 +807,10 @@ arguments and results, as a semi-stable test surface: changes are noted in its c
   again after a reconnect or restart, so the client re-sends a cached answer. `ok:false` "no pending tool call" means drop it.
 - **Job results:** structured gives the validated JSON; agent gives `{text, json?}`. A structured schema miss gets one re-ask in the
   same session. Agent jobs and designs share one slot; structured jobs run up to `jobConcurrency` (4).
-- **Unverified until the real-Claude gate:** the SDK keeps its `StructuredOutput` tool with `tools: []`, and `maxTurns` 4 leaves
-  room for its retries; resuming a session whose last entry is an unanswered MCP tool_use (a restart mid tool call).
+- **Verified on real Claude (2026-10-05, Noah's login, Sonnet 5.5 low):**
+  - Structured jobs with `tools: []` return `structured_output` against Steward's concept-card schema (nullable types,
+    minLength/maxLength/maxItems accepted), 2 turns, $0.011-0.019. The second job read the prompt cache.
+  - An agent job calls a client tool and finishes in 2 turns for $0.007.
+  - A sidecar SIGKILLed while waiting on a tool call restarts, re-sends the same `callId` to the reconnecting client (matched by
+    the client name), resumes the session with the answer and finishes. The reported cost then covers only the post-restart
+    query (the documented overshoot).
