@@ -78,7 +78,7 @@ describe('import paths', () => {
     lib = path.join(root, 'game', 'architect', 'library');
     fs.mkdirSync(lib, { recursive: true });
     const w = path.join(root, 'game', 'saves', 'World 1');
-    for (const f of ['architect/imports/hut.nbt', 'architect/imports/sub/deep.nbt', 'architect/imports/notes.txt', 'saves/World 1/generated/minecraft/structures/house.nbt', 'saves/World 1/generated/mymod/structures/a/b.nbt', 'saves/World 1/data/raids.nbt', 'saves/World 1/level.nbt', 'outside.nbt']) {
+    for (const f of ['architect/imports/hut.nbt', 'architect/imports/sub/deep.nbt', 'architect/imports/notes.txt', 'saves/World 1/generated/minecraft/structures/house.nbt', 'saves/World 1/generated/mymod/structures/a/b.nbt', 'saves/World 1/generated/minecraft/structure/barn.nbt', 'architect/exports/gen_x/gen_x.nbt', 'saves/World 1/generated/minecraft/other/c.nbt', 'saves/World 1/data/raids.nbt', 'saves/World 1/level.nbt', 'outside.nbt']) {
       fs.mkdirSync(path.dirname(path.join(root, 'game', f)), { recursive: true });
       fs.writeFileSync(path.join(root, 'game', f), 'x');
     }
@@ -88,7 +88,7 @@ describe('import paths', () => {
   afterAll(() => rmrf(root));
 
   it('derives the roots from the library path', () => {
-    expect(importRoots(lib)).toEqual({ imports: path.join(root, 'game', 'architect', 'imports'), saves: path.join(root, 'game', 'saves') });
+    expect(importRoots(lib)).toEqual({ imports: path.join(root, 'game', 'architect', 'imports'), exports: path.join(root, 'game', 'architect', 'exports'), saves: path.join(root, 'game', 'saves') });
   });
 
   it('accepts .nbt files in imports/ and in a world\'s generated/<ns>/structures/', () => {
@@ -97,6 +97,9 @@ describe('import paths', () => {
     expect(checkImportPath(g('architect/imports/sub/deep.nbt'), lib)).toBe(g('architect/imports/sub/deep.nbt'));
     expect(checkImportPath(g('saves/World 1/generated/minecraft/structures/house.nbt'), lib)).toBe(g('saves/World 1/generated/minecraft/structures/house.nbt'));
     expect(checkImportPath(g('saves/World 1/generated/mymod/structures/a/b.nbt'), lib)).toBe(g('saves/World 1/generated/mymod/structures/a/b.nbt'));
+    // 26.3 structure blocks save to generated/<ns>/structure/ (singular); exports may be imported in another world
+    expect(checkImportPath(g('saves/World 1/generated/minecraft/structure/barn.nbt'), lib)).toBe(g('saves/World 1/generated/minecraft/structure/barn.nbt'));
+    expect(checkImportPath(g('architect/exports/gen_x/gen_x.nbt'), lib)).toBe(g('architect/exports/gen_x/gen_x.nbt'));
     // a link inside imports/ to a structure save is fine (its real path is allowed too)
     expect(checkImportPath(g('architect/imports/ok_link.nbt'), lib)).toBe(g('saves/World 1/generated/minecraft/structures/house.nbt'));
   });
@@ -113,6 +116,7 @@ describe('import paths', () => {
     refused(g('architect/imports/link.nbt'), /outside those folders/);
     refused(g('saves/World 1/data/raids.nbt'), /outside those folders/);
     refused(g('saves/World 1/level.nbt'), /outside those folders/);
+    refused(g('saves/World 1/generated/minecraft/other/c.nbt'), /outside those folders/);
     refused(g('architect/imports/missing.nbt'), /no file/);
     refused(g('architect/imports'), /not an \.nbt file/);
     expect(() => checkImportPath(g('outside.nbt'), lib)).toThrow(/Architect imports only an \.nbt file in/);
@@ -191,6 +195,7 @@ describe('variant jobs (fixture kit)', () => {
     const done = h.sc.variants.get(v.id)!;
     expect(done.status, done.error).toBe('done');
     expect(done.blueprintId).toBe('gen_lakeside_cabin_birch');
+    expect(done.name).toBe('Lakeside Cabin (birch)');
     expect(done.size).toEqual({ x: 11, y: 9, z: 10 });
     const dir = path.join(h.sc.config.libraryDir, 'gen_lakeside_cabin_birch');
     expect(fs.readdirSync(dir).sort()).toEqual(['gen_lakeside_cabin_birch.blueprint.json', 'gen_lakeside_cabin_birch.mjs', 'gen_lakeside_cabin_birch.nbt', 'gen_lakeside_cabin_birch.preview-front.png', 'gen_lakeside_cabin_birch.preview-iso.png', 'gen_lakeside_cabin_birch.preview-top.png']);
@@ -233,6 +238,15 @@ describe('variant jobs (fixture kit)', () => {
     const v2 = h.sc.requestVariant('cabin_dark', 'birch');
     await h.sc.variantRunner.idle();
     expect(readSidecar(h.sc, h.sc.variants.get(v2.id)!.blueprintId!)).toMatchObject({ id: 'cabin_dark_birch', variantOf: 'cabin_dark', values: { porch: false } });
+  });
+
+  it('a bundled entry whose source is only in kit/examples/<id>/<id>.mjs', async () => {
+    const ex = path.join(h.sc.config.kitDir, 'examples', 'shed');
+    fs.mkdirSync(ex, { recursive: true });
+    fs.writeFileSync(path.join(ex, 'shed.mjs'), fs.readFileSync(path.join(h.sc.config.kitDir, 'designs', 'cabin.mjs'), 'utf8').replace("export const id = 'cabin'", "export const id = 'shed'"));
+    const v = h.sc.requestVariant('shed', 'birch');
+    await h.sc.variantRunner.idle();
+    expect(h.sc.variants.get(v.id), h.sc.variants.get(v.id)!.error).toMatchObject({ status: 'done', blueprintId: 'shed_birch' });
   });
 
   it('refuses at once: no such entry, an import, an entry without a source', () => {
@@ -303,6 +317,7 @@ describe('import jobs (fixture kit)', () => {
     const done = h.sc.variants.get(v.id)!;
     expect(done.status, done.error).toBe('done');
     expect(done.blueprintId).toBe('imp_my_old_house');
+    expect(done.name).toBe('My Old House');
     expect(fs.readdirSync(path.join(h.sc.config.libraryDir, 'imp_my_old_house')).sort()).toEqual(['imp_my_old_house.blueprint.json', 'imp_my_old_house.nbt', 'imp_my_old_house.preview-front.png', 'imp_my_old_house.preview-iso.png', 'imp_my_old_house.preview-top.png']);
     const sc = readSidecar(h.sc, 'imp_my_old_house');
     expect(sc).toMatchObject({ id: 'imp_my_old_house', type: 'custom', imported: true, groundY: 1, front: 'south', name: 'My Old House' });

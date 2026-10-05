@@ -34,7 +34,7 @@ export class VariantRefused extends Error {}
 
 // ---- the book ---------------------------------------------------------------------------------
 
-export type VariantPatch = Partial<Pick<Variant, 'status' | 'step' | 'blueprintId' | 'size' | 'previews' | 'error'>>;
+export type VariantPatch = Partial<Pick<Variant, 'status' | 'step' | 'blueprintId' | 'size' | 'previews' | 'error' | 'name'>>;
 
 export interface VariantBookCtx {
   store: Store;
@@ -151,8 +151,8 @@ export function findVariantSource(libraryDir: string, kitDir: string, from: stri
     if (!fs.existsSync(src)) throw new VariantRefused(`library entry ${from} has no source (${from}.mjs), so no variants`);
     return { from, sourceFile: src, entry, bundled: false };
   }
-  const kitSrc = path.join(kitDir, 'designs', `${from}.mjs`);
-  if (fs.existsSync(kitSrc)) {
+  const kitSrc = [path.join(kitDir, 'designs', `${from}.mjs`), path.join(kitDir, 'examples', from, `${from}.mjs`)].find((f) => fs.existsSync(f));
+  if (kitSrc) {
     const entry = readJsonFile(path.join(kitDir, 'examples', from, `${from}.blueprint.json`));
     return { from, sourceFile: kitSrc, ...(entry ? { entry } : {}), bundled: true };
   }
@@ -223,9 +223,9 @@ export function variantDisplayName(base: string, opts: { palette?: PaletteSpec |
  * Where imports may come from, derived from the library path (<gameDir>/architect/library):
  * <gameDir>/architect/imports/ and <gameDir>/saves/<world>/generated/<namespace>/structures/.
  */
-export function importRoots(libraryDir: string): { imports: string; saves: string } {
+export function importRoots(libraryDir: string): { imports: string; exports: string; saves: string } {
   const architect = path.dirname(libraryDir);
-  return { imports: path.join(architect, 'imports'), saves: path.join(path.dirname(architect), 'saves') };
+  return { imports: path.join(architect, 'imports'), exports: path.join(architect, 'exports'), saves: path.join(path.dirname(architect), 'saves') };
 }
 
 const real = (p: string): string | undefined => {
@@ -243,7 +243,7 @@ const real = (p: string): string | undefined => {
  */
 export function checkImportPath(p: string, libraryDir: string): string {
   const roots = importRoots(libraryDir);
-  const allowed = `an .nbt file in ${roots.imports}${path.sep} or in a world's ${path.join('saves', '<world>', 'generated', '<namespace>', 'structures')}${path.sep}`;
+  const allowed = `an .nbt file in ${roots.imports}${path.sep}, in ${roots.exports}${path.sep} or in a world's ${path.join('saves', '<world>', 'generated', '<namespace>', 'structure')}${path.sep} (or structures${path.sep})`;
   const refuse = (why: string): never => {
     throw new VariantRefused(`import refused: ${why}. Architect imports only ${allowed}`);
   };
@@ -259,10 +259,10 @@ export function checkImportPath(p: string, libraryDir: string): string {
     const rel = path.relative(root, file);
     return rel && !rel.startsWith('..') && !path.isAbsolute(rel) ? rel.split(path.sep) : undefined;
   };
-  if (inside(real(roots.imports))) return file;
+  if (inside(real(roots.imports)) || inside(real(roots.exports))) return file;
   const parts = inside(real(roots.saves));
-  // <world>/generated/<namespace>/structures/<...>.nbt
-  if (parts && parts.length >= 5 && parts[1] === 'generated' && parts[3] === 'structures') return file;
+  // <world>/generated/<namespace>/structure/<...>.nbt (26.3 structure-block saves; `structures` as older versions had)
+  if (parts && parts.length >= 5 && parts[1] === 'generated' && (parts[3] === 'structure' || parts[3] === 'structures')) return file;
   return refuse(`${p} is outside those folders`);
 }
 
@@ -409,7 +409,7 @@ export class VariantRunner {
           extra: { variantOf: v.from, displayName },
         },
       });
-      this.finish(v.id, installed.blueprintId, sc, installed.previews, [r.error ? `previews: ${truncate(r.error, 80)}` : '', res.warnings.length ? `${res.warnings.length} checker warning(s)` : ''].filter(Boolean).join('; '));
+      this.finish(v.id, installed.blueprintId, sc, installed.previews, [r.error ? `previews: ${truncate(r.error, 80)}` : '', res.warnings.length ? `${res.warnings.length} checker warning(s)` : ''].filter(Boolean).join('; '), displayName);
     } finally {
       this.taken.delete(bp);
     }
@@ -457,13 +457,13 @@ export class VariantRunner {
         previews: rp.files,
         meta: { createdAt: this.host.now(), extra: { imported: true } },
       });
-      this.finish(v.id, installed.blueprintId, sc, installed.previews, [rp.error ? `previews: ${truncate(rp.error, 80)}` : '', res.warnings.length ? `${res.warnings.length} warning(s)` : ''].filter(Boolean).join('; '));
+      this.finish(v.id, installed.blueprintId, sc, installed.previews, [rp.error ? `previews: ${truncate(rp.error, 80)}` : '', res.warnings.length ? `${res.warnings.length} warning(s)` : ''].filter(Boolean).join('; '), typeof sc.name === 'string' ? sc.name : undefined);
     } finally {
       this.taken.delete(bp);
     }
   }
 
-  private finish(id: string, blueprintId: string, sc: SidecarJson, previews: string[], note: string): void {
+  private finish(id: string, blueprintId: string, sc: SidecarJson, previews: string[], note: string, name: string | undefined): void {
     const s = sc.size!;
     this.host.variants.update(id, {
       status: 'done',
@@ -471,6 +471,7 @@ export class VariantRunner {
       blueprintId,
       size: { x: s.x, y: s.y, z: s.z },
       previews,
+      ...(name ? { name } : {}),
     });
   }
 }

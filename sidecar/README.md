@@ -80,9 +80,9 @@ The connection is `ws://127.0.0.1:<port>`, with one JSON object per text frame:
     accent? }`; `values` `{ name: int | bool | string }`; `name` (<= 40) the new entry's displayName.
   - `import.request { path }` is acked with `result: { variantId }`.
 - **Sidecar → client**
-  - `snapshot { version, status, designs, variants, kit? }` in reply to a valid hello. `variants`: the last 20
-    variant/import jobs plus any unfinished one. `kit` (an addition): `{ palettes: [{ name, preset, wood, stone, roof,
-    accent }], choices: { woods, stones, roofs } }` from `kit/tools/describe.mjs --palettes`, for the palette picker.
+  - `snapshot { version, status, designs, variants, palettes? }` in reply to a valid hello. `variants`: the last 20
+    variant/import jobs plus any unfinished one. `palettes` (an addition): `{ presets: { <name>: { wood, stone, roof,
+    accent } }, woods, stones, roofs }` from `kit/tools/describe.mjs --palettes`, for the palette picker.
   - `status { status }` whenever the status changes.
   - `design.upsert { design }`, to be replaced by `design.id`.
   - `variant.upsert { variant }`, to be replaced by `variant.id`. Imports report on this same channel.
@@ -107,11 +107,13 @@ Neither uses Claude, and they run one at a time on their own queue, so a variant
 `Variant = { id: "v<n>", kind: "variant" | "import", from, status: queued|building|done|failed, step, palette?,
 values?, name?, blueprintId?, size?, previews?, error?, createdAt, updatedAt }`. `kind`, `palette`, `values`, `name`
 and `previews` are additions to the contract. For an import, `from` is the absolute `.nbt` path. `done` and `failed` are
-final; `error` keeps the kit's lines (one per line).
+final; `error` keeps the kit's lines (one per line). When a job is done, `name` is the new entry's displayName (a
+variant) or name (an import).
 
 **A variant** of `from`:
 - The source is `<library>/<from>/<from>.mjs`. For a bundled example, which lives in the mod's jar and not in the
-  library, it is the kit's `designs/<from>.mjs`, with `kit/examples/<from>/` for its sidecar.
+  library, it is the kit's `designs/<from>.mjs` (else `examples/<from>/<from>.mjs`), with `kit/examples/<from>/` for
+  its sidecar.
 - `variant.request` is refused at once (`ack ok:false`) when there is no such entry, when the entry is `imported`, or
   when it has no source.
 - The job works in `<data>/variants/<v>/`, which holds a fresh copy of the kit. It copies the source to
@@ -128,10 +130,11 @@ final; `error` keeps the kit's lines (one per line).
   The build also writes `palette`, `params` and `values`. `favorite` and `userTags` are never written.
 
 **An import** (`import.request { path }`):
-- The path must be absolute and end in `.nbt`, and its real path (links resolved) must be under one of two folders.
-  Both are derived from `--library` (`<gameDir>/architect/library`):
+- The path must be absolute and end in `.nbt`, and its real path (links resolved) must be under one of these folders,
+  all derived from `--library` (`<gameDir>/architect/library`):
   - `<gameDir>/architect/imports/`
-  - `<gameDir>/saves/<world>/generated/<namespace>/structures/`
+  - `<gameDir>/architect/exports/` (so an export can be imported in another world)
+  - `<gameDir>/saves/<world>/generated/<namespace>/structure/` (26.3 structure-block saves) or `.../structures/`
 - Anything else is refused at once with the reason.
 - The job copies the file into the scratch dir and runs `kit/import.mjs <copy> --id imp_<slug> --out check --json`.
   That writes the template (first palette, entities dropped) and a sidecar: type `custom`, groundY 1, front south,

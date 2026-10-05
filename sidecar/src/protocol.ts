@@ -121,7 +121,7 @@ export const Variant = z.object({
   step: z.string().describe('one line of progress'),
   palette: PaletteSpec.optional().describe('(addition) variant: the palette asked for'),
   values: ParamValues.optional().describe('(addition) variant: the param values asked for'),
-  name: z.string().optional().describe('(addition) the name asked for'),
+  name: z.string().optional().describe('(addition) the name asked for; when done, the new entry\'s display name (variant) or name (import)'),
   blueprintId: z.string().optional().describe('done: the new library id'),
   size: z.object({ x: z.number().int(), y: z.number().int(), z: z.number().int() }).optional(),
   previews: z.array(z.string()).optional().describe('(addition) done: absolute paths of the preview PNGs'),
@@ -131,12 +131,21 @@ export const Variant = z.object({
 });
 export type Variant = z.infer<typeof Variant>;
 
-/** (addition) What the kit offers a palette picker: the presets and the accepted woods / stones / roofs. */
-export const KitInfo = z.object({
+/** What `node kit/tools/describe.mjs --palettes` prints. */
+export const KitPalettes = z.object({
   palettes: z.array(z.object({ name: z.string(), preset: z.string().optional(), wood: z.string(), stone: z.string(), roof: z.string(), accent: z.string() })),
   choices: z.object({ woods: z.array(z.string()), stones: z.array(z.string()), roofs: z.array(z.string()) }),
 });
-export type KitInfo = z.infer<typeof KitInfo>;
+export type KitPalettes = z.infer<typeof KitPalettes>;
+
+/** (addition) What the mod's palette picker shows: the kit's presets (inputs) and what a custom palette accepts. */
+export const PaletteInfo = z.object({
+  presets: z.record(z.string(), z.object({ wood: z.string(), stone: z.string(), roof: z.string(), accent: z.string() })),
+  woods: z.array(z.string()),
+  stones: z.array(z.string()),
+  roofs: z.array(z.string()),
+});
+export type PaletteInfo = z.infer<typeof PaletteInfo>;
 
 // ---- messages --------------------------------------------------------------------------------
 
@@ -153,7 +162,7 @@ export const SnapshotMsg = z.object({
   status: Status,
   designs: z.array(Design),
   variants: z.array(Variant).describe('the last 20 variant/import jobs plus any unfinished one'),
-  kit: KitInfo.optional().describe('(addition) the palette presets and choices, when the kit could describe them'),
+  palettes: PaletteInfo.optional().describe('(addition) the kit palette presets and choices, when the kit could describe them'),
 });
 export const StatusMsg = z.object({ ...envelope('status'), status: Status });
 export const DesignUpsertMsg = z.object({ ...envelope('design.upsert'), design: Design });
@@ -194,7 +203,7 @@ export const VariantRequestMsg = z.object({
 });
 export const ImportRequestMsg = z.object({
   ...envelope('import.request'),
-  path: z.string().min(1).max(4096).describe("an absolute .nbt path in <gameDir>/architect/imports/ or a world's generated/<namespace>/structures/"),
+  path: z.string().min(1).max(4096).describe("an absolute .nbt path in <gameDir>/architect/imports/, <gameDir>/architect/exports/ or a world's generated/<namespace>/structure(s)/"),
 });
 
 export const ClientMessage = z.discriminatedUnion('type', [HelloMsg, DesignRequestMsg, DesignCancelMsg, AuthSetMsg, ShutdownMsg, VariantRequestMsg, ImportRequestMsg]);

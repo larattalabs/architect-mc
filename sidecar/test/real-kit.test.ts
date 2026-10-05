@@ -29,6 +29,16 @@ describe.skipIf(!hasKit)('sim designer with the real kit', () => {
     rmrf(root);
   });
 
+  it('the snapshot carries the kit palettes in the mod\'s shape', async () => {
+    await until(() => 'palettes' in (sc.snapshot() as Record<string, unknown>), 30_000);
+    const p = (sc.snapshot() as unknown as { palettes: { presets: Record<string, Record<string, string>>; woods: string[]; stones: string[]; roofs: string[] } }).palettes;
+    expect(Object.keys(p.presets)).toEqual(expect.arrayContaining(['rustic', 'cherry', 'mangrove', 'crimson', 'fortress']));
+    expect(p.presets.fortress).toEqual({ wood: 'spruce', stone: 'stone_bricks', roof: 'deepslate_tiles', accent: 'dark_oak' });
+    expect(p.woods).toContain('cherry');
+    expect(p.stones).toContain('mud_bricks');
+    expect(p.roofs).toContain('deepslate_tiles');
+  });
+
   it('variants of a kit example installed in the library: a palette and a param change', async () => {
     const d = sc.requestDesign(DesignRequest.parse(request({ type: 'tower', name: 'Var Tower', maxSize: { x: 64, y: 64, z: 64 } })));
     await until(() => ['done', 'failed'].includes(sc.designs.get(d.id)!.status), 120_000);

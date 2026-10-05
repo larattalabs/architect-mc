@@ -6,7 +6,7 @@ import type { Config } from './config.js';
 import { VERSION } from './config.js';
 import type { Logger } from './context.js';
 import { DesignBook, describeRequest, isFinalDesign, runNode, type Installed } from './designs.js';
-import { KitInfo, type ClientMessage, type Design, type DesignRequest, type Outbound, type PaletteSpec, type ParamValues, type Status, type Variant } from './protocol.js';
+import { KitPalettes, type ClientMessage, type PaletteInfo, type Design, type DesignRequest, type Outbound, type PaletteSpec, type ParamValues, type Status, type Variant } from './protocol.js';
 import { readSecrets, updateSecrets, type Secrets } from './secrets.js';
 import type { Store } from './store.js';
 import { truncate } from './util/text.js';
@@ -44,7 +44,7 @@ export class Sidecar {
   readonly variants: VariantBook;
   readonly variantRunner: VariantRunner;
   /** the kit's palette presets and choices, for the snapshot (loaded at start) */
-  private kitInfo: KitInfo | undefined;
+  private palettes: PaletteInfo | undefined;
   private listeners = new Set<(m: Outbound) => void>();
   private designer: Designer | undefined;
   private authView: AuthView = { auth: 'checking', sdk: 'missing' };
@@ -127,7 +127,7 @@ export class Sidecar {
   }
 
   snapshot(): Outbound {
-    return { type: 'snapshot', version: VERSION, status: this.status(), designs: this.designs.recent(), variants: this.variants.recent(), ...(this.kitInfo ? { kit: this.kitInfo } : {}) };
+    return { type: 'snapshot', version: VERSION, status: this.status(), designs: this.designs.recent(), variants: this.variants.recent(), ...(this.palettes ? { palettes: this.palettes } : {}) };
   }
 
   // ---- lifecycle ------------------------------------------------------------------------------
@@ -155,8 +155,11 @@ export class Sidecar {
     if (!fs.existsSync(script)) return;
     const r = await runNode(script, ['--palettes'], this.config.kitDir, 30_000);
     try {
-      const parsed = KitInfo.safeParse(JSON.parse(r.stdout.trim().split('\n').pop() ?? ''));
-      if (parsed.success) this.kitInfo = parsed.data;
+      const parsed = KitPalettes.safeParse(JSON.parse(r.stdout.trim().split('\n').pop() ?? ''));
+      if (parsed.success) {
+        const k = parsed.data;
+        this.palettes = { presets: Object.fromEntries(k.palettes.map((p) => [p.name, { wood: p.wood, stone: p.stone, roof: p.roof, accent: p.accent }])), ...k.choices };
+      }
       else this.log.warn(`kit describe --palettes: unexpected output (${parsed.error.issues[0]?.message ?? '?'})`);
     } catch {
       this.log.warn(`kit describe --palettes failed: ${truncate(r.output, 200)}`);
