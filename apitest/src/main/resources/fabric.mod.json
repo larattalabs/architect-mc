@@ -1,0 +1,19 @@
+{
+	"schemaVersion": 1,
+	"id": "architect_apitest",
+	"version": "${version}",
+	"name": "Architect API test (dev only)",
+	"description": "Exercises Architect's public API in a dev world. Never shipped.",
+	"license": "MIT",
+	"environment": "*",
+	"entrypoints": {
+		"main": ["dev.larattalabs.apitest.ApiTest"],
+		"client": ["dev.larattalabs.apitest.client.ApiTestClient"]
+	},
+	"depends": {
+		"fabricloader": ">=0.19.5",
+		"minecraft": "~26.3",
+		"fabric-api": "*",
+		"architect_mc": ">=0.4.0"
+	}
+}

@@ -1,0 +1,77 @@
+// apitest: a dev-only Fabric mod that exercises Architect's public API (docs/CONTRACT.md "Phase 4a gate"). It compiles
+// against dev.larattalabs.architect.api only (enforced by the checkApiOnly task below) and is never part of the shipped
+// jar or the sidecar bundle: the root project puts it on the dev client's runtime classpath only when ARCHITECT_APITEST=1
+// (or -Papitest) is set.
+plugins {
+	id 'net.fabricmc.fabric-loom'
+}
+
+version = rootProject.version
+group = 'dev.larattalabs.apitest'
+
+base {
+	archivesName = 'architect_apitest'
+}
+
+loom {
+	splitEnvironmentSourceSets()
+	mods {
+		"architect_apitest" {
+			sourceSet sourceSets.main
+			sourceSet sourceSets.client
+		}
+	}
+}
+
+dependencies {
+	minecraft "com.mojang:minecraft:${rootProject.minecraft_version}"
+	implementation "net.fabricmc:fabric-loader:${rootProject.loader_version}"
+	implementation "net.fabricmc.fabric-api:fabric-api:${rootProject.fabric_api_version}"
+	// Architect itself (the root project's jar). Only its api package may be used: see checkApiOnly.
+	compileOnly project(':')
+	clientCompileOnly project(':')
+}
+
+processResources {
+	def version = project.version
+	inputs.property "version", version
+	filesMatching("fabric.mod.json") {
+		expand "version": version
+	}
+}
+
+tasks.withType(JavaCompile).configureEach {
+	it.options.release = 25
+	it.options.encoding = "UTF-8"
+}
+
+// The gate rule "depends only on dev.larattalabs.architect.api": no source file may import anything else of Architect.
+def checkApiOnly = tasks.register("checkApiOnly") {
+	def srcDirs = files("src/main/java", "src/client/java")
+	inputs.files(srcDirs)
+	doLast {
+		def bad = []
+		srcDirs.each { dir ->
+			if (!dir.exists()) {
+				return
+			}
+			dir.eachFileRecurse { f ->
+				if (!f.name.endsWith(".java")) {
+					return
+				}
+				f.readLines().eachWithIndex { line, i ->
+					def m = line =~ /dev\.larattalabs\.architect\.([A-Za-z_]+)/
+					m.each { match ->
+						if (match[1] != "api") {
+							bad << "${f.name}:${i + 1}: ${line.trim()}"
+						}
+					}
+				}
+			}
+		}
+		if (!bad.isEmpty()) {
+			throw new GradleException("apitest may only use dev.larattalabs.architect.api:\n" + bad.join("\n"))
+		}
+	}
+}
+tasks.named("compileJava") { dependsOn(checkApiOnly) }

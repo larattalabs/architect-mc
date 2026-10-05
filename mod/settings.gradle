@@ -10,3 +10,7 @@ pluginManagement {
 }
 
 rootProject.name = 'architect_mc'
+
+// dev-only API test mod (docs/CONTRACT.md "Phase 4a gate"); never in the shipped jar
+include ':apitest'
+project(':apitest').projectDir = file('../apitest')
