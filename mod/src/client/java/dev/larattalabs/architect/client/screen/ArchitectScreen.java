@@ -1054,7 +1054,7 @@ public final class ArchitectScreen extends Screen {
 				List<Option> opts = new ArrayList<>();
 				opts.add(new Option("none", "None (no bible)", f.bible == null));
 				opts.addAll(SetDialog.bibleOptions(f.bible, false));
-				openPopup("design:bible", bdx, bdy + CHIP_H + 1, Math.max(240, colW), opts, v -> f.bible = "none".equals(v) ? null : v);
+				openPopup("design:bible", rx, bdy + CHIP_H + 1, colW, opts, v -> f.bible = "none".equals(v) ? null : v);
 			});
 		} else {
 			g.text(font, TextUtil.ellipsize(font, "none (the helper has no bibles)", rx + colW - bdx), bdx, ry + 3, muted, false);
@@ -1587,7 +1587,8 @@ public final class ArchitectScreen extends Screen {
 		g.text(font, TextUtil.ellipsize(font, (bj.kind().equals("revise") ? "Revise " : "Bible ") + bj.bibleId() + " v" + bj.version() + "  (" + bj.id()
 			+ ")", dw), dx, y, UiBits.ink(), false);
 		y += 12;
-		g.text(font, TextUtil.ellipsize(font, bj.status().name().toLowerCase(Locale.ROOT) + (bj.step().isEmpty() ? "" : ": " + bj.step()), dw), dx, y,
+		String bst = bj.status().name().toLowerCase(Locale.ROOT);
+		g.text(font, TextUtil.ellipsize(font, bj.step().isEmpty() ? bst : bj.step().startsWith(bst) ? bj.step() : bst + ": " + bj.step(), dw), dx, y,
 			UiBits.muted(), false);
 		y += 11;
 		String prompt = bj.request().has("prompt") ? bj.request().get("prompt").getAsString() : "";

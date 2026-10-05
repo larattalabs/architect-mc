@@ -406,9 +406,9 @@ final class LibraryTab {
 		int tx = x + 4;
 		PreviewImages.Found sheet = bible == null ? null : RolesSwatch.sheet(bible);
 		if (sheet != null) {
-			g.fill(x + 2, y + 2, x + 2 + 64, y + h - 2, 0x22FFFFFF);
-			PreviewImages.draw(g, sheet, x + 3, y + 3, 62, h - 6);
-			tx = x + 70;
+			g.fill(x + 2, y + 2, x + 2 + 78, y + h - 2, 0x22FFFFFF);
+			PreviewImages.draw(g, sheet, x + 3, y + 3, 76, h - 6);
+			tx = x + 84;
 		}
 		long n = LibraryFeature.cards().stream().filter(c -> c.collections().contains(key)).count();
 		String title = collectionName(key) + " · " + n + (n == 1 ? " entry" : " entries");
@@ -920,7 +920,8 @@ final class LibraryTab {
 		if (ph >= 40) {
 			Panels.inset(g, rx, ry, colW, ph);
 			drawPreview(g, f.from(), "iso", rx + 2, ry + 2, colW - 4, ph - 4);
-			String cur = "now: " + (f.palettes().presetMatching(originalInputs(c)) != null ? f.palettes().presetMatching(originalInputs(c)) + " palette"
+			String cur = "now: " + (c != null && c.bible() != null ? collectionName(LibraryQuery.BIBLE_PREFIX + c.bible()).substring("Bible: ".length())
+				+ " bible" : f.palettes().presetMatching(originalInputs(c)) != null ? f.palettes().presetMatching(originalInputs(c)) + " palette"
 				: "its own palette");
 			g.text(font, TextUtil.ellipsize(font, cur, colW - 8), rx + 4, ry + ph - 12, UiBits.muted(), false);
 		}
