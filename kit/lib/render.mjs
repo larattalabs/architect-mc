@@ -60,14 +60,14 @@ export function buildScene(structure, opts = {}) {
   const swap = k % 2 === 1;
   const W = swap ? sz : sx, D = swap ? sx : sz, H = sy;
   const specs = structure.palette.map((p) => {
-    const props = { ...(p.properties ?? {}) };
+    const props = { ...(p.properties ?? p.Properties ?? {}) };
     if (k) { // rotate every direction-valued property
       if (props.facing) props.facing = rotDir(props.facing, k);
       const conn = DIRS.map((d) => props[d]);
       if (DIRS.every((d) => d in props)) DIRS.forEach((d, i) => { props[rotDir(d, k)] = conn[i]; });
       if (swap && (props.axis === 'x' || props.axis === 'z')) props.axis = props.axis === 'x' ? 'z' : 'x';
     }
-    return makeSpec(p.id, props, opts.unknown);
+    return makeSpec(p.id ?? p.Name, props, opts.unknown);
   });
   const grid = new Int16Array(W * H * D).fill(-1);
   const at = (x, y, z) => (y * D + z) * W + x;

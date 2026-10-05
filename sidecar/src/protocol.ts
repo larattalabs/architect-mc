@@ -89,6 +89,64 @@ export const Design = z.object({
 });
 export type Design = z.infer<typeof Design>;
 
+// ---- variants and imports (phase 2, docs/CONTRACT.md "Variants without Claude") -------------
+
+export const LIBRARY_ID = /^[a-z0-9_]+$/;
+
+export const VariantStatus = z
+  .enum(['queued', 'building', 'done', 'failed'])
+  .describe('queued -> building (copy the source, build + check with a pristine kit, render, install) -> done | failed. done and failed are final.');
+export type VariantStatus = z.infer<typeof VariantStatus>;
+
+const BlockName = z.string().min(1).max(64).regex(/^[a-z0-9_:]+$/);
+
+/** A preset name (kit PALETTE_PRESETS) or palette inputs; anything else the kit refuses with a reason. */
+export const PaletteSpec = z.union([
+  z.string().min(1).max(32).regex(/^[a-z0-9_]+$/),
+  z.object({ preset: z.string().min(1).max(32).regex(/^[a-z0-9_]+$/).optional(), wood: BlockName.optional(), stone: BlockName.optional(), roof: BlockName.optional(), accent: BlockName.optional() }),
+]);
+export type PaletteSpec = z.infer<typeof PaletteSpec>;
+
+/** Param values ({ floors: 2, porch: false, roof: 'hip' }); the kit checks them against the design's params. */
+export const ParamValues = z
+  .record(z.string().regex(/^[a-z][a-zA-Z0-9_]{0,31}$/), z.union([z.number().int().min(-1000).max(1000), z.boolean(), z.string().max(32)]))
+  .refine((v) => Object.keys(v).length <= 16, 'at most 16 values');
+export type ParamValues = z.infer<typeof ParamValues>;
+
+export const Variant = z.object({
+  id: Id.describe('"v<n>"'),
+  kind: z.enum(['variant', 'import']).describe('(addition) a variant of a library entry, or an imported .nbt'),
+  from: z.string().min(1).max(4096).describe('variant: the library id it is made from; import: the absolute .nbt path'),
+  status: VariantStatus,
+  step: z.string().describe('one line of progress'),
+  palette: PaletteSpec.optional().describe('(addition) variant: the palette asked for'),
+  values: ParamValues.optional().describe('(addition) variant: the param values asked for'),
+  name: z.string().optional().describe('(addition) the name asked for; when done, the new entry\'s display name (variant) or name (import)'),
+  blueprintId: z.string().optional().describe('done: the new library id'),
+  size: z.object({ x: z.number().int(), y: z.number().int(), z: z.number().int() }).optional(),
+  previews: z.array(z.string()).optional().describe('(addition) done: absolute paths of the preview PNGs'),
+  error: z.string().optional().describe('failed: why, with the checker lines'),
+  createdAt: Ts,
+  updatedAt: Ts,
+});
+export type Variant = z.infer<typeof Variant>;
+
+/** What `node kit/tools/describe.mjs --palettes` prints. */
+export const KitPalettes = z.object({
+  palettes: z.array(z.object({ name: z.string(), preset: z.string().optional(), wood: z.string(), stone: z.string(), roof: z.string(), accent: z.string() })),
+  choices: z.object({ woods: z.array(z.string()), stones: z.array(z.string()), roofs: z.array(z.string()) }),
+});
+export type KitPalettes = z.infer<typeof KitPalettes>;
+
+/** (addition) What the mod's palette picker shows: the kit's presets (inputs) and what a custom palette accepts. */
+export const PaletteInfo = z.object({
+  presets: z.record(z.string(), z.object({ wood: z.string(), stone: z.string(), roof: z.string(), accent: z.string() })),
+  woods: z.array(z.string()),
+  stones: z.array(z.string()),
+  roofs: z.array(z.string()),
+});
+export type PaletteInfo = z.infer<typeof PaletteInfo>;
+
 // ---- messages --------------------------------------------------------------------------------
 
 const envelope = <T extends string>(type: T) => ({
@@ -98,19 +156,27 @@ const envelope = <T extends string>(type: T) => ({
 });
 
 // sidecar -> client
-export const SnapshotMsg = z.object({ ...envelope('snapshot'), version: z.string(), status: Status, designs: z.array(Design) });
+export const SnapshotMsg = z.object({
+  ...envelope('snapshot'),
+  version: z.string(),
+  status: Status,
+  designs: z.array(Design),
+  variants: z.array(Variant).describe('the last 20 variant/import jobs plus any unfinished one'),
+  palettes: PaletteInfo.optional().describe('(addition) the kit palette presets and choices, when the kit could describe them'),
+});
 export const StatusMsg = z.object({ ...envelope('status'), status: Status });
 export const DesignUpsertMsg = z.object({ ...envelope('design.upsert'), design: Design });
+export const VariantUpsertMsg = z.object({ ...envelope('variant.upsert'), variant: Variant });
 export const AckMsg = z.object({
   ...envelope('ack'),
   re: z.string().describe('the `id` of the client message'),
   ok: z.boolean(),
   error: z.string().optional(),
-  result: z.record(z.string(), z.unknown()).optional().describe('design.request: {designId}'),
+  result: z.record(z.string(), z.unknown()).optional().describe('design.request: {designId}; variant.request / import.request: {variantId}'),
 });
 export const ErrorMsg = z.object({ ...envelope('error'), message: z.string(), re: z.string().optional() });
 
-export const ServerMessage = z.discriminatedUnion('type', [SnapshotMsg, StatusMsg, DesignUpsertMsg, AckMsg, ErrorMsg]);
+export const ServerMessage = z.discriminatedUnion('type', [SnapshotMsg, StatusMsg, DesignUpsertMsg, VariantUpsertMsg, AckMsg, ErrorMsg]);
 export type ServerMessage = z.infer<typeof ServerMessage>;
 
 // client -> sidecar
@@ -128,8 +194,19 @@ export const AuthSetMsg = z.object({
   useClaudeLogin: z.boolean().optional(),
 });
 export const ShutdownMsg = z.object({ ...envelope('shutdown') });
+export const VariantRequestMsg = z.object({
+  ...envelope('variant.request'),
+  from: z.string().min(1).max(64).regex(LIBRARY_ID).describe('the library id to vary'),
+  palette: PaletteSpec.optional(),
+  values: ParamValues.optional(),
+  name: z.string().trim().min(1).max(40).optional().describe('the displayName of the new entry (default: "<name> (<palette>, floors 2)")'),
+});
+export const ImportRequestMsg = z.object({
+  ...envelope('import.request'),
+  path: z.string().min(1).max(4096).describe("an absolute .nbt path in <gameDir>/architect/imports/, <gameDir>/architect/exports/ or a world's generated/<namespace>/structure(s)/"),
+});
 
-export const ClientMessage = z.discriminatedUnion('type', [HelloMsg, DesignRequestMsg, DesignCancelMsg, AuthSetMsg, ShutdownMsg]);
+export const ClientMessage = z.discriminatedUnion('type', [HelloMsg, DesignRequestMsg, DesignCancelMsg, AuthSetMsg, ShutdownMsg, VariantRequestMsg, ImportRequestMsg]);
 export type ClientMessage = z.infer<typeof ClientMessage>;
 
 /** A server message without the envelope's `v` (added by the sender). */

@@ -86,67 +86,192 @@ function woodSet(w) {
 }
 
 /**
+ * Stone families: blocks cut from the same stone, first the usual building blocks (a palette's `stoneTrim` is the
+ * first member after its stone). The checker warns when a design uses a stone family (or a wood) its palette doesn't
+ * name, because such a block would not follow a palette swap.
+ */
+export const STONE_FAMILIES = {
+  cobblestone: ['cobblestone', 'mossy_cobblestone'],
+  stone: ['stone_bricks', 'smooth_stone', 'stone', 'mossy_stone_bricks', 'cracked_stone_bricks', 'chiseled_stone_bricks'],
+  deepslate: ['deepslate_bricks', 'polished_deepslate', 'deepslate_tiles', 'cobbled_deepslate', 'chiseled_deepslate', 'cracked_deepslate_bricks', 'cracked_deepslate_tiles', 'deepslate'],
+  blackstone: ['polished_blackstone_bricks', 'polished_blackstone', 'blackstone', 'chiseled_polished_blackstone', 'cracked_polished_blackstone_bricks', 'gilded_blackstone'],
+  sandstone: ['sandstone', 'cut_sandstone', 'smooth_sandstone', 'chiseled_sandstone'],
+  red_sandstone: ['red_sandstone', 'cut_red_sandstone', 'smooth_red_sandstone', 'chiseled_red_sandstone'],
+  bricks: ['bricks'],
+  andesite: ['andesite', 'polished_andesite'],
+  diorite: ['diorite', 'polished_diorite'],
+  granite: ['granite', 'polished_granite'],
+  tuff: ['tuff_bricks', 'polished_tuff', 'tuff', 'chiseled_tuff', 'chiseled_tuff_bricks'],
+  mud: ['mud_bricks', 'packed_mud'],
+  nether_bricks: ['nether_bricks', 'red_nether_bricks', 'chiseled_nether_bricks', 'cracked_nether_bricks'],
+  end_stone: ['end_stone_bricks', 'end_stone'],
+  quartz: ['quartz_block', 'smooth_quartz', 'quartz_bricks', 'chiseled_quartz_block', 'quartz_pillar'],
+  purpur: ['purpur_block', 'purpur_pillar'],
+  prismarine: ['prismarine', 'prismarine_bricks', 'dark_prismarine'],
+  resin: ['resin_bricks', 'chiseled_resin_bricks'],
+  basalt: ['polished_basalt', 'smooth_basalt', 'basalt'],
+};
+const STONE_MEMBER = new Map(Object.entries(STONE_FAMILIES).flatMap(([f, list]) => list.map((b) => [b, f])));
+/** Woods longest first, so `dark_oak_planks` is dark_oak, not oak. */
+const WOODS_BY_LENGTH = () => [...WOODS].sort((a, b) => b.length - a.length);
+const WOOD_PART = /^(planks|log|wood|stem|hyphae|block|stairs|slab|fence|fence_gate|door|trapdoor|button|pressure_plate|sign|wall_sign|hanging_sign|wall_hanging_sign|shelf|mosaic|mosaic_stairs|mosaic_slab)$/;
+
+/** The wood a block is made of (`minecraft:stripped_spruce_log` -> 'spruce'), or null. */
+export function woodFamilyOf(block) {
+  const b = qualify(block).replace(/^minecraft:/, '').replace(/^stripped_/, '');
+  for (const w of WOODS_BY_LENGTH()) if (b.startsWith(`${w}_`) && WOOD_PART.test(b.slice(w.length + 1))) return w;
+  return null;
+}
+
+/**
+ * The stone family of a block (`minecraft:deepslate_tile_stairs` -> 'deepslate'), or null. Buttons and pressure
+ * plates have none: they are fittings (an iron door's stone buttons), not building material.
+ */
+export function stoneFamilyOf(block) {
+  const b = qualify(block).replace(/^minecraft:/, '');
+  if (/_(button|pressure_plate)$/.test(b)) return null;
+  const m = /^(.*)_(stairs|slab|wall|fence)$/.exec(b);
+  const cands = m ? [m[1], `${m[1]}s`, `${m[1]}_block`] : [b];
+  for (const c of cands) if (STONE_MEMBER.has(c)) return STONE_MEMBER.get(c);
+  return null;
+}
+
+/** The inputs that pick a palette (what the sidecar's `palette` records); `preset` names a PALETTE_PRESETS entry. */
+export const PALETTE_INPUTS = ['preset', 'wood', 'stone', 'roof', 'accent'];
+
+/**
  * A material palette: what a design builds with, so the same source can be re-run as oak/cobblestone or
  * spruce/deepslate (phase 2 variants). Designs read `p.planks`, `p.log`, `p.stone`, `p.roofStairs`... never literal
  * wood or stone names, for anything that should follow the palette.
- * @param {{wood?:string, stone?:string, roof?:string, accent?:string, [k:string]:any}} o
- *   wood: a WOODS name; stone: a full stone block (cobblestone, stone_bricks, deepslate_tiles, bricks, sandstone...);
- *   roof: a wood name or a full block with stairs+slab (default: a darker wood than `wood`);
- *   accent: a second wood for trim (default: the roof wood if it is a wood, else `wood`).
- *   Any other key overrides the derived field (e.g. `wall: 'minecraft:white_terracotta'`).
+ * @param {{preset?:string, wood?:string, stone?:string, roof?:string, accent?:string, [k:string]:any}} o
+ *   preset: a PALETTE_PRESETS name to start from (its inputs and extras; the other keys override it);
+ *   wood: a WOODS name; stone: a full stone block with stairs and slab variants (cobblestone, stone_bricks,
+ *   deepslate_tiles, bricks, sandstone...); roof: a wood name or a full block with stairs+slab (default: a darker wood
+ *   than `wood`); accent: a second wood for trim (default: the roof wood if it is a wood, else `wood`).
+ *   Any other key overrides the derived field (e.g. `plaster: 'minecraft:white_terracotta'`).
+ * `p.inputs` is { preset?, wood, stone, roof, accent } with every default filled in: `palette(p.inputs)` rebuilds
+ * the same palette.
  */
 export function palette(o = {}) {
+  if (o.preset !== undefined) {
+    const base = PALETTE_PRESETS[o.preset];
+    if (!base) throw new Error(`palette: unknown preset '${o.preset}' (one of ${Object.keys(PALETTE_PRESETS).join(', ')})`);
+    // a preset's extras belong to its own stone / wood: an override of those drops the extras tied to them
+    const extras = Object.fromEntries(Object.entries(base).filter(([k, v]) => {
+      if (PALETTE_INPUTS.includes(k)) return false;
+      const stoneTied = k === 'stoneTrim' || !!stoneFamilyOf(v);
+      const woodTied = !!woodFamilyOf(v);
+      if (stoneTied && o.stone !== undefined && qualify(o.stone) !== qualify(base.stone)) return false;
+      if (woodTied && o.wood !== undefined && o.wood !== base.wood) return false;
+      return true;
+    }));
+    const inputs = Object.fromEntries(Object.entries(base).filter(([k]) => PALETTE_INPUTS.includes(k)));
+    o = { ...inputs, ...extras, ...o };
+  }
   const wood = o.wood ?? 'oak';
+  if (!WOODS.includes(wood)) throw new Error(`palette: unknown wood '${wood}' (one of ${WOODS.join(', ')})`);
   const stone = qualify(o.stone ?? 'cobblestone');
-  if (!has(stone)) throw new Error(`palette: unknown stone '${o.stone}'`);
+  if (!has(stone) || !isCube(normalize(stone))) throw new Error(`palette: stone '${o.stone}' is not a full vanilla block`);
+  const stoneStairs = variant(stone, 'stairs');
+  const stoneSlab = variant(stone, 'slab');
+  if (!stoneStairs || !stoneSlab) throw new Error(`palette: stone '${o.stone}' has no stairs/slab variant`);
+  const stoneShort = stone.replace(/^minecraft:/, '');
+  const family = STONE_MEMBER.get(stoneShort);
+  const kin = family ? STONE_FAMILIES[family] : [];
   const roof = o.roof ?? (DARK_WOODS.has(wood) ? (wood === 'dark_oak' ? 'spruce' : 'dark_oak') : 'dark_oak');
   const w = woodSet(wood);
-  const roofIsWood = has(`${roof}_planks`);
+  const roofIsWood = WOODS.includes(roof);
   const roofBlock = roofIsWood ? qualify(`${roof}_planks`) : qualify(roof);
   if (!has(roofBlock)) throw new Error(`palette: unknown roof '${roof}'`);
   const roofStairs = variant(roofBlock, 'stairs');
   const roofSlab = variant(roofBlock, 'slab');
   if (!roofStairs || !roofSlab) throw new Error(`palette: roof '${roof}' has no stairs/slab variant`);
   const accentWood = o.accent ?? (roofIsWood ? roof : wood);
+  if (!WOODS.includes(accentWood)) throw new Error(`palette: unknown accent wood '${accentWood}' (one of ${WOODS.join(', ')})`);
   const a = woodSet(accentWood);
   const p = {
-    wood, stoneName: stone.replace(/^minecraft:/, ''), roofName: roof, accentWood,
+    wood, stoneName: stoneShort, roofName: roof, accentWood,
     ...w,
     accentPlanks: a.planks, accentLog: a.strippedLog, accentStairs: a.stairs, accentSlab: a.slab, accentFence: a.fence,
     stone,
-    stoneStairs: variant(stone, 'stairs') ?? 'minecraft:cobblestone_stairs',
-    stoneSlab: variant(stone, 'slab') ?? 'minecraft:cobblestone_slab',
-    stoneWall: variant(stone, 'wall') ?? 'minecraft:cobblestone_wall',
+    stoneStairs,
+    stoneSlab,
+    // a wall of the same stone (or its family), else the accent fence
+    stoneWall: variant(stone, 'wall') ?? kin.map((k) => variant(k, 'wall')).find(Boolean) ?? a.fence,
+    // a second block of the same stone for bands and trim (polished, cut, smooth...), else the stone itself
+    stoneTrim: qualify(kin.find((k) => k !== stoneShort && has(k) && isCube(normalize(k))) ?? stoneShort),
     roofBlock, roofStairs, roofSlab,
     wall: w.planks, // main wall fill
     frame: w.log, // corner posts / timber frame
     floor: w.planks,
     foundation: stone,
+    plaster: 'minecraft:calcite', // infill between timber framing
     glass: 'minecraft:glass',
     pane: 'minecraft:glass_pane',
     light: 'minecraft:lantern',
     path: 'minecraft:dirt_path',
   };
   for (const [k, v] of Object.entries(o)) {
-    if (['wood', 'stone', 'roof', 'accent'].includes(k)) continue;
+    if (PALETTE_INPUTS.includes(k)) continue;
     p[k] = typeof v === 'string' ? qualify(v) : v;
   }
   for (const [k, v] of Object.entries(p)) {
     if (typeof v === 'string' && v.startsWith('minecraft:') && !has(v)) throw new Error(`palette: ${k} '${v}' is not a vanilla block`);
   }
+  p.inputs = Object.freeze({ ...(o.preset !== undefined ? { preset: o.preset } : {}), wood, stone: stoneShort, roof, accent: accentWood });
   p.with = (more) => palette({ ...o, ...more });
   return Object.freeze(p);
 }
 
-/** Named starting points (any can be tweaked: `PALETTES.rustic.with({ stone: 'mossy_cobblestone' })`). */
-export const PALETTES = {
-  rustic: palette({ wood: 'spruce', stone: 'cobblestone', roof: 'dark_oak' }),
-  oak: palette({ wood: 'oak', stone: 'stone_bricks', roof: 'spruce' }),
-  birch: palette({ wood: 'birch', stone: 'polished_andesite', roof: 'dark_oak' }),
-  dark: palette({ wood: 'dark_oak', stone: 'deepslate_bricks', roof: 'deepslate_tiles', accent: 'spruce' }),
-  desert: palette({ wood: 'jungle', stone: 'sandstone', roof: 'smooth_sandstone', accent: 'jungle' }),
-  brick: palette({ wood: 'oak', stone: 'bricks', roof: 'deepslate_tiles', accent: 'dark_oak' }),
-};
+/**
+ * The presets' inputs. A preset may set derived fields too (`plaster`, `stoneTrim`, ...): they follow from the
+ * preset name, so `palette({ preset })` with the recorded inputs always rebuilds the same palette.
+ */
+export const PALETTE_PRESETS = Object.freeze({
+  rustic: { wood: 'spruce', stone: 'cobblestone', roof: 'dark_oak' },
+  oak: { wood: 'oak', stone: 'stone_bricks', roof: 'spruce' },
+  birch: { wood: 'birch', stone: 'polished_andesite', roof: 'dark_oak' },
+  dark: { wood: 'dark_oak', stone: 'deepslate_bricks', roof: 'deepslate_tiles', accent: 'spruce' },
+  desert: { wood: 'jungle', stone: 'sandstone', roof: 'smooth_sandstone', accent: 'jungle', plaster: 'smooth_sandstone' },
+  brick: { wood: 'oak', stone: 'bricks', roof: 'deepslate_tiles', accent: 'dark_oak', stoneTrim: 'polished_deepslate' },
+  cherry: { wood: 'cherry', stone: 'polished_tuff', roof: 'dark_oak', accent: 'dark_oak', stoneTrim: 'tuff_bricks' },
+  mangrove: { wood: 'mangrove', stone: 'mud_bricks', roof: 'mangrove', accent: 'spruce', plaster: 'packed_mud' },
+  crimson: { wood: 'crimson', stone: 'polished_blackstone_bricks', roof: 'nether_bricks', accent: 'crimson', plaster: 'polished_blackstone' },
+  fortress: { wood: 'spruce', stone: 'stone_bricks', roof: 'deepslate_tiles', accent: 'dark_oak', stoneTrim: 'polished_andesite' },
+});
+
+/** The presets as palettes (any can be tweaked: `PALETTES.rustic.with({ stone: 'mossy_cobblestone' })`). */
+export const PALETTES = Object.freeze(Object.fromEntries(Object.keys(PALETTE_PRESETS).map((n) => [n, palette({ preset: n })])));
+
+/**
+ * A palette from the CLI / the sidecar: a preset name, or { preset?, wood?, stone?, roof?, accent? } (inputs only:
+ * any other key is refused, so a recorded palette means the same thing everywhere). Throws on anything invalid.
+ */
+export function resolvePalette(spec) {
+  if (typeof spec === 'string') {
+    if (!PALETTE_PRESETS[spec]) throw new Error(`palette: unknown preset '${spec}' (one of ${Object.keys(PALETTE_PRESETS).join(', ')})`);
+    return palette({ preset: spec });
+  }
+  if (!spec || typeof spec !== 'object' || Array.isArray(spec)) throw new Error('palette: must be a preset name or an object { preset?, wood?, stone?, roof?, accent? }');
+  for (const [k, v] of Object.entries(spec)) {
+    if (!PALETTE_INPUTS.includes(k)) throw new Error(`palette: unknown field '${k}' (allowed: ${PALETTE_INPUTS.join(', ')})`);
+    if (typeof v !== 'string' || !/^[a-z0-9_:]+$/.test(v)) throw new Error(`palette: ${k} must be a block or wood name`);
+  }
+  return palette(spec);
+}
+
+/** The palettes a player picks from, as their inputs: [{ name, preset, wood, stone, roof, accent }]. */
+export function paletteList() {
+  return Object.entries(PALETTES).map(([name, p]) => ({ name, ...p.inputs }));
+}
+
+/** Stones a palette accepts (full blocks with stairs and slab), roofs (woods, then such stones), for pickers. */
+export function paletteChoices() {
+  const stones = [...STONE_MEMBER.keys()].filter((s) => {
+    try { palette({ stone: s }); return true; } catch { return false; }
+  });
+  return { woods: [...WOODS], stones, roofs: [...WOODS, ...stones] };
+}
 
 // ------------------------------------------------------------------ blueprint
 
@@ -180,6 +305,9 @@ export class Blueprint {
       : { length: 4, width: 3, block: this.p.path, slab: this.p.stoneSlab, ...(o.approach ?? {}) };
     this.createdAt = o.createdAt;
     this.request = o.request;
+    /** set by build.mjs: the design's `params` export and the values this build used */
+    this.params = undefined;
+    this.values = undefined;
     this.cells = new Map(); // "x,y,z" -> { state:{name,props}, nbt }
     this.anchors = {};
     const og = o.origin ?? [0, 0, 0];
@@ -707,6 +835,10 @@ export class Blueprint {
     if (this.interiorBox) s.interior = { ...this.interiorBox };
     s.anchors = Object.fromEntries(Object.entries(this.anchors).map(([k, v]) => [k, { ...v }]));
     s.source = `${this.id}.mjs`;
+    // phase 2: what the build was made from (build.mjs sets params/values from the design's `params` export)
+    if (this.p?.inputs) s.palette = { ...this.p.inputs };
+    if (this.params) s.params = structuredClone(this.params);
+    if (this.values) s.values = { ...this.values };
     if (this.createdAt !== undefined) s.createdAt = this.createdAt;
     if (this.request !== undefined) s.request = this.request;
     return s;

@@ -137,7 +137,7 @@ describe('the kit pipeline (fixture kit)', () => {
     expect(fs.readdirSync(b.dir).sort()).toEqual(['gen_lakeside_cabin_3.blueprint.json', 'gen_lakeside_cabin_3.mjs', 'gen_lakeside_cabin_3.nbt', 'gen_lakeside_cabin_3.preview-front.png', 'gen_lakeside_cabin_3.preview-iso.png', 'gen_lakeside_cabin_3.preview-top.png']);
     const sc = JSON.parse(fs.readFileSync(b.json, 'utf8')) as Record<string, unknown>;
     expect(sc).toMatchObject({ id: 'gen_lakeside_cabin_3', name: 'Lakeside Cabin', type: 'cabin', source: 'gen_lakeside_cabin_3.mjs', createdAt: 1234, request: r });
-    expect(fs.readFileSync(b.source, 'utf8')).toContain("export const id = 'gen_lakeside_cabin_3'");
+    expect(fs.readFileSync(b.source!, 'utf8')).toContain("export const id = 'gen_lakeside_cabin_3'");
   });
 
   it('prepares a scratch dir: kit copy, BRIEF.md, CONTRACT.md, remix source', () => {

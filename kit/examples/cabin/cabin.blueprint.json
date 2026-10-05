@@ -31,6 +31,7 @@
     "minecraft:lantern",
     "minecraft:red_bed",
     "minecraft:spruce_door",
+    "minecraft:spruce_stairs",
     "minecraft:spruce_trapdoor",
     "minecraft:barrel",
     "minecraft:bookshelf",
@@ -40,8 +41,7 @@
     "minecraft:furnace",
     "minecraft:potted_fern",
     "minecraft:red_carpet",
-    "minecraft:spruce_pressure_plate",
-    "minecraft:spruce_stairs"
+    "minecraft:spruce_pressure_plate"
   ],
   "foundationBlock": "minecraft:cobblestone",
   "approach": {
@@ -88,5 +88,38 @@
       "pitch": 10.683
     }
   },
-  "source": "cabin.mjs"
+  "source": "cabin.mjs",
+  "palette": {
+    "preset": "rustic",
+    "wood": "spruce",
+    "stone": "cobblestone",
+    "roof": "dark_oak",
+    "accent": "dark_oak"
+  },
+  "params": {
+    "width": {
+      "type": "int",
+      "min": 7,
+      "max": 13,
+      "default": 9,
+      "label": "Width"
+    },
+    "depth": {
+      "type": "int",
+      "min": 6,
+      "max": 9,
+      "default": 7,
+      "label": "Depth"
+    },
+    "porch": {
+      "type": "bool",
+      "default": true,
+      "label": "Porch"
+    }
+  },
+  "values": {
+    "width": 9,
+    "depth": 7,
+    "porch": true
+  }
 }

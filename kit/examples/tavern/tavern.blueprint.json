@@ -90,5 +90,40 @@
       "pitch": 7.921
     }
   },
-  "source": "tavern.mjs"
+  "source": "tavern.mjs",
+  "palette": {
+    "preset": "rustic",
+    "wood": "spruce",
+    "stone": "cobblestone",
+    "roof": "dark_oak",
+    "accent": "dark_oak"
+  },
+  "params": {
+    "length": {
+      "type": "int",
+      "min": 12,
+      "max": 18,
+      "default": 14,
+      "label": "Length"
+    },
+    "roof": {
+      "type": "enum",
+      "options": [
+        "gable",
+        "hip"
+      ],
+      "default": "gable",
+      "label": "Roof"
+    },
+    "chimney": {
+      "type": "bool",
+      "default": true,
+      "label": "Chimney"
+    }
+  },
+  "values": {
+    "length": 14,
+    "roof": "gable",
+    "chimney": true
+  }
 }

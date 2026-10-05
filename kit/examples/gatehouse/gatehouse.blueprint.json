@@ -18,9 +18,8 @@
   "materials": [
     "minecraft:stone_bricks",
     "minecraft:spruce_planks",
-    "minecraft:stone_brick_slab",
     "minecraft:polished_andesite",
-    "minecraft:cobblestone",
+    "minecraft:stone_brick_slab",
     "minecraft:iron_bars",
     "minecraft:ladder",
     "minecraft:lantern",
@@ -74,5 +73,38 @@
       "pitch": 21.209
     }
   },
-  "source": "gatehouse.mjs"
+  "source": "gatehouse.mjs",
+  "palette": {
+    "preset": "fortress",
+    "wood": "spruce",
+    "stone": "stone_bricks",
+    "roof": "deepslate_tiles",
+    "accent": "dark_oak"
+  },
+  "params": {
+    "passage": {
+      "type": "int",
+      "min": 3,
+      "max": 5,
+      "default": 3,
+      "label": "Passage width"
+    },
+    "depth": {
+      "type": "int",
+      "min": 5,
+      "max": 9,
+      "default": 7,
+      "label": "Depth"
+    },
+    "crenels": {
+      "type": "bool",
+      "default": true,
+      "label": "Crenellations"
+    }
+  },
+  "values": {
+    "passage": 3,
+    "depth": 7,
+    "crenels": true
+  }
 }

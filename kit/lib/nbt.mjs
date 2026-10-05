@@ -15,6 +15,10 @@ export const nbt = {
   double: (v) => ({ t: 'double', v }),
   str: (v) => ({ t: 'string', v: String(v) }),
   intArray: (v) => ({ t: 'intArray', v }),
+  /** bytes as numbers -128..127 */
+  byteArray: (v) => ({ t: 'byteArray', v }),
+  /** longs as bigints */
+  longArray: (v) => ({ t: 'longArray', v: v.map((n) => BigInt(n)) }),
   /** items are tagged values of type `of` (use an empty array for an empty list). */
   list: (of, items = []) => ({ t: 'list', of, v: items }),
   compound: (obj = {}) => ({ t: 'compound', v: obj }),
@@ -43,6 +47,8 @@ function writePayload(o, tag) {
     case 'double': o.f64(tag.v); break;
     case 'string': o.str(tag.v); break;
     case 'intArray': o.i32(tag.v.length); tag.v.forEach((n) => o.i32(n)); break;
+    case 'byteArray': o.i32(tag.v.length); tag.v.forEach((n) => o.u8(n & 0xff)); break;
+    case 'longArray': o.i32(tag.v.length); tag.v.forEach((n) => o.i64(n)); break;
     case 'list':
       o.u8(tag.v.length === 0 ? TAG.end : TAG[tag.of]);
       o.i32(tag.v.length);
@@ -90,6 +96,16 @@ function readPayload(b, pos, type) {
       const n = b.readInt32BE(pos); const v = [];
       for (let i = 0; i < n; i++) v.push(b.readInt32BE(pos + 4 + 4 * i));
       return [nbt.intArray(v), pos + 4 + 4 * n];
+    }
+    case TAG.byteArray: {
+      const n = b.readInt32BE(pos); const v = [];
+      for (let i = 0; i < n; i++) v.push(b.readInt8(pos + 4 + i));
+      return [nbt.byteArray(v), pos + 4 + n];
+    }
+    case TAG.longArray: {
+      const n = b.readInt32BE(pos); const v = [];
+      for (let i = 0; i < n; i++) v.push(b.readBigInt64BE(pos + 4 + 8 * i));
+      return [{ t: 'longArray', v }, pos + 4 + 8 * n];
     }
     case TAG.list: {
       const et = b.readUInt8(pos); const n = b.readInt32BE(pos + 1); let p = pos + 5; const v = [];
