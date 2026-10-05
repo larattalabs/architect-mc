@@ -789,3 +789,23 @@ arguments and results, as a semi-stable test surface: changes are noted in its c
   calls one mod-provided tool. Cheap model, small budget. The cost report includes cache tokens.
 - A protocol-1 client (today's mod build, or the stub) still works against the new sidecar.
 - gate-verifier checks the result.
+
+## Phase 4a sidecar as built (protocol 2, recorded 2026-10-05)
+
+- **Negotiation:** `hello {client, version, token, protocols}`. No `protocols` means 1; no common protocol means `error` and close
+  code 4002. Protocol-1 clients get exactly the phase 1-3 messages (filtered by `toProtocol1`).
+- **Snapshot features from the sidecar:** `job.run`, `job.tools`, `blobs`, `budget`, `designs.v2`. The Java `features()` maps them
+  to its stable names (`jobs`, `jobTools`, `blobs`, `protocol2`, ...).
+- **Budget:** `maxBudgetUsd` passes the REMAINING budget to each `query()`, since the SDK counts per query. A query cut short by a
+  restart reports no cost, so the budget can overshoot by that query's spend (documented).
+- **Additions:**
+  - `job.tool.call` carries `owner` and `timeoutMs`;
+  - `Job` carries `resultBlob` (when the result is over 256 KB) and `usageLimitUntil`;
+  - `blob.put` takes `ext` and `more` (multi-frame uploads);
+  - frames are at most 16 MB (close 1009 above).
+- **Tool-call re-send** is matched by the hello `client` name (the mod sends `"mod"`), not by owner. The same `callId` can arrive
+  again after a reconnect or restart, so the client re-sends a cached answer. `ok:false` "no pending tool call" means drop it.
+- **Job results:** structured gives the validated JSON; agent gives `{text, json?}`. A structured schema miss gets one re-ask in the
+  same session. Agent jobs and designs share one slot; structured jobs run up to `jobConcurrency` (4).
+- **Unverified until the real-Claude gate:** the SDK keeps its `StructuredOutput` tool with `tools: []`, and `maxTurns` 4 leaves
+  room for its retries; resuming a session whose last entry is an unanswered MCP tool_use (a restart mid tool call).

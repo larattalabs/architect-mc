@@ -32,6 +32,7 @@ import { truncate } from '../util/text.js';
 import { ARCHITECT_NO_API_AUTH_MESSAGE, authEnv, authSourceOf, checkApiKey, directApiKey, type KeyCheck } from './auth.js';
 import { designFixPrompt, designPrompt, designStepFor, designSystemPrompt, MAX_DESIGN_ROUNDS, RESTART_PROMPT } from './brief.js';
 import { isAuthText, probeFailure } from './failures.js';
+import { costFromResult, CostMeter, zeroCost } from '../jobs/cost.js';
 import { connectorHook, denyHook, designVerdict } from './permissions.js';
 import { loadSdk, loadZod, type Sdk } from './sdk.js';
 import { limitFromText, StreamMapper, type RateLimitReport, type TurnStats } from './stream.js';
@@ -61,7 +62,8 @@ export interface ClaudeDesignerOptions {
   keyCheck?: KeyCheck;
 }
 
-interface Running {
+/** A running CLI turn (a design turn or a job query): its abort and its process. */
+export interface Running {
   abort: AbortController;
   reason?: AbortReason;
   child?: ChildProcess;
@@ -118,6 +120,9 @@ export class ClaudeDesigner implements Designer {
   // ---- lifecycle ------------------------------------------------------------------------------
 
   async start(): Promise<void> {
+    this.sc.heavy.onFree(() => {
+      if (!this.stopping) this.kick();
+    });
     await this.checkAuth();
     this.armLimitTimer();
     this.kick();
@@ -275,6 +280,21 @@ export class ClaudeDesigner implements Designer {
     return q;
   }
 
+  /** The SDK's query() (or the injected one), for the job driver. */
+  queryFunction(): QueryFn {
+    return this.queryFn();
+  }
+
+  /** The CLI env for a job query (the same as a design turn's). */
+  cliEnv(cwd: string): Record<string, string | undefined> {
+    return this.env(cwd);
+  }
+
+  /** The shared usage limit changed elsewhere (a job hit it): wake up when it ends. */
+  limitChanged(): void {
+    this.armLimitTimer();
+  }
+
   // ---- usage limits ---------------------------------------------------------------------------
 
   private limited(now = Date.now()): boolean {
@@ -291,6 +311,7 @@ export class ClaudeDesigner implements Designer {
     this.sc.store.markDirty();
     this.sc.log.warn(`usage limit reached${type ? ` (${type.replace(/_/g, ' ')})` : ''}: designs wait until ${clock(until)}`);
     this.armLimitTimer();
+    this.sc.jobs.limitChanged();
     this.sc.statusChanged();
   }
 
@@ -303,7 +324,11 @@ export class ClaudeDesigner implements Designer {
     if (this.limitTimer) clearTimeout(this.limitTimer);
     this.limitTimer = undefined;
     const l = this.sc.store.data.limit;
-    if (!l) return;
+    if (!l) {
+      // (cleared elsewhere, e.g. by the job runner's own wake-up)
+      this.kick();
+      return;
+    }
     const left = l.until - Date.now();
     if (left <= 0) {
       delete this.sc.store.data.limit;
@@ -331,6 +356,8 @@ export class ClaudeDesigner implements Designer {
       return;
     }
     if (!this.canStart()) return;
+    // one design or agent job at a time (agent jobs share the design queue's slot)
+    if (!this.sc.heavy.tryAcquire('design')) return;
     const id = this.queue.shift()!;
     const cur: Current = { id, done: Promise.resolve() };
     this.current = cur;
@@ -343,6 +370,7 @@ export class ClaudeDesigner implements Designer {
       .finally(() => {
         if (this.current === cur) this.current = undefined;
         this.sc.statusChanged();
+        this.sc.heavy.release('design');
         if (!this.stopping) this.kick();
       });
   }
@@ -384,8 +412,14 @@ export class ClaudeDesigner implements Designer {
     sc.store.markDirty();
     const scratch = prepareScratch({ dataDir: cfg.dataDir, kitDir: cfg.kitDir, libraryDir: cfg.libraryDir, design: d, bp: w.bp });
     const sessionKey = `design:${id}`;
+    const budget = req.budgetUsd;
+    const meter = new CostMeter(w.cost ?? zeroCost());
     for (;;) {
       if (this.cancelled(id)) return;
+      if (budget !== undefined && meter.remaining(budget) <= 0) {
+        sc.designFailed(id, 'budget', `failed: budget ($${meter.total().usd.toFixed(4)} of $${budget})`);
+        return;
+      }
       const resume = sc.store.data.sessions[sessionKey]?.sessionId;
       const prompt = w.pending ?? (resume ? RESTART_PROMPT : designPrompt(w.bp));
       w.round++;
@@ -393,21 +427,33 @@ export class ClaudeDesigner implements Designer {
       sc.designStep(id, 'designing', w.round === 1 ? 'the designer is reading the brief' : `revising the design (round ${w.round} of ${MAX_DESIGN_ROUNDS})`);
       const turn: Running = { abort: new AbortController() };
       cur.turn = turn;
+      // the SDK's maxBudgetUsd counts only this query(): give it what is left
+      const caps = [this.cfg.maxBudgetUsd, budget !== undefined ? meter.remaining(budget) : undefined].filter((n): n is number => typeof n === 'number' && n > 0);
+      meter.begin(!!resume);
       const { stats, reason } = await this.runTurn(turn, {
         id,
         bp: w.bp,
         sessionKey,
         cwd: scratch,
         prompt,
+        model: req.model ?? this.cfg.designModel,
+        ...(caps.length ? { maxBudgetUsd: Math.min(...caps) } : {}),
         mcp: await this.designMcp(id),
         ...(resume ? { resume } : {}),
         onMessage: (msg) => {
           const step = designStepFor(msg, w.bp);
           if (step) sc.designStep(id, 'designing', step);
+          if (msg.type === 'result') sc.designCost(id, meter.observe(costFromResult(msg as unknown as Record<string, unknown>)));
         },
       });
       cur.turn = undefined;
+      w.cost = meter.commit();
+      sc.store.markDirty();
       if (reason === 'cancel' || this.cancelled(id)) return;
+      if (stats.subtype === 'error_max_budget_usd' && budget !== undefined && reason !== 'shutdown' && !this.stopping) {
+        sc.designFailed(id, 'budget', `failed: budget ($${w.cost.usd.toFixed(4)} of $${budget})`);
+        return;
+      }
       if (reason === 'shutdown' || this.stopping) {
         // picked up again on the next start (resuming this session)
         w.round--;
@@ -454,7 +500,7 @@ export class ClaudeDesigner implements Designer {
         sidecar: res.sidecar!,
         source: path.join(scratch, KIT, 'designs', `${w.bp}.mjs`),
         previews: r.files,
-        meta: { name: req.name, request: req, createdAt: sc.now() },
+        meta: { name: req.name, request: req, createdAt: sc.now(), ...(req.ext && Object.keys(req.ext).length ? { extra: { ext: req.ext } } : {}) },
       });
       const s = res.sidecar!.size!;
       const notes = [r.skipped ? 'no renderer' : r.error ? `previews: ${truncate(r.error, 80)}` : '', res.warnings.length ? `${res.warnings.length} checker warning(s)` : ''].filter(Boolean).join('; ');
@@ -482,14 +528,14 @@ export class ClaudeDesigner implements Designer {
     return scrubEnv(authEnv(base, this.authInputs()));
   }
 
-  private policyContext(cwd: string): PolicyContext {
+  policyContext(cwd: string, mcpServer = MCP_SERVER): PolicyContext {
     const e = this.sc.endpoint;
     return {
       role: 'worker',
       cwd,
       readDirs: [],
       tempDirs: [],
-      mcpServer: MCP_SERVER,
+      mcpServer,
       foreman: { home: this.sc.config.dataDir, ...(e ? { port: e.port, tokenFile: e.tokenFile } : {}) },
     };
   }
@@ -518,12 +564,12 @@ export class ClaudeDesigner implements Designer {
   }
 
   /** The SDK options of a design turn (exported for tests through runTurn's queryFn). */
-  turnOptions(turn: Running, spec: { bp: string; cwd: string; mcp: McpServerConfig; resume?: string }): Options {
+  turnOptions(turn: Running, spec: { bp: string; cwd: string; mcp: McpServerConfig; resume?: string; model?: string; maxBudgetUsd?: number }): Options {
     const cwd = spec.cwd;
     const report = (tool: string, why: string) => this.sc.log.info(`designer blocked: ${tool} (${truncate(why, 160)})`);
     return {
       cwd,
-      model: this.cfg.designModel,
+      model: spec.model ?? this.cfg.designModel,
       effort: this.cfg.effort,
       maxTurns: this.cfg.maxTurns,
       settingSources: [],
@@ -546,17 +592,17 @@ export class ClaudeDesigner implements Designer {
       env: this.env(cwd),
       spawnClaudeCodeProcess: this.spawner(turn, 'designer'),
       ...(spec.resume ? { resume: spec.resume } : {}),
-      ...(this.cfg.maxBudgetUsd ? { maxBudgetUsd: this.cfg.maxBudgetUsd } : {}),
+      ...(spec.maxBudgetUsd !== undefined ? { maxBudgetUsd: spec.maxBudgetUsd } : this.cfg.maxBudgetUsd ? { maxBudgetUsd: this.cfg.maxBudgetUsd } : {}),
     };
   }
 
   private async runTurn(
     turn: Running,
-    spec: { id: string; bp: string; sessionKey: string; cwd: string; prompt: string; mcp: McpServerConfig; resume?: string; onMessage?(msg: SDKMessage): void },
+    spec: { id: string; bp: string; sessionKey: string; cwd: string; prompt: string; mcp: McpServerConfig; resume?: string; model?: string; maxBudgetUsd?: number; onMessage?(msg: SDKMessage): void },
   ): Promise<{ stats: TurnStats; reason?: AbortReason }> {
     const label = `designer ${spec.id}`;
     const mapper = new StreamMapper(this.sc.log, label, (r) => this.onRateLimit(r));
-    this.sc.log.info(`${label}: ${spec.resume ? 'resuming' : 'starting'} (${this.cfg.designModel}, effort ${this.cfg.effort})`);
+    this.sc.log.info(`${label}: ${spec.resume ? 'resuming' : 'starting'} (${spec.model ?? this.cfg.designModel}, effort ${this.cfg.effort}${spec.maxBudgetUsd !== undefined ? `, budget left $${spec.maxBudgetUsd}` : ''})`);
     let stats: TurnStats;
     const timer = setTimeout(() => this.abortTurn(turn, 'timeout'), DESIGN_TURN_TIMEOUT_MS);
     timer.unref?.();
@@ -635,7 +681,7 @@ export class ClaudeDesigner implements Designer {
    * The CLI is spawned by us (same as the SDK's local spawn) so its pid is known: an aborted turn's
    * whole process tree can be ended. A bare `node` command becomes this node (minimal PATH).
    */
-  private spawner(entry: Running | undefined, label: string): NonNullable<Options['spawnClaudeCodeProcess']> {
+  spawner(entry: Running | undefined, label: string): NonNullable<Options['spawnClaudeCodeProcess']> {
     return (o) => {
       const command = o.command === 'node' ? process.execPath : o.command;
       const child = spawn(command, o.args, { cwd: o.cwd, env: scrubEnv(o.env as NodeJS.ProcessEnv), stdio: ['pipe', 'pipe', 'pipe'], signal: o.signal, windowsHide: true });
@@ -651,7 +697,7 @@ export class ClaudeDesigner implements Designer {
   }
 
   /** Abort a turn: remember why, snapshot its process tree while the CLI is still alive, close it. */
-  private abortTurn(r: Running, reason: AbortReason): void {
+  abortTurn(r: Running, reason: AbortReason): void {
     r.reason ??= reason;
     const pid = r.child?.pid;
     if (pid && alive(r.child) && !r.tree) r.tree = processTable().then((t) => (t ? descendantsOf(t, pid) : undefined)).catch(() => undefined);
@@ -662,7 +708,7 @@ export class ClaudeDesigner implements Designer {
    * Make sure an aborted turn's CLI process and everything it started are gone (the SDK's close()
    * gives the CLI ~2 s; then its tree is killed, and orphans that outlived it).
    */
-  private reap(r: Running, graceMs = 4000): Promise<void> {
+  reap(r: Running, graceMs = 4000): Promise<void> {
     r.reaping ??= this.doReap(r, graceMs).catch((e) => this.sc.log.warn(`clean-up of a stopped design turn: ${(e as Error).message}`));
     return r.reaping;
   }

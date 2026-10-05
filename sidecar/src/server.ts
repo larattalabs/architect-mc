@@ -3,19 +3,38 @@
 // A client must send `hello` with the client token (clienttoken.ts) first. Anything before a valid
 // hello is refused, and a hello with a missing or wrong token gets an `error` and the connection is
 // closed (code 4001). A valid hello is answered with a `snapshot`; after that the client gets every
-// broadcast (`status`, `design.upsert`). Any browser Origin (also `null`) and non-loopback Host
+// broadcast (`status`, `design.upsert`, ...). Any browser Origin (also `null`) and non-loopback Host
 // headers are rejected at the upgrade, so a web page cannot reach the sidecar.
+//
+// Protocol (docs/CONTRACT.md "Versioning"): the hello's `protocols` picks the connection's
+// protocol. A protocol-1 connection (no `protocols`) parses frames with the phase 1-3 messages only
+// and gets every outbound message through `toProtocol1`: no job.* messages, no v2 fields.
 import type { IncomingMessage } from 'node:http';
 import { WebSocketServer, type WebSocket } from 'ws';
 import { tokenMatches } from './clienttoken.js';
 import type { Logger } from './context.js';
-import { parseClientMessage, PROTOCOL_VERSION, ServerMessage, type ClientMessage, type Outbound } from './protocol.js';
+import { chooseProtocol, parseClientMessage, PROTOCOL_VERSION, PROTOCOLS, ServerMessage, toProtocol1, type ClientMessage, type Outbound, type Protocol } from './protocol.js';
+
+/** A connected client, as the sidecar core sees it. */
+export interface ClientHandle {
+  readonly id: number;
+  /** the hello's `client` ("mod", "cli"; "client" when absent) */
+  readonly name: string;
+  readonly protocol: Protocol;
+  /** `client.paused` (the game is paused): tool-call clocks of this client stop */
+  paused: boolean;
+  /** still connected and trusted */
+  readonly open: boolean;
+  send(m: Outbound): void;
+}
 
 /** What the server drives (the Sidecar). */
 export interface ServerTarget {
   /** a validated message from a client that sent a valid hello (hello included) */
-  handle(msg: ClientMessage, reply: (m: Outbound) => void): Promise<void>;
+  handle(msg: ClientMessage, reply: (m: Outbound) => void, client?: ClientHandle): Promise<void>;
   subscribe(fn: (m: Outbound) => void): () => void;
+  /** a trusted client disconnected */
+  clientGone?(client: ClientHandle): void;
 }
 
 export interface ServerOptions {
@@ -33,7 +52,11 @@ const LOOPBACK_HOST = /^(127\.0\.0\.1|localhost|\[::1\])(:\d+)?$/i;
 
 export const TOKEN_REFUSED = 'refused: hello needs the client token from <data>/client.token';
 export const HELLO_FIRST = 'refused: send hello with the client token first';
+export const NO_COMMON_PROTOCOL = `refused: no common protocol (this sidecar speaks ${PROTOCOLS.join(', ')})`;
 export const CLOSE_BAD_TOKEN = 4001;
+export const CLOSE_BAD_PROTOCOL = 4002;
+/** One frame. Blobs bigger than this go as several `blob.put` frames (`more: true`). */
+export const MAX_FRAME_BYTES = 16 * 1024 * 1024;
 
 /**
  * Why a WebSocket upgrade is refused, or undefined to accept. The mod (Java HttpClient) and our
@@ -49,13 +72,30 @@ export function refuseReason(req: IncomingMessage): string | undefined {
   return undefined;
 }
 
-interface Client {
-  ws: WebSocket;
-  id: number;
+class Client implements ClientHandle {
   /** sent a hello with the right token */
-  trusted: boolean;
-  name: string;
-  alive: boolean;
+  trusted = false;
+  name = 'client';
+  label: string;
+  alive = true;
+  protocol: Protocol = 1;
+  paused = false;
+
+  constructor(
+    readonly ws: WebSocket,
+    readonly id: number,
+    private server: SidecarServer,
+  ) {
+    this.label = `client#${id}`;
+  }
+
+  get open(): boolean {
+    return this.trusted && this.ws.readyState === this.ws.OPEN;
+  }
+
+  send(m: Outbound): void {
+    this.server.sendTo(this, m);
+  }
 }
 
 export class SidecarServer {
@@ -80,7 +120,7 @@ export class SidecarServer {
       const wss = new WebSocketServer({
         host: this.opts.host,
         port: this.opts.port,
-        maxPayload: 1024 * 1024,
+        maxPayload: MAX_FRAME_BYTES,
         verifyClient: (info: { origin?: string; req: IncomingMessage }) => {
           const why = refuseReason(info.req);
           if (!why) return true;
@@ -117,7 +157,7 @@ export class SidecarServer {
   }
 
   private onConnection(ws: WebSocket, req: IncomingMessage): void {
-    const client: Client = { ws, id: this.nextId++, trusted: false, name: `client#${this.nextId - 1}`, alive: true };
+    const client = new Client(ws, this.nextId++, this);
     this.clients.add(client);
     this.opts.log.info(`client #${client.id} connected from ${req.socket.remoteAddress ?? '?'}`);
     ws.on('pong', () => {
@@ -126,46 +166,64 @@ export class SidecarServer {
     ws.on('message', (data, isBinary) => {
       client.alive = true;
       if (isBinary) {
-        this.send(client, { type: 'error', message: 'binary frames are not supported' });
+        this.sendTo(client, { type: 'error', message: 'binary frames are not supported' });
         return;
       }
       // (the raw frame is never logged: an auth.set carries an API key)
-      const parsed = parseClientMessage(data.toString());
+      const parsed = parseClientMessage(data.toString(), client.trusted ? client.protocol : 2);
       if (!parsed.ok) {
         if (!client.trusted) return this.refuse(client, HELLO_FIRST, parsed.id);
-        this.send(client, { type: 'error', message: `bad message: ${parsed.error}`, ...(parsed.id ? { re: parsed.id } : {}) });
-        if (parsed.id) this.send(client, { type: 'ack', re: parsed.id, ok: false, error: parsed.error });
+        this.sendTo(client, { type: 'error', message: `bad message: ${parsed.error}`, ...(parsed.id ? { re: parsed.id } : {}) });
+        if (parsed.id) this.sendTo(client, { type: 'ack', re: parsed.id, ok: false, error: parsed.error });
         return;
       }
       const msg = parsed.msg;
       if (msg.type === 'hello') {
         if (!tokenMatches(this.opts.token, msg.token)) {
           this.opts.log.warn(`client #${client.id}: hello ${msg.token ? 'with a wrong' : 'without a'} client token: refused`);
-          this.send(client, { type: 'error', message: TOKEN_REFUSED, ...(msg.id ? { re: msg.id } : {}) });
-          if (msg.id) this.send(client, { type: 'ack', re: msg.id, ok: false, error: TOKEN_REFUSED });
+          this.sendTo(client, { type: 'error', message: TOKEN_REFUSED, ...(msg.id ? { re: msg.id } : {}) });
+          if (msg.id) this.sendTo(client, { type: 'ack', re: msg.id, ok: false, error: TOKEN_REFUSED });
           client.ws.close(CLOSE_BAD_TOKEN, 'bad client token');
           return;
         }
+        const protocol = chooseProtocol(msg.protocols);
+        if (protocol === undefined) {
+          this.opts.log.warn(`client #${client.id}: hello offers protocols ${JSON.stringify(msg.protocols)}: none in common`);
+          this.sendTo(client, { type: 'error', message: NO_COMMON_PROTOCOL, ...(msg.id ? { re: msg.id } : {}) });
+          if (msg.id) this.sendTo(client, { type: 'ack', re: msg.id, ok: false, error: NO_COMMON_PROTOCOL });
+          client.ws.close(CLOSE_BAD_PROTOCOL, 'no common protocol');
+          return;
+        }
         client.trusted = true;
-        client.name = `${msg.client ?? 'client'}#${client.id}${msg.version ? ` (${msg.version})` : ''}`;
-        this.opts.log.info(`hello from ${client.name}`);
+        client.protocol = protocol;
+        client.name = msg.client ?? 'client';
+        client.label = `${client.name}#${client.id}${msg.version ? ` (${msg.version})` : ''}`;
+        this.opts.log.info(`hello from ${client.label}, protocol ${protocol}`);
       } else if (!client.trusted) return this.refuse(client, HELLO_FIRST, msg.id);
-      void this.target.handle(msg, (out) => this.send(client, out)).catch((e) => this.opts.log.error(`handling ${msg.type}: ${(e as Error).message}`));
+      void this.target.handle(msg, (out) => this.sendTo(client, out), client).catch((e) => this.opts.log.error(`handling ${msg.type}: ${(e as Error).message}`));
     });
     ws.on('close', () => {
       this.clients.delete(client);
       this.opts.log.info(`client #${client.id} disconnected`);
+      if (client.trusted) {
+        try {
+          this.target.clientGone?.(client);
+        } catch (e) {
+          this.opts.log.error(`clientGone: ${(e as Error).message}`);
+        }
+      }
     });
     ws.on('error', (e) => this.opts.log.warn(`client #${client.id}: ${e.message}`));
   }
 
   private refuse(client: Client, why: string, re: string | undefined): void {
-    this.send(client, { type: 'error', message: why, ...(re ? { re } : {}) });
-    if (re) this.send(client, { type: 'ack', re, ok: false, error: why });
+    this.sendTo(client, { type: 'error', message: why, ...(re ? { re } : {}) });
+    if (re) this.sendTo(client, { type: 'ack', re, ok: false, error: why });
   }
 
-  private serialize(m: Outbound): string {
-    const full = { v: PROTOCOL_VERSION, ...m };
+  /** The frame for a protocol, or undefined when that protocol has no such message. */
+  private serialize(m: Outbound, protocol: Protocol): string | undefined {
+    const full = { v: PROTOCOL_VERSION, ...m } as Record<string, unknown>;
     if (this.opts.validateOutbound) {
       const r = ServerMessage.safeParse(full);
       if (!r.success) {
@@ -173,20 +231,26 @@ export class SidecarServer {
         throw new Error(`outbound ${m.type} violates protocol`);
       }
     }
+    if (protocol === 1) {
+      const v1 = toProtocol1(full);
+      return v1 ? JSON.stringify(v1) : undefined;
+    }
     return JSON.stringify(full);
   }
 
-  private send(c: Client, m: Outbound): void {
+  sendTo(c: Client, m: Outbound): void {
     if (c.ws.readyState !== c.ws.OPEN) return;
-    c.ws.send(this.serialize(m));
+    const s = this.serialize(m, c.protocol);
+    if (s !== undefined) c.ws.send(s);
   }
 
   broadcast(m: Outbound): void {
-    let s: string | undefined;
+    const frames = new Map<Protocol, string | undefined>();
     for (const c of this.clients) {
       if (!c.trusted || c.ws.readyState !== c.ws.OPEN) continue;
-      s ??= this.serialize(m);
-      c.ws.send(s);
+      if (!frames.has(c.protocol)) frames.set(c.protocol, this.serialize(m, c.protocol));
+      const s = frames.get(c.protocol);
+      if (s !== undefined) c.ws.send(s);
     }
   }
 
