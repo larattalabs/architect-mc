@@ -67,6 +67,21 @@ Each phase ends at a gate that is checked in a dev client (DevBridge screenshots
 - **Gate:** from a fresh dev world, generate a cabin at preset M and a tower on a marked plot; both pass
   the checker, place, and Remove restores the terrain exactly.
 
+**Status: PASSED 2026-10-04** (independent gate-verifier). A real Claude cabin (preset M, 13x14x16) and a tower on an
+11x11 plot (11x30x11) each passed the pristine-kit check on round 1, about 4 min and about $1 each. Both were placed through the ghost on rough
+terrain and removed with the snapshot box restored cell for cell. The bundled first-run launcher path works
+(extract, npm ci, spawn); the run found and fixed a first-run crash. Evidence: `artifacts/gate1/REPORT.md` (local).
+
+Carried forward (known issues):
+- **Leaf decay at the box edge:** clearing logs inside a site lets leaves just outside decay while it stands; Remove can't
+  restore them (4 leaves on the tower run). Fix idea: keep leaves within a few blocks persistent while a site stands, or snapshot
+  a leaf margin.
+- **BedSafety** (from AgentCraft) was dropped in the port: template beds in the Nether/End explode on use. Bring it back before
+  phase 3 (the bundled cabin has a bed).
+- Leaves on a template's unwritten floor-row cells stay (below the ground row, TerrainFit does not clear them).
+- The plot outline is hard to see under trees; the notes field and long toasts need polish.
+- No-cheats play is untested (the commands have no permission check; the dev world has cheats on).
+
 ### Phase 2: Library
 - Every design keeps its **parametric source** (`.mjs`) next to its `.nbt`, sidecar and previews. The
   source is the asset; the `.nbt` is build output. (AgentCraft keeps the source only in a scratch dir, and
