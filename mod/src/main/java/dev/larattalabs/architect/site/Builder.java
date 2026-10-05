@@ -1353,7 +1353,10 @@ public final class Builder {
 						var over = cover.get(m.asLong());
 						if (over != null) {
 							int qi = r == null ? -1 : r.queuePos(m);
-							if (qi >= 0 && !free.get(qi) && WorldJournal.state(over).is(r.target[qi].getBlock())) {
+							// displaced: the covering site's before is this site's block and the world no longer holds it there (a block
+							// the covering site kept stays in the world; it drops once, with the covering site's removal)
+							if (qi >= 0 && !free.get(qi) && WorldJournal.state(over).is(r.target[qi].getBlock()) && !level.getBlockState(m).is(r.target[qi]
+								.getBlock())) {
 								tally.add(Refunds.Outcome.REFUND, r.cost.get(qi));
 							}
 							continue;
