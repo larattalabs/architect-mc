@@ -410,12 +410,19 @@ final class PlaceJob implements Placement.Job {
 		cursor = 0;
 	}
 
-	/** Waits for {@code f} until {@code deadline} at most (the server thread only waits inside the placement budget). */
+	/**
+	 * How far past the placement budget the server thread waits for a journal commit (the I/O thread's encode, write and
+	 * read-back of a kit building take 1-5 ms): a placement then does not lose a whole tick per commit. 4d ran its job start
+	 * unsliced (up to 12 ms); this bounds the overrun at 6 ms.
+	 */
+	static final long COMMIT_GRACE_NANOS = 6_000_000L;
+
+	/** Waits for {@code f} until {@code deadline} plus {@link #COMMIT_GRACE_NANOS} at most. */
 	static boolean waitFor(java.util.concurrent.CompletableFuture<?> f, long deadline) {
 		if (f.isDone()) {
 			return true;
 		}
-		long left = deadline - System.nanoTime();
+		long left = deadline + COMMIT_GRACE_NANOS - System.nanoTime();
 		if (left <= 0) {
 			return false;
 		}
