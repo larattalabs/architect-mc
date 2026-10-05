@@ -310,7 +310,7 @@ async function run(name) {
     error = String(e?.stack ?? e);
     failures++;
   }
-  if (name !== 'all' && name !== 'eval') write(`${name}.json`, { step: name, seconds: (Date.now() - t0) / 1000, error, results: { ...results }, data });
+  if (!['all', 'eval', 'stop', 'start'].includes(name)) write(`${name}.json`, { step: name, seconds: (Date.now() - t0) / 1000, error, results: { ...results }, data });
 }
 
 // ================================================================== the steps
@@ -388,6 +388,23 @@ function flattest(cols, w, d, step = 4) {
   }
   return best;
 }
+
+/** `stop`: quits the gate client (by PID if it hangs). `start [world]`: moves the run worktree to this worktree's HEAD and starts it. */
+steps.stop = async () => {
+  try {
+    await connect(PORT, GAME_DIR, 10_000);
+  } catch {
+    // not answering: killed by PID below
+  }
+  await stopClient();
+  return { pids: clientPids() };
+};
+steps.start = async () => {
+  const head = execFileSync('git', ['-C', root, 'rev-parse', 'HEAD']).toString().trim();
+  execFileSync('git', ['-C', RUN, 'checkout', '-q', '--detach', head]);
+  await startClient(process.argv[3] ?? 'G4E Smoke');
+  return { head, pids: clientPids() };
+};
 
 /** Debugging: `node tools/gate4e.mjs eval '<async js>'` with the helpers in scope; prints the value. */
 steps.eval = async () => {
