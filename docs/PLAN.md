@@ -171,6 +171,13 @@ own. A9 is phase 3 itself. Order (Noah can reorder):
 
 Round 2 (R1-R11, `steward-mc/docs/ARCHITECT-ASKS.md`) is all accepted 2026-10-05 and folded in above.
 
+**Phase 4a status: PASSED 2026-10-05** (gate-verifier; `artifacts/gate4a/REPORT.md`, local). Public API 1.1.0 / mod 0.4.1,
+published to GitHub Packages (0.4.0, 0.4.1) and resolved by Steward's CI. API checks 44-47 per run with 0 failures
+(stub/protocol 1 and real sidecar/protocol 2). Jobs: 32 sim checks plus 8 catch-up checks. Real Claude: structured jobs on
+Steward's concept-card schema (validated with Ajv), an agent job with a tool, and a restart mid tool call; $0.007-0.019 each.
+Protocol 1 is unchanged. Open: Java API -> real Claude end to end is covered by sim only (Steward's first in-game concept card
+will exercise it); the paused-game test used a 10 s timeout.
+
 Conflicts with Architect's current contracts, to resolve in those phases:
 - **Sites never overlap**, and placement refuses an overlap. Settlements put buildings on top of a macro terrain site, so
   they need **nested sites**: a child inside a parent, with remove order child-first and the parent's snapshot unaffected.
