@@ -1414,3 +1414,825 @@ Where this section and the text above disagree, this section wins.
   itself (start to after the last end-of-tick handler).
 - Commands, DevBridge hooks and apitest steps: README "Controls", docs/DEVBRIDGE.md changelog. Gate evidence:
   `artifacts/gate4d/REPORT.md`, `throughput.json` (local).
+
+# Phase 4e contract: journal-backed sites (A5a, R1) - DRAFT for Steward review
+
+Goal: sites may **overlap and layer**. Examples: a road, then a house whose approach meets it; a building, then a later
+extension over its side wall; a lot over a terrain pad. **Remove stays exact in any order**, and **roads become sites**.
+The 4d API keeps working unchanged. Underneath it, the box-snapshot backend (one `.nbt` per site in `architect-sites/`)
+is replaced by a per-cell **world journal**, ported from AgentCraft's `WorldJournal` (contract J1). Phases 1-4d above
+still hold except where this section changes them; where they disagree, this section wins.
+
+Sources for this draft:
+- `docs/PLAN.md`: the 4e row, and the 4d caveats.
+- "Phase 4d as built" and "Changes from Steward's review" (the approach-meets-road promise).
+- AgentCraft `~/Developer/agentcraft`: `mod/src/main/java/dev/agentcraft/journal/`, last changed `ab08a02`, and
+  docs/BUILDINGS.md "World journal", "Held leaves" and "Roads".
+- Steward: `steward-mc/docs/A5B-SPEC.md` §4 N1-N9 and §6a, and `A4D-REVIEW.md`.
+
+## What stays the same
+
+- **The write paths.** Every block an instant placement, a ticked placement (`PlaceJob`, `TemplateWriter`), a
+  construction builder or a restore (`restoreQuietly`, `RestoreJob`, `TickDeferral`, the leaf ring) writes is unchanged.
+  Only where the "before" comes from and how the undo is chosen change.
+- **The bar.** A site that overlaps nothing is placed and removed with **exactly the same block writes as in 4d**. The 4d
+  gate re-runs unchanged as a regression (see the gate).
+- **The 4d API.** Every 1.4.0 method keeps its meaning, and a caller that passes no overlap policy gets 4d's refusal:
+  **overlap stays REFUSE by default**.
+- **The site.** It stays the user-facing handle: id, record in `architect-sites.json`, owner, ext, group, stage. A site now
+  names its journal entries instead of a snapshot file.
+
+## The journal
+
+### Port map (AgentCraft `dev.agentcraft.journal` -> `dev.larattalabs.architect.journal`)
+
+| AgentCraft | Here | How |
+|---|---|---|
+| `Journal.java` (rules: `planUndo`, `reactivate`, `transfer`, `absorb`, `stack`, `Value`, `Cell`, `Entry`, `Policy`) | `journal/Journal.java` | **Verbatim** except for three additions: the PLACING status, a `Value` cache key, and per-cell layers stored sparsely (below). Pure, no world. The rules work per position, so they run unchanged on one chunk section at a time (see "Per-section planning"). |
+| `JournalTest` (16 tests) | `JournalTest` | **Verbatim** (package rename), plus the property tests in the gate. |
+| `JournalStore.java` (index + one gzip NBT file per entry, generations, atomic index commit, tidy at open) | `journal/JournalStore.java` | **Adapted.** The commit protocol, generations, read-back and tidy rules are kept. The files are sharded per entry per 512x512 region, the index gains a section map, and I/O runs on a journal I/O thread. |
+| `JournalNbt.java` (entry encoding with a per-file palette; template <-> cells) | `journal/JournalNbt.java` | **Adapted.** Same palette encoding, grouped by section, with a 12-bit position within the section instead of a `long` per cell, and the layer per entry with per-cell overrides. The template conversion is kept for migration and for `TemplateWriter` input. |
+| `WorldJournal.java` (open/close, capture, `apply`, `planUndo` against a level, DevBridge JSON) | `journal/WorldJournal.java` | **Partly reused.** Open/close, `unavailable`, `valueAt` and `state()` with its cache, and `dev.journal.state`/`at` are kept. `activeTouching` (which loads whole entries by bounding box) is replaced by the section index. `apply` is **replaced**: undo writes go through Architect's 4d writers (below). |
+| `JournalMigration.java` (AgentCraft's buildings, roads and trophies files) | `journal/JournalMigration.java` | **Rewritten** for Architect's formats. AgentCraft's structure is kept: plan, then commit as the only "done" marker, then move to `legacy/`. |
+| Roads: `RoadPlan`, `RoadTerrain`, `Road.handover` | `site/roads/` | **Adapted** (see "Roads as sites"). The surface choice, clearing, half steps, lanterns and handover are kept. The route comes from the caller's polyline instead of AgentCraft's agent planner, and there are no building-pair records. |
+
+Not ported: trophies, `absorb`'s trophy use (kept in `Journal.java`, unused), AgentCraft's `LegacyIds`, its road settle (replaced
+by Architect's Reconcile with the covered-cell rule below).
+
+### Data model
+
+- **Entry**: `{id: "j<n>", kind, site, group?, dimension, policy: BOX|CELL, layer, status: PLACING|ACTIVE|UNDONE, createdAt,
+  cells, undo?, meta?, ring?}`.
+  - `kind`:
+    - `site`: a building's restore box;
+    - `road`;
+    - `cells`: a cell site, see below;
+    - `crate`: a construction crate's cell;
+    - `leaves`: held leaves.
+    - Mod-defined kinds are namespaced (`steward_mc:terrain`).
+  - `site`: the Architect site id it belongs to. AgentCraft's `owner` is renamed so it can't be confused with the API owner.
+  - `group`: the site group (4d), if any.
+  - `meta`: the site record when the entry was made (crash repair rebuilds a lost record from it).
+  - `ring`: the 4d leaf ring, kept as a side table on `site` entries (see "Leaves").
+- **Cell**: `{pos, layer, before: Value, after: Value | null}`.
+  - `after` null means unknown; only migrated BOX entries have it (a BOX undo never needs `after`).
+  - `layer` defaults to the entry's layer. A cell keeps its old layer only after a `transfer` (road handover), and that
+    override is stored per cell.
+- **Value**: `{state: {Name, Properties}, nbt?}`, the block state plus the block entity's full NBT, as in AgentCraft.
+- **Layers.** One counter per world, and a later change is higher. The active cells at one position form a **stack**,
+  ordered by layer. The top cell's `after` is what the world should show there, and the entry holding the top cell
+  **owns** that cell.
+- **PLACING** (new): an entry committed before its blocks are written, whose `after` is not captured yet.
+  - It counts as on top for overlap and ownership.
+  - Its undo is a rollback: BOX writes every `before`. CELL writes `before` where the world holds the planned `after`,
+    which is known for roads and cell sites.
+- **Undo group**: the entries undone together. A site's undo group is its `site` entry plus its `leaves` and `crate` entries.
+  A site group's or stage's undo is the union of its sites' entries.
+
+### Layering rules (AgentCraft J1, unchanged)
+
+`Journal.planUndo` takes the undone entries out of the stacks, top-down per position:
+- **A cell on top** writes the world.
+  - A **BOX** entry always writes its `before`. Remove puts back exactly what was there, including the player's later
+    changes inside the box (today's safe remove).
+  - A **CELL** entry writes `before` only while the world "still holds" its `after` (see "Still ours"). Otherwise it leaves
+    the cell and reports it as **kept**.
+- **A cell under a cell that stays** changes nothing in the world. **Ownership passes down**: the newer cell's `before`
+  becomes what this entry's undo would have made of it. For BOX that is this cell's `before`. For CELL it is this cell's
+  `before` if its `after` matches the newer cell's `before`, else the newer cell's `before` as it is. So overlapping
+  entries undo in any order, with no holes and no resurrected blocks.
+- **Undone entries** keep their cells, what the undo wrote and each hand-down until the next world start settles them.
+  Settling either releases them or reactivates them (the hand-downs reversed, newest first, where the receiving cell still
+  holds what was handed).
+- **Transfer** moves cells between entries and keeps their layers (road handover).
+
+**Per-section planning.** A stack is per position, so planning an undo over the positions of one chunk section needs only
+the entries that have cells in that section. The plan for a whole entry is the union of its per-section plans, with
+hand-down `order` numbered per section in section order. This is a unit test (gate 1), and it is what lets a road that spans
+a village be removed without loading anything outside its own sections.
+
+### Still ours (CELL policy)
+
+A cell's world state "still holds" `after` when all of these are true:
+1. it is the same block;
+2. every property is equal except the **volatile** ones below;
+3. it has a block entity exactly when `after` does;
+4. for a container, its inventory is empty when `after`'s was empty. A container the player filled is not ours.
+
+Proposed volatile list (open question S2):
+- `open` (doors, trapdoors, fence gates, barrels)
+- `powered`, `power`, `lit`, `triggered`, `enabled`, `extended`
+- `occupied` (beds)
+- `in_wall` (fence gates)
+- `snowy` (grass, podzol, mycelium)
+- `waterlogged`
+- `distance` (leaves; `persistent` is NOT volatile)
+- `moisture` (farmland)
+- the connection properties `north`, `east`, `south`, `west`, `up` on fences, walls, panes, iron bars and redstone wire
+- `shape` on stairs and rails
+
+Not volatile: `facing`, `half`, `type` (slab), `axis`, `age`. Crop `age` is Steward's question.
+
+Two kinds have their own comparison:
+- `leaves` entries compare only the block and `persistent` (AgentCraft `LeafGuard.stillHeld`).
+- `crate` entries are BOX.
+
+## On disk
+
+### Files
+
+`<world>/architect-journal/`:
+- `journal.json`: the index. Holds `{version: 1, nextId, nextLayer, entries: [meta], legacy: {oldFile: entryId}}`. Each
+  entry's meta is:
+  - id, kind, site, group, dimension, policy, layer, status, createdAt, cell count, box;
+  - `files: {"rx,rz": gen}`;
+  - `sections`: the packed section keys it has cells in, as base64 of a `long[]`;
+  - when undone: `undoGroup` and `undoneAt`.
+- `e/<id>/<rx>.<rz>.<gen>.nbt`: gzip NBT holding the entry's cells in one 512x512 column region. Inside, each section is
+  `{key, palette, idx: short[] (12-bit position within the section), b: int[], a: int[] (-1 = unknown), bn/an: {i: nbt},
+  layers?: {i: long}}`.
+  - The undo record (`written`, `handed`) is stored per region file in the same shape.
+  - A kit building is one file. A 1000x1000 cell site is about 9 files.
+- `legacy/`: 4d snapshot files after migration (below).
+
+In memory:
+- the index;
+- a **section map** `sectionKey -> entry ids`, built at open from `sections`;
+- an LRU cache of decoded region files (config `journalCacheMb`, default 64).
+
+Nothing loads an entry's cells outside the sections an operation touches.
+
+### Commit protocol (AgentCraft's, per region file)
+
+1. Write each changed `(entry, region)` file as its next generation: to a `.tmp`, then an atomic move, then a read-back
+   whose cell count must match.
+2. Replace `journal.json` atomically. **This is the commit point.**
+3. Delete the superseded generations.
+
+- One commit may carry many entries. An undo plus all its hand-downs, or a migration, is always **one** commit.
+- At open:
+  - generations the index doesn't name are leftovers and are deleted;
+  - `.tmp` files are deleted;
+  - files of entries the index doesn't know are **kept** and listed (`dev.journal.state.unreferenced`).
+- **I/O thread.** Encoding and file I/O run on one journal I/O thread, in commit order. The server thread captures the cells,
+  hands off the commit, and **never writes a block that depends on a commit before that commit's future has completed**.
+  The ticked placement waits in a new internal phase `COMMITTING`. A single Place outside the queue may commit
+  synchronously when it has at most 100k cells (as 4d's snapshot write did). Above that it uses the ticked job.
+
+### Size limits
+
+| What | Limit | Over the limit |
+|---|---|---|
+| a `site` entry | the restore box of a template within the existing 96x64x96 cap | as today |
+| a `road` entry | 2048 centre cells, width 1-5 | refused `OTHER` ("road too long; split it") |
+| a `cells` entry | 1,000,000 cells per request | refused `TOO_LARGE` |
+| stack depth | **8 active non-guard entries** per cell (guard kinds `leaves`, and `ring` data, don't count) | refused `LAYER_DEPTH` |
+| index | none. Logged at over 16 MB. | |
+| journal on disk | none. A warning toast and a Status-tab line at over 1 GB; `/architect journal` shows the size. | |
+
+### Compaction
+
+The journal holds only what is needed to undo the entries that stand. It is not a history.
+- **Undone** entries are released at the world start that settles them, and their files go in that commit.
+- **Forgotten** entries are released at once.
+- Superseded generations are deleted after each commit, and leftovers at open.
+- Each file has its own palette, so a palette never grows past its file's states.
+- A `leaves` entry whose cells were all released (the leaves no longer held) is released.
+- An entry entirely covered by newer cells **stays**, because hand-down needs it. Folding covered entries (`absorb`) is
+  deferred.
+
+### Crash safety: state sequences and kill points
+
+Order for every change: **the journal first, then the site record (`architect-sites.json`), then the blocks.**
+
+**Place** (instant, atomic or ticked; construction sites too):
+
+| Step | What |
+|---|---|
+| P1 | Checks, then capture the `before` of every cell (see "Capture in one tick"); the cells are reserved, and overlapping items wait |
+| P2 | Write the entry files (I/O thread) |
+| P3 | **Index commit: entry PLACING** |
+| P4 | Site record `placing` |
+| P5 | Block writes (4d `PlaceJob`, unchanged) |
+| P6 | Capture `after` (sliced) |
+| P7 | Commit: entry ACTIVE with `after` |
+| P8 | Site record placed; SITE_PLACED |
+
+What happens on a kill (named for the gate's `dev.journal.killAt`):
+- **K1, before P3:** the world and record are unchanged. Orphan files are deleted (generations) or listed (unknown entry).
+- **K2, P3 to P4:** at the next start, a PLACING entry with no record is **released, and nothing is written**. No block was
+  written before the record existed, and a rollback would only write a possibly stale capture.
+- **K3, during P5 or P6:** as 4d. After a clean stop the job resumes from its cursor. After an unclean stop it rolls back,
+  and the rollback is the undo of the PLACING entry, writing exactly 4d's snapshot restore.
+- **K4, P7 to P8:** the journal wins. The record becomes placed.
+
+**Remove** (one site, a stage or a group):
+
+| Step | What |
+|---|---|
+| R1 | Plan the undo per section (pure) |
+| R2 | **One commit**: the entries UNDONE with `written` and every hand-down to the entries that stay |
+| R3 | Site records go to `pending`, naming their entries |
+| R4 | Block writes (atomic, or a ticked `RestoreJob`) |
+| R5 | At the next world start: settle (below) |
+
+What happens on a kill:
+- **K5, before R2:** nothing changed.
+- **K6, R2 to R3:** at the next start the record follows the journal (it becomes pending). The evidence then finds the site
+  standing, so the entries are reactivated and the record comes back.
+- **K7, during R4:** after a clean stop the `RestoreJob` re-runs from the start (re-writing `written` is idempotent). After an
+  unclean stop it also re-runs, before any settling. **An undo group with an interrupted restore job is not settled at that
+  start**; it is settled at the next.
+
+**A hand-down** is part of the R2 commit, so it can't be half applied (K8 in the gate kills inside that commit).
+
+**Journal unavailable.** If the index can't be read, place, move, remove, forget, roads and cell sites refuse with
+`JOURNAL_UNAVAILABLE`, and the ghost verdict says so. Nothing on disk is touched (AgentCraft).
+**Full disk.** The draft write in P2 fails and the placement is refused before the world changes.
+
+## Placement and removal on the journal
+
+### Capture in one tick
+
+A `before` gathered over many ticks could record a state that never existed: leaves decaying, fluids flowing, random ticks
+in between. So:
+- **Up to 50k cells** (every kit building, about 30 ms at most), the `before` capture (P1) and the `after` capture (P6) each
+  happen **in one tick**, as 4d's snapshot capture does. Only encoding and file I/O move off the server thread. That is the
+  part of 4d's unsliced job start that grows with size (compressed write plus read-back).
+- **Larger captures** (designs near the size cap, cell sites, big roads) are sliced under `placementBudgetMs`, with **change
+  tracking**. From the first slice until P3, a hook on chunk block changes records every changed position inside the
+  reserved sections. In the tick before P3, those positions are captured again. The capture then equals a one-tick capture
+  taken at that tick. The same applies to a sliced P6.
+- Gate 8 places the size-cap fixture with `randomTickSpeed` raised and checks that its Remove is exact.
+
+### Place
+
+- **Instant (atomic and ticked):** P1-P8. The writes are 4d's.
+  - The 4d caveat "job start unsliced" is closed. The compressed write and read-back move off the server thread, and
+    captures over 50k cells are sliced with change tracking (above). Gate 8 measures the size-cap fixture.
+- **Construction sites** (survival): the instant build runs as in phase 3/4d. Then:
+  1. the `after` capture is the **target**: the target file goes away, and the entry's `after` cells are the target;
+  2. the queue indexes the entry's cells;
+  3. the queued cells are cleared.
+
+  The target capture is one tick (as P6). The clear step after it runs over ticks under the budget. Together with the
+  off-thread I/O, this addresses the other 4d caveat (the 17-45 ms conversion).
+  - The crate cell is its own `crate` BOX entry in the site's undo group. A 4d shared crate is owned by the group and
+    undone when the crate goes, or with the group.
+  - "Built" is derived from the world as in phase 3, but **only for cells this entry owns** (top of stack). A cell another
+    site covers is neither built nor queued; it counts as `covered` in `dev.site.state`.
+
+### Remove
+
+1. `refusePlayerIn` over the cells the undo will write.
+2. `removalBlockers` (the player's things in the box, filled containers) over **the cells the site owns**. A covered cell
+   belongs to the site on top.
+3. Survival refunds (see "Survival layering").
+4. Commit R2, record R3.
+5. Writes:
+   - **BOX writes** go through 4d's restore path. The snapshot template given to `TemplateWriter` / `restoreTemplate` is
+     built from the plan's `written` values over the entry's box, so a site with no overlaps gets the full box exactly as
+     in 4d.
+   - Cells the plan does not write (**holes**: covered by a site that stays) are absent from the template.
+   - **CELL writes** use `setBlock` lowest first, with the kind's flags. Roads and cell sites use `UPDATE_CLIENTS |
+     UPDATE_SKIP_ALL_SIDEEFFECTS`, as AgentCraft's roads do.
+6. Leaves (below), drops, reholdNear, SITE_REMOVED.
+
+**Updates at holes.** After a BOX restore, the 4d writer runs edge shape updates, `updateFromNeighbourShapes` and neighbour
+updates for the cells it wrote. These would change the site above: its fences, panes and stairs would reshape, and a torch,
+ladder or door hung on a restored wall could pop off.
+- **Rule:** in a restore with holes, **no update of any kind is delivered into a covered position**: no shape update, no
+  neighbour update. The writer gets a mask of covered positions and skips them as update targets.
+- Block and fluid ticks scheduled **at** covered positions during the restore are dropped, the same way leaf ticks are
+  (`TickDeferral`).
+- Written cells still get their updates as in 4d. A restore without holes has an empty mask, so it is unchanged from 4d.
+- Cells of the site on top that are now unsupported are reported in `RemoveResult.notes`. Examples: an attachable whose
+  support cell was restored to air, or a gravity block over a restored cave. They stay as they are until something else
+  updates them.
+- The gate checks that the site on top is identical, cell for cell, after the site under it is removed.
+
+### Move, undo move, forget
+
+- **Move / undo move:** allowed only for a site that has **no layers above or below it**, meaning no cell it owns or covers
+  is shared with another standing entry. Otherwise it is refused: "remove it and place it again". Moving layered sites is
+  deferred.
+- **Forget** (drop the record, keep the blocks) releases the site's entries.
+  - Allowed when nothing is **below** the site.
+  - A site with entries below is refused: forgetting it would make the lower site's undo wipe the forgotten blocks.
+    "Forget or remove the sites under it first."
+  - Forgetting a site with entries **above** is fine: their `before`s already hold its blocks.
+
+### World-start settle (Reconcile)
+
+Pending sites are settled on evidence, as in 4d (`Reconcile.restored`, `stands`), with one change: **cells another standing
+entry owns are excluded** from both counts, as AgentCraft's road settle does.
+- **Restored** releases the entries.
+- **Standing** reactivates them and brings the record back.
+- **Doubtful** keeps them.
+
+`Reconcile.standing` for standing sites also counts only the cells each site owns. A building half covered by an extension
+still "stands".
+
+Evidence for the kinds 4d didn't have:
+- **Road and cell entries:** over the uncovered cells the undo wrote, count the cells where `before` and `after` differ
+  (AgentCraft's road settle).
+  - Most hold `before`, or none can tell: release.
+  - Most hold `after`: reactivate, and the record comes back.
+- **Migrated BOX entries with `after` unknown:** the site's pin (its template and own block entities), as in 4d.
+- **A site whose comparable cells are all covered:** release. A standing site's own entry holds the same terrain (AgentCraft's
+  COVERED rule).
+- **`leaves` and `crate` entries** settle with their site's group.
+
+**Records come from the journal.** Each site's list of entries is derived from `entry.site` and is not stored in the record.
+At every start, an ACTIVE or PLACING entry whose `site` has no record gets its record rebuilt from the entry's `meta`
+(the journal wins). This is also what repairs a downgrade round trip (see Migration).
+
+### Leaves
+
+- **Held leaves** (`LeafGuard.hold`) become a `leaves` CELL entry in the site's undo group, as in AgentCraft:
+  - each cell's `before` is the natural leaf with its distance, and its `after` is the same leaf persistent;
+  - the undo writes quietly (`UPDATE_KNOWN_SHAPE`) and compares block plus `persistent`.
+- **Decision:** the stack semantics replace 4d's `releaseHeldInside`. A later site whose box takes in a held leaf records
+  the **persistent** leaf as its `before`.
+  - If the holder is removed first, hand-down gives the later site the natural leaf.
+  - If the later site is removed first, its restore writes the persistent leaf, which the holder still holds.
+  - The end states equal 4d's in both orders (gate 9).
+  - `reholdNear` stays: after a removal, nearby standing sites get new `leaves` entries.
+- **Guard cells never claim another site's cells.** Held leaves and the leaf ring skip cells that another standing entry
+  owns when they are captured (4d's "not cells inside a standing site's box").
+- **The leaf ring** (4d, `architect_leafRing`) stays a **side table** on the `site` entry, not stack cells. After the
+  site's undo, `LeafGuard.restoreRing` runs as in 4d. The 4d test "in another standing site's restore box" becomes "owned
+  by a standing entry". Leaf ticks are dropped as in 4d.
+
+### Block entities
+
+- `Value.nbt` holds the full BE NBT in `before` and `after`. Undo loads it as 4d does.
+- Construction targets clear only container inventories (phase 3).
+- **"Foreign" block entities** in a new site's box are the cells whose BE isn't an Architect `after`:
+  - the cell is not owned by an entry; or
+  - its NBT differs from the owner's `after` in container contents.
+
+  These still refuse with `BLOCK_ENTITIES` unless `force`. An empty template chest of a lower site does not refuse a LAYER
+  over it; a chest the player filled does (Steward N2, N5).
+- **Migrated entries** have no `after`. For them, "an Architect BE" falls back to the site's pin (its template's own BE
+  positions), as 4d's `removalBlockers` does.
+
+## Overlap
+
+### The test is per cell
+
+- A new site overlaps when any cell of its **predicted restore box** (4d: template box, approach strip, one row below) is
+  in a standing or placing entry's cells, in the same dimension. The lookup goes through the section map.
+- For BOX against BOX this is 4d's box test, because a `site` entry's cells fill its box. Against a road or a cell site it
+  is exact; a bounding box would refuse anything near a long road.
+- Guard data (held leaves, the ring) never counts as overlap.
+
+### `OverlapPolicy` (per call; `PlaceRequest.overlap`, `Batch.overlap`)
+
+| Policy | Means |
+|---|---|
+| `REFUSE` (default: null, or a 1.4.0 caller) | **4d behaviour.** Any overlap refuses with `OVERLAP`. The one exception is the 4d promise: an approach stopped by a road is not an overlap, because it writes nothing there (see "Roads as sites"). |
+| `LAYER` | The new site goes on top: its `before` at shared cells is what the world shows (the lower site's blocks), and undo works in any order through hand-down. All other checks still apply. |
+
+**LAYER still refuses** when:
+- the overlapped entry is `placing`, a construction site still `BUILDING`, or being removed: `OVERLAP_BUSY` (temporary, so a
+  queued item **waits**, as for `PLAYER_IN_BOX`);
+- the overlapped site has another owner than the request: `OVERLAP_OWNED` unless `force` (the guardrail, as for remove);
+- the stack would exceed 8: `LAYER_DEPTH`;
+- foreign block entities, lava, build height, a door cut, creative-only blocks, or occupancy, as in 4d.
+
+**TerrainFit and Approach under LAYER** read cells another entry owns by their block, like natural terrain. Solid is ground,
+non-solid can be cleared. They are never "the player's block" (Steward N2).
+
+`REPLACE` (remove what you overlap, then place) is **deferred**: no Steward ask needs it (see Deferred).
+
+### Removing a covered site: `CoveredPolicy` (`RemoveOptions.covered`)
+
+| Policy | Means |
+|---|---|
+| `KEEP` (default) | Hand-down. Cells another site covers stay as they are (that site's blocks). Every other cell is restored. The site on top later restores the original ground. RemoveResult lists `handedDown` per covering site. |
+| `CASCADE` | First remove every site that covers this one, top-down, recursively, as one undo group. Then remove this one. Each covering site is subject to its own blockers, owner rule and refunds. Any refusal stops the whole cascade before anything is written. |
+| `REFUSE` | Refuse `COVERED` when another site covers any cell. |
+
+The UI asks when a site is covered: "3 cells of this site are under 'East Wing'; they stay until it is removed. [Remove]
+[Remove both] [Cancel]". `KEEP` never silently deletes anything (Steward N1).
+
+## Roads as sites
+
+### Request
+
+```java
+record RoadRequest(ServerLevel level, List<BlockPos> points, int width, @Nullable String surface, @Nullable String slab,
+                   boolean lanterns, boolean shallowDecks, Mode mode, @Nullable String owner, JsonObject ext,
+                   @Nullable ServerPlayer actor, boolean force) {}
+```
+
+- `points`: 2-256 waypoints. Each `y` is a ground hint: the ground is searched from `y + 8` down to `y - 8`.
+- `width`: 1-5, default 3, centred on the line. An even width puts the extra cell on the right of the direction of travel.
+- `surface` / `slab`: null means automatic. Otherwise a vanilla block id, validated.
+
+The ghost previews it through a new composite layer style `ROAD` (client), and `Sites.checkRoad(r)` returns a Verdict with
+the cells.
+
+### Cells
+
+- **Line.** Between waypoints, a 4-connected supercover line in x/z. A diagonal step goes through its corner cell, so the
+  walkway stays connected (AgentCraft).
+- **Profile.** Each centre cell's ground is the top solid block that is not leaves or a plant (Approach's ground rule).
+  - The heights are smoothed so neighbouring centre cells differ by at most 1, and no column is cut or filled by more than 4.
+  - A column that needs more refuses with `TOO_STEEP`, naming it.
+  - Fill uses `foundation` (default `minecraft:cobblestone`). A cut removes natural blocks only.
+- **Side cells** take their centre cell's height.
+  - Each needs at most 2 of fill or cut. A side cell needing more, or holding something that can't be cleared, is left
+    out (noted).
+  - A centre cell holding something that can't be cleared keeps it (AgentCraft `KEPT`, noted).
+- **Surface** (`surface == null`), AgentCraft `RoadPlan.surfaceFor`:
+  - `dirt_path` on the dirt family;
+  - `gravel` on sand or stone when the block below holds it up, else `packed_mud`;
+  - `packed_mud` on mud.
+
+  **Half steps** follow the same rule: a bottom slab in the feet cell where a neighbour is one block higher and none is
+  lower. Exposed ores are never paved.
+- **Clearing.** 2 cells of headroom (3 over a half step): plants, saplings, grass, snow layers, leaves, and natural terrain
+  in a cut. It never clears block entities, logs, the player's blocks, fluids or anything waterlogged.
+- **Water.** 1-deep water gets an `oak_slab` deck in the air above it only with `shallowDecks`; otherwise those cells are
+  skipped and noted. Deeper water refuses with `DEEP_WATER` ("bridges are phase 6").
+- **Lanterns** (optional): AgentCraft's rule, a fence post plus a lantern beside the walkway, the first 6 blocks out and
+  then every 12.
+- **Other sites.** **A road never layers.** It skips every cell another standing entry owns (a building's restore box
+  including its approach, another road) and notes "N cells of `<site>` left as they are". A road placed after the lots
+  therefore runs up to the approach ends.
+- **Entry.** Kind `road`, policy **CELL**, `after` = the planned cells. Writes use `UPDATE_CLIENTS |
+  UPDATE_SKIP_ALL_SIDEEFFECTS`. New drops near changed cells are cleared (AgentCraft `CellDrops`). Writes are ticked under
+  the placement budget.
+
+### Approaches meet roads (the 4d promise, in full)
+
+- `Approach`'s `TerrainFit.World` gets a new flag `ROAD` on cells whose owner is a standing road entry's surface or slab
+  cell. Road cells also count as ground (`NATURAL | FILLABLE`).
+- The approach **stops before the first row r >= 1 in which any of its columns' path cell (one below the feet) or feet cell
+  is a ROAD cell.** Rows r and later are not written, and the extension (`EXTEND`) stops: the path has met the ground.
+- The restore box (`approach.union(box)`) therefore ends before row r. The approach writes nothing on the road, and that is
+  **not an overlap**, under any policy.
+- If the last written row's path is more than 1 block off the road surface, a note says "approach meets road `<id>` with a
+  step of N". It is not a refusal.
+- A road cell inside the template box or row 0 is an ordinary overlap: REFUSE refuses, LAYER layers.
+- **Client ghost.** The client has no journal, so the server syncs road cells near each player. The payload is
+  `architect_mc:road_cells {dimension, sections: [{key, cells: short[], top: byte (surface|slab)}]}`.
+  - It covers roads with sections within 160 blocks.
+  - It is sent on join and dimension change, and as deltas on road place and remove.
+  - The client's Approach adapter reads it, so the ghost draws the shortened approach. The placement verdict stays the
+    server's.
+- **`fitToLot`** computes `predictedRestoreBox` with the road rule, so a lot facing a road gets the shorter box.
+- **`overlapMargin`** stays the worst case (no road). A lot facing a road needs at most that much and usually less.
+
+### Removing a road
+
+- CELL rule: a cell is restored where the world still holds the road's block. Cells the player changed are kept and
+  reported (`RemoveResult.kept`).
+- A cell a later site covers (a LAYER placement over the road) is handed down.
+- **Crossings and shared stretches** (AgentCraft `Road.handover`): changed cells that another standing road runs on are
+  **transferred** to that road with `Journal.transfer`, keeping their layers, and noted ("… 24 cells kept for road
+  `<id>`"). This covers cells in or beside a column of that road's walkway, from 2 below its feet to 3 above. If there are
+  several such roads, the nearest takes the cell, then the newest.
+- **Houses whose approach met the road** are unchanged. Their approaches end where the road was.
+
+### Survival roads
+
+In a survival-toggle world a road is a **construction site**:
+- its crate goes beside the first waypoint;
+- its BOM comes from the surface, slab, fill, fence and lantern cells (with the obtainability map, so `dirt_path` costs
+  dirt);
+- the builder writes the entry's `after` cells.
+
+INSTANT follows the same actor and permission rules as buildings. (A candidate for deferral; open question S7.)
+
+## Cell sites
+
+`Sites.placeCells(CellsRequest)` places a caller's own cell list as a site. Steward needs it for pad flattening (N3) and as
+the write path phase 6 will stream region programs into (N9). It is also the gate's synthetic scale fixture.
+
+```java
+record CellsRequest(ServerLevel level, String kind /* namespaced */, Policy policy /* BOX | CELL */, List<CellWrite> cells,
+                    boolean naturalOnly, OverlapPolicy overlap, Mode mode, @Nullable String owner, JsonObject ext,
+                    @Nullable ServerPlayer actor, boolean force) {}
+record CellWrite(BlockPos pos, BlockState state, @Nullable CompoundTag nbt) {}
+```
+
+- At most 1,000,000 cells; more than that means several requests in one group. INSTANT only in 4e: CONSTRUCTION is refused
+  `NOT_ALLOWED`. Writes are ticked and use the road flags.
+- `naturalOnly` (default true): a cell whose current block is not natural terrain, air or water, or holds a block entity,
+  is skipped and noted (Steward's engine invariant).
+- Overlap is checked per cell as above. LAYER over BOX sites is allowed.
+
+## Survival layering
+
+The invariant is **items in = items out**, for every removal order: no item is duplicated and none is lost. The rules:
+1. **Waiting.** A LAYER placement over a construction site that is still BUILDING waits (`OVERLAP_BUSY`).
+2. **Free clearing.** The clear step of a site on top gives no drops, whether the cleared cell is terrain or a lower site's
+   block. Either the block comes back when the upper site is removed (its BOX `before`), or rule 4 refunds it.
+3. **Refunds when a site S is deconstructed:**
+   - (a) a cell S owns, where the world holds S's `after` block and the cell was paid, is refunded (phase 3);
+   - (b) a paid cell of S that a site U covers, where U's `before` there equals S's `after` (U's clear step displaced S's
+     intact block), is refunded. After the hand-down, U's `before` there is S's `before`, so that block never comes back;
+   - otherwise nothing is refunded.
+   - The player's own blocks drop only from cells S owns (phase 3 rule).
+4. **The other order.** If U is removed first, its BOX undo writes S's block back, and S refunds it later under (a).
+5. **Covered cells and S's own state.** S's builder, "built" scan and Reconcile skip cells S doesn't own.
+6. **Crates.** Refunds drop at the deconstructed site's crate cell, or its group's shared crate (4d).
+7. **Group undo.** In a group or stage undo, refunds are computed against the stacks **before** the undo is planned. The
+   hand-downs within the group would otherwise hide rule 3(b).
+
+## Groups, stages and the queue
+
+The API is unchanged from 4d.
+- **`removeGroup`** is **one undo** over every entry of the group's sites, planned per section and written by a ticked
+  `RestoreJob`. Hand-downs between members of the group cancel out, so the result doesn't depend on order. The writes still
+  go in reverse placement order, so progress reads as 4d did.
+- **Construction members** deconstruct with the refund rules above.
+- **`undoStage`** is one undo over that stage's entries. The 4d dependency rule stays (a later placed stage refuses without
+  `force`). With `force`, hand-down applies.
+- **The queue:**
+  - An item's policy comes from `PlaceRequest.overlap`, else `Batch.overlap`, else REFUSE.
+  - Items of one batch may layer on earlier items of the same batch when the policy is LAYER (terrain pad, then lots).
+  - The overlap test runs at queue time (in the Verdict) and again at the item's start.
+  - `OVERLAP_BUSY` waits under `waitPolicy`.
+  - Road and cell items queue like buildings.
+- **Groups are journal undo groups.** Stages are undo groups too. `SiteGroup` and `Stage` records don't change.
+
+## Migration from 4d worlds (`JournalMigration`)
+
+**When:** the first 0.8.0 start of a world that has `architect-sites.json` and no `architect-journal/journal.json`. It runs at
+SERVER_STARTED, before the sites load, the same way AgentCraft's migration does.
+
+| 4d artifact | Becomes |
+|---|---|
+| a standing instant site's snapshot (`architect-sites/<file>.nbt`) | an ACTIVE `site` BOX entry over its restore box: the `before`s are the snapshot's blocks and BE NBT exactly, and `after` is unknown |
+| the snapshot's `architect_leafRing` | that entry's `ring` side table, unchanged |
+| `Pin.heldLeaves` (x, y, z, distance) | a `leaves` CELL entry. Each listed cell is read from the world (its chunk loaded for the read). A cell that is no longer a persistent leaf is dropped (it isn't held). `before` = the natural leaf with the recorded distance, `after` = the leaf as read. |
+| a construction site's target file | the `site` entry's `after` values (the target); the queue indexes are remapped to entry cells |
+| a crate's `{pos, snapshot}` (and a group's shared crate) | a `crate` BOX entry (one cell) in the site's (or group's) undo group |
+| a `pending` site (removed or moved away, not settled) | UNDONE entries whose undo wrote the whole box, settled at this start by the existing evidence rules |
+| a `placing` site (`architect-queue.json` cursor) | a PLACING entry with the snapshot as `before`. Its job resumes (clean stop) or rolls back (unclean), as in 4d. The queue file is unchanged: its cursors index the cell lists, not the snapshot. |
+| site groups, stages, batches | unchanged in `architect-sites.json`; site records name no entries (they are derived from `entry.site`) |
+| unreferenced snapshot files | not imported, moved with the rest, still listed |
+
+- **Layers** follow `placedAt`, and each site's entries are consecutive (`site`, then `leaves`, then `crate`).
+- **Unreadable files:**
+  - An unreadable snapshot of one site imports that site without an entry, flagged. Remove refuses it with the 4d "forget"
+    way out.
+  - An unreadable `architect-sites.json` means no import (4d's `loadFailed`; nothing is written).
+- **Done marker:** the single index commit. After it, `architect-sites/` moves to `architect-journal/legacy/`. A crash
+  in between only finishes the move at the next start. Old file names map to entries in `legacy`.
+- **Late import:** at every start, a site record that names a snapshot file in `architect-sites/` and has no entry is imported
+  the same way, as the top layer. Such a record was made by 0.7.0 after a downgrade.
+- **Downgrade** (0.8.0 world opened in 0.7.0). Checked in the code:
+  - 0.7.0 ignores the file `version`.
+  - `Site.fileFromJson` reads only `sites`, `pending`, `groups`, `next` and `nextGroup`.
+  - `Site.fileJson` writes only those, so **any 0.7.0 save drops every field and array it doesn't know**.
+
+  Hence:
+  - **Roads and cell sites** go in a top-level array `infra: []`. 0.7.0 doesn't see them, so it can't remove them, and its
+    next save drops the array. 0.8.0 then rebuilds those records from their entries' `meta` (the journal wins, see "Records
+    come from the journal").
+  - **Migrated building sites** keep records that 0.7.0 can read. Their Remove refuses, because the snapshot moved; 0.7.0
+    offers forget, and writes no wrong terrain. A 0.7.0 **forget** drops the record but not the journal entry, so 0.8.0
+    brings the record back. Forgetting must be done again in 0.8.0.
+  - **Sites 0.7.0 places** get snapshot files and no entries. 0.8.0 late-imports them on top, which is LAYER semantics if
+    they overlap a road 0.7.0 couldn't see.
+  - **New ids** (`s<n>`, `g<n>`): 0.7.0 recomputes `next` from the records it sees. Road and cell-site ids therefore use
+    their own prefixes (`r<n>`, `c<n>`), with counters stored in the journal index, so 0.7.0 can't reuse one.
+  - So a downgrade is **unsupported but recoverable**: no wrong blocks are written, and the round trip 0.8 -> 0.7 (place
+    something, which saves) -> 0.8 restores every record. Gate 4 checks it (open question N1).
+
+## Java API (1.5.0)
+
+`ArchitectApi.VERSION = "1.5.0"`. The rules follow the 1.1-1.4 precedent: old constructors kept; new `Sites` methods are
+default methods that throw `UnsupportedOperationException("... needs Architect API 1.5.0")`; enum constants are appended
+at the end.
+
+**New types:**
+- `enum OverlapPolicy { REFUSE, LAYER }`
+- `enum CoveredPolicy { KEEP, CASCADE, REFUSE }`
+- `enum Policy { BOX, CELL }`
+- `RoadRequest`, `CellsRequest`, `CellWrite`
+- `Layer(String siteId, String kind, Policy policy, long layer, boolean top)`
+- `Overlap(String siteId, @Nullable String owner, int cells, boolean blocking)`
+
+**Records gain components** (the old constructors are kept):
+- `PlaceRequest`: `@Nullable OverlapPolicy overlap` (null = REFUSE, or the batch default).
+- `RemoveOptions`: `CoveredPolicy covered` (null = KEEP).
+- `RemoveResult`: `int restored`, `int kept` (CELL cells the player changed), `Map<String,Integer> handedDown`, `List<String>
+  cascaded`.
+- `Verdict`: `List<Overlap> overlaps`, plus road and cell cells for `checkRoad` / `checkCells` (as a count and a box, not the
+  list).
+- `SiteView`: `String kind` (`building`, `road`, `cells:<kind>`), `Policy policy`, `List<String> covers`, `List<String> coveredBy`
+  (site ids).
+- `Batch`: `@Nullable OverlapPolicy overlap`.
+- `Batch.Item`: `@Nullable RoadRequest road` and `@Nullable CellsRequest cells`. **Exactly one of `request`, `road` and
+  `cells` is non-null. For a road or cell item, `request()` returns null.**
+
+**`Sites` gains:**
+- `placeRoad(RoadRequest)` -> `CompletableFuture<PlaceResult>`
+- `checkRoad(RoadRequest)` -> `Verdict`
+- `placeCells(CellsRequest)` -> `CompletableFuture<PlaceResult>`
+- `checkCells(CellsRequest)` -> `Verdict`
+- `stack(ResourceKey<Level>, BlockPos)` -> `List<Layer>` (bottom first)
+- `place`, `check` and `queue` honour `PlaceRequest.overlap` / `Batch.overlap`
+- `remove`, `removeGroup` and `undoStage` honour `RemoveOptions.covered`
+
+**`Reason` gains** (appended): `OVERLAP_BUSY`, `OVERLAP_OWNED`, `LAYER_DEPTH`, `COVERED`, `TOO_STEEP`, `DEEP_WATER`, `TOO_LARGE`,
+`JOURNAL_UNAVAILABLE`.
+
+**Events:** none new. SITE_PLACED and SITE_REMOVED fire for roads and cell sites (their `SiteView.kind` tells them apart).
+SITE_REMOVED's RemoveResult carries the hand-downs.
+
+**Features:** `"journal"`, `"overlapLayer"`, `"roads"`, `"cellSites"`, `"stackQuery"`.
+
+**Not purely additive** (as in 1.1-1.4):
+- Record patterns, `equals` and `toString` change for `PlaceRequest`, `RemoveOptions`, `RemoveResult`, `Verdict`, `SiteView`,
+  `Batch` and `Batch.Item`.
+- New `Reason` constants break exhaustive switches.
+- `Batch.Item.request()` may now be null, for road and cell items only. A 1.4.0 caller reading only its own items is
+  unaffected.
+
+**Binary compatibility check:** Steward's current jar, and `apitest` compiled against 1.4.0, run against 0.8.0 unchanged (gate
+11).
+
+## DevBridge (docs/DEVBRIDGE.md changelog)
+
+- From AgentCraft: `dev.journal.state` and `dev.journal.at {x, y, z, dimension?}`.
+- New:
+  - `dev.journal.killAt {point: K1..K8 | migrate-before-commit | migrate-after-commit}`: the next matching step halts the
+    JVM (`Runtime.halt`);
+  - `dev.journal.failNextCommit`;
+  - `dev.road.place` / `dev.road.check`;
+  - `dev.cells.place`;
+  - `dev.region.hash {box, exclude?}`: cells plus BE NBT, for the order tests.
+- `dev.site.state` gains `covered`, `entries` and `layers`.
+
+## Performance budgets
+
+| What | Budget |
+|---|---|
+| capture (`before` / `after`) on the server thread | <= 0.6 µs per cell without a BE: one tick up to 50k cells (kit buildings under 30 ms), sliced with change tracking above that |
+| encode + gzip + write + read-back (I/O thread) | >= 2M cells/s; never on the server thread above 100k cells |
+| journal size | <= 10 bytes per cell compressed, averaged over the village |
+| placement throughput at 4 ms | >= 15k cells/s, journal included (75% of 4d's 20.5k) |
+| undo planning | <= 1 µs per cell at stack depth <= 2, sliced per section |
+| overlap check (`check()` of a kit building) | <= 2 ms |
+| MSPT | no tick over 50 ms in any gate scenario. Village plus roads at 4 ms: max <= 25 ms. A 96x64x96 fixture placed and removed: no tick over 50 ms (closes the 4d caveat). |
+| memory | peak heap <= 4d + 64 MB on the village |
+
+## Phase 4e gate
+
+1. **Unit tests:**
+   - AgentCraft's `JournalTest`, `JournalStoreTest` and `JournalMigrationTest` cases, ported. The migration cases are
+     rewritten for Architect's formats.
+   - **Property tests (invariants)** over random fixtures (2-6 entries, BOX and CELL, random overlaps, random player edits),
+     each removal order and each group split:
+     - (i) with no player edits, undoing everything in any order gives back the original world;
+     - (ii) undoing a subset never writes a cell owned by an entry outside the subset;
+     - (iii) the final world after undoing everything is the same for every order, with edits included;
+     - (iv) a player edit on a cell that a CELL entry owns survives that entry's undo.
+   - **Per-section planning** equals whole-entry planning.
+   - **Store crash tests:** a fault at every I/O step.
+2. **Any-order exactness** (dev world). The fixture is 4 overlapping sites:
+   - T: a cell site, CELL, a flattened pad;
+   - R: a road across T;
+   - H: a house LAYERed on T, whose approach meets R;
+   - X: an extension LAYERed over H's side wall.
+
+   **All 24 removal orders**, each from a copy of the same world, plus one group removal of all 4. After each removal:
+   - every site still standing is identical, cell for cell, on the cells it owns (no shape leak through holes);
+   - at the end, the union box + 8 equals the pre-placement hash, every cell plus BE NBT.
+
+   A fifth site L (a lot that LAYERs over R's edge) runs in 6 random orders.
+3. **Player edits:**
+   - a block placed on R and a lever flipped in H. R's removal keeps the block and reports it.
+   - H's removal restores its box (safe remove), and the flipped lever counts as ours.
+   - A filled chest in T refuses H's LAYER without force.
+4. **Migration:** a world made **with the 0.7.0 jar** through its DevBridge, with the pre-placement hashes recorded. It holds:
+   - 3 instant sites;
+   - a construction site half built;
+   - a removed site not yet settled;
+   - a group with 2 stages;
+   - a site placing at a clean stop;
+   - a site beside a worldgen tree (held leaves and the ring).
+
+   Opened with 0.8.0:
+   - the index is made and `legacy/` is filled;
+   - every Remove matches its pre-hash;
+   - the construction site finishes identical to an instant placement;
+   - the placing site resumes, and the pending site settles.
+
+   - A LAYER placement over a migrated site works (the foreign-BE check falls back to the pin), and removing both in either
+     order is exact.
+
+   Repeated with a kill before and after the migration commit.
+
+   **Downgrade round trip:** 0.8.0 (with a road) -> 0.7.0, where you place a site, which saves the file, and try to Remove
+   a migrated site, which refuses and writes nothing -> 0.8.0. Afterwards the road's record is back, the 0.7.0 site is
+   late-imported, and every Remove is exact.
+5. **Crash mid-write:** K1-K8 each, by `dev.journal.killAt` and a restart. Each time:
+   - the journal opens, and no file the index names is lost;
+   - the site ends in the state the sequence promises;
+   - a final full removal matches the pre-hash.
+6. **Road plus village:** the 4d 12-lot village with roads joining the entrances, in both orders:
+   - **(A)** roads first, then lots through the queue with REFUSE. Every approach stops at a road, there are 0 OVERLAP
+     refusals, and no approach cell is a road cell.
+   - **(B)** lots first, then roads. The roads skip lot cells.
+
+   Both orders end with an exact group undo.
+   - Removing one road while the lots stand restores its uncovered cells, transfers its crossing cells to the other road,
+     and leaves the lot approaches unchanged.
+   - The client ghost of a lot facing a road draws the shortened approach (a screenshot that has been looked at).
+   - `fitToLot` facing a road predicts the shorter box.
+7. **Survival layering:** S (a cabin construction site) and U (an extension LAYERed over S's wall, construction), both fed by
+   hoppers. U queued while S builds waits with `OVERLAP_BUSY`, then proceeds. Both finish identical to instant LAYER
+   placements. Deconstructing in both orders (two world copies): items out equals items in, per item id, and the terrain is
+   exact.
+8. **MSPT and throughput:**
+   - the village plus roads at 1, 4 and 10 ms;
+   - a 96x64x96 fixture placed and removed;
+   - numbers in `artifacts/gate4e/REPORT.md` and `throughput.json`, against the budgets.
+   - The size-cap fixture is also placed with `randomTickSpeed` 300 near a worldgen tree, and its Remove is exact. The same
+     holds for a sliced 300k-cell cell site with change tracking.
+9. **4d regression:**
+   - the whole 4d gate and its additions re-run, including that a third lot whose approach crosses a neighbour's front
+     refuses `OVERLAP` under the default;
+   - the phase 3 gate and phase 1 exact Remove;
+   - **the strengthened 4d caveat:** the toggle step on **adjacent (0-gap) lots**, where the only allowed diffs are
+     persistent-leaf diffs, and the held-leaf cases from "Leaves" in both orders.
+10. **mega-lite** (synthetic, no region programs, since realise is phase 6):
+    - a 256x256 CELL terrain pad as a cell site, 40 stub lots LAYERed on it, and 8 roads, through the queue with
+      `LOAD_BOUNDED`;
+    - the group undo is exact, and one lot's undo leaves the pad exact.
+
+    Recorded (not gated):
+    - cells/s at 1, 4 and 10 ms, undo time (group and one lot), journal size, peak heap, and resume across a relog;
+    - the same generator at 1000x1000, for Steward's `mega_bench` numbers.
+11. **API:**
+    - new apitest steps for every 1.5.0 method and each new Reason;
+    - **the 1.4.0 apitest jar, unchanged, passes against 0.8.0.**
+12. gate-verifier checks the result.
+
+## Open questions for Steward
+
+- **S1.** `RemoveOptions.covered` defaults to `KEEP` (hand-down, the lots stay). Is that right for API callers, or do you
+  want `REFUSE` by default with an explicit KEEP or CASCADE?
+- **S2.** The volatile list (see "Still ours"). Should crop `age` and farmland `moisture` be on it? Do you need any more?
+- **S3.** Should items in the same group get LAYER implicitly, or is an explicit `Batch.overlap = LAYER` fine? The draft
+  wants it explicit.
+- **S4.** Roads take a polyline with Architect's ground-following profile (cut or fill of at most 4, width at most 5).
+  Enough for region programs, or do you need per-point absolute y (sky roads) or larger cut/fill limits?
+- **S5.** Is `placeCells` (Java-side lists, at most 1M cells, INSTANT only, `naturalOnly`) useful to you before phase 6, for
+  example for N3 pad flattening? Should construction mode for it come in 4e?
+- **S6.** N3 says a child may move within its pad. 4e refuses Move for any layered site. Is that acceptable until later?
+- **S7.** Do you need survival (construction) roads in 4e, or only Patron/creative?
+- **S8.** Is `SiteView.covers/coveredBy` plus `Sites.stack()` enough for N8, or do you want per-entry views (change-sets)
+  in the API?
+- **S9.** mega-lite gated in 4e, with your full `mega_bench` measured in phase 6 once region realise exists: agreed?
+
+## Open questions for Noah
+
+- **N1.** Downgrade: "unsupported but recoverable". 0.7.0 refuses to remove migrated sites, roads are invisible to it, and
+  its saves drop the road records, which 0.8.0 rebuilds from the journal. Is that acceptable? Nothing 0.7.0 already honours
+  could make it refuse such a world: it ignores `version`.
+- **N2.** Player UI:
+  - Should the ghost offer "Place on top" (LAYER) when it overlaps, in creative and in survival?
+  - Should Remove of a covered site ask with "Remove both"?
+  - The draft says yes to both.
+- **N3.** REPLACE is deferred. Do you want it in 4e anyway? The tight version: remove the overlapped sites of the same
+  owner, then place, refused if any of them is covered by a third site.
+- **N4.** The survival refund rule (b) for a lower site's paid block that an upper site displaced. OK as the no-dupe,
+  no-loss rule?
+- **N5.** The journal port copies AgentCraft at `ab08a02` and diverges (sharded store). Treat it as independent from now on,
+  like the placement code (PLAN "Open questions")?
+- **N6.** A road tool in the UI (click waypoints, ghost, confirm) in 4e? The draft has a command (`/architect road <x z>...
+  [width]`) plus the API only.
+- **N7.** The disk warning threshold of 1 GB, and the cache of 64 MB.
+
+## Deferred (recommended)
+
+- **REPLACE** overlap policy (N3).
+- **Moving layered sites**, and forgetting a site with layers below it.
+- **Bridges** beyond 1-deep decks: spans, supports, arches. That is phase 6 (A5b `bridge`), placed as cell sites.
+- **Routed roads** (pathfinding between entrances, AgentCraft's planner). 4e takes the caller's polyline.
+- **Region realise streaming** (N9: per-section evaluation in the sidecar, cell lists over the WebSocket). Phase 6 writes them
+  through `placeCells`.
+- **Construction mode for cell sites.**
+- **Delta apply** (A6, phase 5b). It becomes "a new layer whose `before` includes the earlier layers", which the journal
+  already supports.
+- **Compaction of covered stacks** (`absorb` beyond release and GC), and a stack inspector UI (DevBridge only in 4e).
+- **The full 1000x1000 `mega_bench` as a gate** (phase 6).
+
+## Coordinator decisions on N1-N7 (provisional, Noah may override)
+
+- **N1** Yes: unsupported but recoverable, with the round trip in the gate. The changelog says so.
+- **N2** Yes to both: "Place on top" in creative and survival, and "Remove both" on a covered site.
+- **N3** REPLACE stays deferred.
+- **N4** Yes: rule (b) is the no-dupe, no-loss rule.
+- **N5** Yes: the journal is independent from now on. CONTRACT and the source header record its origin (AgentCraft `ab08a02`).
+- **N6** Command plus API in 4e; the click-waypoint road tool waits until roads are used in play.
+- **N7** Yes: 1 GB warning, 64 MB cache, both in the config.
