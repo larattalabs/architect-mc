@@ -2,7 +2,7 @@
 // buildings): BRIEF.md from the request, the system prompt, the first / fix / restart prompts, and
 // one line of progress per tool call.
 import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk';
-import { BUILDING_TYPES, type BuildingType, type DesignRequest } from '../protocol.js';
+import { BUILDING_TYPES, type BuildingType, type Context, type DesignRequest, type Massing } from '../protocol.js';
 
 /** design agent turns per job (the first + follow-ups after a failed check) */
 export const MAX_DESIGN_ROUNDS = 4;
@@ -134,6 +134,115 @@ export interface BriefOptions {
   bible?: { id: string; version: number; name: string; roles: Record<string, string>; components: string[]; hasProse: boolean };
   /** (4b) renders of the group's finished earlier-wave items in neighbours/ */
   neighbours?: Array<{ file: string; entryId: string; name?: string; type: string }>;
+  /** (4c) the massing copied into massing/: the one a detail pass is bound to, or the version a redirect starts from */
+  massing?: { record: Massing; role: 'detail' | 'redirect'; files: string[]; maxSize?: DesignRequest['maxSize'] };
+}
+
+/** (4c) the context section (a group's site, purpose, neighbour lots), for every brief. */
+export function contextSection(ctx: Context | undefined): string[] {
+  if (ctx === undefined) return [];
+  const text = typeof ctx === 'string' ? ctx : JSON.stringify(ctx, null, 2);
+  return ['## Context', '', 'From whoever asked for this building (the site, its purpose, the neighbouring lots and the street side). Respect it:', '', typeof ctx === 'string' ? text : ['```json', text, '```'].join('\n'), ''];
+}
+
+/** (4c) the parts of a massing, one line each. */
+function partLines(m: Massing): string[] {
+  return Object.entries(m.parts).map(([name, p]) => {
+    const q = (p ?? {}) as { box?: number[]; roof?: string; storeys?: number };
+    return `  - \`${name}\`: box ${q.box ? `[${q.box.join(', ')}]` : '?'}${q.roof ? `, roof ${q.roof}` : ''}${q.storeys ? `, ${q.storeys} storey${q.storeys === 1 ? '' : 's'}` : ''}`;
+  });
+}
+
+/** (4c) the binding-massing section of a detail pass's BRIEF.md. */
+export function massingBindingSection(m: Massing, maxSize: DesignRequest['maxSize']): string[] {
+  return [
+    `## The approved massing (binding): \`${m.id}\` v${m.version}`,
+    '',
+    `The player approved this massing of the building; your design details it. Its source is \`massing/${m.id}.mjs\`, its sidecar (parts with boxes and roof forms, size) \`massing/${m.id}.blueprint.json\`, its renders \`massing/${m.id}.preview-*.png\`: read them first. It is binding:`,
+    `- **The same part names**: wrap each mass in \`bp.part('<same name>', () => { ... }, { roof: '<same form>' })\`. The parts (design coordinates, size ${m.size.x}x${m.size.y}x${m.size.z}):`,
+    ...partLines(m),
+    '- **Each part\'s box within 1 of the massing\'s on every face**, and **the same roof form** per part.',
+    `- **The total size within 2 of the massing\'s, and never more than x ${maxSize.x}, y ${maxSize.y}, z ${maxSize.z}** (the massing\'s size + 2, capped by the request): a bigger design is refused.`,
+    '- Detail goes inside and on the masses: walls, openings, trim, roofs, furnishings, lighting. Extra parts of your own (`openings`, `furnishings`) are fine.',
+    `- The check adds the massing conformance: \`--massing massing/${m.id}.blueprint.json\` in the build command below. Its size errors fail the design; fix its \`massing:\` warnings too.`,
+    '',
+  ];
+}
+
+/** BRIEF.md of a massing job (4c): a coarse volume design, cheap and quick. */
+export function massingBrief(req: DesignRequest, bp: string, opts: BriefOptions): string {
+  const m = req.maxSize;
+  const examples = opts.examples.filter((e) => e.endsWith('_massing'));
+  const plot = req.plot ? `- plot: a marked plot of ${req.plot.dx} x ${req.plot.dz} blocks${req.plot.height ? `, up to ${req.plot.height} high` : ''}${req.plot.front ? `, its front facing ${req.plot.front}` : ''}. Design it with \`front: 'south'\` as usual.` : '';
+  const prev = opts.massing?.role === 'redirect' ? opts.massing.record : undefined;
+  const lines = [
+    `# Massing brief: ${req.name ?? `a ${req.style} ${req.type}`}`,
+    '',
+    `Massing id: \`${bp}\`. Write it as \`kit/designs/${bp}.mjs\` (\`export const id = '${bp}'\` and a default export that returns the Blueprint; the file name must match the id).`,
+    '',
+    'A **massing** is the cheap first pass of a building: its volumes, roof forms and major openings, no detail. The player approves its shape (or redirects it with notes) before anyone pays for detail; then a detail design keeps its part names and boxes. Keep it quick: a few masses, one build, one look at the renders.',
+    '',
+    '## Request',
+    '',
+    `- type: \`${req.type}\` (set \`type: '${req.type}'\` on the Blueprint). ${typeGuide(req.type)} Give the masses the proportions such a building needs; the rooms come later.`,
+    `- style: "${req.style}". It shapes the silhouette: roof forms and pitch, storeys, towers, wings, porches.`,
+    `- features: ${req.features.length ? req.features.map(featureLine).join('; ') : 'none requested'} (only the ones that are volumes: a porch, a tower, a wing, a chimney column).`,
+    `- **maximum size: x <= ${m.x}, y <= ${m.y}, z <= ${m.z}** (the whole template, roofs and overhangs included). This is a hard limit: a bigger massing is refused.`,
+    plot,
+    req.notes ? `- notes from the player: ${req.notes}` : '',
+    req.group ? `- this is the massing of item \`${req.itemKey ?? '?'}\` (${req.role ?? 'ordinary'}${req.role === 'landmark' ? ': the set\'s centrepiece' : ''}) of a design group, wave ${req.wave ?? 1}.` : '',
+    '',
+    ...(prev && req.redirect
+      ? [
+          `## Redirect: from version ${prev.version}`,
+          '',
+          `The player looked at version ${prev.version} (\`massing/${prev.id}.mjs\`, its renders \`massing/${prev.id}.preview-*.png\`) and asked for changes:`,
+          '',
+          `> ${req.redirect.notes.replace(/\n/g, '\n> ')}`,
+          '',
+          `Start from its source (copy it into your file; it already has your id) and change it as the notes say. Keep the names of the masses that stay; name new masses by their function.`,
+          '',
+        ]
+      : []),
+    ...contextSection(req.context),
+    ...(opts.bible
+      ? [
+          `## The style bible: ${opts.bible.name} (\`${opts.bible.id}\` v${opts.bible.version})`,
+          '',
+          `The masses use the bible\'s roles in flat form (wall, roof, foundation, glass, frame), so the massing reads in its colours: \`import { palette } from '../lib/kit.mjs'; import { loadBible } from '../lib/bible.mjs'; const BIBLE = loadBible(new URL('../../bible/bible.json', import.meta.url));\` and \`export default function build({ palette: p = palette({ bible: BIBLE }) } = {})\`. Read \`bible/bible.json\` (proportions, roof language, silhouette)${opts.bible.hasProse ? ' and `bible/bible.md`' : ''}: follow its storey height, roof pitch and silhouette.`,
+          '',
+        ]
+      : []),
+    ...(opts.neighbours?.length ? ['## Neighbours', '', `Massings of the same set that come before yours: ${opts.neighbours.map((n) => `\`${n.file}\` (${n.name ? `${n.name}, ` : ''}a ${n.type})`).join(', ')}. Make yours belong with them (scale, roof language).`, ''] : []),
+    '## How you work',
+    '',
+    `- Only \`kit/designs/${bp}.mjs\` is yours. The sidecar re-checks it with a fresh copy of the kit.`,
+    `- Read \`kit/README.md\`, section "Massing designs": \`massing(bp)\` marks the Blueprint \`massing: true\`; \`m.mass(name, [x0,y0,z0,x1,y1,z1], { roof, ridge, storeys, wall, roofPart })\`, \`m.opening(mass, face, [u, y], [w, h])\` for the door and major openings, \`m.stilts(name, box, spacing)\`. ${examples.length ? `Examples: ${examples.map((e) => `\`kit/massings/${e}.mjs\``).join(', ')}.` : ''}`,
+    '- **Name every mass by its function** (`hall`, `lodging`, `wing_east`, `tower`, `porch`, `roof`; lower_snake_case, unique, never `box1`): at least 2 masses, and the names carry over to the detail design.',
+    '- An entrance (`bp.spot(\'entrance\', ...)` just outside the door, `spawn` a little further out), reachable from outside; nothing floating. No light, interior or furnishing rules apply.',
+    `- Build and check: \`node kit/build.mjs ${bp} --profile massing --max ${m.x},${m.y},${m.z} --type ${req.type}\`. "check: OK" is required; fix the warnings too.`,
+    opts.renderer ? `- Look at it once: \`node kit/render.mjs kit/out/${bp}.nbt --out previews\` and Read \`previews/${bp}.preview-iso.png\`.` : '',
+    '- Report progress with the `design_status` tool. No network, no installs, no git, no subagents.',
+    '- Finish with ONE line: the masses and the silhouette.',
+    '',
+  ];
+  return lines.filter((l, i, a) => l !== '' || a[i - 1] !== '').join('\n');
+}
+
+export function massingSystemPrompt(): string {
+  return [
+    "# You are Architect's massing designer",
+    'You make massings of Minecraft buildings: the volumes, roof forms and main openings, as code with the Architect blueprint kit (kit/lib/massing.mjs). A player approves the shape before a detail designer builds it out, so the masses must read clearly and be named by what they are for.',
+    'Your working directory is a scratch folder with BRIEF.md (read it first), CONTRACT.md and kit/. Work only inside it and write only your own design file. Be quick: a massing is meant to cost cents and take a minute or two.',
+  ].join('\n');
+}
+
+export function massingPrompt(bp: string): string {
+  return `Make the massing described in BRIEF.md as kit/designs/${bp}.mjs. Read BRIEF.md and the "Massing designs" section of kit/README.md, write the massing, build and check it, look at the iso render once, then end with a one-line summary.`;
+}
+
+export function massingFixPrompt(bp: string, problem: string, round: number): string {
+  return `The sidecar re-checked your massing with a fresh copy of the kit and it did not pass (round ${round} of ${MAX_DESIGN_ROUNDS}):\n${problem}\n\nFix kit/designs/${bp}.mjs (only that file counts), run the build command from BRIEF.md until the check is OK, then end with a one-line summary.`;
 }
 
 /** The style-bible section of BRIEF.md (4b). */
@@ -152,7 +261,11 @@ export function bibleSection(b: NonNullable<BriefOptions['bible']>, bp: string):
 
 /** BRIEF.md for a request: what the design agent reads first. */
 export function designBrief(req: DesignRequest, bp: string, opts: BriefOptions): string {
-  const m = req.maxSize;
+  if (req.massing) return massingBrief(req, bp, opts);
+  const bound = opts.massing?.role === 'detail' ? opts.massing : undefined;
+  // (4c) a detail pass's hard cap: min(massing size + 2, request.maxSize)
+  const m = bound?.maxSize ?? req.maxSize;
+  const massingArg = bound ? ` --massing massing/${bound.record.id}.blueprint.json` : '';
   const ex = examplesFor(req.type, opts.examples);
   const plot = req.plot
     ? `- plot: a marked plot of ${req.plot.dx} x ${req.plot.dz} blocks${req.plot.height ? `, up to ${req.plot.height} high` : ''}${req.plot.front ? `, its front facing ${req.plot.front}` : ''}. The mod turns the design so its \`front\` faces the plot's front; design it with \`front: 'south'\` as usual.`
@@ -177,6 +290,8 @@ export function designBrief(req: DesignRequest, bp: string, opts: BriefOptions):
     req.remix ? `- remix: start from the library design \`${req.remix}\`. ${opts.remix ?? 'Its source was not found; design from scratch in its spirit.'}` : '',
     req.group ? `- this is item \`${req.itemKey ?? '?'}\` (${req.role ?? 'ordinary'}${req.role === 'landmark' ? ': the set\'s centrepiece, the most elaborate and recognisable' : ': it supports the landmarks, simpler and smaller'}) of a design group, wave ${req.wave ?? 1}.` : '',
     '',
+    ...contextSection(req.context),
+    ...(bound ? massingBindingSection(bound.record, m) : []),
     ...(opts.bible ? bibleSection(opts.bible, bp) : []),
     ...(opts.neighbours?.length
       ? [
@@ -203,7 +318,7 @@ export function designBrief(req: DesignRequest, bp: string, opts: BriefOptions):
     '- **Materials come from the palette**: the default export gets `palette` (default: the preset or `palette({ wood, stone, roof, accent })` that fits the request). Read every wood and stone from it (`p.planks`, `p.log`, `p.strippedLog`, `p.stairs`, `p.slab`, `p.fence`, `p.door`, `p.trapdoor`, `p.accentLog`, `p.accentStairs`, `p.stone`, `p.stoneStairs`, `p.stoneSlab`, `p.stoneWall`, `p.stoneTrim`, `p.roofStairs`, `p.roofSlab`, `p.roofBlock`, `p.plaster`), never a hard-coded wood or stone id, so a palette swap re-skins the whole building; the checker warns otherwise. Decor (chests, barrels, beds, lanterns, glass, carpets, iron) is free. Check a second preset too (`--palette cherry`, `--palette fortress`).',
     "- **Name the parts**: wrap every major mass in `bp.part('<name>', () => { ... })` (e.g. `main`, `roof`, `porch`, `tower`, `wing_east`, `chimney`, `furnishings`): at least 2 parts, and at most 20% of the cells outside any part (the checker warns otherwise). Names are stable ids (later edits diff by them): lower_snake_case, unique. Declare consts outside the part closures if several parts use them.",
     `- Build it semantically with the kit helpers in \`kit/lib/kit.mjs\` (walls with openings, floors, doors, roofs with overhang, stairs and ladders, windows, chimney, porch, lighting, \`anchor()\`), not as a dump of raw coordinates. ${ex.length ? `Start by reading the closest example${ex.length > 1 ? 's' : ''}: ${ex.map((e) => `\`kit/designs/${e}.mjs\``).join(', ')} (each is parametric and palette-driven: see how its \`params\` shape the code).` : 'Look at the examples in `kit/designs/`.'}`,
-    `- Build and check: \`node kit/build.mjs ${bp} --max ${m.x},${m.y},${m.z} --type ${req.type}${!isPreset(req.type) ? ` --profile ${(req.profile ?? DEFAULT_PROFILE).join(',')}` : ''}\` (writes kit/out/${bp}.nbt and the sidecar, then runs the checker; add \`--palette <preset>\` / \`--values <json>\` for the variants). "check: OK" is required with the defaults; fix the warnings too.`,
+    `- Build and check: \`node kit/build.mjs ${bp} --max ${m.x},${m.y},${m.z} --type ${req.type}${!isPreset(req.type) ? ` --profile ${(req.profile ?? DEFAULT_PROFILE).join(',')}` : ''}${massingArg}\` (writes kit/out/${bp}.nbt and the sidecar, then runs the checker; add \`--palette <preset>\` / \`--values <json>\` for the variants). "check: OK" is required with the defaults; fix the warnings too.`,
     opts.renderer
       ? `- Look at it: \`node kit/render.mjs kit/out/${bp}.nbt --out previews\` writes ${bp}.preview-iso.png / -top.png / -front.png into previews/; Read the PNGs and fix what looks wrong (holes, floating blocks, a missing roof, the entrance not on the front, dark rooms, a flat or boxy look). Iterate until it looks like a ${req.type} a player would be proud of.`
       : '- There is no renderer in this kit: check the layout by reasoning about the code and the checker output.',

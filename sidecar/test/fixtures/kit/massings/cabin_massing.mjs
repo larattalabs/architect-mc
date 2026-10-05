@@ -2,7 +2,7 @@
 // grows it (a redirect in the sim bumps it): 1 adds wing_east, 2 also a tower.
 import { massing } from '../lib/massing.mjs';
 
-export const id = 'cabin';
+export const id = 'cabin_massing';
 
 export const params = {
   wings: { type: 'int', min: 0, max: 2, default: 0, label: 'Wings' },

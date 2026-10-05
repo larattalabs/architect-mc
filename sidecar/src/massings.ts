@@ -121,7 +121,8 @@ export class Massings {
   /** The check of a massing or a detail pass: the size cap (the hard one for a detail pass) and the conformance args. */
   checkPlan(d: Design, base: Limits): { limits: Limits; extra: string[] } {
     const r = d.request;
-    if (r.massing) return { limits: { maxSize: r.maxSize, type: r.type }, extra: [] };
+    // the kit's massing profile (`--profile massing`; a sidecar with massing: true gets it anyway), the request's size
+    if (r.massing) return { limits: { maxSize: r.maxSize, type: r.type, profile: ['massing'] }, extra: [] };
     const m = this.sourceOf(d);
     if (!m) return { limits: base, extra: [] };
     return { limits: { ...base, maxSize: detailMax(m.size, r.maxSize) }, extra: ['--massing', path.join(m.dir, `${m.id}.blueprint.json`)] };

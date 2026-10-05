@@ -10,6 +10,7 @@ import { designBrief, type BriefOptions } from './claude/brief.js';
 import { CONTRACT_EXCERPT } from './claude/contract.js';
 import { KIT, refreshKit, rendererIn } from './designs.js';
 import type { BibleInfo, BiblePin, Design } from './protocol.js';
+import type { ScratchMassing } from './sidecar.js';
 
 export function scratchDirFor(dataDir: string, designId: string): string {
   return path.join(dataDir, 'designs', designId);
@@ -39,6 +40,8 @@ export interface PrepareInput {
   bible?: { files: BibleFiles; info: BibleInfo; pin: BiblePin } | undefined;
   /** (4b) renders of finished earlier-wave siblings: copied into neighbours/<entryId>.png */
   neighbours?: Array<{ entryId: string; name?: string; type: string; png: string }> | undefined;
+  /** (4c) the massing a detail pass is bound to (or a redirect starts from): copied into massing/ */
+  massing?: ScratchMassing | undefined;
 }
 
 /** Create / refresh the scratch dir: fresh kit, BRIEF.md, CONTRACT.md and the remix source. */
@@ -80,7 +83,22 @@ export function prepareScratch(input: PrepareInput): string {
     fs.copyFileSync(n.png, f);
     neighbours.push({ file: `neighbours/${n.entryId}.png`, entryId: n.entryId, type: n.type, ...(n.name ? { name: n.name } : {}) });
   }
-  const examples = kitExamples(path.join(scratch, KIT)).filter((e) => e !== bp);
+  // 4c: the massing (source, sidecar, renders) of a detail pass or a redirect
+  const md = path.join(scratch, 'massing');
+  fs.rmSync(md, { recursive: true, force: true });
+  let massing: BriefOptions['massing'];
+  if (input.massing) {
+    const m = input.massing.record;
+    fs.mkdirSync(md, { recursive: true });
+    const files: string[] = [];
+    for (const f of fs.existsSync(m.dir) ? fs.readdirSync(m.dir) : []) {
+      if (!f.startsWith(`${m.id}.`) || f.endsWith('.nbt')) continue;
+      fs.copyFileSync(path.join(m.dir, f), path.join(md, f));
+      files.push(`massing/${f}`);
+    }
+    massing = { record: m, role: input.massing.role, files, ...(input.massing.maxSize ? { maxSize: input.massing.maxSize } : {}) };
+  }
+  const examples = [...kitExamples(path.join(scratch, KIT)), ...(d.request.massing ? kitMassings(path.join(scratch, KIT)) : [])].filter((e) => e !== bp);
   fs.writeFileSync(
     path.join(scratch, 'BRIEF.md'),
     designBrief(d.request, bp, {
@@ -89,9 +107,23 @@ export function prepareScratch(input: PrepareInput): string {
       ...(remix ? { remix } : {}),
       ...(input.bible ? { bible: { id: input.bible.pin.id, version: input.bible.pin.version, name: input.bible.info.name, roles: input.bible.info.roles, components: input.bible.info.components, hasProse: !!input.bible.files.md && fs.existsSync(input.bible.files.md) } } : {}),
       ...(neighbours.length ? { neighbours } : {}),
+      ...(massing ? { massing } : {}),
     }),
   );
   return scratch;
+}
+
+/** (4c) Example massings in a kit (massings/<id>_massing.mjs), sorted. */
+export function kitMassings(kitDir: string): string[] {
+  try {
+    return fs
+      .readdirSync(path.join(kitDir, 'massings'))
+      .filter((f) => /^[a-z0-9_]+\.mjs$/.test(f))
+      .map((f) => f.slice(0, -4))
+      .sort();
+  } catch {
+    return [];
+  }
 }
 
 /** Copy a bible's files into <scratch>/bible/ (what a design imports: ../../bible/components.mjs, ../../bible/bible.json). */
