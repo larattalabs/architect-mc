@@ -565,7 +565,7 @@ noted. Async results use `CompletableFuture` completed on the server thread.
 
 ```java
 public interface ArchitectApi {
-  String VERSION = "1.0.0";
+  String VERSION = "1.1.0";   // 1.1.0: Jobs.putBlob, ToolHandler.threadSafe, Job.resultBlob/owner (see "Phase 4a mod jobs as built")
   static ArchitectApi get();
 
   Library library();                 // read-only view of the library (bundled + user)
@@ -686,8 +686,15 @@ interface Jobs {
   Optional<Job> get(String jobId);  List<Job> list(@Nullable String owner);   // includes jobs finished while you were away
   void registerTool(String owner, String name, ToolHandler h);  // global per (owner, tool name), NOT per run
   boolean available();                                   // false: no sidecar link (helper not running / no client)
+  // 1.1.0
+  CompletableFuture<String> putBlob(String kind, @Nullable String owner, JsonElement data);  // -> blobId
+  CompletableFuture<String> putBlob(String kind, @Nullable String owner, byte[] data);       // 1 MB chunks
 }
-@FunctionalInterface interface ToolHandler { CompletableFuture<JsonElement> call(String jobId, JsonObject input); }
+@FunctionalInterface interface ToolHandler {
+  CompletableFuture<JsonElement> call(String jobId, JsonObject input);
+  default boolean threadSafe() { return false; }         // 1.1.0: a readOnly tool's handler may then run on a worker
+  static ToolHandler threadSafe(ToolHandler h);          // 1.1.0: wraps a lambda as thread-safe
+}
 ```
 - **Tool handlers are registered globally** by owner and tool name, at mod init. A job that resumes after a restart
   re-sends its pending tool call, and the handler registered in the new JVM answers it. A per-run closure would have
@@ -814,6 +821,65 @@ arguments and results, as a semi-stable test surface: changes are noted in its c
   - A sidecar SIGKILLed while waiting on a tool call restarts, re-sends the same `callId` to the reconnecting client (matched by
     the client name), resumes the session with the answer and finishes. The reported cost then covers only the post-restart
     query (the documented overshoot).
+
+## Phase 4a mod jobs as built (Java side, API 1.1.0, recorded 2026-10-05)
+
+- **API 1.1.0 (minor, additive):** `Jobs.putBlob(String kind, @Nullable String owner, JsonElement data)` and
+  `Jobs.putBlob(String kind, @Nullable String owner, byte[] data)` -> `CompletableFuture<String>` (the blob id, on the server
+  thread); `ToolHandler.threadSafe()` (default false) and `static ToolHandler.threadSafe(ToolHandler)`; `Job` gains the
+  component `Optional<String> resultBlob` (the 1.0.0 nine-argument constructor is kept) and `Optional<String> owner()`.
+  `features()` already mapped the sidecar's `blobs`.
+- **available()** = the link is synced, the sidecar chose protocol 2 and lists `job.run`. Against a protocol-1 helper `run()`
+  fails with "jobs need protocol 2; this helper speaks protocol 1".
+- **Jobs and events:** `snapshot.jobs` is merged with what the mod already knows (a snapshot holds only the last 20 plus the
+  unfinished ones), and `job.upsert` updates it. `JOB_UPDATED` fires when status, step, cost or `updatedAt` changed since the
+  last one; `JOB_DONE` fires once per job (`id@createdAt`), and that set is kept in `<gameDir>/architect/api-jobs.json`, so a
+  reconnect's snapshot, a sidecar restart or a game restart never fires it again. A job that finished while no world was
+  loaded fires when the next world has started. A job whose result came as `resultBlob` gets it read back from
+  `<sidecar data>/blobs/<id>` into `result` before `JOB_DONE` (if that read fails, `result` stays empty and `resultBlob`
+  names it).
+- **Tool calls:** the handler of (`owner` from the call, else the job's spec owner; `name`). It runs on the server thread, or
+  on a worker ("Architect-ToolWorker") when the job's spec marks the tool `readOnly` AND the handler is `threadSafe()`.
+  - Answers are cached per `callId` (the newest 512) before they are sent. A re-sent call gets the cached answer, and one
+    re-sent while its handler still runs waits for it; the handler never runs twice.
+  - An answer whose JSON is over 254 KB (256 KB less some headroom for `JSON.stringify` differences) goes as a `tool.result`
+    blob, and the result is `{blob, kind: "tool.result", bytes, note}`. A sidecar `ok:false` that says the result is too
+    big triggers the same fallback.
+  - `ok:false` with "no pending tool call" (the job was cancelled, or the call timed out) is dropped with an info log line.
+  - With no handler, the answer is the error "no handler for <tool> in this game". With no world running, or a server that
+    is stopping, it is an error that says so. A handler that throws or fails gives the agent its message (at most 10 000
+    chars).
+- **The paused clock in practice:** the integrated server still runs queued tasks while the game is paused, so a server-
+  thread handler that answers at once is not held up by a pause. Only work that waits for ticks (or anything else that
+  stops while paused) is, and the sidecar's paused clock covers that. apitest's `tickwait` tool shows it: a call with a
+  10 s timeout survives a 15 s pause.
+- **blob.put from Java:** a JSON blob up to 12 MB goes whole (`data`); a bigger one goes as UTF-8 chunks with `ext: "json"`.
+  A binary blob goes as base64 chunks of 1 MB, with at most 12 MB of base64 per frame (so under 16 MB). The frames are sent
+  one after another with `more: true` and the blob id from the first ack. Above 64 MB, the upload is refused before
+  sending.
+- **Designs and variants (fixes):**
+  - `Library.makeVariant` futures time out after 2 minutes. They fail when the link drops, and they complete even when the
+    variant finished before its ack was processed: the outcome is kept for a minute for a late registration.
+  - `Designs.request` completes at the ack. Its 10-minute timeout is a backstop, because the link's 20 s ack timeout and a
+    dropped link already fail it.
+  - Both timeouts are configurable: `-Darchitect.api.variantTimeoutMs` / `ARCHITECT_API_VARIANT_TIMEOUT_MS` and
+    `-Darchitect.api.designTimeoutMs` / `ARCHITECT_API_DESIGN_TIMEOUT_MS`.
+  - Designs and variants that finished while no world was loaded fire `DESIGN_DONE` / `VARIANT_DONE` once the next world
+    has started.
+- **Dev/test:** `ARCHITECT_SIDECAR_BACKEND=sim|claude` makes the launcher pass `--backend` to a sidecar it starts
+  (`tools/run-apitest-client.sh --sim`). New DevBridge hooks `dev.world.leave` / `dev.world.open` (docs/DEVBRIDGE.md).
+- **Verified without Claude** (`tools/apitest.mjs jobs` and `catchup`, the real sidecar's sim backend started by the launcher):
+  - a structured job, and an agent job: the survey summary tool on the server thread, a `readOnly` + thread-safe tool on a
+    worker, a `readOnly` tool that is not thread-safe on the server thread, a missing handler, a 310 KB answer as a blob;
+  - a tool call across a 15 s pause with a 10 s timeout;
+  - cancel, with the late answer dropped;
+  - a budget stop at $0.02 of $0.015;
+  - a 2.5 MB binary blob (3 frames) and a survey JSON blob put from Java and found in a job's scratch dir, the SHA-256
+    matching;
+  - the sidecar SIGKILLed mid tool call and restarted by the launcher: the handler ran once and the cached answer was
+    re-sent;
+  - every JOB_ event on the server thread, DONE once per job across reruns;
+  - designs and variants finished on the title screen fire DONE when the world loads.
 
 ---
 
