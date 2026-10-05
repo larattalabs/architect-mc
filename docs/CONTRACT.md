@@ -247,3 +247,115 @@ the crash-safety snapshot needs a slim part of it) or HQ:
 In a fresh dev world (DevBridge, never a real world): generate a cabin at preset M and a tower on a marked plot
 with the real Claude backend; both pass the checker, show as a ghost, place, and Remove restores the terrain
 exactly. Screenshots in `artifacts/gate1/`.
+
+---
+
+# Phase 2 contract: the library
+
+The parallel work for phase 2 builds against this section. Phase 1 above still holds. The gate is in docs/PLAN.md.
+
+## Library entry (additions to `<id>.blueprint.json`)
+
+```json
+{
+  "palette": { "preset": "rustic", "wood": "spruce", "stone": "cobblestone", "roof": "dark_oak", "accent": "dark_oak" },
+  "params": {
+    "floors": { "type": "int", "min": 1, "max": 3, "default": 1, "label": "Floors" },
+    "width":  { "type": "int", "min": 7, "max": 15, "default": 9, "label": "Width" },
+    "porch":  { "type": "bool", "default": true, "label": "Porch" }
+  },
+  "values": { "floors": 1, "width": 9, "porch": true },
+  "variantOf": "gen_lakeside_cabin",
+  "favorite": false,
+  "userTags": ["mine"],
+  "displayName": "Lakeside Cabin (birch)"
+}
+```
+
+- **The kit's build writes these:**
+  - `palette`: the palette the design was built with, as its inputs (preset name if any, plus wood/stone/roof/accent).
+  - `params`: the design's declared parameters, exported from the source as `export const params = {...}`. Absent means none.
+  - `values`: the parameter values this build used.
+- **The sidecar writes:**
+  - `variantOf`: the library id this entry was made from, for a variant or a remix.
+- **The mod writes, editing the JSON in place:**
+  - `favorite`, `userTags`, `displayName`. These three are user metadata.
+  - The sidecar never touches them. The kit's build never writes them, and a rebuild keeps them.
+
+## Parametric designs (kit + brief)
+
+- **Signature.** A design's default export takes `{ palette, ...values }` and must build for every value in its `params`
+  domain. Each `int` param has min, max and default; each `bool` param has a default; each `enum` param has `options` and a default.
+- **Sizes.** Designs keep the size small enough that the defaults fit the request's maxSize. `params` bounds may reach
+  past that limit. A variant that doesn't fit the requested maxSize is just a bigger building; the mod shows its size.
+- **Examples.** The kit examples (cabin, tower, tavern, gatehouse) each get 2 to 4 params, e.g. floors, width/depth,
+  porch on/off, roof style.
+- **Brief.** The design brief asks Claude for 2 to 4 meaningful params plus palette-driven materials. Materials must come
+  from `palette` fields, never hard-coded wood or stone ids, so palette swaps work. The checker warns when a design uses
+  a wood or stone family that isn't from its palette (phase 2: a warning).
+- **Palettes.** `kit/lib/kit.mjs` `PALETTES` grows to about 10 presets: rustic, oak, birch, dark, desert, brick, plus
+  cherry, mangrove, crimson (nether-safe woods) and a stone-heavy "fortress". `palette()` validates the overrides.
+- **CLI.** `node kit/build.mjs <id> --palette <preset>|<json> --values <json>` builds a variant.
+  `node kit/tools/describe.mjs <id>` prints `{ params, palettes: [names + inputs] }`.
+
+## Variants without Claude (protocol additions)
+
+Client -> sidecar:
+- `variant.request` `{ from: libraryId, palette?: string | {wood?, stone?, roof?, accent?}, values?: {..}, name?: string }`
+  -> ack `{ variantId }`.
+
+Sidecar -> client:
+- `variant.upsert` `{ variant: { id: "v<n>", from, status: queued|building|done|failed, step, blueprintId?, size?, error?, createdAt, updatedAt } }`
+- Also in `snapshot.variants[]` (the last 20 plus any unfinished).
+
+How a variant job works:
+- No Claude.
+- Copy the library entry's `.mjs` into a scratch kit copy, then build it with the palette and values through the
+  pristine-kit check: same child process, minimal env, `--max` = the entry's request maxSize grown to fit (no limit), `--type` = the entry's type.
+- Render the previews, then install as a new library entry. Id: `<from>_<palette>`, or `_v2`, ...; never overwriting.
+  The entry gets `variantOf`, keeps the original's `request`, and gets `displayName` = `"<name> (<palette>, floors 2)"`.
+- One job at a time; seconds, not minutes.
+- A source that throws or fails the check marks the variant `failed`, with the checker's error lines.
+
+## Mod: library screen
+
+**Library tab:**
+- A grid of cards with the iso preview, name, type, size, a favourite star, and a variant badge.
+- Filters: type, user tag, favourites only, and text search over name/tags/description.
+- Sort: newest, name, size.
+
+Detail panel for the selected card:
+- previews: iso, top, front, cutaway if present
+- description, materials, size, and where it came from (generated request, variant of X, imported, bundled)
+- actions: Place, Place on the plot, Rename, Tags, Favourite, Delete (to the trash, as now), Export, Remix…, Variants…
+
+**Variants…:**
+- A palette picker (preset chips, plus advanced wood/stone/roof/accent dropdowns from the kit's lists).
+- Controls generated from `params` (int stepper, bool toggle, enum chips).
+- "Make variant" sends `variant.request`.
+- Progress and the result show in the Designs tab, which now lists variants too.
+
+**Remix…** opens the Design tab prefilled from the entry's request, with `remix` set and an empty notes field
+for "what to change". It's the existing remix path, so it uses Claude.
+
+**Import / export:**
+- Export writes `<id>.nbt` and `<id>.blueprint.json` to `<gameDir>/architect/exports/<id>/`. It also copies the `.nbt` into the
+  current world's `generated/<namespace>/structures/` as `architect_mc:<id>`, so a vanilla structure block can load it.
+- Import:
+  - The Library's "Import…" lists `.nbt` files in `<gameDir>/architect/imports/` and in the current world's
+    `generated/*/structures/` (structure-block saves).
+  - Picking one creates a library entry: type `custom`, groundY 1, front south, entrance at the front centre, and spawn 2 out.
+  - It is checked with the `custom` profile through the sidecar (`import.request {path}` -> reuses the variant pipeline:
+    a check, previews, install with `"imported": true`). No source, so no variants: the Variants button is disabled for it.
+  - A palette re-skin of imports is out of scope.
+
+## Phase 2 gate (PLAN.md)
+
+All in a fresh dev world, through the UI (DevBridge):
+- Generate one design with Claude.
+- Make 3 variants of it without a Claude call: 2 palettes and 1 param change (e.g. floors).
+- Place a variant and remove it.
+- Export one entry, and import it in a second world (a structure-block save round trip).
+- Favourite, tag, rename and delete all work and survive a game restart.
+
+Screenshots go in `artifacts/gate2/`, and gate-verifier checks the result.
