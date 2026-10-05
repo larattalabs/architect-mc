@@ -4,6 +4,8 @@
 // usage-limit state. Until a model has measurements the seeds stand in, measured in the phase 4b gate (2026-10-05):
 // an Opus design $2.0-3.2 and 8-13 min, a Sonnet design $0.8-2.5 and 4-10 min, a bible job $1.2-2.0 and 5-8 min (the
 // phase 1-2 Opus figure of $1-1.5 was for smaller, simpler designs). Only the Claude backend records samples.
+// Phase 4c adds the `massing` kind (seeded at $0.10-0.40 and 1-3 min, the contract's figure until the gate measures it);
+// a group with massingFirst estimates both passes (redirects are not in the estimate: they are the player's choice).
 import type { BibleRequest, DesignRequest, Estimate, GroupRequest } from './protocol.js';
 import type { Store } from './store.js';
 
@@ -13,10 +15,12 @@ export interface Sample {
   at: number;
 }
 
-export type EstimateKind = 'design' | 'bible';
+export type EstimateKind = 'design' | 'bible' | 'massing';
 export interface EstimateData {
   design: Record<string, Sample[]>;
   bible: Record<string, Sample[]>;
+  /** (4c) */
+  massing: Record<string, Sample[]>;
 }
 
 const KEEP = 20;
@@ -30,6 +34,8 @@ const OPUS: Seed = { usd: [2.0, 3.2], ms: [8 * MIN, 13 * MIN] };
 /** Bible job seed, measured 2026-10-05 (one real bible: $1.40, 6.4 min). */
 const BIBLE: Seed = { usd: [1.2, 2.0], ms: [5 * MIN, 8 * MIN] };
 const SONNET: Seed = { usd: [0.8, 2.5], ms: [4 * MIN, 10 * MIN] };
+/** (4c) Massing job seed: the contract's $0.10-0.40 and 1-3 min (Sonnet, effort low), to be measured in the 4c gate. */
+const MASSING: Seed = { usd: [0.1, 0.4], ms: [1 * MIN, 3 * MIN] };
 
 /** The seed of a model family (by its id). */
 export function seedFor(model: string): { seed: Seed; family: string } {
@@ -53,6 +59,8 @@ export interface EstimateCtx {
   landmarkModel: string;
   ordinaryModel: string;
   bibleModel: string;
+  /** (4c) the default model of a massing job */
+  massingModel: string;
 }
 
 export class Estimates {
@@ -62,9 +70,10 @@ export class Estimates {
   ) {}
 
   private get data(): EstimateData {
-    const d = (this.store.data.estimates ??= { design: {}, bible: {} });
+    const d = (this.store.data.estimates ??= { design: {}, bible: {}, massing: {} });
     d.design ??= {};
     d.bible ??= {};
+    d.massing ??= {};
     return d;
   }
 
@@ -105,6 +114,7 @@ export class Estimates {
   perJob(kind: EstimateKind, model: string): { usd: [number, number]; ms: [number, number]; basis: string } {
     const list = this.data[kind][model] ?? [];
     if (!list.length) {
+      if (kind === 'massing') return { usd: MASSING.usd, ms: MASSING.ms, basis: `${model}: seed, a massing ($0.10-0.40, 1-3 min)` };
       const { seed, family } = seedFor(model);
       return { usd: seed.usd, ms: seed.ms, basis: `${model}: seed, ${family}` };
     }
@@ -117,38 +127,54 @@ export class Estimates {
     return { usd: [Math.max(0, mu - du), mu + du], ms: [Math.max(MIN / 2, mt - dt), mt + dt], basis: `${model}: ${list.length} measured (avg $${mu.toFixed(2)}, ${(mt / MIN).toFixed(1)} min)` };
   }
 
-  /** A design group's estimate (or one design's: a group of one). */
-  group(g: Pick<GroupRequest, 'items' | 'concurrency'>, ctx: EstimateCtx): Estimate {
+  /** A design group's estimate (or one design's: a group of one); with massingFirst, the massing pass plus the detail pass. */
+  group(g: Pick<GroupRequest, 'items' | 'concurrency'> & { massingFirst?: boolean | undefined }, ctx: EstimateCtx): Estimate {
     const slots = Math.max(1, Math.min(g.concurrency ?? 3, ctx.designConcurrency));
-    let usdLo = 0;
-    let usdHi = 0;
-    const waves = new Map<number, Array<{ ms: [number, number] }>>();
-    const bases = new Map<string, string>();
-    for (const it of g.items) {
-      const model = itemModel(it, ctx);
-      const pj = this.perJob('design', model);
-      bases.set(model, pj.basis);
-      usdLo += pj.usd[0];
-      usdHi += pj.usd[1];
-      const w = it.anchor ? 0 : (it.wave ?? 1);
-      if (!waves.has(w)) waves.set(w, []);
-      waves.get(w)!.push({ ms: pj.ms });
-    }
-    // each wave runs in batches of `slots`; a batch takes as long as its slowest item
-    let msLo = 0;
-    let msHi = 0;
-    for (const items of waves.values()) {
-      const batches = Math.ceil(items.length / slots);
-      msLo += batches * Math.max(...items.map((i) => i.ms[0]));
-      msHi += batches * Math.max(...items.map((i) => i.ms[1]));
-    }
+    const passes = [...(g.massingFirst ? [this.pass(g.items, 'massing', () => ctx.massingModel, slots)] : []), this.pass(g.items, 'design', (it) => itemModel(it, ctx), slots)];
+    const sum = (f: (p: PassEstimate) => number) => passes.reduce((a, p) => a + f(p), 0);
+    const waves = new Set(g.items.map((it) => (it.anchor ? 0 : (it.wave ?? 1)))).size;
     const wait = ctx.limitUntil && ctx.limitUntil > ctx.now ? ctx.limitUntil - ctx.now : 0;
-    const basis = [...bases.values(), `${g.items.length} design${g.items.length === 1 ? '' : 's'} in ${waves.size} wave${waves.size === 1 ? '' : 's'}, ${slots} at a time`, ...(wait ? [`a usage limit holds new turns for ${Math.ceil(wait / MIN)} min`] : [])].join('; ');
-    return { usdLow: r2(usdLo), usdHigh: r2(usdHi), minutesLow: r1((msLo + wait) / MIN), minutesHigh: r1((msHi + wait) / MIN), basis };
+    const n = g.items.length;
+    const basis = [
+      ...new Set(passes.flatMap((p) => p.bases)),
+      `${n} design${n === 1 ? '' : 's'} in ${waves} wave${waves === 1 ? '' : 's'}, ${slots} at a time`,
+      ...(g.massingFirst ? [`massing first: ${n} massing${n === 1 ? '' : 's'} before the detail pass (redirects not included)`] : []),
+      ...(wait ? [`a usage limit holds new turns for ${Math.ceil(wait / MIN)} min`] : []),
+    ].join('; ');
+    return { usdLow: r2(sum((p) => p.usd[0])), usdHigh: r2(sum((p) => p.usd[1])), minutesLow: r1((sum((p) => p.ms[0]) + wait) / MIN), minutesHigh: r1((sum((p) => p.ms[1]) + wait) / MIN), basis };
   }
 
-  /** One design's estimate. */
+  /** One pass over the items (massings or designs): the cost adds up, each wave runs in batches of `slots` (a batch takes as long as its slowest item). */
+  private pass(items: GroupRequest['items'], kind: 'design' | 'massing', model: (it: GroupRequest['items'][number]) => string, slots: number): PassEstimate {
+    const usd: [number, number] = [0, 0];
+    const waves = new Map<number, Array<[number, number]>>();
+    const bases: string[] = [];
+    for (const it of items) {
+      const m = model(it);
+      const pj = this.perJob(kind, m);
+      if (!bases.includes(pj.basis)) bases.push(pj.basis);
+      usd[0] += pj.usd[0];
+      usd[1] += pj.usd[1];
+      const w = it.anchor ? 0 : (it.wave ?? 1);
+      if (!waves.has(w)) waves.set(w, []);
+      waves.get(w)!.push(pj.ms);
+    }
+    const ms: [number, number] = [0, 0];
+    for (const list of waves.values()) {
+      const batches = Math.ceil(list.length / slots);
+      ms[0] += batches * Math.max(...list.map((x) => x[0]));
+      ms[1] += batches * Math.max(...list.map((x) => x[1]));
+    }
+    return { usd, ms, bases };
+  }
+
+  /** One design's estimate (a massing job's when the request is one). */
   design(req: DesignRequest, ctx: EstimateCtx): Estimate {
+    if (req.massing) {
+      const pj = this.perJob('massing', req.model ?? ctx.massingModel);
+      const wait = ctx.limitUntil && ctx.limitUntil > ctx.now ? ctx.limitUntil - ctx.now : 0;
+      return { usdLow: r2(pj.usd[0]), usdHigh: r2(pj.usd[1]), minutesLow: r1((pj.ms[0] + wait) / MIN), minutesHigh: r1((pj.ms[1] + wait) / MIN), basis: [pj.basis, 'one massing', ...(wait ? [`a usage limit holds new turns for ${Math.ceil(wait / MIN)} min`] : [])].join('; ') };
+    }
     return this.group({ items: [{ ...req, model: req.model ?? ctx.designModel } as GroupRequest['items'][number]], concurrency: 1 }, ctx);
   }
 
@@ -160,6 +186,12 @@ export class Estimates {
     const wait = ctx.limitUntil && ctx.limitUntil > ctx.now ? ctx.limitUntil - ctx.now : 0;
     return { usdLow: r2(pj.usd[0]), usdHigh: r2(pj.usd[1]), minutesLow: r1((pj.ms[0] + wait) / MIN), minutesHigh: r1((pj.ms[1] + wait) / MIN), basis: [pj.basis, ...(wait ? [`a usage limit holds new turns for ${Math.ceil(wait / MIN)} min`] : [])].join('; ') };
   }
+}
+
+interface PassEstimate {
+  usd: [number, number];
+  ms: [number, number];
+  bases: string[];
 }
 
 /** The model a group item designs with: its own, else its role's default (landmark / ordinary). */

@@ -16,7 +16,7 @@ import type { BlobMeta } from './blobs.js';
 import type { BibleWork } from './bibles.js';
 import type { EstimateData } from './estimates.js';
 import type { GroupWork } from './groups.js';
-import type { BibleJob, Cost, Design, Group, Job, JobSpec, Reskin, Variant } from './protocol.js';
+import type { BibleJob, Cost, Design, Group, Job, JobSpec, Massing, Reskin, Variant } from './protocol.js';
 import { ensureDir, readJson, writeJsonAtomic } from './util/fsx.js';
 
 export interface SessionRecord {
@@ -103,6 +103,8 @@ export interface StateData {
   estimates?: EstimateData;
   /** (4b) design id -> when it first started (for the time estimates) */
   runStarts?: Record<string, number>;
+  /** (4c) massing versions (massings.ts), oldest first */
+  massings?: Massing[];
 }
 
 function emptyState(now: number): StateData {
