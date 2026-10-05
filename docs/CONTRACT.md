@@ -925,3 +925,36 @@ collection header with the bible's sheet, name and a "re-skin the collection" ac
 - **A group-wide usage hold** (sim backend): one item hits the limit, all hold, all resume.
 - **An open type** with a profile (`hellish_lair` with `door`, `lit`, `no_floating`) designs and passes.
 - gate-verifier checks the result.
+
+### 4b review folded in (Steward, `steward-mc/docs/A4B-REVIEW.md`, all accepted 2026-10-05)
+
+1. **Addressable items:** a group item carries `itemKey` (the caller's key, unique in the group) plus `ext`. `group(id)` and
+   `GROUP_DONE` return `items: [{itemKey, ext, designId, entryId?, status, cost}]`, persisted across restarts.
+   `Designs.listGroups(owner)` and `Bibles.list(owner)`.
+2. **Estimates:** `Designs.estimate(GroupRequest)` and `Bibles.estimate(BibleRequest)` return
+   `{usdLow, usdHigh, minutesLow, minutesHigh, basis}`. They're computed from the sidecar's measured per-model averages
+   (rolling, persisted, seeded with today's measurements: Opus design about $1.0-1.5 and 4-6 min; Sonnet unmeasured,
+   seeded at 0.4x Opus cost), the concurrency and the current usage-limit state. Protocol: `design.estimate` / `bible.estimate`.
+3. **Soft budget:** `softBudgetFraction` (default 0.8). Reaching it stops dispatching new items, and the group goes
+   `paused_budget` with a reason. `Designs.extendGroup(id, budgetUsd)` and `resumeGroup(id)`. The hard budget still cancels
+   at 100%.
+4. **Anchor-first:** items take `wave: n` (default 1; `anchor: true` = wave 0). A wave starts when the previous wave is
+   done (or failed), and later waves get the earlier waves' renders as neighbours.
+5. **Open roles:** `roles` may carry extra named roles (vanilla blocks, validated). `BibleRequest.scope: "building" |
+   "settlement"`; with settlement, the bible job also fills the macro roles `rock`, `surface`, `subsurface`, `rubble`, `rail`,
+   `structure`, for A5b region programs.
+6. **Re-skin and the sheet:** `Library.reskinCollection(bibleId, version)` returns one future plus a `RESKIN_DONE` event listing
+   the new entries. The Java `Bible` record has `version`, `roles`, `prose` and `sheetPath`, so the client can show the sheet
+   for approval.
+7. **Seed preset:** `BibleRequest.seedPreset` starts a bible from a built-in one (the 10 palettes, plus style templates as
+   they're added).
+8. **Group statuses:** `queued | running | held_usage | paused_budget | done | failed | cancelled`.
+9. **Limits and sharing:**
+   - A group holds up to **24** items.
+   - `designConcurrency` (default 3) is one pool shared round-robin across groups (fair, not FIFO by group) and single designs.
+   - A bible job takes one slot.
+   - Variants and re-skins don't use design slots (they're in the variant queue, seconds each).
+10. **Gate additions:**
+    - `ext` and `itemKey` survive a sidecar restart mid-group;
+    - the estimate is within ±50% of the measured cost for the gate group, and the tolerance gets tightened as data accrues;
+    - a soft-budget pause, extend and resume (sim backend).
