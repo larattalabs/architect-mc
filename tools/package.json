@@ -1,0 +1,15 @@
+{
+  "name": "architect-tools",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "description": "Architect dev tools: the DevBridge CLI (devcli.mjs) and the scene screenshot runner (shoot.mjs). No dependencies: Node 22+ has WebSocket.",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "state": "node devcli.mjs state",
+    "wait": "node devcli.mjs wait"
+  }
+}

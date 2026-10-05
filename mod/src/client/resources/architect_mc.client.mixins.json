@@ -1,0 +1,20 @@
+{
+	"required": true,
+	"package": "dev.larattalabs.architect.client.mixin",
+	"compatibilityLevel": "JAVA_25",
+	"client": [
+		"BackupConfirmScreenAccessor",
+		"CameraAccessor",
+		"CameraMixin",
+		"ClientLevelAccessor",
+		"KeyboardHandlerMixin",
+		"MinecraftMixin",
+		"RenderSystemMixin"
+	],
+	"injectors": {
+		"defaultRequire": 1
+	},
+	"overwrites": {
+		"requireAnnotations": true
+	}
+}
