@@ -43,6 +43,7 @@ public final class ScreenFeature {
 			DevBridge.registerScreen("architect_" + t.id(), mc -> new ArchitectScreen(t));
 		}
 		registerDev();
+		LibraryDev.register();
 	}
 
 	private static ArchitectScreen screen(Minecraft mc) {
