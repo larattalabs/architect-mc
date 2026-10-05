@@ -37,6 +37,28 @@ describe('designVerdict', () => {
     }
   });
 
+  it('a data dir reached through a link: the own file is allowed by its link path and its real path', () => {
+    if (process.platform === 'win32') return;
+    const real = path.join(data, 'real-data');
+    const link = path.join(data, 'link-data');
+    fs.mkdirSync(path.join(real, 'designs', 'd9', 'kit', 'designs'), { recursive: true });
+    fs.symlinkSync(real, link);
+    const viaLink = path.join(link, 'designs', 'd9');
+    const viaReal = path.join(real, 'designs', 'd9');
+    for (const home of [link, real]) {
+      for (const c of [viaLink, viaReal]) {
+        for (const p of [path.join(viaLink, 'kit', 'designs', 'gen_x.mjs'), path.join(viaReal, 'kit', 'designs', 'gen_x.mjs')]) {
+          const label = `home ${home}, cwd ${c}, file ${p}`;
+          expect(designVerdict('Write', { file_path: p }, { cwd: c, bp: 'gen_x' }), label).toBeUndefined();
+          expect(classifyToolUse('Read', { file_path: path.join(home, 'secrets.json') }, { ...policy, cwd: c, foreman: { home } }).action, label).toBe('deny');
+          // the ported policy compares paths as written: the sidecar hands the agent the real
+          // (physical) scratch path as its cwd (scratch.ts), and the agent's paths follow it
+          if (c === viaReal && p.startsWith(viaReal)) expect(classifyToolUse('Write', { file_path: p }, { ...policy, cwd: c, foreman: { home } }).action, label).toBe('allow');
+        }
+      }
+    }
+  });
+
   it('refuses git, subagents, web tools and skills; leaves the rest to the policy', () => {
     for (const c of ['git status', 'cd kit && git init', 'FOO=1 git log', '/usr/bin/git diff', 'echo $(git rev-parse HEAD)', 'env git push']) expect(runsGit(c), c).toBe(true);
     for (const c of ['node kit/build.mjs gen_x', 'grep -r digit kit', 'ls kit/designs', 'cat .gitignore']) expect(runsGit(c), c).toBe(false);

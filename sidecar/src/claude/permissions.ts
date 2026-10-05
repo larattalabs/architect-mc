@@ -122,7 +122,8 @@ export function designVerdict(toolName: string, input: Record<string, unknown>, 
     const own = path.join(ctx.cwd, 'kit', 'designs', `${ctx.bp}.mjs`);
     const p = typeof input.file_path === 'string' ? input.file_path : typeof input.notebook_path === 'string' ? input.notebook_path : '';
     const abs = p ? path.resolve(ctx.cwd, p) : '';
-    if (abs && samePath(abs, own) && samePath(realish(abs), realish(own)) && isInsideOrEqual(realish(abs), realish(ctx.cwd))) return undefined;
+    // compared through links (the scratch dir may be reached by a link and by its real path alike)
+    if (abs && samePath(realish(abs), realish(own)) && isInsideOrEqual(realish(abs), realish(ctx.cwd))) return undefined;
     return { action: 'deny', reason: `Only kit/designs/${ctx.bp}.mjs is yours to write in a design job (not ${p || 'a file without a path'}). Use node kit/build.mjs and kit/render.mjs for everything else.` };
   }
   if (toolName === 'Bash' || toolName === 'PowerShell') {

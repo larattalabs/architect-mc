@@ -39,8 +39,10 @@ export interface PrepareInput {
 /** Create / refresh the scratch dir: fresh kit, BRIEF.md, CONTRACT.md and the remix source. */
 export function prepareScratch(input: PrepareInput): string {
   const { design: d, bp } = input;
-  const scratch = scratchDirFor(input.dataDir, d.id);
-  fs.mkdirSync(scratch, { recursive: true });
+  fs.mkdirSync(scratchDirFor(input.dataDir, d.id), { recursive: true });
+  // the physical path: the agent's cwd, the policy and the guards then all see the same prefix
+  // (a data dir reached through a link, e.g. /var -> /private/var on macOS)
+  const scratch = fs.realpathSync(scratchDirFor(input.dataDir, d.id));
   refreshKit(input.kitDir, scratch, [bp]);
   fs.writeFileSync(path.join(scratch, 'CONTRACT.md'), CONTRACT_EXCERPT);
   let remix: string | undefined;

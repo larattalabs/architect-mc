@@ -40,6 +40,11 @@ export async function main(argv: string[]): Promise<void> {
     throw e;
   }
   fs.mkdirSync(cfg.dataDir, { recursive: true });
+  fs.mkdirSync(cfg.libraryDir, { recursive: true });
+  // physical paths, so the design agent's cwd, the policy and the guards agree on every prefix
+  cfg.dataDir = fs.realpathSync(cfg.dataDir);
+  cfg.libraryDir = fs.realpathSync(cfg.libraryDir);
+  if (fs.existsSync(cfg.kitDir)) cfg.kitDir = fs.realpathSync(cfg.kitDir);
   const log = consoleLogger('sidecar', { debug: cfg.debug, file: path.join(cfg.dataDir, 'logs', 'sidecar.log') });
   if (!fs.existsSync(path.join(cfg.kitDir, 'build.mjs'))) log.warn(`no build.mjs in the kit at ${cfg.kitDir}: designs will fail until it is there`);
 
