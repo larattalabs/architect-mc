@@ -1,0 +1,92 @@
+{
+  "id": "cabin",
+  "name": "Log Cabin",
+  "description": "A one-room log cabin with a covered porch, a gable roof and a stone chimney.",
+  "type": "cabin",
+  "tags": [
+    "rustic",
+    "small",
+    "porch",
+    "chimney"
+  ],
+  "size": {
+    "x": 11,
+    "y": 12,
+    "z": 12
+  },
+  "groundY": 1,
+  "front": "south",
+  "materials": [
+    "minecraft:spruce_log",
+    "minecraft:spruce_planks",
+    "minecraft:dark_oak_stairs",
+    "minecraft:dark_oak_planks",
+    "minecraft:cobblestone",
+    "minecraft:spruce_slab",
+    "minecraft:stripped_spruce_log",
+    "minecraft:glass_pane",
+    "minecraft:brown_carpet",
+    "minecraft:spruce_fence",
+    "minecraft:dirt_path",
+    "minecraft:lantern",
+    "minecraft:red_bed",
+    "minecraft:spruce_door",
+    "minecraft:spruce_trapdoor",
+    "minecraft:barrel",
+    "minecraft:bookshelf",
+    "minecraft:campfire",
+    "minecraft:chest",
+    "minecraft:crafting_table",
+    "minecraft:furnace",
+    "minecraft:potted_fern",
+    "minecraft:red_carpet",
+    "minecraft:spruce_pressure_plate",
+    "minecraft:spruce_stairs"
+  ],
+  "foundationBlock": "minecraft:cobblestone",
+  "approach": {
+    "length": 4,
+    "width": 3,
+    "block": "minecraft:dirt_path",
+    "slab": "minecraft:cobblestone_slab"
+  },
+  "interior": {
+    "minX": 2,
+    "minY": 1,
+    "minZ": 2,
+    "maxX": 8,
+    "maxY": 4,
+    "maxZ": 6
+  },
+  "anchors": {
+    "entrance": {
+      "x": 5.5,
+      "y": 1,
+      "z": 8.5,
+      "yaw": 180,
+      "pitch": 0
+    },
+    "spawn": {
+      "x": 5.5,
+      "y": 1,
+      "z": 11.5,
+      "yaw": 180,
+      "pitch": 0
+    },
+    "cam_overview": {
+      "x": -7,
+      "y": 10,
+      "z": 19,
+      "yaw": -141.34,
+      "pitch": 20.022
+    },
+    "cam_interior": {
+      "x": 7.5,
+      "y": 2.6,
+      "z": 5.5,
+      "yaw": 120.964,
+      "pitch": 10.683
+    }
+  },
+  "source": "cabin.mjs"
+}
