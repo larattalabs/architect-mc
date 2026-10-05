@@ -8,6 +8,7 @@ import dev.larattalabs.architect.api.Stage;
 import dev.larattalabs.architect.apiimpl.ApiRules;
 import dev.larattalabs.architect.batch.QBatch;
 import dev.larattalabs.architect.batch.StageRules;
+import dev.larattalabs.architect.journal.Journal;
 import dev.larattalabs.architect.placement.Occupancy;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -50,6 +51,8 @@ public final class Groups {
 		@Nullable String undo;
 		final List<String> undoSites = new ArrayList<>();
 		Map<String, Integer> handed = new TreeMap<>();
+		/** The cells the undo restores (its plan's stats). */
+		int restoredCells;
 		transient @Nullable CompletableFuture<Void> commit;
 		/** Construction members' deconstruct items (computed before the undo is planned, rule 7) and where they drop. */
 		final Map<String, Map<String, Integer>> decItems = new LinkedHashMap<>();
@@ -92,6 +95,7 @@ public final class Groups {
 				JsonObject h = new JsonObject();
 				handed.forEach(h::addProperty);
 				o.add("handed", h);
+				o.addProperty("restoredCells", restoredCells);
 			}
 			if (!decItems.isEmpty()) {
 				JsonObject d = new JsonObject();
@@ -121,6 +125,7 @@ public final class Groups {
 				r.undo = o.get("undo").getAsString();
 				o.getAsJsonArray("undoSites").forEach(e -> r.undoSites.add(e.getAsString()));
 				o.getAsJsonObject("handed").entrySet().forEach(e -> r.handed.put(e.getKey(), e.getValue().getAsInt()));
+				r.restoredCells = o.has("restoredCells") ? o.get("restoredCells").getAsInt() : 0;
 			}
 			if (o.has("dec")) {
 				o.getAsJsonObject("dec").entrySet().forEach(e -> {
@@ -361,7 +366,7 @@ public final class Groups {
 			r.sites.remove(0);
 		}
 		if (r.sites.isEmpty()) {
-			end(server, r, new Removed(true, List.of(), Map.copyOf(r.refund), r.undoSites.size(), Map.copyOf(r.handedAll), List.copyOf(r.cascaded)));
+			end(server, r, new Removed(true, List.of(), Map.copyOf(r.refund), r.restoredCells, Map.copyOf(r.handedAll), List.copyOf(r.cascaded)));
 			return;
 		}
 		String id = r.sites.get(0);
@@ -519,6 +524,7 @@ public final class Groups {
 			r.undoSites.addAll(ids);
 			r.handed = new TreeMap<>(Sites.handedBySite(u.work()));
 			r.handedAll = new TreeMap<>(r.handed);
+			r.restoredCells = u.work().plan().stats().values().stream().mapToInt(Journal.Stats::restored).sum();
 			r.commit = u.commit();
 			Placement.save(server, false);
 		} catch (Sites.SiteException e) {

@@ -352,7 +352,11 @@ async function ownedNow(ids) {
   }
   return out;
 }
-/** Cells a standing site owned before and still owns that changed (the shape leak), per site. */
+/**
+ * Cells a standing site owned before and still owns that changed away from what the site placed (its entry's after), per site:
+ * the shape leak. A cell that changed back to the site's after (a neighbour's placement had reshaped it, its removal undid that)
+ * is not one.
+ */
 function leaks(before, after) {
   const out = {};
   for (const id of Object.keys(after)) {
@@ -360,7 +364,7 @@ function leaks(before, after) {
     if (!b) continue;
     const changed = [];
     for (const [p, v] of after[id].cells) {
-      if (b.cells.has(p) && b.cells.get(p) !== v) changed.push({ was: b.cells.get(p), now: v });
+      if (b.cells.has(p) && b.cells.get(p) !== v && v.endsWith(' !after')) changed.push({ was: b.cells.get(p), now: v });
     }
     if (changed.length) out[id] = { count: changed.length, first: changed.slice(0, 10) };
   }
@@ -466,7 +470,7 @@ async function ordersBase() {
   await leaveWorld();
   copyWorld('G4E OrdBase', 'G4E OrdBaseL');
   await openWorld('G4E OrdBaseL');
-  const L = await result(await api('place cabin 63 65 -14 INSTANT unowned noactor 0 layer'));
+  const L = await result(await api('place cabin 63 65 -8 INSTANT unowned noactor 0 layer'));
   check(L.placed, `orders: L layered over R's edge (${L.siteId})`, L);
   const allL = await sites();
   const lSite = allL.find((x) => x.id === L.siteId);
