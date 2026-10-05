@@ -195,7 +195,14 @@ public final class TerrainFit {
 
 	/** {@link World} flags of a block (client or server level). */
 	public static int flags(BlockGetter level, BlockPos p) {
-		BlockState s = level.getBlockState(p);
+		return flags(level.getBlockState(p));
+	}
+
+	/** {@link #flags(BlockGetter, BlockPos)} of a state already read. */
+	public static int flags(BlockState s) {
+		if (s.isAir()) {
+			return FILLABLE;
+		}
 		if (s.hasBlockEntity()) {
 			return BLOCK_ENTITY;
 		}

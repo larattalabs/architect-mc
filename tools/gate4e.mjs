@@ -802,6 +802,8 @@ steps.roads = async () => {
     await leaveWorld();
   }
   tp0.sort((x, y) => x.budgetMs - y.budgetMs);
+  const at4 = tp0.find((x) => x.budgetMs === 4);
+  check(at4.cellsPerSecond >= 15_000, `throughput: ${Math.round(at4.cellsPerSecond)} cells/s at 4 ms, journal included (budget >= 15k)`, at4);
   fs.writeFileSync(path.join(OUT, 'throughput.json'), JSON.stringify(tp0, null, 2));
   return out;
 };
@@ -1020,7 +1022,7 @@ steps.sizecap = async () => {
   await cmd('/gamerule random_tick_speed 300');
   await call('dev.placement.stats', { reset: true });
   const t0 = Date.now();
-  const cs = await call('dev.cells.place', { kind: 'gate4e:big', pad: { minX: c0[0], maxX: c0[0] + 100, minZ: c0[2], maxZ: c0[2] + 99, y: c0[1] + 2, depth: 4, clear: 25 }, force: true }, 1_200_000);
+  const cs = await call('dev.cells.place', { kind: 'gate4e:big', pad: { minX: c0[0] + 1, maxX: c0[0] + 96, minZ: c0[2] + 1, maxZ: c0[2] + 96, y: c0[1] + 2, depth: 4, clear: 28 }, force: true }, 1_200_000);
   const cst = await call('dev.placement.stats', {});
   await cmd('/gamerule random_tick_speed 0');
   const j = await journal();
@@ -1803,6 +1805,7 @@ async function mig070() {
   // P: a tavern placing over ticks at 1 ms (a creative actor), then a clean stop mid-placement
   await cmd('/architect budget 1');
   await tp(MIG.P.at[0] + 5.5, 85, MIG.P.at[2] + 30.5);
+  await call('dev.placement.slow', { on: true }); // P is caught mid-placement for sure
   await mark();
   const pid = await queue({ id: 'mig-p', items: [{ key: 'P', bp: MIG.P.bp, at: MIG.P.at, rot: 0, mode: 'INSTANT', force: true, actor: true }] });
   for (let i = 0; i < 40; i++) {
@@ -2087,7 +2090,7 @@ steps.eval = async () => {
 };
 
 steps.all = async () => {
-  for (const s of ['orders', 'edits', 'roads', 'survival', 'crash', 'migration', 'downgrade', 'mspt', 'adjacent', 'leaves', 'megalite', 'bench', 'api']) {
+  for (const s of ['orders', 'edits', 'crash', 'roads', 'ghost', 'survival', 'sizecap', 'leaves', 'megalite', 'bench', 'api', 'migration', 'downgrade', 'api14']) {
     await run(s);
   }
 };

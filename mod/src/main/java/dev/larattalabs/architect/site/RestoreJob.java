@@ -162,8 +162,13 @@ final class RestoreJob implements Placement.Job {
 			if (phase == PLAN) {
 				// R1 sliced per section over ticks (a size-cap site plans 600k cells), then the one commit (R2)
 				if (planner == null) {
+					Sites.Trace tr = new Sites.Trace("restore plan start " + siteId);
 					group = SiteJournal.group(purpose + "-" + siteId);
 					planner = SiteJournal.undoPlanner(level, List.of(siteId), group);
+					tr.mark("planner");
+					planner.ready();
+					tr.mark("warm");
+					tr.done();
 				}
 				SiteJournal.Undone u = planned(deadline);
 				if (u == null) {

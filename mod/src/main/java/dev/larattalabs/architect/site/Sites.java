@@ -544,15 +544,20 @@ public final class Sites {
 		int reach = bp.approach().length() + Approach.EXTEND + 2;
 		it.unimi.dsi.fastutil.longs.LongOpenHashSet roads = dev.larattalabs.architect.site.roads.Roads.roadCells(dimensionId(level), box.grow(reach));
 		BlockPos.MutableBlockPos mp = new BlockPos.MutableBlockPos();
-		TerrainFit.World world = dryRun ? (x, y, z) -> {
-			if (!level.hasChunk(x >> 4, z >> 4)) {
+		// the chunk of the last column read (a size-cap box reads 600k cells: no per-cell chunk lookup)
+		net.minecraft.world.level.chunk.LevelChunk[] chunk = {null};
+		long[] chunkAt = {Long.MIN_VALUE};
+		TerrainFit.World world = (x, y, z) -> {
+			long key = net.minecraft.world.level.ChunkPos.pack(x >> 4, z >> 4);
+			if (key != chunkAt[0]) {
+				chunkAt[0] = key;
+				chunk[0] = dryRun ? level.getChunkSource().getChunkNow(x >> 4, z >> 4) : level.getChunk(x >> 4, z >> 4);
+			}
+			if (chunk[0] == null) {
 				unloaded[0] = true;
 				return 0;
 			}
-			int fl = TerrainFit.flags(level, mp.set(x, y, z));
-			return !roads.isEmpty() && roads.contains(BlockPos.asLong(x, y, z)) ? fl | TerrainFit.ROAD : fl;
-		} : (x, y, z) -> {
-			int fl = TerrainFit.flags(level, mp.set(x, y, z));
+			int fl = y < level.getMinY() || y > level.getMaxY() ? TerrainFit.FILLABLE : TerrainFit.flags(chunk[0].getBlockState(mp.set(x, y, z)));
 			return !roads.isEmpty() && roads.contains(BlockPos.asLong(x, y, z)) ? fl | TerrainFit.ROAD : fl;
 		};
 		TerrainFit.Plan plan = TerrainFit.plan(model, box.minX(), box.minY(), box.minZ(), world);
