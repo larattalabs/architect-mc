@@ -114,9 +114,20 @@ public final class Approach {
 	 * @param end the walkable centre of the last row (feet position: x, y, z), or null when there is no approach
 	 */
 	public record Plan(int[] path, int[] slabs, int[] fill, int[] clear, int[] water, int waterCount, int[] lava, int lavaCount,
-		int[] blockEntities, int[] feet, Anchors.@Nullable Bounds bounds, double @Nullable [] end, int ground) {
+		int[] blockEntities, int[] feet, Anchors.@Nullable Bounds bounds, double @Nullable [] end, int ground, int @Nullable [] road) {
 		public static final Plan EMPTY = new Plan(new int[0], new int[0], new int[0], new int[0], new int[0], 0, new int[0], 0, new int[0],
-			new int[0], null, null, Integer.MIN_VALUE);
+			new int[0], null, null, Integer.MIN_VALUE, null);
+
+		/** The 4d shape (no road met). */
+		public Plan(int[] path, int[] slabs, int[] fill, int[] clear, int[] water, int waterCount, int[] lava, int lavaCount, int[] blockEntities,
+			int[] feet, Anchors.@Nullable Bounds bounds, double @Nullable [] end, int ground) {
+			this(path, slabs, fill, clear, water, waterCount, lava, lavaCount, blockEntities, feet, bounds, end, ground, null);
+		}
+
+		/** Whether the approach stopped at a road (phase 4e). */
+		public boolean metRoad() {
+			return road != null;
+		}
 
 		public int rows() {
 			return Math.max(0, feet.length - 1);
@@ -203,6 +214,7 @@ public final class Approach {
 		feet[0] = feetY;
 		int rows = 0;
 		int lastTarget = Integer.MIN_VALUE;
+		int[] road = null;
 		for (int i = 1; i <= maxRows; i++) {
 			int[] ground = new int[hi - lo + 1];
 			for (int c = lo; c <= hi; c++) {
@@ -211,7 +223,21 @@ public final class Approach {
 			}
 			// no ground within reach: a deep drop, keep going down (the fill holds the path up)
 			int target = TerrainFit.medianSurface(ground, feet[i - 1] - TerrainFit.MAX_FILL);
-			feet[i] = feet[i - 1] + Integer.signum(target - feet[i - 1]);
+			int f = feet[i - 1] + Integer.signum(target - feet[i - 1]);
+			// phase 4e: the approach stops before the first row whose path or feet cell is a road's: the path has met the ground
+			for (int c = lo; c <= hi && road == null; c++) {
+				int[] xz = cell(face, centre, i, c, dx, dz, alongX);
+				for (int y : new int[] {f - 1, f}) {
+					if ((w.flags(xz[0], y, xz[1]) & TerrainFit.ROAD) != 0) {
+						road = new int[] {xz[0], y, xz[1]};
+						break;
+					}
+				}
+			}
+			if (road != null) {
+				break;
+			}
+			feet[i] = f;
 			lastTarget = target;
 			rows = i;
 			if (i >= spec.length() && feet[i] == target) {
@@ -297,8 +323,14 @@ public final class Approach {
 		int lf = feet[rows];
 		boolean lastSlab = rows > 0 && slab(feet, rows);
 		double[] end = {last[0] + 0.5, lf + (lastSlab ? 0.5 : 0), last[1] + 0.5};
+		if (rows == 0) {
+			// stopped at row 1 by a road: no approach cells (the box ends at the template)
+			return new Plan(new int[0], new int[0], new int[0], new int[0], new int[0], 0, lava.drawn(), lava.n, new int[0], feet, null, end,
+				lastTarget, road);
+		}
 		Anchors.Bounds bounds = new Anchors.Bounds(bb[0], bb[1], bb[2], bb[3], bb[4], bb[5]);
-		return new Plan(path.all(), slabs.all(), fill.all(), clear.all(), water.drawn(), water.n, lava.drawn(), lava.n, be.all(), feet, bounds, end, lastTarget);
+		return new Plan(path.all(), slabs.all(), fill.all(), clear.all(), water.drawn(), water.n, lava.drawn(), lava.n, be.all(), feet, bounds, end, lastTarget,
+			road);
 	}
 
 	/**

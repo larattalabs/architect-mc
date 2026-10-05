@@ -19,6 +19,7 @@ public class ArchitectClient implements ClientModInitializer {
 	public void onInitializeClient() {
 		AutoWorld.init();
 		PlacementFeature.init();
+		dev.larattalabs.architect.client.placement.RoadCellsClient.init(); // phase 4e: road cells for the ghost's approach
 		dev.larattalabs.architect.client.placement.CompositePreview.init();
 		ScreenFeature.init();
 		DesignFeature.init();

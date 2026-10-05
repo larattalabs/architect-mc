@@ -47,6 +47,10 @@ import org.jspecify.annotations.Nullable;
  * /architect group approve|skip|undo &lt;group&gt; &lt;stage&gt; [force]
  *                                   approve or skip a planned stage, or undo a placed one (force: although a later one is placed)
  * /architect budget [ms]            show / set the server time per tick placements may use (1-20 ms; setting needs permission 2)
+ * /architect road &lt;x z&gt;... [width]   lay a road through these waypoints (the ground under each is the hint; width 1-5, default 3)
+ * /architect remove &lt;road|cell site&gt; [both]
+ *                                   remove a road or cell site (both: the sites covering it first)
+ * /architect journal                the world journal: entries, size on disk, the cache
  * </pre>
  * In a survival world (docs/CONTRACT.md phase 3) place makes a construction site and remove deconstructs it.
  */
@@ -125,6 +129,9 @@ public final class SiteCommands {
 				.then(stageCommand("approve"))
 				.then(stageCommand("skip"))
 				.then(stageCommand("undo")))
+			.then(Commands.literal("road")
+				.then(Commands.argument("points", StringArgumentType.greedyString()).executes(SiteCommands::road)))
+			.then(Commands.literal("journal").executes(SiteCommands::journal))
 			.then(Commands.literal("budget")
 				.executes(ctx -> budget(ctx, -1))
 				.then(Commands.argument("ms", com.mojang.brigadier.arguments.IntegerArgumentType.integer(1, 20))
@@ -425,6 +432,9 @@ public final class SiteCommands {
 	private static int remove(CommandContext<CommandSourceStack> ctx, boolean forgetOnly, boolean force) {
 		CommandSourceStack src = ctx.getSource();
 		String id = StringArgumentType.getString(ctx, "site");
+		if (Sites.get(id) == null && Infras.get(id) != null) {
+			return removeInfra(src, id, forgetOnly, force);
+		}
 		try {
 			if (forgetOnly) {
 				Sites.forget(src.getServer(), id);
@@ -443,5 +453,117 @@ public final class SiteCommands {
 			src.sendFailure(Component.literal("Removing " + id + " failed: " + e));
 			return 0;
 		}
+	}
+
+	// ------------------------------------------------------------------ phase 4e: roads, cell sites, the journal
+
+	private static int removeInfra(CommandSourceStack src, String id, boolean forgetOnly, boolean both) {
+		Infra i = Infras.get(id);
+		if (forgetOnly) {
+			try {
+				String under = SiteJournal.below(id);
+				if (under != null) {
+					src.sendFailure(Component.literal(id + " lies on top of " + Sites.describe(under) + ": forget or remove the sites under it first"));
+					return 0;
+				}
+				SiteJournal.await(SiteJournal.release(id), "forgetting " + id);
+				Infras.drop(src.getServer(), id);
+				src.sendSuccess(() -> Component.literal("Forgot " + i.describe() + "; its blocks stay in the world"), true);
+				return 1;
+			} catch (Sites.SiteException e) {
+				src.sendFailure(Component.literal(e.getMessage()));
+				return 0;
+			}
+		}
+		try {
+			InfraPlace.remove(src.getLevel(), id, both ? Sites.Covered.CASCADE : Sites.Covered.KEEP).whenComplete((r, e) -> src.getServer().execute(() -> {
+				if (e != null) {
+					src.sendFailure(Component.literal("Removing " + id + " failed: " + e.getMessage()));
+				} else {
+					src.sendSuccess(() -> Component.literal("Removed " + i.describe() + ": " + r.restored() + " cells restored" + (r.kept() > 0 ? ", " + r.kept()
+						+ " you changed kept" : "") + (r.notes().isEmpty() ? "" : "; " + String.join("; ", r.notes()))), true);
+				}
+			}));
+			src.sendSuccess(() -> Component.literal("Removing " + i.describe() + "..."), false);
+			return 1;
+		} catch (Sites.SiteException e) {
+			src.sendFailure(Component.literal(e.getMessage()));
+			return 0;
+		}
+	}
+
+	/** {@code /architect road <x z>... [width]}: waypoints, the ground under each the hint. */
+	private static int road(CommandContext<CommandSourceStack> ctx) {
+		CommandSourceStack src = ctx.getSource();
+		String[] parts = StringArgumentType.getString(ctx, "points").trim().split("\\s+");
+		List<Integer> n = new java.util.ArrayList<>();
+		try {
+			for (String p : parts) {
+				n.add(Integer.parseInt(p));
+			}
+		} catch (NumberFormatException e) {
+			src.sendFailure(Component.literal("Usage: /architect road <x z> <x z> ... [width]"));
+			return 0;
+		}
+		int width = 3;
+		if (n.size() % 2 == 1) {
+			width = n.remove(n.size() - 1);
+		}
+		if (n.size() < 4) {
+			src.sendFailure(Component.literal("A road needs at least two waypoints: /architect road <x z> <x z> ... [width]"));
+			return 0;
+		}
+		var level = src.getLevel();
+		List<net.minecraft.core.BlockPos> pts = new java.util.ArrayList<>();
+		for (int i = 0; i + 1 < n.size(); i += 2) {
+			int x = n.get(i);
+			int z = n.get(i + 1);
+			int y = level.hasChunk(x >> 4, z >> 4) ? level.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, x, z) - 1
+				: (int) src.getPosition().y;
+			pts.add(new net.minecraft.core.BlockPos(x, y, z));
+		}
+		String no = InfraPlace.modeRefusal(src.getServer(), dev.larattalabs.architect.api.Mode.INSTANT, src.getPlayer(), false);
+		if (no != null) {
+			src.sendFailure(Component.literal(no));
+			return 0;
+		}
+		InfraPlace.Check c = InfraPlace.checkRoad(level, pts, width, null, null, false, false, null, false);
+		if (!c.ok()) {
+			src.sendFailure(Component.literal("No road: " + c.refusals().get(0).message()));
+			return 0;
+		}
+		try {
+			InfraJob job = InfraPlace.beginRoad(level, c, null, null, null);
+			java.util.concurrent.CompletableFuture<dev.larattalabs.architect.api.PlaceResult> f = new java.util.concurrent.CompletableFuture<>();
+			job.futures.add(f);
+			Placement.add(src.getServer(), job);
+			f.thenAccept(r -> src.sendSuccess(() -> Component.literal(r.placed() ? "Road " + job.siteId + " laid (" + c.cells() + " cells)"
+				+ (c.notes().isEmpty() ? "" : "; " + String.join("; ", c.notes())) : "No road: " + r.refusals()), true));
+			src.sendSuccess(() -> Component.literal("Laying road " + job.siteId + " (" + c.cells() + " cells)..."), false);
+			return 1;
+		} catch (Sites.SiteException e) {
+			src.sendFailure(Component.literal(e.getMessage()));
+			return 0;
+		}
+	}
+
+	/** {@code /architect journal}: the journal's entries and size. */
+	private static int journal(CommandContext<CommandSourceStack> ctx) {
+		CommandSourceStack src = ctx.getSource();
+		String why = dev.larattalabs.architect.journal.WorldJournal.unavailable();
+		if (why != null) {
+			src.sendFailure(Component.literal(why));
+			return 0;
+		}
+		var s = dev.larattalabs.architect.journal.WorldJournal.storeOrNull();
+		var idx = s.index();
+		long active = idx.entries().values().stream().filter(dev.larattalabs.architect.journal.JournalStore.Meta::active).count();
+		long cells = idx.entries().values().stream().mapToLong(dev.larattalabs.architect.journal.JournalStore.Meta::cells).sum();
+		long bytes = s.bytesOnDisk();
+		long warn = (long) dev.larattalabs.architect.survival.SurvivalWorld.journalWarnMb() << 20;
+		src.sendSuccess(() -> Component.literal("World journal: " + idx.entries().size() + " entries (" + active + " standing), " + cells + " cells, "
+			+ String.format(java.util.Locale.ROOT, "%.1f MB", bytes / 1048576.0) + " on disk" + (bytes > warn ? " (over the " + (warn >> 20)
+				+ " MB warning)" : "") + "; cache " + dev.larattalabs.architect.survival.SurvivalWorld.journalCacheMb() + " MB"), false);
+		return 1;
 	}
 }

@@ -266,6 +266,9 @@ final class RestoreJob implements Placement.Job {
 		}
 		dev.larattalabs.architect.Architect.LOGGER.info("Removed {}: {} cells restored, {} kept (changed since), {} handed down", inf.describe(), st.restored(),
 			st.changed(), handed);
+		if (inf.road()) {
+			dev.larattalabs.architect.site.roads.RoadSync.changed(server, inf.dimension(), inf.box());
+		}
 		phase = DONE;
 		done = true;
 		futures.forEach(f -> f.complete(result));

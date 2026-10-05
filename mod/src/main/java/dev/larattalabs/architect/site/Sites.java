@@ -153,6 +153,7 @@ public final class Sites {
 	public static void init() {
 		WorldJournal.init(); // the journal opens (and imports 4d worlds) before the sites load
 		dev.larattalabs.architect.journal.JournalMigration.init();
+		dev.larattalabs.architect.site.roads.RoadSync.init();
 		ServerLifecycleEvents.SERVER_STARTED.register(server -> {
 			worldDir = server.getWorldPath(LevelResource.ROOT);
 			load(server);
@@ -536,13 +537,20 @@ public final class Sites {
 		TemplateGrid grid = TemplateGrid.of(entry);
 		GhostModel model = grid.ghost(turns);
 		boolean[] unloaded = {false};
+		// phase 4e: standing roads' surface cells near the box (the approach stops at a road)
+		int reach = bp.approach().length() + Approach.EXTEND + 2;
+		it.unimi.dsi.fastutil.longs.LongOpenHashSet roads = dev.larattalabs.architect.site.roads.Roads.roadCells(dimensionId(level), box.grow(reach));
 		TerrainFit.World world = dryRun ? (x, y, z) -> {
 			if (!level.hasChunk(x >> 4, z >> 4)) {
 				unloaded[0] = true;
 				return 0;
 			}
-			return TerrainFit.flags(level, new BlockPos(x, y, z));
-		} : (x, y, z) -> TerrainFit.flags(level, new BlockPos(x, y, z));
+			int fl = TerrainFit.flags(level, new BlockPos(x, y, z));
+			return !roads.isEmpty() && roads.contains(BlockPos.asLong(x, y, z)) ? fl | TerrainFit.ROAD : fl;
+		} : (x, y, z) -> {
+			int fl = TerrainFit.flags(level, new BlockPos(x, y, z));
+			return !roads.isEmpty() && roads.contains(BlockPos.asLong(x, y, z)) ? fl | TerrainFit.ROAD : fl;
+		};
 		TerrainFit.Plan plan = TerrainFit.plan(model, box.minX(), box.minY(), box.minZ(), world);
 		Approach.Plan approach = Approach.forBlueprint(bp, turns, box, world);
 		SiteWarnings.Result site = SiteWarnings.forBlueprint(bp, turns, box, approach, world);
@@ -555,6 +563,14 @@ public final class Sites {
 			out.add(Reason.BUILD_HEIGHT, "Box " + Anchors.str(snapBox) + " leaves the build height (" + level.getMinY() + ".." + level.getMaxY() + ")");
 		}
 		List<String> layerNotes = new ArrayList<>();
+		if (approach.metRoad()) {
+			int[] r = approach.road();
+			String road = SiteJournal.ownerSite(dimensionId(level), BlockPos.asLong(r[0], r[1], r[2]));
+			int[] feet = approach.feet();
+			int last = feet.length == 0 ? box.minY() + bp.groundY() : feet[feet.length - 1];
+			int step = Math.abs(r[1] + 1 - last);
+			layerNotes.add(step > 1 ? "approach meets road " + road + " with a step of " + step : "approach meets road " + road);
+		}
 		List<SiteJournal.Hit> hits = overlapCheck(level, snapBox, moving, layer, owner, force, out, layerNotes);
 		String lava = TerrainFit.lavaRefusal(plan);
 		if (lava == null) {

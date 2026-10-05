@@ -510,7 +510,7 @@ public final class SiteJournal {
 	}
 
 	/** The sites covering any cell of this site (active entries above its cells). */
-	static List<String> coveringSites(String siteId) {
+	public static List<String> coveringSites(String siteId) {
 		return related(siteId, true);
 	}
 
@@ -943,6 +943,55 @@ public final class SiteJournal {
 		TreeMap<Long, List<Long>> out = new TreeMap<>();
 		for (long p : positions) {
 			out.computeIfAbsent(Sections.key(p), k -> new ArrayList<>()).add(p);
+		}
+		return out;
+	}
+
+	/**
+	 * Survival layering (docs/CONTRACT.md phase 4e "Survival layering"): for every cell of this site that another site covers,
+	 * the {@code before} of the covering cell directly above it (the lowest layer above this site's). Empty when nothing covers
+	 * it.
+	 */
+	static Map<Long, Value> coverBefores(String siteId) {
+		Map<Long, Value> out = new HashMap<>();
+		Map<Long, Long> layerAt = new HashMap<>();
+		JournalStore s = WorldJournal.storeOrNull();
+		JournalStore.Meta main = main(siteId);
+		if (s == null || main == null) {
+			return out;
+		}
+		try {
+			for (long k : main.sections()) {
+				SectionCells mine = s.section(main.id(), k);
+				List<String> ids = s.inSection(main.dimension(), k);
+				if (mine == null || ids.size() < 2) {
+					continue;
+				}
+				for (String o : ids) {
+					JournalStore.Meta om = s.meta(o);
+					if (om == null || !om.active() || om.site().equals(siteId) || om.kind().equals(WorldJournal.LEAVES)) {
+						continue;
+					}
+					SectionCells their = s.section(o, k);
+					if (their == null || !mine.intersects(their.mask())) {
+						continue;
+					}
+					for (int a = 0; a < mine.size(); a++) {
+						int j = their.find(mine.index(a));
+						if (j < 0 || their.layer(j) <= mine.layer(a)) {
+							continue;
+						}
+						long p = mine.pos(a);
+						Long l = layerAt.get(p);
+						if (l == null || their.layer(j) < l) {
+							layerAt.put(p, their.layer(j));
+							out.put(p, their.before(j));
+						}
+					}
+				}
+			}
+		} catch (IOException e) {
+			// unreadable: no cover known
 		}
 		return out;
 	}

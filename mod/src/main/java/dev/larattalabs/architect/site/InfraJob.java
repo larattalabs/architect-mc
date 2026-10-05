@@ -274,6 +274,9 @@ final class InfraJob implements Placement.Job {
 					phase = DONE;
 					Architect.LOGGER.info("Placed {} ({} cells){}", done.describe(), positions.length, notes.isEmpty() ? "" : "; " + String.join("; ", notes));
 					dev.larattalabs.architect.apiimpl.ApiEvents.placedInfra(server, done);
+					if (done.road()) {
+						dev.larattalabs.architect.site.roads.RoadSync.changed(server, dimension, done.box());
+					}
 					futures.forEach(x -> x.complete(new PlaceResult(true, Optional.of(siteId), List.of(), List.copyOf(notes))));
 					return true;
 				}

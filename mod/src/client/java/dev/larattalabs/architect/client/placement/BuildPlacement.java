@@ -132,6 +132,8 @@ public final class BuildPlacement {
 	private static int ticksSinceScan;
 	private static boolean pending;
 	private static boolean forceArmed;
+	/** Phase 4e: the last confirm was refused for an overlap; Enter again places on top of it (LAYER). */
+	private static boolean layerArmed;
 	private static @Nullable String status;
 	private static boolean statusError;
 	private static @Nullable Result lastResult;
@@ -280,6 +282,7 @@ public final class BuildPlacement {
 		scanned = null;
 		pending = false;
 		forceArmed = false;
+		layerArmed = false;
 		lastAim = null;
 		tooFar = false;
 		verdict = null;
@@ -295,6 +298,7 @@ public final class BuildPlacement {
 		}
 		userTurns = Math.floorMod(userTurns + quarterTurns, 4);
 		forceArmed = false;
+		layerArmed = false;
 		update(Minecraft.getInstance(), true);
 	}
 
@@ -309,6 +313,7 @@ public final class BuildPlacement {
 		nudgeZ += d[1];
 		nudgeY += up;
 		forceArmed = false;
+		layerArmed = false;
 		update(mc, true);
 	}
 
@@ -373,6 +378,7 @@ public final class BuildPlacement {
 			return CompletableFuture.completedFuture(r);
 		}
 		boolean useForce = force && forceArmed;
+		boolean useLayer = layerArmed;
 		IntegratedServer server = mc.getSingleplayerServer();
 		if (server == null || mc.player == null) {
 			return CompletableFuture.completedFuture(new Result(false, null, "Singleplayer only"));
@@ -399,7 +405,7 @@ public final class BuildPlacement {
 					throw new Sites.SiteException(sl == null ? "That dimension is not loaded" : "Design " + bpId + " is gone (reloaded?)");
 				}
 				// the server's verdict on the exact site first (S4): a refusal lists every reason, not only the first
-				checked = Sites.verdict(sl, b, origin, rotation, useForce, moveId, false); // reads the site as place() does
+				checked = Sites.verdict(sl, b, origin, rotation, useForce, moveId, false, null, useLayer, null); // reads the site as place() does
 				if (!checked.ok()) {
 					if (moveId == null) {
 						// a refused placement attempt (not the ghost's live verdict): PLACE_FAILED, as the API and commands fire it
@@ -414,7 +420,7 @@ public final class BuildPlacement {
 					r = new Result(true, moved.id(), "Moved " + moved.id() + " (" + b.name() + "); its old place is as it was before"
 						+ (note == null ? "" : " (" + note + ")"));
 				} else {
-					Site placed = Sites.place(sl, b, origin, rotation, useForce, owner);
+					Site placed = Sites.place(sl, b, origin, rotation, useForce, owner, null, null, null, Sites.playerOf(server, owner), null, useLayer);
 					String note = Sites.lastNote();
 					r = placed.building()
 						? new Result(true, placed.id(), "Construction site " + placed.id() + " (" + b.name() + ") placed: feed its crate (right-click it, "
@@ -466,8 +472,19 @@ public final class BuildPlacement {
 			update(Minecraft.getInstance(), true);
 		}
 		forceArmed = arm;
+		// phase 4e "Place on top": an overlap refusal arms LAYER; Enter again places on top of the site it overlaps
+		boolean layer = active && moving == null && r.message().contains("overlaps") && !layerArmed;
+		if (layer) {
+			explicitOrigin = new int[] {refused.ox(), refused.oy(), refused.oz()};
+			explicitTurns = refused.turns();
+			userTurns = 0;
+			nudgeX = nudgeY = nudgeZ = 0;
+			locked = true;
+			update(Minecraft.getInstance(), true);
+		}
+		layerArmed = layer;
 		String msg = r.message() + (forceArmed ? r.message().contains("first (moving it") ? " - Shift+Enter moves anyway (they are lost)"
-			: " - Shift+Enter places anyway (they come back on remove)" : "");
+			: " - Shift+Enter places anyway (they come back on remove)" : "") + (layerArmed ? " - Enter again places on top of it (Place on top)" : "");
 		setStatus(msg, true);
 		Toasts.push(Toasts.Level.WARN, "Not placed", msg);
 	}
@@ -685,6 +702,7 @@ public final class BuildPlacement {
 		}
 		if (!same) {
 			forceArmed = false;
+			layerArmed = false;
 		}
 		scanned = spot;
 		ticksSinceScan = 0;
@@ -721,7 +739,9 @@ public final class BuildPlacement {
 		int sx = m.sizeX;
 		int sy = m.sizeY;
 		int sz = m.sizeZ;
-		TerrainFit.World world = (x, y, z) -> TerrainFit.flags(lv, p.set(x, y, z));
+		String roadDim = lv.dimension().identifier().toString();
+		// phase 4e: road cells the server synced count as roads (the approach stops at one)
+		TerrainFit.World world = (x, y, z) -> TerrainFit.flags(lv, p.set(x, y, z)) | (RoadCellsClient.road(roadDim, x, y, z) ? TerrainFit.ROAD : 0);
 		TerrainFit.Plan plan = TerrainFit.plan(m, ox, oy, oz, world);
 		Anchors.Bounds box = new Anchors.Bounds(ox, oy, oz, ox + sx - 1, oy + sy - 1, oz + sz - 1);
 		Approach.Plan approach = Approach.forBlueprint(b, turns, box, world);
@@ -944,6 +964,7 @@ public final class BuildPlacement {
 		o.addProperty("locked", v.locked());
 		o.addProperty("pending", v.pending());
 		o.addProperty("forceArmed", v.forceArmed());
+		o.addProperty("layerArmed", layerArmed);
 		o.addProperty("tooFar", tooFar());
 		JsonObject c = new JsonObject();
 		c.addProperty("obstructed", v.obstructedCount());

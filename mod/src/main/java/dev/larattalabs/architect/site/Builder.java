@@ -1342,10 +1342,23 @@ public final class Builder {
 		BlockPos.MutableBlockPos m = new BlockPos.MutableBlockPos();
 		int dx = b.maxX() - b.minX() + 1;
 		int dz = b.maxZ() - b.minZ() + 1;
+		// phase 4e "Survival layering": cells another site covers belong to it; a paid cell of this site whose intact block the
+		// covering site displaced (its before there is this site's block) is refunded (rule 3b), nothing else there
+		Map<Long, dev.larattalabs.architect.journal.Journal.Value> cover = SiteJournal.coverBefores(s.id());
 		for (int y = b.minY(); y <= b.maxY(); y++) {
 			for (int z = b.minZ(); z <= b.maxZ(); z++) {
 				for (int x = b.minX(); x <= b.maxX(); x++) {
 					m.set(x, y, z);
+					if (!cover.isEmpty()) {
+						var over = cover.get(m.asLong());
+						if (over != null) {
+							int qi = r == null ? -1 : r.queuePos(m);
+							if (qi >= 0 && !free.get(qi) && WorldJournal.state(over).is(r.target[qi].getBlock())) {
+								tally.add(Refunds.Outcome.REFUND, r.cost.get(qi));
+							}
+							continue;
+						}
+					}
 					BlockState now = level.getBlockState(m);
 					int k = Construction.index(x - b.minX(), y - b.minY(), z - b.minZ(), dx, dz);
 					BlockState was = k < before.size() ? before.states[k] : Blocks.AIR.defaultBlockState();
