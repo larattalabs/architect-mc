@@ -1,0 +1,82 @@
+package dev.larattalabs.architect.apiimpl;
+
+import com.google.gson.JsonObject;
+import dev.larattalabs.architect.Architect;
+import dev.larattalabs.architect.api.Design;
+import dev.larattalabs.architect.api.Library;
+import dev.larattalabs.architect.api.Mode;
+import dev.larattalabs.architect.api.PlaceRequest;
+import dev.larattalabs.architect.api.Refusal;
+import dev.larattalabs.architect.api.RemoveResult;
+import dev.larattalabs.architect.api.SiteEvents;
+import dev.larattalabs.architect.site.Site;
+import dev.larattalabs.architect.site.Sites;
+import java.util.List;
+import net.minecraft.core.BlockPos;
+import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.level.block.Rotation;
+import org.jspecify.annotations.Nullable;
+
+/**
+ * Where Architect's internals fire the public events (R7), so API calls, the UI and commands fire the same ones. Every
+ * method runs on the server thread and never throws (a failing view or listener is logged). Internal.
+ */
+public final class ApiEvents {
+	private ApiEvents() {
+	}
+
+	private static void guard(String what, Runnable r) {
+		try {
+			r.run();
+		} catch (Throwable t) {
+			Architect.LOGGER.warn("Firing {} failed", what, t);
+		}
+	}
+
+	public static void placed(MinecraftServer server, Site s) {
+		guard("SITE_PLACED", () -> SiteEvents.SITE_PLACED.invoker().onPlaced(Views.site(server, s)));
+	}
+
+	public static void removed(MinecraftServer server, Sites.Removed r) {
+		guard("SITE_REMOVED", () -> SiteEvents.SITE_REMOVED.invoker().onRemoved(Views.site(null, r.site()),
+			new RemoveResult(true, List.of(), Views.items(r.returned()))));
+	}
+
+	public static void moved(MinecraftServer server, Site before, Site after) {
+		guard("SITE_MOVED", () -> SiteEvents.SITE_MOVED.invoker().onMoved(Views.site(null, before), Views.site(server, after)));
+	}
+
+	public static void progress(MinecraftServer server, Site s) {
+		guard("SITE_PROGRESS", () -> SiteEvents.SITE_PROGRESS.invoker().onProgress(Views.site(server, s)));
+	}
+
+	public static void built(MinecraftServer server, Site s) {
+		guard("SITE_BUILT", () -> SiteEvents.SITE_BUILT.invoker().onBuilt(Views.site(server, s)));
+	}
+
+	/** A refused placement attempt (API, UI confirm, command). {@code construction}: null = AUTO. */
+	public static void placeFailed(ServerLevel level, String blueprintId, BlockPos origin, Rotation rotation, boolean force,
+		@Nullable Boolean construction, @Nullable String owner, @Nullable JsonObject ext, @Nullable ServerPlayer actor, List<Sites.Refusal> refusals) {
+		Mode mode = construction == null ? Mode.AUTO : construction ? Mode.CONSTRUCTION : Mode.INSTANT;
+		placeFailed(new PlaceRequest(blueprintId, level, origin, rotation, mode, owner, ext == null ? new JsonObject() : ext.deepCopy(), force, actor),
+			refusals.stream().map(r -> new Refusal(r.reason(), r.message())).toList());
+	}
+
+	public static void placeFailed(PlaceRequest r, List<Refusal> refusals) {
+		guard("PLACE_FAILED", () -> SiteEvents.PLACE_FAILED.invoker().onFailed(r, List.copyOf(refusals)));
+	}
+
+	public static void designUpdated(Design d) {
+		guard("DESIGN_UPDATED", () -> SiteEvents.DESIGN_UPDATED.invoker().onUpdated(d));
+	}
+
+	public static void designDone(Design d) {
+		guard("DESIGN_DONE", () -> SiteEvents.DESIGN_DONE.invoker().onDone(d));
+	}
+
+	public static void variantDone(Library.Entry e) {
+		guard("VARIANT_DONE", () -> SiteEvents.VARIANT_DONE.invoker().onDone(e));
+	}
+}

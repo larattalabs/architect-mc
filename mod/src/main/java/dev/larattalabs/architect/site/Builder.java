@@ -116,6 +116,10 @@ public final class Builder {
 	/** How far the builder looks ahead in the queue per tick for cells it can place. */
 	static final int SCAN = 4096;
 	private static final Map<String, Run> RUNS = new ConcurrentHashMap<>();
+	/** SITE_PROGRESS rate limit: per site, the tick and built count of the last event. */
+	private static final Map<String, long[]> PROGRESS = new ConcurrentHashMap<>();
+	/** At most one SITE_PROGRESS per site per this many ticks (one second). */
+	static final int PROGRESS_TICKS = 20;
 	private static long ticks;
 
 	private Builder() {
@@ -126,6 +130,7 @@ public final class Builder {
 		ServerLifecycleEvents.SERVER_STARTED.register(s -> server = s);
 		ServerLifecycleEvents.SERVER_STOPPED.register(s -> {
 			RUNS.clear();
+			PROGRESS.clear();
 			server = null;
 		});
 	}
@@ -636,8 +641,36 @@ public final class Builder {
 			} catch (RuntimeException e) {
 				Architect.LOGGER.error("Construction site {}: builder step failed", s.id(), e);
 			}
+			Site now = Sites.get(s.id());
+			if (now != null && now.building()) {
+				long[] last = PROGRESS.computeIfAbsent(s.id(), k -> new long[] {Long.MIN_VALUE / 2, r.built.cardinality()});
+				int built = r.built.cardinality();
+				if (progressDue(last[0], (int) last[1], ticks, built)) {
+					last[0] = ticks;
+					last[1] = built;
+					dev.larattalabs.architect.apiimpl.ApiEvents.progress(srv, now);
+				}
+			}
 		}
 		syncGhosts(srv);
+	}
+
+	/** Whether a SITE_PROGRESS is due: the built count changed and a second passed since the last one. Pure. */
+	static boolean progressDue(long lastTick, int lastBuilt, long now, int built) {
+		return built != lastBuilt && now - lastTick >= PROGRESS_TICKS;
+	}
+
+	/** {built, queued} of a construction site's queue ({queued, queued} once built); {0, 0} for an instant site. Server thread. */
+	public static int[] progress(MinecraftServer srv, Site s) {
+		Construction c = s.construction();
+		if (c == null) {
+			return new int[] {0, 0};
+		}
+		if (!c.building()) {
+			return new int[] {c.size(), c.size()};
+		}
+		Run r = run(srv, s);
+		return r == null ? new int[] {0, c.size()} : new int[] {r.built.cardinality(), r.size()};
 	}
 
 	private static void step(MinecraftServer srv, ServerLevel level, Site s, Run r) {
@@ -781,6 +814,9 @@ public final class Builder {
 			}
 		}
 		Architect.LOGGER.info("Construction site {}: built ({} cells); crate leftovers {}", s.id(), r.size(), left);
+		PROGRESS.remove(s.id());
+		Site now = Sites.get(s.id());
+		dev.larattalabs.architect.apiimpl.ApiEvents.built(srv, now != null ? now : done);
 	}
 
 	// ------------------------------------------------------------------ ghost sync

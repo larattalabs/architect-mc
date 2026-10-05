@@ -6,6 +6,9 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import dev.larattalabs.architect.Architect;
+import dev.larattalabs.architect.api.Reason;
+import dev.larattalabs.architect.apiimpl.ApiEvents;
+import dev.larattalabs.architect.apiimpl.ApiRules;
 import dev.larattalabs.architect.placement.Anchor;
 import dev.larattalabs.architect.placement.Anchors;
 import dev.larattalabs.architect.placement.Approach;
@@ -50,6 +53,7 @@ import net.minecraft.resources.Identifier;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.Container;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.ExperienceOrb;
@@ -114,9 +118,25 @@ public final class Sites {
 
 	/** Thrown by {@link #place} / {@link #remove} / {@link #move} with a message meant for the player. */
 	public static final class SiteException extends Exception {
+		private final Reason reason;
+
 		public SiteException(String message) {
-			super(message);
+			this(Reason.OTHER, message);
 		}
+
+		public SiteException(Reason reason, String message) {
+			super(message);
+			this.reason = reason == null ? Reason.OTHER : reason;
+		}
+
+		/** The refusal's type (docs/CONTRACT.md phase 4a {@code Reason}), set where the refusal is made. */
+		public Reason reason() {
+			return reason;
+		}
+	}
+
+	/** A refusal with its type. */
+	public record Refusal(Reason reason, String message) {
 	}
 
 	private Sites() {
@@ -187,9 +207,46 @@ public final class Sites {
 	 */
 	public static Site place(ServerLevel level, Blueprint bp, BlockPos origin, Rotation rotation, boolean force, @Nullable String owner)
 		throws SiteException {
+		return place(level, bp, origin, rotation, force, owner, null, null, null, playerOf(level.getServer(), owner));
+	}
+
+	/** The online player with this UUID string, or null. */
+	public static @Nullable ServerPlayer playerOf(MinecraftServer server, @Nullable String uuid) {
+		if (uuid == null) {
+			return null;
+		}
+		try {
+			return server.getPlayerList().getPlayer(java.util.UUID.fromString(uuid));
+		} catch (IllegalArgumentException e) {
+			return null;
+		}
+	}
+
+	/**
+	 * {@link #place} with every option (docs/CONTRACT.md phase 4a): {@code construction} null = the world's toggle, true = a
+	 * construction site, false = instant (the caller checked the permission rule); {@code siteOwner}/{@code ext} are stored
+	 * on the site (R5); {@code actor} is who placed it (for the events). {@code placer}: the placing player's UUID (the HUD
+	 * line). Fires {@code SITE_PLACED} after the record is saved, or {@code PLACE_FAILED} with the typed refusal. Server thread.
+	 */
+	public static Site place(ServerLevel level, Blueprint bp, BlockPos origin, Rotation rotation, boolean force, @Nullable String placer,
+		@Nullable Boolean construction, @Nullable String siteOwner, @Nullable JsonObject ext, @Nullable ServerPlayer actor) throws SiteException {
+		Site placed;
+		try {
+			placed = placeInternal(level, bp, origin, rotation, force, placer, construction, siteOwner, ext);
+		} catch (SiteException e) {
+			ApiEvents.placeFailed(level, bp.id(), origin, rotation, force, construction, siteOwner, ext, actor,
+				List.of(new Refusal(e.reason(), e.getMessage())));
+			throw e;
+		}
+		ApiEvents.placed(level.getServer(), placed);
+		return placed;
+	}
+
+	private static Site placeInternal(ServerLevel level, Blueprint bp, BlockPos origin, Rotation rotation, boolean force, @Nullable String owner,
+		@Nullable Boolean construction, @Nullable String siteOwner, @Nullable JsonObject ext) throws SiteException {
 		MinecraftServer server = level.getServer();
 		if (loadFailed) {
-			throw new SiteException(FILE + " could not be read when the world started (see the log); fix or move it, then restart");
+			throw new SiteException(Reason.OTHER, FILE + " could not be read when the world started (see the log); fix or move it, then restart");
 		}
 		State s = state;
 		int next = s.next();
@@ -197,12 +254,12 @@ public final class Sites {
 			next++; // never reuse an id a snapshot file still carries
 		}
 		String id = "s" + next;
-		boolean survival = SurvivalWorld.on();
-		Built built = build(level, bp, origin, rotation, force, null, id);
-		Construction construction = null;
+		boolean survival = construction != null ? construction : SurvivalWorld.on();
+		Built built = build(level, bp, origin, rotation, force, null, id, survival);
+		Construction cs = null;
 		if (survival) {
 			try {
-				construction = Builder.convert(level, bp, built, id, owner);
+				cs = Builder.convert(level, bp, built, id, owner);
 			} catch (SiteException | RuntimeException e) {
 				Architect.LOGGER.error("Making {} a construction site failed; taking the placement down", id, e);
 				unbuild(level, built);
@@ -212,7 +269,7 @@ public final class Sites {
 		Map<String, Site> map = new LinkedHashMap<>(s.byId());
 		long now = System.currentTimeMillis();
 		Site b = new Site(id, bp.id(), BlueprintTransform.rotationName(built.turns()), built.box(), built.interior(), built.anchors(), now,
-			dimensionId(level), built.snapshotBox(), built.snapshot(), null, built.pin(), construction);
+			dimensionId(level), built.snapshotBox(), built.snapshot(), null, built.pin(), cs, siteOwner, ext);
 		map.put(id, b);
 		commit(server, new State(Collections.unmodifiableMap(map), next + 1, s.pending()));
 		lastNote = built.note();
@@ -328,8 +385,7 @@ public final class Sites {
 	}
 
 	private static Site withPin(Site x, Site.Pin pin) {
-		return new Site(x.id(), x.blueprint(), x.rotation(), x.box(), x.interior(), x.anchors(), x.placedAt(), x.dimension(), x.snapshotBox(),
-			x.snapshot(), x.movedFrom(), pin, x.construction());
+		return x.withPin(pin);
 	}
 
 	/** {@link #pinFor} without the bed cells a placement left out ({@link #removeUnsafeBeds}). */
@@ -383,11 +439,11 @@ public final class Sites {
 
 	@FunctionalInterface
 	private interface Refusals {
-		void add(String message) throws SiteException;
+		void add(Reason reason, String message) throws SiteException;
 	}
 
-	private static final Refusals THROW = m -> {
-		throw new SiteException(m);
+	private static final Refusals THROW = (r, m) -> {
+		throw new SiteException(r, m);
 	};
 
 	/** A site that passed {@link #checkSite}: everything {@link #build} needs, so it never looks at the world twice. */
@@ -401,10 +457,10 @@ public final class Sites {
 	 * at all. {@code moving}: the site being moved. Server thread.
 	 */
 	private static @Nullable SitePlan checkSite(ServerLevel level, Blueprint bp, BlockPos origin, Rotation rotation, boolean force,
-		@Nullable Site moving, Refusals out, boolean dryRun) throws SiteException {
+		@Nullable Site moving, Refusals out, boolean dryRun, boolean survival) throws SiteException {
 		Blueprints.Entry entry = Blueprints.entry(bp.id());
 		if (entry == null) {
-			out.add("Design " + bp.id() + " has no loaded template");
+			out.add(Reason.UNKNOWN_BLUEPRINT, "Design " + bp.id() + " has no loaded template");
 			return null;
 		}
 		StructureTemplate template = entry.template();
@@ -415,7 +471,7 @@ public final class Sites {
 		BlockPos placePos = origin.offset(-atZero.minX(), -atZero.minY(), -atZero.minZ());
 		BoundingBox bb = template.getBoundingBox(settings, placePos);
 		if (bb.minX() != origin.getX() || bb.minY() != origin.getY() || bb.minZ() != origin.getZ()) {
-			out.add("Internal: rotated box " + bb + " does not start at " + origin.toShortString());
+			out.add(Reason.OTHER, "Internal: rotated box " + bb + " does not start at " + origin.toShortString());
 			return null;
 		}
 		Anchors.Bounds box = new Anchors.Bounds(bb.minX(), bb.minY(), bb.minZ(), bb.maxX(), bb.maxY(), bb.maxZ());
@@ -434,16 +490,16 @@ public final class Sites {
 		SiteWarnings.Result site = SiteWarnings.forBlueprint(bp, turns, box, approach, world);
 		Anchors.Bounds snapBox = snapshotBox(box, plan, approach);
 		if (dryRun && (unloaded[0] || !loaded(level, snapBox))) {
-			out.add("the site is not loaded on the server (walk closer)");
+			out.add(Reason.NOT_LOADED, "the site is not loaded on the server (walk closer)");
 			return null;
 		}
 		if (snapBox.minY() < level.getMinY() || box.maxY() > level.getMaxY()) {
-			out.add("Box " + Anchors.str(snapBox) + " leaves the build height (" + level.getMinY() + ".." + level.getMaxY() + ")");
+			out.add(Reason.BUILD_HEIGHT, "Box " + Anchors.str(snapBox) + " leaves the build height (" + level.getMinY() + ".." + level.getMaxY() + ")");
 		}
 		String here = dimensionId(level);
 		for (Site other : state.byId().values()) {
 			if (other.dimension().equals(here) && Anchors.intersects(other.restoreBox(), snapBox)) {
-				out.add("Box " + Anchors.str(snapBox) + " overlaps " + (moving != null && other.id().equals(moving.id())
+				out.add(Reason.OVERLAP, "Box " + Anchors.str(snapBox) + " overlaps " + (moving != null && other.id().equals(moving.id())
 					? "where " + other.id() + " stands now (move it further)" : "site " + other.id() + " " + Anchors.str(other.box())
 					+ " (remove it first or place elsewhere)"));
 				break;
@@ -454,32 +510,32 @@ public final class Sites {
 			lava = Approach.lavaRefusal(approach);
 		}
 		if (lava != null) {
-			out.add("Not here: " + lava + "; a building next to lava burns and floods");
+			out.add(Reason.LAVA, "Not here: " + lava + "; a building next to lava burns and floods");
 		}
 		if (!force) {
 			List<String> foreign = blockEntities(level, snapBox);
 			if (!foreign.isEmpty()) {
-				out.add("Box " + Anchors.str(snapBox) + " contains " + foreign.size() + " block entit" + (foreign.size() == 1 ? "y" : "ies")
+				out.add(Reason.BLOCK_ENTITIES, "Box " + Anchors.str(snapBox) + " contains " + foreign.size() + " block entit" + (foreign.size() == 1 ? "y" : "ies")
 					+ " (" + String.join(", ", foreign.subList(0, Math.min(4, foreign.size()))) + (foreign.size() > 4 ? ", ..." : "")
 					+ "); add force to overwrite them (they come back on remove)");
 			}
 		}
 		List<String> doors = straddling(level, snapBox, true);
 		if (!doors.isEmpty()) {
-			out.add("Not placed: a door is cut in half by the box edge (" + String.join(", ", doors.subList(0, Math.min(3, doors.size())))
+			out.add(Reason.DOOR_CUT, "Not placed: a door is cut in half by the box edge (" + String.join(", ", doors.subList(0, Math.min(3, doors.size())))
 				+ "); raise, lower or move the building so the door is fully in or out");
 		}
-		if (moving == null && SurvivalWorld.on()) {
+		if (moving == null && survival) {
 			List<String> creative = Builder.creativeOnly(grid, bp);
 			if (!creative.isEmpty()) {
-				out.add("This design uses " + String.join(", ", creative.stream().map(c -> c.replace("minecraft:", "")).toList())
+				out.add(Reason.CREATIVE_ONLY_BLOCK, "This design uses " + String.join(", ", creative.stream().map(c -> c.replace("minecraft:", "")).toList())
 					+ ", which survival can't build");
 			}
 		}
 		List<Occupancy.Found> found = Occupancy.scan(level, snapBox, e -> false);
 		List<String> occupied = Occupancy.refusals(found);
 		if (!occupied.isEmpty()) {
-			out.add("Not placed: " + String.join("; ", occupied));
+			out.add(ApiRules.occupancyReason(found.stream().map(Occupancy.Found::kind).toList()), "Not placed: " + String.join("; ", occupied));
 		}
 		return new SitePlan(template, turns, settings, placePos, box, grid, plan, approach, snapBox, found, site);
 	}
@@ -496,10 +552,16 @@ public final class Sites {
 	}
 
 	/** The server's verdict on a site: every reason {@link #place} (or {@link #move}) would refuse it for, and its notes. */
-	public record Verdict(List<String> refusals, List<String> notes) {
+	public record Verdict(List<String> refusals, List<String> notes, List<Refusal> typed, Anchors.@Nullable Bounds box,
+		Anchors.@Nullable Bounds snapshotBox, boolean construction) {
 		public Verdict {
 			refusals = List.copyOf(refusals);
 			notes = List.copyOf(notes);
+			typed = List.copyOf(typed);
+		}
+
+		public Verdict(List<String> refusals, List<String> notes) {
+			this(refusals, notes, refusals.stream().map(r -> new Refusal(Reason.OTHER, r)).toList(), null, null, false);
 		}
 
 		public boolean ok() {
@@ -514,47 +576,60 @@ public final class Sites {
 
 	public static Verdict verdict(ServerLevel level, Blueprint bp, BlockPos origin, Rotation rotation, boolean force, @Nullable String movingId,
 		boolean dryRun) {
-		List<String> refusals = new ArrayList<>();
-		Refusals out = refusals::add;
+		return verdict(level, bp, origin, rotation, force, movingId, dryRun, null);
+	}
+
+	/** {@link #verdict}; {@code construction}: null = the world's toggle, else whether it would be a construction site. */
+	public static Verdict verdict(ServerLevel level, Blueprint bp, BlockPos origin, Rotation rotation, boolean force, @Nullable String movingId,
+		boolean dryRun, @Nullable Boolean construction) {
+		List<Refusal> typed = new ArrayList<>();
+		Refusals out = (r, m) -> typed.add(new Refusal(r, m));
+		boolean survival = construction != null ? construction : SurvivalWorld.on();
 		Site moving = null;
+		SitePlan site = null;
 		try {
 			if (loadFailed) {
-				refusals.add(FILE + " could not be read when the world started (see the log); fix or move it, then restart");
+				out.add(Reason.OTHER, FILE + " could not be read when the world started (see the log); fix or move it, then restart");
 			}
 			if (movingId != null) {
 				moving = get(movingId);
 				if (moving == null) {
-					return new Verdict(List.of("No site " + movingId), List.of());
+					return verdictOf(List.of(new Refusal(Reason.OTHER, "No site " + movingId)), List.of(), null, survival);
 				}
 				String noMove = moveRefusal(moving);
 				if (noMove != null) {
-					return new Verdict(List.of(noMove), List.of());
+					return verdictOf(List.of(new Refusal(Reason.NOT_ALLOWED, noMove)), List.of(), null, survival);
 				}
 				ServerLevel oldLevel = levelOf(level.getServer(), moving);
 				if (oldLevel == null) {
-					refusals.add(moving.dimension() + " is not loaded; nothing was moved");
+					out.add(Reason.NOT_LOADED, moving.dimension() + " is not loaded; nothing was moved");
 				}
 				Site m = moving;
 				if (oldLevel != null && (!dryRun || loaded(oldLevel, m.restoreBox()))) {
 					try {
 						refusePlayerIn(oldLevel, m.restoreBox(), movingId, "moving it");
 					} catch (SiteException e) {
-						refusals.add(e.getMessage());
+						out.add(e.reason(), e.getMessage());
 					}
 					if (!force) {
 						List<String> blockers = removalBlockers(oldLevel, moving);
 						if (!blockers.isEmpty()) {
-							refusals.add(blockersMessage(movingId, blockers).replace("removing it", "moving it"));
+							out.add(Reason.BLOCK_ENTITIES, blockersMessage(movingId, blockers).replace("removing it", "moving it"));
 						}
 					}
 				}
 			}
-			SitePlan site = checkSite(level, bp, origin, rotation, force, moving, out, dryRun);
-			return new Verdict(refusals, site == null ? List.of() : siteNotes(site, site.found()));
+			site = checkSite(level, bp, origin, rotation, force, moving, out, dryRun, survival && moving == null);
+			return verdictOf(typed, site == null ? List.of() : siteNotes(site, site.found()), site, survival);
 		} catch (SiteException | RuntimeException e) {
-			refusals.add(e.getMessage() == null ? e.toString() : e.getMessage());
-			return new Verdict(refusals, List.of());
+			typed.add(new Refusal(e instanceof SiteException se ? se.reason() : Reason.OTHER, e.getMessage() == null ? e.toString() : e.getMessage()));
+			return verdictOf(typed, List.of(), site, survival);
 		}
+	}
+
+	private static Verdict verdictOf(List<Refusal> typed, List<String> notes, @Nullable SitePlan site, boolean construction) {
+		return new Verdict(typed.stream().map(Refusal::message).toList(), notes, typed, site == null ? null : site.box(),
+			site == null ? null : site.snapBox(), construction);
 	}
 
 	private static List<String> siteNotes(SitePlan s, List<Occupancy.Found> found) {
@@ -584,9 +659,9 @@ public final class Sites {
 	 * written first, then the template, foundation, cleared terrain, the approach, and drops caused by it removed.
 	 * Restores the terrain and throws when anything fails.
 	 */
-	private static Built build(ServerLevel level, Blueprint bp, BlockPos origin, Rotation rotation, boolean force, @Nullable Site moving, String id)
-		throws SiteException {
-		SitePlan site = checkSite(level, bp, origin, rotation, force, moving, THROW, false);
+	private static Built build(ServerLevel level, Blueprint bp, BlockPos origin, Rotation rotation, boolean force, @Nullable Site moving, String id,
+		boolean survival) throws SiteException {
+		SitePlan site = checkSite(level, bp, origin, rotation, force, moving, THROW, false, survival);
 		if (site == null) {
 			throw new SiteException("Internal: no site for " + bp.id());
 		}
@@ -781,6 +856,18 @@ public final class Sites {
 	 * {@code force}. The snapshot is kept until the next world start confirms the restored terrain reached the disk. Server thread.
 	 */
 	public static Site remove(ServerLevel level, String id, boolean force) throws SiteException {
+		return removeDetailed(level, id, force).site();
+	}
+
+	/**
+	 * What a removal did: the site as it was and every item a deconstruct dropped (refunds, the player's blocks, the crate's
+	 * stock; item id -> count; empty for an instant site).
+	 */
+	public record Removed(Site site, Map<String, Integer> returned) {
+	}
+
+	/** {@link #remove}, returning what it gave back. Fires {@code SITE_REMOVED}. Server thread. */
+	public static Removed removeDetailed(ServerLevel level, String id, boolean force) throws SiteException {
 		Site b = get(id);
 		if (b == null) {
 			throw new SiteException("No site " + id + " (see /architect list)");
@@ -821,7 +908,9 @@ public final class Sites {
 		commit(server, new State(Collections.unmodifiableMap(map), s.next(), List.copyOf(pending)));
 		Architect.LOGGER.info("Removed site {} ({}): restored box {}{}; snapshot {} kept until the next world start", id, b.blueprint(),
 			Anchors.str(b.restoreBox()), force ? " (forced)" : "", b.snapshot());
-		return b;
+		Removed r = new Removed(b, dec == null ? Map.of() : Map.copyOf(dec.all()));
+		ApiEvents.removed(server, r);
+		return r;
 	}
 
 	/** The snapshot of a standing site, or a refusal naming the way out. */
@@ -839,7 +928,7 @@ public final class Sites {
 	static void refusePlayerIn(ServerLevel level, Anchors.Bounds box, String id, String verb) throws SiteException {
 		for (Occupancy.Found f : Occupancy.scan(level, box, e -> false)) {
 			if (f.kind() == Occupancy.Kind.PLAYER) {
-				throw new SiteException("Step out of " + id + " first (" + f.name() + " is in or next to it): " + verb
+				throw new SiteException(Reason.PLAYER_IN_BOX, "Step out of " + id + " first (" + f.name() + " is in or next to it): " + verb
 					+ " puts the old terrain back there; nothing was done");
 			}
 		}
@@ -980,10 +1069,10 @@ public final class Sites {
 				throw new SiteException(blockersMessage(id, blockers).replace("removing it", "moving it"));
 			}
 		}
-		Built built = build(level, bp, origin, rotation, force, b, id);
+		Built built = build(level, bp, origin, rotation, force, b, id, false);
 		long now = System.currentTimeMillis();
 		Site nb = new Site(id, b.blueprint(), BlueprintTransform.rotationName(built.turns()), built.box(), built.interior(), built.anchors(), b.placedAt(),
-			dimensionId(level), built.snapshotBox(), built.snapshot(), b.location(), built.pin());
+			dimensionId(level), built.snapshotBox(), built.snapshot(), b.location(), built.pin()).withOwnership(b.owner(), b.ext());
 		try {
 			if (failNextMove) {
 				failNextMove = false;
@@ -1020,6 +1109,7 @@ public final class Sites {
 		lastNote = built.note();
 		Architect.LOGGER.info("Moved site {} from {} ({}) to {} ({}){}", id, Anchors.str(b.box()), b.dimension(), Anchors.str(nb.box()), nb.dimension(),
 			built.note() == null ? "" : "; " + built.note());
+		ApiEvents.moved(server, b, nb);
 		return nb;
 	}
 

@@ -23,6 +23,10 @@ export function writeBlueprint(bp, dir) {
   let old = null;
   try { old = JSON.parse(fs.readFileSync(jsonPath, 'utf8')); } catch { /* no previous sidecar */ }
   if (old && typeof old === 'object') for (const k of USER_FIELDS) if (old[k] !== undefined) sidecar[k] = old[k];
+  // ext (R5): other mods' namespaced data, set on the entry by the mod (Library.setExt); a rebuild keeps it, on top of the design's own
+  const ext = { ...(sidecar.ext ?? {}), ...(old && typeof old.ext === 'object' && old.ext ? old.ext : {}) };
+  if (Object.keys(ext).length) sidecar.ext = ext;
+  else delete sidecar.ext;
   fs.writeFileSync(jsonPath, `${JSON.stringify(sidecar, null, 2)}\n`);
   return { nbtPath, jsonPath, blocks: bp.cells.size, bytes: bytes.length };
 }

@@ -64,7 +64,7 @@ public final class SidecarState {
 
 	/** A design job. {@code size} is {x, y, z} or null; {@code previews} absolute PNG paths. */
 	public record Design(String id, JsonObject request, DesignStatus status, String step, @Nullable String blueprintId, int @Nullable [] size,
-		List<String> previews, @Nullable String error, long createdAt, long updatedAt) {
+		List<String> previews, @Nullable String error, long createdAt, long updatedAt, JsonObject raw) {
 		public Design {
 			previews = List.copyOf(previews);
 		}
@@ -83,7 +83,7 @@ public final class SidecarState {
 			}
 			return new Design(str(o, "id", "?"), o.has("request") && o.get("request").isJsonObject() ? o.getAsJsonObject("request") : new JsonObject(),
 				DesignStatus.of(str(o, "status", null)), str(o, "step", ""), str(o, "blueprintId", null), size, previews, str(o, "error", null),
-				o.has("createdAt") ? o.get("createdAt").getAsLong() : 0L, o.has("updatedAt") ? o.get("updatedAt").getAsLong() : 0L);
+				o.has("createdAt") ? o.get("createdAt").getAsLong() : 0L, o.has("updatedAt") ? o.get("updatedAt").getAsLong() : 0L, o);
 		}
 
 		/** The request's name, else its type and style ("Cabin, rustic"). */
@@ -177,6 +177,10 @@ public final class SidecarState {
 	private final Map<String, Variant> variants = new LinkedHashMap<>();
 	/** {@code snapshot.palettes} when the sidecar sends it (optional; see Palettes). */
 	private @Nullable JsonElement palettes;
+	/** {@code snapshot.protocol}; 1 when the snapshot names none (a phase 1-3 sidecar), 0 before a snapshot. */
+	private volatile int protocol;
+	/** {@code snapshot.features} (empty for protocol 1). */
+	private volatile java.util.Set<String> features = java.util.Set.of();
 	private final List<Listener> listeners = new CopyOnWriteArrayList<>();
 	private long snapshots;
 
@@ -222,6 +226,44 @@ public final class SidecarState {
 		return palettes;
 	}
 
+	/** The protocol the sidecar chose ({@code snapshot.protocol}): 1 when absent, 0 before the first snapshot. Any thread. */
+	public int protocol() {
+		return protocol;
+	}
+
+	/** The sidecar's {@code features}. Any thread. */
+	public java.util.Set<String> features() {
+		return features;
+	}
+
+	/** Reads {@code protocol} and {@code features} from a snapshot; absent = protocol 1 with no features. Pure. */
+	public static int protocolOf(JsonObject snapshot) {
+		JsonElement p = snapshot.get("protocol");
+		return p != null && p.isJsonPrimitive() && p.getAsJsonPrimitive().isNumber() ? Math.max(1, p.getAsInt()) : 1;
+	}
+
+	public static java.util.Set<String> featuresOf(JsonObject snapshot) {
+		java.util.Set<String> out = new java.util.TreeSet<>();
+		JsonElement f = snapshot.get("features");
+		if (f != null && f.isJsonArray()) {
+			for (JsonElement e : f.getAsJsonArray()) {
+				if (e.isJsonPrimitive()) {
+					out.add(e.getAsString());
+				}
+			}
+		}
+		return java.util.Set.copyOf(out);
+	}
+
+	/** The raw design messages as last received (copies), for the API. */
+	public List<JsonObject> designsRaw() {
+		List<JsonObject> out = new ArrayList<>();
+		for (Design d : designs()) {
+			out.add(d.raw().deepCopy());
+		}
+		return out;
+	}
+
 	void setLink(LinkStatus s) {
 		link = s;
 		for (Listener l : listeners) {
@@ -253,6 +295,8 @@ public final class SidecarState {
 					}
 				}
 				palettes = json.has("palettes") && !json.get("palettes").isJsonNull() ? json.get("palettes") : null;
+				protocol = protocolOf(json);
+				features = featuresOf(json);
 				snapshots++;
 				for (Listener l : listeners) {
 					for (Variant v : variants.values()) {
@@ -349,6 +393,10 @@ public final class SidecarState {
 		}
 		o.add("variants", vs);
 		o.addProperty("palettesFromSidecar", palettes != null);
+		o.addProperty("protocol", protocol);
+		JsonArray fs = new JsonArray();
+		features.forEach(fs::add);
+		o.add("features", fs);
 		o.addProperty("snapshots", snapshots);
 		return o;
 	}

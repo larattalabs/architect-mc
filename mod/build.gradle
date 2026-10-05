@@ -1,6 +1,7 @@
 plugins {
 	// Minecraft 26.x is unobfuscated: the non-remapping Loom plugin is used (no mappings, no remapJar).
 	id 'net.fabricmc.fabric-loom' version "${loom_version}"
+	id 'maven-publish'
 }
 
 version = project.mod_version
@@ -152,6 +153,37 @@ tasks.withType(JavaCompile).configureEach {
 java {
 	sourceCompatibility = JavaVersion.VERSION_25
 	targetCompatibility = JavaVersion.VERSION_25
+	withSourcesJar()
+}
+
+// docs/CONTRACT.md "Versioning": `./gradlew publishToMavenLocal` publishes dev.larattalabs:architect_mc:<version>, the mod
+// jar plus a sources jar. The package dev.larattalabs.architect.api is the contract; everything else is internal.
+publishing {
+	publications {
+		mavenJava(MavenPublication) {
+			groupId = 'dev.larattalabs'
+			artifactId = 'architect_mc'
+			from components.java
+		}
+	}
+}
+
+// The dev-only API test mod (../apitest) joins the dev client's classpath only when asked for (ARCHITECT_APITEST=1 or
+// -Papitest). It is never a dependency of the published jar and never in the sidecar bundle.
+if (System.getenv("ARCHITECT_APITEST") == "1" || project.hasProperty("apitest")) {
+	loom {
+		mods {
+			"architect_apitest" {
+				sourceSet("main", ":apitest")
+				sourceSet("client", ":apitest")
+			}
+		}
+	}
+	dependencies {
+		localRuntime(project(":apitest")) {
+			transitive = false
+		}
+	}
 }
 
 // Seed mod/run with a dev options.txt (muted, 1080p GUI scale, no onboarding noise, no pause on focus

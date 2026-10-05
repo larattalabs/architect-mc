@@ -96,8 +96,8 @@ public final class PlacementFeature {
 	 * Only while placing with no screen open; releases always pass.
 	 */
 	public static boolean onKey(int action, KeyEvent e) {
-		if (action == InputConstants.RELEASE || !BuildPlacement.active() && !PlotMarker.active()) {
-			return false;
+		if (action == InputConstants.RELEASE || !BuildPlacement.active() && !PlotMarker.active() || BuildPlacement.preview()) {
+			return false; // an API preview has no keys
 		}
 		Minecraft mc = Minecraft.getInstance();
 		if (mc.gui.screen() != null) {

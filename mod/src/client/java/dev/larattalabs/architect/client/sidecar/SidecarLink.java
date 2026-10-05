@@ -39,7 +39,10 @@ import org.jspecify.annotations.Nullable;
  * deliver a snapshot within 15 s of opening.
  */
 public final class SidecarLink {
+	/** The envelope version {@code v} (unchanged by the protocol negotiation). */
 	public static final int PROTOCOL = 1;
+	/** The sidecar protocols this mod speaks (docs/CONTRACT.md phase 4a "Versioning"), sent in {@code hello.protocols}. */
+	public static final int[] PROTOCOLS = {1, 2};
 	public static final long ACK_TIMEOUT_MS = 20_000;
 	private static final long[] BACKOFF_MS = {250, 500, 1000, 2000, 3000, 5000};
 	private static final long SILENCE_MS = 45_000;
@@ -206,6 +209,11 @@ public final class SidecarLink {
 					hello.addProperty("type", "hello");
 					hello.addProperty("client", "mod");
 					hello.addProperty("version", modVersion);
+					com.google.gson.JsonArray protocols = new com.google.gson.JsonArray();
+					for (int p : PROTOCOLS) {
+						protocols.add(p);
+					}
+					hello.add("protocols", protocols);
 					if (tok != null) {
 						hello.addProperty("token", tok);
 					}

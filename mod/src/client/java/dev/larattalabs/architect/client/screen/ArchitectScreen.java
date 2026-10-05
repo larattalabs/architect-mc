@@ -1023,8 +1023,9 @@ public final class ArchitectScreen extends Screen {
 				}
 				Blueprint b = Blueprints.get(s.blueprint());
 				g.text(font, TextUtil.ellipsize(font, s.id() + "  " + (b == null ? s.blueprint() : b.name()), listW - 14), x + 6, ry + 2, UiBits.ink(), false);
-				g.text(font, TextUtil.ellipsize(font, s.box().minX() + ", " + s.box().minY() + ", " + s.box().minZ() + " · " + s.rotation().replace('_', ' '),
-					listW - 14), x + 6, ry + 12, UiBits.muted(), false);
+				String owned = dev.larattalabs.architect.client.ui.OwnedConfirm.label(s);
+				g.text(font, TextUtil.ellipsize(font, s.box().minX() + ", " + s.box().minY() + ", " + s.box().minZ() + " · " + s.rotation().replace('_', ' ')
+					+ (owned == null ? "" : " · " + owned), listW - 14), x + 6, ry + 12, UiBits.muted(), false);
 			}
 			ry += ROW_H;
 		}
@@ -1040,8 +1041,13 @@ public final class ArchitectScreen extends Screen {
 		int y = ly;
 		g.text(font, TextUtil.ellipsize(font, s.id() + " · " + s.blueprint(), dw), dx, y, UiBits.ink(), false);
 		y += 12;
-		for (String line : List.of("box " + Anchors.str(s.box()), "restores " + Anchors.str(s.restoreBox()), s.dimension() + " · " + s.rotation(),
-			s.movedFrom() == null ? "never moved" : "moved from " + s.movedFrom().x() + ", " + s.movedFrom().y() + ", " + s.movedFrom().z())) {
+		List<String> lines = new java.util.ArrayList<>(List.of("box " + Anchors.str(s.box()), "restores " + Anchors.str(s.restoreBox()),
+			s.dimension() + " · " + s.rotation(),
+			s.movedFrom() == null ? "never moved" : "moved from " + s.movedFrom().x() + ", " + s.movedFrom().y() + ", " + s.movedFrom().z()));
+		if (s.owner() != null) {
+			lines.add(0, dev.larattalabs.architect.client.ui.OwnedConfirm.label(s) + " (" + s.owner() + ")");
+		}
+		for (String line : lines) {
 			g.text(font, TextUtil.ellipsize(font, line, dw), dx, y, UiBits.muted(), false);
 			y += 10;
 		}
@@ -1055,8 +1061,14 @@ public final class ArchitectScreen extends Screen {
 		int by = footerY - 16 - 20;
 		int bx = dx;
 		boolean force = s.id().equals(armedRemove);
-		String rm = force ? "Remove anyway" : "Remove";
-		button(g, "remove", rm, bx, by, bw(rm), true, true, mx, my, () -> removeSite(s, force));
+		boolean ownedArmed = dev.larattalabs.architect.client.ui.OwnedConfirm.armed(s);
+		String rm = ownedArmed ? "Remove owned site" : force ? "Remove anyway" : "Remove";
+		button(g, "remove", rm, bx, by, bw(rm), true, true, mx, my, () -> {
+			// a site another mod owns asks twice (R5)
+			if (dev.larattalabs.architect.client.ui.OwnedConfirm.ask(s, LibraryFeature::say)) {
+				removeSite(s, force);
+			}
+		});
 		bx += bw(rm) + 4;
 		String mv = "Move…";
 		button(g, "move", mv, bx, by, bw(mv), false, true, mx, my, () -> {
