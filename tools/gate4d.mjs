@@ -321,6 +321,14 @@ async function base() {
 
 // ------------------------------------------------------------------ the 12-lot village: queue vs atomic, MSPT, group undo
 
+/** Lot hashes with their cell lists (for a diff when a check fails). */
+async function hashLotsCells(lots) {
+  const out = {};
+  for (const l of lots) out[l.key] = await hash(region(l), true);
+  return out;
+}
+const cellDiff = (a, b) => Object.fromEntries(Object.keys(a).filter((k) => a[k].sha256 !== b[k].sha256).map((k) => [k, diff(a[k].cells, b[k].cells, 20)]));
+
 async function hashLots(lots) {
   const out = {};
   for (const l of lots) out[l.key] = (await hash(region(l))).sha256;
@@ -744,8 +752,10 @@ async function patron() {
 
 async function toggle() {
   await fresh('G4D Toggle');
-  const lots = ctx.lots.slice(0, 4);
-  const pre = await hashLots(lots);
+  // lots far apart: a placed site holds the leaves within 6 of it (LeafGuard), which a neighbour's box + 7 would include
+  const lots = [ctx.lots[0], ctx.lots[2], ctx.lots[9], ctx.lots[11]];
+  const preCells = await hashLotsCells(lots);
+  const pre = Object.fromEntries(Object.entries(preCells).map(([k, v]) => [k, v.sha256]));
   await call('dev.placement.slow', { on: true });
   await mark();
   const id = await queue({ id: 'toggle', proximity: false, items: lots.map((l) => item(l)) });
@@ -764,16 +774,18 @@ async function toggle() {
   const st = done.items.map((i) => `${i.key}:${i.status}${i.reason ? ':' + i.reason : ''}`);
   const failed = done.items.filter((i) => i.status === 'FAILED');
   const sites = (await api('sites')).all;
-  const post = await hashLots(lots);
+  const postCells = await hashLotsCells(lots);
+  const post = Object.fromEntries(Object.entries(postCells).map(([k, v]) => [k, v.sha256]));
   check(failed.length === 3 && failed.every((i) => i.reason === 'NOT_ALLOWED') && done.items[0].status === 'PLACED',
     `toggle on mid-batch: the placing item finishes, the 3 queued INSTANT items fail NOT_ALLOWED (${st.join(' ')})`, { mid, st });
   check(!sites.some((s) => s.state === 'PLACING') && failed.every((i) => post[i.key] === pre[i.key]), 'toggle on mid-batch: nothing half-placed (failed lots unchanged)',
-    { pre, post });
+    { pre, post, diff: cellDiff(Object.fromEntries(failed.map((i) => [i.key, preCells[i.key]])), postCells) });
   await call('dev.survival.set', { on: false });
   // cancel mid-item
   // the placed item is far from the cancelled one, so its own changes (leaf holds within 6) never reach that region
-  const cl = [ctx.lots[11], ctx.lots[5], ctx.lots[6]];
-  const preC = await hashLots(cl);
+  const cl = [ctx.lots[3], ctx.lots[5], ctx.lots[10]];
+  const preCC = await hashLotsCells(cl);
+  const preC = Object.fromEntries(Object.entries(preCC).map(([k, v]) => [k, v.sha256]));
   await call('dev.placement.slow', { on: true });
   await mark();
   const cid = await queue({ id: 'cancel', proximity: false, items: cl.map((l) => item(l)) });
@@ -787,12 +799,14 @@ async function toggle() {
   }
   const cancelled = await result(await api(`bcancel ${cid}`), 120_000);
   await call('dev.placement.slow', { on: false });
-  const postC = await hashLots(cl);
+  const postCC = await hashLotsCells(cl);
+  const postC = Object.fromEntries(Object.entries(postCC).map(([k, v]) => [k, v.sha256]));
   const cst = cancelled.items.map((i) => `${i.key}:${i.status}${i.reason ? ':' + i.reason : ''}`);
   check(cancelled.status === 'CANCELLED' && cancelled.items[0].status === 'PLACED' && cancelled.items.slice(1).every((i) => i.reason === 'CANCELLED'),
     `cancelBatch: placed stays, the one placing and the rest fail CANCELLED (${cst.join(' ')})`, { midC, cst });
   check(postC[cl[1].key] === preC[cl[1].key] && postC[cl[2].key] === preC[cl[2].key],
-    `cancelBatch mid-item: ${cl[1].key}'s region (box + 7) is exactly as before (it was at ${midC?.progress}/${midC?.total})`, { preC, postC });
+    `cancelBatch mid-item: ${cl[1].key}'s region (box + 7) is exactly as before (it was at ${midC?.progress}/${midC?.total})`,
+    { preC, postC, diff: cellDiff({ [cl[1].key]: preCC[cl[1].key], [cl[2].key]: preCC[cl[2].key] }, postCC) });
   // growing a group
   const al = [ctx.lots[8], ctx.lots[9]];
   const preA = await hashLots(al);
