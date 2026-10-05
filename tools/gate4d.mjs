@@ -771,7 +771,8 @@ async function toggle() {
     { pre, post });
   await call('dev.survival.set', { on: false });
   // cancel mid-item
-  const cl = ctx.lots.slice(4, 7);
+  // the placed item is far from the cancelled one, so its own changes (leaf holds within 6) never reach that region
+  const cl = [ctx.lots[11], ctx.lots[5], ctx.lots[6]];
   const preC = await hashLots(cl);
   await call('dev.placement.slow', { on: true });
   await mark();
