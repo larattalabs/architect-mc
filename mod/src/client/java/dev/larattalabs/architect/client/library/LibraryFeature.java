@@ -310,7 +310,7 @@ public final class LibraryFeature {
 				server.getStructureTemplateManager().remove(sid); // drop a cached older copy
 				StructureTemplate loaded = server.getStructureTemplateManager().get(sid).orElse(null);
 				JsonObject o = new JsonObject();
-				o.addProperty("id", id);
+				o.addProperty("entry", id); // not "id": that is the DevBridge request id
 				o.addProperty("dir", dir.toString());
 				JsonArray files = new JsonArray();
 				files.add(nbt.toString());

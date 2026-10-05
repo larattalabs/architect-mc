@@ -147,6 +147,13 @@ public record LibraryMeta(boolean favorite, List<String> userTags, @Nullable Str
 		Path tmp = Files.createTempFile(dir, "." + file.getFileName(), ".tmp");
 		try {
 			Files.writeString(tmp, text, StandardCharsets.UTF_8);
+			// a temp file is owner-only: keep the old file's permissions (rw-r--r-- for a new one)
+			try {
+				Files.setPosixFilePermissions(tmp, Files.exists(file) ? Files.getPosixFilePermissions(file)
+					: java.nio.file.attribute.PosixFilePermissions.fromString("rw-r--r--"));
+			} catch (UnsupportedOperationException | IOException e) {
+				// not a POSIX file system (Windows): the defaults are fine
+			}
 			try {
 				Files.move(tmp, file, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
 			} catch (AtomicMoveNotSupportedException e) {

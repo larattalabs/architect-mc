@@ -212,6 +212,17 @@ function simulate(d) {
         if (f.endsWith('.blueprint.json')) {
           const sc = JSON.parse(fs.readFileSync(path.join(from, f), 'utf8'));
           Object.assign(sc, { id, name: d.request?.name || sc.name, type: d.request?.type || sc.type, createdAt: Date.now(), request: d.request });
+          // what a phase 2 kit build writes (docs/CONTRACT.md "Library entry"), when the copied example predates it
+          if (!sc.params) {
+            sc.palette = { preset: 'rustic', wood: 'spruce', stone: 'cobblestone', roof: 'dark_oak', accent: 'dark_oak' };
+            sc.params = {
+              floors: { type: 'int', min: 1, max: 3, default: 1, label: 'Floors' },
+              width: { type: 'int', min: 7, max: 15, default: 11, label: 'Width' },
+              porch: { type: 'bool', default: true, label: 'Porch' },
+              roof: { type: 'enum', options: ['gable', 'hip', 'flat'], default: 'gable', label: 'Roof style' },
+            };
+            sc.values = { floors: 1, width: 11, porch: true, roof: 'gable' };
+          }
           fs.writeFileSync(path.join(out, target), JSON.stringify(sc, null, 2));
         } else {
           fs.copyFileSync(path.join(from, f), path.join(out, target));

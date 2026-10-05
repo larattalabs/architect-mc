@@ -58,6 +58,14 @@ final class LibraryTab {
 	static final int GAP = 5;
 	static final List<String> VIEW_KINDS = List.of("iso", "top", "front", "cutaway");
 	private static final DateTimeFormatter DATE = DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ROOT).withZone(ZoneId.systemDefault());
+	private static final DateTimeFormatter DAY = DateTimeFormatter.ofPattern("d MMM", Locale.ROOT).withZone(ZoneId.systemDefault());
+
+	/** "4 Oct" this year, "4 Oct 2025" before. */
+	static String date(long ms) {
+		Instant t = Instant.ofEpochMilli(ms);
+		int year = t.atZone(ZoneId.systemDefault()).getYear();
+		return (year == java.time.Year.now().getValue() ? DAY : DATE).format(t);
+	}
 
 	static Dialog dialog = Dialog.NONE;
 	static String previewKind = "iso";
@@ -489,7 +497,7 @@ final class LibraryTab {
 			ty += 11;
 		}
 		String facts = c.type() + " · " + c.sizeX() + " × " + c.sizeY() + " × " + c.sizeZ() + (b == null ? "" : " · entrance " + b.front())
-			+ (c.createdAt() > 0 ? " · " + DATE.format(Instant.ofEpochMilli(c.createdAt())) : "");
+			+ (c.createdAt() > 0 ? " · " + date(c.createdAt()) : "");
 		g.text(font, TextUtil.ellipsize(font, facts, w), x, ty, UiBits.muted(), false);
 		ty += 10;
 		String prov = c.provenance(LibraryFeature::nameOf) + (c.name().equals(c.baseName()) ? "" : " · was “" + c.baseName() + "”");
@@ -671,6 +679,16 @@ final class LibraryTab {
 		ry += 11;
 		s.textField(g, Focus.VNAME, variantNameView, variantName, rx, ry, colW, new TextFieldView.Style(null, 0, "default: the name + what changed",
 			null, null, 0, 1));
+		ry += TextFieldView.BASE_H + 6;
+		// the source, as it is now
+		int ph = footerY - 20 - ry;
+		if (ph >= 40) {
+			Panels.inset(g, rx, ry, colW, ph);
+			drawPreview(g, f.from(), "iso", rx + 2, ry + 2, colW - 4, ph - 4);
+			String cur = "now: " + (f.palettes().presetMatching(originalInputs(c)) != null ? f.palettes().presetMatching(originalInputs(c)) + " palette"
+				: "its own palette");
+			g.text(font, TextUtil.ellipsize(font, cur, colW - 8), rx + 4, ry + ph - 12, UiBits.muted(), false);
+		}
 		// footer
 		String status;
 		boolean err;
@@ -699,6 +717,10 @@ final class LibraryTab {
 		String cancel = "Cancel";
 		bx -= s.bw(cancel) + 6;
 		s.button(g, "variant:cancel", cancel, bx, footerY, s.bw(cancel), false, true, mx, my, this::closeDialog);
+	}
+
+	private static Palettes.Inputs originalInputs(@Nullable LibraryCard c) {
+		return c == null || c.palette() == null ? Palettes.Inputs.NONE : Palettes.Inputs.of(c.palette());
 	}
 
 	static String summary(VariantForm f) {
@@ -750,7 +772,7 @@ final class LibraryTab {
 				}
 				int tagW = Panels.pill(g, font, c.where().equals("world") ? "this world" : "imports", x + 6, ry + 5, UiBits.ink());
 				g.text(font, TextUtil.ellipsize(font, c.label(), w - tagW - 120), x + 12 + tagW, ry + 2, UiBits.ink(), false);
-				String meta = (c.bytes() / 1024 + 1) + " KB · " + DATE.format(Instant.ofEpochMilli(c.modified()));
+				String meta = (c.bytes() / 1024 + 1) + " KB · " + date(c.modified());
 				g.text(font, meta, x + w - 12 - font.width(meta), ry + 2, UiBits.muted(), false);
 				g.text(font, TextUtil.ellipsize(font, c.path().toString(), w - tagW - 30), x + 12 + tagW, ry + 11, UiStyle.color("ink_ui.ghost_on_paper",
 					0xFF9A8E7C), false);
