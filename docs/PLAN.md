@@ -181,7 +181,11 @@ usage hold, re-skin, open type). Caveats:
 - Real runs went over the WebSocket; the Java path is sim-only.
 - The bible set is cluttered and less legible, which is 5a's (critique loop) job.
 
-**Phase 4d status: BUILT 2026-10-05, gate pending independent verification** (branch `phase/4d`; API 1.4.0 / mod 0.7.0;
+**Phase 4d status: PASSED 2026-10-05** (gate-verifier reproduced every item on fresh terrain, `artifacts/gate4d-verify/`, local: 12/12
+equal, MSPT max 33.9 ms at 4 ms (job start up to 23.6 ms, unsliced), survival max 30.2 ms, 0 ticks over 50 ms; phase 3 gate
+re-run clean after the Remove change. Caveats carried to 4e: the toggle step now uses non-adjacent lots, so adjacency leaks are
+only covered by equality/undo; strengthen it to adjacent lots allowing persistent-leaf diffs only. Job start and construction
+conversion are unsliced; slice them if designs near the size cap break 50 ms.) Built on branch `phase/4d`; API 1.4.0 / mod 0.7.0;
 builder's run in `artifacts/gate4d/REPORT.md`, local). Every gate item and gate addition passed in the builder's run: 12-lot
 village via the queue identical to atomic (12/12 regions + the whole village), MSPT max 16.8 ms / mean 7.8 ms at 4 ms,
 relog mid-item resumed identical, group undo exact in reverse order, stages, survival shared crate (3 sites from one hopper
