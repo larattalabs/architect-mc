@@ -212,6 +212,40 @@ public final class SurvivalFeature {
 					return o;
 				})).thenCompose(x -> x);
 			});
+		DevBridge.register("dev.items.near", 10_000, "{pos: [x,y,z], radius?: 8} - dropped item entities near a point: stacks and items per id; and "
+			+ "the player's inventory per id (refund checks)", (req, mc) -> {
+				Fields f = Fields.of(req);
+				var a = f.json().getAsJsonArray("pos");
+				double r = f.optNum("radius", 8, 0.5, 64);
+				return DevBridge.onClient(mc, () -> ServerTasks.callAsPlayer((level, player) -> {
+					JsonObject o = new JsonObject();
+					AABB box = new AABB(a.get(0).getAsDouble(), a.get(1).getAsDouble(), a.get(2).getAsDouble(), a.get(0).getAsDouble() + 1,
+						a.get(1).getAsDouble() + 1, a.get(2).getAsDouble() + 1).inflate(r);
+					Map<String, Integer> items = new java.util.TreeMap<>();
+					int stacks = 0;
+					for (ItemEntity e : level.getEntitiesOfClass(ItemEntity.class, box)) {
+						stacks++;
+						items.merge(net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(e.getItem().getItem()).toString(), e.getItem().getCount(),
+							Integer::sum);
+					}
+					JsonObject io = new JsonObject();
+					items.forEach(io::addProperty);
+					o.addProperty("stacks", stacks);
+					o.add("items", io);
+					Map<String, Integer> inv = new java.util.TreeMap<>();
+					var pi = player.getInventory();
+					for (int i = 0; i < pi.getContainerSize(); i++) {
+						var st = pi.getItem(i);
+						if (!st.isEmpty()) {
+							inv.merge(net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(st.getItem()).toString(), st.getCount(), Integer::sum);
+						}
+					}
+					JsonObject iv = new JsonObject();
+					inv.forEach(iv::addProperty);
+					o.add("inventory", iv);
+					return o;
+				})).thenCompose(x -> x);
+			});
 		DevBridge.register("dev.ghosts.state", 10_000, "{} - the construction-site ghosts this client holds (cells, built, remaining, HUD line)",
 			(req, mc) -> DevBridge.onClient(mc, SiteGhosts::json));
 	}

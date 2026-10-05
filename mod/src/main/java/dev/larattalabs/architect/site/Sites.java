@@ -1174,6 +1174,10 @@ public final class Sites {
 		for (Site b : map.values()) {
 			if (b.construction() != null) {
 				Builder.Run run = Builder.run(server, b);
+				ServerLevel atStart = levelOf(server, b);
+				if (run != null && atStart != null) {
+					run.rescan(atStart, true); // built is derived from the world when it loads (the chunks are read here, as for every site)
+				}
 				if (run == null) {
 					report(b.id(), true, b.id() + "'s construction plan " + SNAPSHOT_DIR + "/" + b.construction().target() + " is missing; it can only be "
 						+ "removed");

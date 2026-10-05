@@ -277,7 +277,20 @@ switch (step) {
     // the refund items lie at the crate's cell
     await sleep(1500);
     const crate = fed.final.crate;
-    const items = await cmd(`/execute if entity @e[type=item,x=${crate.x - 2},y=${crate.y - 2},z=${crate.z - 2},dx=5,dy=5,dz=5]`);
+    // what the player really gets: the refund items lying at the crate's cell after the restore's drop cleanup (3 ticks), then
+    // picked up: the inventory must hold exactly the BOM (the refund plus the 3 mined blocks already held)
+    const placeRec = load('survival-place');
+    const cp = [placeRec.site.crate.x, placeRec.site.crate.y, placeRec.site.crate.z];
+    await sleep(2000);
+    const lying = await call('dev.items.near', { pos: cp, radius: 6 });
+    const lyingMism = [...new Set([...Object.keys(lying.items), ...Object.keys(expected)])].filter((k) => (lying.items[k] ?? 0) !== (expected[k] ?? 0));
+    check(lyingMism.length === 0, `the refund lies at the crate's cell as items, exactly: ${total(lying.items)} items in ${lying.stacks} stacks${lyingMism.length ? '; differ: ' + lyingMism.join(', ') : ''}`);
+    await cmd(`/tp @s ${cp[0] + 0.5} ${cp[1]} ${cp[2] + 0.5}`);
+    await sleep(3000);
+    const after = await call('dev.items.near', { pos: cp, radius: 6 });
+    const invMism = [...new Set([...Object.keys(after.inventory), ...Object.keys(fed.bom)])].filter((k) => (after.inventory[k] ?? 0) !== (fed.bom[k] ?? 0));
+    check(after.stacks === 0 && invMism.length === 0, `picked up: the player's inventory holds exactly the BOM (${total(after.inventory)} items = ${total(fed.bom)}), ${after.stacks} stacks left${invMism.length ? '; differ: ' + invMism.map((k) => `${k} ${after.inventory[k] ?? 0}/${fed.bom[k] ?? 0}`).join(', ') : ''}`);
+    const items = { lying, after };
     // terrain: the region as before, except the hopper chain cells; then put those back and the whole region matches
     await sleep(500);
     const post = await cells(REGION.min, REGION.max);
@@ -349,6 +362,96 @@ switch (step) {
     save(step, { survival: sv, gamerules: rules, place: r, instantCellsSha: inst.sha256, instantBlockEntities: inst.blockEntities, compare: cmp,
       remove: rm, preSha: pre.sha256, postSha: post.sha256, removeDiff: d2.slice(0, 20) });
     save(`${step}-instant-cells`, { snapshotBox: sb, ...inst });
+    break;
+  }
+  case 'regression': {
+    // instant placement unchanged with the toggle off: place, stand under 300x random ticks for 30 s, remove; the snapshot
+    // box + 7 must come back exactly (phase 2's exact-Remove property, LeafGuard included)
+    const sv = await call('dev.survival.state');
+    check(sv.survival === false, `the toggle is off (${JSON.stringify(sv)})`);
+    await call('dev.camera', { x: 5, y: 130, z: 40, yaw: 180, pitch: 30, mode: 'keep' }).catch(() => null);
+    await cmd('/kill @e[type=item]');
+    await cmd('/gamerule random_tick_speed 0');
+    const pre = await cells(REGION.min, REGION.max);
+    const r = await place();
+    check(r.placed === true && !/Construction site/.test(r.message), `placed instantly: ${r.message}`);
+    const ticks = [await cmd('/gamerule random_tick_speed 300')];
+    await sleep(30_000);
+    ticks.push(await cmd('/gamerule random_tick_speed 0'));
+    await sleep(1000);
+    const rm = await call('dev.sites.remove', { site: r.siteId }, 60_000);
+    await sleep(1500);
+    const post = await cells(REGION.min, REGION.max);
+    const all = diff(pre.cells, post.cells);
+    // nature, not the site: grass under a world-generated log or other opaque block turns to dirt on its first random tick
+    // (random ticks were off since the world was made), outside the snapshot box
+    const rec = (await call('dev.sites.state')).pending.map((p) => p.site).find((x) => x.id === r.siteId);
+    const sb = rec?.snapshotBox ?? rec?.box;
+    const inBox = (k) => {
+      const [x, y, z] = k.split(',').map(Number);
+      return sb && x >= sb.minX && x <= sb.maxX && y >= sb.minY && y <= sb.maxY && z >= sb.minZ && z <= sb.maxZ;
+    };
+    const covered = (k) => {
+      const [x, y, z] = k.split(',').map(Number);
+      return /oak_log|_log"|stone|dirt"|deepslate/.test(pre.cells[`${x},${y + 1},${z}`] ?? '');
+    };
+    const natural = all.filter((c) => /grass_block/.test(c.before) && /minecraft:dirt"/.test(c.after) && covered(c.at) && !inBox(c.at));
+    const d = all.filter((c) => !natural.includes(c));
+    check(rm.removed && d.length === 0, `place, stand 30 s at 300x random ticks, remove: the snapshot box + 7 is back exactly (${d.length} of ${Object.keys(pre.cells).length} cells differ${d.length ? ': ' + JSON.stringify(d.slice(0, 5)) : ''}; ${natural.length} natural change(s) outside the box: grass under a world-generated log turned to dirt${natural.length ? ' ' + natural.map((c) => c.at).join(' ') : ''})`);
+    save('regression', { survival: sv, place: r, randomTicks: ticks, remove: rm, preSha: pre.sha256, postSha: post.sha256, diff: d.slice(0, 50), differing: d.length, natural });
+    break;
+  }
+  case 'extras-insert': {
+    // not in the gate: Insert from inventory (only what the site needs leaves the inventory) and a crate removed by /setblock
+    await cmd('/kill @e[type=item]');
+    await call('dev.camera', { x: 5, y: 130, z: 40, yaw: 180, pitch: 30, mode: 'keep' }).catch(() => null);
+    const r = await place();
+    check(r.placed === true && /Construction site/.test(r.message), `placed: ${r.message}`);
+    const id = r.siteId;
+    const st0 = await call('dev.site.state', { site: id });
+    const cp = [st0.crate.x, st0.crate.y, st0.crate.z];
+    const give = [await cmd('/clear @s'), await cmd('/give @s minecraft:spruce_log 10'), await cmd('/give @s minecraft:cobblestone 64'),
+      await cmd('/give @s minecraft:diamond 5')];
+    await cmd(`/tp @s ${cp[0] + 0.5} ${cp[1]} ${cp[2] + 2.5}`);
+    await call('dev.crate.open', { site: id });
+    await sleep(1000);
+    const pressed = await call('dev.crate.press', { control: 'insert' });
+    await sleep(1500);
+    const inv = await call('dev.items.near', { pos: cp, radius: 2 });
+    const scr = await call('dev.crate.state');
+    check((inv.inventory['minecraft:spruce_log'] ?? 0) === 0 && inv.inventory['minecraft:cobblestone'] === 25 && inv.inventory['minecraft:diamond'] === 5,
+      `Insert from inventory moved only what the site needs: inventory now ${JSON.stringify(inv.inventory)}; "${scr.flash}"`);
+    await call('dev.screen', { open: null });
+    await sleep(2000);
+    const st1 = await call('dev.site.state', { site: id });
+    await cmd(`/setblock ${cp.join(' ')} minecraft:air`);
+    await sleep(2500);
+    const st2 = await call('dev.site.state', { site: id });
+    const gh = await call('dev.ghosts.state');
+    const g = gh.ghosts.find((x) => x.site === id);
+    check(st2.crate.missing === true && st2.notes.some((n) => /crate missing/.test(n)) && /crate missing/.test(g?.hud ?? ''),
+      `crate removed by /setblock: state ${JSON.stringify(st2.crate)}, note "${st2.notes[0]}", HUD "${g?.hud}"`);
+    save('extras-insert', { place: r, give, pressed: pressed.flash, inventory: inv.inventory, before: st1.built, crateGone: st2.crate, notes: st2.notes, hud: g?.hud,
+      ledgerBefore: st1.ledger });
+    break;
+  }
+  case 'extras-missing': {
+    // after a relog: the world-start report names the missing crate; Deconstruct from the Library refunds placed cells only
+    const sites = await call('dev.sites.state');
+    const rec = sites.sites.find((x) => x.construction && x.construction.state === 'building');
+    const id = rec.id;
+    check(/crate missing/.test(sites.reports[id] ?? ''), `world-start report: ${sites.reports[id]}`);
+    const before = load('extras-insert');
+    const st = await call('dev.site.state', { site: id });
+    const rm = await call('dev.sites.remove', { site: id }, 60_000);
+    const tally = (await call('dev.site.state', { site: id }).catch((e) => ({ error: e.message })));
+    const cp = [rec.construction.crate.pos[0], rec.construction.crate.pos[1], rec.construction.crate.pos[2]];
+    await sleep(1500);
+    const lying = await call('dev.items.near', { pos: cp, radius: 6 });
+    const cell = await cmd(`/execute if block ${cp.join(' ')} minecraft:air`);
+    check(rm.removed === true, `Deconstruct (Library path) works with the crate missing: ${rm.restoreBox ?? rm.message}; items at the crate cell ${JSON.stringify(lying.items)} (placed cells only: ${st.built} built cells)`);
+    check(cell.success, `the crate cell keeps what replaced the crate (air here): ${cell.messages.join(' ')}`);
+    save('extras-missing', { report: sites.reports[id], built: st.built, remove: rm, refundLying: lying, crateCell: cell, after: tally, insertStep: before.inventory });
     break;
   }
   case 'hardcore': {

@@ -123,7 +123,11 @@ public final class Builder {
 
 	public static void init() {
 		ServerTickEvents.END_SERVER_TICK.register(Builder::tick);
-		ServerLifecycleEvents.SERVER_STOPPED.register(server -> RUNS.clear());
+		ServerLifecycleEvents.SERVER_STARTED.register(s -> server = s);
+		ServerLifecycleEvents.SERVER_STOPPED.register(s -> {
+			RUNS.clear();
+			server = null;
+		});
 	}
 
 	// ------------------------------------------------------------------ the run-time state of one site
@@ -290,12 +294,20 @@ public final class Builder {
 
 		/** Derives {@link #built} from the world for every queued cell in a loaded chunk. Returns cells that changed. */
 		int rescan(ServerLevel level) {
+			return rescan(level, false);
+		}
+
+		/**
+		 * {@code load}: read unloaded chunks too (once, at world start, as the sites check does for every site); the builder's
+		 * own rescans never load a chunk.
+		 */
+		int rescan(ServerLevel level, boolean load) {
 			int changed = 0;
 			BlockPos.MutableBlockPos m = new BlockPos.MutableBlockPos();
 			for (int i = 0; i < queue.length; i++) {
 				int[] o = Construction.offsets(queue[i], dx, dz);
 				m.set(box.minX() + o[0], box.minY() + o[1], box.minZ() + o[2]);
-				if (!level.isLoaded(m)) {
+				if (!load && !level.isLoaded(m)) {
 					continue;
 				}
 				boolean b = matches(level.getBlockState(m), i);
@@ -645,6 +657,8 @@ public final class Builder {
 		}
 		Ledger ledger = crate.ledger();
 		int budget = SurvivalWorld.blocksPerTick();
+		BitSet free = c.free();
+		boolean freeChanged = false;
 		int placed = 0;
 		int scanned = 0;
 		for (int i = r.built.nextClearBit(0); i < r.size() && budget > 0 && scanned < SCAN; i = r.built.nextClearBit(i + 1)) {
@@ -680,13 +694,25 @@ public final class Builder {
 				pay(ledger, r.cost.get(j));
 				put(level, r, j, q, false);
 			}
+			// a cell finish placed free, mined since and now paid for: it is refundable again
+			if (free.get(i) || j >= 0 && free.get(j)) {
+				free.clear(i);
+				if (j >= 0) {
+					free.clear(j);
+				}
+				freeChanged = true;
+			}
 			budget--;
 			placed++;
 		}
 		if (placed > 0) {
 			crate.ledgerChanged();
 		}
-		if (r.built.cardinality() == r.size()) {
+		if (freeChanged) {
+			Sites.replace(srv, s.withConstruction(c.withFree(free)));
+			s = Sites.get(s.id());
+		}
+		if (s != null && r.built.cardinality() == r.size()) {
 			complete(srv, level, s, r, crate);
 		}
 	}
@@ -742,7 +768,8 @@ public final class Builder {
 			restoreCrateCell(level, c.crate());
 		}
 		dropItems(level, at, left, null);
-		Site done = s.withConstruction(c.withState(Construction.BUILT, null).withPaused(false));
+		// the crate record stays (its block is gone): a later deconstruct drops its refunds on that cell, outside the box
+		Site done = s.withConstruction(c.withState(Construction.BUILT, c.crate()).withPaused(false));
 		Sites.replace(srv, done);
 		sendClear(srv, r, true);
 		r.blockedSince.clear();

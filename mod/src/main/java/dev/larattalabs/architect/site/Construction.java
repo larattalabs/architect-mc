@@ -17,7 +17,8 @@ import org.jspecify.annotations.Nullable;
  *              template's cells, the foundation fill and the approach (path, slabs, fill)
  * @param target the file in {@code <world>/architect-sites/} holding what an instant placement wrote over the snapshot box
  *               (block states and block-entity NBT): what each queued cell gets
- * @param crate the construction crate, or null once the site is built (the crate is gone)
+ * @param crate the construction crate's cell and what it held before; kept once the site is built (the crate block is gone, a
+ *              deconstruct drops its refunds there, outside the box)
  * @param free queue positions whose cells were placed without payment ({@code /architect site finish})
  * @param paused the builder waits
  * @param owner the UUID of the player who placed it (the HUD line), or null
