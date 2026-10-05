@@ -353,6 +353,23 @@ public final class BuildPlacement {
 			Result r = new Result(false, null, "Not placed: " + PLAYER_INSIDE);
 			lastResult = r;
 			setStatus(r.message(), true);
+			// a refused placement attempt, refused here before it reaches the server: PLACE_FAILED all the same
+			IntegratedServer srv = mc.getSingleplayerServer();
+			if (moving == null && srv != null && mc.player != null) {
+				ResourceKey<Level> dim = mc.player.level().dimension();
+				String bpId = v.bp().id();
+				BlockPos origin = new BlockPos(v.ox(), v.oy(), v.oz());
+				Rotation rotation = Rotation.values()[v.turns()];
+				boolean useForce = force && forceArmed;
+				String owner = mc.player.getUUID().toString();
+				srv.execute(() -> {
+					ServerLevel sl = srv.getLevel(dim);
+					if (sl != null) {
+						dev.larattalabs.architect.apiimpl.ApiEvents.placeFailed(sl, bpId, origin, rotation, useForce, null, null, null,
+							Sites.playerOf(srv, owner), List.of(new Sites.Refusal(dev.larattalabs.architect.api.Reason.PLAYER_IN_BOX, PLAYER_INSIDE)));
+					}
+				});
+			}
 			return CompletableFuture.completedFuture(r);
 		}
 		boolean useForce = force && forceArmed;

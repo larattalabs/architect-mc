@@ -43,6 +43,24 @@ public final class ApiClientBridge implements ClientBridge {
 				for (JsonObject d : Sidecar.state().designsRaw()) {
 					DESIGNS.put(d.has("id") ? d.get("id").getAsString() : "?", d);
 				}
+				if (Sidecar.state().protocol() >= 2) {
+					ApiImpl.jobsSnapshot(Sidecar.state().jobsRaw());
+				}
+			}
+
+			@Override
+			public void onLink(dev.larattalabs.architect.client.sidecar.LinkStatus link) {
+				ApiImpl.linkChanged(link.synced());
+			}
+
+			@Override
+			public void onJob(JsonObject job) {
+				ApiImpl.jobChanged(job);
+			}
+
+			@Override
+			public void onToolCall(JsonObject call) {
+				ApiImpl.toolCall(call);
 			}
 
 			@Override
@@ -159,6 +177,36 @@ public final class ApiClientBridge implements ClientBridge {
 	@Override
 	public CompletableFuture<String> variantRequest(JsonObject payload) {
 		return onClient(() -> Sidecar.variantRequest(payload).thenApply(ack -> idOf(ack, "variantId", "id")));
+	}
+
+	@Override
+	public CompletableFuture<JsonObject> send(JsonObject message) {
+		// SidecarLink.send is thread-safe; its future completes on the client thread
+		return Sidecar.link().send(message).thenApply(ack -> {
+			JsonObject o = new JsonObject();
+			o.addProperty("ok", ack.ok());
+			if (ack.error() != null) {
+				o.addProperty("error", ack.error());
+			}
+			if (ack.result() != null) {
+				o.add("result", ack.result().deepCopy());
+			}
+			return o;
+		});
+	}
+
+	@Override
+	public CompletableFuture<byte[]> readBlob(String blobId) {
+		if (!blobId.matches("[A-Za-z0-9_-]{1,64}")) {
+			return CompletableFuture.failedFuture(new IllegalArgumentException("not a blob id: " + blobId));
+		}
+		return CompletableFuture.supplyAsync(() -> {
+			try {
+				return java.nio.file.Files.readAllBytes(Sidecar.dataDir().resolve("blobs").resolve(blobId));
+			} catch (java.io.IOException e) {
+				throw new java.io.UncheckedIOException(e);
+			}
+		});
 	}
 
 	@Override

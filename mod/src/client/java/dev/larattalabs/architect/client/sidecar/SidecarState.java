@@ -169,12 +169,22 @@ public final class SidecarState {
 
 		default void onVariant(@Nullable Variant previous, Variant variant) {
 		}
+
+		/** (protocol 2) {@code job.upsert {job}}: the job as received. */
+		default void onJob(JsonObject job) {
+		}
+
+		/** (protocol 2) {@code job.tool.call {jobId, callId, name, input, owner?, timeoutMs?}}: answer with job.tool.result. */
+		default void onToolCall(JsonObject call) {
+		}
 	}
 
 	private LinkStatus link = new LinkStatus(LinkStatus.Phase.DISABLED, "", 0, null, 0, 0, false);
 	private Status status = Status.EMPTY;
 	private final Map<String, Design> designs = new LinkedHashMap<>();
 	private final Map<String, Variant> variants = new LinkedHashMap<>();
+	/** (protocol 2) the jobs as received ({@code snapshot.jobs} replaces, {@code job.upsert} updates). */
+	private final Map<String, JsonObject> jobs = new LinkedHashMap<>();
 	/** {@code snapshot.palettes} when the sidecar sends it (optional; see Palettes). */
 	private @Nullable JsonElement palettes;
 	/** {@code snapshot.protocol}; 1 when the snapshot names none (a phase 1-3 sidecar), 0 before a snapshot. */
@@ -255,6 +265,15 @@ public final class SidecarState {
 		return java.util.Set.copyOf(out);
 	}
 
+	/** (protocol 2) The jobs of the last snapshot and the upserts since, as received (copies). */
+	public List<JsonObject> jobsRaw() {
+		List<JsonObject> out = new ArrayList<>();
+		for (JsonObject j : jobs.values()) {
+			out.add(j.deepCopy());
+		}
+		return out;
+	}
+
 	/** The raw design messages as last received (copies), for the API. */
 	public List<JsonObject> designsRaw() {
 		List<JsonObject> out = new ArrayList<>();
@@ -291,6 +310,14 @@ public final class SidecarState {
 						if (e.isJsonObject()) {
 							Variant v = Variant.of(e.getAsJsonObject());
 							variants.put(v.id(), v);
+						}
+					}
+				}
+				jobs.clear();
+				if (json.has("jobs") && json.get("jobs").isJsonArray()) {
+					for (JsonElement e : json.getAsJsonArray("jobs")) {
+						if (e.isJsonObject() && e.getAsJsonObject().has("id")) {
+							jobs.put(str(e.getAsJsonObject(), "id", "?"), e.getAsJsonObject());
 						}
 					}
 				}
@@ -341,8 +368,23 @@ public final class SidecarState {
 					guard(() -> l.onVariant(prev, v));
 				}
 			}
+			case "job.upsert" -> {
+				if (!json.has("job") || !json.get("job").isJsonObject()) {
+					return;
+				}
+				JsonObject j = json.getAsJsonObject("job");
+				jobs.put(str(j, "id", "?"), j);
+				for (Listener l : listeners) {
+					guard(() -> l.onJob(j));
+				}
+			}
+			case "job.tool.call" -> {
+				for (Listener l : listeners) {
+					guard(() -> l.onToolCall(json));
+				}
+			}
 			default -> {
-				// unknown messages are ignored (a newer sidecar)
+				// job.event (streamed progress) and unknown messages are ignored (a newer sidecar)
 			}
 		}
 	}
@@ -392,6 +434,17 @@ public final class SidecarState {
 			vs.add(v.raw());
 		}
 		o.add("variants", vs);
+		JsonArray js = new JsonArray();
+		for (JsonObject j : jobs.values()) {
+			JsonObject v = new JsonObject();
+			for (String k : new String[] {"id", "status", "step", "error", "resultBlob"}) {
+				if (j.has(k)) {
+					v.add(k, j.get(k));
+				}
+			}
+			js.add(v);
+		}
+		o.add("jobs", js);
 		o.addProperty("palettesFromSidecar", palettes != null);
 		o.addProperty("protocol", protocol);
 		JsonArray fs = new JsonArray();

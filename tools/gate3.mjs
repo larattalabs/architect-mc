@@ -213,7 +213,9 @@ switch (step) {
     const empty = leftover.every((l) => /no elements|\[\]/i.test(l.items));
     check(empty, `chests and hoppers are empty: ${leftover.map((l) => l.items).join(' | ')}`);
     const drops = await cmd(`/execute if entity @e[type=item,x=${crate[0] - 3},y=${crate[1] - 3},z=${crate[2] - 3},dx=7,dy=7,dz=7]`);
-    check(!drops.success || /fail/i.test(drops.messages.join(' ')), `no leftover items dropped at the crate (credit 0): ${drops.messages.join(' ')}`);
+    // `/execute if entity` answers "Test failed" when it matches nothing: that is the pass here
+    const dropsFound = drops.success && !/fail/i.test(drops.messages.join(' '));
+    check(!dropsFound, `no leftover items dropped at the crate (credit 0): ${dropsFound ? `item entities found near the crate (${drops.messages.join(' ')})` : 'no item entity within 3 blocks of the crate'}`);
     save('survival-feed', { bom, chests, logsAsEquivalents: logs, stacks: stacks.length, chain: ch, commands: [...placed, ...fills.slice(0, 3)], sprint,
       final: last, seconds: secs, leftover, drops });
     // the finished site's cells (the comparison with the instant placement)

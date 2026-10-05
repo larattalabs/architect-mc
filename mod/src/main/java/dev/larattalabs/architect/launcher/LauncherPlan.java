@@ -310,6 +310,15 @@ public final class LauncherPlan {
 	 */
 	public static List<String> command(Path node, Path sidecarDir, int port, Path data, Path library, @Nullable Path kit, long parentPid,
 		boolean useClaudeLogin) {
+		return command(node, sidecarDir, port, data, library, kit, parentPid, useClaudeLogin, null);
+	}
+
+	/**
+	 * As above, plus {@code --backend <backend>} when it is {@code sim} or {@code claude} (the dev switch
+	 * {@code ARCHITECT_SIDECAR_BACKEND}: {@code sim} runs designs and jobs without Claude, for tests); anything else is ignored.
+	 */
+	public static List<String> command(Path node, Path sidecarDir, int port, Path data, Path library, @Nullable Path kit, long parentPid,
+		boolean useClaudeLogin, @Nullable String backend) {
 		List<String> c = new ArrayList<>(List.of(node.toString(), sidecarDir.resolve("dist").resolve("main.mjs").toString(), "--port",
 			Integer.toString(port), "--data", data.toString(), "--library", library.toString()));
 		if (kit != null) {
@@ -320,6 +329,10 @@ public final class LauncherPlan {
 		c.add(Long.toString(parentPid));
 		if (useClaudeLogin) {
 			c.add("--use-claude-login");
+		}
+		if ("sim".equals(backend) || "claude".equals(backend)) {
+			c.add("--backend");
+			c.add(backend);
 		}
 		return List.copyOf(c);
 	}

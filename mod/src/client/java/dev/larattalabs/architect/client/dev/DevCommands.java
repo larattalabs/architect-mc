@@ -128,6 +128,29 @@ public final class DevCommands {
 		DevBridge.register("dev.key", 10_000, "{key:'escape'|'key.keyboard.f3', modifiers?} or {mapping:'key.chat'} - press a key (to the open screen, else key mappings)",
 			DevCommands::key);
 		DevBridge.register("dev.type", 10_000, "{text} - type text into the focused widget of the open screen", DevCommands::type);
+		DevBridge.register("dev.world.leave", 60_000, "{} - save and leave the world for the title screen (as Save and Quit to Title)",
+			(req, mc) -> DevBridge.onClient(mc, () -> {
+				boolean was = mc.level != null;
+				if (was) {
+					mc.disconnectFromWorld(net.minecraft.network.chat.Component.literal("dev.world.leave"));
+				}
+				if (!(mc.gui.screen() instanceof net.minecraft.client.gui.screens.TitleScreen)) {
+					mc.gui.setScreen(new net.minecraft.client.gui.screens.TitleScreen());
+				}
+				JsonObject o = new JsonObject();
+				o.addProperty("left", was);
+				return o;
+			}));
+		DevBridge.register("dev.world.open", 10_000, "{} - open (or create) the AutoWorld world again, from the title screen; then dev.state until ready",
+			(req, mc) -> DevBridge.onClient(mc, () -> {
+				if (mc.level != null) {
+					throw new IllegalStateException("already in a world (dev.world.leave first)");
+				}
+				dev.larattalabs.architect.client.AutoWorld.openOrCreate(mc);
+				JsonObject o = new JsonObject();
+				o.addProperty("opening", true);
+				return o;
+			}));
 		DevBridge.register("dev.hud", 10_000, "{hidden: bool} - hide/show the HUD (like F1)", (req, mc) -> {
 			boolean hidden = Fields.of(req).bool("hidden");
 			return DevBridge.onClient(mc, () -> {

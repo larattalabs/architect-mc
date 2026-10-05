@@ -6,9 +6,15 @@
 //
 //   node tools/apitest.mjs survival     in a survival world (the toggle on): sites, refusals, the actor rule, progress,
 //                                       remove rules and refund, survey, designs/variants/library writes, a client preview
+//                                       (against the stub sidecar, protocol 1, or the sim sidecar, protocol 2)
+//   node tools/apitest.mjs jobs         jobs without Claude (tools/run-apitest-client.sh --sim: the real sidecar's sim
+//                                       backend, started by the launcher): structured, an agent job with apitest's tools,
+//                                       a tool call across a paused game, cancel, a budget stop, blobs from Java read by a
+//                                       job, a resume after the sidecar is killed mid tool call, events on the server thread
 //
 // Evidence goes to artifacts/apitest/<step>.json (APITEST_OUT overrides), screenshots to the client's ARCHITECT_SHOTS_DIR.
 
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -18,6 +24,10 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = process.env.APITEST_OUT ? path.resolve(process.env.APITEST_OUT) : path.join(root, 'artifacts', 'apitest');
 fs.mkdirSync(OUT, { recursive: true });
 const OWNER = 'apitest:village/1';
+const API_VERSION = '1.1.0';
+// the dev client's game dir (tools/run-apitest-client.sh runs it in mod/)
+const GAME_DIR = process.env.APITEST_GAME_DIR ? path.resolve(process.env.APITEST_GAME_DIR) : path.join(root, 'mod', 'run');
+const SIDECAR_DATA = path.join(GAME_DIR, 'architect', 'sidecar-data');
 
 const step = process.argv[2];
 const dev = await DevClient.connect({ timeoutMs: 120_000 });
@@ -132,14 +142,15 @@ switch (step) {
 
     // ---- version, features, jobs stub
     const v = await api('version');
-    check(v.version === '1.0.0', `ArchitectApi.VERSION ${v.version}`, v);
+    check(v.version === API_VERSION, `ArchitectApi.VERSION ${v.version}`, v);
     const p2 = v.features.includes('protocol2');
     const jobFeatures = ['jobs', 'jobTools', 'blobs'];
     check(['designs', 'events', 'library', 'sites', 'survey'].every((f) => v.features.includes(f))
       && (p2 ? jobFeatures.every((f) => v.features.includes(f)) : !jobFeatures.some((f) => v.features.includes(f))),
       `features() against a protocol-${p2 ? 2 : 1} sidecar: ${v.features.join(', ')}`, v.features);
     const jobs = await result(await api('jobs'));
-    check(v.jobsAvailable === false && /jobs arrive with protocol 2/.test(jobs.error ?? ''), `jobs: available() false, run() refused (${jobs.error})`, jobs);
+    if (p2) check(v.jobsAvailable === true && /^j\d+$/.test(jobs.value ?? ''), `jobs: available() true, run() -> ${jobs.value ?? jobs.error}`, jobs);
+    else check(v.jobsAvailable === false && /protocol 2/.test(jobs.error ?? ''), `jobs: available() false, run() refused (${jobs.error})`, jobs);
 
     // ---- place a construction site through the API with an owner and ext (AUTO in a survival world)
     const A = await spot(px + 24, pz - 8);
@@ -160,6 +171,19 @@ switch (step) {
     check(!over.placed && over.refusals.some((r) => r.reason === 'OVERLAP'), `refused OVERLAP: ${over.refusals.map((r) => r.reason).join(', ')}`, over);
     const failed = (await events()).filter((e) => e.event === 'PLACE_FAILED');
     check(failed.length >= 2 && failed.some((e) => e.refusals.some((r) => r.reason === 'OVERLAP')), `PLACE_FAILED fired for both (${failed.length})`, failed);
+    // the UI's own refusal (the client sees the player inside the ghost and never asks the server) fires PLACE_FAILED too
+    const nFailed = failed.length;
+    await call('dev.build.start', { blueprint: 'cabin', origin: [px - 6, py - 1, pz - 5] });
+    await sleep(800);
+    const uiConfirm = await call('dev.build.confirm', {});
+    await call('dev.build.cancel', {});
+    let uiFailed = null;
+    for (let i = 0; i < 20 && !uiFailed; i++) {
+      await sleep(250);
+      uiFailed = (await events()).filter((e) => e.event === 'PLACE_FAILED')[nFailed] ?? null;
+    }
+    check(uiConfirm.lastResult?.placed === false && uiFailed?.mode === 'AUTO' && uiFailed.refusals.some((r) => r.reason === 'PLAYER_IN_BOX'),
+      `the placement UI's "player inside" refusal fires PLACE_FAILED (${uiFailed?.serverThread})`, { uiConfirm: uiConfirm.lastResult, uiFailed });
     const chk = await api(`check cabin ${A.x + 3} ${A.y} ${A.z + 2} AUTO unowned actor`);
     check(!chk.ok && chk.refusals.some((r) => r.reason === 'OVERLAP') && chk.construction === true && Object.keys(chk.bom).length > 0,
       `Sites.check (dry run): OVERLAP, construction, BOM of ${Object.keys(chk.bom).length} items`, chk);
@@ -265,8 +289,303 @@ switch (step) {
     results.events = await events();
     break;
   }
+  case 'jobs': {
+    // against the real sidecar with its sim backend, started by the game's launcher (tools/run-apitest-client.sh --sim)
+    const sha = (buf) => crypto.createHash('sha256').update(buf).digest('hex');
+    const logFile = path.join(GAME_DIR, 'logs', 'latest.log');
+    const logSize = () => (fs.existsSync(logFile) ? fs.statSync(logFile).size : 0);
+    const logSince = (from) => {
+      if (!fs.existsSync(logFile)) return '';
+      const b = fs.readFileSync(logFile);
+      return b.subarray(Math.min(from, b.length)).toString('utf8');
+    };
+    const jobDone = async (id, timeoutMs = 60_000) => waitEvent((e) => e.event === 'JOB_DONE' && e.id === id, timeoutMs);
+    const toolstats = () => api('toolstats');
+    const waitCalled = async (tool, calls, timeoutMs = 30_000) => {
+      const end = Date.now() + timeoutMs;
+      while (Date.now() < end) {
+        const s = await toolstats();
+        if ((s[tool]?.calls ?? 0) >= calls) return s;
+        await sleep(100);
+      }
+      return null;
+    };
+    const run = async (spec, blobs) => {
+      const r = await result(await api(`jobrun ${spec}${blobs ? ` ${blobs.join(',')}` : ''}`));
+      if (!/^j\d+$/.test(r.value ?? '')) throw new Error(`jobrun ${spec}: ${JSON.stringify(r)}`);
+      return { id: r.value, thread: r._thread };
+    };
+    const resultJson = (ev) => {
+      try {
+        return JSON.parse(ev?.result?.text ?? 'null');
+      } catch {
+        return null;
+      }
+    };
+
+    await api('clear');
+    const launcher = await call('dev.launcher.state');
+    const v = await api('version');
+    check(v.version === API_VERSION && v.jobsAvailable === true && ['protocol2', 'jobs', 'jobTools', 'blobs'].every((f) => v.features.includes(f)),
+      `VERSION ${v.version}, jobs available, features ${v.features.join(', ')}`, v);
+    check(launcher.startedByUs === true && launcher.reused === false && launcher.source === 'dev' && launcher.pid > 0,
+      `the launcher started the sidecar (pid ${launcher.pid}, source ${launcher.source}, reused ${launcher.reused})`, launcher);
+    const snapshotJobs = (await call('dev.sidecar.state')).jobs ?? [];
+
+    // ---- a structured job
+    const st = await run('structured');
+    check(st.thread === 'Server thread', `run() completed on the server thread with ${st.id} (${st.thread})`);
+    const stDone = await jobDone(st.id);
+    const card = stDone?.result;
+    check(stDone?.status === 'done' && typeof card?.name === 'string' && card.name.length > 0 && Number.isInteger(card?.floors) && card.floors >= 1,
+      `structured job ${st.id} done: ${JSON.stringify(card)}`, stDone);
+    check(stDone?.cost?.usd > 0 && stDone.cost.cacheReadTokens > 0, `cost ${JSON.stringify(stDone?.cost)} (sim estimate, cache tokens)`);
+    const stUpd = (await events()).filter((e) => e.event === 'JOB_UPDATED' && e.id === st.id);
+    check(stUpd.length >= 2, `JOB_UPDATED ${stUpd.length}x (${stUpd.map((e) => e.status).join(' > ')})`);
+    const listed = await api('joblist apitest');
+    check(listed.some((j) => j.id === st.id) && (await api('joblist nobody')).length === 0, `Jobs.list(owner): ${listed.length} of apitest, none of nobody`);
+    const got = await api(`job ${st.id}`);
+    check(got?.status === 'done' && got.tag === 'apitest-structured', `Jobs.get(${st.id}): ${got?.status}`, got);
+
+    // ---- an agent job: the survey summary, thread choice, a missing handler, a big answer as a blob
+    const ag = await run('agent');
+    const agDone = await jobDone(ag.id, 90_000);
+    const out = resultJson(agDone);
+    const by = Object.fromEntries((out?.results ?? []).map((r) => [r.tool, r]));
+    check(agDone?.status === 'done' && out?.results?.length === 5, `agent job ${ag.id} done with ${out?.results?.length} tool results`, agDone);
+    check(/height|ascii|grid|\d/i.test(by.survey?.result?.summary ?? '') && by.survey?.result?.ranOn === 'Server thread',
+      `survey tool: a ${by.survey?.result?.width}x${by.survey?.result?.depth} summary, handler on ${by.survey?.result?.ranOn}`, by.survey);
+    check(by.fast?.result?.ranOn && by.fast.result.ranOn !== 'Server thread', `readOnly + threadSafe tool ran on a worker (${by.fast?.result?.ranOn})`);
+    check(by.slowro?.result?.ranOn === 'Server thread', `readOnly but not thread-safe ran on the server thread (${by.slowro?.result?.ranOn})`);
+    check(by.missing?.error === 'no handler for missing in this game', `no handler: "${by.missing?.error}"`);
+    const bigBlob = by.big?.result?.blob;
+    const bigFile = bigBlob ? path.join(SIDECAR_DATA, 'blobs', bigBlob) : null;
+    const bigRows = bigFile && fs.existsSync(bigFile) ? JSON.parse(fs.readFileSync(bigFile, 'utf8')).rows?.length : 0;
+    check(!!bigBlob && by.big.result.bytes > 256 * 1024 && bigRows === 6000, `a ${by.big?.result?.bytes}-byte answer went as blob ${bigBlob} (${bigRows} rows on disk)`, by.big);
+
+    // ---- a job result over 256 KB: the sidecar puts it in a blob (resultBlob); the mod reads it back before JOB_DONE
+    const br = await run('bigresult');
+    const brDone = await jobDone(br.id, 60_000);
+    const brGot = await api(`job ${br.id}`);
+    check(brDone?.status === 'done' && /^b/.test(brDone.resultBlob ?? '') && brDone.resultBytes > 256 * 1024 && brGot?.resultBytes === brDone.resultBytes,
+      `job ${br.id}: a ${brDone?.resultBytes}-byte result came as blob ${brDone?.resultBlob} and is in JOB_DONE and Jobs.get().result()`,
+      { ...brDone, result: undefined });
+
+    // ---- a tool call across a paused game: tool timeout 10 s, the game paused 15 s while the handler waits for 60 ticks
+    const pz = await run('paused');
+    const called = await waitCalled('tickwait', 1);
+    await call('dev.screen', { open: 'pause' });
+    await sleep(500);
+    const ps = await call('dev.state');
+    const t0 = (await api('ticks')).ticks;
+    await sleep(15_000);
+    const t1 = (await api('ticks')).ticks;
+    const mid = await api(`job ${pz.id}`);
+    check(ps.paused === true && t1 === t0 && mid?.status === 'waiting_tool', `paused 15 s: dev.state.paused ${ps.paused}, server ticks ${t0} -> ${t1}, job ${mid?.status}`);
+    await call('dev.screen', { open: null });
+    const pzDone = await jobDone(pz.id, 60_000);
+    const pzOut = resultJson(pzDone);
+    const tw = (await toolstats()).tickwait;
+    const waited = tw.answeredAt - tw.calledAt;
+    check(pzDone?.status === 'done' && pzOut?.results?.[0]?.result?.tickwait === 60 && !pzOut.results[0].error,
+      `the job completed after the unpause: ${JSON.stringify(pzOut?.results?.[0])}`, pzDone);
+    check(!!called && waited > 10_000, `the call took ${waited} ms of wall time, past its 10 s timeout, and did not time out`);
+
+    // ---- cancel: a job whose tool is held; the late answer is dropped ("no pending tool call")
+    const holdsBefore = (await toolstats()).hold?.calls ?? 0;
+    const cj = await run('hold');
+    await waitCalled('hold', holdsBefore + 1);
+    const logMark = logSize();
+    await api(`jobcancel ${cj.id}`);
+    const cjDone = await jobDone(cj.id, 30_000);
+    check(cjDone?.status === 'cancelled', `job ${cj.id} cancelled while its tool was held (${cjDone?.status})`, cjDone);
+    await api('release');
+    await sleep(1500);
+    const dropped = /tool call \S+ of job \S+ is no longer pending; answer dropped/.test(logSince(logMark));
+    check(dropped, 'the late answer to the cancelled job was dropped (ok:false "no pending tool call")');
+
+    // ---- a budget stop: $0.01 per sim step, a budget of $0.015
+    const bj = await run('budget');
+    const bjDone = await jobDone(bj.id, 60_000);
+    check(bjDone?.status === 'failed' && bjDone.error === 'budget' && bjDone.cost.usd >= 0.015, `budget stop: ${bjDone?.status}, error ${bjDone?.error}, cost $${bjDone?.cost?.usd}`, bjDone);
+
+    // ---- blobs from Java: a 2.5 MB binary (3 frames of chunks) and a survey sample as JSON, read by a job from its scratch dir
+    const bin = await result(await api('blobput bin 2621440'), 60_000);
+    const sv = await result(await api('blobput survey'), 60_000);
+    check(/^b/.test(bin.blobId ?? '') && bin.thread === 'Server thread' && /^b/.test(sv.blobId ?? ''), `putBlob: binary ${bin.blobId} (${bin.bytes} bytes), survey ${sv.blobId} (${sv.bytes} bytes), on ${bin.thread}`, { bin, sv });
+    const blj = await run('structured', [bin.blobId, sv.blobId]);
+    const bljDone = await jobDone(blj.id);
+    const scratch = path.join(SIDECAR_DATA, 'jobs', blj.id, 'blobs');
+    const binCopy = path.join(scratch, `${bin.blobId}.bin`);
+    const svCopy = path.join(scratch, `${sv.blobId}.json`);
+    const binSha = fs.existsSync(binCopy) ? sha(fs.readFileSync(binCopy)) : null;
+    const svJson = fs.existsSync(svCopy) ? JSON.parse(fs.readFileSync(svCopy, 'utf8')) : null;
+    check(bljDone?.status === 'done' && binSha === bin.sha256, `job ${blj.id} got the binary blob in its scratch dir, SHA-256 matches (${binSha?.slice(0, 12)})`);
+    check(svJson && JSON.stringify(svJson).length > 1000 && (svJson.width === sv.width || svJson.resolution !== undefined),
+      `the survey blob is ${svCopy.split('/').slice(-2).join('/')} (width ${svJson?.width}, ${Object.keys(svJson ?? {}).length} keys)`);
+
+    // ---- resume after a sidecar restart mid tool call: kill it, the launcher restarts it, the cached answer is re-sent
+    const holds0 = (await toolstats()).hold?.calls ?? 0;
+    const rj = await run('hold');
+    await waitCalled('hold', holds0 + 1);
+    const pid = (await call('dev.launcher.state')).pid;
+    process.kill(pid, 'SIGKILL');
+    let link = 'synced';
+    for (let i = 0; i < 50 && link === 'synced'; i++) {
+      await sleep(200);
+      link = (await call('dev.sidecar.state')).link;
+    }
+    const rel = await api('release'); // the handler answers while the helper is down: the answer is cached
+    await sleep(1000);
+    const logMark2 = logSize();
+    await call('dev.launcher.restart');
+    const rjDone = await jobDone(rj.id, 90_000);
+    const after = await call('dev.launcher.state');
+    const rOut = resultJson(rjDone);
+    const holds1 = (await toolstats()).hold?.calls ?? 0;
+    check(rel.released === true && link !== 'synced', `killed the sidecar (pid ${pid}) mid call; link ${link}; the handler answered while it was down`);
+    check(after.pid !== pid && after.startedByUs === true, `the launcher restarted it (pid ${after.pid})`, after);
+    check(rjDone?.status === 'done' && rOut?.results?.[0]?.result?.held === true, `job ${rj.id} resumed and finished with the held answer: ${JSON.stringify(rOut?.results?.[0])}`, rjDone);
+    check(holds1 === holds0 + 1, `the handler ran once (${holds0} -> ${holds1}); the re-sent call got the cached answer`);
+    check(/re-sent tool call \S+ \(hold\): sending the cached answer/.test(logSince(logMark2)), 'the log shows the cached answer re-sent');
+
+    // ---- the same, but the handler still runs when the call comes again: it is not run twice, its answer goes out later
+    const holds2 = (await toolstats()).hold?.calls ?? 0;
+    const rj2 = await run('hold');
+    await waitCalled('hold', holds2 + 1);
+    const pid2 = (await call('dev.launcher.state')).pid;
+    process.kill(pid2, 'SIGKILL');
+    for (let i = 0, l = 'synced'; i < 50 && l === 'synced'; i++) {
+      await sleep(200);
+      l = (await call('dev.sidecar.state')).link;
+    }
+    await sleep(500);
+    const logMark3 = logSize();
+    await call('dev.launcher.restart');
+    let resentWhileRunning = false;
+    for (let i = 0; i < 100 && !resentWhileRunning; i++) {
+      await sleep(200);
+      resentWhileRunning = /re-sent tool call \S+ \(hold\): its handler is still running/.test(logSince(logMark3));
+    }
+    await api('release');
+    const rj2Done = await jobDone(rj2.id, 90_000);
+    const holds3 = (await toolstats()).hold?.calls ?? 0;
+    check(resentWhileRunning && rj2Done?.status === 'done' && resultJson(rj2Done)?.results?.[0]?.result?.held === true && holds3 === holds2 + 1,
+      `re-sent while its handler still ran: not run again (${holds2} -> ${holds3}), answered on release, job ${rj2.id} ${rj2Done?.status}`, rj2Done);
+
+    // ---- events: on the server thread, DONE once per job (the reconnect snapshots did not fire it again)
+    const all = await events();
+    const jobEvents = all.filter((e) => e.event.startsWith('JOB_'));
+    const doneCounts = {};
+    for (const e of jobEvents.filter((x) => x.event === 'JOB_DONE')) doneCounts[e.id] = (doneCounts[e.id] ?? 0) + 1;
+    check(jobEvents.length > 0 && jobEvents.every((e) => e.serverThread === 'Server thread'), `${jobEvents.length} JOB_ events, all on the server thread`);
+    check(Object.values(doneCounts).every((n) => n === 1), `JOB_DONE once per job: ${JSON.stringify(doneCounts)}`);
+    const preexisting = snapshotJobs.filter((j) => ['done', 'failed', 'cancelled'].includes(j.status)).map((j) => j.id);
+    check(!preexisting.some((id) => doneCounts[id]), `no JOB_DONE for the ${preexisting.length} jobs finished before this run`);
+    results.events = jobEvents;
+    break;
+  }
+  case 'catchup': {
+    // designs and variants that finish while no world is loaded fire DESIGN_DONE / VARIANT_DONE when one loads (sim sidecar:
+    // its steps slowed to 1.5 s through <data>/config.json and a helper restart, so the design outlasts leaving the world)
+    const cfgFile = path.join(SIDECAR_DATA, 'config.json');
+    const oldCfg = fs.existsSync(cfgFile) ? fs.readFileSync(cfgFile, 'utf8') : null;
+    const restartHelper = async () => {
+      await call('dev.launcher.restart');
+      for (let i = 0; i < 100; i++) {
+        await sleep(300);
+        if ((await call('dev.sidecar.state')).link === 'synced' && (await call('dev.launcher.state')).state === 'running') return;
+      }
+      throw new Error('the helper did not come back');
+    };
+    const waitInWorld = async () => {
+      for (let i = 0; i < 300; i++) {
+        await sleep(500);
+        const s = await call('dev.state').catch(() => null);
+        if (s?.inWorld && s.ready) return s;
+      }
+      throw new Error('the world did not load');
+    };
+    fs.writeFileSync(cfgFile, JSON.stringify({ ...(oldCfg ? JSON.parse(oldCfg) : {}), simStepMs: 1500 }));
+    try {
+      await restartHelper();
+      await api('clear');
+      const from = (await api('entries')).find((id) => /^gen_apicabin$/.test(id)) ?? 'cabin';
+      const d = await result(await api('design CatchUp'));
+      const palettes = ['oak', 'dark', 'cherry', 'fortress'];
+      for (const p of palettes) await api(`variant ${from} ${p}`);
+      await sleep(300);
+      const tLeave = Date.now();
+      await call('dev.world.leave');
+      check((await call('dev.state')).inWorld === false, `left the world (design ${d.value}, ${palettes.length} variants of ${from} queued)`);
+      // wait on the title screen until the helper reports them all finished
+      let sc;
+      for (let i = 0; i < 200; i++) {
+        await sleep(500);
+        sc = await call('dev.sidecar.state');
+        const dd = sc.designs.find((x) => x.id === d.value);
+        const vs = sc.variants.filter((x) => x.from === from && x.createdAt >= tLeave - 60_000);
+        if (dd && ['done', 'failed', 'cancelled'].includes(dd.status) && vs.length >= palettes.length && vs.every((x) => ['done', 'failed'].includes(x.status))) break;
+      }
+      const vs = sc.variants.filter((x) => x.from === from && x.createdAt >= tLeave - 60_000);
+      const whileOut = vs.filter((x) => x.updatedAt > tLeave);
+      const evOut = await call('dev.state');
+      check(evOut.inWorld === false && whileOut.length > 0, `on the title screen: the design and ${whileOut.length} of ${vs.length} variants finished while no world was loaded`, vs.map((x) => ({ id: x.id, status: x.status, blueprintId: x.blueprintId })));
+      const tOpen = Date.now();
+      await call('dev.world.open');
+      await waitInWorld();
+      const dDone = await waitEvent((e) => e.event === 'DESIGN_DONE' && e.id === d.value, 30_000);
+      check(!!dDone && dDone.t >= tOpen && dDone.serverThread === 'Server thread' && dDone.status === 'DONE',
+        `DESIGN_DONE ${d.value} fired after the world loaded (${dDone ? dDone.t - tOpen : '?'} ms after the open, on ${dDone?.serverThread})`, dDone);
+      await sleep(1500);
+      const all = await events();
+      const vDone = all.filter((e) => e.event === 'VARIANT_DONE');
+      const outIds = whileOut.filter((x) => x.status === 'done').map((x) => x.blueprintId);
+      check(outIds.length > 0 && outIds.every((id) => vDone.filter((e) => e.id === id).length === 1 && vDone.find((e) => e.id === id).t >= tOpen),
+        `VARIANT_DONE once for each variant that finished while out (${outIds.join(', ')}), after the world loaded`, vDone.map((e) => ({ id: e.id, t: e.t - tOpen })));
+      const futs = [];
+      for (const p of palettes) futs.push(await result({ pending: `variant:${from}:${p}` }, 30_000));
+      check(futs.every((f) => !f.error && f.variantOf === from), `the makeVariant futures completed after the reload (${futs.map((f) => f.id ?? f.error).join(', ')})`, futs);
+      const dCount = all.filter((e) => e.event === 'DESIGN_DONE' && e.id === d.value).length;
+      check(dCount === 1, `DESIGN_DONE once (${dCount})`);
+      // tidy: the new entries go to the trash
+      for (const f of futs) if (f.id) await result(await api(`delete ${f.id}`), 30_000).catch(() => null);
+      if (dDone?.entryId) await result(await api(`delete ${dDone.entryId}`), 30_000).catch(() => null);
+
+      // a tool call that arrives while no world runs gets an error answer (the job goes on); JOB_DONE fires on the next load
+      const timerCalls = (await api('toolstats')).timer?.calls ?? 0;
+      const nw = await result(await api('jobrun noworld'));
+      for (let i = 0; i < 100 && ((await api('toolstats')).timer?.calls ?? 0) <= timerCalls; i++) await sleep(100);
+      await call('dev.world.leave');
+      let nwJob;
+      for (let i = 0; i < 120; i++) {
+        await sleep(500);
+        nwJob = (await call('dev.sidecar.state')).jobs.find((j) => j.id === nw.value);
+        if (['done', 'failed', 'cancelled'].includes(nwJob?.status)) break;
+      }
+      const tOpen2 = Date.now();
+      await call('dev.world.open');
+      await waitInWorld();
+      const nwDone = await waitEvent((e) => e.event === 'JOB_DONE' && e.id === nw.value, 30_000);
+      let nwOut = null;
+      try {
+        nwOut = JSON.parse(nwDone?.result?.text ?? 'null');
+      } catch {
+        /* checked below */
+      }
+      const byTool = Object.fromEntries((nwOut?.results ?? []).map((r) => [r.tool, r]));
+      check(nwJob?.status === 'done' && byTool.timer?.result?.timer === 4000 && /no world is running/.test(byTool.fast?.error ?? ''),
+        `job ${nw.value} finished on the title screen: timer answered, fast got "${byTool.fast?.error}"`, nwOut);
+      check(!!nwDone && nwDone.t >= tOpen2 && nwDone.serverThread === 'Server thread', `its JOB_DONE fired after the world loaded (${nwDone ? nwDone.t - tOpen2 : '?'} ms)`);
+    } finally {
+      if (oldCfg === null) fs.rmSync(cfgFile, { force: true });
+      else fs.writeFileSync(cfgFile, oldCfg);
+      await restartHelper().catch((e) => console.log('restart:', e.message));
+    }
+    break;
+  }
   default:
-    console.error('usage: node tools/apitest.mjs survival|preview');
+    console.error('usage: node tools/apitest.mjs survival|jobs|catchup|preview');
     process.exit(2);
 }
 
