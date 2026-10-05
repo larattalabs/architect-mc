@@ -11,9 +11,9 @@
 [![Claude Agent SDK](https://img.shields.io/badge/designer-Claude%20Agent%20SDK-2fa3a0)](https://code.claude.com/docs/en/agent-sdk/overview)
 [![License: MIT](https://img.shields.io/badge/license-MIT-c9a227)](LICENSE)
 
-<img src="docs/img/readme/hero.jpg" alt="A small village at sunset on a hillside below a cherry grove: two Town Houses, a tavern, a watchtower and a gatehouse" width="100%">
+<img src="docs/img/readme/hero.jpg" alt="A small village in the evening on a hillside: a gatehouse, two Town Houses, a tavern, a log cabin and a watchtower, with a row of four more Town Houses behind" width="100%">
 
-<sub>A village in a dev world at sunset: the Claude-designed Town House (rustic and birch) with the bundled tavern, watchtower and gatehouse.</sub>
+<sub>A village in a dev world: the Claude-designed Town House (rustic and birch) with the bundled gatehouse, tavern, log cabin and watchtower, and the Town House in four palettes behind them.</sub>
 
 </div>
 
@@ -22,6 +22,8 @@
 Describe a building, or mark a plot on the ground. Claude designs it as **parametric code**, checks it against
 the rules for its building type and renders previews. You review it as a translucent ghost on the real terrain,
 place it, and keep it in a library where new variants cost nothing. **Remove** puts the land back exactly as it was.
+In a survival world, Place puts down a **construction site** instead, and the building goes up as you feed it the
+materials.
 
 Architect is a Fabric mod for singleplayer. It starts its own small helper in the background (a local Node process
 that runs the Claude design agent), so there is no terminal and no server to set up.
@@ -41,7 +43,8 @@ that runs the Claude design agent), so there is no terminal and no server to set
 | **A library** | Every design you make, with previews, tags, favourites, rename, search and sort, plus Place, Remix and Export. |
 | **Variants without Claude** | 10 palettes and each design's own parameters. A variant re-runs the design's code: no Claude call, under a second. |
 | **Import and export** | Export writes a vanilla `.nbt` that a structure block or `/place template` can load. Import turns `.nbt` files and structure-block saves into library entries. |
-| **Built for no-cheat worlds** | Everything is in one screen (<kbd>B</kbd>). Placement runs on the game's own integrated server without op commands, so it is meant to work in Hardcore too (a full no-cheats playthrough is still to come). |
+| **Survival construction sites** | In survival and Hardcore, Place puts down a ghost and a crate. Feed the crate by hand or from hoppers; it takes only what the building still needs and builds a few blocks per tick. Deconstruct refunds what you paid for and puts the terrain back exactly. |
+| **Built for no-cheat worlds** | Everything is in one screen (<kbd>B</kbd>), and placement, construction sites and Deconstruct need no op commands. Tested in a Hardcore world without cheats: a site places, builds from its crate and deconstructs, while the survival toggle and the free `site finish` stay locked. |
 
 **Building types:** cabin, house, cottage, tower, shop, tavern, barn, smithy, chapel, gatehouse and custom. Each has
 a style line in Claude's brief and a checker profile (warnings for now): a tower should be at least twice as tall as it
@@ -169,16 +172,86 @@ low side.
 
 <br>
 
-## Coming next: survival
+## Survival
 
-> **Not in this build yet.** Phase 3 is in development; see [docs/PLAN.md](docs/PLAN.md) and the phase 3 section
-> of [docs/CONTRACT.md](docs/CONTRACT.md).
+<img src="docs/img/readme/site-building.jpg" alt="A log cabin construction site at 42 percent: the lower walls and roof are built, the rest is a translucent ghost, a crate and a hopper chain stand at the end of the path, and the HUD reads: Log Cabin 42%, needs 105 spruce planks" width="100%">
 
-In a survival or Hardcore world, Place will put down a **construction site**: a ghost of what's left to build and a
-crate at the entrance. You feed the crate by hand or from a hopper chain, and the site builds itself bottom-up as
-the materials arrive. A bill of materials shows what it needs, and logs count as planks. Deconstruct refunds what
-the site placed, then restores the terrain exactly. Creative worlds keep instant placement, and survival is a
-per-world toggle.
+<sub>A Log Cabin site at 42%, fed from two chests through hoppers. The HUD names the next thing it is waiting for.</sub>
+
+**A per-world toggle.** Survival construction sites are on by default in survival and Hardcore worlds and off in
+creative ones. The Status tab and `/architect survival` show the setting. Changing it needs cheats (permission level 2):
+`/architect survival on|off`. With it off, Place is instant, as in creative.
+
+**A construction site.** With it on, Place runs the same checks as before, saves the terrain and clears the spot for
+free. Then it puts down a **ghost** of the building and a **construction crate** next to the end of the entrance path.
+The ghost stays across relogs and restarts, and the cells whose items are already in the crate are tinted green. While
+you are within 64 blocks, a HUD line shows the progress and what the site needs next.
+
+<table>
+<tr>
+<td width="50%"><img src="docs/img/readme/hoppers.jpg" alt="Two chests on two hoppers feeding a construction crate beside a half-built log cabin"></td>
+<td width="50%"><img src="docs/img/readme/crate.jpg" alt="The crate screen: 42%, 218 of 507 cells, 506 items in all, and a table of items with needed, delivered, placed and missing counts"></td>
+</tr>
+<tr>
+<td><b>Feeding.</b> Hoppers and droppers feed the crate from any side, or you put items in by hand.</td>
+<td><b>The crate.</b> The bill of materials with needed, delivered, placed and missing counts, plus Insert from inventory, Pause and Deconstruct.</td>
+</tr>
+</table>
+
+- **The crate takes only what the site still needs**, so a hopper chain never jams on other items. **Insert from
+  inventory** moves every needed item from your inventory. Players can't break the crate while the site is building,
+  and explosions don't destroy it.
+- **The bill of materials** counts every block the instant placement would write: the building, plus that spot's
+  foundation and entrance approach. The Library shows the design's own count before you place it. A door, bed or tall
+  plant costs one item, a double slab costs two slabs, and wall torches and wall signs cost the standing item. Path
+  blocks, farmland and grass cost **dirt**, since survival can't pick those blocks up. A design that uses a block
+  survival can't get (a spawner, bedrock, a command block...) is refused at placement. Waterlogged cells are built dry.
+- **Raw materials count, one way, at vanilla yields.** One log is 4 planks of its wood, one plank is 2 slabs, and a
+  stonecutter block counts as what it cuts into (stone to stone bricks, cobblestone to its slab, stairs or wall).
+  Nothing converts back and nothing skips smelting. When a conversion yields more than the site needs, the rest stays
+  in the crate as credit and comes back when the site is done.
+- **It builds a few blocks per tick** (4 by default, up to 64, set in the world's `architect-world.json`), from the
+  ground up, with whatever is in the crate. It only builds in loaded chunks. If something stands in a cell, the site
+  skips it and tries again, and the crate screen reports the cell if it stays blocked.
+- **The finished building is identical to an instant placement**, block entities included. In the phase 3 gate run, a
+  cabin site of 507 cells with a 506-item bill of materials, fed by hoppers and partly with logs, finished with the same
+  hash as an instant placement at the same spot.
+- **When it's done**, the crate gives back any leftovers and credit and disappears, and its cell is restored.
+
+<table>
+<tr>
+<td width="50%"><img src="docs/img/readme/site-before.jpg" alt="A fresh construction site: the cabin as a translucent ghost on a cleared patch of forest, with the crate next to the end of the path"></td>
+<td width="50%"><img src="docs/img/readme/site-after.jpg" alt="The finished log cabin with a smoking chimney, the hopper chain beside the path, and a toast: Log Cabin is built"></td>
+</tr>
+<tr>
+<td><b>Placed.</b> The spot is cleared and the whole cabin is a ghost. The HUD asks for 112 spruce logs.</td>
+<td><b>Built.</b> 507 of 507 cells. The crate is gone, and a toast and a chat line say so.</td>
+</tr>
+</table>
+
+<img src="docs/img/readme/library-survival.jpg" alt="The Library detail of the Town House in a survival world: the bill of materials, Needs: 1070 items, and a Place construction site button" align="right" width="38%">
+
+**In the Library**, a survival world shows each design's bill of materials and "Needs: N items", and Place becomes
+**Place construction site**.
+
+**Deconstruct** (from the crate screen, the Library's **Placed here** list, or `/architect remove <site>`):
+
+- Blocks the site placed and you paid for, still in place, are **refunded** as items at the crate's spot.
+- **Blocks you mined from the site aren't refunded**: you already have them. In the gate run, mining 3 logs and then
+  deconstructing refunded exactly 506 − 3 = 503 items.
+- Cells that `/architect site finish` placed for free refund nothing.
+- **Your own blocks** in the box drop as items.
+- Then the terrain comes back **exactly**, as with Remove in creative.
+- A container you filled still stops it, as before. Move is refused in survival: deconstruct and place again.
+
+**Clearing a site gives no terrain drops.** The trees and dirt a site clears vanish, and Deconstruct puts them back.
+That keeps Remove exact, and since you never received the terrain, restoring it can't duplicate items.
+
+**Finishing for free.** `/architect site finish <site>` builds the rest at once. It needs cheats (permission level 2)
+and a player in creative mode, and Deconstruct refunds nothing for what it placed. **In Hardcore** without cheats you
+can't change the toggle or use `site finish`; sites place, build from their crates and deconstruct as usual.
+
+<br clear="right">
 
 <br>
 
@@ -237,8 +310,14 @@ and make variants before you add a key.
 **While marking a plot:** <kbd>Enter</kbd> sets a corner, <kbd>PgUp</kbd>/<kbd>PgDn</kbd> change the height
 (<kbd>Shift</kbd> for 4 at a time), <kbd>Backspace</kbd> goes back a corner, <kbd>Esc</kbd> cancels.
 
-**Commands** (none need cheats): `/architect` opens the screen, `/architect place <id> [rotation]`,
-`/architect remove <site>`, `/architect list`, `/architect reload`.
+**Construction crate:** right-click it to open the crate screen: **Insert from inventory**, **Pause**/**Resume**, and
+**Deconstruct** (press it twice). Hoppers and droppers feed it from any side.
+
+**Commands:** `/architect` opens the screen, `/architect place <id> [rotation]`, `/architect remove <site>` (in
+survival, deconstructs a construction site), `/architect list`, `/architect reload`, `/architect survival` (shows the
+toggle) and `/architect site state <site>` (progress and what's missing). These need no cheats.
+`/architect survival on|off` and `/architect site finish <site>` need permission level 2, and `site finish` also needs
+creative mode.
 
 <br>
 
@@ -340,8 +419,11 @@ screenshots: `node tools/devcli.mjs help`.
 
 Every in-game image in this README was taken that way, in a dev world and without any Claude calls.
 `tools/run-readme-client.sh` starts that client, the world, placements and camera positions are recorded in
-`tools/scenes/readme.json`, and `tools/readme-images.mjs` converts the raw shots. The Town House is a real Claude design from the phase 2 gate run. Its variants and
-the import were made through the UI. The cabin, tower, tavern and gatehouse are the kit's hand-written examples.
+`tools/scenes/readme.json`, and `tools/readme-images.mjs` converts the raw shots. The survival images come from a fresh
+survival world: `tools/run-p3-client.sh` starts it with a stub helper, and `tools/readme-survival.mjs` places the site,
+builds the hopper chain and takes the shots. The Town House is a real Claude design from the phase 2 gate run. Its
+variants and the import were made through the UI. The cabin, tower, tavern and gatehouse are the kit's hand-written
+examples.
 
 <br>
 
@@ -349,15 +431,25 @@ the import were made through the UI. The cabin, tower, tavern and gatehouse are 
 
 Architect is early.
 
-- **Phase 1** (design, ghost, place, exact Remove) and **phase 2** (library, variants, import/export) passed their
-  gates in dev worlds, with real Claude designs, in October 2026. **Phase 3** (survival construction sites) has
-  started.
+- **Phases 1 to 3 passed their gates** in dev worlds in October 2026: **phase 1** (design, ghost, place, exact
+  Remove) and **phase 2** (library, variants, import/export) with real Claude designs, and **phase 3** (survival
+  construction sites) in fresh survival, creative and Hardcore worlds.
 - **Singleplayer only**, on **Minecraft 26.3**. Dedicated servers are out of scope: the design agent's code runs on
   your machine.
 - **Run on macOS (Apple Silicon) so far.** The launcher knows the Windows paths, but Windows hasn't been tested.
-- **Known issues:** in the Nether the ghost starts on the bedrock roof (give it a lower spot), exports carry no
-  source, so an imported export has no variants, and a full no-cheats Hardcore playthrough is still to come. The
-  list is in [docs/PLAN.md](docs/PLAN.md).
+- **Known issues:** in the Nether the ghost starts on the bedrock roof (give it a lower spot). Exports carry no
+  source, so an imported export has no variants. Item names in the crate and the HUD are singular ("112 spruce log"),
+  and raw-material equivalents cover whole-number yields only (no planks to stairs). A full hand-played Hardcore run
+  is still to come. The list is in [docs/PLAN.md](docs/PLAN.md).
+
+**What's next** (the roadmap in [docs/PLAN.md](docs/PLAN.md); the order can change):
+
+- **A public API**, so other mods and scripts can use the library, design jobs, the ghost and sites.
+- **Matching sets:** a style bible, and several buildings designed in that one style in parallel.
+- **A massing preview:** a cheap, coarse ghost to approve before paying for the detailed design.
+- **Batch placement** over several ticks, to place a whole set at once without a lag spike.
+- **A journal-backed site engine** for overlapping builds, roads and bridges, with undo in any order.
+- **A critique loop:** a cheaper reviewer that looks at each design's renders and sends it back for fixes.
 
 <br>
 
