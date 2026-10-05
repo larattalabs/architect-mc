@@ -569,6 +569,7 @@ public interface ArchitectApi {
   Sites sites(MinecraftServer s);    // the sites of this world
   Survey survey();                   // terrain sampling (R1/A5b section 7.1)
   SiteEvents events();               // Fabric Events (R7)
+  Jobs jobs();                       // Claude jobs (R2), see "Jobs": thread-safe, callable from the server thread
 }
 
 interface Library {
@@ -586,9 +587,10 @@ interface Sites {
   Verdict check(PlaceRequest r);     // dry run: what place() would do (refusals, notes, BOM, boxes), no side effects
 }
 record PlaceRequest(String blueprintId, ServerLevel level, BlockPos origin, Rotation rotation, Mode mode,
-                    String owner, JsonObject ext, boolean force) {}
-enum Mode { AUTO, INSTANT, CONSTRUCTION }  // AUTO = the world's toggle; INSTANT in a survival world needs permission
-                                           // level 2 for the owner's acting player, else refused (NOT_ALLOWED)
+                    @Nullable String owner, JsonObject ext, boolean force, @Nullable ServerPlayer actor) {}
+enum Mode { AUTO, INSTANT, CONSTRUCTION }  // AUTO = the world's toggle. INSTANT in a survival-toggle world needs an
+                                           // `actor` with permission level 2; no actor, or one without it -> refused
+                                           // NOT_ALLOWED (no free builds by an entity or a mod on its own).
 record SiteView(String id, String blueprintId, String owner, JsonObject ext, BoundingBox box, BoundingBox restoreBox,
                 Rotation rotation, ResourceKey<Level> dimension, State state, int built, int queued) {}
 enum State { BUILT, BUILDING }
@@ -600,6 +602,9 @@ record RemoveOptions(boolean force, String requester) {}  // removing a site own
 record RemoveResult(boolean removed, List<String> blockers, Map<Item, Integer> refund) {}
 ```
 
+- **Owner and requester are guardrails, not security.** Any mod in the same JVM can pass any string; they prevent
+  accidental removal of another mod's sites, nothing more. The permission rule that matters (INSTANT in survival) is
+  checked against a real `actor`.
 - **Owner (R5):** a free string, by convention `<modid>:<thing>` (e.g. `steward_mc:settlement/set_ab12`); `null` = the
   player's own site. It's stored in the site record and shown in the Library's Placed view ("owned by steward_mc").
   Architect's UI asks for a second confirmation before removing an owned site. The API refuses `remove` from a
@@ -632,7 +637,26 @@ Resolution is 1 up to 256x256 cells, else 4. Only loaded chunks are sampled; the
 `ArchitectClientApi.get()` (client thread):
 - `preview(String blueprintId, BlockPos origin, Rotation rotation, PreviewStyle style)` shows a locked ghost with the HUD verdict
   until `clearPreview()`. It's the placement ghost without the keys.
-- `jobs()` is the job client below. It uses the mod's one sidecar link, so another mod never starts its own helper.
+
+## Jobs, Java side (common: callable from the server thread)
+
+```java
+interface Jobs {
+  CompletableFuture<String> run(JobSpec spec);           // -> jobId once acked; completes on the server thread
+  void cancel(String jobId);
+  Optional<Job> get(String jobId);  List<Job> list(@Nullable String owner);   // includes jobs finished while you were away
+  void registerTool(String owner, String name, ToolHandler h);  // global per (owner, tool name), NOT per run
+  boolean available();                                   // false: no sidecar link (helper not running / no client)
+}
+@FunctionalInterface interface ToolHandler { CompletableFuture<JsonElement> call(String jobId, JsonObject input); }
+```
+- **Tool handlers are registered globally** by owner and tool name, at mod init. A job that resumes after a restart
+  re-sends its pending tool call, and the handler registered in the new JVM answers it. A per-run closure would have
+  died with the old process. No handler registered -> the agent gets the error "no handler for <tool> in this game".
+- Calls are thread-safe. The mod forwards them to its one sidecar link, which lives on the client side of the same
+  singleplayer process. Futures and tool handlers run on the server thread.
+- Events: `JOB_UPDATED(Job)` and `JOB_DONE(Job)` on `events()`, so a mod sees results that finished while it wasn't listening
+  (and `list(owner)` after a world load).
 
 ## Jobs (R2): protocol 2
 
@@ -647,9 +671,14 @@ Client -> sidecar:
               budgetUsd?: number             (hard stop, enforced by the sidecar)
               maxTurns?: number, owner?: string, tag?: string, group?: string, ext?: object }
   ```
-  `structured` is a single-shot answer (no file tools, no Bash). `agent` is a multi-turn agent with ONLY the
-  mod-provided tools (plus `job_status` for progress): no file system, no Bash, no network. It runs under the same
-  refuse-by-default permission policy as design jobs.
+  **Both kinds run through the Claude Agent SDK** (`query()`), never the raw Messages API: the opt-in claude-login mode
+  authenticates only through the SDK/CLI, so a direct API path would silently fail for login users.
+  - `structured` uses the SDK's native `outputFormat: {type: 'json_schema', schema}`. The result is the result message's
+    `structured_output`, validated again by the sidecar. The SDK's own retries end in `error_max_structured_output_retries`,
+    which means failed. Built-in tools are off (`tools: []`) and `maxTurns` is small.
+  - `agent` is multi-turn with ONLY the mod-provided tools (an in-process MCP server built from `tools`, plus
+    `job_status` for progress). Built-in tools are off at the source (`tools: []`): no file system, no Bash, no web. The
+    refuse-by-default permission policy is the second line of defence, not the first.
 - `job.cancel { jobId }`
 - `job.tool.result { jobId, callId, result?: any, error?: string }`
 
@@ -667,8 +696,11 @@ Sidecar -> client:
   While waiting, the job's status is `waiting_tool`. The answer must be JSON, at most 256 KB.
 
 Other job rules:
-- **Budget (hard stop):** the sidecar passes `budgetUsd` to the SDK (`maxBudgetUsd`) and also checks the reported cost
-  after every turn. Over budget -> the turn is aborted and the job `failed` with `error: "budget"`. The cost so far is kept.
+- **Budget (hard stop):** the sidecar passes `budgetUsd` as the SDK's `maxBudgetUsd`. The SDK ends the run with
+  `error_max_budget_usd`, and the job fails with `error: "budget"`, keeping the cost so far. The sidecar also checks the
+  cumulative `total_cost_usd` after each result, because `maxBudgetUsd` counts only since the current `query()` and a
+  resumed job must count its earlier spend too. **Cost is the SDK's estimate**, not a billing statement. Under the
+  claude-login mode it's notional (plan usage, not dollars), and the budget still applies to that estimate.
 - **Resume after restart:** jobs persist in the sidecar's state (prompt, session id, cost). An unfinished job resumes on
   the next start (the SDK session resume). A pending tool call is re-sent when the client reconnects.
 - **Usage limits:** a job is `held` with `usageLimitUntil`, as designs are. Groups (4b) hold together.
@@ -685,7 +717,7 @@ arguments and results, as a semi-stable test surface: changes are noted in its c
 
 ## Phase 4a gate
 
-- An in-repo test mod `apitest/` (a Gradle subproject, dev only, never shipped) depends only on
+- An in-repo test mod `apitest/` (a Gradle subproject, dev only, **never in the shipped jar or the sidecar bundle**) depends only on
   `dev.larattalabs.architect.api`. In a dev world it:
   - places a site through the API with an owner and ext, and gets SITE_PLACED;
   - is refused with typed reasons (PLAYER_IN_BOX, OVERLAP);
