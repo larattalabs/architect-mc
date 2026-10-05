@@ -68,7 +68,12 @@ const waitEvent = async (pred, timeoutMs = 30_000) => {
 };
 
 async function groundAt(x, z) {
-  const s = await result(await api(`survey ${x} ${z} ${x} ${z} 1`));
+  let s;
+  for (let i = 0; i < 40; i++) {
+    s = await result(await api(`survey ${x} ${z} ${x} ${z} 1`));
+    if (s.columns?.length) break;
+    await sleep(500); // a chunk the player just reached
+  }
   const m = /h(-?\d+)/.exec(s.columns?.[0] ?? '');
   if (!m) throw new Error(`no ground at ${x},${z}: ${JSON.stringify(s)}`);
   return Number(m[1]);
@@ -107,12 +112,20 @@ switch (step) {
     break;
   }
   case 'survival': {
+    // a fixed home (camera moves of an earlier run carry the player away): onto the ground at APITEST_HOME (x,z)
+    const [hx, hz] = (process.env.APITEST_HOME ?? '150,60').split(',').map(Number);
+    await call('dev.release', { mode: 'keep' }).catch(() => null);
+    await cmd('/gamemode spectator @a');
+    await cmd(`/tp @a ${hx} 200 ${hz}`);
+    await sleep(1000);
+    await call('dev.waitChunks', {}, 40_000).catch(() => null);
+    await cmd(`/tp @a ${hx} ${(await groundAt(hx, hz)) + 1} ${hz}`);
     const st = await call('dev.state');
     const p = st.player;
     const px = Math.floor(p.x);
     const py = Math.floor(p.y);
     const pz = Math.floor(p.z);
-    for (const c of ['/gamerule advance_time false', '/time set 6000', '/gamerule spawn_mobs false', '/kill @e[type=!player]', '/kill @e[type=item]']) await cmd(c);
+    for (const c of ['/gamemode survival @a', '/gamerule advance_time false', '/time set 6000', '/gamerule spawn_mobs false', '/kill @e[type=!player]', '/kill @e[type=item]']) await cmd(c);
     await api('clear');
     // a rerun in the same world: take down what an earlier run left
     for (const old of (await api('sites')).all) await cmd(`/architect remove ${old.id} force`);

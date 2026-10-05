@@ -76,7 +76,8 @@ public final class ApiClientBridge implements ClientBridge {
 			JsonObject m = new JsonObject();
 			m.addProperty("type", "client.paused");
 			m.addProperty("paused", paused);
-			Sidecar.link().send(m).exceptionally(t -> null);
+			Sidecar.link().send(m).whenComplete((ack, t) -> Architect.LOGGER.info("client.paused {} -> {}", paused,
+				t != null ? t.getMessage() : ack.ok() ? "ok" : ack.error()));
 		}
 	}
 
