@@ -330,7 +330,8 @@ public final class JournalDev {
 					if (after == null || !after.equals(now)) {
 						bad++;
 						if (first.size() < max) {
-							first.add(p.toShortString() + " entry " + t[0] + " after " + after + " now " + now);
+							first.add(p.toShortString() + " entry " + t[0] + " after " + (after == null ? "null" : after.state() + " " + after.nbt()) + " now "
+								+ now.state() + " " + now.nbt());
 						}
 					}
 				}
