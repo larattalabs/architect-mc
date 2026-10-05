@@ -107,9 +107,11 @@ survives a restart. Remove is exact over the snapshot box + 7 blocks after two f
 without neighbour updates; the snapshot covers the ground row under the foundation).
 
 Carried forward:
-- **Natural drops refuse placement (fix first):** leaf litter, sticks and saplings from decay lying in a box refuse it
+- ~~Natural drops refuse placement~~ **fixed 2026-10-05**: natural drops are cleared with a note; a player's item still refuses.
+  (was: leaf litter, sticks and saplings from decay lying in a box refuse it
   ("pick them up first"). `NaturalDrops` must treat them as natural; it hit the gate run twice.
-- **Stale bundled sidecar:** the launcher re-extracts only when the mod version changes; use a content hash of the bundle.
+- ~~Stale bundled sidecar~~ **fixed 2026-10-05**: the extraction is keyed by a fingerprint of the bundle; node_modules are kept
+  unless package-lock.json changes; a helper we started from the replaced bundle is restarted.
 - **Exports carry no source:** an imported export is a plain structure (no variants). Export could include the `.mjs`
   and import could recognise an Architect export.
 - **Nether ground:** the ghost's "ground" starts on the bedrock roof (see phase 1 notes).
@@ -125,10 +127,11 @@ Carried forward:
   before attachables (torches, doors, ladders, signs).
 - **Raw materials:** a small, curated equivalence table (1 log = 4 planks, cobblestone ↔ stone, ...),
   not a recipe-graph solver.
-- **Terrain:** blocks cleared from the site drop into the site's buffer or as items, so terrain isn't
-  destroyed for free.
-- **Remove = deconstruct and refund** into the site's storage. Snapshot-restore is off in survival:
-  it would hand back terrain for free and could duplicate containers.
+- **Terrain (revised 2026-10-05, see CONTRACT "Decision: terrain in survival"):** clearing a site gives no drops, and
+  Remove still restores the terrain snapshot exactly. The player never receives the terrain, so restoring it can't
+  duplicate anything.
+- **Remove = deconstruct and refund:** blocks the site placed that are still there are refunded; the player's own blocks
+  in the box drop as items; mined site blocks are not refunded (no dupes); then the terrain snapshot is restored.
 - Optional: "design with what I have": pass a chest's contents to the designer as a palette constraint,
   or palette-swap a library design to match.
 - **Gate:** in a survival dev world, place a site, feed it from a hopper chain, watch it finish, then

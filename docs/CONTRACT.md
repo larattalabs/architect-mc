@@ -359,3 +359,129 @@ All in a fresh dev world, through the UI (DevBridge):
 - Favourite, tag, rename and delete all work and survive a game restart.
 
 Screenshots go in `artifacts/gate2/`, and gate-verifier checks the result.
+
+---
+
+# Phase 3 contract: survival
+
+The parallel work builds against this section. Phases 1-2 above still hold.
+
+## The toggle
+
+- Per world: `<world>/architect-world.json` `{ "survival": bool }`.
+- Default at the first load: on for survival and hardcore worlds, off for creative.
+- Changing it needs permission level 2 (cheats/op). The Status tab shows it, and so does `/architect survival on|off`.
+- **Off**: everything as in phases 1-2 (instant placement, snapshot Remove).
+- **On**: Place creates a construction site.
+- A player in creative mode in a survival world can finish a site instantly with `/architect site finish <id>`, which needs permission 2.
+
+## Decision: terrain in survival (changes the PLAN.md phase 3 bullet)
+
+Clearing a site's terrain gives **no drops**, and Remove **restores the snapshot exactly**, as in creative. The PLAN
+bullet had cleared terrain drop as items and Remove keep the ground flat. That trade loses exact Remove, which is the
+mod's core guarantee, and either path risks duplicating items. Here the player never receives the terrain, so restoring
+it creates nothing. Free clearing (trees and dirt removed without drops) is the convenience a site gives.
+
+## Lifecycle of a construction site
+
+1. **Place in survival.**
+   - It runs the same checks and snapshot as phases 1-2.
+   - The snapshot is taken first, then the terrain fit **clear** step runs at once (free, no drops).
+   - Nothing else is placed.
+   - The `Site` record gets `state: "building"` and a **build queue**: every cell the instant placement would write (the
+     template cells, foundation fill, approach path/slabs/fill), in build order.
+   - A **construction crate** (`architect_mc:construction_crate`, a block with a block entity) is put at the approach's
+     end, or 2 cells out from the entrance when there is no approach. It is outside the snapshot box, and its cell is
+     snapshotted separately in the site record.
+2. **Build order.**
+   - Bottom-up by y.
+   - Within a row: full blocks first, then partial blocks (slabs, stairs, panes, fences), then **attachables** (torches,
+     lanterns, buttons, doors, beds, ladders, signs, carpets, flowers, anything that needs support). Attachables come only
+     after their support cell is built.
+   - Two-part blocks (doors, beds, tall plants) are placed as pairs.
+   - Air cells in the template are not queued; the clear step handled them.
+   - Block entities placed by the template are empty.
+3. **Materials.**
+   - Each queued cell costs its **item**: `Block.asItem()`, with these special cases:
+     - a door, bed or tall plant costs one item per pair;
+     - a double slab costs 2 slabs;
+     - candles cost their count; sea pickles cost their count;
+     - wall torches, wall signs and wall banners cost their standing item;
+     - `minecraft:fire` and other blocks with no item cost nothing.
+     - Waterlogged cells cost a water bucket? No: waterlogging is dropped in survival builds (written as not waterlogged). Note it.
+   - The **bill of materials** (BOM) is the sum over the queue. It is computed from the template on the server, and on the client for the
+     Library ("needs: 412 spruce planks, ...").
+4. **The crate.**
+   - A `WorldlyContainer`. Hoppers and droppers insert from any side.
+   - It accepts an item only while the site still needs it (counting equivalents), so a hopper chain never jams on junk.
+   - Right-click opens the crate screen:
+     - the BOM with needed / delivered / placed per item;
+     - an "insert from inventory" button that moves every needed item from the player's inventory;
+     - progress, and pause/resume;
+     - Deconstruct.
+   - Breaking the crate is refused while the site is building (unbreakable; it shows a message to use Deconstruct).
+5. **Equivalents** (`data/architect_mc/equivalents.json`, curated):
+   - 1 log or stem (any wood) = 4 planks of that wood
+   - 1 planks = 2 slabs of that wood
+   - stone ↔ stone bricks (1:1), cobblestone ↔ cobblestone variants (1:1)
+   - 1 iron ingot = 1 iron bars × 16/6 (rounded down)
+   - and similar small ones
+   An inserted item that only an equivalent needs is converted on insert. Leftovers stay as credit in the crate.
+6. **Builder.**
+   - Each server tick, a building site places up to `blocksPerTick` (default 4, config 1-64) queued cells whose item is
+     in the crate. Place sounds play quietly at the cell.
+   - A cell whose position now holds something else (a player's block or a mob) is skipped and retried later. After
+     200 ticks it's reported in the crate screen as "blocked at x,y,z".
+   - When the queue is empty: `state: "built"`, the crate drops its leftover items (credit too, as items) and turns into
+     air, and a toast plus chat note fires. The crate cell is restored from its own snapshot.
+7. **Ghost.**
+   - The server syncs each building site's **remaining** cells to clients in range, through a custom payload
+     `architect_mc:site_ghost {siteId, origin, rotation, blueprintId, built: bitset}`. Clients derive the remaining
+     cells from the template plus the bitset.
+   - GhostRenderer draws the remaining cells translucent; the next cells, whose items are delivered, are tinted green.
+   - The ghost is kept across relogs and restarts; the state is in the site record.
+8. **Remove / deconstruct in survival** (from the crate screen, the Library's Placed view, or `/architect remove`).
+   - For every cell of the box:
+     - if the current state equals what the site placed there, the cell's item is **refunded**;
+     - else if the current state differs from the snapshot and is not air, it is the player's block: it **drops as an item** at the cell;
+     - else nothing.
+   - Then the snapshot is restored, as now.
+   - Refunds plus the crate's stored items and credit drop at the crate's position as item entities, or go into the
+     crate's inventory if there's room, until the player empties it. Decide which, and document.
+   - **Blocks the player mined from a site are not refunded**: they already have the item. That's the no-dupe rule.
+   - A container the player filled still refuses Remove (as now).
+   - Move in survival is refused ("deconstruct and place again").
+9. **Leaf guard and bed safety** apply as now. A bed that bed safety leaves out is not queued and not charged.
+
+## Site record additions
+
+`state: "building"|"built"` (absent = built, as in phases 1-2), `queue` (a compact form: indexes into the template grid plus
+the foundation/approach cells), `built` (a bitset), `crate {pos, snapshot}`, `ledger { delivered: {item: n}, credit: {item: n} }`.
+A building site whose design changed under the same id keeps working from its pin's template fingerprint. If the template
+is gone, the site can only be removed.
+
+## UI
+
+- **Library detail:** in a survival world, "Needs: N items" plus an expandable BOM. Place says "Place construction site".
+- **Crate screen** (above). Also a HUD line while a site you placed is building and you're within 64 blocks:
+  "Gate Cabin 62% · needs 40 spruce planks".
+- **Status tab:** the survival toggle and its state, with the permission rule.
+
+## DevBridge hooks
+
+`dev.survival.set`, `dev.site.state {id}` (queue length, built count, ledger, blocked cells), `dev.crate.insert {id, items}`,
+`dev.crate.open`, `dev.site.finish`, `dev.site.deconstruct`.
+
+## Phase 3 gate
+
+In a fresh **survival** dev world (DevBridge):
+- the toggle is on by default;
+- place a cabin site: the ghost is visible, and it survives a relog;
+- feed it from a **hopper chain** out of chests holding exactly the BOM, part of it as logs (equivalents);
+- watch it finish: the built site equals an instant placement of the same design at the same spot, every cell;
+- mine 3 placed blocks (the player keeps the items), then deconstruct: the refund equals BOM − 3 mined, the 3 aren't
+  refunded again, and the terrain is restored exactly;
+- a creative world with the toggle off still places instantly;
+- a hardcore world works without cheats, except the toggle change.
+
+gate-verifier checks the result.
