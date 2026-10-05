@@ -19,6 +19,7 @@ public class ArchitectClient implements ClientModInitializer {
 	public void onInitializeClient() {
 		AutoWorld.init();
 		PlacementFeature.init();
+		dev.larattalabs.architect.client.placement.CompositePreview.init();
 		ScreenFeature.init();
 		DesignFeature.init();
 		dev.larattalabs.architect.client.design.SetFeature.init();
