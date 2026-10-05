@@ -8,6 +8,7 @@ import fs from 'node:fs';
 import { parse, plain } from './nbt.mjs';
 import {
   BLOCKS, collisionOf, normalize, emissionOf, opticsOf, voxelsOf, faceMask, lightCost, isConductor, isFloor,
+  isPassable, isClimbable, supportOf, topOf,
 } from './blocks.mjs';
 import { BUILDING_TYPES } from './kit.mjs';
 
@@ -316,6 +317,12 @@ export function checkStructure(sidecar, structure, opts = {}) {
     if (dark.length) err(`light: ${dark.length} standable interior cell(s) get no block light (mobs spawn there at night), e.g. ${dark.slice(0, 6).join('; ')}`);
   }
 
+  // ================================================================ rules new in Architect: warnings in phase 1
+  const ctx = { g, sidecar, anchors, interior: w, outside, doors: doors.doors, outsideDoors };
+  for (const rule of NEW_RULES) {
+    try { warnings.push(...rule(ctx)); } catch (e) { warnings.push(`checker: rule ${rule.name} failed: ${e.message}`); }
+  }
+
   return { ok: errors.length === 0, errors, warnings };
 }
 
@@ -334,3 +341,237 @@ export function checkFiles(nbtPath, jsonPath, opts) {
   try { sidecar = JSON.parse(fs.readFileSync(jsonPath, 'utf8')); } catch (e) { return { ok: false, errors: [`${jsonPath}: cannot parse JSON: ${e.message}`], warnings: [] }; }
   return checkStructure(sidecar, structure, opts);
 }
+
+// ==================================================================== new rules (phase 1: warnings)
+
+const HORIZ4 = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+/** Minimum interior volume (free cells inside `interior`) per type. */
+export const MIN_VOLUME = { cabin: 60, cottage: 80, house: 120, shop: 80, smithy: 80, tavern: 250, chapel: 150 };
+
+/**
+ * A player walking: feet cells (x,y,z) where the body (feet + head) fits through passable blocks (doors open,
+ * ladders climb), standing on a floor (full blocks, top slabs, stairs, near-full blocks; a bottom slab counts too,
+ * as a half step) or on/in a climbable block. Moves: to a horizontal neighbour up 1 (a jump needs headroom, unless
+ * the target rests on stairs or a bottom slab or we are climbing), level, or down up to 3; up and down ladders.
+ */
+export function walker(g) {
+  const pass = (x, y, z) => {
+    const c = g.at(x, y, z);
+    if (c) return isPassable(c);
+    return !g.terrain(x, y, z);
+  };
+  const climb = (x, y, z) => isClimbable(g.at(x, y, z));
+  const familyAt = (x, y, z) => BLOCKS[g.at(x, y, z)?.name]?.family;
+  const halfStep = (x, y, z) => familyAt(x, y, z) === 'stairs' || (familyAt(x, y, z) === 'slab' && g.at(x, y, z).props.type === 'bottom');
+  const support = (x, y, z) => g.floor(x, y, z) || (familyAt(x, y, z) === 'slab');
+  const feet = (x, y, z) => g.inBox(x, y, z) && y >= 1 && pass(x, y, z) && pass(x, y + 1, z)
+    && (support(x, y - 1, z) || climb(x, y, z) || climb(x, y - 1, z));
+  /** standing (not just hanging on a ladder) */
+  const stands = (x, y, z) => g.inBox(x, y, z) && pass(x, y, z) && pass(x, y + 1, z) && support(x, y - 1, z);
+  function reach(start) {
+    const seen = new Set();
+    if (!start || !feet(...start)) return seen;
+    const q = [start];
+    seen.add(fmt(...start));
+    for (let i = 0; i < q.length; i++) {
+      const [x, y, z] = q[i];
+      const next = [];
+      if (climb(x, y, z) || climb(x, y + 1, z)) next.push([x, y + 1, z]);
+      if (climb(x, y, z) || climb(x, y - 1, z)) next.push([x, y - 1, z]);
+      for (const [dx, dz] of HORIZ4) {
+        const nx = x + dx; const nz = z + dz;
+        if (feet(nx, y + 1, nz) && (pass(x, y + 2, z) || halfStep(nx, y, nz) || climb(x, y, z))) next.push([nx, y + 1, nz]);
+        for (let dy = 0; dy >= -3; dy--) {
+          if (feet(nx, y + dy, nz)) { next.push([nx, y + dy, nz]); break; }
+          if (!(pass(nx, y + dy, nz) && pass(nx, y + dy + 1, nz))) break; // no falling through a block
+        }
+      }
+      for (const n of next) {
+        const k = fmt(...n);
+        if (seen.has(k) || !feet(...n)) continue;
+        seen.add(k);
+        q.push(n);
+      }
+    }
+    return seen;
+  }
+  return { feet, stands, reach, pass };
+}
+
+/**
+ * The floor levels of the interior: feet rows with at least max(4, 30% of the interior's footprint) standing cells
+ * (all of them in a tiny interior), so table tops, barrels and stair steps stay below that.
+ */
+export function floorLevels(g, w, wk = walker(g)) {
+  const area = (w.maxX - w.minX + 1) * (w.maxZ - w.minZ + 1);
+  const min = Math.min(area, Math.max(4, Math.ceil(area * 0.3)));
+  const levels = [];
+  for (let y = w.minY; y <= w.maxY; y++) {
+    const cells = [];
+    for (let z = w.minZ; z <= w.maxZ; z++) for (let x = w.minX; x <= w.maxX; x++) if (wk.stands(x, y, z)) cells.push(fmt(x, y, z));
+    if (cells.length >= min) levels.push({ y, cells });
+  }
+  return levels;
+}
+
+const startOf = (a) => (a ? [Math.floor(a.x), Math.floor(a.y + 1e-6), Math.floor(a.z)] : null);
+const sample = (list, n = 5) => list.slice(0, n).join('; ') + (list.length > n ? '; ...' : '');
+
+/** Nothing floating: every block connects to the ground through other blocks (attachables through their support). */
+function floating({ g }) {
+  const nodes = [];
+  for (const [k, c] of g.cells) {
+    const fam = BLOCKS[c.name]?.family;
+    if (fam === 'air' || fam === 'liquid' || fam === 'fire') continue;
+    nodes.push([k, c]);
+  }
+  const connected = new Set();
+  const structural = new Set(nodes.filter(([, c]) => supportOf(c) === null).map(([k]) => k));
+  const q = [];
+  for (const k of structural) {
+    const [x, y, z] = unfmt(k);
+    if (y <= g.groundY - 1 || g.terrain(x, y - 1, z)) { connected.add(k); q.push([x, y, z]); }
+  }
+  for (let i = 0; i < q.length; i++) {
+    const [x, y, z] = q[i];
+    for (const [, dx, dy, dz] of DIRS6) {
+      const k = fmt(x + dx, y + dy, z + dz);
+      if (structural.has(k) && !connected.has(k)) { connected.add(k); q.push([x + dx, y + dy, z + dz]); }
+    }
+  }
+  const attach = nodes.filter(([k]) => !structural.has(k));
+  for (let changed = true; changed;) {
+    changed = false;
+    for (const [k, c] of attach) {
+      if (connected.has(k)) continue;
+      const [x, y, z] = unfmt(k);
+      if (supportOf(c).some(([dx, dy, dz]) => connected.has(fmt(x + dx, y + dy, z + dz)) || g.terrain(x + dx, y + dy, z + dz))) { connected.add(k); changed = true; }
+    }
+  }
+  const loose = nodes.filter(([k]) => !connected.has(k)).map(([k, c]) => `${c.name.replace('minecraft:', '')} at ${k}`);
+  return loose.length ? [`floating: ${loose.length} block(s) not connected to the ground (attachables count through their support), e.g. ${sample(loose)}`] : [];
+}
+
+/** A door on the front face that the entrance reaches; every interior floor level reachable from the entrance. */
+function reachability({ g, sidecar, anchors, interior: w, outside, outsideDoors }) {
+  const out = [];
+  const wk = walker(g);
+  const reached = wk.reach(startOf(anchors.entrance));
+  const [fx, fz] = H_VEC[sidecar.front];
+  // a door on the front face: its outward side (front) is outside
+  const front = outsideDoors.filter(({ x, y, z, state }) => {
+    const [dx, dz] = H_VEC[state.props.facing];
+    return Math.abs(dx) === Math.abs(fx) && Math.abs(dz) === Math.abs(fz)
+      && (outside.has(fmt(x + fx, y, z + fz)) || outside.has(fmt(x + fx, y + 1, z + fz)));
+  });
+  const frontReached = front.filter(({ x, y, z }) => [0, 1, -1].some((dy) => reached.has(fmt(x + fx, y + dy, z + fz))));
+  const opening = sidecar.type === 'barn' && barnOpening(g, sidecar, w);
+  if (!opening) {
+    if (!front.length) out.push(`doors: no outside door on the ${sidecar.front} (front) face`);
+    else if (!frontReached.length) out.push(`doors: the front door${front.length > 1 ? 's' : ''} at ${front.map((d) => fmt(d.x, d.y, d.z)).join('; ')} cannot be walked to from the entrance`);
+  }
+  if (w) {
+    const levels = floorLevels(g, w, wk);
+    if (!levels.length) out.push('reachability: the interior has no floor level (no row with enough standing room)');
+    let ok = 0;
+    for (const L of levels) {
+      const n = L.cells.filter((k) => reached.has(k)).length;
+      if (n === 0) out.push(`reachability: floor level y=${L.y} (${L.cells.length} cells) cannot be reached from the entrance (walking, max step 1: stairs, ladders, slabs)`);
+      else if (n < L.cells.length / 2) out.push(`reachability: only ${n} of ${L.cells.length} cells of floor level y=${L.y} can be reached from the entrance`);
+      if (n >= L.cells.length / 2) ok++;
+    }
+    if (sidecar.type === 'tower' && ok < 3) out.push(`tower: ${ok} floor level(s) reachable, a tower needs at least 3`);
+  }
+  return out;
+}
+
+/** The interior is enclosed: walls without gaps and a roof over every cell (any block above counts as cover). */
+function enclosure({ g, sidecar, interior: w }) {
+  if (!w) return [];
+  const out = [];
+  const sy = g.size[1];
+  const open = [];
+  const unwritten = [];
+  for (const [x, y, z] of interiorCells(w)) {
+    if (!g.cells.has(fmt(x, y, z))) unwritten.push(fmt(x, y, z));
+    if (!g.free(x, y, z)) continue;
+    let covered = false;
+    for (let yy = y + 1; yy < sy && !covered; yy++) {
+      const c = g.at(x, yy, z);
+      if (c && BLOCKS[c.name]?.family !== 'air') covered = true;
+    }
+    if (!covered) open.push(fmt(x, y, z));
+  }
+  if (open.length) out.push(`enclosure: ${open.length} interior cell(s) open to the sky (no roof above), e.g. ${sample(open)}`);
+  if (unwritten.length) out.push(`interior: ${unwritten.length} cell(s) not written (write interior air explicitly so placement clears it), e.g. ${sample(unwritten)}`);
+  if (sidecar.type !== 'barn') {
+    const walls = outsideFlood(g, w.maxY);
+    const inW = (x, y, z) => x >= w.minX && x <= w.maxX && y >= w.minY && y <= w.maxY && z >= w.minZ && z <= w.maxZ;
+    const gaps = interiorCells(w).filter(([x, y, z]) => walls.has(fmt(x, y, z)));
+    if (gaps.length) {
+      const entries = gaps.map(([x, y, z]) => fmt(x, y, z)).filter((k) => !inW(...unfmt(walls.get(k))));
+      out.push(`enclosure: ${gaps.length} interior cell(s) reachable from outside through the walls (a gap, or a doorway without a door), entering at ${sample(entries, 4)}`);
+    }
+  }
+  return out;
+}
+
+/** A barn's entrance: a run of >= 3 cells across the front wall, open (or doors / gates) for 3 rows from the ground. */
+function barnOpening(g, sidecar, w) {
+  if (!w) return false;
+  const wk = walker(g);
+  const f = sidecar.front;
+  const alongX = f === 'north' || f === 'south';
+  const plane = f === 'south' ? w.maxZ + 1 : f === 'north' ? w.minZ - 1 : f === 'east' ? w.maxX + 1 : w.minX - 1;
+  const [u0, u1] = alongX ? [w.minX - 1, w.maxX + 1] : [w.minZ - 1, w.maxZ + 1];
+  let run = 0;
+  for (let u = u0; u <= u1; u++) {
+    const ok = [0, 1, 2].every((dy) => wk.pass(...(alongX ? [u, g.groundY + dy, plane] : [plane, g.groundY + dy, u])));
+    run = ok ? run + 1 : 0;
+    if (run >= 3) return true;
+  }
+  return false;
+}
+
+/** Profile geometry: tower proportions, the barn's big entrance, the gatehouse passage, interior volume. */
+function profile({ g, sidecar, interior: w }) {
+  const out = [];
+  const t = sidecar.type;
+  if (t === 'tower') {
+    if (!w) out.push('tower: no interior declared (needed to measure the footprint and the floors)');
+    else {
+      const side = Math.min(w.maxX - w.minX + 3, w.maxZ - w.minZ + 3);
+      let top = -1;
+      for (const [k, c] of g.cells) if (BLOCKS[c.name]?.family !== 'air') top = Math.max(top, unfmt(k)[1]);
+      const h = top - g.groundY + 1;
+      if (h < 2 * side) out.push(`tower: ${h} blocks tall above the ground on a ${side}-wide footprint (a tower is at least 2 x its smaller side: ${2 * side})`);
+    }
+  }
+  if (t === 'barn' && !barnOpening(g, sidecar, w)) out.push(`barn: no entrance at least 3 wide and 3 tall on the ${sidecar.front} face (a door or an open arch)`);
+  if (t === 'gatehouse') {
+    const [sx, , sz] = g.size;
+    const wk = walker(g);
+    const alongZ = sidecar.front === 'south' || sidecar.front === 'north';
+    const n = alongZ ? sx : sz;
+    const depth = alongZ ? sz : sx;
+    let run = 0;
+    let best = 0;
+    for (let u = 0; u < n; u++) {
+      let ok = true;
+      for (let d = 0; d < depth && ok; d++) for (let dy = 0; dy < 3 && ok; dy++) ok = wk.pass(...(alongZ ? [u, g.groundY + dy, d] : [d, g.groundY + dy, u]));
+      run = ok ? run + 1 : 0;
+      best = Math.max(best, run);
+    }
+    if (best < 3) out.push(`gatehouse: no passage through the building front to back at least 3 wide and 3 tall (widest: ${best})`);
+  }
+  if (MIN_VOLUME[t] !== undefined) {
+    if (!w) out.push(`${t}: no interior declared`);
+    else {
+      const vol = interiorCells(w).filter(([x, y, z]) => g.free(x, y, z)).length;
+      if (vol < MIN_VOLUME[t]) out.push(`${t}: interior volume ${vol} is under the ${MIN_VOLUME[t]} a ${t} needs`);
+    }
+  }
+  return out;
+}
+
+const NEW_RULES = [floating, reachability, enclosure, profile];
