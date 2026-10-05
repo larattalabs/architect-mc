@@ -539,7 +539,10 @@ gate-verifier checks the result.
 
 ---
 
-# Phase 4a contract: public API (A8 + R2, R5, R7, R11) - DRAFT for Steward review
+# Phase 4a contract: public API (A8 + R2, R5, R7, R11)
+
+Reviewed by Steward (`steward-mc/docs/A8-REVIEW.md`); its items 1-6 and 8 are in, 9 is noted as Noah's call, and 7
+(a composite preview with per-cell added/removed/changed) is reserved for 4c/5b.
 
 The stable surface other mods (first: Steward, `steward_mc`) build on. **Everything outside `dev.larattalabs.architect.api`
 and the documented protocol messages stays internal**, and may change without notice.
@@ -570,10 +573,19 @@ public interface ArchitectApi {
   Survey survey();                   // terrain sampling (R1/A5b section 7.1)
   SiteEvents events();               // Fabric Events (R7)
   Jobs jobs();                       // Claude jobs (R2), see "Jobs": thread-safe, callable from the server thread
+  Designs designs();                 // building design requests (review 1), see "Designs"
+  Set<String> features();            // review 6: "protocol2", "jobs", "jobTools", "blobs", "designs", later "siteGroups",
+                                     // "jobGroups", "massing", "deltaApply"... matching the sidecar's features plus Java-only ones
 }
 
 interface Library {
   List<Entry> list();  Optional<Entry> get(String id);  void reload();
+  // writes (review 2); thread-safe, futures complete on the server thread
+  CompletableFuture<Entry> makeVariant(String entryId, @Nullable JsonElement palette, @Nullable JsonObject values, @Nullable String name);
+  CompletableFuture<Boolean> delete(String entryId);                 // to the trash, as the UI; bundled entries refuse
+  void setExt(String entryId, String key, @Nullable JsonElement value); // namespaced key; null removes
+  void setTags(String entryId, List<String> userTags);
+  // remix is a design request with `remix` set: Designs.request
   record Entry(String id, String name, String type, BlockSize size, List<String> tags, Optional<String> source,
                Map<String, JsonElement> params, Map<String, JsonElement> values, Optional<JsonObject> palette,
                Map<String, Port> ports, JsonObject ext, boolean bundled, boolean imported, Optional<String> variantOf) {}
@@ -581,7 +593,7 @@ interface Library {
 }
 
 interface Sites {
-  List<SiteView> list();  Optional<SiteView> get(String siteId);
+  List<SiteView> list();  List<SiteView> list(@Nullable String owner);  Optional<SiteView> get(String siteId);
   CompletableFuture<PlaceResult> place(PlaceRequest r);
   CompletableFuture<RemoveResult> remove(String siteId, RemoveOptions o);
   Verdict check(PlaceRequest r);     // dry run: what place() would do (refusals, notes, BOM, boxes), no side effects
@@ -615,22 +627,47 @@ record RemoveResult(boolean removed, List<String> blockers, Map<Item, Integer> r
   `item_out`, `item_in`, `water_in`, `water_out`, `redstone_in`, `redstone_out`, `bed`, `door`, plus any `<modid>:<kind>`.
   The checker validates that a port's cell is inside the template and its facing is horizontal.
 
+## Designs (review 1)
+
+```java
+interface Designs {
+  CompletableFuture<String> request(DesignRequest r);   // -> designId once acked
+  void cancel(String designId);
+  Optional<Design> get(String designId);  List<Design> list(@Nullable String owner);
+}
+record DesignRequest(String type, String style, @Nullable String materials, List<String> features, BlockSize maxSize,
+                     @Nullable String name, @Nullable String notes, @Nullable String remix,
+                     @Nullable String owner, JsonObject ext, @Nullable String model, @Nullable Double budgetUsd,
+                     @Nullable String bible, @Nullable String group) {}   // bible/group reserved for 4b (ignored until then)
+record Design(String id, Status status, String step, Optional<String> entryId, Cost cost, Optional<String> error, ...) {}
+```
+Results arrive as `DESIGN_UPDATED` / `DESIGN_DONE` events (the new library entry included, with the request's `ext`
+copied into the entry). Remix = a request with `remix` set.
+
 ## Events (R7)
 
 Fabric `Event`s on `ArchitectApi.get().events()`:
-`SITE_PLACED(SiteView)`, `SITE_REMOVED(SiteView, RemoveResult)`, `PLACE_FAILED(PlaceRequest, List<Refusal>)`,
-`SITE_PROGRESS(SiteView)` (construction sites, at most once per second per site), `SITE_BUILT(SiteView)`. All fire on
-the server thread. UI and commands fire them too, not only API calls.
+`SITE_PLACED(SiteView)`, `SITE_REMOVED(SiteView, RemoveResult)`, `SITE_MOVED(SiteView before, SiteView after)`,
+`PLACE_FAILED(PlaceRequest, List<Refusal>)`, `SITE_PROGRESS(SiteView)` (construction sites, at most once per second per
+site), `SITE_BUILT(SiteView)`, `DESIGN_UPDATED(Design)`, `DESIGN_DONE(Design)`, `VARIANT_DONE(Library.Entry)`,
+`JOB_UPDATED(Job)`, `JOB_DONE(Job)`. All fire on the server thread. UI and commands fire them too, not only API calls.
 
-## Survey (for Steward's site survey; A5b section 7.1)
+## Survey (for Steward's site survey; A5b section 7.1; review 3 and 5)
 
-`Survey.sample(ServerLevel, BoundingBox area, int resolution)` returns a `Sample`:
-- `heights`: motion-blocking without leaves;
-- `floor`: ocean floor;
-- `biome` per 4x4;
-- `water` mask.
-Resolution is 1 up to 256x256 cells, else 4. Only loaded chunks are sampled; the rest are reported as missing. Its JSON form
-(`Sample.toJson()`) is what `job.run` passes to the agent.
+`Survey.sample(ServerLevel, BoundingBox area, int resolution, LoadPolicy load)` returns a `CompletableFuture<Sample>`.
+It is **time-sliced on the server thread** (a budget of a few ms per tick), so a big area never stalls a tick.
+`LoadPolicy`:
+- `LOADED_ONLY` (default): unloaded chunks are reported as missing;
+- `LOAD_BOUNDED(maxChunks)`: loads at most that many chunks, then unloads what it loaded.
+
+A `Sample` holds, per column: `height` (motion-blocking without leaves), `floor` (ocean floor), `top` (the top block's id),
+`slope` (max height difference to the 4 neighbours), and masks for `water`, `tree` (logs and leaves above ground) and
+`natural` (the column's top is natural terrain, nothing built). Also `biome` per 4x4. Resolution is 1 up to 256x256,
+else 4.
+
+**A survey never goes to the model whole** (a 256x256 sample is far past any context and the 256 KB tool limit). It
+goes to the sidecar as a **blob** (see Jobs), and kit programs read it from the job's scratch dir. The agent gets
+`Sample.summary()`: stats, a coarse ASCII height grid (at most 64x64) and the blob handle.
 
 ## Client side
 
@@ -680,6 +717,10 @@ Client -> sidecar:
     `job_status` for progress). Built-in tools are off at the source (`tools: []`): no file system, no Bash, no web. The
     refuse-by-default permission policy is the second line of defence, not the first.
 - `job.cancel { jobId }`
+- `blob.put { blobId?, kind, owner?, data | chunks }` -> ack `{ blobId }`. A blob is JSON or binary (base64 chunks of at
+  most 1 MB each), up to 64 MB. It's stored in `<data>/blobs/<id>`, kept 7 days or until `blob.delete`. A JobSpec lists
+  `blobs: [blobId]`, and the sidecar copies them into the job's scratch dir as `blobs/<id>.<ext>`, where kit programs and
+  scripts read them. The model sees only names and the summaries the client passes in the prompt.
 - `job.tool.result { jobId, callId, result?: any, error?: string }`
 
 Sidecar -> client:
@@ -691,9 +732,15 @@ Sidecar -> client:
           createdAt, updatedAt }
   ```
 - `job.event { jobId, kind: "text" | "step" | "tool", data }`: streamed progress, not persisted.
-- `job.tool.call { jobId, callId, name, input }`: the agent called a mod-provided tool. The **client that started the job** answers
-  with `job.tool.result` within 60 s, or the tool returns an error to the agent ("the game did not answer").
-  While waiting, the job's status is `waiting_tool`. The answer must be JSON, at most 256 KB.
+- `job.tool.call { jobId, callId, name, input }`: the agent called a mod-provided tool. The client answers with
+  `job.tool.result`. The answer must be JSON, at most 256 KB; anything bigger goes in a blob and the result names it.
+  While waiting, the job's status is `waiting_tool`.
+  - **Timeout:** per tool, `timeoutMs` in the tool spec, default 60 s. **The clock pauses while the game is paused**:
+    the mod sends `client.paused {paused}` when singleplayer pauses or resumes, and the sidecar doesn't count paused
+    time.
+  - A tool may declare `readOnly: true`. The mod then runs its handler off the server thread (on a worker) when the
+    handler says it's thread-safe. Everything else runs on the server thread, which only advances while the game runs;
+    the paused clock covers that.
 
 Other job rules:
 - **Budget (hard stop):** the sidecar passes `budgetUsd` as the SDK's `maxBudgetUsd`. The SDK ends the run with
@@ -717,6 +764,8 @@ arguments and results, as a semi-stable test surface: changes are noted in its c
 
 ## Phase 4a gate
 
+- **Publishing:** `publishToMavenLocal` now. A public Maven (GitHub Packages on a release tag, or Modrinth Maven) is wanted
+  for Steward's public CI, but publishing is Noah's call; it's not part of this gate.
 - An in-repo test mod `apitest/` (a Gradle subproject, dev only, **never in the shipped jar or the sidecar bundle**) depends only on
   `dev.larattalabs.architect.api`. In a dev world it:
   - places a site through the API with an owner and ext, and gets SITE_PLACED;
@@ -725,8 +774,15 @@ arguments and results, as a semi-stable test surface: changes are noted in its c
   - removes the site (refused without force from another requester; RemoveResult with the refund in survival);
   - samples a survey;
   - shows a client preview.
-- **Jobs, without Claude** (the sim backend): run, events, cancel, a tool round trip (the test mod answers a tool call
-  with a survey), resume after a sidecar restart, and a budget stop (the sim reports a cost).
+- **Jobs, without Claude** (the sim backend):
+  - run, events, cancel;
+  - a tool round trip;
+  - **a tool call across a paused game** (pause > 60 s mid-call, unpause, and the job completes);
+  - **a blob handle** (a survey uploaded as a blob, read by a kit script in the job's scratch dir);
+  - resume after a sidecar restart;
+  - a budget stop (the sim reports a cost).
+- **Designs and the library through the API:** a design request round trip (sim backend) with owner and ext, landing on the
+  new entry; a variant through `Library.makeVariant`; setExt and setTags; delete.
 - **Jobs, with Claude, once:** a `structured` job with a schema (a concept-card-like parse) and an `agent` job that
   calls one mod-provided tool. Cheap model, small budget. The cost report includes cache tokens.
 - A protocol-1 client (today's mod build, or the stub) still works against the new sidecar.
