@@ -92,7 +92,8 @@ export class BlobStore {
       fs.rmSync(this.partFile(id), { force: true });
       fs.writeFileSync(this.file(id), text);
       this.metas[id] = { id, kind: m.kind, ...(m.owner ? { owner: m.owner } : {}), ext: m.ext ?? 'json', size, complete: true, createdAt: now, updatedAt: now };
-      this.store.markDirty();
+      // on disk before the ack: a sweep after a crash would delete a blob state.json does not know
+      this.store.flush();
       return { blobId: id, size, complete: true };
     }
     const bufs = (m.chunks ?? []).map((c, i) => {
@@ -122,8 +123,8 @@ export class BlobStore {
     if (!m.more) {
       fs.renameSync(this.partFile(meta.id), this.file(meta.id));
       meta.complete = true;
-    }
-    this.store.markDirty();
+      this.store.flush();
+    } else this.store.markDirty();
     return { blobId: meta.id, size: meta.size, complete: meta.complete };
   }
 

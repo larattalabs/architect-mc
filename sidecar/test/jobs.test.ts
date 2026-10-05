@@ -76,7 +76,7 @@ interface Env {
 }
 
 /** A sidecar (sim backend, fixture kit) plus its server over `root` (reused across restarts). */
-async function startEnv(root: string, port = 0): Promise<Env> {
+async function startEnv(root: string, port = 0, beforeStart?: (sc: Sidecar) => void): Promise<Env> {
   const kit = fs.existsSync(path.join(root, 'kit')) ? path.join(root, 'kit') : copyKit(root);
   const cfg = loadConfig(['--data', path.join(root, 'data'), '--library', path.join(root, 'library'), '--kit', kit, '--port', String(port), '--backend', 'sim'], {});
   cfg.simStepMs = 20;
@@ -85,6 +85,7 @@ async function startEnv(root: string, port = 0): Promise<Env> {
   const sc = new Sidecar(cfg, store, memoryLogger());
   const server = new SidecarServer(sc, { host: '127.0.0.1', port, token: TOKEN, validateOutbound: true, log: sc.log });
   await server.start();
+  beforeStart?.(sc);
   await sc.start(new SimDesigner(sc, 20));
   return {
     root,
@@ -349,6 +350,32 @@ describe('protocol 2 over a WebSocket (sim backend)', () => {
     c.ws.close();
   });
 
+  it('an agent job waits for a running design (they share one slot) and starts when the design ends', async () => {
+    const c = await hello(env.port, { protocols: [1, 2] });
+    c.send({ type: 'design.request', id: 'd', request: request({ name: 'Slot Holder' }) });
+    const designId = (await c.ack('d')).result.designId as string;
+    await until(() => env.sc.designs.get(designId)!.status === 'designing');
+    const jobId = await runJob(c, 'r', { kind: 'agent', prompt: 'x', tools: [tool('after')] });
+    // a structured job does not wait for the slot
+    const sId = await runJob(c, 's', { kind: 'structured', prompt: 'x', schema: { type: 'object', properties: { a: { type: 'string' } } } });
+    await jobDone(c, sId);
+    expect(['designing', 'checking', 'rendering']).toContain(env.sc.designs.get(designId)!.status);
+    expect(env.sc.jobs.book.get(jobId)!.status).toBe('queued');
+    const call = await c.next((m) => m.type === 'job.tool.call' && m.jobId === jobId, 20_000);
+    expect(env.sc.designs.get(designId)!.status).toBe('done');
+    c.send({ type: 'job.tool.result', jobId, callId: call.callId, result: 'ok' });
+    expect((await jobDone(c, jobId)).status).toBe('done');
+    c.ws.close();
+  });
+
+  it('a finished blob is on disk in state.json when blob.put is acked', async () => {
+    const c = await hello(env.port, { protocols: [1, 2] });
+    c.send({ type: 'blob.put', id: 'p', kind: 'survey', data: { a: 1 } });
+    const id = (await c.ack('p')).result.blobId as string;
+    expect(JSON.parse(fs.readFileSync(path.join(env.sc.config.dataDir, 'state.json'), 'utf8')).blobs[id]).toMatchObject({ kind: 'survey', complete: true });
+    c.ws.close();
+  });
+
   it('cancel stops a job that waits for a tool', async () => {
     const c = await hello(env.port, { protocols: [1, 2] });
     const jobId = await runJob(c, 'r', { kind: 'agent', prompt: 'x', tools: [tool('never')] });
@@ -403,6 +430,48 @@ describe('resume after a sidecar restart (sim backend)', () => {
     expect(env.sc.jobs.book.work(jobId)!.sessionId).toBe(before.sessionId);
     expect(j.cost.usd).toBe(0.03);
     expect(env.sc.jobs.book.work(jobId)!.pending).toEqual([]);
+    c.ws.close();
+  });
+
+  it('a resumed job keeps the blobs it copied, even when the blob was deleted meanwhile', async () => {
+    env = await startEnv(root);
+    let c = await hello(env.port, { protocols: [1, 2] });
+    c.send({ type: 'blob.put', id: 'p', kind: 'survey', data: { h: [1, 2] } });
+    const blobId = (await c.ack('p')).result.blobId as string;
+    const jobId = await runJob(c, 'r', { kind: 'agent', prompt: 'x', blobs: [blobId], tools: [tool('a')] });
+    const call = await c.next((m) => m.type === 'job.tool.call');
+    c.send({ type: 'blob.delete', id: 'd', blobId });
+    expect((await c.ack('d')).ok).toBe(true);
+    c.ws.close();
+    await env.stop();
+    env = await startEnv(root);
+    c = await hello(env.port, { protocols: [1, 2] });
+    const resent = await c.next((m) => m.type === 'job.tool.call');
+    expect(resent.callId).toBe(call.callId);
+    c.send({ type: 'job.tool.result', jobId, callId: call.callId, result: 1 });
+    expect((await jobDone(c, jobId)).status).toBe('done');
+    expect(fs.existsSync(path.join(env.sc.config.dataDir, 'jobs', jobId, 'blobs', `${blobId}.json`))).toBe(true);
+    c.ws.close();
+  });
+
+  it('an answer to a persisted call is kept when it arrives before the job starts again (the slot is busy)', async () => {
+    env = await startEnv(root);
+    let c = await hello(env.port, { protocols: [1, 2] });
+    const jobId = await runJob(c, 'r', { kind: 'agent', prompt: 'x', tools: [tool('a')] });
+    const call = await c.next((m) => m.type === 'job.tool.call');
+    c.ws.close();
+    await env.stop();
+    // the restarted sidecar's slot is taken (as by a resumed design): the job cannot start yet
+    env = await startEnv(root, 0, (sc) => sc.heavy.tryAcquire('test'));
+    c = await hello(env.port, { protocols: [1, 2] });
+    c.send({ type: 'job.tool.result', id: 't', jobId, callId: call.callId, result: 'early' });
+    expect((await c.ack('t')).ok).toBe(true);
+    expect(env.sc.jobs.book.get(jobId)!.status).toBe('queued');
+    env.sc.heavy.release('test');
+    const j = await jobDone(c, jobId);
+    expect(j.result.json.results).toEqual([{ tool: 'a', result: 'early' }]);
+    // the job did not ask again
+    expect(c.msgs.filter((m) => m.type === 'job.tool.call')).toEqual([]);
     c.ws.close();
   });
 

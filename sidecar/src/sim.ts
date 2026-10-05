@@ -87,27 +87,25 @@ export class SimDesigner implements Designer {
     if (this.runP || this.stopped || !this.queue.length) return;
     // one design or agent job at a time (agent jobs share the design queue's slot)
     if (!this.sc.heavy.tryAcquire('design')) return;
+    // one design per turn of the slot, so an agent job waiting for it gets its turn in between
+    const id = this.queue.shift()!;
     this.runP = (async () => {
+      this.current = id;
+      this.sc.statusChanged();
       try {
-        while (!this.stopped && this.queue.length) {
-          const id = this.queue.shift()!;
-          this.current = id;
-          this.sc.statusChanged();
-          try {
-            await this.runJob(id);
-          } catch (e) {
-            if (!(e instanceof Cancelled)) this.sc.designFailed(id, (e as Error).message);
-          } finally {
-            this.current = undefined;
-            this.cancelled.delete(id);
-            this.sc.statusChanged();
-          }
-        }
+        await this.runJob(id);
+      } catch (e) {
+        if (!(e instanceof Cancelled)) this.sc.designFailed(id, (e as Error).message);
       } finally {
-        this.runP = undefined;
-        this.sc.heavy.release('design');
+        this.current = undefined;
+        this.cancelled.delete(id);
+        this.sc.statusChanged();
       }
-    })();
+    })().finally(() => {
+      this.runP = undefined;
+      this.sc.heavy.release('design');
+      this.kick();
+    });
   }
 
   private sleep(ms: number, id: string): Promise<void> {

@@ -106,6 +106,10 @@ export class JobRunner {
   /** Pick up the jobs that were unfinished when the sidecar stopped, then start what can start. */
   start(driver: JobDriver): void {
     this.driver = driver;
+    // a design (or another agent job) finished: an agent job waiting for the shared slot may start
+    this.sc.heavy.onFree(() => {
+      if (!this.stopping) this.kick();
+    });
     this.sc.blobs.sweep();
     this.sweepTimer = setInterval(() => this.sc.blobs.sweep(), 3600_000);
     this.sweepTimer.unref?.();
@@ -180,15 +184,21 @@ export class JobRunner {
   /** job.tool.result: the client's answer to a pending call. */
   toolResult(jobId: string, callId: string, result: unknown, error: string | undefined): void {
     const lc = this.live.get(callId);
-    if (!lc || lc.jobId !== jobId) throw new ClientError(`job ${jobId} has no pending tool call "${callId}" (answered, timed out or cancelled)`);
-    if (error !== undefined) {
-      this.settle(lc, { ok: false, error });
-      return;
+    // a call persisted before a restart whose job has not started again yet (waiting for auth or the slot)
+    const stored = !lc ? this.book.work(jobId)?.pending.find((p) => p.callId === callId && !p.answer) : undefined;
+    if ((!lc || lc.jobId !== jobId) && !stored) throw new ClientError(`job ${jobId} has no pending tool call "${callId}" (answered, timed out or cancelled)`);
+    let answer: ToolAnswer;
+    if (error !== undefined) answer = { ok: false, error };
+    else {
+      const json = JSON.stringify(result ?? null);
+      const size = Buffer.byteLength(json);
+      if (size > MAX_RESULT_BYTES) throw new ClientError(`the result is ${size} bytes, more than ${MAX_RESULT_BYTES}: put it in a blob (blob.put) and return its id; the call is still waiting`);
+      answer = { ok: true, result: JSON.parse(json) as unknown };
     }
-    const json = JSON.stringify(result ?? null);
-    const size = Buffer.byteLength(json);
-    if (size > MAX_RESULT_BYTES) throw new ClientError(`the result is ${size} bytes, more than ${MAX_RESULT_BYTES}: put it in a blob (blob.put) and return its id; the call is still waiting`);
-    this.settle(lc, { ok: true, result: JSON.parse(json) as unknown });
+    if (lc) return this.settle(lc, answer);
+    stored!.answer = answer.ok ? { result: answer.result } : { error: answer.error };
+    this.sc.store.flush();
+    this.log.info(`job ${jobId}: ${stored!.name} answered before the job started again; kept for its resume`);
   }
 
   /** A client said hello: re-send the tool calls waiting for a client of its name. */
@@ -339,13 +349,23 @@ export class JobRunner {
 
   // ---- scratch dir ----------------------------------------------------------------------------
 
-  /** <data>/jobs/<id>/ with the job's blobs in blobs/<id>.<ext> (no file tools by default). */
+  /**
+   * <data>/jobs/<id>/ with the job's blobs in blobs/<id>.<ext> (no file tools by default). A blob
+   * copied on an earlier start is kept, so a resumed job does not need the blob any more.
+   */
   prepareScratch(id: string, blobs: string[]): string {
     const dir = this.book.scratchDir(id);
     fs.mkdirSync(dir, { recursive: true });
     const real = fs.realpathSync(dir);
+    let have: string[] = [];
     try {
-      this.sc.blobs.copyInto(blobs, real);
+      have = fs.readdirSync(path.join(real, 'blobs'));
+    } catch {
+      /* none yet */
+    }
+    const missing = blobs.filter((b) => !have.some((f) => f.startsWith(`${b}.`)));
+    try {
+      this.sc.blobs.copyInto(missing, real);
     } catch (e) {
       if (e instanceof BlobError) throw new Error(`${e.message} (it expired or was deleted)`);
       throw e;
