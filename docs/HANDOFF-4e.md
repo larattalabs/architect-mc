@@ -20,24 +20,30 @@ migration, downgrade, roads, survival, sizecap, megalite, megabig, bench, api, a
 gate client by PID, `eval '<js>'` runs ad-hoc checks). The fixture worlds are flat meadows (`G4E Flat`); size-cap random
 ticks use a normal world (`G4E Normal`, seed `4e`).
 
-## Gate status
+## Gate status (stopped 2026-10-05 for a shutdown)
 
-Evidence is local, under `~/Developer/LarattaLabs/architect-mc/artifacts/gate4e/<step>.json` (+ all.log). Steps run on a build
-older than the latest commit must be re-run on the final build (every step, plus gate 9's gate4d/gate3/phase 1 re-runs).
+Evidence is local, under `~/Developer/LarattaLabs/architect-mc/artifacts/gate4e/<step>.json` (+ all.log). "Current" = run on
+a build within the last few commits (since the large-site work); "earlier" = an older build: re-run on the final build.
 
 | Gate | Step | Status (evidence) |
 |---|---|---|
-| 2 any order | `orders` | PASS earlier build: 24/24, group, L 6/6 (orders.json) |
-| 3 player edits | `edits` | PASS earlier build (edits.json) |
-| 5 crash K1-K8 | `crash` | PASS earlier build, incl. K3 clean (crash.json) |
-| 6 roads + village | `roads` | PASS earlier build (roads.json); 4 ms throughput 19.5k cells/s after the same-tick start fix (village probe), roads.json older |
-| 7 survival layering | `survival` | PASS (survival.json) after the rule 3b fix |
-| 8 size cap | `sizecap` | PASS (sizecap.json): keep place max 15-43 ms, remove max 25 ms, with rts 300 by feature trees 25 ms, 304k-cell sliced cell site 20/22 ms, all exact |
-| 4 migration, downgrade | `migration`, `downgrade` | written, not run |
-| 9 4d regression | gate4d.mjs + gate3 + phase 1 | earlier: all pass but L3 (pre-existing on v0.7.0: worldgen gravel over a cave at the lot edge); `leaves` step written, not run |
-| 10 mega-lite, bench | `megalite`, `bench`, `megabig` | written, not run |
+| 2 any order | `orders` | PASS, earlier build: 24/24, group, L 6/6 |
+| 3 player edits | `edits` | PASS, earlier build |
+| 5 crash K1-K8 | `crash` | PASS, earlier build (incl. K3 clean) |
+| 6 roads + village | `roads` | PASS, earlier build; 4 ms throughput 19.5k cells/s after the same-tick start fix (`village A 4` probe) |
+| 6 client ghost | `ghost` | PASS, current: shots g4e-ghost-road.png / -noroad.png looked at (approach 4 rows -> 2, stops at the road) |
+| 7 survival layering | `survival` | PASS, earlier build (after the rule 3b fix) |
+| 8 size cap | `sizecap` | PASS, current: keep place max 15-43 ms, remove 25 ms, rts 300 by feature trees 25 ms, 304k-cell cell site 20/22 ms, all exact |
+| 9 leaves (adjacent toggle, held leaves both orders) | `leaves` | PASS, current (after the cut-plant and two-block fixes) |
+| 10 mega-lite | `megalite` | PARTIAL, current: placement (759,824 cells, relog resume), one lot's undo leaves the pad exact, group undo exact (10.9 s); FAIL on MSPT: 1 ms run max 237 ms, 10 ms run 298 ms, 4 ms run 59 ms (the 256x256 pad's start/commit or the many-lot group undo still has unsliced steps; trace with ARCHITECT_TRACE_JOBS=1) |
+| 10 bench, megabig | `bench`, `megabig` | written, not run |
+| 4 migration, downgrade | `migration`, `downgrade` | written, not run (needs the 0.7.0 client: `use('old')`, ports 8892/8893) |
 | 11 API | `api`, `api14` | written, not run |
-| 6 ghost | `ghost` | written, not run |
+| 9 4d regression | gate4d.mjs all + gate3.mjs + phase 1 Remove on the 4e client | earlier build only: all pass but L3 (pre-existing on v0.7.0: floating worldgen gravel at the lot edge, a known limit for "as built") |
+
+Left: mega-lite MSPT; bench/megabig; migration/downgrade; api/api14; gate 9 re-runs; then a full re-run of every step on the
+final build; CONTRACT "Phase 4e as built" (deviations listed below in Known issues and the commit log since 711e4b5), PLAN
+status line. README and DEVBRIDGE are updated.
 
 Bugs the gate found and fixed so far: `Journal.Value` helpers used `Name`/`Properties` (26.x writes `id`/`properties`);
 removal blockers ignored block entities a LAYERed BOX site owns by its journal `after`; a group removal reported sites as
