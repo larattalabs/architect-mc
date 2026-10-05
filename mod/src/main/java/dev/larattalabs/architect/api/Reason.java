@@ -11,10 +11,10 @@ package dev.larattalabs.architect.api;
  * <li>{@code BUILD_HEIGHT}: the box leaves the world's build height.</li>
  * <li>{@code DOOR_CUT}: a door is cut in half by the box edge.</li>
  * <li>{@code CREATIVE_ONLY_BLOCK}: a construction site of a design with blocks survival can't build.</li>
- * <li>{@code NOT_ALLOWED}: the mode needs a permission the actor lacks, or the sites file could not be read.</li>
+ * <li>{@code NOT_ALLOWED}: the mode needs a permission the actor lacks (INSTANT in a survival world), or a move in survival.</li>
  * <li>{@code NOT_LOADED}: part of the site is in an unloaded chunk (or the dimension is not loaded).</li>
  * <li>{@code UNKNOWN_BLUEPRINT}: no loaded design with that id.</li>
- * <li>{@code OTHER}: anything else (an I/O error, an internal problem).</li>
+ * <li>{@code OTHER}: anything else (an I/O error, the world's sites file could not be read, an internal problem).</li>
  * </ul>
  */
 public enum Reason {

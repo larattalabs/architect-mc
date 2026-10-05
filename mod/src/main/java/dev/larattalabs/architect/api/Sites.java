@@ -12,10 +12,10 @@ import org.jspecify.annotations.Nullable;
  * removal of another mod's sites. The rule that matters (INSTANT in a survival world) is checked against a real actor.
  */
 public interface Sites {
-	/** Every site, in placement order. Any thread. */
+	/** Every site, in placement order. Server thread (the construction progress counts read the world). */
 	List<SiteView> list();
 
-	/** The sites whose owner equals {@code owner} (null: the player's own sites, those without an owner). Any thread. */
+	/** The sites whose owner equals {@code owner} (null: the player's own sites, those without an owner). Server thread. */
 	List<SiteView> list(@Nullable String owner);
 
 	Optional<SiteView> get(String siteId);

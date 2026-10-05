@@ -35,6 +35,10 @@ public final class ApiClientBridge implements ClientBridge {
 		Sidecar.state().addListener(new SidecarState.Listener() {
 			@Override
 			public void onSnapshot() {
+				// a (re)connect while the game is paused: the new connection starts unpaused on the sidecar's side
+				if (Boolean.TRUE.equals(lastPaused)) {
+					sendPaused(true);
+				}
 				DESIGNS.clear();
 				for (JsonObject d : Sidecar.state().designsRaw()) {
 					DESIGNS.put(d.has("id") ? d.get("id").getAsString() : "?", d);
@@ -72,6 +76,10 @@ public final class ApiClientBridge implements ClientBridge {
 		if (first && !paused) {
 			return;
 		}
+		sendPaused(paused);
+	}
+
+	private static void sendPaused(boolean paused) {
 		if (Sidecar.connected() && Sidecar.state().protocol() >= 2) {
 			JsonObject m = new JsonObject();
 			m.addProperty("type", "client.paused");
