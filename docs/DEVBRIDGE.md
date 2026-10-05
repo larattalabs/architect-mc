@@ -9,7 +9,7 @@ tests.
 ## Connecting
 
 - **Where:** `ws://127.0.0.1:<port>`, loopback only. The port is `ARCHITECT_DEV_PORT`, default `7891`. The client's sidecar port is `ARCHITECT_PORT` (default `7890`). Run several clients side by side by
-  giving each its own pair (the repo's sessions use 7890/7891, 7990/7991, 8090/8091, 8190/8191 and 8790/8791).
+  giving each its own pair (the repo's sessions use 7890/7891, 7990/7991, 8090/8091, 8190/8191, 8790/8791 and, for phase 4d, 8890/8891).
 - **When:** dev runs only (`gradlew runClient`, or any client with `ARCHITECT_DEV_PORT` set). It starts when the client
   has started, before a world loads.
 - **Token:** every connection needs the shared secret, as `?token=<token>` on the URL or `Authorization: Bearer <token>`.
@@ -97,6 +97,14 @@ The list below is what `dev.help` returns (`{commands: {name: description}, scre
 | `dev.sites.failNextMove` | {} - test hook: the next move fails restoring the old site and rolls back |
 | `dev.sites.remove` | {site, force?: false} - Remove (restores the terrain) as the Library's Remove does |
 | `dev.sites.state` | {} - the placed sites of this world, the sites taken down (pending until the next world start settles them, with snapshotExists), the world-start reports and snapshot files no site names |
+
+### Ticked placement (phase 4d)
+
+| hook | arguments, result |
+|---|---|
+| `dev.placement.stats` | {reset?: false} - while placement is active (a job, a running batch or removal, a construction site building): `budgetMs`, `ticks`, `msptMax`/`msptMean` (each tick timed from its start to after the last end-of-tick handler), `ticksOver50ms`, `serverMsptMax` (the server's own tick time, which leaves end-of-tick handlers out), `placementMsMax`/`Mean` (Architect's time per tick), `jobStartMsMax` (checks, snapshot, leaf ring and hold), `convertMsMax` (a construction site's conversion), `cells`, `workSeconds`, `cellsPerSecond`, `active`, `jobs`; reset starts over after the answer |
+| `dev.placement.jobs` | {} - the ticked jobs running now: site, kind (place\|rollback\|remove), batch, item, phase, progress, total, held (ticks held back); `slow`, `budgetMs` |
+| `dev.placement.slow` | {on: bool} - test hook: jobs write about 16 cells per tick, so a check can act in the middle of an item (cancel, relog) |
 
 ### Survival
 
@@ -219,6 +227,11 @@ there is no DevBridge hook to make layers, so tests go through the API as anothe
 ## Changelog
 
 Semi-stable: a hook may change or go, and every such change is listed here, newest first.
+
+- **2026-10-05 (phase 4d):** new `dev.placement.stats|jobs|slow`. `dev.box.hash` is unchanged; snapshots now carry an
+  `architect_leafRing` int array (ignored by vanilla). apitest steps `bqueue, batch(es), bcancel, sgroups, sgroup,
+  sgremove, sapprove, sskip, sreorder, sundo, stock, fit, margin` (and `place ... [force]`), driven by `tools/gate4d.mjs`
+  against `tools/run-gate4d-client.sh` (DevBridge 8891, sidecar 8890).
 
 - **2026-10-05 (phase 4c, mod side):** new `dev.massing.state|review|key|redirect|showSet|hideSet` and
   `dev.composite.state|clear`. `dev.design.fill` takes `massingFirst`, `dev.set.fill` takes `massingFirst`,

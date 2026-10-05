@@ -320,6 +320,13 @@ toggle) and `/architect site state <site>` (progress and what's missing). These 
 `/architect survival on|off` and `/architect site finish <site>` need permission level 2, and `site finish` also needs
 creative mode.
 
+**Batches and site groups** (placed by other mods, such as Steward, through the API): `/architect batches` lists them,
+`/architect batch cancel <batch>` cancels one (placed buildings stay, the one being placed rolls back), `/architect groups`
+lists the site groups and their stages, `/architect group remove <group>` takes a whole group down (last placed first),
+and `/architect group approve|skip|undo <group> <stage>` drives a group's stages. `/architect budget [ms]` shows or sets
+how much server time per tick placements may use (1-20 ms, default 4; setting it needs permission level 2). Large
+placements are written over several ticks; while one is in progress its ghost fills in.
+
 <br>
 
 ## Auth
