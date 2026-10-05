@@ -306,7 +306,7 @@ public final class Sites {
 
 	private static Site withPin(Site x, Site.Pin pin) {
 		return new Site(x.id(), x.blueprint(), x.rotation(), x.box(), x.interior(), x.anchors(), x.placedAt(), x.dimension(), x.snapshotBox(),
-			x.snapshot(), x.movedFrom(), pin);
+			x.snapshot(), x.movedFrom(), pin, x.construction());
 	}
 
 	/** {@link #pinFor} without the bed cells a placement left out ({@link #removeUnsafeBeds}). */
