@@ -567,6 +567,466 @@ steps.orders = async () => {
   return { ids: b.ids, L: b.L.siteId, seam: b.seamKinds };
 };
 
+// ------------------------------------------------------------------ gate 3: player edits
+
+const cellsOf = async (b) => (await call('dev.region.hash', { box: b, cells: true }, 300_000)).list;
+function cellMap(list) {
+  return new Map(list.map((l) => [l.slice(0, l.indexOf(' ')), l.slice(l.indexOf(' ') + 1)]));
+}
+
+steps.edits = async () => {
+  if (!dev) await connect();
+  await flatBase();
+  await fresh('G4E Edits', FLAT);
+  await tp(48.5, 80, 30.5);
+  const h0 = await hash(FIX_BOX);
+  const T = await call('dev.cells.place', { kind: 'gate4e:pad', pad: PAD }, 600_000);
+  const R = await call('dev.road.place', { points: [[10, 67, 0], [80, 67, 0]], width: 3 }, 180_000);
+  check(T.placed && R.placed, `edits: T and R placed (${T.siteId}, ${R.siteId})`);
+  await cmd('/save-all flush');
+  await leaveWorld();
+  copyWorld('G4E Edits', 'G4E EditsChest');
+  await openWorld('G4E Edits');
+  const s1 = cellMap(await cellsOf(FIX_BOX));
+  const H = await result(await api('place cabin 28 67 -19 INSTANT unowned noactor 0 layer'));
+  check(H.placed, `edits: H layered on T (${H.siteId})`, H);
+  const hBox = box6((await sites()).find((x) => x.id === H.siteId).restoreBox);
+  // a block placed on R: a road cell outside every building (the top of R's stack at x 70)
+  let roadCell = null;
+  for (let y = 67; y >= 62 && !roadCell; y--) {
+    const st = await call('dev.journal.at', { x: 70, y, z: 0 });
+    const top = (st.stack ?? []).at(-1);
+    if (top && top.site === R.siteId && top.after && !/air/.test(top.after)) roadCell = [70, y, 0];
+  }
+  check(!!roadCell, `edits: R's surface cell at x 70 is ${JSON.stringify(roadCell)}`);
+  await cmd(`/setblock ${roadCell.join(' ')} minecraft:cobblestone`);
+  // the door of H, opened (the kit has no lever: a door's "open" is the same volatile-property rule)
+  const hc = await cellsOf(hBox);
+  const door = hc.find((l) => /_door",properties:\{[^}]*half:"lower"/.test(l));
+  check(!!door, `edits: H's door ${door?.slice(0, 120)}`);
+  const dp = door.slice(0, door.indexOf(' ')).split(',').map(Number);
+  await cmd(`/setblock ${dp.join(' ')} ${/id:"([^"]+)"/.exec(door)[1]}[${[...door.matchAll(/(\w+):"(\w+)"/g)].filter((m) => m[1] !== 'id').map((m) => `${m[1]}=${m[1] === 'open' ? 'true' : m[2]}`).join(',')}]`);
+  await settle(1500);
+  const opened = (await cellsOf([dp[0], dp[1], dp[2], dp[0], dp[1] + 1, dp[2]]));
+  check(opened.every((l) => /open:"true"/.test(l)), 'edits: the door is open (both halves)', opened);
+  // H's removal: a safe remove (the open door counts as ours), its box back as before H
+  const rh = await result(await api(`remove ${H.siteId} - noforce keep`), 300_000);
+  check(rh.removed, `edits: H's removal is not refused by its opened door (${JSON.stringify(rh.blockers)})`, rh);
+  const s2 = cellMap(await cellsOf(FIX_BOX));
+  const inH = (k) => { const [x, y, z] = k.split(',').map(Number); return x >= hBox[0] && x <= hBox[3] && y >= hBox[1] && y <= hBox[4] && z >= hBox[2] && z <= hBox[5]; };
+  const hDiff = [...s1.keys()].filter((k) => inH(k) && s1.get(k) !== s2.get(k));
+  check(hDiff.length === 0, `edits: H's box is back exactly as before H (${hDiff.length} cells differ)`, hDiff.slice(0, 10).map((k) => [k, s1.get(k), s2.get(k)]));
+  // R's removal keeps the block and reports it
+  const rr = await result(await api(`remove ${R.siteId} - noforce keep`), 300_000);
+  const kept = cellMap(await cellsOf([...roadCell, ...roadCell]));
+  check(rr.removed && rr.kept >= 1 && /cobblestone/.test([...kept.values()][0]), `edits: R's removal keeps the placed block and reports it (kept ${rr.kept})`, rr);
+  const rt = await result(await api(`remove ${T.siteId} - noforce keep`), 300_000);
+  const h1 = await hash(FIX_BOX, [[...roadCell, ...roadCell]]);
+  const h0x = await (async () => { await leaveWorld(); copyWorld(FLAT, 'G4E EditsRef'); await openWorld('G4E EditsRef'); return hash(FIX_BOX, [[...roadCell, ...roadCell]]); })();
+  check(rt.removed && h1.sha256 === h0x.sha256, 'edits: after T, the box is the original but for the kept block', { h1: h1.sha256, h0x: h0x.sha256 });
+  await leaveWorld();
+  // a filled chest in T refuses H's LAYER without force
+  await openWorld('G4E EditsChest');
+  await cmd('/setblock 33 67 -12 minecraft:chest');
+  await cmd('/item replace block 33 67 -12 container.0 with minecraft:diamond 5');
+  const v = await result(await api('place cabin 28 67 -19 INSTANT unowned noactor 0 layer'));
+  const reasons = (v.refusals ?? []).map((r) => r.reason ?? r);
+  check(!v.placed && reasons.length > 0, `edits: a filled chest in T refuses H's LAYER without force (${JSON.stringify(reasons)})`, v);
+  await leaveWorld();
+  return { h0: h0.sha256, roadCell, door: dp };
+};
+
+// ------------------------------------------------------------------ gates 6 and 8: roads plus the village, MSPT
+
+const KINDS = ['cabin', 'gatehouse', 'tavern', 'tower'];
+const VOX = 0;
+const VOZ = 100;
+/** Lot i of the 4x3 village on the flat meadow (22 x 30 lots, 4-block gaps, an 8-block street north of each row; gate4d's). */
+function vLot(i) {
+  const col = i % 4;
+  const row = Math.floor(i / 4);
+  const x0 = VOX + col * 26;
+  const z0 = VOZ + row * 38 + 8;
+  return [x0, 64, z0, x0 + 21, 104, z0 + 29];
+}
+/** The streets' roads (one per row, the street's middle) and one road north-south through the gap between columns 1 and 2. */
+function vRoads() {
+  const out = [];
+  for (let row = 0; row < 3; row++) {
+    const z = VOZ + row * 38 + 8 - 4;
+    out.push({ key: `R${row}`, road: { points: [[VOX - 6, 65, z], [VOX + 3 * 26 + 27, 65, z]], width: 3 } });
+  }
+  out.push({ key: 'RX', road: { points: [[VOX + 26 + 24, 65, VOZ - 2], [VOX + 26 + 24, 65, VOZ + 2 * 38 + 4]], width: 3 } });
+  return out;
+}
+const V_BOX = [VOX - 14, 54, VOZ - 12, VOX + 3 * 26 + 36, 110, VOZ + 3 * 38 + 16];
+
+/** The fits (approach into the street) of the 12 lots in the current world. */
+async function vFits() {
+  const out = [];
+  for (let i = 0; i < 12; i++) {
+    const lot = vLot(i);
+    const f = await api(`fit ${KINDS[i % 4]} ${lot.join(',')} north into`);
+    out.push({ key: `L${i}`, bp: KINDS[i % 4], lot, at: f.at, rot: f.rot, predicted: f.predictedRestoreBox, refusals: (f.refusals ?? []).map((r) => r.reason) });
+  }
+  return out;
+}
+const intersects = (a, b) => a[0] <= b[3] && a[3] >= b[0] && a[1] <= b[4] && a[4] >= b[1] && a[2] <= b[5] && a[5] >= b[2];
+
+async function village(order, budget, name) {
+  await fresh(name, 'G4E VBase');
+  await tp(VOX + 50.5, 100, VOZ + 60.5);
+  await cmd(`/architect budget ${budget}`);
+  await call('dev.placement.stats', { reset: true });
+  const roads = vRoads();
+  const lots = ctx.village.fits.map((f) => ({ key: f.key, bp: f.bp, at: f.at, rot: f.rot, mode: 'INSTANT', force: true }));
+  const items = order === 'A' ? [...roads, ...lots.map((l) => ({ ...l, after: roads.map((r) => r.key) }))]
+    : [...lots, ...roads.map((r) => ({ ...r, after: lots.map((l) => l.key) }))];
+  await mark();
+  const t0 = Date.now();
+  const id = await queue({ id: `v${order}${budget}`, proximity: false, items });
+  const done = await waitBatch(id, 30 * 60_000);
+  const wall = (Date.now() - t0) / 1000;
+  const stats = await call('dev.placement.stats', {});
+  const ev = await since();
+  const ids = {};
+  for (const e of ev.filter((x) => x.event === 'ITEM_PLACED' && x.batch === id)) ids[e.key] = e.site;
+  const failed = done.items.filter((i) => i.status !== 'PLACED').map((i) => `${i.key}:${i.status}:${i.reason}`);
+  return { id, done, wall, stats, ids, failed };
+}
+
+steps.roads = async () => {
+  if (!dev) await connect();
+  await flatBase();
+  // the base: the village's fits with no roads (the approach runs into the street), and the pre-hash
+  await fresh('G4E VBase', FLAT);
+  await tp(VOX + 50.5, 100, VOZ + 60.5);
+  const fits = await vFits();
+  const h0 = (await hash(V_BOX)).sha256;
+  await leaveWorld();
+  ctx.village = { fits, h0 };
+  saveCtx();
+  const out = {};
+  // (A) roads first, then the lots (REFUSE)
+  const a = await village('A', 4, 'G4E VA');
+  out.A = { wall: a.wall, stats: a.stats, failed: a.failed };
+  check(a.failed.length === 0, `roads (A): 4 roads then 12 lots placed with REFUSE, 0 refusals (${a.failed.join(' ') || 'none'})`, a.done);
+  const all = await sites();
+  const roadBoxes = Object.fromEntries(vRoads().map((r) => [r.key, box6(all.find((x) => x.id === a.ids[r.key]).restoreBox)]));
+  const stops = [];
+  for (const f of fits) {
+    const sb = box6(all.find((x) => x.id === a.ids[f.key]).restoreBox);
+    const row = Math.floor(Number(f.key.slice(1)) / 4);
+    const rb = roadBoxes[`R${row}`];
+    stops.push({ key: f.key, minZ: sb[2], roadMaxZ: rb[5], fitMinZ: f.predicted?.[2], meets: sb[2] === rb[5] + 1, intoRoad: intersects(sb, rb) });
+  }
+  check(stops.every((x) => x.meets && !x.intoRoad), `roads (A): every approach stops at the road (restore box starts right after the road: ${stops.filter((x) => x.meets).length}/12)`, stops);
+  let roadOwned = 0;
+  let roadBad = 0;
+  for (const r of vRoads()) {
+    const v = await verify(a.ids[r.key]);
+    roadOwned += v.owned;
+    roadBad += v.mismatches;
+  }
+  check(roadBad === 0, `roads (A): no approach cell is a road cell (the roads own all their ${roadOwned} cells, as placed)`);
+  const fitsRoad = await vFits();
+  check(fitsRoad.every((f, i) => f.predicted[2] > fits[i].predicted[2]), 'roads (A): fitToLot facing a road predicts the shorter box',
+    fitsRoad.map((f, i) => [f.key, fits[i].predicted[2], f.predicted[2]]));
+  check(a.stats.ticksOver50ms === 0 && a.stats.msptMax <= 25, `roads (A) at 4 ms: MSPT max ${a.stats.msptMax?.toFixed(2)} ms (<= 25), no tick over 50 ms`, a.stats);
+  await cmd('/save-all flush');
+  await leaveWorld();
+  copyWorld('G4E VA', 'G4E VA1');
+  await openWorld('G4E VA');
+  // the group undo
+  const ga = await result(await api(`sgremove ${a.done.group}`), 20 * 60_000);
+  const ha = (await hash(V_BOX)).sha256;
+  check(ga.removed && ha === h0, `roads (A): the group undo is exact (${ga.restored} cells)`, ga);
+  await leaveWorld();
+  // removing one road (RX) while the lots stand
+  await openWorld('G4E VA1');
+  await tp(VOX + 50.5, 100, VOZ + 60.5);
+  const lotIds = fits.map((f) => a.ids[f.key]);
+  const before = await ownedNow([...lotIds, a.ids.R0, a.ids.R1, a.ids.R2]);
+  const preCells = cellMap(await cellsOf(roadBoxes.RX));
+  const rx = await result(await api(`remove ${a.ids.RX} - noforce keep`), 300_000);
+  const after = await ownedNow([...lotIds, a.ids.R0, a.ids.R1, a.ids.R2]);
+  const lk = leaks(before, after);
+  const gained = ['R0', 'R1', 'R2'].map((k) => after[a.ids[k]].owned - before[a.ids[k]].owned);
+  check(rx.removed && Object.keys(lk).length === 0, `roads: removing RX leaves the lots and the other roads unchanged (${JSON.stringify(lk).slice(0, 200)})`, { rx, lk });
+  check(gained.every((g) => g > 0), `roads: RX's crossing cells went to the other roads (+${gained.join(', +')} cells)`, gained);
+  // RX's own (uncovered) cells: back to the flat meadow
+  await leaveWorld();
+  copyWorld(FLAT, 'G4E VRef');
+  await openWorld('G4E VRef');
+  const refCells = cellMap(await cellsOf(roadBoxes.RX));
+  await leaveWorld();
+  await openWorld('G4E VA1');
+  const nowCells = cellMap(await cellsOf(roadBoxes.RX));
+  const otherRoad = (k) => { const z = Number(k.split(',')[2]); return [0, 1, 2].some((row) => Math.abs(z - (VOZ + row * 38 + 4)) <= 2); };
+  const wrong = [...nowCells.keys()].filter((k) => !otherRoad(k) && nowCells.get(k) !== refCells.get(k));
+  check(wrong.length === 0, `roads: RX's uncovered cells are restored (${wrong.length} differ)`, wrong.slice(0, 10).map((k) => [k, preCells.get(k), nowCells.get(k), refCells.get(k)]));
+  await leaveWorld();
+  // (B) lots first, then the roads: they skip lot cells
+  const b = await village('B', 4, 'G4E VB');
+  out.B = { wall: b.wall, stats: b.stats, failed: b.failed };
+  check(b.failed.length === 0, `roads (B): 12 lots then 4 roads placed (${b.failed.join(' ') || 'none'})`, b.done);
+  const lotsB = await ownedNow(fits.map((f) => b.ids[f.key]));
+  let badB = 0;
+  for (const r of vRoads()) badB += (await verify(b.ids[r.key])).mismatches;
+  const lotChanged = Object.values(lotsB).reduce((n, v) => n + [...v.cells.values()].filter((c) => c.endsWith(' !after') && !/dirt_path|"minecraft:dirt"/.test(c)).length, 0);
+  check(badB === 0 && lotChanged === 0, `roads (B): the roads skip lot cells (lots untouched: ${lotChanged} changed cells)`);
+  const gb = await result(await api(`sgremove ${b.done.group}`), 20 * 60_000);
+  const hb = (await hash(V_BOX)).sha256;
+  check(gb.removed && hb === h0, `roads (B): the group undo is exact (${gb.restored} cells)`, gb);
+  await leaveWorld();
+  // gate 8: the village plus roads at 1 and 10 ms
+  const tp0 = [{ budgetMs: 4, wallSeconds: a.wall, ...a.stats }];
+  for (const ms of [1, 10]) {
+    const t = await village('A', ms, `G4E VT${ms}`);
+    tp0.push({ budgetMs: ms, wallSeconds: t.wall, failed: t.failed, ...t.stats });
+    check(t.failed.length === 0 && t.stats.ticksOver50ms === 0, `throughput ${ms} ms: village + roads ${Math.round(t.stats.cellsPerSecond)} cells/s, wall ${t.wall.toFixed(1)} s, `
+      + `MSPT max ${t.stats.msptMax?.toFixed(2)} mean ${t.stats.msptMean?.toFixed(2)}, no tick over 50 ms`, t.stats);
+    await cmd('/architect budget 4');
+    await leaveWorld();
+  }
+  tp0.sort((x, y) => x.budgetMs - y.budgetMs);
+  fs.writeFileSync(path.join(OUT, 'throughput.json'), JSON.stringify(tp0, null, 2));
+  return out;
+};
+
+// ------------------------------------------------------------------ gate 7: survival layering
+
+const S_AT = [28, 65, -19];
+const U_AT = [37, 65, -19];
+const SU_BOX = [10, 55, -35, 65, 90, 10];
+const addTo = (m, k, n) => { m[k] = (m[k] ?? 0) + n; };
+
+/** A chest on a hopper on the crate of {@code site}; returns the feed cells. */
+async function hopperFor(site) {
+  const c = (await siteState(site)).crate;
+  const hop = [c.x, c.y + 1, c.z];
+  const chest = [c.x, c.y + 2, c.z];
+  await cmd(`/setblock ${hop.join(' ')} minecraft:hopper[facing=down]`);
+  await cmd(`/setblock ${chest.join(' ')} minecraft:chest`);
+  return { crate: c, hop, chest };
+}
+/** Puts what the site still misses into its feed chest (27 stacks at most); counts it into {@code into}. */
+async function refill(site, feedCells, into) {
+  const st = await siteState(site);
+  const stacks = [];
+  for (const r of st.rows ?? []) {
+    let left = Math.max(0, (r.missing ?? 0) - (r.stock ?? 0));
+    const max = /bed$|banner$/.test(r.item) ? 1 : /_door$|sign$/.test(r.item) ? 16 : 64;
+    while (left > 0 && stacks.length < 27) {
+      const n = Math.min(max, left);
+      stacks.push([r.item, n]);
+      left -= n;
+    }
+  }
+  const inChest = await containerItems(feedCells.chest);
+  if (Object.keys(inChest).length) return 0; // still feeding
+  for (let i = 0; i < stacks.length; i++) {
+    await cmd(`/item replace block ${feedCells.chest.join(' ')} container.${i} with ${stacks[i][0]} ${stacks[i][1]}`);
+    addTo(into, stacks[i][0], stacks[i][1]);
+  }
+  return stacks.length;
+}
+/** Items in a container block (/data get block). */
+async function containerItems(p) {
+  const r = await cmd(`/data get block ${p.join(' ')} Items`);
+  const text = (r.messages ?? []).join(' ');
+  const out = {};
+  for (const m of text.matchAll(/id: "([^"]+)"[^}]*?count: (\d+)|count: (\d+)[^}]*?id: "([^"]+)"/g)) {
+    const id = m[1] ?? m[4];
+    const n = Number(m[2] ?? m[3]);
+    addTo(out, id, n);
+  }
+  return out;
+}
+async function buildUntilDone(sites0, feeds, into, minutes = 20) {
+  const end = Date.now() + minutes * 60_000;
+  while (Date.now() < end) {
+    let done = 0;
+    for (const s0 of sites0) {
+      const st = await siteState(s0);
+      if (st.state === 'built' || st.percent === 100) {
+        done++;
+        continue;
+      }
+      if (st.state === 'building') await refill(s0, feeds[s0], into);
+    }
+    if (done === sites0.length) return true;
+    await sleep(3000);
+  }
+  return false;
+}
+
+steps.survival = async () => {
+  if (!dev) await connect();
+  await flatBase();
+  await fresh('G4E Surv', FLAT);
+  await tp(40.5, 80, 10.5);
+  const h0 = (await hash(SU_BOX)).sha256;
+  await call('dev.survival.set', { on: true });
+  await mark();
+  const sId = await queue({ id: 'S', proximity: false, items: [{ key: 'S', bp: 'cabin', at: S_AT, rot: 0, mode: 'CONSTRUCTION', force: true }] });
+  const sEv = await waitEvent((e) => e.event === 'ITEM_PLACED' && e.batch === sId, 120_000, 'S placed');
+  const S = sEv.site;
+  const into = {};
+  const feeds = { [S]: await hopperFor(S) };
+  await refill(S, feeds[S], into);
+  await sleep(4000);
+  // U, LAYERed over S's wall, queued while S builds: it waits (OVERLAP_BUSY), then proceeds
+  const uId = await queue({ id: 'U', proximity: false, overlap: 'LAYER', items: [{ key: 'U', bp: 'gatehouse', at: U_AT, rot: 0, mode: 'CONSTRUCTION', force: true }] });
+  await sleep(4000);
+  const uView = await api(`batch ${uId}`);
+  const uItem = (uView.items ?? [])[0] ?? {};
+  check(JSON.stringify(uItem).includes('OVERLAP_BUSY'), `survival: U queued while S builds waits with OVERLAP_BUSY (${JSON.stringify(uItem).slice(0, 200)})`, uView);
+  check(await buildUntilDone([S], feeds, into), 'survival: S finished from its hopper');
+  const uEv = await waitEvent((e) => e.event === 'ITEM_PLACED' && e.batch === uId, 300_000, 'U placed');
+  const U = uEv.site;
+  feeds[U] = await hopperFor(U);
+  check(await buildUntilDone([U], feeds, into), `survival: U (${U}) proceeded after S and finished from its hopper`);
+  const all = await sites();
+  const ub = union(box6(all.find((x) => x.id === S).restoreBox), box6(all.find((x) => x.id === U).restoreBox));
+  const feedCells = Object.values(feeds).flatMap((f) => [f.hop, f.chest]);
+  const builtHash = (await hash(ub, feedCells.map((c) => [...c, ...c]))).sha256;
+  await cmd('/save-all flush');
+  await leaveWorld();
+  copyWorld('G4E Surv', 'G4E Surv2');
+  // the instant LAYER reference
+  await fresh('G4E SurvRef', FLAT);
+  const rs = await result(await api(`place cabin ${S_AT.join(' ')} INSTANT unowned noactor 0 force`));
+  const ru = await result(await api(`place gatehouse ${U_AT.join(' ')} INSTANT unowned noactor 0 layer force`));
+  const refHash = (await hash(ub, feedCells.map((c) => [...c, ...c]))).sha256;
+  check(rs.placed && ru.placed && refHash === builtHash, 'survival: S and U finished identical to instant LAYER placements', { builtHash, refHash });
+  await leaveWorld();
+  // deconstruct in both orders: items out = items in, terrain exact
+  const res = {};
+  for (const [w, order] of [['G4E Surv', [S, U]], ['G4E Surv2', [U, S]]]) {
+    await openWorld(w);
+    await tp(40.5, 80, 10.5);
+    const out = {};
+    for (const f of Object.values(feeds)) {
+      for (const [k, n] of Object.entries(await containerItems(f.chest))) addTo(out, k, n);
+      for (const [k, n] of Object.entries(await containerItems(f.hop))) addTo(out, k, n);
+    }
+    for (const id of order) {
+      const r = await result(await api(`remove ${id} - noforce keep`), 600_000);
+      check(r.removed, `survival: deconstruct ${id} (order ${order.join(', ')})`, r);
+      for (const [k, n] of Object.entries(r.refund ?? {})) addTo(out, k, n);
+    }
+    for (const f of Object.values(feeds)) {
+      await cmd(`/setblock ${f.chest.join(' ')} minecraft:air`);
+      await cmd(`/setblock ${f.hop.join(' ')} minecraft:air`);
+    }
+    await cmd('/kill @e[type=minecraft:item]');
+    const ids = new Set([...Object.keys(into), ...Object.keys(out)]);
+    const mism = [...ids].filter((k) => (into[k] ?? 0) !== (out[k] ?? 0)).map((k) => [k, into[k] ?? 0, out[k] ?? 0]);
+    check(mism.length === 0, `survival (${order.join(' then ')}): items out = items in for every item id (${Object.values(into).reduce((a, b) => a + b, 0)} items)`, mism);
+    const h = (await hash(SU_BOX)).sha256;
+    check(h === h0, `survival (${order.join(' then ')}): the terrain is exact`);
+    res[order.join(',')] = { mism };
+    await leaveWorld();
+  }
+  return { into, res };
+};
+
+// ------------------------------------------------------------------ gate 8: the size-cap fixture, random ticks, a sliced cell site
+
+function installKeep() {
+  execFileSync('node', [path.join(root, 'tools', 'gate4e-sizecap.mjs'), GAME_DIR], { stdio: 'pipe' });
+}
+async function placeQueued(spec, label) {
+  await call('dev.placement.stats', { reset: true });
+  await mark();
+  const t0 = Date.now();
+  const id = await queue(spec);
+  const done = await waitBatch(id, 30 * 60_000);
+  const stats = await call('dev.placement.stats', {});
+  const site = done.items[0]?.site;
+  log(`  ${label}: ${done.items.map((i) => `${i.key}:${i.status}${i.reason ? ':' + i.reason : ''}`).join(' ')} in ${((Date.now() - t0) / 1000).toFixed(1)} s, `
+    + `MSPT max ${stats.msptMax?.toFixed(2)} ms`);
+  return { done, stats, site, wall: (Date.now() - t0) / 1000 };
+}
+async function removeTimed(id) {
+  await call('dev.placement.stats', { reset: true });
+  const t0 = Date.now();
+  const r = await result(await api(`remove ${id} - force keep`), 30 * 60_000);
+  // a ticked restore: wait until the site is gone
+  for (let i = 0; i < 600 && (await sites()).some((x) => x.id === id); i++) await sleep(1000);
+  const stats = await call('dev.placement.stats', {});
+  return { r, stats, wall: (Date.now() - t0) / 1000 };
+}
+
+steps.sizecap = async () => {
+  if (!dev) await connect();
+  installKeep();
+  await flatBase();
+  const out = {};
+  // (a) on the flat meadow at 4 ms
+  await fresh('G4E Keep', FLAT);
+  await tp(48.5, 140, 150.5);
+  const KB = [-10, 54, -10, 106, 130, 110];
+  const h0 = (await hash(KB)).sha256;
+  const pa = await placeQueued({ id: 'keep', proximity: false, items: [{ key: 'K', bp: 'g4e_keep', at: [0, 65, 0], rot: 0, mode: 'INSTANT', force: true }] }, 'keep (flat)');
+  check(pa.done.items[0].status === 'PLACED' && pa.stats.ticksOver50ms === 0, `sizecap: the 96x64x96 keep placed at 4 ms, no tick over 50 ms (max ${pa.stats.msptMax?.toFixed(2)} ms, `
+    + `${Math.round(pa.stats.cellsPerSecond)} cells/s)`, pa.stats);
+  const ra = await removeTimed(pa.site);
+  check(ra.r.removed && ra.stats.ticksOver50ms === 0, `sizecap: its Remove, no tick over 50 ms (max ${ra.stats.msptMax?.toFixed(2)} ms, ${ra.wall.toFixed(1)} s)`, ra.stats);
+  check((await hash(KB)).sha256 === h0, 'sizecap: the keep\'s Remove is exact (box + 8)');
+  out.flat = { place: pa.stats, remove: ra.stats, wallPlace: pa.wall, wallRemove: ra.wall };
+  await leaveWorld();
+  // (b) natural terrain next to a worldgen tree, randomTickSpeed 300 while it places
+  const NW = 'G4E Normal';
+  if (!fs.existsSync(path.join(SAVES, NW, 'level.dat'))) {
+    await openWorld(NW, { mode: 'creative', preset: 'normal', seed: '4e', cheats: true });
+    await setRules();
+    await cmd('/save-all flush');
+    await leaveWorld();
+  }
+  await fresh('G4E KeepTree', NW);
+  await setRules();
+  const cols = await surveyAround(176, 4);
+  const w = flattest(new Map([...cols].filter(([, c]) => !c.tree)), 96, 96);
+  const trees = [...cols.values()].filter((c) => c.tree && c.x >= w.x - 8 && c.x <= w.x + 104 && c.z >= w.z - 8 && c.z <= w.z + 104
+    && !(c.x >= w.x && c.x <= w.x + 95 && c.z >= w.z && c.z <= w.z + 95));
+  log(`  keep window ${JSON.stringify(w)}, ${trees.length} tree columns within 8 of it`);
+  check(trees.length > 0, `sizecap: worldgen trees beside the keep's box (${trees.length} columns)`, trees.slice(0, 5));
+  const at = [w.x, w.mean + 1, w.z];
+  const KB2 = [w.x - 10, w.mean - 30, w.z - 10, w.x + 106, w.mean + 80, w.z + 110];
+  await tp(w.x + 48.5, w.mean + 90, w.z + 48.5);
+  const h2 = (await hash(KB2)).sha256;
+  await cmd('/gamerule random_tick_speed 300');
+  const pb = await placeQueued({ id: 'keept', proximity: false, items: [{ key: 'K', bp: 'g4e_keep', at, rot: 0, mode: 'INSTANT', force: true }] }, 'keep (trees, rts 300)');
+  await cmd('/gamerule random_tick_speed 0');
+  check(pb.done.items[0].status === 'PLACED' && pb.stats.ticksOver50ms === 0, `sizecap: placed by a worldgen tree with randomTickSpeed 300, no tick over 50 ms (max ${pb.stats.msptMax?.toFixed(2)} ms)`, pb.stats);
+  const rb = await removeTimed(pb.site);
+  const hb = await hash(KB2, [], true);
+  const exact = hb.sha256 === h2;
+  check(rb.r.removed && exact, 'sizecap: its Remove is exact (box + 8, every cell and BE)', { r: rb.r });
+  out.tree = { place: pb.stats, remove: rb.stats, window: w };
+  // (c) a sliced 300k-cell cell site with change tracking, randomTickSpeed 300
+  const c0 = [w.x, w.mean, w.z];
+  const CB = [c0[0] - 8, c0[1] - 12, c0[2] - 8, c0[0] + 108, c0[1] + 40, c0[2] + 108];
+  const h3 = (await hash(CB)).sha256;
+  await cmd('/gamerule random_tick_speed 300');
+  await call('dev.placement.stats', { reset: true });
+  const t0 = Date.now();
+  const cs = await call('dev.cells.place', { kind: 'gate4e:big', pad: { minX: c0[0], maxX: c0[0] + 99, minZ: c0[2], maxZ: c0[2] + 99, y: c0[1], depth: 4, clear: 25 }, force: true }, 1_200_000);
+  const cst = await call('dev.placement.stats', {});
+  await cmd('/gamerule random_tick_speed 0');
+  const j = await journal();
+  const ce = (j.entries ?? []).find((e) => e.site === cs.siteId);
+  check(cs.placed && ce?.cells >= 300_000 && cst.ticksOver50ms === 0, `sizecap: a ${ce?.cells}-cell cell site placed sliced in ${((Date.now() - t0) / 1000).toFixed(1)} s, `
+    + `no tick over 50 ms (max ${cst.msptMax?.toFixed(2)} ms)`, { cs, cst });
+  const rc = await removeTimed(cs.siteId);
+  check(rc.r.removed && (await hash(CB)).sha256 === h3 && rc.stats.ticksOver50ms === 0, `sizecap: its Remove is exact, no tick over 50 ms (max ${rc.stats.msptMax?.toFixed(2)} ms)`, rc);
+  out.cells = { place: cst, remove: rc.stats, cells: ce?.cells };
+  await leaveWorld();
+  return out;
+};
+
 // ------------------------------------------------------------------ gate 5: crash mid-write (K1-K8)
 
 /** Every file the on-disk index names exists; the files it does not name (orphans). Read straight from the world folder. */
