@@ -32,7 +32,7 @@ older than the latest commit must be re-run on the final build (every step, plus
 | 5 crash K1-K8 | `crash` | PASS earlier build, incl. K3 clean (crash.json) |
 | 6 roads + village | `roads` | PASS earlier build (roads.json); 4 ms throughput 19.5k cells/s after the same-tick start fix (village probe), roads.json older |
 | 7 survival layering | `survival` | PASS (survival.json) after the rule 3b fix |
-| 8 size cap | `sizecap` | FAIL: keep placement spikes (tryStart 260 ms: cold TemplateGrid 118 ms + two checkSite passes; P3 submit 30 ms, start 30 ms, first template step 45 ms); single Remove of the keep took 1.4 s in one tick (plan 417, commit 199, write 776 ms). Work in progress: ticked/sliced removal and placement start |
+| 8 size cap | `sizecap` | PASS (sizecap.json): keep place max 15-43 ms, remove max 25 ms, with rts 300 by feature trees 25 ms, 304k-cell sliced cell site 20/22 ms, all exact |
 | 4 migration, downgrade | `migration`, `downgrade` | written, not run |
 | 9 4d regression | gate4d.mjs + gate3 + phase 1 | earlier: all pass but L3 (pre-existing on v0.7.0: worldgen gravel over a cave at the lot edge); `leaves` step written, not run |
 | 10 mega-lite, bench | `megalite`, `bench`, `megabig` | written, not run |

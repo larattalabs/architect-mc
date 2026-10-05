@@ -1022,13 +1022,15 @@ steps.sizecap = async () => {
   await cmd('/gamerule random_tick_speed 300');
   await call('dev.placement.stats', { reset: true });
   const t0 = Date.now();
-  const cs = await call('dev.cells.place', { kind: 'gate4e:big', pad: { minX: c0[0] + 1, maxX: c0[0] + 96, minZ: c0[2] + 1, maxZ: c0[2] + 96, y: c0[1] + 2, depth: 4, clear: 28 }, force: true }, 1_200_000);
+  const cs = await call('dev.cells.place', { kind: 'gate4e:big', pad: { minX: c0[0] + 1, maxX: c0[0] + 96, minZ: c0[2] + 1, maxZ: c0[2] + 96, y: c0[1] + 2, depth: 4, clear: 28, top: 'minecraft:stone', fill: 'minecraft:cobblestone' }, force: true }, 1_200_000);
   const cst = await call('dev.placement.stats', {});
   await cmd('/gamerule random_tick_speed 0');
   const j = await journal();
   const ce = (j.entries ?? []).find((e) => e.site === cs.siteId);
   check(cs.placed && ce?.cells >= 300_000 && cst.ticksOver50ms === 0, `sizecap: a ${ce?.cells}-cell cell site placed sliced in ${((Date.now() - t0) / 1000).toFixed(1)} s, `
     + `no tick over 50 ms (max ${cst.msptMax?.toFixed(2)} ms)`, { cs, cst });
+  const drift = await verify(cs.siteId);
+  log(`  the cell site before its removal: ${drift.mismatches} of ${drift.owned} cells differ from its after ${JSON.stringify(drift.first.slice(0, 5))}`);
   const rc = await removeTimed(cs.siteId);
   check(rc.r.removed && (await hash(CB)).sha256 === h3 && rc.stats.ticksOver50ms === 0, `sizecap: its Remove is exact, no tick over 50 ms (max ${rc.stats.msptMax?.toFixed(2)} ms)`, rc);
   out.cells = { place: cst, remove: rc.stats, cells: ce?.cells };
