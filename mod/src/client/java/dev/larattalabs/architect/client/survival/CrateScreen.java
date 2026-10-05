@@ -300,24 +300,30 @@ public final class CrateScreen extends Screen {
 		y += 2;
 		// the BOM table
 		int colItem = cx + 2;
-		int colNeed = cx + cw - 196;
-		int colDel = cx + cw - 146;
-		int colPl = cx + cw - 96;
+		int colNeed = cx + cw - 216;
+		int colDel = cx + cw - 162;
+		int colPl = cx + cw - 98;
 		int colMiss = cx + cw - 46;
 		int listTop = y + 12;
-		int listBottom = bottom - 26;
+		int listBottom = bottom - 38; // room below for the flash line and the scroll hint
 		Panels.text(g, font, "Item", colItem + 20, y, UiBits.muted());
 		Panels.text(g, font, "Needed", colNeed, y, UiBits.muted());
 		Panels.text(g, font, "Delivered", colDel, y, UiBits.muted());
 		Panels.text(g, font, "Placed", colPl, y, UiBits.muted());
 		Panels.text(g, font, "Missing", colMiss, y, UiBits.muted());
 		Panels.inset(g, cx, listTop - 1, cw, listBottom - listTop + 2);
-		JsonArray rows = s.has("rows") ? s.getAsJsonArray("rows") : new JsonArray();
+		// what is still missing first (most first), then the rest by name
+		List<JsonObject> rows = new ArrayList<>();
+		if (s.has("rows")) {
+			s.getAsJsonArray("rows").forEach(e -> rows.add(e.getAsJsonObject()));
+		}
+		rows.sort((p, q) -> num(q, "missing") != num(p, "missing") ? Integer.compare(num(q, "missing"), num(p, "missing"))
+			: str(p, "name").compareTo(str(q, "name")));
 		int visible = Math.max(1, (listBottom - listTop) / ROW);
 		scroll = Math.min(scroll, Math.max(0, rows.size() - visible));
 		int ry = listTop + 1;
 		for (int i = scroll; i < rows.size() && ry + ROW <= listBottom + 1; i++) {
-			JsonObject r = rows.get(i).getAsJsonObject();
+			JsonObject r = rows.get(i);
 			Item item = item(str(r, "item"));
 			if (item != null) {
 				g.item(new ItemStack(item), colItem, ry);
@@ -334,7 +340,7 @@ public final class CrateScreen extends Screen {
 		}
 		if (rows.size() > visible) {
 			String more = (scroll + 1) + "-" + Math.min(rows.size(), scroll + visible) + " of " + rows.size() + " (scroll)";
-			Panels.text(g, font, more, cx + cw - font.width(more) - 4, listBottom - 9, UiBits.muted());
+			Panels.text(g, font, more, cx + cw - font.width(more), listBottom + 3, UiBits.muted());
 		}
 		// footer: flash, buttons
 		int by = bottom - 20;
@@ -345,8 +351,7 @@ public final class CrateScreen extends Screen {
 			mouseX, mouseY, this::deconstruct) + 4;
 		button(g, "close", "Close", cx + cw - 50, by, 50, false, true, mouseX, mouseY, this::onClose);
 		if (flash != null && System.currentTimeMillis() - flashAt < 6000) {
-			String f = TextUtil.ellipsize(font, flash, cw);
-			Panels.text(g, font, f, cx, by - 11, flashBad ? UiBits.errorText() : UiBits.okText());
+			Panels.text(g, font, TextUtil.ellipsize(font, flash, cw - 110), cx, listBottom + 3, flashBad ? UiBits.errorText() : UiBits.okText());
 		}
 	}
 

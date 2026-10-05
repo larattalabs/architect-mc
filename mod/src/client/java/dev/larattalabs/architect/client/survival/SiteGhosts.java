@@ -113,7 +113,7 @@ public final class SiteGhosts {
 		Set<Integer> nextDelivered() {
 			Set<Integer> out = new HashSet<>();
 			SiteNet.SiteStatus s = status;
-			if (s == null || s.paused()) {
+			if (s == null) {
 				return out;
 			}
 			Set<String> have = new HashSet<>(s.available());

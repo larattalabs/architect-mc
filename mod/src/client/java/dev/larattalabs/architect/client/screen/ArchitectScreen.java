@@ -1392,7 +1392,7 @@ public final class ArchitectScreen extends Screen {
 		String svNote = !inWorld ? "Open a world to see its setting." : (survivalOn
 			? "Place makes a construction site that builds as its crate is fed (hoppers welcome)."
 			: "Placement is instant and free.") + (may ? " Changing it needs cheats (permission level 2): you have them."
-			: " Changing it needs cheats (permission level 2): ask an operator, or /architect survival on|off with cheats.");
+			: " Changing it needs cheats (permission level 2): ask an operator, or /architect survival on or off with cheats.");
 		for (String line : TextUtil.wrapPlain(font, svNote, colW)) {
 			g.text(font, line, rx, ry, UiBits.muted(), false);
 			ry += 10;

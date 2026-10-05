@@ -32,7 +32,7 @@ final class SiteHud implements HudElement {
 		if (s.crateMissing()) {
 			tail = "crate missing";
 		} else if (s.paused()) {
-			tail = "paused";
+			tail = "paused" + (s.needs().isEmpty() ? "" : " · needs " + s.needs());
 		} else if (!s.needs().isEmpty()) {
 			tail = "needs " + s.needs();
 		} else {

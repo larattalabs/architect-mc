@@ -88,10 +88,10 @@ public final class SiteCommands {
 					.then(Commands.literal("force").executes(ctx -> remove(ctx, false, true)))))
 			.then(Commands.literal("survival")
 				.executes(SiteCommands::survivalShow)
-				.then(Commands.literal("on").requires(Commands.hasPermission(Commands.LEVEL_GAMEMASTERS)).executes(ctx -> survivalSet(ctx, true)))
-				.then(Commands.literal("off").requires(Commands.hasPermission(Commands.LEVEL_GAMEMASTERS)).executes(ctx -> survivalSet(ctx, false))))
+				.then(Commands.literal("on").executes(ctx -> survivalSet(ctx, true)))
+				.then(Commands.literal("off").executes(ctx -> survivalSet(ctx, false))))
 			.then(Commands.literal("site")
-				.then(Commands.literal("finish").requires(Commands.hasPermission(Commands.LEVEL_GAMEMASTERS))
+				.then(Commands.literal("finish")
 					.then(Commands.argument("site", StringArgumentType.word()).suggests((ctx, b) -> {
 						Sites.all().stream().filter(Site::building).forEach(x -> b.suggest(x.id()));
 						return b.buildFuture();
@@ -111,7 +111,16 @@ public final class SiteCommands {
 		return on ? 1 : 0;
 	}
 
+	/** Permission level 2 (cheats on, or an operator): changing the toggle, finishing a site for free. */
+	static boolean gamemaster(CommandSourceStack src) {
+		return src.permissions().hasPermission(net.minecraft.server.permissions.Permissions.COMMANDS_GAMEMASTER);
+	}
+
 	private static int survivalSet(CommandContext<CommandSourceStack> ctx, boolean on) {
+		if (!gamemaster(ctx.getSource())) {
+			ctx.getSource().sendFailure(Component.literal("Changing survival construction sites needs permission level 2 (cheats on, or an operator)"));
+			return 0;
+		}
 		SurvivalWorld.set(ctx.getSource().getServer(), on);
 		ctx.getSource().sendSuccess(() -> Component.literal("Survival construction sites turned " + (on ? "on" : "off") + " for this world"
 			+ (on ? "" : " (construction sites already placed keep building)")), true);
@@ -122,6 +131,10 @@ public final class SiteCommands {
 		CommandSourceStack src = ctx.getSource();
 		String id = StringArgumentType.getString(ctx, "site");
 		ServerPlayer player = src.getPlayer();
+		if (!gamemaster(src)) {
+			src.sendFailure(Component.literal("/architect site finish needs permission level 2 (cheats on, or an operator)"));
+			return 0;
+		}
 		if (player != null && !player.isCreative()) {
 			src.sendFailure(Component.literal("/architect site finish is for a player in creative mode (it builds for free)"));
 			return 0;
