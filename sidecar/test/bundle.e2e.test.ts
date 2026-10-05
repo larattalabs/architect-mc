@@ -158,3 +158,83 @@ describe('dist/main.mjs (sim backend, fixture kit)', () => {
     expect(q.out.join('')).toMatch(/parent pid \d+ is gone/);
   }, 30_000);
 });
+
+// Protocol 2 through the built bundle on port 8290: negotiation (a protocol-1 client unchanged), a blob, an agent job
+// whose tool call survives a SIGKILL of the sidecar (re-sent on hello after the restart, same call id), and a
+// structured job.
+describe('dist/main.mjs, protocol 2 on port 8290 (sim backend)', () => {
+  const PORT = 8290;
+  let root: string;
+  let data: string;
+  let p: Proc | undefined;
+  const args = () => ['--port', String(PORT), '--data', data, '--library', path.join(root, 'library'), '--kit', path.join(root, 'kit'), '--backend', 'sim'];
+  const tokenOf = () => fs.readFileSync(path.join(data, 'client.token'), 'utf8').trim();
+  type M = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
+  const find = (msgs: unknown[], pred: (m: M) => boolean) => (msgs as M[]).find(pred);
+  async function start(): Promise<void> {
+    if (fs.existsSync(path.join(data, 'sidecar.json'))) fs.rmSync(path.join(data, 'sidecar.json'));
+    p = startSidecar(args());
+    await until(() => fs.existsSync(path.join(data, 'sidecar.json')), 15_000);
+  }
+  async function hello2(client = 'mod') {
+    const c = await connect(PORT);
+    c.send({ type: 'hello', client, version: 'e2e', token: tokenOf(), protocols: [1, 2] });
+    await until(() => c.msgs.some((m) => m.type === 'snapshot'));
+    return c;
+  }
+
+  beforeAll(async () => {
+    if (!fs.existsSync(MAIN)) execFileSync(process.execPath, [path.join(SIDECAR_ROOT, 'scripts', 'build.mjs')], { cwd: SIDECAR_ROOT, stdio: 'pipe' });
+    root = tempDir('arch-e2e-p2-');
+    data = path.join(root, 'sidecar-data');
+    copyKit(root);
+    fs.mkdirSync(data, { recursive: true });
+    fs.writeFileSync(path.join(data, 'config.json'), JSON.stringify({ simStepMs: 20 }));
+    await start();
+  }, 60_000);
+
+  afterAll(async () => {
+    if (p && p.child.exitCode === null) p.child.kill('SIGKILL');
+    rmrf(root);
+  });
+
+  it('negotiates protocol 2; a protocol-1 hello gets the phase 1-3 snapshot', async () => {
+    const v2 = await hello2();
+    expect(find(v2.msgs, (m) => m.type === 'snapshot')).toMatchObject({ protocol: 2, features: ['job.run', 'job.tools', 'blobs', 'budget', 'designs.v2'], jobs: [] });
+    const v1 = await connect(PORT);
+    v1.send({ type: 'hello', client: 'mod', version: 'old', token: tokenOf() });
+    await until(() => v1.msgs.some((m) => m.type === 'snapshot'));
+    expect(Object.keys(find(v1.msgs, (m) => m.type === 'snapshot')!).sort()).toEqual(['designs', 'status', 'type', 'v', 'variants', 'version']);
+    v1.ws.close();
+    v2.ws.close();
+  });
+
+  it('an agent job with a blob; SIGKILL mid tool call; restart on the same port; the call is re-sent and the job completes', async () => {
+    let c = await hello2();
+    c.send({ type: 'blob.put', id: 'b', kind: 'survey', data: { width: 2, depth: 1, height: [64, 66] } });
+    await until(() => c.msgs.some((m) => m.type === 'ack' && m.re === 'b'));
+    const blobId = (find(c.msgs, (m) => m.type === 'ack' && m.re === 'b')!.result as M).blobId as string;
+    c.send({ type: 'job.run', id: 'j', job: { kind: 'agent', prompt: 'plan the site', blobs: [blobId], tools: [{ name: 'probe', description: 'probe', inputSchema: { type: 'object', properties: { x: { type: 'integer' } } } }] } });
+    await until(() => c.msgs.some((m) => m.type === 'job.tool.call'));
+    const call = find(c.msgs, (m) => m.type === 'job.tool.call')!;
+    const jobId = call.jobId as string;
+    expect(fs.existsSync(path.join(data, 'jobs', jobId, 'blobs', `${blobId}.json`))).toBe(true);
+    p!.child.kill('SIGKILL');
+    await p!.exit;
+    await start();
+    c = await hello2();
+    expect((find(c.msgs, (m) => m.type === 'snapshot')!.jobs as M[]).find((j) => j.id === jobId)).toBeDefined();
+    await until(() => c.msgs.some((m) => m.type === 'job.tool.call'), 15_000);
+    expect(find(c.msgs, (m) => m.type === 'job.tool.call')).toMatchObject({ jobId, callId: call.callId, name: 'probe' });
+    c.send({ type: 'job.tool.result', jobId, callId: call.callId, result: { ok: true } });
+    await until(() => c.msgs.some((m) => m.type === 'job.upsert' && m.job.id === jobId && ['done', 'failed'].includes(m.job.status)), 20_000);
+    const done = (c.msgs as M[]).filter((m) => m.type === 'job.upsert' && m.job.id === jobId).at(-1)!.job;
+    expect(done).toMatchObject({ status: 'done', result: { json: { results: [{ tool: 'probe', result: { ok: true } }] } } });
+    // a structured job too
+    c.send({ type: 'job.run', id: 's', job: { kind: 'structured', prompt: 'card', schema: { type: 'object', properties: { name: { type: 'string' } }, required: ['name'] } } });
+    await until(() => c.msgs.some((m) => m.type === 'job.upsert' && m.job.spec.kind === 'structured' && m.job.status === 'done'), 20_000);
+    expect((c.msgs as M[]).filter((m) => m.type === 'job.upsert' && m.job.spec.kind === 'structured').at(-1)!.job.result).toEqual({ name: 'sim' });
+    c.send({ type: 'shutdown', id: 'x' });
+    expect(await p!.exit).toBe(0);
+  }, 60_000);
+});

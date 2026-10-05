@@ -4,13 +4,16 @@
 //   <data>/state.json            designs, id counters, SDK sessions, design job progress, usage limit
 //   <data>/designs/<designId>/   scratch dirs of design jobs (designs.ts)
 //   <data>/variants/<variantId>/ scratch dirs of variant and import jobs (variants.ts)
+//   <data>/jobs/<jobId>/         scratch dirs of Claude jobs (jobs/runner.ts), with blobs/
+//   <data>/blobs/<blobId>        blobs (blobs.ts)
 //   <data>/logs/sidecar.log      the log (main.ts)
 //
 // state.json is written atomically (temp + fsync + rename), debounced, and flushed on exit. It
 // never holds credentials (those are in secrets.json, see secrets.ts).
 import fs from 'node:fs';
 import path from 'node:path';
-import type { Design, Variant } from './protocol.js';
+import type { BlobMeta } from './blobs.js';
+import type { Cost, Design, Job, JobSpec, Variant } from './protocol.js';
 import { ensureDir, readJson, writeJsonAtomic } from './util/fsx.js';
 
 export interface SessionRecord {
@@ -30,6 +33,37 @@ export interface DesignWork {
   round: number;
   /** the next turn's prompt (a follow-up after a failed check) */
   pending?: string;
+  /** (protocol 2) the cost committed by finished turns */
+  cost?: Cost;
+}
+
+/** A mod-provided tool call the client has not answered yet (survives a restart). */
+export interface PendingCall {
+  callId: string;
+  name: string;
+  input: unknown;
+  timeoutMs: number;
+  /** time counted against the timeout (only while the client is connected and not paused) */
+  elapsedMs: number;
+  startedAt: number;
+  /** answered after a restart, waiting for the resumed session to take it */
+  answer?: { result?: unknown; error?: string };
+}
+
+/** A job's own progress (jobs/runner.ts). */
+export interface JobWork {
+  /** the full spec (the Job record's copy has the prompt cut at 2000 chars) */
+  spec: JobSpec;
+  /** the hello `client` name of the client that started it: its tool calls go there */
+  starter: string;
+  sessionId?: string;
+  /** cost committed by finished query() calls */
+  cost: Cost;
+  pending: PendingCall[];
+  /** query() calls started so far */
+  queries: number;
+  /** structured: re-asks after the sidecar's own schema check failed */
+  schemaRetries: number;
 }
 
 export interface StateData {
@@ -39,6 +73,12 @@ export interface StateData {
   designs: Design[];
   /** variant and import jobs, oldest first */
   variants: Variant[];
+  /** (protocol 2) Claude jobs, oldest first */
+  jobs: Job[];
+  /** job id -> its progress */
+  jobWork: Record<string, JobWork>;
+  /** blob id -> its record (blobs.ts) */
+  blobs: Record<string, BlobMeta>;
   counters: Record<string, number>;
   /** "design:<id>" -> the SDK session of that design's agent */
   sessions: Record<string, SessionRecord>;
@@ -51,7 +91,7 @@ export interface StateData {
 }
 
 function emptyState(now: number): StateData {
-  return { version: 1, createdAt: now, designs: [], variants: [], counters: {}, sessions: {}, work: {} };
+  return { version: 1, createdAt: now, designs: [], variants: [], jobs: [], jobWork: {}, blobs: {}, counters: {}, sessions: {}, work: {} };
 }
 
 export class Store {

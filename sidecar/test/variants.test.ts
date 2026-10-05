@@ -216,6 +216,15 @@ describe('variant jobs (fixture kit)', () => {
     expect(Object.keys(env).every((k) => ['PATH', 'Path', 'HOME', 'USERPROFILE', 'TMP', 'TEMP', 'TMPDIR', 'SystemRoot', 'SYSTEMROOT', 'windir', 'LANG', 'LC_ALL', '__CF_USER_TEXT_ENCODING'].includes(k))).toBe(true);
   });
 
+  it("a variant keeps the entry's ext (protocol 2)", async () => {
+    installEntry(h.sc, 'gen_ext_cabin', { ext: { 'steward_mc:lot': 'L3', 'steward_mc:role': { kind: 'mill' } } });
+    const v = h.sc.requestVariant('gen_ext_cabin', 'birch');
+    await h.sc.variantRunner.idle();
+    const done = h.sc.variants.get(v.id)!;
+    expect(done.status, done.error).toBe('done');
+    expect(readSidecar(h.sc, done.blueprintId!).ext).toEqual({ 'steward_mc:lot': 'L3', 'steward_mc:role': { kind: 'mill' } });
+  });
+
   it('a param variant keeps the entry\'s palette and values, may grow, and is named _v2', async () => {
     installEntry(h.sc, 'gen_lakeside_cabin');
     const v = h.sc.requestVariant('gen_lakeside_cabin', undefined, { floors: 3 });
@@ -328,6 +337,18 @@ describe('import jobs (fixture kit)', () => {
     const v2 = h.sc.requestImport(file);
     await h.sc.variantRunner.idle();
     expect(h.sc.variants.get(v2.id)!.blueprintId).toBe('imp_my_old_house_2');
+  });
+
+  it("an exported entry (<id>.nbt beside <id>.blueprint.json) brings its ext along (protocol 2)", async () => {
+    const exp = path.join(h.game, 'architect', 'exports', 'gen_mill');
+    fs.mkdirSync(exp, { recursive: true });
+    fs.writeFileSync(path.join(exp, 'gen_mill.nbt'), 'NBT');
+    fs.writeFileSync(path.join(exp, 'gen_mill.blueprint.json'), JSON.stringify({ id: 'gen_mill', ext: { 'steward_mc:lot': 'L7' } }));
+    const v = h.sc.requestImport(path.join(exp, 'gen_mill.nbt'));
+    await h.sc.variantRunner.idle();
+    const done = h.sc.variants.get(v.id)!;
+    expect(done.status, done.error).toBe('done');
+    expect(readSidecar(h.sc, done.blueprintId!)).toMatchObject({ imported: true, ext: { 'steward_mc:lot': 'L7' } });
   });
 
   it('non-vanilla blocks fail with the list of them; junk fails clearly', async () => {

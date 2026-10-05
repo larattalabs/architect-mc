@@ -126,6 +126,11 @@ export interface VariantSource {
   bundled: boolean;
 }
 
+/** A non-empty `ext` object (namespaced metadata other mods keep on an entry). */
+export function isExt(v: unknown): v is Record<string, unknown> {
+  return !!v && typeof v === 'object' && !Array.isArray(v) && Object.keys(v).length > 0;
+}
+
 function readJsonFile(file: string): Record<string, unknown> | undefined {
   try {
     const j = JSON.parse(fs.readFileSync(file, 'utf8')) as unknown;
@@ -406,7 +411,8 @@ export class VariantRunner {
           description: typeof entry.description === 'string' ? entry.description : undefined,
           request: entry.request && typeof entry.request === 'object' ? (entry.request as DesignRequest) : undefined,
           createdAt: this.host.now(),
-          extra: { variantOf: v.from, displayName },
+          // the entry's ext (docs/CONTRACT.md "ext (R5)": builds, variants and imports keep it)
+          extra: { variantOf: v.from, displayName, ...(isExt(entry.ext) ? { ext: entry.ext } : {}) },
         },
       });
       this.finish(v.id, installed.blueprintId, sc, installed.previews, [r.error ? `previews: ${truncate(r.error, 80)}` : '', res.warnings.length ? `${res.warnings.length} checker warning(s)` : ''].filter(Boolean).join('; '), displayName);
@@ -448,6 +454,8 @@ export class VariantRunner {
       this.step(v.id, 'rendering previews');
       const rp = await renderPreviews(scratch, res.nbt!, KIT_TIMEOUT_MS);
       const sc = res.sidecar!;
+      // an exported entry (<id>.nbt next to <id>.blueprint.json) brings its ext along
+      const ext = readJsonFile(file.replace(/\.nbt$/i, '.blueprint.json'))?.ext;
       const installed = installDesign({
         library: cfg.libraryDir,
         baseId: bp,
@@ -455,7 +463,7 @@ export class VariantRunner {
         nbt: res.nbt!,
         sidecar: sc,
         previews: rp.files,
-        meta: { createdAt: this.host.now(), extra: { imported: true } },
+        meta: { createdAt: this.host.now(), extra: { imported: true, ...(isExt(ext) ? { ext } : {}) } },
       });
       this.finish(v.id, installed.blueprintId, sc, installed.previews, [rp.error ? `previews: ${truncate(rp.error, 80)}` : '', res.warnings.length ? `${res.warnings.length} warning(s)` : ''].filter(Boolean).join('; '), typeof sc.name === 'string' ? sc.name : undefined);
     } finally {

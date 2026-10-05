@@ -1,13 +1,23 @@
-// Architect wire protocol (docs/CONTRACT.md "Protocol"), version 1. Ported from AgentCraft's
-// foreman/src/protocol.ts (design messages only).
+// Architect wire protocol (docs/CONTRACT.md "Protocol" and "Phase 4a contract: public API"). Ported
+// from AgentCraft's foreman/src/protocol.ts (design messages only).
 //
 // Transport: ws://127.0.0.1:<port>, one JSON object per text frame:
 //   { "v": 1, "type": "<type>", "id"?: "<client correlation id>", ...payload }
+// `v` is the envelope version and stays 1. The PROTOCOL (what messages and fields a client gets) is
+// negotiated per connection: `hello.protocols: [1, 2]` picks the highest both sides speak, and the
+// v2 snapshot answers `protocol` and `features`. A client that sends no `protocols` is protocol 1
+// and gets exactly the phase 1-3 messages (see `toProtocol1`).
 // Conventions: timestamps are integer epoch ms; unknown fields are ignored (zod strips them);
 // optional fields are omitted, never null (except `auth.set.apiKey: null`, which clears the key).
 import { z } from 'zod';
 
+/** The envelope version (`v`), unchanged by protocol 2. */
 export const PROTOCOL_VERSION = 1 as const;
+/** The protocols this sidecar speaks (hello.protocols picks one). */
+export const PROTOCOLS = [1, 2] as const;
+export type Protocol = (typeof PROTOCOLS)[number];
+/** What a protocol-2 snapshot lists in `features`. */
+export const FEATURES = ['job.run', 'job.tools', 'blobs', 'budget', 'designs.v2'] as const;
 
 const Ts = z.number().int().nonnegative();
 const Id = z.string().min(1).max(64);
@@ -58,34 +68,71 @@ export type Plot = z.infer<typeof Plot>;
 
 export const FEATURE_RE = /^[a-z][a-z0-9_]{0,31}$/;
 
-export const DesignRequest = z
-  .object({
-    type: BuildingType,
-    style: z.string().trim().min(1).max(40).describe('"rustic", "medieval", "modern", ... (chips or any text)'),
-    materials: z.string().trim().max(200).optional().describe('free text, e.g. "spruce and cobblestone"'),
-    features: z.array(z.string().regex(FEATURE_RE)).max(6).describe('porch, chimney, balcony, garden, skylights, courtyard, big_windows, basement, ...'),
-    maxSize: z.object({ x: Size(7, 96), y: Size(6, 64), z: Size(7, 96) }).describe('the largest template allowed (including roof overhangs, porch, garden)'),
-    plot: Plot.optional(),
-    remix: z.string().regex(/^[a-z0-9_]+$/).max(64).optional().describe('start from this library id'),
-    name: z.string().trim().min(1).max(40).optional().describe('display name; also names the id (gen_<slug>)'),
-    notes: z.string().max(2000).optional(),
-  })
-  .superRefine((r, ctx) => {
-    if (new Set(r.features).size !== r.features.length) ctx.addIssue({ code: 'custom', path: ['features'], message: 'duplicate feature' });
-  });
+const DesignRequestBase = z.object({
+  type: BuildingType,
+  style: z.string().trim().min(1).max(40).describe('"rustic", "medieval", "modern", ... (chips or any text)'),
+  materials: z.string().trim().max(200).optional().describe('free text, e.g. "spruce and cobblestone"'),
+  features: z.array(z.string().regex(FEATURE_RE)).max(6).describe('porch, chimney, balcony, garden, skylights, courtyard, big_windows, basement, ...'),
+  maxSize: z.object({ x: Size(7, 96), y: Size(6, 64), z: Size(7, 96) }).describe('the largest template allowed (including roof overhangs, porch, garden)'),
+  plot: Plot.optional(),
+  remix: z.string().regex(/^[a-z0-9_]+$/).max(64).optional().describe('start from this library id'),
+  name: z.string().trim().min(1).max(40).optional().describe('display name; also names the id (gen_<slug>)'),
+  notes: z.string().max(2000).optional(),
+});
+
+function noDuplicateFeatures(r: { features: string[] }, ctx: z.RefinementCtx): void {
+  if (new Set(r.features).size !== r.features.length) ctx.addIssue({ code: 'custom', path: ['features'], message: 'duplicate feature' });
+}
+
+/** A design request as protocol 1 knows it. A protocol-1 client's requests are parsed with this, so v2 fields are dropped. */
+export const DesignRequestV1 = DesignRequestBase.superRefine(noDuplicateFeatures);
+
+/** (protocol 2) namespaced metadata (`"steward_mc:lot": "L3"`) that Architect never interprets; at most 64 KB as JSON. */
+export const Ext = z.record(z.string().min(1).max(200), z.unknown()).refine((v) => JSON.stringify(v).length <= 64 * 1024, 'ext is larger than 64 KB');
+export type Ext = z.infer<typeof Ext>;
+
+export const ModelId = z.string().trim().min(1).max(100).regex(/^[A-Za-z0-9._:@/[\]-]+$/, 'not a model id');
+const BudgetUsd = z.number().positive().max(1000);
+const Owner = z.string().trim().min(1).max(200);
+
+export const DesignRequest = DesignRequestBase.extend({
+  owner: Owner.optional().describe('(protocol 2) who asked, by convention "<modid>:<thing>"; absent = the player'),
+  ext: Ext.optional().describe("(protocol 2) merged into the installed entry's blueprint JSON `ext`; kept through variants and imports"),
+  model: ModelId.optional().describe('(protocol 2) the design model (default: config designModel)'),
+  budgetUsd: BudgetUsd.optional().describe('(protocol 2) hard stop on the estimated cost (USD) of this design, across resumes'),
+  bible: z.string().max(200).optional().describe('(protocol 2, reserved for 4b: accepted and ignored)'),
+  group: z.string().max(200).optional().describe('(protocol 2, reserved for 4b: accepted and ignored)'),
+}).superRefine(noDuplicateFeatures);
 export type DesignRequest = z.infer<typeof DesignRequest>;
 
-export const Design = z.object({
+/** (protocol 2) the SDK's estimate: total_cost_usd plus the modelUsage token totals. Not a billing statement. */
+export const Cost = z.object({
+  usd: z.number().nonnegative(),
+  inputTokens: z.number().int().nonnegative(),
+  outputTokens: z.number().int().nonnegative(),
+  cacheReadTokens: z.number().int().nonnegative(),
+  cacheWriteTokens: z.number().int().nonnegative(),
+  turns: z.number().int().nonnegative(),
+});
+export type Cost = z.infer<typeof Cost>;
+
+const designFields = {
   id: Id.describe('"d<n>"'),
-  request: DesignRequest,
   status: DesignStatus,
   step: z.string().describe('one line of progress'),
   blueprintId: z.string().optional().describe('done: the new library id (gen_<slug>, gen_<slug>_2, ...)'),
   size: z.object({ x: z.number().int(), y: z.number().int(), z: z.number().int() }).optional(),
   previews: z.array(z.string()).optional().describe('done: absolute paths of the preview PNGs in <library>/<id>/'),
-  error: z.string().optional(),
+  error: z.string().optional().describe('failed: why ("budget" when the budget stopped it)'),
   createdAt: Ts,
   updatedAt: Ts,
+};
+/** A design record as protocol 1 sends it. */
+export const DesignV1 = z.object({ ...designFields, request: DesignRequestV1 });
+export const Design = z.object({
+  ...designFields,
+  request: DesignRequest,
+  cost: Cost.optional().describe('(protocol 2) the estimated cost so far, with cache tokens'),
 });
 export type Design = z.infer<typeof Design>;
 
@@ -121,7 +168,7 @@ export const Variant = z.object({
   step: z.string().describe('one line of progress'),
   palette: PaletteSpec.optional().describe('(addition) variant: the palette asked for'),
   values: ParamValues.optional().describe('(addition) variant: the param values asked for'),
-  name: z.string().optional().describe('(addition) the name asked for; when done, the new entry\'s display name (variant) or name (import)'),
+  name: z.string().optional().describe("(addition) the name asked for; when done, the new entry's display name (variant) or name (import)"),
   blueprintId: z.string().optional().describe('done: the new library id'),
   size: z.object({ x: z.number().int(), y: z.number().int(), z: z.number().int() }).optional(),
   previews: z.array(z.string()).optional().describe('(addition) done: absolute paths of the preview PNGs'),
@@ -147,6 +194,80 @@ export const PaletteInfo = z.object({
 });
 export type PaletteInfo = z.infer<typeof PaletteInfo>;
 
+// ---- jobs and blobs (protocol 2, docs/CONTRACT.md "Jobs (R2): protocol 2") ------------------
+
+/** A tool result or a job result larger than this (as JSON) is refused / goes to a blob. */
+export const MAX_RESULT_BYTES = 256 * 1024;
+/** One blob chunk, decoded. */
+export const MAX_CHUNK_BYTES = 1024 * 1024;
+/** One blob, in all. */
+export const MAX_BLOB_BYTES = 64 * 1024 * 1024;
+/** A JSON Schema object (validated by the sidecar's own subset validator, src/jobs/schema.ts). */
+export const JsonSchema = z.record(z.string(), z.unknown());
+export const BLOB_ID = /^[A-Za-z0-9_-]{1,64}$/;
+export const BlobId = z.string().regex(BLOB_ID, 'blob ids are [A-Za-z0-9_-]{1,64}');
+export const TOOL_NAME = /^[A-Za-z0-9_-]{1,64}$/;
+/** The tool every agent job gets for progress lines. */
+export const JOB_STATUS_TOOL = 'job_status';
+
+export const JobTool = z.object({
+  name: z.string().regex(TOOL_NAME, 'tool names are [A-Za-z0-9_-]{1,64}').refine((n) => n !== JOB_STATUS_TOOL, `"${JOB_STATUS_TOOL}" is the sidecar's own tool`),
+  description: z.string().max(4000),
+  inputSchema: JsonSchema.describe('JSON Schema of the input object'),
+  timeoutMs: z.number().int().min(100).max(24 * 3600_000).optional().describe('default 60000; counts only while the client is connected and not paused'),
+  readOnly: z.boolean().optional().describe('the mod may run the handler off the server thread'),
+});
+export type JobTool = z.infer<typeof JobTool>;
+
+export const JobKind = z.enum(['structured', 'agent']);
+export type JobKind = z.infer<typeof JobKind>;
+
+export const JobSpec = z
+  .object({
+    kind: JobKind,
+    prompt: z.string().min(1).max(200_000),
+    system: z.string().max(50_000).optional(),
+    model: ModelId.optional().describe('default config jobModel ("claude-sonnet-5-5")'),
+    effort: z.enum(['low', 'medium', 'high', 'xhigh']).optional(),
+    schema: JsonSchema.optional().describe('structured: required, the answer must validate; agent: optional, asks for a final JSON answer'),
+    tools: z.array(JobTool).max(64).optional().describe('agent: the mod-provided tools'),
+    budgetUsd: BudgetUsd.optional().describe('hard stop on the estimated cost, across resumes'),
+    maxTurns: z.number().int().min(1).max(500).optional(),
+    owner: Owner.optional(),
+    tag: z.string().max(200).optional(),
+    group: z.string().max(200).optional().describe('reserved for 4b'),
+    ext: Ext.optional(),
+    blobs: z.array(BlobId).max(32).optional().describe('copied into the job scratch dir as blobs/<id>.<ext>'),
+  })
+  .superRefine((s, ctx) => {
+    if (s.kind === 'structured' && !s.schema) ctx.addIssue({ code: 'custom', path: ['schema'], message: 'a structured job needs a schema' });
+    if (s.kind === 'structured' && s.tools?.length) ctx.addIssue({ code: 'custom', path: ['tools'], message: 'a structured job has no tools (use an agent job)' });
+    const names = (s.tools ?? []).map((t) => t.name);
+    if (new Set(names).size !== names.length) ctx.addIssue({ code: 'custom', path: ['tools'], message: 'duplicate tool name' });
+    if (s.blobs && new Set(s.blobs).size !== s.blobs.length) ctx.addIssue({ code: 'custom', path: ['blobs'], message: 'duplicate blob id' });
+  });
+export type JobSpec = z.infer<typeof JobSpec>;
+
+export const JobStatus = z
+  .enum(['queued', 'running', 'waiting_tool', 'held', 'done', 'failed', 'cancelled'])
+  .describe('queued -> running <-> waiting_tool -> done | failed | cancelled; held = waiting for a usage limit to reset. done, failed and cancelled are final.');
+export type JobStatus = z.infer<typeof JobStatus>;
+
+export const Job = z.object({
+  id: Id.describe('"j<n>"'),
+  spec: z.record(z.string(), z.unknown()).describe('the JobSpec, its prompt cut at 2000 chars'),
+  status: JobStatus,
+  step: z.string(),
+  result: z.unknown().optional().describe('done: structured -> the validated JSON; agent -> { text, json? }'),
+  resultBlob: BlobId.optional().describe('(addition) done: the result was larger than 256 KB and is in this blob instead'),
+  error: z.string().optional().describe('failed: why ("budget" when the budget stopped it)'),
+  cost: Cost,
+  usageLimitUntil: Ts.optional().describe('(addition) held: when the usage limit resets'),
+  createdAt: Ts,
+  updatedAt: Ts,
+});
+export type Job = z.infer<typeof Job>;
+
 // ---- messages --------------------------------------------------------------------------------
 
 const envelope = <T extends string>(type: T) => ({
@@ -156,15 +277,23 @@ const envelope = <T extends string>(type: T) => ({
 });
 
 // sidecar -> client
-export const SnapshotMsg = z.object({
+const snapshotFields = {
   ...envelope('snapshot'),
   version: z.string(),
   status: Status,
-  designs: z.array(Design),
   variants: z.array(Variant).describe('the last 20 variant/import jobs plus any unfinished one'),
   palettes: PaletteInfo.optional().describe('(addition) the kit palette presets and choices, when the kit could describe them'),
+};
+export const SnapshotMsgV1 = z.object({ ...snapshotFields, designs: z.array(DesignV1) });
+export const SnapshotMsg = z.object({
+  ...snapshotFields,
+  designs: z.array(Design),
+  protocol: z.number().int().optional().describe('(protocol 2) the protocol chosen for this connection'),
+  features: z.array(z.string()).optional().describe('(protocol 2) e.g. "job.run", "job.tools", "blobs", "budget", "designs.v2"'),
+  jobs: z.array(Job).optional().describe('(protocol 2) the last 20 jobs plus any unfinished one'),
 });
 export const StatusMsg = z.object({ ...envelope('status'), status: Status });
+export const DesignUpsertMsgV1 = z.object({ ...envelope('design.upsert'), design: DesignV1 });
 export const DesignUpsertMsg = z.object({ ...envelope('design.upsert'), design: Design });
 export const VariantUpsertMsg = z.object({ ...envelope('variant.upsert'), variant: Variant });
 export const AckMsg = z.object({
@@ -172,21 +301,42 @@ export const AckMsg = z.object({
   re: z.string().describe('the `id` of the client message'),
   ok: z.boolean(),
   error: z.string().optional(),
-  result: z.record(z.string(), z.unknown()).optional().describe('design.request: {designId}; variant.request / import.request: {variantId}'),
+  result: z.record(z.string(), z.unknown()).optional().describe('design.request: {designId}; variant.request / import.request: {variantId}; job.run: {jobId}; blob.put: {blobId, size, complete}'),
 });
 export const ErrorMsg = z.object({ ...envelope('error'), message: z.string(), re: z.string().optional() });
+export const JobUpsertMsg = z.object({ ...envelope('job.upsert'), job: Job });
+export const JobEventMsg = z.object({
+  ...envelope('job.event'),
+  jobId: Id,
+  kind: z.enum(['text', 'step', 'tool']),
+  data: z.record(z.string(), z.unknown()).describe('text: {text}; step: {step}; tool: {phase: call|result|error|timeout, name, callId}'),
+});
+export const JobToolCallMsg = z.object({
+  ...envelope('job.tool.call'),
+  jobId: Id,
+  callId: Id,
+  name: z.string(),
+  input: z.unknown(),
+  owner: z.string().optional().describe("(addition) the job's spec.owner, so the client can find the handler (owner, name)"),
+  timeoutMs: z.number().int().optional().describe('(addition) the tool timeout in force'),
+});
 
-export const ServerMessage = z.discriminatedUnion('type', [SnapshotMsg, StatusMsg, DesignUpsertMsg, VariantUpsertMsg, AckMsg, ErrorMsg]);
+export const ServerMessage = z.discriminatedUnion('type', [SnapshotMsg, StatusMsg, DesignUpsertMsg, VariantUpsertMsg, AckMsg, ErrorMsg, JobUpsertMsg, JobEventMsg, JobToolCallMsg]);
 export type ServerMessage = z.infer<typeof ServerMessage>;
+/** What protocol 1 knows: the phase 1-3 messages, with their phase 1-3 fields. */
+export const ServerMessageV1 = z.discriminatedUnion('type', [SnapshotMsgV1, StatusMsg, DesignUpsertMsgV1, VariantUpsertMsg, AckMsg, ErrorMsg]);
 
 // client -> sidecar
 export const HelloMsg = z.object({
   ...envelope('hello'),
-  client: z.string().max(40).optional().describe('"mod" | "cli"'),
+  client: z.string().max(40).optional().describe('"mod" | "cli"; the same name after a restart gets pending tool calls re-sent'),
   version: z.string().max(80).optional().describe('the client version (informational)'),
   token: z.string().max(200).optional().describe('the contents of <data>/client.token'),
+  protocols: z.array(z.number().int().min(1).max(1000)).min(1).max(16).optional().describe('(protocol 2) the protocols the client speaks, e.g. [1, 2]; absent = [1]'),
 });
-export const DesignRequestMsg = z.object({ ...envelope('design.request'), request: DesignRequest });
+const designRequestMsg = { ...envelope('design.request') };
+export const DesignRequestMsgV1 = z.object({ ...designRequestMsg, request: DesignRequestV1 });
+export const DesignRequestMsg = z.object({ ...designRequestMsg, request: DesignRequest });
 export const DesignCancelMsg = z.object({ ...envelope('design.cancel'), designId: Id });
 export const AuthSetMsg = z.object({
   ...envelope('auth.set'),
@@ -205,9 +355,53 @@ export const ImportRequestMsg = z.object({
   ...envelope('import.request'),
   path: z.string().min(1).max(4096).describe("an absolute .nbt path in <gameDir>/architect/imports/, <gameDir>/architect/exports/ or a world's generated/<namespace>/structure(s)/"),
 });
+export const JobRunMsg = z.object({ ...envelope('job.run'), job: JobSpec });
+export const JobCancelMsg = z.object({ ...envelope('job.cancel'), jobId: Id });
+export const JobToolResultMsg = z.object({
+  ...envelope('job.tool.result'),
+  jobId: Id,
+  callId: Id,
+  result: z.unknown().optional().describe('any JSON, at most 256 KB'),
+  error: z.string().max(10_000).optional().describe('the tool failed: the agent gets this text as an error'),
+});
+const base64 = z.string().max(Math.ceil(MAX_CHUNK_BYTES / 3) * 4).regex(/^[A-Za-z0-9+/]*={0,2}$/, 'not base64');
+export const BlobPutMsg = z
+  .object({
+    ...envelope('blob.put'),
+    blobId: BlobId.optional().describe('absent: the sidecar picks one; an existing finished blob with this id is replaced'),
+    kind: z.string().min(1).max(40).regex(/^[a-z0-9_.:-]+$/).optional().describe('required on the first frame, e.g. "survey"'),
+    owner: Owner.optional(),
+    ext: z.string().regex(/^[a-z0-9]{1,8}$/).optional().describe('(addition) the file extension in a job scratch dir; default json for data, bin for chunks'),
+    data: z.unknown().optional().describe('a JSON blob, whole'),
+    chunks: z.array(base64).max(64).optional().describe('binary, base64, at most 1 MB each (decoded)'),
+    more: z.boolean().optional().describe('(addition) chunks only: more frames follow with the same blobId; the last frame omits it'),
+  })
+  .superRefine((m, ctx) => {
+    const hasData = m.data !== undefined;
+    if (hasData === (m.chunks !== undefined)) ctx.addIssue({ code: 'custom', path: ['data'], message: 'send exactly one of data and chunks' });
+    if (hasData && m.more) ctx.addIssue({ code: 'custom', path: ['more'], message: 'more is for chunks only' });
+  });
+export const BlobDeleteMsg = z.object({ ...envelope('blob.delete'), blobId: BlobId });
+export const ClientPausedMsg = z.object({ ...envelope('client.paused'), paused: z.boolean() });
 
-export const ClientMessage = z.discriminatedUnion('type', [HelloMsg, DesignRequestMsg, DesignCancelMsg, AuthSetMsg, ShutdownMsg, VariantRequestMsg, ImportRequestMsg]);
+export const ClientMessage = z.discriminatedUnion('type', [
+  HelloMsg,
+  DesignRequestMsg,
+  DesignCancelMsg,
+  AuthSetMsg,
+  ShutdownMsg,
+  VariantRequestMsg,
+  ImportRequestMsg,
+  JobRunMsg,
+  JobCancelMsg,
+  JobToolResultMsg,
+  BlobPutMsg,
+  BlobDeleteMsg,
+  ClientPausedMsg,
+]);
 export type ClientMessage = z.infer<typeof ClientMessage>;
+/** What a protocol-1 client may send (exactly the phase 1-3 messages and fields). */
+export const ClientMessageV1 = z.discriminatedUnion('type', [HelloMsg, DesignRequestMsgV1, DesignCancelMsg, AuthSetMsg, ShutdownMsg, VariantRequestMsg, ImportRequestMsg]);
 
 /** A server message without the envelope's `v` (added by the sender). */
 export type Outbound = ServerMessage extends infer M ? (M extends { v: 1 } ? Omit<M, 'v'> : never) : never;
@@ -219,11 +413,29 @@ export function formatZodError(err: z.ZodError): string {
     .join('; ');
 }
 
+/** The protocol both sides speak: the highest of `offered` this sidecar knows (absent = 1), or undefined. */
+export function chooseProtocol(offered: number[] | undefined): Protocol | undefined {
+  if (!offered) return 1;
+  const common = PROTOCOLS.filter((p) => offered.includes(p));
+  return common.length ? (Math.max(...common) as Protocol) : undefined;
+}
+
 /**
- * Parse a client frame. The error text names fields and rules only, never the values sent (an
- * `auth.set` frame carries an API key).
+ * A full (protocol 2) message as a protocol-1 client gets it: undefined for messages protocol 1
+ * does not have (job.*), and the phase 1-3 fields only (no `cost`, no v2 request fields, no
+ * snapshot `protocol` / `features` / `jobs`).
  */
-export function parseClientMessage(raw: unknown): { ok: true; msg: ClientMessage } | { ok: false; error: string; id?: string } {
+export function toProtocol1(full: Record<string, unknown>): Record<string, unknown> | undefined {
+  const r = ServerMessageV1.safeParse(full);
+  return r.success ? (r.data as Record<string, unknown>) : undefined;
+}
+
+/**
+ * Parse a client frame (for a protocol-1 client: with the phase 1-3 messages only, so v2 fields
+ * are dropped and v2 messages fail as unknown types). The error text names fields and rules only,
+ * never the values sent (an `auth.set` frame carries an API key).
+ */
+export function parseClientMessage(raw: unknown, protocol: Protocol = 2): { ok: true; msg: ClientMessage } | { ok: false; error: string; id?: string } {
   let data = raw;
   if (typeof raw === 'string') {
     try {
@@ -232,9 +444,9 @@ export function parseClientMessage(raw: unknown): { ok: true; msg: ClientMessage
       return { ok: false, error: 'invalid JSON' };
     }
   }
-  const id = data && typeof data === 'object' && typeof (data as { id?: unknown }).id === 'string' ? ((data as { id: string }).id.slice(0, 200)) : undefined;
-  const r = ClientMessage.safeParse(data);
-  if (r.success) return { ok: true, msg: r.data };
+  const id = data && typeof data === 'object' && typeof (data as { id?: unknown }).id === 'string' ? (data as { id: string }).id.slice(0, 200) : undefined;
+  const r = (protocol === 1 ? ClientMessageV1 : ClientMessage).safeParse(data);
+  if (r.success) return { ok: true, msg: r.data as ClientMessage };
   return { ok: false, error: formatZodError(r.error), ...(id ? { id } : {}) };
 }
 
