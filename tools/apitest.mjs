@@ -120,8 +120,11 @@ switch (step) {
     // ---- version, features, jobs stub
     const v = await api('version');
     check(v.version === '1.0.0', `ArchitectApi.VERSION ${v.version}`, v);
-    check(['designs', 'events', 'library', 'sites', 'survey'].every((f) => v.features.includes(f)) && !v.features.includes('protocol2')
-      && !v.features.includes('jobs'), `features() against the protocol-1 stub: ${v.features.join(', ')}`, v.features);
+    const p2 = v.features.includes('protocol2');
+    const jobFeatures = ['jobs', 'jobTools', 'blobs'];
+    check(['designs', 'events', 'library', 'sites', 'survey'].every((f) => v.features.includes(f))
+      && (p2 ? jobFeatures.every((f) => v.features.includes(f)) : !jobFeatures.some((f) => v.features.includes(f))),
+      `features() against a protocol-${p2 ? 2 : 1} sidecar: ${v.features.join(', ')}`, v.features);
     const jobs = await result(await api('jobs'));
     check(v.jobsAvailable === false && /jobs arrive with protocol 2/.test(jobs.error ?? ''), `jobs: available() false, run() refused (${jobs.error})`, jobs);
 

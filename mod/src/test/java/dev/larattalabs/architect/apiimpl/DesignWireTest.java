@@ -10,7 +10,7 @@ import dev.larattalabs.architect.api.DesignRequest;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
-/** A design request's wire form: review 1's fields only for a protocol-2 sidecar; bible and group never. */
+/** A design request's wire form: review 1's fields (and the reserved bible, group) only for a protocol-2 sidecar. */
 class DesignWireTest {
 	private static DesignRequest req() {
 		JsonObject ext = new JsonObject();
@@ -36,7 +36,7 @@ class DesignWireTest {
 		assertEquals("v", w.getAsJsonObject("ext").get("apitest:k").getAsString());
 		assertEquals("claude-haiku-5", w.get("model").getAsString());
 		assertTrue(w.has("budgetUsd"));
-		assertFalse(w.has("bible"));
-		assertFalse(w.has("group"));
+		assertEquals("bible1", w.get("bible").getAsString());
+		assertEquals("group1", w.get("group").getAsString());
 	}
 }

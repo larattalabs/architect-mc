@@ -31,7 +31,8 @@ import org.jspecify.annotations.Nullable;
 /**
  * {@link Designs} over the client's sidecar link ({@code design.request}, protocol 1 or 2). The request's {@code owner} and
  * {@code ext} are kept here, in {@code <gameDir>/architect/api-designs.json}, because a protocol-1 sidecar drops them: they
- * answer {@link #list(String)} and are copied into the new entry's blueprint JSON when the design is done. Finished designs
+ * answer {@link #list(String)} and are copied into the new entry's blueprint JSON when the design is done (a protocol-2
+ * sidecar merges ext into the entry itself; the copy then finds nothing to change). Finished designs
  * already reported are remembered there too, so a reconnect's snapshot does not fire {@code DESIGN_DONE} twice. Internal.
  */
 final class DesignsImpl implements Designs {
@@ -108,7 +109,10 @@ final class DesignsImpl implements Designs {
 		}
 	}
 
-	/** The wire form of a request: owner, ext, model and budgetUsd only for protocol 2; bible and group never (reserved). */
+	/**
+	 * The wire form of a request: owner, ext, model, budgetUsd, bible and group only for protocol 2 (design.request v2; a
+	 * protocol-1 sidecar would drop them anyway). bible and group are reserved for 4b: the sidecar accepts and ignores them.
+	 */
 	static JsonObject wire(DesignRequest r, int protocol) {
 		JsonObject o = new JsonObject();
 		o.addProperty("type", r.type());
@@ -145,6 +149,12 @@ final class DesignsImpl implements Designs {
 			}
 			if (r.budgetUsd() != null) {
 				o.addProperty("budgetUsd", r.budgetUsd());
+			}
+			if (r.bible() != null) {
+				o.addProperty("bible", r.bible());
+			}
+			if (r.group() != null) {
+				o.addProperty("group", r.group());
 			}
 		}
 		return o;
