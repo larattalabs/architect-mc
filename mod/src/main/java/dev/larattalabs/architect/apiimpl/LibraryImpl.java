@@ -207,6 +207,13 @@ final class LibraryImpl implements Library {
 		if (b == null) {
 			throw new IllegalStateException("tags are kept by the client's Library; no client here");
 		}
-		b.setTags(entryId, userTags == null ? List.of() : List.copyOf(userTags));
+		// a user entry's tags are written into its blueprint JSON: reload, so list()/get() show them (bundled ones read the overlay)
+		b.setTags(entryId, userTags == null ? List.of() : List.copyOf(userTags)).whenComplete((v, e) -> {
+			if (e != null) {
+				Architect.LOGGER.warn("Library: setting the tags of {} failed: {}", entryId, e.getMessage());
+			} else {
+				reload();
+			}
+		});
 	}
 }

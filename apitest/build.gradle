@@ -76,3 +76,6 @@ def checkApiOnly = tasks.register("checkApiOnly") {
 	}
 }
 tasks.named("compileJava") { dependsOn(checkApiOnly) }
+
+// apitest never runs on its own: the root project's runClient loads it (ARCHITECT_APITEST=1)
+tasks.matching { it.name == "runClient" || it.name == "runServer" }.configureEach { enabled = false }

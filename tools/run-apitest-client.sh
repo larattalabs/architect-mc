@@ -17,4 +17,4 @@ export JAVA_HOME=${JAVA_HOME:-/opt/homebrew/opt/openjdk@25}
 export GRADLE_USER_HOME=${GRADLE_USER_HOME:-$W/.gradle-home}
 cd $W/mod
 export ARCHITECT_APITEST=1
-exec ./gradlew --offline --no-daemon runClient
+exec ./gradlew --offline --no-daemon :runClient

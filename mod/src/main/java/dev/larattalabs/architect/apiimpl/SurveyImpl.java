@@ -136,7 +136,7 @@ public final class SurveyImpl implements Survey {
 
 	/** Natural terrain at the top of a column: soil, stone, sand, snow and ice, logs and leaves, water, lava. */
 	static boolean natural(BlockState s, boolean water) {
-		return water || s.is(BlockTags.DIRT) || s.is(BlockTags.SAND) || s.is(BlockTags.BASE_STONE_OVERWORLD) || s.is(BlockTags.BASE_STONE_NETHER)
+		return water || s.is(Blocks.GRASS_BLOCK) || s.is(Blocks.PODZOL) || s.is(Blocks.MYCELIUM) || s.is(Blocks.MUD) || s.is(BlockTags.DIRT) || s.is(BlockTags.SAND) || s.is(BlockTags.BASE_STONE_OVERWORLD) || s.is(BlockTags.BASE_STONE_NETHER)
 			|| s.is(BlockTags.LOGS) || s.is(BlockTags.LEAVES) || s.is(BlockTags.ICE) || s.is(BlockTags.SNOW) || s.is(BlockTags.TERRACOTTA)
 			|| s.is(Blocks.GRAVEL) || s.is(Blocks.CLAY) || s.is(Blocks.SANDSTONE) || s.is(Blocks.RED_SANDSTONE) || s.is(Blocks.LAVA)
 			|| s.is(Blocks.SNOW_BLOCK) || s.is(Blocks.POWDER_SNOW) || s.is(Blocks.BEDROCK) || s.is(Blocks.END_STONE) || s.is(Blocks.SOUL_SAND)
