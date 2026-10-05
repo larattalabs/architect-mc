@@ -92,7 +92,9 @@ public final class ArchitectScreen extends Screen {
 	private static final int ROW_H = 24;
 
 	enum Focus {
-		NONE, STYLE, MATERIALS, NAME, NOTES, KEY, SEARCH, RENAME, TAGS, VNAME, OTYPE, SET_NAME, SET_PROMPT, SET_TYPE, SET_INAME, SET_NOTES;
+		NONE, STYLE, MATERIALS, NAME, NOTES, KEY, SEARCH, RENAME, TAGS, VNAME, OTYPE, SET_NAME, SET_PROMPT, SET_TYPE, SET_INAME, SET_NOTES, SET_CONTEXT,
+		/** (4c) the Designs tab's redirect notes for a set's item. */
+		REDIRECT;
 
 		/** A field of the set dialog's item rows (focused with an index). */
 		boolean perItem() {
@@ -233,7 +235,8 @@ public final class ArchitectScreen extends Screen {
 			case NOTES -> f.notes;
 			case SEARCH, RENAME, TAGS, VNAME -> library.model(focus);
 			case OTYPE -> f.openType;
-			case SET_NAME, SET_PROMPT, SET_TYPE, SET_INAME, SET_NOTES -> set.model(focus, focusIndex);
+			case SET_NAME, SET_PROMPT, SET_TYPE, SET_INAME, SET_NOTES, SET_CONTEXT -> set.model(focus, focusIndex);
+			case REDIRECT -> redirectNotes;
 			default -> null;
 		};
 	}
@@ -288,6 +291,10 @@ public final class ArchitectScreen extends Screen {
 		}
 		if (TextKeys.isEnter(e)) {
 			if (library.enter(focus)) {
+				return true;
+			}
+			if (focus == Focus.REDIRECT) {
+				sendRedirect();
 				return true;
 			}
 			if (tab == Tab.DESIGN && e.hasControlDown() && dev.larattalabs.architect.client.design.SetFeature.form() != null) {
@@ -348,6 +355,9 @@ public final class ArchitectScreen extends Screen {
 			for (Focus f : SetDialog.ITEM_FIELDS) {
 				order.add(new Object[] {f, i});
 			}
+		}
+		if (dev.larattalabs.architect.client.design.SetFeature.has("massing")) {
+			order.add(new Object[] {Focus.SET_CONTEXT, -1});
 		}
 		int at = -1;
 		for (int i = 0; i < order.size(); i++) {
@@ -1047,6 +1057,21 @@ public final class ArchitectScreen extends Screen {
 			ry += 10;
 		}
 		ry += 2;
+		// (4c) Massing first: a cheap shape to approve before the detail (on by default for L and plot sizes)
+		if (dev.larattalabs.architect.client.design.SetFeature.has("massing")) {
+			boolean can = f.remix == null;
+			boolean on = f.massingFirst();
+			String ml = "Massing first";
+			Hit h = new Hit("design:massing_first", ml, rx, ry, 12 + font.width(ml) + 4, 12, can, on, () -> f.massingFirst = !f.massingFirst());
+			hits.add(h);
+			Panels.sprite(g, on ? Kit.CHECKBOX_CHECKED : Kit.CHECKBOX, rx, ry + 1, 10, 10, can ? 0xFFFFFFFF : 0x90FFFFFF);
+			g.text(font, ml, rx + 13, ry + 2, on || h.contains(mx, my) ? UiBits.ink() : muted, false);
+			String why = !can ? "not for a remix" : on ? f.massingFirst == null ? "a cheap shape to approve (default for " + (DesignForm.PLOT.equals(f.size)
+				? "a plot)" : "size L)") : "a cheap shape to approve first" : "the detail at once";
+			int wx = rx + 13 + font.width(ml) + 8;
+			g.text(font, TextUtil.ellipsize(font, why, Math.max(10, rx + colW - wx)), wx, ry + 2, muted, false);
+			ry += 16;
+		}
 		// the style bible (phase 4b): none = today's behaviour
 		g.text(font, "Style bible", rx, ry + 3, UiStyle.CLAY_DARK, false);
 		int bdx = rx + font.width("Style bible") + 6;
@@ -1089,6 +1114,9 @@ public final class ArchitectScreen extends Screen {
 			err = true;
 		} else if (f.remix != null) {
 			status = "Remix: Claude edits " + LibraryFeature.nameOf(f.remix) + "; the notes say what to change.";
+			err = false;
+		} else if (f.massingFirst() && dev.larattalabs.architect.client.design.SetFeature.has("massing")) {
+			status = "Ready: a massing first (cents, a minute or two); approve its shape, then Claude adds the detail.";
 			err = false;
 		} else {
 			status = "Ready: Claude designs it in the background; the Designs tab shows progress.";
@@ -1284,9 +1312,64 @@ public final class ArchitectScreen extends Screen {
 			case DONE -> "done";
 			case FAILED -> "error";
 			case CANCELLED -> "idle";
-			case QUEUED, HELD_USAGE, PAUSED_BUDGET -> "waiting";
+			case QUEUED, HELD_USAGE, PAUSED_BUDGET, AWAITING_APPROVAL -> "waiting";
 			default -> "working";
 		};
+	}
+
+	/** (4c) A set item's dot: its massing waiting for approval is "waiting", not done. */
+	static String itemFam(dev.larattalabs.architect.api.Group.Item it) {
+		if (it.awaitingApproval()) {
+			return "waiting";
+		}
+		return switch (it.status()) {
+			case DONE -> "done";
+			case FAILED -> "error";
+			case CANCELLED -> "idle";
+			case QUEUED -> "waiting";
+			default -> "working";
+		};
+	}
+
+	/** (4c) A set item's stage line: "massing v2 waits for approval · round 1/3", "detail · designing", ... */
+	static String itemStage(dev.larattalabs.architect.api.Group gr, dev.larattalabs.architect.api.Group.Item it) {
+		String status = it.status().name().toLowerCase(Locale.ROOT);
+		if (it.stage().isEmpty()) {
+			return status;
+		}
+		String m = it.massing().map(r -> " v" + r.version()).orElse("");
+		String rounds = gr.maxRedirects() > 0 || it.rounds() > 0 ? " · round " + it.rounds() + "/" + gr.maxRedirects() : "";
+		return switch (it.stage().get()) {
+			case MASSING -> "massing" + m + " · " + status + rounds;
+			case APPROVAL -> it.awaitingApproval() ? "massing" + m + " waits for approval" + rounds : "massing" + m + " · " + status + rounds;
+			case DETAIL -> "detail of massing" + m + " · " + status;
+		};
+	}
+
+	/** (4c) The set item whose redirect notes are being typed ({@code group/itemKey}), and the notes. */
+	private static @Nullable String redirectItem;
+	private final TextModel redirectNotes = new TextModel(2000);
+	private final TextFieldView redirectView = new TextFieldView();
+
+	private void startRedirect(String groupId, String itemKey) {
+		redirectItem = groupId + "/" + itemKey;
+		redirectNotes.clear();
+		setFocus(Focus.REDIRECT);
+	}
+
+	/** Sends the typed redirect notes for {@link #redirectItem}. */
+	void sendRedirect() {
+		String ri = redirectItem;
+		if (ri == null || redirectNotes.value().isBlank()) {
+			return;
+		}
+		int slash = ri.indexOf('/');
+		String g = ri.substring(0, slash);
+		String key = ri.substring(slash + 1);
+		dev.larattalabs.architect.client.design.SetFeature.approve(g, List.of(), Map.of(key, redirectNotes.value().strip()), List.of());
+		redirectItem = null;
+		redirectNotes.clear();
+		setFocus(Focus.NONE);
 	}
 
 	static List<Job> jobs() {
@@ -1325,7 +1408,7 @@ public final class ArchitectScreen extends Screen {
 				case QUEUED -> "waiting";
 				default -> "working";
 			};
-			String kind = d.request().has("remix") ? "remix" : "design";
+			String kind = d.raw().has("massing") ? "massing" : d.request().has("fromMassing") ? "detail" : d.request().has("remix") ? "remix" : "design";
 			out.add(new Job(d.id(), kind, d.title(), fam, d.status().wire(), d.step(), d.blueprintId(), d.size(), d.error(), d.createdAt(),
 				d.status().isRunning(), d, null));
 		}
@@ -1436,6 +1519,45 @@ public final class ArchitectScreen extends Screen {
 				g.text(font, "at most " + sz.get("x") + " × " + sz.get("y") + " × " + sz.get("z"), dx, y, UiBits.ink(), false);
 				y += 10;
 			}
+			// (4c) a massing job, or a detail pass and its conformance
+			var mref = dev.larattalabs.architect.apiimpl.Wire4c.designMassing(j.design().raw());
+			if (mref.isPresent()) {
+				JsonObject mraw = Sidecar.state().massing(mref.get().id());
+				String extra = mraw == null ? "" : " · " + dev.larattalabs.architect.apiimpl.Wire4c.massing(mraw).parts().size() + " masses" + (mraw.has(
+					"detail") ? " · detailed" : "");
+				g.text(font, TextUtil.ellipsize(font, "massing " + mref.get().id() + " v" + mref.get().version() + extra, dw), dx, y, UiStyle.CLAY_DARK, false);
+				y += 10;
+				if (r.has("redirect") && r.get("redirect").isJsonObject()) {
+					for (String line : TextUtil.wrapPlain(font, "redirect: " + r.getAsJsonObject("redirect").get("notes").getAsString(), dw).stream().limit(2)
+						.toList()) {
+						g.text(font, line, dx, y, UiBits.ink(), false);
+						y += 10;
+					}
+				}
+			}
+			if (r.has("fromMassing")) {
+				g.text(font, TextUtil.ellipsize(font, "detail of massing " + r.get("fromMassing").getAsString() + (r.has("massingVersion") ? " v" + r.get(
+					"massingVersion").getAsString() : ""), dw), dx, y, UiStyle.CLAY_DARK, false);
+				y += 10;
+			}
+			var conf = dev.larattalabs.architect.apiimpl.Wire4c.conformance(j.design().raw().get("conformance"));
+			if (conf.isPresent()) {
+				var c = conf.get();
+				String cl = c.ok() && c.warnings() == 0 ? "conformance: ok (" + UiBits.CHECK + " part names, boxes, size, roofs)" : "conformance: " + (c.ok()
+					? "ok" : "not ok") + ", " + c.warnings() + " warning" + (c.warnings() == 1 ? "" : "s");
+				g.text(font, TextUtil.ellipsize(font, cl, dw), dx, y, c.ok() && c.warnings() == 0 ? UiBits.okText() : UiStyle.CLAY_DARK, false);
+				y += 10;
+				List<String> all = new ArrayList<>(c.errors());
+				all.addAll(c.issues());
+				for (String warn : all.stream().limit(4).toList()) {
+					g.text(font, TextUtil.ellipsize(font, "· " + warn, dw), dx, y, UiStyle.CLAY_DARK, false);
+					y += 10;
+				}
+				if (all.size() > 4) {
+					g.text(font, "· " + (all.size() - 4) + " more", dx, y, UiBits.muted(), false);
+					y += 10;
+				}
+			}
 		} else if (j.variant() != null) {
 			SidecarState.Variant v = j.variant();
 			if (v.from() != null) {
@@ -1468,6 +1590,23 @@ public final class ArchitectScreen extends Screen {
 			button(g, "cancel_design", cancel, bx, by, bw(cancel), false, j.running() && Sidecar.connected(), mx, my,
 				() -> DesignFeature.cancel(j.id()));
 			bx += bw(cancel) + 4;
+		}
+		var jm = j.design() == null ? java.util.Optional.<dev.larattalabs.architect.api.MassingRef>empty() : dev.larattalabs.architect.apiimpl.Wire4c
+			.designMassing(j.design().raw());
+		if (j.fam().equals("done") && jm.isPresent()) {
+			// (4c) a finished massing: show it in the world with the Approve / Redirect… / Cancel bar
+			String rv = "Review massing";
+			JsonObject mraw = Sidecar.state().massing(jm.get().id());
+			boolean grouped = mraw != null && mraw.has("group");
+			button(g, "design:review_massing", rv, bx, by, bw(rv), true, mraw != null && !grouped && inWorld(), mx, my, () -> {
+				String why = dev.larattalabs.architect.client.design.MassingReview.open(jm.get().id());
+				if (why != null) {
+					LibraryFeature.say(why, true);
+				} else {
+					onClose();
+				}
+			});
+			bx += bw(rv) + 4;
 		}
 		if (j.fam().equals("done") && j.blueprintId() != null) {
 			String show = "Show in Library";
@@ -1511,9 +1650,22 @@ public final class ArchitectScreen extends Screen {
 				y += 10;
 			}
 		}
+		// (4c) who approves a massingFirst set
+		boolean architectUi = gr.approvalUi() == dev.larattalabs.architect.api.GroupRequest.ApprovalUi.ARCHITECT;
+		boolean approving = gr.massingFirst() && architectUi && !gr.finished() && Sidecar.connected();
+		if (gr.massingFirst()) {
+			String who = architectUi ? "massings first · approve each shape here" + (gr.maxRedirects() > 0 ? ", " + gr.maxRedirects() + " redirect"
+				+ (gr.maxRedirects() == 1 ? "" : "s") + " each" : "") : "massings first · its owner approves: " + gr.owner().orElse("?");
+			g.text(font, TextUtil.ellipsize(font, who, dw), dx, y, architectUi ? UiStyle.CLAY_DARK : UiBits.muted(), false);
+			y += 10;
+		}
 		y += 3;
 		// the items
 		int by = footerY - 16 - 20;
+		boolean typing = redirectItem != null && redirectItem.startsWith(gr.id() + "/") && approving;
+		if (typing) {
+			by -= TextFieldView.BASE_H + 4;
+		}
 		int rowH = 20;
 		int listH = by - 4 - y;
 		Panels.inset(g, dx, y, dw, listH);
@@ -1524,25 +1676,53 @@ public final class ArchitectScreen extends Screen {
 		for (int i = first; i < Math.min(gr.items().size(), first + fit); i++) {
 			var it = gr.items().get(i);
 			int ry = y + 3 + (i - first) * rowH;
-			String f = switch (it.status()) {
-				case DONE -> "done";
-				case FAILED -> "error";
-				case CANCELLED -> "idle";
-				case QUEUED -> "waiting";
-				default -> "working";
-			};
-			Panels.dot(g, f, dx + 4, ry + 2, false);
+			Panels.dot(g, itemFam(it), dx + 4, ry + 2, false);
 			String name = it.name().orElse(it.itemKey());
 			String right = String.format(Locale.ROOT, "$%.2f", it.cost().usd());
 			int rw = font.width(right);
+			// (4c) Approve / Redirect… / × on a massing that waits (Architect's UI only)
+			int actionsW = 0;
+			if (approving && it.awaitingApproval()) {
+				String ik = it.itemKey();
+				int ax = dx + dw - 8;
+				ax -= font.width("×") + 12;
+				chip(g, "group:item_cancel:" + ik, "×", ax, ry - 2, false, true, mx, my, () -> dev.larattalabs.architect.client.design.SetFeature.approve(
+					gr.id(), List.of(), Map.of(), List.of(ik)));
+				boolean canRedirect = it.rounds() < gr.maxRedirects();
+				ax -= font.width("Redirect…") + 12 + 3;
+				chip(g, "group:item_redirect:" + ik, "Redirect…", ax, ry - 2, (gr.id() + "/" + ik).equals(redirectItem), canRedirect, mx, my,
+					() -> startRedirect(gr.id(), ik));
+				ax -= font.width("Approve") + 12 + 3;
+				chip(g, "group:item_approve:" + ik, "Approve", ax, ry - 2, true, true, mx, my, () -> dev.larattalabs.architect.client.design.SetFeature
+					.approve(gr.id(), List.of(ik), Map.of(), List.of()));
+				actionsW = dx + dw - 8 - ax + 6;
+			}
 			String role = it.role() == dev.larattalabs.architect.api.GroupRequest.Role.LANDMARK ? " ★" : "";
-			g.text(font, TextUtil.ellipsize(font, name + role + " · " + it.type() + (it.wave() == 0 ? " · anchor" : " · wave " + it.wave()), dw - 30 - rw),
+			int titleRoom = actionsW > 0 ? dw - 16 - actionsW : dw - 30 - rw;
+			g.text(font, TextUtil.ellipsize(font, name + role + " · " + it.type() + (it.wave() == 0 ? " · anchor" : " · wave " + it.wave()), titleRoom),
 				dx + 14, ry, UiBits.ink(), false);
-			g.text(font, right, dx + dw - 10 - rw, ry, UiBits.muted(), false);
-			String line = it.status().name().toLowerCase(Locale.ROOT) + (it.step().isEmpty() ? "" : " · " + it.step()) + it.entryId().map(e -> " → " + e)
-				.orElse("") + it.error().map(e -> " · " + e).orElse("");
-			g.text(font, TextUtil.ellipsize(font, line, dw - 24), dx + 14, ry + 9, it.status() == dev.larattalabs.architect.api.Design.Status.FAILED
-				? UiBits.errorText() : UiBits.muted(), false);
+			if (actionsW == 0) {
+				g.text(font, right, dx + dw - 10 - rw, ry, UiBits.muted(), false);
+			}
+			String stage = gr.massingFirst() ? itemStage(gr, it) : it.status().name().toLowerCase(Locale.ROOT);
+			// (4c) a detail pass's conformance: ok, or its warnings (the first one shown)
+			String conf = "";
+			SidecarState.Design dd = it.stage().orElse(null) == dev.larattalabs.architect.api.Group.Stage.DETAIL ? Sidecar.state().design(it.designId())
+				: null;
+			var c = dd == null ? java.util.Optional.<dev.larattalabs.architect.api.Conformance>empty() : dev.larattalabs.architect.apiimpl.Wire4c
+				.conformance(dd.raw().get("conformance"));
+			boolean warn = false;
+			if (c.isPresent()) {
+				warn = !c.get().ok() || c.get().warnings() > 0;
+				List<String> all = new ArrayList<>(c.get().errors());
+				all.addAll(c.get().issues());
+				conf = warn ? " · conformance: " + c.get().warnings() + " warning" + (c.get().warnings() == 1 ? "" : "s") + (all.isEmpty() ? "" : " ("
+					+ all.get(0) + ")") : " · conformance ok";
+			}
+			String line = stage + conf + (it.step().isEmpty() || it.awaitingApproval() || !conf.isEmpty() ? "" : " · " + it.step()) + it.entryId().map(
+				e -> " → " + e).orElse("") + it.error().map(e -> " · " + e).orElse("") + (actionsW > 0 ? " · " + right : "");
+			g.text(font, TextUtil.ellipsize(font, line, dw - 24 - actionsW), dx + 14, ry + 9, it.status() == dev.larattalabs.architect.api.Design.Status.FAILED
+				? UiBits.errorText() : it.awaitingApproval() || warn ? UiStyle.CLAY_DARK : UiBits.muted(), false);
 		}
 		if (gr.items().size() > fit) {
 			TextUtil.Scroll sc = new TextUtil.Scroll().update(gr.items().size() * rowH, fit * rowH);
@@ -1550,9 +1730,37 @@ public final class ArchitectScreen extends Screen {
 			sc.scrollBy(first * rowH);
 			Panels.scrollbar(g, dx + dw - 6, y, listH, sc, false);
 		}
+		// (4c) the redirect notes of one item
+		if (typing) {
+			String key = redirectItem.substring(gr.id().length() + 1);
+			String iname = gr.item(key).flatMap(dev.larattalabs.architect.api.Group.Item::name).orElse(key);
+			String send = "Redirect";
+			int sw = bw(send);
+			int fy = by - 1;
+			textField(g, Focus.REDIRECT, redirectView, redirectNotes, dx, fy + 1, dw - sw - 6, new TextFieldView.Style(TextUtil.ellipsize(font, iname, 70)
+				+ ": ", UiStyle.CLAY_DARK, "how should it change? Enter sends", null, null, 0, 1));
+			button(g, "group:redirect_send", send, dx + dw - sw, fy, sw, true, !redirectNotes.value().isBlank(), mx, my, this::sendRedirect);
+			by += TextFieldView.BASE_H + 4;
+		}
 		// actions
 		int bx = dx;
 		boolean live = Sidecar.connected() && !gr.finished();
+		if (approving && !gr.awaiting().isEmpty()) {
+			String all = "Approve all";
+			button(g, "group:approve_all", all, bx, by, bw(all), true, true, mx, my, () -> dev.larattalabs.architect.client.design.SetFeature.approve(gr
+				.id(), gr.awaiting(), Map.of(), List.of()));
+			bx += bw(all) + 4;
+			String show = "Show massings";
+			// on a narrow panel (GUI scale 4) it gives way to Cancel set (the row shows by itself when the set starts waiting)
+			if (bx + bw(show) + 4 + bw("Cancel set") <= dx + dw) {
+				button(g, "group:show_massings", show, bx, by, bw(show), false, inWorld(), mx, my, () -> {
+					String why = dev.larattalabs.architect.client.design.MassingReview.showSet(gr.id());
+					dev.larattalabs.architect.client.design.SetFeature.say(why != null ? why
+						: "The massings stand in a row in front of you (close this screen to see them)", why != null);
+				});
+				bx += bw(show) + 4;
+			}
+		}
 		if (st == dev.larattalabs.architect.api.Group.Status.PAUSED_BUDGET) {
 			String res = "Resume";
 			button(g, "group:resume", res, bx, by, bw(res), true, live, mx, my, () -> dev.larattalabs.architect.client.design.SetFeature.resumeGroup(gr
@@ -1566,10 +1774,13 @@ public final class ArchitectScreen extends Screen {
 				.id(), to));
 			bx += bw(ext) + 4;
 		}
-		String cancel = "Cancel set";
-		button(g, "group:cancel", cancel, bx, by, bw(cancel), false, live, mx, my, () -> dev.larattalabs.architect.client.design.SetFeature
-			.cancelGroup(gr.id()));
-		bx += bw(cancel) + 4;
+		// a set its owner approves (approvalUi owner) is the owner's to run: no buttons but Show in Library
+		if (architectUi || !gr.massingFirst()) {
+			String cancel = "Cancel set";
+			button(g, "group:cancel", cancel, bx, by, bw(cancel), false, live, mx, my, () -> dev.larattalabs.architect.client.design.SetFeature
+				.cancelGroup(gr.id()));
+			bx += bw(cancel) + 4;
+		}
 		String show = "Show in Library";
 		if (bx + bw(show) <= dx + dw) {
 			button(g, "group:library", show, bx, by, bw(show), gr.finished(), gr.done() > 0, mx, my, () -> showCollection(

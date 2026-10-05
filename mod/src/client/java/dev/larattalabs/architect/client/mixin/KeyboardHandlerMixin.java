@@ -17,7 +17,7 @@ public abstract class KeyboardHandlerMixin {
 	 */
 	@Inject(method = "keyPress", at = @At("HEAD"), cancellable = true)
 	private void architect$wizardKeys(long window, int action, KeyEvent event, CallbackInfo ci) {
-		if (PlacementFeature.onKey(action, event)) {
+		if (PlacementFeature.onKey(action, event) || dev.larattalabs.architect.client.design.MassingReview.onKey(action, event)) {
 			ci.cancel();
 		}
 	}

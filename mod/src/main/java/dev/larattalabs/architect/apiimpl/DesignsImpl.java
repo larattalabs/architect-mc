@@ -167,6 +167,19 @@ final class DesignsImpl implements Designs {
 				r.profile().forEach(p::add);
 				o.add("profile", p);
 			}
+			// 4c (only when set: a 4b helper sees the 4b shape)
+			if (r.massing()) {
+				o.addProperty("massing", true);
+			}
+			if (r.fromMassing() != null) {
+				o.addProperty("fromMassing", r.fromMassing());
+				if (r.massingVersion() != null) {
+					o.addProperty("massingVersion", r.massingVersion());
+				}
+			}
+			if (r.context() != null) {
+				o.add("context", Wire4c.contextWire(r.context()));
+			}
 		}
 		return o;
 	}
@@ -182,7 +195,25 @@ final class DesignsImpl implements Designs {
 		if (r.bible() != null && !b.sidecarFeatures().contains("bibles")) {
 			return "designing with a bible needs a helper with bibles (phase 4b)";
 		}
-		return null;
+		return refusal4c(r, b.protocol(), b.sidecarFeatures());
+	}
+
+	/** Why the 4c fields can't be sent (null: they can). Pure. */
+	static @Nullable String refusal4c(DesignRequest r, int protocol, java.util.Set<String> features) {
+		boolean uses = r.massing() || r.fromMassing() != null || r.context() != null;
+		if (uses && (protocol < 2 || !features.contains("massing"))) {
+			return "massings, detail passes and context need a helper with the massing pass (phase 4c); this one does not have it";
+		}
+		if (r.massing() && r.fromMassing() != null) {
+			return "a request is a massing or the detail of one, not both";
+		}
+		if (r.massingVersion() != null && r.fromMassing() == null) {
+			return "massingVersion needs fromMassing";
+		}
+		if (r.fromMassing() != null && !Wire4c.MASSING_ID.matcher(r.fromMassing()).matches()) {
+			return "fromMassing is not a massing id: " + r.fromMassing();
+		}
+		return Wire4c.contextProblem(r.context());
 	}
 
 	@Override
@@ -272,7 +303,8 @@ final class DesignsImpl implements Designs {
 		}
 		return new Design(id == null ? "?" : id, Design.Status.of(str(raw, "status")), str(raw, "step") == null ? "" : str(raw, "step"),
 			Optional.ofNullable(str(raw, "blueprintId")), raw.has("cost") && raw.get("cost").isJsonObject() ? Cost.fromJson(raw.getAsJsonObject("cost"))
-			: Cost.NONE, Optional.ofNullable(str(raw, "error")), req, Optional.ofNullable(owner), num(raw, "createdAt"), num(raw, "updatedAt"));
+			: Cost.NONE, Optional.ofNullable(str(raw, "error")), req, Optional.ofNullable(owner), num(raw, "createdAt"), num(raw, "updatedAt"),
+			Wire4c.designMassing(raw), Wire4c.conformance(raw.get("conformance")));
 	}
 
 	/**
@@ -320,9 +352,16 @@ final class DesignsImpl implements Designs {
 		if (is != null && is.isJsonArray()) {
 			for (JsonElement e : is.getAsJsonArray()) {
 				if (e.isJsonObject()) {
-					b.append(RecordBook.str(e.getAsJsonObject(), "status")).append(':').append(RecordBook.str(e.getAsJsonObject(), "step")).append('|');
+					JsonObject i = e.getAsJsonObject();
+					b.append(RecordBook.str(i, "status")).append(':').append(RecordBook.str(i, "step")).append(':').append(RecordBook.str(i, "stage"))
+						.append(':').append(Wire4c.ref(i.get("massing")).map(Object::toString).orElse("")).append(':').append(RecordBook.num(i, "rounds"))
+						.append(':').append(RecordBook.str(i, "designId")).append('|');
 				}
 			}
+		}
+		JsonElement aw = g.get("awaiting");
+		if (aw != null) {
+			b.append("awaiting=").append(aw);
 		}
 		return b.toString();
 	}
@@ -333,7 +372,7 @@ final class DesignsImpl implements Designs {
 			return "the Architect helper is not running";
 		}
 		if (b.protocol() < 2 || !b.sidecarFeatures().contains(feature)) {
-			return what + " need a helper with phase 4b (" + feature + "); this one does not have it";
+			return what + " need a helper with phase " + ("massing".equals(feature) ? "4c" : "4b") + " (" + feature + "); this one does not have it";
 		}
 		return null;
 	}
@@ -445,15 +484,22 @@ final class DesignsImpl implements Designs {
 		}
 	}
 
-	/** Server thread: GROUP_UPDATED when it changed, GROUP_DONE once (after a library reload, so its entries are loaded). */
+	/**
+	 * Server thread: GROUP_UPDATED when it changed, GROUP_AWAITING_APPROVAL when an item waits with a massing version not
+	 * reported before (4c), GROUP_DONE once (after a library reload, so its entries are loaded).
+	 */
 	void fireGroup(JsonObject raw) {
 		RecordBook.Firing f = groups.fire(raw);
-		if (!f.updated() && !f.done()) {
+		Group g = Wire4b.group(raw);
+		boolean awaiting = awaitingFires(g);
+		if (!f.updated() && !f.done() && !awaiting) {
 			return;
 		}
-		Group g = Wire4b.group(raw);
 		if (f.updated()) {
 			ApiEvents.groupUpdated(g);
+		}
+		if (awaiting) {
+			ApiEvents.groupAwaitingApproval(g);
 		}
 		if (f.done()) {
 			MinecraftServer s = ApiImpl.server();
@@ -464,9 +510,207 @@ final class DesignsImpl implements Designs {
 		}
 	}
 
-	/** A world loaded (server thread): GROUP_DONE for the groups that finished while none was. */
+	/**
+	 * A world loaded (server thread): GROUP_DONE for the groups that finished while none was, GROUP_AWAITING_APPROVAL for the
+	 * ones that started waiting (4c), MASSING_DONE for the massing versions installed meanwhile (4c).
+	 */
 	void catchUpGroups() {
 		groups.pendingDone().forEach(this::fireGroup);
+		for (JsonObject raw : groups.all()) {
+			Group g = Wire4b.group(raw);
+			if (g.status() == Group.Status.AWAITING_APPROVAL && awaitingFires(g)) {
+				ApiEvents.groupAwaitingApproval(g);
+			}
+		}
+		massings.pendingDone().forEach(this::fireMassing);
+	}
+
+	// ------------------------------------------------------------------ 4c: massings, approval
+
+	/** The massing versions seen (by {@code id@version}), the MASSING_DONE ledger; persisted in api-massings.json. */
+	final RecordBook massings = new RecordBook("massing", Blueprints.gameDataDir().resolve("api-massings.json"), 300, m -> true,
+		m -> new JobLedger.Mark("installed", Wire4c.ref(m.get("detail")).map(Object::toString).orElse(""), RecordBook.num(m, "createdAt"), 0),
+		Wire4c::versionKey, Wire4c::doneKey);
+	/** The GROUP_AWAITING_APPROVAL tokens reported, persisted in api-awaiting.json. */
+	private final AwaitingLedger awaitingLedger = new AwaitingLedger();
+	private boolean awaitingLoaded;
+
+	private static Path awaitingFile() {
+		return Blueprints.gameDataDir().resolve("api-awaiting.json");
+	}
+
+	/** Whether GROUP_AWAITING_APPROVAL fires for {@code g} now (and remembers it, persisted). */
+	private synchronized boolean awaitingFires(Group g) {
+		if (g.status() != Group.Status.AWAITING_APPROVAL) {
+			return false;
+		}
+		if (!awaitingLoaded) {
+			awaitingLoaded = true;
+			try {
+				Path f = awaitingFile();
+				if (Files.exists(f)) {
+					List<String> keys = new ArrayList<>();
+					JsonParser.parseString(Files.readString(f, StandardCharsets.UTF_8)).getAsJsonObject().getAsJsonArray("reported").forEach(e -> keys.add(e
+						.getAsString()));
+					awaitingLedger.restore(keys);
+				}
+			} catch (IOException | RuntimeException e) {
+				Architect.LOGGER.warn("Could not read {}; GROUP_AWAITING_APPROVAL may fire again", awaitingFile(), e);
+			}
+		}
+		if (!awaitingLedger.fire(JobLedger.key(g.id(), g.createdAt()), Wire4c.awaitingTokens(g))) {
+			return false;
+		}
+		JsonObject o = new JsonObject();
+		JsonArray a = new JsonArray();
+		awaitingLedger.keys().forEach(a::add);
+		o.add("reported", a);
+		try {
+			Path f = awaitingFile();
+			Files.createDirectories(f.getParent());
+			Path tmp = f.resolveSibling(f.getFileName() + ".tmp");
+			Files.writeString(tmp, GSON.toJson(o), StandardCharsets.UTF_8);
+			Files.move(tmp, f, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+		} catch (IOException e) {
+			Architect.LOGGER.warn("Could not save {}", awaitingFile(), e);
+		}
+		return true;
+	}
+
+	/** {@code massing.upsert} or a snapshot's / massing.list's massing (any thread): merged; MASSING_DONE on the server thread. */
+	void massingChanged(JsonObject raw, boolean fire) {
+		JsonObject m = massings.merge(raw);
+		if (m != null && fire) {
+			ApiImpl.runOnServer(() -> fireMassing(m));
+		}
+	}
+
+	/** {@code massing.removed {massingId}}: every version of it is forgotten. */
+	void massingRemoved(String massingId) {
+		massings.removeIf(m -> massingId.equals(RecordBook.str(m, "id")));
+	}
+
+	/** Server thread: MASSING_DONE once per installed version. */
+	void fireMassing(JsonObject raw) {
+		if (massings.fire(raw).done()) {
+			ApiEvents.massingDone(Wire4c.massing(raw));
+		}
+	}
+
+	/** Every version this game knows of {@code massingId}, ascending. */
+	private List<JsonObject> versionsOf(String massingId) {
+		List<JsonObject> out = new ArrayList<>();
+		for (JsonObject m : massings.all()) {
+			if (massingId.equals(RecordBook.str(m, "id"))) {
+				out.add(m);
+			}
+		}
+		out.sort(java.util.Comparator.comparingLong(m -> RecordBook.num(m, "version")));
+		return out;
+	}
+
+	@Override
+	public Optional<dev.larattalabs.architect.api.Massing> massing(String massingId) {
+		List<JsonObject> vs = versionsOf(massingId);
+		return vs.isEmpty() ? Optional.empty() : Optional.of(Wire4c.massing(vs.get(vs.size() - 1)));
+	}
+
+	@Override
+	public Optional<dev.larattalabs.architect.api.Massing> massing(String massingId, int version) {
+		List<JsonObject> vs = versionsOf(massingId);
+		if (vs.isEmpty()) {
+			return Optional.empty();
+		}
+		// an older version's record was stored when it was the latest: its versions list comes from the newest record
+		JsonElement all = vs.get(vs.size() - 1).get("versions");
+		return vs.stream().filter(m -> RecordBook.num(m, "version") == version).findFirst().map(m -> {
+			JsonObject c = m.deepCopy();
+			if (all != null) {
+				c.add("versions", all.deepCopy());
+			}
+			return Wire4c.massing(c);
+		});
+	}
+
+	@Override
+	public List<dev.larattalabs.architect.api.Massing> listMassings(@Nullable String owner) {
+		Map<String, JsonObject> latest = new LinkedHashMap<>();
+		for (JsonObject m : massings.all()) {
+			String id = RecordBook.str(m, "id");
+			JsonObject had = latest.get(id);
+			if (had == null || RecordBook.num(m, "version") > RecordBook.num(had, "version")) {
+				latest.put(id, m);
+			}
+		}
+		List<dev.larattalabs.architect.api.Massing> out = new ArrayList<>();
+		for (JsonObject m : latest.values()) {
+			dev.larattalabs.architect.api.Massing v = Wire4c.massing(m);
+			if (owner == null || owner.equals(v.owner().orElse(null))) {
+				out.add(v);
+			}
+		}
+		out.sort((a, b) -> Long.compare(b.createdAt(), a.createdAt()));
+		return out;
+	}
+
+	@Override
+	public CompletableFuture<Group.Redirected> redirectMassing(String massingId, String notes, @Nullable String owner) {
+		if (notes == null || notes.isBlank() || notes.strip().length() > 2000) {
+			return ApiImpl.onServerFuture(CompletableFuture.failedFuture(new IllegalArgumentException("redirect notes are 1 to 2000 characters")));
+		}
+		JsonObject m = msg("massing.redirect");
+		m.addProperty("massingId", massingId);
+		m.addProperty("notes", notes.strip());
+		if (owner != null) {
+			m.addProperty("owner", owner);
+		}
+		return ask("massing", "massing redirects", m).thenApply(Wire4c::redirected);
+	}
+
+	@Override
+	public CompletableFuture<Integer> deleteMassing(String massingId) {
+		JsonObject m = msg("massing.delete");
+		m.addProperty("massingId", massingId);
+		return ask("massing", "massings", m).thenApply(r -> {
+			// the ack's versions is a count (sidecar massings.ts delete); an array is counted too
+			JsonElement e = r.get("versions");
+			int n = e == null ? 0 : e.isJsonArray() ? e.getAsJsonArray().size() : e.isJsonPrimitive() ? e.getAsInt() : 0;
+			massingRemoved(massingId);
+			return n;
+		});
+	}
+
+	@Override
+	public CompletableFuture<Group.Approval> approveGroup(String groupId, List<String> approve, Map<String, String> redirect, List<String> cancel,
+		@Nullable String owner) {
+		JsonObject m = Wire4c.approveMessage(groupId, approve == null ? List.of() : approve, redirect == null ? Map.of() : redirect, cancel == null
+			? List.of() : cancel, owner);
+		return ask("massing", "group approvals", m).thenApply(Wire4c::approval);
+	}
+
+	/** On every connect (protocol 2, massing): {@code massing.list {}}, the latest version of every massing, merged (no events). */
+	void refreshMassings() {
+		ClientBridge b = ApiImpl.bridge();
+		if (unavailable4b(b, "massing", "massings") != null) {
+			return;
+		}
+		b.send(msg("massing.list")).thenAccept(ack -> {
+			if (!ack.has("ok") || !ack.get("ok").getAsBoolean() || !ack.has("result")) {
+				return;
+			}
+			JsonElement ms = ack.getAsJsonObject("result").get("massings");
+			if (ms != null && ms.isJsonArray()) {
+				for (JsonElement e : ms.getAsJsonArray()) {
+					if (e.isJsonObject()) {
+						massingChanged(e.getAsJsonObject(), true);
+					}
+				}
+				massings.flush();
+			}
+		}).exceptionally(t -> {
+			Architect.LOGGER.info("massing.list failed: {}", t.getMessage());
+			return null;
+		});
 	}
 
 	private static @Nullable String str(JsonObject o, String k) {

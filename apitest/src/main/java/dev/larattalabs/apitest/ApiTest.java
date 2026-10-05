@@ -87,6 +87,7 @@ public class ApiTest implements ModInitializer {
 		SiteEvents.JOB_DONE.register(j -> event("JOB_DONE", ApiTestJobs.job(j)));
 		ApiTestJobs.init();
 		ApiTestSets.init();
+		ApiTestMassing.init();
 		CommandRegistrationCallback.EVENT.register((d, ctx, env) -> d.register(Commands.literal("apitest")
 			.then(Commands.argument("args", StringArgumentType.greedyString()).executes(ApiTest::run))));
 	}
@@ -183,6 +184,18 @@ public class ApiTest implements ModInitializer {
 			case "reskinvariant":
 			case "survival": {
 				return ApiTestSets.step(src, a);
+			}
+			case "massingreq":
+			case "massingget":
+			case "massings":
+			case "redirect":
+			case "massingdelete":
+			case "detail":
+			case "designget":
+			case "approve":
+			case "composite":
+			case "compositeclear": {
+				return ApiTestMassing.step(src, a);
 			}
 			case "place":
 			case "check": {
@@ -428,6 +441,20 @@ public class ApiTest implements ModInitializer {
 		o.addProperty("owner", d.owner().orElse(null));
 		o.addProperty("error", d.error().orElse(null));
 		o.add("request", d.request());
+		// 1.3.0
+		o.addProperty("massing", d.massing().map(Object::toString).orElse(null));
+		o.addProperty("fromMassing", d.fromMassing().map(Object::toString).orElse(null));
+		d.conformance().ifPresent(c -> {
+			JsonObject j = new JsonObject();
+			j.addProperty("ok", c.ok());
+			JsonArray er = new JsonArray();
+			c.errors().forEach(er::add);
+			j.add("errors", er);
+			JsonArray is = new JsonArray();
+			c.issues().forEach(is::add);
+			j.add("issues", is);
+			o.add("conformance", j);
+		});
 		return o;
 	}
 

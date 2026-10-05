@@ -21,7 +21,8 @@ public final class ApiRules {
 	 * The Java-side feature names, always present (docs/CONTRACT.md phase 4a: STABLE within major version 1, never renamed or
 	 * removed).
 	 */
-	public static final java.util.Set<String> JAVA_FEATURES = java.util.Set.of("sites", "events", "designs", "library", "survey", "survivalInfo");
+	public static final java.util.Set<String> JAVA_FEATURES = java.util.Set.of("sites", "events", "designs", "library", "survey", "survivalInfo",
+		"compositePreview");
 
 	private ApiRules() {
 	}

@@ -207,6 +207,26 @@ public final class ApiImpl implements ArchitectApi {
 		instance().library.reskinChanged(reskin);
 	}
 
+	/** (4c) {@code massing.upsert {massing}} or a snapshot's massing: merged, MASSING_DONE once per installed version. */
+	public static void massingChanged(JsonObject massing) {
+		instance().designs.massingChanged(massing.deepCopy(), true);
+	}
+
+	/** (4c) {@code massing.removed {massingId}}. */
+	public static void massingRemoved(String massingId) {
+		instance().designs.massingRemoved(massingId);
+	}
+
+	/** (4c) The link synced with a massing helper: fetch every massing ({@code massing.list}) so the API's list is complete. */
+	public static void massingsSync() {
+		instance().designs.refreshMassings();
+	}
+
+	/** The designs facade, for the client UI (massings, approval). */
+	public static Designs designsImpl() {
+		return instance().designs;
+	}
+
 	/** The bibles, for the client UI (installed + built in). */
 	public static BiblesImpl biblesImpl() {
 		return instance().bibles;

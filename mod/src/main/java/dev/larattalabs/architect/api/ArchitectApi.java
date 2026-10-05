@@ -13,8 +13,11 @@ import net.minecraft.server.MinecraftServer;
  * {@link #VERSION} at runtime when it needs a newer minor version.
  */
 public interface ArchitectApi {
-	/** 1.2.0: bibles, design groups, estimates, re-skins, open types, named parts, the survival toggle (docs/CONTRACT.md phase 4b). */
-	String VERSION = "1.2.0";
+	/**
+	 * 1.2.0: bibles, design groups, estimates, re-skins, open types, named parts, the survival toggle (docs/CONTRACT.md phase 4b).
+	 * 1.3.0: massings, redirects, massingFirst groups and their approval, context, the composite preview (phase 4c).
+	 */
+	String VERSION = "1.3.0";
 
 	/** The singleton. Safe to call from any mod's initializer (it does not depend on Architect's init order). */
 	static ArchitectApi get() {
@@ -46,7 +49,8 @@ public interface ArchitectApi {
 	 * What this game can do: the sidecar's {@code features} (when the snapshot names any; {@code "protocol2"} when it chose
 	 * protocol 2) plus Java-only ones ({@code "designs"}, {@code "survey"}, {@code "sites"}, {@code "events"}, ...). Any thread.
 	 * Since 1.2.0, a 4b helper adds {@code "bibles"}, {@code "designGroups"}, {@code "namedParts"}, {@code "openTypes"},
-	 * {@code "estimates"} and {@code "reskin"}; {@code "survivalInfo"} is always there.
+	 * {@code "estimates"} and {@code "reskin"}; {@code "survivalInfo"} is always there. Since 1.3.0, a 4c helper adds
+	 * {@code "massing"}, and {@code "compositePreview"} ({@code ArchitectClientApi.previewComposite}) is always there.
 	 */
 	Set<String> features();
 }

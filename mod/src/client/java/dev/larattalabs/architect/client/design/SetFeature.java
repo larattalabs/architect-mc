@@ -63,6 +63,11 @@ public final class SetFeature {
 		public int concurrency = SetSpec.DEFAULT_CONCURRENCY;
 		/** Null = no budget. */
 		public @Nullable Double budgetUsd;
+		/** (4c) Every building a massing first (default on; sent only to a helper with massings). */
+		public boolean massingFirst = true;
+		public int maxRedirects = SetSpec.DEFAULT_REDIRECTS;
+		/** (4c) Text for every brief: the site, its purpose, the neighbours, the street. */
+		public final TextModel context = new TextModel(SetSpec.MAX_CONTEXT + 50);
 		public @Nullable String sendError;
 		public boolean sending;
 		// the live estimate
@@ -81,7 +86,9 @@ public final class SetFeature {
 		}
 
 		public SetSpec.Draft draft() {
-			return new SetSpec.Draft(name.value(), bible, items.stream().map(Item::spec).toList(), concurrency, budgetUsd);
+			boolean m4c = has("massing");
+			return new SetSpec.Draft(name.value(), bible, items.stream().map(Item::spec).toList(), concurrency, budgetUsd, massingFirst && m4c, maxRedirects,
+				m4c ? context.value() : null);
 		}
 
 		public Map<String, String> errors() {
@@ -344,6 +351,32 @@ public final class SetFeature {
 		}, String.format(java.util.Locale.ROOT, "The set %s may now spend $%.2f", id, budgetUsd));
 	}
 
+	/**
+	 * (4c) A set's approval in the Designs tab ({@code group.approve}): approve, redirect (itemKey -> notes) or cancel items. No
+	 * owner is sent: a set approved by its owner (approvalUi owner) refuses it, and the tab shows no buttons for one.
+	 */
+	public static CompletableFuture<SidecarLink.Ack> approve(String groupId, List<String> approve, Map<String, String> redirect, List<String> cancel) {
+		JsonObject m = dev.larattalabs.architect.apiimpl.Wire4c.approveMessage(groupId, approve, redirect, cancel, null);
+		List<String> what = new ArrayList<>();
+		if (!approve.isEmpty()) {
+			what.add("approved " + String.join(", ", approve) + " (the detail starts)");
+		}
+		if (!redirect.isEmpty()) {
+			what.add("redirected " + String.join(", ", redirect.keySet()) + " (a new massing)");
+		}
+		if (!cancel.isEmpty()) {
+			what.add("dropped " + String.join(", ", cancel));
+		}
+		String done = "Set " + groupId + ": " + String.join("; ", what);
+		return Sidecar.link().send(m).whenComplete((ack, err) -> {
+			if (err != null || !ack.ok()) {
+				say("Not sent: " + (err != null ? err.getMessage() : ack.error()), true);
+			} else {
+				say(done, false);
+			}
+		});
+	}
+
 	public static CompletableFuture<SidecarLink.Ack> cancelBible(String jobId) {
 		return send("bible.cancel", m -> m.addProperty("jobId", jobId), "Cancelled the bible job " + jobId);
 	}
@@ -395,6 +428,9 @@ public final class SetFeature {
 			o.addProperty("bibleJob", f.bibleJob);
 			o.addProperty("concurrency", f.concurrency);
 			o.addProperty("budgetUsd", f.budgetUsd);
+			o.addProperty("massingFirst", f.massingFirst);
+			o.addProperty("maxRedirects", f.maxRedirects);
+			o.addProperty("context", f.context.value());
 			com.google.gson.JsonArray items = new com.google.gson.JsonArray();
 			for (Item it : f.items) {
 				JsonObject j = new JsonObject();

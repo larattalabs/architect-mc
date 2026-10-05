@@ -9,7 +9,7 @@ tests.
 ## Connecting
 
 - **Where:** `ws://127.0.0.1:<port>`, loopback only. The port is `ARCHITECT_DEV_PORT`, default `7891`. The client's sidecar port is `ARCHITECT_PORT` (default `7890`). Run several clients side by side by
-  giving each its own pair (the repo's sessions use 7890/7891, 7990/7991, 8090/8091 and 8190/8191).
+  giving each its own pair (the repo's sessions use 7890/7891, 7990/7991, 8090/8091, 8190/8191 and 8790/8791).
 - **When:** dev runs only (`gradlew runClient`, or any client with `ARCHITECT_DEV_PORT` set). It starts when the client
   has started, before a world loads.
 - **Token:** every connection needs the shared secret, as `?token=<token>` on the URL or `Authorization: Bearer <token>`.
@@ -180,17 +180,53 @@ Controls (`dev.ui.click`): `design_set`, `design:bible`, `design:profile`, `type
 `filter:collection`, `collection:reskin`, `collection:clear`, `sort` (when the sort chips fold into one), and in the
 Variants dialog `bible:<id>`.
 
+### Massings and the composite preview (phase 4c)
+
+| hook | arguments, result |
+|---|---|
+| `dev.massing.state` | {} - the massing review (massing, version, title, origin, turns, onPlot), the massing jobs it waits for (`pending`), the set shown in a row (`shownSet`, `shownItems` left to right), the status line, the bar's rect (`barRect`, GUI px), the open screen (and the Redirect… dialog's notes), plus `composite` (= `dev.composite.state`) |
+| `dev.massing.review` | {massing} - Review massing: its latest version as a massing ghost (on the plot it was made for, else in front of the player) with the Approve / Redirect… / Cancel bar; fails for a set's massing |
+| `dev.massing.key` | {key: enter\|r\|backspace\|escape} - press a review-bar key through the keyboard's own path (no screen open): Enter approves (the detail pass of the reviewed version), R opens Redirect…, Backspace/Esc cancels -> {consumed} + the state. (`dev.key` with no screen open clicks key mappings and never reaches the bar.) |
+| `dev.massing.redirect` | {notes, submit?: true} - in the open Redirect… dialog: type the notes and press Redirect (`massing.redirect`); the new version opens the review again when it is installed |
+| `dev.massing.showSet` | {group} - Show massings: a set's massings (not yet detailed) in a row in front of the player, entrances facing them |
+| `dev.massing.hideSet` | {} - hide that row |
+| `dev.composite.state` | {reset?: false} - every composite key: its generation, `built`, `buildMs`, `cells` (drawn, within the cap), `quads`, and per layer `source`, `origin`, `turns`, `style`, `onlyCells` (count, -1 = all), `cells`, `quads`, `size`, `overCap`, `mode` (`cells` \| `outline:cap` \| `outline:distance` \| `building` \| `error`), `error`; `maxCells` (200000), `fullDistance` (160); `lastFrame` {quads, outlines, ms, maxMs, frames}. `reset` clears maxMs (after the answer is built) |
+| `dev.composite.clear` | {key?} - clear one composite key, or all |
+
+`dev.design.fill` takes `massingFirst: true|false|null` (null = the default: on for L and plot); `dev.set.fill` takes
+`massingFirst`, `maxRedirects` (0-10) and `context`; `dev.ui.focus` takes `set_context` and `redirect` (the Designs
+tab's redirect notes for a set item). `dev.sidecar.state` adds `massings` (the latest version of each: id, version,
+versions, designId, type, name, itemKey, owner, group, size, nbt, redirect, detail, createdAt).
+
+Controls (`dev.ui.click`): on the Design tab `design:massing_first`; in the set dialog `set:massing_first`,
+`set:redirects-`, `set:redirects+` (and the field `field:set_context`); in the Designs tab, on a set waiting for
+approval (approvalUi architect) `group:item_approve:<itemKey>`, `group:item_redirect:<itemKey>` (then type into the
+`redirect` field), `group:item_cancel:<itemKey>`, `group:redirect_send`, `group:approve_all`, `group:show_massings`; on a
+finished massing design `design:review_massing`. A set approved by its owner (approvalUi owner) has none of these, and no
+`group:cancel` either.
+
+The composite preview's Java API is `ArchitectClientApi.previewComposite` (apitest drives it with `/apitest composite`);
+there is no DevBridge hook to make layers, so tests go through the API as another mod would.
+
 ### Sidecar and launcher
 
 | hook | arguments, result |
 |---|---|
 | `dev.launcher.restart` | {} - Restart helper (Status tab) |
 | `dev.launcher.state` | {} - the launcher: state, detail, source, node, pid, reuse, log tail |
-| `dev.sidecar.state` | {} - the sidecar link and state: status (no key), designs, variants, jobs (id, status, step, error, resultBlob), groups, bibleJobs (without the request), reskins, bibleIndex (id, name, version, builtin, sheetPath), protocol, features |
+| `dev.sidecar.state` | {} - the sidecar link and state: status (no key), designs, variants, jobs (id, status, step, error, resultBlob), groups, bibleJobs (without the request), reskins, bibleIndex (id, name, version, builtin, sheetPath), massings (4c), protocol, features |
 
 ## Changelog
 
 Semi-stable: a hook may change or go, and every such change is listed here, newest first.
+
+- **2026-10-05 (phase 4c, mod side):** new `dev.massing.state|review|key|redirect|showSet|hideSet` and
+  `dev.composite.state|clear`. `dev.design.fill` takes `massingFirst`, `dev.set.fill` takes `massingFirst`,
+  `maxRedirects` and `context`, `dev.ui.focus` takes `set_context` and `redirect`. `dev.sidecar.state` adds `massings`.
+  The Designs tab lists massing jobs (kind MASSING) and detail passes (kind DETAIL); a set's rows carry the approval
+  controls listed above. `tools/apitest.mjs massing` (and `composite`) drives the 4c API (apitest `/apitest massingreq,
+  massingget, massings, redirect, massingdelete, detail, designget, approve, composite, compositeclear`);
+  `tools/p4c-ui.mjs` walks the 4c screens with screenshots.
 
 - **2026-10-05 (phase 4b, mod side):** new `dev.set.open|fill|draft|submit|close|state`, `dev.library.reskin`,
   `dev.group.action`, `dev.bibles`. `dev.library.filter` takes `collection`, `dev.library.variants.set` takes `bible`,

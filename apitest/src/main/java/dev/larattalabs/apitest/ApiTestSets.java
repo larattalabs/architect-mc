@@ -91,6 +91,16 @@ final class ApiTestSets {
 		if (s(o, "bible") != null) {
 			r = r.withBible(s(o, "bible"), o.has("bibleVersion") ? o.get("bibleVersion").getAsInt() : null);
 		}
+		// 1.3.0: {massing?: bool, fromMassing?, massingVersion?, context?: text | object}
+		if (o.has("massing")) {
+			r = r.massing(o.get("massing").getAsBoolean());
+		}
+		if (s(o, "fromMassing") != null) {
+			r = r.fromMassing(s(o, "fromMassing"), o.has("massingVersion") ? o.get("massingVersion").getAsInt() : null);
+		}
+		if (o.has("context")) {
+			r = r.withContext(o.get("context"));
+		}
 		return r;
 	}
 
@@ -102,9 +112,18 @@ final class ApiTestSets {
 			items.add(new GroupRequest.Item(s(i, "itemKey"), design(i), GroupRequest.Role.of(s(i, "role")), i.has("wave") ? i.get("wave").getAsInt() : null,
 				i.has("anchor") && i.get("anchor").getAsBoolean()));
 		}
-		return new GroupRequest(s(o, "name"), s(o, "bible"), o.has("bibleVersion") ? o.get("bibleVersion").getAsInt() : null, ApiTest.OWNER,
-			o.has("ext") ? o.getAsJsonObject("ext") : null, o.has("concurrency") ? o.get("concurrency").getAsInt() : null,
-			o.has("budgetUsd") ? o.get("budgetUsd").getAsDouble() : null, items);
+		GroupRequest g = new GroupRequest(s(o, "name"), s(o, "bible"), o.has("bibleVersion") ? o.get("bibleVersion").getAsInt() : null, s(o, "owner")
+			!= null ? s(o, "owner") : ApiTest.OWNER, o.has("ext") ? o.getAsJsonObject("ext") : null, o.has("concurrency") ? o.get("concurrency").getAsInt()
+			: null, o.has("budgetUsd") ? o.get("budgetUsd").getAsDouble() : null, items);
+		// 1.3.0: {massingFirst?, approvalUi?: architect|owner, maxRedirects?, context?}
+		if (o.has("massingFirst") && o.get("massingFirst").getAsBoolean()) {
+			g = g.withMassingFirst(s(o, "approvalUi") == null ? null : GroupRequest.ApprovalUi.of(s(o, "approvalUi")), o.has("maxRedirects") ? o.get(
+				"maxRedirects").getAsInt() : null);
+		}
+		if (o.has("context")) {
+			g = g.withContext(o.get("context"));
+		}
+		return g;
 	}
 
 	static JsonElement step(CommandSourceStack src, String[] a) {
@@ -301,9 +320,25 @@ final class ApiTestSets {
 			j.addProperty("model", i.model());
 			j.addProperty("type", i.type());
 			j.addProperty("error", i.error().orElse(null));
+			// 1.3.0
+			j.addProperty("stage", i.stage().map(Group.Stage::wire).orElse(null));
+			j.addProperty("massing", i.massing().map(Object::toString).orElse(null));
+			j.addProperty("rounds", i.rounds());
+			JsonArray ds = new JsonArray();
+			i.designIds().forEach(ds::add);
+			j.add("designIds", ds);
+			j.addProperty("awaitingApproval", i.awaitingApproval());
+			j.addProperty("detailed", i.detailed());
 			items.add(j);
 		}
 		o.add("items", items);
+		o.addProperty("massingFirst", g.massingFirst());
+		o.addProperty("approvalUi", g.approvalUi().wire());
+		o.addProperty("maxRedirects", g.maxRedirects());
+		o.add("context", g.context().orElse(null));
+		JsonArray aw = new JsonArray();
+		g.awaiting().forEach(aw::add);
+		o.add("awaiting", aw);
 		return o;
 	}
 

@@ -109,6 +109,26 @@ public interface SiteEvents {
 		}
 	});
 	/**
+	 * A massing version was installed (a massing job or a redirect finished), once per version; since 1.3.0. A failed massing
+	 * job has no record: it shows only as {@link #DESIGN_DONE} with status FAILED and {@code design.massing()} set.
+	 */
+	Event<MassingDone> MASSING_DONE = EventFactory.createArrayBacked(MassingDone.class, ls -> m -> {
+		for (MassingDone l : ls) {
+			Guard.run(() -> l.onDone(m), "MASSING_DONE");
+		}
+	});
+	/**
+	 * A massingFirst group waits for approval ({@link Group.Status#AWAITING_APPROVAL}; {@link Group#awaiting} lists the items,
+	 * {@link Group#owner} says who approves when its approvalUi is owner); since 1.3.0. Fires on the change to
+	 * awaiting_approval, and again only when an item waits with a massing version not reported before (after a redirect
+	 * finished): never for a partial approval, a reconnect or a restart.
+	 */
+	Event<GroupAwaitingApproval> GROUP_AWAITING_APPROVAL = EventFactory.createArrayBacked(GroupAwaitingApproval.class, ls -> g -> {
+		for (GroupAwaitingApproval l : ls) {
+			Guard.run(() -> l.onAwaiting(g), "GROUP_AWAITING_APPROVAL");
+		}
+	});
+	/**
 	 * The world's survival toggle changed ({@code /architect survival}, the Status tab), or was set to its default at the
 	 * world's first load with Architect (since 1.2.0).
 	 */
@@ -196,6 +216,16 @@ public interface SiteEvents {
 	@FunctionalInterface
 	interface ReskinDone {
 		void onDone(Reskin reskin);
+	}
+
+	@FunctionalInterface
+	interface MassingDone {
+		void onDone(Massing massing);
+	}
+
+	@FunctionalInterface
+	interface GroupAwaitingApproval {
+		void onAwaiting(Group group);
 	}
 
 	@FunctionalInterface

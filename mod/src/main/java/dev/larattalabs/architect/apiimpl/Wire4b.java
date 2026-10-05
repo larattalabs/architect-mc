@@ -122,7 +122,9 @@ public final class Wire4b {
 				JsonObject i = e.getAsJsonObject();
 				items.add(new Group.Item(str(i, "itemKey", "?"), obj(i, "ext").deepCopy(), str(i, "designId", "?"), Optional.ofNullable(str(i, "entryId")),
 					Design.Status.of(str(i, "status")), str(i, "step", ""), cost(i), (int) num(i, "wave"), GroupRequest.Role.of(str(i, "role")),
-					str(i, "model", ""), str(i, "type", ""), Optional.ofNullable(str(i, "name")), Optional.ofNullable(str(i, "error"))));
+					str(i, "model", ""), str(i, "type", ""), Optional.ofNullable(str(i, "name")), Optional.ofNullable(str(i, "error")),
+					Group.Stage.of(str(i, "stage")), Wire4c.ref(i.get("massing")), (int) num(i, "rounds"), i.has("designIds") ? strings(i, "designIds")
+						: List.of(str(i, "designId", "?"))));
 			}
 		}
 		Double budget = dbl(o, "budgetUsd");
@@ -130,7 +132,9 @@ public final class Wire4b {
 		return new Group(str(o, "id", "?"), str(o, "name", ""), pin(o.get("bible")).orElse(new BiblePin("?", 1)), Optional.ofNullable(str(o, "owner")),
 			obj(o, "ext").deepCopy(), (int) num(o, "concurrency"), Optional.ofNullable(budget), soft == null ? 0.8 : soft, Group.Status.of(str(o, "status")),
 			Optional.ofNullable(str(o, "reason")), items, o.has("wave") ? (int) num(o, "wave") : -1, (int) num(o, "done"), (int) num(o, "failed"), cost(o),
-			num(o, "usageLimitUntil"), num(o, "createdAt"), num(o, "updatedAt"));
+			num(o, "usageLimitUntil"), num(o, "createdAt"), num(o, "updatedAt"), o.has("massingFirst") && o.get("massingFirst").isJsonPrimitive()
+				&& o.get("massingFirst").getAsBoolean(), GroupRequest.ApprovalUi.of(str(o, "approvalUi")), (int) num(o, "maxRedirects"),
+			o.has("context") && !o.get("context").isJsonNull() ? Optional.of(o.get("context").deepCopy()) : Optional.empty(), strings(o, "awaiting"));
 	}
 
 	/** {@code BibleInfo} (bible.index, snapshot.bibleIndex, a done BibleJob's {@code bible}). */
@@ -239,6 +243,29 @@ public final class Wire4b {
 		if (g.budgetUsd() != null) {
 			o.addProperty("budgetUsd", g.budgetUsd());
 		}
+		// 4c: only when set, so a 4b helper sees the 4b shape
+		if (g.approvalUi() == GroupRequest.ApprovalUi.OWNER && g.owner() == null) {
+			throw new IllegalArgumentException("approvalUi owner needs the group's owner");
+		}
+		if (g.maxRedirects() != null && (g.maxRedirects() < 0 || g.maxRedirects() > GroupRequest.MAX_REDIRECTS)) {
+			throw new IllegalArgumentException("maxRedirects is 0 to " + GroupRequest.MAX_REDIRECTS);
+		}
+		if (g.massingFirst()) {
+			o.addProperty("massingFirst", true);
+			if (g.approvalUi() != null) {
+				o.addProperty("approvalUi", g.approvalUi().wire());
+			}
+			if (g.maxRedirects() != null) {
+				o.addProperty("maxRedirects", g.maxRedirects());
+			}
+		}
+		if (g.context() != null) {
+			String why = Wire4c.contextProblem(g.context());
+			if (why != null) {
+				throw new IllegalArgumentException(why);
+			}
+			o.add("context", Wire4c.contextWire(g.context()));
+		}
 		JsonArray items = new JsonArray();
 		for (GroupRequest.Item it : g.items()) {
 			JsonObject r = DesignsImpl.wire(it.request(), 2);
@@ -246,6 +273,10 @@ public final class Wire4b {
 			r.remove("bible");
 			r.remove("bibleVersion");
 			r.remove("group");
+			// the group's massingFirst decides the massing pass, and its context goes to every item
+			r.remove("massing");
+			r.remove("fromMassing");
+			r.remove("massingVersion");
 			if (it.itemKey() != null) {
 				r.addProperty("itemKey", it.itemKey());
 			}
