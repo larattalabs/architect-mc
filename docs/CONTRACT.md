@@ -1415,7 +1415,7 @@ Where this section and the text above disagree, this section wins.
 - Commands, DevBridge hooks and apitest steps: README "Controls", docs/DEVBRIDGE.md changelog. Gate evidence:
   `artifacts/gate4d/REPORT.md`, `throughput.json` (local).
 
-# Phase 4e contract: journal-backed sites (A5a, R1) - DRAFT for Steward review
+# Phase 4e contract: journal-backed sites (A5a, R1) - FROZEN after Steward review
 
 Goal: sites may **overlap and layer**. Examples: a road, then a house whose approach meets it; a building, then a later
 extension over its side wall; a lot over a terrain pad. **Remove stays exact in any order**, and **roads become sites**.
@@ -2236,3 +2236,23 @@ SITE_REMOVED's RemoveResult carries the hand-downs.
 - **N5** Yes: the journal is independent from now on. CONTRACT and the source header record its origin (AgentCraft `ab08a02`).
 - **N6** Command plus API in 4e; the click-waypoint road tool waits until roads are used in play.
 - **N7** Yes: 1 GB warning, 64 MB cache, both in the config.
+
+## Changes from Steward's review (steward-mc/docs/A4E-REVIEW.md), all accepted
+
+Where this section and the 4e text above disagree, this section wins.
+
+- **Roads over cell sites (MUST 1).** A road skips every cell owned by a `site` entry (a building's restore box, its approach
+  included) or another `road` entry, and **layers over `cells` entries** (CELL policy). A `cells` entry of another owner refuses
+  with `OVERLAP_OWNED` unless forced. Gate 2's "R across T" tests exactly this.
+- **Cell sites in a survival-toggle world (SHOULD 2).** In 4e, `placeCells` is INSTANT only. In a world where INSTANT is not
+  allowed (survival toggle on, not creative) it refuses `NOT_ALLOWED`, terrain-kind included. Free natural-only cut/fill for
+  survival terrain operators is a game-design call for Noah, taken up with Steward's difficulty modes (not 4e).
+- **mega_bench numbers (SHOULD 3).** The gate records compressed journal bytes per cell for a 256x256 pad and for the mega-lite
+  generator, and `Sites.stack()` query time (p50/p99) at stack depth 4, in `artifacts/gate4e/bench.json`.
+- **S1** KEEP stays the default for removing a covered site.
+- **S2** The "volatile" properties ignored when deciding a cell is still ours: add `age` (crops, sugar cane, cactus, kelp,
+  fire, nether wart), `stage` (saplings), `honey_level`, `level` (composter, cauldron) and `bites`. `moisture` is already on the
+  list. `facing/half/axis/type` are not added.
+- **S3** LAYER is explicit: `Batch.overlap = LAYER`. **S4** Polyline roads only, no per-point absolute y. **S5** placeCells
+  ships in 4e, with no construction mode. **S6** Move refused for layered sites. **S7** No survival roads in 4e.
+  **S8** `covers/coveredBy` plus `stack()` is enough. **S9** mega-lite gates 4e; the full mega_bench is measured in phase 6.
