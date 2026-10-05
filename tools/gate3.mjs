@@ -22,7 +22,7 @@ import { fileURLToPath } from 'node:url';
 import { DevClient } from './lib/devclient.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const OUT = path.join(root, 'artifacts', 'gate3-dryrun');
+const OUT = process.env.GATE3_OUT ? path.resolve(process.env.GATE3_OUT) : path.join(root, 'artifacts', 'gate3-dryrun');
 fs.mkdirSync(OUT, { recursive: true });
 
 // the spot (same seed 2026 in every gate world): the cabin's rotated box minimum, no rotation
@@ -39,7 +39,8 @@ const load = (name) => JSON.parse(fs.readFileSync(path.join(OUT, `${name}.json`)
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const cmd = async (c, asPlayer = false) => {
   const r = await call('dev.command', { cmd: c, asPlayer });
-  return { cmd: c, success: r.success, messages: r.messages };
+  // success = dispatched without an exception; result = the command's return value (0 = refused / did nothing)
+  return { cmd: c, success: r.success, result: r.result, messages: r.messages };
 };
 const fail = (m) => {
   console.error(`FAIL: ${m}`);
@@ -458,7 +459,7 @@ switch (step) {
     const sv = await call('dev.survival.state');
     check(sv.survival === true && sv.mayToggle === false, `hardcore: the toggle is on by default and the player may not change it (${JSON.stringify(sv)})`);
     const off = await cmd('/architect survival off', true);
-    check(!off.success, `/architect survival off without cheats is refused: ${off.messages.join(' ')}`);
+    check(!off.success || off.result === 0, `/architect survival off without cheats is refused (result ${off.result}): ${off.messages.join(' ')}`);
     const show = await cmd('/architect survival', true);
     check(show.success, `/architect survival (show) works without cheats: ${show.messages.join(' ')}`);
     const finish = await cmd(`/architect site finish ${SITE}`, true);
@@ -467,7 +468,7 @@ switch (step) {
     const r = await place();
     check(r.placed === true && /Construction site/.test(r.message), `a construction site places without cheats: ${r.message}`);
     const fin = await cmd(`/architect site finish ${SITE}`, true);
-    check(!fin.success, `/architect site finish without cheats is refused: ${fin.messages.join(' ')}`);
+    check(!fin.success || fin.result === 0, `/architect site finish without cheats is refused (result ${fin.result}): ${fin.messages.join(' ')}`);
     const ins = await call('dev.crate.insert', { site: SITE, items: { 'minecraft:cobblestone': 64, 'minecraft:spruce_log': 30 } });
     await sleep(4000);
     const st = await siteState();
