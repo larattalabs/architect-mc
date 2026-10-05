@@ -34,18 +34,18 @@ that runs the Claude design agent), so there is no terminal and no server to set
 |---|---|
 | **Describe it or mark a plot** | Pick a building type and a style, list materials and features, choose a size or mark two corners on the ground. The design is made to fit. |
 | **Designs as code** | Claude writes each design as a small JavaScript program with 2 to 4 parameters of its own (width, floors, a porch...) and every material read from a palette. The source is kept next to the structure file. |
-| **Checked before you see it** | A checker per building type: vanilla blocks only, a front door you can reach, a lit interior, floors reachable by stairs, a closed roof, nothing floating. A design that fails goes back to Claude, up to 4 rounds. |
+| **Checked before you see it** | A checker per building type. Hard rules: vanilla blocks only, a working outside door, a lit interior. Warnings Claude is asked to fix: a front door you can walk to, floors reachable by stairs, a closed roof, nothing floating. A design that breaks a hard rule goes back to Claude, up to 4 rounds. |
 | **Review as a ghost** | The building follows your view as a ghost. The HUD says what it would replace, how much foundation it adds and why it would refuse. Rotate, nudge, raise, lock, then place. |
 | **Fits the land** | Terrain under and around the building is cleared, a foundation fills any gap under the floor on a slope, and an entrance path runs from the door to the ground. |
 | **Exact Remove** | Everything the building covers is saved before it is placed. Remove restores it block for block, trees at the edge included. |
 | **A library** | Every design you make, with previews, tags, favourites, rename, search and sort, plus Place, Remix and Export. |
 | **Variants without Claude** | 10 palettes and each design's own parameters. A variant re-runs the design's code: no Claude call, under a second. |
 | **Import and export** | Export writes a vanilla `.nbt` that a structure block or `/place template` can load. Import turns `.nbt` files and structure-block saves into library entries. |
-| **No cheats needed** | Everything is in one screen (<kbd>B</kbd>). Placement runs on the game's own integrated server without op commands, so a Hardcore world works the same way. |
+| **Built for no-cheat worlds** | Everything is in one screen (<kbd>B</kbd>). Placement runs on the game's own integrated server without op commands, so it is meant to work in Hardcore too (a full no-cheats playthrough is still to come). |
 
 **Building types:** cabin, house, cottage, tower, shop, tavern, barn, smithy, chapel, gatehouse and custom. Each has
-a style line in Claude's brief and a checker profile: a tower must be at least twice as tall as it is wide with three
-reachable floors, a barn needs a wide entrance, a gatehouse a passage through it, and so on.
+a style line in Claude's brief and a checker profile (warnings for now): a tower should be at least twice as tall as it
+is wide with three reachable floors, a barn needs a wide entrance, a gatehouse a passage through it, and so on.
 
 <br>
 
