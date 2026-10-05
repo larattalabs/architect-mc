@@ -122,7 +122,7 @@ public final class JournalDev {
 			});
 		DevBridge.register("dev.site.verify", 120_000, "{site, list?: false, max?: 20} - phase 4e: every cell where one of the site's active entries is "
 			+ "top of the stack, compared with that entry's after by exact equality (state and block-entity data): {owned, mismatches, first: [..], "
-			+ "list?: ['x,y,z state'..]} (the any-order tests' no-leak check)", (req, mc) -> {
+			+ "list?: ['x,y,z <world state> [<BE data>]'..]} (the any-order tests' no-leak check: the list before and after a removal)", (req, mc) -> {
 				Fields f = Fields.of(req);
 				String site = f.nonBlank("site");
 				boolean list = f.optBool("list", false);
@@ -325,7 +325,7 @@ public final class JournalDev {
 					Journal.Value now = WorldJournal.valueAt(level, p);
 					Journal.Value after = (Journal.Value) t[2];
 					if (cells != null) {
-						cells.add(p.getX() + "," + p.getY() + "," + p.getZ() + " " + (after == null ? "null" : after.state().toString()));
+						cells.add(p.getX() + "," + p.getY() + "," + p.getZ() + " " + now.state() + (now.nbt() == null ? "" : " " + now.nbt()));
 					}
 					if (after == null || !after.equals(now)) {
 						bad++;

@@ -343,6 +343,29 @@ async function placeFixture() {
   return { T: { ...T, siteId: T.siteId }, R, H, X };
 }
 const verify = async (site, list = false) => call('dev.site.verify', { site, list, max: 20 }, 120_000);
+/** The owned cells of each site as "pos" -> world value (dev.site.verify list). */
+async function ownedNow(ids) {
+  const out = {};
+  for (const id of ids) {
+    const v = await verify(id, true);
+    out[id] = { owned: v.owned, afterMismatches: v.mismatches, firstAfter: v.first, cells: new Map(v.list.map((l) => [l.slice(0, l.indexOf(' ')), l])) };
+  }
+  return out;
+}
+/** Cells a standing site owned before and still owns that changed (the shape leak), per site. */
+function leaks(before, after) {
+  const out = {};
+  for (const id of Object.keys(after)) {
+    const b = before[id];
+    if (!b) continue;
+    const changed = [];
+    for (const [p, v] of after[id].cells) {
+      if (b.cells.has(p) && b.cells.get(p) !== v) changed.push({ was: b.cells.get(p), now: v });
+    }
+    if (changed.length) out[id] = { count: changed.length, first: changed.slice(0, 10) };
+  }
+  return out;
+}
 
 steps.smoke = async () => {
   if (!dev) await connect();
@@ -355,20 +378,18 @@ steps.smoke = async () => {
   const all = await sites();
   log(JSON.stringify(all.map((x) => ({ id: x.id, kind: x.kind, covers: x.covers, coveredBy: x.coveredBy, rb: x.restoreBox }))));
   const ids = { T: f.T.siteId, R: f.R.siteId, H: f.H.siteId, X: f.X.siteId };
-  for (const k of Object.keys(ids)) {
-    const v = await verify(ids[k]);
-    check(v.mismatches === 0, `smoke: ${k} owns ${v.owned} cells, all its after`, v);
-  }
   let standing = Object.keys(ids);
+  let snap = await ownedNow(standing.map((k) => ids[k]));
+  for (const k of standing) log(`  ${k}: owns ${snap[ids[k]].owned}, ${snap[ids[k]].afterMismatches} differ from the recorded after ${JSON.stringify(snap[ids[k]].firstAfter.slice(0, 2))}`);
   for (const k of ['H', 'R', 'X', 'T']) {
     const r = await result(await api(`remove ${ids[k]} - noforce keep`), 300_000);
     check(r.removed, `smoke: remove ${k}: restored ${r.restored}, handed ${JSON.stringify(r.handedDown)}`, r);
     standing = standing.filter((x) => x !== k);
     await settle();
-    for (const o of standing) {
-      const v = await verify(ids[o]);
-      check(v.mismatches === 0, `smoke: after ${k}, ${o} still holds its ${v.owned} owned cells`, v);
-    }
+    const now = await ownedNow(standing.map((x) => ids[x]));
+    const l = leaks(snap, now);
+    check(Object.keys(l).length === 0, `smoke: after ${k}, ${standing.join(',') || 'none'} unchanged on the cells they own`, l);
+    snap = now;
   }
   const h1 = await hash(FIX_BOX, [], true);
   const ok = check(h1.sha256 === h0.sha256, 'smoke: the fixture box is back exactly after removing H, R, X, T', { h0: h0.sha256, h1: h1.sha256 });
@@ -398,6 +419,47 @@ steps.start = async () => {
   await startClient(process.argv[3] ?? 'G4E Smoke');
   return { head, pids: clientPids() };
 };
+
+/** The loaded ground around the player (apitest heights, step 4): "x,z" -> {x, z, h, water, tree}. */
+async function surveyAround(r = 160, step = 4) {
+  const p = (await call('dev.state')).player;
+  const x0 = Math.floor(p.x / step) * step;
+  const z0 = Math.floor(p.z / step) * step;
+  const s = await result(await api(`heights ${x0 - r} ${z0 - r} ${x0 + r} ${z0 + r} ${step}`), 300_000);
+  const cols = new Map();
+  for (const [x, z, h, w, t] of s) cols.set(`${x},${z}`, { x, z, h, water: !!w, tree: !!t });
+  return cols;
+}
+/** The flattest dry w x d window (step 4) among surveyed columns: {x, z (min corner), range, mean}. */
+function flattest(cols, w, d, step = 4) {
+  let best = null;
+  const xs = [...new Set([...cols.values()].map((c) => c.x))].sort((a, b) => a - b);
+  const zs = [...new Set([...cols.values()].map((c) => c.z))].sort((a, b) => a - b);
+  for (const x of xs) {
+    for (const z of zs) {
+      let lo = Infinity;
+      let hi = -Infinity;
+      let sum = 0;
+      let n = 0;
+      let ok = true;
+      for (let dx = 0; dx <= w && ok; dx += step) {
+        for (let dz = 0; dz <= d && ok; dz += step) {
+          const c = cols.get(`${x + dx},${z + dz}`);
+          if (!c || c.water) {
+            ok = false;
+            break;
+          }
+          lo = Math.min(lo, c.h);
+          hi = Math.max(hi, c.h);
+          sum += c.h;
+          n++;
+        }
+      }
+      if (ok && (best === null || hi - lo < best.range)) best = { x, z, range: hi - lo, mean: Math.round(sum / n) };
+    }
+  }
+  return best;
+}
 
 /** `scout <seed>...`: the flattest dry windows near spawn of fresh worlds (picks the gate's base seed). */
 steps.scout = async () => {

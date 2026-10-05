@@ -99,20 +99,20 @@ public final class Journal {
 		/** A plain block by id (tests, air). */
 		public static Value of(String name) {
 			CompoundTag t = new CompoundTag();
-			t.putString("Name", name);
+			t.putString("id", name); // NbtUtils.writeBlockState keys (26.x: id, properties)
 			return new Value(intern(t), null);
 		}
 
 		/** A block by id with block state properties ({@code "type", "bottom"} pairs). */
 		public static Value of(String name, String... props) {
 			CompoundTag t = new CompoundTag();
-			t.putString("Name", name);
+			t.putString("id", name); // NbtUtils.writeBlockState keys (26.x: id, properties)
 			if (props.length > 0) {
 				CompoundTag p = new CompoundTag();
 				for (int i = 0; i + 1 < props.length; i += 2) {
 					p.putString(props[i], props[i + 1]);
 				}
-				t.put("Properties", p);
+				t.put("properties", p);
 			}
 			return new Value(intern(t), null);
 		}
@@ -122,12 +122,12 @@ public final class Journal {
 		}
 
 		public String name() {
-			return state.getStringOr("Name", "minecraft:air");
+			return state.getStringOr("id", "minecraft:air");
 		}
 
 		@Override
 		public String toString() {
-			return name() + (state.get("Properties") == null ? "" : state.get("Properties").toString()) + (nbt == null ? "" : " +nbt");
+			return name() + (state.get("properties") == null ? "" : state.get("properties").toString()) + (nbt == null ? "" : " +nbt");
 		}
 	}
 
