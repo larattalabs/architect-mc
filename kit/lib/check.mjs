@@ -14,7 +14,7 @@ import {
   BLOCKS, collisionOf, normalize, emissionOf, opticsOf, voxelsOf, faceMask, lightCost, isConductor, isFloor,
   isPassable, isClimbable, supportOf, topOf,
 } from './blocks.mjs';
-import { BUILDING_TYPES, resolvePalette, stoneFamilyOf, woodFamilyOf } from './kit.mjs';
+import { BUILDING_TYPES, PORT_KINDS, resolvePalette, stoneFamilyOf, woodFamilyOf } from './kit.mjs';
 
 const DIRS6 = [['east', 1, 0, 0], ['west', -1, 0, 0], ['up', 0, 1, 0], ['down', 0, -1, 0], ['south', 0, 0, 1], ['north', 0, 0, -1]];
 const OPP = { east: 'west', west: 'east', up: 'down', down: 'up', south: 'north', north: 'south' };
@@ -181,6 +181,32 @@ export function parseMax(s) {
  * @param {object} structure plain (untagged) parsed structure NBT root
  * @param {{max?:{x:number,y:number,z:number}, type?:string, imported?:boolean}} [opts]
  */
+/**
+ * Ports (docs/CONTRACT.md phase 4a, R5): a list of {name, kind, x, y, z, facing}; unique names, a known kind or
+ * `<modid>:<kind>`, an integer cell inside the template, a horizontal facing. Returns the error lines.
+ */
+export function checkPorts(ports, size) {
+  if (ports === undefined) return [];
+  if (!Array.isArray(ports)) return ['ports: must be a list of {name, kind, x, y, z, facing}'];
+  const out = [];
+  const names = new Set();
+  for (const [i, p] of ports.entries()) {
+    const at = `port ${p && typeof p.name === 'string' && p.name ? `'${p.name}'` : `#${i}`}`;
+    if (!p || typeof p !== 'object') { out.push(`${at}: must be an object`); continue; }
+    if (typeof p.name !== 'string' || !/^[a-z0-9_][a-z0-9_.-]*$/.test(p.name)) out.push(`${at}: name must match [a-z0-9_][a-z0-9_.-]*`);
+    else if (names.has(p.name)) out.push(`${at}: the name is used twice`);
+    else names.add(p.name);
+    if (!(PORT_KINDS.includes(p.kind) || /^[a-z0-9_.-]+:[a-z0-9_./-]+$/.test(p.kind ?? ''))) {
+      out.push(`${at}: kind '${p.kind}' must be one of ${PORT_KINDS.join(', ')} or <modid>:<kind>`);
+    }
+    if (!['north', 'south', 'east', 'west'].includes(p.facing)) out.push(`${at}: facing '${p.facing}' must be horizontal (north, south, east, west)`);
+    const xyz = [p.x, p.y, p.z];
+    if (!xyz.every(Number.isInteger)) out.push(`${at}: x, y, z must be integers`);
+    else if (Array.isArray(size) && xyz.some((v, a) => v < 0 || v >= size[a])) out.push(`${at}: cell ${xyz.join(',')} is outside the template (${size.join('x')})`);
+  }
+  return out;
+}
+
 export function checkStructure(sidecar, structure, opts = {}) {
   const errors = [];
   const warnings = [];
@@ -272,6 +298,8 @@ export function checkStructure(sidecar, structure, opts = {}) {
     err(`sidecar size ${sidecar.size?.x}x${sidecar.size?.y}x${sidecar.size?.z} != structure size ${size.join('x')}`);
   }
   if (!(Number.isInteger(sidecar.groundY) && sidecar.groundY >= 1 && sidecar.groundY < size[1])) err('sidecar: groundY must be an int inside the template (>= 1: the floor row is groundY-1)');
+  for (const m of checkPorts(sidecar.ports, size)) err(m);
+  if (sidecar.ext !== undefined && !(sidecar.ext && typeof sidecar.ext === 'object' && !Array.isArray(sidecar.ext))) err('sidecar: ext must be an object');
   if (sidecar.tags !== undefined && !(Array.isArray(sidecar.tags) && sidecar.tags.every((t) => typeof t === 'string'))) err('sidecar: tags must be a list of strings');
   if (sidecar.materials !== undefined && !(Array.isArray(sidecar.materials) && sidecar.materials.every((t) => typeof t === 'string' && BLOCKS[t]))) err('sidecar: materials must be a list of vanilla block ids');
   const w = sidecar.interior ?? null;

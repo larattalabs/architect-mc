@@ -15,6 +15,8 @@ import { BLOCKS, normalize, qualify, isCube, familyOf, info } from './blocks.mjs
 export const DATA_VERSION = 5023;
 
 /** The building types of the contract (each has a checker profile). */
+/** Known port kinds (R5); any `<modid>:<kind>` is allowed too. */
+export const PORT_KINDS = ['item_out', 'item_in', 'water_in', 'water_out', 'redstone_in', 'redstone_out', 'bed', 'door'];
 export const BUILDING_TYPES = ['house', 'cabin', 'cottage', 'tower', 'shop', 'tavern', 'barn', 'smithy', 'chapel', 'gatehouse', 'custom'];
 
 export const DIR = {
@@ -310,6 +312,10 @@ export class Blueprint {
     this.values = undefined;
     this.cells = new Map(); // "x,y,z" -> { state:{name,props}, nbt }
     this.anchors = {};
+    /** named connector ports (docs/CONTRACT.md phase 4a, R5): [{name, kind, x, y, z, facing}] in template coordinates */
+    this.ports = [];
+    /** namespaced extra data for other mods ({"<modid>:<key>": any}); Architect never interprets it */
+    this.ext = { ...(o.ext ?? {}) };
     const og = o.origin ?? [0, 0, 0];
     this.ox = og[0];
     this.oy = og[1];
@@ -723,6 +729,16 @@ export class Blueprint {
     return this;
   }
 
+  /**
+   * A named connector port (R5) on cell (x, y, z) (design coordinates), facing a horizontal direction. `kind`: one of
+   * PORT_KINDS or `<modid>:<kind>`. The checker validates the cell (inside the template), the facing and the kind.
+   */
+  port(name, kind, x, y, z, facing) {
+    this.ports = this.ports.filter((p) => p.name !== name);
+    this.ports.push({ name, kind, x: x + this.ox, y: y + this.oy, z: z + this.oz, facing });
+    return this;
+  }
+
   /** A standing spot at the centre of cell (cx, cz), feet row y (default the ground feet row), looking at `yaw`. */
   spot(name, cx, cz, yaw = 0, { y = this.feet } = {}) { return this.anchor(name, cx + 0.5, y, cz + 0.5, yaw, 0); }
 
@@ -841,6 +857,8 @@ export class Blueprint {
     if (this.values) s.values = { ...this.values };
     if (this.createdAt !== undefined) s.createdAt = this.createdAt;
     if (this.request !== undefined) s.request = this.request;
+    if (this.ports.length) s.ports = this.ports.map((p) => ({ ...p }));
+    if (Object.keys(this.ext).length) s.ext = structuredClone(this.ext);
     return s;
   }
 }
