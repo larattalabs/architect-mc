@@ -3,13 +3,14 @@
 //
 //   <data>/state.json            designs, id counters, SDK sessions, design job progress, usage limit
 //   <data>/designs/<designId>/   scratch dirs of design jobs (designs.ts)
+//   <data>/variants/<variantId>/ scratch dirs of variant and import jobs (variants.ts)
 //   <data>/logs/sidecar.log      the log (main.ts)
 //
 // state.json is written atomically (temp + fsync + rename), debounced, and flushed on exit. It
 // never holds credentials (those are in secrets.json, see secrets.ts).
 import fs from 'node:fs';
 import path from 'node:path';
-import type { Design } from './protocol.js';
+import type { Design, Variant } from './protocol.js';
 import { ensureDir, readJson, writeJsonAtomic } from './util/fsx.js';
 
 export interface SessionRecord {
@@ -36,6 +37,8 @@ export interface StateData {
   createdAt: number;
   /** design jobs, oldest first */
   designs: Design[];
+  /** variant and import jobs, oldest first */
+  variants: Variant[];
   counters: Record<string, number>;
   /** "design:<id>" -> the SDK session of that design's agent */
   sessions: Record<string, SessionRecord>;
@@ -48,7 +51,7 @@ export interface StateData {
 }
 
 function emptyState(now: number): StateData {
-  return { version: 1, createdAt: now, designs: [], counters: {}, sessions: {}, work: {} };
+  return { version: 1, createdAt: now, designs: [], variants: [], counters: {}, sessions: {}, work: {} };
 }
 
 export class Store {

@@ -151,12 +151,18 @@ export interface Sidecar {
   [k: string]: unknown;
 }
 
+/** What a built design is checked against: the request's maximum size (none for a variant) and type. */
+export interface Limits {
+  maxSize?: DesignRequest['maxSize'] | undefined;
+  type?: string | undefined;
+}
+
 /** Does the built blueprint fit the request? (undefined = yes, else why not) */
-export function sidecarProblem(sc: Sidecar, limits: { maxSize: DesignRequest['maxSize']; type?: string | undefined }): string | undefined {
+export function sidecarProblem(sc: Sidecar, limits: Limits): string | undefined {
   const s = sc.size;
   if (!s || ![s.x, s.y, s.z].every((n) => Number.isInteger(n) && n > 0)) return 'the sidecar has no valid size';
   const m = limits.maxSize;
-  if (s.x > m.x || s.y > m.y || s.z > m.z) return `size ${s.x}x${s.y}x${s.z} exceeds the maximum ${m.x}x${m.y}x${m.z} (x*y*z); make it smaller`;
+  if (m && (s.x > m.x || s.y > m.y || s.z > m.z)) return `size ${s.x}x${s.y}x${s.z} exceeds the maximum ${m.x}x${m.y}x${m.z} (x*y*z); make it smaller`;
   if (limits.type && sc.type !== limits.type) return `type is "${String(sc.type)}" but the request is for a ${limits.type}`;
   return undefined;
 }
@@ -257,10 +263,11 @@ export function parseBuildJson(stdout: string): { ok?: boolean; errors: string[]
 
 /**
  * Build kit/designs/<bp>.mjs with a pristine kit and check it (`node kit/build.mjs <bp> --out check
- * --max x,y,z --type <t> --json`), then the size and type against the request. The exit code and
- * the files on disk decide; the JSON line only supplies the error and warning text.
+ * [--max x,y,z] [--type <t>] [extra args] --json`), then the size and type against the request. The
+ * exit code and the files on disk decide; the JSON line only supplies the error and warning text.
+ * `extra` carries a variant's `--palette` / `--values`.
  */
-export async function checkDesign(kitSrc: string, scratch: string, bp: string, limits: { maxSize: DesignRequest['maxSize']; type?: string | undefined }, timeoutMs = 120_000): Promise<CheckResult> {
+export async function checkDesign(kitSrc: string, scratch: string, bp: string, limits: Limits, timeoutMs = 120_000, extra: string[] = []): Promise<CheckResult> {
   const rel = `${KIT}/designs/${bp}.mjs`;
   if (!fs.existsSync(path.join(scratch, KIT, 'designs', `${bp}.mjs`))) return { ok: false, problem: `there is no ${rel}`, output: '', warnings: [] };
   refreshKit(kitSrc, scratch, [bp]);
@@ -268,19 +275,26 @@ export async function checkDesign(kitSrc: string, scratch: string, bp: string, l
   fs.rmSync(out, { recursive: true, force: true });
   fs.mkdirSync(out, { recursive: true });
   const m = limits.maxSize;
-  const args = [bp, '--out', out, '--max', `${m.x},${m.y},${m.z}`, ...(limits.type ? ['--type', limits.type] : []), '--json'];
-  const r = await runNode(path.join(KIT, 'build.mjs'), args, scratch, timeoutMs);
+  const args = [bp, '--out', out, ...(m ? ['--max', `${m.x},${m.y},${m.z}`] : []), ...(limits.type ? ['--type', limits.type] : []), ...extra, '--json'];
+  return finishCheck(await runNode(path.join(KIT, 'build.mjs'), args, scratch, timeoutMs), out, bp, limits, timeoutMs);
+}
+
+/**
+ * The common end of a kit build or import run: the exit code and the files on disk decide, the JSON
+ * line supplies the error and warning text.
+ */
+export function finishCheck(r: NodeRun, out: string, bp: string, limits: Limits, timeoutMs: number): CheckResult {
   const j = parseBuildJson(r.stdout);
   const warnings = j?.warnings ?? [];
   const nbt = path.join(out, `${bp}.nbt`);
   const json = path.join(out, `${bp}.blueprint.json`);
   if (!r.ok) {
     if (r.timedOut) return { ok: false, problem: `build.mjs timed out after ${timeoutMs / 1000}s`, output: r.output, warnings };
-    const what = r.code === 1 ? 'the checker refused the design' : 'build.mjs failed (the design threw, or bad usage)';
+    const what = r.code === 1 ? 'the checker refused the design' : 'the kit failed (the design threw, or bad usage)';
     const detail = j?.errors.length ? j.errors.map((e) => `- ${e}`).join('\n') : outputTail(r.output);
     return { ok: false, problem: `${what}:\n${truncate(detail, 1500)}`, output: r.output, warnings };
   }
-  if (!fs.existsSync(nbt) || !fs.existsSync(json)) return { ok: false, problem: `build.mjs did not write ${bp}.nbt and ${bp}.blueprint.json`, output: r.output, warnings };
+  if (!fs.existsSync(nbt) || !fs.existsSync(json)) return { ok: false, problem: `the kit did not write ${bp}.nbt and ${bp}.blueprint.json`, output: r.output, warnings };
   let sc: Sidecar;
   try {
     sc = JSON.parse(fs.readFileSync(json, 'utf8')) as Sidecar;
@@ -321,12 +335,12 @@ export interface InstallInput {
   taken?: ReadonlySet<string>;
   nbt: string;
   sidecar: Sidecar;
-  /** the design's .mjs source (its `export const id` is rewritten to the installed id) */
-  source: string;
+  /** the design's .mjs source (its `export const id` is rewritten to the installed id); none for an import */
+  source?: string | undefined;
   /** preview PNGs named <anything>.preview-<view>.png */
   previews: string[];
-  /** written into the sidecar JSON */
-  meta: { name?: string | undefined; description?: string | undefined; request: DesignRequest; createdAt: number };
+  /** written into the sidecar JSON (`extra`: variantOf, displayName, imported, ...) */
+  meta: { name?: string | undefined; description?: string | undefined; request?: DesignRequest | undefined; createdAt: number; extra?: Record<string, unknown> };
 }
 
 export interface Installed {
@@ -334,7 +348,7 @@ export interface Installed {
   dir: string;
   nbt: string;
   json: string;
-  source: string;
+  source?: string;
   previews: string[];
 }
 
@@ -359,8 +373,11 @@ export function installDesign(input: InstallInput): Installed {
     try {
       const nbt = path.join(dir, `${id}.nbt`);
       fs.copyFileSync(input.nbt, nbt, fs.constants.COPYFILE_EXCL);
-      const source = path.join(dir, `${id}.mjs`);
-      fs.writeFileSync(source, withDesignId(fs.readFileSync(input.source, 'utf8'), id), { flag: 'wx' });
+      let source: string | undefined;
+      if (input.source) {
+        source = path.join(dir, `${id}.mjs`);
+        fs.writeFileSync(source, withDesignId(fs.readFileSync(input.source, 'utf8'), id), { flag: 'wx' });
+      }
       const previews: string[] = [];
       for (const p of input.previews) {
         const view = /\.preview-([a-z0-9_-]+)\.png$/i.exec(p)?.[1];
@@ -371,17 +388,22 @@ export function installDesign(input: InstallInput): Installed {
       }
       const json = path.join(dir, `${id}.blueprint.json`);
       const m = input.meta;
-      const sidecar = {
+      const sidecar: Record<string, unknown> = {
         ...input.sidecar,
         id,
         ...(m.name ? { name: m.name } : {}),
         ...(m.description ? { description: m.description } : {}),
-        source: `${id}.mjs`,
         createdAt: m.createdAt,
-        request: m.request,
+        ...(m.request ? { request: m.request } : {}),
+        ...(m.extra ?? {}),
       };
+      if (source) sidecar.source = `${id}.mjs`;
+      else delete sidecar.source;
+      // the mod's user metadata is never written here (docs/CONTRACT.md "Library entry"), only `displayName` as a starting name
+      for (const k of ['favorite', 'userTags']) delete sidecar[k];
+      if (!(m.extra && 'displayName' in m.extra)) delete sidecar.displayName;
       fs.writeFileSync(json, `${JSON.stringify(sidecar, null, 2)}\n`, { flag: 'wx' });
-      return { blueprintId: id, dir, nbt, json, source, previews };
+      return { blueprintId: id, dir, nbt, json, ...(source ? { source } : {}), previews };
     } catch (e) {
       // the folder is ours (created exclusively above): take it back out
       fs.rmSync(dir, { recursive: true, force: true });

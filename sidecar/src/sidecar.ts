@@ -1,14 +1,16 @@
 // The sidecar core (the design part of AgentCraft's Foreman, foreman/src/foreman.ts): the design
 // book, the status, the client messages, and the hooks a designer (claude or sim) reports through.
+import fs from 'node:fs';
 import path from 'node:path';
 import type { Config } from './config.js';
 import { VERSION } from './config.js';
 import type { Logger } from './context.js';
-import { DesignBook, describeRequest, isFinalDesign, type Installed } from './designs.js';
-import type { ClientMessage, Design, DesignRequest, Outbound, Status } from './protocol.js';
+import { DesignBook, describeRequest, isFinalDesign, runNode, type Installed } from './designs.js';
+import { KitInfo, type ClientMessage, type Design, type DesignRequest, type Outbound, type PaletteSpec, type ParamValues, type Status, type Variant } from './protocol.js';
 import { readSecrets, updateSecrets, type Secrets } from './secrets.js';
 import type { Store } from './store.js';
 import { truncate } from './util/text.js';
+import { checkImportPath, findVariantSource, VariantBook, VariantRefused, VariantRunner } from './variants.js';
 
 /** A message the client caused that cannot be done (answered with ack ok:false). */
 export class ClientError extends Error {}
@@ -38,6 +40,11 @@ export interface AuthView {
 
 export class Sidecar {
   readonly designs: DesignBook;
+  /** variant and import jobs (no Claude), on their own queue */
+  readonly variants: VariantBook;
+  readonly variantRunner: VariantRunner;
+  /** the kit's palette presets and choices, for the snapshot (loaded at start) */
+  private kitInfo: KitInfo | undefined;
   private listeners = new Set<(m: Outbound) => void>();
   private designer: Designer | undefined;
   private authView: AuthView = { auth: 'checking', sdk: 'missing' };
@@ -54,6 +61,8 @@ export class Sidecar {
     readonly now: () => number = Date.now,
   ) {
     this.designs = new DesignBook({ store, emit: (m) => this.emit(m), now: () => this.now() });
+    this.variants = new VariantBook({ store, emit: (m) => this.emit(m), now: () => this.now() });
+    this.variantRunner = new VariantRunner(this);
   }
 
   // ---- outbound -------------------------------------------------------------------------------
@@ -118,7 +127,7 @@ export class Sidecar {
   }
 
   snapshot(): Outbound {
-    return { type: 'snapshot', version: VERSION, status: this.status(), designs: this.designs.recent() };
+    return { type: 'snapshot', version: VERSION, status: this.status(), designs: this.designs.recent(), variants: this.variants.recent(), ...(this.kitInfo ? { kit: this.kitInfo } : {}) };
   }
 
   // ---- lifecycle ------------------------------------------------------------------------------
@@ -129,6 +138,8 @@ export class Sidecar {
    */
   async start(designer: Designer): Promise<void> {
     this.designer = designer;
+    this.variantRunner.start();
+    void this.loadKitInfo();
     for (const d of this.designs.active()) {
       this.designs.update(d.id, { status: 'queued', step: 'picked up again after a restart' });
       designer.request(d);
@@ -138,7 +149,22 @@ export class Sidecar {
     this.statusChanged();
   }
 
+  /** `node kit/tools/describe.mjs --palettes` once: the presets and choices for the mod's palette picker. */
+  async loadKitInfo(): Promise<void> {
+    const script = path.join(this.config.kitDir, 'tools', 'describe.mjs');
+    if (!fs.existsSync(script)) return;
+    const r = await runNode(script, ['--palettes'], this.config.kitDir, 30_000);
+    try {
+      const parsed = KitInfo.safeParse(JSON.parse(r.stdout.trim().split('\n').pop() ?? ''));
+      if (parsed.success) this.kitInfo = parsed.data;
+      else this.log.warn(`kit describe --palettes: unexpected output (${parsed.error.issues[0]?.message ?? '?'})`);
+    } catch {
+      this.log.warn(`kit describe --palettes failed: ${truncate(r.output, 200)}`);
+    }
+  }
+
   async close(): Promise<void> {
+    await this.variantRunner.stop();
     await this.designer?.stop();
     this.store.close();
   }
@@ -178,7 +204,39 @@ export class Sidecar {
         this.log.info('shutdown requested by a client');
         setImmediate(() => this.onShutdown?.());
         return {};
+      case 'variant.request':
+        return { variantId: this.requestVariant(msg.from, msg.palette, msg.values, msg.name).id };
+      case 'import.request':
+        return { variantId: this.requestImport(msg.path).id };
     }
+  }
+
+  /** variant.request: refused at once (ack ok:false) when the entry has no source; else queued. */
+  requestVariant(from: string, palette?: PaletteSpec, values?: ParamValues, name?: string): Variant {
+    try {
+      findVariantSource(this.config.libraryDir, this.config.kitDir, from);
+    } catch (e) {
+      if (e instanceof VariantRefused) throw new ClientError(e.message);
+      throw e;
+    }
+    const v = this.variants.create({ kind: 'variant', from, ...(palette !== undefined ? { palette } : {}), ...(values !== undefined ? { values } : {}), ...(name !== undefined ? { name } : {}) });
+    this.log.info(`variant ${v.id} of ${from} requested${palette !== undefined ? `: palette ${JSON.stringify(palette)}` : ''}${values ? `, values ${JSON.stringify(values)}` : ''}`);
+    this.variantRunner.enqueue(v.id);
+    return v;
+  }
+
+  /** import.request: refused at once unless the path is an .nbt in the import folders. */
+  requestImport(file: string): Variant {
+    try {
+      checkImportPath(file, this.config.libraryDir);
+    } catch (e) {
+      if (e instanceof VariantRefused) throw new ClientError(e.message);
+      throw e;
+    }
+    const v = this.variants.create({ kind: 'import', from: file });
+    this.log.info(`import ${v.id} requested: ${file}`);
+    this.variantRunner.enqueue(v.id);
+    return v;
   }
 
   /** auth.set: store the settings (0600), never log or echo the key, then re-check auth. */
