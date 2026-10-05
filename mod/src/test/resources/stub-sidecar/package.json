@@ -1,0 +1,7 @@
+{
+  "name": "architect-stub-sidecar",
+  "version": "0.0.0-stub",
+  "private": true,
+  "type": "module",
+  "description": "Test stub of the Architect sidecar (launcher and Status tab tests); see dist/main.mjs."
+}

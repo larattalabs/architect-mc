@@ -308,6 +308,33 @@ public final class PlacementFeature {
 				o.addProperty("armed", true);
 				return o;
 			}));
+		DevBridge.register("dev.capture", 30_000, "{min: [x,y,z], max: [x,y,z], name} - save the box as a structure template (as a structure block "
+			+ "would) to <gameDir>/architect/captures/<name>.nbt (authoring library designs by hand)", (req, mc) -> {
+				Fields f = Fields.of(req);
+				int[] a = xyz(f, "min");
+				int[] b = xyz(f, "max");
+				String name = f.nonBlank("name");
+				if (!dev.larattalabs.architect.placement.Blueprint.ID.matcher(name).matches()) {
+					throw new DevBridge.DevException("name must match [a-z0-9_]+");
+				}
+				return DevBridge.onClient(mc, () -> ServerTasks.callAsPlayer((level, player) -> {
+					try {
+						Anchors.Bounds box = new Anchors.Bounds(Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.min(a[2], b[2]), Math.max(a[0], b[0]),
+							Math.max(a[1], b[1]), Math.max(a[2], b[2]));
+						CompoundTag tag = Sites.capture(level, box);
+						java.nio.file.Path out = dev.larattalabs.architect.placement.Blueprints.gameDataDir().resolve("captures").resolve(name + ".nbt");
+						java.nio.file.Files.createDirectories(out.getParent());
+						net.minecraft.nbt.NbtIo.writeCompressed(tag, out);
+						JsonObject o = new JsonObject();
+						o.addProperty("path", out.toString());
+						o.addProperty("size", (box.maxX() - box.minX() + 1) + "x" + (box.maxY() - box.minY() + 1) + "x" + (box.maxZ() - box.minZ() + 1));
+						o.addProperty("dataVersion", tag.getIntOr("DataVersion", -1));
+						return o;
+					} catch (java.io.IOException e) {
+						throw new IllegalStateException(e.getMessage(), e);
+					}
+				})).thenCompose(x -> x);
+			});
 		DevBridge.register("dev.box.hash", 60_000, "{min: [x,y,z], max: [x,y,z]} - SHA-256 over every block state and block-entity NBT in the "
 			+ "box (the player's dimension, loads chunks): before/after a place + remove proves the terrain came back exactly", (req, mc) -> {
 				Fields f = Fields.of(req);
