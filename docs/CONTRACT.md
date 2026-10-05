@@ -514,3 +514,25 @@ In a fresh **survival** dev world (DevBridge):
 - a hardcore world works without cheats, except the toggle change.
 
 gate-verifier checks the result.
+
+## Phase 3 as built (deviations, recorded 2026-10-05)
+
+- **Identical to instant placement by construction.** Survival Place runs the unchanged instant build, settles the
+  block ticks it scheduled on its own cells (dirt_path next to a solid block turns to dirt one tick later), captures
+  the snapshot box into a per-site **target file**, then clears the queued cells to air in the same tick. The builder
+  writes each target state and its BE NBT with the same FLAGS, stripping only container inventories. The queue indexes
+  the snapshot box, not the template grid, so a site keeps working when its design changes under the same id.
+- **Built status** is derived from the world by matching the block, not the full state, so a door the player opened
+  still counts. World start reads it, as the existing sites check does; the builder's rescans never load chunks.
+- **Ghost payloads** carry the queue cells and their state ids as well as the bitset (foundation and approach depend on
+  the terrain). Extra payloads: `site_status` (HUD line, green tint), `site_clear` (and the "built" toast), `crate_open`.
+- **Refunds** drop as items on the crate's cell, outside the box. A built site keeps its crate record, so later refunds
+  land there. "The player's block" ignores natural changes (fluids, fire, snow, grass/dirt).
+- **DevBridge hooks** take `{site}`, because `id` is the request id. Also added: `dev.items.near`, `dev.ghosts.state`, and
+  `dev.command {asPlayer}`.
+- **Other choices:** `blocksPerTick` lives in `architect-world.json`; `/architect site finish` needs permission 2 and creative mode;
+  the Status toggle runs the command as the player; the crate sits one cell to the side of the approach's end.
+- **Equivalents** are generated (`tools/gen-equivalents.mjs`, 195 rules), whole-number yields only.
+- **The creative-only list** exists twice (`survival_items.json` and `kit/lib/check.mjs`), kept in sync by hand.
+- **Dev worlds:** `ARCHITECT_AUTOWORLD_MODE=creative|survival|hardcore`, `ARCHITECT_AUTOWORLD_CHEATS`, and
+  `ARCHITECT_DEV_HARDCORE=1` (lets the dev tool drive a hardcore world).
