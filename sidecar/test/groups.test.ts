@@ -266,7 +266,8 @@ describe.skipIf(!hasKit)('design groups (sim backend, real kit)', () => {
     const paused = h.sc.groups.get(g.id)!;
     // (the sim reports cost per step: the 3rd design crosses $0.80 while it runs, and finishes)
     expect(paused.reason).toMatch(/soft budget: \$0\.80 of \$1 spent \(80% reached\)/);
-    await new Promise((r) => setTimeout(r, 200));
+    // the item that crossed the soft budget finishes (it was already running); wait for it rather than a fixed sleep
+    await until(() => h!.sc.groups.get(g.id)!.items[2]!.status === 'done', 10_000);
     expect(h.sc.groups.get(g.id)!.items.map((i) => i.status)).toEqual(['done', 'done', 'done', 'queued']);
     expect(() => h!.sc.groups.extend(g.id, 0.5)).toThrow(/not above/);
     h.sc.groups.extend(g.id, 3);
