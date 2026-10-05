@@ -137,6 +137,20 @@ Carried forward:
 - **Gate:** in a survival dev world, place a site, feed it from a hopper chain, watch it finish, then
   deconstruct it and check that the refund matches the materials put in.
 
+### Phase 3 status
+**PASSED 2026-10-05** (gate-verifier PASS, no blocking caveats; `artifacts/gate3/REPORT.md`, local). In a fresh survival world
+a cabin site (507 cells, a 506-item bill of materials) was fed by hoppers from chests holding exactly that bill, partly as logs.
+It built to a state identical to an instant placement at the same spot (same hash, block entities included). Mining 3 blocks
+and deconstructing refunded exactly 506 - 3, and the terrain hash returned to the original. Creative stays instant; hardcore
+can't change the toggle or finish without cheats. Tests: mod 162, kit 60, sidecar 432. The verifier found no dupe path in
+the code.
+
+Carried forward:
+- **Terrain drops:** the current decision is no drops plus exact Remove. Noah hasn't confirmed; it's cheap to flip or to make a per-world option.
+- Item names in the HUD/crate are singular ("112 spruce log"); equivalents cover whole-number yields only (no planks to stairs/panes).
+- The creative-only list lives in two places (survival_items.json, kit check.mjs), synced by hand.
+- Hardcore was fed through a dev hook in the gate; a real-hopper hardcore run is still to do.
+
 ## After phase 3: asks from Steward (accepted 2026-10-05)
 
 Steward (`~/Developer/LarattaLabs/steward-mc`, a sibling mod that founds whole settlements and depends on Architect) asked
