@@ -98,6 +98,61 @@ public final class SidecarState {
 		}
 	}
 
+	/** {@code variant.upsert}'s status (docs/CONTRACT.md "Variants without Claude"). */
+	public enum VariantStatus {
+		QUEUED, BUILDING, DONE, FAILED, UNKNOWN;
+
+		public boolean isRunning() {
+			return this == QUEUED || this == BUILDING;
+		}
+
+		static VariantStatus of(@Nullable String s) {
+			if (s == null) {
+				return UNKNOWN;
+			}
+			try {
+				return valueOf(s.toUpperCase(Locale.ROOT));
+			} catch (IllegalArgumentException e) {
+				return UNKNOWN;
+			}
+		}
+
+		public String wire() {
+			return name().toLowerCase(Locale.ROOT);
+		}
+	}
+
+	/**
+	 * A variant or import job ({@code variant.upsert {variant}}, {@code snapshot.variants}). An import job has no {@code from}
+	 * and names its file in {@code path} (the sidecar runs imports through the variant pipeline). {@code raw} is the message
+	 * as received (for the DevBridge).
+	 */
+	public record Variant(String id, @Nullable String from, @Nullable String path, VariantStatus status, String step, @Nullable String blueprintId,
+		int @Nullable [] size, @Nullable String error, long createdAt, long updatedAt, @Nullable String name, JsonObject raw) {
+		static Variant of(JsonObject o) {
+			int[] size = null;
+			if (o.has("size") && o.get("size").isJsonObject()) {
+				JsonObject s = o.getAsJsonObject("size");
+				size = new int[] {s.get("x").getAsInt(), s.get("y").getAsInt(), s.get("z").getAsInt()};
+			}
+			String error = str(o, "error", null);
+			if (error == null && o.has("errors") && o.get("errors").isJsonArray()) {
+				List<String> lines = new ArrayList<>();
+				o.getAsJsonArray("errors").forEach(e -> lines.add(e.isJsonPrimitive() ? e.getAsString() : e.toString()));
+				error = lines.isEmpty() ? null : String.join("\n", lines);
+			}
+			return new Variant(str(o, "id", "?"), str(o, "from", null), str(o, "path", null), VariantStatus.of(str(o, "status", null)),
+				str(o, "step", ""), str(o, "blueprintId", null), size, error, o.has("createdAt") ? o.get("createdAt").getAsLong() : 0L,
+				o.has("updatedAt") ? o.get("updatedAt").getAsLong() : 0L, str(o, "name", null), o);
+		}
+
+		/** An import job (no source entry, a file path instead). */
+		public boolean isImport() {
+			return from == null && path != null || raw.has("imported") && raw.get("imported").isJsonPrimitive() && raw.get("imported").getAsBoolean()
+				|| "import".equals(str(raw, "kind", null));
+		}
+	}
+
 	/** Change listener (client thread). */
 	public interface Listener {
 		default void onLink(LinkStatus link) {
@@ -111,11 +166,17 @@ public final class SidecarState {
 
 		default void onDesign(@Nullable Design previous, Design design) {
 		}
+
+		default void onVariant(@Nullable Variant previous, Variant variant) {
+		}
 	}
 
 	private LinkStatus link = new LinkStatus(LinkStatus.Phase.DISABLED, "", 0, null, 0, 0, false);
 	private Status status = Status.EMPTY;
 	private final Map<String, Design> designs = new LinkedHashMap<>();
+	private final Map<String, Variant> variants = new LinkedHashMap<>();
+	/** {@code snapshot.palettes} when the sidecar sends it (optional; see Palettes). */
+	private @Nullable JsonElement palettes;
 	private final List<Listener> listeners = new CopyOnWriteArrayList<>();
 	private long snapshots;
 
@@ -146,6 +207,21 @@ public final class SidecarState {
 		return designs.get(id);
 	}
 
+	/** Variant and import jobs, newest first. */
+	public List<Variant> variants() {
+		List<Variant> out = new ArrayList<>(variants.values());
+		out.sort((a, b) -> Long.compare(b.createdAt(), a.createdAt()));
+		return Collections.unmodifiableList(out);
+	}
+
+	public @Nullable Variant variant(String id) {
+		return variants.get(id);
+	}
+
+	public @Nullable JsonElement palettes() {
+		return palettes;
+	}
+
 	void setLink(LinkStatus s) {
 		link = s;
 		for (Listener l : listeners) {
@@ -166,8 +242,25 @@ public final class SidecarState {
 						designs.put(d.id(), d);
 					}
 				}
+				Map<String, Variant> oldVariants = new LinkedHashMap<>(variants);
+				variants.clear();
+				if (json.has("variants") && json.get("variants").isJsonArray()) {
+					for (JsonElement e : json.getAsJsonArray("variants")) {
+						if (e.isJsonObject()) {
+							Variant v = Variant.of(e.getAsJsonObject());
+							variants.put(v.id(), v);
+						}
+					}
+				}
+				palettes = json.has("palettes") && !json.get("palettes").isJsonNull() ? json.get("palettes") : null;
 				snapshots++;
 				for (Listener l : listeners) {
+					for (Variant v : variants.values()) {
+						Variant prev = oldVariants.get(v.id());
+						if (prev == null || prev.status() != v.status() || prev.updatedAt() != v.updatedAt()) {
+							guard(() -> l.onVariant(prev, v));
+						}
+					}
 					guard(l::onSnapshot);
 					for (Design d : designs.values()) {
 						Design prev = old.get(d.id());
@@ -192,6 +285,16 @@ public final class SidecarState {
 				Design prev = designs.put(d.id(), d);
 				for (Listener l : listeners) {
 					guard(() -> l.onDesign(prev, d));
+				}
+			}
+			case "variant.upsert" -> {
+				if (!json.has("variant") || !json.get("variant").isJsonObject()) {
+					return;
+				}
+				Variant v = Variant.of(json.getAsJsonObject("variant"));
+				Variant prev = variants.put(v.id(), v);
+				for (Listener l : listeners) {
+					guard(() -> l.onVariant(prev, v));
 				}
 			}
 			default -> {
@@ -240,6 +343,12 @@ public final class SidecarState {
 			ds.add(j);
 		}
 		o.add("designs", ds);
+		JsonArray vs = new JsonArray();
+		for (Variant v : variants()) {
+			vs.add(v.raw());
+		}
+		o.add("variants", vs);
+		o.addProperty("palettesFromSidecar", palettes != null);
 		o.addProperty("snapshots", snapshots);
 		return o;
 	}

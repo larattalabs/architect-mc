@@ -106,6 +106,22 @@ public final class Sidecar {
 		return link().send(m);
 	}
 
+	/** {@code variant.request {from, palette?, values?, name?}}; the ack's result carries {@code variantId}. */
+	public static CompletableFuture<SidecarLink.Ack> variantRequest(JsonObject payload) {
+		JsonObject m = msg("variant.request");
+		for (var e : payload.entrySet()) {
+			m.add(e.getKey(), e.getValue());
+		}
+		return link().send(m);
+	}
+
+	/** {@code import.request {path}} (an absolute {@code .nbt} path); the ack's result carries the job id. */
+	public static CompletableFuture<SidecarLink.Ack> importRequest(String path) {
+		JsonObject m = msg("import.request");
+		m.addProperty("path", path);
+		return link().send(m);
+	}
+
 	/** {@code shutdown {}} (the launcher stops a sidecar it started). */
 	public static CompletableFuture<SidecarLink.Ack> shutdown() {
 		return link().send(msg("shutdown"));
