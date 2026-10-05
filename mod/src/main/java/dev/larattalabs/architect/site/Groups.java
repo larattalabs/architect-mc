@@ -15,6 +15,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.concurrent.CompletableFuture;
+import net.minecraft.core.BlockPos;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import org.jspecify.annotations.Nullable;
@@ -42,6 +43,14 @@ public final class Groups {
 		long nextCheck;
 		final Map<String, Integer> refund = new TreeMap<>();
 		final List<CompletableFuture<Removed>> futures = new ArrayList<>();
+		/** Phase 4e: the undo group once planned (one undo over the sites), the sites it covers, and what it handed down. */
+		@Nullable String undo;
+		final List<String> undoSites = new ArrayList<>();
+		Map<String, Integer> handed = new TreeMap<>();
+		transient @Nullable CompletableFuture<Void> commit;
+		/** Construction members' deconstruct items (computed before the undo is planned, rule 7) and where they drop. */
+		final Map<String, Map<String, Integer>> decItems = new LinkedHashMap<>();
+		final Map<String, long[]> decAt = new LinkedHashMap<>();
 
 		Removal(String group, @Nullable String stage, @Nullable String requester, boolean force) {
 			this.group = group;
@@ -71,6 +80,27 @@ public final class Groups {
 			JsonObject r = new JsonObject();
 			refund.forEach(r::addProperty);
 			o.add("refund", r);
+			if (undo != null) {
+				o.addProperty("undo", undo);
+				JsonArray us = new JsonArray();
+				undoSites.forEach(us::add);
+				o.add("undoSites", us);
+				JsonObject h = new JsonObject();
+				handed.forEach(h::addProperty);
+				o.add("handed", h);
+			}
+			if (!decItems.isEmpty()) {
+				JsonObject d = new JsonObject();
+				decItems.forEach((site, items) -> {
+					JsonObject x = new JsonObject();
+					JsonObject it = new JsonObject();
+					items.forEach(it::addProperty);
+					x.add("items", it);
+					x.addProperty("at", decAt.get(site)[0]);
+					d.add(site, x);
+				});
+				o.add("dec", d);
+			}
 			return o;
 		}
 
@@ -82,6 +112,20 @@ public final class Groups {
 			r.current = o.has("current") ? o.get("current").getAsString() : null;
 			r.waited = o.get("waited").getAsLong();
 			o.getAsJsonObject("refund").entrySet().forEach(e -> r.refund.put(e.getKey(), e.getValue().getAsInt()));
+			if (o.has("undo")) {
+				r.undo = o.get("undo").getAsString();
+				o.getAsJsonArray("undoSites").forEach(e -> r.undoSites.add(e.getAsString()));
+				o.getAsJsonObject("handed").entrySet().forEach(e -> r.handed.put(e.getKey(), e.getValue().getAsInt()));
+			}
+			if (o.has("dec")) {
+				o.getAsJsonObject("dec").entrySet().forEach(e -> {
+					JsonObject x = e.getValue().getAsJsonObject();
+					Map<String, Integer> items = new TreeMap<>();
+					x.getAsJsonObject("items").entrySet().forEach(i -> items.put(i.getKey(), i.getValue().getAsInt()));
+					r.decItems.put(e.getKey(), items);
+					r.decAt.put(e.getKey(), new long[] {x.get("at").getAsLong()});
+				});
+			}
 			return r;
 		}
 	}
@@ -231,17 +275,26 @@ public final class Groups {
 		}
 	}
 
+	/**
+	 * One removal's tick (docs/CONTRACT.md phase 4e "Groups, stages and the queue"): the group's (or stage's) standing sites
+	 * become <b>one undo</b>, planned per section and committed once (hand-downs between members cancel out); then the writes
+	 * go site by site in reverse placement order (instant sites over ticks, {@link RestoreJob}; construction sites at once,
+	 * with the refunds computed before the undo was planned). A player in a box is waited for (up to 10 min); the player's
+	 * things in a box stop the removal before anything is written.
+	 */
 	private static void tick(MinecraftServer server, Removal r) {
 		if (r.current != null) {
 			if (Placement.job(r.current) != null) {
 				return; // a restore job runs (Placement); removed() moves on
 			}
-			// its job is gone (a load that could not resume it): the site is down if its record is
-			if (Sites.get(r.current) != null) {
-				Placement.add(server, new RestoreJob(r.current, RestoreJob.REMOVE, null, null));
+			// its job is gone (a load that could not resume it): write it again if it is still pending
+			if (r.undo != null && Sites.pendingRecord(r.current) != null && !written(r.current)) {
+				Placement.add(server, RestoreJob.writing(r.current, r.undo, r.current.equals(r.undoSites.isEmpty() ? null : r.undoSites.get(r.undoSites
+					.size() - 1)) ? r.handed : Map.of()));
 				return;
 			}
 			r.sites.remove(r.current);
+			written.add(r.current);
 			r.current = null;
 		}
 		if (!r.started) {
@@ -260,7 +313,28 @@ public final class Groups {
 		if (r.nextCheck > tick) {
 			return;
 		}
-		while (!r.sites.isEmpty() && Sites.get(r.sites.get(0)) == null) {
+		if (r.undo == null) {
+			plan(server, r);
+			return;
+		}
+		if (r.commit != null) {
+			if (!r.commit.isDone()) {
+				return;
+			}
+			if (r.commit.isCompletedExceptionally()) {
+				r.undo = null;
+				r.commit = null;
+				end(server, r, new Removed(false, List.of("the undo could not be saved to the world journal"), Map.copyOf(r.refund)));
+				return;
+			}
+			r.commit = null;
+			dev.larattalabs.architect.journal.WorldJournal.kill("K6");
+			pendAll(server, r);
+		} else {
+			pendAll(server, r); // after a load: the records go pending if they did not yet (R3)
+		}
+		// R4: the writes, last placed first
+		while (!r.sites.isEmpty() && (!r.undoSites.contains(r.sites.get(0)) || Sites.pendingRecord(r.sites.get(0)) == null && Sites.get(r.sites.get(0)) == null)) {
 			r.sites.remove(0);
 		}
 		if (r.sites.isEmpty()) {
@@ -268,42 +342,156 @@ public final class Groups {
 			return;
 		}
 		String id = r.sites.get(0);
-		Site s = Sites.get(id);
-		ServerLevel level = Sites.levelOf(server, s);
-		if (level == null) {
-			end(server, r, new Removed(false, List.of(s.dimension() + " is not loaded"), Map.copyOf(r.refund)));
+		Site s = Sites.pendingRecord(id);
+		ServerLevel level = s == null ? null : Sites.levelOf(server, s);
+		if (s == null || level == null) {
+			r.sites.remove(0);
 			return;
 		}
-		boolean player = Occupancy.scan(level, s.restoreBox(), e -> false).stream().anyMatch(f -> f.kind() == Occupancy.Kind.PLAYER);
-		if (player || s.placing()) {
-			r.waited += Batches.RECHECK;
-			r.nextCheck = tick + Batches.RECHECK;
-			if (r.waited >= MAX_WAIT) {
-				end(server, r, new Removed(false, List.of(player ? "a player stayed in " + id + " for 10 minutes" : id + " is still being placed"),
-					Map.copyOf(r.refund)));
-			}
-			return;
-		}
-		r.waited = 0;
-		List<String> blockers = Sites.removalBlockers(level, s);
-		if (!blockers.isEmpty()) {
-			end(server, r, new Removed(false, List.of(Sites.blockersMessage(id, blockers)), Map.copyOf(r.refund)));
-			return;
-		}
+		Map<String, Integer> handedHere = r.handed;
+		r.handed = Map.of();
 		if (s.construction() != null) {
-			// a construction site deconstructs with refunds (atomic, one per tick)
+			// a construction site deconstructs at once (its refunds were tallied before the undo, rule 7), one per tick
+			Map<String, Integer> items = r.decItems.getOrDefault(id, Map.of());
+			long[] at = r.decAt.get(id);
 			try {
-				Sites.Removed done = Sites.removeDetailed(level, id, false);
+				Sites.Removed done = Sites.finishGroupDeconstruct(level, s, r.undo, items, at == null ? null : BlockPos.of(at[0]), handedHere);
 				done.returned().forEach((k, v) -> r.refund.merge(k, v, Integer::sum));
-				r.sites.remove(0);
 			} catch (Sites.SiteException e) {
 				end(server, r, new Removed(false, List.of(e.getMessage()), Map.copyOf(r.refund)));
+				return;
 			}
+			r.sites.remove(0);
+			written.add(id);
 			Placement.save(server, false);
 			return;
 		}
 		r.current = id;
-		Placement.add(server, new RestoreJob(id, RestoreJob.REMOVE, null, null));
+		Placement.add(server, RestoreJob.writing(id, r.undo, handedHere));
+	}
+
+	/** Sites whose undo writes were done in this session (a reload writes again only those not done). */
+	private static final java.util.Set<String> written = new java.util.HashSet<>();
+
+	private static boolean written(String id) {
+		return written.contains(id);
+	}
+
+	/** R3 of a group undo: every member's record goes pending (once). */
+	private static void pendAll(MinecraftServer server, Removal r) {
+		for (String id : r.undoSites) {
+			Site s = Sites.get(id);
+			if (s != null) {
+				Sites.markPending(server, s, "removed");
+			}
+			if (Infras.get(id) != null) {
+				Infras.markPending(server, id);
+			}
+		}
+	}
+
+	/** R1-R2 of a group undo: checks every member, tallies construction refunds, plans and submits one commit. */
+	private static void plan(MinecraftServer server, Removal r) {
+		while (!r.sites.isEmpty() && Sites.get(r.sites.get(0)) == null && Infras.get(r.sites.get(0)) == null) {
+			r.sites.remove(0);
+		}
+		if (r.sites.isEmpty()) {
+			end(server, r, new Removed(true, List.of(), Map.copyOf(r.refund)));
+			return;
+		}
+		String dim = dimensionOf(r.sites.get(0));
+		List<String> ids = new ArrayList<>();
+		for (String id : r.sites) {
+			if (dim.equals(dimensionOf(id))) {
+				ids.add(id);
+			}
+		}
+		ServerLevel level = Sites.levelOf(server, dim);
+		if (level == null) {
+			end(server, r, new Removed(false, List.of(dim + " is not loaded"), Map.copyOf(r.refund)));
+			return;
+		}
+		for (String id : ids) {
+			Site s = Sites.get(id);
+			Infra inf = Infras.get(id);
+			boolean placing = s != null ? s.placing() : inf != null && inf.placing();
+			dev.larattalabs.architect.placement.Anchors.Bounds box = s != null ? s.restoreBox() : inf.box();
+			boolean player = Occupancy.scan(level, box, e -> false).stream().anyMatch(f -> f.kind() == Occupancy.Kind.PLAYER);
+			if (player || placing) {
+				r.waited += Batches.RECHECK;
+				r.nextCheck = tick + Batches.RECHECK;
+				if (r.waited >= MAX_WAIT) {
+					end(server, r, new Removed(false, List.of(player ? "a player stayed in " + id + " for 10 minutes" : id + " is still being placed"),
+						Map.copyOf(r.refund)));
+				}
+				return;
+			}
+		}
+		r.waited = 0;
+		for (String id : ids) {
+			Site s = Sites.get(id);
+			if (s == null) {
+				continue;
+			}
+			List<String> blockers = Sites.removalBlockers(level, s);
+			if (!blockers.isEmpty()) {
+				end(server, r, new Removed(false, List.of(Sites.blockersMessage(id, blockers)), Map.copyOf(r.refund)));
+				return;
+			}
+		}
+		// refunds against the stacks before the undo is planned (rule 7)
+		for (String id : ids) {
+			Site s = Sites.get(id);
+			if (s != null && s.construction() != null) {
+				Builder.Deconstruction d = Builder.prepareDeconstruct(level, s);
+				r.decItems.put(id, Map.copyOf(d.all()));
+				r.decAt.put(id, new long[] {d.at().asLong()});
+			}
+		}
+		String group = dev.larattalabs.architect.site.SiteJournal.group(r.stage == null ? "group-" + r.group : "stage-" + r.group + "-" + r.stage);
+		List<String> withCrate = new ArrayList<>(ids);
+		if (r.stage == null) {
+			withCrate.add(SiteGroupRec.CRATE_PREFIX + r.group); // the group's shared crate goes with the group
+		}
+		try {
+			List<String> entries = new ArrayList<>();
+			for (String id : withCrate) {
+				SiteJournal.active(id).forEach(m -> entries.add(m.id()));
+			}
+			if (entries.isEmpty()) {
+				end(server, r, new Removed(false, List.of("nothing of group " + r.group + " is in the world journal"), Map.copyOf(r.refund)));
+				return;
+			}
+			dev.larattalabs.architect.journal.WorldJournal.kill("K5");
+			SiteJournal.Undone u = SiteJournal.undoEntries(level, entries, group);
+			r.undo = group;
+			r.undoSites.clear();
+			r.undoSites.addAll(ids);
+			r.handed = new TreeMap<>(Sites.handedBySite(u.work()));
+			r.commit = u.commit();
+			Placement.save(server, false);
+		} catch (Sites.SiteException e) {
+			end(server, r, new Removed(false, List.of(e.getMessage()), Map.copyOf(r.refund)));
+		}
+	}
+
+	private static String dimensionOf(String id) {
+		Site s = Sites.get(id);
+		if (s != null) {
+			return s.dimension();
+		}
+		Infra i = Infras.get(id);
+		return i != null ? i.dimension() : Site.OVERWORLD;
+	}
+
+	/** Whether a removal in progress takes this site down (it can't be layered over meanwhile). */
+	static boolean removing(String siteId) {
+		for (Removal r : REMOVALS) {
+			if (r.sites.contains(siteId) || r.undoSites.contains(siteId)) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/** A restore job of a removal finished (Placement). */
@@ -312,6 +500,7 @@ public final class Groups {
 			if (job.siteId.equals(r.current)) {
 				r.current = null;
 				r.sites.remove(job.siteId);
+				written.add(job.siteId);
 				if (job.broken != null) {
 					end(server, r, new Removed(false, List.of(job.siteId + ": " + job.broken), Map.copyOf(r.refund)));
 				}
@@ -370,6 +559,7 @@ public final class Groups {
 	}
 
 	static void reset(MinecraftServer server) {
+		written.clear();
 		REMOVALS.forEach(r -> r.futures.forEach(f -> f.completeExceptionally(new IllegalStateException("the world stopped"))));
 		REMOVALS.clear();
 		tick = 0;

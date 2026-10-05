@@ -9,6 +9,9 @@ import dev.larattalabs.architect.Architect;
 import dev.larattalabs.architect.api.Reason;
 import dev.larattalabs.architect.apiimpl.ApiEvents;
 import dev.larattalabs.architect.apiimpl.ApiRules;
+import dev.larattalabs.architect.journal.Journal;
+import dev.larattalabs.architect.journal.JournalStore;
+import dev.larattalabs.architect.journal.WorldJournal;
 import dev.larattalabs.architect.placement.Anchor;
 import dev.larattalabs.architect.placement.Anchors;
 import dev.larattalabs.architect.placement.Approach;
@@ -83,26 +86,28 @@ import org.jspecify.annotations.Nullable;
 
 /**
  * The placed designs of the running world (was AgentCraft's {@code Buildings}): persisted in
- * {@code <world>/architect-sites.json}, with the terrain each one replaced kept as a structure snapshot in
- * {@code <world>/architect-sites/<file>.nbt}. Loaded when any world starts and cleared when it stops. The world is only
- * changed by {@link #place}, {@link #remove} and {@link #move}, which run on explicit commands (or a ghost confirm) on the
- * server thread; reads are safe from any thread.
+ * {@code <world>/architect-sites.json}, with what each one changed kept in the world journal ({@code journal.WorldJournal},
+ * docs/CONTRACT.md "Phase 4e contract"). Loaded when any world starts and cleared when it stops. The world is only changed by
+ * {@link #place}, {@link #remove} and {@link #move}, which run on explicit commands (or a ghost confirm) on the server thread;
+ * reads are safe from any thread.
  *
  * <p><b>Placement contract</b> (kept from AgentCraft docs/BUILDINGS.md): terrain fit (foundation fill, cleared terrain),
  * the entrance approach, occupancy (players, pets and things that matter refuse; hostile mobs are removed), fluids (lava
- * refuses, water is a note), safe remove (the player's things in the box refuse unless forced), crash safety (a taken-down
- * site's snapshot is kept until the next world start finds the restored terrain on disk) and move / undo move.
+ * refuses, water is a note), safe remove (the player's things in the box refuse unless forced), crash safety and move / undo
+ * move.
  *
- * <p><b>Snapshots instead of AgentCraft's world journal.</b> Sites never overlap and there are no roads or trophies, so each
- * site owns one snapshot file, named in its record. Order of every change: the snapshot file first (written, then renamed
- * into place), then the blocks, then the record file. A file that no record or pending entry names is kept and reported
- * at world start (never deleted).
+ * <p><b>The journal instead of 4d's box snapshots</b> (phase 4e): a site's restore box is its {@code site} BOX entry, its held
+ * leaves a {@code leaves} CELL entry, a construction crate a {@code crate} entry ({@link SiteJournal}). Order of every change:
+ * the journal first, then the site record, then the blocks. A site that overlaps nothing is placed and removed with exactly
+ * 4d's block writes; the restore template is built from the undo's {@code written} values.
  */
 public final class Sites {
 	public static final String FILE = "architect-sites.json";
 	public static final String SNAPSHOT_DIR = "architect-sites";
 	/** Block update flags for placing and restoring: sync to clients, no drops, no container spills (no duplicated items on restore). */
 	static final int FLAGS = Block.UPDATE_CLIENTS | Block.UPDATE_SUPPRESS_DROPS | Block.UPDATE_SKIP_BLOCK_ENTITY_SIDEEFFECTS;
+	/** Roads and cell sites write with these (phase 4e, as AgentCraft's roads do): sync to clients, no side effects. */
+	static final int CELL_FLAGS = Block.UPDATE_CLIENTS | Block.UPDATE_SKIP_ALL_SIDEEFFECTS;
 	private static final Gson GSON = new GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create();
 
 	/** Immutable state: sites by id (placement order), the next id number, sites taken down since the last world start. */
@@ -146,10 +151,11 @@ public final class Sites {
 	}
 
 	public static void init() {
+		WorldJournal.init(); // the journal opens (and imports 4d worlds) before the sites load
 		ServerLifecycleEvents.SERVER_STARTED.register(server -> {
 			worldDir = server.getWorldPath(LevelResource.ROOT);
 			load(server);
-			reconcile(server);
+			reconcile(server, Placement.jobSites(server));
 			notifyListeners();
 		});
 		Placement.init();
@@ -257,58 +263,124 @@ public final class Sites {
 
 	private static Site placeInternal(ServerLevel level, Blueprint bp, BlockPos origin, Rotation rotation, boolean force, @Nullable String owner,
 		@Nullable Boolean construction, @Nullable String siteOwner, @Nullable JsonObject ext, Site.@Nullable Member member) throws SiteException {
+		return placeInternal(level, bp, origin, rotation, force, owner, construction, siteOwner, ext, member, false);
+	}
+
+	private static Site placeInternal(ServerLevel level, Blueprint bp, BlockPos origin, Rotation rotation, boolean force, @Nullable String owner,
+		@Nullable Boolean construction, @Nullable String siteOwner, @Nullable JsonObject ext, Site.@Nullable Member member, boolean layer)
+		throws SiteException {
 		MinecraftServer server = level.getServer();
 		if (loadFailed) {
 			throw new SiteException(Reason.OTHER, FILE + " could not be read when the world started (see the log); fix or move it, then restart");
 		}
-		State s = state;
-		int next = s.next();
-		while (snapshotUsed("s" + next)) {
-			next++; // never reuse an id a snapshot file still carries
-		}
-		String id = "s" + next;
+		SiteJournal.requireAvailable();
+		String id = newSiteId();
 		boolean survival = construction != null ? construction : SurvivalWorld.on();
-		Built built = build(level, bp, origin, rotation, force, null, id, survival);
+		Built built = build(level, bp, origin, rotation, force, null, id, survival, layer, new Who(siteOwner, ext, member, owner));
 		Construction cs = null;
 		if (survival) {
 			try {
-				cs = Builder.convert(level, bp, built, id, owner);
+				cs = Builder.convertNow(level, bp, built, id, owner);
 			} catch (SiteException | RuntimeException e) {
 				Architect.LOGGER.error("Making {} a construction site failed; taking the placement down", id, e);
 				unbuild(level, built);
 				throw e instanceof SiteException se ? se : new SiteException("Making the construction site failed (" + e.getMessage() + "); the area was restored");
 			}
 		}
-		Map<String, Site> map = new LinkedHashMap<>(s.byId());
-		long now = System.currentTimeMillis();
-		Site b = new Site(id, bp.id(), BlueprintTransform.rotationName(built.turns()), built.box(), built.interior(), built.anchors(), now,
-			dimensionId(level), built.snapshotBox(), built.snapshot(), null, built.pin(), cs, siteOwner, ext, member, false);
-		map.put(id, b);
-		addToGroup(b);
-		commit(server, new State(Collections.unmodifiableMap(map), next + 1, s.pending()));
+		// P8: the record placed
+		Site b = built.record().withPin(built.pin()).withConstruction(cs).withPlacing(false);
+		replace(server, b);
+		SiteJournal.updateMeta(id, b.toJson());
 		lastNote = built.note();
-		Architect.LOGGER.info("Placed site {} ({}) at {} rotation {}: box {}, snapshot {} over {}{}{}", id, bp.id(), origin.toShortString(), b.rotation(),
-			Anchors.str(b.box()), b.snapshot(), Anchors.str(b.restoreBox()), force ? " (forced)" : "", built.note() == null ? "" : "; " + built.note());
+		Architect.LOGGER.info("Placed site {} ({}) at {} rotation {}: box {}, journal box {}{}{}", id, bp.id(), origin.toShortString(), b.rotation(),
+			Anchors.str(b.box()), Anchors.str(b.restoreBox()), force ? " (forced)" : "", built.note() == null ? "" : "; " + built.note());
 		return b;
 	}
 
-	/** A template put into the world (not recorded yet): its snapshot file (written) and the terrain tag (to roll back). */
-	record Built(int turns, Anchors.Bounds box, Anchors.Bounds snapshotBox, Anchors.Bounds interior, Map<String, Anchor> anchors,
-		Site.Pin pin, @Nullable String note, String snapshot, CompoundTag before, TemplateGrid grid, TerrainFit.Plan plan, Approach.Plan approach) {
+	/** Who a placement is for: the site's owner and ext, its group membership, the placing player (the HUD line). */
+	record Who(@Nullable String siteOwner, @Nullable JsonObject ext, Site.@Nullable Member member, @Nullable String placer) {
+		static final Who NONE = new Who(null, null, null, null);
 	}
 
-	/** Takes a built but unrecorded site down again and deletes its snapshot file. */
-	static void unbuild(ServerLevel level, Built built) {
-		try {
-			Drops drops = Drops.before(level, built.snapshotBox());
-			restoreTemplate(level, built.snapshotBox(), built.before());
-			drops.clearNew(level);
-			releaseHeld(level, built.pin().heldLeaves());
-		} catch (RuntimeException e) {
-			Architect.LOGGER.error("Could not take the site {} down again (its saved terrain is {})", Anchors.str(built.snapshotBox()), built.snapshot(), e);
-			return;
+	/** A new site id ({@code s<n>}): never one a record, a journal entry or a legacy snapshot file carries. */
+	static String newSiteId() {
+		State s = state;
+		int next = s.next();
+		while (idUsed("s" + next)) {
+			next++;
 		}
-		deleteSnapshot(built.snapshot());
+		state = new State(s.byId(), next + 1, s.pending());
+		return "s" + next;
+	}
+
+	private static boolean idUsed(String id) {
+		return state.byId().containsKey(id) || state.pending().stream().anyMatch(p -> p.site().id().equals(id)) || !SiteJournal.entries(id).isEmpty()
+			|| snapshotUsed(id);
+	}
+
+	/** The file name a 0.8.0 record carries in {@code snapshot}: no such file exists, so 0.7.0 refuses to remove it (downgrade). */
+	static String journalName(String id) {
+		return id + "-" + System.currentTimeMillis() + ".journal";
+	}
+
+	/**
+	 * A template put into the world: its placing record (P4), the pin and notes, and what the construction conversion needs.
+	 */
+	record Built(int turns, Anchors.Bounds box, Anchors.Bounds snapshotBox, Anchors.Bounds interior, Map<String, Anchor> anchors,
+		Site.Pin pin, @Nullable String note, TemplateGrid grid, TerrainFit.Plan plan, Approach.Plan approach, Site record, List<String> entries) {
+		String snapshot() {
+			return record.snapshot();
+		}
+	}
+
+	/** Takes a built site down again (a failed conversion or move): its undo written at once, its entries and record gone. */
+	static void unbuild(ServerLevel level, Built built) {
+		Site cur = get(built.record().id());
+		abortPlacement(level, built.record().id(), cur != null && cur.placing(), built.entries());
+	}
+
+	/**
+	 * Rolls a placement back in the same tick (it failed half way): the undo of its entries is committed and written, then the
+	 * entries are released (it was never placed) and its record dropped ({@code dropRecord}).
+	 */
+	static void abortPlacement(ServerLevel level, String id, boolean dropRecord, List<String> entries) {
+		try {
+			Drops drops = null;
+			Site rec = get(id);
+			if (rec != null) {
+				drops = Drops.before(level, rec.restoreBox());
+			}
+			String g = SiteJournal.group("abort-" + id);
+			SiteJournal.Undone u = SiteJournal.undoEntries(level, entries, g);
+			SiteJournal.await(u.commit(), "the rollback of " + id);
+			SiteJournal.Restore r = SiteJournal.writeNow(level, id, g);
+			SiteJournal.restoreRing(level, r.ring());
+			if (drops != null) {
+				drops.clearNew(level);
+			}
+			SiteJournal.releaseGroup(u.work().ids());
+		} catch (SiteException | RuntimeException e) {
+			Architect.LOGGER.error("Could not take the placement {} down again", id, e);
+		}
+		if (dropRecord && state.byId().containsKey(id)) {
+			State s = state;
+			Map<String, Site> map = new LinkedHashMap<>(s.byId());
+			Site gone = map.remove(id);
+			if (gone != null) {
+				dropFromGroup(gone);
+			}
+			MinecraftServer server = level.getServer();
+			commit(server, new State(Collections.unmodifiableMap(map), s.next(), s.pending()));
+		}
+	}
+
+	/** Adds (or replaces) a record and saves: P4 of a placement. */
+	static void putRecord(MinecraftServer server, Site b) {
+		State s = state;
+		Map<String, Site> map = new LinkedHashMap<>(s.byId());
+		map.put(b.id(), b);
+		addToGroup(b);
+		commit(server, new State(Collections.unmodifiableMap(map), s.next(), s.pending()));
 	}
 
 	/** What a site placed from {@code grid} with {@code turns} pins. */
@@ -316,80 +388,34 @@ public final class Sites {
 		return new Site.Pin(grid.fingerprint(), grid.blockEntityOffsets(turns));
 	}
 
-	// ------------------------------------------------------------------ held leaves (LeafGuard)
-
-	/** Releases held leaves, except cells inside a standing site's box in this dimension (they are that site's now). */
-	private static void releaseHeld(ServerLevel level, List<Integer> held) {
-		if (held.isEmpty()) {
-			return;
-		}
-		String here = dimensionId(level);
-		List<Anchors.Bounds> boxes = state.byId().values().stream().filter(x -> x.dimension().equals(here)).map(Site::restoreBox).toList();
-		List<Integer> free = new ArrayList<>(held.size());
-		for (int i = 0; i + 3 < held.size(); i += 4) {
-			int x = held.get(i);
-			int y = held.get(i + 1);
-			int z = held.get(i + 2);
-			if (boxes.stream().noneMatch(bx -> LeafGuard.distanceTo(bx, x, y, z) == 0)) {
-				free.addAll(held.subList(i, i + 4));
-			}
-		}
-		LeafGuard.release(level, free, FLAGS);
-	}
+	// ------------------------------------------------------------------ held leaves (LeafGuard, phase 4e: leaves entries)
 
 	/**
-	 * Before a new snapshot of {@code box}: leaves standing sites hold inside it get their natural state back and leave
-	 * those sites' records (the new site's snapshot keeps them natural; the new site's own hold covers what it needs).
+	 * After {@code box} got its old terrain back: standing sites near it hold again the leaves that hang on them, each as a new
+	 * {@code leaves} entry (committed before the leaves are written).
 	 */
-	private static void releaseHeldInside(ServerLevel level, Anchors.Bounds box) {
-		State s = state;
-		String here = dimensionId(level);
-		Map<String, Site> map = new LinkedHashMap<>(s.byId());
-		boolean changed = false;
-		for (Site x : s.byId().values()) {
-			if (!x.dimension().equals(here) || x.pin() == null || x.pin().heldLeaves().isEmpty()) {
-				continue;
-			}
-			List<Integer> held = x.pin().heldLeaves();
-			List<Integer> keep = new ArrayList<>(held.size());
-			List<Integer> inside = new ArrayList<>();
-			for (int i = 0; i + 3 < held.size(); i += 4) {
-				boolean in = LeafGuard.distanceTo(box, held.get(i), held.get(i + 1), held.get(i + 2)) == 0;
-				(in ? inside : keep).addAll(held.subList(i, i + 4));
-			}
-			if (inside.isEmpty()) {
-				continue;
-			}
-			LeafGuard.release(level, inside, FLAGS);
-			map.put(x.id(), withPin(x, x.pin().withHeldLeaves(keep)));
-			changed = true;
-		}
-		if (changed) {
-			state = new State(Collections.unmodifiableMap(map), s.next(), s.pending()); // the caller's commit writes it
-		}
-	}
-
-	/** After {@code box} got its old terrain back: standing sites near it hold again the leaves that hang on them. */
 	private static void reholdNear(ServerLevel level, Anchors.Bounds box) {
-		State s = state;
 		String here = dimensionId(level);
-		Map<String, Site> map = new LinkedHashMap<>(s.byId());
-		boolean changed = false;
-		for (Site x : s.byId().values()) {
-			if (!x.dimension().equals(here) || x.pin() == null || !near(x.restoreBox(), box, 2 * LeafGuard.RADIUS)) {
+		for (Site x : state.byId().values()) {
+			if (!x.dimension().equals(here) || x.placing() || !near(x.restoreBox(), box, 2 * LeafGuard.RADIUS)) {
 				continue;
 			}
-			List<Integer> more = LeafGuard.hold(level, x.restoreBox(), FLAGS);
+			List<Integer> more = SiteJournal.holdable(level, x.restoreBox());
 			if (more.isEmpty()) {
 				continue;
 			}
-			List<Integer> all = new ArrayList<>(x.pin().heldLeaves());
-			all.addAll(more);
-			map.put(x.id(), withPin(x, x.pin().withHeldLeaves(all)));
-			changed = true;
-		}
-		if (changed) {
-			state = new State(Collections.unmodifiableMap(map), s.next(), s.pending()); // the caller's commit writes it
+			try {
+				JournalStore s = SiteJournal.store();
+				String id = s.newId();
+				long layer = s.newLayer();
+				JournalStore.Txn t = s.begin().label("rehold:" + x.id()).create(JournalStore.Meta.header(id, WorldJournal.LEAVES, x.id(), x.group(), here,
+					Journal.Policy.CELL, layer, Journal.Status.ACTIVE, System.currentTimeMillis()), JournalStore.bySection(SiteJournal.leafCells(level, more,
+						layer)), dev.larattalabs.architect.journal.JournalNbt.Head.EMPTY);
+				SiteJournal.await(s.submit(t), "the leaves " + x.id() + " holds");
+				LeafGuard.holdCells(level, more, FLAGS);
+			} catch (SiteException e) {
+				Architect.LOGGER.warn("Could not hold the leaves near {} again: {}", x.id(), e.getMessage());
+			}
 		}
 	}
 
@@ -462,7 +488,8 @@ public final class Sites {
 
 	/** A site that passed {@link #checkSite}: everything {@link #build} needs, so it never looks at the world twice. */
 	private record SitePlan(StructureTemplate template, int turns, StructurePlaceSettings settings, BlockPos placePos, Anchors.Bounds box,
-		TemplateGrid grid, TerrainFit.Plan plan, Approach.Plan approach, Anchors.Bounds snapBox, List<Occupancy.Found> found, SiteWarnings.Result site) {
+		TemplateGrid grid, TerrainFit.Plan plan, Approach.Plan approach, Anchors.Bounds snapBox, List<Occupancy.Found> found, SiteWarnings.Result site,
+		List<String> layerNotes, List<SiteJournal.Hit> overlaps) {
 	}
 
 	/**
@@ -472,6 +499,15 @@ public final class Sites {
 	 */
 	private static @Nullable SitePlan checkSite(ServerLevel level, Blueprint bp, BlockPos origin, Rotation rotation, boolean force,
 		@Nullable Site moving, Refusals out, boolean dryRun, boolean survival) throws SiteException {
+		return checkSite(level, bp, origin, rotation, force, moving, out, dryRun, survival, false, null);
+	}
+
+	/**
+	 * {@link #checkSite}; {@code layer}: the LAYER overlap policy (docs/CONTRACT.md phase 4e "Overlap"), else REFUSE;
+	 * {@code owner}: the request's owner (a LAYER over another owner's site needs force).
+	 */
+	private static @Nullable SitePlan checkSite(ServerLevel level, Blueprint bp, BlockPos origin, Rotation rotation, boolean force,
+		@Nullable Site moving, Refusals out, boolean dryRun, boolean survival, boolean layer, @Nullable String owner) throws SiteException {
 		Blueprints.Entry entry = Blueprints.entry(bp.id());
 		if (entry == null) {
 			out.add(Reason.UNKNOWN_BLUEPRINT, "Design " + bp.id() + " has no loaded template");
@@ -510,15 +546,8 @@ public final class Sites {
 		if (snapBox.minY() < level.getMinY() || box.maxY() > level.getMaxY()) {
 			out.add(Reason.BUILD_HEIGHT, "Box " + Anchors.str(snapBox) + " leaves the build height (" + level.getMinY() + ".." + level.getMaxY() + ")");
 		}
-		String here = dimensionId(level);
-		for (Site other : state.byId().values()) {
-			if (other.dimension().equals(here) && Anchors.intersects(other.restoreBox(), snapBox)) {
-				out.add(Reason.OVERLAP, "Box " + Anchors.str(snapBox) + " overlaps " + (moving != null && other.id().equals(moving.id())
-					? "where " + other.id() + " stands now (move it further)" : "site " + other.id() + " " + Anchors.str(other.box())
-					+ " (remove it first or place elsewhere)"));
-				break;
-			}
-		}
+		List<String> layerNotes = new ArrayList<>();
+		List<SiteJournal.Hit> hits = overlapCheck(level, snapBox, moving, layer, owner, force, out, layerNotes);
 		String lava = TerrainFit.lavaRefusal(plan);
 		if (lava == null) {
 			lava = Approach.lavaRefusal(approach);
@@ -527,7 +556,7 @@ public final class Sites {
 			out.add(Reason.LAVA, "Not here: " + lava + "; a building next to lava burns and floods");
 		}
 		if (!force) {
-			List<String> foreign = blockEntities(level, snapBox);
+			List<String> foreign = foreignBlockEntities(level, snapBox);
 			if (!foreign.isEmpty()) {
 				out.add(Reason.BLOCK_ENTITIES, "Box " + Anchors.str(snapBox) + " contains " + foreign.size() + " block entit" + (foreign.size() == 1 ? "y" : "ies")
 					+ " (" + String.join(", ", foreign.subList(0, Math.min(4, foreign.size()))) + (foreign.size() > 4 ? ", ..." : "")
@@ -551,7 +580,150 @@ public final class Sites {
 		if (!occupied.isEmpty()) {
 			out.add(ApiRules.occupancyReason(found.stream().map(Occupancy.Found::kind).toList()), "Not placed: " + String.join("; ", occupied));
 		}
-		return new SitePlan(template, turns, settings, placePos, box, grid, plan, approach, snapBox, found, site);
+		return new SitePlan(template, turns, settings, placePos, box, grid, plan, approach, snapBox, found, site, layerNotes, hits);
+	}
+
+	/**
+	 * The per-cell overlap test (docs/CONTRACT.md phase 4e "Overlap"): the predicted restore box against every standing or
+	 * placing entry's cells (guard data never counts). REFUSE: any overlap refuses {@code OVERLAP}. LAYER: the new site goes on
+	 * top, unless an overlapped site is busy ({@code OVERLAP_BUSY}: placing, a construction site still building, being
+	 * removed), has another owner ({@code OVERLAP_OWNED} without force) or a cell would carry more than 8 layers
+	 * ({@code LAYER_DEPTH}). Returns the hits.
+	 */
+	private static List<SiteJournal.Hit> overlapCheck(ServerLevel level, Anchors.Bounds snapBox, @Nullable Site moving, boolean layer,
+		@Nullable String owner, boolean force, Refusals out, List<String> notes) throws SiteException {
+		String why = SiteJournal.unavailable();
+		if (why != null) {
+			out.add(Reason.JOURNAL_UNAVAILABLE, why);
+			return List.of();
+		}
+		List<SiteJournal.Hit> hits = SiteJournal.overlaps(dimensionId(level), snapBox, null);
+		if (hits.isEmpty()) {
+			return hits;
+		}
+		if (!layer || moving != null) {
+			SiteJournal.Hit h = hits.get(0);
+			out.add(Reason.OVERLAP, "Box " + Anchors.str(snapBox) + " overlaps " + (moving != null && h.site().equals(moving.id())
+				? "where " + h.site() + " stands now (move it further)" : describe(h.site()) + " (remove it first or place elsewhere)"));
+			return hits;
+		}
+		Map<String, Integer> bySite = new LinkedHashMap<>();
+		for (SiteJournal.Hit h : hits) {
+			bySite.merge(h.site(), h.cells(), Integer::sum);
+		}
+		for (SiteJournal.Hit h : hits) {
+			String busy = busy(h.site(), h.status());
+			if (busy != null) {
+				out.add(Reason.OVERLAP_BUSY, "Not yet: " + describe(h.site()) + " " + busy + " (it waits)");
+				return hits;
+			}
+		}
+		for (String sid : bySite.keySet()) {
+			String o = ownerOf(sid);
+			if (!force && !java.util.Objects.equals(o, owner)) {
+				out.add(Reason.OVERLAP_OWNED, describe(sid) + " is owned by " + (o == null ? "the player" : o) + "; placing on top of it needs force");
+				return hits;
+			}
+		}
+		int depth = hits.get(0).depth();
+		if (depth + 1 > SiteJournal.MAX_DEPTH) {
+			out.add(Reason.LAYER_DEPTH, "A cell would carry " + (depth + 1) + " layers (at most " + SiteJournal.MAX_DEPTH + ")");
+			return hits;
+		}
+		bySite.forEach((sid, n) -> notes.add("on top of " + describe(sid) + " (" + n + " cell" + (n == 1 ? "" : "s") + ")"));
+		return hits;
+	}
+
+	/** "site s3 (cabin)", "road r2", "cell site c1 (steward_mc:terrain)". */
+	static String describe(String siteId) {
+		Site b = get(siteId);
+		if (b != null) {
+			return "site " + siteId + " " + Anchors.str(b.box());
+		}
+		Infra i = Infras.get(siteId);
+		if (i != null) {
+			return i.describe();
+		}
+		return siteId.startsWith("group:") ? "the shared crate of " + siteId.substring(6) : "site " + siteId;
+	}
+
+	/** The owner of a site, road or cell site (null: the player's). */
+	static @Nullable String ownerOf(String siteId) {
+		Site b = get(siteId);
+		if (b != null) {
+			return b.owner();
+		}
+		Infra i = Infras.get(siteId);
+		if (i != null) {
+			return i.owner();
+		}
+		if (siteId.startsWith(SiteGroupRec.CRATE_PREFIX)) {
+			SiteGroupRec g = group(siteId.substring(SiteGroupRec.CRATE_PREFIX.length()));
+			return g == null ? null : g.owner();
+		}
+		return null;
+	}
+
+	/** Why a site can't be layered over now (temporary), or null: placing, a construction site building, being removed. */
+	static @Nullable String busy(String siteId, Journal.Status status) {
+		if (status == Journal.Status.PLACING) {
+			return "is still being placed";
+		}
+		Site b = get(siteId);
+		if (b != null && b.placing()) {
+			return "is still being placed";
+		}
+		if (b != null && b.building()) {
+			return "is a construction site still building";
+		}
+		if (Groups.removing(siteId)) {
+			return "is being removed";
+		}
+		Infra i = Infras.get(siteId);
+		if (i != null && i.placing()) {
+			return "is still being placed";
+		}
+		return null;
+	}
+
+	/**
+	 * The block entities in {@code box} that are not an Architect site's own (docs/CONTRACT.md phase 4e "Block entities"): a
+	 * cell no entry owns, or one whose container contents differ from the owner's {@code after} (a migrated entry without
+	 * {@code after} falls back to its site's pin, as 4d's removal blockers do). An empty template chest of a lower site is
+	 * not foreign; a chest the player filled is.
+	 */
+	private static List<String> foreignBlockEntities(ServerLevel level, Anchors.Bounds box) {
+		List<String> out = new ArrayList<>();
+		String dim = dimensionId(level);
+		forEachBlockEntity(level, box, be -> {
+			BlockPos p = be.getBlockPos();
+			String what = p.toShortString() + " " + be.getBlockState().getBlock().getDescriptionId().replace("block.minecraft.", "");
+			List<WorldJournal.Layer> st;
+			try {
+				st = WorldJournal.stack(dim, p.asLong());
+			} catch (IOException e) {
+				st = List.of();
+			}
+			if (st.isEmpty()) {
+				out.add(what);
+				return;
+			}
+			WorldJournal.Layer top = st.get(st.size() - 1);
+			Journal.Value after = top.cell().after();
+			CompoundTag now = WorldJournal.beNbt(level, p);
+			if (after != null) {
+				if (!dev.larattalabs.architect.journal.StillOurs.holds(be.getBlockState(), now, WorldJournal.state(after), after.nbt())) {
+					out.add(what);
+				}
+				return;
+			}
+			Site owner = get(top.meta().site());
+			boolean own = owner != null && ownBlockEntities(owner).contains(p);
+			if (!own || be instanceof Container c && !c.isEmpty()) {
+				out.add(what);
+			}
+		});
+		return out;
 	}
 
 	private static boolean loaded(ServerLevel level, Anchors.Bounds box) {
@@ -669,36 +841,52 @@ public final class Sites {
 	}
 
 	/**
-	 * Checks a site (the first refusal thrown) and puts the template there: the terrain captured and its snapshot file
-	 * written first, then the template, foundation, cleared terrain, the approach, and drops caused by it removed.
-	 * Restores the terrain and throws when anything fails.
+	 * Checks a site (the first refusal thrown) and puts the template there (P1-P7 of docs/CONTRACT.md phase 4e "Crash safety"):
+	 * the box captured into the journal (one tick) and committed PLACING first, then the record (placing; a move keeps the
+	 * standing record), then the template, foundation, cleared terrain, the approach, and drops caused by it removed; then (an
+	 * instant site) the {@code after} capture and the ACTIVE commit. A construction site's {@code after} is its target, taken by
+	 * {@link Builder#convertNow}. Rolls back and throws when anything fails.
 	 */
 	private static Built build(ServerLevel level, Blueprint bp, BlockPos origin, Rotation rotation, boolean force, @Nullable Site moving, String id,
-		boolean survival) throws SiteException {
-		SitePlan site = checkSite(level, bp, origin, rotation, force, moving, THROW, false, survival);
+		boolean survival, boolean layer, Who who) throws SiteException {
+		SitePlan site = checkSite(level, bp, origin, rotation, force, moving, THROW, false, survival, layer, who.siteOwner());
 		if (site == null) {
 			throw new SiteException("Internal: no site for " + bp.id());
 		}
+		MinecraftServer server = level.getServer();
 		Anchors.Bounds box = site.box();
 		TerrainFit.Plan plan = site.plan();
 		Approach.Plan approach = site.approach();
 		Anchors.Bounds snapBox = site.snapBox();
-		// leaves other sites (or this one, when moving) hold inside the new box: natural again before the snapshot, so a
-		// later Remove of this site does not bring them back persistent (they are this site's terrain now)
-		releaseHeldInside(level, snapBox);
-		CompoundTag before;
-		String snapshot = id + "-" + System.currentTimeMillis() + ".nbt";
+		int turns = site.turns();
+		// P1: the capture (one tick), the leaves to hold (not other sites' cells), the leaf ring
+		List<Integer> held = SiteJournal.holdable(level, snapBox);
+		int[] ring = LeafGuard.ring(level, snapBox);
+		Site rec = new Site(id, bp.id(), BlueprintTransform.rotationName(turns), box, BlueprintTransform.worldBounds(bp, turns, box.minX(), box.minY(),
+			box.minZ()), BlueprintTransform.worldAnchors(bp, turns, box.minX(), box.minY(), box.minZ()), moving != null ? moving.placedAt()
+				: System.currentTimeMillis(), dimensionId(level), snapBox, journalName(id), moving != null ? moving.movedFrom() : null,
+			pinFor(site.grid(), turns), null, moving != null ? moving.owner() : who.siteOwner(), moving != null ? moving.ext() : who.ext(),
+			moving != null ? moving.member() : who.member(), true);
+		// P2-P3: the PLACING commit (a single Place commits synchronously); positions changed meanwhile are captured again
+		SiteJournal.Placing placing = SiteJournal.begin(level, id, WorldJournal.SITE, rec.group(), snapBox, held, rec.toJson(), ring, null);
 		try {
-			before = captureWithRing(level, snapBox);
-			writeSnapshot(snapshot, before);
-		} catch (IOException e) {
-			Architect.LOGGER.warn("Could not save the snapshot of {}", Anchors.str(snapBox), e);
-			throw new SiteException("Could not save the terrain snapshot (" + e.getMessage() + "); nothing was placed");
+			SiteJournal.await(placing.commit, "the terrain of " + id);
+			for (java.util.concurrent.CompletableFuture<Void> f; (f = SiteJournal.retake(level, placing)) != null;) {
+				SiteJournal.await(f, "the terrain of " + id);
+			}
+		} finally {
+			placing.stopTracking();
 		}
+		WorldJournal.kill("K2");
+		// P4: the record, placing
+		if (moving == null) {
+			putRecord(server, rec);
+		}
+		// P5: the blocks (4d's writes, unchanged)
 		List<BlockPos> plants = straddlingPositions(level, snapBox, false);
 		Drops drops = Drops.before(level, snapBox);
 		// leaves outside the box that hang on logs inside it: kept from decaying while the site stands (before the box changes)
-		List<Integer> held = LeafGuard.hold(level, snapBox, FLAGS);
+		LeafGuard.holdCells(level, held, FLAGS);
 		try {
 			int removed = 0;
 			for (Entity e : level.getEntities((Entity) null, Occupancy.aabb(snapBox), e -> !(e instanceof Player) && e.isAlive())) {
@@ -760,17 +948,20 @@ public final class Sites {
 				notes.add(shortOf);
 			}
 			notes.addAll(site.site().warnings());
-			int turns = site.turns();
+			notes.addAll(site.layerNotes());
+			Site.Pin pin = pinFor(site.grid(), turns, beds.cells(), box);
+			// P6-P7 (instant): the after capture and the ACTIVE commit; a construction site's after is its target (convertNow)
+			if (!survival) {
+				SiteJournal.await(SiteJournal.complete(id, WorldJournal.capture(level, snapBox), null), "the placement of " + id);
+				WorldJournal.kill("K4");
+			}
 			return new Built(turns, box, snapBox, BlueprintTransform.worldBounds(bp, turns, box.minX(), box.minY(), box.minZ()),
-				BlueprintTransform.worldAnchors(bp, turns, box.minX(), box.minY(), box.minZ()),
-				pinFor(site.grid(), turns, beds.cells(), box).withHeldLeaves(held), notes.isEmpty() ? null : String.join("; ", notes), snapshot, before,
-				site.grid(), plan, approach);
-		} catch (RuntimeException e) {
-			// never leave a half-built, unrecorded box behind: put the site back as it was captured
+				BlueprintTransform.worldAnchors(bp, turns, box.minX(), box.minY(), box.minZ()), pin, notes.isEmpty() ? null : String.join("; ", notes),
+				site.grid(), plan, approach, rec, placing.entries());
+		} catch (RuntimeException | SiteException e) {
+			// never leave a half-built box behind: its journal entries put it back as it was captured
 			Architect.LOGGER.error("Placing {} at {} failed; restoring box {}", bp.id(), origin.toShortString(), Anchors.str(snapBox), e);
-			restoreTemplate(level, snapBox, before);
-			releaseHeld(level, held);
-			deleteSnapshot(snapshot);
+			abortPlacement(level, id, moving == null, placing.entries());
 			throw new SiteException("Placing " + bp.id() + " failed (" + e.getMessage() + "); the area was restored");
 		}
 	}
@@ -864,10 +1055,21 @@ public final class Sites {
 
 	// ------------------------------------------------------------------ remove / move
 
+	/** How a removal treats cells another site covers (docs/CONTRACT.md phase 4e {@code CoveredPolicy}). */
+	public enum Covered {
+		/** Hand-down: covered cells stay as they are; the site on top later restores the original ground. */
+		KEEP,
+		/** First remove every site that covers this one, top-down, recursively, as one undo group. */
+		CASCADE,
+		/** Refuse {@code COVERED} when another site covers any cell. */
+		REFUSE
+	}
+
 	/**
 	 * Puts back exactly what was in the site's box (foundation and approach included) before it was placed, then forgets the
 	 * site. Refuses, listing them, when the box holds things the site did not bring ({@link #removalBlockers}) unless
-	 * {@code force}. The snapshot is kept until the next world start confirms the restored terrain reached the disk. Server thread.
+	 * {@code force}. Its journal entries stay (undone) until the next world start confirms the restored terrain reached the
+	 * disk. Server thread.
 	 */
 	public static Site remove(ServerLevel level, String id, boolean force) throws SiteException {
 		return removeDetailed(level, id, force).site();
@@ -875,13 +1077,26 @@ public final class Sites {
 
 	/**
 	 * What a removal did: the site as it was and every item a deconstruct dropped (refunds, the player's blocks, the crate's
-	 * stock; item id -> count; empty for an instant site).
+	 * stock; item id -> count; empty for an instant site); phase 4e: the cells restored, the CELL cells the player changed and
+	 * kept, the cells handed down per covering site, and the sites a cascade removed first.
 	 */
-	public record Removed(Site site, Map<String, Integer> returned) {
+	public record Removed(Site site, Map<String, Integer> returned, int restored, int kept, Map<String, Integer> handedDown, List<String> cascaded,
+		List<String> notes) {
+		public Removed(Site site, Map<String, Integer> returned) {
+			this(site, returned, 0, 0, Map.of(), List.of(), List.of());
+		}
 	}
 
 	/** {@link #remove}, returning what it gave back. Fires {@code SITE_REMOVED}. Server thread. */
 	public static Removed removeDetailed(ServerLevel level, String id, boolean force) throws SiteException {
+		return removeDetailed(level, id, force, Covered.KEEP);
+	}
+
+	/**
+	 * {@link #removeDetailed} with a covered policy: R1-R4 of docs/CONTRACT.md phase 4e "Remove" (one plan, one commit, the
+	 * records pending, then the writes). Server thread.
+	 */
+	public static Removed removeDetailed(ServerLevel level, String id, boolean force, Covered covered) throws SiteException {
 		Site b = get(id);
 		if (b == null) {
 			throw new SiteException("No site " + id + " (see /architect list)");
@@ -889,43 +1104,193 @@ public final class Sites {
 		if (!b.dimension().equals(dimensionId(level))) {
 			throw new SiteException(id + " is in " + b.dimension() + ", not in " + dimensionId(level) + ": remove it from there");
 		}
+		SiteJournal.requireAvailable();
 		MinecraftServer server = level.getServer();
-		CompoundTag before = readSnapshot(b);
+		if (SiteJournal.active(id).isEmpty()) {
+			throw new SiteException("The saved terrain of " + id + " (" + b.snapshot() + ") is not in the world journal, so it cannot be restored; "
+				+ "/architect remove " + id + " forget drops the record and leaves the blocks");
+		}
 		refusePlayerIn(level, b.restoreBox(), id, "removing it");
 		if (b.placing()) {
-			// Remove during placing cancels the job and restores the snapshot (phase 4d): it was never placed
+			// Remove during placing cancels the job and restores the box (phase 4d): it was never placed
 			Placement.abort(server, id, "removed while it was being placed");
-			Drops drops = Drops.before(level, b.restoreBox());
-			restoreQuietly(level, b.restoreBox(), before);
-			return finishRollback(server, level, b, drops, before);
+			return rollbackNow(level, b);
 		}
-		if (!force) {
-			List<String> blockers = removalBlockers(level, b);
-			if (!blockers.isEmpty()) {
-				throw new SiteException(blockersMessage(id, blockers));
+		// the sites covering it (phase 4e)
+		List<String> cascade = new ArrayList<>();
+		List<String> cover = SiteJournal.coveringSites(id);
+		if (!cover.isEmpty()) {
+			if (covered == Covered.REFUSE) {
+				throw new SiteException(Reason.COVERED, cover.size() + " site(s) cover cells of " + id + " (" + String.join(", ", cover.stream()
+					.map(Sites::describe).toList()) + "); remove them first, or remove with KEEP or CASCADE");
+			}
+			if (covered == Covered.CASCADE) {
+				cascade.addAll(cascadeOf(id));
 			}
 		}
-		// a construction site deconstructs: refunds for paid cells still standing, the player's blocks and the crate's stock
-		Builder.Deconstruction dec = b.construction() != null ? Builder.prepareDeconstruct(level, b, before) : null;
+		List<Site> all = new ArrayList<>();
+		for (String c : cascade) {
+			Site cs = get(c);
+			if (cs == null) {
+				if (Infras.get(c) != null) {
+					continue; // a road or cell site in the cascade: its records are handled below
+				}
+				throw new SiteException("Cascade: " + describe(c) + " can't be removed with " + id);
+			}
+			if (cs.placing() || cs.building()) {
+				throw new SiteException(Reason.OVERLAP_BUSY, "Cascade: " + c + (cs.placing() ? " is still being placed" : " is a construction site still building"));
+			}
+			refusePlayerIn(level, cs.restoreBox(), c, "removing it");
+			all.add(cs);
+		}
+		all.add(b);
+		if (!force) {
+			for (Site x : all) {
+				List<String> blockers = removalBlockers(level, x);
+				if (!blockers.isEmpty()) {
+					throw new SiteException(blockersMessage(x.id(), blockers));
+				}
+			}
+		}
+		// a construction site deconstructs: refunds for paid cells still standing, against the stacks before the undo (rule 7)
+		Map<String, Builder.Deconstruction> decs = new LinkedHashMap<>();
+		for (Site x : all) {
+			if (x.construction() != null) {
+				decs.put(x.id(), Builder.prepareDeconstruct(level, x));
+			}
+		}
+		Anchors.Bounds u = all.get(0).restoreBox();
+		for (Site x : all) {
+			u = union(u, x.restoreBox());
+		}
+		Drops drops = Drops.before(level, u);
+		List<String> ids = new ArrayList<>(all.stream().map(Site::id).toList());
+		for (String c : cascade) {
+			if (Infras.get(c) != null) {
+				ids.add(0, c);
+			}
+		}
+		WorldJournal.kill("K5");
+		String group = SiteJournal.group(id);
+		SiteJournal.Undone undone = SiteJournal.undo(level, ids, group);
+		SiteJournal.await(undone.commit(), "the removal of " + id);
+		WorldJournal.kill("K6");
+		// R3: the records pending
+		for (Site x : all) {
+			markPending(server, x, "removed");
+		}
+		for (String c : cascade) {
+			if (Infras.get(c) != null) {
+				Infras.markPending(server, c);
+			}
+		}
+		// R4: the writes, top first (the cascade is ordered top-down)
+		Removed last = null;
+		Map<String, Integer> handed = handedBySite(undone.work());
+		for (String c : cascade) {
+			if (Infras.get(c) == null && Infras.pending(c) != null) {
+				Infras.finishRemoval(level, c, group, true);
+			}
+		}
+		for (Site x : all) {
+			SiteJournal.Restore r = SiteJournal.writeNow(level, x.id(), group);
+			Journal.Stats st = statsOf(undone.work(), x.id());
+			Removed done = afterRestore(level, x, decs.get(x.id()), drops, force, true, r.ring(), st, x.id().equals(id) ? handed : Map.of(),
+				x.id().equals(id) ? cascade : List.of(), notesOf(level, r));
+			if (x.id().equals(id)) {
+				last = done;
+			}
+		}
+		return last;
+	}
+
+	/** The sites covering {@code id}, recursively, top-down (the highest layer first). */
+	private static List<String> cascadeOf(String id) {
+		List<String> out = new ArrayList<>();
+		java.util.ArrayDeque<String> todo = new java.util.ArrayDeque<>(SiteJournal.coveringSites(id));
+		while (!todo.isEmpty()) {
+			String c = todo.poll();
+			if (out.contains(c) || c.equals(id)) {
+				continue;
+			}
+			out.add(c);
+			todo.addAll(SiteJournal.coveringSites(c));
+		}
+		out.sort(java.util.Comparator.comparingLong((String c) -> {
+			JournalStore.Meta m = SiteJournal.main(c);
+			return m == null ? 0 : m.layer();
+		}).reversed());
+		return out;
+	}
+
+	/** The stats of a site's entries in an undo, summed. */
+	static Journal.Stats statsOf(WorldJournal.UndoWork w, String siteId) {
+		int r = 0;
+		int k = 0;
+		int c = 0;
+		for (JournalStore.Meta m : SiteJournal.entries(siteId)) {
+			Journal.Stats s = w.plan().stats().get(m.id());
+			if (s != null) {
+				r += s.restored();
+				k += s.changed();
+				c += s.covered();
+			}
+		}
+		return new Journal.Stats(r, k, c);
+	}
+
+	/** Hand-downs of an undo, per receiving site. */
+	static Map<String, Integer> handedBySite(WorldJournal.UndoWork w) {
+		Map<String, Integer> out = new java.util.TreeMap<>();
+		JournalStore s = WorldJournal.storeOrNull();
+		w.handedDown().forEach((entry, n) -> {
+			JournalStore.Meta m = s == null ? null : s.meta(entry);
+			out.merge(m == null ? entry : m.site(), n, Integer::sum);
+		});
+		return out;
+	}
+
+	/** Notes of a restore with holes: cells of the site on top that may now be unsupported stay as they are. */
+	private static List<String> notesOf(ServerLevel level, SiteJournal.Restore r) {
+		if (r.holes() == 0) {
+			return List.of();
+		}
+		return List.of(r.holes() + " cell(s) covered by a site that stays were left as they are (they come back when it is removed)");
+	}
+
+	static Anchors.Bounds union(Anchors.Bounds a, Anchors.Bounds b) {
+		return new Anchors.Bounds(Math.min(a.minX(), b.minX()), Math.min(a.minY(), b.minY()), Math.min(a.minZ(), b.minZ()), Math.max(a.maxX(), b.maxX()),
+			Math.max(a.maxY(), b.maxY()), Math.max(a.maxZ(), b.maxZ()));
+	}
+
+	/** R3: a standing record becomes pending (its undo is committed; the writes follow). */
+	static void markPending(MinecraftServer server, Site b, String why) {
+		State s = state;
+		Map<String, Site> map = new LinkedHashMap<>(s.byId());
+		map.remove(b.id());
+		List<Site.Pending> pending = new ArrayList<>(s.pending());
+		pending.removeIf(p -> p.site().id().equals(b.id()) && p.site().placedAt() == b.placedAt() && "removed".equals(p.why()));
+		pending.add(new Site.Pending(b, System.currentTimeMillis(), why));
+		reports.remove(b.id());
+		dropFromGroup(b);
+		commit(server, new State(Collections.unmodifiableMap(map), s.next(), List.copyOf(pending)));
+	}
+
+	/** A placing site rolled back at once (Remove during placing): undo of its PLACING entries, the record pending, the writes. */
+	private static Removed rollbackNow(ServerLevel level, Site b) throws SiteException {
+		MinecraftServer server = level.getServer();
 		Drops drops = Drops.before(level, b.restoreBox());
-		restoreQuietly(level, b.restoreBox(), before);
-		return afterRestore(level, b, dec, drops, force, true, before);
+		String group = SiteJournal.group("rollback-" + b.id());
+		SiteJournal.Undone undone = SiteJournal.undo(level, List.of(b.id()), group);
+		SiteJournal.await(undone.commit(), "the rollback of " + b.id());
+		markPending(server, b, "removed");
+		SiteJournal.Restore r = SiteJournal.writeNow(level, b.id(), group);
+		Architect.LOGGER.info("Rolled back site {} ({}) that was still being placed", b.id(), b.blueprint());
+		return afterRestore(level, b, null, drops, true, false, r.ring(), statsOf(undone.work(), b.id()), Map.of(), List.of(), List.of());
 	}
 
-	/** The key of the leaf ring in a snapshot tag ({@link LeafGuard#ring}). */
-	static final String RING = "architect_leafRing";
-
-	/** {@link #capture}, plus the leaf ring around the box (phase 4d), so Remove can give the leaves around it back their distances. */
-	static CompoundTag captureWithRing(ServerLevel level, Anchors.Bounds box) throws IOException {
-		CompoundTag tag = capture(level, box);
-		tag.putIntArray(RING, LeafGuard.ring(level, box));
-		return tag;
-	}
-
-	/**
-	 * {@link #restoreTemplate} with the leaf ticks it schedules dropped (the other ticks run as usual): the restored leaves
-	 * keep the snapshot's distances instead of relaxing (phase 4d).
-	 */
+	/** {@link #restoreTemplate} with the leaf ticks it schedules dropped (the other ticks run as usual): the restored leaves
+	 * keep their recorded distances instead of relaxing (phase 4d). */
 	static void restoreQuietly(ServerLevel level, Anchors.Bounds box, CompoundTag tpl) {
 		List<TickDeferral.Held> held = new ArrayList<>();
 		TickDeferral.begin(level, held);
@@ -938,57 +1303,32 @@ public final class Sites {
 	}
 
 	/**
-	 * The rest of a removal once the box holds its snapshot again: drops cleared (and a deconstruct's items dropped), the
-	 * record gone, held leaves given back, a pending entry kept until the next world start. {@code event}: fire SITE_REMOVED.
+	 * The rest of a removal once the box holds its old terrain again (the record already pending, R3): drops cleared (and a
+	 * deconstruct's items dropped), the leaves near it held again by standing sites, the leaf ring given back. {@code event}:
+	 * fire SITE_REMOVED.
 	 */
 	private static Removed afterRestore(ServerLevel level, Site b, Builder.@Nullable Deconstruction dec, Drops drops, boolean force, boolean event,
-		@Nullable CompoundTag snapshot) {
+		int[] ring, Journal.Stats stats, Map<String, Integer> handed, List<String> cascaded, List<String> notes) {
 		MinecraftServer server = level.getServer();
 		String id = b.id();
 		drops.clearNew(level);
 		if (dec != null) {
 			Builder.dropDeconstruction(level, b, dec, drops);
-		}
-		State s = state;
-		Map<String, Site> map = new LinkedHashMap<>(s.byId());
-		map.remove(id);
-		state = new State(Collections.unmodifiableMap(map), s.next(), s.pending());
-		if (b.pin() != null) {
-			releaseHeld(level, b.pin().heldLeaves());
+		} else {
+			Builder.forget(server, id);
 		}
 		reholdNear(level, b.restoreBox());
 		// the leaves around the box get the distances they had before the site (worldgen leaves relax once touched)
-		if (snapshot != null && snapshot.contains(RING)) {
-			String here = dimensionId(level);
-			List<Anchors.Bounds> others = state.byId().values().stream().filter(x -> x.dimension().equals(here)).map(Site::restoreBox).toList();
-			LeafGuard.restoreRing(level, snapshot.getIntArray(RING).orElse(new int[0]),
-				p -> others.stream().anyMatch(o -> o.contains(p.getX(), p.getY(), p.getZ())), FLAGS);
-		}
-		s = state;
-		map = new LinkedHashMap<>(s.byId());
-		List<Site.Pending> pending = new ArrayList<>(s.pending());
-		pending.add(new Site.Pending(b, System.currentTimeMillis(), "removed"));
-		reports.remove(id);
-		dropFromGroup(b);
-		commit(server, new State(Collections.unmodifiableMap(map), s.next(), List.copyOf(pending)));
-		Architect.LOGGER.info("Removed site {} ({}): restored box {}{}; snapshot {} kept until the next world start", id, b.blueprint(),
-			Anchors.str(b.restoreBox()), force ? " (forced)" : "", b.snapshot());
-		Removed r = new Removed(b, dec == null ? Map.of() : Map.copyOf(dec.all()));
+		SiteJournal.restoreRing(level, ring);
+		save(server, state);
+		notifyListeners();
+		Architect.LOGGER.info("Removed site {} ({}): restored box {}{}; its journal entries are kept until the next world start", id, b.blueprint(),
+			Anchors.str(b.restoreBox()), force ? " (forced)" : "");
+		Removed r = new Removed(b, dec == null ? Map.of() : Map.copyOf(dec.all()), stats.restored(), stats.changed(), handed, cascaded, notes);
 		if (event) {
 			ApiEvents.removed(server, r);
 		}
 		return r;
-	}
-
-	/** The snapshot of a standing site, or a refusal naming the way out. */
-	private static CompoundTag readSnapshot(Site b) throws SiteException {
-		try {
-			return readSnapshot(b.snapshot());
-		} catch (IOException e) {
-			Architect.LOGGER.warn("Could not read the snapshot {} of {}", b.snapshot(), b.id(), e);
-			throw new SiteException("The saved terrain of " + b.id() + " (" + SNAPSHOT_DIR + "/" + b.snapshot() + ") cannot be read, so it cannot be "
-				+ "restored; /architect remove " + b.id() + " forget drops the record and leaves the blocks");
-		}
 	}
 
 	/** Refuses when a player stands in (or next to) a box about to get its old terrain back: restoring it would bury them. */
@@ -1009,14 +1349,20 @@ public final class Sites {
 
 	/**
 	 * What a removal would destroy that the site did not bring: block entities where the template has none, template
-	 * containers / lecterns the player filled, dropped items (not natural drops), pets, item frames, armor stands. Server thread.
+	 * containers / lecterns the player filled, dropped items (not natural drops), pets, item frames, armor stands; phase 4e:
+	 * only over the cells the site owns (a covered cell belongs to the site on top). Server thread.
 	 */
 	public static List<String> removalBlockers(ServerLevel level, Site b) {
 		List<String> out = new ArrayList<>();
 		Set<BlockPos> own = ownBlockEntities(b);
 		Anchors.Bounds box = b.restoreBox();
+		String dim = dimensionId(level);
 		forEachBlockEntity(level, box, be -> {
 			BlockPos p = be.getBlockPos();
+			String top = SiteJournal.ownerSite(dim, p.asLong());
+			if (top != null && !top.equals(b.id())) {
+				return; // another site's cell (it covers this one)
+			}
 			String what = be.getBlockState().getBlock().getName().getString().toLowerCase(java.util.Locale.ROOT) + " at " + p.toShortString();
 			if (be instanceof LecternBlockEntity lectern) {
 				if (lectern.hasBook() || !own.contains(p)) {
@@ -1072,21 +1418,31 @@ public final class Sites {
 		return out;
 	}
 
-	/** Drops the record of a site without touching the world: its blocks stay for good, its snapshot file is deleted. */
+	/**
+	 * Drops the record of a site without touching the world: its blocks stay for good and its journal entries are released.
+	 * Refused when an entry lies under it (forgetting it would make the lower site's undo wipe the forgotten blocks); a site
+	 * with entries above it is fine (their befores hold its blocks).
+	 */
 	public static void forget(MinecraftServer server, String id) throws SiteException {
 		State s = state;
 		Site b = s.byId().get(id);
 		if (b == null) {
 			throw new SiteException("No site " + id);
 		}
+		String under = SiteJournal.below(id);
+		if (under != null) {
+			throw new SiteException(Reason.NOT_ALLOWED, id + " lies on top of " + describe(under) + ": forget or remove the sites under it first");
+		}
+		if (WorldJournal.unavailable() == null) {
+			SiteJournal.await(SiteJournal.release(id), "forgetting " + id);
+		}
 		Map<String, Site> map = new LinkedHashMap<>(s.byId());
 		map.remove(id);
 		reports.remove(id);
+		dropFromGroup(b);
 		commit(server, new State(Collections.unmodifiableMap(map), s.next(), s.pending()));
-		deleteSnapshot(b.snapshot());
 		if (b.construction() != null) {
 			Builder.forget(server, id);
-			deleteSnapshot(b.construction().target());
 		}
 	}
 
@@ -1104,8 +1460,8 @@ public final class Sites {
 	/**
 	 * Moves a site: the same id at a new place in {@code level}. The new place gets every check of {@link #place} (it may not
 	 * overlap the old one); the old site must be clear of the player's things unless {@code force}. Places at the new site,
-	 * then restores the old one (its snapshot kept until the next world start, as for a removal) and records the old place in
-	 * {@link Site#movedFrom()}. Server thread.
+	 * then restores the old one (its entries kept until the next world start, as for a removal) and records the old place in
+	 * {@link Site#movedFrom()}. Refused for a site with layers above or below it (phase 4e). Server thread.
 	 */
 	public static Site move(ServerLevel level, String id, BlockPos origin, Rotation rotation, boolean force) throws SiteException {
 		MinecraftServer server = level.getServer();
@@ -1128,7 +1484,11 @@ public final class Sites {
 		if (loadFailed) {
 			throw new SiteException(FILE + " could not be read when the world started; nothing was moved");
 		}
-		CompoundTag oldTerrain = readSnapshot(b);
+		SiteJournal.requireAvailable();
+		List<String> oldEntries = SiteJournal.active(id).stream().map(JournalStore.Meta::id).toList();
+		if (oldEntries.isEmpty()) {
+			throw new SiteException("The saved terrain of " + id + " is not in the world journal; it can't be moved (forget drops the record)");
+		}
 		refusePlayerIn(oldLevel, b.restoreBox(), id, "moving it");
 		if (!force) {
 			List<String> blockers = removalBlockers(oldLevel, b);
@@ -1136,43 +1496,37 @@ public final class Sites {
 				throw new SiteException(blockersMessage(id, blockers).replace("removing it", "moving it"));
 			}
 		}
-		Built built = build(level, bp, origin, rotation, force, b, id, false);
-		long now = System.currentTimeMillis();
+		Built built = build(level, bp, origin, rotation, force, b, id, false, false, Who.NONE);
 		Site nb = new Site(id, b.blueprint(), BlueprintTransform.rotationName(built.turns()), built.box(), built.interior(), built.anchors(), b.placedAt(),
-			dimensionId(level), built.snapshotBox(), built.snapshot(), b.location(), built.pin()).withOwnership(b.owner(), b.ext());
+			dimensionId(level), built.snapshotBox(), built.snapshot(), b.location(), built.pin(), null, b.owner(), b.ext(), b.member(), false);
+		String group = SiteJournal.group("move-" + id);
+		Drops drops = Drops.before(oldLevel, b.restoreBox());
+		SiteJournal.Undone undone;
 		try {
 			if (failNextMove) {
 				failNextMove = false;
 				throw new IllegalStateException("injected failure restoring the old site (dev.sites.failNextMove)");
 			}
-			Drops drops = Drops.before(oldLevel, b.restoreBox());
-			restoreTemplate(oldLevel, b.restoreBox(), oldTerrain);
-			drops.clearNew(oldLevel);
-		} catch (RuntimeException e) {
+			undone = SiteJournal.undoEntries(oldLevel, oldEntries, group);
+			SiteJournal.await(undone.commit(), "the move of " + id);
+		} catch (RuntimeException | SiteException e) {
 			Architect.LOGGER.error("Moving {}: restoring the old site failed; taking the new site down again", id, e);
-			unbuild(level, built);
+			abortPlacement(level, id, false, built.entries());
 			throw new SiteException("Moving " + id + " failed (" + e.getMessage() + "); the new site was restored, " + id + " stays where it was");
 		}
-		// the old record as it is now (building the new site may have taken some of its held leaves into the new box)
-		Site cur = get(id);
-		State s0 = state;
-		Map<String, Site> m0 = new LinkedHashMap<>(s0.byId());
-		m0.put(id, nb);
-		state = new State(Collections.unmodifiableMap(m0), s0.next(), s0.pending());
-		Site.Pin oldPin = cur != null && cur.placedAt() == b.placedAt() && cur.box().equals(b.box()) ? cur.pin() : b.pin();
-		if (oldPin != null) {
-			releaseHeld(oldLevel, oldPin.heldLeaves());
-		}
-		// hold again what standing sites near the old place need (a short move shares leaves with the old site)
-		reholdNear(oldLevel, b.restoreBox());
-		nb = get(id) != null ? get(id) : nb;
 		State s = state;
 		Map<String, Site> map = new LinkedHashMap<>(s.byId());
 		map.put(id, nb);
 		List<Site.Pending> pending = new ArrayList<>(s.pending());
-		pending.add(new Site.Pending(b, now, "moved"));
+		pending.add(new Site.Pending(b, System.currentTimeMillis(), "moved"));
 		reports.remove(id);
 		commit(server, new State(Collections.unmodifiableMap(map), s.next(), List.copyOf(pending)));
+		SiteJournal.updateMeta(id, nb.toJson());
+		SiteJournal.Restore r = SiteJournal.writeNow(oldLevel, id, group);
+		drops.clearNew(oldLevel);
+		// hold again what standing sites near the old place need (a short move shares leaves with the old site)
+		reholdNear(oldLevel, b.restoreBox());
+		SiteJournal.restoreRing(oldLevel, r.ring());
 		lastNote = built.note();
 		Architect.LOGGER.info("Moved site {} from {} ({}) to {} ({}){}", id, Anchors.str(b.box()), b.dimension(), Anchors.str(nb.box()), nb.dimension(),
 			built.note() == null ? "" : "; " + built.note());
@@ -1182,13 +1536,19 @@ public final class Sites {
 
 	private static volatile boolean failNextMove;
 
-	/** Why a site may not move: in survival (the toggle on, or a construction site) a move would carry the building for free. */
+	/**
+	 * Why a site may not move: in survival (the toggle on, or a construction site) a move would carry the building for free;
+	 * phase 4e: a site with layers above or below it ("remove it and place it again").
+	 */
 	public static @Nullable String moveRefusal(Site b) {
 		if (b.placing()) {
 			return b.id() + " is still being placed; wait until it is done";
 		}
 		if (b.construction() != null || SurvivalWorld.on()) {
 			return "Move is refused in survival: deconstruct " + b.id() + " and place it again";
+		}
+		if (SiteJournal.above(b.id()) != null || SiteJournal.below(b.id()) != null) {
+			return b.id() + " has sites layered over or under it: remove it and place it again";
 		}
 		return null;
 	}
@@ -1222,7 +1582,7 @@ public final class Sites {
 		return key == null ? null : server.getLevel(ResourceKey.create(Registries.DIMENSION, key));
 	}
 
-	// ------------------------------------------------------------------ ticked placement (docs/CONTRACT.md phase 4d)
+	// ------------------------------------------------------------------ ticked placement (docs/CONTRACT.md phase 4d, 4e)
 
 	/** The placement settings {@code placeInWorld} gets for a rotation (shared with the ticked writer). */
 	static StructurePlaceSettings placeSettings(Rotation rotation) {
@@ -1239,77 +1599,39 @@ public final class Sites {
 		return slab ? blockState(bp.approach().slab(), Approach.DEFAULT_SLAB, bp.id()) : blockState(bp.approach().block(), Approach.DEFAULT_BLOCK, bp.id());
 	}
 
-	/**
-	 * Starts an instant placement written over ticks: exactly {@link #build}'s checks and its steps before the first write, in
-	 * its order (held leaves inside the box given back, the snapshot captured and written, the tall plants the box cuts and
-	 * the drops around it noted, leaves hanging on the box held, removable entities removed), then the site is recorded as
-	 * placing (snapshot file, then record, then blocks). Ticks these steps schedule are held back with the job's. Server
-	 * thread. The caller adds the returned job to {@link Placement}.
-	 */
 	static PlaceJob beginPlacing(ServerLevel level, Blueprint bp, BlockPos origin, Rotation rotation, boolean force, @Nullable String siteOwner,
 		@Nullable JsonObject ext, Site.@Nullable Member member) throws SiteException {
-		return beginPlacing(level, bp, origin, rotation, force, siteOwner, ext, member, false, null);
+		return beginPlacing(level, bp, origin, rotation, force, siteOwner, ext, member, false, null, false);
 	}
 
 	/**
-	 * {@link #beginPlacing}; {@code construction}: a survival construction site, written over ticks like an instant placement
-	 * and then turned into a construction site ({@link Builder#convert}) when its last cell is written, as {@link #place}
-	 * does in one tick. {@code placer}: the placing player's UUID (the HUD line).
+	 * Starts an instant placement written over ticks: exactly {@link #build}'s checks and its reads before the first write (P1:
+	 * the capture, in one tick up to 50k cells, else sliced with change tracking ({@link PlaceJob}); the leaves to hold, the
+	 * leaf ring, the tall plants the box cuts, the drops around it), then the PLACING commit is submitted (P2-P3, off the
+	 * server thread). The job waits for it, records the site as placing (P4) and writes. {@code construction}: a survival
+	 * construction site, converted ({@link Builder}) when its last cell is written. {@code placer}: the placing player's UUID.
+	 * {@code layer}: the LAYER overlap policy. Server thread. The caller adds the returned job to {@link Placement}.
 	 */
 	static PlaceJob beginPlacing(ServerLevel level, Blueprint bp, BlockPos origin, Rotation rotation, boolean force, @Nullable String siteOwner,
-		@Nullable JsonObject ext, Site.@Nullable Member member, boolean construction, @Nullable String placer) throws SiteException {
-		MinecraftServer server = level.getServer();
+		@Nullable JsonObject ext, Site.@Nullable Member member, boolean construction, @Nullable String placer, boolean layer) throws SiteException {
 		if (loadFailed) {
 			throw new SiteException(Reason.OTHER, FILE + " could not be read when the world started (see the log); fix or move it, then restart");
 		}
-		State s0 = state;
-		int next = s0.next();
-		while (snapshotUsed("s" + next)) {
-			next++;
-		}
-		String id = "s" + next;
-		SitePlan site = checkSite(level, bp, origin, rotation, force, null, THROW, false, construction);
+		SiteJournal.requireAvailable();
+		SitePlan site = checkSite(level, bp, origin, rotation, force, null, THROW, false, construction, layer, siteOwner);
 		if (site == null) {
 			throw new SiteException("Internal: no site for " + bp.id());
 		}
+		String id = newSiteId();
 		Anchors.Bounds box = site.box();
 		TerrainFit.Plan plan = site.plan();
 		Approach.Plan approach = site.approach();
 		Anchors.Bounds snapBox = site.snapBox();
-		List<TickDeferral.Held> held = new ArrayList<>();
-		String snapshot = id + "-" + System.currentTimeMillis() + ".nbt";
-		List<BlockPos> plants;
-		Drops drops;
-		List<Integer> leaves;
-		int removed = 0;
-		TickDeferral.begin(level, held);
-		try {
-			releaseHeldInside(level, snapBox);
-			try {
-				writeSnapshot(snapshot, captureWithRing(level, snapBox));
-			} catch (IOException e) {
-				Architect.LOGGER.warn("Could not save the snapshot of {}", Anchors.str(snapBox), e);
-				throw new SiteException("Could not save the terrain snapshot (" + e.getMessage() + "); nothing was placed");
-			}
-			plants = straddlingPositions(level, snapBox, false);
-			drops = Drops.before(level, snapBox);
-			leaves = LeafGuard.hold(level, snapBox, FLAGS);
-			for (Entity e : level.getEntities((Entity) null, Occupancy.aabb(snapBox), e -> !(e instanceof Player) && e.isAlive())) {
-				if (Occupancy.classify(e).removable()) {
-					e.discard();
-					removed++;
-				}
-			}
-		} catch (SiteException | RuntimeException e) {
-			TickDeferral.end();
-			TickDeferral.release(level, held); // what was done stays done, as in the atomic path
-			throw e;
-		} finally {
-			TickDeferral.end();
-		}
+		List<BlockPos> plants = straddlingPositions(level, snapBox, false);
+		Drops drops = Drops.before(level, snapBox);
 		List<String> notes = new ArrayList<>();
 		String gone = Occupancy.removalNote(site.found());
-		if (gone != null && removed > 0) {
+		if (gone != null && site.found().stream().anyMatch(f -> f.removable())) {
 			notes.add(gone);
 		}
 		String water = TerrainFit.waterWarning(plan);
@@ -1334,34 +1656,37 @@ public final class Sites {
 			notes.add(shortOf);
 		}
 		notes.addAll(site.site().warnings());
+		notes.addAll(site.layerNotes());
 		int turns = site.turns();
 		long now = System.currentTimeMillis();
 		Site rec = new Site(id, bp.id(), BlueprintTransform.rotationName(turns), box, BlueprintTransform.worldBounds(bp, turns, box.minX(), box.minY(),
-			box.minZ()), BlueprintTransform.worldAnchors(bp, turns, box.minX(), box.minY(), box.minZ()), now, dimensionId(level), snapBox, snapshot, null,
-			pinFor(site.grid(), turns).withHeldLeaves(leaves), null, siteOwner, ext == null ? new JsonObject() : ext, member, true);
-		State s = state;
-		Map<String, Site> map = new LinkedHashMap<>(s.byId());
-		map.put(id, rec);
-		addToGroup(rec);
-		commit(server, new State(Collections.unmodifiableMap(map), Math.max(s.next(), next + 1), s.pending()));
+			box.minZ()), BlueprintTransform.worldAnchors(bp, turns, box.minX(), box.minY(), box.minZ()), now, dimensionId(level), snapBox, journalName(id),
+			null, pinFor(site.grid(), turns), null, siteOwner, ext == null ? new JsonObject() : ext, member, true);
 		long[] cut = new long[plants.size()];
 		for (int i = 0; i < cut.length; i++) {
 			cut[i] = plants.get(i).asLong();
 		}
 		int[] none = new int[0];
 		boolean a = approach.rows() > 0;
-		Architect.LOGGER.info("Placing site {} ({}) over ticks at {} rotation {}: box {}, snapshot {} over {}", id, bp.id(), origin.toShortString(),
-			rec.rotation(), Anchors.str(box), snapshot, Anchors.str(snapBox));
 		PlaceJob job = new PlaceJob(id, dimensionId(level), bp.id(), turns, box, snapBox, site.placePos(), plan.fill(), plan.clear(),
 			a ? approach.clear() : none, a ? approach.fill() : none, a ? approach.path() : none, a ? approach.slabs() : none, cut, drops.uuids(), notes,
-			held, member == null ? null : member.batchId(), member == null ? null : member.itemKey());
+			new ArrayList<>(), member == null ? null : member.batchId(), member == null ? null : member.itemKey());
 		job.construction = construction;
 		job.placer = placer;
 		job.approachEnd = a ? approach.end() : null;
+		job.record = rec;
+		job.startCapture(level);
+		Architect.LOGGER.info("Placing site {} ({}) over ticks at {} rotation {}: box {}, journal box {} ({} cells)", id, bp.id(), origin.toShortString(),
+			rec.rotation(), Anchors.str(box), Anchors.str(snapBox), snapBox.volume());
 		return job;
 	}
 
-	/** A ticked placement wrote its last cell: the pin gets the beds bed safety left out, the site is placed. Fires SITE_PLACED. */
+	/** P4 of a ticked placement (its PLACING commit is durable): the record, placing. */
+	static void startPlacing(MinecraftServer server, Site rec) {
+		putRecord(server, rec);
+	}
+
+	/** A ticked placement wrote its last cell and its ACTIVE commit is durable (P8): the pin gets the beds bed safety left out, the site is placed. Fires SITE_PLACED. */
 	static @Nullable Site finishPlacing(MinecraftServer server, PlaceJob job, Set<Long> bedCells, @Nullable String note) {
 		Site cur = get(job.siteId);
 		if (cur == null) {
@@ -1373,49 +1698,88 @@ public final class Sites {
 			pin = pinFor(grid, job.turns, bedCells, cur.box()).withHeldLeaves(pin.heldLeaves());
 		}
 		Site done = cur.withPin(pin).withPlacing(false);
-		if (job.construction) {
-			// the construction site: what convert does after the atomic build, now that the last cell is written
-			ServerLevel level = levelOf(server, cur);
-			Blueprint bp = Blueprints.get(cur.blueprint());
-			if (level == null || bp == null || grid == null) {
-				job.broken = "its level or design is gone; it can't become a construction site";
-				return null;
-			}
-			int[] none = new int[0];
-			Built built = new Built(job.turns, cur.box(), cur.restoreBox(), cur.interior(), cur.anchors(), pin, note, cur.snapshot(), null, grid,
-				new TerrainFit.Plan(job.fill, job.clear, none, 0, none, 0, cur.restoreBox().minY() + 1), new Approach.Plan(job.aPath, job.aSlabs,
-					job.aFill, job.aClear, none, 0, none, 0, none, none, null, job.approachEnd, Integer.MIN_VALUE));
-			SiteGroupRec g = cur.group() == null ? null : group(cur.group());
-			Builder.SHARED_CRATE.set(g != null && g.sharedCrate() ? g.id() : null);
-			try {
-				long t0 = System.nanoTime();
-				done = done.withConstruction(Builder.convert(level, bp, built, cur.id(), job.placer));
-				Placement.noteConvert(cur.id(), System.nanoTime() - t0);
-			} catch (SiteException | RuntimeException e) {
-				Architect.LOGGER.error("Making {} a construction site failed; rolling it back", cur.id(), e);
-				job.broken = "making the construction site failed (" + e.getMessage() + ")";
-				return null;
-			} finally {
-				Builder.SHARED_CRATE.remove();
-			}
+		if (job.convert != null) {
+			done = done.withConstruction(job.convert);
 		}
 		replace(server, done);
+		SiteJournal.updateMeta(done.id(), done.toJson());
 		lastNote = note;
-		Architect.LOGGER.info("Placed site {} ({}) over ticks: box {}, snapshot {} over {}{}", done.id(), done.blueprint(), Anchors.str(done.box()),
-			done.snapshot(), Anchors.str(done.restoreBox()), note == null ? "" : "; " + note);
+		Architect.LOGGER.info("Placed site {} ({}) over ticks: box {}, journal box {}{}", done.id(), done.blueprint(), Anchors.str(done.box()),
+			Anchors.str(done.restoreBox()), note == null ? "" : "; " + note);
 		ApiEvents.placed(server, done);
 		return done;
 	}
 
-	/** A placing site's box holds its snapshot again: the record goes (it was never placed: no SITE_REMOVED). */
-	static Removed finishRollback(MinecraftServer server, ServerLevel level, Site b, Drops drops, @Nullable CompoundTag snapshot) {
+	/** The {@link Built} of a ticked placement whose cells are written (its construction conversion's input), or null. */
+	static @Nullable Built builtOf(PlaceJob job) {
+		Site cur = get(job.siteId);
+		Blueprint bp = Blueprints.get(job.blueprint);
+		TemplateGrid grid = cur == null ? null : ownGrid(cur);
+		if (cur == null || bp == null || grid == null) {
+			return null;
+		}
+		Site.Pin pin = pinFor(grid, job.turns, job.bedCells, cur.box());
+		int[] none = new int[0];
+		return new Built(job.turns, cur.box(), cur.restoreBox(), cur.interior(), cur.anchors(), pin, null, grid,
+			new TerrainFit.Plan(job.fill, job.clear, none, 0, none, 0, cur.restoreBox().minY() + 1), new Approach.Plan(job.aPath, job.aSlabs, job.aFill,
+				job.aClear, none, 0, none, 0, none, none, null, job.approachEnd, Integer.MIN_VALUE), cur, List.of());
+	}
+
+	/** Saves the sites file now (roads and cell sites changed). */
+	static void saveAll(MinecraftServer server) {
+		save(server, state);
+		notifyListeners();
+	}
+
+	/** The pin of a ticked placement as it will be (beds left out), for the construction conversion. */
+	static Site.@Nullable Pin pinOf(PlaceJob job, Set<Long> bedCells) {
+		Site cur = get(job.siteId);
+		TemplateGrid grid = cur == null ? null : ownGrid(cur);
+		return grid == null || cur.pin() == null ? cur == null ? null : cur.pin() : pinFor(grid, job.turns, bedCells, cur.box());
+	}
+
+	/** A placing site's box holds its old terrain again (its record pending): it was never placed (no SITE_REMOVED). */
+	static Removed finishRollback(MinecraftServer server, ServerLevel level, Site b, Drops drops, int[] ring, Journal.Stats stats) {
 		Architect.LOGGER.info("Rolled back site {} ({}) that was still being placed", b.id(), b.blueprint());
-		return afterRestore(level, b, null, drops, true, false, snapshot);
+		return afterRestore(level, b, null, drops, true, false, ring, stats, Map.of(), List.of(), List.of());
 	}
 
 	/** An instant site restored over ticks ({@link RestoreJob}): the rest of the removal. Fires SITE_REMOVED. */
-	static Removed finishTickedRemove(MinecraftServer server, ServerLevel level, Site b, Drops drops, @Nullable CompoundTag snapshot) {
-		return afterRestore(level, b, null, drops, false, true, snapshot);
+	static Removed finishTickedRemove(MinecraftServer server, ServerLevel level, Site b, Drops drops, int[] ring, Journal.Stats stats,
+		Map<String, Integer> handed) {
+		return afterRestore(level, b, null, drops, false, true, ring, stats, handed, List.of(), List.of());
+	}
+
+	/**
+	 * A construction member of a group undo (its record pending, the undo committed): its writes at once, then its
+	 * deconstruct items (tallied before the undo was planned) drop at its crate's cell. Fires SITE_REMOVED.
+	 */
+	static Removed finishGroupDeconstruct(ServerLevel level, Site b, String group, Map<String, Integer> items, @Nullable BlockPos at,
+		Map<String, Integer> handed) throws SiteException {
+		Drops drops = Drops.before(level, b.restoreBox());
+		SiteJournal.Restore r = SiteJournal.writeNow(level, b.id(), group);
+		drops.clearNew(level);
+		BlockPos where = at != null ? at : Builder.dropPos(b);
+		Builder.dropItems(level, where, items, drops);
+		Builder.forget(level.getServer(), b.id());
+		reholdNear(level, b.restoreBox());
+		SiteJournal.restoreRing(level, r.ring());
+		save(level.getServer(), state);
+		notifyListeners();
+		Removed done = new Removed(b, Map.copyOf(items), r.cells().size(), 0, handed, List.of(), notesOf(level, r));
+		ApiEvents.removed(level.getServer(), done);
+		return done;
+	}
+
+	/** A pending site's record as it was taken down (for a restore job that resumes after the record went pending). */
+	static @Nullable Site pendingRecord(String id) {
+		Site.Pending found = null;
+		for (Site.Pending p : state.pending()) {
+			if (p.site().id().equals(id)) {
+				found = p;
+			}
+		}
+		return found == null ? null : found.site();
 	}
 
 	/** A dry-run plan of a placement: its snapshot (restore) box and its approach's end, for choosing a shared crate's cell. */
@@ -1561,12 +1925,15 @@ public final class Sites {
 		reports.merge(id, new Report(id, problem, message), (a, b) -> new Report(id, a.problem() || b.problem(), a.message() + " " + b.message()));
 	}
 
-	/** The sites taken down whose snapshots are kept until the next world start settles them. Any thread. */
+	/** The sites taken down whose journal entries are kept until the next world start settles them. Any thread. */
 	public static List<Site.Pending> pending() {
 		return state.pending();
 	}
 
-	/** {matching non-air blocks, non-air template blocks} of a site's own template in the world; {0, 0} when it cannot be checked. */
+	/**
+	 * {matching non-air blocks, non-air template blocks} of a site's own template in the world, over the cells the site owns
+	 * (phase 4e: a cell another standing entry owns is left out); {0, 0} when it cannot be checked.
+	 */
 	static int[] standing(MinecraftServer server, Site b, @Nullable TemplateGrid grid) {
 		ServerLevel level = levelOf(server, b);
 		if (grid == null || level == null) {
@@ -1581,13 +1948,23 @@ public final class Sites {
 			if (want.isAir()) {
 				continue;
 			}
+			p.set(b.box().minX() + m.x(i), b.box().minY() + m.y(i), b.box().minZ() + m.z(i));
+			if (ownedByOther(b.dimension(), p.asLong(), b.id())) {
+				continue;
+			}
 			total++;
 			// by block, not state: players open doors
-			if (level.getBlockState(p.set(b.box().minX() + m.x(i), b.box().minY() + m.y(i), b.box().minZ() + m.z(i))).is(want.getBlock())) {
+			if (level.getBlockState(p).is(want.getBlock())) {
 				match++;
 			}
 		}
 		return new int[] {match, total};
+	}
+
+	/** Whether {@code pos} is owned by a standing entry of another site. */
+	private static boolean ownedByOther(String dim, long pos, String site) {
+		String o = SiteJournal.ownerSite(dim, pos);
+		return o != null && !o.equals(site);
 	}
 
 	private static @Nullable Boolean stands(MinecraftServer server, Site b) {
@@ -1595,67 +1972,166 @@ public final class Sites {
 		return st[1] == 0 ? null : Reconcile.stands(st[0], st[1]);
 	}
 
-	/** Whether a taken-down site shows its saved terrain again ({@link Reconcile#restored}); null when it cannot be told. */
-	static @Nullable Boolean restored(MinecraftServer server, Site b) {
+	/**
+	 * The evidence of an undone site (docs/CONTRACT.md phase 4e "World-start settle"), over the cells of its main undone
+	 * entry that no standing entry owns: {restored, stands} (null when it can't be told). With {@code after} known: cells where
+	 * {@code before} and {@code after} differ, matched by block against each; a migrated entry ({@code after} unknown) uses its
+	 * site's pin (the template), as 4d did. {@code covered}: every comparable cell is owned by a standing entry.
+	 */
+	record Evidence(@Nullable Boolean restored, @Nullable Boolean stands, boolean covered) {
+	}
+
+	static Evidence evidence(MinecraftServer server, Site b, String group) {
 		ServerLevel level = levelOf(server, b);
-		if (level == null) {
-			return null;
+		JournalStore js = WorldJournal.storeOrNull();
+		if (level == null || js == null) {
+			return new Evidence(null, null, false);
 		}
-		TemplateGrid saved;
-		try {
-			StructureTemplate t = new StructureTemplate();
-			t.load(level.registryAccess().lookupOrThrow(Registries.BLOCK), readSnapshot(b.snapshot()));
-			saved = TemplateGrid.read(null, t);
-		} catch (IOException | RuntimeException e) {
-			Architect.LOGGER.warn("Sites check: could not read the snapshot {}", b.snapshot(), e);
-			return null;
-		}
-		Anchors.Bounds rb = b.restoreBox();
-		Map<Long, BlockState> terrain = new java.util.HashMap<>();
-		for (int i = 0; i < saved.count(); i++) {
-			terrain.put(BlockPos.asLong(rb.minX() + saved.xyz()[i * 3], rb.minY() + saved.xyz()[i * 3 + 1], rb.minZ() + saved.xyz()[i * 3 + 2]),
-				saved.states()[i]);
-		}
-		BlockPos.MutableBlockPos p = new BlockPos.MutableBlockPos();
-		int total = 0;
-		int match = 0;
-		TemplateGrid grid = ownGrid(b);
-		if (grid != null) {
-			GhostModel m = grid.ghost(Math.max(0, BlueprintTransform.ROTATIONS.indexOf(b.rotation())));
-			for (int i = 0; i < m.count(); i++) {
-				p.set(b.box().minX() + m.x(i), b.box().minY() + m.y(i), b.box().minZ() + m.z(i));
-				BlockState was = terrain.get(p.asLong());
-				if (was == null || was.is(grid.states()[i].getBlock())) {
-					continue;
-				}
-				total++;
-				if (level.getBlockState(p).is(was.getBlock())) {
-					match++;
-				}
+		JournalStore.Meta main = null;
+		for (JournalStore.Meta m : SiteJournal.undone(b.id(), group)) {
+			if (!m.kind().equals(WorldJournal.LEAVES) && !m.kind().equals(WorldJournal.CRATE)) {
+				main = m;
 			}
 		}
-		return Reconcile.restored(match, total);
+		if (main == null) {
+			return new Evidence(null, null, false);
+		}
+		int total = 0;
+		int holdBefore = 0;
+		int holdAfter = 0;
+		int ownedOut = 0;
+		TemplateGrid grid = ownGrid(b);
+		Map<Long, BlockState> template = new java.util.HashMap<>();
+		if (grid != null) {
+			GhostModel gm = grid.ghost(Math.max(0, BlueprintTransform.ROTATIONS.indexOf(b.rotation())));
+			for (int i = 0; i < gm.count(); i++) {
+				template.put(BlockPos.asLong(b.box().minX() + gm.x(i), b.box().minY() + gm.y(i), b.box().minZ() + gm.z(i)), grid.states()[i]);
+			}
+		}
+		BlockPos.MutableBlockPos p = new BlockPos.MutableBlockPos();
+		try {
+			for (long k : main.sections()) {
+				var sc = js.section(main.id(), k);
+				if (sc == null) {
+					continue;
+				}
+				for (int i = 0; i < sc.size(); i++) {
+					long pos = sc.pos(i);
+					BlockState before = WorldJournal.state(sc.before(i));
+					Journal.Value av = sc.after(i);
+					BlockState after = av != null ? WorldJournal.state(av) : template.get(pos);
+					if (after == null || after.getBlock() == before.getBlock() || av == null && after.isAir()) {
+						continue;
+					}
+					if (SiteJournal.owned(main.dimension(), pos)) {
+						ownedOut++;
+						continue;
+					}
+					total++;
+					BlockState now = level.getBlockState(p.set(BlockPos.getX(pos), BlockPos.getY(pos), BlockPos.getZ(pos)));
+					if (now.is(before.getBlock())) {
+						holdBefore++;
+					} else if (now.is(after.getBlock())) {
+						holdAfter++;
+					}
+				}
+			}
+		} catch (IOException e) {
+			return new Evidence(null, null, false);
+		}
+		if (total == 0) {
+			return new Evidence(null, null, ownedOut > 0);
+		}
+		if (main.policy() == Journal.Policy.CELL) {
+			// roads and cell sites (AgentCraft's road settle): most hold after -> it stands; else released
+			boolean st = holdAfter * 2 > total;
+			return new Evidence(!st, st, false);
+		}
+		return new Evidence(Reconcile.restored(holdBefore, total), Reconcile.stands(holdAfter, total), false);
 	}
 
 	/**
-	 * At world start, checks the records against the world and settles the sites taken down before the game stopped: a
-	 * snapshot is only deleted on positive evidence ({@link Reconcile#decide}). A removal or move that never reached the disk
-	 * gets its record back; doubtful cases are reported and keep their snapshot. A site whose template no longer stands is
-	 * reported. Snapshot files nobody names are listed. Never deletes a record or changes the world. Server thread.
+	 * At world start (docs/CONTRACT.md phase 4e "World-start settle"), checks the records against the journal and the world:
+	 * <ul>
+	 * <li>records come from the journal: an ACTIVE entry whose site has no record gets its record back from the entry's
+	 * {@code meta}; a PLACING entry with no record and no job to resume is released (K2: no block was written before the
+	 * record existed);</li>
+	 * <li>pending sites are settled on evidence over the cells no standing entry owns: restored releases their entries,
+	 * standing reactivates them (the hand-downs reversed) and brings the record back, doubtful keeps them; an undo group
+	 * whose restore job was interrupted is not settled at this start;</li>
+	 * <li>standing sites whose template no longer stands are reported.</li>
+	 * </ul>
+	 * Never changes the world. Server thread.
 	 */
-	static void reconcile(MinecraftServer server) {
+	static void reconcile(MinecraftServer server, Set<String> jobSites) {
 		reports.clear();
 		if (loadFailed) {
+			return;
+		}
+		String why = WorldJournal.unavailable();
+		if (why != null) {
+			report("journal", true, why);
 			return;
 		}
 		State s = state;
 		Map<String, Site> map = new LinkedHashMap<>(s.byId());
 		List<Site.Pending> pending = new ArrayList<>(s.pending());
 		boolean changed = false;
+		JournalStore js = WorldJournal.storeOrNull();
+		// records come from the journal
+		Set<String> pendingIds = new HashSet<>();
+		pending.forEach(p -> pendingIds.add(p.site().id()));
+		List<String> releaseNow = new ArrayList<>();
+		Map<String, List<JournalStore.Meta>> bySite = new LinkedHashMap<>();
+		for (JournalStore.Meta m : js.index().entries().values()) {
+			if (m.active()) {
+				bySite.computeIfAbsent(m.site(), k -> new ArrayList<>()).add(m);
+			}
+		}
+		for (var e : bySite.entrySet()) {
+			String sid = e.getKey();
+			if (map.containsKey(sid) || Infras.get(sid) != null || sid.startsWith(SiteGroupRec.CRATE_PREFIX) || jobSites.contains(sid)) {
+				continue;
+			}
+			boolean placing = e.getValue().stream().anyMatch(m -> m.status() == Journal.Status.PLACING);
+			JournalStore.Meta main = e.getValue().stream().filter(m -> !m.kind().equals(WorldJournal.LEAVES) && !m.kind().equals(WorldJournal.CRATE))
+				.findFirst().orElse(null);
+			if (placing || main == null) {
+				// K2: committed before its record, never written (or only guard entries left): released, nothing written
+				e.getValue().forEach(m -> releaseNow.add(m.id()));
+				Architect.LOGGER.info("Sites check: {} had journal entries but no record ({}); released them, nothing written", sid,
+					placing ? "a placement that stopped before its record was saved" : "only guard entries");
+				continue;
+			}
+			if (pendingIds.contains(sid)) {
+				continue; // a removal whose undo was not committed: settled below
+			}
+			try {
+				JsonObject meta = js.head(main.id()).meta();
+				if (meta == null) {
+					report(sid, true, "journal entry " + main.id() + " of " + sid + " has no record to rebuild it from; it stays in the journal");
+					continue;
+				}
+				if (main.kind().equals(WorldJournal.SITE)) {
+					Site rec = Site.fromJson(meta).withPlacing(false);
+					map.put(sid, rec);
+					changed = true;
+					report(sid, false, sid + "'s record was rebuilt from the world journal (its record was lost: a downgrade, or a stop before it was saved)");
+				} else {
+					Infras.rebuild(server, main, meta);
+					report(sid, false, sid + "'s record was rebuilt from the world journal");
+				}
+			} catch (IOException | RuntimeException ex) {
+				report(sid, true, "could not rebuild " + sid + "'s record from the journal (" + ex.getMessage() + ")");
+			}
+		}
+		if (!releaseNow.isEmpty()) {
+			SiteJournal.releaseGroup(releaseNow);
+		}
 		Map<String, Boolean> standsNow = new java.util.HashMap<>();
 		for (Site b : map.values()) {
 			if (b.placing()) {
-				// half written on purpose: its job resumes from the queue file (Placement), or rolls back from its snapshot
+				// half written on purpose: its job resumes from the queue file (Placement), or rolls back
 				report(b.id(), false, b.id() + " was still being placed; it resumes");
 				continue;
 			}
@@ -1666,12 +2142,10 @@ public final class Sites {
 					run.rescan(atStart, true); // built is derived from the world when it loads (the chunks are read here, as for every site)
 				}
 				if (run == null) {
-					report(b.id(), true, b.id() + "'s construction plan " + SNAPSHOT_DIR + "/" + b.construction().target() + " is missing; it can only be "
-						+ "removed");
+					report(b.id(), true, b.id() + "'s construction plan (its journal entry's target) is missing; it can only be removed");
 					continue;
 				}
 				if (b.building()) {
-					// half built is not "doesn't match its blueprint": what is built was just derived from the world
 					ServerLevel lv = levelOf(server, b);
 					Construction.Crate cr = b.construction().crate();
 					if (lv != null && (cr == null || !(lv.getBlockEntity(new BlockPos(cr.x(), cr.y(), cr.z())) instanceof
@@ -1698,43 +2172,54 @@ public final class Sites {
 		for (Site.Pending p : List.copyOf(pending)) {
 			Site gone = p.site();
 			boolean moved = "moved".equals(p.why());
-			if (!Files.exists(snapshotFile(gone.snapshot()))) {
-				Architect.LOGGER.warn("Sites check: the snapshot {} of {}'s {} site is missing; dropping the entry", gone.snapshot(), gone.id(), p.why());
+			String group = null;
+			long at = Long.MIN_VALUE;
+			for (JournalStore.Meta m : SiteJournal.entries(gone.id())) {
+				if (m.status() == Journal.Status.UNDONE && m.undoneAt() >= at) {
+					at = m.undoneAt();
+					group = m.undoGroup();
+				}
+			}
+			if (group == null) {
+				// nothing undone in the journal: the undo was never committed (the record went pending first) or it was released
+				if (!map.containsKey(gone.id()) && !SiteJournal.active(gone.id()).isEmpty() && !moved) {
+					map.put(gone.id(), gone);
+					recovered.add(gone.id());
+					report(gone.id(), false, gone.id() + "'s removal was not saved before the game stopped: it stands again (remove it again)");
+				}
 				pending.remove(p);
 				changed = true;
 				continue;
 			}
-			List<Reconcile.Site> sites = new ArrayList<>();
-			for (Site o : map.values()) {
-				sites.add(new Reconcile.Site(o.id(), o.dimension(), o.restoreBox(), standsNow.get(o.id())));
+			if (jobSites.contains(gone.id())) {
+				report(gone.id(), false, gone.id() + "'s restore was interrupted; it runs again before this site is settled");
+				continue;
 			}
-			Reconcile.Found found = Reconcile.overlap(new Reconcile.Site(gone.id(), gone.dimension(), gone.restoreBox(), null), sites);
-			String over = found.by() == null || found.by().equals(gone.id()) ? null : found.by();
+			Evidence ev = evidence(server, gone, group);
 			Site current = map.get(gone.id());
-			Boolean stands = stands(server, gone);
-			Boolean restored = restored(server, gone);
-			Reconcile.Action action = Reconcile.decide(moved, stands, restored, found.overlap(), current != null,
-				current == null ? null : standsNow.get(gone.id()));
-			Architect.LOGGER.info("Sites check: {} site of {} at {} (stands {}, restored {}, overlap {}): {}", p.why(), gone.id(),
-				Anchors.str(gone.restoreBox()), stands, restored, found.overlap(), action);
+			Reconcile.Action action = ev.covered() ? Reconcile.Action.RELEASE : Reconcile.decide(moved, ev.stands(), ev.restored(),
+				Reconcile.Overlap.NONE, current != null, current == null ? null : standsNow.get(gone.id()));
+			Architect.LOGGER.info("Sites check: {} site of {} at {} (stands {}, restored {}, covered {}): {}", p.why(), gone.id(), Anchors.str(gone.restoreBox()),
+				ev.stands(), ev.restored(), ev.covered(), action);
+			List<String> groupIds = SiteJournal.undone(gone.id(), group).stream().map(JournalStore.Meta::id).toList();
 			switch (action) {
 				case RELEASE -> {
-					// the same file may still be a current record's (undo move back onto it never reuses names, but be safe)
-					if (map.values().stream().noneMatch(o -> o.snapshot().equals(gone.snapshot()))) {
-						deleteSnapshot(gone.snapshot());
-					}
-					if (gone.construction() != null && map.values().stream().noneMatch(o -> o.construction() != null
-						&& o.construction().target().equals(gone.construction().target()))) {
-						deleteSnapshot(gone.construction().target());
-					}
+					SiteJournal.releaseGroup(groupIds);
 					pending.remove(p);
 					changed = true;
 				}
 				case RECOVER -> {
+					try {
+						SiteJournal.reactivate(group);
+					} catch (IOException e) {
+						report(gone.id(), true, "could not bring " + gone.id() + " back (" + e.getMessage() + ")");
+						continue;
+					}
 					if (moved && current != null) {
-						// the move never reached the disk: the site is still at its old place; the new place's snapshot stays as a file
-						report(gone.id(), false, gone.id() + "'s move was not saved before the game stopped: it is back at its old place (the new "
-							+ "place's snapshot " + current.snapshot() + " is kept)");
+						// the move never reached the disk: the site is still at its old place; the new place's entries go
+						List<String> newer = SiteJournal.active(gone.id()).stream().map(JournalStore.Meta::id).filter(i -> !groupIds.contains(i)).toList();
+						SiteJournal.releaseGroup(newer);
+						report(gone.id(), false, gone.id() + "'s move was not saved before the game stopped: it is back at its old place");
 					} else {
 						report(gone.id(), false, gone.id() + "'s removal was not saved before the game stopped: it stands again (remove it again)");
 					}
@@ -1744,14 +2229,9 @@ public final class Sites {
 					pending.remove(p);
 					changed = true;
 				}
-				case REPORT_KEEP -> {
-					String on = current != null ? gone.id() : over != null ? over : gone.id();
-					String what = over != null && current == null
-						? "a copy of " + gone.id() + " (" + p.why() + " before the game stopped, not saved) still stands partly under " + over
-						: moved ? gone.id() + " stands at its old place " + Anchors.str(gone.box()) + " too: the move was only partly saved"
-						: "removed " + gone.id() + " stands again but could not get its record back";
-					report(on, true, what + ". Its saved terrain is kept as " + SNAPSHOT_DIR + "/" + gone.snapshot() + "; nothing was changed");
-				}
+				case REPORT_KEEP -> report(current != null ? gone.id() : gone.id(), true, (moved ? gone.id() + " stands at its old place "
+					+ Anchors.str(gone.box()) + " too: the move was only partly saved" : "removed " + gone.id() + " stands again but could not get its "
+						+ "record back") + ". Its journal entries are kept; nothing was changed");
 				case KEEP -> {
 				}
 			}
@@ -1765,15 +2245,15 @@ public final class Sites {
 		}
 		if (changed) {
 			state = new State(Collections.unmodifiableMap(map), s.next(), List.copyOf(pending));
+			for (Site b : map.values()) {
+				addToGroup(b);
+			}
 			save(server, state);
-		}
-		for (String f : unreferenced()) {
-			Architect.LOGGER.warn("Sites check: snapshot {}/{} belongs to no site (a placement whose record was not saved?); kept", SNAPSHOT_DIR, f);
 		}
 		reports.values().forEach(r -> Architect.LOGGER.warn("Sites check: {}", r.message()));
 	}
 
-	/** Snapshot files that no record and no pending entry names (kept, listed for the player / DevBridge). */
+	/** Legacy snapshot files (4d, or written by 0.7.0 after a downgrade) that no record names (kept, listed). */
 	public static List<String> unreferenced() {
 		Path dir = snapshotDir();
 		if (dir == null || !Files.isDirectory(dir)) {
@@ -1783,16 +2263,6 @@ public final class Sites {
 		State s = state;
 		s.byId().values().forEach(b -> named.add(b.snapshot()));
 		s.pending().forEach(p -> named.add(p.site().snapshot()));
-		s.byId().values().forEach(b -> {
-			if (b.construction() != null) {
-				named.add(b.construction().target());
-			}
-		});
-		s.pending().forEach(p -> {
-			if (p.site().construction() != null) {
-				named.add(p.site().construction().target());
-			}
-		});
 		try (Stream<Path> files = Files.list(dir)) {
 			return files.map(f -> f.getFileName().toString()).filter(n -> n.endsWith(".nbt") && !named.contains(n)).sorted().toList();
 		} catch (IOException e) {
@@ -1800,9 +2270,9 @@ public final class Sites {
 		}
 	}
 
-	// ------------------------------------------------------------------ snapshots
+	// ------------------------------------------------------------------ snapshots (4d: read for the migration and late imports only)
 
-	private static @Nullable Path snapshotDir() {
+	static @Nullable Path snapshotDir() {
 		Path w = worldDir;
 		return w == null ? null : w.resolve(SNAPSHOT_DIR);
 	}
@@ -1815,17 +2285,25 @@ public final class Sites {
 		return dir.resolve(name);
 	}
 
-	/** Whether a snapshot file carries this site id (ids are never reused while one does). */
+	/** Whether a legacy snapshot file carries this site id (ids are never reused while one does). */
 	private static boolean snapshotUsed(String id) {
-		Path dir = snapshotDir();
-		if (dir == null || !Files.isDirectory(dir)) {
+		Path w = worldDir;
+		if (w == null) {
 			return false;
 		}
-		try (Stream<Path> files = Files.list(dir)) {
-			return files.anyMatch(f -> f.getFileName().toString().startsWith(id + "-"));
-		} catch (IOException e) {
-			return false;
+		for (Path dir : new Path[] {w.resolve(SNAPSHOT_DIR), w.resolve(JournalStore.DIR).resolve("legacy").resolve(SNAPSHOT_DIR)}) {
+			if (!Files.isDirectory(dir)) {
+				continue;
+			}
+			try (Stream<Path> files = Files.list(dir)) {
+				if (files.anyMatch(f -> f.getFileName().toString().startsWith(id + "-"))) {
+					return true;
+				}
+			} catch (IOException e) {
+				// unreadable: not counted
+			}
 		}
+		return false;
 	}
 
 	/** Captures a box as a structure template tag (blocks and block entities, air included, no entities). */
@@ -1852,34 +2330,9 @@ public final class Sites {
 		t.placeInWorld(level, min, min, settings(Rotation.NONE), level.getRandom(), FLAGS);
 	}
 
-	static void writeSnapshotFile(String name, CompoundTag tag) throws IOException {
-		writeSnapshot(name, tag);
-	}
-
-	static void deleteSnapshotFile(String name) {
-		deleteSnapshot(name);
-	}
-
-	private static void writeSnapshot(String name, CompoundTag tag) throws IOException {
-		Path f = snapshotFile(name);
-		Files.createDirectories(f.getParent());
-		Path tmp = f.resolveSibling(name + ".tmp");
-		NbtIo.writeCompressed(tag, tmp);
-		// read it back before it counts: a full disk or a broken write refuses the placement, not the later removal
-		NbtIo.readCompressed(tmp, NbtAccounter.unlimitedHeap());
-		Files.move(tmp, f, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
-	}
-
+	/** A legacy snapshot (4d) by name, from {@code architect-sites/}. */
 	static CompoundTag readSnapshot(String name) throws IOException {
 		return NbtIo.readCompressed(snapshotFile(name), NbtAccounter.unlimitedHeap());
-	}
-
-	private static void deleteSnapshot(String name) {
-		try {
-			Files.deleteIfExists(snapshotFile(name));
-		} catch (IOException | RuntimeException e) {
-			Architect.LOGGER.warn("Could not delete the snapshot {}", name, e);
-		}
 	}
 
 	// ------------------------------------------------------------------ world work
@@ -2030,8 +2483,13 @@ public final class Sites {
 		Path f = file(server);
 		try {
 			Path tmp = f.resolveSibling(FILE + ".tmp");
-			Files.writeString(tmp, GSON.toJson(Site.fileJson(List.copyOf(s.byId().values()), s.next(), s.pending(), List.copyOf(groups.values()),
-				nextGroup)), StandardCharsets.UTF_8);
+			JsonObject root = Site.fileJson(List.copyOf(s.byId().values()), s.next(), s.pending(), List.copyOf(groups.values()), nextGroup);
+			// phase 4e: roads and cell sites in their own array (0.7.0 never sees them; its saves drop it; the journal rebuilds them)
+			JsonArray infra = Infras.toJson();
+			if (!infra.isEmpty()) {
+				root.add("infra", infra);
+			}
+			Files.writeString(tmp, GSON.toJson(root), StandardCharsets.UTF_8);
 			Files.move(tmp, f, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
 		} catch (IOException e) {
 			Architect.LOGGER.warn("Could not save {}", f, e);
@@ -2042,13 +2500,16 @@ public final class Sites {
 		loadFailed = false;
 		groups = Map.of();
 		nextGroup = 1;
+		Infras.load(new JsonArray());
 		Path f = file(server);
 		if (!Files.exists(f)) {
 			state = State.EMPTY;
 			return;
 		}
 		try {
-			Site.FileData data = Site.fileFromJson(JsonParser.parseString(Files.readString(f, StandardCharsets.UTF_8)).getAsJsonObject());
+			JsonObject root = JsonParser.parseString(Files.readString(f, StandardCharsets.UTF_8)).getAsJsonObject();
+			Site.FileData data = Site.fileFromJson(root);
+			Infras.load(root.has("infra") && root.get("infra").isJsonArray() ? root.getAsJsonArray("infra") : new JsonArray());
 			Map<String, Site> map = new LinkedHashMap<>();
 			for (Site b : data.sites()) {
 				map.put(b.id(), b);
@@ -2071,15 +2532,25 @@ public final class Sites {
 	public static JsonObject json() {
 		JsonObject o = new JsonObject();
 		JsonArray sites = new JsonArray();
-		all().forEach(b -> sites.add(b.toJson()));
+		all().forEach(b -> {
+			JsonObject j = b.toJson();
+			JsonArray ids = new JsonArray();
+			SiteJournal.active(b.id()).forEach(m -> ids.add(m.id()));
+			j.add("entries", ids);
+			sites.add(j);
+		});
 		o.add("sites", sites);
 		JsonArray pend = new JsonArray();
 		pending().forEach(p -> {
 			JsonObject j = p.toJson();
-			Path d = snapshotDir();
-			j.addProperty("snapshotExists", d != null && Files.exists(d.resolve(p.site().snapshot())));
+			List<JournalStore.Meta> es = SiteJournal.entries(p.site().id()).stream().filter(m -> m.status() == Journal.Status.UNDONE).toList();
+			j.addProperty("snapshotExists", !es.isEmpty());
+			JsonArray ids = new JsonArray();
+			es.forEach(m -> ids.add(m.id()));
+			j.add("entries", ids);
 			pend.add(j);
 		});
+		o.add("infra", Infras.toJson());
 		o.add("pending", pend);
 		JsonObject rep = new JsonObject();
 		reports().forEach((id, r) -> rep.addProperty(id, (r.problem() ? "problem: " : "note: ") + r.message()));

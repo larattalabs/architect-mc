@@ -63,6 +63,23 @@ public final class SurvivalWorld {
 	}
 
 	private static volatile @Nullable Settings current;
+	/** The world journal's region cache (phase 4e, decision N7): {@code journalCacheMb} in the file, default 64. */
+	private static volatile int journalCacheMb = 64;
+	/** The journal size at which a warning shows (phase 4e, N7): {@code journalWarnMb}, default 1024 (1 GB). */
+	private static volatile int journalWarnMb = 1024;
+
+	public static int journalCacheMb() {
+		return journalCacheMb;
+	}
+
+	public static int journalWarnMb() {
+		return journalWarnMb;
+	}
+
+	private static void readJournalConfig(JsonObject o) {
+		journalCacheMb = o.has("journalCacheMb") ? Math.max(8, Math.min(4096, o.get("journalCacheMb").getAsInt())) : 64;
+		journalWarnMb = o.has("journalWarnMb") ? Math.max(16, o.get("journalWarnMb").getAsInt()) : 1024;
+	}
 	private static final java.util.List<Consumer<Boolean>> LISTENERS = new CopyOnWriteArrayList<>();
 
 	private SurvivalWorld() {
@@ -119,13 +136,17 @@ public final class SurvivalWorld {
 	}
 
 	static void load(MinecraftServer server) {
+		journalCacheMb = 64;
+		journalWarnMb = 1024;
 		GameType type = server.getDefaultGameType();
 		boolean def = defaultOn(type.getName(), server.isHardcore());
 		Path f = file(server);
 		Settings s;
 		if (Files.exists(f)) {
 			try {
-				s = Settings.fromJson(JsonParser.parseString(Files.readString(f, StandardCharsets.UTF_8)).getAsJsonObject(), def);
+				JsonObject root = JsonParser.parseString(Files.readString(f, StandardCharsets.UTF_8)).getAsJsonObject();
+				s = Settings.fromJson(root, def);
+				readJournalConfig(root);
 			} catch (IOException | RuntimeException e) {
 				Architect.LOGGER.warn("Could not read {}; survival {} (the default for this world)", f, def ? "on" : "off", e);
 				s = new Settings(def, DEFAULT_BLOCKS_PER_TICK);
@@ -161,7 +182,10 @@ public final class SurvivalWorld {
 		Path f = file(server);
 		try {
 			Path tmp = f.resolveSibling(FILE + ".tmp");
-			Files.writeString(tmp, GSON.toJson(s.toJson()), StandardCharsets.UTF_8);
+			JsonObject o = s.toJson();
+			o.addProperty("journalCacheMb", journalCacheMb);
+			o.addProperty("journalWarnMb", journalWarnMb);
+			Files.writeString(tmp, GSON.toJson(o), StandardCharsets.UTF_8);
 			Files.move(tmp, f, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
 		} catch (IOException e) {
 			Architect.LOGGER.warn("Could not save {}", f, e);

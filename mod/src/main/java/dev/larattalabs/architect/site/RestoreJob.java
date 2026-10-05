@@ -2,12 +2,16 @@ package dev.larattalabs.architect.site;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
-import java.io.IOException;
+import dev.larattalabs.architect.journal.Journal;
+import dev.larattalabs.architect.journal.JournalStore;
+import dev.larattalabs.architect.journal.UpdateMask;
+import dev.larattalabs.architect.journal.WorldJournal;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.Registries;
-import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.block.Rotation;
@@ -15,27 +19,38 @@ import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemp
 import org.jspecify.annotations.Nullable;
 
 /**
- * A site's snapshot put back over ticks (docs/CONTRACT.md phase 4d): the same writes as {@code Sites.restoreTemplate} (the
- * snapshot placed with {@link TemplateWriter}), then the rest of a removal. Two purposes:
+ * A site's undo written over ticks (docs/CONTRACT.md phase 4d; phase 4e R1-R4): the same writes as the atomic restore (the
+ * undo's {@code written} values as a structure template placed with {@link TemplateWriter}, under the hole mask when a site
+ * that stays covers some of its cells), then its other cells, then the rest of a removal. Two purposes:
  * <ul>
- * <li>{@code rollback}: a site still placing is cancelled ({@code cancelBatch}, a broken job); it was never placed, so no
- * SITE_REMOVED fires;</li>
- * <li>{@code remove}: an instant site of a group or stage being undone; SITE_REMOVED fires.</li>
+ * <li>{@code rollback}: a site still placing is cancelled ({@code cancelBatch}, a broken job); this job plans and commits the
+ * undo of its PLACING entries itself; it was never placed, so no SITE_REMOVED fires;</li>
+ * <li>{@code remove}: a site of a group or stage being undone: the group's undo is already committed ({@link Groups}); this
+ * job writes it; SITE_REMOVED fires.</li>
  * </ul>
- * Persisted by purpose and site only: after a load it starts over (writing a snapshot again is idempotent).
+ * Persisted by purpose, site and undo group: after a load it starts its writes over (writing the same values again is
+ * idempotent; K7).
  */
 final class RestoreJob implements Placement.Job {
 	static final String ROLLBACK = "rollback";
 	static final String REMOVE = "remove";
+	static final int PLAN = 0;
+	static final int COMMIT = 1;
+	static final int WRITE = 2;
+	static final int DONE = 3;
 
 	final String siteId;
 	final String purpose;
 	final @Nullable String batchId;
 	final @Nullable String itemKey;
 	final List<TickDeferral.Held> held = new ArrayList<>();
+	/** The undo group (null until a rollback planned it). */
+	@Nullable String group;
+	int phase = PLAN;
+	transient @Nullable CompletableFuture<Void> commit;
+	transient WorldJournal.@Nullable UndoWork work;
 	@Nullable TemplateWriter writer;
-	/** The snapshot being restored (its leaf ring is applied at the end). */
-	@Nullable CompoundTag tag;
+	transient SiteJournal.@Nullable Restore restore;
 	@Nullable List<String> dropsBefore;
 	@Nullable String broken;
 	boolean done;
@@ -45,12 +60,23 @@ final class RestoreJob implements Placement.Job {
 	boolean requeue;
 	/** What the finished removal gave back (a remove's refunds are empty: instant sites only). */
 	Sites.@Nullable Removed result;
+	/** A removal's hand-downs per site (for its RemoveResult). */
+	Map<String, Integer> handed = Map.of();
 
 	RestoreJob(String siteId, String purpose, @Nullable String batchId, @Nullable String itemKey) {
 		this.siteId = siteId;
 		this.purpose = purpose;
 		this.batchId = batchId;
 		this.itemKey = itemKey;
+	}
+
+	/** A removal's write job: its undo group is committed. */
+	static RestoreJob writing(String siteId, String group, Map<String, Integer> handed) {
+		RestoreJob j = new RestoreJob(siteId, REMOVE, null, null);
+		j.group = group;
+		j.phase = WRITE;
+		j.handed = handed;
+		return j;
 	}
 
 	@Override
@@ -68,33 +94,82 @@ final class RestoreJob implements Placement.Job {
 		return purpose;
 	}
 
+	/** The record: standing (a rollback before its undo) or pending (after R3). */
+	private @Nullable Site record() {
+		Site s = Sites.get(siteId);
+		return s != null ? s : Sites.pendingRecord(siteId);
+	}
+
 	@Override
 	public boolean step(MinecraftServer server, long deadline) {
-		Site s = Sites.get(siteId);
+		Site s = record();
 		ServerLevel level = s == null ? null : Sites.levelOf(server, s);
 		if (s == null || level == null) {
 			broken = s == null ? "no site " + siteId : s.dimension() + " is not loaded";
 			return true;
 		}
+		try {
+			if (phase == PLAN) {
+				group = SiteJournal.group(purpose + "-" + siteId);
+				SiteJournal.Undone u = SiteJournal.undo(level, List.of(siteId), group);
+				work = u.work();
+				commit = u.commit();
+				dropsBefore = Sites.Drops.before(level, s.restoreBox()).uuids();
+				phase = COMMIT;
+				return false;
+			}
+			if (phase == COMMIT) {
+				CompletableFuture<Void> f = commit;
+				if (f != null && !f.isDone()) {
+					return false;
+				}
+				if (f != null && f.isCompletedExceptionally()) {
+					broken = "its undo could not be saved to the world journal";
+					return true;
+				}
+				commit = null;
+				WorldJournal.kill("K6");
+				if (Sites.get(siteId) != null) {
+					Sites.markPending(server, Sites.get(siteId), "removed"); // R3
+				}
+				phase = WRITE;
+				return false;
+			}
+		} catch (Sites.SiteException e) {
+			broken = e.getMessage();
+			return true;
+		}
 		if (writer == null) {
 			try {
-				tag = Sites.readSnapshot(s.snapshot());
-			} catch (IOException | RuntimeException e) {
-				broken = "the saved terrain of " + siteId + " can't be read (" + e.getMessage() + ")";
+				restore = SiteJournal.restore(level, siteId, group);
+			} catch (Sites.SiteException e) {
+				broken = e.getMessage();
 				return true;
 			}
-			StructureTemplate t = new StructureTemplate();
-			t.load(level.registryAccess().lookupOrThrow(Registries.BLOCK), tag);
-			BlockPos min = new BlockPos(s.restoreBox().minX(), s.restoreBox().minY(), s.restoreBox().minZ());
-			writer = new TemplateWriter(TemplateWriter.cells(level, t, Sites.placeSettings(Rotation.NONE)), min, Sites.FLAGS);
 			if (dropsBefore == null) {
 				dropsBefore = Sites.Drops.before(level, s.restoreBox()).uuids();
 			}
+			if (restore.template() != null && restore.box() != null) {
+				StructureTemplate t = new StructureTemplate();
+				t.load(level.registryAccess().lookupOrThrow(Registries.BLOCK), restore.template());
+				BlockPos min = new BlockPos(restore.box().minX(), restore.box().minY(), restore.box().minZ());
+				writer = new TemplateWriter(TemplateWriter.cells(level, t, Sites.placeSettings(Rotation.NONE)), min, Sites.FLAGS);
+			} else {
+				writer = new TemplateWriter(new TemplateWriter.Cells(new int[0], new net.minecraft.world.level.block.state.BlockState[0],
+					new net.minecraft.nbt.CompoundTag[0]), BlockPos.ZERO, Sites.FLAGS);
+			}
 		}
 		TickDeferral.begin(level, held);
+		if (restore != null && restore.mask() != null) {
+			UpdateMask.begin(restore.mask());
+		}
 		try {
 			writer.step(level, deadline);
+			if (writer.progress() > 0) {
+				WorldJournal.kill("K7");
+			}
 		} finally {
+			UpdateMask.end();
 			TickDeferral.end();
 		}
 		if (!writer.done()) {
@@ -103,8 +178,12 @@ final class RestoreJob implements Placement.Job {
 		// as Sites.restoreQuietly: the leaf ticks the restore scheduled are dropped
 		TickDeferral.release(level, TickDeferral.withoutLeaves(held));
 		held.clear();
+		SiteJournal.writeCells(level, restore.cells());
 		Sites.Drops drops = Sites.Drops.of(level, s.restoreBox(), dropsBefore);
-		result = ROLLBACK.equals(purpose) ? Sites.finishRollback(server, level, s, drops, tag) : Sites.finishTickedRemove(server, level, s, drops, tag);
+		Journal.Stats st = work != null ? Sites.statsOf(work, siteId) : new Journal.Stats(restore.cells().size(), 0, restore.holes());
+		result = ROLLBACK.equals(purpose) ? Sites.finishRollback(server, level, s, drops, restore.ring(), st)
+			: Sites.finishTickedRemove(server, level, s, drops, restore.ring(), st, handed);
+		phase = DONE;
 		done = true;
 		return true;
 	}
@@ -135,6 +214,10 @@ final class RestoreJob implements Placement.Job {
 		if (itemKey != null) {
 			o.addProperty("itemKey", itemKey);
 		}
+		if (group != null) {
+			o.addProperty("group", group);
+		}
+		o.addProperty("phase", phase == DONE ? WRITE : phase);
 		if (!why.isEmpty()) {
 			o.addProperty("why", why);
 		}
@@ -146,6 +229,11 @@ final class RestoreJob implements Placement.Job {
 			dropsBefore.forEach(d::add);
 			o.add("dropsBefore", d);
 		}
+		if (!handed.isEmpty()) {
+			JsonObject h = new JsonObject();
+			handed.forEach(h::addProperty);
+			o.add("handed", h);
+		}
 		return o;
 	}
 
@@ -154,16 +242,39 @@ final class RestoreJob implements Placement.Job {
 			o.has("itemKey") ? o.get("itemKey").getAsString() : null);
 		j.why = o.has("why") ? o.get("why").getAsString() : "";
 		j.requeue = o.has("requeue") && o.get("requeue").getAsBoolean();
+		j.group = o.has("group") ? o.get("group").getAsString() : null;
+		j.phase = o.has("phase") ? o.get("phase").getAsInt() : j.group == null ? PLAN : WRITE;
+		if (j.group == null) {
+			j.phase = PLAN;
+		} else if (j.phase == COMMIT || j.phase == PLAN) {
+			// the undo was submitted: committed (written again from the start) or not (planned again)
+			String g = j.group;
+			boolean undone = SiteJournal.entries(j.siteId).stream().anyMatch(m -> m.status() == Journal.Status.UNDONE && g.equals(m.undoGroup()));
+			j.phase = undone ? WRITE : PLAN;
+			if (undone && Sites.get(j.siteId) != null) {
+				j.phase = COMMIT; // R3 not done yet: the record goes pending first
+			}
+		}
 		if (o.has("dropsBefore")) {
 			List<String> d = new ArrayList<>();
 			o.getAsJsonArray("dropsBefore").forEach(e -> d.add(e.getAsString()));
 			j.dropsBefore = d;
+		}
+		if (o.has("handed")) {
+			Map<String, Integer> h = new java.util.TreeMap<>();
+			o.getAsJsonObject("handed").entrySet().forEach(e -> h.put(e.getKey(), e.getValue().getAsInt()));
+			j.handed = h;
 		}
 		return j;
 	}
 
 	@Override
 	public String toString() {
-		return "RestoreJob[" + purpose + " " + siteId + "]";
+		return "RestoreJob[" + purpose + " " + siteId + (group == null ? "" : " " + group) + "]";
+	}
+
+	/** Unused helper kept for the store import (entries of a group). */
+	static List<String> entryIds(String siteId, String group) {
+		return SiteJournal.undone(siteId, group).stream().map(JournalStore.Meta::id).toList();
 	}
 }

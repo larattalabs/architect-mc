@@ -3,6 +3,7 @@ package dev.larattalabs.architect.site;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import dev.larattalabs.architect.Architect;
+import dev.larattalabs.architect.journal.WorldJournal;
 import dev.larattalabs.architect.placement.Anchor;
 import dev.larattalabs.architect.placement.Anchors;
 import dev.larattalabs.architect.placement.Approach;
@@ -387,14 +388,13 @@ public final class Builder {
 		if (r != null && r.placedAt == s.placedAt() && r.box.equals(s.restoreBox())) {
 			return r;
 		}
-		CompoundTag tag;
-		try {
-			tag = Sites.readSnapshot(c.target());
-		} catch (IOException | RuntimeException e) {
-			Architect.LOGGER.warn("Construction site {}: its target file {} can't be read; it can only be removed", s.id(), c.target(), e);
+		// phase 4e: the target is the site entry's after (the instant placement's box once it settled)
+		Cells target = SiteJournal.target(s.id(), s.restoreBox());
+		if (target == null) {
+			Architect.LOGGER.warn("Construction site {}: its target (the journal entry's after) can't be read; it can only be removed", s.id());
 			return null;
 		}
-		r = new Run(s, Cells.read(tag));
+		r = new Run(s, target);
 		ServerLevel level = Sites.levelOf(server, s);
 		if (level != null) {
 			r.rescan(level);
@@ -582,11 +582,19 @@ public final class Builder {
 	// ------------------------------------------------------------------ place: instant placement -> construction site
 
 	/**
-	 * Turns the instant placement just built into a construction site: captures the target, puts the crate down and clears
-	 * every queued cell to air (free, no drops). Called by {@link Sites#place} before the record is committed; throws after
-	 * undoing its own changes (the caller takes the placement down).
+	 * What turning an instant placement into a construction site takes (docs/CONTRACT.md phase 3, 4e): the queued cells in build
+	 * order, the target (the box as the instant placement left it once its own block ticks ran: P6, the site entry's
+	 * {@code after}), the crate's cell (and whether a new crate goes there).
 	 */
-	static Construction convert(ServerLevel level, Blueprint bp, Sites.Built built, String id, @Nullable String owner) throws Sites.SiteException {
+	record ConvertPlan(String id, Construction construction, WorldJournal.Captured target, Anchors.Bounds sb, boolean newCrate,
+		@Nullable String sharedGroup) {
+	}
+
+	/**
+	 * P6 of a construction placement: settles the block ticks the instant placement scheduled on its own cells, captures the
+	 * target over the snapshot box, orders the queue and picks the crate's cell. Writes nothing else.
+	 */
+	static ConvertPlan planConvert(ServerLevel level, Blueprint bp, Sites.Built built, String id, @Nullable String owner) throws Sites.SiteException {
 		Anchors.Bounds sb = built.snapshotBox();
 		int dx = sb.maxX() - sb.minX() + 1;
 		int dz = sb.maxZ() - sb.minZ() + 1;
@@ -624,16 +632,9 @@ public final class Builder {
 		if (settled > 0) {
 			Architect.LOGGER.info("Construction site {}: ran {} block tick(s) the instant placement scheduled on its cells", id, settled);
 		}
-		// the target: what the instant placement left over the whole snapshot box (states and block-entity NBT)
-		CompoundTag target;
-		String targetFile = id + "-" + System.currentTimeMillis() + "-target.nbt";
-		try {
-			target = Sites.capture(level, sb);
-			Sites.writeSnapshotFile(targetFile, target);
-		} catch (IOException e) {
-			throw new Sites.SiteException("Could not save the construction site's plan (" + e.getMessage() + "); nothing was placed");
-		}
-		Cells t = Cells.read(target);
+		// the target: what the instant placement left over the whole snapshot box (states and block-entity NBT), P6
+		WorldJournal.Captured target = WorldJournal.capture(level, sb);
+		Cells t = Cells.fromCapture(target);
 		List<Integer> idx = new ArrayList<>();
 		for (BlockPos p : cells) {
 			int k = Construction.index(p.getX() - sb.minX(), p.getY() - sb.minY(), p.getZ() - sb.minZ(), dx, dz);
@@ -645,7 +646,7 @@ public final class Builder {
 		int n = idx.size();
 		int[] boxIdx = idx.stream().mapToInt(Integer::intValue).toArray();
 		Site probe = new Site(id, bp.id(), "none", built.box(), built.box(), Map.of(), 0L, Sites.dimensionId(level), sb, built.snapshot(), null, null,
-			new Construction(Construction.BUILDING, boxIdx, targetFile, null, new BitSet(), false, owner));
+			new Construction(Construction.BUILDING, boxIdx, JOURNAL_TARGET, null, new BitSet(), false, owner));
 		Run r = new Run(probe, t);
 		int[] y = new int[n];
 		int[] kind = new int[n];
@@ -671,6 +672,7 @@ public final class Builder {
 				crate = gc;
 			}
 		}
+		boolean newCrate = crate == null;
 		if (crate == null) {
 			BlockPos cratePos = grp != null && grp.crateAt() != null ? new BlockPos(grp.crateAt()[0], grp.crateAt()[1], grp.crateAt()[2])
 				: cratePos(level, bp, built, sb);
@@ -678,27 +680,93 @@ public final class Builder {
 			BlockEntity wasBe = level.getBlockEntity(cratePos);
 			String wasNbt = wasBe == null ? null : wasBe.saveWithFullMetadata(level.registryAccess()).toString();
 			crate = new Construction.Crate(cratePos.getX(), cratePos.getY(), cratePos.getZ(), NbtUtils.writeBlockState(was).toString(), wasNbt);
-			level.setBlock(cratePos, CrateBlocks.CRATE.defaultBlockState(), Sites.FLAGS);
-			if (level.getBlockEntity(cratePos) instanceof CrateBlockEntity be) {
-				be.setSiteId(grp != null ? grp.crateOwner() : id);
-			}
-			if (grp != null) {
-				Sites.putGroup(level.getServer(), grp.withCrate(crate));
-			}
 		}
-		BlockPos cratePos = new BlockPos(crate.x(), crate.y(), crate.z());
-		// clear the queued cells: top down, no drops, no neighbour updates (nothing pops off)
-		Integer[] topDown = idx.toArray(new Integer[0]);
-		Arrays.sort(topDown, Comparator.comparingInt((Integer k) -> -k));
+		Architect.LOGGER.info("Construction site {} ({}): {} cells queued, crate at {}{}", id, bp.id(), n, crate.x() + "," + crate.y() + "," + crate.z(),
+			r.waterlogged > 0 ? ", " + r.waterlogged + " waterlogged cell(s) built dry" : "");
+		return new ConvertPlan(id, new Construction(Construction.BUILDING, queue, JOURNAL_TARGET, crate, new BitSet(), false, owner), target, sb, newCrate,
+			grp == null ? null : grp.id());
+	}
+
+	/** {@link Construction#target} of a 4e construction site: its target lives in its journal entry ({@code after}). */
+	static final String JOURNAL_TARGET = "journal";
+
+	/** P7 of a construction placement: the site entry's after is the target, and a new crate's cell its own {@code crate} entry. */
+	static java.util.concurrent.CompletableFuture<Void> commitConvert(ServerLevel level, ConvertPlan p) throws Sites.SiteException {
+		Construction.Crate c = p.construction().crate();
+		if (!p.newCrate() || c == null) {
+			return SiteJournal.complete(p.id(), p.target(), null);
+		}
+		String owner = p.sharedGroup() != null ? SiteGroupRec.CRATE_PREFIX + p.sharedGroup() : p.id();
+		SiteGroupRec g = p.sharedGroup() == null ? null : Sites.group(p.sharedGroup());
+		String group = g != null ? g.id() : Sites.get(p.id()) != null ? Sites.get(p.id()).group() : null;
+		Sites.SiteException[] err = new Sites.SiteException[1];
+		var f = SiteJournal.complete(p.id(), p.target(), t -> {
+			try {
+				SiteJournal.crateEntry(t, level, owner, group, new BlockPos(c.x(), c.y(), c.z()), WorldJournal.value(CrateBlocks.CRATE.defaultBlockState()));
+			} catch (Sites.SiteException e) {
+				err[0] = e;
+			}
+		});
+		if (err[0] != null) {
+			throw err[0];
+		}
+		return f;
+	}
+
+	/** After P7: a new crate goes down (its entry is committed). */
+	static void placeCrate(ServerLevel level, ConvertPlan p) {
+		Construction.Crate c = p.construction().crate();
+		if (!p.newCrate() || c == null) {
+			return;
+		}
+		BlockPos cratePos = new BlockPos(c.x(), c.y(), c.z());
+		SiteGroupRec grp = p.sharedGroup() == null ? null : Sites.group(p.sharedGroup());
+		level.setBlock(cratePos, CrateBlocks.CRATE.defaultBlockState(), Sites.FLAGS);
+		if (level.getBlockEntity(cratePos) instanceof CrateBlockEntity be) {
+			be.setSiteId(grp != null ? grp.crateOwner() : p.id());
+		}
+		if (grp != null) {
+			Sites.putGroup(level.getServer(), grp.withCrate(c));
+		}
+	}
+
+	/**
+	 * Clears queued cells of {@code c} to air, top down, no drops, no neighbour updates (nothing pops off): from index
+	 * {@code from} of the top-down order until {@code deadline} ({@link System#nanoTime}; {@code Long.MAX_VALUE}: all). Returns
+	 * the next index ({@code c.size()} when done).
+	 */
+	static int clear(ServerLevel level, Construction c, Anchors.Bounds sb, int from, long deadline) {
+		int[] topDown = c.queue();
+		Arrays.sort(topDown);
+		int dx = sb.maxX() - sb.minX() + 1;
+		int dz = sb.maxZ() - sb.minZ() + 1;
 		BlockPos.MutableBlockPos mp = new BlockPos.MutableBlockPos();
 		BlockState air = Blocks.AIR.defaultBlockState();
-		for (int k : topDown) {
+		int i = from;
+		for (; i < topDown.length; i++) {
+			if (i > from && (i - from) % 16 == 0 && System.nanoTime() >= deadline) {
+				return i;
+			}
+			int k = topDown[topDown.length - 1 - i];
 			int[] o = Construction.offsets(k, dx, dz);
 			level.setBlock(mp.set(sb.minX() + o[0], sb.minY() + o[1], sb.minZ() + o[2]), air, Sites.FLAGS);
 		}
-		Architect.LOGGER.info("Construction site {} ({}): {} cells queued, crate at {}{}", id, bp.id(), n, cratePos.toShortString(),
-			r.waterlogged > 0 ? ", " + r.waterlogged + " waterlogged cell(s) built dry" : "");
-		return new Construction(Construction.BUILDING, queue, targetFile, crate, new BitSet(), false, owner);
+		return i;
+	}
+
+	/**
+	 * Turns the instant placement just built into a construction site at once (a single Place): P6, the P7 commit
+	 * (synchronous), the crate and the clearing. Called by {@link Sites#place} before the record is placed; throws after undoing
+	 * nothing of the world (the caller takes the placement down).
+	 */
+	static Construction convertNow(ServerLevel level, Blueprint bp, Sites.Built built, String id, @Nullable String owner) throws Sites.SiteException {
+		long t0 = System.nanoTime();
+		ConvertPlan p = planConvert(level, bp, built, id, owner);
+		SiteJournal.await(commitConvert(level, p), "the construction plan of " + id);
+		placeCrate(level, p);
+		clear(level, p.construction(), p.sb(), 0, Long.MAX_VALUE);
+		Placement.noteConvert(id, System.nanoTime() - t0);
+		return p.construction();
 	}
 
 	private static void add(List<BlockPos> cells, Set<Long> seen, BlockPos p) {
@@ -707,22 +775,6 @@ public final class Builder {
 		}
 	}
 
-	/** Undoes {@link #convert}'s crate (a placement rolled back after the conversion). */
-	static void removeCrate(ServerLevel level, Construction c) {
-		boolean inUse = false;
-		if (c.crate() != null) {
-			for (Site o : Sites.all()) {
-				Construction oc = o.construction();
-				if (oc != null && oc.crate() != null && oc.crate().x() == c.crate().x() && oc.crate().y() == c.crate().y() && oc.crate().z() == c.crate().z()) {
-					inUse = true;
-				}
-			}
-		}
-		if (c.crate() != null && !inUse) {
-			restoreCrateCell(level, c.crate());
-		}
-		Sites.deleteSnapshotFile(c.target());
-	}
 
 	/** The crate's cell: one past the approach's last row (at its feet height), or 2 out from the entrance; never in the box. */
 	static BlockPos cratePos(ServerLevel level, Blueprint bp, Sites.Built built, Anchors.Bounds sb) {
@@ -964,6 +1016,7 @@ public final class Builder {
 		BlockPos at = c.crate() != null ? new BlockPos(c.crate().x(), c.crate().y(), c.crate().z()) : dropPos(s);
 		if (c.crate() != null && !keepCrate && (crate != null || level.isLoaded(at))) {
 			restoreCrateCell(level, c.crate());
+			SiteJournal.releaseKind(crateOwner(s), WorldJournal.CRATE); // its cell is the ground again (phase 4e)
 		}
 		dropItems(level, at, left, null);
 		// the crate record stays (its block is gone): a later deconstruct drops its refunds on that cell, outside the box
@@ -1275,10 +1328,13 @@ public final class Builder {
 	 * takes the crate's stock and puts the crate's cell back. {@code snapshot}: the site's snapshot tag. The caller restores
 	 * the box, then calls {@link #dropDeconstruction}.
 	 */
-	static Deconstruction prepareDeconstruct(ServerLevel level, Site s, CompoundTag snapshot) {
+	static Deconstruction prepareDeconstruct(ServerLevel level, Site s) {
 		MinecraftServer srv = level.getServer();
 		Run r = run(srv, s);
-		Cells before = Cells.read(snapshot);
+		Cells before = SiteJournal.before(s.id(), s.restoreBox(), false);
+		if (before == null) {
+			before = Cells.fromValues(s.restoreBox(), Map.of());
+		}
 		Anchors.Bounds b = s.restoreBox();
 		BitSet free = s.construction().free();
 		Refunds.Tally tally = new Refunds.Tally();
@@ -1319,6 +1375,9 @@ public final class Builder {
 				keepDelivered(srv, s, crate, false);
 				stock = crate.ledger().takeStock();
 				restoreCrateCell(level, c.crate());
+				if (sharedGroup(s) != null) {
+					SiteJournal.releaseKind(crateOwner(s), WorldJournal.CRATE); // the group's crate went (its own entry, phase 4e)
+				}
 			}
 		}
 		Deconstruction d = new Deconstruction(tally, stock, at, r == null ? 0 : r.size(), missing);

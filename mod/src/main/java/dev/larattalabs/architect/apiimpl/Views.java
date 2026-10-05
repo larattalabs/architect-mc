@@ -64,6 +64,13 @@ public final class Views {
 			m == null ? null : m.batchId(), m == null ? null : m.itemKey());
 	}
 
+	/** A road or cell site as the API sees it (phase 4e). */
+	public static SiteView infra(dev.larattalabs.architect.site.Infra i) {
+		Site.Member m = i.member();
+		return new SiteView(i.id(), i.kind(), i.owner(), i.ext(), box(i.box()), box(i.box()), Rotation.NONE, dimension(i.dimension()),
+			i.placing() ? State.PLACING : State.BUILT, 0, 0, m == null ? null : m.group(), m == null ? null : m.batchId(), m == null ? null : m.itemKey());
+	}
+
 	// ------------------------------------------------------------------ phase 4d: batches, groups, stages
 
 	public static dev.larattalabs.architect.api.BatchView batch(dev.larattalabs.architect.batch.QBatch b) {

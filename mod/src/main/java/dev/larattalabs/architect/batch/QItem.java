@@ -41,6 +41,12 @@ public final class QItem {
 	/** Whether the world's survival toggle was on when the item was queued (an INSTANT item queued with it off fails if it is switched on). */
 	public final boolean survivalAtQueue;
 
+	/** Phase 4e: the LAYER overlap policy (else REFUSE). */
+	public boolean layer;
+	/** Phase 4e: {@code building}, {@code road} or {@code cells}; a road's or cell site's request ({@code spec}). */
+	public String itemKind = "building";
+	public @Nullable JsonObject spec;
+
 	public Status status = Status.QUEUED;
 	public @Nullable String siteId;
 	/** The typed reason (a {@code Reason} name) while waiting or once failed. */
@@ -111,6 +117,15 @@ public final class QItem {
 		if (waited > 0) {
 			o.addProperty("waited", waited);
 		}
+		if (layer) {
+			o.addProperty("overlap", "LAYER");
+		}
+		if (!"building".equals(itemKind)) {
+			o.addProperty("itemKind", itemKind);
+		}
+		if (spec != null) {
+			o.add("spec", spec.deepCopy());
+		}
 		return o;
 	}
 
@@ -132,6 +147,9 @@ public final class QItem {
 		i.reason = o.has("reason") ? o.get("reason").getAsString() : null;
 		i.message = o.has("message") ? o.get("message").getAsString() : "";
 		i.waited = o.has("waited") ? o.get("waited").getAsLong() : 0L;
+		i.layer = o.has("overlap") && "LAYER".equals(o.get("overlap").getAsString());
+		i.itemKind = o.has("itemKind") ? o.get("itemKind").getAsString() : "building";
+		i.spec = o.has("spec") && o.get("spec").isJsonObject() ? o.getAsJsonObject("spec") : null;
 		return i;
 	}
 }

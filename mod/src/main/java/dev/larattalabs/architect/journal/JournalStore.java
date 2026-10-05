@@ -730,6 +730,7 @@ public final class JournalStore {
 		CompletableFuture<Void> f = new CompletableFuture<>();
 		String label = t.label;
 		io.execute(() -> {
+			WorldJournal.writing = label;
 			try {
 				if (epoch != myEpoch) {
 					throw new IOException("an earlier journal commit failed");

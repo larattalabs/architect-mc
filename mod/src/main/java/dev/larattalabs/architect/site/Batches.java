@@ -59,7 +59,7 @@ public final class Batches {
 	static final TicketType TICKET = net.minecraft.core.Registry.register(BuiltInRegistries.TICKET_TYPE,
 		Identifier.fromNamespaceAndPath(Architect.MOD_ID, "placement"), new TicketType(0L, TicketType.FLAG_LOADING));
 	/** Temporary blockers: an item refused only for these waits instead of failing. */
-	static final Set<Reason> TEMPORARY = Set.of(Reason.PLAYER_IN_BOX, Reason.OCCUPIED, Reason.NOT_LOADED);
+	static final Set<Reason> TEMPORARY = Set.of(Reason.PLAYER_IN_BOX, Reason.OCCUPIED, Reason.NOT_LOADED, Reason.OVERLAP_BUSY);
 
 	private static final Map<String, QBatch> BATCHES = new LinkedHashMap<>();
 	private static int next = 1;
@@ -437,7 +437,7 @@ public final class Batches {
 		try {
 			// instant or construction: written over ticks; a construction site is converted when its last cell is written
 			long t0 = System.nanoTime();
-			PlaceJob job = Sites.beginPlacing(level, bp, origin, rot, i.force, b.owner, i.ext, member, i.construction, i.actor);
+			PlaceJob job = Sites.beginPlacing(level, bp, origin, rot, i.force, b.owner, i.ext, member, i.construction, i.actor, i.layer);
 			Placement.noteStart(job.siteId, System.nanoTime() - t0);
 			i.status = QItem.Status.PLACING;
 			i.siteId = job.siteId;
@@ -583,6 +583,30 @@ public final class Batches {
 			boolean cancel = b.cancelling;
 			fail(b, i, cancel ? Reason.CANCELLED : Reason.OTHER, cancel ? "cancelled: rolled back from its snapshot"
 				: "rolled back: " + (job.why.isEmpty() ? "it could not be placed" : job.why));
+		}
+	}
+
+	/** A placement failed before its first block and its record (its journal commit failed): its item fails. */
+	static void failedBeforeRecord(MinecraftServer server, PlaceJob job, String why) {
+		QBatch b = job.batchId == null ? null : BATCHES.get(job.batchId);
+		QItem i = b == null || job.itemKey == null ? null : b.item(job.itemKey);
+		if (i != null && i.status == QItem.Status.PLACING) {
+			untickItem(server, b, "job:" + i.key);
+			fail(b, i, Reason.JOURNAL_UNAVAILABLE, why);
+		}
+	}
+
+	/** A placement that stopped before its record (a crash): its item queues again. */
+	static void requeue(MinecraftServer server, PlaceJob job, String why) {
+		QBatch b = job.batchId == null ? null : BATCHES.get(job.batchId);
+		QItem i = b == null || job.itemKey == null ? null : b.item(job.itemKey);
+		if (i != null && i.status == QItem.Status.PLACING) {
+			i.status = QItem.Status.QUEUED;
+			i.siteId = null;
+			i.reason = null;
+			i.message = "";
+			CHANGED.add(b.id);
+			Architect.LOGGER.info("Batch {}: item {} queued again ({})", b.id, i.key, why);
 		}
 	}
 

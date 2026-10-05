@@ -67,6 +67,9 @@ public final class TickDeferral {
 
 	/** {@code LevelTicksMixin}: true when the tick was held back (and must not be scheduled now). */
 	public static boolean capture(ScheduledTick<?> tick) {
+		if (dev.larattalabs.architect.journal.UpdateMask.masked(tick.pos())) {
+			return true; // a restore with holes: ticks at covered positions are dropped (phase 4e)
+		}
 		List<Held> into = active;
 		if (into == null || Thread.currentThread() != owner) {
 			return false;

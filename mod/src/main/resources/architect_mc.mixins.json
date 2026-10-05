@@ -3,6 +3,8 @@
 	"package": "dev.larattalabs.architect.mixin",
 	"compatibilityLevel": "JAVA_25",
 	"mixins": [
+		"BlockStateUpdateMixin",
+		"LevelChunkMixin",
 		"LevelTicksMixin",
 		"StructureTemplateAccessor"
 	],

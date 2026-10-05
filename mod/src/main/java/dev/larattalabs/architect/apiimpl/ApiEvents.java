@@ -70,6 +70,16 @@ public final class ApiEvents {
 			new RemoveResult(true, List.of(), Views.items(r.returned()))));
 	}
 
+	/** A road or cell site was placed (phase 4e: SITE_PLACED fires for them too; their view's kind tells them apart). */
+	public static void placedInfra(MinecraftServer server, dev.larattalabs.architect.site.Infra i) {
+		guard("SITE_PLACED", () -> SiteEvents.SITE_PLACED.invoker().onPlaced(Views.infra(i)));
+	}
+
+	/** A road or cell site was removed. */
+	public static void removedInfra(MinecraftServer server, dev.larattalabs.architect.site.Infra i, int restored) {
+		guard("SITE_REMOVED", () -> SiteEvents.SITE_REMOVED.invoker().onRemoved(Views.infra(i), new RemoveResult(true, List.of(), java.util.Map.of())));
+	}
+
 	public static void moved(MinecraftServer server, Site before, Site after) {
 		guard("SITE_MOVED", () -> SiteEvents.SITE_MOVED.invoker().onMoved(Views.site(null, before), Views.site(server, after)));
 	}

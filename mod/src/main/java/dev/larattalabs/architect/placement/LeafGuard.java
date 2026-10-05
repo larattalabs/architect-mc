@@ -82,6 +82,52 @@ public final class LeafGuard {
 	}
 
 	/**
+	 * The leaves {@link #hold} would make persistent around {@code box}, without changing anything (phase 4e: they become a
+	 * {@code leaves} journal entry before they are written), as x, y, z, distance quadruples. {@code skip}: cells another
+	 * standing entry owns (guard cells never claim another site's cells).
+	 */
+	public static List<Integer> holdable(ServerLevel level, Anchors.Bounds box, java.util.function.Predicate<BlockPos> skip) {
+		List<Integer> out = new ArrayList<>();
+		BlockPos.MutableBlockPos p = new BlockPos.MutableBlockPos();
+		int minY = Math.max(level.getMinY(), box.minY() - RADIUS);
+		int maxY = Math.min(level.getMaxY(), box.maxY() + RADIUS);
+		for (int y = minY; y <= maxY; y++) {
+			for (int z = box.minZ() - RADIUS; z <= box.maxZ() + RADIUS; z++) {
+				for (int x = box.minX() - RADIUS; x <= box.maxX() + RADIUS; x++) {
+					int from = distanceTo(box, x, y, z);
+					if (from == 0 || from > RADIUS) {
+						continue;
+					}
+					BlockState s = level.getBlockState(p.set(x, y, z));
+					if (!(s.getBlock() instanceof LeavesBlock) || s.getValue(LeavesBlock.PERSISTENT)) {
+						continue;
+					}
+					int d = s.getValue(LeavesBlock.DISTANCE);
+					if (!mayDependOnBox(d, from) || skip.test(p)) {
+						continue;
+					}
+					out.add(x);
+					out.add(y);
+					out.add(z);
+					out.add(d);
+				}
+			}
+		}
+		return out;
+	}
+
+	/** Makes the {@link #holdable} cells persistent (no neighbour updates), where they still are natural leaves. */
+	public static void holdCells(ServerLevel level, List<Integer> held, int flags) {
+		BlockPos.MutableBlockPos p = new BlockPos.MutableBlockPos();
+		for (int i = 0; i + 3 < held.size(); i += 4) {
+			BlockState s = level.getBlockState(p.set(held.get(i), held.get(i + 1), held.get(i + 2)));
+			if (s.getBlock() instanceof LeavesBlock && !s.getValue(LeavesBlock.PERSISTENT)) {
+				level.setBlock(p, s.setValue(LeavesBlock.PERSISTENT, true), quiet(flags));
+			}
+		}
+	}
+
+	/**
 	 * Gives held leaves back their original state: still leaves and still persistent (the player may have broken them or
 	 * placed something else there, which stays as it is) -> not persistent, with the recorded distance. Returns how many.
 	 */

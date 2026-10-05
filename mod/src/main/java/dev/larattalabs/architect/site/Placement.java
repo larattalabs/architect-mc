@@ -249,7 +249,14 @@ public final class Placement {
 	private static void completed(MinecraftServer srv, Job j) {
 		clearGhost(srv, j, false);
 		if (j instanceof PlaceJob pj) {
-			if (pj.broken != null) {
+			if (pj.broken != null && pj.beforeRecord) {
+				// nothing written and no record (P1-P3 failed): the item fails; entries that did reach the journal are released
+				Architect.LOGGER.warn("Placing {} failed before its first block ({})", pj.siteId, pj.broken);
+				pj.aborted(srv);
+				SiteJournal.releaseGroup(SiteJournal.entries(pj.siteId).stream().filter(m -> m.status() == dev.larattalabs.architect.journal.Journal.Status.PLACING)
+					.map(dev.larattalabs.architect.journal.JournalStore.Meta::id).toList());
+				Batches.failedBeforeRecord(srv, pj, pj.broken);
+			} else if (pj.broken != null) {
 				Architect.LOGGER.warn("Placing {} can't go on ({}); rolling it back", pj.siteId, pj.broken);
 				pj.aborted(srv);
 				RestoreJob rb = new RestoreJob(pj.siteId, RestoreJob.ROLLBACK, pj.batchId, pj.itemKey);
@@ -422,10 +429,44 @@ public final class Placement {
 		if ("place".equals(kind)) {
 			PlaceJob pj = PlaceJob.fromJson(o);
 			ServerLevel level = Sites.levelOf(srv, pj.dimension);
+			if (pj.beforeRecord) {
+				// stopped before its record (P1-P3): a clean stop resumes (the commit was flushed); after a crash its entries were
+				// released at the world start (K2) and its item queues again
+				if (clean && level != null) {
+					if (pj.phase == PlaceJob.CAPTURE || pj.siteEntry == null) {
+						try {
+							pj.startCapture(level);
+						} catch (Sites.SiteException e) {
+							Batches.requeue(srv, pj, "it could not resume (" + e.getMessage() + ")");
+							return;
+						}
+					} else {
+						pj.phase = PlaceJob.COMMIT;
+					}
+					JOBS.add(pj);
+					Architect.LOGGER.info("Resuming the placement of {} ({}) before its first block", pj.siteId, pj.blueprint);
+				} else {
+					Batches.requeue(srv, pj, "the game stopped without saving before it was placed");
+				}
+				return;
+			}
 			Site s = Sites.get(pj.siteId);
 			if (s == null) {
 				Architect.LOGGER.warn("Placement job for {} has no site record; dropped", pj.siteId);
 				return;
+			}
+			boolean active = SiteJournal.main(pj.siteId) != null && SiteJournal.main(pj.siteId).status() == dev.larattalabs.architect.journal.Journal.Status.ACTIVE;
+			if ((pj.phase == PlaceJob.AFTER_COMMIT || pj.phase == PlaceJob.CONSTRUCTION_CLEAR) && active && level != null) {
+				// K4: the journal wins (its ACTIVE commit is durable); a construction site's clearing starts over
+				if (pj.phase == PlaceJob.CONSTRUCTION_CLEAR) {
+					pj.clearCursor = 0;
+				}
+				JOBS.add(pj);
+				Architect.LOGGER.info("Finishing the placement of {} ({}) (its journal entry is placed)", pj.siteId, pj.blueprint);
+				return;
+			}
+			if (pj.phase == PlaceJob.AFTER) {
+				pj.captureCursor = 0;
 			}
 			if (!clean || level == null || !pj.resume(level)) {
 				RestoreJob rb = new RestoreJob(pj.siteId, RestoreJob.ROLLBACK, pj.batchId, pj.itemKey);
@@ -442,6 +483,38 @@ public final class Placement {
 				JOBS.add(rj);
 			}
 		}
+	}
+
+	/**
+	 * The sites whose undo groups and PLACING entries the world-start settle must leave alone: those with a job in the queue
+	 * file that resumes or rolls back (after a crash, a placement that never got its record is not one: K2 releases it).
+	 */
+	static java.util.Set<String> jobSites(MinecraftServer srv) {
+		java.util.Set<String> out = new java.util.HashSet<>();
+		Path f = file(srv);
+		if (!Files.exists(f)) {
+			return out;
+		}
+		try {
+			JsonObject root = JsonParser.parseString(Files.readString(f, StandardCharsets.UTF_8)).getAsJsonObject();
+			boolean clean = root.has("clean") && root.get("clean").getAsBoolean();
+			for (JsonElement e : root.has("jobs") ? root.getAsJsonArray("jobs") : new JsonArray()) {
+				JsonObject o = e.getAsJsonObject();
+				boolean before = "place".equals(o.get("kind").getAsString()) && (!o.has("beforeRecord") || o.get("beforeRecord").getAsBoolean());
+				if (clean || !before) {
+					out.add(o.get("siteId").getAsString());
+				}
+			}
+			for (JsonElement e : root.has("removals") ? root.getAsJsonArray("removals") : new JsonArray()) {
+				JsonObject o = e.getAsJsonObject();
+				if (o.has("sites")) {
+					o.getAsJsonArray("sites").forEach(x -> out.add(x.getAsString()));
+				}
+			}
+		} catch (IOException | RuntimeException e) {
+			Architect.LOGGER.warn("Could not read {} for the sites check", f, e);
+		}
+		return out;
 	}
 
 	// ------------------------------------------------------------------ stats (the gate's MSPT and throughput)
