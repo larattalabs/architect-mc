@@ -154,7 +154,7 @@ public final class ScreenFeature {
 				if (why != null) {
 					throw new DevBridge.DevException(why);
 				}
-				return dev.larattalabs.architect.client.placement.PlacementFeature.placeNow(bp) == null ? designState(mc) : designState(mc);
+				return designState(mc);
 			});
 		});
 		DevBridge.register("dev.plot.start", 10_000, "{height?} - Mark a plot… (closes the screen; corners with dev.plot.corner)", (req, mc) -> {

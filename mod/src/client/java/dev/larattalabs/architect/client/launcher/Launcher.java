@@ -220,6 +220,13 @@ public final class Launcher {
 		long recordedPid = sidecarJson != null && sidecarJson.has("pid") ? sidecarJson.get("pid").getAsLong() : 0;
 		long ownedPid = launcherJson != null && launcherJson.has("pid") ? launcherJson.get("pid").getAsLong() : 0;
 		boolean alive = recordedPid > 0 && ProcessHandle.of(recordedPid).map(ProcessHandle::isAlive).orElse(false);
+		// a pid counts as ours only when that process started right when our launcher spawned one (pids get reused)
+		long spawnedAt = launcherJson != null && launcherJson.has("startedAt") ? launcherJson.get("startedAt").getAsLong() : 0;
+		long procStart = alive ? ProcessHandle.of(recordedPid).flatMap(h -> h.info().startInstant()).map(java.time.Instant::toEpochMilli).orElse(-1L)
+			: -1L;
+		if (ownedPid > 0 && !LauncherPlan.sameProcess(procStart, spawnedAt)) {
+			ownedPid = 0;
+		}
 		Reuse r = LauncherPlan.reuse(answered, expectedVersion, recordedPid, ownedPid, alive);
 		lastReuse = r;
 		Architect.LOGGER.info("Launcher: port {} answered {}, expected {}, sidecar.json pid {} (alive {}), ours {}: {}", Sidecar.port(),

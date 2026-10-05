@@ -286,6 +286,22 @@ public final class LauncherPlan {
 		return ours ? Reuse.STOP_THEN_START : Reuse.START;
 	}
 
+	/** How far a process's start may lie after the launcher's recorded spawn time and still be the one it spawned. */
+	public static final long SAME_PROCESS_MS = 10_000;
+
+	/**
+	 * Whether a live pid is really the sidecar our launcher spawned, not a later process that reused the pid: its start time
+	 * ({@code processStartMs}, -1 when the OS does not say) lies within {@link #SAME_PROCESS_MS} after the spawn time recorded
+	 * in {@code launcher.json} ({@code spawnedAtMs}, 0 when unknown). Unknown is false: the launcher never kills a process it
+	 * cannot identify.
+	 */
+	public static boolean sameProcess(long processStartMs, long spawnedAtMs) {
+		if (processStartMs < 0 || spawnedAtMs <= 0) {
+			return false;
+		}
+		return processStartMs >= spawnedAtMs - 2_000 && processStartMs <= spawnedAtMs + SAME_PROCESS_MS;
+	}
+
 	// ------------------------------------------------------------------ the command line
 
 	/**

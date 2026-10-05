@@ -125,6 +125,19 @@ class LauncherPlanTest {
 	}
 
 	@Test
+	void aReusedPidIsNeverOurs() {
+		long spawned = 1_759_600_000_000L;
+		assertTrue(LauncherPlan.sameProcess(spawned + 30, spawned));
+		assertTrue(LauncherPlan.sameProcess(spawned - 500, spawned)); // clocks round
+		// the pid came back days later for another program
+		assertFalse(LauncherPlan.sameProcess(spawned + 3L * 24 * 3600 * 1000, spawned));
+		assertFalse(LauncherPlan.sameProcess(spawned - 60_000, spawned));
+		// unknown start time or spawn time: not ours (never killed)
+		assertFalse(LauncherPlan.sameProcess(-1, spawned));
+		assertFalse(LauncherPlan.sameProcess(spawned, 0));
+	}
+
+	@Test
 	void commandLine() {
 		List<String> c = LauncherPlan.command(Path.of("/opt/homebrew/bin/node"), Path.of("/s"), 7890, Path.of("/g/architect/sidecar-data"),
 			Path.of("/g/architect/library"), Path.of("/s/kit"), 1234, false);
