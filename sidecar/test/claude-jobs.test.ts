@@ -234,6 +234,39 @@ describe('Claude jobs (fake SDK)', () => {
     expect(calls[1]!.opts.resume).toBeDefined();
   });
 
+  it('the budget is cumulative across query() calls: a resume gets only what is left, and a spent budget never starts another', async () => {
+    const hold = async function* (s: string, usd: number) {
+      yield msg({ type: 'rate_limit_event', session_id: s, rate_limit_info: { status: 'rejected', resetsAt: Date.now() + 300, rateLimitType: 'five_hour' } });
+      yield result(s, 'success', { is_error: true, result: 'Claude AI usage limit reached', total_cost_usd: usd, modelUsage: usage(usd * 100) });
+    };
+    // 1) $0.30 spent, held; the resume gets maxBudgetUsd 0.20 and reports the session total (0.45, the earlier 0.30 included)
+    let k = 0;
+    script = async function* (_p, opts) {
+      const s = opts.resume ?? sid();
+      yield init(s);
+      if (++k === 1) return yield* hold(s, 0.3);
+      yield result(s, 'success', { structured_output: { name: 'Mill', floors: 1 }, total_cost_usd: 0.45, modelUsage: usage(45) });
+    };
+    const j = h.sc.jobs.run(job({ kind: 'structured', schema, budgetUsd: 0.5 }), undefined);
+    await final(j.id);
+    expect(calls.map((c) => c.opts.maxBudgetUsd)).toEqual([0.5, 0.2]);
+    expect(h.sc.jobs.book.get(j.id)).toMatchObject({ status: 'done', cost: { usd: 0.45, inputTokens: 4500 } });
+
+    // 2) the first query spends the whole budget and is held: the resume does not start, the job fails "budget"
+    calls.length = 0;
+    k = 0;
+    script = async function* (_p, opts) {
+      const s = opts.resume ?? sid();
+      yield init(s);
+      if (++k === 1) return yield* hold(s, 0.3);
+      yield result(s, 'success', { structured_output: { name: 'Mill', floors: 1 } });
+    };
+    const j2 = h.sc.jobs.run(job({ kind: 'structured', schema, budgetUsd: 0.3 }), undefined);
+    await final(j2.id);
+    expect(calls).toHaveLength(1);
+    expect(h.sc.jobs.book.get(j2.id)).toMatchObject({ status: 'failed', error: 'budget', cost: { usd: 0.3 } });
+  });
+
   it('designs v2: the request model and budget reach the SDK; the design records cost with cache tokens; ext lands on the entry', async () => {
     script = async function* (prompt, opts) {
       const s = sid();
