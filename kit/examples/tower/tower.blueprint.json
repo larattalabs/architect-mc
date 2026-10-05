@@ -1,7 +1,7 @@
 {
   "id": "tower",
   "name": "Watchtower",
-  "description": "A stone watchtower: three floors joined by a ladder and an open lookout under a slate hip roof.",
+  "description": "A stone watchtower: 3 floors joined by a ladder and an open lookout under a hip roof.",
   "type": "tower",
   "tags": [
     "medieval",
@@ -78,5 +78,42 @@
       "pitch": 24.979
     }
   },
-  "source": "tower.mjs"
+  "source": "tower.mjs",
+  "palette": {
+    "preset": "fortress",
+    "wood": "spruce",
+    "stone": "stone_bricks",
+    "roof": "deepslate_tiles",
+    "accent": "dark_oak"
+  },
+  "params": {
+    "floors": {
+      "type": "int",
+      "min": 3,
+      "max": 6,
+      "default": 3,
+      "label": "Floors"
+    },
+    "width": {
+      "type": "int",
+      "min": 5,
+      "max": 9,
+      "default": 7,
+      "label": "Width"
+    },
+    "roof": {
+      "type": "enum",
+      "options": [
+        "hip",
+        "battlements"
+      ],
+      "default": "hip",
+      "label": "Roof"
+    }
+  },
+  "values": {
+    "floors": 3,
+    "width": 7,
+    "roof": "hip"
+  }
 }

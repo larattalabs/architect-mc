@@ -1,7 +1,11 @@
 // Blueprint checker: validates a structure template + its sidecar against docs/CONTRACT.md "Checker profiles".
 //   checkFiles(nbtPath, jsonPath, opts) / checkBlueprint(bp, opts) / checkStructure(sidecar, structure, opts)
 //     -> { ok, errors: string[], warnings: string[] }
-//   opts: { max?: {x,y,z}, type?: string }
+//   opts: { max?: {x,y,z}, type?: string, imported?: boolean }
+// `imported` (an .nbt the player built and saved, docs/CONTRACT.md "Import / export"): the rules inherited from
+// AgentCraft about how the building works (anchors, doors, light) and the size-vs-extent match become warnings; the
+// structure format, palette validity (vanilla blocks with valid properties), the sidecar and --max stay errors.
+// Unknown / non-vanilla blocks are then reported as one error listing every id with its block count.
 // Ported from AgentCraft's tools/blueprints/lib/check.mjs (MIT, see LICENSE): the office rules are gone, the light,
 // door and anchor rules stay errors; the rules new in Architect are warnings in phase 1.
 import fs from 'node:fs';
@@ -10,7 +14,7 @@ import {
   BLOCKS, collisionOf, normalize, emissionOf, opticsOf, voxelsOf, faceMask, lightCost, isConductor, isFloor,
   isPassable, isClimbable, supportOf, topOf,
 } from './blocks.mjs';
-import { BUILDING_TYPES } from './kit.mjs';
+import { BUILDING_TYPES, resolvePalette, stoneFamilyOf, woodFamilyOf } from './kit.mjs';
 
 const DIRS6 = [['east', 1, 0, 0], ['west', -1, 0, 0], ['up', 0, 1, 0], ['down', 0, -1, 0], ['south', 0, 0, 1], ['north', 0, 0, -1]];
 const OPP = { east: 'west', west: 'east', up: 'down', down: 'up', south: 'north', north: 'south' };
@@ -175,13 +179,18 @@ export function parseMax(s) {
 /**
  * @param {object} sidecar parsed <id>.blueprint.json
  * @param {object} structure plain (untagged) parsed structure NBT root
- * @param {{max?:{x:number,y:number,z:number}, type?:string}} [opts]
+ * @param {{max?:{x:number,y:number,z:number}, type?:string, imported?:boolean}} [opts]
  */
 export function checkStructure(sidecar, structure, opts = {}) {
   const errors = [];
   const warnings = [];
   const err = (m) => errors.push(m);
   const warn = (m) => warnings.push(m);
+  const imported = !!opts.imported;
+  /** an inherited "does the building work" rule: an error, or a warning for an imported structure */
+  const inherited = imported ? (m) => warn(`imported: ${m}`) : err;
+  /** imported: unknown block id -> palette indexes (reported once, with block counts) */
+  const unknownIds = new Map();
 
   // ---- structure format
   if (!Number.isInteger(structure.DataVersion)) err('structure: DataVersion missing / not an int');
@@ -190,25 +199,33 @@ export function checkStructure(sidecar, structure, opts = {}) {
   if (!Array.isArray(structure.palette)) err('structure: palette missing');
   if (!Array.isArray(structure.blocks)) err('structure: blocks missing');
   if (!Array.isArray(structure.entities)) err('structure: entities missing (must be an empty list)');
-  else if (structure.entities.length) err('structure: entities must be empty');
+  else if (structure.entities.length) (imported ? warn : err)(`structure: entities must be empty (${structure.entities.length} found)`);
   if (errors.length) return { ok: false, errors, warnings };
 
   // ---- palette: vanilla blocks only, every property explicit and valid
+  let defaulted = 0;
   const palette = structure.palette.map((p, i) => {
-    const props = p.properties ?? {};
-    const name = p.id;
+    // (imports: a save older than 26.3 may use the Name / Properties keys)
+    let props = p.properties ?? (imported ? p.Properties : undefined) ?? {};
+    const name = p.id ?? (imported ? p.Name : undefined);
     if (typeof name !== 'string' || !name.includes(':')) { err(`palette[${i}]: bad id '${name}'`); return { name: String(name), props }; }
+    if (imported && !BLOCKS[name]) { unknownIds.set(name, [...(unknownIds.get(name) ?? []), i]); return { name, props }; }
     if (!name.startsWith('minecraft:')) { err(`palette[${i}]: '${name}' is not a vanilla block (templates use minecraft: blocks only)`); return { name, props }; }
     if (!BLOCKS[name]) { err(`palette[${i}]: unknown block '${name}' (not a vanilla 26.3 block)`); return { name, props }; }
     for (const v of Object.values(props)) if (typeof v !== 'string') err(`palette[${i}] ${name}: property values must be strings`);
     try {
       const full = normalize(name, props);
-      for (const k of Object.keys(full.props)) if (!(k in props)) err(`palette[${i}] ${name}: property '${k}' not written explicitly`);
+      const missing = Object.keys(full.props).filter((k) => !(k in props));
+      // imported: a missing property takes its default when the game loads the template
+      if (imported && missing.length) { defaulted++; props = full.props; }
+      else for (const k of missing) err(`palette[${i}] ${name}: property '${k}' not written explicitly`);
     } catch (e) {
       err(`palette[${i}]: ${e.message}`);
     }
     return { name, props };
   });
+
+  if (defaulted) warn(`imported: ${defaulted} palette entr${defaulted === 1 ? 'y has' : 'ies have'} properties not written (they take their defaults)`);
 
   // ---- blocks
   const cells = new Map();
@@ -225,10 +242,17 @@ export function checkStructure(sidecar, structure, opts = {}) {
     for (let a = 0; a < 3; a++) { min[a] = Math.min(min[a], b.pos[a]); max[a] = Math.max(max[a], b.pos[a]); }
     if (x < 0 || y < 0 || z < 0 || x >= size[0] || y >= size[1] || z >= size[2]) err(`block at ${k} outside size ${size.join('x')}`);
   }
+  if (unknownIds.size) {
+    const count = new Map();
+    const owner = new Map([...unknownIds].flatMap(([n, idx]) => idx.map((i) => [i, n])));
+    for (const b of structure.blocks) { const n = owner.get(b.state); if (n) count.set(n, (count.get(n) ?? 0) + 1); }
+    const list = [...unknownIds.keys()].sort((a, b) => (count.get(b) ?? 0) - (count.get(a) ?? 0) || (a < b ? -1 : 1));
+    err(`unknown or non-vanilla blocks (${list.length}): ${list.map((n) => `${n} x${count.get(n) ?? 0}`).join(', ')} (Architect places vanilla 26.3 blocks only: replace them and save the structure again)`);
+  }
   if (cells.size) {
     const extent = max.map((m, a) => m - min[a] + 1);
     if (min.some((m) => m !== 0) || extent.some((e, a) => e !== size[a])) {
-      err(`size ${size.join('x')} does not match block extents ${extent.join('x')} (min ${min.join(',')})`);
+      (imported && min.every((m) => m >= 0) && max.every((m, a) => m < size[a]) ? warn : err)(`size ${size.join('x')} does not match block extents ${extent.join('x')} (min ${min.join(',')})`);
     }
   } else err('no blocks');
 
@@ -298,31 +322,31 @@ export function checkStructure(sidecar, structure, opts = {}) {
     if (y < 1 || y >= sy || x < -16 || z < -16 || x >= sx + 16 || z >= sz + 16) { err(`anchor ${n} (${a.x},${a.y},${a.z}) is too far outside the template`); continue; }
     if (!Number.isInteger(a.y)) warn(`anchor ${n}: y ${a.y} is not on a block boundary`);
     const below = g.at(x, y - 1, z);
-    if (!g.floor(x, y - 1, z)) err(`anchor ${n}: no solid block to stand on (${below ? below.name : 'nothing written'} at ${fmt(x, y - 1, z)})`);
+    if (!g.floor(x, y - 1, z)) inherited(`anchor ${n}: no solid block to stand on (${below ? below.name : 'nothing written'} at ${fmt(x, y - 1, z)})`);
     for (const [dy, part] of [[0, 'feet'], [1, 'head']]) {
-      if (!g.free(x, y + dy, z)) err(`anchor ${n}: ${part} cell ${fmt(x, y + dy, z)} is ${g.at(x, y + dy, z)?.name ?? 'solid'} (needs air or a non-colliding block)`);
+      if (!g.free(x, y + dy, z)) inherited(`anchor ${n}: ${part} cell ${fmt(x, y + dy, z)} is ${g.at(x, y + dy, z)?.name ?? 'solid'} (needs air or a non-colliding block)`);
     }
   }
 
   // ---- doors (closed, iron doors with buttons) and an outside door
   const outside = outsideFlood(g);
   const doors = doorCheck(g);
-  errors.push(...doors.errors);
+  for (const m of doors.errors) inherited(m);
   const outsideDoors = doors.doors.filter(({ x, y, z, state }) => {
     const [fx, fz] = H_VEC[state.props.facing];
     return [[fx, fz], [-fx, -fz]].some(([dx, dz]) => outside.has(fmt(x + dx, y, z + dz)) || outside.has(fmt(x + dx, y + 1, z + dz)));
   });
-  if (!outsideDoors.length && sidecar.type !== 'barn') err('no outside door: a building needs at least one closed door to the outside on its front');
+  if (!outsideDoors.length && sidecar.type !== 'barn') inherited('no outside door: a building needs at least one closed door to the outside on its front');
 
   // ---- light: every standable interior cell gets block light >= 1 from vanilla sources
   if (w) {
     const light = lightLevels(g);
     const dark = interiorCells(w).filter(([x, y, z]) => g.standable(x, y, z) && light(x, y, z) < 1).map(([x, y, z]) => fmt(x, y, z));
-    if (dark.length) err(`light: ${dark.length} standable interior cell(s) get no block light (mobs spawn there at night), e.g. ${dark.slice(0, 6).join('; ')}`);
+    if (dark.length) inherited(`light: ${dark.length} standable interior cell(s) get no block light (mobs spawn there at night), e.g. ${dark.slice(0, 6).join('; ')}`);
   }
 
   // ================================================================ rules new in Architect: warnings in phase 1
-  const ctx = { g, sidecar, anchors, interior: w, outside, doors: doors.doors, outsideDoors };
+  const ctx = { g, sidecar, anchors, interior: w, outside, doors: doors.doors, outsideDoors, imported };
   for (const rule of NEW_RULES) {
     try { warnings.push(...rule(ctx)); } catch (e) { warnings.push(`checker: rule ${rule.name} failed: ${e.message}`); }
   }
@@ -581,4 +605,36 @@ function profile({ g, sidecar, interior: w }) {
   return out;
 }
 
-const NEW_RULES = [floating, reachability, enclosure, profile];
+/**
+ * Palette families (phase 2: a warning): every wood and stone family the template uses comes from its palette, so a
+ * palette swap re-skins the whole building. Without a recorded `palette` (imports, phase 1 entries) there is nothing to
+ * compare with.
+ */
+function paletteFamilies({ g, sidecar }) {
+  if (!sidecar.palette) return [];
+  let p;
+  try { p = resolvePalette(sidecar.palette); } catch (e) { return [`palette: the sidecar's palette is invalid: ${e.message}`]; }
+  const woods = new Set();
+  const stones = new Set();
+  for (const v of Object.values(p)) {
+    if (typeof v !== 'string' || !v.startsWith('minecraft:')) continue;
+    const wf = woodFamilyOf(v);
+    if (wf) woods.add(wf);
+    const sf = stoneFamilyOf(v);
+    if (sf) stones.add(sf);
+  }
+  const off = new Map(); // "wood 'oak'" -> { blocks, n }
+  for (const c of g.cells.values()) {
+    const wf = woodFamilyOf(c.name);
+    const sf = stoneFamilyOf(c.name);
+    const k = wf && !woods.has(wf) ? `wood '${wf}'` : sf && !stones.has(sf) ? `stone family '${sf}'` : null;
+    if (!k) continue;
+    const e = off.get(k) ?? { blocks: new Set(), n: 0 };
+    e.blocks.add(c.name.replace('minecraft:', ''));
+    e.n++;
+    off.set(k, e);
+  }
+  return [...off].map(([k, e]) => `palette: ${e.n} block(s) of ${k} (${[...e.blocks].slice(0, 4).join(', ')}) not from the palette (woods ${[...woods].join('/')}; stone ${[...stones].join('/')}): read them from the palette so a palette swap changes them too`);
+}
+
+const NEW_RULES = [floating, reachability, enclosure, profile, paletteFamilies];
