@@ -637,4 +637,25 @@ function paletteFamilies({ g, sidecar }) {
   return [...off].map(([k, e]) => `palette: ${e.n} block(s) of ${k} (${[...e.blocks].slice(0, 4).join(', ')}) not from the palette (woods ${[...woods].join('/')}; stone ${[...stones].join('/')}): read them from the palette so a palette swap changes them too`);
 }
 
-const NEW_RULES = [floating, reachability, enclosure, profile, paletteFamilies];
+/**
+ * Blocks survival can't build (docs/CONTRACT.md phase 3 "Materials", the obtainability map): a survival world refuses to
+ * place a design that uses one. Keep in sync with creativeOnly in mod/src/main/resources/data/architect_mc/survival_items.json.
+ */
+export const SURVIVAL_CREATIVE_ONLY = new Set(['bedrock', 'barrier', 'light', 'structure_block', 'structure_void', 'jigsaw', 'test_block',
+  'test_instance_block', 'command_block', 'chain_command_block', 'repeating_command_block', 'spawner', 'trial_spawner', 'vault',
+  'budding_amethyst', 'reinforced_deepslate', 'end_portal_frame', 'end_portal', 'end_gateway', 'nether_portal', 'petrified_oak_slab',
+  'infested_stone', 'infested_cobblestone', 'infested_stone_bricks', 'infested_mossy_stone_bricks', 'infested_cracked_stone_bricks',
+  'infested_chiseled_stone_bricks', 'infested_deepslate', 'suspicious_sand', 'suspicious_gravel', 'frogspawn', 'chorus_plant', 'player_head',
+  'player_wall_head'].map((b) => `minecraft:${b}`));
+
+/** Survival (phase 3: a warning): the design uses blocks survival can't build, so a survival world refuses to place it. */
+function survival({ g, sidecar }) {
+  const n = new Map();
+  const add = (id) => n.set(id, (n.get(id) ?? 0) + 1);
+  for (const c of g.cells.values()) if (SURVIVAL_CREATIVE_ONLY.has(c.name)) add(c.name);
+  if (SURVIVAL_CREATIVE_ONLY.has(sidecar.foundationBlock)) add(sidecar.foundationBlock);
+  for (const k of ['block', 'slab']) if (SURVIVAL_CREATIVE_ONLY.has(sidecar.approach?.[k])) add(sidecar.approach[k]);
+  return [...n].map(([b, c]) => `survival: this design uses ${b.replace('minecraft:', '')} (${c} block${c === 1 ? '' : 's'}), which survival can't build: a survival world refuses to place it`);
+}
+
+const NEW_RULES = [floating, reachability, enclosure, profile, paletteFamilies, survival];
