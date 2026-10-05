@@ -814,3 +814,114 @@ arguments and results, as a semi-stable test surface: changes are noted in its c
   - A sidecar SIGKILLed while waiting on a tool call restarts, re-sends the same `callId` to the reconnecting client (matched by
     the client name), resumes the session with the answer and finishes. The reported cost then covers only the post-restart
     query (the documented overshoot).
+
+---
+
+# Phase 4b contract: style bibles and design groups (A1 + A2, R3, R4, R9, R10) - DRAFT for Steward review
+
+Goal: **many separately generated buildings read as one place**, and N of them design in about the wall time of one.
+
+## Style bible (A1)
+
+A bible is an artifact, separate from library entries: `<gameDir>/architect/bibles/<id>/`.
+
+| file | what |
+|---|---|
+| `bible.json` | the structured bible (schema below), versioned (`version` increments on every revision) |
+| `bible.md` | prose for designers: mood, silhouette, what each material means, do and don't |
+| `components.mjs` | the bible's component library (R3), a kit module |
+| `sheet.png` | a rendered sample sheet: each component plus a wall/roof swatch, for review |
+
+`bible.json`:
+```json
+{ "id": "bib_ashfall", "name": "Ashfall", "version": 3, "prompt": "hellish evil lair, mining facility",
+  "roles": { "wall": "minecraft:blackstone", "wall_alt": "minecraft:polished_blackstone_bricks", "trim": "minecraft:basalt",
+             "roof": "minecraft:deepslate_tiles", "floor": "minecraft:polished_basalt", "frame": "minecraft:crimson_stem",
+             "accent": "minecraft:crimson_planks", "light": "minecraft:shroomlight", "glass": "minecraft:red_stained_glass_pane",
+             "foundation": "minecraft:blackstone", "path": "minecraft:coarse_dirt" },
+  "proportions": { "storey": 4, "roofPitch": 1.0, "overhang": 1, "windowRhythm": 3, "plinth": 1 },
+  "roofLanguage": "steep gable", "silhouette": "tall, narrow, spiky ridges", "motifs": ["chimney vents", "chain lanterns"],
+  "tiers": { "humble": ["wall_alt","accent"], "important": ["wall","trim"] },
+  "lighting": "low, warm, from below", "avoid": ["white", "bright wood"],
+  "components": ["window", "door_surround", "lantern_post", "roof_trim", "chimney"],
+  "createdAt": 0, "cost": { "usd": 0, "...": 0 } }
+```
+- **Roles generalise the kit palette.** `palette({bible})` maps every palette field to a role, and the existing presets
+  become built-in bibles without prose. A design that takes materials from `palette` (the phase 2 rule) re-skins under any
+  bible with no code change. **A re-skin = a variant with another bible** (free, no Claude).
+- **Bible job** (`bible.request {prompt, name?, owner?, ext?, model?, budgetUsd?, references?: [libraryId]}`):
+  - a structured pass (the JSON) plus an agent pass that writes `components.mjs` in a scratch kit;
+  - a component check: each component builds into a test frame, passes the checker and renders the sheet;
+  - Opus by default, about one design's cost;
+  - `bible.upsert` progress like designs, `snapshot.bibles`.
+- **Revise:** `bible.revise {id, notes}` creates version+1. Entries pin the bible version they were built with, and re-skinning
+  to a newer version is a variant.
+
+## Component library and named parts (R3)
+
+- **Components:** `components.mjs` exports functions `(bp, at, opts)` that place a small part using the bible's roles:
+  `window`, `door_surround`, `lantern_post`, `roof_trim`, `chimney` (the minimum set) plus any the bible adds. Every design in
+  a group imports `bible/components.mjs` from its scratch dir and is asked to use them for those elements.
+- **Named parts:** `bp.part(name, () => {...})` records which cells a part writes. The sidecar JSON gets
+  `parts: { "<name>": { "box": [..], "cells": <count> } }`. Names must be unique, stable across revisions (`wing_east`,
+  `tower`, `porch`), and given for every major mass. This is what A6 delta apply diffs by. The checker warns when a design
+  has fewer than 2 parts or more than 20% of its cells outside any part.
+
+## Open building types (R4)
+
+`DesignRequest.type` may be any short string (`hellish_lair`, `mining_hall`), not only the 11 presets. For a non-preset type,
+`profile` lists the checker rules from a menu: `door`, `roof_closed`, `floors_reachable`, `lit`, `no_floating`,
+`interior` (required for `lit`), `min_interior_volume:<n>`, `passage:<w>x<h>`, `tall:<ratio>`. Preset types keep their
+profiles. A non-preset type without a profile gets `door`, `lit` and `no_floating`.
+
+## Design groups (A2, R9)
+
+- **`design.group`**: `{ group: { id?, name, bible, owner?, ext?, concurrency?: 1..6 (default 3), budgetUsd?,
+  items: [DesignRequest & { role?: "landmark"|"ordinary", model? }] } }` -> ack `{groupId, designIds}`.
+  - The default model per role: landmark `claude-opus-5-5`, ordinary `claude-sonnet-5-5` (config).
+  - Every item gets the bible (its JSON, its prose, and `components.mjs` in the scratch dir) and, after the first wave,
+    renders of its finished siblings ("neighbours": iso PNGs, at most 4).
+- **`group.upsert`**: `{id, status, designs: [{id, status, step}], done, failed, cost (aggregate), usageLimitUntil?}`.
+- **Concurrency:** design jobs run up to `concurrency` at once. The sidecar-wide `designConcurrency` caps all groups
+  (default 3); a single design still uses one slot.
+- **Rate limits (R9):** a usage limit hit by any job holds the whole group, and its queued items wait. All of them resume
+  together after the reset.
+- **Partial results are usable:** each finished design installs as soon as it's done. A group can be cancelled; finished
+  items stay.
+- **Budget:** a group budget is a hard cap on the group's total. Items still queued when it's reached are cancelled with
+  error "budget".
+
+## Collections (R10)
+
+Entries carry `bible` (id + version) and `group` (id). The Library gets a **Collection** filter (by bible or group) and a
+collection header with the bible's sheet, name and a "re-skin the collection" action: N variants with another bible, free.
+
+## API (Java, 1.2.0)
+
+`ArchitectApi.bibles()`:
+- `request(BibleRequest)`, `revise(id, notes)`, `get(id)`, `list(owner)`;
+- events `BIBLE_UPDATED` / `BIBLE_DONE`.
+
+`Designs`:
+- `requestGroup(GroupRequest)` -> `CompletableFuture<String groupId>`;
+- `group(id)`, `cancelGroup(id)`;
+- events `GROUP_UPDATED` / `GROUP_DONE`.
+
+`Library.makeVariant` takes an optional `bible` (the re-skin). New features: `"bibles"`, `"designGroups"`, `"namedParts"`,
+`"openTypes"`.
+
+## Phase 4b gate
+
+- One bible from a prompt (real Claude). Its sheet renders, and its components pass their check.
+- A group of 3 designs (house, tavern, tower; one landmark) with that bible, on real Claude:
+  - wall time at most 1.5x the slowest single design;
+  - all 3 use the bible's components and roles;
+  - each has at least 2 named parts;
+  - the aggregate cost is reported.
+- **"Reads as one set"** is judged by two independent `design-critic` agents on the three renders side by side plus the
+  sheet. Both must say "set". A control: 3 designs of the same types WITHOUT a bible, judged the same way, should read as
+  less coherent.
+- **Re-skin:** the collection re-skinned to a second (built-in) bible is free and passes the checker.
+- **A group-wide usage hold** (sim backend): one item hits the limit, all hold, all resume.
+- **An open type** with a profile (`hellish_lair` with `door`, `lit`, `no_floating`) designs and passes.
+- gate-verifier checks the result.
