@@ -34,7 +34,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = process.env.APITEST_OUT ? path.resolve(process.env.APITEST_OUT) : path.join(root, 'artifacts', 'apitest');
 fs.mkdirSync(OUT, { recursive: true });
 const OWNER = 'apitest:village/1';
-const API_VERSION = '1.3.0';
+const API_VERSION = '1.4.0';
 // the dev client's game dir (tools/run-apitest-client.sh runs it in mod/)
 const GAME_DIR = process.env.APITEST_GAME_DIR ? path.resolve(process.env.APITEST_GAME_DIR) : path.join(root, 'mod', 'run');
 const SIDECAR_DATA = path.join(GAME_DIR, 'architect', 'sidecar-data');

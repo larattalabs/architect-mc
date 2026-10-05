@@ -111,6 +111,9 @@ public final class Sites {
 	}
 
 	private static volatile State state = State.EMPTY;
+	/** The site groups (phase 4d), by id in creation order, saved in the sites file with the sites. */
+	private static volatile Map<String, SiteGroupRec> groups = Map.of();
+	private static volatile int nextGroup = 1;
 	/** The sites file exists but could not be parsed: placing would overwrite it, so it is refused. */
 	private static volatile boolean loadFailed;
 	private static volatile @Nullable Path worldDir;
@@ -149,10 +152,13 @@ public final class Sites {
 			reconcile(server);
 			notifyListeners();
 		});
+		Placement.init();
 		Builder.init();
 		ServerTickEvents.END_SERVER_TICK.register(server -> Drops.tick());
 		ServerLifecycleEvents.SERVER_STOPPED.register(server -> {
 			state = State.EMPTY;
+			groups = Map.of();
+			nextGroup = 1;
 			reports.clear();
 			Drops.reset();
 			worldDir = null;
@@ -230,9 +236,16 @@ public final class Sites {
 	 */
 	public static Site place(ServerLevel level, Blueprint bp, BlockPos origin, Rotation rotation, boolean force, @Nullable String placer,
 		@Nullable Boolean construction, @Nullable String siteOwner, @Nullable JsonObject ext, @Nullable ServerPlayer actor) throws SiteException {
+		return place(level, bp, origin, rotation, force, placer, construction, siteOwner, ext, actor, null);
+	}
+
+	/** {@link #place} for a batch item (phase 4d): the site joins {@code member}'s group. Server thread. */
+	public static Site place(ServerLevel level, Blueprint bp, BlockPos origin, Rotation rotation, boolean force, @Nullable String placer,
+		@Nullable Boolean construction, @Nullable String siteOwner, @Nullable JsonObject ext, @Nullable ServerPlayer actor,
+		Site.@Nullable Member member) throws SiteException {
 		Site placed;
 		try {
-			placed = placeInternal(level, bp, origin, rotation, force, placer, construction, siteOwner, ext);
+			placed = placeInternal(level, bp, origin, rotation, force, placer, construction, siteOwner, ext, member);
 		} catch (SiteException e) {
 			ApiEvents.placeFailed(level, bp.id(), origin, rotation, force, construction, siteOwner, ext, actor,
 				List.of(new Refusal(e.reason(), e.getMessage())));
@@ -243,7 +256,7 @@ public final class Sites {
 	}
 
 	private static Site placeInternal(ServerLevel level, Blueprint bp, BlockPos origin, Rotation rotation, boolean force, @Nullable String owner,
-		@Nullable Boolean construction, @Nullable String siteOwner, @Nullable JsonObject ext) throws SiteException {
+		@Nullable Boolean construction, @Nullable String siteOwner, @Nullable JsonObject ext, Site.@Nullable Member member) throws SiteException {
 		MinecraftServer server = level.getServer();
 		if (loadFailed) {
 			throw new SiteException(Reason.OTHER, FILE + " could not be read when the world started (see the log); fix or move it, then restart");
@@ -269,8 +282,9 @@ public final class Sites {
 		Map<String, Site> map = new LinkedHashMap<>(s.byId());
 		long now = System.currentTimeMillis();
 		Site b = new Site(id, bp.id(), BlueprintTransform.rotationName(built.turns()), built.box(), built.interior(), built.anchors(), now,
-			dimensionId(level), built.snapshotBox(), built.snapshot(), null, built.pin(), cs, siteOwner, ext);
+			dimensionId(level), built.snapshotBox(), built.snapshot(), null, built.pin(), cs, siteOwner, ext, member, false);
 		map.put(id, b);
+		addToGroup(b);
 		commit(server, new State(Collections.unmodifiableMap(map), next + 1, s.pending()));
 		lastNote = built.note();
 		Architect.LOGGER.info("Placed site {} ({}) at {} rotation {}: box {}, snapshot {} over {}{}{}", id, bp.id(), origin.toShortString(), b.rotation(),
@@ -395,7 +409,7 @@ public final class Sites {
 	}
 
 	/** The template's beds a placement left out: every removed cell and the head cells, as {@link BlockPos#asLong}. */
-	private record BedsOut(Set<Long> cells, Set<Long> heads) {
+	record BedsOut(Set<Long> cells, Set<Long> heads) {
 	}
 
 	/**
@@ -403,7 +417,7 @@ public final class Sites {
 	 * bed explodes when used, which ends a Hardcore world): both halves become air (no drops, {@link #FLAGS}). The rule is
 	 * read at each bed's head cell, as vanilla does. Only cells the template wrote a bed to are looked at. Server thread.
 	 */
-	private static BedsOut removeUnsafeBeds(ServerLevel level, TemplateGrid grid, int turns, Anchors.Bounds box) {
+	static BedsOut removeUnsafeBeds(ServerLevel level, TemplateGrid grid, int turns, Anchors.Bounds box) {
 		Set<Long> cells = new HashSet<>();
 		Set<Long> heads = new HashSet<>();
 		GhostModel m = grid.ghost(turns);
@@ -675,7 +689,7 @@ public final class Sites {
 		CompoundTag before;
 		String snapshot = id + "-" + System.currentTimeMillis() + ".nbt";
 		try {
-			before = capture(level, snapBox);
+			before = captureWithRing(level, snapBox);
 			writeSnapshot(snapshot, before);
 		} catch (IOException e) {
 			Architect.LOGGER.warn("Could not save the snapshot of {}", Anchors.str(snapBox), e);
@@ -878,6 +892,13 @@ public final class Sites {
 		MinecraftServer server = level.getServer();
 		CompoundTag before = readSnapshot(b);
 		refusePlayerIn(level, b.restoreBox(), id, "removing it");
+		if (b.placing()) {
+			// Remove during placing cancels the job and restores the snapshot (phase 4d): it was never placed
+			Placement.abort(server, id, "removed while it was being placed");
+			Drops drops = Drops.before(level, b.restoreBox());
+			restoreQuietly(level, b.restoreBox(), before);
+			return finishRollback(server, level, b, drops, before);
+		}
 		if (!force) {
 			List<String> blockers = removalBlockers(level, b);
 			if (!blockers.isEmpty()) {
@@ -887,7 +908,43 @@ public final class Sites {
 		// a construction site deconstructs: refunds for paid cells still standing, the player's blocks and the crate's stock
 		Builder.Deconstruction dec = b.construction() != null ? Builder.prepareDeconstruct(level, b, before) : null;
 		Drops drops = Drops.before(level, b.restoreBox());
-		restoreTemplate(level, b.restoreBox(), before);
+		restoreQuietly(level, b.restoreBox(), before);
+		return afterRestore(level, b, dec, drops, force, true, before);
+	}
+
+	/** The key of the leaf ring in a snapshot tag ({@link LeafGuard#ring}). */
+	static final String RING = "architect_leafRing";
+
+	/** {@link #capture}, plus the leaf ring around the box (phase 4d), so Remove can give the leaves around it back their distances. */
+	static CompoundTag captureWithRing(ServerLevel level, Anchors.Bounds box) throws IOException {
+		CompoundTag tag = capture(level, box);
+		tag.putIntArray(RING, LeafGuard.ring(level, box));
+		return tag;
+	}
+
+	/**
+	 * {@link #restoreTemplate} with the leaf ticks it schedules dropped (the other ticks run as usual): the restored leaves
+	 * keep the snapshot's distances instead of relaxing (phase 4d).
+	 */
+	static void restoreQuietly(ServerLevel level, Anchors.Bounds box, CompoundTag tpl) {
+		List<TickDeferral.Held> held = new ArrayList<>();
+		TickDeferral.begin(level, held);
+		try {
+			restoreTemplate(level, box, tpl);
+		} finally {
+			TickDeferral.end();
+		}
+		TickDeferral.release(level, TickDeferral.withoutLeaves(held));
+	}
+
+	/**
+	 * The rest of a removal once the box holds its snapshot again: drops cleared (and a deconstruct's items dropped), the
+	 * record gone, held leaves given back, a pending entry kept until the next world start. {@code event}: fire SITE_REMOVED.
+	 */
+	private static Removed afterRestore(ServerLevel level, Site b, Builder.@Nullable Deconstruction dec, Drops drops, boolean force, boolean event,
+		@Nullable CompoundTag snapshot) {
+		MinecraftServer server = level.getServer();
+		String id = b.id();
 		drops.clearNew(level);
 		if (dec != null) {
 			Builder.dropDeconstruction(level, b, dec, drops);
@@ -900,16 +957,26 @@ public final class Sites {
 			releaseHeld(level, b.pin().heldLeaves());
 		}
 		reholdNear(level, b.restoreBox());
+		// the leaves around the box get the distances they had before the site (worldgen leaves relax once touched)
+		if (snapshot != null && snapshot.contains(RING)) {
+			String here = dimensionId(level);
+			List<Anchors.Bounds> others = state.byId().values().stream().filter(x -> x.dimension().equals(here)).map(Site::restoreBox).toList();
+			LeafGuard.restoreRing(level, snapshot.getIntArray(RING).orElse(new int[0]),
+				p -> others.stream().anyMatch(o -> o.contains(p.getX(), p.getY(), p.getZ())), FLAGS);
+		}
 		s = state;
 		map = new LinkedHashMap<>(s.byId());
 		List<Site.Pending> pending = new ArrayList<>(s.pending());
 		pending.add(new Site.Pending(b, System.currentTimeMillis(), "removed"));
 		reports.remove(id);
+		dropFromGroup(b);
 		commit(server, new State(Collections.unmodifiableMap(map), s.next(), List.copyOf(pending)));
 		Architect.LOGGER.info("Removed site {} ({}): restored box {}{}; snapshot {} kept until the next world start", id, b.blueprint(),
 			Anchors.str(b.restoreBox()), force ? " (forced)" : "", b.snapshot());
 		Removed r = new Removed(b, dec == null ? Map.of() : Map.copyOf(dec.all()));
-		ApiEvents.removed(server, r);
+		if (event) {
+			ApiEvents.removed(server, r);
+		}
 		return r;
 	}
 
@@ -1117,6 +1184,9 @@ public final class Sites {
 
 	/** Why a site may not move: in survival (the toggle on, or a construction site) a move would carry the building for free. */
 	public static @Nullable String moveRefusal(Site b) {
+		if (b.placing()) {
+			return b.id() + " is still being placed; wait until it is done";
+		}
 		if (b.construction() != null || SurvivalWorld.on()) {
 			return "Move is refused in survival: deconstruct " + b.id() + " and place it again";
 		}
@@ -1150,6 +1220,328 @@ public final class Sites {
 	public static @Nullable ServerLevel levelOf(MinecraftServer server, Site b) {
 		Identifier key = Identifier.tryParse(b.dimension());
 		return key == null ? null : server.getLevel(ResourceKey.create(Registries.DIMENSION, key));
+	}
+
+	// ------------------------------------------------------------------ ticked placement (docs/CONTRACT.md phase 4d)
+
+	/** The placement settings {@code placeInWorld} gets for a rotation (shared with the ticked writer). */
+	static StructurePlaceSettings placeSettings(Rotation rotation) {
+		return settings(rotation);
+	}
+
+	static @Nullable ServerLevel levelOf(MinecraftServer server, String dimension) {
+		Identifier key = Identifier.tryParse(dimension);
+		return key == null ? null : server.getLevel(ResourceKey.create(Registries.DIMENSION, key));
+	}
+
+	/** The approach's path block, or its slab. */
+	static BlockState approachBlock(Blueprint bp, boolean slab) {
+		return slab ? blockState(bp.approach().slab(), Approach.DEFAULT_SLAB, bp.id()) : blockState(bp.approach().block(), Approach.DEFAULT_BLOCK, bp.id());
+	}
+
+	/**
+	 * Starts an instant placement written over ticks: exactly {@link #build}'s checks and its steps before the first write, in
+	 * its order (held leaves inside the box given back, the snapshot captured and written, the tall plants the box cuts and
+	 * the drops around it noted, leaves hanging on the box held, removable entities removed), then the site is recorded as
+	 * placing (snapshot file, then record, then blocks). Ticks these steps schedule are held back with the job's. Server
+	 * thread. The caller adds the returned job to {@link Placement}.
+	 */
+	static PlaceJob beginPlacing(ServerLevel level, Blueprint bp, BlockPos origin, Rotation rotation, boolean force, @Nullable String siteOwner,
+		@Nullable JsonObject ext, Site.@Nullable Member member) throws SiteException {
+		return beginPlacing(level, bp, origin, rotation, force, siteOwner, ext, member, false, null);
+	}
+
+	/**
+	 * {@link #beginPlacing}; {@code construction}: a survival construction site, written over ticks like an instant placement
+	 * and then turned into a construction site ({@link Builder#convert}) when its last cell is written, as {@link #place}
+	 * does in one tick. {@code placer}: the placing player's UUID (the HUD line).
+	 */
+	static PlaceJob beginPlacing(ServerLevel level, Blueprint bp, BlockPos origin, Rotation rotation, boolean force, @Nullable String siteOwner,
+		@Nullable JsonObject ext, Site.@Nullable Member member, boolean construction, @Nullable String placer) throws SiteException {
+		MinecraftServer server = level.getServer();
+		if (loadFailed) {
+			throw new SiteException(Reason.OTHER, FILE + " could not be read when the world started (see the log); fix or move it, then restart");
+		}
+		State s0 = state;
+		int next = s0.next();
+		while (snapshotUsed("s" + next)) {
+			next++;
+		}
+		String id = "s" + next;
+		SitePlan site = checkSite(level, bp, origin, rotation, force, null, THROW, false, construction);
+		if (site == null) {
+			throw new SiteException("Internal: no site for " + bp.id());
+		}
+		Anchors.Bounds box = site.box();
+		TerrainFit.Plan plan = site.plan();
+		Approach.Plan approach = site.approach();
+		Anchors.Bounds snapBox = site.snapBox();
+		List<TickDeferral.Held> held = new ArrayList<>();
+		String snapshot = id + "-" + System.currentTimeMillis() + ".nbt";
+		List<BlockPos> plants;
+		Drops drops;
+		List<Integer> leaves;
+		int removed = 0;
+		TickDeferral.begin(level, held);
+		try {
+			releaseHeldInside(level, snapBox);
+			try {
+				writeSnapshot(snapshot, captureWithRing(level, snapBox));
+			} catch (IOException e) {
+				Architect.LOGGER.warn("Could not save the snapshot of {}", Anchors.str(snapBox), e);
+				throw new SiteException("Could not save the terrain snapshot (" + e.getMessage() + "); nothing was placed");
+			}
+			plants = straddlingPositions(level, snapBox, false);
+			drops = Drops.before(level, snapBox);
+			leaves = LeafGuard.hold(level, snapBox, FLAGS);
+			for (Entity e : level.getEntities((Entity) null, Occupancy.aabb(snapBox), e -> !(e instanceof Player) && e.isAlive())) {
+				if (Occupancy.classify(e).removable()) {
+					e.discard();
+					removed++;
+				}
+			}
+		} catch (SiteException | RuntimeException e) {
+			TickDeferral.end();
+			TickDeferral.release(level, held); // what was done stays done, as in the atomic path
+			throw e;
+		} finally {
+			TickDeferral.end();
+		}
+		List<String> notes = new ArrayList<>();
+		String gone = Occupancy.removalNote(site.found());
+		if (gone != null && removed > 0) {
+			notes.add(gone);
+		}
+		String water = TerrainFit.waterWarning(plan);
+		if (water != null) {
+			notes.add(water + " (filled below the floor; water next to the walls stays)");
+		}
+		if (plan.fillCount() > 0) {
+			notes.add(plan.fillCount() + " foundation block" + (plan.fillCount() == 1 ? "" : "s"));
+		}
+		if (plan.clearCount() > 0) {
+			notes.add(plan.clearCount() + " terrain block" + (plan.clearCount() == 1 ? "" : "s") + " cleared");
+		}
+		String wet = Approach.waterWarning(approach);
+		if (wet != null) {
+			notes.add(wet);
+		}
+		if (approach.rows() > 0) {
+			notes.add("entrance approach " + approach.rows() + " rows (" + approach.changed() + " blocks)");
+		}
+		String shortOf = Approach.shortWarning(approach);
+		if (shortOf != null) {
+			notes.add(shortOf);
+		}
+		notes.addAll(site.site().warnings());
+		int turns = site.turns();
+		long now = System.currentTimeMillis();
+		Site rec = new Site(id, bp.id(), BlueprintTransform.rotationName(turns), box, BlueprintTransform.worldBounds(bp, turns, box.minX(), box.minY(),
+			box.minZ()), BlueprintTransform.worldAnchors(bp, turns, box.minX(), box.minY(), box.minZ()), now, dimensionId(level), snapBox, snapshot, null,
+			pinFor(site.grid(), turns).withHeldLeaves(leaves), null, siteOwner, ext == null ? new JsonObject() : ext, member, true);
+		State s = state;
+		Map<String, Site> map = new LinkedHashMap<>(s.byId());
+		map.put(id, rec);
+		addToGroup(rec);
+		commit(server, new State(Collections.unmodifiableMap(map), Math.max(s.next(), next + 1), s.pending()));
+		long[] cut = new long[plants.size()];
+		for (int i = 0; i < cut.length; i++) {
+			cut[i] = plants.get(i).asLong();
+		}
+		int[] none = new int[0];
+		boolean a = approach.rows() > 0;
+		Architect.LOGGER.info("Placing site {} ({}) over ticks at {} rotation {}: box {}, snapshot {} over {}", id, bp.id(), origin.toShortString(),
+			rec.rotation(), Anchors.str(box), snapshot, Anchors.str(snapBox));
+		PlaceJob job = new PlaceJob(id, dimensionId(level), bp.id(), turns, box, snapBox, site.placePos(), plan.fill(), plan.clear(),
+			a ? approach.clear() : none, a ? approach.fill() : none, a ? approach.path() : none, a ? approach.slabs() : none, cut, drops.uuids(), notes,
+			held, member == null ? null : member.batchId(), member == null ? null : member.itemKey());
+		job.construction = construction;
+		job.placer = placer;
+		job.approachEnd = a ? approach.end() : null;
+		return job;
+	}
+
+	/** A ticked placement wrote its last cell: the pin gets the beds bed safety left out, the site is placed. Fires SITE_PLACED. */
+	static @Nullable Site finishPlacing(MinecraftServer server, PlaceJob job, Set<Long> bedCells, @Nullable String note) {
+		Site cur = get(job.siteId);
+		if (cur == null) {
+			return null;
+		}
+		TemplateGrid grid = ownGrid(cur);
+		Site.Pin pin = cur.pin();
+		if (grid != null && pin != null) {
+			pin = pinFor(grid, job.turns, bedCells, cur.box()).withHeldLeaves(pin.heldLeaves());
+		}
+		Site done = cur.withPin(pin).withPlacing(false);
+		if (job.construction) {
+			// the construction site: what convert does after the atomic build, now that the last cell is written
+			ServerLevel level = levelOf(server, cur);
+			Blueprint bp = Blueprints.get(cur.blueprint());
+			if (level == null || bp == null || grid == null) {
+				job.broken = "its level or design is gone; it can't become a construction site";
+				return null;
+			}
+			int[] none = new int[0];
+			Built built = new Built(job.turns, cur.box(), cur.restoreBox(), cur.interior(), cur.anchors(), pin, note, cur.snapshot(), null, grid,
+				new TerrainFit.Plan(job.fill, job.clear, none, 0, none, 0, cur.restoreBox().minY() + 1), new Approach.Plan(job.aPath, job.aSlabs,
+					job.aFill, job.aClear, none, 0, none, 0, none, none, null, job.approachEnd, Integer.MIN_VALUE));
+			SiteGroupRec g = cur.group() == null ? null : group(cur.group());
+			Builder.SHARED_CRATE.set(g != null && g.sharedCrate() ? g.id() : null);
+			try {
+				long t0 = System.nanoTime();
+				done = done.withConstruction(Builder.convert(level, bp, built, cur.id(), job.placer));
+				Placement.noteConvert(cur.id(), System.nanoTime() - t0);
+			} catch (SiteException | RuntimeException e) {
+				Architect.LOGGER.error("Making {} a construction site failed; rolling it back", cur.id(), e);
+				job.broken = "making the construction site failed (" + e.getMessage() + ")";
+				return null;
+			} finally {
+				Builder.SHARED_CRATE.remove();
+			}
+		}
+		replace(server, done);
+		lastNote = note;
+		Architect.LOGGER.info("Placed site {} ({}) over ticks: box {}, snapshot {} over {}{}", done.id(), done.blueprint(), Anchors.str(done.box()),
+			done.snapshot(), Anchors.str(done.restoreBox()), note == null ? "" : "; " + note);
+		ApiEvents.placed(server, done);
+		return done;
+	}
+
+	/** A placing site's box holds its snapshot again: the record goes (it was never placed: no SITE_REMOVED). */
+	static Removed finishRollback(MinecraftServer server, ServerLevel level, Site b, Drops drops, @Nullable CompoundTag snapshot) {
+		Architect.LOGGER.info("Rolled back site {} ({}) that was still being placed", b.id(), b.blueprint());
+		return afterRestore(level, b, null, drops, true, false, snapshot);
+	}
+
+	/** An instant site restored over ticks ({@link RestoreJob}): the rest of the removal. Fires SITE_REMOVED. */
+	static Removed finishTickedRemove(MinecraftServer server, ServerLevel level, Site b, Drops drops, @Nullable CompoundTag snapshot) {
+		return afterRestore(level, b, null, drops, false, true, snapshot);
+	}
+
+	/** A dry-run plan of a placement: its snapshot (restore) box and its approach's end, for choosing a shared crate's cell. */
+	public record Prediction(Anchors.Bounds snapBox, int[] end, int[] out) {
+	}
+
+	/**
+	 * Plans a placement without changing anything or loading a chunk (as the dry-run verdict does) and predicts its restore
+	 * box and approach end. When its chunks are not loaded, a conservative guess: the template box grown by the worst-case
+	 * approach on every side and the deepest foundation below, and the end {@code approach.length} rows out from the
+	 * entrance. Server thread.
+	 */
+	public static Prediction predict(ServerLevel level, Blueprint bp, BlockPos origin, Rotation rotation) {
+		int turns = rotation.ordinal();
+		int[] out = Approach.outward(BlueprintTransform.rotateDirection(bp.front(), turns));
+		SitePlan p = null;
+		try {
+			p = checkSite(level, bp, origin, rotation, true, null, (r, m) -> {
+			}, true, false);
+		} catch (SiteException | RuntimeException e) {
+			p = null;
+		}
+		Anchor entrance = BlueprintTransform.worldAnchors(bp, turns, origin.getX(), origin.getY(), origin.getZ()).get(Blueprint.ENTRANCE);
+		if (p != null) {
+			double[] end = p.approach().end();
+			int[] e;
+			if (end != null && p.approach().rows() > 0) {
+				e = new int[] {(int) Math.floor(end[0]), (int) Math.floor(end[1]), (int) Math.floor(end[2])};
+			} else if (entrance != null) {
+				e = new int[] {(int) Math.floor(entrance.x()) + out[0], (int) Math.floor(entrance.y()), (int) Math.floor(entrance.z()) + out[1]};
+			} else {
+				e = new int[] {(p.snapBox().minX() + p.snapBox().maxX()) / 2, p.box().minY() + bp.groundY(), (p.snapBox().minZ() + p.snapBox().maxZ()) / 2};
+			}
+			return new Prediction(p.snapBox(), e, out);
+		}
+		int sx = BlueprintTransform.rotatedSizeX(bp.sizeX(), bp.sizeZ(), turns);
+		int sz = BlueprintTransform.rotatedSizeZ(bp.sizeX(), bp.sizeZ(), turns);
+		int m = dev.larattalabs.architect.batch.LotFitting.frontMargin(bp);
+		Anchors.Bounds guess = new Anchors.Bounds(origin.getX() - m, origin.getY() - TerrainFit.MAX_FILL - 1, origin.getZ() - m, origin.getX() + sx - 1 + m,
+			origin.getY() + bp.sizeY() - 1 + Approach.MAX_CUT, origin.getZ() + sz - 1 + m);
+		int len = bp.approach().enabled() ? bp.approach().length() : 1;
+		int[] e = entrance == null ? new int[] {origin.getX() + sx / 2, origin.getY() + bp.groundY(), origin.getZ() + sz / 2}
+			: new int[] {(int) Math.floor(entrance.x()) + out[0] * len, origin.getY() + bp.groundY(), (int) Math.floor(entrance.z()) + out[1] * len};
+		return new Prediction(guess, e, out);
+	}
+
+	// ------------------------------------------------------------------ site groups (docs/CONTRACT.md phase 4d)
+
+	/** Every site group, in creation order. Any thread. */
+	public static List<SiteGroupRec> groups() {
+		return List.copyOf(groups.values());
+	}
+
+	public static @Nullable SiteGroupRec group(String id) {
+		return groups.get(id);
+	}
+
+	/** A new group id ({@code g<n>}); the counter is saved with the next commit. */
+	static String newGroupId() {
+		int n = nextGroup;
+		while (groups.containsKey("g" + n)) {
+			n++;
+		}
+		nextGroup = n + 1;
+		return "g" + n;
+	}
+
+	/** Adds or replaces a group and saves. Server thread. */
+	static void putGroup(MinecraftServer server, SiteGroupRec g) {
+		Map<String, SiteGroupRec> m = new LinkedHashMap<>(groups);
+		m.put(g.id(), g);
+		groups = Collections.unmodifiableMap(m);
+		save(server, state);
+		notifyListeners();
+	}
+
+	/** A site joins its group (and its stage): the caller commits. */
+	private static void addToGroup(Site b) {
+		Site.Member m = b.member();
+		SiteGroupRec g = m == null ? null : groups.get(m.group());
+		if (g == null) {
+			return;
+		}
+		List<String> sites = new ArrayList<>(g.sites());
+		if (!sites.contains(b.id())) {
+			sites.add(b.id());
+		}
+		g = g.withSites(sites);
+		if (m.itemKey() != null) {
+			for (SiteGroupRec.StageRec st : g.stages()) {
+				if (st.items().contains(m.itemKey()) && st.batchId().equals(m.batchId()) && !st.sites().contains(b.id())) {
+					List<String> ss = new ArrayList<>(st.sites());
+					ss.add(b.id());
+					g = g.withStage(st.name(), x -> x.withSites(ss));
+				}
+			}
+		}
+		Map<String, SiteGroupRec> mm = new LinkedHashMap<>(groups);
+		mm.put(g.id(), g);
+		groups = Collections.unmodifiableMap(mm);
+	}
+
+	/** A removed site leaves its group and stage lists: the caller commits. */
+	private static void dropFromGroup(Site b) {
+		String gid = b.group();
+		SiteGroupRec g = gid == null ? null : groups.get(gid);
+		if (g == null) {
+			return;
+		}
+		List<String> sites = new ArrayList<>(g.sites());
+		sites.remove(b.id());
+		List<SiteGroupRec.StageRec> stages = new ArrayList<>();
+		for (SiteGroupRec.StageRec st : g.stages()) {
+			List<String> ss = new ArrayList<>(st.sites());
+			ss.remove(b.id());
+			stages.add(st.withSites(ss));
+		}
+		Map<String, SiteGroupRec> mm = new LinkedHashMap<>(groups);
+		mm.put(g.id(), g.withSites(sites).withStages(stages));
+		groups = Collections.unmodifiableMap(mm);
+	}
+
+	/** A site placed through the atomic path for a batch item (a construction site) joins its group. Server thread. */
+	static void joinGroup(MinecraftServer server, Site b) {
+		addToGroup(b);
+		save(server, state);
 	}
 
 	// ------------------------------------------------------------------ crash safety
@@ -1262,6 +1654,11 @@ public final class Sites {
 		boolean changed = false;
 		Map<String, Boolean> standsNow = new java.util.HashMap<>();
 		for (Site b : map.values()) {
+			if (b.placing()) {
+				// half written on purpose: its job resumes from the queue file (Placement), or rolls back from its snapshot
+				report(b.id(), false, b.id() + " was still being placed; it resumes");
+				continue;
+			}
 			if (b.construction() != null) {
 				Builder.Run run = Builder.run(server, b);
 				ServerLevel atStart = levelOf(server, b);
@@ -1361,7 +1758,7 @@ public final class Sites {
 		}
 		for (Site b : map.values()) {
 			Boolean st = standsNow.get(b.id());
-			if (Boolean.FALSE.equals(st) && !recovered.contains(b.id())) {
+			if (Boolean.FALSE.equals(st) && !recovered.contains(b.id()) && !b.placing()) {
 				int[] n = standing(server, b, ownGrid(b));
 				report(b.id(), true, Reconcile.mismatch(b.id(), n[0], n[1]));
 			}
@@ -1529,6 +1926,26 @@ public final class Sites {
 			this.area = area;
 		}
 
+		/** Drops around {@code box} that were there before, by entity UUID (a ticked placement's, saved in the queue file). */
+		static Drops of(ServerLevel level, Anchors.Bounds box, @Nullable List<String> uuids) {
+			Drops d = new Drops(Occupancy.aabb(box).inflate(1));
+			if (uuids != null) {
+				for (String u : uuids) {
+					try {
+						d.before.add(java.util.UUID.fromString(u));
+					} catch (IllegalArgumentException ignored) {
+						// skipped
+					}
+				}
+			}
+			return d;
+		}
+
+		/** The UUIDs that were there before (for the queue file). */
+		List<String> uuids() {
+			return before.stream().map(java.util.UUID::toString).sorted().toList();
+		}
+
 		static Drops before(ServerLevel level, Anchors.Bounds box) {
 			Drops d = new Drops(Occupancy.aabb(box).inflate(1));
 			level.getEntitiesOfClass(ItemEntity.class, d.area).forEach(e -> d.before.add(e.getUUID()));
@@ -1613,7 +2030,8 @@ public final class Sites {
 		Path f = file(server);
 		try {
 			Path tmp = f.resolveSibling(FILE + ".tmp");
-			Files.writeString(tmp, GSON.toJson(Site.fileJson(List.copyOf(s.byId().values()), s.next(), s.pending())), StandardCharsets.UTF_8);
+			Files.writeString(tmp, GSON.toJson(Site.fileJson(List.copyOf(s.byId().values()), s.next(), s.pending(), List.copyOf(groups.values()),
+				nextGroup)), StandardCharsets.UTF_8);
 			Files.move(tmp, f, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
 		} catch (IOException e) {
 			Architect.LOGGER.warn("Could not save {}", f, e);
@@ -1622,6 +2040,8 @@ public final class Sites {
 
 	private static void load(MinecraftServer server) {
 		loadFailed = false;
+		groups = Map.of();
+		nextGroup = 1;
 		Path f = file(server);
 		if (!Files.exists(f)) {
 			state = State.EMPTY;
@@ -1634,6 +2054,10 @@ public final class Sites {
 				map.put(b.id(), b);
 			}
 			state = new State(Collections.unmodifiableMap(map), data.next(), data.pending());
+			Map<String, SiteGroupRec> gs = new LinkedHashMap<>();
+			data.groups().forEach(g -> gs.put(g.id(), g));
+			groups = Collections.unmodifiableMap(gs);
+			nextGroup = data.nextGroup();
 			Architect.LOGGER.info("Loaded {} site(s) {}{}", map.size(), map.keySet(), data.pending().isEmpty() ? ""
 				: "; " + data.pending().size() + " site(s) taken down before the last stop");
 		} catch (Exception e) {

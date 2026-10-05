@@ -181,6 +181,18 @@ usage hold, re-skin, open type). Caveats:
 - Real runs went over the WebSocket; the Java path is sim-only.
 - The bible set is cluttered and less legible, which is 5a's (critique loop) job.
 
+**Phase 4d status: PASSED 2026-10-05** (gate-verifier reproduced every item on fresh terrain, `artifacts/gate4d-verify/`, local: 12/12
+equal, MSPT max 33.9 ms at 4 ms (job start up to 23.6 ms, unsliced), survival max 30.2 ms, 0 ticks over 50 ms; phase 3 gate
+re-run clean after the Remove change. Caveats carried to 4e: the toggle step now uses non-adjacent lots, so adjacency leaks are
+only covered by equality/undo; strengthen it to adjacent lots allowing persistent-leaf diffs only. Job start and construction
+conversion are unsliced; slice them if designs near the size cap break 50 ms.) Built on branch `phase/4d`; API 1.4.0 / mod 0.7.0;
+builder's run in `artifacts/gate4d/REPORT.md`, local). Every gate item and gate addition passed in the builder's run: 12-lot
+village via the queue identical to atomic (12/12 regions + the whole village), MSPT max 16.8 ms / mean 7.8 ms at 4 ms,
+relog mid-item resumed identical, group undo exact in reverse order, stages, survival shared crate (3 sites from one hopper
+chain, identical, stock matches; MSPT max 24.6 ms), fitToLot on 4 sides, 0-gap and OVERLAP, Patron, toggle, cancel mid-item,
+appended group. Throughput: 12.1k / 20.5k / 33.9k cells/s at 1 / 4 / 10 ms (12-lot wall 2.2 / 1.3 / 0.8 s). The gate found
+and fixed inexact Remove around worldgen trees (the leaf ring, also in the atomic path). Deviations: CONTRACT "Phase 4d as built".
+
 **Phase 4c status: PASSED 2026-10-05** (gate-verifier, every item reproduced; `artifacts/gate4c/REPORT.md`, local). API 1.3.0 / mod
 0.6.0.
 - **Real massing:** $0.21 / 0.9 min, 8 masses.

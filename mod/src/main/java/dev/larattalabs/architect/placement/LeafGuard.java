@@ -99,6 +99,57 @@ public final class LeafGuard {
 		return n;
 	}
 
+	/** How far around a snapshot box the leaf ring reaches ({@link #ring}): past the box + 7 the gate hashes. */
+	public static final int RING = RADIUS + 2;
+
+	/**
+	 * The leaf ring of a box (phase 4d): every leaf within {@link #RING} of {@code box} but outside it, as world x, y, z,
+	 * distance quadruples, read before the box changes. Worldgen leaves often carry a distance larger than their nearest
+	 * log gives (trees generated over each other); any shape update next to them lets the whole canopy relax to the true
+	 * distances, which is not "the terrain as it was". Remove puts the recorded distances back ({@link #restoreRing}).
+	 */
+	public static int[] ring(ServerLevel level, Anchors.Bounds box) {
+		List<Integer> out = new ArrayList<>();
+		BlockPos.MutableBlockPos p = new BlockPos.MutableBlockPos();
+		int minY = Math.max(level.getMinY(), box.minY() - RING);
+		int maxY = Math.min(level.getMaxY(), box.maxY() + RING);
+		for (int y = minY; y <= maxY; y++) {
+			for (int z = box.minZ() - RING; z <= box.maxZ() + RING; z++) {
+				for (int x = box.minX() - RING; x <= box.maxX() + RING; x++) {
+					if (box.contains(x, y, z)) {
+						continue;
+					}
+					BlockState s = level.getBlockState(p.set(x, y, z));
+					if (s.getBlock() instanceof LeavesBlock) {
+						out.add(x);
+						out.add(y);
+						out.add(z);
+						out.add(s.getValue(LeavesBlock.DISTANCE));
+					}
+				}
+			}
+		}
+		return out.stream().mapToInt(Integer::intValue).toArray();
+	}
+
+	/**
+	 * Gives the ring's leaves their recorded distance back (no neighbour updates), where the cell still holds leaves and lies
+	 * in none of {@code skip} (other standing sites' boxes). Returns how many changed.
+	 */
+	public static int restoreRing(ServerLevel level, int[] ring, java.util.function.Predicate<BlockPos> skip, int flags) {
+		int n = 0;
+		BlockPos.MutableBlockPos p = new BlockPos.MutableBlockPos();
+		for (int i = 0; i + 3 < ring.length; i += 4) {
+			BlockState s = level.getBlockState(p.set(ring[i], ring[i + 1], ring[i + 2]));
+			if (!(s.getBlock() instanceof LeavesBlock) || s.getValue(LeavesBlock.DISTANCE) == ring[i + 3] || skip.test(p)) {
+				continue;
+			}
+			level.setBlock(p, s.setValue(LeavesBlock.DISTANCE, ring[i + 3]), quiet(flags));
+			n++;
+		}
+		return n;
+	}
+
 	private LeafGuard() {
 	}
 }

@@ -1,6 +1,24 @@
 package dev.larattalabs.architect.apiimpl;
 
+import com.google.gson.JsonObject;
+import dev.larattalabs.architect.api.Batch;
+import dev.larattalabs.architect.api.BatchView;
+import dev.larattalabs.architect.api.FitOptions;
+import dev.larattalabs.architect.api.LotFit;
+import dev.larattalabs.architect.api.OverlapMargin;
 import dev.larattalabs.architect.api.PlaceRequest;
+import dev.larattalabs.architect.api.SiteGroup;
+import dev.larattalabs.architect.api.Stage;
+import dev.larattalabs.architect.api.Stock;
+import dev.larattalabs.architect.batch.LotFitting;
+import dev.larattalabs.architect.batch.QBatch;
+import dev.larattalabs.architect.site.Batches;
+import dev.larattalabs.architect.site.Groups;
+import dev.larattalabs.architect.site.SiteGroupRec;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.world.level.block.Rotation;
+import net.minecraft.world.level.levelgen.structure.BoundingBox;
 import dev.larattalabs.architect.api.PlaceResult;
 import dev.larattalabs.architect.api.Reason;
 import dev.larattalabs.architect.api.Refusal;
@@ -170,5 +188,111 @@ final class SitesImpl implements dev.larattalabs.architect.api.Sites {
 	@Override
 	public dev.larattalabs.architect.api.SurvivalInfo survival() {
 		return new dev.larattalabs.architect.api.SurvivalInfo(SurvivalWorld.on(), SurvivalWorld.blocksPerTick());
+	}
+
+	// ------------------------------------------------------------------ 1.4.0 (docs/CONTRACT.md phase 4d)
+
+	@Override
+	public CompletableFuture<String> queue(Batch batch) {
+		return onServer(() -> Batches.queue(server, batch));
+	}
+
+	@Override
+	public Optional<BatchView> batch(String batchId) {
+		QBatch b = Batches.get(batchId);
+		return b == null ? Optional.empty() : Optional.of(Views.batch(b));
+	}
+
+	@Override
+	public List<BatchView> batches(@Nullable String owner) {
+		return Batches.all().stream().filter(b -> ApiRules.ownerMatches(b.owner, owner)).map(Views::batch).toList();
+	}
+
+	@Override
+	public CompletableFuture<BatchView> cancelBatch(String batchId) {
+		return onServer(() -> Batches.cancel(server, batchId)).thenCompose(f -> f).thenApply(Views::batch);
+	}
+
+	@Override
+	public List<SiteGroup> groups(@Nullable String owner) {
+		return Sites.groups().stream().filter(g -> ApiRules.ownerMatches(g.owner(), owner)).map(Views::group).toList();
+	}
+
+	@Override
+	public Optional<SiteGroup> group(String groupId) {
+		SiteGroupRec g = Sites.group(groupId);
+		return g == null ? Optional.empty() : Optional.of(Views.group(g));
+	}
+
+	@Override
+	public CompletableFuture<RemoveResult> removeGroup(String groupId, RemoveOptions o) {
+		return onServer(() -> Groups.removeGroup(server, groupId, o == null ? null : o.requester(), o != null && o.force())).thenCompose(f -> f)
+			.thenApply(SitesImpl::result);
+	}
+
+	@Override
+	public Stage approveStage(String groupId, String stage) {
+		return Views.stage(Groups.approve(server, groupId, stage));
+	}
+
+	@Override
+	public Stage skipStage(String groupId, String stage) {
+		return Views.stage(Groups.skip(server, groupId, stage));
+	}
+
+	@Override
+	public List<Stage> reorderStages(String groupId, List<String> names) {
+		return Groups.reorder(server, groupId, names).stages().stream().map(Views::stage).toList();
+	}
+
+	@Override
+	public CompletableFuture<RemoveResult> undoStage(String groupId, String stage, boolean force) {
+		return onServer(() -> Groups.undoStage(server, groupId, stage, force)).thenCompose(f -> f).thenApply(SitesImpl::result);
+	}
+
+	private static RemoveResult result(Groups.Removed r) {
+		return new RemoveResult(r.removed(), r.blockers(), Views.items(r.refund()));
+	}
+
+	@Override
+	public Stock stock(String groupId) {
+		return Views.stock(server, groupId);
+	}
+
+	@Override
+	public LotFit fitToLot(String blueprintId, BoundingBox lot, Direction streetSide, FitOptions o) {
+		FitOptions opt = o == null ? FitOptions.DEFAULT : o;
+		Blueprint bp = Blueprints.get(blueprintId);
+		ServerLevel level = opt.level() != null ? opt.level() : server.overworld();
+		Anchors.Bounds lb = new Anchors.Bounds(lot.minX(), lot.minY(), lot.minZ(), lot.maxX(), lot.maxY(), lot.maxZ());
+		if (bp == null) {
+			Verdict v = new Verdict(List.of(new Refusal(Reason.UNKNOWN_BLUEPRINT, "No design " + blueprintId + " in the library")), List.of(), false, Map.of(),
+				Optional.empty(), Optional.empty());
+			return new LotFit(new BlockPos(lot.minX(), lot.minY(), lot.minZ()), Rotation.NONE, lot, Optional.empty(), v);
+		}
+		if (streetSide == null || streetSide.getAxis().isVertical()) {
+			throw new IllegalArgumentException("streetSide must be north, east, south or west");
+		}
+		LotFitting.Fit f = LotFitting.fit(bp, lb, streetSide.getName(), opt.centreOn() == FitOptions.CentreOn.BOX, opt.setback(), opt.approachIntoStreet());
+		BlockPos origin = new BlockPos(f.ox(), f.oy(), f.oz());
+		Rotation rot = Rotation.values()[f.turns()];
+		Verdict v;
+		if (!f.fits()) {
+			boolean construction = ApiRules.construction(opt.mode(), SurvivalWorld.on());
+			v = new Verdict(List.of(new Refusal(Reason.LOT_TOO_SMALL, "The lot is too small for " + blueprintId + ": " + f.why())), List.of(), construction,
+				Map.of(), Optional.of(Views.box(f.box())), Optional.empty());
+		} else {
+			v = check(new PlaceRequest(blueprintId, level, origin, rot, opt.mode(), null, new JsonObject(), opt.force(), opt.actor()));
+		}
+		return new LotFit(origin, rot, Views.box(f.box()), v.restoreBox(), v);
+	}
+
+	@Override
+	public OverlapMargin overlapMargin(String blueprintId) {
+		Blueprint bp = Blueprints.get(blueprintId);
+		if (bp == null) {
+			throw new IllegalArgumentException("No design " + blueprintId + " in the library");
+		}
+		return new OverlapMargin(LotFitting.frontMargin(bp), 0, 0);
 	}
 }

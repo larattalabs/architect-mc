@@ -121,6 +121,8 @@ public final class Builder {
 	/** At most one SITE_PROGRESS per site per this many ticks (one second). */
 	static final int PROGRESS_TICKS = 20;
 	private static long ticks;
+	/** Set around a batch's construction placement whose group shares one crate (phase 4d, R6): the group id. Server thread. */
+	static final ThreadLocal<String> SHARED_CRATE = new ThreadLocal<>();
 
 	private Builder() {
 	}
@@ -405,6 +407,16 @@ public final class Builder {
 
 	private static @Nullable MinecraftServer server;
 
+	/** Whether any construction site is building (the placement stats count those ticks). */
+	static boolean anyBuilding() {
+		for (Site s : Sites.all()) {
+			if (s.building()) {
+				return true;
+			}
+		}
+		return false;
+	}
+
 	/** Whether {@code siteId} is a construction site still building (the crate is unbreakable then). Any thread. */
 	public static boolean siteBuilding(String siteId) {
 		Site s = siteId == null || siteId.isEmpty() ? null : Sites.get(siteId);
@@ -420,7 +432,120 @@ public final class Builder {
 		if (!load && !level.isLoaded(p)) {
 			return null;
 		}
-		return level.getBlockEntity(p) instanceof CrateBlockEntity be && s.id().equals(be.siteId()) ? be : null;
+		return level.getBlockEntity(p) instanceof CrateBlockEntity be && crateOwner(s).equals(be.siteId()) ? be : null;
+	}
+
+	// ------------------------------------------------------------------ the group crate (phase 4d, R6)
+
+	/** The group whose shared crate this construction site uses, or null (its own crate). */
+	static @Nullable SiteGroupRec sharedGroup(Site s) {
+		Construction c = s.construction();
+		SiteGroupRec g = s.group() == null ? null : Sites.group(s.group());
+		if (c == null || c.crate() == null || g == null || !g.sharedCrate() || g.crate() == null) {
+			return null;
+		}
+		Construction.Crate gc = g.crate();
+		return gc.x() == c.crate().x() && gc.y() == c.crate().y() && gc.z() == c.crate().z() ? g : null;
+	}
+
+	/** The owner id the site's crate block entity carries: the site's id, or {@code group:<id>} for a shared crate. */
+	static String crateOwner(Site s) {
+		SiteGroupRec g = sharedGroup(s);
+		return g == null ? s.id() : g.crateOwner();
+	}
+
+	/** The other construction sites still building on {@code s}'s shared crate, in placement order. */
+	static List<Site> otherBuildingShared(Site s) {
+		SiteGroupRec g = sharedGroup(s);
+		List<Site> out = new ArrayList<>();
+		if (g == null) {
+			return out;
+		}
+		for (Site o : Sites.all()) {
+			if (!o.id().equals(s.id()) && o.building() && g.id().equals(o.group()) && sharedGroup(o) != null) {
+				out.add(o);
+			}
+		}
+		return out;
+	}
+
+	/** The building sites a crate feeds: the site, or every building site of the group sharing it (placement order). */
+	private static List<Site> fedBy(String crateOwner) {
+		if (!crateOwner.startsWith(SiteGroupRec.CRATE_PREFIX)) {
+			Site s = Sites.get(crateOwner);
+			return s == null ? List.of() : List.of(s);
+		}
+		String gid = crateOwner.substring(SiteGroupRec.CRATE_PREFIX.length());
+		List<Site> out = new ArrayList<>();
+		for (Site o : Sites.all()) {
+			if (o.building() && gid.equals(o.group()) && sharedGroup(o) != null) {
+				out.add(o);
+			}
+		}
+		return out;
+	}
+
+	/** A shared crate about to go: its delivered counts stay on the group record ({@code Sites.stock} after the build). */
+	private static void keepDelivered(MinecraftServer srv, Site s, @Nullable CrateBlockEntity crate, boolean keep) {
+		SiteGroupRec g = sharedGroup(s);
+		if (g != null && crate != null && !keep) {
+			Sites.putGroup(srv, g.withDelivered(crate.ledger().delivered()));
+		}
+	}
+
+	/** What a group's stockpile holds (R6, {@code Sites.stock}). */
+	public record GroupStock(Map<String, Integer> delivered, Map<String, Integer> credit, Map<String, Map<String, Integer>> outstandingBySite,
+		Map<String, Integer> outstanding, @Nullable BlockPos crate) {
+	}
+
+	/** A group's stock: delivered and credit from its crate(s), the outstanding bill per building site and in total. Server thread. */
+	public static GroupStock groupStock(MinecraftServer srv, SiteGroupRec g) {
+		Map<String, Map<String, Integer>> bySite = new LinkedHashMap<>();
+		Map<String, Integer> total = new TreeMap<>();
+		Map<String, Integer> delivered = new TreeMap<>();
+		Map<String, Integer> credit = new TreeMap<>();
+		Set<BlockPos> crates = new HashSet<>();
+		for (Site s : Sites.all()) {
+			if (!g.id().equals(s.group()) || s.construction() == null) {
+				continue;
+			}
+			Run r = s.building() ? run(srv, s) : null;
+			if (r != null) {
+				Map<String, Integer> out = new TreeMap<>();
+				r.unbuilt.forEach((k, v) -> {
+					if (v > 0) {
+						out.put(k, v);
+					}
+				});
+				bySite.put(s.id(), out);
+				out.forEach((k, v) -> total.merge(k, v, Integer::sum));
+			}
+			ServerLevel level = Sites.levelOf(srv, s);
+			CrateBlockEntity crate = level == null ? null : crate(level, s, false);
+			if (crate != null && crates.add(crate.getBlockPos())) {
+				crate.ledger().delivered().forEach((k, v) -> delivered.merge(k, v, Integer::sum));
+				String owner = crateOwner(s);
+				crate.ledger().credit(item -> unbuiltFor(srv, owner, item)).forEach((k, v) -> credit.merge(k, v, Integer::sum));
+			}
+		}
+		Construction.Crate gc = g.crate();
+		SiteGroupRec now = Sites.group(g.id());
+		if (crates.isEmpty() && now != null) {
+			delivered.putAll(now.delivered()); // the shared crate is gone (every site built): its ledger was kept on the group
+		}
+		return new GroupStock(delivered, credit, bySite, total, gc == null ? null : new BlockPos(gc.x(), gc.y(), gc.z()));
+	}
+
+	/** What the sites a crate feeds still need of {@code item}. */
+	private static int unbuiltFor(MinecraftServer srv, String crateOwner, String item) {
+		int n = 0;
+		for (Site s : fedBy(crateOwner)) {
+			Run r = run(srv, s);
+			if (r != null) {
+				n += r.unbuiltCost(item);
+			}
+		}
+		return n;
 	}
 
 	/**
@@ -429,8 +554,18 @@ public final class Builder {
 	 */
 	public static Ledger.@Nullable Accepted accepts(String siteId, CrateBlockEntity crate, String item, boolean commit) {
 		MinecraftServer srv = server;
-		Site s = siteId == null || siteId.isEmpty() ? null : Sites.get(siteId);
-		if (srv == null || s == null || !s.building()) {
+		if (srv == null || siteId == null || siteId.isEmpty()) {
+			return null;
+		}
+		if (siteId.startsWith(SiteGroupRec.CRATE_PREFIX)) {
+			// a group's shared crate: what any of its building sites still needs (R6)
+			if (fedBy(siteId).isEmpty()) {
+				return null;
+			}
+			return crate.ledger().accept(item, it -> unbuiltFor(srv, siteId, it), Equivalents.bundled(), commit);
+		}
+		Site s = Sites.get(siteId);
+		if (s == null || !s.building()) {
 			return null;
 		}
 		Run r = run(srv, s);
@@ -525,17 +660,33 @@ public final class Builder {
 		for (int i = 0; i < n; i++) {
 			queue[i] = boxIdx[order[i]];
 		}
-		// the crate: outside the snapshot box, at the approach's end (or 2 out from the entrance)
-		BlockPos cratePos = cratePos(level, bp, built, sb);
-		BlockState was = level.getBlockState(cratePos);
-		BlockEntity wasBe = level.getBlockEntity(cratePos);
-		String wasNbt = wasBe == null ? null : wasBe.saveWithFullMetadata(level.registryAccess()).toString();
-		Construction.Crate crate = new Construction.Crate(cratePos.getX(), cratePos.getY(), cratePos.getZ(), NbtUtils.writeBlockState(was).toString(),
-			wasNbt);
-		level.setBlock(cratePos, CrateBlocks.CRATE.defaultBlockState(), Sites.FLAGS);
-		if (level.getBlockEntity(cratePos) instanceof CrateBlockEntity be) {
-			be.setSiteId(id);
+		// the crate: outside the snapshot box, at the approach's end (or 2 out from the entrance); a batch whose group shares one
+		// crate (phase 4d, R6) puts it down once (at crateAt, or beside the first site's approach end) and every site uses it
+		String sharedId = SHARED_CRATE.get();
+		SiteGroupRec grp = sharedId == null ? null : Sites.group(sharedId);
+		Construction.Crate crate = null;
+		if (grp != null && grp.crate() != null) {
+			Construction.Crate gc = grp.crate();
+			if (level.getBlockEntity(new BlockPos(gc.x(), gc.y(), gc.z())) instanceof CrateBlockEntity be && grp.crateOwner().equals(be.siteId())) {
+				crate = gc;
+			}
 		}
+		if (crate == null) {
+			BlockPos cratePos = grp != null && grp.crateAt() != null ? new BlockPos(grp.crateAt()[0], grp.crateAt()[1], grp.crateAt()[2])
+				: cratePos(level, bp, built, sb);
+			BlockState was = level.getBlockState(cratePos);
+			BlockEntity wasBe = level.getBlockEntity(cratePos);
+			String wasNbt = wasBe == null ? null : wasBe.saveWithFullMetadata(level.registryAccess()).toString();
+			crate = new Construction.Crate(cratePos.getX(), cratePos.getY(), cratePos.getZ(), NbtUtils.writeBlockState(was).toString(), wasNbt);
+			level.setBlock(cratePos, CrateBlocks.CRATE.defaultBlockState(), Sites.FLAGS);
+			if (level.getBlockEntity(cratePos) instanceof CrateBlockEntity be) {
+				be.setSiteId(grp != null ? grp.crateOwner() : id);
+			}
+			if (grp != null) {
+				Sites.putGroup(level.getServer(), grp.withCrate(crate));
+			}
+		}
+		BlockPos cratePos = new BlockPos(crate.x(), crate.y(), crate.z());
 		// clear the queued cells: top down, no drops, no neighbour updates (nothing pops off)
 		Integer[] topDown = idx.toArray(new Integer[0]);
 		Arrays.sort(topDown, Comparator.comparingInt((Integer k) -> -k));
@@ -558,7 +709,16 @@ public final class Builder {
 
 	/** Undoes {@link #convert}'s crate (a placement rolled back after the conversion). */
 	static void removeCrate(ServerLevel level, Construction c) {
+		boolean inUse = false;
 		if (c.crate() != null) {
+			for (Site o : Sites.all()) {
+				Construction oc = o.construction();
+				if (oc != null && oc.crate() != null && oc.crate().x() == c.crate().x() && oc.crate().y() == c.crate().y() && oc.crate().z() == c.crate().z()) {
+					inUse = true;
+				}
+			}
+		}
+		if (c.crate() != null && !inUse) {
 			restoreCrateCell(level, c.crate());
 		}
 		Sites.deleteSnapshotFile(c.target());
@@ -694,7 +854,9 @@ public final class Builder {
 		boolean freeChanged = false;
 		int placed = 0;
 		int scanned = 0;
-		for (int i = r.built.nextClearBit(0); i < r.size() && budget > 0 && scanned < SCAN; i = r.built.nextClearBit(i + 1)) {
+		// the per-tick placement budget (phase 4d) is shared: past it, a site places only its first cell this tick
+		for (int i = r.built.nextClearBit(0); i < r.size() && budget > 0 && scanned < SCAN && (placed == 0 || Placement.remainingNanos() > 0);
+			i = r.built.nextClearBit(i + 1)) {
 			scanned++;
 			if (r.isSecond[i]) {
 				continue; // placed with its first
@@ -795,9 +957,12 @@ public final class Builder {
 	/** Every queued cell built: the site is built, the crate gives back its stock and goes, a toast and a chat note fire. */
 	private static void complete(MinecraftServer srv, ServerLevel level, Site s, Run r, @Nullable CrateBlockEntity crate) {
 		Construction c = s.construction();
-		Map<String, Integer> left = crate != null ? crate.ledger().takeStock() : Map.of();
+		// a group's shared crate stays while another of its sites still builds (R6)
+		boolean keepCrate = !otherBuildingShared(s).isEmpty();
+		keepDelivered(srv, s, crate, keepCrate);
+		Map<String, Integer> left = crate != null && !keepCrate ? crate.ledger().takeStock() : Map.of();
 		BlockPos at = c.crate() != null ? new BlockPos(c.crate().x(), c.crate().y(), c.crate().z()) : dropPos(s);
-		if (c.crate() != null && (crate != null || level.isLoaded(at))) {
+		if (c.crate() != null && !keepCrate && (crate != null || level.isLoaded(at))) {
 			restoreCrateCell(level, c.crate());
 		}
 		dropItems(level, at, left, null);
@@ -821,7 +986,7 @@ public final class Builder {
 
 	// ------------------------------------------------------------------ ghost sync
 
-	private static boolean near(ServerPlayer p, Anchors.Bounds b, int range) {
+	static boolean near(ServerPlayer p, Anchors.Bounds b, int range) {
 		double x = Math.max(b.minX(), Math.min(b.maxX() + 1, p.getX()));
 		double z = Math.max(b.minZ(), Math.min(b.maxZ() + 1, p.getZ()));
 		double ddx = x - p.getX();
@@ -866,7 +1031,7 @@ public final class Builder {
 		}
 	}
 
-	private static void send(ServerPlayer p, net.minecraft.network.protocol.common.custom.CustomPacketPayload payload) {
+	static void send(ServerPlayer p, net.minecraft.network.protocol.common.custom.CustomPacketPayload payload) {
 		if (ServerPlayNetworking.canSend(p, payload.type())) {
 			ServerPlayNetworking.send(p, payload);
 		}
@@ -936,6 +1101,10 @@ public final class Builder {
 	/** Right-click on a crate: the crate screen, or (a crate no site owns) the crate goes, giving back what it held. */
 	public static void openCrate(ServerLevel level, ServerPlayer player, CrateBlockEntity crate) {
 		Site s = Sites.get(crate.siteId());
+		if (crate.siteId().startsWith(SiteGroupRec.CRATE_PREFIX)) {
+			List<Site> fed = fedBy(crate.siteId());
+			s = fed.isEmpty() ? null : fed.get(0);
+		}
 		Construction c = s == null ? null : s.construction();
 		if (s == null || c == null || !s.building() || c.crate() == null || !crate.getBlockPos().equals(new BlockPos(c.crate().x(), c.crate().y(),
 			c.crate().z()))) {
@@ -1145,7 +1314,9 @@ public final class Builder {
 		if (c.crate() != null) {
 			at = new BlockPos(c.crate().x(), c.crate().y(), c.crate().z());
 			CrateBlockEntity crate = crate(level, s, true);
-			if (crate != null) {
+			// a shared crate other sites still build from stays; this site's refunds drop at its cell (R6)
+			if (crate != null && otherBuildingShared(s).isEmpty()) {
+				keepDelivered(srv, s, crate, false);
 				stock = crate.ledger().takeStock();
 				restoreCrateCell(level, c.crate());
 			}

@@ -76,10 +76,24 @@ public interface Library {
 	 * @param group (since 1.2.0) the design group it was made in
 	 * @param groupItem (since 1.2.0) its item key in that group
 	 * @param parts (since 1.2.0) its named parts (R3: {@code main, roof, wing_east, ...}) by name, template coordinates
+	 * @param front (since 1.4.0) the direction the entrance faces in the unrotated template
+	 * @param anchors (since 1.4.0) named template cells (unrotated): at least {@code entrance} and {@code spawn} when the design
+	 *                has them (the cell holding the anchor's point)
+	 * @param groundY (since 1.4.0) the template y of the entrance's feet row: the ground level the design expects
+	 * @param approach (since 1.4.0) the entrance approach placement builds in front of the door
 	 */
 	record Entry(String id, String name, String type, BlockSize size, List<String> tags, Optional<String> source, Map<String, JsonElement> params,
 		Map<String, JsonElement> values, Optional<JsonObject> palette, Map<String, Port> ports, JsonObject ext, boolean bundled, boolean imported,
-		Optional<String> variantOf, Optional<BiblePin> bible, Optional<String> group, Optional<String> groupItem, Map<String, Part> parts) {
+		Optional<String> variantOf, Optional<BiblePin> bible, Optional<String> group, Optional<String> groupItem, Map<String, Part> parts,
+		Direction front, Map<String, BlockPos> anchors, int groundY, Approach approach) {
+		/** The 1.2.0 constructor (no lot-fitting data: front south, no anchors, groundY 0, the default approach). */
+		public Entry(String id, String name, String type, BlockSize size, List<String> tags, Optional<String> source, Map<String, JsonElement> params,
+			Map<String, JsonElement> values, Optional<JsonObject> palette, Map<String, Port> ports, JsonObject ext, boolean bundled, boolean imported,
+			Optional<String> variantOf, Optional<BiblePin> bible, Optional<String> group, Optional<String> groupItem, Map<String, Part> parts) {
+			this(id, name, type, size, tags, source, params, values, palette, ports, ext, bundled, imported, variantOf, bible, group, groupItem, parts,
+				Direction.SOUTH, Map.of(), 0, Approach.DEFAULT);
+		}
+
 		/** The 1.1.0 constructor (no bible, group or parts). */
 		public Entry(String id, String name, String type, BlockSize size, List<String> tags, Optional<String> source, Map<String, JsonElement> params,
 			Map<String, JsonElement> values, Optional<JsonObject> palette, Map<String, Port> ports, JsonObject ext, boolean bundled, boolean imported,
@@ -87,6 +101,14 @@ public interface Library {
 			this(id, name, type, size, tags, source, params, values, palette, ports, ext, bundled, imported, variantOf, Optional.empty(), Optional.empty(),
 				Optional.empty(), Map.of());
 		}
+	}
+
+	/**
+	 * A design's entrance approach (since 1.4.0): {@code length} rows out from the front face, {@code width} wide, plus up to
+	 * {@code extendMax} more rows while the path has not met the ground. {@code length} 0 = no approach.
+	 */
+	record Approach(int length, int width, int extendMax) {
+		public static final Approach DEFAULT = new Approach(6, 3, 8);
 	}
 
 	/**

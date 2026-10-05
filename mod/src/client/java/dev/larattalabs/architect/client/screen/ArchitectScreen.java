@@ -1230,7 +1230,8 @@ public final class ArchitectScreen extends Screen {
 				g.text(font, TextUtil.ellipsize(font, s.id() + "  " + (b == null ? s.blueprint() : b.name()), listW - 14), x + 6, ry + 2, UiBits.ink(), false);
 				String owned = dev.larattalabs.architect.client.ui.OwnedConfirm.label(s);
 				g.text(font, TextUtil.ellipsize(font, s.box().minX() + ", " + s.box().minY() + ", " + s.box().minZ() + " · " + s.rotation().replace('_', ' ')
-					+ (owned == null ? "" : " · " + owned), listW - 14), x + 6, ry + 12, UiBits.muted(), false);
+					+ (owned == null ? "" : " · " + owned) + (s.group() == null ? "" : " · group " + s.group()) + (s.placing() ? " · placing" : ""), listW - 14),
+					x + 6, ry + 12, UiBits.muted(), false);
 			}
 			ry += ROW_H;
 		}
@@ -1251,6 +1252,11 @@ public final class ArchitectScreen extends Screen {
 			s.movedFrom() == null ? "never moved" : "moved from " + s.movedFrom().x() + ", " + s.movedFrom().y() + ", " + s.movedFrom().z()));
 		if (s.owner() != null) {
 			lines.add(0, dev.larattalabs.architect.client.ui.OwnedConfirm.label(s) + " (" + s.owner() + ")");
+		}
+		if (s.member() != null) {
+			// phase 4d: the site group (one undo for the set), the batch and item that placed it
+			lines.add("group " + s.member().group() + (s.member().batchId() == null ? "" : " · batch " + s.member().batchId())
+				+ (s.member().itemKey() == null ? "" : " · item " + s.member().itemKey()) + (s.placing() ? " · placing" : ""));
 		}
 		for (String line : lines) {
 			g.text(font, TextUtil.ellipsize(font, line, dw), dx, y, UiBits.muted(), false);

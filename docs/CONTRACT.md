@@ -1364,3 +1364,53 @@ Where this section and the text above disagree, this section wins.
 - `cancelBatch` mid-item leaves that item's region exactly as before; a second batch appends a stage to an existing group and
   `removeGroup` takes both batches' sites down exactly.
 - Throughput numbers recorded.
+
+### Phase 4d as built (API 1.4.0, mod 0.7.0, recorded 2026-10-05)
+
+- **Ticked placement.** `TemplateWriter` is vanilla `StructureTemplate.placeInWorld` as a resumable cursor (barrier for NBT
+  cells, `setBlock` gating "placed", the edge shape update, then `updateFromNeighbourShapes` / neighbour updates per placed
+  cell); `PlaceJob` then writes bed safety, foundation, clears, approach (clear, fill, path, slabs) and cut plants in the
+  atomic order. Block and fluid ticks scheduled during Architect's own write slices are held back (`LevelTicksMixin`) and
+  scheduled with their delays when the placement completes. Cell lists are cached per template and rotation. The site
+  record is written as `placing` right after the snapshot (snapshot, record, blocks).
+- **Unsliced steps** (coordinator decision): the start of a placement (checks, snapshot capture + compressed write +
+  read-back, leaf ring, leaf hold) and a construction site's conversion each run in one tick. Measured on the kit buildings:
+  job start max 12.3 ms, conversion max 17.0 ms; the 12-lot village at 4 ms had MSPT max 16.8 ms, the survival scenario
+  24.6 ms, no tick over 50 ms anywhere. Designs near the size cap would take longer.
+- **Construction items of a batch** are written over ticks like instant ones and converted into construction sites when
+  their last cell is written (the atomic convert measured a 45 ms tick). A single Place outside a batch is unchanged.
+- **Removal:** group and stage removal restore instant sites over ticks (`RestoreJob`); construction sites deconstruct
+  atomically, one per tick. A player in a box is waited for (up to 10 min); the player's things in a box stop the removal
+  with the blockers (sites already removed stay removed). Remove of a `placing` site from the UI or API rolls it back at
+  once; `cancelBatch` rolls the placing item back over ticks.
+- **Resume:** a clean stop writes every job's cursor (`architect-queue.json`, `clean: true`) and resumes there. After an
+  unclean stop a placing job is rolled back from its snapshot and its item queued again (chunks on disk may be older than
+  the file). Restore jobs start over (rewriting a snapshot is idempotent).
+- **Leaf ring (a fix to exact Remove, found by this gate, affects the atomic path too):** worldgen leaves often carry a
+  larger distance than their nearest log gives; any shape update next to them relaxes a whole canopy, which made Remove
+  inexact over box + 7. Snapshots now carry `architect_leafRing` (leaves within 8 of the box, with their distances);
+  Remove puts those distances back (no neighbour updates; cells in other standing sites are left), and restores drop the
+  leaf ticks they schedule.
+- **Waiting:** temporary blockers are PLAYER_IN_BOX, OCCUPIED (mobs, drops) and NOT_LOADED. An item also waits until the
+  chunks of its snapshot box grown by 7 are loaded (the leaf hold and edge updates read there). While a job writes, its
+  chunks hold a short-lived `architect_mc:placement` ticket. The wait limit counts game ticks (20 per re-check) across relogs.
+- **Batches and stages:** one item places at a time per batch. Items without a stage form a stage named after the batch
+  id, first, approved at once; a batch without `group` gets a new group (`g<n>`), so every batch has one undo. Stages place
+  only when every earlier stage of the group is finished. `reorderStages` permutes the planned stages' slots only.
+  `stopOnFailure` lets the item being placed finish and ends the batch STOPPED. Skipped stages' and cancelled items get
+  ITEM_FAILED CANCELLED. Actorless INSTANT is allowed in a creative-default world or with the toggle off.
+- **fitToLot:** an entrance-centred box that would stick out of the lot sideways is moved back inside it (the entrance as
+  near the centre as the lot allows); `streetSide` NORTH = the lot's minZ edge. The approach may still extend past the lot
+  edge on a slope (up to `extendMax`, while it has not met the ground); `predictedRestoreBox` shows it.
+- **Shared crate:** the group's crate block entity is owned by `group:<id>`; it accepts what any building site of the group
+  still needs, sites draw from it in placement order, deconstruct refunds drop at its cell, and it gives back its stock and
+  goes when the group's last site is built. Without `crateAt` it goes beside the first construction item's approach end, in
+  the first cell (right, then left, up to 8 out) outside every item's predicted restore box and every standing site's; none
+  refuses the batch (OTHER: pass crateAt). Its delivered counts stay on the group record for `stock()`.
+- **Budget:** `placementBudgetMs` lives in `architect-world.json` next to `blocksPerTick`; `/architect budget [ms]` sets it.
+  The construction builder stops at the budget after its first cell per site.
+- **Ghost progress:** a placing site sends the construction ghost payloads (its template cells, filled in as written).
+- **MSPT:** Fabric runs END_SERVER_TICK after the server tallies its tick time, so `dev.placement.stats` times the full tick
+  itself (start to after the last end-of-tick handler).
+- Commands, DevBridge hooks and apitest steps: README "Controls", docs/DEVBRIDGE.md changelog. Gate evidence:
+  `artifacts/gate4d/REPORT.md`, `throughput.json` (local).
