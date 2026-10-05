@@ -3,14 +3,22 @@
 // (kit/designs/<type>.mjs if there is one, else cabin.mjs) as its "design" under the new id and
 // runs it through the real pipeline: the scratch dir, the pristine-kit check (`kit/build.mjs` in a
 // child process), the renderer and the never-overwrite install into the library.
+//
+// Phase 4b: it runs as many designs at once as the pool hands it. A design with a bible builds the
+// example under the bible's roles (`--bible bible/bible.json`); an open type is written into the
+// copy (type and profile). `simDesignUsd` (config) is the cost each step reports, so budgets can be
+// tested. A request whose notes contain `sim:usage_limit` hits a usage limit once (it lasts
+// `simLimitMs`): every design holds (the running ones stop at their next step and go back to the
+// front of their lane) and all resume together after the reset.
 import fs from 'node:fs';
 import path from 'node:path';
 import { loadSdk } from './claude/sdk.js';
 import { zeroCost } from './jobs/cost.js';
-import { checkDesign, designBaseId, freeLibraryId, installDesign, KIT, renderPreviews, withDesignId } from './designs.js';
+import { checkDesign, designBaseId, freeLibraryId, installDesign, isFinalDesign, KIT, renderPreviews, withDesignId } from './designs.js';
 import type { Design } from './protocol.js';
+import { BUILDING_TYPES } from './protocol.js';
 import { prepareScratch } from './scratch.js';
-import type { Designer, Sidecar } from './sidecar.js';
+import type { Designer, RunOutcome, Sidecar } from './sidecar.js';
 import { truncate } from './util/text.js';
 
 const STEPS: Array<{ status: 'designing'; step: string }> = [
@@ -19,7 +27,11 @@ const STEPS: Array<{ status: 'designing'; step: string }> = [
   { status: 'designing', step: 'raising the walls and the roof' },
 ];
 
+/** A request asks the sim to hit a usage limit (once). */
+export const SIM_LIMIT_MARK = 'sim:usage_limit';
+
 class Cancelled extends Error {}
+class Limited extends Error {}
 
 /** The kit example a sim job copies for a request type. */
 export function simSource(kitDir: string, type: string): string | undefined {
@@ -29,14 +41,20 @@ export function simSource(kitDir: string, type: string): string | undefined {
   return undefined;
 }
 
+interface Run {
+  cancelled: boolean;
+  wake?: () => void;
+}
+
 export class SimDesigner implements Designer {
   readonly name = 'sim' as const;
-  private queue: string[] = [];
-  private current: string | undefined;
-  private cancelled = new Set<string>();
+  private runs = new Map<string, Run>();
   private stopped = false;
-  private wake: (() => void) | undefined;
-  private runP: Promise<void> | undefined;
+  private limitTimer: NodeJS.Timeout | undefined;
+  /** designs that hit their simulated limit already */
+  private limitedOnce = new Set<string>();
+  /** ids handed out to running jobs (a library id is taken only when installed) */
+  private taken = new Map<string, string>();
 
   constructor(
     private sc: Sidecar,
@@ -45,133 +63,192 @@ export class SimDesigner implements Designer {
   ) {}
 
   async start(): Promise<void> {
-    this.sc.heavy.onFree(() => this.kick());
-    this.sc.setAuth({ auth: 'ok', authSource: 'sim (no Claude)', sdk: await sdkResolvable() ? 'ready' : 'missing', message: 'sim designer: installs kit examples, no Claude' });
+    this.sc.setAuth({ auth: 'ok', authSource: 'sim (no Claude)', sdk: (await sdkResolvable()) ? 'ready' : 'missing', message: 'sim designer: installs kit examples, no Claude' });
+    this.armLimit();
   }
 
   authChanged(): void {
     /* the sim needs no credentials */
   }
 
-  runningId(): string | undefined {
-    return this.current;
+  canRun(): boolean {
+    return !this.stopped && !this.limited();
   }
 
-  request(d: Design): void {
-    if (this.queue.includes(d.id) || this.current === d.id) return;
-    this.cancelled.delete(d.id);
-    this.queue.push(d.id);
-    this.kick();
+  blocked(): string | undefined {
+    return undefined;
+  }
+
+  limitChanged(): void {
+    this.armLimit();
+  }
+
+  run(id: string): Promise<RunOutcome> {
+    const r: Run = { cancelled: false };
+    this.runs.set(id, r);
+    this.sc.statusChanged();
+    return this.runJob(id, r)
+      .then((): RunOutcome => 'finished')
+      .catch((e): RunOutcome => {
+        if (e instanceof Limited) return 'requeue';
+        if (e instanceof Cancelled) return this.stopped ? 'stopped' : 'finished';
+        this.sc.designFailed(id, (e as Error).message);
+        return 'finished';
+      })
+      .finally(() => {
+        this.runs.delete(id);
+        this.taken.delete(id);
+        this.sc.statusChanged();
+      });
   }
 
   cancel(id: string): void {
-    this.queue = this.queue.filter((x) => x !== id);
-    if (this.current === id) {
-      this.cancelled.add(id);
-      this.wake?.();
-    }
+    const r = this.runs.get(id);
+    if (!r) return;
+    r.cancelled = true;
+    r.wake?.();
   }
 
   async stop(): Promise<void> {
     this.stopped = true;
-    this.wake?.();
-    await this.runP?.catch(() => undefined);
+    if (this.limitTimer) clearTimeout(this.limitTimer);
+    const runs = [...this.runs.values()];
+    for (const r of runs) r.wake?.();
+    while (this.runs.size) await new Promise((res) => setTimeout(res, 5));
   }
 
-  /** resolves when nothing is queued or running (tests) */
+  /** resolves when nothing is running or waiting (tests) */
   async idle(): Promise<void> {
-    while (this.runP) await this.runP.catch(() => undefined);
+    while (this.runs.size || this.sc.scheduler.waitingIds().length) await new Promise((res) => setTimeout(res, 10));
   }
 
-  private kick(): void {
-    if (this.runP || this.stopped || !this.queue.length) return;
-    // one design or agent job at a time (agent jobs share the design queue's slot)
-    if (!this.sc.heavy.tryAcquire('design')) return;
-    // one design per turn of the slot, so an agent job waiting for it gets its turn in between
-    const id = this.queue.shift()!;
-    this.runP = (async () => {
-      this.current = id;
+  // ---- the simulated usage limit -----------------------------------------------------------------
+
+  private limited(): boolean {
+    const l = this.sc.store.data.limit;
+    return !!l && l.until > Date.now();
+  }
+
+  private hitLimit(): void {
+    const until = Date.now() + this.sc.config.simLimitMs;
+    this.sc.store.data.limit = { until, type: 'sim' };
+    this.sc.store.markDirty();
+    this.sc.log.warn(`usage limit reached (simulated): designs wait ${this.sc.config.simLimitMs} ms`);
+    this.sc.limitChanged();
+    this.sc.statusChanged();
+    // every running design stops at its next step
+    for (const r of this.runs.values()) r.wake?.();
+  }
+
+  /** Clear the limit when it ends, then let the queues start again. */
+  private armLimit(): void {
+    if (this.limitTimer) clearTimeout(this.limitTimer);
+    this.limitTimer = undefined;
+    const l = this.sc.store.data.limit;
+    if (!l || this.stopped) return;
+    const left = l.until - Date.now();
+    if (left <= 0) {
+      delete this.sc.store.data.limit;
+      this.sc.store.markDirty();
+      this.sc.log.info('usage limit over (simulated): designs resume');
+      this.sc.jobs.limitChanged();
+      this.sc.groups.refreshActive();
       this.sc.statusChanged();
-      try {
-        await this.runJob(id);
-      } catch (e) {
-        if (!(e instanceof Cancelled)) this.sc.designFailed(id, (e as Error).message);
-      } finally {
-        this.current = undefined;
-        this.cancelled.delete(id);
-        this.sc.statusChanged();
-      }
-    })().finally(() => {
-      this.runP = undefined;
-      this.sc.heavy.release('design');
-      this.kick();
-    });
+      this.sc.scheduler.kick();
+      return;
+    }
+    this.limitTimer = setTimeout(() => this.armLimit(), left + 5);
+    this.limitTimer.unref?.();
   }
 
-  private sleep(ms: number, id: string): Promise<void> {
+  // ---- one design -----------------------------------------------------------------------------------
+
+  private sleep(ms: number, id: string, r: Run): Promise<void> {
     return new Promise<void>((resolve, reject) => {
       const done = () => {
         clearTimeout(t);
-        this.wake = undefined;
-        if (this.stopped || this.cancelled.has(id)) reject(new Cancelled());
+        r.wake = undefined;
+        if (this.stopped || r.cancelled || this.gone(id)) reject(new Cancelled());
+        else if (this.limited()) reject(new Limited());
         else resolve();
       };
       const t = setTimeout(done, ms);
       t.unref?.();
-      this.wake = done;
+      r.wake = done;
     });
   }
 
-  private check(id: string): void {
+  private gone(id: string): boolean {
     const d = this.sc.designs.get(id);
-    if (this.stopped || this.cancelled.has(id) || !d || d.status === 'cancelled') throw new Cancelled();
+    return !d || isFinalDesign(d);
   }
 
-  private async runJob(id: string): Promise<void> {
+  private check(id: string, r: Run): void {
+    if (this.stopped || r.cancelled || this.gone(id)) throw new Cancelled();
+  }
+
+  private async runJob(id: string, r: Run): Promise<void> {
     const sc = this.sc;
     const cfg = sc.config;
     const d = sc.designs.get(id);
-    if (!d || d.status === 'cancelled' || d.status === 'done' || d.status === 'failed') return;
+    if (!d || isFinalDesign(d)) return;
     const req = d.request;
     const src = simSource(cfg.kitDir, req.type);
     if (!src) throw new Error(`the sim copies a kit example, but ${path.join(cfg.kitDir, 'designs')} has neither ${req.type}.mjs nor cabin.mjs`);
-    const bp = freeLibraryId(cfg.libraryDir, designBaseId(req));
-    const scratch = prepareScratch({ dataDir: cfg.dataDir, kitDir: cfg.kitDir, libraryDir: cfg.libraryDir, design: d, bp });
+    const bp = freeLibraryId(cfg.libraryDir, designBaseId(req), new Set([...this.taken].filter(([k]) => k !== id).map(([, v]) => v)));
+    this.taken.set(id, bp);
+    const scratch = prepareScratch({ dataDir: cfg.dataDir, kitDir: cfg.kitDir, libraryDir: cfg.libraryDir, design: d, bp, ...sc.scratchExtras(d) });
+    let cost = d.cost ?? zeroCost();
     for (const s of STEPS) {
       sc.designStep(id, s.status, `${s.step} (simulated)`);
-      await this.sleep(this.stepMs, id);
+      if (req.notes?.includes(SIM_LIMIT_MARK) && !this.limitedOnce.has(id) && s === STEPS[1]) {
+        this.limitedOnce.add(id);
+        sc.designStep(id, 'queued', 'usage limit (simulated): waiting for the reset');
+        this.hitLimit();
+        throw new Limited();
+      }
+      await this.sleep(this.stepMs, id, r);
+      // the sim's notional spend: simDesignUsd per step
+      cost = { ...cost, usd: Math.round((cost.usd + cfg.simDesignUsd) * 1e6) / 1e6, turns: cost.turns + 1 };
+      sc.designCost(id, cost);
     }
-    // no Claude, no spend: the cost record still shows the steps
-    sc.designCost(id, { ...zeroCost(), turns: STEPS.length });
-    // the "design": the example under the new id
+    this.check(id, r);
+    // the "design": the example under the new id (an open type and its profile written in)
     const design = path.join(scratch, KIT, 'designs', `${bp}.mjs`);
-    fs.writeFileSync(design, withDesignId(fs.readFileSync(path.join(scratch, KIT, 'designs', `${src}.mjs`), 'utf8'), bp));
-    this.check(id);
+    let source = withDesignId(fs.readFileSync(path.join(scratch, KIT, 'designs', `${src}.mjs`), 'utf8'), bp);
+    const open = !(BUILDING_TYPES as readonly string[]).includes(req.type);
+    if (open) source = source.replace(new RegExp(`type: '${src}'`), `type: '${req.type}', profile: ${JSON.stringify(req.profile ?? ['door', 'lit', 'no_floating'])}`);
+    fs.writeFileSync(design, source);
     sc.designStep(id, 'checking', 'checking the design (simulated designer)');
     // a fallback example (cabin for a tower) is checked as what it is, not as the requested type
-    const res = await checkDesign(cfg.kitDir, scratch, bp, { maxSize: req.maxSize, type: src === req.type ? req.type : undefined });
-    this.check(id);
+    const checkType = src === req.type || open ? req.type : undefined;
+    const bibleArgs = req.bible && fs.existsSync(path.join(scratch, 'bible', 'bible.json')) ? ['--bible', path.join('bible', 'bible.json')] : [];
+    sc.syncScratchBible(scratch, d);
+    const res = await checkDesign(cfg.kitDir, scratch, bp, { maxSize: req.maxSize, type: checkType, ...(open ? { profile: req.profile ?? ['door', 'lit', 'no_floating'] } : {}) }, 120_000, bibleArgs);
+    this.check(id, r);
     if (!res.ok) throw new Error(`the sim installs the kit example ${src}, which did not pass: ${res.problem ?? 'the check failed'}`);
     sc.designStep(id, 'rendering', 'rendering previews');
-    const r = await renderPreviews(scratch, res.nbt!);
-    this.check(id);
+    const rp = await renderPreviews(scratch, res.nbt!);
+    this.check(id, r);
     const installed = installDesign({
       library: cfg.libraryDir,
       baseId: designBaseId(req),
+      taken: new Set([...this.taken].filter(([k]) => k !== id).map(([, v]) => v)),
       nbt: res.nbt!,
       sidecar: res.sidecar!,
       source: design,
-      previews: r.files,
+      previews: rp.files,
+      files: sc.entryFiles(d, scratch),
       meta: {
         name: req.name ?? `Sim ${req.style} ${req.type}`,
         description: `Simulated design (a copy of the kit example ${src})${req.notes ? `: ${truncate(req.notes, 200)}` : ''}`,
         request: req,
         createdAt: sc.now(),
-        ...(req.ext && Object.keys(req.ext).length ? { extra: { ext: req.ext } } : {}),
+        extra: sc.entryExtra(d),
       },
     });
     const s = res.sidecar!.size!;
-    const notes = [src !== req.type ? `copied ${src} (no ${req.type} example)` : '', r.skipped ? 'no renderer' : r.error ? `previews: ${truncate(r.error, 80)}` : '', res.warnings.length ? `${res.warnings.length} checker warning(s)` : ''].filter(Boolean).join('; ');
+    const notes = [src !== req.type ? `copied ${src} (no ${req.type} example)` : '', rp.skipped ? 'no renderer' : rp.error ? `previews: ${truncate(rp.error, 80)}` : '', res.warnings.length ? `${res.warnings.length} checker warning(s)` : ''].filter(Boolean).join('; ');
     sc.designDone(id, installed, { x: s.x, y: s.y, z: s.z }, notes);
   }
 }

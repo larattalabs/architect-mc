@@ -17,7 +17,7 @@ export const PROTOCOL_VERSION = 1 as const;
 export const PROTOCOLS = [1, 2] as const;
 export type Protocol = (typeof PROTOCOLS)[number];
 /** What a protocol-2 snapshot lists in `features`. */
-export const FEATURES = ['job.run', 'job.tools', 'blobs', 'budget', 'designs.v2'] as const;
+export const FEATURES = ['job.run', 'job.tools', 'blobs', 'budget', 'designs.v2', 'bibles', 'design.groups', 'named.parts', 'open.types', 'estimates', 'reskin'] as const;
 
 const Ts = z.number().int().nonnegative();
 const Id = z.string().min(1).max(64);
@@ -46,6 +46,7 @@ export const Status = z.object({
   designing: Id.optional().describe('the running design id'),
   queued: z.number().int().nonnegative(),
   usageLimitUntil: Ts.optional(),
+  designingIds: z.array(Id).optional().describe('(4b addition) every running design (the pool runs up to designConcurrency); `designing` is the first'),
   backend: z.enum(['claude', 'sim']).optional().describe('(addition) which designer runs the jobs'),
   message: z.string().optional().describe('(addition) one human line about auth / the SDK, for the Status tab'),
 });
@@ -95,13 +96,31 @@ export const ModelId = z.string().trim().min(1).max(100).regex(/^[A-Za-z0-9._:@/
 const BudgetUsd = z.number().positive().max(1000);
 const Owner = z.string().trim().min(1).max(200);
 
+/** (4b, R4) a building type: a preset or an open type (`hellish_lair`). */
+export const OPEN_TYPE = /^[a-z][a-z0-9_]{0,39}$/;
+export const OpenType = z.string().regex(OPEN_TYPE, 'a type is a preset or a short open type ([a-z][a-z0-9_]{0,39})');
+/** (4b, R4) one checker rule of an open type's profile. */
+export const PROFILE_RULE = /^(door|roof_closed|floors_reachable|lit|no_floating|interior|min_interior_volume:\d{1,5}|passage:\d{1,2}x\d{1,2}|tall:\d+(\.\d+)?)$/;
+export const Profile = z.array(z.string().regex(PROFILE_RULE, 'a profile rule is door, roof_closed, floors_reachable, lit, no_floating, interior, min_interior_volume:<n>, passage:<w>x<h> or tall:<ratio>')).min(1).max(12);
+export const BIBLE_ID = /^[a-z0-9_]{1,64}$/;
+export const BibleId = z.string().regex(BIBLE_ID, 'bible ids are [a-z0-9_]{1,64}');
+export const ItemKey = z.string().min(1).max(100).regex(/^[A-Za-z0-9_.:/-]+$/, 'item keys are [A-Za-z0-9_.:/-]{1,100}');
+export const ItemRole = z.enum(['landmark', 'ordinary']);
+export type ItemRole = z.infer<typeof ItemRole>;
+
 export const DesignRequest = DesignRequestBase.extend({
+  type: OpenType.describe('(protocol 2: any open type; protocol 1: the 11 presets) the building type'),
+  profile: Profile.optional().describe('(4b, R4) an open type: the checker rules it wants (default door, lit, no_floating); preset types ignore it'),
   owner: Owner.optional().describe('(protocol 2) who asked, by convention "<modid>:<thing>"; absent = the player'),
   ext: Ext.optional().describe("(protocol 2) merged into the installed entry's blueprint JSON `ext`; kept through variants and imports"),
   model: ModelId.optional().describe('(protocol 2) the design model (default: config designModel)'),
   budgetUsd: BudgetUsd.optional().describe('(protocol 2) hard stop on the estimated cost (USD) of this design, across resumes'),
-  bible: z.string().max(200).optional().describe('(protocol 2, reserved for 4b: accepted and ignored)'),
-  group: z.string().max(200).optional().describe('(protocol 2, reserved for 4b: accepted and ignored)'),
+  bible: BibleId.optional().describe('(4b) design with this style bible (its roles, prose and components); a group sets it'),
+  bibleVersion: z.number().int().min(1).optional().describe('(4b) the bible version (default: its latest when the request is made; the sidecar pins it)'),
+  group: z.string().max(200).optional().describe('(4b) set by the sidecar: the group this design belongs to (design.request refuses it)'),
+  itemKey: ItemKey.optional().describe('(4b) set by the sidecar for a group item: the caller\'s key'),
+  wave: z.number().int().min(0).max(8).optional().describe('(4b) a group item\'s wave (0 = anchor)'),
+  role: ItemRole.optional().describe('(4b) a group item\'s role'),
 }).superRefine(noDuplicateFeatures);
 export type DesignRequest = z.infer<typeof DesignRequest>;
 
@@ -173,10 +192,190 @@ export const Variant = z.object({
   size: z.object({ x: z.number().int(), y: z.number().int(), z: z.number().int() }).optional(),
   previews: z.array(z.string()).optional().describe('(addition) done: absolute paths of the preview PNGs'),
   error: z.string().optional().describe('failed: why, with the checker lines'),
+  bible: z.object({ id: BibleId, version: z.number().int().min(1) }).optional().describe('(4b) a re-skin: the bible (and version) it is built with'),
+  reskin: Id.optional().describe('(4b) the reskin.request this variant belongs to'),
   createdAt: Ts,
   updatedAt: Ts,
 });
 export type Variant = z.infer<typeof Variant>;
+
+// ---- phase 4b: style bibles, design groups, estimates, re-skins (docs/CONTRACT.md "Phase 4b contract") ----
+
+export const BiblePin = z.object({ id: BibleId, version: z.number().int().min(1) });
+export type BiblePin = z.infer<typeof BiblePin>;
+/** A bible reference in a request: an id (its latest version) or { id, version }. */
+export const BibleRef = z.union([BibleId, z.object({ id: BibleId, version: z.number().int().min(1).optional() })]);
+export type BibleRef = z.infer<typeof BibleRef>;
+
+export const MAX_GROUP_ITEMS = 24;
+
+export const GroupItemInput = DesignRequestBase.extend({
+  type: OpenType,
+  profile: Profile.optional(),
+  itemKey: ItemKey.optional().describe("the caller's key, unique in the group (default item<n>)"),
+  ext: Ext.optional(),
+  role: ItemRole.optional().describe('landmark (default model claude-opus-5-5) or ordinary (claude-sonnet-5-5, the default)'),
+  model: ModelId.optional(),
+  wave: z.number().int().min(1).max(8).optional().describe('default 1; a wave starts when the previous one is done or failed'),
+  anchor: z.boolean().optional().describe('true = wave 0 (designed first; later waves see its render)'),
+  owner: Owner.optional(),
+  budgetUsd: BudgetUsd.optional(),
+}).superRefine(noDuplicateFeatures);
+export type GroupItemInput = z.infer<typeof GroupItemInput>;
+
+export const GroupRequest = z
+  .object({
+    id: z.string().regex(/^[A-Za-z0-9_-]{1,64}$/).optional().describe('ignored when taken; the sidecar answers the id it used'),
+    name: z.string().trim().min(1).max(60),
+    bible: BibleRef.describe('the style bible every item designs with (pinned to its version now)'),
+    owner: Owner.optional(),
+    ext: Ext.optional(),
+    concurrency: z.number().int().min(1).max(6).optional().describe('default 3; the sidecar-wide designConcurrency caps all groups'),
+    budgetUsd: BudgetUsd.optional().describe("hard cap on the group's total; queued items are cancelled with error \"budget\" when it is reached"),
+    items: z.array(GroupItemInput).min(1).max(MAX_GROUP_ITEMS),
+  })
+  .superRefine((g, ctx) => {
+    const keys = g.items.map((it, i) => it.itemKey ?? `item${i + 1}`);
+    if (new Set(keys).size !== keys.length) ctx.addIssue({ code: 'custom', path: ['items'], message: 'duplicate itemKey' });
+  });
+export type GroupRequest = z.infer<typeof GroupRequest>;
+
+export const GroupStatus = z
+  .enum(['queued', 'running', 'held_usage', 'paused_budget', 'done', 'failed', 'cancelled'])
+  .describe('held_usage: a usage limit holds every item; paused_budget: the soft budget stopped dispatching (extend / resume); done: every item ended and at least one is done; failed: none is; done, failed and cancelled are final');
+export type GroupStatus = z.infer<typeof GroupStatus>;
+
+export const GroupItem = z.object({
+  itemKey: ItemKey,
+  ext: Ext.optional(),
+  designId: Id,
+  entryId: z.string().optional().describe('done: the library entry'),
+  status: DesignStatus,
+  step: z.string(),
+  cost: Cost,
+  wave: z.number().int().min(0),
+  role: ItemRole,
+  model: z.string(),
+  type: z.string(),
+  name: z.string().optional(),
+  error: z.string().optional(),
+});
+export type GroupItem = z.infer<typeof GroupItem>;
+
+export const Group = z.object({
+  id: Id.describe('"g<n>"'),
+  name: z.string(),
+  bible: BiblePin,
+  owner: z.string().optional(),
+  ext: Ext.optional(),
+  concurrency: z.number().int(),
+  budgetUsd: z.number().optional(),
+  softBudgetFraction: z.number(),
+  status: GroupStatus,
+  reason: z.string().optional().describe('why it is paused / failed / cancelled ("budget", ...)'),
+  items: z.array(GroupItem),
+  designs: z.array(z.object({ id: Id, status: DesignStatus, step: z.string() })).describe('(contract shape) the items as designs'),
+  wave: z.number().int().optional().describe('the wave running now'),
+  done: z.number().int(),
+  failed: z.number().int(),
+  cost: Cost.describe('the sum of the items'),
+  usageLimitUntil: Ts.optional(),
+  createdAt: Ts,
+  updatedAt: Ts,
+});
+export type Group = z.infer<typeof Group>;
+
+export const Estimate = z.object({
+  usdLow: z.number(),
+  usdHigh: z.number(),
+  minutesLow: z.number(),
+  minutesHigh: z.number(),
+  basis: z.string().describe('what it is computed from: "seed" values or "<n> measured" designs per model, the concurrency, the usage limit'),
+});
+export type Estimate = z.infer<typeof Estimate>;
+
+export const BibleScope = z.enum(['building', 'settlement']);
+export const BibleRequest = z.object({
+  prompt: z.string().trim().min(1).max(2000).describe('what the place is ("weathered fishing village on stilts")'),
+  name: z.string().trim().min(1).max(40).optional(),
+  owner: Owner.optional(),
+  ext: Ext.optional(),
+  model: ModelId.optional().describe('default config bibleModel (claude-opus-5-5)'),
+  budgetUsd: BudgetUsd.optional(),
+  references: z.array(z.string().regex(LIBRARY_ID).max(64)).max(8).optional().describe('library entries whose look to learn from'),
+  scope: BibleScope.optional().describe('settlement: also the macro roles rock, surface, subsurface, rubble, rail, structure'),
+  seedPreset: z.string().regex(/^[a-z0-9_]{1,32}$/).optional().describe('start from a built-in bible (the palette presets)'),
+});
+export type BibleRequest = z.infer<typeof BibleRequest>;
+
+export const BibleInfo = z.object({
+  id: BibleId,
+  name: z.string(),
+  version: z.number().int(),
+  versions: z.array(z.number().int()),
+  builtin: z.boolean(),
+  scope: BibleScope,
+  prompt: z.string().optional(),
+  roles: z.record(z.string(), z.string()),
+  prose: z.string().optional().describe('bible.md (at most 8000 characters)'),
+  sheetPath: z.string().optional().describe('absolute path of sheet.png'),
+  dir: z.string().optional().describe('absolute path of the version folder'),
+  components: z.array(z.string()),
+  owner: z.string().optional(),
+  ext: Ext.optional(),
+  createdAt: Ts.optional(),
+  cost: Cost.optional(),
+});
+export type BibleInfo = z.infer<typeof BibleInfo>;
+
+export const BibleJobStatus = z
+  .enum(['queued', 'drafting', 'components', 'checking', 'rendering', 'done', 'failed', 'cancelled'])
+  .describe('queued -> drafting (the structured bible) -> components (the agent writes components.mjs) -> checking (the component frame, pristine kit) -> rendering (sheet) -> done; failed and cancelled; done, failed and cancelled are final');
+export type BibleJobStatus = z.infer<typeof BibleJobStatus>;
+
+export const BibleJob = z.object({
+  id: Id.describe('"b<n>"'),
+  kind: z.enum(['request', 'revise']),
+  bibleId: BibleId.describe('the bible it makes (request: reserved at once) or revises'),
+  version: z.number().int().min(1).describe('the version it makes'),
+  request: BibleRequest.extend({ notes: z.string().max(4000).optional() }),
+  status: BibleJobStatus,
+  step: z.string(),
+  error: z.string().optional(),
+  cost: Cost,
+  rounds: z.number().int().optional().describe('component rounds so far'),
+  usageLimitUntil: Ts.optional(),
+  bible: BibleInfo.optional().describe('done: the installed bible'),
+  createdAt: Ts,
+  updatedAt: Ts,
+});
+export type BibleJob = z.infer<typeof BibleJob>;
+
+export const ReskinFrom = z
+  .object({
+    group: z.string().max(64).optional(),
+    bible: BibleId.optional(),
+    bibleVersion: z.number().int().min(1).optional(),
+    entries: z.array(z.string().regex(LIBRARY_ID).max(64)).max(64).optional(),
+  })
+  .refine((f) => !!(f.group || f.bible || f.entries?.length), 'from needs a group, a bible or entries');
+export type ReskinFrom = z.infer<typeof ReskinFrom>;
+
+export const Reskin = z.object({
+  id: Id.describe('"r<n>"'),
+  bible: BiblePin,
+  from: ReskinFrom,
+  status: z.enum(['building', 'done', 'failed']),
+  step: z.string(),
+  variants: z.array(Id),
+  entries: z.array(z.string()).describe('the new library entries, as they finish'),
+  done: z.number().int(),
+  failed: z.number().int(),
+  error: z.string().optional(),
+  createdAt: Ts,
+  updatedAt: Ts,
+});
+export type Reskin = z.infer<typeof Reskin>;
 
 /** What `node kit/tools/describe.mjs --palettes` prints. */
 export const KitPalettes = z.object({
@@ -291,6 +490,10 @@ export const SnapshotMsg = z.object({
   protocol: z.number().int().optional().describe('(protocol 2) the protocol chosen for this connection'),
   features: z.array(z.string()).optional().describe('(protocol 2) e.g. "job.run", "job.tools", "blobs", "budget", "designs.v2"'),
   jobs: z.array(Job).optional().describe('(protocol 2) the last 20 jobs plus any unfinished one'),
+  groups: z.array(Group).optional().describe('(4b) the last 20 design groups plus any unfinished one'),
+  bibles: z.array(BibleJob).optional().describe('(4b) the last 20 bible jobs plus any unfinished one'),
+  bibleIndex: z.array(BibleInfo).optional().describe('(4b) every installed bible (latest version) and the built-in ones'),
+  reskins: z.array(Reskin).optional().describe('(4b) the last 20 re-skins plus any unfinished one'),
 });
 export const StatusMsg = z.object({ ...envelope('status'), status: Status });
 export const DesignUpsertMsgV1 = z.object({ ...envelope('design.upsert'), design: DesignV1 });
@@ -321,7 +524,12 @@ export const JobToolCallMsg = z.object({
   timeoutMs: z.number().int().optional().describe('(addition) the tool timeout in force'),
 });
 
-export const ServerMessage = z.discriminatedUnion('type', [SnapshotMsg, StatusMsg, DesignUpsertMsg, VariantUpsertMsg, AckMsg, ErrorMsg, JobUpsertMsg, JobEventMsg, JobToolCallMsg]);
+export const GroupUpsertMsg = z.object({ ...envelope('group.upsert'), group: Group });
+export const BibleUpsertMsg = z.object({ ...envelope('bible.upsert'), bible: BibleJob });
+export const BibleIndexMsg = z.object({ ...envelope('bible.index'), bibles: z.array(BibleInfo).describe('every installed bible and the built-in ones (sent when one is installed)') });
+export const ReskinUpsertMsg = z.object({ ...envelope('reskin.upsert'), reskin: Reskin });
+
+export const ServerMessage = z.discriminatedUnion('type', [SnapshotMsg, StatusMsg, DesignUpsertMsg, VariantUpsertMsg, AckMsg, ErrorMsg, JobUpsertMsg, JobEventMsg, JobToolCallMsg, GroupUpsertMsg, BibleUpsertMsg, BibleIndexMsg, ReskinUpsertMsg]);
 export type ServerMessage = z.infer<typeof ServerMessage>;
 /** What protocol 1 knows: the phase 1-3 messages, with their phase 1-3 fields. */
 export const ServerMessageV1 = z.discriminatedUnion('type', [SnapshotMsgV1, StatusMsg, DesignUpsertMsgV1, VariantUpsertMsg, AckMsg, ErrorMsg]);
@@ -350,6 +558,7 @@ export const VariantRequestMsg = z.object({
   palette: PaletteSpec.optional(),
   values: ParamValues.optional(),
   name: z.string().trim().min(1).max(40).optional().describe('the displayName of the new entry (default: "<name> (<palette>, floors 2)")'),
+  bible: BibleRef.optional().describe('(4b) a re-skin: build with this bible\'s roles (excludes palette); the design keeps its own components'),
 });
 export const ImportRequestMsg = z.object({
   ...envelope('import.request'),
@@ -383,6 +592,19 @@ export const BlobPutMsg = z
   });
 export const BlobDeleteMsg = z.object({ ...envelope('blob.delete'), blobId: BlobId });
 export const ClientPausedMsg = z.object({ ...envelope('client.paused'), paused: z.boolean() });
+// 4b
+export const DesignGroupMsg = z.object({ ...envelope('design.group'), group: GroupRequest });
+export const GroupCancelMsg = z.object({ ...envelope('group.cancel'), groupId: Id });
+export const GroupExtendMsg = z.object({ ...envelope('group.extend'), groupId: Id, budgetUsd: BudgetUsd });
+export const GroupResumeMsg = z.object({ ...envelope('group.resume'), groupId: Id });
+export const DesignEstimateMsg = z
+  .object({ ...envelope('design.estimate'), group: GroupRequest.optional(), request: DesignRequest.optional() })
+  .refine((m) => !!m.group !== !!m.request, 'send exactly one of group and request');
+export const BibleRequestMsg = z.object({ ...envelope('bible.request'), request: BibleRequest });
+export const BibleReviseMsg = z.object({ ...envelope('bible.revise'), id: BibleId, notes: z.string().trim().min(1).max(4000), model: ModelId.optional(), budgetUsd: BudgetUsd.optional() });
+export const BibleEstimateMsg = z.object({ ...envelope('bible.estimate'), request: BibleRequest.optional() });
+export const BibleCancelMsg = z.object({ ...envelope('bible.cancel'), jobId: Id });
+export const ReskinRequestMsg = z.object({ ...envelope('reskin.request'), bibleId: BibleId, version: z.number().int().min(1).optional(), from: ReskinFrom });
 
 export const ClientMessage = z.discriminatedUnion('type', [
   HelloMsg,
@@ -398,6 +620,16 @@ export const ClientMessage = z.discriminatedUnion('type', [
   BlobPutMsg,
   BlobDeleteMsg,
   ClientPausedMsg,
+  DesignGroupMsg,
+  GroupCancelMsg,
+  GroupExtendMsg,
+  GroupResumeMsg,
+  DesignEstimateMsg,
+  BibleRequestMsg,
+  BibleReviseMsg,
+  BibleEstimateMsg,
+  BibleCancelMsg,
+  ReskinRequestMsg,
 ]);
 export type ClientMessage = z.infer<typeof ClientMessage>;
 /** What a protocol-1 client may send (exactly the phase 1-3 messages and fields). */

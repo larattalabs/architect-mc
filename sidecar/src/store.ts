@@ -13,7 +13,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { BlobMeta } from './blobs.js';
-import type { Cost, Design, Job, JobSpec, Variant } from './protocol.js';
+import type { BibleWork } from './bibles.js';
+import type { EstimateData } from './estimates.js';
+import type { GroupWork } from './groups.js';
+import type { BibleJob, Cost, Design, Group, Job, JobSpec, Reskin, Variant } from './protocol.js';
 import { ensureDir, readJson, writeJsonAtomic } from './util/fsx.js';
 
 export interface SessionRecord {
@@ -88,6 +91,18 @@ export interface StateData {
   limit?: { until: number; type?: string };
   /** total estimated spend (USD) of all design turns */
   costUsd?: number;
+  /** (4b) design groups, oldest first, and their own bookkeeping */
+  groups?: Group[];
+  groupWork?: Record<string, GroupWork>;
+  /** (4b) bible jobs, oldest first, and their progress */
+  bibleJobs?: BibleJob[];
+  bibleWork?: Record<string, BibleWork>;
+  /** (4b) re-skins of a collection */
+  reskins?: Reskin[];
+  /** (4b) the rolling per-model averages behind design.estimate / bible.estimate */
+  estimates?: EstimateData;
+  /** (4b) design id -> when it first started (for the time estimates) */
+  runStarts?: Record<string, number>;
 }
 
 function emptyState(now: number): StateData {

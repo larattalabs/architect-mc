@@ -2,7 +2,7 @@
 // buildings): BRIEF.md from the request, the system prompt, the first / fix / restart prompts, and
 // one line of progress per tool call.
 import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk';
-import type { BuildingType, DesignRequest } from '../protocol.js';
+import { BUILDING_TYPES, type BuildingType, type DesignRequest } from '../protocol.js';
 
 /** design agent turns per job (the first + follow-ups after a failed check) */
 export const MAX_DESIGN_ROUNDS = 4;
@@ -70,8 +70,41 @@ export const PROFILE_LINE: Record<BuildingType, string> = {
   custom: 'the common rules only',
 };
 
+const isPreset = (t: string): t is BuildingType => (BUILDING_TYPES as readonly string[]).includes(t);
+const DEFAULT_PROFILE = ['door', 'lit', 'no_floating'];
+
+/** What makes a type read as that type (an open type: its name and the request). */
+export function typeGuide(type: string): string {
+  if (isPreset(type)) return TYPE_GUIDE[type];
+  return `${type.replace(/_/g, ' ')}: an open building type (not one of the presets). Work out from the name, the style and the notes what such a building has and how it reads from outside; give it a clear entrance and the rooms its use needs.`;
+}
+
+const RULE_TEXT: Record<string, string> = {
+  door: 'a closed outside door on the front face, reachable from the entrance',
+  roof_closed: 'the interior closed by walls and a roof',
+  floors_reachable: 'every floor level reachable from the entrance',
+  lit: 'every standable interior cell lit (needs `interior`)',
+  no_floating: 'nothing floating',
+  interior: 'an `interior` box',
+};
+
+/** The checker profile line for a request's type (open types: their profile, default door, lit, no_floating). */
+export function profileLine(type: string, profile?: string[]): string {
+  if (isPreset(type)) return PROFILE_LINE[type];
+  const rules = profile?.length ? profile : DEFAULT_PROFILE;
+  return `this open type's profile is [${rules.join(', ')}]: ${rules
+    .map((r) => {
+      const [n, a] = r.split(':');
+      if (n === 'min_interior_volume') return `an interior volume of at least ${a} free cells`;
+      if (n === 'passage') return `a passage through the building, front to back, at least ${a!.replace('x', ' wide and ')} tall`;
+      if (n === 'tall') return `height >= ${a} x the smaller footprint side`;
+      return RULE_TEXT[n!] ?? r;
+    })
+    .join('; ')} (and the common rules: vanilla blocks, anchors, size). Set \`profile: ${JSON.stringify(rules)}\` on the Blueprint`;
+}
+
 /** The example design closest to a type (kit/designs/<example>.mjs), in order of preference. */
-export function examplesFor(type: BuildingType, available: string[]): string[] {
+export function examplesFor(type: string, available: string[]): string[] {
   const prefer: Record<BuildingType, string[]> = {
     house: ['house', 'cottage', 'cabin'],
     cabin: ['cabin', 'cottage', 'house'],
@@ -85,7 +118,7 @@ export function examplesFor(type: BuildingType, available: string[]): string[] {
     gatehouse: ['gatehouse', 'tower'],
     custom: [],
   };
-  const order = [...prefer[type], 'cabin', 'tower'];
+  const order = [...(isPreset(type) ? prefer[type] : []), 'cabin', 'tower'];
   const out = order.filter((x, i) => available.includes(x) && order.indexOf(x) === i);
   return out.length ? out : available.slice(0, 2);
 }
@@ -97,6 +130,24 @@ export interface BriefOptions {
   examples: string[];
   /** what the remix source is, if any */
   remix?: string;
+  /** (4b) the style bible copied into bible/ */
+  bible?: { id: string; version: number; name: string; roles: Record<string, string>; components: string[]; hasProse: boolean };
+  /** (4b) renders of the group's finished earlier-wave items in neighbours/ */
+  neighbours?: Array<{ file: string; entryId: string; name?: string; type: string }>;
+}
+
+/** The style-bible section of BRIEF.md (4b). */
+export function bibleSection(b: NonNullable<BriefOptions['bible']>, bp: string): string[] {
+  const roles = Object.entries(b.roles).map(([k, v]) => `\`${k}\` ${v.replace(/^minecraft:/, '')}`).join(', ');
+  return [
+    `## The style bible: ${b.name} (\`${b.id}\` v${b.version})`,
+    '',
+    `This building is one of a set that must read as ONE place. The bible is in \`bible/\`: \`bible/bible.json\` (roles, proportions, roof language, silhouette, motifs, tiers, lighting, what to avoid)${b.hasProse ? ', `bible/bible.md` (the prose: read it first)' : ''} and \`bible/components.mjs\` (the shared component library). Follow it over your own taste.`,
+    `- **Roles are the materials.** Roles: ${roles}. Default palette = the bible's: \`import { palette } from '../lib/kit.mjs'; import { loadBible } from '../lib/bible.mjs'; const BIBLE = loadBible(new URL('../../bible/bible.json', import.meta.url));\` and \`export default function build({ palette: p = palette({ bible: BIBLE }), ... })\`. Every palette field comes from a role (\`p.wall\`, \`p.plaster\` = wall_alt, \`p.stoneTrim\` = trim, \`p.roofStairs\`, \`p.floor\`, \`p.frame\`, \`p.accentPlanks\`, \`p.light\`, \`p.pane\`, \`p.foundation\`, \`p.path\`, plus the wood and stone sets derived from them); extra roles are \`p.roles.<name>\`. Use the bible's tiers (important vs humble materials) and proportions (storey height, roof pitch, overhang, window rhythm, plinth).`,
+    `- **Use the components** for those elements, never your own version of them: \`import * as C from '../../bible/components.mjs';\` then \`C.window(bp, { x, y, z, facing, width, height }, opts)\`, \`C.door_surround(bp, { x, y, z, facing })\` (after placing the door), \`C.lantern_post(bp, { x, y, z, facing })\`, \`C.roof_trim(bp, { x, y, z, facing, length })\`, \`C.chimney(bp, { x, y, z, facing, top })\`${b.components.filter((c) => !['window', 'door_surround', 'lantern_post', 'roof_trim', 'chimney'].includes(c)).map((c) => `, \`C.${c}(...)\``).join('')}. Read \`bible/components.mjs\` for what each one does and what \`at\` means (design coordinates; facing = outwards).`,
+    `- Keep the bible's files as they are (the sidecar puts them back before its check); \`kit/designs/${bp}.mjs\` imports them from \`../../bible/\`.`,
+    '',
+  ];
 }
 
 /** BRIEF.md for a request: what the design agent reads first. */
@@ -113,8 +164,8 @@ export function designBrief(req: DesignRequest, bp: string, opts: BriefOptions):
     '',
     '## Request',
     '',
-    `- type: \`${req.type}\` (set \`type: '${req.type}'\` on the Blueprint). ${TYPE_GUIDE[req.type]}`,
-    `- checker profile for ${req.type}: ${PROFILE_LINE[req.type]}.`,
+    `- type: \`${req.type}\` (set \`type: '${req.type}'\` on the Blueprint). ${typeGuide(req.type)}`,
+    `- checker profile for ${req.type}: ${profileLine(req.type, req.profile)}.`,
     `- style: "${req.style}". Interpret it with vanilla blocks; let it shape the materials, the roof form, the windows and the details.`,
     req.materials ? `- materials: "${req.materials}". Make the design's default palette match them (a preset, or \`palette({ wood, stone, roof, accent })\` with the closest vanilla names).` : '- materials: your choice, fitting the type and the style: pick the default palette (a preset or `palette({ wood, stone, roof, accent })`).',
     `- features: ${req.features.length ? req.features.map(featureLine).join('; ') : 'none requested'}`,
@@ -124,7 +175,17 @@ export function designBrief(req: DesignRequest, bp: string, opts: BriefOptions):
     '- description: one sentence for the sidecar\'s `description`; tags: a few words (style, size) for `tags`.',
     req.notes ? `- notes from the player: ${req.notes}` : '',
     req.remix ? `- remix: start from the library design \`${req.remix}\`. ${opts.remix ?? 'Its source was not found; design from scratch in its spirit.'}` : '',
+    req.group ? `- this is item \`${req.itemKey ?? '?'}\` (${req.role ?? 'ordinary'}${req.role === 'landmark' ? ': the set\'s centrepiece, the most elaborate and recognisable' : ': it supports the landmarks, simpler and smaller'}) of a design group, wave ${req.wave ?? 1}.` : '',
     '',
+    ...(opts.bible ? bibleSection(opts.bible, bp) : []),
+    ...(opts.neighbours?.length
+      ? [
+          '## Neighbours',
+          '',
+          `These finished buildings of the same set stand next to yours: ${opts.neighbours.map((n) => `\`${n.file}\` (${n.name ? `${n.name}, ` : ''}a ${n.type})`).join(', ')}. Read the PNGs and make yours belong with them: the same roof language, materials, trim and details, at a scale that suits your type.`,
+          '',
+        ]
+      : []),
     '## The contract (CONTRACT.md has the full text: read it)',
     '',
     '- Coordinates are relative to the template origin (minimum corner); +x east, +y up, +z south. `front` is the side the entrance faces: keep `south` unless the notes say otherwise. Every door is written closed.',
@@ -140,8 +201,9 @@ export function designBrief(req: DesignRequest, bp: string, opts: BriefOptions):
     '- Read `kit/README.md` first: it has the kit API and a complete small parametric design.',
     '- **Make it parametric** (players make variants of it later without you, so this matters): `export const params = {...}` with 2 to 4 meaningful params (e.g. floors, width or depth, porch on/off, roof style; `int` with min/max/default, `bool`, `enum` with options), each with a `label`. The default export takes `{ palette, ...values }` with the defaults in the signature. The defaults must fit the maximum size above; the bounds may go past it. Every combination must build and pass the checker: try the corners (`--values \'{"floors":3,"porch":false}\'`) before you finish.',
     '- **Materials come from the palette**: the default export gets `palette` (default: the preset or `palette({ wood, stone, roof, accent })` that fits the request). Read every wood and stone from it (`p.planks`, `p.log`, `p.strippedLog`, `p.stairs`, `p.slab`, `p.fence`, `p.door`, `p.trapdoor`, `p.accentLog`, `p.accentStairs`, `p.stone`, `p.stoneStairs`, `p.stoneSlab`, `p.stoneWall`, `p.stoneTrim`, `p.roofStairs`, `p.roofSlab`, `p.roofBlock`, `p.plaster`), never a hard-coded wood or stone id, so a palette swap re-skins the whole building; the checker warns otherwise. Decor (chests, barrels, beds, lanterns, glass, carpets, iron) is free. Check a second preset too (`--palette cherry`, `--palette fortress`).',
+    "- **Name the parts**: wrap every major mass in `bp.part('<name>', () => { ... })` (e.g. `main`, `roof`, `porch`, `tower`, `wing_east`, `chimney`, `furnishings`): at least 2 parts, and at most 20% of the cells outside any part (the checker warns otherwise). Names are stable ids (later edits diff by them): lower_snake_case, unique. Declare consts outside the part closures if several parts use them.",
     `- Build it semantically with the kit helpers in \`kit/lib/kit.mjs\` (walls with openings, floors, doors, roofs with overhang, stairs and ladders, windows, chimney, porch, lighting, \`anchor()\`), not as a dump of raw coordinates. ${ex.length ? `Start by reading the closest example${ex.length > 1 ? 's' : ''}: ${ex.map((e) => `\`kit/designs/${e}.mjs\``).join(', ')} (each is parametric and palette-driven: see how its \`params\` shape the code).` : 'Look at the examples in `kit/designs/`.'}`,
-    `- Build and check: \`node kit/build.mjs ${bp} --max ${m.x},${m.y},${m.z} --type ${req.type}\` (writes kit/out/${bp}.nbt and the sidecar, then runs the checker; add \`--palette <preset>\` / \`--values <json>\` for the variants). "check: OK" is required with the defaults; fix the warnings too.`,
+    `- Build and check: \`node kit/build.mjs ${bp} --max ${m.x},${m.y},${m.z} --type ${req.type}${!isPreset(req.type) ? ` --profile ${(req.profile ?? DEFAULT_PROFILE).join(',')}` : ''}\` (writes kit/out/${bp}.nbt and the sidecar, then runs the checker; add \`--palette <preset>\` / \`--values <json>\` for the variants). "check: OK" is required with the defaults; fix the warnings too.`,
     opts.renderer
       ? `- Look at it: \`node kit/render.mjs kit/out/${bp}.nbt --out previews\` writes ${bp}.preview-iso.png / -top.png / -front.png into previews/; Read the PNGs and fix what looks wrong (holes, floating blocks, a missing roof, the entrance not on the front, dark rooms, a flat or boxy look). Iterate until it looks like a ${req.type} a player would be proud of.`
       : '- There is no renderer in this kit: check the layout by reasoning about the code and the checker output.',

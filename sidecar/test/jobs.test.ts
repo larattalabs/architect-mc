@@ -80,6 +80,8 @@ async function startEnv(root: string, port = 0, beforeStart?: (sc: Sidecar) => v
   const kit = fs.existsSync(path.join(root, 'kit')) ? path.join(root, 'kit') : copyKit(root);
   const cfg = loadConfig(['--data', path.join(root, 'data'), '--library', path.join(root, 'library'), '--kit', kit, '--port', String(port), '--backend', 'sim'], {});
   cfg.simStepMs = 20;
+  // one design-pool slot: these tests check that an agent job waits for a running design (they share the pool)
+  cfg.designConcurrency = 1;
   fs.mkdirSync(cfg.dataDir, { recursive: true });
   const store = new Store(cfg.dataDir, { debounceMs: 5 });
   const sc = new Sidecar(cfg, store, memoryLogger());
@@ -125,7 +127,7 @@ describe('protocol 2 over a WebSocket (sim backend)', () => {
     const c = await hello(env.port, { protocols: [1, 2] });
     const snap = c.msgs.find((m) => m.type === 'snapshot')!;
     expect(snap).toMatchObject({ protocol: 2, features: [...FEATURES], jobs: [] });
-    expect(FEATURES).toEqual(['job.run', 'job.tools', 'blobs', 'budget', 'designs.v2']);
+    expect(FEATURES).toEqual(['job.run', 'job.tools', 'blobs', 'budget', 'designs.v2', 'bibles', 'design.groups', 'named.parts', 'open.types', 'estimates', 'reskin']);
     c.ws.close();
     const bad = await connect(env.port);
     bad.send({ type: 'hello', id: 'h', token: TOKEN, protocols: [3, 4] });
@@ -147,7 +149,7 @@ describe('protocol 2 over a WebSocket (sim backend)', () => {
     expect(ja.ok).toBe(false);
     expect(ja.error).toBe(ua.error);
     // a v2 design (owner, ext, budget) and a v2 job
-    v2.send({ type: 'design.request', id: 'd', request: request({ name: 'Owned Mill', owner: 'steward_mc:s1', ext: { 'steward_mc:lot': 'L1' }, budgetUsd: 2, model: 'claude-haiku-5', bible: 'b1', group: 'g1' }) });
+    v2.send({ type: 'design.request', id: 'd', request: request({ name: 'Owned Mill', owner: 'steward_mc:s1', ext: { 'steward_mc:lot': 'L1' }, budgetUsd: 2, model: 'claude-haiku-5' }) });
     const designId = (await v2.ack('d')).result.designId as string;
     const jobId = await runJob(v2, 'r', { kind: 'structured', prompt: 'a concept card', schema });
     await jobDone(v2, jobId);
@@ -162,7 +164,7 @@ describe('protocol 2 over a WebSocket (sim backend)', () => {
     }
     // the v2 client: the same design with cost and its v2 fields
     const d2 = v2.msgs.filter((m) => m.type === 'design.upsert' && m.design.id === designId).at(-1)!.design;
-    expect(d2.request).toMatchObject({ owner: 'steward_mc:s1', ext: { 'steward_mc:lot': 'L1' }, budgetUsd: 2, model: 'claude-haiku-5', bible: 'b1', group: 'g1' });
+    expect(d2.request).toMatchObject({ owner: 'steward_mc:s1', ext: { 'steward_mc:lot': 'L1' }, budgetUsd: 2, model: 'claude-haiku-5' });
     expect(d2.cost).toEqual({ usd: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, turns: 3 });
     // the design's ext landed on its entry
     const entry = JSON.parse(fs.readFileSync(path.join(env.sc.config.libraryDir, d2.blueprintId, `${d2.blueprintId}.blueprint.json`), 'utf8'));
@@ -462,12 +464,12 @@ describe('resume after a sidecar restart (sim backend)', () => {
     c.ws.close();
     await env.stop();
     // the restarted sidecar's slot is taken (as by a resumed design): the job cannot start yet
-    env = await startEnv(root, 0, (sc) => sc.heavy.tryAcquire('test'));
+    env = await startEnv(root, 0, (sc) => sc.pool.hold('test'));
     c = await hello(env.port, { protocols: [1, 2] });
     c.send({ type: 'job.tool.result', id: 't', jobId, callId: call.callId, result: 'early' });
     expect((await c.ack('t')).ok).toBe(true);
     expect(env.sc.jobs.book.get(jobId)!.status).toBe('queued');
-    env.sc.heavy.release('test');
+    env.sc.pool.release('test');
     const j = await jobDone(c, jobId);
     expect(j.result.json.results).toEqual([{ tool: 'a', result: 'early' }]);
     // the job did not ask again

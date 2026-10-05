@@ -116,15 +116,17 @@ export function runsGit(command: string): boolean {
  * The design job's own rules on top of the worker policy: undefined = no objection. `cwd` is the
  * scratch dir, `bp` the id the agent builds under.
  */
-export function designVerdict(toolName: string, input: Record<string, unknown>, ctx: { cwd: string; bp: string }): Verdict | undefined {
+export function designVerdict(toolName: string, input: Record<string, unknown>, ctx: { cwd: string; bp: string; own?: string | undefined }): Verdict | undefined {
   if (toolName in OFF_TOOLS) return { action: 'deny', reason: OFF_TOOLS[toolName]! };
   if (EDIT_TOOLS.has(toolName)) {
-    const own = path.join(ctx.cwd, 'kit', 'designs', `${ctx.bp}.mjs`);
+    // the one file the job may write: a design's module, or (a bible job, 4b) bible/components.mjs
+    const rel = ctx.own ?? path.join('kit', 'designs', `${ctx.bp}.mjs`);
+    const own = path.join(ctx.cwd, rel);
     const p = typeof input.file_path === 'string' ? input.file_path : typeof input.notebook_path === 'string' ? input.notebook_path : '';
     const abs = p ? path.resolve(ctx.cwd, p) : '';
     // compared through links (the scratch dir may be reached by a link and by its real path alike)
     if (abs && samePath(realish(abs), realish(own)) && isInsideOrEqual(realish(abs), realish(ctx.cwd))) return undefined;
-    return { action: 'deny', reason: `Only kit/designs/${ctx.bp}.mjs is yours to write in a design job (not ${p || 'a file without a path'}). Use node kit/build.mjs and kit/render.mjs for everything else.` };
+    return { action: 'deny', reason: ctx.own ? `Only ${rel} is yours to write in this job (not ${p || 'a file without a path'}). Use node kit/tools/components.mjs for everything else.` : `Only kit/designs/${ctx.bp}.mjs is yours to write in a design job (not ${p || 'a file without a path'}). Use node kit/build.mjs and kit/render.mjs for everything else.` };
   }
   if (toolName === 'Bash' || toolName === 'PowerShell') {
     const command = typeof input.command === 'string' ? input.command : '';

@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { checkDesign, designBaseId, freeLibraryId, installDesign, minimalEnv, parseBuildJson, refreshKit, renderPreviews, slugify, withDesignId } from '../src/designs.js';
-import { DesignRequest, parseClientMessage } from '../src/protocol.js';
+import { DesignRequest, DesignRequestV1, parseClientMessage } from '../src/protocol.js';
 import { prepareScratch } from '../src/scratch.js';
 import { copyKit, request, rmrf, tempDir } from './helpers.js';
 
@@ -46,7 +46,12 @@ describe('naming', () => {
 describe('the request schema', () => {
   it('accepts free style text and unknown features, refuses bad sizes and types', () => {
     expect(DesignRequest.safeParse(request({ style: 'elven treehouse', features: ['porch', 'hot_tub'] })).success).toBe(true);
-    expect(DesignRequest.safeParse(request({ type: 'castle' })).success).toBe(false);
+    // protocol 2: open types (4b, R4); protocol 1: the 11 presets only
+    expect(DesignRequest.safeParse(request({ type: 'castle' })).success).toBe(true);
+    expect(DesignRequestV1.safeParse(request({ type: 'castle' })).success).toBe(false);
+    expect(DesignRequest.safeParse(request({ type: 'Castle!' })).success).toBe(false);
+    expect(DesignRequest.safeParse(request({ type: 'lair', profile: ['door', 'passage:3x3', 'tall:2.5', 'min_interior_volume:80'] })).success).toBe(true);
+    expect(DesignRequest.safeParse(request({ type: 'lair', profile: ['flying'] })).success).toBe(false);
     expect(DesignRequest.safeParse(request({ maxSize: { x: 6, y: 20, z: 20 } })).success).toBe(false);
     expect(DesignRequest.safeParse(request({ maxSize: { x: 97, y: 20, z: 20 } })).success).toBe(false);
     expect(DesignRequest.safeParse(request({ features: ['a', 'b', 'c', 'd', 'e', 'f', 'g'] })).success).toBe(false);
