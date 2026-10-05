@@ -1,0 +1,82 @@
+{
+  "id": "tower",
+  "name": "Watchtower",
+  "description": "A stone watchtower: three floors joined by a ladder and an open lookout under a slate hip roof.",
+  "type": "tower",
+  "tags": [
+    "medieval",
+    "stone",
+    "lookout"
+  ],
+  "size": {
+    "x": 9,
+    "y": 25,
+    "z": 11
+  },
+  "groundY": 1,
+  "front": "south",
+  "materials": [
+    "minecraft:stone_bricks",
+    "minecraft:deepslate_tile_stairs",
+    "minecraft:deepslate_tiles",
+    "minecraft:polished_andesite",
+    "minecraft:spruce_planks",
+    "minecraft:stone_brick_stairs",
+    "minecraft:glass_pane",
+    "minecraft:spruce_fence",
+    "minecraft:ladder",
+    "minecraft:spruce_log",
+    "minecraft:lantern",
+    "minecraft:dirt_path",
+    "minecraft:iron_chain",
+    "minecraft:iron_door",
+    "minecraft:stone_button",
+    "minecraft:lightning_rod"
+  ],
+  "foundationBlock": "minecraft:stone_bricks",
+  "approach": {
+    "length": 4,
+    "width": 3,
+    "block": "minecraft:dirt_path",
+    "slab": "minecraft:stone_brick_slab"
+  },
+  "interior": {
+    "minX": 2,
+    "minY": 1,
+    "minZ": 2,
+    "maxX": 6,
+    "maxY": 14,
+    "maxZ": 6
+  },
+  "anchors": {
+    "entrance": {
+      "x": 4.5,
+      "y": 1,
+      "z": 8.5,
+      "yaw": 180,
+      "pitch": 0
+    },
+    "spawn": {
+      "x": 4.5,
+      "y": 1,
+      "z": 10.5,
+      "yaw": 180,
+      "pitch": 0
+    },
+    "cam_overview": {
+      "x": -8,
+      "y": 14,
+      "z": 21,
+      "yaw": -144.782,
+      "pitch": 10.881
+    },
+    "cam_lookout": {
+      "x": 2.5,
+      "y": 17.6,
+      "z": 2.5,
+      "yaw": -45,
+      "pitch": 24.979
+    }
+  },
+  "source": "tower.mjs"
+}

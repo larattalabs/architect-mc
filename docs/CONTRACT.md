@@ -100,7 +100,7 @@ Common:
   needs a button on both sides (as in AgentCraft), a wooden door doesn't
 - nothing floating: every non-air block is connected to the ground row through other blocks (face
   adjacency; attachables count through their support)
-- `interior` (when present): every standable interior cell is lit by vanilla emitters (block light >= 1),
+- `interior` (required for every type but `custom`, an error: without it the light rule would be skipped): every standable interior cell is lit by vanilla emitters (block light >= 1),
   every floor level is reachable from the entrance by walking (stairs, ladders, slabs; max step 1),
   and the interior is enclosed (no sky access straight down into it except declared skylights/courtyards)
 - size within `--max`
