@@ -408,6 +408,14 @@ it creates nothing. Free clearing (trees and dirt removed without drops) is the 
      - candles cost their count; sea pickles cost their count;
      - wall torches, wall signs and wall banners cost their standing item;
      - `minecraft:fire` and other blocks with no item cost nothing.
+     - **Obtainability map** (`data/architect_mc/survival_items.json`), for blocks whose item can't be obtained in survival
+       or that have no item:
+       - `dirt_path` and `farmland` cost `dirt`; `grass_block` costs `dirt` (it is placed as grass anyway);
+       - a potted plant costs `flower_pot` plus the plant;
+       - creative-only blocks (spawner, budding_amethyst, reinforced_deepslate, bedrock, end_portal_frame, command
+         blocks, barrier, light, structure blocks...) are **refused at placement** in survival ("this design uses
+         <block>, which survival can't build"). The kit checker warns about them, as `survival:` warnings.
+       - The kit approach default `dirt_path` therefore costs dirt; the gate cabin must be buildable end to end.
      - Waterlogged cells are built not waterlogged in survival (no water bucket cost); the crate screen notes it.
    - The **bill of materials** (BOM) is the sum over the queue. It is computed from the template on the server, and on the client for the
      Library ("needs: 412 spruce planks, ...").
@@ -419,30 +427,40 @@ it creates nothing. Free clearing (trees and dirt removed without drops) is the 
      - an "insert from inventory" button that moves every needed item from the player's inventory;
      - progress, and pause/resume;
      - Deconstruct.
-   - Breaking the crate is refused while the site is building (unbreakable; it shows a message to use Deconstruct).
-5. **Equivalents** (`data/architect_mc/equivalents.json`, curated):
-   - 1 log or stem (any wood) = 4 planks of that wood
-   - 1 planks = 2 slabs of that wood
-   - stone ↔ stone bricks (1:1), cobblestone ↔ cobblestone variants (1:1)
-   - 1 iron ingot = 1 iron bars × 16/6 (rounded down)
-   - and similar small ones
+   - Breaking the crate is refused while the site is building (unbreakable for players; it shows a message to use
+     Deconstruct) and it is **explosion-immune**. Lava, `/setblock` and the like can still remove it: that's the "crate missing" case.
+5. **Equivalents** (`data/architect_mc/equivalents.json`, curated, **one way only, raw to processed, at vanilla crafting
+   yields**; nothing converts back and nothing skips smelting):
+   - 1 log, wood or stem (stripped too) = 4 planks of that wood
+   - 1 planks = 2 slabs of that wood (6 planks -> 12 slabs, the crafting yield per plank)
+   - 1 stone = 1 stone bricks (the stonecutter yield); 1 cobblestone = 1 cobblestone slab×2 / stairs×1 / wall×1
+     (stonecutter); likewise for other stone families a stonecutter makes
+   - and similar small ones; nothing from a cheaper material to a more expensive one
    An inserted item that only an equivalent needs is converted on insert. Leftovers stay as credit in the crate.
 6. **Builder.**
    - Each server tick, a building site places up to `blocksPerTick` (default 4, config 1-64) queued cells whose item is
      in the crate. Place sounds play quietly at the cell.
+   - **It writes exactly what the instant placement writes:** the same `FLAGS` (no neighbour updates, so stairs, fences,
+     panes and chest halves keep the template's shape), and the template's block-entity NBT, with only container
+     inventories cleared (signs, banners, pots and lecterns keep their data). The gate compares every cell, BE NBT
+     included, with an instant placement.
+   - **Only cells in loaded chunks** progress. Never force-load a chunk.
    - A cell whose position now holds something else (a player's block or a mob) is skipped and retried later. After
      200 ticks it's reported in the crate screen as "blocked at x,y,z".
    - When the queue is empty: `state: "built"`, the crate drops its leftover items (credit too, as items) and turns into
      air, and a toast plus chat note fires. The crate cell is restored from its own snapshot.
 7. **Ghost.**
-   - The server syncs each building site's **remaining** cells to clients in range, through a custom payload
-     `architect_mc:site_ghost {siteId, origin, rotation, blueprintId, built: bitset}`. Clients derive the remaining
-     cells from the template plus the bitset.
+   - The server syncs each building site's **remaining** cells to clients in range, through custom payloads:
+     `architect_mc:site_ghost {siteId, origin, rotation, blueprintId, built: bitset}` once when a client comes in range
+     or joins, then `architect_mc:site_progress {siteId, newlyBuilt: int[]}` deltas (batched per tick). Clients derive the
+     remaining cells from the template plus the bitset.
    - GhostRenderer draws the remaining cells translucent; the next cells, whose items are delivered, are tinted green.
    - The ghost is kept across relogs and restarts; the state is in the site record.
 8. **Remove / deconstruct in survival** (from the crate screen, the Library's Placed view, or `/architect remove`).
    - For every cell of the box:
-     - if the current state equals what the site placed there, the cell's item is **refunded**;
+     - if the current state equals what the site placed there **and that cell was paid for** (placed by consuming
+       an item; cells placed by `/architect site finish` or by an instant placement are tracked as free), the cell's
+       item is **refunded**;
      - else if the current state differs from the snapshot and is not air, it is the player's block: it **drops as an item** at the cell;
      - else nothing.
    - Then the snapshot is restored, as now.
@@ -453,10 +471,20 @@ it creates nothing. Free clearing (trees and dirt removed without drops) is the 
    - Move in survival is refused ("deconstruct and place again").
 9. **Leaf guard and bed safety** apply as now. A bed that bed safety leaves out is not queued and not charged.
 
-## Site record additions
+## Site record additions and where state lives
 
-`state: "building"|"built"` (absent = built, as in phases 1-2), `queue` (a compact form: indexes into the template grid plus
-the foundation/approach cells), `built` (a bitset), `crate {pos, snapshot}`, `ledger { delivered: {item: n}, credit: {item: n} }`.
+- In the site record (`architect-sites.json`, written on state changes and on world save, **never per tick**):
+  - `state: "building"|"built"` (absent means built, as in phases 1-2);
+  - `queue` (a compact form: indexes into the template grid plus the foundation/approach cells);
+  - `crate {pos, snapshot}`;
+  - `free` (a bitset of cells placed without payment).
+- **The ledger lives in the crate block entity** (delivered counts and credit, next to its items), saved with its chunk
+  like any container. Items and ledger can't drift apart in a crash.
+- **`built` is derived from the world.** On load (and after a crash) a queued cell counts as built if the world holds
+  exactly the template's state there. In memory it's a bitset; it is not persisted per tick.
+- **Reconcile and the world-start check** know `building`: a half-built site is not "doesn't match its blueprint". They
+  rebuild `built` from the world. A missing crate is reported ("crate missing": Deconstruct from the Library still works,
+  with refunds of placed cells only).
 A building site whose design changed under the same id keeps working from its pin's template fingerprint. If the template
 is gone, the site can only be removed.
 
@@ -477,7 +505,8 @@ is gone, the site can only be removed.
 In a fresh **survival** dev world (DevBridge):
 - the toggle is on by default;
 - place a cabin site: the ghost is visible, and it survives a relog;
-- feed it from a **hopper chain** out of chests holding exactly the BOM, part of it as logs (equivalents);
+- feed it from a **hopper chain** out of chests holding exactly the BOM **as reported by `dev.site.state` after placement**
+  (the template plus that spot's foundation and approach), part of it as logs (equivalents);
 - watch it finish: the built site equals an instant placement of the same design at the same spot, every cell;
 - mine 3 placed blocks (the player keeps the items), then deconstruct: the refund equals BOM − 3 mined, the 3 aren't
   refunded again, and the terrain is restored exactly;
