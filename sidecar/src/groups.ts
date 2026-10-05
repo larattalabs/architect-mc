@@ -324,7 +324,8 @@ export class Groups {
     if (status === 'held_usage' && limit) g.usageLimitUntil = limit.until;
     else delete g.usageLimitUntil;
     if (status === 'failed' && !g.reason) g.reason = g.items.find((it) => it.error)?.error?.split('\n')[0] ?? 'every item failed';
-    if ((status === 'queued' || status === 'running' || status === 'held_usage') && g.reason && g.reason.startsWith('soft budget')) delete g.reason;
+    // a soft-budget reason only describes paused_budget: clear it on any other status (a group that finished while paused kept it)
+    if (status !== 'paused_budget' && g.reason && g.reason.startsWith('soft budget')) delete g.reason;
     return JSON.stringify(g) !== before;
   }
 }

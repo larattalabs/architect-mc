@@ -301,6 +301,8 @@ describe.skipIf(!fs.existsSync(path.join(REAL_KIT, 'tools', 'components.mjs')))(
     expect(bj.status, bj.error).toBe('done');
     expect(fs.existsSync(bj.bible.sheetPath)).toBe(true);
     expect(path.dirname(path.dirname(path.dirname(bj.bible.sheetPath)))).toBe(path.join(root, 'bibles', 'bib_stilts'));
+    // bible.index follows the job's done upsert: wait for it (the order of the two frames is not fixed)
+    await until(() => c.msgs.some((m) => m.type === 'bible.index' && (m.bibles as M[]).some((x) => x.id === b.bibleId)), 10_000);
     expect(last(c.msgs, (m) => m.type === 'bible.index')!.bibles.map((x: M) => x.id)).toContain('bib_stilts');
     // a group: an anchor wave, then two items
     const group = {
