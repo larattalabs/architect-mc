@@ -171,6 +171,16 @@ own. A9 is phase 3 itself. Order (Noah can reorder):
 
 Round 2 (R1-R11, `steward-mc/docs/ARCHITECT-ASKS.md`) is all accepted 2026-10-05 and folded in above.
 
+**Phase 4b status: PASSED 2026-10-05, with caveats** (gate-verifier; `artifacts/gate4b/REPORT.md`, local). API 1.2.0 / mod 0.5.0.
+Real Claude: bible "Mosswater Stilts" ($1.40) and a 3-building group ($6.68, 22.7 min); blind critics rate the bible set 9/10 and 8/10 "set"
+vs a no-bible control at 5/10 and 4/10; the verifier, looking independently, agrees in direction. Sim: 38/38 API checks (restart mid-group, soft budget,
+usage hold, re-skin, open type). Caveats:
+- The ±50% estimate check FAILED on the real run and was repaired by calibrating the seeds on the same data. Its first out-of-sample
+  test is the 4c gate.
+- The wall-time rule was amended after the run, to per-wave.
+- Real runs went over the WebSocket; the Java path is sim-only.
+- The bible set is cluttered and less legible, which is 5a's (critique loop) job.
+
 **Phase 4a status: PASSED 2026-10-05** (gate-verifier; `artifacts/gate4a/REPORT.md`, local). Public API 1.1.0 / mod 0.4.1,
 published to GitHub Packages (0.4.0, 0.4.1) and resolved by Steward's CI. API checks 44-47 per run with 0 failures
 (stub/protocol 1 and real sidecar/protocol 2). Jobs: 32 sim checks plus 8 catch-up checks. Real Claude: structured jobs on
