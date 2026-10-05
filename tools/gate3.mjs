@@ -298,9 +298,16 @@ switch (step) {
       restoreChain: restore, postSha: post.sha256, post2Sha: post2.sha256, preSha: pre.sha256 });
     break;
   }
-  case 'creative': {
+  case 'creative':
+  case 'instant': {
+    // creative: a fresh creative world (same seed): the toggle is off by default and placement is instant. World generation
+    // is not cell-exact across worlds (leaf litter, a tree), so the cell comparison there counts only cells whose terrain matched.
+    // instant: a copy of the survival world after the gate (its terrain proven restored exactly) with the toggle off: the
+    // same terrain, so the finished construction site must equal the instant placement in every cell of the snapshot box.
+    const exact = step === 'instant';
     const sv = await call('dev.survival.state');
-    check(sv.survival === false, `the toggle is off by default in a creative world (${JSON.stringify(sv)})`);
+    check(sv.survival === false, exact ? `the toggle is off in the copied world (${JSON.stringify(sv)})`
+      : `the toggle is off by default in a creative world (${JSON.stringify(sv)})`);
     const rules = await gamerules();
     await call('dev.camera', { x: 5, y: 130, z: 40, yaw: 180, pitch: 30, mode: 'keep' }).catch(() => null);
     await call('dev.waitChunks', {}, 40_000).catch(() => null);
@@ -309,7 +316,9 @@ switch (step) {
     try {
       sPre = load('survival-pre');
     } catch {}
-    if (sPre) check(sPre.sha256 === pre.sha256, `same seed, same terrain as the survival world before placing (${pre.sha256})`);
+    const sameTerrain = !!sPre && sPre.sha256 === pre.sha256;
+    if (exact) check(sameTerrain, `the same terrain as the survival world before its site (${pre.sha256})`);
+    else console.log(`note same seed; terrain ${sameTerrain ? 'identical' : 'not cell-identical (world generation)'}: ${pre.sha256}`);
     const r = await place();
     check(r.placed === true && !/Construction site/.test(r.message), `placed instantly: ${r.message}`);
     const rec = (await call('dev.sites.state')).sites.find((s) => s.id === r.siteId);
@@ -322,10 +331,13 @@ switch (step) {
     } catch {}
     let cmp = null;
     if (built) {
-      const d = diff(inst.cells, built.cells);
+      const all = diff(inst.cells, built.cells);
+      // cells whose terrain differed between the two worlds before placing are not the site's doing
+      const terrainDiff = new Set(sPre ? Object.keys(sPre.cells).filter((k) => sPre.cells[k] !== pre.cells[k]) : []);
+      const d = all.filter((x) => !terrainDiff.has(x.at));
       const sameBox = JSON.stringify(built.snapshotBox) === JSON.stringify(sb);
-      cmp = { sameBox, differing: d.length, first: d.slice(0, 10) };
-      check(sameBox && d.length === 0, `the finished construction site equals the instant placement cell for cell, BE NBT included: ${Object.keys(inst.cells).length} cells, ${inst.blockEntities} block entities, ${d.length} differ${d.length ? ': ' + JSON.stringify(d.slice(0, 3)) : ''}`);
+      cmp = { sameBox, differing: all.length, terrainDiffCells: terrainDiff.size, differingOutsideTerrainDiff: d.length, first: d.slice(0, 10) };
+      check(sameBox && d.length === 0 && (!exact || all.length === 0), `the finished construction site equals the instant placement cell for cell, BE NBT included: ${Object.keys(inst.cells).length} cells, ${inst.blockEntities} block entities, ${all.length} differ${exact ? '' : ` (${terrainDiff.size} cells of the region had other terrain before; ${d.length} differ elsewhere)`}${d.length ? ': ' + JSON.stringify(d.slice(0, 3)) : ''}`);
     }
     // place / stand / remove: the snapshot box + 7 comes back byte-exact
     await sleep(3000);
@@ -334,9 +346,9 @@ switch (step) {
     const post = await cells(REGION.min, REGION.max);
     const d2 = diff(pre.cells, post.cells);
     check(rm.removed && post.sha256 === pre.sha256, `instant Remove restores the snapshot box + 7 exactly (${post.sha256 === pre.sha256 ? 'same hash' : d2.length + ' cells differ'})`);
-    save('creative', { survival: sv, gamerules: rules, place: r, instantCellsSha: inst.sha256, instantBlockEntities: inst.blockEntities, compare: cmp,
+    save(step, { survival: sv, gamerules: rules, place: r, instantCellsSha: inst.sha256, instantBlockEntities: inst.blockEntities, compare: cmp,
       remove: rm, preSha: pre.sha256, postSha: post.sha256, removeDiff: d2.slice(0, 20) });
-    save('creative-instant-cells', { snapshotBox: sb, ...inst });
+    save(`${step}-instant-cells`, { snapshotBox: sb, ...inst });
     break;
   }
   case 'hardcore': {
