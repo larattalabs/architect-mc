@@ -1026,3 +1026,9 @@ collection header with the bible's sheet, name and a "re-skin the collection" ac
     - `ext` and `itemKey` survive a sidecar restart mid-group;
     - the estimate is within ±50% of the measured cost for the gate group, and the tolerance gets tightened as data accrues;
     - a soft-budget pause, extend and resume (sim backend).
+
+### Steward ask (2026-10-05): read the world's survival toggle (API 1.2.0, with the 4b Java side)
+
+`Sites.survival()` -> `SurvivalInfo { boolean enabled; int blocksPerTick; boolean mayToggle(@Nullable ServerPlayer actor); }` for the
+server's world, plus a `WORLD_MODE_CHANGED(SurvivalInfo)` event (fired by the Status tab, `/architect survival` and the default at the
+first load). Feature name: `"survivalInfo"`.
