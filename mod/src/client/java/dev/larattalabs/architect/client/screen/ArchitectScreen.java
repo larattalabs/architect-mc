@@ -499,6 +499,11 @@ public final class ArchitectScreen extends Screen {
 		listScroll = 0;
 	}
 
+	/** Scrolls the current list to {@code px} (clamped by the next frame's scroll area). */
+	void scrollTo(int px) {
+		listScroll = Math.max(0, px);
+	}
+
 	int scroll() {
 		return listScroll;
 	}

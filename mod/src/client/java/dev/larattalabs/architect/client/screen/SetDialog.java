@@ -174,7 +174,10 @@ final class SetDialog {
 		s.scrollbarAt(g, x + w - 7, y, fit * ROW_H);
 		y += fit * ROW_H + 2;
 		int ax = x;
-		ax += s.chip(g, "set:add", "+ Add a building", ax, y, false, f.items.size() < SetSpec.MAX_ITEMS, mx, my, f::addItem) + 8;
+		ax += s.chip(g, "set:add", "+ Add a building", ax, y, false, f.items.size() < SetSpec.MAX_ITEMS, mx, my, () -> {
+			f.addItem();
+			s.scrollTo(f.items.size() * ROW_H); // the new row in view
+		}) + 8;
 		g.text(font, TextUtil.ellipsize(font, "landmarks: Opus, designed first · ordinary: Sonnet", Math.max(10, x + w - ax)), ax, y + 3, UiBits.muted(),
 			false);
 		y += ArchitectScreen.CHIP_H + 4;

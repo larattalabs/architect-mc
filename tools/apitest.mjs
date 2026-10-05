@@ -648,8 +648,51 @@ switch (step) {
       const ot = await result(await api(`opentype o1 ${b64({ type: 'hellish_lair', style: 'spiky', name: `Lair ${tag}`, size: SIZE, profile: ['door', 'lit', 'no_floating'], bible: bj.bibleId })}`), 30_000);
       const otDone = await waitEvent((e) => e.event === 'DESIGN_DONE' && e.id === ot.value, 120_000);
       const otEntry = otDone?.entryId ? await api(`entry ${otDone.entryId}`) : null;
-      check(otDone?.status === 'DONE' && otEntry?.type === 'hellish_lair' && otEntry.bible === `${bj.bibleId}@1`,
+      check(otDone?.status === 'DONE' && otEntry?.type === 'hellish_lair' && otEntry.bible === `${bj.bibleId}@1`
+        && JSON.stringify(otDone?.request?.profile) === JSON.stringify(['door', 'lit', 'no_floating']),
         `open type: ${ot.value} -> ${otEntry?.id} type ${otEntry?.type}, profile ${JSON.stringify(otDone?.request?.profile)}`, { otDone, otEntry });
+
+      // ---- 4b work that finishes while no world is loaded: BIBLE_DONE, GROUP_DONE and RESKIN_DONE fire once the next world has
+      // loaded (the reskinCollection future completes then too), once each
+      await api('clear');
+      const cbj = await result(await api(`bible cu${tag} ${b64({ prompt: 'a quiet mill town', name: `Mill ${tag}` })}`), 30_000);
+      const cgid = (await result(await api(`group cg ${b64({ name: `Catch-up ${tag}`, bible: 'oak', concurrency: 2, items: [
+        { itemKey: 'c1', type: 'cabin', style: 'rustic', size: SIZE }, { itemKey: 'c2', type: 'cabin', style: 'rustic', size: SIZE }] })}`), 30_000)).value;
+      const rkp = await api(`reskin r2 birch group ${gid}`);
+      await sleep(300);
+      const tLeave = Date.now();
+      await call('dev.world.leave');
+      let scOut;
+      for (let i = 0; i < 300; i++) {
+        await sleep(500);
+        scOut = await call('dev.sidecar.state');
+        const fin = (x) => ['done', 'failed', 'cancelled'].includes(x?.status);
+        const g = scOut.groups.find((x) => x.id === cgid);
+        const b = scOut.bibleJobs.find((x) => x.id === cbj.id);
+        const r = scOut.reskins.filter((x) => x.updatedAt >= tLeave - 60_000).sort((a, z) => z.createdAt - a.createdAt)[0];
+        if (fin(g) && fin(b) && r && r.status !== 'building') break;
+      }
+      const gOut = scOut.groups.find((x) => x.id === cgid);
+      const bOut = scOut.bibleJobs.find((x) => x.id === cbj.id);
+      const rOut = scOut.reskins.filter((x) => x.updatedAt >= tLeave - 60_000).sort((a, z) => z.createdAt - a.createdAt)[0];
+      const outIds = [[gOut, 'GROUP_DONE'], [bOut, 'BIBLE_DONE'], [rOut, 'RESKIN_DONE']].filter(([x]) => x && x.updatedAt > tLeave);
+      check((await call('dev.state')).inWorld === false && gOut?.updatedAt > tLeave && outIds.length >= 2,
+        `on the title screen: ${outIds.map(([x, e]) => `${x.id} (${e.split('_')[0].toLowerCase()} ${x.status})`).join(', ')} finished while no world was loaded`,
+        { gOut, bOut: bOut && { ...bOut, bible: undefined }, rOut });
+      const tOpen = Date.now();
+      await call('dev.world.open', {});
+      await waitWorld();
+      await sleep(2500);
+      const evCu = await events();
+      for (const [x, e] of outIds) {
+        const evs = evCu.filter((v) => v.event === e && v.id === x.id);
+        check(evs.length === 1 && evs[0].t >= tOpen && evs[0].serverThread === 'Server thread' && (e !== 'GROUP_DONE' || evs[0].entriesLoaded?.length === 2)
+          && (e !== 'RESKIN_DONE' || evs[0].entriesLoaded?.length === evs[0].entries?.length),
+          `${e} ${x.id} fired once after the world loaded (${evs.length ? evs[0].t - tOpen : '?'} ms after the open, on ${evs[0]?.serverThread}${e === 'GROUP_DONE'
+            ? `, ${evs[0]?.entriesLoaded?.length} entries loaded` : ''})`, evs);
+      }
+      const rkf = await result(rkp, 30_000);
+      check(rkf.status === 'DONE' && rkf.id === rOut?.id && rkf.completedOn === 'Server thread', `the reskinCollection future completed (${rkf.id}, ${rkf.entries?.length} entries)`);
 
       // ---- Sites.survival() and WORLD_MODE_CHANGED: the toggle in this world, then a fresh creative and a fresh survival world
       const s0 = await api('survival');

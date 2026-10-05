@@ -570,7 +570,23 @@ public final class LibraryFeature {
 		DesignForm f = DesignFeature.form();
 		JsonObject r = c.request();
 		String type = r != null && r.has("type") ? r.get("type").getAsString() : b.type();
-		f.type = DesignSpec.find(DesignSpec.TYPES, type) != null ? type : DesignSpec.find(DesignSpec.TYPES, b.type()) != null ? b.type() : f.type;
+		if (DesignSpec.isPreset(type)) {
+			f.type = type;
+		} else if (DesignSpec.OPEN_TYPE.matcher(type).matches()) {
+			// an open type (phase 4b): "Other…" with its name and the profile it was designed with
+			f.type = DesignForm.OTHER;
+			f.openType.set(type);
+			f.profile.clear();
+			if (r != null && r.has("profile") && r.get("profile").isJsonArray()) {
+				r.getAsJsonArray("profile").forEach(e -> f.profile.add(e.getAsString()));
+			} else {
+				f.profile.addAll(DesignSpec.DEFAULT_PROFILE);
+			}
+		} else if (DesignSpec.isPreset(b.type())) {
+			f.type = b.type();
+		}
+		// the bible it was built with (phase 4b)
+		f.bible = c.bible();
 		if (r != null && r.has("style") && r.get("style").isJsonPrimitive()) {
 			String style = r.get("style").getAsString();
 			if (DesignSpec.find(DesignSpec.STYLES, style) != null) {
