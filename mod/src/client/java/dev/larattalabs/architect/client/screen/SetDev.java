@@ -54,7 +54,7 @@ final class SetDev {
 			return state(mc);
 		}));
 		DevBridge.register("dev.set.fill", 10_000, "{name?, bible?: id | \"new\", prompt?, items?: [{type, name?, role?: landmark|ordinary, notes?}], "
-			+ "concurrency?, budgetUsd?: number|null} - set the open dialog's fields (items replace the rows)", (req, mc) -> {
+			+ "concurrency?, budgetUsd?: number|null, massingFirst?: bool, maxRedirects?: 0-10, context?: text (4c)} - set the open dialog's fields (items replace the rows)", (req, mc) -> {
 				Fields f = Fields.of(req);
 				return DevBridge.onClient(mc, () -> {
 					SetFeature.Form form = SetFeature.form();
@@ -89,6 +89,16 @@ final class SetDev {
 					}
 					if (f.has("budgetUsd")) {
 						form.budgetUsd = f.isExplicitNull("budgetUsd") ? null : f.num("budgetUsd", 0.01, 1000);
+					}
+					// (4c)
+					if (f.has("massingFirst")) {
+						form.massingFirst = f.bool("massingFirst");
+					}
+					if (f.has("maxRedirects")) {
+						form.maxRedirects = (int) f.num("maxRedirects", 0, 10);
+					}
+					if (f.has("context")) {
+						form.context.set(f.str("context"));
 					}
 					form.sendError = null;
 					return state(mc);

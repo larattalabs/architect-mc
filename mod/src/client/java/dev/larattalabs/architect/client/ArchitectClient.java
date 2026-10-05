@@ -22,6 +22,7 @@ public class ArchitectClient implements ClientModInitializer {
 		dev.larattalabs.architect.client.placement.CompositePreview.init();
 		ScreenFeature.init();
 		DesignFeature.init();
+		dev.larattalabs.architect.client.design.MassingReview.init();
 		dev.larattalabs.architect.client.design.SetFeature.init();
 		dev.larattalabs.architect.client.library.LibraryFeature.init();
 		dev.larattalabs.architect.client.survival.SurvivalFeature.init();

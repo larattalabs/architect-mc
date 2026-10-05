@@ -26,10 +26,25 @@ public final class SetSpec {
 	public record Item(String type, @Nullable String name, boolean landmark, @Nullable String notes) {
 	}
 
-	/** The whole set as the dialog holds it. {@code budgetUsd} null = no budget. */
-	public record Draft(String name, @Nullable String bible, List<Item> items, int concurrency, @Nullable Double budgetUsd) {
+	/** Phase 4c: the most redirect rounds per item, the default, and the longest context. */
+	public static final int MAX_REDIRECTS = 10;
+	public static final int DEFAULT_REDIRECTS = 3;
+	public static final int MAX_CONTEXT = 4000;
+
+	/**
+	 * The whole set as the dialog holds it. {@code budgetUsd} null = no budget. Phase 4c: {@code massingFirst} (every building a
+	 * massing first, then the set waits for approval), {@code maxRedirects} (rounds per building), {@code context} (text for
+	 * every brief; blank = none).
+	 */
+	public record Draft(String name, @Nullable String bible, List<Item> items, int concurrency, @Nullable Double budgetUsd, boolean massingFirst,
+		int maxRedirects, @Nullable String context) {
 		public Draft {
 			items = List.copyOf(items);
+		}
+
+		/** The 4b draft (no massing pass, no context). */
+		public Draft(String name, @Nullable String bible, List<Item> items, int concurrency, @Nullable Double budgetUsd) {
+			this(name, bible, items, concurrency, budgetUsd, false, DEFAULT_REDIRECTS, null);
 		}
 	}
 
@@ -75,6 +90,12 @@ public final class SetSpec {
 		if (d.budgetUsd() != null && (d.budgetUsd() <= 0 || d.budgetUsd() > 1000)) {
 			e.put("budget", "a budget is above $0 and at most $1000");
 		}
+		if (d.maxRedirects() < 0 || d.maxRedirects() > MAX_REDIRECTS) {
+			e.put("redirects", "0 to " + MAX_REDIRECTS + " redirects per building");
+		}
+		if (d.context() != null && d.context().strip().length() > MAX_CONTEXT) {
+			e.put("context", "the context is " + d.context().strip().length() + " characters (at most " + MAX_CONTEXT + ")");
+		}
 		return e;
 	}
 
@@ -91,6 +112,14 @@ public final class SetSpec {
 		g.addProperty("concurrency", d.concurrency());
 		if (d.budgetUsd() != null) {
 			g.addProperty("budgetUsd", d.budgetUsd());
+		}
+		// 4c: massings first (Architect's UI approves: approvalUi architect, the default); the context goes into every brief
+		if (d.massingFirst()) {
+			g.addProperty("massingFirst", true);
+			g.addProperty("maxRedirects", d.maxRedirects());
+		}
+		if (!DesignSpec.blank(d.context())) {
+			g.addProperty("context", d.context().strip());
 		}
 		String style = style(bibleName == null ? d.bible() : bibleName);
 		JsonArray items = new JsonArray();

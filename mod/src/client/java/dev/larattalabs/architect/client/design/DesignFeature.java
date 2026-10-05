@@ -97,6 +97,11 @@ public final class DesignFeature {
 		}
 		DesignSpec.Plot plot = DesignForm.PLOT.equals(f.size) ? f.plot : null;
 		JsonObject request = f.requestJson();
+		// (4c) "Massing first": a massing job; its massing opens the review (MassingReview) when it is installed
+		boolean massing = f.massingFirst() && SetFeature.has("massing");
+		if (massing) {
+			request.addProperty("massing", true);
+		}
 		sending = true;
 		return Sidecar.designRequest(request).handle((ack, err) -> {
 			sending = false;
@@ -116,11 +121,13 @@ public final class DesignFeature {
 			}
 			lastSent = id;
 			RUNNING.add(id);
-			if (plot != null) {
+			if (massing) {
+				MassingReview.expect(id, plot);
+			} else if (plot != null) {
 				PLOT_BY_DESIGN.put(id, plot);
 			}
-			Architect.LOGGER.info("Design {} requested ({} {}{})", id, request.get("type").getAsString(), request.get("style").getAsString(),
-				plot != null ? ", on a plot" : "");
+			Architect.LOGGER.info("Design {} requested ({} {}{}{})", id, request.get("type").getAsString(), request.get("style").getAsString(),
+				plot != null ? ", on a plot" : "", massing ? ", massing first" : "");
 			return new Sent(id, null);
 		});
 	}
@@ -134,6 +141,15 @@ public final class DesignFeature {
 			return r.get("designId").getAsString();
 		}
 		return r.has("id") && r.get("id").isJsonPrimitive() ? r.get("id").getAsString() : null;
+	}
+
+	/** (4c) A detail pass the massing review started: tracked as a design of this tab (its plot kept for "Place on the plot"). */
+	static void trackDetail(String designId, DesignSpec.@Nullable Plot plot) {
+		RUNNING.add(designId);
+		lastSent = designId;
+		if (plot != null) {
+			PLOT_BY_DESIGN.put(designId, plot);
+		}
 	}
 
 	public static CompletableFuture<SidecarLink.Ack> cancel(String designId) {
@@ -201,6 +217,13 @@ public final class DesignFeature {
 			return;
 		}
 		String key = Keys.screen == null ? "B" : Keys.label(Keys.screen);
+		if (d.raw().has("massing")) {
+			// (4c) a massing job: never a library entry; MassingReview shows it when its massing is installed
+			if (d.status() == DesignStatus.FAILED) {
+				Toasts.push(Toasts.Level.WARN, "Massing failed: " + d.title(), firstLine(d.error() != null ? d.error() : d.step()), key, "designs");
+			}
+			return;
+		}
 		switch (d.status()) {
 			case DONE -> done(d, key);
 			case FAILED -> Toasts.push(Toasts.Level.WARN, "Design failed: " + d.title(), firstLine(d.error() != null ? d.error() : d.step()), key,

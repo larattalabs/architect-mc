@@ -43,6 +43,16 @@ public final class DesignForm {
 	public @Nullable String bible;
 	/** Shown under the form after a refused or failed send; cleared by any edit. */
 	public @Nullable String sendError;
+	/** (4c) "Massing first": null = the default for the size (on for L and plot, {@link dev.larattalabs.architect.design.MassingRules}). */
+	public @Nullable Boolean massingFirst;
+
+	/** Whether this request makes a massing first (a remix never does). */
+	public boolean massingFirst() {
+		if (remix != null) {
+			return false;
+		}
+		return massingFirst != null ? massingFirst : dev.larattalabs.architect.design.MassingRules.massingFirstByDefault(size);
+	}
 
 	/** The style sent: the free text when typed, else the chip. */
 	public String style() {
@@ -130,6 +140,8 @@ public final class DesignForm {
 		errors().forEach(errs::addProperty);
 		o.add("errors", errs);
 		o.addProperty("sendError", sendError);
+		o.addProperty("massingFirst", massingFirst());
+		o.addProperty("massingFirstSet", massingFirst);
 		if (errors().isEmpty()) {
 			o.add("request", requestJson());
 		}
