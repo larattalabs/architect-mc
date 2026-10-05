@@ -216,7 +216,7 @@ public class ApiTest implements ModInitializer {
 			}
 			case "place":
 			case "check": {
-				// place <bp> <x> <y> <z> <AUTO|INSTANT|CONSTRUCTION> <owned|unowned> <actor|noactor> [rotation 0-3]
+				// place <bp> <x> <y> <z> <AUTO|INSTANT|CONSTRUCTION> <owned|unowned> <actor|noactor> [rotation 0-3] [force]
 				PlaceRequest r = request(src, a, player);
 				if (a[0].equals("check")) {
 					return verdict(api.sites(server).check(r));
@@ -342,7 +342,8 @@ public class ApiTest implements ModInitializer {
 			nested.addProperty("plan", 7);
 			ext.add("apitest:data", nested);
 		}
-		return new PlaceRequest(a[1], src.getLevel(), origin, rot, mode, owned ? OWNER : null, ext, false, actor ? player : null);
+		boolean force = a.length > 9 && a[9].equals("force");
+		return new PlaceRequest(a[1], src.getLevel(), origin, rot, mode, owned ? OWNER : null, ext, force, actor ? player : null);
 	}
 
 	// ------------------------------------------------------------------ JSON views
