@@ -15,8 +15,10 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.List;
+import net.fabricmc.fabric.api.event.Event;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.storage.LevelResource;
@@ -74,6 +76,11 @@ public final class Placement {
 		ServerLifecycleEvents.SERVER_STARTED.register(Placement::load);
 		ServerTickEvents.START_SERVER_TICK.register(s -> STATS.startTick(s, active()));
 		ServerTickEvents.END_SERVER_TICK.register(Placement::tick);
+		// the tick's full time is measured from its start to after every other end-of-tick handler (Fabric runs END_SERVER_TICK
+		// after the server tallied its own tick time, so the server's MSPT leaves those handlers out)
+		Identifier last = Identifier.fromNamespaceAndPath(Architect.MOD_ID, "tick_stats");
+		ServerTickEvents.END_SERVER_TICK.addPhaseOrdering(Event.DEFAULT_PHASE, last);
+		ServerTickEvents.END_SERVER_TICK.register(last, s -> STATS.endTick(s));
 		ServerLifecycleEvents.SERVER_STOPPING.register(s -> save(s, true));
 		ServerLifecycleEvents.SERVER_STOPPED.register(s -> {
 			JOBS.clear();
@@ -113,6 +120,7 @@ public final class Placement {
 			Batches.tick(srv, deadline);
 			Groups.tick(srv, deadline);
 			runJobs(srv);
+			syncGhosts(srv);
 		} catch (RuntimeException e) {
 			Architect.LOGGER.error("Placement tick failed", e);
 		}
@@ -181,8 +189,65 @@ public final class Placement {
 		}
 	}
 
+	/**
+	 * While an instant placement writes, players within range see its ghost fill in (the construction ghost's payloads: the
+	 * whole ghost once, then the cells written each tick); it is cleared when the placement ends.
+	 */
+	private static void syncGhosts(MinecraftServer srv) {
+		for (Job j : JOBS) {
+			if (!(j instanceof PlaceJob pj)) {
+				continue;
+			}
+			ServerLevel level = Sites.levelOf(srv, pj.dimension);
+			if (level == null) {
+				continue;
+			}
+			int[] newly = null;
+			for (net.minecraft.server.level.ServerPlayer p : srv.getPlayerList().getPlayers()) {
+				boolean in = p.level() == level && Builder.near(p, pj.snapBox, Builder.RANGE);
+				boolean had = pj.ghostTo.contains(p.getUUID());
+				if (!in) {
+					if (had) {
+						pj.ghostTo.remove(p.getUUID());
+						Builder.send(p, new dev.larattalabs.architect.survival.SiteNet.SiteClear(pj.siteId, false, pj.blueprint));
+					}
+					continue;
+				}
+				if (!had) {
+					var g = pj.ghost();
+					if (g != null) {
+						Builder.send(p, g);
+						pj.ghostTo.add(p.getUUID());
+					}
+					continue;
+				}
+				if (newly == null) {
+					newly = pj.ghostNewly();
+				}
+				if (newly.length > 0) {
+					Builder.send(p, new dev.larattalabs.architect.survival.SiteNet.SiteProgress(pj.siteId,
+						dev.larattalabs.architect.survival.CellBits.encodeInts(newly)));
+				}
+			}
+		}
+	}
+
+	private static void clearGhost(MinecraftServer srv, Job j, boolean finished) {
+		if (!(j instanceof PlaceJob pj)) {
+			return;
+		}
+		for (java.util.UUID u : pj.ghostTo) {
+			net.minecraft.server.level.ServerPlayer p = srv.getPlayerList().getPlayer(u);
+			if (p != null) {
+				Builder.send(p, new dev.larattalabs.architect.survival.SiteNet.SiteClear(pj.siteId, finished, pj.blueprint));
+			}
+		}
+		pj.ghostTo.clear();
+	}
+
 	/** A job ended: placed, rolled back, removed, or broken (a broken placement rolls back). */
 	private static void completed(MinecraftServer srv, Job j) {
+		clearGhost(srv, j, false);
 		if (j instanceof PlaceJob pj) {
 			if (pj.broken != null) {
 				Architect.LOGGER.warn("Placing {} can't go on ({}); rolling it back", pj.siteId, pj.broken);
@@ -236,6 +301,7 @@ public final class Placement {
 		}
 		JOBS.remove(j);
 		j.aborted(srv);
+		clearGhost(srv, j, false);
 		if (j instanceof PlaceJob pj) {
 			Batches.aborted(srv, pj, why);
 		}
@@ -250,6 +316,7 @@ public final class Placement {
 		}
 		JOBS.remove(j);
 		pj.aborted(srv);
+		clearGhost(srv, j, false);
 		RestoreJob rb = new RestoreJob(siteId, RestoreJob.ROLLBACK, pj.batchId, pj.itemKey);
 		rb.why = why;
 		JOBS.add(rb);
@@ -392,21 +459,32 @@ public final class Placement {
 		long firstWorkAt;
 		long lastWorkAt;
 
-		/** Records the previous tick's full time (as the server measured it: the MSPT) when placement was active in it. */
+		/** Starts timing a tick (the server's tick, then every end-of-tick handler). */
 		void startTick(MinecraftServer s, boolean activeNow) {
-			if (tickActive) {
-				long t = s.getTickTimesNanos()[s.getTickCount() % 100];
-				ticks++;
-				tickSum += t;
-				tickMax = Math.max(tickMax, t);
-				if (t > 50_000_000L) {
-					over50++;
-				}
-			}
+			tickStart = System.nanoTime();
 			tickActive = activeNow;
 		}
 
+		/** After every other end-of-tick handler: records the tick's full time when placement was active in it. */
+		void endTick(MinecraftServer s) {
+			if (!tickActive || tickStart == 0) {
+				return;
+			}
+			long t = System.nanoTime() - tickStart;
+			ticks++;
+			tickSum += t;
+			tickMax = Math.max(tickMax, t);
+			if (t > 50_000_000L) {
+				over50++;
+			}
+			// the server's own measure (without end-of-tick handlers), for reference
+			long v = s.getTickTimesNanos()[s.getTickCount() % 100];
+			serverMax = Math.max(serverMax, v);
+		}
+
+		long tickStart;
 		boolean tickActive;
+		long serverMax;
 
 		void work(long nanos, int handled) {
 			tickActive = true;
@@ -425,7 +503,7 @@ public final class Placement {
 
 		void reset() {
 			tickActive = false;
-			ticks = tickSum = tickMax = workTicks = workSum = workMax = cells = firstWorkAt = lastWorkAt = 0;
+			ticks = tickSum = tickMax = serverMax = workTicks = workSum = workMax = cells = firstWorkAt = lastWorkAt = 0;
 			over50 = 0;
 		}
 
@@ -436,6 +514,7 @@ public final class Placement {
 			o.addProperty("msptMax", tickMax / 1e6);
 			o.addProperty("msptMean", ticks == 0 ? 0 : tickSum / 1e6 / ticks);
 			o.addProperty("ticksOver50ms", over50);
+			o.addProperty("serverMsptMax", serverMax / 1e6);
 			o.addProperty("placementTicks", workTicks);
 			o.addProperty("placementMsMax", workMax / 1e6);
 			o.addProperty("placementMsMean", workTicks == 0 ? 0 : workSum / 1e6 / workTicks);

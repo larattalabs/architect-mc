@@ -963,7 +963,7 @@ public final class Builder {
 
 	// ------------------------------------------------------------------ ghost sync
 
-	private static boolean near(ServerPlayer p, Anchors.Bounds b, int range) {
+	static boolean near(ServerPlayer p, Anchors.Bounds b, int range) {
 		double x = Math.max(b.minX(), Math.min(b.maxX() + 1, p.getX()));
 		double z = Math.max(b.minZ(), Math.min(b.maxZ() + 1, p.getZ()));
 		double ddx = x - p.getX();
@@ -1008,7 +1008,7 @@ public final class Builder {
 		}
 	}
 
-	private static void send(ServerPlayer p, net.minecraft.network.protocol.common.custom.CustomPacketPayload payload) {
+	static void send(ServerPlayer p, net.minecraft.network.protocol.common.custom.CustomPacketPayload payload) {
 		if (ServerPlayNetworking.canSend(p, payload.type())) {
 			ServerPlayNetworking.send(p, payload);
 		}

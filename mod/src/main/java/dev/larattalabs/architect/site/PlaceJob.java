@@ -73,6 +73,75 @@ final class PlaceJob implements Placement.Job {
 	@Nullable TemplateWriter writer;
 	/** Set when the job can't go on (its design changed, its level is gone): it is rolled back instead. */
 	@Nullable String broken;
+	/** The ghost clients see while it places: the template's non-air cells, built as the writer passes them. */
+	int @Nullable [] ghostOf;
+	int ghostCells;
+	int ghostSent;
+	final java.util.Set<java.util.UUID> ghostTo = new java.util.HashSet<>();
+
+	/**
+	 * The ghost payload (the same as a construction site's): the template's non-air cells over the snapshot box, built up to
+	 * the writer's cursor. Null before the writer exists.
+	 */
+	dev.larattalabs.architect.survival.SiteNet.@Nullable SiteGhost ghost() {
+		TemplateWriter w = writer;
+		if (w == null) {
+			return null;
+		}
+		int dx = snapBox.maxX() - snapBox.minX() + 1;
+		int dz = snapBox.maxZ() - snapBox.minZ() + 1;
+		int n = w.cells.size();
+		if (ghostOf == null) {
+			ghostOf = new int[n];
+			int k = 0;
+			for (int i = 0; i < n; i++) {
+				ghostOf[i] = w.cells.states()[i].isAir() ? -1 : k++;
+			}
+			ghostCells = k;
+		}
+		int[] queue = new int[ghostCells];
+		int[] states = new int[ghostCells];
+		java.util.BitSet built = new java.util.BitSet();
+		int done = w.phase == TemplateWriter.SET ? w.cursor : n;
+		for (int i = 0; i < n; i++) {
+			int j = ghostOf[i];
+			if (j < 0) {
+				continue;
+			}
+			int x = w.px + w.cells.off()[i * 3] - snapBox.minX();
+			int y = w.py + w.cells.off()[i * 3 + 1] - snapBox.minY();
+			int z = w.pz + w.cells.off()[i * 3 + 2] - snapBox.minZ();
+			queue[j] = Construction.index(x, y, z, dx, dz);
+			states[j] = net.minecraft.world.level.block.Block.getId(w.cells.states()[i]);
+			if (i < done) {
+				built.set(j);
+			}
+		}
+		ghostSent = done;
+		Blueprint b = Blueprints.get(blueprint);
+		return new dev.larattalabs.architect.survival.SiteNet.SiteGhost(siteId, blueprint, net.minecraft.world.level.block.Rotation.values()[turns].name()
+			.toLowerCase(java.util.Locale.ROOT), b == null ? blueprint : b.name(), snapBox.minX(), snapBox.minY(), snapBox.minZ(), dx,
+			snapBox.maxY() - snapBox.minY() + 1, dz, dev.larattalabs.architect.survival.CellBits.encodeInts(queue), states,
+			dev.larattalabs.architect.survival.CellBits.words(built));
+	}
+
+	/** The ghost cells built since the last call (the writer's progress), or an empty array. */
+	int[] ghostNewly() {
+		TemplateWriter w = writer;
+		if (w == null || ghostOf == null) {
+			return new int[0];
+		}
+		int done = w.phase == TemplateWriter.SET ? w.cursor : w.cells.size();
+		int[] out = new int[Math.max(0, done - ghostSent)];
+		int c = 0;
+		for (int i = ghostSent; i < done; i++) {
+			if (ghostOf[i] >= 0) {
+				out[c++] = ghostOf[i];
+			}
+		}
+		ghostSent = Math.max(ghostSent, done);
+		return java.util.Arrays.copyOf(out, c);
+	}
 
 	PlaceJob(String siteId, String dimension, String blueprint, int turns, Anchors.Bounds box, Anchors.Bounds snapBox, BlockPos placePos, int[] fill,
 		int[] clear, int[] aClear, int[] aFill, int[] aPath, int[] aSlabs, long[] plants, List<String> dropsBefore, List<String> notes,
