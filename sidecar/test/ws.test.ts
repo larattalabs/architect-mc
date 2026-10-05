@@ -110,14 +110,14 @@ describe('WebSocket server + sim designer', () => {
     c.send({ type: 'hello', token });
     c.send({ type: 'design.request', id: 'r2', request: request({ type: 'chapel', name: undefined, style: 'gothic' }) });
     await until(() => c.msgs.some((m) => m.type === 'ack' && m.re === 'r2'));
-    const id2 = (c.msgs.find((m) => m.type === 'ack' && m.re === 'r2') as { result: { designId: string } }).result.designId;
+    const id2 = (c.msgs.find((m) => m.type === 'ack' && m.re === 'r2') as unknown as { result: { designId: string } }).result.designId;
     await until(() => h.sc.designs.get(id2)?.status === 'done', 20_000);
     expect(h.sc.designs.get(id2)!.blueprintId).toBe('gen_gothic_chapel');
     expect(h.sc.designs.get(id2)!.step).toContain('copied cabin (no chapel example)');
 
     c.send({ type: 'design.request', id: 'r3', request: request({ name: 'Doomed' }) });
     await until(() => c.msgs.some((m) => m.type === 'ack' && m.re === 'r3'));
-    const id3 = (c.msgs.find((m) => m.type === 'ack' && m.re === 'r3') as { result: { designId: string } }).result.designId;
+    const id3 = (c.msgs.find((m) => m.type === 'ack' && m.re === 'r3') as unknown as { result: { designId: string } }).result.designId;
     c.send({ type: 'design.cancel', id: 'c3', designId: id3 });
     await until(() => c.msgs.some((m) => m.type === 'ack' && m.re === 'c3'));
     await new Promise((r) => setTimeout(r, 300));

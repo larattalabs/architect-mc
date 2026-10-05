@@ -1,0 +1,155 @@
+// Auth mode (ported from AgentCraft's claude-auth.test.ts): API key / cloud provider by default; the
+// claude.ai CLI login only with --use-claude-login / useClaudeLogin. Plus Architect's key from the
+// in-game settings, the status line, and the SDK being absent.
+import { afterEach, describe, expect, it } from 'vitest';
+import { authEnv, authSourceOf, detectApiAuth, withAuthMode, ARCHITECT_NO_API_AUTH_MESSAGE } from '../src/claude/auth.js';
+import { ClaudeDesigner } from '../src/claude/designer.js';
+import { setSdkLoaderForTests } from '../src/claude/sdk.js';
+import { makeSidecar, until, type Harness } from './helpers.js';
+
+describe('detectApiAuth / withAuthMode (as AgentCraft)', () => {
+  it('finds an API key, a cloud provider switch or a gateway, and nothing else', () => {
+    expect(detectApiAuth({ ANTHROPIC_API_KEY: 'sk-ant-x' })).toEqual({ ok: true, source: 'API key' });
+    expect(detectApiAuth({ CLAUDE_CODE_USE_BEDROCK: '1' })).toEqual({ ok: true, source: 'Amazon Bedrock' });
+    expect(detectApiAuth({ CLAUDE_CODE_USE_VERTEX: 'true' })).toEqual({ ok: true, source: 'Google Vertex AI' });
+    expect(detectApiAuth({ CLAUDE_CODE_USE_BEDROCK: '0' })).toEqual({ ok: false });
+    expect(detectApiAuth({ ANTHROPIC_AUTH_TOKEN: 't', ANTHROPIC_BASE_URL: 'https://gw' })).toEqual({ ok: true, source: 'API gateway' });
+    expect(detectApiAuth({ ANTHROPIC_API_KEY: '  ', CLAUDE_CODE_OAUTH_TOKEN: 'oauth' })).toEqual({ ok: false });
+  });
+
+  it('drops the claude.ai login token from agent processes unless opted in', () => {
+    const env = { CLAUDE_CODE_OAUTH_TOKEN: 'oauth', ANTHROPIC_API_KEY: 'k' };
+    expect(withAuthMode(env, false)).toEqual({ ANTHROPIC_API_KEY: 'k' });
+    expect(withAuthMode(env, true)).toEqual({ CLAUDE_CODE_OAUTH_TOKEN: 'oauth' });
+  });
+
+  it('under --use-claude-login strips ANTHROPIC_API_KEY and ANTHROPIC_AUTH_TOKEN (any case), keeps the rest', () => {
+    const env = { ANTHROPIC_API_KEY: 'k', anthropic_auth_token: 't', ANTHROPIC_BASE_URL: 'https://gw', PATH: '/bin', CLAUDE_CODE_USE_BEDROCK: '1' };
+    const out = withAuthMode(env, true);
+    expect(out).toEqual({ ANTHROPIC_BASE_URL: 'https://gw', PATH: '/bin', CLAUDE_CODE_USE_BEDROCK: '1' });
+    expect(JSON.stringify(out)).not.toContain('"k"');
+  });
+});
+
+describe('the key from the in-game settings', () => {
+  it('fills in for a missing ANTHROPIC_API_KEY in API mode only; the environment wins', () => {
+    expect(authEnv({ PATH: '/bin' }, { useClaudeLogin: false, storedKey: 'stored' })).toEqual({ PATH: '/bin', ANTHROPIC_API_KEY: 'stored' });
+    expect(authEnv({ ANTHROPIC_API_KEY: 'env' }, { useClaudeLogin: false, storedKey: 'stored' })).toEqual({ ANTHROPIC_API_KEY: 'env' });
+    expect(authEnv({ CLAUDE_CODE_OAUTH_TOKEN: 'o' }, { useClaudeLogin: true, storedKey: 'stored' })).toEqual({ CLAUDE_CODE_OAUTH_TOKEN: 'o' });
+  });
+
+  it('names the source for the status line', () => {
+    expect(authSourceOf({}, { useClaudeLogin: false })).toEqual({ ok: false });
+    expect(authSourceOf({}, { useClaudeLogin: false, storedKey: 'k' })).toEqual({ ok: true, source: 'API key' });
+    expect(authSourceOf({ ANTHROPIC_API_KEY: 'k' }, { useClaudeLogin: false, storedKey: 'k2' })).toEqual({ ok: true, source: 'API key (environment)' });
+    expect(authSourceOf({ CLAUDE_CODE_USE_BEDROCK: '1' }, { useClaudeLogin: false })).toEqual({ ok: true, source: 'Amazon Bedrock' });
+    expect(authSourceOf({}, { useClaudeLogin: true })).toEqual({ ok: true, source: 'claude login (personal use)' });
+  });
+});
+
+describe('ClaudeDesigner.checkAuth', () => {
+  let h: Harness | undefined;
+  const saved = { key: process.env.ANTHROPIC_API_KEY, bedrock: process.env.CLAUDE_CODE_USE_BEDROCK };
+  afterEach(async () => {
+    if (saved.key === undefined) delete process.env.ANTHROPIC_API_KEY;
+    else process.env.ANTHROPIC_API_KEY = saved.key;
+    if (saved.bedrock === undefined) delete process.env.CLAUDE_CODE_USE_BEDROCK;
+    else process.env.CLAUDE_CODE_USE_BEDROCK = saved.bedrock;
+    setSdkLoaderForTests(undefined);
+    await h?.close();
+    h = undefined;
+  });
+  const clean = () => {
+    delete process.env.ANTHROPIC_API_KEY;
+    delete process.env.CLAUDE_CODE_USE_BEDROCK;
+  };
+
+  let queried = 0;
+  let accountInfo: () => Promise<Record<string, unknown>> = async () => ({ email: 'x@example.com', organization: 'Acme', subscriptionType: 'max' });
+  const fakeQuery = () => {
+    queried++;
+    return { close() {}, accountInfo: () => accountInfo() };
+  };
+
+  it('without an API key (and no opt-in): missing, and never touches the CLI login', async () => {
+    clean();
+    h = makeSidecar();
+    queried = 0;
+    const b = new ClaudeDesigner(h.sc, { queryFn: fakeQuery as never });
+    expect(await b.checkAuth()).toBe(false);
+    expect(queried).toBe(0);
+    expect(h.sc.status()).toMatchObject({ auth: 'missing', useClaudeLogin: false, message: ARCHITECT_NO_API_AUTH_MESSAGE });
+  });
+
+  it('with ANTHROPIC_API_KEY it checks access and reports the source', async () => {
+    clean();
+    process.env.ANTHROPIC_API_KEY = 'sk-ant-test';
+    h = makeSidecar();
+    queried = 0;
+    const b = new ClaudeDesigner(h.sc, { queryFn: fakeQuery as never });
+    expect(await b.checkAuth()).toBe(true);
+    expect(queried).toBe(1);
+    expect(h.sc.status()).toMatchObject({ auth: 'ok', authSource: 'API key (environment)', sdk: 'ready', message: 'Acme' });
+  });
+
+  it('a key set in game (auth.set) is checked right away; a bad one fails, clearing it goes back to missing', async () => {
+    clean();
+    h = makeSidecar();
+    const b = new ClaudeDesigner(h.sc, { queryFn: fakeQuery as never });
+    await h.sc.start(b);
+    expect(h.sc.status().auth).toBe('missing');
+    accountInfo = async () => {
+      throw new Error('Invalid API key');
+    };
+    await h.sc.handle({ v: 1, type: 'auth.set', apiKey: 'sk-ant-bad' }, () => undefined);
+    await until(() => h!.sc.status().auth === 'failed');
+    expect(h.sc.status()).toMatchObject({ auth: 'failed', authSource: 'API key' });
+    expect(h.sc.status().message).toMatch(/Claude API check failed: Invalid API key/);
+    expect(() => h!.sc.requestDesign({ type: 'cabin', style: 'x', features: [], maxSize: { x: 10, y: 10, z: 10 } })).toThrow(/Claude is not available/);
+    accountInfo = async () => ({ organization: 'Acme' });
+    await h.sc.handle({ v: 1, type: 'auth.set', apiKey: 'sk-ant-good' }, () => undefined);
+    await until(() => h!.sc.status().auth === 'ok');
+    await h.sc.handle({ v: 1, type: 'auth.set', apiKey: null }, () => undefined);
+    await until(() => h!.sc.status().auth === 'missing');
+    accountInfo = async () => ({ email: 'x@example.com', organization: 'Acme', subscriptionType: 'max' });
+  });
+
+  it('a network failure is not a bad key: it stays checking and retries', async () => {
+    clean();
+    process.env.ANTHROPIC_API_KEY = 'sk-ant-test';
+    h = makeSidecar();
+    let fail = true;
+    accountInfo = async () => {
+      if (fail) throw new Error('fetch failed: ECONNREFUSED');
+      return { organization: 'Acme' };
+    };
+    const b = new ClaudeDesigner(h.sc, { queryFn: fakeQuery as never, authRetryMs: 100 });
+    expect(await b.checkAuth()).toBe(false);
+    expect(h.sc.status().auth).toBe('checking');
+    expect(h.sc.status().message).toMatch(/could not be reached/);
+    fail = false;
+    await until(() => h!.sc.status().auth === 'ok', 5000);
+    await b.stop();
+    accountInfo = async () => ({ email: 'x@example.com', organization: 'Acme', subscriptionType: 'max' });
+  });
+
+  it('--use-claude-login uses the CLI login (personal use) even without a key', async () => {
+    clean();
+    h = makeSidecar(['--use-claude-login']);
+    const b = new ClaudeDesigner(h.sc, { queryFn: fakeQuery as never });
+    expect(await b.checkAuth()).toBe(true);
+    expect(h.sc.status()).toMatchObject({ auth: 'ok', useClaudeLogin: true, authSource: 'claude login (personal use)', message: 'Acme · max' });
+  });
+
+  it('without the SDK installed: status still serves (sdk missing), designs wait', async () => {
+    clean();
+    process.env.ANTHROPIC_API_KEY = 'sk-ant-test';
+    h = makeSidecar();
+    setSdkLoaderForTests(async () => undefined);
+    const b = new ClaudeDesigner(h.sc);
+    expect(await b.checkAuth()).toBe(false);
+    expect(h.sc.status()).toMatchObject({ auth: 'checking', sdk: 'missing' });
+    expect(h.sc.status().message).toMatch(/Waiting for the Claude Agent SDK/);
+    await b.stop();
+  });
+});
