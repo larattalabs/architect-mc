@@ -16,9 +16,18 @@ import org.jspecify.annotations.Nullable;
  * @param tag a user tag, or null for all
  * @param favoritesOnly only starred entries
  * @param text words that must all appear (case-insensitive) in the name, the design's name, id, tags, user tags or description
+ * @param collection a collection (phase 4b, R10): {@code bible:<id>} (every entry designed or re-skinned with that bible) or
+ *     {@code group:<id>} (a design group's entries), or null for all
  */
-public record LibraryQuery(@Nullable String type, @Nullable String tag, boolean favoritesOnly, String text, Sort sort) {
-	public static final LibraryQuery ALL = new LibraryQuery(null, null, false, "", Sort.NEWEST);
+public record LibraryQuery(@Nullable String type, @Nullable String tag, boolean favoritesOnly, String text, Sort sort, @Nullable String collection) {
+	public static final LibraryQuery ALL = new LibraryQuery(null, null, false, "", Sort.NEWEST, null);
+	public static final String BIBLE_PREFIX = "bible:";
+	public static final String GROUP_PREFIX = "group:";
+
+	/** The phase 2 constructor (no collection). */
+	public LibraryQuery(@Nullable String type, @Nullable String tag, boolean favoritesOnly, String text, Sort sort) {
+		this(type, tag, favoritesOnly, text, sort, null);
+	}
 
 	public enum Sort {
 		NEWEST, NAME, SIZE;
@@ -50,30 +59,35 @@ public record LibraryQuery(@Nullable String type, @Nullable String tag, boolean 
 		tag = tag == null || tag.isBlank() ? null : tag;
 		text = text == null ? "" : text;
 		sort = sort == null ? Sort.NEWEST : sort;
+		collection = collection == null || collection.isBlank() ? null : collection;
 	}
 
 	public LibraryQuery withType(@Nullable String t) {
-		return new LibraryQuery(t, tag, favoritesOnly, text, sort);
+		return new LibraryQuery(t, tag, favoritesOnly, text, sort, collection);
 	}
 
 	public LibraryQuery withTag(@Nullable String t) {
-		return new LibraryQuery(type, t, favoritesOnly, text, sort);
+		return new LibraryQuery(type, t, favoritesOnly, text, sort, collection);
 	}
 
 	public LibraryQuery withFavoritesOnly(boolean on) {
-		return new LibraryQuery(type, tag, on, text, sort);
+		return new LibraryQuery(type, tag, on, text, sort, collection);
 	}
 
 	public LibraryQuery withText(String t) {
-		return new LibraryQuery(type, tag, favoritesOnly, t, sort);
+		return new LibraryQuery(type, tag, favoritesOnly, t, sort, collection);
 	}
 
 	public LibraryQuery withSort(Sort s) {
-		return new LibraryQuery(type, tag, favoritesOnly, text, s);
+		return new LibraryQuery(type, tag, favoritesOnly, text, s, collection);
+	}
+
+	public LibraryQuery withCollection(@Nullable String c) {
+		return new LibraryQuery(type, tag, favoritesOnly, text, sort, c);
 	}
 
 	public boolean filtered() {
-		return type != null || tag != null || favoritesOnly || !text.isBlank();
+		return type != null || tag != null || favoritesOnly || !text.isBlank() || collection != null;
 	}
 
 	public boolean matches(LibraryCard c) {
@@ -84,6 +98,9 @@ public record LibraryQuery(@Nullable String type, @Nullable String tag, boolean 
 			return false;
 		}
 		if (favoritesOnly && !c.favorite()) {
+			return false;
+		}
+		if (collection != null && !c.collections().contains(collection)) {
 			return false;
 		}
 		String q = text.strip().toLowerCase(Locale.ROOT);
@@ -126,6 +143,28 @@ public record LibraryQuery(@Nullable String type, @Nullable String tag, boolean 
 		TreeSet<String> s = new TreeSet<>();
 		cards.forEach(c -> s.add(c.type()));
 		return List.copyOf(s);
+	}
+
+	/** A collection present among the cards: its key ({@code bible:<id>} / {@code group:<id>}) and how many entries it has. */
+	public record CollectionInfo(String key, String id, boolean bible, int count) {
+	}
+
+	/** The collections present: bibles first, then groups, each by id. */
+	public static List<CollectionInfo> collections(java.util.Collection<LibraryCard> cards) {
+		java.util.TreeMap<String, Integer> bibles = new java.util.TreeMap<>();
+		java.util.TreeMap<String, Integer> groups = new java.util.TreeMap<>();
+		for (LibraryCard c : cards) {
+			if (c.bible() != null) {
+				bibles.merge(c.bible(), 1, Integer::sum);
+			}
+			if (c.group() != null) {
+				groups.merge(c.group(), 1, Integer::sum);
+			}
+		}
+		List<CollectionInfo> out = new ArrayList<>();
+		bibles.forEach((id, n) -> out.add(new CollectionInfo(BIBLE_PREFIX + id, id, true, n)));
+		groups.forEach((id, n) -> out.add(new CollectionInfo(GROUP_PREFIX + id, id, false, n)));
+		return out;
 	}
 
 	/** The user tags present, sorted. */

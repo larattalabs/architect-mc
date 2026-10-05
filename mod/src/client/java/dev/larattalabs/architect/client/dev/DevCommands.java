@@ -141,12 +141,22 @@ public final class DevCommands {
 				o.addProperty("left", was);
 				return o;
 			}));
-		DevBridge.register("dev.world.open", 10_000, "{} - open (or create) the AutoWorld world again, from the title screen; then dev.state until ready",
+		DevBridge.register("dev.world.open", 10_000, "{name?, mode?: creative|survival|hardcore, preset?: flat|normal, seed?, cheats?: bool} - open "
+			+ "(or create) the AutoWorld world again, from the title screen (the fields replace ARCHITECT_AUTOWORLD_*: another world); then dev.state "
+			+ "until ready",
 			(req, mc) -> DevBridge.onClient(mc, () -> {
 				if (mc.level != null) {
 					throw new IllegalStateException("already in a world (dev.world.leave first)");
 				}
-				dev.larattalabs.architect.client.AutoWorld.openOrCreate(mc);
+				java.util.Map<String, String> over = new java.util.HashMap<>();
+				for (String k : new String[] {"name", "mode", "preset", "seed", "cheats"}) {
+					if (req.has(k) && !req.get(k).isJsonNull()) {
+						String v = req.get(k).getAsString();
+						over.put("ARCHITECT_AUTOWORLD_" + k.toUpperCase(java.util.Locale.ROOT), k.equals("cheats") ? (Boolean.parseBoolean(v) || v.equals("1") ? "1"
+							: "0") : v);
+					}
+				}
+				dev.larattalabs.architect.client.AutoWorld.openOrCreate(mc, over);
 				JsonObject o = new JsonObject();
 				o.addProperty("opening", true);
 				return o;

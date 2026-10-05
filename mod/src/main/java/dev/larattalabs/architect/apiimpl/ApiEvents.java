@@ -79,4 +79,30 @@ public final class ApiEvents {
 	public static void variantDone(Library.Entry e) {
 		guard("VARIANT_DONE", () -> SiteEvents.VARIANT_DONE.invoker().onDone(e));
 	}
+
+	public static void groupUpdated(dev.larattalabs.architect.api.Group g) {
+		guard("GROUP_UPDATED", () -> SiteEvents.GROUP_UPDATED.invoker().onUpdated(g));
+	}
+
+	public static void groupDone(dev.larattalabs.architect.api.Group g) {
+		guard("GROUP_DONE", () -> SiteEvents.GROUP_DONE.invoker().onDone(g));
+	}
+
+	public static void bibleUpdated(dev.larattalabs.architect.api.BibleJob j) {
+		guard("BIBLE_UPDATED", () -> SiteEvents.BIBLE_UPDATED.invoker().onUpdated(j));
+	}
+
+	public static void bibleDone(dev.larattalabs.architect.api.BibleJob j) {
+		guard("BIBLE_DONE", () -> SiteEvents.BIBLE_DONE.invoker().onDone(j));
+	}
+
+	public static void reskinDone(dev.larattalabs.architect.api.Reskin r) {
+		guard("RESKIN_DONE", () -> SiteEvents.RESKIN_DONE.invoker().onDone(r));
+	}
+
+	/** The world's survival toggle changed, or got its default at the first load (server thread). */
+	public static void worldModeChanged(boolean on, int blocksPerTick) {
+		dev.larattalabs.architect.api.SurvivalInfo info = new dev.larattalabs.architect.api.SurvivalInfo(on, blocksPerTick);
+		guard("WORLD_MODE_CHANGED", () -> SiteEvents.WORLD_MODE_CHANGED.invoker().onChanged(info));
+	}
 }

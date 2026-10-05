@@ -177,6 +177,22 @@ public final class SidecarState {
 		/** (protocol 2) {@code job.tool.call {jobId, callId, name, input, owner?, timeoutMs?}}: answer with job.tool.result. */
 		default void onToolCall(JsonObject call) {
 		}
+
+		/** (4b) {@code group.upsert {group}} or a group of a snapshot that changed: the group as received. */
+		default void onGroup(JsonObject group) {
+		}
+
+		/** (4b) {@code bible.upsert {bible}} or a bible job of a snapshot that changed. */
+		default void onBibleJob(JsonObject job) {
+		}
+
+		/** (4b) {@code bible.index {bibles}} or a snapshot's {@code bibleIndex}. */
+		default void onBibleIndex(List<JsonObject> bibles) {
+		}
+
+		/** (4b) {@code reskin.upsert {reskin}} or a re-skin of a snapshot that changed. */
+		default void onReskin(JsonObject reskin) {
+		}
 	}
 
 	private LinkStatus link = new LinkStatus(LinkStatus.Phase.DISABLED, "", 0, null, 0, 0, false);
@@ -185,6 +201,12 @@ public final class SidecarState {
 	private final Map<String, Variant> variants = new LinkedHashMap<>();
 	/** (protocol 2) the jobs as received ({@code snapshot.jobs} replaces, {@code job.upsert} updates). */
 	private final Map<String, JsonObject> jobs = new LinkedHashMap<>();
+	/** (4b) groups, bible jobs and re-skins as received ({@code snapshot.*} merges, {@code *.upsert} updates), by id. */
+	private final Map<String, JsonObject> groups = new LinkedHashMap<>();
+	private final Map<String, JsonObject> bibleJobs = new LinkedHashMap<>();
+	private final Map<String, JsonObject> reskins = new LinkedHashMap<>();
+	/** (4b) the sidecar's bible index (installed + built in), as last received. */
+	private List<JsonObject> bibleIndex = List.of();
 	/** {@code snapshot.palettes} when the sidecar sends it (optional; see Palettes). */
 	private @Nullable JsonElement palettes;
 	/** {@code snapshot.protocol}; 1 when the snapshot names none (a phase 1-3 sidecar), 0 before a snapshot. */
@@ -274,6 +296,65 @@ public final class SidecarState {
 		return out;
 	}
 
+	/** (4b) The design groups (newest first), as received. */
+	public List<JsonObject> groups() {
+		return newest(groups);
+	}
+
+	/** (4b) The bible jobs (newest first), as received. */
+	public List<JsonObject> bibleJobs() {
+		return newest(bibleJobs);
+	}
+
+	/** (4b) The re-skins (newest first), as received. */
+	public List<JsonObject> reskins() {
+		return newest(reskins);
+	}
+
+	public @Nullable JsonObject group(String id) {
+		return groups.get(id);
+	}
+
+	public @Nullable JsonObject bibleJob(String id) {
+		return bibleJobs.get(id);
+	}
+
+	public @Nullable JsonObject reskin(String id) {
+		return reskins.get(id);
+	}
+
+	/** (4b) The bible index as last received (installed + built in). */
+	public List<JsonObject> bibleIndex() {
+		return bibleIndex;
+	}
+
+	private static List<JsonObject> newest(Map<String, JsonObject> m) {
+		List<JsonObject> out = new ArrayList<>(m.values());
+		out.sort((a, b) -> Long.compare(ts(b, "createdAt"), ts(a, "createdAt")));
+		return Collections.unmodifiableList(out);
+	}
+
+	private static long ts(JsonObject o, String k) {
+		return o.has(k) && o.get(k).isJsonPrimitive() ? o.get(k).getAsLong() : 0L;
+	}
+
+	/** Merges a snapshot array into {@code into} by id (a snapshot holds only the last 20 + the unfinished); the changed ones. */
+	private static List<JsonObject> mergeAll(JsonObject snapshot, String key, Map<String, JsonObject> into) {
+		List<JsonObject> changed = new ArrayList<>();
+		if (snapshot.has(key) && snapshot.get(key).isJsonArray()) {
+			for (JsonElement e : snapshot.getAsJsonArray(key)) {
+				if (e.isJsonObject() && e.getAsJsonObject().has("id")) {
+					JsonObject o = e.getAsJsonObject();
+					JsonObject prev = into.put(str(o, "id", "?"), o);
+					if (prev == null || !prev.equals(o)) {
+						changed.add(o);
+					}
+				}
+			}
+		}
+		return changed;
+	}
+
 	/** The raw design messages as last received (copies), for the API. */
 	public List<JsonObject> designsRaw() {
 		List<JsonObject> out = new ArrayList<>();
@@ -321,6 +402,18 @@ public final class SidecarState {
 						}
 					}
 				}
+				List<JsonObject> changedGroups = mergeAll(json, "groups", groups);
+				List<JsonObject> changedBibles = mergeAll(json, "bibles", bibleJobs);
+				List<JsonObject> changedReskins = mergeAll(json, "reskins", reskins);
+				List<JsonObject> index = new ArrayList<>();
+				if (json.has("bibleIndex") && json.get("bibleIndex").isJsonArray()) {
+					json.getAsJsonArray("bibleIndex").forEach(e -> {
+						if (e.isJsonObject()) {
+							index.add(e.getAsJsonObject());
+						}
+					});
+					bibleIndex = List.copyOf(index);
+				}
 				palettes = json.has("palettes") && !json.get("palettes").isJsonNull() ? json.get("palettes") : null;
 				protocol = protocolOf(json);
 				features = featuresOf(json);
@@ -333,6 +426,18 @@ public final class SidecarState {
 						}
 					}
 					guard(l::onSnapshot);
+					if (json.has("bibleIndex")) {
+						guard(() -> l.onBibleIndex(bibleIndex));
+					}
+					for (JsonObject g : changedGroups) {
+						guard(() -> l.onGroup(g));
+					}
+					for (JsonObject b : changedBibles) {
+						guard(() -> l.onBibleJob(b));
+					}
+					for (JsonObject r : changedReskins) {
+						guard(() -> l.onReskin(r));
+					}
 					for (Design d : designs.values()) {
 						Design prev = old.get(d.id());
 						if (prev == null || prev.status() != d.status() || prev.updatedAt() != d.updatedAt()) {
@@ -376,6 +481,49 @@ public final class SidecarState {
 				jobs.put(str(j, "id", "?"), j);
 				for (Listener l : listeners) {
 					guard(() -> l.onJob(j));
+				}
+			}
+			case "group.upsert", "bible.upsert", "reskin.upsert" -> {
+				String key = type.substring(0, type.indexOf('.'));
+				if (!json.has(key) || !json.get(key).isJsonObject()) {
+					return;
+				}
+				JsonObject o = json.getAsJsonObject(key);
+				String id = str(o, "id", "?");
+				switch (type) {
+					case "group.upsert" -> {
+						groups.put(id, o);
+						for (Listener l : listeners) {
+							guard(() -> l.onGroup(o));
+						}
+					}
+					case "bible.upsert" -> {
+						bibleJobs.put(id, o);
+						for (Listener l : listeners) {
+							guard(() -> l.onBibleJob(o));
+						}
+					}
+					default -> {
+						reskins.put(id, o);
+						for (Listener l : listeners) {
+							guard(() -> l.onReskin(o));
+						}
+					}
+				}
+			}
+			case "bible.index" -> {
+				List<JsonObject> index = new ArrayList<>();
+				if (json.has("bibles") && json.get("bibles").isJsonArray()) {
+					json.getAsJsonArray("bibles").forEach(e -> {
+						if (e.isJsonObject()) {
+							index.add(e.getAsJsonObject());
+						}
+					});
+				}
+				bibleIndex = List.copyOf(index);
+				List<JsonObject> idx = bibleIndex;
+				for (Listener l : listeners) {
+					guard(() -> l.onBibleIndex(idx));
 				}
 			}
 			case "job.tool.call" -> {
@@ -445,6 +593,34 @@ public final class SidecarState {
 			js.add(v);
 		}
 		o.add("jobs", js);
+		JsonArray gs = new JsonArray();
+		for (JsonObject g : groups()) {
+			gs.add(g);
+		}
+		o.add("groups", gs);
+		JsonArray bjs = new JsonArray();
+		for (JsonObject b : bibleJobs()) {
+			JsonObject v = b.deepCopy();
+			v.remove("request");
+			bjs.add(v);
+		}
+		o.add("bibleJobs", bjs);
+		JsonArray rs = new JsonArray();
+		for (JsonObject r : reskins()) {
+			rs.add(r);
+		}
+		o.add("reskins", rs);
+		JsonArray bi = new JsonArray();
+		for (JsonObject b : bibleIndex) {
+			JsonObject v = new JsonObject();
+			for (String k : new String[] {"id", "name", "version", "builtin", "sheetPath"}) {
+				if (b.has(k)) {
+					v.add(k, b.get(k));
+				}
+			}
+			bi.add(v);
+		}
+		o.add("bibleIndex", bi);
 		o.addProperty("palettesFromSidecar", palettes != null);
 		o.addProperty("protocol", protocol);
 		JsonArray fs = new JsonArray();

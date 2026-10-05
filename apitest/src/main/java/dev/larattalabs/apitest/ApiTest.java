@@ -86,11 +86,12 @@ public class ApiTest implements ModInitializer {
 		SiteEvents.JOB_UPDATED.register(j -> event("JOB_UPDATED", ApiTestJobs.job(j)));
 		SiteEvents.JOB_DONE.register(j -> event("JOB_DONE", ApiTestJobs.job(j)));
 		ApiTestJobs.init();
+		ApiTestSets.init();
 		CommandRegistrationCallback.EVENT.register((d, ctx, env) -> d.register(Commands.literal("apitest")
 			.then(Commands.argument("args", StringArgumentType.greedyString()).executes(ApiTest::run))));
 	}
 
-	private static void event(String type, JsonObject data) {
+	static void event(String type, JsonObject data) {
 		data.addProperty("event", type);
 		data.addProperty("t", System.currentTimeMillis());
 		data.addProperty("serverThread", Thread.currentThread().getName());
@@ -162,6 +163,26 @@ public class ApiTest implements ModInitializer {
 			case "toolstats":
 			case "ticks": {
 				return ApiTestJobs.step(src, a);
+			}
+			case "bible":
+			case "biblerevise":
+			case "bibleestimate":
+			case "biblejob":
+			case "bibleget":
+			case "bibles":
+			case "estimate":
+			case "estimate1":
+			case "group":
+			case "groupget":
+			case "groups":
+			case "groupcancel":
+			case "groupextend":
+			case "groupresume":
+			case "opentype":
+			case "reskin":
+			case "reskinvariant":
+			case "survival": {
+				return ApiTestSets.step(src, a);
 			}
 			case "place":
 			case "check": {
@@ -428,6 +449,12 @@ public class ApiTest implements ModInitializer {
 		o.addProperty("imported", e.imported());
 		o.addProperty("variantOf", e.variantOf().orElse(null));
 		o.addProperty("palette", e.palette().map(Object::toString).orElse(null));
+		o.addProperty("bible", e.bible().map(b -> b.id() + "@" + b.version()).orElse(null));
+		o.addProperty("group", e.group().orElse(null));
+		o.addProperty("groupItem", e.groupItem().orElse(null));
+		JsonObject parts = new JsonObject();
+		e.parts().forEach((n, p) -> parts.addProperty(n, p.cells()));
+		o.add("parts", parts);
 		return o;
 	}
 }

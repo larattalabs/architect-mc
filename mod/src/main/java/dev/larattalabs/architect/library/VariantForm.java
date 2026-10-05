@@ -159,6 +159,8 @@ public final class VariantForm {
 	private @Nullable String preset;
 	private Palettes.Inputs inputs;
 	private String name = "";
+	/** A re-skin (phase 4b): the style bible to build with instead of a palette, or null. */
+	private @Nullable String bible;
 
 	/**
 	 * @param from the library id
@@ -219,7 +221,17 @@ public final class VariantForm {
 		name = n == null ? "" : n.strip();
 	}
 
-	/** Picks a preset chip: the inputs become the preset's. */
+	/** The style bible picked (a re-skin), or null. */
+	public @Nullable String bible() {
+		return bible;
+	}
+
+	/** Picks a style bible (phase 4b re-skin): the variant builds with its roles instead of a palette; null = none. */
+	public void chooseBible(@Nullable String id) {
+		bible = id == null || id.isBlank() ? null : id;
+	}
+
+	/** Picks a preset chip: the inputs become the preset's (and a picked bible is dropped). */
 	public void choosePreset(String p) {
 		Palettes.Inputs in = palettes.preset(p);
 		if (in == null) {
@@ -227,6 +239,7 @@ public final class VariantForm {
 		}
 		preset = p;
 		inputs = in;
+		bible = null;
 	}
 
 	/** An advanced dropdown: one field changes; the preset name stays only while the inputs still equal it. */
@@ -235,6 +248,7 @@ public final class VariantForm {
 			throw new IllegalArgumentException("palette field must be wood, stone, roof or accent: " + field);
 		}
 		inputs = inputs.with(field, Palettes.shortName(value));
+		bible = null;
 		Palettes.Inputs p = palettes.preset(preset);
 		if (p == null || !p.equals(inputs)) {
 			preset = palettes.presetMatching(inputs);
@@ -293,17 +307,20 @@ public final class VariantForm {
 
 	/** Whether "Make variant" has something to make. */
 	public boolean changed() {
-		return paletteChanged() || !changedValues().isEmpty();
+		return bible != null || paletteChanged() || !changedValues().isEmpty();
 	}
 
 	/**
 	 * {@code {from, palette?, values?, name?}}: {@code palette} is the preset name when the inputs are exactly a preset's,
-	 * else an object of the four inputs, and absent when unchanged; {@code values} holds only the changed parameters.
+	 * else an object of the four inputs, and absent when unchanged; {@code values} holds only the changed parameters. With a
+	 * bible picked: {@code bible} instead of {@code palette} (a re-skin).
 	 */
 	public JsonObject requestJson() {
 		JsonObject o = new JsonObject();
 		o.addProperty("from", from);
-		if (paletteChanged()) {
+		if (bible != null) {
+			o.addProperty("bible", bible);
+		} else if (paletteChanged()) {
 			Palettes.Inputs p = palettes.preset(preset);
 			if (preset != null && p != null && p.equals(inputs)) {
 				o.addProperty("palette", preset);
@@ -328,6 +345,7 @@ public final class VariantForm {
 		JsonObject o = new JsonObject();
 		o.addProperty("from", from);
 		o.addProperty("preset", preset);
+		o.addProperty("bible", bible);
 		o.addProperty("originalPreset", originalPreset);
 		o.add("inputs", inputs.toJson());
 		JsonArray ps = new JsonArray();

@@ -36,4 +36,10 @@ public interface Sites {
 
 	/** A dry run of {@link #place}: refusals, notes, the bill of materials and the boxes. No side effects, never loads a chunk. */
 	Verdict check(PlaceRequest r);
+
+	/**
+	 * The world's survival toggle: construction sites on or off, the build speed, and who may change it. Server thread (any
+	 * thread works; it reads a volatile). Changes fire {@link SiteEvents#WORLD_MODE_CHANGED}. Since 1.2.0.
+	 */
+	SurvivalInfo survival();
 }

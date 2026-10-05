@@ -24,6 +24,8 @@ import org.jspecify.annotations.Nullable;
  * off for creative (and adventure/spectator) ones, and is written then. Off: placement is instant (phases 1-2). On: Place
  * creates a construction site. Changing it needs permission level 2 ({@code /architect survival on|off}, the Status tab).
  * {@code blocksPerTick} is the builder's speed per site (1-64, default 4). Loaded before the sites when a world starts.
+ * Every real change (on to off or back), and the default written at the first load, fires the API's {@code WORLD_MODE_CHANGED}
+ * (server thread).
  */
 public final class SurvivalWorld {
 	public static final String FILE = "architect-world.json";
@@ -108,6 +110,10 @@ public final class SurvivalWorld {
 			write(server, s);
 			Architect.LOGGER.info("First load of this world with Architect: survival construction sites {} ({} world{})", def ? "on" : "off",
 				type.getName(), server.isHardcore() ? ", hardcore" : "");
+			current = s;
+			// the default at the first load is a change too (API 1.2.0 WORLD_MODE_CHANGED)
+			dev.larattalabs.architect.apiimpl.ApiEvents.worldModeChanged(s.survival(), s.blocksPerTick());
+			return;
 		}
 		current = s;
 	}
@@ -116,10 +122,14 @@ public final class SurvivalWorld {
 	public static void set(MinecraftServer server, boolean on) {
 		Settings s = current;
 		Settings n = new Settings(on, s == null ? DEFAULT_BLOCKS_PER_TICK : s.blocksPerTick());
+		boolean changed = s == null || s.survival() != on;
 		current = n;
 		write(server, n);
 		Architect.LOGGER.info("Survival construction sites turned {}", on ? "on" : "off");
 		LISTENERS.forEach(l -> l.accept(on));
+		if (changed) {
+			dev.larattalabs.architect.apiimpl.ApiEvents.worldModeChanged(on, n.blocksPerTick());
+		}
 	}
 
 	private static void write(MinecraftServer server, Settings s) {

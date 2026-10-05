@@ -8,6 +8,7 @@ import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.world.level.levelgen.structure.BoundingBox;
 import org.jspecify.annotations.Nullable;
 
 /** The design library: bundled designs (in the jar) and the user's ({@code <gameDir>/architect/library/}). */
@@ -27,6 +28,27 @@ public interface Library {
 	 * {@code {wood?, stone?, roof?, accent?}}. Thread-safe.
 	 */
 	CompletableFuture<Entry> makeVariant(String entryId, @Nullable JsonElement palette, @Nullable JsonObject values, @Nullable String name);
+
+	/**
+	 * A variant built with a style bible's roles (a re-skin: free, no Claude; the design keeps its own components, which read
+	 * the roles). {@code bible} excludes {@code palette} (both set: the future fails); null bible = {@link #makeVariant(String,
+	 * JsonElement, JsonObject, String)}. The bible's latest version. Since 1.2.0.
+	 */
+	CompletableFuture<Entry> makeVariant(String entryId, @Nullable JsonElement palette, @Nullable JsonObject values, @Nullable String name,
+		@Nullable String bible);
+
+	/** As above, at a bible version (null = its latest). Since 1.2.0. */
+	CompletableFuture<Entry> makeVariant(String entryId, @Nullable JsonElement palette, @Nullable JsonObject values, @Nullable String name,
+		@Nullable String bible, @Nullable Integer bibleVersion);
+
+	/**
+	 * Re-skins a collection (docs/CONTRACT.md "Collections (R10)"): one variant per entry of {@code from} with the bible
+	 * {@code bibleId} (at {@code version}, null = its latest). Only user entries with a parametric source are re-skinned
+	 * (bundled and imported ones have none in the library folder). Completes on the server thread once every variant
+	 * finished, with the new entries loaded; {@link SiteEvents#RESKIN_DONE} fires then too. Fails when the helper is not
+	 * running or the collection has no entry with a source. Since 1.2.0.
+	 */
+	CompletableFuture<Reskin> reskinCollection(String bibleId, @Nullable Integer version, CollectionRef from);
 
 	/** Moves a user entry to {@code architect/library-trash/} (as the UI does) and reloads. Bundled entries refuse (false). Thread-safe. */
 	CompletableFuture<Boolean> delete(String entryId);
@@ -49,10 +71,54 @@ public interface Library {
 	 * @param source the parametric source file name ({@code <id>.mjs}), absent for imports and hand-made templates
 	 * @param ports named connectors (R5) in template coordinates (before rotation)
 	 * @param ext namespaced extra data from the blueprint JSON (a copy)
+	 * @param type a preset type or (since 1.2.0) an open type
+	 * @param bible (since 1.2.0) the style bible it was designed or re-skinned with
+	 * @param group (since 1.2.0) the design group it was made in
+	 * @param groupItem (since 1.2.0) its item key in that group
+	 * @param parts (since 1.2.0) its named parts (R3: {@code main, roof, wing_east, ...}) by name, template coordinates
 	 */
 	record Entry(String id, String name, String type, BlockSize size, List<String> tags, Optional<String> source, Map<String, JsonElement> params,
 		Map<String, JsonElement> values, Optional<JsonObject> palette, Map<String, Port> ports, JsonObject ext, boolean bundled, boolean imported,
-		Optional<String> variantOf) {
+		Optional<String> variantOf, Optional<BiblePin> bible, Optional<String> group, Optional<String> groupItem, Map<String, Part> parts) {
+		/** The 1.1.0 constructor (no bible, group or parts). */
+		public Entry(String id, String name, String type, BlockSize size, List<String> tags, Optional<String> source, Map<String, JsonElement> params,
+			Map<String, JsonElement> values, Optional<JsonObject> palette, Map<String, Port> ports, JsonObject ext, boolean bundled, boolean imported,
+			Optional<String> variantOf) {
+			this(id, name, type, size, tags, source, params, values, palette, ports, ext, bundled, imported, variantOf, Optional.empty(), Optional.empty(),
+				Optional.empty(), Map.of());
+		}
+	}
+
+	/**
+	 * A named part of a design (R3, {@code bp.part(name, ...)}): the box its cells span (template coordinates, before
+	 * rotation, inclusive) and how many cells it wrote. Names are stable across revisions; A6 delta apply diffs by them.
+	 * Since 1.2.0.
+	 */
+	record Part(String name, BoundingBox box, int cells) {
+	}
+
+	/**
+	 * A collection to re-skin: a design group, a bible (optionally one version of it), or explicit entries. Since 1.2.0.
+	 */
+	record CollectionRef(@Nullable String group, @Nullable String bible, @Nullable Integer bibleVersion, List<String> entries) {
+		public CollectionRef {
+			entries = entries == null ? List.of() : List.copyOf(entries);
+			if (group == null && bible == null && entries.isEmpty()) {
+				throw new IllegalArgumentException("a collection needs a group, a bible or entries");
+			}
+		}
+
+		public static CollectionRef ofGroup(String groupId) {
+			return new CollectionRef(groupId, null, null, List.of());
+		}
+
+		public static CollectionRef ofBible(String bibleId, @Nullable Integer version) {
+			return new CollectionRef(null, bibleId, version, List.of());
+		}
+
+		public static CollectionRef ofEntries(List<String> entryIds) {
+			return new CollectionRef(null, null, null, entryIds);
+		}
 	}
 
 	/**

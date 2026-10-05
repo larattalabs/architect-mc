@@ -83,7 +83,8 @@ public final class Views {
 			Optional.ofNullable(str(j, "source")), map(j, "params"), map(j, "values"),
 			j.has("palette") && j.get("palette").isJsonObject() ? Optional.of(j.getAsJsonObject("palette").deepCopy()) : Optional.empty(),
 			ports(j), j.has("ext") && j.get("ext").isJsonObject() ? j.getAsJsonObject("ext").deepCopy() : new JsonObject(), e.bundled(),
-			j.has("imported") && j.get("imported").isJsonPrimitive() && j.get("imported").getAsBoolean(), Optional.ofNullable(str(j, "variantOf")));
+			j.has("imported") && j.get("imported").isJsonPrimitive() && j.get("imported").getAsBoolean(), Optional.ofNullable(str(j, "variantOf")),
+			Wire4b.pin(j.get("bible")), Optional.ofNullable(str(j, "group")), Optional.ofNullable(str(j, "groupItem")), Wire4b.parts(j));
 	}
 
 	private static @Nullable String str(JsonObject j, String k) {

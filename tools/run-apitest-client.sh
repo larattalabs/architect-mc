@@ -6,7 +6,7 @@
 #              started by the game's launcher, so `dev.launcher.restart` restarts it. Needs sidecar/dist (npm run build) and
 #              sidecar/node_modules. No credentials reach the helper.
 #   ARCHITECT_AUTOWORLD_NAME="API Survival" ARCHITECT_AUTOWORLD_MODE=survival ARCHITECT_AUTOWORLD_CHEATS=1 tools/run-apitest-client.sh [--sim]
-#   (then: ARCHITECT_DEV_PORT=8191 node tools/devcli.mjs wait; node tools/apitest.mjs survival | jobs)
+#   (then: ARCHITECT_DEV_PORT=8191 node tools/devcli.mjs wait; node tools/apitest.mjs survival | jobs | sets (--sim))
 # ARCHITECT_AUTOWORLD_MODE: creative | survival | hardcore (hardcore worlds get no cheats unless ARCHITECT_AUTOWORLD_CHEATS=1).
 set -e
 W=${0:A:h:h}

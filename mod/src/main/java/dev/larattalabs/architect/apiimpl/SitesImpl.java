@@ -166,4 +166,9 @@ final class SitesImpl implements dev.larattalabs.architect.api.Sites {
 		}
 		return true;
 	}
+
+	@Override
+	public dev.larattalabs.architect.api.SurvivalInfo survival() {
+		return new dev.larattalabs.architect.api.SurvivalInfo(SurvivalWorld.on(), SurvivalWorld.blocksPerTick());
+	}
 }

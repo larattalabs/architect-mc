@@ -74,8 +74,16 @@ public final class AutoWorld {
 	private static AutoWorldSpec spec;
 
 	public static void openOrCreate(Minecraft mc) {
+		openOrCreate(mc, java.util.Map.of());
+	}
+
+	/**
+	 * Opens (or creates) the AutoWorld world, with {@code overrides} taking the place of the environment's
+	 * {@code ARCHITECT_AUTOWORLD_*} values (DevBridge {@code dev.world.open {name, mode, preset, seed, cheats}}).
+	 */
+	public static void openOrCreate(Minecraft mc, java.util.Map<String, String> overrides) {
 		try {
-			spec = AutoWorldSpec.from(ClientEnv::raw);
+			spec = AutoWorldSpec.from(k -> overrides.containsKey(k) ? overrides.get(k) : ClientEnv.raw(k));
 			String name = spec.name();
 			if (mc.getLevelSource().levelExists(name)) {
 				Architect.LOGGER.info("AutoWorld: loading existing world '{}'", name);

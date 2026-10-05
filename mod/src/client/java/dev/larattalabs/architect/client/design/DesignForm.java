@@ -18,6 +18,8 @@ import org.jspecify.annotations.Nullable;
 public final class DesignForm {
 	public static final String PLOT = "plot";
 	public static final String CUSTOM = "custom";
+	/** The type chip that means "my own type" (phase 4b open types): the type is {@link #openType}'s text. */
+	public static final String OTHER = "other";
 
 	public String type = "cabin";
 	/** The style: a chip id, or the free text when {@link #styleText} is not empty. */
@@ -33,6 +35,12 @@ public final class DesignForm {
 	public @Nullable String remix;
 	public final TextModel name = new TextModel(DesignSpec.MAX_NAME + 20);
 	public final TextModel notes = new TextModel(DesignSpec.MAX_NOTES + 200);
+	/** (4b) An open type's name when {@link #type} is {@link #OTHER} ({@code hellish_lair}). */
+	public final TextModel openType = new TextModel(40);
+	/** (4b) An open type's checker rules ({@link DesignSpec#PROFILE_RULES}); empty = the default (door, lit, no_floating). */
+	public final List<String> profile = new ArrayList<>(DesignSpec.DEFAULT_PROFILE);
+	/** (4b) The style bible to design with, or null (today's behaviour). */
+	public @Nullable String bible;
 	/** Shown under the form after a refused or failed send; cleared by any edit. */
 	public @Nullable String sendError;
 
@@ -50,7 +58,7 @@ public final class DesignForm {
 		if (CUSTOM.equals(size) || PLOT.equals(size)) {
 			return new int[] {customX, customY, customZ};
 		}
-		return DesignSpec.preset(size, type);
+		return DesignSpec.preset(size, OTHER.equals(type) ? "custom" : type);
 	}
 
 	/** A marked plot sets the size to it (and keeps it for a design sent with it). */
@@ -65,10 +73,21 @@ public final class DesignForm {
 		}
 	}
 
+	/** The type sent: the chip, or the open type typed for {@link #OTHER}. */
+	public String typeSent() {
+		return OTHER.equals(type) ? openType.value().strip().toLowerCase(java.util.Locale.ROOT) : type;
+	}
+
+	public void toggleProfile(String rule) {
+		if (!profile.remove(rule)) {
+			profile.add(rule);
+		}
+	}
+
 	public DesignSpec.Draft draft() {
 		int[] m = maxSize();
-		return new DesignSpec.Draft(type, style(), materials.value(), features, m[0], m[1], m[2], PLOT.equals(size) ? plot : null, remix, name.value(),
-			notes.value());
+		return new DesignSpec.Draft(typeSent(), style(), materials.value(), features, m[0], m[1], m[2], PLOT.equals(size) ? plot : null, remix,
+			name.value(), notes.value(), OTHER.equals(type) ? profile : List.of(), bible);
 	}
 
 	public Map<String, String> errors() {
@@ -86,7 +105,12 @@ public final class DesignForm {
 	/** For the DevBridge ({@code dev.design.state}). */
 	public JsonObject stateJson() {
 		JsonObject o = new JsonObject();
-		o.addProperty("type", type);
+		o.addProperty("type", typeSent());
+		o.addProperty("typeChip", type);
+		JsonArray pr = new JsonArray();
+		profile.forEach(pr::add);
+		o.add("profile", pr);
+		o.addProperty("bible", bible);
 		o.addProperty("style", style());
 		o.addProperty("styleChip", styleChip);
 		o.addProperty("styleText", styleText.value());

@@ -11,6 +11,10 @@ import dev.larattalabs.architect.api.Cost;
 import dev.larattalabs.architect.api.Design;
 import dev.larattalabs.architect.api.DesignRequest;
 import dev.larattalabs.architect.api.Designs;
+import dev.larattalabs.architect.api.Estimate;
+import dev.larattalabs.architect.api.Group;
+import dev.larattalabs.architect.api.GroupRequest;
+import dev.larattalabs.architect.placement.Blueprint;
 import dev.larattalabs.architect.placement.Blueprints;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -110,8 +114,10 @@ final class DesignsImpl implements Designs {
 	}
 
 	/**
-	 * The wire form of a request: owner, ext, model, budgetUsd, bible and group only for protocol 2 (design.request v2; a
-	 * protocol-1 sidecar would drop them anyway). bible and group are reserved for 4b: the sidecar accepts and ignores them.
+	 * The wire form of a request: owner, ext, model, budgetUsd, bible, bibleVersion and profile only for protocol 2
+	 * (design.request v2; a protocol-1 sidecar would drop them anyway). {@code group} is never sent: the 4b sidecar sets it
+	 * for a group's items and refuses a design.request that carries it ({@link #request} refuses it first). {@code profile}
+	 * only for an open (non-preset) type.
 	 */
 	static JsonObject wire(DesignRequest r, int protocol) {
 		JsonObject o = new JsonObject();
@@ -152,12 +158,31 @@ final class DesignsImpl implements Designs {
 			}
 			if (r.bible() != null) {
 				o.addProperty("bible", r.bible());
+				if (r.bibleVersion() != null) {
+					o.addProperty("bibleVersion", r.bibleVersion());
+				}
 			}
-			if (r.group() != null) {
-				o.addProperty("group", r.group());
+			if (!r.profile().isEmpty() && !Blueprint.TYPES.contains(r.type())) {
+				JsonArray p = new JsonArray();
+				r.profile().forEach(p::add);
+				o.add("profile", p);
 			}
 		}
 		return o;
+	}
+
+	/** Why the helper can't take this request (null: it can): a group set, an open type or a bible without 4b. */
+	static @Nullable String refusal(DesignRequest r, ClientBridge b) {
+		if (r.group() != null) {
+			return "group is set by Designs.requestGroup; a single design request can't carry one";
+		}
+		if (!Blueprint.TYPES.contains(r.type()) && !b.sidecarFeatures().contains("open.types")) {
+			return "the open type " + r.type() + " needs a helper with open types (phase 4b); this one takes only the 11 preset types";
+		}
+		if (r.bible() != null && !b.sidecarFeatures().contains("bibles")) {
+			return "designing with a bible needs a helper with bibles (phase 4b)";
+		}
+		return null;
 	}
 
 	@Override
@@ -166,6 +191,10 @@ final class DesignsImpl implements Designs {
 		ClientBridge b = ApiImpl.bridge();
 		if (b == null || !b.connected()) {
 			return ApiImpl.onServerFuture(CompletableFuture.failedFuture(new IllegalStateException("the design helper is not running")));
+		}
+		String why = refusal(r, b);
+		if (why != null) {
+			return ApiImpl.onServerFuture(CompletableFuture.failedFuture(new IllegalArgumentException(why)));
 		}
 		CompletableFuture<String> out = b.designRequest(wire(r, b.protocol())).thenApply(id -> {
 			synchronized (this) {
@@ -275,6 +304,169 @@ final class DesignsImpl implements Designs {
 		}
 		save();
 		ApiEvents.designDone(d);
+	}
+
+	// ------------------------------------------------------------------ groups (4b)
+
+	/** The groups the helper reported (merged), the DONE ledger, persisted in api-groups.json. */
+	final RecordBook groups = new RecordBook("group", Blueprints.gameDataDir().resolve("api-groups.json"), 100,
+		g -> Group.Status.of(RecordBook.str(g, "status")).isFinal(), g -> new JobLedger.Mark(RecordBook.str(g, "status"), stepOf(g),
+			RecordBook.num(g, "updatedAt"), Wire4b.cost(g).usd()));
+
+	/** What changes a group's update besides its status: each item's status and step. */
+	private static String stepOf(JsonObject g) {
+		StringBuilder b = new StringBuilder();
+		JsonElement is = g.get("items");
+		if (is != null && is.isJsonArray()) {
+			for (JsonElement e : is.getAsJsonArray()) {
+				if (e.isJsonObject()) {
+					b.append(RecordBook.str(e.getAsJsonObject(), "status")).append(':').append(RecordBook.str(e.getAsJsonObject(), "step")).append('|');
+				}
+			}
+		}
+		return b.toString();
+	}
+
+	/** Why 4b {@code feature} can't be used now, or null. */
+	static @Nullable String unavailable4b(@Nullable ClientBridge b, String feature, String what) {
+		if (b == null || !b.connected()) {
+			return "the Architect helper is not running";
+		}
+		if (b.protocol() < 2 || !b.sidecarFeatures().contains(feature)) {
+			return what + " need a helper with phase 4b (" + feature + "); this one does not have it";
+		}
+		return null;
+	}
+
+	/** Sends one message, completes with its ack's result (failed for an ok:false ack), on the server thread. */
+	static CompletableFuture<JsonObject> ask(String feature, String what, JsonObject message) {
+		ClientBridge b = ApiImpl.bridge();
+		String why = unavailable4b(b, feature, what);
+		if (why != null) {
+			return ApiImpl.onServerFuture(CompletableFuture.failedFuture(new IllegalStateException(why)));
+		}
+		return ApiImpl.onServerFuture(b.send(message).thenApply(ack -> {
+			if (!ack.has("ok") || !ack.get("ok").getAsBoolean()) {
+				throw new java.util.concurrent.CompletionException(new IllegalStateException(ack.has("error") ? ack.get("error").getAsString()
+					: "refused by the helper"));
+			}
+			return ack.has("result") && ack.get("result").isJsonObject() ? ack.getAsJsonObject("result") : new JsonObject();
+		}));
+	}
+
+	static JsonObject msg(String type) {
+		JsonObject m = new JsonObject();
+		m.addProperty("type", type);
+		return m;
+	}
+
+	@Override
+	public CompletableFuture<String> requestGroup(GroupRequest r) {
+		JsonObject m = msg("design.group");
+		try {
+			m.add("group", Wire4b.group(r));
+		} catch (IllegalArgumentException e) {
+			return ApiImpl.onServerFuture(CompletableFuture.failedFuture(e));
+		}
+		return ask("design.groups", "design groups", m).thenApply(res -> {
+			String id = res.has("groupId") ? res.get("groupId").getAsString() : null;
+			if (id == null) {
+				throw new IllegalStateException("the helper sent no groupId");
+			}
+			Architect.LOGGER.info("API: design group {} ({} items{}) requested", id, r.items().size(), r.owner() == null ? "" : ", " + r.owner());
+			return id;
+		});
+	}
+
+	@Override
+	public Optional<Group> group(String groupId) {
+		JsonObject g = groups.get(groupId);
+		return g == null ? Optional.empty() : Optional.of(Wire4b.group(g));
+	}
+
+	@Override
+	public List<Group> listGroups(@Nullable String owner) {
+		List<Group> out = new ArrayList<>();
+		for (JsonObject g : groups.all()) {
+			Group v = Wire4b.group(g);
+			if (owner == null || owner.equals(v.owner().orElse(null))) {
+				out.add(v);
+			}
+		}
+		return out;
+	}
+
+	@Override
+	public CompletableFuture<Void> cancelGroup(String groupId) {
+		JsonObject m = msg("group.cancel");
+		m.addProperty("groupId", groupId);
+		return ask("design.groups", "design groups", m).thenApply(r -> null);
+	}
+
+	@Override
+	public CompletableFuture<Void> extendGroup(String groupId, double budgetUsd) {
+		JsonObject m = msg("group.extend");
+		m.addProperty("groupId", groupId);
+		m.addProperty("budgetUsd", budgetUsd);
+		return ask("design.groups", "design groups", m).thenApply(r -> null);
+	}
+
+	@Override
+	public CompletableFuture<Void> resumeGroup(String groupId) {
+		JsonObject m = msg("group.resume");
+		m.addProperty("groupId", groupId);
+		return ask("design.groups", "design groups", m).thenApply(r -> null);
+	}
+
+	@Override
+	public CompletableFuture<Estimate> estimate(GroupRequest r) {
+		JsonObject m = msg("design.estimate");
+		try {
+			m.add("group", Wire4b.group(r));
+		} catch (IllegalArgumentException e) {
+			return ApiImpl.onServerFuture(CompletableFuture.failedFuture(e));
+		}
+		return ask("estimates", "estimates", m).thenApply(Wire4b::estimate);
+	}
+
+	@Override
+	public CompletableFuture<Estimate> estimate(DesignRequest r) {
+		JsonObject m = msg("design.estimate");
+		JsonObject w = wire(r, 2);
+		m.add("request", w);
+		return ask("estimates", "estimates", m).thenApply(Wire4b::estimate);
+	}
+
+	/** {@code group.upsert} or a snapshot's group (any thread): merged; the events fire on the server thread. */
+	void groupChanged(JsonObject raw) {
+		JsonObject g = groups.merge(raw);
+		if (g != null) {
+			ApiImpl.runOnServer(() -> fireGroup(g));
+		}
+	}
+
+	/** Server thread: GROUP_UPDATED when it changed, GROUP_DONE once (after a library reload, so its entries are loaded). */
+	void fireGroup(JsonObject raw) {
+		RecordBook.Firing f = groups.fire(raw);
+		if (!f.updated() && !f.done()) {
+			return;
+		}
+		Group g = Wire4b.group(raw);
+		if (f.updated()) {
+			ApiEvents.groupUpdated(g);
+		}
+		if (f.done()) {
+			MinecraftServer s = ApiImpl.server();
+			if (s != null && g.items().stream().anyMatch(i -> i.entryId().isPresent() && Blueprints.entry(i.entryId().get()) == null)) {
+				Blueprints.reload(s);
+			}
+			ApiEvents.groupDone(g);
+		}
+	}
+
+	/** A world loaded (server thread): GROUP_DONE for the groups that finished while none was. */
+	void catchUpGroups() {
+		groups.pendingDone().forEach(this::fireGroup);
 	}
 
 	private static @Nullable String str(JsonObject o, String k) {
