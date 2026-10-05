@@ -238,3 +238,113 @@ describe('dist/main.mjs, protocol 2 on port 8290 (sim backend)', () => {
     expect(await p!.exit).toBe(0);
   }, 60_000);
 });
+
+// Phase 4b through the built bundle on port 8295, with the REAL kit and --debug (every outbound message is validated
+// against its schema): estimates, a bible job (sim backend: a fixed bible through the real component frame and sheet),
+// a design group with an anchor wave that survives a SIGKILL mid-group (itemKey and ext intact), and a re-skin of the
+// collection to a built-in bible.
+const REAL_KIT = path.join(SIDECAR_ROOT, '..', 'kit');
+describe.skipIf(!fs.existsSync(path.join(REAL_KIT, 'tools', 'components.mjs')))('dist/main.mjs, phase 4b on port 8295 (sim backend, real kit)', () => {
+  const PORT = 8295;
+  let root: string;
+  let data: string;
+  let p: Proc | undefined;
+  const args = () => ['--port', String(PORT), '--data', data, '--library', path.join(root, 'library'), '--kit', REAL_KIT, '--backend', 'sim', '--debug'];
+  const tokenOf = () => fs.readFileSync(path.join(data, 'client.token'), 'utf8').trim();
+  type M = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
+  const last = (msgs: unknown[], pred: (m: M) => boolean) => (msgs as M[]).filter(pred).at(-1);
+  async function start(): Promise<void> {
+    if (fs.existsSync(path.join(data, 'sidecar.json'))) fs.rmSync(path.join(data, 'sidecar.json'));
+    p = startSidecar(args());
+    await until(() => fs.existsSync(path.join(data, 'sidecar.json')) || p!.child.exitCode !== null, 15_000);
+    if (p.child.exitCode !== null) throw new Error(`the sidecar exited (${p.child.exitCode})${p.child.exitCode === 3 ? `: port ${PORT} is in use (another sidecar or test run?)` : ''}:\n${p.out.join('').slice(-1500)}`);
+  }
+  async function hello2() {
+    const c = await connect(PORT);
+    c.send({ type: 'hello', client: 'mod', version: 'e2e', token: tokenOf(), protocols: [1, 2] });
+    await until(() => c.msgs.some((m) => m.type === 'snapshot'));
+    return c;
+  }
+  const ack = async (c: Awaited<ReturnType<typeof hello2>>, id: string) => {
+    await until(() => c.msgs.some((m) => m.type === 'ack' && m.re === id), 15_000);
+    return (c.msgs as M[]).find((m) => m.type === 'ack' && m.re === id)!;
+  };
+
+  beforeAll(async () => {
+    if (!fs.existsSync(MAIN)) execFileSync(process.execPath, [path.join(SIDECAR_ROOT, 'scripts', 'build.mjs')], { cwd: SIDECAR_ROOT, stdio: 'pipe' });
+    root = tempDir('arch-e2e-4b-');
+    data = path.join(root, 'sidecar-data');
+    fs.mkdirSync(data, { recursive: true });
+    fs.writeFileSync(path.join(data, 'config.json'), JSON.stringify({ simStepMs: 150, designConcurrency: 3 }));
+    await start();
+  }, 60_000);
+
+  afterAll(async () => {
+    if (p && p.child.exitCode === null) p.child.kill('SIGKILL');
+    rmrf(root);
+  });
+
+  it('estimates, a bible, a group across a SIGKILL, a re-skin', async () => {
+    let c = await hello2();
+    const snap = (c.msgs as M[]).find((m) => m.type === 'snapshot')!;
+    expect(snap).toMatchObject({ protocol: 2, groups: [], bibles: [], reskins: [] });
+    expect((snap.bibleIndex as M[]).map((b) => b.id)).toEqual(expect.arrayContaining(['rustic', 'oak', 'cherry', 'fortress']));
+    // estimates
+    c.send({ type: 'bible.estimate', id: 'be', request: { prompt: 'x' } });
+    expect((await ack(c, 'be')).result).toMatchObject({ usdLow: 1, usdHigh: 1.5, minutesLow: 4, minutesHigh: 6 });
+    // a bible
+    c.send({ type: 'bible.request', id: 'b', request: { prompt: 'weathered fishing village on stilts', name: 'Stilts', ext: { 'steward_mc:k': 1 } } });
+    const b = (await ack(c, 'b')).result as M;
+    expect(b).toMatchObject({ bibleId: 'bib_stilts', version: 1 });
+    await until(() => c.msgs.some((m) => m.type === 'bible.upsert' && m.bible.id === b.jobId && ['done', 'failed'].includes(m.bible.status)), 30_000);
+    const bj = last(c.msgs, (m) => m.type === 'bible.upsert' && m.bible.id === b.jobId)!.bible;
+    expect(bj.status, bj.error).toBe('done');
+    expect(fs.existsSync(bj.bible.sheetPath)).toBe(true);
+    expect(path.dirname(path.dirname(path.dirname(bj.bible.sheetPath)))).toBe(path.join(root, 'bibles', 'bib_stilts'));
+    expect(last(c.msgs, (m) => m.type === 'bible.index')!.bibles.map((x: M) => x.id)).toContain('bib_stilts');
+    // a group: an anchor wave, then two items
+    const group = {
+      name: 'Stilt Village',
+      bible: 'bib_stilts',
+      ext: { 'steward_mc:settlement': 'S1' },
+      items: [
+        { itemKey: 'hall', type: 'tavern', style: 'fishing', features: [], maxSize: { x: 64, y: 40, z: 64 }, anchor: true, role: 'landmark', ext: { 'steward_mc:lot': 'L1' } },
+        { itemKey: 'hut', type: 'cabin', style: 'fishing', features: [], maxSize: { x: 64, y: 40, z: 64 }, ext: { 'steward_mc:lot': 'L2' } },
+        { itemKey: 'watch', type: 'tower', style: 'fishing', features: [], maxSize: { x: 64, y: 40, z: 64 }, ext: { 'steward_mc:lot': 'L3' } },
+      ],
+    };
+    c.send({ type: 'design.estimate', id: 'ge', group });
+    expect((await ack(c, 'ge')).result).toMatchObject({ minutesLow: 8, basis: expect.stringMatching(/2 waves/) });
+    c.send({ type: 'design.group', id: 'g', group });
+    const g = (await ack(c, 'g')).result as M;
+    expect(g.itemKeys).toEqual(['hall', 'hut', 'watch']);
+    expect(g.designIds).toHaveLength(3);
+    // SIGKILL once the anchor is done and the second wave runs
+    await until(() => c.msgs.some((m) => m.type === 'group.upsert' && m.group.id === g.groupId && m.group.done >= 1 && m.group.items.some((i: M) => i.status === 'designing')), 30_000);
+    p!.child.kill('SIGKILL');
+    await p!.exit;
+    await start();
+    c = await hello2();
+    const back = ((c.msgs as M[]).find((m) => m.type === 'snapshot')!.groups as M[]).find((x) => x.id === g.groupId)!;
+    expect(back.items.map((i: M) => [i.itemKey, i.ext])).toEqual([['hall', { 'steward_mc:lot': 'L1' }], ['hut', { 'steward_mc:lot': 'L2' }], ['watch', { 'steward_mc:lot': 'L3' }]]);
+    expect(back.ext).toEqual({ 'steward_mc:settlement': 'S1' });
+    await until(() => c.msgs.some((m) => m.type === 'group.upsert' && m.group.id === g.groupId && ['done', 'failed'].includes(m.group.status)), 40_000);
+    const gd = last(c.msgs, (m) => m.type === 'group.upsert' && m.group.id === g.groupId)!.group;
+    expect(gd).toMatchObject({ status: 'done', done: 3, failed: 0, bible: { id: 'bib_stilts', version: 1 } });
+    for (const it of gd.items) {
+      const e = JSON.parse(fs.readFileSync(path.join(root, 'library', it.entryId, `${it.entryId}.blueprint.json`), 'utf8'));
+      expect(e).toMatchObject({ bible: { id: 'bib_stilts', version: 1 }, group: g.groupId, groupItem: it.itemKey, ext: it.ext });
+      expect(Object.keys(e.parts ?? {}).length).toBeGreaterThanOrEqual(2);
+    }
+    // re-skin the collection to a built-in bible: free, checked
+    c.send({ type: 'reskin.request', id: 'r', bibleId: 'cherry', from: { group: g.groupId } });
+    const r = (await ack(c, 'r')).result as M;
+    expect(r.variantIds).toHaveLength(3);
+    await until(() => c.msgs.some((m) => m.type === 'reskin.upsert' && m.reskin.id === r.reskinId && m.reskin.status !== 'building'), 30_000);
+    expect(last(c.msgs, (m) => m.type === 'reskin.upsert' && m.reskin.id === r.reskinId)!.reskin).toMatchObject({ status: 'done', done: 3, bible: { id: 'cherry', version: 1 } });
+    // nothing failed an outbound schema check (--debug validates every message)
+    expect(p!.out.join('')).not.toMatch(/violates protocol/);
+    c.send({ type: 'shutdown', id: 'x' });
+    expect(await p!.exit).toBe(0);
+  }, 150_000);
+});

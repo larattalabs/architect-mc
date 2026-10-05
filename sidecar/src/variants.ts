@@ -538,6 +538,8 @@ export interface ReskinHost {
   now(): number;
   emit(m: Outbound): void;
   requestVariant(from: string, palette?: PaletteSpec, values?: ParamValues, name?: string, bible?: BiblePin, reskin?: string): Variant;
+  /** a group's finished entries, when the sidecar knows the group */
+  groupEntries?(groupId: string): string[] | undefined;
 }
 
 /**
@@ -575,8 +577,12 @@ export class Reskins {
     } catch {
       return [];
     }
+    // a group the sidecar knows: exactly its items' entries (a crash between an install and the state write could
+    // leave a second copy carrying the group)
+    const known = from.group ? this.host.groupEntries?.(from.group) : undefined;
     const out: string[] = [];
     for (const id of ids) {
+      if (known && from.group && !known.includes(id) && !from.entries?.includes(id) && !from.bible) continue;
       const j = readJsonFile(path.join(lib, id, `${id}.blueprint.json`));
       if (!j || j.imported === true || !fs.existsSync(path.join(lib, id, `${id}.mjs`))) continue;
       const bible = j.bible && typeof j.bible === 'object' ? (j.bible as { id?: unknown; version?: unknown }) : undefined;

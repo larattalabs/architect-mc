@@ -500,6 +500,11 @@ export class Sidecar {
 
   // ---- what a design job gets (4b): budget, bible, neighbours, entry fields --------------------
 
+  /** (re-skins) a group's finished entries, or undefined for a group this sidecar does not know */
+  groupEntries(groupId: string): string[] | undefined {
+    return this.groups.get(groupId)?.items.flatMap((it) => (it.entryId ? [it.entryId] : []));
+  }
+
   /** What a design may spend: its own budgetUsd, capped by what is left of its group's. */
   designBudget(id: string): number | undefined {
     const d = this.designs.get(id);
@@ -578,6 +583,8 @@ export class Sidecar {
     const started = this.estimates.startedAt(id);
     if (this.designer?.name === 'claude' && started !== undefined) this.estimates.record('design', d.request.model ?? this.config.claude.designModel, d.cost?.usd ?? 0, this.now() - started);
     this.estimates.forget(id);
+    // on disk at once: a crash right after an install must not run the design (and install it) again
+    this.store.flush();
     this.log.info(`design ${id} is ready: ${installed.blueprintId} (${size.x}x${size.y}x${size.z}) in ${path.dirname(installed.json)}`);
   }
 
