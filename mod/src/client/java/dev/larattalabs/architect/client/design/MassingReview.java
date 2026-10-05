@@ -350,9 +350,8 @@ public final class MassingReview {
 		}
 		String why = showSet(g.id());
 		String key = Keys.screen == null ? "B" : Keys.label(Keys.screen);
-		Toasts.push(Toasts.Level.INFO, "Set " + g.name() + ": " + g.awaiting().size() + " massing" + (g.awaiting().size() == 1 ? "" : "s")
-			+ " to approve", why != null ? why : "They stand in a row in front of you; approve, redirect or cancel each in the Designs tab", key,
-			"designs");
+		Toasts.push(Toasts.Level.INFO, "To approve: " + g.name(), why != null ? why : g.awaiting().size() + " massing" + (g.awaiting().size() == 1 ? ""
+			: "s") + " in a row ahead; approve in the Designs tab", key, "designs");
 	}
 
 	/** Shows a set's massings in a row in front of the player. Returns why not, or null. */

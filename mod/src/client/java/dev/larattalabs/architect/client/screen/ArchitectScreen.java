@@ -1018,21 +1018,6 @@ public final class ArchitectScreen extends Screen {
 			g.text(font, c.label(), fx + 13, y + 2, on || h.contains(mx, my) ? UiBits.ink() : muted, false);
 			fx += fw;
 		}
-		// (4c) Massing first: a cheap shape to approve before the detail (default on for L and plot sizes)
-		if (dev.larattalabs.architect.client.design.SetFeature.has("massing")) {
-			y += 18;
-			boolean can = f.remix == null;
-			boolean on = f.massingFirst();
-			String ml = "Massing first";
-			Hit h = new Hit("design:massing_first", ml, lx, y, 12 + font.width(ml) + 4, 12, can, on, () -> f.massingFirst = !f.massingFirst());
-			hits.add(h);
-			Panels.sprite(g, on ? Kit.CHECKBOX_CHECKED : Kit.CHECKBOX, lx, y + 1, 10, 10, can ? 0xFFFFFFFF : 0x90FFFFFF);
-			g.text(font, ml, lx + 13, y + 2, on || h.contains(mx, my) ? UiBits.ink() : muted, false);
-			String why = !can ? "not for a remix" : f.massingFirst != null ? "approve the shape, then the detail" : on ? "on for " + (DesignForm.PLOT.equals(
-				f.size) ? "a plot" : "size L") + ": approve the shape first" : "approve a cheap shape first";
-			int wx = lx + 13 + font.width(ml) + 8;
-			g.text(font, TextUtil.ellipsize(font, why, Math.max(10, lx + colW - wx)), wx, y + 2, muted, false);
-		}
 		// right: size, name, notes
 		int ry = top;
 		ry = label(g, "Size", errors, rx, ry, colW, "maxSize");
@@ -1072,6 +1057,21 @@ public final class ArchitectScreen extends Screen {
 			ry += 10;
 		}
 		ry += 2;
+		// (4c) Massing first: a cheap shape to approve before the detail (on by default for L and plot sizes)
+		if (dev.larattalabs.architect.client.design.SetFeature.has("massing")) {
+			boolean can = f.remix == null;
+			boolean on = f.massingFirst();
+			String ml = "Massing first";
+			Hit h = new Hit("design:massing_first", ml, rx, ry, 12 + font.width(ml) + 4, 12, can, on, () -> f.massingFirst = !f.massingFirst());
+			hits.add(h);
+			Panels.sprite(g, on ? Kit.CHECKBOX_CHECKED : Kit.CHECKBOX, rx, ry + 1, 10, 10, can ? 0xFFFFFFFF : 0x90FFFFFF);
+			g.text(font, ml, rx + 13, ry + 2, on || h.contains(mx, my) ? UiBits.ink() : muted, false);
+			String why = !can ? "not for a remix" : on ? f.massingFirst == null ? "a cheap shape to approve (default for " + (DesignForm.PLOT.equals(f.size)
+				? "a plot)" : "size L)") : "a cheap shape to approve first" : "the detail at once";
+			int wx = rx + 13 + font.width(ml) + 8;
+			g.text(font, TextUtil.ellipsize(font, why, Math.max(10, rx + colW - wx)), wx, ry + 2, muted, false);
+			ry += 16;
+		}
 		// the style bible (phase 4b): none = today's behaviour
 		g.text(font, "Style bible", rx, ry + 3, UiStyle.CLAY_DARK, false);
 		int bdx = rx + font.width("Style bible") + 6;
@@ -1116,7 +1116,7 @@ public final class ArchitectScreen extends Screen {
 			status = "Remix: Claude edits " + LibraryFeature.nameOf(f.remix) + "; the notes say what to change.";
 			err = false;
 		} else if (f.massingFirst() && dev.larattalabs.architect.client.design.SetFeature.has("massing")) {
-			status = "Ready: a massing first (cents, a minute or two); you approve its shape in the world, then Claude adds the detail.";
+			status = "Ready: a massing first (cents, a minute or two); approve its shape, then Claude adds the detail.";
 			err = false;
 		} else {
 			status = "Ready: Claude designs it in the background; the Designs tab shows progress.";
@@ -1654,9 +1654,8 @@ public final class ArchitectScreen extends Screen {
 		boolean architectUi = gr.approvalUi() == dev.larattalabs.architect.api.GroupRequest.ApprovalUi.ARCHITECT;
 		boolean approving = gr.massingFirst() && architectUi && !gr.finished() && Sidecar.connected();
 		if (gr.massingFirst()) {
-			String who = architectUi ? "massings first · you approve each shape here" + (gr.maxRedirects() > 0 ? " (up to " + gr.maxRedirects()
-				+ " redirect" + (gr.maxRedirects() == 1 ? "" : "s") + " each)" : "") : "massings first · approved by its owner " + gr.owner().orElse("?")
-				+ " (no buttons here)";
+			String who = architectUi ? "massings first · approve each shape here" + (gr.maxRedirects() > 0 ? ", " + gr.maxRedirects() + " redirect"
+				+ (gr.maxRedirects() == 1 ? "" : "s") + " each" : "") : "massings first · its owner approves: " + gr.owner().orElse("?");
 			g.text(font, TextUtil.ellipsize(font, who, dw), dx, y, architectUi ? UiStyle.CLAY_DARK : UiBits.muted(), false);
 			y += 10;
 		}
@@ -1694,7 +1693,7 @@ public final class ArchitectScreen extends Screen {
 				chip(g, "group:item_redirect:" + ik, "Redirect…", ax, ry - 2, (gr.id() + "/" + ik).equals(redirectItem), canRedirect, mx, my,
 					() -> startRedirect(gr.id(), ik));
 				ax -= font.width("Approve") + 12 + 3;
-				chip(g, "group:item_approve:" + ik, "Approve", ax, ry - 2, false, true, mx, my, () -> dev.larattalabs.architect.client.design.SetFeature
+				chip(g, "group:item_approve:" + ik, "Approve", ax, ry - 2, true, true, mx, my, () -> dev.larattalabs.architect.client.design.SetFeature
 					.approve(gr.id(), List.of(ik), Map.of(), List.of()));
 				actionsW = dx + dw - 8 - ax + 6;
 			}
@@ -1708,7 +1707,7 @@ public final class ArchitectScreen extends Screen {
 			String stage = gr.massingFirst() ? itemStage(gr, it) : it.status().name().toLowerCase(Locale.ROOT);
 			String line = stage + (it.step().isEmpty() || it.awaitingApproval() ? "" : " · " + it.step()) + it.entryId().map(e -> " → " + e).orElse("")
 				+ it.error().map(e -> " · " + e).orElse("") + (actionsW > 0 ? " · " + right : "");
-			g.text(font, TextUtil.ellipsize(font, line, dw - 24), dx + 14, ry + 9, it.status() == dev.larattalabs.architect.api.Design.Status.FAILED
+			g.text(font, TextUtil.ellipsize(font, line, dw - 24 - actionsW), dx + 14, ry + 9, it.status() == dev.larattalabs.architect.api.Design.Status.FAILED
 				? UiBits.errorText() : it.awaitingApproval() ? UiStyle.CLAY_DARK : UiBits.muted(), false);
 		}
 		if (gr.items().size() > fit) {
@@ -1723,7 +1722,7 @@ public final class ArchitectScreen extends Screen {
 			String iname = gr.item(key).flatMap(dev.larattalabs.architect.api.Group.Item::name).orElse(key);
 			String send = "Redirect";
 			int sw = bw(send);
-			int fy = by + 4;
+			int fy = by - 1;
 			textField(g, Focus.REDIRECT, redirectView, redirectNotes, dx, fy + 1, dw - sw - 6, new TextFieldView.Style(TextUtil.ellipsize(font, iname, 70)
 				+ ": ", UiStyle.CLAY_DARK, "how should it change? Enter sends", null, null, 0, 1));
 			button(g, "group:redirect_send", send, dx + dw - sw, fy, sw, true, !redirectNotes.value().isBlank(), mx, my, this::sendRedirect);
@@ -1758,10 +1757,13 @@ public final class ArchitectScreen extends Screen {
 				.id(), to));
 			bx += bw(ext) + 4;
 		}
-		String cancel = "Cancel set";
-		button(g, "group:cancel", cancel, bx, by, bw(cancel), false, live, mx, my, () -> dev.larattalabs.architect.client.design.SetFeature
-			.cancelGroup(gr.id()));
-		bx += bw(cancel) + 4;
+		// a set its owner approves (approvalUi owner) is the owner's to run: no buttons but Show in Library
+		if (architectUi || !gr.massingFirst()) {
+			String cancel = "Cancel set";
+			button(g, "group:cancel", cancel, bx, by, bw(cancel), false, live, mx, my, () -> dev.larattalabs.architect.client.design.SetFeature
+				.cancelGroup(gr.id()));
+			bx += bw(cancel) + 4;
+		}
 		String show = "Show in Library";
 		if (bx + bw(show) <= dx + dw) {
 			button(g, "group:library", show, bx, by, bw(show), gr.finished(), gr.done() > 0, mx, my, () -> showCollection(
