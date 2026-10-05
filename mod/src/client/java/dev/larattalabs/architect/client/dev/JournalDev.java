@@ -12,7 +12,10 @@ import dev.larattalabs.architect.api.Policy;
 import dev.larattalabs.architect.api.RoadRequest;
 import dev.larattalabs.architect.api.Verdict;
 import dev.larattalabs.architect.client.world.ServerTasks;
+import dev.larattalabs.architect.journal.Journal;
 import dev.larattalabs.architect.journal.JournalMigration;
+import dev.larattalabs.architect.journal.JournalStore;
+import dev.larattalabs.architect.journal.SectionCells;
 import dev.larattalabs.architect.journal.WorldJournal;
 import dev.larattalabs.architect.site.InfraApi;
 import dev.larattalabs.architect.site.Sites;
@@ -116,6 +119,15 @@ public final class JournalDev {
 					}
 					return InfraApi.placeCells(r).thenApply(JournalDev::placeJson);
 				})).thenCompose(r -> r).thenCompose(r -> r);
+			});
+		DevBridge.register("dev.site.verify", 120_000, "{site, list?: false, max?: 20} - phase 4e: every cell where one of the site's active entries is "
+			+ "top of the stack, compared with that entry's after by exact equality (state and block-entity data): {owned, mismatches, first: [..], "
+			+ "list?: ['x,y,z state'..]} (the any-order tests' no-leak check)", (req, mc) -> {
+				Fields f = Fields.of(req);
+				String site = f.nonBlank("site");
+				boolean list = f.optBool("list", false);
+				int max = f.optInt("max", 20, 0, 10_000);
+				return DevBridge.onClient(mc, () -> ServerTasks.callAsPlayer((level, player) -> verify(level, site, list, max))).thenCompose(r -> r);
 			});
 		DevBridge.register("dev.region.hash", 120_000, "{box: [minX,minY,minZ,maxX,maxY,maxZ], exclude?: [[6]...], cells?: false} - phase 4e: SHA-256 "
 			+ "over every block state and block-entity NBT in the box, cells inside an excluded box left out (the order tests)", (req, mc) -> {
@@ -258,6 +270,83 @@ public final class JournalDev {
 		JsonArray n = new JsonArray();
 		p.notes().forEach(n::add);
 		o.add("notes", n);
+		return o;
+	}
+
+	/** dev.site.verify: the site's owned (top-of-stack) cells against its entries' after. */
+	static JsonObject verify(ServerLevel level, String site, boolean list, int max) {
+		JournalStore s = WorldJournal.storeOrNull();
+		if (s == null) {
+			throw new DevBridge.DevException("the journal is not open");
+		}
+		java.util.Set<String> mine = new java.util.HashSet<>();
+		java.util.Set<Long> keys = new java.util.TreeSet<>();
+		String dim = null;
+		for (JournalStore.Meta m : s.find(m -> site.equals(m.site()) && m.active())) {
+			mine.add(m.id());
+			dim = m.dimension();
+			for (long k : m.sections()) {
+				keys.add(k);
+			}
+		}
+		int owned = 0;
+		int bad = 0;
+		JsonArray first = new JsonArray();
+		JsonArray cells = list ? new JsonArray() : null;
+		try {
+			for (long key : keys) {
+				// the top layer per cell of this section, over every active entry there
+				java.util.Map<Integer, Object[]> top = new java.util.HashMap<>();
+				for (String id : s.inSection(dim, key)) {
+					JournalStore.Meta m = s.meta(id);
+					if (m == null || !m.active()) {
+						continue;
+					}
+					SectionCells sc = s.section(id, key);
+					if (sc == null) {
+						continue;
+					}
+					for (int k = 0; k < sc.size(); k++) {
+						int idx = sc.index(k);
+						Object[] t = top.get(idx);
+						long layer = sc.layer(k);
+						if (t == null || layer > (long) t[1] || layer == (long) t[1] && id.compareTo((String) t[0]) > 0) {
+							top.put(idx, new Object[] {id, layer, sc.after(k), sc.pos(k)});
+						}
+					}
+				}
+				for (Object[] t : top.values()) {
+					if (!mine.contains((String) t[0])) {
+						continue;
+					}
+					owned++;
+					long pos = (long) t[3];
+					BlockPos p = BlockPos.of(pos);
+					Journal.Value now = WorldJournal.valueAt(level, p);
+					Journal.Value after = (Journal.Value) t[2];
+					if (cells != null) {
+						cells.add(p.getX() + "," + p.getY() + "," + p.getZ() + " " + (after == null ? "null" : after.state().toString()));
+					}
+					if (after == null || !after.equals(now)) {
+						bad++;
+						if (first.size() < max) {
+							first.add(p.toShortString() + " entry " + t[0] + " after " + after + " now " + now);
+						}
+					}
+				}
+			}
+		} catch (java.io.IOException e) {
+			throw new DevBridge.DevException(e.getMessage());
+		}
+		JsonObject o = new JsonObject();
+		o.addProperty("site", site);
+		o.addProperty("entries", mine.size());
+		o.addProperty("owned", owned);
+		o.addProperty("mismatches", bad);
+		o.add("first", first);
+		if (cells != null) {
+			o.add("list", cells);
+		}
 		return o;
 	}
 

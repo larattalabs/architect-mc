@@ -315,79 +315,72 @@ async function run(name) {
 
 // ================================================================== the steps
 
+// ------------------------------------------------------------------ the flat base world and the 4-site fixture
+
+const FLAT = 'G4E Flat';
+/** A flat meadow (grass top at y 64), creative, cheats, the gate rules, no entities. Made once. */
+async function flatBase(force = false) {
+  if (!force && fs.existsSync(path.join(SAVES, FLAT, 'level.dat'))) return;
+  await leaveWorld();
+  fs.rmSync(path.join(SAVES, FLAT), { recursive: true, force: true });
+  await openWorld(FLAT, { mode: 'creative', preset: 'flat', cheats: true });
+  await setRules();
+  await tp(48.5, 70, 0.5);
+  await cmd('/kill @e[type=!minecraft:player]');
+  await cmd('/save-all flush');
+  await leaveWorld();
+}
+
+/** The fixture's fixed hash box (the union of the four sites + 8 must lie inside it). */
+const FIX_BOX = [0, 50, -44, 100, 110, 40];
+/** Places the fixture: T (a raised CELL pad), R (a road across T), H (a cabin LAYERed on T facing R), X (a gatehouse LAYERed over H's east wall). */
+async function placeFixture() {
+  const T = await call('dev.cells.place', { kind: 'gate4e:pad', pad: { minX: 20, maxX: 59, minZ: -24, maxZ: 15, y: 66, top: 'minecraft:coarse_dirt', depth: 3, clear: 8 } },
+    600_000);
+  const R = await call('dev.road.place', { points: [[10, 67, 0], [80, 67, 0]], width: 3 }, 180_000);
+  const H = await result(await api('place cabin 28 67 -19 INSTANT unowned noactor 0 layer'));
+  const X = await result(await api('place gatehouse 37 67 -19 INSTANT unowned noactor 0 layer'));
+  return { T: { ...T, siteId: T.siteId }, R, H, X };
+}
+const verify = async (site, list = false) => call('dev.site.verify', { site, list, max: 20 }, 120_000);
+
 steps.smoke = async () => {
   if (!dev) await connect();
-  await setRules();
-  const p = (await call('dev.state')).player;
-  const cx = Math.floor(p.x) + 40;
-  const cz = Math.floor(p.z);
-  const y = await groundAt(cx, cz);
-  const area = [cx - 30, y - 20, cz - 30, cx + 30, y + 40, cz + 30];
-  const h0 = await hash(area);
-  const T = await call('dev.cells.place', { kind: 'apitest:pad', pad: { minX: cx - 20, maxX: cx + 19, minZ: cz - 20, maxZ: cz + 19, y, depth: 3, clear: 12 } },
-    600_000);
-  check(T.placed, `smoke: pad T placed (${T.siteId})`, T);
-  const R = await call('dev.road.place', { points: [[cx - 25, y + 1, cz], [cx + 25, y + 1, cz]], width: 3 }, 180_000);
-  check(R.placed, `smoke: road R placed (${R.siteId})`, R);
-  const H = await result(await api(`place cabin ${cx - 10} ${y + 1} ${cz - 15} INSTANT unowned noactor 0 layer`));
-  check(H.placed, `smoke: cabin H layered on T (${H.siteId})`, H);
-  const X = await result(await api(`place gatehouse ${cx - 1} ${y + 1} ${cz - 15} INSTANT unowned noactor 0 layer`));
-  check(X.placed, `smoke: gatehouse X layered over H (${X.siteId})`, X);
+  await flatBase();
+  await fresh('G4E SmokeF', FLAT);
+  await tp(48.5, 80, 20.5);
+  const h0 = await hash(FIX_BOX);
+  const f = await placeFixture();
+  for (const k of ['T', 'R', 'H', 'X']) check(f[k].placed, `smoke: ${k} placed (${f[k].siteId})`, f[k]);
   const all = await sites();
-  log(JSON.stringify(all.map((s) => ({ id: s.id, kind: s.kind, covers: s.covers, coveredBy: s.coveredBy, rb: s.restoreBox }))));
-  for (const id of [H.siteId, R.siteId, X.siteId, T.siteId]) {
-    if (!id) continue;
-    const r = await result(await api(`remove ${id} - noforce keep`), 300_000);
-    log(`removed ${id}: ${JSON.stringify(r).slice(0, 300)}`);
+  log(JSON.stringify(all.map((x) => ({ id: x.id, kind: x.kind, covers: x.covers, coveredBy: x.coveredBy, rb: x.restoreBox }))));
+  const ids = { T: f.T.siteId, R: f.R.siteId, H: f.H.siteId, X: f.X.siteId };
+  for (const k of Object.keys(ids)) {
+    const v = await verify(ids[k]);
+    check(v.mismatches === 0, `smoke: ${k} owns ${v.owned} cells, all its after`, v);
   }
-  const h1 = await hash(area);
-  check(h1.sha256 === h0.sha256, 'smoke: the area is back exactly after removing H, R, X, T', { h0: h0.sha256, h1: h1.sha256 });
-  return { area, T, R, H, X };
-};
-
-/** Surveys the loaded ground around the player (step 4): {x, z} -> {h, top}. */
-async function surveyAround(r = 160, step = 4) {
-  const p = (await call('dev.state')).player;
-  const x0 = Math.floor(p.x);
-  const z0 = Math.floor(p.z);
-  const s = await result(await api(`survey ${x0 - r} ${z0 - r} ${x0 + r} ${z0 + r} ${step}`), 300_000);
-  const cols = new Map();
-  for (const c of s.columns ?? []) {
-    const m = /^(-?\d+),(-?\d+) h(-?\d+) floor(-?\d+) (\S+)/.exec(c);
-    if (m) cols.set(`${m[1]},${m[2]}`, { x: +m[1], z: +m[2], h: +m[3], floor: +m[4], top: m[5] });
-  }
-  return cols;
-}
-/** The flattest dry w x d window (step 4) among surveyed columns: {x, z (min corner), range, mean}. */
-function flattest(cols, w, d, step = 4) {
-  let best = null;
-  const xs = [...new Set([...cols.values()].map((c) => c.x))].sort((a, b) => a - b);
-  const zs = [...new Set([...cols.values()].map((c) => c.z))].sort((a, b) => a - b);
-  for (const x of xs) {
-    for (const z of zs) {
-      let lo = Infinity;
-      let hi = -Infinity;
-      let sum = 0;
-      let n = 0;
-      let ok = true;
-      for (let dx = 0; dx <= w && ok; dx += step) {
-        for (let dz = 0; dz <= d && ok; dz += step) {
-          const c = cols.get(`${x + dx},${z + dz}`);
-          if (!c || /water|lava|ice|leaves|log/.test(c.top)) {
-            ok = false;
-            break;
-          }
-          lo = Math.min(lo, c.h);
-          hi = Math.max(hi, c.h);
-          sum += c.h;
-          n++;
-        }
-      }
-      if (ok && (best === null || hi - lo < best.range)) best = { x, z, range: hi - lo, mean: Math.round(sum / n) };
+  let standing = Object.keys(ids);
+  for (const k of ['H', 'R', 'X', 'T']) {
+    const r = await result(await api(`remove ${ids[k]} - noforce keep`), 300_000);
+    check(r.removed, `smoke: remove ${k}: restored ${r.restored}, handed ${JSON.stringify(r.handedDown)}`, r);
+    standing = standing.filter((x) => x !== k);
+    await settle();
+    for (const o of standing) {
+      const v = await verify(ids[o]);
+      check(v.mismatches === 0, `smoke: after ${k}, ${o} still holds its ${v.owned} owned cells`, v);
     }
   }
-  return best;
-}
+  const h1 = await hash(FIX_BOX, [], true);
+  const ok = check(h1.sha256 === h0.sha256, 'smoke: the fixture box is back exactly after removing H, R, X, T', { h0: h0.sha256, h1: h1.sha256 });
+  if (!ok) {
+    await leaveWorld();
+    copyWorld(FLAT, 'G4E SmokeRef');
+    await openWorld('G4E SmokeRef');
+    const ref = await hash(FIX_BOX, [], true);
+    results.diff = { ok: false, data: diff(ref.list, h1.list, 40) };
+  }
+  return { f, ids };
+};
 
 /** `stop`: quits the gate client (by PID if it hangs). `start [world]`: moves the run worktree to this worktree's HEAD and starts it. */
 steps.stop = async () => {
@@ -404,6 +397,24 @@ steps.start = async () => {
   execFileSync('git', ['-C', RUN, 'checkout', '-q', '--detach', head]);
   await startClient(process.argv[3] ?? 'G4E Smoke');
   return { head, pids: clientPids() };
+};
+
+/** `scout <seed>...`: the flattest dry windows near spawn of fresh worlds (picks the gate's base seed). */
+steps.scout = async () => {
+  if (!dev) await connect();
+  const out = [];
+  for (const seed of process.argv.slice(3)) {
+    const name = 'G4E Scout';
+    await leaveWorld();
+    fs.rmSync(path.join(SAVES, name), { recursive: true, force: true });
+    await openWorld(name, { mode: 'creative', preset: 'normal', seed, cheats: true });
+    await sleep(8000);
+    const cols = await surveyAround(176, 4);
+    const r = { seed, columns: cols.size, village: flattest(cols, 120, 128), fixture: flattest(cols, 72, 72) };
+    log(JSON.stringify(r));
+    out.push(r);
+  }
+  return out;
 };
 
 /** Debugging: `node tools/gate4e.mjs eval '<async js>'` with the helpers in scope; prints the value. */
