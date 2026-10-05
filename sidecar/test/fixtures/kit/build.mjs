@@ -1,5 +1,10 @@
 // Test fixture: implements the kit CLI from docs/CONTRACT.md "Kit CLI" without Minecraft data.
-//   node kit/build.mjs <id> [--out <dir>] [--max x,y,z] [--type <t>] [--palette <preset>|<json>] [--values <json>] [--json]
+//   node kit/build.mjs <id> [--out <dir>] [--max x,y,z] [--type <t>] [--palette <preset>|<json>] [--values <json>]
+//                          [--massing <massing.blueprint.json>] [--json]
+// (4c) A blueprint with `massing: true` gets the massing profile (at least 2 parts). --massing checks conformance to a
+// massing: a size over the massing's + 2 on an axis is an error (exit 1); a missing part, a part box off by more than 1
+// on a face, a total size off by more than 2 and a changed roof form are issues. --json adds `conformance: {ok, errors,
+// issues}`.
 // exit 0 = OK, 1 = check failed, 2 = the design threw / bad usage (an unknown palette or param value too).
 // It also writes env.json (the environment it ran with) next to the outputs, so tests can check
 // that the checker child process gets a minimal environment.
@@ -71,16 +76,37 @@ const type = opt('type');
 if (type && bp.type !== type) errors.push(`type is ${bp.type}, expected ${type}`);
 if (!bp.anchors?.entrance || !bp.anchors?.spawn) errors.push('entrance and spawn anchors are required');
 if (bp.fail) errors.push(bp.fail);
+if (bp.massing && Object.keys(bp.parts ?? {}).length < 2) errors.push(`massing: ${Object.keys(bp.parts ?? {}).length} part(s); a massing needs at least 2 named masses`);
+let conformance;
+const massingFile = opt('massing');
+if (massingFile !== undefined) {
+  let ms;
+  try { ms = JSON.parse(fs.readFileSync(path.resolve(massingFile), 'utf8')); } catch (e) { usage(`--massing: cannot read ${massingFile} (${e.message})`); }
+  const cErr = [];
+  const issues = [];
+  for (const a of ['x', 'y', 'z']) {
+    if (bp.size[a] > ms.size[a] + 2) cErr.push(`conformance: size ${a} ${bp.size[a]} is over the massing's ${ms.size[a]} + 2`);
+    else if (Math.abs(bp.size[a] - ms.size[a]) > 2) issues.push(`conformance: size ${a} ${bp.size[a]} is more than 2 off the massing's ${ms.size[a]}`);
+  }
+  for (const [name, p] of Object.entries(ms.parts ?? {})) {
+    const d = bp.parts?.[name];
+    if (!d) { issues.push(`conformance: part ${name} of the massing is missing`); continue; }
+    if (d.box.some((v, i) => Math.abs(v - p.box[i]) > 1)) issues.push(`conformance: part ${name} box ${JSON.stringify(d.box)} is more than 1 off the massing's ${JSON.stringify(p.box)} on a face`);
+    if (p.roof && d.roof && p.roof !== d.roof) issues.push(`conformance: part ${name} roof ${d.roof} is not the massing's ${p.roof}`);
+  }
+  conformance = { ok: cErr.length === 0, errors: cErr, issues };
+  errors.push(...cErr);
+}
 fs.mkdirSync(out, { recursive: true });
 const nbt = path.join(out, `${id}.nbt`);
 const sidecarFile = path.join(out, `${id}.blueprint.json`);
 fs.writeFileSync(nbt, `FAKE-NBT ${id} ${JSON.stringify(bp.size)} ${JSON.stringify(bp.palette)}`);
-const { warnings: _w, fail: _f, ...sidecar } = bp;
+const { warnings: _w, fail: _f, openings: _o, ...sidecar } = bp;
 sidecar.id = id;
 fs.writeFileSync(sidecarFile, JSON.stringify(sidecar, null, 2));
 fs.writeFileSync(path.join(out, 'env.json'), JSON.stringify(process.env));
 const ok = errors.length === 0;
-if (json) console.log(JSON.stringify({ ok, errors, warnings, nbt, sidecar: sidecarFile }));
+if (json) console.log(JSON.stringify({ ok, errors, warnings, nbt, sidecar: sidecarFile, ...(conformance ? { conformance } : {}) }));
 else {
   for (const w of warnings) console.log(`warning: ${w}`);
   for (const e of errors) console.log(`error: ${e}`);
