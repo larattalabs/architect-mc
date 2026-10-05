@@ -11,3 +11,4 @@ mod/build/
 mod/.gradle/
 sidecar/scratch/
 .claude/
+_import/
