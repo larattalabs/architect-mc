@@ -1077,16 +1077,30 @@ async function megaRun(name, budget, opts = {}) {
   const t0 = Date.now();
   const id = await queue(spec);
   let relog = null;
+  let done;
   if (opts.relog) {
-    await sleep(15_000);
-    const before = (await api(`batch ${id}`)).items?.filter((i) => i.status === 'PLACED').length;
+    // a clean stop mid-batch (the pad and a few lots placed), then the queue resumes after the restart
+    let before = 0;
+    for (let i = 0; i < 2400; i++) {
+      before = (await api(`batch ${id}`)).items?.filter((x) => x.status === 'PLACED').length ?? 0;
+      if (before >= 12) break;
+      await sleep(100);
+    }
     await stopClient();
     await startClient(name);
     await tp(128.5, 160, 128.5);
-    await mark();
     relog = { placedBefore: before };
+    for (let i = 0; i < 7200; i++) {
+      const b = await api(`batch ${id}`);
+      if (b.status === 'DONE' || b.status === 'STOPPED' || b.status === 'CANCELLED') {
+        done = b;
+        break;
+      }
+      await sleep(500);
+    }
+  } else {
+    done = await waitBatch(id, 120 * 60_000);
   }
-  const done = await waitBatch(id, 120 * 60_000);
   const wall = (Date.now() - t0) / 1000;
   const stats = await call('dev.placement.stats', {});
   const heap = await call('dev.heap', {});
