@@ -1159,3 +1159,23 @@ redirects it with notes. The detail design then takes the approved massing as bi
    - composites clear on world leave;
    - **client-only:** a server-side mod sends its layers over its own packet and calls `previewComposite` on the client.
 7. **Auto-approve** needs no change (the owner calls `approveGroup` on the event).
+
+### Phase 4c as built (API 1.3.0, mod 0.6.0)
+
+- **Sidecar wire** (full text in `sidecar/README.md` "Phase 4c"):
+  - massing acks are `{designId, massingId, version}`; a detail ack is `{designId, massing}`;
+  - `massing.upsert` / `massing.removed`;
+  - `group.approve` also takes `cancel[]`;
+  - `GroupItem.stage` is massing|approval|detail. An item awaiting approval has status `done` with stage `approval`.
+  - `massing.delete` acks a count.
+  - Only conformance ERRORS (the size cap) fail a detail round; issues stay warnings on `Design.conformance`. Fixed in 487a5f3: the first build failed on issues too.
+- **Java:**
+  - `Designs.massing(id[, version])` answers from a persisted book: the latest version of every massing is fetched on each connect, and a pinned version is known only if this game saw it.
+  - `approveGroup` / `redirectMassing` have owner overloads; the forms without an owner are refused for approvalUi owner groups.
+  - MASSING_DONE fires once per installed version. GROUP_AWAITING_APPROVAL fires again only for a newly awaiting massing version (after a redirect).
+  - **Not purely additive:** new record components, `Group.Status.AWAITING_APPROVAL` inserted before DONE (ordinals shift), new `PreviewStyle` constants (exhaustive switches break).
+- **Composite preview:**
+  - `onlyCells` is in template coordinates (unrotated);
+  - a library entry wins over a massing with the same id, and `id@version` names a version;
+  - a 200k-cell key costs 5-7 ms of CPU per frame (vertex streaming).
+- **UI:** a Design-tab review bar (Enter approves, R redirects, Esc dismisses and keeps the massing); a set's massings stand in a row with a numbered legend; the Designs tab shows item stages, rounds and conformance.
