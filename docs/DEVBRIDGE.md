@@ -74,7 +74,7 @@ The list below is what `dev.help` returns (`{commands: {name: description}, scre
 | `dev.waitChunks` | {timeoutMs?:30000, radius?:renderDistance-1} - block until chunks around the camera are loaded+built |
 | `dev.weather` | {clear?:true} or {weather: clear\|rain\|thunder} |
 | `dev.world.leave` | {} - save and leave the world for the title screen (as Save and Quit to Title) -> {left} |
-| `dev.world.open` | {} - open (or create) the AutoWorld world again from the title screen; then poll `dev.state` until ready |
+| `dev.world.open` | {name?, mode?: creative\|survival\|hardcore, preset?: flat\|normal, seed?, cheats?: bool} - open (or create) the AutoWorld world again from the title screen; the fields replace `ARCHITECT_AUTOWORLD_*` (another world, e.g. a fresh one per run); then poll `dev.state` until ready |
 
 ### Placement (the ghost)
 
@@ -131,7 +131,8 @@ The list below is what `dev.help` returns (`{commands: {name: description}, scre
 | `dev.library.delete` | {entry?} - Delete (to architect/library-trash; bundled entries refuse) and reload |
 | `dev.library.export` | {entry?} - Export: architect/exports/<id>/ + the world's generated/architect_mc/structure/<id>.nbt -> {dir, files, worldFile, structureId, structureLoads, structureSize} |
 | `dev.library.favorite` | {entry?, on? (default: toggle)} - the star |
-| `dev.library.filter` | {reset?, buildingType? (all\|<type>), tag? (all\|<tag>), favorites?, text?, sort?: newest\|name\|size} - set the Library tab's search/filters/sort |
+| `dev.library.filter` | {reset?, buildingType? (all\|<type>), tag? (all\|<tag>), favorites?, text?, sort?: newest\|name\|size, collection?: all\|bible:<id>\|group:<id>} - set the Library tab's search/filters/sort and the Collection filter (the collection header shows above the grid) |
+| `dev.library.reskin` | {collection?: bible:<id>\|group:<id> (default: the Collection filter), bible} - Re-skin… in the collection header (`reskin.request`) -> {reskinId, error, message} |
 | `dev.library.import.list` | {} - Import…: opens the dialog and lists the .nbt files (imports/ and this world's structure-block saves) |
 | `dev.library.import.pick` | {index? \| path?} - pick a file in the Import… list and press Import (import.request) -> {jobId} |
 | `dev.library.remix` | {entry?} - Remix…: the Design tab prefilled from the entry, remix set, notes focused |
@@ -140,7 +141,7 @@ The list below is what `dev.help` returns (`{commands: {name: description}, scre
 | `dev.library.state` | {} - the library: query, visible cards, selected (detail), user tags, the Variants form, the import list, the last export, messages |
 | `dev.library.tag` | {entry?, tags: [..] \| "a, b"} - Tags (the inline editor; replaces the user tags) |
 | `dev.library.variants.open` | {entry?} - Variants… (refused for imported entries and entries without a source) |
-| `dev.library.variants.set` | {preset?, wood?, stone?, roof?, accent?, values?: {param: value}, steps?: {param: delta}, toggle?: [param], name?} - change the open Variants dialog |
+| `dev.library.variants.set` | {preset?, wood?, stone?, roof?, accent?, bible?: id\|null (a re-skin with one of your style bibles; a preset or a palette field drops it), values?: {param: value}, steps?: {param: delta}, toggle?: [param], name?} - change the open Variants dialog |
 | `dev.library.variants.submit` | {} - Make variant (variant.request) -> {jobId} |
 | `dev.library.wait` | {jobId, timeoutMs?: 60000} - wait until a variant/import job is done (and its entry loaded) or failed -> {status, blueprintId, error} |
 
@@ -149,7 +150,7 @@ The list below is what `dev.help` returns (`{commands: {name: description}, scre
 | hook | arguments, result |
 |---|---|
 | `dev.design.cancel` | {designId} - design.cancel |
-| `dev.design.fill` | {reset?, buildingType? (not type: that is the message type), style? (chip id or any text), materials?, features?: [..] \| "a,b", size?: S\|M\|L\|custom\|plot, custom?: [x,y,z], remix?, name?, notes?} - set the Design tab's fields |
+| `dev.design.fill` | {reset?, buildingType? (not type: that is the message type; a non-preset one is an open type), openType?, profile?: [rules], bible?: id\|none, style? (chip id or any text), materials?, features?: [..] \| "a,b", size?: S\|M\|L\|custom\|plot, custom?: [x,y,z], remix?, name?, notes?} - set the Design tab's fields |
 | `dev.design.place` | {blueprint} - Place on the plot (placement locked on the plot marked for it) |
 | `dev.design.state` | {} - the Design form (fields, errors, the request as it would be sent), the sidecar's designs, plots |
 | `dev.design.submit` | {fields?} - fill (optional), then press Design it: replies after the ack with sent{designId, error} + the state |
@@ -158,17 +159,46 @@ The list below is what `dev.help` returns (`{commands: {name: description}, scre
 | `dev.plot.start` | {height?} - Mark a plot… (closes the screen; corners with dev.plot.corner) |
 | `dev.plot.state` | {} - plot marking |
 
+### Sets, bibles and groups (phase 4b)
+
+| hook | arguments, result |
+|---|---|
+| `dev.set.open` | {} - Design tab, Design a set… (the dialog takes the tab's body) -> the dialog's state |
+| `dev.set.fill` | {name?, bible?: id \| "new", prompt?, items?: [{type, name?, role?: landmark\|ordinary, notes?}], concurrency?: 1-6, budgetUsd?: number\|null} - set the open dialog's fields (`items` replace the rows) |
+| `dev.set.draft` | {} - Draft bible (`bible.request` with the prompt; the new bible is picked when its job is done) -> {jobId, error} + the state |
+| `dev.set.submit` | {} - Design the set (`design.group`) -> {groupId, error} + the state; the screen shows the set in the Designs tab |
+| `dev.set.close` | {} - Cancel the dialog |
+| `dev.set.state` | {} - the dialog: fields, errors, the live estimate (`design.estimate`, debounced), the request as it would be sent, the screen state |
+| `dev.group.action` | {group, action: cancel\|resume\|extend, budgetUsd? (extend)} - the Designs tab's set buttons (`group.cancel`, `group.resume`, `group.extend`) -> {ok, error, message} |
+| `dev.bibles` | {} - the bibles the UI lists (installed, then built in) and the bible jobs |
+
+Controls (`dev.ui.click`): `design_set`, `design:bible`, `design:profile`, `type:other`; in the dialog `set:bible`,
+`set:draft_bible`, `set:type_pick:<row>`, `set:role:<row>`, `set:remove:<row>`, `set:add`, `set:concurrency±`,
+`set:budget±`, `set:submit`, `set:cancel`, and the fields `field:set_name`, `field:set_prompt`, `field:set_type:<row>`,
+`field:set_iname:<row>`, `field:set_notes:<row>` (`dev.ui.focus {field: "set_iname:2"}`); in the Designs tab
+`group:resume`, `group:extend`, `group:cancel`, `group:library`, `bible:cancel`, `bible:use`; in the Library
+`filter:collection`, `collection:reskin`, `collection:clear`, `sort` (when the sort chips fold into one), and in the
+Variants dialog `bible:<id>`.
+
 ### Sidecar and launcher
 
 | hook | arguments, result |
 |---|---|
 | `dev.launcher.restart` | {} - Restart helper (Status tab) |
 | `dev.launcher.state` | {} - the launcher: state, detail, source, node, pid, reuse, log tail |
-| `dev.sidecar.state` | {} - the sidecar link and state: status (no key), designs, variants, jobs (id, status, step, error, resultBlob), protocol, features |
+| `dev.sidecar.state` | {} - the sidecar link and state: status (no key), designs, variants, jobs (id, status, step, error, resultBlob), groups, bibleJobs (without the request), reskins, bibleIndex (id, name, version, builtin, sheetPath), protocol, features |
 
 ## Changelog
 
 Semi-stable: a hook may change or go, and every such change is listed here, newest first.
+
+- **2026-10-05 (phase 4b, mod side):** new `dev.set.open|fill|draft|submit|close|state`, `dev.library.reskin`,
+  `dev.group.action`, `dev.bibles`. `dev.library.filter` takes `collection`, `dev.library.variants.set` takes `bible`,
+  `dev.design.fill` takes `openType`, `profile` and `bible`, `dev.world.open` takes `{name, mode, preset, seed, cheats}`,
+  `dev.ui.focus` takes `set_*` fields (with `:<row>` for an item row). `dev.sidecar.state` adds `groups`, `bibleJobs`,
+  `reskins` and `bibleIndex`. The Designs tab lists sets (kind SET) and bible jobs (kind BIBLE); a set's item designs
+  are no longer rows of their own (they show in the set). `tools/apitest.mjs sets` drives the 4b API (apitest
+  `/apitest bible|group|estimate|reskin|opentype|survival ...`).
 
 - **2026-10-05 (phase 4a, jobs):** new `dev.world.leave` and `dev.world.open` (leave a world and load it again in the same
   game, for "finished while no world was loaded" checks). `dev.sidecar.state` also lists the sidecar's `jobs`. The
