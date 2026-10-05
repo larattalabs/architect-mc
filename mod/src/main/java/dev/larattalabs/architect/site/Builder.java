@@ -893,7 +893,7 @@ public final class Builder {
 				int miss = crate.ledger().missing(e.getKey(), r::unbuiltCost);
 				if (miss > most) {
 					most = miss;
-					needs = miss + " " + itemName(e.getKey());
+					needs = miss + " × " + itemName(e.getKey()); // "112 × spruce log": item names have no plural form
 				}
 			}
 		}
