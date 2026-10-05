@@ -22,11 +22,25 @@ const OUT = process.env.GATE4E_OUT ? path.resolve(process.env.GATE4E_OUT) : path
 fs.mkdirSync(OUT, { recursive: true });
 // the client runs from a separate worktree (compiling here never changes a running client's classes)
 const RUN = process.env.GATE4E_RUN ? path.resolve(process.env.GATE4E_RUN) : path.resolve(root, '..', 'architect-mc-4e-run');
-const GAME_DIR = path.join(RUN, 'mod', 'run');
-const SAVES = path.join(GAME_DIR, 'saves');
-const PORT = Number(process.env.ARCHITECT_DEV_PORT || 8891);
 const V070 = path.resolve(root, '..', 'architect-mc-v070');
-const V070_PORT = 8893;
+/** The two clients: the 0.8.0 gate client (run worktree) and the 0.7.0 one (tag v0.7.0, for the migration and the downgrade). */
+const CLIENTS = {
+  new: { name: '0.8.0', dir: RUN, port: Number(process.env.ARCHITECT_DEV_PORT || 8891), script: 'tools/run-gate4e-client.sh', env: {} },
+  old: { name: '0.7.0', dir: V070, port: 8893, script: 'tools/run-gate4d-client.sh',
+    env: { ARCHITECT_PORT: '8892', ARCHITECT_DEV_PORT: '8893', ARCHITECT_SHOTS_DIR: path.join(OUT, 'shots070') } },
+};
+let CUR = CLIENTS.new;
+let GAME_DIR = path.join(CUR.dir, 'mod', 'run');
+let SAVES = path.join(GAME_DIR, 'saves');
+let PORT = CUR.port;
+/** Switches the helpers (connection, saves, PIDs) to the other client; the caller stops the current one first. */
+function use(which) {
+  CUR = CLIENTS[which];
+  GAME_DIR = path.join(CUR.dir, 'mod', 'run');
+  SAVES = path.join(GAME_DIR, 'saves');
+  PORT = CUR.port;
+}
+const savesOf = (which) => path.join(CLIENTS[which].dir, 'mod', 'run', 'saves');
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const results = {};
@@ -52,6 +66,8 @@ const saveCtx = () => fs.writeFileSync(CTX, JSON.stringify(ctx, null, 2));
 
 let dev = null;
 async function connect(port = PORT, gameDir = GAME_DIR, timeoutMs = 600_000) {
+  port = port ?? PORT;
+  gameDir = gameDir ?? GAME_DIR;
   const end = Date.now() + timeoutMs;
   let last;
   while (Date.now() < end) {
@@ -68,7 +84,7 @@ async function connect(port = PORT, gameDir = GAME_DIR, timeoutMs = 600_000) {
 }
 const call = (type, payload = {}, timeoutMs) => dev.call(type, payload, timeoutMs ? { timeoutMs } : {});
 
-function clientPids(dir = RUN) {
+function clientPids(dir = CUR.dir) {
   try {
     return execFileSync('pgrep', ['-f', `${path.basename(dir)}/mod/.gradle/loom-cache/launch.cfg`]).toString().trim().split(/\s+/).filter(Boolean).map(Number);
   } catch {
@@ -78,19 +94,21 @@ function clientPids(dir = RUN) {
 
 /** Starts the gate client (this worktree) on {@code world}; returns once it is in the world. */
 async function startClient(world, env = {}) {
-  if (clientPids().length) throw new Error(`a client of ${RUN} runs already: ${clientPids()}`);
+  if (clientPids().length) throw new Error(`a client of ${CUR.dir} runs already: ${clientPids()}`);
+  const opts = path.join(GAME_DIR, 'options.txt');
+  if (fs.existsSync(opts)) fs.writeFileSync(opts, fs.readFileSync(opts, 'utf8').replace(/^enableVsync:true$/m, 'enableVsync:false'));
   try {
     fs.rmSync(path.join(GAME_DIR, 'architect', 'devbridge.token'), { force: true });
   } catch {
     // none
   }
   const out = fs.openSync(path.join(OUT, 'client.log'), 'a');
-  const p = spawn(path.join(RUN, 'tools', 'run-gate4e-client.sh'), [], { cwd: RUN, detached: true, stdio: ['ignore', out, out],
-    env: { ...process.env, ARCHITECT_AUTOWORLD_NAME: world, ...env } });
+  const p = spawn(path.join(CUR.dir, CUR.script), [], { cwd: CUR.dir, detached: true, stdio: ['ignore', out, out],
+    env: { ...process.env, ...CUR.env, ARCHITECT_AUTOWORLD_NAME: world, ...env } });
   p.unref();
   await connect(PORT, GAME_DIR, 600_000);
   await waitInWorld();
-  log(`client up (pid ${clientPids()}) in ${world}`);
+  log(`${CUR.name} client up (pid ${clientPids()}) in ${world}`);
 }
 
 async function waitInWorld(timeoutMs = 600_000) {
@@ -108,7 +126,7 @@ async function waitInWorld(timeoutMs = 600_000) {
 }
 
 /** Stops the gate client: a clean quit, then (only this worktree's java, by PID) a kill. */
-async function stopClient(dir = RUN) {
+async function stopClient(dir = CUR.dir) {
   const pids = clientPids(dir);
   if (!pids.length) return;
   try {
@@ -256,8 +274,8 @@ async function openWorld(name, opts = {}) {
   }
   throw new Error(`world ${name} did not open`);
 }
-function copyWorld(from, to, saves = SAVES) {
-  const src = path.join(saves, from);
+function copyWorld(from, to, saves = SAVES, fromSaves = saves) {
+  const src = path.join(fromSaves, from);
   const dst = path.join(saves, to);
   if (!dst.startsWith(saves + path.sep) || !to.startsWith('G4E ')) throw new Error(`refusing to replace ${dst}`);
   fs.rmSync(dst, { recursive: true, force: true });
@@ -599,7 +617,8 @@ async function killRun(point, base, action, pre) {
   copyWorld(base, 'G4E Crash');
   await openWorld('G4E Crash');
   await tp(48.5, 80, 30.5);
-  const before = { sites: (await sites()).map((x) => x.id), journal: journalFiles('G4E Crash') };
+  const standing = (await sites()).map((x) => x.id);
+  const before = { sites: standing, journal: journalFiles('G4E Crash'), owned: standing.length ? await ownedNow(standing) : {} };
   await cmd('/save-all flush');
   await settle(1000);
   await call('dev.journal.killAt', { point });
@@ -675,7 +694,7 @@ steps.crash = async () => {
   if (r) {
     const all = await sites();
     const j = await journal();
-    check(all.length === 1 && all[0].state !== 'placing' && (j.entries ?? []).some((e) => e.status === 'ACTIVE' && e.site === all[0].id),
+    check(all.length === 1 && all[0].state === 'BUILT' && (j.entries ?? []).some((e) => e.status === 'ACTIVE' && e.site === all[0].id),
       `crash K4: the record is placed (${JSON.stringify(all.map((x) => [x.id, x.state]))})`, { all, entries: j.entries });
     await finalExact('K4', pre);
     out.K4 = r;
@@ -686,8 +705,8 @@ steps.crash = async () => {
     const all = (await sites()).map((x) => x.id).sort();
     check(JSON.stringify(all) === JSON.stringify(Object.values(ids).sort()), `crash K5: all four sites stand (${all})`, { all });
     const lk = await ownedNow(Object.values(ids));
-    const bad = Object.entries(lk).filter(([, v]) => [...v.cells.values()].some((c) => c.endsWith(' !after') && !/dirt_path|"minecraft:dirt"/.test(c)));
-    check(bad.length === 0, 'crash K5: every site holds its after', bad.map(([k]) => k));
+    const bad = Object.keys(lk).filter((k) => lk[k].owned !== r.before.owned[k].owned || [...lk[k].cells].some(([p, v]) => r.before.owned[k].cells.get(p) !== v));
+    check(bad.length === 0, 'crash K5: every site\'s owned cells are as before the kill', bad);
     await finalExact('K5', pre);
     out.K5 = r;
   }
@@ -728,6 +747,8 @@ steps.crash = async () => {
     const j = await journal();
     check(JSON.stringify(all) === JSON.stringify(Object.values(ids).sort()) && (j.entries ?? []).every((e) => e.status === 'ACTIVE'),
       `crash K8: the hand-down did not half apply: all four stand, all entries ACTIVE`, { all, entries: j.entries });
+    check(r.after.orphans.length === 0, `crash K8: the half-written generations were deleted at the start (${r.disk.orphans.length} before, ${r.after.orphans.length} after)`,
+      { before: r.disk.orphans, after: r.after.orphans });
     await finalExact('K8', pre);
     out.K8 = r;
   }
@@ -744,13 +765,317 @@ steps.crash = async () => {
   await startClient('G4E Crash');
   await mark();
   await cmd('/architect budget 4');
-  for (let i = 0; i < 120 && !(await sites()).some((x) => x.state === 'placed'); i++) await sleep(1000);
+  for (let i = 0; i < 120 && !(await sites()).some((x) => x.state === 'BUILT'); i++) await sleep(1000);
   const all = await sites();
-  check(all.length === 1 && all[0].state === 'placed', `crash K3 clean: the placement resumed after a clean stop (${JSON.stringify(all.map((x) => [x.id, x.state]))})`,
+  check(all.length === 1 && all[0].state === 'BUILT', `crash K3 clean: the placement resumed after a clean stop (${JSON.stringify(all.map((x) => [x.id, x.state]))})`,
     { bid, all });
   await finalExact('K3-clean', pre);
   await leaveWorld();
   return out;
+};
+
+// ------------------------------------------------------------------ gate 4: migration from a 0.7.0 world, the downgrade round trip
+
+/** dev.box.hash (both versions have it): the migration's hashes are comparable across 0.7.0 and 0.8.0. */
+async function bhash(b, cells = false) {
+  await settle(2000);
+  return call('dev.box.hash', { min: [b[0], b[1], b[2]], max: [b[3], b[4], b[5]], cells }, 300_000);
+}
+/** The migration lots on the flat meadow (origin y 65): a lot's hash region holds its restore box + 7. */
+const MIG = {
+  A1: { bp: 'cabin', at: [0, 65, -120] },
+  A2: { bp: 'tower', at: [45, 65, -120] },
+  A3: { bp: 'gatehouse', at: [90, 65, -120] },
+  C: { bp: 'cabin', at: [135, 65, -120] },
+  D: { bp: 'cabin', at: [180, 65, -120] },
+  G1: { bp: 'tavern', at: [0, 65, -190] },
+  G2: { bp: 'cabin', at: [45, 65, -190] },
+  P: { bp: 'tavern', at: [90, 65, -190] },
+  T: { bp: 'cabin', at: [135, 65, -190] },
+  N: { bp: 'cabin', at: [180, 65, -190] }, // the downgrade's 0.7.0 site
+};
+const TREE = [148, 65, -183]; // an oak by the worldgen feature, its canopy over T's east wall
+const ROAD_D = { points: [[-20, 65, -150], [220, 65, -150]], width: 3 }; // the downgrade's road, between the rows
+const ROAD_BOX = [-28, 55, -158, 228, 80, -142];
+const migRegion = (k) => [MIG[k].at[0] - 10, 56, MIG[k].at[2] - 10, MIG[k].at[0] + 30, 100, MIG[k].at[2] + 40];
+
+/** Fills a construction site's crate with up to {@code maxStacks} stacks of what it still misses (or of its bill). */
+async function feed(site, fraction = 1, maxStacks = 27) {
+  const st = await siteState(site);
+  const c = st.crate;
+  const rows = (st.rows ?? []).filter((r) => (r.missing ?? 0) > 0 || (r.needed ?? 0) > (r.placed ?? 0) + (r.stock ?? 0));
+  const stacks = [];
+  for (const r of rows) {
+    let left = Math.ceil(Math.max(r.missing ?? 0, (r.needed ?? 0) - (r.placed ?? 0) - (r.stock ?? 0)) * fraction);
+    const max = /bed$|banner$/.test(r.item) ? 1 : /_door$|sign$|ender_pearl|snowball|egg$/.test(r.item) ? 16 : 64;
+    while (left > 0 && stacks.length < maxStacks) {
+      const n = Math.min(max, left);
+      stacks.push([r.item, n]);
+      left -= n;
+    }
+  }
+  for (let i = 0; i < stacks.length; i++) await cmd(`/item replace block ${c.x} ${c.y} ${c.z} container.${i} with ${stacks[i][0]} ${stacks[i][1]}`);
+  return { stacks: stacks.length, percent: st.percent, crate: c };
+}
+
+/** Makes the 0.7.0 world (gate 4's fixture) with the 0.7.0 client; records the pre-placement hashes. */
+async function mig070() {
+  await stopClient();
+  use('old');
+  await startClient('G4E Title070').catch(async (e) => {
+    throw e;
+  });
+  await leaveWorld();
+  fs.rmSync(path.join(SAVES, 'G4E MigPre070'), { recursive: true, force: true });
+  await openWorld('G4E MigPre070', { mode: 'creative', preset: 'flat', cheats: true });
+  await setRules();
+  await tp(TREE[0] - 6.5, 70, TREE[2] + 10.5);
+  const tree = await cmd(`/place feature minecraft:oak ${TREE.join(' ')}`);
+  await settle(2000);
+  const pre = {};
+  for (const k of Object.keys(MIG)) {
+    await tp(MIG[k].at[0] + 10.5, 80, MIG[k].at[2] + 30.5);
+    pre[k] = (await bhash(migRegion(k))).sha256;
+  }
+  await tp(100.5, 80, -150.5);
+  const preRoad = (await bhash(ROAD_BOX)).sha256;
+  await cmd('/save-all flush');
+  await leaveWorld();
+  copyWorld('G4E MigPre070', 'G4E Mig070');
+  await openWorld('G4E Mig070');
+  await tp(90.5, 90, -150.5);
+  const ids = {};
+  for (const k of ['A1', 'A2', 'A3', 'T', 'D']) {
+    await tp(MIG[k].at[0] + 5.5, 85, MIG[k].at[2] + 30.5);
+    const r = await result(await api(`place ${MIG[k].bp} ${MIG[k].at.join(' ')} INSTANT unowned noactor 0 force`));
+    check(r.placed, `mig 0.7.0: ${k} (${MIG[k].bp}) placed instant (${r.siteId})`, r);
+    ids[k] = r.siteId;
+  }
+  const tSite = await siteState(ids.T);
+  log(`  T held leaves: ${JSON.stringify(tSite.heldLeaves ?? tSite.held ?? tSite.leaves ?? null)}`);
+  // D: removed, not yet settled (its record stays pending until the next world start)
+  const rd = await result(await api(`remove ${ids.D} - noforce`), 120_000);
+  check(rd.removed, 'mig 0.7.0: D removed (pending until the next start)', rd);
+  // G: a group with two stages
+  await mark();
+  const gid = await queue({ id: 'mig-g', autoApprove: true, items: [{ key: 'G1', bp: MIG.G1.bp, at: MIG.G1.at, rot: 0, mode: 'INSTANT', force: true, stage: 's1' },
+    { key: 'G2', bp: MIG.G2.bp, at: MIG.G2.at, rot: 0, mode: 'INSTANT', force: true, stage: 's2' }], stages: [{ name: 's1', items: ['G1'] }, { name: 's2', items: ['G2'] }] });
+  const gdone = await waitBatch(gid, 300_000);
+  for (const e of (await since()).filter((x) => x.event === 'ITEM_PLACED' && x.batch === gid)) ids[e.key] = e.site;
+  check(!!ids.G1 && !!ids.G2, `mig 0.7.0: group ${gdone.group} with stages s1, s2 placed (${ids.G1}, ${ids.G2})`, gdone);
+  // C: a construction site, half built (toggle on, half its bill in the crate)
+  await call('dev.survival.set', { on: true });
+  await mark();
+  const cid = await queue({ id: 'mig-c', proximity: false, items: [{ key: 'C', bp: MIG.C.bp, at: MIG.C.at, rot: 0, mode: 'CONSTRUCTION', force: true }] });
+  const cev = await waitEvent((e) => e.event === 'ITEM_PLACED' && e.batch === cid, 120_000, 'C construction site');
+  ids.C = cev.site;
+  await tp(MIG.C.at[0] + 5.5, 85, MIG.C.at[2] + 30.5);
+  const f1 = await feed(ids.C, 0.5);
+  let pc = 0;
+  for (let i = 0; i < 90; i++) {
+    await sleep(2000);
+    const st = await siteState(ids.C);
+    if (st.percent === pc && i > 5) break;
+    pc = st.percent;
+  }
+  check(pc > 0 && pc < 100, `mig 0.7.0: C half built (${pc}%, ${f1.stacks} stacks fed)`, { pc, f1 });
+  // P: a tavern placing over ticks at 1 ms (a creative actor), then a clean stop mid-placement
+  await cmd('/architect budget 1');
+  await tp(MIG.P.at[0] + 5.5, 85, MIG.P.at[2] + 30.5);
+  await mark();
+  const pid = await queue({ id: 'mig-p', items: [{ key: 'P', bp: MIG.P.bp, at: MIG.P.at, rot: 0, mode: 'INSTANT', force: true, actor: true }] });
+  for (let i = 0; i < 40; i++) {
+    const b = await api(`batch ${pid}`);
+    const it = (b.items ?? [])[0];
+    if (it?.site) {
+      ids.P = it.site;
+      break;
+    }
+    await sleep(250);
+  }
+  await sleep(1200);
+  const placing = (await sites()).filter((x) => x.state === 'PLACING').map((x) => x.id);
+  check(!!ids.P && placing.includes(ids.P), `mig 0.7.0: P placing at the stop (${ids.P}, placing: ${placing})`, { placing });
+  const before = await sites();
+  await stopClient(); // a clean stop: the world and the queue are saved mid-placement
+  use('new');
+  ctx.mig = { pre, preRoad, ids, group: gdone.group, sites070: before.map((x) => ({ id: x.id, state: x.state, bp: x.blueprint ?? x.bp })), tree };
+  saveCtx();
+  return ctx.mig;
+}
+
+/** Opens a 0.8.0 copy of the 0.7.0 world (optionally with a migration kill point armed) and checks the import. */
+async function migOpen(name, kill = null) {
+  copyWorld('G4E Mig070', name, SAVES, savesOf('old'));
+  if (!clientPids().length) await startClient('G4E Smoke');
+  await leaveWorld();
+  if (kill) {
+    await call('dev.journal.killAt', { point: kill });
+    call('dev.world.open', { name }, 30_000).catch(() => {});
+    const died = await waitDead(300_000);
+    check(died, `mig ${kill}: the JVM halted at the kill point`);
+    const disk = journalFiles(name);
+    check(disk.missing.length === 0, `mig ${kill}: no file the index names is lost`, disk);
+    await startClient(name);
+  } else {
+    await openWorld(name);
+  }
+  const dir = path.join(SAVES, name);
+  const j = await journal();
+  const legacy = path.join(dir, 'architect-journal', 'legacy', 'architect-sites');
+  const legacyFiles = fs.existsSync(legacy) ? fs.readdirSync(legacy) : [];
+  const oldDir = fs.existsSync(path.join(dir, 'architect-sites')) ? fs.readdirSync(path.join(dir, 'architect-sites')) : [];
+  const label = kill ? `mig ${kill}` : 'mig';
+  check(j.open && !j.unavailable && fs.existsSync(path.join(dir, 'architect-journal', 'journal.json')), `${label}: the index is made (${(j.entries ?? []).length} entries, `
+    + `${j.imported ?? '?'} imported)`, { entries: j.entries, notes: j.importNotes, flagged: j.importFlagged });
+  check(legacyFiles.length > 0 && oldDir.length === 0, `${label}: legacy/ holds the 0.7.0 snapshots (${legacyFiles.length} files), architect-sites/ is empty`,
+    { legacyFiles: legacyFiles.length, oldDir });
+  return j;
+}
+
+/** Removes the lots' sites one by one; each lot region must match its 0.7.0 pre-hash. */
+async function migRemoves(keys, label) {
+  const m = ctx.mig;
+  let ok = 0;
+  for (const k of keys) {
+    await tp(MIG[k].at[0] + 10.5, 85, MIG[k].at[2] + 30.5);
+    const r = await result(await api(`remove ${m.ids[k]} - force keep`), 600_000);
+    await settle(2000);
+    const h = (await bhash(migRegion(k))).sha256;
+    if (check(r.removed && h === m.pre[k], `${label}: Remove ${k} (${m.ids[k]}) matches its 0.7.0 pre-hash`, { r, h, pre: m.pre[k] })) ok++;
+    else results[`${label} ${k} diff`] = { ok: false, data: await migDiff(k) };
+  }
+  return ok;
+}
+async function migDiff(k) {
+  const now = await bhash(migRegion(k), true);
+  return { now: now.cells?.length ?? now.list?.length };
+}
+
+steps.migration = async () => {
+  if (!dev) await connect().catch(() => null);
+  if (!ctx.mig || process.argv[3] === 'remake') await mig070();
+  const m = ctx.mig;
+  // 1. a plain open
+  const j = await migOpen('G4E Mig');
+  const all = await sites();
+  check(!all.some((x) => x.id === m.ids.D) && !(j.entries ?? []).some((e) => e.site === m.ids.D && e.status !== 'UNDONE'),
+    `mig: the pending site D settled (${m.ids.D} gone)`, { all: all.map((x) => [x.id, x.state]) });
+  await tp(MIG.D.at[0] + 10.5, 85, MIG.D.at[2] + 30.5);
+  check((await bhash(migRegion('D'))).sha256 === m.pre.D, 'mig: D\'s lot is its pre-hash');
+  await tp(MIG.P.at[0] + 10.5, 85, MIG.P.at[2] + 30.5);
+  await cmd('/architect budget 4');
+  let pState = null;
+  for (let i = 0; i < 120; i++) {
+    pState = (await sites()).find((x) => x.id === m.ids.P)?.state;
+    if (pState === 'BUILT') break;
+    await sleep(1000);
+  }
+  check(pState === 'BUILT', `mig: the placing site P resumed and finished (${pState})`);
+  // the construction site finishes, identical to an instant placement
+  await tp(MIG.C.at[0] + 5.5, 85, MIG.C.at[2] + 30.5);
+  let cState = null;
+  for (let i = 0; i < 40; i++) {
+    const st = await siteState(m.ids.C);
+    cState = st.state;
+    if (st.state === 'built' || st.percent === 100) break;
+    await feed(m.ids.C, 1);
+    await sleep(5000);
+  }
+  check(cState === 'built' || (await siteState(m.ids.C)).percent === 100, `mig: the construction site C finished (${cState})`);
+  const cBox = box6((await sites()).find((x) => x.id === m.ids.C).restoreBox);
+  const cHash = (await bhash(cBox)).sha256;
+  // a LAYER placement over a migrated site (its foreign-BE check falls back to the pin), removed in both orders, in copies
+  await leaveWorld();
+  copyWorld('G4E Mig', 'G4E MigL1');
+  copyWorld('G4E Mig', 'G4E MigL2');
+  copyWorld('G4E Mig', 'G4E MigDown');
+  await openWorld('G4E Mig');
+  await call('dev.survival.set', { on: false });
+  const okRemoves = await migRemoves(['A1', 'A2', 'A3', 'T', 'G1', 'G2', 'P', 'C'], 'mig');
+  check(okRemoves === 8, `mig: ${okRemoves}/8 Removes match their pre-hashes`);
+  await leaveWorld();
+  // the instant reference for C, in the pristine 0.7.0 world opened by 0.8.0
+  copyWorld('G4E MigPre070', 'G4E MigRef', SAVES, savesOf('old'));
+  await openWorld('G4E MigRef');
+  await tp(MIG.C.at[0] + 5.5, 85, MIG.C.at[2] + 30.5);
+  const ref = await result(await api(`place ${MIG.C.bp} ${MIG.C.at.join(' ')} INSTANT unowned noactor 0 force`));
+  const refHash = (await bhash(cBox)).sha256;
+  check(ref.placed && refHash === cHash, 'mig: C finished identical to an instant placement (restore box, BE NBT)', { cHash, refHash });
+  await leaveWorld();
+  for (const [w, order] of [['G4E MigL1', ['A1', 'X']], ['G4E MigL2', ['X', 'A1']]]) {
+    await openWorld(w);
+    await call('dev.survival.set', { on: false });
+    await tp(MIG.A1.at[0] + 10.5, 85, MIG.A1.at[2] + 30.5);
+    const x = await result(await api(`place gatehouse ${MIG.A1.at[0] + 9} 65 ${MIG.A1.at[2]} INSTANT unowned noactor 0 layer`));
+    check(x.placed, `mig: a LAYER placement over migrated A1 works (${x.siteId}) [${w}]`, x);
+    const ids = { A1: m.ids.A1, X: x.siteId };
+    const steps0 = [];
+    for (const k of order) steps0.push(await result(await api(`remove ${ids[k]} - noforce keep`), 300_000));
+    const h = (await bhash(migRegion('A1'))).sha256;
+    check(steps0.every((r) => r.removed) && h === m.pre.A1, `mig: removing A1 and X in order ${order.join(', ')} is exact`, { steps0, h });
+    await leaveWorld();
+  }
+  // 2. kills before and after the migration commit
+  for (const k of ['migrate-before-commit', 'migrate-after-commit']) {
+    const name = k === 'migrate-before-commit' ? 'G4E MigKb' : 'G4E MigKa';
+    const jk = await migOpen(name, k);
+    check((jk.entries ?? []).length === (j.entries ?? []).length, `mig ${k}: the same ${(jk.entries ?? []).length} entries as the plain import`);
+    const allK = await sites();
+    check(!allK.some((x) => x.id === m.ids.D), `mig ${k}: D settled`);
+    await call('dev.survival.set', { on: false });
+    const okK = await migRemoves(['A1', 'A2', 'A3', 'T', 'G1', 'G2'], `mig ${k}`);
+    check(okK === 6, `mig ${k}: ${okK}/6 instant Removes match their pre-hashes`);
+    await leaveWorld();
+  }
+  return { ids: m.ids };
+};
+
+steps.downgrade = async () => {
+  if (!ctx.mig) throw new Error('run `migration` first');
+  const m = ctx.mig;
+  if (!dev) await connect().catch(() => null);
+  if (!clientPids().length) await startClient('G4E Smoke');
+  // 0.8.0: the migrated world gets a road
+  await openWorld('G4E MigDown');
+  await tp(100.5, 85, -150.5);
+  const road = await call('dev.road.place', ROAD_D, 300_000);
+  check(road.placed, `downgrade: a road placed on 0.8.0 (${road.siteId})`, road);
+  const roadId = road.siteId;
+  await leaveWorld();
+  await stopClient();
+  // 0.7.0: place a site (it saves the record file) and try to Remove a migrated site (refused, nothing written)
+  use('old');
+  copyWorld('G4E MigDown', 'G4E MigDown070', SAVES, savesOf('new'));
+  await startClient('G4E MigDown070');
+  await tp(MIG.N.at[0] + 5.5, 85, MIG.N.at[2] + 30.5);
+  const n = await result(await api(`place ${MIG.N.bp} ${MIG.N.at.join(' ')} INSTANT unowned noactor 0 force`));
+  check(n.placed, `downgrade: 0.7.0 places a site (${n.siteId})`, n);
+  await tp(MIG.A1.at[0] + 10.5, 85, MIG.A1.at[2] + 30.5);
+  const hA = (await bhash(migRegion('A1'))).sha256;
+  const r = await result(await api(`remove ${m.ids.A1} - noforce`), 120_000).catch((e) => ({ error: String(e) }));
+  const hA2 = (await bhash(migRegion('A1'))).sha256;
+  check(r.removed !== true && hA === hA2, `downgrade: 0.7.0 refuses to Remove migrated A1 and writes nothing (${JSON.stringify(r).slice(0, 200)})`, r);
+  await cmd('/save-all flush');
+  await stopClient();
+  use('new');
+  // back to 0.8.0
+  copyWorld('G4E MigDown070', 'G4E MigBack', SAVES, savesOf('old'));
+  await startClient('G4E MigBack');
+  const all = await sites();
+  const j = await journal();
+  check(all.some((x) => x.id === roadId), `downgrade: the road's record is back (${roadId})`, all.map((x) => x.id));
+  check((j.entries ?? []).some((e) => e.site === n.siteId), `downgrade: the 0.7.0 site ${n.siteId} is late-imported`, j.entries);
+  await call('dev.survival.set', { on: false });
+  m.ids.N = n.siteId;
+  const ok = await migRemoves(['A1', 'A2', 'A3', 'T', 'G1', 'G2', 'N'], 'downgrade');
+  const rr = await result(await api(`remove ${roadId} - force keep`), 300_000);
+  await tp(100.5, 85, -150.5);
+  const hr = (await bhash(ROAD_BOX)).sha256;
+  check(rr.removed && hr === m.preRoad, 'downgrade: removing the road restores its strip exactly', { rr, hr });
+  check(ok === 7, `downgrade: ${ok}/7 Removes exact after the round trip`);
+  await leaveWorld();
+  return { roadId, n: n.siteId };
 };
 
 /** `stop`: quits the gate client (by PID if it hangs). `start [world]`: moves the run worktree to this worktree's HEAD and starts it. */

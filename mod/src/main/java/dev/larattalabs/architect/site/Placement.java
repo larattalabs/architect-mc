@@ -431,6 +431,13 @@ public final class Placement {
 		// a site still marked placing without a job (its queue entry was lost): put its terrain back
 		for (Site s : Sites.all()) {
 			if (s.placing() && job(s.id()) == null) {
+				dev.larattalabs.architect.journal.JournalStore.Meta main = SiteJournal.main(s.id());
+				if (main != null && main.status() == dev.larattalabs.architect.journal.Journal.Status.ACTIVE && s.construction() == null) {
+					// K4: the ACTIVE commit (P7) reached the journal before the record was placed (P8): the journal wins
+					Architect.LOGGER.warn("Site {} was placed in the world journal but its record was still placing; it is placed", s.id());
+					Sites.putRecord(srv, s.withPlacing(false));
+					continue;
+				}
 				Architect.LOGGER.warn("Site {} was still being placed and has no job in {}; rolling it back from its snapshot", s.id(), FILE);
 				Site.Member m = s.member();
 				RestoreJob rb = new RestoreJob(s.id(), RestoreJob.ROLLBACK, m == null ? null : m.batchId(), m == null ? null : m.itemKey());

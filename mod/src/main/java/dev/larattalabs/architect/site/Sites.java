@@ -2030,13 +2030,21 @@ public final class Sites {
 	}
 
 	static Evidence evidence(MinecraftServer server, Site b, String group) {
-		ServerLevel level = levelOf(server, b);
+		return evidence(levelOf(server, b), b.id(), b, group);
+	}
+
+	/** {@link #evidence} for a road or cell site (CELL entries with {@code after}: no template). */
+	static Evidence evidence(@Nullable ServerLevel level, String siteId, String group) {
+		return evidence(level, siteId, null, group);
+	}
+
+	private static Evidence evidence(@Nullable ServerLevel level, String siteId, @Nullable Site b, String group) {
 		JournalStore js = WorldJournal.storeOrNull();
 		if (level == null || js == null) {
 			return new Evidence(null, null, false);
 		}
 		JournalStore.Meta main = null;
-		for (JournalStore.Meta m : SiteJournal.undone(b.id(), group)) {
+		for (JournalStore.Meta m : SiteJournal.undone(siteId, group)) {
 			if (!m.kind().equals(WorldJournal.LEAVES) && !m.kind().equals(WorldJournal.CRATE)) {
 				main = m;
 			}
@@ -2048,7 +2056,7 @@ public final class Sites {
 		int holdBefore = 0;
 		int holdAfter = 0;
 		int ownedOut = 0;
-		TemplateGrid grid = ownGrid(b);
+		TemplateGrid grid = b == null ? null : ownGrid(b);
 		Map<Long, BlockState> template = new java.util.HashMap<>();
 		if (grid != null) {
 			GhostModel gm = grid.ghost(Math.max(0, BlueprintTransform.ROTATIONS.indexOf(b.rotation())));
@@ -2057,15 +2065,26 @@ public final class Sites {
 			}
 		}
 		BlockPos.MutableBlockPos p = new BlockPos.MutableBlockPos();
+		// what the undo wrote: in a group undo the lowest entry writes a shared cell, so the value to look for there is the group's
+		List<JournalStore.Meta> inGroup = new ArrayList<>(js.find(m -> group.equals(m.undoGroup())));
+		inGroup.sort(java.util.Comparator.comparingLong(JournalStore.Meta::layer)); // the lowest writes last: its value wins
 		try {
 			for (long k : main.sections()) {
 				var sc = js.section(main.id(), k);
 				if (sc == null) {
 					continue;
 				}
+				Map<Long, Journal.Value> wrote = new java.util.HashMap<>();
+				for (JournalStore.Meta g : inGroup) {
+					var gs = js.section(g.id(), k);
+					if (gs != null) {
+						gs.writtenMap().forEach(wrote::putIfAbsent);
+					}
+				}
 				for (int i = 0; i < sc.size(); i++) {
 					long pos = sc.pos(i);
-					BlockState before = WorldJournal.state(sc.before(i));
+					Journal.Value w = sc.written(i) != null ? sc.written(i) : wrote.get(pos);
+					BlockState before = WorldJournal.state(w != null ? w : sc.before(i));
 					Journal.Value av = sc.after(i);
 					BlockState after = av != null ? WorldJournal.state(av) : template.get(pos);
 					if (after == null || after.getBlock() == before.getBlock() || av == null && after.isAir()) {
@@ -2176,6 +2195,25 @@ public final class Sites {
 		if (!releaseNow.isEmpty()) {
 			SiteJournal.releaseGroup(releaseNow);
 		}
+		// K6: the undo committed (R2) before the record went pending (R3): the record follows the journal, then the evidence decides
+		for (Site b : List.copyOf(map.values())) {
+			if (b.placing() || jobSites.contains(b.id()) || pendingIds.contains(b.id()) || !SiteJournal.active(b.id()).isEmpty()) {
+				continue;
+			}
+			long at = Long.MIN_VALUE;
+			for (JournalStore.Meta m : SiteJournal.entries(b.id())) {
+				if (m.status() == Journal.Status.UNDONE && m.undoGroup() != null) {
+					at = Math.max(at, m.undoneAt());
+				}
+			}
+			if (at != Long.MIN_VALUE) {
+				map.remove(b.id());
+				pending.add(new Site.Pending(b, at, "removed"));
+				pendingIds.add(b.id());
+				changed = true;
+				Architect.LOGGER.info("Sites check: {}'s removal was committed to the journal before its record went pending; it is settled now", b.id());
+			}
+		}
 		Map<String, Boolean> standsNow = new java.util.HashMap<>();
 		for (Site b : map.values()) {
 			if (b.placing()) {
@@ -2281,6 +2319,46 @@ public final class Sites {
 					+ Anchors.str(gone.box()) + " too: the move was only partly saved" : "removed " + gone.id() + " stands again but could not get its "
 						+ "record back") + ". Its journal entries are kept; nothing was changed");
 				case KEEP -> {
+				}
+			}
+		}
+		// pending roads and cell sites (R3 done): settled on the same evidence; an interrupted restore runs again first
+		for (Infra gone : Infras.pendingAll()) {
+			String group = null;
+			long at = Long.MIN_VALUE;
+			for (JournalStore.Meta m : SiteJournal.entries(gone.id())) {
+				if (m.status() == Journal.Status.UNDONE && m.undoneAt() >= at) {
+					at = m.undoneAt();
+					group = m.undoGroup();
+				}
+			}
+			if (group == null) {
+				if (!SiteJournal.active(gone.id()).isEmpty()) {
+					Infras.recover(server, gone.id());
+					report(gone.id(), false, gone.id() + "'s removal was not saved before the game stopped: it stands again (remove it again)");
+				} else {
+					Infras.drop(server, gone.id());
+				}
+				continue;
+			}
+			if (jobSites.contains(gone.id())) {
+				report(gone.id(), false, gone.id() + "'s restore was interrupted; it runs again before it is settled");
+				continue;
+			}
+			Evidence ev = evidence(levelOf(server, gone.dimension()), gone.id(), group);
+			List<String> groupIds = SiteJournal.undone(gone.id(), group).stream().map(JournalStore.Meta::id).toList();
+			Architect.LOGGER.info("Sites check: removed {} at {} (stands {}, restored {}, covered {})", gone.id(), Anchors.str(gone.box()), ev.stands(),
+				ev.restored(), ev.covered());
+			if (ev.covered() || Boolean.TRUE.equals(ev.restored()) || ev.restored() == null && ev.stands() == null) {
+				SiteJournal.releaseGroup(groupIds);
+				Infras.drop(server, gone.id());
+			} else if (Boolean.TRUE.equals(ev.stands())) {
+				try {
+					SiteJournal.reactivate(group);
+					Infras.recover(server, gone.id());
+					report(gone.id(), false, gone.id() + "'s removal was not saved before the game stopped: it stands again (remove it again)");
+				} catch (IOException e) {
+					report(gone.id(), true, "could not bring " + gone.id() + " back (" + e.getMessage() + ")");
 				}
 			}
 		}
