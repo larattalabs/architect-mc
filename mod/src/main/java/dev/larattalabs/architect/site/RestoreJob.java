@@ -165,45 +165,9 @@ final class RestoreJob implements Placement.Job {
 					group = SiteJournal.group(purpose + "-" + siteId);
 					planner = SiteJournal.undoPlanner(level, List.of(siteId), group);
 				}
-				try {
-					if (!planned && !planner.step(deadline)) {
-						return false;
-					}
-				} catch (java.io.IOException e) {
-					throw new Sites.SiteException(Reason.JOURNAL_UNAVAILABLE, "the journal can't be read (" + e.getMessage() + ")");
-				}
-				SiteJournal.Undone u;
-				if (planner.sections() > SPLIT_SECTIONS) {
-					// a large undo: its commit is built off the server thread, then submitted
-					if (txn == null) {
-						WorldJournal.UndoWork w = planner.work();
-						planned = true;
-						txn = CompletableFuture.supplyAsync(() -> {
-							try {
-								return new Object[] {w, SiteJournal.undoTxn(w)};
-							} catch (Sites.SiteException e) {
-								throw new java.util.concurrent.CompletionException(e);
-							}
-						});
-						return false;
-					}
-					if (!txn.isDone()) {
-						return false;
-					}
-					Object[] built;
-					try {
-						built = txn.join();
-					} catch (java.util.concurrent.CompletionException e) {
-						broken = e.getCause() != null ? e.getCause().getMessage() : e.getMessage();
-						return true;
-					} finally {
-						txn = null;
-					}
-					WorldJournal.kill("K5");
-					u = SiteJournal.submitUndo((WorldJournal.UndoWork) built[0], (dev.larattalabs.architect.journal.JournalStore.Txn) built[1]);
-				} else {
-					WorldJournal.kill("K5");
-					u = SiteJournal.submitUndo(planner.work());
+				SiteJournal.Undone u = planned(deadline);
+				if (u == null) {
+					return broken != null;
 				}
 				planned = false;
 				planner = null;
@@ -316,6 +280,54 @@ final class RestoreJob implements Placement.Job {
 		return true;
 	}
 
+	/**
+	 * R1 sliced, then R2: null while planning (or while a large undo's commit is built off the server thread, or when it broke:
+	 * {@link #broken}); the submitted undo once done.
+	 */
+	private SiteJournal.@Nullable Undone planned(long deadline) throws Sites.SiteException {
+		try {
+			if (!planned && !planner.step(deadline)) {
+				return null;
+			}
+		} catch (java.io.IOException e) {
+			throw new Sites.SiteException(Reason.JOURNAL_UNAVAILABLE, "the journal can't be read (" + e.getMessage() + ")");
+		}
+		SiteJournal.Undone u;
+		if (planner.sections() > SPLIT_SECTIONS) {
+			// a large undo: its commit is built off the server thread, then submitted
+			if (txn == null) {
+				WorldJournal.UndoWork w = planner.work();
+				planned = true;
+				txn = CompletableFuture.supplyAsync(() -> {
+					try {
+						return new Object[] {w, SiteJournal.undoTxn(w)};
+					} catch (Sites.SiteException e) {
+						throw new java.util.concurrent.CompletionException(e);
+					}
+				});
+				return null;
+			}
+			if (!txn.isDone()) {
+				return null;
+			}
+			Object[] built;
+			try {
+				built = txn.join();
+			} catch (java.util.concurrent.CompletionException e) {
+				broken = e.getCause() != null ? e.getCause().getMessage() : e.getMessage();
+				return null;
+			} finally {
+				txn = null;
+			}
+			WorldJournal.kill("K5");
+			u = SiteJournal.submitUndo((WorldJournal.UndoWork) built[0], (dev.larattalabs.architect.journal.JournalStore.Txn) built[1]);
+		} else {
+			WorldJournal.kill("K5");
+			u = SiteJournal.submitUndo(planner.work());
+		}
+		return u;
+	}
+
 	/** A road's or cell site's undo: plan and commit (when this job planned it), the record pending, the cells lowest first over ticks. */
 	private boolean stepInfra(MinecraftServer server, Infra inf, long deadline) {
 		ServerLevel level = Sites.levelOf(server, inf.dimension());
@@ -329,14 +341,11 @@ final class RestoreJob implements Placement.Job {
 					group = SiteJournal.group(purpose + "-" + siteId);
 					planner = SiteJournal.undoPlanner(level, List.of(siteId), group);
 				}
-				try {
-					if (!planner.step(deadline)) {
-						return false;
-					}
-				} catch (java.io.IOException e) {
-					throw new Sites.SiteException(Reason.JOURNAL_UNAVAILABLE, "the journal can't be read (" + e.getMessage() + ")");
+				SiteJournal.Undone u = planned(deadline);
+				if (u == null) {
+					return broken != null;
 				}
-				SiteJournal.Undone u = SiteJournal.submitUndo(planner.work());
+				planned = false;
 				planner = null;
 				work = u.work();
 				commit = u.commit();

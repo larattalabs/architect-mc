@@ -132,6 +132,69 @@ final class InfraJob implements Placement.Job {
 	}
 
 	/** P2-P3: the entry (before as captured, after as planned), PLACING. */
+	/** A large cell site's sections, built off the server thread (the capture is complete; changes meanwhile are tracked). */
+	transient @Nullable CompletableFuture<List<SectionCells>> building;
+	transient long buildingLayer;
+
+	/** P3 for a large capture: sections built off-thread first; false while that runs. */
+	private boolean submitLarge(ServerLevel level) throws Sites.SiteException {
+		if (positions.length <= SiteJournal.SYNC_CELLS || tracker == null) {
+			submit(level);
+			return true;
+		}
+		if (building == null) {
+			SiteJournal.requireAvailable();
+			long layer = SiteJournal.store().newLayer();
+			buildingLayer = layer;
+			long[] ps = positions;
+			Journal.Value[] bs = befores.clone();
+			Journal.Value[] as = afters;
+			building = CompletableFuture.supplyAsync(() -> {
+				List<Cell> cells = new ArrayList<>(ps.length);
+				for (int i = 0; i < ps.length; i++) {
+					cells.add(new Cell(ps[i], layer, bs[i], as[i]));
+				}
+				return JournalStore.bySection(cells);
+			});
+			return false;
+		}
+		if (!building.isDone()) {
+			return false;
+		}
+		List<SectionCells> secs = building.join();
+		building = null;
+		long[] changed = tracker.drain();
+		tracker.stop();
+		tracker = null;
+		if (changed.length > 0) {
+			// changed while the sections were built: captured again, and the sections made again (rare)
+			java.util.Map<Long, Integer> at = new java.util.HashMap<>();
+			for (int i = 0; i < positions.length; i++) {
+				at.put(positions[i], i);
+			}
+			BlockPos.MutableBlockPos m = new BlockPos.MutableBlockPos();
+			for (long c : changed) {
+				Integer i = at.get(c);
+				if (i != null) {
+					befores[i] = WorldJournal.valueAt(level, m.set(Journal.x(c), Journal.y(c), Journal.z(c)));
+				}
+			}
+			List<Cell> cells = new ArrayList<>(positions.length);
+			for (int i = 0; i < positions.length; i++) {
+				cells.add(new Cell(positions[i], buildingLayer, befores[i], afters[i]));
+			}
+			secs = JournalStore.bySection(cells);
+		}
+		JournalStore s = SiteJournal.store();
+		String id = s.newId();
+		commit = s.submit(s.begin().label("P3:" + siteId).create(JournalStore.Meta.header(id, entryKind, siteId, record.group(), dimension, policy,
+			buildingLayer, Journal.Status.PLACING, System.currentTimeMillis()), secs, new JournalNbt.Head(record.toJson(), new int[0])));
+		entry = id;
+		befores = null;
+		phase = COMMIT;
+		return true;
+	}
+
 	private void submit(ServerLevel level) throws Sites.SiteException {
 		if (tracker != null) {
 			long[] changed = tracker.drain();
@@ -221,7 +284,7 @@ final class InfraJob implements Placement.Job {
 						return true;
 					}
 					if (captureSome(level, deadline)) {
-						submit(level);
+						submitLarge(level);
 					}
 					return false;
 				}

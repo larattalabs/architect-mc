@@ -1002,7 +1002,7 @@ steps.sizecap = async () => {
   check(trees.length === 6, 'sizecap: six worldgen-feature trees beside the keep\'s box', trees);
   const at = [w.x, w.mean + 1, w.z];
   const KB2 = [w.x - 10, w.mean - 30, w.z - 10, w.x + 106, w.mean + 80, w.z + 110];
-  await tp(w.x + 48.5, w.mean + 90, w.z + 48.5);
+  await tp(w.x + 48.5, 140, w.z + 150.5);
   const h2 = (await hash(KB2)).sha256;
   await cmd('/gamerule random_tick_speed 300');
   const pb = await placeQueued({ id: 'keept', proximity: false, items: [{ key: 'K', bp: 'g4e_keep', at, rot: 0, mode: 'INSTANT', force: true }] }, 'keep (trees, rts 300)');
