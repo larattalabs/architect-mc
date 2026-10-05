@@ -29,7 +29,8 @@ dependencies {
 	implementation "net.fabricmc.fabric-api:fabric-api:${rootProject.fabric_api_version}"
 	// Architect itself (the root project's jar). Only its api package may be used: see checkApiOnly.
 	compileOnly project(':')
-	clientCompileOnly project(':')
+	// the client half (ArchitectClientApi) lives in Architect's client source set: compile against the jar, which has both
+	clientCompileOnly files(rootProject.tasks.named('jar'))
 }
 
 processResources {
