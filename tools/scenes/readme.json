@@ -1,0 +1,646 @@
+{
+  "notes": [
+    "README screenshots (docs/img/readme/). Run: tools/run-readme-client.sh, then node tools/shoot.mjs tools/scenes/readme.json --port 7991; then node tools/readme-images.mjs.",
+    "World: the dev client's own 'Architect Dev' (AutoWorld: creative, peaceful, natural terrain, seed 2026). Never a real world.",
+    "Library: mod/run/architect/library/ holds a copy of the phase 2 gate run's Claude design gen_gate_two_house and its birch and fortress variants (in the copies, name 'Gate Two House' was changed to 'Town House'). The bundled kit examples (cabin, tower, tavern, gatehouse) come with the mod.",
+    "The variant jobs below are v1-v4 only in a fresh sidecar-data dir. Shots are in the order they were taken: placements come before the shots that need them.",
+    "designs-progress and status need the other modes: designs.jpg with --stub (tools/run-readme-client.sh --stub; submit a design and shoot while its status is 'designing'), status.jpg with --helper (no credentials; never submit a design there)."
+  ],
+  "setup": [
+    "/time set 3000",
+    "/weather clear",
+    "/gamerule advance_time false",
+    "/gamerule advance_weather false",
+    "/kill @e[type=!minecraft:player,distance=..300]",
+    "/kill @e[type=minecraft:item]"
+  ],
+  "shots": [
+    {
+      "name": "raw/variants",
+      "requests": [
+        [
+          "dev.ui.open",
+          {
+            "tab": "library"
+          }
+        ],
+        [
+          "dev.library.variants.open",
+          {
+            "entry": "gen_gate_two_house"
+          }
+        ],
+        [
+          "dev.library.variants.set",
+          {
+            "preset": "cherry"
+          }
+        ]
+      ],
+      "hideHud": false,
+      "frames": 8,
+      "waitChunks": false,
+      "after": [
+        [
+          "dev.library.variants.open",
+          {
+            "entry": "gen_gate_two_house"
+          }
+        ],
+        [
+          "dev.library.variants.set",
+          {
+            "preset": "cherry"
+          }
+        ],
+        [
+          "dev.library.variants.submit",
+          {}
+        ],
+        [
+          "dev.library.wait",
+          {
+            "jobId": "v1"
+          }
+        ],
+        [
+          "dev.library.variants.open",
+          {
+            "entry": "gen_gate_two_house"
+          }
+        ],
+        [
+          "dev.library.variants.set",
+          {
+            "preset": "desert"
+          }
+        ],
+        [
+          "dev.library.variants.submit",
+          {}
+        ],
+        [
+          "dev.library.wait",
+          {
+            "jobId": "v2"
+          }
+        ],
+        [
+          "dev.library.variants.open",
+          {
+            "entry": "gen_gate_two_house"
+          }
+        ],
+        [
+          "dev.library.variants.set",
+          {
+            "preset": "mangrove",
+            "values": {
+              "width": 11,
+              "balcony": false
+            }
+          }
+        ],
+        [
+          "dev.library.variants.submit",
+          {}
+        ],
+        [
+          "dev.library.wait",
+          {
+            "jobId": "v3"
+          }
+        ],
+        [
+          "dev.screen",
+          {
+            "open": null
+          }
+        ]
+      ]
+    },
+    {
+      "name": "raw/ghost_try4",
+      "requests": [
+        [
+          "dev.build.start",
+          {
+            "blueprint": "gen_gate_two_house",
+            "origin": [
+              -5,
+              100,
+              -125
+            ],
+            "ground": true,
+            "turns": 0
+          }
+        ]
+      ],
+      "camera": {
+        "x": 12.5,
+        "y": 78,
+        "z": -84.5,
+        "lookAt": {
+          "x": 9,
+          "y": 72.3,
+          "z": -93.9
+        },
+        "fov": 70,
+        "mode": "spectator"
+      },
+      "hideHud": false,
+      "after": [
+        [
+          "dev.build.confirm",
+          {}
+        ]
+      ]
+    },
+    {
+      "name": "raw/ext1",
+      "camera": {
+        "x": 16,
+        "y": 78,
+        "z": -98,
+        "yaw": 141.34,
+        "pitch": 17.346,
+        "fov": 70,
+        "mode": "spectator"
+      }
+    },
+    {
+      "name": "raw/int1",
+      "commands": [
+        "/time set 6000"
+      ],
+      "camera": {
+        "x": 0.5,
+        "y": 67.6,
+        "z": -113.5,
+        "yaw": 176.987,
+        "pitch": 6.596,
+        "fov": 80,
+        "mode": "spectator"
+      },
+      "after": [
+        [
+          "dev.build.start",
+          {
+            "blueprint": "tavern",
+            "origin": [
+              12,
+              100,
+              -122
+            ],
+            "ground": true
+          }
+        ],
+        [
+          "dev.build.confirm",
+          {}
+        ],
+        [
+          "dev.build.start",
+          {
+            "blueprint": "cabin",
+            "origin": [
+              33,
+              100,
+              -120
+            ],
+            "ground": true
+          }
+        ],
+        [
+          "dev.build.confirm",
+          {}
+        ],
+        [
+          "dev.build.start",
+          {
+            "blueprint": "gen_gate_two_house_birch",
+            "origin": [
+              48,
+              100,
+              -126
+            ],
+            "ground": true
+          }
+        ],
+        [
+          "dev.build.confirm",
+          {}
+        ],
+        [
+          "dev.build.start",
+          {
+            "blueprint": "tower",
+            "origin": [
+              20,
+              100,
+              -145
+            ],
+            "ground": true
+          }
+        ],
+        [
+          "dev.build.confirm",
+          {}
+        ],
+        [
+          "dev.build.start",
+          {
+            "blueprint": "gatehouse",
+            "origin": [
+              -20,
+              100,
+              -118
+            ],
+            "ground": true
+          }
+        ],
+        [
+          "dev.build.confirm",
+          {}
+        ]
+      ]
+    },
+    {
+      "name": "raw/hero5",
+      "commands": [
+        "/time set 12250"
+      ],
+      "camera": {
+        "x": 74.5,
+        "y": 90,
+        "z": -80.5,
+        "lookAt": {
+          "x": 16,
+          "y": 74,
+          "z": -126
+        },
+        "fov": 65,
+        "mode": "spectator"
+      },
+      "frames": 40,
+      "after": [
+        [
+          "dev.build.start",
+          {
+            "blueprint": "gen_gate_two_house",
+            "origin": [
+              -15,
+              100,
+              -185
+            ],
+            "ground": true
+          }
+        ],
+        [
+          "dev.build.confirm",
+          {}
+        ],
+        [
+          "dev.build.start",
+          {
+            "blueprint": "gen_gate_two_house_cherry",
+            "origin": [
+              0,
+              100,
+              -185
+            ],
+            "ground": true
+          }
+        ],
+        [
+          "dev.build.confirm",
+          {}
+        ],
+        [
+          "dev.build.start",
+          {
+            "blueprint": "gen_gate_two_house_desert",
+            "origin": [
+              15,
+              100,
+              -185
+            ],
+            "ground": true
+          }
+        ],
+        [
+          "dev.build.confirm",
+          {}
+        ],
+        [
+          "dev.build.start",
+          {
+            "blueprint": "gen_gate_two_house_fortress",
+            "origin": [
+              30,
+              100,
+              -185
+            ],
+            "ground": true
+          }
+        ],
+        [
+          "dev.build.confirm",
+          {}
+        ]
+      ]
+    },
+    {
+      "name": "raw/palettes3",
+      "commands": [
+        "/time set 3000"
+      ],
+      "camera": {
+        "x": 10.5,
+        "y": 91,
+        "z": -147.5,
+        "lookAt": {
+          "x": 12.5,
+          "y": 74,
+          "z": -178
+        },
+        "fov": 70,
+        "mode": "spectator"
+      },
+      "frames": 40
+    },
+    {
+      "name": "raw/remove_before2",
+      "camera": {
+        "x": -2.5,
+        "y": 82,
+        "z": -86.5,
+        "lookAt": {
+          "x": 0,
+          "y": 68,
+          "z": -117
+        },
+        "fov": 60,
+        "mode": "spectator"
+      },
+      "frames": 40,
+      "after": [
+        [
+          "dev.sites.remove",
+          {
+            "site": "s1"
+          }
+        ]
+      ]
+    },
+    {
+      "name": "raw/remove_after2",
+      "camera": {
+        "x": -2.5,
+        "y": 82,
+        "z": -86.5,
+        "lookAt": {
+          "x": 0,
+          "y": 68,
+          "z": -117
+        },
+        "fov": 60,
+        "mode": "spectator"
+      },
+      "delayMs": 1500,
+      "frames": 40,
+      "after": [
+        [
+          "dev.build.start",
+          {
+            "blueprint": "gen_gate_two_house",
+            "origin": [
+              -5,
+              100,
+              -125
+            ],
+            "ground": true
+          }
+        ],
+        [
+          "dev.build.confirm",
+          {}
+        ]
+      ]
+    },
+    {
+      "name": "raw/design_form",
+      "requests": [
+        [
+          "dev.ui.open",
+          {
+            "tab": "design"
+          }
+        ],
+        [
+          "dev.design.fill",
+          {
+            "reset": true,
+            "buildingType": "smithy",
+            "style": "medieval",
+            "materials": "dark oak and cobblestone",
+            "features": [
+              "chimney",
+              "porch"
+            ],
+            "size": "M",
+            "name": "Riverside Forge",
+            "notes": "An open-fronted forge with an anvil and a blast furnace, a small store room at the back, and a stone chimney."
+          }
+        ]
+      ],
+      "hideHud": false,
+      "frames": 8,
+      "waitChunks": false,
+      "after": [
+        [
+          "dev.screen",
+          {
+            "open": null
+          }
+        ]
+      ]
+    },
+    {
+      "name": "raw/plot1",
+      "requests": [
+        [
+          "dev.plot.start",
+          {
+            "height": 16
+          }
+        ],
+        [
+          "dev.plot.corner",
+          {
+            "x": 46,
+            "y": 66,
+            "z": -184
+          }
+        ],
+        [
+          "dev.plot.corner",
+          {
+            "x": 58,
+            "y": 66,
+            "z": -172,
+            "front": "south",
+            "confirm": false
+          }
+        ]
+      ],
+      "camera": {
+        "x": 52.5,
+        "y": 80,
+        "z": -152.5,
+        "lookAt": {
+          "x": 52,
+          "y": 70,
+          "z": -177
+        },
+        "fov": 70,
+        "mode": "spectator"
+      },
+      "hideHud": false,
+      "frames": 30,
+      "after": [
+        [
+          "dev.plot.cancel",
+          {}
+        ]
+      ]
+    },
+    {
+      "name": "raw/library2",
+      "requests": [
+        [
+          "dev.ui.open",
+          {
+            "tab": "library"
+          }
+        ],
+        [
+          "dev.library.export",
+          {
+            "entry": "gen_gate_two_house_desert"
+          }
+        ],
+        [
+          "dev.library.import.list",
+          {}
+        ],
+        [
+          "dev.library.import.pick",
+          {
+            "index": 1
+          }
+        ],
+        [
+          "dev.library.wait",
+          {
+            "jobId": "v4"
+          }
+        ],
+        [
+          "dev.library.rename",
+          {
+            "entry": "imp_gen_gate_two_house_desert",
+            "name": "Desert House (structure save)"
+          }
+        ],
+        [
+          "dev.library.rename",
+          {
+            "entry": "gen_gate_two_house",
+            "name": ""
+          }
+        ],
+        [
+          "dev.library.tag",
+          {
+            "entry": "gen_gate_two_house",
+            "tags": [
+              "village",
+              "medieval"
+            ]
+          }
+        ],
+        [
+          "dev.library.favorite",
+          {
+            "entry": "gen_gate_two_house",
+            "on": true
+          }
+        ],
+        [
+          "dev.library.filter",
+          {
+            "reset": true
+          }
+        ],
+        [
+          "dev.library.select",
+          {
+            "entry": "gen_gate_two_house"
+          }
+        ]
+      ],
+      "hideHud": false,
+      "frames": 10,
+      "waitChunks": false,
+      "after": [
+        [
+          "dev.screen",
+          {
+            "open": null
+          }
+        ]
+      ]
+    },
+    {
+      "name": "raw/ghost_slope1",
+      "commands": [
+        "/time set 4000"
+      ],
+      "requests": [
+        [
+          "dev.build.start",
+          {
+            "blueprint": "tavern",
+            "origin": [
+              -50,
+              100,
+              -100
+            ],
+            "ground": true
+          }
+        ]
+      ],
+      "camera": {
+        "x": -20.5,
+        "y": 90,
+        "z": -68.5,
+        "lookAt": {
+          "x": -27,
+          "y": 86.2,
+          "z": -76.5
+        },
+        "fov": 70,
+        "mode": "spectator"
+      },
+      "hideHud": false,
+      "frames": 30,
+      "after": [
+        [
+          "dev.build.cancel",
+          {}
+        ]
+      ]
+    }
+  ]
+}
