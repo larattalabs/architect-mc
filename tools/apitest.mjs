@@ -1022,7 +1022,33 @@ switch (step) {
       const goDone = await waitEvent((e) => e.event === 'GROUP_DONE' && e.id === gido, 180_000);
       check(okO.approved?.['o/cabin'] && goDone?.status === 'DONE' && goDone.done === 1, `approveGroup as ${OWNER2}: ${goDone?.status}, ${goDone?.done} detailed`, goDone);
 
-      // ---- 8. the composite preview (client side)
+      // ---- 8. GROUP_AWAITING_APPROVAL caught up after a world load: a set's massing finishes while no world is loaded (the sim's
+      // steps slowed so the massing outlasts leaving the world)
+      fs.writeFileSync(cfgFile, JSON.stringify({ ...(oldCfg ? JSON.parse(oldCfg) : {}), simStepMs: 2500, simDesignUsd: 0.02, designConcurrency: 3 }));
+      await restart();
+      await api('clear');
+      const gcu = (await result(await api(`group gcu ${b64({ name: `Catch-up set ${tag}`, bible: 'oak', massingFirst: true,
+        items: [{ itemKey: 'c/gate', type: 'gatehouse', style: 'rustic', size: SIZE }] })}`), 30_000)).value;
+      await call('dev.world.leave');
+      const tLeft = Date.now();
+      let gOut = null;
+      for (let i = 0; i < 240 && !gOut; i++) {
+        await sleep(500);
+        gOut = (await call('dev.sidecar.state')).groups.find((g) => g.id === gcu && g.status === 'awaiting_approval') ?? null;
+      }
+      const tOpenG = Date.now();
+      await call('dev.world.open', {});
+      await waitWorld();
+      await sleep(2500);
+      const awc = await evs((e) => e.event === 'GROUP_AWAITING_APPROVAL' && e.id === gcu);
+      check(!!gOut && gOut.updatedAt > tLeft - 5000 && awc.length === 1 && awc[0].t >= tOpenG && awc[0].serverThread === 'Server thread'
+        && JSON.stringify(awc[0].awaiting) === '["c/gate"]',
+        `set ${gcu} began waiting on the title screen; GROUP_AWAITING_APPROVAL fired once after the world loaded (${awc.length ? awc[0].t - tOpenG : '?'} ms after the open)`, { gOut, awc });
+      await result(await api(`groupcancel ${gcu}`), 20_000).catch(() => null);
+      fs.writeFileSync(cfgFile, JSON.stringify({ ...(oldCfg ? JSON.parse(oldCfg) : {}), simStepMs: 500, simDesignUsd: 0.02, designConcurrency: 3 }));
+      await restart();
+
+      // ---- 9. the composite preview (client side)
       await compositeChecks(tag);
     } finally {
       if (oldCfg === null) fs.rmSync(cfgFile, { force: true });

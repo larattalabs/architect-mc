@@ -1705,10 +1705,24 @@ public final class ArchitectScreen extends Screen {
 				g.text(font, right, dx + dw - 10 - rw, ry, UiBits.muted(), false);
 			}
 			String stage = gr.massingFirst() ? itemStage(gr, it) : it.status().name().toLowerCase(Locale.ROOT);
-			String line = stage + (it.step().isEmpty() || it.awaitingApproval() ? "" : " · " + it.step()) + it.entryId().map(e -> " → " + e).orElse("")
-				+ it.error().map(e -> " · " + e).orElse("") + (actionsW > 0 ? " · " + right : "");
+			// (4c) a detail pass's conformance: ok, or its warnings (the first one shown)
+			String conf = "";
+			SidecarState.Design dd = it.stage().orElse(null) == dev.larattalabs.architect.api.Group.Stage.DETAIL ? Sidecar.state().design(it.designId())
+				: null;
+			var c = dd == null ? java.util.Optional.<dev.larattalabs.architect.api.Conformance>empty() : dev.larattalabs.architect.apiimpl.Wire4c
+				.conformance(dd.raw().get("conformance"));
+			boolean warn = false;
+			if (c.isPresent()) {
+				warn = !c.get().ok() || c.get().warnings() > 0;
+				List<String> all = new ArrayList<>(c.get().errors());
+				all.addAll(c.get().issues());
+				conf = warn ? " · conformance: " + c.get().warnings() + " warning" + (c.get().warnings() == 1 ? "" : "s") + (all.isEmpty() ? "" : " ("
+					+ all.get(0) + ")") : " · conformance ok";
+			}
+			String line = stage + conf + (it.step().isEmpty() || it.awaitingApproval() || !conf.isEmpty() ? "" : " · " + it.step()) + it.entryId().map(
+				e -> " → " + e).orElse("") + it.error().map(e -> " · " + e).orElse("") + (actionsW > 0 ? " · " + right : "");
 			g.text(font, TextUtil.ellipsize(font, line, dw - 24 - actionsW), dx + 14, ry + 9, it.status() == dev.larattalabs.architect.api.Design.Status.FAILED
-				? UiBits.errorText() : it.awaitingApproval() ? UiStyle.CLAY_DARK : UiBits.muted(), false);
+				? UiBits.errorText() : it.awaitingApproval() || warn ? UiStyle.CLAY_DARK : UiBits.muted(), false);
 		}
 		if (gr.items().size() > fit) {
 			TextUtil.Scroll sc = new TextUtil.Scroll().update(gr.items().size() * rowH, fit * rowH);
@@ -1737,12 +1751,15 @@ public final class ArchitectScreen extends Screen {
 				.id(), gr.awaiting(), Map.of(), List.of()));
 			bx += bw(all) + 4;
 			String show = "Show massings";
-			button(g, "group:show_massings", show, bx, by, bw(show), false, inWorld(), mx, my, () -> {
-				String why = dev.larattalabs.architect.client.design.MassingReview.showSet(gr.id());
-				dev.larattalabs.architect.client.design.SetFeature.say(why != null ? why : "The massings stand in a row in front of you (close this screen to see them)",
-					why != null);
-			});
-			bx += bw(show) + 4;
+			// on a narrow panel (GUI scale 4) it gives way to Cancel set (the row shows by itself when the set starts waiting)
+			if (bx + bw(show) + 4 + bw("Cancel set") <= dx + dw) {
+				button(g, "group:show_massings", show, bx, by, bw(show), false, inWorld(), mx, my, () -> {
+					String why = dev.larattalabs.architect.client.design.MassingReview.showSet(gr.id());
+					dev.larattalabs.architect.client.design.SetFeature.say(why != null ? why
+						: "The massings stand in a row in front of you (close this screen to see them)", why != null);
+				});
+				bx += bw(show) + 4;
+			}
 		}
 		if (st == dev.larattalabs.architect.api.Group.Status.PAUSED_BUDGET) {
 			String res = "Resume";

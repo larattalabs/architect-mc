@@ -147,8 +147,12 @@ final class SetDialog {
 		g.text(font, "notes", notesX, y + 12, UiBits.muted(), false);
 		y += 22;
 		boolean m4c = SetFeature.has("massing");
-		// add row + (4c: massing first and redirects; the context, up to 2 lines) + concurrency/budget/estimate
-		int bottomBlock = 34 + (m4c ? 18 + TextFieldView.BASE_H + TextFieldView.LINE + 4 : 0);
+		// add row + (4c: massing first and redirects; the context, up to 2 lines) + concurrency/budget/estimate. On a short screen
+		// (GUI scale 4 at 1080p) the 4c controls share one row and the context keeps one line, so the list still shows 2 rows
+		int roomy4c = 18 + TextFieldView.BASE_H + TextFieldView.LINE + 4;
+		int compact4c = TextFieldView.BASE_H + 4;
+		boolean compact = m4c && footerY - 16 - 34 - roomy4c - y < 2 * ROW_H;
+		int bottomBlock = 34 + (m4c ? compact ? compact4c : roomy4c : 0);
 		int listH = Math.max(ROW_H, footerY - 16 - bottomBlock - y);
 		int fit = Math.max(1, listH / ROW_H);
 		s.setScrollArea(x, y, w - 6, fit * ROW_H, f.items.size() * ROW_H, ROW_H);
@@ -202,15 +206,20 @@ final class SetDialog {
 			g.text(font, Integer.toString(f.maxRedirects), mx0 + 2, y + 5, on ? UiBits.ink() : UiBits.muted(), false);
 			mx0 += font.width("10") + 6;
 			mx0 += s.chip(g, "set:redirects+", "+", mx0, y + 2, false, on && f.maxRedirects < SetSpec.MAX_REDIRECTS, mx, my, () -> f.maxRedirects++) + 12;
-			g.text(font, TextUtil.ellipsize(font, on ? "each shape waits for your approval in the Designs tab" : "the detail at once", Math.max(10, x + w - mx0)),
-				mx0, y + 5, UiBits.muted(), false);
-			y += 18;
 			String ce = errors.get("context");
 			TextFieldView.Style cs = new TextFieldView.Style("Context ", UiStyle.CLAY_DARK, ce != null ? ce
 				: "the site, its purpose, the neighbours, the street side: it goes into every brief", null, f.context.length() > 200 ? f.context.length() + "/"
-					+ SetSpec.MAX_CONTEXT : null, UiBits.muted(), 2);
-			s.textField(g, Focus.SET_CONTEXT, contextView, f.context, x, y, w, cs);
-			y += TextFieldView.BASE_H + TextFieldView.LINE + 4;
+					+ SetSpec.MAX_CONTEXT : null, UiBits.muted(), compact ? 1 : 2);
+			if (compact) {
+				s.textField(g, Focus.SET_CONTEXT, contextView, f.context, mx0, y, x + w - mx0, cs);
+				y += compact4c;
+			} else {
+				g.text(font, TextUtil.ellipsize(font, on ? "each shape waits for your approval in the Designs tab" : "the detail at once", Math.max(10, x + w
+					- mx0)), mx0, y + 5, UiBits.muted(), false);
+				y += 18;
+				s.textField(g, Focus.SET_CONTEXT, contextView, f.context, x, y, w, cs);
+				y += TextFieldView.BASE_H + TextFieldView.LINE + 4;
+			}
 		}
 		// concurrency, budget, estimate
 		int cx = x;

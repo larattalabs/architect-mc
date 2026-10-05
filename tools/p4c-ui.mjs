@@ -6,7 +6,7 @@
 // ghost is screenshotted (P4C_SHOTS prefix, default mod-p4c-ui) into the client's ARCHITECT_SHOTS_DIR; evidence goes to
 // artifacts/mod-p4c/p4c-ui.json.
 //
-//   ARCHITECT_DEV_PORT=8791 node tools/p4c-ui.mjs [step...]    steps: design set owner (default: all)
+//   ARCHITECT_DEV_PORT=8791 node tools/p4c-ui.mjs [step...]    steps: design plot set owner (default: all)
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -17,7 +17,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = process.env.P4C_OUT ? path.resolve(process.env.P4C_OUT) : path.join(root, 'artifacts', 'mod-p4c');
 fs.mkdirSync(OUT, { recursive: true });
 const PREFIX = process.env.P4C_SHOTS ?? 'mod-p4c-ui';
-const steps = process.argv.slice(2).length ? process.argv.slice(2) : ['design', 'set', 'owner'];
+const steps = process.argv.slice(2).length ? process.argv.slice(2) : ['design', 'plot', 'set', 'owner'];
 const dev = await DevClient.connect({ timeoutMs: 120_000 });
 const call = (type, payload = {}, timeoutMs) => dev.call(type, payload, timeoutMs ? { timeoutMs } : {});
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -133,6 +133,42 @@ if (steps.includes('design')) {
   check(ui.controls.some((c) => c.id === 'show_library'), 'the detail design in the Designs tab (Show in Library)');
   await shot('designs-detail-conformance');
   await call('dev.screen', { open: null });
+}
+
+if (steps.includes('plot')) {
+  // ---- a marked plot: Massing first is on by default, the massing ghost stands on the plot, the detail keeps the plot
+  await call('dev.screen', { open: null });
+  await cmd(`/tp @s ${P.x} ${P.y} ${P.z} 180 25`);
+  await call('dev.ui.open', { tab: 'design' });
+  await call('dev.design.fill', { reset: true, buildingType: 'gatehouse', style: 'rustic', name: 'The Plot Gate', massingFirst: null });
+  await call('dev.plot.start', {});
+  const X0 = P.x + 20;
+  const Z0 = P.z - 40;
+  await call('dev.plot.corner', { x: X0, y: P.y, z: Z0 });
+  await call('dev.plot.corner', { x: X0 + 19, y: P.y, z: Z0 + 19, front: 'south' });
+  await sleep(500);
+  const pf = await call('dev.design.state');
+  check(pf.form.size === 'plot' && pf.form.massingFirst === true && pf.form.massingFirstSet === null, `a marked plot (${pf.form.plot}): Massing first on by default`, pf.form);
+  const sent = await call('dev.design.submit', {}, 30_000);
+  await call('dev.screen', { open: null });
+  const rv = await until('the massing review on the plot', async () => (await massing()).review);
+  const [ox, oy, oz] = rv.origin.split(',').map(Number);
+  check(rv.onPlot === true && ox >= X0 && oz >= Z0 && ox + 11 <= X0 + 20 && oz + 10 <= Z0 + 20,
+    `the massing ghost stands on the plot: ${rv.massing} at ${rv.origin} (plot ${X0},${Z0} 20x20)`, { rv, sent: sent.sent });
+  await look(X0 + 10, P.y + 16, Z0 + 40, { x: X0 + 10, y: P.y + 4, z: Z0 + 10 });
+  await shot('review-on-plot');
+  const before = new Set((await sidecar()).designs.map((d) => d.id));
+  await call('dev.massing.key', { key: 'enter' });
+  const detail = await until('the detail design', async () => {
+    const s = await sidecar();
+    return s.designs.find((d) => !before.has(d.id) && d.status === 'done' && d.blueprintId) ?? null;
+  }, 180_000);
+  await sleep(1500);
+  const placed = await call('dev.design.place', { blueprint: detail.blueprintId }).then(() => true, (e) => e.message);
+  const bs = await call('dev.build.state').catch(() => null);
+  check(placed === true && bs?.active === true, `the detail (${detail.blueprintId}) keeps the plot: Place on the plot locks the ghost on it (${placed === true ? bs?.origin : placed})`, bs);
+  await shot('detail-place-on-plot');
+  await call('dev.build.cancel').catch(() => null);
 }
 
 let gid = null;
