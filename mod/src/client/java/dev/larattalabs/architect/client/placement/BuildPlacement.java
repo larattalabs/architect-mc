@@ -599,6 +599,19 @@ public final class BuildPlacement {
 	}
 
 	/**
+	 * Where the player points, as {@link #spot} ({x, surfaceY, z, gap, facingIndex}), without touching the placement's state:
+	 * the looked-at spot, else the feet. For the massing ghosts (phase 4c).
+	 */
+	public static int[] lookSpot(Minecraft mc, Player p) {
+		int[] s = aim(mc, p);
+		if (s != null) {
+			return s;
+		}
+		BlockPos feet = p.blockPosition();
+		return new int[] {feet.getX(), feet.getY(), feet.getZ(), SiteCommands.GAP, BlueprintTransform.directionIndex(horizontalFacing(p).getName())};
+	}
+
+	/**
 	 * Whether the ghost stays at the last spot in reach because the player looks further than {@value #REACH} blocks (or
 	 * at the sky). False while locked or at an explicit origin (the look does not move the ghost then).
 	 */

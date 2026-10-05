@@ -94,10 +94,10 @@ public interface Designs {
 	CompletableFuture<Group.Redirected> redirectMassing(String massingId, String notes, @Nullable String owner);
 
 	/**
-	 * Deletes a massing and every version of it now ({@code massing.delete}); completes with the versions deleted. Refused while
-	 * a job makes or details it, or while its group is not final. Since 1.3.0.
+	 * Deletes a massing and every version of it now ({@code massing.delete}, its folder included); completes with how many
+	 * versions were deleted. Refused while a job makes or details it, or while its group is not final. Since 1.3.0.
 	 */
-	CompletableFuture<List<Integer>> deleteMassing(String massingId);
+	CompletableFuture<Integer> deleteMassing(String massingId);
 
 	/**
 	 * A massingFirst group's approval ({@code group.approve}): the {@code approve} items start their detail pass (bound to their

@@ -15,6 +15,12 @@
 //                                       restart mid-group (itemKey + ext round trip), the estimate, a soft-budget pause / extend /
 //                                       resume, the group-wide usage hold, a re-skin, an open type with a profile, and
 //                                       Sites.survival() / WORLD_MODE_CHANGED in a fresh creative and a fresh survival world
+//   node tools/apitest.mjs massing      phase 4c without Claude (--sim): a massing -> MASSING_DONE, a redirect -> v2, the detail
+//                                       pass with conformance, deleteMassing, MASSING_DONE caught up after a world load, a
+//                                       massingFirst set of 3 through GROUP_AWAITING_APPROVAL (a sidecar restart while awaiting),
+//                                       approve 2 / redirect 1 / all detailed, approvalUi owner from the API, and the composite
+//                                       preview (5 styles at once with a screenshot, the cell cap and outline fallback, clear on
+//                                       world leave)
 //
 // Evidence goes to artifacts/apitest/<step>.json (APITEST_OUT overrides), screenshots to the client's ARCHITECT_SHOTS_DIR.
 
@@ -28,7 +34,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = process.env.APITEST_OUT ? path.resolve(process.env.APITEST_OUT) : path.join(root, 'artifacts', 'apitest');
 fs.mkdirSync(OUT, { recursive: true });
 const OWNER = 'apitest:village/1';
-const API_VERSION = '1.2.0';
+const API_VERSION = '1.3.0';
 // the dev client's game dir (tools/run-apitest-client.sh runs it in mod/)
 const GAME_DIR = process.env.APITEST_GAME_DIR ? path.resolve(process.env.APITEST_GAME_DIR) : path.join(root, 'mod', 'run');
 const SIDECAR_DATA = path.join(GAME_DIR, 'architect', 'sidecar-data');
@@ -100,6 +106,119 @@ async function spot(x, z) {
   for (const [dx, dz] of [[0, 0], [12, 0], [0, 16], [12, 16], [6, 8]]) ys.push(await groundAt(x + dx, z + dz));
   ys.sort((a, b) => a - b);
   return { x, y: ys[2], z, ys, coarse: s.resolution };
+}
+
+/**
+ * The composite preview (phase 4c, ArchitectClientApi.previewComposite) through apitest's client half: 5 styles at once (a
+ * massing, a ghost, and a delta's added / changed / removed cells) with a screenshot, two keys at once, an unknown id refused,
+ * the 200,000-cell cap and the outline fallback (cap and distance), the frame time, clear, and clear on world leave.
+ */
+async function compositeChecks(tag) {
+  const b64 = (o) => Buffer.from(typeof o === 'string' ? o : JSON.stringify(o)).toString('base64');
+  const SHOTS = process.env.APITEST_SHOT_PREFIX ?? 'mod-p4c';
+  const composite = async (key, layers) => {
+    const r = await result(await api(`composite ${key} ${b64(layers)}`), 20_000);
+    return r;
+  };
+  const state = async (reset = false) => call('dev.composite.state', { reset });
+  const built = async (key, ms = 60_000) => {
+    const end = Date.now() + ms;
+    while (Date.now() < end) {
+      const s = await state();
+      if (s.keys[key]?.built && s.keys[key].layers.every((l) => l.mode !== 'not drawn yet' && l.mode !== 'building')) return s;
+      await sleep(250);
+    }
+    return state();
+  };
+  const range = (x0, x1, y0, y1, z0, z1) => {
+    const out = [];
+    for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) for (let z = z0; z <= z1; z++) out.push([x, y, z]);
+    return out;
+  };
+  await call('dev.release', { mode: 'keep' }).catch(() => null);
+  // a massing to show (sim)
+  const mreq = await result(await api(`massingreq cmp ${b64({ type: 'tower', style: 'rustic', name: `Plan tower ${tag}`, size: [31, 30, 31] })}`), 30_000);
+  const md = await waitEvent((e) => e.event === 'MASSING_DONE' && e.designId === mreq.value, 120_000);
+  const p = (await call('dev.state')).player;
+  const P = await spot(Math.floor(p.x) + 30, Math.floor(p.z) + 10);
+  const at = (dx, dz = 0) => [P.x + dx, P.y, P.z + dz];
+  // 5 styles at once: a massing, a ghost, and on one tavern a delta (its lower rows added, middle changed, upper removed)
+  const five = [
+    { blueprintId: md.id, origin: at(0), style: 'MASSING' },
+    { blueprintId: 'cabin', origin: at(22), style: 'GHOST' },
+    { blueprintId: 'tavern', origin: at(42), style: 'ADDED', onlyCells: range(0, 15, 0, 4, 0, 11) },
+    { blueprintId: 'tavern', origin: at(42), style: 'CHANGED', onlyCells: range(0, 15, 5, 8, 0, 11) },
+    { blueprintId: 'tavern', origin: at(42), style: 'REMOVED', onlyCells: range(0, 15, 9, 17, 0, 11) },
+  ];
+  const r5 = await composite('apitest:plan', five);
+  const s5 = await built('apitest:plan');
+  const k5 = s5.keys['apitest:plan'];
+  check(!r5.error && r5.thread === 'Render thread' && k5?.layers?.length === 5 && k5.layers.every((l) => l.mode === 'cells' && l.cells > 0 && l.quads > 0)
+    && k5.layers.map((l) => l.style).join() === 'MASSING,GHOST,ADDED,CHANGED,REMOVED',
+    `previewComposite(apitest:plan, 5 layers) on the ${r5.thread}: ${k5?.layers?.map((l) => `${l.style} ${l.source} ${l.cells} cells/${l.quads} quads`).join('; ')} (built in ${k5?.buildMs} ms)`, k5);
+  const rem = k5?.layers?.[4];
+  const tavernAll = k5?.layers?.slice(2).reduce((s, l) => s + l.cells, 0);
+  check(rem && rem.onlyCells > 0 && rem.cells > 0 && rem.quads % 5 === 0 && k5.layers[2].cells > 0 && k5.layers[3].cells > 0,
+    `onlyCells in template coordinates: rows 0-4 / 5-8 / 9-17 of the tavern give ${k5?.layers?.slice(2).map((l) => l.cells).join(' / ')} cells (${tavernAll} in all); the removed ones as red frames (${rem?.quads} quads = 5 per face)`, rem);
+  await call('dev.camera', { x: P.x + 30, y: P.y + 34, z: P.z + 52, lookAt: { x: P.x + 30, y: P.y + 6, z: P.z + 6 }, mode: 'spectator' }).catch((e) => console.log('camera:', e.message));
+  await sleep(1500);
+  await state(true);
+  await sleep(1500);
+  const f5 = (await state()).lastFrame;
+  const shot5 = await call('dev.screenshot', { name: `${SHOTS}-composite-5styles`, hideHud: true }, 120_000);
+  check(!!shot5.path, `screenshot of the 5 styles at once: ${shot5.path} (frame: ${f5.quads} quads in ${f5.ms.toFixed(3)} ms, max ${f5.maxMs.toFixed(3)} ms)`, { shot5, f5 });
+  // a second key at once; an unknown id is refused and leaves the key as it was
+  const r2 = await composite('apitest:second', [{ blueprintId: 'tower', origin: at(-22), style: 'GHOST' }]);
+  const bad = await composite('apitest:second', [{ blueprintId: `nope_${tag}`, origin: at(0), style: 'GHOST' }]);
+  check(JSON.stringify(r2.keys) === '["apitest:plan","apitest:second"]' && /IllegalArgumentException/.test(bad.error ?? '') && (await state()).keys['apitest:second']?.layers?.[0]?.source === 'tower',
+    `two keys at once (${r2.keys?.join(', ')}); an unknown id is refused ("${bad.error}") and the key keeps its layers`, { r2, bad });
+  // the cell cap: taverns side by side until the key passes 200,000 cells; the layers past the cap draw as box outlines
+  const perTavern = (await (async () => {
+    await composite('apitest:cap', [{ blueprintId: 'tavern', origin: at(0, -40), style: 'GHOST' }]);
+    return (await built('apitest:cap')).keys['apitest:cap'].layers[0].cells;
+  })());
+  const n = Math.ceil(230_000 / perTavern);
+  const cols = Math.ceil(Math.sqrt(n));
+  const capLayers = [];
+  for (let i = 0; i < n; i++) capLayers.push({ blueprintId: 'tavern', origin: at(-60 + (i % cols) * 18, -60 - Math.floor(i / cols) * 14), style: i % 2 ? 'GHOST' : 'MASSING' });
+  const cx = P.x - 60 + (cols * 18) / 2;
+  const cz = P.z - 60 - (Math.ceil(n / cols) * 14) / 2;
+  await call('dev.camera', { x: cx, y: P.y + 70, z: cz + 40, lookAt: { x: cx, y: P.y, z: cz }, mode: 'spectator' }).catch((e) => console.log('camera:', e.message));
+  await composite('apitest:cap', capLayers);
+  const sc = await built('apitest:cap', 120_000);
+  const kc = sc.keys['apitest:cap'];
+  const drawn = kc.layers.filter((l) => !l.overCap).reduce((s, l) => s + l.cells, 0);
+  const capped = kc.layers.filter((l) => l.overCap);
+  check(n * perTavern > 200_000 && drawn <= 200_000 && capped.length >= 1 && capped.every((l) => l.mode === 'outline:cap') && kc.cells === drawn,
+    `the cap: ${n} taverns (${perTavern} cells each, ${n * perTavern} in all): ${drawn} cells drawn, ${capped.length} layer(s) past the cap as outlines (built in ${kc.buildMs} ms)`, { n, perTavern, drawn, capped: capped.length });
+  await sleep(1000);
+  await state(true);
+  await sleep(2000);
+  const fc = (await state()).lastFrame;
+  const shotC = await call('dev.screenshot', { name: `${SHOTS}-composite-cap`, hideHud: true }, 120_000);
+  check(!!shotC.path && fc.frames > 0, `screenshot of the capped key: ${shotC.path}; frame at the cap: ${fc.quads} quads in ${fc.ms.toFixed(2)} ms (max ${fc.maxMs.toFixed(2)} ms over 2 s)`, { shotC, fc });
+  results.frameAtCap = fc;
+  // the distance fallback: a layer 300 blocks away draws as its outline
+  await composite('apitest:far', [{ blueprintId: 'tavern', origin: at(300, 0), style: 'CHANGED' }, { blueprintId: 'cabin', origin: at(0, 0), style: 'ADDED' }]);
+  await call('dev.camera', { x: P.x + 30, y: P.y + 34, z: P.z + 52, lookAt: { x: P.x + 30, y: P.y + 6, z: P.z + 6 }, mode: 'spectator' }).catch(() => null);
+  const sf = await built('apitest:far');
+  await sleep(500);
+  const kf = (await state()).keys['apitest:far'];
+  check(kf?.layers?.[0]?.mode === 'outline:distance' && kf.layers[1].mode === 'cells', `beyond 160 blocks: ${kf?.layers?.map((l) => `${l.source} ${l.mode}`).join(', ')}`, kf);
+  // clear one key, then leave the world: every composite clears
+  await result(await api('compositeclear apitest:far'), 20_000);
+  const afterClear = await state();
+  check(!afterClear.keys['apitest:far'] && !!afterClear.keys['apitest:plan'], `clearComposite(apitest:far): ${Object.keys(afterClear.keys).join(', ')} remain`);
+  await call('dev.world.leave');
+  await call('dev.world.open', {});
+  for (let i = 0; i < 300; i++) {
+    await sleep(500);
+    const s = await call('dev.state').catch(() => null);
+    if (s?.inWorld && s.ready) break;
+  }
+  const afterLeave = await state();
+  check(Object.keys(afterLeave.keys).length === 0, `world leave cleared every composite (keys now: ${Object.keys(afterLeave.keys).length})`, afterLeave);
+  await result(await api(`massingdelete ${md.id}`), 20_000).catch(() => null);
 }
 
 /** A client preview through the API, with a screenshot, then cleared. */
@@ -724,6 +843,197 @@ switch (step) {
       await restart().catch((e) => console.log('restart:', e.message));
     }
     results.events = (await events()).filter((e) => !e.event.startsWith('SITE_'));
+    break;
+  }
+  case 'massing': {
+    // phase 4c through the API (docs/CONTRACT.md "Phase 4c gate" and "4c review folded in", the Java half) against the real
+    // sidecar's sim backend (tools/run-apitest-client.sh --sim; no Claude). The sim installs the kit's example massings (tavern,
+    // tower, gatehouse, cabin have conforming detail pairs) and its steps are slowed and priced through <data>/config.json.
+    const cfgFile = path.join(SIDECAR_DATA, 'config.json');
+    const oldCfg = fs.existsSync(cfgFile) ? fs.readFileSync(cfgFile, 'utf8') : null;
+    const b64 = (o) => Buffer.from(typeof o === 'string' ? o : JSON.stringify(o)).toString('base64');
+    const tag = Date.now().toString(36);
+    const SIZE = [31, 30, 31];
+    const MASSINGS = path.join(GAME_DIR, 'architect', 'massings');
+    const restart = async () => {
+      await call('dev.launcher.restart');
+      for (let i = 0; i < 100; i++) {
+        await sleep(300);
+        if ((await call('dev.sidecar.state')).link === 'synced' && (await call('dev.launcher.state')).state === 'running') return;
+      }
+      throw new Error('the helper did not come back');
+    };
+    const waitWorld = async () => {
+      for (let i = 0; i < 300; i++) {
+        await sleep(500);
+        const s = await call('dev.state').catch(() => null);
+        if (s?.inWorld && s.ready) return s;
+      }
+      throw new Error('the world did not load');
+    };
+    const evs = async (pred) => (await events()).filter(pred);
+    fs.writeFileSync(cfgFile, JSON.stringify({ ...(oldCfg ? JSON.parse(oldCfg) : {}), simStepMs: 500, simDesignUsd: 0.02, designConcurrency: 3 }));
+    try {
+      await restart();
+      await api('clear');
+      const v = await api('version');
+      check(v.version === API_VERSION && v.features.includes('massing') && v.features.includes('compositePreview'),
+        `VERSION ${v.version}, features massing + compositePreview (${v.features.join(', ')})`, v);
+
+      // ---- 1. a massing request -> MASSING_DONE (DESIGN_DONE with no library entry)
+      const req1 = { type: 'tavern', style: 'rustic', name: `Tankard ${tag}`, size: SIZE, ext: { 'apitest:m': tag }, context: 'on a river bend; the street runs south' };
+      const m1 = await result(await api(`massingreq m1 ${b64(req1)}`), 30_000);
+      check(/^d\d+$/.test(m1.value ?? '') && m1._thread === 'Server thread', `request(massing) -> ${m1.value} (on ${m1._thread})`, m1);
+      const md1 = await waitEvent((e) => e.event === 'MASSING_DONE' && e.designId === m1.value, 120_000);
+      const mid = md1?.id;
+      check(md1?.version === 1 && /^mas_/.test(mid ?? '') && Object.keys(md1.parts ?? {}).length >= 2 && md1.nbtExists && md1.owner === OWNER
+        && md1.ext?.['apitest:m'] === tag && md1.serverThread === 'Server thread' && md1.type === 'tavern',
+        `MASSING_DONE ${mid} v${md1?.version}: ${Object.keys(md1?.parts ?? {}).join('/')} ${md1?.size}, model ${md1?.model}, $${md1?.cost?.usd}, ext and owner kept`, md1);
+      const dd1 = await waitEvent((e) => e.event === 'DESIGN_DONE' && e.id === m1.value, 10_000);
+      check(dd1?.status === 'DONE' && dd1.entryId === null && dd1.massing === `${mid}@1`, `DESIGN_DONE ${m1.value}: no library entry, massing ${dd1?.massing}`, dd1);
+      check(!(await api('entries')).includes(mid), `the massing is not in the library`);
+      const g1 = await api(`massingget ${mid}`);
+      const mine = await api(`massings ${OWNER}`);
+      check(g1?.version === 1 && mine.some((m) => m.id === mid) && fs.existsSync(path.join(MASSINGS, mid, `${mid}.nbt`)),
+        `Designs.massing(${mid}) v${g1?.version}; listMassings(owner) has it; ${mid}/${mid}.nbt on disk`, g1);
+
+      // ---- 2. a redirect -> a new version
+      const rd = await result(await api(`redirect r1 ${mid} ${b64('make it L-shaped with a tower at the corner')}`), 30_000);
+      check(rd.version === 2 && /^d\d+$/.test(rd.designId ?? ''), `redirectMassing(${mid}) -> ${rd.designId} making v${rd.version}`, rd);
+      const md2 = await waitEvent((e) => e.event === 'MASSING_DONE' && e.id === mid && e.version === 2, 120_000);
+      const v1 = await api(`massingget ${mid} 1`);
+      check(md2?.redirect?.fromVersion === 1 && /L-shaped/.test(md2.redirect.notes) && JSON.stringify(md2.versions) === '[1,2]' && md2.latest && v1?.version === 1
+        && !v1.latest && fs.existsSync(path.join(MASSINGS, mid, 'versions', '2', `${mid}.nbt`)),
+        `MASSING_DONE ${mid} v2 (redirect of v1: "${md2?.redirect?.notes}"), ${md2?.size} vs v1 ${v1?.size}; massing(id, 1) still known`, { md2, v1 });
+      check((await evs((e) => e.event === 'MASSING_DONE' && e.id === mid)).length === 2, 'MASSING_DONE once per version');
+
+      // ---- 3. the detail pass from the massing -> conformance ok. Pinned to v1: the sim's tavern redirect turns the gable into a
+      // hip and its detail is the gable example, which the sidecar then fails (reported; the set below details a redirected v2)
+      const dt = await result(await api(`detail d1 ${b64({ type: 'tavern', style: 'rustic', name: `Tankard ${tag}`, size: SIZE, fromMassing: mid, massingVersion: 1 })}`), 30_000);
+      const dd = await waitEvent((e) => e.event === 'DESIGN_DONE' && e.id === dt.value, 120_000);
+      const dEntry = dd?.entryId ? await api(`entry ${dd.entryId}`) : null;
+      check(dd?.status === 'DONE' && dd.fromMassing === `${mid}@1` && dd.conformance?.ok === true && !!dEntry,
+        `detail ${dt.value} from ${dd?.fromMassing}: ${dd?.entryId}, conformance ok ${dd?.conformance?.ok} (${(dd?.conformance?.errors ?? []).length} errors, ${(dd?.conformance?.issues ?? []).length} warnings)`, dd);
+      await sleep(500);
+      const afterDetail = await api(`massingget ${mid} 1`);
+      check(afterDetail?.detail?.designId === dt.value && afterDetail.detail.status === 'DONE' && afterDetail.detail.entryId === dd?.entryId,
+        `massing ${mid} v1 .detail (recorded on the version it details) -> ${afterDetail?.detail?.designId} ${afterDetail?.detail?.status} (${afterDetail?.detail?.entryId})`, afterDetail);
+
+      // ---- 4. deleteMassing
+      const del = await result(await api(`massingdelete ${mid}`), 20_000);
+      await sleep(500);
+      check(del.value === 2 && (await api(`massingget ${mid}`)) === null && (await api(`massingget ${mid} 1`)) === null
+        && !(await api(`massings ${OWNER}`)).some((m) => m.id === mid) && !fs.existsSync(path.join(MASSINGS, mid)),
+        `deleteMassing(${mid}) -> ${del.value} versions; gone from the API (every version) and the disk`, del);
+
+      // ---- 5. MASSING_DONE caught up after a world load (the massing finishes on the title screen)
+      await api('clear');
+      const mc = await result(await api(`massingreq mc ${b64({ type: 'cabin', style: 'rustic', name: `Catch ${tag}`, size: SIZE })}`), 30_000);
+      await call('dev.world.leave');
+      let mcOut = null;
+      for (let i = 0; i < 200 && !mcOut; i++) {
+        await sleep(500);
+        const sc = await call('dev.sidecar.state');
+        mcOut = sc.massings.find((m) => m.designId === mc.value) ?? null;
+      }
+      const tOpen = Date.now();
+      await call('dev.world.open', {});
+      await waitWorld();
+      await sleep(2500);
+      const mcEv = await evs((e) => e.event === 'MASSING_DONE' && e.designId === mc.value);
+      check(!!mcOut && mcEv.length === 1 && mcEv[0].t >= tOpen && mcEv[0].serverThread === 'Server thread',
+        `massing ${mcOut?.id} installed on the title screen; MASSING_DONE once after the world loaded (${mcEv.length ? mcEv[0].t - tOpen : '?'} ms)`, mcEv);
+      if (mcOut) await result(await api(`massingdelete ${mcOut.id}`), 20_000).catch(() => null);
+
+      // ---- 6. a massingFirst set of 3 through approval
+      await api('clear');
+      const set = {
+        name: `Massing set ${tag}`, bible: 'oak', concurrency: 3, massingFirst: true, maxRedirects: 2, ext: { 'apitest:set': tag },
+        context: { site: 'a river bend', street: 'south', purpose: 'a crossing village' },
+        items: [
+          { itemKey: 's/tower', anchor: true, role: 'landmark', type: 'tower', style: 'rustic', name: `Tower ${tag}`, size: SIZE, ext: { 'apitest:lot': 'T' } },
+          { itemKey: 's/tavern', type: 'tavern', style: 'rustic', name: `Tavern ${tag}`, size: SIZE, ext: { 'apitest:lot': 'V' } },
+          { itemKey: 's/gate', type: 'gatehouse', style: 'rustic', name: `Gate ${tag}`, size: SIZE, ext: { 'apitest:lot': 'G' } },
+        ],
+      };
+      const est = await result(await api(`estimate ${b64(set)}`), 20_000);
+      const { massingFirst: _mf, ...plainSet } = set;
+      const estPlain = await result(await api(`estimate ${b64(plainSet)}`), 20_000);
+      check(est.usdHigh > estPlain.usdHigh && est.minutesHigh > estPlain.minutesHigh,
+        `Designs.estimate(massingFirst set) includes the massing pass: $${est.usdLow}-${est.usdHigh}, ${est.minutesLow}-${est.minutesHigh} min vs $${estPlain.usdLow}-${estPlain.usdHigh} without (${est.basis})`, { est, estPlain });
+      const gid = (await result(await api(`group gm ${b64(set)}`), 30_000)).value;
+      const aw1 = await waitEvent((e) => e.event === 'GROUP_AWAITING_APPROVAL' && e.id === gid, 240_000);
+      check(aw1?.status === 'AWAITING_APPROVAL' && aw1.awaiting.length === 3 && aw1.items.every((i) => i.stage === 'approval' && i.awaitingApproval && /^mas_/.test(i.massing ?? ''))
+        && aw1.done === 0 && aw1.massingFirst && aw1.approvalUi === 'architect' && aw1.maxRedirects === 2 && aw1.context?.site === 'a river bend' && aw1.serverThread === 'Server thread',
+        `GROUP_AWAITING_APPROVAL ${gid}: awaiting ${aw1?.awaiting?.join(', ')}; items ${aw1?.items?.map((i) => `${i.itemKey} ${i.stage} ${i.massing}`).join(', ')}; done ${aw1?.done}`, aw1);
+      const setMassings = await evs((e) => e.event === 'MASSING_DONE' && e.group === gid);
+      check(setMassings.length === 3 && setMassings.every((m) => m.itemKey && m.ext?.['apitest:lot']),
+        `MASSING_DONE for the 3 items (${setMassings.map((m) => `${m.itemKey}:${m.id}@${m.version}`).join(', ')}), item ext kept`, setMassings);
+      // a sidecar restart while awaiting: the group comes back awaiting, and the event does not fire again
+      const pid = (await call('dev.launcher.state')).pid;
+      process.kill(pid, 'SIGKILL');
+      for (let i = 0, l = 'synced'; i < 50 && l === 'synced'; i++) {
+        await sleep(200);
+        l = (await call('dev.sidecar.state')).link;
+      }
+      await restart();
+      await sleep(2000);
+      const back = await api(`groupget ${gid}`);
+      check(back?.status === 'AWAITING_APPROVAL' && back.awaiting.length === 3 && (await evs((e) => e.event === 'GROUP_AWAITING_APPROVAL' && e.id === gid)).length === 1
+        && (await call('dev.launcher.state')).pid !== pid,
+        `killed the sidecar (pid ${pid}) while awaiting; back: ${back?.status}, awaiting ${back?.awaiting?.length}; GROUP_AWAITING_APPROVAL still once`, back);
+      // approve 2, redirect 1
+      const tAp = Date.now();
+      const ap = await result(await api(`approve a1 ${gid} ${b64({ approve: ['s/tower', 's/tavern'], redirect: { 's/gate': 'taller gate towers, a wider arch' } })}`), 30_000);
+      check(Object.keys(ap.approved ?? {}).sort().join() === 's/tavern,s/tower' && ap.redirected?.['s/gate']?.version === 2 && ap._thread === 'Server thread',
+        `approveGroup: approved ${Object.entries(ap.approved ?? {}).map(([k, d]) => `${k}->${d}`).join(', ')}; redirected s/gate -> v${ap.redirected?.['s/gate']?.version}`, ap);
+      const aw2 = await waitEvent((e) => e.event === 'GROUP_AWAITING_APPROVAL' && e.id === gid && e.t > tAp, 240_000);
+      const gate2 = aw2?.items?.find((i) => i.itemKey === 's/gate');
+      check(JSON.stringify(aw2?.awaiting) === '["s/gate"]' && gate2?.rounds === 1 && /@2$/.test(gate2?.massing ?? '') && (await evs((e) => e.event === 'GROUP_AWAITING_APPROVAL' && e.id === gid)).length === 2,
+        `the redirect finished: GROUP_AWAITING_APPROVAL again, awaiting ${aw2?.awaiting}; s/gate ${gate2?.massing}, ${gate2?.rounds} round`, aw2);
+      const ap2 = await result(await api(`approve a2 ${gid} ${b64({ approve: ['s/gate'] })}`), 30_000);
+      const gDone = await waitEvent((e) => e.event === 'GROUP_DONE' && e.id === gid, 240_000);
+      const byKey = Object.fromEntries((gDone?.items ?? []).map((i) => [i.itemKey, i]));
+      check(!!ap2.approved?.['s/gate'] && gDone?.status === 'DONE' && gDone.done === 3 && gDone.items.every((i) => i.detailed && i.stage === 'detail' && i.entryId)
+        && byKey['s/gate']?.designIds?.length === 3 && byKey['s/tower']?.designIds?.length === 2 && gDone.entriesLoaded?.length === 3,
+        `GROUP_DONE ${gid}: ${gDone?.done} detailed (${gDone?.items?.map((i) => `${i.itemKey}: ${i.designIds.join('>')} -> ${i.entryId}`).join('; ')}), $${gDone?.cost?.usd}`, gDone);
+      const details = [];
+      for (const it of gDone?.items ?? []) details.push(await api(`designget ${it.designId}`));
+      check(details.every((d) => d?.conformance?.ok === true && d.fromMassing), `every detail pass conforms (${details.map((d) => `${d?.id} ${d?.fromMassing} ok=${d?.conformance?.ok}`).join(', ')})`, details);
+      const massCost = (await evs((e) => e.event === 'MASSING_DONE' && e.group === gid)).reduce((s, m) => s + m.cost.usd, 0);
+      check(gDone?.cost?.usd > massCost && massCost > 0, `the group's cost $${gDone?.cost?.usd} includes its 4 massings ($${massCost.toFixed(2)})`);
+
+      // ---- 7. approvalUi owner: only the group's owner approves (from the API)
+      const OWNER2 = 'apitest:owner/1';
+      const setO = { name: `Owner set ${tag}`, bible: 'oak', owner: OWNER2, massingFirst: true, approvalUi: 'owner', maxRedirects: 0,
+        items: [{ itemKey: 'o/cabin', type: 'cabin', style: 'rustic', size: SIZE, owner: OWNER2 }] };
+      const gido = (await result(await api(`group go ${b64(setO)}`), 30_000)).value;
+      const awo = await waitEvent((e) => e.event === 'GROUP_AWAITING_APPROVAL' && e.id === gido, 240_000);
+      check(awo?.owner === OWNER2 && awo.approvalUi === 'owner', `GROUP_AWAITING_APPROVAL ${gido} names its owner ${awo?.owner} (approvalUi ${awo?.approvalUi})`, awo);
+      const noOwner = await result(await api(`approve o1 ${gido} ${b64({ approve: ['o/cabin'] })}`), 20_000);
+      const wrong = await result(await api(`approve o2 ${gido} ${b64({ approve: ['o/cabin'], owner: 'apitest:someone_else' })}`), 20_000);
+      const cabinMassing = awo?.items?.[0]?.massing?.split('@')[0];
+      const redirNoOwner = await result(await api(`redirect o3 ${cabinMassing} ${b64('bigger')}`), 20_000);
+      const redirOwner = await result(await api(`redirect o4 ${cabinMassing} ${b64('bigger')} ${OWNER2}`), 20_000);
+      check(/owner/.test(noOwner.error ?? '') && /owner/.test(wrong.error ?? '') && /owner/.test(redirNoOwner.error ?? '') && /redirect round/.test(redirOwner.error ?? ''),
+        `refused: approveGroup without owner ("${noOwner.error}"), with another owner, redirectMassing without owner; with the owner the redirect cap applies ("${redirOwner.error}")`,
+        { noOwner, wrong, redirNoOwner, redirOwner });
+      const okO = await result(await api(`approve o5 ${gido} ${b64({ approve: ['o/cabin'], owner: OWNER2 })}`), 20_000);
+      const goDone = await waitEvent((e) => e.event === 'GROUP_DONE' && e.id === gido, 180_000);
+      check(okO.approved?.['o/cabin'] && goDone?.status === 'DONE' && goDone.done === 1, `approveGroup as ${OWNER2}: ${goDone?.status}, ${goDone?.done} detailed`, goDone);
+
+      // ---- 8. the composite preview (client side)
+      await compositeChecks(tag);
+    } finally {
+      if (oldCfg === null) fs.rmSync(cfgFile, { force: true });
+      else fs.writeFileSync(cfgFile, oldCfg);
+      await restart().catch((e) => console.log('restart:', e.message));
+    }
+    results.events = (await events()).filter((e) => !e.event.startsWith('SITE_'));
+    break;
+  }
+  case 'composite': {
+    await compositeChecks(Date.now().toString(36));
     break;
   }
   case 'catchup': {

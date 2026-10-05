@@ -617,7 +617,19 @@ final class DesignsImpl implements Designs {
 
 	@Override
 	public Optional<dev.larattalabs.architect.api.Massing> massing(String massingId, int version) {
-		return versionsOf(massingId).stream().filter(m -> RecordBook.num(m, "version") == version).findFirst().map(Wire4c::massing);
+		List<JsonObject> vs = versionsOf(massingId);
+		if (vs.isEmpty()) {
+			return Optional.empty();
+		}
+		// an older version's record was stored when it was the latest: its versions list comes from the newest record
+		JsonElement all = vs.get(vs.size() - 1).get("versions");
+		return vs.stream().filter(m -> RecordBook.num(m, "version") == version).findFirst().map(m -> {
+			JsonObject c = m.deepCopy();
+			if (all != null) {
+				c.add("versions", all.deepCopy());
+			}
+			return Wire4c.massing(c);
+		});
 	}
 
 	@Override
@@ -656,17 +668,15 @@ final class DesignsImpl implements Designs {
 	}
 
 	@Override
-	public CompletableFuture<List<Integer>> deleteMassing(String massingId) {
+	public CompletableFuture<Integer> deleteMassing(String massingId) {
 		JsonObject m = msg("massing.delete");
 		m.addProperty("massingId", massingId);
 		return ask("massing", "massings", m).thenApply(r -> {
-			List<Integer> vs = new ArrayList<>();
+			// the ack's versions is a count (sidecar massings.ts delete); an array is counted too
 			JsonElement e = r.get("versions");
-			if (e != null && e.isJsonArray()) {
-				e.getAsJsonArray().forEach(x -> vs.add(x.getAsInt()));
-			}
+			int n = e == null ? 0 : e.isJsonArray() ? e.getAsJsonArray().size() : e.isJsonPrimitive() ? e.getAsInt() : 0;
 			massingRemoved(massingId);
-			return vs;
+			return n;
 		});
 	}
 

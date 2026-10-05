@@ -25,7 +25,7 @@ import java.util.Optional;
  * @param nbt the version's structure template
  * @param previews the version's preview renders
  * @param redirect when this version is a redirect: the version it started from and the notes
- * @param detail the latest detail pass made from this massing (any version)
+ * @param detail the latest detail pass made from this version (the sidecar records a detail pass on the version it pins)
  */
 public record Massing(String id, int version, List<Integer> versions, String designId, String type, Optional<String> name, Optional<String> itemKey,
 	JsonObject ext, Optional<String> owner, Optional<String> group, Optional<BiblePin> bible, Map<String, Library.Part> parts, BlockSize size,
