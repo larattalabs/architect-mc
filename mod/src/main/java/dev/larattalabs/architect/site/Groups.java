@@ -56,6 +56,7 @@ public final class Groups {
 		/** R1 in progress (not saved: a load plans again). */
 		transient dev.larattalabs.architect.journal.WorldJournal.@Nullable UndoPlanner planner;
 		transient List<String> planIds = List.of();
+		transient @Nullable CompletableFuture<Object[]> txn;
 		transient @Nullable String planGroup;
 		transient @Nullable CompletableFuture<Void> commit;
 		/** Construction members' deconstruct items (computed before the undo is planned, rule 7) and where they drop. */
@@ -433,16 +434,46 @@ public final class Groups {
 		if (r.planner != null) {
 			// R1 over ticks (a large group plans per section; phase 4e budget)
 			try {
-				if (!r.planner.step(Placement.deadline())) {
+				if (r.txn == null && !r.planner.step(Placement.deadline())) {
 					return;
 				}
-				dev.larattalabs.architect.journal.WorldJournal.kill("K5");
-				SiteJournal.Undone u = SiteJournal.submitUndo(r.planner.work());
+				SiteJournal.Undone u;
+				if (r.planner.sections() > RestoreJob.SPLIT_SECTIONS) {
+					// a large undo: the plan's maps and its commit are made off the server thread, then submitted
+					if (r.txn == null) {
+						var p = r.planner;
+						r.txn = CompletableFuture.supplyAsync(() -> {
+							try {
+								var w = p.work();
+								return new Object[] {w, SiteJournal.undoTxn(w)};
+							} catch (Sites.SiteException e) {
+								throw new java.util.concurrent.CompletionException(e);
+							}
+						});
+						return;
+					}
+					if (!r.txn.isDone()) {
+						return;
+					}
+					Object[] built;
+					try {
+						built = r.txn.join();
+					} finally {
+						r.txn = null;
+					}
+					dev.larattalabs.architect.journal.WorldJournal.kill("K5");
+					u = SiteJournal.submitUndo((dev.larattalabs.architect.journal.WorldJournal.UndoWork) built[0],
+						(dev.larattalabs.architect.journal.JournalStore.Txn) built[1]);
+				} else {
+					dev.larattalabs.architect.journal.WorldJournal.kill("K5");
+					u = SiteJournal.submitUndo(r.planner.work());
+				}
 				r.planner = null;
 				committed(server, r, u);
-			} catch (java.io.IOException | Sites.SiteException e) {
+			} catch (java.io.IOException | Sites.SiteException | java.util.concurrent.CompletionException e) {
 				r.planner = null;
-				end(server, r, new Removed(false, List.of(e.getMessage()), Map.copyOf(r.refund)));
+				r.txn = null;
+				end(server, r, new Removed(false, List.of(String.valueOf(e.getMessage())), Map.copyOf(r.refund)));
 			}
 			return;
 		}

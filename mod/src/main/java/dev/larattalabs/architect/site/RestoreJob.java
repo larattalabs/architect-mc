@@ -307,10 +307,11 @@ final class RestoreJob implements Placement.Job {
 		if (planner.sections() > SPLIT_SECTIONS) {
 			// a large undo: its commit is built off the server thread, then submitted
 			if (txn == null) {
-				WorldJournal.UndoWork w = planner.work();
+				WorldJournal.UndoPlanner p = planner;
 				planned = true;
 				txn = CompletableFuture.supplyAsync(() -> {
 					try {
+						WorldJournal.UndoWork w = p.work(); // the plan's maps (600k cells) are made off the server thread too
 						return new Object[] {w, SiteJournal.undoTxn(w)};
 					} catch (Sites.SiteException e) {
 						throw new java.util.concurrent.CompletionException(e);
