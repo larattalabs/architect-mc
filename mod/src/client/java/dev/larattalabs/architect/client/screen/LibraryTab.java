@@ -437,7 +437,8 @@ final class LibraryTab {
 		// actions first (they decide how much room the text and preview get)
 		List<Btn> row1 = new ArrayList<>();
 		boolean inWorld = s.inWorld();
-		row1.add(new Btn("place", "Place", true, inWorld, () -> place(c.id())));
+		boolean survival = dev.larattalabs.architect.survival.SurvivalWorld.on();
+		row1.add(new Btn("place", survival ? "Place construction site" : "Place", true, inWorld, () -> place(c.id())));
 		if (DesignFeature.plotForBlueprint(c.id()) != null) {
 			row1.add(new Btn("place_plot", "On the plot", false, inWorld, () -> placeOnPlot(c.id())));
 		}
@@ -452,8 +453,11 @@ final class LibraryTab {
 		List<List<Btn>> rows = flow(List.of(row1, row2), w);
 		int buttonsTop = y + h - rows.size() * 22 + 2;
 		// text block height
-		List<String> desc = c.description().isBlank() ? List.of() : TextUtil.wrapPlain(font, c.description(), w);
-		int textLines = 4 + (c.userTags().isEmpty() ? 0 : 1) + Math.min(2, desc.size()) + (c.materials().isEmpty() ? 0 : 1);
+		// the expanded BOM takes the room of the description and the materials line
+		boolean bomOpen = survival && showBom;
+		List<String> desc = c.description().isBlank() || bomOpen ? List.of() : TextUtil.wrapPlain(font, c.description(), w);
+		boolean mats = !c.materials().isEmpty() && !bomOpen;
+		int textLines = 4 + (c.userTags().isEmpty() ? 0 : 1) + Math.min(2, desc.size()) + (mats ? 1 : 0) + (survival ? 1 : 0);
 		int textH = textLines * 10 + 4 + (edit != Edit.NONE ? 12 : 0);
 		List<String> kinds = new ArrayList<>();
 		for (PreviewImages.Found f : PreviewImages.find(c.id())) {
@@ -465,7 +469,11 @@ final class LibraryTab {
 		if (!kinds.contains(previewKind)) {
 			previewKind = kinds.isEmpty() ? "iso" : kinds.get(0);
 		}
-		drawPreview(g, c.id(), previewKind, x + 2, y + 2, w - 4, box - 4);
+		if (survival && showBom) {
+			drawBom(g, c.id(), x + 2, y + 2, w - 4, box - 4, mx, my);
+		} else {
+			drawPreview(g, c.id(), previewKind, x + 2, y + 2, w - 4, box - 4);
+		}
 		int ty = y + box + 3;
 		if (kinds.size() > 1) {
 			int kx = x;
@@ -512,12 +520,27 @@ final class LibraryTab {
 			g.text(font, line, x, ty, UiBits.ink(), false);
 			ty += 10;
 		}
-		if (!c.materials().isEmpty()) {
-			List<String> mats = new ArrayList<>();
+		if (mats) {
+			List<String> matNames = new ArrayList<>();
 			for (String m : c.materials()) {
-				mats.add(m.replace("minecraft:", "").replace('_', ' '));
+				matNames.add(m.replace("minecraft:", "").replace('_', ' '));
 			}
-			g.text(font, TextUtil.ellipsize(font, "uses " + String.join(", ", mats), w), x, ty, UiBits.muted(), false);
+			g.text(font, TextUtil.ellipsize(font, "uses " + String.join(", ", matNames), w), x, ty, UiBits.muted(), false);
+			ty += 10;
+		}
+		if (survival) {
+			// survival: what the design needs (the template; the spot adds its foundation and approach), and the BOM on demand
+			ty += 2;
+			Bom bom = bom(c.id());
+			String needs = bom == null ? "Needs: (the template isn't loaded)" : !bom.creativeOnly().isEmpty()
+				? "Survival can't build it: uses " + String.join(", ", bom.creativeOnly().stream().map(m -> m.replace("minecraft:", "")).toList())
+				: "Needs: " + bom.total() + " items";
+			int cw = bom == null || !bom.creativeOnly().isEmpty() ? 0 : font.width(showBom ? "Preview" : "BOM ▸") + 12;
+			g.text(font, TextUtil.ellipsize(font, needs, w - cw - 4), x, ty, bom != null && !bom.creativeOnly().isEmpty() ? UiBits.errorText()
+				: UiStyle.CLAY_DARK, false);
+			if (cw > 0) {
+				s.chip(g, "bom", showBom ? "Preview" : "BOM ▸", x + w - cw, ty - 3, showBom, true, mx, my, () -> showBom = !showBom);
+			}
 		}
 		// buttons
 		int by = buttonsTop;
@@ -533,6 +556,71 @@ final class LibraryTab {
 	}
 
 	record Btn(String id, String label, boolean primary, boolean enabled, Runnable action) {
+	}
+
+	/** A design's template bill of materials (survival "Needs"), cached per template fingerprint. */
+	record Bom(String fingerprint, java.util.Map<String, Integer> items, List<String> creativeOnly) {
+		int total() {
+			return items.values().stream().mapToInt(Integer::intValue).sum();
+		}
+	}
+
+	boolean showBom;
+	int bomPage;
+	private final java.util.Map<String, Bom> boms = new java.util.HashMap<>();
+
+	Bom bom(String id) {
+		dev.larattalabs.architect.placement.TemplateGrid grid = dev.larattalabs.architect.placement.TemplateGrid.of(id);
+		Blueprint bp = Blueprints.get(id);
+		if (grid == null || bp == null) {
+			return null;
+		}
+		Bom b = boms.get(id);
+		if (b == null || !b.fingerprint().equals(grid.fingerprint())) {
+			b = new Bom(grid.fingerprint(), dev.larattalabs.architect.site.Builder.templateBom(grid),
+				dev.larattalabs.architect.site.Builder.creativeOnly(grid, bp));
+			boms.put(id, b);
+		}
+		return b;
+	}
+
+	/** The expanded BOM in the preview box: item icons with counts, largest first, in columns. */
+	private void drawBom(GuiGraphicsExtractor g, String id, int x, int y, int w, int h, int mx, int my) {
+		Font font = font();
+		Bom b = bom(id);
+		if (b == null) {
+			return;
+		}
+		List<java.util.Map.Entry<String, Integer>> rows = new ArrayList<>(b.items().entrySet());
+		rows.sort((p, q) -> !q.getValue().equals(p.getValue()) ? Integer.compare(q.getValue(), p.getValue()) : p.getKey().compareTo(q.getKey()));
+		int cols = Math.max(1, (w - 4) / 112);
+		int colW = (w - 4) / cols;
+		int perCol = Math.max(1, (h - 16) / 17);
+		g.text(font, TextUtil.ellipsize(font, "Bill of materials · " + b.total() + " items, plus the spot's foundation and path", w - 8), x + 4, y + 3,
+			UiBits.muted(), false);
+		int per = cols * perCol;
+		int pages = Math.max(1, (rows.size() + per - 1) / per);
+		bomPage = Math.floorMod(bomPage, pages);
+		int from = bomPage * per;
+		int shown = Math.min(rows.size() - from, per);
+		for (int j = 0; j < shown; j++) {
+			var e = rows.get(from + j);
+			int cx = x + 4 + (j / perCol) * colW;
+			int cy = y + 15 + (j % perCol) * 17;
+			net.minecraft.world.item.Item it = net.minecraft.core.registries.BuiltInRegistries.ITEM.getOptional(
+				net.minecraft.resources.Identifier.parse(e.getKey())).orElse(null);
+			if (it != null) {
+				g.item(new net.minecraft.world.item.ItemStack(it), cx, cy);
+			}
+			String label = e.getValue() + " " + dev.larattalabs.architect.site.Builder.itemNameClient(e.getKey());
+			g.text(font, TextUtil.ellipsize(font, label, colW - 22), cx + 18, cy + 5, UiBits.ink(), false);
+		}
+		if (pages > 1) {
+			// pages: the chip turns to the next one (the list is largest first)
+			String more = "page " + (bomPage + 1) + "/" + pages + " \u25b8";
+			int cw = font.width(more) + 12;
+			s.chip(g, "bom:page", more, x + w - cw - 2, y + h - 14, false, true, mx, my, () -> bomPage++);
+		}
 	}
 
 	private int bw(String label) {

@@ -33,7 +33,7 @@ import net.minecraft.world.level.levelgen.presets.WorldPresets;
  * Dev runs only (ARCHITECT_AUTOWORLD, default on in gradlew runClient, off for an installed jar): boots straight into
  * the "Architect Dev" world without any clicks: the first time the title screen appears, the world is loaded if it exists,
  * or created (creative, peaceful, natural terrain with seed 2026 by default, so placement meets slopes) if it does not. Disable with ARCHITECT_AUTOWORLD=0.
- * ARCHITECT_AUTOWORLD_NAME / _PRESET (flat | normal) / _SEED pick another world ({@link AutoWorldSpec});
+ * ARCHITECT_AUTOWORLD_NAME / _PRESET (flat | normal) / _SEED / _MODE (creative | survival | hardcore) / _CHEATS pick another world ({@link AutoWorldSpec});
  */
 public final class AutoWorld {
 	private static boolean attempted;
@@ -82,12 +82,15 @@ public final class AutoWorld {
 				openingHq = true;
 				mc.createWorldOpenFlows().openWorld(name, () -> mc.gui.setScreen(new TitleScreen()));
 			} else {
-				Architect.LOGGER.info("AutoWorld: creating world '{}' ({}, seed {})", name, spec.preset(), spec.seed());
+				Architect.LOGGER.info("AutoWorld: creating world '{}' ({}, seed {}, {}, cheats {})", name, spec.preset(), spec.seed(), spec.mode(),
+					spec.cheats() ? "on" : "off");
+				boolean hardcore = spec.mode() == AutoWorldSpec.Mode.HARDCORE;
 				LevelSettings settings = new LevelSettings(
 					name,
-					GameType.CREATIVE,
-					new LevelSettings.DifficultySettings(Difficulty.PEACEFUL, false, false),
-					true,
+					spec.mode() == AutoWorldSpec.Mode.CREATIVE ? GameType.CREATIVE : GameType.SURVIVAL,
+					// hardcore is always hard; survival dev worlds stay peaceful so mobs never disturb a check
+					new LevelSettings.DifficultySettings(hardcore ? Difficulty.HARD : Difficulty.PEACEFUL, hardcore, false),
+					spec.cheats(),
 					WorldDataConfiguration.DEFAULT
 				);
 				WorldOptions options = new WorldOptions(spec.seed(), false, false);

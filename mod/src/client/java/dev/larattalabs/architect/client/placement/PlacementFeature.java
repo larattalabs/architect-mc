@@ -366,17 +366,20 @@ public final class PlacementFeature {
 							air++;
 						}
 						String st = NbtUtils.writeBlockState(s).toString();
-						if (cells != null) {
-							cells.add(x + "," + y + "," + z + " " + st);
-						}
 						md.update(st.getBytes(java.nio.charset.StandardCharsets.UTF_8));
 						BlockEntity be = level.getBlockEntity(p);
+						String beNbt = "";
 						if (be != null) {
 							blockEntities++;
 							TagValueOutput out = TagValueOutput.createWithContext(ProblemReporter.DISCARDING, level.registryAccess());
 							be.saveWithFullMetadata(out);
 							CompoundTag t = out.buildResult();
-							md.update(t.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+							beNbt = t.toString();
+							md.update(beNbt.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+						}
+						if (cells != null) {
+							// the block-entity NBT too (phase 3: a construction site is compared with an instant placement, BE NBT included)
+							cells.add(x + "," + y + "," + z + " " + st + (beNbt.isEmpty() ? "" : " be=" + beNbt));
 						}
 						md.update((byte) '|');
 					}

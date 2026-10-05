@@ -28,10 +28,28 @@ import org.jspecify.annotations.Nullable;
  * @param movedFrom where it stood before its last move ("undo move"), null when it never moved
  * @param pin what it was placed from (template fingerprint, own block entities), so a later change of the design under the
  *            same id never changes what this site is
+ * @param construction a survival construction site's queue, crate and free cells ({@link Construction}); null for a site
+ *                     placed instantly
  */
 public record Site(String id, String blueprint, String rotation, Anchors.Bounds box, Anchors.Bounds interior, Map<String, Anchor> anchors,
-	long placedAt, String dimension, Anchors.@Nullable Bounds snapshotBox, String snapshot, @Nullable Location movedFrom, @Nullable Pin pin) {
+	long placedAt, String dimension, Anchors.@Nullable Bounds snapshotBox, String snapshot, @Nullable Location movedFrom, @Nullable Pin pin,
+	@Nullable Construction construction) {
 	public static final String OVERWORLD = "minecraft:overworld";
+
+	/** A site placed instantly (phases 1-2): no construction data. */
+	public Site(String id, String blueprint, String rotation, Anchors.Bounds box, Anchors.Bounds interior, Map<String, Anchor> anchors,
+		long placedAt, String dimension, Anchors.@Nullable Bounds snapshotBox, String snapshot, @Nullable Location movedFrom, @Nullable Pin pin) {
+		this(id, blueprint, rotation, box, interior, anchors, placedAt, dimension, snapshotBox, snapshot, movedFrom, pin, null);
+	}
+
+	/** A construction site still building (survival, docs/CONTRACT.md phase 3): not every queued cell is in the world yet. */
+	public boolean building() {
+		return construction != null && construction.building();
+	}
+
+	public Site withConstruction(@Nullable Construction c) {
+		return new Site(id, blueprint, rotation, box, interior, anchors, placedAt, dimension, snapshotBox, snapshot, movedFrom, pin, c);
+	}
 
 	/** A site's former place: its box's minimum corner, rotation and dimension. */
 	public record Location(int x, int y, int z, String rotation, String dimension) {
@@ -151,6 +169,9 @@ public record Site(String id, String blueprint, String rotation, Anchors.Bounds 
 		if (pin != null) {
 			o.add("pin", pin.toJson());
 		}
+		if (construction != null) {
+			o.add("construction", construction.toJson());
+		}
 		return o;
 	}
 
@@ -176,7 +197,8 @@ public record Site(String id, String blueprint, String rotation, Anchors.Bounds 
 			o.has("placedAt") ? o.get("placedAt").getAsLong() : 0L, o.has("dimension") ? o.get("dimension").getAsString() : OVERWORLD,
 			o.has("snapshotBox") ? Anchors.boundsFromJson(o.getAsJsonObject("snapshotBox")) : null,
 			o.has("snapshot") ? o.get("snapshot").getAsString() : id + ".nbt", moved,
-			o.has("pin") && o.get("pin").isJsonObject() ? Pin.fromJson(o.getAsJsonObject("pin")) : null);
+			o.has("pin") && o.get("pin").isJsonObject() ? Pin.fromJson(o.getAsJsonObject("pin")) : null,
+			o.has("construction") && o.get("construction").isJsonObject() ? Construction.fromJson(o.getAsJsonObject("construction")) : null);
 	}
 
 	/**

@@ -71,6 +71,8 @@ public final class DevBridge extends WebSocketServer {
 	public static final Gson GSON = new GsonBuilder().disableHtmlEscaping().serializeNulls().create();
 	/** Upper bound for a request's {@code timeoutMs}. */
 	public static final long MAX_TIMEOUT_MS = 3_600_000L;
+	/** Dev runs only: allow the bridge in a Hardcore world (ARCHITECT_DEV_HARDCORE=1). */
+	static final boolean HARDCORE_OK = "1".equals(System.getenv("ARCHITECT_DEV_HARDCORE")) && dev.larattalabs.architect.client.ClientEnv.DEV_RUN;
 
 	@FunctionalInterface
 	public interface Handler {
@@ -361,7 +363,9 @@ public final class DevBridge extends WebSocketServer {
 			// The DevBridge runs commands with full permissions and switches game modes; none of that
 			// belongs anywhere near a Hardcore world.
 			Minecraft current = Minecraft.getInstance();
-			if (!t.equals("dev.help") && current != null && current.level != null && current.level.getLevelData().isHardcore()) {
+			// (ARCHITECT_DEV_HARDCORE=1 lets a dev run drive a Hardcore dev world for the phase 3 check; dev.command then only runs
+			// commands with the player's own permissions)
+			if (!t.equals("dev.help") && !HARDCORE_OK && current != null && current.level != null && current.level.getLevelData().isHardcore()) {
 				throw new DevException("the DevBridge is disabled while a Hardcore world is loaded");
 			}
 			Fields meta = Fields.of(req);

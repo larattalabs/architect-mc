@@ -136,6 +136,8 @@ public final class ArchitectScreen extends Screen {
 	private final StringBuilder key = new StringBuilder();
 	private @Nullable String keyMessage;
 	private boolean keyMessageError;
+	private @Nullable String survivalMessage;
+	private boolean survivalMessageError;
 	private @Nullable String armedRemove;
 	private int listScroll;
 	private int listNeeded;
@@ -594,12 +596,28 @@ public final class ArchitectScreen extends Screen {
 		});
 	}
 
+	/** The Status tab's survival toggle: runs /architect survival on|off as the player, so the server's permission rule applies. */
+	private void toggleSurvival(boolean on) {
+		if (minecraft == null || minecraft.player == null) {
+			return;
+		}
+		if (!dev.larattalabs.architect.client.survival.SurvivalFeature.mayToggle()) {
+			survivalMessage = "Changing it needs cheats (permission level 2)";
+			survivalMessageError = true;
+			return;
+		}
+		minecraft.player.connection.sendCommand("architect survival " + (on ? "on" : "off"));
+		survivalMessage = "Construction sites turned " + (on ? "on" : "off") + " for this world";
+		survivalMessageError = false;
+	}
+
 	private void removeSite(Site s, boolean force) {
 		dev.larattalabs.architect.client.world.ServerTasks.callAsPlayer((level, player) -> {
 			try {
 				var sl = Sites.levelOf(level.getServer(), s);
 				Site gone = Sites.remove(sl == null ? level : sl, s.id(), force);
-				return "Removed " + gone.id() + "; the terrain is back";
+				return gone.construction() != null ? "Deconstructed " + gone.id() + "; refunds dropped where its crate stood, the terrain is back"
+					: "Removed " + gone.id() + "; the terrain is back";
 			} catch (Sites.SiteException ex) {
 				return "!" + ex.getMessage();
 			}
@@ -1358,6 +1376,28 @@ public final class ArchitectScreen extends Screen {
 			g.text(font, line, rx, ry, UiBits.muted(), false);
 			ry += 10;
 		}
+		// survival construction sites: this world's toggle (docs/CONTRACT.md phase 3 "UI")
+		ry += 8;
+		g.text(font, "Survival (this world)", rx, ry, UiStyle.CLAY_DARK, false);
+		ry += 12;
+		boolean inWorld = dev.larattalabs.architect.survival.SurvivalWorld.loaded();
+		boolean survivalOn = dev.larattalabs.architect.survival.SurvivalWorld.on();
+		boolean may = inWorld && dev.larattalabs.architect.client.survival.SurvivalFeature.mayToggle();
+		String sl = "Construction sites";
+		Hit sv = new Hit("survival_toggle", sl, rx, ry, Math.min(colW, 13 + font.width(sl)), 12, may, survivalOn, () -> toggleSurvival(!survivalOn));
+		hits.add(sv);
+		Panels.sprite(g, survivalOn ? Kit.CHECKBOX_CHECKED : Kit.CHECKBOX, rx, ry + 1, 10, 10, may ? 0xFFFFFFFF : 0x90FFFFFF);
+		g.text(font, TextUtil.ellipsize(font, sl + (survivalOn ? ": on" : ": off"), colW - 13), rx + 13, ry + 2, UiBits.ink(), false);
+		ry += 14;
+		String svNote = !inWorld ? "Open a world to see its setting." : (survivalOn
+			? "Place makes a construction site that builds as its crate is fed (hoppers welcome)."
+			: "Placement is instant and free.") + (may ? " Changing it needs cheats (permission level 2): you have them."
+			: " Changing it needs cheats (permission level 2): ask an operator, or /architect survival on or off with cheats.");
+		for (String line : TextUtil.wrapPlain(font, svNote, colW)) {
+			g.text(font, line, rx, ry, UiBits.muted(), false);
+			ry += 10;
+		}
+		statusLine(g, survivalMessage, survivalMessageError, rx, ry, colW);
 		String[] hints = {"1-4", "tabs", "Esc", "close"};
 		UiBits.hints(g, font, x, footerY + 4, false, hints);
 	}

@@ -18,7 +18,7 @@ import org.jspecify.annotations.Nullable;
  * {@code /architect reload} (new entries) is picked up. Also the top-down preview of the
  * blueprint screen.
  */
-final class TemplateCells {
+public final class TemplateCells {
 	/** Map colour for blocks without one (glass, barriers...): a pale blue-grey, so windows still read. */
 	static final int GLASS = 0xFFB8D4DC;
 	private static final Map<Blueprints.Entry, GhostModel.Cells> CACHE = new WeakHashMap<>();
@@ -40,7 +40,7 @@ final class TemplateCells {
 	}
 
 	/** Opaque map colour of a block, 0 (alpha 0) for air. */
-	static int color(BlockState state) {
+	public static int color(BlockState state) {
 		if (state.isAir()) {
 			return 0;
 		}
@@ -83,7 +83,7 @@ final class TemplateCells {
 		return top;
 	}
 
-	static int shade(int argb, float f) {
+	public static int shade(int argb, float f) {
 		int r = Math.min(255, Math.round(((argb >> 16) & 0xFF) * f));
 		int g = Math.min(255, Math.round(((argb >> 8) & 0xFF) * f));
 		int b = Math.min(255, Math.round((argb & 0xFF) * f));

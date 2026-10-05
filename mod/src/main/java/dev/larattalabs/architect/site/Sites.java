@@ -21,6 +21,7 @@ import dev.larattalabs.architect.placement.Reconcile;
 import dev.larattalabs.architect.placement.SiteWarnings;
 import dev.larattalabs.architect.placement.TemplateGrid;
 import dev.larattalabs.architect.placement.TerrainFit;
+import dev.larattalabs.architect.survival.SurvivalWorld;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -128,6 +129,7 @@ public final class Sites {
 			reconcile(server);
 			notifyListeners();
 		});
+		Builder.init();
 		ServerTickEvents.END_SERVER_TICK.register(server -> Drops.tick());
 		ServerLifecycleEvents.SERVER_STOPPED.register(server -> {
 			state = State.EMPTY;
@@ -175,6 +177,16 @@ public final class Sites {
 	 * overwrite block entities. The terrain of the box is saved first; {@link #remove} restores it. Server thread.
 	 */
 	public static Site place(ServerLevel level, Blueprint bp, BlockPos origin, Rotation rotation, boolean force) throws SiteException {
+		return place(level, bp, origin, rotation, force, null);
+	}
+
+	/**
+	 * {@link #place}; in a survival world ({@link SurvivalWorld#on}) the placement becomes a construction site ({@link Builder#convert}):
+	 * same checks and snapshot, then everything but the terrain clearing is taken out again and queued for the builder.
+	 * {@code owner}: the placing player's UUID (the HUD line), or null.
+	 */
+	public static Site place(ServerLevel level, Blueprint bp, BlockPos origin, Rotation rotation, boolean force, @Nullable String owner)
+		throws SiteException {
 		MinecraftServer server = level.getServer();
 		if (loadFailed) {
 			throw new SiteException(FILE + " could not be read when the world started (see the log); fix or move it, then restart");
@@ -185,11 +197,22 @@ public final class Sites {
 			next++; // never reuse an id a snapshot file still carries
 		}
 		String id = "s" + next;
+		boolean survival = SurvivalWorld.on();
 		Built built = build(level, bp, origin, rotation, force, null, id);
+		Construction construction = null;
+		if (survival) {
+			try {
+				construction = Builder.convert(level, bp, built, id, owner);
+			} catch (SiteException | RuntimeException e) {
+				Architect.LOGGER.error("Making {} a construction site failed; taking the placement down", id, e);
+				unbuild(level, built);
+				throw e instanceof SiteException se ? se : new SiteException("Making the construction site failed (" + e.getMessage() + "); the area was restored");
+			}
+		}
 		Map<String, Site> map = new LinkedHashMap<>(s.byId());
 		long now = System.currentTimeMillis();
 		Site b = new Site(id, bp.id(), BlueprintTransform.rotationName(built.turns()), built.box(), built.interior(), built.anchors(), now,
-			dimensionId(level), built.snapshotBox(), built.snapshot(), null, built.pin());
+			dimensionId(level), built.snapshotBox(), built.snapshot(), null, built.pin(), construction);
 		map.put(id, b);
 		commit(server, new State(Collections.unmodifiableMap(map), next + 1, s.pending()));
 		lastNote = built.note();
@@ -199,12 +222,12 @@ public final class Sites {
 	}
 
 	/** A template put into the world (not recorded yet): its snapshot file (written) and the terrain tag (to roll back). */
-	private record Built(int turns, Anchors.Bounds box, Anchors.Bounds snapshotBox, Anchors.Bounds interior, Map<String, Anchor> anchors,
-		Site.Pin pin, @Nullable String note, String snapshot, CompoundTag before) {
+	record Built(int turns, Anchors.Bounds box, Anchors.Bounds snapshotBox, Anchors.Bounds interior, Map<String, Anchor> anchors,
+		Site.Pin pin, @Nullable String note, String snapshot, CompoundTag before, TemplateGrid grid, TerrainFit.Plan plan, Approach.Plan approach) {
 	}
 
 	/** Takes a built but unrecorded site down again and deletes its snapshot file. */
-	private static void unbuild(ServerLevel level, Built built) {
+	static void unbuild(ServerLevel level, Built built) {
 		try {
 			Drops drops = Drops.before(level, built.snapshotBox());
 			restoreTemplate(level, built.snapshotBox(), built.before());
@@ -306,7 +329,7 @@ public final class Sites {
 
 	private static Site withPin(Site x, Site.Pin pin) {
 		return new Site(x.id(), x.blueprint(), x.rotation(), x.box(), x.interior(), x.anchors(), x.placedAt(), x.dimension(), x.snapshotBox(),
-			x.snapshot(), x.movedFrom(), pin);
+			x.snapshot(), x.movedFrom(), pin, x.construction());
 	}
 
 	/** {@link #pinFor} without the bed cells a placement left out ({@link #removeUnsafeBeds}). */
@@ -446,6 +469,13 @@ public final class Sites {
 			out.add("Not placed: a door is cut in half by the box edge (" + String.join(", ", doors.subList(0, Math.min(3, doors.size())))
 				+ "); raise, lower or move the building so the door is fully in or out");
 		}
+		if (moving == null && SurvivalWorld.on()) {
+			List<String> creative = Builder.creativeOnly(grid, bp);
+			if (!creative.isEmpty()) {
+				out.add("This design uses " + String.join(", ", creative.stream().map(c -> c.replace("minecraft:", "")).toList())
+					+ ", which survival can't build");
+			}
+		}
 		List<Occupancy.Found> found = Occupancy.scan(level, snapBox, e -> false);
 		List<String> occupied = Occupancy.refusals(found);
 		if (!occupied.isEmpty()) {
@@ -495,6 +525,10 @@ public final class Sites {
 				moving = get(movingId);
 				if (moving == null) {
 					return new Verdict(List.of("No site " + movingId), List.of());
+				}
+				String noMove = moveRefusal(moving);
+				if (noMove != null) {
+					return new Verdict(List.of(noMove), List.of());
 				}
 				ServerLevel oldLevel = levelOf(level.getServer(), moving);
 				if (oldLevel == null) {
@@ -640,7 +674,8 @@ public final class Sites {
 			int turns = site.turns();
 			return new Built(turns, box, snapBox, BlueprintTransform.worldBounds(bp, turns, box.minX(), box.minY(), box.minZ()),
 				BlueprintTransform.worldAnchors(bp, turns, box.minX(), box.minY(), box.minZ()),
-				pinFor(site.grid(), turns, beds.cells(), box).withHeldLeaves(held), notes.isEmpty() ? null : String.join("; ", notes), snapshot, before);
+				pinFor(site.grid(), turns, beds.cells(), box).withHeldLeaves(held), notes.isEmpty() ? null : String.join("; ", notes), snapshot, before,
+				site.grid(), plan, approach);
 		} catch (RuntimeException e) {
 			// never leave a half-built, unrecorded box behind: put the site back as it was captured
 			Architect.LOGGER.error("Placing {} at {} failed; restoring box {}", bp.id(), origin.toShortString(), Anchors.str(snapBox), e);
@@ -762,9 +797,14 @@ public final class Sites {
 				throw new SiteException(blockersMessage(id, blockers));
 			}
 		}
+		// a construction site deconstructs: refunds for paid cells still standing, the player's blocks and the crate's stock
+		Builder.Deconstruction dec = b.construction() != null ? Builder.prepareDeconstruct(level, b, before) : null;
 		Drops drops = Drops.before(level, b.restoreBox());
 		restoreTemplate(level, b.restoreBox(), before);
 		drops.clearNew(level);
+		if (dec != null) {
+			Builder.dropDeconstruction(level, b, dec, drops);
+		}
 		State s = state;
 		Map<String, Site> map = new LinkedHashMap<>(s.byId());
 		map.remove(id);
@@ -888,6 +928,21 @@ public final class Sites {
 		reports.remove(id);
 		commit(server, new State(Collections.unmodifiableMap(map), s.next(), s.pending()));
 		deleteSnapshot(b.snapshot());
+		if (b.construction() != null) {
+			Builder.forget(server, id);
+			deleteSnapshot(b.construction().target());
+		}
+	}
+
+	/** Replaces a standing site's record (construction state changes: built, paused, free cells) and saves. Server thread. */
+	static void replace(MinecraftServer server, Site b) {
+		State s = state;
+		if (!s.byId().containsKey(b.id())) {
+			return;
+		}
+		Map<String, Site> map = new LinkedHashMap<>(s.byId());
+		map.put(b.id(), b);
+		commit(server, new State(Collections.unmodifiableMap(map), s.next(), s.pending()));
 	}
 
 	/**
@@ -901,6 +956,10 @@ public final class Sites {
 		Site b = get(id);
 		if (b == null) {
 			throw new SiteException("No site " + id);
+		}
+		String noMove = moveRefusal(b);
+		if (noMove != null) {
+			throw new SiteException(noMove);
 		}
 		Blueprint bp = Blueprints.get(b.blueprint());
 		if (bp == null) {
@@ -965,6 +1024,14 @@ public final class Sites {
 	}
 
 	private static volatile boolean failNextMove;
+
+	/** Why a site may not move: in survival (the toggle on, or a construction site) a move would carry the building for free. */
+	public static @Nullable String moveRefusal(Site b) {
+		if (b.construction() != null || SurvivalWorld.on()) {
+			return "Move is refused in survival: deconstruct " + b.id() + " and place it again";
+		}
+		return null;
+	}
 
 	/** Test hook (DevBridge {@code dev.sites.failNextMove}): the next {@link #move} fails restoring the old site, so it rolls back. */
 	public static void failNextMove() {
@@ -1105,6 +1172,30 @@ public final class Sites {
 		boolean changed = false;
 		Map<String, Boolean> standsNow = new java.util.HashMap<>();
 		for (Site b : map.values()) {
+			if (b.construction() != null) {
+				Builder.Run run = Builder.run(server, b);
+				ServerLevel atStart = levelOf(server, b);
+				if (run != null && atStart != null) {
+					run.rescan(atStart, true); // built is derived from the world when it loads (the chunks are read here, as for every site)
+				}
+				if (run == null) {
+					report(b.id(), true, b.id() + "'s construction plan " + SNAPSHOT_DIR + "/" + b.construction().target() + " is missing; it can only be "
+						+ "removed");
+					continue;
+				}
+				if (b.building()) {
+					// half built is not "doesn't match its blueprint": what is built was just derived from the world
+					ServerLevel lv = levelOf(server, b);
+					Construction.Crate cr = b.construction().crate();
+					if (lv != null && (cr == null || !(lv.getBlockEntity(new BlockPos(cr.x(), cr.y(), cr.z())) instanceof
+						dev.larattalabs.architect.survival.CrateBlockEntity))) {
+						report(b.id(), true, "crate missing: " + b.id() + " can't take items; Deconstruct from the Library still works (refunds placed "
+							+ "cells only)");
+					}
+					report(b.id(), false, b.id() + " is a construction site: " + run.built.cardinality() + " of " + run.size() + " cells built");
+					continue;
+				}
+			}
 			if (ownGrid(b) == null) {
 				if (TemplateGrid.of(b.blueprint()) != null) {
 					report(b.id(), false, b.blueprint() + " changed since " + b.id() + " was placed; it was not checked");
@@ -1144,6 +1235,10 @@ public final class Sites {
 					// the same file may still be a current record's (undo move back onto it never reuses names, but be safe)
 					if (map.values().stream().noneMatch(o -> o.snapshot().equals(gone.snapshot()))) {
 						deleteSnapshot(gone.snapshot());
+					}
+					if (gone.construction() != null && map.values().stream().noneMatch(o -> o.construction() != null
+						&& o.construction().target().equals(gone.construction().target()))) {
+						deleteSnapshot(gone.construction().target());
 					}
 					pending.remove(p);
 					changed = true;
@@ -1201,6 +1296,16 @@ public final class Sites {
 		State s = state;
 		s.byId().values().forEach(b -> named.add(b.snapshot()));
 		s.pending().forEach(p -> named.add(p.site().snapshot()));
+		s.byId().values().forEach(b -> {
+			if (b.construction() != null) {
+				named.add(b.construction().target());
+			}
+		});
+		s.pending().forEach(p -> {
+			if (p.site().construction() != null) {
+				named.add(p.site().construction().target());
+			}
+		});
 		try (Stream<Path> files = Files.list(dir)) {
 			return files.map(f -> f.getFileName().toString()).filter(n -> n.endsWith(".nbt") && !named.contains(n)).sorted().toList();
 		} catch (IOException e) {
@@ -1260,6 +1365,14 @@ public final class Sites {
 		t.placeInWorld(level, min, min, settings(Rotation.NONE), level.getRandom(), FLAGS);
 	}
 
+	static void writeSnapshotFile(String name, CompoundTag tag) throws IOException {
+		writeSnapshot(name, tag);
+	}
+
+	static void deleteSnapshotFile(String name) {
+		deleteSnapshot(name);
+	}
+
 	private static void writeSnapshot(String name, CompoundTag tag) throws IOException {
 		Path f = snapshotFile(name);
 		Files.createDirectories(f.getParent());
@@ -1270,7 +1383,7 @@ public final class Sites {
 		Files.move(tmp, f, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
 	}
 
-	private static CompoundTag readSnapshot(String name) throws IOException {
+	static CompoundTag readSnapshot(String name) throws IOException {
 		return NbtIo.readCompressed(snapshotFile(name), NbtAccounter.unlimitedHeap());
 	}
 
@@ -1336,6 +1449,11 @@ public final class Sites {
 		void clearNew(ServerLevel level) {
 			clear(level);
 			LATER.add(new Object[] {this, level, 3});
+		}
+
+		/** An entity the change brings on purpose (a deconstruct's refunds): never cleared. */
+		void keep(Entity e) {
+			before.add(e.getUUID());
 		}
 
 		private int clear(ServerLevel level) {

@@ -19,6 +19,10 @@ public class Architect implements ModInitializer {
 	@Override
 	public void onInitialize() {
 		Blueprints.init();
+		// survival (phase 3): the crate and the payloads are registered first; the toggle loads before the sites when a world starts
+		dev.larattalabs.architect.survival.CrateBlocks.init();
+		dev.larattalabs.architect.survival.SiteNet.init();
+		dev.larattalabs.architect.survival.SurvivalWorld.init();
 		Sites.init();
 		SiteCommands.init();
 		LOGGER.info("Architect common init done");
