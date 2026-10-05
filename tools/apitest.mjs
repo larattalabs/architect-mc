@@ -171,6 +171,19 @@ switch (step) {
     check(!over.placed && over.refusals.some((r) => r.reason === 'OVERLAP'), `refused OVERLAP: ${over.refusals.map((r) => r.reason).join(', ')}`, over);
     const failed = (await events()).filter((e) => e.event === 'PLACE_FAILED');
     check(failed.length >= 2 && failed.some((e) => e.refusals.some((r) => r.reason === 'OVERLAP')), `PLACE_FAILED fired for both (${failed.length})`, failed);
+    // the UI's own refusal (the client sees the player inside the ghost and never asks the server) fires PLACE_FAILED too
+    const nFailed = failed.length;
+    await call('dev.build.start', { blueprint: 'cabin', origin: [px - 6, py - 1, pz - 5] });
+    await sleep(800);
+    const uiConfirm = await call('dev.build.confirm', {});
+    await call('dev.build.cancel', {});
+    let uiFailed = null;
+    for (let i = 0; i < 20 && !uiFailed; i++) {
+      await sleep(250);
+      uiFailed = (await events()).filter((e) => e.event === 'PLACE_FAILED')[nFailed] ?? null;
+    }
+    check(uiConfirm.lastResult?.placed === false && uiFailed?.mode === 'AUTO' && uiFailed.refusals.some((r) => r.reason === 'PLAYER_IN_BOX'),
+      `the placement UI's "player inside" refusal fires PLACE_FAILED (${uiFailed?.serverThread})`, { uiConfirm: uiConfirm.lastResult, uiFailed });
     const chk = await api(`check cabin ${A.x + 3} ${A.y} ${A.z + 2} AUTO unowned actor`);
     check(!chk.ok && chk.refusals.some((r) => r.reason === 'OVERLAP') && chk.construction === true && Object.keys(chk.bom).length > 0,
       `Sites.check (dry run): OVERLAP, construction, BOM of ${Object.keys(chk.bom).length} items`, chk);
@@ -440,8 +453,81 @@ switch (step) {
     results.events = jobEvents;
     break;
   }
+  case 'catchup': {
+    // designs and variants that finish while no world is loaded fire DESIGN_DONE / VARIANT_DONE when one loads (sim sidecar:
+    // its steps slowed to 1.5 s through <data>/config.json and a helper restart, so the design outlasts leaving the world)
+    const cfgFile = path.join(SIDECAR_DATA, 'config.json');
+    const oldCfg = fs.existsSync(cfgFile) ? fs.readFileSync(cfgFile, 'utf8') : null;
+    const restartHelper = async () => {
+      await call('dev.launcher.restart');
+      for (let i = 0; i < 100; i++) {
+        await sleep(300);
+        if ((await call('dev.sidecar.state')).link === 'synced' && (await call('dev.launcher.state')).state === 'running') return;
+      }
+      throw new Error('the helper did not come back');
+    };
+    const waitInWorld = async () => {
+      for (let i = 0; i < 300; i++) {
+        await sleep(500);
+        const s = await call('dev.state').catch(() => null);
+        if (s?.inWorld && s.ready) return s;
+      }
+      throw new Error('the world did not load');
+    };
+    fs.writeFileSync(cfgFile, JSON.stringify({ ...(oldCfg ? JSON.parse(oldCfg) : {}), simStepMs: 1500 }));
+    try {
+      await restartHelper();
+      await api('clear');
+      const from = (await api('entries')).find((id) => /^gen_apicabin$/.test(id)) ?? 'cabin';
+      const d = await result(await api('design CatchUp'));
+      const palettes = ['oak', 'dark', 'cherry', 'fortress'];
+      for (const p of palettes) await api(`variant ${from} ${p}`);
+      await sleep(300);
+      const tLeave = Date.now();
+      await call('dev.world.leave');
+      check((await call('dev.state')).inWorld === false, `left the world (design ${d.value}, ${palettes.length} variants of ${from} queued)`);
+      // wait on the title screen until the helper reports them all finished
+      let sc;
+      for (let i = 0; i < 200; i++) {
+        await sleep(500);
+        sc = await call('dev.sidecar.state');
+        const dd = sc.designs.find((x) => x.id === d.value);
+        const vs = sc.variants.filter((x) => x.from === from && x.createdAt >= tLeave - 60_000);
+        if (dd && ['done', 'failed', 'cancelled'].includes(dd.status) && vs.length >= palettes.length && vs.every((x) => ['done', 'failed'].includes(x.status))) break;
+      }
+      const vs = sc.variants.filter((x) => x.from === from && x.createdAt >= tLeave - 60_000);
+      const whileOut = vs.filter((x) => x.updatedAt > tLeave);
+      const evOut = await call('dev.state');
+      check(evOut.inWorld === false && whileOut.length > 0, `on the title screen: the design and ${whileOut.length} of ${vs.length} variants finished while no world was loaded`, vs.map((x) => ({ id: x.id, status: x.status, blueprintId: x.blueprintId })));
+      const tOpen = Date.now();
+      await call('dev.world.open');
+      await waitInWorld();
+      const dDone = await waitEvent((e) => e.event === 'DESIGN_DONE' && e.id === d.value, 30_000);
+      check(!!dDone && dDone.t >= tOpen && dDone.serverThread === 'Server thread' && dDone.status === 'DONE',
+        `DESIGN_DONE ${d.value} fired after the world loaded (${dDone ? dDone.t - tOpen : '?'} ms after the open, on ${dDone?.serverThread})`, dDone);
+      await sleep(1500);
+      const all = await events();
+      const vDone = all.filter((e) => e.event === 'VARIANT_DONE');
+      const outIds = whileOut.filter((x) => x.status === 'done').map((x) => x.blueprintId);
+      check(outIds.length > 0 && outIds.every((id) => vDone.filter((e) => e.id === id).length === 1 && vDone.find((e) => e.id === id).t >= tOpen),
+        `VARIANT_DONE once for each variant that finished while out (${outIds.join(', ')}), after the world loaded`, vDone.map((e) => ({ id: e.id, t: e.t - tOpen })));
+      const futs = [];
+      for (const p of palettes) futs.push(await result({ pending: `variant:${from}:${p}` }, 30_000));
+      check(futs.every((f) => !f.error && f.variantOf === from), `the makeVariant futures completed after the reload (${futs.map((f) => f.id ?? f.error).join(', ')})`, futs);
+      const dCount = all.filter((e) => e.event === 'DESIGN_DONE' && e.id === d.value).length;
+      check(dCount === 1, `DESIGN_DONE once (${dCount})`);
+      // tidy: the new entries go to the trash
+      for (const f of futs) if (f.id) await result(await api(`delete ${f.id}`), 30_000).catch(() => null);
+      if (dDone?.entryId) await result(await api(`delete ${dDone.entryId}`), 30_000).catch(() => null);
+    } finally {
+      if (oldCfg === null) fs.rmSync(cfgFile, { force: true });
+      else fs.writeFileSync(cfgFile, oldCfg);
+      await restartHelper().catch((e) => console.log('restart:', e.message));
+    }
+    break;
+  }
   default:
-    console.error('usage: node tools/apitest.mjs survival|jobs|preview');
+    console.error('usage: node tools/apitest.mjs survival|jobs|catchup|preview');
     process.exit(2);
 }
 

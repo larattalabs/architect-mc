@@ -73,6 +73,8 @@ The list below is what `dev.help` returns (`{commands: {name: description}, scre
 | `dev.wait` | {frames?:0-36000, ms?:0-600000} - wait for rendered frames and/or wall time |
 | `dev.waitChunks` | {timeoutMs?:30000, radius?:renderDistance-1} - block until chunks around the camera are loaded+built |
 | `dev.weather` | {clear?:true} or {weather: clear\|rain\|thunder} |
+| `dev.world.leave` | {} - save and leave the world for the title screen (as Save and Quit to Title) -> {left} |
+| `dev.world.open` | {} - open (or create) the AutoWorld world again from the title screen; then poll `dev.state` until ready |
 
 ### Placement (the ghost)
 
@@ -162,12 +164,16 @@ The list below is what `dev.help` returns (`{commands: {name: description}, scre
 |---|---|
 | `dev.launcher.restart` | {} - Restart helper (Status tab) |
 | `dev.launcher.state` | {} - the launcher: state, detail, source, node, pid, reuse, log tail |
-| `dev.sidecar.state` | {} - the sidecar link and state: status (no key), designs |
+| `dev.sidecar.state` | {} - the sidecar link and state: status (no key), designs, variants, jobs (id, status, step, error, resultBlob), protocol, features |
 
 ## Changelog
 
 Semi-stable: a hook may change or go, and every such change is listed here, newest first.
 
+- **2026-10-05 (phase 4a, jobs):** new `dev.world.leave` and `dev.world.open` (leave a world and load it again in the same
+  game, for "finished while no world was loaded" checks). `dev.sidecar.state` also lists the sidecar's `jobs`. The
+  launcher passes `--backend sim|claude` to a sidecar it starts when `ARCHITECT_SIDECAR_BACKEND` says so (dev/test switch,
+  not a hook; `tools/run-apitest-client.sh --sim`).
 - **2026-10-05 (phase 4a):** this document. No hook was added or removed. `dev.sidecar.state` also reports the sidecar's
   `protocol` (1 when its snapshot names none) and `features`; the Placed view's site rows show "owned by <mod>";
   its Remove control (`dev.ui.click {control: "remove"}`) asks once more for a site another mod owns (the first click
