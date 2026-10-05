@@ -37,10 +37,10 @@ import org.jspecify.annotations.Nullable;
  */
 public final class PreviewImages {
 	/** View kinds in display order. */
-	static final List<String> KINDS = List.of("iso", "top", "front");
+	static final List<String> KINDS = List.of("iso", "top", "front", "cutaway");
 	static final int MAX_SIDE = 2048;
-	static final int MAX_TEXTURES = 8;
-	static final long MAX_BYTES = 48L << 20;
+	static final int MAX_TEXTURES = 64;
+	static final long MAX_BYTES = 192L << 20;
 	static final long RESCAN_MS = 2000;
 
 	public enum State {

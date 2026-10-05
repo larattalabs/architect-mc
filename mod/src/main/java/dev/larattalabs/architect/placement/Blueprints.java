@@ -48,8 +48,10 @@ public final class Blueprints {
 	 * A loaded design: sidecar + template + where it came from ({@code bundled ...} / {@code user ...}).
 	 *
 	 * @param dir the user library folder it was read from, or null for a bundled one (previews come from the jar then)
+	 * @param json the sidecar as read (phase 2 keys such as palette, params, values, variantOf, imported and the user
+	 *        metadata live here; never written back through {@link Blueprint#toJson()}, which drops them)
 	 */
-	public record Entry(Blueprint blueprint, StructureTemplate template, String source, @Nullable Path dir) {
+	public record Entry(Blueprint blueprint, StructureTemplate template, String source, @Nullable Path dir, com.google.gson.JsonObject json) {
 		public boolean bundled() {
 			return dir == null;
 		}
@@ -140,7 +142,8 @@ public final class Blueprints {
 			Identifier file = e.getKey();
 			String where = file.toString();
 			try (Reader r = new InputStreamReader(e.getValue().open(), StandardCharsets.UTF_8)) {
-				Blueprint bp = Blueprint.fromJson(JsonParser.parseReader(r).getAsJsonObject());
+				com.google.gson.JsonObject json = JsonParser.parseReader(r).getAsJsonObject();
+				Blueprint bp = Blueprint.fromJson(json);
 				String expected = RESOURCE_DIR + "/" + bp.id() + "/" + bp.id() + SIDECAR_SUFFIX;
 				if (!file.getPath().equals(expected)) {
 					throw new IllegalArgumentException("expected at " + expected + " for id " + bp.id());
@@ -151,7 +154,7 @@ public final class Blueprints {
 				try (InputStream in = nbt.open()) {
 					t = readTemplate(server, NbtIo.readCompressed(in, NbtAccounter.unlimitedHeap()));
 				}
-				accept(map, bp, t, "bundled " + where, null);
+				accept(map, bp, t, "bundled " + where, null, json);
 			} catch (Exception ex) {
 				problem(problems, where, ex);
 			}
@@ -180,7 +183,8 @@ public final class Blueprints {
 				if (!Files.exists(sidecar)) {
 					throw new IllegalArgumentException("no " + sidecar.getFileName());
 				}
-				Blueprint bp = Blueprint.fromJson(JsonParser.parseString(Files.readString(sidecar, StandardCharsets.UTF_8)).getAsJsonObject());
+				com.google.gson.JsonObject json = JsonParser.parseString(Files.readString(sidecar, StandardCharsets.UTF_8)).getAsJsonObject();
+				Blueprint bp = Blueprint.fromJson(json);
 				if (!id.equals(bp.id())) {
 					throw new IllegalArgumentException("folder " + id + " does not match id " + bp.id());
 				}
@@ -188,7 +192,7 @@ public final class Blueprints {
 				if (!Files.exists(nbt)) {
 					throw new IllegalArgumentException("no template " + nbt.getFileName());
 				}
-				accept(map, bp, readTemplate(server, NbtIo.readCompressed(nbt, NbtAccounter.unlimitedHeap())), "user " + folder, folder);
+				accept(map, bp, readTemplate(server, NbtIo.readCompressed(nbt, NbtAccounter.unlimitedHeap())), "user " + folder, folder, json);
 			} catch (Exception ex) {
 				problem(problems, sidecar.toString(), ex);
 			}
@@ -204,7 +208,8 @@ public final class Blueprints {
 		return t;
 	}
 
-	private static void accept(Map<String, Entry> map, Blueprint bp, StructureTemplate t, String source, @Nullable Path dir) {
+	private static void accept(Map<String, Entry> map, Blueprint bp, StructureTemplate t, String source, @Nullable Path dir,
+		com.google.gson.JsonObject json) {
 		Vec3i size = t.getSize();
 		if (size.getX() != bp.sizeX() || size.getY() != bp.sizeY() || size.getZ() != bp.sizeZ()) {
 			throw new IllegalArgumentException("sidecar size " + bp.sizeX() + "x" + bp.sizeY() + "x" + bp.sizeZ() + " does not match template "
@@ -213,7 +218,7 @@ public final class Blueprints {
 		for (String w : bp.warnings()) {
 			Architect.LOGGER.warn("Design {}: {}", bp.id(), w);
 		}
-		Entry old = map.put(bp.id(), new Entry(bp, t, source, dir));
+		Entry old = map.put(bp.id(), new Entry(bp, t, source, dir, json));
 		if (old != null) {
 			Architect.LOGGER.info("Design {} from {} overrides {}", bp.id(), source, old.source());
 		}

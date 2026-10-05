@@ -67,7 +67,55 @@ test {
 	}
 }
 
+// The kit's palettes for the Variants dialog (tools/gen-palettes.mjs -> assets/architect_mc/palettes.json). Needs node;
+// without it (or if the kit fails to load) the jar has no palettes.json and the mod uses its built-in list
+// (dev.larattalabs.architect.library.Palettes.FALLBACK), so the build stays green offline and node-less.
+abstract class GenPalettes extends DefaultTask {
+	@InputDirectory @PathSensitive(PathSensitivity.RELATIVE) @Optional
+	abstract DirectoryProperty getKitLib()
+
+	@InputFile @PathSensitive(PathSensitivity.RELATIVE)
+	abstract RegularFileProperty getScript()
+
+	@OutputDirectory
+	abstract DirectoryProperty getOutDir()
+
+	@TaskAction
+	void run() {
+		File out = outDir.get().file("assets/architect_mc/palettes.json").asFile
+		out.delete()
+		if (!kitLib.isPresent() || !kitLib.get().asFile.isDirectory()) {
+			logger.warn("gen-palettes: no kit/lib; the mod uses its built-in palette list")
+			return
+		}
+		File kit = kitLib.get().asFile.parentFile
+		try {
+			Process p = new ProcessBuilder("node", script.get().asFile.absolutePath, "--kit", kit.absolutePath, "--out", out.absolutePath)
+				.redirectErrorStream(true).start()
+			String log = p.inputStream.text
+			if (p.waitFor() != 0) {
+				out.delete()
+				logger.warn("gen-palettes failed (the mod uses its built-in palette list):\n" + log)
+			} else {
+				logger.info(log.trim())
+			}
+		} catch (IOException e) {
+			logger.warn("gen-palettes: node not found (" + e.message + "); the mod uses its built-in palette list")
+		}
+	}
+}
+
+def genPalettes = tasks.register("genPalettes", GenPalettes) {
+	def lib = file("../kit/lib")
+	if (lib.isDirectory()) {
+		kitLib.set(lib)
+	}
+	script.set(file("../tools/gen-palettes.mjs"))
+	outDir.set(layout.buildDirectory.dir("generated/palettes"))
+}
+
 processResources {
+	from(genPalettes)
 	def version = project.version
 	inputs.property "version", version
 

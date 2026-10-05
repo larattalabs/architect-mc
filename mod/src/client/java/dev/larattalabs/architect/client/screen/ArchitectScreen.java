@@ -8,6 +8,7 @@ import dev.larattalabs.architect.client.design.DesignForm;
 import dev.larattalabs.architect.client.design.PreviewImages;
 import dev.larattalabs.architect.client.hud.UiBits;
 import dev.larattalabs.architect.client.launcher.Launcher;
+import dev.larattalabs.architect.client.library.LibraryFeature;
 import dev.larattalabs.architect.client.placement.BlueprintPreview;
 import dev.larattalabs.architect.client.placement.PlacementFeature;
 import dev.larattalabs.architect.client.sidecar.Sidecar;
@@ -30,6 +31,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.screens.ConfirmLinkScreen;
 import net.minecraft.client.gui.screens.Screen;
@@ -45,9 +47,10 @@ import org.jspecify.annotations.Nullable;
  * <ul>
  * <li><b>Design</b>: the request form (type, style chips or your own words, materials, features, size S/M/L/custom or a
  * marked plot, name, notes) and "Design it";</li>
- * <li><b>Library</b>: the designs (previews, Place, Delete with a confirm) and the sites placed in this world (Remove, Move,
- * Undo move);</li>
- * <li><b>Designs</b>: the queue and its progress, Cancel;</li>
+ * <li><b>Library</b>: the designs ({@link LibraryTab}: a grid of cards with search, filters and sort, the detail panel with
+ * Place, Rename, Tags, Star, Delete, Export, Remix…, Variants…, and the Variants… / Import… dialogs) and the sites placed in
+ * this world (Remove, Move, Undo move);</li>
+ * <li><b>Designs</b>: the queue and its progress (designs, variants and imports), Cancel;</li>
  * <li><b>Status</b>: the helper (launcher) state, auth, the API key field and the claude-login toggle.</li>
  * </ul>
  * Controls are hit boxes with stable ids ({@link #click(String)}, DevBridge {@code dev.ui.click}). Client thread.
@@ -85,11 +88,23 @@ public final class ArchitectScreen extends Screen {
 
 	private static final int MAX_W = 640;
 	private static final int MAX_H = 400;
-	private static final int CHIP_H = 14;
+	static final int CHIP_H = 14;
 	private static final int ROW_H = 24;
 
 	enum Focus {
-		NONE, STYLE, MATERIALS, NAME, NOTES, KEY
+		NONE, STYLE, MATERIALS, NAME, NOTES, KEY, SEARCH, RENAME, TAGS, VNAME
+	}
+
+	/** A choice in a popup (the type/tag filters, the palette dropdowns). */
+	record Option(String id, String label, boolean on) {
+	}
+
+	/** An open popup: options laid out as chips in a box under its anchor; drawn last, clicked first. */
+	private record Popup(String id, int x, int y, int w, List<Option> options, java.util.function.Consumer<String> pick) {
+	}
+
+	/** A text field drawn this frame (for click-to-focus). */
+	private record FieldRect(Focus focus, TextFieldView view, TextModel model, int x, int y, int w, TextFieldView.Style style) {
 	}
 
 	record Hit(String id, String label, int x, int y, int w, int h, boolean enabled, boolean on, Runnable action) {
@@ -107,24 +122,25 @@ public final class ArchitectScreen extends Screen {
 	private Tab tab;
 	private Focus focus = Focus.NONE;
 	private final List<Hit> hits = new ArrayList<>();
+	private final List<Hit> overlayHits = new ArrayList<>();
+	private final List<FieldRect> fieldRects = new ArrayList<>();
+	private @Nullable Popup popup;
+	private final LibraryTab library = new LibraryTab(this);
 	private final TextFieldView styleView = new TextFieldView();
 	private final TextFieldView materialsView = new TextFieldView();
 	private final TextFieldView nameView = new TextFieldView();
 	private final TextFieldView notesView = new TextFieldView();
-	private final int[][] fields = new int[5][3];
+	private final int[][] fields = new int[Focus.values().length][3];
 	private int notesLines = 4;
 	/** The API key being typed (never shown, logged or kept after sending). */
 	private final StringBuilder key = new StringBuilder();
 	private @Nullable String keyMessage;
 	private boolean keyMessageError;
-	private @Nullable String armedDelete;
-	private long armedAt;
 	private @Nullable String armedRemove;
-	private @Nullable String libraryMessage;
-	private boolean libraryMessageError;
 	private int listScroll;
 	private int listNeeded;
 	private int listAvailable;
+	private int scrollStep = ROW_H;
 	private int[] listArea = new int[4];
 
 	public ArchitectScreen(@Nullable Tab tab) {
@@ -144,7 +160,11 @@ public final class ArchitectScreen extends Screen {
 	}
 
 	public void setTab(Tab t) {
+		if (focus == Focus.RENAME || focus == Focus.TAGS) {
+			library.cancelEdit();
+		}
 		setFocus(Focus.NONE);
+		closePopup();
 		tab = t;
 		lastTab = t;
 		listScroll = 0;
@@ -188,8 +208,13 @@ public final class ArchitectScreen extends Screen {
 			case MATERIALS -> f.materials;
 			case NAME -> f.name;
 			case NOTES -> f.notes;
+			case SEARCH, RENAME, TAGS, VNAME -> library.model(focus);
 			default -> null;
 		};
+	}
+
+	private boolean libraryField() {
+		return focus == Focus.SEARCH || focus == Focus.RENAME || focus == Focus.TAGS || focus == Focus.VNAME;
 	}
 
 	// ------------------------------------------------------------------ input
@@ -198,11 +223,15 @@ public final class ArchitectScreen extends Screen {
 	public boolean keyPressed(KeyEvent e) {
 		int k = e.key();
 		if (e.isEscape()) {
-			if (focus != Focus.NONE) {
+			if (popup != null) {
+				closePopup();
+			} else if (focus == Focus.RENAME || focus == Focus.TAGS) {
+				library.cancelEdit();
+			} else if (focus != Focus.NONE) {
 				setFocus(Focus.NONE);
-				return true;
+			} else if (!(tab == Tab.LIBRARY && library.escape())) {
+				onClose();
 			}
-			onClose();
 			return true;
 		}
 		if (focus == Focus.KEY) {
@@ -226,6 +255,9 @@ public final class ArchitectScreen extends Screen {
 			return true;
 		}
 		if (TextKeys.isEnter(e)) {
+			if (library.enter(focus)) {
+				return true;
+			}
 			if (tab == Tab.DESIGN && e.hasControlDown()) {
 				submit();
 			} else if (focus == Focus.NOTES) {
@@ -243,7 +275,11 @@ public final class ArchitectScreen extends Screen {
 				return true;
 			}
 			TextKeys.handle(e, m);
-			DesignFeature.form().sendError = null;
+			if (libraryField()) {
+				library.edited(focus);
+			} else {
+				DesignFeature.form().sendError = null;
+			}
 			return true; // a focused field swallows the rest
 		}
 		if (focus == Focus.NONE && k >= InputConstants.KEY_1 && k <= InputConstants.KEY_4 && !e.hasControlDown()) {
@@ -265,7 +301,11 @@ public final class ArchitectScreen extends Screen {
 		TextModel m = model();
 		if (m != null && e.codepoint() >= 32) {
 			m.insert(e.codepointAsString());
-			DesignFeature.form().sendError = null;
+			if (libraryField()) {
+				library.edited(focus);
+			} else {
+				DesignFeature.form().sendError = null;
+			}
 			return true;
 		}
 		return false;
@@ -274,7 +314,7 @@ public final class ArchitectScreen extends Screen {
 	@Override
 	public boolean mouseScrolled(double x, double y, double scrollX, double scrollY) {
 		if (listNeeded > listAvailable && x >= listArea[0] && x < listArea[0] + listArea[2] + 8 && y >= listArea[1] && y < listArea[1] + listArea[3]) {
-			listScroll = Math.max(0, Math.min(listNeeded - listAvailable, listScroll + (scrollY > 0 ? -ROW_H : ROW_H)));
+			listScroll = Math.max(0, Math.min(listNeeded - listAvailable, listScroll + (scrollY > 0 ? -scrollStep : scrollStep)));
 			return true;
 		}
 		return super.mouseScrolled(x, y, scrollX, scrollY);
@@ -282,6 +322,18 @@ public final class ArchitectScreen extends Screen {
 
 	@Override
 	public boolean mouseClicked(MouseButtonEvent e, boolean doubleClick) {
+		if (popup != null) {
+			for (Hit h : List.copyOf(overlayHits)) {
+				if (h.contains(e.x(), e.y())) {
+					if (h.enabled()) {
+						h.action().run();
+					}
+					return true;
+				}
+			}
+			closePopup(); // a click outside closes it
+			return true;
+		}
 		for (Hit h : List.copyOf(hits)) {
 			if (h.contains(e.x(), e.y())) {
 				if (h.enabled()) {
@@ -291,20 +343,19 @@ public final class ArchitectScreen extends Screen {
 				return true;
 			}
 		}
-		if (tab == Tab.DESIGN) {
-			DesignForm f = DesignFeature.form();
-			TextModel[] models = {f.styleText, f.materials, f.name, f.notes};
-			TextFieldView[] views = {styleView, materialsView, nameView, notesView};
-			Focus[] foci = {Focus.STYLE, Focus.MATERIALS, Focus.NAME, Focus.NOTES};
-			for (int i = 0; i < 4; i++) {
-				int[] r = fields[i];
-				int at = views[i].hit(font, models[i], r[0], r[1], r[2], styleFor(foci[i]), e.x(), e.y());
-				if (at >= 0) {
-					setFocus(foci[i]);
-					models[i].moveTo(at, false);
-					return true;
+		for (FieldRect r : List.copyOf(fieldRects)) {
+			int at = r.view().hit(font, r.model(), r.x(), r.y(), r.w(), r.style(), e.x(), e.y());
+			if (at >= 0) {
+				if (focus != r.focus() && (focus == Focus.RENAME || focus == Focus.TAGS)) {
+					library.commitEdit(); // clicking another field keeps what was typed
 				}
+				setFocus(r.focus());
+				r.model().moveTo(at, false);
+				return true;
 			}
+		}
+		if (focus == Focus.RENAME || focus == Focus.TAGS) {
+			library.commitEdit();
 		}
 		setFocus(Focus.NONE);
 		return super.mouseClicked(e, doubleClick);
@@ -312,7 +363,12 @@ public final class ArchitectScreen extends Screen {
 
 	/** Runs the control with id {@code id} as a click would (DevBridge {@code dev.ui.click}). Returns false when there is none. */
 	public boolean click(String id) {
-		for (Hit h : List.copyOf(hits)) {
+		List<Hit> all = new ArrayList<>(overlayHits);
+		all.addAll(hits);
+		if (popup != null && overlayHits.stream().noneMatch(h -> h.id().equals(id))) {
+			closePopup(); // as a click elsewhere would
+		}
+		for (Hit h : all) {
 			if (h.id().equals(id)) {
 				if (h.enabled()) {
 					h.action().run();
@@ -323,9 +379,162 @@ public final class ArchitectScreen extends Screen {
 		return false;
 	}
 
-	/** Focuses a text field by name (style, materials, name, notes, key) for the DevBridge. */
+	/** Focuses a text field by name (style, materials, name, notes, key, search, rename, tags, vname) for the DevBridge. */
 	public void focus(String name) {
 		setFocus(Focus.valueOf(name.toUpperCase(Locale.ROOT)));
+	}
+
+	/** The Library tab shows the designs (not the placed sites). */
+	void showDesigns() {
+		showPlaced = false;
+	}
+
+	/** The Library tab's designs view (DevBridge). */
+	LibraryTab library() {
+		return library;
+	}
+
+	// ------------------------------------------------------------------ helpers for LibraryTab
+
+	Font font() {
+		return font;
+	}
+
+	void setFocusPublic(Focus f) {
+		setFocus(f);
+	}
+
+	boolean inWorld() {
+		return minecraft != null && minecraft.player != null;
+	}
+
+	void addHit(Hit h) {
+		hits.add(h);
+	}
+
+	void resetScroll() {
+		listScroll = 0;
+	}
+
+	int scroll() {
+		return listScroll;
+	}
+
+	/** Declares the scrollable region of this frame ({@code needed} px of content, {@code step} px a wheel notch). */
+	void setScrollArea(int x, int y, int w, int h, int needed, int step) {
+		listArea = new int[] {x, y, w, h};
+		listAvailable = h;
+		listNeeded = needed;
+		scrollStep = step;
+		listScroll = Math.max(0, Math.min(listScroll, Math.max(0, needed - h)));
+	}
+
+	void scrollbarAt(GuiGraphicsExtractor g, int x, int y, int h) {
+		scrollbar(g, x, y, h);
+	}
+
+	void statusLineAt(GuiGraphicsExtractor g, @Nullable String text, boolean error, int x, int y, int w) {
+		statusLine(g, text, error, x, y, w);
+	}
+
+	/** Draws a text field and registers it for click-to-focus. */
+	void textField(GuiGraphicsExtractor g, Focus f, TextFieldView view, TextModel m, int x, int y, int w, TextFieldView.Style st) {
+		int[] r = fields[f.ordinal() - 1];
+		r[0] = x;
+		r[1] = y;
+		r[2] = w;
+		fieldRects.add(new FieldRect(f, view, m, x, y, w, st));
+		hits.add(new Hit("field:" + f.name().toLowerCase(Locale.ROOT), "text field", x, y, w, TextFieldView.BASE_H, true, focus == f, () -> {
+			setFocus(f);
+			m.moveTo(m.length(), false);
+		}));
+		view.draw(g, font, m, x, y, w, focus == f, st);
+	}
+
+	/** A dropdown-looking chip (fixed width, the label ellipsized). */
+	void dropdown(GuiGraphicsExtractor g, String id, String label, int x, int y, int w, int mx, int my, Runnable action) {
+		Hit h = new Hit(id, label, x, y, w, CHIP_H, true, false, action);
+		hits.add(h);
+		Panels.sprite(g, Kit.TEXT_FIELD, x, y, w, CHIP_H);
+		if (h.contains(mx, my)) {
+			g.fill(x + 1, y + 1, x + w - 1, y + CHIP_H - 1, 0x10000000);
+		}
+		g.text(font, TextUtil.ellipsize(font, label, w - 10), x + 5, y + 3, UiBits.ink(), false);
+	}
+
+	void openPopup(String id, int x, int y, int w, List<Option> options, java.util.function.Consumer<String> pick) {
+		setFocus(Focus.NONE);
+		popup = new Popup(id, x, y, w, List.copyOf(options), pick);
+	}
+
+	void closePopup() {
+		popup = null;
+		overlayHits.clear();
+	}
+
+	/** Remix…: the Design tab prefilled from the entry, remix set, the notes focused for "what to change". */
+	void remix(String id) {
+		try {
+			LibraryFeature.prefillRemix(id);
+		} catch (IllegalArgumentException ex) {
+			LibraryFeature.say(ex.getMessage(), true);
+			return;
+		}
+		setTab(Tab.DESIGN);
+		setFocus(Focus.NOTES);
+	}
+
+	/** Shows a design, variant or import job in the Designs tab. */
+	void showJob(String jobId) {
+		selectedDesign = jobId;
+		if (minecraft != null && minecraft.gui.screen() == this) {
+			setTab(Tab.DESIGNS);
+		}
+	}
+
+	private void drawPopup(GuiGraphicsExtractor g, int mx, int my) {
+		overlayHits.clear();
+		Popup p = popup;
+		if (p == null) {
+			return;
+		}
+		int pad = 4;
+		int w = Math.min(p.w(), width - 8);
+		// lay the chips out first to know the height
+		int cx = 0;
+		int cy = 0;
+		List<int[]> at = new ArrayList<>();
+		for (Option o : p.options()) {
+			int cw = font.width(o.label()) + 12;
+			if (cx > 0 && cx + cw > w - 2 * pad) {
+				cx = 0;
+				cy += CHIP_H + 3;
+			}
+			at.add(new int[] {cx, cy, cw});
+			cx += cw + 3;
+		}
+		int h = cy + CHIP_H + 2 * pad;
+		int x = Math.max(4, Math.min(p.x(), width - w - 4));
+		int y = p.y() + h > height - 4 ? Math.max(4, p.y() - h - CHIP_H - 2) : p.y();
+		g.nextStratum();
+		Panels.framed(g, x - 2, y - 2, w + 4, h + 4);
+		g.fill(x, y, x + w, y + h, UiStyle.CREAM);
+		for (int i = 0; i < p.options().size(); i++) {
+			Option o = p.options().get(i);
+			int[] a = at.get(i);
+			int ox = x + pad + a[0];
+			int oy = y + pad + a[1];
+			Hit hit = new Hit("option:" + p.id() + ":" + o.id(), o.label(), ox, oy, a[2], CHIP_H, true, o.on(), () -> {
+				closePopup();
+				p.pick().accept(o.id());
+			});
+			overlayHits.add(hit);
+			Panels.sprite(g, o.on() ? Kit.TAB_ACTIVE : Kit.TAB_INACTIVE, ox, oy, a[2], CHIP_H);
+			if (!o.on() && hit.contains(mx, my)) {
+				g.fill(ox + 1, oy + 1, ox + a[2] - 1, oy + CHIP_H - 1, 0x14000000);
+			}
+			g.text(font, o.label(), ox + 6, oy + 3, o.on() || hit.contains(mx, my) ? UiBits.ink() : UiBits.muted(), false);
+		}
 	}
 
 	/** DevBridge: types into the API key field (as keystrokes would). */
@@ -385,41 +594,6 @@ public final class ArchitectScreen extends Screen {
 		});
 	}
 
-	private void place(String id) {
-		String why = PlacementFeature.placeNow(id);
-		libraryMessage = why;
-		libraryMessageError = why != null;
-	}
-
-	private void placeOnPlot(String id) {
-		String why = DesignFeature.placeOnPlot(id);
-		libraryMessage = why;
-		libraryMessageError = why != null;
-	}
-
-	private void delete(Blueprints.Entry e) {
-		String id = e.blueprint().id();
-		long now = Util.getMillis();
-		if (!id.equals(armedDelete) || now - armedAt > 6000) {
-			armedDelete = id;
-			armedAt = now;
-			libraryMessage = "Delete " + e.blueprint().name() + "? Click Delete again to move it to architect/library-trash";
-			libraryMessageError = true;
-			return;
-		}
-		armedDelete = null;
-		try {
-			LibraryFiles.trash(e);
-			libraryMessage = "Deleted " + id + " (kept in architect/library-trash)";
-			libraryMessageError = false;
-			selectedEntry = null;
-			DesignFeature.reload(null);
-		} catch (Exception ex) {
-			libraryMessage = "Could not delete " + id + ": " + ex.getMessage();
-			libraryMessageError = true;
-		}
-	}
-
 	private void removeSite(Site s, boolean force) {
 		dev.larattalabs.architect.client.world.ServerTasks.callAsPlayer((level, player) -> {
 			try {
@@ -431,9 +605,9 @@ public final class ArchitectScreen extends Screen {
 			}
 		}).whenComplete((msg, err) -> {
 			String m = err != null ? "!" + err.getMessage() : msg;
-			libraryMessageError = m.startsWith("!");
-			libraryMessage = libraryMessageError ? m.substring(1) : m;
-			armedRemove = libraryMessageError && m.contains("confirm again with force") ? s.id() : null;
+			boolean bad = m.startsWith("!");
+			LibraryFeature.say(bad ? m.substring(1) : m, bad);
+			armedRemove = bad && m.contains("confirm again with force") ? s.id() : null;
 		});
 	}
 
@@ -447,8 +621,8 @@ public final class ArchitectScreen extends Screen {
 			}
 		}).whenComplete((msg, err) -> {
 			String m = err != null ? "!" + err.getMessage() : msg;
-			libraryMessageError = m.startsWith("!");
-			libraryMessage = libraryMessageError ? m.substring(1) : m;
+			boolean bad = m.startsWith("!");
+			LibraryFeature.say(bad ? m.substring(1) : m, bad);
 		});
 	}
 
@@ -463,6 +637,7 @@ public final class ArchitectScreen extends Screen {
 	@Override
 	public void extractRenderState(GuiGraphicsExtractor g, int mouseX, int mouseY, float a) {
 		hits.clear();
+		fieldRects.clear();
 		int pw = Math.min(MAX_W, width - 16);
 		int ph = Math.min(MAX_H, height - 16);
 		int px = (width - pw) / 2;
@@ -521,17 +696,21 @@ public final class ArchitectScreen extends Screen {
 			case DESIGNS -> drawDesigns(g, cx, top, cw, footerY, mouseX, mouseY);
 			case STATUS -> drawStatus(g, cx, top, cw, footerY, mouseX, mouseY);
 		}
+		if (popup != null) {
+			drawPopup(g, mouseX, mouseY);
+		}
 	}
 
 	private String badge(Tab t) {
 		if (t == Tab.DESIGNS) {
-			long running = Sidecar.state().designs().stream().filter(d -> d.status().isRunning()).count();
+			long running = Sidecar.state().designs().stream().filter(d -> d.status().isRunning()).count()
+				+ Sidecar.state().variants().stream().filter(v -> v.status().isRunning()).count();
 			return running > 0 ? " (" + running + ")" : "";
 		}
 		return "";
 	}
 
-	private void button(GuiGraphicsExtractor g, String id, String label, int x, int y, int w, boolean primary, boolean enabled, int mx, int my,
+	void button(GuiGraphicsExtractor g, String id, String label, int x, int y, int w, boolean primary, boolean enabled, int mx, int my,
 		Runnable action) {
 		Hit h = new Hit(id, label, x, y, w, 20, enabled, primary, action);
 		hits.add(h);
@@ -539,7 +718,7 @@ public final class ArchitectScreen extends Screen {
 		UiBits.button(g, font, label, 0, x, y, w, primary, st, false);
 	}
 
-	private int bw(String label) {
+	int bw(String label) {
 		return UiBits.buttonWidth(font, label, 0);
 	}
 
@@ -553,7 +732,7 @@ public final class ArchitectScreen extends Screen {
 		return y + 11;
 	}
 
-	private int chip(GuiGraphicsExtractor g, String id, String label, int x, int y, boolean on, boolean enabled, int mx, int my, Runnable action) {
+	int chip(GuiGraphicsExtractor g, String id, String label, int x, int y, boolean on, boolean enabled, int mx, int my, Runnable action) {
 		int w = font.width(label) + 12;
 		Hit h = new Hit(id, label, x, y, w, CHIP_H, enabled, on, action);
 		hits.add(h);
@@ -600,7 +779,8 @@ public final class ArchitectScreen extends Screen {
 	}
 
 	private TextFieldView.Style notesStyle() {
-		return new TextFieldView.Style(null, 0, "rooms, mood, anything the designer should know", null, null, 0, notesLines);
+		return new TextFieldView.Style(null, 0, DesignFeature.form().remix != null ? "what to change, e.g. add a second floor and a bigger porch"
+			: "rooms, mood, anything the designer should know", null, null, 0, notesLines);
 	}
 
 	private void field(GuiGraphicsExtractor g, Focus f, TextFieldView view, TextModel m, int x, int y, int w) {
@@ -608,6 +788,7 @@ public final class ArchitectScreen extends Screen {
 		r[0] = x;
 		r[1] = y;
 		r[2] = w;
+		fieldRects.add(new FieldRect(f, view, m, x, y, w, styleFor(f)));
 		view.draw(g, font, m, x, y, w, focus == f, styleFor(f));
 	}
 
@@ -715,6 +896,9 @@ public final class ArchitectScreen extends Screen {
 		} else if (!Sidecar.connected()) {
 			status = "The design helper is not running yet (Status tab).";
 			err = true;
+		} else if (f.remix != null) {
+			status = "Remix: Claude edits " + LibraryFeature.nameOf(f.remix) + "; the notes say what to change.";
+			err = false;
 		} else {
 			status = "Ready: Claude designs it in the background; the Designs tab shows progress.";
 			err = false;
@@ -727,9 +911,18 @@ public final class ArchitectScreen extends Screen {
 		String reset = "Clear";
 		bx -= bw(reset) + 6;
 		button(g, "reset", reset, bx, footerY, bw(reset), false, true, mx, my, DesignFeature::resetForm);
-		String[] hints = {"Tab", "next field", "Ctrl+Enter", "design it", "Esc", "close"};
-		if (UiBits.hintsWidth(font, hints) <= bx - x - 6) {
-			UiBits.hints(g, font, x, footerY + 4, false, hints);
+		if (f.remix != null) {
+			String rl = "Remix of " + LibraryFeature.nameOf(f.remix) + "  ×";
+			int rw = Math.min(font.width(rl) + 12, bx - x - 8);
+			Hit h = new Hit("remix:clear", "Not a remix", x, footerY + 3, rw, CHIP_H, true, true, () -> f.remix = null);
+			hits.add(h);
+			Panels.sprite(g, Kit.TAB_ACTIVE, x, footerY + 3, rw, CHIP_H);
+			g.text(font, TextUtil.ellipsize(font, rl, rw - 12), x + 6, footerY + 6, h.contains(mx, my) ? UiBits.errorText() : UiBits.ink(), false);
+		} else {
+			String[] hints = {"Tab", "next field", "Ctrl+Enter", "design it", "Esc", "close"};
+			if (UiBits.hintsWidth(font, hints) <= bx - x - 6) {
+				UiBits.hints(g, font, x, footerY + 4, false, hints);
+			}
 		}
 	}
 
@@ -746,110 +939,50 @@ public final class ArchitectScreen extends Screen {
 	// ------------------------------------------------------------------ Library tab
 
 	private void drawLibrary(GuiGraphicsExtractor g, int x, int top, int w, int footerY, int mx, int my) {
-		int listW = Math.min(240, (w - 12) / 2);
+		boolean dialog = !showPlaced && LibraryTab.dialog != LibraryTab.Dialog.NONE;
 		int cx = x;
-		cx += chip(g, "library:designs", "Designs (" + Blueprints.entries().size() + ")", cx, top, !showPlaced, true, mx, my, () -> {
-			showPlaced = false;
-			listScroll = 0;
-		}) + 3;
-		chip(g, "library:placed", "Placed here (" + Sites.all().size() + ")", cx, top, showPlaced, true, mx, my, () -> {
-			showPlaced = true;
-			listScroll = 0;
-		});
-		int ly = top + CHIP_H + 6;
-		int lh = footerY - 16 - ly;
-		listArea = new int[] {x, ly, listW, lh};
-		listAvailable = lh;
-		Panels.inset(g, x, ly, listW, lh);
-		int dx = x + listW + 12;
-		int dw = w - listW - 12;
-		if (showPlaced) {
-			drawSites(g, x, ly, listW, lh, dx, dw, footerY, mx, my);
-		} else {
-			drawEntries(g, x, ly, listW, lh, dx, dw, footerY, mx, my);
-		}
-		statusLine(g, libraryMessage, libraryMessageError, x, footerY - 13, w);
-		String reload = "Reload library";
-		button(g, "reload", reload, x + w - bw(reload), footerY, bw(reload), false, true, mx, my, () -> {
-			libraryMessage = "Reloading…";
-			libraryMessageError = false;
-			DesignFeature.reload(null).thenAccept(ok -> {
-				libraryMessage = "Library: " + Blueprints.ids().size() + " design(s)" + (Blueprints.lastProblems().isEmpty() ? ""
-					: ", " + Blueprints.lastProblems().size() + " skipped (see the log)");
-				libraryMessageError = !Blueprints.lastProblems().isEmpty();
-			});
-		});
-	}
-
-	private void drawEntries(GuiGraphicsExtractor g, int x, int ly, int listW, int lh, int dx, int dw, int footerY, int mx, int my) {
-		List<Blueprints.Entry> entries = new ArrayList<>(Blueprints.entries());
-		entries.sort((a, b) -> Long.compare(b.blueprint().createdAt(), a.blueprint().createdAt()));
-		if (selectedEntry == null || Blueprints.entry(selectedEntry) == null) {
-			selectedEntry = entries.isEmpty() ? null : entries.get(0).blueprint().id();
-		}
-		listNeeded = entries.size() * ROW_H + 4;
-		listScroll = Math.max(0, Math.min(listScroll, Math.max(0, listNeeded - lh)));
-		g.enableScissor(x + 1, ly + 1, x + listW - 1, ly + lh - 1);
-		int ry = ly + 3 - listScroll;
-		for (Blueprints.Entry e : entries) {
-			Blueprint b = e.blueprint();
-			boolean sel = b.id().equals(selectedEntry);
-			if (ry + ROW_H > ly && ry < ly + lh) {
-				Hit h = new Hit("entry:" + b.id(), b.name(), x + 2, Math.max(ry, ly), listW - 4, Math.min(ROW_H - 2, ly + lh - ry), true, sel,
-					() -> selectedEntry = b.id());
-				hits.add(h);
-				if (sel) {
-					g.fill(x + 2, ry, x + listW - 2, ry + ROW_H - 2, 0x22D97757);
-				} else if (h.contains(mx, my)) {
-					g.fill(x + 2, ry, x + listW - 2, ry + ROW_H - 2, 0x12000000);
+		if (!dialog) {
+			cx += chip(g, "library:designs", "Designs (" + Blueprints.entries().size() + ")", cx, top, !showPlaced, true, mx, my, () -> {
+				showPlaced = false;
+				listScroll = 0;
+			}) + 3;
+			cx += chip(g, "library:placed", "Placed here (" + Sites.all().size() + ")", cx, top, showPlaced, true, mx, my, () -> {
+				showPlaced = true;
+				listScroll = 0;
+				if (focus == Focus.SEARCH) {
+					setFocus(Focus.NONE);
 				}
-				g.text(font, TextUtil.ellipsize(font, b.name(), listW - 14), x + 6, ry + 2, UiBits.ink(), false);
-				String sub = b.type() + " · " + b.sizeX() + "×" + b.sizeY() + "×" + b.sizeZ() + " · " + (e.bundled() ? "bundled" : "yours");
-				g.text(font, TextUtil.ellipsize(font, sub, listW - 14), x + 6, ry + 12, UiBits.muted(), false);
+			});
+		}
+		if (!showPlaced) {
+			library.draw(g, x, top, w, footerY, mx, my, cx);
+			if (dialog) {
+				return;
 			}
-			ry += ROW_H;
+		} else {
+			int listW = Math.min(240, (w - 12) / 2);
+			int ly = top + CHIP_H + 6;
+			int lh = footerY - 16 - ly;
+			listArea = new int[] {x, ly, listW, lh};
+			listAvailable = lh;
+			scrollStep = ROW_H;
+			Panels.inset(g, x, ly, listW, lh);
+			drawSites(g, x, ly, listW, lh, x + listW + 12, w - listW - 12, footerY, mx, my);
 		}
-		g.disableScissor();
-		if (entries.isEmpty()) {
-			g.text(font, "No designs yet: the Design tab makes one.", x + 6, ly + 6, UiBits.muted(), false);
+		statusLine(g, LibraryFeature.message(), LibraryFeature.messageError(), x, footerY - 13, w);
+		int bx = x + w;
+		String reload = "Reload library";
+		bx -= bw(reload);
+		button(g, "reload", reload, bx, footerY, bw(reload), false, true, mx, my, () -> {
+			LibraryFeature.say("Reloading…", false);
+			DesignFeature.reload(null).thenAccept(ok -> LibraryFeature.say("Library: " + Blueprints.ids().size() + " design(s)" + (Blueprints
+				.lastProblems().isEmpty() ? "" : ", " + Blueprints.lastProblems().size() + " skipped (see the log)"), !Blueprints.lastProblems().isEmpty()));
+		});
+		if (!showPlaced) {
+			String imp = "Import…";
+			bx -= bw(imp) + 6;
+			button(g, "import", imp, bx, footerY, bw(imp), false, inWorld(), mx, my, library::openImport);
 		}
-		scrollbar(g, x + listW + 2, ly, lh);
-		Blueprints.Entry e = selectedEntry == null ? null : Blueprints.entry(selectedEntry);
-		if (e == null) {
-			return;
-		}
-		Blueprint b = e.blueprint();
-		int y = ly;
-		int box = Math.max(40, Math.min(dw, footerY - 16 - ly - 74));
-		Panels.inset(g, dx, y, dw, box);
-		List<PreviewImages.Found> previews = PreviewImages.find(b.id());
-		boolean drawn = !previews.isEmpty() && PreviewImages.draw(g, previews.get(0), dx + 2, y + 2, dw - 4, box - 4);
-		if (!drawn) {
-			BlueprintPreview.draw(g, b.id(), dx + (dw - (box - 8)) / 2, y + 4, box - 8);
-		}
-		y += box + 4;
-		g.text(font, TextUtil.ellipsize(font, b.name() + "  (" + b.id() + ")", dw), dx, y, UiBits.ink(), false);
-		y += 11;
-		String facts = b.type() + " · " + b.sizeX() + " × " + b.sizeY() + " × " + b.sizeZ() + " · entrance " + b.front()
-			+ (b.tags().isEmpty() ? "" : " · " + String.join(", ", b.tags()));
-		g.text(font, TextUtil.ellipsize(font, facts, dw), dx, y, UiBits.muted(), false);
-		y += 11;
-		for (String line : TextUtil.wrapPlain(font, b.description(), dw).stream().limit(2).toList()) {
-			g.text(font, line, dx, y, UiBits.ink(), false);
-			y += 10;
-		}
-		int by = footerY - 16 - 20;
-		int bx = dx;
-		String place = "Place";
-		button(g, "place", place, bx, by, bw(place), true, minecraft != null && minecraft.player != null, mx, my, () -> place(b.id()));
-		bx += bw(place) + 4;
-		if (DesignFeature.plotForBlueprint(b.id()) != null) {
-			String onPlot = "Place on the plot";
-			button(g, "place_plot", onPlot, bx, by, bw(onPlot), false, true, mx, my, () -> placeOnPlot(b.id()));
-			bx += bw(onPlot) + 4;
-		}
-		String del = b.id().equals(armedDelete) && Util.getMillis() - armedAt < 6000 ? "Delete (sure?)" : "Delete";
-		button(g, "delete", del, dx + dw - bw(del), by, bw(del), false, !e.bundled(), mx, my, () -> delete(e));
 	}
 
 	private void drawSites(GuiGraphicsExtractor g, int x, int ly, int listW, int lh, int dx, int dw, int footerY, int mx, int my) {
@@ -910,8 +1043,7 @@ public final class ArchitectScreen extends Screen {
 		String mv = "Move…";
 		button(g, "move", mv, bx, by, bw(mv), false, true, mx, my, () -> {
 			String why = PlacementFeature.startMove(s.id());
-			libraryMessage = why;
-			libraryMessageError = why != null;
+			LibraryFeature.say(why, why != null);
 		});
 		bx += bw(mv) + 4;
 		String undo = "Undo move";
@@ -929,94 +1061,162 @@ public final class ArchitectScreen extends Screen {
 
 	// ------------------------------------------------------------------ Designs tab
 
+	/** A row of the Designs tab: a design (Claude), a variant or an import (the variant pipeline). */
+	record Job(String id, String kind, String title, String fam, String status, String step, @Nullable String blueprintId, int @Nullable [] size,
+		@Nullable String error, long createdAt, boolean running, SidecarState.@Nullable Design design, SidecarState.@Nullable Variant variant) {
+	}
+
+	static List<Job> jobs() {
+		List<Job> out = new ArrayList<>();
+		for (SidecarState.Design d : Sidecar.state().designs()) {
+			String fam = switch (d.status()) {
+				case DONE -> "done";
+				case FAILED -> "error";
+				case CANCELLED -> "idle";
+				case QUEUED -> "waiting";
+				default -> "working";
+			};
+			String kind = d.request().has("remix") ? "remix" : "design";
+			out.add(new Job(d.id(), kind, d.title(), fam, d.status().wire(), d.step(), d.blueprintId(), d.size(), d.error(), d.createdAt(),
+				d.status().isRunning(), d, null));
+		}
+		for (SidecarState.Variant v : Sidecar.state().variants()) {
+			String fam = switch (v.status()) {
+				case DONE -> "done";
+				case FAILED -> "error";
+				case QUEUED -> "waiting";
+				case BUILDING -> "working";
+				default -> "idle";
+			};
+			out.add(new Job(v.id(), v.isImport() ? "import" : "variant", LibraryFeature.title(v), fam, v.status().wire(), v.step(), v.blueprintId(),
+				v.size(), v.error(), v.createdAt(), v.status().isRunning(), null, v));
+		}
+		out.sort((a, b) -> Long.compare(b.createdAt(), a.createdAt()));
+		return out;
+	}
+
 	private void drawDesigns(GuiGraphicsExtractor g, int x, int top, int w, int footerY, int mx, int my) {
-		List<SidecarState.Design> designs = Sidecar.state().designs();
+		List<Job> jobs = jobs();
 		int listW = Math.min(240, (w - 12) / 2);
 		int lh = footerY - 16 - top;
 		listArea = new int[] {x, top, listW, lh};
 		listAvailable = lh;
+		scrollStep = ROW_H;
 		Panels.inset(g, x, top, listW, lh);
-		if (selectedDesign == null || Sidecar.state().design(selectedDesign) == null) {
-			selectedDesign = designs.isEmpty() ? null : designs.get(0).id();
+		Job sel = null;
+		for (Job j : jobs) {
+			if (j.id().equals(selectedDesign)) {
+				sel = j;
+			}
 		}
-		listNeeded = designs.size() * ROW_H + 4;
+		if (sel == null && !jobs.isEmpty()) {
+			sel = jobs.get(0);
+			selectedDesign = sel.id();
+		}
+		listNeeded = jobs.size() * ROW_H + 4;
 		listScroll = Math.max(0, Math.min(listScroll, Math.max(0, listNeeded - lh)));
 		g.enableScissor(x + 1, top + 1, x + listW - 1, top + lh - 1);
 		int ry = top + 3 - listScroll;
-		for (SidecarState.Design d : designs) {
-			boolean sel = d.id().equals(selectedDesign);
+		for (Job j : jobs) {
+			boolean isSel = j == sel;
 			if (ry + ROW_H > top && ry < top + lh) {
-				Hit h = new Hit("design:" + d.id(), d.title(), x + 2, Math.max(ry, top), listW - 4, Math.min(ROW_H - 2, top + lh - ry), true, sel,
-					() -> selectedDesign = d.id());
+				Hit h = new Hit("design:" + j.id(), j.title(), x + 2, Math.max(ry, top), listW - 4, Math.min(ROW_H - 2, top + lh - ry), true, isSel,
+					() -> selectedDesign = j.id());
 				hits.add(h);
-				if (sel) {
+				if (isSel) {
 					g.fill(x + 2, ry, x + listW - 2, ry + ROW_H - 2, 0x22D97757);
+				} else if (h.contains(mx, my)) {
+					g.fill(x + 2, ry, x + listW - 2, ry + ROW_H - 2, 0x12000000);
 				}
-				String fam = switch (d.status()) {
-					case DONE -> "done";
-					case FAILED -> "error";
-					case CANCELLED -> "idle";
-					case QUEUED -> "waiting";
-					default -> "working";
-				};
-				Panels.dot(g, fam, x + 6, ry + 4, false);
-				g.text(font, TextUtil.ellipsize(font, d.title(), listW - 24), x + 16, ry + 2, UiBits.ink(), false);
-				g.text(font, TextUtil.ellipsize(font, d.status().wire() + " · " + d.step(), listW - 24), x + 16, ry + 12, UiBits.muted(), false);
+				Panels.dot(g, j.fam(), x + 6, ry + 4, false);
+				String kind = j.kind().equals("design") ? "" : j.kind().toUpperCase(Locale.ROOT);
+				int kw = kind.isEmpty() ? 0 : font.width(kind) + 6;
+				g.text(font, TextUtil.ellipsize(font, j.title(), listW - 26 - kw), x + 16, ry + 2, UiBits.ink(), false);
+				if (!kind.isEmpty()) {
+					g.text(font, kind, x + listW - 6 - font.width(kind), ry + 2, UiStyle.CLAY_DARK, false);
+				}
+				g.text(font, TextUtil.ellipsize(font, j.status() + (j.step().isEmpty() ? "" : " · " + j.step()), listW - 24), x + 16, ry + 12,
+					UiBits.muted(), false);
 			}
 			ry += ROW_H;
 		}
 		g.disableScissor();
-		if (designs.isEmpty()) {
+		if (jobs.isEmpty()) {
 			g.text(font, Sidecar.connected() ? "No designs yet." : "The design helper is not connected.", x + 6, top + 6, UiBits.muted(), false);
 		}
 		scrollbar(g, x + listW + 2, top, lh);
-		SidecarState.Design d = selectedDesign == null ? null : Sidecar.state().design(selectedDesign);
-		if (d == null) {
+		if (sel == null) {
 			return;
 		}
+		Job j = sel;
 		int dx = x + listW + 12;
 		int dw = w - listW - 12;
 		int y = top;
-		g.text(font, TextUtil.ellipsize(font, d.title() + "  (" + d.id() + ")", dw), dx, y, UiBits.ink(), false);
+		g.text(font, TextUtil.ellipsize(font, j.title() + "  (" + j.id() + ")", dw), dx, y, UiBits.ink(), false);
 		y += 12;
-		g.text(font, TextUtil.ellipsize(font, d.status().wire() + (d.step().isEmpty() ? "" : ": " + d.step()), dw), dx, y, UiBits.muted(), false);
+		g.text(font, TextUtil.ellipsize(font, j.status() + (j.step().isEmpty() ? "" : ": " + j.step()), dw), dx, y, UiBits.muted(), false);
 		y += 12;
-		JsonObject r = d.request();
-		for (String k : List.of("type", "style", "materials", "name")) {
-			if (r.has(k)) {
-				g.text(font, TextUtil.ellipsize(font, k + ": " + r.get(k).getAsString(), dw), dx, y, UiBits.ink(), false);
+		if (j.design() != null) {
+			JsonObject r = j.design().request();
+			for (String k : List.of("type", "style", "materials", "name")) {
+				if (r.has(k)) {
+					g.text(font, TextUtil.ellipsize(font, k + ": " + r.get(k).getAsString(), dw), dx, y, UiBits.ink(), false);
+					y += 10;
+				}
+			}
+			if (r.has("remix")) {
+				g.text(font, TextUtil.ellipsize(font, "remix of: " + LibraryFeature.nameOf(r.get("remix").getAsString()), dw), dx, y, UiBits.ink(), false);
 				y += 10;
 			}
-		}
-		if (r.has("features")) {
-			g.text(font, TextUtil.ellipsize(font, "features: " + r.get("features").toString().replaceAll("[\\[\\]\"]", "").replace(",", ", "), dw), dx, y,
-				UiBits.ink(), false);
+			if (r.has("features")) {
+				g.text(font, TextUtil.ellipsize(font, "features: " + r.get("features").toString().replaceAll("[\\[\\]\"]", "").replace(",", ", "), dw),
+					dx, y, UiBits.ink(), false);
+				y += 10;
+			}
+			if (r.has("maxSize")) {
+				JsonObject sz = r.getAsJsonObject("maxSize");
+				g.text(font, "at most " + sz.get("x") + " × " + sz.get("y") + " × " + sz.get("z"), dx, y, UiBits.ink(), false);
+				y += 10;
+			}
+		} else if (j.variant() != null) {
+			SidecarState.Variant v = j.variant();
+			if (v.from() != null) {
+				g.text(font, TextUtil.ellipsize(font, "from: " + LibraryFeature.nameOf(v.from()) + " (" + v.from() + ")", dw), dx, y, UiBits.ink(), false);
+				y += 10;
+			}
+			if (v.path() != null) {
+				g.text(font, TextUtil.ellipsize(font, "file: " + v.path(), dw), dx, y, UiBits.ink(), false);
+				y += 10;
+			}
+			g.text(font, TextUtil.ellipsize(font, "no Claude call: the helper " + (v.isImport() ? "checks the structure (custom profile)"
+				: "re-runs the design's code"), dw), dx, y, UiBits.muted(), false);
 			y += 10;
 		}
-		if (r.has("maxSize")) {
-			JsonObject s = r.getAsJsonObject("maxSize");
-			g.text(font, "at most " + s.get("x") + " × " + s.get("y") + " × " + s.get("z"), dx, y, UiBits.ink(), false);
+		if (j.blueprintId() != null) {
+			g.text(font, TextUtil.ellipsize(font, "result: " + j.blueprintId() + (j.size() == null ? "" : " (" + j.size()[0] + "×" + j.size()[1] + "×"
+				+ j.size()[2] + ")"), dw), dx, y, UiBits.okText(), false);
 			y += 10;
 		}
-		if (d.blueprintId() != null) {
-			g.text(font, TextUtil.ellipsize(font, "result: " + d.blueprintId() + (d.size() == null ? "" : " (" + d.size()[0] + "×" + d.size()[1] + "×"
-				+ d.size()[2] + ")"), dw), dx, y, UiBits.okText(), false);
-			y += 10;
-		}
-		if (d.error() != null) {
-			for (String line : TextUtil.wrapPlain(font, d.error(), dw).stream().limit(6).toList()) {
+		if (j.error() != null) {
+			for (String line : TextUtil.wrapPlain(font, j.error(), dw).stream().limit(6).toList()) {
 				g.text(font, line, dx, y, UiBits.errorText(), false);
 				y += 10;
 			}
 		}
 		int by = footerY - 16 - 20;
-		String cancel = "Cancel";
-		button(g, "cancel_design", cancel, dx, by, bw(cancel), false, d.status().isRunning() && Sidecar.connected(), mx, my,
-			() -> DesignFeature.cancel(d.id()));
-		if (d.status() == SidecarState.DesignStatus.DONE && d.blueprintId() != null) {
+		int bx = dx;
+		if (j.design() != null) {
+			String cancel = "Cancel";
+			button(g, "cancel_design", cancel, bx, by, bw(cancel), false, j.running() && Sidecar.connected(), mx, my,
+				() -> DesignFeature.cancel(j.id()));
+			bx += bw(cancel) + 4;
+		}
+		if (j.fam().equals("done") && j.blueprintId() != null) {
 			String show = "Show in Library";
-			button(g, "show_library", show, dx + bw(cancel) + 4, by, bw(show), true, Blueprints.get(d.blueprintId()) != null, mx, my, () -> {
-				selectedEntry = d.blueprintId();
+			button(g, "show_library", show, bx, by, bw(show), true, Blueprints.get(j.blueprintId()) != null, mx, my, () -> {
+				LibraryFeature.select(j.blueprintId());
+				LibraryFeature.setQuery(dev.larattalabs.architect.library.LibraryQuery.ALL.withSort(LibraryFeature.query().sort()));
+				LibraryTab.dialog = LibraryTab.Dialog.NONE;
 				showPlaced = false;
 				setTab(Tab.LIBRARY);
 			});
@@ -1172,13 +1372,18 @@ public final class ArchitectScreen extends Screen {
 		o.addProperty("guiHeight", height);
 		o.addProperty("keyTyped", key.length()); // the length only, never the key
 		o.addProperty("keyMessage", keyMessage);
-		o.addProperty("libraryMessage", libraryMessage);
+		o.addProperty("libraryMessage", LibraryFeature.message());
+		o.addProperty("libraryDialog", LibraryTab.dialog.name().toLowerCase(Locale.ROOT));
+		o.addProperty("libraryEdit", library.edit.name().toLowerCase(Locale.ROOT));
+		o.addProperty("popup", popup == null ? null : popup.id());
 		o.addProperty("showPlaced", showPlaced);
 		o.addProperty("selectedEntry", selectedEntry);
 		o.addProperty("selectedSite", selectedSite);
 		o.addProperty("selectedDesign", selectedDesign);
 		JsonArray a = new JsonArray();
-		for (Hit h : hits) {
+		List<Hit> all = new ArrayList<>(overlayHits);
+		all.addAll(hits);
+		for (Hit h : all) {
 			JsonObject j = new JsonObject();
 			j.addProperty("id", h.id());
 			j.addProperty("label", h.label());
