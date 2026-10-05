@@ -32,4 +32,16 @@ class NaturalDropsTest {
 			assertFalse(NaturalDrops.natural(id, false, false, false), id);
 		}
 	}
+
+	@Test
+	void naturalDropsNeverRefuseAPlacementAndAreNoted() {
+		java.util.List<Occupancy.Found> found = java.util.List.of(new Occupancy.Found(Occupancy.Kind.DROP, "Leaf Litter", false),
+			new Occupancy.Found(Occupancy.Kind.DROP, "Stick", false));
+		assertTrue(Occupancy.refusals(found).isEmpty());
+		assertTrue(found.stream().allMatch(Occupancy.Found::removable));
+		org.junit.jupiter.api.Assertions.assertEquals("clears 2 natural drops (sticks, saplings, leaf litter...)", Occupancy.removalNote(found));
+		// the player's items still refuse
+		java.util.List<Occupancy.Found> mine = java.util.List.of(new Occupancy.Found(Occupancy.Kind.ITEM, "Diamond", true));
+		assertFalse(Occupancy.refusals(mine).isEmpty());
+	}
 }

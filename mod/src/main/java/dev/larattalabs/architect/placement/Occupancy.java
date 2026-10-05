@@ -33,7 +33,8 @@ import net.minecraft.world.phys.AABB;
  * picked up the player's gear carries it);</li>
  * <li>any other living entity (villagers, animals, armor stands) and anything else (item frames, minecarts, boats)
  * refuses, named;</li>
- * <li>dropped items inside the box refuse ("pick them up first": they would be sealed into the walls), and so do a
+ * <li>natural drops ({@link NaturalDrops}: sticks, saplings, leaf litter... that nobody threw) are cleared with a note;</li>
+ * <li>other dropped items inside the box refuse ("pick them up first": they would be sealed into the walls), and so do a
  * thrown trident and an arrow the player can pick up (an enchanted trident lost to a placement in Hardcore);
  * arrows nobody can pick up (a skeleton's, a creative or Infinity shot) and XP are removed.</li>
  * </ul>
@@ -43,7 +44,9 @@ import net.minecraft.world.phys.AABB;
 public final class Occupancy {
 	/** What an entity in the box is. */
 	public enum Kind {
-		PLAYER, OWNED, HOSTILE, LIVING, ITEM, PROJECTILE, OTHER
+		PLAYER, OWNED, HOSTILE, LIVING, ITEM, PROJECTILE, OTHER,
+		/** A natural drop ({@link NaturalDrops}: sticks, saplings, leaf litter, seeds... nobody threw): cleared with a note. */
+		DROP
 	}
 
 	/**
@@ -55,7 +58,7 @@ public final class Occupancy {
 	public record Found(Kind kind, String name, boolean keep) {
 		/** Whether placing removes it instead of refusing. */
 		public boolean removable() {
-			return kind == Kind.PROJECTILE || kind == Kind.HOSTILE && !keep;
+			return kind == Kind.PROJECTILE || kind == Kind.DROP || kind == Kind.HOSTILE && !keep;
 		}
 	}
 
@@ -91,10 +94,15 @@ public final class Occupancy {
 	/** The note for what placing removes ("removes 2 zombies, 1 skeleton in the box"), or null when nothing. */
 	public static String removalNote(List<Found> found) {
 		Map<String, Integer> hostile = count(found, f -> f.kind() == Kind.HOSTILE && f.removable());
-		if (hostile.isEmpty()) {
-			return null;
+		long drops = found.stream().filter(f -> f.kind() == Kind.DROP).count();
+		List<String> parts = new ArrayList<>();
+		if (!hostile.isEmpty()) {
+			parts.add("removes " + join(hostile) + " in the box");
 		}
-		return "removes " + join(hostile) + " in the box";
+		if (drops > 0) {
+			parts.add("clears " + drops + " natural drop" + (drops == 1 ? "" : "s") + " (sticks, saplings, leaf litter...)");
+		}
+		return parts.isEmpty() ? null : String.join("; ", parts);
 	}
 
 	private static Map<String, Integer> count(List<Found> found, Predicate<Found> which) {
@@ -169,6 +177,10 @@ public final class Occupancy {
 			|| e instanceof Mob m && m.isLeashed();
 		if (owned) {
 			return new Found(Kind.OWNED, name, true);
+		}
+		if (e instanceof ItemEntity item && NaturalDrops.natural(item)) {
+			// leaves decaying around the site, plants the placement cleared: nobody's items, so they never block a placement
+			return new Found(Kind.DROP, item.getItem().getHoverName().getString(), false);
 		}
 		if (e instanceof ItemEntity item) {
 			String what = item.getItem().getHoverName().getString();

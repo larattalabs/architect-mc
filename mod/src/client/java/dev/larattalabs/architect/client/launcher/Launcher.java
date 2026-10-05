@@ -201,6 +201,7 @@ public final class Launcher {
 			return;
 		}
 		Path dir = src.dir();
+		bundleUpdated = false;
 		if (src.kind() == SourceKind.BUNDLED) {
 			if (!install(mod.orElseThrow(), dir, found)) {
 				return;
@@ -228,6 +229,9 @@ public final class Launcher {
 			ownedPid = 0;
 		}
 		Reuse r = LauncherPlan.reuse(answered, expectedVersion, recordedPid, ownedPid, alive);
+		if (bundleUpdated && r == Reuse.REUSE && ownedPid > 0 && ownedPid == recordedPid) {
+			r = Reuse.STOP_THEN_START; // ours, but running the helper we just replaced (same version number, other code)
+		}
 		lastReuse = r;
 		Architect.LOGGER.info("Launcher: port {} answered {}, expected {}, sidecar.json pid {} (alive {}), ours {}: {}", Sidecar.port(),
 			answered == null ? "nothing" : "version '" + answered + "'", expectedVersion, recordedPid, alive, ownedPid, r);
@@ -425,11 +429,20 @@ public final class Launcher {
 
 	// ------------------------------------------------------------------ the bundle
 
-	/** Extracts the jar's {@code architect-sidecar/} (once per mod version) and runs {@code npm ci --omit=dev} (once). */
+	/**
+	 * Extracts the jar's {@code architect-sidecar/} whenever its content differs from what is extracted (a fingerprint of
+	 * every file, not the mod version: a rebuilt jar with the same version must not keep running the old helper) and runs
+	 * {@code npm ci --omit=dev} when {@code package-lock.json} changed. An unchanged lock keeps {@code node_modules} (the
+	 * Agent SDK is ~200 MB), so a new helper build installs in a second.
+	 */
 	private static boolean install(ModContainer mod, Path target, Path nodePath) throws IOException, InterruptedException {
-		if (!Files.exists(target.resolve(".extracted"))) {
-			set(State.INSTALLING, "unpacking the helper");
-			Path root = mod.findPath("architect-sidecar").orElseThrow();
+		Path root = mod.findPath("architect-sidecar").orElseThrow();
+		String fingerprint = fingerprint(root);
+		String extracted = readString(target.resolve(".extracted"));
+		if (!fingerprint.equals(extracted)) {
+			bundleUpdated = extracted != null;
+			set(State.INSTALLING, extracted == null ? "unpacking the helper" : "updating the helper");
+			Architect.LOGGER.info("Launcher: extracting the helper bundle {} (was {})", fingerprint, extracted);
 			Path tmp = target.resolveSibling(target.getFileName() + ".tmp-" + System.currentTimeMillis());
 			try (Stream<Path> walk = Files.walk(root)) {
 				for (Path p : (Iterable<Path>) walk::iterator) {
@@ -443,13 +456,24 @@ public final class Launcher {
 					}
 				}
 			}
-			Files.writeString(tmp.resolve(".extracted"), modVersion(), StandardCharsets.UTF_8);
+			Files.writeString(tmp.resolve(".extracted"), fingerprint, StandardCharsets.UTF_8);
+			// keep the installed dependencies; install() below reinstalls them only if the lock file changed
+			if (Files.isDirectory(target.resolve("node_modules"))) {
+				Files.move(target.resolve("node_modules"), tmp.resolve("node_modules"));
+				if (Files.exists(target.resolve(".installed"))) {
+					Files.copy(target.resolve(".installed"), tmp.resolve(".installed"));
+				}
+			}
 			if (Files.exists(target)) {
 				deleteTree(target);
 			}
 			Files.move(tmp, target, StandardCopyOption.ATOMIC_MOVE);
 		}
-		if (Files.exists(target.resolve(".installed")) || !Files.exists(target.resolve("package.json"))) {
+		if (!Files.exists(target.resolve("package.json"))) {
+			return true;
+		}
+		String lock = Files.exists(target.resolve("package-lock.json")) ? sha256(Files.readAllBytes(target.resolve("package-lock.json"))) : "no-lock";
+		if (lock.equals(readString(target.resolve(".installed")))) {
 			return true;
 		}
 		Path npm = LauncherPlan.npmFor(nodePath, isWindows());
@@ -477,7 +501,7 @@ public final class Launcher {
 			return false;
 		}
 		installLine = null;
-		Files.writeString(target.resolve(".installed"), Long.toString(System.currentTimeMillis()), StandardCharsets.UTF_8);
+		Files.writeString(target.resolve(".installed"), lock, StandardCharsets.UTF_8);
 		return true;
 	}
 
@@ -559,6 +583,44 @@ public final class Launcher {
 			return List.of();
 		}
 	}
+
+	/** SHA-256 over the bundle: every file's relative path and bytes, in a stable order. */
+	static String fingerprint(Path root) throws IOException {
+		java.security.MessageDigest md = digest();
+		List<Path> files;
+		try (Stream<Path> walk = Files.walk(root)) {
+			files = walk.filter(Files::isRegularFile).sorted(java.util.Comparator.comparing(p -> root.relativize(p).toString())).toList();
+		}
+		for (Path p : files) {
+			md.update(root.relativize(p).toString().replace('\\', '/').getBytes(StandardCharsets.UTF_8));
+			md.update((byte) 0);
+			md.update(Files.readAllBytes(p));
+		}
+		return java.util.HexFormat.of().formatHex(md.digest());
+	}
+
+	private static String sha256(byte[] data) {
+		return java.util.HexFormat.of().formatHex(digest().digest(data));
+	}
+
+	private static java.security.MessageDigest digest() {
+		try {
+			return java.security.MessageDigest.getInstance("SHA-256");
+		} catch (java.security.NoSuchAlgorithmException e) {
+			throw new IllegalStateException(e);
+		}
+	}
+
+	private static @Nullable String readString(Path p) {
+		try {
+			return Files.exists(p) ? Files.readString(p, StandardCharsets.UTF_8).strip() : null;
+		} catch (IOException e) {
+			return null;
+		}
+	}
+
+	/** This launch replaced an extracted bundle (a helper started from the old one must not be reused). */
+	private static volatile boolean bundleUpdated;
 
 	private static String modVersion() {
 		return FabricLoader.getInstance().getModContainer(Architect.MOD_ID).map(c -> c.getMetadata().getVersion().getFriendlyString()).orElse("dev");
