@@ -342,8 +342,8 @@ for "what to change". It's the existing remix path, so it uses Claude.
 - Export writes `<id>.nbt` and `<id>.blueprint.json` to `<gameDir>/architect/exports/<id>/`. It also copies the `.nbt` into the
   current world's `generated/<namespace>/structures/` as `architect_mc:<id>`, so a vanilla structure block can load it.
 - Import:
-  - The Library's "Import…" lists `.nbt` files in `<gameDir>/architect/imports/` and in the current world's
-    `generated/*/structures/` (structure-block saves).
+  - The Library's "Import…" lists `.nbt` files in `<gameDir>/architect/imports/`, in `<gameDir>/architect/exports/` (so an export imports into another world), and in the current world's
+    `generated/*/structure/` (structure-block saves; 26.3 uses singular `structure/`, legacy `structures/` too).
   - Picking one creates a library entry: type `custom`, groundY 1, front south, entrance at the front centre, and spawn 2 out.
   - It is checked with the `custom` profile through the sidecar (`import.request {path}` -> reuses the variant pipeline:
     a check, previews, install with `"imported": true`). No source, so no variants: the Variants button is disabled for it.

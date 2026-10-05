@@ -59,14 +59,14 @@ public final class Exchange {
 	/**
 	 * One importable file.
 	 *
-	 * @param where {@code imports} or {@code world}
+	 * @param where {@code imports}, {@code exports} or {@code world}
 	 * @param structureId for a world file, the structure-block name ({@code ns:path}), else null
 	 */
 	public record Candidate(Path path, String where, String label, @Nullable String structureId, long modified, long bytes) {
 	}
 
 	/**
-	 * The {@code .nbt} files to offer: {@code imports/} first, then the world's structure-block saves; each group newest
+	 * The {@code .nbt} files to offer: {@code imports/} first, then {@code exports/}, then the world's structure-block saves; each group newest
 	 * first; at most {@value #MAX_IMPORT_LIST}. {@code worldRoot} may be null (not in a world).
 	 */
 	public static List<Candidate> importCandidates(Path gameData, @Nullable Path worldRoot) throws IOException {
@@ -76,6 +76,16 @@ public final class Exchange {
 			List<Candidate> group = new ArrayList<>();
 			for (Path p : nbtFiles(imports)) {
 				group.add(candidate(p, "imports", imports.relativize(p).toString().replace('\\', '/'), null));
+			}
+			group.sort(Comparator.comparingLong(Candidate::modified).reversed());
+			out.addAll(group);
+		}
+		// exports (from any world): an export can be imported in another world without copying files by hand
+		Path exports = gameData.resolve("exports");
+		if (Files.isDirectory(exports)) {
+			List<Candidate> group = new ArrayList<>();
+			for (Path p : nbtFiles(exports)) {
+				group.add(candidate(p, "exports", exports.relativize(p).toString().replace('\\', '/'), null));
 			}
 			group.sort(Comparator.comparingLong(Candidate::modified).reversed());
 			out.addAll(group);
