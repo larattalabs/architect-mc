@@ -170,7 +170,13 @@ final class RestoreJob implements Placement.Job {
 					tr.mark("warm");
 					tr.done();
 				}
+				long tp0 = System.nanoTime();
+				int was0 = planner.planned();
 				SiteJournal.Undone u = planned(deadline);
+				if (Sites.Trace.ON) {
+					dev.larattalabs.architect.Architect.LOGGER.info("TRACE restore {} planned {} -> {} of {} sections in {} ms{}", siteId, was0, planner == null ? -1
+						: planner.planned(), planner == null ? -1 : planner.sections(), (System.nanoTime() - tp0) / 1e6, u != null ? " submitted" : "");
+				}
 				if (u == null) {
 					return broken != null;
 				}
