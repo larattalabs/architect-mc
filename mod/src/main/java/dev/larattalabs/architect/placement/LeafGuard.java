@@ -1,0 +1,94 @@
+package dev.larattalabs.architect.placement;
+
+import java.util.ArrayList;
+import java.util.List;
+import net.minecraft.core.BlockPos;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.level.block.LeavesBlock;
+import net.minecraft.world.level.block.state.BlockState;
+
+/**
+ * Leaves just outside a site, kept from decaying while it stands. Placing a site clears logs inside its box; leaves
+ * outside the box that hung on those logs then decay, and Remove (which restores only the box) cannot bring them back.
+ * So placement makes those leaves persistent and records them with their original {@code distance}; Remove and Move give
+ * them their original state back once the box (and its logs) is restored.
+ *
+ * <p>Which leaves: non-persistent leaves with {@code distance} below 7 (7 decays anyway) within {@link #RADIUS} of the
+ * box whose Manhattan distance to the box is at most their {@code distance}. A leaf's {@code distance} is the length of
+ * its shortest face path to a log; a path from a log inside the box is at least as long as the leaf's Manhattan distance
+ * to the box, so any leaf further away does not depend on the box. Server thread.
+ */
+public final class LeafGuard {
+	/** Leaves decay at distance 7, so nothing further than 6 from the box can depend on a log inside it. */
+	public static final int RADIUS = 6;
+
+	/** Manhattan distance from a cell to the box (0 inside). */
+	public static int distanceTo(Anchors.Bounds box, int x, int y, int z) {
+		return gap(x, box.minX(), box.maxX()) + gap(y, box.minY(), box.maxY()) + gap(z, box.minZ(), box.maxZ());
+	}
+
+	private static int gap(int v, int min, int max) {
+		return v < min ? min - v : v > max ? v - max : 0;
+	}
+
+	/** Whether a non-persistent leaf with {@code distance} at Manhattan distance {@code fromBox} (> 0) may hang on the box. */
+	public static boolean mayDependOnBox(int distance, int fromBox) {
+		return fromBox > 0 && distance < 7 && fromBox <= distance;
+	}
+
+	/**
+	 * Makes the leaves around {@code box} that may hang on it persistent (no neighbour updates) and returns them as world
+	 * x, y, z, original distance quadruples. Call it before the box is changed: a leaf's {@code distance} is read as it was.
+	 */
+	public static List<Integer> hold(ServerLevel level, Anchors.Bounds box, int flags) {
+		List<Integer> out = new ArrayList<>();
+		BlockPos.MutableBlockPos p = new BlockPos.MutableBlockPos();
+		int minY = Math.max(level.getMinY(), box.minY() - RADIUS);
+		int maxY = Math.min(level.getMaxY(), box.maxY() + RADIUS);
+		for (int y = minY; y <= maxY; y++) {
+			for (int z = box.minZ() - RADIUS; z <= box.maxZ() + RADIUS; z++) {
+				for (int x = box.minX() - RADIUS; x <= box.maxX() + RADIUS; x++) {
+					int from = distanceTo(box, x, y, z);
+					if (from == 0 || from > RADIUS) {
+						continue;
+					}
+					BlockState s = level.getBlockState(p.set(x, y, z));
+					if (!(s.getBlock() instanceof LeavesBlock) || s.getValue(LeavesBlock.PERSISTENT)) {
+						continue;
+					}
+					int d = s.getValue(LeavesBlock.DISTANCE);
+					if (!mayDependOnBox(d, from)) {
+						continue;
+					}
+					level.setBlock(p, s.setValue(LeavesBlock.PERSISTENT, true), flags);
+					out.add(x);
+					out.add(y);
+					out.add(z);
+					out.add(d);
+				}
+			}
+		}
+		return out;
+	}
+
+	/**
+	 * Gives held leaves back their original state: still leaves and still persistent (the player may have broken them or
+	 * placed something else there, which stays as it is) -> not persistent, with the recorded distance. Returns how many.
+	 */
+	public static int release(ServerLevel level, List<Integer> held, int flags) {
+		int n = 0;
+		BlockPos.MutableBlockPos p = new BlockPos.MutableBlockPos();
+		for (int i = 0; i + 3 < held.size(); i += 4) {
+			BlockState s = level.getBlockState(p.set(held.get(i), held.get(i + 1), held.get(i + 2)));
+			if (!(s.getBlock() instanceof LeavesBlock) || !s.getValue(LeavesBlock.PERSISTENT)) {
+				continue;
+			}
+			level.setBlock(p, s.setValue(LeavesBlock.PERSISTENT, false).setValue(LeavesBlock.DISTANCE, held.get(i + 3)), flags);
+			n++;
+		}
+		return n;
+	}
+
+	private LeafGuard() {
+	}
+}

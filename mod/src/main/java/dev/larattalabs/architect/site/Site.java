@@ -38,17 +38,36 @@ public record Site(String id, String blueprint, String rotation, Anchors.Bounds 
 	}
 
 	/**
-	 * The template a site was placed from.
+	 * The template a site was placed from, and what it holds outside its box.
 	 *
 	 * @param template {@code TemplateGrid.fingerprint} of the template
 	 * @param blockEntities the template's own block entities as offsets from the box's minimum corner, three ints each
+	 * @param heldLeaves leaves outside the snapshot box that the site made persistent while it stands (clearing logs inside
+	 *                   the box would otherwise let them decay, and Remove could not bring them back): world x, y, z and
+	 *                   the original {@code distance}, four ints each. {@code LeafGuard.release} gives them back on Remove/Move.
 	 */
-	public record Pin(String template, List<Integer> blockEntities) {
+	public record Pin(String template, List<Integer> blockEntities, List<Integer> heldLeaves) {
 		public Pin {
 			blockEntities = List.copyOf(blockEntities);
+			heldLeaves = List.copyOf(heldLeaves);
 			if (blockEntities.size() % 3 != 0) {
 				throw new IllegalArgumentException("blockEntities must hold x,y,z triples");
 			}
+			if (heldLeaves.size() % 4 != 0) {
+				throw new IllegalArgumentException("heldLeaves must hold x,y,z,distance quadruples");
+			}
+		}
+
+		public Pin(String template, List<Integer> blockEntities) {
+			this(template, blockEntities, List.of());
+		}
+
+		public Pin withHeldLeaves(List<Integer> leaves) {
+			return new Pin(template, blockEntities, leaves);
+		}
+
+		public Pin withoutBlockEntities(List<Integer> kept) {
+			return new Pin(template, kept, heldLeaves);
 		}
 
 		public JsonObject toJson() {
@@ -57,17 +76,26 @@ public record Site(String id, String blueprint, String rotation, Anchors.Bounds 
 			JsonArray be = new JsonArray();
 			blockEntities.forEach(be::add);
 			o.add("blockEntities", be);
+			if (!heldLeaves.isEmpty()) {
+				JsonArray hl = new JsonArray();
+				heldLeaves.forEach(hl::add);
+				o.add("heldLeaves", hl);
+			}
 			return o;
 		}
 
 		public static Pin fromJson(JsonObject o) {
-			List<Integer> be = new ArrayList<>();
-			if (o.has("blockEntities")) {
-				for (JsonElement e : o.getAsJsonArray("blockEntities")) {
-					be.add(e.getAsInt());
+			return new Pin(o.get("template").getAsString(), ints(o, "blockEntities"), ints(o, "heldLeaves"));
+		}
+
+		private static List<Integer> ints(JsonObject o, String key) {
+			List<Integer> out = new ArrayList<>();
+			if (o.has(key) && o.get(key).isJsonArray()) {
+				for (JsonElement e : o.getAsJsonArray(key)) {
+					out.add(e.getAsInt());
 				}
 			}
-			return new Pin(o.get("template").getAsString(), be);
+			return out;
 		}
 	}
 

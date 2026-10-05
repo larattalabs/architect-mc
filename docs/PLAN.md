@@ -73,12 +73,18 @@ terrain and removed with the snapshot box restored cell for cell. The bundled fi
 (extract, npm ci, spawn); the run found and fixed a first-run crash. Evidence: `artifacts/gate1/REPORT.md` (local).
 
 Carried forward (known issues):
-- **Leaf decay at the box edge:** clearing logs inside a site lets leaves just outside decay while it stands; Remove can't
-  restore them (4 leaves on the tower run). Fix idea: keep leaves within a few blocks persistent while a site stands, or snapshot
-  a leaf margin.
-- **BedSafety** (from AgentCraft) was dropped in the port: template beds in the Nether/End explode on use. Bring it back before
-  phase 3 (the bundled cabin has a bed).
-- Leaves on a template's unwritten floor-row cells stay (below the ground row, TerrainFit does not clear them).
+- ~~Leaf decay at the box edge~~ **fixed 2026-10-04** (`LeafGuard`): while a site stands, leaves within 6 of its box
+  that may hang on logs inside it are held persistent (recorded in the site's pin with their original distance) and get
+  their state back on Remove/Move; a new snapshot gives back leaves other sites hold inside it, and after a restore nearby
+  sites hold again what they need. Verified: place, stand, move next door, undo, remove under 300x random ticks, with
+  ~156k cells around both places identical.
+- ~~BedSafety dropped~~ **ported back 2026-10-04**: template beds are left out where the bed rule makes them dangerous
+  (verified: the bundled cabin in the Nether places with "1 bed left out", no bed blocks).
+- ~~Leaves on unwritten floor-row cells~~ **fixed**: leaves are cleared in every row of the box the template doesn't write.
+- **Nether ground:** "ground" placement (median surface) uses the motion-blocking heightmap, which is the bedrock roof in
+  the Nether, so the ghost starts on the roof (an explicit origin works). Needs a floor search from the player's height.
+- **Natural drops refuse placement:** sticks/saplings from leaf decay lying in a box refuse it ("pick them up first");
+  `NaturalDrops` should treat leaf-decay drops as natural.
 - The plot outline is hard to see under trees; the notes field and long toasts need polish.
 - No-cheats play is untested (the commands have no permission check; the dev world has cheats on).
 

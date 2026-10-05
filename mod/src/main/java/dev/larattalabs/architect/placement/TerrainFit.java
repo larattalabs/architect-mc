@@ -42,6 +42,8 @@ public final class TerrainFit {
 	public static final int BLOCK_ENTITY = 16;
 	/** A log or leaves: solid, but not the ground ({@link Approach} looks through trees for the terrain). */
 	public static final int TREE = 32;
+	/** Leaves (with {@link #TREE}): cleared anywhere inside the box the template does not write, below the ground row too. */
+	public static final int LEAVES = 64;
 
 	/** The world under a placement: {@link #flags} bits of a world cell. */
 	@FunctionalInterface
@@ -128,14 +130,18 @@ public final class TerrainFit {
 			}
 		}
 		Cells clear = new Cells();
-		for (int y = Math.max(0, m.groundY); y < sy; y++) {
+		for (int y = 0; y < sy; y++) {
+			boolean aboveGround = y >= m.groundY;
 			for (int z = 0; z < sz; z++) {
 				for (int x = 0; x < sx; x++) {
 					if (writes[(y * sz + z) * sx + x] != 0) {
 						continue;
 					}
 					int f = w.flags(ox + x, oy + y, oz + z);
-					if ((f & (NATURAL | TREE)) != 0 && (f & BLOCK_ENTITY) == 0 && (f & (WATER | LAVA)) == 0) {
+					// above the ground row: terrain and trees; below it (the floor and foundation rows): only leaves, which
+					// are never ground (a canopy hanging into the floor row's unwritten cells stayed there before)
+					int what = aboveGround ? (NATURAL | TREE) : LEAVES;
+					if ((f & what) != 0 && (f & BLOCK_ENTITY) == 0 && (f & (WATER | LAVA)) == 0) {
 						clear.add(ox + x, oy + y, oz + z);
 					}
 				}
@@ -204,7 +210,9 @@ public final class TerrainFit {
 		}
 		if (natural(s)) {
 			f |= NATURAL;
-		} else if (s.is(BlockTags.LOGS) || s.is(BlockTags.LEAVES)) {
+		} else if (s.is(BlockTags.LEAVES)) {
+			f |= TREE | LEAVES;
+		} else if (s.is(BlockTags.LOGS)) {
 			f |= TREE;
 		}
 		return f;

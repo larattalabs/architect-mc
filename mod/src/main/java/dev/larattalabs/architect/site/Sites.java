@@ -9,10 +9,12 @@ import dev.larattalabs.architect.Architect;
 import dev.larattalabs.architect.placement.Anchor;
 import dev.larattalabs.architect.placement.Anchors;
 import dev.larattalabs.architect.placement.Approach;
+import dev.larattalabs.architect.placement.BedSafety;
 import dev.larattalabs.architect.placement.Blueprint;
 import dev.larattalabs.architect.placement.BlueprintTransform;
 import dev.larattalabs.architect.placement.Blueprints;
 import dev.larattalabs.architect.placement.GhostModel;
+import dev.larattalabs.architect.placement.LeafGuard;
 import dev.larattalabs.architect.placement.NaturalDrops;
 import dev.larattalabs.architect.placement.Occupancy;
 import dev.larattalabs.architect.placement.Reconcile;
@@ -54,6 +56,10 @@ import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.BedBlock;
+import net.minecraft.core.Direction;
+import net.minecraft.world.level.block.state.properties.BedPart;
+import net.minecraft.world.attribute.BedRule;
 import net.minecraft.world.level.block.DoorBlock;
 import net.minecraft.world.level.block.Mirror;
 import net.minecraft.world.level.block.Rotation;
@@ -203,6 +209,7 @@ public final class Sites {
 			Drops drops = Drops.before(level, built.snapshotBox());
 			restoreTemplate(level, built.snapshotBox(), built.before());
 			drops.clearNew(level);
+			releaseHeld(level, built.pin().heldLeaves());
 		} catch (RuntimeException e) {
 			Architect.LOGGER.error("Could not take the site {} down again (its saved terrain is {})", Anchors.str(built.snapshotBox()), built.snapshot(), e);
 			return;
@@ -213,6 +220,136 @@ public final class Sites {
 	/** What a site placed from {@code grid} with {@code turns} pins. */
 	static Site.Pin pinFor(TemplateGrid grid, int turns) {
 		return new Site.Pin(grid.fingerprint(), grid.blockEntityOffsets(turns));
+	}
+
+	// ------------------------------------------------------------------ held leaves (LeafGuard)
+
+	/** Releases held leaves, except cells inside a standing site's box in this dimension (they are that site's now). */
+	private static void releaseHeld(ServerLevel level, List<Integer> held) {
+		if (held.isEmpty()) {
+			return;
+		}
+		String here = dimensionId(level);
+		List<Anchors.Bounds> boxes = state.byId().values().stream().filter(x -> x.dimension().equals(here)).map(Site::restoreBox).toList();
+		List<Integer> free = new ArrayList<>(held.size());
+		for (int i = 0; i + 3 < held.size(); i += 4) {
+			int x = held.get(i);
+			int y = held.get(i + 1);
+			int z = held.get(i + 2);
+			if (boxes.stream().noneMatch(bx -> LeafGuard.distanceTo(bx, x, y, z) == 0)) {
+				free.addAll(held.subList(i, i + 4));
+			}
+		}
+		LeafGuard.release(level, free, FLAGS);
+	}
+
+	/**
+	 * Before a new snapshot of {@code box}: leaves standing sites hold inside it get their natural state back and leave
+	 * those sites' records (the new site's snapshot keeps them natural; the new site's own hold covers what it needs).
+	 */
+	private static void releaseHeldInside(ServerLevel level, Anchors.Bounds box) {
+		State s = state;
+		String here = dimensionId(level);
+		Map<String, Site> map = new LinkedHashMap<>(s.byId());
+		boolean changed = false;
+		for (Site x : s.byId().values()) {
+			if (!x.dimension().equals(here) || x.pin() == null || x.pin().heldLeaves().isEmpty()) {
+				continue;
+			}
+			List<Integer> held = x.pin().heldLeaves();
+			List<Integer> keep = new ArrayList<>(held.size());
+			List<Integer> inside = new ArrayList<>();
+			for (int i = 0; i + 3 < held.size(); i += 4) {
+				boolean in = LeafGuard.distanceTo(box, held.get(i), held.get(i + 1), held.get(i + 2)) == 0;
+				(in ? inside : keep).addAll(held.subList(i, i + 4));
+			}
+			if (inside.isEmpty()) {
+				continue;
+			}
+			LeafGuard.release(level, inside, FLAGS);
+			map.put(x.id(), withPin(x, x.pin().withHeldLeaves(keep)));
+			changed = true;
+		}
+		if (changed) {
+			state = new State(Collections.unmodifiableMap(map), s.next(), s.pending()); // the caller's commit writes it
+		}
+	}
+
+	/** After {@code box} got its old terrain back: standing sites near it hold again the leaves that hang on them. */
+	private static void reholdNear(ServerLevel level, Anchors.Bounds box) {
+		State s = state;
+		String here = dimensionId(level);
+		Map<String, Site> map = new LinkedHashMap<>(s.byId());
+		boolean changed = false;
+		for (Site x : s.byId().values()) {
+			if (!x.dimension().equals(here) || x.pin() == null || !near(x.restoreBox(), box, 2 * LeafGuard.RADIUS)) {
+				continue;
+			}
+			List<Integer> more = LeafGuard.hold(level, x.restoreBox(), FLAGS);
+			if (more.isEmpty()) {
+				continue;
+			}
+			List<Integer> all = new ArrayList<>(x.pin().heldLeaves());
+			all.addAll(more);
+			map.put(x.id(), withPin(x, x.pin().withHeldLeaves(all)));
+			changed = true;
+		}
+		if (changed) {
+			state = new State(Collections.unmodifiableMap(map), s.next(), s.pending()); // the caller's commit writes it
+		}
+	}
+
+	private static boolean near(Anchors.Bounds a, Anchors.Bounds b, int d) {
+		return a.minX() - d <= b.maxX() && b.minX() <= a.maxX() + d && a.minY() - d <= b.maxY() && b.minY() <= a.maxY() + d
+			&& a.minZ() - d <= b.maxZ() && b.minZ() <= a.maxZ() + d;
+	}
+
+	private static Site withPin(Site x, Site.Pin pin) {
+		return new Site(x.id(), x.blueprint(), x.rotation(), x.box(), x.interior(), x.anchors(), x.placedAt(), x.dimension(), x.snapshotBox(),
+			x.snapshot(), x.movedFrom(), pin);
+	}
+
+	/** {@link #pinFor} without the bed cells a placement left out ({@link #removeUnsafeBeds}). */
+	static Site.Pin pinFor(TemplateGrid grid, int turns, Set<Long> removedBeds, Anchors.Bounds box) {
+		Site.Pin pin = pinFor(grid, turns);
+		return pin.withoutBlockEntities(BedSafety.withoutCells(pin.blockEntities(), removedBeds, box.minX(), box.minY(), box.minZ()));
+	}
+
+	/** The template's beds a placement left out: every removed cell and the head cells, as {@link BlockPos#asLong}. */
+	private record BedsOut(Set<Long> cells, Set<Long> heads) {
+	}
+
+	/**
+	 * Takes the template's own beds out again where the level's bed rule makes them dangerous (in the Nether and the End a
+	 * bed explodes when used, which ends a Hardcore world): both halves become air (no drops, {@link #FLAGS}). The rule is
+	 * read at each bed's head cell, as vanilla does. Only cells the template wrote a bed to are looked at. Server thread.
+	 */
+	private static BedsOut removeUnsafeBeds(ServerLevel level, TemplateGrid grid, int turns, Anchors.Bounds box) {
+		Set<Long> cells = new HashSet<>();
+		Set<Long> heads = new HashSet<>();
+		GhostModel m = grid.ghost(turns);
+		BlockPos.MutableBlockPos p = new BlockPos.MutableBlockPos();
+		for (int i = 0; i < m.count(); i++) {
+			BlockState s = level.getBlockState(p.set(box.minX() + m.x(i), box.minY() + m.y(i), box.minZ() + m.z(i)));
+			if (!(s.getBlock() instanceof BedBlock bed)) {
+				continue;
+			}
+			Direction facing = s.getValue(BedBlock.FACING);
+			BlockPos head = BedSafety.head(p.getX(), p.getY(), p.getZ(), s.getValue(BedBlock.PART) == BedPart.HEAD, facing.getStepX(), facing.getStepZ());
+			BedRule rule = bed.getBedRule(level, head);
+			if (!BedSafety.unsafe(rule.canSleep() == BedRule.Rule.NEVER, rule.destroyOnUse(), rule.destroyOnLeave())) {
+				continue;
+			}
+			cells.add(p.asLong());
+			heads.add(head.asLong());
+		}
+		for (long c : cells) {
+			level.setBlock(BlockPos.of(c), Blocks.AIR.defaultBlockState(), FLAGS);
+		}
+		if (!cells.isEmpty()) {
+			Architect.LOGGER.info("Left out {} bed(s) of {} in {}: beds are not safe there", heads.size(), grid.blueprint().id(), dimensionId(level));
+		}
+		return new BedsOut(Set.copyOf(cells), Set.copyOf(heads));
 	}
 
 	/** The loaded template grid of a site's design when it is the one the site was placed from (its pin), else null. */
@@ -423,6 +560,9 @@ public final class Sites {
 		TerrainFit.Plan plan = site.plan();
 		Approach.Plan approach = site.approach();
 		Anchors.Bounds snapBox = site.snapBox();
+		// leaves other sites (or this one, when moving) hold inside the new box: natural again before the snapshot, so a
+		// later Remove of this site does not bring them back persistent (they are this site's terrain now)
+		releaseHeldInside(level, snapBox);
 		CompoundTag before;
 		String snapshot = id + "-" + System.currentTimeMillis() + ".nbt";
 		try {
@@ -434,6 +574,8 @@ public final class Sites {
 		}
 		List<BlockPos> plants = straddlingPositions(level, snapBox, false);
 		Drops drops = Drops.before(level, snapBox);
+		// leaves outside the box that hang on logs inside it: kept from decaying while the site stands (before the box changes)
+		List<Integer> held = LeafGuard.hold(level, snapBox, FLAGS);
 		try {
 			int removed = 0;
 			for (Entity e : level.getEntities((Entity) null, Occupancy.aabb(snapBox), e -> !(e instanceof Player) && e.isAlive())) {
@@ -445,6 +587,7 @@ public final class Sites {
 			if (!site.template().placeInWorld(level, site.placePos(), site.placePos(), site.settings(), level.getRandom(), FLAGS)) {
 				throw new IllegalStateException("template " + bp.id() + " placed nothing (empty template?)");
 			}
+			BedsOut beds = removeUnsafeBeds(level, site.grid(), site.turns(), box);
 			BlockState foundation = foundationState(bp);
 			BlockPos.MutableBlockPos m = new BlockPos.MutableBlockPos();
 			for (int i = 0; i < plan.fill().length; i += 3) {
@@ -464,6 +607,10 @@ public final class Sites {
 			}
 			drops.clearNew(level);
 			List<String> notes = new ArrayList<>();
+			String bedNote = BedSafety.note(beds.heads().size(), dimensionId(level));
+			if (bedNote != null) {
+				notes.add(bedNote);
+			}
 			String gone = Occupancy.removalNote(site.found());
 			if (gone != null && removed > 0) {
 				notes.add(gone);
@@ -492,12 +639,13 @@ public final class Sites {
 			notes.addAll(site.site().warnings());
 			int turns = site.turns();
 			return new Built(turns, box, snapBox, BlueprintTransform.worldBounds(bp, turns, box.minX(), box.minY(), box.minZ()),
-				BlueprintTransform.worldAnchors(bp, turns, box.minX(), box.minY(), box.minZ()), pinFor(site.grid(), turns),
-				notes.isEmpty() ? null : String.join("; ", notes), snapshot, before);
+				BlueprintTransform.worldAnchors(bp, turns, box.minX(), box.minY(), box.minZ()),
+				pinFor(site.grid(), turns, beds.cells(), box).withHeldLeaves(held), notes.isEmpty() ? null : String.join("; ", notes), snapshot, before);
 		} catch (RuntimeException e) {
 			// never leave a half-built, unrecorded box behind: put the site back as it was captured
 			Architect.LOGGER.error("Placing {} at {} failed; restoring box {}", bp.id(), origin.toShortString(), Anchors.str(snapBox), e);
 			restoreTemplate(level, snapBox, before);
+			releaseHeld(level, held);
 			deleteSnapshot(snapshot);
 			throw new SiteException("Placing " + bp.id() + " failed (" + e.getMessage() + "); the area was restored");
 		}
@@ -618,6 +766,13 @@ public final class Sites {
 		State s = state;
 		Map<String, Site> map = new LinkedHashMap<>(s.byId());
 		map.remove(id);
+		state = new State(Collections.unmodifiableMap(map), s.next(), s.pending());
+		if (b.pin() != null) {
+			releaseHeld(level, b.pin().heldLeaves());
+		}
+		reholdNear(level, b.restoreBox());
+		s = state;
+		map = new LinkedHashMap<>(s.byId());
 		List<Site.Pending> pending = new ArrayList<>(s.pending());
 		pending.add(new Site.Pending(b, System.currentTimeMillis(), "removed"));
 		reports.remove(id);
@@ -781,6 +936,19 @@ public final class Sites {
 			unbuild(level, built);
 			throw new SiteException("Moving " + id + " failed (" + e.getMessage() + "); the new site was restored, " + id + " stays where it was");
 		}
+		// the old record as it is now (building the new site may have taken some of its held leaves into the new box)
+		Site cur = get(id);
+		State s0 = state;
+		Map<String, Site> m0 = new LinkedHashMap<>(s0.byId());
+		m0.put(id, nb);
+		state = new State(Collections.unmodifiableMap(m0), s0.next(), s0.pending());
+		Site.Pin oldPin = cur != null && cur.placedAt() == b.placedAt() && cur.box().equals(b.box()) ? cur.pin() : b.pin();
+		if (oldPin != null) {
+			releaseHeld(oldLevel, oldPin.heldLeaves());
+		}
+		// hold again what standing sites near the old place need (a short move shares leaves with the old site)
+		reholdNear(oldLevel, b.restoreBox());
+		nb = get(id) != null ? get(id) : nb;
 		State s = state;
 		Map<String, Site> map = new LinkedHashMap<>(s.byId());
 		map.put(id, nb);
