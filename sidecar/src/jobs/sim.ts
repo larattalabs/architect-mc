@@ -86,8 +86,9 @@ export class SimJobDriver implements JobDriver {
     for (const a of q.resumeAnswers ?? []) {
       st.results.push({ tool: a.name, ...(a.error !== undefined ? { error: a.error } : { result: a.result }) });
       st.next++;
-      save();
+      step();
     }
+    if (over()) return yield result('error_max_budget_usd');
 
     if (q.kind === 'structured') {
       await pause();
