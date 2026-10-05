@@ -350,3 +350,126 @@ describe.skipIf(!fs.existsSync(path.join(REAL_KIT, 'tools', 'components.mjs')))(
     expect(await p!.exit).toBe(0);
   }, 150_000);
 });
+
+// Phase 4c through the built bundle on port 8296, with the REAL kit (its example massings) and --debug (every outbound
+// message is validated against its schema): a massing, a redirect, massing.list, a detail pass from it (conformance), a
+// massingFirst group with approvalUi "owner" across a SIGKILL while it awaits approval (approve 2, redirect 1, then the
+// last), estimates with the massing pass, and massing.delete.
+describe.skipIf(!fs.existsSync(path.join(REAL_KIT, 'lib', 'massing.mjs')))('dist/main.mjs, phase 4c on port 8296 (sim backend, real kit)', () => {
+  const PORT = 8296;
+  let root: string;
+  let data: string;
+  let p: Proc | undefined;
+  const args = () => ['--port', String(PORT), '--data', data, '--library', path.join(root, 'library'), '--kit', REAL_KIT, '--backend', 'sim', '--debug'];
+  const tokenOf = () => fs.readFileSync(path.join(data, 'client.token'), 'utf8').trim();
+  type M = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
+  const last = (msgs: unknown[], pred: (m: M) => boolean) => (msgs as M[]).filter(pred).at(-1);
+  async function start(): Promise<void> {
+    if (fs.existsSync(path.join(data, 'sidecar.json'))) fs.rmSync(path.join(data, 'sidecar.json'));
+    p = startSidecar(args());
+    await until(() => fs.existsSync(path.join(data, 'sidecar.json')) || p!.child.exitCode !== null, 15_000);
+    if (p.child.exitCode !== null) throw new Error(`the sidecar exited (${p.child.exitCode})${p.child.exitCode === 3 ? `: port ${PORT} is in use (another sidecar or test run?)` : ''}:\n${p.out.join('').slice(-1500)}`);
+  }
+  async function hello2() {
+    const c = await connect(PORT);
+    c.send({ type: 'hello', client: 'mod', version: 'e2e', token: tokenOf(), protocols: [1, 2] });
+    await until(() => c.msgs.some((m) => m.type === 'snapshot'));
+    return c;
+  }
+  type C = Awaited<ReturnType<typeof hello2>>;
+  const ack = async (c: C, id: string) => {
+    await until(() => c.msgs.some((m) => m.type === 'ack' && m.re === id), 15_000);
+    return (c.msgs as M[]).find((m) => m.type === 'ack' && m.re === id)!;
+  };
+  const designDone = (c: C, id: string) => until(() => (c.msgs as M[]).some((m) => m.type === 'design.upsert' && m.design.id === id && ['done', 'failed'].includes(m.design.status)), 40_000);
+  const groupAt = (c: C, id: string, st: string[], pred: (g: M) => boolean = () => true) => until(() => (c.msgs as M[]).some((m) => m.type === 'group.upsert' && m.group.id === id && st.includes(m.group.status) && pred(m.group)), 60_000);
+
+  beforeAll(async () => {
+    if (!fs.existsSync(MAIN)) execFileSync(process.execPath, [path.join(SIDECAR_ROOT, 'scripts', 'build.mjs')], { cwd: SIDECAR_ROOT, stdio: 'pipe' });
+    root = tempDir('arch-e2e-4c-');
+    data = path.join(root, 'sidecar-data');
+    fs.mkdirSync(data, { recursive: true });
+    fs.writeFileSync(path.join(data, 'config.json'), JSON.stringify({ simStepMs: 100, designConcurrency: 3 }));
+    await start();
+  }, 60_000);
+
+  afterAll(async () => {
+    if (p && p.child.exitCode === null) p.child.kill('SIGKILL');
+    rmrf(root);
+  });
+
+  it('a massing, a redirect, a detail pass; a massingFirst group with owner approval across a SIGKILL; delete', async () => {
+    let c = await hello2();
+    const snap = (c.msgs as M[]).find((m) => m.type === 'snapshot')!;
+    expect(snap.features).toContain('massing');
+    expect(snap.massings).toEqual([]);
+    const req = { type: 'tavern', style: 'rustic', features: [], maxSize: { x: 64, y: 40, z: 64 }, name: 'Inn' };
+    c.send({ type: 'design.estimate', id: 'me', request: { ...req, massing: true } });
+    expect((await ack(c, 'me')).result).toMatchObject({ usdLow: 0.1, usdHigh: 0.4, minutesLow: 1, minutesHigh: 3 });
+    // a massing
+    c.send({ type: 'design.request', id: 'm', request: { ...req, massing: true, ext: { 'steward_mc:lot': 'L9' } } });
+    const m = (await ack(c, 'm')).result as M;
+    expect(m).toMatchObject({ massingId: 'mas_inn', version: 1 });
+    await designDone(c, m.designId);
+    expect(last(c.msgs, (x) => x.type === 'design.upsert' && x.design.id === m.designId)!.design).toMatchObject({ status: 'done', massing: { id: 'mas_inn', version: 1 } });
+    await until(() => (c.msgs as M[]).some((x) => x.type === 'massing.upsert' && x.massing.id === 'mas_inn'));
+    expect(fs.existsSync(path.join(root, 'massings', 'mas_inn', 'mas_inn.nbt'))).toBe(true);
+    // a redirect
+    c.send({ type: 'massing.redirect', id: 'r', massingId: 'mas_inn', notes: 'hip the roof' });
+    const r = (await ack(c, 'r')).result as M;
+    expect(r).toMatchObject({ massingId: 'mas_inn', version: 2 });
+    await designDone(c, r.designId);
+    c.send({ type: 'massing.list', id: 'l', massingId: 'mas_inn' });
+    expect(((await ack(c, 'l')).result as M).massings.map((x: M) => x.version)).toEqual([1, 2]);
+    // the detail pass from v1 (the example pair conforms)
+    c.send({ type: 'design.request', id: 'd', request: { ...req, fromMassing: 'mas_inn', massingVersion: 1 } });
+    const d = (await ack(c, 'd')).result as M;
+    await designDone(c, d.designId);
+    const dd = last(c.msgs, (x) => x.type === 'design.upsert' && x.design.id === d.designId)!.design;
+    expect(dd, dd.error).toMatchObject({ status: 'done', conformance: { ok: true, errors: [] } });
+    // a massingFirst group, approved by its owner only
+    const item = (itemKey: string, type: string, o: M = {}) => ({ itemKey, type, style: 'rustic', features: [], maxSize: { x: 64, y: 40, z: 64 }, ...o });
+    const group = {
+      name: 'Crossroads',
+      bible: 'oak',
+      owner: 'steward_mc:s1',
+      massingFirst: true,
+      approvalUi: 'owner',
+      context: 'a crossroads hamlet; the street runs along the south side',
+      items: [item('inn', 'tavern', { anchor: true, role: 'landmark', ext: { 'steward_mc:lot': 'L1' } }), item('watch', 'tower', { ext: { 'steward_mc:lot': 'L2' } }), item('gate', 'gatehouse', { ext: { 'steward_mc:lot': 'L3' } })],
+    };
+    c.send({ type: 'design.estimate', id: 'ge', group });
+    expect(((await ack(c, 'ge')).result as M).basis).toMatch(/massing first: 3 massings/);
+    c.send({ type: 'design.group', id: 'g', group });
+    const g = (await ack(c, 'g')).result as M;
+    await groupAt(c, g.groupId, ['awaiting_approval']);
+    // SIGKILL while it awaits approval
+    p!.child.kill('SIGKILL');
+    await p!.exit;
+    await start();
+    c = await hello2();
+    const back = ((c.msgs as M[]).find((x) => x.type === 'snapshot')!.groups as M[]).find((x) => x.id === g.groupId)!;
+    expect(back).toMatchObject({ status: 'awaiting_approval', awaiting: ['inn', 'watch', 'gate'], approvalUi: 'owner' });
+    expect(back.items.map((i: M) => [i.itemKey, i.ext])).toEqual([['inn', { 'steward_mc:lot': 'L1' }], ['watch', { 'steward_mc:lot': 'L2' }], ['gate', { 'steward_mc:lot': 'L3' }]]);
+    c.send({ type: 'group.approve', id: 'a0', groupId: g.groupId, approve: ['inn'] });
+    expect(await ack(c, 'a0')).toMatchObject({ ok: false, error: expect.stringMatching(/owner only/) });
+    c.send({ type: 'group.approve', id: 'a1', groupId: g.groupId, owner: 'steward_mc:s1', approve: ['inn', 'watch'], redirect: { gate: 'make it wider' } });
+    expect((await ack(c, 'a1')).result).toMatchObject({ redirected: { gate: { version: 2 } } });
+    await groupAt(c, g.groupId, ['awaiting_approval', 'running', 'queued'], (x) => x.items[2].stage === 'approval' && x.items[2].massing.version === 2);
+    c.send({ type: 'group.approve', id: 'a2', groupId: g.groupId, owner: 'steward_mc:s1', approve: ['gate'] });
+    expect((await ack(c, 'a2')).ok).toBe(true);
+    await groupAt(c, g.groupId, ['done', 'failed']);
+    const gd = last(c.msgs, (x) => x.type === 'group.upsert' && x.group.id === g.groupId)!.group;
+    expect(gd).toMatchObject({ status: 'done', done: 3, failed: 0 });
+    expect(gd.items.map((i: M) => i.rounds)).toEqual([0, 0, 1]);
+    // delete: a stand-alone massing goes at once
+    c.send({ type: 'massing.delete', id: 'x', massingId: 'mas_inn' });
+    expect((await ack(c, 'x')).result).toMatchObject({ massingId: 'mas_inn', versions: 2 });
+    await until(() => (c.msgs as M[]).some((x) => x.type === 'massing.removed' && x.massingId === 'mas_inn'));
+    expect(fs.existsSync(path.join(root, 'massings', 'mas_inn'))).toBe(false);
+    // nothing failed an outbound schema check (--debug validates every message)
+    expect(p!.out.join('')).not.toMatch(/violates protocol/);
+    c.send({ type: 'shutdown', id: 'q' });
+    expect(await p!.exit).toBe(0);
+  }, 180_000);
+});

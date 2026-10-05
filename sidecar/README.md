@@ -250,6 +250,61 @@ How they run:
 `<data>/config.json` adds `designConcurrency`, `bibleModel`, `landmarkModel`, `ordinaryModel`, `softBudgetFraction`,
 `simDesignUsd` and `simLimitMs`.
 
+## Phase 4c: massings, redirects, group approval
+
+The binding text is `../docs/CONTRACT.md`, "Phase 4c contract" and "4c review folded in". The schemas are in
+`src/protocol.ts`; the code in `src/massings.ts` (records, install, delete, GC), `src/groups.ts` (massingFirst) and the two
+designers. Snapshot `features` adds `massing`.
+
+- **A massing job** is `design.request { request: { ...DesignRequest, massing: true } }` -> ack `{ designId, massingId,
+  version: 1 }`. It is an ordinary design record with `design.massing = { id, version }` and never a `blueprintId`. The id
+  `mas_<slug of the name, else style_type>` is reserved at once. Defaults: `massingModel` (claude-sonnet-5-5), effort
+  `massingEffort` (low), `massingMaxTurns` (20). BRIEF.md asks for `kit/lib/massing.mjs`, masses named by function, the
+  bible's roles, the entrance, and `request.maxSize` as a hard limit. The re-check is `build.mjs <id> --profile massing
+  --max x,y,z --type <t> --json`; the sidecar also requires `massing: true` and at least 2 parts in the built sidecar.
+- **Install:** `<massings>/<id>/versions/<v>/` (`<id>.nbt`, `.blueprint.json` with `massing: true`, `version`, `request`,
+  `ext`, `bible`, `group`, `groupItem`, `redirect`; `.mjs`, previews, `bible/`), and a copy of the latest version at
+  `<massings>/<id>/`. `<massings>` is `<library>/../massings` (`--massings` overrides). Massings never enter the library.
+- **`Massing`** (one record per version, in state.json): `{ id, version, versions, designId, type, name?, itemKey?, ext?,
+  owner?, group?, bible?, parts, size, request, cost, dir, nbt, previews, redirect?: { fromVersion, notes }, detail?: {
+  designId, status, entryId?, at? }, createdAt }`. Sent as `massing.upsert { massing }` when a version installs and when a
+  detail pass from it changes; `massing.removed { massingId, reason: deleted|gc }`; `snapshot.massings` = the latest
+  version of every open massing (not detailed, its group not final) plus the last 20.
+- `massing.redirect { massingId, notes, owner?, model?, budgetUsd? }` -> ack `{ designId, massingId, version }`: version + 1
+  from the latest version plus the notes (the scratch dir gets `massing/<id>.*` of the old version). One at a time per
+  massing. A group's massing goes through `group.approve` rules (owner, cap).
+- `massing.list { owner?, massingId? }` -> ack `{ massings }` (the latest of each; with `massingId`, every version).
+- `massing.delete { massingId }` -> ack `{ massingId, versions }`: immediate, refused while a job makes or details it or its
+  group is not final. **GC** at start and hourly: a group's massings 7 days after the group is final; a stand-alone one 7
+  days after its detail design finished, else 30 days after its latest version.
+- **The detail pass:** `design.request { request: { ...DesignRequest, fromMassing, massingVersion? } }` -> ack `{ designId,
+  massing: { id, version } }` (the version is pinned; the massing's bible is inherited). A group's massing is refused
+  (approve it). The scratch dir gets `massing/<id>.mjs`, `.blueprint.json` and the previews; BRIEF.md makes it binding
+  (part names, boxes within 1, roof forms, size within 2) and shows the hard cap. The re-check passes BOTH `--max
+  min(massing size + 2, maxSize)` and `--massing <the version's blueprint.json>`: conformance errors fail the round (and
+  go into the fix prompt), issues stay as warnings in `design.conformance = { ok, errors, issues }`. The entry records
+  `fromMassing: { id, version }`.
+- **Groups:** `GroupRequest` adds `massingFirst`, `approvalUi: architect|owner` (owner needs `owner`), `maxRedirects`
+  (0..10, config `maxRedirects`, 3) and `context` (text <= 4000 chars or JSON, into every item's brief; a single
+  `DesignRequest.context` too). With massingFirst every item starts as a massing (in waves; later waves see the earlier
+  massings as neighbours). `GroupItem` adds `stage: massing|approval|detail`, `massing {id, version}`, `rounds`,
+  `designIds`; `Group` adds `massingFirst`, `approvalUi`, `maxRedirects`, `context`, `awaiting: [itemKey]` and the status
+  `awaiting_approval` (an item waits and no massing of the group is open; precedence cancelled > awaiting_approval >
+  paused_budget > held_usage > running > queued).
+- `group.approve { groupId, approve?: [itemKey], redirect?: { itemKey: notes }, cancel?: [itemKey], owner? }` -> ack `{
+  groupId, approved: { itemKey: designId }, redirected: { itemKey: { designId, version } }, cancelled: [itemKey] }`.
+  Validated as a whole first. With approvalUi `owner`, `owner` must equal the group's. A redirect past `maxRedirects` is
+  refused. `cancel` (an addition) drops items. An item's cost is every design it made, so massings and redirects count
+  toward the aggregate and the soft/hard budget (the hard cap also ends items awaiting approval).
+- **Estimates:** a `massing` kind (seed $0.10-0.40, 1-3 min); `design.estimate` of a massing request, and of a
+  massingFirst group (both passes; redirects not included).
+- **Sim:** a massing installs the kit's example massing for the type (`kit/massings/<type>_massing.mjs`, else the
+  cabin's) with the requested type written in; a redirect bumps the first int param (the fixture grows a wing), else turns
+  the first gable into a hip; a detail pass builds the type's design example with `--massing` (the example pairs conform).
+- A protocol-1 client sees none of it (massing and detail designs are filtered out).
+
+`<data>/config.json` adds `massingModel`, `massingEffort`, `massingMaxTurns` and `maxRedirects`.
+
 ## Variants and imports
 
 Neither uses Claude, and they run one at a time on their own queue, so a variant never waits behind a design.
