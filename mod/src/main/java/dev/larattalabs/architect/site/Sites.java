@@ -1156,6 +1156,7 @@ public final class Sites {
 			throw new SiteException(id + " is in " + b.dimension() + ", not in " + dimensionId(level) + ": remove it from there");
 		}
 		SiteJournal.requireAvailable();
+		Trace tr = new Trace("remove " + id);
 		MinecraftServer server = level.getServer();
 		if (SiteJournal.active(id).isEmpty()) {
 			throw new SiteException("The saved terrain of " + id + " (" + b.snapshot() + ") is not in the world journal, so it cannot be restored; "
@@ -1203,6 +1204,7 @@ public final class Sites {
 				}
 			}
 		}
+		tr.mark("checks");
 		// a construction site deconstructs: refunds for paid cells still standing, against the stacks before the undo (rule 7)
 		Map<String, Builder.Deconstruction> decs = new LinkedHashMap<>();
 		for (Site x : all) {
@@ -1215,6 +1217,7 @@ public final class Sites {
 			u = union(u, x.restoreBox());
 		}
 		Drops drops = Drops.before(level, u);
+		tr.mark("drops");
 		List<String> ids = new ArrayList<>(all.stream().map(Site::id).toList());
 		for (String c : cascade) {
 			if (Infras.get(c) != null) {
@@ -1224,7 +1227,9 @@ public final class Sites {
 		WorldJournal.kill("K5");
 		String group = SiteJournal.group(id);
 		SiteJournal.Undone undone = SiteJournal.undo(level, ids, group);
+		tr.mark("plan");
 		SiteJournal.await(undone.commit(), "the removal of " + id);
+		tr.mark("commit");
 		WorldJournal.kill("K6");
 		// R3: the records pending
 		for (Site x : all) {
@@ -1238,6 +1243,7 @@ public final class Sites {
 		// R4: the writes, top first (the cascade is ordered top-down)
 		Removed last = null;
 		Map<String, Integer> handed = handedBySite(undone.work());
+		tr.mark("pending");
 		for (String c : cascade) {
 			if (Infras.get(c) == null && Infras.pending(c) != null) {
 				Infras.finishRemoval(level, c, group, true);
@@ -1245,13 +1251,16 @@ public final class Sites {
 		}
 		for (Site x : all) {
 			SiteJournal.Restore r = SiteJournal.writeNow(level, x.id(), group);
+			tr.mark("write " + x.id());
 			Journal.Stats st = statsOf(undone.work(), x.id());
 			Removed done = afterRestore(level, x, decs.get(x.id()), drops, force, true, r.ring(), st, x.id().equals(id) ? handed : Map.of(),
 				x.id().equals(id) ? cascade : List.of(), notesOf(level, r));
+			tr.mark("after " + x.id());
 			if (x.id().equals(id)) {
 				last = done;
 			}
 		}
+		tr.done();
 		return last;
 	}
 
