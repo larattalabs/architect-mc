@@ -459,6 +459,19 @@ public final class Builder {
 				add(cells, seen, new BlockPos(arr[i], arr[i + 1], arr[i + 2]));
 			}
 		}
+		// settle: block ticks the instant placement scheduled on its own cells run now (a path that ended up under a solid
+		// block turns to dirt one tick later), so the target is what an instant placement holds once it has settled
+		int settled = 0;
+		for (BlockPos p : cells) {
+			BlockState st = level.getBlockState(p);
+			if (!st.isAir() && level.getBlockTicks().hasScheduledTick(p, st.getBlock())) {
+				st.tick(level, p, level.getRandom());
+				settled++;
+			}
+		}
+		if (settled > 0) {
+			Architect.LOGGER.info("Construction site {}: ran {} block tick(s) the instant placement scheduled on its cells", id, settled);
+		}
 		// the target: what the instant placement left over the whole snapshot box (states and block-entity NBT)
 		CompoundTag target;
 		String targetFile = id + "-" + System.currentTimeMillis() + "-target.nbt";
