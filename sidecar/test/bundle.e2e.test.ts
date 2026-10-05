@@ -291,7 +291,7 @@ describe.skipIf(!fs.existsSync(path.join(REAL_KIT, 'tools', 'components.mjs')))(
     expect((snap.bibleIndex as M[]).map((b) => b.id)).toEqual(expect.arrayContaining(['rustic', 'oak', 'cherry', 'fortress']));
     // estimates
     c.send({ type: 'bible.estimate', id: 'be', request: { prompt: 'x' } });
-    expect((await ack(c, 'be')).result).toMatchObject({ usdLow: 1, usdHigh: 1.5, minutesLow: 4, minutesHigh: 6 });
+    expect((await ack(c, 'be')).result).toMatchObject({ usdLow: 1.2, usdHigh: 2, minutesLow: 5, minutesHigh: 8 });
     // a bible
     c.send({ type: 'bible.request', id: 'b', request: { prompt: 'weathered fishing village on stilts', name: 'Stilts', ext: { 'steward_mc:k': 1 } } });
     const b = (await ack(c, 'b')).result as M;
@@ -314,7 +314,7 @@ describe.skipIf(!fs.existsSync(path.join(REAL_KIT, 'tools', 'components.mjs')))(
       ],
     };
     c.send({ type: 'design.estimate', id: 'ge', group });
-    expect((await ack(c, 'ge')).result).toMatchObject({ minutesLow: 8, basis: expect.stringMatching(/2 waves/) });
+    expect((await ack(c, 'ge')).result).toMatchObject({ minutesLow: 12, basis: expect.stringMatching(/2 waves/) });
     c.send({ type: 'design.group', id: 'g', group });
     const g = (await ack(c, 'g')).result as M;
     expect(g.itemKeys).toEqual(['hall', 'hut', 'watch']);

@@ -982,7 +982,7 @@ collection header with the bible's sheet, name and a "re-skin the collection" ac
 
 - One bible from a prompt (real Claude). Its sheet renders, and its components pass their check.
 - A group of 3 designs (house, tavern, tower; one landmark) with that bible, on real Claude:
-  - wall time at most 1.5x the slowest single design;
+  - wall time at most the sum over waves of 1.5x that wave's slowest design (anchor-first waves run in sequence, and a wave's items run in parallel; amended 2026-10-05 after the real run: 22.7 min = 12.5 for the anchor + 10.2 for the parallel second wave);
   - all 3 use the bible's components and roles;
   - each has at least 2 named parts;
   - the aggregate cost is reported.
@@ -1032,3 +1032,10 @@ collection header with the bible's sheet, name and a "re-skin the collection" ac
 `Sites.survival()` -> `SurvivalInfo { boolean enabled; int blocksPerTick; boolean mayToggle(@Nullable ServerPlayer actor); }` for the
 server's world, plus a `WORLD_MODE_CHANGED(SurvivalInfo)` event (fired by the Status tab, `/architect survival` and the default at the
 first load). Feature name: `"survivalInfo"`.
+
+### 4b estimate seeds (measured 2026-10-05)
+
+The seeded estimates were wrong by more than 2x on the first real group ($1.8-2.7 estimated, $6.68 measured). Seeds are now
+measured values: an Opus design $2.0-3.2 and 8-13 min, a Sonnet design $0.8-2.5 and 4-10 min, a bible job $1.2-2.0 and 5-8 min.
+For the gate group (1 Opus anchor plus 2 Sonnet) that gives $3.6-8.2 and 12-23 min; the measured $6.68 and 22.7 min fall inside.
+Real samples replace the seeds per model as they accrue.

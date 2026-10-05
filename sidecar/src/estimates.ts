@@ -1,9 +1,9 @@
 // Cost and time estimates (docs/CONTRACT.md phase 4b, "4b review folded in" item 2): `design.estimate` and
 // `bible.estimate` answer { usdLow, usdHigh, minutesLow, minutesHigh, basis }, computed from a rolling per-model average
 // of finished designs and bible jobs (the last 20 of each, persisted in state.json), the concurrency and the current
-// usage-limit state. Until a model has measurements the seeds stand in: an Opus design costs about $1.0-1.5 and takes
-// 4-6 minutes (measured in phases 1-2); Sonnet is unmeasured and seeded at 0.4x the Opus cost (same time); a bible
-// job is about one design. Only the Claude backend records samples (the sim would poison the averages).
+// usage-limit state. Until a model has measurements the seeds stand in, measured in the phase 4b gate (2026-10-05):
+// an Opus design $2.0-3.2 and 8-13 min, a Sonnet design $0.8-2.5 and 4-10 min, a bible job $1.2-2.0 and 5-8 min (the
+// phase 1-2 Opus figure of $1-1.5 was for smaller, simpler designs). Only the Claude backend records samples.
 import type { BibleRequest, DesignRequest, Estimate, GroupRequest } from './protocol.js';
 import type { Store } from './store.js';
 
@@ -25,14 +25,18 @@ interface Seed {
   usd: [number, number];
   ms: [number, number];
 }
-const OPUS: Seed = { usd: [1.0, 1.5], ms: [4 * MIN, 6 * MIN] };
+const OPUS: Seed = { usd: [2.0, 3.2], ms: [8 * MIN, 13 * MIN] };
+/** Sonnet design seed, measured 2026-10-05 (4 real designs in the phase 4b gate: $0.86-2.45, 4-10 min). */
+/** Bible job seed, measured 2026-10-05 (one real bible: $1.40, 6.4 min). */
+const BIBLE: Seed = { usd: [1.2, 2.0], ms: [5 * MIN, 8 * MIN] };
+const SONNET: Seed = { usd: [0.8, 2.5], ms: [4 * MIN, 10 * MIN] };
 
 /** The seed of a model family (by its id). */
 export function seedFor(model: string): { seed: Seed; family: string } {
   const m = model.toLowerCase();
-  if (m.includes('sonnet')) return { seed: { usd: [OPUS.usd[0] * 0.4, OPUS.usd[1] * 0.4], ms: OPUS.ms }, family: 'sonnet (0.4x the Opus cost, unmeasured)' };
+  if (m.includes('sonnet')) return { seed: SONNET, family: 'sonnet ($0.8-2.5, 4-10 min per design, measured 2026-10-05)' };
   if (m.includes('haiku')) return { seed: { usd: [OPUS.usd[0] * 0.15, OPUS.usd[1] * 0.15], ms: [OPUS.ms[0] * 0.6, OPUS.ms[1] * 0.6] }, family: 'haiku (0.15x the Opus cost, unmeasured)' };
-  return { seed: OPUS, family: 'opus ($1.0-1.5, 4-6 min per design)' };
+  return { seed: OPUS, family: 'opus ($2.0-3.2, 8-13 min per design, measured 2026-10-05)' };
 }
 
 const r2 = (n: number) => Math.round(n * 100) / 100;
@@ -152,7 +156,7 @@ export class Estimates {
   bible(req: Partial<BibleRequest>, ctx: EstimateCtx): Estimate {
     const model = req.model ?? ctx.bibleModel;
     const measured = this.data.bible[model]?.length;
-    const pj = measured ? this.perJob('bible', model) : { ...this.perJob('design', model), basis: `${model}: about one design (no bible measured yet): ${this.perJob('design', model).basis}` };
+    const pj = measured ? this.perJob('bible', model) : { usd: BIBLE.usd, ms: BIBLE.ms, basis: `${model}: seed, a bible job ($1.2-2.0, 5-8 min, measured 2026-10-05)` };
     const wait = ctx.limitUntil && ctx.limitUntil > ctx.now ? ctx.limitUntil - ctx.now : 0;
     return { usdLow: r2(pj.usd[0]), usdHigh: r2(pj.usd[1]), minutesLow: r1((pj.ms[0] + wait) / MIN), minutesHigh: r1((pj.ms[1] + wait) / MIN), basis: [pj.basis, ...(wait ? [`a usage limit holds new turns for ${Math.ceil(wait / MIN)} min`] : [])].join('; ') };
   }
