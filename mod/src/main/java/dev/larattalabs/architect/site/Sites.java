@@ -858,6 +858,9 @@ public final class Sites {
 				}
 			}
 			site = checkSite(level, bp, origin, rotation, force, moving, out, dryRun, survival && moving == null, layer, owner);
+			if (site != null && typed.isEmpty() && moving == null) {
+				checked = new Checked(checkKey(level, bp, origin, rotation, force, survival, layer, owner), level.getServer().getTickCount(), site);
+			}
 			List<String> notes = new ArrayList<>(site == null ? List.of() : siteNotes(site, site.found()));
 			if (site != null) {
 				notes.addAll(site.layerNotes());
@@ -1740,7 +1743,12 @@ public final class Sites {
 		}
 		SiteJournal.requireAvailable();
 		long tr0 = System.nanoTime();
-		SitePlan site = checkSite(level, bp, origin, rotation, force, null, THROW, false, construction, layer, siteOwner);
+		// a large batch item was checked in the tick before (its verdict): that plan is used, not made again
+		Checked c = checked;
+		checked = null;
+		SitePlan site = c != null && c.key().equals(checkKey(level, bp, origin, rotation, force, construction, layer, siteOwner))
+			&& level.getServer().getTickCount() - c.tick() <= 1 ? c.plan()
+				: checkSite(level, bp, origin, rotation, force, null, THROW, false, construction, layer, siteOwner);
 		if (site == null) {
 			throw new SiteException("Internal: no site for " + bp.id());
 		}
@@ -1809,6 +1817,17 @@ public final class Sites {
 		Architect.LOGGER.info("Placing site {} ({}) over ticks at {} rotation {}: box {}, journal box {} ({} cells)", id, bp.id(), origin.toShortString(),
 			rec.rotation(), Anchors.str(box), Anchors.str(snapBox), snapBox.volume());
 		return job;
+	}
+
+	/** The last verdict without refusals (phase 4e: a large batch item's start, a tick later, uses its plan). */
+	private record Checked(String key, int tick, SitePlan plan) {
+	}
+
+	private static @Nullable Checked checked;
+
+	private static String checkKey(ServerLevel level, Blueprint bp, BlockPos origin, Rotation rotation, boolean force, boolean survival, boolean layer,
+		@Nullable String owner) {
+		return dimensionId(level) + "|" + bp.id() + "|" + origin.asLong() + "|" + rotation + "|" + force + "|" + survival + "|" + layer + "|" + owner;
 	}
 
 	/** P4 of a ticked placement (its PLACING commit is durable): the record, placing. */
