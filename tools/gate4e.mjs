@@ -549,6 +549,209 @@ steps.orders = async () => {
   return { ids: b.ids, L: b.L.siteId, seam: b.seamKinds };
 };
 
+// ------------------------------------------------------------------ gate 5: crash mid-write (K1-K8)
+
+/** Every file the on-disk index names exists; the files it does not name (orphans). Read straight from the world folder. */
+function journalFiles(world) {
+  const dir = path.join(SAVES, world, 'architect-journal');
+  const idx = JSON.parse(fs.readFileSync(path.join(dir, 'journal.json'), 'utf8'));
+  const named = new Set();
+  const missing = [];
+  for (const e of idx.entries ?? []) {
+    for (const [k, gen] of Object.entries(e.files ?? {})) {
+      const f = k === 'head' ? `head.${gen}.nbt` : `${k.replace(',', '.')}.${gen}.nbt`;
+      const rel = path.join('e', e.id, f);
+      named.add(rel);
+      if (!fs.existsSync(path.join(dir, rel))) missing.push(rel);
+    }
+  }
+  const orphans = [];
+  const edir = path.join(dir, 'e');
+  for (const id of fs.existsSync(edir) ? fs.readdirSync(edir) : []) {
+    for (const f of fs.readdirSync(path.join(edir, id))) {
+      const rel = path.join('e', id, f);
+      if (!named.has(rel)) orphans.push(rel);
+    }
+  }
+  return { entries: (idx.entries ?? []).map((e) => `${e.id}:${e.site}:${e.status}`), missing, orphans };
+}
+
+/** Removes every site and road standing (top of the stacks first), then hashes the fixture box. */
+async function removeAll() {
+  const out = [];
+  for (let round = 0; round < 10; round++) {
+    const all = await sites();
+    if (!all.length) break;
+    const tops = all.filter((x) => !(x.coveredBy ?? []).length);
+    for (const t of tops.length ? tops : all) {
+      const r = await result(await api(`remove ${t.id} - force keep`), 300_000);
+      out.push({ id: t.id, removed: r.removed, blockers: r.blockers });
+    }
+  }
+  await settle(2000);
+  return { removed: out, left: (await sites()).map((x) => x.id), h: (await hash(FIX_BOX)).sha256 };
+}
+
+/** Runs {@code action} with kill point {@code point} armed in a fresh copy of {@code base}; restarts the client into that world. */
+async function killRun(point, base, action, pre) {
+  await leaveWorld();
+  copyWorld(base, 'G4E Crash');
+  await openWorld('G4E Crash');
+  await tp(48.5, 80, 30.5);
+  const before = { sites: (await sites()).map((x) => x.id), journal: journalFiles('G4E Crash') };
+  await cmd('/save-all flush');
+  await settle(1000);
+  await call('dev.journal.killAt', { point });
+  const t0 = Date.now();
+  action().catch(() => {});
+  const died = await waitDead(180_000);
+  check(died, `crash ${point}: the JVM halted at the kill point (${((Date.now() - t0) / 1000).toFixed(1)} s)`);
+  if (!died) {
+    await connect();
+    await call('dev.journal.killAt', { point: null });
+    return null;
+  }
+  await sleep(2000);
+  const disk = journalFiles('G4E Crash');
+  check(disk.missing.length === 0, `crash ${point}: no file the index names is lost (orphans on disk: ${disk.orphans.length})`, disk);
+  await startClient('G4E Crash');
+  await tp(48.5, 80, 30.5);
+  await settle(5000);
+  const j = await journal();
+  check(j.open && !j.unavailable, `crash ${point}: the journal opens`, { open: j.open, unavailable: j.unavailable });
+  const after = journalFiles('G4E Crash');
+  return { before, disk, j, after, pre };
+}
+
+async function finalExact(point, pre) {
+  const f = await removeAll();
+  check(f.left.length === 0 && f.h === pre, `crash ${point}: a final full removal matches the pre-hash`, f);
+}
+
+steps.crash = async () => {
+  if (!dev) await connect();
+  if (!ctx.orders) throw new Error('run `orders` first (its base world and pre-hash)');
+  const pre = ctx.orders.h0;
+  const ids = ctx.orders.ids;
+  const out = {};
+  const placeAtomic = () => api('place cabin 28 65 -40 INSTANT unowned noactor 0');
+  // K1: inside the P3 commit (files written, index not) - nothing changed, the files are orphans
+  let r = await killRun('K1', FLAT, placeAtomic, pre);
+  if (r) {
+    const all = await sites();
+    check(all.length === 0 && (r.j.entries ?? []).length === 0, `crash K1: no site and no entry (orphans after the start: ${r.after.orphans.length})`, { all, r });
+    check((await hash(FIX_BOX)).sha256 === pre, 'crash K1: the world is unchanged');
+    await finalExact('K1', pre);
+    out.K1 = r;
+  }
+  // K2: after P3, before the record - the PLACING entry is released at the start and nothing is written
+  r = await killRun('K2', FLAT, placeAtomic, pre);
+  if (r) {
+    const all = await sites();
+    check(all.length === 0 && (r.j.entries ?? []).length === 0, 'crash K2: the PLACING entry is released, no record', { all, entries: r.j.entries });
+    check((await hash(FIX_BOX)).sha256 === pre, 'crash K2: nothing was written');
+    await finalExact('K2', pre);
+    out.K2 = r;
+  }
+  // K3: during the ticked block writes (unclean) - rolled back by the undo of the PLACING entry
+  r = await killRun('K3', FLAT, async () => {
+    await cmd('/architect budget 1');
+    return queue({ id: 'k3', items: [{ key: 'a', bp: 'cabin', at: [28, 65, -40], rot: 0, mode: 'INSTANT' }] });
+  }, pre);
+  if (r) {
+    await settle(8000);
+    const all = await sites();
+    const j = await journal();
+    check(all.length === 0 && (j.entries ?? []).every((e) => e.status === 'UNDONE'), 'crash K3: the unclean stop rolled the placement back (no site, its entry undone)',
+      { all, entries: j.entries });
+    check((await hash(FIX_BOX)).sha256 === pre, 'crash K3: the rollback wrote the before exactly');
+    await finalExact('K3', pre);
+    await cmd('/architect budget 4');
+    out.K3 = r;
+  }
+  // K4: after the ACTIVE commit, before the record is placed - the journal wins
+  r = await killRun('K4', FLAT, placeAtomic, pre);
+  if (r) {
+    const all = await sites();
+    const j = await journal();
+    check(all.length === 1 && all[0].state !== 'placing' && (j.entries ?? []).some((e) => e.status === 'ACTIVE' && e.site === all[0].id),
+      `crash K4: the record is placed (${JSON.stringify(all.map((x) => [x.id, x.state]))})`, { all, entries: j.entries });
+    await finalExact('K4', pre);
+    out.K4 = r;
+  }
+  // K5: before the R2 commit - nothing changed
+  r = await killRun('K5', 'G4E OrdBase', () => api(`remove ${ids.H} - noforce keep`), pre);
+  if (r) {
+    const all = (await sites()).map((x) => x.id).sort();
+    check(JSON.stringify(all) === JSON.stringify(Object.values(ids).sort()), `crash K5: all four sites stand (${all})`, { all });
+    const lk = await ownedNow(Object.values(ids));
+    const bad = Object.entries(lk).filter(([, v]) => [...v.cells.values()].some((c) => c.endsWith(' !after') && !/dirt_path|"minecraft:dirt"/.test(c)));
+    check(bad.length === 0, 'crash K5: every site holds its after', bad.map(([k]) => k));
+    await finalExact('K5', pre);
+    out.K5 = r;
+  }
+  // K6: after R2, before the records go pending - the evidence finds H standing: reactivated, the record back
+  r = await killRun('K6', 'G4E OrdBase', () => api(`remove ${ids.H} - noforce keep`), pre);
+  if (r) {
+    const all = (await sites()).map((x) => x.id).sort();
+    const j = await journal();
+    const hEntries = (j.entries ?? []).filter((e) => e.site === ids.H);
+    check(all.includes(ids.H) && hEntries.every((e) => e.status === 'ACTIVE'), `crash K6: H is back (record and ACTIVE entries: ${hEntries.map((e) => e.status)})`,
+      { all, hEntries });
+    await finalExact('K6', pre);
+    out.K6 = r;
+  }
+  // K7: during the ticked restore of a group removal - re-run at the start, settled at the next
+  r = await killRun('K7', 'G4E OrdBase', async () => {
+    await cmd('/architect budget 1');
+    return api(`sgremove ${ctx.orders.group}`);
+  }, pre);
+  if (r) {
+    for (let i = 0; i < 120 && (await sites()).length; i++) await sleep(1000);
+    const all = await sites();
+    const h = (await hash(FIX_BOX)).sha256;
+    check(all.length === 0 && h === pre, `crash K7: the restore re-ran at the start: no site, the box exact (${all.length} left)`, { all });
+    // settled at the next start
+    await stopClient();
+    await startClient('G4E Crash');
+    const j = await journal();
+    check((j.entries ?? []).length === 0, `crash K7: the next start settles the group (${(j.entries ?? []).length} entries left)`, j.entries);
+    check((await hash(FIX_BOX)).sha256 === pre, 'crash K7: still exact after settling');
+    await cmd('/architect budget 4');
+    out.K7 = r;
+  }
+  // K8: inside the R2 commit that hands H's cells down to X - nothing changed (the index was not written)
+  r = await killRun('K8', 'G4E OrdBase', () => api(`remove ${ids.H} - noforce keep`), pre);
+  if (r) {
+    const all = (await sites()).map((x) => x.id).sort();
+    const j = await journal();
+    check(JSON.stringify(all) === JSON.stringify(Object.values(ids).sort()) && (j.entries ?? []).every((e) => e.status === 'ACTIVE'),
+      `crash K8: the hand-down did not half apply: all four stand, all entries ACTIVE`, { all, entries: j.entries });
+    await finalExact('K8', pre);
+    out.K8 = r;
+  }
+  // K3, clean: a clean stop mid-placement resumes from the cursor
+  await leaveWorld();
+  copyWorld(FLAT, 'G4E Crash');
+  await openWorld('G4E Crash');
+  await tp(48.5, 80, 30.5);
+  await cmd('/architect budget 1');
+  await mark();
+  const bid = await queue({ id: 'k3c', items: [{ key: 'a', bp: 'cabin', at: [28, 65, -40], rot: 0, mode: 'INSTANT' }] });
+  await sleep(300);
+  await stopClient();
+  await startClient('G4E Crash');
+  await mark();
+  await cmd('/architect budget 4');
+  for (let i = 0; i < 120 && !(await sites()).some((x) => x.state === 'placed'); i++) await sleep(1000);
+  const all = await sites();
+  check(all.length === 1 && all[0].state === 'placed', `crash K3 clean: the placement resumed after a clean stop (${JSON.stringify(all.map((x) => [x.id, x.state]))})`,
+    { bid, all });
+  await finalExact('K3-clean', pre);
+  await leaveWorld();
+  return out;
+};
+
 /** `stop`: quits the gate client (by PID if it hangs). `start [world]`: moves the run worktree to this worktree's HEAD and starts it. */
 steps.stop = async () => {
   try {
