@@ -1,0 +1,1410 @@
+{
+ "cabin|-|{\"width\":7,\"depth\":6,\"porch\":false}": {
+  "nbt": "1b44936f0f04b52a",
+  "sidecar": "298a6e4b2f93b9ed"
+ },
+ "cabin|-|{\"width\":7,\"depth\":6,\"porch\":true}": {
+  "nbt": "229dc3e60a5b196f",
+  "sidecar": "ba570a700da8893d"
+ },
+ "cabin|-|{\"width\":7,\"depth\":9,\"porch\":false}": {
+  "nbt": "e07caf4f7ddb670e",
+  "sidecar": "8ad1bcb8be72799d"
+ },
+ "cabin|-|{\"width\":7,\"depth\":9,\"porch\":true}": {
+  "nbt": "430ca96466c644ba",
+  "sidecar": "2dbc1fec36605b54"
+ },
+ "cabin|-|{\"width\":13,\"depth\":6,\"porch\":false}": {
+  "nbt": "99cb36d13dbc6c7d",
+  "sidecar": "f3e3d2ce30423da5"
+ },
+ "cabin|-|{\"width\":13,\"depth\":6,\"porch\":true}": {
+  "nbt": "b409e28dff9fcd1e",
+  "sidecar": "880a6ec2e134ca46"
+ },
+ "cabin|-|{\"width\":13,\"depth\":9,\"porch\":false}": {
+  "nbt": "d01e3873d8fc8f25",
+  "sidecar": "2df5723cac0ef883"
+ },
+ "cabin|-|{\"width\":13,\"depth\":9,\"porch\":true}": {
+  "nbt": "8cb6d9939b5026c9",
+  "sidecar": "9f402ebaeb5cbc45"
+ },
+ "cabin|rustic|{\"width\":7,\"depth\":6,\"porch\":false}": {
+  "nbt": "1b44936f0f04b52a",
+  "sidecar": "298a6e4b2f93b9ed"
+ },
+ "cabin|rustic|{\"width\":7,\"depth\":6,\"porch\":true}": {
+  "nbt": "229dc3e60a5b196f",
+  "sidecar": "ba570a700da8893d"
+ },
+ "cabin|rustic|{\"width\":7,\"depth\":9,\"porch\":false}": {
+  "nbt": "e07caf4f7ddb670e",
+  "sidecar": "8ad1bcb8be72799d"
+ },
+ "cabin|rustic|{\"width\":7,\"depth\":9,\"porch\":true}": {
+  "nbt": "430ca96466c644ba",
+  "sidecar": "2dbc1fec36605b54"
+ },
+ "cabin|rustic|{\"width\":13,\"depth\":6,\"porch\":false}": {
+  "nbt": "99cb36d13dbc6c7d",
+  "sidecar": "f3e3d2ce30423da5"
+ },
+ "cabin|rustic|{\"width\":13,\"depth\":6,\"porch\":true}": {
+  "nbt": "b409e28dff9fcd1e",
+  "sidecar": "880a6ec2e134ca46"
+ },
+ "cabin|rustic|{\"width\":13,\"depth\":9,\"porch\":false}": {
+  "nbt": "d01e3873d8fc8f25",
+  "sidecar": "2df5723cac0ef883"
+ },
+ "cabin|rustic|{\"width\":13,\"depth\":9,\"porch\":true}": {
+  "nbt": "8cb6d9939b5026c9",
+  "sidecar": "9f402ebaeb5cbc45"
+ },
+ "cabin|oak|{\"width\":7,\"depth\":6,\"porch\":false}": {
+  "nbt": "8f12d941572ebd69",
+  "sidecar": "263695b0806f83ba"
+ },
+ "cabin|oak|{\"width\":7,\"depth\":6,\"porch\":true}": {
+  "nbt": "6a96c86defd524a0",
+  "sidecar": "c4cad1c01d52204c"
+ },
+ "cabin|oak|{\"width\":7,\"depth\":9,\"porch\":false}": {
+  "nbt": "94073e2d1679216a",
+  "sidecar": "09bac97649c7a579"
+ },
+ "cabin|oak|{\"width\":7,\"depth\":9,\"porch\":true}": {
+  "nbt": "075862ea18e2d46a",
+  "sidecar": "504058d7a6516d0d"
+ },
+ "cabin|oak|{\"width\":13,\"depth\":6,\"porch\":false}": {
+  "nbt": "31336a540ce326f1",
+  "sidecar": "92db07faafd08d83"
+ },
+ "cabin|oak|{\"width\":13,\"depth\":6,\"porch\":true}": {
+  "nbt": "b466045e42eeaced",
+  "sidecar": "294fbc5aa3808416"
+ },
+ "cabin|oak|{\"width\":13,\"depth\":9,\"porch\":false}": {
+  "nbt": "bd18e11da7be18e8",
+  "sidecar": "6e5792cd8bd448a5"
+ },
+ "cabin|oak|{\"width\":13,\"depth\":9,\"porch\":true}": {
+  "nbt": "cb87cd41a93c2199",
+  "sidecar": "0d9cb94602801096"
+ },
+ "cabin|birch|{\"width\":7,\"depth\":6,\"porch\":false}": {
+  "nbt": "b8a0f6b28b8afb3e",
+  "sidecar": "f60db305e8c70464"
+ },
+ "cabin|birch|{\"width\":7,\"depth\":6,\"porch\":true}": {
+  "nbt": "68c33085808b9f2b",
+  "sidecar": "1118c4c44e4bbf18"
+ },
+ "cabin|birch|{\"width\":7,\"depth\":9,\"porch\":false}": {
+  "nbt": "9caedb313f6a57db",
+  "sidecar": "c274c612e927db7a"
+ },
+ "cabin|birch|{\"width\":7,\"depth\":9,\"porch\":true}": {
+  "nbt": "e153faaf5ab2e8e3",
+  "sidecar": "4df8158506117d17"
+ },
+ "cabin|birch|{\"width\":13,\"depth\":6,\"porch\":false}": {
+  "nbt": "df4b7724bd6b19c1",
+  "sidecar": "c6f41a6098e0e18f"
+ },
+ "cabin|birch|{\"width\":13,\"depth\":6,\"porch\":true}": {
+  "nbt": "b833fa29c2cca1be",
+  "sidecar": "c8bdf521431bac88"
+ },
+ "cabin|birch|{\"width\":13,\"depth\":9,\"porch\":false}": {
+  "nbt": "918df54ab9828f9d",
+  "sidecar": "00c8582f1b9f651f"
+ },
+ "cabin|birch|{\"width\":13,\"depth\":9,\"porch\":true}": {
+  "nbt": "f9d186f8e6b8d42c",
+  "sidecar": "98233fd94c6ab549"
+ },
+ "cabin|dark|{\"width\":7,\"depth\":6,\"porch\":false}": {
+  "nbt": "d127e30a959ba203",
+  "sidecar": "4ab096a813ded1fd"
+ },
+ "cabin|dark|{\"width\":7,\"depth\":6,\"porch\":true}": {
+  "nbt": "862eba58584af960",
+  "sidecar": "3c65b444569daeaf"
+ },
+ "cabin|dark|{\"width\":7,\"depth\":9,\"porch\":false}": {
+  "nbt": "7e40f98acc9f1d3a",
+  "sidecar": "7e2e9f18e1ba8c22"
+ },
+ "cabin|dark|{\"width\":7,\"depth\":9,\"porch\":true}": {
+  "nbt": "311d296517a60c55",
+  "sidecar": "3b8c085119dc9133"
+ },
+ "cabin|dark|{\"width\":13,\"depth\":6,\"porch\":false}": {
+  "nbt": "43d8b8035b71ea16",
+  "sidecar": "5d3f0e0633a54593"
+ },
+ "cabin|dark|{\"width\":13,\"depth\":6,\"porch\":true}": {
+  "nbt": "d4f0f6a6af16f91e",
+  "sidecar": "9538fb322811627a"
+ },
+ "cabin|dark|{\"width\":13,\"depth\":9,\"porch\":false}": {
+  "nbt": "1fcc10dd39fef725",
+  "sidecar": "286128b7d7d83268"
+ },
+ "cabin|dark|{\"width\":13,\"depth\":9,\"porch\":true}": {
+  "nbt": "ac28d2d56dd10059",
+  "sidecar": "3a14bdf560f32bd5"
+ },
+ "cabin|desert|{\"width\":7,\"depth\":6,\"porch\":false}": {
+  "nbt": "f489f78c90d9e522",
+  "sidecar": "8863e0f803975984"
+ },
+ "cabin|desert|{\"width\":7,\"depth\":6,\"porch\":true}": {
+  "nbt": "5a4f3a59e6cb3437",
+  "sidecar": "b6a0134193e1ddba"
+ },
+ "cabin|desert|{\"width\":7,\"depth\":9,\"porch\":false}": {
+  "nbt": "895bb2ce035e42d5",
+  "sidecar": "866e8fa3408102be"
+ },
+ "cabin|desert|{\"width\":7,\"depth\":9,\"porch\":true}": {
+  "nbt": "06623e051cec406c",
+  "sidecar": "6382f0a20bb91e0b"
+ },
+ "cabin|desert|{\"width\":13,\"depth\":6,\"porch\":false}": {
+  "nbt": "389474a11666f28d",
+  "sidecar": "b39995d05b14b599"
+ },
+ "cabin|desert|{\"width\":13,\"depth\":6,\"porch\":true}": {
+  "nbt": "6e96ce80938c3222",
+  "sidecar": "9e8ff7081f6a7b22"
+ },
+ "cabin|desert|{\"width\":13,\"depth\":9,\"porch\":false}": {
+  "nbt": "d88abcb294ddd593",
+  "sidecar": "4925853ef8f18199"
+ },
+ "cabin|desert|{\"width\":13,\"depth\":9,\"porch\":true}": {
+  "nbt": "fee1c29a2a2fdc59",
+  "sidecar": "616e16e8dfb7fa4f"
+ },
+ "cabin|brick|{\"width\":7,\"depth\":6,\"porch\":false}": {
+  "nbt": "b8e0a3ab9b0176b0",
+  "sidecar": "006033f26599cdef"
+ },
+ "cabin|brick|{\"width\":7,\"depth\":6,\"porch\":true}": {
+  "nbt": "8f71aaa48bcbe7bf",
+  "sidecar": "248cf3462ef3af3b"
+ },
+ "cabin|brick|{\"width\":7,\"depth\":9,\"porch\":false}": {
+  "nbt": "e037398d09646a2e",
+  "sidecar": "6cb1aed6586ff273"
+ },
+ "cabin|brick|{\"width\":7,\"depth\":9,\"porch\":true}": {
+  "nbt": "49b435365ad57580",
+  "sidecar": "aee2de70253ce91d"
+ },
+ "cabin|brick|{\"width\":13,\"depth\":6,\"porch\":false}": {
+  "nbt": "a42ec68b26c8b1ba",
+  "sidecar": "af487133b04d20f4"
+ },
+ "cabin|brick|{\"width\":13,\"depth\":6,\"porch\":true}": {
+  "nbt": "b1b87e02d14d3787",
+  "sidecar": "2e922de8a7cbafb4"
+ },
+ "cabin|brick|{\"width\":13,\"depth\":9,\"porch\":false}": {
+  "nbt": "6635e2d3f21d894b",
+  "sidecar": "08ba99498a0063ab"
+ },
+ "cabin|brick|{\"width\":13,\"depth\":9,\"porch\":true}": {
+  "nbt": "19b49bd2c5ae5343",
+  "sidecar": "bdbd129a55599ceb"
+ },
+ "cabin|cherry|{\"width\":7,\"depth\":6,\"porch\":false}": {
+  "nbt": "3608b85ed0fe91c4",
+  "sidecar": "d0b406623cc3b522"
+ },
+ "cabin|cherry|{\"width\":7,\"depth\":6,\"porch\":true}": {
+  "nbt": "c6abdce1f01e6669",
+  "sidecar": "87af1f699303bf77"
+ },
+ "cabin|cherry|{\"width\":7,\"depth\":9,\"porch\":false}": {
+  "nbt": "4dcc8c9c5985bae2",
+  "sidecar": "42e689d6091cd08c"
+ },
+ "cabin|cherry|{\"width\":7,\"depth\":9,\"porch\":true}": {
+  "nbt": "82821a105111d62f",
+  "sidecar": "73f505473871fa17"
+ },
+ "cabin|cherry|{\"width\":13,\"depth\":6,\"porch\":false}": {
+  "nbt": "c762df36be5a5a35",
+  "sidecar": "cfc80fe958ee1428"
+ },
+ "cabin|cherry|{\"width\":13,\"depth\":6,\"porch\":true}": {
+  "nbt": "fd3bc6b4d7b65959",
+  "sidecar": "eafab92ff64aa4a5"
+ },
+ "cabin|cherry|{\"width\":13,\"depth\":9,\"porch\":false}": {
+  "nbt": "cfa5f432aa23a52c",
+  "sidecar": "36e3d3f7083e4651"
+ },
+ "cabin|cherry|{\"width\":13,\"depth\":9,\"porch\":true}": {
+  "nbt": "80b327ae3edf181d",
+  "sidecar": "92f847ff4ec566d0"
+ },
+ "cabin|mangrove|{\"width\":7,\"depth\":6,\"porch\":false}": {
+  "nbt": "4c559b499499f17e",
+  "sidecar": "6853cb83d633993e"
+ },
+ "cabin|mangrove|{\"width\":7,\"depth\":6,\"porch\":true}": {
+  "nbt": "e8ce430cacd8afe4",
+  "sidecar": "f16a72f69daa2434"
+ },
+ "cabin|mangrove|{\"width\":7,\"depth\":9,\"porch\":false}": {
+  "nbt": "f14e894a87db1f58",
+  "sidecar": "27876df60d906144"
+ },
+ "cabin|mangrove|{\"width\":7,\"depth\":9,\"porch\":true}": {
+  "nbt": "bf710a59d05dd5aa",
+  "sidecar": "4dd616b5bad44b71"
+ },
+ "cabin|mangrove|{\"width\":13,\"depth\":6,\"porch\":false}": {
+  "nbt": "4e90a74850dc7a2b",
+  "sidecar": "e774ccf206596350"
+ },
+ "cabin|mangrove|{\"width\":13,\"depth\":6,\"porch\":true}": {
+  "nbt": "dc2c922c001e58a0",
+  "sidecar": "ca8f4ed82f799026"
+ },
+ "cabin|mangrove|{\"width\":13,\"depth\":9,\"porch\":false}": {
+  "nbt": "3c8e42798f1e80c5",
+  "sidecar": "267601709dd38c10"
+ },
+ "cabin|mangrove|{\"width\":13,\"depth\":9,\"porch\":true}": {
+  "nbt": "71eafd5eec4a6d91",
+  "sidecar": "580ef93227a1911e"
+ },
+ "cabin|crimson|{\"width\":7,\"depth\":6,\"porch\":false}": {
+  "nbt": "3fb70d0e47f452f7",
+  "sidecar": "199813406dafcb22"
+ },
+ "cabin|crimson|{\"width\":7,\"depth\":6,\"porch\":true}": {
+  "nbt": "1de3d89ae898fb5e",
+  "sidecar": "6cf1ba4771a04d90"
+ },
+ "cabin|crimson|{\"width\":7,\"depth\":9,\"porch\":false}": {
+  "nbt": "b5c11a11bb50a04b",
+  "sidecar": "bdf1109e0f2dc24b"
+ },
+ "cabin|crimson|{\"width\":7,\"depth\":9,\"porch\":true}": {
+  "nbt": "3b4196d53ad8bd23",
+  "sidecar": "ff29b88577114382"
+ },
+ "cabin|crimson|{\"width\":13,\"depth\":6,\"porch\":false}": {
+  "nbt": "3c14295ca7f0433f",
+  "sidecar": "3a5c68f41c1299b7"
+ },
+ "cabin|crimson|{\"width\":13,\"depth\":6,\"porch\":true}": {
+  "nbt": "c731491c7f88a4e0",
+  "sidecar": "4b7e20f9697c03a7"
+ },
+ "cabin|crimson|{\"width\":13,\"depth\":9,\"porch\":false}": {
+  "nbt": "8d2ba5d448e6b288",
+  "sidecar": "353b5754d605b4c3"
+ },
+ "cabin|crimson|{\"width\":13,\"depth\":9,\"porch\":true}": {
+  "nbt": "d9192050d0ae2627",
+  "sidecar": "7168304314f09e0d"
+ },
+ "cabin|fortress|{\"width\":7,\"depth\":6,\"porch\":false}": {
+  "nbt": "bb9afaa4f3b1bc00",
+  "sidecar": "f312bbb3f4bf1756"
+ },
+ "cabin|fortress|{\"width\":7,\"depth\":6,\"porch\":true}": {
+  "nbt": "f75889fd72992428",
+  "sidecar": "8193516d29d46433"
+ },
+ "cabin|fortress|{\"width\":7,\"depth\":9,\"porch\":false}": {
+  "nbt": "81b060a196f7a686",
+  "sidecar": "e04e0cf94e492427"
+ },
+ "cabin|fortress|{\"width\":7,\"depth\":9,\"porch\":true}": {
+  "nbt": "eaab996ec81ef230",
+  "sidecar": "42e120e3da0596a2"
+ },
+ "cabin|fortress|{\"width\":13,\"depth\":6,\"porch\":false}": {
+  "nbt": "e7a4e064061db047",
+  "sidecar": "3ce4137f7c025863"
+ },
+ "cabin|fortress|{\"width\":13,\"depth\":6,\"porch\":true}": {
+  "nbt": "991a1816668cf1f1",
+  "sidecar": "6c9ca4cd851dea4c"
+ },
+ "cabin|fortress|{\"width\":13,\"depth\":9,\"porch\":false}": {
+  "nbt": "d1cd0522f344b7c0",
+  "sidecar": "1ba18a6cca7e26ed"
+ },
+ "cabin|fortress|{\"width\":13,\"depth\":9,\"porch\":true}": {
+  "nbt": "024d2693d1295d7c",
+  "sidecar": "a099c1d7f10dcfd9"
+ },
+ "tower|-|{\"floors\":3,\"width\":5,\"roof\":\"hip\"}": {
+  "nbt": "241fd9eb891c45b7",
+  "sidecar": "65451d68931181e4"
+ },
+ "tower|-|{\"floors\":3,\"width\":5,\"roof\":\"battlements\"}": {
+  "nbt": "25e85b7c06ad64be",
+  "sidecar": "79bebc8e9dda4852"
+ },
+ "tower|-|{\"floors\":3,\"width\":9,\"roof\":\"hip\"}": {
+  "nbt": "c5c9d2b7897e6592",
+  "sidecar": "6491d773578596c1"
+ },
+ "tower|-|{\"floors\":3,\"width\":9,\"roof\":\"battlements\"}": {
+  "nbt": "e6b188bba518327f",
+  "sidecar": "e3383e33041eebfb"
+ },
+ "tower|-|{\"floors\":6,\"width\":5,\"roof\":\"hip\"}": {
+  "nbt": "92252a2319c033a8",
+  "sidecar": "529eec9f93e168ef"
+ },
+ "tower|-|{\"floors\":6,\"width\":5,\"roof\":\"battlements\"}": {
+  "nbt": "0be6454af0c3d0c7",
+  "sidecar": "1338667712acd269"
+ },
+ "tower|-|{\"floors\":6,\"width\":9,\"roof\":\"hip\"}": {
+  "nbt": "b0a0d096bce41aa6",
+  "sidecar": "8f0fb0e7eabb06cb"
+ },
+ "tower|-|{\"floors\":6,\"width\":9,\"roof\":\"battlements\"}": {
+  "nbt": "5265c9f4fb62ab29",
+  "sidecar": "afa1e8c54c16efc3"
+ },
+ "tower|rustic|{\"floors\":3,\"width\":5,\"roof\":\"hip\"}": {
+  "nbt": "49ba5000869860e2",
+  "sidecar": "c2193b47406e5580"
+ },
+ "tower|rustic|{\"floors\":3,\"width\":5,\"roof\":\"battlements\"}": {
+  "nbt": "ff88ba3779d743e3",
+  "sidecar": "a914725fa3e41ba7"
+ },
+ "tower|rustic|{\"floors\":3,\"width\":9,\"roof\":\"hip\"}": {
+  "nbt": "6986d2a87d9b62c0",
+  "sidecar": "c862a7a7a6a027d0"
+ },
+ "tower|rustic|{\"floors\":3,\"width\":9,\"roof\":\"battlements\"}": {
+  "nbt": "e1f03b07bd30bbbd",
+  "sidecar": "c5edb77c23c2b9fe"
+ },
+ "tower|rustic|{\"floors\":6,\"width\":5,\"roof\":\"hip\"}": {
+  "nbt": "a82bffef6fcae83d",
+  "sidecar": "e9b3cb7fcf7785b2"
+ },
+ "tower|rustic|{\"floors\":6,\"width\":5,\"roof\":\"battlements\"}": {
+  "nbt": "52f84941294e102a",
+  "sidecar": "e7e776be2b8daff8"
+ },
+ "tower|rustic|{\"floors\":6,\"width\":9,\"roof\":\"hip\"}": {
+  "nbt": "603e7c7a1bad2f99",
+  "sidecar": "02d2ee42b3a4386f"
+ },
+ "tower|rustic|{\"floors\":6,\"width\":9,\"roof\":\"battlements\"}": {
+  "nbt": "8d22bd82204caacb",
+  "sidecar": "772f7472e86ee1c0"
+ },
+ "tower|oak|{\"floors\":3,\"width\":5,\"roof\":\"hip\"}": {
+  "nbt": "71e45adf5a4ab857",
+  "sidecar": "5c8176b373fc1780"
+ },
+ "tower|oak|{\"floors\":3,\"width\":5,\"roof\":\"battlements\"}": {
+  "nbt": "670f293bd16139e7",
+  "sidecar": "e50e1cb8589cd67c"
+ },
+ "tower|oak|{\"floors\":3,\"width\":9,\"roof\":\"hip\"}": {
+  "nbt": "bbc8f54960792b5d",
+  "sidecar": "bf5f1c3d8716eaa2"
+ },
+ "tower|oak|{\"floors\":3,\"width\":9,\"roof\":\"battlements\"}": {
+  "nbt": "c2f061de6e3d1593",
+  "sidecar": "59122f24da9ab359"
+ },
+ "tower|oak|{\"floors\":6,\"width\":5,\"roof\":\"hip\"}": {
+  "nbt": "f4f0de17a8a80e1f",
+  "sidecar": "9bd441aa2d003598"
+ },
+ "tower|oak|{\"floors\":6,\"width\":5,\"roof\":\"battlements\"}": {
+  "nbt": "b32ed179975ac2ec",
+  "sidecar": "6e31ea5a0259fb0b"
+ },
+ "tower|oak|{\"floors\":6,\"width\":9,\"roof\":\"hip\"}": {
+  "nbt": "d5f986a8e9de09b2",
+  "sidecar": "671c01e5a7075325"
+ },
+ "tower|oak|{\"floors\":6,\"width\":9,\"roof\":\"battlements\"}": {
+  "nbt": "5e728fed45daa10e",
+  "sidecar": "e1aa5cd393987248"
+ },
+ "tower|birch|{\"floors\":3,\"width\":5,\"roof\":\"hip\"}": {
+  "nbt": "c6cfb9fdfbd647f5",
+  "sidecar": "d53905c65faedfac"
+ },
+ "tower|birch|{\"floors\":3,\"width\":5,\"roof\":\"battlements\"}": {
+  "nbt": "266935d9cb340703",
+  "sidecar": "32397c6d4b056e79"
+ },
+ "tower|birch|{\"floors\":3,\"width\":9,\"roof\":\"hip\"}": {
+  "nbt": "997f0401943983f6",
+  "sidecar": "86d9b08c8e2341d3"
+ },
+ "tower|birch|{\"floors\":3,\"width\":9,\"roof\":\"battlements\"}": {
+  "nbt": "b1715e4143f6122a",
+  "sidecar": "da70a3303c6c39eb"
+ },
+ "tower|birch|{\"floors\":6,\"width\":5,\"roof\":\"hip\"}": {
+  "nbt": "730636f6bf1ac155",
+  "sidecar": "c2eb2fddb305a650"
+ },
+ "tower|birch|{\"floors\":6,\"width\":5,\"roof\":\"battlements\"}": {
+  "nbt": "f20679e2d35cab48",
+  "sidecar": "d2caeba06641986b"
+ },
+ "tower|birch|{\"floors\":6,\"width\":9,\"roof\":\"hip\"}": {
+  "nbt": "55c37eb770df159a",
+  "sidecar": "a9ea307780b06a7a"
+ },
+ "tower|birch|{\"floors\":6,\"width\":9,\"roof\":\"battlements\"}": {
+  "nbt": "a26383983d723e89",
+  "sidecar": "426c8a1b15dc1b8e"
+ },
+ "tower|dark|{\"floors\":3,\"width\":5,\"roof\":\"hip\"}": {
+  "nbt": "7a3ced3e9ccf4e68",
+  "sidecar": "72e1492f8026bf4d"
+ },
+ "tower|dark|{\"floors\":3,\"width\":5,\"roof\":\"battlements\"}": {
+  "nbt": "044ed49b21953123",
+  "sidecar": "4eff50d062312692"
+ },
+ "tower|dark|{\"floors\":3,\"width\":9,\"roof\":\"hip\"}": {
+  "nbt": "2bb04bcf96cf8a2b",
+  "sidecar": "f5704c29ad0b9e0e"
+ },
+ "tower|dark|{\"floors\":3,\"width\":9,\"roof\":\"battlements\"}": {
+  "nbt": "b09a1a31cf2e1e95",
+  "sidecar": "dabc6627b5a86403"
+ },
+ "tower|dark|{\"floors\":6,\"width\":5,\"roof\":\"hip\"}": {
+  "nbt": "3e3e776e02ba0433",
+  "sidecar": "4e735a03001b7abd"
+ },
+ "tower|dark|{\"floors\":6,\"width\":5,\"roof\":\"battlements\"}": {
+  "nbt": "445ef3a1fb961749",
+  "sidecar": "14f80946674d025c"
+ },
+ "tower|dark|{\"floors\":6,\"width\":9,\"roof\":\"hip\"}": {
+  "nbt": "2e2505bc52398ef2",
+  "sidecar": "ced8012e2032f2f9"
+ },
+ "tower|dark|{\"floors\":6,\"width\":9,\"roof\":\"battlements\"}": {
+  "nbt": "00d898d93703ef61",
+  "sidecar": "4b8121362f8822a6"
+ },
+ "tower|desert|{\"floors\":3,\"width\":5,\"roof\":\"hip\"}": {
+  "nbt": "280b19cca89938fb",
+  "sidecar": "11db391e0d22a169"
+ },
+ "tower|desert|{\"floors\":3,\"width\":5,\"roof\":\"battlements\"}": {
+  "nbt": "166d6b186784b8ca",
+  "sidecar": "ff15401cbe2947a3"
+ },
+ "tower|desert|{\"floors\":3,\"width\":9,\"roof\":\"hip\"}": {
+  "nbt": "e8a74325a0815592",
+  "sidecar": "162ae2e69e767337"
+ },
+ "tower|desert|{\"floors\":3,\"width\":9,\"roof\":\"battlements\"}": {
+  "nbt": "a0c4aea1c9be2267",
+  "sidecar": "334b6bbb0fa5352e"
+ },
+ "tower|desert|{\"floors\":6,\"width\":5,\"roof\":\"hip\"}": {
+  "nbt": "00d60a925e422625",
+  "sidecar": "1184960f76725379"
+ },
+ "tower|desert|{\"floors\":6,\"width\":5,\"roof\":\"battlements\"}": {
+  "nbt": "da9bb4bf73a5ffe2",
+  "sidecar": "5978f2ff2a459863"
+ },
+ "tower|desert|{\"floors\":6,\"width\":9,\"roof\":\"hip\"}": {
+  "nbt": "fd25af52df810770",
+  "sidecar": "92d74335297eb631"
+ },
+ "tower|desert|{\"floors\":6,\"width\":9,\"roof\":\"battlements\"}": {
+  "nbt": "21e26f0c0f534d3a",
+  "sidecar": "ab6b057803e11d96"
+ },
+ "tower|brick|{\"floors\":3,\"width\":5,\"roof\":\"hip\"}": {
+  "nbt": "59019438ed660577",
+  "sidecar": "59794e6c7736aa84"
+ },
+ "tower|brick|{\"floors\":3,\"width\":5,\"roof\":\"battlements\"}": {
+  "nbt": "629f5115da8cbee3",
+  "sidecar": "7578f0e31c376c1c"
+ },
+ "tower|brick|{\"floors\":3,\"width\":9,\"roof\":\"hip\"}": {
+  "nbt": "eba602434f96e50f",
+  "sidecar": "6602dededebb0a2c"
+ },
+ "tower|brick|{\"floors\":3,\"width\":9,\"roof\":\"battlements\"}": {
+  "nbt": "408c3351f72ed722",
+  "sidecar": "a294f267ca37f9bc"
+ },
+ "tower|brick|{\"floors\":6,\"width\":5,\"roof\":\"hip\"}": {
+  "nbt": "54282327c378c6f3",
+  "sidecar": "985f6901f13ed69d"
+ },
+ "tower|brick|{\"floors\":6,\"width\":5,\"roof\":\"battlements\"}": {
+  "nbt": "7057369bd1a6c0ee",
+  "sidecar": "c5c5124cb56b06f9"
+ },
+ "tower|brick|{\"floors\":6,\"width\":9,\"roof\":\"hip\"}": {
+  "nbt": "1c6060c894e5164d",
+  "sidecar": "6a71a513f7d8fa3f"
+ },
+ "tower|brick|{\"floors\":6,\"width\":9,\"roof\":\"battlements\"}": {
+  "nbt": "be7ff43da330f1b3",
+  "sidecar": "d1697449453e2c99"
+ },
+ "tower|cherry|{\"floors\":3,\"width\":5,\"roof\":\"hip\"}": {
+  "nbt": "53260da419aab488",
+  "sidecar": "3601177467e6322a"
+ },
+ "tower|cherry|{\"floors\":3,\"width\":5,\"roof\":\"battlements\"}": {
+  "nbt": "79bd1d161db80673",
+  "sidecar": "1b336fad8db2bc7c"
+ },
+ "tower|cherry|{\"floors\":3,\"width\":9,\"roof\":\"hip\"}": {
+  "nbt": "a42112a64d894f1e",
+  "sidecar": "86a7d40e48f3bcd0"
+ },
+ "tower|cherry|{\"floors\":3,\"width\":9,\"roof\":\"battlements\"}": {
+  "nbt": "07401eea47e8497d",
+  "sidecar": "d9888171452fd971"
+ },
+ "tower|cherry|{\"floors\":6,\"width\":5,\"roof\":\"hip\"}": {
+  "nbt": "098f5b2e689ad6a6",
+  "sidecar": "2fec8950e070622c"
+ },
+ "tower|cherry|{\"floors\":6,\"width\":5,\"roof\":\"battlements\"}": {
+  "nbt": "bcaf8cf66050082b",
+  "sidecar": "b83e98540c851a28"
+ },
+ "tower|cherry|{\"floors\":6,\"width\":9,\"roof\":\"hip\"}": {
+  "nbt": "6938a126f96bc57a",
+  "sidecar": "38c44d9646e47c18"
+ },
+ "tower|cherry|{\"floors\":6,\"width\":9,\"roof\":\"battlements\"}": {
+  "nbt": "4421f8091ea70700",
+  "sidecar": "05b12165e1948d27"
+ },
+ "tower|mangrove|{\"floors\":3,\"width\":5,\"roof\":\"hip\"}": {
+  "nbt": "2312d149415289d8",
+  "sidecar": "ad21f1f6cff0cbfd"
+ },
+ "tower|mangrove|{\"floors\":3,\"width\":5,\"roof\":\"battlements\"}": {
+  "nbt": "b3444154e4d1321b",
+  "sidecar": "26bc2b5bd20dd064"
+ },
+ "tower|mangrove|{\"floors\":3,\"width\":9,\"roof\":\"hip\"}": {
+  "nbt": "90b027b889ea4abd",
+  "sidecar": "c671810a8ac7f6c6"
+ },
+ "tower|mangrove|{\"floors\":3,\"width\":9,\"roof\":\"battlements\"}": {
+  "nbt": "6d0a817744db9bbf",
+  "sidecar": "2ce97cb13f2cbc0c"
+ },
+ "tower|mangrove|{\"floors\":6,\"width\":5,\"roof\":\"hip\"}": {
+  "nbt": "be0ac5c008560007",
+  "sidecar": "9f8f9a24e526ff9c"
+ },
+ "tower|mangrove|{\"floors\":6,\"width\":5,\"roof\":\"battlements\"}": {
+  "nbt": "5dcd37743fdd3993",
+  "sidecar": "661e097aeb20c9ba"
+ },
+ "tower|mangrove|{\"floors\":6,\"width\":9,\"roof\":\"hip\"}": {
+  "nbt": "b0d73d26e377b40a",
+  "sidecar": "f7c03ab1c7239f5f"
+ },
+ "tower|mangrove|{\"floors\":6,\"width\":9,\"roof\":\"battlements\"}": {
+  "nbt": "9668e642b8940595",
+  "sidecar": "2c9e433af04475fd"
+ },
+ "tower|crimson|{\"floors\":3,\"width\":5,\"roof\":\"hip\"}": {
+  "nbt": "e2b8f038b569f89d",
+  "sidecar": "5aa683a01f58acdd"
+ },
+ "tower|crimson|{\"floors\":3,\"width\":5,\"roof\":\"battlements\"}": {
+  "nbt": "20309965d296774d",
+  "sidecar": "85329aa836b5b9fe"
+ },
+ "tower|crimson|{\"floors\":3,\"width\":9,\"roof\":\"hip\"}": {
+  "nbt": "544a4ba4491de05a",
+  "sidecar": "a8923c630602713e"
+ },
+ "tower|crimson|{\"floors\":3,\"width\":9,\"roof\":\"battlements\"}": {
+  "nbt": "2441991942cda632",
+  "sidecar": "defb1093ca4ebc06"
+ },
+ "tower|crimson|{\"floors\":6,\"width\":5,\"roof\":\"hip\"}": {
+  "nbt": "68648940e14db261",
+  "sidecar": "cfcb08fb87a58d65"
+ },
+ "tower|crimson|{\"floors\":6,\"width\":5,\"roof\":\"battlements\"}": {
+  "nbt": "131a4497dfe41a2f",
+  "sidecar": "75cc5d47a3a1f369"
+ },
+ "tower|crimson|{\"floors\":6,\"width\":9,\"roof\":\"hip\"}": {
+  "nbt": "d98a2ead103c8c6f",
+  "sidecar": "b0583cae59388a90"
+ },
+ "tower|crimson|{\"floors\":6,\"width\":9,\"roof\":\"battlements\"}": {
+  "nbt": "775c39c7e7fb0c1e",
+  "sidecar": "53c1ec7125f3592a"
+ },
+ "tower|fortress|{\"floors\":3,\"width\":5,\"roof\":\"hip\"}": {
+  "nbt": "241fd9eb891c45b7",
+  "sidecar": "65451d68931181e4"
+ },
+ "tower|fortress|{\"floors\":3,\"width\":5,\"roof\":\"battlements\"}": {
+  "nbt": "25e85b7c06ad64be",
+  "sidecar": "79bebc8e9dda4852"
+ },
+ "tower|fortress|{\"floors\":3,\"width\":9,\"roof\":\"hip\"}": {
+  "nbt": "c5c9d2b7897e6592",
+  "sidecar": "6491d773578596c1"
+ },
+ "tower|fortress|{\"floors\":3,\"width\":9,\"roof\":\"battlements\"}": {
+  "nbt": "e6b188bba518327f",
+  "sidecar": "e3383e33041eebfb"
+ },
+ "tower|fortress|{\"floors\":6,\"width\":5,\"roof\":\"hip\"}": {
+  "nbt": "92252a2319c033a8",
+  "sidecar": "529eec9f93e168ef"
+ },
+ "tower|fortress|{\"floors\":6,\"width\":5,\"roof\":\"battlements\"}": {
+  "nbt": "0be6454af0c3d0c7",
+  "sidecar": "1338667712acd269"
+ },
+ "tower|fortress|{\"floors\":6,\"width\":9,\"roof\":\"hip\"}": {
+  "nbt": "b0a0d096bce41aa6",
+  "sidecar": "8f0fb0e7eabb06cb"
+ },
+ "tower|fortress|{\"floors\":6,\"width\":9,\"roof\":\"battlements\"}": {
+  "nbt": "5265c9f4fb62ab29",
+  "sidecar": "afa1e8c54c16efc3"
+ },
+ "tavern|-|{\"length\":12,\"roof\":\"gable\",\"chimney\":false}": {
+  "nbt": "0f3ecdce135a2ec2",
+  "sidecar": "62c7bfb15820287e"
+ },
+ "tavern|-|{\"length\":12,\"roof\":\"gable\",\"chimney\":true}": {
+  "nbt": "7a2bfb514d401bb3",
+  "sidecar": "79a6b5acebd6ff51"
+ },
+ "tavern|-|{\"length\":12,\"roof\":\"hip\",\"chimney\":false}": {
+  "nbt": "9b04f9c91568fd64",
+  "sidecar": "254291cb85d5cda1"
+ },
+ "tavern|-|{\"length\":12,\"roof\":\"hip\",\"chimney\":true}": {
+  "nbt": "07ac0fe5e7fbaae2",
+  "sidecar": "5bf53bab6926e87f"
+ },
+ "tavern|-|{\"length\":18,\"roof\":\"gable\",\"chimney\":false}": {
+  "nbt": "df252838b37b61f6",
+  "sidecar": "d999d51bdf0fc0e2"
+ },
+ "tavern|-|{\"length\":18,\"roof\":\"gable\",\"chimney\":true}": {
+  "nbt": "ec795cb272fe1f47",
+  "sidecar": "e8b4b3f02c90a1cf"
+ },
+ "tavern|-|{\"length\":18,\"roof\":\"hip\",\"chimney\":false}": {
+  "nbt": "ef7fc725748723bb",
+  "sidecar": "7a2821dae6b54923"
+ },
+ "tavern|-|{\"length\":18,\"roof\":\"hip\",\"chimney\":true}": {
+  "nbt": "5e63cc351eeebd6b",
+  "sidecar": "eb09684116fc9ae2"
+ },
+ "tavern|rustic|{\"length\":12,\"roof\":\"gable\",\"chimney\":false}": {
+  "nbt": "0f3ecdce135a2ec2",
+  "sidecar": "62c7bfb15820287e"
+ },
+ "tavern|rustic|{\"length\":12,\"roof\":\"gable\",\"chimney\":true}": {
+  "nbt": "7a2bfb514d401bb3",
+  "sidecar": "79a6b5acebd6ff51"
+ },
+ "tavern|rustic|{\"length\":12,\"roof\":\"hip\",\"chimney\":false}": {
+  "nbt": "9b04f9c91568fd64",
+  "sidecar": "254291cb85d5cda1"
+ },
+ "tavern|rustic|{\"length\":12,\"roof\":\"hip\",\"chimney\":true}": {
+  "nbt": "07ac0fe5e7fbaae2",
+  "sidecar": "5bf53bab6926e87f"
+ },
+ "tavern|rustic|{\"length\":18,\"roof\":\"gable\",\"chimney\":false}": {
+  "nbt": "df252838b37b61f6",
+  "sidecar": "d999d51bdf0fc0e2"
+ },
+ "tavern|rustic|{\"length\":18,\"roof\":\"gable\",\"chimney\":true}": {
+  "nbt": "ec795cb272fe1f47",
+  "sidecar": "e8b4b3f02c90a1cf"
+ },
+ "tavern|rustic|{\"length\":18,\"roof\":\"hip\",\"chimney\":false}": {
+  "nbt": "ef7fc725748723bb",
+  "sidecar": "7a2821dae6b54923"
+ },
+ "tavern|rustic|{\"length\":18,\"roof\":\"hip\",\"chimney\":true}": {
+  "nbt": "5e63cc351eeebd6b",
+  "sidecar": "eb09684116fc9ae2"
+ },
+ "tavern|oak|{\"length\":12,\"roof\":\"gable\",\"chimney\":false}": {
+  "nbt": "6a90fe88ff64d655",
+  "sidecar": "120c1474a46bfd4d"
+ },
+ "tavern|oak|{\"length\":12,\"roof\":\"gable\",\"chimney\":true}": {
+  "nbt": "57c3538e9077f896",
+  "sidecar": "bc8335be84de3c97"
+ },
+ "tavern|oak|{\"length\":12,\"roof\":\"hip\",\"chimney\":false}": {
+  "nbt": "35c90e531c015134",
+  "sidecar": "67ff5e61ab431a35"
+ },
+ "tavern|oak|{\"length\":12,\"roof\":\"hip\",\"chimney\":true}": {
+  "nbt": "08e49ca601aac33c",
+  "sidecar": "1fdbd9d08ebd2e23"
+ },
+ "tavern|oak|{\"length\":18,\"roof\":\"gable\",\"chimney\":false}": {
+  "nbt": "72fb0638a535c88c",
+  "sidecar": "d369e9aa64161583"
+ },
+ "tavern|oak|{\"length\":18,\"roof\":\"gable\",\"chimney\":true}": {
+  "nbt": "f7be0bb863a93200",
+  "sidecar": "aa129001e90721a1"
+ },
+ "tavern|oak|{\"length\":18,\"roof\":\"hip\",\"chimney\":false}": {
+  "nbt": "1a823671d5384cec",
+  "sidecar": "1370068c868bb2ab"
+ },
+ "tavern|oak|{\"length\":18,\"roof\":\"hip\",\"chimney\":true}": {
+  "nbt": "1548280cae5dd4be",
+  "sidecar": "12d5e26ca26a926a"
+ },
+ "tavern|birch|{\"length\":12,\"roof\":\"gable\",\"chimney\":false}": {
+  "nbt": "a255bf1d78b6ab29",
+  "sidecar": "e9adaa5ce5481851"
+ },
+ "tavern|birch|{\"length\":12,\"roof\":\"gable\",\"chimney\":true}": {
+  "nbt": "112169ad0c854591",
+  "sidecar": "2c5d04bc4a137e99"
+ },
+ "tavern|birch|{\"length\":12,\"roof\":\"hip\",\"chimney\":false}": {
+  "nbt": "713752cc52f7ebc0",
+  "sidecar": "4721530912363b68"
+ },
+ "tavern|birch|{\"length\":12,\"roof\":\"hip\",\"chimney\":true}": {
+  "nbt": "a5a465a8f59eb0b4",
+  "sidecar": "e023ee4ce34c83e2"
+ },
+ "tavern|birch|{\"length\":18,\"roof\":\"gable\",\"chimney\":false}": {
+  "nbt": "261bec9063b15a39",
+  "sidecar": "45210cd6244cc533"
+ },
+ "tavern|birch|{\"length\":18,\"roof\":\"gable\",\"chimney\":true}": {
+  "nbt": "24a6868b4d06fa6f",
+  "sidecar": "f519a0cd1933c64a"
+ },
+ "tavern|birch|{\"length\":18,\"roof\":\"hip\",\"chimney\":false}": {
+  "nbt": "634589d2dd211001",
+  "sidecar": "a4928eb6edaa8fae"
+ },
+ "tavern|birch|{\"length\":18,\"roof\":\"hip\",\"chimney\":true}": {
+  "nbt": "dd396679d0e36b06",
+  "sidecar": "73fabc5fc4945992"
+ },
+ "tavern|dark|{\"length\":12,\"roof\":\"gable\",\"chimney\":false}": {
+  "nbt": "cd5e0a485893c851",
+  "sidecar": "2c511aed9540c43c"
+ },
+ "tavern|dark|{\"length\":12,\"roof\":\"gable\",\"chimney\":true}": {
+  "nbt": "b10fd4e89662c319",
+  "sidecar": "b2c909069506b7f9"
+ },
+ "tavern|dark|{\"length\":12,\"roof\":\"hip\",\"chimney\":false}": {
+  "nbt": "cde811aafe7082ff",
+  "sidecar": "a44c1f2df708f60f"
+ },
+ "tavern|dark|{\"length\":12,\"roof\":\"hip\",\"chimney\":true}": {
+  "nbt": "fb979d745fe75110",
+  "sidecar": "8438a7fcd7c556cd"
+ },
+ "tavern|dark|{\"length\":18,\"roof\":\"gable\",\"chimney\":false}": {
+  "nbt": "ceee7a74a11786a9",
+  "sidecar": "58c7679d8f98df23"
+ },
+ "tavern|dark|{\"length\":18,\"roof\":\"gable\",\"chimney\":true}": {
+  "nbt": "6cd62de50d76ab60",
+  "sidecar": "b3df06c3d8955958"
+ },
+ "tavern|dark|{\"length\":18,\"roof\":\"hip\",\"chimney\":false}": {
+  "nbt": "ed083d69231ccda2",
+  "sidecar": "ba4947146b92a341"
+ },
+ "tavern|dark|{\"length\":18,\"roof\":\"hip\",\"chimney\":true}": {
+  "nbt": "8583fe176073b2f7",
+  "sidecar": "a42ff4096b589c3a"
+ },
+ "tavern|desert|{\"length\":12,\"roof\":\"gable\",\"chimney\":false}": {
+  "nbt": "57e6054269b5e45e",
+  "sidecar": "0918ecddfb43d337"
+ },
+ "tavern|desert|{\"length\":12,\"roof\":\"gable\",\"chimney\":true}": {
+  "nbt": "8b7ef899417d41e8",
+  "sidecar": "44c2f69afe8d0908"
+ },
+ "tavern|desert|{\"length\":12,\"roof\":\"hip\",\"chimney\":false}": {
+  "nbt": "f69bd1de3adf3e96",
+  "sidecar": "d59b4b6a94acb8c2"
+ },
+ "tavern|desert|{\"length\":12,\"roof\":\"hip\",\"chimney\":true}": {
+  "nbt": "564cc1ac21a2b9ae",
+  "sidecar": "361bc72aebe554a3"
+ },
+ "tavern|desert|{\"length\":18,\"roof\":\"gable\",\"chimney\":false}": {
+  "nbt": "5a84cd52819b6a7b",
+  "sidecar": "da48389f9413d435"
+ },
+ "tavern|desert|{\"length\":18,\"roof\":\"gable\",\"chimney\":true}": {
+  "nbt": "f53fe5900927db0e",
+  "sidecar": "8cd38156c561e030"
+ },
+ "tavern|desert|{\"length\":18,\"roof\":\"hip\",\"chimney\":false}": {
+  "nbt": "d9e906c54057af30",
+  "sidecar": "035350bc75ed1924"
+ },
+ "tavern|desert|{\"length\":18,\"roof\":\"hip\",\"chimney\":true}": {
+  "nbt": "da6a43f18a4fdc29",
+  "sidecar": "042d785feda4cfc1"
+ },
+ "tavern|brick|{\"length\":12,\"roof\":\"gable\",\"chimney\":false}": {
+  "nbt": "0f2076621a39b1a7",
+  "sidecar": "fcebd2055572eda1"
+ },
+ "tavern|brick|{\"length\":12,\"roof\":\"gable\",\"chimney\":true}": {
+  "nbt": "fad10191e75b3f3b",
+  "sidecar": "659ae8a9137e2678"
+ },
+ "tavern|brick|{\"length\":12,\"roof\":\"hip\",\"chimney\":false}": {
+  "nbt": "bd84d250396956dd",
+  "sidecar": "b5355017613e1ff7"
+ },
+ "tavern|brick|{\"length\":12,\"roof\":\"hip\",\"chimney\":true}": {
+  "nbt": "5af85abf3b34041b",
+  "sidecar": "796df7bf608b3bdd"
+ },
+ "tavern|brick|{\"length\":18,\"roof\":\"gable\",\"chimney\":false}": {
+  "nbt": "9dbe7f73ada68044",
+  "sidecar": "ad3a0306042e4ab4"
+ },
+ "tavern|brick|{\"length\":18,\"roof\":\"gable\",\"chimney\":true}": {
+  "nbt": "9d4cb220b23f2f59",
+  "sidecar": "3e93d6a1b0172a76"
+ },
+ "tavern|brick|{\"length\":18,\"roof\":\"hip\",\"chimney\":false}": {
+  "nbt": "aa4e03e673008e78",
+  "sidecar": "43a7a39032b13da6"
+ },
+ "tavern|brick|{\"length\":18,\"roof\":\"hip\",\"chimney\":true}": {
+  "nbt": "030237a6767c4c20",
+  "sidecar": "04219101b5383491"
+ },
+ "tavern|cherry|{\"length\":12,\"roof\":\"gable\",\"chimney\":false}": {
+  "nbt": "9610024f7b615f5d",
+  "sidecar": "0fddc3ee2df8f024"
+ },
+ "tavern|cherry|{\"length\":12,\"roof\":\"gable\",\"chimney\":true}": {
+  "nbt": "8db4d4e33e51d675",
+  "sidecar": "8148a40da2da4c88"
+ },
+ "tavern|cherry|{\"length\":12,\"roof\":\"hip\",\"chimney\":false}": {
+  "nbt": "5996eee107efa249",
+  "sidecar": "2002f808170c14bc"
+ },
+ "tavern|cherry|{\"length\":12,\"roof\":\"hip\",\"chimney\":true}": {
+  "nbt": "16d5ed2949fd33d0",
+  "sidecar": "845f7b83443639db"
+ },
+ "tavern|cherry|{\"length\":18,\"roof\":\"gable\",\"chimney\":false}": {
+  "nbt": "cf5db638028b0395",
+  "sidecar": "5b92204f77bcf7d6"
+ },
+ "tavern|cherry|{\"length\":18,\"roof\":\"gable\",\"chimney\":true}": {
+  "nbt": "686a15a74bebab83",
+  "sidecar": "27a6d1b8a2f84ead"
+ },
+ "tavern|cherry|{\"length\":18,\"roof\":\"hip\",\"chimney\":false}": {
+  "nbt": "6a7ed132de3b2385",
+  "sidecar": "056bc1bf7d87b50e"
+ },
+ "tavern|cherry|{\"length\":18,\"roof\":\"hip\",\"chimney\":true}": {
+  "nbt": "4cb50edcfa0bd24a",
+  "sidecar": "f962a5e998d8f040"
+ },
+ "tavern|mangrove|{\"length\":12,\"roof\":\"gable\",\"chimney\":false}": {
+  "nbt": "8d2e11176add5011",
+  "sidecar": "1db267fc8f9137c4"
+ },
+ "tavern|mangrove|{\"length\":12,\"roof\":\"gable\",\"chimney\":true}": {
+  "nbt": "5dddeba5f850d4f4",
+  "sidecar": "144fa93341140c93"
+ },
+ "tavern|mangrove|{\"length\":12,\"roof\":\"hip\",\"chimney\":false}": {
+  "nbt": "bc902c70c30eef63",
+  "sidecar": "11c395164c01037a"
+ },
+ "tavern|mangrove|{\"length\":12,\"roof\":\"hip\",\"chimney\":true}": {
+  "nbt": "8618eafba515faf8",
+  "sidecar": "739c5e4d815ca9d8"
+ },
+ "tavern|mangrove|{\"length\":18,\"roof\":\"gable\",\"chimney\":false}": {
+  "nbt": "737bfa1830168062",
+  "sidecar": "5ad77ad43cc772c5"
+ },
+ "tavern|mangrove|{\"length\":18,\"roof\":\"gable\",\"chimney\":true}": {
+  "nbt": "ab7cd2413fb979e4",
+  "sidecar": "fa301b51c31de994"
+ },
+ "tavern|mangrove|{\"length\":18,\"roof\":\"hip\",\"chimney\":false}": {
+  "nbt": "3949359875e52bb6",
+  "sidecar": "d2796b4520d50cf2"
+ },
+ "tavern|mangrove|{\"length\":18,\"roof\":\"hip\",\"chimney\":true}": {
+  "nbt": "4dd2542c0f80afd9",
+  "sidecar": "ca1a4440d17faba0"
+ },
+ "tavern|crimson|{\"length\":12,\"roof\":\"gable\",\"chimney\":false}": {
+  "nbt": "3f6cfb87b1a4ad43",
+  "sidecar": "1a4506be15087a85"
+ },
+ "tavern|crimson|{\"length\":12,\"roof\":\"gable\",\"chimney\":true}": {
+  "nbt": "c0693a03973e0978",
+  "sidecar": "6655e853427ce323"
+ },
+ "tavern|crimson|{\"length\":12,\"roof\":\"hip\",\"chimney\":false}": {
+  "nbt": "755c8ad12aa82966",
+  "sidecar": "e60fc2df64df2e36"
+ },
+ "tavern|crimson|{\"length\":12,\"roof\":\"hip\",\"chimney\":true}": {
+  "nbt": "466ac0b74e674103",
+  "sidecar": "565113ee1d7e633c"
+ },
+ "tavern|crimson|{\"length\":18,\"roof\":\"gable\",\"chimney\":false}": {
+  "nbt": "24c618deee4e85f7",
+  "sidecar": "e4fcfd367a884649"
+ },
+ "tavern|crimson|{\"length\":18,\"roof\":\"gable\",\"chimney\":true}": {
+  "nbt": "804ca253d3e5d22d",
+  "sidecar": "b364e93073835702"
+ },
+ "tavern|crimson|{\"length\":18,\"roof\":\"hip\",\"chimney\":false}": {
+  "nbt": "6b63fff67192bb11",
+  "sidecar": "5050dd29ecaf4033"
+ },
+ "tavern|crimson|{\"length\":18,\"roof\":\"hip\",\"chimney\":true}": {
+  "nbt": "07c715aeabb85497",
+  "sidecar": "e86af67732eab945"
+ },
+ "tavern|fortress|{\"length\":12,\"roof\":\"gable\",\"chimney\":false}": {
+  "nbt": "ecd4153013aa9a8f",
+  "sidecar": "6510871193a9ff43"
+ },
+ "tavern|fortress|{\"length\":12,\"roof\":\"gable\",\"chimney\":true}": {
+  "nbt": "6a06455060db9aa1",
+  "sidecar": "07df482cd809f282"
+ },
+ "tavern|fortress|{\"length\":12,\"roof\":\"hip\",\"chimney\":false}": {
+  "nbt": "a358bb523647e25e",
+  "sidecar": "82c5b5e4328664f6"
+ },
+ "tavern|fortress|{\"length\":12,\"roof\":\"hip\",\"chimney\":true}": {
+  "nbt": "38e06921928bc6e0",
+  "sidecar": "b5adeb18328eeb11"
+ },
+ "tavern|fortress|{\"length\":18,\"roof\":\"gable\",\"chimney\":false}": {
+  "nbt": "783afffb6bac7136",
+  "sidecar": "3238bc422372e20c"
+ },
+ "tavern|fortress|{\"length\":18,\"roof\":\"gable\",\"chimney\":true}": {
+  "nbt": "83d37216f87f5384",
+  "sidecar": "1e38f77dfb752a0b"
+ },
+ "tavern|fortress|{\"length\":18,\"roof\":\"hip\",\"chimney\":false}": {
+  "nbt": "9bcbab605ce7e131",
+  "sidecar": "201f475be2bf4325"
+ },
+ "tavern|fortress|{\"length\":18,\"roof\":\"hip\",\"chimney\":true}": {
+  "nbt": "014458e830f28967",
+  "sidecar": "03213d241228524a"
+ },
+ "gatehouse|-|{\"passage\":3,\"depth\":5,\"crenels\":false}": {
+  "nbt": "aca986a8c618e0a7",
+  "sidecar": "ecd15aec4b2c9b78"
+ },
+ "gatehouse|-|{\"passage\":3,\"depth\":5,\"crenels\":true}": {
+  "nbt": "06134c4deb39d287",
+  "sidecar": "43a3204f441f2ac5"
+ },
+ "gatehouse|-|{\"passage\":3,\"depth\":9,\"crenels\":false}": {
+  "nbt": "6229a70e1650d217",
+  "sidecar": "55e1d0c2a130bf6a"
+ },
+ "gatehouse|-|{\"passage\":3,\"depth\":9,\"crenels\":true}": {
+  "nbt": "d2606f9fb6a3cbe0",
+  "sidecar": "d1d2149eaf617361"
+ },
+ "gatehouse|-|{\"passage\":5,\"depth\":5,\"crenels\":false}": {
+  "nbt": "c05d15182b30c458",
+  "sidecar": "610dc35e7612fd2a"
+ },
+ "gatehouse|-|{\"passage\":5,\"depth\":5,\"crenels\":true}": {
+  "nbt": "db8ee652d47f359f",
+  "sidecar": "f52518ea63f41a63"
+ },
+ "gatehouse|-|{\"passage\":5,\"depth\":9,\"crenels\":false}": {
+  "nbt": "07299b899274df2a",
+  "sidecar": "7d78713e00326988"
+ },
+ "gatehouse|-|{\"passage\":5,\"depth\":9,\"crenels\":true}": {
+  "nbt": "05d6e31586640544",
+  "sidecar": "9c787f9210ee5939"
+ },
+ "gatehouse|rustic|{\"passage\":3,\"depth\":5,\"crenels\":false}": {
+  "nbt": "4e11cf76b94ec0c3",
+  "sidecar": "e8b20975e1473093"
+ },
+ "gatehouse|rustic|{\"passage\":3,\"depth\":5,\"crenels\":true}": {
+  "nbt": "5b3c9f288f0bea7d",
+  "sidecar": "0425b808b6832b12"
+ },
+ "gatehouse|rustic|{\"passage\":3,\"depth\":9,\"crenels\":false}": {
+  "nbt": "2d0d9742f5d20836",
+  "sidecar": "3bdbfee2c3f708da"
+ },
+ "gatehouse|rustic|{\"passage\":3,\"depth\":9,\"crenels\":true}": {
+  "nbt": "e7c268aa847d947f",
+  "sidecar": "c83d524c14c4757c"
+ },
+ "gatehouse|rustic|{\"passage\":5,\"depth\":5,\"crenels\":false}": {
+  "nbt": "2b7efdb1ec29a53d",
+  "sidecar": "83a9190e1b7c6c0a"
+ },
+ "gatehouse|rustic|{\"passage\":5,\"depth\":5,\"crenels\":true}": {
+  "nbt": "df33fc08ffbd356b",
+  "sidecar": "364c2e48358616fc"
+ },
+ "gatehouse|rustic|{\"passage\":5,\"depth\":9,\"crenels\":false}": {
+  "nbt": "7616ec45582d7c4f",
+  "sidecar": "d6999c5ff0737d45"
+ },
+ "gatehouse|rustic|{\"passage\":5,\"depth\":9,\"crenels\":true}": {
+  "nbt": "7005e27032096f84",
+  "sidecar": "2234b891aacd726c"
+ },
+ "gatehouse|oak|{\"passage\":3,\"depth\":5,\"crenels\":false}": {
+  "nbt": "08486facfbfcb35c",
+  "sidecar": "4d45a58cca80fe6b"
+ },
+ "gatehouse|oak|{\"passage\":3,\"depth\":5,\"crenels\":true}": {
+  "nbt": "4221bff299abf275",
+  "sidecar": "8e75318f7468053c"
+ },
+ "gatehouse|oak|{\"passage\":3,\"depth\":9,\"crenels\":false}": {
+  "nbt": "0ec35bc600b9c9e0",
+  "sidecar": "eaca2cd7ba163733"
+ },
+ "gatehouse|oak|{\"passage\":3,\"depth\":9,\"crenels\":true}": {
+  "nbt": "8ac6968dd6b17a6a",
+  "sidecar": "45be75b6a091a2c2"
+ },
+ "gatehouse|oak|{\"passage\":5,\"depth\":5,\"crenels\":false}": {
+  "nbt": "d601a4b4fece9192",
+  "sidecar": "bd8e008902e1670e"
+ },
+ "gatehouse|oak|{\"passage\":5,\"depth\":5,\"crenels\":true}": {
+  "nbt": "c5bb7d365c146bd8",
+  "sidecar": "087366bcf2dfaea3"
+ },
+ "gatehouse|oak|{\"passage\":5,\"depth\":9,\"crenels\":false}": {
+  "nbt": "678a49c2aedefe9a",
+  "sidecar": "914d891acc10ccee"
+ },
+ "gatehouse|oak|{\"passage\":5,\"depth\":9,\"crenels\":true}": {
+  "nbt": "20ba4dfcffbcdee3",
+  "sidecar": "fea558f121eb0867"
+ },
+ "gatehouse|birch|{\"passage\":3,\"depth\":5,\"crenels\":false}": {
+  "nbt": "ee4c52ee8805bc21",
+  "sidecar": "a64efb873646e37d"
+ },
+ "gatehouse|birch|{\"passage\":3,\"depth\":5,\"crenels\":true}": {
+  "nbt": "8e92a27c67640e8b",
+  "sidecar": "704370d9b4363fc6"
+ },
+ "gatehouse|birch|{\"passage\":3,\"depth\":9,\"crenels\":false}": {
+  "nbt": "97399122df0bc6c2",
+  "sidecar": "bd4df99678edfb5e"
+ },
+ "gatehouse|birch|{\"passage\":3,\"depth\":9,\"crenels\":true}": {
+  "nbt": "ac5d48292a422a24",
+  "sidecar": "fa599c923f537c35"
+ },
+ "gatehouse|birch|{\"passage\":5,\"depth\":5,\"crenels\":false}": {
+  "nbt": "ef01e540051cc34a",
+  "sidecar": "bb638f53b91230ce"
+ },
+ "gatehouse|birch|{\"passage\":5,\"depth\":5,\"crenels\":true}": {
+  "nbt": "242c95727a9726c6",
+  "sidecar": "3dc965851163f38c"
+ },
+ "gatehouse|birch|{\"passage\":5,\"depth\":9,\"crenels\":false}": {
+  "nbt": "08580488e63e69bf",
+  "sidecar": "61bc833aad8f3a49"
+ },
+ "gatehouse|birch|{\"passage\":5,\"depth\":9,\"crenels\":true}": {
+  "nbt": "979bd844e5104f34",
+  "sidecar": "a4de9cb827210df0"
+ },
+ "gatehouse|dark|{\"passage\":3,\"depth\":5,\"crenels\":false}": {
+  "nbt": "45278c1d1c16f232",
+  "sidecar": "d3f5c9179d9284a3"
+ },
+ "gatehouse|dark|{\"passage\":3,\"depth\":5,\"crenels\":true}": {
+  "nbt": "0a9b4abb4aa06b64",
+  "sidecar": "cbea0cfbb7e82bc9"
+ },
+ "gatehouse|dark|{\"passage\":3,\"depth\":9,\"crenels\":false}": {
+  "nbt": "f254d70c51bb7821",
+  "sidecar": "6e683d5ff7388336"
+ },
+ "gatehouse|dark|{\"passage\":3,\"depth\":9,\"crenels\":true}": {
+  "nbt": "d973eafdbb434fe9",
+  "sidecar": "5180c30005855701"
+ },
+ "gatehouse|dark|{\"passage\":5,\"depth\":5,\"crenels\":false}": {
+  "nbt": "ab1d65e35d784f92",
+  "sidecar": "4315f32cd74b1275"
+ },
+ "gatehouse|dark|{\"passage\":5,\"depth\":5,\"crenels\":true}": {
+  "nbt": "b67c1b500b607715",
+  "sidecar": "d931ed2a5a6ccca3"
+ },
+ "gatehouse|dark|{\"passage\":5,\"depth\":9,\"crenels\":false}": {
+  "nbt": "d2dfdaac489380df",
+  "sidecar": "4c76e8ec1c24134b"
+ },
+ "gatehouse|dark|{\"passage\":5,\"depth\":9,\"crenels\":true}": {
+  "nbt": "c336e314f1f8548f",
+  "sidecar": "d0433f049c5943d2"
+ },
+ "gatehouse|desert|{\"passage\":3,\"depth\":5,\"crenels\":false}": {
+  "nbt": "f6be2390107a4c0d",
+  "sidecar": "e3232a9e41e45962"
+ },
+ "gatehouse|desert|{\"passage\":3,\"depth\":5,\"crenels\":true}": {
+  "nbt": "1b08b7c4858cfd3e",
+  "sidecar": "59f124a24aad1700"
+ },
+ "gatehouse|desert|{\"passage\":3,\"depth\":9,\"crenels\":false}": {
+  "nbt": "1e005506fc8aaeb3",
+  "sidecar": "e70867f60e6911a6"
+ },
+ "gatehouse|desert|{\"passage\":3,\"depth\":9,\"crenels\":true}": {
+  "nbt": "101efd6a2ed41f86",
+  "sidecar": "822d054f3d1aa878"
+ },
+ "gatehouse|desert|{\"passage\":5,\"depth\":5,\"crenels\":false}": {
+  "nbt": "879e26ea2c4ca90d",
+  "sidecar": "7ece2af3a9d8aa92"
+ },
+ "gatehouse|desert|{\"passage\":5,\"depth\":5,\"crenels\":true}": {
+  "nbt": "31b91748d449f916",
+  "sidecar": "4f20828c45ac5340"
+ },
+ "gatehouse|desert|{\"passage\":5,\"depth\":9,\"crenels\":false}": {
+  "nbt": "06372061a481d105",
+  "sidecar": "0bf07b6b5e5108f6"
+ },
+ "gatehouse|desert|{\"passage\":5,\"depth\":9,\"crenels\":true}": {
+  "nbt": "4ec4c260f60e1418",
+  "sidecar": "66a52b08c89b1bcf"
+ },
+ "gatehouse|brick|{\"passage\":3,\"depth\":5,\"crenels\":false}": {
+  "nbt": "aa0fd6d954cd6aa9",
+  "sidecar": "0b367c7dcb64980f"
+ },
+ "gatehouse|brick|{\"passage\":3,\"depth\":5,\"crenels\":true}": {
+  "nbt": "432832d214dd3508",
+  "sidecar": "85cea086fc22fed0"
+ },
+ "gatehouse|brick|{\"passage\":3,\"depth\":9,\"crenels\":false}": {
+  "nbt": "a245a3ad0165f218",
+  "sidecar": "81feb96c46565dde"
+ },
+ "gatehouse|brick|{\"passage\":3,\"depth\":9,\"crenels\":true}": {
+  "nbt": "4a561b2ae58edb4c",
+  "sidecar": "158a9c4accc94877"
+ },
+ "gatehouse|brick|{\"passage\":5,\"depth\":5,\"crenels\":false}": {
+  "nbt": "d7cad808753ecbe3",
+  "sidecar": "6c5f4662910709e4"
+ },
+ "gatehouse|brick|{\"passage\":5,\"depth\":5,\"crenels\":true}": {
+  "nbt": "12eb1c792993d54d",
+  "sidecar": "c423ec30cc464713"
+ },
+ "gatehouse|brick|{\"passage\":5,\"depth\":9,\"crenels\":false}": {
+  "nbt": "da6f82e104e73481",
+  "sidecar": "beac746be15976ab"
+ },
+ "gatehouse|brick|{\"passage\":5,\"depth\":9,\"crenels\":true}": {
+  "nbt": "5968bec4376f90bd",
+  "sidecar": "f9ef0fa0cd83d01b"
+ },
+ "gatehouse|cherry|{\"passage\":3,\"depth\":5,\"crenels\":false}": {
+  "nbt": "ab4208d3e6c9a8fb",
+  "sidecar": "dbbbebff53980168"
+ },
+ "gatehouse|cherry|{\"passage\":3,\"depth\":5,\"crenels\":true}": {
+  "nbt": "8a9b0371c16aa825",
+  "sidecar": "fa9dec7ea5487e39"
+ },
+ "gatehouse|cherry|{\"passage\":3,\"depth\":9,\"crenels\":false}": {
+  "nbt": "e08c51ca8b167878",
+  "sidecar": "91280b112d7b1a0f"
+ },
+ "gatehouse|cherry|{\"passage\":3,\"depth\":9,\"crenels\":true}": {
+  "nbt": "de44bf570f9b412e",
+  "sidecar": "1050570801e7e613"
+ },
+ "gatehouse|cherry|{\"passage\":5,\"depth\":5,\"crenels\":false}": {
+  "nbt": "1d2e842c5b21d4ad",
+  "sidecar": "ea19761970457810"
+ },
+ "gatehouse|cherry|{\"passage\":5,\"depth\":5,\"crenels\":true}": {
+  "nbt": "79b095ed2706b9ab",
+  "sidecar": "61b0ca795ec49319"
+ },
+ "gatehouse|cherry|{\"passage\":5,\"depth\":9,\"crenels\":false}": {
+  "nbt": "2bb2d733a68039a0",
+  "sidecar": "6f1d1838db69a768"
+ },
+ "gatehouse|cherry|{\"passage\":5,\"depth\":9,\"crenels\":true}": {
+  "nbt": "dfbabc1ad26173f1",
+  "sidecar": "11d2f8ac34d7df7f"
+ },
+ "gatehouse|mangrove|{\"passage\":3,\"depth\":5,\"crenels\":false}": {
+  "nbt": "494b80000091daec",
+  "sidecar": "0c1e3e074031aaac"
+ },
+ "gatehouse|mangrove|{\"passage\":3,\"depth\":5,\"crenels\":true}": {
+  "nbt": "fe5e457c022ad2e4",
+  "sidecar": "9d5ad76c489f237a"
+ },
+ "gatehouse|mangrove|{\"passage\":3,\"depth\":9,\"crenels\":false}": {
+  "nbt": "f41e30c0c22c67c8",
+  "sidecar": "a8518614afbedb74"
+ },
+ "gatehouse|mangrove|{\"passage\":3,\"depth\":9,\"crenels\":true}": {
+  "nbt": "b0b71a4bcb3fe337",
+  "sidecar": "a822c00bcce0673a"
+ },
+ "gatehouse|mangrove|{\"passage\":5,\"depth\":5,\"crenels\":false}": {
+  "nbt": "fe23bc52b2a854f5",
+  "sidecar": "9b5e4ed797e3a3c0"
+ },
+ "gatehouse|mangrove|{\"passage\":5,\"depth\":5,\"crenels\":true}": {
+  "nbt": "e63ba7049893c251",
+  "sidecar": "f184ac7c727206cc"
+ },
+ "gatehouse|mangrove|{\"passage\":5,\"depth\":9,\"crenels\":false}": {
+  "nbt": "7b493569c42c4dde",
+  "sidecar": "04eb6a46d55616a7"
+ },
+ "gatehouse|mangrove|{\"passage\":5,\"depth\":9,\"crenels\":true}": {
+  "nbt": "879dd7e05f430e60",
+  "sidecar": "d11d2e58d93809e1"
+ },
+ "gatehouse|crimson|{\"passage\":3,\"depth\":5,\"crenels\":false}": {
+  "nbt": "f0b98cba27b07836",
+  "sidecar": "23ce22a8533e33d8"
+ },
+ "gatehouse|crimson|{\"passage\":3,\"depth\":5,\"crenels\":true}": {
+  "nbt": "fd19568c95d70d66",
+  "sidecar": "7e3c1853ead75b06"
+ },
+ "gatehouse|crimson|{\"passage\":3,\"depth\":9,\"crenels\":false}": {
+  "nbt": "a828abb8151fa0c9",
+  "sidecar": "a5a6b5b97354b99e"
+ },
+ "gatehouse|crimson|{\"passage\":3,\"depth\":9,\"crenels\":true}": {
+  "nbt": "3832dcf4c706361a",
+  "sidecar": "690d0524f97ee824"
+ },
+ "gatehouse|crimson|{\"passage\":5,\"depth\":5,\"crenels\":false}": {
+  "nbt": "8384650d3914bc20",
+  "sidecar": "a9b7b4fd4363bf07"
+ },
+ "gatehouse|crimson|{\"passage\":5,\"depth\":5,\"crenels\":true}": {
+  "nbt": "0c54e0b9765a8764",
+  "sidecar": "4b6e2665ac04d80d"
+ },
+ "gatehouse|crimson|{\"passage\":5,\"depth\":9,\"crenels\":false}": {
+  "nbt": "5a01914af34bdb64",
+  "sidecar": "a9dd7505729f64c5"
+ },
+ "gatehouse|crimson|{\"passage\":5,\"depth\":9,\"crenels\":true}": {
+  "nbt": "e9d83d4ac3175ee9",
+  "sidecar": "92dae9ae9ec45c97"
+ },
+ "gatehouse|fortress|{\"passage\":3,\"depth\":5,\"crenels\":false}": {
+  "nbt": "aca986a8c618e0a7",
+  "sidecar": "ecd15aec4b2c9b78"
+ },
+ "gatehouse|fortress|{\"passage\":3,\"depth\":5,\"crenels\":true}": {
+  "nbt": "06134c4deb39d287",
+  "sidecar": "43a3204f441f2ac5"
+ },
+ "gatehouse|fortress|{\"passage\":3,\"depth\":9,\"crenels\":false}": {
+  "nbt": "6229a70e1650d217",
+  "sidecar": "55e1d0c2a130bf6a"
+ },
+ "gatehouse|fortress|{\"passage\":3,\"depth\":9,\"crenels\":true}": {
+  "nbt": "d2606f9fb6a3cbe0",
+  "sidecar": "d1d2149eaf617361"
+ },
+ "gatehouse|fortress|{\"passage\":5,\"depth\":5,\"crenels\":false}": {
+  "nbt": "c05d15182b30c458",
+  "sidecar": "610dc35e7612fd2a"
+ },
+ "gatehouse|fortress|{\"passage\":5,\"depth\":5,\"crenels\":true}": {
+  "nbt": "db8ee652d47f359f",
+  "sidecar": "f52518ea63f41a63"
+ },
+ "gatehouse|fortress|{\"passage\":5,\"depth\":9,\"crenels\":false}": {
+  "nbt": "07299b899274df2a",
+  "sidecar": "7d78713e00326988"
+ },
+ "gatehouse|fortress|{\"passage\":5,\"depth\":9,\"crenels\":true}": {
+  "nbt": "05d6e31586640544",
+  "sidecar": "9c787f9210ee5939"
+ }
+}

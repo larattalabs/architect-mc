@@ -75,6 +75,8 @@ describe('Claude designer (fake SDK)', () => {
     calls = [];
     h = makeSidecar(['--backend', 'claude']);
     h.sc.config.claude.designModel = 'fake-designer';
+    // one pool slot: these tests check queueing behind a running design (the pool has its own tests)
+    h.sc.config.designConcurrency = 1;
     h.sc.endpoint = { port: 7890, tokenFile: path.join(h.cfg.dataDir, 'client.token') };
     const designer = new ClaudeDesigner(h.sc, { queryFn: fakeQuery(() => script, calls) as never, skipAuthCheck: true });
     // an API key from the in-game settings (skipAuthCheck: no probe)

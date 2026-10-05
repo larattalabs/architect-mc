@@ -172,6 +172,84 @@ schemas live in `src/protocol.ts`. The envelope keeps `"v": 1`; the protocol is 
   calls each tool once in order and returns `{"results":[{tool, result | error}]}`, and every step reports
   `simJobStepUsd` more, honouring `maxBudgetUsd` as the SDK does.
 
+## Phase 4b: style bibles, design groups, estimates, re-skins
+
+The binding text is `../docs/CONTRACT.md`, "Phase 4b contract" and its "4b review folded in". The schemas are in
+`src/protocol.ts`; snapshot `features` adds `bibles`, `design.groups`, `named.parts`, `open.types`, `estimates`, `reskin`.
+
+- **The pool** (`src/pool.ts`, `src/scheduler.ts`). `designConcurrency` (config, default 3) slots, shared round-robin by
+  lanes: `single` (design requests), `group:<g>` (capped at the group's `concurrency`), `bibles` (a bible job takes one
+  slot) and `jobs` (agent jobs). Variants and re-skins never use it. A ticket waits in place while it cannot start (auth
+  being checked, a usage limit, a paused group, an unfinished earlier wave). `Status` adds `designingIds` (every running
+  design; `designing` is the first).
+- **Open types.** `DesignRequest.type` is any `[a-z][a-z0-9_]{0,39}` (protocol 2; protocol 1 keeps the 11 presets, so a
+  protocol-1 client does not see open-type designs). `profile?: string[]` (rules `door`, `roof_closed`,
+  `floors_reachable`, `lit`, `no_floating`, `interior`, `min_interior_volume:<n>`, `passage:<w>x<h>`, `tall:<ratio>`) is
+  passed to the kit as `--profile`; the entry records it.
+- **Design requests** also take `bible` (an id; `bibleVersion` is pinned to its latest when absent). `group`, `itemKey`,
+  `wave` and `role` are set by `design.group` (a `design.request` carrying them is refused).
+
+Client -> sidecar:
+- `design.group { group: GroupRequest }` -> ack `{ groupId, designIds, itemKeys, bible: { id, version } }`.
+  `GroupRequest = { id?, name, bible: id | { id, version? }, owner?, ext?, concurrency?: 1..6 (3), budgetUsd?, items:
+  [DesignRequest fields & { itemKey? (default item<n>, unique), ext?, role?: landmark|ordinary (ordinary), model?, wave?:
+  1..8 (1), anchor?: true (= wave 0), owner?, budgetUsd? }] (1..24) }`. Default models: landmark `landmarkModel`
+  (claude-opus-5-5), ordinary `ordinaryModel` (claude-sonnet-5-5).
+- `group.cancel { groupId }`, `group.extend { groupId, budgetUsd }` (above what was spent; the group stays paused),
+  `group.resume { groupId }` -> ack `{ groupId, ... }`.
+- `design.estimate { group: GroupRequest } | { request: DesignRequest }` and `bible.estimate { request?: BibleRequest }`
+  -> ack `{ usdLow, usdHigh, minutesLow, minutesHigh, basis }`.
+- `bible.request { request: BibleRequest }` -> ack `{ jobId, bibleId, version }` (the id `bib_<slug of the name, else the
+  prompt>` is reserved at once). `BibleRequest = { prompt, name?, owner?, ext?, model? (bibleModel, claude-opus-5-5),
+  budgetUsd?, references?: [libraryId], scope?: building|settlement, seedPreset?: <built-in bible> }`.
+- `bible.revise { id, notes, model?, budgetUsd? }` -> ack `{ jobId, bibleId, version: latest + 1 }`.
+- `bible.cancel { jobId }`.
+- `variant.request { ..., bible?: id | { id, version? } }`: a re-skin (excludes `palette`).
+- `reskin.request { bibleId, version?, from: { group? | bible? (+ bibleVersion?) | entries? } }` -> ack `{ reskinId,
+  variantIds, bible }`.
+
+Sidecar -> client:
+- `group.upsert { group: Group }`, also in `snapshot.groups`. `Group = { id: "g<n>", name, bible: { id, version }, owner?,
+  ext?, concurrency, budgetUsd?, softBudgetFraction, status: queued|running|held_usage|paused_budget|done|failed|cancelled,
+  reason?, items: [{ itemKey, ext?, designId, entryId?, status, step, cost, wave, role, model, type, name?, error? }],
+  designs: [{ id, status, step }], wave?, done, failed, cost, usageLimitUntil?, createdAt, updatedAt }`. Items persist
+  across restarts. `done` = every item ended and one is done; `failed` = none is.
+- `bible.upsert { bible: BibleJob }`, also in `snapshot.bibles`. `BibleJob = { id: "b<n>", kind: request|revise, bibleId,
+  version, request, status: queued|drafting|components|checking|rendering|done|failed|cancelled, step, error?, cost,
+  rounds?, usageLimitUntil?, bible?: BibleInfo (done), createdAt, updatedAt }`.
+- `bible.index { bibles: BibleInfo[] }` when a bible is installed; `snapshot.bibleIndex` likewise. `BibleInfo = { id, name,
+  version, versions, builtin, scope, prompt?, roles, prose? (bible.md, <= 8000 chars), sheetPath?, dir?, components,
+  owner?, ext?, createdAt?, cost? }`. The built-in bibles are the kit's 10 palette presets (id = preset name, version 1).
+- `reskin.upsert { reskin: { id: "r<n>", bible, from, status: building|done|failed, step, variants, entries, done, failed,
+  error?, createdAt, updatedAt } }`, also in `snapshot.reskins`. `Variant` adds `bible?` and `reskin?`.
+
+How they run:
+- **Groups** (`src/groups.ts`). Every item is a design from the start. An item waits until every item of the earlier
+  waves has ended. Each gets `bible/` (bible.json, bible.md, components.mjs) in its scratch dir, and from wave 1 on the iso
+  renders of finished earlier-wave items in `neighbours/` (at most 4); BRIEF.md asks for the roles, the components and
+  named parts. A usage limit (the shared hold) shows as `held_usage` and every item waits; all resume after the reset.
+  At `softBudgetFraction` (0.8) of `budgetUsd` nothing new starts (`paused_budget`, a reason); at 100% queued items are
+  cancelled and running ones fail, with error `budget`. A running item may spend what is left of the group's budget.
+  Installed entries carry `bible: { id, version }`, `group`, `groupItem` (the item key), the item's `ext`, and a copy of
+  the bible files their source imports in `<entry>/bible/`.
+- **Bibles** (`src/bibles.ts`, `src/claude/bible.ts`). Installed in `<gameDir>/architect/bibles/<id>/versions/<v>/`
+  (`--bibles` overrides the folder) with a copy of the latest at `<id>/`: `bible.json`, `bible.md`, `components.mjs`,
+  `sheet.png`. A job: a structured pass (the Agent SDK, json_schema, no tools) drafts the JSON and prose, the kit validates
+  it (`kit/tools/bible.mjs validate`; one re-ask), then an agent pass in `<data>/bibles/<jobId>/` may write only
+  `bible/components.mjs`, and the pristine kit's component frame (`kit/tools/components.mjs`) checks it and renders the
+  sheet; a failed check goes back to the agent, 3 rounds in all. The sim backend writes a fixed bible (or the seed's
+  roles) and keeps the reference components, through the real check.
+- **Re-skins** (`src/variants.ts`). A variant with a bible builds the entry's source with `--bible` (the target's roles);
+  the design keeps its own components (they read the roles). `reskin.request` makes one per entry of the collection.
+- **Estimates** (`src/estimates.ts`): a rolling average (the last 20) per model of finished Claude designs and bible jobs
+  (cost and minutes), seeded at $1.0-1.5 and 4-6 min for an Opus design, 0.4x that cost for Sonnet; waves run in
+  batches of min(group concurrency, designConcurrency); a usage limit adds its wait. The sim records nothing.
+- **Sim** (tests, offline): `simDesignUsd` (cost per sim step), a request whose notes contain `sim:usage_limit` hits a
+  usage limit once (`simLimitMs`).
+
+`<data>/config.json` adds `designConcurrency`, `bibleModel`, `landmarkModel`, `ordinaryModel`, `softBudgetFraction`,
+`simDesignUsd` and `simLimitMs`.
+
 ## Variants and imports
 
 Neither uses Claude, and they run one at a time on their own queue, so a variant never waits behind a design.

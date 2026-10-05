@@ -17,7 +17,8 @@ import path from 'node:path';
 import type { Logger } from './context.js';
 import type { Config } from './config.js';
 import { checkDesign, finishCheck, freeLibraryId, installDesign, KIT, CHECK_DIR, refreshKit, renderPreviews, runNode, slugify, withDesignId, type Sidecar as SidecarJson } from './designs.js';
-import type { DesignRequest, Outbound, PaletteSpec, ParamValues, Variant, VariantStatus } from './protocol.js';
+import type { BibleIndex } from './bibles.js';
+import type { BiblePin, DesignRequest, Outbound, PaletteSpec, ParamValues, Reskin, ReskinFrom, Variant, VariantStatus } from './protocol.js';
 import type { Store } from './store.js';
 import { truncate } from './util/text.js';
 
@@ -68,7 +69,7 @@ export class VariantBook {
     return [...extra, ...tail].sort((a, b) => a.createdAt - b.createdAt).map((v) => structuredClone(v));
   }
 
-  create(fields: Pick<Variant, 'kind' | 'from'> & Partial<Pick<Variant, 'palette' | 'values' | 'name'>>): Variant {
+  create(fields: Pick<Variant, 'kind' | 'from'> & Partial<Pick<Variant, 'palette' | 'values' | 'name' | 'bible' | 'reskin'>>): Variant {
     const now = this.ctx.now();
     const v: Variant = {
       id: this.ctx.store.nextId('v'),
@@ -79,6 +80,8 @@ export class VariantBook {
       ...(fields.palette !== undefined ? { palette: structuredClone(fields.palette) } : {}),
       ...(fields.values !== undefined ? { values: { ...fields.values } } : {}),
       ...(fields.name !== undefined ? { name: fields.name } : {}),
+      ...(fields.bible !== undefined ? { bible: { ...fields.bible } } : {}),
+      ...(fields.reskin !== undefined ? { reskin: fields.reskin } : {}),
       createdAt: now,
       updatedAt: now,
     };
@@ -172,11 +175,22 @@ export function normalizeKitImports(source: string): string {
   return source.replace(/(['"])((?:\.\.?\/)+(?:[^'"\n]*\/)?)lib\/([\w.-]+\.mjs)\1/g, (_m, q: string, _p: string, file: string) => `${q}../lib/${file}${q}`);
 }
 
-/** The palette to build with: a preset string as asked, or palette inputs over the entry's recorded ones. */
-export function mergePalette(recorded: unknown, asked: PaletteSpec | undefined): PaletteSpec | undefined {
-  if (asked === undefined) return isPaletteInputs(recorded) ? recorded : undefined;
+/**
+ * The palette to build with: a preset string as asked, or palette inputs over the entry's recorded ones. A recorded
+ * bible palette (4b: `{ bible: { id, version, roles } }`) is passed on as it is when nothing is asked, and replaced by
+ * whatever is asked.
+ */
+export function mergePalette(recorded: unknown, asked: PaletteSpec | undefined): PaletteSpec | Record<string, unknown> | undefined {
+  if (asked === undefined) return isPaletteInputs(recorded) ? recorded : isBiblePalette(recorded) ? recorded : undefined;
   if (typeof asked === 'string') return asked;
   return { ...(isPaletteInputs(recorded) ? recorded : {}), ...asked };
+}
+
+/** A recorded bible palette: { bible: { id, version, roles } }. */
+export function isBiblePalette(p: unknown): p is { bible: { id: string; version: number; roles: Record<string, string> } } {
+  if (!p || typeof p !== 'object' || Array.isArray(p)) return false;
+  const b = (p as { bible?: unknown }).bible;
+  return Object.keys(p).length === 1 && !!b && typeof b === 'object' && !!(b as { roles?: unknown }).roles;
 }
 
 function isPaletteInputs(p: unknown): p is Exclude<PaletteSpec, string> {
@@ -194,8 +208,8 @@ export function paletteLabel(p: PaletteSpec | undefined): string {
  * The new entry's id: <from>_<palette> (then _2, _3, ...) when a palette is asked, else <from>_v2,
  * <from>_v3, ...; never one with a folder in the library or in `taken`.
  */
-export function variantId(libraryDir: string, from: string, palette: PaletteSpec | undefined, taken: ReadonlySet<string> = new Set()): string {
-  const sfx = typeof palette === 'string' ? slugify(palette, 20) : palette ? slugify((palette.wood ?? palette.stone ?? palette.roof ?? palette.accent ?? palette.preset ?? '').replace(/^minecraft:/, ''), 20) : '';
+export function variantId(libraryDir: string, from: string, palette: PaletteSpec | undefined, taken: ReadonlySet<string> = new Set(), bible?: string): string {
+  const sfx = bible ? slugify(bible.replace(/^bib_/, ''), 20) : typeof palette === 'string' ? slugify(palette, 20) : palette ? slugify((palette.wood ?? palette.stone ?? palette.roof ?? palette.accent ?? palette.preset ?? '').replace(/^minecraft:/, ''), 20) : '';
   const stem = from.slice(0, 40);
   if (sfx) return freeLibraryId(libraryDir, `${stem}_${sfx}`, taken);
   for (let n = 2; ; n++) {
@@ -278,6 +292,8 @@ export interface VariantHost {
   readonly config: Config;
   readonly variants: VariantBook;
   readonly log: Logger;
+  /** (4b) re-skins build with a bible's roles */
+  readonly bibleIndex: Pick<BibleIndex, 'resolve'>;
   now(): number;
 }
 
@@ -373,15 +389,28 @@ export class VariantRunner {
     const src = findVariantSource(cfg.libraryDir, cfg.kitDir, v.from);
     const entry = src.entry ?? {};
     const scratch = this.scratch(v.id);
-    const bp = variantId(cfg.libraryDir, v.from, v.palette, this.taken);
+    const bp = variantId(cfg.libraryDir, v.from, v.palette, this.taken, v.bible?.id);
     this.taken.add(bp);
     try {
       const design = path.join(scratch, KIT, 'designs', `${bp}.mjs`);
       fs.writeFileSync(design, withDesignId(normalizeKitImports(fs.readFileSync(src.sourceFile, 'utf8')), bp));
-      let palette = mergePalette(entry.palette, v.palette);
-      if (palette !== undefined && typeof palette !== 'string' && !isPaletteInputs(entry.palette) && !palette.preset) {
+      // 4b: a bible design imports ../../bible/ (its bible.json and components): the entry keeps a copy in bible/
+      const own = path.join(path.dirname(src.sourceFile), 'bible');
+      if (!src.bundled && fs.existsSync(own)) fs.cpSync(own, path.join(scratch, 'bible'), { recursive: true });
+      const bibleFiles = fs.existsSync(path.join(scratch, 'bible')) ? ['bible.json', 'bible.md', 'components.mjs'].map((f) => ({ from: path.join(scratch, 'bible', f), to: path.join('bible', f) })) : [];
+      let palette = v.bible ? undefined : mergePalette(entry.palette, v.palette);
+      if (palette !== undefined && typeof palette !== 'string' && !isBiblePalette(palette) && !isPaletteInputs(entry.palette) && !(palette as { preset?: string }).preset) {
         // an entry without a recorded palette (built before phase 2): start from the design's own default
         palette = { ...(await this.defaultPalette(scratch, bp)), ...palette };
+      }
+      // a re-skin (4b): the target bible's roles; the design keeps its own components (they read the roles)
+      let bibleArgs: string[] = [];
+      let bibleName: string | undefined;
+      if (v.bible) {
+        const target = this.host.bibleIndex.resolve(v.bible);
+        fs.copyFileSync(target.files.json, path.join(scratch, 'target-bible.json'));
+        bibleArgs = ['--bible', 'target-bible.json'];
+        bibleName = target.info.name;
       }
       const baseValues = entry.values && typeof entry.values === 'object' ? (entry.values as Record<string, unknown>) : {};
       const values = { ...baseValues, ...(v.values ?? {}) };
@@ -389,15 +418,16 @@ export class VariantRunner {
       this.step(v.id, `building ${bp} and checking it`);
       const extra = [
         ...(palette !== undefined ? ['--palette', typeof palette === 'string' ? palette : JSON.stringify(palette)] : []),
+        ...bibleArgs,
         ...(Object.keys(values).length ? ['--values', JSON.stringify(values)] : []),
       ];
-      const res = await checkDesign(cfg.kitDir, scratch, bp, { type }, KIT_TIMEOUT_MS, extra);
+      const res = await checkDesign(cfg.kitDir, scratch, bp, { type, ...(Array.isArray(entry.profile) ? { profile: entry.profile as string[] } : {}) }, KIT_TIMEOUT_MS, extra);
       if (!res.ok) throw new Error(`the variant did not pass: ${res.problem ?? 'the check failed'}`);
       this.step(v.id, 'rendering previews');
       const r = await renderPreviews(scratch, res.nbt!, KIT_TIMEOUT_MS);
       const sc = res.sidecar!;
       const name = typeof entry.name === 'string' ? entry.name : typeof sc.name === 'string' ? sc.name : v.from;
-      const displayName = v.name ?? variantDisplayName(name, { palette: v.palette, values: v.values, baseValues, params: sc.params as Record<string, ParamDecl> | undefined });
+      const displayName = v.name ?? (bibleName ? truncate(`${name} (${bibleName})`, 80) : variantDisplayName(name, { palette: v.palette, values: v.values, baseValues, params: sc.params as Record<string, ParamDecl> | undefined }));
       const installed = installDesign({
         library: cfg.libraryDir,
         baseId: bp,
@@ -406,13 +436,22 @@ export class VariantRunner {
         sidecar: sc,
         source: design,
         previews: r.files,
+        files: bibleFiles,
         meta: {
           name,
           description: typeof entry.description === 'string' ? entry.description : undefined,
           request: entry.request && typeof entry.request === 'object' ? (entry.request as DesignRequest) : undefined,
           createdAt: this.host.now(),
-          // the entry's ext (docs/CONTRACT.md "ext (R5)": builds, variants and imports keep it)
-          extra: { variantOf: v.from, displayName, ...(isExt(entry.ext) ? { ext: entry.ext } : {}) },
+          // the entry's ext (docs/CONTRACT.md "ext (R5)": builds, variants and imports keep it); a re-skin's bible (the
+          // kit records it too), else the bible the entry was built with
+          extra: {
+            variantOf: v.from,
+            displayName,
+            ...(isExt(entry.ext) ? { ext: entry.ext } : {}),
+            ...(v.bible ? { bible: v.bible } : entry.bible && typeof entry.bible === 'object' ? { bible: entry.bible } : {}),
+            ...(Array.isArray(entry.profile) ? { profile: entry.profile } : {}),
+            ...(v.reskin ? { reskin: v.reskin } : {}),
+          },
         },
       });
       this.finish(v.id, installed.blueprintId, sc, installed.previews, [r.error ? `previews: ${truncate(r.error, 80)}` : '', res.warnings.length ? `${res.warnings.length} checker warning(s)` : ''].filter(Boolean).join('; '), displayName);
@@ -481,5 +520,122 @@ export class VariantRunner {
       previews,
       ...(name ? { name } : {}),
     });
+  }
+}
+
+// ---- re-skins (4b) --------------------------------------------------------------------------------
+
+export const RESKIN_SNAPSHOT_LIMIT = 20;
+const RESKIN_KEEP = 100;
+
+/** What a re-skin needs from the sidecar. */
+export interface ReskinHost {
+  readonly config: Config;
+  readonly store: Store;
+  readonly variants: VariantBook;
+  readonly log: Logger;
+  readonly bibleIndex: Pick<BibleIndex, 'resolve'>;
+  now(): number;
+  emit(m: Outbound): void;
+  requestVariant(from: string, palette?: PaletteSpec, values?: ParamValues, name?: string, bible?: BiblePin, reskin?: string): Variant;
+  /** a group's finished entries, when the sidecar knows the group */
+  groupEntries?(groupId: string): string[] | undefined;
+}
+
+/**
+ * `reskin.request { bibleId, version?, from: { group | bible (+ bibleVersion) | entries } }`: one variant per library
+ * entry of the collection, each built with the bible's roles (free, no Claude; the variant queue), reported as one
+ * `reskin.upsert` record that lists the variants and, as they finish, the new entries.
+ */
+export class Reskins {
+  constructor(private host: ReskinHost) {}
+
+  private get all(): Reskin[] {
+    return (this.host.store.data.reskins ??= []);
+  }
+
+  get(id: string): Reskin | undefined {
+    return this.all.find((r) => r.id === id);
+  }
+
+  recent(): Reskin[] {
+    const tail = this.all.slice(-RESKIN_SNAPSHOT_LIMIT);
+    const extra = this.all.filter((r) => r.status === 'building' && !tail.includes(r));
+    return [...extra, ...tail].sort((a, b) => a.createdAt - b.createdAt).map((r) => structuredClone(r));
+  }
+
+  start(): void {
+    for (const r of this.all.filter((x) => x.status === 'building')) this.refresh(r);
+  }
+
+  /** The library entries of a collection (imports and entries without a source are left out). */
+  collection(from: ReskinFrom): string[] {
+    const lib = this.host.config.libraryDir;
+    let ids: string[] = [];
+    try {
+      ids = fs.readdirSync(lib).filter((d) => /^[a-z0-9_]+$/.test(d)).sort();
+    } catch {
+      return [];
+    }
+    // a group the sidecar knows: exactly its items' entries (a crash between an install and the state write could
+    // leave a second copy carrying the group)
+    const known = from.group ? this.host.groupEntries?.(from.group) : undefined;
+    const out: string[] = [];
+    for (const id of ids) {
+      if (known && from.group && !known.includes(id) && !from.entries?.includes(id) && !from.bible) continue;
+      const j = readJsonFile(path.join(lib, id, `${id}.blueprint.json`));
+      if (!j || j.imported === true || !fs.existsSync(path.join(lib, id, `${id}.mjs`))) continue;
+      const bible = j.bible && typeof j.bible === 'object' ? (j.bible as { id?: unknown; version?: unknown }) : undefined;
+      const match =
+        (from.entries?.includes(id) ?? false) ||
+        (!!from.group && j.group === from.group) ||
+        (!!from.bible && bible?.id === from.bible && (from.bibleVersion === undefined || bible?.version === from.bibleVersion));
+      if (match) out.push(id);
+    }
+    return out;
+  }
+
+  request(bibleId: string, version: number | undefined, from: ReskinFrom): Reskin {
+    const pin = this.host.bibleIndex.resolve(version ? { id: bibleId, version } : bibleId).pin;
+    const entries = this.collection(from);
+    if (!entries.length) throw new VariantRefused(`the collection ${JSON.stringify(from)} has no library entries with a source`);
+    const now = this.host.now();
+    const r: Reskin = { id: this.host.store.nextId('r'), bible: pin, from: structuredClone(from), status: 'building', step: `re-skinning ${entries.length} entr${entries.length === 1 ? 'y' : 'ies'} with ${pin.id} v${pin.version}`, variants: [], entries: [], done: 0, failed: 0, createdAt: now, updatedAt: now };
+    this.all.push(r);
+    while (this.all.length > RESKIN_KEEP) {
+      const k = this.all.findIndex((x) => x.status !== 'building');
+      if (k < 0) break;
+      this.all.splice(k, 1);
+    }
+    for (const e of entries) r.variants.push(this.host.requestVariant(e, undefined, undefined, undefined, pin, r.id).id);
+    this.host.store.markDirty();
+    this.host.emit({ type: 'reskin.upsert', reskin: structuredClone(r) } as Outbound);
+    this.host.log.info(`reskin ${r.id}: ${entries.length} variant(s) with ${pin.id} v${pin.version}`);
+    this.refresh(r);
+    return r;
+  }
+
+  variantChanged(v: Variant): void {
+    if (!v.reskin) return;
+    const r = this.get(v.reskin);
+    if (r) this.refresh(r);
+  }
+
+  private refresh(r: Reskin): void {
+    const before = JSON.stringify(r);
+    const vs = r.variants.map((id) => this.host.variants.get(id));
+    r.done = vs.filter((v) => v?.status === 'done').length;
+    r.failed = vs.filter((v) => !v || v.status === 'failed').length;
+    r.entries = vs.filter((v) => v?.status === 'done' && v.blueprintId).map((v) => v!.blueprintId!);
+    if (r.variants.length && r.done + r.failed === r.variants.length) {
+      r.status = r.done > 0 ? 'done' : 'failed';
+      r.step = `${r.done} re-skinned with ${r.bible.id} v${r.bible.version}${r.failed ? `, ${r.failed} failed` : ''}`;
+      if (r.failed) r.error = vs.filter((v) => v?.status === 'failed').map((v) => `${v!.from}: ${(v!.error ?? '').split('\n')[0]}`).join('\n');
+    } else r.step = `${r.done + r.failed} of ${r.variants.length} built`;
+    if (JSON.stringify(r) !== before) {
+      r.updatedAt = this.host.now();
+      this.host.store.markDirty();
+      this.host.emit({ type: 'reskin.upsert', reskin: structuredClone(r) } as Outbound);
+    }
   }
 }

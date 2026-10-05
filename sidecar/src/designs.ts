@@ -156,6 +156,8 @@ export interface Sidecar {
 export interface Limits {
   maxSize?: DesignRequest['maxSize'] | undefined;
   type?: string | undefined;
+  /** (4b, open types) the checker profile the request asked for (`--profile`) */
+  profile?: string[] | undefined;
 }
 
 /** Does the built blueprint fit the request? (undefined = yes, else why not) */
@@ -276,7 +278,7 @@ export async function checkDesign(kitSrc: string, scratch: string, bp: string, l
   fs.rmSync(out, { recursive: true, force: true });
   fs.mkdirSync(out, { recursive: true });
   const m = limits.maxSize;
-  const args = [bp, '--out', out, ...(m ? ['--max', `${m.x},${m.y},${m.z}`] : []), ...(limits.type ? ['--type', limits.type] : []), ...extra, '--json'];
+  const args = [bp, '--out', out, ...(m ? ['--max', `${m.x},${m.y},${m.z}`] : []), ...(limits.type ? ['--type', limits.type] : []), ...(limits.profile?.length ? ['--profile', limits.profile.join(',')] : []), ...extra, '--json'];
   return finishCheck(await runNode(path.join(KIT, 'build.mjs'), args, scratch, timeoutMs), out, bp, limits, timeoutMs);
 }
 
@@ -340,6 +342,8 @@ export interface InstallInput {
   source?: string | undefined;
   /** preview PNGs named <anything>.preview-<view>.png */
   previews: string[];
+  /** (4b) more files for the entry folder: `to` relative to it (`bible/components.mjs`: the design's bible files) */
+  files?: Array<{ from: string; to: string }> | undefined;
   /** written into the sidecar JSON (`extra`: variantOf, displayName, imported, ...) */
   meta: { name?: string | undefined; description?: string | undefined; request?: DesignRequest | undefined; createdAt: number; extra?: Record<string, unknown> };
 }
@@ -386,6 +390,13 @@ export function installDesign(input: InstallInput): Installed {
         const dst = path.join(dir, `${id}.preview-${view.toLowerCase()}.png`);
         fs.copyFileSync(p, dst, fs.constants.COPYFILE_EXCL);
         previews.push(dst);
+      }
+      for (const f of input.files ?? []) {
+        const rel = path.normalize(f.to);
+        if (path.isAbsolute(rel) || rel.startsWith('..')) throw new Error(`install: ${f.to} is outside the entry folder`);
+        if (!fs.existsSync(f.from)) continue;
+        fs.mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true });
+        fs.copyFileSync(f.from, path.join(dir, rel), fs.constants.COPYFILE_EXCL);
       }
       const json = path.join(dir, `${id}.blueprint.json`);
       const m = input.meta;

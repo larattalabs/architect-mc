@@ -51,6 +51,27 @@ export interface Config {
   simStepMs: number;
   /** (protocol 2) Claude jobs */
   jobs: JobsConfig;
+  /** (4b) design and bible jobs running at once, shared round-robin by groups and single designs (config designConcurrency) */
+  designConcurrency: number;
+  /** (4b) <gameDir>/architect/bibles (the library dir's sibling; --bibles overrides) */
+  biblesDir: string;
+  /** (4b) the default model of a bible job (config bibleModel) */
+  bibleModel: string;
+  /** (4b) design groups */
+  groups: GroupsConfig;
+  /** sim: the cost a sim design / bible pass reports (config simDesignUsd, default 0) */
+  simDesignUsd: number;
+  /** sim: how long a simulated usage limit lasts (config simLimitMs) */
+  simLimitMs: number;
+}
+
+export interface GroupsConfig {
+  /** the default model of a landmark item (config landmarkModel) */
+  landmarkModel: string;
+  /** the default model of an ordinary item (config ordinaryModel) */
+  ordinaryModel: string;
+  /** the soft budget: dispatching pauses at this fraction of a group's budgetUsd (config softBudgetFraction, default 0.8) */
+  softBudgetFraction: number;
 }
 
 export interface JobsConfig {
@@ -71,6 +92,7 @@ export const HELP = `Architect sidecar ${VERSION}
   --data <dir>         sidecar data: state.json, client.token, sidecar.json, secrets.json, logs/, designs/
   --library <dir>      the design library (<gameDir>/architect/library): installs go to <library>/<id>/
   --kit <dir>          the blueprint kit (kit/build.mjs, kit/render.mjs, kit/lib, kit/designs)
+  --bibles <dir>       style bibles (default: <library>/../bibles, i.e. <gameDir>/architect/bibles)
   --use-claude-login   use your local \`claude\` login instead of an API key (personal use only)
   --parent-pid <pid>   exit when this process is gone (checked every 5 s)
   --backend <name>     claude (default) or sim (no Claude: installs a kit example; tests, offline UI work)
@@ -100,7 +122,7 @@ export function parseFlags(argv: string[]): Record<string, string | true> {
 }
 
 const BOOL_FLAGS = new Set(['use-claude-login', 'debug', 'help']);
-const VALUE_FLAGS = new Set(['port', 'data', 'library', 'kit', 'parent-pid', 'backend']);
+const VALUE_FLAGS = new Set(['port', 'data', 'library', 'kit', 'parent-pid', 'backend', 'bibles']);
 
 export function loadConfig(argv: string[], env: NodeJS.ProcessEnv = process.env): Config {
   const flags = parseFlags(argv);
@@ -154,6 +176,16 @@ export function loadConfig(argv: string[], env: NodeJS.ProcessEnv = process.env)
       concurrency: Math.max(1, Math.min(16, Math.round(num(file.jobConcurrency, 4)))),
       simStepUsd: typeof file.simJobStepUsd === 'number' && file.simJobStepUsd >= 0 ? file.simJobStepUsd : 0.01,
     },
+    designConcurrency: Math.max(1, Math.min(16, Math.round(num(file.designConcurrency, 3)))),
+    biblesDir: str('bibles') ? path.resolve(str('bibles')!) : path.join(path.dirname(need('library')), 'bibles'),
+    bibleModel: (typeof file.bibleModel === 'string' && file.bibleModel.trim()) || DEFAULT_DESIGN_MODEL,
+    groups: {
+      landmarkModel: (typeof file.landmarkModel === 'string' && file.landmarkModel.trim()) || DEFAULT_DESIGN_MODEL,
+      ordinaryModel: (typeof file.ordinaryModel === 'string' && file.ordinaryModel.trim()) || DEFAULT_JOB_MODEL,
+      softBudgetFraction: typeof file.softBudgetFraction === 'number' && file.softBudgetFraction > 0 && file.softBudgetFraction <= 1 ? file.softBudgetFraction : 0.8,
+    },
+    simDesignUsd: typeof file.simDesignUsd === 'number' && file.simDesignUsd >= 0 ? file.simDesignUsd : 0,
+    simLimitMs: num(file.simLimitMs, 1500),
   };
 }
 

@@ -2,7 +2,8 @@
 // AgentCraft's design job (agents/claude/design.ts DesignJobs + the aux turn runner in
 // jobs/designTurns.ts, sessions.ts, holds.ts and the auth probe), without the agent roster.
 //
-// One job at a time, queued in request order. A job:
+// Design jobs run in the sidecar's pool (pool.ts, scheduler.ts: `designConcurrency` at once, round-robin across groups
+// and single designs); this designer runs the one it is handed (`run(id)`). A job:
 //   1. prepares <data>/designs/<id>/ (scratch.ts): a fresh copy of the kit, BRIEF.md, CONTRACT.md,
 //      the remix source if any
 //   2. runs a design agent turn there (claude_code preset, cwd = the scratch dir, AgentCraft's
@@ -24,11 +25,12 @@ import { checkDesign, designBaseId, freeLibraryId, installDesign, isFinalDesign,
 import { classifyToolUse, describeToolCall, foremanPrivateVerdict, GIT_REDIRECT_VARS, type PolicyContext } from '../policy.js';
 import type { Design } from '../protocol.js';
 import { prepareScratch } from '../scratch.js';
-import type { Designer, Sidecar } from '../sidecar.js';
+import type { Designer, RunOutcome, Sidecar } from '../sidecar.js';
 import type { DesignWork } from '../store.js';
 import { scrubEnv, withPathFirst } from '../util/env.js';
 import { descendantsOf, killSnapshot, killTree, orphansOf, processTable, type ProcEntry } from '../util/proc.js';
 import { truncate } from '../util/text.js';
+import { ClaudeBibleBackend } from './bible.js';
 import { ARCHITECT_NO_API_AUTH_MESSAGE, authEnv, authSourceOf, checkApiKey, directApiKey, type KeyCheck } from './auth.js';
 import { designFixPrompt, designPrompt, designStepFor, designSystemPrompt, MAX_DESIGN_ROUNDS, RESTART_PROMPT } from './brief.js';
 import { isAuthText, probeFailure } from './failures.js';
@@ -78,6 +80,22 @@ interface Current {
   done: Promise<void>;
 }
 
+/** What an agent turn runs with. */
+export interface TurnSpec {
+  bp: string;
+  cwd: string;
+  mcp: McpServerConfig;
+  resume?: string;
+  model?: string;
+  maxBudgetUsd?: number;
+  /** the one file the agent may write, relative to cwd (default kit/designs/<bp>.mjs) */
+  own?: string;
+  /** the system prompt's appendix (default the designer's) */
+  system?: string;
+  /** the log label */
+  label?: string;
+}
+
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 const alive = (c: ChildProcess | undefined): c is ChildProcess => !!c && c.exitCode === null && c.signalCode === null;
 
@@ -87,8 +105,9 @@ function clock(ms: number): string {
 
 export class ClaudeDesigner implements Designer {
   readonly name = 'claude' as const;
-  private queue: string[] = [];
-  private current: Current | undefined;
+  /** the designs running now (each holds a pool slot) */
+  private runs = new Map<string, Current>();
+  private bibles: ClaudeBibleBackend | undefined;
   private stopping = false;
   private sdk: Sdk | undefined;
   /** sticky until auth.set: the key / login is not valid */
@@ -120,36 +139,60 @@ export class ClaudeDesigner implements Designer {
   // ---- lifecycle ------------------------------------------------------------------------------
 
   async start(): Promise<void> {
-    this.sc.heavy.onFree(() => {
-      if (!this.stopping) this.kick();
-    });
     await this.checkAuth();
     this.armLimitTimer();
     this.kick();
   }
 
+  /** The bible backend on this designer (its SDK, auth, turn runner and policy). */
+  bibleBackend(): ClaudeBibleBackend {
+    return (this.bibles ??= new ClaudeBibleBackend(this.sc, this));
+  }
+
   async stop(): Promise<void> {
     this.stopping = true;
     for (const t of [this.authTimer, this.sdkTimer, this.limitTimer]) if (t) clearTimeout(t);
-    const cur = this.current;
-    if (!cur) return;
-    if (cur.turn) this.abortTurn(cur.turn, 'shutdown');
-    await cur.done.catch(() => undefined);
-  }
-
-  runningId(): string | undefined {
-    return this.current?.id;
-  }
-
-  request(d: Design): void {
-    if (this.queue.includes(d.id) || this.current?.id === d.id) return;
-    this.queue.push(d.id);
-    this.kick();
+    this.bibles?.stopAll();
+    const runs = [...this.runs.values()];
+    for (const cur of runs) if (cur.turn) this.abortTurn(cur.turn, 'shutdown');
+    await Promise.all(runs.map((cur) => cur.done.catch(() => undefined)));
   }
 
   cancel(id: string): void {
-    this.queue = this.queue.filter((x) => x !== id);
-    if (this.current?.id === id && this.current.turn) this.abortTurn(this.current.turn, 'cancel');
+    const cur = this.runs.get(id);
+    if (cur?.turn) this.abortTurn(cur.turn, 'cancel');
+  }
+
+  /** May a design turn start now (auth checked and fine, no usage limit, not stopping)? */
+  canRun(): boolean {
+    return this.canStart();
+  }
+
+  /** The reason designs cannot run until auth.set (auth failed), else undefined. */
+  blocked(): string | undefined {
+    return this.authFailed ? `Claude is not available: ${this.sc.status().message ?? 'authentication failed'}` : undefined;
+  }
+
+  /** Run one design to its end (the scheduler holds a pool slot for it). */
+  async run(id: string): Promise<RunOutcome> {
+    const cur: Current = { id, done: Promise.resolve() };
+    this.runs.set(id, cur);
+    this.sc.statusChanged();
+    let outcome: RunOutcome = 'finished';
+    cur.done = this.runDesign(cur)
+      .then((o) => {
+        outcome = o;
+      })
+      .catch((e) => {
+        this.sc.log.error(`design ${id}: ${(e as Error).stack ?? e}`);
+        this.sc.designFailed(id, (e as Error).message);
+      })
+      .finally(() => {
+        if (this.runs.get(id) === cur) this.runs.delete(id);
+        this.sc.statusChanged();
+      });
+    await cur.done;
+    return outcome;
   }
 
   authChanged(): void {
@@ -257,6 +300,8 @@ export class ClaudeDesigner implements Designer {
     this.authTimer = undefined;
     this.sc.setAuth({ auth: 'failed', ...(source ? { authSource: source } : {}), sdk: this.sdk || this.opts.queryFn ? 'ready' : 'missing', message });
     this.sc.log.error(message);
+    // nothing can run until auth.set: what waits fails, so the player sees why
+    this.kick();
   }
 
   /** The probe could not reach Claude: hold new turns and probe again later (backoff). */
@@ -334,6 +379,8 @@ export class ClaudeDesigner implements Designer {
       delete this.sc.store.data.limit;
       this.sc.store.markDirty();
       this.sc.statusChanged();
+      // groups leave held_usage now, not at their next design event
+      this.sc.groups.refreshActive();
       this.kick();
       return;
     }
@@ -347,78 +394,73 @@ export class ClaudeDesigner implements Designer {
     return !this.stopping && this.authOk && !this.authFailed && !this.limited();
   }
 
-  /** Start the next queued job if nothing runs and turns may start. */
+  /** Something changed (auth, the limit): the scheduler re-checks what can start (and fails what is blocked). */
   kick(): void {
-    if (this.current || this.stopping || !this.queue.length) return;
-    if (this.authFailed) {
-      // nothing can run until auth.set: fail what waits, so the player sees why
-      for (const id of this.queue.splice(0)) this.sc.designFailed(id, `Claude is not available: ${this.sc.status().message ?? 'authentication failed'}`);
-      return;
-    }
-    if (!this.canStart()) return;
-    // one design or agent job at a time (agent jobs share the design queue's slot)
-    if (!this.sc.heavy.tryAcquire('design')) return;
-    const id = this.queue.shift()!;
-    const cur: Current = { id, done: Promise.resolve() };
-    this.current = cur;
-    this.sc.statusChanged();
-    cur.done = this.run(cur)
-      .catch((e) => {
-        this.sc.log.error(`design ${id}: ${(e as Error).stack ?? e}`);
-        this.sc.designFailed(id, (e as Error).message);
-      })
-      .finally(() => {
-        if (this.current === cur) this.current = undefined;
-        this.sc.statusChanged();
-        this.sc.heavy.release('design');
-        if (!this.stopping) this.kick();
-      });
+    if (this.stopping) return;
+    this.sc.scheduler.kick();
   }
 
   private takenIds(except: string): Set<string> {
     return new Set(Object.entries(this.work).filter(([k]) => k !== except).map(([, w]) => w.bp));
   }
 
+  /** cancelled, or ended otherwise (a group's hard budget fails a running item): stop working on it */
   private cancelled(id: string): boolean {
     const d = this.sc.designs.get(id);
-    return !d || d.status === 'cancelled';
+    return !d || isFinalDesign(d);
   }
 
-  private async designMcp(id: string): Promise<McpServerConfig> {
+  private designMcp(id: string): Promise<McpServerConfig> {
+    return this.statusMcp('design_status', 'Report one short line of progress on the design (shown to the player in the Designs tab).', (step) => this.sc.designStep(id, 'designing', step));
+  }
+
+  /** The sidecar's own MCP server with one progress tool (mcpGate lets exactly this server through). */
+  async statusMcp(name: string, description: string, onStep: (step: string) => void): Promise<McpServerConfig> {
     const sdk = this.sdk ?? (await loadSdk());
     if (!sdk) throw new Error('the Claude Agent SDK is not installed');
     const { z } = await loadZod();
-    // the sidecar's own server: mcpGate lets exactly this one through
     return sdk.createSdkMcpServer({
       name: MCP_SERVER,
       version: VERSION,
       tools: [
-        sdk.tool('design_status', 'Report one short line of progress on the design (shown to the player in the Designs tab).', { step: z.string().min(1).max(200) }, async ({ step }) => {
-          this.sc.designStep(id, 'designing', step);
+        sdk.tool(name, description, { step: z.string().min(1).max(200) }, async ({ step }) => {
+          onStep(step);
           return { content: [{ type: 'text' as const, text: 'ok' }] };
         }),
       ],
     });
   }
 
-  private async run(cur: Current): Promise<void> {
+  /** (bibles) is the turn runner usable now: auth ok, no limit */
+  get usable(): boolean {
+    return this.canStart();
+  }
+
+  /** (bibles) the usage limit a turn reported: hold everything until it resets */
+  noteLimit(stats: TurnStats): void {
+    if (!this.limited()) this.setLimit(stats.rateLimit?.resetsAt, stats.rateLimit?.type);
+  }
+
+  private async runDesign(cur: Current): Promise<RunOutcome> {
     const sc = this.sc;
     const cfg = sc.config;
     const id = cur.id;
     const d = sc.designs.get(id);
-    if (!d || isFinalDesign(d)) return;
+    if (!d || isFinalDesign(d)) return 'finished';
     const req = d.request;
     const w = (this.work[id] ??= { bp: freeLibraryId(cfg.libraryDir, designBaseId(req), this.takenIds(id)), round: 0 });
     sc.store.markDirty();
-    const scratch = prepareScratch({ dataDir: cfg.dataDir, kitDir: cfg.kitDir, libraryDir: cfg.libraryDir, design: d, bp: w.bp });
+    const scratch = prepareScratch({ dataDir: cfg.dataDir, kitDir: cfg.kitDir, libraryDir: cfg.libraryDir, design: d, bp: w.bp, ...sc.scratchExtras(d) });
     const sessionKey = `design:${id}`;
-    const budget = req.budgetUsd;
     const meter = new CostMeter(w.cost ?? zeroCost());
+    const model = req.model ?? this.cfg.designModel;
     for (;;) {
-      if (this.cancelled(id)) return;
+      if (this.cancelled(id)) return 'finished';
+      // a group item's budget is what is left of the group's (Sidecar.designBudget)
+      const budget = sc.designBudget(id);
       if (budget !== undefined && meter.remaining(budget) <= 0) {
         sc.designFailed(id, 'budget', `failed: budget ($${meter.total().usd.toFixed(4)} of $${budget})`);
-        return;
+        return 'finished';
       }
       const resume = sc.store.data.sessions[sessionKey]?.sessionId;
       const prompt = w.pending ?? (resume ? RESTART_PROMPT : designPrompt(w.bp));
@@ -436,7 +478,7 @@ export class ClaudeDesigner implements Designer {
         sessionKey,
         cwd: scratch,
         prompt,
-        model: req.model ?? this.cfg.designModel,
+        model,
         ...(caps.length ? { maxBudgetUsd: Math.min(...caps) } : {}),
         mcp: await this.designMcp(id),
         ...(resume ? { resume } : {}),
@@ -449,16 +491,16 @@ export class ClaudeDesigner implements Designer {
       cur.turn = undefined;
       w.cost = meter.commit();
       sc.store.markDirty();
-      if (reason === 'cancel' || this.cancelled(id)) return;
+      if (reason === 'cancel' || this.cancelled(id)) return 'finished';
       if (stats.subtype === 'error_max_budget_usd' && budget !== undefined && reason !== 'shutdown' && !this.stopping) {
         sc.designFailed(id, 'budget', `failed: budget ($${w.cost.usd.toFixed(4)} of $${budget})`);
-        return;
+        return 'finished';
       }
       if (reason === 'shutdown' || this.stopping) {
         // picked up again on the next start (resuming this session)
         w.round--;
         sc.store.markDirty();
-        return;
+        return 'stopped';
       }
       if (stats.limited) {
         w.round--;
@@ -466,17 +508,18 @@ export class ClaudeDesigner implements Designer {
         if (!this.limited()) this.setLimit(stats.rateLimit?.resetsAt, stats.rateLimit?.type);
         const until = sc.store.data.limit?.until;
         sc.designStep(id, 'queued', `usage limit - resumes ${until ? clock(until) : 'later'}`);
-        this.queue.unshift(id);
-        return;
+        return 'requeue';
       }
       if (stats.authFailed) {
         sc.designFailed(id, `Claude authentication failed (${stats.authFailed})`);
-        return;
+        return 'finished';
       }
       delete w.pending;
       sc.designStep(id, 'checking', `checking the design (round ${w.round})`);
-      const res = await checkDesign(cfg.kitDir, scratch, w.bp, { maxSize: req.maxSize, type: req.type });
-      if (this.cancelled(id)) return;
+      // the bible files again from their source (Bash in the scratch dir could have changed them)
+      sc.syncScratchBible(scratch, d);
+      const res = await checkDesign(cfg.kitDir, scratch, w.bp, { maxSize: req.maxSize, type: req.type, profile: req.profile });
+      if (this.cancelled(id)) return 'finished';
       if (!res.ok) {
         const problem = res.problem ?? 'the check failed';
         if (w.round < MAX_DESIGN_ROUNDS) {
@@ -487,11 +530,11 @@ export class ClaudeDesigner implements Designer {
         }
         const ended = stats.isError ? ` (the designer's last turn ended: ${stats.subtype ?? stats.errors[0] ?? 'error'})` : '';
         sc.designFailed(id, `${problem}${ended}`);
-        return;
+        return 'finished';
       }
       sc.designStep(id, 'rendering', 'rendering previews');
       const r = await renderPreviews(scratch, res.nbt!);
-      if (this.cancelled(id)) return;
+      if (this.cancelled(id)) return 'finished';
       const installed = installDesign({
         library: cfg.libraryDir,
         baseId: designBaseId(req),
@@ -500,12 +543,13 @@ export class ClaudeDesigner implements Designer {
         sidecar: res.sidecar!,
         source: path.join(scratch, KIT, 'designs', `${w.bp}.mjs`),
         previews: r.files,
-        meta: { name: req.name, request: req, createdAt: sc.now(), ...(req.ext && Object.keys(req.ext).length ? { extra: { ext: req.ext } } : {}) },
+        files: sc.entryFiles(d, scratch),
+        meta: { name: req.name, request: req, createdAt: sc.now(), extra: sc.entryExtra(d) },
       });
       const s = res.sidecar!.size!;
       const notes = [r.skipped ? 'no renderer' : r.error ? `previews: ${truncate(r.error, 80)}` : '', res.warnings.length ? `${res.warnings.length} checker warning(s)` : ''].filter(Boolean).join('; ');
       sc.designDone(id, installed, { x: s.x, y: s.y, z: s.z }, notes);
-      return;
+      return 'finished';
     }
   }
 
@@ -545,10 +589,10 @@ export class ClaudeDesigner implements Designer {
    * permission prompt, so whatever the policy would ask about is refused with a reason the agent
    * can work with.
    */
-  canUseTool(cwd: string, bp: string, turn: Running): CanUseTool {
+  canUseTool(cwd: string, bp: string, turn: Running, ownFile?: string): CanUseTool {
     return async (toolName, input): Promise<PermissionResult> => {
       if (turn.abort.signal.aborted) return { behavior: 'deny', message: 'The job was stopped.', interrupt: true };
-      const own = designVerdict(toolName, input, { cwd, bp });
+      const own = designVerdict(toolName, input, { cwd, bp, own: ownFile });
       if (own) {
         this.sc.log.info(`designer blocked: ${describeToolCall(toolName, input)} (${truncate(own.reason, 160)})`);
         return { behavior: 'deny', message: own.reason };
@@ -564,7 +608,7 @@ export class ClaudeDesigner implements Designer {
   }
 
   /** The SDK options of a design turn (exported for tests through runTurn's queryFn). */
-  turnOptions(turn: Running, spec: { bp: string; cwd: string; mcp: McpServerConfig; resume?: string; model?: string; maxBudgetUsd?: number }): Options {
+  turnOptions(turn: Running, spec: TurnSpec): Options {
     const cwd = spec.cwd;
     const report = (tool: string, why: string) => this.sc.log.info(`designer blocked: ${tool} (${truncate(why, 160)})`);
     return {
@@ -575,7 +619,7 @@ export class ClaudeDesigner implements Designer {
       settingSources: [],
       // never auto mode: every call the CLI does not allow by itself reaches canUseTool
       permissionMode: 'default',
-      canUseTool: this.canUseTool(cwd, spec.bp, turn),
+      canUseTool: this.canUseTool(cwd, spec.bp, turn, spec.own),
       tools: ['Read', 'Grep', 'Glob', 'Edit', 'Write', 'Bash', 'TodoWrite'],
       disallowedTools: ['Agent', 'Task', 'WebFetch', 'WebSearch', 'Skill', 'NotebookEdit', 'Bash(git:*)'],
       strictMcpConfig: true,
@@ -584,10 +628,10 @@ export class ClaudeDesigner implements Designer {
         PreToolUse: [
           { hooks: [denyHook((tool, input) => foremanPrivateVerdict(tool, input, this.policyContext(cwd)), report)] },
           { hooks: [connectorHook([MCP_SERVER], (tool, server) => report(tool, `MCP server "${server}" is not available`))] },
-          { hooks: [denyHook((tool, input) => designVerdict(tool, input, { cwd, bp: spec.bp }), report)] },
+          { hooks: [denyHook((tool, input) => designVerdict(tool, input, { cwd, bp: spec.bp, own: spec.own }), report)] },
         ],
       },
-      systemPrompt: { type: 'preset', preset: 'claude_code', append: designSystemPrompt() },
+      systemPrompt: { type: 'preset', preset: 'claude_code', append: spec.system ?? designSystemPrompt() },
       abortController: turn.abort,
       env: this.env(cwd),
       spawnClaudeCodeProcess: this.spawner(turn, 'designer'),
@@ -596,11 +640,9 @@ export class ClaudeDesigner implements Designer {
     };
   }
 
-  private async runTurn(
-    turn: Running,
-    spec: { id: string; bp: string; sessionKey: string; cwd: string; prompt: string; mcp: McpServerConfig; resume?: string; model?: string; maxBudgetUsd?: number; onMessage?(msg: SDKMessage): void },
-  ): Promise<{ stats: TurnStats; reason?: AbortReason }> {
-    const label = `designer ${spec.id}`;
+  /** One agent turn (a design's, or a bible job's component pass): the CLI with the design policy, streamed. */
+  async runTurn(turn: Running, spec: TurnSpec & { id: string; sessionKey: string; prompt: string; onMessage?(msg: SDKMessage): void }): Promise<{ stats: TurnStats; reason?: AbortReason }> {
+    const label = spec.label ?? `designer ${spec.id}`;
     const mapper = new StreamMapper(this.sc.log, label, (r) => this.onRateLimit(r));
     this.sc.log.info(`${label}: ${spec.resume ? 'resuming' : 'starting'} (${spec.model ?? this.cfg.designModel}, effort ${this.cfg.effort}${spec.maxBudgetUsd !== undefined ? `, budget left $${spec.maxBudgetUsd}` : ''})`);
     let stats: TurnStats;
@@ -625,10 +667,10 @@ export class ClaudeDesigner implements Designer {
         } catch (e) {
           this.sc.log.warn(`${label}: ${(e as Error).message}`);
         }
-        if (mapper.stats.sessionId && this.sc.store.data.sessions[spec.sessionKey]?.sessionId !== mapper.stats.sessionId) this.recordSession(spec.sessionKey, mapper.stats.sessionId);
+        if (mapper.stats.sessionId && this.sc.store.data.sessions[spec.sessionKey]?.sessionId !== mapper.stats.sessionId) this.recordSession(spec.sessionKey, mapper.stats.sessionId, undefined, spec.model);
       }
       stats = mapper.stats;
-      if (stats.sessionId) this.recordSession(spec.sessionKey, stats.sessionId, stats);
+      if (stats.sessionId) this.recordSession(spec.sessionKey, stats.sessionId, stats, spec.model);
       if (stats.authFailed) this.markAuthFailed(`Claude authentication failed (${stats.authFailed}).`);
     } catch (e) {
       stats = { ...mapper.stats };
@@ -655,10 +697,10 @@ export class ClaudeDesigner implements Designer {
     return { stats, ...(turn.reason ? { reason: turn.reason } : {}) };
   }
 
-  private recordSession(key: string, sessionId: string, stats?: TurnStats): void {
+  private recordSession(key: string, sessionId: string, stats?: TurnStats, model?: string): void {
     const s = (this.sc.store.data.sessions[key] ??= { turns: 0, costUsd: 0, updatedAt: Date.now() });
     s.sessionId = sessionId;
-    s.model = this.cfg.designModel;
+    s.model = model ?? this.cfg.designModel;
     s.updatedAt = Date.now();
     if (stats) {
       s.turns += stats.numTurns ?? 0;

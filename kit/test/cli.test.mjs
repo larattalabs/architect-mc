@@ -57,7 +57,7 @@ test('build --type mismatch fails the check (exit 1)', () => {
 test('build: bad usage and unknown designs exit 2', () => {
   assert.equal(run('build.mjs', []).status, 2);
   assert.equal(run('build.mjs', ['cabin', '--max', 'big']).status, 2);
-  assert.equal(run('build.mjs', ['cabin', '--type', 'castle']).status, 2);
+  assert.equal(run('build.mjs', ['cabin', '--type', 'Castle!']).status, 2);
   assert.equal(run('build.mjs', ['cabin', '--frobnicate']).status, 2);
   const r = run('build.mjs', ['no_such_design', '--json']);
   assert.equal(r.status, 2);

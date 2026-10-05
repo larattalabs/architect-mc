@@ -18,6 +18,43 @@ export const DATA_VERSION = 5023;
 /** Known port kinds (R5); any `<modid>:<kind>` is allowed too. */
 export const PORT_KINDS = ['item_out', 'item_in', 'water_in', 'water_out', 'redstone_in', 'redstone_out', 'bed', 'door'];
 export const BUILDING_TYPES = ['house', 'cabin', 'cottage', 'tower', 'shop', 'tavern', 'barn', 'smithy', 'chapel', 'gatehouse', 'custom'];
+/**
+ * Open building types (phase 4b, R4): any short type string (`hellish_lair`, `mining_hall`) besides the presets. A
+ * non-preset type is checked with the rules its `profile` lists (PROFILE_RULES); none listed = DEFAULT_PROFILE.
+ */
+export const TYPE_RE = /^[a-z][a-z0-9_]{0,39}$/;
+export const isPresetType = (t) => BUILDING_TYPES.includes(t);
+/** The checker rules a non-preset type may list in its profile (`min_interior_volume:<n>`, `passage:<w>x<h>`, `tall:<ratio>` take an argument). */
+export const PROFILE_RULES = ['door', 'roof_closed', 'floors_reachable', 'lit', 'no_floating', 'interior', 'min_interior_volume', 'passage', 'tall'];
+export const DEFAULT_PROFILE = ['door', 'lit', 'no_floating'];
+
+/**
+ * Parse a profile (a list of rule strings, or a comma-separated string) into { rules: Set, minVolume?, passage?: {w,h},
+ * tall? }. Throws with the reason on an unknown or malformed rule.
+ */
+export function parseProfile(list) {
+  const items = typeof list === 'string' ? list.split(',').map((x) => x.trim()).filter(Boolean) : list;
+  if (!Array.isArray(items) || !items.every((x) => typeof x === 'string')) throw new Error('profile must be a list of rule strings');
+  const out = { rules: new Set(), list: [] };
+  for (const it of items) {
+    const [name, arg, more] = it.split(':');
+    if (!PROFILE_RULES.includes(name) || more !== undefined) throw new Error(`profile: unknown rule '${it}' (one of door, roof_closed, floors_reachable, lit, no_floating, interior, min_interior_volume:<n>, passage:<w>x<h>, tall:<ratio>)`);
+    if (name === 'min_interior_volume') {
+      if (!/^\d{1,5}$/.test(arg ?? '')) throw new Error(`profile: ${it}: min_interior_volume needs a whole number (min_interior_volume:120)`);
+      out.minVolume = Number(arg);
+    } else if (name === 'passage') {
+      const m = /^(\d{1,2})x(\d{1,2})$/.exec(arg ?? '');
+      if (!m || Number(m[1]) < 1 || Number(m[2]) < 2) throw new Error(`profile: ${it}: passage needs <w>x<h> (passage:3x3)`);
+      out.passage = { w: Number(m[1]), h: Number(m[2]) };
+    } else if (name === 'tall') {
+      if (!/^\d+(\.\d+)?$/.test(arg ?? '') || Number(arg) <= 0) throw new Error(`profile: ${it}: tall needs a ratio (tall:2)`);
+      out.tall = Number(arg);
+    } else if (arg !== undefined) throw new Error(`profile: rule '${name}' takes no argument`);
+    out.rules.add(name);
+    out.list.push(it);
+  }
+  return out;
+}
 
 export const DIR = {
   north: { dx: 0, dz: -1, yaw: 180 },
@@ -155,6 +192,7 @@ export const PALETTE_INPUTS = ['preset', 'wood', 'stone', 'roof', 'accent'];
  * the same palette.
  */
 export function palette(o = {}) {
+  if (o.bible !== undefined) return paletteFromBible(o.bible, o);
   if (o.preset !== undefined) {
     const base = PALETTE_PRESETS[o.preset];
     if (!base) throw new Error(`palette: unknown preset '${o.preset}' (one of ${Object.keys(PALETTE_PRESETS).join(', ')})`);
@@ -222,8 +260,146 @@ export function palette(o = {}) {
   }
   p.inputs = Object.freeze({ ...(o.preset !== undefined ? { preset: o.preset } : {}), wood, stone: stoneShort, roof, accent: accentWood });
   p.with = (more) => palette({ ...o, ...more });
+  // the palette's materials as style-bible roles (docs/CONTRACT.md phase 4b): components read them as bp.p.roles
+  p.roles = Object.freeze(rolesOfPalette(p));
   return Object.freeze(p);
 }
+
+// ------------------------------------------------------------------ style-bible roles (phase 4b)
+
+/**
+ * The roles every style bible names (docs/CONTRACT.md "Style bible"). A bible's `roles` maps each to a vanilla block;
+ * `palette({ bible })` derives every palette field from them (ROLE_FIELDS), so a palette-driven design re-skins under
+ * any bible with no code change. Extra named roles are allowed (vanilla blocks too) and reach designs as `p.roles.<name>`.
+ */
+export const CORE_ROLES = ['wall', 'wall_alt', 'trim', 'roof', 'floor', 'frame', 'accent', 'light', 'glass', 'foundation', 'path'];
+/** Macro roles a settlement-scope bible adds, for region programs (A5b): terrain, rubble, rails, structures. */
+export const MACRO_ROLES = ['rock', 'surface', 'subsurface', 'rubble', 'rail', 'structure'];
+export const ROLE_NAME = /^[a-z][a-z0-9_]{0,31}$/;
+
+/**
+ * Which palette fields each role sets (the rest derive from them: stairs/slab variants of `roof`, the wood set of the
+ * first wooden role, the stone set of the first stone role with stairs and slab).
+ */
+export const ROLE_FIELDS = {
+  wall: ['wall'],
+  wall_alt: ['plaster'],
+  trim: ['stoneTrim'],
+  roof: ['roofBlock', 'roofStairs', 'roofSlab'],
+  floor: ['floor'],
+  frame: ['frame', '(the wood set: planks, log, strippedLog, stairs, slab, fence, door, ... from its wood, unless roles.wood names one)'],
+  accent: ['accentPlanks', 'accentLog', 'accentStairs', 'accentSlab', 'accentFence'],
+  light: ['light'],
+  glass: ['pane', 'glass'],
+  foundation: ['foundation', '(the stone set: stone, stoneStairs, stoneSlab, stoneWall, from it or the first of wall, trim, wall_alt with stairs and slab)'],
+  path: ['path'],
+};
+
+/** The roles of a palette (what a built-in bible holds). */
+export function rolesOfPalette(p) {
+  return {
+    wall: p.wall, wall_alt: p.plaster, trim: p.stoneTrim, roof: p.roofBlock, floor: p.floor, frame: p.frame,
+    accent: p.accentPlanks, light: p.light, glass: p.pane, foundation: p.foundation, path: p.path,
+  };
+}
+
+/**
+ * The full block behind a stairs / slab / wall id (`deepslate_tile_stairs` -> `deepslate_tiles`), else the id itself:
+ * a bible may name a roof by its stairs.
+ */
+export function fullBlockOf(block) {
+  const q = qualify(block);
+  const b = q.replace(/^minecraft:/, '');
+  const m = /^(.*)_(stairs|slab|wall)$/.exec(b);
+  if (!m) return q;
+  for (const c of [`${m[1]}_planks`, `${m[1]}s`, m[1], `${m[1]}_block`]) {
+    if (has(c) && isCube(normalize(c)) && variant(c, m[2]) === q) return qualify(c);
+  }
+  return q;
+}
+
+/**
+ * A palette from a style bible: `bible` is a bible JSON (`{ id, version, roles }`) or a built-in bible name (the palette
+ * presets). Every palette field comes from a role (ROLE_FIELDS). Throws when a role is not a vanilla block or a
+ * derived field has no block (a roof without stairs).
+ * `p.inputs` is `{ bible: { id, version, roles } }`: `palette(p.inputs)` rebuilds it. `p.bible` is `{ id, version }`.
+ */
+export function paletteFromBible(bible, o = {}) {
+  const extra = Object.keys(o).filter((k) => k !== 'bible');
+  if (extra.length) throw new Error(`palette: a bible palette takes no other inputs (got ${extra.join(', ')})`);
+  if (typeof bible === 'string') {
+    if (!PALETTE_PRESETS[bible]) throw new Error(`palette: unknown built-in bible '${bible}' (one of ${Object.keys(PALETTE_PRESETS).join(', ')})`);
+    bible = { id: bible, version: 1, roles: rolesOfPalette(PALETTES_BY_NAME()[bible]) };
+  }
+  if (!bible || typeof bible !== 'object' || Array.isArray(bible)) throw new Error('palette: bible must be a bible object { id, version, roles } or a built-in bible name');
+  const id = bible.id ?? 'bible';
+  if (typeof id !== 'string' || !/^[a-z0-9_]+$/.test(id)) throw new Error(`palette: bible id '${id}' must match [a-z0-9_]+`);
+  const version = bible.version ?? 1;
+  if (!Number.isInteger(version) || version < 1) throw new Error(`palette: bible version must be an integer >= 1 (got ${JSON.stringify(version)})`);
+  const r0 = bible.roles;
+  if (!r0 || typeof r0 !== 'object' || Array.isArray(r0)) throw new Error('palette: bible.roles must be an object { role: block }');
+  const roles = {};
+  for (const [k, v] of Object.entries(r0)) {
+    if (!ROLE_NAME.test(k)) throw new Error(`palette: role name '${k}' must match ${ROLE_NAME}`);
+    if (typeof v !== 'string' || !/^[a-z0-9_:]+$/.test(v)) throw new Error(`palette: role ${k} must be a block id`);
+    const q = qualify(v);
+    if (!q.startsWith('minecraft:') || !has(q)) throw new Error(`palette: role ${k} '${v}' is not a vanilla block`);
+    roles[k] = q;
+  }
+  const missing = CORE_ROLES.filter((k) => !roles[k]);
+  if (missing.length) throw new Error(`palette: the bible has no role${missing.length > 1 ? 's' : ''} ${missing.join(', ')}`);
+
+  // the wood set: roles.wood (a wood name or a wooden block), else the first wooden role
+  const woodOf = (b) => (WOODS.includes(String(b).replace(/^minecraft:/, '')) ? String(b).replace(/^minecraft:/, '') : woodFamilyOf(b));
+  const wood = [roles.wood, roles.frame, roles.accent, roles.floor, roles.wall, roles.wall_alt, roles.roof].map((b) => (b ? woodOf(b) : null)).find(Boolean) ?? 'oak';
+  const w = woodSet(wood);
+  const accentWood = woodOf(roles.accent) ?? wood;
+  const a = woodSet(accentWood);
+  // the stone set: the first stone-like role with stairs and slab variants
+  const stone = [roles.foundation, roles.wall, roles.trim, roles.wall_alt].map(fullBlockOf).find((b) => isCube(normalize(b)) && variant(b, 'stairs') && variant(b, 'slab')) ?? 'minecraft:cobblestone';
+  const stoneShort = stone.replace(/^minecraft:/, '');
+  const family = STONE_MEMBER.get(stoneShort);
+  const kin = family ? STONE_FAMILIES[family] : [];
+  const roofBlock = fullBlockOf(roles.roof);
+  const roofStairs = variant(roofBlock, 'stairs');
+  const roofSlab = variant(roofBlock, 'slab');
+  if (!roofStairs || !roofSlab) throw new Error(`palette: roof '${roles.roof}' has no stairs/slab variant (pick a roof block with both, e.g. deepslate_tiles, dark_oak_planks)`);
+  const glassRole = roles.glass;
+  const isPane = BLOCKS[glassRole]?.family === 'pane' || /_pane$/.test(glassRole);
+  const glass = isPane ? (has(glassRole.replace(/_pane$/, '')) ? glassRole.replace(/_pane$/, '') : 'minecraft:glass') : glassRole;
+  const pane = isPane ? glassRole : has(`${glassRole}_pane`) ? `${glassRole}_pane` : 'minecraft:glass_pane';
+  const p = {
+    wood, stoneName: stoneShort, roofName: woodOf(roofBlock) && roofBlock === qualify(`${woodOf(roofBlock)}_planks`) ? woodOf(roofBlock) : roofBlock.replace(/^minecraft:/, ''), accentWood,
+    ...w,
+    accentPlanks: a.planks, accentLog: a.strippedLog, accentStairs: a.stairs, accentSlab: a.slab, accentFence: a.fence,
+    stone,
+    stoneStairs: variant(stone, 'stairs'),
+    stoneSlab: variant(stone, 'slab'),
+    stoneWall: variant(stone, 'wall') ?? kin.map((k) => variant(k, 'wall')).find(Boolean) ?? a.fence,
+    stoneTrim: roles.trim,
+    roofBlock, roofStairs, roofSlab,
+    wall: roles.wall,
+    frame: roles.frame,
+    floor: roles.floor,
+    foundation: roles.foundation,
+    plaster: roles.wall_alt,
+    glass: qualify(glass),
+    pane: qualify(pane),
+    light: roles.light,
+    path: roles.path,
+  };
+  for (const [k, v] of Object.entries(p)) {
+    if (typeof v === 'string' && v.startsWith('minecraft:') && !has(v)) throw new Error(`palette: ${k} '${v}' is not a vanilla block`);
+  }
+  p.roles = Object.freeze({ ...roles });
+  p.bible = Object.freeze({ id, version });
+  p.inputs = Object.freeze({ bible: { id, version, roles: { ...roles } } });
+  p.with = () => { throw new Error('palette: a bible palette cannot be tweaked with .with(); change the bible'); };
+  return Object.freeze(p);
+}
+
+/** (lazy: PALETTES is defined below) */
+const PALETTES_BY_NAME = () => PALETTES;
 
 /**
  * The presets' inputs. A preset may set derived fields too (`plaster`, `stoneTrim`, ...): they follow from the
@@ -255,6 +431,8 @@ export function resolvePalette(spec) {
     return palette({ preset: spec });
   }
   if (!spec || typeof spec !== 'object' || Array.isArray(spec)) throw new Error('palette: must be a preset name or an object { preset?, wood?, stone?, roof?, accent? }');
+  // a style bible (phase 4b): { bible: <built-in name> | { id, version, roles } }, what a bible build records
+  if (spec.bible !== undefined) return palette(spec);
   for (const [k, v] of Object.entries(spec)) {
     if (!PALETTE_INPUTS.includes(k)) throw new Error(`palette: unknown field '${k}' (allowed: ${PALETTE_INPUTS.join(', ')})`);
     if (typeof v !== 'string' || !/^[a-z0-9_:]+$/.test(v)) throw new Error(`palette: ${k} must be a block or wood name`);
@@ -295,7 +473,9 @@ export class Blueprint {
     this.name = o.name ?? o.id;
     this.description = o.description ?? '';
     this.type = o.type ?? 'custom';
-    if (!BUILDING_TYPES.includes(this.type)) throw new Error(`type '${this.type}' must be one of ${BUILDING_TYPES.join(', ')}`);
+    if (!TYPE_RE.test(this.type)) throw new Error(`type '${this.type}' must be a preset (${BUILDING_TYPES.join(', ')}) or a short open type matching ${TYPE_RE}`);
+    /** open types (R4): the checker rules this building wants (see PROFILE_RULES); ignored for preset types */
+    this.profile = o.profile === undefined ? undefined : parseProfile(o.profile).list;
     this.tags = [...(o.tags ?? [])];
     const s = Array.isArray(o.size) ? o.size : [o.size.x, o.size.y, o.size.z];
     this.size = { x: s[0], y: s[1], z: s[2] };
@@ -322,6 +502,49 @@ export class Blueprint {
     this.oz = og[2];
     this.interiorBox = null;
     if (o.interior) this.interior(o.interior);
+    /** named parts (R3): part name -> first-declared order; cellPart: cell key -> the part that wrote it last */
+    this.partNames = [];
+    this.cellPart = new Map();
+    this.partStack = [];
+  }
+
+  /**
+   * A named part (R3): every cell written while `fn(bp)` runs belongs to `name` (the innermost part when nested; a later
+   * write elsewhere takes the cell over). The sidecar gets `parts: { name: { box, cells } }`, which delta apply diffs
+   * by: give every major mass a stable name (`main`, `wing_east`, `tower`, `porch`, `roof`). Calling it again with the
+   * same name adds to the part. The checker warns with fewer than 2 parts or more than 20% of the cells in none.
+   */
+  part(name, fn) {
+    if (typeof name !== 'string' || !/^[a-z][a-z0-9_]{0,39}$/.test(name)) throw new Error(`${this.id}: part name '${name}' must match [a-z][a-z0-9_]{0,39}`);
+    if (typeof fn !== 'function') throw new Error(`${this.id}: part('${name}', fn): fn must be a function that writes the part`);
+    if (!this.partNames.includes(name)) this.partNames.push(name);
+    this.partStack.push(name);
+    try {
+      fn(this);
+    } finally {
+      this.partStack.pop();
+    }
+    return this;
+  }
+
+  /** The parts as the sidecar writes them: { name: { box: [x0,y0,z0,x1,y1,z1] (template coordinates), cells } }. */
+  partBoxes() {
+    const acc = new Map(this.partNames.map((n) => [n, { min: [Infinity, Infinity, Infinity], max: [-Infinity, -Infinity, -Infinity], cells: 0 }]));
+    for (const [k, n] of this.cellPart) {
+      if (!this.cells.has(k)) continue;
+      const a = acc.get(n);
+      const xyz = k.split(',').map(Number);
+      for (let i = 0; i < 3; i++) { a.min[i] = Math.min(a.min[i], xyz[i]); a.max[i] = Math.max(a.max[i], xyz[i]); }
+      a.cells++;
+    }
+    const out = {};
+    for (const [n, a] of acc) if (a.cells) out[n] = { box: [...a.min, ...a.max], cells: a.cells };
+    return out;
+  }
+
+  /** The kit's direction helpers, for component modules (which import nothing): { DIR, OPPOSITE, CW, CCW, cellsOf, variant }. */
+  get kit() {
+    return { DIR, OPPOSITE, CW, CCW, cellsOf, variant, yawOf, dirOfYaw };
   }
 
   /** Feet row (rows >= this are the building above the terrain). */
@@ -349,7 +572,11 @@ export class Blueprint {
   /** Place one block. `props` may be partial (the rest is filled with defaults); `nbt` is a block-entity compound as a plain object. */
   set(x, y, z, block, props = {}, nbtData = null) {
     if (!this.inBounds(x, y, z)) throw new Error(`${this.id}: set(${x},${y},${z}) outside size ${this.size.x}x${this.size.y}x${this.size.z} (origin ${this.ox},${this.oy},${this.oz})`);
-    this.cells.set(key(x + this.ox, y + this.oy, z + this.oz), { state: normalize(block, props), nbt: nbtData });
+    const k = key(x + this.ox, y + this.oy, z + this.oz);
+    this.cells.set(k, { state: normalize(block, props), nbt: nbtData });
+    const part = this.partStack[this.partStack.length - 1];
+    if (part) this.cellPart.set(k, part);
+    else this.cellPart.delete(k);
     return this;
   }
 
@@ -360,7 +587,7 @@ export class Blueprint {
   nameAt(x, y, z) { return this.get(x, y, z)?.state.name ?? null; }
 
   /** Remove a written cell (placement then leaves the terrain there). */
-  unset(x, y, z) { this.cells.delete(key(x + this.ox, y + this.oy, z + this.oz)); return this; }
+  unset(x, y, z) { const k = key(x + this.ox, y + this.oy, z + this.oz); this.cells.delete(k); this.cellPart.delete(k); return this; }
 
   /** Fill an inclusive box [x0,y0,z0,x1,y1,z1]. */
   fill(box, block, props = {}, nbtData = null) {
@@ -670,7 +897,10 @@ export class Blueprint {
   // ------------------------------------------------------------------ lights, decor
 
   /** A lantern (hanging from the block above, or standing on the block below). */
-  lantern(x, y, z, hanging = false, block = this.p.light) { return this.set(x, y, z, block, { hanging: String(hanging) }); }
+  lantern(x, y, z, hanging = false, block = this.p.light) {
+    // a bible's light role may be a full block (shroomlight, sea lantern, froglight): it has no `hanging`
+    return this.set(x, y, z, block, BLOCKS[qualify(block)]?.props.hanging ? { hanging: String(hanging) } : {});
+  }
 
   /** A torch: on the floor, or on a wall when `facing` (pointing away from the wall it hangs on) is given. */
   torch(x, y, z, facing = null) {
@@ -852,13 +1082,18 @@ export class Blueprint {
     s.anchors = Object.fromEntries(Object.entries(this.anchors).map(([k, v]) => [k, { ...v }]));
     s.source = `${this.id}.mjs`;
     // phase 2: what the build was made from (build.mjs sets params/values from the design's `params` export)
-    if (this.p?.inputs) s.palette = { ...this.p.inputs };
+    if (this.p?.inputs) s.palette = structuredClone(this.p.inputs);
+    // phase 4b: the style bible the build used (a re-skin is a variant with another bible)
+    if (this.p?.bible) s.bible = { ...this.p.bible };
     if (this.params) s.params = structuredClone(this.params);
     if (this.values) s.values = { ...this.values };
     if (this.createdAt !== undefined) s.createdAt = this.createdAt;
     if (this.request !== undefined) s.request = this.request;
     if (this.ports.length) s.ports = this.ports.map((p) => ({ ...p }));
     if (Object.keys(this.ext).length) s.ext = structuredClone(this.ext);
+    // phase 4b: named parts (R3) and an open type's checker profile (R4)
+    if (this.partNames.length) s.parts = this.partBoxes();
+    if (this.profile !== undefined) s.profile = [...this.profile];
     return s;
   }
 }

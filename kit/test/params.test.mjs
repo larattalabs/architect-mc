@@ -130,15 +130,17 @@ test('checker: a wood or stone family not from the palette is a warning', () => 
   const p = palette({ preset: 'rustic' });
   const hut = (extra) => {
     const bp = new Blueprint({ id: 'hut', type: 'custom', size: [5, 5, 7], palette: p, interior: [1, 1, 1, 3, 3, 3] });
-    bp.floor(0, 0, 4, 6, 0, p.stone);
-    bp.carve([1, 1, 1, 3, 3, 3]);
-    bp.walls(0, 0, 4, 4, 1, 3);
-    bp.floor(0, 0, 4, 4, 4, p.planks);
-    bp.door(2, 1, 4, 'south');
-    bp.lantern(2, 3, 2, true);
+    bp.part('main', () => {
+      bp.floor(0, 0, 4, 6, 0, p.stone);
+      bp.carve([1, 1, 1, 3, 3, 3]);
+      bp.walls(0, 0, 4, 4, 1, 3);
+      bp.door(2, 1, 4, 'south');
+      bp.lantern(2, 3, 2, true);
+    });
+    bp.part('roof', () => bp.floor(0, 0, 4, 4, 4, p.planks));
     bp.spot('entrance', 2, 5, 180);
     bp.spot('spawn', 2, 6, 180);
-    extra?.(bp);
+    bp.part('extra', () => extra?.(bp));
     return checkBlueprint(bp);
   };
   assert.deepEqual(hut().warnings, []);

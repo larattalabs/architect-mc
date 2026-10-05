@@ -106,10 +106,6 @@ export class JobRunner {
   /** Pick up the jobs that were unfinished when the sidecar stopped, then start what can start. */
   start(driver: JobDriver): void {
     this.driver = driver;
-    // a design (or another agent job) finished: an agent job waiting for the shared slot may start
-    this.sc.heavy.onFree(() => {
-      if (!this.stopping) this.kick();
-    });
     this.sc.blobs.sweep();
     this.sweepTimer = setInterval(() => this.sc.blobs.sweep(), 3600_000);
     this.sweepTimer.unref?.();
@@ -170,6 +166,7 @@ export class JobRunner {
     this.log.info(`job ${id} cancelled`);
     this.structuredQueue = this.structuredQueue.filter((x) => x !== id);
     this.agentQueue = this.agentQueue.filter((x) => x !== id);
+    this.sc.pool.withdraw(`job:${id}`);
     const w = this.book.work(id);
     if (w) {
       w.pending = [];
@@ -282,6 +279,22 @@ export class JobRunner {
     if (q.includes(id) || this.running.has(id)) return;
     if (front) q.unshift(id);
     else q.push(id);
+    // (4b) an agent job takes a slot of the design pool (lane `jobs`), round-robin with designs and groups
+    if (kind === 'agent') this.sc.pool.submit({ key: `job:${id}`, lane: 'jobs', ready: () => this.agentReady(), start: () => this.startAgent(id) }, front);
+  }
+
+  private agentReady(): boolean {
+    if (this.stopping || !this.driver) return false;
+    return this.sc.status().auth === 'ok' && !this.limitedUntil();
+  }
+
+  /** The pool gave an agent job its slot: run it (the slot is held until it ends). */
+  private startAgent(id: string): Promise<void> {
+    this.agentQueue = this.agentQueue.filter((x) => x !== id);
+    const j = this.book.get(id);
+    if (!j || isFinalJob(j) || this.running.has(id)) return Promise.resolve();
+    this.launch(id, 'agent');
+    return this.running.get(id)?.done ?? Promise.resolve();
   }
 
   kick(): void {
@@ -289,6 +302,7 @@ export class JobRunner {
     const auth = this.sc.status();
     if (auth.auth === 'failed' || auth.auth === 'missing') {
       for (const id of [...this.structuredQueue.splice(0), ...this.agentQueue.splice(0)]) {
+        this.sc.pool.withdraw(`job:${id}`);
         const msg = `Claude is not available: ${auth.message ?? `auth ${auth.auth}`}`;
         this.book.update(id, { status: 'failed', step: `failed: ${msg}`, error: msg });
       }
@@ -297,13 +311,7 @@ export class JobRunner {
     if (auth.auth !== 'ok' || this.limitedUntil()) return;
     const runningStructured = [...this.running.values()].filter((r) => r.kind === 'structured').length;
     for (let n = runningStructured; n < this.sc.config.jobs.concurrency && this.structuredQueue.length; n++) this.launch(this.structuredQueue.shift()!, 'structured');
-    if (this.agentQueue.length && ![...this.running.values()].some((r) => r.kind === 'agent')) {
-      const id = this.agentQueue[0]!;
-      if (this.sc.heavy.tryAcquire(`job:${id}`)) {
-        this.agentQueue.shift();
-        this.launch(id, 'agent');
-      }
-    }
+    if (this.agentQueue.length) this.sc.pool.kick();
   }
 
   private launch(id: string, kind: JobSpec['kind']): void {
@@ -316,8 +324,11 @@ export class JobRunner {
       })
       .finally(() => {
         this.running.delete(id);
-        if (r.requeue) this.enqueue(id, kind, true);
-        if (kind === 'agent') this.sc.heavy.release(`job:${id}`);
+        // (an agent job: after the pool has released its slot)
+        if (r.requeue) {
+          if (kind === 'agent') setImmediate(() => this.enqueue(id, kind, true));
+          else this.enqueue(id, kind, true);
+        }
         const j = this.book.get(id);
         if (j && isFinalJob(j)) this.starterClients.delete(id);
         if (!this.stopping) this.kick();
