@@ -97,7 +97,9 @@ final class ApiTestBatch {
 				case "sgremove": {
 					boolean force = a.length > 2 && a[2].equals("force");
 					String requester = a.length > 3 && !a[3].equals("-") ? a[3] : null;
-					return ApiTest.later("sgremove:" + a[1], sites.removeGroup(a[1], new RemoveOptions(force, requester)).thenApply(ApiTest::removeJson));
+					dev.larattalabs.architect.api.CoveredPolicy cov = a.length > 4 ? dev.larattalabs.architect.api.CoveredPolicy.valueOf(a[4].toUpperCase(
+						java.util.Locale.ROOT)) : null;
+					return ApiTest.later("sgremove:" + a[1], sites.removeGroup(a[1], new RemoveOptions(force, requester, cov)).thenApply(ApiTest::removeJson));
 				}
 				case "sapprove":
 					return stage(sites.approveStage(a[1], a[2]));
@@ -160,12 +162,25 @@ final class ApiTestBatch {
 		List<Batch.Item> items = new ArrayList<>();
 		for (JsonElement e : j.getAsJsonArray("items")) {
 			JsonObject it = e.getAsJsonObject();
+			List<String> after0 = new ArrayList<>();
+			if (it.has("after")) {
+				it.getAsJsonArray("after").forEach(x -> after0.add(x.getAsString()));
+			}
+			String stage0 = it.has("stage") ? it.get("stage").getAsString() : null;
+			if (it.has("road")) {
+				items.add(Batch.Item.road(it.get("key").getAsString(), ApiTestJournal.road(src, it.getAsJsonObject("road"), player), stage0, after0));
+				continue;
+			}
+			if (it.has("cells")) {
+				items.add(Batch.Item.cells(it.get("key").getAsString(), ApiTestJournal.cells(src, it.getAsJsonObject("cells"), player), stage0, after0));
+				continue;
+			}
 			JsonArray at = it.getAsJsonArray("at");
 			JsonObject ext = it.has("ext") ? it.getAsJsonObject("ext") : new JsonObject();
 			PlaceRequest r = new PlaceRequest(it.get("bp").getAsString(), src.getLevel(), new BlockPos(at.get(0).getAsInt(), at.get(1).getAsInt(),
 				at.get(2).getAsInt()), Rotation.values()[it.has("rot") ? it.get("rot").getAsInt() : 0], it.has("mode") ? Mode.valueOf(it.get("mode")
 					.getAsString()) : Mode.AUTO, null, ext, it.has("force") && it.get("force").getAsBoolean(), it.has("actor") && it.get("actor")
-					.getAsBoolean() ? player : null);
+					.getAsBoolean() ? player : null, it.has("overlap") ? dev.larattalabs.architect.api.OverlapPolicy.valueOf(it.get("overlap").getAsString()) : null);
 			List<String> after = new ArrayList<>();
 			if (it.has("after")) {
 				it.getAsJsonArray("after").forEach(x -> after.add(x.getAsString()));
@@ -194,7 +209,8 @@ final class ApiTestBatch {
 			j.has("loadChunks") && j.get("loadChunks").getAsInt() > 0 ? LoadPolicy.LOAD_BOUNDED(j.get("loadChunks").getAsInt()) : LoadPolicy.LOADED_ONLY,
 			j.has("proximity") && !j.get("proximity").isJsonNull() ? j.get("proximity").getAsBoolean() : null,
 			j.has("stopOnFailure") && j.get("stopOnFailure").getAsBoolean(), j.has("autoApprove") && j.get("autoApprove").getAsBoolean(),
-			j.has("sharedCrate") && j.get("sharedCrate").getAsBoolean(), crateAt);
+			j.has("sharedCrate") && j.get("sharedCrate").getAsBoolean(), crateAt, j.has("overlap") ? dev.larattalabs.architect.api.OverlapPolicy.valueOf(
+				j.get("overlap").getAsString()) : null);
 	}
 
 	static JsonObject batchBrief(BatchView b) {

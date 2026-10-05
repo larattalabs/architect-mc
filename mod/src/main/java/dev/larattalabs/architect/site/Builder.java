@@ -1431,8 +1431,28 @@ public final class Builder {
 
 	/** A site's construction state: queue, built, BOM rows (needed / delivered / placed / missing), ledger, blocked cells. */
 	public static JsonObject state(MinecraftServer srv, String id) throws Sites.SiteException {
+		JsonObject o = stateOf(srv, id);
+		// phase 4e: its journal entries, the cells another site covers, the sites it lies on and under
+		JsonObject j = SiteJournal.siteJson(id);
+		j.entrySet().forEach(e -> o.add(e.getKey(), e.getValue()));
+		JsonObject layers = new JsonObject();
+		layers.add("covers", j.get("covers"));
+		layers.add("coveredBy", j.get("coveredBy"));
+		o.add("layers", layers);
+		return o;
+	}
+
+	private static JsonObject stateOf(MinecraftServer srv, String id) throws Sites.SiteException {
 		Site s = Sites.get(id);
 		if (s == null) {
+			Infra i = Infras.get(id) != null ? Infras.get(id) : Infras.pending(id);
+			if (i != null) {
+				JsonObject o = i.toJson();
+				o.remove("id");
+				o.addProperty("site", id);
+				o.addProperty("state", Infras.get(id) == null ? "removed" : i.placing() ? "placing" : "placed");
+				return o;
+			}
 			throw new Sites.SiteException("No site " + id);
 		}
 		Construction c = s.construction();

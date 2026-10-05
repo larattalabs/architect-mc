@@ -946,4 +946,67 @@ public final class SiteJournal {
 		}
 		return out;
 	}
+
+	// ------------------------------------------------------------------ DevBridge
+
+	/**
+	 * A site's journal view ({@code dev.site.state}): its entries (id, kind, policy, status, layer, cells), the cells of its main
+	 * entry another site covers ({@code covered}), the sites it lies on ({@code covers}) and under ({@code coveredBy}).
+	 */
+	public static JsonObject siteJson(String siteId) {
+		JsonObject o = new JsonObject();
+		com.google.gson.JsonArray es = new com.google.gson.JsonArray();
+		for (JournalStore.Meta m : entries(siteId)) {
+			JsonObject j = new JsonObject();
+			j.addProperty("entry", m.id());
+			j.addProperty("kind", m.kind());
+			j.addProperty("policy", m.policy().name());
+			j.addProperty("status", m.status().name());
+			j.addProperty("layer", m.layer());
+			j.addProperty("cells", m.cells());
+			es.add(j);
+		}
+		o.add("entries", es);
+		int covered = 0;
+		JournalStore s = WorldJournal.storeOrNull();
+		JournalStore.Meta main = main(siteId);
+		if (s != null && main != null) {
+			try {
+				for (long k : main.sections()) {
+					SectionCells sc = s.section(main.id(), k);
+					if (sc == null) {
+						continue;
+					}
+					List<String> ids = s.inSection(main.dimension(), k);
+					if (ids.size() < 2) {
+						continue;
+					}
+					for (int i = 0; i < sc.size(); i++) {
+						for (String other : ids) {
+							JournalStore.Meta om = s.meta(other);
+							if (om == null || !om.active() || om.site().equals(siteId) || om.kind().equals(WorldJournal.LEAVES)) {
+								continue;
+							}
+							SectionCells oc = s.section(other, k);
+							int j = oc == null ? -1 : oc.find(sc.index(i));
+							if (j >= 0 && oc.layer(j) > sc.layer(i)) {
+								covered++;
+								break;
+							}
+						}
+					}
+				}
+			} catch (IOException e) {
+				// unreadable: not counted
+			}
+		}
+		o.addProperty("covered", covered);
+		com.google.gson.JsonArray layers = new com.google.gson.JsonArray();
+		coveredSites(siteId).forEach(layers::add);
+		o.add("covers", layers);
+		com.google.gson.JsonArray by = new com.google.gson.JsonArray();
+		coveringSites(siteId).forEach(by::add);
+		o.add("coveredBy", by);
+		return o;
+	}
 }

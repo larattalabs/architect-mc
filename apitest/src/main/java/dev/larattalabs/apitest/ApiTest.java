@@ -198,6 +198,16 @@ public class ApiTest implements ModInitializer {
 			case "compositeclear": {
 				return ApiTestMassing.step(src, a);
 			}
+			case "road":
+			case "roadcheck":
+			case "cells":
+			case "cellscheck":
+			case "stack":
+			case "sundo2":
+			case "reasons":
+			case "api15": {
+				return ApiTestJournal.step(src, a);
+			}
 			case "bqueue":
 			case "batch":
 			case "batches":
@@ -225,10 +235,12 @@ public class ApiTest implements ModInitializer {
 				return later(key, api.sites(server).place(r).thenApply(ApiTest::placeJson));
 			}
 			case "remove": {
-				// remove <site> <requester|-> <force|noforce>
+				// remove <site> <requester|-> <force|noforce> [keep|cascade|refuse]
 				String requester = a[2].equals("-") ? null : a[2];
-				return later("remove:" + a[1] + ":" + a[2] + ":" + a[3], api.sites(server).remove(a[1], new RemoveOptions(a[3].equals("force"), requester))
-					.thenApply(ApiTest::removeJson));
+				dev.larattalabs.architect.api.CoveredPolicy covered = a.length > 4 ? dev.larattalabs.architect.api.CoveredPolicy.valueOf(a[4].toUpperCase(
+					java.util.Locale.ROOT)) : null;
+				return later("remove:" + a[1] + ":" + a[2] + ":" + a[3], api.sites(server).remove(a[1], new RemoveOptions(a[3].equals("force"), requester,
+					covered)).thenApply(ApiTest::removeJson));
 			}
 			case "sites": {
 				JsonObject o = new JsonObject();
@@ -342,8 +354,21 @@ public class ApiTest implements ModInitializer {
 			nested.addProperty("plan", 7);
 			ext.add("apitest:data", nested);
 		}
-		boolean force = a.length > 9 && a[9].equals("force");
-		return new PlaceRequest(a[1], src.getLevel(), origin, rot, mode, owned ? OWNER : null, ext, force, actor ? player : null);
+		boolean force = false;
+		boolean layer = false;
+		String owner = owned ? OWNER : null;
+		for (int i = 9; i < a.length; i++) {
+			if (a[i].equals("force")) {
+				force = true;
+			} else if (a[i].equals("layer")) {
+				layer = true;
+			} else if (a[i].startsWith("owner=")) {
+				owner = a[i].substring(6);
+			}
+		}
+		// 1.5.0: the overlap policy (null = REFUSE, as a 1.4.0 caller)
+		return new PlaceRequest(a[1], src.getLevel(), origin, rot, mode, owner, ext, force, actor ? player : null,
+			layer ? dev.larattalabs.architect.api.OverlapPolicy.LAYER : null);
 	}
 
 	// ------------------------------------------------------------------ JSON views
@@ -364,6 +389,14 @@ public class ApiTest implements ModInitializer {
 		o.addProperty("group", v.group());
 		o.addProperty("batchId", v.batchId());
 		o.addProperty("itemKey", v.itemKey());
+		o.addProperty("kind", v.kind());
+		o.addProperty("policy", v.policy().name());
+		JsonArray cv = new JsonArray();
+		v.covers().forEach(cv::add);
+		o.add("covers", cv);
+		JsonArray cb = new JsonArray();
+		v.coveredBy().forEach(cb::add);
+		o.add("coveredBy", cb);
 		return o;
 	}
 
@@ -398,6 +431,14 @@ public class ApiTest implements ModInitializer {
 		o.add("refund", items(r.refund()));
 		int total = r.refund().values().stream().mapToInt(Integer::intValue).sum();
 		o.addProperty("refundTotal", total);
+		o.addProperty("restored", r.restored());
+		o.addProperty("kept", r.kept());
+		JsonObject h = new JsonObject();
+		r.handedDown().forEach(h::addProperty);
+		o.add("handedDown", h);
+		JsonArray c = new JsonArray();
+		r.cascaded().forEach(c::add);
+		o.add("cascaded", c);
 		return o;
 	}
 
@@ -419,6 +460,17 @@ public class ApiTest implements ModInitializer {
 		o.add("bom", items(v.bom()));
 		o.addProperty("box", v.box().map(Object::toString).orElse(null));
 		o.addProperty("restoreBox", v.restoreBox().map(Object::toString).orElse(null));
+		JsonArray ov = new JsonArray();
+		v.overlaps().forEach(x -> {
+			JsonObject j = new JsonObject();
+			j.addProperty("site", x.siteId());
+			j.addProperty("owner", x.owner());
+			j.addProperty("cells", x.cells());
+			j.addProperty("blocking", x.blocking());
+			ov.add(j);
+		});
+		o.add("overlaps", ov);
+		o.addProperty("cells", v.cells());
 		return o;
 	}
 
