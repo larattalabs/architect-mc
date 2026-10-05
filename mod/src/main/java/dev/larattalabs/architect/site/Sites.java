@@ -534,8 +534,11 @@ public final class Sites {
 			return null;
 		}
 		Anchors.Bounds box = new Anchors.Bounds(bb.minX(), bb.minY(), bb.minZ(), bb.maxX(), bb.maxY(), bb.maxZ());
+		Trace tr = new Trace("checkSite " + bp.id());
 		TemplateGrid grid = TemplateGrid.of(entry);
+		tr.mark("grid");
 		GhostModel model = grid.ghost(turns);
+		tr.mark("ghost");
 		boolean[] unloaded = {false};
 		// phase 4e: standing roads' surface cells near the box (the approach stops at a road)
 		int reach = bp.approach().length() + Approach.EXTEND + 2;
@@ -552,8 +555,11 @@ public final class Sites {
 			return !roads.isEmpty() && roads.contains(BlockPos.asLong(x, y, z)) ? fl | TerrainFit.ROAD : fl;
 		};
 		TerrainFit.Plan plan = TerrainFit.plan(model, box.minX(), box.minY(), box.minZ(), world);
+		tr.mark("terrain");
 		Approach.Plan approach = Approach.forBlueprint(bp, turns, box, world);
+		tr.mark("approach");
 		SiteWarnings.Result site = SiteWarnings.forBlueprint(bp, turns, box, approach, world);
+		tr.mark("warnings");
 		Anchors.Bounds snapBox = snapshotBox(box, plan, approach);
 		if (dryRun && (unloaded[0] || !loaded(level, snapBox))) {
 			out.add(Reason.NOT_LOADED, "the site is not loaded on the server (walk closer)");
@@ -572,6 +578,7 @@ public final class Sites {
 			layerNotes.add(step > 1 ? "approach meets road " + road + " with a step of " + step : "approach meets road " + road);
 		}
 		List<SiteJournal.Hit> hits = overlapCheck(level, snapBox, moving, layer, owner, force, out, layerNotes);
+		tr.mark("overlap");
 		String lava = TerrainFit.lavaRefusal(plan);
 		if (lava == null) {
 			lava = Approach.lavaRefusal(approach);
@@ -581,6 +588,7 @@ public final class Sites {
 		}
 		if (!force) {
 			List<String> foreign = foreignBlockEntities(level, snapBox);
+			tr.mark("foreignBE");
 			if (!foreign.isEmpty()) {
 				out.add(Reason.BLOCK_ENTITIES, "Box " + Anchors.str(snapBox) + " contains " + foreign.size() + " block entit" + (foreign.size() == 1 ? "y" : "ies")
 					+ " (" + String.join(", ", foreign.subList(0, Math.min(4, foreign.size()))) + (foreign.size() > 4 ? ", ..." : "")
@@ -588,6 +596,7 @@ public final class Sites {
 			}
 		}
 		List<String> doors = straddling(level, snapBox, true);
+		tr.mark("doors");
 		if (!doors.isEmpty()) {
 			out.add(Reason.DOOR_CUT, "Not placed: a door is cut in half by the box edge (" + String.join(", ", doors.subList(0, Math.min(3, doors.size())))
 				+ "); raise, lower or move the building so the door is fully in or out");
@@ -600,10 +609,12 @@ public final class Sites {
 			}
 		}
 		List<Occupancy.Found> found = Occupancy.scan(level, snapBox, e -> false);
+		tr.mark("occupancy");
 		List<String> occupied = Occupancy.refusals(found);
 		if (!occupied.isEmpty()) {
 			out.add(ApiRules.occupancyReason(found.stream().map(Occupancy.Found::kind).toList()), "Not placed: " + String.join("; ", occupied));
 		}
+		tr.done();
 		return new SitePlan(template, turns, settings, placePos, box, grid, plan, approach, snapBox, found, site, layerNotes, hits);
 	}
 
@@ -1666,17 +1677,21 @@ public final class Sites {
 			throw new SiteException(Reason.OTHER, FILE + " could not be read when the world started (see the log); fix or move it, then restart");
 		}
 		SiteJournal.requireAvailable();
+		long tr0 = System.nanoTime();
 		SitePlan site = checkSite(level, bp, origin, rotation, force, null, THROW, false, construction, layer, siteOwner);
 		if (site == null) {
 			throw new SiteException("Internal: no site for " + bp.id());
 		}
+		long tr1 = System.nanoTime();
 		String id = newSiteId();
 		Anchors.Bounds box = site.box();
 		TerrainFit.Plan plan = site.plan();
 		Approach.Plan approach = site.approach();
 		Anchors.Bounds snapBox = site.snapBox();
 		List<BlockPos> plants = straddlingPositions(level, snapBox, false);
+		long tr2 = System.nanoTime();
 		Drops drops = Drops.before(level, snapBox);
+		long tr3 = System.nanoTime();
 		List<String> notes = new ArrayList<>();
 		String gone = Occupancy.removalNote(site.found());
 		if (gone != null && site.found().stream().anyMatch(f -> f.removable())) {
@@ -1723,7 +1738,12 @@ public final class Sites {
 		job.placer = placer;
 		job.approachEnd = a ? approach.end() : null;
 		job.record = rec;
+		long tr4 = System.nanoTime();
 		job.startCapture(level);
+		if (System.getenv("ARCHITECT_TRACE_JOBS") != null) {
+			Architect.LOGGER.info("TRACE beginPlacing {}: checks {} ms, plants {} ms, drops {} ms, record {} ms, startCapture {} ms", id, (tr1 - tr0) / 1e6,
+				(tr2 - tr1) / 1e6, (tr3 - tr2) / 1e6, (tr4 - tr3) / 1e6, (System.nanoTime() - tr4) / 1e6);
+		}
 		Architect.LOGGER.info("Placing site {} ({}) over ticks at {} rotation {}: box {}, journal box {} ({} cells)", id, bp.id(), origin.toShortString(),
 			rec.rotation(), Anchors.str(box), Anchors.str(snapBox), snapBox.volume());
 		return job;
@@ -2686,5 +2706,31 @@ public final class Sites {
 		o.add("unreferenced", un);
 		o.addProperty("loadFailed", loadFailed);
 		return o;
+	}
+
+	/** ARCHITECT_TRACE_JOBS: timings of the steps of one call, logged when it is done. */
+	static final class Trace {
+		static final boolean ON = System.getenv("ARCHITECT_TRACE_JOBS") != null;
+		final String what;
+		long t = System.nanoTime();
+		final StringBuilder sb = new StringBuilder();
+
+		Trace(String what) {
+			this.what = what;
+		}
+
+		void mark(String label) {
+			if (ON) {
+				long n = System.nanoTime();
+				sb.append(' ').append(label).append(' ').append(String.format(java.util.Locale.ROOT, "%.1f", (n - t) / 1e6));
+				t = n;
+			}
+		}
+
+		void done() {
+			if (ON) {
+				Architect.LOGGER.info("TRACE {}:{}", what, sb);
+			}
+		}
 	}
 }

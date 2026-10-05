@@ -2084,7 +2084,7 @@ steps.scout = async () => {
 steps.eval = async () => {
   if (!dev) await connect();
   const AsyncFunction = Object.getPrototypeOf(async () => {}).constructor;
-  const helpers = { surveyAround, flattest, call, cmd, api, result, hash, sites, siteState, journal, groundAt, tp, sleep, mark, since, queue, waitBatch, ctx };
+  const helpers = { fresh, leaveWorld, openWorld, FLAT, placeQueued, removeTimed, installKeep, surveyAround, flattest, call, cmd, api, result, hash, sites, siteState, journal, groundAt, tp, sleep, mark, since, queue, waitBatch, ctx };
   const f = new AsyncFunction(...Object.keys(helpers), process.argv[3]);
   const v = await f(...Object.values(helpers));
   console.log(JSON.stringify(v, null, 1));
