@@ -29,7 +29,7 @@ import type { DesignWork } from '../store.js';
 import { scrubEnv, withPathFirst } from '../util/env.js';
 import { descendantsOf, killSnapshot, killTree, orphansOf, processTable, type ProcEntry } from '../util/proc.js';
 import { truncate } from '../util/text.js';
-import { ARCHITECT_NO_API_AUTH_MESSAGE, authEnv, authSourceOf } from './auth.js';
+import { ARCHITECT_NO_API_AUTH_MESSAGE, authEnv, authSourceOf, checkApiKey, directApiKey, type KeyCheck } from './auth.js';
 import { designFixPrompt, designPrompt, designStepFor, designSystemPrompt, MAX_DESIGN_ROUNDS, RESTART_PROMPT } from './brief.js';
 import { isAuthText, probeFailure } from './failures.js';
 import { connectorHook, denyHook, designVerdict } from './permissions.js';
@@ -57,6 +57,8 @@ export interface ClaudeDesignerOptions {
   skipAuthCheck?: boolean;
   /** first auth-probe retry delay after a network failure (tests) */
   authRetryMs?: number;
+  /** validates an API key against the API (tests inject a fake) */
+  keyCheck?: KeyCheck;
 }
 
 interface Running {
@@ -199,7 +201,19 @@ export class ClaudeDesigner implements Designer {
       const info = await Promise.race([q.accountInfo(), new Promise<never>((_, r) => setTimeout(() => r(new Error('timed out after 45s')), 45_000).unref?.())]);
       if (gen !== this.authGen) return false;
       const ok = !!(info.email || info.organization || (info.apiKeySource && info.apiKeySource !== 'none') || (info.tokenSource && info.tokenSource !== 'none') || (info.apiProvider && info.apiProvider !== 'firstParty'));
+      this.sc.log.debug(`claude account info: apiKeySource ${info.apiKeySource ?? '-'}, tokenSource ${info.tokenSource ?? '-'}, apiProvider ${info.apiProvider ?? '-'}`);
       if (!ok) throw new Error('not logged in');
+      // the CLI only reports that it found a key: ask the API whether the key is valid
+      const key = directApiKey(process.env, a);
+      if (key) {
+        const v = await (this.opts.keyCheck ?? checkApiKey)(key);
+        if (gen !== this.authGen) return false;
+        if (v === 'invalid') throw new Error('Invalid API key (the Claude API refused it)');
+        if (v !== 'ok') {
+          this.goOffline(v.unreachable, src.source!);
+          return false;
+        }
+      }
       const account = a.useClaudeLogin ? [info.organization, info.subscriptionType].filter(Boolean).join(' · ') : info.organization ?? '';
       this.authFailed = false;
       this.authOk = true;

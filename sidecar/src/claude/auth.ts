@@ -81,6 +81,33 @@ export function authEnv(base: Record<string, string | undefined>, a: AuthInputs)
   return withAuthMode(env, a.useClaudeLogin);
 }
 
+/** The Anthropic API key design turns will use, when that is the auth (not a gateway, provider or login). */
+export function directApiKey(base: NodeJS.ProcessEnv, a: AuthInputs): string | undefined {
+  if (a.useClaudeLogin || base.ANTHROPIC_BASE_URL?.trim()) return undefined;
+  return base.ANTHROPIC_API_KEY?.trim() || a.storedKey || undefined;
+}
+
+export type KeyCheck = (key: string) => Promise<'ok' | 'invalid' | { unreachable: string }>;
+
+/**
+ * Is this API key valid? The CLI's account info only says that it found a key, so the sidecar asks
+ * the API itself: GET /v1/models (free; the key travels only in its header). 401/403 = invalid;
+ * a network error or a 5xx = unreachable (retried later).
+ */
+export const checkApiKey: KeyCheck = async (key) => {
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/models?limit=1', {
+      headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01' },
+      signal: AbortSignal.timeout(20_000),
+    });
+    if (res.status === 401 || res.status === 403) return 'invalid';
+    if (res.ok) return 'ok';
+    return { unreachable: `HTTP ${res.status}` };
+  } catch (e) {
+    return { unreachable: (e as Error).message || 'network error' };
+  }
+};
+
 /** What authenticates design turns, for the status line (ok false = nothing). */
 export function authSourceOf(base: NodeJS.ProcessEnv, a: AuthInputs): { ok: boolean; source?: string } {
   if (a.useClaudeLogin) return { ok: true, source: 'claude login (personal use)' };

@@ -49,18 +49,21 @@ describe('the key from the in-game settings', () => {
 
 describe('ClaudeDesigner.checkAuth', () => {
   let h: Harness | undefined;
-  const saved = { key: process.env.ANTHROPIC_API_KEY, bedrock: process.env.CLAUDE_CODE_USE_BEDROCK };
+  const saved = { key: process.env.ANTHROPIC_API_KEY, bedrock: process.env.CLAUDE_CODE_USE_BEDROCK, base: process.env.ANTHROPIC_BASE_URL };
   afterEach(async () => {
     if (saved.key === undefined) delete process.env.ANTHROPIC_API_KEY;
     else process.env.ANTHROPIC_API_KEY = saved.key;
     if (saved.bedrock === undefined) delete process.env.CLAUDE_CODE_USE_BEDROCK;
     else process.env.CLAUDE_CODE_USE_BEDROCK = saved.bedrock;
+    if (saved.base === undefined) delete process.env.ANTHROPIC_BASE_URL;
+    else process.env.ANTHROPIC_BASE_URL = saved.base;
     setSdkLoaderForTests(undefined);
     await h?.close();
     h = undefined;
   });
   const clean = () => {
     delete process.env.ANTHROPIC_API_KEY;
+    delete process.env.ANTHROPIC_BASE_URL;
     delete process.env.CLAUDE_CODE_USE_BEDROCK;
   };
 
@@ -86,32 +89,54 @@ describe('ClaudeDesigner.checkAuth', () => {
     process.env.ANTHROPIC_API_KEY = 'sk-ant-test';
     h = makeSidecar();
     queried = 0;
-    const b = new ClaudeDesigner(h.sc, { queryFn: fakeQuery as never });
+    const checked: string[] = [];
+    const b = new ClaudeDesigner(h.sc, { queryFn: fakeQuery as never, keyCheck: async (k) => (checked.push(k), 'ok') });
     expect(await b.checkAuth()).toBe(true);
     expect(queried).toBe(1);
+    expect(checked).toEqual(['sk-ant-test']);
     expect(h.sc.status()).toMatchObject({ auth: 'ok', authSource: 'API key (environment)', sdk: 'ready', message: 'Acme' });
   });
 
-  it('a key set in game (auth.set) is checked right away; a bad one fails, clearing it goes back to missing', async () => {
+  it('a key set in game (auth.set) is checked right away against the API; a bad one fails, clearing it goes back to missing', async () => {
     clean();
     h = makeSidecar();
-    const b = new ClaudeDesigner(h.sc, { queryFn: fakeQuery as never });
+    // the CLI finds any key; the API decides whether it is valid
+    const b = new ClaudeDesigner(h.sc, { queryFn: fakeQuery as never, keyCheck: async (k) => (k === 'sk-ant-good' ? 'ok' : 'invalid') });
     await h.sc.start(b);
     expect(h.sc.status().auth).toBe('missing');
-    accountInfo = async () => {
-      throw new Error('Invalid API key');
-    };
     await h.sc.handle({ v: 1, type: 'auth.set', apiKey: 'sk-ant-bad' }, () => undefined);
     await until(() => h!.sc.status().auth === 'failed');
     expect(h.sc.status()).toMatchObject({ auth: 'failed', authSource: 'API key' });
     expect(h.sc.status().message).toMatch(/Claude API check failed: Invalid API key/);
+    expect(h.sc.status().message).not.toContain('sk-ant-bad');
     expect(() => h!.sc.requestDesign({ type: 'cabin', style: 'x', features: [], maxSize: { x: 10, y: 10, z: 10 } })).toThrow(/Claude is not available/);
-    accountInfo = async () => ({ organization: 'Acme' });
     await h.sc.handle({ v: 1, type: 'auth.set', apiKey: 'sk-ant-good' }, () => undefined);
     await until(() => h!.sc.status().auth === 'ok');
     await h.sc.handle({ v: 1, type: 'auth.set', apiKey: null }, () => undefined);
     await until(() => h!.sc.status().auth === 'missing');
-    accountInfo = async () => ({ email: 'x@example.com', organization: 'Acme', subscriptionType: 'max' });
+  });
+
+  it('the key check failing on the network is not a bad key: checking, then retried', async () => {
+    clean();
+    process.env.ANTHROPIC_API_KEY = 'sk-ant-test';
+    h = makeSidecar();
+    let up = false;
+    const b = new ClaudeDesigner(h.sc, { queryFn: fakeQuery as never, authRetryMs: 100, keyCheck: async () => (up ? 'ok' : { unreachable: 'fetch failed' }) });
+    expect(await b.checkAuth()).toBe(false);
+    expect(h.sc.status()).toMatchObject({ auth: 'checking' });
+    expect(h.sc.status().message).toMatch(/could not be reached \(fetch failed\)/);
+    up = true;
+    await until(() => h!.sc.status().auth === 'ok', 5000);
+    await b.stop();
+  });
+
+  it('no key check for a gateway, a cloud provider or the login', async () => {
+    clean();
+    process.env.CLAUDE_CODE_USE_BEDROCK = '1';
+    h = makeSidecar();
+    const b = new ClaudeDesigner(h.sc, { queryFn: fakeQuery as never, keyCheck: async () => 'invalid' });
+    expect(await b.checkAuth()).toBe(true);
+    expect(h.sc.status()).toMatchObject({ auth: 'ok', authSource: 'Amazon Bedrock' });
   });
 
   it('a network failure is not a bad key: it stays checking and retries', async () => {
@@ -123,7 +148,7 @@ describe('ClaudeDesigner.checkAuth', () => {
       if (fail) throw new Error('fetch failed: ECONNREFUSED');
       return { organization: 'Acme' };
     };
-    const b = new ClaudeDesigner(h.sc, { queryFn: fakeQuery as never, authRetryMs: 100 });
+    const b = new ClaudeDesigner(h.sc, { queryFn: fakeQuery as never, authRetryMs: 100, keyCheck: async () => 'ok' });
     expect(await b.checkAuth()).toBe(false);
     expect(h.sc.status().auth).toBe('checking');
     expect(h.sc.status().message).toMatch(/could not be reached/);
