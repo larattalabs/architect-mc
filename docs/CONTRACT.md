@@ -2356,3 +2356,590 @@ re-run has one pre-existing failure class (below).
 | `Sites.stack()` at depth 4 | recorded | p50 1.08 µs, p99 1.46 µs |
 | 1000x1000 generator (recorded) | | 11.57M cells in 33.6 min at 4 ms with LOAD_BOUNDED 64; 11 of 610 lots timed out NOT_LOADED; MSPT max 237 ms while the server generated unexplored terrain |
 
+
+# Phase 5a contract: critique loop and eval harness (A4 + R8) - DRAFT for Steward review
+
+Goal: **designs get better without a person reviewing each one, and we can measure it.** After a design renders, a
+cheaper critic looks at fixed renders plus the blueprint summary, the brief and the style bible, and returns a structured
+verdict. The designer revises on that verdict until the critic ships it, a round cap or a budget stops it, and the best
+version installs. An eval harness scores a fixed brief set with the checker, the critic and a blind pairwise judge, stores
+the results, and compares versions. It also gives Steward the Opus vs Sonnet numbers it asked for (R8).
+
+5a also closes two carried items: the 4b quality note ("the bible set is cluttered and less legible") and the 4e caveat
+(no migration unit tests).
+
+Versions: API **1.6.0**, mod **0.9.0**, sidecar protocol stays **2** (additive messages, new feature names, as in 4b-4c).
+
+## What Steward asked for (summary of steward-mc/docs, read only)
+
+- **A4** (ARCHITECT-ASKS): render, Claude reviews its own iso/top/front images and its neighbours', revises, bounded
+  rounds. "Quality without a human per building"; the same pattern as AgentCraft's design-critic.
+- **R8**: an eval harness. A prompt set scored by the checker plus the critique, re-run when the prompts, the bible format or
+  the model change. Steward needs it for the Opus vs Sonnet tier decision.
+- **A5B-SPEC §5**: for region programs (phase 6) the reviewer also looks at top-down and section previews plus the checker
+  output. Not in 5a (no region programs yet), but the critic's inputs are a list of views so phase 6 can add them.
+- **BUILDER-TOOLING.md** (unverified research): textured renders (block-model-renderer), layered ASCII slices in the critique
+  prompt, deterministic facing and attachment checks, the GDMC rubric (adaptability, functionality, narrative,
+  aesthetics), MineCEraft-style verifiable instruction categories for the eval set, a HeadlessMC nightly.
+- **skills/minecraft-structure-design**: a playbook (SKILL.md) written for Architect's design agent, plus `slices.mjs`
+  (layered ASCII) and `attach-lint.mjs` (support, halves, open doors, hanging lanterns). Steward's notes: copy SKILL.md
+  into each scratch dir and name it in BRIEF.md, never load it through `settingSources`; drop §7 (regions) until A5b;
+  the scripts may become kit tools and the rules kit checker warnings.
+- **Steward PLAN**: critique is part of every building job in its pipeline ("checker, render, critique, revise");
+  style coherence is to be measured; cost is a product constraint (an 8-20 building settlement is $12-50 and 30-90 min
+  today).
+
+## Measured costs this contract builds on
+
+| What | Measured | Source |
+|---|---|---|
+| Opus design | $2.0-3.2, 8-13 min | 4b seeds; 4c detail pass $3.40 / 13.8 min |
+| Sonnet design | $0.8-2.5, 4-10 min | 4b gate (4 designs) |
+| Bible job | $1.2-2.0, 5-8 min | 4b ($1.40 / 6.4 min) |
+| Massing | $0.1-0.4, 1-3 min | 4c ($0.21 / 0.9 min, redirect $0.17) |
+| Structured job, text only, Sonnet low | $0.011-0.019, 2 turns | 4a |
+
+Price list used for the new seeds (Claude API rates; under the claude login they are notional): Sonnet 5.5 $2 / $10 per
+MTok in/out, Opus 5.5 $4 / $20, cache reads $0.20. A 1000x800 PNG is about 1,100 input tokens.
+
+---
+
+## The critique loop
+
+### Where it runs
+
+A design job today: designing -> checking (pristine kit) -> rendering -> install. With critique on:
+
+```
+designing -> checking -> rendering -> critiquing --ship--------------------------------> install the best round
+                                          |
+                                          +--iterate--> designing ("revising after critique") -> checking -> rendering -> critiquing ...
+```
+
+- **Round 0** is the design as it is today (it passed the check and rendered). Each **revision** is one more designer turn
+  in the same SDK session (warm cache), followed by the usual check and render, then a critic call.
+- `DesignStatus` gains `critiquing`. Protocol-1 clients see it as `rendering` (`toProtocol1`), with the step text.
+- Every round that passes the check is kept in the scratch dir: `rounds/<n>/` holds the `.nbt`, the sidecar JSON, the
+  previews and the verdict.
+- **Install the best round:** the passing round with the highest sidecar-computed `overall` (ties: the later round). The
+  library never sees intermediate rounds.
+
+### The critic
+
+| | |
+|---|---|
+| Model | `claude-sonnet-5-5` (config `critique.model`), effort `medium` |
+| Call | a `structured` job inside the sidecar (`outputFormat: json_schema`, `tools: []`), a **fresh query per round** (no session), so it doesn't defend its earlier verdict |
+| Images | sent as image content blocks in the SDK user message (see "Images in jobs"). Fallback if a probe shows that path fails under the claude login: an agent turn whose only tool is Read, restricted to `critique/<round>/` |
+| Max turns | 3 (one schema re-ask) |
+| Seed | $0.04-0.15 and 0.5-2 min per call (about 8-14k input tokens, 2-5k output with thinking); measured in the smoke tier |
+
+**Inputs, all fixed per design:**
+- **Renders**, from fixed cameras: `iso` (front-left, today's), `iso_back` (back-right, new), `front`, `top`, `cutaway`
+  (lowered near walls, today's `--cutaway`). Flat-colour renderer, 1000 px wide. `critique.views` can drop views; phase 6
+  adds `section`.
+- **Neighbour renders** for a group item: at most 4 `iso` PNGs of finished siblings, as 4b already passes to the designer.
+- **Blueprint summary** (JSON, at most 4k chars): type and profile, size and `maxSize`, `front`, named parts (name, box,
+  cells), the 12 most used blocks with counts, checker warnings, the new attach and facing warnings, massing conformance,
+  and the metrics `accentShare`, `detailNoise` and `windowsPerFacade` (see "Bible-set clutter").
+- **Layered ASCII slices** (`kit/tools/slices.mjs`): the floor row and the eye-height row of each storey, at most 6 layers
+  and 8k chars. They make doors, stairwells and holes exact where the flat renders are vague.
+- **The brief:** the request text, type, size, notes, group context (4c item 4).
+- **The style bible:** `bible.json` and `bible.md`, not `components.mjs`.
+- **Round 2 and later:** the previous round's issue list, so the critic can mark issues resolved. It never sees the
+  designer's transcript or the `.mjs` source; it judges what was built.
+
+**Verdict (the JSON schema; the sidecar validates it again):**
+```
+{ "scores": { "silhouette": 1-10, "legibility": 1-10, "craft": 1-10, "materials": 1-10, "brief": 1-10,
+              "bible"?: 1-10, "set"?: 1-10, "interior"?: 1-10 },
+  "issues": [ { "priority": "P0"|"P1"|"P2", "part": "<a named part>" | null, "view": "<a view name>",
+                "what": "<=200 chars", "fix": "<=200 chars" } ],      // at most 6, worst first
+  "resolved": [<index into the previous round's issues>],
+  "verdict": "ship" | "iterate",
+  "summary": "<=300 chars" }
+```
+- **Dimensions:** `silhouette` (massing and roof read as the type), `legibility` (doors, windows, entrance readable; no
+  noise), `craft` (no floating or stray blocks, finished corners, facing right), `materials` (three-tone hierarchy, palette
+  and roles), `brief` (does what was asked). `bible` only with a bible, `set` only with neighbours, `interior` only for a
+  type with the `interior` rule. The GDMC rubric maps onto these (functionality is mostly the checker's job).
+- **Parts (R3):** `part` must be one of the blueprint's part names, or null for the whole building. An unknown name becomes
+  null with a note, and counts against the critic's part-grounding rate (an eval metric).
+- **P0** = a player would call it broken (unreadable entrance, a floating mass, a hole in the roof the checker missed). P1 =
+  clearly worse than it should be. P2 = polish.
+- **The sidecar decides ship, not the model:** `overall` = the mean of the present scores. Ship when `overall >= shipScore`
+  (default 7.0), no score is below `shipScore - 2`, and there is no P0. The model's own `verdict` is recorded and its
+  disagreement rate reported in the eval.
+
+### The revision turn
+
+- The designer's session resumes with a prompt built from the verdict: the issues in priority order, with part and view;
+  the scores; and the rules: fix every P0 and P1; keep the part names, the front and the size; **when the issue is clutter,
+  remove before adding**; no new motifs; read `critique/<round>/` (the same PNGs the critic saw).
+- It has its own check-fix allowance: up to 2 more turns if the pristine check fails. If it still fails, the loop ends
+  with `check_failed` and the best earlier round installs. A failed revision never fails the design.
+- `MAX_DESIGN_ROUNDS` (4) still bounds round 0's own check-fix turns; revisions don't spend it.
+
+### Stopping
+
+The loop ends at the first of:
+
+| End reason | When |
+|---|---|
+| `ship` | the sidecar's ship rule holds |
+| `max_revisions` | `maxRevisions` revisions done (default 2, at most 3), then one last critic call scores the final round |
+| `budget` | the next revision plus critic would not fit: their seeded **high** estimate exceeds what is left of any cap (below). Not a failure: the best round installs |
+| `time` | the loop has run `maxMinutes` (default 15) at a round boundary |
+| `regressed` | a revision scored at least 1.0 below the best round so far; the best round installs |
+| `check_failed` | see above |
+| `critic_failed` | the critic call failed twice (schema, error); the best round so far installs, with a note |
+
+### Budgets and cost
+
+- **Caps on the loop's spend** (critic calls plus revision turns), the smallest wins:
+  1. `critique.budgetUsd`, if set;
+  2. otherwise **1.0x round 0's own cost**: by default the loop at most doubles a design's cost;
+  3. what's left of the design's `budgetUsd` (hard) and of the group's budget (4b, `designBudget`).
+- The SDK's `maxBudgetUsd` still gets the remaining hard budget on every query, as today. Hitting the hard budget
+  mid-revision installs the best round with end reason `budget`; it doesn't fail the design, unlike a hard stop in round 0.
+- **Group soft budget** (4b item 3): once reached, items mid-loop finish the round they're in and then end with `budget`. No
+  new revision starts in a `paused_budget` group.
+- **Usage limits** hold critic calls and revision turns like design turns (`held_usage`, group-wide). The loop state is in
+  `DesignWork.critique` (rounds, the best round, the pending step) and resumes after a sidecar restart: a critic call with
+  no stored result runs again; a revision resumes its session (`RESTART_PROMPT`).
+- **Concurrency:** an item keeps its design slot for its whole loop (the critic is a short call inside it). Simple and fair
+  across groups; wall time grows by the loop's time, and the estimate says so.
+- **Cost reporting:** `Design.cost` stays the total. New `Design.critique.cost` splits it as `{critic, revise}`. Group cost
+  aggregates as today.
+
+**Seeds** (per call or turn, until measured; `Estimates` gains the kinds `critic` and `revise`):
+
+| | Cost | Time |
+|---|---|---|
+| critic call (Sonnet 5.5, medium) | $0.04-0.15 | 0.5-2 min |
+| revision turn, Sonnet design | $0.25-0.9 | 2-5 min |
+| revision turn, Opus design | $0.5-1.5 | 3-7 min |
+
+- **Estimate with critique:** low = round 0 plus 1 critic call (ships first time); high = round 0 plus
+  `maxRevisions x (revise + critic) + 1 critic`, clipped by the caps. Default loop, Sonnet: +$0.04 to +$2.25 (capped at 1.0x
+  round 0); Opus: +$0.04 to +$3.45 (capped likewise). The basis line names the critique and its cap.
+
+### Opt-in vs default
+
+- `critique.mode`: `off` | `report` (one critic call, no revision: scores and issues for about $0.1) | `loop`.
+- **API default `off`.** A caller opts in per design request, per group or per group item (the item's spec wins). Steward
+  turns it on where it wants it.
+- **UI default:** `off` until the gate passes; then the Design tab's "Critique and revise" toggle defaults on for single
+  designs and sets (open question N1). The toggle shows the estimate with and without it.
+- **Massings:** `critique` on a massing request is allowed with its own rubric (`silhouette`, `brief`, `site fit` from the
+  group context), `maxRevisions` default 1, default off. It's useful with `approvalUi: "owner"` groups that auto-approve.
+- **Bible jobs:** with critique on, the bible job ends with one `report` call on `sheet.png` (component legibility and
+  restraint), stored in `bible.json.critique`. About $0.05.
+
+### Blind and non-blind
+
+- **The in-loop critic is not blind:** it knows the brief, the bible, and (from round 2) the previous issues. It is the
+  designer's reviewer, not a judge of the loop.
+- **The eval judge is blind** (see the eval harness): it sees two render sets labelled A and B with neutral file names,
+  in random order, judged twice with the order swapped. It isn't told that either is a revision, sees no critique text and
+  no round numbers, and is a different model (Opus 5.5) from the critic (Sonnet 5.5), to limit self-preference and the
+  loop learning to please one reviewer.
+
+### Report-only critique of a library entry
+
+`design.critique { entryId, spec: { mode: "report", ... } }` -> ack `{designId}`. It runs one critic call on the entry's
+installed files (re-rendering the views it lacks) and writes `<entry>/critique.json`. No new entry, no Claude design turn.
+This is for players ("how good is this?") and for scoring old designs, e.g. the 4b sets, in the eval. A "polish" action
+that revises an existing entry is deferred.
+
+### Images in jobs (`job.run`, also used inside the sidecar)
+
+`JobSpec.images?: [{ blob: blobId, label: string }]`: at most 8, PNG or JPEG, each at most 5 MB. The sidecar sends them
+as image content blocks before the prompt text. Feature `job.images`. The first build step is a probe: one structured
+job with 2 images under Noah's claude login (about $0.02). If the SDK path refuses images there, critic and judge take the
+Read fallback, and `job.images` ships only once it works.
+
+### Kit additions (renderer and checker)
+
+- `render.mjs --views iso,iso_back,front,top,cutaway` (default unchanged: iso, top, front). `iso_back` is the iso camera
+  turned 180 degrees.
+- From Steward's skill, owned by Architect from now on (header notes the origin): `kit/tools/slices.mjs` and
+  `kit/PLAYBOOK.md` (SKILL.md without §7, paths changed to `kit/tools/`). The playbook is copied into every scratch dir with
+  the kit and named in BRIEF.md, never loaded via `settingSources`.
+- **New checker rules, as warnings** (the phase 1 rule): `attach` (ladders, wall torches, wall signs and wall banners have
+  a solid block behind them; door and bed halves are complete; doors written closed; hanging lanterns hang from something),
+  ported from `attach-lint.mjs`, and `facing` (a door leaf doesn't open into a wall; a bed's head against a wall; roof
+  stairs on a slope face up-slope). They're promoted to errors only after a full eval shows zero false positives on the
+  brief set and the kit examples.
+- **New metrics** in the check's JSON output, recorded and passed to the critic: `accentShare`, `detailNoise`,
+  `windowsPerFacade`, `paletteAdherence` (the share of cells whose wood and stone families come from the palette or the
+  bible's roles). They give warnings only against a bible's `restraint` (below).
+
+### Protocol (2, additive)
+
+- `DesignRequest.critique?: CritiqueSpec`, `GroupRequest.critique?` (the default for items), `GroupItemInput.critique?`.
+  ```
+  CritiqueSpec = { mode: "off"|"report"|"loop", maxRevisions?: 0..3 (2), model?: string, effort?: low|medium|high (medium),
+                   budgetUsd?: number, maxMinutes?: number (15), shipScore?: number (7.0),
+                   views?: [view], neighbours?: boolean (true in groups), extraCriteria?: [string <= 200 chars] (<= 3) }
+  ```
+- `Design.critique?: { mode, rounds: [{ n, verdict, overall, scores, issues, resolved, cost, ms, kept: boolean }],
+  best: n, end: EndReason, cost: { critic, revise } }`. `GroupItem.critique?` gives the same summary (rounds, best, end,
+  overall).
+- `Design.status` gains `critiquing`. Steps: `critic: round 1`, `revising after critique (1 of 2): 3 issues`,
+  `critique: shipped at round 1 (7.6)`.
+- `design.critique { entryId, spec }` (report only, above).
+- `design.estimate` / group estimates take the critique spec.
+- `JobSpec.images` (above).
+- Bible additions: `bible.delete`, `bible.archive`, and `BibleInfo.restraint`, `BibleInfo.archived` (see "Bible-set
+  clutter").
+- Snapshot features: `critique`, `critique.report`, `job.images`, `bible.admin`, `bible.restraint`.
+
+### Java API (1.6.0)
+
+- `CritiqueSpec` (record plus builder) and `enum CritiqueMode { OFF, REPORT, LOOP }`; `DesignRequest.critique(CritiqueSpec)`,
+  `GroupRequest.critique(...)`, `GroupRequest.Item.critique(...)`.
+- `record Critique(List<Round> rounds, int best, EndReason end, double overall, Map<String,Integer> scores,
+  List<Issue> openIssues, Cost critic, Cost revise)`, with `Round`, `Issue(Priority, @Nullable String part, String view,
+  String what, String fix)` and `enum EndReason { SHIP, MAX_REVISIONS, BUDGET, TIME, REGRESSED, CHECK_FAILED, CRITIC_FAILED,
+  OFF }`.
+- `Design.critique()` / `Group.Item.critique()` / `Library.Entry.critique()` -> `Optional<Critique>`.
+- `Designs.critique(String entryId, CritiqueSpec)` -> `CompletableFuture<Critique>` (report mode).
+- Event `DESIGN_CRITIQUED(designId, Round)` once per round; `DESIGN_DONE` carries the final critique.
+- `Jobs`: `JobSpec.images(List<ImageRef>)`.
+- `Bibles.delete(id, @Nullable owner)` and `Bibles.archive(id, boolean)`; `Bible` gains `restraint()` and `archived()`.
+- Features `critique`, `critiqueReport`, `jobImages`, `bibleAdmin`, `bibleRestraint`.
+- **Not purely additive** (the 1.1-1.5 precedent): `Design.Status.CRITIQUING` is inserted before `DONE` (ordinals shift,
+  exhaustive switches break), and records gain components (old constructors kept).
+
+### UI
+
+- Design tab and the set dialog: a "Critique and revise" toggle, a max-revisions choice (1 or 2) and the estimate
+  including it.
+- Designs tab: per design, the rounds with `overall` and the end reason; the best round is marked.
+- Library entry details: the final scores and the open issues (unresolved P1/P2); a "Critique" entry action (report mode,
+  shows its ~$0.1 estimate).
+
+---
+
+## Bible-set clutter
+
+**What the carried item means.** PLAN's "the bible set is cluttered and less legible" is the 4b quality note about the
+**designs built with the bible** (gate4b-real REPORT and blind CRITICS.md: scattered red trim and dark bundle blocks, moss
+floating on roofs, few readable windows, heavy roofs hiding walls), not about too many bible files. The Mosswater bible
+had 7 motifs, 9 components and "avoid large window walls", and the designer prompt says "follow it over your own taste".
+5a fixes it in three places, and also adds the library hygiene the request asked about.
+
+1. **The critique loop:** `legibility` and `craft` are scored dimensions, and the revision rule for clutter is "remove
+   before adding".
+2. **Restraint in the bible** (bible format 2):
+   - `bible.json` gains
+     `restraint: { heroMotifs: [<= 3 of motifs], accentShareMax: 0.04-0.20 (0.12), detailDensity: "sparse"|"moderate"|"rich" ("moderate"), windowsPerFacadeMin: int (2) }`.
+   - `motifs` drops from at most 8 to at most 6, and the components to the 5 required plus at most 3.
+   - The bible author's prompt: a bible is a restraint as much as a palette; pick at most 3 hero motifs; each motif must
+     read at one block's scale.
+   - The design brief: hero motifs on every building, other motifs at most once per building, never an unsupported motif
+     block, windows readable from `front`.
+   - Kit warnings when a design breaks its bible's `accentShareMax` or `windowsPerFacadeMin`, or when `detailNoise` is over
+     the level its `detailDensity` allows (thresholds set from the 4b sets plus the eval's round-0 designs before the
+     gate, then frozen).
+   - Format 1 bibles read with defaults (hero motifs = the first 3 motifs). `bible.revise {id, notes}` writes a format 2
+     version; re-skins keep working, since roles don't change.
+3. **The sheet critique** at bible creation (above).
+
+**Library hygiene:**
+- `bible.archive { id, archived }`: hides the bible from the pickers. Its entries and re-skins are unaffected.
+- `bible.delete { id }`: refused while any library entry, unfinished group or massing pins any of its versions (the error
+  lists them), or for another owner's bible without that owner. Otherwise it removes `<bibles>/<id>/`. No force flag.
+- **Version GC:** a version that is neither the latest nor pinned by anything, and is older than 30 days, loses its
+  `versions/<v>/` folder at sidecar start. Pins always win.
+- Consolidating near-duplicate bibles = archive one, and `bible.revise` the other with notes. No automatic merge.
+
+---
+
+## The eval harness (R8)
+
+### Layout
+
+```
+eval/briefs/v1/<briefId>.json       the brief set, versioned; a change makes v2 (the set's hash is in every result)
+eval/fixtures/bibles/mosswater/     the 4b bible (format 1) and a format 2 revision made in the gate: no bible cost per run
+eval/results/<label>/summary.json   committed: metrics per brief, the aggregates, versions and hashes (small, no PNGs)
+artifacts/eval/<runId>/             local (gitignored): per brief every round's nbt, previews, verdicts, the judge's verdicts, logs
+tools/eval.mjs                      the runner
+```
+
+### The brief set v1 (18 briefs)
+
+| # | Brief | Type | Size | Biome / setting | Model |
+|---|---|---|---|---|---|
+| 1 | woodcutter's cabin | cabin | S | taiga | Sonnet |
+| 2 | farmhouse with a porch | house | M | plains | Sonnet |
+| 3 | watchtower on an 11x11 plot | tower | plot | mountains | Sonnet |
+| 4 | spice shop with an awning | shop | M | desert | Sonnet |
+| 5 | coaching inn | tavern | L | plains | Sonnet |
+| 6 | cattle barn | barn | L | savanna | Sonnet |
+| 7 | smithy with a forge yard | smithy | M | badlands | Sonnet |
+| 8 | mountain chapel | chapel | M | snowy slopes | Sonnet |
+| 9 | gatehouse on a 15x9 plot | gatehouse | plot | forest | Sonnet |
+| 10 | hellish lair | open: `hellish_lair` (door, lit, no_floating) | L | nether | Sonnet |
+| 11 | lighthouse | open: `lighthouse` (door, floors_reachable, tall:3) | M | beach | Sonnet |
+| 12 | windmill | open: `windmill` (door, roof_closed, lit) | M | meadow | Sonnet |
+| 13 | stilt house | house | S | jungle | Sonnet |
+| 14 | mining hall | open: `mining_hall` (door, lit, passage:3x3) | L | badlands | Sonnet |
+| 15 | tea house | house | M | cherry grove | Sonnet |
+| 16-18 | Mosswater set: tavern (anchor), house, tower | group with the bible | L, M, M | swamp | Opus anchor, Sonnet items (product defaults) |
+
+- Each brief file pins the request (prompt, type, size, profile, notes), the model and effort, and for 16-18 the group
+  spec (waves, neighbours).
+- **Smoke tier subset:** 1, 3, 10, 13 (two presets, a plot, an open type; small sizes).
+- **Model-tier subset (R8, recorded):** 5, 8, 10, 14 also run on Opus.
+- Settlement-flavoured briefs from Steward's concept cards can join as v2 (S6).
+
+### How one brief runs (paired, so it's frugal)
+
+The runner submits the brief with `critique.mode = "loop"`. **Round 0 is the no-critique design** (identical to what
+critique off would produce), so one run gives the pair **round 0 vs final** with no second design. Briefs that ship at
+round 0 have no revision; they're counted, and they leave the pairwise test (identical designs).
+
+### Metrics (per brief, per round where it applies)
+
+| Metric | From |
+|---|---|
+| conformance errors and issues (massing pass only; v1 has none) | checker |
+| checker errors, and warnings by rule (attach and facing included) | pristine check |
+| `paletteAdherence`, `accentShare`, `detailNoise`, `windowsPerFacade`, parts count, cells outside parts | kit metrics |
+| critic scores per dimension, `overall`, P0/P1/P2 counts, part-grounding rate, model vs sidecar verdict disagreement | in-loop critic (not blind) |
+| blind pairwise preference final vs round 0: win, loss or tie, margin, reasons per dimension | judge (blind) |
+| cost (round 0, critic, revise; cache tokens) and wall time per step | sidecar |
+| end reason, revisions, the best round | sidecar |
+| estimate vs measured (cost, time) | `design.estimate` before submit |
+
+### The blind pairwise judge
+
+- A `structured` job with images, `claude-opus-5-5`, effort `medium`.
+- Input: two sets of the same 5 views, named `A_iso.png`... and `B_iso.png`..., plus the brief text only (no bible prose,
+  no critique, no scores).
+- Output: `{ preferred: "A"|"B"|"tie", margin: "slight"|"clear"|"strong", dimensions: { silhouette, legibility, craft,
+  materials, brief: "A"|"B"|"tie" }, reasons: "<= 400 chars" }`.
+- **Each pair is judged twice, with the order swapped.** A brief is a **win** when both calls prefer the final, a **loss**
+  when both prefer round 0, otherwise a **tie**.
+- About $0.08-0.12 per call, so about $0.20 per brief.
+
+### The runner (`tools/eval.mjs`)
+
+- `run --tier sim|smoke|full [--label <name>] [--briefs 1,3] [--max-usd N] [--models opus-subset]`
+  - It starts its own sidecar (no game) on a free port with `--backend claude --use-claude-login`, or `--backend sim` for
+    `--tier sim`, and drives it over WebSocket protocol 2, as the 4b and 4c real runs did.
+  - **Auth guard:** a real tier refuses to start if `ANTHROPIC_API_KEY` or `ANTHROPIC_AUTH_TOKEN` is set in its environment
+    or the sidecar's config holds a key. Gate and eval runs use Noah's claude login only, never an API key.
+  - **Spend guard:** it stops submitting when the cumulative SDK cost estimate plus the next brief's seeded high would
+    pass `--max-usd` (default: the tier's cap). Running items get the remaining cap as their budget.
+  - Usage limits: the runner waits through `held_usage` and resumes. It is restartable (`--resume <runId>`); finished
+    briefs are never re-run.
+- `rescore <runId>`: recomputes every deterministic metric from the stored artifacts. $0.
+- `rejudge <runId> [--briefs]`: runs the pairwise judge again on stored renders, judge cost only (measures judge
+  stability).
+- `compare <runA> <runB>`: matched by brief id. Deterministic deltas per brief and in aggregate; optionally (`--judge`) a
+  cross-version blind pairwise of the two runs' finals (judge cost only, about $0.20 per brief). The verdict:
+  - **regressed** if A's finals beat B's by the sign test (one-sided, alpha 0.05), or a hard metric got worse (any
+    checker error; mean warnings +25%; mean cost or time +30%; mean `paletteAdherence` -5 points);
+  - otherwise **no regression**, with the deltas.
+- **Reproducibility:** every result records the sidecar and kit versions; hashes of the brief set, the kit, the design
+  system prompt, the brief template, the critic and judge prompts and schemas; model ids, efforts and the config. The
+  renders are deterministic from the `.nbt`; model outputs aren't, so reproducible here means the same inputs are pinned
+  and the stored outputs can be re-scored and re-judged.
+- **When to run (R8):** smoke after any change to the design, bible, critic or judge prompts, the bible format or a
+  default model, compared against the last stored smoke; full when the smoke flags a regression or before a minor release
+  that changes them. CI can't call Claude; the sim tier runs in CI.
+
+### Tiers and their cost
+
+| Tier | What | Expected | Cap |
+|---|---|---|---|
+| sim | the 18 briefs on the sim backend with scripted critic and judge verdicts; tests the harness | $0 | $0 |
+| smoke | briefs 1, 3, 10, 13 on Sonnet, `maxRevisions` 1, judged | ~$5-9 (round 0 ~$0.8-1.5 each, loop <= 1.0x, judge $0.20) | $12 |
+| full | the 18 briefs, `maxRevisions` 2, judged | ~$45-60 (round 0 ~$27 at a $1.5 Sonnet mean plus the Opus anchor; loop ~$14; judge ~$4) | $85 |
+| model subset | briefs 5, 8, 10, 14 on Opus with the loop, judged vs their Sonnet finals | ~$18 | $26 |
+
+---
+
+## Migration unit tests (the 4e caveat)
+
+4e shipped `JournalMigration` checked only by the in-game gate step. 5a adds pure-JVM tests to `./gradlew test`.
+
+- **Seam:** `JournalMigration.run(MigrationWorld world, JournalStore store, Path worldDir, boolean late)`, with
+  `interface MigrationWorld { @Nullable BlockState read(String dimension, BlockPos pos); boolean hasDimension(String dimension); }`.
+  The production adapter wraps `MinecraftServer` (loads the chunk for the read, as today). No behaviour change; the 4e
+  gate's in-game migration step re-runs as the regression.
+- **Fixtures:**
+  - `mod/src/test/resources/migration/v070/` holds files from the 4e-verify 0.7.0 world, trimmed
+    (`architect-sites.json`, `architect-sites/*.nbt`, `architect-queue.json`).
+  - A test helper writes synthetic 0.7.0-format files.
+  - A vendored copy of 0.7.0's `Site.fileFromJson` / `fileJson` (`V070SiteFile`, test only) for the downgrade cases.
+- **Cases** (one test each, from the migration table and its notes):
+  1. an instant site -> an ACTIVE `site` BOX entry whose `before`s equal the snapshot's blocks and BE NBT;
+  2. `architect_leafRing` -> the entry's `ring` table, unchanged;
+  3. `heldLeaves` -> a `leaves` CELL entry, and a cell that is no longer a persistent leaf is dropped;
+  4. a construction target -> the entry's `after` values, with the queue indexes remapped;
+  5. a crate and a group's shared crate -> `crate` BOX entries in the right undo group;
+  6. a `pending` site -> UNDONE entries, settled by the evidence rules;
+  7. a `placing` site -> a PLACING entry, and the queue file unchanged;
+  8. groups, stages and batches unchanged;
+  9. unreferenced snapshot files not imported, but moved and listed;
+  10. layers ordered by `placedAt`, each site's entries consecutive;
+  11. an unreadable snapshot -> that site flagged, with no entry;
+  12. an unreadable `architect-sites.json` -> nothing written;
+  13. a fault at every I/O step of the migration commit and of the legacy move (`JournalStore.faultHook`) -> reopening
+      gives either the pre-migration state (migration runs again) or the finished one, never a mix;
+  14. late import of a 0.7.0-made record as the top layer;
+  15. the `r<n>` / `c<n>` counters survive a 0.7.0 save that drops `infra`, and never collide;
+  16. downgrade: `V070SiteFile` reads a 0.8.0 file and keeps the migrated records, its save drops `infra`, and 0.8.0
+      rebuilds the infra records from the entries' `meta`;
+  17. migrating twice equals migrating once.
+- **Property test:** random 0.7.0 worlds (2-6 sites with random held leaves, crates, stages and pending states) -> migrate
+  -> undo everything through journal planning in a random order -> the cells equal the original snapshots.
+- At least 18 tests, all in CI.
+
+---
+
+## Phase 5a gate
+
+Budget cap for the whole gate: **$120** (the SDK's cost estimate under Noah's claude login; notional plan usage, not
+billing). The runner enforces it across tiers. Planned spend: probe ~$0.1, smoke ~$9, full ~$60, bible clutter ~$12,
+other real checks ~$3, about $85; the model subset (~$18) runs last and only if it fits under the cap.
+
+1. **Unit and sim (no Claude):**
+   - sidecar tests for the loop on the sim backend, each a scripted verdict sequence:
+     - ship at round 0;
+     - iterate then ship;
+     - a regression keeps the best round;
+     - `max_revisions`, `budget` (the 1.0x default cap and an explicit `budgetUsd`), `time`, `check_failed` and
+       `critic_failed`;
+     - an unknown part name;
+     - a restart mid-critic and mid-revision;
+     - a usage hold mid-critic, group-wide;
+     - a group soft budget stops new revisions;
+     - a protocol-1 client sees `rendering`;
+     - the estimate with critique;
+   - kit tests for `--views`, slices, the attach and facing rules (the kit examples plus deliberately broken fixtures, as
+     Steward's lint was checked) and the four metrics;
+   - bible format 2 validation and defaults for format 1; delete refused while pinned; archive; version GC keeps pins;
+   - the migration tests above;
+   - `eval.mjs run --tier sim`, then `rescore` (byte-identical) and `compare` on two sim runs.
+2. **Probe** (real, ~$0.1): one structured job with 2 images under the claude login. It decides image blocks vs the Read
+   fallback.
+3. **Smoke tier** (real, cap $12): its measured critic and revise costs replace the seeds before the full run. `rejudge` on
+   the smoke run agrees with the first judging on at least 3 of 4 briefs (judge stability).
+4. **Full tier** (real, cap $85, Sonnet briefs). **The bar:**
+   - **G1, improvement (primary, blind):** among briefs with at least one revision (n of them, at least 12), final beats
+     round 0 by a one-sided sign test at alpha 0.05 over the non-tie briefs (n=18 -> at least 13 wins; 16 -> 12;
+     14 -> 11; 12 -> 10), with at most 3 losses.
+     **Confidence statement:** a pass means the judge prefers the loop's output more often than chance (p < 0.05). With
+     18 pairs the test has about 72% power for a true 75% win rate, so a modest real effect can fail; a fail is recorded
+     as "not shown", not as "no effect". Fewer than 12 briefs with a revision means `shipScore` is too lax, and the gate
+     fails.
+   - **G2, the critic's own view (supporting):** the mean in-loop `overall` rises by at least 1.0 from round 0 to the
+     installed round, and P0 issues at install are 0 in at least 16 of 18.
+   - **G3, no deterministic regression:** 0 checker errors in every final; per brief, final warnings <= round 0's in at
+     least 16 of 18, and the total doesn't rise; mean `paletteAdherence` doesn't drop by more than 2 points; every final
+     has at least 2 named parts.
+   - **G4, cost and time bounds:**
+     - the loop's spend is within its cap for **18 of 18** (an invariant);
+     - mean loop spend is at most 60% of mean round-0 cost;
+     - mean added wall time is at most 8 min;
+     - the estimate with critique is within ±50% of the measured cost for at least 15 of 18 designs and for the total.
+5. **Bible clutter** (real, ~$12):
+   - Mosswater revised to format 2 (`bible.revise` with consolidate notes, ~$1.5).
+   - The 3-item set (briefs 16-18) run with the v2 bible and the loop.
+   - A blind pairwise judge on each item, against the 4b set's renders (stored, $0 design): the new item wins at least 2
+     of 3 on `legibility`.
+   - Two `design-critic` agents, as in 4b, still say "set" at 7/10 or above.
+   - `detailNoise` and `accentShare` are lower than the 4b set's, on average over the 3 items.
+6. **Other real checks** (~$3):
+   - one `report` critique of a 4b entry;
+   - one massing critique (`maxRevisions` 1);
+   - the bible sheet critique from step 5;
+   - one design with `loop` requested through the Java API from `apitest` (the first real Java-path check of a design;
+     4a-4c covered the Java side by sim only).
+7. **Regression:**
+   - every sidecar, kit and mod test;
+   - the 4a jobs sim checks, the 4b 38 sim checks and the 4c 35 sim checks re-run;
+   - **the 1.5.0 apitest jar, unchanged, passes against 0.9.0**;
+   - the 4e in-game migration step (gate 4e item 4, without the downgrade) re-run on the new seam;
+   - a dev-client screenshot of the Designs tab showing a design's critique rounds, which has been looked at.
+8. **Recorded, not gated:**
+   - the model subset: Opus vs Sonnet on briefs 5, 8, 10 and 14, with cost, time, the loop's effect and the cross-model
+     pairwise;
+   - whether the second revision adds value (wins of round 2 over round 1 where it happened); this decides the default
+     `maxRevisions`;
+   - the critic's part-grounding rate and its verdict disagreement.
+9. gate-verifier checks the result, including that no real tier ran with an API key in its environment.
+
+---
+
+## Build order inside 5a
+
+1. The image probe; `job.images`.
+2. The kit: `--views`, slices, the attach and facing rules, the metrics, the playbook copy.
+3. Migration tests (independent; can run in parallel with the rest).
+4. The critic and the loop on the sim backend; estimates; the protocol.
+5. Bible format 2, restraint, admin.
+6. Java 1.6.0 and the UI.
+7. The eval runner (sim), then smoke, calibrate the seeds and the clutter thresholds, freeze them, then the full gate.
+
+## Open questions for Steward
+
+- **S1.** Critique defaults to `off` for API callers; you opt in per group or item. OK, or do you want `loop` by default
+  for groups?
+- **S2.** You get the verdicts as data (`Critique` on designs, items and entries, `DESIGN_CRITIQUED` per round). Is that
+  enough for your inbox or HUD?
+- **S3.** `extraCriteria` (at most 3 short strings per item, e.g. "faces the street on the south side", "reads as a
+  mine") join the rubric as an extra score. Useful, or should the critic read `GroupRequest.context` instead?
+- **S4.** Neighbour renders are at most 4 iso PNGs. Do you need a site-plan view (a top-down composite of the lots) in 5a,
+  or is that phase 6, with the A5B section previews?
+- **S5.** Massing critique for `approvalUi: "owner"` groups that auto-approve: do you want it in 5a?
+- **S6.** Will you send 4-6 settlement-flavoured briefs (concept-card outputs) for eval set v2?
+- **S7.** Architect takes owned copies of SKILL.md (as `kit/PLAYBOOK.md`, without §7), `slices.mjs` and the attach rules
+  (as checker rules). Changes flow back to you by message. Agreed?
+- **S8.** Is `job.images` (images in `job.run`) useful to you beyond the critic, e.g. a concept card from a screenshot?
+- **S9.** The model subset runs 4 briefs on both models, which is directional only. Enough for your tier decision, or do
+  you want a dedicated run (about $30, outside this gate)?
+
+## Open questions for Noah
+
+- **N1.** After the gate, should the UI default "Critique and revise" to on (with `maxRevisions` from the round-2 data), or
+  keep it off?
+- **N2.** Is a $120 gate cap on your claude login OK? About $85 of mostly Sonnet use will likely hit plan usage limits;
+  the runner waits through holds, so the gate may take a day or more of wall time.
+- **N3.** The defaults `shipScore` 7.0 and "the loop at most doubles a design's cost" (1.0x round 0): OK?
+- **N4.** `eval/results/<label>/summary.json` is committed to the public repo (brief texts, scores, costs; no PNGs, no
+  personal data). OK?
+- **N5.** Critic Sonnet 5.5 medium, judge Opus 5.5 medium: OK? A Sonnet judge would halve the judge cost, but it's the
+  critic's model.
+- **N6.** Textured renders (block-model-renderer, MPL-2.0, 26.x unverified) are deferred. Agree?
+- **N7.** `bible.delete` has no force flag and refuses while anything pins the bible. OK?
+- **N8.** The HeadlessMC nightly stays deferred. Agree?
+
+## Deferred (recommended)
+
+- **Textured renders** (verify 26.x and the asset licence first). The critic's view list is ready for them.
+- **Polish of existing entries** (critique plus revision as a remix). 5a has report mode only.
+- **Region and settlement critique** (top-down plan, section views, set-level revisions): phase 6 with A5b.
+- **A HeadlessMC or GameTest nightly** as a slow in-game gate.
+- **MineCEraft-style categories** in the eval (verify the reference first) and **hill-climbing prompts against the eval**.
+- **In-loop critic panels** (several lenses per round): 2-3x critic cost for an unmeasured gain. Revisit with eval data.
+- **Promoting the attach and facing warnings to errors** (after a clean full eval).
+- **A dedicated Opus vs Sonnet run** (S9) and a **v0.8.0 vs v0.9.0 round-0 comparison** (the playbook's own effect, about
+  $30): recorded later, not gated.
+- **Not 5a:** the other 4e caveats (the thin 4 ms throughput margin, invariant iii narrowed, the 1000x1000 NOT_LOADED
+  timeouts and terrain-generation ticks) stay with phase 6 as PLAN says.
+
+## Coordinator decisions on Noah's questions (provisional; N2 waits for Noah)
+
+- **N1** The UI default stays off after the gate; a settings toggle turns it on, and the default is revisited once real use shows its cost.
+- **N2** The gate's dollar cap and the wall time on Noah's login: **waiting for Noah**.
+- **N3** Yes: ship at a mean of 7 with no score below 5 and no P0 issue; the loop at most doubles a design's cost.
+- **N4** Yes: commit small eval summaries (scores, costs, verdicts), no renders or transcripts. They hold no personal data.
+- **N5** Yes: the critic is Sonnet 5.5 and the blind judge Opus 5.5.
+- **N6, N7, N8** Yes: textured renders and the HeadlessMC nightly are deferred, and bibles have no force-delete.
