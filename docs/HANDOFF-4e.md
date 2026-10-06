@@ -20,7 +20,7 @@ migration, downgrade, roads, survival, sizecap, megalite, megabig, bench, api, a
 gate client by PID, `eval '<js>'` runs ad-hoc checks). The fixture worlds are flat meadows (`G4E Flat`); size-cap random
 ticks use a normal world (`G4E Normal`, seed `4e`).
 
-## Gate status (stopped 2026-10-05 for a shutdown)
+## Gate status (2026-10-06)
 
 Evidence is local, under `~/Developer/LarattaLabs/architect-mc/artifacts/gate4e/<step>.json` (+ all.log). "Current" = run on
 a build within the last few commits (since the large-site work); "earlier" = an older build: re-run on the final build.
@@ -41,9 +41,7 @@ a build within the last few commits (since the large-site work); "earlier" = an 
 | 11 API | `api`, `api14` | PASS, current: every 1.5.0 call and new Reason; the 1.4.0 jar (unchanged) passes v0.7.0's apitest survival (45 ok), the 1.5.0 suite too (45 ok) |
 | 9 4d regression | gate4d.mjs all + gate3.mjs + phase 1 Remove on the 4e client | earlier build only: all pass but L3 (pre-existing on v0.7.0: floating worldgen gravel at the lot edge, a known limit for "as built") |
 
-Left: gate 9 re-runs; then a full re-run of every step on the
-final build; CONTRACT "Phase 4e as built" (deviations listed below in Known issues and the commit log since 711e4b5), PLAN
-status line. README and DEVBRIDGE are updated.
+Left: the final full re-run (in progress: every gate4e step on the final build, `=== FINAL RUN` in all.log), then gate 9 (gate4d.mjs all with GATE4D_OUT=artifacts/gate4e/regress4d, gate3.mjs steps with ARCHITECT_AUTOWORLD_SEED=2026, the phase 1 exact Remove via gate4d probe), REPORT.md, and the CONTRACT as-built numbers.
 
 Bugs the gate found and fixed so far: `Journal.Value` helpers used `Name`/`Properties` (26.x writes `id`/`properties`);
 removal blockers ignored block entities a LAYERed BOX site owns by its journal `after`; a group removal reported sites as
