@@ -1351,7 +1351,7 @@ steps.api14 = async () => {
     await startClient('G4E Api14', { ARCHITECT_APITEST: '0' });
     try {
       text = execFileSync('node', [path.join(V070, 'tools', 'apitest.mjs'), 'survival'], {
-        env: { ...process.env, ARCHITECT_DEV_PORT: String(PORT), APITEST_OUT: outDir, APITEST_GAME_DIR: GAME_DIR }, timeout: 3_600_000 }).toString();
+        env: { ...process.env, ARCHITECT_DEV_PORT: String(PORT), ARCHITECT_GAME_DIR: GAME_DIR, APITEST_OUT: outDir, APITEST_GAME_DIR: GAME_DIR }, timeout: 3_600_000 }).toString();
     } catch (e) {
       code = e.status ?? 1;
       text = `${e.stdout ?? ''}${e.stderr ?? ''}`;
