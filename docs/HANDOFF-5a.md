@@ -81,3 +81,15 @@ git pull
 node --test kit/test/*.test.mjs
 (cd mod && JAVA_HOME=/opt/homebrew/opt/openjdk@25 GRADLE_USER_HOME=$PWD/../.gradle-home ./gradlew build --offline)
 ```
+
+## Pause note (coordinator, 2026-10-06)
+
+- Paused to conserve Noah's subscription. Real spend so far: $11.10 API-equivalent (spend.json).
+- **Not yet merged into phase/5a:** `phase/5a-java` (worktree `../architect-mc-5a-java`, head f1784d3): API 1.6.0, mod 0.9.0,
+  critique UI, the apitest `critique` suite (20/20 sim), `tools/api-compat.mjs` (466 refs and 1088 members compatible), 320
+  mod tests. Merge it first on resume. Left there: an end-to-end run of the UI submit paths (Design tab, set dialog, massing
+  first plus critique), the 1.6.0 "as built" note, the N1 settings toggle, and `tools/gate4e.mjs`, which still hard-codes 1.5.0.
+  The 1.5.0 jar run needs `APITEST_API_VERSION=1.5.0`.
+- Resume order: merge 5a-java -> full tier (fresh run) -> Opus subset if under $120 -> critique-real via the Java API ->
+  gate G1-G4, clutter, regressions -> docs -> gate-verifier.
+- Smoke signal to watch: no design reached ship (5-6 vs 7), 3 of 4 installed designs kept a P0, so G2 is at risk.
