@@ -181,6 +181,10 @@ usage hold, re-skin, open type). Caveats:
 - Real runs went over the WebSocket; the Java path is sim-only.
 - The bible set is cluttered and less legible, which is 5a's (critique loop) job.
 
+**Phase 4e status: BUILT 2026-10-06, gate pending verification** (branch `phase/4e`; API 1.5.0 / mod 0.8.0; the builder's run in
+`artifacts/gate4e/REPORT.md`, local; deviations and measured numbers in CONTRACT "Phase 4e as built"). Sites are journal-backed
+(AgentCraft `ab08a02`'s rules): overlap with LAYER, removal in any order, roads and cell sites, 0.7.0 worlds migrate.
+
 **Phase 4d status: PASSED 2026-10-05** (gate-verifier reproduced every item on fresh terrain, `artifacts/gate4d-verify/`, local: 12/12
 equal, MSPT max 33.9 ms at 4 ms (job start up to 23.6 ms, unsliced), survival max 30.2 ms, 0 ticks over 50 ms; phase 3 gate
 re-run clean after the Remove change. Caveats carried to 4e: the toggle step now uses non-adjacent lots, so adjacency leaks are
