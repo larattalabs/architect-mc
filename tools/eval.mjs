@@ -344,19 +344,25 @@ function simJudge(b, finalIs) {
   return { preferred: pick, margin: 'clear', dimensions: { silhouette: pick, legibility: pick, craft: 'tie', materials: pick, brief: pick }, reasons: `simulated judge for brief ${b.n}` };
 }
 
-/** Install a fixture bible (eval/fixtures/bibles/<id>/) into a run's bibles dir as <id> v1. */
+/**
+ * Install a fixture bible (eval/fixtures/bibles/<id>/: its files are v1; versions/<n>/ holds later versions, e.g. the
+ * format 2 revision made in the 5a gate) into a run's bibles dir. The latest version is copied to the top, as the
+ * sidecar installs them.
+ */
 function installFixtureBible(biblesDir, id) {
   const src = path.join(FIXTURE_BIBLES, id);
-  const v = path.join(biblesDir, id, 'versions', '1');
-  if (fs.existsSync(v)) return;
-  fs.mkdirSync(v, { recursive: true });
-  for (const f of fs.readdirSync(src)) {
-    if (f === 'bible.json') {
-      const j = readJson(path.join(src, f));
-      fs.writeFileSync(path.join(v, f), `${JSON.stringify({ ...j, id, version: 1 }, null, 2)}\n`);
-    } else fs.copyFileSync(path.join(src, f), path.join(v, f));
+  const versions = [[1, src], ...(fs.existsSync(path.join(src, 'versions')) ? fs.readdirSync(path.join(src, 'versions')).filter((v) => /^\d+$/.test(v)).map((v) => [Number(v), path.join(src, 'versions', v)]) : [])].sort((a, b) => a[0] - b[0]);
+  for (const [n, from] of versions) {
+    const v = path.join(biblesDir, id, 'versions', String(n));
+    if (fs.existsSync(v)) continue;
+    fs.mkdirSync(v, { recursive: true });
+    for (const f of fs.readdirSync(from).filter((x) => fs.statSync(path.join(from, x)).isFile())) {
+      if (f === 'bible.json') fs.writeFileSync(path.join(v, f), `${JSON.stringify({ ...readJson(path.join(from, f)), id, version: n }, null, 2)}\n`);
+      else fs.copyFileSync(path.join(from, f), path.join(v, f));
+    }
   }
-  for (const f of fs.readdirSync(v)) fs.copyFileSync(path.join(v, f), path.join(biblesDir, id, f));
+  const latest = path.join(biblesDir, id, 'versions', String(versions.at(-1)[0]));
+  for (const f of fs.readdirSync(latest)) fs.copyFileSync(path.join(latest, f), path.join(biblesDir, id, f));
 }
 
 async function cmdRun(o) {
