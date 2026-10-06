@@ -713,9 +713,10 @@ class JournalMigrationTest {
 	// ------------------------------------------------------------------ the real files
 
 	/**
-	 * Files 0.7.0's code path wrote in a real world (the Gate3 Hardcore save: a pending construction site with its snapshot,
-	 * its target and a crate; vanilla's structure template writer, not {@link V070World}'s). The 4e-verify 0.7.0 world is not
-	 * on disk any more; these are the closest real files (src/test/resources/migration/v070).
+	 * Real Architect files, not {@link V070World}'s: vanilla's structure template writer made the snapshot and the target (a
+	 * pending construction site with a crate). They come from the main checkout's {@code mod/run/saves/Gate3 Hardcore} save,
+	 * written by a phase-3 build (a pre-4d format that 0.7.0 still reads), copied to src/test/resources/migration/v070. The
+	 * 4e-verify 0.7.0 world the contract names is not on disk any more (its worktrees were removed after the 4e gate).
 	 */
 	@Test
 	void realSnapshotFilesImport() throws IOException {
