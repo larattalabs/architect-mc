@@ -33,7 +33,8 @@ const BRIEFS_DIR = path.join(REPO, 'eval', 'briefs', 'v1');
 const BRIEF_SET = 'v1';
 const FIXTURE_BIBLES = path.join(REPO, 'eval', 'fixtures', 'bibles');
 const KIT = path.join(REPO, 'kit');
-const SIDECAR = path.join(REPO, 'sidecar', 'dist', 'main.mjs');
+/** the sidecar bundle (ARCHITECT_EVAL_SIDECAR overrides: a test's own copy) */
+const SIDECAR = process.env.ARCHITECT_EVAL_SIDECAR ? path.resolve(process.env.ARCHITECT_EVAL_SIDECAR) : path.join(REPO, 'sidecar', 'dist', 'main.mjs');
 const PORTS = [8890, 8891, 8892, 8893, 8894, 8895];
 const MIN = 60_000;
 
@@ -291,7 +292,8 @@ class Client {
   }
 
   call(m) {
-    const id = `e${++this.seq}`;
+    // (bible.revise / bible.delete / bible.archive carry the bible id in `id`, which is also the correlation id)
+    const id = m.id ?? `e${++this.seq}`;
     return new Promise((res, rej) => {
       this.waiters.set(id, { res, rej });
       this.send({ ...m, id });
@@ -926,6 +928,54 @@ async function crossJudge(o, a, b, ids) {
   return { pairs: Object.keys(results).length, before, after, ties: Object.keys(results).length - before - after, p: r4(p), regressed: p < 0.05, usd: r4(usd), results };
 }
 
+/**
+ * revise-bible <id> --notes "...": a real bible.revise (with the sheet critique) of a fixture bible, on a sidecar of its own;
+ * the new version is copied into eval/fixtures/bibles/<id>/versions/<v>/ (the 5a gate's format-2 Mosswater).
+ */
+async function cmdReviseBible(o) {
+  const id = o._[1];
+  if (!id || !o.notes) throw new Error('revise-bible <id> --notes "..."');
+  authGuard(o.tier ?? 'smoke');
+  const out = path.resolve(o.out ?? path.join(REPO, 'artifacts', 'eval'));
+  const dir = path.join(out, `bible-${id}-${new Date().toISOString().replace(/[:.]/g, '').slice(0, 15)}`);
+  const tier = o.tier === 'sim' ? 'sim' : 'smoke';
+  writeJson(path.join(dir, 'run.json'), { runId: path.basename(dir), tier, briefs: [], state: {} });
+  const port = await freePort(o.port);
+  const sc = await startSidecar(dir, tier, port);
+  const client = new Client(port, sc.token);
+  let usd = 0;
+  try {
+    await client.connect();
+    installFixtureBible(sc.dirs.bibles, id);
+    const jobs = new Map();
+    client.onMessage = ((orig) => (m) => {
+      if (m.type === 'bible.upsert') jobs.set(m.bible.id, m.bible);
+      orig.call(client, m);
+    })(client.onMessage);
+    const r = await client.call({ type: 'bible.revise', id, notes: o.notes, critique: { mode: 'report' }, ...(o.maxUsd ? { budgetUsd: o.maxUsd } : {}) });
+    log(`bible job ${r.jobId}: ${id} -> v${r.version}`);
+    let j;
+    for (;;) {
+      j = jobs.get(r.jobId);
+      if (j && FINAL.has(j.status)) break;
+      await sleep(2000);
+    }
+    usd = j.cost?.usd ?? 0;
+    log(`bible job ${r.jobId}: ${j.status} ${j.step} ($${r4(usd)})`);
+    if (o.ledger) ledgerPut(o.ledger, `${path.basename(dir)}:bible.revise`, usd);
+    if (j.status !== 'done') throw new Error(`the revision ${j.status}: ${j.error ?? ''}`);
+    const vdir = path.join(sc.dirs.bibles, id, 'versions', String(r.version));
+    const dst = path.join(FIXTURE_BIBLES, id, 'versions', String(r.version));
+    fs.mkdirSync(dst, { recursive: true });
+    for (const f of fs.readdirSync(vdir)) fs.copyFileSync(path.join(vdir, f), path.join(dst, f));
+    writeJson(path.join(dir, 'bible-job.json'), j);
+    log(`installed into ${path.relative(REPO, dst)}`);
+  } finally {
+    client.close();
+    sc.child.kill('SIGTERM');
+  }
+}
+
 // ---- CLI ------------------------------------------------------------------------------------------------------
 
 function parseArgs(argv) {
@@ -947,6 +997,7 @@ function parseArgs(argv) {
     else if (a === '--max-revisions') o.maxRevisions = Number(val());
     else if (a === '--no-results') o.noResults = true;
     else if (a === '--judge') o.judge = true;
+    else if (a === '--notes') o.notes = val();
     else if (a.startsWith('--')) throw new Error(`unknown option ${a}`);
     else o._.push(a);
   }
@@ -963,6 +1014,7 @@ async function main() {
   } else if (cmd === 'rescore') cmdRescore(o);
   else if (cmd === 'rejudge') await cmdRejudge(o);
   else if (cmd === 'compare') await cmdCompare(o);
+  else if (cmd === 'revise-bible') await cmdReviseBible(o);
   else {
     console.log('usage: node tools/eval.mjs run --tier sim|smoke|full [...] | rescore <runId> | rejudge <runId> | compare <runA> <runB>');
     process.exitCode = 2;

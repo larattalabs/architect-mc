@@ -767,7 +767,9 @@ export class Bibles {
       if (c.ok) {
         // ---- 4. install
         this.update(id, { status: 'rendering', step: 'installing the bible and its sheet' });
-        const comps = [...new Set([...((w.bible!.components as string[] | undefined) ?? []), ...c.components])];
+        // (5a) format 2: the drafted list (the 5 required plus at most 3) is the library; extra exports are not listed
+        const drafted = (w.bible!.components as string[] | undefined) ?? [];
+        const comps = w.bible!.format === 2 && drafted.length ? [...new Set(drafted)] : [...new Set([...drafted, ...c.components])];
         w.bible = { ...w.bible!, components: comps, cost: w.cost };
         const stage = path.join(scratch, 'install');
         fs.rmSync(stage, { recursive: true, force: true });

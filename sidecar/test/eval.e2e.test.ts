@@ -12,15 +12,21 @@ const EVAL = path.join(REPO, 'tools', 'eval.mjs');
 const MAIN = path.join(SIDECAR_ROOT, 'dist', 'main.mjs');
 const hasKit = fs.existsSync(path.join(REPO, 'kit', 'check.mjs'));
 
+/** a copy of the bundle (other test files rebuild dist/ while this one runs) */
+let bundle = '';
 const run = (args: string[], env: NodeJS.ProcessEnv = {}) => {
   const base = { ...process.env };
   for (const k of ['ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN']) delete base[k];
-  return spawnSync(process.execPath, [EVAL, ...args], { cwd: REPO, encoding: 'utf8', env: { ...base, ...env }, timeout: 240_000 });
+  return spawnSync(process.execPath, [EVAL, ...args], { cwd: REPO, encoding: 'utf8', env: { ...base, ARCHITECT_EVAL_SIDECAR: bundle, ...env }, timeout: 240_000 });
 };
 
 describe.skipIf(!hasKit)('tools/eval.mjs (sim tier)', () => {
   beforeAll(() => {
     if (!fs.existsSync(MAIN)) execFileSync(process.execPath, [path.join(SIDECAR_ROOT, 'scripts', 'build.mjs')], { cwd: SIDECAR_ROOT, stdio: 'pipe' });
+    // the bundle resolves its version from ../package.json and node_modules from its folder's parents: a sibling copy
+    bundle = path.join(SIDECAR_ROOT, 'dist-eval-test', 'main.mjs');
+    fs.mkdirSync(path.dirname(bundle), { recursive: true });
+    fs.copyFileSync(MAIN, bundle);
   });
 
   it('runs the sim tier, rescore is byte-identical, compare of two runs says no regression', () => {
