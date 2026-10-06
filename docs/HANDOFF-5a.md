@@ -13,7 +13,7 @@ Working notes for resuming phase 5a after a pause. Deleted when the gate passes.
 |---|---|
 | 1. Image probe | DONE 2026-10-06: image content blocks work under the claude login ($0.0098, apiKeySource none). Critic and judge send images; `job.images` ships. |
 | 2. Sim build | sidecar loop, critic, budgets, estimates, bible format 2/admin, report mode, job.images, eval.mjs: DONE (sidecar 536 tests). Kit (phase/5a-kit, merged): views, slices, attach/facing, metrics, restraint, PLAYBOOK (kit 126 tests). Migration tests (phase/5a-mig, merged): 19 new mod tests. Java 1.6.0 + UI: in progress on phase/5a-java (subagent). |
-| 3. Real runs (smoke, full, Opus subset) | not started |
+| 3. Real runs | **PAUSED 2026-10-06 18:10 (coordinator: Noah's subscription near its limit; no real calls until he says so).** Smoke tier DONE (complete, not partial). Mosswater format-2 revision DONE (fixture committed). Full tier NOT STARTED. Opus subset NOT STARTED. |
 | 4. Gate G1-G4, clutter, regressions | not started |
 | 5. Docs | not started |
 
@@ -26,9 +26,39 @@ The unchanged 1.5.0 apitest jar (`architect_apitest-0.8.0.jar`), the 0.8.0 mod j
 | What | USD |
 |---|---|
 | probe | 0.0098 |
-| **total** | **0.0098** |
+| smoke tier (briefs 1, 3, 10, 13; run `smoke-2026-10-06T1738`) | 9.2970 |
+| smoke rejudge (judge stability) | 0.3891 |
+| Mosswater bible.revise, 1st try (failed: a format-field bug, fixed in 6f…/"a bible draft is always validated as format 2") | 0.2790 |
+| Mosswater bible.revise to format 2 (with the sheet critique) | 1.1248 |
+| **total** | **11.0997** (= spend.json totalUsd) |
 
 The ledger of record is `artifacts/gate5a/spend.json` (eval.mjs reads and writes it).
+
+## Smoke tier results (2026-10-06, Sonnet, maxRevisions 1)
+
+| Brief | End | Round 0 -> round 1 (critic overall) | Best | Judge | Cost |
+|---|---|---|---|---|---|
+| 1 woodcutters_cabin | max_revisions | 5.0 -> 5.33 | 1 | win | $1.90 |
+| 3 watchtower_plot | max_revisions | 5.67 -> 5.33 | 0 | identical (round 0 installs) | $1.74 |
+| 10 hellish_lair | max_revisions | 5.67 -> 5.83 | 1 | tie | $3.11 |
+| 13 stilt_house | max_revisions | 5.5 -> 5.67 | 1 | win | $2.55 |
+
+- Nothing shipped (the critic scores 5-6; shipScore 7). Loop spend mean $0.63 = 39% of round 0 ($1.60); added wall time 2.4 min; estimates within +-50% (4/4, total +0.4%).
+- Judge stability: `rejudge` agreed 4/4 (3 real judgings + 1 identical).
+- P0 at install in 3 of 4 (the critic keeps finding a P0 the one revision did not fix). G2 (rise >= 1.0) looks unlikely with these scores; record honestly.
+- Calibrated from it (committed): critic seed $0.02-0.08 / 0.1-0.4 min, Sonnet revision $0.25-1.0 / 1-4 min, Opus revision $0.4-1.6 / 1.5-6 min (scaled). Frozen: `DETAIL_NOISE_MAX = { sparse 0.32, moderate 0.42, rich 0.5 }`.
+- Mosswater v2 (eval/fixtures/bibles/mosswater/versions/2): format 2, 6 motifs, 3 hero motifs, accentShareMax 0.06, sparse, 8 components; sheet critique overall 5 (legibility 4, restraint 6, craft 5).
+
+## What is left (in order)
+
+1. Merge `phase/5a-java` (Java 1.6.0 + UI, subagent stopped mid-work: check its last commit and finish it), build mod 0.9.0, all mod tests green.
+2. **Full tier** (all 18 briefs, briefs 16-18 use Mosswater v2 automatically via the fixture's versions/2... NOTE: the group brief files name `bible: "mosswater"` = its latest version, i.e. v2). Cap $85; total ledger stays under $120:
+   `env -u ANTHROPIC_API_KEY -u ANTHROPIC_AUTH_TOKEN node tools/eval.mjs run --tier full --label full --max-usd 85 --out ~/Developer/LarattaLabs/architect-mc/artifacts/eval --ledger ~/Developer/LarattaLabs/architect-mc/artifacts/gate5a/spend.json --total-cap 120 --reserve 8`
+   (reserve ~$8 for step 3). A paused/killed full run resumes with `--resume <runId>` (same --out); finished briefs are never re-run, in-flight designs resume in the sidecar's data dir.
+3. Other real checks (~$3-5): `design.critique` report of a 4b entry, one massing critique (maxRevisions 1), one `loop` design through the Java API (apitest `critique` suite on the claude-login sidecar).
+4. Opus subset (`--models opus-subset`, briefs 5, 8, 10, 14) only if the ledger total stays under $120.
+5. Gate: G1-G4 from `eval/results/full/summary.json` aggregates; clutter (briefs 16-18 vs the 4b set: blind legibility judge vs the stored 4b renders, design-critic agents, detailNoise/accentShare); regressions (all tests, 4a-4c sim checks, the 1.5.0 apitest jar in `artifacts/gate5a/v080/` against 0.9.0, the 4e in-game migration step, a Designs-tab screenshot); REPORT.md in artifacts/gate5a.
+6. Docs: CONTRACT "Phase 5a as built", PLAN status line, README (critique), DEVBRIDGE changelog.
 
 ## Eval runs
 
