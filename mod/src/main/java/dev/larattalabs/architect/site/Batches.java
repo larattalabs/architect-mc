@@ -238,9 +238,11 @@ public final class Batches {
 			fail(b, i, Reason.NOT_LOADED, i.dimension + " is not loaded");
 			return;
 		}
+		Sites.Trace tr = new Sites.Trace("tryStartInfra " + i.key);
 		if (b.loadChunks > 0) {
 			ticketBox(server, b, i, level, infraBox(i));
 		}
+		tr.mark("ticket");
 		InfraPlace.Check c;
 		boolean road = "road".equals(i.itemKind);
 		InfraSpec.Cells cells = null;
@@ -249,10 +251,13 @@ public final class Batches {
 				"slab"), i.spec.get("lanterns").getAsBoolean(), i.spec.get("shallowDecks").getAsBoolean(), b.owner, i.force);
 		} else {
 			cells = InfraSpec.cellsOf(i.spec);
+			tr.mark("decode");
 			c = InfraPlace.checkCells(level, i.spec.get("kind").getAsString(), dev.larattalabs.architect.journal.Journal.Policy.valueOf(i.spec.get("policy")
 				.getAsString()), cells.pos(), cells.states(), cells.nbt(), i.spec.get("naturalOnly").getAsBoolean(), i.layer, b.owner, i.force, true);
 		}
+		tr.mark("check");
 		if (!c.ok()) {
+			tr.done();
 			Sites.Refusal r = c.refusals().get(0);
 			if (TEMPORARY.contains(r.reason())) {
 				waitFor(b, i, r.reason(), r.message());
@@ -269,6 +274,8 @@ public final class Batches {
 		try {
 			InfraJob job = road ? InfraPlace.beginRoad(level, c, b.owner, i.ext, member) : InfraPlace.beginCells(level, i.spec.get("kind").getAsString(),
 				dev.larattalabs.architect.journal.Journal.Policy.valueOf(i.spec.get("policy").getAsString()), c, b.owner, i.ext, member);
+			tr.mark("begin");
+			tr.done();
 			i.status = QItem.Status.PLACING;
 			i.siteId = job.siteId;
 			i.reason = null;
