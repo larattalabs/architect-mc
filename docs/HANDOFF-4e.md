@@ -37,11 +37,11 @@ a build within the last few commits (since the large-site work); "earlier" = an 
 | 9 leaves (adjacent toggle, held leaves both orders) | `leaves` | PASS, current (after the cut-plant and two-block fixes) |
 | 10 mega-lite | `megalite` | PASS, current: 759,824 cells, relog resume, lot undo leaves the pad exact, group undo exact (max 30 ms), MSPT max 17/39/33 ms at 1/4/10 ms |
 | 10 bench, megabig | `bench`, `megabig` | bench PASS (pad 0.04 B/cell, stack p50 1.0 / p99 1.4 µs at depth 4). megabig recorded: 11.6M cells, 33 min, 11 of 610 lots timed out NOT_LOADED (LOAD_BOUNDED 64 chunks at 1000x1000), MSPT max 237 ms (chunk generation of unexplored terrain) |
-| 4 migration, downgrade | `migration`, `downgrade` | written, not run (needs the 0.7.0 client: `use('old')`, ports 8892/8893) |
-| 11 API | `api`, `api14` | written, not run |
+| 4 migration, downgrade | `migration`, `downgrade` | PASS, current (0.7.0-made world: index, legacy, 8/8 Removes, C half built 47% then identical to instant, P resumed, D settled, LAYER over migrated both orders, kills before/after commit; downgrade round trip) |
+| 11 API | `api`, `api14` | PASS, current: every 1.5.0 call and new Reason; the 1.4.0 jar (unchanged) passes v0.7.0's apitest survival (45 ok), the 1.5.0 suite too (45 ok) |
 | 9 4d regression | gate4d.mjs all + gate3.mjs + phase 1 Remove on the 4e client | earlier build only: all pass but L3 (pre-existing on v0.7.0: floating worldgen gravel at the lot edge, a known limit for "as built") |
 
-Left: migration/downgrade; api/api14; gate 9 re-runs; then a full re-run of every step on the
+Left: gate 9 re-runs; then a full re-run of every step on the
 final build; CONTRACT "Phase 4e as built" (deviations listed below in Known issues and the commit log since 711e4b5), PLAN
 status line. README and DEVBRIDGE are updated.
 
