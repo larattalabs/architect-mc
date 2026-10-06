@@ -296,6 +296,8 @@ export function simVerdict(notes: string | undefined, round: number, dims: strin
   const tokens = m ? m[1]!.split('/') : ['8'];
   const tok = tokens[Math.min(round, tokens.length - 1)]!;
   if (tok === 'fail') return { simFail: 'the simulated critic failed' };
+  // `L`: this critic call hits a usage limit once (it lasts simLimitMs), then answers
+  if (tok.includes('L')) return { simLimitMs: 600, answer: simVerdict(notes?.replace(tok, tok.replace('L', '')), round, dims, parts) };
   const num = Number(/^[\d.]+/.exec(tok)?.[0] ?? '8');
   const score = Math.max(1, Math.min(10, Math.round(num)));
   // an uneven split keeps the mean at `num` when it is a half (7.5 -> 7 and 8)

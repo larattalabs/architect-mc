@@ -18,6 +18,8 @@ import type { DriverQuery, JobDriver } from './driver.js';
 import { sampleFromSchema } from './schema.js';
 
 interface SimSession {
+  /** (5a) a scripted usage limit was hit once already */
+  limited?: boolean;
   next: number;
   results: Array<{ tool: string; result?: unknown; error?: string }>;
   usd: number;
@@ -96,8 +98,19 @@ export class SimJobDriver implements JobDriver {
       step();
       if (over()) return yield result('error_max_budget_usd');
       // (5a) a scripted answer (the critic's and the judge's verdicts in the sim), or a scripted failure
-      const scripted = q.simAnswer;
+      let scripted = q.simAnswer;
       if (scripted && typeof scripted === 'object' && 'simFail' in (scripted as Record<string, unknown>)) return yield result('error_during_execution', { errors: [String((scripted as { simFail: unknown }).simFail)] });
+      // a scripted usage limit, once per session: the SDK's rate_limit_event "rejected", then the turn ends
+      if (scripted && typeof scripted === 'object' && 'simLimitMs' in (scripted as Record<string, unknown>)) {
+        const s = scripted as { simLimitMs: number; answer: unknown };
+        if (!st.limited) {
+          st.limited = true;
+          save();
+          yield msg({ type: 'rate_limit_event', session_id: sessionId, rate_limit_info: { status: 'rejected', rateLimitType: 'sim', resetsAt: Date.now() + s.simLimitMs } });
+          return yield result('error_during_execution', { errors: ['usage limit reached (simulated)'] });
+        }
+        scripted = s.answer;
+      }
       yield msg({ type: 'assistant', session_id: sessionId, message: { content: [{ type: 'text', text: `sim: answering to the schema${q.images?.length ? ` (looked at ${q.images.length} image${q.images.length === 1 ? '' : 's'})` : ''}` }] } });
       yield result('success', { result: '', structured_output: scripted !== undefined ? scripted : sampleFromSchema(q.schema ?? { type: 'object' }) });
       return;

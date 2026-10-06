@@ -462,8 +462,9 @@ export class Critiques {
     const job = sc.jobs.book.get(jobId);
     if (!d || !cw || !job || isFinalDesign(d) || cw.pending !== 'critic' || cw.jobId !== jobId) return;
     delete cw.jobId;
+    const turns = this.turnsCost(d);
     cw.critic = addCost(cw.critic, job.cost);
-    sc.designCost(id, this.turnsCost(d));
+    sc.designCost(id, turns);
     const fresh = sc.designs.get(id)!;
     const n = cw.round;
     const rounds = [...(fresh.critique?.rounds ?? [])];
