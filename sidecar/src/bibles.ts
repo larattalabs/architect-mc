@@ -708,7 +708,8 @@ export class Bibles {
         const r = await backend.draft({ job: j, work: w, scratch, budgetLeft: left, retryErrors });
         this.sc.store.markDirty();
         if (!r.ok) return this.passEnded(id, r);
-        const v = await this.validate(scratch, { ...r.bible, id: j.bibleId, version: j.version }, scope);
+        // (5a) every new version is format 2 (the kit validates its restraint and limits)
+        const v = await this.validate(scratch, { ...r.bible, format: 2, id: j.bibleId, version: j.version }, scope);
         if (!v.ok) {
           if (w.draftRetries < 1) {
             w.draftRetries++;
