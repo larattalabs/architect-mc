@@ -383,6 +383,17 @@ public final class JournalStore {
 		return readRegion(id, region, gen, m.layer());
 	}
 
+	/** Whether an entry's region is in memory (pinned or cached), or has no file. */
+	public boolean inMemory(String id, long region) {
+		Meta m = head.entries().get(id);
+		Integer gen = m == null ? null : m.files().get(regionName(region));
+		if (gen == null) {
+			return true;
+		}
+		Path p = regionPath(id, region, gen);
+		return pinned.get(p) instanceof JournalNbt.Region || cache.get(p) != null;
+	}
+
 	private JournalNbt.Region readRegion(String id, long region, int gen, long layer) throws IOException {
 		Path p = regionPath(id, region, gen);
 		Object pin = pinned.get(p);

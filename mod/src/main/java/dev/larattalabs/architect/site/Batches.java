@@ -628,6 +628,13 @@ public final class Batches {
 			startChecked(server, b, i, level, bp, origin, rot, i.checkedSnap);
 			return;
 		}
+		// the journal regions under it in memory first (read off the server thread)
+		int sx = BlueprintTransform.rotatedSizeX(bp.sizeX(), bp.sizeZ(), i.turns);
+		int sz = BlueprintTransform.rotatedSizeZ(bp.sizeX(), bp.sizeZ(), i.turns);
+		Anchors.Bounds near = new Anchors.Bounds(i.x - 24, i.y - 24, i.z - 24, i.x + sx + 24, i.y + bp.sizeY() + 8, i.z + sz + 24);
+		if (!SiteJournal.warm(i.dimension, near)) {
+			return;
+		}
 		Sites.Verdict v = Sites.verdict(level, bp, origin, rot, i.force, null, true, i.construction, i.layer, b.owner);
 		if (!v.ok()) {
 			Sites.Refusal hard = v.typed().stream().filter(r -> !TEMPORARY.contains(r.reason())).findFirst().orElse(null);

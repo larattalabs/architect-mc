@@ -604,6 +604,46 @@ public final class SiteJournal {
 	}
 
 	/** {@link #undo} of these entries (active ones; a move's new entries share the site id with the old ones). */
+	/**
+	 * Reads into memory, off the server thread, the region files of the active entries that reach into {@code box} (a check
+	 * there would otherwise decode them on the server thread: a 256x256 pad's region is tens of milliseconds after a restart).
+	 * True when they are all in memory already; else it starts the read (once) and returns false.
+	 */
+	static boolean warm(String dim, Anchors.Bounds box) {
+		JournalStore s = WorldJournal.storeOrNull();
+		if (s == null) {
+			return true;
+		}
+		List<String[]> todo = new ArrayList<>();
+		for (int rx = box.minX() >> 9; rx <= box.maxX() >> 9; rx++) {
+			for (int rz = box.minZ() >> 9; rz <= box.maxZ() >> 9; rz++) {
+				long r = Sections.region(rx, rz);
+				for (JournalStore.Meta m : s.find(m -> m.active() && m.dimension().equals(dim) && m.intersects(dim, new int[] {box.minX(), box.minY(), box.minZ(),
+					box.maxX(), box.maxY(), box.maxZ()}))) {
+					if (!s.inMemory(m.id(), r)) {
+						todo.add(new String[] {m.id(), Long.toString(r)});
+					}
+				}
+			}
+		}
+		if (todo.isEmpty()) {
+			return true;
+		}
+		String key = dim + todo.get(0)[0] + "@" + todo.get(0)[1];
+		WARMING.computeIfAbsent(key, k -> CompletableFuture.runAsync(() -> {
+			for (String[] t : todo) {
+				try {
+					s.region(t[0], Long.parseLong(t[1]));
+				} catch (IOException e) {
+					// the check reads it again and reports
+				}
+			}
+		}).whenComplete((v, e) -> WARMING.remove(k)));
+		return false;
+	}
+
+	private static final Map<String, CompletableFuture<Void>> WARMING = new java.util.concurrent.ConcurrentHashMap<>();
+
 	/** R1 over ticks: the planner of undoing {@code siteIds}' active entries as {@code group} ({@link #submitUndo} when it is done). */
 	static WorldJournal.UndoPlanner undoPlanner(ServerLevel level, Collection<String> siteIds, String group) throws Sites.SiteException {
 		requireAvailable();
