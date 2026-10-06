@@ -1003,7 +1003,11 @@ function materialOf(name) {
 
 const isGlass = (c) => /glass/.test(c.name);
 
-/** Detail-noise ceilings per bible `restraint.detailDensity` (PROVISIONAL, from the 4b sets and the kit examples; frozen after the 5a smoke run). */
+/**
+ * Detail-noise ceilings per bible `restraint.detailDensity`. FROZEN 2026-10-06 after the 5a smoke run: the cluttered 4b
+ * Mosswater set measured 0.445-0.497, the kit examples 0.18-0.38 (every corner and preset), the smoke tier's round-0
+ * designs (no bible) 0.347-0.416. Moderate sits between the clean designs and the cluttered set.
+ */
 export const DETAIL_NOISE_MAX = Object.freeze({ sparse: 0.32, moderate: 0.42, rich: 0.5 });
 
 /** The metrics of a grid (see above). `outside`: outsideFlood(g). */

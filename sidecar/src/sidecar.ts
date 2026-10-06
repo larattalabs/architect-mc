@@ -785,7 +785,11 @@ export class Sidecar {
     });
     // the rolling averages behind the estimates (real Claude designs only)
     const started = this.estimates.startedAt(id);
-    if (this.designer?.name === 'claude' && started !== undefined) this.estimates.record('design', d.request.model ?? this.config.claude.designModel, d.cost?.usd ?? 0, this.now() - started);
+    // (5a) the design sample is round 0 only: the loop's spend and time are the critic and revise samples
+    const c = this.designs.get(id)?.critique;
+    const loopUsd = c ? c.cost.critic.usd + c.cost.revise.usd : 0;
+    const loopMs = c ? c.rounds.reduce((a, r) => a + r.ms, 0) : 0;
+    if (this.designer?.name === 'claude' && started !== undefined) this.estimates.record('design', d.request.model ?? this.config.claude.designModel, Math.max(0, (d.cost?.usd ?? 0) - loopUsd), Math.max(1, this.now() - started - loopMs));
     this.estimates.forget(id);
     // on disk at once: a crash right after an install must not run the design (and install it) again
     this.store.flush();

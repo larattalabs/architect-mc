@@ -40,11 +40,14 @@ const BIBLE: Seed = { usd: [1.2, 2.0], ms: [5 * MIN, 8 * MIN] };
 const SONNET: Seed = { usd: [0.8, 2.5], ms: [4 * MIN, 10 * MIN] };
 /** (4c) Massing job seed: the contract's $0.10-0.40 and 1-3 min (Sonnet, effort low), to be measured in the 4c gate. */
 const MASSING: Seed = { usd: [0.1, 0.4], ms: [1 * MIN, 3 * MIN] };
-/** (5a) seeds from the contract, replaced by the smoke tier's measurements: a critic call (Sonnet 5.5, medium) */
-export const CRITIC_SEED: Seed = { usd: [0.04, 0.15], ms: [0.5 * MIN, 2 * MIN] };
-/** (5a) a revision turn of a Sonnet design, of an Opus design */
-export const REVISE_SONNET_SEED: Seed = { usd: [0.25, 0.9], ms: [2 * MIN, 5 * MIN] };
-export const REVISE_OPUS_SEED: Seed = { usd: [0.5, 1.5], ms: [3 * MIN, 7 * MIN] };
+/**
+ * (5a) Seeds calibrated on the smoke tier (2026-10-06, 4 Sonnet designs, claude login): 8 critic calls (Sonnet 5.5,
+ * medium, 5 views) $0.023-0.072 (mean $0.045), 4-19 s; 4 revisions $0.29-0.96 (mean $0.54), 0.8-3.3 min. The contract's
+ * seeds were $0.04-0.15 / 0.5-2 min and $0.25-0.9 / 2-5 min. The Opus revision is scaled from Sonnet's (unmeasured).
+ */
+export const CRITIC_SEED: Seed = { usd: [0.02, 0.08], ms: [0.1 * MIN, 0.4 * MIN] };
+export const REVISE_SONNET_SEED: Seed = { usd: [0.25, 1.0], ms: [1 * MIN, 4 * MIN] };
+export const REVISE_OPUS_SEED: Seed = { usd: [0.4, 1.6], ms: [1.5 * MIN, 6 * MIN] };
 
 /** The seed of a model family (by its id). */
 export function seedFor(model: string): { seed: Seed; family: string } {
@@ -128,7 +131,7 @@ export class Estimates {
     const list = this.data[kind][model] ?? [];
     if (!list.length) {
       if (kind === 'massing') return { usd: MASSING.usd, ms: MASSING.ms, basis: `${model}: seed, a massing ($0.10-0.40, 1-3 min)` };
-      if (kind === 'critic') return { usd: CRITIC_SEED.usd, ms: CRITIC_SEED.ms, basis: `critic ${model}: seed ($0.04-0.15, 0.5-2 min per call)` };
+      if (kind === 'critic') return { usd: CRITIC_SEED.usd, ms: CRITIC_SEED.ms, basis: `critic ${model}: seed ($${CRITIC_SEED.usd[0]}-${CRITIC_SEED.usd[1]}, ${CRITIC_SEED.ms[0] / MIN}-${CRITIC_SEED.ms[1] / MIN} min per call, smoke 2026-10-06)` };
       if (kind === 'revise') {
         const opus = !model.toLowerCase().includes('sonnet') && !model.toLowerCase().includes('haiku');
         const sd = opus ? REVISE_OPUS_SEED : REVISE_SONNET_SEED;

@@ -1,0 +1,755 @@
+{
+  "runId": "smoke-2026-10-06T1738",
+  "label": "smoke",
+  "tier": "smoke",
+  "models": null,
+  "maxRevisions": 1,
+  "capUsd": 12,
+  "authVars": {
+    "ANTHROPIC_API_KEY": false,
+    "ANTHROPIC_AUTH_TOKEN": false,
+    "CLAUDE_CODE_OAUTH_TOKEN": false,
+    "ANTHROPIC_BASE_URL": true,
+    "CLAUDE_CODE_USE_BEDROCK": false,
+    "CLAUDE_CODE_USE_VERTEX": false,
+    "CLAUDE_CODE_USE_FOUNDRY": false
+  },
+  "provenance": {
+    "sidecarVersion": "0.1.0",
+    "modVersion": "0.8.0",
+    "briefSet": "v1",
+    "hashes": {
+      "briefs": "1e503b2332ac1ee6e1cfb6123cc84af89ee9b0e8b9b6b9fcc610d2fa5f6f4a80",
+      "kit": "e6b381f1cc56d3c990a8c4cd944495d3d16e3d8605b5ba2c1bbb3076bca865cc",
+      "designPrompts": "a90bce97e378df2e467bc47871e813e003eb4092a2cf1eca1062d1ccf276f040",
+      "critic": "b7888e53874212e7f6efbefff555d79f9962e7c4679025b417f24a423e6e0bcc",
+      "judge": "a087ab438b0c93874f83e9af3245c3e46094582f7cf3a06d17629ff4794702a4"
+    },
+    "models": {
+      "critic": "claude-sonnet-5-5 (medium)",
+      "judge": "claude-opus-5-5 (medium)"
+    }
+  },
+  "stopReason": null,
+  "briefs": [
+    {
+      "id": "woodcutters_cabin",
+      "n": 1,
+      "title": "woodcutter's cabin",
+      "type": "cabin",
+      "model": "claude-sonnet-5-5",
+      "status": "done",
+      "end": "max_revisions",
+      "best": 1,
+      "revisions": 1,
+      "rounds": [
+        {
+          "n": 0,
+          "kept": true,
+          "overall": 5,
+          "scores": {
+            "silhouette": 6,
+            "legibility": 4,
+            "craft": 5,
+            "materials": 4,
+            "brief": 5,
+            "interior": 6
+          },
+          "ship": false,
+          "modelVerdict": "iterate",
+          "issues": {
+            "P0": 1,
+            "P1": 0,
+            "P2": 0
+          },
+          "issueParts": 1,
+          "unknownParts": 0,
+          "cost": 0.02,
+          "ms": 4713
+        },
+        {
+          "n": 1,
+          "kept": true,
+          "overall": 5.33,
+          "scores": {
+            "silhouette": 6,
+            "legibility": 4,
+            "craft": 5,
+            "materials": 6,
+            "brief": 5,
+            "interior": 6
+          },
+          "ship": false,
+          "modelVerdict": "iterate",
+          "issues": {
+            "P0": 1,
+            "P1": 0,
+            "P2": 0
+          },
+          "issueParts": 1,
+          "unknownParts": 0,
+          "cost": 0.31,
+          "ms": 49743
+        }
+      ],
+      "round0": {
+        "errors": 0,
+        "warnings": 0,
+        "byRule": {},
+        "metrics": {
+          "accentShare": 0.248,
+          "detailNoise": 0.416,
+          "windowsMin": 2,
+          "paletteAdherence": 1,
+          "parts": 8,
+          "cellsOutsideParts": 0,
+          "blocks": 576
+        }
+      },
+      "final": {
+        "errors": 0,
+        "warnings": 0,
+        "byRule": {},
+        "metrics": {
+          "accentShare": 0.368,
+          "detailNoise": 0.418,
+          "windowsMin": 2,
+          "paletteAdherence": 1,
+          "parts": 8,
+          "cellsOutsideParts": 0,
+          "blocks": 571
+        }
+      },
+      "critic": {
+        "calls": 2,
+        "disagreements": 0,
+        "issues": 2,
+        "unknownParts": 0,
+        "partGrounding": 1
+      },
+      "judge": {
+        "outcome": "win",
+        "revisions": 1,
+        "best": 1,
+        "views": [
+          "iso",
+          "iso_back",
+          "front",
+          "top"
+        ],
+        "calls": [
+          {
+            "order": {
+              "A": "round0",
+              "B": "final"
+            },
+            "preferred": "B",
+            "margin": "clear",
+            "dimensions": {
+              "silhouette": "B",
+              "legibility": "B",
+              "craft": "tie",
+              "materials": "B",
+              "brief": "B"
+            },
+            "reasons": "A and B have the same shape. What separates them is the palette. In A the roof, walls, porch and log pile are all the same dark brown, so the building reads as one mass and the doors and windows get lost. B pairs a grey roof with tan plank walls. That makes the roof line, porch and openings easy to read, and it still looks rustic. Both have the chimney and porch.",
+            "winner": "final",
+            "usd": 0.051
+          },
+          {
+            "order": {
+              "A": "final",
+              "B": "round0"
+            },
+            "preferred": "A",
+            "margin": "slight",
+            "dimensions": {
+              "silhouette": "A",
+              "legibility": "A",
+              "craft": "tie",
+              "materials": "A",
+              "brief": "tie"
+            },
+            "reasons": "The two have the same geometry. A's grey stone roof stands out against the light plank walls, so the roof, the walls and the porch each read clearly. B puts a dark wood roof on dark log walls, so the two blend together and the door and windows get lost. B's log walls feel a little more like a cabin, but they don't make up for the lost clarity.",
+            "winner": "final",
+            "usd": 0.0444
+          }
+        ]
+      },
+      "cost": {
+        "total": 1.807,
+        "round0": 1.4737,
+        "critic": 0.0458,
+        "revise": 0.2874,
+        "loop": 0.3332,
+        "loopCap": 1.4737,
+        "judge": 0.0953,
+        "cacheReadTokens": 3362963
+      },
+      "ms": {
+        "total": 486547,
+        "loop": 54456
+      },
+      "estimate": {
+        "usdLow": 0.8,
+        "usdHigh": 2.5,
+        "critiqueUsdLow": 0.04,
+        "critiqueUsdHigh": 1.2,
+        "minutesLow": 4,
+        "minutesHigh": 10,
+        "critiqueMinutesLow": 0.5,
+        "critiqueMinutesHigh": 9,
+        "midUsd": 2.27,
+        "errorPct": -20.4
+      }
+    },
+    {
+      "id": "watchtower_plot",
+      "n": 3,
+      "title": "watchtower on an 11x11 plot",
+      "type": "tower",
+      "model": "claude-sonnet-5-5",
+      "status": "done",
+      "end": "max_revisions",
+      "best": 0,
+      "revisions": 1,
+      "rounds": [
+        {
+          "n": 0,
+          "kept": true,
+          "overall": 5.67,
+          "scores": {
+            "silhouette": 6,
+            "legibility": 5,
+            "craft": 5,
+            "materials": 6,
+            "brief": 6,
+            "interior": 6
+          },
+          "ship": false,
+          "modelVerdict": "iterate",
+          "issues": {
+            "P0": 1,
+            "P1": 3,
+            "P2": 1
+          },
+          "issueParts": 5,
+          "unknownParts": 0,
+          "cost": 0.07,
+          "ms": 17779
+        },
+        {
+          "n": 1,
+          "kept": true,
+          "overall": 5.33,
+          "scores": {
+            "silhouette": 6,
+            "legibility": 5,
+            "craft": 5,
+            "materials": 5,
+            "brief": 6,
+            "interior": 5
+          },
+          "ship": false,
+          "modelVerdict": "iterate",
+          "issues": {
+            "P0": 0,
+            "P1": 4,
+            "P2": 2
+          },
+          "issueParts": 6,
+          "unknownParts": 0,
+          "cost": 0.48,
+          "ms": 148637
+        }
+      ],
+      "round0": {
+        "errors": 0,
+        "warnings": 0,
+        "byRule": {},
+        "metrics": {
+          "accentShare": 0.013,
+          "detailNoise": 0.382,
+          "windowsMin": 14,
+          "paletteAdherence": 1,
+          "parts": 9,
+          "cellsOutsideParts": 0,
+          "blocks": 1284
+        }
+      },
+      "final": {
+        "errors": 0,
+        "warnings": 0,
+        "byRule": {},
+        "metrics": {
+          "accentShare": 0.013,
+          "detailNoise": 0.382,
+          "windowsMin": 14,
+          "paletteAdherence": 1,
+          "parts": 9,
+          "cellsOutsideParts": 0,
+          "blocks": 1284
+        }
+      },
+      "critic": {
+        "calls": 2,
+        "disagreements": 0,
+        "issues": 11,
+        "unknownParts": 0,
+        "partGrounding": 1
+      },
+      "judge": {
+        "outcome": "identical",
+        "revisions": 1,
+        "calls": []
+      },
+      "cost": {
+        "total": 1.7379,
+        "round0": 1.1842,
+        "critic": 0.1417,
+        "revise": 0.412,
+        "loop": 0.5537,
+        "loopCap": 1.1842,
+        "judge": 0,
+        "cacheReadTokens": 2421736
+      },
+      "ms": {
+        "total": 528875,
+        "loop": 166416
+      },
+      "estimate": {
+        "usdLow": 0.8,
+        "usdHigh": 2.5,
+        "critiqueUsdLow": 0.04,
+        "critiqueUsdHigh": 1.2,
+        "minutesLow": 4,
+        "minutesHigh": 10,
+        "critiqueMinutesLow": 0.5,
+        "critiqueMinutesHigh": 9,
+        "midUsd": 2.27,
+        "errorPct": -23.44
+      }
+    },
+    {
+      "id": "hellish_lair",
+      "n": 10,
+      "title": "hellish lair",
+      "type": "hellish_lair",
+      "model": "claude-sonnet-5-5",
+      "status": "done",
+      "end": "max_revisions",
+      "best": 1,
+      "revisions": 1,
+      "rounds": [
+        {
+          "n": 0,
+          "kept": true,
+          "overall": 5.67,
+          "scores": {
+            "silhouette": 6,
+            "legibility": 5,
+            "craft": 6,
+            "materials": 6,
+            "brief": 6,
+            "interior": 5
+          },
+          "ship": false,
+          "modelVerdict": "iterate",
+          "issues": {
+            "P0": 0,
+            "P1": 4,
+            "P2": 2
+          },
+          "issueParts": 6,
+          "unknownParts": 0,
+          "cost": 0.05,
+          "ms": 10041
+        },
+        {
+          "n": 1,
+          "kept": true,
+          "overall": 5.83,
+          "scores": {
+            "silhouette": 6,
+            "legibility": 5,
+            "craft": 6,
+            "materials": 6,
+            "brief": 6,
+            "interior": 6
+          },
+          "ship": false,
+          "modelVerdict": "iterate",
+          "issues": {
+            "P0": 0,
+            "P1": 3,
+            "P2": 2
+          },
+          "issueParts": 5,
+          "unknownParts": 0,
+          "cost": 1.01,
+          "ms": 207432
+        }
+      ],
+      "round0": {
+        "errors": 0,
+        "warnings": 0,
+        "byRule": {},
+        "metrics": {
+          "accentShare": 0.043,
+          "detailNoise": 0.347,
+          "windowsMin": 0,
+          "paletteAdherence": 1,
+          "parts": 7,
+          "cellsOutsideParts": 0,
+          "blocks": 4007
+        }
+      },
+      "final": {
+        "errors": 0,
+        "warnings": 0,
+        "byRule": {},
+        "metrics": {
+          "accentShare": 0,
+          "detailNoise": 0.326,
+          "windowsMin": 0,
+          "paletteAdherence": 1,
+          "parts": 7,
+          "cellsOutsideParts": 0,
+          "blocks": 4088
+        }
+      },
+      "critic": {
+        "calls": 2,
+        "disagreements": 0,
+        "issues": 11,
+        "unknownParts": 0,
+        "partGrounding": 1
+      },
+      "judge": {
+        "outcome": "tie",
+        "revisions": 1,
+        "best": 1,
+        "views": [
+          "iso",
+          "iso_back",
+          "front",
+          "top"
+        ],
+        "calls": [
+          {
+            "order": {
+              "A": "final",
+              "B": "round0"
+            },
+            "preferred": "B",
+            "margin": "slight",
+            "dimensions": {
+              "silhouette": "B",
+              "legibility": "B",
+              "craft": "A",
+              "materials": "A",
+              "brief": "B"
+            },
+            "reasons": "B fits the brief better. Its crenellated blackstone side wings make it read as a fortified lair. It has a clear gated entrance and spikes along the roof ridge, and the soul-fire lanterns along the lava path mean it is clearly lit. A is cleaner and more restrained but sparsely lit, with a weaker entrance. B's loose glowstone cubes and skull pedestals on the path add some clutter.",
+            "winner": "round0",
+            "usd": 0.0876
+          },
+          {
+            "order": {
+              "A": "round0",
+              "B": "final"
+            },
+            "preferred": "B",
+            "margin": "slight",
+            "dimensions": {
+              "silhouette": "B",
+              "legibility": "B",
+              "craft": "B",
+              "materials": "B",
+              "brief": "A"
+            },
+            "reasons": "Both versions have the same massing. B's fortified entrance is a clear red nether-brick arch, and its back wall has red pilasters, which give it a more finished, coherent look. A has more soul-fire lighting along the walkway, which suits the brief better. But that walkway is cluttered with loose blocks that look like they might be floating, and odd pedestals that read as noise.",
+            "winner": "final",
+            "usd": 0.0888
+          }
+        ]
+      },
+      "cost": {
+        "total": 2.932,
+        "round0": 1.8819,
+        "critic": 0.092,
+        "revise": 0.9581,
+        "loop": 1.0501,
+        "loopCap": 1.8819,
+        "judge": 0.1764,
+        "cacheReadTokens": 6044367
+      },
+      "ms": {
+        "total": 707332,
+        "loop": 217473
+      },
+      "estimate": {
+        "usdLow": 0.8,
+        "usdHigh": 2.5,
+        "critiqueUsdLow": 0.04,
+        "critiqueUsdHigh": 1.2,
+        "minutesLow": 4,
+        "minutesHigh": 10,
+        "critiqueMinutesLow": 0.5,
+        "critiqueMinutesHigh": 9,
+        "midUsd": 2.27,
+        "errorPct": 29.16
+      }
+    },
+    {
+      "id": "stilt_house",
+      "n": 13,
+      "title": "stilt house",
+      "type": "house",
+      "model": "claude-sonnet-5-5",
+      "status": "done",
+      "end": "max_revisions",
+      "best": 1,
+      "revisions": 1,
+      "rounds": [
+        {
+          "n": 0,
+          "kept": true,
+          "overall": 5.5,
+          "scores": {
+            "silhouette": 6,
+            "legibility": 5,
+            "craft": 4,
+            "materials": 6,
+            "brief": 6,
+            "interior": 6
+          },
+          "ship": false,
+          "modelVerdict": "iterate",
+          "issues": {
+            "P0": 2,
+            "P1": 3,
+            "P2": 1
+          },
+          "issueParts": 6,
+          "unknownParts": 0,
+          "cost": 0.05,
+          "ms": 14513
+        },
+        {
+          "n": 1,
+          "kept": true,
+          "overall": 5.67,
+          "scores": {
+            "silhouette": 6,
+            "legibility": 5,
+            "craft": 5,
+            "materials": 5,
+            "brief": 7,
+            "interior": 6
+          },
+          "ship": false,
+          "modelVerdict": "iterate",
+          "issues": {
+            "P0": 1,
+            "P1": 3,
+            "P2": 1
+          },
+          "issueParts": 5,
+          "unknownParts": 0,
+          "cost": 0.52,
+          "ms": 112985
+        }
+      ],
+      "round0": {
+        "errors": 0,
+        "warnings": 0,
+        "byRule": {},
+        "metrics": {
+          "accentShare": 0.123,
+          "detailNoise": 0.374,
+          "windowsMin": 2,
+          "paletteAdherence": 1,
+          "parts": 8,
+          "cellsOutsideParts": 0,
+          "blocks": 720
+        }
+      },
+      "final": {
+        "errors": 0,
+        "warnings": 0,
+        "byRule": {},
+        "metrics": {
+          "accentShare": 0.101,
+          "detailNoise": 0.33,
+          "windowsMin": 2,
+          "paletteAdherence": 1,
+          "parts": 8,
+          "cellsOutsideParts": 0,
+          "blocks": 717
+        }
+      },
+      "critic": {
+        "calls": 2,
+        "disagreements": 0,
+        "issues": 11,
+        "unknownParts": 0,
+        "partGrounding": 1
+      },
+      "judge": {
+        "outcome": "win",
+        "revisions": 1,
+        "best": 1,
+        "views": [
+          "iso",
+          "iso_back",
+          "front",
+          "top"
+        ],
+        "calls": [
+          {
+            "order": {
+              "A": "round0",
+              "B": "final"
+            },
+            "preferred": "B",
+            "margin": "clear",
+            "dimensions": {
+              "silhouette": "B",
+              "legibility": "B",
+              "craft": "B",
+              "materials": "B",
+              "brief": "tie"
+            },
+            "reasons": "Both have the same stilt house shape, with a stair up to a veranda and a thatch roof. B is the better one. Its dark eave trim finishes the roof edges and its back wall is clean, with neat windows. A has stray leaf blocks floating on its walls and scattered around the stilt bases, plus an odd glowing cap on the chimney, so it looks noisy and unfinished.",
+            "winner": "final",
+            "usd": 0.0542
+          },
+          {
+            "order": {
+              "A": "final",
+              "B": "round0"
+            },
+            "preferred": "A",
+            "margin": "clear",
+            "dimensions": {
+              "silhouette": "A",
+              "legibility": "A",
+              "craft": "A",
+              "materials": "A",
+              "brief": "tie"
+            },
+            "reasons": "Both meet the brief: a stilt house with a stair up to a veranda. A is cleaner. Its dark-wood eave trim sets the veranda roof apart from the main gable, and it has no stray blocks. B has scattered leaf blocks around the stilt bases and on the walls that look like noise or floating bits, and an odd lantern sits on top of the chimney. Its roof also runs over the veranda as one slab with no trim.",
+            "winner": "final",
+            "usd": 0.0534
+          }
+        ]
+      },
+      "cost": {
+        "total": 2.4408,
+        "round0": 1.8758,
+        "critic": 0.0784,
+        "revise": 0.4866,
+        "loop": 0.565,
+        "loopCap": 1.8758,
+        "judge": 0.1076,
+        "cacheReadTokens": 4569060
+      },
+      "ms": {
+        "total": 700814,
+        "loop": 127498
+      },
+      "estimate": {
+        "usdLow": 1.33,
+        "usdHigh": 2.22,
+        "critiqueUsdLow": 0.03,
+        "critiqueUsdHigh": 0.57,
+        "minutesLow": 6.3,
+        "minutesHigh": 10.6,
+        "critiqueMinutesLow": 0.1,
+        "critiqueMinutesHigh": 2.7,
+        "midUsd": 2.075,
+        "errorPct": 17.63
+      }
+    }
+  ],
+  "aggregates": {
+    "briefs": 4,
+    "done": 4,
+    "failed": 0,
+    "ends": {
+      "max_revisions": 4
+    },
+    "G1": {
+      "withRevision": 4,
+      "wins": 2,
+      "losses": 0,
+      "ties": 2,
+      "p": 0.25,
+      "significant": false,
+      "pass": false,
+      "note": "n=18 -> 13 wins needed; thresholds {\"12\":10,\"14\":11,\"16\":12,\"18\":13}"
+    },
+    "G2": {
+      "meanOverallRound0": 5.46,
+      "meanOverallInstalled": 5.63,
+      "rise": 0.17,
+      "p0ZeroAtInstall": 1,
+      "pass": false
+    },
+    "G3": {
+      "checkerErrorsInFinals": 0,
+      "warningsNotWorse": 4,
+      "warningsTotal": {
+        "round0": 0,
+        "final": 0
+      },
+      "paletteAdherence": {
+        "round0": 1,
+        "final": 1,
+        "dropPoints": 0
+      },
+      "finalsWith2Parts": 4,
+      "pass": true
+    },
+    "G4": {
+      "loopWithinCap": 4,
+      "of": 4,
+      "meanLoopUsd": 0.6255,
+      "meanRound0Usd": 1.6039,
+      "loopShare": 0.39,
+      "meanAddedMinutes": 2.36,
+      "estimateWithin50": 4,
+      "estimateTotalErrorPct": 0.37,
+      "pass": true
+    },
+    "metrics": {
+      "round0": {
+        "accentShare": 0.107,
+        "detailNoise": 0.38,
+        "windowsMin": 4.5,
+        "paletteAdherence": 1
+      },
+      "final": {
+        "accentShare": 0.121,
+        "detailNoise": 0.364,
+        "windowsMin": 4.5,
+        "paletteAdherence": 1
+      }
+    },
+    "critic": {
+      "calls": 8,
+      "disagreements": 0,
+      "partGrounding": 1
+    },
+    "round2": {
+      "briefs": 0,
+      "better": 0,
+      "worse": 0
+    },
+    "cost": {
+      "usd": 9.297,
+      "judge": 0.3793
+    }
+  }
+}

@@ -30,7 +30,7 @@ describe.skipIf(!hasKit)('tools/eval.mjs (sim tier)', () => {
       expect(a.status, a.stdout + a.stderr).toBe(0);
       const b = run(['run', '--tier', 'sim', '--label', 'ci-b', '--briefs', '2,5,16,17', '--out', out, '--no-results']);
       expect(b.status, b.stdout + b.stderr).toBe(0);
-      const [ra, rb] = ['ci-a', 'ci-b'].map((l) => fs.readdirSync(out).find((d) => d.startsWith(`${l}-`))!);
+      const [ra, rb] = ['ci-a', 'ci-b'].map((l) => fs.readdirSync(out).find((d) => d.startsWith(`${l}-`))!) as [string, string];
       const s = JSON.parse(fs.readFileSync(path.join(out, ra, 'summary.json'), 'utf8')) as { briefs: Array<{ id: string; status: string; judge: { outcome: string } | null; final: { errors: number } | null }>; aggregates: { done: number; G1: { withRevision: number } }; authVars: Record<string, boolean>; provenance: { hashes: Record<string, string> } };
       expect(s.aggregates.done).toBe(4);
       expect(s.briefs.find((x) => x.id === 'farmhouse_porch')!.judge!.outcome).toBe('win');

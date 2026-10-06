@@ -290,11 +290,11 @@ describe.skipIf(!hasKit)('the critique loop (sim backend, real kit)', () => {
     const off = est(undefined);
     expect(off.critiqueUsdLow).toBeUndefined();
     const on = est({ mode: 'loop' });
-    expect(on).toMatchObject({ usdLow: off.usdLow, usdHigh: off.usdHigh, critiqueUsdLow: 0.04, critiqueUsdHigh: 2.25 });
-    expect(on.critiqueMinutesLow).toBe(0.5);
+    expect(on).toMatchObject({ usdLow: off.usdLow, usdHigh: off.usdHigh, critiqueUsdLow: 0.02, critiqueUsdHigh: 2.24 });
+    expect(on.critiqueMinutesLow).toBe(0.1);
     expect(on.basis).toMatch(/critique: up to 2 revisions/);
     const report = est({ mode: 'report' });
-    expect(report).toMatchObject({ critiqueUsdLow: 0.04, critiqueUsdHigh: 0.15 });
+    expect(report).toMatchObject({ critiqueUsdLow: 0.02, critiqueUsdHigh: 0.08 });
     const capped = est({ mode: 'loop', budgetUsd: 0.5 });
     expect(capped.critiqueUsdHigh).toBe(0.5);
   });
@@ -304,10 +304,10 @@ describe.skipIf(!hasKit)('the critique loop (sim backend, real kit)', () => {
     const g = GroupRequest.parse({ name: 'G', bible: 'rustic', critique: { mode: 'loop' }, items: [{ ...request(), itemKey: 'a' }, { ...request(), itemKey: 'b', critique: { mode: 'off' } }] });
     const e = sc.estimates.group(g, sc.estimateCtx());
     expect(e.items!.map((i) => [i.itemKey, i.critiqueUsdLow ?? null])).toEqual([
-      ['a', 0.04],
+      ['a', 0.02],
       ['b', null],
     ]);
-    expect(e.critiqueUsdLow).toBe(0.04);
+    expect(e.critiqueUsdLow).toBe(0.02);
     expect(e.critiqueMinutesHigh).toBeGreaterThan(0);
   });
 });
