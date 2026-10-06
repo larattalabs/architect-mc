@@ -185,13 +185,18 @@ public final class JournalMigration {
 		for (Site.Pending p : data.pending()) {
 			items.add(new Item(p.site(), "pending", p.at(), p.at()));
 		}
+		List<String> unreferenced = unreferenced(snapDir, items);
 		if (late) {
 			items.removeIf(i -> !store.find(m -> m.site().equals(i.site().id())).isEmpty() || !Files.exists(snapDir.resolve(i.site().snapshot())));
 		}
-		items.sort(Comparator.comparingLong(Item::time));
+		items.sort(Comparator.comparingLong(i -> i.site().placedAt())); // layers follow placedAt (a pending site's time is its removal)
 		List<String> notes = new ArrayList<>();
 		List<String> flagged = new ArrayList<>();
 		Map<String, String> legacy = new LinkedHashMap<>();
+		if (!unreferenced.isEmpty()) {
+			notes.add("snapshot files no record names (not imported, moved to " + JournalStore.DIR + "/" + LEGACY_DIR + "/" + SNAPSHOT_DIR + "): "
+				+ String.join(", ", unreferenced));
+		}
 		JournalStore.Txn t = store.begin().label(late ? "migrate:late" : "migrate");
 		int made = 0;
 		Set<String> crates = new HashSet<>();
@@ -329,6 +334,26 @@ public final class JournalMigration {
 		return m;
 	}
 
+	/** The files in the snapshot folder that no record names (as its snapshot or its construction target), sorted. */
+	private static List<String> unreferenced(Path snapDir, List<Item> items) throws IOException {
+		if (!Files.isDirectory(snapDir)) {
+			return List.of();
+		}
+		Set<String> named = new HashSet<>();
+		for (Item it : items) {
+			named.add(it.site().snapshot());
+			Construction c = it.site().construction();
+			if (c != null) {
+				named.add(c.target());
+			}
+		}
+		List<String> out = new ArrayList<>();
+		try (var list = Files.list(snapDir)) {
+			list.map(f -> f.getFileName().toString()).filter(n -> !named.contains(n)).sorted().forEach(out::add);
+		}
+		return out;
+	}
+
 	/** The sites a 4d queue file was placing (their snapshots become PLACING entries). */
 	private static Set<String> placingSites(Path w) {
 		Set<String> out = new HashSet<>();
@@ -369,9 +394,11 @@ public final class JournalMigration {
 				if (Files.exists(target)) {
 					target = to.resolve(f.getFileName() + ".dup-" + System.currentTimeMillis());
 				}
+				JournalStore.faultStep("legacy move " + f.getFileName());
 				Files.move(f, target, StandardCopyOption.ATOMIC_MOVE);
 			}
 		}
+		JournalStore.faultStep("legacy move done");
 		Files.deleteIfExists(from);
 	}
 
