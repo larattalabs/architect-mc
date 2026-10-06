@@ -1826,7 +1826,17 @@ async function mig070() {
   const cev = await waitEvent((e) => e.event === 'ITEM_PLACED' && e.batch === cid, 120_000, 'C construction site');
   ids.C = cev.site;
   await tp(MIG.C.at[0] + 5.5, 85, MIG.C.at[2] + 30.5);
-  const f1 = await feed(ids.C, 0.5);
+  // half the bill through a hopper chain (the 4d way; the crate takes hopper deliveries)
+  const hc = await hopperFor(ids.C);
+  const st0 = await siteState(ids.C);
+  let nst = 0;
+  for (const r of st0.rows ?? []) {
+    const half = Math.floor((r.needed ?? 0) / 2);
+    if (half > 0 && nst < 27) {
+      await cmd(`/item replace block ${hc.chest.join(' ')} container.${nst++} with ${r.item} ${Math.min(half, /_door$|bed$|sign$|banner$/.test(r.item) ? 1 : 64)}`);
+    }
+  }
+  const f1 = { stacks: nst };
   let pc = 0;
   for (let i = 0, still = 0; i < 150; i++) {
     await sleep(2000);
@@ -1937,7 +1947,7 @@ steps.migration = async () => {
     const st = await siteState(m.ids.C);
     cState = st.state;
     if (st.state === 'built' || st.percent === 100) break;
-    await feed(m.ids.C, 1);
+    await feed(m.ids.C, 1); // straight into the crate (0.8.0 accepts it); the hopper keeps feeding too
     await sleep(5000);
   }
   check(cState === 'built' || (await siteState(m.ids.C)).percent === 100, `mig: the construction site C finished (${cState})`);
