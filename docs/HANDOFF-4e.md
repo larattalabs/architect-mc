@@ -35,13 +35,13 @@ a build within the last few commits (since the large-site work); "earlier" = an 
 | 7 survival layering | `survival` | PASS, earlier build (after the rule 3b fix) |
 | 8 size cap | `sizecap` | PASS, current: keep place max 15-43 ms, remove 25 ms, rts 300 by feature trees 25 ms, 304k-cell cell site 20/22 ms, all exact |
 | 9 leaves (adjacent toggle, held leaves both orders) | `leaves` | PASS, current (after the cut-plant and two-block fixes) |
-| 10 mega-lite | `megalite` | PARTIAL, current: placement (759,824 cells, relog resume), one lot's undo leaves the pad exact, group undo exact (10.9 s); FAIL on MSPT: 1 ms run max 237 ms, 10 ms run 298 ms, 4 ms run 59 ms (the 256x256 pad's start/commit or the many-lot group undo still has unsliced steps; trace with ARCHITECT_TRACE_JOBS=1) |
-| 10 bench, megabig | `bench`, `megabig` | written, not run |
+| 10 mega-lite | `megalite` | PASS, current: 759,824 cells, relog resume, lot undo leaves the pad exact, group undo exact (max 30 ms), MSPT max 17/39/33 ms at 1/4/10 ms |
+| 10 bench, megabig | `bench`, `megabig` | bench PASS (pad 0.04 B/cell, stack p50 1.0 / p99 1.4 µs at depth 4). megabig recorded: 11.6M cells, 33 min, 11 of 610 lots timed out NOT_LOADED (LOAD_BOUNDED 64 chunks at 1000x1000), MSPT max 237 ms (chunk generation of unexplored terrain) |
 | 4 migration, downgrade | `migration`, `downgrade` | written, not run (needs the 0.7.0 client: `use('old')`, ports 8892/8893) |
 | 11 API | `api`, `api14` | written, not run |
 | 9 4d regression | gate4d.mjs all + gate3.mjs + phase 1 Remove on the 4e client | earlier build only: all pass but L3 (pre-existing on v0.7.0: floating worldgen gravel at the lot edge, a known limit for "as built") |
 
-Left: mega-lite MSPT; bench/megabig; migration/downgrade; api/api14; gate 9 re-runs; then a full re-run of every step on the
+Left: migration/downgrade; api/api14; gate 9 re-runs; then a full re-run of every step on the
 final build; CONTRACT "Phase 4e as built" (deviations listed below in Known issues and the commit log since 711e4b5), PLAN
 status line. README and DEVBRIDGE are updated.
 
