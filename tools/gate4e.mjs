@@ -1259,7 +1259,7 @@ steps.api = async () => {
   const ro = await api(`roadcheck ${j1({ ...roadReq, points: [[30, 67, -20], [30, 67, 10]], owner: 'apitest:b' })}`);
   check(reasonsOf(ro).includes('OVERLAP_OWNED'), `api: a road over another owner's cells refuses OVERLAP_OWNED (${reasonsOf(ro)})`, ro);
   // a LAYER placement, the stack, the site views
-  const H = await result(await api('place cabin 28 67 -19 INSTANT unowned noactor 0 layer'));
+  const H = await result(await api('place cabin 28 67 -19 INSTANT unowned noactor 0 layer owner=apitest:a'));
   const st = await api('stack 30 67 -10');
   check(H.placed && st.length >= 2 && st.at(-1).site === H.siteId && st.at(-1).top && st[0].site === T.siteId,
     `api: Sites.stack() bottom first: ${st.map((x) => `${x.site}/${x.kind}/${x.policy}/L${x.layer}${x.top ? '/top' : ''}`).join(' ')}`, st);
@@ -1269,17 +1269,17 @@ steps.api = async () => {
   check(vt?.kind?.startsWith('cells:') && vt.policy === 'CELL' && vt.coveredBy.includes(H.siteId) && vh.covers.includes(T.siteId) && vh.policy === 'BOX',
     'api: SiteView kind, policy, covers, coveredBy', { vt, vh });
   // COVERED: removing the pad under H with REFUSE
-  const rr = await result(await api(`remove ${T.siteId} - noforce refuse`), 120_000);
-  check(!rr.removed && rr.blockers.some((b) => /COVERED/.test(b)), `api: CoveredPolicy.REFUSE refuses a covered site (${rr.blockers})`, rr);
+  const rr = await result(await api(`remove ${T.siteId} apitest:a noforce refuse`), 120_000);
+  check(!rr.removed && rr.blockers.some((b) => /cover/i.test(b)), `api: CoveredPolicy.REFUSE refuses a covered site (${rr.blockers})`, rr);
   await cmd('/save-all flush');
   await leaveWorld();
   copyWorld('G4E Api', 'G4E Api2');
   await openWorld('G4E Api');
-  const rk = await result(await api(`remove ${T.siteId} - noforce keep`), 300_000);
+  const rk = await result(await api(`remove ${T.siteId} apitest:a noforce keep`), 300_000);
   check(rk.removed && Object.keys(rk.handedDown).length > 0 && rk.restored > 0, `api: KEEP removes the pad, hands cells down (${j1(rk.handedDown)}), restored ${rk.restored}`, rk);
   await leaveWorld();
   await openWorld('G4E Api2');
-  const rcas = await result(await api(`remove ${T.siteId} - noforce cascade`), 300_000);
+  const rcas = await result(await api(`remove ${T.siteId} apitest:a noforce cascade`), 300_000);
   check(rcas.removed && rcas.cascaded.includes(H.siteId) && rcas.cascaded.includes(R.siteId), `api: CASCADE removes the covering sites first (${rcas.cascaded})`, rcas);
   // LAYER_DEPTH: nine cell sites on one cell
   const one = (i) => ({ kind: `apitest:d${i}`, cells: [[100, 70, 100, i % 2 ? 'minecraft:stone' : 'minecraft:dirt']], overlap: 'LAYER' });
@@ -1303,14 +1303,14 @@ steps.api = async () => {
   const big = await api(`cellscheck ${j1({ kind: 'apitest:big', fill: { min: [200, 0, 200], max: [300, 99, 299], id: 'minecraft:stone' } })}`);
   check(reasonsOf(big).includes('TOO_LARGE'), `api: a cell site over 1M cells refuses TOO_LARGE (${reasonsOf(big)})`, big);
   // OVERLAP_BUSY: a check over a site still being placed
-  await cmd('/architect budget 1');
+  await call('dev.placement.slow', { on: true });
   await mark();
   const bq = await queue({ id: 'busy', proximity: false, items: [{ key: 'b', bp: 'tavern', at: [60, 65, 40], rot: 0, mode: 'INSTANT', force: true }] });
   await sleep(1500);
   const busy = await api(`cellscheck ${j1({ kind: 'apitest:busy', fill: { min: [62, 66, 42], max: [64, 66, 44], id: 'minecraft:stone' }, overlap: 'LAYER' })}`);
   check(reasonsOf(busy).includes('OVERLAP_BUSY'), `api: layering over a site still being placed refuses OVERLAP_BUSY (${reasonsOf(busy)})`, busy);
+  await call('dev.placement.slow', { on: false });
   await waitBatch(bq, 300_000);
-  await cmd('/architect budget 4');
   // undoStage(RemoveOptions)
   await mark();
   const sg = await queue({ id: 'st2', autoApprove: true, items: [{ key: 'a', bp: 'cabin', at: [0, 65, 60], rot: 0, mode: 'INSTANT', force: true, stage: 's1' },

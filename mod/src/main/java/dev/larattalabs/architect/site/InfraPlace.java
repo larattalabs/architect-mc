@@ -339,13 +339,45 @@ public final class InfraPlace {
 		if (!cover.isEmpty() && covered == Sites.Covered.REFUSE) {
 			throw new Sites.SiteException(Reason.COVERED, cover.size() + " site(s) cover cells of " + id + " (" + String.join(", ", cover) + ")");
 		}
+		List<String> cascaded = new ArrayList<>();
+		List<String> infraCover = new ArrayList<>();
 		if (!cover.isEmpty() && covered == Sites.Covered.CASCADE) {
 			for (String c : cover) {
 				if (Sites.get(c) != null) {
-					Sites.removeDetailed(level, c, false, Sites.Covered.CASCADE);
+					Sites.Removed r = Sites.removeDetailed(level, c, false, Sites.Covered.CASCADE);
+					cascaded.addAll(r.cascaded());
+					cascaded.add(c);
 				} else if (Infras.get(c) != null) {
-					throw new Sites.SiteException(Reason.COVERED, id + " is covered by " + Infras.get(c).describe() + ": remove it first");
+					infraCover.add(c);
 				}
+			}
+			if (!infraCover.isEmpty()) {
+				// roads and cell sites on top go first (over ticks, one after the other), then this one
+				CompletableFuture<List<String>> chain = CompletableFuture.completedFuture(new ArrayList<>(cascaded));
+				for (String c : infraCover) {
+					chain = chain.thenCompose(done -> {
+						if (Infras.get(c) == null) {
+							return CompletableFuture.completedFuture(done);
+						}
+						try {
+							return remove(level, c, Sites.Covered.CASCADE).thenApply(r -> {
+								done.addAll(r.cascaded());
+								done.add(c);
+								return done;
+							});
+						} catch (Sites.SiteException e) {
+							return CompletableFuture.failedFuture(e);
+						}
+					});
+				}
+				return chain.thenCompose(done -> {
+					try {
+						return remove(level, id, Sites.Covered.KEEP).thenApply(r -> new Sites.Removed(r.site(), r.returned(), r.restored(), r.kept(), r.handedDown(),
+							List.copyOf(done), r.notes()));
+					} catch (Sites.SiteException e) {
+						return CompletableFuture.failedFuture(e);
+					}
+				});
 			}
 		}
 		List<String> notes = new ArrayList<>();
@@ -356,7 +388,8 @@ public final class InfraPlace {
 		CompletableFuture<Sites.Removed> f = new CompletableFuture<>();
 		job.futures.add(f);
 		Placement.add(level.getServer(), job);
-		return f.thenApply(r -> new Sites.Removed(r.site(), r.returned(), r.restored(), r.kept(), r.handedDown(), r.cascaded(), notes));
+		return f.thenApply(r -> new Sites.Removed(r.site(), r.returned(), r.restored(), r.kept(), r.handedDown(), cascaded.isEmpty() ? r.cascaded()
+			: List.copyOf(cascaded), notes));
 	}
 
 	/** The road handover: this road's changed cells another standing road runs on go to that road (one commit, before the undo). */
