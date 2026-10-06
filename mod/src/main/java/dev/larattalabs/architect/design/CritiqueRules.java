@@ -110,14 +110,22 @@ public final class CritiqueRules {
 			return c.pending().map(p -> "revise".equals(p) ? "revising after round " + n : "critiquing round " + n).orElse("critiquing round " + n)
 				+ (c.scored() ? " (best " + score(c.overall()) + ")" : "");
 		}
+		if (c.mode() == dev.larattalabs.architect.api.CritiqueMode.REPORT && c.scored()) {
+			return "report " + score(c.overall());
+		}
 		return c.scored() ? "critique " + score(c.overall()) + ", " + c.end().label() : "critique: " + c.end().label();
 	}
 
 	/** The end line of the Designs tab: "Critique: shipped at round 1 (7.4)", "Critique: ended (max revisions), best round 2 (6.8)". */
 	public static String endLine(Critique c) {
-		String mode = c.mode() == dev.larattalabs.architect.api.CritiqueMode.REPORT ? "Report" : "Critique";
+		boolean report = c.mode() == dev.larattalabs.architect.api.CritiqueMode.REPORT;
+		String mode = report ? "Report" : "Critique";
 		if (!c.ended()) {
 			return mode + ": " + brief(c);
+		}
+		if (report && c.scored()) {
+			// a report is one critic call: no loop ended, it scored
+			return "Report: scored " + score(c.overall()) + (c.bestRound().map(Critique.Round::ship).orElse(false) ? ", would ship" : "");
 		}
 		String at = c.best() >= 0 ? "round " + c.best() + (c.scored() ? " (" + score(c.overall()) + ")" : "") : "round 0";
 		if (c.end() == Critique.EndReason.SHIP) {

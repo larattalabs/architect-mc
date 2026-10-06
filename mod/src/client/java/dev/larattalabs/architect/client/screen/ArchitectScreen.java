@@ -1123,8 +1123,16 @@ public final class ArchitectScreen extends Screen {
 			DesignFeature.tickEstimate();
 			String est = f.estimateError != null ? "estimate: " + f.estimateError : f.estimate != null ? dev.larattalabs.architect.design.CritiqueRules
 				.estimateLine(f.estimate) : errors.isEmpty() ? "estimating…" : "estimate: fix the marked fields";
-			g.text(font, TextUtil.ellipsize(font, est, colW), rx, ry + 1, f.estimateError != null ? UiBits.errorText() : UiStyle.color(
-				"palette.ui.teal_text", 0xFF1E7472), false);
+			int ec = f.estimateError != null ? UiBits.errorText() : UiStyle.color("palette.ui.teal_text", 0xFF1E7472);
+			int cut = est.indexOf(" · with critique");
+			if (font.width(est) > colW && cut > 0) {
+				// two lines: the design, then with critique
+				g.text(font, TextUtil.ellipsize(font, est.substring(0, cut), colW), rx, ry + 1, ec, false);
+				ry += 10;
+				g.text(font, TextUtil.ellipsize(font, est.substring(cut + 3), colW), rx, ry + 1, ec, false);
+			} else {
+				g.text(font, TextUtil.ellipsize(font, est, colW), rx, ry + 1, ec, false);
+			}
 			ry += 12;
 		}
 		// the style bible (phase 4b): none = today's behaviour

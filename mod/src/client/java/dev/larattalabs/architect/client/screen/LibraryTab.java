@@ -662,7 +662,8 @@ final class LibraryTab {
 		if (critique.isPresent()) {
 			var cr = critique.get();
 			String head = (cr.mode() == dev.larattalabs.architect.api.CritiqueMode.REPORT ? "Critique (report): " : "Critique: ") + (cr.scored()
-				? String.format(java.util.Locale.ROOT, "%.1f", cr.overall()) : "not scored") + (cr.ended() ? " · " + cr.end().label() : "") + " · "
+				? String.format(java.util.Locale.ROOT, "%.1f", cr.overall()) : "not scored") + (cr.ended() && (cr.mode() != dev.larattalabs.architect.api.CritiqueMode.REPORT
+				|| !cr.scored()) ? " · " + cr.end().label() : "") + " · "
 				+ cr.openIssues().size() + " open issue" + (cr.openIssues().size() == 1 ? "" : "s") + (cr.stale() ? " · stale: the design changed since"
 					: "");
 			g.text(font, TextUtil.ellipsize(font, head, w), x, ty, cr.stale() ? UiBits.muted() : UiStyle.CLAY_DARK, false);

@@ -21,6 +21,14 @@
 //                                       approve 2 / redirect 1 / all detailed, approvalUi owner from the API, and the composite
 //                                       preview (5 styles at once with a screenshot, the cell cap and outline fallback, clear on
 //                                       world leave)
+//   node tools/apitest.mjs critique     phase 5a without Claude (--sim): CritiqueSpec's builder, the estimate's critique figures
+//                                       (one design, a group per item), a loop design with two rounds (DESIGN_CRITIQUED per round,
+//                                       CRITIQUING, the critique on DESIGN_DONE and on the entry), a report critique of the entry
+//                                       (critique.json, stale once the .nbt changes), a group with the loop on one item and off on
+//                                       another, a bible with the sheet critique and its restraint, archive, delete refused (owner,
+//                                       pinned) and allowed, a structured job with two images
+//   node tools/apitest.mjs critique-real   REAL (the real sidecar under the claude login, ~$1-5): one design with the loop
+//                                       requested through the Java API; prints its critique (APITEST_MODEL, APITEST_REVISIONS)
 //
 // Evidence goes to artifacts/apitest/<step>.json (APITEST_OUT overrides), screenshots to the client's ARCHITECT_SHOTS_DIR.
 
@@ -34,7 +42,8 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = process.env.APITEST_OUT ? path.resolve(process.env.APITEST_OUT) : path.join(root, 'artifacts', 'apitest');
 fs.mkdirSync(OUT, { recursive: true });
 const OWNER = 'apitest:village/1';
-const API_VERSION = process.env.APITEST_API_VERSION ?? '1.5.0';
+// the apitest jar's compiled-in ArchitectApi.VERSION (the unchanged 1.5.0 jar of a regression run: APITEST_API_VERSION=1.5.0)
+const API_VERSION = process.env.APITEST_API_VERSION ?? '1.6.0';
 // the dev client's game dir (tools/run-apitest-client.sh runs it in mod/)
 const GAME_DIR = process.env.APITEST_GAME_DIR ? path.resolve(process.env.APITEST_GAME_DIR) : path.join(root, 'mod', 'run');
 const SIDECAR_DATA = path.join(GAME_DIR, 'architect', 'sidecar-data');
@@ -1161,8 +1170,162 @@ switch (step) {
     }
     break;
   }
+  case 'critique': {
+    // phase 5a through the API (docs/CONTRACT.md "Phase 5a contract", "Java API (1.6.0)", the Java half) against the real
+    // sidecar's sim backend (tools/run-apitest-client.sh --sim; no Claude). The sim critic scores each round from the request's
+    // notes (`sim:critique=5/8`: round 0 scores 5 and iterates, round 1 scores 8 and ships).
+    const cfgFile = path.join(SIDECAR_DATA, 'config.json');
+    const oldCfg = fs.existsSync(cfgFile) ? fs.readFileSync(cfgFile, 'utf8') : null;
+    const b64 = (o) => Buffer.from(typeof o === 'string' ? o : JSON.stringify(o)).toString('base64');
+    const tag = Date.now().toString(36);
+    const SIZE = [21, 30, 21];
+    const LIBRARY = path.join(GAME_DIR, 'architect', 'library');
+    const restart = async () => {
+      await call('dev.launcher.restart');
+      for (let i = 0; i < 100; i++) {
+        await sleep(300);
+        if ((await call('dev.sidecar.state')).link === 'synced' && (await call('dev.launcher.state')).state === 'running') return;
+      }
+      throw new Error('the helper did not come back');
+    };
+    const designDone = (id, ms = 180_000) => waitEvent((e) => e.event === 'DESIGN_DONE' && e.id === id, ms);
+    fs.writeFileSync(cfgFile, JSON.stringify({ ...(oldCfg ? JSON.parse(oldCfg) : {}), simStepMs: 400, simDesignUsd: 0.05, designConcurrency: 3 }));
+    try {
+      await restart();
+      await api('clear');
+      const v = await api('version');
+      const want = ['critique', 'critiqueReport', 'jobImages', 'bibleAdmin', 'bibleRestraint'];
+      check(v.version === API_VERSION && want.every((f) => v.features.includes(f)), `VERSION ${v.version}, 5a features: ${want.filter((f) => v.features.includes(f)).join(', ')}`, v);
+
+      // ---- 1. the spec's builder refuses out-of-range fields
+      const bad = await api(`critspec ${b64({ mode: 'loop', maxRevisions: 5 })}`);
+      const okSpec = await api(`critspec ${b64({ mode: 'loop', maxRevisions: 2, budgetUsd: 5, views: ['iso', 'front'], extraCriteria: ['reads as a mill'] })}`);
+      check(/maxRevisions/.test(bad.refused ?? '') && okSpec.mode === 'LOOP', `CritiqueSpec.builder: maxRevisions 5 refused ("${bad.refused}"), a full loop spec builds`, { bad, okSpec });
+
+      // ---- 2. the estimate: separate critique figures, absent without critique
+      const plainD = { type: 'cabin', style: 'rustic', size: SIZE };
+      const e0 = await result(await api(`critestimate e0 ${b64(plainD)}`), 20_000);
+      const e1 = await result(await api(`critestimate e1 ${b64({ ...plainD, critique: { mode: 'loop', maxRevisions: 2 } })}`), 20_000);
+      const er = await result(await api(`critestimate er ${b64({ ...plainD, critique: { mode: 'report' } })}`), 20_000);
+      check(!e0.critique && e0.critiqueUsdHigh === 0 && e1.critique && e1.critiqueUsdLow > 0 && e1.critiqueUsdHigh >= e1.critiqueUsdLow
+        && e1.usdHigh === e0.usdHigh && er.critique && er.critiqueUsdHigh <= e1.critiqueUsdHigh,
+        `Designs.estimate: design $${e0.usdLow}-${e0.usdHigh}; loop adds $${e1.critiqueUsdLow}-${e1.critiqueUsdHigh} (${e1.critiqueMinutesLow}-${e1.critiqueMinutesHigh} min); report adds $${er.critiqueUsdLow}-${er.critiqueUsdHigh}`, { e0, e1, er });
+      const ge = await result(await api(`critgroupestimate ge ${b64({ name: `Est ${tag}`, bible: 'oak', items: [{ itemKey: 'a', ...plainD, itemCritique: { mode: 'loop', maxRevisions: 1 } }, { itemKey: 'b', ...plainD }] })}`), 20_000);
+      check(ge.critique && ge.items?.length === 2 && ge.items[0].critique && !ge.items[1].critique && ge.critiqueUsdHigh >= ge.items[0].critiqueUsdHigh,
+        `Designs.estimate(group): critique $${ge.critiqueUsdLow}-${ge.critiqueUsdHigh} in total; per item ${ge.items?.map((i) => `${i.itemKey}:${i.critique ? `$${i.critiqueUsdHigh}` : 'off'}`).join(' ')}`, ge);
+
+      // ---- 3. a loop design: two rounds (5 then 8), DESIGN_CRITIQUED per round, the critique on DESIGN_DONE and on the entry
+      const d1 = await result(await api(`critreq d1 ${b64({ type: 'cabin', style: 'rustic', name: `Critic ${tag}`, size: SIZE, notes: 'sim:critique=5/8', ext: { 'apitest:c': tag }, critique: { mode: 'loop', budgetUsd: 5 } })}`), 30_000);
+      check(/^d\d+$/.test(d1.value ?? '') && d1._thread === 'Server thread', `request(critique loop) -> ${d1.value}`, d1);
+      const dd1 = await designDone(d1.value);
+      const c1 = dd1?.critique;
+      check(dd1?.status === 'DONE' && c1?.rounds?.length === 2 && c1.best === 1 && c1.end === 'SHIP' && c1.overall === 8 && c1.rounds[0].overall === 5
+        && c1.rounds[0].issues >= 1 && c1.rounds[1].ship && c1.criticUsd > 0,
+        `DESIGN_DONE ${d1.value}: ${c1?.rounds?.length} rounds (${c1?.rounds?.map((r) => r.overall).join(' -> ')}), best ${c1?.best}, ${c1?.end}; critic $${c1?.criticUsd}, revise $${c1?.reviseUsd}`, dd1);
+      const evs = await events();
+      const crit = evs.filter((e) => e.event === 'DESIGN_CRITIQUED' && e.id === d1.value);
+      const doneT = evs.find((e) => e.event === 'DESIGN_DONE' && e.id === d1.value)?.t ?? 0;
+      check(crit.length === 2 && crit[0].n === 0 && crit[1].n === 1 && crit.every((e) => e.t <= doneT && e.serverThread === 'Server thread'),
+        `DESIGN_CRITIQUED once per round (${crit.map((e) => `#${e.n} ${e.overall}`).join(', ')}), before DESIGN_DONE, on the server thread`, crit);
+      const sawCritiquing = evs.some((e) => e.event === 'DESIGN_UPDATED' && e.id === d1.value && e.status === 'CRITIQUING');
+      check(sawCritiquing, `DESIGN_UPDATED showed Design.Status.CRITIQUING (${[...new Set(evs.filter((e) => e.event === 'DESIGN_UPDATED' && e.id === d1.value).map((e) => e.status))].join(' > ')})`);
+      const entryId = dd1?.entryId;
+      const ec1 = entryId ? await api(`critentry ${entryId}`) : null;
+      check(ec1?.overall === 8 && ec1.end === 'SHIP' && ec1.stale === false && Object.keys(ec1.scores ?? {}).length >= 5,
+        `Library.Entry(${entryId}).critique(): ${ec1?.mode} ${ec1?.overall} ${ec1?.end}, ${Object.keys(ec1?.scores ?? {}).length} scores, stale ${ec1?.stale}`, ec1);
+
+      // ---- 4. a report critique of the entry: completes with the critique; critique.json; stale once the .nbt changes
+      const rep = await result(await api(`critreport r1 ${entryId}`), 120_000);
+      check(rep.mode === 'REPORT' && rep.rounds?.length === 1 && typeof rep.overall === 'number' && rep._thread === 'Server thread',
+        `Designs.critique(${entryId}) -> report ${rep.overall} (${rep.openIssues?.length} open issues, ${rep.end}), on ${rep._thread}`, rep);
+      const repDone = (await events()).find((e) => e.event === 'DESIGN_DONE' && e.critiqueOf === entryId);
+      check(!!repDone && repDone.entryId === entryId, `its design ${repDone?.id}: critiqueOf ${repDone?.critiqueOf}, no new entry`, repDone);
+      const ec2 = await api(`critentry ${entryId}`);
+      const cjson = path.join(LIBRARY, entryId, 'critique.json');
+      check(ec2?.mode === 'REPORT' && ec2.stale === false && fs.existsSync(cjson), `the entry's critique is now the report's (critique.json), not stale`, ec2);
+      const nbt = path.join(LIBRARY, entryId, `${entryId}.nbt`);
+      const orig = fs.readFileSync(nbt);
+      fs.writeFileSync(nbt, Buffer.concat([orig, Buffer.from([0])]));
+      const ec3 = await api(`critentry ${entryId}`);
+      fs.writeFileSync(nbt, orig);
+      const ec4 = await api(`critentry ${entryId}`);
+      check(ec3?.stale === true && ec3.overall === ec2.overall && ec4?.stale === false, `a changed .nbt makes it stale (${ec3?.stale}); restored, fresh again (${ec4?.stale})`, { ec3, ec4 });
+      const noEntry = await result(await api(`critreport r2 no_such_entry_${tag}`), 20_000);
+      const loopOnEntry = await result(await api(`critreport r3 ${entryId} ${b64({ mode: 'loop' })}`), 20_000);
+      check(/no library entry/.test(noEntry.error ?? '') && /report/.test(loopOnEntry.error ?? ''), `refused: an unknown entry ("${noEntry.error}"), a loop on an entry ("${loopOnEntry.error}")`, { noEntry, loopOnEntry });
+
+      // ---- 5. a group: the group's loop for one item, an item turned off
+      const gr = await result(await api(`critgroup g1 ${b64({ name: `Crit set ${tag}`, bible: 'oak', critique: { mode: 'loop', budgetUsd: 5 }, items: [
+        { itemKey: 'a', type: 'house', style: 'rustic', name: `House ${tag}`, size: SIZE, notes: 'sim:critique=6/8' },
+        { itemKey: 'b', type: 'cabin', style: 'rustic', name: `Hut ${tag}`, size: SIZE, itemCritique: { mode: 'off' } }] })}`), 30_000);
+      const gDone = await waitEvent((e) => e.event === 'GROUP_DONE' && e.id === gr.value, 240_000);
+      const gget = await api(`critgroupget ${gr.value}`);
+      const ga = gget?.critiques?.a;
+      check(gDone?.status === 'DONE' && ga?.rounds?.length === 2 && ga.end === 'SHIP' && gget.critiques.b === null,
+        `group ${gr.value}: item a critiqued (${ga?.rounds?.map((r) => r.overall).join(' -> ')}, ${ga?.end}; rounds from its design record), item b off`, gget);
+
+      // ---- 6. bibles: the sheet critique, restraint, archive, delete refused while pinned and for another owner, then deleted
+      const sb = await result(await api(`sheetbible s1 ${b64({ prompt: 'mossy riverside mill town', name: `Moss ${tag}` })}`), 30_000);
+      const sbDone = await waitEvent((e) => e.event === 'BIBLE_DONE' && e.id === sb.id, 180_000);
+      const adm = await api(`bibleadmin ${sb.bibleId}`);
+      check(sbDone?.status === 'DONE' && adm?.restraint?.heroMotifs?.length <= 3 && adm.restraint.accentShareMax >= 0.04 && adm.archived === false,
+        `bible ${sb.bibleId}: format ${adm?.format}, restraint heroes [${adm?.restraint?.heroMotifs?.join(', ')}] accent <= ${adm?.restraint?.accentShareMax} ${adm?.restraint?.detailDensity}; sheet critique ${adm?.critique ? JSON.stringify(adm.critique).slice(0, 80) : 'none'}`, adm);
+      const pinD = await result(await api(`critreq pin ${b64({ type: 'cabin', style: 'rustic', name: `Pinned ${tag}`, size: SIZE, bible: sb.bibleId })}`), 30_000);
+      await designDone(pinD.value);
+      const delOther = await result(await api(`bibledelete d1 ${sb.bibleId} -`), 20_000);
+      const delPinned = await result(await api(`bibledelete d2 ${sb.bibleId} ${OWNER}`), 20_000);
+      check(/belongs to/.test(delOther.error ?? '') && /in use/.test(delPinned.error ?? '') && (await api(`bibleget ${sb.bibleId}`)) !== null,
+        `Bibles.delete refused: without the owner ("${delOther.error}"), while an entry pins it ("${(delPinned.error ?? '').slice(0, 90)}")`, { delOther, delPinned });
+      await result(await api(`biblearchive a1 ${sb.bibleId} true`), 20_000);
+      await sleep(1200);
+      const arch = await api(`bibleadmin ${sb.bibleId}`);
+      await result(await api(`biblearchive a2 ${sb.bibleId} false`), 20_000);
+      await sleep(1200);
+      const unarch = await api(`bibleadmin ${sb.bibleId}`);
+      check(arch?.archived === true && unarch?.archived === false, `Bibles.archive: archived ${arch?.archived}, then back ${unarch?.archived}`, { arch, unarch });
+      const fb = await result(await api(`bible free ${b64({ prompt: 'a short-lived test bible', name: `Gone ${tag}` })}`), 30_000);
+      await waitEvent((e) => e.event === 'BIBLE_DONE' && e.id === fb.id, 180_000);
+      const del = await result(await api(`bibledelete d3 ${fb.bibleId} ${OWNER}`), 20_000);
+      await sleep(1200);
+      check(Array.isArray(del.value ?? del) && JSON.stringify(del.value ?? del) === '[1]' && (await api(`bibleget ${fb.bibleId}`)) === null,
+        `Bibles.delete(${fb.bibleId}, owner) -> versions ${JSON.stringify(del.value ?? del)}; gone`, del);
+
+      // ---- 7. a structured job with two images
+      const ij = await result(await api('imagejob i1'), 30_000);
+      const ijDone = await waitEvent((e) => e.event === 'JOB_DONE' && e.id === ij.value, 120_000);
+      const refused9 = await api('imagejobrefused');
+      check(/^done$/i.test(ijDone?.status ?? '') && /at most 8/.test(refused9.refused ?? ''), `JobSpec.images: job ${ij.value} with 2 PNG blobs ${ijDone?.status}; 9 images refused ("${refused9.refused}")`, { ijDone, refused9 });
+    } finally {
+      if (oldCfg === null) fs.rmSync(cfgFile, { force: true });
+      else fs.writeFileSync(cfgFile, oldCfg);
+      await restart().catch((e) => console.log('restart:', e.message));
+    }
+    break;
+  }
+  case 'critique-real': {
+    // ONE REAL design with the critique loop requested through the Java API (docs/CONTRACT.md "Phase 5a gate" step 6, the first
+    // real Java-path check of a design): the client must run with the real sidecar under the claude login (not --sim). It costs
+    // a design plus its loop (about $1-5, 5-30 min). It prints the critique: rounds, scores, issues, the end reason.
+    const b64 = (o) => Buffer.from(typeof o === 'string' ? o : JSON.stringify(o)).toString('base64');
+    const tag = Date.now().toString(36);
+    const v = await api('version');
+    check(v.version === API_VERSION && v.features.includes('critique'), `VERSION ${v.version}, critique ${v.features.includes('critique')}`, v);
+    const req = { type: 'cabin', style: 'rustic', name: `Critique ${tag}`, size: [15, 14, 15], model: process.env.APITEST_MODEL ?? 'claude-sonnet-5-5',
+      critique: { mode: 'loop', maxRevisions: Number(process.env.APITEST_REVISIONS ?? 2) } };
+    const d = await result(await api(`critreq real ${b64(req)}`), 60_000);
+    check(/^d\d+$/.test(d.value ?? ''), `request(loop) through the API -> ${d.value ?? d.error}`, d);
+    const done = await waitEvent((e) => e.event === 'DESIGN_DONE' && e.id === d.value, Number(process.env.APITEST_REAL_MS ?? 45 * 60_000));
+    const c = done?.critique;
+    console.log(JSON.stringify(c, null, 1));
+    const crit = (await events()).filter((e) => e.event === 'DESIGN_CRITIQUED' && e.id === d.value);
+    check(done?.status === 'DONE' && !!c?.end && c.rounds?.length >= 1 && crit.length === c.rounds.filter((r) => r.overall !== null || (r.kept && r.error)).length,
+      `DESIGN_DONE ${d.value} ${done?.status}: ${c?.rounds?.length} rounds (${c?.rounds?.map((r) => r.overall).join(' -> ')}), best ${c?.best}, ${c?.end}; critic $${c?.criticUsd}, revise $${c?.reviseUsd}; ${crit.length} DESIGN_CRITIQUED`, done);
+    const e = done?.entryId ? await api(`critentry ${done.entryId}`) : null;
+    check(e?.stale === false && e.overall === c?.overall, `Library.Entry(${done?.entryId}).critique(): ${e?.overall}, ${e?.openIssues?.length} open issues`, e);
+    break;
+  }
   default:
-    console.error('usage: node tools/apitest.mjs survival|jobs|catchup|sets|preview');
+    console.error('usage: node tools/apitest.mjs survival|jobs|catchup|sets|massing|composite|preview|critique|critique-real');
     process.exit(2);
 }
 

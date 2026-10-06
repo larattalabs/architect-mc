@@ -89,6 +89,7 @@ public class ApiTest implements ModInitializer {
 		ApiTestSets.init();
 		ApiTestMassing.init();
 		ApiTestBatch.init();
+		ApiTestCritique.init();
 		CommandRegistrationCallback.EVENT.register((d, ctx, env) -> d.register(Commands.literal("apitest")
 			.then(Commands.argument("args", StringArgumentType.greedyString()).executes(ApiTest::run))));
 	}
@@ -185,6 +186,23 @@ public class ApiTest implements ModInitializer {
 			case "reskinvariant":
 			case "survival": {
 				return ApiTestSets.step(src, a);
+			}
+			case "critspec":
+			case "critreq":
+			case "critget":
+			case "critentry":
+			case "critreport":
+			case "critestimate":
+			case "critgroupestimate":
+			case "critgroup":
+			case "critgroupget":
+			case "sheetbible":
+			case "bibleadmin":
+			case "biblearchive":
+			case "bibledelete":
+			case "imagejob":
+			case "imagejobrefused": {
+				return ApiTestCritique.step(src, a);
 			}
 			case "massingreq":
 			case "massingget":
@@ -529,6 +547,9 @@ public class ApiTest implements ModInitializer {
 			j.add("issues", is);
 			o.add("conformance", j);
 		});
+		// 1.6.0
+		d.critique().ifPresent(c -> o.add("critique", ApiTestCritique.critique(c)));
+		o.addProperty("critiqueOf", d.critiqueOf().orElse(null));
 		return o;
 	}
 
