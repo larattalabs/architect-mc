@@ -1828,11 +1828,12 @@ async function mig070() {
   await tp(MIG.C.at[0] + 5.5, 85, MIG.C.at[2] + 30.5);
   const f1 = await feed(ids.C, 0.5);
   let pc = 0;
-  for (let i = 0; i < 90; i++) {
+  for (let i = 0, still = 0; i < 150; i++) {
     await sleep(2000);
     const st = await siteState(ids.C);
-    if (st.percent === pc && i > 5) break;
+    still = st.percent === pc ? still + 1 : 0;
     pc = st.percent;
+    if (pc > 0 && still >= 3) break; // it built what the half bill allows
   }
   check(pc > 0 && pc < 100, `mig 0.7.0: C half built (${pc}%, ${f1.stacks} stacks fed)`, { pc, f1 });
   // P: a tavern placing over ticks at 1 ms (a creative actor), then a clean stop mid-placement
