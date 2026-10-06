@@ -115,7 +115,8 @@ public final class ScreenFeature {
 		});
 		DevBridge.register("dev.design.fill", 10_000, "{reset?, buildingType? (not type: that is the message type; a non-preset one is an open type), openType?, profile?: [rules], "
 			+ "bible?: id|none, style? (chip id or any text), materials?, features?: [..] | \"a,b\", size?: "
-			+ "S|M|L|custom|plot, custom?: [x,y,z], remix?, name?, notes?, massingFirst?: bool|null (4c; null = the default for the size)} - set the Design tab's fields", (req, mc) -> {
+			+ "S|M|L|custom|plot, custom?: [x,y,z], remix?, name?, notes?, massingFirst?: bool|null (4c; null = the default for the size), critique?: bool, "
+			+ "maxRevisions?: 1|2 (5a)} - set the Design tab's fields", (req, mc) -> {
 				Fields f = Fields.of(req);
 				return DevBridge.onClient(mc, () -> {
 					fill(f);
@@ -294,6 +295,13 @@ public final class ScreenFeature {
 		if (f.has("massingFirst")) {
 			// (4c) true / false, or null = the default for the size (on for L and plot)
 			form.massingFirst = f.isExplicitNull("massingFirst") ? null : f.bool("massingFirst");
+		}
+		// (5a) "Critique and revise" and its revisions
+		if (f.has("critique")) {
+			form.critique = f.bool("critique");
+		}
+		if (f.has("maxRevisions")) {
+			form.maxRevisions = dev.larattalabs.architect.design.CritiqueRules.revisions((int) f.num("maxRevisions", 1, 2));
 		}
 		form.sendError = null;
 	}

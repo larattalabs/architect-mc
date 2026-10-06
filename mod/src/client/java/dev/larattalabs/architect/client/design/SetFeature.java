@@ -68,6 +68,9 @@ public final class SetFeature {
 		public int maxRedirects = SetSpec.DEFAULT_REDIRECTS;
 		/** (4c) Text for every brief: the site, its purpose, the neighbours, the street. */
 		public final TextModel context = new TextModel(SetSpec.MAX_CONTEXT + 50);
+		/** (5a) "Critique and revise" for every building (default off; sent only to a helper with the loop). */
+		public boolean critique = dev.larattalabs.architect.design.CritiqueRules.DEFAULT_ON;
+		public int maxRevisions = dev.larattalabs.architect.design.CritiqueRules.DEFAULT_REVISIONS;
 		public @Nullable String sendError;
 		public boolean sending;
 		// the live estimate
@@ -96,7 +99,13 @@ public final class SetFeature {
 		}
 
 		public JsonObject groupJson() {
-			return SetSpec.groupJson(draft(), bible == null ? null : bible(bible).map(Bible::name).orElse(null));
+			JsonObject g = SetSpec.groupJson(draft(), bible == null ? null : bible(bible).map(Bible::name).orElse(null));
+			// (5a) the items' critique (with massingFirst, the detail passes': the helper strips it from the massings)
+			JsonObject c = dev.larattalabs.architect.design.CritiqueRules.spec(critique, maxRevisions, has("critique"));
+			if (c != null) {
+				g.add("critique", c);
+			}
+			return g;
 		}
 
 		public void addItem() {
@@ -429,6 +438,8 @@ public final class SetFeature {
 			o.addProperty("concurrency", f.concurrency);
 			o.addProperty("budgetUsd", f.budgetUsd);
 			o.addProperty("massingFirst", f.massingFirst);
+			o.addProperty("critique", f.critique);
+			o.addProperty("maxRevisions", f.maxRevisions);
 			o.addProperty("maxRedirects", f.maxRedirects);
 			o.addProperty("context", f.context.value());
 			com.google.gson.JsonArray items = new com.google.gson.JsonArray();
@@ -455,6 +466,7 @@ public final class SetFeature {
 				e.addProperty("minutesHigh", f.estimate.minutesHigh());
 				e.addProperty("basis", f.estimate.basis());
 				o.add("estimate", e);
+				o.addProperty("estimateLine", dev.larattalabs.architect.design.CritiqueRules.estimateLine(f.estimate));
 			}
 			if (f.errors().isEmpty()) {
 				o.add("request", f.groupJson());
