@@ -629,16 +629,24 @@ public final class SiteJournal {
 		if (todo.isEmpty()) {
 			return true;
 		}
-		String key = dim + todo.get(0)[0] + "@" + todo.get(0)[1];
-		WARMING.computeIfAbsent(key, k -> CompletableFuture.runAsync(() -> {
-			for (String[] t : todo) {
-				try {
-					s.region(t[0], Long.parseLong(t[1]));
-				} catch (IOException e) {
-					// the check reads it again and reports
+		String key = dim + "|" + box.minX() + "," + box.minZ() + "," + box.maxX() + "," + box.maxZ();
+		CompletableFuture<Void> f = WARMING.get(key);
+		if (f != null && f.isDone()) {
+			// read once: go on even if the cache could not keep them all (a big journal: the check reads what it needs)
+			WARMING.remove(key);
+			return true;
+		}
+		if (f == null) {
+			WARMING.put(key, CompletableFuture.runAsync(() -> {
+				for (String[] t : todo) {
+					try {
+						s.region(t[0], Long.parseLong(t[1]));
+					} catch (IOException e) {
+						// the check reads it again and reports
+					}
 				}
-			}
-		}).whenComplete((v, e) -> WARMING.remove(k)));
+			}));
+		}
 		return false;
 	}
 
