@@ -116,8 +116,17 @@ public final class Placement {
 		return !JOBS.isEmpty() || Batches.anyRunning() || Groups.anyRemoving() || Builder.anyBuilding();
 	}
 
+	/**
+	 * Ticks after a world start in which placement waits (phase 4e): the server's own first ticks load chunks and warm up
+	 * (measured up to 45 ms), and resumed jobs and queued items would add to them.
+	 */
+	static final int START_GRACE_TICKS = 40;
+
 	private static void tick(MinecraftServer srv) {
 		server = srv;
+		if (srv.getTickCount() < START_GRACE_TICKS) {
+			return;
+		}
 		long start = System.nanoTime();
 		deadline = start + budgetNanos();
 		int before = workDone();

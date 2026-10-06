@@ -1132,22 +1132,28 @@ steps.megalite = async () => {
   await openWorld('G4E Mega4b');
   await tp(128.5, 160, 128.5);
   const pv0 = await verify(pad);
+  await call('dev.placement.stats', { reset: true });
   const t1 = Date.now();
   const rl = await result(await api(`remove ${lot} - noforce keep`), 600_000);
   const lotUndo = (Date.now() - t1) / 1000;
+  const lst = await call('dev.placement.stats', {});
   await settle(2000);
   const pv1 = await verify(pad);
+  check(!(lst.ticksOver50ms > 0), `megalite: one lot's undo has no tick over 50 ms (max ${lst.msptMax?.toFixed(2) ?? '-'} ms)`, lst);
   check(rl.removed && pv1.mismatches === 0 && pv1.owned > pv0.owned, `megalite: one lot's undo leaves the pad exact (the pad owns ${pv0.owned} -> ${pv1.owned} cells, `
     + `${pv1.mismatches} differ from its after; ${lotUndo.toFixed(2)} s)`, { pv0, pv1, rl });
   await leaveWorld();
   // the group undo
   await openWorld('G4E Mega4');
   await tp(128.5, 160, 128.5);
+  await call('dev.placement.stats', { reset: true });
   const t2 = Date.now();
   const g = await result(await api(`sgremove ${r4.done.group}`), 60 * 60_000);
   const groupUndo = (Date.now() - t2) / 1000;
+  const gst = await call('dev.placement.stats', {});
   const h1 = (await hash(MEGA_BOX)).sha256;
   check(g.removed && h1 === h0, `megalite: the group undo is exact (${g.restored} cells in ${groupUndo.toFixed(1)} s)`, g);
+  check(gst.ticksOver50ms === 0, `megalite: the group undo has no tick over 50 ms (max ${gst.msptMax?.toFixed(2)} ms)`, gst);
   await leaveWorld();
   for (const ms of [1, 10]) {
     runs[ms] = await megaRun(`G4E Mega${ms}`, ms);
@@ -1158,7 +1164,7 @@ steps.megalite = async () => {
   check(r4.stats.ticksOver50ms === 0, `megalite 4 ms: ${Math.round(r4.stats.cellsPerSecond)} cells/s, wall ${r4.wall.toFixed(1)} s, MSPT max ${r4.stats.msptMax?.toFixed(2)} ms`, r4.stats);
   const rec = Object.fromEntries(Object.entries(runs).map(([k, r]) => [k, { cellsPerSecond: r.stats.cellsPerSecond, wallSeconds: r.wall, msptMax: r.stats.msptMax,
     msptMean: r.stats.msptMean, ticksOver50ms: r.stats.ticksOver50ms, peakHeapMb: r.heap.peakMb, journalBytes: r.journalBytes, cells: r.cells, bytesPerCell: r.bytesPerCell }]));
-  ctx.mega = { runs: rec, lotUndoSeconds: lotUndo, groupUndoSeconds: groupUndo, relog: r4.relog };
+  ctx.mega = { runs: rec, lotUndoSeconds: lotUndo, groupUndoSeconds: groupUndo, groupUndoMsptMax: gst.msptMax, relog: r4.relog };
   saveCtx();
   return ctx.mega;
 };
