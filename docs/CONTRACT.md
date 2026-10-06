@@ -2260,7 +2260,8 @@ Where this section and the 4e text above disagree, this section wins.
 ## Phase 4e as built (API 1.5.0, mod 0.8.0, recorded 2026-10-06)
 
 Deviations, interpretations and measured numbers. The gate evidence is local: `artifacts/gate4e/` (REPORT.md, per-step
-JSON, `throughput.json`, `bench.json`), driven by `tools/gate4e.mjs`.
+JSON, `throughput.json`, `bench.json`), driven by `tools/gate4e.mjs`. Every gate step passed on the final build; gate 9's 4d
+re-run has one pre-existing failure class (below).
 
 **Journal and store**
 - The journal is AgentCraft `ab08a02`'s rules (`Journal.java` and its tests, verbatim plus `PLACING` and interned state tags),
@@ -2316,6 +2317,7 @@ JSON, `throughput.json`, `bench.json`), driven by `tools/gate4e.mjs`.
   a block the covering site kept drops once, with that site's removal.
 - `/architect remove <road> force` is CASCADE.
 - LOAD_BOUNDED fairness: the first item that could not get its chunk tickets has the next ones.
+- CASCADE on a road or cell site also removes the roads and cell sites on top (over ticks, before it).
 
 **Gate setup**
 - The fixtures stand on a flat meadow (`preset: flat`); normal worldgen near spawn was too steep for roads with at most 4 of
@@ -2324,3 +2326,33 @@ JSON, `throughput.json`, `bench.json`), driven by `tools/gate4e.mjs`.
 - The kit has no lever: the "lever flipped in H" edit flips H's door (`open`, the same volatile-property rule).
 - The 4d gate's lot L3 fails group-undo equality on the 0.7.0 jar too (worldgen gravel floating over a cave at the lot edge
   falls after the restore): a pre-existing limit, not a 4e regression.
+- The 4d gate's group-undo equality also fails on other lots of other base worlds (a fresh world each run) for the same
+  reason class: a worldgen block that cannot stand on its own after the restore (gravel over a cave, a brown mushroom in light
+  after the house is gone) is written back and then breaks. The atomic path and the 0.7.0 jar lose the same cell
+  (`artifacts/gate4e/regress4d-final/undodebug-atomic.json`, `v070/`): a known limit of exact Remove, not a 4e regression.
+
+**MSPT: what broke 50 ms and why (the gate's mega-lite and size-cap runs)**
+- A 655k-cell pad's start in a batch took 237-263 ms in one tick: decoding the queued cells, a boxed per-cell check and a
+  boxed sort. Now staged (see above).
+- The placement queue file was written on the server thread after every change and held the queued pad's cells (megabytes of
+  JSON): 20-40 ms per save. Now written off-thread.
+- A group removal marked 48 records pending one by one, saving the record file each time: 96 ms. Now one change, one save.
+- A road or cell site's restore gathered its 655k undo cells on the server thread (25-35 ms). Now off-thread.
+- After a relog the first ticks are the server's own warm-up (up to 45 ms) plus cold journal regions (a check decoding a
+  pad's region): placement now waits 40 ticks after a world start and reads the regions under a batch item off-thread first.
+- The size-cap keep: a cold template grid (118 ms), two checkSite passes, the undo plan (417 ms), its commit (199 ms) and the
+  restore writes (776 ms) in single ticks; all spread or moved off-thread as listed above.
+
+**Measured (final run, 82ec7b5; `artifacts/gate4e/REPORT.md`)**
+
+| What | Budget | Measured |
+|---|---|---|
+| placement throughput at 4 ms (village + roads) | >= 15k cells/s | 16.6k cells/s (8.2k at 1 ms, 57.2k at 10 ms); probes 19.5-24.3k |
+| MSPT, village + roads at 4 ms | max <= 25 ms | 12.7 ms |
+| size-cap keep placed / removed | no tick over 50 ms | max 23 / 33 ms; with randomTickSpeed 300 by trees 25 ms |
+| 304k-cell cell site placed / removed | no tick over 50 ms | 20 / 15 ms |
+| mega-lite at 1 / 4 / 10 ms, group undo | no tick over 50 ms | 23 / 46 / 29 ms, group undo 14 ms |
+| journal size | <= 10 bytes/cell | 256x256 pad 0.044, mega-lite 0.39, 1000x1000 0.40 bytes/cell |
+| `Sites.stack()` at depth 4 | recorded | p50 1.08 µs, p99 1.46 µs |
+| 1000x1000 generator (recorded) | | 11.57M cells in 33.6 min at 4 ms with LOAD_BOUNDED 64; 11 of 610 lots timed out NOT_LOADED; MSPT max 237 ms while the server generated unexplored terrain |
+
