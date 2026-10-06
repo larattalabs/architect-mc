@@ -181,7 +181,12 @@ usage hold, re-skin, open type). Caveats:
 - Real runs went over the WebSocket; the Java path is sim-only.
 - The bible set is cluttered and less legible, which is 5a's (critique loop) job.
 
-**Phase 4e status: BUILT 2026-10-06, gate pending verification** (branch `phase/4e`; API 1.5.0 / mod 0.8.0; the builder's run in
+**Phase 4e status: PASSED 2026-10-06** (gate-verifier, PASS WITH CAVEATS; reproduced every gate item in game on fresh terrain,
+`artifacts/gate4e-verify/`, local; the 4d L5 mushroom loss confirmed pre-existing on the same world with the 0.7.0 jar).
+Caveats carried forward: no migration unit tests (only the in-game step), add them in 5a; the 4 ms throughput margin is thin
+(15.1k vs the 15k budget in the verifier's run); invariant iii is narrowed where a player edits a cell with a CELL entry over a
+BOX entry (end state then depends on removal order, disclosed); the 1000x1000 run (recorded, not gated) had NOT_LOADED timeouts
+and 237 ms ticks while generating terrain, to chase in phase 6. Built on branch `phase/4e`; API 1.5.0 / mod 0.8.0; the builder's run in
 `artifacts/gate4e/REPORT.md`, local; deviations and measured numbers in CONTRACT "Phase 4e as built"). Sites are journal-backed
 (AgentCraft `ab08a02`'s rules): overlap with LAYER, removal in any order, roads and cell sites, 0.7.0 worlds migrate.
 
