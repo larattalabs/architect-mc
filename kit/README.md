@@ -11,6 +11,9 @@ with `node` (>= 22) and no `npm install`. The contract is `docs/CONTRACT.md` ("L
 node kit/build.mjs cabin [--out <dir>] [--max x,y,z] [--type <t>] [--json]   # build + check
 node kit/build.mjs cabin --palette cherry --values '{"width":11,"porch":false}'  # a variant
 node kit/render.mjs kit/out/cabin.nbt [--out <dir>] [--cutaway]                # iso / top / front previews
+node kit/render.mjs kit/out/cabin.nbt --views iso,iso_back,front,top,cutaway    # pick the views (phase 5a)
+node kit/tools/slices.mjs kit/out/cabin.nbt [--y N|A-B] [--box x0,z0,x1,z1] [--storeys] [--max-chars N]  # layered ASCII
+node kit/build.mjs cabin --restraint <bible.json> --json                       # metrics + restraint warnings (phase 5a)
 node kit/tools/describe.mjs cabin                                              # params, palettes (one JSON line)
 node kit/check.mjs <file.nbt> <sidecar.json> [--max x,y,z] [--type <t>] [--imported] [--json]  # check a pair, no source
 node kit/import.mjs <file.nbt> --id <id> --out <dir> [--name <n>] [--json]     # a structure-block save -> entry
@@ -27,7 +30,8 @@ node --test kit/test/*.test.mjs                                                #
 
 `build.mjs` writes `<out>/<id>.nbt` and `<out>/<id>.blueprint.json` (default `kit/out/`), prints `warning:` and
 `error:` lines and `check: OK` / `check: FAILED`. Exit 0 = OK, 1 = check failed, 2 = the design threw or bad usage.
-`--json` prints one line: `{ ok, errors, warnings, nbt, sidecar }` (also for bad usage).
+`--json` prints one line: `{ ok, errors, warnings, nbt, sidecar, metrics }` (also for bad usage; `metrics` is null when
+the check could not compute them).
 
 `--palette` is a preset name or JSON `{ preset?, wood?, stone?, roof?, accent? }` (inputs only; a preset is applied first,
 the other keys over it); `--values` is JSON `{ name: value }` over the params' defaults. An unknown palette or a value
@@ -205,7 +209,8 @@ interior cell lit by vanilla emitters, `--max`, `--type`. Warnings (phase 1): fl
 door, interior floor levels reachable from the entrance, enclosure (roof, wall gaps), unwritten interior cells,
 the tower / barn / gatehouse geometry and the minimum interior volume per type. Phase 2 warning: a wood or stone
 family that isn't from the sidecar's `palette`. Phase 4b warnings: named parts (fewer than 2, more than 20% of the cells
-outside); an open type's profile geometry.
+outside); an open type's profile geometry. Phase 5a warnings: `attach:` and `facing:` (below), and `restraint:` with
+`--restraint`.
 
 **Imports** (`--imported`, `import.mjs`): a structure the player built is theirs, so the rules about how a building
 works (anchors standable, doors closed / with buttons, an outside door, light) and a size that doesn't match the block
@@ -213,6 +218,66 @@ extents become warnings prefixed `imported:`. These stay errors: the structure f
 26.3 blocks with valid property values; every unknown or non-vanilla id is listed in one error with its block count),
 the sidecar fields and `--max`. Older saves are read as the game reads them: `Name`/`Properties` palette keys, and
 missing properties take their defaults.
+
+## Phase 5a: views, slices, attach and facing, metrics, restraint, the playbook
+
+**Renders.** `render.mjs --views <list>` writes `<id>.preview-<view>.png` for each listed view: `iso` (front-left),
+`iso_back` (the iso camera turned 180 degrees: back-right), `front`, `top`, `cutaway`. Without `--views` the default
+stays iso, top, front, and `--cutaway` adds cutaway. An unknown view is bad usage (exit 2).
+`renderStructure(nbt, { views })` takes the same list.
+
+**Slices** (`tools/slices.mjs`, from Steward's minecraft-structure-design skill, owned by Architect): the template as
+layered ASCII, one character per block, north up, west left, a legend and a listing of directional blocks with their
+facing. `--y` and `--box` pick layers and a sub-rectangle; `--storeys` prints only the floor row and the eye-height row
+(feet row + 1) of each storey (the interior's floor levels, `floorLevels`; at most 6 layers, needs the sidecar, by
+default `<id>.blueprint.json` next to the `.nbt`); `--max-chars N` truncates the output to N characters with a final
+`... (truncated)` line. `slices(structure, sidecar, opts)` is the same as a function.
+
+**Attach and facing** (warnings, ported from Steward's attach-lint; promoted to errors only after a full eval shows
+zero false positives). One line per kind with a count and up to 5 examples:
+- `attach:` ladders, wall torches (every kind), wall signs and wall banners have a sturdy block behind them (terrain, a
+  full block that is not a door, trapdoor or gate, or a stair / slab whose face on that side is full); a door's upper half
+  stands on its lower half; both halves of each bed; a hanging lantern hangs from a sturdy block, a chain, a fence, a wall,
+  bars or a pane. A lower half without its upper half and a door written open are already errors, not repeated.
+- `facing:` a door doesn't open into a wall: the cells in front of and behind it (both rows) are not solid (a door
+  turned 90 degrees in its wall, or one opening onto a block); a bed's head is against a wall (the cell beyond the head
+  is a full or thin block); a stair on a slope doesn't face down-slope (a bottom, straight stair in a run of at least 3
+  stairs rising one row per step in one direction, with free space above, must not face against the rise; a stair
+  facing across a run is a hip or a crooked eave and is not flagged).
+
+**Metrics** (`checkStructure(...).metrics`, and `metrics` in the `--json` line of `build.mjs` and `check.mjs`):
+`{ accentShare, detailNoise, windowsPerFacade: { north, south, east, west }, windowsMin, paletteAdherence, parts,
+cellsOutsideParts, blocks, topBlocks }`; fractions 0..1 rounded to 3 decimals.
+- *Shell cells*: non-air, non-liquid cells next to (6 directions) a cell of the outside flood: what a player sees
+  from outside. A shell cell is visible from a side when its neighbour on that side is outside.
+- `accentShare`: among shell cells without glass, panes, doors, trapdoors and light sources, the share that are
+  accents: blocks of the palette's accent fields (`accentPlanks`, `accentLog`, `accentStairs`, `accentSlab`,
+  `accentFence`, the bible role `accent`) and blocks in no palette field (decor: moss, wool, vines, a bible's extra
+  roles). A block in a main field, or the stairs / slab / wall of one, is main (so the roof stairs stay main when the
+  accent wood is the roof wood). Without a recorded palette the 4 most-used material families (a wood, a stone family,
+  else the block without its shape suffix) are main.
+- `detailNoise`: per side, over pairs of shell cells visible from that side that are neighbours in the facade plane
+  (along the facade, or one above the other), the share whose block ids differ; the mean over the 4 sides weighted by
+  pair count.
+- `windowsPerFacade`: per side, the connected groups of glass / glass-pane cells visible from that side;
+  `windowsMin` the smallest.
+- `paletteAdherence`: among all cells with a wood or stone family, the share whose family is the palette's (as the
+  `palette:` warning computes them); 1 without a recorded palette.
+- `parts`: named parts; `cellsOutsideParts`: written cells (air included, as the `parts:` warning counts) outside every
+  part; `blocks`: non-air cells; `topBlocks`: the 12 most used non-air ids (no `minecraft:`) with counts.
+
+**Restraint** (bible format 2, `lib/bible.mjs`): `bible.json` may say `format: 2` and
+`restraint: { heroMotifs (<= 3 of the motifs), accentShareMax (0.04-0.20, default 0.12), detailDensity (sparse |
+moderate | rich, default moderate), windowsPerFacadeMin (int, default 2) }`; format 2 allows at most 6 motifs and the 5
+required components plus at most 3. `validateBible` fills the defaults in; a format 1 bible keeps its limits and
+`restraintOf(bible)` gives it the defaults with its first 3 motifs as hero motifs. `--restraint <bible.json|name>` on
+`build.mjs` and `check.mjs` adds `restraint:` warnings when `accentShare > accentShareMax`, `windowsMin <
+windowsPerFacadeMin`, or `detailNoise` is over `DETAIL_NOISE_MAX[detailDensity]` (`lib/check.mjs`; provisional
+`{ sparse: 0.32, moderate: 0.42, rich: 0.5 }`: the kit examples measure 0.18-0.38 at every corner and preset, the 4b
+bible set 0.45-0.50; frozen after the 5a smoke run).
+
+**Playbook** (`PLAYBOOK.md`): Steward's design playbook (SKILL.md without §7), owned by Architect from 5a. The sidecar
+copies it into each design scratch dir and names it in BRIEF.md; it is never loaded through `settingSources`.
 
 ## Generated tables
 
