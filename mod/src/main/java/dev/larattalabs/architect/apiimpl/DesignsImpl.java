@@ -49,6 +49,10 @@ final class DesignsImpl implements Designs {
 
 	private final Map<String, Meta> meta = new LinkedHashMap<>();
 	private final Set<String> handled = new LinkedHashSet<>();
+	/** (5a) the critique rounds reported by DESIGN_CRITIQUED ({@code designId@createdAt#n}), persisted with the rest. */
+	private final Set<String> critiqued = new LinkedHashSet<>();
+	/** (5a) report critiques of library entries waiting for their design ({@link #critique}). */
+	private final PendingFutures<dev.larattalabs.architect.api.Critique> critiqueWaiting = new PendingFutures<>("critique", 10 * 60_000L);
 	private boolean loaded;
 
 	private static Path file() {
@@ -76,6 +80,9 @@ final class DesignsImpl implements Designs {
 			if (o.has("done") && o.get("done").isJsonArray()) {
 				o.getAsJsonArray("done").forEach(x -> handled.add(x.getAsString()));
 			}
+			if (o.has("critiqued") && o.get("critiqued").isJsonArray()) {
+				o.getAsJsonArray("critiqued").forEach(x -> critiqued.add(x.getAsString()));
+			}
 		} catch (IOException | RuntimeException e) {
 			Architect.LOGGER.warn("Could not read {}; design owners start empty", f, e);
 		}
@@ -87,6 +94,9 @@ final class DesignsImpl implements Designs {
 		}
 		while (handled.size() > KEEP) {
 			handled.remove(handled.iterator().next());
+		}
+		while (critiqued.size() > 4 * KEEP) {
+			critiqued.remove(critiqued.iterator().next());
 		}
 		JsonObject o = new JsonObject();
 		JsonObject ds = new JsonObject();
@@ -102,6 +112,9 @@ final class DesignsImpl implements Designs {
 		JsonArray done = new JsonArray();
 		handled.forEach(done::add);
 		o.add("done", done);
+		JsonArray cr = new JsonArray();
+		critiqued.forEach(cr::add);
+		o.add("critiqued", cr);
 		Path f = file();
 		try {
 			Files.createDirectories(f.getParent());
@@ -180,6 +193,10 @@ final class DesignsImpl implements Designs {
 			if (r.context() != null) {
 				o.add("context", Wire4c.contextWire(r.context()));
 			}
+			// 5a (only when on: a design with critique off is sent exactly as in 4c)
+			if (r.critique() != null && r.critique().on()) {
+				o.add("critique", Wire5a.spec(r.critique()));
+			}
 		}
 		return o;
 	}
@@ -195,7 +212,30 @@ final class DesignsImpl implements Designs {
 		if (r.bible() != null && !b.sidecarFeatures().contains("bibles")) {
 			return "designing with a bible needs a helper with bibles (phase 4b)";
 		}
-		return refusal4c(r, b.protocol(), b.sidecarFeatures());
+		String why = refusal4c(r, b.protocol(), b.sidecarFeatures());
+		return why != null ? why : refusal5a(r.critique(), b.protocol(), b.sidecarFeatures());
+	}
+
+	/** Why a critique can't be sent (null: it can, or it is off). Pure. */
+	static @Nullable String refusal5a(dev.larattalabs.architect.api.@Nullable CritiqueSpec c, int protocol, java.util.Set<String> features) {
+		if (c == null || !c.on()) {
+			return null;
+		}
+		if (protocol < 2 || !features.contains("critique")) {
+			return "critique needs a helper with the critique loop (phase 5a); this one does not have it";
+		}
+		return null;
+	}
+
+	/** Why a group's critiques can't be sent (null: they can, or none is on). Pure. */
+	static @Nullable String refusal5a(GroupRequest g, int protocol, java.util.Set<String> features) {
+		String why = refusal5a(g.critique(), protocol, features);
+		for (GroupRequest.Item it : g.items()) {
+			if (why == null) {
+				why = refusal5a(it.critique() != null ? it.critique() : it.request().critique(), protocol, features);
+			}
+		}
+		return why;
 	}
 
 	/** Why the 4c fields can't be sent (null: they can). Pure. */
@@ -304,7 +344,8 @@ final class DesignsImpl implements Designs {
 		return new Design(id == null ? "?" : id, Design.Status.of(str(raw, "status")), str(raw, "step") == null ? "" : str(raw, "step"),
 			Optional.ofNullable(str(raw, "blueprintId")), raw.has("cost") && raw.get("cost").isJsonObject() ? Cost.fromJson(raw.getAsJsonObject("cost"))
 			: Cost.NONE, Optional.ofNullable(str(raw, "error")), req, Optional.ofNullable(owner), num(raw, "createdAt"), num(raw, "updatedAt"),
-			Wire4c.designMassing(raw), Wire4c.conformance(raw.get("conformance")));
+			Wire4c.designMassing(raw), Wire4c.conformance(raw.get("conformance")), Wire5a.record(raw.get("critique")), Optional.ofNullable(str(raw,
+				"critiqueOf")));
 	}
 
 	/**
@@ -315,9 +356,11 @@ final class DesignsImpl implements Designs {
 		load();
 		Design d = view(raw);
 		ApiEvents.designUpdated(d);
+		fireCritiqued(d);
 		if (!d.status().isFinal()) {
 			return;
 		}
+		settleReport(d);
 		String key = d.id() + "@" + d.createdAt();
 		synchronized (this) {
 			if (!handled.add(key)) {
@@ -336,6 +379,112 @@ final class DesignsImpl implements Designs {
 		}
 		save();
 		ApiEvents.designDone(d);
+	}
+
+	// ------------------------------------------------------------------ 5a: critique
+
+	/** DESIGN_CRITIQUED for the rounds of {@code d} that got their verdict and were not reported yet (server thread). */
+	private void fireCritiqued(Design d) {
+		if (d.critique().isEmpty()) {
+			return;
+		}
+		List<dev.larattalabs.architect.api.Critique.Round> fresh = new ArrayList<>();
+		synchronized (this) {
+			for (var r : Wire5a.verdictRounds(d.critique().get())) {
+				if (critiqued.add(Wire5a.roundKey(d.id(), d.createdAt(), r.n()))) {
+					fresh.add(r);
+				}
+			}
+		}
+		if (fresh.isEmpty()) {
+			return;
+		}
+		save();
+		fresh.forEach(r -> ApiEvents.designCritiqued(d.id(), r));
+	}
+
+	/** A report critique's design ended: its {@link #critique} future completes (or fails). */
+	private void settleReport(Design d) {
+		if (d.critiqueOf().isEmpty()) {
+			return;
+		}
+		long now = System.currentTimeMillis();
+		if (d.status() == Design.Status.DONE && d.critique().isPresent()) {
+			critiqueWaiting.complete(d.id(), d.critique().get(), now);
+		} else {
+			critiqueWaiting.fail(d.id(), new IllegalStateException("the critique of " + d.critiqueOf().get() + " " + d.status().name().toLowerCase(
+				java.util.Locale.ROOT) + d.error().map(e -> ": " + e).orElse("")), now);
+		}
+	}
+
+	@Override
+	public CompletableFuture<dev.larattalabs.architect.api.Critique> critique(String entryId, dev.larattalabs.architect.api.@Nullable CritiqueSpec spec) {
+		JsonObject m;
+		try {
+			m = Wire5a.critiqueMessage(entryId, spec);
+		} catch (IllegalArgumentException e) {
+			return ApiImpl.onServerFuture(CompletableFuture.failedFuture(e));
+		}
+		CompletableFuture<dev.larattalabs.architect.api.Critique> done = new CompletableFuture<>();
+		ask("critique.report", "report critiques of library entries", m).whenComplete((res, err) -> {
+			if (err != null) {
+				done.completeExceptionally(err);
+				return;
+			}
+			String id = res.has("designId") ? res.get("designId").getAsString() : null;
+			if (id == null) {
+				done.completeExceptionally(new IllegalStateException("the helper sent no designId"));
+				return;
+			}
+			Architect.LOGGER.info("API: report critique {} of {} requested", id, entryId);
+			critiqueWaiting.await(id, done, System.currentTimeMillis(), ApiTimeouts.CRITIQUE_MS);
+			// it may have finished before the ack was processed (a design record already final)
+			ClientBridge b = ApiImpl.bridge();
+			if (b != null) {
+				for (JsonObject raw : b.designs()) {
+					if (id.equals(str(raw, "id"))) {
+						Design d = view(raw);
+						if (d.status().isFinal()) {
+							settleReport(d);
+						}
+					}
+				}
+			}
+		});
+		return ApiImpl.onServerFuture(done);
+	}
+
+	/** Fails the critique futures past their timeout (any thread). */
+	void expire(long now) {
+		critiqueWaiting.expire(now);
+	}
+
+	/**
+	 * A group with each item's critique filled from its design's record when this game has it (every round), else the item's
+	 * summary as the helper sent it.
+	 */
+	Group withCritiques(Group g) {
+		ClientBridge b = ApiImpl.bridge();
+		if (b == null || g.items().stream().noneMatch(i -> i.critique().isPresent())) {
+			return g;
+		}
+		Map<String, JsonObject> raws = new java.util.HashMap<>();
+		for (JsonObject raw : b.designs()) {
+			String id = str(raw, "id");
+			if (id != null) {
+				raws.put(id, raw);
+			}
+		}
+		List<Group.Item> items = new ArrayList<>();
+		for (Group.Item i : g.items()) {
+			JsonObject raw = raws.get(i.designId());
+			var full = raw == null ? java.util.Optional.<dev.larattalabs.architect.api.Critique>empty() : Wire5a.record(raw.get("critique"));
+			items.add(full.isEmpty() ? i : new Group.Item(i.itemKey(), i.ext(), i.designId(), i.entryId(), i.status(), i.step(), i.cost(), i.wave(),
+				i.role(), i.model(), i.type(), i.name(), i.error(), i.stage(), i.massing(), i.rounds(), i.designIds(), full));
+		}
+		return new Group(g.id(), g.name(), g.bible(), g.owner(), g.ext(), g.concurrency(), g.budgetUsd(), g.softBudgetFraction(), g.status(), g.reason(),
+			items, g.wave(), g.done(), g.failed(), g.cost(), g.usageLimitUntil(), g.createdAt(), g.updatedAt(), g.massingFirst(), g.approvalUi(),
+			g.maxRedirects(), g.context(), g.awaiting());
 	}
 
 	// ------------------------------------------------------------------ groups (4b)
@@ -366,13 +515,24 @@ final class DesignsImpl implements Designs {
 		return b.toString();
 	}
 
+	/** A group's critique refusal against the connected helper (null: fine or not connected; the send reports that). */
+	private static @Nullable String critiqueRefusal(GroupRequest r) {
+		ClientBridge b = ApiImpl.bridge();
+		return b == null || !b.connected() ? null : refusal5a(r, b.protocol(), b.sidecarFeatures());
+	}
+
 	/** Why 4b {@code feature} can't be used now, or null. */
 	static @Nullable String unavailable4b(@Nullable ClientBridge b, String feature, String what) {
 		if (b == null || !b.connected()) {
 			return "the Architect helper is not running";
 		}
 		if (b.protocol() < 2 || !b.sidecarFeatures().contains(feature)) {
-			return what + " need a helper with phase " + ("massing".equals(feature) ? "4c" : "4b") + " (" + feature + "); this one does not have it";
+			String phase = switch (feature) {
+				case "massing" -> "4c";
+				case "critique", "critique.report", "job.images", "bible.admin", "bible.restraint" -> "5a";
+				default -> "4b";
+			};
+			return what + " need a helper with phase " + phase + " (" + feature + "); this one does not have it";
 		}
 		return null;
 	}
@@ -407,6 +567,10 @@ final class DesignsImpl implements Designs {
 		} catch (IllegalArgumentException e) {
 			return ApiImpl.onServerFuture(CompletableFuture.failedFuture(e));
 		}
+		String why5a = critiqueRefusal(r);
+		if (why5a != null) {
+			return ApiImpl.onServerFuture(CompletableFuture.failedFuture(new IllegalArgumentException(why5a)));
+		}
 		return ask("design.groups", "design groups", m).thenApply(res -> {
 			String id = res.has("groupId") ? res.get("groupId").getAsString() : null;
 			if (id == null) {
@@ -420,7 +584,7 @@ final class DesignsImpl implements Designs {
 	@Override
 	public Optional<Group> group(String groupId) {
 		JsonObject g = groups.get(groupId);
-		return g == null ? Optional.empty() : Optional.of(Wire4b.group(g));
+		return g == null ? Optional.empty() : Optional.of(withCritiques(Wire4b.group(g)));
 	}
 
 	@Override
@@ -429,7 +593,7 @@ final class DesignsImpl implements Designs {
 		for (JsonObject g : groups.all()) {
 			Group v = Wire4b.group(g);
 			if (owner == null || owner.equals(v.owner().orElse(null))) {
-				out.add(v);
+				out.add(withCritiques(v));
 			}
 		}
 		return out;
@@ -465,11 +629,20 @@ final class DesignsImpl implements Designs {
 		} catch (IllegalArgumentException e) {
 			return ApiImpl.onServerFuture(CompletableFuture.failedFuture(e));
 		}
+		String why5a = critiqueRefusal(r);
+		if (why5a != null) {
+			return ApiImpl.onServerFuture(CompletableFuture.failedFuture(new IllegalArgumentException(why5a)));
+		}
 		return ask("estimates", "estimates", m).thenApply(Wire4b::estimate);
 	}
 
 	@Override
 	public CompletableFuture<Estimate> estimate(DesignRequest r) {
+		ClientBridge cb = ApiImpl.bridge();
+		String why5a = cb == null ? null : refusal5a(r.critique(), cb.protocol(), cb.sidecarFeatures());
+		if (why5a != null) {
+			return ApiImpl.onServerFuture(CompletableFuture.failedFuture(new IllegalArgumentException(why5a)));
+		}
 		JsonObject m = msg("design.estimate");
 		JsonObject w = wire(r, 2);
 		m.add("request", w);
@@ -490,7 +663,7 @@ final class DesignsImpl implements Designs {
 	 */
 	void fireGroup(JsonObject raw) {
 		RecordBook.Firing f = groups.fire(raw);
-		Group g = Wire4b.group(raw);
+		Group g = withCritiques(Wire4b.group(raw));
 		boolean awaiting = awaitingFires(g);
 		if (!f.updated() && !f.done() && !awaiting) {
 			return;

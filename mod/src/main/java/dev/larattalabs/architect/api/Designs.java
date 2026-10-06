@@ -21,6 +21,11 @@ import org.jspecify.annotations.Nullable;
  * {@link DesignRequest#fromMassing(String) fromMassing} details it, {@link #redirectMassing} makes a new version from notes; a
  * {@link GroupRequest#massingFirst massingFirst} group waits for {@link #approveGroup}
  * ({@link SiteEvents#GROUP_AWAITING_APPROVAL}).
+ *
+ * <p>Since 1.6.0, critique (docs/CONTRACT.md "Phase 5a contract"; a helper with {@code "critique"}): a request or a group with
+ * a {@link CritiqueSpec} is critiqued after it renders ({@link CritiqueMode#LOOP} revises on the verdict and installs the best
+ * round); {@link SiteEvents#DESIGN_CRITIQUED} fires once per round, and {@link Design#critique()} carries the rounds.
+ * {@link #critique} critiques an installed library entry (report only).
  */
 public interface Designs {
 	/** Sends the request; completes with the design id once the sidecar acked it, or fails (helper not running, refused). */
@@ -62,6 +67,19 @@ public interface Designs {
 
 	/** What one design would probably cost and take. Since 1.2.0. */
 	CompletableFuture<Estimate> estimate(DesignRequest r);
+
+	// ------------------------------------------------------------------ 1.6.0: critique
+
+	/**
+	 * A report critique of a library entry ({@code design.critique}, a helper with {@code "critiqueReport"}): one critic call on
+	 * the entry's installed files (re-rendering the views it lacks), about $0.1; no new entry, no design turn. The verdict is
+	 * written to the entry's {@code critique.json} ({@link Library.Entry#critique()}). Completes when that report design is done,
+	 * with its critique (its id is in {@link Design#critiqueOf()} records, as DESIGN_UPDATED / DESIGN_DONE); fails when it is
+	 * refused (a bundled entry, a spec whose mode is not report) or fails (the critic failed twice), or after
+	 * {@code architect.api.critiqueTimeoutMs} (default 15 min). {@code spec}: null = report with the defaults; its model, effort,
+	 * views and extra criteria apply. Since 1.6.0.
+	 */
+	CompletableFuture<Critique> critique(String entryId, @Nullable CritiqueSpec spec);
 
 	// ------------------------------------------------------------------ 1.3.0: massings
 

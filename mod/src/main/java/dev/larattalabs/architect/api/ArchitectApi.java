@@ -19,8 +19,10 @@ public interface ArchitectApi {
 	 * 1.4.0: batches over ticks, site groups, stages, the group crate, lot fitting (phase 4d).
 	 * 1.5.0: journal-backed sites: overlap policies (LAYER), covered policies, roads and cell sites as sites, the stack query
 	 * (phase 4e).
+	 * 1.6.0: critique (report and loop) on designs, groups and items, report critiques of library entries, DESIGN_CRITIQUED,
+	 * the critique figures of estimates, images in jobs, bible delete and archive, bible restraint (phase 5a).
 	 */
-	String VERSION = "1.5.0";
+	String VERSION = "1.6.0";
 
 	/** The singleton. Safe to call from any mod's initializer (it does not depend on Architect's init order). */
 	static ArchitectApi get() {
@@ -56,6 +58,8 @@ public interface ArchitectApi {
 	 * {@code "massing"}, and {@code "compositePreview"} ({@code ArchitectClientApi.previewComposite}) is always there.
 	 * Since 1.4.0, {@code "batchPlacement"}, {@code "siteGroups"}, {@code "stages"} and {@code "groupCrate"} are always there.
 	 * Since 1.5.0, {@code "journal"}, {@code "overlapLayer"}, {@code "roads"}, {@code "cellSites"} and {@code "stackQuery"}.
+	 * Since 1.6.0, a 5a helper adds {@code "critique"}, {@code "critiqueReport"}, {@code "jobImages"}, {@code "bibleAdmin"} and
+	 * {@code "bibleRestraint"}.
 	 */
 	Set<String> features();
 }

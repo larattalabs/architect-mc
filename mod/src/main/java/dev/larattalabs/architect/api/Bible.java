@@ -23,14 +23,47 @@ import java.util.Optional;
  *     roof_trim, chimney} plus what it adds)
  * @param owner who asked for it ({@code <modid>:<thing>}), absent = the player
  * @param ext the request's namespaced extra data (a copy)
+ * @param format (since 1.6.0) the bible format: 1 (4b) or 2 (5a, with restraint)
+ * @param restraint (since 1.6.0) its effective restraint (a format-1 bible: the defaults, its first 3 motifs as heroes)
+ * @param archived (since 1.6.0) hidden from the pickers ({@link Bibles#archive}); its entries and re-skins are unaffected
+ * @param critique (since 1.6.0) the sheet critique ({@code bible.json critique}: overall, scores, issues), when the bible job had
+ *     one ({@link BibleRequest#sheetCritique})
  */
 public record Bible(String id, String name, int version, List<Integer> versions, boolean builtin, String scope, Map<String, String> roles,
-	Optional<String> prose, Optional<Path> sheetPath, List<String> components, Optional<String> owner, JsonObject ext) {
+	Optional<String> prose, Optional<Path> sheetPath, List<String> components, Optional<String> owner, JsonObject ext, int format, Restraint restraint,
+	boolean archived, Optional<JsonObject> critique) {
 	public Bible {
 		versions = List.copyOf(versions);
 		roles = java.util.Collections.unmodifiableMap(new java.util.LinkedHashMap<>(roles));
 		components = List.copyOf(components);
 		ext = ext == null ? new JsonObject() : ext;
+		format = format == 2 ? 2 : 1;
+		restraint = restraint == null ? Restraint.DEFAULT : restraint;
+		critique = critique == null ? Optional.empty() : critique;
+	}
+
+	/** The 1.2.0 constructor (format 1, the default restraint, not archived). */
+	public Bible(String id, String name, int version, List<Integer> versions, boolean builtin, String scope, Map<String, String> roles,
+		Optional<String> prose, Optional<Path> sheetPath, List<String> components, Optional<String> owner, JsonObject ext) {
+		this(id, name, version, versions, builtin, scope, roles, prose, sheetPath, components, owner, ext, 1, Restraint.DEFAULT, false, Optional.empty());
+	}
+
+	/**
+	 * A bible's restraint (docs/CONTRACT.md "Bible-set clutter", bible format 2): a bible is a restraint as much as a palette.
+	 * Since 1.6.0.
+	 *
+	 * @param heroMotifs at most 3 of its motifs, on every building (other motifs at most once per building)
+	 * @param accentShareMax the most of a design's cells in accent roles, 0.04-0.20 (default 0.12)
+	 * @param detailDensity {@code sparse | moderate | rich} (default moderate)
+	 * @param windowsPerFacadeMin readable windows per facade (default 2)
+	 */
+	public record Restraint(List<String> heroMotifs, double accentShareMax, String detailDensity, int windowsPerFacadeMin) {
+		public static final Restraint DEFAULT = new Restraint(List.of(), 0.12, "moderate", 2);
+
+		public Restraint {
+			heroMotifs = heroMotifs == null ? List.of() : List.copyOf(heroMotifs);
+			detailDensity = detailDensity == null ? "moderate" : detailDensity;
+		}
 	}
 
 	public BiblePin pin() {

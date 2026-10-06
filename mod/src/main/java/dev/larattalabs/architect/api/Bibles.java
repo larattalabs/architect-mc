@@ -12,6 +12,9 @@ import org.jspecify.annotations.Nullable;
  * (deduplicated, also for jobs that finished while no world was loaded). The installed bibles are read from
  * {@code <gameDir>/architect/bibles/}; the built-in ones (the palette presets) come from the sidecar's index.
  * Calls are thread-safe; futures complete on the server thread. Since 1.2.0.
+ *
+ * <p>Since 1.6.0: {@link #delete} and {@link #archive} (library hygiene), and {@link Bible#restraint()} /
+ * {@link Bible#archived()}. {@link #list} still lists archived bibles (the UI's pickers hide them).
  */
 public interface Bibles {
 	/**
@@ -22,6 +25,26 @@ public interface Bibles {
 
 	/** Revises a bible (version + 1, {@code notes} say what to change). Built-in bibles refuse: request one with a seedPreset. */
 	CompletableFuture<BibleJob> revise(String bibleId, String notes);
+
+	/**
+	 * Revises a bible with a sheet critique at the end ({@code critique: {mode: report}}, a helper with {@code "critique"}) when
+	 * {@code sheetCritique}. Since 1.6.0.
+	 */
+	CompletableFuture<BibleJob> revise(String bibleId, String notes, boolean sheetCritique);
+
+	/**
+	 * Deletes a bible and every version of it ({@code bible.delete}, a helper with {@code "bibleAdmin"}); completes with the
+	 * versions deleted. Refused (the future fails, the message lists them) while any library entry, unfinished group, design or
+	 * massing pins any of its versions, and for another owner's bible unless {@code owner} is that owner. Built-in bibles refuse.
+	 * No force flag. Since 1.6.0.
+	 */
+	CompletableFuture<List<Integer>> delete(String bibleId, @Nullable String owner);
+
+	/**
+	 * Archives a bible (true: hidden from the pickers; its entries and re-skins are unaffected) or brings it back (false)
+	 * ({@code bible.archive}, a helper with {@code "bibleAdmin"}). Since 1.6.0.
+	 */
+	CompletableFuture<Void> archive(String bibleId, boolean archived);
 
 	/** Cancels a bible job (not a bible). */
 	void cancel(String jobId);

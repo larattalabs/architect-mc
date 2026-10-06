@@ -135,15 +135,28 @@ public record Group(String id, String name, BiblePin bible, Optional<String> own
 	 * @param massing (since 1.3.0) the item's massing (the latest version)
 	 * @param rounds (since 1.3.0) redirect rounds so far (at most the group's maxRedirects)
 	 * @param designIds (since 1.3.0) every design of the item, oldest first (massings, redirects, the detail)
+	 * @param critique (since 1.6.0) its design's critique. Filled from the item's design record when this game has it (every
+	 *     round in full, as {@link Design#critique()}); otherwise from the item's summary, whose {@code rounds} is only a count:
+	 *     then {@link Critique#rounds()} is empty, {@code scores} and {@code openIssues} are empty, and the best round's number,
+	 *     the end reason and the overall are set. Empty when critique is off
 	 */
 	public record Item(String itemKey, JsonObject ext, String designId, Optional<String> entryId, Design.Status status, String step, Cost cost,
 		int wave, GroupRequest.Role role, String model, String type, Optional<String> name, Optional<String> error, Optional<Stage> stage,
-		Optional<MassingRef> massing, int rounds, List<String> designIds) {
+		Optional<MassingRef> massing, int rounds, List<String> designIds, Optional<Critique> critique) {
 		public Item {
 			ext = ext == null ? new JsonObject() : ext;
 			stage = stage == null ? Optional.empty() : stage;
 			massing = massing == null ? Optional.empty() : massing;
 			designIds = designIds == null ? List.of() : List.copyOf(designIds);
+			critique = critique == null ? Optional.empty() : critique;
+		}
+
+		/** The 1.3.0 constructor (no critique). */
+		public Item(String itemKey, JsonObject ext, String designId, Optional<String> entryId, Design.Status status, String step, Cost cost, int wave,
+			GroupRequest.Role role, String model, String type, Optional<String> name, Optional<String> error, Optional<Stage> stage,
+			Optional<MassingRef> massing, int rounds, List<String> designIds) {
+			this(itemKey, ext, designId, entryId, status, step, cost, wave, role, model, type, name, error, stage, massing, rounds, designIds,
+				Optional.empty());
 		}
 
 		/** The 1.2.0 constructor (no massing pass). */

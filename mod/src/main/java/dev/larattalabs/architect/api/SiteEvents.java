@@ -60,6 +60,17 @@ public interface SiteEvents {
 		}
 	});
 	/** A variant was installed and loaded. */
+	/**
+	 * A critique round got its verdict (since 1.6.0): once per round of a critiqued design ({@link Design#critique()}), when the
+	 * critic scored it or failed on it ({@link Critique.Round#error()}); also a report critique's single round. Rounds that
+	 * failed the check before any critic call do not fire. Fires before the design's DESIGN_DONE (which carries the final
+	 * critique); deduplicated across reconnects and restarts, and caught up after a world load.
+	 */
+	Event<DesignCritiqued> DESIGN_CRITIQUED = EventFactory.createArrayBacked(DesignCritiqued.class, ls -> (id, r) -> {
+		for (DesignCritiqued l : ls) {
+			Guard.run(() -> l.onCritiqued(id, r), "DESIGN_CRITIQUED");
+		}
+	});
 	Event<VariantDone> VARIANT_DONE = EventFactory.createArrayBacked(VariantDone.class, ls -> e -> {
 		for (VariantDone l : ls) {
 			Guard.run(() -> l.onDone(e), "VARIANT_DONE");
@@ -253,6 +264,12 @@ public interface SiteEvents {
 	@FunctionalInterface
 	interface ReskinDone {
 		void onDone(Reskin reskin);
+	}
+
+	/** Since 1.6.0. */
+	@FunctionalInterface
+	interface DesignCritiqued {
+		void onCritiqued(String designId, Critique.Round round);
 	}
 
 	@FunctionalInterface

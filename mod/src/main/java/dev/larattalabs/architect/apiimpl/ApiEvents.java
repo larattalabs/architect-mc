@@ -112,6 +112,10 @@ public final class ApiEvents {
 		guard("DESIGN_DONE", () -> SiteEvents.DESIGN_DONE.invoker().onDone(d));
 	}
 
+	public static void designCritiqued(String designId, dev.larattalabs.architect.api.Critique.Round r) {
+		guard("DESIGN_CRITIQUED", () -> SiteEvents.DESIGN_CRITIQUED.invoker().onCritiqued(designId, r));
+	}
+
 	public static void variantDone(Library.Entry e) {
 		guard("VARIANT_DONE", () -> SiteEvents.VARIANT_DONE.invoker().onDone(e));
 	}

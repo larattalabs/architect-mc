@@ -101,13 +101,9 @@ public final class Wire4b {
 
 	// ------------------------------------------------------------------ sidecar -> API
 
+	/** An estimate (since 5a with its critique figures and items: {@link Wire5a#estimate}). */
 	public static Estimate estimate(JsonObject r) {
-		return new Estimate(d(r, "usdLow"), d(r, "usdHigh"), d(r, "minutesLow"), d(r, "minutesHigh"), str(r, "basis", ""));
-	}
-
-	private static double d(JsonObject o, String k) {
-		Double v = dbl(o, k);
-		return v == null ? 0 : v;
+		return Wire5a.estimate(r);
 	}
 
 	/** {@code Group} (group.upsert, snapshot.groups). */
@@ -124,7 +120,7 @@ public final class Wire4b {
 					Design.Status.of(str(i, "status")), str(i, "step", ""), cost(i), (int) num(i, "wave"), GroupRequest.Role.of(str(i, "role")),
 					str(i, "model", ""), str(i, "type", ""), Optional.ofNullable(str(i, "name")), Optional.ofNullable(str(i, "error")),
 					Group.Stage.of(str(i, "stage")), Wire4c.ref(i.get("massing")), (int) num(i, "rounds"), i.has("designIds") ? strings(i, "designIds")
-						: List.of(str(i, "designId", "?"))));
+						: List.of(str(i, "designId", "?")), Wire5a.summary(i.get("critique"))));
 			}
 		}
 		Double budget = dbl(o, "budgetUsd");
@@ -156,10 +152,15 @@ public final class Wire4b {
 		}
 		List<String> comps = strings(o, "components");
 		String sheet = str(o, "sheetPath");
+		// (5a) the restraint as the helper sent it (effective), else computed from bible.json (a format-1 bible: the defaults)
+		Bible.Restraint sent = Wire5a.restraint(o.get("restraint"));
+		Bible.Restraint restraint = o.has("motifs") ? Wire5a.restraintOf(o) : sent != null ? sent : Bible.Restraint.DEFAULT;
 		return new Bible(str(o, "id", "?"), str(o, "name", str(o, "id", "?")), version, versions, o.has("builtin") && o.get("builtin").getAsBoolean(),
 			"settlement".equals(str(o, "scope")) ? "settlement" : "building", roles, Optional.ofNullable(str(o, "prose")),
 			Optional.ofNullable(sheet == null || sheet.isBlank() ? null : Path.of(sheet)), comps.isEmpty() ? REQUIRED_COMPONENTS : comps,
-			Optional.ofNullable(str(o, "owner")), obj(o, "ext").deepCopy());
+			Optional.ofNullable(str(o, "owner")), obj(o, "ext").deepCopy(), (int) num(o, "format"), restraint, o.has("archived") && o.get("archived")
+				.isJsonPrimitive() && o.get("archived").getAsBoolean(), o.has("critique") && o.get("critique").isJsonObject() ? Optional.of(o
+				.getAsJsonObject("critique").deepCopy()) : Optional.empty());
 	}
 
 	/** {@code BibleJob} (bible.upsert, snapshot.bibles). */
@@ -266,9 +267,19 @@ public final class Wire4b {
 			}
 			o.add("context", Wire4c.contextWire(g.context()));
 		}
+		// 5a: the items' default critique (only when on, so an older helper sees the 4c shape)
+		if (g.critique() != null) {
+			o.add("critique", Wire5a.spec(g.critique()));
+		}
 		JsonArray items = new JsonArray();
 		for (GroupRequest.Item it : g.items()) {
 			JsonObject r = DesignsImpl.wire(it.request(), 2);
+			// 5a: the item's critique wins over the group's: its own, else its request's; OFF is sent to turn the group's off
+			r.remove("critique");
+			var ic = it.critique() != null ? it.critique() : it.request().critique();
+			if (ic != null) {
+				r.add("critique", Wire5a.spec(ic));
+			}
 			// the group sets these
 			r.remove("bible");
 			r.remove("bibleVersion");
@@ -325,7 +336,18 @@ public final class Wire4b {
 		if (r.seedPreset() != null) {
 			o.addProperty("seedPreset", r.seedPreset());
 		}
+		// 5a: only when on (an older helper sees the 4b shape)
+		if (r.sheetCritique()) {
+			o.add("critique", sheetCritique());
+		}
 		return o;
+	}
+
+	/** {@code {mode: "report"}}: a bible job's sheet critique (5a). */
+	public static JsonObject sheetCritique() {
+		JsonObject c = new JsonObject();
+		c.addProperty("mode", "report");
+		return c;
 	}
 
 	/** A reskin's {@code from}. */
@@ -418,6 +440,10 @@ public final class Wire4b {
 			versions(dir.resolve(id)).forEach(vs::add);
 			info.add("versions", vs);
 			info.addProperty("builtin", false);
+			// (5a) archive state lives next to the versions, not in bible.json
+			if (Wire5a.archived(dir.resolve(id))) {
+				info.addProperty("archived", true);
+			}
 			Path md = vdir.resolve("bible.md");
 			if (Files.isRegularFile(md)) {
 				String prose = Files.readString(md, StandardCharsets.UTF_8);

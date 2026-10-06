@@ -42,7 +42,7 @@ public final class ApiRules {
 					case "job.run", "jobs" -> "jobs";
 					case "job.tools", "jobTools" -> "jobTools";
 					case "blob.put", "blobs" -> "blobs";
-					default -> Wire4b.FEATURE_NAMES.getOrDefault(f, f);
+					default -> Wire4b.FEATURE_NAMES.getOrDefault(f, Wire5a.FEATURE_NAMES.getOrDefault(f, f));
 				});
 			}
 		}
