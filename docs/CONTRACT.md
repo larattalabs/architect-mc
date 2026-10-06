@@ -2938,7 +2938,8 @@ other real checks ~$3, about $85; the model subset (~$18) runs last and only if 
 ## Coordinator decisions on Noah's questions (provisional; N2 waits for Noah)
 
 - **N1** The UI default stays off after the gate; a settings toggle turns it on, and the default is revisited once real use shows its cost.
-- **N2** The gate's dollar cap and the wall time on Noah's login: **waiting for Noah**.
+- **N2** Noah: run the gate on his claude login (subscription). The dollar figures are API-equivalent usage, not a bill. The $120
+  cap stays as a guard on usage; holds that stretch the gate over more than a day are accepted.
 - **N3** Yes: ship at a mean of 7 with no score below 5 and no P0 issue; the loop at most doubles a design's cost.
 - **N4** Yes: commit small eval summaries (scores, costs, verdicts), no renders or transcripts. They hold no personal data.
 - **N5** Yes: the critic is Sonnet 5.5 and the blind judge Opus 5.5.
