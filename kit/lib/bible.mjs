@@ -2,8 +2,12 @@
 // bibles (the palette presets, as roles, without prose). A bible's roles generalise the kit palette: palette({ bible })
 // (lib/kit.mjs) derives every palette field from a role, so a palette-driven design re-skins under any bible.
 //
-//   bible.json      { id, name, version, prompt, scope, roles, proportions, roofLanguage, silhouette, motifs, tiers,
-//                     lighting, avoid, components, createdAt, cost }
+//   bible.json      { id, name, version, format?, prompt, scope, roles, proportions, roofLanguage, silhouette, motifs, tiers,
+//                     lighting, avoid, components, restraint? (format 2), createdAt, cost }
+//   Format 2 (phase 5a): `format: 2`, `restraint: { heroMotifs (<= 3 of the motifs), accentShareMax (0.04-0.20, 0.12),
+//   detailDensity (sparse|moderate|rich, moderate), windowsPerFacadeMin (int, 2) }` (defaults filled in by validateBible),
+//   at most 6 motifs, the 5 required components plus at most 3. Format 1 (no `format`) keeps its limits; restraintOf()
+//   gives it the default restraint with its first 3 motifs as hero motifs.
 //   bible.md        prose for designers
 //   components.mjs  the component library (lib/components.mjs)
 //   sheet.png       the rendered sample sheet (tools/components.mjs)
@@ -67,6 +71,32 @@ export function readBibleArg(arg) {
 export function loadBible(file) {
   const p = file instanceof URL ? fileURLToPath(file) : String(file);
   return JSON.parse(fs.readFileSync(p, 'utf8'));
+}
+
+// ---- restraint (phase 5a, bible format 2; docs/CONTRACT.md "Bible-set clutter")
+/** Format 2 limits: at most 6 motifs, and the required components plus at most 3. */
+export const FORMAT2_MAX_MOTIFS = 6;
+export const FORMAT2_MAX_EXTRA_COMPONENTS = 3;
+export const MAX_HERO_MOTIFS = 3;
+export const DETAIL_DENSITIES = ['sparse', 'moderate', 'rich'];
+export const ACCENT_SHARE_RANGE = [0.04, 0.2];
+export const RESTRAINT_DEFAULTS = Object.freeze({ accentShareMax: 0.12, detailDensity: 'moderate', windowsPerFacadeMin: 2 });
+
+/**
+ * The effective restraint of a bible: a format 2 bible's `restraint` over the defaults; a format 1 bible (or one without
+ * `restraint`) gets the defaults with its first 3 motifs as the hero motifs.
+ * @returns {{ heroMotifs: string[], accentShareMax: number, detailDensity: 'sparse'|'moderate'|'rich', windowsPerFacadeMin: number }}
+ */
+export function restraintOf(bible) {
+  const motifs = Array.isArray(bible?.motifs) ? bible.motifs.filter((m) => typeof m === 'string') : [];
+  const base = { heroMotifs: motifs.slice(0, MAX_HERO_MOTIFS), ...RESTRAINT_DEFAULTS };
+  const r = bible?.format === 2 && bible.restraint && typeof bible.restraint === 'object' ? bible.restraint : {};
+  const out = { ...base };
+  if (Array.isArray(r.heroMotifs)) out.heroMotifs = r.heroMotifs.slice(0, MAX_HERO_MOTIFS);
+  if (typeof r.accentShareMax === 'number') out.accentShareMax = r.accentShareMax;
+  if (DETAIL_DENSITIES.includes(r.detailDensity)) out.detailDensity = r.detailDensity;
+  if (Number.isInteger(r.windowsPerFacadeMin)) out.windowsPerFacadeMin = r.windowsPerFacadeMin;
+  return out;
 }
 
 const isStrList = (v, max) => Array.isArray(v) && v.length <= max && v.every((x) => typeof x === 'string' && x.length <= 200);
@@ -135,7 +165,30 @@ export function validateBible(j, opts = {}) {
   }
   b.proportions = { ...DEFAULT_PROPORTIONS, ...(b.proportions && typeof b.proportions === 'object' ? b.proportions : {}) };
   for (const k of ['prompt', 'roofLanguage', 'silhouette', 'lighting']) if (b[k] !== undefined && (typeof b[k] !== 'string' || b[k].length > 2000)) err(`${k} must be a string`);
-  for (const k of ['motifs', 'avoid']) if (b[k] !== undefined && !isStrList(b[k], 16)) err(`${k} must be a list of at most 16 strings`);
+  // format (phase 5a): 1 (absent) or 2; format 2 adds `restraint` and tighter limits on motifs and components
+  if (b.format !== undefined && b.format !== 1 && b.format !== 2) err(`format must be 1 or 2 (got ${JSON.stringify(b.format)})`);
+  const f2 = b.format === 2;
+  const maxMotifs = f2 ? FORMAT2_MAX_MOTIFS : 16;
+  if (b.avoid !== undefined && !isStrList(b.avoid, 16)) err('avoid must be a list of at most 16 strings');
+  if (b.motifs !== undefined && !isStrList(b.motifs, maxMotifs)) err(`motifs must be a list of at most ${maxMotifs} strings${f2 ? ' (format 2)' : ''}`);
+  if (!f2 && b.restraint !== undefined) err('restraint needs format: 2');
+  if (f2) {
+    const r = b.restraint ?? {};
+    if (!r || typeof r !== 'object' || Array.isArray(r)) err('restraint must be an object { heroMotifs, accentShareMax, detailDensity, windowsPerFacadeMin }');
+    else {
+      const motifs = Array.isArray(b.motifs) ? b.motifs : [];
+      const known = new Set(['heroMotifs', 'accentShareMax', 'detailDensity', 'windowsPerFacadeMin']);
+      for (const k of Object.keys(r)) if (!known.has(k)) err(`restraint: unknown field '${k}' (one of ${[...known].join(', ')})`);
+      if (r.heroMotifs !== undefined) {
+        if (!isStrList(r.heroMotifs, MAX_HERO_MOTIFS)) err(`restraint.heroMotifs must be a list of at most ${MAX_HERO_MOTIFS} of the motifs`);
+        else for (const m of r.heroMotifs) if (!motifs.includes(m)) err(`restraint.heroMotifs: '${m}' is not one of the motifs`);
+      }
+      if (r.accentShareMax !== undefined && !(typeof r.accentShareMax === 'number' && r.accentShareMax >= ACCENT_SHARE_RANGE[0] && r.accentShareMax <= ACCENT_SHARE_RANGE[1])) err(`restraint.accentShareMax must be a number ${ACCENT_SHARE_RANGE[0]}-${ACCENT_SHARE_RANGE[1]}`);
+      if (r.detailDensity !== undefined && !DETAIL_DENSITIES.includes(r.detailDensity)) err(`restraint.detailDensity must be one of ${DETAIL_DENSITIES.join(', ')}`);
+      if (r.windowsPerFacadeMin !== undefined && !(Number.isInteger(r.windowsPerFacadeMin) && r.windowsPerFacadeMin >= 0 && r.windowsPerFacadeMin <= 16)) err('restraint.windowsPerFacadeMin must be an integer 0..16');
+      b.restraint = { ...restraintOf({ ...b, restraint: undefined }), ...r };
+    }
+  }
   if (b.tiers !== undefined) {
     if (!b.tiers || typeof b.tiers !== 'object' || Array.isArray(b.tiers)) err('tiers must be an object { tier: [role, ...] }');
     else for (const [t, list] of Object.entries(b.tiers)) {
@@ -146,5 +199,6 @@ export function validateBible(j, opts = {}) {
   }
   if (b.components !== undefined && !(Array.isArray(b.components) && b.components.every((c) => typeof c === 'string' && /^[a-z][a-z0-9_]{0,39}$/.test(c)))) err('components must be a list of component names ([a-z][a-z0-9_]*)');
   b.components = [...new Set([...REQUIRED_COMPONENTS, ...(Array.isArray(b.components) ? b.components.filter((c) => typeof c === 'string') : [])])];
+  if (f2 && b.components.length > REQUIRED_COMPONENTS.length + FORMAT2_MAX_EXTRA_COMPONENTS) err(`components: format 2 allows the ${REQUIRED_COMPONENTS.length} required components plus at most ${FORMAT2_MAX_EXTRA_COMPONENTS} (got ${b.components.length - REQUIRED_COMPONENTS.length} more: ${b.components.filter((c) => !REQUIRED_COMPONENTS.includes(c)).join(', ')})`);
   return { ok: errors.length === 0, errors, bible: b };
 }
