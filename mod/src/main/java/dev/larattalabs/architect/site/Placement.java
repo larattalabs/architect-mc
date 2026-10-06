@@ -414,6 +414,42 @@ public final class Placement {
 		root.add("jobs", jobs);
 		root.add("removals", Groups.toJson());
 		Path f = file(srv);
+		// phase 4e: the file holds the queued cell sites' cells (a 256x256 pad is megabytes of JSON): it is written off the
+		// server thread, the latest state winning; a clean stop waits for it and writes at once
+		PENDING_SAVE.set(new Object[] {root, f});
+		if (clean) {
+			flushSaves();
+			writeSave(root, f);
+			return;
+		}
+		SAVER.execute(() -> {
+			Object[] w = PENDING_SAVE.getAndSet(null);
+			if (w != null) {
+				writeSave((JsonObject) w[0], (Path) w[1]);
+			}
+		});
+	}
+
+	private static final java.util.concurrent.atomic.AtomicReference<Object[]> PENDING_SAVE = new java.util.concurrent.atomic.AtomicReference<>();
+	private static final java.util.concurrent.ExecutorService SAVER = java.util.concurrent.Executors.newSingleThreadExecutor(r -> {
+		Thread t = new Thread(r, "Architect queue save");
+		t.setDaemon(true);
+		return t;
+	});
+
+	/** Waits until the queued saves are written. */
+	static void flushSaves() {
+		try {
+			SAVER.submit(() -> { }).get();
+		} catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+		} catch (java.util.concurrent.ExecutionException e) {
+			// a failed write was logged
+		}
+		PENDING_SAVE.set(null);
+	}
+
+	private static synchronized void writeSave(JsonObject root, Path f) {
 		try {
 			Path tmp = f.resolveSibling(FILE + ".tmp");
 			Files.writeString(tmp, GSON.toJson(root), StandardCharsets.UTF_8);
