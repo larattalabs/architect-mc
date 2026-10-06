@@ -14,3 +14,4 @@ sidecar/scratch/
 _import/
 artifacts/
 artifacts-*.log
+mod/logs/

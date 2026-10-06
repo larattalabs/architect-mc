@@ -161,14 +161,35 @@ final class TemplateWriter {
 					handled++;
 				}
 				case EDGE -> {
-					if (minX <= maxX) {
+					// vanilla's StructureTemplate.updateShapeAtEdge, face by face over ticks (phase 4e: a size-cap template's
+					// edge took 40 ms in one tick): the same faces in the same order, the same updates
+					if (minX > maxX) {
+						phase = POST;
+						cursor = -1;
+						continue;
+					}
+					if (faces == null) {
 						DiscreteVoxelShape shape = new BitSetDiscreteVoxelShape(maxX - minX + 1, maxY - minY + 1, maxZ - minZ + 1);
 						for (int i = placed.nextSetBit(0); i >= 0; i = placed.nextSetBit(i + 1)) {
 							shape.fill(px + cells.off[i * 3] - minX, py + cells.off[i * 3 + 1] - minY, pz + cells.off[i * 3 + 2] - minZ);
 						}
-						StructureTemplate.updateShapeAtEdge(level, flags, shape, minX, minY, minZ);
-						handled += Math.max(1, placed.cardinality() / 8);
+						it.unimi.dsi.fastutil.ints.IntArrayList f = new it.unimi.dsi.fastutil.ints.IntArrayList();
+						shape.forAllFaces((d, x, y, z) -> {
+							f.add(d.ordinal());
+							f.add(x);
+							f.add(y);
+							f.add(z);
+						});
+						faces = f.toIntArray();
+						edgeCursor = 0;
 					}
+					if (edgeCursor < faces.length) {
+						edgeFace(level, edgeCursor);
+						edgeCursor += 4;
+						handled++;
+						continue;
+					}
+					faces = null;
 					phase = POST;
 					cursor = -1;
 				}
@@ -188,6 +209,28 @@ final class TemplateWriter {
 			}
 		}
 		return handled;
+	}
+
+	private int @Nullable [] faces;
+	private int edgeCursor;
+	private final BlockPos.MutableBlockPos edgeA = new BlockPos.MutableBlockPos();
+	private final BlockPos.MutableBlockPos edgeB = new BlockPos.MutableBlockPos();
+
+	/** One face of vanilla's updateShapeAtEdge lambda. */
+	private void edgeFace(ServerLevel level, int k) {
+		net.minecraft.core.Direction d = net.minecraft.core.Direction.values()[faces[k]];
+		edgeA.set(minX + faces[k + 1], minY + faces[k + 2], minZ + faces[k + 3]);
+		edgeB.setWithOffset(edgeA, d);
+		BlockState a = level.getBlockState(edgeA);
+		BlockState b = level.getBlockState(edgeB);
+		BlockState na = a.updateShape(level, level, edgeA, d, edgeB, b, level.getRandom());
+		if (a != na) {
+			level.setBlock(edgeA, na, flags & -2);
+		}
+		BlockState nb = b.updateShape(level, level, edgeB, d.getOpposite(), edgeA, na, level.getRandom());
+		if (b != nb) {
+			level.setBlock(edgeB, nb, flags & -2);
+		}
 	}
 
 	private void set(ServerLevel level, int i) {

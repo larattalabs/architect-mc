@@ -20,6 +20,7 @@ import dev.larattalabs.architect.placement.Anchors;
 import dev.larattalabs.architect.placement.Blueprint;
 import dev.larattalabs.architect.placement.BlueprintTransform;
 import dev.larattalabs.architect.placement.Blueprints;
+import dev.larattalabs.architect.placement.TemplateGrid;
 import dev.larattalabs.architect.placement.LeafGuard;
 import dev.larattalabs.architect.survival.SurvivalWorld;
 import java.util.ArrayList;
@@ -59,7 +60,7 @@ public final class Batches {
 	static final TicketType TICKET = net.minecraft.core.Registry.register(BuiltInRegistries.TICKET_TYPE,
 		Identifier.fromNamespaceAndPath(Architect.MOD_ID, "placement"), new TicketType(0L, TicketType.FLAG_LOADING));
 	/** Temporary blockers: an item refused only for these waits instead of failing. */
-	static final Set<Reason> TEMPORARY = Set.of(Reason.PLAYER_IN_BOX, Reason.OCCUPIED, Reason.NOT_LOADED);
+	static final Set<Reason> TEMPORARY = Set.of(Reason.PLAYER_IN_BOX, Reason.OCCUPIED, Reason.NOT_LOADED, Reason.OVERLAP_BUSY);
 
 	private static final Map<String, QBatch> BATCHES = new LinkedHashMap<>();
 	private static int next = 1;
@@ -79,6 +80,15 @@ public final class Batches {
 	}
 
 	// ------------------------------------------------------------------ reads
+
+	/** Phase 4e: a job's writes are done and its P7 commit is submitted: the batch may start its next item meanwhile. */
+	static void committing(@Nullable String batchId, @Nullable String itemKey) {
+		QBatch b = batchId == null ? null : BATCHES.get(batchId);
+		QItem i = b == null || itemKey == null ? null : b.item(itemKey);
+		if (i != null && i.status == QItem.Status.PLACING) {
+			i.committing = true;
+		}
+	}
 
 	public static @Nullable QBatch get(String id) {
 		return BATCHES.get(id);
@@ -135,6 +145,10 @@ public final class Batches {
 		boolean creative = server.getDefaultGameType() == GameType.CREATIVE;
 		List<QItem> items = new ArrayList<>();
 		for (Batch.Item it : spec.items()) {
+			if (it.request() == null) {
+				items.add(infraItem(server, spec, it, plan.stageOf().get(it.itemKey()), survival));
+				continue;
+			}
 			var r = it.request();
 			JsonObject ext = spec.ext().deepCopy();
 			r.ext().entrySet().forEach(e -> ext.add(e.getKey(), e.getValue().deepCopy()));
@@ -151,6 +165,7 @@ public final class Batches {
 					q.fail(Reason.NOT_ALLOWED.name(), no);
 				}
 			}
+			q.layer = (r.overlap() != null ? r.overlap() : spec.overlap()) == dev.larattalabs.architect.api.OverlapPolicy.LAYER;
 			items.add(q);
 		}
 		Batch.WaitPolicy w = spec.waitPolicy();
@@ -194,6 +209,159 @@ public final class Batches {
 		return id;
 	}
 
+	/** A road or cell-site item (phase 4e): its request as JSON; the mode rule checked now (INSTANT only). */
+	private static QItem infraItem(MinecraftServer server, Batch spec, Batch.Item it, String stage, boolean survival) {
+		boolean road = it.road() != null;
+		var level = road ? it.road().level() : it.cells().level();
+		JsonObject ext = spec.ext().deepCopy();
+		(road ? it.road().ext() : it.cells().ext()).entrySet().forEach(e -> ext.add(e.getKey(), e.getValue().deepCopy()));
+		ServerPlayer actor = road ? it.road().actor() : it.cells().actor();
+		BlockPos first = road ? it.road().points().get(0) : it.cells().cells().isEmpty() ? BlockPos.ZERO : it.cells().cells().get(0).pos();
+		QItem q = new QItem(it.itemKey(), stage, it.after(), road ? "road" : "cells", Sites.dimensionId(level), first.getX(), first.getY(), first.getZ(), 0,
+			road ? it.road().force()
+			: it.cells().force(), ext, actor == null ? null : actor.getStringUUID(), false, survival);
+		q.itemKind = road ? "road" : "cells";
+		q.spec = road ? InfraSpec.road(it.road()) : InfraSpec.cells(it.cells());
+		var overlap = road ? null : it.cells().overlap() != null ? it.cells().overlap() : spec.overlap();
+		q.layer = overlap == dev.larattalabs.architect.api.OverlapPolicy.LAYER;
+		String no = InfraPlace.modeRefusal(server, road ? it.road().mode() : it.cells().mode(), actor, !road);
+		if (no != null) {
+			q.fail(Reason.NOT_ALLOWED.name(), no);
+		}
+		return q;
+	}
+
+	/** Starts a road or cell-site item: its check (waits on temporary blockers), then its job. */
+	private static void tryStartInfra(MinecraftServer server, QBatch b, QItem i) {
+		ServerLevel level = Sites.levelOf(server, i.dimension);
+		if (level == null || i.spec == null) {
+			fail(b, i, Reason.NOT_LOADED, i.dimension + " is not loaded");
+			return;
+		}
+		Sites.Trace tr = new Sites.Trace("tryStartInfra " + i.key);
+		boolean road = "road".equals(i.itemKind);
+		InfraPlace.Check c;
+		InfraSpec.Cells cells = null;
+		if (!road && CellsCheck.large(i.spec)) {
+			// a large cell site: decoded off the server thread, then checked over ticks (CellsCheck); started in the tick after
+			CellsCheck ck = (CellsCheck) i.prep;
+			if (ck == null) {
+				i.prep = new CellsCheck(i.spec, i.spec.get("kind").getAsString(), dev.larattalabs.architect.journal.Journal.Policy.valueOf(i.spec.get(
+					"policy").getAsString()), i.spec.get("naturalOnly").getAsBoolean(), i.layer, b.owner, i.force, level.getMinY(), level.getMaxY());
+				return;
+			}
+			if (b.loadChunks > 0 && ck.box() != null && !i.ticketed) {
+				ticketBox(server, b, i, level, ck.box().grow(1));
+				i.ticketed = true;
+			}
+			if (i.checked == null) {
+				i.checked = ck.step(level, Placement.deadline());
+				if (i.checked instanceof InfraPlace.Check ok && ok.ok()) {
+					return; // its start goes in the next tick
+				}
+				if (i.checked == null) {
+					return;
+				}
+			}
+			c = (InfraPlace.Check) i.checked;
+			i.prep = null;
+			i.checked = null;
+			i.ticketed = false;
+			tr.mark("staged check");
+		} else {
+		if (b.loadChunks > 0) {
+			ticketBox(server, b, i, level, infraBox(i));
+		}
+		tr.mark("ticket");
+		if (road) {
+			c = InfraPlace.checkRoad(level, InfraSpec.points(i.spec), i.spec.get("width").getAsInt(), InfraSpec.str(i.spec, "surface"), InfraSpec.str(i.spec,
+				"slab"), i.spec.get("lanterns").getAsBoolean(), i.spec.get("shallowDecks").getAsBoolean(), b.owner, i.force);
+		} else {
+			cells = InfraSpec.cellsOf(i.spec);
+			tr.mark("decode");
+			c = InfraPlace.checkCells(level, i.spec.get("kind").getAsString(), dev.larattalabs.architect.journal.Journal.Policy.valueOf(i.spec.get("policy")
+				.getAsString()), cells.pos(), cells.states(), cells.nbt(), i.spec.get("naturalOnly").getAsBoolean(), i.layer, b.owner, i.force, true);
+		}
+		}
+		tr.mark("check");
+		if (!c.ok()) {
+			tr.done();
+			Sites.Refusal r = c.refusals().get(0);
+			if (TEMPORARY.contains(r.reason())) {
+				waitFor(b, i, r.reason(), r.message());
+			} else {
+				fail(b, i, r.reason(), r.message());
+			}
+			return;
+		}
+		Site.Member member = new Site.Member(b.group, b.id, i.key);
+		if (c.box() != null && !loaded(level, c.box().grow(1))) {
+			waitFor(b, i, Reason.NOT_LOADED, "the cells are not loaded on the server (walk closer)");
+			return;
+		}
+		try {
+			InfraJob job = road ? InfraPlace.beginRoad(level, c, b.owner, i.ext, member) : InfraPlace.beginCells(level, i.spec.get("kind").getAsString(),
+				dev.larattalabs.architect.journal.Journal.Policy.valueOf(i.spec.get("policy").getAsString()), c, b.owner, i.ext, member);
+			tr.mark("begin");
+			tr.done();
+			i.status = QItem.Status.PLACING;
+			i.siteId = job.siteId;
+			i.reason = null;
+			i.message = "";
+			startStage(server, b, i);
+			Placement.add(server, job);
+			CHANGED.add(b.id);
+		} catch (Sites.SiteException e) {
+			if (TEMPORARY.contains(e.reason())) {
+				waitFor(b, i, e.reason(), e.getMessage());
+			} else {
+				fail(b, i, e.reason(), e.getMessage());
+			}
+		}
+	}
+
+	/** A road or cell-site job finished: its item is placed and the site joins the group. */
+	static void infraPlaced(MinecraftServer server, InfraJob job) {
+		QBatch b = job.batchId == null ? null : BATCHES.get(job.batchId);
+		QItem i = b == null || job.itemKey == null ? null : b.item(job.itemKey);
+		if (i == null) {
+			return;
+		}
+		SiteGroupRec g = Sites.group(b.group);
+		if (g != null && !g.sites().contains(job.siteId)) {
+			List<String> sites = new ArrayList<>(g.sites());
+			sites.add(job.siteId);
+			SiteGroupRec n = g.withSites(sites);
+			for (SiteGroupRec.StageRec st : n.stages()) {
+				if (st.items().contains(i.key) && st.batchId().equals(b.id) && !st.sites().contains(job.siteId)) {
+					List<String> ss = new ArrayList<>(st.sites());
+					ss.add(job.siteId);
+					n = n.withStage(st.name(), x -> x.withSites(ss));
+				}
+			}
+			Sites.putGroup(server, n);
+		}
+		placedItem(server, b, i);
+	}
+
+	static void infraFailed(MinecraftServer server, InfraJob job, String why) {
+		QBatch b = job.batchId == null ? null : BATCHES.get(job.batchId);
+		QItem i = b == null || job.itemKey == null ? null : b.item(job.itemKey);
+		if (i != null && i.status == QItem.Status.PLACING) {
+			fail(b, i, Reason.JOURNAL_UNAVAILABLE, why);
+		}
+	}
+
+	static void infraRequeue(MinecraftServer server, InfraJob job) {
+		QBatch b = job.batchId == null ? null : BATCHES.get(job.batchId);
+		QItem i = b == null || job.itemKey == null ? null : b.item(job.itemKey);
+		if (i != null && i.status == QItem.Status.PLACING) {
+			i.status = QItem.Status.QUEUED;
+			i.siteId = null;
+			CHANGED.add(b.id);
+		}
+	}
+
 	/**
 	 * The shared crate's cell when the batch names none (R6): beside the first construction item's approach end, outside every
 	 * item's predicted restore box and every standing site's ({@link CratePlacement}). Refuses the batch when there is none.
@@ -212,6 +380,17 @@ public final class Batches {
 		List<Anchors.Bounds> boxes = new ArrayList<>();
 		Sites.Prediction start = null;
 		for (Batch.Item it : spec.items()) {
+			if (it.request() == null) {
+				if (it.road() != null || it.cells() != null) {
+					// a road or cell site of the batch: the crate never goes on it (its box is a fair stand-in)
+					InfraPlace.Check c = it.road() != null ? InfraPlace.checkRoad(it.road().level(), it.road().points(), it.road().width(), it.road().surface(),
+						it.road().slab(), it.road().lanterns(), it.road().shallowDecks(), spec.owner(), true) : null;
+					if (c != null && c.box() != null) {
+						boxes.add(c.box());
+					}
+				}
+				continue;
+			}
 			Blueprint bp = Blueprints.get(it.request().blueprintId());
 			if (bp == null) {
 				continue;
@@ -261,6 +440,12 @@ public final class Batches {
 	}
 
 	// ------------------------------------------------------------------ the tick
+
+	/** {@link #tick} again in the same game tick (after a job finished), without advancing the wait clock. */
+	static void startNext(MinecraftServer server, long deadline) {
+		tick--;
+		tick(server, deadline);
+	}
 
 	static void tick(MinecraftServer server, long deadline) {
 		tick++;
@@ -401,6 +586,18 @@ public final class Batches {
 
 	/** Checks an item and starts it, makes it wait, or fails it. */
 	private static void tryStart(MinecraftServer server, QBatch b, QItem i) {
+		long t0 = System.nanoTime();
+		tryStart0(server, b, i);
+		if (System.getenv("ARCHITECT_TRACE_JOBS") != null) {
+			Architect.LOGGER.info("TRACE tick {} tryStart {} {} ms", server.getTickCount(), i.key, (System.nanoTime() - t0) / 1e6);
+		}
+	}
+
+	private static void tryStart0(MinecraftServer server, QBatch b, QItem i) {
+		if (!"building".equals(i.itemKind)) {
+			tryStartInfra(server, b, i);
+			return;
+		}
 		ServerLevel level = Sites.levelOf(server, i.dimension);
 		if (level == null) {
 			fail(b, i, Reason.NOT_LOADED, i.dimension + " is not loaded");
@@ -416,7 +613,29 @@ public final class Batches {
 		if (b.loadChunks > 0) {
 			ticketItem(server, b, i, level, bp);
 		}
-		Sites.Verdict v = Sites.verdict(level, bp, origin, rot, i.force, null, true, i.construction);
+		// a large design (phase 4e, the size cap): its grid is built off the server thread first, and its checks and its start
+		// (the second checks, the capture) go in separate ticks
+		boolean large = (long) bp.sizeX() * bp.sizeY() * bp.sizeZ() > LARGE_CELLS;
+		Blueprints.Entry entry = Blueprints.entry(bp.id());
+		if (large && entry != null) {
+			CompletableFuture<?> w = WARMING.computeIfAbsent(entry, e -> CompletableFuture.runAsync(() -> TemplateGrid.of(e).warm()));
+			if (!w.isDone()) {
+				return; // tried again next tick
+			}
+		}
+		if (large && i.checkedAt == tick - 1 && i.checkedSnap != null) {
+			i.checkedAt = -1;
+			startChecked(server, b, i, level, bp, origin, rot, i.checkedSnap);
+			return;
+		}
+		// the journal regions under it in memory first (read off the server thread)
+		int sx = BlueprintTransform.rotatedSizeX(bp.sizeX(), bp.sizeZ(), i.turns);
+		int sz = BlueprintTransform.rotatedSizeZ(bp.sizeX(), bp.sizeZ(), i.turns);
+		Anchors.Bounds near = new Anchors.Bounds(i.x - 24, i.y - 24, i.z - 24, i.x + sx + 24, i.y + bp.sizeY() + 8, i.z + sz + 24);
+		if (!SiteJournal.warm(i.dimension, near)) {
+			return;
+		}
+		Sites.Verdict v = Sites.verdict(level, bp, origin, rot, i.force, null, true, i.construction, i.layer, b.owner);
 		if (!v.ok()) {
 			Sites.Refusal hard = v.typed().stream().filter(r -> !TEMPORARY.contains(r.reason())).findFirst().orElse(null);
 			if (hard != null) {
@@ -433,11 +652,25 @@ public final class Batches {
 			waitFor(b, i, Reason.NOT_LOADED, "the area around the site is not loaded on the server (walk closer)");
 			return;
 		}
+		if (large) {
+			i.checkedAt = tick;
+			i.checkedSnap = snap;
+			return; // the start goes in the next tick
+		}
+		startChecked(server, b, i, level, bp, origin, rot, snap);
+	}
+
+	/** Items larger than this many cells (a design's box) check and start in separate ticks, after their grid is warm. */
+	static final long LARGE_CELLS = 100_000;
+	private static final Map<Blueprints.Entry, CompletableFuture<?>> WARMING = java.util.Collections.synchronizedMap(new java.util.WeakHashMap<>());
+
+	private static void startChecked(MinecraftServer server, QBatch b, QItem i, ServerLevel level, Blueprint bp, BlockPos origin, Rotation rot,
+		Anchors.@Nullable Bounds snap) {
 		Site.Member member = new Site.Member(b.group, b.id, i.key);
 		try {
 			// instant or construction: written over ticks; a construction site is converted when its last cell is written
 			long t0 = System.nanoTime();
-			PlaceJob job = Sites.beginPlacing(level, bp, origin, rot, i.force, b.owner, i.ext, member, i.construction, i.actor);
+			PlaceJob job = Sites.beginPlacing(level, bp, origin, rot, i.force, b.owner, i.ext, member, i.construction, i.actor, i.layer);
 			Placement.noteStart(job.siteId, System.nanoTime() - t0);
 			i.status = QItem.Status.PLACING;
 			i.siteId = job.siteId;
@@ -586,6 +819,30 @@ public final class Batches {
 		}
 	}
 
+	/** A placement failed before its first block and its record (its journal commit failed): its item fails. */
+	static void failedBeforeRecord(MinecraftServer server, PlaceJob job, String why) {
+		QBatch b = job.batchId == null ? null : BATCHES.get(job.batchId);
+		QItem i = b == null || job.itemKey == null ? null : b.item(job.itemKey);
+		if (i != null && i.status == QItem.Status.PLACING) {
+			untickItem(server, b, "job:" + i.key);
+			fail(b, i, Reason.JOURNAL_UNAVAILABLE, why);
+		}
+	}
+
+	/** A placement that stopped before its record (a crash): its item queues again. */
+	static void requeue(MinecraftServer server, PlaceJob job, String why) {
+		QBatch b = job.batchId == null ? null : BATCHES.get(job.batchId);
+		QItem i = b == null || job.itemKey == null ? null : b.item(job.itemKey);
+		if (i != null && i.status == QItem.Status.PLACING) {
+			i.status = QItem.Status.QUEUED;
+			i.siteId = null;
+			i.reason = null;
+			i.message = "";
+			CHANGED.add(b.id);
+			Architect.LOGGER.info("Batch {}: item {} queued again ({})", b.id, i.key, why);
+		}
+	}
+
 	/** Remove during placing took the job out (the site was restored at once). */
 	static void aborted(MinecraftServer server, PlaceJob job, String why) {
 		QBatch b = job.batchId == null ? null : BATCHES.get(job.batchId);
@@ -636,7 +893,7 @@ public final class Batches {
 			untickItem(server, b, q.key);
 			ApiEvents.itemFailed(b, q);
 		}
-		QItem placing = b.placing();
+		QItem placing = b.blocking(); // an item committing its after finishes (its writes are done)
 		if (placing != null && placing.siteId != null && rollBackPlacing) {
 			Placement.rollBack(server, placing.siteId, why);
 		}
@@ -694,9 +951,49 @@ public final class Batches {
 		int m = LotFitting.frontMargin(bp) + LeafGuard.RADIUS + 1;
 		Set<Long> want = chunks(new Anchors.Bounds(i.x - m, i.y, i.z - m, i.x + sx - 1 + m, i.y + bp.sizeY() - 1, i.z + sz - 1 + m));
 		int count = held.values().stream().mapToInt(Set::size).sum();
-		if (count + want.size() > b.loadChunks) {
+		if (!ticketTurn(b, i) || count + want.size() > b.loadChunks) {
+			if (want.size() <= b.loadChunks) {
+				ticketWait(b, i); // it fits once the budget is free (a larger one waits for a player, LOADED_ONLY)
+			}
 			return; // over the bound: it waits for a player like LOADED_ONLY
 		}
+		ticketGot(b, i);
+		for (long c : want) {
+			level.getChunkSource().addTicketWithRadius(TICKET, ChunkPos.unpack(c), 0);
+		}
+		held.put(i.key, want);
+		levels.put(b.id + "/" + i.key, i.dimension);
+	}
+
+	/** The area a road or cell-site item touches (its points' or cells' box, grown by the road's width and search). */
+	private static Anchors.Bounds infraBox(QItem i) {
+		int[] bb = {Integer.MAX_VALUE, Integer.MAX_VALUE, Integer.MAX_VALUE, Integer.MIN_VALUE, Integer.MIN_VALUE, Integer.MIN_VALUE};
+		List<BlockPos> ps = "road".equals(i.itemKind) ? InfraSpec.points(i.spec) : InfraSpec.cellsOf(i.spec).pos();
+		for (BlockPos p : ps) {
+			bb[0] = Math.min(bb[0], p.getX());
+			bb[1] = Math.min(bb[1], p.getY());
+			bb[2] = Math.min(bb[2], p.getZ());
+			bb[3] = Math.max(bb[3], p.getX());
+			bb[4] = Math.max(bb[4], p.getY());
+			bb[5] = Math.max(bb[5], p.getZ());
+		}
+		int g = "road".equals(i.itemKind) ? 10 : 1;
+		return new Anchors.Bounds(bb[0] - g, bb[1] - g, bb[2] - g, bb[3] + g, bb[4] + g, bb[5] + g);
+	}
+
+	/** LOAD_BOUNDED tickets for a box (a road or cell-site item), while the batch holds at most {@code loadChunks}. */
+	private static void ticketBox(MinecraftServer server, QBatch b, QItem i, ServerLevel level, Anchors.Bounds box) {
+		Map<String, Set<Long>> held = TICKETS.computeIfAbsent(b.id, k -> new HashMap<>());
+		if (held.containsKey(i.key)) {
+			return;
+		}
+		Set<Long> want = chunks(box);
+		int count = held.values().stream().mapToInt(Set::size).sum();
+		if (!ticketTurn(b, i) || count + want.size() > b.loadChunks && count > 0) {
+			ticketWait(b, i);
+			return;
+		}
+		ticketGot(b, i);
 		for (long c : want) {
 			level.getChunkSource().addTicketWithRadius(TICKET, ChunkPos.unpack(c), 0);
 		}
@@ -716,6 +1013,33 @@ public final class Batches {
 
 	private static final Map<String, String> levels = new HashMap<>();
 
+	/**
+	 * Phase 4e, LOAD_BOUNDED fairness: the first item that could not get its tickets has the next ones (later items started
+	 * every tick took the budget before its re-check, and it timed out at 600 s on a 1000x1000 run).
+	 */
+	private static final Map<String, String> TICKET_WAITER = new HashMap<>();
+
+	private static boolean ticketTurn(QBatch b, QItem i) {
+		String w = TICKET_WAITER.get(b.id);
+		if (w == null || w.equals(i.key)) {
+			return true;
+		}
+		QItem wi = b.item(w);
+		if (wi == null || wi.status != QItem.Status.QUEUED && wi.status != QItem.Status.WAITING) {
+			TICKET_WAITER.remove(b.id);
+			return true;
+		}
+		return false;
+	}
+
+	private static void ticketWait(QBatch b, QItem i) {
+		TICKET_WAITER.putIfAbsent(b.id, i.key);
+	}
+
+	private static void ticketGot(QBatch b, QItem i) {
+		TICKET_WAITER.remove(b.id, i.key);
+	}
+
 	private static void untickItem(MinecraftServer server, QBatch b, String key) {
 		Map<String, Set<Long>> held = TICKETS.get(b.id);
 		Set<Long> cs = held == null ? null : held.remove(key);
@@ -726,6 +1050,11 @@ public final class Batches {
 		}
 		for (long c : cs) {
 			level.getChunkSource().removeTicketWithRadius(TICKET, ChunkPos.unpack(c), 0);
+		}
+		String w = TICKET_WAITER.get(b.id);
+		QItem wi = w == null ? null : b.item(w);
+		if (wi != null && wi.status == QItem.Status.WAITING) {
+			wi.nextCheck = tick; // budget came free: it re-checks now
 		}
 	}
 

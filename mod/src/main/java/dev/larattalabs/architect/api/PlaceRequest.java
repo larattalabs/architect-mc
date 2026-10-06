@@ -16,17 +16,29 @@ import org.jspecify.annotations.Nullable;
  * @param ext namespaced extra data stored on the site (null reads as empty)
  * @param force overwrite block entities in the box (they come back on remove), as the UI's force confirm
  * @param actor the player on whose behalf it is placed (permission checks), or null for a mod on its own
+ * @param overlap (1.5.0) what to do where it overlaps a standing site: null = REFUSE (or, in a batch, the batch's policy)
  */
 public record PlaceRequest(String blueprintId, ServerLevel level, BlockPos origin, Rotation rotation, Mode mode,
-	@Nullable String owner, JsonObject ext, boolean force, @Nullable ServerPlayer actor) {
+	@Nullable String owner, JsonObject ext, boolean force, @Nullable ServerPlayer actor, @Nullable OverlapPolicy overlap) {
 	public PlaceRequest {
 		ext = ext == null ? new JsonObject() : ext;
 		mode = mode == null ? Mode.AUTO : mode;
 		rotation = rotation == null ? Rotation.NONE : rotation;
 	}
 
+	/** The 1.4.0 constructor (no overlap policy: REFUSE). */
+	public PlaceRequest(String blueprintId, ServerLevel level, BlockPos origin, Rotation rotation, Mode mode, @Nullable String owner, JsonObject ext,
+		boolean force, @Nullable ServerPlayer actor) {
+		this(blueprintId, level, origin, rotation, mode, owner, ext, force, actor, null);
+	}
+
 	/** A request with the defaults: AUTO mode, no owner, no ext, no force, no actor. */
 	public static PlaceRequest of(String blueprintId, ServerLevel level, BlockPos origin, Rotation rotation) {
-		return new PlaceRequest(blueprintId, level, origin, rotation, Mode.AUTO, null, new JsonObject(), false, null);
+		return new PlaceRequest(blueprintId, level, origin, rotation, Mode.AUTO, null, new JsonObject(), false, null, null);
+	}
+
+	/** The same request with an overlap policy. Since 1.5.0. */
+	public PlaceRequest withOverlap(@Nullable OverlapPolicy policy) {
+		return new PlaceRequest(blueprintId, level, origin, rotation, mode, owner, ext, force, actor, policy);
 	}
 }

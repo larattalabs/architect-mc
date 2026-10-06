@@ -64,6 +64,11 @@ public final class Placement {
 
 	private static final List<Job> JOBS = new ArrayList<>();
 	private static long deadline;
+
+	/** This tick's placement deadline ({@link System#nanoTime}). */
+	static long deadline() {
+		return deadline;
+	}
 	private static int rotate;
 	private static @Nullable MinecraftServer server;
 	private static final Stats STATS = new Stats();
@@ -111,15 +116,31 @@ public final class Placement {
 		return !JOBS.isEmpty() || Batches.anyRunning() || Groups.anyRemoving() || Builder.anyBuilding();
 	}
 
+	/**
+	 * Ticks after a world start in which placement waits (phase 4e): the server's own first ticks load chunks and warm up
+	 * (measured up to 45 ms), and resumed jobs and queued items would add to them.
+	 */
+	static final int START_GRACE_TICKS = 40;
+
 	private static void tick(MinecraftServer srv) {
 		server = srv;
+		if (srv.getTickCount() < START_GRACE_TICKS) {
+			return;
+		}
 		long start = System.nanoTime();
 		deadline = start + budgetNanos();
 		int before = workDone();
 		try {
 			Batches.tick(srv, deadline);
 			Groups.tick(srv, deadline);
+			completedNow = false;
 			runJobs(srv);
+			// phase 4e: a job that finished leaves budget: its batch starts the next item in this tick, not the next one
+			for (int again = 0; again < 4 && completedNow && !slow && System.nanoTime() < deadline; again++) {
+				completedNow = false;
+				Batches.startNext(srv, deadline);
+				runJobs(srv);
+			}
 			syncGhosts(srv);
 		} catch (RuntimeException e) {
 			Architect.LOGGER.error("Placement tick failed", e);
@@ -131,6 +152,7 @@ public final class Placement {
 	}
 
 	private static int finishedWork;
+	private static boolean completedNow;
 
 	private static int workDone() {
 		int n = 0;
@@ -182,6 +204,7 @@ public final class Placement {
 				}
 			}
 			if (complete) {
+				completedNow = true;
 				JOBS.remove(j);
 				finishedWork += Math.max(0, j.total() - was);
 				completed(srv, j);
@@ -249,7 +272,14 @@ public final class Placement {
 	private static void completed(MinecraftServer srv, Job j) {
 		clearGhost(srv, j, false);
 		if (j instanceof PlaceJob pj) {
-			if (pj.broken != null) {
+			if (pj.broken != null && pj.beforeRecord) {
+				// nothing written and no record (P1-P3 failed): the item fails; entries that did reach the journal are released
+				Architect.LOGGER.warn("Placing {} failed before its first block ({})", pj.siteId, pj.broken);
+				pj.aborted(srv);
+				SiteJournal.releaseGroup(SiteJournal.entries(pj.siteId).stream().filter(m -> m.status() == dev.larattalabs.architect.journal.Journal.Status.PLACING)
+					.map(dev.larattalabs.architect.journal.JournalStore.Meta::id).toList());
+				Batches.failedBeforeRecord(srv, pj, pj.broken);
+			} else if (pj.broken != null) {
 				Architect.LOGGER.warn("Placing {} can't go on ({}); rolling it back", pj.siteId, pj.broken);
 				pj.aborted(srv);
 				RestoreJob rb = new RestoreJob(pj.siteId, RestoreJob.ROLLBACK, pj.batchId, pj.itemKey);
@@ -258,9 +288,35 @@ public final class Placement {
 			} else {
 				Batches.placed(srv, pj);
 			}
+		} else if (j instanceof InfraJob ij) {
+			if (ij.broken != null && ij.beforeRecord) {
+				Architect.LOGGER.warn("Placing {} failed before its first cell ({})", ij.siteId, ij.broken);
+				ij.aborted(srv);
+				SiteJournal.releaseGroup(SiteJournal.entries(ij.siteId).stream().filter(m -> m.status() == dev.larattalabs.architect.journal.Journal.Status.PLACING)
+					.map(dev.larattalabs.architect.journal.JournalStore.Meta::id).toList());
+				ij.failed(ij.broken);
+				Batches.infraFailed(srv, ij, ij.broken);
+			} else if (ij.broken != null) {
+				Architect.LOGGER.warn("Placing {} can't go on ({}); rolling it back", ij.siteId, ij.broken);
+				ij.failed(ij.broken);
+				RestoreJob rb = new RestoreJob(ij.siteId, RestoreJob.ROLLBACK, ij.batchId, ij.itemKey);
+				rb.why = ij.broken;
+				JOBS.add(rb);
+			} else {
+				Batches.infraPlaced(srv, ij);
+			}
 		} else if (j instanceof RestoreJob rj) {
-			if (RestoreJob.ROLLBACK.equals(rj.purpose)) {
+			if (rj.infraDone != null && RestoreJob.REMOVE.equals(rj.purpose) && rj.group != null && !rj.group.startsWith("u:remove-")) {
+				Groups.removed(srv, rj);
+			} else if (rj.infraDone != null && RestoreJob.REMOVE.equals(rj.purpose)) {
+				// a single road or cell site removal: its futures were completed
+			} else if (RestoreJob.ROLLBACK.equals(rj.purpose)) {
 				Batches.rolledBack(srv, rj);
+			} else if (rj.group != null && rj.group.startsWith("u:remove-")) {
+				// a single site removed over ticks (a large one): its futures were completed
+				if (rj.broken != null) {
+					rj.futures.forEach(f -> f.completeExceptionally(new IllegalStateException(rj.broken)));
+				}
 			} else {
 				Groups.removed(srv, rj);
 			}
@@ -367,6 +423,42 @@ public final class Placement {
 		root.add("jobs", jobs);
 		root.add("removals", Groups.toJson());
 		Path f = file(srv);
+		// phase 4e: the file holds the queued cell sites' cells (a 256x256 pad is megabytes of JSON): it is written off the
+		// server thread, the latest state winning; a clean stop waits for it and writes at once
+		PENDING_SAVE.set(new Object[] {root, f});
+		if (clean) {
+			flushSaves();
+			writeSave(root, f);
+			return;
+		}
+		SAVER.execute(() -> {
+			Object[] w = PENDING_SAVE.getAndSet(null);
+			if (w != null) {
+				writeSave((JsonObject) w[0], (Path) w[1]);
+			}
+		});
+	}
+
+	private static final java.util.concurrent.atomic.AtomicReference<Object[]> PENDING_SAVE = new java.util.concurrent.atomic.AtomicReference<>();
+	private static final java.util.concurrent.ExecutorService SAVER = java.util.concurrent.Executors.newSingleThreadExecutor(r -> {
+		Thread t = new Thread(r, "Architect queue save");
+		t.setDaemon(true);
+		return t;
+	});
+
+	/** Waits until the queued saves are written. */
+	static void flushSaves() {
+		try {
+			SAVER.submit(() -> { }).get();
+		} catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+		} catch (java.util.concurrent.ExecutionException e) {
+			// a failed write was logged
+		}
+		PENDING_SAVE.set(null);
+	}
+
+	private static synchronized void writeSave(JsonObject root, Path f) {
 		try {
 			Path tmp = f.resolveSibling(FILE + ".tmp");
 			Files.writeString(tmp, GSON.toJson(root), StandardCharsets.UTF_8);
@@ -403,6 +495,13 @@ public final class Placement {
 		// a site still marked placing without a job (its queue entry was lost): put its terrain back
 		for (Site s : Sites.all()) {
 			if (s.placing() && job(s.id()) == null) {
+				dev.larattalabs.architect.journal.JournalStore.Meta main = SiteJournal.main(s.id());
+				if (main != null && main.status() == dev.larattalabs.architect.journal.Journal.Status.ACTIVE && s.construction() == null) {
+					// K4: the ACTIVE commit (P7) reached the journal before the record was placed (P8): the journal wins
+					Architect.LOGGER.warn("Site {} was placed in the world journal but its record was still placing; it is placed", s.id());
+					Sites.putRecord(srv, s.withPlacing(false));
+					continue;
+				}
 				Architect.LOGGER.warn("Site {} was still being placed and has no job in {}; rolling it back from its snapshot", s.id(), FILE);
 				Site.Member m = s.member();
 				RestoreJob rb = new RestoreJob(s.id(), RestoreJob.ROLLBACK, m == null ? null : m.batchId(), m == null ? null : m.itemKey());
@@ -422,10 +521,44 @@ public final class Placement {
 		if ("place".equals(kind)) {
 			PlaceJob pj = PlaceJob.fromJson(o);
 			ServerLevel level = Sites.levelOf(srv, pj.dimension);
+			if (pj.beforeRecord) {
+				// stopped before its record (P1-P3): a clean stop resumes (the commit was flushed); after a crash its entries were
+				// released at the world start (K2) and its item queues again
+				if (clean && level != null) {
+					if (pj.phase == PlaceJob.CAPTURE || pj.siteEntry == null) {
+						try {
+							pj.startCapture(level);
+						} catch (Sites.SiteException e) {
+							Batches.requeue(srv, pj, "it could not resume (" + e.getMessage() + ")");
+							return;
+						}
+					} else {
+						pj.phase = PlaceJob.COMMIT;
+					}
+					JOBS.add(pj);
+					Architect.LOGGER.info("Resuming the placement of {} ({}) before its first block", pj.siteId, pj.blueprint);
+				} else {
+					Batches.requeue(srv, pj, "the game stopped without saving before it was placed");
+				}
+				return;
+			}
 			Site s = Sites.get(pj.siteId);
 			if (s == null) {
 				Architect.LOGGER.warn("Placement job for {} has no site record; dropped", pj.siteId);
 				return;
+			}
+			boolean active = SiteJournal.main(pj.siteId) != null && SiteJournal.main(pj.siteId).status() == dev.larattalabs.architect.journal.Journal.Status.ACTIVE;
+			if ((pj.phase == PlaceJob.AFTER_COMMIT || pj.phase == PlaceJob.CONSTRUCTION_CLEAR) && active && level != null) {
+				// K4: the journal wins (its ACTIVE commit is durable); a construction site's clearing starts over
+				if (pj.phase == PlaceJob.CONSTRUCTION_CLEAR) {
+					pj.clearCursor = 0;
+				}
+				JOBS.add(pj);
+				Architect.LOGGER.info("Finishing the placement of {} ({}) (its journal entry is placed)", pj.siteId, pj.blueprint);
+				return;
+			}
+			if (pj.phase == PlaceJob.AFTER) {
+				pj.captureCursor = 0;
 			}
 			if (!clean || level == null || !pj.resume(level)) {
 				RestoreJob rb = new RestoreJob(pj.siteId, RestoreJob.ROLLBACK, pj.batchId, pj.itemKey);
@@ -436,12 +569,67 @@ public final class Placement {
 			}
 			JOBS.add(pj);
 			Architect.LOGGER.info("Resuming the placement of {} ({}) at phase {}", pj.siteId, pj.blueprint, pj.phase);
+		} else if ("infra".equals(kind)) {
+			InfraJob ij = InfraJob.fromJson(o);
+			if (ij.beforeRecord && !clean) {
+				Batches.infraRequeue(srv, ij);
+				return;
+			}
+			if (ij.beforeRecord && ij.phase == InfraJob.CAPTURE) {
+				Batches.infraRequeue(srv, ij); // its capture was not saved: planned again
+				return;
+			}
+			if (!ij.beforeRecord && !clean) {
+				boolean active = SiteJournal.main(ij.siteId) != null && SiteJournal.main(ij.siteId).status() == dev.larattalabs.architect.journal.Journal.Status.ACTIVE;
+				if (!active) {
+					RestoreJob rb = new RestoreJob(ij.siteId, RestoreJob.ROLLBACK, ij.batchId, ij.itemKey);
+					rb.requeue = true;
+					rb.why = "the game stopped without saving while it was being placed";
+					JOBS.add(rb);
+					return;
+				}
+				ij.phase = InfraJob.AFTER_COMMIT;
+			}
+			JOBS.add(ij);
 		} else {
 			RestoreJob rj = RestoreJob.fromJson(o);
-			if (Sites.get(rj.siteId) != null) {
+			if (Sites.get(rj.siteId) != null || Sites.pendingRecord(rj.siteId) != null || Infras.get(rj.siteId) != null || Infras.pending(rj.siteId) != null) {
 				JOBS.add(rj);
 			}
 		}
+	}
+
+	/**
+	 * The sites whose undo groups and PLACING entries the world-start settle must leave alone: those with a job in the queue
+	 * file that resumes or rolls back (after a crash, a placement that never got its record is not one: K2 releases it).
+	 */
+	static java.util.Set<String> jobSites(MinecraftServer srv) {
+		java.util.Set<String> out = new java.util.HashSet<>();
+		Path f = file(srv);
+		if (!Files.exists(f)) {
+			return out;
+		}
+		try {
+			JsonObject root = JsonParser.parseString(Files.readString(f, StandardCharsets.UTF_8)).getAsJsonObject();
+			boolean clean = root.has("clean") && root.get("clean").getAsBoolean();
+			for (JsonElement e : root.has("jobs") ? root.getAsJsonArray("jobs") : new JsonArray()) {
+				JsonObject o = e.getAsJsonObject();
+				String k = o.get("kind").getAsString();
+				boolean before = ("place".equals(k) || "infra".equals(k)) && o.has("beforeRecord") && o.get("beforeRecord").getAsBoolean();
+				if (clean || !before) {
+					out.add(o.get("siteId").getAsString());
+				}
+			}
+			for (JsonElement e : root.has("removals") ? root.getAsJsonArray("removals") : new JsonArray()) {
+				JsonObject o = e.getAsJsonObject();
+				if (o.has("sites")) {
+					o.getAsJsonArray("sites").forEach(x -> out.add(x.getAsString()));
+				}
+			}
+		} catch (IOException | RuntimeException e) {
+			Architect.LOGGER.warn("Could not read {} for the sites check", f, e);
+		}
+		return out;
 	}
 
 	// ------------------------------------------------------------------ stats (the gate's MSPT and throughput)

@@ -61,7 +61,18 @@ public final class Views {
 		Site.Member m = s.member();
 		return new SiteView(s.id(), s.blueprint(), s.owner(), s.ext(), box(s.box()), box(s.restoreBox()), rotation(s.rotation()),
 			dimension(s.dimension()), s.placing() ? State.PLACING : s.building() ? State.BUILDING : State.BUILT, p[0], p[1], m == null ? null : m.group(),
-			m == null ? null : m.batchId(), m == null ? null : m.itemKey());
+			m == null ? null : m.batchId(), m == null ? null : m.itemKey(), "building", dev.larattalabs.architect.api.Policy.BOX,
+			dev.larattalabs.architect.site.SiteJournal.coveredSites(s.id()), dev.larattalabs.architect.site.SiteJournal.related(s.id(), true));
+	}
+
+	/** A road or cell site as the API sees it (phase 4e). */
+	public static SiteView infra(dev.larattalabs.architect.site.Infra i) {
+		Site.Member m = i.member();
+		dev.larattalabs.architect.api.Policy policy = i.road() || !"BOX".equals(i.spec().has("policy") ? i.spec().get("policy").getAsString() : "CELL")
+			? dev.larattalabs.architect.api.Policy.CELL : dev.larattalabs.architect.api.Policy.BOX;
+		return new SiteView(i.id(), i.kind(), i.owner(), i.ext(), box(i.box()), box(i.box()), Rotation.NONE, dimension(i.dimension()),
+			i.placing() ? State.PLACING : State.BUILT, 0, 0, m == null ? null : m.group(), m == null ? null : m.batchId(), m == null ? null : m.itemKey(),
+			i.kind(), policy, dev.larattalabs.architect.site.SiteJournal.coveredSites(i.id()), dev.larattalabs.architect.site.SiteJournal.related(i.id(), true));
 	}
 
 	// ------------------------------------------------------------------ phase 4d: batches, groups, stages

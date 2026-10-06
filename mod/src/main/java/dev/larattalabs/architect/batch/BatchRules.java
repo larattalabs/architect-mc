@@ -174,7 +174,7 @@ public final class BatchRules {
 	 * @param runningApproved whether it may place (approved or already placing)
 	 */
 	public static @Nullable QItem next(QBatch b, @Nullable String runningStage, boolean runningApproved, long tick, ToDoubleFunction<QItem> distance) {
-		if (!b.running() || b.cancelling || b.placing() != null || runningStage == null || !runningApproved || !b.stages.contains(runningStage)) {
+		if (!b.running() || b.cancelling || b.blocking() != null || runningStage == null || !runningApproved || !b.stages.contains(runningStage)) {
 			return null;
 		}
 		QItem best = null;

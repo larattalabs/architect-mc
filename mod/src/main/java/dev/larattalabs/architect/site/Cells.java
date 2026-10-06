@@ -41,6 +41,47 @@ final class Cells {
 		return states.length;
 	}
 
+	/**
+	 * Journal values over {@code box} as a dense box (phase 4e: a construction site's target is its site entry's {@code after},
+	 * a deconstruct's "was" its {@code before}); cells without a value are air.
+	 */
+	static Cells fromValues(dev.larattalabs.architect.placement.Anchors.Bounds box, Map<Long, dev.larattalabs.architect.journal.Journal.Value> values) {
+		int dx = box.maxX() - box.minX() + 1;
+		int dy = box.maxY() - box.minY() + 1;
+		int dz = box.maxZ() - box.minZ() + 1;
+		Cells c = new Cells(dx, dy, dz);
+		for (var e : values.entrySet()) {
+			long p = e.getKey();
+			int x = net.minecraft.core.BlockPos.getX(p) - box.minX();
+			int y = net.minecraft.core.BlockPos.getY(p) - box.minY();
+			int z = net.minecraft.core.BlockPos.getZ(p) - box.minZ();
+			if (x < 0 || y < 0 || z < 0 || x >= dx || y >= dy || z >= dz) {
+				continue;
+			}
+			int k = Construction.index(x, y, z, dx, dz);
+			c.states[k] = dev.larattalabs.architect.journal.WorldJournal.state(e.getValue());
+			c.nbt[k] = e.getValue().nbt();
+		}
+		for (int k = 0; k < c.states.length; k++) {
+			if (c.states[k] == null) {
+				c.states[k] = Blocks.AIR.defaultBlockState();
+			}
+		}
+		return c;
+	}
+
+	/** A capture as a dense box (the same index order). */
+	static Cells fromCapture(dev.larattalabs.architect.journal.WorldJournal.Captured cap) {
+		var box = cap.box();
+		Cells c = new Cells(box.maxX() - box.minX() + 1, box.maxY() - box.minY() + 1, box.maxZ() - box.minZ() + 1);
+		for (int k = 0; k < c.states.length; k++) {
+			var v = cap.values()[k];
+			c.states[k] = dev.larattalabs.architect.journal.WorldJournal.state(v);
+			c.nbt[k] = v.nbt();
+		}
+		return c;
+	}
+
 	static Cells read(CompoundTag tag) {
 		ListTag size = tag.getListOrEmpty(StructureTemplate.SIZE_TAG);
 		Cells c = new Cells(size.getIntOr(0, 0), size.getIntOr(1, 0), size.getIntOr(2, 0));

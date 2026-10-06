@@ -741,22 +741,52 @@ public final class ArchitectScreen extends Screen {
 	}
 
 	private void removeSite(Site s, boolean force) {
+		removeSite(s, force, null);
+	}
+
+	/**
+	 * Remove (phase 4e): a site another site covers asks first ("3 cells of this site are under ...: [Remove] [Remove both]
+	 * [Cancel]"); {@code covered} null = ask when covered, else KEEP (hand-down) or CASCADE (both).
+	 */
+	private void removeSite(Site s, boolean force, Sites.@org.jspecify.annotations.Nullable Covered covered) {
 		dev.larattalabs.architect.client.world.ServerTasks.callAsPlayer((level, player) -> {
 			try {
 				var sl = Sites.levelOf(level.getServer(), s);
-				Site gone = Sites.remove(sl == null ? level : sl, s.id(), force);
-				return gone.construction() != null ? "Deconstructed " + gone.id() + "; refunds dropped where its crate stood, the terrain is back"
-					: "Removed " + gone.id() + "; the terrain is back";
+				if (covered == null) {
+					java.util.List<String> over = dev.larattalabs.architect.site.SiteJournal.coveringSites(s.id());
+					if (!over.isEmpty()) {
+						int n = dev.larattalabs.architect.site.SiteJournal.siteJson(s.id()).get("covered").getAsInt();
+						return "?" + n + " cell" + (n == 1 ? "" : "s") + " of this site " + (n == 1 ? "is" : "are") + " under " + String.join(", ", over.stream()
+							.map(Sites::describe).toList()) + "; they stay until " + (over.size() == 1 ? "it is" : "they are") + " removed";
+					}
+				}
+				if (Sites.removeLarge(sl == null ? level : sl, s.id(), force, covered == null ? Sites.Covered.KEEP : covered) != null) {
+					return "Removing " + s.id() + " over ticks (a large site)";
+				}
+				Sites.Removed gone = Sites.removeDetailed(sl == null ? level : sl, s.id(), force, covered == null ? Sites.Covered.KEEP : covered);
+				String both = gone.cascaded().isEmpty() ? "" : " (with " + String.join(", ", gone.cascaded()) + ")";
+				return gone.site().construction() != null ? "Deconstructed " + gone.site().id() + both + "; refunds dropped where its crate stood, the terrain "
+					+ "is back" : "Removed " + gone.site().id() + both + "; the terrain is back" + (gone.handedDown().isEmpty() ? ""
+						: " (covered cells stay until " + String.join(", ", gone.handedDown().keySet()) + " goes)");
 			} catch (Sites.SiteException ex) {
 				return "!" + ex.getMessage();
 			}
 		}).whenComplete((msg, err) -> {
 			String m = err != null ? "!" + err.getMessage() : msg;
+			if (m.startsWith("?")) {
+				coveredArmed = s.id();
+				LibraryFeature.say(m.substring(1), false);
+				return;
+			}
+			coveredArmed = null;
 			boolean bad = m.startsWith("!");
 			LibraryFeature.say(bad ? m.substring(1) : m, bad);
 			armedRemove = bad && m.contains("confirm again with force") ? s.id() : null;
 		});
 	}
+
+	/** The site whose Remove asked "Remove / Remove both / Cancel" (another site covers it), or null. */
+	private @org.jspecify.annotations.Nullable String coveredArmed;
 
 	private void undoMove(Site s) {
 		dev.larattalabs.architect.client.world.ServerTasks.callOnServer(server -> {
@@ -1274,13 +1304,26 @@ public final class ArchitectScreen extends Screen {
 		boolean force = s.id().equals(armedRemove);
 		boolean ownedArmed = dev.larattalabs.architect.client.ui.OwnedConfirm.armed(s);
 		String rm = ownedArmed ? "Remove owned site" : force ? "Remove anyway" : "Remove";
+		boolean coveredAsk = s.id().equals(coveredArmed);
 		button(g, "remove", rm, bx, by, bw(rm), true, true, mx, my, () -> {
 			// a site another mod owns asks twice (R5)
 			if (dev.larattalabs.architect.client.ui.OwnedConfirm.ask(s, LibraryFeature::say)) {
-				removeSite(s, force);
+				removeSite(s, force, coveredAsk ? Sites.Covered.KEEP : null);
 			}
 		});
 		bx += bw(rm) + 4;
+		if (coveredAsk) {
+			// phase 4e: the site is covered: Remove keeps the covered cells (hand-down), Remove both takes the covering sites first
+			String both = "Remove both";
+			button(g, "remove_both", both, bx, by, bw(both), true, true, mx, my, () -> removeSite(s, force, Sites.Covered.CASCADE));
+			bx += bw(both) + 4;
+			String cancel = "Cancel";
+			button(g, "remove_cancel", cancel, bx, by, bw(cancel), false, true, mx, my, () -> {
+				coveredArmed = null;
+				LibraryFeature.say("Not removed", false);
+			});
+			bx += bw(cancel) + 4;
+		}
 		String mv = "Move…";
 		button(g, "move", mv, bx, by, bw(mv), false, true, mx, my, () -> {
 			String why = PlacementFeature.startMove(s.id());

@@ -19,6 +19,7 @@ public class ArchitectClient implements ClientModInitializer {
 	public void onInitializeClient() {
 		AutoWorld.init();
 		PlacementFeature.init();
+		dev.larattalabs.architect.client.placement.RoadCellsClient.init(); // phase 4e: road cells for the ghost's approach
 		dev.larattalabs.architect.client.placement.CompositePreview.init();
 		ScreenFeature.init();
 		DesignFeature.init();
@@ -26,6 +27,7 @@ public class ArchitectClient implements ClientModInitializer {
 		dev.larattalabs.architect.client.design.SetFeature.init();
 		dev.larattalabs.architect.client.library.LibraryFeature.init();
 		dev.larattalabs.architect.client.survival.SurvivalFeature.init();
+		dev.larattalabs.architect.client.dev.JournalDev.init(); // phase 4e hooks (journal, roads, cell sites, region hashes)
 		dev.larattalabs.architect.client.api.ApiClientBridge.init(); // the public API's client side (docs/CONTRACT.md phase 4a)
 		Launcher.init();
 		HudElementRegistry.addLast(Architect.id("hud/toasts"), dev.larattalabs.architect.client.ui.GuardedHud.of("hud.toasts", new Toasts()));

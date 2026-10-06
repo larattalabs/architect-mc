@@ -99,6 +99,8 @@ public final class DevBridge extends WebSocketServer {
 		setDaemon(true);
 		setTcpNoDelay(true);
 		setConnectionLostTimeout(0);
+		// a client killed mid-call (the phase 4e crash tests halt the JVM) leaves the port in TIME_WAIT: rebind at once on restart
+		setReuseAddr(true);
 	}
 
 	// ---------------------------------------------------------------- extension API

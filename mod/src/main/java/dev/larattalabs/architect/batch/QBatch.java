@@ -76,6 +76,16 @@ public final class QBatch {
 	}
 
 	/** The item whose cells are being written, if any (at most one per batch). */
+	/** The item placing that keeps the next from starting (one placing at a time; an item committing its after does not). */
+	public @Nullable QItem blocking() {
+		for (QItem i : items) {
+			if (i.status == QItem.Status.PLACING && !i.committing) {
+				return i;
+			}
+		}
+		return null;
+	}
+
 	public @Nullable QItem placing() {
 		for (QItem i : items) {
 			if (i.status == QItem.Status.PLACING) {

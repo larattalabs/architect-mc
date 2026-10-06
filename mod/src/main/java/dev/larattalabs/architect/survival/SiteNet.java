@@ -135,8 +135,44 @@ public final class SiteNet {
 	}
 
 	/** Registers the payload types (both sides, at mod init). */
+	/**
+	 * Phase 4e {@code architect_mc:road_cells}: standing roads' surface and slab cells near a player, per chunk section (12-bit
+	 * positions, a top byte: 0 surface, 1 slab), so the client's approach adapter draws an approach that stops at a road. A
+	 * section listed with no cells has none any more (a delta).
+	 */
+	public record RoadCells(String dimension, long[] keys, List<int[]> cells, List<byte[]> top) implements CustomPacketPayload {
+		public static final Type<RoadCells> TYPE = new Type<>(Architect.id("road_cells"));
+		public static final StreamCodec<RegistryFriendlyByteBuf, RoadCells> CODEC = StreamCodec.of((buf, p) -> {
+			buf.writeUtf(p.dimension);
+			buf.writeVarInt(p.keys.length);
+			for (int i = 0; i < p.keys.length; i++) {
+				buf.writeLong(p.keys[i]);
+				buf.writeVarIntArray(p.cells.get(i));
+				buf.writeByteArray(p.top.get(i));
+			}
+		}, buf -> {
+			String dim = buf.readUtf();
+			int n = buf.readVarInt();
+			long[] keys = new long[n];
+			List<int[]> cells = new ArrayList<>(n);
+			List<byte[]> top = new ArrayList<>(n);
+			for (int i = 0; i < n; i++) {
+				keys[i] = buf.readLong();
+				cells.add(buf.readVarIntArray());
+				top.add(buf.readByteArray());
+			}
+			return new RoadCells(dim, keys, cells, top);
+		});
+
+		@Override
+		public Type<RoadCells> type() {
+			return TYPE;
+		}
+	}
+
 	public static void init() {
 		PayloadTypeRegistry<RegistryFriendlyByteBuf> s2c = PayloadTypeRegistry.clientboundPlay();
+		s2c.registerLarge(RoadCells.TYPE, RoadCells.CODEC, 16 * 1024 * 1024);
 		s2c.registerLarge(SiteGhost.TYPE, SiteGhost.CODEC, 16 * 1024 * 1024);
 		s2c.register(SiteProgress.TYPE, SiteProgress.CODEC);
 		s2c.register(SiteStatus.TYPE, SiteStatus.CODEC);

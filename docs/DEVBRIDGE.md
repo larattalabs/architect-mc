@@ -106,6 +106,21 @@ The list below is what `dev.help` returns (`{commands: {name: description}, scre
 | `dev.placement.jobs` | {} - the ticked jobs running now: site, kind (place\|rollback\|remove), batch, item, phase, progress, total, held (ticks held back); `slow`, `budgetMs` |
 | `dev.placement.slow` | {on: bool} - test hook: jobs write about 16 cells per tick, so a check can act in the middle of an item (cancel, relog) |
 
+### World journal, roads and cell sites (phase 4e)
+
+| hook | arguments, result |
+|---|---|
+| `dev.journal.state` | {} - the journal: open/unavailable, counters, bytes on disk, every entry's metadata (id, kind, site, group, policy, layer, status, cells, sections, box, files, undo group), legacy names, the last import's notes |
+| `dev.journal.at` | {x, y, z, dimension?} - the stack at a cell, bottom first (entry, kind, site, policy, status, layer, before, after) |
+| `dev.journal.killAt` | {point: K1..K8, migrate-before-commit, migrate-after-commit or null} - TEST: the next matching step halts the JVM |
+| `dev.journal.failNextCommit` | {} - TEST: the next commit fails at its first file write (a full disk) |
+| `dev.journal.stackBench` | {box, depth: 4, n} - `Sites.stack()` timed at random cells of that depth: p50/p99/max µs |
+| `dev.road.check` / `dev.road.place` | {points, width?, surface?, slab?, lanterns?, shallowDecks?, owner?, force?} - checkRoad / placeRoad |
+| `dev.cells.place` | {kind, policy?, cells? \| fill? \| pad?, naturalOnly?, overlap?, owner?, force?, check?} - placeCells (or checkCells) |
+| `dev.region.hash` | {box, exclude?: [boxes], cells?} - SHA-256 over states and block-entity NBT, excluded boxes left out |
+| `dev.site.verify` | {site, list?, max?} - the site's top-of-stack cells against its entries' after |
+| `dev.heap` | {reset?} - heap used and peak since the last reset (MB) |
+
 ### Survival
 
 | hook | arguments, result |
@@ -228,6 +243,15 @@ there is no DevBridge hook to make layers, so tests go through the API as anothe
 
 Semi-stable: a hook may change or go, and every such change is listed here, newest first.
 
+- **2026-10-05 (phase 4e):** new `dev.journal.state|at|killAt|failNextCommit|stackBench`, `dev.road.check|place`,
+  `dev.cells.place` (cells, a fill or a pad generator), `dev.region.hash` (with excluded boxes), `dev.site.verify` (a
+  site's owned cells against its journal `after`; with `list` the world values, for the any-order no-leak check) and
+  `dev.heap`. `dev.site.state` adds the site's journal entries, covers and coveredBy. Snapshots are gone: a site's
+  terrain lives in the world journal. DevBridge rebinds its port at once after a halted client (`SO_REUSEADDR`).
+  `ARCHITECT_TRACE_JOBS=1` (dev env, not a hook) logs each placement, restore and road job step with its tick and
+  milliseconds. apitest steps `road, roadcheck, cells (pad generator too), cellscheck, stack, sundo2, reasons, api15,
+  heights`, plus `place ... layer`, `remove <site> - <force|noforce> [keep|cascade|refuse]` and batch `overlap`/road/
+  cells items. `tools/gate4e.mjs` drives the phase 4e gate.
 - **2026-10-05 (phase 4d):** new `dev.placement.stats|jobs|slow`. `dev.box.hash` is unchanged; snapshots now carry an
   `architect_leafRing` int array (ignored by vanilla). apitest steps `bqueue, batch(es), bcancel, sgroups, sgroup,
   sgremove, sapprove, sskip, sreorder, sundo, stock, fit, margin` (and `place ... [force]`), driven by `tools/gate4d.mjs`

@@ -41,6 +41,24 @@ public final class QItem {
 	/** Whether the world's survival toggle was on when the item was queued (an INSTANT item queued with it off fails if it is switched on). */
 	public final boolean survivalAtQueue;
 
+	/** Phase 4e: the LAYER overlap policy (else REFUSE). */
+	public boolean layer;
+	/** Phase 4e: {@code building}, {@code road} or {@code cells}; a road's or cell site's request ({@code spec}). */
+	public String itemKind = "building";
+	/**
+	 * Phase 4e, not saved: its writes are done and its ACTIVE commit (P7) is on the I/O thread; the batch's next item may start
+	 * meanwhile (it captures the world after these writes). It is PLACED at P8 as before.
+	 */
+	public transient boolean committing;
+	/** Phase 4e, not saved: a large item checked in this batch tick (its start follows in the next) and its snapshot box. */
+	public transient long checkedAt = -1;
+	/** Phase 4e, not saved: a large cell site's staged check, its result (a tick before its start) and whether its chunks are ticketed. */
+	public transient @Nullable Object prep;
+	public transient @Nullable Object checked;
+	public transient boolean ticketed;
+	public transient dev.larattalabs.architect.placement.Anchors.@org.jspecify.annotations.Nullable Bounds checkedSnap;
+	public @Nullable JsonObject spec;
+
 	public Status status = Status.QUEUED;
 	public @Nullable String siteId;
 	/** The typed reason (a {@code Reason} name) while waiting or once failed. */
@@ -111,6 +129,15 @@ public final class QItem {
 		if (waited > 0) {
 			o.addProperty("waited", waited);
 		}
+		if (layer) {
+			o.addProperty("overlap", "LAYER");
+		}
+		if (!"building".equals(itemKind)) {
+			o.addProperty("itemKind", itemKind);
+		}
+		if (spec != null) {
+			o.add("spec", spec.deepCopy());
+		}
 		return o;
 	}
 
@@ -132,6 +159,9 @@ public final class QItem {
 		i.reason = o.has("reason") ? o.get("reason").getAsString() : null;
 		i.message = o.has("message") ? o.get("message").getAsString() : "";
 		i.waited = o.has("waited") ? o.get("waited").getAsLong() : 0L;
+		i.layer = o.has("overlap") && "LAYER".equals(o.get("overlap").getAsString());
+		i.itemKind = o.has("itemKind") ? o.get("itemKind").getAsString() : "building";
+		i.spec = o.has("spec") && o.get("spec").isJsonObject() ? o.getAsJsonObject("spec") : null;
 		return i;
 	}
 }

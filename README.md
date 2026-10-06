@@ -166,9 +166,18 @@ low side.
 - **Leaf guard.** While a building stands, leaves near its box that hang on logs it replaced are kept from
   decaying, and they get their state back on Remove.
 - **Bed safety.** In the Nether and the End, where beds explode, the design's beds are left out.
-- **Remove** restores the snapshot. It stops first if your own things are in the box, until you take them out or
+- **Remove** restores what was there. It stops first if your own things are in the box, until you take them out or
   press **Remove anyway**. **Move…** places it again elsewhere, with **Undo move**. Both are in the Library's
   **Placed here** list.
+- **Layering (the world journal).** Every placement records the cells it changes, with what was there before, in a
+  per-world journal (`<world>/architect-journal/`). Sites may overlap: when a placement would overlap another site, the
+  ghost refuses once and a second <kbd>Enter</kbd> ("Place on top") puts it on top. Remove works in any order: a
+  site under another one gives its covered cells to the site on top, which restores them when it goes. Removing a
+  covered site asks once ("Remove both" also takes the sites on top down). A layered site can't be moved.
+- **Roads.** `/architect road <x z> <x z> ... [width]` lays a road along waypoints: it follows the ground (at most
+  one block up or down per step, cuts and fills up to 4), skips buildings and other roads, and runs over terrain
+  pads. Too steep or deep water refuses. A building's entrance approach stops at a road. Removing a road restores its
+  cells and hands the cells where it crosses another road over to that road.
 
 <br>
 
@@ -325,7 +334,11 @@ creative mode.
 lists the site groups and their stages, `/architect group remove <group>` takes a whole group down (last placed first),
 and `/architect group approve|skip|undo <group> <stage>` drives a group's stages. `/architect budget [ms]` shows or sets
 how much server time per tick placements may use (1-20 ms, default 4; setting it needs permission level 2). Large
-placements are written over several ticks; while one is in progress its ghost fills in.
+placements are written over several ticks; while one is in progress its ghost fills in. Large removals (sites near
+the 96x64x96 size cap) also run over ticks.
+
+**Roads and the journal:** `/architect road <x z> <x z> ... [width]` lays a road (creative), `/architect remove <road>`
+removes it, `/architect journal` shows the world journal (entries, cells, size on disk).
 
 <br>
 
@@ -455,8 +468,6 @@ Architect is early.
 - **A public API**, so other mods and scripts can use the library, design jobs, the ghost and sites.
 - **Matching sets:** a style bible, and several buildings designed in that one style in parallel.
 - **A massing preview:** a cheap, coarse ghost to approve before paying for the detailed design.
-- **Batch placement** over several ticks, to place a whole set at once without a lag spike.
-- **A journal-backed site engine** for overlapping builds, roads and bridges, with undo in any order.
 - **A critique loop:** a cheaper reviewer that looks at each design's renders and sends it back for fixes.
 
 <br>

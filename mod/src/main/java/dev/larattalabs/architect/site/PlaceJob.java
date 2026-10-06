@@ -23,11 +23,15 @@ import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemp
 import org.jspecify.annotations.Nullable;
 
 /**
- * An instant placement written over ticks (docs/CONTRACT.md phase 4d "Ticked placement"). {@link Sites#beginPlacing} runs the
- * checks, writes the snapshot and records the site as placing; this job then writes, under the per-tick budget, exactly what
- * the atomic placement ({@code Sites.build}) writes and in its order: the template ({@link TemplateWriter}), the beds bed
- * safety takes out, the foundation fill, the cleared terrain, the approach (clear, fill, path, slabs), the outside halves of
- * cut tall plants; then the drops it caused are cleared and the ticks it held back are scheduled ({@link TickDeferral}).
+ * An instant placement written over ticks (docs/CONTRACT.md phase 4d "Ticked placement", phase 4e "Crash safety"). {@link
+ * Sites#beginPlacing} runs the checks and the reads; this job then captures the box into the journal (one tick up to 50k
+ * cells, else sliced with change tracking), waits for the PLACING commit (P3, off the server thread), records the site as
+ * placing (P4) and writes, under the per-tick budget, exactly what the atomic placement ({@code Sites.build}) writes and in its
+ * order: the template ({@link TemplateWriter}), the beds bed safety takes out, the foundation fill, the cleared terrain, the
+ * approach (clear, fill, path, slabs), the outside halves of cut tall plants; then the drops it caused are cleared and the
+ * ticks it held back are scheduled ({@link TickDeferral}); then the {@code after} capture (P6) and the ACTIVE commit (P7)
+ * before the record is placed (P8). A construction site's P6 is its target ({@link Builder#planConvert}), and its queued
+ * cells are cleared over ticks after the commit.
  *
  * <p>Its state (phase, cursor, the plan's cell lists, placed bits, held ticks) is persisted in the queue file, so a relog
  * resumes where it stopped; the plan is never recomputed from a half-written world.
@@ -44,6 +48,18 @@ final class PlaceJob implements Placement.Job {
 	static final int PLANTS = 8;
 	static final int FINISH = 9;
 	static final int DONE = 10;
+	/** P1, sliced: the {@code before} capture of a box over 50k cells. */
+	static final int CAPTURE = 11;
+	/** P3: waiting for the PLACING commit (and a re-capture of positions changed meanwhile). */
+	static final int COMMIT = 12;
+	/** P4: the record, held leaves, entities removed; then the writes. */
+	static final int START = 13;
+	/** P6, sliced: the {@code after} capture of a box over 50k cells. */
+	static final int AFTER = 14;
+	/** P7: waiting for the ACTIVE commit. */
+	static final int AFTER_COMMIT = 15;
+	/** A construction site's queued cells cleared over ticks (after P7). */
+	static final int CONSTRUCTION_CLEAR = 16;
 	private static final int CLOCK = 16;
 
 	final String siteId;
@@ -71,6 +87,31 @@ final class PlaceJob implements Placement.Job {
 	final Set<Long> bedCells = new HashSet<>();
 	final Set<Long> bedHeads = new HashSet<>();
 	@Nullable TemplateWriter writer;
+	/** The placing record (P4), made when the job began. */
+	@Nullable Site record;
+	/** Its journal entries once committed. */
+	@Nullable String siteEntry;
+	@Nullable String leavesEntry;
+	/** The leaves it holds (x, y, z, distance) and the leaf ring, read at P1. */
+	List<Integer> heldLeaves = new ArrayList<>();
+	int[] ring = new int[0];
+	/** P1 in flight (not persisted: a stop before P3 releases and queues again). */
+	transient SiteJournal.@Nullable Placing placing;
+	transient dev.larattalabs.architect.journal.WorldJournal.@Nullable Captured capture;
+	transient dev.larattalabs.architect.journal.@Nullable ChangeTracker tracker;
+	int captureCursor;
+	/** The commit the job waits for (P3 or P7); null after a load (the stop flushed it). */
+	transient java.util.concurrent.@Nullable CompletableFuture<Void> commit;
+	/** Nothing was written and no record exists yet (a failure before P4 only fails the item). */
+	boolean beforeRecord = true;
+	/** A construction site's conversion: its construction record (queue, crate), whether a new crate goes down, its group crate. */
+	@Nullable Construction convert;
+	boolean newCrate;
+	@Nullable String sharedGroup;
+	int clearCursor;
+	/** The note and bed cells the placement finished with (for P8). */
+	@Nullable String finishNote;
+	@Nullable String layerOver;
 	/** A survival construction site: converted when its last cell is written ({@link Sites#finishPlacing}). */
 	boolean construction;
 	/** The placing player's UUID, or null. */
@@ -205,15 +246,78 @@ final class PlaceJob implements Placement.Job {
 		return writer;
 	}
 
+	/**
+	 * P1 when the job is made: a box up to 50k cells is captured now (one tick) and its PLACING commit submitted; a larger one
+	 * is captured over ticks ({@link #CAPTURE}) with change tracking. Server thread.
+	 */
+	void startCapture(ServerLevel level) throws Sites.SiteException {
+		heldLeaves = SiteJournal.holdable(level, snapBox);
+		ring = dev.larattalabs.architect.placement.LeafGuard.ring(level, snapBox);
+		if (snapBox.volume() <= SiteJournal.ONE_TICK_CELLS) {
+			submitBefore(level, dev.larattalabs.architect.journal.WorldJournal.capture(level, snapBox));
+			return;
+		}
+		capture = dev.larattalabs.architect.journal.WorldJournal.empty(snapBox);
+		tracker = dev.larattalabs.architect.journal.ChangeTracker.start(level, dev.larattalabs.architect.journal.WorldJournal.sectionsOf(snapBox));
+		captureCursor = 0;
+		phase = CAPTURE;
+	}
+
+	private void submitBefore(ServerLevel level, dev.larattalabs.architect.journal.WorldJournal.Captured c) throws Sites.SiteException {
+		if (tracker != null) {
+			dev.larattalabs.architect.journal.WorldJournal.recapture(level, c, tracker.drain());
+			tracker.stop();
+			tracker = null;
+		}
+		Site rec = java.util.Objects.requireNonNull(record, "record");
+		placing = SiteJournal.begin(level, siteId, dev.larattalabs.architect.journal.WorldJournal.SITE, rec.group(), snapBox, heldLeaves, plants,
+			rec.toJson(), ring, c);
+		siteEntry = placing.siteEntry;
+		leavesEntry = placing.leavesEntry;
+		commit = placing.commit;
+		capture = null;
+		phase = COMMIT;
+	}
+
 	@Override
 	public boolean step(MinecraftServer server, long deadline) {
+		int p0 = phase;
+		long t0 = System.nanoTime();
+		boolean r = step0(server, deadline);
+		if (System.getenv("ARCHITECT_TRACE_JOBS") != null) {
+			dev.larattalabs.architect.Architect.LOGGER.info("TRACE tick {} {} phase {} -> {} {} ms{}", server.getTickCount(), siteId, p0, phase, (System.nanoTime() - t0) / 1e6, r ? " done" : "");
+		}
+		return r;
+	}
+
+	private boolean step0(MinecraftServer server, long deadline) {
 		ServerLevel level = Sites.levelOf(server, dimension);
 		if (level == null) {
 			broken = dimension + " is not loaded";
 			return true;
 		}
+		try {
+			if (phase == CAPTURE || phase == COMMIT) {
+				// the commit is waited for inside the budget (the I/O thread does the work): a site does not lose a tick per phase
+				if (journalBefore(server, level, deadline)) {
+					return true;
+				}
+				if (phase != START || System.nanoTime() >= deadline) {
+					return false;
+				}
+			}
+			if (phase == AFTER || phase == AFTER_COMMIT || phase == CONSTRUCTION_CLEAR) {
+				return journalAfter(server, level, deadline);
+			}
+		} catch (Sites.SiteException e) {
+			broken = e.getMessage();
+			return true;
+		}
 		TickDeferral.begin(level, held);
 		try {
+			if (phase == START) {
+				start(server, level);
+			}
 			int n = 0;
 			while (phase < FINISH) {
 				if (n > 0 && n % CLOCK == 0 && System.nanoTime() >= deadline) {
@@ -223,14 +327,192 @@ final class PlaceJob implements Placement.Job {
 				if (broken != null) {
 					return true;
 				}
+				if (n > 0) {
+					dev.larattalabs.architect.journal.WorldJournal.kill("K3");
+				}
 			}
 		} finally {
 			TickDeferral.end();
 		}
 		if (phase == FINISH) {
-			finish(server, level);
-			phase = DONE;
+			try {
+				finish(server, level);
+				if ((phase == AFTER || phase == AFTER_COMMIT) && broken == null && System.nanoTime() < deadline) {
+					return journalAfter(server, level, deadline);
+				}
+			} catch (Sites.SiteException e) {
+				broken = e.getMessage();
+				return true;
+			}
+			return phase == DONE || broken != null;
 		}
+		return true;
+	}
+
+	/** P1 sliced and P3: the capture, then the PLACING commit (and re-captures of what changed meanwhile). */
+	private boolean journalBefore(MinecraftServer server, ServerLevel level, long deadline) throws Sites.SiteException {
+		if (phase == CAPTURE) {
+			var c = capture;
+			if (c == null) {
+				broken = "its capture was lost";
+				return true;
+			}
+			int step = Math.max(4096, 1);
+			while (captureCursor < c.size()) {
+				int to = Math.min(c.size(), captureCursor + step);
+				dev.larattalabs.architect.journal.WorldJournal.captureSlice(level, c, captureCursor, to);
+				captureCursor = to;
+				if (System.nanoTime() >= deadline && captureCursor < c.size()) {
+					return false;
+				}
+			}
+			submitBefore(level, c);
+		}
+		var f = commit;
+		if (f == null) {
+			// resumed after a stop: the commit was flushed before the world stopped
+			phase = START;
+			return false;
+		}
+		if (!waitFor(f, deadline)) {
+			return false;
+		}
+		if (f.isCompletedExceptionally()) {
+			broken = "its terrain could not be saved to the world journal";
+			if (placing != null) {
+				placing.stopTracking();
+			}
+			return true;
+		}
+		if (placing != null) {
+			var again = SiteJournal.retake(level, placing);
+			if (again != null) {
+				commit = again;
+				return false;
+			}
+			placing.stopTracking();
+		}
+		commit = null;
+		dev.larattalabs.architect.journal.WorldJournal.kill("K2");
+		phase = START;
+		return false;
+	}
+
+	/** P4: the record (placing), the held leaves, removable entities gone; then the writes start. */
+	private void start(MinecraftServer server, ServerLevel level) {
+		if (record != null) {
+			Sites.startPlacing(server, record);
+		}
+		beforeRecord = false;
+		dev.larattalabs.architect.placement.LeafGuard.holdCells(level, heldLeaves, Sites.FLAGS);
+		int removed = 0;
+		for (net.minecraft.world.entity.Entity e : level.getEntities((net.minecraft.world.entity.Entity) null,
+			dev.larattalabs.architect.placement.Occupancy.aabb(snapBox), e -> !(e instanceof net.minecraft.world.entity.player.Player) && e.isAlive())) {
+			if (dev.larattalabs.architect.placement.Occupancy.classify(e).removable()) {
+				e.discard();
+				removed++;
+			}
+		}
+		if (removed == 0) {
+			notes.removeIf(n -> n.contains("removed"));
+		}
+		phase = TEMPLATE;
+		cursor = 0;
+	}
+
+	/**
+	 * How far past the placement budget the server thread waits for a journal commit (the I/O thread's encode, write and
+	 * read-back of a kit building take 1-5 ms): a placement then does not lose a whole tick per commit. 4d ran its job start
+	 * unsliced (up to 12 ms); this bounds the overrun at 6 ms.
+	 */
+	static final long COMMIT_GRACE_NANOS = 6_000_000L;
+
+	/** Waits for {@code f} until {@code deadline} plus {@link #COMMIT_GRACE_NANOS} at most. */
+	static boolean waitFor(java.util.concurrent.CompletableFuture<?> f, long deadline) {
+		if (f.isDone()) {
+			return true;
+		}
+		long left = deadline + COMMIT_GRACE_NANOS - System.nanoTime();
+		if (left <= 0) {
+			return false;
+		}
+		try {
+			f.get(left, java.util.concurrent.TimeUnit.NANOSECONDS);
+		} catch (java.util.concurrent.TimeoutException e) {
+			return false;
+		} catch (java.util.concurrent.ExecutionException | java.util.concurrent.CancellationException e) {
+			return true;
+		} catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+			return false;
+		}
+		return f.isDone();
+	}
+
+	/** P6-P7 (and a construction site's clearing), then P8. */
+	private boolean journalAfter(MinecraftServer server, ServerLevel level, long deadline) throws Sites.SiteException {
+		if (phase == AFTER) {
+			var c = capture;
+			if (c == null) {
+				capture = c = dev.larattalabs.architect.journal.WorldJournal.empty(snapBox);
+				captureCursor = 0;
+				tracker = dev.larattalabs.architect.journal.ChangeTracker.start(level, dev.larattalabs.architect.journal.WorldJournal.sectionsOf(snapBox));
+			}
+			while (captureCursor < c.size()) {
+				int to = Math.min(c.size(), captureCursor + 4096);
+				dev.larattalabs.architect.journal.WorldJournal.captureSlice(level, c, captureCursor, to);
+				captureCursor = to;
+				if (System.nanoTime() >= deadline && captureCursor < c.size()) {
+					return false;
+				}
+			}
+			if (tracker != null) {
+				dev.larattalabs.architect.journal.WorldJournal.recapture(level, c, tracker.drain());
+				tracker.stop();
+				tracker = null;
+			}
+			commit = SiteJournal.complete(siteId, c, null);
+			capture = null;
+			phase = AFTER_COMMIT;
+		}
+		if (phase == AFTER_COMMIT) {
+			var f = commit;
+			if (convert == null) {
+				Batches.committing(batchId, itemKey); // the writes are done: the next item may start while this commit runs
+			}
+			if (f != null && !waitFor(f, deadline)) {
+				return false;
+			}
+			if (f != null && f.isCompletedExceptionally()) {
+				broken = "its placement could not be saved to the world journal";
+				return true;
+			}
+			commit = null;
+			dev.larattalabs.architect.journal.WorldJournal.kill("K4");
+			if (convert != null) {
+				Builder.placeCrate(level, new Builder.ConvertPlan(siteId, convert, dev.larattalabs.architect.journal.WorldJournal.empty(snapBox), snapBox,
+					newCrate, sharedGroup));
+				newCrate = false;
+				phase = CONSTRUCTION_CLEAR;
+				clearCursor = 0;
+				return false;
+			}
+			return placed(server);
+		}
+		// CLEAR
+		clearCursor = Builder.clear(level, convert, snapBox, clearCursor, deadline);
+		if (clearCursor < convert.size()) {
+			return false;
+		}
+		return placed(server);
+	}
+
+	/** P8: the record placed (or a construction site, building), SITE_PLACED. */
+	private boolean placed(MinecraftServer server) {
+		if (Sites.finishPlacing(server, this, bedCells, finishNote) == null && broken == null) {
+			broken = "its site record is gone";
+		}
+		phase = DONE;
 		return true;
 	}
 
@@ -321,7 +603,7 @@ final class PlaceJob implements Placement.Job {
 		}
 	}
 
-	private void finish(MinecraftServer server, ServerLevel level) {
+	private void finish(MinecraftServer server, ServerLevel level) throws Sites.SiteException {
 		Sites.Drops drops = Sites.Drops.of(level, snapBox, dropsBefore);
 		drops.clearNew(level);
 		TickDeferral.release(level, held);
@@ -330,8 +612,36 @@ final class PlaceJob implements Placement.Job {
 		if (bedNote != null) {
 			notes.add(0, bedNote);
 		}
-		if (Sites.finishPlacing(server, this, bedCells, notes.isEmpty() ? null : String.join("; ", notes)) == null && broken == null) {
-			broken = "its site record is gone";
+		finishNote = notes.isEmpty() ? null : String.join("; ", notes);
+		if (construction) {
+			// P6 of a construction site: its target (the converted site's queue, crate), then P7 with the crate's own entry
+			Sites.Built built = Sites.builtOf(this);
+			if (built == null) {
+				broken = "its level or design is gone; it can't become a construction site";
+				return;
+			}
+			Blueprint bp = bp();
+			SiteGroupRec g = record == null || record.group() == null ? null : Sites.group(record.group());
+			Builder.SHARED_CRATE.set(g != null && g.sharedCrate() ? g.id() : null);
+			try {
+				long t0 = System.nanoTime();
+				Builder.ConvertPlan p = Builder.planConvert(level, bp, built, siteId, placer);
+				commit = Builder.commitConvert(level, p);
+				convert = p.construction();
+				newCrate = p.newCrate();
+				sharedGroup = p.sharedGroup();
+				Placement.noteConvert(siteId, System.nanoTime() - t0);
+			} finally {
+				Builder.SHARED_CRATE.remove();
+			}
+			phase = AFTER_COMMIT;
+			return;
+		}
+		if (snapBox.volume() <= SiteJournal.ONE_TICK_CELLS) {
+			commit = SiteJournal.complete(siteId, dev.larattalabs.architect.journal.WorldJournal.capture(level, snapBox), null);
+			phase = AFTER_COMMIT;
+		} else {
+			phase = AFTER;
 		}
 	}
 
@@ -367,6 +677,13 @@ final class PlaceJob implements Placement.Job {
 	public void aborted(MinecraftServer server) {
 		// a cancelled job never schedules what it held back: the rollback restores the box as it was
 		held.clear();
+		if (tracker != null) {
+			tracker.stop();
+			tracker = null;
+		}
+		if (placing != null) {
+			placing.stopTracking();
+		}
 	}
 
 	// ------------------------------------------------------------------ persistence
@@ -430,6 +747,31 @@ final class PlaceJob implements Placement.Job {
 		if (writer != null) {
 			o.add("writer", writer.toJson());
 		}
+		if (record != null) {
+			o.add("record", record.toJson());
+		}
+		if (siteEntry != null) {
+			o.addProperty("siteEntry", siteEntry);
+		}
+		if (leavesEntry != null) {
+			o.addProperty("leavesEntry", leavesEntry);
+		}
+		JsonArray hl = new JsonArray();
+		heldLeaves.forEach(hl::add);
+		o.add("heldLeaves", hl);
+		o.add("ring", ints(ring));
+		o.addProperty("beforeRecord", beforeRecord);
+		if (convert != null) {
+			o.add("convert", convert.toJson());
+			o.addProperty("newCrate", newCrate);
+			if (sharedGroup != null) {
+				o.addProperty("sharedGroup", sharedGroup);
+			}
+			o.addProperty("clearCursor", clearCursor);
+		}
+		if (finishNote != null) {
+			o.addProperty("finishNote", finishNote);
+		}
 		return o;
 	}
 
@@ -463,6 +805,25 @@ final class PlaceJob implements Placement.Job {
 		if (o.has("writer")) {
 			j.pendingWriter = o.getAsJsonObject("writer");
 		}
+		if (o.has("record")) {
+			j.record = Site.fromJson(o.getAsJsonObject("record"));
+		}
+		j.siteEntry = o.has("siteEntry") ? o.get("siteEntry").getAsString() : null;
+		j.leavesEntry = o.has("leavesEntry") ? o.get("leavesEntry").getAsString() : null;
+		if (o.has("heldLeaves")) {
+			o.getAsJsonArray("heldLeaves").forEach(e -> j.heldLeaves.add(e.getAsInt()));
+		}
+		if (o.has("ring")) {
+			j.ring = intArray(o, "ring");
+		}
+		j.beforeRecord = o.has("beforeRecord") && o.get("beforeRecord").getAsBoolean(); // a 4d job (migrated) had its record
+		if (o.has("convert")) {
+			j.convert = Construction.fromJson(o.getAsJsonObject("convert"));
+			j.newCrate = o.has("newCrate") && o.get("newCrate").getAsBoolean();
+			j.sharedGroup = o.has("sharedGroup") ? o.get("sharedGroup").getAsString() : null;
+			j.clearCursor = o.has("clearCursor") ? o.get("clearCursor").getAsInt() : 0;
+		}
+		j.finishNote = o.has("finishNote") ? o.get("finishNote").getAsString() : null;
 		return j;
 	}
 
