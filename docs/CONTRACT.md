@@ -2357,7 +2357,7 @@ re-run has one pre-existing failure class (below).
 | 1000x1000 generator (recorded) | | 11.57M cells in 33.6 min at 4 ms with LOAD_BOUNDED 64; 11 of 610 lots timed out NOT_LOADED; MSPT max 237 ms while the server generated unexplored terrain |
 
 
-# Phase 5a contract: critique loop and eval harness (A4 + R8) - DRAFT for Steward review
+# Phase 5a contract: critique loop and eval harness (A4 + R8) - FROZEN after Steward review
 
 Goal: **designs get better without a person reviewing each one, and we can measure it.** After a design renders, a
 cheaper critic looks at fixed renders plus the blueprint summary, the brief and the style bible, and returns a structured
@@ -2944,3 +2944,27 @@ other real checks ~$3, about $85; the model subset (~$18) runs last and only if 
 - **N4** Yes: commit small eval summaries (scores, costs, verdicts), no renders or transcripts. They hold no personal data.
 - **N5** Yes: the critic is Sonnet 5.5 and the blind judge Opus 5.5.
 - **N6, N7, N8** Yes: textured renders and the HeadlessMC nightly are deferred, and bibles have no force-delete.
+
+## Changes from Steward's review of 5a (steward-mc/docs/A5A-REVIEW.md), all accepted
+
+Where this section and the 5a text above disagree, this section wins.
+
+- **Estimates (SHOULD 1).** Estimates return critique as separate fields (`critiqueUsdLow/High`, `critiqueMinutesLow/High`, per
+  item and in total), next to the design figures, so a caller can show "with polish / without". When the soft budget is reached,
+  critique rounds are the first thing dropped: no new critic call or revision starts, and the design installs as it is.
+- **Group wall time (SHOULD 2).** The group estimate states its time with and without critique. An item **releases its design slot
+  during the critic call** and re-enters the queue for its revision turn **ahead of items not yet started** (same session, kept
+  alive). The gate records group wall time with critique for the Mosswater set.
+- **Polish-ready report verdicts (SHOULD 3).** Report mode writes `<entry>/critique.json` (verdict, renders' hashes, the bible
+  version, the entry revision). Its shape is the input a later "polish" job (critique plus a revision of an installed entry,
+  deferred to 5b with delta apply) starts from. A stale verdict (entry revision changed) is marked stale, not reused.
+- **S1** Off for API callers; per-item opt-in. Architect never loops a whole group by default.
+- **S2** Verdicts as data, as drafted.
+- **S3** `extraCriteria`: up to 3 per item, scored as their own rubric lines and shown to the critic and the judge.
+- **S4** No site-plan view in 5a (phase 6, with section previews and Steward's lot rectangles).
+- **S5** Massing critique with autoApprove: available, off by default.
+- **S6** Eval set v2 adds Steward's 6 briefs (steward-mc/docs/eval-briefs-v2-candidates.json) as a separate tier, not in the
+  5a gate's 18.
+- **S7** Architect owns PLAYBOOK.md, slices.mjs and the attach/facing rules, with an origin note; changes are reported to Steward.
+- **S8** `job.images` is a general input of structured jobs, not critic-only.
+- **S9** The 4-brief Opus subset is directional. If it is ambiguous, a dedicated run follows the gate as a separate decision.
