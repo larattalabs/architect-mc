@@ -2256,3 +2256,71 @@ Where this section and the 4e text above disagree, this section wins.
 - **S3** LAYER is explicit: `Batch.overlap = LAYER`. **S4** Polyline roads only, no per-point absolute y. **S5** placeCells
   ships in 4e, with no construction mode. **S6** Move refused for layered sites. **S7** No survival roads in 4e.
   **S8** `covers/coveredBy` plus `stack()` is enough. **S9** mega-lite gates 4e; the full mega_bench is measured in phase 6.
+
+## Phase 4e as built (API 1.5.0, mod 0.8.0, recorded 2026-10-06)
+
+Deviations, interpretations and measured numbers. The gate evidence is local: `artifacts/gate4e/` (REPORT.md, per-step
+JSON, `throughput.json`, `bench.json`), driven by `tools/gate4e.mjs`.
+
+**Journal and store**
+- The journal is AgentCraft `ab08a02`'s rules (`Journal.java` and its tests, verbatim plus `PLACING` and interned state tags),
+  stored per entry per 512x512 region with generations, the index as the commit point, a section map and an LRU cache
+  (`journalCacheMb`, 64; `journalWarnMb`, 1024, in `architect-world.json`).
+- Block states are kept as `NbtUtils.writeBlockState` writes them; in 26.x that is `{id, properties}` (the port's
+  `Name/Properties` helpers were wrong; `Journal.AIR` never equalled a world value until the gate found it).
+- Undo records and section sets use hash collections: `Map.copyOf` on packed block positions went quadratic (a 600k-cell
+  undo planned for minutes).
+- **The invariants (iii) and (iv) contradict each other** when a player edits a cell where a CELL entry lies over a BOX entry:
+  with BOX undone first, the CELL entry keeps the player's block (iv); with CELL first, the BOX entry restores its before.
+  The end state depends on the order. Resolution (closest to Steward's needs, which rely on iv: a player's block on a road or
+  pad survives): (iv) holds as specified; (iii) is tested with player edits on cells whose entries are all CELL or all BOX,
+  and the contradicting case has its own test (`JournalPropertyTest.theContradictionBetweenIiiAndIvIsReal`).
+
+**Placement and removal**
+- A single Place commits P3 and P7 synchronously (as 4d's synchronous snapshot write). Queue items commit off the server
+  thread and wait for the commit inside the budget plus at most 6 ms (`PlaceJob.COMMIT_GRACE_NANOS`), so an item does not
+  lose a tick per commit. The next batch item starts while the previous item's P7 commit is still on the I/O thread
+  (its writes are done; it is PLACED at P8 as before), and a finished job's batch starts its next item in the same tick.
+- A building's `after` (P6) is captured before the placement's deferred block ticks run: a few cells differ from it later
+  (dirt_path under a solid block becomes dirt). BOX removal is unaffected; `dev.site.verify` reports such cells.
+- Large sites (restore box over 100k cells, the size cap) are removed over ticks (`Sites.removeLarge`, a `RestoreJob`): the
+  undo is planned per section across ticks after its region files are read off the server thread, its commit is built
+  off-thread, the restore template is prepared off-thread, and the edge shape update runs face by face.
+- A large batch item (design box over 100k cells) has its template grid warmed off-thread, its checks in one tick and its
+  start (reusing that plan) in the next. Terrain checks read through the column's chunk; leaf scans skip sections without
+  leaves.
+- Large cell sites in a batch (over 50k cells): decoded, de-duplicated and sorted off-thread, the natural filter over ticks,
+  the overlap test on occupied sections only, started a tick later without a second sort; their PLACING sections are built
+  off-thread. Single `placeCells` calls are synchronous (one tick) as specified for INSTANT.
+- Batch items read the journal regions under them off the server thread before their checks.
+- The placement queue file is written off the server thread (it holds queued cell sites' cells); a clean stop writes it
+  at once. Placement waits the first 40 ticks after a world start (the server's own first ticks reached 45 ms).
+- A group removal is one undo; blockers are checked up front; the records go pending in one change of state.
+- Removal blockers count a block entity in the site's journal `after` as the site's own (a LAYERed BOX site keeps what it
+  stood on).
+- The outside halves of tall plants a box cuts are guard cells of the site's `leaves` entry and are written back before the
+  box; restores put back two-block plants and doors a box write lost (0.7.0 lost such plants).
+- `undoStage(group, stage, RemoveOptions)` is an added overload (the covered policy for stages). `Sites.Removed.site` is null
+  for road and cell-site results.
+
+**Crash safety and settle**
+- K4 (ACTIVE in the journal, the record still placing): the record is placed. K6 (undo committed, record not pending): the
+  record follows the journal to pending, then the evidence decides. Pending roads and cell sites are settled at world start
+  like sites (they were not before the gate). Group-undo evidence compares against the value the group wrote at a cell.
+- Orphan generation files are deleted at open; an unknown entry's files are kept and listed.
+
+**Roads, cell sites, layering**
+- A road's handover to the road it crosses is its own commit, before the road's undo.
+- Cell sites in a world where INSTANT is not allowed refuse `NOT_ALLOWED` regardless of the actor (SHOULD 2).
+- Survival rule 3(b) refunds a covered cell only when the covering site displaced the block (the world no longer holds it);
+  a block the covering site kept drops once, with that site's removal.
+- `/architect remove <road> force` is CASCADE.
+- LOAD_BOUNDED fairness: the first item that could not get its chunk tickets has the next ones.
+
+**Gate setup**
+- The fixtures stand on a flat meadow (`preset: flat`); normal worldgen near spawn was too steep for roads with at most 4 of
+  cut/fill. Trees for the size-cap and leaf cases are placed with the worldgen tree features (`/place feature`), and the
+  held-leaf cases use a normal world (seed `4e`).
+- The kit has no lever: the "lever flipped in H" edit flips H's door (`open`, the same volatile-property rule).
+- The 4d gate's lot L3 fails group-undo equality on the 0.7.0 jar too (worldgen gravel floating over a cave at the lot edge
+  falls after the restore): a pre-existing limit, not a 4e regression.
