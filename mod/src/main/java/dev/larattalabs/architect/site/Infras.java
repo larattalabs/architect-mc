@@ -81,9 +81,16 @@ public final class Infras {
 
 	/** R3 for a road or cell site: the record goes pending. */
 	static void markPending(MinecraftServer server, String id) {
+		if (markPendingQuiet(id)) {
+			Sites.saveAll(server);
+		}
+	}
+
+	/** {@link #markPending} without the save (the caller saves once for many). */
+	static boolean markPendingQuiet(String id) {
 		Infra i = byId.get(id);
 		if (i == null) {
-			return;
+			return false;
 		}
 		Map<String, Infra> m = new LinkedHashMap<>(byId);
 		m.remove(id);
@@ -91,7 +98,7 @@ public final class Infras {
 		Map<String, Infra> p = new LinkedHashMap<>(pending);
 		p.put(id, i);
 		pending = Collections.unmodifiableMap(p);
-		Sites.saveAll(server);
+		return true;
 	}
 
 	/** Drops a pending record (settled) or a record (forgotten). */

@@ -424,15 +424,16 @@ public final class Groups {
 
 	/** R3 of a group undo: every member's record goes pending (once). */
 	private static void pendAll(MinecraftServer server, Removal r) {
+		List<Site> sites = new ArrayList<>();
 		for (String id : r.undoSites) {
 			Site s = Sites.get(id);
 			if (s != null) {
-				Sites.markPending(server, s, "removed");
+				sites.add(s);
 			}
-			if (Infras.get(id) != null) {
-				Infras.markPending(server, id);
-			}
+			Infras.markPendingQuiet(id);
 		}
+		// one change of state, one save (the infra records are saved with it)
+		Sites.markPendingAll(server, sites, "removed");
 	}
 
 	/** R1-R2 of a group undo: checks every member, tallies construction refunds, plans and submits one commit. */

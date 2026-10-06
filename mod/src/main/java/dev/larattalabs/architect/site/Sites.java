@@ -1387,6 +1387,22 @@ public final class Sites {
 	}
 
 	/** R3: a standing record becomes pending (its undo is committed; the writes follow). */
+	/** {@link #markPending} for many sites in one change of state (one save; a group of 48 sites took 96 ms one by one). */
+	static void markPendingAll(MinecraftServer server, List<Site> sites, String why) {
+		State s = state;
+		Map<String, Site> map = new LinkedHashMap<>(s.byId());
+		List<Site.Pending> pending = new ArrayList<>(s.pending());
+		long now = System.currentTimeMillis();
+		for (Site b : sites) {
+			map.remove(b.id());
+			pending.removeIf(p -> p.site().id().equals(b.id()) && p.site().placedAt() == b.placedAt() && "removed".equals(p.why()));
+			pending.add(new Site.Pending(b, now, why));
+			reports.remove(b.id());
+			dropFromGroup(b);
+		}
+		commit(server, new State(Collections.unmodifiableMap(map), s.next(), List.copyOf(pending)));
+	}
+
 	static void markPending(MinecraftServer server, Site b, String why) {
 		State s = state;
 		Map<String, Site> map = new LinkedHashMap<>(s.byId());
