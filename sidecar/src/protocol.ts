@@ -769,7 +769,7 @@ export const DesignEstimateMsg = z
   .object({ ...envelope('design.estimate'), group: GroupRequest.optional(), request: DesignRequest.optional() })
   .refine((m) => !!m.group !== !!m.request, 'send exactly one of group and request');
 export const BibleRequestMsg = z.object({ ...envelope('bible.request'), request: BibleRequest });
-export const BibleReviseMsg = z.object({ ...envelope('bible.revise'), id: BibleId, notes: z.string().trim().min(1).max(4000), model: ModelId.optional(), budgetUsd: BudgetUsd.optional() });
+export const BibleReviseMsg = z.object({ ...envelope('bible.revise'), id: BibleId, notes: z.string().trim().min(1).max(4000), model: ModelId.optional(), budgetUsd: BudgetUsd.optional(), critique: z.object({ mode: z.enum(['off', 'report']), model: ModelId.optional() }).optional().describe('(5a) a sheet critique at the end') });
 export const BibleEstimateMsg = z.object({ ...envelope('bible.estimate'), request: BibleRequest.optional() });
 export const BibleCancelMsg = z.object({ ...envelope('bible.cancel'), jobId: Id });
 export const ReskinRequestMsg = z.object({ ...envelope('reskin.request'), bibleId: BibleId, version: z.number().int().min(1).optional(), from: ReskinFrom });

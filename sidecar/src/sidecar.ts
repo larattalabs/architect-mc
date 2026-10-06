@@ -434,7 +434,7 @@ export class Sidecar {
         return { jobId: j.id, bibleId: j.bibleId, version: j.version };
       }
       case 'bible.revise': {
-        const j = this.bibles.revise(msg.id, msg.notes, msg.model, msg.budgetUsd);
+        const j = this.bibles.revise(msg.id, msg.notes, msg.model, msg.budgetUsd, msg.critique);
         return { jobId: j.id, bibleId: j.bibleId, version: j.version };
       }
       case 'bible.estimate':

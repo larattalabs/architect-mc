@@ -418,7 +418,7 @@ export class Critiques {
         owner: CRITIC_OWNER,
         tag: `design ${id} round ${n}`,
       },
-      { images, ...(sc.designerName() === 'sim' ? { simAnswer: simVerdict(d.request.notes, n, dims, parts) } : {}) },
+      { images, ...(sc.designerName() === 'sim' ? { simAnswer: simVerdict(d.request.notes, n, dims, parts, usedViews) } : {}) },
     );
     cw.pending = 'critic';
     cw.jobId = job.id;
@@ -705,6 +705,33 @@ export class Critiques {
     }
     sc.designs.update(d.id, { status: 'done', step, blueprintId: cw.entry! });
     sc.store.flush();
+  }
+
+  // ---- the bible sheet critique ----------------------------------------------------------------------------
+
+  /**
+   * One report call on a bible's sheet.png (component legibility and restraint); its cost joins the bible job's. Returns
+   * what bible.json keeps (`critique`), or undefined when the call failed (the bible installs without it).
+   */
+  async sheetCritique(j: import('./protocol.js').BibleJob, w: { cost: Cost; bible?: Record<string, unknown> }, sheet: string): Promise<Record<string, unknown> | undefined> {
+    const sc = this.sc;
+    const model = j.request.critique?.model ?? sc.config.critique.model;
+    const ctx: CriticContext = { kind: 'sheet', neighbours: 0, views: ['sheet'], parts: [], extraCriteria: [], round: 0, report: true, biblePrompt: j.request.prompt, bible: { name: String(w.bible?.name ?? j.bibleId), json: JSON.stringify(w.bible ?? {}, null, 2) } };
+    const dims = dimsFor(ctx);
+    const job = sc.jobs.runInternal(
+      { kind: 'structured', prompt: criticPrompt(ctx), system: CRITIC_SYSTEM, model, effort: sc.config.critique.effort, schema: verdictSchema(dims, ['sheet']), maxTurns: 3, owner: 'architect:sheet-critic', tag: `bible ${j.bibleId} v${j.version}` },
+      { images: [{ file: sheet, label: 'sheet (the component sheet)' }], ...(sc.designerName() === 'sim' ? { simAnswer: simVerdict(j.request.prompt, 0, dims, [], ['sheet']) } : {}) },
+    );
+    const done = await sc.jobs.waitFinal(job.id);
+    w.cost = addCost(w.cost, done.cost);
+    sc.bibles.setCost(j.id, w.cost);
+    if (done.status !== 'done') {
+      sc.log.warn(`bible job ${j.id}: the sheet critique failed (${done.error ?? done.status}); installing without it`);
+      return undefined;
+    }
+    const v = readVerdict(done.result, { dims, parts: [], shipScore: DEFAULT_SHIP_SCORE, previousCount: 0 });
+    sc.log.info(`bible job ${j.id}: sheet critique ${v.overall} (${Object.entries(v.scores).map(([k, x]) => `${k} ${x}`).join(', ')})`);
+    return { overall: v.overall, scores: v.scores, issues: v.issues, ...(v.summary ? { summary: v.summary } : {}), ship: v.ship, model, cost: done.cost.usd, at: sc.now() };
   }
 
   // ---- restart -------------------------------------------------------------------------------------------

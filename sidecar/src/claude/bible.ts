@@ -47,14 +47,26 @@ export function bibleSchema(scope: 'building' | 'settlement'): Record<string, un
       },
       roofLanguage: { type: 'string', maxLength: 200 },
       silhouette: { type: 'string', maxLength: 200 },
-      motifs: { type: 'array', items: { type: 'string', maxLength: 120 }, maxItems: 8 },
+      motifs: { type: 'array', items: { type: 'string', maxLength: 120 }, maxItems: 6, description: 'at most 6, each readable at one block\'s scale' },
       tiers: { type: 'object', properties: { humble: { type: 'array', items: { type: 'string' } }, important: { type: 'array', items: { type: 'string' } } }, required: ['humble', 'important'], description: 'role names' },
       lighting: { type: 'string', maxLength: 200 },
       avoid: { type: 'array', items: { type: 'string', maxLength: 120 }, maxItems: 8 },
-      components: { type: 'array', items: { type: 'string', description: 'lower_snake_case' }, maxItems: 10, description: `the component library: always ${REQUIRED_COMPONENTS.join(', ')}, plus up to 4 the style needs` },
+      components: { type: 'array', items: { type: 'string', description: 'lower_snake_case' }, maxItems: 8, description: `the component library: always ${REQUIRED_COMPONENTS.join(', ')}, plus at most 3 the style needs` },
+      restraint: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          heroMotifs: { type: 'array', items: { type: 'string', maxLength: 120 }, maxItems: 3, description: 'at most 3 of the motifs, copied exactly: they appear on every building; the others at most once per building' },
+          accentShareMax: { type: 'number', minimum: 0.04, maximum: 0.2, description: 'the largest share of a facade that may be accent blocks (0.12 is moderate)' },
+          detailDensity: { type: 'string', enum: ['sparse', 'moderate', 'rich'] },
+          windowsPerFacadeMin: { type: 'integer', minimum: 0, maximum: 6, description: 'readable windows per facade, at least' },
+        },
+        required: ['heroMotifs', 'accentShareMax', 'detailDensity', 'windowsPerFacadeMin'],
+        description: '(format 2) how much the style holds back: a bible is a restraint as much as a palette',
+      },
       prose: { type: 'string', minLength: 200, maxLength: 6000, description: 'bible.md for designers (markdown): mood, silhouette, what each material means, do and don\'t' },
     },
-    required: ['name', 'roles', 'proportions', 'roofLanguage', 'silhouette', 'motifs', 'tiers', 'lighting', 'avoid', 'components', 'prose'],
+    required: ['name', 'roles', 'proportions', 'roofLanguage', 'silhouette', 'motifs', 'tiers', 'lighting', 'avoid', 'components', 'restraint', 'prose'],
   };
 }
 
@@ -73,6 +85,7 @@ export function draftPrompt(job: BibleJob, ctx: { seed?: { id: string; roles: Re
     ctx.references?.length ? `Learn from these existing buildings of the library: ${ctx.references.map((x) => `${x.name} (${x.id}): ${x.materials.slice(0, 10).join(', ')}`).join('; ')}.` : '',
     ctx.previous ? `The current version:\n${ctx.previous.json}\n\nIts prose:\n${truncate(ctx.previous.prose, 4000)}` : '',
     'Make the roles distinctive and coherent (a limited palette reads as one place): what is humble (sheds, houses) and what is important (the landmark, the hall) goes in `tiers` as role names. Proportions are in blocks: storey height, roof pitch (1 = one block up per block in), overhang, window rhythm (a window every n blocks), plinth height.',
+    'A bible is a restraint as much as a palette (format 2). Sets made with an earlier bible came out cluttered and hard to read: scattered accent blocks, too many motifs, few readable windows, heavy roofs hiding the walls. So: at most 6 motifs, each one readable at a single block\'s scale (no motif that needs a pattern of mixed blocks to read); pick at most 3 of them as hero motifs (`restraint.heroMotifs`, copied exactly), which every building shows; the others appear at most once per building. Set `restraint.accentShareMax` (0.04-0.20; 0.12 is moderate), `restraint.detailDensity` (sparse, moderate or rich) and `restraint.windowsPerFacadeMin` (readable windows per facade, usually 2). Components: the 5 required ones plus at most 3. Windows must stay readable from the front.',
     'The prose (bible.md) is for the building designers: the mood in two sentences, the silhouette, what each role is used for, the roof and window language, the components and how to use them, and a short do / don\'t list. No more than about 500 words.',
   ];
   return lines.filter(Boolean).join('\n\n');

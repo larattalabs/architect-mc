@@ -190,6 +190,20 @@ export class JobRunner {
     return j;
   }
 
+  /** (5a) Resolves when the job is final (done, failed or cancelled). */
+  waitFinal(id: string): Promise<Job> {
+    return new Promise<Job>((resolve) => {
+      const now = this.book.get(id);
+      if (!now || isFinalJob(now)) return resolve(now ?? ({ id, status: 'failed', error: 'no such job' } as unknown as Job));
+      const off = this.sc.subscribe((m) => {
+        if (m.type === 'job.upsert' && m.job.id === id && isFinalJob(m.job)) {
+          off();
+          resolve(this.book.get(id) ?? m.job);
+        }
+      });
+    });
+  }
+
   /** (5a) Write a job's images into <scratch>/images/ and record them in its work. */
   private storeImages(id: string, images: Array<{ buf: Buffer; label: string; mediaType: 'image/png' | 'image/jpeg' }>): void {
     const dir = path.join(this.book.scratchDir(id), 'images');

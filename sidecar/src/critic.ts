@@ -291,20 +291,20 @@ export function blueprintSummary(input: {
  * a score for every dimension (`7.5`), optionally with `!P0` (a P0 issue), `?part` (an issue on an unknown part) or
  * the token `fail` (the critic call fails). Without a script the sim critic gives 8 everywhere (ships at round 0).
  */
-export function simVerdict(notes: string | undefined, round: number, dims: string[], parts: string[]): unknown {
+export function simVerdict(notes: string | undefined, round: number, dims: string[], parts: string[], views: string[] = ['iso', 'front']): unknown {
   const m = /sim:critique=([^\s;]+)/.exec(notes ?? '');
   const tokens = m ? m[1]!.split('/') : ['8'];
   const tok = tokens[Math.min(round, tokens.length - 1)]!;
   if (tok === 'fail') return { simFail: 'the simulated critic failed' };
   // `L`: this critic call hits a usage limit once (it lasts simLimitMs), then answers
-  if (tok.includes('L')) return { simLimitMs: 600, answer: simVerdict(notes?.replace(tok, tok.replace('L', '')), round, dims, parts) };
+  if (tok.includes('L')) return { simLimitMs: 600, answer: simVerdict(notes?.replace(tok, tok.replace('L', '')), round, dims, parts, views) };
   const num = Number(/^[\d.]+/.exec(tok)?.[0] ?? '8');
   const score = Math.max(1, Math.min(10, Math.round(num)));
   // an uneven split keeps the mean at `num` when it is a half (7.5 -> 7 and 8)
   const scores = Object.fromEntries(dims.map((d, i) => [d, Number.isInteger(num) ? score : i % 2 ? Math.ceil(num) : Math.floor(num)]));
   const issues: CritiqueIssue[] = [];
-  if (tok.includes('!P0')) issues.push({ priority: 'P0', part: parts[0] ?? null, view: 'iso', what: 'the entrance is blocked (simulated)', fix: 'open the door way' });
-  if (tok.includes('?part')) issues.push({ priority: 'P1', part: 'no_such_part', view: 'front', what: 'a part the blueprint does not have (simulated)', fix: 'none' });
-  if (num < 7) issues.push({ priority: 'P1', part: parts[0] ?? null, view: 'front', what: 'the front reads flat (simulated)', fix: 'add depth to the facade' });
+  if (tok.includes('!P0')) issues.push({ priority: 'P0', part: parts[0] ?? null, view: views[0] ?? 'iso', what: 'the entrance is blocked (simulated)', fix: 'open the door way' });
+  if (tok.includes('?part')) issues.push({ priority: 'P1', part: 'no_such_part', view: views.at(-1) ?? 'front', what: 'a part the blueprint does not have (simulated)', fix: 'none' });
+  if (num < 7) issues.push({ priority: 'P1', part: parts[0] ?? null, view: views.at(-1) ?? 'front', what: 'the front reads flat (simulated)', fix: 'add depth to the facade' });
   return { scores, issues, resolved: round > 0 ? [0] : [], verdict: num >= 7 ? 'ship' : 'iterate', summary: `simulated verdict ${tok} (round ${round})` };
 }

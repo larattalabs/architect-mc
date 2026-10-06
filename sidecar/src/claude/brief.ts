@@ -131,7 +131,9 @@ export interface BriefOptions {
   /** what the remix source is, if any */
   remix?: string;
   /** (4b) the style bible copied into bible/ */
-  bible?: { id: string; version: number; name: string; roles: Record<string, string>; components: string[]; hasProse: boolean };
+  bible?: { id: string; version: number; name: string; roles: Record<string, string>; components: string[]; hasProse: boolean; restraint?: { heroMotifs: string[]; accentShareMax: number; detailDensity: string; windowsPerFacadeMin: number } | undefined };
+  /** (5a) the kit has PLAYBOOK.md (the design playbook) */
+  playbook?: boolean;
   /** (4b) renders of the group's finished earlier-wave items in neighbours/ */
   neighbours?: Array<{ file: string; entryId: string; name?: string; type: string }>;
   /** (4c) the massing copied into massing/: the one a detail pass is bound to, or the version a redirect starts from */
@@ -255,6 +257,11 @@ export function bibleSection(b: NonNullable<BriefOptions['bible']>, bp: string):
     `- **Roles are the materials.** Roles: ${roles}. Default palette = the bible's: \`import { palette } from '../lib/kit.mjs'; import { loadBible } from '../lib/bible.mjs'; const BIBLE = loadBible(new URL('../../bible/bible.json', import.meta.url));\` and \`export default function build({ palette: p = palette({ bible: BIBLE }), ... })\`. Every palette field comes from a role (\`p.wall\`, \`p.plaster\` = wall_alt, \`p.stoneTrim\` = trim, \`p.roofStairs\`, \`p.floor\`, \`p.frame\`, \`p.accentPlanks\`, \`p.light\`, \`p.pane\`, \`p.foundation\`, \`p.path\`, plus the wood and stone sets derived from them); extra roles are \`p.roles.<name>\`. Use the bible's tiers (important vs humble materials) and proportions (storey height, roof pitch, overhang, window rhythm, plinth).`,
     `- **Use the components** for those elements, never your own version of them: \`import * as C from '../../bible/components.mjs';\` then \`C.window(bp, { x, y, z, facing, width, height }, opts)\`, \`C.door_surround(bp, { x, y, z, facing })\` (after placing the door), \`C.lantern_post(bp, { x, y, z, facing })\`, \`C.roof_trim(bp, { x, y, z, facing, length })\`, \`C.chimney(bp, { x, y, z, facing, top })\`${b.components.filter((c) => !['window', 'door_surround', 'lantern_post', 'roof_trim', 'chimney'].includes(c)).map((c) => `, \`C.${c}(...)\``).join('')}. Read \`bible/components.mjs\` for what each one does and what \`at\` means (design coordinates; facing = outwards).`,
     `- Keep the bible's files as they are (the sidecar puts them back before its check); \`kit/designs/${bp}.mjs\` imports them from \`../../bible/\`.`,
+    ...(b.restraint
+      ? [
+          `- **Restraint** (the bible is a restraint as much as a palette): the hero motifs ${b.restraint.heroMotifs.map((m) => `"${m}"`).join(', ') || '(none named)'} go on this building; every other motif at most once, and never as a block that hangs on nothing. Accents (accent blocks and decor that is in no role) stay under ${Math.round(b.restraint.accentShareMax * 100)}% of the facade; detail density "${b.restraint.detailDensity}"; at least ${b.restraint.windowsPerFacadeMin} readable windows per facade, readable from the front render. When in doubt, leave it out. The checker warns (\`restraint: ...\`) when a design breaks it.`,
+        ]
+      : []),
     '',
   ];
 }
@@ -314,6 +321,7 @@ export function designBrief(req: DesignRequest, bp: string, opts: BriefOptions):
     '',
     `- Only \`kit/designs/${bp}.mjs\` is yours: you cannot write anywhere else, and the sidecar re-checks your design with a fresh copy of the kit, so changes to the kit would not count anyway.`,
     '- Read `kit/README.md` first: it has the kit API and a complete small parametric design.',
+    opts.playbook ? '- Read `kit/PLAYBOOK.md` too: how to plan, build in layers, look at it (slices with `node kit/tools/slices.mjs`, then the renders) and critique your own design before you finish. It adds to this brief and never overrides it.' : '',
     '- **Make it parametric** (players make variants of it later without you, so this matters): `export const params = {...}` with 2 to 4 meaningful params (e.g. floors, width or depth, porch on/off, roof style; `int` with min/max/default, `bool`, `enum` with options), each with a `label`. The default export takes `{ palette, ...values }` with the defaults in the signature. The defaults must fit the maximum size above; the bounds may go past it. Every combination must build and pass the checker: try the corners (`--values \'{"floors":3,"porch":false}\'`) before you finish.',
     '- **Materials come from the palette**: the default export gets `palette` (default: the preset or `palette({ wood, stone, roof, accent })` that fits the request). Read every wood and stone from it (`p.planks`, `p.log`, `p.strippedLog`, `p.stairs`, `p.slab`, `p.fence`, `p.door`, `p.trapdoor`, `p.accentLog`, `p.accentStairs`, `p.stone`, `p.stoneStairs`, `p.stoneSlab`, `p.stoneWall`, `p.stoneTrim`, `p.roofStairs`, `p.roofSlab`, `p.roofBlock`, `p.plaster`), never a hard-coded wood or stone id, so a palette swap re-skins the whole building; the checker warns otherwise. Decor (chests, barrels, beds, lanterns, glass, carpets, iron) is free. Check a second preset too (`--palette cherry`, `--palette fortress`).',
     "- **Name the parts**: wrap every major mass in `bp.part('<name>', () => { ... })` (e.g. `main`, `roof`, `porch`, `tower`, `wing_east`, `chimney`, `furnishings`): at least 2 parts, and at most 20% of the cells outside any part (the checker warns otherwise). Names are stable ids (later edits diff by them): lower_snake_case, unique. Declare consts outside the part closures if several parts use them.",

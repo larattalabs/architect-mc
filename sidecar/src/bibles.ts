@@ -45,6 +45,12 @@ export type RunOutcome = 'finished' | 'requeue' | 'stopped' | 'critique';
 
 // ---- the index ------------------------------------------------------------------------------------
 
+/** Hero motifs that are among the motifs (at most 3); none: the first 3 motifs. */
+function heroesOf(heroes: string[], motifs: unknown[]): string[] {
+  const ok = heroes.filter((m) => motifs.includes(m)).slice(0, 3);
+  return ok.length ? ok : motifs.filter((m): m is string => typeof m === 'string').slice(0, 3);
+}
+
 export const DEFAULT_RESTRAINT = { accentShareMax: 0.12, detailDensity: 'moderate' as const, windowsPerFacadeMin: 2 };
 
 /** (5a) A bible's effective restraint: format 2's own (defaults filled in); format 1: the defaults, hero motifs = its first 3 motifs. */
@@ -515,13 +521,13 @@ export class Bibles {
   }
 
   /** bible.revise: version + 1 of an installed bible, from the notes. */
-  revise(id: string, notes: string, model?: string, budgetUsd?: number): BibleJob {
+  revise(id: string, notes: string, model?: string, budgetUsd?: number, critique?: BibleJob['request']['critique']): BibleJob {
     this.sc.ensureClaudeAvailable();
     const vs = this.sc.bibleIndex.versions(id);
     if (!vs.length) throw new ClientError(this.sc.bibleIndex.isBuiltin(id) ? `${id} is a built-in bible: request a new bible with seedPreset "${id}" instead` : `no bible "${id}"`);
     if (this.active().some((j) => j.bibleId === id)) throw new ClientError(`bible ${id} is being made or revised already`);
     const info = this.sc.bibleIndex.get(id)!;
-    const req: BibleJob['request'] = { prompt: info.prompt ?? info.name, name: info.name, notes, ...(model ? { model } : {}), ...(budgetUsd !== undefined ? { budgetUsd } : {}), ...(info.owner ? { owner: info.owner } : {}), ...(info.scope === 'settlement' ? { scope: 'settlement' as const } : {}) };
+    const req: BibleJob['request'] = { prompt: info.prompt ?? info.name, name: info.name, notes, ...(model ? { model } : {}), ...(budgetUsd !== undefined ? { budgetUsd } : {}), ...(info.owner ? { owner: info.owner } : {}), ...(info.scope === 'settlement' ? { scope: 'settlement' as const } : {}), ...(critique ? { critique } : {}) };
     const j = this.create('revise', id, vs[vs.length - 1]! + 1, req);
     this.sc.log.info(`bible job ${j.id}: revise ${id} -> v${j.version}`);
     return j;
@@ -713,8 +719,14 @@ export class Bibles {
           this.fail(id, `the bible did not validate: ${truncate(v.errors.join('; '), 1000)}`);
           return 'finished';
         }
+        // (5a) format 2: the restraint (the draft's own, else the defaults with its first 3 motifs as heroes)
+        const restraint = restraintOf({ ...v.bible, format: 2, ...(r.bible.restraint ? { restraint: r.bible.restraint } : {}) });
+        const motifs = Array.isArray(v.bible.motifs) ? (v.bible.motifs as unknown[]) : [];
         w.bible = {
           ...v.bible,
+          format: 2,
+          motifs,
+          restraint: { ...restraint, heroMotifs: heroesOf(restraint.heroMotifs, motifs) },
           id: j.bibleId,
           version: j.version,
           name: j.request.name ?? v.bible.name ?? j.bibleId,
@@ -764,6 +776,16 @@ export class Bibles {
         fs.writeFileSync(path.join(stage, 'bible.md'), `${(w.prose ?? '').trim()}\n`);
         fs.copyFileSync(path.join(scratch, 'bible', 'components.mjs'), path.join(stage, 'components.mjs'));
         fs.copyFileSync(c.sheet!, path.join(stage, 'sheet.png'));
+        // (5a) the sheet critique (one report call on sheet.png), stored in bible.json `critique`
+        if (j.request.critique?.mode === 'report') {
+          this.update(id, { step: 'critic: the component sheet' });
+          const crit = await this.sc.critiques.sheetCritique(j, w, path.join(stage, 'sheet.png'));
+          if (this.stopped(id)) return 'finished';
+          if (crit) {
+            w.bible = { ...w.bible!, critique: crit, cost: w.cost };
+            fs.writeFileSync(path.join(stage, 'bible.json'), `${JSON.stringify(w.bible, null, 2)}\n`);
+          }
+        }
         this.sc.bibleIndex.install(j.bibleId, j.version, stage);
         const info = this.sc.bibleIndex.get(j.bibleId, j.version);
         if (this.sc.designerName() === 'claude' && w.startedAt) this.sc.estimates.record('bible', j.request.model ?? this.sc.config.bibleModel, w.cost.usd, this.sc.now() - w.startedAt);
