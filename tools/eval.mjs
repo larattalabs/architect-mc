@@ -338,9 +338,9 @@ function simScript(b) {
   const scripts = ['8', '5/8', '6/7.5', '5/5/7', '6/4', '5?part/8', '5/6/6', '6/8', '7/8', '5/7', '4/6/8', '6/7', '5/8', '6/7/7', '5/6', 'fail', '6/8', '5/7/8'];
   return `sim:critique=${scripts[(b.n - 1) % scripts.length]}`;
 }
-function simJudge(b, finalIs) {
-  const prefer = b.n % 6 === 0 ? 'round0' : 'final';
-  const pick = prefer === finalIs.A ? 'A' : 'B';
+function simJudge(b, order) {
+  const prefer = b.n % 6 === 0 ? (order.A === 'final' || order.B === 'final' ? 'round0' : 'before') : order.A === 'final' || order.B === 'final' ? 'final' : 'after';
+  const pick = prefer === order.A ? 'A' : 'B';
   return { preferred: pick, margin: 'clear', dimensions: { silhouette: pick, legibility: pick, craft: 'tie', materials: pick, brief: pick }, reasons: `simulated judge for brief ${b.n}` };
 }
 
@@ -615,38 +615,46 @@ async function judgeBrief(client, run, runDir, b, left, force = false) {
     s.judge = { outcome: 'none', revisions, calls: [], error: 'no renders to judge' };
     return;
   }
-  const blobs = { round0: {}, final: {} };
-  for (const k of ['round0', 'final']) for (const v of views) blobs[k][v] = await client.putPng(imgs[k][v]);
   const rng = rngFrom(`${run.seed}:${b.id}:${force ? `re${Date.now()}` : ''}`);
-  const firstFinalIsA = rng() < 0.5;
+  const j = await pairJudge(client, { b, request: requestOf(run, b), imgs: { final: imgs.final, round0: imgs.round0 }, views, firstXIsA: rng() < 0.5, x: 'final', y: 'round0', tag: `${run.runId} ${b.id}`, sim: run.tier === 'sim' });
+  const outcome = j.outcome === 'final' ? 'win' : j.outcome === 'round0' ? 'loss' : 'tie';
+  s.judge = { outcome, revisions, best: c.best, views, calls: j.calls };
+  s.judgeUsd = r4((s.judgeUsd ?? 0) + j.usd);
+}
+
+/**
+ * Two blind judge calls on the sets x and y (named A and B in a random order, then swapped). `outcome` is x or y when
+ * both calls prefer it, else tie.
+ */
+async function pairJudge(client, o) {
+  const blobs = { [o.x]: {}, [o.y]: {} };
+  for (const k of [o.x, o.y]) for (const v of o.views) blobs[k][v] = await client.putPng(o.imgs[k][v]);
   const calls = [];
   let usd = 0;
-  for (const finalIsA of [firstFinalIsA, !firstFinalIsA]) {
-    const order = finalIsA ? { A: 'final', B: 'round0' } : { A: 'round0', B: 'final' };
-    const images = [...views.map((v) => ({ blob: blobs[order.A][v], label: `A_${v}.png` })), ...views.map((v) => ({ blob: blobs[order.B][v], label: `B_${v}.png` }))];
-    const spec = { kind: 'structured', prompt: judgePrompt({ request: requestOf(run, b) }), system: JUDGE_SYSTEM, model: JUDGE_MODEL, effort: JUDGE_EFFORT, schema: JUDGE_SCHEMA, maxTurns: 3, budgetUsd: 0.5, images, owner: 'eval:judge', tag: `${run.runId} ${b.id}`, ...(run.tier === 'sim' ? { ext: { 'architect:simAnswer': simJudge(b, order) } } : {}) };
+  for (const xIsA of [o.firstXIsA, !o.firstXIsA]) {
+    const order = xIsA ? { A: o.x, B: o.y } : { A: o.y, B: o.x };
+    const images = [...o.views.map((v) => ({ blob: blobs[order.A][v], label: `A_${v}.png` })), ...o.views.map((v) => ({ blob: blobs[order.B][v], label: `B_${v}.png` }))];
+    const spec = { kind: 'structured', prompt: judgePrompt({ request: o.request }), system: JUDGE_SYSTEM, model: JUDGE_MODEL, effort: JUDGE_EFFORT, schema: JUDGE_SCHEMA, maxTurns: 3, budgetUsd: 0.5, images, owner: 'eval:judge', tag: o.tag, ...(o.sim ? { ext: { 'architect:simAnswer': simJudge(o.b, order) } } : {}) };
     let job;
     for (let attempt = 0; attempt < 2; attempt++) {
       const r = await client.call({ type: 'job.run', job: spec });
       for (;;) {
-        const j = client.jobs.get(r.jobId);
-        if (j && FINAL.has(j.status)) {
-          job = j;
+        const jj = client.jobs.get(r.jobId);
+        if (jj && FINAL.has(jj.status)) {
+          job = jj;
           break;
         }
         await sleep(500);
       }
       usd += job.cost?.usd ?? 0;
       if (job.status === 'done') break;
-      log(`brief ${b.id}: judge call failed (${job.error ?? job.status})${attempt === 0 ? ', once more' : ''}`);
+      log(`${o.tag}: judge call failed (${job.error ?? job.status})${attempt === 0 ? ', once more' : ''}`);
     }
     const a = job.status === 'done' ? job.result : null;
     calls.push({ order, ...(a ? { preferred: a.preferred, margin: a.margin, dimensions: a.dimensions, reasons: a.reasons, winner: a.preferred === 'tie' ? 'tie' : order[a.preferred] } : { error: job.error ?? job.status }), usd: r4(job.cost?.usd ?? 0) });
   }
-  const winners = calls.map((x) => x.winner);
-  const outcome = winners.every((w) => w === 'final') ? 'win' : winners.every((w) => w === 'round0') ? 'loss' : 'tie';
-  s.judge = { outcome, revisions, best: c.best, views, calls };
-  s.judgeUsd = r4((s.judgeUsd ?? 0) + usd);
+  const w = calls.map((x) => x.winner);
+  return { outcome: w.every((x) => x === o.x) ? o.x : w.every((x) => x === o.y) ? o.y : 'tie', calls, usd: r4(usd) };
 }
 
 // ---- summary (a pure function of the stored files) -------------------------------------------------------------
@@ -867,12 +875,55 @@ async function cmdCompare(o) {
   if (m('minutes', 1) > 1.3 * m('minutes', 0)) hard.push(`mean time +${r2(100 * (m('minutes', 1) / m('minutes', 0) - 1))}%`);
   if (100 * (m('paletteAdherence', 0) - m('paletteAdherence', 1)) > 5) hard.push('mean paletteAdherence -5 points');
   let judge = null;
-  if (o.judge) judge = { note: 'cross-run judge: run each pair with `rejudge`-style calls; not implemented beyond the deterministic comparison in 5a' };
+  if (o.judge) judge = await crossJudge(o, a, b, ids);
+  if (judge?.regressed) hard.push(`A's finals beat B's in the blind judge (${judge.before} to ${judge.after}, p ${judge.p})`);
   const out = { a: a.runId, b: b.runId, briefs: ids.length, per, means: { overall: [r2(m('overall', 0)), r2(m('overall', 1))], warnings: [r2(m('warnings', 0)), r2(m('warnings', 1))], cost: [r4(m('cost', 0)), r4(m('cost', 1))], minutes: [r2(m('minutes', 0)), r2(m('minutes', 1))], paletteAdherence: [r3(m('paletteAdherence', 0)), r3(m('paletteAdherence', 1))] }, hardRegressions: hard, judge, verdict: hard.length ? 'regressed' : 'no regression' };
   const dir = path.resolve(o.out ?? path.join(REPO, 'artifacts', 'eval'));
   writeJson(path.join(dir, `compare-${a.runId}-vs-${b.runId}.json`), out);
   log(`compare ${a.runId} -> ${b.runId}: ${out.verdict}${hard.length ? ` (${hard.join('; ')})` : ''}`);
   return out;
+}
+
+/** compare --judge: a blind pairwise judge of the two runs' finals (judge cost only), on a sidecar of its own. */
+async function crossJudge(o, a, b, ids) {
+  const out = path.resolve(o.out ?? path.join(REPO, 'artifacts', 'eval'));
+  const dir = path.join(out, `cmp-${a.runId}-vs-${b.runId}`);
+  fs.mkdirSync(dir, { recursive: true });
+  const tier = a.tier === 'sim' && b.tier === 'sim' ? 'sim' : 'smoke';
+  authGuard(tier);
+  if (!fs.existsSync(path.join(dir, 'run.json'))) writeJson(path.join(dir, 'run.json'), { runId: path.basename(dir), tier, briefs: [], state: {} });
+  const port = await freePort(o.port);
+  const sc = await startSidecar(dir, tier, port);
+  const client = new Client(port, sc.token);
+  const finalImgs = (runId, x) => {
+    const rd = path.join(out, runId);
+    const st = readJson(path.join(rd, 'sidecar', 'data', 'state.json'), {});
+    const did = readJson(path.join(rd, 'run.json')).state[x.id].designIds[0];
+    return roundImages(path.join(rd, 'sidecar', 'data', 'designs', did), st.work?.[did]?.critique?.bp, x.best);
+  };
+  const results = {};
+  let usd = 0;
+  try {
+    await client.connect();
+    for (const id of ids) {
+      const x = a.briefs.find((q) => q.id === id);
+      const y = b.briefs.find((q) => q.id === id);
+      const brief = loadBriefs().find((q) => q.id === id);
+      const imgs = { before: finalImgs(a.runId, x), after: finalImgs(b.runId, y) };
+      const views = JUDGE_VIEWS.filter((v) => imgs.before[v] && imgs.after[v]);
+      if (!views.length) continue;
+      const j = await pairJudge(client, { b: brief, request: brief.request, imgs, views, firstXIsA: rngFrom(`${a.runId}:${b.runId}:${id}`)() < 0.5, x: 'after', y: 'before', tag: `compare ${id}`, sim: tier === 'sim' });
+      results[id] = j;
+      usd += j.usd;
+    }
+  } finally {
+    client.close();
+    sc.child.kill('SIGTERM');
+  }
+  const after = Object.values(results).filter((r) => r.outcome === 'after').length;
+  const before = Object.values(results).filter((r) => r.outcome === 'before').length;
+  const p = signTestP(before, before + after);
+  return { pairs: Object.keys(results).length, before, after, ties: Object.keys(results).length - before - after, p: r4(p), regressed: p < 0.05, usd: r4(usd), results };
 }
 
 // ---- CLI ------------------------------------------------------------------------------------------------------
