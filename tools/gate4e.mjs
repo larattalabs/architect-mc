@@ -1045,15 +1045,26 @@ function megaSpec(n, id) {
   const cols = Math.max(1, Math.floor(n / 32));
   const rows = Math.max(1, Math.floor(n / 50));
   const want = Math.round(40 * (n / 256) ** 2);
-  const items = [{ key: 'P', cells: { kind: 'gate4e:terrain', pad: { minX: 0, maxX: n - 1, minZ: 0, maxZ: n - 1, y: 66, depth: 3, clear: 6 } } }];
+  // the pad in tiles of at most 256x256 (a cell site is at most 1M cells); 256x256 is one tile, P
+  const items = [];
+  const tile = 256;
+  const tiles = Math.ceil(n / tile);
+  for (let tx = 0; tx < tiles; tx++) {
+    for (let tz = 0; tz < tiles; tz++) {
+      const key = tiles === 1 ? 'P' : `P${tx}_${tz}`;
+      items.push({ key, cells: { kind: 'gate4e:terrain', pad: { minX: tx * tile, maxX: Math.min(n, (tx + 1) * tile) - 1, minZ: tz * tile,
+        maxZ: Math.min(n, (tz + 1) * tile) - 1, y: 66, depth: 3, clear: 6 } } });
+    }
+  }
+  const padKeys = items.map((i) => i.key);
   const roads = [];
   for (let r = 0; r < rows - 1 && roads.length < Math.round(4 * n / 256); r++) {
     const z = 10 + r * 50 + 33;
-    roads.push({ key: `RE${r}`, road: { points: [[2, 67, z], [n - 3, 67, z]], width: 3 }, after: ['P'] });
+    roads.push({ key: `RE${r}`, road: { points: [[2, 67, z], [n - 3, 67, z]], width: 3 }, after: padKeys });
   }
   for (let c = 0; c < cols && roads.length < Math.round(8 * n / 256); c += 2) {
     const x = 8 + c * 31 + 20;
-    roads.push({ key: `RN${c}`, road: { points: [[x, 67, 2], [x, 67, n - 3]], width: 3 }, after: ['P'] });
+    roads.push({ key: `RN${c}`, road: { points: [[x, 67, 2], [x, 67, n - 3]], width: 3 }, after: padKeys });
   }
   items.push(...roads);
   let k = 0;
