@@ -84,6 +84,53 @@ final class InfraJob implements Placement.Job {
 
 	/** Sets the planned cells (sorted lowest first) and starts P1. */
 	void plan(ServerLevel level, long[] pos, Value[] values) throws Sites.SiteException {
+		if (sortedLowestFirst(pos)) {
+			// a large cell site's check already sorted them (CellsCheck): no boxing sort on the server thread
+			positions = pos;
+			afters = values;
+		} else {
+			sortInto(pos, values);
+		}
+		befores = new Value[positions.length];
+		cursor = 0;
+		if (positions.length > SiteJournal.ONE_TICK_CELLS) {
+			it.unimi.dsi.fastutil.longs.LongOpenHashSet ks = new it.unimi.dsi.fastutil.longs.LongOpenHashSet();
+			long last = Long.MIN_VALUE;
+			for (long p : positions) {
+				long k = Sections.key(p);
+				if (k != last) {
+					ks.add(k);
+					last = k;
+				}
+			}
+			Set<Long> secs = new LinkedHashSet<>(ks);
+			tracker = ChangeTracker.start(level, secs);
+			phase = CAPTURE;
+		} else {
+			captureSome(level, Long.MAX_VALUE);
+			submit(level);
+		}
+	}
+
+	private static boolean sortedLowestFirst(long[] pos) {
+		for (int i = 1; i < pos.length; i++) {
+			long a = pos[i - 1];
+			long b = pos[i];
+			int c = Integer.compare(Journal.y(a), Journal.y(b));
+			if (c == 0) {
+				c = Integer.compare(Journal.x(a), Journal.x(b));
+			}
+			if (c == 0) {
+				c = Integer.compare(Journal.z(a), Journal.z(b));
+			}
+			if (c > 0) {
+				return false;
+			}
+		}
+		return true;
+	}
+
+	private void sortInto(long[] pos, Value[] values) {
 		Integer[] order = new Integer[pos.length];
 		for (int i = 0; i < order.length; i++) {
 			order[i] = i;
@@ -101,19 +148,6 @@ final class InfraJob implements Placement.Job {
 		for (int i = 0; i < order.length; i++) {
 			positions[i] = pos[order[i]];
 			afters[i] = values[order[i]];
-		}
-		befores = new Value[positions.length];
-		cursor = 0;
-		if (positions.length > SiteJournal.ONE_TICK_CELLS) {
-			Set<Long> secs = new LinkedHashSet<>();
-			for (long p : positions) {
-				secs.add(Sections.key(p));
-			}
-			tracker = ChangeTracker.start(level, secs);
-			phase = CAPTURE;
-		} else {
-			captureSome(level, Long.MAX_VALUE);
-			submit(level);
 		}
 	}
 

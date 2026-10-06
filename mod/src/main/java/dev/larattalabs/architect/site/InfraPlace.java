@@ -241,29 +241,9 @@ public final class InfraPlace {
 		}
 		List<SiteJournal.Hit> hits = new ArrayList<>();
 		over.forEach((s, n) -> hits.add(new SiteJournal.Hit(s, "", "", Journal.Policy.BOX, status.get(s), n, 0)));
-		if (!over.isEmpty()) {
-			if (!layer) {
-				String s = over.keySet().iterator().next();
-				return new Check(List.of(new Sites.Refusal(Reason.OVERLAP, "the cells overlap " + Sites.describe(s) + " (" + over.get(s)
-					+ " cells); place on top with LAYER or elsewhere")), notes, new long[0], new Value[0], null, hits, null);
-			}
-			for (String s : over.keySet()) {
-				String busy = Sites.busy(s, status.get(s));
-				if (busy != null) {
-					return new Check(List.of(new Sites.Refusal(Reason.OVERLAP_BUSY, "Not yet: " + Sites.describe(s) + " " + busy)), notes, new long[0],
-						new Value[0], null, hits, null);
-				}
-				String o = Sites.ownerOf(s);
-				if (!force && !java.util.Objects.equals(o, owner)) {
-					return new Check(List.of(new Sites.Refusal(Reason.OVERLAP_OWNED, Sites.describe(s) + " is owned by " + (o == null ? "the player" : o)
-						+ "; placing on top of it needs force")), notes, new long[0], new Value[0], null, hits, null);
-				}
-			}
-			if (deepest + 1 > SiteJournal.MAX_DEPTH) {
-				return new Check(List.of(new Sites.Refusal(Reason.LAYER_DEPTH, "a cell would carry " + (deepest + 1) + " layers (at most "
-					+ SiteJournal.MAX_DEPTH + ")")), notes, new long[0], new Value[0], null, hits, null);
-			}
-			over.forEach((s, n) -> notes.add("on top of " + Sites.describe(s) + " (" + n + " cells)"));
+		Check refusal = overlapRefusal(over, status, deepest, layer, owner, force, notes, hits);
+		if (refusal != null) {
+			return refusal;
 		}
 		long[] ps = new long[keep.size()];
 		Value[] vs = new Value[keep.size()];
@@ -288,6 +268,37 @@ public final class InfraPlace {
 		spec.addProperty("cells", ps.length);
 		spec.addProperty("naturalOnly", naturalOnly);
 		return new Check(List.of(), notes, ps, vs, new Anchors.Bounds(bb[0], bb[1], bb[2], bb[3], bb[4], bb[5]), hits, spec);
+	}
+
+	/** The overlap rules of a cell site (REFUSE, OVERLAP_BUSY, OVERLAP_OWNED, LAYER_DEPTH), or null; notes the sites it goes on. */
+	static @Nullable Check overlapRefusal(Map<String, Integer> over, Map<String, Journal.Status> status, int deepest, boolean layer, @Nullable String owner,
+		boolean force, List<String> notes, List<SiteJournal.Hit> hits) {
+		if (over.isEmpty()) {
+			return null;
+		}
+		if (!layer) {
+			String s = over.keySet().iterator().next();
+			return new Check(List.of(new Sites.Refusal(Reason.OVERLAP, "the cells overlap " + Sites.describe(s) + " (" + over.get(s)
+				+ " cells); place on top with LAYER or elsewhere")), notes, new long[0], new Value[0], null, hits, null);
+		}
+		for (String s : over.keySet()) {
+			String busy = Sites.busy(s, status.get(s));
+			if (busy != null) {
+				return new Check(List.of(new Sites.Refusal(Reason.OVERLAP_BUSY, "Not yet: " + Sites.describe(s) + " " + busy)), notes, new long[0],
+					new Value[0], null, hits, null);
+			}
+			String o = Sites.ownerOf(s);
+			if (!force && !java.util.Objects.equals(o, owner)) {
+				return new Check(List.of(new Sites.Refusal(Reason.OVERLAP_OWNED, Sites.describe(s) + " is owned by " + (o == null ? "the player" : o)
+					+ "; placing on top of it needs force")), notes, new long[0], new Value[0], null, hits, null);
+			}
+		}
+		if (deepest + 1 > SiteJournal.MAX_DEPTH) {
+			return new Check(List.of(new Sites.Refusal(Reason.LAYER_DEPTH, "a cell would carry " + (deepest + 1) + " layers (at most "
+				+ SiteJournal.MAX_DEPTH + ")")), notes, new long[0], new Value[0], null, hits, null);
+		}
+		over.forEach((s, n) -> notes.add("on top of " + Sites.describe(s) + " (" + n + " cells)"));
+		return null;
 	}
 
 	/** Starts placing a cell site ({@link InfraJob}). */

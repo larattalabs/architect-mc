@@ -239,13 +239,40 @@ public final class Batches {
 			return;
 		}
 		Sites.Trace tr = new Sites.Trace("tryStartInfra " + i.key);
+		boolean road = "road".equals(i.itemKind);
+		InfraPlace.Check c;
+		InfraSpec.Cells cells = null;
+		if (!road && CellsCheck.large(i.spec)) {
+			// a large cell site: decoded off the server thread, then checked over ticks (CellsCheck); started in the tick after
+			CellsCheck ck = (CellsCheck) i.prep;
+			if (ck == null) {
+				i.prep = new CellsCheck(i.spec, i.spec.get("kind").getAsString(), dev.larattalabs.architect.journal.Journal.Policy.valueOf(i.spec.get(
+					"policy").getAsString()), i.spec.get("naturalOnly").getAsBoolean(), i.layer, b.owner, i.force, level.getMinY(), level.getMaxY());
+				return;
+			}
+			if (b.loadChunks > 0 && ck.box() != null && !i.ticketed) {
+				ticketBox(server, b, i, level, ck.box().grow(1));
+				i.ticketed = true;
+			}
+			if (i.checked == null) {
+				i.checked = ck.step(level, Placement.deadline());
+				if (i.checked instanceof InfraPlace.Check ok && ok.ok()) {
+					return; // its start goes in the next tick
+				}
+				if (i.checked == null) {
+					return;
+				}
+			}
+			c = (InfraPlace.Check) i.checked;
+			i.prep = null;
+			i.checked = null;
+			i.ticketed = false;
+			tr.mark("staged check");
+		} else {
 		if (b.loadChunks > 0) {
 			ticketBox(server, b, i, level, infraBox(i));
 		}
 		tr.mark("ticket");
-		InfraPlace.Check c;
-		boolean road = "road".equals(i.itemKind);
-		InfraSpec.Cells cells = null;
 		if (road) {
 			c = InfraPlace.checkRoad(level, InfraSpec.points(i.spec), i.spec.get("width").getAsInt(), InfraSpec.str(i.spec, "surface"), InfraSpec.str(i.spec,
 				"slab"), i.spec.get("lanterns").getAsBoolean(), i.spec.get("shallowDecks").getAsBoolean(), b.owner, i.force);
@@ -254,6 +281,7 @@ public final class Batches {
 			tr.mark("decode");
 			c = InfraPlace.checkCells(level, i.spec.get("kind").getAsString(), dev.larattalabs.architect.journal.Journal.Policy.valueOf(i.spec.get("policy")
 				.getAsString()), cells.pos(), cells.states(), cells.nbt(), i.spec.get("naturalOnly").getAsBoolean(), i.layer, b.owner, i.force, true);
+		}
 		}
 		tr.mark("check");
 		if (!c.ok()) {

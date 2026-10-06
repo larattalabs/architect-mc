@@ -52,6 +52,10 @@ public final class QItem {
 	public transient boolean committing;
 	/** Phase 4e, not saved: a large item checked in this batch tick (its start follows in the next) and its snapshot box. */
 	public transient long checkedAt = -1;
+	/** Phase 4e, not saved: a large cell site's staged check, its result (a tick before its start) and whether its chunks are ticketed. */
+	public transient @Nullable Object prep;
+	public transient @Nullable Object checked;
+	public transient boolean ticketed;
 	public transient dev.larattalabs.architect.placement.Anchors.@org.jspecify.annotations.Nullable Bounds checkedSnap;
 	public @Nullable JsonObject spec;
 
