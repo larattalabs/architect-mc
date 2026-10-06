@@ -138,7 +138,7 @@ describe.skipIf(!hasKit)('the critique loop (sim backend, real kit)', () => {
       [0, 5, true],
       [1, 8, true],
     ]);
-    expect(f.critique!.cost.revise.usd).toBeCloseTo(0.3, 6);
+    expect(f.critique!.cost.revise.usd).toBeCloseTo(0.1, 6);
     expect(f.critique!.cost.critic.usd).toBeCloseTo(0.02, 6);
     expect(f.critique!.rounds[1]!.resolved).toEqual([0]);
     const steps = h.events.filter((e): e is Extract<Outbound, { type: 'design.upsert' }> => e.type === 'design.upsert' && e.design.id === d.id).map((e) => e.design.step);
@@ -169,24 +169,24 @@ describe.skipIf(!hasKit)('the critique loop (sim backend, real kit)', () => {
 
   it('budget: the default 1.0x round-0 cap ends the loop before a revision that would not fit', async () => {
     h = await harness();
-    const d = design(h, 'sim:critique=5/8', { mode: 'loop' });
+    const d = design(h, 'sim:critique=5/5/5/5', { mode: 'loop', maxRevisions: 3 });
     await final(h, d.id);
     const f = get(h, d.id);
-    // round 0 cost $0.30 (the cap); a revision ($0.30) plus a critic ($0.01) does not fit what is left
-    expect(f.critique).toMatchObject({ end: 'budget', best: 0 });
-    expect(f.critique!.rounds).toHaveLength(1);
+    // round 0 cost $0.30 (the cap); each revision $0.10 plus a critic $0.01: the third does not fit what is left ($0.07)
+    expect(f.critique).toMatchObject({ end: 'budget' });
+    expect(f.critique!.rounds).toHaveLength(3);
     const loop = f.critique!.cost.critic.usd + f.critique!.cost.revise.usd;
     expect(loop).toBeLessThanOrEqual(0.3 + 1e-9);
   }, 60_000);
 
   it('budget: an explicit critique.budgetUsd allows one revision, then ends', async () => {
     h = await harness();
-    const d = design(h, 'sim:critique=5/5/5', { mode: 'loop', budgetUsd: 0.35 });
+    const d = design(h, 'sim:critique=5/5/5', { mode: 'loop', budgetUsd: 0.15 });
     await final(h, d.id);
     const f = get(h, d.id);
     expect(f.critique).toMatchObject({ end: 'budget' });
     expect(f.critique!.rounds).toHaveLength(2);
-    expect(f.critique!.cost.critic.usd + f.critique!.cost.revise.usd).toBeLessThanOrEqual(0.35 + 1e-9);
+    expect(f.critique!.cost.critic.usd + f.critique!.cost.revise.usd).toBeLessThanOrEqual(0.15 + 1e-9);
   }, 60_000);
 
   it('time: the loop ends at the first round boundary after maxMinutes', async () => {

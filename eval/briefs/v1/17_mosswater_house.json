@@ -1,0 +1,30 @@
+{
+  "id": "mosswater_house",
+  "n": 17,
+  "title": "Mosswater set: house",
+  "size": "M",
+  "setting": "swamp",
+  "model": "claude-sonnet-5-5",
+  "effort": "high",
+  "group": {
+    "id": "mosswater",
+    "name": "Mosswater",
+    "bible": "mosswater",
+    "concurrency": 3,
+    "itemKey": "house",
+    "role": "ordinary",
+    "anchor": false
+  },
+  "request": {
+    "type": "house",
+    "style": "weathered fishing village",
+    "features": [],
+    "maxSize": {
+      "x": 15,
+      "y": 14,
+      "z": 15
+    },
+    "name": "Fisher Cottage",
+    "notes": "a fisher family home on stilts"
+  }
+}

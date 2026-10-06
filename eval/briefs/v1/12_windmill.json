@@ -1,0 +1,26 @@
+{
+  "id": "windmill",
+  "n": 12,
+  "title": "windmill",
+  "size": "M",
+  "setting": "A windmill in a flower meadow: a tapered body, big sails on the front, a millstone floor inside.",
+  "model": "claude-sonnet-5-5",
+  "effort": "high",
+  "request": {
+    "type": "windmill",
+    "style": "dutch",
+    "features": [],
+    "maxSize": {
+      "x": 21,
+      "y": 26,
+      "z": 21
+    },
+    "name": "Windmill",
+    "notes": "A windmill in a flower meadow: a tapered body, big sails on the front, a millstone floor inside.",
+    "profile": [
+      "door",
+      "roof_closed",
+      "lit"
+    ]
+  }
+}

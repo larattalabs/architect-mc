@@ -1,0 +1,28 @@
+{
+  "id": "watchtower_plot",
+  "n": 3,
+  "title": "watchtower on an 11x11 plot",
+  "size": "plot",
+  "setting": "A watchtower on a mountain ridge, built on a marked 11x11 plot; a lookout platform on top.",
+  "model": "claude-sonnet-5-5",
+  "effort": "high",
+  "request": {
+    "type": "tower",
+    "style": "medieval",
+    "features": [
+      "battlements"
+    ],
+    "maxSize": {
+      "x": 11,
+      "y": 26,
+      "z": 11
+    },
+    "name": "Watchtower",
+    "notes": "A watchtower on a mountain ridge, built on a marked 11x11 plot; a lookout platform on top.",
+    "plot": {
+      "dx": 11,
+      "dz": 11,
+      "front": "south"
+    }
+  }
+}

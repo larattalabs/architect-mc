@@ -191,8 +191,8 @@ export class Critiques {
   /** The high seed (USD) of a critic call and of a revision turn for this design. */
   highs(d: Design, cw: CritiqueWork): { critic: number; revise: number } {
     if (this.sc.designerName() === 'sim') {
-      // sim-scale: one job step for the critic, three design steps for a revision
-      return { critic: this.sc.config.jobs.simStepUsd, revise: 3 * this.sc.config.simDesignUsd };
+      // sim-scale: one job step for the critic, one design step for a revision
+      return { critic: this.sc.config.jobs.simStepUsd, revise: this.sc.config.simDesignUsd };
     }
     const model = d.request.model ?? (d.request.massing ? this.sc.config.massing.model : this.sc.config.claude.designModel);
     return { critic: this.sc.estimates.perJob('critic', cw.spec.model).usd[1], revise: this.sc.estimates.perJob('revise', model).usd[1] };

@@ -312,7 +312,7 @@ export class SimDesigner implements Designer {
   }
 
   /**
-   * (5a) A simulated revision: a few steps that cost like design steps, then the same source is checked and rendered
+   * (5a) A simulated revision: one step that costs like a design step, then the same source is checked and rendered
    * again (the scripted critic decides the scores). Notes `sim:revise=fail` make every revision fail its check, so the
    * loop ends check_failed after the revision's own allowance.
    */
@@ -329,7 +329,8 @@ export class SimDesigner implements Designer {
       if (!sc.critiques.beforeRevision(sc.designs.get(id)!)) return 'finished';
       sc.designStep(id, 'designing', `${sc.critiques.revisionStep(sc.designs.get(id)!)} (simulated)`);
       let cost = sc.critiques.turnsCost(sc.designs.get(id)!);
-      for (let i = 0; i < 3; i++) {
+      // a revision costs one design step (a warm session, a smaller change than round 0)
+      for (let i = 0; i < 1; i++) {
         try {
           await this.sleep(this.stepMs, id, r);
         } catch (e) {

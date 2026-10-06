@@ -1,0 +1,23 @@
+{
+  "id": "mountain_chapel",
+  "n": 8,
+  "title": "mountain chapel",
+  "size": "M",
+  "setting": "A small chapel high on snowy slopes: a steep roof against the snow, a bell over the entrance.",
+  "model": "claude-sonnet-5-5",
+  "effort": "high",
+  "request": {
+    "type": "chapel",
+    "style": "alpine",
+    "features": [
+      "bell"
+    ],
+    "maxSize": {
+      "x": 25,
+      "y": 16,
+      "z": 29
+    },
+    "name": "Mountain chapel",
+    "notes": "A small chapel high on snowy slopes: a steep roof against the snow, a bell over the entrance."
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "id": "gatehouse_plot",
+  "n": 9,
+  "title": "gatehouse on a 15x9 plot",
+  "size": "plot",
+  "setting": "A gatehouse across a forest road, on a marked 15x9 plot (15 along the road front).",
+  "model": "claude-sonnet-5-5",
+  "effort": "high",
+  "request": {
+    "type": "gatehouse",
+    "style": "fortified",
+    "features": [
+      "battlements"
+    ],
+    "maxSize": {
+      "x": 15,
+      "y": 16,
+      "z": 9
+    },
+    "name": "Gatehouse",
+    "notes": "A gatehouse across a forest road, on a marked 15x9 plot (15 along the road front).",
+    "plot": {
+      "dx": 15,
+      "dz": 9,
+      "front": "south"
+    }
+  }
+}

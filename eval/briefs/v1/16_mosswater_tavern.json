@@ -1,0 +1,30 @@
+{
+  "id": "mosswater_tavern",
+  "n": 16,
+  "title": "Mosswater set: tavern (anchor)",
+  "size": "L",
+  "setting": "swamp",
+  "model": "claude-opus-5-5",
+  "effort": "high",
+  "group": {
+    "id": "mosswater",
+    "name": "Mosswater",
+    "bible": "mosswater",
+    "concurrency": 3,
+    "itemKey": "tavern",
+    "role": "landmark",
+    "anchor": true
+  },
+  "request": {
+    "type": "tavern",
+    "style": "weathered fishing village",
+    "features": [],
+    "maxSize": {
+      "x": 21,
+      "y": 18,
+      "z": 21
+    },
+    "name": "Net and Lantern",
+    "notes": "the village tavern on stilts over the water, the landmark"
+  }
+}

@@ -162,6 +162,9 @@ export class JobRunner {
     });
     const j = this.book.create(spec, client?.name ?? 'client');
     if (images.length) this.storeImages(j.id, images);
+    // (5a) the sim backend only: a scripted structured answer in ext `architect:simAnswer` (the eval's sim tier judge)
+    const sim = spec.ext?.['architect:simAnswer'];
+    if (sim !== undefined && this.driver.name === 'sim') this.book.work(j.id)!.simAnswer = sim;
     this.log.info(`job ${j.id} (${spec.kind}${spec.owner ? `, ${spec.owner}` : ''}${spec.tag ? `, ${spec.tag}` : ''}) requested`);
     this.starterClients.set(j.id, client);
     this.enqueue(j.id, spec.kind);

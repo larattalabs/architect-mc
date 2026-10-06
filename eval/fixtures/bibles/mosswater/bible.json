@@ -1,0 +1,89 @@
+{
+  "name": "Mosswater Stilts",
+  "roles": {
+    "wall": "minecraft:spruce_planks",
+    "wall_alt": "minecraft:stripped_spruce_log",
+    "trim": "minecraft:dark_oak_log",
+    "roof": "minecraft:dark_oak_planks",
+    "floor": "minecraft:spruce_planks",
+    "frame": "minecraft:mangrove_log",
+    "accent": "minecraft:moss_block",
+    "light": "minecraft:lantern",
+    "glass": "minecraft:brown_stained_glass_pane",
+    "foundation": "minecraft:mossy_cobblestone",
+    "path": "minecraft:coarse_dirt",
+    "drape": "minecraft:moss_carpet",
+    "creeper": "minecraft:vine",
+    "rail_post": "minecraft:mangrove_fence"
+  },
+  "proportions": {
+    "storey": 4,
+    "roofPitch": 1,
+    "overhang": 1,
+    "windowRhythm": 3,
+    "plinth": 3
+  },
+  "roofLanguage": "Steep dark oak gables, one block up per block in, with a deliberate sag or offset ridge; moss block and moss carpet patches on the lower courses; ragged overhang of 1.",
+  "silhouette": "Narrow, top-heavy boxes perched 3+ blocks above water on mangrove stilts, upper floors jettied out, ridges kinked, chimneys leaning; joined by sagging boardwalks.",
+  "motifs": [
+    "mangrove log stilts with cross-bracing fences",
+    "upper storey jettied 1 block past the lower",
+    "ridge line stepped or offset by one block (crooked)",
+    "moss carpet and vines creeping up from the waterline",
+    "bleached stripped spruce board patches on weather sides",
+    "net lofts and drying racks under the eaves",
+    "lanterns hung from fence arms over the water"
+  ],
+  "tiers": {
+    "humble": [
+      "wall",
+      "wall_alt",
+      "roof",
+      "frame",
+      "floor",
+      "path",
+      "drape"
+    ],
+    "important": [
+      "trim",
+      "foundation",
+      "accent",
+      "light",
+      "rail_post",
+      "creeper"
+    ]
+  },
+  "lighting": "Sparse warm lanterns hung on fence arms at doors, boardwalk corners and pier ends, one every 6-8 blocks; the hall gets a lantern cluster under its eaves. Keep it dim and foggy.",
+  "avoid": [
+    "perfectly symmetrical facades or dead-straight ridges",
+    "buildings sitting directly on the ground or water",
+    "bright or clean materials: no white, quartz, polished stone",
+    "glass blocks or large window walls",
+    "stone walls above the plinth",
+    "flat roofs"
+  ],
+  "components": [
+    "window",
+    "door_surround",
+    "lantern_post",
+    "roof_trim",
+    "chimney",
+    "stilt_pile",
+    "boardwalk",
+    "net_loft",
+    "drying_rack"
+  ],
+  "id": "bib_weathered_fishing_village_on",
+  "version": 1,
+  "scope": "building",
+  "prompt": "weathered fishing village on stilts, mossy and crooked",
+  "createdAt": 1791196401842,
+  "cost": {
+    "usd": 1.404206,
+    "inputTokens": 32,
+    "outputTokens": 37807,
+    "cacheReadTokens": 501488,
+    "cacheWriteTokens": 68455,
+    "turns": 22
+  }
+}

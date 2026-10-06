@@ -1,0 +1,23 @@
+{
+  "id": "smithy_forge_yard",
+  "n": 7,
+  "title": "smithy with a forge yard",
+  "size": "M",
+  "setting": "A smithy in the badlands with an open forge yard to one side: anvil, grindstone, quench trough.",
+  "model": "claude-sonnet-5-5",
+  "effort": "high",
+  "request": {
+    "type": "smithy",
+    "style": "frontier",
+    "features": [
+      "chimney"
+    ],
+    "maxSize": {
+      "x": 21,
+      "y": 14,
+      "z": 21
+    },
+    "name": "Smithy",
+    "notes": "A smithy in the badlands with an open forge yard to one side: anvil, grindstone, quench trough."
+  }
+}

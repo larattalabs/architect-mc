@@ -1,0 +1,24 @@
+{
+  "id": "farmhouse_porch",
+  "n": 2,
+  "title": "farmhouse with a porch",
+  "size": "M",
+  "setting": "A farmhouse with a deep front porch on the plains, a kitchen and two bedrooms.",
+  "model": "claude-sonnet-5-5",
+  "effort": "high",
+  "request": {
+    "type": "house",
+    "style": "farmhouse",
+    "features": [
+      "porch",
+      "chimney"
+    ],
+    "maxSize": {
+      "x": 21,
+      "y": 14,
+      "z": 21
+    },
+    "name": "Farmhouse",
+    "notes": "A farmhouse with a deep front porch on the plains, a kitchen and two bedrooms."
+  }
+}
