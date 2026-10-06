@@ -1348,7 +1348,9 @@ steps.api14 = async () => {
   let code = 0;
   let text = '';
   try {
-    await startClient('G4E Api14', { ARCHITECT_APITEST: '0' });
+    // a fresh survival world (the suite's "survival" step expects the toggle on, as tools/run-apitest-client.sh gave it)
+    fs.rmSync(path.join(SAVES, 'G4E Api14'), { recursive: true, force: true });
+    await startClient('G4E Api14', { ARCHITECT_APITEST: '0', ARCHITECT_AUTOWORLD_MODE: 'survival' });
     try {
       text = execFileSync('node', [path.join(V070, 'tools', 'apitest.mjs'), 'survival'], {
         env: { ...process.env, ARCHITECT_DEV_PORT: String(PORT), ARCHITECT_GAME_DIR: GAME_DIR, APITEST_OUT: outDir, APITEST_GAME_DIR: GAME_DIR }, timeout: 3_600_000 }).toString();
