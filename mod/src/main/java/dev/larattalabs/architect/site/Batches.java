@@ -951,9 +951,13 @@ public final class Batches {
 		int m = LotFitting.frontMargin(bp) + LeafGuard.RADIUS + 1;
 		Set<Long> want = chunks(new Anchors.Bounds(i.x - m, i.y, i.z - m, i.x + sx - 1 + m, i.y + bp.sizeY() - 1, i.z + sz - 1 + m));
 		int count = held.values().stream().mapToInt(Set::size).sum();
-		if (count + want.size() > b.loadChunks) {
+		if (!ticketTurn(b, i) || count + want.size() > b.loadChunks) {
+			if (want.size() <= b.loadChunks) {
+				ticketWait(b, i); // it fits once the budget is free (a larger one waits for a player, LOADED_ONLY)
+			}
 			return; // over the bound: it waits for a player like LOADED_ONLY
 		}
+		ticketGot(b, i);
 		for (long c : want) {
 			level.getChunkSource().addTicketWithRadius(TICKET, ChunkPos.unpack(c), 0);
 		}
@@ -985,9 +989,11 @@ public final class Batches {
 		}
 		Set<Long> want = chunks(box);
 		int count = held.values().stream().mapToInt(Set::size).sum();
-		if (count + want.size() > b.loadChunks && count > 0) {
+		if (!ticketTurn(b, i) || count + want.size() > b.loadChunks && count > 0) {
+			ticketWait(b, i);
 			return;
 		}
+		ticketGot(b, i);
 		for (long c : want) {
 			level.getChunkSource().addTicketWithRadius(TICKET, ChunkPos.unpack(c), 0);
 		}
@@ -1007,6 +1013,33 @@ public final class Batches {
 
 	private static final Map<String, String> levels = new HashMap<>();
 
+	/**
+	 * Phase 4e, LOAD_BOUNDED fairness: the first item that could not get its tickets has the next ones (later items started
+	 * every tick took the budget before its re-check, and it timed out at 600 s on a 1000x1000 run).
+	 */
+	private static final Map<String, String> TICKET_WAITER = new HashMap<>();
+
+	private static boolean ticketTurn(QBatch b, QItem i) {
+		String w = TICKET_WAITER.get(b.id);
+		if (w == null || w.equals(i.key)) {
+			return true;
+		}
+		QItem wi = b.item(w);
+		if (wi == null || wi.status != QItem.Status.QUEUED && wi.status != QItem.Status.WAITING) {
+			TICKET_WAITER.remove(b.id);
+			return true;
+		}
+		return false;
+	}
+
+	private static void ticketWait(QBatch b, QItem i) {
+		TICKET_WAITER.putIfAbsent(b.id, i.key);
+	}
+
+	private static void ticketGot(QBatch b, QItem i) {
+		TICKET_WAITER.remove(b.id, i.key);
+	}
+
 	private static void untickItem(MinecraftServer server, QBatch b, String key) {
 		Map<String, Set<Long>> held = TICKETS.get(b.id);
 		Set<Long> cs = held == null ? null : held.remove(key);
@@ -1017,6 +1050,11 @@ public final class Batches {
 		}
 		for (long c : cs) {
 			level.getChunkSource().removeTicketWithRadius(TICKET, ChunkPos.unpack(c), 0);
+		}
+		String w = TICKET_WAITER.get(b.id);
+		QItem wi = w == null ? null : b.item(w);
+		if (wi != null && wi.status == QItem.Status.WAITING) {
+			wi.nextCheck = tick; // budget came free: it re-checks now
 		}
 	}
 
