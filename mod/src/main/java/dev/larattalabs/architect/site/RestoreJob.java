@@ -383,7 +383,29 @@ final class RestoreJob implements Placement.Job {
 				return false;
 			}
 			if (restore == null) {
-				restore = SiteJournal.restore(level, siteId, group);
+				// a large road or cell site's undo cells are gathered and sorted off the server thread
+				String g = group;
+				if (prepared == null) {
+					java.util.function.Supplier<Object[]> prep = () -> {
+						try {
+							return new Object[] {SiteJournal.restore(level, siteId, g), null};
+						} catch (Sites.SiteException e) {
+							throw new java.util.concurrent.CompletionException(e);
+						}
+					};
+					prepared = inf.box().volume() > OFF_THREAD_CELLS ? CompletableFuture.supplyAsync(prep) : CompletableFuture.completedFuture(prep.get());
+				}
+				if (!prepared.isDone()) {
+					return false;
+				}
+				try {
+					restore = (SiteJournal.Restore) prepared.join()[0];
+				} catch (java.util.concurrent.CompletionException e) {
+					broken = e.getCause() != null ? e.getCause().getMessage() : e.getMessage();
+					return true;
+				} finally {
+					prepared = null;
+				}
 				cellCursor = 0;
 			}
 		} catch (Sites.SiteException e) {
