@@ -32,8 +32,9 @@ import { descendantsOf, killSnapshot, killTree, orphansOf, processTable, type Pr
 import { truncate } from '../util/text.js';
 import { ClaudeBibleBackend } from './bible.js';
 import { ARCHITECT_NO_API_AUTH_MESSAGE, authEnv, authSourceOf, checkApiKey, directApiKey, type KeyCheck } from './auth.js';
-import { designFixPrompt, designPrompt, designStepFor, designSystemPrompt, massingFixPrompt, massingPrompt, massingSystemPrompt, MAX_DESIGN_ROUNDS, RESTART_PROMPT } from './brief.js';
+import { designFixPrompt, designPrompt, designStepFor, designSystemPrompt, massingFixPrompt, massingPrompt, massingSystemPrompt, MAX_DESIGN_ROUNDS, RESTART_PROMPT, revisionFixPrompt } from './brief.js';
 import { isAuthText, probeFailure } from './failures.js';
+import { REVISION_RESTART_PROMPT } from '../critic.js';
 import { costFromResult, CostMeter, zeroCost } from '../jobs/cost.js';
 import { connectorHook, denyHook, designVerdict } from './permissions.js';
 import { loadSdk, loadZod, type Sdk } from './sdk.js';
@@ -461,21 +462,29 @@ export class ClaudeDesigner implements Designer {
     const model = req.model ?? (isMassing ? cfg.massing.model : this.cfg.designModel);
     for (;;) {
       if (this.cancelled(id)) return 'finished';
-      // a group item's budget is what is left of the group's (Sidecar.designBudget)
-      const budget = sc.designBudget(id);
+      // (5a) a revision after critique: the loop may end it first (the group's soft budget)
+      const revising = sc.critiques.revising(id);
+      if (revising && !sc.critiques.beforeRevision(sc.designs.get(id)!)) return 'finished';
+      // a group item's budget is what is left of the group's (Sidecar.designBudget), minus (5a) its critic calls
+      const budget = sc.designTurnBudget(id);
       if (budget !== undefined && meter.remaining(budget) <= 0) {
+        if (revising) {
+          sc.critiques.revisionEnded(id, 'budget', `the budget is spent ($${meter.total().usd.toFixed(4)} of $${budget})`);
+          return 'finished';
+        }
         sc.designFailed(id, 'budget', `failed: budget ($${meter.total().usd.toFixed(4)} of $${budget})`);
         return 'finished';
       }
       const resume = sc.store.data.sessions[sessionKey]?.sessionId;
-      const prompt = w.pending ?? (resume ? RESTART_PROMPT : isMassing ? massingPrompt(w.bp) : designPrompt(w.bp));
-      w.round++;
+      const prompt = w.pending ?? (resume ? (revising ? REVISION_RESTART_PROMPT : RESTART_PROMPT) : isMassing ? massingPrompt(w.bp) : designPrompt(w.bp));
+      if (!revising) w.round++;
       sc.store.markDirty();
-      sc.designStep(id, 'designing', w.round === 1 ? 'the designer is reading the brief' : `revising the design (round ${w.round} of ${MAX_DESIGN_ROUNDS})`);
+      sc.designStep(id, 'designing', revising ? sc.critiques.revisionStep(sc.designs.get(id)!) : w.round === 1 ? 'the designer is reading the brief' : `revising the design (round ${w.round} of ${MAX_DESIGN_ROUNDS})`);
       const turn: Running = { abort: new AbortController() };
       cur.turn = turn;
-      // the SDK's maxBudgetUsd counts only this query(): give it what is left
-      const caps = [this.cfg.maxBudgetUsd, budget !== undefined ? meter.remaining(budget) : undefined].filter((n): n is number => typeof n === 'number' && n > 0);
+      // the SDK's maxBudgetUsd counts only this query(): give it what is left (a revision: within the loop's cap too)
+      const loopLeft = revising ? sc.critiques.revisionBudget(sc.designs.get(id)!) : undefined;
+      const caps = [this.cfg.maxBudgetUsd, budget !== undefined ? meter.remaining(budget) : undefined, loopLeft].filter((n): n is number => typeof n === 'number' && n > 0);
       meter.begin(!!resume);
       const { stats, reason } = await this.runTurn(turn, {
         id,
@@ -498,18 +507,24 @@ export class ClaudeDesigner implements Designer {
       w.cost = meter.commit();
       sc.store.markDirty();
       if (reason === 'cancel' || this.cancelled(id)) return 'finished';
-      if (stats.subtype === 'error_max_budget_usd' && budget !== undefined && reason !== 'shutdown' && !this.stopping) {
+      if (stats.subtype === 'error_max_budget_usd' && (budget !== undefined || loopLeft !== undefined) && reason !== 'shutdown' && !this.stopping) {
+        if (revising) {
+          sc.critiques.revisionEnded(id, 'budget', `the revision hit its budget ($${w.cost.usd.toFixed(4)})`);
+          return 'finished';
+        }
         sc.designFailed(id, 'budget', `failed: budget ($${w.cost.usd.toFixed(4)} of $${budget})`);
         return 'finished';
       }
       if (reason === 'shutdown' || this.stopping) {
         // picked up again on the next start (resuming this session)
-        w.round--;
+        if (!revising) w.round--;
+        else sc.critiques.undoTurn(id);
         sc.store.markDirty();
         return 'stopped';
       }
       if (stats.limited) {
-        w.round--;
+        if (!revising) w.round--;
+        else sc.critiques.undoTurn(id);
         sc.store.markDirty();
         if (!this.limited()) this.setLimit(stats.rateLimit?.resetsAt, stats.rateLimit?.type);
         const until = sc.store.data.limit?.until;
@@ -521,7 +536,7 @@ export class ClaudeDesigner implements Designer {
         return 'finished';
       }
       delete w.pending;
-      sc.designStep(id, 'checking', `checking the design (round ${w.round})`);
+      sc.designStep(id, 'checking', revising ? 'checking the revision' : `checking the design (round ${w.round})`);
       // the bible files again from their source (Bash in the scratch dir could have changed them)
       sc.syncScratchBible(scratch, d);
       // (4c) a massing: the massing profile; a detail pass: the hard size cap and the massing conformance
@@ -531,6 +546,17 @@ export class ClaudeDesigner implements Designer {
       const outcome = sc.checkOutcome(d, res);
       if (!res.ok || outcome) {
         const problem = (res.ok ? outcome : res.problem) ?? 'the check failed';
+        if (revising) {
+          // (5a) a revision has its own check-fix allowance; a failed revision never fails the design
+          if (sc.critiques.mayFixRevision(id)) {
+            w.pending = revisionFixPrompt(w.bp, problem);
+            sc.store.markDirty();
+            sc.designStep(id, 'designing', `revision check failed: ${truncate(problem.split('\n')[0] ?? problem, 80)}`);
+            continue;
+          }
+          sc.critiques.revisionEnded(id, 'check_failed', problem);
+          return 'finished';
+        }
         if (w.round < MAX_DESIGN_ROUNDS) {
           w.pending = (isMassing ? massingFixPrompt : designFixPrompt)(w.bp, problem, w.round + 1);
           sc.store.markDirty();
@@ -545,6 +571,9 @@ export class ClaudeDesigner implements Designer {
       const r = await renderPreviews(scratch, res.nbt!);
       if (this.cancelled(id)) return 'finished';
       const notes = [r.skipped ? 'no renderer' : r.error ? `previews: ${truncate(r.error, 80)}` : '', res.warnings.length ? `${res.warnings.length} checker warning(s)` : ''];
+      // (5a) the critique loop takes the round (it gives the slot back while its critic call runs)
+      const next = await sc.critiques.roundReady(sc.designs.get(id)!, { scratch, bp: w.bp, res, previews: r.files, baseId: designBaseId(req), name: req.name, notes: notes.filter(Boolean) });
+      if (next === 'critique') return 'critique';
       sc.installChecked(d, { scratch, bp: w.bp, baseId: designBaseId(req), res, previews: r.files, taken: this.takenIds(id), name: req.name, notes });
       return 'finished';
     }

@@ -65,6 +65,15 @@ export interface Config {
   simLimitMs: number;
   /** (4c) massing jobs */
   massing: MassingConfig;
+  /** (5a) the critic */
+  critique: CritiqueConfig;
+}
+
+export interface CritiqueConfig {
+  /** the critic model (config critique.model, default claude-sonnet-5-5) */
+  model: string;
+  /** (config critique.effort, default medium) */
+  effort: 'low' | 'medium' | 'high';
 }
 
 export interface MassingConfig {
@@ -209,7 +218,14 @@ export function loadConfig(argv: string[], env: NodeJS.ProcessEnv = process.env)
       maxTurns: Math.round(num(file.massingMaxTurns, 20)),
       maxRedirects: typeof file.maxRedirects === 'number' && Number.isInteger(file.maxRedirects) && file.maxRedirects >= 0 && file.maxRedirects <= 10 ? file.maxRedirects : 3,
     },
+    critique: critiqueConfig(file),
   };
+}
+
+function critiqueConfig(file: Record<string, unknown>): CritiqueConfig {
+  const c = file.critique && typeof file.critique === 'object' && !Array.isArray(file.critique) ? (file.critique as Record<string, unknown>) : {};
+  const effort = c.effort === 'low' || c.effort === 'medium' || c.effort === 'high' ? c.effort : 'medium';
+  return { model: (typeof c.model === 'string' && c.model.trim()) || DEFAULT_JOB_MODEL, effort };
 }
 
 function readConfigFile(dataDir: string): Record<string, unknown> {

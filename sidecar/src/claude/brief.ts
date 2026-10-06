@@ -347,6 +347,11 @@ export function designFixPrompt(bp: string, problem: string, round: number): str
   return `The sidecar re-checked your design with a fresh copy of the kit and it did not pass (round ${round} of ${MAX_DESIGN_ROUNDS}):\n${problem}\n\nFix kit/designs/${bp}.mjs (only that file counts), run the build command from BRIEF.md until the check is OK and the size fits, look at the renders again if there is a renderer, then end with a one-line summary.`;
 }
 
+/** (5a) a revision after critique whose check failed (its own allowance, not MAX_DESIGN_ROUNDS) */
+export function revisionFixPrompt(bp: string, problem: string): string {
+  return `The sidecar re-checked your revision with a fresh copy of the kit and it did not pass:\n${problem}\n\nFix kit/designs/${bp}.mjs (only that file counts), keeping the revision's changes, run the build command from BRIEF.md until the check is OK, then end with a one-line summary.`;
+}
+
 export const RESTART_PROMPT =
   'The sidecar restarted while you were working on this design. Re-check where you were (kit/designs/, BRIEF.md) and continue until the checker passes and it looks right, then end with a one-line summary.';
 

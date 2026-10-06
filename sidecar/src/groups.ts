@@ -36,7 +36,7 @@ export const GROUP_SNAPSHOT_LIMIT = 20;
 const GROUP_KEEP = 100;
 const FINAL: ReadonlySet<GroupStatus> = new Set(['done', 'failed', 'cancelled']);
 export const isFinalGroup = (g: Group): boolean => FINAL.has(g.status);
-const RUNNING = new Set(['designing', 'checking', 'rendering']);
+const RUNNING = new Set(['designing', 'checking', 'rendering', 'critiquing']);
 
 /** A group's own bookkeeping (not sent to clients). */
 export interface GroupWork {
@@ -116,9 +116,12 @@ export class Groups {
       const role = it.role ?? 'ordinary';
       const wave = it.anchor ? 0 : (it.wave ?? 1);
       const model = itemModel(it, cfg.groups);
-      const { itemKey: _k, role: _r, anchor: _a, wave: _w, model: _m, ext, owner, budgetUsd: _b, ...base } = it;
+      const { itemKey: _k, role: _r, anchor: _a, wave: _w, model: _m, ext, owner, budgetUsd: _b, critique: itemCritique, ...base } = it;
+      // (5a) the item's critique wins over the group's default
+      const critique = itemCritique ?? req.critique;
       const request = DesignRequest.parse({
         ...base,
+        ...(critique && critique.mode !== 'off' ? { critique } : {}),
         ...(owner ?? req.owner ? { owner: owner ?? req.owner } : {}),
         ...(ext && Object.keys(ext).length ? { ext } : {}),
         model,
@@ -134,7 +137,9 @@ export class Groups {
       let d: Design;
       if (req.massingFirst) {
         itemRequests[itemKey] = request;
-        const mreq: DesignRequestT = { ...request, massing: true, model: cfg.massing.model };
+        // (5a) the critique belongs to the detail pass, not the item's massing
+        const { critique: _c, ...noCritique } = request;
+        const mreq: DesignRequestT = { ...noCritique, massing: true, model: cfg.massing.model };
         d = this.sc.designs.create(mreq, { id: this.sc.massings.reserveId(mreq), version: 1 });
       } else d = this.sc.designs.create(request);
       designs.push(d);
@@ -199,11 +204,21 @@ export class Groups {
     if (!g) return true;
     if (isFinalGroup(g)) return false;
     const w = this.work(gid);
+    // (5a) a revision after critique starts even in a paused group: it then ends its loop with "budget" at once
+    if (this.sc.critiques.revising(d.id) && !w.cancelled) return true;
     if (w.paused || w.cancelled) return false;
     if (g.budgetUsd !== undefined && g.cost.usd >= g.budgetUsd) return false;
     const wave = d.request.wave ?? 1;
     // a wave starts when every earlier wave is done (or failed)
     return g.items.every((it) => it.wave >= wave || isFinalDesign({ status: this.sc.designs.get(it.designId)?.status ?? 'done' } as Design));
+  }
+
+  /** (5a) Is this design's group paused by its soft budget (or out of budget)? Critique rounds are dropped first. */
+  pausedFor(d: Design): boolean {
+    const g = d.request.group ? this.get(d.request.group) : undefined;
+    if (!g) return false;
+    const w = this.work(g.id);
+    return !!w.paused || (g.budgetUsd !== undefined && g.cost.usd >= g.softBudgetFraction * g.budgetUsd && w.softOverride !== g.budgetUsd);
   }
 
   /** What a group item may still spend (the group's budget minus what the others spent); undefined: no group budget. */
@@ -301,7 +316,8 @@ export class Groups {
     }
     for (const [key, notes] of Object.entries(a.redirect)) {
       const it = item(key);
-      const req: DesignRequestT = { ...w.itemRequests![key]!, massing: true, model: this.sc.config.massing.model, redirect: { fromVersion: it.massing!.version, notes } };
+      const { critique: _c, ...noCritique } = w.itemRequests![key]!;
+      const req: DesignRequestT = { ...noCritique, massing: true, model: this.sc.config.massing.model, redirect: { fromVersion: it.massing!.version, notes } };
       const version = this.sc.massings.nextVersion(it.massing!.id);
       const d = this.sc.designs.create(req, { id: it.massing!.id, version });
       moveOn(it, d);
@@ -433,6 +449,7 @@ export class Groups {
         it.cost = addCost(committed, d.cost ?? zeroCost());
         if (d.blueprintId) it.entryId = d.blueprintId;
         if (d.error) it.error = d.error;
+        if (d.critique) it.critique = { rounds: d.critique.rounds.length, ...(d.critique.best !== undefined ? { best: d.critique.best } : {}), ...(d.critique.end ? { end: d.critique.end } : {}), ...(d.critique.overall !== undefined ? { overall: d.critique.overall } : {}) };
         // (4c) a finished massing (or redirect) waits for approval
         if (it.stage === 'massing' && d.status === 'done' && d.massing) {
           it.stage = 'approval';

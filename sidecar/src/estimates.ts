@@ -6,7 +6,7 @@
 // phase 1-2 Opus figure of $1-1.5 was for smaller, simpler designs). Only the Claude backend records samples.
 // Phase 4c adds the `massing` kind (seeded at $0.10-0.40 and 1-3 min, the contract's figure until the gate measures it);
 // a group with massingFirst estimates both passes (redirects are not in the estimate: they are the player's choice).
-import type { BibleRequest, DesignRequest, Estimate, GroupRequest } from './protocol.js';
+import type { BibleRequest, CritiqueSpec, DesignRequest, Estimate, GroupRequest } from './protocol.js';
 import type { Store } from './store.js';
 
 export interface Sample {
@@ -15,12 +15,16 @@ export interface Sample {
   at: number;
 }
 
-export type EstimateKind = 'design' | 'bible' | 'massing';
+export type EstimateKind = 'design' | 'bible' | 'massing' | 'critic' | 'revise';
 export interface EstimateData {
   design: Record<string, Sample[]>;
   bible: Record<string, Sample[]>;
   /** (4c) */
   massing: Record<string, Sample[]>;
+  /** (5a) one critic call (by the critic's model) */
+  critic: Record<string, Sample[]>;
+  /** (5a) one revision turn with its check-fix turns (by the design's model) */
+  revise: Record<string, Sample[]>;
 }
 
 const KEEP = 20;
@@ -36,6 +40,11 @@ const BIBLE: Seed = { usd: [1.2, 2.0], ms: [5 * MIN, 8 * MIN] };
 const SONNET: Seed = { usd: [0.8, 2.5], ms: [4 * MIN, 10 * MIN] };
 /** (4c) Massing job seed: the contract's $0.10-0.40 and 1-3 min (Sonnet, effort low), to be measured in the 4c gate. */
 const MASSING: Seed = { usd: [0.1, 0.4], ms: [1 * MIN, 3 * MIN] };
+/** (5a) seeds from the contract, replaced by the smoke tier's measurements: a critic call (Sonnet 5.5, medium) */
+export const CRITIC_SEED: Seed = { usd: [0.04, 0.15], ms: [0.5 * MIN, 2 * MIN] };
+/** (5a) a revision turn of a Sonnet design, of an Opus design */
+export const REVISE_SONNET_SEED: Seed = { usd: [0.25, 0.9], ms: [2 * MIN, 5 * MIN] };
+export const REVISE_OPUS_SEED: Seed = { usd: [0.5, 1.5], ms: [3 * MIN, 7 * MIN] };
 
 /** The seed of a model family (by its id). */
 export function seedFor(model: string): { seed: Seed; family: string } {
@@ -61,6 +70,8 @@ export interface EstimateCtx {
   bibleModel: string;
   /** (4c) the default model of a massing job */
   massingModel: string;
+  /** (5a) the default critic model */
+  criticModel?: string;
 }
 
 export class Estimates {
@@ -70,10 +81,12 @@ export class Estimates {
   ) {}
 
   private get data(): EstimateData {
-    const d = (this.store.data.estimates ??= { design: {}, bible: {}, massing: {} });
+    const d = (this.store.data.estimates ??= { design: {}, bible: {}, massing: {}, critic: {}, revise: {} });
     d.design ??= {};
     d.bible ??= {};
     d.massing ??= {};
+    d.critic ??= {};
+    d.revise ??= {};
     return d;
   }
 
@@ -115,6 +128,12 @@ export class Estimates {
     const list = this.data[kind][model] ?? [];
     if (!list.length) {
       if (kind === 'massing') return { usd: MASSING.usd, ms: MASSING.ms, basis: `${model}: seed, a massing ($0.10-0.40, 1-3 min)` };
+      if (kind === 'critic') return { usd: CRITIC_SEED.usd, ms: CRITIC_SEED.ms, basis: `critic ${model}: seed ($0.04-0.15, 0.5-2 min per call)` };
+      if (kind === 'revise') {
+        const opus = !model.toLowerCase().includes('sonnet') && !model.toLowerCase().includes('haiku');
+        const sd = opus ? REVISE_OPUS_SEED : REVISE_SONNET_SEED;
+        return { usd: sd.usd, ms: sd.ms, basis: `revision ${model}: seed ($${sd.usd[0]}-${sd.usd[1]}, ${sd.ms[0] / MIN}-${sd.ms[1] / MIN} min per revision)` };
+      }
       const { seed, family } = seedFor(model);
       return { usd: seed.usd, ms: seed.ms, basis: `${model}: seed, ${family}` };
     }
@@ -124,11 +143,35 @@ export class Estimates {
     const mt = mean(list.map((s) => s.ms));
     const du = Math.max(0.25 * mu, sd(list.map((s) => s.usd), mu));
     const dt = Math.max(0.25 * mt, sd(list.map((s) => s.ms), mt));
-    return { usd: [Math.max(0, mu - du), mu + du], ms: [Math.max(MIN / 2, mt - dt), mt + dt], basis: `${model}: ${list.length} measured (avg $${mu.toFixed(2)}, ${(mt / MIN).toFixed(1)} min)` };
+    const label = kind === 'critic' ? `critic ${model}` : kind === 'revise' ? `revision ${model}` : model;
+    const minMs = kind === 'critic' ? 5_000 : MIN / 2;
+    return { usd: [Math.max(0, mu - du), mu + du], ms: [Math.max(minMs, mt - dt), mt + dt], basis: `${label}: ${list.length} measured (avg $${mu.toFixed(2)}, ${(mt / MIN).toFixed(1)} min)` };
+  }
+
+  /**
+   * (5a) The critique of one design on top of its design figures: low = one critic call (it ships at once); high = round
+   * 0 plus maxRevisions x (revision + critic) + 1 critic, the loop's spend clipped by its cap (critique.budgetUsd, else
+   * 1.0x round 0's high) and its time by maxMinutes plus one revision and critic.
+   */
+  critique(spec: CritiqueSpec | undefined, designModel: string, round0: { usd: [number, number] }, ctx: EstimateCtx, massing = false): { usd: [number, number]; ms: [number, number]; basis: string } | undefined {
+    if (!spec || spec.mode === 'off') return undefined;
+    const critic = this.perJob('critic', spec.model ?? ctx.criticModel ?? 'claude-sonnet-5-5');
+    if (spec.mode === 'report') return { usd: critic.usd, ms: critic.ms, basis: `critique: a report (one critic call; ${critic.basis})` };
+    const rev = this.perJob('revise', designModel);
+    const n = Math.min(3, spec.maxRevisions ?? (massing ? 1 : 2));
+    const cap = spec.budgetUsd ?? round0.usd[1];
+    const usdHigh = Math.min(cap, n * (rev.usd[1] + critic.usd[1]) + critic.usd[1]);
+    const maxMs = (spec.maxMinutes ?? 15) * MIN + rev.ms[1] + critic.ms[1];
+    const msHigh = Math.min(maxMs, n * (rev.ms[1] + critic.ms[1]) + critic.ms[1]);
+    return {
+      usd: [Math.min(critic.usd[0], usdHigh), usdHigh],
+      ms: [critic.ms[0], msHigh],
+      basis: `critique: up to ${n} revision${n === 1 ? '' : 's'}, the loop capped at ${spec.budgetUsd !== undefined ? `$${spec.budgetUsd}` : '1.0x the design'} (${critic.basis}; ${rev.basis})`,
+    };
   }
 
   /** A design group's estimate (or one design's: a group of one); with massingFirst, the massing pass plus the detail pass. */
-  group(g: Pick<GroupRequest, 'items' | 'concurrency'> & { massingFirst?: boolean | undefined }, ctx: EstimateCtx): Estimate {
+  group(g: Pick<GroupRequest, 'items' | 'concurrency'> & { massingFirst?: boolean | undefined; critique?: CritiqueSpec | undefined }, ctx: EstimateCtx): Estimate {
     const slots = Math.max(1, Math.min(g.concurrency ?? 3, ctx.designConcurrency));
     const passes = [...(g.massingFirst ? [this.pass(g.items, 'massing', () => ctx.massingModel, slots)] : []), this.pass(g.items, 'design', (it) => itemModel(it, ctx), slots)];
     const sum = (f: (p: PassEstimate) => number) => passes.reduce((a, p) => a + f(p), 0);
@@ -141,7 +184,46 @@ export class Estimates {
       ...(g.massingFirst ? [`massing first: ${n} massing${n === 1 ? '' : 's'} before the detail pass (redirects not included)`] : []),
       ...(wait ? [`a usage limit holds new turns for ${Math.ceil(wait / MIN)} min`] : []),
     ].join('; ');
-    return { usdLow: r2(sum((p) => p.usd[0])), usdHigh: r2(sum((p) => p.usd[1])), minutesLow: r1((sum((p) => p.ms[0]) + wait) / MIN), minutesHigh: r1((sum((p) => p.ms[1]) + wait) / MIN), basis };
+    const out: Estimate = { usdLow: r2(sum((p) => p.usd[0])), usdHigh: r2(sum((p) => p.usd[1])), minutesLow: r1((sum((p) => p.ms[0]) + wait) / MIN), minutesHigh: r1((sum((p) => p.ms[1]) + wait) / MIN), basis };
+    // (5a) critique as separate figures, per item and in total (Steward SHOULD 1)
+    const per = g.items.map((it) => {
+      const model = itemModel(it, ctx);
+      const pj = this.perJob('design', model);
+      const c = this.critique((it as { critique?: CritiqueSpec }).critique ?? g.critique, model, pj, ctx);
+      return { it, pj, c };
+    });
+    if (per.some((p) => p.c)) {
+      const cs = per.map((p) => p.c);
+      out.critiqueUsdLow = r2(cs.reduce((a, c) => a + (c?.usd[0] ?? 0), 0));
+      out.critiqueUsdHigh = r2(cs.reduce((a, c) => a + (c?.usd[1] ?? 0), 0));
+      // the added wall time: per wave, batches of `slots` (a critic call holds no slot, the revisions do)
+      const waveMs = new Map<number, Array<[number, number]>>();
+      for (const p of per) {
+        const w = p.it.anchor ? 0 : (p.it.wave ?? 1);
+        if (!waveMs.has(w)) waveMs.set(w, []);
+        waveMs.get(w)!.push(p.c ? p.c.ms : [0, 0]);
+      }
+      let lo = 0;
+      let hi = 0;
+      for (const list of waveMs.values()) {
+        const batches = Math.ceil(list.length / slots);
+        lo += batches * Math.max(...list.map((x) => x[0]));
+        hi += batches * Math.max(...list.map((x) => x[1]));
+      }
+      out.critiqueMinutesLow = r1(lo / MIN);
+      out.critiqueMinutesHigh = r1(hi / MIN);
+      out.items = per.map((p, i) => ({
+        ...((p.it as { itemKey?: string }).itemKey ? { itemKey: (p.it as { itemKey?: string }).itemKey } : g.items.length > 1 ? { itemKey: `item${i + 1}` } : {}),
+        usdLow: r2(p.pj.usd[0]),
+        usdHigh: r2(p.pj.usd[1]),
+        minutesLow: r1(p.pj.ms[0] / MIN),
+        minutesHigh: r1(p.pj.ms[1] / MIN),
+        ...(p.c ? { critiqueUsdLow: r2(p.c.usd[0]), critiqueUsdHigh: r2(p.c.usd[1]), critiqueMinutesLow: r1(p.c.ms[0] / MIN), critiqueMinutesHigh: r1(p.c.ms[1] / MIN) } : {}),
+      }));
+      const bases = [...new Set(cs.flatMap((c) => (c ? [c.basis] : [])))];
+      out.basis = `${out.basis}; ${bases.join('; ')}; with critique $${r2(out.usdLow + out.critiqueUsdLow)}-${r2(out.usdHigh + out.critiqueUsdHigh)}, ${r1(out.minutesLow + out.critiqueMinutesLow)}-${r1(out.minutesHigh + out.critiqueMinutesHigh)} min`;
+    }
+    return out;
   }
 
   /** One pass over the items (massings or designs): the cost adds up, each wave runs in batches of `slots` (a batch takes as long as its slowest item). */
@@ -171,11 +253,17 @@ export class Estimates {
   /** One design's estimate (a massing job's when the request is one). */
   design(req: DesignRequest, ctx: EstimateCtx): Estimate {
     if (req.massing) {
-      const pj = this.perJob('massing', req.model ?? ctx.massingModel);
+      const model = req.model ?? ctx.massingModel;
+      const pj = this.perJob('massing', model);
       const wait = ctx.limitUntil && ctx.limitUntil > ctx.now ? ctx.limitUntil - ctx.now : 0;
-      return { usdLow: r2(pj.usd[0]), usdHigh: r2(pj.usd[1]), minutesLow: r1((pj.ms[0] + wait) / MIN), minutesHigh: r1((pj.ms[1] + wait) / MIN), basis: [pj.basis, 'one massing', ...(wait ? [`a usage limit holds new turns for ${Math.ceil(wait / MIN)} min`] : [])].join('; ') };
+      const out: Estimate = { usdLow: r2(pj.usd[0]), usdHigh: r2(pj.usd[1]), minutesLow: r1((pj.ms[0] + wait) / MIN), minutesHigh: r1((pj.ms[1] + wait) / MIN), basis: [pj.basis, 'one massing', ...(wait ? [`a usage limit holds new turns for ${Math.ceil(wait / MIN)} min`] : [])].join('; ') };
+      const c = this.critique(req.critique, model, pj, ctx, true);
+      if (c) Object.assign(out, { critiqueUsdLow: r2(c.usd[0]), critiqueUsdHigh: r2(c.usd[1]), critiqueMinutesLow: r1(c.ms[0] / MIN), critiqueMinutesHigh: r1(c.ms[1] / MIN), basis: `${out.basis}; ${c.basis}` });
+      return out;
     }
-    return this.group({ items: [{ ...req, model: req.model ?? ctx.designModel } as GroupRequest['items'][number]], concurrency: 1 }, ctx);
+    const est = this.group({ items: [{ ...req, model: req.model ?? ctx.designModel } as GroupRequest['items'][number]], concurrency: 1 }, ctx);
+    delete est.items;
+    return est;
   }
 
   /** A bible job's estimate (about one design; measured separately once bibles finish). */

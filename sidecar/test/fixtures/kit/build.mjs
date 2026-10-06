@@ -106,7 +106,8 @@ sidecar.id = id;
 fs.writeFileSync(sidecarFile, JSON.stringify(sidecar, null, 2));
 fs.writeFileSync(path.join(out, 'env.json'), JSON.stringify(process.env));
 const ok = errors.length === 0;
-if (json) console.log(JSON.stringify({ ok, errors, warnings, nbt, sidecar: sidecarFile, ...(conformance ? { conformance } : {}) }));
+const metrics = { accentShare: 0.05, detailNoise: 0.2, windowsPerFacade: { north: 2, south: 3, east: 2, west: 2 }, windowsMin: 2, paletteAdherence: 1, parts: Object.keys(bp.parts ?? {}).length, cellsOutsideParts: 0, blocks: 100, topBlocks: [['spruce_planks', 40], ['cobblestone', 30]] };
+if (json) console.log(JSON.stringify({ ok, errors, warnings, nbt, sidecar: sidecarFile, metrics, ...(conformance ? { conformance } : {}) }));
 else {
   for (const w of warnings) console.log(`warning: ${w}`);
   for (const e of errors) console.log(`error: ${e}`);

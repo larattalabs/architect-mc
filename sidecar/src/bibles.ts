@@ -40,9 +40,23 @@ export const REQUIRED_COMPONENTS = ['window', 'door_surround', 'lantern_post', '
 /** the files of a bible (version) folder */
 export const BIBLE_FILES = ['bible.json', 'bible.md', 'components.mjs', 'sheet.png'] as const;
 
-export type RunOutcome = 'finished' | 'requeue' | 'stopped';
+/** 'critique' (5a): the design gave its slot back while its critic call runs (critique.ts re-queues the revision) */
+export type RunOutcome = 'finished' | 'requeue' | 'stopped' | 'critique';
 
 // ---- the index ------------------------------------------------------------------------------------
+
+export const DEFAULT_RESTRAINT = { accentShareMax: 0.12, detailDensity: 'moderate' as const, windowsPerFacadeMin: 2 };
+
+/** (5a) A bible's effective restraint: format 2's own (defaults filled in); format 1: the defaults, hero motifs = its first 3 motifs. */
+export function restraintOf(j: Record<string, unknown>): { heroMotifs: string[]; accentShareMax: number; detailDensity: 'sparse' | 'moderate' | 'rich'; windowsPerFacadeMin: number } {
+  const motifs = (Array.isArray(j.motifs) ? j.motifs : []).map((m) => (typeof m === 'string' ? m : typeof (m as { name?: unknown })?.name === 'string' ? (m as { name: string }).name : JSON.stringify(m)));
+  const r = (j.format === 2 && j.restraint && typeof j.restraint === 'object' ? j.restraint : {}) as Record<string, unknown>;
+  const hero = Array.isArray(r.heroMotifs) ? (r.heroMotifs as unknown[]).filter((x): x is string => typeof x === 'string').slice(0, 3) : motifs.slice(0, 3);
+  const asm = typeof r.accentShareMax === 'number' && r.accentShareMax >= 0.04 && r.accentShareMax <= 0.2 ? r.accentShareMax : DEFAULT_RESTRAINT.accentShareMax;
+  const dd = r.detailDensity === 'sparse' || r.detailDensity === 'moderate' || r.detailDensity === 'rich' ? r.detailDensity : DEFAULT_RESTRAINT.detailDensity;
+  const wmin = typeof r.windowsPerFacadeMin === 'number' && Number.isInteger(r.windowsPerFacadeMin) && r.windowsPerFacadeMin >= 0 ? r.windowsPerFacadeMin : DEFAULT_RESTRAINT.windowsPerFacadeMin;
+  return { heroMotifs: hero, accentShareMax: asm, detailDensity: dd, windowsPerFacadeMin: wmin };
+}
 
 export interface BibleFiles {
   json: string;
@@ -178,6 +192,10 @@ export class BibleIndex {
       ...(j.ext && typeof j.ext === 'object' ? { ext: j.ext } : {}),
       ...(typeof j.createdAt === 'number' ? { createdAt: j.createdAt } : {}),
       ...(j.cost && typeof j.cost === 'object' ? { cost: j.cost } : {}),
+      format: j.format === 2 ? 2 : 1,
+      restraint: restraintOf(j),
+      ...(this.archived(id) ? { archived: true } : {}),
+      ...(j.critique && typeof j.critique === 'object' ? { critique: j.critique } : {}),
     };
     const r = BibleInfoSchema.safeParse(info);
     return r.success ? r.data : undefined;
@@ -230,6 +248,105 @@ export class BibleIndex {
       return { pin: { id, version: b.version ?? 1 }, files: this.builtinFiles(b), info: this.builtinInfo(b) };
     }
     throw new ClientError(`no bible "${id}" (installed in ${this.dir}, or a built-in one: ${this.loadBuiltins().map((x) => x.id).join(', ') || 'none'})`);
+  }
+
+  // ---- (5a) library hygiene: archive, delete, version GC ---------------------------------------------
+
+  private adminFile(id: string): string {
+    return path.join(this.dir, id, 'admin.json');
+  }
+
+  archived(id: string): boolean {
+    return readJson(this.adminFile(id))?.archived === true;
+  }
+
+  /** bible.archive: hide it from the pickers (its entries and re-skins are unaffected). */
+  archive(id: string, archived: boolean): { id: string; archived: boolean } {
+    if (this.isBuiltin(id) && !this.versions(id).length) throw new ClientError(`${id} is a built-in bible: it cannot be archived`);
+    if (!this.versions(id).length) throw new ClientError(`no bible "${id}"`);
+    const f = this.adminFile(id);
+    const cur = readJson(f) ?? {};
+    fs.writeFileSync(f, `${JSON.stringify({ ...cur, archived }, null, 2)}\n`);
+    this.sc.log.info(`bible ${id} ${archived ? 'archived' : 'unarchived'}`);
+    this.sc.bibleIndexChanged();
+    return { id, archived };
+  }
+
+  /**
+   * What pins a bible's versions: library entries (their blueprint JSON `bible`), unfinished groups and designs, open
+   * massings, unfinished bible jobs.
+   */
+  pins(id: string): { versions: Set<number>; by: string[] } {
+    const versions = new Set<number>();
+    const by: string[] = [];
+    const lib = this.sc.config.libraryDir;
+    for (const e of fs.existsSync(lib) ? fs.readdirSync(lib) : []) {
+      const j = readJson(path.join(lib, e, `${e}.blueprint.json`));
+      const b = j?.bible as { id?: string; version?: number } | undefined;
+      if (b?.id === id) {
+        versions.add(b.version ?? 1);
+        by.push(`entry ${e}`);
+      }
+    }
+    for (const g of this.sc.groups.active()) if (g.bible.id === id) {
+      versions.add(g.bible.version);
+      by.push(`group ${g.id}`);
+    }
+    for (const d of this.sc.designs.active()) if (d.request.bible === id && !d.request.group) {
+      versions.add(d.request.bibleVersion ?? 1);
+      by.push(`design ${d.id}`);
+    }
+    for (const m of this.sc.massings.list()) if (m.bible?.id === id && !m.detail) {
+      versions.add(m.bible.version);
+      by.push(`massing ${m.id}`);
+    }
+    for (const j of this.sc.bibles.active()) if (j.bibleId === id) by.push(`bible job ${j.id}`);
+    return { versions, by: [...new Set(by)] };
+  }
+
+  /** bible.delete: refused while anything pins it, or for another owner's bible without that owner. No force flag. */
+  delete(id: string, owner?: string): { id: string; versions: number[] } {
+    const vs = this.versions(id);
+    if (!vs.length) throw new ClientError(this.isBuiltin(id) ? `${id} is a built-in bible: it cannot be deleted` : `no bible "${id}"`);
+    const info = this.installedInfo(id, vs[vs.length - 1]!);
+    if (info?.owner && info.owner !== owner) throw new ClientError(`bible ${id} belongs to ${info.owner}: only its owner can delete it`);
+    const p = this.pins(id);
+    if (p.by.length) throw new ClientError(`bible ${id} is in use, delete refused: ${p.by.slice(0, 12).join(', ')}${p.by.length > 12 ? `, and ${p.by.length - 12} more` : ''}`);
+    fs.rmSync(path.join(this.dir, id), { recursive: true, force: true });
+    this.sc.log.info(`bible ${id} deleted (versions ${vs.join(', ')})`);
+    this.sc.bibleIndexChanged();
+    return { id, versions: vs };
+  }
+
+  /**
+   * Version GC (at sidecar start): a version that is neither the latest nor pinned, and older than `maxAgeMs`, loses its
+   * versions/<v>/ folder. Pins always win.
+   */
+  gc(maxAgeMs = 30 * 24 * 3600_000): string[] {
+    const removed: string[] = [];
+    let ids: string[] = [];
+    try {
+      ids = fs.readdirSync(this.dir).filter((d) => /^[a-z0-9_]{1,64}$/.test(d));
+    } catch {
+      return removed;
+    }
+    const now = this.sc.now();
+    for (const id of ids) {
+      const vs = this.versions(id);
+      if (vs.length < 2) continue;
+      const latest = vs[vs.length - 1]!;
+      const pinned = this.pins(id).versions;
+      for (const v of vs) {
+        if (v === latest || pinned.has(v)) continue;
+        const j = readJson(path.join(this.versionDir(id, v), 'bible.json'));
+        const at = typeof j?.createdAt === 'number' ? j.createdAt : fs.statSync(this.versionDir(id, v)).mtimeMs;
+        if (now - at < maxAgeMs) continue;
+        fs.rmSync(this.versionDir(id, v), { recursive: true, force: true });
+        removed.push(`${id} v${v}`);
+      }
+    }
+    if (removed.length) this.sc.log.info(`bible version gc: removed ${removed.join(', ')}`);
+    return removed;
   }
 
   /** Copy a bible's files into <scratch>/bible/ (bible.json, bible.md, components.mjs), replacing what is there. */

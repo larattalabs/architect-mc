@@ -95,8 +95,11 @@ export class SimJobDriver implements JobDriver {
       if (q.abort.signal.aborted) return;
       step();
       if (over()) return yield result('error_max_budget_usd');
-      yield msg({ type: 'assistant', session_id: sessionId, message: { content: [{ type: 'text', text: 'sim: answering to the schema' }] } });
-      yield result('success', { result: '', structured_output: sampleFromSchema(q.schema ?? { type: 'object' }) });
+      // (5a) a scripted answer (the critic's and the judge's verdicts in the sim), or a scripted failure
+      const scripted = q.simAnswer;
+      if (scripted && typeof scripted === 'object' && 'simFail' in (scripted as Record<string, unknown>)) return yield result('error_during_execution', { errors: [String((scripted as { simFail: unknown }).simFail)] });
+      yield msg({ type: 'assistant', session_id: sessionId, message: { content: [{ type: 'text', text: `sim: answering to the schema${q.images?.length ? ` (looked at ${q.images.length} image${q.images.length === 1 ? '' : 's'})` : ''}` }] } });
+      yield result('success', { result: '', structured_output: scripted !== undefined ? scripted : sampleFromSchema(q.schema ?? { type: 'object' }) });
       return;
     }
 

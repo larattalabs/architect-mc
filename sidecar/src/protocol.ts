@@ -17,7 +17,7 @@ export const PROTOCOL_VERSION = 1 as const;
 export const PROTOCOLS = [1, 2] as const;
 export type Protocol = (typeof PROTOCOLS)[number];
 /** What a protocol-2 snapshot lists in `features`. */
-export const FEATURES = ['job.run', 'job.tools', 'blobs', 'budget', 'designs.v2', 'bibles', 'design.groups', 'named.parts', 'open.types', 'estimates', 'reskin', 'massing'] as const;
+export const FEATURES = ['job.run', 'job.tools', 'blobs', 'budget', 'designs.v2', 'bibles', 'design.groups', 'named.parts', 'open.types', 'estimates', 'reskin', 'massing', 'critique', 'critique.report', 'job.images', 'bible.admin', 'bible.restraint'] as const;
 
 const Ts = z.number().int().nonnegative();
 const Id = z.string().min(1).max(64);
@@ -29,9 +29,11 @@ export const BuildingType = z.enum(BUILDING_TYPES);
 export type BuildingType = z.infer<typeof BuildingType>;
 
 export const DesignStatus = z
-  .enum(['queued', 'designing', 'checking', 'rendering', 'done', 'failed', 'cancelled'])
-  .describe('queued -> designing (the design agent works) -> checking (the sidecar re-runs the checker with a pristine kit) -> rendering (previews) -> done; or failed / cancelled. done, failed and cancelled are final.');
+  .enum(['queued', 'designing', 'checking', 'rendering', 'critiquing', 'done', 'failed', 'cancelled'])
+  .describe('queued -> designing (the design agent works) -> checking (the sidecar re-runs the checker with a pristine kit) -> rendering (previews) -> [critiquing (5a: the critic looks at the renders) -> designing (a revision) -> ...] -> done; or failed / cancelled. done, failed and cancelled are final. A protocol-1 client sees critiquing as rendering.');
 export type DesignStatus = z.infer<typeof DesignStatus>;
+/** What protocol 1 knows (no critiquing). */
+export const DesignStatusV1 = z.enum(['queued', 'designing', 'checking', 'rendering', 'done', 'failed', 'cancelled']);
 
 export const AuthState = z.enum(['ok', 'missing', 'failed', 'checking']);
 export type AuthState = z.infer<typeof AuthState>;
@@ -118,6 +120,81 @@ export const Context = z.union([
 ]);
 export type Context = z.infer<typeof Context>;
 
+/** (protocol 2) the SDK's estimate: total_cost_usd plus the modelUsage token totals. Not a billing statement. */
+export const Cost = z.object({
+  usd: z.number().nonnegative(),
+  inputTokens: z.number().int().nonnegative(),
+  outputTokens: z.number().int().nonnegative(),
+  cacheReadTokens: z.number().int().nonnegative(),
+  cacheWriteTokens: z.number().int().nonnegative(),
+  turns: z.number().int().nonnegative(),
+});
+export type Cost = z.infer<typeof Cost>;
+
+// ---- phase 5a: critique (docs/CONTRACT.md "Phase 5a contract") ------------------------------
+
+/** The fixed critic views (render.mjs --views); phase 6 adds section. */
+export const CRITIQUE_VIEWS = ['iso', 'iso_back', 'front', 'top', 'cutaway'] as const;
+export const CritiqueView = z.enum(CRITIQUE_VIEWS);
+export type CritiqueView = z.infer<typeof CritiqueView>;
+export const CritiqueMode = z.enum(['off', 'report', 'loop']);
+export type CritiqueMode = z.infer<typeof CritiqueMode>;
+export const CritiqueSpec = z
+  .object({
+    mode: CritiqueMode.describe('off | report (one critic call, no revision) | loop (revise until it ships, a round cap, a budget or the clock stops it)'),
+    maxRevisions: z.number().int().min(0).max(3).optional().describe('default 2 (a massing: 1)'),
+    model: z.string().trim().min(1).max(100).regex(/^[A-Za-z0-9._:@/[\]-]+$/, 'not a model id').optional().describe('the critic model (default config critique.model, claude-sonnet-5-5)'),
+    effort: z.enum(['low', 'medium', 'high']).optional().describe('default medium'),
+    budgetUsd: z.number().positive().max(1000).optional().describe("cap on the loop's own spend (critic calls plus revision turns); default 1.0x round 0's cost"),
+    maxMinutes: z.number().positive().max(240).optional().describe('default 15: the loop ends at the first round boundary after this'),
+    shipScore: z.number().min(1).max(10).optional().describe('default 7.0: ship when the mean score reaches it, no score is below shipScore - 2 and there is no P0'),
+    views: z.array(CritiqueView).min(1).max(5).optional().describe('default every view'),
+    neighbours: z.boolean().optional().describe('send the finished siblings\' renders (default true in groups)'),
+    extraCriteria: z.array(z.string().trim().min(1).max(200)).max(3).optional().describe('up to 3 extra rubric lines, each scored on its own'),
+  })
+  .refine((c) => !c.views || new Set(c.views).size === c.views.length, 'duplicate view');
+export type CritiqueSpec = z.infer<typeof CritiqueSpec>;
+
+export const END_REASONS = ['ship', 'max_revisions', 'budget', 'time', 'regressed', 'check_failed', 'critic_failed', 'off'] as const;
+export const EndReason = z.enum(END_REASONS);
+export type EndReason = z.infer<typeof EndReason>;
+export const IssuePriority = z.enum(['P0', 'P1', 'P2']);
+export const CritiqueIssue = z.object({
+  priority: IssuePriority,
+  part: z.string().max(64).nullable().describe('a named part of the blueprint, or null for the whole building'),
+  view: z.string().max(40),
+  what: z.string().max(200),
+  fix: z.string().max(200),
+});
+export type CritiqueIssue = z.infer<typeof CritiqueIssue>;
+export const CritiqueRound = z.object({
+  n: z.number().int().min(0),
+  verdict: z.enum(['ship', 'iterate']).nullable().describe("the model's own verdict (the sidecar decides; null: no critic answer)"),
+  overall: z.number().nullable().describe('the mean of the present scores (null: not scored)'),
+  scores: z.record(z.string(), z.number()),
+  issues: z.array(CritiqueIssue),
+  resolved: z.array(z.number().int()),
+  summary: z.string().max(400).optional(),
+  ship: z.boolean().describe("the sidecar's ship rule held"),
+  cost: z.number().nonnegative().describe("USD of this round's critic call plus the revision that made it"),
+  ms: z.number().int().nonnegative().describe('wall time of the revision and the critic call'),
+  kept: z.boolean().describe('the round passed the check and is kept in the scratch dir (rounds/<n>/)'),
+  notes: z.array(z.string()).optional().describe('e.g. an unknown part name became null'),
+  unknownParts: z.number().int().optional(),
+  error: z.string().optional().describe('why the round has no verdict (check failed, critic failed)'),
+});
+export type CritiqueRound = z.infer<typeof CritiqueRound>;
+export const CritiqueRecord = z.object({
+  mode: CritiqueMode,
+  rounds: z.array(CritiqueRound),
+  best: z.number().int().optional().describe('the round that installs (or installed)'),
+  end: EndReason.optional().describe('set when the loop has ended'),
+  overall: z.number().nullable().optional().describe("the best round's overall"),
+  pending: z.enum(['critic', 'revise']).optional().describe('what the loop does next (absent once it ended)'),
+  cost: z.object({ critic: Cost, revise: Cost }),
+});
+export type CritiqueRecord = z.infer<typeof CritiqueRecord>;
+
 export const DesignRequest = DesignRequestBase.extend({
   type: OpenType.describe('(protocol 2: any open type; protocol 1: the 11 presets) the building type'),
   profile: Profile.optional().describe('(4b, R4) an open type: the checker rules it wants (default door, lit, no_floating); preset types ignore it'),
@@ -136,22 +213,13 @@ export const DesignRequest = DesignRequestBase.extend({
   massingVersion: z.number().int().min(1).optional().describe('(4c) with fromMassing: the massing version (default: its latest; the sidecar pins it)'),
   context: Context.optional().describe('(4c) text (<= 4000 chars) or JSON for the brief: site, purpose, neighbour lots; a group sets it on every item'),
   redirect: z.object({ fromVersion: z.number().int().min(1), notes: z.string().max(2000) }).optional().describe('(4c) set by the sidecar: a massing redirect (the version it starts from and the notes)'),
+  critique: CritiqueSpec.optional().describe('(5a) critique this design: report (one critic call) or loop (revise on the verdict); default off'),
 }).superRefine(noDuplicateFeatures).superRefine((r, ctx) => {
   if (r.massing && r.fromMassing) ctx.addIssue({ code: 'custom', path: ['fromMassing'], message: 'a request is a massing or the detail of one, not both' });
   if (r.massingVersion !== undefined && !r.fromMassing) ctx.addIssue({ code: 'custom', path: ['massingVersion'], message: 'massingVersion needs fromMassing' });
 });
 export type DesignRequest = z.infer<typeof DesignRequest>;
 
-/** (protocol 2) the SDK's estimate: total_cost_usd plus the modelUsage token totals. Not a billing statement. */
-export const Cost = z.object({
-  usd: z.number().nonnegative(),
-  inputTokens: z.number().int().nonnegative(),
-  outputTokens: z.number().int().nonnegative(),
-  cacheReadTokens: z.number().int().nonnegative(),
-  cacheWriteTokens: z.number().int().nonnegative(),
-  turns: z.number().int().nonnegative(),
-});
-export type Cost = z.infer<typeof Cost>;
 
 /** (4c) the kit's massing conformance result (`build.mjs --massing <file> --json`) */
 export const Conformance = z.object({ ok: z.boolean(), errors: z.array(z.string()), issues: z.array(z.string()) });
@@ -159,7 +227,6 @@ export type Conformance = z.infer<typeof Conformance>;
 
 const designFields = {
   id: Id.describe('"d<n>"'),
-  status: DesignStatus,
   step: z.string().describe('one line of progress'),
   blueprintId: z.string().optional().describe('done: the new library id (gen_<slug>, gen_<slug>_2, ...)'),
   size: z.object({ x: z.number().int(), y: z.number().int(), z: z.number().int() }).optional(),
@@ -169,13 +236,16 @@ const designFields = {
   updatedAt: Ts,
 };
 /** A design record as protocol 1 sends it. */
-export const DesignV1 = z.object({ ...designFields, request: DesignRequestV1 });
+export const DesignV1 = z.object({ ...designFields, status: DesignStatusV1, request: DesignRequestV1 });
 export const Design = z.object({
   ...designFields,
+  status: DesignStatus,
   request: DesignRequest,
   cost: Cost.optional().describe('(protocol 2) the estimated cost so far, with cache tokens'),
   massing: z.object({ id: MassingId, version: z.number().int().min(1) }).optional().describe('(4c) a massing job: the massing (id, version) it makes; it never gets a blueprintId'),
   conformance: Conformance.optional().describe('(4c) a detail pass: the massing conformance result (errors failed a round; issues are warnings)'),
+  critique: CritiqueRecord.optional().describe('(5a) the critique rounds, the best round, the end reason and the split cost'),
+  critiqueOf: z.string().optional().describe('(5a) a report critique of this library entry (design.critique): no new entry'),
 });
 export type Design = z.infer<typeof Design>;
 
@@ -244,6 +314,7 @@ export const GroupItemInput = DesignRequestBase.extend({
   anchor: z.boolean().optional().describe('true = wave 0 (designed first; later waves see its render)'),
   owner: Owner.optional(),
   budgetUsd: BudgetUsd.optional(),
+  critique: CritiqueSpec.optional().describe("(5a) this item's critique (wins over the group's)"),
 }).superRefine(noDuplicateFeatures);
 export type GroupItemInput = z.infer<typeof GroupItemInput>;
 
@@ -261,6 +332,7 @@ export const GroupRequest = z
     approvalUi: z.enum(['architect', 'owner']).optional().describe('(4c) who approves: architect (the mod\'s UI, default) or owner (only group.approve with the group\'s owner)'),
     maxRedirects: z.number().int().min(0).max(10).optional().describe('(4c) redirect rounds per item (default 3)'),
     context: Context.optional().describe('(4c) goes into every item\'s brief (massing and detail)'),
+    critique: CritiqueSpec.optional().describe('(5a) the default critique of the items (an item\'s own spec wins); default off'),
   })
   .superRefine((g, ctx) => {
     const keys = g.items.map((it, i) => it.itemKey ?? `item${i + 1}`);
@@ -292,6 +364,7 @@ export const GroupItem = z.object({
   massing: z.object({ id: MassingId, version: z.number().int().min(1) }).optional().describe('(4c) the item\'s massing (the latest version)'),
   rounds: z.number().int().min(0).optional().describe('(4c) redirect rounds so far (capped at the group\'s maxRedirects)'),
   designIds: z.array(Id).optional().describe('(4c) every design of the item, oldest first (massings, redirects, the detail); designId is the latest'),
+  critique: z.object({ rounds: z.number().int(), best: z.number().int().optional(), end: EndReason.optional(), overall: z.number().nullable().optional() }).optional().describe('(5a) the critique summary of its design'),
 });
 export type GroupItem = z.infer<typeof GroupItem>;
 
@@ -349,12 +422,23 @@ export const Massing = z.object({
 });
 export type Massing = z.infer<typeof Massing>;
 
+const CritiqueFigures = {
+  critiqueUsdLow: z.number().optional().describe('(5a) the critique loop on top of the design figures (absent: critique off)'),
+  critiqueUsdHigh: z.number().optional(),
+  critiqueMinutesLow: z.number().optional().describe('(5a) the wall time the critique adds'),
+  critiqueMinutesHigh: z.number().optional(),
+};
 export const Estimate = z.object({
   usdLow: z.number(),
   usdHigh: z.number(),
   minutesLow: z.number(),
   minutesHigh: z.number(),
   basis: z.string().describe('what it is computed from: "seed" values or "<n> measured" designs per model, the concurrency, the usage limit'),
+  ...CritiqueFigures,
+  items: z
+    .array(z.object({ itemKey: z.string().optional(), usdLow: z.number(), usdHigh: z.number(), minutesLow: z.number(), minutesHigh: z.number(), ...CritiqueFigures }))
+    .optional()
+    .describe('(5a) per item (a group estimate), the design figures and the critique figures'),
 });
 export type Estimate = z.infer<typeof Estimate>;
 
@@ -369,6 +453,7 @@ export const BibleRequest = z.object({
   references: z.array(z.string().regex(LIBRARY_ID).max(64)).max(8).optional().describe('library entries whose look to learn from'),
   scope: BibleScope.optional().describe('settlement: also the macro roles rock, surface, subsurface, rubble, rail, structure'),
   seedPreset: z.string().regex(/^[a-z0-9_]{1,32}$/).optional().describe('start from a built-in bible (the palette presets)'),
+  critique: z.object({ mode: z.enum(['off', 'report']), model: ModelId.optional() }).optional().describe('(5a) report: the bible job ends with one critic call on sheet.png, stored in bible.json critique'),
 });
 export type BibleRequest = z.infer<typeof BibleRequest>;
 
@@ -389,6 +474,13 @@ export const BibleInfo = z.object({
   ext: Ext.optional(),
   createdAt: Ts.optional(),
   cost: Cost.optional(),
+  format: z.number().int().optional().describe('(5a) the bible format: 1 (4b) or 2 (with restraint)'),
+  restraint: z
+    .object({ heroMotifs: z.array(z.string()), accentShareMax: z.number(), detailDensity: z.enum(['sparse', 'moderate', 'rich']), windowsPerFacadeMin: z.number().int() })
+    .optional()
+    .describe('(5a) the effective restraint (a format-1 bible: the defaults, hero motifs = its first 3 motifs)'),
+  archived: z.boolean().optional().describe('(5a) hidden from the pickers (bible.archive); its entries are unaffected'),
+  critique: z.record(z.string(), z.unknown()).optional().describe('(5a) the sheet critique (overall, scores, issues), when the bible job had one'),
 });
 export type BibleInfo = z.infer<typeof BibleInfo>;
 
@@ -483,6 +575,9 @@ export const JobTool = z.object({
 export type JobTool = z.infer<typeof JobTool>;
 
 export const JobKind = z.enum(['structured', 'agent']);
+/** (5a) images per job (JobSpec.images) and their size */
+export const MAX_JOB_IMAGES = 8;
+export const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 export type JobKind = z.infer<typeof JobKind>;
 
 export const JobSpec = z
@@ -501,6 +596,11 @@ export const JobSpec = z
     group: z.string().max(200).optional().describe('reserved for 4b'),
     ext: Ext.optional(),
     blobs: z.array(BlobId).max(32).optional().describe('copied into the job scratch dir as blobs/<id>.<ext>'),
+    images: z
+      .array(z.object({ blob: BlobId, label: z.string().trim().min(1).max(200) }))
+      .max(MAX_JOB_IMAGES)
+      .optional()
+      .describe('(5a) PNG or JPEG blobs (at most 8, 5 MB each) sent as image content blocks before the prompt text, each after its label'),
   })
   .superRefine((s, ctx) => {
     if (s.kind === 'structured' && !s.schema) ctx.addIssue({ code: 'custom', path: ['schema'], message: 'a structured job needs a schema' });
@@ -508,6 +608,7 @@ export const JobSpec = z
     const names = (s.tools ?? []).map((t) => t.name);
     if (new Set(names).size !== names.length) ctx.addIssue({ code: 'custom', path: ['tools'], message: 'duplicate tool name' });
     if (s.blobs && new Set(s.blobs).size !== s.blobs.length) ctx.addIssue({ code: 'custom', path: ['blobs'], message: 'duplicate blob id' });
+    if (s.images?.length && s.kind !== 'structured' && s.kind !== 'agent') ctx.addIssue({ code: 'custom', path: ['images'], message: 'images need a job kind' });
   });
 export type JobSpec = z.infer<typeof JobSpec>;
 
@@ -692,6 +793,11 @@ export const GroupApproveMsg = z.object({
   owner: Owner.optional().describe('who approves: must be the group\'s owner when its approvalUi is "owner"'),
 });
 
+// 5a
+export const DesignCritiqueMsg = z.object({ ...envelope('design.critique'), entryId: z.string().regex(LIBRARY_ID).max(64), spec: CritiqueSpec.optional().describe('mode must be report (the default); the model, effort, views and extraCriteria apply') });
+export const BibleDeleteMsg = z.object({ ...envelope('bible.delete'), id: BibleId, owner: Owner.optional().describe("required for another owner's bible") });
+export const BibleArchiveMsg = z.object({ ...envelope('bible.archive'), id: BibleId, archived: z.boolean() });
+
 export const ClientMessage = z.discriminatedUnion('type', [
   HelloMsg,
   DesignRequestMsg,
@@ -720,6 +826,9 @@ export const ClientMessage = z.discriminatedUnion('type', [
   MassingListMsg,
   MassingDeleteMsg,
   GroupApproveMsg,
+  DesignCritiqueMsg,
+  BibleDeleteMsg,
+  BibleArchiveMsg,
 ]);
 export type ClientMessage = z.infer<typeof ClientMessage>;
 /** What a protocol-1 client may send (exactly the phase 1-3 messages and fields). */
@@ -749,9 +858,13 @@ export function chooseProtocol(offered: number[] | undefined): Protocol | undefi
  */
 export function toProtocol1(full: Record<string, unknown>): Record<string, unknown> | undefined {
   // (4c) massing jobs and detail passes are protocol-2 work: a protocol-1 client never sees them
-  const v2Only = (d: unknown) => !!d && typeof d === 'object' && !!(((d as { request?: Record<string, unknown> }).request ?? {}).massing || ((d as { request?: Record<string, unknown> }).request ?? {}).fromMassing);
+  // (5a) and a report critique of a library entry (design.critique)
+  const v2Only = (d: unknown) => !!d && typeof d === 'object' && (!!(d as { critiqueOf?: unknown }).critiqueOf || !!(((d as { request?: Record<string, unknown> }).request ?? {}).massing || ((d as { request?: Record<string, unknown> }).request ?? {}).fromMassing));
+  // (5a) critiquing is a protocol-2 status: protocol 1 sees rendering, with the step text
+  const v1Status = (d: unknown) => (d && typeof d === 'object' && (d as { status?: unknown }).status === 'critiquing' ? { ...(d as Record<string, unknown>), status: 'rendering' } : d);
   if (full.type === 'design.upsert' && v2Only(full.design)) return undefined;
-  if (full.type === 'snapshot' && Array.isArray(full.designs)) full = { ...full, designs: (full.designs as unknown[]).filter((d) => !v2Only(d)) };
+  if (full.type === 'design.upsert') full = { ...full, design: v1Status(full.design) };
+  if (full.type === 'snapshot' && Array.isArray(full.designs)) full = { ...full, designs: (full.designs as unknown[]).filter((d) => !v2Only(d)).map(v1Status) };
   const r = ServerMessageV1.safeParse(full);
   return r.success ? (r.data as Record<string, unknown>) : undefined;
 }

@@ -38,6 +38,8 @@ export interface DesignWork {
   pending?: string;
   /** (protocol 2) the cost committed by finished turns */
   cost?: Cost;
+  /** (5a) the critique loop's state (critique.ts CritiqueWork) */
+  critique?: import('./critique.js').CritiqueWork;
 }
 
 /** A mod-provided tool call the client has not answered yet (survives a restart). */
@@ -67,6 +69,10 @@ export interface JobWork {
   queries: number;
   /** structured: re-asks after the sidecar's own schema check failed */
   schemaRetries: number;
+  /** (5a) the job's images, copied into its scratch dir (images/) when it was made */
+  images?: Array<{ file: string; label: string; mediaType: 'image/png' | 'image/jpeg' }>;
+  /** (5a) sim only: a scripted structured answer (the critic's verdicts) */
+  simAnswer?: unknown;
 }
 
 export interface StateData {
