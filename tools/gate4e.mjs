@@ -1774,6 +1774,7 @@ async function feed(site, fraction = 1, maxStacks = 27) {
   return { stacks: stacks.length, percent: st.percent, crate: c };
 }
 
+let hopperC = null;
 /** Makes the 0.7.0 world (gate 4's fixture) with the 0.7.0 client; records the pre-placement hashes. */
 async function mig070() {
   await stopClient();
@@ -1837,6 +1838,7 @@ async function mig070() {
     }
   }
   const f1 = { stacks: nst };
+  hopperC = hc;
   let pc = 0;
   for (let i = 0, still = 0; i < 150; i++) {
     await sleep(2000);
@@ -1867,7 +1869,7 @@ async function mig070() {
   const before = await sites();
   await stopClient(); // a clean stop: the world and the queue are saved mid-placement
   use('new');
-  ctx.mig = { pre, preRoad, ids, group: gdone.group, sites070: before.map((x) => ({ id: x.id, state: x.state, bp: x.blueprint ?? x.bp })), tree };
+  ctx.mig = { hopperC, pre, preRoad, ids, group: gdone.group, sites070: before.map((x) => ({ id: x.id, state: x.state, bp: x.blueprint ?? x.bp })), tree };
   saveCtx();
   return ctx.mig;
 }
@@ -1960,6 +1962,9 @@ steps.migration = async () => {
   copyWorld('G4E Mig', 'G4E MigDown');
   await openWorld('G4E Mig');
   await call('dev.survival.set', { on: false });
+  // the hopper chain that fed C is the player's: taken away before C's lot is compared
+  for (const c of [m.hopperC?.chest, m.hopperC?.hop].filter(Boolean)) await cmd(`/setblock ${c.join(' ')} minecraft:air`);
+  await cmd('/kill @e[type=minecraft:item]');
   const okRemoves = await migRemoves(['A1', 'A2', 'A3', 'T', 'G1', 'G2', 'P', 'C'], 'mig');
   check(okRemoves === 8, `mig: ${okRemoves}/8 Removes match their pre-hashes`);
   await leaveWorld();
@@ -2016,6 +2021,7 @@ steps.downgrade = async () => {
   use('old');
   copyWorld('G4E MigDown', 'G4E MigDown070', SAVES, savesOf('new'));
   await startClient('G4E MigDown070');
+  await call('dev.survival.set', { on: false }); // the fixture's toggle (for C) would refuse an actorless INSTANT place
   await tp(MIG.N.at[0] + 5.5, 85, MIG.N.at[2] + 30.5);
   const n = await result(await api(`place ${MIG.N.bp} ${MIG.N.at.join(' ')} INSTANT unowned noactor 0 force`));
   check(n.placed, `downgrade: 0.7.0 places a site (${n.siteId})`, n);
@@ -2036,11 +2042,13 @@ steps.downgrade = async () => {
   check((j.entries ?? []).some((e) => e.site === n.siteId), `downgrade: the 0.7.0 site ${n.siteId} is late-imported`, j.entries);
   await call('dev.survival.set', { on: false });
   m.ids.N = n.siteId;
-  const ok = await migRemoves(['A1', 'A2', 'A3', 'T', 'G1', 'G2', 'N'], 'downgrade');
-  const rr = await result(await api(`remove ${roadId} - force keep`), 300_000);
+  // the road first (its strip reaches into the lots' hash regions), then the lots
   await tp(100.5, 85, -150.5);
+  const rr = await result(await api(`remove ${roadId} - force keep`), 300_000);
+  for (let i = 0; i < 60 && (await sites()).some((x) => x.id === roadId); i++) await sleep(500);
   const hr = (await bhash(ROAD_BOX)).sha256;
   check(rr.removed && hr === m.preRoad, 'downgrade: removing the road restores its strip exactly', { rr, hr });
+  const ok = await migRemoves(['A1', 'A2', 'A3', 'T', 'G1', 'G2', 'N'], 'downgrade');
   check(ok === 7, `downgrade: ${ok}/7 Removes exact after the round trip`);
   await leaveWorld();
   return { roadId, n: n.siteId };
