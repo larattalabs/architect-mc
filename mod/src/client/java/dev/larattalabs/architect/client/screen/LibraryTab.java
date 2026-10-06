@@ -432,7 +432,8 @@ final class LibraryTab {
 			() -> {
 				List<ArchitectScreen.Option> opts = new ArrayList<>();
 				for (var b : dev.larattalabs.architect.client.design.SetFeature.bibles()) {
-					if (!b.id().equals(cur)) {
+					// (5a) archived bibles are hidden from the pickers
+					if (!b.id().equals(cur) && !b.archived()) {
 						opts.add(new ArchitectScreen.Option(b.id(), b.builtin() ? b.name() : b.name() + " v" + b.version(), false));
 					}
 				}
@@ -912,8 +913,8 @@ final class LibraryTab {
 		}
 		ly += ArchitectScreen.CHIP_H + 6;
 		// phase 4b: style bibles (the presets above are the built-in ones); a bible re-skins with its roles
-		List<dev.larattalabs.architect.api.Bible> mine = dev.larattalabs.architect.client.design.SetFeature.bibles().stream().filter(b -> !b.builtin())
-			.toList();
+		List<dev.larattalabs.architect.api.Bible> mine = dev.larattalabs.architect.client.design.SetFeature.bibles().stream().filter(b -> !b.builtin()
+			&& (!b.archived() || b.id().equals(f.bible()))).toList();
 		if (dev.larattalabs.architect.client.design.SetFeature.has("reskin")) {
 			g.text(font, "Style bible", lx, ly, UiStyle.CLAY_DARK, false);
 			String bnote = "the presets are the built-in ones";

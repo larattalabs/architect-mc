@@ -4,6 +4,9 @@
 // Fieldref) must still exist, with the same descriptor, in the mod's freshly compiled classes.
 //
 //   node tools/api-compat.mjs <old.jar> [classesDir]
+//   node tools/api-compat.mjs --surface <old architect_mc.jar> [classesDir]
+//                     every public or protected member of every class under dev/larattalabs/architect/api in the old MOD jar
+//                     (its whole 1.x surface, not only what one jar calls) must still exist with the same descriptor.
 //
 // classesDir defaults to mod/build/classes/java/{main,client} (run the mod's build first). JAVA_HOME's javap is used (else the PATH's).
 // Also lists the old jar's switch maps over api enums (a $SwitchMap resolves constants by name, so inserted constants are safe
@@ -16,10 +19,12 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const jar = process.argv[2];
-const classDirs = process.argv[3] ? [path.resolve(process.argv[3])] : ['main', 'client'].map((s) => path.join(root, 'mod', 'build', 'classes', 'java', s));
+const surface = process.argv[2] === '--surface';
+const args = surface ? process.argv.slice(3) : process.argv.slice(2);
+const jar = args[0];
+const classDirs = args[1] ? [path.resolve(args[1])] : ['main', 'client'].map((s) => path.join(root, 'mod', 'build', 'classes', 'java', s));
 if (!jar) {
-  console.error('usage: node tools/api-compat.mjs <old.jar> [classesDir]');
+  console.error('usage: node tools/api-compat.mjs [--surface] <old.jar> [classesDir]');
   process.exit(2);
 }
 const javap = process.env.JAVA_HOME ? path.join(process.env.JAVA_HOME, 'bin', 'javap') : 'javap';
@@ -37,11 +42,11 @@ const walk = (d) => {
 };
 walk(tmp);
 
-// ---- 1. the references
+// ---- 1. the references (or, with --surface, the old api's public and protected members)
 const refs = new Map(); // "owner.name:desc" -> kind
 let patternSwitch = false;
 const switchMaps = new Set();
-for (const f of classFiles) {
+for (const f of surface ? [] : classFiles) {
   const out = execFileSync(javap, ['-v', '-p', f], { encoding: 'utf8', maxBuffer: 64 << 20 });
   for (const line of out.split('\n')) {
     const m = /=\s+(Methodref|InterfaceMethodref|Fieldref)\s+#\d+\.#\d+\s+\/\/\s+(\S+)\.("?[^:"]+"?):(\S+)/.exec(line);
@@ -49,6 +54,28 @@ for (const f of classFiles) {
     if (/java\/lang\/MatchException/.test(line)) patternSwitch = true;
     const sm = /\$SwitchMap\$(dev\$larattalabs\$architect\$api\$[A-Za-z0-9$]+)/.exec(line);
     if (sm) switchMaps.add(sm[1].replace(/\$/g, '.'));
+  }
+}
+
+if (surface) {
+  for (const f of classFiles) {
+    const rel = path.relative(tmp, f).replace(/\\/g, '/');
+    if (!rel.startsWith(API) || !rel.endsWith('.class')) continue;
+    const cls = rel.slice(0, -'.class'.length);
+    const out = execFileSync(javap, ['-protected', '-s', f], { encoding: 'utf8' }).split('\n');
+    for (let i = 0; i < out.length; i++) {
+      const d = /^\s+descriptor: (\S+)/.exec(out[i]);
+      if (!d) continue;
+      const sig = out[i - 1].trim().replace(/;$/, '');
+      let name;
+      if (sig.includes('(')) {
+        const before = sig.slice(0, sig.indexOf('('));
+        name = before.split(/\s+/).pop();
+        name = sig === 'static {}' ? '<clinit>' : name === cls.replace(/\//g, '.') ? '<init>' : name.split('.').pop();
+      } else name = sig.split(/\s+/).pop();
+      if (name === '<clinit>') continue;
+      refs.set(`${cls}.${name}:${d[1]}`, 'member');
+    }
   }
 }
 
@@ -107,7 +134,7 @@ for (const [ref, kind] of [...refs].sort()) {
 }
 fs.rmSync(tmp, { recursive: true, force: true });
 
-console.log(`${refs.size} api references in ${path.basename(jar)} (${classFiles.length} classes), checked against ${classDirs.map((d) => path.relative(root, d)).join(' + ')}`);
+console.log(surface ? `${refs.size} public/protected api members of ${path.basename(jar)}, checked against ${classDirs.map((d) => path.relative(root, d)).join(' + ')}` : `${refs.size} api references in ${path.basename(jar)} (${classFiles.length} classes), checked against ${classDirs.map((d) => path.relative(root, d)).join(' + ')}`);
 if (switchMaps.size) console.log(`switch maps over api enums (resolved by name, safe for inserted constants): ${[...switchMaps].sort().join(', ')}`);
 console.log(patternSwitch ? 'WARN: a pattern switch (MatchException) exists in the jar: inserted enum constants may reach its default' : 'no pattern switches (MatchException) in the jar');
 if (missing.length) {

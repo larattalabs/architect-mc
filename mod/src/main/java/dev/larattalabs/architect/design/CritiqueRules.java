@@ -165,6 +165,15 @@ public final class CritiqueRules {
 		return out;
 	}
 
+	/** The rounds' overalls in one line, the best starred: "5.0 → 8.0★" ("–" for a round without a score). */
+	public static String roundsShort(Critique c) {
+		List<String> parts = new ArrayList<>();
+		for (Critique.Round r : c.rounds()) {
+			parts.add((r.scored() ? score(r.overall()) : "–") + (r.n() == c.best() && (c.ended() || r.scored()) ? "★" : ""));
+		}
+		return String.join(" → ", parts);
+	}
+
 	/** The scores in a fixed order: "silhouette 8 · legibility 7 · craft 7 · materials 7 · brief 8". */
 	public static String scoresLine(Map<String, Integer> scores) {
 		List<String> keys = new ArrayList<>(scores.keySet());

@@ -62,6 +62,7 @@ class CritiqueRulesTest {
 		assertEquals("round 1  8.0  ships  1 issue, 2 resolved  ★ best", lines.get(1));
 		assertEquals("Critique: shipped at round 1 (8.0)", CritiqueRules.endLine(c));
 		assertEquals("critique 8.0, shipped", CritiqueRules.brief(c));
+		assertEquals("5.0 → 8.0★", CritiqueRules.roundsShort(c));
 	}
 
 	@Test

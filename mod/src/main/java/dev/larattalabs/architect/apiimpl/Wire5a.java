@@ -344,9 +344,19 @@ public final class Wire5a {
 			Path f = dir.resolve(CRITIQUE_FILE);
 			if (Files.isRegularFile(f)) {
 				try {
-					JsonObject j = JsonParser.parseString(Files.readString(f, StandardCharsets.UTF_8)).getAsJsonObject();
 					Path nbt = dir.resolve(id + ".nbt");
-					return Optional.of(critiqueFile(j, Files.isRegularFile(nbt) ? sha256(nbt) : null));
+					String rev = Files.isRegularFile(nbt) ? sha256(nbt) : null;
+					long mtime = Files.getLastModifiedTime(f).toMillis();
+					long size = Files.size(f);
+					Parsed p = PARSED.get(f);
+					if (p == null || p.mtime() != mtime || p.size() != size) {
+						p = new Parsed(mtime, size, JsonParser.parseString(Files.readString(f, StandardCharsets.UTF_8)).getAsJsonObject());
+						if (PARSED.size() > 4096) {
+							PARSED.clear();
+						}
+						PARSED.put(f, p);
+					}
+					return Optional.of(critiqueFile(p.json(), rev));
 				} catch (IOException | RuntimeException e) {
 					// fall back to the summary
 				}
@@ -354,6 +364,12 @@ public final class Wire5a {
 		}
 		return summary(blueprintJson.get("critique"));
 	}
+
+	/** A parsed critique.json, by path (re-read when its mtime or size changes). */
+	private record Parsed(long mtime, long size, JsonObject json) {
+	}
+
+	private static final Map<Path, Parsed> PARSED = new ConcurrentHashMap<>();
 
 	/**
 	 * The rounds of a design's critique that have their verdict (DESIGN_CRITIQUED): scored by the critic, or kept with an error

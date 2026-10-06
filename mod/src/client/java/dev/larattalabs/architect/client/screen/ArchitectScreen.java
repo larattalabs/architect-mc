@@ -1846,7 +1846,12 @@ public final class ArchitectScreen extends Screen {
 					+ all.get(0) + ")") : " · conformance ok";
 			}
 			// (5a) the item's critique: its overall and how the loop ended (or the round it is in)
-			String crit = it.critique().map(cr -> " · " + dev.larattalabs.architect.design.CritiqueRules.brief(cr)).orElse("");
+			// the rounds come from the item's design record when the client has it ("5.0 → 8.0★")
+			SidecarState.Design idd = it.critique().isPresent() ? Sidecar.state().design(it.designId()) : null;
+			var full = idd == null ? java.util.Optional.<dev.larattalabs.architect.api.Critique>empty() : dev.larattalabs.architect.apiimpl.Wire5a.record(idd
+				.raw().get("critique"));
+			String crit = it.critique().map(cr -> " · " + dev.larattalabs.architect.design.CritiqueRules.brief(full.orElse(cr)) + full.map(fc -> " ("
+				+ dev.larattalabs.architect.design.CritiqueRules.roundsShort(fc) + ")").orElse("")).orElse("");
 			String line = stage + conf + crit + (it.step().isEmpty() || it.awaitingApproval() || !conf.isEmpty() || !crit.isEmpty() ? "" : " · " + it.step()) + it.entryId().map(
 				e -> " → " + e).orElse("") + it.error().map(e -> " · " + e).orElse("") + (actionsW > 0 ? " · " + right : "");
 			g.text(font, TextUtil.ellipsize(font, line, dw - 24 - actionsW), dx + 14, ry + 9, it.status() == dev.larattalabs.architect.api.Design.Status.FAILED
