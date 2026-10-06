@@ -299,7 +299,13 @@ public final class Groups {
 				break;
 			}
 			try {
+				long t0 = System.nanoTime();
+				String was = r.planner != null ? "planning" : r.undo == null ? "start" : r.commit != null ? "commit" : "writes " + r.current;
 				tick(server, r);
+				if (Sites.Trace.ON && System.nanoTime() - t0 > 5_000_000L) {
+					Architect.LOGGER.info("TRACE tick {} group {} {} -> {} {} ms", server.getTickCount(), r.group, was, r.planner != null ? "planning" : r.undo == null
+						? "start" : r.commit != null ? "commit" : "writes " + r.current, (System.nanoTime() - t0) / 1e6);
+				}
 			} catch (RuntimeException e) {
 				Architect.LOGGER.error("Removing group {} failed", r.group, e);
 				end(server, r, new Removed(false, List.of("it failed: " + e), Map.copyOf(r.refund)));
