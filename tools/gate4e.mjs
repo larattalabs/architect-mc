@@ -1341,6 +1341,44 @@ steps.api = async () => {
   return {};
 };
 
+/**
+ * (5a) `api15jar`: the 1.5.0 apitest jar (0.8.0, stashed in artifacts/gate5a/v080/ before 5a), unchanged, against this
+ * worktree's mod (0.9.0, API 1.6.0) - tools/apitest.mjs survival of v0.8.0 (APITEST_API_VERSION=1.5.0).
+ */
+steps.api15jar = async () => {
+  const V080 = path.join(MAIN, 'artifacts', 'gate5a', 'v080');
+  const jar = path.join(V080, 'architect_apitest-0.8.0.jar');
+  const mods = path.join(GAME_DIR, 'mods');
+  if (dev) await stopClient();
+  else if (clientPids().length) {
+    await connect(PORT, GAME_DIR, 10_000).catch(() => null);
+    await stopClient();
+  }
+  fs.mkdirSync(mods, { recursive: true });
+  fs.copyFileSync(jar, path.join(mods, 'architect_apitest-0.8.0.jar'));
+  const outDir = path.join(OUT, 'api15jar');
+  let code = 0;
+  let text = '';
+  try {
+    fs.rmSync(path.join(SAVES, 'G5A Api15'), { recursive: true, force: true });
+    await startClient('G5A Api15', { ARCHITECT_APITEST: '0', ARCHITECT_AUTOWORLD_MODE: 'survival' });
+    try {
+      text = execFileSync('node', [path.join(V080, 'tools', 'apitest.mjs'), 'survival'], {
+        env: { ...process.env, APITEST_API_VERSION: '1.5.0', ARCHITECT_DEV_PORT: String(PORT), ARCHITECT_GAME_DIR: GAME_DIR, APITEST_OUT: outDir, APITEST_GAME_DIR: GAME_DIR }, timeout: 3_600_000 }).toString();
+    } catch (e) {
+      code = e.status ?? 1;
+      text = `${e.stdout ?? ''}${e.stderr ?? ''}`;
+    }
+  } finally {
+    await stopClient();
+    fs.rmSync(path.join(mods, 'architect_apitest-0.8.0.jar'), { force: true });
+  }
+  fs.writeFileSync(path.join(OUT, 'api15jar.log'), text);
+  const fails = text.split('\n').filter((l) => l.startsWith('FAIL'));
+  check(code === 0 && fails.length === 0, `api15jar: the 1.5.0 apitest jar (unchanged) passes tools/apitest.mjs survival (v0.8.0) against 0.9.0 (${fails.length} FAIL)`, fails);
+  return { code, fails };
+};
+
 /** `api14`: the 1.4.0 apitest jar (0.7.0), unchanged, against 0.8.0 - tools/apitest.mjs survival of v0.7.0. */
 steps.api14 = async () => {
   const jar = path.join(V070, 'apitest', 'build', 'libs', 'architect_apitest-0.7.0.jar');
