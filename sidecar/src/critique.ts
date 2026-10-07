@@ -201,7 +201,8 @@ export class Critiques {
 
   /** What is left of the loop's cap (critique.budgetUsd, else 1.0x round 0) and of the hard caps (design, group). */
   remaining(d: Design, cw: CritiqueWork): { loop: number; hard: number | undefined } {
-    const loopCap = cw.spec.budgetUsd ?? cw.round0.usd;
+    // (the sim with no notional cost, simDesignUsd 0: no cap, or every loop would end at once with budget)
+    const loopCap = cw.spec.budgetUsd ?? (this.sc.designerName() === 'sim' && cw.round0.usd === 0 ? Infinity : cw.round0.usd);
     const spent = cw.critic.usd + subCost(this.turnsCost(d), cw.round0).usd;
     const hardCap = this.sc.designBudget(d.id);
     const hard = hardCap !== undefined ? hardCap - (d.cost?.usd ?? 0) : undefined;
