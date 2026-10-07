@@ -8,6 +8,7 @@ import org.jspecify.annotations.Nullable;
  * <pre>
  * architect.api.designTimeoutMs  / ARCHITECT_API_DESIGN_TIMEOUT_MS   Designs.request (default 10 min)
  * architect.api.variantTimeoutMs / ARCHITECT_API_VARIANT_TIMEOUT_MS  Library.makeVariant (default 2 min)
+ * architect.api.critiqueTimeoutMs / ARCHITECT_API_CRITIQUE_TIMEOUT_MS Designs.critique (default 15 min; since 1.6.0)
  * </pre>
  * Internal.
  */
@@ -15,6 +16,8 @@ public final class ApiTimeouts {
 	public static final long DESIGN_DEFAULT_MS = 10 * 60_000L;
 	public static final long VARIANT_DEFAULT_MS = 2 * 60_000L;
 	public static final long DESIGN_MS = read("architect.api.designTimeoutMs", "ARCHITECT_API_DESIGN_TIMEOUT_MS", DESIGN_DEFAULT_MS);
+	public static final long CRITIQUE_DEFAULT_MS = 15 * 60_000L;
+	public static final long CRITIQUE_MS = read("architect.api.critiqueTimeoutMs", "ARCHITECT_API_CRITIQUE_TIMEOUT_MS", CRITIQUE_DEFAULT_MS);
 	public static final long VARIANT_MS = read("architect.api.variantTimeoutMs", "ARCHITECT_API_VARIANT_TIMEOUT_MS", VARIANT_DEFAULT_MS);
 
 	private ApiTimeouts() {

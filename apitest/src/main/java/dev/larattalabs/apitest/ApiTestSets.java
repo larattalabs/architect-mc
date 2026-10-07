@@ -101,6 +101,10 @@ final class ApiTestSets {
 		if (o.has("context")) {
 			r = r.withContext(o.get("context"));
 		}
+		// 1.6.0: {critique?: spec}
+		if (o.has("critique")) {
+			r = r.critique(ApiTestCritique.spec(o.getAsJsonObject("critique")));
+		}
 		return r;
 	}
 
@@ -109,8 +113,9 @@ final class ApiTestSets {
 		List<GroupRequest.Item> items = new ArrayList<>();
 		for (JsonElement e : o.getAsJsonArray("items")) {
 			JsonObject i = e.getAsJsonObject();
+			// 1.6.0: an item's own critique is {itemCritique: spec} (its request's {critique} is the design's)
 			items.add(new GroupRequest.Item(s(i, "itemKey"), design(i), GroupRequest.Role.of(s(i, "role")), i.has("wave") ? i.get("wave").getAsInt() : null,
-				i.has("anchor") && i.get("anchor").getAsBoolean()));
+				i.has("anchor") && i.get("anchor").getAsBoolean(), i.has("itemCritique") ? ApiTestCritique.spec(i.getAsJsonObject("itemCritique")) : null));
 		}
 		GroupRequest g = new GroupRequest(s(o, "name"), s(o, "bible"), o.has("bibleVersion") ? o.get("bibleVersion").getAsInt() : null, s(o, "owner")
 			!= null ? s(o, "owner") : ApiTest.OWNER, o.has("ext") ? o.getAsJsonObject("ext") : null, o.has("concurrency") ? o.get("concurrency").getAsInt()
@@ -122,6 +127,9 @@ final class ApiTestSets {
 		}
 		if (o.has("context")) {
 			g = g.withContext(o.get("context"));
+		}
+		if (o.has("critique")) {
+			g = g.critique(ApiTestCritique.spec(o.getAsJsonObject("critique")));
 		}
 		return g;
 	}

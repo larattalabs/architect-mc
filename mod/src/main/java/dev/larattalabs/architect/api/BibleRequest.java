@@ -16,12 +16,25 @@ import org.jspecify.annotations.Nullable;
  * @param references library entries whose look to learn from (at most 8)
  * @param scope {@code "building"} (default) or {@code "settlement"} (also the macro roles for region programs)
  * @param seedPreset start from a built-in bible (a palette preset name), or null
+ * @param sheetCritique (since 1.6.0, a helper with {@code "critique"}) the job ends with one report critique of its
+ *     {@code sheet.png} (component legibility and restraint, about $0.05), kept as {@link Bible#critique()}
  */
 public record BibleRequest(String prompt, @Nullable String name, @Nullable String owner, JsonObject ext, @Nullable String model,
-	@Nullable Double budgetUsd, List<String> references, @Nullable String scope, @Nullable String seedPreset) {
+	@Nullable Double budgetUsd, List<String> references, @Nullable String scope, @Nullable String seedPreset, boolean sheetCritique) {
 	public BibleRequest {
 		ext = ext == null ? new JsonObject() : ext;
 		references = references == null ? List.of() : List.copyOf(references);
+	}
+
+	/** The 1.2.0 constructor (no sheet critique). */
+	public BibleRequest(String prompt, @Nullable String name, @Nullable String owner, JsonObject ext, @Nullable String model, @Nullable Double budgetUsd,
+		List<String> references, @Nullable String scope, @Nullable String seedPreset) {
+		this(prompt, name, owner, ext, model, budgetUsd, references, scope, seedPreset, false);
+	}
+
+	/** A copy with (or without) the sheet critique. Since 1.6.0. */
+	public BibleRequest withSheetCritique(boolean on) {
+		return new BibleRequest(prompt, name, owner, ext, model, budgetUsd, references, scope, seedPreset, on);
 	}
 
 	/** Just a prompt (and an optional name). */

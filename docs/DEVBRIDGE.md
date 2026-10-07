@@ -243,6 +243,10 @@ there is no DevBridge hook to make layers, so tests go through the API as anothe
 
 Semi-stable: a hook may change or go, and every such change is listed here, newest first.
 
+- **2026-10-06 (phase 5a, Java):** `dev.design.fill` and `dev.set.fill` take `critique` (bool) and `maxRevisions` (1|2); their
+  state replies show them, the critique spec as sent and (Design tab) the live estimate line with critique. apitest steps
+  `critspec, critreq, critget, critentry, critreport, critestimate, critgroupestimate, critgroup, critgroupget, sheetbible,
+  bibleadmin, biblearchive, bibledelete, imagejob, imagejobrefused` (`tools/apitest.mjs critique`, `critique-real`).
 - **2026-10-05 (phase 4e):** new `dev.journal.state|at|killAt|failNextCommit|stackBench`, `dev.road.check|place`,
   `dev.cells.place` (cells, a fill or a pad generator), `dev.region.hash` (with excluded boxes), `dev.site.verify` (a
   site's owned cells against its journal `after`; with `list` the world values, for the any-order no-leak check) and
