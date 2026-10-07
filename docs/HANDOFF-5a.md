@@ -13,7 +13,8 @@ Working notes for resuming phase 5a after a pause. Deleted when the gate passes.
 |---|---|
 | 1. Image probe | DONE 2026-10-06: image content blocks work under the claude login ($0.0098, apiKeySource none). Critic and judge send images; `job.images` ships. |
 | 2. Sim build | sidecar loop, critic, budgets, estimates, bible format 2/admin, report mode, job.images, eval.mjs: DONE (sidecar 536 tests). Kit (phase/5a-kit, merged): views, slices, attach/facing, metrics, restraint, PLAYBOOK (kit 126 tests). Migration tests (phase/5a-mig, merged): 19 new mod tests. Java 1.6.0 + UI: in progress on phase/5a-java (subagent). |
-| 3. Real runs | **PAUSED 2026-10-06 18:10 (coordinator: Noah's subscription near its limit; no real calls until he says so).** Smoke tier DONE (complete, not partial). Mosswater format-2 revision DONE (fixture committed). Full tier NOT STARTED. Opus subset NOT STARTED. |
+| 3b. Resumed 2026-10-07 | 5a-java merged (mod 339 tests); report end reason; N1 setting; UI paths on the sim (tools/p5a-ui.mjs, all ok); apitest jobs 33/sets 37/massing 35/critique 20 sim checks all ok; 1.5.0 jar vs 0.9.0 OK; 4e migration step 55 ok. Full tier RUNNING (run full-2026-10-07T2324, resume with `--resume full-2026-10-07T2324`). |
+| 3. Real runs (history) | **PAUSED 2026-10-06 18:10 (coordinator: Noah's subscription near its limit; no real calls until he says so).** Smoke tier DONE (complete, not partial). Mosswater format-2 revision DONE (fixture committed). Full tier NOT STARTED. Opus subset NOT STARTED. |
 | 4. Gate G1-G4, clutter, regressions | not started |
 | 5. Docs | not started |
 
