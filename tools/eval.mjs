@@ -929,6 +929,57 @@ async function crossJudge(o, a, b, ids) {
 }
 
 /**
+ * clutter <runId> --against <dir> --map item=entry,...: the blind pairwise judge of a run's group items (their finals) against
+ * stored renders of an older set (<dir>/<entry>.preview-<view>.png), e.g. the 4b Mosswater set rebuilt from its sources.
+ * Judge cost only. A new item wins on a dimension when both calls prefer it there.
+ */
+async function cmdClutter(o) {
+  const out = path.resolve(o.out ?? path.join(REPO, 'artifacts', 'eval'));
+  const runDir = path.join(out, o._[1]);
+  const run = readJson(path.join(runDir, 'run.json'));
+  const map = Object.fromEntries((o.map ?? '').split(',').filter(Boolean).map((kv) => kv.split('=')));
+  const tier = run.tier === 'sim' ? 'sim' : 'smoke';
+  authGuard(tier);
+  const port = await freePort(o.port);
+  const dir = path.join(out, `clutter-${run.runId}`);
+  writeJson(path.join(dir, 'run.json'), { runId: path.basename(dir), tier, briefs: [], state: {} });
+  const sc = await startSidecar(dir, tier, port);
+  const client = new Client(port, sc.token);
+  const st = readJson(path.join(runDir, 'sidecar', 'data', 'state.json'), {});
+  const results = {};
+  let usd = 0;
+  try {
+    await client.connect();
+    for (const b of loadBriefs(run.briefs).filter((x) => x.group && map[x.group.itemKey])) {
+      const s = run.state[b.id];
+      const d = readJson(path.join(runDir, 'briefs', b.id, `design-${s.designIds[0]}.json`));
+      const finalImgs = roundImages(path.join(runDir, 'sidecar', 'data', 'designs', d.id), st.work?.[d.id]?.critique?.bp, d.critique?.best ?? 0);
+      const entry = map[b.group.itemKey];
+      const old = Object.fromEntries(JUDGE_VIEWS.map((v) => [v, path.join(path.resolve(o.against), `${entry}.preview-${v}.png`)]).filter(([, f]) => fs.existsSync(f)));
+      const views = JUDGE_VIEWS.filter((v) => finalImgs[v] && old[v]);
+      const j = await pairJudge(client, { b, request: b.request, imgs: { new: finalImgs, old }, views, firstXIsA: rngFrom(`clutter:${run.runId}:${b.id}`)() < 0.5, x: 'new', y: 'old', tag: `clutter ${b.id}`, sim: tier === 'sim' });
+      const dims = {};
+      for (const dim of ['silhouette', 'legibility', 'craft', 'materials', 'brief']) {
+        const w = j.calls.map((c) => (c.dimensions ? (c.dimensions[dim] === 'tie' ? 'tie' : c.order[c.dimensions[dim]]) : 'error'));
+        dims[dim] = w.every((x) => x === 'new') ? 'new' : w.every((x) => x === 'old') ? 'old' : 'tie';
+      }
+      results[b.id] = { against: entry, outcome: j.outcome, dims, calls: j.calls, usd: j.usd };
+      usd += j.usd;
+      log(`clutter ${b.id} vs ${entry}: ${j.outcome}; legibility ${dims.legibility}`);
+    }
+  } finally {
+    client.close();
+    sc.child.kill('SIGTERM');
+  }
+  if (o.ledger) ledgerPut(o.ledger, `${run.runId}:clutter-judge`, usd);
+  const legWins = Object.values(results).filter((r) => r.dims.legibility === 'new').length;
+  const res = { runId: run.runId, against: o.against, items: Object.keys(results).length, legibilityWins: legWins, pass: legWins >= 2, usd: r4(usd), results };
+  writeJson(path.join(runDir, 'clutter.json'), res);
+  log(`clutter: the new items win on legibility ${legWins} of ${res.items}`);
+  return res;
+}
+
+/**
  * revise-bible <id> --notes "...": a real bible.revise (with the sheet critique) of a fixture bible, on a sidecar of its own;
  * the new version is copied into eval/fixtures/bibles/<id>/versions/<v>/ (the 5a gate's format-2 Mosswater).
  */
@@ -998,6 +1049,8 @@ function parseArgs(argv) {
     else if (a === '--no-results') o.noResults = true;
     else if (a === '--judge') o.judge = true;
     else if (a === '--notes') o.notes = val();
+    else if (a === '--against') o.against = val();
+    else if (a === '--map') o.map = val();
     else if (a.startsWith('--')) throw new Error(`unknown option ${a}`);
     else o._.push(a);
   }
@@ -1015,6 +1068,7 @@ async function main() {
   else if (cmd === 'rejudge') await cmdRejudge(o);
   else if (cmd === 'compare') await cmdCompare(o);
   else if (cmd === 'revise-bible') await cmdReviseBible(o);
+  else if (cmd === 'clutter') await cmdClutter(o);
   else {
     console.log('usage: node tools/eval.mjs run --tier sim|smoke|full [...] | rescore <runId> | rejudge <runId> | compare <runA> <runB>');
     process.exitCode = 2;
