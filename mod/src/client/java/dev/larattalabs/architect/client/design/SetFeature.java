@@ -69,7 +69,7 @@ public final class SetFeature {
 		/** (4c) Text for every brief: the site, its purpose, the neighbours, the street. */
 		public final TextModel context = new TextModel(SetSpec.MAX_CONTEXT + 50);
 		/** (5a) "Critique and revise" for every building (default off; sent only to a helper with the loop). */
-		public boolean critique = dev.larattalabs.architect.design.CritiqueRules.DEFAULT_ON;
+		public boolean critique = UiPrefs.critiqueByDefault();
 		public int maxRevisions = dev.larattalabs.architect.design.CritiqueRules.DEFAULT_REVISIONS;
 		public @Nullable String sendError;
 		public boolean sending;

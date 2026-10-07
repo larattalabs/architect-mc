@@ -155,7 +155,7 @@ export const CritiqueSpec = z
   .refine((c) => !c.views || new Set(c.views).size === c.views.length, 'duplicate view');
 export type CritiqueSpec = z.infer<typeof CritiqueSpec>;
 
-export const END_REASONS = ['ship', 'max_revisions', 'budget', 'time', 'regressed', 'check_failed', 'critic_failed', 'off'] as const;
+export const END_REASONS = ['ship', 'max_revisions', 'budget', 'time', 'regressed', 'check_failed', 'critic_failed', 'report', 'off'] as const;
 export const EndReason = z.enum(END_REASONS);
 export type EndReason = z.infer<typeof EndReason>;
 export const IssuePriority = z.enum(['P0', 'P1', 'P2']);

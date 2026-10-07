@@ -1228,6 +1228,14 @@ steps.bench = async () => {
 
 // ------------------------------------------------------------------ gate 11: the 1.5.0 API through apitest
 
+/** a.b.c >= x.y.z (the API only grows: 0.9.0 reports 1.6.0 and still has every 1.5.0 feature) */
+function gteVersion(v, min) {
+  const a = String(v).split('.').map(Number);
+  const b = min.split('.').map(Number);
+  for (let i = 0; i < 3; i++) if ((a[i] ?? 0) !== (b[i] ?? 0)) return (a[i] ?? 0) > (b[i] ?? 0);
+  return true;
+}
+
 const reasonsOf = (v) => (v.refusals ?? []).map((r) => r.reason ?? r);
 const j1 = (o) => JSON.stringify(o);
 
@@ -1238,7 +1246,7 @@ steps.api = async () => {
   await tp(48.5, 90, 30.5);
   const v = await api('api15');
   const want = ['journal', 'overlapLayer', 'roads', 'cellSites', 'stackQuery'];
-  check(v.version === '1.5.0' && want.every((f) => v.features.includes(f)), `api: version ${v.version}, features ${want.filter((f) => v.features.includes(f)).join(' ')}`, v);
+  check(gteVersion(v.version, '1.5.0') && want.every((f) => v.features.includes(f)), `api: version ${v.version}, features ${want.filter((f) => v.features.includes(f)).join(' ')}`, v);
   check(j1(v.overlapPolicies) === j1(['REFUSE', 'LAYER']) && j1(v.coveredPolicies) === j1(['KEEP', 'CASCADE', 'REFUSE']), 'api: OverlapPolicy and CoveredPolicy values', v);
   const reasons = await api('reasons');
   const NEW = ['OVERLAP_BUSY', 'OVERLAP_OWNED', 'LAYER_DEPTH', 'COVERED', 'TOO_STEEP', 'DEEP_WATER', 'TOO_LARGE', 'JOURNAL_UNAVAILABLE'];

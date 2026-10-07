@@ -89,7 +89,7 @@ class CritiqueRulesTest {
 		assertEquals("critique: critic failed", CritiqueRules.brief(report));
 		Critique scored = critique("""
 			{"mode":"report","rounds":[{"n":0,"verdict":"iterate","overall":5,"scores":{"craft":5},"issues":[],"resolved":[],"ship":false,"cost":0.05,"ms":0,
-			 "kept":true}],"best":0,"end":"max_revisions","overall":5,"cost":{"critic":{"usd":0.05},"revise":{"usd":0}}}""");
+			 "kept":true}],"best":0,"end":"report","overall":5,"cost":{"critic":{"usd":0.05},"revise":{"usd":0}}}""");
 		assertEquals("Report: scored 5.0", CritiqueRules.endLine(scored), "a report is one critic call: no loop end reason shown");
 		assertEquals("report 5.0", CritiqueRules.brief(scored));
 	}

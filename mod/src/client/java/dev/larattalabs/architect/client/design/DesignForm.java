@@ -47,7 +47,7 @@ public final class DesignForm {
 	/** (4c) "Massing first": null = the default for the size (on for L and plot, {@link dev.larattalabs.architect.design.MassingRules}). */
 	public @Nullable Boolean massingFirst;
 	/** (5a) "Critique and revise": the critique loop after the design renders (default off, {@link CritiqueRules#DEFAULT_ON}). */
-	public boolean critique = CritiqueRules.DEFAULT_ON;
+	public boolean critique = UiPrefs.critiqueByDefault();
 	/** (5a) The loop's revisions: 1 or 2. */
 	public int maxRevisions = CritiqueRules.DEFAULT_REVISIONS;
 	// (5a) the live estimate (asked once the form has been still a moment, {@link DesignFeature#tickEstimate})

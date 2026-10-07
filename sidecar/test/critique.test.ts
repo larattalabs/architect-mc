@@ -231,7 +231,7 @@ describe.skipIf(!hasKit)('the critique loop (sim backend, real kit)', () => {
     h = await harness();
     const d = design(h, 'sim:critique=5', { mode: 'report' });
     await final(h, d.id);
-    expect(get(h, d.id).critique).toMatchObject({ mode: 'report', end: 'max_revisions', best: 0 });
+    expect(get(h, d.id).critique).toMatchObject({ mode: 'report', end: 'report', best: 0 });
     expect(get(h, d.id).critique!.rounds).toHaveLength(1);
   }, 60_000);
 

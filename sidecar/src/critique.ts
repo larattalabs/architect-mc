@@ -113,6 +113,7 @@ export function bestRound(rounds: CritiqueRound[]): CritiqueRound | undefined {
 export function endStep(end: EndReason, best: CritiqueRound | undefined): string {
   const at = best ? `round ${best.n}${best.overall !== null ? ` (${best.overall})` : ''}` : 'round 0';
   if (end === 'ship') return `critique: shipped at ${at}`;
+  if (end === 'report') return `critique: report, ${at}`;
   return `critique: ended (${end.replace(/_/g, ' ')}), best ${at}`;
 }
 
@@ -513,7 +514,7 @@ export class Critiques {
     const cw = this.work(id)!;
     const rounds = d.critique?.rounds ?? [];
     const r = rounds.find((x) => x.n === cw.round)!;
-    if (cw.spec.mode === 'report') return this.end(id, r.ship ? 'ship' : 'max_revisions');
+    if (cw.spec.mode === 'report') return this.end(id, 'report');
     if (r.ship) return this.end(id, 'ship');
     const earlier = bestRound(rounds.filter((x) => x.n < r.n));
     if (r.n > 0 && r.overall !== null && earlier?.overall != null && r.overall <= earlier.overall - REGRESSION) return this.end(id, 'regressed', `round ${r.n} scored ${r.overall}, ${round2(earlier.overall - r.overall)} below round ${earlier.n}`);

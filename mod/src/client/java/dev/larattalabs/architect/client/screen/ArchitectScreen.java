@@ -2123,6 +2123,19 @@ public final class ArchitectScreen extends Screen {
 			g.text(font, line, rx, ry, UiBits.muted(), false);
 			ry += 10;
 		}
+		// (5a, N1) critique by default: the Design tab's and the set dialog's "Critique and revise" start on
+		ry += 6;
+		boolean crit = dev.larattalabs.architect.client.design.UiPrefs.critiqueByDefault();
+		String cl = "Critique and revise new designs by default";
+		Hit ct = new Hit("critique_default", cl, rx, ry, Math.min(colW, 13 + font.width(cl)), 12, true, crit, () -> dev.larattalabs.architect.client.design.UiPrefs.setCritiqueByDefault(!crit));
+		hits.add(ct);
+		Panels.sprite(g, crit ? Kit.CHECKBOX_CHECKED : Kit.CHECKBOX, rx, ry + 1, 10, 10, 0xFFFFFFFF);
+		g.text(font, TextUtil.ellipsize(font, cl, colW - 13), rx + 13, ry + 2, UiBits.ink(), false);
+		ry += 14;
+		for (String line : TextUtil.wrapPlain(font, "A critic reviews each design's renders and the designer revises it (up to 2 rounds, at most about doubling its cost). Off by default.", colW)) {
+			g.text(font, line, rx, ry, UiBits.muted(), false);
+			ry += 10;
+		}
 		// survival construction sites: this world's toggle (docs/CONTRACT.md phase 3 "UI")
 		ry += 8;
 		g.text(font, "Survival (this world)", rx, ry, UiStyle.CLAY_DARK, false);

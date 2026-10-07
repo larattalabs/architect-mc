@@ -94,6 +94,8 @@ public record Critique(List<Round> rounds, int best, @Nullable EndReason end, do
 		CHECK_FAILED,
 		/** the critic call failed twice */
 		CRITIC_FAILED,
+		/** a report (one critic call, no revision): the verdict is the result */
+		REPORT,
 		/** critique was off */
 		OFF,
 		UNKNOWN;

@@ -138,7 +138,7 @@ class Wire5aTest {
 
 	@Test
 	void endReasons() {
-		for (String w : List.of("ship", "max_revisions", "budget", "time", "regressed", "check_failed", "critic_failed", "off")) {
+		for (String w : List.of("ship", "max_revisions", "budget", "time", "regressed", "check_failed", "critic_failed", "report", "off")) {
 			assertEquals(w, Critique.EndReason.of(w).wire());
 		}
 		assertEquals(Critique.EndReason.UNKNOWN, Critique.EndReason.of("polished"), "a newer reason");
