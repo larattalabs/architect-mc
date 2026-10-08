@@ -65,9 +65,9 @@ export class DesignBook {
   }
 
   /** A new queued design; `massing` (4c) marks a massing job and the massing version it makes. */
-  create(request: DesignRequest, massing?: Design['massing']): Design {
+  create(request: DesignRequest, massing?: Design['massing'], extra: Pick<Design, 'kind' | 'polish'> = {}): Design {
     const now = this.ctx.now();
-    const d: Design = { id: this.ctx.store.nextId('d'), request: structuredClone(request), status: 'queued', step: 'waiting for the designer', cost: zeroCost(), ...(massing ? { massing: { ...massing } } : {}), createdAt: now, updatedAt: now };
+    const d: Design = { id: this.ctx.store.nextId('d'), request: structuredClone(request), status: 'queued', step: 'waiting for the designer', cost: zeroCost(), ...(massing ? { massing: { ...massing } } : {}), ...structuredClone(extra), createdAt: now, updatedAt: now };
     this.all.push(d);
     this.trim();
     this.ctx.store.markDirty();

@@ -290,11 +290,12 @@ export class Polishes {
     const open = sc.designs.active().find((d) => d.kind === 'polish' && d.polish?.entryId === entryId);
     if (open) throw new ClientError(`${entryId} is being polished already (design ${open.id})`);
     const req: DesignRequest = { ...this.requestOf(json, r.model), ...(opts.owner ? { owner: opts.owner } : {}), ...(opts.ext ? { ext: opts.ext } : {}) };
-    const d = sc.designs.create(req);
     const record: PolishRecord = { entryId, fromVersion: r.fromVersion, steps: [], installedVersion: null, ...(r.apply ? { apply: r.apply } : {}), prompts: { ...POLISH_PROMPT_HASHES } };
+    // kind and polish from the first upsert on (a protocol-1 client never sees it)
+    const d = sc.designs.create(req, undefined, { kind: 'polish', polish: record });
     const works = (sc.store.data.work ??= {});
     works[d.id] = { bp: entryId, round: 0, polish: { entryId, bp: entryId, spec: r, phase: 'prepare', startedAt: sc.now(), reported: false, reportFailures: 0, failed: [], accepted: [], turns: zeroCost(), critic: zeroCost() } };
-    sc.designs.update(d.id, { kind: 'polish', polish: record, step: `polish of ${entryId} v${r.fromVersion}: waiting for the designer` });
+    sc.designs.update(d.id, { step: `polish of ${entryId} v${r.fromVersion}: waiting for the designer` });
     sc.store.markDirty();
     sc.log.info(`design ${d.id}: polish of ${entryId} v${r.fromVersion} requested (${r.maxSteps} step${r.maxSteps === 1 ? '' : 's'}, ${r.model}${r.notes ? `, notes "${truncate(r.notes, 80)}"` : ''}${opts.parentDesign ? `, after design ${opts.parentDesign}` : ''})`);
     sc.scheduler.enqueue(d.id);
@@ -877,7 +878,7 @@ export class Polishes {
     const cur = w.current!;
     this.pushStep(id, w, cur, false, null, kind);
     if (cur.target) w.failed.push(w.spec.notes && cur.targetIndex === null ? 'notes' : issueKey(cur.target));
-    this.sc.log.info(`design ${id}: polish step ${cur.n} ${kind}: ${truncate(text.split('\n')[0] ?? text, 160)}`);
+    this.sc.log.info(`design ${id}: polish step ${cur.n} ${kind}: ${truncate(text.replace(/\s+/g, ' '), 400)}`);
     delete w.current;
     if (final) {
       this.end(id, w, 'budget', truncate(text, 120));
@@ -908,7 +909,8 @@ export class Polishes {
     const typeAt = args.indexOf('--type');
     const type = typeAt >= 0 ? args[typeAt + 1] : undefined;
     const profAt = args.indexOf('--profile');
-    const extra = args.filter((_a, i) => i !== typeAt && i !== typeAt + 1 && i !== profAt && i !== profAt + 1);
+    const drop = new Set([...(typeAt >= 0 ? [typeAt, typeAt + 1] : []), ...(profAt >= 0 ? [profAt, profAt + 1] : [])]);
+    const extra = args.filter((_a, i) => !drop.has(i));
     const restraint = fs.existsSync(path.join(scratch, 'bible', 'bible.json')) ? ['--restraint', path.join('bible', 'bible.json')] : [];
     const res: CheckResult = await checkDesign(sc.config.kitDir, scratch, w.bp, { ...(type ? { type } : {}), ...(profAt >= 0 ? { profile: args[profAt + 1]!.split(',') } : {}) }, 120_000, [...extra, ...restraint]);
     if (!res.ok) return { kind: 'check_failed', text: `${res.problem ?? 'the check failed'}${turnError ? ` (the turn ended: ${truncate(turnError, 120)})` : ''}` };

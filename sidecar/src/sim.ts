@@ -444,7 +444,7 @@ export class SimDesigner implements Designer {
  * of `part` (`--outside a,b`: of any part not listed, or in no part), preferring full blocks so an edit does not change a
  * neighbour's connections.
  */
-const SIM_CELL = `import { loadVersion } from './kit/lib/diff.mjs';
+const SIM_CELL = `import { loadVersion } from '../kit/lib/diff.mjs';
 const [file, mode, list] = process.argv.slice(2);
 const names = (list ?? '').split(',').filter(Boolean);
 const v = loadVersion(file);
