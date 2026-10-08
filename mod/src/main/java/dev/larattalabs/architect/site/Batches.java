@@ -280,6 +280,15 @@ public final class Batches {
 		if (!SiteDeltas.diffReady(server, r.siteId(), r.toVersion())) {
 			return;
 		}
+		// an instant delta checks on one tick and writes on the next (each well inside a tick; the 4 ms batch keeps MSPT low).
+		// The check is used only when the site record did not change in between.
+		long tick = server.getTickCount();
+		if (!i.construction && i.checked instanceof SiteDeltas.Check pc && i.checkedAt == tick - 1 && i.prep == site) {
+			i.checked = null;
+			i.prep = null;
+			applyDeltaItem(server, b, i, level, r, pc);
+			return;
+		}
 		long tc = System.nanoTime();
 		SiteDeltas.Check c = i.construction ? Builder.checkConstructionDelta(level, r) : SiteDeltas.check(level, r);
 		Architect.LOGGER.debug("Batch {}: the check of {} took {} ms", b.id, i.key, (System.nanoTime() - tc) / 1e6);
@@ -295,6 +304,16 @@ public final class Batches {
 			}
 			return;
 		}
+		if (!i.construction) {
+			i.checked = c;
+			i.checkedAt = tick;
+			i.prep = site;
+			return;
+		}
+		applyDeltaItem(server, b, i, level, r, c);
+	}
+
+	private static void applyDeltaItem(MinecraftServer server, QBatch b, QItem i, ServerLevel level, SiteDeltas.Request r, SiteDeltas.Check c) {
 		try {
 			SiteDeltas.Result res = i.construction ? Builder.applyConstructionDelta(level, r, null) : SiteDeltas.applyChecked(level, c, r.edits()
 				== dev.larattalabs.architect.delta.DeltaPlanner.Edits.OVERWRITE, "delta");
