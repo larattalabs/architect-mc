@@ -332,7 +332,9 @@ public final class RegionItems {
 				continue;
 			}
 			if (freezing) {
-				break; // one freeze at a time
+				// one freeze at a time, but the next one's chunks load meanwhile (its tickets taken now)
+				preTicket(b, i, level, window(t[3], r.rec().claim));
+				break;
 			}
 			freezing = true;
 			Anchors.Bounds win = window(t[3], r.rec().claim);
@@ -405,6 +407,33 @@ public final class RegionItems {
 
 	/** Tickets the janitor gave back, by kind (each one a leak elsewhere: reported by dev.region.state). */
 	public static final Map<String, Long> LEAKS = new java.util.TreeMap<>();
+
+	/** The next freeze's window tickets, taken early under the bound (so its chunks load while the current freeze surveys). */
+	private static void preTicket(QBatch b, QItem i, ServerLevel level, Anchors.Bounds win) {
+		if (b.loadChunks <= 0 || Batches.hasWaiter(b)) {
+			return;
+		}
+		Map<String, Set<Long>> held = Batches.TICKETS.computeIfAbsent(b.id, x -> new HashMap<>());
+		String fk = "freeze:" + i.key;
+		if (held.containsKey(fk)) {
+			return;
+		}
+		Set<Long> want = Batches.chunks(win);
+		int count = held.values().stream().mapToInt(Set::size).sum();
+		if (count + want.size() > b.loadChunks) {
+			return;
+		}
+		if (!b.generate) {
+			for (long c : want) {
+				if (dev.larattalabs.architect.region.ChunkGen.state(level, c) != dev.larattalabs.architect.region.ChunkGen.State.GENERATED) {
+					return;
+				}
+			}
+		}
+		ChunkTickets.acquire(i.dimension, want, Batches.source(level));
+		held.put(fk, want);
+		Batches.levels.put(b.id + "/" + fk, i.dimension);
+	}
 
 	/** A region item's wait for these reasons does not count toward its wait limit (CONTRACT "Waiting without a time limit"). */
 	static boolean uncounted(QBatch b, Reason why) {

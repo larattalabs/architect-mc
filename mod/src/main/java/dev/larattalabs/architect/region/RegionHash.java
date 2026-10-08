@@ -234,7 +234,7 @@ public final class RegionHash {
 							String was = j.snapPalette.get(readVar(j.in));
 							if (!was.equals(v)) {
 								j.mismatchCount++;
-								String cls = classify(j.level, m.immutable(), was);
+								String cls = classify(j.level, m.immutable(), was, v);
 								j.classes.merge(cls, 1, Integer::sum);
 								if (j.mismatches.size() < 2000) {
 									JsonObject o = new JsonObject();
@@ -273,6 +273,31 @@ public final class RegionHash {
 
 	/** E-normal's classifier: whether the snapped (pre-region) cell can't stand on its own. */
 	static String classify(ServerLevel level, BlockPos p, String was) {
+		return classify(level, p, was, null);
+	}
+
+	/**
+	 * E-normal's classifier. {@code gravity}: the pre-region cell is a gravity block over air or fluid, or the cell is where such
+	 * a block landed (now a gravity block, before air or fluid); {@code unsupported}: a plant or mushroom that can't survive there
+	 * now; {@code live}: the same block whose block entity the world itself changed (bees in a hive); else {@code none}.
+	 */
+	static String classify(ServerLevel level, BlockPos p, String was, @Nullable String now) {
+		if (now != null) {
+			String wb = was.contains("[") ? was.substring(0, was.indexOf('[')) : was.contains("{") ? was.substring(0, was.indexOf('{')) : was;
+			String nb = now.contains("[") ? now.substring(0, now.indexOf('[')) : now.contains("{") ? now.substring(0, now.indexOf('{')) : now;
+			if (wb.equals(nb) && (was.contains("{") || now.contains("{"))) {
+				return "live";
+			}
+			try {
+				BlockState ns = Packed.parse(now.contains("{") ? now.substring(0, now.indexOf('{')) : now);
+				BlockState ws = Packed.parse(was.contains("{") ? was.substring(0, was.indexOf('{')) : was);
+				if (ns.getBlock() instanceof FallingBlock && (ws.isAir() || !ws.getFluidState().isEmpty())) {
+					return "gravity";
+				}
+			} catch (RuntimeException e) {
+				// unparsable: fall through
+			}
+		}
 		BlockState s;
 		try {
 			s = Packed.parse(was.contains("{") ? was.substring(0, was.indexOf('{')) : was);

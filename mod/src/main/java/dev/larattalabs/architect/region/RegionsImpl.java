@@ -507,7 +507,8 @@ public final class RegionsImpl implements Regions {
 			}
 			tilesOfStage.put(st, terrainKeys);
 		}
-		LoadPolicy load = r.load() != null ? r.load() : LoadPolicy.GENERATED_ONLY(Math.max(64, maxNeed + 36));
+		// the writer, the next tile (its tickets taken while the last one's P7 commits) and two freezes ahead fit together
+		LoadPolicy load = r.load() != null ? r.load() : LoadPolicy.GENERATED_ONLY(Math.max(64, maxNeed + 2 * 36));
 		rec.maxChunks = load.maxChunks();
 		rec.generate = load.generate();
 		rec.stats.addProperty("drift", drift.message());

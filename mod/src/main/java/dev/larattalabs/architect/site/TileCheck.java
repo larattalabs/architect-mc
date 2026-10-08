@@ -373,15 +373,13 @@ final class TileCheck {
 		if (!extra.isEmpty()) {
 			skipped.merge("treeCells", (long) extra.size(), Long::sum);
 		}
-		// what stood on a cell this tile clears (snow layers, leaf litter, plants, sugar cane, kelp, sand and gravel) goes too,
+		// what stood on a cell this tile changes (snow layers, leaf litter, plants, sugar cane, kelp, sand and gravel) goes too,
 		// as cells of this entry (the undo puts it back); left alone it breaks or falls at the next update (phase 6a, E-normal)
 		Value water = WorldJournal.value(Blocks.WATER.defaultBlockState());
 		int deps = 0;
 		LongArrayList cleared = new LongArrayList();
 		for (var e : target.long2ObjectEntrySet()) {
-			if (!e.getValue().isSolid()) {
-				cleared.add(e.getLongKey());
-			}
+			cleared.add(e.getLongKey()); // a plant can't stand on most new blocks either (grass on stone): any changed cell
 		}
 		for (int k = 0; k < cleared.size(); k++) {
 			long q = cleared.getLong(k);

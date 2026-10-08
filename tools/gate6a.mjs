@@ -480,6 +480,12 @@ steps.megaA = async () => {
   const r = await megaRun('G6A MegaA', { base: 'G6A Mega Base Prepared' });
   ctx.megaA = { world: 'G6A MegaA', region: r.region, planId: r.plan.planId, box: r.box };
   saveCtx();
+  // a copy of the realised world for post-mortems (the undo releases the journal's entries at the next start)
+  await cmd('/save-all flush');
+  await leaveWorld();
+  copyWorld('G6A MegaA', 'G6A MegaA Realised');
+  await openWorld('G6A MegaA');
+  await tp(0.5, 160, 0.5);
   // the group undo: timed, MSPT, then the diff against the pre-region snap (E-normal)
   await settle(5000);
   await call('dev.mspt.trace', { start: true });
@@ -502,7 +508,7 @@ steps.megaA = async () => {
   check(b.tiles.bytesPerCell <= 4, `megaA: wire ${b.tiles.bytesPerCell.toFixed(3)} bytes/cell; tile latency p50 ${b.tiles.latencyP50Ms.toFixed(0)} ms, p99 ${b.tiles.latencyP99Ms.toFixed(0)} ms`);
   check((b.starvedShare ?? 1) <= 0.05, `megaA: writer starved ${(100 * b.starvedShare).toFixed(1)}% of its ticks (bar 5%)`);
   check(rm.removed && b.undo.seconds <= 600 && b.undo.mspt.all.over50 === 0, `megaA: group undo ${b.undo.seconds.toFixed(0)} s, MSPT max ${b.undo.mspt.all.max.toFixed(1)} ms`);
-  const unclassified = b.diff.classes?.none ?? 0;
+  const unclassified = (b.diff.classes?.none ?? 0);
   check(unclassified === 0 && b.diff.mismatches <= 0.0001 * b.cellsWritten, `megaA: E-normal: ${b.diff.mismatches} mismatches after the group undo (${JSON.stringify(b.diff.classes)}; cap ${(0.0001 * b.cellsWritten).toFixed(0)})`);
   await leaveWorld();
   return b;
