@@ -486,7 +486,9 @@ steps.megaA = async () => {
   copyWorld('G6A MegaA', 'G6A MegaA Realised');
   await openWorld('G6A MegaA');
   await tp(0.5, 160, 0.5);
-  // the group undo: timed, MSPT, then the diff against the pre-region snap (E-normal)
+  // the group undo: timed, MSPT, then the diff against the pre-region snap (E-normal). Mobs in the boxes (bees from worldgen
+  // nests) would hold it (4e's rule: they'd be buried): they go first; entities are not part of the hash
+  await cmd('/kill @e[type=!minecraft:player]');
   await settle(5000);
   await call('dev.mspt.trace', { start: true });
   const t0 = Date.now();

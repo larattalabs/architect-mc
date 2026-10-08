@@ -64,6 +64,9 @@ public final class Groups {
 		transient @Nullable CompletableFuture<Object[]> txn;
 		transient @Nullable String planGroup;
 		transient @Nullable CompletableFuture<Void> commit;
+		/** Phase 6a: how far the per-member checks got (they go over ticks). */
+		transient int scan;
+		transient int blockerScan;
 		/** Phase 6a: the sites outside the removal covering its cells, found off the server thread (it reads every section). */
 		transient @Nullable CompletableFuture<java.util.LinkedHashSet<String>> outsideF;
 		/** Construction members' deconstruct items (computed before the undo is planned, rule 7) and where they drop. */
@@ -614,19 +617,27 @@ public final class Groups {
 			end(server, r, new Removed(false, List.of(dim + " is not loaded"), Map.copyOf(r.refund)));
 			return;
 		}
-		for (String id : ids) {
+		// phase 6a: the per-member checks go over ticks under the placement budget (a region's 400 members took 210 ms at once)
+		long deadline = Placement.deadline();
+		while (r.scan < ids.size()) {
+			String id = ids.get(r.scan);
 			Site s = Sites.get(id);
 			Infra inf = Infras.get(id);
 			boolean placing = s != null ? s.placing() : inf != null && inf.placing();
 			dev.larattalabs.architect.placement.Anchors.Bounds box = s != null ? s.restoreBox() : inf.box();
 			boolean player = Occupancy.scan(level, box, e -> false).stream().anyMatch(f -> f.kind() == Occupancy.Kind.PLAYER);
 			if (player || placing) {
+				r.scan = 0;
 				r.waited += Batches.RECHECK;
 				r.nextCheck = tick + Batches.RECHECK;
 				if (r.waited >= MAX_WAIT) {
 					end(server, r, new Removed(false, List.of(player ? "a player stayed in " + id + " for 10 minutes" : id + " is still being placed"),
 						Map.copyOf(r.refund)));
 				}
+				return;
+			}
+			r.scan++;
+			if (System.nanoTime() >= deadline && r.scan < ids.size()) {
 				return;
 			}
 		}
@@ -667,14 +678,16 @@ public final class Groups {
 			end(server, r, new Removed(false, List.of("COVERED: " + String.join(", ", outside) + " cover cells of the sites"), Map.copyOf(r.refund)));
 			return;
 		}
-		if (!outside.isEmpty() && r.covered == Sites.Covered.CASCADE) {
+		if (!outside.isEmpty() && r.covered == Sites.Covered.CASCADE && r.blockerScan == 0) {
 			List<String> top = new ArrayList<>(outside);
 			java.util.Collections.reverse(top);
+			top.removeIf(r.sites::contains);
 			ids.addAll(0, top);
 			r.sites.addAll(0, top);
 			r.cascaded.addAll(top);
 		}
-		for (String id : ids) {
+		while (r.blockerScan < ids.size()) {
+			String id = ids.get(r.blockerScan++);
 			Site s = Sites.get(id);
 			if (s == null) {
 				continue;
@@ -682,6 +695,10 @@ public final class Groups {
 			List<String> blockers = Sites.removalBlockers(level, s);
 			if (!blockers.isEmpty()) {
 				end(server, r, new Removed(false, List.of(Sites.blockersMessage(id, blockers)), Map.copyOf(r.refund)));
+				return;
+			}
+			if (System.nanoTime() >= Placement.deadline() && r.blockerScan < ids.size()) {
+				r.outsideF = CompletableFuture.completedFuture(outside); // keep what was found; go on next tick
 				return;
 			}
 		}
