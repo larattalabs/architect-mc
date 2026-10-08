@@ -802,8 +802,12 @@ public final class SiteJournal {
 					box = box == null ? mb : Sites.union(box, mb);
 					boxWritten.putAll(written);
 					boxUnwritten.addAll(unwritten);
-					if (m.kind().equals(WorldJournal.SITE)) {
-						ring = s.head(m.id()).ring();
+					// the rings of the site and of its growth deltas (phase 5b), all restored after the box
+					int[] mr = s.head(m.id()).ring();
+					if (mr.length > 0) {
+						int[] merged = java.util.Arrays.copyOf(ring, ring.length + mr.length);
+						System.arraycopy(mr, 0, merged, ring.length, mr.length);
+						ring = merged;
 					}
 				} else {
 					int flags = m.kind().equals(WorldJournal.LEAVES) ? Sites.FLAGS | Block.UPDATE_KNOWN_SHAPE : m.policy() == Policy.BOX ? Sites.FLAGS

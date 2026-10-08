@@ -666,8 +666,12 @@ public final class SiteDeltas {
 		DeltaPlanner.Outcome o = p.outcome();
 		String dim = b.dimension();
 		List<String> notes = new ArrayList<>(c.notes());
+		if (p.to() == p.from() && o.write().isEmpty() && o.growth().isEmpty()) {
+			Result res = new Result(true, b.id(), p.from(), p.to(), 0, o.kept(), 0, List.of(), notes, b, b);
+			return res; // already at that version: no step
+		}
 		if (o.write().isEmpty() && o.growth().isEmpty()) {
-			// an empty Δ is not a refusal: the site's version becomes b
+			// an empty Δ is not a refusal: the site's version becomes b (a step without an entry; chain() keeps it as the top)
 			Site nb = b.withVersioning(b.versioning().append(new Site.History(p.to(), System.currentTimeMillis(), kind, null, p.minB(), true)))
 				.withGeometry(boxOf(p), interiorOf(p), anchorsOf(p), Sites.union(b.restoreBox(), p.pb().snapBox()), pinOf(p));
 			Sites.replace(server, nb);
@@ -683,6 +687,8 @@ public final class SiteDeltas {
 			before.put(q, WorldJournal.valueAt(level, mp.set(q)));
 		}
 		List<Integer> held = o.growth().isEmpty() ? List.of() : SiteJournal.holdable(level, p.pb().snapBox());
+		// the leaf ring of the growth (4d): leaves around the new restore box, outside the ring the site already keeps
+		int[] ring = o.growth().isEmpty() ? new int[0] : growthRing(level, b.restoreBox(), p.pb().snapBox());
 		WorldJournal.kill("D1");
 		long layer = s.newLayer();
 		String id = s.newId();
@@ -705,7 +711,7 @@ public final class SiteDeltas {
 		}
 		JournalStore.Txn t = s.begin().label("D3:" + b.id());
 		t.create(JournalStore.Meta.header(id, WorldJournal.DELTA, b.id(), b.group(), dim, Policy.BOX, layer, Status.PLACING, now), JournalStore.bySection(
-			placing), new JournalNbt.Head(meta, new int[0]));
+			placing), new JournalNbt.Head(meta, ring));
 		String leaves = null;
 		if (!held.isEmpty()) {
 			leaves = s.newId();
@@ -793,6 +799,21 @@ public final class SiteDeltas {
 		Result res = new Result(true, b.id(), p.from(), p.to(), o.write().size(), o.kept(), reshaped, List.of(), notes, b, nb);
 		dev.larattalabs.architect.apiimpl.ApiEvents.siteUpdated(server, res);
 		return res;
+	}
+
+	/** The ring of {@code snapB} without the cells within the ring distance of {@code snapA} (the base's own ring covers those). */
+	static int[] growthRing(ServerLevel level, Anchors.Bounds snapA, Anchors.Bounds snapB) {
+		int[] all = LeafGuard.ring(level, snapB);
+		Anchors.Bounds near = snapA.grow(LeafGuard.RING);
+		List<Integer> out = new ArrayList<>();
+		for (int i = 0; i + 3 < all.length; i += 4) {
+			if (!near.contains(all[i], all[i + 1], all[i + 2])) {
+				for (int k = 0; k < 4; k++) {
+					out.add(all[i + k]);
+				}
+			}
+		}
+		return out.stream().mapToInt(Integer::intValue).toArray();
 	}
 
 	/**
@@ -904,6 +925,10 @@ public final class SiteDeltas {
 		for (int i = 0; i < tos.size(); i++) {
 			out.add(new int[] {tos.get(i), i});
 		}
+		if (cur > 0 && cur != tos.get(tos.size() - 1)) {
+			// a later step wrote nothing (a version plan-identical to the last): the record's version is the top, no entry
+			out.add(new int[] {cur, tos.size()});
+		}
 		return out;
 	}
 
@@ -1002,6 +1027,14 @@ public final class SiteDeltas {
 		MinecraftServer server = level.getServer();
 		String siteId = b.id();
 		List<int[]> ch = chain(b);
+		if (idx >= deltas.size()) {
+			// the target is the last delta's version and a later step wrote nothing: only the record moves
+			Site after = reverted(level, b, k, ch.get(Math.min(idx, ch.size() - 1)), Set.of());
+			Sites.replace(server, after);
+			Result res = new Result(true, siteId, from, k, 0, List.of(), 0, List.of(), List.of("nothing to write"), b, after);
+			dev.larattalabs.architect.apiimpl.ApiEvents.siteUpdated(server, res);
+			return res;
+		}
 		List<String> ids = new ArrayList<>();
 		Set<String> undoDeltas = new LinkedHashSet<>();
 		for (int i = idx; i < deltas.size(); i++) {
@@ -1025,6 +1058,7 @@ public final class SiteDeltas {
 		Sites.replace(server, reverting);
 		Sites.Drops drops = Sites.Drops.before(level, b.restoreBox());
 		SiteJournal.Restore rs = SiteJournal.writeNow(level, siteId, group);
+		SiteJournal.restoreRing(level, rs.ring());
 		drops.clearNew(level);
 		WorldJournal.kill("K7");
 		Site after = reverted(level, reverting, k, ch.get(idx), undoDeltas);
@@ -1159,7 +1193,8 @@ public final class SiteDeltas {
 						String group = SiteJournal.group(m.site() + "-rb");
 						SiteJournal.Undone u = SiteJournal.undoEntries(level, ids, group);
 						SiteJournal.await(u.commit(), "the rollback of " + m.site());
-						SiteJournal.writeNow(level, m.site(), group);
+						SiteJournal.Restore rs = SiteJournal.writeNow(level, m.site(), group);
+						SiteJournal.restoreRing(level, rs.ring());
 						Sites.replace(server, b.withVersioning(b.versioning().withUpdating(0)));
 						Architect.LOGGER.info("Deltas: {}'s update to v{} stopped while it wrote; rolled back to v{}", m.site(), b.versioning().updating(), b
 							.versioning().version());
