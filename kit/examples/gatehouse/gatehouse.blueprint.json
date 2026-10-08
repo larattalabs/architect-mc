@@ -15,6 +15,13 @@
   },
   "groundY": 1,
   "front": "south",
+  "frame": {
+    "origin": [
+      0,
+      0,
+      2
+    ]
+  },
   "materials": [
     "minecraft:stone_bricks",
     "minecraft:spruce_planks",

@@ -15,7 +15,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { blueprintSummary, CRITIC_SYSTEM, criticPrompt, dimsFor, readVerdict, revisionPrompt, SLICES_MAX_CHARS, simVerdict, verdictSchema, type CriticContext } from './critic.js';
-import { isFinalDesign, KIT, refreshKit, runNode, type CheckResult, type Sidecar as SidecarJson } from './designs.js';
+import { copyPartsAlong, isFinalDesign, KIT, refreshKit, runNode, type CheckResult, type Sidecar as SidecarJson } from './designs.js';
 import { addCost, zeroCost } from './jobs/cost.js';
 import { isFinalJob } from './jobs/book.js';
 import { CRITIQUE_VIEWS, DesignRequest as DesignRequestSchema, type Cost, type CritiqueRecord, type CritiqueRound, type CritiqueSpec, type Design, type DesignRequest, type EndReason, type Job } from './protocol.js';
@@ -252,6 +252,7 @@ export class Critiques {
     fs.rmSync(dir, { recursive: true, force: true });
     fs.mkdirSync(path.join(dir, 'previews'), { recursive: true });
     fs.copyFileSync(r.res.nbt!, path.join(dir, `${r.bp}.nbt`));
+    copyPartsAlong(r.res.nbt!, path.join(dir, `${r.bp}.nbt`));
     fs.copyFileSync(r.res.json!, path.join(dir, `${r.bp}.blueprint.json`));
     const src = path.join(r.scratch, KIT, 'designs', `${r.bp}.mjs`);
     if (fs.existsSync(src)) fs.copyFileSync(src, path.join(dir, `${r.bp}.mjs`));
@@ -677,6 +678,7 @@ export class Critiques {
     const nbt = path.join(round, `${entryId}.nbt`);
     const json = path.join(round, `${entryId}.blueprint.json`);
     fs.copyFileSync(path.join(dir, `${entryId}.nbt`), nbt);
+    copyPartsAlong(path.join(dir, `${entryId}.nbt`), nbt);
     fs.copyFileSync(path.join(dir, `${entryId}.blueprint.json`), json);
     for (const f of fs.readdirSync(dir).filter((x) => /\.preview-[a-z0-9_-]+\.png$/.test(x))) fs.copyFileSync(path.join(dir, f), path.join(round, 'previews', f));
     // the bible files the entry carries (bible/), for the critic's bible line

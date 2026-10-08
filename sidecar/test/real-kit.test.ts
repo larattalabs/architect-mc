@@ -57,6 +57,11 @@ describe.skipIf(!hasKit)('sim designer with the real kit', () => {
     expect((vb.size as { y: number }).y).toBe(30); // grew past the original's 25: no --max for a variant
     expect((vb.request as { name: string }).name).toBe('Var Tower');
     expect(fs.existsSync(path.join(sc.config.libraryDir, `${from}_v2`, `${from}_v2.preview-iso.png`))).toBe(true);
+    // (5b) installs and variants carry the per-cell part map and the frame
+    for (const id of [from, `${from}_cherry`, `${from}_v2`]) {
+      expect(fs.existsSync(path.join(sc.config.libraryDir, id, `${id}.parts.nbt`)), id).toBe(true);
+      expect(read(id).frame).toEqual({ origin: expect.any(Array) });
+    }
     expect(sc.variants.get(c.id)).toMatchObject({ status: 'failed' });
     expect(sc.variants.get(c.id)!.error).toMatch(/floors must be an integer 3\.\.6/);
   }, 150_000);
@@ -74,6 +79,9 @@ describe.skipIf(!hasKit)('sim designer with the real kit', () => {
     expect(JSON.parse(fs.readFileSync(path.join(dir, 'imp_tiny_hut.blueprint.json'), 'utf8'))).toMatchObject({ type: 'custom', imported: true, name: 'Tiny Hut', size: { x: 5, y: 4, z: 5 }, anchors: { entrance: { x: 2.5, z: 5.5 }, spawn: { x: 2.5, z: 7.5 } } });
     expect(sc.variants.get(b.id)!.status).toBe('failed');
     expect(sc.variants.get(b.id)!.error).toMatch(/unknown or non-vanilla blocks \(1\): create:andesite_casing x10/);
+    // (5b) a part map is not a structure
+    fs.copyFileSync(path.join(SIDECAR_ROOT, 'test', 'fixtures', 'imports', 'tiny_hut.nbt'), path.join(imports, 'x.parts.nbt'));
+    expect(() => sc.requestImport(path.join(imports, 'x.parts.nbt'))).toThrow(/is a part map/);
   }, 60_000);
 
   for (const type of ['cabin', 'tower', 'tavern', 'gatehouse', 'chapel'] as const) {

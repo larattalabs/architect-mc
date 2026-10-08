@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // node kit/tools/preset-builds.mjs [--write]
 // Hashes every kit example built under every palette preset (and its own default) at every corner of its params:
-// the template (raw NBT) and the sidecar JSON without `parts`. kit/test/fixtures/preset-builds.json holds the hashes
+// the template (raw NBT) and the sidecar JSON without `parts` (and, from 5b, without `frame`). kit/test/fixtures/preset-builds.json holds the hashes
 // recorded before phase 4b (style bibles); test/bible.test.mjs checks that the presets still build byte-identically.
 // --write records the current hashes (only when a change to the examples' geometry is intended).
 import crypto from 'node:crypto';
@@ -28,6 +28,8 @@ export async function presetBuilds({ palette = (preset) => preset } = {}) {
         const bp = await loadDesign(id, { palette: preset === undefined ? undefined : palette(preset), values });
         const sc = JSON.parse(JSON.stringify(bp.sidecar()));
         delete sc.parts;
+        // (5b) frame is new in every sidecar; the rest must stay byte-identical
+        delete sc.frame;
         out[`${id}|${preset ?? '-'}|${JSON.stringify(values)}`] = { nbt: sha(encode(bp.toStructure())), sidecar: sha(JSON.stringify(sc)) };
       }
     }

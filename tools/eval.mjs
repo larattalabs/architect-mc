@@ -26,6 +26,7 @@ import fs from 'node:fs';
 import net from 'node:net';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { verifyRebuild } from '../kit/lib/rebuild.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(HERE, '..');
@@ -180,6 +181,61 @@ export function provenance() {
     },
     models: { critic: 'claude-sonnet-5-5 (medium)', judge: `${JUDGE_MODEL} (${JUDGE_EFFORT})` },
   };
+}
+
+// ---- (5b) the round-0 rebuild pre-check ------------------------------------------------------------------------
+
+/** A fixture bible pin's files: v1 is the fixture's top level, later versions are versions/<n>/. */
+export function fixtureBibleDir(pin) {
+  const top = path.join(FIXTURE_BIBLES, pin.id);
+  const dir = (pin.version ?? 1) === 1 ? top : path.join(top, 'versions', String(pin.version));
+  return fs.existsSync(path.join(dir, 'bible.json')) ? dir : undefined;
+}
+
+/**
+ * Rebuild every stored round 0 of a run with this kit and byte-compare its .nbt (docs/CONTRACT.md "The polish eval":
+ * import-round0 refuses to start on any drift, which would otherwise end that brief base_drift and count it as a tie).
+ * With `examples`, the kit examples (kit/examples/<id>/) too. Returns { ok, results: [{ brief, n, designId, id, same,
+ * stored, rebuilt, bible?, error? }], examples? }.
+ */
+export function round0PreCheck(runDir, { examples = false } = {}) {
+  const run = readJson(path.join(runDir, 'run.json'));
+  if (!run) throw new Error(`no run.json in ${runDir}`);
+  const results = [];
+  for (const b of loadBriefs(run.briefs)) {
+    const s = run.state?.[b.id];
+    const did = s?.designIds?.[0];
+    if (!did) {
+      results.push({ brief: b.id, n: b.n, same: false, error: 'not run' });
+      continue;
+    }
+    const dir = path.join(runDir, 'sidecar', 'data', 'designs', did, 'rounds', '0');
+    const r = fs.existsSync(dir) ? verifyRebuild(dir, { bibleFor: fixtureBibleDir, kitDir: KIT }) : { same: false, error: `no ${dir}` };
+    const { dir: _d, ...rest } = r;
+    results.push({ brief: b.id, n: b.n, designId: did, ...rest });
+  }
+  const out = { ok: results.every((r) => r.same), results };
+  if (examples) {
+    const ex = path.join(KIT, 'examples');
+    out.examples = fs.readdirSync(ex).filter((d) => fs.statSync(path.join(ex, d)).isDirectory()).sort().map((d) => {
+      const { dir: _d, ...rest } = verifyRebuild(path.join(ex, d), { kitDir: KIT });
+      return rest;
+    });
+    out.ok = out.ok && out.examples.every((r) => r.same);
+  }
+  return out;
+}
+
+/** verify-round0 <runId> [--examples] [--record <file>]: the pre-check on its own ($0), recorded. */
+function cmdVerifyRound0(o) {
+  const dir = runDirOf(o, o._[1]);
+  const r = round0PreCheck(dir, { examples: !!o.examples });
+  const rec = { runId: o._[1], at: new Date().toISOString(), kit: provenance().hashes.kit, ok: r.ok, identical: r.results.filter((x) => x.same).length, of: r.results.length, ...(r.examples ? { examplesIdentical: r.examples.filter((x) => x.same).length, examplesOf: r.examples.length } : {}), results: r.results, ...(r.examples ? { examples: r.examples } : {}) };
+  if (o.record) writeJson(path.resolve(o.record), rec);
+  log(`verify-round0 ${o._[1]}: ${rec.identical} of ${rec.of} round-0 sources rebuild byte-identically${r.examples ? `, examples ${rec.examplesIdentical} of ${rec.examplesOf}` : ''}${r.ok ? '' : ' -- DRIFT'}`);
+  for (const x of [...r.results, ...(r.examples ?? [])].filter((x) => !x.same)) log(`  differs: ${x.brief ?? x.id}: ${x.error ?? `${x.stored} != ${x.rebuilt}`}`);
+  if (!r.ok) process.exitCode = 1;
+  return rec;
 }
 
 // ---- the spend ledger ------------------------------------------------------------------------------------
@@ -1051,6 +1107,8 @@ function parseArgs(argv) {
     else if (a === '--notes') o.notes = val();
     else if (a === '--against') o.against = val();
     else if (a === '--map') o.map = val();
+    else if (a === '--examples') o.examples = true;
+    else if (a === '--record') o.record = val();
     else if (a.startsWith('--')) throw new Error(`unknown option ${a}`);
     else o._.push(a);
   }
@@ -1069,6 +1127,7 @@ async function main() {
   else if (cmd === 'compare') await cmdCompare(o);
   else if (cmd === 'revise-bible') await cmdReviseBible(o);
   else if (cmd === 'clutter') await cmdClutter(o);
+  else if (cmd === 'verify-round0') cmdVerifyRound0(o);
   else {
     console.log('usage: node tools/eval.mjs run --tier sim|smoke|full [...] | rescore <runId> | rejudge <runId> | compare <runA> <runB>');
     process.exitCode = 2;

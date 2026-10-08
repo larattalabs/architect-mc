@@ -342,12 +342,25 @@ export async function renderPreviews(scratch: string, nbt: string, timeoutMs = 1
 
 // ---- installing -------------------------------------------------------------------------------
 
+/** (5b) `<base>.parts.nbt` next to `<base>.nbt` (the kit writes both). */
+export function partsFileOf(nbt: string): string {
+  return nbt.replace(/\.nbt$/i, '.parts.nbt');
+}
+
+/** (5b) Copy `<base>.parts.nbt` next to a copied template, when the source has one (tolerates none). */
+export function copyPartsAlong(fromNbt: string, toNbt: string): void {
+  const src = partsFileOf(fromNbt);
+  if (fs.existsSync(src)) fs.copyFileSync(src, partsFileOf(toNbt));
+}
+
 export interface InstallInput {
   library: string;
   baseId: string;
   /** ids other jobs are about to use */
   taken?: ReadonlySet<string>;
   nbt: string;
+  /** (5b) the per-cell part map (default: <nbt base>.parts.nbt next to `nbt`, when it exists) */
+  parts?: string | undefined;
   sidecar: Sidecar;
   /** the design's .mjs source (its `export const id` is rewritten to the installed id); none for an import */
   source?: string | undefined;
@@ -389,6 +402,9 @@ export function installDesign(input: InstallInput): Installed {
     try {
       const nbt = path.join(dir, `${id}.nbt`);
       fs.copyFileSync(input.nbt, nbt, fs.constants.COPYFILE_EXCL);
+      // (5b) the per-cell part map travels with the template (none for an import or a pre-5b build)
+      const parts = input.parts ?? partsFileOf(input.nbt);
+      if (parts && fs.existsSync(parts)) fs.copyFileSync(parts, path.join(dir, `${id}.parts.nbt`), fs.constants.COPYFILE_EXCL);
       let source: string | undefined;
       if (input.source) {
         source = path.join(dir, `${id}.mjs`);
