@@ -72,7 +72,8 @@ function pair(outDir, name, a, b, { kind, dropParts = [] } = {}) {
 function kitHash() {
   const h = crypto.createHash('sha256');
   const files = [
-    ...fs.readdirSync(path.join(KIT, 'lib')).sort().map((f) => path.join(KIT, 'lib', f)),
+    // (6a) files only: lib/region/ is a directory (its files are not part of the delta fixtures)
+    ...fs.readdirSync(path.join(KIT, 'lib'), { withFileTypes: true }).filter((e) => e.isFile()).map((e) => e.name).sort().map((f) => path.join(KIT, 'lib', f)),
     path.join(KIT, 'build.mjs'),
     DIFF,
     ...listDesigns().map((d) => path.join(KIT, 'designs', `${d}.mjs`)),
