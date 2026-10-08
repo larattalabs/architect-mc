@@ -29,6 +29,7 @@ import { truncate } from './util/text.js';
 import { checkImportPath, findVariantSource, Reskins, VariantBook, VariantRefused, VariantRunner } from './variants.js';
 import { EntryVersions, type VersionBy } from './versions.js';
 import { Polishes } from './polish.js';
+import { Regions } from './regions.js';
 
 export type { RunOutcome } from './bibles.js';
 
@@ -105,6 +106,8 @@ export class Sidecar {
   readonly versions: EntryVersions;
   /** (5b) polish of library entries */
   readonly polishes: Polishes;
+  /** (6a) region plans and tile evaluation */
+  readonly regions: Regions;
   private gcTimer: NodeJS.Timeout | undefined;
   /** trusted connections */
   private connected = new Set<ClientHandle>();
@@ -141,6 +144,7 @@ export class Sidecar {
     this.critiques = new Critiques(this);
     this.versions = new EntryVersions({ libraryDir: config.libraryDir, kitDir: config.kitDir, dataDir: config.dataDir, now: () => this.now(), log });
     this.polishes = new Polishes(this);
+    this.regions = new Regions({ config, blobs: this.blobs, bibleIndex: this.bibleIndex, log, emit: (m) => this.emit(m), now: () => this.now() });
   }
 
   /** trusted, open connections */
@@ -151,6 +155,7 @@ export class Sidecar {
   clientGone(c: ClientHandle): void {
     this.connected.delete(c);
     this.jobs.clientGone(c);
+    this.regions.clientGone(c);
   }
 
   /** The shared usage limit changed: the queues re-arm their wake-ups, groups show the hold. */
@@ -330,6 +335,7 @@ export class Sidecar {
   async close(): Promise<void> {
     if (this.gcTimer) clearInterval(this.gcTimer);
     this.pool.stop();
+    await this.regions.close();
     await this.variantRunner.stop();
     await this.jobs.stop();
     await this.designer?.stop();
@@ -504,6 +510,13 @@ export class Sidecar {
         const d = this.polishes.request(msg.entryId, msg.spec ?? {}, { ...(msg.owner ? { owner: msg.owner } : {}), ...(msg.ext ? { ext: msg.ext } : {}) });
         return { designId: d.id, entryId: msg.entryId, fromVersion: d.polish?.fromVersion };
       }
+      // ---- 6a (no Claude on either backend)
+      case 'region.plan':
+        return this.regions.plan(msg);
+      case 'region.tiles.request':
+        return this.regions.tiles(msg, client);
+      case 'region.release':
+        return this.regions.release(msg.planId, client);
     }
   }
 

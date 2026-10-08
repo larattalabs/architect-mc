@@ -4,9 +4,10 @@
 //                      [--use-claude-login] [--parent-pid <pid>] [--backend claude|sim] [--debug] [--bibles <dir>] [--massings <dir>]
 //
 // <data>/config.json (optional, hand-edited): { "designModel", "effort", "maxTurns", "maxBudgetUsd",
-// "simStepMs", "jobModel", "jobConcurrency", "simJobStepUsd" }. ARCHITECT_DESIGN_MODEL overrides
-// designModel, ARCHITECT_JOB_MODEL jobModel.
+// "simStepMs", "jobModel", "jobConcurrency", "simJobStepUsd", (6a) "regionWorkers", "regionWindow", ... }.
+// ARCHITECT_DESIGN_MODEL overrides designModel, ARCHITECT_JOB_MODEL jobModel.
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 
 function readVersion(): string {
@@ -69,6 +70,50 @@ export interface Config {
   critique: CritiqueConfig;
   /** (5b) polish: config polish.model (default: the entry's designer model) and polish.scopingModel (default Sonnet) */
   polish: { model?: string | undefined; scopingModel: string };
+  /** (6a) region programs: planning and tile evaluation */
+  regions: RegionsConfig;
+}
+
+export interface RegionsConfig {
+  /** <gameDir>/architect/regions/programs (the library dir's sibling): where non-bundled programs may live */
+  programsDir: string;
+  /** tile evaluation workers (config regionWorkers, 1-16; default min(4, cores/2)) */
+  workers: number;
+  /** evaluated tiles held per plan and connection (config regionWindow, 1-16, default 4) */
+  window: number;
+  /** a plan run's time limit in ms (config regionPlanMs, default 30000; enforced as wall clock) */
+  planMs: number;
+  /** a plan run's heap (--max-old-space-size, config regionPlanHeapMb, default 1024) */
+  planHeapMb: number;
+  /** the largest IR (config regionIrMaxBytes, default 4 MB) */
+  irMaxBytes: number;
+  /** one tile's evaluation limit in ms (config regionTileMs, default 2000) */
+  tileMs: number;
+  /** one worker's heap (resourceLimits.maxOldGenerationSizeMb, config regionTileHeapMb, default 256) */
+  tileHeapMb: number;
+  /** plan runs at once (config regionPlanConcurrency, default 2) */
+  planConcurrency: number;
+}
+
+/** The default worker count: min(4, cores / 2), at least 1. */
+export function defaultRegionWorkers(): number {
+  const cores = typeof os.availableParallelism === 'function' ? os.availableParallelism() : os.cpus().length;
+  return Math.max(1, Math.min(4, Math.floor(cores / 2)));
+}
+
+function regionsConfig(file: Record<string, unknown>, libraryDir: string): RegionsConfig {
+  const int = (v: unknown, d: number, lo: number, hi: number) => (typeof v === 'number' && Number.isFinite(v) ? Math.max(lo, Math.min(hi, Math.round(v))) : d);
+  return {
+    programsDir: path.join(path.dirname(libraryDir), 'regions', 'programs'),
+    workers: int(file.regionWorkers, defaultRegionWorkers(), 1, 16),
+    window: int(file.regionWindow, 4, 1, 16),
+    planMs: int(file.regionPlanMs, 30_000, 100, 600_000),
+    planHeapMb: int(file.regionPlanHeapMb, 1024, 64, 8192),
+    irMaxBytes: int(file.regionIrMaxBytes, 4 * 1024 * 1024, 1024, 4 * 1024 * 1024),
+    tileMs: int(file.regionTileMs, 2000, 50, 60_000),
+    tileHeapMb: int(file.regionTileHeapMb, 256, 16, 4096),
+    planConcurrency: int(file.regionPlanConcurrency, 2, 1, 8),
+  };
 }
 
 export interface CritiqueConfig {
@@ -222,6 +267,7 @@ export function loadConfig(argv: string[], env: NodeJS.ProcessEnv = process.env)
     },
     critique: critiqueConfig(file),
     polish: polishConfig(file),
+    regions: regionsConfig(file, need('library')),
   };
 }
 

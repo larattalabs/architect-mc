@@ -51,6 +51,7 @@ job step, default 0.01).
 | `<data>/jobs/<j>/` | a job | Its scratch dir (cwd of the job's query), with `blobs/<id>.<ext>`. |
 | `<data>/blobs/<id>` | `blob.put`, a big job result | The blob's bytes (`<id>.part` while an upload is open). Kept 7 days. |
 | `<data>/logs/sidecar.log` | always | The log, which is also written to stdout/stderr. |
+| `<data>/regions/plans/<planId>/` | `region.plan` | The plan dir: `program.mjs`, `survey.bin`, `params.json`, `bible.json`, `request.json`, `ir.json`, `plan.json` (see "Phase 6a"). |
 | `<data>/variants/<v>/` | a variant / import job | Its scratch dir: a fresh `kit/`, `check/`, `previews/`, `in/` (the import copy). |
 | `<library>/<id>/` | a design finished | `<id>.nbt`, `<id>.blueprint.json` (with `source`, `createdAt` and `request` added), `<id>.mjs` and the `<id>.preview-*.png` files. An existing folder is never overwritten: ids go `gen_<slug>`, then `gen_<slug>_2`, and so on. |
 
@@ -304,6 +305,60 @@ designers. Snapshot `features` adds `massing`.
 - A protocol-1 client sees none of it (massing and detail designs are filtered out).
 
 `<data>/config.json` adds `massingModel`, `massingEffort`, `massingMaxTurns` and `maxRedirects`.
+
+## Phase 6a: region programs (plan and tile streaming)
+
+The binding text is `../docs/CONTRACT.md`, "Phase 6 contract" (§1 "Where programs run", §3 "Streaming", §6 "Sidecar
+protocol (2, additive)", §7) and `../kit/REGIONS.md` (tile keys, the ARSV columns codec, ARTL packed tiles, IR format 1,
+"Sidecar protocol"). The schemas are in `src/protocol.ts`; the code in `src/regions.ts` (plans, the IR cache, the window),
+`src/regionpool.ts` (the worker pool) and `src/region-worker.mjs` (the worker; the build copies it to
+`dist/region-worker.mjs`). Snapshot `features` adds `region.plan` and `region.tiles`. A protocol-1 client sees none of it.
+Region planning never calls Claude, on either backend (`sim` runs it the same way).
+
+- `region.plan { program, params, seed?, claim, surveyBlobId, bible?, bibleVersion?, roles? }` -> ack `{ planId, seed }` at
+  once (the seed the sidecar picked when none was sent, a u64 decimal string). Refused at once (ack `ok: false`): a
+  program that is neither a bundled id (`[a-z][a-z0-9_]{0,47}`, `<kit>/regions/<id>.mjs` must exist) nor a `.mjs` file under
+  `<gameDir>/architect/regions/programs` (absolute or relative to it; `..` and links out of it are refused); a missing survey
+  blob; an unknown bible. `roles` win over the bible's roles.
+  - The plan dir `<data>/regions/plans/<planId>/`: `program.mjs` (a copy), `survey.bin`, `params.json`, `bible.json`
+    (`{id?, version?, roles}`), `request.json`, then `ir.json` (the kit's) and `plan.json` (the kit's fields, if it wrote
+    any, plus `planId`, `ok`, `irSha`, `irBytes`, `irBlobId?`, `notes`, `ms`, `request`).
+  - The run: `node --permission --allow-fs-read=<kit> --allow-fs-read=<planDir> [--allow-fs-read=<programs dir>]
+    --allow-fs-write=<planDir> --max-old-space-size=1024 --import=<no-network preload> <kit>/tools/region.mjs plan ...`
+    (the arguments are in `Regions.planArgs`, see REGIONS.md "Plan CLI"), cwd the plan dir, a minimal environment (no
+    API keys, no client token). Node's permission model refuses other files, child processes and workers; Node 24 has no
+    network switch, so the preload makes `net`, `tls`, `dgram`, `dns`, `http(s)` and `fetch` throw. A bundled program runs
+    from the kit (its relative imports resolve); a player's program from its own path.
+  - Then, broadcast: `region.planned { planId, irSha, ir | irBlobId, lots, stages, anchors, budget, tiles, notes, ms }` or
+    `region.failed { planId, message }` (the kit's message; or the time limit, the heap, the IR limit). `irSha` is the
+    SHA-256 of the exact `ir.json` bytes; `ir` is that text when it is at most 1 MB, else `irBlobId` names a blob holding
+    the same bytes (`<data>/blobs/<id>`, kind `region.ir`). `lots`, `stages`, `anchors`, `budget` and `tiles` are read from
+    the IR. At most `regionPlanConcurrency` (2) plans run at once.
+- `region.tiles.request { planId, irSha, ir?, tiles: [{ key, stage, set, heights }] }` (1-64 tiles; `heights` base64
+  ARSV) -> ack `{ accepted }`, or `ok: false, error: "ir_unknown"` when the IR is in neither the cache (by sha) nor the
+  plan dir (`ir.json` with that sha) and the request has no `ir`. `ir` is the `ir.json` text (preferred) or its JSON object
+  (hashed as canonical JSON); it must hash to `irSha`. Then per tile, in any order: `region.tile { planId, key, stage,
+  set, seq, more, data, count, sha }` frames (`data` = base64 of at most 1 MB of `gzipPinned(payload)`, `seq` from 0,
+  `more: true` on all but the last; `count` and `sha`, the SHA-256 of the uncompressed ARTL payload, on every frame), or
+  `region.tile.error { planId, key, stage, set, message }`.
+  - **The pool:** `worker_threads`, `regionWorkers` of them (default `min(4, cores/2)`), started on demand. Workers import
+    only `<kit>/lib/realise.mjs` (`evalTile(ir, key, heights, {stage, set})`) and `<kit>/lib/region/pack.mjs`
+    (`gzipPinned`; a built-in level-6 / mtime 0 / OS 255 gzip when the kit has none). Each worker caches parsed IRs by
+    sha. Per tile: `regionTileMs` (2000) and `regionTileHeapMb` (256, `resourceLimits`). A tile that throws answers its
+    message; one that runs over its time, crashes its worker or runs out of memory answers `region.tile.error` and the
+    worker is replaced; the other tiles go on. The payload is the kit's, hashed and compressed, never re-encoded: the bytes
+    for (IR, key, heights, stage, set) do not depend on the worker count, the order or restarts.
+  - **The window:** per plan and connection at most `regionWindow` (1-16, default 4) tiles are being evaluated or sent;
+    a tile keeps its slot until its last frame is flushed to the socket, so a client that stops reading stops the
+    evaluation. Tiles beyond W wait in a queue (at most 256 per plan and connection, else the request is refused).
+- `region.release { planId }` -> ack `{ planId, dropped }`: this connection's queued tiles for the plan go, and the cached
+  IR (unless another plan uses it). The plan dir stays, so a later request without `ir` still works.
+- **Connections:** a connection that goes away loses its queued and in-flight tiles (results are discarded). Nothing else
+  is per connection: the plan dirs and the IR cache (8 IRs by sha) stay; the mod re-requests its window on reconnect.
+
+`<data>/config.json` adds `regionWorkers`, `regionWindow`, and the limits `regionPlanMs` (30000, wall clock),
+`regionPlanHeapMb` (1024), `regionIrMaxBytes` (4194304), `regionTileMs` (2000), `regionTileHeapMb` (256) and
+`regionPlanConcurrency` (2).
 
 ## Variants and imports
 

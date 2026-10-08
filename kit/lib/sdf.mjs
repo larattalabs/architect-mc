@@ -1,0 +1,776 @@
+// The closed shape library of region programs (docs/CONTRACT.md "The shape library", kit/REGIONS.md "Shapes").
+// A shape is a JSON tree; compileShape() turns it into an evaluator that works one column at a time:
+//   node.prep(x, z, col) -> boolean   (false: no cell of this column is inside); sets node.lo / node.hi
+//   node.sd(y)           -> number    (signed distance at (x, y, z) of the prepared column; inside when <= 0)
+// `col` is `{ g, h, f }`: the column's frozen ground, height and floor (y-refs resolve against it).
+// Under the realise lint: only + - * / and Math.floor/sqrt/abs/min/max/imul.
+import { makeNoise, noiseSpecError } from './noise.mjs';
+
+/** Bigger than any distance in a world; substituted for a child known to be outside its threshold. */
+export const BIG = 1e9;
+const EPS = 1e-6;
+
+export const PRIMITIVES = ['sphere', 'box', 'cylinder', 'cone', 'bowl', 'ring', 'torus', 'capsulePath', 'extrude', 'heightfield', 'mask'];
+export const COMBINATORS = ['union', 'intersect', 'subtract', 'smooth', 'offset', 'displace', 'clipY'];
+export const BOWL_PROFILES = ['parabolic', 'spherical', 'flat'];
+/** Cells above a bowl's rim it includes by default (its `h`). */
+export const BOWL_DEFAULT_H = 32;
+
+const isNum = (v) => typeof v === 'number' && Number.isFinite(v);
+
+// ------------------------------------------------------------------ y-refs
+
+/**
+ * A y value: a number or `{abs: n}` (absolute), `{surface: dy}` (the column's frozen ground + dy), `{floor: dy}` (the
+ * first non-fluid block under the ground + dy), `{height: dy}` (max(height, ground) + dy: the top of the column, trunks
+ * included), `{min: [y, ...]}`, `{max: [y, ...]}`. Returns the error message or null.
+ */
+export function yrefError(r, where = 'y') {
+  if (isNum(r)) return null;
+  if (!r || typeof r !== 'object' || Array.isArray(r)) return `${where}: a y value must be a number or {abs|surface|floor|height: n} or {min|max: [...]}`;
+  const keys = Object.keys(r);
+  if (keys.length !== 1) return `${where}: a y value has exactly one key (got ${keys.join(', ') || 'none'})`;
+  const k = keys[0];
+  if (k === 'abs' || k === 'surface' || k === 'floor' || k === 'height') return isNum(r[k]) ? null : `${where}.${k} must be a finite number`;
+  if (k === 'min' || k === 'max') {
+    if (!Array.isArray(r[k]) || r[k].length < 1) return `${where}.${k} must be a non-empty array`;
+    for (let i = 0; i < r[k].length; i++) { const e = yrefError(r[k][i], `${where}.${k}[${i}]`); if (e) return e; }
+    return null;
+  }
+  return `${where}: unknown y kind '${k}' (abs, surface, floor, height, min, max)`;
+}
+
+/** Compile a y-ref to `col => y`. */
+export function yrefFn(r) {
+  if (isNum(r)) return () => r;
+  if ('abs' in r) { const v = r.abs; return () => v; }
+  if ('surface' in r) { const d = r.surface; return (c) => c.g + d; }
+  if ('floor' in r) { const d = r.floor; return (c) => c.f + d; }
+  if ('height' in r) { const d = r.height; return (c) => (c.h > c.g ? c.h : c.g) + d; }
+  const fs = (r.min ?? r.max).map(yrefFn);
+  if ('min' in r) return (c) => { let m = fs[0](c); for (let i = 1; i < fs.length; i++) { const v = fs[i](c); if (v < m) m = v; } return m; };
+  return (c) => { let m = fs[0](c); for (let i = 1; i < fs.length; i++) { const v = fs[i](c); if (v > m) m = v; } return m; };
+}
+
+/** The y-ref's absolute value when it does not depend on a column, else null. */
+export function yrefAbs(r) {
+  if (isNum(r)) return r;
+  if ('abs' in r) return r.abs;
+  if ('min' in r || 'max' in r) {
+    const vs = (r.min ?? r.max).map(yrefAbs);
+    if (vs.some((v) => v === null)) return null;
+    return 'min' in r ? Math.min(...vs) : Math.max(...vs);
+  }
+  return null;
+}
+
+/**
+ * Bounds of a y-ref over columns whose frozen values lie in [lo, hi] (`range = {lo, hi}`): `[min, max]`.
+ * Without a range, a column-dependent y-ref gives [-BIG, BIG].
+ */
+export function yrefRange(r, range) {
+  if (isNum(r)) return [r, r];
+  if ('abs' in r) return [r.abs, r.abs];
+  const k = Object.keys(r)[0];
+  if (k === 'min' || k === 'max') {
+    const rs = r[k].map((x) => yrefRange(x, range));
+    if (k === 'min') return [Math.min(...rs.map((x) => x[0])), Math.min(...rs.map((x) => x[1]))];
+    return [Math.max(...rs.map((x) => x[0])), Math.max(...rs.map((x) => x[1]))];
+  }
+  if (!range) return [-BIG, BIG];
+  return [range.lo + r[k], range.hi + r[k]];
+}
+
+// ------------------------------------------------------------------ 2D polygon helpers (shared with plan time)
+
+/** Even-odd point-in-polygon for a polygon [[x, z], ...] (boundary points count by the distance rule, not here). */
+export function insidePolygon(poly, x, z) {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const xi = poly[i][0], zi = poly[i][1], xj = poly[j][0], zj = poly[j][1];
+    if ((zi > z) !== (zj > z) && x < ((xj - xi) * (z - zi)) / (zj - zi) + xi) inside = !inside;
+  }
+  return inside;
+}
+
+/** Signed distance from (x, z) to a polygon in the x/z plane (negative inside). */
+export function polygonDistance(poly, x, z) {
+  let best = BIG * BIG;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const ax = poly[j][0], az = poly[j][1];
+    const ex = poly[i][0] - ax, ez = poly[i][1] - az;
+    const px = x - ax, pz = z - az;
+    const l2 = ex * ex + ez * ez;
+    let t = l2 > 0 ? (px * ex + pz * ez) / l2 : 0;
+    t = t < 0 ? 0 : t > 1 ? 1 : t;
+    const dx = px - ex * t, dz = pz - ez * t;
+    const d2 = dx * dx + dz * dz;
+    if (d2 < best) best = d2;
+  }
+  const d = Math.sqrt(best);
+  return insidePolygon(poly, x, z) ? -d : d;
+}
+
+// ------------------------------------------------------------------ blobs
+
+/** Decode a base64 string to bytes (Buffer when available). */
+function b64(s) {
+  return Uint8Array.from(Buffer.from(String(s), 'base64'));
+}
+
+/**
+ * A blob for `heightfield` / `mask`: `{ minX, minZ, width, depth, data }` with `data` base64 of u16 LE values
+ * (heightfield) or of a bitset, bit i at byte i>>3, bit i&7, i = x + z*width (mask).
+ */
+function resolveBlob(name, blobs) {
+  const b = typeof blobs === 'function' ? blobs(name) : blobs?.[name];
+  if (!b) throw new Error(`shape: blob '${name}' is not in the IR's blobs`);
+  if (b._dec) return b._dec;
+  const bytes = b.bytes instanceof Uint8Array ? b.bytes : b64(b.data);
+  const dec = { minX: b.minX, minZ: b.minZ, width: b.width, depth: b.depth, bytes };
+  Object.defineProperty(b, '_dec', { value: dec, enumerable: false });
+  return dec;
+}
+
+// ------------------------------------------------------------------ validation
+
+/** Validate a shape tree; returns the first error (with its path) or null. */
+export function shapeError(s, where = 'shape', depth = 0) {
+  if (depth > 64) return `${where}: shape nesting is deeper than 64`;
+  if (!s || typeof s !== 'object' || Array.isArray(s)) return `${where}: a shape must be an object { kind, ... }`;
+  const k = s.kind;
+  const num = (f, pos = false) => (isNum(s[f]) && (!pos || s[f] > 0) ? null : `${where}.${f} must be a ${pos ? 'positive ' : ''}number`);
+  const vec3 = (f) => {
+    const v = s[f];
+    if (!Array.isArray(v) || v.length !== 3 || !isNum(v[0]) || !isNum(v[2])) return `${where}.${f} must be [x, y, z]`;
+    return yrefError(v[1], `${where}.${f}[1]`);
+  };
+  const first = (...errs) => errs.find((e) => e) ?? null;
+  switch (k) {
+    case 'sphere': return first(vec3('c'), num('r'));
+    case 'box': {
+      const e = first(vec3('min'), vec3('max'));
+      if (e) return e;
+      if (s.min[0] > s.max[0] || s.min[2] > s.max[2]) return `${where}: box min must be <= max in x and z`;
+      return null;
+    }
+    case 'cylinder': return first(vec3('c'), num('r'), num('h', true));
+    case 'cone': return first(vec3('c'), num('r0'), num('r1'), num('h', true));
+    case 'bowl': {
+      const e = first(vec3('c'), num('r', true), num('depth', true));
+      if (e) return e;
+      if (s.profile !== undefined && !BOWL_PROFILES.includes(s.profile)) return `${where}.profile must be one of ${BOWL_PROFILES.join(', ')}`;
+      if (s.h !== undefined && !(isNum(s.h) && s.h >= 0)) return `${where}.h must be a number >= 0`;
+      return null;
+    }
+    case 'ring': {
+      const e = first(vec3('c'), num('r0'), num('r1'), num('h', true));
+      if (e) return e;
+      return s.r0 < s.r1 ? null : `${where}: ring r0 must be < r1`;
+    }
+    case 'torus': return first(vec3('c'), num('R'), num('r', true));
+    case 'capsulePath': {
+      if (!Array.isArray(s.points) || s.points.length < 1) return `${where}.points must be a non-empty array of [x, y, z]`;
+      for (let i = 0; i < s.points.length; i++) {
+        const p = s.points[i];
+        if (!Array.isArray(p) || p.length !== 3 || !p.every(isNum)) return `${where}.points[${i}] must be [x, y, z] numbers`;
+      }
+      return num('r', true);
+    }
+    case 'extrude': {
+      if (!Array.isArray(s.polygon) || s.polygon.length < 3) return `${where}.polygon must have 3+ [x, z] points`;
+      for (let i = 0; i < s.polygon.length; i++) {
+        const p = s.polygon[i];
+        if (!Array.isArray(p) || p.length !== 2 || !p.every(isNum)) return `${where}.polygon[${i}] must be [x, z]`;
+      }
+      return first(yrefError(s.y0, `${where}.y0`), yrefError(s.y1, `${where}.y1`));
+    }
+    case 'heightfield': {
+      if (typeof s.blob !== 'string') return `${where}.blob must be a blob name`;
+      return first(num('scale'), yrefError(s.y0, `${where}.y0`));
+    }
+    case 'mask': return typeof s.blob === 'string' ? null : `${where}.blob must be a blob name`;
+    case 'union': case 'intersect': case 'subtract': {
+      if (!Array.isArray(s.of) || s.of.length < (k === 'subtract' ? 2 : 1)) return `${where}.of must be an array of ${k === 'subtract' ? '2+' : '1+'} shapes`;
+      for (let i = 0; i < s.of.length; i++) { const e = shapeError(s.of[i], `${where}.of[${i}]`, depth + 1); if (e) return e; }
+      return null;
+    }
+    case 'smooth': {
+      if (!Array.isArray(s.of) || s.of.length !== 2) return `${where}.of must be [a, b]`;
+      return first(num('k', true), shapeError(s.of[0], `${where}.of[0]`, depth + 1), shapeError(s.of[1], `${where}.of[1]`, depth + 1));
+    }
+    case 'offset': return first(num('d'), shapeError(s.of, `${where}.of`, depth + 1));
+    case 'displace': {
+      const ne = noiseSpecError(s.noise);
+      if (ne) return `${where}.noise: ${ne}`;
+      return first(num('amp'), shapeError(s.of, `${where}.of`, depth + 1));
+    }
+    case 'clipY': {
+      if (s.y0 == null && s.y1 == null) return `${where}: clipY needs y0 or y1`;
+      return first(s.y0 == null ? null : yrefError(s.y0, `${where}.y0`), s.y1 == null ? null : yrefError(s.y1, `${where}.y1`), shapeError(s.of, `${where}.of`, depth + 1));
+    }
+    default: return `${where}: unknown shape kind '${k}' (${[...PRIMITIVES, ...COMBINATORS].join(', ')})`;
+  }
+}
+
+// ------------------------------------------------------------------ compiled nodes
+// Each node has a band [L, e] (fixed at compile time) over which its parent needs its exact value; below L or above e
+// only the side matters. prep() returning false, or y outside [lo, hi], guarantees sd(y) > e, so the parent may
+// substitute BIG there. The root's band is [0, 0]. Children: union/intersect/clipY [L, e]; offset d [L+d, e+d];
+// displace amp [L-|amp|, e+|amp|]; smooth k [L, e + 5k/4]; subtract's base [L, e] and its cutters [-e, -L].
+
+class Node {
+  constructor(e, L = e) { this.e = e; this.L = L; this.lo = 0; this.hi = 0; this.minX = -BIG; this.maxX = BIG; this.minZ = -BIG; this.maxZ = BIG; }
+  /** within the node's x/z bounds */
+  inXZ(x, z) { return x >= this.minX && x <= this.maxX && z >= this.minZ && z <= this.maxZ; }
+}
+
+class Sphere extends Node {
+  constructor(s, e, blobs, L) {
+    super(e, L);
+    [this.cx, , this.cz] = s.c; this.cy = yrefFn(s.c[1]); this.r = s.r;
+    this.R = s.r + e;
+    const R = this.R > 0 ? this.R : 0;
+    this.minX = this.cx - R; this.maxX = this.cx + R; this.minZ = this.cz - R; this.maxZ = this.cz + R;
+  }
+  prep(x, z, c) {
+    if (this.R < 0) return false;
+    const dx = x - this.cx, dz = z - this.cz;
+    this.d2 = dx * dx + dz * dz;
+    const s = this.R * this.R - this.d2;
+    if (s < 0) return false;
+    this.y0 = this.cy(c);
+    const hh = Math.sqrt(s);
+    this.lo = this.y0 - hh; this.hi = this.y0 + hh;
+    return true;
+  }
+  sd(y) { const dy = y - this.y0; return Math.sqrt(this.d2 + dy * dy) - this.r; }
+}
+
+class Box extends Node {
+  constructor(s, e, blobs, L) {
+    super(e, L);
+    this.x0 = s.min[0]; this.x1 = s.max[0]; this.z0 = s.min[2]; this.z1 = s.max[2];
+    this.y0f = yrefFn(s.min[1]); this.y1f = yrefFn(s.max[1]);
+    const g = e > 0 ? e : 0;
+    this.minX = this.x0 - g; this.maxX = this.x1 + g; this.minZ = this.z0 - g; this.maxZ = this.z1 + g;
+  }
+  prep(x, z, c) {
+    const qx = Math.max(this.x0 - x, x - this.x1), qz = Math.max(this.z0 - z, z - this.z1);
+    if (qx > this.e || qz > this.e) return false;
+    this.qx = qx; this.qz = qz;
+    const ox = qx > 0 ? qx : 0, oz = qz > 0 ? qz : 0;
+    this.o2 = ox * ox + oz * oz;
+    this.y0 = this.y0f(c); this.y1 = this.y1f(c);
+    this.lo = this.y0 - this.e; this.hi = this.y1 + this.e;
+    return this.lo <= this.hi;
+  }
+  sd(y) {
+    const qy = Math.max(this.y0 - y, y - this.y1);
+    const oy = qy > 0 ? qy : 0;
+    const out = Math.sqrt(this.o2 + oy * oy);
+    const m = Math.max(this.qx, qy, this.qz);
+    return out + (m < 0 ? m : 0);
+  }
+}
+
+class Cylinder extends Node {
+  // vertical, base y = c[1], h cells (top = base + h - 1)
+  constructor(s, e, blobs, L) {
+    super(e, L);
+    [this.cx, , this.cz] = s.c; this.cyf = yrefFn(s.c[1]); this.r = s.r; this.h = s.h;
+    const R = Math.max(0, s.r + e);
+    this.minX = this.cx - R; this.maxX = this.cx + R; this.minZ = this.cz - R; this.maxZ = this.cz + R;
+  }
+  prep(x, z, c) {
+    const dx = x - this.cx, dz = z - this.cz;
+    this.dr = Math.sqrt(dx * dx + dz * dz) - this.r;
+    if (this.dr > this.e) return false;
+    this.y0 = this.cyf(c); this.y1 = this.y0 + this.h - 1;
+    this.lo = this.y0 - this.e; this.hi = this.y1 + this.e;
+    return true;
+  }
+  sd(y) { return Math.max(this.dr, this.y0 - y, y - this.y1); }
+}
+
+class Cone extends Node {
+  // radius r0 at the base y, r1 at the top (base + h - 1)
+  constructor(s, e, blobs, L) {
+    super(e, L);
+    [this.cx, , this.cz] = s.c; this.cyf = yrefFn(s.c[1]); this.r0 = s.r0; this.h = s.h;
+    this.s = s.h > 1 ? (s.r1 - s.r0) / (s.h - 1) : 0;
+    this.k = Math.sqrt(1 + this.s * this.s);
+    const R = Math.max(0, Math.max(s.r0, s.r1) + Math.abs(e) * this.k + 1);
+    this.minX = this.cx - R; this.maxX = this.cx + R; this.minZ = this.cz - R; this.maxZ = this.cz + R;
+  }
+  prep(x, z, c) {
+    const dx = x - this.cx, dz = z - this.cz;
+    this.d = Math.sqrt(dx * dx + dz * dz);
+    this.y0 = this.cyf(c); this.y1 = this.y0 + this.h - 1;
+    let lo = this.y0 - this.e, hi = this.y1 + this.e;
+    const need = this.d - this.r0 - this.e * this.k; // need s*(y - y0) >= need
+    if (this.s > 0) lo = Math.max(lo, this.y0 + need / this.s);
+    else if (this.s < 0) hi = Math.min(hi, this.y0 + need / this.s);
+    else if (need > 0) return false;
+    this.lo = lo; this.hi = hi;
+    return lo <= hi;
+  }
+  sd(y) {
+    const r = this.r0 + this.s * (y - this.y0);
+    return Math.max((this.d - r) / this.k, this.y0 - y, y - this.y1);
+  }
+}
+
+class Bowl extends Node {
+  // the void of a bowl: rim centre c (rim y = c[1]), radius r, depth; inside = above the profile, up to rim + h
+  constructor(s, e, blobs, L) {
+    super(e, L);
+    [this.cx, , this.cz] = s.c; this.cyf = yrefFn(s.c[1]); this.r = s.r; this.depth = s.depth;
+    this.profile = s.profile ?? 'parabolic'; this.h = s.h ?? BOWL_DEFAULT_H;
+    if (this.profile === 'spherical') this.R = (s.r * s.r + s.depth * s.depth) / (2 * s.depth);
+    const R = Math.max(0, s.r + e);
+    this.minX = this.cx - R; this.maxX = this.cx + R; this.minZ = this.cz - R; this.maxZ = this.cz + R;
+  }
+  /** the profile's depth below the rim and its slope at horizontal distance d */
+  static profileAt(profile, r, depth, R, d) {
+    if (d > r) return [0, 0];
+    if (profile === 'flat') return [depth, 0];
+    if (profile === 'spherical') {
+      const q = Math.sqrt(R * R - d * d);
+      return [depth - R + q, d / q];
+    }
+    const t = d / r;
+    return [depth * (1 - t * t), (2 * depth * d) / (r * r)];
+  }
+  prep(x, z, c) {
+    const dx = x - this.cx, dz = z - this.cz;
+    this.d = Math.sqrt(dx * dx + dz * dz);
+    if (this.d - this.r > this.e) return false;
+    const [dep, slope] = Bowl.profileAt(this.profile, this.r, this.depth, this.R, this.d);
+    this.yr = this.cyf(c);
+    this.yp = this.yr - dep;
+    this.k = Math.sqrt(1 + slope * slope);
+    this.top = this.yr + this.h;
+    this.lo = this.yp - this.e * this.k; this.hi = this.top + this.e;
+    return this.lo <= this.hi;
+  }
+  sd(y) { return Math.max(this.d - this.r, (this.yp - y) / this.k, y - this.top); }
+}
+
+class Ring extends Node {
+  constructor(s, e, blobs, L) {
+    super(e, L);
+    [this.cx, , this.cz] = s.c; this.cyf = yrefFn(s.c[1]); this.r0 = s.r0; this.r1 = s.r1; this.h = s.h;
+    const R = Math.max(0, s.r1 + e);
+    this.minX = this.cx - R; this.maxX = this.cx + R; this.minZ = this.cz - R; this.maxZ = this.cz + R;
+  }
+  prep(x, z, c) {
+    const dx = x - this.cx, dz = z - this.cz;
+    const d = Math.sqrt(dx * dx + dz * dz);
+    this.dr = Math.max(this.r0 - d, d - this.r1);
+    if (this.dr > this.e) return false;
+    this.y0 = this.cyf(c); this.y1 = this.y0 + this.h - 1;
+    this.lo = this.y0 - this.e; this.hi = this.y1 + this.e;
+    return true;
+  }
+  sd(y) { return Math.max(this.dr, this.y0 - y, y - this.y1); }
+}
+
+class Torus extends Node {
+  constructor(s, e, blobs, L) {
+    super(e, L);
+    [this.cx, , this.cz] = s.c; this.cyf = yrefFn(s.c[1]); this.R = s.R; this.r = s.r;
+    const R = Math.max(0, s.R + s.r + e);
+    this.minX = this.cx - R; this.maxX = this.cx + R; this.minZ = this.cz - R; this.maxZ = this.cz + R;
+  }
+  prep(x, z, c) {
+    const dx = x - this.cx, dz = z - this.cz;
+    const q = Math.sqrt(dx * dx + dz * dz) - this.R;
+    const re = this.r + this.e;
+    const s = re * re - q * q;
+    if (re < 0 || s < 0) return false;
+    this.q2 = q * q;
+    this.y0 = this.cyf(c);
+    const hh = Math.sqrt(s);
+    this.lo = this.y0 - hh; this.hi = this.y0 + hh;
+    return true;
+  }
+  sd(y) { const dy = y - this.y0; return Math.sqrt(this.q2 + dy * dy) - this.r; }
+}
+
+class CapsulePath extends Node {
+  constructor(s, e, blobs, L) {
+    super(e, L);
+    const pts = s.points.length === 1 ? [s.points[0], s.points[0]] : s.points;
+    const n = pts.length - 1;
+    this.n = n; this.r = s.r;
+    this.seg = new Float64Array(n * 7); // ax ay az ex ey ez l2
+    this.box = new Float64Array(n * 4); // minX maxX minZ maxZ (expanded)
+    this.cand = new Int32Array(n);
+    this.nc = 0;
+    const g = Math.max(0, s.r + e);
+    this.reach = s.r + e;
+    let mnx = BIG, mxx = -BIG, mnz = BIG, mxz = -BIG;
+    for (let i = 0; i < n; i++) {
+      const a = pts[i], b = pts[i + 1];
+      const o = i * 7;
+      this.seg[o] = a[0]; this.seg[o + 1] = a[1]; this.seg[o + 2] = a[2];
+      this.seg[o + 3] = b[0] - a[0]; this.seg[o + 4] = b[1] - a[1]; this.seg[o + 5] = b[2] - a[2];
+      this.seg[o + 6] = this.seg[o + 3] * this.seg[o + 3] + this.seg[o + 4] * this.seg[o + 4] + this.seg[o + 5] * this.seg[o + 5];
+      const bx0 = Math.min(a[0], b[0]) - g, bx1 = Math.max(a[0], b[0]) + g, bz0 = Math.min(a[2], b[2]) - g, bz1 = Math.max(a[2], b[2]) + g;
+      this.box[i * 4] = bx0; this.box[i * 4 + 1] = bx1; this.box[i * 4 + 2] = bz0; this.box[i * 4 + 3] = bz1;
+      if (bx0 < mnx) mnx = bx0; if (bx1 > mxx) mxx = bx1; if (bz0 < mnz) mnz = bz0; if (bz1 > mxz) mxz = bz1;
+    }
+    this.minX = mnx; this.maxX = mxx; this.minZ = mnz; this.maxZ = mxz;
+  }
+  prep(x, z) {
+    if (this.reach < 0) return false;
+    let nc = 0, lo = BIG, hi = -BIG;
+    const re = this.reach;
+    for (let i = 0; i < this.n; i++) {
+      const b = i * 4;
+      if (x < this.box[b] || x > this.box[b + 1] || z < this.box[b + 2] || z > this.box[b + 3]) continue;
+      const o = i * 7;
+      // 2D distance in x/z to the projected segment is a lower bound of the 3D distance
+      const ex = this.seg[o + 3], ez = this.seg[o + 5];
+      const px = x - this.seg[o], pz = z - this.seg[o + 2];
+      const l2 = ex * ex + ez * ez;
+      let t = l2 > 0 ? (px * ex + pz * ez) / l2 : 0;
+      t = t < 0 ? 0 : t > 1 ? 1 : t;
+      const dx = px - ex * t, dz = pz - ez * t;
+      if (dx * dx + dz * dz > re * re) continue;
+      this.cand[nc++] = i;
+      const ay = this.seg[o + 1], by = ay + this.seg[o + 4];
+      const l = Math.min(ay, by) - re, h = Math.max(ay, by) + re;
+      if (l < lo) lo = l; if (h > hi) hi = h;
+    }
+    this.nc = nc;
+    if (!nc) return false;
+    this.x = x; this.z = z; this.lo = lo; this.hi = hi;
+    return true;
+  }
+  sd(y) {
+    let best = BIG * BIG;
+    for (let k = 0; k < this.nc; k++) {
+      const o = this.cand[k] * 7;
+      const px = this.x - this.seg[o], py = y - this.seg[o + 1], pz = this.z - this.seg[o + 2];
+      const ex = this.seg[o + 3], ey = this.seg[o + 4], ez = this.seg[o + 5], l2 = this.seg[o + 6];
+      let t = l2 > 0 ? (px * ex + py * ey + pz * ez) / l2 : 0;
+      t = t < 0 ? 0 : t > 1 ? 1 : t;
+      const dx = px - ex * t, dy = py - ey * t, dz = pz - ez * t;
+      const d2 = dx * dx + dy * dy + dz * dz;
+      if (d2 < best) best = d2;
+    }
+    return Math.sqrt(best) - this.r;
+  }
+}
+
+class Extrude extends Node {
+  constructor(s, e, blobs, L) {
+    super(e, L);
+    this.poly = s.polygon.map((p) => [p[0], p[1]]);
+    this.y0f = yrefFn(s.y0); this.y1f = yrefFn(s.y1);
+    const g = e > 0 ? e : 0;
+    this.minX = Math.min(...this.poly.map((p) => p[0])) - g; this.maxX = Math.max(...this.poly.map((p) => p[0])) + g;
+    this.minZ = Math.min(...this.poly.map((p) => p[1])) - g; this.maxZ = Math.max(...this.poly.map((p) => p[1])) + g;
+  }
+  prep(x, z, c) {
+    this.d2 = polygonDistance(this.poly, x, z);
+    if (this.d2 > this.e) return false;
+    this.y0 = this.y0f(c); this.y1 = this.y1f(c);
+    this.lo = this.y0 - this.e; this.hi = this.y1 + this.e;
+    return this.lo <= this.hi;
+  }
+  sd(y) { return Math.max(this.d2, this.y0 - y, y - this.y1); }
+}
+
+class Heightfield extends Node {
+  // solid at and below y0 + scale * v(x, z) over the blob's area
+  constructor(s, e, blobs, L) {
+    super(e, L);
+    this.b = resolveBlob(s.blob, blobs);
+    this.scale = s.scale; this.y0f = yrefFn(s.y0);
+    this.minX = this.b.minX; this.maxX = this.b.minX + this.b.width - 1; this.minZ = this.b.minZ; this.maxZ = this.b.minZ + this.b.depth - 1;
+  }
+  prep(x, z, c) {
+    const i = x - this.b.minX, j = z - this.b.minZ;
+    if (i < 0 || j < 0 || i >= this.b.width || j >= this.b.depth) return false;
+    const o = (i + j * this.b.width) * 2;
+    const v = this.b.bytes[o] | (this.b.bytes[o + 1] << 8);
+    this.top = this.y0f(c) + this.scale * v;
+    this.lo = -BIG; this.hi = this.top + this.e;
+    return true;
+  }
+  sd(y) { return y - this.top; }
+}
+
+class Mask extends Node {
+  constructor(s, e, blobs, L) {
+    super(e, L);
+    this.b = resolveBlob(s.blob, blobs);
+    this.minX = this.b.minX; this.maxX = this.b.minX + this.b.width - 1; this.minZ = this.b.minZ; this.maxZ = this.b.minZ + this.b.depth - 1;
+  }
+  prep(x, z) {
+    const i = x - this.b.minX, j = z - this.b.minZ;
+    let on = false;
+    if (i >= 0 && j >= 0 && i < this.b.width && j < this.b.depth) {
+      const k = i + j * this.b.width;
+      on = ((this.b.bytes[k >> 3] >> (k & 7)) & 1) === 1;
+    }
+    this.v = on ? -0.5 : 0.5;
+    if (this.v > this.e) return false;
+    this.lo = -BIG; this.hi = BIG;
+    return true;
+  }
+  sd() { return this.v; }
+}
+
+/** min over children inside their [lo, hi] (others are > e: BIG) */
+class Union extends Node {
+  constructor(s, e, blobs, L) {
+    super(e, L);
+    this.kids = s.of.map((k) => compileNode(k, e, blobs, L));
+    this.on = new Uint8Array(this.kids.length);
+    this.minX = Math.min(...this.kids.map((k) => k.minX)); this.maxX = Math.max(...this.kids.map((k) => k.maxX));
+    this.minZ = Math.min(...this.kids.map((k) => k.minZ)); this.maxZ = Math.max(...this.kids.map((k) => k.maxZ));
+  }
+  prep(x, z, c) {
+    let any = false, lo = BIG, hi = -BIG;
+    for (let i = 0; i < this.kids.length; i++) {
+      const k = this.kids[i];
+      const on = k.inXZ(x, z) && k.prep(x, z, c);
+      this.on[i] = on ? 1 : 0;
+      if (on) { any = true; if (k.lo < lo) lo = k.lo; if (k.hi > hi) hi = k.hi; }
+    }
+    this.lo = lo; this.hi = hi;
+    return any;
+  }
+  sd(y) {
+    let m = BIG;
+    for (let i = 0; i < this.kids.length; i++) {
+      if (!this.on[i]) continue;
+      const k = this.kids[i];
+      if (y < k.lo - EPS || y > k.hi + EPS) continue;
+      const v = k.sd(y);
+      if (v < m) m = v;
+    }
+    return m;
+  }
+}
+
+class Intersect extends Node {
+  constructor(s, e, blobs, L) {
+    super(e, L);
+    this.kids = s.of.map((k) => compileNode(k, e, blobs, L));
+    this.minX = Math.max(...this.kids.map((k) => k.minX)); this.maxX = Math.min(...this.kids.map((k) => k.maxX));
+    this.minZ = Math.max(...this.kids.map((k) => k.minZ)); this.maxZ = Math.min(...this.kids.map((k) => k.maxZ));
+  }
+  prep(x, z, c) {
+    let lo = -BIG, hi = BIG;
+    for (const k of this.kids) {
+      if (!k.inXZ(x, z) || !k.prep(x, z, c)) return false;
+      if (k.lo > lo) lo = k.lo; if (k.hi < hi) hi = k.hi;
+    }
+    this.lo = lo; this.hi = hi;
+    return lo <= hi + 2 * EPS;
+  }
+  sd(y) {
+    let m = -BIG;
+    for (const k of this.kids) {
+      if (y < k.lo - EPS || y > k.hi + EPS) return BIG;
+      const v = k.sd(y);
+      if (v > m) m = v;
+    }
+    return m;
+  }
+}
+
+class Subtract extends Node {
+  // of[0] minus the union of the rest: max(a, -b)
+  constructor(s, e, blobs, L) {
+    super(e, L);
+    this.a = compileNode(s.of[0], e, blobs, L);
+    this.b = compileNode(s.of.length === 2 ? s.of[1] : { kind: 'union', of: s.of.slice(1) }, -L, blobs, -e);
+    this.minX = this.a.minX; this.maxX = this.a.maxX; this.minZ = this.a.minZ; this.maxZ = this.a.maxZ;
+  }
+  prep(x, z, c) {
+    if (!this.a.prep(x, z, c)) return false;
+    this.bon = this.b.inXZ(x, z) && this.b.prep(x, z, c);
+    this.lo = this.a.lo; this.hi = this.a.hi;
+    return true;
+  }
+  sd(y) {
+    const a = this.a.sd(y);
+    if (!this.bon || y < this.b.lo - EPS || y > this.b.hi + EPS) return a;
+    const nb = -this.b.sd(y);
+    return a > nb ? a : nb;
+  }
+}
+
+class Smooth extends Node {
+  // polynomial smooth union: min(a, b) - h*h*k/4, h = max(k - |a - b|, 0) / k
+  constructor(s, e, blobs, L) {
+    super(e, L);
+    this.k = s.k;
+    const ce = e + 1.25 * s.k;
+    this.a = compileNode(s.of[0], ce, blobs, L);
+    this.b = compileNode(s.of[1], ce, blobs, L);
+    this.minX = Math.min(this.a.minX, this.b.minX); this.maxX = Math.max(this.a.maxX, this.b.maxX);
+    this.minZ = Math.min(this.a.minZ, this.b.minZ); this.maxZ = Math.max(this.a.maxZ, this.b.maxZ);
+  }
+  prep(x, z, c) {
+    this.aon = this.a.inXZ(x, z) && this.a.prep(x, z, c);
+    this.bon = this.b.inXZ(x, z) && this.b.prep(x, z, c);
+    if (!this.aon && !this.bon) return false;
+    this.lo = Math.min(this.aon ? this.a.lo : BIG, this.bon ? this.b.lo : BIG);
+    this.hi = Math.max(this.aon ? this.a.hi : -BIG, this.bon ? this.b.hi : -BIG);
+    return true;
+  }
+  sd(y) {
+    const a = this.aon && y >= this.a.lo - EPS && y <= this.a.hi + EPS ? this.a.sd(y) : BIG;
+    const b = this.bon && y >= this.b.lo - EPS && y <= this.b.hi + EPS ? this.b.sd(y) : BIG;
+    const h = Math.max(this.k - Math.abs(a - b), 0) / this.k;
+    return Math.min(a, b) - h * h * this.k * 0.25;
+  }
+}
+
+class Offset extends Node {
+  constructor(s, e, blobs, L) {
+    super(e, L);
+    this.d = s.d;
+    this.a = compileNode(s.of, e + s.d, blobs, L + s.d);
+    this.minX = this.a.minX; this.maxX = this.a.maxX; this.minZ = this.a.minZ; this.maxZ = this.a.maxZ;
+  }
+  prep(x, z, c) {
+    if (!this.a.prep(x, z, c)) return false;
+    this.lo = this.a.lo; this.hi = this.a.hi;
+    return true;
+  }
+  sd(y) { return this.a.sd(y) - this.d; }
+}
+
+class Displace extends Node {
+  constructor(s, e, blobs, L) {
+    super(e, L);
+    this.amp = s.amp;
+    this.n = makeNoise(s.noise);
+    this.a = compileNode(s.of, e + Math.abs(s.amp), blobs, L - Math.abs(s.amp));
+    this.minX = this.a.minX; this.maxX = this.a.maxX; this.minZ = this.a.minZ; this.maxZ = this.a.maxZ;
+  }
+  prep(x, z, c) {
+    if (!this.a.prep(x, z, c)) return false;
+    this.x = x; this.z = z;
+    this.lo = this.a.lo; this.hi = this.a.hi;
+    return true;
+  }
+  sd(y) { return this.a.sd(y) + this.amp * this.n(this.x, y, this.z); }
+}
+
+class ClipY extends Node {
+  constructor(s, e, blobs, L) {
+    super(e, L);
+    this.y0f = s.y0 == null ? null : yrefFn(s.y0);
+    this.y1f = s.y1 == null ? null : yrefFn(s.y1);
+    this.a = compileNode(s.of, e, blobs, L);
+    this.minX = this.a.minX; this.maxX = this.a.maxX; this.minZ = this.a.minZ; this.maxZ = this.a.maxZ;
+  }
+  prep(x, z, c) {
+    if (!this.a.prep(x, z, c)) return false;
+    this.y0 = this.y0f ? this.y0f(c) : -BIG;
+    this.y1 = this.y1f ? this.y1f(c) : BIG;
+    this.lo = Math.max(this.a.lo, this.y0 - this.e);
+    this.hi = Math.min(this.a.hi, this.y1 + this.e);
+    return this.lo <= this.hi;
+  }
+  sd(y) { return Math.max(this.a.sd(y), this.y0 - y, y - this.y1); }
+}
+
+const CLASSES = {
+  sphere: Sphere, box: Box, cylinder: Cylinder, cone: Cone, bowl: Bowl, ring: Ring, torus: Torus, capsulePath: CapsulePath,
+  extrude: Extrude, heightfield: Heightfield, mask: Mask, union: Union, intersect: Intersect, subtract: Subtract,
+  smooth: Smooth, offset: Offset, displace: Displace, clipY: ClipY,
+};
+
+function compileNode(s, e, blobs, L = e) {
+  const C = CLASSES[s?.kind];
+  if (!C) throw new Error(`shape: unknown kind '${s?.kind}'`);
+  return new C(s, e, blobs, L);
+}
+
+/**
+ * Compile a (validated) shape tree. `blobs` is the IR's `blobs` map or a resolver `name => blob`.
+ * The result has `minX..maxZ` (conservative x/z bounds), `prep(x, z, col)` and `sd(y)`.
+ */
+export function compileShape(shape, blobs) {
+  const err = shapeError(shape);
+  if (err) throw new Error(err);
+  return compileNode(shape, 0, blobs);
+}
+
+/**
+ * Evaluate a compiled shape over one column: calls `cb(y)` for every integer y in [ylo, yhi] that is inside
+ * (sd <= 0), ascending. Returns the number of inside cells. Plan-time helper (the evaluator inlines this loop).
+ */
+export function columnCells(node, x, z, col, ylo, yhi, cb) {
+  if (!node.inXZ(x, z) || !node.prep(x, z, col)) return 0;
+  const a = Math.max(ylo, -Math.floor(-(node.lo - EPS))), b = Math.min(yhi, Math.floor(node.hi + EPS));
+  let n = 0;
+  for (let y = a; y <= b; y++) if (node.sd(y) <= 0) { n++; if (cb) cb(y); }
+  return n;
+}
+
+/** Signed distance of a shape at one point (plan time and tests). */
+export function sdAt(node, x, y, z, col) {
+  if (!node.inXZ(x, z) || !node.prep(x, z, col)) return BIG;
+  if (y < node.lo - EPS || y > node.hi + EPS) return BIG;
+  return node.sd(y);
+}
+
+/**
+ * Conservative world bounds of a shape: `{minX, maxX, minZ, maxZ}` (integers, from the compiled node) plus
+ * `minY`/`maxY` when the shape's y extent does not depend on columns (else null).
+ */
+export function shapeBounds(shape, blobs) {
+  const n = compileShape(shape, blobs);
+  const b = { minX: Math.floor(n.minX) + 0, maxX: -Math.floor(-n.maxX) + 0, minZ: Math.floor(n.minZ) + 0, maxZ: -Math.floor(-n.maxZ) + 0, minY: null, maxY: null };
+  const ys = staticY(shape);
+  if (ys) { b.minY = Math.floor(ys[0]) + 0; b.maxY = -Math.floor(-ys[1]) + 0; }
+  return b;
+}
+
+/** [lo, hi] of a shape's y extent when absolute (null when column-dependent or unbounded). */
+function staticY(s) {
+  const A = (r) => yrefAbs(r);
+  switch (s.kind) {
+    case 'sphere': { const y = A(s.c[1]); return y === null ? null : [y - s.r, y + s.r]; }
+    case 'box': { const a = A(s.min[1]), b = A(s.max[1]); return a === null || b === null ? null : [a, b]; }
+    case 'cylinder': case 'ring': case 'cone': { const y = A(s.c[1]); return y === null ? null : [y, y + s.h - 1]; }
+    case 'bowl': { const y = A(s.c[1]); return y === null ? null : [y - s.depth, y + (s.h ?? BOWL_DEFAULT_H)]; }
+    case 'torus': { const y = A(s.c[1]); return y === null ? null : [y - s.r, y + s.r]; }
+    case 'capsulePath': { const ys = s.points.map((p) => p[1]); return [Math.min(...ys) - s.r, Math.max(...ys) + s.r]; }
+    case 'extrude': { const a = A(s.y0), b = A(s.y1); return a === null || b === null ? null : [a, b]; }
+    case 'heightfield': case 'mask': return null;
+    case 'union': case 'smooth': {
+      const rs = s.of.map(staticY);
+      if (rs.some((r) => !r)) return null;
+      const pad = s.kind === 'smooth' ? s.k : 0;
+      return [Math.min(...rs.map((r) => r[0])) - pad, Math.max(...rs.map((r) => r[1])) + pad];
+    }
+    case 'intersect': {
+      const rs = s.of.map(staticY).filter(Boolean);
+      if (!rs.length) return null;
+      return [Math.max(...rs.map((r) => r[0])), Math.min(...rs.map((r) => r[1]))];
+    }
+    case 'subtract': return staticY(s.of[0]);
+    case 'offset': { const r = staticY(s.of); return r ? [r[0] - Math.abs(s.d), r[1] + Math.abs(s.d)] : null; }
+    case 'displace': { const r = staticY(s.of); return r ? [r[0] - Math.abs(s.amp), r[1] + Math.abs(s.amp)] : null; }
+    case 'clipY': {
+      const r = staticY(s.of);
+      const a = s.y0 == null ? null : A(s.y0), b = s.y1 == null ? null : A(s.y1);
+      if (r) return [a === null ? r[0] : Math.max(r[0], a), b === null ? r[1] : Math.min(r[1], b)];
+      if (a !== null && b !== null) return [a, b];
+      return null;
+    }
+    default: return null;
+  }
+}

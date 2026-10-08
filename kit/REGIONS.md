@@ -128,21 +128,53 @@ pillar, ring, terrace, lot pads, stair, bridge, graded road) compile into them a
   OS (D9).
 - Limits: 2 s and 256 MB per tile (the pool enforces them); over 1M cells the mod splits the entry by section rows.
 
+## Plan CLI (how the sidecar runs a plan)
+
+The sidecar runs, with cwd the plan dir `<data>/regions/plans/<planId>/`:
+
+```
+node --permission --allow-fs-read=<kit> --allow-fs-read=<planDir> [--allow-fs-read=<programs dir>] --allow-fs-write=<planDir>
+     --max-old-space-size=1024 --import=<no-network preload>
+     <kit>/tools/region.mjs plan <program.mjs> --params <planDir>/params.json --survey <planDir>/survey.bin --seed <u64>
+     --claim minX,minZ,maxX,maxZ,minY,maxY [--bible <planDir>/bible.json] --out <planDir> --json
+```
+
+- `<program.mjs>` is an absolute path: `<kit>/regions/<id>.mjs` for a bundled program (so its relative kit imports resolve),
+  else the player's file under `<gameDir>/architect/regions/programs`.
+- `--claim` carries the y range as its 5th and 6th numbers (CONTRACT §6 lists `x0,z0,x1,z1`; the IR's claim needs y).
+- `--bible` is `{id?, version?, roles: {role: blockState}}`: the bible's roles already merged with the request's `roles`
+  (the request's win). It is absent when there are no roles.
+- The CLI writes `<out>/ir.json`: the canonical IR JSON, whose SHA-256 is `irSha`. It may write `<out>/plan.json`; the sidecar
+  keeps its fields and adds its own.
+- Its stdout's last JSON line is `{ok: true, irSha?, notes?: [string]}` or `{ok: false, error}`; exit 0 on success, 1 when
+  the program throws or the IR is invalid (the `error` text is what `region.failed` carries), 2 on bad usage. The sidecar
+  takes `lots`, `stages`, `anchors`, `budget` and `tiles` from `ir.json` itself, not from stdout.
+- Limits the sidecar enforces around it: 30 s (wall clock), 1 GB heap, `ir.json` at most 4 MB.
+
 ## Sidecar protocol (2, additive; CONTRACT §6 "Sidecar protocol")
 
 Client -> sidecar (each is acked like every message, `{ok, error?, result?}`):
-- `region.plan {program, params, seed?, claim, surveyBlobId, bible?, bibleVersion?, roles?}` -> ack `{planId}`; then
-  `region.planned {planId, irSha, ir, lots, stages, anchors, budget, tiles, notes}` or `region.failed {planId, message}`.
+- `region.plan {program, params, seed?, claim, surveyBlobId, bible?, bibleVersion?, roles?}` -> ack `{planId, seed}` (the
+  seed used: the request's, or one the sidecar picked; a u64 decimal string); then
+  `region.planned {planId, irSha, ir, lots, stages, anchors, budget, tiles, notes, ms?}` or `region.failed {planId, message}`.
   `program` is a bundled id (`kit/regions/<id>.mjs`) or a path under `<gameDir>/architect/regions/programs`. The plan dir is
   `<data>/regions/plans/<planId>/` (program copy, `ir.json`, `plan.json`). `ir` travels in `region.planned` so the mod can keep
   a copy in the world (it is at most 4 MB; sent as `irBlobId` instead when over 1 MB: the mod reads the blob).
+  `ir` is a **string**: the exact `ir.json` text, so the mod can store the bytes whose SHA-256 is `irSha` without
+  re-serialising; the blob `<data>/blobs/<irBlobId>` holds the same bytes. Both messages are broadcast to protocol-2 clients.
 - `region.tiles.request {planId, irSha, ir?, tiles: [{key, stage, set, heights}]}` (`heights`: base64 `ARSV`): ack
   `{accepted: n}`, or `ok: false, error: "ir_unknown"` when the sidecar has neither the plan dir nor an IR of that sha cached
-  and the request carries no `ir`. Then one `region.tile` per tile, in any order:
+  and the request carries no `ir`. `ir` is the `ir.json` text (preferred) or its JSON object (hashed as canonical JSON); it
+  must hash to `irSha`. The IR cache is by sha, so a known IR is found under any `planId`. At most 64 tiles per request.
+  Then one `region.tile` per tile, in any order:
   `region.tile {planId, key, stage, set, seq, more, data, count, sha}` (`data`: base64 of a slice of the gzip bytes, at most
   1 MB per frame, `seq` from 0; `count` and `sha` on every frame), or `region.tile.error {planId, key, stage, set, message}`.
-- `region.release {planId}`: drop cached tiles and the cached IR.
+- `region.release {planId}` -> ack `{planId, dropped}`: drop this connection's queued tiles and the cached IR. The plan dir
+  stays (a later request without `ir` still finds the IR there).
 
 Backpressure: the mod keeps at most W tiles outstanding (config `regionWindow`, default 4); the sidecar evaluates on a
 `worker_threads` pool (`regionWorkers`, default `min(4, cores/2)`), at most W evaluated tiles per plan held in memory.
+In the sidecar a tile holds one of its plan's W slots (per connection) from evaluation until its last frame is flushed to the
+socket; requests beyond W queue (at most 256 per plan and connection). A connection that goes away loses its queued and
+in-flight tiles; the plan dirs and the IR cache stay.
 Snapshot features: `region.plan`, `region.tiles`.
