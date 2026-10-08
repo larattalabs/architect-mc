@@ -88,6 +88,14 @@ final class InfraSpec {
 			i++;
 		}
 		o.add("palette", palette);
+		if (r.cells().stream().anyMatch(c -> c.cond() != null)) {
+			byte[] cond = new byte[r.cells().size()];
+			int k = 0;
+			for (CellWrite c : r.cells()) {
+				cond[k++] = (byte) (c.cond() == null ? -1 : c.cond().ordinal());
+			}
+			o.addProperty("cond", Base64.getEncoder().encodeToString(cond)); // phase 6a: CellWrite.Cond, -1 = none
+		}
 		o.addProperty("pos", Base64.getEncoder().encodeToString(pos.array()));
 		o.addProperty("idx", Base64.getEncoder().encodeToString(idx.array()));
 		if (nbt.size() > 0) {
@@ -97,7 +105,7 @@ final class InfraSpec {
 	}
 
 	/** The cells of {@link #cells}: positions, states and block entity data. */
-	record Cells(List<BlockPos> pos, List<BlockState> states, List<@Nullable CompoundTag> nbt) {
+	record Cells(List<BlockPos> pos, List<BlockState> states, List<@Nullable CompoundTag> nbt, byte @Nullable [] cond) {
 	}
 
 	static Cells cellsOf(JsonObject o) {
@@ -129,6 +137,6 @@ final class InfraSpec {
 			}
 			ns.add(t);
 		}
-		return new Cells(ps, ss, ns);
+		return new Cells(ps, ss, ns, o.has("cond") ? Base64.getDecoder().decode(o.get("cond").getAsString()) : null);
 	}
 }

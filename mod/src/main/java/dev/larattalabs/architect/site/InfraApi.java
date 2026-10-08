@@ -86,12 +86,22 @@ public final class InfraApi {
 		List<BlockPos> pos = new ArrayList<>(r.cells().size());
 		List<BlockState> st = new ArrayList<>(r.cells().size());
 		List<@Nullable CompoundTag> nbt = new ArrayList<>(r.cells().size());
+		byte[] cond = null;
+		int k = 0;
 		for (CellWrite c : r.cells()) {
 			pos.add(c.pos());
 			st.add(c.state());
 			nbt.add(c.nbt());
+			if (c.cond() != null) {
+				if (cond == null) {
+					cond = new byte[r.cells().size()];
+					java.util.Arrays.fill(cond, (byte) -1);
+				}
+				cond[k] = (byte) c.cond().ordinal();
+			}
+			k++;
 		}
-		return InfraPlace.checkCells(r.level(), r.kind(), Journal.Policy.valueOf(r.policy().name()), pos, st, nbt, r.naturalOnly(),
+		return InfraPlace.checkCells(r.level(), r.kind(), Journal.Policy.valueOf(r.policy().name()), pos, st, nbt, cond, r.naturalOnly(),
 			r.overlap() == dev.larattalabs.architect.api.OverlapPolicy.LAYER, r.owner(), r.force(), dryRun);
 	}
 

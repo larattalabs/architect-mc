@@ -464,7 +464,7 @@ public final class Batches {
 			cells = InfraSpec.cellsOf(i.spec);
 			tr.mark("decode");
 			c = InfraPlace.checkCells(level, i.spec.get("kind").getAsString(), dev.larattalabs.architect.journal.Journal.Policy.valueOf(i.spec.get("policy")
-				.getAsString()), cells.pos(), cells.states(), cells.nbt(), i.spec.get("naturalOnly").getAsBoolean(), i.layer, b.owner, i.force, true);
+				.getAsString()), cells.pos(), cells.states(), cells.nbt(), cells.cond(), i.spec.get("naturalOnly").getAsBoolean(), i.layer, b.owner, i.force, true);
 		}
 		}
 		tr.mark("check");

@@ -872,11 +872,11 @@ public final class RegionsImpl implements Regions {
 	}
 
 	/** A refusal with its reason (the futures fail with it; {@link #reasonOf} reads it back). */
-	public static final class RegionException extends RuntimeException {
+	public static final class RegionException extends dev.larattalabs.architect.api.RegionRefused {
 		public final Reason reason;
 
 		RegionException(Reason r, String msg) {
-			super(msg);
+			super(r, msg);
 			this.reason = r;
 		}
 	}

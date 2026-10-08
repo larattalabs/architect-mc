@@ -147,6 +147,16 @@ public final class InfraPlace {
 	 */
 	public static Check checkCells(ServerLevel level, String kind, Journal.Policy policy, List<BlockPos> pos, List<BlockState> states,
 		List<@Nullable CompoundTag> nbt, boolean naturalOnly, boolean layer, @Nullable String owner, boolean force, boolean dryRun) {
+		return checkCells(level, kind, policy, pos, states, nbt, null, naturalOnly, layer, owner, force, dryRun);
+	}
+
+	/**
+	 * {@link #checkCells} with per-cell conditions (phase 6a, {@code CellWrite.Cond}; -1 or null = {@code naturalOnly}). A cell
+	 * whose condition fails is skipped and noted. ALWAYS_OURS passes a cell an entry of the same owner owns.
+	 */
+	public static Check checkCells(ServerLevel level, String kind, Journal.Policy policy, List<BlockPos> pos, List<BlockState> states,
+		List<@Nullable CompoundTag> nbt, byte @Nullable [] conds, boolean naturalOnly, boolean layer, @Nullable String owner, boolean force,
+		boolean dryRun) {
 		String why = WorldJournal.unavailable();
 		if (why != null) {
 			return refused(Reason.JOURNAL_UNAVAILABLE, why);
@@ -180,7 +190,14 @@ public final class InfraPlace {
 					return refused(Reason.NOT_LOADED, "the cell site is not loaded at " + x + ", " + z + " (walk closer)");
 				}
 			}
-			if (naturalOnly) {
+			int cond = conds == null ? -1 : conds[at.get(p)];
+			if (cond >= 0) {
+				BlockState s = level.getBlockState(m.set(x, y, z));
+				if (!dev.larattalabs.architect.region.CellCond.passes(cond, s, cond == 3 && ownedBySameOwner(level, p, owner))) {
+					skipped++;
+					continue;
+				}
+			} else if (naturalOnly) {
 				int f = TerrainFit.flags(level, m.set(x, y, z));
 				BlockState s = level.getBlockState(m);
 				boolean natural = (f & TerrainFit.BLOCK_ENTITY) == 0 && (s.isAir() || (f & TerrainFit.NATURAL) != 0 || (f & TerrainFit.WATER) != 0
@@ -268,6 +285,30 @@ public final class InfraPlace {
 		spec.addProperty("cells", ps.length);
 		spec.addProperty("naturalOnly", naturalOnly);
 		return new Check(List.of(), notes, ps, vs, new Anchors.Bounds(bb[0], bb[1], bb[2], bb[3], bb[4], bb[5]), hits, spec);
+	}
+
+	/** ALWAYS_OURS for a cell site: an active entry (not leaves) of a site with the same owner has the cell. */
+	static boolean ownedBySameOwner(ServerLevel level, long p, @Nullable String owner) {
+		JournalStore js = WorldJournal.storeOrNull();
+		if (js == null) {
+			return false;
+		}
+		long k = Sections.key(p);
+		for (String id : js.inSection(Sites.dimensionId(level), k)) {
+			JournalStore.Meta mm = js.meta(id);
+			if (mm == null || !mm.active() || mm.kind().equals(WorldJournal.LEAVES) || !java.util.Objects.equals(Sites.ownerOf(mm.site()), owner)) {
+				continue;
+			}
+			try {
+				SectionCells sc = js.section(id, k);
+				if (sc != null && sc.has(Sections.index(p))) {
+					return true;
+				}
+			} catch (IOException e) {
+				return false;
+			}
+		}
+		return false;
 	}
 
 	/** The overlap rules of a cell site (REFUSE, OVERLAP_BUSY, OVERLAP_OWNED, LAYER_DEPTH), or null; notes the sites it goes on. */
