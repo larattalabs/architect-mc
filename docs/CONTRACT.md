@@ -4108,3 +4108,38 @@ Where this section and the 5b text above disagree, this section wins. (The Java 
 - **Answers:** S1 KEEP default. S2 covered cells wait for phase 6. S3 version/headVersion, `ENTRY_VERSIONED` and `outdated`.
   S4 paid survival revert. S5 local edits within 3 existing plus 2 new parts; whole-look changes route away (above). S6 buildings
   only. S7 frame rule. S8 6 deltas. S9 polish uses the entry's own designer model by default, with a caller override.
+
+## Phase 5b as built (API 1.7.0, mod 0.10.0, recorded 2026-10-08)
+
+Built on branch `phase/5b`. Gate record: `artifacts/gate5b/REPORT.md` (local). Where this section and the 5b text disagree,
+this section says what shipped.
+
+**Deviations and decisions made while building:**
+- **Unframed versions borrow the frame.** A pre-5b version (no `frame` in its blueprint JSON) takes the framed side's
+  `origin` when compared with a framed version, in the kit's `diff.mjs` and in the mod's `TemplateDelta` alike ("missing =
+  [0,0,0]" put most pre-5b entries one block off). Two unframed versions compare at [0,0,0].
+- **`DeltaRequest` gains `owner`** (the owner rule needs the caller's identity); the 7-argument constructor stays.
+  `Designs.estimatePolish` returns `CompletableFuture<Estimate>`. `Sites.outdated` returns `OutdatedSite` records.
+- **The API revert** passes the site's own owner with `force` (a revert is the site owner's undo).
+- **Shape guards** are limited to S-owned neighbours whose world value is still S's `after` (kept or edited cells are never
+  guards, so a player's edit is never re-written as "ours").
+- **The leaf ring of a growth** is recorded as the delta entry's own ring (head data), not a change to the base's ring.
+- **Delta jobs (over 50k cells) are not resumed after a clean stop:** settle rolls them back (D4-D6) like an unclean stop.
+- **Instant deltas are atomic.** A batch delta item checks on one tick and writes on the next (the check is used only when
+  the site record did not change in between). A `cancelBatch` therefore never finds a half-applied instant delta; the
+  in-flight rollback path applies to delta jobs only.
+- **`BLOCK_ENTITIES`** refuses in every `playerEdits` mode, a kept (player-edited) cell included.
+- **Lost writes (crash safety, added).** An unclean stop loses block writes made since the world's last save, while the
+  journal and the site record are on disk. At world start, a site's top delta whose own cells (before != after, uncovered)
+  mostly hold their `before` is undone (one undo, exact) and the record follows the world. So D7/D8 kills end at a
+  consistent version a, not "record b, world a". Construction deltas are left alone.
+- **Write order.** A delta writes its clears (cells becoming air) before its other cells, instant and ticked, so a block
+  under one the delta removes doesn't react to it first. A dirt path under a solid block is planned as dirt (vanilla turns it
+  at its next tick), so the captured `after`, a construction target and a fresh placement agree.
+- **Template deltas are cached** by the two versions' content; batch items wait for the diff on a worker thread.
+- **Deconstruct after construction deltas:** growth cells' pre-site value comes from the delta's `before`; restore-box cells
+  no entry of the site recorded are not the site's.
+- **Fixtures:** the tavern versions gained a `yard` part (fence, glass pane, a free-standing gate door) for the shape-update,
+  opened-door and minimality checks.
+- **Prompt development** used the 4b Mosswater items and the 4c tavern (gate 1's cabin and tower entries no longer exist on
+  disk; gate 2's town house has no part map, so no part-named target).
