@@ -145,6 +145,10 @@ public final class Batches {
 		boolean creative = server.getDefaultGameType() == GameType.CREATIVE;
 		List<QItem> items = new ArrayList<>();
 		for (Batch.Item it : spec.items()) {
+			if (it.delta() != null) {
+				items.add(deltaItem(server, spec, it, plan.stageOf().get(it.itemKey()), survival));
+				continue;
+			}
 			if (it.request() == null) {
 				items.add(infraItem(server, spec, it, plan.stageOf().get(it.itemKey()), survival));
 				continue;
@@ -207,6 +211,112 @@ public final class Batches {
 		}
 		CHANGED.add(id);
 		return id;
+	}
+
+	/** The stage-site token of a delta item (phase 5b): {@code delta:<siteId>:<delta entry>} (never a group site). */
+	public static final String DELTA_TOKEN = "delta:";
+
+	/**
+	 * A delta item (phase 5b): a placed site to another version; its request as JSON; the mode resolved now (instant where the
+	 * actor may, else a construction delta).
+	 */
+	private static QItem deltaItem(MinecraftServer server, Batch spec, Batch.Item it, String stage, boolean survival) {
+		dev.larattalabs.architect.api.DeltaRequest d = it.delta();
+		Site site = Sites.get(d.siteId());
+		JsonObject ext = spec.ext().deepCopy();
+		d.ext().entrySet().forEach(e -> ext.add(e.getKey(), e.getValue().deepCopy()));
+		ServerPlayer actor = d.actor();
+		boolean construction = survival && !dev.larattalabs.architect.apiimpl.ApiRules.permission2(actor);
+		QItem q = new QItem(it.itemKey(), stage, it.after(), "delta", site == null ? "minecraft:overworld" : site.dimension(), site == null ? 0 : site.box()
+			.minX(), site == null ? 0 : site.box().minY(), site == null ? 0 : site.box().minZ(), 0, d.force(), ext, actor == null ? null : actor
+				.getStringUUID(), construction, survival);
+		q.itemKind = "delta";
+		JsonObject sp = new JsonObject();
+		sp.addProperty("siteId", d.siteId());
+		sp.addProperty("toVersion", d.toVersion());
+		sp.addProperty("playerEdits", d.playerEdits() == null ? "KEEP" : d.playerEdits().name());
+		sp.addProperty("layer", (d.overlap() != null ? d.overlap() : spec.overlap()) == dev.larattalabs.architect.api.OverlapPolicy.LAYER);
+		if (d.owner() != null) {
+			sp.addProperty("owner", d.owner());
+		}
+		q.spec = sp;
+		if (site == null) {
+			q.fail(Reason.OTHER.name(), "No site " + d.siteId());
+		}
+		return q;
+	}
+
+	/** The internal request of a delta item. */
+	static SiteDeltas.Request deltaOf(QItem i) {
+		JsonObject sp = i.spec;
+		return new SiteDeltas.Request(sp.get("siteId").getAsString(), sp.get("toVersion").getAsInt(), dev.larattalabs.architect.delta.DeltaPlanner.Edits
+			.valueOf(sp.get("playerEdits").getAsString()), sp.get("layer").getAsBoolean(), sp.has("owner") ? sp.get("owner").getAsString() : null, i.force);
+	}
+
+	/**
+	 * Starts a delta item: its check (temporary blockers wait under the wait policy: SITE_BUSY, a player or mob in its cells,
+	 * OVERLAP_BUSY, unloaded chunks), then the apply (instant: written now; a construction delta: started). ITEM_PLACED means
+	 * "applied". A later delta of the same site in the batch runs after this one (the site is busy until it is done).
+	 */
+	private static void tryStartDelta(MinecraftServer server, QBatch b, QItem i) {
+		SiteDeltas.Request r = deltaOf(i);
+		Site site = Sites.get(r.siteId());
+		ServerLevel level = site == null ? null : Sites.levelOf(server, site);
+		if (level == null) {
+			fail(b, i, site == null ? Reason.OTHER : Reason.NOT_LOADED, site == null ? "No site " + r.siteId() : i.dimension + " is not loaded");
+			return;
+		}
+		// an earlier delta item of the same site in this batch goes first
+		for (QItem o : b.items) {
+			if (o == i) {
+				break;
+			}
+			if ("delta".equals(o.itemKind) && o.spec != null && r.siteId().equals(o.spec.get("siteId").getAsString()) && !o.status.terminal()) {
+				waitFor(b, i, Reason.SITE_BUSY, r.siteId() + " has an earlier update in this batch");
+				return;
+			}
+		}
+		SiteDeltas.Check c = i.construction ? Builder.checkConstructionDelta(level, r) : SiteDeltas.check(level, r);
+		if (!c.ok()) {
+			SiteDeltas.Refusal f = c.refusals().get(0);
+			if (c.waits() || TEMPORARY.contains(f.reason()) || f.reason() == Reason.SITE_BUSY) {
+				waitFor(b, i, f.reason(), f.message());
+			} else {
+				fail(b, i, f.reason(), f.message());
+			}
+			return;
+		}
+		try {
+			SiteDeltas.Result res = i.construction ? Builder.applyConstructionDelta(level, r, null) : SiteDeltas.applyChecked(level, c, r.edits()
+				== dev.larattalabs.architect.delta.DeltaPlanner.Edits.OVERWRITE, "delta");
+			i.siteId = r.siteId();
+			startStage(server, b, i);
+			// the stage remembers the delta (its undo reverts it), never as a group site
+			String entry = null;
+			if (res.after() != null && !res.after().versioning().history().isEmpty()) {
+				entry = res.after().versioning().history().get(res.after().versioning().history().size() - 1).deltaEntry();
+			}
+			SiteGroupRec g = Sites.group(b.group);
+			if (g != null && entry != null) {
+				String token = DELTA_TOKEN + r.siteId() + ":" + entry;
+				SiteGroupRec n = g;
+				for (SiteGroupRec.StageRec st : g.stages()) {
+					if (st.items().contains(i.key) && st.batchId().equals(b.id) && !st.sites().contains(token)) {
+						List<String> ss = new ArrayList<>(st.sites());
+						ss.add(token);
+						n = n.withStage(st.name(), x -> x.withSites(ss));
+					}
+				}
+				Sites.putGroup(server, n);
+			}
+			placedItem(server, b, i);
+		} catch (Sites.SiteException e) {
+			if (TEMPORARY.contains(e.reason()) || e.reason() == Reason.SITE_BUSY) {
+				waitFor(b, i, e.reason(), e.getMessage());
+			} else {
+				fail(b, i, e.reason(), e.getMessage());
+			}
+		}
 	}
 
 	/** A road or cell-site item (phase 4e): its request as JSON; the mode rule checked now (INSTANT only). */
@@ -369,7 +479,8 @@ public final class Batches {
 	private static int @Nullable [] defaultCrate(MinecraftServer server, Batch spec, List<QItem> items) {
 		Batch.Item first = null;
 		for (int k = 0; k < items.size(); k++) {
-			if (items.get(k).construction && items.get(k).status != QItem.Status.FAILED) {
+			// a delta item has its site's own crate (phase 5b), never the batch's shared one
+			if (items.get(k).construction && items.get(k).status != QItem.Status.FAILED && spec.items().get(k).request() != null) {
 				first = spec.items().get(k);
 				break;
 			}
@@ -594,6 +705,10 @@ public final class Batches {
 	}
 
 	private static void tryStart0(MinecraftServer server, QBatch b, QItem i) {
+		if ("delta".equals(i.itemKind)) {
+			tryStartDelta(server, b, i);
+			return;
+		}
 		if (!"building".equals(i.itemKind)) {
 			tryStartInfra(server, b, i);
 			return;

@@ -956,7 +956,52 @@ public final class SiteDeltas {
 			}
 			return applyChecked(level, c, false, "forward");
 		}
-		// R1-R5 over the suffix: one undo of the deltas above k (and their guard entries)
+		return undoSuffix(level, b, idx, deltas, ch.get(idx)[0], from);
+	}
+
+	/**
+	 * Reverts the delta entry {@code entryId} of a site and every delta above it (a stage undo of a delta stage): one undo of the
+	 * suffix that starts at it; refused when a later delta stands on the site and {@code force} is off (4d's dependency rule).
+	 */
+	public static Result revertDelta(ServerLevel level, String siteId, String entryId, boolean force) throws Sites.SiteException {
+		Site b = Sites.get(siteId);
+		if (b == null) {
+			throw new Sites.SiteException("No site " + siteId);
+		}
+		MinecraftServer server = level.getServer();
+		int from = versionOf(server, b);
+		b = Sites.get(siteId);
+		List<JournalStore.Meta> deltas = SiteJournal.active(siteId).stream().filter(m -> m.kind().equals(WorldJournal.DELTA)).sorted(java.util.Comparator
+			.comparingLong(JournalStore.Meta::layer)).toList();
+		int at = -1;
+		for (int i = 0; i < deltas.size(); i++) {
+			if (deltas.get(i).id().equals(entryId)) {
+				at = i;
+			}
+		}
+		if (at < 0) {
+			return new Result(true, siteId, from, from, 0, List.of(), 0, List.of(), List.of("delta " + entryId + " is not standing (reverted or folded)"), b,
+				b);
+		}
+		if (at < deltas.size() - 1 && !force) {
+			throw new Sites.SiteException(Reason.OTHER, siteId + " has " + (deltas.size() - 1 - at) + " later update(s) on top of this one; undo them "
+				+ "first, or pass force");
+		}
+		for (int i = at; i < deltas.size(); i++) {
+			if (!historyRevertible(b, deltas.get(i).id())) {
+				throw new Sites.SiteException(Reason.NOT_ALLOWED, siteId + "'s update " + deltas.get(i).id() + " was built as a construction delta; "
+					+ "only a forward delta goes back");
+			}
+		}
+		List<int[]> ch = chain(b);
+		return undoSuffix(level, b, at, deltas, ch.get(at)[0], from);
+	}
+
+	/** R1-R5 over the suffix of {@code deltas} starting at {@code idx}: one undo of those deltas (and their guard entries). */
+	static Result undoSuffix(ServerLevel level, Site b, int idx, List<JournalStore.Meta> deltas, int k, int from) throws Sites.SiteException {
+		MinecraftServer server = level.getServer();
+		String siteId = b.id();
+		List<int[]> ch = chain(b);
 		List<String> ids = new ArrayList<>();
 		Set<String> undoDeltas = new LinkedHashSet<>();
 		for (int i = idx; i < deltas.size(); i++) {

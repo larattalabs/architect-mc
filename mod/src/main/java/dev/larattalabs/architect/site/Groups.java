@@ -11,7 +11,10 @@ import dev.larattalabs.architect.batch.StageRules;
 import dev.larattalabs.architect.journal.Journal;
 import dev.larattalabs.architect.placement.Occupancy;
 import java.util.ArrayList;
+import dev.larattalabs.architect.journal.JournalStore;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.Set;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
@@ -278,6 +281,9 @@ public final class Groups {
 				return CompletableFuture.failedFuture(new IllegalStateException("group " + groupId + " is already being taken down"));
 			}
 		}
+		if (g.stages().get(i).sites().stream().anyMatch(x -> x.startsWith(Batches.DELTA_TOKEN))) {
+			return undoDeltaStage(server, g, stage, g.stages().get(i).sites(), force);
+		}
 		Removal r = new Removal(groupId, stage, null, true);
 		r.covered = covered;
 		r.started = true;
@@ -290,6 +296,85 @@ public final class Groups {
 		Placement.save(server, false);
 		Architect.LOGGER.info("Undoing stage {} of group {} ({} site(s)){}", stage, groupId, sites.size(), force ? " (forced)" : "");
 		return f;
+	}
+
+	/**
+	 * The undo of a stage of delta items (phase 5b, e.g. Steward's "upgrade"): each delta reverted, newest first. Each must be its
+	 * site's top delta: a later delta on the same site refuses without {@code force} (4d's dependency rule), and {@code force}
+	 * reverts the later deltas too. In survival (INSTANT not allowed) each becomes a forward construction delta to the version
+	 * before it. Checked for every delta before anything is written.
+	 */
+	static CompletableFuture<Removed> undoDeltaStage(MinecraftServer server, SiteGroupRec g, String stage, List<String> tokens, boolean force) {
+		List<String[]> ds = new ArrayList<>();
+		for (String t : tokens) {
+			if (t.startsWith(Batches.DELTA_TOKEN)) {
+				String[] p = t.substring(Batches.DELTA_TOKEN.length()).split(":", 2);
+				if (p.length == 2) {
+					ds.add(p);
+				}
+			}
+		}
+		java.util.Collections.reverse(ds);
+		boolean instant = !dev.larattalabs.architect.survival.SurvivalWorld.on();
+		// the checks first: each delta standing and on top (or force)
+		Set<String> stageEntries = new HashSet<>();
+		ds.forEach(d -> stageEntries.add(d[1]));
+		for (String[] d : ds) {
+			List<String> active = SiteJournal.active(d[0]).stream().filter(m -> m.kind().equals(dev.larattalabs.architect.journal.WorldJournal.DELTA))
+				.sorted(java.util.Comparator.comparingLong(JournalStore.Meta::layer)).map(JournalStore.Meta::id).toList();
+			int at = active.indexOf(d[1]);
+			if (at >= 0 && !force) {
+				for (String later : active.subList(at + 1, active.size())) {
+					if (!stageEntries.contains(later)) {
+						return CompletableFuture.failedFuture(new IllegalStateException(d[0] + " has a later update (" + later + ") that is not in stage "
+							+ stage + "; undo it first, or pass force"));
+					}
+				}
+			}
+		}
+		List<String> notes = new ArrayList<>();
+		Map<String, Integer> refund = new LinkedHashMap<>();
+		boolean ok = true;
+		for (String[] d : ds) {
+			Site b = Sites.get(d[0]);
+			ServerLevel level = b == null ? null : Sites.levelOf(server, b);
+			if (level == null) {
+				notes.add(d[0] + " is gone");
+				continue;
+			}
+			try {
+				SiteDeltas.Result r;
+				if (instant) {
+					r = SiteDeltas.revertDelta(level, d[0], d[1], true);
+				} else {
+					int to = fromOf(d[1]);
+					r = Builder.applyConstructionDelta(level, new SiteDeltas.Request(d[0], to, dev.larattalabs.architect.delta.DeltaPlanner.Edits.KEEP, false,
+						b.owner(), true), null);
+				}
+				notes.addAll(r.notes());
+				r.refund().forEach((k, v) -> refund.merge(k, v, Integer::sum));
+			} catch (Sites.SiteException e) {
+				ok = false;
+				notes.add(d[0] + ": " + e.getMessage());
+			}
+		}
+		SiteGroupRec n = Sites.group(g.id());
+		if (ok && n != null) {
+			Batches.setStage(server, n, stage, Stage.State.UNDONE);
+		}
+		Architect.LOGGER.info("Undo of delta stage {} of group {}: {}", stage, g.id(), ok ? "done" : String.join("; ", notes));
+		return CompletableFuture.completedFuture(new Removed(ok, ok ? List.of() : notes, refund));
+	}
+
+	/** The version a delta entry started from (its meta), or 0. */
+	static int fromOf(String entryId) {
+		JournalStore s = dev.larattalabs.architect.journal.WorldJournal.storeOrNull();
+		try {
+			com.google.gson.JsonObject m = s == null ? null : s.head(entryId).meta();
+			return m == null ? 0 : m.get("from").getAsInt();
+		} catch (java.io.IOException e) {
+			return 0;
+		}
 	}
 
 	static void tick(MinecraftServer server, long deadline) {

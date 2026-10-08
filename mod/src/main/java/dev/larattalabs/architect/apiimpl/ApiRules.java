@@ -111,4 +111,9 @@ public final class ApiRules {
 	public static int surveyColumns(int blocks, int resolution) {
 		return (blocks + resolution - 1) / resolution;
 	}
+
+	/** Whether a player has permission level 2 (cheats or op): INSTANT in a survival world (phase 5b deltas use it too). */
+	public static boolean permission2(net.minecraft.server.level.@Nullable ServerPlayer p) {
+		return p != null && p.createCommandSourceStack().permissions().hasPermission(net.minecraft.server.permissions.Permissions.COMMANDS_GAMEMASTER);
+	}
 }
