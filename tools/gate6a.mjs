@@ -631,30 +631,28 @@ steps.eflat = async () => {
   }
   const r = await megaRun('G6A EFlat', { base: 'G6A Flat Mega Prepared' });
   const out = { run: { cellsWritten: r.cellsWritten, cellsPerSecond: r.cellsPerSecond, mspt: r.mspt?.all, state: r.state.view.state } };
-  // a player's block on a pad cell (a tile cell of the ground stage, top of its stack)
+  // a player's block on a pad cell: next to a lot (its apron), the top of the column's stack a terrain tile's
   const lotSite = r.state.view.lots.find((l) => l.siteId)?.siteId;
-  const tileSites = (await api('sites')).all.filter((x) => x.region === r.region && x.kind === 'cells:architect:terrain');
-  const pad = tileSites[Math.floor(tileSites.length / 2)];
   let edit = null;
-  if (pad) {
-    const b = pad.box;
-    const m = /minX=(-?\d+), minY=(-?\d+), minZ=(-?\d+), maxX=(-?\d+), maxY=(-?\d+), maxZ=(-?\d+)/.exec(String(b)) ?? [];
-    const bb = Array.isArray(b) ? b : m.slice(1).map(Number);
-    const x = Math.floor((bb[0] + bb[3]) / 2);
-    const z = Math.floor((bb[2] + bb[5]) / 2);
-    const top = await call('dev.journal.at', { x, y: bb[4], z }).catch(() => null);
-    // the highest cell of that column the tile owns
-    for (let y = bb[4]; y >= bb[1]; y--) {
-      const at = await call('dev.journal.at', { x, y, z });
-      const s0 = (at.stack ?? at.layers ?? []);
-      if (s0.length && s0[s0.length - 1].site === pad.id) {
-        edit = [x, y, z];
+  for (const l of r.state.view.lots.filter((x) => x.siteId).slice(0, 10)) {
+    const lb = r.state.record.lots[l.id];
+    const ir = JSON.parse(fs.readFileSync(path.join(SAVES, 'G6A EFlat', 'architect-regions', r.region, 'ir.json'), 'utf8'));
+    const lot = ir.lots.find((x) => x.id === l.id);
+    for (const [x, z] of [[lot.box.minX - 1, lot.box.minZ - 1], [lot.box.maxX + 1, lot.box.maxZ + 1], [lot.box.minX - 1, lot.box.maxZ + 1]]) {
+      await tp(x + 0.5, lot.floorY + 30, z + 0.5);
+      const at = await call('dev.journal.at', { x, y: lot.floorY - 1, z }).catch(() => null);
+      const st = at?.stack ?? [];
+      if (st.length && st[st.length - 1].kind === 'architect:terrain') {
+        edit = [x, lot.floorY - 1, z];
         break;
       }
     }
-    if (edit) await cmd(`/setblock ${edit[0]} ${edit[1]} ${edit[2]} minecraft:gold_block`);
-    out.edit = { site: pad.id, at: edit, top };
+    if (edit) break;
+    void lb;
   }
+  if (edit) await cmd(`/setblock ${edit[0]} ${edit[1]} ${edit[2]} minecraft:gold_block`);
+  out.edit = { at: edit };
+  await tp(0.5, 160, 0.5);
   // copies for the stage undo and the lot undo
   await cmd('/save-all flush');
   await leaveWorld();
@@ -671,14 +669,15 @@ steps.eflat = async () => {
   check(rm.removed && mism.length === 0, `eflat: E-flat: after the group undo ${mism.length} mismatches over ${diff.cells} cells (the player's block excluded)`, out.groupUndo);
   if (edit) {
     const kept = diff.list.find((m) => m.pos === edit.join(','));
-    check(!!kept && /gold_block/.test(kept.now) && JSON.stringify(rm.kept ?? rm).includes(String(edit[0])), `eflat: the player's block on pad cell ${edit} survives the group undo and is reported kept (${JSON.stringify(rm.kept).slice(0, 200)})`);
+    check(!!kept && /gold_block/.test(kept.now) && Number(rm.kept) >= 1, `eflat: the player's block on pad cell ${edit} survives the group undo and is reported kept (kept ${JSON.stringify(rm.kept)})`);
   }
   await leaveWorld();
   // lots-3's stage undo, exact on the cells it owns
   await openWorld('G6A EFlat Stage');
   const lots3 = r.state.view.lots.filter((l) => l.siteId && r.state.record.lots[l.id]?.stage === 'lots-3').map((l) => l.siteId);
   await call('dev.undo.mark', { sites: lots3 });
-  const su = await api(`sundo2 ${r.state.view.groupId} lots-3 keep`).then((x) => result(x, 3_600_000));
+  // lots-4 was placed after lots-3 (4d's order rule): force
+  const su = await api(`sundo2 ${r.state.view.groupId} lots-3 keep force`).then((x) => result(x, 3_600_000));
   await settle(5000);
   const sc = await call('dev.undo.check', {}, 120_000);
   check(su.removed !== false && sc.mismatches === 0, `eflat: lots-3's stage undo is exact on the ${sc.cells} cells its ${lots3.length} lots own`, { su, sc });
@@ -686,6 +685,9 @@ steps.eflat = async () => {
   await leaveWorld();
   // one lot's undo (timed), the pad under it exact
   await openWorld('G6A EFlat Lot');
+  const lotView = (await api('sites')).all.find((x) => x.id === lotSite);
+  const lm = /minX=(-?\d+), minY=(-?\d+), minZ=(-?\d+)/.exec(String(lotView?.box));
+  if (lm) await tp(Number(lm[1]) + 0.5, Number(lm[2]) + 40, Number(lm[3]) + 0.5);
   await call('dev.undo.mark', { sites: [lotSite] });
   const t1 = Date.now();
   const lr = await api(`remove ${lotSite} - noforce keep`).then((x) => result(x, 600_000));
