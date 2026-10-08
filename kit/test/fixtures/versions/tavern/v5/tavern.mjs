@@ -25,7 +25,7 @@ export default function build({ palette: p = PALETTES.rustic, length = 14, roof 
     description: 'A two-storey timber-framed tavern (fixture version 5).',
     type: 'tavern',
     tags: ['medieval', 'timber-frame', 'fixture'],
-    size: [X + 3, (chimney ? ridge + 2 : ridge) + 1, 12],
+    size: [X + 6, (chimney ? ridge + 2 : ridge) + 1, 12],
     origin: [1, 0, 1],
     groundY: 1,
     front: 'south',
@@ -129,6 +129,14 @@ export default function build({ palette: p = PALETTES.rustic, length = 14, roof 
     bp.set(X - 1, 6, Z - 1, 'minecraft:bookshelf');
     bp.plant(X - 1, 7, Z - 1, 'minecraft:potted_red_tulip');
     bp.ceilingLights(3, 1, X - 1, Z - 1, 9, { spacing: 5 });
+  });
+
+  // gate item 2 "shape updates": a fence and a glass pane that stand where v2's wing_east adds a wall (z 7) and v5 takes it away
+  bp.part('yard', () => {
+    bp.set(X + 4, 0, 8, p.stone);
+    bp.set(X + 3, 0, 8, p.stone);
+    bp.set(X + 4, 1, 8, p.fence);
+    bp.set(X + 3, 1, 8, 'minecraft:glass_pane');
   });
 
   // the path and the anchors (in no part)

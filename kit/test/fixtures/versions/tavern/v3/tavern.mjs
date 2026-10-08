@@ -147,6 +147,14 @@ export default function build({ palette: p = PALETTES.rustic, length = 14, roof 
     bp.ceilingLights(3, 1, X - 1, Z - 1, 9, { spacing: 5 });
   });
 
+  // gate item 2 "shape updates": a fence and a glass pane that stand where v2's wing_east adds a wall (z 7) and v5 takes it away
+  bp.part('yard', () => {
+    bp.set(X + 4, 0, 8, p.stone);
+    bp.set(X + 3, 0, 8, p.stone);
+    bp.set(X + 4, 1, 8, p.fence);
+    bp.set(X + 3, 1, 8, 'minecraft:glass_pane');
+  });
+
   // the path and the anchors (in no part)
   bp.floor(D - 1, Z + 1, D + 2, Z + 2, 0, p.stone);
   bp.floor(D, Z + 1, D + 1, Z + 2, 0, p.path);

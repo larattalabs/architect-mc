@@ -318,7 +318,7 @@ test('delta-fixtures.mjs: the hand-written tavern versions build clean and the p
   assert.ok(index.pairs.filter((p) => p.kind === 'palette').every((p) => p.changed > 0));
   // v2: wing_east added, porch removed, roof re-materialled; v3: wing_west, main's windows, nothing else; v4: the frame
   const e12 = JSON.parse(fs.readFileSync(path.join(out, 'pairs', 'tavern-v1__tavern-v2', 'expected.json'), 'utf8'));
-  assert.deepEqual(Object.fromEntries(Object.entries(e12.parts).map(([n, p]) => [n, p.status])), { guest_rooms: 'UNCHANGED', main: 'UNCHANGED', porch: 'REMOVED', roof: 'CHANGED', stairs: 'UNCHANGED', taproom: 'UNCHANGED', wing_east: 'ADDED' });
+  assert.deepEqual(Object.fromEntries(Object.entries(e12.parts).map(([n, p]) => [n, p.status])), { guest_rooms: 'UNCHANGED', main: 'UNCHANGED', porch: 'REMOVED', roof: 'CHANGED', stairs: 'UNCHANGED', taproom: 'UNCHANGED', wing_east: 'ADDED', yard: 'CHANGED' }); // yard: the fence and pane connect to the new wall
   const e23 = JSON.parse(fs.readFileSync(path.join(out, 'pairs', 'tavern-v2__tavern-v3', 'expected.json'), 'utf8'));
   assert.deepEqual(Object.entries(e23.parts).filter(([, p]) => p.status !== 'UNCHANGED').map(([n, p]) => `${n}:${p.status}`), ['main:CHANGED', 'wing_west:ADDED']);
   assert.equal(e23.removed, 0);
