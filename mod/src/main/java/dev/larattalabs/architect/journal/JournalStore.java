@@ -405,6 +405,8 @@ public final class JournalStore {
 			return r;
 		}
 		CompoundTag t;
+		long diagT0 = System.nanoTime();
+		boolean diagMain = Thread.currentThread().getName().equals("Server thread");
 		try {
 			t = NbtIo.readCompressed(p, NbtAccounter.unlimitedHeap());
 		} catch (IOException ex) {
@@ -421,8 +423,16 @@ public final class JournalStore {
 			throw new IOException(p.getFileName() + ": " + ex.getMessage(), ex);
 		}
 		cache.put(p, r);
+		if (diagMain) {
+			DIAG_MAIN_READS.incrementAndGet();
+			DIAG_MAIN_NANOS.addAndGet(System.nanoTime() - diagT0);
+		}
 		return r;
 	}
+
+	/** Diag branch: journal region files read (and decoded) on the server thread. */
+	public static final java.util.concurrent.atomic.AtomicLong DIAG_MAIN_READS = new java.util.concurrent.atomic.AtomicLong();
+	public static final java.util.concurrent.atomic.AtomicLong DIAG_MAIN_NANOS = new java.util.concurrent.atomic.AtomicLong();
 
 	/** An entry's cells in one section, or null when it has none there. */
 	public @Nullable SectionCells section(String id, long key) throws IOException {

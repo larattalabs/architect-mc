@@ -60,6 +60,10 @@ final class Diag {
 		}
 		ServerTickEvents.START_SERVER_TICK.register(s -> tickStart = System.nanoTime());
 		ServerTickEvents.END_SERVER_TICK.register(Diag::endTick);
+		// the full tick (after every end-of-tick handler, Architect's placement included)
+		net.minecraft.resources.Identifier last = net.minecraft.resources.Identifier.fromNamespaceAndPath("architect_mc", "diag_last");
+		ServerTickEvents.END_SERVER_TICK.addPhaseOrdering(net.fabricmc.fabric.api.event.Event.DEFAULT_PHASE, last);
+		ServerTickEvents.END_SERVER_TICK.register(last, Diag::lastTick);
 		ServerChunkEvents.CHUNK_LOAD.register((level, chunk, gen) -> {
 			loads++;
 			if (gen) {
@@ -92,6 +96,7 @@ final class Diag {
 
 	private static void endTick(MinecraftServer server) {
 		double ms = (System.nanoTime() - tickStart) / 1e6;
+		vanillaMs = ms;
 		ticks++;
 		genTotal += generated;
 		loadTotal += loads;
@@ -131,6 +136,29 @@ final class Diag {
 		removed = 0;
 		generated = 0;
 		loads = 0;
+	}
+
+	private static long reads0;
+	private static long readNanos0;
+	private static double vanillaMs;
+
+	private static void lastTick(MinecraftServer server) {
+		double full = (System.nanoTime() - tickStart) / 1e6;
+		long r = dev.larattalabs.architect.journal.JournalStore.DIAG_MAIN_READS.get();
+		long rn = dev.larattalabs.architect.journal.JournalStore.DIAG_MAIN_NANOS.get();
+		if (full > 50) {
+			JsonObject o = new JsonObject();
+			o.addProperty("ev", "slowFull");
+			o.addProperty("tick", server.getTickCount());
+			o.addProperty("fullMs", full);
+			o.addProperty("beforeArchitectMs", vanillaMs);
+			o.addProperty("journalReadsMain", r - reads0);
+			o.addProperty("journalReadMsMain", (rn - readNanos0) / 1e6);
+			o.addProperty("held", Batches.diagHeld());
+			write(o);
+		}
+		reads0 = r;
+		readNanos0 = rn;
 	}
 
 	/** One wait of an item: why, how long, its tickets, and the status of every chunk it wants (at most one line per 10 s per item). */
