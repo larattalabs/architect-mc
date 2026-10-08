@@ -4144,4 +4144,22 @@ this section says what shipped.
 - **Fixtures:** the tavern versions gained a `yard` part (fence, glass pane, a free-standing gate door) for the shape-update,
   opened-door and minimality checks.
 - **Prompt development** used the 4b Mosswater items and the 4c tavern (gate 1's cabin and tower entries no longer exist on
-  disk; gate 2's town house has no part map, so no part-named target).
+  disk; gate 2's town house has no part map, so no part-named target), through `tools/eval.mjs polish-dev` (entries rebuilt
+  from source, a fresh report, the eval's spend guard). It ended at 0 of 7 steps accepted ($2.65 of the $20 cap): the
+  step critic sees the step's renders and the base's indexed issues, the targeted fix was visibly there (dormers and a
+  kinked ridge on the 4c tavern's roof), and `resolved` stayed empty every time. The limit is 5a's critic, which the
+  contract keeps fixed, so the prompts were frozen at the second revision (hashes: system f4916959, brief 8d0b4f4c, step
+  99d5bcdb, scoping e9821a71).
+- **The polish eval stopped at the smoke tier** (`full-polish-2026-10-08T1901`): 4 of 4 smoke briefs accepted no step
+  (3 `not_resolved`, brief 3 `budget`: the seeded step high didn't fit 1.0x its round-0 cost), so the other 14 were not
+  run. G1 not shown (3 identical), G2 +0.00, G4: in cap 4/4, mean $0.49 and 2.2 min, estimate within 50% 2/4 (fail);
+  G5: nothing installed to check. `rescore` byte-identical. Polish's label is decided outside the build (contract: G4 fail
+  -> dev flag; G1/G2 fail -> experimental).
+- **Gate item 7** ran through the Java API on the claude login: a placed entry polished with a preview (0/2 accepted, so
+  the real apply path was exercised on the sim: polish, ENTRY_VERSIONED, outdated, checkDelta, applyDelta, history,
+  revert, Remove exact); a notes-scoped polish with its scoping call (0/1); one new design with `critique.mode: "polish"`
+  (round 0 + report, then a polish design, 0/1).
+- **`tools/apitest.mjs`** gains `polish`, `polish-real` and `critique-polish-real`; `tools/gate5b.mjs` steps smoke, e1,
+  chains, edits, layers, crash, history, ghost, survival, survqueue, village, sizecap, apijars.
+- **Spend:** $9.17 API-equivalent (claude login, every paid run with a scrubbed environment: no ANTHROPIC_*/CLAUDE_*
+  variable, logged in artifacts/gate5b/env-paid.log).
