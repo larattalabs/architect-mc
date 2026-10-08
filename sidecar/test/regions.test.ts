@@ -389,7 +389,7 @@ describe('region.tiles (fake kit)', () => {
     expect(err('99,99')).toContain('fake evaluator refused tile 99,99');
     expect(err('98,98')).toMatch(/exited|crashed/);
     expect(err('97,97')).toMatch(/longer than 1 s/);
-    expect(err('96,96')).toMatch(/out of memory|exited|crashed/);
+    expect(err('96,96')).toMatch(/out of memory \(64 MB per worker\)/);
     expect(errors).toHaveLength(4);
     expect(new Set(frames.map((f) => f.key))).toEqual(new Set(['0,0', '1,0', '2,0', '3,0', '4,0']));
     const stats = h.sc.regions.poolStats()!;
@@ -542,5 +542,48 @@ describe('determinism across worker counts, order and restarts', () => {
     expect(a.size).toBe(keys.length);
     for (const k of keys) expect(b.get(k), k).toEqual(a.get(k));
     expect(b.has('98,98')).toBe(false);
+  });
+});
+
+// ---- through the WebSocket server (every outbound message validated) --------------------------------
+
+describe('region.* over the WebSocket server (validateOutbound)', () => {
+  it('plans and streams with every frame schema-checked; a dropped socket drops its tiles', async () => {
+    const { SidecarServer } = await import('../src/server.js');
+    const WebSocket = (await import('ws')).default;
+    const h = makeSidecar(['--backend', 'sim']);
+    h.cfg.regions.window = 1;
+    const token = 'region-token-0123456789';
+    const server = new SidecarServer(h.sc, { host: '127.0.0.1', port: 0, token, validateOutbound: true, log: h.log });
+    await server.start();
+    await h.sc.start(new SimDesigner(h.sc, 20));
+    try {
+      const ws = new WebSocket(`ws://127.0.0.1:${server.port}`);
+      const msgs: Record<string, any>[] = []; // eslint-disable-line @typescript-eslint/no-explicit-any
+      ws.on('message', (d) => msgs.push(JSON.parse(d.toString()) as Record<string, unknown>));
+      await new Promise<void>((r) => ws.once('open', () => r()));
+      const send = (o: Record<string, unknown>) => ws.send(JSON.stringify({ v: 1, ...o }));
+      send({ type: 'hello', client: 'mod', token, protocols: [1, 2] });
+      await until(() => msgs.some((m) => m.type === 'snapshot'));
+      expect(msgs[0]!.features).toEqual(expect.arrayContaining(['region.plan', 'region.tiles']));
+      send({ type: 'region.plan', id: 'p', program: 'fake_basic', params: { slowMs: 50 }, claim: CLAIM, surveyBlobId: putSurvey(h) });
+      await until(() => msgs.some((m) => m.type === 'region.planned'), 30_000);
+      const planned = msgs.find((m) => m.type === 'region.planned')!;
+      send({ id: 't', ...tilesReq(planned.planId as string, planned.irSha as string, ['0,0', '95,95', '99,99']) });
+      await until(() => msgs.filter((m) => (m.type === 'region.tile' && !m.more) || m.type === 'region.tile.error').length === 3, 30_000);
+      expect(msgs.find((m) => m.type === 'ack' && m.re === 't')).toMatchObject({ ok: true, result: { accepted: 3 } });
+      expect(msgs.find((m) => m.type === 'region.tile.error')).toMatchObject({ key: '99,99', stage: 'ground', set: 'terrain' });
+      expect(h.log.lines.some((l) => /violates protocol/.test(l))).toBe(false);
+      // close mid-stream: the rest is discarded
+      send({ id: 't2', ...tilesReq(planned.planId as string, planned.irSha as string, Array.from({ length: 20 }, (_, i) => `${i},7`)) });
+      await until(() => msgs.some((m) => m.type === 'region.tile' && m.key === '0,7'));
+      ws.close();
+      const before = h.sc.regions.poolStats()!.tiles;
+      await new Promise((r) => setTimeout(r, 500));
+      expect(h.sc.regions.poolStats()!.tiles - before).toBeLessThanOrEqual(1);
+    } finally {
+      await server.stop();
+      await h.close();
+    }
   });
 });

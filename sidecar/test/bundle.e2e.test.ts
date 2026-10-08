@@ -5,7 +5,9 @@
 // the fixture kit CLI, auth.set never leaking the key, a second sidecar on a taken port leaving the
 // first one alone, the shutdown message, and exiting when the parent pid is gone.
 import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
+import zlib from 'node:zlib';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import WebSocket from 'ws';
@@ -200,7 +202,7 @@ describe('dist/main.mjs, protocol 2 on port 8290 (sim backend)', () => {
 
   it('negotiates protocol 2; a protocol-1 hello gets the phase 1-3 snapshot', async () => {
     const v2 = await hello2();
-    expect(find(v2.msgs, (m) => m.type === 'snapshot')).toMatchObject({ protocol: 2, features: ['job.run', 'job.tools', 'blobs', 'budget', 'designs.v2', 'bibles', 'design.groups', 'named.parts', 'open.types', 'estimates', 'reskin', 'massing', 'critique', 'critique.report', 'job.images', 'bible.admin', 'bible.restraint', 'entry.versions', 'entry.delta', 'design.polish', 'critique.polish'], jobs: [] });
+    expect(find(v2.msgs, (m) => m.type === 'snapshot')).toMatchObject({ protocol: 2, features: ['job.run', 'job.tools', 'blobs', 'budget', 'designs.v2', 'bibles', 'design.groups', 'named.parts', 'open.types', 'estimates', 'reskin', 'massing', 'critique', 'critique.report', 'job.images', 'bible.admin', 'bible.restraint', 'entry.versions', 'entry.delta', 'design.polish', 'critique.polish', 'region.plan', 'region.tiles'], jobs: [] });
     const v1 = await connect(PORT);
     v1.send({ type: 'hello', client: 'mod', version: 'old', token: tokenOf() });
     await until(() => v1.msgs.some((m) => m.type === 'snapshot'));
@@ -208,6 +210,51 @@ describe('dist/main.mjs, protocol 2 on port 8290 (sim backend)', () => {
     v1.ws.close();
     v2.ws.close();
   });
+
+  it('(6a) region.plan and region.tiles through the bundle: the worker module resolves next to dist/main.mjs', async () => {
+    expect(fs.existsSync(path.join(SIDECAR_ROOT, 'dist', 'region-worker.mjs'))).toBe(true);
+    const c = await hello2();
+    const v1 = await connect(PORT);
+    v1.send({ type: 'hello', client: 'mod', version: 'old', token: tokenOf() });
+    await until(() => v1.msgs.some((m) => m.type === 'snapshot'));
+    const ackOf = async (id: string) => {
+      await until(() => find(c.msgs, (m) => m.type === 'ack' && m.re === id) !== undefined, 20_000);
+      return find(c.msgs, (m) => m.type === 'ack' && m.re === id)!;
+    };
+    // an ARSV survey (128x128) and a tile's 80x80 window
+    const arsvBuf = (minX: number, minZ: number, w: number, d: number) => {
+      const b = Buffer.alloc(28 + w * d * 7);
+      b.write('ARSV', 0, 'latin1');
+      b[4] = 1;
+      b.writeInt32LE(minX, 8);
+      b.writeInt32LE(minZ, 12);
+      b.writeInt32LE(w, 16);
+      b.writeInt32LE(d, 20);
+      b.writeInt32LE(1, 24);
+      return b;
+    };
+    c.send({ type: 'blob.put', id: 'sv', kind: 'survey', chunks: [arsvBuf(0, 0, 128, 128).toString('base64')] });
+    const blobId = (await ackOf('sv')).result.blobId as string;
+    c.send({ type: 'region.plan', id: 'rp', program: 'fake_basic', params: {}, seed: '5', claim: { minX: 0, minZ: 0, maxX: 127, maxZ: 127, minY: -64, maxY: 319 }, surveyBlobId: blobId });
+    const planId = (await ackOf('rp')).result.planId as string;
+    await until(() => find(c.msgs, (m) => m.type === 'region.planned' && m.planId === planId) !== undefined, 30_000);
+    const planned = find(c.msgs, (m) => m.type === 'region.planned')!;
+    c.send({ type: 'region.tiles.request', id: 'rt', planId, irSha: planned.irSha, tiles: ['0,0', '95,95'].map((key) => ({ key, stage: 'ground', set: 'terrain', heights: arsvBuf(64 * Number(key.split(',')[0]) - 8, 64 * Number(key.split(',')[1]) - 8, 80, 80).toString('base64') })) });
+    expect((await ackOf('rt')).result).toEqual({ accepted: 2 });
+    await until(() => (c.msgs as M[]).filter((m) => m.type === 'region.tile' && !m.more).length === 2, 30_000);
+    for (const key of ['0,0', '95,95']) {
+      const frames = (c.msgs as M[]).filter((m) => m.type === 'region.tile' && m.key === key).sort((a, b) => a.seq - b.seq);
+      const payload = zlib.gunzipSync(Buffer.concat(frames.map((f) => Buffer.from(f.data as string, 'base64'))));
+      expect(crypto.createHash('sha256').update(payload).digest('hex')).toBe(frames[0]!.sha);
+      expect(frames.length).toBe(key === '95,95' ? 3 : 1);
+    }
+    c.send({ type: 'region.release', id: 'rr', planId });
+    expect((await ackOf('rr')).ok).toBe(true);
+    // a protocol-1 client sees none of it
+    expect(v1.msgs.some((m) => (m.type as string).startsWith('region.'))).toBe(false);
+    v1.ws.close();
+    c.ws.close();
+  }, 60_000);
 
   it('an agent job with a blob; SIGKILL mid tool call; restart on the same port; the call is re-sent and the job completes', async () => {
     let c = await hello2();
