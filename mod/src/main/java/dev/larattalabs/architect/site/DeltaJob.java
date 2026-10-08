@@ -167,7 +167,14 @@ final class DeltaJob implements Placement.Job {
 			return true;
 		}
 		try {
-			return REVERT.equals(kind) ? revertStep(server, level, b, deadline) : applyStep(server, level, b, deadline);
+			long t0 = System.nanoTime();
+			int ph = phase;
+			boolean done = REVERT.equals(kind) ? revertStep(server, level, b, deadline) : applyStep(server, level, b, deadline);
+			long ms = (System.nanoTime() - t0) / 1_000_000;
+			if (ms > 20) {
+				Architect.LOGGER.warn("Delta job of {} ({}): phase {} -> {} took {} ms in one tick", siteId, kind, ph, phase, ms);
+			}
+			return done;
 		} catch (Sites.SiteException | RuntimeException e) {
 			Architect.LOGGER.error("Delta job of {} failed", siteId, e);
 			if (tracker != null) {

@@ -428,8 +428,9 @@ public final class SiteDeltas {
 			return empty(out, r.siteId(), from, to, notes);
 		}
 		// busy: placing, a construction site (or a construction delta) still building, being removed, an update in progress
+		// (a check with a capture is the site's own DeltaJob planning: its job is not "busy")
 		if (b.placing() || b.building() || b.versioning().updating() > 0 || b.versioning().reverting() > 0 || Groups.removing(b.id())
-			|| Placement.job(b.id()) != null) {
+			|| cap == null && Placement.job(b.id()) != null) {
 			out.add(new Refusal(Reason.SITE_BUSY, r.siteId() + " is busy (" + (b.placing() ? "still being placed" : b.building() ? "still building"
 				: b.versioning().updating() > 0 ? "an update is running" : "being removed or reverted") + ")", true));
 			return empty(out, r.siteId(), from, to, notes);
