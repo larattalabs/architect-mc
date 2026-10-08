@@ -1392,6 +1392,24 @@ switch (step) {
     }
     break;
   }
+  case 'critique-polish-real': {
+    // ONE REAL new design with critique.mode "polish" through the Java API (docs/CONTRACT.md "Phase 5b gate" 7): round 0,
+    // a report, then the polish steps as a separate polish design. Claude login; about $2-4.
+    const b64 = (o) => Buffer.from(typeof o === 'string' ? o : JSON.stringify(o)).toString('base64');
+    const tag = Date.now().toString(36);
+    const req = { type: 'cabin', style: 'rustic', name: `CritPolish ${tag}`, size: [15, 14, 15], model: process.env.APITEST_MODEL ?? 'claude-sonnet-5-5',
+      critique: { mode: 'polish', maxRevisions: 2 } };
+    const d = await result(await api(`critreq cp ${b64(req)}`), 60_000);
+    check(/^d\d+$/.test(d.value ?? ''), `request(critique polish) through the API -> ${d.value ?? d.error}`, d);
+    const done = await waitEvent((e) => e.event === 'DESIGN_DONE' && e.id === d.value, Number(process.env.APITEST_REAL_MS ?? 45 * 60_000));
+    console.log(JSON.stringify(done?.critique ?? null));
+    check(done?.status === 'DONE' && !!done.entryId, `DESIGN_DONE ${d.value} ${done?.status}: entry ${done?.entryId}, critique ${done?.critique?.mode} ${done?.critique?.end ?? ''}`, done);
+    const pol = await waitEvent((e) => e.event === 'DESIGN_DONE' && e.id !== d.value && (e.kind === 'POLISH' || e.polishOf === done?.entryId || e.entryId === done?.entryId), Number(process.env.APITEST_REAL_MS ?? 45 * 60_000)).catch(() => null);
+    const pg = pol ? await api(`polishget ${pol.id}`) : null;
+    console.log(JSON.stringify(pg));
+    check(!!pg?.polish?.end && pg.kind === 'POLISH', `its polish design ${pol?.id}: ${pg?.polish?.end}, ${pg?.polish?.accepted}/${pg?.polish?.steps} accepted, $${pg?.polish?.usd}`, { pol, pg });
+    break;
+  }
   default:
     console.error('usage: node tools/apitest.mjs survival|jobs|catchup|sets|massing|composite|preview|critique|critique-real|polish|polish-real');
     process.exit(2);
