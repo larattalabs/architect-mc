@@ -26,6 +26,8 @@ export interface ClientHandle {
   /** still connected and trusted */
   readonly open: boolean;
   send(m: Outbound): void;
+  /** (6a) send, resolving once the frame is flushed to the socket (backpressure for region tiles) */
+  sendFlushed?(m: Outbound): Promise<void>;
 }
 
 /** What the server drives (the Sidecar). */
@@ -95,6 +97,10 @@ class Client implements ClientHandle {
 
   send(m: Outbound): void {
     this.server.sendTo(this, m);
+  }
+
+  sendFlushed(m: Outbound): Promise<void> {
+    return this.server.sendFlushed(this, m);
   }
 }
 
@@ -242,6 +248,16 @@ export class SidecarServer {
     if (c.ws.readyState !== c.ws.OPEN) return;
     const s = this.serialize(m, c.protocol);
     if (s !== undefined) c.ws.send(s);
+  }
+
+  /** Send and resolve when ws has written the frame to the socket (a client that stops reading holds it back). */
+  sendFlushed(c: Client, m: Outbound): Promise<void> {
+    return new Promise((resolve, reject) => {
+      if (c.ws.readyState !== c.ws.OPEN) return resolve();
+      const s = this.serialize(m, c.protocol);
+      if (s === undefined) return resolve();
+      c.ws.send(s, (err) => (err ? reject(err) : resolve()));
+    });
   }
 
   broadcast(m: Outbound): void {
