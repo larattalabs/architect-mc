@@ -340,6 +340,67 @@ public final class RegionDev {
 			}));
 		DevBridge.register("dev.undo.check", 120_000, "{} - phase 6a: the marked cells against the world now (mismatches)", (req, mc) -> ServerTasks
 			.callOnServer(s -> dev.larattalabs.architect.site.UndoCheck.check(s.overworld())));
+		DevBridge.register("dev.region.logs", 300_000, "{box} - phase 6a (forest rim): logs in the box with neither a log nor solid ground under them "
+			+ "(floating), and the logs and persistent/natural leaves counted", (req, mc) -> {
+				int[] b = JournalDev.six(req.get("box"));
+				return ServerTasks.callOnServer(s -> {
+					ServerLevel level = s.overworld();
+					net.minecraft.core.BlockPos.MutableBlockPos m = new net.minecraft.core.BlockPos.MutableBlockPos();
+					int logs = 0;
+					int floating = 0;
+					int leavesPersistent = 0;
+					int leavesNatural = 0;
+					JsonArray first = new JsonArray();
+					for (int x = b[0]; x <= b[3]; x++) {
+						for (int z = b[2]; z <= b[5]; z++) {
+							if (!level.hasChunk(x >> 4, z >> 4)) {
+								continue;
+							}
+							for (int y = b[1]; y <= b[4]; y++) {
+								var st = level.getBlockState(m.set(x, y, z));
+								if (st.getBlock() instanceof net.minecraft.world.level.block.LeavesBlock) {
+									if (st.getValue(net.minecraft.world.level.block.LeavesBlock.PERSISTENT)) {
+										leavesPersistent++;
+									} else {
+										leavesNatural++;
+									}
+								}
+								if (!st.is(net.minecraft.tags.BlockTags.LOGS)) {
+									continue;
+								}
+								logs++;
+								// a trunk stands on a log or on solid ground (diagonal branches of big trees hang on a log next to them)
+								boolean held = false;
+								for (int dx = -1; dx <= 1 && !held; dx++) {
+									for (int dz = -1; dz <= 1 && !held; dz++) {
+										var below = level.getBlockState(m.set(x + dx, y - 1, z + dz));
+										var side = level.getBlockState(m.set(x + dx, y, z + dz));
+										held = below.is(net.minecraft.tags.BlockTags.LOGS) || (dx == 0 && dz == 0 && below.isSolid())
+											|| (dx != 0 || dz != 0) && side.is(net.minecraft.tags.BlockTags.LOGS);
+									}
+								}
+								if (!held) {
+									var above = level.getBlockState(m.set(x, y + 1, z));
+									held = above.is(net.minecraft.tags.BlockTags.LOGS) && false;
+								}
+								if (!held) {
+									floating++;
+									if (first.size() < 20) {
+										first.add(x + "," + y + "," + z);
+									}
+								}
+							}
+						}
+					}
+					JsonObject o = new JsonObject();
+					o.addProperty("logs", logs);
+					o.addProperty("floating", floating);
+					o.add("first", first);
+					o.addProperty("leavesPersistent", leavesPersistent);
+					o.addProperty("leavesNatural", leavesNatural);
+					return o;
+				});
+			});
 		DevBridge.register("dev.tiles.stats", 10_000, "{reset?} - phase 6a: tiles received, wire bytes and cells (bytes per cell)", (req, mc) -> {
 			JsonObject o = new JsonObject();
 			o.addProperty("received", TileStream.RECEIVED.get());

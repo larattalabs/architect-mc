@@ -435,8 +435,7 @@ function irY(p) {
  * The prepared base: a copy of the base world, plan (LOADED_ONLY: what prepare will generate), prepare (governed, MSPT traced),
  * saved as `<base> Prepared` for every configuration-A run (and B, whose world is then explored land).
  */
-async function prepared(base, program, params = {}) {
-  const name = `${base} Prepared`;
+async function prepared(base, program, params = {}, name = `${base} Prepared`) {
   const out = {};
   await fresh('G6A Preparing', base);
   await tp(0.5, 160, 0.5);
@@ -617,6 +616,174 @@ steps.megaB = async () => {
   return out;
 };
 
+// ------------------------------------------------------------------ gate 6: exactness
+
+/** E-flat: mega_bench on the flat world (the gate's rules); after the group undo the claim + 8 over the written y span +-8 is
+ * identical to the pre-region snap: 0 mismatches. Also lots-3's stage undo and one lot's undo exact on the cells they own, and
+ * a player's block on a pad cell survives the group undo (kept). */
+steps.eflat = async () => {
+  if (!dev) await connect();
+  if (!fs.existsSync(path.join(SAVES, 'G6A Flat Mega Prepared', 'level.dat'))) {
+    ctx.flatMegaPrepared = await prepared('G6A Flat Base', MEGA, {}, 'G6A Flat Mega Prepared');
+    saveCtx();
+  }
+  const r = await megaRun('G6A EFlat', { base: 'G6A Flat Mega Prepared' });
+  const out = { run: { cellsWritten: r.cellsWritten, cellsPerSecond: r.cellsPerSecond, mspt: r.mspt?.all, state: r.state.view.state } };
+  // a player's block on a pad cell (a tile cell of the ground stage, top of its stack)
+  const lotSite = r.state.view.lots.find((l) => l.siteId)?.siteId;
+  const tileSites = (await api('sites')).all.filter((x) => x.region === r.region && x.kind === 'cells:architect:terrain');
+  const pad = tileSites[Math.floor(tileSites.length / 2)];
+  let edit = null;
+  if (pad) {
+    const b = pad.box;
+    const m = /minX=(-?\d+), minY=(-?\d+), minZ=(-?\d+), maxX=(-?\d+), maxY=(-?\d+), maxZ=(-?\d+)/.exec(String(b)) ?? [];
+    const bb = Array.isArray(b) ? b : m.slice(1).map(Number);
+    const x = Math.floor((bb[0] + bb[3]) / 2);
+    const z = Math.floor((bb[2] + bb[5]) / 2);
+    const top = await call('dev.journal.at', { x, y: bb[4], z }).catch(() => null);
+    // the highest cell of that column the tile owns
+    for (let y = bb[4]; y >= bb[1]; y--) {
+      const at = await call('dev.journal.at', { x, y, z });
+      const s0 = (at.stack ?? at.layers ?? []);
+      if (s0.length && s0[s0.length - 1].site === pad.id) {
+        edit = [x, y, z];
+        break;
+      }
+    }
+    if (edit) await cmd(`/setblock ${edit[0]} ${edit[1]} ${edit[2]} minecraft:gold_block`);
+    out.edit = { site: pad.id, at: edit, top };
+  }
+  // copies for the stage undo and the lot undo
+  await cmd('/save-all flush');
+  await leaveWorld();
+  copyWorld('G6A EFlat', 'G6A EFlat Stage');
+  copyWorld('G6A EFlat', 'G6A EFlat Lot');
+  await openWorld('G6A EFlat');
+  await settle(3000);
+  const t0 = Date.now();
+  const rm = await call('dev.region.remove', { region: r.region }, 4 * 3_600_000);
+  await settle(10_000);
+  const diff = await call('dev.region.hash', { box: r.box, mode: 'diff', file: path.join(OUT, 'G6A_EFlat.snap.gz') }, 4 * 3_600_000);
+  const mism = diff.list.filter((m) => !(edit && m.pos === edit.join(',')));
+  out.groupUndo = { seconds: (Date.now() - t0) / 1000, kept: rm.kept, mismatches: diff.mismatches, classes: diff.classes, list: diff.list.slice(0, 20) };
+  check(rm.removed && mism.length === 0, `eflat: E-flat: after the group undo ${mism.length} mismatches over ${diff.cells} cells (the player's block excluded)`, out.groupUndo);
+  if (edit) {
+    const kept = diff.list.find((m) => m.pos === edit.join(','));
+    check(!!kept && /gold_block/.test(kept.now) && JSON.stringify(rm.kept ?? rm).includes(String(edit[0])), `eflat: the player's block on pad cell ${edit} survives the group undo and is reported kept (${JSON.stringify(rm.kept).slice(0, 200)})`);
+  }
+  await leaveWorld();
+  // lots-3's stage undo, exact on the cells it owns
+  await openWorld('G6A EFlat Stage');
+  const lots3 = r.state.view.lots.filter((l) => l.siteId && r.state.record.lots[l.id]?.stage === 'lots-3').map((l) => l.siteId);
+  await call('dev.undo.mark', { sites: lots3 });
+  const su = await api(`sundo2 ${r.state.view.groupId} lots-3 keep`).then((x) => result(x, 3_600_000));
+  await settle(5000);
+  const sc = await call('dev.undo.check', {}, 120_000);
+  check(su.removed !== false && sc.mismatches === 0, `eflat: lots-3's stage undo is exact on the ${sc.cells} cells its ${lots3.length} lots own`, { su, sc });
+  out.stageUndo = sc;
+  await leaveWorld();
+  // one lot's undo (timed), the pad under it exact
+  await openWorld('G6A EFlat Lot');
+  await call('dev.undo.mark', { sites: [lotSite] });
+  const t1 = Date.now();
+  const lr = await api(`remove ${lotSite} - noforce keep`).then((x) => result(x, 600_000));
+  const lotSeconds = (Date.now() - t1) / 1000;
+  await settle(3000);
+  const lc = await call('dev.undo.check', {}, 120_000);
+  check(lr.removed && lc.mismatches === 0 && lotSeconds <= 5, `eflat: one lot's undo (${lotSite}) exact on its ${lc.cells} cells in ${lotSeconds.toFixed(2)} s (bar 5 s)`, { lr, lc });
+  out.lotUndo = { seconds: lotSeconds, check: lc };
+  await leaveWorld();
+  write('eflat.json', out);
+  return out;
+};
+
+/**
+ * Forest rim: region_small with its bowl's rim through worldgen forest (found by the survey), random ticks at the default 3, a
+ * 2-minute stand, then the tile's undo: no floating log after the realise, held leaves on the tile's leaves entry, and the undo
+ * exact over the bowl's tiles.
+ */
+steps.forest = async () => {
+  if (!dev) await connect();
+  await fresh('G6A Forest', 'G6A Mega Base Prepared');
+  // find a forest column inside the claim: a coarse scan of the prepared land (trees flag)
+  let spot = null;
+  for (const [x0, z0] of [[0, 0], [-300, -300], [300, -300], [-300, 300], [300, 300], [0, 300], [0, -300], [300, 0], [-300, 0]]) {
+    await tp(x0 + 0.5, 200, z0 + 0.5);
+    const cols = await api(`heights ${x0 - 96} ${z0 - 96} ${x0 + 96} ${z0 + 96} 4`).then((x) => result(x, 300_000));
+    const trees = (cols.columns ?? cols).filter((c) => Array.isArray(c) ? c[4] === 1 : / t/.test(c));
+    if (trees.length > 60) {
+      const t = trees[Math.floor(trees.length / 2)];
+      spot = Array.isArray(t) ? [t[0], t[1]] : null;
+      if (spot) break;
+    }
+  }
+  check(!!spot, `forest: a forest found at ${spot}`);
+  if (!spot) return {};
+  // the bowl centre 24 blocks east of the forest point: its rim crosses the trees
+  const claim = [spot[0] - 96, spot[1] - 96, spot[0] + 95, spot[1] + 95];
+  const program = { program: 'region_small', claim };
+  await tp(spot[0] + 0.5, 200, spot[1] + 0.5);
+  const p = await plan(program, 'generated:64', { cx: spot[0] + 24, cz: spot[1] });
+  const y = irY(p);
+  const box = [claim[0] - 8, y[0] - 8, claim[1] - 8, claim[2] + 8, y[1] + 8, claim[3] + 8];
+  const before = await call('dev.region.logs', { box }, 300_000);
+  await call('dev.region.hash', { box, mode: 'snap', file: path.join(OUT, 'G6A_Forest.snap.gz') }, 3_600_000);
+  const region = await realise(p.planId, { stages: ['ground'] });
+  const st = await waitRegion(region, 3_600_000);
+  const after = await call('dev.region.logs', { box }, 300_000);
+  const j = await call('dev.journal.state', {}, 60_000);
+  const leaves = (j.entries ?? []).filter((e) => e.kind === 'leaves' && e.status === 'ACTIVE');
+  check(after.floating === 0, `forest: no floating log after the realise (${after.floating}; logs ${before.logs} -> ${after.logs}; ${JSON.stringify(after.first)})`);
+  check(leaves.length > 0 && leaves.reduce((a, e) => a + (e.cells ?? 0), 0) > 0, `forest: held leaves on the tiles' leaves entries (${leaves.length} entries, `
+    + `${leaves.reduce((a, e) => a + (e.cells ?? 0), 0)} cells; ${after.leavesPersistent} persistent leaves in the box)`);
+  await cmd('/gamerule random_tick_speed 3');
+  await sleep(120_000);
+  const rm = await call('dev.region.remove', { region }, 3_600_000);
+  await cmd('/gamerule random_tick_speed 0');
+  await settle(5000);
+  const diff = await call('dev.region.hash', { box, mode: 'diff', file: path.join(OUT, 'G6A_Forest.snap.gz') }, 3_600_000);
+  check(rm.removed && diff.mismatches === 0, `forest: the undo after a 2-minute stand at randomTickSpeed 3 is exact (${diff.mismatches} mismatches, ${JSON.stringify(diff.classes)})`,
+    diff.list?.slice(0, 20));
+  await leaveWorld();
+  const out = { spot, before, after, leaves: leaves.length, state: st.view.state, diff: { mismatches: diff.mismatches, classes: diff.classes } };
+  write('forest.json', out);
+  return out;
+};
+
+/** Gate 8: invariant (iii) for regions, live: a lot LAYERed on a pad, a player edit on a lot cell, pad and lot removed in both orders. */
+steps.inv3 = async () => {
+  if (!dev) await connect();
+  const r = await smallRun('G6A Inv3');
+  const st = await waitRegion(r.region, 3_600_000);
+  const lot = st.view.lots.find((l) => l.siteId);
+  const all = (await api('sites')).all;
+  const lotView = all.find((x) => x.id === lot.siteId);
+  const covers = lotView.covers ?? [];
+  const pad = covers.find((c) => all.find((x) => x.id === c && x.kind === 'cells:architect:terrain'));
+  const b = lotView.box;
+  const m = /minX=(-?\d+), minY=(-?\d+), minZ=(-?\d+), maxX=(-?\d+), maxY=(-?\d+), maxZ=(-?\d+)/.exec(String(b));
+  const bb = m.slice(1).map(Number);
+  const cell = [bb[0] + 1, bb[1] + 1, bb[2] + 1];
+  await cmd(`/setblock ${cell.join(' ')} minecraft:gold_block`);
+  await cmd('/save-all flush');
+  await leaveWorld();
+  copyWorld('G6A Inv3', 'G6A Inv3 B');
+  await openWorld('G6A Inv3');
+  await api(`remove ${pad} - force keep`).then((x) => result(x, 600_000));
+  await api(`remove ${lot.siteId} - force keep`).then((x) => result(x, 600_000));
+  await settle(3000);
+  const ha = await call('dev.region.hash', { box: r.box }, 3_600_000);
+  await leaveWorld();
+  await openWorld('G6A Inv3 B');
+  await api(`remove ${lot.siteId} - force keep`).then((x) => result(x, 600_000));
+  await api(`remove ${pad} - force keep`).then((x) => result(x, 600_000));
+  await settle(3000);
+  const hb = await call('dev.region.hash', { box: r.box }, 3_600_000);
+  check(!!pad && ha.sha256 === hb.sha256, `inv3: pad ${pad} then lot ${lot.siteId}, or lot then pad, give the same end state (${ha.sha256.slice(0, 12)} / ${hb.sha256.slice(0, 12)})`);
+  await leaveWorld();
+  return { pad, lot: lot.siteId, cell, a: ha.sha256, b: hb.sha256 };
+};
+
 // ------------------------------------------------------------------ gate 7: crash points RG1-RG6, K3/K7 inside a region
 
 const smallBox = (p) => {
@@ -656,7 +823,7 @@ async function finishRegion(region, box) {
 steps.crash = async () => {
   if (!dev) await connect();
   if (!fs.existsSync(path.join(SAVES, 'G6A Flat Base Prepared', 'level.dat'))) {
-    ctx.flatPrepared = await prepared('G6A Flat Base', SMALL);
+    ctx.flatPrepared = await prepared('G6A Flat Base', SMALL, {}, 'G6A Flat Base Prepared');
     saveCtx();
   }
   // the reference: uninterrupted
