@@ -1196,17 +1196,9 @@ public final class Batches {
 	 * marked to wait {@code NOT_GENERATED} (or, while a chunk's status is still being read, to try again next tick).
 	 */
 	static boolean generated(ServerLevel level, Set<Long> want, QItem i) {
-		boolean unknown = false;
-		for (long c : want) {
-			ChunkGen.State st = ChunkGen.state(level, c);
-			if (st == ChunkGen.State.NOT_GENERATED) {
-				i.notGenerated = c;
-				return false;
-			}
-			unknown |= st == ChunkGen.State.UNKNOWN;
-		}
-		i.notGenerated = unknown ? Long.MAX_VALUE : Long.MIN_VALUE;
-		return !unknown;
+		long r = dev.larattalabs.architect.region.TicketGate.check(want, c -> ChunkGen.state(level, c));
+		i.notGenerated = r;
+		return r == dev.larattalabs.architect.region.TicketGate.OK;
 	}
 
 	/**
@@ -1227,9 +1219,9 @@ public final class Batches {
 			if (bp == null) {
 				continue;
 			}
-			int need = itemChunks(i, bp).size();
-			if (need > b.loadChunks) {
-				i.fail(Reason.CHUNK_BOUND.name(), "needs " + need + " chunks, the bound is " + b.loadChunks);
+			String why = dev.larattalabs.architect.region.TicketGate.chunkBound(itemChunks(i, bp).size(), b.loadChunks);
+			if (why != null) {
+				i.fail(Reason.CHUNK_BOUND.name(), why);
 			}
 		}
 	}
