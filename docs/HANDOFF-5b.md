@@ -58,6 +58,20 @@ critic (frozen by the contract), not the prompts. Prompts FROZEN at dev 2: syste
 round-0 verdicts reused): about $0.5-0.95 per brief, brief 16 (Opus) about $2-3 -> polish arm about $12-19; judges about
 $6.5; other real checks about $6. Spent $2.65 + about $25-32 = **about $28-35, under the $80 cap.**
 
+| Polish eval (full-polish-2026-10-08T1901, smoke first) | USD |
+|---|---|
+| brief 3 watchtower_plot (ended `budget` before a step: the seeded step high did not fit 1.0x its round-0 cost; judges) | 0.1267 |
+| brief 13 stilt_house (0/2) | 0.5627 |
+| brief 1 woodcutters_cabin (0/2) | 0.7842 |
+| brief 10 hellish_lair (0/2) | 0.7835 |
+| **total so far (spend.json)** | **4.9070** |
+
+**Gate item 6 result:** the smoke stop rule fired (4 of 4 smoke briefs accepted no step); the other 14 briefs were not
+run, as the contract says. G1 not shown (0 wins, 3 identical), G2 fail (+0.00), G4 within cap 4/4 (mean $0.49, 2.2 min
+added; estimate within 50% for 2/4: fail), G5 0 violations (no accepted step to check). Recorded: h2h vs the loop polish 1,
+loop 1, tie 1, identical 1; targeted judge identical 4/4. `rescore` byte-identical. Polish ships experimental at best:
+the label is the coordinator's/Noah's call (G4's estimate line also fails).
+
 The ledger of record is `artifacts/gate5b/spend.json`.
 
 ## Next paid step (resume here)
