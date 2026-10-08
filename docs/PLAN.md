@@ -181,7 +181,9 @@ usage hold, re-skin, open type). Caveats:
 - Real runs went over the WebSocket; the Java path is sim-only.
 - The bible set is cluttered and less legible, which is 5a's (critique loop) job.
 
-**Phase 5b status: BUILT, GATE PENDING VERIFICATION (2026-10-08; branch `phase/5b`, API 1.7.0 / mod 0.10.0;
+**Phase 5b status: SHIPPED 2026-10-08** (gate-verifier: delta apply passes. Polish failed G1/G2 and G4 (the critic accepted 0
+steps; estimate within 50% on 2/4), so per the contract polish stays behind a dev flag (`-Darchitect.dev.polish=true` for the
+Library button; API callers can still request it). Next lever: the critic itself, not the prompts. Original record: BUILT (2026-10-08; branch `phase/5b`, API 1.7.0 / mod 0.10.0;
 `artifacts/gate5b/REPORT.md`, local).** Delta apply: every $0 gate item passes (in-game exactness: chains E1 273/273, edits,
 layers 6/6 orders, crash D1-D8 + save variants + K5-K7, history, ghost; survival items in = out; the village delta batch at
 MSPT 11 ms; the size cap 589k cells with no tick over 50 ms; F1/F2; the 4d, 4e, sim and 1.6.0/1.5.0-jar regressions).

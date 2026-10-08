@@ -168,7 +168,7 @@ added on average $1.06 and 3 minutes to a $2.02 design. A blind Opus judge prefe
   open doors and your own edits elsewhere stay as they are. **History** lists the versions; a creative revert is an exact
   undo, Remove still restores the terrain exactly, and in survival an update (or "Rebuild as v1") is a construction job
   fed from a new crate, with refunds for what it takes away.
-- **Polish… (experimental).** A critic names one problem with one part, and the designer edits only that part, as a new
+- **Polish… (dev flag: start the game with `-Darchitect.dev.polish=true`).** A critic names one problem with one part, and the designer edits only that part, as a new
   version. In the 5b evaluation the critic did not accept the edits, so polish rarely produces a new version yet.
 
 <br>

@@ -581,7 +581,8 @@ final class LibraryTab {
 			row2.add(new Btn("compare", "Compare…", false, inWorld, () -> compare(c.id(), headV - 1, headV)));
 			row2.add(new Btn("revert_entry", "Revert to v" + (headV - 1), false, Sidecar.connected() && !c.bundled(), () -> revertEntry(c.id(), headV - 1)));
 		}
-		if (dev.larattalabs.architect.client.design.SetFeature.has("design.polish")) {
+		// (5b) polish failed its gate (G4), so per the contract it stays behind a dev flag: -Darchitect.dev.polish=true
+		if (dev.larattalabs.architect.client.design.SetFeature.has("design.polish") && Boolean.getBoolean("architect.dev.polish")) {
 			row2.add(new Btn("polish", POLISHING.contains(c.id()) ? "Polishing…" : "Polish…", false, !c.bundled() && c.canVariant() && !POLISHING.contains(c
 				.id()), () -> polish(c.id())));
 		}

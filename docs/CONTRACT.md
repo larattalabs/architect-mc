@@ -4163,3 +4163,12 @@ this section says what shipped.
   chains, edits, layers, crash, history, ghost, survival, survqueue, village, sizecap, apijars.
 - **Spend:** $9.17 API-equivalent (claude login, every paid run with a scrubbed environment: no ANTHROPIC_*/CLAUDE_*
   variable, logged in artifacts/gate5b/env-paid.log).
+
+## Phase 5b outcome (coordinator, 2026-10-08)
+
+- Delta apply, entry versions, checkDelta, outdated, the owner rule, F1 and F2 ship (gate items 1-5 and 8-9 passed; the
+  gate-verifier confirmed them).
+- Polish: G1 not shown, and G2 and G4 failed (the smoke stop rule ended the eval at 4 briefs: 0 steps accepted). By the outcome
+  rule above, polish stays **behind a dev flag**: the Library "Polish…" button shows only with `-Darchitect.dev.polish=true`.
+  The API and protocol keep `mode: "polish"` for callers who opt in knowingly. The next attempt changes the critic, which is
+  what refused visible fixes, and is re-gated on the same eval.
