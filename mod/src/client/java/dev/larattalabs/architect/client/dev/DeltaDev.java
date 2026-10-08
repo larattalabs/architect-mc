@@ -70,8 +70,13 @@ public final class DeltaDev {
 				Fields f = Fields.of(req);
 				SiteDeltas.Request r = request(f);
 				boolean cells = f.optBool("cells", false);
-				return DevBridge.onClient(mc, () -> ServerTasks.callAsPlayer((level, player) -> checkJson(SiteDeltas.check(level, r), cells))).thenCompose(
-					x -> x);
+				return DevBridge.onClient(mc, () -> ServerTasks.callAsPlayer((level, player) -> {
+					long t0 = System.nanoTime();
+					SiteDeltas.Check c = SiteDeltas.check(level, r);
+					JsonObject o = checkJson(c, cells);
+					o.addProperty("ms", (System.nanoTime() - t0) / 1e6);
+					return o;
+				})).thenCompose(x -> x);
 			});
 		DevBridge.register("dev.site.delta.apply", 120_000, "{site, version?, playerEdits?, overlap?, owner?, force?} - phase 5b: Sites.applyDelta "
 			+ "(instant) -> {applied, from, to, written, kept, reshaped, notes} or {applied: false, refusals}", (req, mc) -> {
@@ -79,7 +84,10 @@ public final class DeltaDev {
 				SiteDeltas.Request r = request(f);
 				return DevBridge.onClient(mc, () -> ServerTasks.callAsPlayer((level, player) -> {
 					try {
-						return resultJson(SiteDeltas.apply(level, r));
+						long t0 = System.nanoTime();
+						JsonObject o = resultJson(SiteDeltas.apply(level, r));
+						o.addProperty("ms", (System.nanoTime() - t0) / 1e6);
+						return o;
 					} catch (Sites.SiteException e) {
 						JsonObject o = new JsonObject();
 						o.addProperty("applied", false);

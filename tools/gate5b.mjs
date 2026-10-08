@@ -468,7 +468,7 @@ steps.e1 = async () => {
   let applies = 0;
   for (let op = 0; op < 14; op++) {
     const h = await history(site);
-    if (rnd(3) > 0 || h.chain.length < 2) {
+    if (process.env.G5B_APPLY_ONLY || rnd(3) > 0 || h.chain.length < 2) {
       let to = 1 + rnd(nv);
       if (to === h.version) to = (to % nv) + 1;
       const a = await deltaApply(site, to);
