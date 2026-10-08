@@ -15,7 +15,7 @@ export function synthWorld(seed = 'synth') {
   const t = fnv64('synth', seed, 'trees');
   return (x, z) => {
     const b = broad(x, 0, z), hl = hills(x, 0, z), r = rough(x, 0, z);
-    const ground = Math.floor(70 + 16 * b + 9 * hl * (0.6 + 0.4 * b) + 1.5 * r);
+    const ground = Math.floor(72 + 20 * b + 11 * hl * (0.6 + 0.4 * b) + 1.5 * r);
     if (ground < SEA) return { g: SEA, h: SEA, f: ground, flags: FLAG_WATER };
     const tree = hash3(t.hi, t.lo, x, 0, z) % 97 === 0;
     return { g: ground, h: tree ? ground + 6 : ground, f: ground, flags: tree ? FLAG_TREE : 0 };
