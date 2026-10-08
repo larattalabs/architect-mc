@@ -3028,3 +3028,18 @@ Mosswater, kept in `eval/fixtures/bibles/mosswater/versions/2/`) and `clutter` (
 summary is a pure function of the stored files (`rescore` is byte-identical). **The judge sees 4 views per set** (iso, iso_back,
 front, top: 8 images, the job.images limit), not 5. A pair whose final is round 0 (the loop kept round 0) is `identical`: no judge
 call, counted as a tie. The sim tier runs in CI (`sidecar/test/eval.e2e.test.ts`, on its own copy of the bundle).
+
+### Phase 5a gate results (builder's run, 2026-10-08; $93.23 API-equivalent, claude login, cap raised to $150 by Noah)
+
+| Item | Result |
+|---|---|
+| Probe | image blocks work under the claude login ($0.0098) |
+| Smoke (4) | 2 wins, 1 tie, 1 identical; rejudge agreed 4/4; seeds calibrated, DETAIL_NOISE_MAX frozen |
+| G1 | **not shown**: 18 revised, 7 wins / 6 losses / 5 ties (3 identical), p 0.50 |
+| G2 | **fail**: critic mean 5.48 -> 5.76; P0 at install 0 in 16/18 |
+| G3 | pass |
+| G4 | pass: loop within cap 18/18, 52% of round 0, +3.2 min, estimate +-50% 16/18 and total +10.5% |
+| Clutter | legibility 2/3, detailNoise and accentShare lower; design-critic "set" 8 and **6** (bar 7) |
+| Other | report critique, massing critique (ended `budget` before a revision), a loop design through the Java API: ok |
+| Opus subset | directional: Opus preferred 2, Sonnet 1, tie 1; Opus +33% cost |
+| Regressions | all suites green; 4a-4c sim suites; the 1.5.0 jar against 0.9.0; the 4e migration step; UI walk-through |
