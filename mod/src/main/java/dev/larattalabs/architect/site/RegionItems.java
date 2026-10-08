@@ -107,9 +107,11 @@ public final class RegionItems {
 				}
 			}
 			if (!Batches.loaded(level, win)) {
+				heldWait(b, i, level, win);
 				Batches.waitFor(b, i, Reason.NOT_LOADED, "the tile's chunks are not loaded on the server" + (b.loadChunks > 0 ? " yet" : " (walk closer)"));
 				return;
 			}
+			HELD_SINCE.remove(b.id + "/" + i.key);
 		}
 		if (!p.frozen) {
 			int st = freezeStep(r, p, t[3], level, deadline);
@@ -192,6 +194,34 @@ public final class RegionItems {
 			} else {
 				Batches.fail(b, i, e.reason(), e.getMessage());
 			}
+		}
+	}
+
+	/** Liveness (gate item 4): when a tile item holding its tickets first waited for its (all generated) chunks to load. */
+	private static final Map<String, Long> HELD_SINCE = new HashMap<>();
+	/** The longest such wait (seconds) and every wait over 10 s with its chunk statuses (dev.region.state). */
+	public static double maxHeldWaitSeconds;
+	public static final java.util.List<String> LONG_WAITS = new java.util.ArrayList<>();
+
+	private static void heldWait(QBatch b, QItem i, ServerLevel level, Anchors.Bounds win) {
+		if (!i.ticketed) {
+			return;
+		}
+		long now = System.currentTimeMillis();
+		Long since = HELD_SINCE.putIfAbsent(b.id + "/" + i.key, now);
+		if (since == null) {
+			return;
+		}
+		double s = (now - since) / 1000.0;
+		maxHeldWaitSeconds = Math.max(maxHeldWaitSeconds, s);
+		if (s > 10 && LONG_WAITS.size() < 200 && (LONG_WAITS.isEmpty() || !LONG_WAITS.get(LONG_WAITS.size() - 1).startsWith(i.key + " "))) {
+			Map<String, Integer> st = new java.util.TreeMap<>();
+			for (long c : Batches.chunks(win)) {
+				var ls = level.getChunkSource().chunkMap.getLatestStatus(c);
+				st.merge((ls == null ? "none" : ls.getName()) + (level.hasChunk(net.minecraft.world.level.ChunkPos.getX(c), net.minecraft.world.level.ChunkPos
+					.getZ(c)) ? "+loaded" : ""), 1, Integer::sum);
+			}
+			LONG_WAITS.add(i.key + " " + String.format(java.util.Locale.ROOT, "%.0f", s) + " s " + st);
 		}
 	}
 
@@ -351,6 +381,9 @@ public final class RegionItems {
 
 	public static void reset() {
 		PIPES.clear();
+		HELD_SINCE.clear();
+		LONG_WAITS.clear();
+		maxHeldWaitSeconds = 0;
 		starvedTicks = 0;
 		writerTicks = 0;
 	}

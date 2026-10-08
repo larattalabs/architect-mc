@@ -846,6 +846,11 @@ public final class RegionsImpl implements Regions {
 			o.addProperty("batchStatus", b.status.name());
 		}
 		o.addProperty("starvedTicks", RegionItems.starvedTicks);
+		o.addProperty("maxHeldWaitSeconds", RegionItems.maxHeldWaitSeconds);
+		com.google.gson.JsonArray lw = new com.google.gson.JsonArray();
+		RegionItems.LONG_WAITS.forEach(lw::add);
+		o.add("longWaits", lw);
+		o.addProperty("chunkLoads", GenCounter.loads());
 		o.addProperty("writerTicks", RegionItems.writerTicks);
 		o.addProperty("generatedTerrain", GenCounter.terrain());
 		o.addProperty("generatedWhileHeld", GenCounter.whileHeld());

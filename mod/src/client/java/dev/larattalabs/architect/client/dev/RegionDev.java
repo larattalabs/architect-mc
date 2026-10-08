@@ -260,6 +260,7 @@ public final class RegionDev {
 				o.addProperty("terrain", GenCounter.terrain());
 				o.addProperty("full", GenCounter.full());
 				o.addProperty("whileHeld", GenCounter.whileHeld());
+				o.addProperty("loads", GenCounter.loads());
 				return CompletableFuture.completedFuture(o);
 			});
 		DevBridge.register("dev.chunks.status", 600_000, "{box: [x0,z0,x1,z1] (blocks)} - phase 6a: how many chunks of the box were fully generated, "

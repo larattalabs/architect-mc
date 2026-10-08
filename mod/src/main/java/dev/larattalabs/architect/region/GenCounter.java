@@ -13,6 +13,8 @@ import net.minecraft.server.level.ServerLevel;
 public final class GenCounter {
 	private static final AtomicLong TERRAIN = new AtomicLong();
 	private static final AtomicLong FULL = new AtomicLong();
+	/** Chunks loaded (generated or from disk) this session (gate S9: chunks loaded per stage). */
+	private static final AtomicLong LOADS = new AtomicLong();
 	/** Chunks generated while a region item held tickets (checked by the gate: must stay 0 under GENERATED_ONLY). */
 	private static final AtomicLong WHILE_HELD = new AtomicLong();
 	private static volatile int holders;
@@ -22,6 +24,7 @@ public final class GenCounter {
 
 	public static void init() {
 		ServerChunkEvents.CHUNK_LOAD.register((level, chunk, generated) -> {
+			LOADS.incrementAndGet();
 			if (generated) {
 				FULL.incrementAndGet();
 			}
@@ -50,6 +53,10 @@ public final class GenCounter {
 		return FULL.get();
 	}
 
+	public static long loads() {
+		return LOADS.get();
+	}
+
 	public static long whileHeld() {
 		return WHILE_HELD.get();
 	}
@@ -57,6 +64,7 @@ public final class GenCounter {
 	public static void reset() {
 		TERRAIN.set(0);
 		FULL.set(0);
+		LOADS.set(0);
 		WHILE_HELD.set(0);
 		holders = 0;
 	}
