@@ -77,6 +77,7 @@ public final class Batches {
 	static void init() {
 		// the ticket type registers with the class (during mod init, before the registries freeze)
 		Architect.LOGGER.debug("placement ticket {}", TICKET);
+		Diag.init();
 	}
 
 	// ------------------------------------------------------------------ reads
@@ -853,6 +854,9 @@ public final class Batches {
 	}
 
 	private static void waitFor(QBatch b, QItem i, Reason why, String msg) {
+		if (Diag.on()) {
+			diagWait(b, i, i.waited + RECHECK >= b.maxWaitTicks && i.status == QItem.Status.WAITING ? "TIMED_OUT" : why.name(), msg);
+		}
 		boolean first = i.status != QItem.Status.WAITING;
 		boolean changed = first || !why.name().equals(i.reason);
 		if (!first) {
@@ -1097,12 +1101,18 @@ public final class Batches {
 		if (!ticketTurn(b, i) || count + want.size() > b.loadChunks) {
 			if (want.size() <= b.loadChunks) {
 				ticketWait(b, i); // it fits once the budget is free (a larger one waits for a player, LOADED_ONLY)
+			} else if (Diag.on()) {
+				JsonObject o = new JsonObject();
+				o.addProperty("key", i.key);
+				o.addProperty("want", want.size());
+				Diag.note("overBound", o);
 			}
 			return; // over the bound: it waits for a player like LOADED_ONLY
 		}
 		ticketGot(b, i);
 		for (long c : want) {
 			level.getChunkSource().addTicketWithRadius(TICKET, ChunkPos.unpack(c), 0);
+			Diag.ticketAdded(1);
 		}
 		held.put(i.key, want);
 		levels.put(b.id + "/" + i.key, i.dimension);
@@ -1137,8 +1147,16 @@ public final class Batches {
 			return;
 		}
 		ticketGot(b, i);
+		if (Diag.on()) {
+			JsonObject o = new JsonObject();
+			o.addProperty("key", i.key);
+			o.addProperty("want", want.size());
+			o.addProperty("heldBefore", count);
+			Diag.note("ticketBox", o);
+		}
 		for (long c : want) {
 			level.getChunkSource().addTicketWithRadius(TICKET, ChunkPos.unpack(c), 0);
+			Diag.ticketAdded(1);
 		}
 		held.put(i.key, want);
 		levels.put(b.id + "/" + i.key, i.dimension);
@@ -1149,8 +1167,16 @@ public final class Batches {
 		Set<Long> want = chunks(snap.grow(LeafGuard.RADIUS + 1));
 		for (long c : want) {
 			level.getChunkSource().addTicketWithRadius(TICKET, ChunkPos.unpack(c), 0);
+			Diag.ticketAdded(1);
 		}
 		TICKETS.computeIfAbsent(b.id, k -> new HashMap<>()).put("job:" + i.key, want);
+		if (Diag.on()) {
+			JsonObject o = new JsonObject();
+			o.addProperty("key", i.key);
+			o.addProperty("want", want.size());
+			o.addProperty("heldAfter", diagHeld());
+			Diag.note("ticketJob", o);
+		}
 		levels.put(b.id + "/job:" + i.key, i.dimension);
 	}
 
@@ -1193,6 +1219,7 @@ public final class Batches {
 		}
 		for (long c : cs) {
 			level.getChunkSource().removeTicketWithRadius(TICKET, ChunkPos.unpack(c), 0);
+			Diag.ticketRemoved(1);
 		}
 		String w = TICKET_WAITER.get(b.id);
 		QItem wi = w == null ? null : b.item(w);
@@ -1210,6 +1237,40 @@ public final class Batches {
 			untickItem(server, b, k);
 		}
 		TICKETS.remove(b.id);
+	}
+
+	// ------------------------------------------------------------------ diagnostics (phase 6a step 1, diag branch only)
+
+	static int diagHeld() {
+		return TICKETS.values().stream().mapToInt(m -> m.values().stream().mapToInt(Set::size).sum()).sum();
+	}
+
+	static String diagWaiters() {
+		return TICKET_WAITER.toString();
+	}
+
+	private static void diagWait(QBatch b, QItem i, String why, String msg) {
+		MinecraftServer server = serverOf();
+		ServerLevel level = server == null ? null : Sites.levelOf(server, i.dimension);
+		Map<String, Set<Long>> held = TICKETS.get(b.id);
+		Set<Long> want = null;
+		if ("building".equals(i.itemKind)) {
+			Blueprint bp = Blueprints.get(i.blueprint);
+			if (bp != null) {
+				int sx = BlueprintTransform.rotatedSizeX(bp.sizeX(), bp.sizeZ(), i.turns);
+				int sz = BlueprintTransform.rotatedSizeZ(bp.sizeX(), bp.sizeZ(), i.turns);
+				int m = LotFitting.frontMargin(bp) + LeafGuard.RADIUS + 1;
+				want = chunks(new Anchors.Bounds(i.x - m, i.y, i.z - m, i.x + sx - 1 + m, i.y + bp.sizeY() - 1, i.z + sz - 1 + m));
+			}
+		} else if (i.spec != null && !"delta".equals(i.itemKind)) {
+			try {
+				want = chunks(infraBox(i));
+			} catch (RuntimeException e) {
+				want = null;
+			}
+		}
+		int total = held == null ? 0 : held.values().stream().mapToInt(Set::size).sum();
+		Diag.waiting(b, i, why, msg, level, want, held != null && held.containsKey(i.key), i.key.equals(TICKET_WAITER.get(b.id)), total);
 	}
 
 	// ------------------------------------------------------------------ persistence
