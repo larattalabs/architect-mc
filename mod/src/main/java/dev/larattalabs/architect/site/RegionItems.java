@@ -237,6 +237,17 @@ public final class RegionItems {
 			p.freeze = new Heights.Freeze(r.world(), r.rec().id, w.minX(), w.minZ(), w.maxX(), w.maxZ());
 		}
 		int st = p.freeze.step(level, deadline);
+		if (st == 1 || st == -2) {
+			QBatch b = Batches.get(r.rec().batchId);
+			MinecraftServer srv = level.getServer();
+			if (b != null) {
+				for (QItem q : b.items) {
+					if (q.spec != null && "tile".equals(q.itemKind) && key.equals(q.spec.get("tile").getAsString())) {
+						Batches.untickItem(srv, b, "freeze:" + q.key); // the freeze's own tickets (taken ahead), never kept
+					}
+				}
+			}
+		}
 		if (st == 1) {
 			p.frozen = true;
 			p.freeze = null;
@@ -371,6 +382,10 @@ public final class RegionItems {
 	/** The item is gone (placed, failed, cancelled): its pipe and any streamed cells go. */
 	static void forget(QBatch b, QItem i) {
 		PIPES.remove(b.id + "/" + i.key);
+		MinecraftServer srv = Batches.serverOf();
+		if (srv != null) {
+			Batches.untickItem(srv, b, "freeze:" + i.key); // a freeze ahead that the head finished first
+		}
 		if ("tile".equals(i.itemKind) && i.spec != null) {
 			String[] t = tileOf(i);
 			TileStream.release(t[0], t[1], t[2], t[3]);
