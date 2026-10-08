@@ -1365,10 +1365,8 @@ public final class Builder {
 	static Deconstruction prepareDeconstruct(ServerLevel level, Site s) {
 		MinecraftServer srv = level.getServer();
 		Run r = run(srv, s);
-		Cells before = SiteJournal.before(s.id(), s.restoreBox(), false);
-		if (before == null) {
-			before = Cells.fromValues(s.restoreBox(), Map.of());
-		}
+		Map<Long, dev.larattalabs.architect.journal.Journal.Value> known = SiteJournal.beforeMap(s.id(), false);
+		Cells before = known == null ? Cells.fromValues(s.restoreBox(), Map.of()) : Cells.fromValues(s.restoreBox(), known);
 		Anchors.Bounds b = s.restoreBox();
 		BitSet free = s.construction().free();
 		Refunds.Tally tally = new Refunds.Tally();
@@ -1395,6 +1393,10 @@ public final class Builder {
 							}
 							continue;
 						}
+					}
+					int qi0 = r == null ? -1 : r.queuePos(m);
+					if (qi0 < 0 && known != null && !known.containsKey(m.asLong())) {
+						continue; // a cell of the restore box no entry of the site recorded (between versions' boxes): not the site's
 					}
 					BlockState now = level.getBlockState(m);
 					int k = Construction.index(x - b.minX(), y - b.minY(), z - b.minZ(), dx, dz);

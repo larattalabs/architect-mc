@@ -1094,6 +1094,12 @@ public final class SiteJournal {
 
 	/** The site entry's {@code before} values as a dense box (a deconstruct's "was" per cell). */
 	static @Nullable Cells before(String siteId, Anchors.Bounds box, boolean undone) {
+		Map<Long, Value> v = beforeMap(siteId, undone);
+		return v == null ? null : Cells.fromValues(box, v);
+	}
+
+	/** {@link #before}'s values by position: only the cells some entry of the site recorded (null without a site entry). */
+	static @Nullable Map<Long, Value> beforeMap(String siteId, boolean undone) {
 		JournalStore s = WorldJournal.storeOrNull();
 		if (s == null) {
 			return null;
@@ -1134,7 +1140,7 @@ public final class SiteJournal {
 		} catch (IOException e) {
 			return null;
 		}
-		return Cells.fromValues(box, v);
+		return v;
 	}
 
 	/** The {@code before} and {@code after} at one cell of a site's site entry (null when it has none there). */
