@@ -16,10 +16,10 @@ Working notes for resuming phase 5b after a pause. Deleted only when the delta-a
 |---|---|
 | 0. Baseline (09a4a38) | kit 126, sidecar 536, mod 339 tests, all green |
 | 1. F1 sidecar-bundle guard, F2 USER/LOGNAME | not started |
-| 2. Kit frame, parts.nbt, diff.mjs (scope), fixtures; round-0 rebuild tripwire | not started |
-| 3. Sidecar entry versions, critique.json format 2, entry.* messages | not started |
+| 2. Kit frame, parts.nbt, diff.mjs (scope), fixtures; round-0 rebuild tripwire | done on `phase/5b-js`: frame + `<id>.parts.nbt` (installs, rounds, variants, massings copy it), `kit/tools/diff.mjs`, `kit/lib/rebuild.mjs` + `kit/tools/rebuild.mjs`, tavern versions `kit/test/fixtures/versions/tavern/v1..v5`, `node kit/tools/delta-fixtures.mjs --out <dir>` (31 pairs); tripwire 18/18 + 4/4 examples byte-identical (`artifacts/gate5b/round0-rebuild.json`) |
+| 3. Sidecar entry versions, critique.json format 2, entry.* messages | done on `phase/5b-js`: `sidecar/src/versions.ts` (install with fault points, repair, GC with `pins.json`, revert, refusals), critique.json format 2, criticHash = 5a's provenance hash, `entry.versions/delta/revert/pins`, `entry.versioned` |
 | 4. Mod TemplateDelta, delta apply, revert, fold, crash points, survival, queue/stages, preview, UI | not started |
-| 5. Polish on the sim backend | not started |
+| 5. Polish on the sim backend | done on `phase/5b-js`: `sidecar/src/polish.ts` (sim + Claude backends; prompts are DRAFTS in `claude/polishprompts.ts`), `design.polish`, estimates, `critique.mode: "polish"`; `tools/eval.mjs import-round0` / `run --arm polish --from` (sim tier in CI) |
 | 6. Java API 1.7.0, api-compat (1.6.0 and 1.5.0 jars) | not started |
 | 7. Gate items 1-5, 8, 9 ($0) | not started |
 | 8. Polish prompt development (cap $20), freeze, smoke, full, other real checks | not started |
