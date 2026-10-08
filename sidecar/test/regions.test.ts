@@ -11,37 +11,9 @@ import { FEATURES, parseClientMessage, ServerMessage, toProtocol1, type Outbound
 import { canonicalJson, permissionFlag, sha256 } from '../src/regions.js';
 import type { ClientHandle } from '../src/server.js';
 import { SimDesigner } from '../src/sim.js';
-import { makeSidecar, until, type Harness } from './helpers.js';
+import { arsv, makeSidecar, tileHeights, until, type Harness } from './helpers.js';
 
 // ---- helpers ----------------------------------------------------------------------------------------
-
-/** An ARSV columns buffer (kit/REGIONS.md "Columns codec"). */
-export function arsv(minX: number, minZ: number, width: number, depth: number, ground: (i: number, j: number) => number = () => 64): Buffer {
-  const n = width * depth;
-  const b = Buffer.alloc(28 + n * 7);
-  b.write('ARSV', 0, 'latin1');
-  b[4] = 1;
-  b.writeInt32LE(minX, 8);
-  b.writeInt32LE(minZ, 12);
-  b.writeInt32LE(width, 16);
-  b.writeInt32LE(depth, 20);
-  b.writeInt32LE(1, 24);
-  for (let j = 0; j < depth; j++)
-    for (let i = 0; i < width; i++) {
-      const k = i + j * width;
-      const g = ground(i, j);
-      b.writeInt16LE(g, 28 + k * 2);
-      b.writeInt16LE(g, 28 + n * 2 + k * 2);
-      b.writeInt16LE(g, 28 + n * 4 + k * 2);
-    }
-  return b;
-}
-
-/** A tile's heights: its 80x80 window. */
-export function tileHeights(key: string, salt = 0): string {
-  const [tx, tz] = key.split(',').map(Number) as [number, number];
-  return arsv(64 * tx - 8, 64 * tz - 8, 80, 80, (i, j) => 60 + ((i * 7 + j * 3 + salt + tx * 5 + tz) % 9)).toString('base64');
-}
 
 interface FakeClient extends ClientHandle {
   sent: Outbound[];
