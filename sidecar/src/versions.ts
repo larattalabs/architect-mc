@@ -182,8 +182,11 @@ export class EntryVersions {
 
   // ---- install ---------------------------------------------------------------------------------------------
 
-  /** Install the files as version head+1. Returns the new version number. */
-  install(entryId: string, files: VersionFiles, meta: VersionMeta): number {
+  /**
+   * Install the files as version head+1. Returns the new version number. `headFrame`: the head's design origin when its
+   * JSON records none (a pre-5b entry: a polish proved it by the rebuild), written into the first bump's versions/<head>/.
+   */
+  install(entryId: string, files: VersionFiles, meta: VersionMeta, opts: { headFrame?: number[] | undefined } = {}): number {
     this.repair(entryId);
     const top = this.top(entryId);
     if (!top) throw new VersionRefused('no_entry', `no library entry "${entryId}"`);
@@ -203,7 +206,8 @@ export class EntryVersions {
         if (st.isDirectory()) fs.cpSync(p, path.join(tmp, f), { recursive: true });
         else if (st.isFile() && f !== `${entryId}.blueprint.json`) fs.copyFileSync(p, path.join(tmp, f));
       }
-      const j = { ...top, version: n, versions: lineage };
+      const j: Record<string, unknown> = { ...top, version: n, versions: lineage };
+      if (!j.frame && opts.headFrame) j.frame = { origin: [...opts.headFrame] };
       fs.writeFileSync(path.join(tmp, `${entryId}.blueprint.json`), jsonText(j));
       this.fault?.('head-copied');
       fs.renameSync(tmp, path.join(vroot, String(n)));

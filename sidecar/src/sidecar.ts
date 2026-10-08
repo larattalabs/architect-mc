@@ -733,8 +733,11 @@ export class Sidecar {
 
   /** Files an installed entry keeps: the bible files its source imports (bible/bible.json, bible/components.mjs). */
   entryFiles(d: Design, scratch: string): Array<{ from: string; to: string }> {
-    if (!d.request.bible) return [];
-    return ['bible.json', 'bible.md', 'components.mjs'].map((f) => ({ from: path.join(scratch, 'bible', f), to: path.join('bible', f) }));
+    const bible = d.request.bible ? ['bible.json', 'bible.md', 'components.mjs'].map((f) => ({ from: path.join(scratch, 'bible', f), to: path.join('bible', f) })) : [];
+    // (5b) a group item keeps the neighbour renders it was designed and critiqued with (a later polish's critic sees them)
+    const nb = path.join(scratch, 'neighbours');
+    const neighbours = !d.request.massing && d.request.group && fs.existsSync(nb) ? fs.readdirSync(nb).filter((f) => f.endsWith('.png')).sort().slice(0, 4).map((f) => ({ from: path.join(nb, f), to: path.join('neighbours', f) })) : [];
+    return [...bible, ...neighbours];
   }
 
   /** The entry's extra sidecar fields: ext, the bible pin and the group (collections, R10), the item key. */

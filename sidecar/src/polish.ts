@@ -461,6 +461,9 @@ export class Polishes {
       else fs.copyFileSync(p, path.join(installed, f));
     }
     if (fs.existsSync(path.join(installed, 'bible'))) fs.cpSync(path.join(installed, 'bible'), path.join(scratch, 'bible'), { recursive: true });
+    // (a group item) the neighbour renders it was critiqued with: the polish critic sees them too
+    fs.rmSync(path.join(scratch, 'neighbours'), { recursive: true, force: true });
+    if (fs.existsSync(path.join(installed, 'neighbours'))) fs.cpSync(path.join(installed, 'neighbours'), path.join(scratch, 'neighbours'), { recursive: true });
     sc.designStep(id, 'checking', `polish of ${w.entryId}: rebuilding v${w.spec.fromVersion} from its source`);
     const tool = path.join(sc.config.kitDir, 'tools', 'rebuild.mjs');
     if (!fs.existsSync(tool)) throw new Error('the kit has no tools/rebuild.mjs (an older kit)');
@@ -617,7 +620,17 @@ export class Polishes {
     const check = readObj(path.join(build.dir, 'check.json')) as { warnings?: string[]; metrics?: Record<string, unknown> } | undefined;
     const summary = blueprintSummary({ sidecar: json, request: d.request, warnings: check?.warnings ?? [], metrics: check?.metrics ?? undefined });
     const bible = this.bibleText(scratch);
-    const ctx: CriticContext = { kind: 'design', request: d.request, ...(bible ? { bible } : {}), neighbours: 0, views, parts, extraCriteria: d.request.critique?.extraCriteria ?? [], summary, ...(slices ? { slices } : {}), ...(o.previous?.length ? { previous: o.previous } : {}), round: o.round, ...(o.report ? { report: true } : {}) };
+    // a group item: its neighbours' renders (at most 4) and its set line, as the design's own critic had them
+    const nb = path.join(scratch, 'neighbours');
+    let neighbours = 0;
+    for (const f of fs.existsSync(nb) ? fs.readdirSync(nb).filter((x) => x.endsWith('.png')).sort().slice(0, 4) : []) {
+      images.push({ file: path.join(nb, f), label: `neighbour ${f.replace(/\.png$/, '')} (iso)` });
+      neighbours++;
+    }
+    const entryReq = DesignRequestSchema.safeParse(readObj(path.join(scratch, 'base', 'installed', `${w.bp}.blueprint.json`))?.request);
+    const g = entryReq.success ? entryReq.data : undefined;
+    const request: DesignRequest = g?.group ? { ...d.request, group: g.group, ...(g.itemKey ? { itemKey: g.itemKey } : {}), ...(g.wave !== undefined ? { wave: g.wave } : {}), ...(g.role ? { role: g.role } : {}) } : d.request;
+    const ctx: CriticContext = { kind: 'design', request, ...(bible ? { bible } : {}), neighbours, views, parts, extraCriteria: d.request.critique?.extraCriteria ?? [], summary, ...(slices ? { slices } : {}), ...(o.previous?.length ? { previous: o.previous } : {}), round: o.round, ...(o.report ? { report: true } : {}) };
     const dims = dimsFor(ctx);
     const left = this.cap(w.entryId, w.spec) - this.spent(w);
     for (;;) {
@@ -979,7 +992,9 @@ export class Polishes {
       cost: { critic: w.critic.usd, polish: w.turns.usd },
     };
     // delta.json: the kit's summary from the version polished to the result (written synchronously by install below)
-    const delta = this.deltaSync(w, fromDir ? path.join(fromDir, `${w.entryId}.nbt`) : path.join(w.base0!.dir, `${w.bp}.nbt`), nbt, next);
+    // from the rebuilt base (its cells equal the installed version's, and it records the frame a pre-5b entry lacks)
+    const delta = this.deltaSync(w, path.join(w.base0!.dir, `${w.bp}.nbt`), nbt, next);
+    const baseFrame = (readObj(path.join(w.base0!.dir, `${w.bp}.blueprint.json`))?.frame as { origin?: number[] } | undefined)?.origin;
     const version = sc.versions.install(
       w.entryId,
       {
@@ -990,9 +1005,13 @@ export class Polishes {
         previews: fs.existsSync(path.join(final.dir, 'previews')) ? fs.readdirSync(path.join(final.dir, 'previews')).map((f) => path.join(final.dir, 'previews', f)) : [],
         critique,
         ...(delta ? { delta } : {}),
-        files: fs.existsSync(path.join(scratch, 'base', 'installed', 'bible')) ? fs.readdirSync(path.join(scratch, 'base', 'installed', 'bible')).map((f) => ({ from: path.join(scratch, 'base', 'installed', 'bible', f), to: path.join('bible', f) })) : [],
+        files: ['bible', 'neighbours'].flatMap((sub) => {
+          const dir = path.join(scratch, 'base', 'installed', sub);
+          return fs.existsSync(dir) ? fs.readdirSync(dir).map((f) => ({ from: path.join(dir, f), to: path.join(sub, f) })) : [];
+        }),
       },
       { by: 'polish', parent: w.spec.fromVersion, designId: id, summary, criticHash: criticHash() },
+      { headFrame: w.spec.fromVersion === head ? baseFrame : undefined },
     );
     w.installedVersion = version;
     w.phase = 'ended';

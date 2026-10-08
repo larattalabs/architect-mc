@@ -1174,7 +1174,14 @@ export function importRound0(fromDir, libraryDir, { briefs, tier } = {}) {
         fs.mkdirSync(path.join(dir, 'bible'), { recursive: true });
         for (const f of ['bible.json', 'bible.md', 'components.mjs']) if (fs.existsSync(path.join(bibleDir, f))) fs.copyFileSync(path.join(bibleDir, f), path.join(dir, 'bible', f));
       }
-      const { critique: _c, group: _g, itemKey: _k, wave: _w, role: _r, budgetUsd: _b, ...request } = design?.request ?? b.request;
+      // the design's own request (a group item keeps group, itemKey, wave and role: its critic's set line)
+      const { critique: _c, budgetUsd: _b, ...request } = design?.request ?? b.request;
+      // a group item: the neighbour renders its round 0 was critiqued with (the polish critic sees them too)
+      const nb = path.join(fromDir, 'sidecar', 'data', 'designs', did, 'neighbours');
+      if (request.group && fs.existsSync(nb)) {
+        fs.mkdirSync(path.join(dir, 'neighbours'), { recursive: true });
+        for (const f of fs.readdirSync(nb).filter((x) => x.endsWith('.png')).sort().slice(0, 4)) fs.copyFileSync(path.join(nb, f), path.join(dir, 'neighbours', f));
+      }
       if (tier === 'sim') request.notes = `${request.notes ?? ''} ${simPolishScript(b)}`.trim();
       const rebuilt = readJson(v.out.json);
       const nbtSha256 = sha256(path.join(dir, `${id}.nbt`));

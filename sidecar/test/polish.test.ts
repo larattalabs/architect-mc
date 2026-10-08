@@ -124,6 +124,53 @@ describe.skipIf(!hasKit)('polish (sim backend, real kit)', () => {
     expect(d2.polish!.report).toBeUndefined();
   }, 120_000);
 
+  it('a pre-5b entry (no frame, origin 1,0,1): delta.json and entry.delta in the rebuilt frame; the first bump records it', async () => {
+    h = await harness();
+    const e = await entry(h, 'sim:issues=P1@roof', 'Old Inn');
+    const jf = path.join(h.sc.config.libraryDir, e, `${e}.blueprint.json`);
+    const j = top(h, e);
+    expect(j.frame).toEqual({ origin: [1, 0, 1] });
+    delete j.frame;
+    delete j.version;
+    delete j.versions;
+    fs.writeFileSync(jf, JSON.stringify(j, null, 2));
+    fs.rmSync(path.join(h.sc.config.libraryDir, e, `${e}.parts.nbt`));
+    const p = (await polish(h, e, { maxSteps: 1 })).polish!;
+    expect(p).toMatchObject({ end: 'polished', installedVersion: 2 });
+    const dir = path.join(h.sc.config.libraryDir, e);
+    const delta = JSON.parse(fs.readFileSync(path.join(dir, 'versions', '2', 'delta.json'), 'utf8')) as { parts: Record<string, { status: string }>; frameHint?: number[]; approximate: boolean };
+    expect(Object.entries(delta.parts).filter(([, x]) => x.status !== 'UNCHANGED').map(([k]) => k)).toEqual(['roof']);
+    expect(delta.frameHint).toBeUndefined();
+    expect(delta.approximate).toBe(false);
+    expect(JSON.parse(fs.readFileSync(path.join(dir, 'versions', '1', `${e}.blueprint.json`), 'utf8')).frame).toEqual({ origin: [1, 0, 1] });
+    const live = (await h.sc.entryDelta(e, 1, 2)) as { parts: Record<string, { status: string }>; frameHint?: number[] };
+    expect(Object.entries(live.parts).filter(([, x]) => x.status !== 'UNCHANGED').map(([k]) => k)).toEqual(['roof']);
+    expect(live.frameHint).toBeUndefined();
+  }, 120_000);
+
+  it('a group item: the polish critic sees the neighbour renders the entry keeps (the set dimension) and its set line', async () => {
+    h = await harness();
+    const e = await entry(h, 'sim:issues=P1@roof', 'Set Inn');
+    const dir = path.join(h.sc.config.libraryDir, e);
+    fs.mkdirSync(path.join(dir, 'neighbours'), { recursive: true });
+    fs.copyFileSync(path.join(dir, `${e}.preview-iso.png`), path.join(dir, 'neighbours', 'gen_anchor.png'));
+    const j = top(h, e);
+    fs.writeFileSync(path.join(dir, `${e}.blueprint.json`), JSON.stringify({ ...j, request: { ...(j.request as object), group: 'g1', itemKey: 'inn', wave: 1, role: 'ordinary' } }, null, 2));
+    const d = await polish(h, e, { maxSteps: 1 });
+    expect(d.polish).toMatchObject({ end: 'polished' });
+    expect(d.request.group).toBeUndefined();
+    const jobs = h.sc.jobs.book.recent().filter((x) => (x.spec as { owner?: string }).owner === 'architect:polish');
+    const work = h.sc.store.data.jobWork;
+    expect(jobs.length).toBeGreaterThanOrEqual(2);
+    for (const job of jobs) {
+      const spec = work[job.id]!.spec as unknown as { schema: { properties: { scores: { required: string[] } } }; prompt: string };
+      expect(spec.schema.properties.scores.required).toContain('set');
+      expect(spec.prompt).toMatch(/building of a set \(item inn, wave 1\)/);
+      expect(work[job.id]!.images!.some((im) => /neighbour gen_anchor/.test(im.label))).toBe(true);
+    }
+    expect(fs.existsSync(path.join(dir, 'versions', '2', 'neighbours', 'gen_anchor.png'))).toBe(true);
+  }, 120_000);
+
   it('no_target: only issues without a part (untargetable); the fresh report becomes the head critique.json', async () => {
     h = await harness();
     const e = await entry(h, 'sim:issues=P1@-,P2@-');
