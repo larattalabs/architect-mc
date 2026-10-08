@@ -74,6 +74,8 @@ public final class TileStream {
 	static volatile @Nullable Link link;
 	/** Stats for the gate: tiles received, wire bytes, cells. */
 	public static final AtomicInteger RECEIVED = new AtomicInteger();
+	/** Request to last frame, per tile (ms): the evaluation as the mod sees it (queue, evaluate, send). */
+	public static final List<Double> LATENCY = new ArrayList<>();
 	public static final java.util.concurrent.atomic.AtomicLong WIRE_BYTES = new java.util.concurrent.atomic.AtomicLong();
 	public static final java.util.concurrent.atomic.AtomicLong WIRE_CELLS = new java.util.concurrent.atomic.AtomicLong();
 
@@ -211,6 +213,9 @@ public final class TileStream {
 		t.receivedAt = System.nanoTime();
 		t.phase = Phase.RECEIVED;
 		RECEIVED.incrementAndGet();
+		synchronized (LATENCY) {
+			LATENCY.add((t.receivedAt - t.requestedAt) / 1e6);
+		}
 		WIRE_BYTES.addAndGet(t.wireBytes);
 		WIRE_CELLS.addAndGet(count);
 		Tile tt = t;

@@ -869,13 +869,33 @@ public final class JournalStore {
 		}
 	}
 
+	/** Phase 6a: the index commits' durations (ms, the last 4096) and the index size, for the gate's bars. */
+	private final java.util.ArrayDeque<Double> indexMs = new java.util.ArrayDeque<>();
+	private volatile long indexBytes;
+
+	public synchronized double[] indexCommitMs() {
+		return indexMs.stream().mapToDouble(Double::doubleValue).toArray();
+	}
+
+	public long indexBytes() {
+		return indexBytes;
+	}
+
 	private void writeIndex(Index idx) throws IOException {
+		long t0 = System.nanoTime();
 		Files.createDirectories(dir);
 		Path f = dir.resolve(INDEX);
 		Path tmp = dir.resolve(INDEX + ".tmp");
 		String json = GSON.toJson(indexToJson(idx));
 		Files.writeString(tmp, json, StandardCharsets.UTF_8);
 		Files.move(tmp, f, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+		indexBytes = json.length();
+		synchronized (this) {
+			indexMs.addLast((System.nanoTime() - t0) / 1e6);
+			if (indexMs.size() > 4096) {
+				indexMs.removeFirst();
+			}
+		}
 		if (json.length() > 16 << 20) {
 			dev.larattalabs.architect.Architect.LOGGER.warn("World journal: the index is {} MB", json.length() >> 20);
 		}

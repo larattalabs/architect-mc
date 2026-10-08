@@ -317,12 +317,25 @@ public final class RegionDev {
 			o.addProperty("maxMb", Runtime.getRuntime().maxMemory() / 1048576.0);
 			return CompletableFuture.completedFuture(o);
 		});
-		DevBridge.register("dev.tiles.stats", 10_000, "{} - phase 6a: tiles received, wire bytes and cells (bytes per cell)", (req, mc) -> {
+		DevBridge.register("dev.tiles.stats", 10_000, "{reset?} - phase 6a: tiles received, wire bytes and cells (bytes per cell)", (req, mc) -> {
 			JsonObject o = new JsonObject();
 			o.addProperty("received", TileStream.RECEIVED.get());
 			o.addProperty("wireBytes", TileStream.WIRE_BYTES.get());
 			o.addProperty("wireCells", TileStream.WIRE_CELLS.get());
 			o.addProperty("bytesPerCell", TileStream.WIRE_BYTES.get() / Math.max(1.0, TileStream.WIRE_CELLS.get()));
+			double[] l;
+			synchronized (TileStream.LATENCY) {
+				l = TileStream.LATENCY.stream().mapToDouble(Double::doubleValue).toArray();
+				if (Fields.of(req).optBool("reset", false)) {
+					TileStream.LATENCY.clear();
+					TileStream.RECEIVED.set(0);
+					TileStream.WIRE_BYTES.set(0);
+					TileStream.WIRE_CELLS.set(0);
+				}
+			}
+			java.util.Arrays.sort(l);
+			o.addProperty("latencyP50Ms", l.length == 0 ? 0 : l[l.length / 2]);
+			o.addProperty("latencyP99Ms", l.length == 0 ? 0 : l[Math.min(l.length - 1, (int) Math.floor(l.length * 0.99))]);
 			return CompletableFuture.completedFuture(o);
 		});
 	}

@@ -787,6 +787,13 @@ public final class WorldJournal {
 		o.addProperty("nextRoad", idx.nextRoad());
 		o.addProperty("nextCells", idx.nextCells());
 		o.addProperty("bytesOnDisk", s.bytesOnDisk());
+		o.addProperty("indexBytes", s.indexBytes());
+		double[] ms = s.indexCommitMs();
+		java.util.Arrays.sort(ms);
+		o.addProperty("indexCommits", ms.length);
+		o.addProperty("indexCommitP50Ms", ms.length == 0 ? 0 : ms[ms.length / 2]);
+		o.addProperty("indexCommitP99Ms", ms.length == 0 ? 0 : ms[Math.min(ms.length - 1, (int) Math.floor(ms.length * 0.99))]);
+		o.addProperty("indexCommitMaxMs", ms.length == 0 ? 0 : ms[ms.length - 1]);
 		o.addProperty("durable", s.durable() == idx);
 		JsonArray es = new JsonArray();
 		for (JournalStore.Meta m : idx.entries().values()) {
