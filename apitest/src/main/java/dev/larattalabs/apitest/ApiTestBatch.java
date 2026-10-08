@@ -171,6 +171,16 @@ final class ApiTestBatch {
 				items.add(Batch.Item.road(it.get("key").getAsString(), ApiTestJournal.road(src, it.getAsJsonObject("road"), player), stage0, after0));
 				continue;
 			}
+			if (it.has("delta")) {
+				// phase 5b: {site, version?, playerEdits?, overlap?, owner?, force?, actor?}
+				JsonObject d = it.getAsJsonObject("delta");
+				items.add(Batch.Item.delta(it.get("key").getAsString(), new dev.larattalabs.architect.api.DeltaRequest(d.get("site").getAsString(), d.has(
+					"version") ? d.get("version").getAsInt() : 0, d.has("playerEdits") ? dev.larattalabs.architect.api.PlayerEdits.valueOf(d.get(
+						"playerEdits").getAsString()) : null, d.has("overlap") ? dev.larattalabs.architect.api.OverlapPolicy.valueOf(d.get("overlap")
+							.getAsString()) : null, d.has("actor") && d.get("actor").getAsBoolean() ? player : null, d.has("force") && d.get("force").getAsBoolean(),
+					new JsonObject(), d.has("owner") ? d.get("owner").getAsString() : null), stage0, after0));
+				continue;
+			}
 			if (it.has("cells")) {
 				items.add(Batch.Item.cells(it.get("key").getAsString(), ApiTestJournal.cells(src, it.getAsJsonObject("cells"), player), stage0, after0));
 				continue;
