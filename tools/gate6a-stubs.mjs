@@ -27,6 +27,7 @@ function stub({ id, w, h, d }) {
   const D = Math.floor(X / 2);
   bp.door(D, 1, Z, 'south');
   bp.ceilingLights(1, 1, X - 1, Z - 1, h - 2);
+  for (let x = 2; x < X - 1; x += 5) for (let z = 2; z < Z - 1; z += 5) bp.lantern(x, 1, z); // floor light under a tall ceiling
   bp.floor(D - 1, Z + 1, D + 1, Z + 3, 0, p.path);
   bp.spot('entrance', D, Z + 1, 180);
   bp.spot('spawn', D, Z + 3, 180);
