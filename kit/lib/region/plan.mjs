@@ -207,21 +207,8 @@ export async function planRegion(o) {
     return { id: p.id, stage: p.stage, set: p.set, ops };
   });
 
-  // the IR's y range: inside the request's, around the surveyed land and everything the program placed at fixed y
-  let yLo = Infinity, yHi = -Infinity;
-  for (let i = 0; i < survey.width * survey.depth; i++) {
-    if (raw.flags[i] & FLAG_MISSING) continue;
-    yLo = Math.min(yLo, survey.floor[i]); yHi = Math.max(yHi, survey.height[i], survey.ground[i]);
-  }
-  if (!Number.isFinite(yLo)) { yLo = claim.minY + Y_MARGIN; yHi = claim.maxY - Y_MARGIN; }
-  yLo -= Y_MARGIN; yHi += Y_MARGIN;
-  for (const p of parts) for (const op of p.ops) {
-    if (op.bounds.minY !== null) yLo = Math.min(yLo, op.bounds.minY);
-    if (op.bounds.maxY !== null) yHi = Math.max(yHi, op.bounds.maxY);
-  }
-  for (const l of r.lots) { yLo = Math.min(yLo, l.box.minY - 1); yHi = Math.max(yHi, l.box.maxY); }
-  for (const a of Object.values(r.anchors)) { yLo = Math.min(yLo, a[1]); yHi = Math.max(yHi, a[1]); }
-  const irClaim = { ...claim, minY: Math.max(claim.minY, Math.floor(yLo)), maxY: Math.min(claim.maxY, Math.ceil(yHi)) };
+  // the IR's y range: the request's for now; tightened after the budget pass (below)
+  const irClaim = { ...claim };
 
   // tiles per stage and set, from op x/z bounds clipped to the claim
   const tiles = {};
@@ -248,7 +235,7 @@ export async function planRegion(o) {
 
   // ---- the exact budget: every tile of every change-set over the survey
   const tBudget = performance.now();
-  let cells = 0, removed = 0, added = 0, evaluated = 0;
+  let cells = 0, removed = 0, added = 0, evaluated = 0, cellLo = Infinity, cellHi = -Infinity;
   const perStage = {};
   const windows = new Map();
   for (const s of stages) {
@@ -259,12 +246,28 @@ export async function planRegion(o) {
         if (!w) { w = windowFromSurvey(survey, key); w.flags.forEach((f, i) => { w.flags[i] = f & ~FLAG_MISSING; }); windows.set(key, w); }
         const e = evalTile(ir, key, w, { stage: s, set, countOnly: true });
         cells += e.count; removed += e.removed; added += e.added; evaluated++;
+        if (e.minY !== null) { cellLo = Math.min(cellLo, e.minY); cellHi = Math.max(cellHi, e.maxY); }
         perStage[s][set] += e.count;
       }
     }
   }
   ir.budget = { cells, removed, added };
   if (cells > budgetCap) throw new Error(`the region writes ${cells} cells, over its budget of ${budgetCap}${r.budgetCells ? '' : ' (the default; declare more with region.budget(n), at most 64M)'}`);
+  // tighten the y range inside the request's: the surveyed land and every cell the budget pass emitted, plus a margin of
+  // Y_MARGIN (every emitted cell stays inside, so the budget is unchanged)
+  let yLo = cellLo, yHi = cellHi;
+  for (let i = 0; i < survey.width * survey.depth; i++) {
+    if (raw.flags[i] & FLAG_MISSING) continue;
+    yLo = Math.min(yLo, survey.floor[i]); yHi = Math.max(yHi, survey.height[i], survey.ground[i]);
+  }
+  for (const l of r.lots) { yLo = Math.min(yLo, l.box.minY - 1); yHi = Math.max(yHi, l.box.maxY); }
+  for (const a of Object.values(r.anchors)) { yLo = Math.min(yLo, a[1]); yHi = Math.max(yHi, a[1]); }
+  // an unexplored column could hold anything: then the request's range stays (cuts to a column's top and fills from its
+  // floor must not be clipped by a guess)
+  if (missing) notes.push('claim: the y range stays the request\'s (the survey has missing columns)');
+  else if (Number.isFinite(yLo)) {
+    ir.claim = { ...claim, minY: Math.max(claim.minY, yLo - Y_MARGIN), maxY: Math.min(claim.maxY, yHi + Y_MARGIN) };
+  }
   const irJson = canonicalJson(ir);
   const irBytes = Buffer.byteLength(irJson);
   if (irBytes > LIMITS.irBytes) throw new Error(`the IR is ${irBytes} bytes (at most ${LIMITS.irBytes})`);
@@ -274,5 +277,6 @@ export async function planRegion(o) {
     tiles: Object.fromEntries(stages.map((s) => [s, { terrain: tilesOut[s].terrain.length, path: tilesOut[s].path.length }])),
     tileEvals: evaluated, cellsPerStage: perStage, surveyMissing: missing,
   };
-  return { ir, irJson, irSha: sha256Hex(irJson), notes, stats };
+  // a fresh object: evalTile caches compiled IRs per object, and the claim changed after the budget pass
+  return { ir: JSON.parse(irJson), irJson, irSha: sha256Hex(irJson), notes, stats };
 }
