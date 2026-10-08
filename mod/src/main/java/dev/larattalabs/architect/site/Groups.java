@@ -62,6 +62,8 @@ public final class Groups {
 		transient @Nullable CompletableFuture<Object[]> txn;
 		transient @Nullable String planGroup;
 		transient @Nullable CompletableFuture<Void> commit;
+		/** Phase 6a: the sites outside the removal covering its cells, found off the server thread (it reads every section). */
+		transient @Nullable CompletableFuture<java.util.LinkedHashSet<String>> outsideF;
 		/** Construction members' deconstruct items (computed before the undo is planned, rule 7) and where they drop. */
 		final Map<String, Map<String, Integer>> decItems = new LinkedHashMap<>();
 		final Map<String, long[]> decAt = new LinkedHashMap<>();
@@ -537,8 +539,10 @@ public final class Groups {
 						r.txn = CompletableFuture.supplyAsync(() -> {
 							try {
 								var w = p.work();
-								return new Object[] {w, SiteJournal.undoTxn(w)};
-							} catch (Sites.SiteException e) {
+								var t = SiteJournal.undoTxn(w);
+								// phase 6a: the commit's region merges too, off the server thread (a region's undo: 278 ms in one tick)
+								return new Object[] {w, t, SiteJournal.store().prepare(t)};
+							} catch (Sites.SiteException | java.io.IOException e) {
 								throw new java.util.concurrent.CompletionException(e);
 							}
 						});
@@ -554,8 +558,21 @@ public final class Groups {
 						r.txn = null;
 					}
 					dev.larattalabs.architect.journal.WorldJournal.kill("K5");
-					u = SiteJournal.submitUndo((dev.larattalabs.architect.journal.WorldJournal.UndoWork) built[0],
-						(dev.larattalabs.architect.journal.JournalStore.Txn) built[1]);
+					u = SiteJournal.submitUndoPrepared((dev.larattalabs.architect.journal.WorldJournal.UndoWork) built[0],
+						(dev.larattalabs.architect.journal.JournalStore.Prepared) built[2]);
+					if (u == null) {
+						// another commit came in meanwhile: prepare it again against the new head
+						var w = (dev.larattalabs.architect.journal.WorldJournal.UndoWork) built[0];
+						var t = (dev.larattalabs.architect.journal.JournalStore.Txn) built[1];
+						r.txn = CompletableFuture.supplyAsync(() -> {
+							try {
+								return new Object[] {w, t, SiteJournal.store().prepare(t)};
+							} catch (Sites.SiteException | java.io.IOException e) {
+								throw new java.util.concurrent.CompletionException(e);
+							}
+						});
+						return;
+					}
 				} else {
 					dev.larattalabs.architect.journal.WorldJournal.kill("K5");
 					u = SiteJournal.submitUndo(r.planner.work());
@@ -605,16 +622,38 @@ public final class Groups {
 			}
 		}
 		r.waited = 0;
-		// sites outside the removal covering its cells (phase 4e): KEEP hands down, REFUSE refuses, CASCADE takes them first
-		java.util.LinkedHashSet<String> outside = new java.util.LinkedHashSet<>();
-		java.util.ArrayDeque<String> todo = new java.util.ArrayDeque<>(ids);
-		while (!todo.isEmpty()) {
-			for (String c : SiteJournal.coveringSites(todo.poll())) {
-				if (!ids.contains(c) && outside.add(c) && r.covered == Sites.Covered.CASCADE) {
-					todo.add(c);
+		// sites outside the removal covering its cells (phase 4e): KEEP hands down, REFUSE refuses, CASCADE takes them first.
+		// Phase 6a: found off the server thread (it reads every section of every member: 342 ms in one tick for a region)
+		if (r.outsideF == null) {
+			List<String> members = List.copyOf(ids);
+			Sites.Covered cov = r.covered;
+			r.outsideF = CompletableFuture.supplyAsync(() -> {
+				java.util.LinkedHashSet<String> out = new java.util.LinkedHashSet<>();
+				java.util.Set<String> in = new java.util.HashSet<>(members);
+				java.util.ArrayDeque<String> todo = new java.util.ArrayDeque<>(members);
+				while (!todo.isEmpty()) {
+					for (String c : SiteJournal.coveringSites(todo.poll())) {
+						if (!in.contains(c) && out.add(c) && cov == Sites.Covered.CASCADE) {
+							todo.add(c);
+						}
+					}
 				}
-			}
+				return out;
+			});
+			return;
 		}
+		if (!r.outsideF.isDone()) {
+			return;
+		}
+		java.util.LinkedHashSet<String> outside;
+		try {
+			outside = r.outsideF.join();
+		} catch (RuntimeException e) {
+			r.outsideF = null;
+			end(server, r, new Removed(false, List.of("the journal could not be read (" + e.getMessage() + ")"), Map.copyOf(r.refund)));
+			return;
+		}
+		r.outsideF = null;
 		if (!outside.isEmpty() && r.covered == Sites.Covered.REFUSE) {
 			end(server, r, new Removed(false, List.of("COVERED: " + String.join(", ", outside) + " cover cells of the sites"), Map.copyOf(r.refund)));
 			return;

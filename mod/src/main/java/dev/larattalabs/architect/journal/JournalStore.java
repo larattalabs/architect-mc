@@ -616,6 +616,40 @@ public final class JournalStore {
 		if (closed) {
 			return CompletableFuture.failedFuture(new IOException("the journal is closed"));
 		}
+		Prepared p;
+		try {
+			p = prepare(t);
+		} catch (IOException e) {
+			return CompletableFuture.failedFuture(e);
+		}
+		return install(p);
+	}
+
+	/**
+	 * A commit computed against a head (phase 6a): the region merges, metas and files of a {@link Txn}, made on any thread so a
+	 * big undo's commit (a region group's: hundreds of entries, millions of cells) is not built on the server thread.
+	 * {@link #submitPrepared} installs it if the head has not moved since, else the caller prepares again.
+	 */
+	public static final class Prepared {
+		final Index base;
+		final Map<String, Meta> metas;
+		final List<Write> writes;
+		final List<Path> superseded;
+		final Set<String> changed;
+		final Txn t;
+
+		Prepared(Index base, Map<String, Meta> metas, List<Write> writes, List<Path> superseded, Set<String> changed, Txn t) {
+			this.base = base;
+			this.metas = metas;
+			this.writes = writes;
+			this.superseded = superseded;
+			this.changed = changed;
+			this.t = t;
+		}
+	}
+
+	/** {@link Prepared} against the head now (any thread; reads region files through the cache). */
+	public Prepared prepare(Txn t) throws IOException {
 		Index base = head;
 		Map<String, Meta> metas = new LinkedHashMap<>(base.entries());
 		List<Write> writes = new ArrayList<>();
@@ -728,8 +762,29 @@ public final class JournalStore {
 				}
 			}
 		} catch (IOException e) {
-			return CompletableFuture.failedFuture(e);
+			throw e;
 		}
+		return new Prepared(base, metas, writes, superseded, changed, t);
+	}
+
+	/** Installs a prepared commit (server thread): null when the head moved since it was prepared (prepare it again). */
+	public synchronized @Nullable CompletableFuture<Void> submitPrepared(Prepared p) {
+		if (closed) {
+			return CompletableFuture.failedFuture(new IOException("the journal is closed"));
+		}
+		if (head != p.base) {
+			return null;
+		}
+		return install(p);
+	}
+
+	private CompletableFuture<Void> install(Prepared p) {
+		Index base = p.base;
+		Map<String, Meta> metas = p.metas;
+		List<Write> writes = p.writes;
+		List<Path> superseded = p.superseded;
+		Set<String> changed = p.changed;
+		Txn t = p.t;
 		Map<String, String> leg = new LinkedHashMap<>(base.legacy());
 		leg.putAll(t.legacy);
 		leg.values().removeIf(id -> !metas.containsKey(id));

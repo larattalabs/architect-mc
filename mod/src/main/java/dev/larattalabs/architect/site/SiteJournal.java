@@ -700,6 +700,12 @@ public final class SiteJournal {
 		return new Undone(w, store().submit(t));
 	}
 
+	/** R2 with a commit prepared off the server thread (phase 6a); null when the journal moved meanwhile (prepare again). */
+	static @Nullable Undone submitUndoPrepared(WorldJournal.UndoWork w, JournalStore.Prepared p) {
+		CompletableFuture<Void> f = store0().submitPrepared(p);
+		return f == null ? null : new Undone(w, f);
+	}
+
 	/** R2 of a planned undo: its one commit, submitted. */
 	static Undone submitUndo(WorldJournal.UndoWork w) throws Sites.SiteException {
 		try {
