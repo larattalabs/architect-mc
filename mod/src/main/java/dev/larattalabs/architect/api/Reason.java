@@ -34,11 +34,22 @@ package dev.larattalabs.architect.api;
  * <li>{@code FRAME_CHANGED} (1.7.0): the new version changes {@code front} or the entrance's feet row: a re-place, not a delta.</li>
  * <li>{@code VERSION_GONE} (1.7.0): the version the site stands at can't be found any more; it can be removed or placed again.</li>
  * <li>{@code PLAYER_EDITS} (1.7.0): a delta with {@code PlayerEdits.REFUSE} would write cells the player changed.</li>
+ * <li>{@code NOT_GENERATED} (1.8.0): under {@link LoadPolicy#GENERATED_ONLY} a chunk the item needs was never fully generated
+ * ("needs prepare"). Temporary: the item waits (for a region item, with no time limit).</li>
+ * <li>{@code CHUNK_BOUND} (1.8.0): under a policy that holds tickets, the item needs more chunks than the batch's bound, so it
+ * could never get them; refused at queue time.</li>
+ * <li>{@code DRIFTED} (1.8.0): a region's land changed since its plan beyond the tolerance ("land changed since planning"):
+ * replan, or realise with {@code force}.</li>
+ * <li>{@code SIDECAR_UNAVAILABLE} (1.8.0): a region tile needs the helper (sidecar) and it is not connected. Temporary, no
+ * time limit.</li>
+ * <li>{@code PLAN_STALE} (1.8.0): a region plan's kit version is newer than the running kit.</li>
+ * <li>{@code REGION_LIMIT} (1.8.0): a region plan or a cell outside its limits (the claim, the size, the cell budget).</li>
  * </ul>
  * New values are only ever appended.
  */
 public enum Reason {
 	PLAYER_IN_BOX, OCCUPIED, OVERLAP, LAVA, BLOCK_ENTITIES, BUILD_HEIGHT, DOOR_CUT, CREATIVE_ONLY_BLOCK, NOT_ALLOWED, NOT_LOADED,
 	UNKNOWN_BLUEPRINT, OTHER, CANCELLED, LOT_TOO_SMALL, TIMED_OUT, OVERLAP_BUSY, OVERLAP_OWNED, LAYER_DEPTH, COVERED, TOO_STEEP, DEEP_WATER,
-	TOO_LARGE, JOURNAL_UNAVAILABLE, SITE_BUSY, FRAME_CHANGED, VERSION_GONE, PLAYER_EDITS
+	TOO_LARGE, JOURNAL_UNAVAILABLE, SITE_BUSY, FRAME_CHANGED, VERSION_GONE, PLAYER_EDITS, NOT_GENERATED, CHUNK_BOUND, DRIFTED,
+	SIDECAR_UNAVAILABLE, PLAN_STALE, REGION_LIMIT
 }

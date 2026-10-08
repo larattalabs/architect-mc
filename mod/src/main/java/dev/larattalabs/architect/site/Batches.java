@@ -13,6 +13,7 @@ import dev.larattalabs.architect.apiimpl.ApiRules;
 import dev.larattalabs.architect.batch.BatchRules;
 import dev.larattalabs.architect.batch.CratePlacement;
 import dev.larattalabs.architect.batch.LotFitting;
+import dev.larattalabs.architect.region.ChunkGen;
 import dev.larattalabs.architect.batch.QBatch;
 import dev.larattalabs.architect.batch.QItem;
 import dev.larattalabs.architect.batch.StageRules;
@@ -60,7 +61,8 @@ public final class Batches {
 	static final TicketType TICKET = net.minecraft.core.Registry.register(BuiltInRegistries.TICKET_TYPE,
 		Identifier.fromNamespaceAndPath(Architect.MOD_ID, "placement"), new TicketType(0L, TicketType.FLAG_LOADING));
 	/** Temporary blockers: an item refused only for these waits instead of failing. */
-	static final Set<Reason> TEMPORARY = Set.of(Reason.PLAYER_IN_BOX, Reason.OCCUPIED, Reason.NOT_LOADED, Reason.OVERLAP_BUSY);
+	static final Set<Reason> TEMPORARY = Set.of(Reason.PLAYER_IN_BOX, Reason.OCCUPIED, Reason.NOT_LOADED, Reason.OVERLAP_BUSY, Reason.NOT_GENERATED,
+		Reason.SIDECAR_UNAVAILABLE);
 
 	private static final Map<String, QBatch> BATCHES = new LinkedHashMap<>();
 	private static int next = 1;
@@ -196,6 +198,8 @@ public final class Batches {
 		if (g != null && spec.sharedCrate() && !g.sharedCrate()) {
 			grp = grp.withSharedCrate(true, crateAt);
 		}
+		b.generate = spec.load().generate();
+		chunkBound(b);
 		Sites.putGroup(server, grp);
 		BATCHES.put(id, b);
 		Placement.save(server, false);
@@ -390,6 +394,9 @@ public final class Batches {
 			}
 			if (b.loadChunks > 0 && ck.box() != null && !i.ticketed) {
 				ticketBox(server, b, i, level, ck.box().grow(1));
+				if (notGeneratedWait(b, i)) {
+					return;
+				}
 				i.ticketed = true;
 			}
 			if (i.checked == null) {
@@ -409,6 +416,9 @@ public final class Batches {
 		} else {
 		if (b.loadChunks > 0) {
 			ticketBox(server, b, i, level, infraBox(i));
+			if (notGeneratedWait(b, i)) {
+				return;
+			}
 		}
 		tr.mark("ticket");
 		if (road) {
@@ -755,6 +765,9 @@ public final class Batches {
 		Rotation rot = Rotation.values()[Math.floorMod(i.turns, 4)];
 		if (b.loadChunks > 0) {
 			ticketItem(server, b, i, level, bp);
+			if (notGeneratedWait(b, i)) {
+				return;
+			}
 		}
 		// a large design (phase 4e, the size cap): its grid is built off the server thread first, and its checks and its start
 		// (the second checks, the capture) go in separate ticks
@@ -1089,21 +1102,86 @@ public final class Batches {
 		if (held.containsKey(i.key)) {
 			return;
 		}
-		int sx = BlueprintTransform.rotatedSizeX(bp.sizeX(), bp.sizeZ(), i.turns);
-		int sz = BlueprintTransform.rotatedSizeZ(bp.sizeX(), bp.sizeZ(), i.turns);
-		int m = LotFitting.frontMargin(bp) + LeafGuard.RADIUS + 1;
-		Set<Long> want = chunks(new Anchors.Bounds(i.x - m, i.y, i.z - m, i.x + sx - 1 + m, i.y + bp.sizeY() - 1, i.z + sz - 1 + m));
+		Set<Long> want = itemChunks(i, bp);
 		int count = held.values().stream().mapToInt(Set::size).sum();
 		if (!ticketTurn(b, i) || count + want.size() > b.loadChunks) {
 			if (want.size() <= b.loadChunks) {
-				ticketWait(b, i); // it fits once the budget is free (a larger one waits for a player, LOADED_ONLY)
+				ticketWait(b, i); // it fits once the budget is free (a larger one was refused CHUNK_BOUND at queue time)
 			}
-			return; // over the bound: it waits for a player like LOADED_ONLY
+			return;
+		}
+		if (!b.generate && !generated(level, want, i)) {
+			return; // GENERATED_ONLY: never tickets a chunk that was not generated (it waits NOT_GENERATED)
 		}
 		ticketGot(b, i);
 		ChunkTickets.acquire(i.dimension, want, source(level));
 		held.put(i.key, want);
 		levels.put(b.id + "/" + i.key, i.dimension);
+	}
+
+	/** After a ticket attempt under GENERATED_ONLY: waits NOT_GENERATED (true), or tries again next tick while a status is read (true). */
+	private static boolean notGeneratedWait(QBatch b, QItem i) {
+		long c = i.notGenerated;
+		if (c == Long.MIN_VALUE) {
+			return false;
+		}
+		i.notGenerated = Long.MIN_VALUE;
+		if (c == Long.MAX_VALUE) {
+			return true;
+		}
+		waitFor(b, i, Reason.NOT_GENERATED, "chunk " + ChunkPos.getX(c) + ", " + ChunkPos.getZ(c) + " was never generated (needs prepare)");
+		return true;
+	}
+
+	/**
+	 * GENERATED_ONLY (phase 6a): whether every chunk of {@code want} was fully generated ({@link ChunkGen}); else the item is
+	 * marked to wait {@code NOT_GENERATED} (or, while a chunk's status is still being read, to try again next tick).
+	 */
+	private static boolean generated(ServerLevel level, Set<Long> want, QItem i) {
+		boolean unknown = false;
+		for (long c : want) {
+			ChunkGen.State st = ChunkGen.state(level, c);
+			if (st == ChunkGen.State.NOT_GENERATED) {
+				i.notGenerated = c;
+				return false;
+			}
+			unknown |= st == ChunkGen.State.UNKNOWN;
+		}
+		i.notGenerated = unknown ? Long.MAX_VALUE : Long.MIN_VALUE;
+		return !unknown;
+	}
+
+	/**
+	 * The queue-time chunk check (phase 6a, CONTRACT "Queue-time chunk check"): under a policy that holds tickets, a building
+	 * (or region) item whose box + margin needs more chunks than the batch's bound could never get them; it fails
+	 * {@code CHUNK_BOUND} at once instead of waiting to {@code TIMED_OUT}. Road and cell-site items keep 4e's rule (an oversized
+	 * one takes its tickets alone when the batch holds none, so it can't time out on the bound): see CONTRACT "Phase 6a as built".
+	 */
+	private static void chunkBound(QBatch b) {
+		if (b.loadChunks <= 0) {
+			return; // LOADED_ONLY holds no tickets
+		}
+		for (QItem i : b.items) {
+			if (i.status != QItem.Status.QUEUED || !"building".equals(i.itemKind)) {
+				continue;
+			}
+			Blueprint bp = Blueprints.get(i.blueprint);
+			if (bp == null) {
+				continue;
+			}
+			int need = itemChunks(i, bp).size();
+			if (need > b.loadChunks) {
+				i.fail(Reason.CHUNK_BOUND.name(), "needs " + need + " chunks, the bound is " + b.loadChunks);
+			}
+		}
+	}
+
+	/** The chunks a building item may touch (its box, the approach and the leaf ring): what {@link #ticketItem} tickets. */
+	static Set<Long> itemChunks(QItem i, Blueprint bp) {
+		int sx = BlueprintTransform.rotatedSizeX(bp.sizeX(), bp.sizeZ(), i.turns);
+		int sz = BlueprintTransform.rotatedSizeZ(bp.sizeX(), bp.sizeZ(), i.turns);
+		int m = LotFitting.frontMargin(bp) + LeafGuard.RADIUS + 1;
+		return chunks(new Anchors.Bounds(i.x - m, i.y, i.z - m, i.x + sx - 1 + m, i.y + bp.sizeY() - 1, i.z + sz - 1 + m));
 	}
 
 	/** The vanilla side of {@link ChunkTickets}: radius-0 {@link #TICKET}s of a level. */
@@ -1147,6 +1225,9 @@ public final class Batches {
 		int count = held.values().stream().mapToInt(Set::size).sum();
 		if (!ticketTurn(b, i) || count + want.size() > b.loadChunks && count > 0) {
 			ticketWait(b, i);
+			return;
+		}
+		if (!b.generate && !generated(level, want, i)) {
 			return;
 		}
 		ticketGot(b, i);

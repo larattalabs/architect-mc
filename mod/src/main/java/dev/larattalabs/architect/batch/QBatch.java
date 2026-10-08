@@ -42,6 +42,8 @@ public final class QBatch {
 	public boolean stopping;
 	/** Why a stopped batch stopped. */
 	public String note = "";
+	/** Phase 6a: false under {@code GENERATED_ONLY} (chunks never generated are never ticketed). */
+	public boolean generate = true;
 
 	public QBatch(String id, @Nullable String owner, JsonObject ext, String group, List<QItem> items, List<String> stages, long maxWaitTicks,
 		int loadChunks, boolean proximityFirst, boolean stopOnFailure, boolean autoApprove, boolean sharedCrate, int @Nullable [] crateAt,
@@ -140,6 +142,9 @@ public final class QBatch {
 		if (!note.isEmpty()) {
 			o.addProperty("note", note);
 		}
+		if (!generate) {
+			o.addProperty("generate", false);
+		}
 		return o;
 	}
 
@@ -167,6 +172,7 @@ public final class QBatch {
 		b.cancelling = o.has("cancelling") && o.get("cancelling").getAsBoolean();
 		b.stopping = o.has("stopping") && o.get("stopping").getAsBoolean();
 		b.note = o.has("note") ? o.get("note").getAsString() : "";
+		b.generate = !o.has("generate") || o.get("generate").getAsBoolean();
 		return b;
 	}
 }
