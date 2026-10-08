@@ -1133,6 +1133,11 @@ steps.survival = async () => {
     // the construction delta v1 -> v2
     await openWorld('G5B Surv');
     await tp(40.5, 80, 20.5);
+    // items lying in the box after the base build (a door or bed half the phase 3 builder popped): recorded, then picked up
+    const pops = await cmd('/execute as @e[type=minecraft:item] run data get entity @s Item');
+    if ((pops.messages ?? []).length) log(`  survival: items lying after the base build: ${JSON.stringify(pops.messages).slice(0, 400)}`);
+    out[`pops${mine}`] = pops.messages ?? [];
+    await cmd('/kill @e[type=minecraft:item]');
     const pre = await cellsIn(BOX);
     const c = await deltaCheck(S, 2, { construction: true, cells: true });
     check(c.applicable, `survival: the construction delta v1 -> v2 is allowed (bill ${JSON.stringify(c.bom)}, refunds ${JSON.stringify(c.refund)})`, c.applicable ? undefined : c);

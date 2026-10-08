@@ -1117,6 +1117,20 @@ public final class SiteJournal {
 					}
 				}
 			}
+			// phase 5b: cells a delta first touched (growth) have their pre-site value in that delta's before (the oldest wins)
+			for (JournalStore.Meta x : entries(siteId)) {
+				if (!x.kind().equals(WorldJournal.DELTA) || !(undone ? x.status() == Status.UNDONE : x.active())) {
+					continue;
+				}
+				for (long k : x.sections()) {
+					SectionCells sc = s.section(x.id(), k);
+					if (sc != null) {
+						for (int i = 0; i < sc.size(); i++) {
+							v.putIfAbsent(sc.pos(i), sc.before(i));
+						}
+					}
+				}
+			}
 		} catch (IOException e) {
 			return null;
 		}
