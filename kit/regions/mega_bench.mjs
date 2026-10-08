@@ -95,15 +95,19 @@ export default function megaBench(ctx) {
   }
   rimSamples.sort((a, b) => a - b);
   const rimY = rimSamples[Math.min(rimSamples.length - 1, Math.floor(rimSamples.length * SC.rimPct))];
-  const bowl = { kind: 'bowl', c: [bx, { abs: rimY }, bz], r: BOWL.r, depth: BOWL.depth, profile: 'parabolic', h: 32 };
-  r.part('crater', { stage: 'ground' }).carve(bowl, { lining: 'rubble', liningDepth: SC.lining });
+  // keep the claim's bottom 2 rows (bedrock on a flat world) out of the carve and its lining
+  const depth = Math.max(1, Math.min(BOWL.depth, rimY - (claim.minY + 2) - SC.lining));
+  const lining = Math.max(1, Math.min(SC.lining, rimY - depth - (claim.minY + 2)));
+  if (depth < BOWL.depth) r.note(`crater: depth ${depth} (the land is within ${BOWL.depth} of the claim's bottom)`);
+  const bowl = { kind: 'bowl', c: [bx, { abs: rimY }, bz], r: BOWL.r, depth, profile: 'parabolic', h: 32 };
+  r.part('crater', { stage: 'ground' }).carve(bowl, { lining: 'rubble', liningDepth: lining });
   markDisc(bx, bz, BOWL.r + 24);
   /** the first cell above the carved bowl's surface at (x, z), or null outside the bowl */
   const bowlBottom = (x, z) => {
     const d = Math.sqrt((x - bx) * (x - bx) + (z - bz) * (z - bz));
     if (d > BOWL.r) return null;
     const t = d / BOWL.r;
-    return Math.ceil(rimY - BOWL.depth * (1 - t * t));
+    return Math.max(claim.minY + 2, Math.ceil(rimY - depth * (1 - t * t)));
   };
 
   // ---- ground: the ring wall and its gates

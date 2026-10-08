@@ -462,7 +462,7 @@ class Part {
    * (descending from 1; default 1 - k/n): level k covers the area scaled by fractions[k] about the centre. `levels`: an
    * array of y (lowest first) or a count (then y0 = the median plan ground over the area and each level `step` higher).
    * Each level is flat: cut above its y (to the column top), filled below (`fill` role, from the frozen floor), its top
-   * block the `surface` role over `soil` blocks of `fill`. `edge: 'slope'` keeps every riser <= `riser`; `edge: 'wall'`
+   * block the `surface` role over `soil` blocks of `fill` (never into the claim's bottom 2 rows). `edge: 'slope'` keeps every riser <= `riser`; `edge: 'wall'`
    * builds a retaining wall of `retain` on each level's rim. `stairs`: one stair of `stairWidth` joins each pair of levels.
    * Returns the levels `[{y, radius|polygon}]`.
    */
@@ -502,7 +502,7 @@ class Part {
     for (let k = 0; k < n; k++) {
       const y = ys[k];
       this._shapeOp(footprint(k, { abs: y + 1 }, { height: 0 }), null, COND.IF_NATURAL);
-      this._shapeOp(footprint(k, { min: [{ floor: 1 }, { abs: y - soil }] }, { abs: y - 1 }), fillM, COND.IF_NATURAL);
+      this._shapeOp(footprint(k, { min: [{ floor: 1 }, { abs: Math.max(y - soil, this.region.claim.minY + 2) }] }, { abs: y - 1 }), fillM, COND.IF_NATURAL);
       this._shapeOp(footprint(k, { abs: y }, { abs: y }), surf, COND.IF_NATURAL);
       if (edge === 'wall') {
         const lo = k === 0 ? { floor: 1 } : { abs: ys[k - 1] + 1 };
@@ -608,15 +608,24 @@ class Part {
     }
     let box = { minX: Infinity, minY: Infinity, minZ: Infinity, maxX: -Infinity, maxY: -Infinity, maxZ: -Infinity };
     const grow = (x, y, z) => { box.minX = Math.min(box.minX, x); box.maxX = Math.max(box.maxX, x); box.minY = Math.min(box.minY, y); box.maxY = Math.max(box.maxY, y); box.minZ = Math.min(box.minZ, z); box.maxZ = Math.max(box.maxZ, z); };
+    // treads: centre cells first, then the cross-sections; a column keeps one tread per 3 blocks of height, so the
+    // inside of a turn never puts a tread in another tread's headroom
+    const colTreads = new Map();
+    const tread = (x, y, z, m) => {
+      const k = `${x},${z}`;
+      const l = colTreads.get(k) ?? [];
+      if (l.some((v) => Math.abs(v - y) < 3)) return;
+      l.push(y);
+      colTreads.set(k, l);
+      treads.add(x, z, y, y, m);
+      if (carve) head.add(x, z, y + 1, y + 2, null);
+      grow(x, y, z); grow(x, y + 2, z);
+    };
+    const matAt = (i) => (stairFacing[i] ? stairsOf(full, stairFacing[i]) ?? full : full);
+    cells.forEach((c, i) => tread(c.x, ys[i], c.z, matAt(i)));
     cells.forEach((c, i) => {
       const y = ys[i];
-      const m = stairFacing[i] ? stairsOf(full, stairFacing[i]) ?? full : full;
-      for (const k of offs) {
-        const x = c.x + c.r[0] * k, z = c.z + c.r[1] * k;
-        treads.addOnce(`${x},${y},${z}`, x, z, y, y, m);
-        if (carve) head.addOnce(`${x},${y},${z}`, x, z, y + 1, y + 2, null);
-        grow(x, y, z); grow(x, y + 2, z);
-      }
+      for (const k of offs) if (k !== 0) tread(c.x + c.r[0] * k, y, c.z + c.r[1] * k, matAt(i));
       if (railM !== null) {
         for (const k of [offs[0] - 1, offs[offs.length - 1] + 1]) {
           const x = c.x + c.r[0] * k, z = c.z + c.r[1] * k;
@@ -626,6 +635,7 @@ class Part {
         }
       }
     });
+    this._colsOp(rails, COND.IF_NATURAL);
     this._colsOp(head, COND.IF_NATURAL);
     if (core) {
       const [cx, cz] = core.c.map(round);
@@ -633,7 +643,6 @@ class Part {
       grow(cx - 1, core.bottom, cz - 1); grow(cx + 1, core.top, cz + 1);
     }
     this._colsOp(treads, COND.IF_NATURAL, true);
-    this._colsOp(rails, COND.IF_NATURAL);
     return { cells: cells.map((c, i) => [c.x, ys[i], c.z]), box, width };
   }
 
@@ -680,6 +689,10 @@ class Part {
     const grow = (x, y, z) => { box.minX = Math.min(box.minX, x); box.maxX = Math.max(box.maxX, x); box.minY = Math.min(box.minY, y); box.maxY = Math.max(box.maxY, y); box.minZ = Math.min(box.minZ, z); box.maxZ = Math.max(box.maxZ, z); };
     const s = this.region.survey;
     cells.forEach((c, i) => {
+      walkCells.addOnce(`${c.x},${c.z}`, c.x, c.z, ys[i], ys[i], deckM);
+      head.addOnce(`${c.x},${c.z}`, c.x, c.z, ys[i] + 1, ys[i] + 2, null);
+    });
+    cells.forEach((c, i) => {
       const y = ys[i];
       for (const k of offs) {
         const x = c.x + c.r[0] * k, z = c.z + c.r[1] * k;
@@ -715,9 +728,9 @@ class Part {
       if (low !== null) cols.from = { min: [{ floor: 1 }, { abs: low }] };
       this._colsOp(cols, COND.IF_AIR_OR_FLUID);
     }
+    this._colsOp(edgeCells, COND.IF_AIR_OR_FLUID);
     this._colsOp(head, COND.IF_NATURAL);
     this._colsOp(walkCells, COND.IF_AIR_OR_FLUID, true);
-    this._colsOp(edgeCells, COND.IF_AIR_OR_FLUID);
     const out = { id: id ?? `${this.id}_bridge_${this.region.paths.length + 1}`, stage: this.stage, part: this.id, kind: 'bridge', box };
     this.region.paths.push(out);
     return { cells: cells.map((c, i) => [c.x, ys[i], c.z]), supports: at, box, length: cells.length };

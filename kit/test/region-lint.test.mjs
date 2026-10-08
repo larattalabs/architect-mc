@@ -86,7 +86,8 @@ test('the plan path avoids trig, exp/log/pow and the exponent operator (same IR 
     const f = path.join(KIT, rel);
     if (!fs.existsSync(f)) continue;
     const code = codeOnly(fs.readFileSync(f, 'utf8'));
-    for (const m of code.matchAll(/\bMath\s*\.\s*(sin|cos|tan|asin|acos|atan|atan2|sinh|cosh|tanh|asinh|acosh|atanh|exp|expm1|log|log1p|log2|log10|pow|hypot|cbrt|random)\b/g)) bad.push(`${rel}: Math.${m[1]}`);
+    for (const m of code.matchAll(/\bMath\s*\.\s*(sin|cos|tan|asin|acos|atan|atan2|sinh|cosh|tanh|asinh|acosh|atanh|exp|expm1|log|log1p|log2|log10|pow|hypot|cbrt)\b/g)) bad.push(`${rel}: Math.${m[1]}`);
+    if (/\bMath\s*\.\s*random\s*\(/.test(code)) bad.push(`${rel}: Math.random()`);
     if (/\*\*/.test(code)) bad.push(`${rel}: ** operator`);
   }
   assert.deepEqual(bad, []);
