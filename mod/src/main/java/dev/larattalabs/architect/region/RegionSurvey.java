@@ -15,8 +15,8 @@ import net.minecraft.world.level.chunk.LevelChunk;
 
 /**
  * A region's plan survey ({@link Columns}, resolution 1 or 4), sliced on the server thread like 4a's survey: {@code LOADED_ONLY}
- * reads loaded chunks only; {@code GENERATED_ONLY(n)} also loads generated chunks from disk (never generating), and
- * {@code LOAD_BOUNDED(n)} loads or generates at most {@code n}, both by short-lived tickets, at most 32 at once. Unread
+ * reads loaded chunks only; {@code GENERATED_ONLY(n)} also loads every generated chunk from disk (never generating; n at once),
+ * and {@code LOAD_BOUNDED(n)} loads or generates at most {@code n} in all; both by short-lived tickets, at most 32 at once. Unread
  * columns are missing.
  */
 final class RegionSurvey {
@@ -105,7 +105,9 @@ final class RegionSurvey {
 			if (t.ticketed.contains(k)) {
 				continue; // loading
 			}
-			if (!t.load.loads() || t.loaded >= t.load.maxChunks()) {
+			// LOAD_BOUNDED(n): at most n chunks loaded or generated in all (4a's rule); GENERATED_ONLY(n): n at once, any number
+			// in all (it never generates, so the whole prepared claim can be read)
+			if (!t.load.loads() || t.load.generate() && t.loaded >= t.load.maxChunks()) {
 				t.done.add(k); // missing
 				continue;
 			}
@@ -119,7 +121,7 @@ final class RegionSurvey {
 					continue;
 				}
 			}
-			if (t.ticketed.size() >= IN_FLIGHT) {
+			if (t.ticketed.size() >= (t.load.generate() ? IN_FLIGHT : Math.min(IN_FLIGHT, t.load.maxChunks()))) {
 				continue;
 			}
 			t.level.getChunkSource().addTicketWithRadius(TICKET, ChunkPos.unpack(k), 0);
