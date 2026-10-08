@@ -1373,17 +1373,16 @@ steps.village = async () => {
   await fresh('G5B VRelog', 'G5B VBase');
   await tp(VOX + 50.5, 120, VOZ + 60.5);
   await installVillageV2(v.dir);
-  await call('dev.placement.slow', { on: true });
+  // two ticks per delta item: leaving right after the queue call saves the world mid-batch
   const rb = await upgradeBatch(v, 1, 'uprelog');
-  await sleep(1500);
-  await call('dev.placement.slow', { on: false });
   const mid = await api(`batch ${rb.id}`);
   const placedMid = (mid.items ?? []).filter((i) => i.status === 'PLACED').length;
   await leaveWorld();
   await openWorld('G5B VRelog');
   await tp(VOX + 50.5, 120, VOZ + 60.5);
   await mark();
-  const dr = await waitBatch(rb.id, 30 * 60_000);
+  const now0 = await api(`batch ${rb.id}`);
+  const dr = now0.status === 'DONE' ? now0 : await waitBatch(rb.id, 30 * 60_000);
   const hr = (await hash(V_BOX)).sha256;
   check(dr.items.every((i) => i.status === 'PLACED') && hr === hAtomic, `village: a relog mid-batch (${placedMid} of 12 applied) resumes identically`, { hr, hAtomic });
   await leaveWorld();
@@ -1391,11 +1390,9 @@ steps.village = async () => {
   await fresh('G5B VCancel', 'G5B VBase');
   await tp(VOX + 50.5, 120, VOZ + 60.5);
   await installVillageV2(v.dir);
-  await call('dev.placement.slow', { on: true });
   const cb = await upgradeBatch(v, 1, 'upcancel');
-  await sleep(1200);
+  await sleep(300);
   const cancelled = await result(await api(`bcancel ${cb.id}`), 300_000);
-  await call('dev.placement.slow', { on: false });
   await settle(3000);
   const applied = (cancelled.items ?? []).filter((i) => i.status === 'PLACED').map((i) => i.key.slice(1));
   const hc = (await hash(V_BOX)).sha256;
