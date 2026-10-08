@@ -857,9 +857,11 @@ class Part {
     const box = { minX: Infinity, minY: Infinity, minZ: Infinity, maxX: -Infinity, maxY: -Infinity, maxZ: -Infinity };
     const grow = (x, yy, z) => { box.minX = Math.min(box.minX, x); box.maxX = Math.max(box.maxX, x); box.minY = Math.min(box.minY, yy); box.maxY = Math.max(box.maxY, yy); box.minZ = Math.min(box.minZ, z); box.maxZ = Math.max(box.maxZ, z); };
     const seen = new Set();
-    cells.forEach((c, i) => {
+    // centre cells first, then the cross-sections (a column keeps its first assignment)
+    const order = offs.map((k, j) => [k, j]).sort((a, b) => Math.abs(a[0]) - Math.abs(b[0]) || a[0] - b[0]);
+    for (const [k, j] of order) cells.forEach((c, i) => {
       const yy = y[i];
-      offs.forEach((k, j) => {
+      {
         const x = c.x + c.r[0] * k, z = c.z + c.r[1] * k;
         const key = `${x},${z}`;
         if (seen.has(key)) return;
@@ -875,7 +877,7 @@ class Part {
           const ox = c.x + c.r[0] * kk, oz = c.z + c.r[1] * kk;
           if (s.heightAt(ox, oz) - yy > 2) retC.addOnce(`${ox},${oz}`, ox, oz, yy + 1, 0, rM);
         }
-      });
+      }
     });
     this._colsOp(fillC, COND.IF_NATURAL);
     this._colsOp(cutC, COND.IF_NATURAL);

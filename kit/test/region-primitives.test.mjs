@@ -315,3 +315,88 @@ test('conditions, last-op-wins, later stages and claim clipping', async () => {
   // cells above the claim in an evaluated tile are counted; tiles wholly outside the claim are never evaluated
   assert.equal(cells.clipped, 8 * 10 * 2);
 });
+
+test('road: ground roads split at 2048 centre cells / 256 points; converted to graded when 4e would refuse; graded grade <= 1 in 4, cut/fill <= 12; optional drops', async () => {
+  const flat = worldOf({ flat: 70 });
+  const claim = { minX: 0, minZ: 0, maxX: 999, maxZ: 999, minY: -64, maxY: 319 };
+  const zig = [[5, 5], [995, 5], [995, 20], [5, 20], [5, 40], [995, 40]];
+  let res;
+  const p1 = await planInline((ctx) => {
+    const r = region(ctx);
+    res = r.part('r', { set: 'path' }).road(zig, { id: 'long' });
+    anchors(r, ctx.claim);
+    return r;
+  }, { world: flat, claim });
+  assert.equal(res.mode, 'ground');
+  const roads = p1.ir.roads;
+  assert.ok(roads.length >= 2, `split (${roads.length})`);
+  assert.deepEqual(roads.map((x) => x.id), roads.map((_, i) => `long_${i + 1}`));
+  let total = 0;
+  for (let i = 0; i < roads.length; i++) {
+    const pts = roads[i].points;
+    assert.ok(pts.length >= 2 && pts.length <= 256);
+    let n = 1;
+    for (let k = 1; k < pts.length; k++) n += Math.abs(pts[k][0] - pts[k - 1][0]) + Math.abs(pts[k][2] - pts[k - 1][2]);
+    assert.ok(n <= 2048, `road ${i}: ${n} centre cells`);
+    total += n - (i ? 1 : 0);
+    if (i) assert.deepEqual(roads[i][0] ?? roads[i].points[0], roads[i - 1].points[roads[i - 1].points.length - 1], 'consecutive pieces share a point');
+    for (const q of pts) assert.equal(q[1], 70, 'y is the survey ground (the 4e hint)');
+    assert.equal(roads[i].width, 3); assert.equal(roads[i].lanterns, true); assert.equal(roads[i].stage, 'main');
+  }
+  assert.equal(total, 990 + 15 + 990 + 20 + 990 + 1);
+  assert.equal(p1.ir.budget.cells, 0, 'ground roads are 4e items, not cells');
+
+  // conversions: width 6, water
+  const wet = (x, z) => (x > 50 && x < 60 ? { g: 62, h: 62, f: 58, flags: 1 } : { g: 62, h: 62, f: 62, flags: 0 });
+  const p2 = await planInline((ctx) => {
+    const r = region(ctx);
+    const part = r.part('r', { set: 'path' });
+    assert.equal(part.road([[10, 10], [40, 10]], { width: 6, id: 'wide' }).mode, 'graded');
+    assert.equal(part.road([[10, 30], [100, 30]], { id: 'wet' }).mode, 'graded');
+    anchors(r, ctx.claim);
+    return r;
+  }, { world: wet });
+  assert.ok(p2.notes.some((n) => /road wide: converted to graded \(width 6 > 5\)/.test(n)));
+  assert.ok(p2.notes.some((n) => /road wet: converted to graded \(water at 51,30\)/.test(n)));
+  assert.equal(p2.ir.roads.length, 0);
+  assert.equal(p2.ir.paths.filter((x) => x.kind === 'graded').length, 2);
+
+  // graded on hilly land, pinned at the end: walk surface along the centre
+  const hilly = worldOf({ seed: 'graded' });
+  for (let t = 0; t < 4; t++) {
+    const pts = [[20, 20 + 40 * t], [170, 30 + 40 * t]];
+    let end;
+    const p3 = await planInline((ctx) => {
+      const r = region(ctx);
+      end = ctx.survey.heightAt(170, 30 + 40 * t) + 3;
+      r.part('r', { set: 'path' }).road([pts[0], [pts[1][0], end, pts[1][1]]], { mode: 'graded', width: 3, id: `g${t}` });
+      anchors(r, ctx.claim);
+      return r;
+    }, { world: hilly });
+    const cells = realiseAll(p3.ir, hilly);
+    const centre = [];
+    for (const c of cells.values()) if (c.walk) centre.push(c);
+    const byX = new Map();
+    for (const c of centre) { const l = byX.get(`${c.x},${c.z}`) ?? []; l.push(c.y); byX.set(`${c.x},${c.z}`, l); }
+    for (const [k, l] of byX) assert.equal(l.length, 1, `one surface cell per column (${k})`);
+    // walk the 4-connected centre line from the start
+    const line = [];
+    const [sx, sz] = pts[0], [ex, ez] = pts[1];
+    const { line4 } = await import('../lib/region/geom.mjs');
+    for (const [x, z] of line4(sx, sz, ex, ez)) line.push(byX.get(`${x},${z}`)[0]);
+    for (let i = 1; i < line.length; i++) assert.ok(Math.abs(line[i] - line[i - 1]) <= 1);
+    for (let i = 4; i < line.length; i++) assert.ok(Math.abs(line[i] - line[i - 4]) <= 1, `graded ${t}: grade at ${i}`);
+    assert.equal(line[line.length - 1], end, 'the pinned end');
+    line4(sx, sz, ex, ez).forEach(([x, z], i) => assert.ok(Math.abs(line[i] - hilly(x, z).g) <= 12, `cut/fill at ${x},${z}`));
+  }
+  // impossible: optional drops with a note, otherwise the plan fails
+  const imp = (optional) => planInline((ctx) => {
+    const r = region(ctx);
+    r.part('r', { set: 'path' }).road([[20, 20], [60, 20, 250]], { mode: 'graded', optional, id: 'nope' });
+    anchors(r, ctx.claim);
+    return r;
+  }, { world: hilly });
+  const dropped = await imp(true);
+  assert.ok(dropped.notes.some((n) => /road nope: dropped \(.*needs a cut or fill of \d+/.test(n)));
+  await assert.rejects(imp(false), /needs a cut or fill of \d+ at .* \(at most 12\)/);
+});

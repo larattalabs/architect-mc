@@ -111,9 +111,9 @@ doubles; seeds are decimal strings.
 As built (kit 6a):
 - `node` is the Node **major** (`"24"`); `kitVersion` is `KIT_VERSION` in `lib/region/plan.mjs`. The golden test pins
   `node` so one golden file serves Node 22 and 24 (their IRs are otherwise identical: no trig on the plan path).
-- `claim.minY/maxY` is the request's range **tightened** to the surveyed land (lowest floor - 64 .. highest top + 64, and
-  every absolute y the program placed), never wider than the request's. With an unexplored survey it stays near the
-  request's range.
+- `claim.minY/maxY` is the request's range **tightened** after the budget pass to the surveyed land and every cell the
+  pass emitted (lowest - 64 .. highest + 64, lot boxes and anchors included), never wider than the request's. When the
+  survey has any missing column the request's range stays (with a note): an unexplored column could hold anything.
 - `tiles` keys are sorted numerically by (tx, tz). A stage with no ops in a set has an empty list (mega_bench's `lots-N`).
 - `budget` is **exact for the plan survey**: every tile of every change-set evaluated (count only) over the survey,
   nearest-neighbour upsampled to resolution 1 (sample `floor((x - minX + res/2) / res)`), missing columns filled from their

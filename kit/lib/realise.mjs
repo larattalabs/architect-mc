@@ -20,6 +20,7 @@ const EPS = 1e-6;
 const CLIP_COUNT_MARGIN = 64;
 
 const compiled = new WeakMap();
+const textCache = []; // the last 4 IR texts (an IR passed as a string)
 
 /** Parse a tile key "tx,tz". */
 export function parseKey(key) {
@@ -36,7 +37,14 @@ const colKey = (x, z) => (x + 33554432) * 67108864 + (z + 33554432);
  * @returns {{ claim, ops: object[], mats: string[], parts: object[] }}
  */
 export function compileIR(ir) {
-  if (typeof ir === 'string') ir = JSON.parse(ir);
+  if (typeof ir === 'string') {
+    const hit = textCache.find((e) => e.text === ir);
+    if (hit) return hit.c;
+    const c = compileIR(JSON.parse(ir));
+    textCache.unshift({ text: ir, c });
+    if (textCache.length > 4) textCache.pop();
+    return c;
+  }
   let c = compiled.get(ir);
   if (c) return c;
   if (!ir || ir.format !== 1) throw new Error('IR: format must be 1');
@@ -133,7 +141,7 @@ export function evalTile(ir, key, heights, opts = {}) {
   if (BUF.length < ny * 256) BUF = new Int32Array(ny * 256);
   const buf = BUF;
   const partStats = C.parts.map(() => [0, 0]); // removed, placed
-  let clipped = 0, missing = 0, count = 0, removed = 0, added = 0;
+  let clipped = 0, missing = 0, count = 0, removed = 0, added = 0, minY = null, maxY = null;
   const body = countOnly ? null : new ByteWriter(1 << 16);
   let sections = 0;
   const nMats = C.mats.length;
@@ -222,12 +230,14 @@ export function evalTile(ir, key, heights, opts = {}) {
         const s0 = wLo >> 4, s1 = wHi >> 4;
         for (let s = s0; s <= s1; s++) {
           const off = s * 4096;
-          let n = 0;
+          let n = 0, firstP = -1, lastP = 0;
           const pal = [];
           for (let p = 0; p < 4096; p++) {
             const v = buf[off + p];
             if (v === 0) continue;
             buf[off + p] = 0;
+            if (firstP < 0) firstP = p;
+            lastP = p;
             const opi = (v % OP_SLOTS) - 1;
             const m = (v - opi - 1) / OP_SLOTS;
             const o = C.ops[opi];
@@ -241,6 +251,9 @@ export function evalTile(ir, key, heights, opts = {}) {
             n++;
           }
           if (!n) continue;
+          const y0 = yBase + s * 16 + (firstP >> 8), y1 = yBase + s * 16 + (lastP >> 8);
+          if (minY === null || y0 < minY) minY = y0;
+          if (maxY === null || y1 > maxY) maxY = y1;
           count += n;
           if (countOnly) continue;
           sections++;
@@ -276,11 +289,11 @@ export function evalTile(ir, key, heights, opts = {}) {
     }
   });
   const notes = { parts, clipped, missing };
-  if (countOnly) return { payload: null, count, sha: null, removed, added, notes };
+  if (countOnly) return { payload: null, count, sha: null, removed, added, minY, maxY, notes };
   const w = new ByteWriter(body.len + 16);
   writeArtlHeader(w);
   w.varint(sections);
   w.bytes(body.buf.subarray(0, body.len));
   const payload = w.result();
-  return { payload, count, sha: sha256Hex(payload), removed, added, notes };
+  return { payload, count, sha: sha256Hex(payload), removed, added, minY, maxY, notes };
 }

@@ -8,11 +8,11 @@
   "minY": -64,
   "maxY": 319
  },
- "irSha": "4e88c6fcb28295bc5ea4f8bc090eae9d848a9995fdaa34df7c77c8db0cff59f0",
+ "irSha": "1a8852fea8afa18df40ecbc8d14d2e059b561d82388aae2130c6dabf6340bc68",
  "budget": {
+  "added": 8146790,
   "cells": 9444052,
-  "removed": 1297262,
-  "added": 8146790
+  "removed": 1297262
  },
  "cells": 9446020,
  "tiles": {
