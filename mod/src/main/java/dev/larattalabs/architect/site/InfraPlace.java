@@ -318,6 +318,30 @@ public final class InfraPlace {
 		return job;
 	}
 
+	/**
+	 * Starts placing a region tile (phase 6a): a cell site of kind {@code architect:terrain} or {@code architect:path}, CELL,
+	 * with the tile's held leaves as a {@code leaves} entry and its walk-surface cells in the record's spec.
+	 */
+	static InfraJob beginTile(ServerLevel level, String kind, Check c, @Nullable String owner, @Nullable JsonObject ext, Site.@Nullable Member member,
+		TileCheck.Result r, String tile) throws Sites.SiteException {
+		SiteJournal.requireAvailable();
+		String id = "c" + SiteJournal.store().newCells();
+		JsonObject spec = c.spec() == null ? new JsonObject() : c.spec().deepCopy();
+		spec.addProperty("kind", kind);
+		spec.addProperty("policy", Journal.Policy.CELL.name());
+		spec.addProperty("tile", tile);
+		Infra rec = new Infra(id, Infra.CELLS + kind, owner, ext, Sites.dimensionId(level), c.box(), System.currentTimeMillis(), member, true, spec);
+		InfraJob job = new InfraJob(id, rec.dimension(), kind, Journal.Policy.CELL, rec, member == null ? null : member.batchId(), member == null ? null
+			: member.itemKey());
+		job.notes.addAll(c.notes());
+		job.leafPos = r.leafPos();
+		job.leafBefore = r.leafBefore();
+		job.leafAfter = r.leafAfter();
+		job.tile = tile;
+		job.plan(level, c.positions(), c.values());
+		return job;
+	}
+
 	// ------------------------------------------------------------------ removal
 
 	/**

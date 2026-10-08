@@ -21,8 +21,11 @@ public interface ArchitectApi {
 	 * (phase 4e).
 	 * 1.6.0: critique (report and loop) on designs, groups and items, report critiques of library entries, DESIGN_CRITIQUED,
 	 * the critique figures of estimates, images in jobs, bible delete and archive, bible restraint (phase 5a).
+	 * 1.7.0: entry versions, blueprint deltas, delta apply, revert, polish (phase 5b).
+	 * 1.8.0: regions (plan, prepare, realise, undo), LoadPolicy GENERATED_ONLY, the queue-time CHUNK_BOUND, cell conditions,
+	 * the region events (phase 6a).
 	 */
-	String VERSION = "1.7.0";
+	String VERSION = "1.8.0";
 
 	/** The singleton. Safe to call from any mod's initializer (it does not depend on Architect's init order). */
 	static ArchitectApi get() {
@@ -50,6 +53,11 @@ public interface ArchitectApi {
 	/** Style bibles (phase 4b). Since 1.2.0. */
 	Bibles bibles();
 
+	/** Regions: whole sites as programs (phase 6a). Since 1.8.0. */
+	default Regions regions() {
+		throw new UnsupportedOperationException("regions() needs Architect API 1.8.0");
+	}
+
 	/**
 	 * What this game can do: the sidecar's {@code features} (when the snapshot names any; {@code "protocol2"} when it chose
 	 * protocol 2) plus Java-only ones ({@code "designs"}, {@code "survey"}, {@code "sites"}, {@code "events"}, ...). Any thread.
@@ -60,6 +68,8 @@ public interface ArchitectApi {
 	 * Since 1.5.0, {@code "journal"}, {@code "overlapLayer"}, {@code "roads"}, {@code "cellSites"} and {@code "stackQuery"}.
 	 * Since 1.6.0, a 5a helper adds {@code "critique"}, {@code "critiqueReport"}, {@code "jobImages"}, {@code "bibleAdmin"} and
 	 * {@code "bibleRestraint"}.
+	 * Since 1.8.0, {@code "generatedOnly"}, {@code "cellConditions"} and {@code "chunkBound"} are always there, and a 6a helper
+	 * ({@code region.plan} and {@code region.tiles}) adds {@code "regions"} and {@code "regionPrepare"}.
 	 */
 	Set<String> features();
 }

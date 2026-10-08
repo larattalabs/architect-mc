@@ -64,13 +64,19 @@ public final class QBatch {
 		this.createdAt = createdAt;
 	}
 
+	/** Items by key (phase 6a: a region batch has 1-2k items; a linear search per dependency per tick was quadratic). */
+	private transient java.util.@Nullable Map<String, QItem> byKey;
+
 	public @Nullable QItem item(String key) {
-		for (QItem i : items) {
-			if (i.key.equals(key)) {
-				return i;
+		java.util.Map<String, QItem> m = byKey;
+		if (m == null || m.size() != items.size()) {
+			m = new java.util.HashMap<>(items.size() * 2);
+			for (QItem i : items) {
+				m.putIfAbsent(i.key, i);
 			}
+			byKey = m;
 		}
-		return null;
+		return m.get(key);
 	}
 
 	public boolean running() {
