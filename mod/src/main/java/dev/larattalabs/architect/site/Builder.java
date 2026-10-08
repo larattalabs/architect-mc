@@ -166,6 +166,9 @@ public final class Builder {
 		int waterlogged;
 		boolean crateMissing;
 		String name;
+		/** Phase 5b: a construction delta's swap cells (changed cells that keep the old block until swapped) and their old states. */
+		final BitSet swap;
+		final BlockState @Nullable [] old;
 
 		Run(Site s, Cells t) {
 			Construction c = s.construction();
@@ -214,6 +217,22 @@ public final class Builder {
 			for (int i = 0; i < n; i++) {
 				cost.get(i).forEach(x -> unbuilt.merge(x.item(), x.count(), Integer::sum));
 			}
+			this.swap = c.swap();
+			Cells before = c.delta() == null || swap.isEmpty() ? null : SiteJournal.beforeOf(c.delta(), box);
+			if (before != null) {
+				this.old = new BlockState[n];
+				for (int i = swap.nextSetBit(0); i >= 0 && i < n; i = swap.nextSetBit(i + 1)) {
+					int k = queue[i];
+					old[i] = k >= 0 && k < before.size() ? before.states[k] : null;
+				}
+			} else {
+				this.old = null;
+			}
+		}
+
+		/** Whether the world at a swap cell still holds the old version's block (the swap has not happened). */
+		boolean holdsOld(BlockState now, int i) {
+			return old != null && swap.get(i) && old[i] != null && now.is(old[i].getBlock()) && !matches(now, i);
 		}
 
 		int size() {
@@ -297,6 +316,10 @@ public final class Builder {
 
 		/** The world holds what this cell gets (by block: a door the player opened is still built). */
 		boolean matches(BlockState now, int i) {
+			if (swap.get(i) && old != null && old[i] != null && old[i].is(target[i].getBlock())) {
+				// a swap that keeps the block (a re-oriented stair, another slab type): built when the state is the target's
+				return dev.larattalabs.architect.journal.StillOurs.holds(now, null, target[i], null);
+			}
 			return now.is(target[i].getBlock());
 		}
 
@@ -930,11 +953,21 @@ public final class Builder {
 			}
 			int j = r.second[i];
 			BlockPos q = j >= 0 ? r.pos(j) : null;
-			if (!free(level, p, now, r.target[i]) || q != null && (!level.isLoaded(q) || !free(level, q, level.getBlockState(q), r.target[j]))) {
+			// phase 5b: a swap replaces the old version's block only now that the new item is in the crate; the old block is
+			// refunded when it was paid (the free bit) and is still the site's
+			boolean swapNow = r.holdsOld(now, i) && (q == null || r.holdsOld(level.getBlockState(q), j) || free(level, q, level.getBlockState(q), r.target[j]));
+			if (!swapNow && (!free(level, p, now, r.target[i]) || q != null && (!level.isLoaded(q) || !free(level, q, level.getBlockState(q), r.target[j])))) {
 				r.blockedSince.putIfAbsent(i, ticks);
 				continue;
 			}
 			r.blockedSince.remove(i);
+			if (swapNow) {
+				refundSwap(level, s, r, i, free);
+				if (j >= 0 && r.holdsOld(level.getBlockState(q), j)) {
+					refundSwap(level, s, r, j, free);
+				}
+				freeChanged = true;
+			}
 			pay(ledger, r.cost.get(i));
 			put(level, r, i, p, true);
 			if (j >= 0) {
@@ -1609,16 +1642,265 @@ public final class Builder {
 
 	// ------------------------------------------------------------------ phase 5b: construction deltas (survival)
 
-	/** The verdict of a construction delta (survival: INSTANT not allowed for the actor). */
-	public static SiteDeltas.Check checkConstructionDelta(ServerLevel level, SiteDeltas.Request r) {
-		SiteDeltas.Check c = SiteDeltas.check(level, r);
-		return c.withSurvival(Map.of(), Map.of(), List.of(new SiteDeltas.Refusal(dev.larattalabs.architect.api.Reason.NOT_ALLOWED,
-			"construction deltas are not built yet", false)));
+	/** Refunds per site (dev.site.state, the gate's items-in = items-out), since the world started. */
+	static final Map<String, Map<String, Integer>> REFUNDED = new ConcurrentHashMap<>();
+
+	/** A swap: the old block's item goes to the crate's cell (when it was paid), and the cell counts as paid for its new block. */
+	private static void refundSwap(ServerLevel level, Site s, Run r, int i, BitSet free) {
+		if (r.old != null && r.old[i] != null && !free.get(i)) {
+			Map<String, Integer> items = new TreeMap<>();
+			Cells.cost(r.old[i]).forEach(c -> items.merge(c.item(), c.count(), Integer::sum));
+			Construction c = s.construction();
+			BlockPos at = c.crate() != null ? new BlockPos(c.crate().x(), c.crate().y(), c.crate().z()).above() : dropPos(s);
+			dropItems(level, at, items, null);
+			items.forEach((k, v) -> REFUNDED.computeIfAbsent(s.id(), x -> new ConcurrentHashMap<>()).merge(k, v, Integer::sum));
+		}
+		free.clear(i);
 	}
 
-	/** Starts a construction delta (survival). */
+	/**
+	 * The verdict of a construction delta (survival: INSTANT not allowed for the actor; docs/CONTRACT.md phase 5b "Survival"): the
+	 * instant check, plus its bill of materials (the queued cells: added and changed, at their new block) and refunds (removed
+	 * cells and swapped ones that were paid and are still the site's), and creative-only blocks.
+	 */
+	public static SiteDeltas.Check checkConstructionDelta(ServerLevel level, SiteDeltas.Request r) {
+		SiteDeltas.Check c = SiteDeltas.check(level, r);
+		if (c.plan() == null) {
+			return c;
+		}
+		Site site = Sites.get(r.siteId());
+		Map<String, Integer> bom = new TreeMap<>();
+		Map<String, Integer> refund = new TreeMap<>();
+		List<SiteDeltas.Refusal> more = new ArrayList<>();
+		java.util.Set<String> creative = new java.util.TreeSet<>();
+		BitSet paid = paidCells(site);
+		Anchors.Bounds box = site.restoreBox();
+		for (var e : c.plan().outcome().write().entrySet()) {
+			BlockPos p = BlockPos.of(e.getKey());
+			BlockState target = WorldJournal.state(e.getValue());
+			Byte kind = c.ghost().get(e.getKey());
+			boolean queued = !target.isAir() && kind != null && kind != SiteDeltas.REMOVED;
+			if (queued) {
+				for (SurvivalItems.Cost x : Cells.cost(target)) {
+					bom.merge(x.item(), x.count(), Integer::sum);
+				}
+				if (SurvivalItems.bundled().creativeOnly(Cells.blockId(target))) {
+					creative.add(Cells.blockId(target));
+				}
+			}
+			// what goes back: the site's paid block there (removed now, or swapped later)
+			if (box.contains(p.getX(), p.getY(), p.getZ()) && paid.get(boxIndex(box, p))) {
+				BlockState now = level.getBlockState(p);
+				if (!now.isAir()) {
+					for (SurvivalItems.Cost x : Cells.cost(now)) {
+						refund.merge(x.item(), x.count(), Integer::sum);
+					}
+				}
+			}
+		}
+		if (!creative.isEmpty()) {
+			more.add(new SiteDeltas.Refusal(dev.larattalabs.architect.api.Reason.CREATIVE_ONLY_BLOCK, "This version uses " + String.join(", ", creative)
+				+ ", which survival can't build", false));
+		}
+		return c.withSurvival(bom, refund, more);
+	}
+
+	/** The cells of a site's restore box that hold a paid block now (queued, not free), as box indexes. */
+	static BitSet paidCells(Site s) {
+		BitSet out = new BitSet();
+		Construction c = s.construction();
+		if (c == null) {
+			return out; // an instant site: nothing was paid
+		}
+		BitSet free = c.free();
+		int[] q = c.queue();
+		for (int i = 0; i < q.length; i++) {
+			if (!free.get(i)) {
+				out.set(q[i]);
+			}
+		}
+		return out;
+	}
+
+	static int boxIndex(Anchors.Bounds box, BlockPos p) {
+		int dx = box.maxX() - box.minX() + 1;
+		int dz = box.maxZ() - box.minZ() + 1;
+		return Construction.index(p.getX() - box.minX(), p.getY() - box.minY(), p.getZ() - box.minZ(), dx, dz);
+	}
+
+	/**
+	 * Starts a construction delta (survival; docs/CONTRACT.md phase 5b "Survival"): the delta is applied as an instant delta (its
+	 * entry's after is what an instant apply leaves: the target), then turned into a construction: removed cells stay written
+	 * (free) and their paid blocks are refunded; added cells are cleared to air (free) and queued; changed cells get the old
+	 * version's block back and are queued as swaps (no hole while materials wait). A new crate goes beside the approach end.
+	 * Its history step is never journal-undone ({@code revertible} false): a survival revert is a paid forward delta.
+	 */
 	public static SiteDeltas.Result applyConstructionDelta(ServerLevel level, SiteDeltas.Request r, @org.jspecify.annotations.Nullable ServerPlayer actor)
 		throws Sites.SiteException {
-		throw new Sites.SiteException(dev.larattalabs.architect.api.Reason.NOT_ALLOWED, "construction deltas are not built yet");
+		SiteDeltas.Check c = checkConstructionDelta(level, r);
+		if (!c.ok()) {
+			SiteDeltas.Refusal f = c.refusals().get(0);
+			throw new Sites.SiteException(f.reason(), f.message());
+		}
+		MinecraftServer srv = level.getServer();
+		Site before = Sites.get(r.siteId());
+		BitSet paidBefore = paidCells(before);
+		Anchors.Bounds oldBox = before.restoreBox();
+		Construction oldC = before.construction();
+		Map<Long, BlockState> was = new HashMap<>();
+		for (long p : c.plan().outcome().write().keySet()) {
+			was.put(p, level.getBlockState(BlockPos.of(p)));
+		}
+		// the player's blocks an OVERWRITE replaces drop as items (phase 3 rule)
+		if (r.edits() == dev.larattalabs.architect.delta.DeltaPlanner.Edits.OVERWRITE) {
+			Map<String, Integer> drop = new TreeMap<>();
+			for (var k : c.plan().outcome().edited()) {
+				BlockState now = level.getBlockState(BlockPos.of(k.pos()));
+				Cells.cost(now).forEach(x -> drop.merge(x.item(), x.count(), Integer::sum));
+			}
+			dropItems(level, dropPos(before), drop, null);
+		}
+		SiteDeltas.Result res = SiteDeltas.applyChecked(level, c, r.edits() == dev.larattalabs.architect.delta.DeltaPlanner.Edits.OVERWRITE, "delta");
+		Site s = Sites.get(r.siteId());
+		String entry = s.versioning().history().get(s.versioning().history().size() - 1).deltaEntry();
+		Anchors.Bounds box = s.restoreBox();
+		int dx = box.maxX() - box.minX() + 1;
+		int dz = box.maxZ() - box.minZ() + 1;
+		// the queue: the site's paid cells (old queue, remapped to the new box) minus the removed ones, plus the queued delta cells
+		Map<Integer, Boolean> freeOf = new java.util.LinkedHashMap<>(); // box index -> free
+		if (oldC != null) {
+			int odx = oldBox.maxX() - oldBox.minX() + 1;
+			int odz = oldBox.maxZ() - oldBox.minZ() + 1;
+			BitSet of = oldC.free();
+			int[] oq = oldC.queue();
+			for (int i = 0; i < oq.length; i++) {
+				int[] o = Construction.offsets(oq[i], odx, odz);
+				BlockPos p = new BlockPos(oldBox.minX() + o[0], oldBox.minY() + o[1], oldBox.minZ() + o[2]);
+				freeOf.put(boxIndex(box, p), of.get(i));
+			}
+		}
+		Map<String, Integer> refunded = new TreeMap<>();
+		List<Integer> swapIdx = new ArrayList<>();
+		BlockPos.MutableBlockPos mp = new BlockPos.MutableBlockPos();
+		List<BlockPos> clearAir = new ArrayList<>();
+		for (var e : c.plan().outcome().write().entrySet()) {
+			BlockPos p = BlockPos.of(e.getKey());
+			BlockState target = WorldJournal.state(e.getValue());
+			Byte kind = c.ghost().get(e.getKey());
+			int k = boxIndex(box, p);
+			boolean wasPaid = oldBox.contains(p.getX(), p.getY(), p.getZ()) && paidBefore.get(boxIndexOld(oldBox, p));
+			BlockState old = was.get(e.getKey());
+			if (target.isAir() || kind == null || kind == SiteDeltas.REMOVED) {
+				// removed (or now air): written already, free; the paid block that stood there is refunded now
+				if (wasPaid && old != null && !old.isAir()) {
+					Cells.cost(old).forEach(x -> refunded.merge(x.item(), x.count(), Integer::sum));
+				}
+				freeOf.remove(k);
+				continue;
+			}
+			if (kind == SiteDeltas.CHANGED && old != null && !old.isAir()) {
+				// a swap: the old block goes back now, the new one when its item is in the crate
+				level.setBlock(mp.set(p), old, Sites.FLAGS);
+				freeOf.put(k, !wasPaid);
+				swapIdx.add(k);
+			} else {
+				clearAir.add(p.immutable());
+				freeOf.put(k, false);
+			}
+		}
+		// added cells: cleared to air (free, no drops), top down
+		clearAir.sort((a, b) -> Integer.compare(b.getY(), a.getY()));
+		for (BlockPos p : clearAir) {
+			level.setBlock(p, Blocks.AIR.defaultBlockState(), Sites.FLAGS);
+		}
+		// the queue in build order (bottom up, supports first, pairs together), as a construction placement orders it
+		int[] boxIdx = freeOf.keySet().stream().mapToInt(Integer::intValue).toArray();
+		Cells t = SiteJournal.target(s.id(), box);
+		Site probe = s.withConstruction(new Construction(Construction.BUILDING, boxIdx, JOURNAL_TARGET, null, new BitSet(), false, null));
+		Run pr = new Run(probe, t);
+		int n = boxIdx.length;
+		int[] ys = new int[n];
+		int[] kinds = new int[n];
+		int[] pairOf = new int[n];
+		for (int i = 0; i < n; i++) {
+			ys[i] = pr.pos(i).getY();
+			kinds[i] = kind(pr.target[i]);
+			pairOf[i] = pr.isSecond[i] ? pr.pairFirst(i) : -1;
+		}
+		int[] order = BuildOrder.order(ys, kinds, pr.support, pairOf);
+		int[] queue = new int[n];
+		BitSet free = new BitSet();
+		BitSet swap = new BitSet();
+		java.util.Set<Integer> swaps = new HashSet<>(swapIdx);
+		for (int i = 0; i < n; i++) {
+			queue[i] = boxIdx[order[i]];
+			if (Boolean.TRUE.equals(freeOf.get(queue[i]))) {
+				free.set(i);
+			}
+			if (swaps.contains(queue[i])) {
+				swap.set(i);
+			}
+		}
+		// the crate: beside the new version's approach end (its own crate entry in the site's undo group)
+		BlockPos cp = deltaCratePos(level, s, c.plan().pb());
+		Construction.Crate crate = null;
+		if (cp != null) {
+			BlockState wasC = level.getBlockState(cp);
+			crate = new Construction.Crate(cp.getX(), cp.getY(), cp.getZ(), NbtUtils.writeBlockState(wasC).toString(), null);
+			dev.larattalabs.architect.journal.JournalStore js = SiteJournal.store();
+			dev.larattalabs.architect.journal.JournalStore.Txn txn = js.begin().label("crate:" + s.id());
+			SiteJournal.crateEntry(txn, level, s.id(), s.group(), cp, WorldJournal.value(CrateBlocks.CRATE.defaultBlockState()));
+			SiteJournal.await(js.submit(txn), "the crate of " + s.id());
+			level.setBlock(cp, CrateBlocks.CRATE.defaultBlockState(), Sites.FLAGS);
+			if (level.getBlockEntity(cp) instanceof CrateBlockEntity be) {
+				be.setSiteId(s.id());
+			}
+		}
+		Construction nc = (oldC != null ? oldC : new Construction(Construction.BUILT, new int[0], JOURNAL_TARGET, null, new BitSet(), false, actor
+			== null ? null : actor.getStringUUID())).withDelta(queue, free, crate, entry, swap);
+		// the step is never journal-undone (a survival revert is a paid forward delta)
+		List<Site.History> h = new ArrayList<>(s.versioning().history());
+		Site.History last = h.remove(h.size() - 1);
+		h.add(last.withRevertible(false));
+		Site built = s.withConstruction(nc).withVersioning(new Site.Versioning(s.versioning().version(), h, 0, 0, s.versioning().deviations()));
+		Sites.replace(srv, built);
+		RUNS.remove(s.id());
+		dropItems(level, crate != null ? cp.above() : dropPos(s), refunded, null);
+		refunded.forEach((k, v) -> REFUNDED.computeIfAbsent(s.id(), x -> new ConcurrentHashMap<>()).merge(k, v, Integer::sum));
+		Architect.LOGGER.info("Construction delta of {} v{} -> v{}: {} cells queued ({} swaps), refunds {}", s.id(), res.from(), res.to(), n, swap
+			.cardinality(), refunded);
+		return new SiteDeltas.Result(true, s.id(), res.from(), res.to(), res.written(), res.kept(), res.reshaped(), List.of(), res.notes(), before, built,
+			refunded);
+	}
+
+	static int boxIndexOld(Anchors.Bounds box, BlockPos p) {
+		return boxIndex(box, p);
+	}
+
+	/** The crate's cell of a construction delta: beside the new version's approach end (the phase 3 rule), outside every site. */
+	static @org.jspecify.annotations.Nullable BlockPos deltaCratePos(ServerLevel level, Site s, dev.larattalabs.architect.delta.SitePlanner.Plan pb) {
+		Anchors.Bounds sb = s.restoreBox();
+		Blueprint bp = Blueprints.get(s.blueprint());
+		int turns = dev.larattalabs.architect.placement.BlueprintTransform.parseTurns(s.rotation());
+		String front = dev.larattalabs.architect.placement.BlueprintTransform.rotateDirection(bp == null ? "south" : bp.front(), turns);
+		int[] out = Approach.outward(front);
+		double[] end = pb.approach().end();
+		BlockPos start;
+		int step;
+		if (end != null) {
+			start = BlockPos.containing(end[0], end[1], end[2]);
+			step = 1;
+		} else {
+			Anchor e = s.anchors().get(Blueprint.ENTRANCE);
+			start = e != null ? BlockPos.containing(e.x(), e.y(), e.z()) : new BlockPos((sb.minX() + sb.maxX()) / 2, s.box().minY() + 1, (sb.minZ() + sb
+				.maxZ()) / 2);
+			step = 2;
+		}
+		int[] right = {-out[1], out[0]};
+		BlockPos p = start.offset(out[0] * step + right[0], 0, out[1] * step + right[1]);
+		for (int i = 0; i < 24 && (sb.contains(p.getX(), p.getY(), p.getZ()) || inOtherSite(level, p) || SiteJournal.owned(s.dimension(), p.asLong())); i++) {
+			p = p.offset(out[0], 0, out[1]);
+		}
+		return p;
 	}
 }

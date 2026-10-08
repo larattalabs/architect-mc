@@ -23,7 +23,8 @@ import org.jspecify.annotations.Nullable;
  * @param paused the builder waits
  * @param owner the UUID of the player who placed it (the HUD line), or null
  */
-public record Construction(String state, int[] queue, String target, @Nullable Crate crate, BitSet free, boolean paused, @Nullable String owner) {
+public record Construction(String state, int[] queue, String target, @Nullable Crate crate, BitSet free, boolean paused, @Nullable String owner,
+	@Nullable String delta, BitSet swap) {
 	public static final String BUILDING = "building";
 	public static final String BUILT = "built";
 
@@ -59,9 +60,28 @@ public record Construction(String state, int[] queue, String target, @Nullable C
 	public Construction {
 		queue = queue.clone();
 		free = (BitSet) free.clone();
+		swap = swap == null ? new BitSet() : (BitSet) swap.clone();
 		if (!BUILDING.equals(state) && !BUILT.equals(state)) {
 			throw new IllegalArgumentException("state must be building or built: " + state);
 		}
+	}
+
+	/** Without a construction delta (phases 3-4e). */
+	public Construction(String state, int[] queue, String target, @Nullable Crate crate, BitSet free, boolean paused, @Nullable String owner) {
+		this(state, queue, target, crate, free, paused, owner, null, new BitSet());
+	}
+
+	/**
+	 * Phase 5b: a construction delta's queue ({@code delta}: its journal entry, whose {@code before} holds the old blocks of the
+	 * {@code swap} cells: changed cells that keep the old version's block until their swap, when the new item is in the crate).
+	 */
+	public Construction withDelta(int[] q, BitSet f, @Nullable Crate c, @Nullable String d, BitSet sw) {
+		return new Construction(BUILDING, q, target, c, f, false, owner, d, sw);
+	}
+
+	@Override
+	public BitSet swap() {
+		return (BitSet) swap.clone();
 	}
 
 	@Override
@@ -88,19 +108,19 @@ public record Construction(String state, int[] queue, String target, @Nullable C
 	}
 
 	public Construction withState(String s, @Nullable Crate c) {
-		return new Construction(s, queue, target, c, free, paused, owner);
+		return new Construction(s, queue, target, c, free, paused, owner, delta, swap);
 	}
 
 	public Construction withFree(BitSet f) {
-		return new Construction(state, queue, target, crate, f, paused, owner);
+		return new Construction(state, queue, target, crate, f, paused, owner, delta, swap);
 	}
 
 	public Construction withPaused(boolean p) {
-		return new Construction(state, queue, target, crate, free, p, owner);
+		return new Construction(state, queue, target, crate, free, p, owner, delta, swap);
 	}
 
 	public Construction withCrate(@Nullable Crate c) {
-		return new Construction(state, queue, target, c, free, paused, owner);
+		return new Construction(state, queue, target, c, free, paused, owner, delta, swap);
 	}
 
 	/** A cell's index in a box {@code dx} x {@code dy} x {@code dz} (x fastest, then z, then y). Pure. */
@@ -131,6 +151,10 @@ public record Construction(String state, int[] queue, String target, @Nullable C
 		if (owner != null) {
 			o.addProperty("owner", owner);
 		}
+		if (delta != null) {
+			o.addProperty("delta", delta);
+			o.addProperty("swap", CellBits.base64(swap));
+		}
 		return o;
 	}
 
@@ -142,7 +166,8 @@ public record Construction(String state, int[] queue, String target, @Nullable C
 		return new Construction(o.has("state") ? o.get("state").getAsString() : BUILT, queue, o.get("target").getAsString(),
 			o.has("crate") && o.get("crate").isJsonObject() ? Crate.fromJson(o.getAsJsonObject("crate")) : null,
 			CellBits.fromBase64(o.has("free") ? o.get("free").getAsString() : ""), o.has("paused") && o.get("paused").getAsBoolean(),
-			o.has("owner") ? o.get("owner").getAsString() : null);
+			o.has("owner") ? o.get("owner").getAsString() : null, o.has("delta") ? o.get("delta").getAsString() : null, CellBits.fromBase64(o.has("swap")
+				? o.get("swap").getAsString() : ""));
 	}
 
 	@Override

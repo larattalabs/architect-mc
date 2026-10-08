@@ -1046,10 +1046,50 @@ public final class SiteJournal {
 					after.put(sc.pos(i), a);
 				}
 			}
+			// phase 5b: the site's deltas lie on top (oldest first): the target is the site's top after
+			List<JournalStore.Meta> deltas = active(siteId).stream().filter(x -> x.kind().equals(WorldJournal.DELTA)).sorted(Comparator.comparingLong(
+				JournalStore.Meta::layer)).toList();
+			for (JournalStore.Meta d : deltas) {
+				for (long k : d.sections()) {
+					SectionCells sc = s.section(d.id(), k);
+					if (sc == null) {
+						continue;
+					}
+					for (int i = 0; i < sc.size(); i++) {
+						Value a = sc.after(i);
+						if (a != null) {
+							after.put(sc.pos(i), a);
+						}
+					}
+				}
+			}
 		} catch (IOException e) {
 			return null;
 		}
 		return Cells.fromValues(box, after);
+	}
+
+	/** An entry's {@code before} values over {@code box} (a construction delta's old blocks), or null. */
+	static @Nullable Cells beforeOf(String entryId, Anchors.Bounds box) {
+		JournalStore s = WorldJournal.storeOrNull();
+		JournalStore.Meta m = s == null ? null : s.meta(entryId);
+		if (m == null) {
+			return null;
+		}
+		Map<Long, Value> v = new HashMap<>();
+		try {
+			for (long k : m.sections()) {
+				SectionCells sc = s.section(m.id(), k);
+				if (sc != null) {
+					for (int i = 0; i < sc.size(); i++) {
+						v.put(sc.pos(i), sc.before(i));
+					}
+				}
+			}
+		} catch (IOException e) {
+			return null;
+		}
+		return Cells.fromValues(box, v);
 	}
 
 	/** The site entry's {@code before} values as a dense box (a deconstruct's "was" per cell). */
