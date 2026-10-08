@@ -100,7 +100,7 @@ final class InfraJob implements Placement.Job {
 		}
 		befores = new Value[positions.length];
 		cursor = 0;
-		if (positions.length > SiteJournal.ONE_TICK_CELLS) {
+		if (positions.length > oneTickCells()) {
 			it.unimi.dsi.fastutil.longs.LongOpenHashSet ks = new it.unimi.dsi.fastutil.longs.LongOpenHashSet();
 			long last = Long.MIN_VALUE;
 			for (long p : positions) {
@@ -117,6 +117,20 @@ final class InfraJob implements Placement.Job {
 			captureSome(level, Long.MAX_VALUE);
 			submit(level);
 		}
+	}
+
+	/**
+	 * Phase 6a: a region tile captures over ticks and builds its sections off the server thread from {@link #TILE_SLICED_CELLS}
+	 * cells (a 64x64 terrain tile is often 20-50k cells; captured in one tick it took 30-46 ms).
+	 */
+	static final int TILE_SLICED_CELLS = 8192;
+
+	private int oneTickCells() {
+		return tile != null ? TILE_SLICED_CELLS : SiteJournal.ONE_TICK_CELLS;
+	}
+
+	private int syncCells() {
+		return tile != null ? TILE_SLICED_CELLS : SiteJournal.SYNC_CELLS;
 	}
 
 	private static boolean sortedLowestFirst(long[] pos) {
@@ -179,7 +193,7 @@ final class InfraJob implements Placement.Job {
 
 	/** P3 for a large capture: sections built off-thread first; false while that runs. */
 	private boolean submitLarge(ServerLevel level) throws Sites.SiteException {
-		if (positions.length <= SiteJournal.SYNC_CELLS || tracker == null) {
+		if (positions.length <= syncCells() || tracker == null) {
 			submit(level);
 			return true;
 		}
