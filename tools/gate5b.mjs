@@ -984,9 +984,9 @@ steps.ghost = async () => {
   const site = await placeAtV1(ID, V, [20, 64, 20], 0);
   check((await deltaApply(site, 2)).applied && (await revert(site, 1)).applied, 'ghost: v2 applied and reverted (a history)');
   const c = await deltaCheck(site, 3, { cells: true });
-  const removed = (c.ghost?.removed ?? []).concat(c.ghost?.changed ?? []);
-  // a player block in a cell the update writes: KEEP keeps it (yellow)
-  const kept = removed[Math.floor(removed.length / 2)];
+  // a player block in a cell the update writes (the porch's top front cell, in view): KEEP keeps it (yellow)
+  const byTop = (c.ghost?.removed ?? []).map((p) => p.split(',').map(Number)).sort((a, b) => b[1] - a[1] || b[2] - a[2]);
+  const kept = byTop[0].join(',');
   await cmd(`/setblock ${kept.replaceAll(',', ' ')} minecraft:gold_block`);
   const g = await call('dev.site.delta.preview', { site, version: 3 }, 60_000);
   log(`  ghost: +${g.added} -${g.removed} ~${g.changed} kept ${g.kept.length}`);
@@ -996,6 +996,11 @@ steps.ghost = async () => {
   await call('dev.camera', { x: 50, y: 82, z: 52, lookAt: { x: 26, y: 68, z: 25 }, mode: 'spectator' }, 30_000);
   const shot = await call('dev.screenshot', { name: 'gate5b-delta-ghost', frames: 10 }, 180_000);
   log(`  ghost screenshot: ${shot.path}`);
+  // close up on the front: the porch (REMOVED), the kept cell (KEPT), the changed windows and roof (CHANGED), the wings (ADDED)
+  const [kx, ky, kz] = byTop[0];
+  await call('dev.camera', { x: kx + 9, y: ky + 6, z: kz + 13, lookAt: { x: kx, y: ky, z: kz }, mode: 'spectator' }, 30_000);
+  const close = await call('dev.screenshot', { name: 'gate5b-delta-ghost-close', frames: 10 }, 180_000);
+  log(`  ghost close-up: ${close.path} (kept cell ${kept})`);
   await call('dev.release', {}, 20_000);
   return { shot: shot.path, preview: g };
 };
