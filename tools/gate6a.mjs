@@ -507,6 +507,116 @@ steps.megaA = async () => {
   return b;
 };
 
+// ------------------------------------------------------------------ gate 5: mega_bench B (staged near the player)
+
+/**
+ * Configuration B: LOADED_ONLY (no tickets) on the prepared world (explored land; Architect generates nothing), the player
+ * teleported every 30 s along a route through each stage's tiles and lots, stage by stage; a relog in the middle of lots-2 and
+ * a sidecar kill in the middle of ways. Bars: 0 failed items, resume after the relog and after the sidecar comes back (30 s),
+ * progress resumes within 60 s of the player arriving at a waiting item's chunks, per-stage progress events.
+ */
+steps.megaB = async () => {
+  if (!dev) await connect();
+  const name = 'G6A MegaB';
+  await fresh(name, 'G6A Mega Base Prepared');
+  await cmd('/architect reload').catch(() => null);
+  await tp(0.5, 160, 0.5);
+  await api('revents').catch(() => null); // hooks the region events
+  const p = await plan(MEGA, 'generated:64');
+  const out = { plan: p.planId, stages: {}, events: [] };
+  const region = await realise(p.planId, { load: 'loaded' });
+  out.region = region;
+  const t0 = Date.now();
+  let relogDone = false;
+  let killDone = false;
+  const visit = async (x, z) => {
+    await cmd(`/tp @s ${x} 200 ${z}`);
+    await sleep(30_000);
+  };
+  // tile centres per stage from the region's batch (dev.region.state lists stages; the tiles come from the plan's tiles)
+  const tilesOf = async (stage) => {
+    const st = await regionState(region);
+    const rec = st.record;
+    return { st, rec };
+  };
+  const ir = JSON.parse(fs.readFileSync(path.join(GAME_DIR, 'saves', name, 'architect-regions', region, 'ir.json'), 'utf8'));
+  for (const stage of ir.stages) {
+    const keys = [...(ir.tiles[stage]?.terrain ?? []), ...(ir.tiles[stage]?.path ?? [])].map((k) => k.split(',').map(Number));
+    for (const l of ir.lots.filter((x) => x.stage === stage)) keys.push([Math.floor(l.box.minX / 64), Math.floor(l.box.minZ / 64)]);
+    // serpentine over 3x3-tile cells (render distance 12 covers about 3 tiles around the player)
+    const cells = new Map();
+    for (const [tx, tz] of keys) cells.set(`${Math.floor(tx / 3)},${Math.floor(tz / 3)}`, [Math.floor(tx / 3), Math.floor(tz / 3)]);
+    const route = [...cells.values()].sort((a, b) => a[1] - b[1] || (a[1] % 2 ? b[0] - a[0] : a[0] - b[0]));
+    const s0 = Date.now();
+    const g0 = await call('dev.chunks.generated');
+    log(`  stage ${stage}: ${keys.length} items, ${route.length} waypoints`);
+    let lap = 0;
+    while (true) {
+      for (const [cx, cz] of route) {
+        await visit(cx * 192 + 96, cz * 192 + 96);
+        const st = await regionState(region);
+        const sp = st.view.stages.find((x) => x.name === stage);
+        if (stage === 'ways' && !killDone && sp.tilesDone > sp.tilesTotal / 3) {
+          const ls = await call('dev.launcher.state');
+          log(`  sidecar kill (pid ${ls.pid}) in the middle of ways`);
+          if (ls.pid) process.kill(ls.pid, 'SIGKILL');
+          killDone = true;
+          await sleep(30_000);
+          const w = await regionState(region);
+          out.sidecarKill = { waiting: w.waiting, cells: w.view.cellsWritten };
+          const tk = Date.now();
+          await call('dev.launcher.restart', {}, 120_000);
+          for (let i = 0; i < 120; i++) {
+            const s2 = await regionState(region);
+            if (s2.view.cellsWritten > w.view.cellsWritten) {
+              out.sidecarKill.resumedSeconds = (Date.now() - tk) / 1000;
+              break;
+            }
+            await sleep(1000);
+          }
+          log(`  sidecar back: resumed in ${out.sidecarKill.resumedSeconds} s`);
+        }
+        if (stage === 'lots-2' && !relogDone && st.view.lots.filter((l) => l.state === 'placed').length > 50 + 10) {
+          log('  relog in the middle of lots-2');
+          await stopClient();
+          await startClient(name);
+          relogDone = true;
+          const tr = Date.now();
+          await tp(cx * 192 + 96, 200, cz * 192 + 96);
+          const before = (await regionState(region)).view.cellsWritten;
+          for (let i = 0; i < 120; i++) {
+            const s2 = await regionState(region);
+            if (s2.view.lots.filter((l) => l.state === 'placed').length > st.view.lots.filter((l) => l.state === 'placed').length || s2.view.cellsWritten > before) {
+              out.relog = { resumedSeconds: (Date.now() - tr) / 1000 };
+              break;
+            }
+            await sleep(1000);
+          }
+          log(`  relog: resumed in ${out.relog?.resumedSeconds} s`);
+        }
+        if (sp.state === 'PLACED' || sp.state === 'PARTIAL') break;
+      }
+      const sp = (await regionState(region)).view.stages.find((x) => x.name === stage);
+      if (sp.state === 'PLACED' || sp.state === 'PARTIAL' || ++lap > 6) break;
+    }
+    const g1 = await call('dev.chunks.generated');
+    out.stages[stage] = { seconds: (Date.now() - s0) / 1000, chunksLoaded: g1.loads - g0.loads, generated: g1.terrain - g0.terrain };
+    log(`  stage ${stage} done in ${out.stages[stage].seconds.toFixed(0)} s, ${out.stages[stage].chunksLoaded} chunks loaded`);
+  }
+  const st = await waitRegion(region, 3_600_000);
+  out.state = st;
+  out.wallSeconds = (Date.now() - t0) / 1000;
+  out.events = await api('revents').catch(() => []);
+  write('megabench-B.json', out);
+  const failed = Object.keys(st.failed ?? {});
+  check(failed.length === 0 && st.view.state === 'PLACED', `megaB: ${st.view.state}, ${failed.length} failed items`, st.failed);
+  check(!!out.relog?.resumedSeconds && out.relog.resumedSeconds <= 60, `megaB: resumed ${out.relog?.resumedSeconds} s after the relog in lots-2`);
+  check(!!out.sidecarKill?.resumedSeconds && out.sidecarKill.resumedSeconds <= 30, `megaB: resumed ${out.sidecarKill?.resumedSeconds} s after the sidecar came back`);
+  check(Object.keys(out.stages).length === ir.stages.length, `megaB: per-stage seconds and chunks loaded ${JSON.stringify(out.stages)}`);
+  await leaveWorld();
+  return out;
+};
+
 // ------------------------------------------------------------------ gate 7: crash points RG1-RG6, K3/K7 inside a region
 
 const smallBox = (p) => {
