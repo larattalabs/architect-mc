@@ -93,7 +93,34 @@ public final class SiteDeltas {
 				Architect.LOGGER.info("Deltas: {}'s versions were rebuilt from its delta entries (a 0.9.0 save dropped them)", b.id());
 			}
 		}
-		settle(sv);
+		// lost writes are possible only after an unclean stop: the marker written here is deleted by a clean stop
+		java.nio.file.Path marker = sv.getWorldPath(net.minecraft.world.level.storage.LevelResource.ROOT).resolve(RUNNING_MARKER);
+		boolean unclean = java.nio.file.Files.exists(marker);
+		settle(sv, unclean);
+		try {
+			java.nio.file.Files.writeString(marker, Long.toString(System.currentTimeMillis()));
+		} catch (IOException e) {
+			Architect.LOGGER.warn("Deltas: could not write {} ({})", marker, e.getMessage());
+		}
+	}
+
+	public static @Nullable MinecraftServer serverOrNull() {
+		return server;
+	}
+
+	/** The world-start marker of a running world (an unclean stop leaves it behind). */
+	static final String RUNNING_MARKER = "architect-running.marker";
+
+	/** A clean stop (the world saved): the marker goes. */
+	static void cleanStop(java.nio.file.@Nullable Path worldDir) {
+		if (worldDir == null) {
+			return;
+		}
+		try {
+			java.nio.file.Files.deleteIfExists(worldDir.resolve(RUNNING_MARKER));
+		} catch (IOException e) {
+			Architect.LOGGER.warn("Deltas: could not delete the running marker ({})", e.getMessage());
+		}
 	}
 
 	public static void setMaxSiteDeltas(int n) {
@@ -1322,6 +1349,10 @@ public final class SiteDeltas {
 	 * hold after, else kept for the next start.
 	 */
 	static void settle(MinecraftServer server) {
+		settle(server, true);
+	}
+
+	static void settle(MinecraftServer server, boolean unclean) {
 		JournalStore s = WorldJournal.storeOrNull();
 		if (s == null) {
 			return;
@@ -1449,7 +1480,9 @@ public final class SiteDeltas {
 				}
 			}
 		}
-		lostWrites(server, s);
+		if (unclean) {
+			lostWrites(server, s);
+		}
 	}
 
 	/**
@@ -1485,6 +1518,10 @@ public final class SiteDeltas {
 				for (Cell c : s.load(m.id()).cells()) {
 					if (c.after() == null || c.before().equals(c.after()) || SiteJournal.owned(m.dimension(), c.pos()) && !SiteJournal.isOwnedBy(m.dimension(),
 						c.pos(), b.id())) {
+						continue;
+					}
+					// only loaded cells count (world start never loads a chunk for this)
+					if (level.getChunkSource().getChunkNow(Journal.x(c.pos()) >> 4, Journal.z(c.pos()) >> 4) == null) {
 						continue;
 					}
 					total++;

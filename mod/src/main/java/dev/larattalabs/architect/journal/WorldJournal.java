@@ -736,6 +736,15 @@ public final class WorldJournal {
 
 	/** A named step of a change: halts the JVM when it is the armed kill point (no shutdown hooks, nothing saved). */
 	public static void kill(String point) {
+		if ((point + "+save").equals(killAt)) {
+			// TEST (5b "journal wins"): the world's chunks are saved first, as if an autosave had just run, then the halt
+			var sv = dev.larattalabs.architect.site.SiteDeltas.serverOrNull();
+			if (sv != null) {
+				sv.saveAllChunks(true, true, true);
+			}
+			Architect.LOGGER.error("World journal: kill point {} reached after a save; halting the JVM (dev.journal.killAt)", killAt);
+			Runtime.getRuntime().halt(7);
+		}
 		if (point.equals(killAt)) {
 			Architect.LOGGER.error("World journal: kill point {} reached; halting the JVM (dev.journal.killAt)", point);
 			Runtime.getRuntime().halt(7);

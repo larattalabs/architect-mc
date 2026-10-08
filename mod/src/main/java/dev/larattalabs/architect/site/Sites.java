@@ -172,6 +172,7 @@ public final class Sites {
 			nextGroup = 1;
 			reports.clear();
 			Drops.reset();
+			SiteDeltas.cleanStop(worldDir);
 			worldDir = null;
 			notifyListeners();
 		});

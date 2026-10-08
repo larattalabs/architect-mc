@@ -80,7 +80,7 @@ public final class JournalDev {
 			+ "hook: the next matching step halts the JVM (Runtime.halt, nothing saved)", (req, mc) -> {
 				JsonElement p = req.get("point");
 				String point = p == null || p.isJsonNull() ? null : p.getAsString();
-				if (point != null && !point.matches("K[1-8]|D[1-8]|migrate-before-commit|migrate-after-commit")) {
+				if (point != null && !point.matches("K[1-8]|D[1-8]|D[78]\\+save|migrate-before-commit|migrate-after-commit")) {
 					throw new DevBridge.DevException("point must be K1..K8, D1..D8, migrate-before-commit or migrate-after-commit");
 				}
 				WorldJournal.killAt(point);

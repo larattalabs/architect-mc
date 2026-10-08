@@ -886,7 +886,7 @@ steps.crash = async () => {
   await leaveWorld();
   copyWorld('G5B CrashBase', 'G5B CrashV1');
   const out = {};
-  const expect = { D1: 1, D2: 1, D3: 1, D4: 1, D5: 1, D6: 1, D7: 2, D8: 2 };
+  const expect = { D1: 1, D2: 1, D3: 1, D4: 1, D5: 1, D6: 1, D7: 2, D8: 2, 'D7+save': 2, 'D8+save': 2 };
   for (const point of Object.keys(expect)) {
     if (!(await killRun(point, 'G5B CrashV1', () => deltaApply(site, 2)))) continue;
     const h = await history(site);
@@ -896,13 +896,28 @@ steps.crash = async () => {
     // D1-D6: rolled back to v1. D7-D8 (ACTIVE committed): the journal wins when the world kept the writes; a halt loses the
     // block writes since the last world save, so the lost-writes settle undoes the update and the record follows the world.
     const consistent = (h.version === 1 && now === H1) || (h.version === 2 && now === H2);
-    const ok = expect[point] === 1 ? h.version === 1 && now === H1 : consistent;
+    // the "+save" variants save the world's chunks just before the halt (an autosave): the journal wins, v2 and its world
+    const ok = expect[point] === 1 ? h.version === 1 && now === H1 : point.endsWith('+save') ? h.version === 2 && now === H2 : consistent;
     check(ok && placing.length === 0, `crash ${point}: the site is at v${h.version} and the world matches it${expect[point] === 2 ? ` (journal ACTIVE; the world ${now === H2 ? 'kept' : 'lost'} the writes)` : ''}`,
       { version: h.version, now, H1, H2, placing, versioning: h.versioning });
     out[point] = { version: h.version, ok, world: now === H2 ? 2 : now === H1 ? 1 : null };
     const rm = await result(await api(`remove ${site} - noforce keep`), 300_000);
     check(rm.removed && (await hash(BOX)).sha256 === h0.sha256, `crash ${point}: a final Remove matches the pre-site world`, rm.removed ? undefined : rm);
   }
+  // a clean stop never runs the lost-writes undo: v2 with the player's demolition of its added cells stays v2
+  await fresh('G5B CrashClean', 'G5B CrashV1');
+  const cc = await deltaCheck(site, 2, { cells: true });
+  check((await deltaApply(site, 2)).applied, 'crash clean: v2 applied');
+  for (const q of (cc.ghost?.added ?? [])) await cmd(`/setblock ${q.replaceAll(',', ' ')} minecraft:air`);
+  await cmd('/save-all flush');
+  await leaveWorld();
+  await openWorld('G5B CrashClean');
+  await tp(-30.5, 90, -30.5);
+  await settle(3000);
+  const hc = await history(site);
+  check(hc.version === 2, `crash clean: after a clean stop the site stays at v2 though its ${(cc.ghost?.added ?? []).length} added cells were mined (no lost-writes undo)`, hc);
+  await result(await api(`remove ${site} - force keep`), 300_000);
+  await leaveWorld();
   // the revert's kill points: from v2
   await fresh('G5B CrashV2', 'G5B CrashV1');
   check((await deltaApply(site, 2)).applied, 'crash: the v2 base for the revert points');
@@ -1551,6 +1566,38 @@ steps.apijars = async () => {
   }
   await startClient('G5B Smoke');
   return out;
+};
+
+/** Gate item 3: a queued delta item for a site still BUILDING waits (SITE_BUSY), and starts once the site is built. */
+steps.survqueue = async () => {
+  if (!dev) await connect();
+  await flatBase();
+  const ID = 'g5b_scabin';
+  const V = path.join(OUT, 'versions-scabin');
+  if (!fs.existsSync(path.join(V, 'v2'))) {
+    buildKitVersion('cabin', ID, path.join(V, 'v1'));
+    buildKitVersion('cabin', ID, path.join(V, 'v2'), ['--values', '{"width":10,"porch":false}']);
+  }
+  await fresh('G5B SurvQ', FLAT);
+  await tp(40.5, 80, 20.5);
+  await installEntry(ID, path.join(V, 'v1'));
+  await call('dev.survival.set', { on: true });
+  await mark();
+  const qid = await queue({ id: 'SQ', proximity: false, items: [{ key: 'S', bp: ID, at: [28, 65, -19], rot: 0, mode: 'CONSTRUCTION', force: true }] });
+  const ev = await waitEvent((e) => e.event === 'ITEM_PLACED' && e.batch === qid, 120_000, 'S placed');
+  const S = ev.site;
+  await installVersion(ID, path.join(V, 'v2'), 'v2');
+  const did = await queue({ id: 'SQD', proximity: false, items: [{ key: 'D', delta: { site: S, version: 2 } }] });
+  await settle(3000);
+  const b1 = await api(`batch ${did}`);
+  const it = (b1.items ?? [])[0] ?? {};
+  check(it.status === 'WAITING' && it.reason === 'SITE_BUSY', `survqueue: the queued delta waits while ${S} builds (${it.status} ${it.reason})`, b1);
+  const fin = await cmd(`/architect site finish ${S}`);
+  log(`  survqueue: finish: ${JSON.stringify(fin.messages).slice(0, 200)}`);
+  const done = await waitBatch(did, 300_000);
+  const st = await siteState(S);
+  check(done.items[0].status === 'PLACED' && st.version === 2, `survqueue: once built, the queued delta starts (${done.items[0].status}; the site at v${st.version}, a construction delta of ${st.swaps} swaps)`, { done, st });
+  await call('dev.survival.set', { on: false });
 };
 
 const which = process.argv[2];
