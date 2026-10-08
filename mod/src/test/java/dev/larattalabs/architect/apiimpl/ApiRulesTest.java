@@ -87,11 +87,18 @@ class ApiRulesTest {
 	@Test
 	void featureNamesAreStable() {
 		// pinned: Steward depends on these names (docs/CONTRACT.md phase 4a, stable within major 1)
-		assertEquals(java.util.Set.of("sites", "events", "designs", "library", "survey", "survivalInfo", "compositePreview", "batchPlacement", "siteGroups", "stages", "groupCrate", "journal", "overlapLayer", "roads", "cellSites", "stackQuery", "entryVersions", "blueprintDelta", "deltaApply", "siteRevert", "deltaPreview"), ApiRules.features(0, List.of()));
-		assertEquals(java.util.Set.of("sites", "events", "designs", "library", "survey", "survivalInfo", "compositePreview", "batchPlacement", "siteGroups", "stages", "groupCrate", "journal", "overlapLayer", "roads", "cellSites", "stackQuery", "entryVersions", "blueprintDelta", "deltaApply", "siteRevert", "deltaPreview"), ApiRules.features(1, List.of("job.run")),
+		assertEquals(java.util.Set.of("sites", "events", "designs", "library", "survey", "survivalInfo", "compositePreview", "batchPlacement", "siteGroups", "stages", "groupCrate", "journal", "overlapLayer", "roads", "cellSites", "stackQuery", "entryVersions", "blueprintDelta", "deltaApply", "siteRevert", "deltaPreview", "regionPrepare", "generatedOnly", "cellConditions", "chunkBound"), ApiRules.features(0, List.of()));
+		assertEquals(java.util.Set.of("sites", "events", "designs", "library", "survey", "survivalInfo", "compositePreview", "batchPlacement", "siteGroups", "stages", "groupCrate", "journal", "overlapLayer", "roads", "cellSites", "stackQuery", "entryVersions", "blueprintDelta", "deltaApply", "siteRevert", "deltaPreview", "regionPrepare", "generatedOnly", "cellConditions", "chunkBound"), ApiRules.features(1, List.of("job.run")),
 			"protocol 1: no job or blob features even if named");
-		assertEquals(java.util.Set.of("sites", "events", "designs", "library", "survey", "survivalInfo", "compositePreview", "batchPlacement", "siteGroups", "stages", "groupCrate", "journal", "overlapLayer", "roads", "cellSites", "stackQuery", "entryVersions", "blueprintDelta", "deltaApply", "siteRevert", "deltaPreview", "protocol2", "jobs", "jobTools", "blobs",
+		assertEquals(java.util.Set.of("sites", "events", "designs", "library", "survey", "survivalInfo", "compositePreview", "batchPlacement", "siteGroups", "stages", "groupCrate", "journal", "overlapLayer", "roads", "cellSites", "stackQuery", "entryVersions", "blueprintDelta", "deltaApply", "siteRevert", "deltaPreview", "regionPrepare", "generatedOnly", "cellConditions", "chunkBound", "protocol2", "jobs", "jobTools", "blobs",
 			"budget"), ApiRules.features(2, List.of("job.run", "job.tools", "blob.put", "budget")));
+	}
+
+	@Test
+	void phase6aFeatureNames() {
+		var f = ApiRules.features(2, List.of("region.plan", "region.tiles"));
+		org.junit.jupiter.api.Assertions.assertTrue(f.containsAll(List.of("regions", "regionPrepare", "generatedOnly", "cellConditions", "chunkBound")), f.toString());
+		org.junit.jupiter.api.Assertions.assertFalse(ApiRules.features(1, List.of("region.plan")).contains("regions"));
 	}
 
 	@Test
