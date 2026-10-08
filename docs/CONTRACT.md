@@ -4079,7 +4079,10 @@ G1 and G2 decide polish's label (above), not the phase.
 - Still with phase 6, unchanged: the thin 4 ms throughput margin (5b re-measures it), invariant (iii) narrowed (delta entries
   are BOX, so it is not widened), and the 1000x1000 NOT_LOADED timeouts.
 
-## Coordinator decisions on Noah's questions (provisional; N1 and N6 wait for Noah)
+## Coordinator decisions on Noah's questions
+
+- **N1** Noah: the polish eval runs as drafted on his claude login, with an $80 cap and a $100 ceiling.
+- **N6** Noah: a survival revert is a paid forward delta.
 
 - **N2** Yes: versions live inside the entry, and the id stays stable.
 - **N3** Yes: polish's G1/G2 decide only its label; delta apply ships on its own gate.
