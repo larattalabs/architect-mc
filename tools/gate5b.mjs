@@ -386,7 +386,7 @@ steps.smoke = async () => {
   const seq = [2, 3, 5, 4, 1, 3];
   for (const to of seq) {
     const c = await deltaCheck(site, to);
-    log(`  check v${c.from}->v${to}: ok ${c.ok} +${c.added} -${c.removed} ~${c.changed} writes ${c.writes} guards ${c.shapeGuards} growth ${c.growth} ${JSON.stringify(c.refusals)}`);
+    log(`  check v${c.from}->v${to}: applicable ${c.applicable} +${c.added} -${c.removed} ~${c.changed} writes ${c.writes} guards ${c.shapeGuards} growth ${c.growth} ${JSON.stringify(c.refusals)}`);
     const before = await hash(BOX);
     const a = await deltaApply(site, to);
     check(a.applied, `smoke: apply v${to}: written ${a.written}, reshaped ${a.reshaped}`, a);
@@ -574,7 +574,7 @@ steps.chains = async () => {
     const site = await placeAtV1(ID, V, AT, turns);
     if (first) {
       const v4 = await deltaCheck(site, 4);
-      check(!v4.ok && v4.refusals.some((r) => r.reason === 'FRAME_CHANGED'), 'chains: v4 (front changed) refuses FRAME_CHANGED', v4.refusals);
+      check(!v4.applicable && v4.refusals.some((r) => r.reason === 'FRAME_CHANGED'), 'chains: v4 (front changed) refuses FRAME_CHANGED', v4.refusals);
       first = false;
     }
     let r = sc.seed ?? 1;

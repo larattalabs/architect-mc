@@ -65,7 +65,7 @@ public final class DeltaDev {
 				})).thenCompose(x -> x);
 			});
 		DevBridge.register("dev.site.delta.check", 30_000, "{site, version?: 0 (the head), playerEdits?: KEEP|OVERWRITE|REFUSE, overlap?: REFUSE|LAYER, "
-			+ "owner?, force?, cells?: false} - phase 5b: Sites.checkDelta -> {ok, refusals, from, to, added, removed, changed, parts, kept, overlaps, "
+			+ "owner?, force?, cells?: false} - phase 5b: Sites.checkDelta -> {applicable, refusals, from, to, added, removed, changed, parts, kept, overlaps, "
 			+ "box, notes, ghost?}", (req, mc) -> {
 				Fields f = Fields.of(req);
 				SiteDeltas.Request r = request(f);
@@ -273,7 +273,7 @@ public final class DeltaDev {
 
 	static JsonObject checkJson(SiteDeltas.Check c, boolean cells) {
 		JsonObject o = new JsonObject();
-		o.addProperty("ok", c.ok());
+		o.addProperty("applicable", c.ok()); // not "ok": that is the DevBridge envelope's field
 		o.addProperty("waits", c.waits());
 		JsonArray rs = new JsonArray();
 		for (SiteDeltas.Refusal r : c.refusals()) {
