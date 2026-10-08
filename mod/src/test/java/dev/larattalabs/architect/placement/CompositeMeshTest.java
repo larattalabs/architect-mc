@@ -76,8 +76,8 @@ class CompositeMeshTest {
 			fills.add(CompositeMesh.tint(s, STONE));
 			outlines.add(CompositeMesh.outlineColor(s));
 		}
-		assertEquals(5, fills.size());
-		assertEquals(5, outlines.size());
+		assertEquals(CompositeMesh.Style.values().length, fills.size()); // 6 since phase 5b (KEPT)
+		assertEquals(CompositeMesh.Style.values().length, outlines.size());
 		int added = CompositeMesh.tint(CompositeMesh.Style.ADDED, STONE);
 		assertTrue(((added >> 8) & 0xFF) > ((added >> 16) & 0xFF), "ADDED reads green");
 		int removed = CompositeMesh.outlineColor(CompositeMesh.Style.REMOVED);
