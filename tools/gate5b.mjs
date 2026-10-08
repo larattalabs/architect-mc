@@ -1375,6 +1375,7 @@ steps.village = async () => {
   await installVillageV2(v.dir);
   // two ticks per delta item: leaving right after the queue call saves the world mid-batch
   const rb = await upgradeBatch(v, 1, 'uprelog');
+  await sleep(350);
   const mid = await api(`batch ${rb.id}`);
   const placedMid = (mid.items ?? []).filter((i) => i.status === 'PLACED').length;
   await leaveWorld();
