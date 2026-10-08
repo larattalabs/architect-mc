@@ -49,6 +49,21 @@ Notes: `test/bundle.e2e.test.ts` (4c massing group) failed once under load (the 
 
 The ledger of record is `artifacts/gate5b/spend.json`.
 
+## Next paid step (resume here)
+
+polish-dev4 (gen_net_and_lantern, gen_gull_and_kettle) stalled on the SDK login's 7-day limit and was stopped ($0 spent).
+Prompts are at "dev 2" (b5ef5e7); 0 of 6 dev steps accepted so far (critic `resolved` empty every time). Next:
+
+```sh
+D=~/Developer/LarattaLabs/architect-mc/artifacts/gate5b/polish-dev
+<scratchpad>/paid.sh polish-dev --entries $D/dev4.json --max-usd 8 \
+  --ledger ~/Developer/LarattaLabs/architect-mc/artifacts/gate5b/spend.json --total-cap 80 --label polish-dev4 --out $D
+```
+(`paid.sh` = `env -i HOME PATH USER LOGNAME TERM LANG node tools/eval.mjs "$@"`, logging the variable names to
+artifacts/gate5b/env-paid.log.) Then freeze the prompts (POLISH_PROMPTS_STATUS 'frozen'), `node tools/eval.mjs verify-round0
+full-2026-10-07T2324`, then `run --tier full --arm polish --from full-2026-10-07T2324 --ledger .../spend.json --total-cap 80`
+(smoke briefs 1, 3, 10, 13 first with the stop rule).
+
 ## Pinned cross-language formats (kit, sidecar, mod)
 
 These are fixed before the work splits; the kit, the sidecar and the mod each read the others' files.
