@@ -1410,6 +1410,9 @@ public final class Builder {
 						}
 					} else if (o == Refunds.Outcome.PLAYER_DROP) {
 						tally.add(o, Cells.cost(now));
+						if (TRACE_REFUNDS) {
+							Architect.LOGGER.info("refund-trace player {} {} was {} now {} qi {}", s.id(), m.toShortString(), was, now, qi);
+						}
 					} else if (qi >= 0 && !asPlaced && now.isAir()) {
 						missing++;
 						tally.mined();
