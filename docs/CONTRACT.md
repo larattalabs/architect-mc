@@ -5060,3 +5060,46 @@ Where this section and the phase 6 text above disagree, this section wins.
 - **S11** No survival regions before Noah decides N4. Steward recommends free natural-only cut/fill (terrain is not a material),
   recorded for Noah.
 - **N8** The 15k bar stays at the median of 3, and a miss is recorded with its measured number (it still fails the gate).
+
+## Phase 6a as built (API 1.8.0, mod 0.11.0, recorded 2026-10-08)
+
+Built on branch `phase/6a`. Gate record: `artifacts/gate6a/REPORT.md` (local). Where this section and the phase 6 text
+disagree, this section says what shipped.
+
+**The 4e timeouts and spikes (gate item 2, `artifacts/gate6a/timeouts.md`).**
+- The timeouts were lost shared chunk tickets. Vanilla keeps one ticket per (type, level) and chunk, so the first of two
+  Architect holders to release one dropped it for both; the other waited `NOT_LOADED` holding its share of the bound until
+  `TIMED_OUT`. Architect's tickets are now reference counted (`ChunkTickets`). Waits a region item does not cause
+  (`NOT_LOADED`, `NOT_GENERATED`, `SIDECAR_UNAVAILABLE`, ticket turns) no longer count toward its limit.
+- The spikes were not terrain generation (vanilla's part of every slow tick was under 1 ms). They were journal region reads
+  on the server thread during road checks, and single-tick cabin placements over a 256x256 pad entry. Roads and cell sites
+  now warm the journal off-thread before their checks; regions use 64x64 tile entries.
+
+**Chunk status without loading (gate item 3).** `ChunkGen`: the chunk map's latest status when the chunk is in memory, else
+`IOWorker.scanChunk` reading only the `Status` field of the stored NBT (pending stores included), cached per chunk.
+
+**Deviations and decisions made while building:**
+- `CHUNK_BOUND` refuses building items only; oversized road and cell items keep 4e's "run alone" (mega-lite's 256x256 pad).
+- The default realise bound is `GENERATED_ONLY(max(64, largest need + 72))`, which fits two freezes ahead. A ticket janitor
+  returns tickets an item holds for nothing.
+- Heights freeze per tile window. Lots and 4e roads do not freeze; that is correct for stage orders where lots follow their
+  tiles (mega_bench), and a later-stage tile over earlier lot columns would freeze the lot's surface.
+- The plan flow is plan (`LOADED_ONLY`, the prepare estimate), prepare, plan again (`GENERATED_ONLY`, the complete survey),
+  realise. In a survey, `GENERATED_ONLY(n)` means n chunks at once and any number in all; `LOAD_BOUNDED` keeps 4a's total cap.
+- Drift is checked at region start only, on stored heightmaps (no chunk loads), not per stage.
+- `RegionPlan` carries no checker report or previews (6b). Region futures fail with `RegionRefused(reason)` (new API type).
+- Lots fit flush (setback 0, the approach into the street). Unmapped lots stay pads.
+- **Exactness guards (E-normal).** A tile skips an air write that would let water or lava in. What stands on any changed
+  cell (snow, plants, leaf litter, sand, gravel, kelp and so on) goes with it as cells of the tile's entry. Water or lava
+  that flowed into air a CELL entry cleared counts as still the entry's. The E-normal classifier labels gravity (including
+  the landing cell), unsupported blocks and world-made block-entity changes (bees) as `live`.
+- **Ticks.** A tile's check runs in stages under the tick budget (cells, fluid guard, trees, dependents, leaves) and is
+  assembled off the server thread; tile jobs capture over ticks and build their sections off-thread from 8192 cells. The
+  group undo prepares its journal commit and its covering-sites scan off the server thread and checks members over ticks.
+- **Journal format 2.** Sections with more than 256 cells store positions as a 4096-bit mask (0.20 bytes per cell on
+  mega_bench, was 1.59). Format 1 is still read. The index is written as version 2, so 0.10.x refuses a world 0.11.0 has
+  written (a safe downgrade refusal).
+- Group undo: a player standing in a tile's box holds it (4e's rule); the gate uses a spectator player and clears mobs first.
+- `RemoveResult.kept` for group and stage undos counts kept cells (it was 0).
+- `Sites.list(owner)` hides tiles (S1); the client's Placed view still lists tiles (no player UI in 6a).
+- Sidecar plan directories live under `<data>/regions/plans`; the 30 s plan limit is wall clock.
