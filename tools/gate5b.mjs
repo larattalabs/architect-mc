@@ -509,6 +509,149 @@ steps.e1 = async () => {
   return { states, applies };
 };
 
+/** Copies kit fixture version folders ({@code <src>/v<n>/<from>.*}) renamed to entry {@code to} into {@code dest/v<n>/}. */
+function stageVersions(src, from, to, dest) {
+  for (const v of fs.readdirSync(src).filter((d) => /^v\d+$/.test(d))) {
+    const d = path.join(dest, v);
+    fs.rmSync(d, { recursive: true, force: true });
+    fs.mkdirSync(d, { recursive: true });
+    for (const f of fs.readdirSync(path.join(src, v))) {
+      if (!f.startsWith(from + '.')) continue;
+      const target = path.join(d, to + f.slice(from.length));
+      if (f.endsWith('.blueprint.json')) {
+        const j = JSON.parse(fs.readFileSync(path.join(src, v, f), 'utf8'));
+        j.id = to;
+        j.name = to;
+        j.source = to + '.mjs';
+        fs.writeFileSync(target, JSON.stringify(j, null, 2));
+      } else fs.copyFileSync(path.join(src, v, f), target);
+    }
+  }
+  return dest;
+}
+
+/** The tavern versions v1..v5 (kit/tools/delta-fixtures.mjs) as entry g5b_tavern in artifacts/gate5b/versions-tavern. */
+function tavernVersions() {
+  const fx = path.join(OUT, 'fixtures');
+  fs.rmSync(fx, { recursive: true, force: true });
+  execFileSync('node', [path.join(root, 'kit', 'tools', 'delta-fixtures.mjs'), '--out', fx, '--no-previews'], { stdio: 'ignore' });
+  return stageVersions(path.join(fx, 'versions', 'tavern'), 'tavern', 'g5b_tavern', path.join(OUT, 'versions-tavern'));
+}
+
+/** Installs v1 of an entry, places it (the head is v1 then), then installs v2..vN; returns the site. */
+async function placeAtV1(ID, V, at, turns) {
+  await installEntry(ID, path.join(V, 'v1'));
+  const placed = await result(await api(`place ${ID} ${at.join(' ')} INSTANT unowned noactor ${turns}`));
+  if (!placed.placed) throw new Error(`placing ${ID}: ${JSON.stringify(placed.refusals)}`);
+  const vdirs = fs.readdirSync(V).filter((d) => /^v\d+$/.test(d)).sort((a, b) => Number(a.slice(1)) - Number(b.slice(1)));
+  for (const v of vdirs.slice(1)) await installVersion(ID, path.join(V, v), v);
+  return placed.siteId;
+}
+
+/**
+ * Gate item 2 "Chains": a fixed 12-operation script and 20 seeded random scripts of apply and revert over v1, v2, v3 and v5,
+ * each from a copy of one world: after every operation the region equals a fresh placement of that version at that spot (E1),
+ * every revert equals the world before that apply (E2), and the final Remove gives the pre-site world back (E3). v4 refuses
+ * FRAME_CHANGED.
+ */
+steps.chains = async () => {
+  if (!dev) await connect();
+  await flatBase();
+  const V = tavernVersions();
+  const ID = 'g5b_tavern';
+  const turns = Number(process.env.G5B_TURNS ?? 0);
+  const AT = [20, 64, 20];
+  const BOX = [-12, 50, -12, 76, 100, 70];
+  const scripts = [{ name: 'fixed', ops: ['a2', 'a3', 'r2', 'a5', 'a1', 'r5', 'r1', 'a3', 'a5', 'r3', 'a2', 'r1'] }];
+  const nRandom = Number(process.env.G5B_SCRIPTS ?? 20);
+  for (let k = 0; k < nRandom; k++) scripts.push({ name: `seed${k + 1}`, seed: 1000 + k });
+  const states = [];
+  let first = true;
+  for (const sc of scripts) {
+    await fresh('G5B Chain', FLAT);
+    await tp(-30.5, 90, -30.5);
+    const h0 = await hash(BOX);
+    const site = await placeAtV1(ID, V, AT, turns);
+    if (first) {
+      const v4 = await deltaCheck(site, 4);
+      check(!v4.ok && v4.refusals.some((r) => r.reason === 'FRAME_CHANGED'), 'chains: v4 (front changed) refuses FRAME_CHANGED', v4.refusals);
+      first = false;
+    }
+    let r = sc.seed ?? 1;
+    const rnd = (n) => {
+      r = (r * 1103515245 + 12345) % 2147483648;
+      return Math.floor(r / 65536) % n;
+    };
+    const ops = sc.ops ?? Array.from({ length: 12 }, () => null);
+    const stack = []; // hashes before each standing apply (for E2)
+    const record = async (what, hh) => {
+      const h = await history(site);
+      states.push({ script: sc.name, what, version: h.version, origin: h.versioning.history.at(-1).origin, sha: hh.sha256 });
+    };
+    await record('placed', await hash(BOX));
+    for (let i = 0; i < ops.length; i++) {
+      const h = await history(site);
+      let op = ops[i];
+      if (!op) {
+        const canRevert = h.chain.length > 1;
+        if (canRevert && rnd(3) === 0) op = 'r' + h.chain[rnd(h.chain.length - 1)];
+        else {
+          let to = [1, 2, 3, 5][rnd(4)];
+          if (to === h.version) to = to === 5 ? 1 : to + 1 === 4 ? 5 : to + 1;
+          op = 'a' + to;
+        }
+      }
+      const v = Number(op.slice(1));
+      if (op[0] === 'a') {
+        const pre = await hash(BOX);
+        const a = await deltaApply(site, v);
+        if (!check(a.applied, `chains ${sc.name}: apply v${h.version}->v${v} (${a.written} cells)`, a.applied ? undefined : a)) continue;
+        stack.push({ version: h.version, sha: pre.sha256 });
+        await record(op, await hash(BOX));
+      } else {
+        const a = await revert(site, v);
+        if (!check(a.applied, `chains ${sc.name}: revert to v${v}`, a.applied ? undefined : a)) continue;
+        const now = await hash(BOX);
+        // E2: a revert of the top delta (one step back) gives the world before that apply back
+        const top = stack.at(-1);
+        if (top && top.version === v) {
+          check(now.sha256 === top.sha, `chains ${sc.name}: revert to v${v} equals the world before its apply (E2)`, { want: top.sha, got: now.sha256 });
+          stack.pop();
+        } else {
+          while (stack.length && stack.at(-1).version !== v) stack.pop();
+          stack.pop();
+        }
+        await record(op, now);
+      }
+    }
+    const rm = await result(await api(`remove ${site} - noforce keep`), 300_000);
+    check(rm.removed, `chains ${sc.name}: remove`, rm.removed ? undefined : rm);
+    const h1 = await hash(BOX);
+    check(h1.sha256 === h0.sha256, `chains ${sc.name}: Remove restores the pre-site world (E3)`, { h0: h0.sha256, h1: h1.sha256 });
+  }
+  // E1: every state equals a fresh placement of its version at its spot (references placed one by one in a fresh world)
+  await fresh('G5B ChainRef', FLAT);
+  await tp(-30.5, 90, -30.5);
+  await installEntry(ID, path.join(V, 'v1'));
+  for (const v of ['v2', 'v3', 'v4', 'v5']) await installVersion(ID, path.join(V, v), v);
+  for (const n of [1, 2, 3, 5]) await installReference(ID, n);
+  const cache = {};
+  let ok = 0;
+  for (const st of states) {
+    const key = `${st.version}@${st.origin.join(',')}`;
+    if (!cache[key]) {
+      const ref = await result(await api(`place ${ID}_v${st.version} ${st.origin.join(' ')} INSTANT unowned noactor ${turns}`));
+      if (!check(ref.placed, `chains: reference ${key} placed`, ref.placed ? undefined : ref)) continue;
+      cache[key] = (await hash(BOX)).sha256;
+      await result(await api(`remove ${ref.siteId} - noforce keep`), 300_000);
+    }
+    if (cache[key] === st.sha) ok++;
+    else check(false, `chains ${st.script}: ${st.what} equals a fresh placement of v${st.version} (E1)`, { ref: cache[key], got: st.sha });
+  }
+  check(ok === states.length, `chains: E1 holds for ${ok} of ${states.length} states over ${scripts.length} scripts`);
+  return { states: states.length, scripts: scripts.length };
+};
+
 const which = process.argv[2];
 if (!which || !steps[which]) {
   console.log(`steps: ${Object.keys(steps).join(', ')}`);
