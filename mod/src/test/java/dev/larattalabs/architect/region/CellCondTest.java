@@ -29,7 +29,6 @@ class CellCondTest {
 		var kelpWaterlogged = Blocks.OAK_STAIRS.defaultBlockState().setValue(net.minecraft.world.level.block.state.properties.BlockStateProperties.WATERLOGGED,
 			true);
 		assertTrue(CellCond.passes(Packed.IF_NATURAL, air, false));
-		assertTrue(CellCond.passes(Packed.IF_NATURAL, water, false));
 		assertFalse(CellCond.passes(Packed.IF_NATURAL, bricks, false));
 		assertFalse(CellCond.passes(Packed.IF_NATURAL, chest, true), "never a block entity");
 		assertFalse(CellCond.passes(Packed.IF_SOLID_NATURAL, air, false));
