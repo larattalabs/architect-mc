@@ -880,6 +880,9 @@ public final class RegionsImpl implements Regions {
 		}
 		o.addProperty("starvedTicks", RegionItems.starvedTicks);
 		o.addProperty("maxHeldWaitSeconds", RegionItems.maxHeldWaitSeconds);
+		JsonObject sw = new JsonObject();
+		RegionItems.STARVED.forEach(sw::addProperty);
+		o.add("starvedBy", sw);
 		com.google.gson.JsonArray lw = new com.google.gson.JsonArray();
 		RegionItems.LONG_WAITS.forEach(lw::add);
 		o.add("longWaits", lw);

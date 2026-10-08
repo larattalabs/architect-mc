@@ -667,6 +667,7 @@ steps.eflat = async () => {
   const mism = diff.list.filter((m) => !(edit && m.pos === edit.join(',')));
   out.groupUndo = { seconds: (Date.now() - t0) / 1000, kept: rm.kept, mismatches: diff.mismatches, classes: diff.classes, list: diff.list.slice(0, 20) };
   check(rm.removed && mism.length === 0, `eflat: E-flat: after the group undo ${mism.length} mismatches over ${diff.cells} cells (the player's block excluded)`, out.groupUndo);
+  check(!!edit, `eflat: a pad cell for the player's block found (${edit})`);
   if (edit) {
     const kept = diff.list.find((m) => m.pos === edit.join(','));
     check(!!kept && /gold_block/.test(kept.now) && Number(rm.kept) >= 1, `eflat: the player's block on pad cell ${edit} survives the group undo and is reported kept (kept ${JSON.stringify(rm.kept)})`);

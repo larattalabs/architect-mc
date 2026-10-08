@@ -45,6 +45,8 @@ public final class RegionItems {
 	private static final Map<String, Pipe> PIPES = new HashMap<>();
 	/** Writer starvation (the gate's "no ready tile" share): ticks a region batch had no job and its head tile was not ready. */
 	public static long starvedTicks;
+	/** Starved ticks by what the head tile was doing (chunks: no tickets yet; freezing; request; REQUESTED; RECEIVED). */
+	public static final Map<String, Long> STARVED = new java.util.TreeMap<>();
 	public static long writerTicks;
 
 	private RegionItems() {
@@ -304,6 +306,9 @@ public final class RegionItems {
 			TileStream.Tile tile = TileStream.get(t[0], t[1], t[2], t[3]);
 			if (tile == null || tile.phase != TileStream.Phase.DECODED) {
 				starvedTicks++;
+				Pipe hp = PIPES.get(b.id + "/" + next.get(0).key);
+				String why = hp == null || !hp.frozen ? (next.get(0).ticketed ? "freezing" : "chunks") : tile == null ? "request" : tile.phase.name();
+				STARVED.merge(why, 1L, Long::sum);
 			}
 		}
 		long deadline = Placement.deadline();
@@ -412,6 +417,7 @@ public final class RegionItems {
 		LONG_WAITS.clear();
 		maxHeldWaitSeconds = 0;
 		starvedTicks = 0;
+		STARVED.clear();
 		writerTicks = 0;
 	}
 
