@@ -405,6 +405,110 @@ steps.smoke = async () => {
   check(h1.sha256 === h0.sha256, 'smoke: Remove after the deltas restores the pre-site world (E3)', { h0: h0.sha256, h1: h1.sha256 });
 };
 
+/** Installs version {@code n} of a versioned entry as its own entry {@code <id>_v<n>} (the E1 reference: placement uses the head). */
+async function installReference(id, n) {
+  const src = path.join(LIB(), id, 'versions', String(n));
+  const ref = `${id}_v${n}`;
+  const tmp = path.join(OUT, 'refs', ref);
+  fs.rmSync(tmp, { recursive: true, force: true });
+  fs.mkdirSync(tmp, { recursive: true });
+  for (const f of fs.readdirSync(src)) {
+    if (!f.startsWith(id + '.')) continue;
+    const to = path.join(tmp, ref + f.slice(id.length));
+    if (f.endsWith('.blueprint.json')) {
+      const j = JSON.parse(fs.readFileSync(path.join(src, f), 'utf8'));
+      j.id = ref;
+      j.name = ref;
+      delete j.versions;
+      delete j.version;
+      fs.writeFileSync(to, JSON.stringify(j, null, 2));
+    } else fs.copyFileSync(path.join(src, f), to);
+  }
+  await installEntry(ref, tmp);
+  return ref;
+}
+
+/**
+ * E1 in game (path independence against vanilla): every state a sequence of applies and reverts leaves equals a fresh placement
+ * of that version at that origin (the reference entries are placed and removed one by one in the same world afterwards).
+ * Also the fold (the 7th delta) and the stack depth, and E3 at the end.
+ */
+steps.e1 = async () => {
+  if (!dev) await connect();
+  await flatBase();
+  const V = process.env.G5B_VERSIONS ?? path.join(OUT, 'versions-smoke');
+  const ID = process.env.G5B_ENTRY ?? 'g5b_cabin';
+  const turns = Number(process.env.G5B_TURNS ?? 1);
+  await fresh('G5B E1', FLAT);
+  await tp(-30.5, 90, -30.5);
+  await installEntry(ID, path.join(V, 'v1'));
+  const vdirs = fs.readdirSync(V).filter((d) => /^v\d+$/.test(d)).sort((a, b) => Number(a.slice(1)) - Number(b.slice(1)));
+  for (const v of vdirs.slice(1)) await installVersion(ID, path.join(V, v), v);
+  const nv = vdirs.length;
+  for (let n = 1; n <= nv; n++) await installReference(ID, n);
+  const BOX = [-10, 50, -10, 70, 95, 70];
+  const h0 = await hash(BOX);
+  const placed = await result(await api(`place ${ID} 20 64 20 INSTANT unowned noactor ${turns}`));
+  check(placed.placed, `e1: placed ${placed.siteId} (rotation ${turns})`, placed);
+  const site = placed.siteId;
+  const states = [];
+  const record = async (what) => {
+    const h = await history(site);
+    const hh = await hash(BOX);
+    const top = h.versioning.history.at(-1);
+    states.push({ what, version: h.version, origin: top.origin, sha: hh.sha256 });
+  };
+  await record('placed');
+  const seed = Number(process.env.G5B_SEED ?? 7);
+  let r = seed;
+  const rnd = (n) => {
+    r = (r * 1103515245 + 12345) % 2147483648;
+    return r % n;
+  };
+  let applies = 0;
+  for (let op = 0; op < 14; op++) {
+    const h = await history(site);
+    if (rnd(3) > 0 || h.chain.length < 2) {
+      let to = 1 + rnd(nv);
+      if (to === h.version) to = (to % nv) + 1;
+      const a = await deltaApply(site, to);
+      check(a.applied, `e1: apply v${h.version}->v${to}: written ${a.written}`, a.applied ? undefined : a);
+      applies++;
+      await record(`apply v${to}`);
+    } else {
+      const k = h.chain[rnd(h.chain.length - 1)];
+      const rv = await revert(site, k);
+      check(rv.applied, `e1: revert to v${k}`, rv.applied ? undefined : rv);
+      await record(`revert v${k}`);
+    }
+  }
+  const js = await journal();
+  const mine = (js.entries ?? []).filter((e) => e.site === site && e.status !== 'UNDONE');
+  log(`  journal: ${mine.map((e) => `${e.id}:${e.kind}`).join(' ')}`);
+  check(mine.filter((e) => e.kind === 'delta').length <= 6, `e1: at most 6 delta entries stand (${mine.filter((e) => e.kind === 'delta').length})`);
+  const rm = await result(await api(`remove ${site} - noforce keep`), 300_000);
+  check(rm.removed, `e1: remove ${site}`, rm);
+  const h1 = await hash(BOX);
+  check(h1.sha256 === h0.sha256, 'e1: Remove after the sequence restores the pre-site world (E3)', { h0: h0.sha256, h1: h1.sha256 });
+  // the references: each state's version placed fresh at its origin
+  const cache = {};
+  for (const st of states) {
+    const key = `${st.version}@${st.origin.join(',')}`;
+    if (!cache[key]) {
+      const ref = await result(await api(`place ${ID}_v${st.version} ${st.origin.join(' ')} INSTANT unowned noactor ${turns}`));
+      if (!ref.placed) {
+        check(false, `e1: reference ${key} placed`, ref);
+        continue;
+      }
+      cache[key] = (await hash(BOX)).sha256;
+      const rr = await result(await api(`remove ${ref.siteId} - noforce keep`), 300_000);
+      if (!rr.removed) check(false, `e1: reference ${key} removed`, rr);
+    }
+    check(cache[key] === st.sha, `e1: ${st.what} equals a fresh placement of v${st.version} (E1)`, { ref: cache[key], got: st.sha });
+  }
+  return { states, applies };
+};
+
 const which = process.argv[2];
 if (!which || !steps[which]) {
   console.log(`steps: ${Object.keys(steps).join(', ')}`);
