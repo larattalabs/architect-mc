@@ -1508,10 +1508,18 @@ public final class Builder {
 		JsonObject o = new JsonObject();
 		o.addProperty("site", id); // not "id": DevBridge replies carry the request id there
 		o.addProperty("blueprint", s.blueprint());
+		// phase 5b: the version, the cells the player changed that deltas kept, the delta entries standing, the refunds of
+		// construction deltas so far (this world session)
+		o.addProperty("version", SiteDeltas.versionOf(srv, s));
+		o.addProperty("headVersion", SiteDeltas.headVersion(s.blueprint()));
+		o.addProperty("deviations", s.versioning().deviations());
+		o.addProperty("deltas", (int) SiteJournal.active(id).stream().filter(m -> m.kind().equals(WorldJournal.DELTA)).count());
+		o.add("deltaRefunds", counts(REFUNDED.getOrDefault(id, Map.of())));
 		if (c == null) {
 			o.addProperty("state", "instant");
 			return o;
 		}
+		o.addProperty("swaps", c.swap().cardinality());
 		Run r = run(srv, s);
 		ServerLevel level = Sites.levelOf(srv, s);
 		o.addProperty("state", c.state());

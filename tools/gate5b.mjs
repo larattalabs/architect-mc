@@ -983,6 +983,214 @@ steps.ghost = async () => {
   return { shot: shot.path, preview: g };
 };
 
+// ------------------------------------------------------------------ survival helpers (as gate4e's)
+
+const addTo = (m, k, n) => { m[k] = (m[k] ?? 0) + n; };
+
+/** A chest on a hopper on the crate of {@code site}; returns the feed cells. */
+async function hopperFor(site) {
+  const c = (await siteState(site)).crate;
+  const hop = [c.x, c.y + 1, c.z];
+  const chest = [c.x, c.y + 2, c.z];
+  await cmd(`/setblock ${hop.join(' ')} minecraft:hopper[facing=down]`);
+  await cmd(`/setblock ${chest.join(' ')} minecraft:chest`);
+  return { crate: c, hop, chest };
+}
+/** Puts what the site still misses into its feed chest (27 stacks at most); counts it into {@code into}. */
+async function refill(site, feedCells, into) {
+  const st = await siteState(site);
+  const stacks = [];
+  for (const r of st.rows ?? []) {
+    let left = Math.max(0, (r.missing ?? 0) - (r.stock ?? 0));
+    const max = /bed$|banner$/.test(r.item) ? 1 : /_door$|sign$/.test(r.item) ? 16 : 64;
+    while (left > 0 && stacks.length < 27) {
+      const n = Math.min(max, left);
+      stacks.push([r.item, n]);
+      left -= n;
+    }
+  }
+  const inChest = await containerItems(feedCells.chest);
+  if (Object.keys(inChest).length) return 0; // still feeding
+  for (let i = 0; i < stacks.length; i++) {
+    await cmd(`/item replace block ${feedCells.chest.join(' ')} container.${i} with ${stacks[i][0]} ${stacks[i][1]}`);
+    addTo(into, stacks[i][0], stacks[i][1]);
+  }
+  return stacks.length;
+}
+/** Items in a container block (/data get block). */
+async function containerItems(p) {
+  const r = await cmd(`/data get block ${p.join(' ')} Items`);
+  const text = (r.messages ?? []).join(' ');
+  const out = {};
+  for (const m of text.matchAll(/id: "([^"]+)"[^}]*?count: (\d+)|count: (\d+)[^}]*?id: "([^"]+)"/g)) {
+    const id = m[1] ?? m[4];
+    const n = Number(m[2] ?? m[3]);
+    addTo(out, id, n);
+  }
+  return out;
+}
+async function buildUntilDone(sites0, feeds, into, minutes = 20) {
+  const end = Date.now() + minutes * 60_000;
+  while (Date.now() < end) {
+    let done = 0;
+    for (const s0 of sites0) {
+      const st = await siteState(s0);
+      if (st.state === 'built' || st.percent === 100) {
+        done++;
+        continue;
+      }
+      if (st.state === 'building') await refill(s0, feeds[s0], into);
+    }
+    if (done === sites0.length) return true;
+    await sleep(3000);
+  }
+  return false;
+}
+
+/** Builds kit design {@code design} with {@code args} as entry {@code id} into {@code dir} (a hand-written version). */
+function buildKitVersion(design, id, dir, args = []) {
+  const tmp = path.join(OUT, 'kitbuild', id + '-' + path.basename(dir));
+  fs.rmSync(tmp, { recursive: true, force: true });
+  fs.mkdirSync(tmp, { recursive: true });
+  execFileSync('node', [path.join(root, 'kit', 'build.mjs'), design, '--out', tmp, ...args], { stdio: 'ignore' });
+  fs.rmSync(dir, { recursive: true, force: true });
+  fs.mkdirSync(dir, { recursive: true });
+  for (const f of fs.readdirSync(tmp)) {
+    if (!f.startsWith(design + '.')) continue;
+    const target = path.join(dir, id + f.slice(design.length));
+    if (f.endsWith('.blueprint.json')) {
+      const j = JSON.parse(fs.readFileSync(path.join(tmp, f), 'utf8'));
+      j.id = id;
+      j.name = id;
+      j.source = id + '.mjs';
+      fs.writeFileSync(target, JSON.stringify(j, null, 2));
+    } else fs.copyFileSync(path.join(tmp, f), target);
+  }
+  return dir;
+}
+
+/**
+ * Gate item 3 "Survival": a cabin construction site built from hoppers, then a construction delta v1 -> v2 (the BOM of the
+ * delta in dev.site.state equals its queued cells' bill; changed cells keep the old block until their swap; fed exactly that,
+ * it finishes identical to an instant apply at the same spot in a creative copy; the refunds are the paid removed and swapped
+ * cells), "Rebuild as v1" (a paid forward delta) fed and identical to an instant v1, a deconstruct; items delivered = items
+ * returned per item id. A second run mines 3 blocks: returned = delivered - 3. A delta on a site still building refuses
+ * SITE_BUSY, and a queued one waits.
+ */
+steps.survival = async () => {
+  if (!dev) await connect();
+  await flatBase();
+  const ID = 'g5b_scabin';
+  const V = path.join(OUT, 'versions-scabin');
+  buildKitVersion('cabin', ID, path.join(V, 'v1'));
+  buildKitVersion('cabin', ID, path.join(V, 'v2'), ['--values', '{"width":10,"porch":false}']);
+  const AT = [28, 65, -19];
+  const BOX = [0, 55, -45, 70, 90, 15];
+  const out = {};
+  for (const mine of [0, 3]) {
+    await fresh('G5B Surv', FLAT);
+    await tp(40.5, 80, 20.5);
+    const h0 = (await hash(BOX)).sha256;
+    await installEntry(ID, path.join(V, 'v1'));
+    await call('dev.survival.set', { on: true });
+    await mark();
+    const qid = await queue({ id: 'S', proximity: false, items: [{ key: 'S', bp: ID, at: AT, rot: 0, mode: 'CONSTRUCTION', force: true }] });
+    const ev = await waitEvent((e) => e.event === 'ITEM_PLACED' && e.batch === qid, 120_000, 'S placed');
+    const S = ev.site;
+    await installVersion(ID, path.join(V, 'v2'), 'v2');
+    // a delta on a site still building refuses SITE_BUSY; a queued one waits
+    const busy = await deltaCheck(S, 2, { construction: true });
+    check(!busy.applicable && busy.refusals.some((r) => r.reason === 'SITE_BUSY'), 'survival: a delta on a site still BUILDING refuses SITE_BUSY', busy.refusals);
+    const into = {};
+    const feeds = { [S]: await hopperFor(S) };
+    check(await buildUntilDone([S], feeds, into), 'survival: the cabin construction site is built from its hopper');
+    // the instant reference: a creative copy of this world gets the instant apply
+    await cmd('/save-all flush');
+    await leaveWorld();
+    copyWorld('G5B Surv', 'G5B SurvRef');
+    // the construction delta v1 -> v2
+    await openWorld('G5B Surv');
+    await tp(40.5, 80, 20.5);
+    const pre = await cellsIn(BOX);
+    const c = await deltaCheck(S, 2, { construction: true, cells: true });
+    check(c.applicable, `survival: the construction delta v1 -> v2 is allowed (bill ${JSON.stringify(c.bom)}, refunds ${JSON.stringify(c.refund)})`, c.refusals);
+    const a = await deltaApply(S, 2, { construction: true });
+    check(a.applied, 'survival: the construction delta started', a.applied ? undefined : a);
+    const st = await siteState(S);
+    const missing = Object.fromEntries((st.rows ?? []).filter((r) => r.missing > 0).map((r) => [r.item, r.missing]));
+    const bomEq = JSON.stringify(Object.entries(missing).sort()) === JSON.stringify(Object.entries(c.bom).sort());
+    check(bomEq, 'survival: the BOM in dev.site.state equals the delta\'s queued cells\' bill', { missing, bom: c.bom });
+    const now = await cellsIn(BOX);
+    const swapped = (c.ghost?.changed ?? []).filter((p) => blockOf(now.get(p) ?? '') !== blockOf(pre.get(p) ?? ''));
+    check(st.swaps > 0 && swapped.length === 0, `survival: ${st.swaps} changed cells keep the old block until their swap`, swapped.slice(0, 5));
+    const refunds1 = (await siteState(S)).deltaRefunds ?? {};
+    feeds[S] = await hopperFor(S);
+    check(await buildUntilDone([S], feeds, into), 'survival: the construction delta finished from its hopper');
+    const feedCells = Object.values(feeds).flatMap((f) => [f.hop, f.chest]);
+    const ex = feedCells.map((p) => [...p, ...p]);
+    const built2 = (await hash(BOX, ex)).sha256;
+    // mined cells: the second run takes 3 of the site's blocks before the deconstruct
+    // "Rebuild as v1": a paid forward delta
+    const r1 = await deltaApply(S, 1, { construction: true });
+    check(r1.applied, 'survival: "Rebuild as v1" (a forward construction delta) started', r1.applied ? undefined : r1);
+    feeds[S] = await hopperFor(S);
+    check(await buildUntilDone([S], feeds, into), 'survival: the rebuild as v1 finished from its hopper');
+    const built1 = (await hash(BOX, ex)).sha256;
+    const refunds = (await siteState(S)).deltaRefunds ?? {};
+    let mined = 0;
+    if (mine) {
+      const w = await cellsIn(BOX);
+      const solid = [...w.entries()].filter(([p, st2]) => /planks|log/.test(blockOf(st2)) && Number(p.split(',')[1]) > AT[1] + 2).slice(0, mine);
+      for (const [p] of solid) {
+        await call('dev.site.mine', { pos: p.split(',').map(Number), pickup: true }, 30_000);
+        mined++;
+      }
+      await cmd('/clear @s');
+    }
+    // deconstruct: refunds counted
+    const out1 = {};
+    for (const f of Object.values(feeds)) {
+      for (const [k, n] of Object.entries(await containerItems(f.chest))) addTo(out1, k, n);
+      for (const [k, n] of Object.entries(await containerItems(f.hop))) addTo(out1, k, n);
+    }
+    for (const [k, n] of Object.entries(refunds)) addTo(out1, k, n);
+    const rm = await result(await api(`remove ${S} - noforce keep`), 600_000);
+    check(rm.removed, 'survival: deconstruct', rm.removed ? undefined : rm);
+    for (const [k, n] of Object.entries(rm.refund ?? {})) addTo(out1, k, n);
+    for (const f of Object.values(feeds)) {
+      await cmd(`/setblock ${f.chest.join(' ')} minecraft:air`);
+      await cmd(`/setblock ${f.hop.join(' ')} minecraft:air`);
+    }
+    await cmd('/kill @e[type=minecraft:item]');
+    const deliveredN = Object.values(into).reduce((x, y) => x + y, 0);
+    const returnedN = Object.values(out1).reduce((x, y) => x + y, 0);
+    if (!mine) {
+      const ids = new Set([...Object.keys(into), ...Object.keys(out1)]);
+      const mism = [...ids].filter((k) => (into[k] ?? 0) !== (out1[k] ?? 0)).map((k) => [k, into[k] ?? 0, out1[k] ?? 0]);
+      check(mism.length === 0, `survival: items delivered = items returned per item id (${deliveredN} items)`, mism);
+    } else {
+      check(returnedN === deliveredN - mined, `survival (mined ${mined}): returned ${returnedN} = delivered ${deliveredN} - ${mined}`);
+    }
+    check((await hash(BOX)).sha256 === h0, `survival${mine ? ' (mined)' : ''}: the terrain is exact after the deconstruct`);
+    out[mine ? 'mined' : 'plain'] = { into, out: out1, refunds1, refunds };
+    await call('dev.survival.set', { on: false });
+    if (!mine) {
+      // the instant references in the creative copy
+      await leaveWorld();
+      await openWorld('G5B SurvRef');
+      await call('dev.survival.set', { on: false });
+      const ia = await deltaApply(S, 2);
+      check(ia.applied, 'survival: the instant apply in the creative copy', ia.applied ? undefined : ia);
+      const ref2 = (await hash(BOX, ex)).sha256;
+      check(ref2 === built2, 'survival: the construction delta finished identical to an instant apply at the same spot', { ref2, built2 });
+      const ib = await deltaApply(S, 1);
+      const ref1 = (await hash(BOX, ex)).sha256;
+      check(ib.applied && ref1 === built1, 'survival: "Rebuild as v1" finished identical to an instant v1', { ref1, built1 });
+    }
+  }
+  return out;
+};
+
 const which = process.argv[2];
 if (!which || !steps[which]) {
   console.log(`steps: ${Object.keys(steps).join(', ')}`);

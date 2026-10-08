@@ -70,9 +70,10 @@ public final class DeltaDev {
 				Fields f = Fields.of(req);
 				SiteDeltas.Request r = request(f);
 				boolean cells = f.optBool("cells", false);
+				boolean construction = f.optBool("construction", false);
 				return DevBridge.onClient(mc, () -> ServerTasks.callAsPlayer((level, player) -> {
 					long t0 = System.nanoTime();
-					SiteDeltas.Check c = SiteDeltas.check(level, r);
+					SiteDeltas.Check c = construction ? dev.larattalabs.architect.site.Builder.checkConstructionDelta(level, r) : SiteDeltas.check(level, r);
 					JsonObject o = checkJson(c, cells);
 					o.addProperty("ms", (System.nanoTime() - t0) / 1e6);
 					return o;
@@ -84,6 +85,14 @@ public final class DeltaDev {
 				SiteDeltas.Request r = request(f);
 				return DevBridge.onClient(mc, () -> ServerTasks.callAsPlayer((level, player) -> {
 					long t0 = System.nanoTime();
+					if (f.optBool("construction", false)) {
+						try {
+							return java.util.concurrent.CompletableFuture.completedFuture(resultJson(dev.larattalabs.architect.site.Builder.applyConstructionDelta(level,
+								r, player)));
+						} catch (Sites.SiteException e) {
+							return java.util.concurrent.CompletableFuture.completedFuture(failJson(e));
+						}
+					}
 					return SiteDeltas.applyAsync(level, r).handle((res, err) -> {
 						if (res != null) {
 							JsonObject o = resultJson(res);
@@ -310,6 +319,12 @@ public final class DeltaDev {
 		c.notes().forEach(notes::add);
 		o.add("notes", notes);
 		o.addProperty("writes", c.ghost().size());
+		JsonObject bom = new JsonObject();
+		c.bom().forEach(bom::addProperty);
+		o.add("bom", bom);
+		JsonObject refund = new JsonObject();
+		c.refund().forEach(refund::addProperty);
+		o.add("refund", refund);
 		if (c.plan() != null) {
 			o.addProperty("entryCells", c.plan().outcome().entryCells().size());
 			o.addProperty("shapeGuards", c.plan().outcome().shapeGuards().size());
@@ -355,6 +370,9 @@ public final class DeltaDev {
 		o.addProperty("written", r.written());
 		o.add("kept", keptJson(r.kept()));
 		o.addProperty("reshaped", r.reshaped());
+		JsonObject refund = new JsonObject();
+		r.refund().forEach(refund::addProperty);
+		o.add("refund", refund);
 		JsonArray notes = new JsonArray();
 		r.notes().forEach(notes::add);
 		o.add("notes", notes);
