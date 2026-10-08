@@ -4130,9 +4130,11 @@ this section says what shipped.
   in-flight rollback path applies to delta jobs only.
 - **`BLOCK_ENTITIES`** refuses in every `playerEdits` mode, a kept (player-edited) cell included.
 - **Lost writes (crash safety, added).** An unclean stop loses block writes made since the world's last save, while the
-  journal and the site record are on disk. At world start, a site's top delta whose own cells (before != after, uncovered)
-  mostly hold their `before` is undone (one undo, exact) and the record follows the world. So D7/D8 kills end at a
-  consistent version a, not "record b, world a". Construction deltas are left alone.
+  journal and the site record are on disk. At a world start after an unclean stop (a marker written at world start and
+  deleted by a clean stop), a site's top delta whose own loaded cells (before != after, uncovered) mostly hold their
+  `before` is undone (one undo, exact) and the record follows the world. So a D7/D8 kill ends at a consistent version a,
+  not "record b, world a"; when the world was saved before the halt, the journal wins (b). Construction deltas are left
+  alone. After a clean stop nothing is undone (a player who mined a delta's added cells keeps the site at its version).
 - **Write order.** A delta writes its clears (cells becoming air) before its other cells, instant and ticked, so a block
   under one the delta removes doesn't react to it first. A dirt path under a solid block is planned as dirt (vanilla turns it
   at its next tick), so the captured `after`, a construction target and a fresh placement agree.
