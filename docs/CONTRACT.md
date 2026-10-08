@@ -2968,3 +2968,63 @@ Where this section and the 5a text above disagree, this section wins.
 - **S7** Architect owns PLAYBOOK.md, slices.mjs and the attach/facing rules, with an origin note; changes are reported to Steward.
 - **S8** `job.images` is a general input of structured jobs, not critic-only.
 - **S9** The 4-brief Opus subset is directional. If it is ambiguous, a dedicated run follows the gate as a separate decision.
+
+## Phase 5a as built (API 1.6.0, mod 0.9.0, recorded 2026-10-08)
+
+Built on branch `phase/5a` (with `phase/5a-kit`, `phase/5a-mig` and `phase/5a-java` merged into it). The gate's numbers are in
+"Phase 5a gate results" below and in `eval/results/{smoke,full,opus-subset}/summary.json`.
+
+**Images and the critic**
+- The probe passed (a structured job with 2 PNG image blocks under the claude login, $0.0098, `apiKeySource none`), so the critic
+  and the judge send image content blocks; there is no Read fallback. `JobSpec.images` is checked at `job.run` (PNG or JPEG by
+  magic bytes, at most 5 MB, at most 8) and the files are copied into the job's scratch `images/`.
+- The critic is an internal structured job (`owner: "architect:critic"`, tag `design <id> round <n>`), so it shows in the jobs
+  list and gets the job runner's hold, resume and budget for free; the sheet critique is `owner: "architect:sheet-critic"`. Internal
+  jobs may carry more than 8 images (5 views plus up to 4 neighbours).
+- `extraCriteria` are the score keys `x1`..`x3`. The massing rubric is `silhouette, brief, site`; the sheet rubric `legibility,
+  restraint, craft`.
+
+**The loop**
+- One loop for both designers (`sidecar/src/critique.ts`, state in `DesignWork.critique`). A designer hands each passing round to
+  `roundReady` and returns the new run outcome `critique`, which gives the pool slot back; the critic job runs off the pool; a
+  revision re-enters its lane at the front.
+- The loop cap (critique.budgetUsd, else 1.0x round 0) covers every critic call, round 0's included (the contract's "loop's spend"),
+  and a revision turn's SDK budget is what is left of the caps minus a critic call's high seed, so the loop stays within its cap
+  (18 of 18 in the full tier). The sim backend with no notional cost (simDesignUsd 0) has no loop cap.
+- **Report mode ends with a new end reason `report`** (sidecar and API `EndReason.REPORT`, inserted before OFF): a report is one
+  critic call, not a loop that stopped at `max_revisions`.
+- `openIssues` (entry, API) are the best round's issues: a round's list holds only what is still open (`resolved` points into the
+  previous round's list), so the contract's "unresolved P1/P2" is the best round's list. P0s, if any, are included.
+- Groups: a massingFirst item's massings never carry the critique; its detail pass does (Design tab and set dialog alike). A
+  revision waiting in a paused (soft budget) group starts and ends its loop with `budget` at once.
+- Installed entries carry a `critique` summary in their blueprint JSON and `<entry>/critique.json` (format 1: entryRevision =
+  sha256 of the .nbt, renders' hashes, the bible pin, the verdict, open issues). The API marks a critique.json whose entryRevision
+  differs from the current .nbt as stale.
+- Estimates: the design sample is round 0 only; critic and revision samples are their own kinds. Seeds calibrated on the smoke
+  tier: critic $0.02-0.08 / 0.1-0.4 min, Sonnet revision $0.25-1.0 / 1-4 min, Opus revision $0.4-1.6 / 1.5-6 min (scaled, unmeasured).
+
+**Bibles and the kit**
+- Every new bible version is format 2 (the kit validates it); the drafted component list is the library (5 required plus at most 3).
+  `archived` lives in `<bibles>/<id>/admin.json`. Pins for delete and GC: library entries, unfinished groups, unfinished single
+  designs, open massings, unfinished bible jobs. GC runs at sidecar start only. `bible.delete` / `bible.archive` carry the bible id
+  in `id`, which is also the envelope's correlation id (as `bible.revise` already did).
+- Kit: `--views` (iso_back), `kit/tools/slices.mjs`, `kit/PLAYBOOK.md`, the `attach:` / `facing:` warnings (zero on every kit example,
+  corner and preset; one real hit in the 4c design), the metrics, `--restraint`. `DETAIL_NOISE_MAX` frozen at sparse 0.32 / moderate
+  0.42 / rich 0.5 after the smoke tier. **`accentShare` as specified does not measure the 4b clutter** (the clutter sat in the main
+  roles: the 4b set scored 0.08-0.11 while the clean kit tavern scored 0.22); `detailNoise` is the metric that separates it.
+- Migration seam: `JournalMigration.MigrationWorld` is a nested public interface; `MigrationWorld.of(server)` is the production
+  adapter; 19 pure-JVM tests on synthetic 0.7.0 worlds (the 4e-verify world was gone) plus one real-file test from a phase-3 world.
+  Fixed on the way: a pending site's layer is ordered by placedAt; the legacy move has fault points; unreferenced snapshots are
+  listed in the plan notes.
+
+**Java 1.6.0** (not purely additive, as in 1.1-1.5): `Design.Status.CRITIQUING` before DONE and `Critique.EndReason.REPORT` before
+OFF shift ordinals; records gained components with the old constructors kept. `tools/api-compat.mjs` checks that every member the
+unchanged 1.5.0 apitest jar references (466) and the whole 1.5.0 api surface (1088 members) still exist with the same descriptor;
+the 1.5.0 jar passes its survival suite against 0.9.0 (`APITEST_API_VERSION=1.5.0`). UI: the critique toggle defaults off (N1), and
+the Status tab's "Critique and revise new designs by default" turns it on (`config/architect_mc_ui.json`).
+
+**The eval harness** (`tools/eval.mjs`): `run` / `rescore` / `rejudge` / `compare [--judge]`, plus `revise-bible` (the gate's format-2
+Mosswater, kept in `eval/fixtures/bibles/mosswater/versions/2/`) and `clutter` (the judge against an older set's renders). The
+summary is a pure function of the stored files (`rescore` is byte-identical). **The judge sees 4 views per set** (iso, iso_back,
+front, top: 8 images, the job.images limit), not 5. A pair whose final is round 0 (the loop kept round 0) is `identical`: no judge
+call, counted as a tie. The sim tier runs in CI (`sidecar/test/eval.e2e.test.ts`, on its own copy of the bundle).
