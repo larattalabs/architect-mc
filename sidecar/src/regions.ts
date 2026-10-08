@@ -51,6 +51,13 @@ const NO_NETWORK = [
   'syncBuiltinESMExports();',
 ].join('\n');
 
+/** Node's permission switch: `--permission` (Node >= 22.13 / 23.5), `--experimental-permission` before that, or none. */
+export function permissionFlag(flags: ReadonlySet<string> = process.allowedNodeEnvironmentFlags): string | undefined {
+  if (flags.has('--permission')) return '--permission';
+  if (flags.has('--experimental-permission')) return '--experimental-permission';
+  return undefined;
+}
+
 /** Canonical JSON (keys sorted, no whitespace): the IR's identity (REGIONS.md "The Region IR"). */
 export function canonicalJson(v: unknown): string {
   if (v === null || typeof v !== 'object') {
@@ -237,8 +244,10 @@ export class Regions {
       const kit = fs.realpathSync(this.host.config.kitDir);
       const script = path.join(kit, 'tools', 'region.mjs');
       if (!fs.existsSync(script)) return fail('the kit has no tools/region.mjs (an older kit)');
+      const perm = permissionFlag();
+      if (!perm) return fail(`region planning needs Node's permission model (Node 22.13 or later; this is ${process.version})`);
       const reads = [kit, dir, ...(program.bundled ? [] : [fs.realpathSync(this.cfg.programsDir)])];
-      const flags = ['--permission', ...reads.map((r) => `--allow-fs-read=${r}`), `--allow-fs-write=${dir}`, `--max-old-space-size=${this.cfg.planHeapMb}`, `--import=data:text/javascript,${encodeURIComponent(NO_NETWORK)}`];
+      const flags = [perm, ...reads.map((r) => `--allow-fs-read=${r}`), `--allow-fs-write=${dir}`, `--max-old-space-size=${this.cfg.planHeapMb}`, `--import=data:text/javascript,${encodeURIComponent(NO_NETWORK)}`];
       // a stale ir.json from nowhere must not count
       fs.rmSync(path.join(dir, 'ir.json'), { force: true });
       const r = await run(process.execPath, [...flags, script, ...this.planArgs(dir, program, o)], { cwd: dir, env: minimalEnv(), timeoutMs: this.cfg.planMs });

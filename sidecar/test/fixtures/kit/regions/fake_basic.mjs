@@ -7,6 +7,7 @@ export default async function plan(ctx) {
   const p = ctx.params;
   if (p.throw) throw new Error(p.throw);
   if (p.loop) for (;;);
+  if (p.hog) { const hog = []; for (;;) hog.push(new Array(1e6).fill(hog.length)); }
   if (p.net) await fetch('http://127.0.0.1:9/');
   if (p.writeOutside) fs.writeFileSync(p.writeOutside, 'escaped');
   if (p.readOutside) fs.readFileSync(p.readOutside);

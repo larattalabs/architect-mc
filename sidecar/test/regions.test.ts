@@ -8,7 +8,7 @@ import path from 'node:path';
 import zlib from 'node:zlib';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { FEATURES, parseClientMessage, ServerMessage, toProtocol1, type Outbound, type Protocol } from '../src/protocol.js';
-import { canonicalJson, sha256 } from '../src/regions.js';
+import { canonicalJson, permissionFlag, sha256 } from '../src/regions.js';
 import type { ClientHandle } from '../src/server.js';
 import { SimDesigner } from '../src/sim.js';
 import { makeSidecar, until, type Harness } from './helpers.js';
@@ -287,6 +287,24 @@ describe('region.plan (fake kit, sim backend)', () => {
     expect(sha256(fs.readFileSync(h.sc.blobs.file(big.planned!.irBlobId!)))).toBe(big.planned!.irSha);
     const over = await plan(h, { params: { pad: 4 * 1024 * 1024 + 10 } });
     expect(over.failed!.message).toMatch(/more than the limit of 4194304 bytes/);
+  });
+
+  it('enforces the heap limit (injectable; 1 GB by default)', async () => {
+    const keep = h.cfg.regions.planHeapMb;
+    h.cfg.regions.planHeapMb = 64;
+    try {
+      const r = await plan(h, { params: { hog: true } });
+      expect(r.failed!.message).toBe('the plan ran out of memory (64 MB heap)');
+    } finally {
+      h.cfg.regions.planHeapMb = keep;
+    }
+  });
+
+  it('picks the permission flag this node knows, and refuses to plan without one', () => {
+    expect(permissionFlag(new Set(['--permission', '--experimental-permission']))).toBe('--permission');
+    expect(permissionFlag(new Set(['--experimental-permission']))).toBe('--experimental-permission');
+    expect(permissionFlag(new Set())).toBeUndefined();
+    expect(permissionFlag()).toBeDefined();
   });
 
   it('enforces the time limit (injectable; 30 s by default)', async () => {
@@ -578,9 +596,12 @@ describe('region.* over the WebSocket server (validateOutbound)', () => {
       send({ id: 't2', ...tilesReq(planned.planId as string, planned.irSha as string, Array.from({ length: 20 }, (_, i) => `${i},7`)) });
       await until(() => msgs.some((m) => m.type === 'region.tile' && m.key === '0,7'));
       ws.close();
+      await until(() => server.clientCount === 0);
       const before = h.sc.regions.poolStats()!.tiles;
       await new Promise((r) => setTimeout(r, 500));
+      // at most the one tile (W = 1) that was in flight when the socket closed
       expect(h.sc.regions.poolStats()!.tiles - before).toBeLessThanOrEqual(1);
+      expect(msgs.filter((m) => m.type === 'region.tile').length).toBeLessThan(23);
     } finally {
       await server.stop();
       await h.close();
