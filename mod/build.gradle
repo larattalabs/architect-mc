@@ -38,7 +38,8 @@ loom {
 			// World auto-load/creation and mute are handled by the mod itself in dev runs (mod/DEV.md).
 			def player = (System.getenv("ARCHITECT_PLAYER") ?: System.getProperty("user.name") ?: "Player").replaceAll(/[^A-Za-z0-9_]/, "").take(16) ?: "Player"
 			programArgs "--username", player, "--width", "1920", "--height", "1080"
-			vmArgs "-Xmx4G", "--enable-native-access=ALL-UNNAMED"
+			// ARCHITECT_XMX caps the dev client's heap (phase 6a's memory bar runs mega_bench under baseline + 2 GB)
+			vmArgs "-Xmx" + providers.environmentVariable("ARCHITECT_XMX").getOrElse("4G"), "--enable-native-access=ALL-UNNAMED"
 			runDir "run"
 		}
 		server {

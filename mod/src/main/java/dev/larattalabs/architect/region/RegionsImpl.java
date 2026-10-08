@@ -246,6 +246,10 @@ public final class RegionsImpl implements Regions {
 		if (planned.has("ir") && planned.get("ir").isJsonObject()) {
 			return CompletableFuture.completedFuture(planned.getAsJsonObject("ir"));
 		}
+		if (planned.has("ir") && planned.get("ir").isJsonPrimitive()) {
+			// the sidecar sends ir.json's exact text (its sha is irSha)
+			return CompletableFuture.completedFuture(JsonParser.parseString(planned.get("ir").getAsString()).getAsJsonObject());
+		}
 		if (planned.has("irBlobId")) {
 			return BlobPut.read(planned.get("irBlobId").getAsString()).thenApply(b -> JsonParser.parseString(new String(b, StandardCharsets.UTF_8))
 				.getAsJsonObject());
