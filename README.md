@@ -112,7 +112,10 @@ low side.
 
 <br>
 
-## Critique and revise
+## Critique and revise (experimental)
+
+> **Experimental.** In the 5a eval the loop did not measurably improve designs (blind judge 7 wins, 6 losses, 5 ties over 18
+> briefs), so it stays off by default. The one-off **Critique** report is the useful part today.
 
 Turn on **Critique and revise** in the Design tab or the set dialog, or by default in the Status tab, and a second, cheaper
 Claude call reviews each design after it renders. It looks at fixed renders from five cameras, layered slices of the floors and a

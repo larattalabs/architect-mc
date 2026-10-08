@@ -181,7 +181,11 @@ usage hold, re-skin, open type). Caveats:
 - Real runs went over the WebSocket; the Java path is sim-only.
 - The bible set is cluttered and less legible, which is 5a's (critique loop) job.
 
-**Phase 5a status: BUILT, gate pending verification; the builder's run did NOT pass it** (2026-10-08; branch `phase/5a`, API 1.6.0 /
+**Phase 5a status: SHIPPED AS RE-SCOPED 2026-10-08** (Noah's decision: the loop's quality gates G1/G2 failed, so the loop ships
+**experimental**, off by default and labelled so in the UI and README; the harness, report critiques, bible format 2, job.images,
+API 1.6.0 and the migration tests ship as built, since G3/G4 and every regression passed. Improving the loop (a critic calibrated
+so 7 is reachable, revisions aimed at the top issue, in-place fixes via 5b delta apply) is later work, re-gated on the same eval).
+Original gate record follows: BUILT, the builder's run did NOT pass it (2026-10-08; branch `phase/5a`, API 1.6.0 /
 mod 0.9.0; `artifacts/gate5a/REPORT.md`, local; `eval/results/{smoke,full,opus-subset}/summary.json`). The critique loop, the
 critic (Sonnet, image blocks under the claude login), the eval harness (`tools/eval.mjs`), bible format 2 with restraint and
 hygiene, report critiques, `job.images` and the migration unit tests are built and tested (sidecar 536, kit 126, mod 339; sim API

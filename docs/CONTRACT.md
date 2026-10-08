@@ -3043,3 +3043,11 @@ call, counted as a tie. The sim tier runs in CI (`sidecar/test/eval.e2e.test.ts`
 | Other | report critique, massing critique (ended `budget` before a revision), a loop design through the Java API: ok |
 | Opus subset | directional: Opus preferred 2, Sonnet 1, tie 1; Opus +33% cost |
 | Regressions | all suites green; 4a-4c sim suites; the 1.5.0 jar against 0.9.0; the 4e migration step; UI walk-through |
+
+## Phase 5a re-scope (Noah, 2026-10-08)
+
+- The gate's spend cap was raised from $120 to **$150** API-equivalent on 2026-10-07; the gate spent $93.23.
+- G1 was not shown (7/6/5, p 0.50) and G2 failed (+0.28). The critique **loop ships experimental**: off by default, labelled
+  "(experimental)" in the Design tab, the set dialog and the Status-tab default, and in the README. Report critiques, the eval
+  harness, bible format 2, `job.images`, API 1.6.0 and the migration unit tests ship as built (G3, G4 and all regressions passed).
+- A later loop change is re-gated on the same 18-brief eval with the same G1/G2 bars; prompts are not tuned against the eval set.

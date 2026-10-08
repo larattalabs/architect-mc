@@ -1105,7 +1105,7 @@ public final class ArchitectScreen extends Screen {
 		// (5a) Critique and revise: a critic scores the renders, Claude revises until it ships (default off), 1 or 2 revisions
 		if (dev.larattalabs.architect.client.design.SetFeature.has("critique")) {
 			boolean on = f.critique;
-			String cl = "Critique and revise";
+			String cl = "Critique and revise (experimental)";
 			Hit h = new Hit("design:critique", cl, rx, ry, 12 + font.width(cl) + 4, 12, true, on, () -> f.critique = !f.critique);
 			hits.add(h);
 			Panels.sprite(g, on ? Kit.CHECKBOX_CHECKED : Kit.CHECKBOX, rx, ry + 1, 10, 10);
@@ -2126,7 +2126,7 @@ public final class ArchitectScreen extends Screen {
 		// (5a, N1) critique by default: the Design tab's and the set dialog's "Critique and revise" start on
 		ry += 6;
 		boolean crit = dev.larattalabs.architect.client.design.UiPrefs.critiqueByDefault();
-		String cl = "Critique and revise new designs by default";
+		String cl = "Critique and revise new designs by default (experimental)";
 		Hit ct = new Hit("critique_default", cl, rx, ry, Math.min(colW, 13 + font.width(cl)), 12, true, crit, () -> dev.larattalabs.architect.client.design.UiPrefs.setCritiqueByDefault(!crit));
 		hits.add(ct);
 		Panels.sprite(g, crit ? Kit.CHECKBOX_CHECKED : Kit.CHECKBOX, rx, ry + 1, 10, 10, 0xFFFFFFFF);

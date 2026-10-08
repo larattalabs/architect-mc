@@ -308,7 +308,7 @@ final class SetDialog {
 		Font font = font();
 		int cx = x;
 		boolean on = f.critique;
-		String cl = "Critique and revise";
+		String cl = "Critique and revise (experimental)";
 		int hw = 12 + font.width(cl) + 4;
 		s.addHit(new ArchitectScreen.Hit("set:critique", cl, cx, y, hw, 12, true, on, () -> f.critique = !f.critique));
 		Panels.sprite(g, on ? dev.larattalabs.architect.client.ui.Kit.CHECKBOX_CHECKED : dev.larattalabs.architect.client.ui.Kit.CHECKBOX, cx, y + 1, 10, 10);
