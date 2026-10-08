@@ -3052,7 +3052,7 @@ call, counted as a tie. The sim tier runs in CI (`sidecar/test/eval.e2e.test.ts`
   harness, bible format 2, `job.images`, API 1.6.0 and the migration unit tests ship as built (G3, G4 and all regressions passed).
 - A later loop change is re-gated on the same 18-brief eval with the same G1/G2 bars; prompts are not tuned against the eval set.
 
-# Phase 5b contract: delta apply and polish (A6, plus polish) - DRAFT for Steward review
+# Phase 5b contract: delta apply and polish (A6, plus polish) - FROZEN after Steward review
 
 Goal: **change a building without rebuilding it.** A library entry gets versions. A new version is compared with the old one
 part by part and cell by cell. A placed site moves to the new version by writing only the cells that differ, as a new journal
@@ -4090,3 +4090,21 @@ G1 and G2 decide polish's label (above), not the phase.
 - **N5** Yes: `publishToMavenLocal` fails without the bundle too, with `-PallowNoSidecar` as the escape.
 - **N7** Yes: 32 versions, a 30-day GC, pinned versions always kept.
 - **N8** Yes: prompt development only on designs outside the 18.
+
+## Changes from Steward's review of 5b (steward-mc/docs/A5B-DELTA-REVIEW.md), all accepted
+
+Where this section and the 5b text above disagree, this section wins. (The Java API is section 5 above; Steward's copy was cut.)
+
+- **Delta preview as data (SHOULD 1).** `Sites.checkDelta(DeltaRequest)` returns a `DeltaVerdict` that carries, as Java data,
+  the per-part summary (`PartDelta`), the kept cells (`pos, found, planned`), the BOM, the refunds, and the reasons. The client
+  ghost and Architect's UI render from that same object.
+- **Routing free text (SHOULD 2).** The scoping call returns `fits: boolean`, `suggest: "polish" | "reskin" | "remix"` and a
+  reason. A whole-look request (bible revise plus re-skin) or a structural rebuild is declined before any polish step, for the
+  scoping call's cost only ($0.01-0.03).
+- **`Sites.outdated(owner)` (SHOULD 3).** Returns each standing site whose pinned version is older than its entry's head, with
+  the entry id, the site's version and the head version. Callers use it at world load, because `ENTRY_VERSIONED` events are
+  missed while the world is closed.
+- **Owner rule (SHOULD 4).** A delta on a site owned by someone other than the caller refuses with `OVERLAP_OWNED` unless forced.
+- **Answers:** S1 KEEP default. S2 covered cells wait for phase 6. S3 version/headVersion, `ENTRY_VERSIONED` and `outdated`.
+  S4 paid survival revert. S5 local edits within 3 existing plus 2 new parts; whole-look changes route away (above). S6 buildings
+  only. S7 frame rule. S8 6 deltas. S9 polish uses the entry's own designer model by default, with a caller override.
