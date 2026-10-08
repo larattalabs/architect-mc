@@ -65,6 +65,7 @@ final class DeltaJob implements Placement.Job {
 	int capCursor;
 	@Nullable ChangeTracker tracker;
 	@Nullable CompletableFuture<SiteDeltas.Check> planning;
+	@Nullable CompletableFuture<WorldJournal.Captured> prep0;
 	SiteDeltas.@Nullable Check check;
 	int replans;
 	@Nullable CompletableFuture<Object[]> prepared;
@@ -201,15 +202,26 @@ final class DeltaJob implements Placement.Job {
 						fail("Version " + (va == null ? from : to) + " of " + b.blueprint() + " can't be found");
 						return true;
 					}
-					SiteDeltas.cells(va);
-					SiteDeltas.cells(vb);
 					var bpb = vb.entry().blueprint();
 					int m = Math.max(bpb.sizeX(), bpb.sizeZ());
 					Anchors.Bounds rb = b.restoreBox();
 					int g = dev.larattalabs.architect.placement.Approach.Spec.MAX_LENGTH + dev.larattalabs.architect.placement.Approach.EXTEND + 2;
-					region = new Anchors.Bounds(rb.minX() - m - g, Math.max(level.getMinY(), rb.minY() - 14), rb.minZ() - m - g, rb.maxX() + m + g, Math.min(level
-						.getMaxY(), rb.maxY() + bpb.sizeY() + 2), rb.maxZ() + m + g);
-					cap = WorldJournal.empty(region);
+					Anchors.Bounds rg = new Anchors.Bounds(rb.minX() - m - g, Math.max(level.getMinY(), rb.minY() - 14), rb.minZ() - m - g, rb.maxX() + m + g, Math
+						.min(level.getMaxY(), rb.maxY() + bpb.sizeY() + 2), rb.maxZ() + m + g);
+					// the versions' cells (decoding a large template) and the capture array: off the server thread
+					if (prep0 == null) {
+						prep0 = CompletableFuture.supplyAsync(() -> {
+							SiteDeltas.cells(va);
+							SiteDeltas.cells(vb);
+							return WorldJournal.empty(rg);
+						});
+					}
+					if (!prep0.isDone()) {
+						return false;
+					}
+					region = rg;
+					cap = prep0.join();
+					prep0 = null;
 					tracker = ChangeTracker.start(level, WorldJournal.sectionsOf(region));
 					capCursor = 0;
 					total = cap.size() * 2;
@@ -272,15 +284,16 @@ final class DeltaJob implements Placement.Job {
 						JournalStore s = SiteJournal.store();
 						layer = s.newLayer();
 						entryId = s.newId();
-						cells = new ArrayList<>(o.entryCells());
 						WorldJournal.Captured c = cap;
 						rec = b;
 						long now = System.currentTimeMillis();
-						JsonObject meta = meta(b, now);
 						String id = entryId;
 						long l = layer;
-						List<Long> cs = cells;
+						Site bb = b;
 						prepared = CompletableFuture.supplyAsync(() -> {
+							List<Long> cs = new ArrayList<>(o.entryCells());
+							cells = cs;
+							JsonObject meta = meta(bb, now);
 							Map<Long, Value> bf = new java.util.HashMap<>(cs.size() * 2);
 							List<Cell> placing = new ArrayList<>(cs.size());
 							for (long q : cs) {
