@@ -750,7 +750,9 @@ steps.edits = async () => {
     check(!be.applicable && be.refusals.some((r) => r.reason === 'BLOCK_ENTITIES'), `edits: a filled chest in a changed cell refuses BLOCK_ENTITIES (${mode})`, be.refusals);
   }
   // Remove keeps 4e's blockers (filled containers): empty both chests first, the player's block edits stay
+  // (a container the site didn't place blocks Remove even empty: the player's chest goes; the gold block edit stays)
   for (const c of [changedCell, chest[0]]) await cmd(`/data merge block ${c.replaceAll(',', ' ')} {Items:[]}`);
+  await cmd(`/setblock ${changedCell.replaceAll(',', ' ')} minecraft:air`);
   const rm = await result(await api(`remove ${site} - force keep`), 300_000);
   check(rm.removed, 'edits: remove (the chests emptied; the player\'s blocks still there)', rm.removed ? undefined : rm);
   const h1 = await hash(BOX);
