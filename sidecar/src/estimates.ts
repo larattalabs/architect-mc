@@ -15,7 +15,7 @@ export interface Sample {
   at: number;
 }
 
-export type EstimateKind = 'design' | 'bible' | 'massing' | 'critic' | 'revise';
+export type EstimateKind = 'design' | 'bible' | 'massing' | 'critic' | 'revise' | 'polish' | 'scope' | 'scoping';
 export interface EstimateData {
   design: Record<string, Sample[]>;
   bible: Record<string, Sample[]>;
@@ -25,6 +25,10 @@ export interface EstimateData {
   critic: Record<string, Sample[]>;
   /** (5a) one revision turn with its check-fix turns (by the design's model) */
   revise: Record<string, Sample[]>;
+  /** (5b) one polish step's turn (by the polish model), a scope/check fix turn, the scoping call */
+  polish?: Record<string, Sample[]>;
+  scope?: Record<string, Sample[]>;
+  scoping?: Record<string, Sample[]>;
 }
 
 const KEEP = 20;
@@ -48,6 +52,14 @@ const MASSING: Seed = { usd: [0.1, 0.4], ms: [1 * MIN, 3 * MIN] };
 export const CRITIC_SEED: Seed = { usd: [0.02, 0.08], ms: [0.1 * MIN, 0.4 * MIN] };
 export const REVISE_SONNET_SEED: Seed = { usd: [0.25, 1.0], ms: [1 * MIN, 4 * MIN] };
 export const REVISE_OPUS_SEED: Seed = { usd: [0.4, 1.6], ms: [1.5 * MIN, 6 * MIN] };
+/**
+ * (5b) Polish seeds (docs/CONTRACT.md "Budgets and cost seeds"; measured samples replace them): a polish step is a fresh
+ * session with a cold cache (5a's warm revision turns were $0.47-0.49).
+ */
+export const POLISH_SONNET_SEED: Seed = { usd: [0.4, 1.2], ms: [2 * MIN, 6 * MIN] };
+export const POLISH_OPUS_SEED: Seed = { usd: [0.8, 2.4], ms: [3 * MIN, 8 * MIN] };
+export const SCOPE_FIX_SEED: Seed = { usd: [0.1, 0.4], ms: [1 * MIN, 2 * MIN] };
+export const SCOPING_SEED: Seed = { usd: [0.01, 0.03], ms: [0.05 * MIN, 0.3 * MIN] };
 
 /** The seed of a model family (by its id). */
 export function seedFor(model: string): { seed: Seed; family: string } {
@@ -85,6 +97,9 @@ export class Estimates {
 
   private get data(): EstimateData {
     const d = (this.store.data.estimates ??= { design: {}, bible: {}, massing: {}, critic: {}, revise: {} });
+    d.polish ??= {};
+    d.scope ??= {};
+    d.scoping ??= {};
     d.design ??= {};
     d.bible ??= {};
     d.massing ??= {};
@@ -116,20 +131,27 @@ export class Estimates {
   /** Add a measurement (a finished design or bible job). */
   record(kind: EstimateKind, model: string, usd: number, ms: number): void {
     if (!(usd >= 0) || !(ms > 0)) return;
-    const list = (this.data[kind][model] ??= []);
+    const list = (this.data[kind]![model] ??= []);
     list.push({ usd: Math.round(usd * 1e4) / 1e4, ms: Math.round(ms), at: this.now() });
     while (list.length > KEEP) list.shift();
     this.store.markDirty();
   }
 
   samples(kind: EstimateKind, model: string): Sample[] {
-    return [...(this.data[kind][model] ?? [])];
+    return [...(this.data[kind]?.[model] ?? [])];
   }
 
   /** The [low, high] cost and time of one job of a model, and how that is known. */
   perJob(kind: EstimateKind, model: string): { usd: [number, number]; ms: [number, number]; basis: string } {
-    const list = this.data[kind][model] ?? [];
+    const list = this.data[kind]?.[model] ?? [];
     if (!list.length) {
+      if (kind === 'polish') {
+        const opus = !model.toLowerCase().includes('sonnet') && !model.toLowerCase().includes('haiku');
+        const sd = opus ? POLISH_OPUS_SEED : POLISH_SONNET_SEED;
+        return { usd: sd.usd, ms: sd.ms, basis: `polish step ${model}: seed ($${sd.usd[0]}-${sd.usd[1]}, ${sd.ms[0] / MIN}-${sd.ms[1] / MIN} min per step)` };
+      }
+      if (kind === 'scope') return { usd: SCOPE_FIX_SEED.usd, ms: SCOPE_FIX_SEED.ms, basis: `fix turn ${model}: seed ($0.1-0.4, 1-2 min)` };
+      if (kind === 'scoping') return { usd: SCOPING_SEED.usd, ms: SCOPING_SEED.ms, basis: `scoping call ${model}: seed ($0.01-0.03, < 0.3 min)` };
       if (kind === 'massing') return { usd: MASSING.usd, ms: MASSING.ms, basis: `${model}: seed, a massing ($0.10-0.40, 1-3 min)` };
       if (kind === 'critic') return { usd: CRITIC_SEED.usd, ms: CRITIC_SEED.ms, basis: `critic ${model}: seed ($${CRITIC_SEED.usd[0]}-${CRITIC_SEED.usd[1]}, ${CRITIC_SEED.ms[0] / MIN}-${CRITIC_SEED.ms[1] / MIN} min per call, smoke 2026-10-06)` };
       if (kind === 'revise') {
@@ -146,8 +168,8 @@ export class Estimates {
     const mt = mean(list.map((s) => s.ms));
     const du = Math.max(0.25 * mu, sd(list.map((s) => s.usd), mu));
     const dt = Math.max(0.25 * mt, sd(list.map((s) => s.ms), mt));
-    const label = kind === 'critic' ? `critic ${model}` : kind === 'revise' ? `revision ${model}` : model;
-    const minMs = kind === 'critic' ? 5_000 : MIN / 2;
+    const label = kind === 'critic' ? `critic ${model}` : kind === 'revise' ? `revision ${model}` : kind === 'polish' ? `polish step ${model}` : kind === 'scope' ? `fix turn ${model}` : kind === 'scoping' ? `scoping call ${model}` : model;
+    const minMs = kind === 'critic' || kind === 'scoping' ? 5_000 : MIN / 2;
     return { usd: [Math.max(0, mu - du), mu + du], ms: [Math.max(minMs, mt - dt), mt + dt], basis: `${label}: ${list.length} measured (avg $${mu.toFixed(2)}, ${(mt / MIN).toFixed(1)} min)` };
   }
 
@@ -160,6 +182,16 @@ export class Estimates {
     if (!spec || spec.mode === 'off') return undefined;
     const critic = this.perJob('critic', spec.model ?? ctx.criticModel ?? 'claude-sonnet-5-5');
     if (spec.mode === 'report') return { usd: critic.usd, ms: critic.ms, basis: `critique: a report (one critic call; ${critic.basis})` };
+    if (spec.mode === 'polish') {
+      // (5b) round 0 with a report, then a polish of the new entry: maxSteps x (step + fix turn + critic)
+      const step = this.perJob('polish', designModel);
+      const fix = this.perJob('scope', designModel);
+      const n = Math.max(1, Math.min(3, spec.maxRevisions ?? 2));
+      const cap = spec.budgetUsd ?? round0.usd[1];
+      const usdHigh = Math.min(cap, critic.usd[1] + n * (step.usd[1] + fix.usd[1] + critic.usd[1]));
+      const msHigh = Math.min((spec.maxMinutes ?? 15) * MIN + step.ms[1] + critic.ms[1], critic.ms[1] + n * (step.ms[1] + fix.ms[1] + critic.ms[1]));
+      return { usd: [Math.min(critic.usd[0] + step.usd[0] + critic.usd[0], usdHigh), usdHigh], ms: [critic.ms[0] + step.ms[0] + critic.ms[0], msHigh], basis: `critique: a report, then a polish of up to ${n} step${n === 1 ? '' : 's'} (capped at ${spec.budgetUsd !== undefined ? `$${spec.budgetUsd}` : '1.0x the design'}; ${critic.basis}; ${step.basis})` };
+    }
     const rev = this.perJob('revise', designModel);
     const n = Math.min(3, spec.maxRevisions ?? (massing ? 1 : 2));
     const cap = spec.budgetUsd ?? round0.usd[1];

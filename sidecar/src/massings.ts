@@ -19,7 +19,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { slugify, type CheckResult, type Limits } from './designs.js';
-import { isFinalDesign } from './designs.js';
+import { copyPartsAlong, isFinalDesign } from './designs.js';
 import { zeroCost } from './jobs/cost.js';
 import type { Conformance, Design, DesignRequest, Massing, Outbound } from './protocol.js';
 import type { Sidecar } from './sidecar.js';
@@ -162,6 +162,7 @@ export class Massings {
     fs.mkdirSync(vdir, { recursive: true });
     const nbt = path.join(vdir, `${id}.nbt`);
     fs.copyFileSync(input.nbt, nbt);
+    copyPartsAlong(input.nbt, nbt);
     fs.writeFileSync(path.join(vdir, `${id}.mjs`), fs.readFileSync(input.source, 'utf8').replace(/export\s+const\s+id\s*=\s*(['"`])[^'"`]*\1/, `export const id = '${id}'`));
     const previews: string[] = [];
     for (const p of input.previews) {

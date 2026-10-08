@@ -378,6 +378,12 @@ login instead** (or `--use-claude-login` when running the helper by hand) runs t
 [Agent SDK overview](https://code.claude.com/docs/en/agent-sdk/overview): *"Unless previously approved, Anthropic
 does not allow third party developers to offer claude.ai login or rate limits for their products."*
 
+The login is found through your user account (`HOME`, `USER`, `LOGNAME`). If Minecraft starts from a scrubbed
+environment (a launcher or `env -i` that drops them), the helper fills in what is missing from the OS and says so in
+its log ("USER/LOGNAME were unset; using <name> from the OS"). If it still finds no login, the Status tab says
+"The claude CLI found no login (user ..., HOME ...)": run `claude` and `/login` in a terminal as that user, and keep
+`HOME`, `USER` and `LOGNAME` in the environment Minecraft starts from.
+
 <br clear="right">
 
 <br>
@@ -463,6 +469,20 @@ survival world: `tools/run-p3-client.sh` starts it with a stub helper, and `tool
 builds the hopper chain and takes the shots. The Town House is a real Claude design from the phase 2 gate run. Its
 variants and the import were made through the UI. The cabin, tower, tavern and gatehouse are the kit's hand-written
 examples.
+
+**A scrubbed environment (the 5b USER/LOGNAME check).** To repeat Steward's observation that a client started without
+`USER` and `LOGNAME` did not find the claude login, start the helper by hand in login mode from an empty environment
+and look at the auth line (account info only, no Claude call, $0):
+
+```sh
+cd sidecar && npm run build
+env -i HOME="$HOME" PATH="$PATH" node dist/main.mjs --port 8895 --data /tmp/arch-envi/data \
+  --library /tmp/arch-envi/library --kit "$PWD/../kit" --use-claude-login --debug
+# expect "USER/LOGNAME were unset; using <you> from the OS", then "claude auth ok (claude login (personal use), ...)"
+```
+
+Stop it with Ctrl-C (or by its PID). The no-login message itself is unit-tested with an injected account-info result
+(`sidecar/test/claude-auth.test.ts`), not by a live negative run.
 
 <br>
 

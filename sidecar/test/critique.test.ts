@@ -118,7 +118,7 @@ describe.skipIf(!hasKit)('the critique loop (sim backend, real kit)', () => {
     expect(f.step).toMatch(/critique: shipped at round 0 \(8\)/);
     expect(h.events.some((e) => e.type === 'design.upsert' && e.design.id === d.id && e.design.status === 'critiquing')).toBe(true);
     const cj = JSON.parse(fs.readFileSync(path.join(entryDir(h, f), 'critique.json'), 'utf8')) as Record<string, unknown>;
-    expect(cj).toMatchObject({ format: 1, entryId: f.blueprintId, mode: 'loop', end: 'ship', verdict: { overall: 8, ship: true } });
+    expect(cj).toMatchObject({ format: 2, entryVersion: 1, criticHash: expect.stringMatching(/^[0-9a-f]{64}$/), entryId: f.blueprintId, mode: 'loop', end: 'ship', verdict: { overall: 8, ship: true } });
     expect(String(cj.entryRevision)).toMatch(/^[0-9a-f]{64}$/);
     const bp = JSON.parse(fs.readFileSync(path.join(entryDir(h, f), `${f.blueprintId}.blueprint.json`), 'utf8')) as Record<string, unknown>;
     expect(bp.critique).toMatchObject({ end: 'ship', overall: 8, best: 0 });

@@ -268,6 +268,8 @@ export function checkImportPath(p: string, libraryDir: string): string {
   };
   if (!path.isAbsolute(p)) refuse(`"${p}" is not an absolute path`);
   if (!/\.nbt$/i.test(p)) refuse(`"${path.basename(p)}" is not an .nbt file`);
+  // (5b) <id>.parts.nbt is an entry's per-cell part map, not a structure
+  if (/\.parts\.nbt$/i.test(p)) refuse(`"${path.basename(p)}" is a part map (<id>.parts.nbt), not a structure`);
   const r = real(p);
   if (!r) refuse(`there is no file ${p}`);
   const file = r!;

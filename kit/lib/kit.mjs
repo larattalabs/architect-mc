@@ -1052,6 +1052,27 @@ export class Blueprint {
     }).sort((a, b) => a.y - b.y || a.z - b.z || a.x - b.x);
   }
 
+  /**
+   * Phase 5b: the per-cell part map (`<id>.parts.nbt`): `{ names, idx }` where idx[i] is the part of the i-th block of
+   * toStructure()'s `blocks` list (sorted y, z, x after finalize()), -1 = in no part, else an index into `names` (the
+   * parts that own at least one cell, in declaration order).
+   */
+  partMap() {
+    const list = this.entries();
+    const used = new Set();
+    for (const e of list) {
+      const n = this.cellPart.get(key(e.x, e.y, e.z));
+      if (n) used.add(n);
+    }
+    const names = this.partNames.filter((n) => used.has(n));
+    const index = new Map(names.map((n, i) => [n, i]));
+    const idx = list.map((e) => {
+      const n = this.cellPart.get(key(e.x, e.y, e.z));
+      return n ? index.get(n) : -1;
+    });
+    return { names, idx };
+  }
+
   /** The vanilla structure template as a tagged NBT root compound. */
   toStructure() {
     const list = this.entries();
@@ -1103,6 +1124,8 @@ export class Blueprint {
       size: { ...this.size },
       groundY: this.groundY,
       front: this.front,
+      // phase 5b: the design origin (template = design + origin); two versions of an entry are compared in design coordinates
+      frame: { origin: [this.ox, this.oy, this.oz] },
       materials: this.materials(),
       foundationBlock: this.foundationBlock,
       approach: { ...this.approach },

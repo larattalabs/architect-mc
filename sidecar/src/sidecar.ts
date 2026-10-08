@@ -27,6 +27,8 @@ import type { ClientHandle } from './server.js';
 import type { Store } from './store.js';
 import { truncate } from './util/text.js';
 import { checkImportPath, findVariantSource, Reskins, VariantBook, VariantRefused, VariantRunner } from './variants.js';
+import { EntryVersions, type VersionBy } from './versions.js';
+import { Polishes } from './polish.js';
 
 export type { RunOutcome } from './bibles.js';
 
@@ -39,7 +41,8 @@ export interface ScratchMassing {
 }
 
 /** A message the client caused that cannot be done (answered with ack ok:false). */
-export class ClientError extends Error {}
+export { ClientError } from './errors.js';
+import { ClientError } from './errors.js';
 
 /**
  * Runs design jobs: the Claude designer (claude/designer.ts) or the sim (sim.ts). The scheduler hands it one design at a
@@ -98,6 +101,10 @@ export class Sidecar {
   readonly massings: Massings;
   /** (5a) the critique loop */
   readonly critiques: Critiques;
+  /** (5b) entry versions (install, repair, GC, revert) */
+  readonly versions: EntryVersions;
+  /** (5b) polish of library entries */
+  readonly polishes: Polishes;
   private gcTimer: NodeJS.Timeout | undefined;
   /** trusted connections */
   private connected = new Set<ClientHandle>();
@@ -132,6 +139,8 @@ export class Sidecar {
     this.massings = new Massings(this);
     this.jobs = new JobRunner(this);
     this.critiques = new Critiques(this);
+    this.versions = new EntryVersions({ libraryDir: config.libraryDir, kitDir: config.kitDir, dataDir: config.dataDir, now: () => this.now(), log });
+    this.polishes = new Polishes(this);
   }
 
   /** trusted, open connections */
@@ -249,6 +258,14 @@ export class Sidecar {
    */
   async start(designer: Designer, jobDriver?: JobDriver): Promise<void> {
     this.designer = designer;
+    // (5b) entry versions: repair interrupted installs, then GC (pins always win; no pins ever received = nothing goes)
+    try {
+      const repaired = this.versions.repairAll();
+      if (repaired.length) this.log.info(`entry versions repaired: ${repaired.join(', ')}`);
+      this.versions.gc(this.polishes.versionsInUse());
+    } catch (e) {
+      this.log.error(`entry versions: ${(e as Error).stack ?? e}`);
+    }
     this.bibles.backend = designer.bibleBackend?.() ?? new SimBibleBackend(this, this.config.simStepMs);
     fs.mkdirSync(this.config.biblesDir, { recursive: true });
     this.variantRunner.start();
@@ -351,7 +368,7 @@ export class Sidecar {
       if (msg.id) reply({ type: 'ack', re: msg.id, ok, ...extra });
     };
     try {
-      const result = this.dispatch(msg, reply, client);
+      const result = await this.dispatch(msg, reply, client);
       ack(true, result ? { result } : {});
     } catch (e) {
       const known = e instanceof ClientError || e instanceof BlobError;
@@ -362,7 +379,7 @@ export class Sidecar {
     }
   }
 
-  private dispatch(msg: ClientMessage, reply: (m: Outbound) => void, client?: ClientHandle): Record<string, unknown> | undefined {
+  private dispatch(msg: ClientMessage, reply: (m: Outbound) => void, client?: ClientHandle): Record<string, unknown> | undefined | Promise<Record<string, unknown> | undefined> {
     switch (msg.type) {
       case 'hello':
         reply(this.snapshot(client?.protocol ?? 1));
@@ -427,6 +444,10 @@ export class Sidecar {
       case 'group.resume':
         return { groupId: this.groups.resume(msg.groupId).id, status: this.groups.get(msg.groupId)?.status };
       case 'design.estimate':
+        if (msg.polish) {
+          if (!msg.entryId) throw new ClientError('design.estimate {polish} needs entryId');
+          return { ...this.polishes.estimate(msg.entryId, msg.polish) };
+        }
         if (msg.group) this.bibleIndex.resolve(msg.group.bible);
         return { ...(msg.group ? this.estimates.group(msg.group, this.estimateCtx()) : this.estimates.design(msg.request!, this.estimateCtx())) };
       case 'bible.request': {
@@ -465,7 +486,50 @@ export class Sidecar {
         return { ...this.bibleIndex.delete(msg.id, msg.owner) };
       case 'bible.archive':
         return { ...this.bibleIndex.archive(msg.id, msg.archived) };
+      // ---- 5b
+      case 'entry.versions':
+        return { entryId: msg.entryId, head: this.versions.head(msg.entryId), versions: this.versions.list(msg.entryId) };
+      case 'entry.delta':
+        return this.entryDelta(msg.entryId, msg.from, msg.to).then((delta) => ({ entryId: msg.entryId, delta }));
+      case 'entry.revert': {
+        const from = this.versions.head(msg.entryId);
+        const version = this.versions.revert(msg.entryId, msg.toVersion);
+        this.entryVersioned(msg.entryId, version, from, 'revert');
+        return { entryId: msg.entryId, version };
+      }
+      case 'entry.pins':
+        this.versions.setPins(msg.pins);
+        return { entries: Object.keys(msg.pins).length };
+      case 'design.polish': {
+        const d = this.polishes.request(msg.entryId, msg.spec ?? {}, { ...(msg.owner ? { owner: msg.owner } : {}), ...(msg.ext ? { ext: msg.ext } : {}) });
+        return { designId: d.id, entryId: msg.entryId, fromVersion: d.polish?.fromVersion };
+      }
     }
+  }
+
+  /** (5b) A new version of an entry is installed: the mod reloads it (and re-applies its user metadata if it differs). */
+  entryVersioned(entryId: string, version: number, from: number, by: VersionBy, designId?: string): void {
+    this.emit({ type: 'entry.versioned', entryId, version, from, by, ...(designId ? { designId } : {}) } as Outbound);
+  }
+
+  /** (5b) entry.delta: the kit's summary (kit/tools/diff.mjs --json) of two versions of an entry. */
+  async entryDelta(entryId: string, from: number, to: number): Promise<Record<string, unknown>> {
+    const a = this.versions.versionDir(entryId, from);
+    const b = this.versions.versionDir(entryId, to);
+    if (!this.versions.top(entryId)) throw new ClientError(`no library entry "${entryId}"`);
+    if (!a || !b) throw new ClientError(`${entryId} has no version ${!a ? from : to}`);
+    const diff = path.join(this.config.kitDir, 'tools', 'diff.mjs');
+    if (!fs.existsSync(diff)) throw new ClientError('the kit has no tools/diff.mjs (an older kit)');
+    const r = await runNode(diff, [path.join(a, `${entryId}.nbt`), path.join(b, `${entryId}.nbt`), '--json'], this.config.kitDir, 120_000);
+    let j: Record<string, unknown>;
+    try {
+      j = JSON.parse(r.stdout.trim().split('\n').pop() ?? '') as Record<string, unknown>;
+    } catch {
+      throw new ClientError(`the delta failed: ${truncate(r.output, 300)}`);
+    }
+    if (r.code === 2 || j.error) throw new ClientError(`the delta failed: ${String(j.error ?? truncate(r.output, 300))}`);
+    const { ok: _ok, violations: _v, cells: _c, ...rest } = j;
+    return { entryId, from, to, ...rest };
   }
 
   estimateCtx(): EstimateCtx {
@@ -669,8 +733,11 @@ export class Sidecar {
 
   /** Files an installed entry keeps: the bible files its source imports (bible/bible.json, bible/components.mjs). */
   entryFiles(d: Design, scratch: string): Array<{ from: string; to: string }> {
-    if (!d.request.bible) return [];
-    return ['bible.json', 'bible.md', 'components.mjs'].map((f) => ({ from: path.join(scratch, 'bible', f), to: path.join('bible', f) }));
+    const bible = d.request.bible ? ['bible.json', 'bible.md', 'components.mjs'].map((f) => ({ from: path.join(scratch, 'bible', f), to: path.join('bible', f) })) : [];
+    // (5b) a group item keeps the neighbour renders it was designed and critiqued with (a later polish's critic sees them)
+    const nb = path.join(scratch, 'neighbours');
+    const neighbours = !d.request.massing && d.request.group && fs.existsSync(nb) ? fs.readdirSync(nb).filter((f) => f.endsWith('.png')).sort().slice(0, 4).map((f) => ({ from: path.join(nb, f), to: path.join('neighbours', f) })) : [];
+    return [...bible, ...neighbours];
   }
 
   /** The entry's extra sidecar fields: ext, the bible pin and the group (collections, R10), the item key. */
@@ -738,7 +805,7 @@ export class Sidecar {
       source,
       previews: input.previews,
       files: this.entryFiles(d, input.scratch),
-      meta: { name: input.name, description: input.description, request: d.request, createdAt: this.now(), extra: this.entryExtra(d) },
+      meta: { name: input.name, description: input.description, request: d.request, createdAt: this.now(), extra: this.entryExtra(d), designId: d.id },
     });
     // (5a) the critique verdict next to the entry (the input of a later polish)
     if (d.critique?.end) {
@@ -749,6 +816,8 @@ export class Sidecar {
       }
     }
     this.designDone(d.id, installed, size, [...(input.notes ?? []), conformanceNote(this.designs.get(d.id)?.conformance)].filter(Boolean).join('; '));
+    // (5b) critique.mode "polish": round 0 installed with its report; the polish of the new entry follows
+    if (d.request.critique?.mode === 'polish') this.polishes.afterDesign(this.designs.get(d.id) ?? d, installed.blueprintId);
   }
 
   /** (4c) a massing job installed its version. */

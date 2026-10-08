@@ -15,11 +15,11 @@ Working notes for resuming phase 5b after a pause. Deleted only when the delta-a
 | Step (contract build order) | Status |
 |---|---|
 | 0. Baseline (09a4a38) | kit 126, sidecar 536, mod 339 tests, all green |
-| 1. F1 sidecar-bundle guard, F2 USER/LOGNAME | F1 + F2 launcher side DONE (mod). F2 sidecar side: sub-agent (phase/5b-js) |
-| 2. Kit frame, parts.nbt, diff.mjs (scope), fixtures; round-0 rebuild tripwire | sub-agent on phase/5b-js (worktree ../architect-mc-5b-js), running |
-| 3. Sidecar entry versions, critique.json format 2, entry.* messages | sub-agent on phase/5b-js |
-| 4. Mod TemplateDelta, delta apply, revert, fold, crash points, survival, queue/stages, preview, UI | TemplateDelta, EntryVersions (repair, install), SitePlanner, DeltaPlanner (E1-E7 property tests pass), SiteDeltas (check, D1-D8 instant apply, suffix revert, forward delta, fold, settle), DevBridge hooks DONE; in-game smoke (tools/gate5b.mjs smoke) passes E2/E3. TODO: survival construction deltas, batch/stage items, ticked large deltas, delta_preview ghost, UI |
-| 5. Polish on the sim backend | sub-agent on phase/5b-js; Java side (Designs.polish, entry.versioned) TODO |
+| 1. F1 sidecar-bundle guard, F2 USER/LOGNAME | DONE (mod: F1, launcher env; sidecar: loginenv.ts, the auth message) |
+| 2. Kit frame, parts.nbt, diff.mjs (scope), fixtures; round-0 rebuild tripwire | DONE (merged from phase/5b-js): frame + `<id>.parts.nbt`, `kit/tools/diff.mjs`, `kit/lib/rebuild.mjs`, tavern versions `kit/test/fixtures/versions/tavern/v1..v5`, `node kit/tools/delta-fixtures.mjs --out <dir>` (31 pairs); tripwire 18/18 + 4/4 byte-identical (`artifacts/gate5b/round0-rebuild.json`) |
+| 3. Sidecar entry versions, critique.json format 2, entry.* messages | DONE (merged): `sidecar/src/versions.ts`, criticHash = 5a's provenance hash, `entry.versions/delta/revert/pins`, `entry.versioned` |
+| 4. Mod TemplateDelta, delta apply, revert, fold, crash points, survival, queue/stages, preview, UI | TemplateDelta, EntryVersions, SitePlanner, DeltaPlanner (E1-E7 property tests), SiteDeltas (check, D1-D8 instant, suffix revert, forward delta, fold, settle), batch delta items + delta stage undo, delta ghost, construction deltas (survival, untested in game) DONE. In game: smoke E2/E3 and e1 (E1 vs fresh placements, fold) pass. TODO: ticked large deltas, UI, the gate runs |
+| 5. Polish on the sim backend | DONE (merged): `sidecar/src/polish.ts` (prompts DRAFTS in `claude/polishprompts.ts`), `tools/eval.mjs import-round0`, `run --arm polish --from`. Java side (Designs.polish, entry.versioned, entry.pins) TODO |
 | 6. Java API 1.7.0, api-compat (1.6.0 and 1.5.0 jars) | types + Sites/Library impl DONE; Designs.polish impl, api-compat TODO |
 | 7. Gate items 1-5, 8, 9 ($0) | not started |
 | 8. Polish prompt development (cap $20), freeze, smoke, full, other real checks | not started |
