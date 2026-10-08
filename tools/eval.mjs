@@ -27,7 +27,7 @@ import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { verifyRebuild } from '../kit/lib/rebuild.mjs';
+import { rebuild, verifyRebuild } from '../kit/lib/rebuild.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(HERE, '..');
@@ -1636,6 +1636,128 @@ export function polishAggregates(out) {
 
 // ---- CLI ------------------------------------------------------------------------------------------------------
 
+// ---- (5b) polish prompt development on designs outside the 18 (docs/CONTRACT.md "Prompt development") ----------------
+//
+//   polish-dev --entries <entries.json> --max-usd N --ledger <spend.json> --total-cap 80 [--label <name>] [--notes "<text>"]
+//
+// entries.json: [{ source: <.mjs>, blueprint: <.blueprint.json>, nbt?: <stored .nbt>, bible?: <dir with bible.json and
+// components.mjs>, model?, effort? }]. Each entry is rebuilt from its source with this kit (a stored .nbt must equal the
+// rebuild, else it is skipped as drift: polish would end base_drift), installed as a v1 library entry (frame and part map
+// from the rebuild, no critique.json: a fresh report runs) and polished (maxSteps 2, budget 1.0x the seeded high cap) on
+// the claude login. The spend guard is the eval's: --max-usd for this run and what is left of --total-cap in --ledger.
+// Results: <out>/<runId>/ (designs, step logs) and a one-line row per entry in <runId>/dev.json.
+export function prepareDevEntries(list, libraryDir) {
+  const out = [];
+  fs.mkdirSync(libraryDir, { recursive: true });
+  for (const e of list) {
+    const id = path.basename(e.source).replace(/\.mjs$/, '');
+    const bp = readJson(e.blueprint);
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'arch-dev-'));
+    try {
+      const r = rebuild({ source: e.source, blueprint: bp, bibleDir: e.bible, out: tmp, kitDir: KIT });
+      if (!r.ok) {
+        out.push({ id, skipped: `the rebuild failed (exit ${r.code})` });
+        continue;
+      }
+      if (e.nbt && sha256(e.nbt) !== sha256(r.nbt)) {
+        out.push({ id, skipped: 'drift: the stored .nbt differs from the rebuild' });
+        continue;
+      }
+      const dir = path.join(libraryDir, id);
+      fs.mkdirSync(dir, { recursive: true });
+      fs.copyFileSync(r.nbt, path.join(dir, `${id}.nbt`));
+      fs.copyFileSync(r.parts, path.join(dir, `${id}.parts.nbt`));
+      fs.copyFileSync(e.source, path.join(dir, `${id}.mjs`));
+      if (e.bible) {
+        fs.mkdirSync(path.join(dir, 'bible'), { recursive: true });
+        for (const f of ['bible.json', 'bible.md', 'components.mjs']) if (fs.existsSync(path.join(e.bible, f))) fs.copyFileSync(path.join(e.bible, f), path.join(dir, 'bible', f));
+      }
+      // a dev entry is polished on its own: no group set line
+      const { critique: _c, budgetUsd: _b, group: _g, itemKey: _k, wave: _w, role: _r, ...request } = bp.request ?? {};
+      const rebuilt = readJson(r.json);
+      const nbtSha256 = sha256(path.join(dir, `${id}.nbt`));
+      const createdAt = bp.createdAt ?? 0;
+      fs.writeFileSync(path.join(dir, `${id}.blueprint.json`), `${JSON.stringify({ ...rebuilt, id, ...(bp.name ? { name: bp.name } : {}), createdAt, request, source: `${id}.mjs`, version: 1, versions: [{ n: 1, createdAt, by: 'design', parent: null, summary: 'polish-dev import', nbtSha256 }] }, null, 2)}\n`);
+      out.push({ id, entryId: id, model: e.model ?? (request.model && request.model !== 'claude-sonnet-5' ? request.model : 'claude-sonnet-5-5'), effort: e.effort ?? 'medium', exact: !!e.nbt });
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  }
+  return out;
+}
+
+async function cmdPolishDev(o) {
+  if (!o.entries) throw new Error('polish-dev needs --entries <entries.json>');
+  if (!Number.isFinite(o.maxUsd)) throw new Error('polish-dev needs --max-usd');
+  authGuard('full');
+  const outDir = path.resolve(o.out ?? path.join(REPO, 'artifacts', 'eval'));
+  const label = o.label ?? 'polish-dev';
+  const runId = `${label}-${new Date().toISOString().replace(/[:.]/g, '').slice(0, 15)}`;
+  const runDir = path.join(outDir, runId);
+  fs.mkdirSync(runDir, { recursive: true });
+  const list = readJson(path.resolve(o.entries));
+  let prepared;
+  const port = await freePort(o.port);
+  const sc = await startSidecar(runDir, 'full', port, (dirs) => {
+    prepared = prepareDevEntries(list, dirs.library);
+  });
+  log(`polish-dev ${runId}: sidecar pid ${sc.child.pid} on port ${port}; entries ${prepared.map((p) => p.skipped ? `${p.id} (skipped: ${p.skipped})` : p.id).join(', ')}`);
+  const stop = () => {
+    try {
+      sc.child.kill('SIGTERM');
+    } catch {
+      /* gone */
+    }
+  };
+  process.on('SIGINT', () => {
+    stop();
+    process.exit(130);
+  });
+  const client = new Client(port, sc.token);
+  const rows = [];
+  const cap = () => {
+    let c = o.maxUsd;
+    if (o.ledger && o.totalCap) c = Math.min(c, o.totalCap - (o.reserve ?? 0) - ledgerTotal(o.ledger) + rows.reduce((a, r) => a + (r.usd ?? 0), 0));
+    return c;
+  };
+  try {
+    await client.connect();
+    if (!client.features?.includes('design.polish')) throw new Error('the sidecar has no design.polish');
+    for (const p of prepared.filter((x) => !x.skipped)) {
+      const spent = rows.reduce((a, r) => a + (r.usd ?? 0), 0);
+      const spec = { maxSteps: o.maxSteps ?? 2, model: p.model, effort: p.effort, ...(o.notes ? { target: { notes: o.notes } } : {}) };
+      const est = await client.call({ type: 'design.estimate', entryId: p.entryId, polish: spec });
+      const high = est.polishUsdHigh ?? 0;
+      if (spent + high > cap() + 1e-9) {
+        log(`polish-dev: stop before ${p.id}: $${r2(spent)} + high $${r2(high)} > cap $${r2(cap())}`);
+        break;
+      }
+      const r = await client.call({ type: 'design.polish', entryId: p.entryId, spec, owner: 'eval' });
+      log(`polish-dev: ${p.id} -> ${r.designId} (high $${r2(high)})`);
+      let d;
+      for (;;) {
+        d = client.designs.get(r.designId);
+        if (d && FINAL.has(d.status)) break;
+        if (client.closed) throw new Error('the sidecar connection closed');
+        await sleep(3000);
+      }
+      writeJson(path.join(runDir, 'designs', `${p.id}.json`), d);
+      const usd = d.cost?.usd ?? 0;
+      const row = { id: p.id, designId: d.id, status: d.status, end: d.polish?.end ?? null, usd: r4(usd), estimate: { low: est.polishUsdLow ?? null, high }, ms: (d.updatedAt ?? 0) - (d.createdAt ?? 0), scoping: d.polish?.scoping ?? null, baseOverall: d.polish?.baseOverall ?? null, overall: d.polish?.overall ?? null, installedVersion: d.polish?.installedVersion ?? null, steps: (d.polish?.steps ?? []).map((x) => ({ n: x.n, target: x.target ? { priority: x.target.priority, part: x.target.part, what: x.target.what } : null, allowed: x.allowedParts, accepted: x.accepted, overall: x.overall, changedCells: x.changedCells, usd: x.cost?.usd ?? null, ms: x.ms, failure: x.failure, fixTurns: x.fixTurns ?? 0 })), prompts: d.polish?.prompts ?? null, error: d.error ?? null };
+      rows.push(row);
+      ledgerPut(o.ledger, `${runId}:${p.id}`, usd, 'polish prompt development (outside the 18)');
+      writeJson(path.join(runDir, 'dev.json'), { runId, prepared, rows });
+      log(`polish-dev: ${p.id}: ${d.status} ${row.end ?? ''}, ${row.steps.filter((x) => x.accepted).length}/${row.steps.length} accepted, $${r2(usd)}, ${(row.ms / MIN).toFixed(1)} min`);
+    }
+  } finally {
+    client.close();
+    stop();
+    await sleep(500);
+  }
+  writeJson(path.join(runDir, 'dev.json'), { runId, prepared, rows });
+  console.log(JSON.stringify({ runId, total: r4(rows.reduce((a, r) => a + r.usd, 0)), rows: rows.map((r) => ({ id: r.id, end: r.end, usd: r.usd, steps: r.steps.map((x) => `${x.accepted ? 'A' : 'x'}${x.failure ? ':' + x.failure : ''}`) })) }, null, 2));
+}
+
 function parseArgs(argv) {
   const o = { _: [] };
   for (let i = 0; i < argv.length; i++) {
@@ -1666,6 +1788,7 @@ function parseArgs(argv) {
     else if (a === '--smoke-first') o.smokeFirst = true;
     else if (a === '--no-smoke') o.noSmoke = true;
     else if (a === '--record') o.record = val();
+    else if (a === '--entries') o.entries = val();
     else if (a.startsWith('--')) throw new Error(`unknown option ${a}`);
     else o._.push(a);
   }
@@ -1686,6 +1809,7 @@ async function main() {
   else if (cmd === 'clutter') await cmdClutter(o);
   else if (cmd === 'verify-round0') cmdVerifyRound0(o);
   else if (cmd === 'import-round0') cmdImportRound0(o);
+  else if (cmd === 'polish-dev') await cmdPolishDev(o);
   else {
     console.log('usage: node tools/eval.mjs run --tier sim|smoke|full [--arm polish --from <runId>] [...] | import-round0 <runId> | verify-round0 <runId> | rescore <runId> | rejudge <runId> | compare <runA> <runB>');
     process.exitCode = 2;
