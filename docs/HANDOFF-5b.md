@@ -21,12 +21,18 @@ Working notes for resuming phase 5b after a pause. Deleted only when the delta-a
 | 4. Mod TemplateDelta, delta apply, revert, fold, crash points, survival, queue/stages, preview, UI | DONE: TemplateDelta (kit equality test, 31 pairs), EntryVersions, SitePlanner, DeltaPlanner (E1-E7 property tests), SiteDeltas (check, D1-D8, suffix revert, forward delta, fold at 6, settle), DeltaJob (> 50k cells, ticked), batch delta items + delta stage undo, delta ghost (KEPT), construction deltas (survival), UI (Placed view Update/History, Library Compare/Revert/Polish) |
 | 5. Polish on the sim backend | DONE (merged): `sidecar/src/polish.ts` (prompts DRAFTS in `claude/polishprompts.ts`), `tools/eval.mjs import-round0`, `run --arm polish --from`; Java side (Designs.polish, entry.versioned, entry.pins) DONE |
 | 6. Java API 1.7.0, api-compat (1.6.0 and 1.5.0 jars) | DONE: api-compat clean (1.6.0 jar 543 refs, 1.5.0 jar 466, 0.9.0 surface 1281, 0.8.0 surface 1088), `artifacts/gate5b/api-compat.txt`; apitest 1.7.0 steps |
-| 7. Gate items 1-5, 8, 9 ($0) | item 1: tests green (kit 143, sidecar 577, mod 354). item 2: smoke, e1 pass; chains (12-op script + 20 seeds) running; edits, layers, crash, history, ghost written, not run. item 3: survival step written, not run. items 4-5: village and sizecap steps written, not run. item 8: F1/F2 checks pass (no-bundle Status screenshot TODO). item 9: eval sim tier + rescore byte-identical, polish sim arm run (`artifacts/gate5b/regress/`); in-game suites TODO |
+| 7. Gate items 1-5, 8, 9 ($0) | item 1 green. item 2: smoke, e1, chains (E1 273/273 over 21 scripts), edits (17 ok), layers (6/6 orders), history, crash (D1-D8, K5-K7: 48 ok), ghost (looked at) PASS. item 3 survival: in progress (fixes below). items 4-5 (village, sizecap): written, not run. item 8 PASS (Status-tab shot looked at). item 9: eval sim + rescore, polish sim arm; in-game suites TODO. After the write-order fix: re-run smoke/e1/chains |
 | 8. Polish prompt development (cap $20), freeze, smoke, full, other real checks | not started (dev candidates: gate 2 `gen_gate_two_house`, 4b `gen_fisher_cottage`/`gen_lookout`/`gen_net_and_lantern`, 4c `gen_gull_and_kettle`; gate 1 ids to confirm from gate1/REPORT.md; $0 verifyRebuild first) |
 | 9. Docs (CONTRACT as built, PLAN, README, DEVBRIDGE) | not started |
 
 Gate steps: `node tools/gate5b.mjs <step>` with steps smoke, e1, chains, edits, layers, crash, history, ghost, survival,
 village, sizecap (evidence in `artifacts/gate5b/<step>.json` / `.out`).
+
+Bugs found by the gate and fixed: BLOCK_ENTITIES refused in KEEP mode too (contract "any mode"); lost-writes settle (an
+unclean stop loses block writes since the last world save: a top delta whose cells hold their before is undone, so the
+record follows the world); delta writes clear first (a dirt path written under a removed deck turned to dirt); a dirt path
+under a solid block is planned as dirt; per-world refund tallies; a deconstruct after construction deltas reads growth
+cells' pre-site value from the delta's before (was: 32 phantom "player blocks").
 
 Notes: `test/bundle.e2e.test.ts` (4c massing group) failed once under load (the game client running) and passes alone.
 
