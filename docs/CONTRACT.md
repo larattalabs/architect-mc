@@ -4172,3 +4172,869 @@ this section says what shipped.
   rule above, polish stays **behind a dev flag**: the Library "Polish…" button shows only with `-Darchitect.dev.polish=true`.
   The API and protocol keep `mode: "polish"` for callers who opt in knowingly. The next attempt changes the critic, which is
   what refused visible fixes, and is re-gated on the same eval.
+
+# Phase 6 contract: macro kit, region realise and mega_bench (A5b) - DRAFT for Steward review
+
+Goal: **build whole sites as programs.** A region program describes terrain operations, lots, roads, bridges, stairs and
+anchors for an area far larger than one template, such as a crater works, a sky isle, a walled hill or a 1000x1000 district.
+It is checked without the game and shown as previews and a ghost. Realising it streams cell lists from the sidecar's JS kit
+to the mod, which writes them through the 4e journal. The whole region undoes exactly. The lots are ordinary building
+sites, LAYERed on the region's pads.
+
+Phase 6 is Steward's A5b (`steward-mc/docs/A5B-SPEC.md`, the binding input) plus Steward's full `mega_bench` (A5B §6a).
+It also carries the scale problems 4e recorded at 1000x1000 and deferred to this phase.
+
+Versions: API **1.8.0**, mod **0.11.0** (see "Split" for the per-sub-phase numbers). The sidecar protocol stays **2**,
+with additive messages and new feature names, as in 4b-5b. Phases 1-5b still hold, except where this section changes them;
+where they disagree, this section wins.
+
+Sources for this draft:
+- Steward, read only:
+  - `docs/A5B-SPEC.md`, all of it: the Region API, primitives, M1-M14, N1-N9, §6a mega_bench and staged builds, §7 resolved
+    points, §8 open points;
+  - `ARCHITECT-ASKS.md` A5 and R1;
+  - `A4B-REVIEW.md` item 5 (open roles, macro superset);
+  - `A4E-REVIEW.md` S4 (sky roads, bridges and ramps are region cell lists in phase 6) and S9 (full mega_bench in phase 6);
+  - `A5A-REVIEW.md` S4 (site-plan view and set critic in phase 6);
+  - `A5B-DELTA-REVIEW.md` S2 and S6 (pad deltas under lots, and region deltas, in phase 6);
+  - `PLAN.md` (Phase 2 "Macro sites" gate, the risks after 5a/5b).
+- `docs/PLAN.md`: the phase 6 row, the 4e status and caveats, and the 5a/5b outcomes.
+- `docs/CONTRACT.md`:
+  - 4a: Survey, `LoadPolicy`, blobs;
+  - 4d: the queue, groups, stages, waiting, tickets, and "as built";
+  - 4e: the journal, CELL/BOX, layering, K1-K8, roads, cell sites, the budgets, and "as built", including the 1000x1000
+    recorded run;
+  - 5b: D7 (covered cells deferred to phase 6), the "Deferred" list, and the outcome.
+- Measured, local: `artifacts/gate4e/megabig.json`, `artifacts/gate4e/REPORT.md`, `artifacts/gate5b/throughput.json`.
+- Code at `main` (v0.10.0):
+  - `site/Batches.java`: placement tickets are `FLAG_LOADING` at radius 0, so a ticket can trigger worldgen; LOAD_BOUNDED
+    fairness;
+  - `site/CellsCheck.java`, `InfraPlace.MAX_CELLS` (1M per request);
+  - `sidecar/src/server.ts` `MAX_FRAME_BYTES` 16 MB; `protocol.ts` `MAX_CHUNK_BYTES` 1 MB and `MAX_BLOB_BYTES` 64 MB;
+  - `kit/lib/kit.mjs` `MACRO_ROLES` = rock, surface, subsurface, rubble, rail, structure; `CORE_ROLES` includes `accent`
+    and `foundation`; `kit/lib/bible.mjs` scope `settlement`.
+
+## What the 4e and 5b record says phase 6 must fix or carry
+
+| Item | Record | What this contract does |
+|---|---|---|
+| 1000x1000 run (`megabig`, recorded, not gated) | 657 items, 11.57M cells in 2018 s wall. The step's `cellsPerSecond` is 6.6k; cells over wall time is 5.7k. 11 of 610 lots TIMED_OUT while waiting NOT_LOADED under LOAD_BOUNDED(64), "not investigated further". MSPT max 237 ms, **58 ticks over 50 ms**, while the server generated unexplored terrain for the tickets. Peak heap (sum of pool peaks) **6.27 GB**. Journal 4.6 MB (0.40 bytes/cell). | A root-cause step first. Then a separate, governed **prepare** (pre-generation) step; **realise never generates a chunk**; a queue-time refusal for items that can never get their chunks; 0 timeouts as a gate bar; a memory bar under `-Xmx4G`. |
+| The 4 ms throughput margin | 4e: 16.6k cells/s (builder), **15.1k (verifier)**, against a budget of 15k. 5b re-measured MSPT, not a fresh cells/s median (its village delta batch is item-bound at 5.8k cells/s). | The bar stays 15k. The number is now the **median of 3 runs**, with a stated rule for a miss (gate item 9). |
+| Invariant (iii) narrowed | It holds except where a player edits a cell where a CELL entry lies over a BOX entry. | **A region never puts CELL over BOX**: terrain, paths and roads are always below the lots. Region terrain skips cells that a `site` or `delta` entry owns. So (iii) holds in full for regions. A region delta that would write terrain under standing lots refuses (6d). |
+| Deferred to phase 6 | Bridges beyond 1-deep decks; region realise streaming; site-plan and section previews; a set-level critic over lots; deltas for cell sites, roads and regions; writing a delta under a covering site; the full mega_bench as a gate. | Bridges, streaming, previews and mega_bench are in 6a/6b. Deltas are 6d. The set-level critic is **deferred** (below). |
+| 5a and 5b outcomes | The critic doesn't accept fixes: loop G1/G2 failed, and polish accepted 0 steps. | **Nothing in phase 6 depends on critique.** Quality comes from deterministic programs, the macro checker and previews. Claude's authoring rounds are driven by checker findings only. |
+
+## Key decisions (each specified below)
+
+| # | Decision |
+|---|---|
+| D1 | **Programs run once, at plan time. Realise evaluates data.** A region program (`kit/regions/<id>.mjs`, agent-written or bundled) runs in the pristine-kit child process and returns a **Region IR**: JSON with shape trees from a closed kit shape library, and no closures. Realise evaluates the IR with the kit's own code only, so agent-written code never runs at realise time. |
+| D2 | **The evaluation unit is a tile: 64x64 columns (4x4 chunks), over the region's y range.** Ops are pointwise over a frozen heightfield, so tiles evaluate independently and in any order, in a sidecar worker pool. |
+| D3 | **The pre-region heightfield is frozen, not re-surveyed per section.** A column's surface is surveyed once, the first time any tile of the region (any stage) touches it, including an 8-column margin. It is persisted in the world before that tile's first journal commit. Surface-relative ops always resolve against it. A resume, a later stage or the next section down therefore never evaluates against the region's own carve. (This deviates from A5B §1, "a fresh survey of those sections"; see S2.) |
+| D4 | **One journal entry per (change-set, tile), each its own 4e P1-P8 cycle.** A region's change-set is the set of its tile entries. K1-K8, per-section planning and settle apply unchanged. A tile entry over 1M cells is split by section rows (the 4e `placeCells` cap). |
+| D5 | **The mod pulls, the sidecar never pushes.** The mod requests a window of tiles ahead of the writer (default 4). Cell lists arrive packed, in frames of at most 1 MB. Received lists are never written to the queue file; the queue persists only tile keys and the IR hash. If the sidecar is gone, the region **waits** (`SIDECAR_UNAVAILABLE`, temporary). Undo never needs the sidecar. |
+| D6 | **Prepare, then realise.** `Regions.prepare` generates the missing chunks of claim + margin under an MSPT governor, persistently, with its own record. Realise uses a new `LoadPolicy.GENERATED_ONLY(n)`, which loads chunks from disk and **never generates**. Generated chunks during realise are counted, and the gate bar is 0. |
+| D7 | **Lots are BOX building sites LAYERed on the region's CELL pads**, placed with `fitToLot`. The order is always terrain, then paths and roads, then lots, by stage. Region terrain skips `site`/`delta`-owned cells. |
+| D8 | **Ground roads are 4e roads; everything off the ground is kit cell lists.** A region `road` that fits 4e's limits (width at most 5, cut/fill at most 4) compiles to `RoadRequest` items, so approaches stop at it and crossings hand over. Graded roads, ramps, stairs and bridge decks are cell lists in `architect:path` entries whose walk-surface cells are marked like road surface cells, so 4e's approach rule sees them too. |
+| D9 | **Determinism:** IR = f(program sha, params, plan survey, roles, seed), byte-identical per Node major. Cell lists = f(IR, frozen heightfield), byte-identical across worker counts, tile order, restarts, macOS and Linux. Realise-time kit math uses no `Math.sin/cos/tan/exp/log/pow/random` and no `Date` (lint-enforced). |
+| D10 | **Claude authors programs only (6c).** It is template-first: a cheap structured call picks a bundled program and params when one fits. Otherwise a program-writing session is repaired in rounds against the **deterministic checker**. There is no critic, no loop and no set-level critic. The feature uses whatever auth the sidecar is configured with, like every job. **The gate's spend runs on the claude login only**: expected about **$12**, cap **$25**, stated ceiling **$35**, all in 6c. 6a, 6b and 6d spend $0. |
+| D11 | **Split into 6a (engine and scale, gated by full mega_bench), 6b (macro kit, checker and previews), 6c (Claude authoring and Steward's crater gate), and 6d (region evolution and deltas; recommended to wait for Steward's phase 3).** Each has its own gate. |
+| D12 | **Overworld only, and INSTANT only** (creative, or survival toggle off; Steward's Patron), as 4e cell sites. Regions in survival-toggle worlds refuse `NOT_ALLOWED` until Noah decides the terrain rule (N4). |
+
+### Deviations from A5B-SPEC (for Steward's review)
+
+| A5B says | This contract | Why |
+|---|---|---|
+| §1: realise takes "a fresh survey of those sections" | D3: a frozen pre-region heightfield per column, taken at first touch, plus a drift check at region and stage start | Re-surveying would evaluate surface-relative ops against the region's own earlier writes (resume, a later stage, the next section down) |
+| §2: programs compose shapes freely in JS | D1: a closed, serialisable shape library; `heightfield` and `mask` blobs as the escape hatch | Realise runs data, not agent code; determinism and streaming |
+| §2: `road(path, opts)` placed as a site | D8: ground roads become 4e roads; graded roads, ramps, stairs and decks become `architect:path` cell lists | 4e's approach-meets-road and handover rules work only on road entries; S4 of 4e put sky roads in phase 6 cell lists |
+| §3: M14 starts as a warning | Part-id **uniqueness** is an error from the start (the rest of M14 starts as a warning) | Duplicate part ids make per-part counts and 6d's diff ambiguous |
+| §4 N4: a group places terrain, then roads, then lots | Kept, applied **per stage**, plus "a region never writes CELL over BOX" | Keeps invariant (iii) whole |
+| §6: the gate's player block "placed in a lot beforehand" | Split into before-realise and after-realise cases (6c gate) | The two cases go through different rules (lot refusal, CELL keep) |
+
+---
+
+## Split
+
+| Sub-phase | Scope | Gate | API / mod | Spend |
+|---|---|---|---|---|
+| **6a: engine and scale** | Kit: IR, shape core, noise, tile evaluator, packing; and the primitives mega_bench needs (`carve`, `add`, `platform`, `pillar`, `ring`, `terrace`, `lot`, `road`, `stair`, `bridge`, `part`, `anchor`, `noise`). Sidecar: `region.plan` and the evaluation pool with streaming. Mod: prepare, the frozen heightfield, tile items, the governor, region groups and stages, crash points, region undo. API (6a part of 1.8.0). Commands and DevBridge, no player UI. | Full mega_bench at 1000x1000 with explicit bars; determinism; exact undo; the crash points; the 4d/4e/5b regressions. | 1.8.0 / 0.11.0 | $0 |
+| **6b: macro kit, checker, previews** | The rest of the primitives (`cavern`, `utility`, `floating`, `underside`, `stages` checks). The virtual world and macro checker M1-M14 (every rule starts as a warning except M1/M13/M14's always-on parts). Previews: top-down, section, iso and site plan. The region ghost. The four family fixtures plus broken variants. A minimal Architect player UI (a "Terrain" tab with bundled programs). | Fixture reports match expectations; broken variants caught; prefix-of-stages check; preview goldens; checker time on mega_bench. | 1.9.0 / 0.12.0 | $0 |
+| **6c: authoring with Claude** | `Regions.design` (template-first, then program authoring with checker rounds); lot children from library entries or variants; Steward's A5B §6 gate. | Claude "crater mining facility" passes M1-M4 with no findings, realises, lots placed, one undo exact; the player-block cases; spend within cap. | 1.10.0 / 0.13.0 | about $12, cap $25 |
+| **6d: region evolution** (recommended to wait) | Region deltas by part (A5B N7); deltas for cell sites and roads; pad deltas under standing lots (writing under a cover, the 5b D7 deferral). | Specified when Steward's phase 3 needs it; outline below. | later | $0 |
+
+6a goes first because it carries the unknowns: the 237 ms ticks, the timeouts and memory. Its measured numbers set M12's
+budget estimates and the kit's limits in 6b. 6a and 6b are not merged: the checker's coarse/full-resolution design should
+build on the measured evaluator.
+
+If Noah prefers one 1.8.0 for the whole phase, the 6b/6c members become 1.8.0 methods that throw
+`UnsupportedOperationException("... needs Architect 0.12.0")` until they land, and `features()` tells callers which ones
+exist (N1).
+
+---
+
+## 1. The program model
+
+### Where programs run
+
+```
+plan     (sidecar, no game)  program.mjs + params + plan survey + roles + seed  --child process-->  Region IR (JSON)
+check    (sidecar, no game)  IR + plan survey  -->  virtual world  -->  checker report, previews        (6b)
+prepare  (mod)               claim + margin  -->  generated chunks on disk (governed)
+realise  (mod <-> sidecar)   mod freezes heights per tile -> requests tiles -> sidecar evaluates IR per tile
+                             -> packed cell lists -> mod writes them as tile entries through the queue and the journal
+```
+
+- **Plan** runs the program in the **pristine-kit child process**, the one the checker uses today, with the sidecar's
+  permission policy (no network; file access limited to the job's scratch dir and the read-only kit). Limits: 30 s CPU,
+  `--max-old-space-size=1024`, IR output at most 4 MB. A program that throws, exceeds a limit, or returns something that is not
+  a `Region` fails the plan with the kit's message.
+- The program sees `ctx = {claim, survey, bible, seed, params, kitVersion}`.
+  - `ctx.survey` is the plan survey: 4a's `Sample`, read from its blob. Its resolution is 1 up to 256x256, else 4.
+  - It has helpers: `heightAt`, `pickCenter`, `slopeAt`, `waterAt`, `biomeAt`, and a coarse `flatAreas()`.
+  - `Math.random` throws ("use ctx.rng"), `Date.now` returns 0, and `ctx.rng(label)` is the seeded PRNG.
+- **The IR** (`format: 1`) is the plan's identity. It holds:
+  - id, `programSha`, params, seed, claim, and the `kitVersion`;
+  - the **resolved roles** (role -> vanilla block state, from the bible; a re-skin changes these and nothing else);
+  - `parts: [{id, stage, ops: [op]}]` in program order;
+  - `lots`, `roads`, `paths` (stairs, ramps, bridge decks and graded roads), `utility`, `anchors`, `floating`, `rules`,
+    `stages: [name]`;
+  - `budget: {cells, removed, added}`, an estimate from the coarse pass.
+
+  An op is `{kind, shape, material?, opts}`. A shape is a JSON tree over the closed shape library (below).
+- **Realise** never runs the program. It evaluates the IR with `kit/lib/realise.mjs`, a pure function `(IR, tile key,
+  heightfield window) -> packed cells`. It runs on a sidecar worker pool: `worker_threads`, default `min(4, cores/2)`,
+  config `regionWorkers`. The pool runs only Architect's kit code.
+- **Plans live in two places.** The sidecar keeps `<gameDir>/architect/regions/plans/<planId>/` (program copy, `ir.json`,
+  report, previews). The world keeps `<world>/architect-regions/<regionId>/` with `region.json` (the record), a copy of
+  `ir.json`, and `heights/` (the frozen heightfield, one shard per tile). Because the world holds the IR, a realise can resume after the
+  sidecar lost its plan dir: the mod re-sends the IR with each tile request (cached by IR sha in the sidecar).
+
+### The shape library (closed set, signed distance)
+
+Primitives:
+- `sphere(c, r)`, `box(min, max)`, `cylinder(c, r, h)`, `cone(c, r0, r1, h)`;
+- `bowl(c, r, depth, {profile: 'parabolic'|'spherical'|'flat'})`, `ring(c, r0, r1, {h, rise})`, `torus`;
+- `capsulePath(points, r)`, `extrude(polygon, y0, y1)`;
+- `heightfield(blobRef, {scale, y0})`: a caller-supplied 16-bit field;
+- `mask(blobRef)`: a 2D bitmap.
+
+Combinators: `union`, `subtract`, `intersect`, `smooth(k, a, b)`, `offset(d)`, `displace(noise, amp)`, `clipY(y0, y1)`.
+
+Y is surface-relative by default (`y: {surface: dy}`), or absolute (`y: {abs: n}`).
+
+**Rule:** every op is **pointwise**. A cell's result depends only on the IR, its position, and the frozen heights of
+columns within 8 of it. Smoothing radius, terrace blending and support search are capped at 8 columns. That cap is what
+makes a tile independent: a tile reads the heightfield over itself plus an 8-column margin.
+
+`heightfield` and `mask` are the escape hatch for shapes the library can't express. Their blobs are at most 16 MB each
+and part of the IR's identity (by sha).
+
+### Ground and trees
+
+- The survey's `height` is motion-blocking without leaves, so on forested ground it is the top of a trunk. **The region's
+  ground** (what `surface` means, in the plan survey and in the frozen heightfield) is the first block found by walking down
+  from `height` that is natural and is not a log, leaves or a plant. The freeze stores that y (`ground`), and also `height`
+  for the checker.
+- **Worldgen trees inside an op's write volume or a pad are removed as natural:**
+  - logs, leaves and their attached plants (vines, cocoa) count as `IF_NATURAL` cells of the op that reaches them;
+  - **a tree trunk any of whose log cells an op removes is removed whole**, within the claim, as cells of the same tile
+    entry. No trunk is left floating over a crater;
+  - leaves outside the write volume that hung on those logs get the 4e treatment: `leaves` guard entries per tile, held
+    persistent while the tile stands, and given back on undo.
+  - Trees that touch no op are untouched.
+- The 6a gate places a tile of mega_bench's carve rim through a forest (gate item 6).
+
+### Evaluation and conflicts within a program
+
+- Ops apply in IR order (part order, then op order within the part). **The last op that touches a cell wins.**
+- Each result cell carries a **condition**. The mod resolves the conditions **at P1, together with the `before` capture**,
+  against the live world, using 4e's change tracking up to P3 for sliced captures. **The PLACING entry contains only the
+  cells that passed**, so its planned `after` is exact for 4e's CELL rollback and for P7. This is where 4e's large cell
+  sites already run the natural filter.
+
+| Condition | Writes when the world cell is | Used by |
+|---|---|---|
+| `IF_NATURAL` (default) | natural terrain, air or water, with no block entity (4e `naturalOnly`) | carve, terrace, platform, pads |
+| `IF_SOLID_NATURAL` | solid natural terrain | carve `lining` |
+| `IF_AIR_OR_FLUID` | air, water or lava (not waterlogged blocks) | `add`, decks and supports over water |
+| `ALWAYS_OURS` | a cell this region's earlier entries own, or anything `IF_NATURAL` allows | later stages over earlier ones |
+
+  A cell whose condition fails at P1 is **skipped and noted** per tile (counts per reason). It is never forced. Engine
+  invariants (A5B §3) are enforced here and by the claim check, whatever the checker said.
+- **Claim:** every cell outside the claim box is dropped by the evaluator *and* refused by the mod (`REGION_LIMIT`). The
+  mod never trusts the evaluator for M1.
+
+### Seeds and determinism
+
+- `seed` is a 64-bit integer from the request. It is carried **as a decimal string** in JSON (the IR, the protocol and the
+  region record), because a JSON number loses precision above 2^53 between Java and JS. The default is
+  `fnv64(programId, canonical(params), claim)`, so it never depends on the world seed implicitly.
+- `noise(field)` is kit-implemented value and simplex noise over integer hashing (splitmix64 on BigInt-free 32-bit halves),
+  using only `+ - * / Math.floor Math.sqrt Math.abs Math.min Math.max`. Those are exactly specified in IEEE/ECMAScript, so
+  results are bit-identical across platforms.
+- **The realise lint:** a kit test scans `lib/sdf.mjs`, `lib/noise.mjs` and `lib/realise.mjs` and fails on any other
+  `Math.*` member, `Date` or `Math.random`.
+- **Plan determinism** is per Node major. A program may use trig, which affects IR numbers only. The IR is recorded, so
+  realise is unaffected, and the plan records `node` and `kitVersion`. A replan on another Node major may give another IR
+  sha; that is reported, not an error.
+- **Guarantees** (each a test):
+  1. The same plan inputs give a byte-identical IR (canonical JSON, keys sorted).
+  2. The same (IR, heightfield window) gives a byte-identical packed tile, for 1 and 4 workers, in forward and shuffled
+     tile order, after a sidecar restart, and on macOS and Linux CI.
+  3. Two realises of one plan in two copies of the same world give identical region hashes.
+
+### Limits
+
+| What | Limit | Over the limit |
+|---|---|---|
+| claim | 1024x1024 columns (2048x2048 behind `-Darchitect.dev.bigRegions=true`) | plan refused `REGION_LIMIT` |
+| y range | within the world's build limits; M11 warns within 8 of either limit | refused at plan |
+| IR | 4 MB, 20,000 ops, 1,024 lots, 256 paths, 64 stages | plan fails with the count |
+| cells | `budget.cells` declared by the program; default 20M; hard 64M | plan refused; the checker's M12 shows the estimate |
+| one tile | 1M cells per entry (4e cap); split into section-row sub-tiles above that | automatic |
+| plan run | 30 s CPU, 1 GB heap | plan fails |
+| tile evaluation | 2 s per tile, 256 MB per worker | the tile fails `OTHER` with the kit's message; the region pauses (not fails) so a fix can resume it |
+| region stages | 64 | plan fails |
+| dimension | Overworld (the survey's height is motion-blocking; the Nether ground issue is still open) | `NOT_ALLOWED` |
+
+---
+
+## 2. Primitives
+
+Every primitive belongs to a `part` (M14), and every part to a stage (default `main`). The guarantees hold for the cells
+written. A skipped cell (a failed condition, outside the claim, owned by another site) is noted, never forced.
+
+| Primitive | Parameters (defaults) | Guarantees | Sub-phase |
+|---|---|---|---|
+| `part(id, {stage})` | id `^[a-z][a-z0-9_]{0,47}$`, unique; stage name | Stable id: the unit of diffing (6d) and of the per-part counts on the ghost and in reports. Renames are breaking (A5B §2). | 6a |
+| `carve(shape, {to: 'air'\|role, lining: role?, liningDepth: 1, naturalOnly: true})` | the shape and fill | Removes only `IF_NATURAL` cells inside the shape. The lining is written only where a surviving solid natural cell faces the void (`IF_SOLID_NATURAL`). Never removes block entities, player blocks or cells owned by others. Removed and lined counts are reported per part. | 6a |
+| `add(shape, material, {underside: 'flat'\|'taper'\|'pillars'\|'rock', supportEvery: 8})` | the shape and a role | Writes only `IF_AIR_OR_FLUID`. `pillars` adds `pillar` ops at most `supportEvery` apart under the mass's rim and grid. `taper` and `rock` shape the underside with a seeded noise cone. | 6a; `rock`/`taper` in 6b |
+| `platform(polygon, y, {thickness: 1, edge: 'none'\|'rail'\|'wall', underside})` | a polygon in x/z, a y | A flat slab at exactly `y` over the polygon, with the edge style on its boundary cells. With `underside: 'fill'` it fills down to the frozen surface (`IF_NATURAL`). | 6a |
+| `pillar(at, {to: 'ground'\|'bedrock'\|y, size: 1\|2\|3, material})` | position and footprint | A column from its top down to the first solid natural cell under the frozen surface, or to the floor under water (it reads `floor`). Stops at the claim's bottom margin (M11). | 6a |
+| `ring(c, r0, r1, {height: 8, rise: 0, towers: {every: 48, radius: 4, extra: 4}, gates: [{angle, width: 3, height: 4}], crenels: true})` | centre and radii | A closed wall following the frozen surface, plus `rise`. Every gate opening has at least its width and height clear, and its threshold cells are walk-surface cells. Towers sit on the wall line. | 6a; towers and crenels in 6b |
+| `terrace(region, levels, {riser: 2, retain: role, edge: 'slope'\|'wall', stairs: true})` | a polygon or (centre, fractions) and levels | Each level is flat (every column at its level's y). Risers are at most `riser` per step, or a retaining wall when `edge: 'wall'`. With `stairs`, one stair of width 3 joins each pair of levels. | 6a |
+| `stair(path, {width: 3, rise: 1, landingEvery: 8, carve: true, railing: role?, spiral: false})` | a polyline (x, y, z) | Rise at most 1 per step; 2 headroom along the whole width (carved `IF_NATURAL`; a blocked headroom cell is reported as an M6 error, never forced); a landing (2 flat cells) at least every `landingEvery` steps. Walk cells are marked as walk-surface. | 6a |
+| `bridge(path, {width: 3, deck: role, rail: true, supports: {every: 12, style: 'pillar'\|'arch'}, maxSpan: 24, towers: false})` | a polyline of at least 2 points (abs y or surface) | The deck is continuous at the given width, with rise at most 1 per block along the path. There are 2 headroom cells over the deck. No unsupported span is longer than `maxSpan`: supports go in at most `every` apart, as pillars to the ground or the floor under water. `arch` is a pointwise arch between supports. Rails on both sides. Deck cells are walk-surface (approaches stop at them). An `architect:path` entry. | 6a; arches and towers in 6b |
+| `road(path, {width: 3, surface: auto, lanterns: true, mode: 'ground'\|'graded'})` | a polyline | `ground` (default): compiled into 4e `RoadRequest` items; a road over 2048 centre cells is split. All 4e road guarantees hold (profile, clearing, handover, approaches stop). `graded`: width 1-9, a profile from the frozen heights smoothed to grade at most 1 in 4, cut/fill at most 12, written as an `architect:path` entry with retaining edges where a cut or fill exceeds 2. | 6a |
+| `lot(id, {at, size: [w, d], floor: 'auto'\|y, front: dir\|'toward:<part\|anchor>', max: [x, y, z], brief, pad: {maxCut: 6, maxFill: 6, edge: 'slope'\|'wall'}, foundation: role})` | as A5B | A pad: every column of `size` (+1 apron) ends at `floor`. Cut above (`IF_NATURAL`); fill below with `foundation` down to the frozen surface. Batter slopes or a wall within `maxCut`/`maxFill`. A pad needing more fails at plan with M9's numbers. The lot's box `[size + max height]` is recorded in the IR (N3) and in `RegionView.lots`. The child design cap is the 96x64x96 template cap. | 6a |
+| `anchor(name, at)` | `entrance` and `spawn` required; `cam_*` free | Validated inside the claim. Exposed in the plan and `RegionView`. | 6a |
+| `noise(field, {kind: 'value'\|'simplex', octaves, scale, seedLabel})` | | A seeded field used by other ops (`displace`, masks, `cavern`). Same seed and label, same values (D9). | 6a |
+| `cavern(shape, {noise, amp: 3, floor: 'flat'\|'natural', light: {every: 8, block: role}})` | | A hollow with a noise edge and a flat floor. **Light is mandatory**: a light block at most `every` apart on the floor grid, so no floor cell is more than `every/2` from one (M5 confirms). | 6b |
+| `utility(path, {width: 3, height: 3, kind})` | | No blocks. A reserved corridor: the checker keeps it clear of later ops, and 6d deltas keep it. | 6b |
+| `floating([part ids], {anchor})` | | Declares sky parts for M3 (connected to each other and to an anchor, not to ground). | 6b |
+
+**Materials** are roles only (A5B §2). The roles are `MACRO_ROLES` and `CORE_ROLES` from the bible, plus extra named roles
+(the 4b open-roles rule: validated vanilla blocks). Steward's `scorched` and `lining` are **not** in `MACRO_ROLES` today:
+- programs use them as extra roles, with a fallback chain declared in the program (`roles.scorched ?? roles.rock`);
+- M13 errors on a role that resolves to nothing.
+
+Adding `scorched` to `MACRO_ROLES` is a bible-format change: question S5.
+
+**Lot children.** Realise takes a map `lot id -> (blueprint id[, version])`. Each mapped lot becomes a queue item:
+`fitToLot(lot box, front)`, then a `PlaceRequest` with `overlap = LAYER`, in the lot's stage after its terrain and paths.
+An unmapped lot stays a pad. Generating children is the caller's (Steward's group, A2) or `Regions.design` with
+`designLots` (6c).
+
+---
+
+## 3. Region realise
+
+### Records and states
+
+- `RegionView {id, planId, irSha, owner, ext, groupId, claim, state, stages: [{name, state, tilesDone, tilesTotal, cells}],
+  lots: [{id, pad, siteId?, state}], cellsWritten, cellsSkipped: {reason: n}, waiting?: {reason, since}, prepare?: PrepareView}`.
+- States: `planned` -> `preparing` -> `prepared` -> `placing` -> `placed` | `partial` | `failed`; then `removing`. These
+  are A5B N8's states plus `preparing`/`prepared`.
+- A region **is** a 4d/4e site group. The group's stages are the IR's stages, so 4d `approveStage`, `skipStage`,
+  `reorderStages` and `undoStage` apply unchanged. Within each stage, items go in this order:
+  1. terrain tiles;
+  2. `architect:path` tiles and 4e roads;
+  3. lots.
+
+  4d's dependency rule stays: undoing a stage that later placed stages depend on refuses without `force`.
+
+### The unit of writing: tile entries
+
+- A tile is `(change-set, tx, tz)`, 64x64 columns. The change-set is `terrain` or `path` per stage.
+  - Kind `architect:terrain` or `architect:path`, policy **CELL**.
+  - `site` = the tile's own cell-site record id (`c<n>`); `group` = the region's group.
+  - `meta.region` = region id; `meta.tile` = `tx,tz`.
+- Each tile goes through 4e's P1-P8, with 4e's large-cell-site path: decode, de-duplicate and sort off-thread; the
+  condition filter over ticks; the overlap test on occupied sections only; capture with change tracking.
+- **Overlap within the region:** a later stage's tile is LAYERed over this region's earlier `cells` entries (CELL over
+  CELL). A tile **skips** cells owned by any `site`, `delta` or `road` entry, the region's own lots included, and notes them.
+  So a region never writes CELL over BOX (invariant iii stays whole).
+- **Overlap with others:** cells owned by another owner's entry are skipped and noted, never `OVERLAP_OWNED`-refused. A
+  tile can't wait for a whole settlement. A region whose claim overlaps another owner's standing region is refused at
+  realise with `OVERLAP_OWNED` unless `force`.
+- **Entry count and the index.** mega_bench at about 3 stages gives about 256 x (terrain + path) tiles per stage that
+  touches a tile, plus about 200 lots, so about 1-2k entries. The 4e index holds every entry's section list, base64. The
+  build measures the index size and its commit time. **Bar: index at most 8 MB, commit p99 at most 100 ms on the I/O
+  thread.** If the bar fails, 6a moves `sections` into per-entry side files: index `version: 2`, with the downgrade rule
+  of 4e, so 0.10.0 keeps refusing safely. That is a store-format change and needs its own migration test.
+
+### Streaming (mod <-> sidecar)
+
+1. **Freeze.** When a tile is next-but-W in the queue, the mod surveys the tile's columns plus the 8-column margin that
+   have no frozen height yet. It uses 4a's sliced `Survey.sample` on loaded chunks; prepared chunks load from disk under
+   `GENERATED_ONLY`. It writes them to a per-tile shard `heights/<tx>.<tz>.bin` (int16 `ground`, `height` and `floor`, and
+   a water bit, per column; margin columns go to the shard of the tile that owns them, written once) with write, fsync,
+   atomic rename and read-back. **This happens before the tile's P3.** Shards are never rewritten once complete.
+2. **Request.** `region.tiles.request {planId, irSha, ir?, tiles: [{key, heights: base64}]}`, with at most W tiles
+   outstanding (default 4, config `regionWindow` 1-16). The IR travels only when the sidecar answers `ir_unknown`.
+3. **Answer.** `region.tile {planId, key, seq, more, data: base64, count, sha}`.
+   - `data` is the packed list: per section, a palette, 12-bit positions and a 2-bit condition, gzip.
+   - A tile larger than 1 MB packed is split into frames with `more: true`.
+   - `sha` covers the whole tile and is checked by the mod.
+   - An evaluation error answers `region.tile.error {key, message}`.
+4. **Write.** The tile becomes a ready queue item. The writer takes it under `placementBudgetMs` like any cell-site item.
+   Its cells are held in memory only until its P7 commit.
+5. **Backpressure.** The mod requests a new tile only when one leaves the window. The sidecar holds at most W evaluated
+   tiles per region in memory.
+
+- **Bytes:** the packing targets at most 4 bytes per cell over the wire, and the gate records the number. 4e's 0.40
+  bytes/cell on disk suggests 1-2.
+- **Sidecar gone:** in-flight requests are dropped; the region waits `SIDECAR_UNAVAILABLE`, which is temporary and has no
+  wait limit. On reconnect the mod re-requests its window. A tile already at P3 or later doesn't need the sidecar (its
+  cells are in the PLACING entry).
+- **Queue file:** a region item persists `{regionId, stage, kind, tile}` only. 4e's lesson: queued cell lists made the
+  queue file megabytes.
+
+### Chunks: prepare, loading and the NOT_LOADED fix
+
+**First build step (6a, before any fix is claimed): the root cause.** Re-run 4e's `megabig` generator with the 0.10.0 jar
+and a diagnostic log per waiting item: chunks needed, chunks ticketed, their status per tick, ticket churn, and the wait
+reason over time. Write the classification to `artifacts/gate6a/timeouts.md`. Candidate causes, to confirm or rule out:
+- (a) an item whose snapshot box + 7 needs more chunks than the 64-chunk bound (a 96-wide lot needs up to 8x8 = 64 on its
+  own, so a lot that straddles needs more), which can then never start;
+- (b) fairness: one waiter holds the next tickets while others' tickets lapse;
+- (c) generation slower than the 600 s wait limit under the spikes;
+- (d) radius-0 tickets reaching a chunk status the placement check doesn't accept.
+
+The fixes below don't depend on which cause it was. The diagnosis decides whether more is needed.
+
+- **`Regions.prepare(PrepareRequest)`** generates every not-yet-generated chunk of `claim + 2 chunks` (the box + 7 margin
+  of edge items, rounded up) and records progress in `<world>/architect-regions/<id>/prepare.json`. It resumes after a
+  relog. The governor:
+  - at most `prepareInFlight` generation tickets at once (default 2, config 1-8);
+  - a new ticket only when the last 20 ticks had max MSPT under 35 ms and mean under 20 ms;
+  - after a tick over 50 ms, no new ticket for 40 ticks;
+  - each finished chunk's ticket released at once, so loaded chunks don't accumulate;
+  - nearest to any player first, then rows.
+
+  `PREPARE_PROGRESS` fires at most 1/s. Prepare writes no blocks, and nothing in the journal.
+- **Knowing a chunk is generated without loading it** is a named 6a verification item. The candidate is the region file's
+  location table plus the stored chunk status (vanilla's chunk storage read path) on 26.3. If 26.3 has no cheap way, the
+  fallback is to load with a ticket under the governor and read the status (slower, still governed). The contract does not
+  assume an API.
+- **`LoadPolicy` gains `GENERATED_ONLY(n)`**: like `LOAD_BOUNDED(n)`, but a chunk that isn't fully generated is never
+  ticketed. The item waits with the new temporary reason `NOT_GENERATED`, and the region's state shows "needs prepare".
+  **Realise defaults to `GENERATED_ONLY(64)`**, and a counter of chunks generated while a region item holds tickets must
+  stay 0.
+- **Queue-time chunk check:** at queue time every item computes the chunks its box + 7 touches. **Under a policy that holds
+  tickets** (`LOAD_BOUNDED`, `GENERATED_ONLY`), an item needing more than the batch's bound is refused at once with the new
+  reason `CHUNK_BOUND` ("needs N chunks, the bound is M"). It never waits to `TIMED_OUT`. `LOADED_ONLY` (bound 0, the 4d
+  default and Steward's staged mode) holds no tickets and is not checked. Tiles need at most 36 (6x6); lots up to 81.
+  - **One ticket budget per region.** The writing item and the heights freeze of the W tiles ahead draw from the same
+    bound. The freeze takes tickets only for columns not yet frozen, and releases each tile's tickets once its heights are
+    on disk. **Realise sets the bound to max(64, the largest item's need + 36)**, so the writer and at least one freeze
+    always fit. The freeze is otherwise sequential, so a window of 4 never needs 4 x 36 at once.
+  - The check also applies to ordinary ticket-holding batches (a behaviour fix to 4d/4e, listed under the API rules).
+- **Waiting without a time limit:** for region items, `NOT_LOADED`, `NOT_GENERATED` and `SIDECAR_UNAVAILABLE` waits don't
+  count toward `waitPolicy`. A staged region near the player can wait for days (A5B §6a). `PLAYER_IN_BOX`, `OCCUPIED` and
+  `OVERLAP_BUSY` still count.
+- **Staged near the player (`LOADED_ONLY`):** prepare is optional. Items proceed when their chunks are loaded by players
+  and never ticket. If a chunk is ungenerated, it is generated by the player's own exploration, not by Architect.
+
+### MSPT budget
+
+| Phase | Budget |
+|---|---|
+| realise writes | `placementBudgetMs` (default 4 ms) across all jobs, as 4d/4e. Region writes use the road and cell-site flags (`UPDATE_CLIENTS \| UPDATE_SKIP_ALL_SIDEEFFECTS`), so fluids and gravity blocks get no updates during the write; M3/M4 cover the consequences statically. |
+| server-thread work per tile outside the budget | heights freeze (sliced), the item start (one tick, at most 15 ms), and the P3 and P7 handoff (at most 6 ms grace, as 4e) |
+| lighting and client sync | not budgeted by Architect (vanilla's light engine and chunk sending); **measured** in the gate as the MSPT of ticks with no Architect write slice during a realise |
+| prepare | the governor above |
+
+### Crash safety
+
+Order per tile: **heights first, then the journal, then the record, then the blocks.** So the 4e K1-K8 sequence follows
+a new step H0 (heights persisted). New kill points for `dev.journal.killAt`:
+
+| Point | Where | After restart |
+|---|---|---|
+| RG1 | during prepare | resumes prepare; no blocks or journal touched |
+| RG2 | plan accepted, region record written, no tile started | region `prepared`/`planned`, queue resumes |
+| RG3 | after H0, before the tile's P3 | the frozen heights are reused (no write happened, so they are pre-region); the tile restarts |
+| RG4 | tile in P5 (writes), unclean | 4e K3: the PLACING tile entry rolls back exactly; the tile is re-queued and re-evaluated, giving the same cells (D9) |
+| RG5 | sidecar killed mid-stream | the region waits `SIDECAR_UNAVAILABLE`, then resumes; no tile duplicated |
+| RG6 | during a region group undo | 4e K7 |
+
+The 5b "lost writes" rule (an unclean stop loses block writes since the last world save) applies to tiles as to cell
+sites: settle by evidence (most cells hold `before`: release, the tile is re-queued).
+
+### Undo
+
+- `Regions.remove(regionId, options)` = 4e `removeGroup` over every entry of the region (tiles, roads, paths, lots, their
+  leaves and crates), as one undo planned per section, written by a ticked `RestoreJob`, in reverse stage order.
+- **CELL tiles keep the player's later blocks** (reported in `kept`). BOX lots restore exactly as 4e.
+- `undoStage` removes one stage. A lot's own Remove leaves the pad exact (4e's mega-lite bar, kept).
+- `CoveredPolicy` applies to removing a **tile** that a foreign site covers. KEEP is the default: hand-down, as 4e.
+
+### Region limits on the world, summarised
+
+Claim containment (M1), `IF_*` conditions, no block entities removed, nothing outside the claim, the block budget, and the
+journal path for every write. The mod enforces all of these at write time, whatever the checker reported.
+
+---
+
+## 4. Previews and the checker (6b)
+
+### The virtual world
+
+The plan survey plus the IR, evaluated by the same `realise.mjs` at **coarse resolution**: every 4th column for claims over
+256x256, full resolution below. A **full-resolution pass** covers lots + 8, paths and bridges + 4, stairs, carve edges
+(cells within 2 of a carve boundary) and gates. Lot interiors are their declared boxes (A5B §3).
+
+### The checker (M1-M14)
+
+- Rules and severities as A5B §3, which this contract adopts as written.
+- Start severities: M1 and M13 are errors, M14's uniqueness is an error (a deviation, see the table above), and every
+  other rule is a warning.
+- Promotion follows the usual process, recorded in PLAN.md, after the 6b fixtures and the 6c real runs.
+- A program may declare `rules` (R4). M1, M13 and M14 always apply.
+- **Prefix checking:** M2 (reachability) and M3 (support) run after each stage prefix.
+  - The walk graph and the support union-find are kept per stage and extended, not rebuilt.
+  - This is A5B §8's question, answered by measuring it on mega_bench: bar at most 2x a single full check.
+- **Output:** `report.json` with `{rule, severity, part, stage, count, sample: [positions <= 20], message}`, plus a summary
+  the agent and Steward can read.
+- **Checker time on mega_bench** (gate 6b): coarse at most 60 s, full-resolution passes at most 120 s, single-threaded on
+  this machine; recorded per rule.
+
+### The four views (sidecar renders, no game)
+
+| View | What | Format |
+|---|---|---|
+| `top` | Shaded relief of the post-op heightfield (hillshade from the NW), parts tinted by kind (carve, add, path), lots as outlined rectangles with ids, roads, bridges, anchors, the claim. | PNG, at most 2048 px on the long side; 1 px = 1 column up to 2048, else scaled |
+| `section` | A vertical cut along an axis: the default is `entrance` -> region centre -> the opposite claim edge; or a caller's polyline. Pre-region surface as a line, post-op solid filled by role colour, lots as boxes, water shaded, y grid every 8. One image per axis, at most 4 axes. | PNG |
+| `iso` | A low-detail isometric of the post-op heightfield mesh (one quad per sampled column), with lots as boxes and paths drawn on top. | PNG |
+| `siteplan` | The **site plan**: lots with ids, labels (from `brief`), front arrows and entrances; roads and paths with widths; bridges; stairs; utility corridors; stages as colour bands; districts (parts); anchors; scale bar and north arrow. | SVG + PNG + `siteplan.json` (all geometry as data: lot rects, entrances, paths as polylines, stages) |
+
+- The previews are written to the plan dir. They are deterministic: the same IR and survey give byte-identical PNGs (the
+  kit's pinned encoder).
+- `region.preview {planId, views, axes?}` re-renders on demand.
+- **How Steward gets them:**
+  - `Regions.previews(planId)` -> `RegionPreviews {paths: {view -> absolute path}, sitePlan: JsonObject, report}`;
+  - `RegionPlan.previews` carries the same at plan time.
+  - The client can show the PNGs (Steward's inbox, Architect's Terrain tab). The paths are valid `job.images` inputs if
+    Steward wants its own report-only review.
+- **Region ghost** (client): `ArchitectClientApi.previewRegion(planId, @Nullable String stage)`.
+  - It shows the cells of tiles within 64 blocks of the player. They come from the same tile evaluation, run in preview
+    mode over the plan survey.
+  - Beyond 64 blocks: the claim outline and the lot boxes.
+  - Tints: added, removed, path and lot. The verdict line shows the checker summary and the cell budget.
+
+### Not in phase 6: a set-level critic
+
+A5A-REVIEW S4 asked for a set-level critic (a composite of the lots along the street). 5a's critic did not reach its bar,
+and 5b's critic accepted 0 visible fixes. A set critic built on it would inherit both failures, and a region gate must not
+depend on it. **Deferred** until a recalibrated critic passes 5a's eval. The `siteplan` and `top` views are its future
+inputs, and Steward can already run a report-only review on them through `job.images`.
+
+---
+
+## 5. Claude (6c): authoring programs
+
+- **Template first.** `Regions.design(RegionDesignRequest)` first runs one cheap structured job (Sonnet). Its inputs are
+  the brief, the survey summary (4a's `summary()`: stats plus a 64x64 ASCII grid), the claim, and the catalogue of bundled
+  programs with their params. It returns `{fits, program, params, reason}`. Cost seed $0.01-0.05. When `fits`, the plan
+  runs with no further model call.
+- **Authoring.** Otherwise a design-agent session (the entry model, Opus by default as for landmarks; caller override)
+  writes `regions/<id>.mjs` in a scratch dir. It has the kit docs (`kit/REGIONS.md`, new), the bundled programs as
+  examples, the survey blob and the bible's roles. Its tools are `region plan`, `region check` and `region preview`.
+  - **Rounds are driven by checker findings only:** a round ends when the plan has no errors and none of the request's
+    `mustPass` rules (default M1, M2, M3, M4) has a finding.
+  - Caps: 4 rounds, the request's `budgetUsd`, and the 4a hard budget stop.
+  - No critic call and no critique loop.
+  - The agent may look at its own previews (image blocks under the claude login, as 5a's probe showed).
+- **Lots.** `designLots: false` (default): lots come back as specs, and the caller fills them. The 6c gate fills them from
+  existing library entries and variants (no model call).
+- **Auth and spend.** `Regions.design` uses the sidecar's configured auth, like every job: an API key is the supported
+  player path, and the claude login is the opt-in. **The gate's paid runs use the claude login only.** The gate runner
+  refuses an `ANTHROPIC_*` / `CLAUDE_*` key in its environment, as in 5b, and the gate-verifier checks the log.
+  - The 6c gate's runs: 2 template picks, 2 authoring sessions (the crater, and a custom "terraced hillside village"), and
+    at most 2 retries.
+  - **Expected about $12, cap $25, stated ceiling $35** (raise without re-planning up to it).
+  - 6a, 6b and 6d: $0. Their fixtures and mega_bench are deterministic programs, and the sim backend covers the job paths.
+
+---
+
+## 6. Java API 1.8.0, protocol, events
+
+### Rules (the 1.7.0 rules, unchanged)
+
+- `ArchitectApi.VERSION = "1.8.0"` (6a; 1.9.0 and 1.10.0 for 6b and 6c if the split is accepted, same rules).
+- Old record constructors kept. New interface methods are defaults that throw `UnsupportedOperationException("... needs
+  Architect API 1.8.0")`. **Every new enum constant is appended at the end.**
+- `tools/api-compat.mjs` checks the unchanged **1.7.0, 1.6.0 and 1.5.0** apitest jars' references and the 1.7.0 surface.
+  All three jars pass their suites against 0.11.0.
+- **Behaviour change, listed:** the queue-time `CHUNK_BOUND` refusal applies to every batch whose policy holds tickets
+  (`LOAD_BOUNDED`, `GENERATED_ONLY`); `LOADED_ONLY` batches are unchanged. A 1.7.0 `LOAD_BOUNDED` caller whose item could
+  never get its chunks now gets `ITEM_FAILED(CHUNK_BOUND)` at once, instead of `TIMED_OUT` after 10 minutes.
+
+### New types
+
+```java
+interface Regions {                                                     // ArchitectApi.regions(), a default method
+  CompletableFuture<RegionPlan> plan(RegionPlanRequest r);              // survey (sliced), sidecar plan, (6b) check + previews
+  CompletableFuture<PrepareView> prepare(PrepareRequest r);             // completes when every chunk is generated or it was cancelled
+  void cancelPrepare(String regionOrPlanId);
+  CompletableFuture<String> realise(RealiseRequest r);                  // -> regionId once queued (its group id in view().groupId)
+  CompletableFuture<RemoveResult> remove(String regionId, RemoveOptions o);
+  Optional<RegionView> get(String regionId);  List<RegionView> list(@Nullable String owner);
+  CompletableFuture<RegionPreviews> previews(String planId, Set<PreviewView> views, List<List<BlockPos>> axes);   // 6b
+  CompletableFuture<String> design(RegionDesignRequest r);              // 6c, -> designId (Design.kind REGION)
+}
+record RegionPlanRequest(String program /* bundled id or a path under <gameDir>/architect/regions/programs */, JsonObject params,
+                         ServerLevel level, BoundingBox claim, @Nullable Long seed, @Nullable String bible, @Nullable Integer bibleVersion,
+                         LoadPolicy surveyLoad, @Nullable String owner, JsonObject ext) {}
+record RegionPlan(String planId, String programId, String programSha, String irSha, String surveySha, long seed,
+                  List<LotSpec> lots, List<String> stages, Map<String, BlockPos> anchors, RegionBudget budget,
+                  @Nullable CheckReport report /* 6b */, @Nullable RegionPreviews previews /* 6b */, List<String> notes) {}
+record LotSpec(String id, String stage, BoundingBox lot, int floorY, Direction front, @Nullable String brief, BlockSize max, JsonObject ext) {}
+record RegionBudget(long cells, long removed, long added, int tiles, int chunks, int chunksToGenerate) {}
+record PrepareRequest(String planId, @Nullable Integer inFlight) {}
+record PrepareView(String planId, int chunksTotal, int chunksGenerated, int chunksMissing, State state) { enum State { RUNNING, DONE, CANCELLED, FAILED } }
+record RealiseRequest(String planId, Mode mode, @Nullable ServerPlayer actor, Map<String, String> lotEntries /* lot id -> blueprint id[@version] */,
+                      @Nullable LoadPolicy load /* null = GENERATED_ONLY(bound) */, boolean autoApprove, @Nullable List<String> stages,
+                      boolean force, JsonObject ext) {}
+record RegionView(String id, String planId, String irSha, String owner, JsonObject ext, String groupId, BoundingBox claim, RegionState state,
+                  List<StageProgress> stages, List<LotState> lots, long cellsWritten, Map<String, Long> cellsSkipped,
+                  @Nullable Refusal waiting, @Nullable PrepareView prepare) {}
+enum RegionState { PLANNED, PREPARING, PREPARED, PLACING, PLACED, PARTIAL, FAILED, REMOVING }
+record StageProgress(String name, Stage.State state, int tilesDone, int tilesTotal, long cells) {}
+record LotState(String id, @Nullable String siteId, String state /* pad | queued | placed | failed:<reason> */) {}
+record CheckReport(boolean ok, int errors, int warnings, List<Finding> findings) {                                    // 6b
+  record Finding(String rule, String severity, @Nullable String part, @Nullable String stage, int count, List<BlockPos> sample, String message) {} }
+enum PreviewView { TOP, SECTION, ISO, SITEPLAN }                                                                         // 6b
+record RegionPreviews(Map<PreviewView, List<Path>> images, JsonObject sitePlan) {}                                       // 6b
+record RegionDesignRequest(String brief, ServerLevel level, BoundingBox claim, @Nullable String bible, List<String> mustPass,
+                           boolean templateFirst, boolean designLots, @Nullable String model, @Nullable Double budgetUsd,
+                           @Nullable String owner, JsonObject ext) {}                                                    // 6c
+```
+
+### Additions to existing types
+
+- `ArchitectApi.regions()` (default: throws).
+- `LoadPolicy` gains the component `boolean generate`. The old constructor means `generate = true`. Also
+  `GENERATED_ONLY(int)` and `generates()`.
+- `CellWrite` gains `@Nullable Cond cond`, with `enum Cond { IF_NATURAL, IF_SOLID_NATURAL, IF_AIR_OR_FLUID, ALWAYS_OURS }`
+  (null = the request's `naturalOnly` meaning, as before). That makes the condition available to Java `placeCells` callers
+  too.
+- `SiteView` gains `@Nullable String region`. `Sites.list()` keeps returning every site, tiles included. Architect's
+  Placed view groups a region's tiles into one row.
+- `Design.Kind` gains `REGION` (appended, 6c).
+- `Reason` (appended): `NOT_GENERATED`, `CHUNK_BOUND`, `DRIFTED`, `SIDECAR_UNAVAILABLE`, `PLAN_STALE`, `REGION_LIMIT`
+  (and `PLAYER_BLOCKS` in 6c only if needed, see the 6c gate).
+  - `DRIFTED`: realise refuses when the region-start heightfield sample differs from the plan survey beyond the tolerance:
+    per sampled column |dh| at most 2 on at least 95%, and no column over 8 inside a lot pad or path corridor. Steward can
+    replan.
+  - `PLAN_STALE`: the IR's kit version is newer than the running kit.
+- Client: `ArchitectClientApi.previewRegion(String planId, @Nullable String stage)` and `PreviewStyle.REGION` (appended,
+  6b).
+
+### Events and features
+
+- **Events:**
+  - `REGION_STATE(RegionView)` on every state change;
+  - `REGION_PROGRESS(RegionView)` at most 1/s;
+  - `PREPARE_PROGRESS(PrepareView)` at most 1/s.
+  - The existing `ITEM_*`, `STAGE_STATE` and `SITE_PLACED/REMOVED` events fire for tiles and lots as for any batch item;
+    tile items carry `ext["architect_mc:tile"]`.
+- **Features:**
+  - 6a: `regions`, `regionPrepare`, `generatedOnly`, `cellConditions`, `chunkBound`;
+  - 6b: `regionCheck`, `regionPreview`, `regionGhost`;
+  - 6c: `regionDesign`.
+
+### Sidecar protocol (2, additive)
+
+Client -> sidecar:
+- `region.plan {program, params, seed, claim, surveyBlobId, bible?, bibleVersion?}` -> ack `{planId}`, then
+  `region.planned {planId, irSha, lots, stages, anchors, budget, notes, report?, previews?}` or
+  `region.failed {planId, message}`;
+- `region.tiles.request {planId, irSha, ir?, tiles: [{key, heights}]}`; the answers are `region.tile` /
+  `region.tile.error`;
+- `region.preview {planId, views, axes?}` -> ack `{paths, sitePlan}` (6b);
+- `region.check {planId}` -> ack `{report}` (6b);
+- `region.design {spec}` -> ack `{designId}`, then `design.upsert` with `kind: "region"` (6c);
+- `region.release {planId}` (drop cached tiles and IR).
+
+Sidecar -> client: `region.planned`, `region.failed`, `region.tile`, `region.tile.error`, plus `ir_unknown` as an error
+code on `region.tiles.request`.
+
+Snapshot features: `region.plan`, `region.tiles`, `region.preview`, `region.check`, `region.design`. Protocol-1 clients see
+none of it.
+
+**Kit CLI:** `node kit/tools/region.mjs plan <program> --params p.json --survey s.bin --seed n --claim x0,z0,x1,z1 [--bible b.json] [--out dir]`,
+`eval <ir.json> --tile tx,tz --heights h.bin [--json]`, `check <ir.json> --survey s.bin` (6b), and
+`preview <ir.json> --survey s.bin --views top,section,iso,siteplan` (6b). Exit codes are 0, 1 (findings or failure) and 2
+(usage), as `diff.mjs`.
+
+### DevBridge (docs/DEVBRIDGE.md changelog)
+
+- `dev.region.plan`, `dev.region.prepare`, `dev.region.realise`, `dev.region.state`, `dev.region.remove`.
+- `dev.region.hash {regionId | box, ySpan?, exclude?}`: sliced over ticks; tiles of 64x64 columns, hashed per tile and
+  combined.
+- `dev.chunks.generated {since}`: the number of chunks that reached a generated status since a mark (the "0 generated
+  during realise" counter).
+- `dev.mspt.trace {start|stop}`: per-tick times split into Architect slices, the journal handoff and the rest.
+- `dev.journal.killAt` gains RG1-RG6.
+- `dev.heap {gc: true}`: used heap after a forced GC.
+
+---
+
+## 7. Performance budgets
+
+Measured on this machine (M5 Max), dev client, singleplayer, render distance 12, unless a gate item says otherwise.
+
+| What | Budget |
+|---|---|
+| tile evaluation (sidecar, 4 workers) | at least 3x the write rate: at least 45k cells/s on mega_bench; the writer is starved (no ready tile) in at most 5% of its ticks |
+| wire size | at most 4 bytes per cell (packed, before base64) |
+| realise write rate at 4 ms, prepared chunks | **at least 15k cells/s** = cells written / wall seconds from the first tile write to the last, prepare excluded. The 4e step's `cellsPerSecond` is recorded beside it. |
+| MSPT during realise | **0 ticks over 50 ms**; p99 at most 25 ms |
+| MSPT during prepare | **0 ticks over 100 ms**; at most 1% of ticks over 50 ms; chunks/s recorded |
+| chunks generated during realise | **0** |
+| failed items | **0** `TIMED_OUT`, 0 `NOT_LOADED`/`NOT_GENERATED` failures, 0 `CHUNK_BOUND` in the fixture |
+| liveness (because region waits have no time limit, "0 failures" alone could pass by hanging) | config A finishes every item within **45 minutes** of the first tile write. Under `GENERATED_ONLY`, no item waits more than **30 s** while its chunks are all generated and it holds its tickets (`dev.region.state` logs every wait over 10 s with its chunk statuses). Config B: progress resumes within **60 s** of the player arriving at a waiting item's chunks, and within **30 s** of the sidecar coming back. |
+| memory | The dev client's heap holds client and integrated server together, so the **baseline** is the used heap after a forced GC in the same world, standing at the claim centre, with no region running. Used heap after a forced GC at 5 checkpoints is at most baseline + 1 GB, and mega_bench completes under **`-Xmx` = baseline + 2 GB** (rounded up to a whole GB; expected 4-5 GB). The 4e run's 6.27 GB was a sum of pool peaks, unconstrained: it is recorded the same way for comparison. Sidecar RSS at most 1.5 GB. |
+| journal | at most 1 byte per cell over mega_bench (4e: 0.40); index at most 8 MB; index commit p99 at most 100 ms |
+| region group undo | exact (gate); at most 10 minutes for mega_bench; 0 ticks over 50 ms |
+| one lot's undo | at most 5 s; the pad under it exact |
+| checker (6b) | coarse at most 60 s, full-resolution at most 120 s on mega_bench; prefix checks at most 2x one full check |
+| plan (sidecar) | the mega_bench plan at most 30 s including the coarse budget pass |
+
+---
+
+## 8. mega_bench (Steward's fixture, A5B §6a)
+
+`kit/regions/mega_bench.mjs`, bundled and deterministic (seed fixed), with no Claude call:
+- claim 1000x1000;
+- **one big carve**: a bowl of radius 160, depth 28, with a `rubble` lining;
+- **a ring wall**: radius 470, height 10, thickness 4, towers every 48, 4 gates;
+- **terraces**: 3 terraced hills of 5 levels;
+- **bridges**: 4, spans 40-120, pillar supports, one with arches (6b; a pillar version in 6a);
+- **stairs**: a spiral stair into the bowl;
+- **roads**: ground roads joining the gates and the districts, plus graded roads to the terraces;
+- **lots**: 200 lots on pads, children from 4 stub blueprints (boxes 9-24 wide, 6-14 tall) and the 4 kit examples, so 4d's
+  shared cell lists apply;
+- **stages**: `ground` (carve, terraces, pads), `ways` (roads, stairs, bridges), and `lots-1` to `lots-4` (50 lots each).
+
+The plan records the exact cell count. **About 10M cells (±30%)** is expected, comparable to 4e's 11.6M.
+
+Two configurations, each in a fresh world of fixed seed `mega6` (normal worldgen: terrain generation is the point):
+- **A: prepared.** `prepare`, then `realise` with `GENERATED_ONLY`, the player standing at the claim centre. Every bar in
+  §7 applies.
+- **B: staged near the player.** `LOADED_ONLY`, with a scripted player walk through the claim (DevBridge teleports every
+  30 s along a route), a relog in the middle of `lots-2`, and a sidecar kill in the middle of `ways`.
+  - Bars: 0 failed items, resume after the relog and after the sidecar comes back, and stage progress reported.
+  - Throughput and MSPT are recorded (here the player's own exploration generates chunks, which Architect doesn't govern).
+
+**Exactness, stated up front** (the 4d L3 / 4e class: worldgen blocks that can't stand on their own break after a restore):
+- **E-flat.** mega_bench on a flat-preset world, same seed, with `randomTickSpeed 0`, `doMobSpawning false`,
+  `doFireTick false` and `doWeatherCycle false`. After the group undo the claim + 8 over the written y span ± 8 equals the
+  pre-region hash, every cell plus BE NBT: **0 mismatches**.
+- **E-normal.** Configuration A's world, same gamerules. Mismatches are allowed only where a deterministic classifier
+  (`dev.region.classify`) labels the **pre-region** cell as unable to stand on its own: a gravity block over air or fluid,
+  or a plant or mushroom without valid support or light.
+  - Each one is listed with its position.
+  - The count is at most 0.01% of written cells.
+  - The same classifier run over the atomic-restore baseline of one tile in a world copy must show the same class (4e's
+    method).
+
+---
+
+## 9. Phase 6a gate
+
+1. **Unit and property tests (no game, no Claude):**
+   - Kit:
+     - shape SDFs against analytic fixtures;
+     - every 6a primitive's guarantee, as a property over random params: stair rise and headroom, bridge span and deck
+       continuity, terrace flatness, pad flatness and cut/fill limits, ring gates clear, pillar reaching ground;
+     - conditions, last-op-wins, claim clipping;
+     - the realise lint;
+     - packing round trips.
+   - **Determinism (D9):** IR byte-identical over 3 plan runs; every mega_bench tile's sha identical for 1 and 4 workers,
+     forward and shuffled order, and on Linux and macOS CI (the tile shas are a committed golden file).
+   - Mod, pure JVM (world seam): a tile's P1-P8 with conditions; region undo planning equals per-tile planning; the
+     queue-time `CHUNK_BOUND`; `GENERATED_ONLY` never tickets an ungenerated chunk (fake chunk source).
+   - Sidecar: the `region.*` messages; the window and backpressure; `ir_unknown`; worker crash; plan limits; the sim
+     backend for `region.plan` with a throwing program.
+2. **The timeout diagnosis** (`artifacts/gate6a/timeouts.md`): the 11 megabig timeouts reproduced and classified, with the
+   fix that addresses each class.
+3. **Chunk-status verification:** how 26.3 knows a chunk is generated without loading it (or the governed fallback),
+   written down with its measured cost.
+4. **mega_bench A (prepared):** every §7 bar, recorded in `artifacts/gate6a/REPORT.md` and `megabench.json`:
+   - plan time; prepare time, chunks and MSPT;
+   - realise cells, wall, cells/s both ways, MSPT max/p99/ticks over 50 ms, starvation share;
+   - the lighting/sync tick share;
+   - the heap baseline, the checkpoints, and the run under the capped `-Xmx`;
+   - journal bytes, index size and commit p99;
+   - wire bytes per cell, evaluation p50/p99 per tile;
+   - group undo time and MSPT; one lot's undo time.
+5. **mega_bench B (staged):** 0 failed items, the relog and sidecar-kill resumes, per-stage progress events.
+6. **Exactness:** E-flat (0 mismatches) and E-normal (the classified rule), after the group undo. One stage's undo
+   (`lots-3`) and one lot's undo are exact on the cells they own. A player block placed on a pad cell after realise survives
+   the group undo and is reported in `kept`.
+   **Forest rim:** a tile where the bowl's rim crosses worldgen forest. No log is left without a log or ground under it
+   (checked by a scan), held leaves are on the tile's `leaves` entry, and the tile's undo is exact, with
+   `randomTickSpeed 3` (default) over a 2-minute stand before the undo.
+7. **Crash:** RG1-RG6 and K3/K7 inside a region, each by `dev.journal.killAt` and a restart. Each ends in the stated state,
+   a resumed realise gives the same region hash as an uninterrupted one in a world copy, and the final group undo is exact
+   (E-flat world).
+8. **Invariant iii for regions:** a lot LAYERed on a pad with a player edit on a lot cell. Remove the pad and the lot in
+   both orders: the same end state (no CELL over BOX occurs; the test proves it).
+9. **Regressions:**
+   - every sidecar, kit and mod test;
+   - the 4d gate; 4e gate items 2 (any order), 5 (crash), 6 (roads plus village), 8 (MSPT and throughput), 9 (4d
+     regression) and 10 (mega-lite);
+   - 5b gate items 2 (chains: the fixed script plus 5 seeded), 4 (village deltas) and 5 (MSPT);
+   - the 4a jobs, 4b and 4c sim suites;
+   - **the 1.7.0, 1.6.0 and 1.5.0 apitest jars, unchanged, pass against 0.11.0**, and `api-compat` is clean.
+   - **The throughput margin:** the 4e village plus roads at 4 ms is run **3 times**; the bar is the **median at least
+     15k cells/s**, with all three numbers and their spread recorded.
+     - If the median is within 5% of the bar (under 15.75k), the verifier runs 3 more and the median of 6 decides.
+     - A miss fails the gate. It is not waived: the fix is either a throughput change or an explicit budget change by Noah.
+     - A target of at least 17k is stated, not gated: 6a may profile the per-cell path, since it now matters at 10M
+       cells.
+10. gate-verifier checks the result, including that no step spent money.
+
+## Phase 6b gate (outline, frozen with 6b's own review)
+
+- **Fixtures and expected reports:** `crater_works`, `sky_isle`, `rift_city` and `walled_hill` each match their expected
+  checker report (which rules fire, and why).
+- **Broken variants caught:** a lot with no path (M2), a carve that opens a lake (M4), a floating spur (M3), a dark cavern
+  (M5), a bridge span over its limit (M10), a stair with rise 2 (M7).
+- **Prefix checks:** they hold on every stage prefix of `walled_hill`; the per-prefix check time is within budget.
+- **Preview goldens:** byte-identical; the section and site-plan views have been looked at (screenshots); `siteplan.json`
+  validates against its schema.
+- **The region ghost:** a screenshot that has been looked at, inside and beyond 64 blocks.
+- **Checker time on mega_bench** within budget.
+- **The Terrain tab:** a bundled program planned, previewed, realised and undone in a dev world, exact (`crater_works`
+  at 200x200 under **default** gamerules, with the classified-mismatch rule).
+- **Regressions:** the 6a gate items 4 (shortened: one mega_bench A run), 6 and 9.
+
+## Phase 6c gate (outline; Steward's A5B §6 gate, refined)
+
+- From a fresh dev world, `Regions.design("a crater mining facility")`: a template pick or authored program. The plan has
+  **no M1, M2, M3 or M4 findings**. It is prepared, then realised through the queue. Its lots are filled from library
+  entries and variants, then placed. One `Regions.remove` returns the area cell for cell (the 6a exactness rules).
+- **The player block, split into its two cases:**
+  - **(a) before realise:** a block the player placed inside a lot's pad area is skipped by the pad (noted). The lot's
+    child must then refuse, because A5B N2 says the player's own blocks inside a lot still refuse placement. The region
+    ends `partial`, and after the group undo the block is still there.
+    - Not verified from the code for this draft: whether 0.10.0's check refuses a non-natural block without a block entity
+      inside a LAYERed box, and with which `Reason`. The occupancy path gives `PLAYER_IN_BOX` or `OCCUPIED` for entities
+      only, and `BLOCK_ENTITIES` covers block entities only.
+    - The 6c build pins the reason. If the check only clears such a block, 6c adds the refusal as a new appended `Reason`,
+      `PLAYER_BLOCKS`, returned by `check()` and the queue. It is a behaviour change to 4e's LAYER, listed.
+  - **(b) after realise:** a block placed on a pad or path cell survives the group undo and is reported in `kept`.
+- A second brief ("a terraced hillside village") through authoring, with its checker rounds recorded.
+- **Spend:** within the $25 cap; the claude login only (environment log); the estimate within ±50% for each run.
+- **Regressions:** 6a items 6 and 9, and 6b's fixtures.
+
+## Phase 6d (outline, recommended to wait)
+
+- **Region delta (A5B N7):** re-plan, then diff the IRs by part id. Changed parts' tiles are re-evaluated **against the
+  same frozen heightfield**, and the new cells are written as a new CELL layer per tile.
+  - LIFO undo, as 5b D5.
+  - Cells under a standing lot refuse `COVERED`, or the caller cascades the lots: no CELL over BOX.
+- **Deltas for cell sites and 4e roads.**
+- **Pad delta under standing lots** (5b D7's deferral): rewriting the cover's `before` with its own undo. It needs its own
+  invariant work, because it is the only place a terrain change would sit under a BOX entry.
+
+## Build order inside 6a
+
+1. The timeout diagnosis and the chunk-status verification (gate items 2 and 3), with the 0.10.0 jar. Also an index-commit
+   measurement at 2k synthetic entries.
+2. Kit: IR, shapes, noise, the realise evaluator, packing, the lint, the 6a primitives, the determinism goldens,
+   `mega_bench.mjs`.
+3. Sidecar: `region.plan` in the child process, the worker pool, `region.tiles` with the window.
+4. Mod: prepare and the governor; `GENERATED_ONLY`; `CHUNK_BOUND`; heights freeze (H0); tile items on the 4e large-cell
+   path; region records and states; RG kill points; undo.
+5. Java 1.8.0, apitest steps, api-compat.
+6. Gate items 1 and 4-9.
+
+## Open questions for Steward
+
+- **S1. The write unit.** A region change-set is a set of 64x64 tile entries (D4), one undo group with the region's stages.
+  Is that enough for N8, given `RegionView` aggregates the tiles and `Sites.list` shows them individually? Or do you want
+  tiles hidden from `Sites.list(owner)`?
+- **S2. The frozen heightfield (D3) instead of "a fresh survey per section".** Surface-relative ops resolve against the
+  pre-region surface captured at first touch. The drift check runs at region start (and per stage) against the plan
+  survey. OK? The tolerance is |dh| at most 2 on 95% of sampled columns and none over 8 in pads and paths. Are those numbers
+  right for your replan prompt?
+- **S3. Roads (D8).** Ground roads compile to 4e roads; graded roads, ramps, stairs and decks are cell lists whose walk
+  cells count as road for approaches. Does that cover sky roads and crater ramps?
+- **S4. Closed shape library (D1).** No per-cell JS callbacks at realise time. `heightfield` and `mask` blobs are the escape
+  hatch. Enough for rift, sky city, crater and castle, or is a shape missing?
+- **S5. Roles.** `scorched` and `lining` aren't macro roles today. Use extra roles with a fallback, or add them to
+  `MACRO_ROLES` (a bible-format bump that settlement bibles would then need)?
+- **S6. Prepare as a step.** Region realise waits for `prepare` by default (`GENERATED_ONLY`), and the state shows
+  "preparing ground". Is that acceptable in your inbox flow, or should realise auto-prepare?
+- **S7. Lot children.** Realise takes `lot id -> blueprint` from you, and unmapped lots stay pads. Is `designLots` in 6c
+  needed, or do you always run your own design group?
+- **S8. Waits without a limit** for region items (`NOT_LOADED`, `NOT_GENERATED`, `SIDECAR_UNAVAILABLE`). Good for staged
+  builds over days?
+- **S9. The mega_bench composition** in §8 (stages, 200 lots, about 10M cells): does it match what you want measured? Is
+  configuration B's scripted walk a fair stand-in for "build near the player"?
+- **S10. The site plan as SVG + PNG + `siteplan.json`**, and the set-level critic deferred: OK?
+- **S11. Survival.** Regions refuse in survival-toggle worlds until Noah's terrain rule (N4). Does anything in your Supplied
+  or Hardcore plans need regions before that?
+
+## Open questions for Noah
+
+- **N1. The split.** 6a, 6b, 6c and 6d, each gated, with API 1.8.0, 1.9.0 and 1.10.0 (or one 1.8.0 with members that throw
+  until they land). And 6d waits for Steward's phase 3?
+- **N2. Spend.** 6c only: about $12 expected, a $25 cap, a $35 ceiling, on the claude login. 6a and 6b are $0.
+- **N3. Pre-generation.** `prepare` generates terrain the player hasn't explored: about 4.2k chunks for mega_bench, tens of
+  MB of region files. OK as an explicit step, shown in the UI?
+- **N4. Survival terrain.** Free natural-only cut and fill (no BOM, no drops) for terrain ops in survival-toggle worlds, or
+  regions stay creative/Patron only? (Open since 4e SHOULD 2.)
+- **N5. Gate conditions.** The scale exactness runs use `randomTickSpeed 0` and no mob spawning, fire or weather. The 6b
+  Terrain-tab run uses default rules. Acceptable?
+- **N6. Claim limits.** 1024x1024 by default and 2048x2048 behind a dev flag, matching Steward's "plausible after measuring"
+  and "experimental" classes.
+- **N7. Player UI.** A Terrain tab with bundled programs in 6b, or commands only until Steward needs it?
+- **N8. The throughput bar.** Keep 15k at 4 ms (median of 3, a miss fails), or lower the bar explicitly if 6a measures that
+  10M-cell terrain makes it unrealistic?
+
+## Deferred (recommended)
+
+- **The set-level critic and any critique of regions** (5a/5b outcomes; future inputs: `siteplan`, `top`).
+- **Region evolution (6d):** region deltas, deltas for cell sites and roads, pad deltas under standing lots.
+- **Survival regions** and construction mode for cell sites (N4).
+- **Routed roads** (pathfinding between entrances). Programs give polylines.
+- **Utility modules** that use `utility` corridors (Steward phase 5).
+- **Nether and End regions** (the survey's ground definition).
+- **Moving or rotating a region.** Re-plan and re-realise.
+- **A Java copy of the shape math.** Never (A5B §7.2).
+- **Textured region renders**, and HeadlessMC for scale gates.
+- **Absorbing covered entries** (4e's `absorb`). Revisit only if mega_bench's index bar fails.
+- Still open from earlier phases, unchanged: the Nether ground search; exports without source; REPLACE overlap.
+
+## Coordinator decisions on Noah's questions (provisional; Noah may override)
+
+- **N1** Yes: split into 6a (engine and scale, API 1.8.0 / mod 0.11.0), 6b (checker and previews), 6c (Claude authoring) and
+  6d (region deltas, waiting for Steward's phase 3), each with its own gate and minor version.
+- **N2** 6c: about $12 expected, a $25 cap and a $35 ceiling, on the claude login. This is in line with the spend Noah has
+  approved before; he is told before 6c starts.
+- **N3** Yes: pre-generating unexplored chunks with `prepare` is an explicit, throttled step that the caller (or the player)
+  starts. It is never implicit.
+- **N4** Regions refuse in survival-toggle worlds until Steward's difficulty modes settle the terrain rules (the 4e
+  `placeCells` precedent).
+- **N5** Yes: scale exactness runs use the gamerules the draft proposes (random ticks 0, fire spread off, mob griefing off) and
+  state them in the report.
+- **N6** Yes: 1024 by default, and 2048 behind a dev flag.
+- **N7** Commands and the API in 6b. A player-facing Terrain tab waits until regions see real use.
+- **N8** Keep the 15k bar, measured as the median of 3 runs.
