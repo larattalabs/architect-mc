@@ -89,6 +89,15 @@ public final class Batches {
 		QItem i = b == null || itemKey == null ? null : b.item(itemKey);
 		if (i != null && i.status == QItem.Status.PLACING) {
 			i.committing = true;
+			if ("tile".equals(i.itemKind)) {
+				// phase 6a: a tile's writes are done: its chunk tickets go now, so the next tile can take the budget while this
+				// one's P7 commit runs (the writer would idle on the budget otherwise)
+				MinecraftServer srv = serverOf();
+				if (srv != null) {
+					untickItem(srv, b, i.key);
+					untickItem(srv, b, "job:" + i.key);
+				}
+			}
 		}
 	}
 
