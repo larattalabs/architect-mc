@@ -1362,7 +1362,7 @@ steps.village = async () => {
       await settle(3000);
       const hu = (await hash(V_BOX)).sha256;
       check(hu === v.hPlaced, 'village: undoStage("upgrade") reverts all 12 deltas exactly', { ur, hu, want: v.hPlaced });
-      const rg = await result(await api(`sgremove ${v.group} - noforce`), 900_000);
+      const rg = await result(await api(`sgremove ${v.group}`), 900_000);
       await settle(3000);
       const hr = (await hash(V_BOX)).sha256;
       check(hr === v.h0, 'village: removeGroup afterwards is exact', { rg, hr, want: v.h0 });
@@ -1482,12 +1482,28 @@ steps.vprobe = async () => {
   const done = await waitBatch(b.id, 10 * 60_000);
   const stats = await call('dev.placement.stats', {});
   log(`  vprobe: ${done.items.map((i) => i.status).join(',')} msptMax ${stats.msptMax} over50 ${stats.ticksOver50ms}`);
-  const rg = await result(await api(`sgremove ${v.group} - noforce`), 900_000);
+  const rg = await result(await api(`sgremove ${v.group}`), 900_000);
   await settle(3000);
   const h = await hash(V_BOX, [], true);
   log(`  vprobe: removeGroup ${JSON.stringify(rg).slice(0, 300)}; exact ${h.sha256 === v.h0}`);
   if (h.sha256 !== v.h0) {
     fs.writeFileSync(path.join(OUT, 'vprobe-after.json'), JSON.stringify(h.list ?? []));
+  }
+  await leaveWorld();
+};
+
+steps.vcheck = async () => {
+  if (!dev) await connect();
+  const v = ctx.village5;
+  await fresh('G5B VProbe', 'G5B VBase');
+  await tp(VOX + 50.5, 120, VOZ + 60.5);
+  await installVillageV2(v.dir);
+  for (const k of Object.keys(v.ids)) {
+    const t0 = Date.now();
+    const c = await deltaCheck(v.ids[k], 2);
+    const t1 = Date.now();
+    const c2 = await deltaCheck(v.ids[k], 2);
+    log(`  ${k}: check ms ${c.ms} (${t1 - t0} wall), again ${c2.ms}`);
   }
   await leaveWorld();
 };

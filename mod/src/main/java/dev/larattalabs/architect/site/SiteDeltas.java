@@ -216,8 +216,59 @@ public final class SiteDeltas {
 
 	/** The blueprint delta of two versions (the per-part summary, authoritative for world writes; off-thread capable). */
 	public static TemplateDelta.Result templateDelta(Blueprints.Version a, Blueprints.Version b) {
-		return TemplateDelta.delta(new TemplateDelta.Version(a.raw(), a.parts(), a.entry().json()), new TemplateDelta.Version(b.raw(), b.parts(), b.entry()
+		TemplateDelta.Result r = templateDeltaCached(a, b);
+		if (r != null) {
+			return r;
+		}
+		r = TemplateDelta.delta(new TemplateDelta.Version(a.raw(), a.parts(), a.entry().json()), new TemplateDelta.Version(b.raw(), b.parts(), b.entry()
 			.json()));
+		synchronized (DIFFS) {
+			DIFFS.put(diffKey(a, b), r);
+		}
+		return r;
+	}
+
+	/** Template deltas by the two versions' content (the diff of a kit pair costs tens of ms: never twice, and off the server thread for batches). */
+	private static final Map<String, TemplateDelta.Result> DIFFS = new LinkedHashMap<>(32, 0.75f, true) {
+		@Override
+		protected boolean removeEldestEntry(Map.Entry<String, TemplateDelta.Result> e) {
+			return size() > 64;
+		}
+	};
+	private static final Map<String, java.util.concurrent.CompletableFuture<TemplateDelta.Result>> DIFFING = new java.util.concurrent.ConcurrentHashMap<>();
+
+	private static String diffKey(Blueprints.Version a, Blueprints.Version b) {
+		return a.sha256() + ">" + b.sha256() + ":" + a.entry().json().hashCode() + ":" + b.entry().json().hashCode();
+	}
+
+	static TemplateDelta.@Nullable Result templateDeltaCached(Blueprints.Version a, Blueprints.Version b) {
+		synchronized (DIFFS) {
+			return DIFFS.get(diffKey(a, b));
+		}
+	}
+
+	/** Whether the template delta of the site's current version and {@code to} is ready; when not, starts it on a worker thread. */
+	static boolean diffReady(MinecraftServer server, String siteId, int toVersion) {
+		Site b = Sites.get(siteId);
+		if (b == null) {
+			return true;
+		}
+		int head = headVersion(b.blueprint());
+		int to = toVersion <= 0 ? head : toVersion;
+		int from = versionOf(server, b);
+		Blueprints.Version va = from == 0 ? null : Blueprints.version(server, b.blueprint(), from);
+		Blueprints.Version vb = Blueprints.version(server, b.blueprint(), to);
+		if (va == null || vb == null || templateDeltaCached(va, vb) != null) {
+			return true;
+		}
+		String k = diffKey(va, vb);
+		java.util.concurrent.CompletableFuture<TemplateDelta.Result> f = DIFFING.computeIfAbsent(k, x -> java.util.concurrent.CompletableFuture.supplyAsync(
+			() -> templateDelta(va, vb)));
+		if (f.isDone()) {
+			DIFFING.remove(k);
+			return true;
+		}
+		return false;
 	}
 
 	// ------------------------------------------------------------------ the site's journal side

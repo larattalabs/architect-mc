@@ -276,6 +276,10 @@ public final class Batches {
 				return;
 			}
 		}
+		// the template diff runs on a worker thread; the item starts on a later tick once it is ready
+		if (!SiteDeltas.diffReady(server, r.siteId(), r.toVersion())) {
+			return;
+		}
 		long tc = System.nanoTime();
 		SiteDeltas.Check c = i.construction ? Builder.checkConstructionDelta(level, r) : SiteDeltas.check(level, r);
 		Architect.LOGGER.debug("Batch {}: the check of {} took {} ms", b.id, i.key, (System.nanoTime() - tc) / 1e6);
