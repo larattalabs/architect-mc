@@ -339,6 +339,139 @@ steps.smoke = async () => {
   return { plan: p2, prepare: pr, state: st, remove: rm };
 };
 
+// ------------------------------------------------------------------ gate 4: mega_bench A (prepared)
+
+const pct = (a, q) => {
+  const b = [...a].sort((x, y) => x - y);
+  return b.length ? b[Math.min(b.length - 1, Math.floor(b.length * q))] : 0;
+};
+const median = (a) => pct(a, 0.5);
+
+/**
+ * mega_bench configuration A in a fresh copy of the mega6 world: plan (LOADED_ONLY: the prepare estimate), prepare (governed,
+ * MSPT traced), plan again over the prepared chunks (GENERATED_ONLY: the plan that is realised), a pre-region snap of the claim
+ * + 8 (E-normal), realise under GENERATED_ONLY with every §7 number, then the group undo (timed, MSPT) and the diff against the
+ * snap. opts.xmx/gcCheckpoints: the capped-heap run (forced GCs at 5 checkpoints; its MSPT is not judged).
+ */
+async function megaRun(name, opts = {}) {
+  const out = { world: name };
+  await fresh(name, opts.base ?? 'G6A Mega Base');
+  await cmd('/architect reload').catch(() => null);
+  await tp(0.5, 160, 0.5);
+  await settle(5000);
+  out.heapBaseline = await call('dev.heap.gc', {}, 120_000);
+  log(`  heap baseline after GC: ${out.heapBaseline.usedMb.toFixed(0)} MB (max ${out.heapBaseline.maxMb.toFixed(0)})`);
+  const program = opts.program ?? MEGA;
+  const p1 = await plan(program, 'loaded', opts.params);
+  out.plan1 = { ms: p1.ms, budget: p1.budget, irSha: p1.irSha };
+  await call('dev.mspt.trace', { start: true });
+  const t0 = Date.now();
+  const pr = await prepare(p1.planId, opts.inFlight);
+  out.prepare = { seconds: (Date.now() - t0) / 1000, view: pr, stats: pr.stats, mspt: await call('dev.mspt.trace', { stop: true }) };
+  log(`  prepare: ${JSON.stringify(out.prepare.stats)}; MSPT ${JSON.stringify(out.prepare.mspt.all)}`);
+  const p2 = await plan(program, 'generated:64', opts.params);
+  out.plan = { planId: p2.planId, ms: p2.ms, budget: p2.budget, irSha: p2.irSha, stages: p2.stages, lots: p2.lots.length };
+  const yr = irY(p2);
+  const box = [program.claim[0] - 8, yr[0] - 8, program.claim[1] - 8, program.claim[2] + 8, yr[1] + 8, program.claim[3] + 8];
+  out.box = box;
+  if (opts.snap !== false) {
+    const t1 = Date.now();
+    out.snap = await call('dev.region.hash', { box, mode: 'snap', file: path.join(OUT, `${name.replace(/\s+/g, '_')}.snap.gz`) }, 4 * 3_600_000);
+    log(`  snap ${out.snap.cells} cells in ${((Date.now() - t1) / 1000).toFixed(0)} s, ${out.snap.bytes} bytes`);
+  }
+  const g0 = await call('dev.chunks.generated');
+  await call('dev.tiles.stats', { reset: true });
+  await call('dev.placement.stats', { reset: true });
+  await call('dev.heap', { reset: true });
+  if (!opts.gcCheckpoints) await call('dev.mspt.trace', { start: true });
+  const tr = Date.now();
+  const region = await realise(p2.planId, opts.realise ?? {});
+  out.region = region;
+  const stageLog = {};
+  const heaps = [];
+  let lastStage = null;
+  const st = await waitRegion(region, 4 * 3_600_000, async (s) => {
+    const running = s.view.stages.find((x) => x.tilesDone < x.tilesTotal || x.state === 'PLACING');
+    const name2 = running?.name ?? 'done';
+    if (name2 !== lastStage) {
+      const g = await call('dev.chunks.generated');
+      stageLog[name2] = { at: (Date.now() - tr) / 1000, loads: g.loads, terrain: g.terrain };
+      lastStage = name2;
+    }
+    if (opts.gcCheckpoints) {
+      const done = s.view.stages.reduce((a, x) => a + x.tilesDone, 0);
+      const total = s.view.stages.reduce((a, x) => a + x.tilesTotal, 0);
+      const k = Math.floor((done / Math.max(1, total)) * 4);
+      if (heaps.length <= k && heaps.length < 5) heaps.push({ tilesDone: done, ...(await call('dev.heap.gc', {}, 120_000)) });
+    }
+  });
+  out.wallSeconds = (Date.now() - tr) / 1000;
+  if (opts.gcCheckpoints && heaps.length < 5) heaps.push({ final: true, ...(await call('dev.heap.gc', {}, 120_000)) });
+  out.heapCheckpoints = heaps;
+  out.mspt = opts.gcCheckpoints ? null : await call('dev.mspt.trace', { stop: true });
+  out.placement = await call('dev.placement.stats', {});
+  out.heap = await call('dev.heap', {});
+  out.tiles = await call('dev.tiles.stats', {});
+  const g1 = await call('dev.chunks.generated');
+  out.generatedDuringRealise = { terrain: g1.terrain - g0.terrain, full: g1.full - g0.full, whileHeld: g1.whileHeld - g0.whileHeld, loads: g1.loads - g0.loads };
+  out.state = st;
+  const rec = st.record;
+  const first = rec.stats.firstTileAt;
+  const lastT = rec.stats.lastTileAt;
+  out.cellsWritten = rec.cellsWritten;
+  out.firstToLastSeconds = first && lastT ? (lastT - first) / 1000 : null;
+  out.cellsPerSecond = out.firstToLastSeconds ? rec.cellsWritten / out.firstToLastSeconds : null;
+  out.stepCellsPerSecond = out.placement.cellsPerSecond;
+  out.starvedShare = st.writerTicks ? st.starvedTicks / st.writerTicks : null;
+  out.stages = stageLog;
+  const j = await call('dev.journal.state', {}, 120_000);
+  out.journal = { bytes: j.bytesOnDisk, bytesPerCell: j.bytesOnDisk / Math.max(1, rec.cellsWritten), entries: (j.entries ?? []).length, indexBytes: j.indexBytes,
+    indexCommitP99Ms: j.indexCommitP99Ms, indexCommitMaxMs: j.indexCommitMaxMs, indexCommits: j.indexCommits };
+  log(`  realised ${region}: ${rec.cellsWritten} cells, ${out.cellsPerSecond?.toFixed(0)} cells/s first-to-last (${out.stepCellsPerSecond?.toFixed(0)} step), `
+    + `MSPT ${JSON.stringify(out.mspt?.all)}, starved ${(100 * (out.starvedShare ?? 0)).toFixed(1)}%, generated ${JSON.stringify(out.generatedDuringRealise)}`);
+  write(`${name.replace(/\s+/g, '_')}.json`, out);
+  return out;
+}
+
+/** The IR's y range (the claim it chose) from the plan's lots and anchors, else the world's. */
+function irY(p) {
+  return p.claimY ?? [-64, 319];
+}
+
+steps.megaA = async () => {
+  if (!dev) await connect();
+  const r = await megaRun('G6A MegaA');
+  ctx.megaA = { world: 'G6A MegaA', region: r.region, planId: r.plan.planId, box: r.box };
+  saveCtx();
+  // the group undo: timed, MSPT, then the diff against the pre-region snap (E-normal)
+  await settle(5000);
+  await call('dev.mspt.trace', { start: true });
+  const t0 = Date.now();
+  const rm = await call('dev.region.remove', { region: r.region }, 4 * 3_600_000);
+  r.undo = { seconds: (Date.now() - t0) / 1000, result: rm, mspt: await call('dev.mspt.trace', { stop: true }) };
+  await settle(10_000);
+  r.diff = await call('dev.region.hash', { box: r.box, mode: 'diff', file: path.join(OUT, 'G6A_MegaA.snap.gz') }, 4 * 3_600_000);
+  write('megabench-A.json', r);
+  const b = r;
+  check(b.state.view.state === 'PLACED', `megaA: the region is ${b.state.view.state} (${JSON.stringify(b.state.items)})`);
+  check(b.cellsPerSecond >= 15_000, `megaA: realise ${Math.round(b.cellsPerSecond)} cells/s first tile to last (bar 15k; step ${Math.round(b.stepCellsPerSecond)})`);
+  check(b.mspt.all.over50 === 0 && b.mspt.all.p99 <= 25, `megaA: MSPT during realise max ${b.mspt.all.max.toFixed(1)} ms, p99 ${b.mspt.all.p99.toFixed(1)} ms, ${b.mspt.all.over50} over 50 ms`);
+  check(b.prepare.mspt.all.over100 === undefined ? b.prepare.mspt.all.max <= 100 : true, `megaA: prepare MSPT max ${b.prepare.mspt.all.max.toFixed(1)} ms, ${b.prepare.mspt.all.over50} over 50 of ${b.prepare.mspt.all.ticks} (${(100 * b.prepare.mspt.all.over50 / Math.max(1, b.prepare.mspt.all.ticks)).toFixed(2)}%)`);
+  check(b.generatedDuringRealise.terrain === 0, `megaA: chunks generated during realise ${b.generatedDuringRealise.terrain}`);
+  const failed = Object.keys(b.state.failed ?? {});
+  check(failed.length === 0, `megaA: 0 failed items (${failed.length}: ${JSON.stringify(b.state.failed).slice(0, 300)})`);
+  check(b.wallSeconds <= 45 * 60, `megaA: liveness: every item within 45 min of the first write (${(b.wallSeconds / 60).toFixed(1)} min)`);
+  check(b.state.maxHeldWaitSeconds <= 30, `megaA: liveness: longest wait holding tickets ${b.state.maxHeldWaitSeconds.toFixed(1)} s`);
+  check(b.journal.bytesPerCell <= 1 && b.journal.indexBytes <= 8 << 20 && b.journal.indexCommitP99Ms <= 100, `megaA: journal ${b.journal.bytesPerCell.toFixed(2)} bytes/cell, index ${(b.journal.indexBytes / 1048576).toFixed(2)} MB, commit p99 ${b.journal.indexCommitP99Ms.toFixed(1)} ms`);
+  check(b.tiles.bytesPerCell <= 4, `megaA: wire ${b.tiles.bytesPerCell.toFixed(3)} bytes/cell; tile latency p50 ${b.tiles.latencyP50Ms.toFixed(0)} ms, p99 ${b.tiles.latencyP99Ms.toFixed(0)} ms`);
+  check((b.starvedShare ?? 1) <= 0.05, `megaA: writer starved ${(100 * b.starvedShare).toFixed(1)}% of its ticks (bar 5%)`);
+  check(rm.removed && b.undo.seconds <= 600 && b.undo.mspt.all.over50 === 0, `megaA: group undo ${b.undo.seconds.toFixed(0)} s, MSPT max ${b.undo.mspt.all.max.toFixed(1)} ms`);
+  const unclassified = b.diff.classes?.none ?? 0;
+  check(unclassified === 0 && b.diff.mismatches <= 0.0001 * b.cellsWritten, `megaA: E-normal: ${b.diff.mismatches} mismatches after the group undo (${JSON.stringify(b.diff.classes)}; cap ${(0.0001 * b.cellsWritten).toFixed(0)})`);
+  await leaveWorld();
+  return b;
+};
+
 /** Debugging: node tools/gate6a.mjs eval '<async js>' with the helpers in scope. */
 steps.eval = async () => {
   if (!dev) await connect();

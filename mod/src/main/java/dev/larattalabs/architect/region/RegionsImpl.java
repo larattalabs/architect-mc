@@ -802,6 +802,12 @@ public final class RegionsImpl implements Regions {
 		});
 	}
 
+	/** The plan's claim {minX, minY, minZ, maxX, maxY, maxZ} (the IR's: its y range is the program's), or null. */
+	public static int @Nullable [] planClaim(String planId) {
+		PlanRec p = planRec(planId);
+		return p == null ? null : p.ir().claim().clone();
+	}
+
 	/** The lot ids of a plan (DevBridge: fill every lot round robin). */
 	public static List<String> planLots(String planId) {
 		PlanRec p = planRec(planId);

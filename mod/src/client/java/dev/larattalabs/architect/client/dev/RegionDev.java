@@ -94,6 +94,14 @@ public final class RegionDev {
 							JsonObject o = e != null ? new JsonObject() : json(p);
 							if (e != null) {
 								o.addProperty("refused", reason(e));
+							} else {
+								int[] c = RegionsImpl.planClaim(p.planId());
+								if (c != null) {
+									JsonArray y = new JsonArray();
+									y.add(c[1]);
+									y.add(c[4]);
+									o.add("claimY", y);
+								}
 							}
 							o.addProperty("ms", (System.nanoTime() - t0) / 1e6);
 							return o;
