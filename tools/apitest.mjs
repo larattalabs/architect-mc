@@ -1324,8 +1324,76 @@ switch (step) {
     check(e?.stale === false && e.overall === c?.overall, `Library.Entry(${done?.entryId}).critique(): ${e?.overall}, ${e?.openIssues?.length} open issues`, e);
     break;
   }
+  case 'polish':
+  case 'polish-real': {
+    // phase 5b through the API (docs/CONTRACT.md "Phase 5b gate" 7): an entry placed in a dev world, polished with a preview
+    // (Designs.polish, PolishApply preview), the site reported outdated, its delta checked, applied and reverted
+    // (Sites.checkDelta / applyDelta / revert / history), then removed exactly. `polish` runs on the sim sidecar
+    // (tools/run-apitest-client.sh --sim, $0); `polish-real` on the real sidecar under the claude login (a design ~$1 plus a
+    // polish ~$1-2). APITEST_NOTES="..." adds a notes-scoped polish (its scoping call) on the same entry afterwards.
+    const real = step === 'polish-real';
+    const b64 = (o) => Buffer.from(typeof o === 'string' ? o : JSON.stringify(o)).toString('base64');
+    const tag = Date.now().toString(36);
+    const waitMs = real ? Number(process.env.APITEST_REAL_MS ?? 45 * 60_000) : 180_000;
+    const v = await api('api17');
+    const want = ['entryVersions', 'blueprintDelta', 'deltaApply', 'siteRevert', 'deltaPreview', 'polish'];
+    check(v.version === API_VERSION && want.every((f) => v.features.includes(f)), `VERSION ${v.version}, 5b features: ${want.filter((f) => v.features.includes(f)).join(', ')}`, v);
+    // 1. a design -> an entry (v1)
+    const req = { type: 'cabin', style: 'rustic', name: `Polish ${tag}`, size: [15, 14, 15], ...(real ? { model: process.env.APITEST_MODEL ?? 'claude-sonnet-5-5' } : {}) };
+    const d = await result(await api(`critreq p0 ${b64(req)}`), 60_000);
+    const dd = await waitEvent((e) => e.event === 'DESIGN_DONE' && e.id === d.value, waitMs);
+    const entryId = dd?.entryId;
+    check(dd?.status === 'DONE' && !!entryId, `the base design ${d.value} -> entry ${entryId}`, dd);
+    // 2. placed in the dev world
+    await cmd(`/tp @a -20.5 ${(await groundAt(-20, -20)) + 30} -20.5`);
+    const gy = await groundAt(30, 30);
+    const HB = [10, gy - 16, 10, 64, gy + 40, 64];
+    const pre = await call('dev.region.hash', { box: HB });
+    const pl = await result(await api(`place ${entryId} 30 ${gy + 1} 30 INSTANT unowned noactor 0`), 120_000);
+    check(pl.placed, `placed ${entryId} as ${pl.siteId}`, pl);
+    const site = pl.siteId;
+    // 3. the estimate, then the polish with a preview
+    const est = await result(await api(`polishest ${entryId} 2`), 60_000);
+    check(est.polish === true && est.usdHigh > 0 && est.usdHigh >= est.usdLow, `Designs.estimatePolish: $${est.usdLow}-${est.usdHigh}, ${est.minutesLow}-${est.minutesHigh} min`, est);
+    const p = await result(await api(`polish ${entryId} 2 preview`), 60_000);
+    check(/^d\d+$/.test(p.designId ?? ''), `Designs.polish(${entryId}, preview) -> ${p.designId}`, p);
+    const pd = await waitEvent((e) => e.event === 'DESIGN_DONE' && e.id === p.designId, waitMs);
+    const pg = await api(`polishget ${p.designId}`);
+    console.log(JSON.stringify(pg));
+    const installed = pg?.polish?.installed ?? 0;
+    check(pd?.status === 'DONE' && pg?.kind === 'POLISH' && !!pg?.polish?.end, `the polish ended ${pg?.polish?.end}: ${pg?.polish?.accepted}/${pg?.polish?.steps} steps accepted, v${installed || '-'}, $${pg?.polish?.usd}`, pg);
+    const ev = await api(`eversions ${entryId}`);
+    check(installed ? ev.version === installed && ev.versions.length >= 2 && ev.atVersion1 : ev.version === 1, `Library.versions(${entryId}): head v${ev.version}, ${ev.versions?.length} versions`, ev);
+    if (installed) {
+      const vev = (await events()).find((e) => e.event === 'ENTRY_VERSIONED' && e.entry === entryId);
+      check(!!vev && vev.version === installed, `ENTRY_VERSIONED ${entryId} v${vev?.version}`, vev);
+      // 4. the site is outdated; the preview's verdict; apply; history; revert; Remove exact
+      const od = await api('outdated -');
+      check(Array.isArray(od) && od.some((x) => x.site === site && x.version === 1 && x.head === installed), `Sites.outdated lists ${site} (v1, head v${installed})`, od);
+      const c = await api(`checkdelta ${site} 0`);
+      check(c.applicable && c.added + c.removed + c.changed > 0, `Sites.checkDelta(${site}): +${c.added} -${c.removed} ~${c.changed}, parts ${JSON.stringify(c.parts)}`, c);
+      const a = await result(await api(`applydelta ${site} 0`), 120_000);
+      check(a.applied && a.to === installed, `Sites.applyDelta: v${a.from} -> v${a.to}, ${a.written} cells`, a);
+      const h = await api(`shistory ${site}`);
+      check(h.length === 2 && h[1].version === installed, `Sites.history: ${h.map((x) => `v${x.version} ${x.kind}`).join(', ')}`, h);
+      const r = await result(await api(`srevert ${site} 1`), 120_000);
+      check(r.applied && r.to === 1, `Sites.revert(${site}, 1): back to v${r.to}`, r);
+    }
+    const rm = await result(await api(`remove ${site} - force keep`), 300_000);
+    await call('dev.wait', { ms: 2000 }).catch(() => null);
+    const post = await call('dev.region.hash', { box: HB });
+    check(rm.removed && post.sha256 === pre.sha256, `Remove ${site} is exact`, rm);
+    if (process.env.APITEST_NOTES) {
+      const n = await result(await api(`polish ${entryId} 1 none ${process.env.APITEST_NOTES}`), 60_000);
+      const nd = await waitEvent((e) => e.event === 'DESIGN_DONE' && e.id === n.designId, waitMs);
+      const ng = await api(`polishget ${n.designId}`);
+      console.log(JSON.stringify(ng));
+      check(nd?.status === 'DONE' && !!ng?.polish?.end, `a notes-scoped polish ("${process.env.APITEST_NOTES}") ended ${ng?.polish?.end}: ${ng?.polish?.accepted}/${ng?.polish?.steps} accepted, $${ng?.polish?.usd}`, ng);
+    }
+    break;
+  }
   default:
-    console.error('usage: node tools/apitest.mjs survival|jobs|catchup|sets|massing|composite|preview|critique|critique-real');
+    console.error('usage: node tools/apitest.mjs survival|jobs|catchup|sets|massing|composite|preview|critique|critique-real|polish|polish-real');
     process.exit(2);
 }
 
