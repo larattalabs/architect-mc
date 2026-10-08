@@ -22,7 +22,7 @@ function stub({ id, w, h, d }) {
   const p = PALETTES.rustic;
   const X = w - 1;
   const Z = d - 1;
-  const bp = new Blueprint({ id, type: 'custom', size: [w, h, d + 4], origin: [0, 0, 0], palette: p, interior: [1, 1, 1, X - 1, h - 2, Z - 1] });
+  const bp = new Blueprint({ id, type: 'custom', size: [w, h, d + 3], origin: [0, 0, 0], palette: p, interior: [1, 1, 1, X - 1, h - 2, Z - 1] });
   bp.room([0, 0, 0, X, h - 1, Z]);
   const D = Math.floor(X / 2);
   bp.door(D, 1, Z, 'south');
