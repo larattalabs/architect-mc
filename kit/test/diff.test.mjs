@@ -306,4 +306,34 @@ test('base drift: a rebuild from source matches the stored build; a tampered sto
   assert.equal(d.added + d.removed, 0);
 });
 
+// ---------------------------------------------------------------- the fixture set for the Java equality test
+
+test('delta-fixtures.mjs: the hand-written tavern versions build clean and the pair set has every kind, deterministically', async () => {
+  const { writeFixtures } = await import('../tools/delta-fixtures.mjs');
+  const out = path.join(tmp, 'fixtures');
+  const index = await writeFixtures(out, { previews: false });
+  const by = (n) => index.pairs.find((p) => p.name === n);
+  assert.ok(index.pairs.length >= 25 && index.pairs.length <= 60, `${index.pairs.length} pairs`);
+  for (const kind of ['param', 'palette', 'version', 'identical', 'frame_hint', 'approximate']) assert.ok(index.pairs.some((p) => p.kind === kind), kind);
+  assert.ok(index.pairs.filter((p) => p.kind === 'palette').every((p) => p.changed > 0));
+  // v2: wing_east added, porch removed, roof re-materialled; v3: wing_west, main's windows, nothing else; v4: the frame
+  const e12 = JSON.parse(fs.readFileSync(path.join(out, 'pairs', 'tavern-v1__tavern-v2', 'expected.json'), 'utf8'));
+  assert.deepEqual(Object.fromEntries(Object.entries(e12.parts).map(([n, p]) => [n, p.status])), { guest_rooms: 'UNCHANGED', main: 'UNCHANGED', porch: 'REMOVED', roof: 'CHANGED', stairs: 'UNCHANGED', taproom: 'UNCHANGED', wing_east: 'ADDED' });
+  const e23 = JSON.parse(fs.readFileSync(path.join(out, 'pairs', 'tavern-v2__tavern-v3', 'expected.json'), 'utf8'));
+  assert.deepEqual(Object.entries(e23.parts).filter(([, p]) => p.status !== 'UNCHANGED').map(([n, p]) => `${n}:${p.status}`), ['main:CHANGED', 'wing_west:ADDED']);
+  assert.equal(e23.removed, 0);
+  assert.equal(by('tavern-v3__tavern-v4').frameKept, false);
+  assert.equal(by('tavern-v3__tavern-v5').removed, 260);
+  assert.equal(by('tavern-v2__tavern-v2').changed + by('tavern-v2__tavern-v2').added + by('tavern-v2__tavern-v2').removed, 0);
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(out, 'pairs', 'tavern-v2__tavern-v3moved', 'expected.json'), 'utf8')).frameHint, [5, 0, 0]);
+  assert.equal(by('approx-a__tavern-v1__tavern-v2').approximate, true);
+  assert.equal(fs.existsSync(path.join(out, 'pairs', 'approx-a__tavern-v1__tavern-v2', 'a.parts.nbt')), false);
+  // the installable version folders
+  for (const v of [1, 2, 3, 4, 5]) assert.deepEqual(fs.readdirSync(path.join(out, 'versions', 'tavern', `v${v}`)).sort(), ['tavern.blueprint.json', 'tavern.mjs', 'tavern.nbt', 'tavern.parts.nbt']);
+  // deterministic: a second run writes the same expected files
+  const again = await writeFixtures(path.join(tmp, 'fixtures2'), { previews: false });
+  assert.equal(again.kit, index.kit);
+  for (const p of index.pairs) assert.equal(fs.readFileSync(path.join(tmp, 'fixtures2', 'pairs', p.name, 'expected.json'), 'utf8'), fs.readFileSync(path.join(out, 'pairs', p.name, 'expected.json'), 'utf8'), p.name);
+});
+
 test.after(() => fs.rmSync(tmp, { recursive: true, force: true }));
