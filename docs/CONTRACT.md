@@ -4173,7 +4173,7 @@ this section says what shipped.
   The API and protocol keep `mode: "polish"` for callers who opt in knowingly. The next attempt changes the critic, which is
   what refused visible fixes, and is re-gated on the same eval.
 
-# Phase 6 contract: macro kit, region realise and mega_bench (A5b) - DRAFT for Steward review
+# Phase 6 contract: macro kit, region realise and mega_bench (A5b) - FROZEN after Steward review
 
 Goal: **build whole sites as programs.** A region program describes terrain operations, lots, roads, bridges, stairs and
 anchors for an area far larger than one template, such as a crater works, a sky isle, a walled hill or a 1000x1000 district.
@@ -5038,3 +5038,25 @@ Two configurations, each in a fresh world of fixed seed `mega6` (normal worldgen
 - **N6** Yes: 1024 by default, and 2048 behind a dev flag.
 - **N7** Commands and the API in 6b. A player-facing Terrain tab waits until regions see real use.
 - **N8** Keep the 15k bar, measured as the median of 3 runs.
+
+## Changes from Steward's review of phase 6 (steward-mc/docs/A6-REVIEW.md), all accepted
+
+Where this section and the phase 6 text above disagree, this section wins.
+
+- **S1** `Sites.list(owner)` returns one `RegionView` per region. Its tiles are hidden unless `includeTiles` is set (debugging).
+- **S2** Frozen heights and the drift tolerances as drafted. Drift is reported as "land changed since planning", and the caller
+  chooses to replan or continue.
+- **S4** The closed shape library is enough for 6a. **6b adds** `wedge`/`prism` and `array(shape, step, n)` (repetition without
+  inflating the IR), not blocking.
+- **S5** `scorched` and `lining` are extra roles with a `??` rock fallback. `MACRO_ROLES` does not change.
+- **S6** `prepare` stays explicit. It first returns a size and time estimate, shows a visible "preparing ground" state, and never
+  starts silently or automatically.
+- **S7** No `designLots`; `Regions.design` is kept for bundled programs.
+- **S8** Waits have no time limit for staged builds. The wait reason is shown with a nudge action (move closer, prepare), and
+  `maxWait` is opt-in.
+- **S9** The mega_bench composition is accepted. The gate also records **seconds per stage and chunks loaded per stage** (B's
+  scripted walk goes in stage order and stops per stage).
+- **S10** SVG, PNG and `siteplan.json`; Steward reads `siteplan.json`. The set critic stays deferred.
+- **S11** No survival regions before Noah decides N4. Steward recommends free natural-only cut/fill (terrain is not a material),
+  recorded for Noah.
+- **N8** The 15k bar stays at the median of 3, and a miss is recorded with its measured number (it still fails the gate).
