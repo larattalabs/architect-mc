@@ -29,6 +29,7 @@ public class ArchitectClient implements ClientModInitializer {
 		dev.larattalabs.architect.client.survival.SurvivalFeature.init();
 		dev.larattalabs.architect.client.dev.JournalDev.init(); // phase 4e hooks (journal, roads, cell sites, region hashes)
 		dev.larattalabs.architect.client.dev.DeltaDev.init(); // phase 5b hooks (entry versions, deltas, revert, write counts)
+		dev.larattalabs.architect.client.placement.DeltaGhost.init(); // phase 5b: the delta ghost (architect_mc:delta_preview)
 		dev.larattalabs.architect.client.api.ApiClientBridge.init(); // the public API's client side (docs/CONTRACT.md phase 4a)
 		Launcher.init();
 		HudElementRegistry.addLast(Architect.id("hud/toasts"), dev.larattalabs.architect.client.ui.GuardedHud.of("hud.toasts", new Toasts()));

@@ -111,7 +111,25 @@ public final class CompositePreview {
 
 	/** Whether {@code id} names a library entry or an installed massing (version). */
 	public static boolean known(String id) {
-		return Blueprints.entry(id) != null || MassingFiles.exists(id);
+		return Blueprints.entry(id) != null || MassingFiles.exists(id) || entryVersion(id) != null;
+	}
+
+	/** {@code <entry>@<version>} (phase 5b: library entries too, as 4c's massings): that version's entry, or null. */
+	static Blueprints.@Nullable Entry entryVersion(String id) {
+		int at = id.lastIndexOf('@');
+		if (at <= 0 || Blueprints.entry(id.substring(0, at)) == null) {
+			return null;
+		}
+		try {
+			var server = Minecraft.getInstance().getSingleplayerServer();
+			if (server == null) {
+				return null;
+			}
+			Blueprints.Version v = Blueprints.version(server, id.substring(0, at), Integer.parseInt(id.substring(at + 1)));
+			return v == null ? null : v.entry();
+		} catch (NumberFormatException e) {
+			return null;
+		}
 	}
 
 	/** Shows {@code layers} under {@code key} (replacing it). Client thread. Throws IllegalArgumentException as the API says. */
@@ -167,6 +185,9 @@ public final class CompositePreview {
 			try {
 				Blueprints.Entry e = Blueprints.entry(l.blueprintId());
 				if (e == null) {
+					e = entryVersion(l.blueprintId());
+				}
+				if (e == null) {
 					e = MassingFiles.read(l.blueprintId());
 				}
 				GhostModel.Cells cells = TemplateGrid.of(e).cells(TemplateCells::color);
@@ -197,6 +218,57 @@ public final class CompositePreview {
 				errors.get(i)));
 		}
 		return out;
+	}
+
+	/** A layer of world cells (phase 5b, the delta ghost): a style, the box corner, and cells relative to it with their colours. */
+	public record CellLayer(String source, CompositeMesh.Style style, BlockPos origin, int sizeX, int sizeY, int sizeZ, int[] xyz, int[] argb) {
+	}
+
+	/** Shows world-cell layers under {@code key} (replacing it): a delta ghost (ADDED, REMOVED, CHANGED, KEPT). Client thread. */
+	public static void showCells(String key, List<CellLayer> layers) {
+		if (Minecraft.getInstance().level == null) {
+			throw new IllegalArgumentException("Not in a world");
+		}
+		long gen = ++generation;
+		List<Layer> pending = new ArrayList<>();
+		for (CellLayer l : layers) {
+			pending.add(new Layer(l.source(), l.origin(), 0, l.style(), l.argb().length, null, false, null));
+		}
+		Composite c = new Composite(gen, List.of(), pending);
+		KEYS.put(key, c);
+		long t0 = System.nanoTime();
+		CompletableFuture.supplyAsync(() -> {
+			int[] counts = new int[layers.size()];
+			List<GhostModel> models = new ArrayList<>();
+			for (int i = 0; i < layers.size(); i++) {
+				CellLayer l = layers.get(i);
+				GhostModel m = GhostModel.of(new GhostModel.Cells(Math.max(1, l.sizeX()), Math.max(1, l.sizeY()), Math.max(1, l.sizeZ()), 0, l.xyz(), l
+					.argb()), 0);
+				models.add(m);
+				counts[i] = m.visibleCount();
+			}
+			boolean[] over = CompositeMesh.overCap(counts, CompositeMesh.MAX_CELLS);
+			List<Layer> out = new ArrayList<>();
+			for (int i = 0; i < layers.size(); i++) {
+				CellLayer l = layers.get(i);
+				GhostModel m = models.get(i);
+				CompositeMesh mesh = over[i] ? CompositeMesh.outlineOnly(l.style(), m.sizeX, m.sizeY, m.sizeZ, counts[i]) : CompositeMesh.build(m, l.style());
+				out.add(new Layer(l.source(), l.origin(), 0, l.style(), counts[i], mesh, over[i], null));
+			}
+			return out;
+		}, BUILD).whenComplete((built, err) -> Minecraft.getInstance().execute(() -> {
+			Composite now = KEYS.get(key);
+			if (now == null || now.generation != gen) {
+				return;
+			}
+			if (err == null) {
+				now.layers = built;
+			} else {
+				Architect.LOGGER.warn("Composite {}: build failed", key, err);
+			}
+			now.buildMs = (System.nanoTime() - t0) / 1_000_000;
+			now.built = true;
+		}));
 	}
 
 	/** Removes a key. */

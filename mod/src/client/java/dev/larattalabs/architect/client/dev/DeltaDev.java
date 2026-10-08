@@ -108,6 +108,15 @@ public final class DeltaDev {
 					}
 				})).thenCompose(x -> x);
 			});
+		DevBridge.register("dev.site.delta.preview", 30_000, "{site, version?: 0, key?: 'architect:delta'} - phase 5b: the delta ghost "
+			+ "(ArchitectClientApi.previewDelta) under a composite key -> the verdict's counts", (req, mc) -> {
+				Fields f = Fields.of(req);
+				String site = f.nonBlank("site");
+				int v = f.optInt("version", 0, 0, 1_000_000);
+				String key = f.optStr("key", "architect:delta");
+				return DevBridge.onClient(mc, () -> dev.larattalabs.architect.client.placement.DeltaGhost.request(key, site, v).thenApply(c -> checkJson(c,
+					false))).thenCompose(x -> x);
+			});
 		DevBridge.register("dev.site.history", 10_000, "{site} - phase 5b: the site's version, head version, chain and history", (req, mc) -> {
 			String site = Fields.of(req).nonBlank("site");
 			return DevBridge.onClient(mc, () -> ServerTasks.callOnServer(server -> historyJson(server, site))).thenCompose(x -> x);

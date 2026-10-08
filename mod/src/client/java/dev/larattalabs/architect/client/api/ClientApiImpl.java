@@ -48,4 +48,12 @@ public final class ClientApiImpl implements ArchitectClientApi {
 	public Set<String> compositeKeys() {
 		return CompositePreview.keys();
 	}
+
+	@Override
+	public void previewDelta(String key, String siteId, int toVersion) {
+		if (key == null || key.isBlank()) {
+			throw new IllegalArgumentException("a composite needs a key");
+		}
+		dev.larattalabs.architect.client.placement.DeltaGhost.request(key, siteId, toVersion);
+	}
 }
