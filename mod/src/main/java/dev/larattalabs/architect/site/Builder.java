@@ -755,7 +755,17 @@ public final class Builder {
 	}
 
 	/**
-	 * Clears queued cells of {@code c} to air, top down, no drops, no neighbour updates (nothing pops off): from index
+	 * Block update flags for clearing queued cells to air ({@link #clear}, a construction delta's added cells): {@link Sites#FLAGS}
+	 * plus {@link net.minecraft.world.level.block.Block#UPDATE_KNOWN_SHAPE}. Without it, {@code Level.setBlock} still runs the
+	 * neighbours' shape updates and strips {@code UPDATE_SUPPRESS_DROPS} for them ({@code flags & -34}): clearing a door's upper
+	 * half breaks its lower half, one bed half the other, a hanging lantern's support the lantern, each dropping its item while
+	 * the builder later places the block again from paid items (a free item). The builder's own writes re-run the shape
+	 * updates, so the finished site is unchanged.
+	 */
+	static final int CLEAR_FLAGS = Sites.FLAGS | net.minecraft.world.level.block.Block.UPDATE_KNOWN_SHAPE;
+
+	/**
+	 * Clears queued cells of {@code c} to air, top down, no drops, no neighbour updates ({@link #CLEAR_FLAGS}: nothing pops off): from index
 	 * {@code from} of the top-down order until {@code deadline} ({@link System#nanoTime}; {@code Long.MAX_VALUE}: all). Returns
 	 * the next index ({@code c.size()} when done).
 	 */
@@ -773,7 +783,7 @@ public final class Builder {
 			}
 			int k = topDown[topDown.length - 1 - i];
 			int[] o = Construction.offsets(k, dx, dz);
-			level.setBlock(mp.set(sb.minX() + o[0], sb.minY() + o[1], sb.minZ() + o[2]), air, Sites.FLAGS);
+			level.setBlock(mp.set(sb.minX() + o[0], sb.minY() + o[1], sb.minZ() + o[2]), air, CLEAR_FLAGS);
 		}
 		return i;
 	}
@@ -1836,7 +1846,7 @@ public final class Builder {
 		// added cells: cleared to air (free, no drops), top down
 		clearAir.sort((a, b) -> Integer.compare(b.getY(), a.getY()));
 		for (BlockPos p : clearAir) {
-			level.setBlock(p, Blocks.AIR.defaultBlockState(), Sites.FLAGS);
+			level.setBlock(p, Blocks.AIR.defaultBlockState(), CLEAR_FLAGS);
 		}
 		// the queue in build order (bottom up, supports first, pairs together), as a construction placement orders it
 		int[] boxIdx = freeOf.keySet().stream().mapToInt(Integer::intValue).toArray();

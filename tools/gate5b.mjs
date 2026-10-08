@@ -1134,6 +1134,36 @@ steps.survival = async () => {
     const qid = await queue({ id: 'S', proximity: false, items: [{ key: 'S', bp: ID, at: AT, rot: 0, mode: 'CONSTRUCTION', force: true }] });
     const ev = await waitEvent((e) => e.event === 'ITEM_PLACED' && e.batch === qid, 120_000, 'S placed');
     const S = ev.site;
+    const itemsInBox = async () => ((await cmd(`/execute as @e[type=minecraft:item,x=${BOX[0]},y=${BOX[1]},z=${BOX[2]},dx=${BOX[3] - BOX[0]},` +
+      `dy=${BOX[4] - BOX[1]},dz=${BOX[5] - BOX[2]}] run data get entity @s Item`)).messages ?? []).filter((m) => /entity data/.test(m));
+    // no item lies in the box beyond the refunds a step dropped (deltaRefunds grew by them; it counts per site): a door, bed or
+    // lantern popped by a clear would be one more. Fewer is fine: refunds dropped on the crate's cell before the feed hopper
+    // goes there are pulled into the crate. Checked, then the player picks them up.
+    let refundsSoFar = {};
+    const pickUpRefunds = async (what) => {
+      const lying = {};
+      for (const m of await itemsInBox()) {
+        const id = m.match(/id: "([^"]+)"/)?.[1];
+        if (id) addTo(lying, id, Number(m.match(/count: (\d+)/)?.[1] ?? 1));
+      }
+      const now = (await siteState(S)).deltaRefunds ?? {};
+      const step = {};
+      for (const [k, n] of Object.entries(now)) if (n - (refundsSoFar[k] ?? 0)) step[k] = n - (refundsSoFar[k] ?? 0);
+      const ids = [...new Set([...Object.keys(lying), ...Object.keys(step)])];
+      const extra = ids.filter((k) => (lying[k] ?? 0) > (step[k] ?? 0)).map((k) => [k, lying[k] ?? 0, step[k] ?? 0]);
+      const total = (m) => Object.values(m).reduce((x, y) => x + y, 0);
+      check(extra.length === 0, `survival${mine ? ' (mined)' : ''}: no item lies in the box ${what} beyond its refunds (${total(lying)} lying, ${total(step)} refunded)`,
+        extra.length ? { lyingVsRefunds: extra } : undefined);
+      refundsSoFar = now;
+      await cmd('/kill @e[type=minecraft:item]');
+      return now;
+    };
+    // the conversion clears the instant placement's cells without popping anything (a door, bed or lantern item lying here
+    // while the builder places the block again would be a free item)
+    const placedPops = await itemsInBox();
+    out[`placePops${mine}`] = placedPops;
+    check(placedPops.length === 0, `survival${mine ? ' (mined)' : ''}: no item entities in or around the box after the construction placement (${placedPops.length})`,
+      placedPops.length ? placedPops : undefined);
     await installVersion(ID, path.join(V, 'v2'), 'v2');
     // a delta on a site still building refuses SITE_BUSY; a queued one waits
     const busy = await deltaCheck(S, 2, { construction: true });
@@ -1141,12 +1171,11 @@ steps.survival = async () => {
     const into = {};
     const feeds = { [S]: await hopperFor(S) };
     check(await buildUntilDone([S], feeds, into), 'survival: the cabin construction site is built from its hopper');
-    // items lying in the box after the base build (door, bed or lantern items the phase 3 builder popped: a pre-existing
-    // dupe, recorded): picked up before the world is copied
-    const pops = await cmd('/execute as @e[type=minecraft:item] run data get entity @s Item');
-    if ((pops.messages ?? []).length) log(`  survival: items lying after the base build: ${JSON.stringify(pops.messages).slice(0, 400)}`);
-    out[`pops${mine}`] = pops.messages ?? [];
-    await cmd('/kill @e[type=minecraft:item]');
+    // items in = blocks placed: nothing lies in or around the box after the base build (the conversion's clear once popped a
+    // door, a bed and a lantern here, while the builder placed them again: free items)
+    const popped = await itemsInBox();
+    out[`pops${mine}`] = popped;
+    check(popped.length === 0, `survival${mine ? ' (mined)' : ''}: no item entities in or around the box after the base build (${popped.length})`, popped.length ? popped : undefined);
     // the instant reference: a creative copy of this world gets the instant apply
     await cmd('/save-all flush');
     await leaveWorld();
@@ -1165,12 +1194,11 @@ steps.survival = async () => {
     check(bomEq, 'survival: the BOM in dev.site.state equals the delta\'s queued cells\' bill', { missing, bom: c.bom });
     const now = await cellsIn(BOX);
     const moved = (c.ghost?.changed ?? []).filter((p) => blockOf(now.get(p) ?? '') !== blockOf(pre.get(p) ?? ''));
-    const refunds1 = (await siteState(S)).deltaRefunds ?? {};
     // the player picks up the refunds of the removed cells (counted in deltaRefunds) before they lie in a later delta's box
-    await cmd('/kill @e[type=minecraft:item]');
+    const refunds1 = await pickUpRefunds('after the delta started');
     feeds[S] = await hopperFor(S);
     check(await buildUntilDone([S], feeds, into), 'survival: the construction delta finished from its hopper');
-    await cmd('/kill @e[type=minecraft:item]'); // the swaps' refunds, picked up
+    await pickUpRefunds('after the delta finished'); // the swaps' refunds
     // a changed cell whose v2 value is air is a removal (written at once, refunded); every other changed cell kept its old block
     const w2 = await cellsIn(BOX);
     const swapped = moved.filter((p) => !/:air$|:cave_air$/.test(blockOf(w2.get(p) ?? '')));
@@ -1189,7 +1217,7 @@ steps.survival = async () => {
     check(r1.applied, 'survival: "Rebuild as v1" (a forward construction delta) started', r1.applied ? undefined : r1);
     feeds[S] = await hopperFor(S);
     check(await buildUntilDone([S], feeds, into), 'survival: the rebuild as v1 finished from its hopper');
-    await cmd('/kill @e[type=minecraft:item]'); // its refunds, picked up
+    await pickUpRefunds('after the rebuild as v1');
     const built1 = (await hash(BOX, ex)).sha256;
     const built1Cells = await cellsIn(BOX);
     const refunds = (await siteState(S)).deltaRefunds ?? {};

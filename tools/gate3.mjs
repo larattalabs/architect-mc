@@ -68,6 +68,26 @@ function diff(a, b, ignore = new Set()) {
   return out;
 }
 
+/**
+ * The item entities in a site's snapshot box grown by {@code margin}: {n, items: {id: count}}. A finished or just-placed
+ * construction site must leave none (a popped door, bed or lantern lying while the block stands is a free item).
+ */
+async function itemsInBox(sb, margin = 3) {
+  const sel = `@e[type=minecraft:item,x=${sb.minX - margin},y=${sb.minY - margin},z=${sb.minZ - margin},dx=${sb.maxX - sb.minX + 2 * margin},` +
+    `dy=${sb.maxY - sb.minY + 2 * margin},dz=${sb.maxZ - sb.minZ + 2 * margin}]`;
+  const r = await cmd(`/execute as ${sel} run data get entity @s Item`);
+  const items = {};
+  let n = 0;
+  for (const m of r.messages ?? []) {
+    const id = m.match(/id: "([^"]+)"/)?.[1];
+    if (!id) continue;
+    const c = Number(m.match(/count: (\d+)/)?.[1] ?? 1);
+    items[id] = (items[id] ?? 0) + c;
+    n += c;
+  }
+  return { n, items };
+}
+
 async function siteState() {
   return call('dev.site.state', { site: SITE });
 }
@@ -121,7 +141,12 @@ switch (step) {
     const g = gh.ghosts.find((x) => x.site === SITE);
     check(!!g && g.remaining === st.queue, `the client holds the ghost: ${g ? `${g.remaining} remaining cells, HUD "${g.hud}"` : 'none'}`);
     const sites = await call('dev.sites.state');
-    save('survival-place', { place: r, site: st, ghosts: gh, record: sites.sites.find((s) => s.id === SITE) });
+    // the conversion clears the instant placement's cells: nothing may pop off as an item (a door, bed or lantern lying here
+    // would be a free item once the builder places the block again)
+    const rec = sites.sites.find((s) => s.id === SITE);
+    const popped = await itemsInBox(rec.snapshotBox ?? rec.box);
+    check(popped.n === 0, `no item entities in or around the box after the placement: ${popped.n}${popped.n ? ' ' + JSON.stringify(popped.items) : ''}`);
+    save('survival-place', { place: r, site: st, ghosts: gh, record: rec, itemsAfterPlace: popped });
     break;
   }
   case 'survival-relog': {
@@ -216,11 +241,14 @@ switch (step) {
     // `/execute if entity` answers "Test failed" when it matches nothing: that is the pass here
     const dropsFound = drops.success && !/fail/i.test(drops.messages.join(' '));
     check(!dropsFound, `no leftover items dropped at the crate (credit 0): ${dropsFound ? `item entities found near the crate (${drops.messages.join(' ')})` : 'no item entity within 3 blocks of the crate'}`);
-    save('survival-feed', { bom, chests, logsAsEquivalents: logs, stacks: stacks.length, chain: ch, commands: [...placed, ...fills.slice(0, 3)], sprint,
-      final: last, seconds: secs, leftover, drops });
-    // the finished site's cells (the comparison with the instant placement)
+    // items in = blocks placed: no item entity lies in or around the finished site's box (a popped door, bed or lantern)
     const rec = (await call('dev.sites.state')).sites.find((s) => s.id === SITE);
     const sb = rec.snapshotBox ?? rec.box;
+    const lyingInBox = await itemsInBox(sb);
+    check(lyingInBox.n === 0, `no item entities in or around the box after completion: ${lyingInBox.n}${lyingInBox.n ? ' ' + JSON.stringify(lyingInBox.items) : ''}`);
+    save('survival-feed', { bom, chests, logsAsEquivalents: logs, stacks: stacks.length, chain: ch, commands: [...placed, ...fills.slice(0, 3)], sprint,
+      final: last, seconds: secs, leftover, drops, itemsInBox: lyingInBox });
+    // the finished site's cells (the comparison with the instant placement)
     const built = await cells([sb.minX, sb.minY, sb.minZ], [sb.maxX, sb.maxY, sb.maxZ]);
     save('survival-built-cells', { snapshotBox: sb, ...built });
     console.log(`finished site cells: ${built.sha256} (${Object.keys(built.cells).length} cells, ${built.blockEntities} block entities)`);
