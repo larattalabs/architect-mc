@@ -270,6 +270,9 @@ final class RestoreJob implements Placement.Job {
 			writer.step(level, deadline);
 			if (writer.progress() > 0) {
 				WorldJournal.kill("K7");
+				if (RegionItems.inRegion(siteId)) {
+					WorldJournal.kill("RG6"); // phase 6a: a region's group undo mid-write
+				}
 			}
 		} finally {
 			UpdateMask.end();

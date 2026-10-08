@@ -111,6 +111,7 @@ public final class RegionsImpl implements Regions {
 		net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents.END_SERVER_TICK.register(s -> {
 			RegionSurvey.tick(s);
 			Prepare.tick(s);
+			RegionHash.tick(s);
 		});
 	}
 
@@ -795,6 +796,60 @@ public final class RegionsImpl implements Regions {
 			});
 			return res;
 		});
+	}
+
+	/** The lot ids of a plan (DevBridge: fill every lot round robin). */
+	public static List<String> planLots(String planId) {
+		PlanRec p = planRec(planId);
+		List<String> out = new ArrayList<>();
+		if (p != null) {
+			p.ir().lots().forEach(l -> out.add(l.id()));
+		}
+		return out;
+	}
+
+	/** DevBridge {@code dev.region.state}: the view, the record, the queue's counts, starvation, streaming, generation. */
+	public static JsonObject devState(String regionId) {
+		Live l = REGIONS.get(regionId);
+		JsonObject o = new JsonObject();
+		if (l == null) {
+			o.addProperty("missing", true);
+			return o;
+		}
+		o.add("view", com.google.gson.JsonParser.parseString(new com.google.gson.Gson().toJson(view(l))).getAsJsonObject());
+		o.add("record", l.rec().toJson());
+		QBatch b = Batches.get(l.rec().batchId);
+		if (b != null) {
+			Map<String, Integer> counts = new LinkedHashMap<>();
+			Map<String, Integer> waits = new LinkedHashMap<>();
+			JsonObject longWaits = new JsonObject();
+			for (QItem i : b.items) {
+				counts.merge(i.itemKind + ":" + i.status, 1, Integer::sum);
+				if (i.status == QItem.Status.WAITING && i.reason != null) {
+					waits.merge(i.reason, 1, Integer::sum);
+				}
+				if (i.status == QItem.Status.FAILED) {
+					longWaits.addProperty(i.key, i.reason + ": " + i.message);
+				}
+			}
+			JsonObject c = new JsonObject();
+			counts.forEach(c::addProperty);
+			o.add("items", c);
+			JsonObject w = new JsonObject();
+			waits.forEach(w::addProperty);
+			o.add("waiting", w);
+			o.add("failed", longWaits);
+			o.addProperty("batchStatus", b.status.name());
+		}
+		o.addProperty("starvedTicks", RegionItems.starvedTicks);
+		o.addProperty("writerTicks", RegionItems.writerTicks);
+		o.addProperty("generatedTerrain", GenCounter.terrain());
+		o.addProperty("generatedWhileHeld", GenCounter.whileHeld());
+		o.addProperty("tilesReceived", TileStream.RECEIVED.get());
+		o.addProperty("wireBytes", TileStream.WIRE_BYTES.get());
+		o.addProperty("wireCells", TileStream.WIRE_CELLS.get());
+		o.addProperty("ticketsHeld", dev.larattalabs.architect.site.ChunkTickets.held());
+		return o;
 	}
 
 	// ------------------------------------------------------------------ helpers

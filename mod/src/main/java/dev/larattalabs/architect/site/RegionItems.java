@@ -335,6 +335,20 @@ public final class RegionItems {
 		}
 	}
 
+	/** Whether a site (tile, road or lot) belongs to a region's group. */
+	static boolean inRegion(String siteId) {
+		String g = null;
+		Infra in = Infras.get(siteId);
+		if (in != null) {
+			g = in.group();
+		} else {
+			Site s = Sites.get(siteId);
+			g = s == null ? null : s.group();
+		}
+		SiteGroupRec rec = g == null ? null : Sites.group(g);
+		return rec != null && rec.ext().has(EXT_REGION);
+	}
+
 	public static void reset() {
 		PIPES.clear();
 		starvedTicks = 0;

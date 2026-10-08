@@ -79,13 +79,20 @@ public final class Placement {
 	static void init() {
 		Batches.init(); // registers the chunk ticket type now, while the registries are open
 		ServerLifecycleEvents.SERVER_STARTED.register(Placement::load);
-		ServerTickEvents.START_SERVER_TICK.register(s -> STATS.startTick(s, active()));
+		ServerTickEvents.START_SERVER_TICK.register(s -> {
+			STATS.startTick(s, active());
+			traceStart = System.nanoTime();
+			traceWork = 0;
+		});
 		ServerTickEvents.END_SERVER_TICK.register(Placement::tick);
 		// the tick's full time is measured from its start to after every other end-of-tick handler (Fabric runs END_SERVER_TICK
 		// after the server tallied its own tick time, so the server's MSPT leaves those handlers out)
 		Identifier last = Identifier.fromNamespaceAndPath(Architect.MOD_ID, "tick_stats");
 		ServerTickEvents.END_SERVER_TICK.addPhaseOrdering(Event.DEFAULT_PHASE, last);
-		ServerTickEvents.END_SERVER_TICK.register(last, s -> STATS.endTick(s));
+		ServerTickEvents.END_SERVER_TICK.register(last, s -> {
+			STATS.endTick(s);
+			dev.larattalabs.architect.region.MsptTrace.tick(System.nanoTime() - traceStart, traceWork);
+		});
 		ServerLifecycleEvents.SERVER_STOPPING.register(s -> save(s, true));
 		ServerLifecycleEvents.SERVER_STOPPED.register(s -> {
 			JOBS.clear();
@@ -147,6 +154,7 @@ public final class Placement {
 		}
 		if (!JOBS.isEmpty() || STATS.tickActive) {
 			STATS.work(System.nanoTime() - start, Math.max(0, workDone() - before) + finishedWork);
+			traceWork += System.nanoTime() - start;
 		}
 		finishedWork = 0;
 	}
@@ -635,6 +643,10 @@ public final class Placement {
 	// ------------------------------------------------------------------ stats (the gate's MSPT and throughput)
 
 	/** Server tick times and the budget's use while placement is active; {@code dev.placement.stats}. */
+	/** Phase 6a, dev.mspt.trace: this tick's start and Architect's write time in it. */
+	private static long traceStart;
+	private static long traceWork;
+
 	static final class Stats {
 		long ticks;
 		long tickSum;
