@@ -342,7 +342,29 @@ public final class LauncherPlan {
 	 * design agent runs {@code node kit/build.mjs}). The caller adds nothing secret here: auth goes through {@code auth.set}.
 	 */
 	public static Map<String, String> environment(Map<String, String> base, Path node, boolean windows) {
+		return environment(base, node, windows, System.getProperty("user.name"), System.getProperty("user.home"));
+	}
+
+	/**
+	 * {@link #environment}; {@code userName} and {@code userHome} ({@code user.name}, {@code user.home}) fill {@code USER},
+	 * {@code LOGNAME} and {@code HOME} when the game was started without them (docs/CONTRACT.md phase 5b F2: the claude CLI
+	 * did not find its login from a scrubbed environment). Variables that are set are never changed.
+	 */
+	public static Map<String, String> environment(Map<String, String> base, Path node, boolean windows, @Nullable String userName,
+		@Nullable String userHome) {
 		Map<String, String> env = new java.util.HashMap<>(base);
+		if (!windows) {
+			for (String k : new String[] {"USER", "LOGNAME"}) {
+				String v = env.get(k);
+				if ((v == null || v.isBlank()) && userName != null && !userName.isBlank()) {
+					env.put(k, userName);
+				}
+			}
+			String h = env.get("HOME");
+			if ((h == null || h.isBlank()) && userHome != null && !userHome.isBlank()) {
+				env.put("HOME", userHome);
+			}
+		}
 		String key = windows ? pathKey(base) : "PATH";
 		String sep = windows ? ";" : ":";
 		Path dir = node.toAbsolutePath().getParent();

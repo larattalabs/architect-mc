@@ -4,7 +4,14 @@ plugins {
 	id 'maven-publish'
 }
 
-version = project.mod_version
+// docs/CONTRACT.md phase 5b F1: a jar without the sidecar bundle is a dev jar, marked three ways (the `+nosidecar` version,
+// the manifest attribute Architect-Sidecar-Bundle: missing, fabric.mod.json's custom architect_mc:bundle = "missing"); release
+// builds (-Prelease) and every publish task fail without it (-PallowNoSidecar lets publishToMavenLocal publish the +nosidecar
+// version, for API-only compiling).
+def sidecarMain = file("../sidecar/dist/main.mjs")
+def sidecarLock = file("../sidecar/package-lock.json")
+def sidecarBundled = sidecarMain.isFile() && sidecarMain.length() > 0 && sidecarLock.isFile()
+version = sidecarBundled ? project.mod_version : project.mod_version + "+nosidecar"
 group = project.maven_group
 
 base {
@@ -115,13 +122,82 @@ def genPalettes = tasks.register("genPalettes", GenPalettes) {
 	outDir.set(layout.buildDirectory.dir("generated/palettes"))
 }
 
+// The sidecar bundle check (phase 5b F1). It fails a release build (-Prelease) and every publish task without the bundle
+// (publishToMavenLocal passes with -PallowNoSidecar); a plain local build only warns and gets the dev marks. With the bundle it
+// writes architect-sidecar/BUNDLE.json {sidecarVersion, modVersion, builtAt, mainSha256} into the jar.
+abstract class CheckSidecarBundle extends DefaultTask {
+	@Input abstract Property<Boolean> getBundled()
+	@Input abstract Property<Boolean> getRelease()
+	@Input abstract ListProperty<String> getPublishTasks()
+	@Input abstract Property<Boolean> getAllowNoSidecar()
+	@Input abstract Property<String> getModVersion()
+	@Internal abstract RegularFileProperty getMainFile()
+	@Internal abstract RegularFileProperty getPackageFile()
+	@OutputDirectory abstract DirectoryProperty getOutDir()
+
+	@TaskAction
+	void run() {
+		File out = outDir.get().file("architect-sidecar/BUNDLE.json").asFile
+		out.delete()
+		String fix = "release builds need the sidecar bundle: cd sidecar && npm ci && npm run build"
+		if (!bundled.get()) {
+			if (release.get()) {
+				throw new GradleException(fix + " (-Prelease)")
+			}
+			List<String> pub = publishTasks.get()
+			boolean onlyLocal = !pub.isEmpty() && pub.every { it.toLowerCase().endsWith("publishtomavenlocal") }
+			if (!pub.isEmpty() && !(onlyLocal && allowNoSidecar.get())) {
+				throw new GradleException(fix + " (" + String.join(", ", pub) + "; -PallowNoSidecar lets publishToMavenLocal publish the +nosidecar version)")
+			}
+			logger.warn("WARNING: no sidecar bundle (sidecar/dist/main.mjs): this is a development jar " + modVersion.get()
+				+ " that ships no sidecar. Set ARCHITECT_SIDECAR_DIR when running it, or build sidecar/ and rebuild.")
+			return
+		}
+		File main = mainFile.get().asFile
+		String sha = java.security.MessageDigest.getInstance("SHA-256").digest(main.bytes).encodeHex().toString()
+		def pkg = new groovy.json.JsonSlurper().parse(packageFile.get().asFile)
+		out.parentFile.mkdirs()
+		out.text = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson([sidecarVersion: pkg.version, modVersion: modVersion.get(),
+			builtAt: java.time.Instant.now().toString(), mainSha256: sha])) + "\n"
+	}
+}
+
+def checkSidecarBundle = tasks.register("checkSidecarBundle", CheckSidecarBundle) {
+	bundled.set(sidecarBundled)
+	release.set(project.hasProperty("release"))
+	publishTasks.set(gradle.startParameter.taskNames.findAll { it.toLowerCase().contains("publish") })
+	allowNoSidecar.set(project.hasProperty("allowNoSidecar"))
+	modVersion.set(project.version.toString())
+	mainFile.set(sidecarMain)
+	packageFile.set(file("../sidecar/package.json"))
+	outDir.set(layout.buildDirectory.dir("generated/sidecarBundle"))
+	// the bundle's content is an input when it exists (BUNDLE.json's hash follows it)
+	if (sidecarBundled) {
+		inputs.file(sidecarMain)
+	}
+}
+
+// every publish task checks the bundle, also one that publishes nothing (`publish` without a repository)
+tasks.matching { it.name.startsWith("publish") }.configureEach {
+	dependsOn(checkSidecarBundle)
+}
+
+jar {
+	manifest {
+		attributes("Architect-Sidecar-Bundle": sidecarBundled ? "present" : "missing")
+	}
+}
+
 processResources {
 	from(genPalettes)
+	from(checkSidecarBundle)
 	def version = project.version
+	def bundle = sidecarBundled ? "present" : "missing"
 	inputs.property "version", version
+	inputs.property "bundle", bundle
 
 	filesMatching("fabric.mod.json") {
-		expand "version": version
+		expand "version": version, "bundle": bundle
 	}
 
 	// The sidecar bundle (docs/CONTRACT.md "Launcher"): the built sidecar and the blueprint kit, copied into the

@@ -176,6 +176,21 @@ public final class Launcher {
 
 	// ------------------------------------------------------------------ the sequence
 
+	/** The Status tab's red line and the launcher's log line for a dev jar built without the sidecar bundle (phase 5b F1). */
+	public static final String NO_BUNDLE = "Development build without the sidecar bundle: set ARCHITECT_SIDECAR_DIR, or build sidecar/ and rebuild the mod";
+
+	/**
+	 * Whether this jar is a development build without the sidecar bundle (docs/CONTRACT.md phase 5b F1: the version ends in
+	 * {@code +nosidecar}, the manifest says {@code Architect-Sidecar-Bundle: missing}, fabric.mod.json's custom value
+	 * {@code architect_mc:bundle} is {@code missing}).
+	 */
+	public static boolean devBuildWithoutBundle() {
+		return FabricLoader.getInstance().getModContainer(Architect.MOD_ID).map(c -> {
+			var v = c.getMetadata().getCustomValue("architect_mc:bundle");
+			return v != null && v.getType() == net.fabricmc.loader.api.metadata.CustomValue.CvType.STRING && "missing".equals(v.getAsString());
+		}).orElse(false);
+	}
+
 	private static void launch(long gen) throws Exception {
 		Path gameDir = FabricLoader.getInstance().getGameDir();
 		String modVersion = modVersion();
@@ -185,8 +200,11 @@ public final class Launcher {
 			ClientEnv.raw("ARCHITECT_KIT_DIR"), bundled, gameDir, modVersion, Files::isDirectory);
 		source = src;
 		Architect.LOGGER.info("Launcher: sidecar source {} ({}), kit {}", src.kind(), src.origin(), src.kit());
+		if (devBuildWithoutBundle()) {
+			Architect.LOGGER.warn("Launcher: {}", NO_BUNDLE);
+		}
 		if (src.kind() == SourceKind.NONE) {
-			set(State.DISABLED, "this build has no sidecar bundled (dev: set ARCHITECT_SIDECAR_DIR to a sidecar/ checkout)");
+			set(State.DISABLED, devBuildWithoutBundle() ? NO_BUNDLE : "this build has no sidecar bundled (dev: set ARCHITECT_SIDECAR_DIR to a sidecar/ checkout)");
 			return;
 		}
 		// node

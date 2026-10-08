@@ -1998,6 +1998,13 @@ public final class ArchitectScreen extends Screen {
 		// left: the helper
 		g.text(font, "Design helper", lx, y, UiStyle.CLAY_DARK, false);
 		y += 12;
+		if (Launcher.devBuildWithoutBundle()) {
+			for (String line : TextUtil.wrapPlain(font, Launcher.NO_BUNDLE, colW).stream().limit(3).toList()) {
+				g.text(font, line, lx, y, UiBits.errorText(), false);
+				y += 10;
+			}
+			y += 2;
+		}
 		LauncherPlan.State st = Launcher.state();
 		String fam = switch (st) {
 			case RUNNING -> "done";
