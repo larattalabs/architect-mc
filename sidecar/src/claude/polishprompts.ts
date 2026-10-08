@@ -13,7 +13,8 @@ export const POLISH_PROMPTS_STATUS = 'draft';
 export const POLISH_SYSTEM = [
   'You are polishing an existing Minecraft building made with the Architect blueprint kit: a targeted edit, not a redesign.',
   'A critic named one problem with one part of the building. You fix that problem inside the parts you are allowed to change and keep every other cell exactly as it is.',
-  'Edit, do not rebuild: change as few cells as the fix needs, keep the part names, the front, the frame (`origin`, the entrance feet row), the params, the palette and the size limit. To grow toward -x, -y or -z, raise `origin`; never move existing coordinates.',
+  'The critic looks at the same renders again and accepts your step only when the problem it named is clearly gone. A token tweak that leaves the problem visible fails: make the change the fix needs, even when that means rewriting the allowed part (its code is yours to rework).',
+  'Edit the building, do not rebuild it: outside the allowed parts nothing changes. Keep the part names, the front, the frame (`origin`, the entrance feet row), the params, the palette and the size limit. To grow toward -x, -y or -z, raise `origin`; never move existing coordinates.',
   'When the problem is clutter, remove before adding. No new motifs.',
   'Work only in your scratch directory with the kit and node, without network access. Read POLISH.md first: it has the problem, the allowed parts, the rules and the commands. End only when the diff command reports no violation and the check is OK, with a one-line summary of what you changed.',
 ].join('\n');
@@ -62,11 +63,17 @@ export function polishBrief(i: PolishBriefInput): string {
     i.maxSize ? `- The size limit is ${i.maxSize.x}x${i.maxSize.y}x${i.maxSize.z}.` : '',
     '- When the problem is clutter, remove before adding. No new motifs.',
     '',
+    '## How the step is judged',
+    '',
+    '- The critic renders your version with the same views and is asked whether this problem is resolved. A small tweak that leaves it visible is not accepted, and nothing from the step is kept.',
+    '- Inside the allowed parts you may rework the code as much as the fix needs (move, reshape or rebuild the part); the limits are the parts and the share of changed cells.',
+    '- Also not accepted: a new P0 problem, or a building that looks worse overall.',
+    '',
     '## Check before you end',
     '',
     `1. Build and check: \`${i.buildCommand}\` ("check: OK" is required${warn.length ? `; no more warnings of any rule than the base has: ${warn.map(([k, n]) => `${k} ${n}`).join(', ')}` : '; no new warnings'}).`,
     `2. Compare with the base: \`${i.diffCommand}\`. It must print \`scope: OK\`; otherwise it lists the violations (cells outside the allowed parts, a removed part, too many changes, the frame): undo them.`,
-    '3. Look at your renders (`node kit/render.mjs kit/out/' + i.bp + '.nbt --views iso,front`), then end with a one-line summary of the change.',
+    '3. Render yours (`node kit/render.mjs kit/out/' + i.bp + '.nbt --views iso,front`) and Read them next to polish/base/. Ask: would the critic still write the problem above about this version? If yes, change more; if no, end with a one-line summary of the change.',
     '',
   ]
     .filter((l, k, a) => l !== '' || a[k - 1] !== '')
