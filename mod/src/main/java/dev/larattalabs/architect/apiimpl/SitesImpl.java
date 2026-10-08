@@ -321,7 +321,7 @@ final class SitesImpl implements dev.larattalabs.architect.api.Sites {
 	}
 
 	private static RemoveResult result(Groups.Removed r) {
-		return new RemoveResult(r.removed(), r.blockers(), Views.items(r.refund()), r.restored(), 0, r.handedDown(), r.cascaded());
+		return new RemoveResult(r.removed(), r.blockers(), Views.items(r.refund()), r.restored(), r.kept(), r.handedDown(), r.cascaded());
 	}
 
 	@Override

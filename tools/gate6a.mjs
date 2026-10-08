@@ -631,24 +631,18 @@ steps.eflat = async () => {
   }
   const r = await megaRun('G6A EFlat', { base: 'G6A Flat Mega Prepared' });
   const out = { run: { cellsWritten: r.cellsWritten, cellsPerSecond: r.cellsPerSecond, mspt: r.mspt?.all, state: r.state.view.state } };
-  // a player's block on a pad cell: next to a lot (its apron), the top of the column's stack a terrain tile's
+  // a player's block on a pad cell: a solid cell a ground terrain tile owns at the top of its stack
   const lotSite = r.state.view.lots.find((l) => l.siteId)?.siteId;
   let edit = null;
-  for (const l of r.state.view.lots.filter((x) => x.siteId).slice(0, 10)) {
-    const lb = r.state.record.lots[l.id];
-    const ir = JSON.parse(fs.readFileSync(path.join(SAVES, 'G6A EFlat', 'architect-regions', r.region, 'ir.json'), 'utf8'));
-    const lot = ir.lots.find((x) => x.id === l.id);
-    for (const [x, z] of [[lot.box.minX - 1, lot.box.minZ - 1], [lot.box.maxX + 1, lot.box.maxZ + 1], [lot.box.minX - 1, lot.box.maxZ + 1]]) {
-      await tp(x + 0.5, lot.floorY + 30, z + 0.5);
-      const at = await call('dev.journal.at', { x, y: lot.floorY - 1, z }).catch(() => null);
-      const st = at?.stack ?? [];
-      if (st.length && st[st.length - 1].kind === 'architect:terrain') {
-        edit = [x, lot.floorY - 1, z];
-        break;
-      }
+  const tiles = (await api('sites')).all.filter((x) => x.kind === 'cells:architect:terrain');
+  for (const t of tiles.slice(Math.floor(tiles.length / 2), Math.floor(tiles.length / 2) + 5)) {
+    const v = await call('dev.site.verify', { site: t.id, list: true, max: 200 }, 120_000);
+    const c = (v.list ?? []).find((x) => !/air|water/.test(x));
+    if (c) {
+      edit = c.split(' ')[0].split(',').map(Number);
+      await tp(edit[0] + 0.5, edit[1] + 20, edit[2] + 0.5);
+      break;
     }
-    if (edit) break;
-    void lb;
   }
   if (edit) await cmd(`/setblock ${edit[0]} ${edit[1]} ${edit[2]} minecraft:gold_block`);
   out.edit = { at: edit };

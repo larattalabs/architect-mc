@@ -56,6 +56,8 @@ public final class Groups {
 		Map<String, Integer> handed = new TreeMap<>();
 		/** The cells the undo restores (its plan's stats). */
 		int restoredCells;
+		/** Phase 6a: CELL cells the undo left as they are (the world no longer held what the entry wrote: a player's block). */
+		int keptCells;
 		/** R1 in progress (not saved: a load plans again). */
 		transient dev.larattalabs.architect.journal.WorldJournal.@Nullable UndoPlanner planner;
 		transient List<String> planIds = List.of();
@@ -106,6 +108,7 @@ public final class Groups {
 				handed.forEach(h::addProperty);
 				o.add("handed", h);
 				o.addProperty("restoredCells", restoredCells);
+				o.addProperty("keptCells", keptCells);
 			}
 			if (!decItems.isEmpty()) {
 				JsonObject d = new JsonObject();
@@ -136,6 +139,7 @@ public final class Groups {
 				o.getAsJsonArray("undoSites").forEach(e -> r.undoSites.add(e.getAsString()));
 				o.getAsJsonObject("handed").entrySet().forEach(e -> r.handed.put(e.getKey(), e.getValue().getAsInt()));
 				r.restoredCells = o.has("restoredCells") ? o.get("restoredCells").getAsInt() : 0;
+				r.keptCells = o.has("keptCells") ? o.get("keptCells").getAsInt() : 0;
 			}
 			if (o.has("dec")) {
 				o.getAsJsonObject("dec").entrySet().forEach(e -> {
@@ -152,9 +156,14 @@ public final class Groups {
 
 	/** What a removal ended with: removed, or stopped at a site with its blockers; every refund so far. */
 	public record Removed(boolean removed, List<String> blockers, Map<String, Integer> refund, int restored, Map<String, Integer> handedDown,
-		List<String> cascaded) {
+		List<String> cascaded, int kept) {
 		public Removed(boolean removed, List<String> blockers, Map<String, Integer> refund) {
-			this(removed, blockers, refund, 0, Map.of(), List.of());
+			this(removed, blockers, refund, 0, Map.of(), List.of(), 0);
+		}
+
+		public Removed(boolean removed, List<String> blockers, Map<String, Integer> refund, int restored, Map<String, Integer> handedDown,
+			List<String> cascaded) {
+			this(removed, blockers, refund, restored, handedDown, cascaded, 0);
 		}
 	}
 
@@ -464,7 +473,7 @@ public final class Groups {
 			r.sites.remove(0);
 		}
 		if (r.sites.isEmpty()) {
-			end(server, r, new Removed(true, List.of(), Map.copyOf(r.refund), r.restoredCells, Map.copyOf(r.handedAll), List.copyOf(r.cascaded)));
+			end(server, r, new Removed(true, List.of(), Map.copyOf(r.refund), r.restoredCells, Map.copyOf(r.handedAll), List.copyOf(r.cascaded), r.keptCells));
 			return;
 		}
 		String id = r.sites.get(0);
@@ -720,6 +729,7 @@ public final class Groups {
 		r.handed = new TreeMap<>(Sites.handedBySite(u.work()));
 		r.handedAll = new TreeMap<>(r.handed);
 		r.restoredCells = u.work().plan().stats().values().stream().mapToInt(Journal.Stats::restored).sum();
+		r.keptCells = u.work().plan().stats().values().stream().mapToInt(Journal.Stats::changed).sum();
 		r.commit = u.commit();
 		Placement.save(server, false);
 	}
