@@ -27,7 +27,7 @@ public final class ApiEvents {
 	private ApiEvents() {
 	}
 
-	private static void guard(String what, Runnable r) {
+	static void guard(String what, Runnable r) {
 		try {
 			r.run();
 		} catch (Throwable t) {

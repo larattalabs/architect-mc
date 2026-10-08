@@ -201,6 +201,10 @@ public final class SidecarState {
 		/** (4c) {@code massing.removed {massingId, reason}}: deleted or garbage-collected. */
 		default void onMassingRemoved(String massingId, String reason) {
 		}
+
+		/** (5b) {@code entry.versioned {entryId, version, from, by, designId?}}: a library entry got a new version. */
+		default void onEntryVersioned(JsonObject message) {
+		}
 	}
 
 	private LinkStatus link = new LinkStatus(LinkStatus.Phase.DISABLED, "", 0, null, 0, 0, false);
@@ -577,6 +581,11 @@ public final class SidecarState {
 				String reason = str(json, "reason", "deleted");
 				for (Listener l : listeners) {
 					guard(() -> l.onMassingRemoved(id, reason));
+				}
+			}
+			case "entry.versioned" -> {
+				for (Listener l : listeners) {
+					guard(() -> l.onEntryVersioned(json));
 				}
 			}
 			case "bible.index" -> {
