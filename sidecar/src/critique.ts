@@ -17,6 +17,7 @@ import path from 'node:path';
 import { blueprintSummary, CRITIC_SYSTEM, criticPrompt, dimsFor, readVerdict, revisionPrompt, SLICES_MAX_CHARS, simVerdict, verdictSchema, type CriticContext } from './critic.js';
 import { copyPartsAlong, isFinalDesign, KIT, refreshKit, runNode, type CheckResult, type Sidecar as SidecarJson } from './designs.js';
 import { addCost, zeroCost } from './jobs/cost.js';
+import { criticHash } from './critichash.js';
 import { isFinalJob } from './jobs/book.js';
 import { CRITIQUE_VIEWS, DesignRequest as DesignRequestSchema, type Cost, type CritiqueRecord, type CritiqueRound, type CritiqueSpec, type Design, type DesignRequest, type EndReason, type Job } from './protocol.js';
 import type { Sidecar } from './sidecar.js';
@@ -129,9 +130,11 @@ export class Critiques {
     const c: CritiqueSpec | undefined = d.request.critique;
     if (!c || c.mode === 'off') return undefined;
     const cfg = this.sc.config.critique;
+    // (5b) mode polish: round 0 installs with a report (its critique.json), then a polish of the new entry starts
+    // (Sidecar.installChecked -> Polishes.afterDesign) with maxSteps = maxRevisions
     return {
-      mode: c.mode,
-      maxRevisions: c.mode === 'report' ? 0 : Math.min(3, c.maxRevisions ?? (d.request.massing ? 1 : DEFAULT_MAX_REVISIONS)),
+      mode: c.mode === 'polish' ? 'report' : c.mode,
+      maxRevisions: c.mode === 'report' || c.mode === 'polish' ? 0 : Math.min(3, c.maxRevisions ?? (d.request.massing ? 1 : DEFAULT_MAX_REVISIONS)),
       model: c.model ?? cfg.model,
       effort: c.effort ?? cfg.effort,
       ...(c.budgetUsd !== undefined ? { budgetUsd: c.budgetUsd } : {}),
@@ -616,9 +619,13 @@ export class Critiques {
       const dir = path.join(scratch, 'critique', String(best.n));
       for (const f of fs.existsSync(dir) ? fs.readdirSync(dir).filter((x) => x.endsWith('.png')).sort() : []) renders[/\.preview-([a-z0-9_-]+)\.png$/.exec(f)?.[1] ?? f] = sha256(path.join(dir, f));
     }
+    // (5b) format 2: the entry version it was made for and the critic hash (critichash.ts)
+    const top = readJsonSafe(path.join(entryDir, `${entryId}.blueprint.json`)) as { version?: unknown } | undefined;
     const out = {
-      format: 1,
+      format: 2,
       entryId,
+      entryVersion: typeof top?.version === 'number' ? top.version : 1,
+      criticHash: criticHash(),
       entryRevision: fs.existsSync(nbt) ? sha256(nbt) : null,
       at: this.sc.now(),
       designId: d.id,

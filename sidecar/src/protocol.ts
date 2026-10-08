@@ -17,7 +17,7 @@ export const PROTOCOL_VERSION = 1 as const;
 export const PROTOCOLS = [1, 2] as const;
 export type Protocol = (typeof PROTOCOLS)[number];
 /** What a protocol-2 snapshot lists in `features`. */
-export const FEATURES = ['job.run', 'job.tools', 'blobs', 'budget', 'designs.v2', 'bibles', 'design.groups', 'named.parts', 'open.types', 'estimates', 'reskin', 'massing', 'critique', 'critique.report', 'job.images', 'bible.admin', 'bible.restraint'] as const;
+export const FEATURES = ['job.run', 'job.tools', 'blobs', 'budget', 'designs.v2', 'bibles', 'design.groups', 'named.parts', 'open.types', 'estimates', 'reskin', 'massing', 'critique', 'critique.report', 'job.images', 'bible.admin', 'bible.restraint', 'entry.versions', 'entry.delta', 'design.polish', 'critique.polish'] as const;
 
 const Ts = z.number().int().nonnegative();
 const Id = z.string().min(1).max(64);
@@ -137,12 +137,12 @@ export type Cost = z.infer<typeof Cost>;
 export const CRITIQUE_VIEWS = ['iso', 'iso_back', 'front', 'top', 'cutaway'] as const;
 export const CritiqueView = z.enum(CRITIQUE_VIEWS);
 export type CritiqueView = z.infer<typeof CritiqueView>;
-export const CritiqueMode = z.enum(['off', 'report', 'loop']);
+export const CritiqueMode = z.enum(['off', 'report', 'loop', 'polish']);
 export type CritiqueMode = z.infer<typeof CritiqueMode>;
 export const CritiqueSpec = z
   .object({
-    mode: CritiqueMode.describe('off | report (one critic call, no revision) | loop (revise until it ships, a round cap, a budget or the clock stops it)'),
-    maxRevisions: z.number().int().min(0).max(3).optional().describe('default 2 (a massing: 1)'),
+    mode: CritiqueMode.describe('off | report (one critic call, no revision) | loop (revise until it ships, a round cap, a budget or the clock stops it) | (5b) polish (round 0 installs with a report, then a polish of the new entry: targeted steps, at most one new version)'),
+    maxRevisions: z.number().int().min(0).max(3).optional().describe('default 2 (a massing: 1); (5b) mode polish: maxSteps (1..3)'),
     model: z.string().trim().min(1).max(100).regex(/^[A-Za-z0-9._:@/[\]-]+$/, 'not a model id').optional().describe('the critic model (default config critique.model, claude-sonnet-5-5)'),
     effort: z.enum(['low', 'medium', 'high']).optional().describe('default medium'),
     budgetUsd: z.number().positive().max(1000).optional().describe("cap on the loop's own spend (critic calls plus revision turns); default 1.0x round 0's cost"),
@@ -195,6 +195,73 @@ export const CritiqueRecord = z.object({
 });
 export type CritiqueRecord = z.infer<typeof CritiqueRecord>;
 
+// ---- phase 5b: entry versions and polish (docs/CONTRACT.md "Phase 5b", §1, §3, §5) ----------------------------
+
+export const PartName = z.string().regex(/^[a-z][a-z0-9_]{0,39}$/, 'a part name is [a-z][a-z0-9_]{0,39}');
+export const PolishSpec = z.object({
+  fromVersion: z.number().int().min(1).optional().describe('the version polished (default the head)'),
+  critique: z.enum(['reuse', 'fresh']).optional().describe("reuse (default): the head's critique.json when it is not stale, else a report runs first"),
+  target: z
+    .object({
+      issues: z.array(z.number().int().min(0)).min(1).max(3).optional().describe('indexes into the verdict issues, one per step, in this order'),
+      parts: z.array(PartName).min(1).max(3).optional().describe('the parts the change may touch (with notes: skips the scoping call)'),
+      notes: z.string().trim().min(1).max(500).optional().describe('a free-text change ("make the porch less cluttered"); without parts a scoping call picks them'),
+    })
+    .optional(),
+  maxSteps: z.number().int().min(1).max(3).optional().describe('default 2'),
+  maxNewParts: z.number().int().min(0).max(2).optional().describe('default 2'),
+  maxChangedShare: z.number().min(0.05).max(1).optional().describe('default 0.5: an edit, not a rebuild'),
+  model: ModelId.optional().describe("the polish model (default the entry's designer model)"),
+  effort: z.enum(['low', 'medium', 'high']).optional().describe('default medium'),
+  budgetUsd: BudgetUsd.optional(),
+  maxMinutes: z.number().positive().max(240).optional().describe('default 15'),
+  apply: z.object({ sites: z.union([z.array(z.string().min(1).max(200)).max(256), z.literal('all')]), preview: z.boolean().optional().describe('default true') }).optional().describe('the mod applies: carried in the design record'),
+});
+export type PolishSpec = z.infer<typeof PolishSpec>;
+export const POLISH_ENDS = ['polished', 'no_target', 'not_resolved', 'scope_failed', 'check_failed', 'base_drift', 'budget', 'time', 'critic_failed'] as const;
+export const PolishEnd = z.enum(POLISH_ENDS);
+export type PolishEnd = z.infer<typeof PolishEnd>;
+export const PolishStep = z.object({
+  n: z.number().int().min(1),
+  target: CritiqueIssue.nullable().describe('the issue this step fixes (null: none)'),
+  targetIndex: z.number().int().nullable().optional().describe("its index in the base verdict's issues"),
+  allowedParts: z.array(z.string()),
+  accepted: z.boolean(),
+  overall: z.number().nullable().describe("the fresh critic's overall (null: no verdict)"),
+  changedCells: z.number().int().nonnegative(),
+  cost: Cost,
+  ms: z.number().int().nonnegative(),
+  failure: z.string().nullable().describe('scope_failed / check_failed / not_resolved / new_p0 / regressed / critic_failed / budget / ... (null: accepted)'),
+  fixTurns: z.number().int().nonnegative().optional(),
+});
+export type PolishStep = z.infer<typeof PolishStep>;
+export const PolishRecord = z.object({
+  entryId: z.string(),
+  fromVersion: z.number().int().min(1),
+  steps: z.array(PolishStep),
+  end: PolishEnd.optional().describe('set once the polish ended'),
+  installedVersion: z.number().int().nullable(),
+  apply: PolishSpec.shape.apply.optional(),
+  untargetable: z.number().int().nonnegative().optional().describe('open issues with part null (not targeted by default)'),
+  scoping: z.object({ parts: z.array(z.string()), newParts: z.array(z.string()), restated: z.string(), fits: z.boolean(), suggest: z.enum(['polish', 'reskin', 'remix']), reason: z.string() }).optional(),
+  baseOverall: z.number().nullable().optional(),
+  overall: z.number().nullable().optional().describe('the installed (or base) overall'),
+  report: z.boolean().optional().describe('a fresh report ran first'),
+  prompts: z.record(z.string(), z.string()).optional().describe('hashes of the polish prompts (drafts until frozen)'),
+  note: z.string().optional(),
+});
+export type PolishRecord = z.infer<typeof PolishRecord>;
+export const LineageEntry = z.object({
+  n: z.number().int().min(1),
+  createdAt: z.number(),
+  by: z.enum(['design', 'polish', 'revert', 'migrated']),
+  parent: z.number().int().nullable(),
+  designId: z.string().optional(),
+  summary: z.string(),
+  nbtSha256: z.string(),
+  criticHash: z.string().optional(),
+});
+
 export const DesignRequest = DesignRequestBase.extend({
   type: OpenType.describe('(protocol 2: any open type; protocol 1: the 11 presets) the building type'),
   profile: Profile.optional().describe('(4b, R4) an open type: the checker rules it wants (default door, lit, no_floating); preset types ignore it'),
@@ -246,6 +313,8 @@ export const Design = z.object({
   conformance: Conformance.optional().describe('(4c) a detail pass: the massing conformance result (errors failed a round; issues are warnings)'),
   critique: CritiqueRecord.optional().describe('(5a) the critique rounds, the best round, the end reason and the split cost'),
   critiqueOf: z.string().optional().describe('(5a) a report critique of this library entry (design.critique): no new entry'),
+  kind: z.literal('polish').optional().describe('(5b) a polish of a library entry (design.polish): no new entry, at most one new version'),
+  polish: PolishRecord.optional().describe('(5b) the polish: steps, end, installed version, the apply intent'),
 });
 export type Design = z.infer<typeof Design>;
 
@@ -428,7 +497,14 @@ const CritiqueFigures = {
   critiqueMinutesLow: z.number().optional().describe('(5a) the wall time the critique adds'),
   critiqueMinutesHigh: z.number().optional(),
 };
+const PolishFigures = {
+  polishUsdLow: z.number().optional().describe('(5b) a polish (design.estimate {polish}), on its own'),
+  polishUsdHigh: z.number().optional(),
+  polishMinutesLow: z.number().optional(),
+  polishMinutesHigh: z.number().optional(),
+};
 export const Estimate = z.object({
+  ...PolishFigures,
   usdLow: z.number(),
   usdHigh: z.number(),
   minutesLow: z.number(),
@@ -696,8 +772,9 @@ export const BibleIndexMsg = z.object({ ...envelope('bible.index'), bibles: z.ar
 export const ReskinUpsertMsg = z.object({ ...envelope('reskin.upsert'), reskin: Reskin });
 export const MassingUpsertMsg = z.object({ ...envelope('massing.upsert'), massing: Massing });
 export const MassingRemovedMsg = z.object({ ...envelope('massing.removed'), massingId: MassingId, reason: z.enum(['deleted', 'gc']) });
+export const EntryVersionedMsg = z.object({ ...envelope('entry.versioned'), entryId: z.string(), version: z.number().int().min(1), from: z.number().int().min(1).describe('the head before'), by: z.enum(['design', 'polish', 'revert', 'migrated']), designId: z.string().optional() });
 
-export const ServerMessage = z.discriminatedUnion('type', [SnapshotMsg, StatusMsg, DesignUpsertMsg, VariantUpsertMsg, AckMsg, ErrorMsg, JobUpsertMsg, JobEventMsg, JobToolCallMsg, GroupUpsertMsg, BibleUpsertMsg, BibleIndexMsg, ReskinUpsertMsg, MassingUpsertMsg, MassingRemovedMsg]);
+export const ServerMessage = z.discriminatedUnion('type', [SnapshotMsg, StatusMsg, DesignUpsertMsg, VariantUpsertMsg, AckMsg, ErrorMsg, JobUpsertMsg, JobEventMsg, JobToolCallMsg, GroupUpsertMsg, BibleUpsertMsg, BibleIndexMsg, ReskinUpsertMsg, MassingUpsertMsg, MassingRemovedMsg, EntryVersionedMsg]);
 export type ServerMessage = z.infer<typeof ServerMessage>;
 /** What protocol 1 knows: the phase 1-3 messages, with their phase 1-3 fields. */
 export const ServerMessageV1 = z.discriminatedUnion('type', [SnapshotMsgV1, StatusMsg, DesignUpsertMsgV1, VariantUpsertMsg, AckMsg, ErrorMsg]);
@@ -766,8 +843,8 @@ export const GroupCancelMsg = z.object({ ...envelope('group.cancel'), groupId: I
 export const GroupExtendMsg = z.object({ ...envelope('group.extend'), groupId: Id, budgetUsd: BudgetUsd });
 export const GroupResumeMsg = z.object({ ...envelope('group.resume'), groupId: Id });
 export const DesignEstimateMsg = z
-  .object({ ...envelope('design.estimate'), group: GroupRequest.optional(), request: DesignRequest.optional() })
-  .refine((m) => !!m.group !== !!m.request, 'send exactly one of group and request');
+  .object({ ...envelope('design.estimate'), group: GroupRequest.optional(), request: DesignRequest.optional(), polish: PolishSpec.optional().describe('(5b) a polish of entryId'), entryId: z.string().regex(LIBRARY_ID).max(64).optional().describe('(5b) with polish') })
+  .refine((m) => [m.group, m.request, m.polish].filter((x) => x !== undefined).length === 1, 'send exactly one of group, request and polish');
 export const BibleRequestMsg = z.object({ ...envelope('bible.request'), request: BibleRequest });
 export const BibleReviseMsg = z.object({ ...envelope('bible.revise'), id: BibleId, notes: z.string().trim().min(1).max(4000), model: ModelId.optional(), budgetUsd: BudgetUsd.optional(), critique: z.object({ mode: z.enum(['off', 'report']), model: ModelId.optional() }).optional().describe('(5a) a sheet critique at the end') });
 export const BibleEstimateMsg = z.object({ ...envelope('bible.estimate'), request: BibleRequest.optional() });
@@ -797,6 +874,13 @@ export const GroupApproveMsg = z.object({
 export const DesignCritiqueMsg = z.object({ ...envelope('design.critique'), entryId: z.string().regex(LIBRARY_ID).max(64), spec: CritiqueSpec.optional().describe('mode must be report (the default); the model, effort, views and extraCriteria apply') });
 export const BibleDeleteMsg = z.object({ ...envelope('bible.delete'), id: BibleId, owner: Owner.optional().describe("required for another owner's bible") });
 export const BibleArchiveMsg = z.object({ ...envelope('bible.archive'), id: BibleId, archived: z.boolean() });
+// 5b
+const EntryId = z.string().regex(LIBRARY_ID).max(64);
+export const EntryVersionsMsg = z.object({ ...envelope('entry.versions'), entryId: EntryId });
+export const EntryDeltaMsg = z.object({ ...envelope('entry.delta'), entryId: EntryId, from: z.number().int().min(1), to: z.number().int().min(1) });
+export const EntryRevertMsg = z.object({ ...envelope('entry.revert'), entryId: EntryId, toVersion: z.number().int().min(1) });
+export const EntryPinsMsg = z.object({ ...envelope('entry.pins'), pins: z.record(EntryId, z.array(z.number().int().min(1)).max(4096)).describe('every entry version a standing site pins (sent at connect and when they change)') });
+export const DesignPolishMsg = z.object({ ...envelope('design.polish'), entryId: EntryId, spec: PolishSpec.optional(), owner: Owner.optional(), ext: Ext.optional() });
 
 export const ClientMessage = z.discriminatedUnion('type', [
   HelloMsg,
@@ -829,6 +913,11 @@ export const ClientMessage = z.discriminatedUnion('type', [
   DesignCritiqueMsg,
   BibleDeleteMsg,
   BibleArchiveMsg,
+  EntryVersionsMsg,
+  EntryDeltaMsg,
+  EntryRevertMsg,
+  EntryPinsMsg,
+  DesignPolishMsg,
 ]);
 export type ClientMessage = z.infer<typeof ClientMessage>;
 /** What a protocol-1 client may send (exactly the phase 1-3 messages and fields). */
@@ -859,7 +948,8 @@ export function chooseProtocol(offered: number[] | undefined): Protocol | undefi
 export function toProtocol1(full: Record<string, unknown>): Record<string, unknown> | undefined {
   // (4c) massing jobs and detail passes are protocol-2 work: a protocol-1 client never sees them
   // (5a) and a report critique of a library entry (design.critique)
-  const v2Only = (d: unknown) => !!d && typeof d === 'object' && (!!(d as { critiqueOf?: unknown }).critiqueOf || !!(((d as { request?: Record<string, unknown> }).request ?? {}).massing || ((d as { request?: Record<string, unknown> }).request ?? {}).fromMassing));
+  // (5b) and polish designs
+  const v2Only = (d: unknown) => !!d && typeof d === 'object' && (!!(d as { critiqueOf?: unknown }).critiqueOf || (d as { kind?: unknown }).kind === 'polish' || !!(((d as { request?: Record<string, unknown> }).request ?? {}).massing || ((d as { request?: Record<string, unknown> }).request ?? {}).fromMassing));
   // (5a) critiquing is a protocol-2 status: protocol 1 sees rendering, with the step text
   const v1Status = (d: unknown) => (d && typeof d === 'object' && (d as { status?: unknown }).status === 'critiquing' ? { ...(d as Record<string, unknown>), status: 'rendering' } : d);
   if (full.type === 'design.upsert' && v2Only(full.design)) return undefined;

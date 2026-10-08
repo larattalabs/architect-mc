@@ -11,6 +11,7 @@
 //     in a child process with a minimal environment (it runs agent-written code)
 //   - rendering previews with the kit's renderer
 //   - installing the result into the library as <library>/<id>/, never overwriting anything
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { zeroCost } from './jobs/cost.js';
@@ -28,7 +29,7 @@ const FINAL: ReadonlySet<DesignStatus> = new Set(['done', 'failed', 'cancelled']
 
 export const isFinalDesign = (d: Design): boolean => FINAL.has(d.status);
 
-export type DesignPatch = Partial<Pick<Design, 'status' | 'step' | 'blueprintId' | 'size' | 'previews' | 'error' | 'cost' | 'massing' | 'conformance' | 'critique' | 'critiqueOf'>>;
+export type DesignPatch = Partial<Pick<Design, 'status' | 'step' | 'blueprintId' | 'size' | 'previews' | 'error' | 'cost' | 'massing' | 'conformance' | 'critique' | 'critiqueOf' | 'kind' | 'polish'>>;
 
 export interface BookCtx {
   store: Store;
@@ -369,7 +370,7 @@ export interface InstallInput {
   /** (4b) more files for the entry folder: `to` relative to it (`bible/components.mjs`: the design's bible files) */
   files?: Array<{ from: string; to: string }> | undefined;
   /** written into the sidecar JSON (`extra`: variantOf, displayName, imported, ...) */
-  meta: { name?: string | undefined; description?: string | undefined; request?: DesignRequest | undefined; createdAt: number; extra?: Record<string, unknown> };
+  meta: { name?: string | undefined; description?: string | undefined; request?: DesignRequest | undefined; createdAt: number; extra?: Record<string, unknown>; designId?: string | undefined };
 }
 
 export interface Installed {
@@ -438,6 +439,9 @@ export function installDesign(input: InstallInput): Installed {
       };
       if (source) sidecar.source = `${id}.mjs`;
       else delete sidecar.source;
+      // (5b) a new entry is version 1 of its own lineage
+      sidecar.version = 1;
+      sidecar.versions = [{ n: 1, createdAt: m.createdAt, by: 'design', parent: null, ...(m.designId ? { designId: m.designId } : {}), summary: '', nbtSha256: crypto.createHash('sha256').update(fs.readFileSync(nbt)).digest('hex') }];
       // the mod's user metadata is never written here (docs/CONTRACT.md "Library entry"), only `displayName` as a starting name
       for (const k of ['favorite', 'userTags']) delete sidecar[k];
       if (!(m.extra && 'displayName' in m.extra)) delete sidecar.displayName;

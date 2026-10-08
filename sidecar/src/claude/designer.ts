@@ -36,7 +36,10 @@ import { designFixPrompt, designPrompt, designStepFor, designSystemPrompt, massi
 import { isAuthText, probeFailure } from './failures.js';
 import { ensureLoginEnv, noLoginMessage, osUserInfo, type LoginEnvFill, type UserInfoLike } from './loginenv.js';
 import { REVISION_RESTART_PROMPT } from '../critic.js';
+import type { PolishBackend, PolishTurnResult } from '../polish.js';
+import { POLISH_SYSTEM } from './polishprompts.js';
 import { costFromResult, CostMeter, zeroCost } from '../jobs/cost.js';
+import type { Cost } from '../protocol.js';
 import { connectorHook, denyHook, designVerdict } from './permissions.js';
 import { loadSdk, loadZod, type Sdk } from './sdk.js';
 import { limitFromText, StreamMapper, type RateLimitReport, type TurnStats } from './stream.js';
@@ -464,6 +467,8 @@ export class ClaudeDesigner implements Designer {
     const id = cur.id;
     const d = sc.designs.get(id);
     if (!d || isFinalDesign(d)) return 'finished';
+    // (5b) a polish of a library entry: the polish engine runs it, with this designer's turns
+    if (d.kind === 'polish') return sc.polishes.run(id, this.polishBackend(cur));
     const req = d.request;
     // (4c) a massing job builds under its massing id
     const w = (this.work[id] ??= { bp: d.massing ? d.massing.id : freeLibraryId(cfg.libraryDir, designBaseId(req), this.takenIds(id)), round: 0 });
@@ -590,6 +595,65 @@ export class ClaudeDesigner implements Designer {
       sc.installChecked(d, { scratch, bp: w.bp, baseId: designBaseId(req), res, previews: r.files, taken: this.takenIds(id), name: req.name, notes });
       return 'finished';
     }
+  }
+
+  /** per polish step session: its cost meter (a resumed session reports a cumulative cost) */
+  private polishMeters = new Map<string, CostMeter>();
+
+  /**
+   * (5b) A polish step's turn: a fresh Agent SDK session in the polish scratch dir (a fix turn resumes the step's
+   * session), the same permission policy as designs (the scratch dir only, no network; only kit/designs/<id>.mjs is
+   * writable), the polish system prompt (claude/polishprompts.ts, drafts until frozen).
+   */
+  polishBackend(cur: Current): PolishBackend {
+    return {
+      name: 'claude',
+      stopping: () => this.stopping,
+      turn: async (spec): Promise<PolishTurnResult> => {
+        const sc = this.sc;
+        const turn: Running = { abort: new AbortController() };
+        cur.turn = turn;
+        const resume = spec.resume ? sc.store.data.sessions[spec.sessionKey]?.sessionId : undefined;
+        const meter = this.polishMeters.get(spec.sessionKey) ?? new CostMeter(zeroCost());
+        this.polishMeters.set(spec.sessionKey, meter);
+        const before = meter.total();
+        meter.begin(!!resume);
+        let stats: TurnStats;
+        let reason: AbortReason | undefined;
+        try {
+          ({ stats, reason } = await this.runTurn(turn, {
+            id: spec.id,
+            bp: spec.bp,
+            sessionKey: spec.sessionKey,
+            cwd: spec.scratch,
+            prompt: spec.prompt,
+            model: spec.model,
+            effort: spec.effort,
+            ...(spec.budgetUsd !== undefined ? { maxBudgetUsd: spec.budgetUsd } : {}),
+            mcp: await this.statusMcp('design_status', 'Report one short line of progress on the polish (shown to the player in the Designs tab).', (step) => sc.designStep(spec.id, 'designing', `polish: ${step}`)),
+            ...(resume ? { resume } : {}),
+            system: POLISH_SYSTEM,
+            label: `polish ${spec.id} step ${spec.step} turn ${spec.turn}`,
+            onMessage: (msg) => {
+              if (msg.type === 'result') meter.observe(costFromResult(msg as unknown as Record<string, unknown>));
+            },
+          }));
+        } finally {
+          cur.turn = undefined;
+        }
+        const after = meter.commit();
+        const cost: Cost = { usd: Math.max(0, Math.round((after.usd - before.usd) * 1e6) / 1e6), inputTokens: Math.max(0, after.inputTokens - before.inputTokens), outputTokens: Math.max(0, after.outputTokens - before.outputTokens), cacheReadTokens: Math.max(0, after.cacheReadTokens - before.cacheReadTokens), cacheWriteTokens: Math.max(0, after.cacheWriteTokens - before.cacheWriteTokens), turns: Math.max(0, after.turns - before.turns) };
+        if (reason === 'cancel') return { outcome: 'cancelled', cost };
+        if (reason === 'shutdown' || this.stopping) return { outcome: 'stopped', cost };
+        if (stats.limited) {
+          if (!this.limited()) this.setLimit(stats.rateLimit?.resetsAt, stats.rateLimit?.type);
+          return { outcome: 'limit', cost };
+        }
+        if (stats.subtype === 'error_max_budget_usd') return { outcome: 'budget', cost, error: `the step hit its budget ($${after.usd.toFixed(4)})` };
+        if (stats.authFailed) return { outcome: 'error', cost, error: `Claude authentication failed (${stats.authFailed})` };
+        return { outcome: stats.isError ? 'error' : 'done', cost, ...(stats.isError ? { error: stats.subtype ?? stats.errors[0] ?? 'error' } : {}) };
+      },
+    };
   }
 
   // ---- one SDK turn ---------------------------------------------------------------------------
