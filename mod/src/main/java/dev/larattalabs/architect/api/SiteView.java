@@ -26,16 +26,26 @@ import org.jspecify.annotations.Nullable;
  * @param policy (1.5.0) how its undo treats its cells (buildings BOX, roads CELL, cell sites as requested)
  * @param covers (1.5.0) the sites it lies on top of (any cell)
  * @param coveredBy (1.5.0) the sites lying on top of it (any cell)
+ * @param region (1.8.0) the region it belongs to (a tile, road or lot of a realised region), or null
  */
 public record SiteView(String id, String blueprintId, @Nullable String owner, JsonObject ext, BoundingBox box, BoundingBox restoreBox,
 	Rotation rotation, ResourceKey<Level> dimension, State state, int built, int queued, @Nullable String group, @Nullable String batchId,
 	@Nullable String itemKey, String kind, Policy policy, List<String> covers, List<String> coveredBy, int version, int headVersion, int deviations,
-	boolean updating) {
+	boolean updating, @Nullable String region) {
 	public SiteView {
 		kind = kind == null ? "building" : kind;
 		policy = policy == null ? Policy.BOX : policy;
 		covers = covers == null ? List.of() : List.copyOf(covers);
 		coveredBy = coveredBy == null ? List.of() : List.copyOf(coveredBy);
+	}
+
+	/** The 1.7.0 constructor (no region). */
+	public SiteView(String id, String blueprintId, @Nullable String owner, JsonObject ext, BoundingBox box, BoundingBox restoreBox,
+		Rotation rotation, ResourceKey<Level> dimension, State state, int built, int queued, @Nullable String group, @Nullable String batchId,
+		@Nullable String itemKey, String kind, Policy policy, List<String> covers, List<String> coveredBy, int version, int headVersion, int deviations,
+		boolean updating) {
+		this(id, blueprintId, owner, ext, box, restoreBox, rotation, dimension, state, built, queued, group, batchId, itemKey, kind, policy, covers,
+			coveredBy, version, headVersion, deviations, updating, null);
 	}
 
 	/** The 1.5.0 constructor (no versions: version and headVersion 1, no deviations, not updating). */
