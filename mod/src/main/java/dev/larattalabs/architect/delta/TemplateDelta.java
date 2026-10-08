@@ -196,9 +196,41 @@ public final class TemplateDelta {
 
 	// ------------------------------------------------------------------ the delta
 
-	/** {@code delta(A, B)}. */
+	/**
+	 * {@code delta(A, B)}. A version made before 5b has no frame (its origin is unknown): against a framed version it takes the
+	 * framed side's origin (its design coordinates did not move); two unframed versions compare at 0,0,0.
+	 */
 	public static Result delta(Version va, Version vb) {
+		boolean fa = framed(va.json());
+		boolean fb = framed(vb.json());
+		if (fa != fb) {
+			Version un = fa ? vb : va;
+			int[] o = origin((fa ? va : vb).json());
+			JsonObject j = un.json() == null ? new JsonObject() : un.json().deepCopy();
+			JsonObject f = new JsonObject();
+			com.google.gson.JsonArray a = new com.google.gson.JsonArray();
+			for (int v : o) {
+				a.add(v);
+			}
+			f.add("origin", a);
+			j.add("frame", f);
+			Version borrowed = new Version(un.nbt(), un.parts(), j);
+			return fa ? delta(decode(va), decode(borrowed)) : delta(decode(borrowed), decode(vb));
+		}
 		return delta(decode(va), decode(vb));
+	}
+
+	/** The two origins a delta of these versions uses (the unframed side borrows the framed side's; see {@link #delta(Version, Version)}). */
+	public static int[][] origins(@Nullable JsonObject a, @Nullable JsonObject b) {
+		boolean fa = framed(a);
+		boolean fb = framed(b);
+		int[] oa = origin(fa || !fb ? a : b);
+		int[] ob = origin(fb || !fa ? b : a);
+		return new int[][] {oa, ob};
+	}
+
+	static boolean framed(@Nullable JsonObject json) {
+		return json != null && json.get("frame") instanceof JsonObject f && f.get("origin") instanceof com.google.gson.JsonArray a && a.size() == 3;
 	}
 
 	public static Result delta(Decoded a, Decoded b) {

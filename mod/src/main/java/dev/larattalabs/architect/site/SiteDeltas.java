@@ -431,8 +431,9 @@ public final class SiteDeltas {
 		};
 		int[] minA = siteMin(b, va);
 		SitePlanner.Plan pa = plan(level, va, minA, turns, pre);
-		int[] oa = TemplateDelta.origin(va.entry().json());
-		int[] ob = TemplateDelta.origin(vb.entry().json());
+		int[][] os = TemplateDelta.origins(va.entry().json(), vb.entry().json());
+		int[] oa = os[0];
+		int[] ob = os[1];
 		int[] minB = SitePlanner.alignedMin(minA, oa, va.entry().blueprint().sizeX(), va.entry().blueprint().sizeZ(), ob, vb.entry().blueprint().sizeX(),
 			vb.entry().blueprint().sizeZ(), turns);
 		SitePlanner.Plan pb = plan(level, vb, minB, turns, pre);

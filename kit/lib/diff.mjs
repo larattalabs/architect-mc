@@ -292,5 +292,15 @@ export function diffVersions(A, B, opts = {}) {
 
 /** Diff two .nbt files (each with its sidecar JSON and parts.nbt next to it, unless overridden). */
 export function diffFiles(a, b, opts = {}) {
-  return diffVersions(loadVersion(a, { parts: opts.partsA, frame: opts.frameA }), loadVersion(b, { parts: opts.partsB, frame: opts.frameB }), opts);
+  // an entry made before 5b has no frame: its origin is unknown, and a delta against a framed version takes the framed side's
+  // origin for it (the design coordinates did not move); two unframed versions compare at 0,0,0 (docs/HANDOFF-5b.md)
+  const framed = (p, f) => f ?? (() => {
+    const j = readJson(p.replace(/\.nbt$/i, '') + '.blueprint.json');
+    return Array.isArray(j?.frame?.origin) && j.frame.origin.length === 3 ? j.frame.origin.map(Number) : undefined;
+  })();
+  let fa = framed(a, opts.frameA);
+  let fb = framed(b, opts.frameB);
+  if (fa === undefined && fb !== undefined) fa = fb;
+  if (fb === undefined && fa !== undefined) fb = fa;
+  return diffVersions(loadVersion(a, { parts: opts.partsA, frame: fa }), loadVersion(b, { parts: opts.partsB, frame: fb }), opts);
 }
