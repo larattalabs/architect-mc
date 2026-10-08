@@ -820,8 +820,8 @@ public final class Batches {
 			i.reason = null;
 			i.message = "";
 			startStage(server, b, i);
-			untickItem(server, b, i.key);
 			ticketJob(server, b, i, level, job.snapBox);
+			untickItem(server, b, i.key);
 			Placement.add(server, job);
 			CHANGED.add(b.id);
 		} catch (Sites.SiteException e) {
@@ -1101,11 +1101,24 @@ public final class Batches {
 			return; // over the bound: it waits for a player like LOADED_ONLY
 		}
 		ticketGot(b, i);
-		for (long c : want) {
-			level.getChunkSource().addTicketWithRadius(TICKET, ChunkPos.unpack(c), 0);
-		}
+		ChunkTickets.acquire(i.dimension, want, source(level));
 		held.put(i.key, want);
 		levels.put(b.id + "/" + i.key, i.dimension);
+	}
+
+	/** The vanilla side of {@link ChunkTickets}: radius-0 {@link #TICKET}s of a level. */
+	static ChunkTickets.Source source(ServerLevel level) {
+		return new ChunkTickets.Source() {
+			@Override
+			public void add(long chunk) {
+				level.getChunkSource().addTicketWithRadius(TICKET, ChunkPos.unpack(chunk), 0);
+			}
+
+			@Override
+			public void remove(long chunk) {
+				level.getChunkSource().removeTicketWithRadius(TICKET, ChunkPos.unpack(chunk), 0);
+			}
+		};
 	}
 
 	/** The area a road or cell-site item touches (its points' or cells' box, grown by the road's width and search). */
@@ -1137,9 +1150,7 @@ public final class Batches {
 			return;
 		}
 		ticketGot(b, i);
-		for (long c : want) {
-			level.getChunkSource().addTicketWithRadius(TICKET, ChunkPos.unpack(c), 0);
-		}
+		ChunkTickets.acquire(i.dimension, want, source(level));
 		held.put(i.key, want);
 		levels.put(b.id + "/" + i.key, i.dimension);
 	}
@@ -1147,9 +1158,7 @@ public final class Batches {
 	/** While a job writes, its chunks (and the ring around them) stay loaded. */
 	private static void ticketJob(MinecraftServer server, QBatch b, QItem i, ServerLevel level, Anchors.Bounds snap) {
 		Set<Long> want = chunks(snap.grow(LeafGuard.RADIUS + 1));
-		for (long c : want) {
-			level.getChunkSource().addTicketWithRadius(TICKET, ChunkPos.unpack(c), 0);
-		}
+		ChunkTickets.acquire(i.dimension, want, source(level));
 		TICKETS.computeIfAbsent(b.id, k -> new HashMap<>()).put("job:" + i.key, want);
 		levels.put(b.id + "/job:" + i.key, i.dimension);
 	}
@@ -1191,9 +1200,7 @@ public final class Batches {
 		if (cs == null || level == null) {
 			return;
 		}
-		for (long c : cs) {
-			level.getChunkSource().removeTicketWithRadius(TICKET, ChunkPos.unpack(c), 0);
-		}
+		ChunkTickets.release(dim, cs, source(level));
 		String w = TICKET_WAITER.get(b.id);
 		QItem wi = w == null ? null : b.item(w);
 		if (wi != null && wi.status == QItem.Status.WAITING) {
@@ -1243,6 +1250,7 @@ public final class Batches {
 		CHANGED.clear();
 		TICKETS.clear();
 		levels.clear();
+		ChunkTickets.reset();
 		CANCELLED.values().forEach(fs -> fs.forEach(f -> f.completeExceptionally(new IllegalStateException("the world stopped"))));
 		CANCELLED.clear();
 		next = 1;
