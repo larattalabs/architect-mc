@@ -924,7 +924,7 @@ steps.crash = async () => {
 steps.eval = async () => {
   if (!dev) await connect();
   const AsyncFunction = Object.getPrototypeOf(async () => {}).constructor;
-  const helpers = { call, cmd, api, result, plan, prepare, realise, regionState, waitRegion, fresh, openWorld, leaveWorld, tp, sleep, ctx, saveCtx, log };
+  const helpers = { call, cmd, api, result, plan, prepare, realise, regionState, waitRegion, fresh, openWorld, leaveWorld, tp, sleep, ctx, saveCtx, log, prepared, smallRun, finishRegion, SMALL, MEGA, settle, fs, path, SAVES };
   const f = new AsyncFunction(...Object.keys(helpers), process.argv[3]);
   const v = await f(...Object.values(helpers));
   console.log(JSON.stringify(v, null, 1));

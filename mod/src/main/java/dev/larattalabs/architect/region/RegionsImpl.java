@@ -615,7 +615,7 @@ public final class RegionsImpl implements Regions {
 			q.fail(Reason.UNKNOWN_BLUEPRINT.name(), "No design " + bpId + " in the library");
 			return q;
 		}
-		LotFitting.Fit f = LotFitting.fit(bp, new Anchors.Bounds(b[0], b[1], b[2], b[3], b[4], b[5]), lot.front(), true, null, false);
+		LotFitting.Fit f = LotFitting.fit(bp, new Anchors.Bounds(b[0], b[1], b[2], b[3], b[4], b[5]), lot.front(), true, 0, true);
 		q = new QItem("lot:" + lot.id(), lot.stage(), after, bpId, rec.dimension, f.ox(), f.oy(), f.oz(), f.turns(), false, ext, r.actor() == null ? null
 			: r.actor().getStringUUID(), false, false);
 		q.layer = true;
@@ -824,7 +824,7 @@ public final class RegionsImpl implements Regions {
 			for (int t = 0; t < entries.size(); t++) {
 				String e = entries.get((k + t) % entries.size());
 				Blueprint bp = Blueprints.get(e);
-				if (bp != null && LotFitting.fit(bp, new Anchors.Bounds(b[0], b[1], b[2], b[3], b[4], b[5]), l.front(), true, null, false).fits()
+				if (bp != null && LotFitting.fit(bp, new Anchors.Bounds(b[0], b[1], b[2], b[3], b[4], b[5]), l.front(), true, 0, true).fits()
 					&& bp.sizeY() <= b[4] - b[1] + 1) {
 					out.put(l.id(), e);
 					break;
