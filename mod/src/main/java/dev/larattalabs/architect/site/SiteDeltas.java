@@ -335,6 +335,15 @@ public final class SiteDeltas {
 
 	/** The verdict of applying {@code r} (changes nothing). */
 	public static Check check(ServerLevel level, Request r) {
+		return check(level, r, null, null);
+	}
+
+	/**
+	 * {@link #check}; with {@code cap} (a large delta's sliced capture of the world around the site, {@link DeltaJob}) every world
+	 * read comes from it and the check may run off the server thread (occupancy is then the job's, on the server thread;
+	 * {@code bedsUnsafe} replaces the bed rule's per-head test).
+	 */
+	static Check check(ServerLevel level, Request r, WorldJournal.@Nullable Captured cap, @Nullable Boolean bedsUnsafe) {
 		List<Refusal> out = new ArrayList<>();
 		List<String> notes = new ArrayList<>();
 		MinecraftServer server = level.getServer();
@@ -403,7 +412,14 @@ public final class SiteDeltas {
 		// the pre-site view: the world outside the site's cells, the before of its lowest cell inside them
 		boolean[] unloaded = {false};
 		Map<Long, Value> world = new HashMap<>();
-		java.util.function.LongFunction<Value> now = p -> world.computeIfAbsent(p, q -> {
+		java.util.function.LongFunction<Value> now = cap != null ? p -> {
+			Value v = cap.at(p);
+			if (v == null) {
+				unloaded[0] = true; // outside the capture: the job grows its region and plans again
+				return Journal.AIR;
+			}
+			return v;
+		} : p -> world.computeIfAbsent(p, q -> {
 			BlockPos bp = BlockPos.of(q);
 			if (level.getChunkSource().getChunkNow(bp.getX() >> 4, bp.getZ() >> 4) == null) {
 				unloaded[0] = true;
@@ -430,13 +446,13 @@ public final class SiteDeltas {
 			}
 		};
 		int[] minA = siteMin(b, va);
-		SitePlanner.Plan pa = plan(level, va, minA, turns, pre);
+		SitePlanner.Plan pa = plan(level, va, minA, turns, pre, bedsUnsafe);
 		int[][] os = TemplateDelta.origins(va.entry().json(), vb.entry().json());
 		int[] oa = os[0];
 		int[] ob = os[1];
 		int[] minB = SitePlanner.alignedMin(minA, oa, va.entry().blueprint().sizeX(), va.entry().blueprint().sizeZ(), ob, vb.entry().blueprint().sizeX(),
 			vb.entry().blueprint().sizeZ(), turns);
-		SitePlanner.Plan pb = plan(level, vb, minB, turns, pre);
+		SitePlanner.Plan pb = plan(level, vb, minB, turns, pre, bedsUnsafe);
 		DeltaPlanner.Set3 set = DeltaPlanner.deltaSet(pa, pb, pre);
 		DeltaPlanner.Stacks stacks = new DeltaPlanner.Stacks() {
 			@Override
@@ -518,6 +534,13 @@ public final class SiteDeltas {
 		// a container the player filled in a Δ cell
 		List<String> filled = new ArrayList<>();
 		for (long p : o.write().keySet()) {
+			if (cap != null) {
+				Value v = cap.at(p);
+				if (v != null && v.nbt() != null && !v.nbt().getListOrEmpty("Items").isEmpty()) {
+					filled.add(v.name().replace("minecraft:", "") + " at " + BlockPos.of(p).toShortString());
+				}
+				continue;
+			}
 			BlockEntity be = level.getBlockEntity(BlockPos.of(p));
 			if (be instanceof Container c && !c.isEmpty()) {
 				filled.add(be.getBlockState().getBlock().getName().getString().toLowerCase(java.util.Locale.ROOT) + " at " + BlockPos.of(p).toShortString());
@@ -529,7 +552,7 @@ public final class SiteDeltas {
 		}
 		// a player or an animal in the cells it writes
 		Anchors.Bounds wb = boundsOf(o.entryCells());
-		if (wb != null && !unloaded[0]) {
+		if (wb != null && !unloaded[0] && cap == null) {
 			Set<Long> cells = o.entryCells();
 			List<Occupancy.Found> found = new ArrayList<>();
 			for (Occupancy.Found f : Occupancy.scan(level, wb, e -> !near(cells, e.blockPosition()))) {
@@ -634,10 +657,10 @@ public final class SiteDeltas {
 		return new int[] {b.box().minX(), b.box().minY(), b.box().minZ()};
 	}
 
-	static SitePlanner.Plan plan(ServerLevel level, Blueprints.Version v, int[] min, int turns, SitePlanner.World w) {
+	static SitePlanner.Plan plan(ServerLevel level, Blueprints.Version v, int[] min, int turns, SitePlanner.World w, @Nullable Boolean bedsUnsafe) {
 		var bp = v.entry().blueprint();
 		String dim = Sites.dimensionId(level);
-		SitePlanner.Beds beds = (h, bed) -> {
+		SitePlanner.Beds beds = bedsUnsafe != null ? (h, bed) -> bedsUnsafe : (h, bed) -> {
 			var rule = bed.getBedRule(level, BlockPos.of(h));
 			return dev.larattalabs.architect.placement.BedSafety.unsafe(rule.canSleep() == net.minecraft.world.attribute.BedRule.Rule.NEVER, rule
 				.destroyOnUse(), rule.destroyOnLeave());
@@ -647,6 +670,57 @@ public final class SiteDeltas {
 	}
 
 	// ------------------------------------------------------------------ apply (D1-D8)
+
+	/**
+	 * Applies a delta (instant): a kit building at once ({@link #apply}), a large one over ticks ({@link DeltaJob}). The future
+	 * completes when the writes are done; refusals complete it exceptionally.
+	 */
+	public static java.util.concurrent.CompletableFuture<Result> applyAsync(ServerLevel level, Request r) {
+		Site b = Sites.get(r.siteId());
+		MinecraftServer server = level.getServer();
+		if (b != null) {
+			int head = headVersion(b.blueprint());
+			Blueprints.Version vb = Blueprints.version(server, b.blueprint(), r.toVersion() <= 0 ? head : r.toVersion());
+			if (DeltaJob.large(b, vb)) {
+				if (b.placing() || b.building() || b.versioning().updating() > 0 || Placement.job(b.id()) != null) {
+					return java.util.concurrent.CompletableFuture.failedFuture(new Sites.SiteException(Reason.SITE_BUSY, b.id() + " is busy"));
+				}
+				DeltaJob j = new DeltaJob(b.id(), DeltaJob.APPLY, r);
+				java.util.concurrent.CompletableFuture<Result> f = new java.util.concurrent.CompletableFuture<>();
+				j.futures.add(f);
+				Placement.add(server, j);
+				return f.thenCompose(res -> res.applied() ? java.util.concurrent.CompletableFuture.completedFuture(res) : java.util.concurrent.CompletableFuture
+					.failedFuture(new Sites.SiteException(res.refusals().isEmpty() ? Reason.OTHER : res.refusals().get(0).reason(), String.join("; ", res
+						.notes()))));
+			}
+		}
+		try {
+			return java.util.concurrent.CompletableFuture.completedFuture(apply(level, r));
+		} catch (Sites.SiteException e) {
+			return java.util.concurrent.CompletableFuture.failedFuture(e);
+		}
+	}
+
+	/** {@link #revert}, a large site's undo over ticks ({@link DeltaJob}). */
+	public static java.util.concurrent.CompletableFuture<Result> revertAsync(ServerLevel level, String siteId, int k, @Nullable String owner, boolean force) {
+		LARGE_REVERT.set(Boolean.TRUE);
+		PENDING.remove();
+		try {
+			Result r = revert(level, siteId, k, owner, force);
+			java.util.concurrent.CompletableFuture<Result> f = PENDING.get();
+			return f != null ? f : java.util.concurrent.CompletableFuture.completedFuture(r);
+		} catch (Sites.SiteException e) {
+			return java.util.concurrent.CompletableFuture.failedFuture(e);
+		} finally {
+			LARGE_REVERT.remove();
+			PENDING.remove();
+		}
+	}
+
+	/** Set around {@link #revertAsync}: a large suffix undo goes to a {@link DeltaJob} and returns its pending result. */
+	static final ThreadLocal<Boolean> LARGE_REVERT = new ThreadLocal<>();
+	/** The future of the last large revert started by {@link #undoSuffix} (read by {@link #revertAsync}'s callers). */
+	static final ThreadLocal<java.util.concurrent.CompletableFuture<Result>> PENDING = new ThreadLocal<>();
 
 	/** Applies a delta now (instant). Throws with the first refusal when the check refuses. */
 	public static Result apply(ServerLevel level, Request r) throws Sites.SiteException {
@@ -1050,6 +1124,16 @@ public final class SiteDeltas {
 			}
 		}
 		refusePlayer(level, b, ids);
+		if (Boolean.TRUE.equals(LARGE_REVERT.get()) && b.restoreBox().volume() > DeltaJob.LARGE_CELLS) {
+			DeltaJob j = new DeltaJob(siteId, DeltaJob.REVERT, new Request(siteId, k, DeltaPlanner.Edits.KEEP, false, b.owner(), true));
+			j.revertTo = k;
+			j.revertIds = List.copyOf(ids);
+			java.util.concurrent.CompletableFuture<Result> f = new java.util.concurrent.CompletableFuture<>();
+			j.futures.add(f);
+			PENDING.set(f);
+			Placement.add(server, j);
+			return new Result(true, siteId, from, k, 0, List.of(), 0, List.of(), List.of("pending: reverting over ticks"), b, null);
+		}
 		WorldJournal.kill("K5");
 		String group = SiteJournal.group(siteId + "-r" + k);
 		SiteJournal.Undone undone = SiteJournal.undoEntries(level, ids, group);

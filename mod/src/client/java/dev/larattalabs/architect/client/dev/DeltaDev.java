@@ -83,19 +83,16 @@ public final class DeltaDev {
 				Fields f = Fields.of(req);
 				SiteDeltas.Request r = request(f);
 				return DevBridge.onClient(mc, () -> ServerTasks.callAsPlayer((level, player) -> {
-					try {
-						long t0 = System.nanoTime();
-						JsonObject o = resultJson(SiteDeltas.apply(level, r));
-						o.addProperty("ms", (System.nanoTime() - t0) / 1e6);
-						return o;
-					} catch (Sites.SiteException e) {
-						JsonObject o = new JsonObject();
-						o.addProperty("applied", false);
-						o.addProperty("reason", e.reason().name());
-						o.addProperty("error", e.getMessage());
-						return o;
-					}
-				})).thenCompose(x -> x);
+					long t0 = System.nanoTime();
+					return SiteDeltas.applyAsync(level, r).handle((res, err) -> {
+						if (res != null) {
+							JsonObject o = resultJson(res);
+							o.addProperty("ms", (System.nanoTime() - t0) / 1e6);
+							return o;
+						}
+						return failJson(err);
+					});
+				})).thenCompose(x -> x).thenCompose(x -> x);
 			});
 		DevBridge.register("dev.site.revert", 120_000, "{site, version, owner?, force?} - phase 5b: Sites.revert (creative: one undo of the deltas "
 			+ "above the version in the site's chain, else a forward delta)", (req, mc) -> {
@@ -104,17 +101,8 @@ public final class DeltaDev {
 				int v = f.optInt("version", 1, 1, 1_000_000);
 				String owner = f.optStr("owner", null);
 				boolean force = f.optBool("force", false);
-				return DevBridge.onClient(mc, () -> ServerTasks.callAsPlayer((level, player) -> {
-					try {
-						return resultJson(SiteDeltas.revert(level, site, v, owner, force));
-					} catch (Sites.SiteException e) {
-						JsonObject o = new JsonObject();
-						o.addProperty("applied", false);
-						o.addProperty("reason", e.reason().name());
-						o.addProperty("error", e.getMessage());
-						return o;
-					}
-				})).thenCompose(x -> x);
+				return DevBridge.onClient(mc, () -> ServerTasks.callAsPlayer((level, player) -> SiteDeltas.revertAsync(level, site, v, owner, force).handle((res,
+					err) -> res != null ? resultJson(res) : failJson(err)))).thenCompose(x -> x).thenCompose(x -> x);
 			});
 		DevBridge.register("dev.site.delta.preview", 30_000, "{site, version?: 0, key?: 'architect:delta'} - phase 5b: the delta ghost "
 			+ "(ArchitectClientApi.previewDelta) under a composite key -> the verdict's counts", (req, mc) -> {
@@ -151,6 +139,15 @@ public final class DeltaDev {
 					return o;
 				})).thenCompose(x -> x);
 			});
+	}
+
+	static JsonObject failJson(Throwable err) {
+		Throwable c = err instanceof java.util.concurrent.CompletionException && err.getCause() != null ? err.getCause() : err;
+		JsonObject o = new JsonObject();
+		o.addProperty("applied", false);
+		o.addProperty("reason", c instanceof Sites.SiteException se ? se.reason().name() : "OTHER");
+		o.addProperty("error", String.valueOf(c.getMessage()));
+		return o;
 	}
 
 	static SiteDeltas.Request request(Fields f) {

@@ -416,42 +416,53 @@ final class SitesImpl implements dev.larattalabs.architect.api.Sites {
 
 	@Override
 	public CompletableFuture<dev.larattalabs.architect.api.DeltaResult> applyDelta(dev.larattalabs.architect.api.DeltaRequest r) {
-		return onServer(() -> {
+		CompletableFuture<CompletableFuture<dev.larattalabs.architect.api.DeltaResult>> f = onServer(() -> {
 			Site b = Sites.get(r.siteId());
 			ServerLevel level = b == null ? null : Sites.levelOf(server, b);
 			if (level == null) {
-				return Views.deltaFailed(r.siteId(), new Refusal(Reason.OTHER, b == null ? "No site " + r.siteId() : r.siteId() + "'s dimension is not loaded"));
+				return CompletableFuture.completedFuture(Views.deltaFailed(r.siteId(), new Refusal(Reason.OTHER, b == null ? "No site " + r.siteId() : r.siteId()
+					+ "'s dimension is not loaded")));
 			}
 			try {
 				if (instantDelta(r.actor())) {
-					return Views.deltaResult(dev.larattalabs.architect.site.SiteDeltas.apply(level, deltaRequest(r)));
+					return dev.larattalabs.architect.site.SiteDeltas.applyAsync(level, deltaRequest(r)).handle((res, err) -> res != null ? Views.deltaResult(res)
+						: Views.deltaFailed(r.siteId(), refusalOf(err)));
 				}
-				return Views.deltaResult(Builder.applyConstructionDelta(level, deltaRequest(r), r.actor()));
+				return CompletableFuture.completedFuture(Views.deltaResult(Builder.applyConstructionDelta(level, deltaRequest(r), r.actor())));
 			} catch (Sites.SiteException e) {
-				return Views.deltaFailed(r.siteId(), new Refusal(e.reason(), e.getMessage()));
+				return CompletableFuture.completedFuture(Views.deltaFailed(r.siteId(), new Refusal(e.reason(), e.getMessage())));
 			}
 		});
+		return f.thenCompose(x -> x);
+	}
+
+	static Refusal refusalOf(Throwable err) {
+		Throwable c = err instanceof java.util.concurrent.CompletionException && err.getCause() != null ? err.getCause() : err;
+		return c instanceof Sites.SiteException se ? new Refusal(se.reason(), se.getMessage()) : new Refusal(Reason.OTHER, String.valueOf(c.getMessage()));
 	}
 
 	@Override
 	public CompletableFuture<dev.larattalabs.architect.api.DeltaResult> revert(String siteId, int toVersion, @Nullable ServerPlayer actor) {
-		return onServer(() -> {
+		CompletableFuture<CompletableFuture<dev.larattalabs.architect.api.DeltaResult>> f = onServer(() -> {
 			Site b = Sites.get(siteId);
 			ServerLevel level = b == null ? null : Sites.levelOf(server, b);
 			if (level == null) {
-				return Views.deltaFailed(siteId, new Refusal(Reason.OTHER, b == null ? "No site " + siteId : siteId + "'s dimension is not loaded"));
+				return CompletableFuture.completedFuture(Views.deltaFailed(siteId, new Refusal(Reason.OTHER, b == null ? "No site " + siteId : siteId
+					+ "'s dimension is not loaded")));
 			}
 			try {
 				if (instantDelta(actor)) {
-					return Views.deltaResult(dev.larattalabs.architect.site.SiteDeltas.revert(level, siteId, toVersion, b.owner(), true));
+					return dev.larattalabs.architect.site.SiteDeltas.revertAsync(level, siteId, toVersion, b.owner(), true).handle((res, err) -> res != null
+						? Views.deltaResult(res) : Views.deltaFailed(siteId, refusalOf(err)));
 				}
 				// survival: a paid forward delta, never a journal undo (N6)
-				return Views.deltaResult(Builder.applyConstructionDelta(level, new dev.larattalabs.architect.site.SiteDeltas.Request(siteId, toVersion,
-					dev.larattalabs.architect.delta.DeltaPlanner.Edits.KEEP, false, b.owner(), true), actor));
+				return CompletableFuture.completedFuture(Views.deltaResult(Builder.applyConstructionDelta(level, new dev.larattalabs.architect.site.SiteDeltas
+					.Request(siteId, toVersion, dev.larattalabs.architect.delta.DeltaPlanner.Edits.KEEP, false, b.owner(), true), actor)));
 			} catch (Sites.SiteException e) {
-				return Views.deltaFailed(siteId, new Refusal(e.reason(), e.getMessage()));
+				return CompletableFuture.completedFuture(Views.deltaFailed(siteId, new Refusal(e.reason(), e.getMessage())));
 			}
 		});
+		return f.thenCompose(x -> x);
 	}
 
 	@Override
