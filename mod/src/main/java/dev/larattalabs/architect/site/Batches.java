@@ -276,7 +276,12 @@ public final class Batches {
 				return;
 			}
 		}
+		long tc = System.nanoTime();
 		SiteDeltas.Check c = i.construction ? Builder.checkConstructionDelta(level, r) : SiteDeltas.check(level, r);
+		Architect.LOGGER.debug("Batch {}: the check of {} took {} ms", b.id, i.key, (System.nanoTime() - tc) / 1e6);
+		if (System.getenv("ARCHITECT_TRACE_JOBS") != null) {
+			Architect.LOGGER.info("TRACE delta check {} {} ms", i.key, (System.nanoTime() - tc) / 1e6);
+		}
 		if (!c.ok()) {
 			SiteDeltas.Refusal f = c.refusals().get(0);
 			if (c.waits() || TEMPORARY.contains(f.reason()) || f.reason() == Reason.SITE_BUSY) {

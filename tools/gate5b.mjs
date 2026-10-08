@@ -1470,6 +1470,28 @@ steps.scabindbg = async () => {
   await show('v2');
 };
 
+/** Debug: the village delta batch at 4 ms once (timings in the client log). */
+steps.vprobe = async () => {
+  if (!dev) await connect();
+  await flatBase();
+  const v = await villageBase();
+  await fresh('G5B VProbe', 'G5B VBase');
+  await tp(VOX + 50.5, 120, VOZ + 60.5);
+  await installVillageV2(v.dir);
+  const b = await upgradeBatch(v, 4, 'probe');
+  const done = await waitBatch(b.id, 10 * 60_000);
+  const stats = await call('dev.placement.stats', {});
+  log(`  vprobe: ${done.items.map((i) => i.status).join(',')} msptMax ${stats.msptMax} over50 ${stats.ticksOver50ms}`);
+  const rg = await result(await api(`sgremove ${v.group} - noforce`), 900_000);
+  await settle(3000);
+  const h = await hash(V_BOX, [], true);
+  log(`  vprobe: removeGroup ${JSON.stringify(rg).slice(0, 300)}; exact ${h.sha256 === v.h0}`);
+  if (h.sha256 !== v.h0) {
+    fs.writeFileSync(path.join(OUT, 'vprobe-after.json'), JSON.stringify(h.list ?? []));
+  }
+  await leaveWorld();
+};
+
 const which = process.argv[2];
 if (!which || !steps[which]) {
   console.log(`steps: ${Object.keys(steps).join(', ')}`);

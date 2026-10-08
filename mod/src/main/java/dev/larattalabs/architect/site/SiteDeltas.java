@@ -737,7 +737,12 @@ public final class SiteDeltas {
 	}
 
 	/** D1-D8 of a checked delta; {@code kind}: {@code delta} or {@code forward} (a revert done as a forward delta). */
+	private static String ms(long nanos) {
+		return String.format(java.util.Locale.ROOT, "%.1f", nanos / 1e6);
+	}
+
 	static Result applyChecked(ServerLevel level, Check c, boolean overwrite, String kind) throws Sites.SiteException {
+		long tA = System.nanoTime();
 		Planned p = c.plan();
 		MinecraftServer server = level.getServer();
 		Site b = Sites.get(c.siteId());
@@ -816,6 +821,7 @@ public final class SiteDeltas {
 		}
 		// D2-D3: the PLACING commit (synchronous, as a single Place)
 		SiteJournal.await(s.submit(t), "the update of " + b.id());
+		long tD3 = System.nanoTime();
 		WorldJournal.kill("D3");
 		// D4: the record, updating
 		Site updating = b.withVersioning(b.versioning().withUpdating(p.to()));
@@ -827,6 +833,7 @@ public final class SiteDeltas {
 		LeafGuard.holdCells(level, held, Sites.FLAGS);
 		drops.clearNew(level);
 		WorldJournal.kill("D5");
+		long tD5 = System.nanoTime();
 		// D6: the after capture
 		Map<Long, Value> after = new HashMap<>();
 		for (long q : cells) {
@@ -843,6 +850,7 @@ public final class SiteDeltas {
 			t2.status(leaves, Status.ACTIVE, null, 0L);
 		}
 		SiteJournal.await(s.submit(t2), "the update of " + b.id());
+		long tD7 = System.nanoTime();
 		WorldJournal.kill("D7");
 		// D8: the record at b
 		Site.Versioning v = updating.versioning().withUpdating(0);
@@ -873,8 +881,10 @@ public final class SiteDeltas {
 		if (reshaped > 0) {
 			notes.add(reshaped + " neighbour cell" + (reshaped == 1 ? "" : "s") + " reshaped");
 		}
-		Architect.LOGGER.info("Updated site {} ({}) v{} -> v{}: {} cells written, {} kept{}", b.id(), b.blueprint(), p.from(), p.to(), o.write().size(), o
-			.kept().size(), folded != null ? ", oldest delta folded" : "");
+		long tEnd = System.nanoTime();
+		Architect.LOGGER.info("Updated site {} ({}) v{} -> v{}: {} cells written, {} kept{} in {} ms (to D3 {}, writes {}, to D7 {}, record {})", b.id(), b
+			.blueprint(), p.from(), p.to(), o.write().size(), o.kept().size(), folded != null ? ", oldest delta folded" : "", ms(tEnd - tA), ms(tD3 - tA), ms(
+				tD5 - tD3), ms(tD7 - tD5), ms(tEnd - tD7));
 		Result res = new Result(true, b.id(), p.from(), p.to(), o.write().size(), o.kept(), reshaped, List.of(), notes, b, nb);
 		dev.larattalabs.architect.apiimpl.ApiEvents.siteUpdated(server, res);
 		return res;
