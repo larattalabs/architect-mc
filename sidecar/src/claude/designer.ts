@@ -34,6 +34,7 @@ import { ClaudeBibleBackend } from './bible.js';
 import { ARCHITECT_NO_API_AUTH_MESSAGE, authEnv, authSourceOf, checkApiKey, directApiKey, type KeyCheck } from './auth.js';
 import { designFixPrompt, designPrompt, designStepFor, designSystemPrompt, massingFixPrompt, massingPrompt, massingSystemPrompt, MAX_DESIGN_ROUNDS, RESTART_PROMPT, revisionFixPrompt } from './brief.js';
 import { isAuthText, probeFailure } from './failures.js';
+import { ensureLoginEnv, noLoginMessage, osUserInfo, type LoginEnvFill, type UserInfoLike } from './loginenv.js';
 import { REVISION_RESTART_PROMPT } from '../critic.js';
 import { costFromResult, CostMeter, zeroCost } from '../jobs/cost.js';
 import { connectorHook, denyHook, designVerdict } from './permissions.js';
@@ -63,6 +64,8 @@ export interface ClaudeDesignerOptions {
   authRetryMs?: number;
   /** validates an API key against the API (tests inject a fake) */
   keyCheck?: KeyCheck;
+  /** (5b F2) the environment the login-mode fill applies to and the OS user it reads (tests inject both) */
+  loginEnv?: { env: Record<string, string | undefined>; userInfo: () => UserInfoLike };
 }
 
 /** A running CLI turn (a design turn or a job query): its abort and its process. */
@@ -211,6 +214,13 @@ export class ClaudeDesigner implements Designer {
     return { useClaudeLogin: this.sc.useClaudeLogin, storedKey: this.sc.secrets().apiKey };
   }
 
+  /** (5b F2) login mode: USER/LOGNAME/HOME filled from the OS where unset, before the auth check and every CLI spawn. */
+  loginEnvFill(): LoginEnvFill | undefined {
+    if (!this.sc.useClaudeLogin) return undefined;
+    const o = this.opts.loginEnv;
+    return ensureLoginEnv(this.sc.log, o?.env ?? process.env, o?.userInfo ?? osUserInfo);
+  }
+
   /** Resolve the SDK, then check the credentials with a live `accountInfo()` (the AgentCraft probe). */
   async checkAuth(): Promise<boolean> {
     const gen = ++this.authGen;
@@ -221,6 +231,7 @@ export class ClaudeDesigner implements Designer {
     if (gen !== this.authGen) return false;
     const sdkState = this.sdk ? 'ready' : 'missing';
     const a = this.authInputs();
+    const fill = this.loginEnvFill();
     const src = authSourceOf(process.env, a);
     if (!src.ok) {
       this.sc.setAuth({ auth: 'missing', sdk: sdkState, message: ARCHITECT_NO_API_AUTH_MESSAGE });
@@ -281,7 +292,9 @@ export class ClaudeDesigner implements Designer {
         return false;
       }
       this.markAuthFailed(
-        a.useClaudeLogin
+        a.useClaudeLogin && why === 'not logged in'
+          ? noLoginMessage(this.opts.loginEnv?.env ?? process.env, fill)
+          : a.useClaudeLogin
           ? `Claude login check failed: ${truncate(why, 200)}. Run \`claude\` and /login, then try again.`
           : `Claude API check failed: ${truncate(why, 200)}. Check the API key (or your cloud provider settings).`,
         src.source,
@@ -587,6 +600,7 @@ export class ClaudeDesigner implements Designer {
    * the client token variable scrubbed.
    */
   env(cwd: string): Record<string, string | undefined> {
+    this.loginEnvFill();
     const base: Record<string, string | undefined> = withPathFirst({ ...process.env }, path.dirname(process.execPath));
     for (const k of Object.keys(base)) if (GIT_REDIRECT_VARS.includes(k.toUpperCase())) delete base[k];
     Object.assign(base, {
