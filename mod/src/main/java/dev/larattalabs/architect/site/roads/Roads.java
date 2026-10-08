@@ -162,7 +162,7 @@ public final class Roads {
 		if (top == null) {
 			return null;
 		}
-		if (topKind.equals(WorldJournal.SITE) || topKind.equals(WorldJournal.ROAD) || topKind.equals(WorldJournal.CRATE)) {
+		if (topKind.equals(WorldJournal.SITE) || topKind.equals(WorldJournal.DELTA) || topKind.equals(WorldJournal.ROAD) || topKind.equals(WorldJournal.CRATE)) {
 			return top;
 		}
 		layered.merge(top, 1, Integer::sum);

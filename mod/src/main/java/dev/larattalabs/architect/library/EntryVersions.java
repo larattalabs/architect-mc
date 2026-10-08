@@ -221,6 +221,22 @@ public final class EntryVersions {
 			Files.copy(f, tmp, StandardCopyOption.REPLACE_EXISTING);
 			move(tmp, entryDir.resolve(name));
 		}
+		// the head's own files the new version does not have go (a version without source or previews has none at the top)
+		java.util.Set<String> have = new java.util.HashSet<>();
+		for (Path f : files) {
+			have.add(f.getFileName().toString());
+		}
+		try (Stream<Path> s = Files.list(entryDir)) {
+			for (Path f : s.filter(Files::isRegularFile).sorted().toList()) {
+				String name = f.getFileName().toString();
+				boolean layout = name.equals(id + ".parts.nbt") || name.equals(id + ".mjs") || name.equals("critique.json") || name.startsWith(id
+					+ ".preview-") && name.endsWith(".png");
+				if (layout && !have.contains(name)) {
+					faults.at("top-del:" + name);
+					Files.deleteIfExists(f);
+				}
+			}
+		}
 		JsonObject next = readJson(json);
 		if (next == null) {
 			throw new IOException("version folder " + from + " has no readable " + id + SIDECAR_SUFFIX);

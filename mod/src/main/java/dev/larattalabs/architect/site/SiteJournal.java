@@ -102,11 +102,26 @@ public final class SiteJournal {
 	/** The site's main entry (its {@code site}, road or cell-site entry) that is active, or null. */
 	static JournalStore.@Nullable Meta main(String siteId) {
 		for (JournalStore.Meta m : active(siteId)) {
-			if (!m.kind().equals(WorldJournal.LEAVES) && !m.kind().equals(WorldJournal.CRATE)) {
+			if (!m.kind().equals(WorldJournal.LEAVES) && !m.kind().equals(WorldJournal.CRATE) && !m.kind().equals(WorldJournal.DELTA)) {
 				return m;
 			}
 		}
 		return null;
+	}
+
+	/** Whether the top non-guard entry at {@code pos} is {@code siteId}'s. */
+	static boolean isOwnedBy(String dimension, long pos, String siteId) {
+		try {
+			List<WorldJournal.Layer> st = WorldJournal.stack(dimension, pos);
+			for (int i = st.size() - 1; i >= 0; i--) {
+				if (!st.get(i).meta().kind().equals(WorldJournal.LEAVES)) {
+					return st.get(i).meta().site().equals(siteId);
+				}
+			}
+		} catch (IOException e) {
+			return false;
+		}
+		return false;
 	}
 
 	/** Whether {@code pos} is a cell of an active entry (owned by a standing site); guard kinds count. Server thread. */
@@ -760,6 +775,8 @@ public final class SiteJournal {
 		List<CellWrite> cells = new ArrayList<>();
 		List<CellWrite> pre = new ArrayList<>();
 		List<CellWrite> halves = new ArrayList<>();
+		Map<Long, Value> boxWritten = new LinkedHashMap<>();
+		Set<Long> boxUnwritten = new LinkedHashSet<>();
 		try {
 			for (JournalStore.Meta m : undone(siteId, group)) {
 				Map<Long, Value> written = new LinkedHashMap<>();
@@ -778,22 +795,15 @@ public final class SiteJournal {
 						}
 					}
 				}
-				if (m.kind().equals(WorldJournal.SITE) && m.policy() == Policy.BOX && m.box() != null) {
+				if ((m.kind().equals(WorldJournal.SITE) || m.kind().equals(WorldJournal.DELTA)) && m.policy() == Policy.BOX && m.box() != null) {
+					// the site's restore box and its deltas (phase 5b): one template over their union, written as the 4d restore
 					int[] b = m.box();
-					box = new Anchors.Bounds(b[0], b[1], b[2], b[3], b[4], b[5]);
-					tpl = JournalNbt.toTemplate(written, b[0], b[1], b[2], b[3] - b[0] + 1, b[4] - b[1] + 1, b[5] - b[2] + 1, 0);
-					// two-block plants and doors: a box write can lose them (each half is written next to the other half's old
-					// neighbour); put back quietly afterwards where the world does not hold them
-					written.forEach((p, v) -> {
-						if (v.state().get("properties") instanceof CompoundTag pr && pr.contains("half") && WorldJournal.state(v).hasProperty(
-							net.minecraft.world.level.block.state.properties.BlockStateProperties.DOUBLE_BLOCK_HALF)) {
-							halves.add(new CellWrite(p, v, Block.UPDATE_CLIENTS | Block.UPDATE_KNOWN_SHAPE));
-						}
-					});
-					ring = s.head(m.id()).ring();
-					holes = unwritten.size();
-					if (!unwritten.isEmpty()) {
-						mask = coverMask(m.dimension(), unwritten);
+					Anchors.Bounds mb = new Anchors.Bounds(b[0], b[1], b[2], b[3], b[4], b[5]);
+					box = box == null ? mb : Sites.union(box, mb);
+					boxWritten.putAll(written);
+					boxUnwritten.addAll(unwritten);
+					if (m.kind().equals(WorldJournal.SITE)) {
+						ring = s.head(m.id()).ring();
 					}
 				} else {
 					int flags = m.kind().equals(WorldJournal.LEAVES) ? Sites.FLAGS | Block.UPDATE_KNOWN_SHAPE : m.policy() == Policy.BOX ? Sites.FLAGS
@@ -809,11 +819,37 @@ public final class SiteJournal {
 					});
 				}
 			}
+			if (box != null) {
+				// positions some entry wrote win over another's unwritten (a delta's hole is not the base's)
+				boxUnwritten.removeIf(boxWritten::containsKey);
+				tpl = JournalNbt.toTemplate(boxWritten, box.minX(), box.minY(), box.minZ(), box.maxX() - box.minX() + 1, box.maxY() - box.minY() + 1,
+					box.maxZ() - box.minZ() + 1, 0);
+				// two-block plants and doors: a box write can lose them (each half is written next to the other half's old
+				// neighbour); put back quietly afterwards where the world does not hold them
+				boxWritten.forEach((p, v) -> {
+					if (v.state().get("properties") instanceof CompoundTag pr && pr.contains("half") && WorldJournal.state(v).hasProperty(
+						net.minecraft.world.level.block.state.properties.BlockStateProperties.DOUBLE_BLOCK_HALF)) {
+						halves.add(new CellWrite(p, v, Block.UPDATE_CLIENTS | Block.UPDATE_KNOWN_SHAPE));
+					}
+				});
+				holes = boxUnwritten.size();
+				if (!boxUnwritten.isEmpty()) {
+					mask = coverMask(dimOf(siteId), new ArrayList<>(boxUnwritten));
+				}
+			}
 		} catch (IOException e) {
 			throw new Sites.SiteException(Reason.JOURNAL_UNAVAILABLE, "The journal of " + siteId + " can't be read (" + e.getMessage() + ")");
 		}
 		cells.sort(Comparator.comparingInt(c -> Journal.y(c.pos())));
 		return new Restore(siteId, box, tpl, mask, cells, pre, halves, ring, holes);
+	}
+
+	/** The dimension of a site's entries (its first entry's). */
+	static String dimOf(String siteId) {
+		for (JournalStore.Meta m : entries(siteId)) {
+			return m.dimension();
+		}
+		return "minecraft:overworld";
 	}
 
 	/** The cells of the entries that stay on top of {@code holes} (positions not written because they are covered). */

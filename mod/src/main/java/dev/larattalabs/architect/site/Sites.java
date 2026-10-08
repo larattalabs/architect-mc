@@ -157,13 +157,16 @@ public final class Sites {
 		ServerLifecycleEvents.SERVER_STARTED.register(server -> {
 			worldDir = server.getWorldPath(LevelResource.ROOT);
 			load(server);
+			SiteDeltas.server = server;
 			reconcile(server, Placement.jobSites(server));
+			SiteDeltas.atStart(server);
 			notifyListeners();
 		});
 		Placement.init();
 		Builder.init();
 		ServerTickEvents.END_SERVER_TICK.register(server -> Drops.tick());
 		ServerLifecycleEvents.SERVER_STOPPED.register(server -> {
+			SiteDeltas.server = null;
 			state = State.EMPTY;
 			groups = Map.of();
 			nextGroup = 1;
@@ -483,7 +486,10 @@ public final class Sites {
 	/** The loaded template grid of a site's design when it is the one the site was placed from (its pin), else null. */
 	static @Nullable TemplateGrid ownGrid(Site b) {
 		TemplateGrid grid = TemplateGrid.of(b.blueprint());
-		return grid != null && b.pin() != null && grid.fingerprint().equals(b.pin().template()) ? grid : null;
+		if (grid != null && b.pin() != null && grid.fingerprint().equals(b.pin().template())) {
+			return grid;
+		}
+		return SiteDeltas.gridOf(b); // phase 5b: a site at an older version of its entry
 	}
 
 	@FunctionalInterface
@@ -2169,7 +2175,8 @@ public final class Sites {
 		}
 		JournalStore.Meta main = null;
 		for (JournalStore.Meta m : SiteJournal.undone(siteId, group)) {
-			if (!m.kind().equals(WorldJournal.LEAVES) && !m.kind().equals(WorldJournal.CRATE)) {
+			// the site's own entry decides (a group undo with deltas: their cells lie inside or next to it)
+			if (!m.kind().equals(WorldJournal.LEAVES) && !m.kind().equals(WorldJournal.CRATE) && (main == null || !main.kind().equals(WorldJournal.SITE))) {
 				main = m;
 			}
 		}
@@ -2285,8 +2292,8 @@ public final class Sites {
 				continue;
 			}
 			boolean placing = e.getValue().stream().anyMatch(m -> m.status() == Journal.Status.PLACING);
-			JournalStore.Meta main = e.getValue().stream().filter(m -> !m.kind().equals(WorldJournal.LEAVES) && !m.kind().equals(WorldJournal.CRATE))
-				.findFirst().orElse(null);
+			JournalStore.Meta main = e.getValue().stream().filter(m -> !m.kind().equals(WorldJournal.LEAVES) && !m.kind().equals(WorldJournal.CRATE)
+				&& !m.kind().equals(WorldJournal.DELTA)).findFirst().orElse(null);
 			if (placing || main == null) {
 				// K2: committed before its record, never written (or only guard entries left): released, nothing written
 				e.getValue().forEach(m -> releaseNow.add(m.id()));

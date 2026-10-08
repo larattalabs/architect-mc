@@ -115,9 +115,9 @@ public final class SitePlanner {
 
 	/** Whether the bed rule leaves a template bed out here (the Nether, the End); its head cell decides. */
 	public interface Beds {
-		boolean unsafe(long head);
+		boolean unsafe(long head, BedBlock bed);
 
-		Beds SAFE = h -> false;
+		Beds SAFE = (h, b) -> false;
 	}
 
 	/**
@@ -156,7 +156,7 @@ public final class SitePlanner {
 				int z = bz + m.z(i);
 				boolean head = s.getValue(BedBlock.PART) == net.minecraft.world.level.block.state.properties.BedPart.HEAD;
 				long h = head ? Journal.pos(x, y, z) : Journal.pos(x + f.getStepX(), y, z + f.getStepZ());
-				if (beds.unsafe(h)) {
+				if (beds.unsafe(h, (BedBlock) s.getBlock())) {
 					writes.put(Journal.pos(x, y, z), air);
 				}
 			}

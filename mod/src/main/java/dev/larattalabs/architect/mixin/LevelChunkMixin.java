@@ -16,6 +16,7 @@ public abstract class LevelChunkMixin {
 	private void architect$track(BlockPos pos, BlockState state, int flags, CallbackInfoReturnable<BlockState> cir) {
 		if (cir.getReturnValue() != null) {
 			ChangeTracker.changed(((LevelChunk) (Object) this).getLevel(), pos);
+			dev.larattalabs.architect.journal.WriteCounter.changed(((LevelChunk) (Object) this).getLevel(), pos);
 		}
 	}
 }

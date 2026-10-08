@@ -76,12 +76,12 @@ public final class JournalDev {
 					}
 				})).thenCompose(r -> r);
 			});
-		DevBridge.register("dev.journal.killAt", 10_000, "{point: K1..K8 | migrate-before-commit | migrate-after-commit | null} - phase 4e TEST "
+		DevBridge.register("dev.journal.killAt", 10_000, "{point: K1..K8 | D1..D8 (phase 5b deltas) | migrate-before-commit | migrate-after-commit | null} - phase 4e TEST "
 			+ "hook: the next matching step halts the JVM (Runtime.halt, nothing saved)", (req, mc) -> {
 				JsonElement p = req.get("point");
 				String point = p == null || p.isJsonNull() ? null : p.getAsString();
-				if (point != null && !point.matches("K[1-8]|migrate-before-commit|migrate-after-commit")) {
-					throw new DevBridge.DevException("point must be K1..K8, migrate-before-commit or migrate-after-commit");
+				if (point != null && !point.matches("K[1-8]|D[1-8]|migrate-before-commit|migrate-after-commit")) {
+					throw new DevBridge.DevException("point must be K1..K8, D1..D8, migrate-before-commit or migrate-after-commit");
 				}
 				WorldJournal.killAt(point);
 				JsonObject o = new JsonObject();
