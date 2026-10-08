@@ -3051,3 +3051,1039 @@ call, counted as a tie. The sim tier runs in CI (`sidecar/test/eval.e2e.test.ts`
   "(experimental)" in the Design tab, the set dialog and the Status-tab default, and in the README. Report critiques, the eval
   harness, bible format 2, `job.images`, API 1.6.0 and the migration unit tests ship as built (G3, G4 and all regressions passed).
 - A later loop change is re-gated on the same 18-brief eval with the same G1/G2 bars; prompts are not tuned against the eval set.
+
+# Phase 5b contract: delta apply and polish (A6, plus polish) - DRAFT for Steward review
+
+Goal: **change a building without rebuilding it.** A library entry gets versions. A new version is compared with the old one
+part by part and cell by cell. A placed site moves to the new version by writing only the cells that differ, as a new journal
+layer that can be undone exactly. **Polish** is the first producer of versions: a critique, then a revision **confined to the
+parts the critique named** ("edit, don't rebuild"). Polish is also the proposed fix for the 5a loop, so it is measured on
+5a's 18-brief eval against the same bars.
+
+5b also carries two small fixes from Steward's live check: the release build fails when the sidecar bundle is missing, and the
+claude login is found when USER/LOGNAME are missing.
+
+Versions: API **1.7.0**, mod **0.10.0**. The sidecar protocol stays **2**, with additive messages and new feature names, as in
+4b-5a. Phases 1-5a still hold, except where this section changes them; where they disagree, this section wins.
+
+Sources for this draft:
+- `docs/PLAN.md`: the A6/5b row, the 5a status and re-scope, and the carried-forward items.
+- `docs/CONTRACT.md`:
+  - 4b: named parts (R3) and bibles;
+  - 4c: massing conformance and the composite preview;
+  - 4d: queue, groups, stages;
+  - 4e: journal, layers, LAYER/covered, survival layering, K points;
+  - all of 5a, including "Changes from Steward's review of 5a" (critique.json for polish) and the re-scope.
+- Code at `main` (v0.9.0):
+  - `kit/lib/kit.mjs` `part()` / `partBoxes()`: the per-cell part map exists only in memory; the blueprint JSON keeps `box`
+    and `cells`, and the `.nbt` has no part ids;
+  - `kit/lib/check.mjs` `parts`;
+  - `sidecar/src/critique.ts` `writeEntryCritique` (format 1), `critic.ts` `revisionPrompt`, `designs.ts` `installDesign`
+    (exclusive create, never overwrites), `claude/designer.ts` (the auth check that says "not logged in");
+  - `mod/build.gradle` (the bundle is copied "when it exists");
+  - `site/Site.java` (`Pin` = template fingerprint), `site/SiteJournal.java` (entries found by `entry.site`; kind is a
+    free string), `journal/Journal.java` (`transfer` keeps layers; `absorb` is unused).
+- The 5a full run's stored artifacts: `artifacts/eval/full-2026-10-07T2324/` (local).
+- Steward, read only:
+  - `ARCHITECT-ASKS.md` A6 and R3;
+  - `A5B-SPEC.md` §2 `part(id)` ("renames are breaking") and §4 N7 ("a new change-set layer whose before includes the
+    earlier layers");
+  - `A5A-REVIEW.md` SHOULD 3 (polish = "make it less cluttered" = delta apply);
+  - `PLAN.md` (Evolve, phase 3 "delta preview and apply", the risk note: REPORT critiques only, "polish later");
+  - `mod/DEV.md` "Live card run" (the USER/LOGNAME observation).
+
+## What Steward asked for (summary, read only)
+
+- **A6:** diff the new build of a source against what is placed. The ghost shows added, removed and changed cells, and only
+  the delta is applied. It builds on `Reconcile`.
+- **R3:** named parts with stable ids, so patches stay local. A5B §2: "A6 diffs and patches by part; renames are breaking."
+- **A5B N7:** a patch writes the new cells as a new change-set layer whose `before` includes the earlier layers, and Remove
+  stays exact.
+- **A5A-REVIEW SHOULD 3:** polish (critique plus a revision of an installed entry) soon, because "delta apply and 'make it
+  less cluttered' are the same operation". critique.json is the polish input.
+- **Steward PLAN, after 5a:** REPORT critiques on every item; "polish later" is a decision Steward wants to be able to
+  make; free-text change requests ("add a library wing") and an approve-then-apply delta preview for its phase 3.
+
+## Key decisions (each specified below)
+
+| # | Decision |
+|---|---|
+| D1 | **Entry versions live in the entry**, and the id stays stable: `<id>/versions/<n>/`, as bibles do. The top-level files are the head version. A site pins `(entry, version)`. |
+| D2 | **A blueprint delta is template against template in design coordinates.** The kit records a `frame` (the design origin) and a per-cell part map (`<id>.parts.nbt`) from 5b on. A change of `front`, or of the entrance's feet row, is refused. |
+| D3 | **A site's delta is plan against plan.** The pinned version's instant-placement plan and the new version's plan are both computed on the pre-site terrain (the journal `before`s). Only cells where they differ are written. |
+| D4 | **The delta layer is a BOX journal entry**, kind `delta`, in the site's undo group. That keeps it out of 4e's CELL-over-BOX conflict between invariants (iii) and (iv). |
+| D5 | **Undo is last-in, first-out per site.** Revert to a version in the chain undoes the top deltas down to it; any other target is a forward delta. A middle delta is never undone alone. |
+| D6 | **Player edits:** each delta cell is compared with the site's own top `after` (StillOurs). The default `KEEP` leaves the player's block and reports it. Unchanged cells are never written. |
+| D7 | **Covered cells: REFUSE** (`COVERED`, listing the covering sites). Writing under a covering site is deferred to phase 6. |
+| D8 | **Survival:** a delta is a construction delta. Its BOM is the delta only, and refunds cover the paid cells it replaces. **A survival revert is a paid forward delta, never a journal undo** (a free undo after refunds would duplicate items). |
+| D9 | **Bounded history:** at most 6 deltas per site. The 7th folds the oldest into the base (journal `transfer`, layers kept), so stack depth stays within 4e's limit of 8. |
+| D10 | **Polish = one targeted issue per step.** The issue must name a part. Changes are confined to that part (plus at most 2 new parts) by a deterministic scope check. A step is accepted only if a fresh critic marks the issue resolved. One polish installs at most one new version. |
+| D11 | **The polish eval starts from 5a's stored round 0** (all 18 present, verified). It uses the same critic, judge, views and G1/G2 computation as built, and no round-0 spend. **The outcome decides polish's label, not the phase:** delta apply ships if its gate passes. |
+| D12 | **Spend: expected about $58, cap $80, stated ceiling $100**, on the claude login only (the runner's auth guard). |
+
+---
+
+## 1. Entry versions and blueprint deltas
+
+### Frame and part map (kit, from 5b on)
+
+- **Frame.** The kit's `Blueprint` already takes `origin` (it shifts every design coordinate). The sidecar JSON now always
+  records `frame: { origin: [ox, oy, oz] }`. A missing `frame` (every entry before 5b) means `[0, 0, 0]`.
+  - Design coordinates: `d = t - origin`, where `t` is the template coordinate.
+  - Two versions of one entry are compared in design coordinates.
+  - The design brief and the polish brief say: "to grow toward -x, -y or -z, raise `origin`; never move existing
+    coordinates."
+- **Per-cell part map.** `node kit/build.mjs` also writes `<id>.parts.nbt`, a gzip NBT `{ names: [string], idx: int[] }`,
+  with one `idx` per entry of the template's `blocks` list in order (-1 = in no part). It is a separate file, because
+  vanilla structure loaders must keep reading the `.nbt` unchanged.
+  - Installs, variants, re-skins and versions copy it.
+  - Entries without one (before 5b, imports) get part labels **by box**, marked `approximate` in every delta made from
+    them.
+  - Polish never relies on box labels: it rebuilds the base from source (below), which writes the exact map.
+
+### Entry versions on disk
+
+```
+<library>/<id>/
+  <id>.nbt  <id>.blueprint.json  <id>.mjs  <id>.parts.nbt  <id>.preview-*.png  critique.json   the head version (layout as today)
+  versions/<n>/   the same files for version n; immutable once complete; one folder per version n >= 1
+```
+
+- The blueprint JSON gains:
+  - `version` (absent = 1);
+  - `versions: [{ n, createdAt, by: "design"|"polish"|"revert"|"migrated", parent: n|null, designId?, summary (<= 200 chars),
+    nbtSha256, criticHash? }]`, the lineage.
+- **Pre-5b entries** are version 1, and their `versions/1/` is made at their first version bump, by copying the top level.
+- **What reads where:**
+  - The mod reads a site's pinned version from `versions/<v>/`, and the head from the top level (or from
+    `versions/<head>/` when the top level is mid-repair, below).
+  - Exports, vanilla tools and older mods (0.9.0) read the top level, which is always a complete head.
+
+### Installing a version (sidecar; crash-safe order)
+
+1. If `versions/<n>/` is missing (the first bump), copy the top level into `versions/.tmp-<n>-<rand>/`, then rename it to
+   `versions/<n>/`.
+2. Write version n+1 into `versions/.tmp-<n+1>-<rand>/` (exclusive create, as `installDesign` does), then rename it to
+   `versions/<n+1>/`. **This rename is the commit point.**
+3. Replace the top-level files, each by writing a `.tmp` and renaming it. The blueprint JSON goes last, with `version: n+1`
+   and the lineage.
+   - It carries the user metadata (`favorite`, `userTags`, `displayName`) and `ext`, read from the current top-level JSON
+     immediately before the rename.
+   - The mod owns those keys. On `entry.versioned` it re-applies its in-memory values if they differ, which closes the
+     window in which an edit could be lost.
+4. **Repair**, at sidecar start and at the mod's library load:
+   - if the top-level `version` is less than the highest complete `versions/<m>/`, step 3 is redone from `versions/<m>/`;
+   - `.tmp-*` folders are deleted.
+
+**Refused:**
+- polishing or revising a **bundled** entry (`bundled`: "make a variant first");
+- an **imported** entry (`no_source`: it has no `.mjs`);
+- a **massing** (massings keep their own 4c versions).
+
+**Revert of an entry** (`entry.revert {entryId, toVersion}`) installs version n+1 as a byte copy of version k, with
+`by: "revert"` and `parent: k`. History stays linear, and placed sites are untouched.
+
+### Lineage and staleness
+
+- **critique.json format 2** (the polish input, Steward SHOULD 3) adds `entryVersion` and `criticHash` (the hash of the critic
+  system prompt, template and schema).
+  - Each version keeps its own `versions/<n>/critique.json`; the top-level file is the head's.
+  - A format-1 file reads as `entryVersion: 1`.
+- **Stale** = `entryVersion` differs from the head version, **or** `entryRevision` (the `.nbt` sha256) differs, **or**
+  `criticHash` differs from the current critic. A stale verdict is shown as "for v2; this is v3" and is never reused.
+- **Variants and re-skins** are other entries with their own lineage. `variantOf` gains `variantOfVersion`. A new version
+  of the base doesn't change its variants ("rebase variants" is deferred).
+
+### Retention
+
+- At most **32 versions** per entry. Garbage collection runs at sidecar start.
+- A version folder is deleted when it is not the head, no site pins it (the mod reports pins at connect), no unfinished
+  design or polish uses it, and it is older than 30 days.
+- **Pins always win.** A site's pinned version is never collected, whatever its age or the count.
+
+### The blueprint delta
+
+`delta(A, B)` for two versions of one entry, both built with their recorded palette, values and bible pin. They are compared
+in design coordinates.
+
+- **Cells:** over the union of written cells (unwritten = "terrain stays", as in phase 1):
+  - `added`: written only in B;
+  - `removed`: written only in A;
+  - `changed`: written in both, with a different state or block-entity NBT;
+  - `unchanged`: written in both and equal.
+- **Parts:** each cell carries `part(A)` and `part(B)`. Per part name:
+  - `ADDED`: only in B;
+  - `REMOVED`: only in A;
+  - `CHANGED`: some cell of the part is added, removed or changed;
+  - `UNCHANGED`.
+  
+  It also gets counts and its box in each version. A cell whose part changed name is counted under both names.
+- **Frame checks:**
+  - `front` must be equal, and the entrance's feet row (`groundY - origin.y`) must be equal; otherwise the delta is
+    `frameKept: false` and every site apply refuses `FRAME_CHANGED`.
+  - **The frame hint:** when more than half of the cells of `UNCHANGED`-looking parts fail to match, but some translation
+    `v` (|v| <= 8 per axis) makes at least 90% of them match, the delta notes "frame moved by v: set origin, keep design
+    coordinates".
+- **Output** (`delta.json` in `versions/<n+1>/`, at most 64 KB; counts and boxes, no cell lists):
+  `{ entryId, from, to, frameKept, parts: {name: {status, added, removed, changed, boxFrom, boxTo}}, added, removed, changed,
+  unchanged, approximate, notes }`.
+- **Two implementations, pinned equal:**
+  - the kit's `kit/tools/diff.mjs`, used by the sidecar for polish scope checks, the delta summary and `entry.delta`;
+  - the mod's `TemplateDelta` (Java), off-thread, which is authoritative for world writes.
+  
+  A fixture set (the gate's hand-written versions, plus every kit example against its param and palette variants) must
+  give the same cell sets in both. It's a CI test.
+- **Limits:** both templates within the 96x64x96 cap. `delta.json` at most 64 KB (cell lists are never stored; they're
+  recomputed).
+
+---
+
+## 2. Delta apply to a placed site
+
+### What a site stands at
+
+- `Site.Pin` gains `version`. For a pre-5b pin it is derived once, as the stored version whose template fingerprint equals
+  the pin's.
+  - No match means `VERSION_GONE`: the site can be removed or placed again, but not updated.
+- The site record gains `version` and `history: [{version, appliedAt, kind: placed|delta|revert|forward, deltaEntry?}]`.
+  - The entries themselves are still derived from `entry.site`, as in 4e.
+  - A record that a 0.9.0 save stripped of these fields is rebuilt from the `delta` entries' `meta`. The journal wins,
+    as in 4e.
+
+### The delta set (plan against plan)
+
+For a site S at version a, applying version b:
+
+1. **The pre-site view.** A read-only world view in which S's own entries are undone: the base `site` entry, its `delta`s,
+   and their `leaves` and `crate` entries.
+   - It is the world outside S's cells.
+   - Inside them, it is the `before` of the lowest of S's cells at that position.
+   - Other sites' cells read as they are now, so they count like terrain, as TerrainFit does under LAYER.
+2. **Plans.** `plan_a` and `plan_b` are the **written cells** of an instant placement of each version at S's origin and
+   rotation, computed against the pre-site view:
+   - template cells, foundation fill, clears and approach, as `PlaceJob` orders them;
+   - bed safety.
+   
+   Guard data (the leaf ring, held leaves) is **not** part of the plans. It depends on the living world (trees grow and are
+   cut), so recomputing it would make spurious deltas. It is added only for growth (step 3).
+
+   Version b's template is placed so that every design coordinate lands on the same world cell as in version a (frame
+   aligned). Approaches follow the 4e road rule.
+3. **The delta set** `Δ = { c : plan_b(c) ≠ plan_a(c) }`, where a cell a plan doesn't write takes the pre-site value.
+   - "Removed" cells therefore go back to the ground under them, and growth gets its own foundation and approach from the
+     original terrain.
+   - **Guard cells** for growth are added as the 4e place path adds them: the row under new footprint columns, new held
+     leaves, and the leaf-ring extension.
+4. `plan_a` comes from the pinned version's files, not from the journal `after`. P6's `after` can differ in a few cells
+   from the plan (4e as built: dirt_path turning to dirt one tick later), and using it would make spurious deltas. The
+   journal `after` is used for the player-edit test only.
+5. An empty Δ is not a refusal: the site's version becomes b, with a note "nothing to write".
+
+### Refusals and waits (Verdict, before any write)
+
+| Reason | When | In a queue |
+|---|---|---|
+| `FRAME_CHANGED` (new) | front, or the entrance feet row, differs | refuses |
+| `VERSION_GONE` (new) | the pinned version can't be found | refuses |
+| `SITE_BUSY` (new) | S is `placing`, `BUILDING` (a construction site or a construction delta not finished), or being removed | **waits** |
+| `COVERED` (4e) | any cell of Δ is owned by another site's entry (S's cell is not on top). Lists the covering sites and cell counts | refuses |
+| `OVERLAP` / `OVERLAP_BUSY` / `OVERLAP_OWNED` / `LAYER_DEPTH` (4e) | growth cells outside S's cells meet other entries; `DeltaRequest.overlap` (default REFUSE, LAYER allowed) applies as for placement | as 4e |
+| `PLAYER_EDITS` (new) | `playerEdits: REFUSE` and any Δ cell fails "still ours" | refuses |
+| `BLOCK_ENTITIES` (phase 1) | a container the player filled in a Δ cell (any mode) | refuses |
+| `PLAYER_IN_BOX`, `OCCUPIED`, `NOT_LOADED` | over Δ plus guard cells only | waits |
+| `CREATIVE_ONLY_BLOCK`, `NOT_ALLOWED` | survival rules, below | refuses |
+| `JOURNAL_UNAVAILABLE` | as 4e | refuses |
+
+### The journal entry
+
+- **Entry:** `{kind: "delta", site: S, policy: BOX, layer: next, cells: Δ' ∪ shape guards ∪ growth guards, meta: {from: a,
+  to: b, entryId, version b's fingerprint}}`.
+  - Δ' is Δ minus the kept cells (below).
+  - **Shape guards** are the face neighbours of Δ' that S owns, outside Δ'. Vanilla shape updates (see "Writing") may change
+    them, so their `before` is captured with Δ', and a revert writes it back exactly.
+  - `before` = the world at capture (P1, one tick up to 50k cells; sliced with change tracking above that, as 4e).
+  - `after` = captured at P6.
+- **Why BOX:** reverting a delta restores exactly the previous version, including cells the player touched after the apply.
+  This is the same rule as Remove, and it keeps the delta out of 4e's CELL-over-BOX case, where invariant (iii) is
+  narrowed.
+- **Undo group:** S's undo group is now its `site` entry, its `leaves` and `crate` entries, **every `delta` entry**, and their
+  own `leaves` and `crate` entries.
+  - Remove of S undoes the whole group, which gives the pre-site terrain.
+  - A revert undoes a suffix of the deltas (below).
+- **Kind compatibility:** `kind` is a free string in the store, and 0.9.0 finds a site's entries by `entry.site`. So a 0.9.0
+  Remove of an updated site undoes the deltas too. The gate checks this as a recorded step.
+
+### Writing
+
+- **Writes** go through the 4d/4e writers with the same FLAGS and per-cell post-processing as a placement of the cell.
+  Deferred block ticks are held and released as in `PlaceJob`. Only Δ' and the guard cells are written.
+- **Updates.** Template states are not final states. `TemplateWriter` (vanilla `placeInWorld`) runs
+  `updateFromNeighbourShapes` and a neighbour update after each placed cell. So a fresh placement of b would reshape an
+  unchanged fence, pane, wall or stair next to an added or removed cell, and the delta must do the same.
+  - The post-pass (shape update at the edge, then `updateFromNeighbourShapes` and neighbour updates) runs for Δ' as
+    `TemplateWriter` runs it for placed cells. Its updates reach the shape-guard cells (S's own neighbours) and terrain.
+  - **Only cells owned by other sites are masked**, exactly as 4e's holes rule.
+  - Shape-guard cells whose state changed are reported as `reshaped` (expected, not an error). E1 is the arbiter: the result
+    must equal a fresh placement of b.
+- **Block entities in unchanged cells are never touched**: a chest the player filled in an unchanged part keeps its items.
+
+### Player edits
+
+For each cell c of Δ that S owns (S's own top cell at c is the top of the stack), compare the world with the `after` of S's
+top cell at c. The comparison is 4e's StillOurs, with the volatile list as amended by Steward S2.
+
+| `playerEdits` | A cell that is no longer ours |
+|---|---|
+| `KEEP` (default) | Not written and not in the entry. Reported as `kept {pos, found, planned}`. The site counts it in `deviations`. |
+| `OVERWRITE` | Written. The entry's `before` records the player's block, so a creative revert gives it back. In survival the player's block drops as an item (phase 3 rule), and survival never journal-undoes a delta. |
+| `REFUSE` | The whole delta is refused with `PLAYER_EDITS` and the list. |
+
+- Later deltas are always computed plan against plan and tested against S's top `after`. A kept cell therefore stays kept
+  until the player puts the block back, or a delta with `OVERWRITE` runs.
+- Cells outside Δ are never written, so the player's edits there survive any apply and any revert.
+- **Remove is unchanged:** BOX writes the pre-site terrain over all of S's cells, under the same blockers as today.
+
+### Covered cells and cells below
+
+- **Above S** (another site X owns a Δ cell): refused `COVERED`. The fix is to remove X first, or to apply a version that
+  doesn't touch those cells. A journal entry can't be slid under X: its layer would be above X's.
+  - Writing under a cover means rewriting X's `before` and undoing that rewrite later, through every removal order. That
+    is deferred to phase 6, where region deltas under lots need it (Steward S2).
+- **Below S** (S stands LAYERed on a pad T): Δ's `before` at those cells is what the world shows, so the 4e rule
+  ("before includes the earlier layers") holds unchanged. Growth onto T's cells needs `overlap: LAYER`, as placement does.
+  Removing T and S works in any order through hand-down.
+
+### Undo: revert, remove, history
+
+- **Revert** (`Sites.revert(siteId, k)`):
+  - **Creative, or wherever INSTANT is allowed for the actor (4a rules):**
+    - if version k is in S's chain, the deltas above it are undone as **one** undo (R1-R5 of 4e, one commit). Their mutual
+      hand-downs cancel, so the order inside doesn't matter;
+    - otherwise it is a forward delta to k (as `applyDelta`).
+  - **Survival (INSTANT not allowed):** always a forward **construction** delta to k (see Survival). It's paid for.
+- **Last-in, first-out.** Only suffixes are undone. There is no API to undo a middle delta: hand-down would accept it, but the
+  result would match no version.
+  - Other sites' placements and removals may interleave freely; the 4e rules cover them.
+- **Remove** S at any point: one undo of the whole group, then the pre-site terrain (BOX), as 4e.
+- **History bound:** at most 6 `delta` entries per site (config `maxSiteDeltas`, 2-6). Applying one more first **folds the
+  oldest delta into the base entry**, in the same commit as the new delta's PLACING entry.
+  - Cells where the base has a cell: `before` stays the base's, and `after` becomes the delta's.
+  - Growth cells move to the base with `Journal.transfer`, keeping the delta's layer as a per-cell override (4e).
+  - No other active entry can lie between the base and its delta at a shared cell, because a delta never writes a covered
+    cell. So the fold doesn't change any undo result except "revert to the folded version", which then becomes a forward
+    delta. `SITE_UPDATED` notes "history folded (v2)".
+- **Depth:** S's own entries at a cell are its base plus at most 6 deltas. Because of the fold, 4e's `LAYER_DEPTH` limit of 8
+  per cell is never exceeded by S alone. Another site LAYERed above counts as usual.
+
+### Crash safety (4e's sequences, applied to a delta)
+
+| Step | What |
+|---|---|
+| D1 | Checks; plan Δ (off-thread for the template diff, one tick for the pre-site view); capture `before`; reserve the cells |
+| D2 | Write the entry files (I/O thread) |
+| D3 | **Index commit: `delta` entry PLACING** (with a fold, if any, in the same commit) |
+| D4 | Site record `updating {to: b}` |
+| D5 | Block writes (ticked under `placementBudgetMs`; persisted cursor) |
+| D6 | Capture `after` |
+| D7 | Commit: ACTIVE |
+| D8 | Record `version: b`, history appended; `SITE_UPDATED` |
+
+On a kill:
+- **K1/K2** (before D3, or D3 to D4): nothing written; the PLACING entry is released at start, and the record stays at a.
+- **K3** (during D5 or D6): a clean stop resumes from the cursor. An unclean stop rolls back: the undo of the PLACING delta
+  entry writes its `before`s, the site is exactly at a, and the record goes back to a.
+- **K4** (D7 to D8): the journal wins, and the record becomes b.
+
+A revert is 4e's Remove sequence (R1-R5, K5-K7) over the suffix, with the record going to `reverting {to: k}`.
+
+**World-start settle** (Reconcile, as 4e) for a pending revert: the evidence is counted over that delta's own uncovered cells
+where `before ≠ after`.
+- Most cells hold `before`: released, and the record goes to k.
+- Most hold `after`: reactivated, and the record stays.
+- Otherwise doubtful: kept for the next start.
+
+### Survival
+
+The invariant is **items in = items out** over any chain of applies, reverts and Remove (4e's rule, extended).
+
+- **A built site only.** A site that is still `BUILDING`, or a construction delta that hasn't finished, is `SITE_BUSY`
+  (queued items wait).
+- **A construction delta** (D5 replaced). In one tick:
+  - **Removed** cells (where `plan_b` is the pre-site value) are written at once and for free, as phase 3's clearing.
+  - **Added** cells are cleared to air (free, no drops) and queued.
+  - **Changed** cells **keep version a's block** and are queued as swaps, so a re-roof never leaves a hole while it
+    waits for materials.
+  - The entry's `after` (the target) is `plan_b`. It is computed, not captured, because nothing was written; the 4e
+    note on deferred ticks applies.
+- **BOM** = the sum over queued (added plus changed) cells of the item of `plan_b(c)`, with the obtainability map. Creative-only
+  blocks refuse `CREATIVE_ONLY_BLOCK`.
+- **Refunds:**
+  - **removed** cells: at the start, the item of S's block, if the cell is paid and still ours;
+  - **changed** cells: at the swap, the item of the replaced block, if paid and still ours;
+  - kept (player-edited) cells are neither charged nor refunded.
+  
+  Refunds go to the crate as in phase 3 and 4d.
+- **Crate:** a built site has no crate left, so the delta places a new one beside the approach end (phase 3 placement rule)
+  as its own `crate` BOX entry in the delta's undo group. A group with `sharedCrate` uses the group's crate.
+- **Paid/free per delta cell:** a bitset on the delta, as phase 3's `free`.
+- **The builder** works in phase 3 order over the queue (bottom-up, supports before attachables, pairs together) under the
+  4d time budget. A swap happens only when the new item is in the crate. When the queue is empty, the delta is `BUILT`, the
+  crate gives back its leftovers and goes, and `SITE_BUILT` fires.
+- **Remove during a construction delta:** a cell is refunded when the world holds the `after` of the **topmost of S's cells
+  there that is built and paid**. An unbuilt delta cell doesn't count, so an un-swapped changed cell refunds version a's
+  block, which was paid in the base. Then the pre-site terrain is restored (free). Rule 3(b) of 4e is unchanged.
+- **Revert in survival = a forward construction delta.** A journal undo would put back blocks that were already refunded
+  (a dupe), so it is never used in survival.
+  - A delta built as construction is **never** journal-undone later, even if the toggle is switched off or the actor gains
+    INSTANT. Its `revertible` is false for good, and only a forward delta goes back.
+- **OVERWRITE in survival:** the player's block drops as an item.
+- **Mined cells** are player edits: kept, not refunded (phase 3's no-dupe rule).
+
+### The queue, groups and stages
+
+- **`Batch.Item.delta`** (`DeltaRequest`): exactly one of `request`, `road`, `cells` and `delta` is non-null.
+  - The mode is resolved at queue time (4d MUST 3).
+  - `SITE_BUSY`, `OVERLAP_BUSY` and occupancy wait under `waitPolicy`.
+  - `ITEM_PLACED` means "applied" for a delta item.
+  - `cancelBatch` rolls back an in-flight delta (the undo of its PLACING entry), exactly.
+- **Groups:** a delta's entries join S's undo group, so `removeGroup` is unchanged (one undo, exact).
+- **Stages:** a stage may hold delta items, for example Steward's "upgrade" stage. `undoStage` on such a stage reverts each
+  of its deltas.
+  - Each must be its site's top delta. A later delta on the same site refuses without `force`, as 4d's dependency rule
+    does.
+  - `force` reverts the later deltas too.
+  - In survival, `undoStage` of a delta stage queues forward construction deltas.
+- **One site, one update at a time:** a second delta for the same site in a batch runs after the first, in list order.
+
+### Performance budgets
+
+| What | Budget |
+|---|---|
+| template diff (worker thread) | <= 50 ms for a 96x64x96 pair; never on the server thread |
+| pre-site view, plan and growth terrain fit (server thread) | <= 5 ms for kit buildings, in one tick; sliced above 50k cells |
+| capture, commit, I/O | 4e's budgets (<= 0.6 µs per cell to capture; I/O off-thread above 100k cells) |
+| delta start for a kit building (checks, capture, commit hand-off) | <= 15 ms |
+| throughput at 4 ms | >= 15k cells/s, journal included (4e's bar) |
+| revert planning for a kit building | <= 10 ms |
+| MSPT | no tick over 50 ms in any gate scenario. The 12-lot village delta batch at 4 ms: max <= 25 ms. A size-cap fixture with every cell changed, applied and reverted: no tick over 50 ms. |
+
+### Preview and UI
+
+- **Delta ghost.** The server computes the world-space Δ (and the kept cells) and sends it as
+  `architect_mc:delta_preview {siteId, to, sections: [{key, cells: short[], kind: byte (added|removed|changed|kept)}]}`. Tags
+  are section-packed like 4e's `road_cells`, up to 200k cells.
+  - The client draws it with 4c's `ADDED`, `REMOVED` and `CHANGED` styles, plus a new `KEPT` style (yellow outline).
+  - `previewComposite` accepts `<entry>@<version>` for library entries too (4c had it for massings only), so a caller can
+    compose versions itself. `onlyCells` stays in each layer's own template coordinates.
+- **Library, Placed view:** "v1 · v3 available · Update…". Update… shows:
+  - the delta ghost;
+  - the per-part list (added, removed and changed, with counts);
+  - the kept cells;
+  - in survival, the BOM of the delta and the refunds.
+  
+  Apply / Cancel. A "History" panel lists the versions, with "Revert to v1" in creative and "Rebuild as v1" (a paid forward
+  delta) in survival.
+- **Library detail:**
+  - the version list (n, date, by, summary, critique overall);
+  - "Compare…" (the part summary and a two-layer composite at the look target);
+  - "Revert entry to vk";
+  - "Polish…" (below).
+- Commands: `/architect site update <id> [version] [keep|overwrite]`, `/architect site revert <id> <version>` and
+  `/architect site history <id>`.
+
+---
+
+## 3. Polish
+
+### What polish is
+
+`design.polish {entryId, spec}` runs a **polish design** (`Design.kind: "polish"`) on an installed entry:
+
+1. a critique;
+2. up to `maxSteps` targeted revision steps, each confined to named parts;
+3. at most one new **version** of the same entry;
+4. optionally, a delta of that version to the entry's placed sites.
+
+The same steps also run inside a new design as `CritiqueSpec.mode: "polish"` (round 0, a report, then the polish steps):
+that's how polish replaces the loop if it earns it.
+
+```
+PolishSpec = { fromVersion?: int (head),
+               critique?: "reuse" | "fresh"   (reuse when the head's critique.json isn't stale, else a report runs first),
+               target?: { issues?: [int], parts?: [name], notes?: string <= 500 chars },
+               maxSteps?: 1..3 (2), maxNewParts?: 0..2 (2), maxChangedShare?: 0.05..1 (0.5),
+               model?: string (the entry's designer model), effort?: low|medium|high (medium),
+               budgetUsd?: number, maxMinutes?: number (15),
+               apply?: { sites: [siteId] | "all", preview: boolean (true) } }
+```
+
+### Targets (one issue per step)
+
+- **Default:** the highest-priority open issue of the current verdict **that names a part**: P0, then P1, then P2, and verdict
+  order within a priority. An issue that a previous step failed on is skipped.
+  - Issues with `part: null` are not targeted by default; they are reported as `untargetable`.
+  - No targetable issue ends the polish with `no_target`.
+- **Explicit issues** (`target.issues`): taken in the order given, one per step.
+- **Notes** (`target.notes`, for example "make the porch less cluttered" or "add a library wing") without `parts`: a
+  **scoping call** runs first.
+  - It's a structured job (Sonnet, low effort) with the iso and front renders and the part list. It returns `{parts: <= 3
+    existing names, newParts: <= maxNewParts new names, restated: string}`.
+  - Seed: $0.01-0.03.
+  - Notes with `parts` skip it.
+- **Allowed set** for a step: S = the target's part(s), plus the scoping or caller parts, plus up to `maxNewParts` new part
+  names (new names only, following the name rule).
+
+### The scope check ("edit, don't rebuild")
+
+It's deterministic, run by the sidecar with `kit/tools/diff.mjs --scope`. The designer runs the same command before it ends.
+
+1. **The base is rebuilt from source** (`versions/<from>/<id>.mjs`, with its recorded palette, values and bible pin) in the
+   polish scratch kit. Its cells must equal the installed base. Otherwise the polish ends `base_drift`, with the differing
+   cells, before any model call. The rebuild also writes the exact part map for pre-5b entries.
+2. `delta(base, new)`. **A violation** is any of these:
+   - a non-unchanged cell whose `part(base)` or `part(new)` is outside S (a cell in no part on either side counts as
+     outside, so unnamed cells can't dodge the rule);
+   - a base part missing from the new version, unless it is in S;
+   - `front`, frame, entrance feet row, `params`, palette or `values` changed;
+   - the size is over the request's `maxSize`;
+   - more than `maxChangedShare` of the base's written cells are changed (an edit, not a rebuild).
+3. **The pristine check:** 0 errors, warnings per rule not higher than the base's, and at least 2 parts.
+
+On a violation or a failed check, the designer gets the list and up to **2 fix turns** (5a's revision allowance). If it still
+fails, the step ends `scope_failed` or `check_failed`. Nothing from that step is kept, and the next step starts from the same
+base.
+
+### The polish turn
+
+- A **fresh Agent SDK session** (the original design session is gone for an installed entry) in a polish scratch dir:
+  - the kit copy, with `kit/designs/<id>.mjs` = the base source;
+  - `BRIEF.md` (the original request), `kit/PLAYBOOK.md`;
+  - `POLISH.md`: the issue (priority, part, view, what, fix), the allowed parts, and the rules ("change only these parts;
+    keep every other cell; remove before adding when the issue is clutter; no new motifs; keep the frame; run the diff
+    command and end only when it reports no violation and the check is OK");
+  - the base renders and slices in `polish/base/`.
+- The same permission policy as designs: no network, the scratch dir only.
+- The model is the entry's designer model (Opus for anchors), config `polish.model`.
+- The prompts are new, written and **frozen before the eval** (see "Prompt development"); their hashes go into every result.
+
+### Acceptance (the sidecar decides, as in 5a)
+
+After the scope check passes, the new version is rendered with 5a's views. A critic call follows: 5a's critic, a fresh query,
+given the base's issue list so it can fill `resolved`. **A step is accepted** when all three hold:
+- the target issue's index is in `resolved`;
+- no P0 appears that the base didn't have;
+- `overall >= base overall - 0.5`.
+
+- An accepted step becomes the base of the next step. It stays in scratch until the end.
+- A rejected step is discarded, and its issue is not targeted again in this polish.
+
+### End and install
+
+| End | When |
+|---|---|
+| `polished` | at least one step accepted and `maxSteps` steps done (or no target left) |
+| `no_target` | no targetable issue at the start |
+| `not_resolved` | no step accepted |
+| `scope_failed`, `check_failed` | the last step failed so, and none was accepted |
+| `base_drift` | the rebuilt base differs from the installed one |
+| `budget`, `time`, `critic_failed` | as 5a. The accepted chain so far still installs. |
+
+- With at least one accepted step, the last accepted result installs as **one** new version (`by: "polish"`). Its
+  `summary` lists the issues resolved, `versions/<n+1>/delta.json` is written, and critique.json format 2 comes from the
+  last accepted critic verdict.
+- With none, nothing installs. A fresh report, if one ran, is written as the head's critique.json.
+- **Apply:** with `apply`, each listed site (or every site standing at an older version of this entry) gets a delta.
+  - With `preview: true` (the default; the UI always previews), the polish ends and the sites show "Update available"
+    with the delta ghost. Nothing is written until the player or the caller applies.
+  - With `preview: false` (API only), the deltas are queued as one batch with the caller as actor.
+
+### Budgets and cost seeds
+
+- **Caps** (the smallest wins):
+  - `budgetUsd` if set;
+  - else 1.0x the entry's recorded round-0 design cost, or $2.0 for Sonnet and $4.0 for Opus when unknown;
+  - what's left of a group or design budget (5a's rules; the soft budget drops polish first, Steward SHOULD 1).
+- A step whose seeded high doesn't fit ends the polish with `budget`.
+
+**Seeds** (estimates gain the kinds `polish`, `scope`; measured samples replace them):
+
+| | Cost | Time |
+|---|---|---|
+| scoping call (Sonnet, low) | $0.01-0.03 | < 0.3 min |
+| polish step, Sonnet (fresh session, cold cache; 5a's warm revision turns were $0.47-0.49) | $0.4-1.2 | 2-6 min |
+| polish step, Opus | $0.8-2.4 | 3-8 min |
+| scope or check fix turn | $0.1-0.4 | 1-2 min |
+| critic call (5a calibrated) | $0.02-0.08 | 0.1-0.4 min |
+
+- **Estimate:** low = 1 step + 1 critic; high = `maxSteps x (step + fix turn + critic)` + a report if stale, then clipped by
+  the caps.
+- `Designs.estimate` returns polish as its own fields, as critique (Steward SHOULD 1).
+
+### The polish eval (re-gating the 5a fix)
+
+**Starting points: 5a's round 0, no new round-0 spend.** `artifacts/eval/full-2026-10-07T2324/sidecar/data/designs/d1..d18/`
+holds, for every brief:
+- `rounds/0/` with `.mjs`, `.nbt`, the blueprint JSON and `check.json`;
+- the round-0 verdict `critique/0/verdict.json`;
+- for briefs 16-18, the Mosswater v2 bible pin.
+
+Checked for this draft:
+- all 18 are complete;
+- every round-0 verdict has at least one P0 or P1 issue grounded on a named part;
+- the top issue's part is `roof` in 9 of 18.
+
+**`tools/eval.mjs` additions:**
+- `import-round0 <runId>`: installs each round 0 as a library entry in the eval sidecar, with its round-0 verdict as
+  critique.json format 2. Cost $0.
+  - The verdict is reused only when `criticHash` equals the 5a run's (recorded in its provenance); otherwise a fresh report
+    runs, at about $0.03 per brief.
+  - **Pre-check, before any spend:** it rebuilds all 18 round-0 sources with the frozen 5b kit and **refuses to start** if
+    any differs from its stored `.nbt`. A base drift would otherwise end that brief `base_drift` and quietly count it as a
+    tie in G1.
+- `run --tier full --arm polish --from <runId>`: polish with `maxSteps 2` (5a's `maxRevisions` 2), each brief's own model
+  (Opus for brief 16, as in 5a), effort as 5a's revisions.
+- The auth and spend guards are unchanged: claude login only, refused with `ANTHROPIC_API_KEY` or `ANTHROPIC_AUTH_TOKEN`, and
+  `--max-usd`.
+
+**Judging and bars, exactly as 5a built them:**
+- The same blind Opus judge, prompt and schema (pinned by hash), the same 4 views (iso, iso_back, front, top), each pair
+  judged twice with the order swapped.
+- A brief whose polish accepted nothing has final = round 0. It is `identical`: no judge call, counted as a tie, and it
+  **stays in `withRevision`** when a step ran (as 5a counted its 3 identical briefs).
+- **G1:** final vs round 0, one-sided sign test at alpha 0.05, using 5a's thresholds (`n` 12/14/16/18 -> 10/11/12/13 wins), at
+  most 3 losses, and at least 12 briefs with a step.
+- **G2:** the critic's mean `overall` rises by at least 1.0 from round 0 to installed, and P0 at install is 0 in at least
+  16 of 18. Same critic, same scale. A recalibrated critic would change the scale, so it is not part of this arm.
+- **G3** as 5a.
+- **G4**, with one change from 5a:
+  - **Blocking:** polish spend within its cap for 18 of 18 (the invariant); mean added time at most 8 min; the estimate within
+    ±50% for 15 of 18 and for the total.
+  - **Recorded, not blocking:** 5a's "mean at most 60% of mean round-0 cost" line ($2.02 measured, so $1.21). It is
+    **predicted to fail**: the seeds give about $1.4-1.7 per brief, because a fresh polish session has a cold cache, unlike 5a's
+    warm revisions at $0.47-0.49.
+  - Making the line blocking would hide polish behind a dev flag on cost alone, before its quality is known. Instead it
+    is reported next to the loop's measured $1.06 and feeds N4.
+- **G5 (new, an invariant):** every accepted step passes the scope check, and the mod's `TemplateDelta` of every installed
+  version touches no cell outside its steps' allowed sets (re-verified by `rescore`).
+
+**Recorded, not gated:**
+- **Head to head:** polish final vs 5a loop final, with the same blind judge, both orders. `identical` when both finals are
+  round 0. Judge cost only.
+- **Targeted-issue judge:** a blind pairwise asking only "which shows the problem '<issue.what>' less?". It's blind to
+  which is revised. It measures whether the fix worked visibly, even when the overall preference is a tie.
+- step acceptance rate, scope-violation rate, base drift count, changed-cell share, cost per accepted step, and polish vs
+  loop cost and time.
+
+**Prompt development (not tuned on the eval set):** `POLISH.md`, the polish system prompt and the scoping prompt are developed
+only on real designs outside the 18:
+- gate 1's cabin and tower, gate 2's town house, 4b's Mosswater set (format 1, 3 items) and 4c's tavern;
+- if more are needed, round 0 of Steward's v2 briefs (`steward-mc/docs/eval-briefs-v2-candidates.json`).
+
+Development cap $20. Then:
+- the prompt hashes are frozen;
+- **the measured polish, fix-turn and scoping costs replace the seeds**, and the expected spend of the rest is recomputed;
+- if what has been spent plus the new expectation is over the $80 cap, the run **stops and asks Noah** before the full tier.
+  The smoke stop rule is not relied on for this.
+
+**Smoke stop rule (no extra spend):** the full run does briefs 1, 3, 10 and 13 first, then stops and reports, without running
+the other 14, if any of these holds:
+- 3 or more of the 4 end with no accepted step;
+- any G5 violation;
+- the smoke spend is over 1.5x the seeded high.
+
+**Predicted outcome (stated before the run):**
+- One or two single-part edits per brief make small visual changes, so the judge's tie rate will rise. **G1 (13 wins of 18)
+  is unlikely to pass.**
+- 5a's full revisions moved the critic only +0.28, so **G2's +1.0 is unlikely too.**
+- G4's recorded cost line ($1.21 mean) will likely be exceeded (see G4).
+- The run is still worth about $40, because the targeted-issue judge and the head-to-head answer the questions Steward needs
+  for "polish later":
+  - does a targeted edit visibly fix what was named?
+  - is it at least as good as the loop, at a lower cost?
+
+**What the outcome decides (agreed now, learning from 5a):**
+- **G1-G5 pass:** polish becomes the mechanism behind "Critique and revise" (`mode: "polish"`), and the loop stays
+  experimental. Whether the toggle defaults on is Noah's call (N4).
+- **G1 or G2 fails, G3-G5 pass:** polish ships **experimental** (as the loop did), the result is recorded as "not shown", and
+  the rest of 5b ships.
+- **G3, G4 or G5 fails:** polish stays behind a dev flag until fixed. The rest of 5b still ships.
+
+### Spend (claude login only; API-equivalent estimate)
+
+| Part | Expected | Notes |
+|---|---|---|
+| Prompt development | ~$15 | 6 non-eval entries x (report $0.05 + 2 steps ~$1.5), about 1.7 passes |
+| Full polish arm, 18 briefs | ~$30 | 2 steps x ~$0.8 (step, fix turns, critic) per brief; brief 16 on Opus ~$3; steps that end `no_target` cost nothing |
+| Judges | ~$6.5 | vs round 0 $2.1; vs the loop $2.1; targeted-issue $2.1; rejudge of 4 briefs for stability $0.5 |
+| Other real checks | ~$6 | polish plus apply through the Java API ~$2; one live `critique.mode: "polish"` design ~$3; one notes-scoped polish ~$1 |
+| Delta apply gate | $0 | hand-written versions, sim backend |
+| **Total** | **~$58** (range $40-75) | |
+
+- **Proposed cap: $80**, enforced by the runner across all real steps.
+- **Stated ceiling: $100.** Noah may raise the cap up to $100 without re-planning; past $100 the gate is re-scoped instead.
+- 5a, for scale: planned about $85 with a $120 cap (raised to $150); it spent $93.23.
+
+---
+
+## 4. Two fixes from Steward's live check
+
+### F1: release builds need the sidecar bundle
+
+Today `mod/build.gradle` copies `../sidecar/dist` "when it exists", so a jar built without `npm run build` silently ships no
+sidecar, and the launcher reports "no sidecar bundled" at run time.
+
+- **Task `checkSidecarBundle`:** requires the **file** `sidecar/dist/main.mjs` (non-empty) and `sidecar/package-lock.json`. It
+  writes `architect-sidecar/BUNDLE.json {sidecarVersion, modVersion, builtAt, mainSha256}` into the jar.
+- **It fails the build** for:
+  - every `publish*` task, including `publishToMavenLocal` (see N5);
+  - any build with `-Prelease` (`publish.yml` passes it).
+  
+  The message: "release builds need the sidecar bundle: cd sidecar && npm ci && npm run build".
+- **A plain local `./gradlew build` / `jar` without the bundle still succeeds**, as a **dev jar marked three ways**:
+  - the version suffix `+nosidecar` (`architect_mc-0.10.0+nosidecar.jar`);
+  - the manifest attribute `Architect-Sidecar-Bundle: missing` (and `custom.architect_mc:bundle = "missing"` in
+    fabric.mod.json);
+  - a launcher log line and a red Status-tab line: "Development build without the sidecar bundle: set
+    ARCHITECT_SIDECAR_DIR, or build sidecar/ and rebuild the mod" (instead of "no sidecar bundled").
+  
+  Gradle also prints a warning.
+- `-PallowNoSidecar` lets `publishToMavenLocal` publish the `+nosidecar` version (never under the plain version), for API-only
+  compiling.
+- **CI:** `ci.yml` already builds the bundle first. A new CI step builds once without it and asserts the three marks, then
+  asserts that `publishToMavenLocal -Prelease` fails.
+
+### F2: the claude login without USER/LOGNAME
+
+- **Observed** (Steward `mod/DEV.md`, 2026-10-07): a client started from `env -i` without USER and LOGNAME didn't find the
+  claude login; with them it did. The cause is not root-caused here; it is likely the CLI's macOS keychain lookup. The fix
+  doesn't depend on the mechanism.
+- **Sidecar** (login mode, before the auth check and every CLI spawn):
+  - if `USER` or `LOGNAME` is unset or empty, both are set from `os.userInfo().username`, falling back to the basename of
+    `HOME`;
+  - if `HOME` is unset, it is set from `os.userInfo().homedir`;
+  - this is logged once: "USER/LOGNAME were unset; using <name> from the OS".
+  
+  `tools/eval.mjs` starts its sidecar through the same code.
+- **Launcher (Java):** passes `USER`/`LOGNAME`/`HOME` to the sidecar when missing, from `user.name` and `user.home`.
+- **A clear error.** Under login mode, the `designer.ts` auth check's "not logged in" becomes: "The claude CLI found no login
+  (user <USER>, HOME <HOME>). Log in by running `claude` and `/login` in a terminal as this user. If Minecraft starts from a
+  scrubbed environment, keep HOME, USER and LOGNAME."
+  - When the sidecar filled in a variable, the message says so.
+  - The Status tab shows it, and it stays an `auth` failure (`failures.ts`).
+- **Docs:** the README section "Use my Claude login", and DEV notes on repeating Steward's `env -i` run.
+
+---
+
+## 5. Java API 1.7.0, protocol, events
+
+### Rules (the 1.1-1.6 precedent, tightened)
+
+- `ArchitectApi.VERSION = "1.7.0"`.
+- The old record constructors are kept.
+- New interface methods are **defaults** that throw `UnsupportedOperationException("... needs Architect API 1.7.0")`.
+- **Every new enum constant is appended at the end.** No insertion before DONE or OFF, as 5a did, so ordinals stay stable.
+  Exhaustive switches still break, as before.
+- `tools/api-compat.mjs` checks the unchanged **1.6.0 and 1.5.0** apitest jars' references and the 1.6.0 API surface. Both jars
+  pass their suites against 0.10.0.
+
+### New types
+
+```java
+record EntryVersion(int version, long createdAt, String by, @Nullable Integer parent, @Nullable String designId, String summary,
+                    String nbtSha256, boolean pinned) {}
+enum PartStatus { ADDED, REMOVED, CHANGED, UNCHANGED }
+record PartDelta(String name, PartStatus status, int added, int removed, int changed, @Nullable BoundingBox boxFrom,
+                 @Nullable BoundingBox boxTo) {}
+record BlueprintDelta(String entryId, int from, int to, boolean frameKept, boolean approximate, Map<String, PartDelta> parts,
+                      int added, int removed, int changed, int unchanged, List<String> notes) {}
+enum PlayerEdits { KEEP, OVERWRITE, REFUSE }
+record DeltaRequest(String siteId, int toVersion /* 0 = head */, @Nullable PlayerEdits playerEdits /* null = KEEP */,
+                    @Nullable OverlapPolicy overlap /* null = REFUSE */, @Nullable ServerPlayer actor, boolean force, JsonObject ext) {}
+record KeptCell(BlockPos pos, BlockState found, BlockState planned) {}
+record DeltaVerdict(boolean ok, List<Refusal> refusals, int added, int removed, int changed, Map<String, PartDelta> parts,
+                    List<KeptCell> kept, List<Overlap> overlaps, Map<Item, Integer> bom, Map<Item, Integer> refund,
+                    BoundingBox box, Mode mode, List<String> notes) {}
+record DeltaResult(boolean applied, String siteId, int fromVersion, int toVersion, int written, List<KeptCell> kept,
+                   Map<Item, Integer> refund, int reshaped, List<Refusal> refusals, List<String> notes) {}
+record SiteVersion(int version, long appliedAt, Kind kind, boolean revertible) { enum Kind { PLACED, DELTA, REVERT, FORWARD } }
+// revertible: this version's delta (and every delta above it) can be journal-undone. It is false for every delta built as a
+// construction delta, permanently: a later toggle change to INSTANT never makes it undoable (that would put back refunded
+// blocks). Such a version is reached again only by a forward delta. It is also false for a version folded into the base.
+record PolishRequest(String entryId, @Nullable Integer fromVersion, @Nullable List<Integer> issues, @Nullable List<String> parts,
+                     @Nullable String notes, int maxSteps, @Nullable String model, @Nullable Double budgetUsd,
+                     @Nullable String owner, JsonObject ext, @Nullable PolishApply apply) {}
+record PolishApply(List<String> siteIds /* empty = every site at an older version */, boolean preview) {}
+record Polish(int fromVersion, @Nullable Integer installedVersion, List<Step> steps, End end, Cost cost) {
+  record Step(int n, @Nullable Critique.Issue target, List<String> allowedParts, boolean accepted, @Nullable Double overall,
+              int changedCells, Cost cost, long ms, @Nullable String failure) {}
+  enum End { POLISHED, NO_TARGET, NOT_RESOLVED, SCOPE_FAILED, CHECK_FAILED, BASE_DRIFT, BUDGET, TIME, CRITIC_FAILED }
+}
+```
+
+### Additions to existing types
+
+- **`Library`:**
+  - `versions(entryId)` -> `List<EntryVersion>`;
+  - `entry(entryId, version)` -> `Optional<Entry>`;
+  - `delta(entryId, from, to)` -> `CompletableFuture<BlueprintDelta>` (computed by the mod, off-thread);
+  - `revertEntry(entryId, toVersion)` -> `CompletableFuture<Entry>`.
+- **`Library.Entry`:** gains `int version` and `List<EntryVersion> versions`. The old constructors give version 1.
+- **`Designs`:**
+  - `polish(PolishRequest)` -> `CompletableFuture<String>` (the design id, at the ack);
+  - `estimatePolish(PolishRequest)` -> `Estimate`, with polish as separate fields.
+  
+  `Design` gains `kind()` (`DESIGN`, `MASSING`, `REPORT`, `POLISH`, appended) and `polish()` -> `Optional<Polish>`.
+- **`CritiqueMode`:** `POLISH` (appended).
+- **`Sites`:**
+  - `checkDelta(DeltaRequest)` -> `DeltaVerdict`;
+  - `applyDelta(DeltaRequest)` -> `CompletableFuture<DeltaResult>`;
+  - `revert(siteId, toVersion, @Nullable ServerPlayer actor)` -> `CompletableFuture<DeltaResult>`;
+  - `history(siteId)` -> `List<SiteVersion>`.
+- **`SiteView`:** gains `int version`, `int headVersion`, `int deviations` and `boolean updating`.
+- **`Batch.Item`:** gains `@Nullable DeltaRequest delta`. Exactly one of `request`, `road`, `cells` and `delta` is non-null,
+  and `request()` is null for delta items.
+- **`Reason`** (appended): `SITE_BUSY`, `FRAME_CHANGED`, `VERSION_GONE`, `PLAYER_EDITS`.
+- **Client side:**
+  - `PreviewStyle.KEPT` (appended);
+  - `ArchitectClientApi.previewDelta(String key, String siteId, int toVersion)`;
+  - `previewComposite` accepts `<entry>@<version>`.
+
+### Events and features
+
+**Events:**
+- `ENTRY_VERSIONED(Library.Entry entry, int fromVersion)`: once per installed version, persisted and caught up after a world
+  load, like `JOB_DONE`.
+- `SITE_UPDATED(SiteView before, SiteView after, DeltaResult result)`: for an apply or a revert. It fires when the delta's
+  writes are done; for a construction delta it fires at its start, and `SITE_PROGRESS` / `SITE_BUILT` follow as in phase 3.
+- `DESIGN_DONE` carries `polish()`.
+
+**Features:** `entryVersions`, `blueprintDelta`, **`deltaApply`** (the name 4a and Steward's A8 review reserved), `siteRevert`,
+`polish`, `deltaPreview`.
+
+**Not purely additive:**
+- record patterns and `equals` change for `Library.Entry`, `SiteView`, `Batch.Item` and `Design`;
+- `Batch.Item.request()` may now be null for a delta item;
+- new constants, appended.
+
+### Sidecar protocol (2, additive)
+
+Client -> sidecar:
+- `entry.versions {entryId}` -> ack `{versions}`
+- `entry.delta {entryId, from, to}` -> ack `{delta}` (the kit's summary)
+- `entry.revert {entryId, toVersion}` -> ack `{version}`
+- `design.polish {entryId, spec: PolishSpec}` -> ack `{designId}`
+- `design.estimate` takes `{polish: PolishSpec}`
+- `CritiqueSpec.mode` takes `"polish"`, with `maxRevisions` meaning `maxSteps`
+
+Sidecar -> client:
+- `entry.versioned {entryId, version, from, by, designId?}` (the mod reloads that entry)
+- `design.upsert` with `kind: "polish"` and `polish: {fromVersion, steps, end, installedVersion}`
+
+Other:
+- Snapshot features: `entry.versions`, `entry.delta`, `design.polish`, `critique.polish`.
+- **Protocol-1 clients** see none of it; polish designs are filtered out by `toProtocol1`.
+
+**Kit CLI:** `node kit/tools/diff.mjs <a.nbt> <b.nbt> [--parts-a f] [--parts-b f] [--frame-a x,y,z] [--frame-b x,y,z]
+[--scope p,q] [--new-parts n] [--max-share 0.5] [--json]` prints `{ok, frameKept, parts, added, removed, changed, unchanged,
+violations[], frameHint?}`. The exit code is 0 for no violation, 1 for violations, 2 for bad usage.
+
+### DevBridge (docs/DEVBRIDGE.md changelog)
+
+- `dev.entry.versions`, `dev.entry.installVersion {entryId, dir}` (installs a hand-written version, no Claude), and
+  `dev.entry.delta`.
+- `dev.site.delta.check` / `dev.site.delta.apply`, `dev.site.revert`, `dev.site.history`.
+- `dev.writes.count {box}` (block writes counted since the last call, for minimality).
+- `dev.journal.killAt` gains D1-D8.
+- `dev.site.state` gains `version`, `deviations` and `deltas`.
+
+---
+
+## 6. Phase 5b gate
+
+Blocking items: 1-5 and 7-10. Item 6 must run to the end within the cap. Its G3, G4 and G5 block **shipping polish**, and its
+G1 and G2 decide polish's label (above), not the phase.
+
+1. **Unit and property tests (no Claude):**
+   - **Kit:**
+     - `diff.mjs` on fixtures: part statuses, approximate labels, the frame hint, every scope violation (including
+       no-part cells and a removed out-of-scope part), and base drift;
+     - `frame` and `parts.nbt` round trips.
+   - **Kit diff equals the mod's `TemplateDelta`** on every fixture pair and on every kit example against its param and
+     palette variants.
+   - **Mod, pure JVM** (a world seam like 5a's `MigrationWorld`): property tests over random version chains (3-6 versions
+     from random edits inside parts, including growth and shrink with a frame shift) and random op sequences: apply any
+     version, revert, Remove, another site LAYERed below or placed beside, other removals, and random player edits.
+     - **E1 (path independence):** with no player edits, after any sequence the union box + 8 equals a fresh instant
+       placement of the site's current version on the original world (or the original world, after Remove).
+     - **E2:** a revert of the top delta restores exactly the world before that apply.
+     - **E3:** Remove at any point restores the original world, edits included (BOX).
+     - **E4:** an apply writes only Δ' and its guard cells: shape guards (by vanilla shape updates only) and growth
+       guards.
+     - **E5:** under KEEP, player-edited Δ cells are untouched and reported, and cells outside Δ are untouched by both
+       apply and revert.
+     - **E6:** a fold changes no undo result except the folded version.
+     - **E7:** no API path undoes a non-top delta.
+     - **Per-section planning** equals whole-entry planning, with delta entries included.
+   - **Sidecar:**
+     - the version install with a fault at every step, then repair;
+     - user metadata and `ext` kept through a bump;
+     - GC keeps pins;
+     - the stale rule (version, sha, critic hash);
+     - polish on the sim backend: every end reason scripted, target selection (including `untargetable`), a scope
+       failure then a fix, the acceptance rule, the caps, a restart mid-step, a usage hold, the estimate, and protocol-1
+       filtering.
+2. **In-game exactness (dev world, $0).** Hand-written versions of the kit tavern, installed with `dev.entry.installVersion`:
+   - v2 adds `wing_east`, removes `porch` and re-materials `roof`;
+   - v3 grows west (origin raised, design coordinates kept) and changes `main`'s windows;
+   - v4 changes `front` (must refuse `FRAME_CHANGED`);
+   - v5 shrinks (removes a part; smaller footprint).
+   
+   The checks:
+   - **Chains:** a fixed 12-operation script plus 20 seeded random scripts of apply and revert over v1, v2, v3 and v5, each
+     from a copy of one world.
+     - After every operation, the region hash equals a fresh placement of that version at the same spot in another
+       copy (E1).
+     - Every revert equals the pre-apply hash (E2).
+     - A final Remove equals the pre-site hash over the union box + 8, every cell plus BE NBT (E3).
+   - **Layered and leaves:** the same on a site LAYERed over a cell-site pad T, next to a worldgen tree (held leaves, the
+     ring, growth into leaves). T and the site are removed in both orders.
+   - **Covered:** X is LAYERed over the tavern's wall.
+     - A delta touching X's cells refuses `COVERED`, naming X.
+     - One that doesn't touch them applies.
+     - All 6 removal orders of {T, tavern with its delta, X} are exact.
+   - **Minimality:** `dev.writes.count` equals |Δ'| plus the shape-guard and growth-guard writes. A chest with items in an
+     unchanged part keeps them. A door opened in an unchanged part stays open.
+   - **Shape updates:** a fence and a glass pane in an unchanged part stand against a wall that v2 adds and against a wall
+     that v5 removes. After each apply and revert, they match a fresh placement (E1, E2).
+   - **Player edits:**
+     - a block placed in a removed part's cell: KEEP keeps it and reports it, OVERWRITE replaces it, REFUSE refuses;
+     - a filled chest in a changed cell refuses `BLOCK_ENTITIES`;
+     - an opened door in a changed cell counts as ours.
+   - **Crash:** D1-D8 and K5-K7 by `dev.journal.killAt`, then a restart. The states are as the table says, and the final
+     Remove is exact.
+   - **History:** 8 deltas in a row on the same cells. The depth stays at most 8, the 7th folds, reverts to the retained
+     versions are exact, and Remove is exact.
+   - **Ghost:** a delta preview with ADDED, REMOVED, CHANGED and KEPT tints, in a screenshot that has been looked at.
+3. **Survival:**
+   - A cabin construction site is built from hoppers. Then a construction delta v1 -> v2:
+     - the BOM from `dev.site.state` equals the sum over the delta's queued cells;
+     - it is fed exactly that;
+     - it finishes identical to an instant apply at the same spot in a creative copy;
+     - the refunds equal the paid removed and changed cells that are still ours;
+     - changed cells kept the old block until their swap.
+   - "Rebuild as v1" (a forward delta) is fed and finishes identical to an instant v1. Then deconstruct. Over the whole
+     run, items delivered = items returned, per item id.
+   - A second run mines 3 blocks: returned = delivered - 3.
+   - A delta on a site that is still `BUILDING` refuses `SITE_BUSY`, and a queued one waits.
+4. **Queue, groups and stages:**
+   - The 4d 12-lot village gets a batch of 12 delta items (hand-written v2s of the 4 kit examples) as stage `upgrade`. It
+     is identical to atomic applies, and a relog mid-batch resumes identically.
+   - `cancelBatch` rolls back the in-flight delta exactly.
+   - `undoStage("upgrade")` reverts all 12 exactly, and `removeGroup` afterwards is exact.
+5. **MSPT and throughput:** the budgets table; the village delta batch at 1, 4 and 10 ms; the size-cap fixture with every
+   cell changed, applied and reverted. Results in `artifacts/gate5b/REPORT.md` and `throughput.json`.
+6. **The polish eval** (real, claude login only, with the guards):
+   - prompt development frozen (hashes recorded);
+   - `import-round0`;
+   - smoke with the stop rule, then the full 18;
+   - G1-G5 as above, plus the recorded comparisons;
+   - `rescore` byte-identical;
+   - `rejudge` agrees on at least 3 of 4.
+7. **Other real checks:**
+   - through the Java API (apitest): polish an entry placed in a dev world, preview, then apply;
+   - a notes-scoped polish ("make the porch less cluttered") with its scoping call;
+   - one new design with `critique.mode: "polish"`.
+8. **The fixes:**
+   - `publishToMavenLocal -Prelease` and `publish` fail without `sidecar/dist/main.mjs`;
+   - a local build without the bundle carries all three marks (and a Status-tab screenshot that has been looked at);
+   - a sidecar started with `env -i HOME=... PATH=...` (no USER or LOGNAME) in login mode reports auth ok (account info
+     only, $0);
+   - the new message is unit-tested with an injected account-info result (no login found, with a variable filled and with
+     none filled). This is not a live negative run: it would depend on how the CLI finds credentials, and it could write
+     first-run files.
+9. **Regressions:**
+   - every sidecar, kit and mod test;
+   - the 4a jobs, 4b and 4c sim suites;
+   - the 4d gate;
+   - 4e gate items 2 (any order), 5 (crash), 7 (survival layering) and 9 (the 4d regression);
+   - the 5a sim tier with `rescore`, and the migration tests;
+   - **the 1.6.0 and 1.5.0 apitest jars, unchanged, pass against 0.10.0**, and `api-compat` is clean;
+   - recorded, not gated: a world with an updated site opened in 0.9.0 removes it exactly (the deltas are found by
+     `entry.site`).
+10. gate-verifier checks the result, including that no real step ran with an API key in its environment and that the
+    spend is within the cap.
+
+## Build order inside 5b
+
+1. F1 and F2 (small, independent).
+2. Kit: `frame`, `parts.nbt`, `diff.mjs` (with the scope mode); the fixture versions.
+3. Sidecar: entry versions (install, repair, GC, lineage, critique.json format 2), the `entry.*` messages.
+4. Mod: `TemplateDelta`, the pre-site view and plans, the `delta` entry, apply, revert, fold, crash points, settle. Then
+   survival, the queue and stages, preview, UI. The equality test with the kit comes early.
+5. Polish on the sim backend: targets, scope check, acceptance, steps, estimates, apply.
+6. Java 1.7.0 and api-compat.
+7. Gate items 1-5, 8 and 9 (all $0). Then polish prompt development (cap $20), freeze, smoke, full, other real checks.
+
+## Open questions for Steward
+
+- **S1. Player edits default.** `KEEP` (the player's block stays, reported) for API callers, as your N5 asked for removal. Or do
+  you want `REFUSE` by default, so the steward can ask the player first?
+- **S2. Covered cells.** 5b refuses a delta that touches cells another site covers (`COVERED`), and defers writing under a
+  cover to phase 6. Your lots sit on top of pads, so a lot's own delta is fine. A **pad's** delta under standing lots needs the
+  deferred mode. Is phase 6 soon enough?
+- **S3. Version identity.** The entry id stays stable across versions. Group items, collections and your lot-to-entry maps are
+  unchanged, and `SiteView.version` / `headVersion` plus `ENTRY_VERSIONED` drive "update available". Enough for your inbox,
+  or do you want per-site update proposals as events?
+- **S4. Survival revert costs materials** (a paid forward delta; a free undo would duplicate refunded items). Acceptable for
+  Supplied and Hardcore?
+- **S5. Polish targets.** One part-grounded issue per step. Notes ("add a library wing") go through a scoping call that picks
+  at most 3 parts and 2 new ones. Will your free-text change requests (your phase 3) fit that, or do they need multi-part
+  edits across more of the building (which would be a remix, not a polish)?
+- **S6. Scope of delta apply in 5b.** Building sites only. Roads, cell sites and massings re-place, and region deltas are
+  phase 6 with A5b. OK?
+- **S7. Frame rule.** A new version must keep `front` and the entrance feet row; rotating a building is a re-place. OK?
+- **S8. History.** At most 6 deltas per site before the oldest folds into the base (revert to a folded version becomes a
+  forward delta). Enough?
+- **S9. Polish model.** The entry's own designer model (Opus for anchors), or always Sonnet for polish?
+
+## Open questions for Noah
+
+- **N1. Spend:** about $58 expected, a cap of **$80**, and a stated ceiling of **$100** (raise without re-planning up to it).
+  Claude login only. OK?
+- **N2. Versions in place** (stable id, `versions/<n>/`), rather than a new library entry per revision. OK?
+- **N3. The outcome rule, decided before the run:** polish's G1 and G2 decide only its label (default-capable vs
+  experimental). Delta apply ships on its own gate. OK?
+- **N4.** If polish passes G1-G5: should "Critique and revise" switch to polish, and should it default on?
+- **N5. `publishToMavenLocal` without the bundle fails**, with `-PallowNoSidecar` as the escape. Or should mavenLocal stay
+  lenient?
+  - Steward compiles against mavenLocal.
+  - Its DEV.md records that a jar built from a tag clone needs `npm ci && npm run build` in `sidecar/` first, or it has no
+    sidecar.
+  - Failing makes that impossible to miss.
+- **N6. Survival revert = pay again** (S4), a game-design call.
+- **N7. Retention:** 32 versions per entry, 30-day GC, pins always kept. OK?
+- **N8. Prompt development** on gate 1/2/4b/4c designs (outside the eval), never on the 18. OK?
+
+## Deferred (recommended)
+
+- **Writing a delta under a covering site** (rewriting the cover's `before`, with its undo): phase 6, for pad deltas under
+  lots.
+- **Deltas for roads, cell sites, massings and region programs:** phase 6 with A5b.
+- **Moving or rotating through a delta**, and changing `front`: re-place.
+- **Rebasing variants and re-skins** onto a new base version.
+- **Polish of bundled and imported entries.** Imports have no source; bundled entries need a variant first.
+- **In-world renders** for critiquing a placed site with the player's edits. 5b critiques the entry's template.
+- **A recalibrated critic** ("7 reachable"). It changes the G2 scale, so it is a separate experiment with its own eval run.
+- **Collection-wide polish** ("polish the whole set") and set-level critique: phase 6.
+- **Exports with versions and source** (the PLAN carry-over "exports carry no source").
+- Still with phase 6, unchanged: the thin 4 ms throughput margin (5b re-measures it), invariant (iii) narrowed (delta entries
+  are BOX, so it is not widened), and the 1000x1000 NOT_LOADED timeouts.
+
+## Coordinator decisions on Noah's questions (provisional; N1 and N6 wait for Noah)
+
+- **N2** Yes: versions live inside the entry, and the id stays stable.
+- **N3** Yes: polish's G1/G2 decide only its label; delta apply ships on its own gate.
+- **N4** Only if polish passes G1 and G2: "Critique and revise" then switches to polish, still off by default. Turning it on by default is a later decision.
+- **N5** Yes: `publishToMavenLocal` fails without the bundle too, with `-PallowNoSidecar` as the escape.
+- **N7** Yes: 32 versions, a 30-day GC, pinned versions always kept.
+- **N8** Yes: prompt development only on designs outside the 18.
