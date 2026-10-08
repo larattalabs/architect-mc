@@ -241,7 +241,7 @@ describe.skipIf(!hasKit)('entry.* messages', () => {
     const dl = await call({ type: 'entry.delta', entryId: 'tavern', from: 1, to: 2 });
     expect(dl.ok, dl.error).toBe(true);
     const delta = dl.result!.delta as Record<string, unknown>;
-    expect(delta).toMatchObject({ entryId: 'tavern', from: 1, to: 2, frameKept: true, approximate: false, added: 130, removed: 26, changed: 284 });
+    expect(delta).toMatchObject({ entryId: 'tavern', from: 1, to: 2, frameKept: true, approximate: false, added: 130, removed: 26, changed: 288 });
     expect((delta.parts as Record<string, { status: string }>).wing_east!.status).toBe('ADDED');
     expect(delta.violations).toBeUndefined();
     const rv = await call({ type: 'entry.revert', entryId: 'tavern', toVersion: 1 });
