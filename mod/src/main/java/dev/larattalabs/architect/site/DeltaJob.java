@@ -627,14 +627,20 @@ final class DeltaJob implements Placement.Job {
 					if (!writer.done()) {
 						return false;
 					}
+					long q0 = System.nanoTime();
 					TickDeferral.release(level, TickDeferral.withoutLeaves(held));
 					held.clear();
+					long q1 = System.nanoTime();
 					SiteJournal.writeCells(level, restore.cells());
 					SiteJournal.fixHalves(level, restore.halves());
 					SiteJournal.restoreRing(level, restore.ring());
+					long q2 = System.nanoTime();
 					WorldJournal.kill("K7");
 					Site cur = Sites.get(siteId);
 					Site after = SiteDeltas.reverted(level, cur, revertTo, new int[0], new HashSet<>(revertIds));
+					long q3 = System.nanoTime();
+					Architect.LOGGER.info("Delta job of {}: revert tail: release {} ms, cells {} ({}) ms, record {} ms", siteId, (q1 - q0) / 1_000_000, (q2 - q1)
+						/ 1_000_000, restore.cells().size(), (q3 - q2) / 1_000_000);
 					Sites.replace(server, after);
 					SiteJournal.updateMeta(siteId, after.toJson());
 					SiteDeltas.Result r = new SiteDeltas.Result(true, siteId, before0.versioning().version(), revertTo, writer.total(), List.of(), 0, List.of(), List
