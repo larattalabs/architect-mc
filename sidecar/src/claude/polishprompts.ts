@@ -67,6 +67,7 @@ export function polishBrief(i: PolishBriefInput): string {
     '',
     '- The critic renders your version with the same views and is asked whether this problem is resolved. A small tweak that leaves it visible is not accepted, and nothing from the step is kept.',
     '- Inside the allowed parts you may rework the code as much as the fix needs (move, reshape or rebuild the part); the limits are the parts and the share of changed cells.',
+    '- Work in this order: (1) say in one sentence what the part must look like for the problem to be gone; (2) change the part\'s code to that, as one coherent edit (a shape or size problem: change its dimensions, overhang, pitch or position; clutter: delete; a hidden element: clear what hides it); (3) build, check, diff, render, compare. Avoid many small cosmetic touches: they rarely change what the critic sees.',
     '- Also not accepted: a new P0 problem, or a building that looks worse overall.',
     '',
     '## Check before you end',
