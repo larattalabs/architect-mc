@@ -260,8 +260,69 @@ final class TileCheck {
 				}
 			}
 		}
-		// trees: a trunk any of whose logs the tile removes goes whole (within the window and the claim), as cells of this entry
 		BlockPos.MutableBlockPos m = new BlockPos.MutableBlockPos();
+		// fluids (phase 6a, E-normal): an air write that would let water or lava in is skipped: the cell is a fluid, or a fluid
+		// lies beside or above it that this tile does not replace with a solid block (writes skip block updates, but the first
+		// neighbour update later lets the fluid flow, and the undo would find water where the entry wrote air)
+		it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap<BlockState> target = new it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap<>();
+		for (int i = 0; i < p.pos().length; i++) {
+			if (keep[i]) {
+				target.put(p.pos()[i], p.states()[i]);
+			}
+		}
+		LongOpenHashSet drop = new LongOpenHashSet();
+		int[][] nb = {{1, 0, 0}, {-1, 0, 0}, {0, 0, 1}, {0, 0, -1}, {0, 1, 0}};
+		for (var e : target.long2ObjectEntrySet()) {
+			if (!e.getValue().isAir()) {
+				continue;
+			}
+			long q = e.getLongKey();
+			int x = BlockPos.getX(q);
+			int y = BlockPos.getY(q);
+			int z = BlockPos.getZ(q);
+			if (!level.getBlockState(m.set(x, y, z)).getFluidState().isEmpty()) {
+				drop.add(q);
+				continue;
+			}
+			for (int[] d : nb) {
+				long n = BlockPos.asLong(x + d[0], y + d[1], z + d[2]);
+				if (!level.hasChunk((x + d[0]) >> 4, (z + d[2]) >> 4)) {
+					continue;
+				}
+				BlockState ns = level.getBlockState(m.set(x + d[0], y + d[1], z + d[2]));
+				BlockState nt = target.get(n);
+				if (!ns.getFluidState().isEmpty() && (nt == null || !nt.getFluidState().isEmpty() || !nt.isSolid())) {
+					drop.add(q);
+					break;
+				}
+			}
+		}
+		if (!drop.isEmpty()) {
+			skipped.merge("fluid", (long) drop.size(), Long::sum);
+			LongArrayList pos2 = new LongArrayList();
+			List<Value> vals2 = new ArrayList<>();
+			LongArrayList walk2 = new LongArrayList();
+			for (int k = 0; k < pos.size(); k++) {
+				long q = pos.getLong(k);
+				if (drop.contains(q)) {
+					writes.remove(q);
+					target.remove(q);
+					continue;
+				}
+				pos2.add(q);
+				vals2.add(vals.get(k));
+			}
+			for (long q : walk) {
+				if (!drop.contains(q)) {
+					walk2.add(q);
+				}
+			}
+			pos = pos2;
+			vals = vals2;
+			walk = walk2;
+			logs.removeIf(q -> drop.contains(q));
+		}
+		// trees: a trunk any of whose logs the tile removes goes whole (within the window and the claim), as cells of this entry
 		LongArrayList extra = new LongArrayList();
 		LongOpenHashSet seen = new LongOpenHashSet(logs);
 		java.util.ArrayDeque<Long> todo = new java.util.ArrayDeque<>(logs);
@@ -307,9 +368,44 @@ final class TileCheck {
 			pos.add(q);
 			vals.add(air);
 			writes.add(q);
+			target.put(q, Blocks.AIR.defaultBlockState());
 		}
 		if (!extra.isEmpty()) {
 			skipped.merge("treeCells", (long) extra.size(), Long::sum);
+		}
+		// what stood on a cell this tile clears (snow layers, leaf litter, plants, sugar cane, kelp, sand and gravel) goes too,
+		// as cells of this entry (the undo puts it back); left alone it breaks or falls at the next update (phase 6a, E-normal)
+		Value water = WorldJournal.value(Blocks.WATER.defaultBlockState());
+		int deps = 0;
+		LongArrayList cleared = new LongArrayList();
+		for (var e : target.long2ObjectEntrySet()) {
+			if (!e.getValue().isSolid()) {
+				cleared.add(e.getLongKey());
+			}
+		}
+		for (int k = 0; k < cleared.size(); k++) {
+			long q = cleared.getLong(k);
+			int x = BlockPos.getX(q);
+			int z = BlockPos.getZ(q);
+			for (int y = BlockPos.getY(q) + 1; y <= claim[4]; y++) {
+				long u = BlockPos.asLong(x, y, z);
+				if (writes.contains(u) || others.contains(u)) {
+					break;
+				}
+				BlockState us = level.getBlockState(m.set(x, y, z));
+				if (!dependent(us)) {
+					break;
+				}
+				boolean wet = !us.getFluidState().isEmpty();
+				pos.add(u);
+				vals.add(wet ? water : air);
+				writes.add(u);
+				deps++;
+				extra.add(u);
+			}
+		}
+		if (deps > 0) {
+			skipped.merge("dependentCells", (long) deps, Long::sum);
 		}
 		// leaves that may hang on the removed logs and stay: held persistent while the tile stands (4e's leaves entry)
 		LongArrayList leafPos = new LongArrayList();
@@ -396,6 +492,18 @@ final class TileCheck {
 		}
 		InfraPlace.Check c = new InfraPlace.Check(List.of(), notes, ps, vs, box, hits, spec);
 		return new Result(c, leafPos.toLongArray(), leafBefore.toArray(new Value[0]), leafAfter.toArray(new Value[0]), w, Map.copyOf(skipped));
+	}
+
+	/** A block that stands on the one under it and breaks or falls without it. */
+	static boolean dependent(BlockState s) {
+		var b = s.getBlock();
+		return b instanceof net.minecraft.world.level.block.FallingBlock || b instanceof net.minecraft.world.level.block.VegetationBlock
+			|| b instanceof net.minecraft.world.level.block.SnowLayerBlock || b instanceof net.minecraft.world.level.block.LeafLitterBlock
+			|| b instanceof net.minecraft.world.level.block.FlowerBedBlock || b instanceof net.minecraft.world.level.block.SugarCaneBlock
+			|| b instanceof net.minecraft.world.level.block.CactusBlock || b instanceof net.minecraft.world.level.block.CactusFlowerBlock
+			|| b instanceof net.minecraft.world.level.block.BambooStalkBlock || b instanceof net.minecraft.world.level.block.KelpBlock
+			|| b instanceof net.minecraft.world.level.block.KelpPlantBlock || b instanceof net.minecraft.world.level.block.SeaPickleBlock
+			|| b instanceof net.minecraft.world.level.block.CarpetBlock || b instanceof net.minecraft.world.level.block.DoublePlantBlock;
 	}
 
 	static String walkB64(long[] w) {
