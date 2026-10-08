@@ -332,7 +332,7 @@ final class DeltaJob implements Placement.Job {
 									.maxZ() - wb.minZ() + 1, 0);
 								StructureTemplate tt = new StructureTemplate();
 								tt.load(level.registryAccess().lookupOrThrow(Registries.BLOCK), tpl);
-								return new Object[] {TemplateWriter.cells(level, tt, Sites.placeSettings(Rotation.NONE)), wb};
+								return new Object[] {TemplateWriter.cells(level, tt, Sites.placeSettings(Rotation.NONE)).airFirst(), wb}; // clears first (SiteDeltas.write)
 							});
 						}
 						if (!prepared.isDone()) {

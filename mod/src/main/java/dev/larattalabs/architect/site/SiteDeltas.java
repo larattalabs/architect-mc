@@ -911,8 +911,19 @@ public final class SiteDeltas {
 		} catch (IOException e) {
 			throw new Sites.SiteException(Reason.JOURNAL_UNAVAILABLE, e.getMessage());
 		}
-		CompoundTag tpl = JournalNbt.toTemplate(o.write(), wb.minX(), wb.minY(), wb.minZ(), wb.maxX() - wb.minX() + 1, wb.maxY() - wb.minY() + 1, wb
-			.maxZ() - wb.minZ() + 1, 0);
+		// two passes: the cells that become air first, then the rest. A fresh placement writes onto the pre-site terrain; a
+		// delta writes where version a's blocks still stand, and a block written under one that the delta removes (a dirt path
+		// under a porch deck) would react to it (the path schedules its turn to dirt) before the removal reaches it.
+		Map<Long, Value> clears = new LinkedHashMap<>();
+		Map<Long, Value> rest = new LinkedHashMap<>();
+		for (var e : o.write().entrySet()) {
+			(WorldJournal.state(e.getValue()).isAir() ? clears : rest).put(e.getKey(), e.getValue());
+		}
+		int sx = wb.maxX() - wb.minX() + 1;
+		int sy = wb.maxY() - wb.minY() + 1;
+		int sz = wb.maxZ() - wb.minZ() + 1;
+		CompoundTag tplClears = clears.isEmpty() ? null : JournalNbt.toTemplate(clears, wb.minX(), wb.minY(), wb.minZ(), sx, sy, sz, 0);
+		CompoundTag tpl = rest.isEmpty() ? null : JournalNbt.toTemplate(rest, wb.minX(), wb.minY(), wb.minZ(), sx, sy, sz, 0);
 		// other sites' cells on top near the writes: masked (no shape or neighbour update reaches them)
 		Set<Long> masked = new HashSet<>();
 		Anchors.Bounds g = wb.grow(1);
@@ -930,7 +941,12 @@ public final class SiteDeltas {
 			UpdateMask.begin(masked::contains);
 		}
 		try {
-			Sites.restoreTemplate(level, wb, tpl);
+			if (tplClears != null) {
+				Sites.restoreTemplate(level, wb, tplClears);
+			}
+			if (tpl != null) {
+				Sites.restoreTemplate(level, wb, tpl);
+			}
 		} finally {
 			if (!masked.isEmpty()) {
 				UpdateMask.end();

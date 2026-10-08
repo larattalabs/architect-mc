@@ -134,6 +134,7 @@ public final class Builder {
 		ServerLifecycleEvents.SERVER_STOPPED.register(s -> {
 			RUNS.clear();
 			PROGRESS.clear();
+			REFUNDED.clear();
 			server = null;
 		});
 	}

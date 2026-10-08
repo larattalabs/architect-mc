@@ -1143,21 +1143,34 @@ steps.survival = async () => {
     const bomEq = JSON.stringify(Object.entries(missing).sort()) === JSON.stringify(Object.entries(c.bom).sort());
     check(bomEq, 'survival: the BOM in dev.site.state equals the delta\'s queued cells\' bill', { missing, bom: c.bom });
     const now = await cellsIn(BOX);
-    const swapped = (c.ghost?.changed ?? []).filter((p) => blockOf(now.get(p) ?? '') !== blockOf(pre.get(p) ?? ''));
-    check(st.swaps > 0 && swapped.length === 0, `survival: ${st.swaps} changed cells keep the old block until their swap`, swapped.slice(0, 5));
+    const moved = (c.ghost?.changed ?? []).filter((p) => blockOf(now.get(p) ?? '') !== blockOf(pre.get(p) ?? ''));
     const refunds1 = (await siteState(S)).deltaRefunds ?? {};
+    // the player picks up the refunds of the removed cells (counted in deltaRefunds) before they lie in a later delta's box
+    await cmd('/kill @e[type=minecraft:item]');
     feeds[S] = await hopperFor(S);
     check(await buildUntilDone([S], feeds, into), 'survival: the construction delta finished from its hopper');
+    await cmd('/kill @e[type=minecraft:item]'); // the swaps' refunds, picked up
+    // a changed cell whose v2 value is air is a removal (written at once, refunded); every other changed cell kept its old block
+    const w2 = await cellsIn(BOX);
+    const swapped = moved.filter((p) => !/:air$|:cave_air$/.test(blockOf(w2.get(p) ?? '')));
+    check(st.swaps > 0 && swapped.length === 0, `survival: ${st.swaps} changed cells kept the old block until their swap (${moved.length - swapped.length} changed-to-air cells removed at once)`, swapped.slice(0, 5));
     const feedCells = Object.values(feeds).flatMap((f) => [f.hop, f.chest]);
     const ex = feedCells.map((p) => [...p, ...p]);
     const built2 = (await hash(BOX, ex)).sha256;
+    const built2Cells = await cellsIn(BOX);
     // mined cells: the second run takes 3 of the site's blocks before the deconstruct
     // "Rebuild as v1": a paid forward delta
+    const stD = await siteState(S);
+    const itemsAt = await cmd('/execute as @e[type=minecraft:item] run data get entity @s Pos');
+    const recD = (await sites()).find((x) => x.id === S);
+    log(`  survival: after the delta: box ${JSON.stringify(recD?.box)}, restore ${JSON.stringify(recD?.snapshotBox)}, crate ${JSON.stringify(stD.crate ?? stD.construction?.crate)}; items ${JSON.stringify(itemsAt.messages).slice(0, 600)}`);
     const r1 = await deltaApply(S, 1, { construction: true });
     check(r1.applied, 'survival: "Rebuild as v1" (a forward construction delta) started', r1.applied ? undefined : r1);
     feeds[S] = await hopperFor(S);
     check(await buildUntilDone([S], feeds, into), 'survival: the rebuild as v1 finished from its hopper');
+    await cmd('/kill @e[type=minecraft:item]'); // its refunds, picked up
     const built1 = (await hash(BOX, ex)).sha256;
+    const built1Cells = await cellsIn(BOX);
     const refunds = (await siteState(S)).deltaRefunds ?? {};
     let mined = 0;
     if (mine) {
@@ -1204,10 +1217,12 @@ steps.survival = async () => {
       const ia = await deltaApply(S, 2);
       check(ia.applied, 'survival: the instant apply in the creative copy', ia.applied ? undefined : ia);
       const ref2 = (await hash(BOX, ex)).sha256;
-      check(ref2 === built2, 'survival: the construction delta finished identical to an instant apply at the same spot', { ref2, built2 });
+      const feedSet = new Set(feedCells.map((q) => q.join(',')));
+      const cellDiff = (a, b) => [...new Set([...a.keys(), ...b.keys()])].filter((q) => !feedSet.has(q) && a.get(q) !== b.get(q)).slice(0, 12).map((q) => `${q}: ${a.get(q)} | ${b.get(q)}`);
+      check(ref2 === built2, 'survival: the construction delta finished identical to an instant apply at the same spot', { ref2, built2, diff: cellDiff(built2Cells, await cellsIn(BOX)) });
       const ib = await deltaApply(S, 1);
       const ref1 = (await hash(BOX, ex)).sha256;
-      check(ib.applied && ref1 === built1, 'survival: "Rebuild as v1" finished identical to an instant v1', { ref1, built1 });
+      check(ib.applied && ref1 === built1, 'survival: "Rebuild as v1" finished identical to an instant v1', { ref1, built1, diff: cellDiff(built1Cells, await cellsIn(BOX)) });
     }
   }
   return out;

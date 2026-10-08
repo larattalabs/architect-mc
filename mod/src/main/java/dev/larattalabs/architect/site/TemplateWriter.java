@@ -54,6 +54,28 @@ final class TemplateWriter {
 		int size() {
 			return states.length;
 		}
+
+		/** The same cells with the air ones first, in their order, then the rest in theirs (a delta's clears before its writes). */
+		Cells airFirst() {
+			int n = size();
+			int[] o = new int[n * 3];
+			BlockState[] st = new BlockState[n];
+			CompoundTag[] nb = new CompoundTag[n];
+			int k = 0;
+			for (int pass = 0; pass < 2; pass++) {
+				for (int i = 0; i < n; i++) {
+					if (states[i].isAir() == (pass == 0)) {
+						o[k * 3] = off[i * 3];
+						o[k * 3 + 1] = off[i * 3 + 1];
+						o[k * 3 + 2] = off[i * 3 + 2];
+						st[k] = states[i];
+						nb[k] = nbt[i];
+						k++;
+					}
+				}
+			}
+			return new Cells(o, st, nb);
+		}
 	}
 
 	private static final Map<StructureTemplate, Map<Integer, Cells>> CACHE = new WeakHashMap<>();
