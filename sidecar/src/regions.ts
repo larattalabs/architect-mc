@@ -152,8 +152,9 @@ export class Regions {
       roles = { ...r.info.roles };
     }
     roles = { ...roles, ...(msg.roles ?? {}) };
-    const seed = msg.seed !== undefined ? BigInt(msg.seed).toString() : crypto.randomBytes(8).readBigUInt64LE().toString();
-    if (BigInt(seed) > 0xffffffffffffffffn) throw new ClientError('seed is larger than a u64');
+    // no seed: the kit's default, fnv64(programId, canonical(params), claim) (CONTRACT §1 "Seeds and determinism"); never random
+    const seed = msg.seed !== undefined ? BigInt(msg.seed).toString() : 'default';
+    if (seed !== 'default' && BigInt(seed) > 0xffffffffffffffffn) throw new ClientError('seed is larger than a u64');
     const planId = `p${this.host.now().toString(36)}${crypto.randomBytes(3).toString('hex')}`;
     fs.mkdirSync(this.planDir(planId), { recursive: true });
     const dir = fs.realpathSync(this.planDir(planId));
@@ -218,8 +219,7 @@ export class Regions {
       path.join(dir, 'params.json'),
       '--survey',
       path.join(dir, 'survey.bin'),
-      '--seed',
-      o.seed,
+      ...(o.seed === 'default' ? [] : ['--seed', o.seed]),
       '--claim',
       [c.minX, c.minZ, c.maxX, c.maxZ, c.minY, c.maxY].join(','),
       ...(o.hasBible ? ['--bible', path.join(dir, 'bible.json')] : []),

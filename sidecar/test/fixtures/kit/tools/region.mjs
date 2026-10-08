@@ -23,7 +23,7 @@ for (let i = 0; i < rest.length; i++) {
   if (n === undefined || n.startsWith('--')) flags[a.slice(2)] = true;
   else { flags[a.slice(2)] = n; i++; }
 }
-if (cmd !== 'plan' || !program || !flags.out || !flags.survey || !flags.claim || !flags.seed) {
+if (cmd !== 'plan' || !program || !flags.out || !flags.survey || !flags.claim) {
   console.error('usage: region.mjs plan <program> --params p.json --survey s.bin --seed n --claim ... --out dir');
   process.exit(2);
 }
@@ -35,7 +35,7 @@ try {
   const claim = { minX: c[0], minZ: c[1], maxX: c[2], maxZ: c[3], minY: c[4] ?? -64, maxY: c[5] ?? 319 };
   const bible = flags.bible ? JSON.parse(fs.readFileSync(flags.bible, 'utf8')) : { roles: {} };
   const mod = await import(pathToFileURL(path.resolve(program)).href);
-  const ctx = { claim, survey: { bytes: survey.length }, bible, seed: String(flags.seed), params, kitVersion: 'fake' };
+  const ctx = { claim, survey: { bytes: survey.length }, bible, seed: flags.seed !== undefined ? String(flags.seed) : String(BigInt('0x' + crypto.createHash('sha256').update(path.basename(program) + JSON.stringify(params) + flags.claim).digest('hex').slice(0, 16))), params, kitVersion: 'fake' };
   const got = await mod.default(ctx);
   const ir = { format: 1, id: path.basename(program, '.mjs'), programSha: crypto.createHash('sha256').update(fs.readFileSync(program)).digest('hex'), kitVersion: 'fake', node: 'any', params, seed: ctx.seed, claim, roles: bible.roles ?? {}, stages: ['ground'], parts: [], lots: [], roads: [], paths: [], anchors: { entrance: [claim.minX, 64, claim.minZ], spawn: [claim.minX, 64, claim.minZ] }, rules: {}, budget: { cells: 100, removed: 50, added: 50 }, tiles: { ground: { terrain: ['0,0'], path: [] } }, ...got };
   const json = canonical(ir);

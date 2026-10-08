@@ -197,7 +197,7 @@ describe('region.plan (fake kit, sim backend)', () => {
     console.log(`[numbers] fake plan (fake_basic): ${r.ms} ms round trip, ${p.ms} ms in the child`);
   });
 
-  it('resolves bible roles (request roles win) and picks a u64 seed when none is given', async () => {
+  it('resolves bible roles (request roles win) and uses the kit default seed (not random) when none is given', async () => {
     const r = await plan(h, { bible: 'rustic', roles: { rock: 'minecraft:tuff' } });
     expect(r.planned).toBeDefined();
     const ir = JSON.parse(r.planned!.ir!) as { roles: Record<string, string>; seed: string };
