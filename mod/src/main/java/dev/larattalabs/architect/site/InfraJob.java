@@ -29,6 +29,7 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.ProblemReporter;
 import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.storage.TagValueInput;
 import org.jspecify.annotations.Nullable;
 
@@ -68,6 +69,12 @@ final class InfraJob implements Placement.Job {
 	transient @Nullable ChangeTracker tracker;
 	transient @Nullable CompletableFuture<Void> commit;
 	@Nullable List<String> dropsBefore;
+	/** Phase 6a, region tiles: leaves held persistent while the tile stands (a {@code leaves} entry of the same site). */
+	transient long[] leafPos = new long[0];
+	transient Value[] leafBefore = new Value[0];
+	transient Value[] leafAfter = new Value[0];
+	/** Phase 6a: the region tile this job writes ({@code region|stage|set|key}), or null. */
+	@Nullable String tile;
 	final List<String> notes = new ArrayList<>();
 	/** Who waits for it (the API's placeRoad / placeCells). */
 	transient final List<CompletableFuture<PlaceResult>> futures = new ArrayList<>();
@@ -221,8 +228,10 @@ final class InfraJob implements Placement.Job {
 		}
 		JournalStore s = SiteJournal.store();
 		String id = s.newId();
-		commit = s.submit(s.begin().label("P3:" + siteId).create(JournalStore.Meta.header(id, entryKind, siteId, record.group(), dimension, policy,
-			buildingLayer, Journal.Status.PLACING, System.currentTimeMillis()), secs, new JournalNbt.Head(record.toJson(), new int[0])));
+		JournalStore.Txn txn = s.begin().label("P3:" + siteId).create(JournalStore.Meta.header(id, entryKind, siteId, record.group(), dimension, policy,
+			buildingLayer, Journal.Status.PLACING, System.currentTimeMillis()), secs, new JournalNbt.Head(record.toJson(), new int[0]));
+		leaves(s, txn);
+		commit = s.submit(txn);
 		entry = id;
 		befores = null;
 		phase = COMMIT;
@@ -256,12 +265,28 @@ final class InfraJob implements Placement.Job {
 		for (int i = 0; i < positions.length; i++) {
 			cells.add(new Cell(positions[i], layer, befores[i], afters[i]));
 		}
-		commit = s.submit(s.begin().label("P3:" + siteId).create(JournalStore.Meta.header(id, entryKind, siteId, record.group(), dimension, policy, layer,
-			Journal.Status.PLACING, System.currentTimeMillis()), JournalStore.bySection(cells), new JournalNbt.Head(record.toJson(), new int[0])));
+		JournalStore.Txn txn = s.begin().label("P3:" + siteId).create(JournalStore.Meta.header(id, entryKind, siteId, record.group(), dimension, policy,
+			layer, Journal.Status.PLACING, System.currentTimeMillis()), JournalStore.bySection(cells), new JournalNbt.Head(record.toJson(), new int[0]));
+		leaves(s, txn);
+		commit = s.submit(txn);
 		entry = id;
 		befores = null;
 		cursor = 0;
 		phase = COMMIT;
+	}
+
+	/** A region tile's held leaves as a {@code leaves} CELL entry of the same site, in the PLACING commit (4e's treatment). */
+	private void leaves(JournalStore s, JournalStore.Txn txn) {
+		if (leafPos.length == 0) {
+			return;
+		}
+		long ll = s.newLayer();
+		List<Cell> guard = new ArrayList<>(leafPos.length);
+		for (int i = 0; i < leafPos.length; i++) {
+			guard.add(new Cell(leafPos[i], ll, leafBefore[i], leafAfter[i]));
+		}
+		txn.create(JournalStore.Meta.header(s.newId(), WorldJournal.LEAVES, siteId, record.group(), dimension, Journal.Policy.CELL, ll,
+			Journal.Status.PLACING, System.currentTimeMillis()), JournalStore.bySection(guard), JournalNbt.Head.EMPTY);
 	}
 
 	@Override
@@ -350,6 +375,17 @@ final class InfraJob implements Placement.Job {
 					}
 					BlockPos.MutableBlockPos m = new BlockPos.MutableBlockPos();
 					int n = 0;
+					if (cursor == 0 && leafPos.length > 0) {
+						// held leaves first (persistent, no neighbour updates), before any log under them goes
+						for (int i = 0; i < leafPos.length; i++) {
+							long p = leafPos[i];
+							m.set(Journal.x(p), Journal.y(p), Journal.z(p));
+							BlockState was = level.getBlockState(m);
+							if (WorldJournal.value(was).equals(leafBefore[i])) {
+								level.setBlock(m, WorldJournal.state(leafAfter[i]), Sites.FLAGS | net.minecraft.world.level.block.Block.UPDATE_KNOWN_SHAPE);
+							}
+						}
+					}
 					while (cursor < positions.length) {
 						if (n > 0 && n % CLOCK == 0 && System.nanoTime() >= deadline) {
 							return false;
@@ -369,6 +405,9 @@ final class InfraJob implements Placement.Job {
 						n++;
 						if (n == 1) {
 							WorldJournal.kill("K3");
+							if (tile != null) {
+								WorldJournal.kill("RG4"); // phase 6a: a region tile in P5
+							}
 						}
 					}
 					if (dropsBefore != null) {
@@ -503,6 +542,9 @@ final class InfraJob implements Placement.Job {
 			o.addProperty("entry", entry);
 		}
 		o.addProperty("beforeRecord", beforeRecord);
+		if (tile != null) {
+			o.addProperty("tile", tile);
+		}
 		if (dropsBefore != null) {
 			JsonArray d = new JsonArray();
 			dropsBefore.forEach(d::add);
@@ -522,6 +564,7 @@ final class InfraJob implements Placement.Job {
 		j.cursor = o.get("cursor").getAsInt();
 		j.entry = o.has("entry") ? o.get("entry").getAsString() : null;
 		j.beforeRecord = o.has("beforeRecord") && o.get("beforeRecord").getAsBoolean();
+		j.tile = o.has("tile") ? o.get("tile").getAsString() : null;
 		if (o.has("dropsBefore")) {
 			List<String> d = new ArrayList<>();
 			o.getAsJsonArray("dropsBefore").forEach(e -> d.add(e.getAsString()));
