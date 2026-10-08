@@ -1191,6 +1191,218 @@ steps.survival = async () => {
   return out;
 };
 
+// ------------------------------------------------------------------ gates 4 and 5: the village's delta batch, MSPT
+
+const KINDS = ['cabin', 'gatehouse', 'tavern', 'tower'];
+const VKIND = (k) => `g5b_v_${k}`;
+const VOX = 0;
+const VOZ = 100;
+/** Lot i of the 4x3 village on the flat meadow (22 x 30 lots, 4-block gaps, an 8-block street north of each row; gate4d's). */
+function vLot(i) {
+  const col = i % 4;
+  const row = Math.floor(i / 4);
+  const x0 = VOX + col * 26;
+  const z0 = VOZ + row * 38 + 8;
+  return [x0, 64, z0, x0 + 21, 104, z0 + 29];
+}
+/** The streets' roads (one per row, the street's middle) and one road north-south through the gap between columns 1 and 2. */
+function vRoads() {
+  const out = [];
+  for (let row = 0; row < 3; row++) {
+    const z = VOZ + row * 38 + 8 - 4;
+    out.push({ key: `R${row}`, road: { points: [[VOX - 6, 65, z], [VOX + 3 * 26 + 27, 65, z]], width: 3 } });
+  }
+  out.push({ key: 'RX', road: { points: [[VOX + 26 + 24, 65, VOZ - 2], [VOX + 26 + 24, 65, VOZ + 2 * 38 + 4]], width: 3 } });
+  return out;
+}
+const V_BOX = [VOX - 14, 54, VOZ - 12, VOX + 3 * 26 + 36, 110, VOZ + 3 * 38 + 16];
+
+/** The fits (approach into the street) of the 12 lots in the current world. */
+async function vFits() {
+  const out = [];
+  for (let i = 0; i < 12; i++) {
+    const lot = vLot(i);
+    const f = await api(`fit ${VKIND(KINDS[i % 4])} ${lot.join(',')} north into`);
+    out.push({ key: `L${i}`, bp: VKIND(KINDS[i % 4]), lot, at: f.at, rot: f.rot, predicted: f.predictedRestoreBox, refusals: (f.refusals ?? []).map((r) => r.reason) });
+  }
+  return out;
+}
+
+/** The village's versioned entries: each kit example as g5b_v_<kind> v1, and a hand-written v2 (another palette, the cabin without its porch). */
+async function installVillageEntries() {
+  const dir = path.join(OUT, 'versions-village');
+  const v2args = { cabin: ['--values', '{"porch":false}', '--palette', 'birch'], gatehouse: ['--palette', 'spruce'], tavern: ['--palette', 'dark_oak'],
+    tower: ['--palette', 'spruce'] };
+  for (const k of KINDS) {
+    buildKitVersion(k, VKIND(k), path.join(dir, k, 'v1'));
+    buildKitVersion(k, VKIND(k), path.join(dir, k, 'v2'), v2args[k]);
+    await installEntry(VKIND(k), path.join(dir, k, 'v1'));
+  }
+  return dir;
+}
+async function installVillageV2(dir) {
+  for (const k of KINDS) await installVersion(VKIND(k), path.join(dir, k, 'v2'), 'v2');
+}
+
+/** The village base: the 12 lots placed (v1) as one group, saved as G5B VBase; returns {ids, group, h0, hPlaced}. */
+async function villageBase() {
+  if (ctx.village5 && fs.existsSync(path.join(SAVES, 'G5B VBase', 'level.dat'))) return ctx.village5;
+  await fresh('G5B VBase', FLAT);
+  await tp(VOX + 50.5, 120, VOZ + 60.5);
+  const dir = await installVillageEntries();
+  const h0 = (await hash(V_BOX)).sha256;
+  const fits = await vFits();
+  await mark();
+  const id = await queue({ id: 'vplace', proximity: false, items: fits.map((f) => ({ key: f.key, bp: f.bp, at: f.at, rot: f.rot, mode: 'INSTANT', force: true,
+    stage: 'lots' })), stages: [{ name: 'lots', items: fits.map((f) => f.key) }], autoApprove: true });
+  const done = await waitBatch(id, 30 * 60_000);
+  const ids = {};
+  for (const e of (await since()).filter((x) => x.event === 'ITEM_PLACED' && x.batch === id)) ids[e.key] = e.site;
+  check(Object.keys(ids).length === 12, `village: the 12 lots placed (group ${done.group})`, done);
+  const hPlaced = (await hash(V_BOX)).sha256;
+  await cmd('/save-all flush');
+  await leaveWorld();
+  ctx.village5 = { ids, group: done.group, h0, hPlaced, dir };
+  saveCtx();
+  return ctx.village5;
+}
+
+/** The delta batch: 12 delta items (each lot to its entry's v2) as stage "upgrade" of the village's group. */
+async function upgradeBatch(v, budget, label) {
+  await cmd(`/architect budget ${budget}`);
+  await call('dev.placement.stats', { reset: true });
+  await mark();
+  const keys = Object.keys(v.ids);
+  const t0 = Date.now();
+  const id = await queue({ id: label, group: v.group, proximity: false, autoApprove: true, items: keys.map((k) => ({ key: `U${k}`, stage: 'upgrade',
+    delta: { site: v.ids[k], version: 2 } })), stages: [{ name: 'upgrade', items: keys.map((k) => `U${k}`) }] });
+  return { id, t0 };
+}
+
+/**
+ * Gate item 4: the village's 12 lots get a batch of 12 delta items (hand-written v2s of the 4 kit examples) as stage "upgrade":
+ * identical to atomic applies, a relog mid-batch resumes identically, cancelBatch keeps exactly the applied deltas,
+ * undoStage("upgrade") reverts all 12 exactly, and removeGroup afterwards is exact. Gate item 5: the batch at 1, 4 and 10 ms
+ * (MSPT, throughput) and the size-cap fixture with every cell changed, applied and reverted with no tick over 50 ms.
+ */
+steps.village = async () => {
+  if (!dev) await connect();
+  await flatBase();
+  const v = await villageBase();
+  const out = {};
+  // the reference: atomic applies one by one
+  await fresh('G5B VAtomic', 'G5B VBase');
+  await tp(VOX + 50.5, 120, VOZ + 60.5);
+  await installVillageV2(v.dir);
+  for (const k of Object.keys(v.ids)) check((await deltaApply(v.ids[k], 2)).applied, `village: atomic apply ${k}`);
+  const hAtomic = (await hash(V_BOX)).sha256;
+  // the batch at 1, 4 and 10 ms
+  for (const ms of [4, 1, 10]) {
+    await fresh(`G5B VBatch${ms}`, 'G5B VBase');
+    await tp(VOX + 50.5, 120, VOZ + 60.5);
+    await installVillageV2(v.dir);
+    const b = await upgradeBatch(v, ms, `up${ms}`);
+    const done = await waitBatch(b.id, 30 * 60_000);
+    const wall = (Date.now() - b.t0) / 1000;
+    const stats = await call('dev.placement.stats', {});
+    const h = (await hash(V_BOX)).sha256;
+    const failed = done.items.filter((i) => i.status !== 'PLACED');
+    check(failed.length === 0 && h === hAtomic, `village ${ms} ms: the delta batch equals the atomic applies (wall ${wall.toFixed(1)} s, MSPT max ${stats.msptMax?.toFixed(1)} ms, over 50 ms: ${stats.ticksOver50ms})`,
+      { failed, h, hAtomic });
+    if (ms === 4) check((stats.msptMax ?? 99) <= 25, `village 4 ms: MSPT max ${stats.msptMax?.toFixed(1)} <= 25 ms`, stats);
+    check((stats.ticksOver50ms ?? 1) === 0, `village ${ms} ms: no tick over 50 ms`, stats);
+    out[`batch${ms}`] = { wall, stats };
+    if (ms === 4) {
+      // undoStage("upgrade") reverts all 12 exactly; removeGroup afterwards is exact
+      const u = await api(`sundo ${v.group} upgrade`);
+      const ur = await result(u, 600_000);
+      await settle(3000);
+      const hu = (await hash(V_BOX)).sha256;
+      check(hu === v.hPlaced, 'village: undoStage("upgrade") reverts all 12 deltas exactly', { ur, hu, want: v.hPlaced });
+      const rg = await result(await api(`sgremove ${v.group} - noforce`), 900_000);
+      await settle(3000);
+      const hr = (await hash(V_BOX)).sha256;
+      check(hr === v.h0, 'village: removeGroup afterwards is exact', { rg, hr, want: v.h0 });
+    }
+    await leaveWorld();
+  }
+  // a relog mid-batch resumes identically
+  await fresh('G5B VRelog', 'G5B VBase');
+  await tp(VOX + 50.5, 120, VOZ + 60.5);
+  await installVillageV2(v.dir);
+  await call('dev.placement.slow', { on: true });
+  const rb = await upgradeBatch(v, 1, 'uprelog');
+  await sleep(1500);
+  await call('dev.placement.slow', { on: false });
+  const mid = await api(`batch ${rb.id}`);
+  const placedMid = (mid.items ?? []).filter((i) => i.status === 'PLACED').length;
+  await leaveWorld();
+  await openWorld('G5B VRelog');
+  await tp(VOX + 50.5, 120, VOZ + 60.5);
+  await mark();
+  const dr = await waitBatch(rb.id, 30 * 60_000);
+  const hr = (await hash(V_BOX)).sha256;
+  check(dr.items.every((i) => i.status === 'PLACED') && hr === hAtomic, `village: a relog mid-batch (${placedMid} of 12 applied) resumes identically`, { hr, hAtomic });
+  await leaveWorld();
+  // cancelBatch: the applied deltas stay, the rest never start (an instant delta has no in-flight state at a tick boundary)
+  await fresh('G5B VCancel', 'G5B VBase');
+  await tp(VOX + 50.5, 120, VOZ + 60.5);
+  await installVillageV2(v.dir);
+  await call('dev.placement.slow', { on: true });
+  const cb = await upgradeBatch(v, 1, 'upcancel');
+  await sleep(1200);
+  const cancelled = await result(await api(`bcancel ${cb.id}`), 300_000);
+  await call('dev.placement.slow', { on: false });
+  await settle(3000);
+  const applied = (cancelled.items ?? []).filter((i) => i.status === 'PLACED').map((i) => i.key.slice(1));
+  const hc = (await hash(V_BOX)).sha256;
+  await leaveWorld();
+  await fresh('G5B VCancelRef', 'G5B VBase');
+  await tp(VOX + 50.5, 120, VOZ + 60.5);
+  await installVillageV2(v.dir);
+  for (const k of applied) await deltaApply(v.ids[k], 2);
+  const hcRef = (await hash(V_BOX)).sha256;
+  check(hc === hcRef, `village: cancelBatch keeps exactly the ${applied.length} applied deltas (no half delta)`, { hc, hcRef, applied });
+  await leaveWorld();
+  return out;
+};
+
+/** Gate item 5: the size-cap fixture (96x64x96, every cell changed) applied and reverted over ticks, no tick over 50 ms. */
+steps.sizecap = async () => {
+  if (!dev) await connect();
+  await flatBase();
+  const V = path.join(OUT, 'versions-cap');
+  execFileSync('node', [path.join(root, 'tools', 'gate5b-sizecap.mjs'), V], { stdio: 'ignore' });
+  await fresh('G5B Cap', FLAT);
+  await tp(-40.5, 140, -40.5);
+  const BOX = [-10, 50, -10, 110, 140, 110];
+  const h0 = (await hash(BOX)).sha256;
+  await installEntry('g5b_cap', path.join(V, 'v1'));
+  await cmd('/architect budget 4');
+  await mark();
+  const q = await queue({ id: 'cap', proximity: false, items: [{ key: 'C', bp: 'g5b_cap', at: [0, 64, 0], rot: 0, mode: 'INSTANT', force: true }] });
+  await waitBatch(q, 30 * 60_000);
+  const site = (await since()).find((e) => e.event === 'ITEM_PLACED' && e.batch === q).site;
+  await installVersion('g5b_cap', path.join(V, 'v2'), 'v2');
+  const h1 = (await hash(BOX)).sha256;
+  await call('dev.placement.stats', { reset: true });
+  const t0 = Date.now();
+  const a = await call('dev.site.delta.apply', { site, version: 2 }, 30 * 60_000);
+  const sa = await call('dev.placement.stats', {});
+  check(a.applied, `sizecap: the delta of every cell (${a.written} cells) applied over ticks in ${((Date.now() - t0) / 1000).toFixed(1)} s`, a.applied ? sa : a);
+  check((sa.ticksOver50ms ?? 1) === 0, `sizecap: apply: no tick over 50 ms (max ${sa.msptMax?.toFixed(1)} ms)`, sa);
+  await call('dev.placement.stats', { reset: true });
+  const r = await call('dev.site.revert', { site, version: 1 }, 30 * 60_000);
+  const sr = await call('dev.placement.stats', {});
+  const hb = (await hash(BOX)).sha256;
+  check(r.applied && hb === h1, 'sizecap: the revert gives the v1 world back exactly', { r: r.applied ? undefined : r, hb, h1 });
+  check((sr.ticksOver50ms ?? 1) === 0, `sizecap: revert: no tick over 50 ms (max ${sr.msptMax?.toFixed(1)} ms)`, sr);
+  const rm = await result(await api(`remove ${site} - noforce keep`), 30 * 60_000);
+  await settle(3000);
+  check(rm.removed && (await hash(BOX)).sha256 === h0, 'sizecap: Remove is exact', rm.removed ? undefined : rm);
+  return { apply: sa, revert: sr };
+};
+
 const which = process.argv[2];
 if (!which || !steps[which]) {
   console.log(`steps: ${Object.keys(steps).join(', ')}`);
