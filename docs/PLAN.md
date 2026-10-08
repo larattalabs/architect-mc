@@ -181,6 +181,19 @@ usage hold, re-skin, open type). Caveats:
 - Real runs went over the WebSocket; the Java path is sim-only.
 - The bible set is cluttered and less legible, which is 5a's (critique loop) job.
 
+**Phase 5a status: BUILT, gate pending verification; the builder's run did NOT pass it** (2026-10-08; branch `phase/5a`, API 1.6.0 /
+mod 0.9.0; `artifacts/gate5a/REPORT.md`, local; `eval/results/{smoke,full,opus-subset}/summary.json`). The critique loop, the
+critic (Sonnet, image blocks under the claude login), the eval harness (`tools/eval.mjs`), bible format 2 with restraint and
+hygiene, report critiques, `job.images` and the migration unit tests are built and tested (sidecar 536, kit 126, mod 339; sim API
+suites, the unchanged 1.5.0 jar and the 4e migration step re-run clean). Real gate, $93 API-equivalent of the $150 cap:
+- **G1 not shown:** 18 Sonnet briefs, all revised; the blind Opus judge preferred the final 7 times, round 0 6 times, 5 ties (p 0.50).
+- **G2 failed:** the critic's own mean rose only 5.48 -> 5.76 (bar +1.0); it scores 5-6 and never ships at 7.
+- **G3 and G4 passed:** no checker errors or new warnings; loop spend 52% of round 0, +3.2 min, estimates within +-50% for 16/18.
+- **Clutter:** the format-2 Mosswater set is far less noisy (detailNoise 0.27 vs 0.47) and wins on legibility 2 of 3, but the
+  form-lens critic rated it "set" 6/10 (bar 7).
+- Next decision (not tuned against the eval set): what to change in the loop (e.g. a critic calibrated so 7 is reachable, revisions
+  that target the critic's top issue only, or a different judge), then re-run the full tier and compare.
+
 **Phase 4e status: PASSED 2026-10-06** (gate-verifier, PASS WITH CAVEATS; reproduced every gate item in game on fresh terrain,
 `artifacts/gate4e-verify/`, local; the 4d L5 mushroom loss confirmed pre-existing on the same world with the 0.7.0 jar).
 Caveats carried forward: no migration unit tests (only the in-game step), add them in 5a; the 4 ms throughput margin is thin

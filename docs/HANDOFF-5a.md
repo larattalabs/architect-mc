@@ -13,6 +13,7 @@ Working notes for resuming phase 5a after a pause. Deleted when the gate passes.
 |---|---|
 | 1. Image probe | DONE 2026-10-06: image content blocks work under the claude login ($0.0098, apiKeySource none). Critic and judge send images; `job.images` ships. |
 | 2. Sim build | sidecar loop, critic, budgets, estimates, bible format 2/admin, report mode, job.images, eval.mjs: DONE (sidecar 536 tests). Kit (phase/5a-kit, merged): views, slices, attach/facing, metrics, restraint, PLAYBOOK (kit 126 tests). Migration tests (phase/5a-mig, merged): 19 new mod tests. Java 1.6.0 + UI: in progress on phase/5a-java (subagent). |
+| 3c. Done 2026-10-08 | Full tier, Opus subset, critique-real, clutter, regressions and docs DONE. **Gate not passed** (G1 not shown, G2 fail, clutter critic 6/10): see artifacts/gate5a/REPORT.md. This handoff stays until the gate passes. |
 | 3b. Resumed 2026-10-07 | 5a-java merged (mod 339 tests); report end reason; N1 setting; UI paths on the sim (tools/p5a-ui.mjs, all ok); apitest jobs 33/sets 37/massing 35/critique 20 sim checks all ok; 1.5.0 jar vs 0.9.0 OK; 4e migration step 55 ok. Full tier RUNNING (run full-2026-10-07T2324, resume with `--resume full-2026-10-07T2324`). |
 | 3. Real runs (history) | **PAUSED 2026-10-06 18:10 (coordinator: Noah's subscription near its limit; no real calls until he says so).** Smoke tier DONE (complete, not partial). Mosswater format-2 revision DONE (fixture committed). Full tier NOT STARTED. Opus subset NOT STARTED. |
 | 4. Gate G1-G4, clutter, regressions | not started |
@@ -33,7 +34,13 @@ Noah raised the cap on 2026-10-07: $120 -> $150 (the Opus subset and critique-re
 | smoke rejudge (judge stability) | 0.3891 |
 | Mosswater bible.revise, 1st try (failed: a format-field bug, fixed in 6f…/"a bible draft is always validated as format 2") | 0.2790 |
 | Mosswater bible.revise to format 2 (with the sheet critique) | 1.1248 |
-| **total** | **11.0997** (= spend.json totalUsd) |
+| full tier (18 briefs incl. judge) | 57.47 |
+| clutter judge vs the 4b set | 0.42 |
+| critique-real (Java API loop design) | 3.02 |
+| report critique + massing critique | 0.19 |
+| Opus subset (4 briefs incl. judge) | 20.32 |
+| cross-model judge (compare --judge) | 0.71 |
+| **total** | **93.23** (= spend.json totalUsd) |
 
 The ledger of record is `artifacts/gate5a/spend.json` (eval.mjs reads and writes it).
 
