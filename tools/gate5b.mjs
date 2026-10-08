@@ -899,7 +899,7 @@ steps.crash = async () => {
     const ok = expect[point] === 1 ? h.version === 1 && now === H1 : consistent;
     check(ok && placing.length === 0, `crash ${point}: the site is at v${h.version} and the world matches it${expect[point] === 2 ? ` (journal ACTIVE; the world ${now === H2 ? 'kept' : 'lost'} the writes)` : ''}`,
       { version: h.version, now, H1, H2, placing, versioning: h.versioning });
-    out[point] = { version: h.version, ok: now === want };
+    out[point] = { version: h.version, ok, world: now === H2 ? 2 : now === H1 ? 1 : null };
     const rm = await result(await api(`remove ${site} - noforce keep`), 300_000);
     check(rm.removed && (await hash(BOX)).sha256 === h0.sha256, `crash ${point}: a final Remove matches the pre-site world`, rm.removed ? undefined : rm);
   }
@@ -919,7 +919,7 @@ steps.crash = async () => {
     const consistent = (h.version === 1 && now === H1) || (h.version === 2 && now === H2);
     const ok = rexpect[point] === 2 && point !== 'K7' ? h.version === 2 && now === H2 : consistent;
     check(ok, `crash ${point}: after the restart the site is at v${h.version} and the world matches it`, { version: h.version, now, H1, H2, versioning: h.versioning });
-    out[point] = { version: h.version, ok: now === want };
+    out[point] = { version: h.version, ok, world: now === H2 ? 2 : now === H1 ? 1 : null };
     const rm = await result(await api(`remove ${site} - noforce keep`), 300_000);
     check(rm.removed && (await hash(BOX)).sha256 === h0.sha256, `crash ${point}: a final Remove matches the pre-site world`, rm.removed ? undefined : rm);
   }
