@@ -317,6 +317,20 @@ public final class RegionDev {
 			o.addProperty("maxMb", Runtime.getRuntime().maxMemory() / 1048576.0);
 			return CompletableFuture.completedFuture(o);
 		});
+		DevBridge.register("dev.undo.mark", 120_000, "{sites: [...] | region + lotStage?} - phase 6a: remember what the sites' entries give back on undo",
+			(req, mc) -> ServerTasks.callOnServer(s -> {
+				List<String> sites = new ArrayList<>();
+				if (req.has("sites")) {
+					req.getAsJsonArray("sites").forEach(e -> sites.add(e.getAsString()));
+				}
+				try {
+					return dev.larattalabs.architect.site.UndoCheck.mark(sites);
+				} catch (java.io.IOException e) {
+					throw new DevBridge.DevException(e.getMessage());
+				}
+			}));
+		DevBridge.register("dev.undo.check", 120_000, "{} - phase 6a: the marked cells against the world now (mismatches)", (req, mc) -> ServerTasks
+			.callOnServer(s -> dev.larattalabs.architect.site.UndoCheck.check(s.overworld())));
 		DevBridge.register("dev.tiles.stats", 10_000, "{reset?} - phase 6a: tiles received, wire bytes and cells (bytes per cell)", (req, mc) -> {
 			JsonObject o = new JsonObject();
 			o.addProperty("received", TileStream.RECEIVED.get());
