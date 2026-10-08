@@ -137,11 +137,17 @@ public final class Placement {
 		long start = System.nanoTime();
 		deadline = start + budgetNanos();
 		int before = workDone();
+		SLOW.setLength(0);
 		try {
 			Batches.tick(srv, deadline);
+			lap("batches", start);
+			long t1 = System.nanoTime();
 			Groups.tick(srv, deadline);
+			lap("groups", t1);
 			completedNow = false;
+			t1 = System.nanoTime();
 			runJobs(srv);
+			lap("jobs", t1);
 			// phase 4e: a job that finished leaves budget: its batch starts the next item in this tick, not the next one
 			for (int again = 0; again < 4 && completedNow && !slow && System.nanoTime() < deadline; again++) {
 				completedNow = false;
@@ -151,6 +157,9 @@ public final class Placement {
 			syncGhosts(srv);
 		} catch (RuntimeException e) {
 			Architect.LOGGER.error("Placement tick failed", e);
+		}
+		if (TRACE && System.nanoTime() - start > 25_000_000L) {
+			Architect.LOGGER.info("TRACE slow placement tick {} {} ms:{}", srv.getTickCount(), (System.nanoTime() - start) / 1e6, SLOW);
 		}
 		if (!JOBS.isEmpty() || STATS.tickActive) {
 			STATS.work(System.nanoTime() - start, Math.max(0, workDone() - before) + finishedWork);
@@ -200,8 +209,10 @@ public final class Placement {
 			}
 			int was = j.progress();
 			boolean complete;
+			long tj = System.nanoTime();
 			try {
 				complete = j.step(srv, deadline);
+				lap("step:" + j, tj);
 			} catch (RuntimeException e) {
 				Architect.LOGGER.error("Placement job {} failed", j, e);
 				complete = true;
@@ -215,7 +226,9 @@ public final class Placement {
 				completedNow = true;
 				JOBS.remove(j);
 				finishedWork += Math.max(0, j.total() - was);
+				long tc = System.nanoTime();
 				completed(srv, j);
+				lap("completed:" + j, tc);
 			}
 		}
 	}
@@ -644,6 +657,20 @@ public final class Placement {
 
 	/** Server tick times and the budget's use while placement is active; {@code dev.placement.stats}. */
 	/** Phase 6a, dev.mspt.trace: this tick's start and Architect's write time in it. */
+	/** ARCHITECT_TRACE_JOBS: the parts of a placement tick over 25 ms (phase 6a, MSPT). */
+	static final boolean TRACE = System.getenv("ARCHITECT_TRACE_JOBS") != null;
+	private static final StringBuilder SLOW = new StringBuilder();
+
+	/** Notes a part of this tick that took 2 ms or more (traced only). */
+	static void lap(String what, long since) {
+		if (TRACE) {
+			long ns = System.nanoTime() - since;
+			if (ns >= 2_000_000L) {
+				SLOW.append(' ').append(what).append('=').append(String.format(java.util.Locale.ROOT, "%.1f", ns / 1e6));
+			}
+		}
+	}
+
 	private static long traceStart;
 	private static long traceWork;
 

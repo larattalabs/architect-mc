@@ -277,8 +277,9 @@ public final class RegionHash {
 	}
 
 	/**
-	 * E-normal's classifier. {@code gravity}: the pre-region cell is a gravity block over air or fluid, or the cell is where such
-	 * a block landed (now a gravity block, before air or fluid); {@code unsupported}: a plant or mushroom that can't survive there
+	 * E-normal's classifier. {@code gravity}: the pre-region cell is a gravity block over air or fluid, or one now gone whose
+	 * column below holds the same block first (it fell), or the cell is where such a block landed (now a gravity block, before
+	 * air or fluid); {@code unsupported}: a plant or mushroom that can't survive there
 	 * now; {@code live}: the same block whose block entity the world itself changed (bees in a hive); else {@code none}.
 	 */
 	static String classify(ServerLevel level, BlockPos p, String was, @Nullable String now) {
@@ -308,6 +309,21 @@ public final class RegionHash {
 			BlockState below = level.getBlockState(p.below());
 			if (below.isAir() || !below.getFluidState().isEmpty() || FallingBlock.isFree(below)) {
 				return "gravity";
+			}
+			// it fell and air or fluid took its place: the first block down its column is the same block (a fall onto ground)
+			BlockState here = level.getBlockState(p);
+			if (here.isAir() || here.getBlock() instanceof net.minecraft.world.level.block.LiquidBlock) {
+				BlockPos.MutableBlockPos q = p.mutable();
+				for (int d = 1; d <= 64 && q.getY() > level.getMinY(); d++) {
+					BlockState b = level.getBlockState(q.move(0, -1, 0));
+					if (b.isAir() || b.getBlock() instanceof net.minecraft.world.level.block.LiquidBlock) {
+						continue;
+					}
+					if (b.getBlock() == s.getBlock()) {
+						return "gravity";
+					}
+					break;
+				}
 			}
 		}
 		if ((s.getBlock() instanceof BushBlock || s.is(net.minecraft.tags.BlockTags.SMALL_FLOWERS) || s.getBlock() instanceof net.minecraft.world.level.block

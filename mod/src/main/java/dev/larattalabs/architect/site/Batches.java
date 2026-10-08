@@ -692,22 +692,34 @@ public final class Batches {
 			stop(server, b, "stopped: " + f.key + " failed (" + f.message + ")");
 			return;
 		}
+		long t0 = System.nanoTime();
 		String running = settleStages(server, b);
+		Placement.lap("settleStages", t0);
 		SiteGroupRec g = Sites.group(b.group);
 		Stage.State rs = running == null || g == null || g.stage(running) == null ? null : g.stage(running).state();
 		boolean approved = rs == Stage.State.APPROVED || rs == Stage.State.PLACING;
 		if (RegionItems.isRegion(b) && approved) {
+			t0 = System.nanoTime();
 			RegionItems.ahead(server, b, running); // phase 6a: freeze and request the tiles after the head
+			Placement.lap("ahead", t0);
 		}
+		t0 = System.nanoTime();
 		QItem item = BatchRules.next(b, running, approved, tick, i -> distance(server, i));
+		Placement.lap("next", t0);
 		if (item != null) {
+			t0 = System.nanoTime();
 			tryStart(server, b, item);
+			Placement.lap("tryStart:" + item.key, t0);
 		}
 		if (BatchRules.allDone(b) && !hasJob(b) && stagesDone(b)) {
+			t0 = System.nanoTime();
 			finish(server, b, QBatch.Status.DONE, "");
+			Placement.lap("finish", t0);
 			return;
 		}
+		t0 = System.nanoTime();
 		progress(b);
+		Placement.lap("progress", t0);
 	}
 
 	/**
