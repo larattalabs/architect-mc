@@ -142,6 +142,9 @@ export default function build({ palette: p = PALETTES.rustic, length = 14, roof 
     bp.set(X + 3, 0, 8, p.stone);
     bp.set(X + 4, 1, 8, p.fence);
     bp.set(X + 3, 1, 8, 'minecraft:glass_pane');
+    // a free-standing gate door that v2 re-materials (oak -> spruce): an opened one still counts as the site's (gate item 2)
+    bp.set(X + 1, 0, 9, p.stone);
+    bp.door(X + 1, 1, 9, 'south', { block: 'minecraft:oak_door' });
   });
 
   // the path and the anchors (in no part)
