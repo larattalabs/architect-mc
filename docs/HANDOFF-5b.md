@@ -40,7 +40,12 @@ Notes: `test/bundle.e2e.test.ts` (4c massing group) failed once under load (the 
 
 | What | USD |
 |---|---|
-| **total** | **0.00** |
+| polish-dev1 gen_fisher_cottage (draft prompts: 0/2 accepted) | 0.5206 |
+| polish-dev2 gen_fisher_cottage (dev 1 prompts: 0/2) | 0.7371 |
+| polish-dev2 gen_lookout (dev 1 prompts: 0/1) | 0.4010 |
+| polish-dev3 gen_fisher_cottage (dev 2 prompts: 0/1) | 0.4638 |
+| polish-dev3 gen_net_and_lantern (report only; the step hit the weekly usage limit) | 0.0811 |
+| **total** | **2.2036** |
 
 The ledger of record is `artifacts/gate5b/spend.json`.
 
