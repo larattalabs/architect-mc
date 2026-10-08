@@ -658,11 +658,18 @@ async function cellsIn(box) {
   const m = new Map();
   for (const l of h.list ?? h.cells ?? []) {
     const i = l.indexOf(' ');
-    m.set(l.slice(0, i), l.slice(i + 1));
+    m.set(l.slice(0, i), canonical(l.slice(i + 1)));
   }
   return m;
 }
-const blockOf = (st) => (/\{([^}]+)\}/.exec(st) ?? [])[1] ?? st;
+/** dev.region.hash's SNBT cell value ({id:"minecraft:x",properties:{k:"v"},nbt:...}) as "minecraft:x[k=v,...]" (+ " nbt" when it has data). */
+function canonical(v) {
+  const id = (/id:"([^"]+)"/.exec(v) ?? [])[1] ?? v;
+  const pm = /properties:\{([^}]*)\}/.exec(v);
+  const props = pm ? pm[1].split(',').filter(Boolean).map((kv) => kv.replace(/:"?([^"]*)"?$/, '=$1')).join(',') : '';
+  return `${id}${props ? `[${props}]` : ''}${/nbt:/.test(v) ? ' nbt' : ''}`;
+}
+const blockOf = (st) => st.split(/[[ ]/)[0];
 const propsOf = (st) => (/\[(.*)\]/.exec(st) ?? [])[1] ?? '';
 const setState = (pos, st) => cmd(`/setblock ${pos.replaceAll(',', ' ')} ${blockOf(st)}${propsOf(st) ? '[' + propsOf(st) + ']' : ''}`);
 
