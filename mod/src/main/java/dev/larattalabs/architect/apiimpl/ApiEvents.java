@@ -72,6 +72,10 @@ public final class ApiEvents {
 
 	/** A site moved to another version of its entry (phase 5b: an apply or a revert; SITE_UPDATED, wired with API 1.7.0). */
 	public static void siteUpdated(MinecraftServer server, dev.larattalabs.architect.site.SiteDeltas.Result r) {
+		if (r.before() != null && r.after() != null) {
+			guard("SITE_UPDATED", () -> SiteEvents.SITE_UPDATED.invoker().onUpdated(Views.site(server, r.before()), Views.site(server, r.after()), Views
+				.deltaResult(r)));
+		}
 		UPDATED.forEach(l -> {
 			try {
 				l.accept(r);

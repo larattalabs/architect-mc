@@ -62,7 +62,10 @@ public final class Views {
 		return new SiteView(s.id(), s.blueprint(), s.owner(), s.ext(), box(s.box()), box(s.restoreBox()), rotation(s.rotation()),
 			dimension(s.dimension()), s.placing() ? State.PLACING : s.building() ? State.BUILDING : State.BUILT, p[0], p[1], m == null ? null : m.group(),
 			m == null ? null : m.batchId(), m == null ? null : m.itemKey(), "building", dev.larattalabs.architect.api.Policy.BOX,
-			dev.larattalabs.architect.site.SiteJournal.coveredSites(s.id()), dev.larattalabs.architect.site.SiteJournal.related(s.id(), true));
+			dev.larattalabs.architect.site.SiteJournal.coveredSites(s.id()), dev.larattalabs.architect.site.SiteJournal.related(s.id(), true),
+			s.versioning().version() > 0 || server == null ? Math.max(1, s.versioning().version()) : Math.max(1,
+				dev.larattalabs.architect.site.SiteDeltas.versionOf(server, s)), Math.max(1, dev.larattalabs.architect.site.SiteDeltas.headVersion(s
+					.blueprint())), s.versioning().deviations(), s.versioning().updating() > 0 || s.versioning().reverting() > 0);
 	}
 
 	/** A road or cell site as the API sees it (phase 4e). */
@@ -238,5 +241,59 @@ public final class Views {
 			}
 		}
 		return out;
+	}
+
+	// ------------------------------------------------------------------ phase 5b: deltas
+
+	public static dev.larattalabs.architect.api.DeltaVerdict deltaVerdict(dev.larattalabs.architect.site.SiteDeltas.@Nullable Check c,
+		List<dev.larattalabs.architect.api.Refusal> extra, boolean instant) {
+		dev.larattalabs.architect.api.Mode mode = instant ? dev.larattalabs.architect.api.Mode.INSTANT : dev.larattalabs.architect.api.Mode.CONSTRUCTION;
+		if (c == null) {
+			return new dev.larattalabs.architect.api.DeltaVerdict(false, extra, 0, 0, 0, java.util.Map.of(), List.of(), List.of(), java.util.Map.of(),
+				java.util.Map.of(), new BoundingBox(0, 0, 0, 0, 0, 0), mode, List.of());
+		}
+		List<dev.larattalabs.architect.api.Refusal> rs = new ArrayList<>(extra);
+		for (dev.larattalabs.architect.site.SiteDeltas.Refusal r : c.refusals()) {
+			rs.add(new dev.larattalabs.architect.api.Refusal(r.reason(), r.message()));
+		}
+		java.util.Map<String, dev.larattalabs.architect.api.PartDelta> parts = new java.util.LinkedHashMap<>();
+		c.parts().forEach((n, p) -> parts.put(n, partDelta(p)));
+		List<dev.larattalabs.architect.api.Overlap> ov = new ArrayList<>();
+		c.overlaps().forEach((sid, n) -> ov.add(new dev.larattalabs.architect.api.Overlap(sid, dev.larattalabs.architect.site.Sites.ownerOf(sid), n,
+			false)));
+		BoundingBox box = c.box() != null ? box(c.box()) : new BoundingBox(0, 0, 0, 0, 0, 0);
+		return new dev.larattalabs.architect.api.DeltaVerdict(rs.isEmpty(), rs, c.added(), c.removed(), c.changed(), parts, kept(c.kept()), ov, items(c
+			.bom()), items(c.refund()), box, mode, c.notes());
+	}
+
+	public static dev.larattalabs.architect.api.PartDelta partDelta(dev.larattalabs.architect.delta.TemplateDelta.Part p) {
+		return new dev.larattalabs.architect.api.PartDelta(p.name(), dev.larattalabs.architect.api.PartStatus.valueOf(p.status().name()), p.added(), p
+			.removed(), p.changed(), designBox(p.boxFrom()), designBox(p.boxTo()));
+	}
+
+	static @Nullable BoundingBox designBox(int @Nullable [] b) {
+		return b == null ? null : new BoundingBox(b[0], b[1], b[2], b[3], b[4], b[5]);
+	}
+
+	static List<dev.larattalabs.architect.api.KeptCell> kept(List<dev.larattalabs.architect.delta.DeltaPlanner.Kept> kept) {
+		List<dev.larattalabs.architect.api.KeptCell> out = new ArrayList<>();
+		for (dev.larattalabs.architect.delta.DeltaPlanner.Kept k : kept) {
+			out.add(new dev.larattalabs.architect.api.KeptCell(net.minecraft.core.BlockPos.of(k.pos()), dev.larattalabs.architect.journal.WorldJournal
+				.state(k.found()), dev.larattalabs.architect.journal.WorldJournal.state(k.planned())));
+		}
+		return out;
+	}
+
+	public static dev.larattalabs.architect.api.DeltaResult deltaResult(dev.larattalabs.architect.site.SiteDeltas.Result r) {
+		List<dev.larattalabs.architect.api.Refusal> rs = new ArrayList<>();
+		for (dev.larattalabs.architect.site.SiteDeltas.Refusal x : r.refusals()) {
+			rs.add(new dev.larattalabs.architect.api.Refusal(x.reason(), x.message()));
+		}
+		return new dev.larattalabs.architect.api.DeltaResult(r.applied(), r.siteId(), r.from(), r.to(), r.written(), kept(r.kept()), items(r.refund()),
+			r.reshaped(), rs, r.notes());
+	}
+
+	public static dev.larattalabs.architect.api.DeltaResult deltaFailed(String siteId, dev.larattalabs.architect.api.Refusal why) {
+		return new dev.larattalabs.architect.api.DeltaResult(false, siteId, 0, 0, 0, List.of(), java.util.Map.of(), 0, List.of(why), List.of());
 	}
 }

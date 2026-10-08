@@ -1606,4 +1606,19 @@ public final class Builder {
 		be.saveWithFullMetadata(out);
 		return out.buildResult().toString();
 	}
+
+	// ------------------------------------------------------------------ phase 5b: construction deltas (survival)
+
+	/** The verdict of a construction delta (survival: INSTANT not allowed for the actor). */
+	public static SiteDeltas.Check checkConstructionDelta(ServerLevel level, SiteDeltas.Request r) {
+		SiteDeltas.Check c = SiteDeltas.check(level, r);
+		return c.withSurvival(Map.of(), Map.of(), List.of(new SiteDeltas.Refusal(dev.larattalabs.architect.api.Reason.NOT_ALLOWED,
+			"construction deltas are not built yet", false)));
+	}
+
+	/** Starts a construction delta (survival). */
+	public static SiteDeltas.Result applyConstructionDelta(ServerLevel level, SiteDeltas.Request r, @org.jspecify.annotations.Nullable ServerPlayer actor)
+		throws Sites.SiteException {
+		throw new Sites.SiteException(dev.larattalabs.architect.api.Reason.NOT_ALLOWED, "construction deltas are not built yet");
+	}
 }

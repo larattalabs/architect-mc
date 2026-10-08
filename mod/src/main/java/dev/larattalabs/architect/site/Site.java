@@ -57,29 +57,38 @@ public record Site(String id, String blueprint, String rotation, Anchors.Bounds 
 	 * every delta, revert and forward delta, oldest first), and a delta in progress ({@code updating}: the version it goes to,
 	 * {@code reverting}: a revert's target), or 0.
 	 */
-	public record Versioning(int version, List<History> history, int updating, int reverting) {
-		public static final Versioning NONE = new Versioning(0, List.of(), 0, 0);
+	public record Versioning(int version, List<History> history, int updating, int reverting, int deviations) {
+		public static final Versioning NONE = new Versioning(0, List.of(), 0, 0, 0);
 
 		public Versioning {
 			history = List.copyOf(history);
 		}
 
+		public Versioning(int version, List<History> history, int updating, int reverting) {
+			this(version, history, updating, reverting, 0);
+		}
+
 		public Versioning withVersion(int v) {
-			return new Versioning(v, history, updating, reverting);
+			return new Versioning(v, history, updating, reverting, deviations);
 		}
 
 		public Versioning withUpdating(int to) {
-			return new Versioning(version, history, to, reverting);
+			return new Versioning(version, history, to, reverting, deviations);
 		}
 
 		public Versioning withReverting(int to) {
-			return new Versioning(version, history, updating, to);
+			return new Versioning(version, history, updating, to, deviations);
+		}
+
+		/** The cells the player changed that the last delta kept (KEEP): they stay until the player puts the block back. */
+		public Versioning withDeviations(int n) {
+			return new Versioning(version, history, updating, reverting, n);
 		}
 
 		public Versioning append(History h) {
 			List<History> l = new ArrayList<>(history);
 			l.add(h);
-			return new Versioning(h.version(), l, 0, 0);
+			return new Versioning(h.version(), l, 0, 0, deviations);
 		}
 
 		public JsonObject toJson() {
@@ -93,6 +102,9 @@ public record Site(String id, String blueprint, String rotation, Anchors.Bounds 
 			}
 			if (reverting > 0) {
 				o.addProperty("reverting", reverting);
+			}
+			if (deviations > 0) {
+				o.addProperty("deviations", deviations);
 			}
 			return o;
 		}
@@ -108,7 +120,7 @@ public record Site(String id, String blueprint, String rotation, Anchors.Bounds 
 				}
 			}
 			return new Versioning(o.has("version") ? o.get("version").getAsInt() : 0, h, o.has("updating") ? o.get("updating").getAsInt() : 0,
-				o.has("reverting") ? o.get("reverting").getAsInt() : 0);
+				o.has("reverting") ? o.get("reverting").getAsInt() : 0, o.has("deviations") ? o.get("deviations").getAsInt() : 0);
 		}
 	}
 

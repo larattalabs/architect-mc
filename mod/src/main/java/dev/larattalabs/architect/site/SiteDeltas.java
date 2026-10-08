@@ -115,7 +115,20 @@ public final class SiteDeltas {
 	 */
 	public record Check(List<Refusal> refusals, String siteId, int from, int to, int added, int removed, int changed, Map<String, TemplateDelta.Part> parts,
 		List<DeltaPlanner.Kept> kept, Map<String, Integer> overlaps, Map<Long, Byte> ghost, Anchors.@Nullable Bounds box, List<String> notes,
-		@Nullable Planned plan) {
+		@Nullable Planned plan, Map<String, Integer> bom, Map<String, Integer> refund) {
+		public Check(List<Refusal> refusals, String siteId, int from, int to, int added, int removed, int changed, Map<String, TemplateDelta.Part> parts,
+			List<DeltaPlanner.Kept> kept, Map<String, Integer> overlaps, Map<Long, Byte> ghost, Anchors.@Nullable Bounds box, List<String> notes,
+			@Nullable Planned plan) {
+			this(refusals, siteId, from, to, added, removed, changed, parts, kept, overlaps, ghost, box, notes, plan, Map.of(), Map.of());
+		}
+
+		/** The same verdict with survival's bill of materials and refunds, and more refusals. */
+		public Check withSurvival(Map<String, Integer> b, Map<String, Integer> r, List<Refusal> more) {
+			List<Refusal> rs = new ArrayList<>(refusals);
+			rs.addAll(more);
+			return new Check(rs, siteId, from, to, added, removed, changed, parts, kept, overlaps, ghost, box, notes, plan, b, r);
+		}
+
 		public boolean ok() {
 			return refusals.isEmpty();
 		}
@@ -138,7 +151,11 @@ public final class SiteDeltas {
 
 	/** The result of an apply or a revert (the API's {@code DeltaResult}). */
 	public record Result(boolean applied, String siteId, int from, int to, int written, List<DeltaPlanner.Kept> kept, int reshaped, List<Refusal> refusals,
-		List<String> notes, @Nullable Site before, @Nullable Site after) {
+		List<String> notes, @Nullable Site before, @Nullable Site after, Map<String, Integer> refund) {
+		public Result(boolean applied, String siteId, int from, int to, int written, List<DeltaPlanner.Kept> kept, int reshaped, List<Refusal> refusals,
+			List<String> notes, @Nullable Site before, @Nullable Site after) {
+			this(applied, siteId, from, to, written, kept, reshaped, refusals, notes, before, after, Map.of());
+		}
 	}
 
 	// ------------------------------------------------------------------ versions
@@ -157,24 +174,38 @@ public final class SiteDeltas {
 		if (b.versioning().version() > 0) {
 			return b.versioning().version();
 		}
+		int v = derive(server, b);
+		if (v > 0 && server.isSameThread() && Sites.get(b.id()) != null) {
+			Sites.replace(server, b.withVersioning(new Site.Versioning(v, List.of(new Site.History(v, b.placedAt(), "placed", null, new int[] {b.box()
+				.minX(), b.box().minY(), b.box().minZ()}, true)), 0, 0)));
+		}
+		return v;
+	}
+
+	private static final Map<String, Integer> DERIVED = new java.util.concurrent.ConcurrentHashMap<>();
+
+	/** The stored version whose template fingerprint equals the site's pin (cached per library revision); 0 = none. */
+	static int derive(MinecraftServer server, Site b) {
 		if (b.pin() == null) {
 			return 0;
 		}
-		Blueprints.Entry head = Blueprints.entry(b.blueprint());
-		if (head == null) {
-			return 0;
+		String key = b.blueprint() + "|" + b.pin().template() + "|" + Blueprints.revision();
+		Integer c = DERIVED.get(key);
+		if (c != null) {
+			return c;
 		}
-		int h = Blueprints.headVersion(head);
-		for (int v = h; v >= 1; v--) {
-			Blueprints.Version bv = Blueprints.version(server, b.blueprint(), v);
-			if (bv != null && TemplateGrid.of(bv.entry()).fingerprint().equals(b.pin().template())) {
-				Site nb = b.withVersioning(new Site.Versioning(v, List.of(new Site.History(v, b.placedAt(), "placed", null, new int[] {b.box().minX(), b
-					.box().minY(), b.box().minZ()}, true)), 0, 0));
-				Sites.replace(server, nb);
-				return v;
+		Blueprints.Entry head = Blueprints.entry(b.blueprint());
+		int found = 0;
+		if (head != null) {
+			for (int v = Blueprints.headVersion(head); v >= 1 && found == 0; v--) {
+				Blueprints.Version bv = Blueprints.version(server, b.blueprint(), v);
+				if (bv != null && TemplateGrid.of(bv.entry()).fingerprint().equals(b.pin().template())) {
+					found = v;
+				}
 			}
 		}
-		return 0;
+		DERIVED.put(key, found);
+		return found;
 	}
 
 	private static final Map<Blueprints.Version, SitePlanner.VersionCells> CELLS = Collections.synchronizedMap(new WeakHashMap<>());
@@ -749,7 +780,7 @@ public final class SiteDeltas {
 			v = new Site.Versioning(v.version(), h, 0, 0);
 			notes.add("history folded (v" + p.from() + ")");
 		}
-		v = v.append(new Site.History(p.to(), now, kind, id, p.minB(), true));
+		v = v.append(new Site.History(p.to(), now, kind, id, p.minB(), true)).withDeviations(o.kept().size());
 		Site nb = updating.withVersioning(v).withGeometry(boxOf(p), interiorOf(p), anchorsOf(p), Sites.union(b.restoreBox(), p.pb().snapBox()), pinOf(p));
 		Sites.replace(server, nb);
 		SiteJournal.updateMeta(b.id(), nb.toJson());
