@@ -75,7 +75,8 @@ public final class JournalStore {
 	public static final String INDEX = "journal.json";
 	public static final String ENTRIES = "e";
 	public static final String HEAD = "head";
-	public static final int VERSION = 1;
+	/** 2 since phase 6a (region files may hold section masks, JournalNbt.VERSION); 1 is still read and rewritten as 2. */
+	public static final int VERSION = 2;
 	private static final Gson GSON = new GsonBuilder().disableHtmlEscaping().create();
 	private static final Pattern REGION_FILE = Pattern.compile("(-?\\d+)\\.(-?\\d+)\\.(\\d+)\\.nbt");
 	private static final Pattern HEAD_FILE = Pattern.compile("head\\.(\\d+)\\.nbt");
@@ -1104,7 +1105,7 @@ public final class JournalStore {
 	}
 
 	static Index indexFromJson(JsonObject o) {
-		if (o.get("version") == null || o.get("version").getAsInt() != VERSION) {
+		if (o.get("version") == null || !(o.get("version").getAsInt() == VERSION || o.get("version").getAsInt() == 1)) {
 			throw new IllegalArgumentException("unknown journal version " + o.get("version"));
 		}
 		Map<String, Meta> metas = new LinkedHashMap<>();
