@@ -243,6 +243,10 @@ there is no DevBridge hook to make layers, so tests go through the API as anothe
 
 Semi-stable: a hook may change or go, and every such change is listed here, newest first.
 
+- **2026-10-08 (phase 5a):** `tools/p5a-ui.mjs` walks the critique UI submit paths on the sim (Design tab, set dialog, massing
+  first plus critique: no critique on the massing, critique on the detail pass); the Status tab has a `critique_default` control
+  (N1: "Critique and revise new designs by default", `config/architect_mc_ui.json`). `tools/gate4e.mjs api15jar` runs the
+  unchanged 1.5.0 apitest jar against this build; `gate4e` accepts an API version >= 1.5.0.
 - **2026-10-06 (phase 5a, Java):** `dev.design.fill` and `dev.set.fill` take `critique` (bool) and `maxRevisions` (1|2); their
   state replies show them, the critique spec as sent and (Design tab) the live estimate line with critique. apitest steps
   `critspec, critreq, critget, critentry, critreport, critestimate, critgroupestimate, critgroup, critgroupget, sheetbible,
