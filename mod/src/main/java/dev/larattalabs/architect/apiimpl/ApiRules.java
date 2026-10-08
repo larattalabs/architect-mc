@@ -23,7 +23,7 @@ public final class ApiRules {
 	 */
 	public static final java.util.Set<String> JAVA_FEATURES = java.util.Set.of("sites", "events", "designs", "library", "survey", "survivalInfo",
 		"compositePreview", "batchPlacement", "siteGroups", "stages", "groupCrate", "journal", "overlapLayer", "roads", "cellSites",
-		"stackQuery");
+		"stackQuery", "entryVersions", "blueprintDelta", "deltaApply", "siteRevert", "deltaPreview");
 
 	private ApiRules() {
 	}
@@ -42,6 +42,7 @@ public final class ApiRules {
 					case "job.run", "jobs" -> "jobs";
 					case "job.tools", "jobTools" -> "jobTools";
 					case "blob.put", "blobs" -> "blobs";
+					case "design.polish" -> "polish"; // phase 5b: the helper can polish (the mod's own 5b features are Java names)
 					default -> Wire4b.FEATURE_NAMES.getOrDefault(f, Wire5a.FEATURE_NAMES.getOrDefault(f, f));
 				});
 			}

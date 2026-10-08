@@ -161,7 +161,33 @@ public final class Views {
 			ports(j), j.has("ext") && j.get("ext").isJsonObject() ? j.getAsJsonObject("ext").deepCopy() : new JsonObject(), e.bundled(),
 			j.has("imported") && j.get("imported").isJsonPrimitive() && j.get("imported").getAsBoolean(), Optional.ofNullable(str(j, "variantOf")),
 			Wire4b.pin(j.get("bible")), Optional.ofNullable(str(j, "group")), Optional.ofNullable(str(j, "groupItem")), Wire4b.parts(j),
-			direction(bp.front()), anchorCells(bp), bp.groundY(), approach(bp), Wire5a.entry(e.dir(), bp.id(), j));
+			direction(bp.front()), anchorCells(bp), bp.groundY(), approach(bp), Wire5a.entry(e.dir(), bp.id(), j),
+			dev.larattalabs.architect.library.EntryVersions.version(j), entryVersions(bp.id(), j));
+	}
+
+	/** An entry's lineage for the API, with each version's pin (a standing site stands at it). */
+	public static List<dev.larattalabs.architect.api.EntryVersion> entryVersions(String id, JsonObject j) {
+		java.util.Set<Integer> pinned = new java.util.HashSet<>();
+		for (dev.larattalabs.architect.site.Site s : dev.larattalabs.architect.site.Sites.all()) {
+			if (s.blueprint().equals(id)) {
+				pinned.add(s.versioning().version() > 0 ? s.versioning().version() : dev.larattalabs.architect.library.EntryVersions.version(j));
+			}
+		}
+		List<dev.larattalabs.architect.api.EntryVersion> out = new ArrayList<>();
+		for (var l : dev.larattalabs.architect.library.EntryVersions.lineage(j, null)) {
+			out.add(new dev.larattalabs.architect.api.EntryVersion(l.n(), l.createdAt(), l.by(), l.parent(), l.designId(), l.summary(), l.nbtSha256(),
+				pinned.contains(l.n())));
+		}
+		return out;
+	}
+
+	/** The blueprint delta for the API (the mod's TemplateDelta, the kit's summary). */
+	public static dev.larattalabs.architect.api.BlueprintDelta blueprintDelta(String id, int from, int to,
+		dev.larattalabs.architect.delta.TemplateDelta.Result r) {
+		Map<String, dev.larattalabs.architect.api.PartDelta> parts = new LinkedHashMap<>();
+		r.parts().forEach((n, p) -> parts.put(n, partDelta(p)));
+		return new dev.larattalabs.architect.api.BlueprintDelta(id, from, to, r.frameKept(), r.approximate(), parts, r.added().size(), r.removed().size(),
+			r.changed().size(), r.unchanged(), r.notes());
 	}
 
 	/** {@code north/east/south/west} -> the Direction (south when unknown). */
