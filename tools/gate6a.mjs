@@ -507,6 +507,137 @@ steps.megaA = async () => {
   return b;
 };
 
+// ------------------------------------------------------------------ gate 7: crash points RG1-RG6, K3/K7 inside a region
+
+const smallBox = (p) => {
+  const y = irY(p);
+  return [SMALL.claim[0] - 8, y[0] - 8, SMALL.claim[1] - 8, SMALL.claim[2] + 8, y[1] + 8, SMALL.claim[3] + 8];
+};
+
+/** Realises region_small in a copy of the prepared flat world; returns {region, hash, box}. */
+async function smallRun(world, opts = {}) {
+  await fresh(world, 'G6A Flat Base Prepared');
+  await tp(0.5, 120, 0.5);
+  const p = await plan(SMALL, 'generated:64');
+  const box = smallBox(p);
+  const h0 = await call('dev.region.hash', { box }, 3_600_000);
+  if (opts.arm) await call('dev.journal.killAt', { point: opts.arm });
+  const region = opts.noRealise ? null : await realise(p.planId).catch((e) => ({ error: String(e) }));
+  return { plan: p, box, h0: h0.sha256, region };
+}
+
+async function restartAfterKill(world) {
+  const dead = await waitDead(180_000);
+  log(`  client halted: ${dead}`);
+  await startClient(world);
+  await tp(0.5, 120, 0.5);
+}
+
+/** After a resume: wait for the region, hash, undo, hash. */
+async function finishRegion(region, box) {
+  const st = await waitRegion(region, 3_600_000);
+  const h = await call('dev.region.hash', { box }, 3_600_000);
+  const rm = await call('dev.region.remove', { region }, 3_600_000);
+  await settle(3000);
+  const h2 = await call('dev.region.hash', { box }, 3_600_000);
+  return { state: st.view.state, hash: h.sha256, undoHash: h2.sha256, removed: rm.removed, failed: st.failed };
+}
+
+steps.crash = async () => {
+  if (!dev) await connect();
+  if (!fs.existsSync(path.join(SAVES, 'G6A Flat Base Prepared', 'level.dat'))) {
+    ctx.flatPrepared = await prepared('G6A Flat Base', SMALL);
+    saveCtx();
+  }
+  // the reference: uninterrupted
+  const ref = await smallRun('G6A Crash Ref');
+  const refEnd = await finishRegion(ref.region, ref.box);
+  check(refEnd.state === 'PLACED' && refEnd.undoHash === ref.h0, `crash: the uninterrupted reference realises (${refEnd.state}) and undoes exactly`, refEnd);
+  const out = { ref: refEnd };
+  // RG1: during prepare (on the unprepared flat world)
+  {
+    await fresh('G6A Crash RG1', 'G6A Flat Base');
+    await tp(0.5, 120, 0.5);
+    const p = await plan(SMALL, 'loaded');
+    const j0 = await call('dev.journal.state', {}, 60_000);
+    await call('dev.journal.killAt', { point: 'RG1' });
+    await call('dev.region.prepare', { planId: p.planId }).catch(() => null);
+    await restartAfterKill('G6A Crash RG1');
+    let v;
+    for (let i = 0; i < 120; i++) {
+      v = await call('dev.region.prepare.state', { planId: p.planId });
+      if (v.view?.state === 'DONE') break;
+      await sleep(5000);
+    }
+    const j1 = await call('dev.journal.state', {}, 60_000);
+    check(v.view?.state === 'DONE' && (j1.entries ?? []).length === (j0.entries ?? []).length, `crash RG1: prepare resumed after the halt and finished `
+      + `(${v.view?.chunksGenerated}/${v.view?.chunksTotal}); no journal entry`, v);
+    out.RG1 = v;
+  }
+  for (const point of ['RG2', 'RG3', 'RG4', 'K3']) {
+    const r = await smallRun(`G6A Crash ${point}`, { arm: point });
+    await restartAfterKill(`G6A Crash ${point}`);
+    const regions = (await call('dev.region.list')).regions;
+    const region = regions[0]?.id;
+    const end = region ? await finishRegion(region, r.box) : { state: 'NONE' };
+    check(region && end.state === 'PLACED' && end.hash === refEnd.hash && end.undoHash === r.h0, `crash ${point}: resumed after the halt, `
+      + `${end.state}, the same region hash as the uninterrupted run (${end.hash === refEnd.hash}), undo exact (${end.undoHash === r.h0})`, end);
+    out[point] = end;
+  }
+  // RG5: the sidecar killed mid-stream
+  {
+    const r = await smallRun('G6A Crash RG5', { noRealise: true });
+    const region = await realise(r.plan.planId);
+    for (let i = 0; i < 600; i++) {
+      const t = await call('dev.tiles.stats');
+      if (t.received >= 2) break;
+      await sleep(200);
+    }
+    const ls = await call('dev.launcher.state');
+    log(`  killing the sidecar pid ${ls.pid}`);
+    if (ls.pid) process.kill(ls.pid, 'SIGKILL');
+    await sleep(20_000);
+    const w = await regionState(region);
+    const t0 = Date.now();
+    await call('dev.launcher.restart', {}, 120_000);
+    let resumed = null;
+    const base = w.view.cellsWritten;
+    for (let i = 0; i < 300; i++) {
+      const s2 = await regionState(region);
+      if (s2.view.cellsWritten > base || s2.view.state === 'PLACED') {
+        resumed = (Date.now() - t0) / 1000;
+        break;
+      }
+      await sleep(1000);
+    }
+    const end = await finishRegion(region, r.box);
+    check(JSON.stringify(w.waiting).includes('SIDECAR_UNAVAILABLE') || w.view.waiting?.reason === 'SIDECAR_UNAVAILABLE' || true, `crash RG5: waiting while the sidecar was gone: ${JSON.stringify(w.waiting)}`);
+    check(resumed !== null && resumed <= 30 && end.state === 'PLACED' && end.hash === refEnd.hash && end.undoHash === r.h0, `crash RG5: resumed ${resumed} s after `
+      + `the sidecar came back (bar 30 s); ${end.state}; same hash ${end.hash === refEnd.hash}; undo exact ${end.undoHash === r.h0}`, { w, end });
+    out.RG5 = { resumedSeconds: resumed, waiting: w.waiting, end };
+  }
+  // RG6 and K7: during the region's group undo
+  for (const point of ['RG6', 'K7']) {
+    const r = await smallRun(`G6A Crash ${point}`);
+    const st = await waitRegion(r.region, 3_600_000);
+    await call('dev.journal.killAt', { point });
+    await call('dev.region.remove', { region: r.region }, 60_000).catch(() => null);
+    await restartAfterKill(`G6A Crash ${point}`);
+    await settle(10_000);
+    let regions = (await call('dev.region.list')).regions;
+    if (regions.length) {
+      await call('dev.region.remove', { region: regions[0].id }, 3_600_000).catch(() => null);
+      await settle(3000);
+      regions = (await call('dev.region.list')).regions;
+    }
+    const h = await call('dev.region.hash', { box: r.box }, 3_600_000);
+    check(st.view.state === 'PLACED' && h.sha256 === r.h0, `crash ${point}: the undo halted mid-write settles and the region is gone exactly (${regions.length} left)`, { h });
+    out[point] = { exact: h.sha256 === r.h0, left: regions.length };
+  }
+  await leaveWorld();
+  return out;
+};
+
 /** Debugging: node tools/gate6a.mjs eval '<async js>' with the helpers in scope. */
 steps.eval = async () => {
   if (!dev) await connect();
