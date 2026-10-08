@@ -1405,6 +1405,9 @@ public final class Builder {
 						Refunds.natural(Cells.blockId(was), Cells.blockId(now)));
 					if (o == Refunds.Outcome.REFUND) {
 						tally.add(o, r.cost.get(qi));
+						if (TRACE_REFUNDS) {
+							Architect.LOGGER.info("refund-trace deconstruct {} {} target {} now {} cost {}", s.id(), m.toShortString(), r.target[qi], now, r.cost.get(qi));
+						}
 					} else if (o == Refunds.Outcome.PLAYER_DROP) {
 						tally.add(o, Cells.cost(now));
 					} else if (qi >= 0 && !asPlaced && now.isAir()) {
@@ -1653,12 +1656,17 @@ public final class Builder {
 
 	/** Refunds per site (dev.site.state, the gate's items-in = items-out), since the world started. */
 	static final Map<String, Map<String, Integer>> REFUNDED = new ConcurrentHashMap<>();
+	/** Dev trace (ARCHITECT_TRACE_REFUNDS=1): every refunded cell in the log. */
+	static final boolean TRACE_REFUNDS = System.getenv("ARCHITECT_TRACE_REFUNDS") != null;
 
 	/** A swap: the old block's item goes to the crate's cell (when it was paid), and the cell counts as paid for its new block. */
 	private static void refundSwap(ServerLevel level, Site s, Run r, int i, BitSet free) {
 		if (r.old != null && r.old[i] != null && !free.get(i)) {
 			Map<String, Integer> items = new TreeMap<>();
 			Cells.cost(r.old[i]).forEach(c -> items.merge(c.item(), c.count(), Integer::sum));
+			if (TRACE_REFUNDS) {
+				Architect.LOGGER.info("refund-trace swap {} {} old {}", s.id(), r.pos(i).toShortString(), r.old[i]);
+			}
 			Construction c = s.construction();
 			BlockPos at = c.crate() != null ? new BlockPos(c.crate().x(), c.crate().y(), c.crate().z()).above() : dropPos(s);
 			dropItems(level, at, items, null);
@@ -1803,6 +1811,9 @@ public final class Builder {
 				// removed (or now air): written already, free; the paid block that stood there is refunded now
 				if (wasPaid && old != null && !old.isAir()) {
 					Cells.cost(old).forEach(x -> refunded.merge(x.item(), x.count(), Integer::sum));
+					if (TRACE_REFUNDS) {
+						Architect.LOGGER.info("refund-trace delta-removed {} {} old {} target {} kind {}", s.id(), p.toShortString(), old, target, kind);
+					}
 				}
 				freeOf.remove(k);
 				continue;

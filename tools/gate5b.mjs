@@ -1109,7 +1109,7 @@ steps.survival = async () => {
   const AT = [28, 65, -19];
   const BOX = [0, 55, -45, 70, 90, 15];
   const out = {};
-  for (const mine of [0, 3]) {
+  for (const mine of (process.env.GATE5B_SURV_MINE ?? '0,3').split(',').map(Number)) {
     await fresh('G5B Surv', FLAT);
     await tp(40.5, 80, 20.5);
     const h0 = (await hash(BOX)).sha256;
@@ -1135,7 +1135,7 @@ steps.survival = async () => {
     await tp(40.5, 80, 20.5);
     const pre = await cellsIn(BOX);
     const c = await deltaCheck(S, 2, { construction: true, cells: true });
-    check(c.applicable, `survival: the construction delta v1 -> v2 is allowed (bill ${JSON.stringify(c.bom)}, refunds ${JSON.stringify(c.refund)})`, c.refusals);
+    check(c.applicable, `survival: the construction delta v1 -> v2 is allowed (bill ${JSON.stringify(c.bom)}, refunds ${JSON.stringify(c.refund)})`, c.applicable ? undefined : c);
     const a = await deltaApply(S, 2, { construction: true });
     check(a.applied, 'survival: the construction delta started', a.applied ? undefined : a);
     const st = await siteState(S);
@@ -1207,7 +1207,7 @@ steps.survival = async () => {
       check(returnedN === deliveredN - mined, `survival (mined ${mined}): returned ${returnedN} = delivered ${deliveredN} - ${mined}`);
     }
     check((await hash(BOX)).sha256 === h0, `survival${mine ? ' (mined)' : ''}: the terrain is exact after the deconstruct`);
-    out[mine ? 'mined' : 'plain'] = { into, out: out1, refunds1, refunds };
+    out[mine ? 'mined' : 'plain'] = { into, out: out1, refunds1, refunds, deconstruct: rm.refund ?? null, deconstructAll: rm };
     await call('dev.survival.set', { on: false });
     if (!mine) {
       // the instant references in the creative copy
@@ -1438,6 +1438,30 @@ steps.sizecap = async () => {
   await settle(3000);
   check(rm.removed && (await hash(BOX)).sha256 === h0, 'sizecap: Remove is exact', rm.removed ? undefined : rm);
   return { apply: sa, revert: sr };
+};
+
+/** Debug: the survival cabin's v1 -> v2 as an instant apply (the cells in front of the door). */
+steps.scabindbg = async () => {
+  if (!dev) await connect();
+  await flatBase();
+  const ID = 'g5b_scabin';
+  const V = path.join(OUT, 'versions-scabin');
+  const AT = [28, 65, -19];
+  await fresh('G5B ScDbg', FLAT);
+  await tp(40.5, 80, 20.5);
+  await installEntry(ID, path.join(V, 'v1'));
+  const p = await result(await api(`place ${ID} ${AT.join(' ')} INSTANT unowned noactor 0`));
+  const show = async (label) => {
+    const w = await cellsIn([31, 63, -11, 35, 67, -7]);
+    log(`  ${label}: ` + [...w.entries()].filter(([q]) => /,-(9|10|8),/.test(',' + q.split(',').slice(1).join(',') + ',') || true).filter(([q]) => q.startsWith('32,') || q.startsWith('33,')).map(([q, v]) => `${q}=${v.replace('minecraft:', '')}`).join(' '));
+  };
+  await show('v1');
+  await installVersion(ID, path.join(V, 'v2'), 'v2');
+  const c = await deltaCheck(p.siteId, 2, { cells: true });
+  log(`  check: kept ${JSON.stringify(c.kept)} changed has 32,64,-9: ${(c.ghost?.changed ?? []).includes('32,64,-9')} added: ${(c.ghost?.added ?? []).includes('32,64,-9')} removed: ${(c.ghost?.removed ?? []).includes('32,65,-9')}`);
+  const a = await deltaApply(p.siteId, 2);
+  log(`  apply: written ${a.written} kept ${JSON.stringify(a.kept)}`);
+  await show('v2');
 };
 
 const which = process.argv[2];

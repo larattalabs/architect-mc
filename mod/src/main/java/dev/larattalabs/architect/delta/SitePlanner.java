@@ -168,6 +168,20 @@ public final class SitePlanner {
 		put(writes, approach.fill(), found);
 		put(writes, approach.path(), WorldJournal.value(path));
 		put(writes, approach.slabs(), WorldJournal.value(slab));
+		// a dirt path under a solid block turns to dirt at its next tick (vanilla), whichever placement wrote it: the plan says
+		// dirt there, so the captured after, a construction's target and a fresh placement agree
+		Value dirt = WorldJournal.value(Blocks.DIRT.defaultBlockState());
+		for (var e : List.copyOf(writes.entrySet())) {
+			if (!WorldJournal.state(e.getValue()).is(Blocks.DIRT_PATH)) {
+				continue;
+			}
+			long up = Journal.pos(Journal.x(e.getKey()), Journal.y(e.getKey()) + 1, Journal.z(e.getKey()));
+			Value a = writes.get(up);
+			BlockState above = WorldJournal.state(a != null ? a : w.value(up));
+			if (above.isSolid() && !(above.getBlock() instanceof net.minecraft.world.level.block.FenceGateBlock)) {
+				writes.put(e.getKey(), dirt);
+			}
+		}
 		Anchors.Bounds u = approach.union(box);
 		Anchors.Bounds snap = new Anchors.Bounds(u.minX(), Math.min(u.minY(), terrain.minY()) - 1, u.minZ(), u.maxX(), u.maxY(), u.maxZ());
 		return new Plan(Collections.unmodifiableMap(writes), box, snap, terrain, approach, part);
