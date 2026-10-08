@@ -2,13 +2,13 @@
 // the polish system prompt (appended to the claude_code preset), POLISH.md (the step's brief in the scratch dir), the
 // step and fix-turn prompts, and the scoping call (prompt, system, schema).
 //
-// STATUS: DRAFTS. They are developed on designs outside the 18 eval briefs and frozen in the paid prompt-development
+// STATUS: FROZEN 2026-10-08 after development (0 of 7 dev steps accepted: the critic). They were developed on designs outside the 18 eval briefs and frozen in the paid prompt-development
 // step (contract "Prompt development"); their hashes (POLISH_PROMPT_HASHES) are recorded in every polish result, so a
 // result says which drafts made it. Nothing here is tuned against the eval set.
 import crypto from 'node:crypto';
 import type { CritiqueIssue } from '../protocol.js';
 
-export const POLISH_PROMPTS_STATUS = 'draft';
+export const POLISH_PROMPTS_STATUS = 'frozen';
 
 export const POLISH_SYSTEM = [
   'You are polishing an existing Minecraft building made with the Architect blueprint kit: a targeted edit, not a redesign.',

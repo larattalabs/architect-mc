@@ -45,7 +45,18 @@ Notes: `test/bundle.e2e.test.ts` (4c massing group) failed once under load (the 
 | polish-dev2 gen_lookout (dev 1 prompts: 0/1) | 0.4010 |
 | polish-dev3 gen_fisher_cottage (dev 2 prompts: 0/1) | 0.4638 |
 | polish-dev3 gen_net_and_lantern (report only; the step hit the weekly usage limit) | 0.0811 |
-| **total** | **2.2036** |
+| polish-dev4a gen_gull_and_kettle (dev 2 prompts: 0/1; the fix visibly there, the critic did not mark it resolved) | 0.4463 |
+| **total** | **2.6499** |
+
+Prompt development ended at 0 of 7 steps accepted ($2.65 of the $20 cap). The step critic sees the step's renders (hashes
+differ from the base's) and gets the base issue list with indexes; in dev4a the targeted roof visibly gained dormers and a
+kinked ridge (artifacts/gate5b/shots/polish-dev4a-gull-base-vs-step1.png), yet `resolved` was empty: the limit is 5a's
+critic (frozen by the contract), not the prompts. Prompts FROZEN at dev 2: system f4916959..., brief 8d0b4f4c..., step
+99d5bcdb..., scoping e9821a71.... `verify-round0 full-2026-10-07T2324`: 18/18 byte-identical.
+
+**Expected spend of the rest (measured costs):** Sonnet polish step $0.18-0.45, critic $0.05-0.08, no report (imported
+round-0 verdicts reused): about $0.5-0.95 per brief, brief 16 (Opus) about $2-3 -> polish arm about $12-19; judges about
+$6.5; other real checks about $6. Spent $2.65 + about $25-32 = **about $28-35, under the $80 cap.**
 
 The ledger of record is `artifacts/gate5b/spend.json`.
 

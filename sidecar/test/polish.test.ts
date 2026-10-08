@@ -106,7 +106,7 @@ describe.skipIf(!hasKit)('polish (sim backend, real kit)', () => {
     expect(p.steps.map((s) => [s.n, s.target?.part, s.accepted, s.failure])).toEqual([[1, 'roof', true, null], [2, 'taproom', true, null]]);
     expect(p.steps[0]!.allowedParts).toEqual(['roof']);
     expect(p.steps[0]!.changedCells).toBeGreaterThan(0);
-    expect(p.prompts).toMatchObject({ status: 'draft' });
+    expect(p.prompts).toMatchObject({ status: 'frozen' });
     const j = top(h, e);
     expect(j.version).toBe(2);
     expect((j.versions as Array<{ by: string; parent: number | null; summary: string }>).at(-1)).toMatchObject({ by: 'polish', parent: 1, summary: expect.stringMatching(/^polish: resolved 2 issues/) });
