@@ -86,7 +86,7 @@ export function compileIR(ir) {
         }
         const idx = new Map();
         for (const [k, l] of index) idx.set(k, Int32Array.from(l));
-        ops.push({ ...base, kind: 1, from: yrefFn(o.from ?? { abs: 0 }), to: yrefFn(o.to ?? { abs: 0 }), entries: e, index: idx, minX, maxX, minZ, maxZ });
+        ops.push({ ...base, kind: 1, from: yrefFn(o.from ?? { abs: 0 }), to: yrefFn(o.to ?? { abs: 0 }), entries: e, colIndex: idx, minX, maxX, minZ, maxZ });
       } else throw new Error(`${where}: unknown op '${o.op}' (shape, columns)`);
     }
   }
@@ -196,7 +196,7 @@ export function evalTile(ir, key, heights, opts = {}) {
                 }
                 if (any) { if (a - yBase < wLo) wLo = a - yBase; if (b - yBase > wHi) wHi = b - yBase; }
               } else {
-                const list = o.index.get(colKey(wx, wz));
+                const list = o.colIndex.get(colKey(wx, wz));
                 if (!list) continue;
                 const fy = o.from(col), ty = o.to(col);
                 const E = o.entries;
