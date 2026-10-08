@@ -457,6 +457,11 @@ public final class Batches {
 			}
 		}
 		tr.mark("ticket");
+		// phase 6a (the 4e spike class): the journal regions under a road or small cell site in memory first, read off the
+		// server thread, as for buildings; a road over a big pad read and decoded them in its check (50-250 ms ticks)
+		if (!SiteJournal.warm(i.dimension, infraBox(i))) {
+			return;
+		}
 		if (road) {
 			c = InfraPlace.checkRoad(level, InfraSpec.points(i.spec), i.spec.get("width").getAsInt(), InfraSpec.str(i.spec, "surface"), InfraSpec.str(i.spec,
 				"slab"), i.spec.get("lanterns").getAsBoolean(), i.spec.get("shallowDecks").getAsBoolean(), b.owner, i.force);
