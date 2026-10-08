@@ -618,6 +618,102 @@ steps.megaB = async () => {
   return out;
 };
 
+// ------------------------------------------------------------------ gate 3: chunk status without loading, its cost
+
+steps.chunkstatus = async () => {
+  if (!dev) await connect();
+  await fresh('G6A ChunkStatus', 'G6A Mega Base Prepared');
+  await tp(0.5, 200, 0.5);
+  // the prepared claim + 2 (all generated) and a ring beyond it (not generated): 4624 + the outer chunks
+  const inside = await call('dev.chunks.status', { box: [-532, -532, 531, 531] }, 600_000);
+  const outside = await call('dev.chunks.status', { box: [1600, 1600, 2111, 2111] }, 600_000);
+  log(`  inside: ${JSON.stringify(inside)}`);
+  log(`  outside: ${JSON.stringify(outside)}`);
+  check(inside.generated === inside.chunks, `chunkstatus: the prepared claim + 2: ${inside.generated}/${inside.chunks} generated, ${inside.loaded} loaded, `
+    + `${inside.usPerChunkWall.toFixed(0)} us/chunk wall (mean scan ${inside.usPerScanMean.toFixed(0)} us)`);
+  check(outside.generated === 0, `chunkstatus: unexplored land: ${outside.generated}/${outside.chunks} generated (${outside.usPerChunkWall.toFixed(0)} us/chunk)`);
+  const g = await call('dev.chunks.generated');
+  await leaveWorld();
+  return { inside, outside, generatedBy: g };
+};
+
+// ------------------------------------------------------------------ gate 4: the heap under a capped -Xmx
+
+/**
+ * The memory bar: the baseline (used heap after a forced GC, at the claim centre, no region running) from the gate client, then
+ * a client restarted with -Xmx = baseline + 2 GB (rounded up to a whole GB) runs mega_bench A with forced-GC checkpoints at 5
+ * points (its MSPT is not judged: the forced GCs pause the server).
+ */
+steps.heap = async () => {
+  if (!dev) await connect();
+  await fresh('G6A HeapBase', 'G6A Mega Base Prepared');
+  await tp(0.5, 160, 0.5);
+  await settle(10_000);
+  const base = await call('dev.heap.gc', {}, 120_000);
+  const xmxGb = Math.ceil((base.usedMb + 2048) / 1024);
+  log(`  baseline ${base.usedMb.toFixed(0)} MB -> -Xmx${xmxGb}G`);
+  await leaveWorld();
+  await stopClient();
+  await startClient('G6A Flat Base', { ARCHITECT_XMX: `${xmxGb}G` });
+  const r = await megaRun('G6A HeapA', { base: 'G6A Mega Base Prepared', gcCheckpoints: true, snap: false });
+  const peaks = r.heapCheckpoints.map((h) => h.usedMb);
+  const out = { baselineMb: base.usedMb, xmxGb, checkpoints: r.heapCheckpoints, poolPeakMb: r.heap.peakMb, state: r.state.view.state,
+    cellsPerSecond: r.cellsPerSecond };
+  check(r.state.view.state === 'PLACED', `heap: mega_bench completes under -Xmx${xmxGb}G (baseline ${base.usedMb.toFixed(0)} MB + 2 GB)`);
+  check(Math.max(...peaks) <= base.usedMb + 1024, `heap: used heap after a forced GC at ${peaks.length} checkpoints ${peaks.map((x) => x.toFixed(0)).join(', ')} MB `
+    + `(bar baseline + 1 GB = ${(base.usedMb + 1024).toFixed(0)}); sum of pool peaks ${r.heap.peakMb.toFixed(0)} MB (4e: 6275)`);
+  await leaveWorld();
+  await stopClient();
+  await startClient('G6A Flat Base');
+  write('heap.json', out);
+  return out;
+};
+
+// ------------------------------------------------------------------ gate 9: the unchanged 1.7.0, 1.6.0 and 1.5.0 apitest jars
+
+steps.apijars = async () => {
+  const runs = [
+    { api: '1.7.0', dir: path.join(OUT, 'v0100'), jar: 'architect_apitest-0.10.0.jar', world: 'G6A Api17' },
+    { api: '1.6.0', dir: path.join(MAIN, 'artifacts', 'gate5b', 'v090'), jar: 'architect_apitest-0.9.0.jar', world: 'G6A Api16' },
+    { api: '1.5.0', dir: path.join(MAIN, 'artifacts', 'gate5a', 'v080'), jar: 'architect_apitest-0.8.0.jar', world: 'G6A Api15' },
+  ];
+  const mods = path.join(GAME_DIR, 'mods');
+  const out = {};
+  for (const r of runs) {
+    if (clientPids().length) {
+      await connect(10_000).catch(() => null);
+      await stopClient();
+    }
+    fs.mkdirSync(mods, { recursive: true });
+    fs.copyFileSync(path.join(r.dir, r.jar), path.join(mods, r.jar));
+    const outDir = path.join(OUT, `api${r.api.replace(/\./g, '')}jar`);
+    let code = 0;
+    let text = '';
+    try {
+      fs.rmSync(path.join(SAVES, r.world), { recursive: true, force: true });
+      await startClient(r.world, { ARCHITECT_APITEST: '0', ARCHITECT_AUTOWORLD_MODE: 'survival' });
+      try {
+        text = execFileSync('node', [path.join(r.dir, 'tools', 'apitest.mjs'), 'survival'], {
+          env: { ...process.env, APITEST_API_VERSION: r.api, ARCHITECT_DEV_PORT: String(PORT), ARCHITECT_GAME_DIR: GAME_DIR, APITEST_OUT: outDir,
+            APITEST_GAME_DIR: GAME_DIR }, timeout: 3_600_000 }).toString();
+      } catch (e) {
+        code = e.status ?? 1;
+        text = `${e.stdout ?? ''}${e.stderr ?? ''}`;
+      }
+    } finally {
+      await stopClient();
+      fs.rmSync(path.join(mods, r.jar), { force: true });
+    }
+    fs.writeFileSync(path.join(OUT, `api${r.api.replace(/\./g, '')}jar.log`), text);
+    const fails = text.split('\n').filter((l) => l.startsWith('FAIL'));
+    const oks = text.split('\n').filter((l) => l.startsWith('ok')).length;
+    check(code === 0 && fails.length === 0 && oks > 0, `apijars: the ${r.api} apitest jar (unchanged) passes its tools/apitest.mjs survival against 0.11.0 (${oks} ok, ${fails.length} FAIL)`, fails);
+    out[r.api] = { code, oks, fails: fails.length };
+  }
+  await startClient('G6A Flat Base');
+  return out;
+};
+
 // ------------------------------------------------------------------ gate 6: exactness
 
 /** E-flat: mega_bench on the flat world (the gate's rules); after the group undo the claim + 8 over the written y span +-8 is
