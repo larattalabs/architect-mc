@@ -362,13 +362,6 @@ async function megaRun(name, opts = {}) {
   out.heapBaseline = await call('dev.heap.gc', {}, 120_000);
   log(`  heap baseline after GC: ${out.heapBaseline.usedMb.toFixed(0)} MB (max ${out.heapBaseline.maxMb.toFixed(0)})`);
   const program = opts.program ?? MEGA;
-  const p1 = await plan(program, 'loaded', opts.params);
-  out.plan1 = { ms: p1.ms, budget: p1.budget, irSha: p1.irSha };
-  await call('dev.mspt.trace', { start: true });
-  const t0 = Date.now();
-  const pr = await prepare(p1.planId, opts.inFlight);
-  out.prepare = { seconds: (Date.now() - t0) / 1000, view: pr, stats: pr.stats, mspt: await call('dev.mspt.trace', { stop: true }) };
-  log(`  prepare: ${JSON.stringify(out.prepare.stats)}; MSPT ${JSON.stringify(out.prepare.mspt.all)}`);
   const p2 = await plan(program, 'generated:64', opts.params);
   out.plan = { planId: p2.planId, ms: p2.ms, budget: p2.budget, irSha: p2.irSha, stages: p2.stages, lots: p2.lots.length };
   const yr = irY(p2);
@@ -438,9 +431,52 @@ function irY(p) {
   return p.claimY ?? [-64, 319];
 }
 
+/**
+ * The prepared base: a copy of the base world, plan (LOADED_ONLY: what prepare will generate), prepare (governed, MSPT traced),
+ * saved as `<base> Prepared` for every configuration-A run (and B, whose world is then explored land).
+ */
+async function prepared(base, program, params = {}) {
+  const name = `${base} Prepared`;
+  const out = {};
+  await fresh('G6A Preparing', base);
+  await tp(0.5, 160, 0.5);
+  await settle(5000);
+  const g0 = await call('dev.chunks.generated');
+  const p1 = await plan(program, 'loaded', params);
+  out.plan = { ms: p1.ms, budget: p1.budget, irSha: p1.irSha, planId: p1.planId };
+  await call('dev.mspt.trace', { start: true });
+  const t0 = Date.now();
+  const pr = await prepare(p1.planId);
+  out.prepare = { seconds: (Date.now() - t0) / 1000, view: pr, stats: pr.stats, mspt: await call('dev.mspt.trace', { stop: true }) };
+  out.generated = (await call('dev.chunks.generated')).terrain - g0.terrain;
+  log(`  prepare: ${JSON.stringify(out.prepare.stats)}; MSPT ${JSON.stringify(out.prepare.mspt.all)}`);
+  // prepare again: nothing left (resumable, idempotent)
+  const again = await prepare(p1.planId);
+  out.again = again.stats;
+  await cmd('/save-all flush');
+  await leaveWorld();
+  copyWorld('G6A Preparing', name);
+  out.world = name;
+  out.diskBytes = du(path.join(SAVES, name));
+  return out;
+}
+
+steps.prepare = async () => {
+  if (!dev) await connect();
+  const r = await prepared('G6A Mega Base', MEGA);
+  const m = r.prepare.mspt.all;
+  check(r.prepare.view.state === 'DONE' && r.prepare.view.chunksMissing === 0, `prepare: ${r.prepare.view.chunksGenerated}/${r.prepare.view.chunksTotal} chunks of claim + 2, `
+    + `${r.prepare.stats.generatedThisRun} generated in ${r.prepare.seconds.toFixed(0)} s (${r.prepare.stats.chunksPerSecond.toFixed(1)} chunks/s); estimate was ${r.plan.budget.chunksToGenerate}`);
+  check(m.max <= 100 && m.over50 <= 0.01 * m.ticks, `prepare: MSPT max ${m.max.toFixed(1)} ms, ${m.over50} of ${m.ticks} ticks over 50 ms (${(100 * m.over50 / Math.max(1, m.ticks)).toFixed(2)}%)`);
+  check(r.again.generatedThisRun === 0, 'prepare: a second prepare finds nothing to generate');
+  ctx.prepared = r;
+  saveCtx();
+  return r;
+};
+
 steps.megaA = async () => {
   if (!dev) await connect();
-  const r = await megaRun('G6A MegaA');
+  const r = await megaRun('G6A MegaA', { base: 'G6A Mega Base Prepared' });
   ctx.megaA = { world: 'G6A MegaA', region: r.region, planId: r.plan.planId, box: r.box };
   saveCtx();
   // the group undo: timed, MSPT, then the diff against the pre-region snap (E-normal)
@@ -456,7 +492,6 @@ steps.megaA = async () => {
   check(b.state.view.state === 'PLACED', `megaA: the region is ${b.state.view.state} (${JSON.stringify(b.state.items)})`);
   check(b.cellsPerSecond >= 15_000, `megaA: realise ${Math.round(b.cellsPerSecond)} cells/s first tile to last (bar 15k; step ${Math.round(b.stepCellsPerSecond)})`);
   check(b.mspt.all.over50 === 0 && b.mspt.all.p99 <= 25, `megaA: MSPT during realise max ${b.mspt.all.max.toFixed(1)} ms, p99 ${b.mspt.all.p99.toFixed(1)} ms, ${b.mspt.all.over50} over 50 ms`);
-  check(b.prepare.mspt.all.over100 === undefined ? b.prepare.mspt.all.max <= 100 : true, `megaA: prepare MSPT max ${b.prepare.mspt.all.max.toFixed(1)} ms, ${b.prepare.mspt.all.over50} over 50 of ${b.prepare.mspt.all.ticks} (${(100 * b.prepare.mspt.all.over50 / Math.max(1, b.prepare.mspt.all.ticks)).toFixed(2)}%)`);
   check(b.generatedDuringRealise.terrain === 0, `megaA: chunks generated during realise ${b.generatedDuringRealise.terrain}`);
   const failed = Object.keys(b.state.failed ?? {});
   check(failed.length === 0, `megaA: 0 failed items (${failed.length}: ${JSON.stringify(b.state.failed).slice(0, 300)})`);
