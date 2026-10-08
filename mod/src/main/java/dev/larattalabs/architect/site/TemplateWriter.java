@@ -191,18 +191,36 @@ final class TemplateWriter {
 						continue;
 					}
 					if (faces == null) {
-						DiscreteVoxelShape shape = new BitSetDiscreteVoxelShape(maxX - minX + 1, maxY - minY + 1, maxZ - minZ + 1);
-						for (int i = placed.nextSetBit(0); i >= 0; i = placed.nextSetBit(i + 1)) {
-							shape.fill(px + cells.off[i * 3] - minX, py + cells.off[i * 3 + 1] - minY, pz + cells.off[i * 3 + 2] - minZ);
+						// the face list of a large template is built off the server thread (5b: a 96x64x96 delta's took 50-140 ms)
+						if (facing == null) {
+							int x0 = minX;
+							int y0 = minY;
+							int z0 = minZ;
+							int sx = maxX - minX + 1;
+							int sy = maxY - minY + 1;
+							int sz = maxZ - minZ + 1;
+							java.util.function.Supplier<int[]> build = () -> {
+								DiscreteVoxelShape shape = new BitSetDiscreteVoxelShape(sx, sy, sz);
+								for (int i = placed.nextSetBit(0); i >= 0; i = placed.nextSetBit(i + 1)) {
+									shape.fill(px + cells.off[i * 3] - x0, py + cells.off[i * 3 + 1] - y0, pz + cells.off[i * 3 + 2] - z0);
+								}
+								it.unimi.dsi.fastutil.ints.IntArrayList f = new it.unimi.dsi.fastutil.ints.IntArrayList();
+								shape.forAllFaces((d, x, y, z) -> {
+									f.add(d.ordinal());
+									f.add(x);
+									f.add(y);
+									f.add(z);
+								});
+								return f.toIntArray();
+							};
+							facing = placed.cardinality() > ASYNC_FACES ? java.util.concurrent.CompletableFuture.supplyAsync(build)
+								: java.util.concurrent.CompletableFuture.completedFuture(build.get());
 						}
-						it.unimi.dsi.fastutil.ints.IntArrayList f = new it.unimi.dsi.fastutil.ints.IntArrayList();
-						shape.forAllFaces((d, x, y, z) -> {
-							f.add(d.ordinal());
-							f.add(x);
-							f.add(y);
-							f.add(z);
-						});
-						faces = f.toIntArray();
+						if (!facing.isDone()) {
+							return Math.max(handled, 1);
+						}
+						faces = facing.join();
+						facing = null;
 						edgeCursor = 0;
 					}
 					if (edgeCursor < faces.length) {
@@ -234,6 +252,9 @@ final class TemplateWriter {
 	}
 
 	private int @Nullable [] faces;
+	private java.util.concurrent.@Nullable CompletableFuture<int[]> facing;
+	/** Above this many placed cells the edge's face list is built on a worker thread. */
+	static final int ASYNC_FACES = 50_000;
 	private int edgeCursor;
 	private final BlockPos.MutableBlockPos edgeA = new BlockPos.MutableBlockPos();
 	private final BlockPos.MutableBlockPos edgeB = new BlockPos.MutableBlockPos();
