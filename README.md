@@ -158,6 +158,19 @@ added on average $1.06 and 3 minutes to a $2.02 design. A blind Opus judge prefe
 - **Import…** lists `.nbt` files in `architect/imports/`, `architect/exports/` and this world's structure-block
   saves. An import is checked and gets previews. It has no source code, so it has no variants.
 
+### Versions, updates and polish
+
+- **Versions.** An entry keeps its versions (`versions/<n>/` inside it, the id stays the same). The Library's
+  **Compare…** shows what changed per named part, and **Revert to v(n-1)** makes the old version the new head.
+- **Update a placed building.** A site placed from an older version shows **Update…** in the Placed view, with a ghost
+  of the change: green for added blocks, red frames for removed ones, amber for changed ones and a yellow frame for
+  blocks you changed yourself, which the update keeps by default. Only the cells that differ are written, so chests,
+  open doors and your own edits elsewhere stay as they are. **History** lists the versions; a creative revert is an exact
+  undo, Remove still restores the terrain exactly, and in survival an update (or "Rebuild as v1") is a construction job
+  fed from a new crate, with refunds for what it takes away.
+- **Polish… (experimental).** A critic names one problem with one part, and the designer edits only that part, as a new
+  version. In the 5b evaluation the critic did not accept the edits, so polish rarely produces a new version yet.
+
 <br>
 
 ## Placement
@@ -507,7 +520,8 @@ Architect is early.
 - **Matching sets:** a style bible, and several buildings designed in that one style in parallel.
 - **A massing preview:** a cheap, coarse ghost to approve before paying for the detailed design.
 - **A better critique loop:** the 5a loop runs and is measured by an eval harness (`tools/eval.mjs`), but a blind judge did not
-  yet prefer its revisions clearly.
+  yet prefer its revisions clearly. 5b's targeted polish ran into the same critic: it did not accept visible fixes, so
+  the critic itself is next.
 
 <br>
 

@@ -181,6 +181,14 @@ usage hold, re-skin, open type). Caveats:
 - Real runs went over the WebSocket; the Java path is sim-only.
 - The bible set is cluttered and less legible, which is 5a's (critique loop) job.
 
+**Phase 5b status: BUILT, GATE PENDING VERIFICATION (2026-10-08; branch `phase/5b`, API 1.7.0 / mod 0.10.0;
+`artifacts/gate5b/REPORT.md`, local).** Delta apply: every $0 gate item passes (in-game exactness: chains E1 273/273, edits,
+layers 6/6 orders, crash D1-D8 + save variants + K5-K7, history, ghost; survival items in = out; the village delta batch at
+MSPT 11 ms; the size cap 589k cells with no tick over 50 ms; F1/F2; the 4d, 4e, sim and 1.6.0/1.5.0-jar regressions).
+Polish: built and frozen, but the eval's smoke tier stopped on its stop rule (4 of 4 briefs accepted no step: 5a's critic
+does not mark a targeted issue resolved even when the fix is visible), so G1/G2 are not shown; spend $9.17 of the $80
+cap. Polish's label (experimental / dev flag) is Noah's call.
+
 **Phase 5a status: SHIPPED AS RE-SCOPED 2026-10-08** (Noah's decision: the loop's quality gates G1/G2 failed, so the loop ships
 **experimental**, off by default and labelled so in the UI and README; the harness, report critiques, bible format 2, job.images,
 API 1.6.0 and the migration tests ship as built, since G3/G4 and every regression passed. Improving the loop (a critic calibrated
