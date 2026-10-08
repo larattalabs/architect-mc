@@ -21,7 +21,8 @@ import org.jspecify.annotations.Nullable;
  * still holds {@code after} when it is the same block, every property is equal except the volatile ones, it has a block
  * entity exactly when {@code after} does, and a container is empty when {@code after}'s was empty. For leaves the volatile
  * {@code distance} (and {@code waterlogged}) leave only the block and {@code persistent}, which is AgentCraft's
- * {@code LeafGuard.stillHeld}.
+ * {@code LeafGuard.stillHeld}. Since phase 6a a fluid in air the entry cleared counts as still the entry's (it flowed in after the
+ * write: the undo puts the cell back and the flow recedes).
  */
 public final class StillOurs {
 	/** Volatile on every block. */
@@ -54,6 +55,10 @@ public final class StillOurs {
 
 	/** Whether {@code now} (with its block entity data {@code nowNbt}, null without one) still holds {@code after}. */
 	public static boolean holds(BlockState now, @Nullable CompoundTag nowNbt, BlockState after, @Nullable CompoundTag afterNbt) {
+		if (after.isAir() && (now.getBlock() == net.minecraft.world.level.block.Blocks.WATER || now.getBlock() == net.minecraft.world.level.block.Blocks.LAVA)) {
+			// phase 6a: water or lava that flowed into air an entry cleared is the entry's doing, not a player's: still ours
+			return true;
+		}
 		if (now.getBlock() != after.getBlock()) {
 			return false;
 		}
