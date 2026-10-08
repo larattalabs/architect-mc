@@ -1,0 +1,24 @@
+{
+  "id": "woodcutters_cabin",
+  "n": 1,
+  "title": "woodcutter's cabin",
+  "size": "S",
+  "setting": "A woodcutter's cabin in a snowy taiga forest: a chopping block and a log pile by the door.",
+  "model": "claude-sonnet-5-5",
+  "effort": "high",
+  "request": {
+    "type": "cabin",
+    "style": "rustic",
+    "features": [
+      "porch",
+      "chimney"
+    ],
+    "maxSize": {
+      "x": 13,
+      "y": 10,
+      "z": 13
+    },
+    "name": "Woodcutter's cabin",
+    "notes": "A woodcutter's cabin in a snowy taiga forest: a chopping block and a log pile by the door."
+  }
+}

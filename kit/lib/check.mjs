@@ -19,7 +19,7 @@ import {
   BLOCKS, collisionOf, normalize, emissionOf, opticsOf, voxelsOf, faceMask, lightCost, isConductor, isFloor,
   isPassable, isClimbable, supportOf, topOf,
 } from './blocks.mjs';
-import { BUILDING_TYPES, DEFAULT_PROFILE, PORT_KINDS, TYPE_RE, isPresetType, parseProfile, resolvePalette, stoneFamilyOf, woodFamilyOf } from './kit.mjs';
+import { BUILDING_TYPES, CORE_ROLES, DEFAULT_PROFILE, fullBlockOf, PORT_KINDS, TYPE_RE, isPresetType, parseProfile, resolvePalette, stoneFamilyOf, woodFamilyOf } from './kit.mjs';
 import { checkConformance } from './massing.mjs';
 
 const DIRS6 = [['east', 1, 0, 0], ['west', -1, 0, 0], ['up', 0, 1, 0], ['down', 0, -1, 0], ['south', 0, 0, 1], ['north', 0, 0, -1]];
@@ -232,7 +232,7 @@ export function checkStructure(sidecar, structure, opts = {}) {
   if (!Array.isArray(structure.blocks)) err('structure: blocks missing');
   if (!Array.isArray(structure.entities)) err('structure: entities missing (must be an empty list)');
   else if (structure.entities.length) (imported ? warn : err)(`structure: entities must be empty (${structure.entities.length} found)`);
-  if (errors.length) return { ok: false, errors, warnings };
+  if (errors.length) return { ok: false, errors, warnings, metrics: null };
 
   // ---- palette: vanilla blocks only, every property explicit and valid
   let defaulted = 0;
@@ -357,7 +357,7 @@ export function checkStructure(sidecar, structure, opts = {}) {
       }
     }
   }
-  if (errors.length) return { ok: false, errors, warnings };
+  if (errors.length) return { ok: false, errors, warnings, metrics: null };
 
   const g = makeGrid(cells, size, sidecar.groundY);
 
@@ -406,6 +406,11 @@ export function checkStructure(sidecar, structure, opts = {}) {
     try { warnings.push(...rule(ctx)); } catch (e) { warnings.push(`checker: rule ${rule.name} failed: ${e.message}`); }
   }
 
+  // ---- metrics (phase 5a) and, against a bible's restraint, the `restraint:` warnings
+  let metrics = null;
+  try { metrics = computeMetrics(g, sidecar, outside); } catch (e) { warn(`checker: metrics failed: ${e.message}`); }
+  if (opts.restraint) warnings.push(...restraintWarnings(metrics, opts.restraint));
+
   // ---- massing conformance (phase 4c): the size cap is an error, the rest warnings
   let conformance;
   if (opts.massing !== undefined) {
@@ -415,7 +420,7 @@ export function checkStructure(sidecar, structure, opts = {}) {
     for (const m of c.issues) warn(`massing: ${m}`);
   }
 
-  return { ok: errors.length === 0, errors, warnings, ...(conformance ? { conformance } : {}) };
+  return { ok: errors.length === 0, errors, warnings, metrics, ...(conformance ? { conformance } : {}) };
 }
 
 /** Check a Blueprint object (serialised exactly as write.mjs would). */
@@ -429,8 +434,8 @@ export function checkBlueprint(bp, opts) {
 export function checkFiles(nbtPath, jsonPath, opts) {
   let structure;
   let sidecar;
-  try { structure = plain(parse(fs.readFileSync(nbtPath))); } catch (e) { return { ok: false, errors: [`${nbtPath}: cannot parse NBT: ${e.message}`], warnings: [] }; }
-  try { sidecar = JSON.parse(fs.readFileSync(jsonPath, 'utf8')); } catch (e) { return { ok: false, errors: [`${jsonPath}: cannot parse JSON: ${e.message}`], warnings: [] }; }
+  try { structure = plain(parse(fs.readFileSync(nbtPath))); } catch (e) { return { ok: false, errors: [`${nbtPath}: cannot parse NBT: ${e.message}`], warnings: [], metrics: null }; }
+  try { sidecar = JSON.parse(fs.readFileSync(jsonPath, 'utf8')); } catch (e) { return { ok: false, errors: [`${jsonPath}: cannot parse JSON: ${e.message}`], warnings: [], metrics: null }; }
   return checkStructure(sidecar, structure, opts);
 }
 
@@ -671,15 +676,7 @@ function paletteFamilies({ g, sidecar }) {
   if (!sidecar.palette) return [];
   let p;
   try { p = resolvePalette(sidecar.palette); } catch (e) { return [`palette: the sidecar's palette is invalid: ${e.message}`]; }
-  const woods = new Set();
-  const stones = new Set();
-  for (const v of Object.values(p)) {
-    if (typeof v !== 'string' || !v.startsWith('minecraft:')) continue;
-    const wf = woodFamilyOf(v);
-    if (wf) woods.add(wf);
-    const sf = stoneFamilyOf(v);
-    if (sf) stones.add(sf);
-  }
+  const { woods, stones } = paletteFamilySets(p);
   const off = new Map(); // "wood 'oak'" -> { blocks, n }
   for (const c of g.cells.values()) {
     const wf = woodFamilyOf(c.name);
@@ -811,4 +808,325 @@ function massingEntrance({ g, sidecar, anchors, outside, isMassing }) {
   return out;
 }
 
-const NEW_RULES = [floating, reachability, enclosure, profile, paletteFamilies, survival, parts, massingEntrance];
+const NEW_RULES = [floating, reachability, enclosure, profile, paletteFamilies, survival, parts, massingEntrance, attach, facing];
+
+// ==================================================================== phase 5a: attach and facing rules (warnings)
+// Ported from Steward's minecraft-structure-design skill (scripts/attach-lint.mjs), owned by Architect from phase 5a;
+// changes are reported to Steward. "Solid" uses the kit's block geometry instead of the skill's name list.
+
+const familyOfCell = (c) => (c ? BLOCKS[c.name]?.family : undefined);
+const shortId = (c) => c.name.replace('minecraft:', '');
+/** Families that never carry a wall-mounted block, whatever their collision (they open, or are thin). */
+const NOT_STURDY = new Set(['door', 'trapdoor', 'fence_gate']);
+
+/**
+ * The face of cell (x,y,z) on side `dir` (the side that touches the attached block) is sturdy: terrain below the ground
+ * row, a full block (not a door, trapdoor or gate), or a stair / slab whose face on that side is full.
+ */
+export function sturdyFace(g, x, y, z, dir) {
+  const c = g.at(x, y, z);
+  if (!c) return g.terrain(x, y, z) || (!g.inBox(x, y, z) && y < g.groundY);
+  const f = familyOfCell(c);
+  if (NOT_STURDY.has(f)) return false;
+  if (f === 'stairs' || f === 'slab') return faceMask(voxelsOf(c), dir) === 15;
+  return collisionOf(c) === 'full';
+}
+
+/** A cell that closes a passage or backs a bed: terrain, a full block (not a door / trapdoor / gate), or a thin block (pane, bars, fence, wall). */
+function wallish(g, x, y, z) {
+  const c = g.at(x, y, z);
+  if (!c) return g.terrain(x, y, z) || (!g.inBox(x, y, z) && y < g.groundY);
+  if (NOT_STURDY.has(familyOfCell(c))) return false;
+  const k = collisionOf(c);
+  return k === 'full' || k === 'thin';
+}
+
+/** What a hanging lantern can hang from besides a sturdy bottom face: chains, fences, walls, bars and panes, rods. */
+const HANG_FAMILIES = new Set(['chain', 'fence', 'wall', 'pane', 'rod', 'scaffolding']);
+const WALL_MOUNTED = new Set(['ladder', 'wall_torch', 'wall_sign', 'wall_banner']);
+const line = (n, what, list) => `${n} ${what}, e.g. ${sample(list)}`;
+
+/**
+ * attach (5a, warnings): ladders, wall torches (every kind), wall signs and wall banners have a sturdy block behind them;
+ * a door's upper half stands on its lower half; both halves of every bed; hanging lanterns hang from something.
+ * A door's lower half without its upper half, and a door written open, are already errors (doorCheck), so attach does
+ * not repeat them.
+ */
+function attach({ g, isMassing }) {
+  if (isMassing) return [];
+  const support = [];
+  const doorHalf = [];
+  const bed = [];
+  const lantern = [];
+  for (const [k, c] of g.cells) {
+    const f = familyOfCell(c);
+    if (!f) continue;
+    const [x, y, z] = unfmt(k);
+    const p = c.props ?? {};
+    if (WALL_MOUNTED.has(f) && H_VEC[p.facing]) {
+      const [dx, dz] = H_VEC[p.facing];
+      if (!sturdyFace(g, x - dx, y, z - dz, p.facing)) support.push(`${shortId(c)} at ${k} facing ${p.facing} (behind it: ${g.at(x - dx, y, z - dz) ? shortId(g.at(x - dx, y, z - dz)) : 'nothing'} at ${fmt(x - dx, y, z - dz)})`);
+    } else if (f === 'door' && p.half === 'upper') {
+      const lo = g.at(x, y - 1, z);
+      if (!lo || lo.name !== c.name || lo.props.half !== 'lower') doorHalf.push(`${shortId(c)} at ${k}`);
+    } else if (f === 'bed' && H_VEC[p.facing]) {
+      const [dx, dz] = H_VEC[p.facing];
+      const s = p.part === 'head' ? -1 : 1;
+      const o = g.at(x + s * dx, y, z + s * dz);
+      const want = p.part === 'head' ? 'foot' : 'head';
+      if (!o || o.name !== c.name || o.props.part !== want || o.props.facing !== p.facing) bed.push(`${shortId(c)} ${p.part} at ${k} (no ${want} at ${fmt(x + s * dx, y, z + s * dz)})`);
+    } else if (f === 'lantern' && p.hanging === 'true') {
+      const up = g.at(x, y + 1, z);
+      if (!sturdyFace(g, x, y + 1, z, 'down') && !HANG_FAMILIES.has(familyOfCell(up))) lantern.push(`${shortId(c)} at ${k} (above: ${up ? shortId(up) : 'nothing'})`);
+    }
+  }
+  const out = [];
+  if (support.length) out.push(`attach: ${line(support.length, 'wall-mounted block(s) (ladders, wall torches, wall signs, wall banners) with no solid block behind them', support)}`);
+  if (doorHalf.length) out.push(`attach: ${line(doorHalf.length, 'door upper half(s) with no lower half below', doorHalf)}`);
+  if (bed.length) out.push(`attach: ${line(bed.length, 'bed half(s) without the other half', bed)}`);
+  if (lantern.length) out.push(`attach: ${line(lantern.length, 'hanging lantern(s) with nothing above to hang from (a solid block, chain, bars or fence)', lantern)}`);
+  return out;
+}
+
+/** Stairs that count for the slope rule: bottom half, straight. */
+const slopeStair = (c) => !!c && familyOfCell(c) === 'stairs' && c.props.half === 'bottom' && (c.props.shape ?? 'straight') === 'straight';
+/** A slope run is at least this many stairs rising one row per horizontal step in one direction. */
+export const SLOPE_RUN_MIN = 3;
+
+/**
+ * facing (5a, warnings):
+ * - doors: the cells in front of and behind a door (along its facing, at both halves) are not solid. A vanilla door's leaf
+ *   never leaves its own cell, so "opens into a wall" means the door is turned 90 degrees in its wall (its front and back
+ *   are wall blocks) or opens straight onto a block;
+ * - beds: the cell beyond the head (head + facing) is a wall (a full or thin block);
+ * - slopes: a bottom-half straight stair in a run of at least SLOPE_RUN_MIN stairs that rise one row per step in one
+ *   horizontal direction (a roof slope or a staircase), with free space above it, does not face straight down-slope
+ *   (a stair faces up-slope, the direction you climb it). Only the reversal is flagged: a stair facing across a run is
+ *   usually part of a hip or a crooked eave. Top-half stairs (linings, eaves) and corner shapes are skipped.
+ */
+function facing({ g, isMassing }) {
+  if (isMassing) return [];
+  const doors = [];
+  const beds = [];
+  const slopes = [];
+  for (const [k, c] of g.cells) {
+    const f = familyOfCell(c);
+    const p = c.props ?? {};
+    if (!H_VEC[p.facing]) continue;
+    const [x, y, z] = unfmt(k);
+    const [dx, dz] = H_VEC[p.facing];
+    if (f === 'door' && p.half === 'lower') {
+      const hit = [];
+      for (const s of [1, -1]) for (const dy of [0, 1]) {
+        const nx = x + s * dx; const ny = y + dy; const nz = z + s * dz;
+        if (wallish(g, nx, ny, nz)) hit.push(`${s === 1 ? 'front' : 'back'} ${fmt(nx, ny, nz)} is ${g.at(nx, ny, nz) ? shortId(g.at(nx, ny, nz)) : 'terrain'}`);
+      }
+      if (hit.length) doors.push(`${shortId(c)} at ${k} facing ${p.facing}: ${hit[0]}`);
+    } else if (f === 'bed' && p.part === 'head') {
+      if (!wallish(g, x + dx, y, z + dz)) beds.push(`${shortId(c)} at ${k} facing ${p.facing} (beyond the head: ${g.at(x + dx, y, z + dz) ? shortId(g.at(x + dx, y, z + dz)) : 'air'})`);
+    } else if (slopeStair(c) && g.free(x, y + 1, z)) {
+      const rising = [];
+      for (const [d, [ex, ez]] of Object.entries(H_VEC)) {
+        let n = 1;
+        for (let i = 1; slopeStair(g.at(x + i * ex, y + i, z + i * ez)); i++) n++;
+        for (let i = 1; slopeStair(g.at(x - i * ex, y - i, z - i * ez)); i++) n++;
+        if (n >= SLOPE_RUN_MIN) rising.push(d);
+      }
+      // only the reversal (facing straight down-slope): a stair facing across a run is usually a hip or a crooked eave
+      if (rising.length && !rising.includes(p.facing) && rising.includes(OPP[p.facing])) slopes.push(`${shortId(c)} at ${k} facing ${p.facing} on a slope rising ${OPP[p.facing]}`);
+    }
+  }
+  const out = [];
+  if (doors.length) out.push(`facing: ${line(doors.length, 'door(s) open into a wall: the cell in front of or behind the door is solid (a door turned 90 degrees in its wall, or one opening onto a block)', doors)}`);
+  if (beds.length) out.push(`facing: ${line(beds.length, "bed(s) with the head not against a wall (the cell beyond the head is open)", beds)}`);
+  if (slopes.length) out.push(`facing: ${line(slopes.length, 'stair(s) on a slope facing down-slope (a slope stair faces up-slope, the direction you climb it)', slopes)}`);
+  return out;
+}
+
+
+// ==================================================================== phase 5a: metrics and restraint
+//
+// metrics (docs/CONTRACT.md "Bible-set clutter"; numbers, fractions 0..1 rounded to 3 decimals):
+// - shell cells: non-air, non-liquid cells 6-adjacent to a cell of the outside flood (outsideFlood: what a player sees from
+//   outside). A shell cell is visible from side s (north, south, east, west) when its neighbour on that side is outside.
+// - accentShare: among shell cells, without glass, panes, doors, trapdoors and light sources, the share that are accents:
+//   blocks of the palette's accent fields (accentPlanks, accentLog, accentStairs, accentSlab, accentFence, and the
+//   bible role `accent`) plus blocks in no palette field at all (decor: moss, wool, banners, a bible's extra roles such
+//   as vines or moss carpet). A block that is also in a main field (e.g. the roof stairs when the accent wood is the
+//   roof wood) counts as main, and so does a stairs / slab / wall of a main block (fullBlockOf). Without a recorded palette: the 4 most-used material families on the shell (a wood, a
+//   stone family, else the block without its stairs/slab/wall suffix) are main, everything else counts.
+// - detailNoise: per side, over pairs of shell cells visible from that side that are neighbours in the facade plane
+//   (along the facade horizontally, or one above the other), the share of pairs whose block ids differ; the mean over the
+//   4 sides weighted by pair count.
+// - windowsPerFacade: per side, the window openings visible from that side: 6-connected groups of glass / glass-pane
+//   cells among the shell cells visible from that side. windowsMin: the smallest of the 4.
+// - paletteAdherence: among all cells whose block has a wood or stone family (lib/kit.mjs woodFamilyOf / stoneFamilyOf),
+//   the share whose family is one of the palette's (as the `palette` warning computes them). 1 without a recorded
+//   palette (or without such cells).
+// - parts: named parts; cellsOutsideParts: written cells (air included, as the `parts` warning counts) outside every
+//   part; blocks: non-air cells; topBlocks: the 12 most used non-air block ids (no minecraft: prefix) with their counts,
+//   by count then id.
+
+const CORE_ROLES_SET = new Set(CORE_ROLES);
+const SIDES = ['north', 'south', 'east', 'west'];
+const ACCENT_FIELDS = new Set(['accentPlanks', 'accentLog', 'accentStairs', 'accentSlab', 'accentFence']);
+const round3 = (v) => Math.round(v * 1000) / 1000;
+
+/** The wood and stone families of a palette (its block-valued fields; the `palette` warning and paletteAdherence share it). */
+export function paletteFamilySets(p) {
+  const woods = new Set();
+  const stones = new Set();
+  for (const v of Object.values(p)) {
+    if (typeof v !== 'string' || !v.startsWith('minecraft:')) continue;
+    const wf = woodFamilyOf(v);
+    if (wf) woods.add(wf);
+    const sf = stoneFamilyOf(v);
+    if (sf) stones.add(sf);
+  }
+  return { woods, stones };
+}
+
+/** The sidecar's recorded palette, resolved, or null (none recorded, or invalid). */
+function recordedPalette(sidecar) {
+  if (!sidecar.palette) return null;
+  try { return resolvePalette(sidecar.palette); } catch { return null; }
+}
+
+/** A block's material family for the no-palette accent rule. */
+function materialOf(name) {
+  const wf = woodFamilyOf(name);
+  if (wf) return `wood:${wf}`;
+  const sf = stoneFamilyOf(name);
+  if (sf) return `stone:${sf}`;
+  return name.replace(/_(stairs|slab|wall|fence|fence_gate|pane)$/, '');
+}
+
+const isGlass = (c) => /glass/.test(c.name);
+
+/**
+ * Detail-noise ceilings per bible `restraint.detailDensity`. FROZEN 2026-10-06 after the 5a smoke run: the cluttered 4b
+ * Mosswater set measured 0.445-0.497, the kit examples 0.18-0.38 (every corner and preset), the smoke tier's round-0
+ * designs (no bible) 0.347-0.416. Moderate sits between the clean designs and the cluttered set.
+ */
+export const DETAIL_NOISE_MAX = Object.freeze({ sparse: 0.32, moderate: 0.42, rich: 0.5 });
+
+/** The metrics of a grid (see above). `outside`: outsideFlood(g). */
+export function computeMetrics(g, sidecar, outside = outsideFlood(g)) {
+  const notAir = (c) => !!c && BLOCKS[c.name]?.family !== 'air';
+  const shell = new Map(); // key -> { c, sides: Set }
+  const counts = new Map();
+  let blocks = 0;
+  for (const [k, c] of g.cells) {
+    if (!notAir(c)) continue;
+    blocks++;
+    const id = shortId(c);
+    counts.set(id, (counts.get(id) ?? 0) + 1);
+    const [x, y, z] = unfmt(k);
+    let exposed = false;
+    const sides = new Set();
+    for (const [d, dx, dy, dz] of DIRS6) {
+      if (!outside.has(fmt(x + dx, y + dy, z + dz))) continue;
+      exposed = true;
+      if (H_VEC[d]) sides.add(d);
+    }
+    const fam = familyOfCell(c);
+    if (exposed && fam !== 'liquid' && fam !== 'fire') shell.set(k, { c, sides });
+  }
+  // accentShare
+  const p = recordedPalette(sidecar);
+  let isAccent;
+  if (p) {
+    const main = new Set();
+    const accent = new Set();
+    for (const [f, v] of Object.entries(p)) if (typeof v === 'string' && v.startsWith('minecraft:')) (ACCENT_FIELDS.has(f) ? accent : main).add(v);
+    for (const [r, v] of Object.entries(p.roles ?? {})) if (CORE_ROLES_SET.has(r)) (r === 'accent' ? accent : main).add(v);
+    isAccent = (name) => !main.has(name) && !main.has(fullBlockOf(name));
+  }
+  const counted = [...shell.values()].filter(({ c }) => {
+    const f = familyOfCell(c);
+    return !isGlass(c) && f !== 'pane' && f !== 'door' && f !== 'trapdoor' && !(emissionOf(c) > 0);
+  });
+  if (!p) {
+    const fam = new Map();
+    for (const { c } of counted) { const m = materialOf(c.name); fam.set(m, (fam.get(m) ?? 0) + 1); }
+    const main = new Set([...fam].sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1)).slice(0, 4).map(([m]) => m));
+    isAccent = (name) => !main.has(materialOf(name));
+  }
+  const accentN = counted.filter(({ c }) => isAccent(c.name)).length;
+  // detailNoise and windows, per side
+  let pairs = 0;
+  let differ = 0;
+  const windowsPerFacade = {};
+  for (const s of SIDES) {
+    const vis = (x, y, z) => shell.get(fmt(x, y, z))?.sides.has(s) ? shell.get(fmt(x, y, z)).c : null;
+    const along = s === 'north' || s === 'south' ? [1, 0, 0] : [0, 0, 1];
+    const glass = new Set();
+    for (const [k, { c, sides }] of shell) {
+      if (!sides.has(s)) continue;
+      const [x, y, z] = unfmt(k);
+      for (const [dx, dy, dz] of [along, [0, 1, 0]]) {
+        const o = vis(x + dx, y + dy, z + dz);
+        if (!o) continue;
+        pairs++;
+        if (o.name !== c.name) differ++;
+      }
+      if (isGlass(c)) glass.add(k);
+    }
+    let groups = 0;
+    const seen = new Set();
+    for (const k of glass) {
+      if (seen.has(k)) continue;
+      groups++;
+      const q = [k];
+      seen.add(k);
+      while (q.length) {
+        const [x, y, z] = unfmt(q.pop());
+        for (const [, dx, dy, dz] of DIRS6) {
+          const n = fmt(x + dx, y + dy, z + dz);
+          if (glass.has(n) && !seen.has(n)) { seen.add(n); q.push(n); }
+        }
+      }
+    }
+    windowsPerFacade[s] = groups;
+  }
+  // paletteAdherence
+  let fam = 0;
+  let inPal = 0;
+  if (p) {
+    const { woods, stones } = paletteFamilySets(p);
+    for (const c of g.cells.values()) {
+      const wf = woodFamilyOf(c.name);
+      const sf = stoneFamilyOf(c.name);
+      if (!wf && !sf) continue;
+      fam++;
+      if (wf ? woods.has(wf) : stones.has(sf)) inPal++;
+    }
+  }
+  const parts = sidecar.parts && typeof sidecar.parts === 'object' && !Array.isArray(sidecar.parts) ? sidecar.parts : {};
+  const inParts = Object.values(parts).reduce((a, v) => a + (Number.isInteger(v?.cells) ? v.cells : 0), 0);
+  return {
+    accentShare: counted.length ? round3(accentN / counted.length) : 0,
+    detailNoise: pairs ? round3(differ / pairs) : 0,
+    windowsPerFacade,
+    windowsMin: Math.min(...SIDES.map((s) => windowsPerFacade[s])),
+    paletteAdherence: p && fam ? round3(inPal / fam) : 1,
+    parts: Object.keys(parts).length,
+    cellsOutsideParts: Math.max(0, g.cells.size - inParts),
+    blocks,
+    topBlocks: [...counts].sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1)).slice(0, 12),
+  };
+}
+
+/** The `restraint:` warnings of a metrics object against an effective restraint (lib/bible.mjs restraintOf). */
+export function restraintWarnings(metrics, restraint) {
+  if (!metrics || !restraint) return [];
+  const out = [];
+  if (metrics.accentShare > restraint.accentShareMax) out.push(`restraint: accentShare ${metrics.accentShare} is over the bible's accentShareMax ${restraint.accentShareMax} (too many accent and decor blocks on the outside: remove scattered accents before adding anything)`);
+  if (metrics.windowsMin < restraint.windowsPerFacadeMin) {
+    const low = SIDES.filter((s) => metrics.windowsPerFacade[s] < restraint.windowsPerFacadeMin);
+    out.push(`restraint: ${low.map((s) => `${s} ${metrics.windowsPerFacade[s]}`).join(', ')} window(s), under the bible's windowsPerFacadeMin ${restraint.windowsPerFacadeMin} (readable glass openings on every side)`);
+  }
+  const max = DETAIL_NOISE_MAX[restraint.detailDensity];
+  if (max !== undefined && metrics.detailNoise > max) out.push(`restraint: detailNoise ${metrics.detailNoise} is over ${max}, the most the bible's detailDensity '${restraint.detailDensity}' allows (neighbouring facade blocks change too often: use larger runs of one material)`);
+  return out;
+}

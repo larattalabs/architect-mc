@@ -1,0 +1,24 @@
+{
+  "id": "coaching_inn",
+  "n": 5,
+  "title": "coaching inn",
+  "size": "L",
+  "setting": "A coaching inn on a plains road: a common room, guest rooms upstairs, a stable yard for coaches.",
+  "model": "claude-sonnet-5-5",
+  "effort": "high",
+  "request": {
+    "type": "tavern",
+    "style": "timber-framed",
+    "features": [
+      "chimney",
+      "stable"
+    ],
+    "maxSize": {
+      "x": 37,
+      "y": 22,
+      "z": 41
+    },
+    "name": "Coaching inn",
+    "notes": "A coaching inn on a plains road: a common room, guest rooms upstairs, a stable yard for coaches."
+  }
+}

@@ -18,7 +18,7 @@ import path from 'node:path';
 import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk';
 import { BlobError } from '../blobs.js';
 import { StreamMapper } from '../claude/stream.js';
-import { JOB_STATUS_TOOL, MAX_RESULT_BYTES, type Cost, type Job, type JobSpec, type JobTool } from '../protocol.js';
+import { JOB_STATUS_TOOL, MAX_IMAGE_BYTES, MAX_RESULT_BYTES, type Cost, type Job, type JobSpec, type JobTool } from '../protocol.js';
 import type { ClientHandle } from '../server.js';
 import type { Sidecar } from '../sidecar.js';
 import { ClientError } from '../sidecar.js';
@@ -145,14 +145,79 @@ export class JobRunner {
     if (!this.driver) throw new ClientError('jobs are not running yet');
     const auth = this.sc.status();
     if (auth.auth === 'failed' || auth.auth === 'missing') throw new ClientError(`Claude is not available: ${auth.message ?? `auth ${auth.auth}`}`);
-    const missing = this.sc.blobs.missing(spec.blobs ?? []);
+    const missing = this.sc.blobs.missing([...(spec.blobs ?? []), ...(spec.images ?? []).map((i) => i.blob)]);
     if (missing) throw new ClientError(missing);
+    // (5a) images: PNG or JPEG blobs of at most 5 MB, checked now (refused at once otherwise)
+    const images = (spec.images ?? []).map((im) => {
+      let buf: Buffer;
+      try {
+        buf = this.sc.blobs.read(im.blob);
+      } catch (e) {
+        throw new ClientError(`image ${im.blob}: ${(e as Error).message}`);
+      }
+      const mediaType = imageType(buf);
+      if (!mediaType) throw new ClientError(`image ${im.blob} is not a PNG or JPEG`);
+      if (buf.length > MAX_IMAGE_BYTES) throw new ClientError(`image ${im.blob} is ${buf.length} bytes, more than ${MAX_IMAGE_BYTES}`);
+      return { buf, label: im.label, mediaType };
+    });
     const j = this.book.create(spec, client?.name ?? 'client');
+    if (images.length) this.storeImages(j.id, images);
+    // (5a) the sim backend only: a scripted structured answer in ext `architect:simAnswer` (the eval's sim tier judge)
+    const sim = spec.ext?.['architect:simAnswer'];
+    if (sim !== undefined && this.driver.name === 'sim') this.book.work(j.id)!.simAnswer = sim;
     this.log.info(`job ${j.id} (${spec.kind}${spec.owner ? `, ${spec.owner}` : ''}${spec.tag ? `, ${spec.tag}` : ''}) requested`);
     this.starterClients.set(j.id, client);
     this.enqueue(j.id, spec.kind);
     this.kick();
     return j;
+  }
+
+  /**
+   * (5a) A job the sidecar runs for itself (the critic, the bible sheet critique): no client, the images are files
+   * (copied into the job's scratch dir now), and on the sim backend an optional scripted answer.
+   */
+  runInternal(spec: JobSpec, opts: { images?: Array<{ file: string; label: string }>; simAnswer?: unknown } = {}): Job {
+    if (!this.driver) throw new Error('jobs are not running yet');
+    const images = (opts.images ?? []).map((im) => {
+      const buf = fs.readFileSync(im.file);
+      return { buf, label: im.label, mediaType: imageType(buf) ?? ('image/png' as const) };
+    });
+    const j = this.book.create(spec, 'sidecar');
+    if (images.length) this.storeImages(j.id, images);
+    const w = this.book.work(j.id)!;
+    if (opts.simAnswer !== undefined) w.simAnswer = opts.simAnswer;
+    this.sc.store.markDirty();
+    this.log.info(`job ${j.id} (${spec.kind}, ${spec.owner ?? 'sidecar'}${spec.tag ? `, ${spec.tag}` : ''}${images.length ? `, ${images.length} image${images.length === 1 ? '' : 's'}` : ''}) started by the sidecar`);
+    this.enqueue(j.id, spec.kind);
+    this.kick();
+    return j;
+  }
+
+  /** (5a) Resolves when the job is final (done, failed or cancelled). */
+  waitFinal(id: string): Promise<Job> {
+    return new Promise<Job>((resolve) => {
+      const now = this.book.get(id);
+      if (!now || isFinalJob(now)) return resolve(now ?? ({ id, status: 'failed', error: 'no such job' } as unknown as Job));
+      const off = this.sc.subscribe((m) => {
+        if (m.type === 'job.upsert' && m.job.id === id && isFinalJob(m.job)) {
+          off();
+          resolve(this.book.get(id) ?? m.job);
+        }
+      });
+    });
+  }
+
+  /** (5a) Write a job's images into <scratch>/images/ and record them in its work. */
+  private storeImages(id: string, images: Array<{ buf: Buffer; label: string; mediaType: 'image/png' | 'image/jpeg' }>): void {
+    const dir = path.join(this.book.scratchDir(id), 'images');
+    fs.mkdirSync(dir, { recursive: true });
+    const w = this.book.work(id)!;
+    w.images = images.map((im, i) => {
+      const file = path.join(dir, `${String(i + 1).padStart(2, '0')}.${im.mediaType === 'image/png' ? 'png' : 'jpg'}`);
+      fs.writeFileSync(file, im.buf);
+      return { file, label: im.label, mediaType: im.mediaType };
+    });
+    this.sc.store.markDirty();
   }
 
   /** the connection that sent job.run, while it lasts */
@@ -566,6 +631,8 @@ export class JobRunner {
           resume,
           resumeAnswers: answers && resume ? answers : undefined,
           abort: r.abort,
+          ...(w.images?.length ? { images: w.images } : {}),
+          ...(w.simAnswer !== undefined && this.driver!.name === 'sim' ? { simAnswer: w.simAnswer } : {}),
         });
         for await (const msg of q) {
           if (r.abort.signal.aborted) break;
@@ -657,6 +724,13 @@ export class JobRunner {
   cost(id: string): Cost | undefined {
     return this.book.get(id)?.cost;
   }
+}
+
+/** (5a) PNG or JPEG by the file's magic bytes. */
+export function imageType(buf: Buffer): 'image/png' | 'image/jpeg' | undefined {
+  if (buf.length >= 8 && buf.readUInt32BE(0) === 0x89504e47 && buf.readUInt32BE(4) === 0x0d0a1a0a) return 'image/png';
+  if (buf.length >= 3 && buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return 'image/jpeg';
+  return undefined;
 }
 
 function tryJson(text: string): unknown {

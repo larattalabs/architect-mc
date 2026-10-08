@@ -4,6 +4,7 @@ build/
 .gradle-home/
 run/
 dist/
+dist-eval-test/
 *.log
 .env
 mod/run/

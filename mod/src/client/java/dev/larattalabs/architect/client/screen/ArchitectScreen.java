@@ -1102,6 +1102,39 @@ public final class ArchitectScreen extends Screen {
 			g.text(font, TextUtil.ellipsize(font, why, Math.max(10, rx + colW - wx)), wx, ry + 2, muted, false);
 			ry += 16;
 		}
+		// (5a) Critique and revise: a critic scores the renders, Claude revises until it ships (default off), 1 or 2 revisions
+		if (dev.larattalabs.architect.client.design.SetFeature.has("critique")) {
+			boolean on = f.critique;
+			String cl = "Critique and revise (experimental)";
+			Hit h = new Hit("design:critique", cl, rx, ry, 12 + font.width(cl) + 4, 12, true, on, () -> f.critique = !f.critique);
+			hits.add(h);
+			Panels.sprite(g, on ? Kit.CHECKBOX_CHECKED : Kit.CHECKBOX, rx, ry + 1, 10, 10);
+			g.text(font, cl, rx + 13, ry + 2, on || h.contains(mx, my) ? UiBits.ink() : muted, false);
+			int qx = rx + 13 + font.width(cl) + 8;
+			g.text(font, "Revisions", qx, ry + 2, on ? UiStyle.CLAY_DARK : muted, false);
+			qx += font.width("Revisions") + 4;
+			for (int n : dev.larattalabs.architect.design.CritiqueRules.REVISION_CHOICES) {
+				qx += chip(g, "design:revisions:" + n, Integer.toString(n), qx, ry - 1, on && f.maxRevisions == n, on, mx, my, () -> f.maxRevisions = n) + 3;
+			}
+			ry += 15;
+		}
+		// (5a) the estimate, with and without critique
+		if (dev.larattalabs.architect.client.design.SetFeature.has("estimates")) {
+			DesignFeature.tickEstimate();
+			String est = f.estimateError != null ? "estimate: " + f.estimateError : f.estimate != null ? dev.larattalabs.architect.design.CritiqueRules
+				.estimateLine(f.estimate) : errors.isEmpty() ? "estimating…" : "estimate: fix the marked fields";
+			int ec = f.estimateError != null ? UiBits.errorText() : UiStyle.color("palette.ui.teal_text", 0xFF1E7472);
+			int cut = est.indexOf(" · with critique");
+			if (font.width(est) > colW && cut > 0) {
+				// two lines: the design, then with critique
+				g.text(font, TextUtil.ellipsize(font, est.substring(0, cut), colW), rx, ry + 1, ec, false);
+				ry += 10;
+				g.text(font, TextUtil.ellipsize(font, est.substring(cut + 3), colW), rx, ry + 1, ec, false);
+			} else {
+				g.text(font, TextUtil.ellipsize(font, est, colW), rx, ry + 1, ec, false);
+			}
+			ry += 12;
+		}
 		// the style bible (phase 4b): none = today's behaviour
 		g.text(font, "Style bible", rx, ry + 3, UiStyle.CLAY_DARK, false);
 		int bdx = rx + font.width("Style bible") + 6;
@@ -1146,7 +1179,11 @@ public final class ArchitectScreen extends Screen {
 			status = "Remix: Claude edits " + LibraryFeature.nameOf(f.remix) + "; the notes say what to change.";
 			err = false;
 		} else if (f.massingFirst() && dev.larattalabs.architect.client.design.SetFeature.has("massing")) {
-			status = "Ready: a massing first (cents, a minute or two); approve its shape, then Claude adds the detail.";
+			status = "Ready: a massing first (cents, a minute or two); approve its shape, then Claude adds the detail" + (f.critiqueSpec() != null
+				? " and revises it after a critique." : ".");
+			err = false;
+		} else if (f.critiqueSpec() != null) {
+			status = "Ready: Claude designs it, a critic scores the renders and Claude revises (up to " + f.maxRevisions + "); the Designs tab shows the rounds.";
 			err = false;
 		} else {
 			status = "Ready: Claude designs it in the background; the Designs tab shows progress.";
@@ -1457,7 +1494,8 @@ public final class ArchitectScreen extends Screen {
 				case QUEUED -> "waiting";
 				default -> "working";
 			};
-			String kind = d.raw().has("massing") ? "massing" : d.request().has("fromMassing") ? "detail" : d.request().has("remix") ? "remix" : "design";
+			String kind = d.raw().has("critiqueOf") ? "report" : d.raw().has("massing") ? "massing" : d.request().has("fromMassing") ? "detail" : d.request()
+				.has("remix") ? "remix" : "design";
 			out.add(new Job(d.id(), kind, d.title(), fam, d.status().wire(), d.step(), d.blueprintId(), d.size(), d.error(), d.createdAt(),
 				d.status().isRunning(), d, null));
 		}
@@ -1607,6 +1645,12 @@ public final class ArchitectScreen extends Screen {
 					y += 10;
 				}
 			}
+			// (5a) the critique: how it ended, every round with its overall (the best one starred), the best round's scores and issues
+			var crit = dev.larattalabs.architect.apiimpl.Wire5a.record(j.design().raw().get("critique"));
+			if (crit.isPresent()) {
+				y = drawCritique(g, crit.get(), j.design().raw().has("critiqueOf") ? j.design().raw().get("critiqueOf").getAsString() : null, dx, y + 2, dw,
+					footerY - 16 - 24);
+			}
 		} else if (j.variant() != null) {
 			SidecarState.Variant v = j.variant();
 			if (v.from() != null) {
@@ -1667,6 +1711,39 @@ public final class ArchitectScreen extends Screen {
 				setTab(Tab.LIBRARY);
 			});
 		}
+	}
+
+	/**
+	 * (5a) A design's critique in the Designs tab: the end line, a line per round (overall, ships, issues; the best round starred),
+	 * then the best round's scores and as many of its issues as fit above {@code bottom}. Returns the next y.
+	 */
+	private int drawCritique(GuiGraphicsExtractor g, dev.larattalabs.architect.api.Critique c, @Nullable String of, int dx, int y, int dw, int bottom) {
+		String head = dev.larattalabs.architect.design.CritiqueRules.endLine(c) + (of != null ? " · of " + of : "") + String.format(Locale.ROOT,
+			" · $%.2f", c.usd());
+		g.text(font, TextUtil.ellipsize(font, head, dw), dx, y, c.ended() && c.end() == dev.larattalabs.architect.api.Critique.EndReason.SHIP
+			? UiBits.okText() : UiStyle.CLAY_DARK, false);
+		y += 11;
+		List<String> rounds = dev.larattalabs.architect.design.CritiqueRules.roundLines(c);
+		for (int i = 0; i < rounds.size() && y + 10 <= bottom; i++) {
+			var r = c.rounds().get(i);
+			boolean best = r.n() == c.best() && (c.ended() || r.scored());
+			if (best) {
+				g.fill(dx, y - 1, dx + dw, y + 9, 0x22D97757);
+			}
+			g.text(font, TextUtil.ellipsize(font, rounds.get(i), dw - 4), dx + 2, y, best ? UiBits.ink() : r.error().isPresent() ? UiStyle.CLAY_DARK
+				: UiBits.muted(), false);
+			y += 10;
+		}
+		if (!c.scores().isEmpty() && y + 10 <= bottom) {
+			g.text(font, TextUtil.ellipsize(font, dev.larattalabs.architect.design.CritiqueRules.scoresLine(c.scores()), dw), dx, y, UiBits.ink(), false);
+			y += 10;
+		}
+		List<String> issues = dev.larattalabs.architect.design.CritiqueRules.issueLines(c.openIssues());
+		for (int i = 0; i < issues.size() && y + 10 <= bottom; i++) {
+			g.text(font, TextUtil.ellipsize(font, "· " + issues.get(i), dw), dx, y, UiStyle.CLAY_DARK, false);
+			y += 10;
+		}
+		return y;
 	}
 
 	/** A design set's detail: status, bible, cost and budget, every item's progress, and its actions. */
@@ -1768,7 +1845,14 @@ public final class ArchitectScreen extends Screen {
 				conf = warn ? " · conformance: " + c.get().warnings() + " warning" + (c.get().warnings() == 1 ? "" : "s") + (all.isEmpty() ? "" : " ("
 					+ all.get(0) + ")") : " · conformance ok";
 			}
-			String line = stage + conf + (it.step().isEmpty() || it.awaitingApproval() || !conf.isEmpty() ? "" : " · " + it.step()) + it.entryId().map(
+			// (5a) the item's critique: its overall and how the loop ended (or the round it is in)
+			// the rounds come from the item's design record when the client has it ("5.0 → 8.0★")
+			SidecarState.Design idd = it.critique().isPresent() ? Sidecar.state().design(it.designId()) : null;
+			var full = idd == null ? java.util.Optional.<dev.larattalabs.architect.api.Critique>empty() : dev.larattalabs.architect.apiimpl.Wire5a.record(idd
+				.raw().get("critique"));
+			String crit = it.critique().map(cr -> " · " + dev.larattalabs.architect.design.CritiqueRules.brief(full.orElse(cr)) + full.map(fc -> " ("
+				+ dev.larattalabs.architect.design.CritiqueRules.roundsShort(fc) + ")").orElse("")).orElse("");
+			String line = stage + conf + crit + (it.step().isEmpty() || it.awaitingApproval() || !conf.isEmpty() || !crit.isEmpty() ? "" : " · " + it.step()) + it.entryId().map(
 				e -> " → " + e).orElse("") + it.error().map(e -> " · " + e).orElse("") + (actionsW > 0 ? " · " + right : "");
 			g.text(font, TextUtil.ellipsize(font, line, dw - 24 - actionsW), dx + 14, ry + 9, it.status() == dev.larattalabs.architect.api.Design.Status.FAILED
 				? UiBits.errorText() : it.awaitingApproval() || warn ? UiStyle.CLAY_DARK : UiBits.muted(), false);
@@ -2036,6 +2120,19 @@ public final class ArchitectScreen extends Screen {
 		g.text(font, TextUtil.ellipsize(font, toggle, colW - 13), rx + 13, ry + 2, UiBits.ink(), false);
 		ry += 14;
 		for (String line : TextUtil.wrapPlain(font, CLAUDE_LOGIN_NOTE, colW)) {
+			g.text(font, line, rx, ry, UiBits.muted(), false);
+			ry += 10;
+		}
+		// (5a, N1) critique by default: the Design tab's and the set dialog's "Critique and revise" start on
+		ry += 6;
+		boolean crit = dev.larattalabs.architect.client.design.UiPrefs.critiqueByDefault();
+		String cl = "Critique and revise new designs by default (experimental)";
+		Hit ct = new Hit("critique_default", cl, rx, ry, Math.min(colW, 13 + font.width(cl)), 12, true, crit, () -> dev.larattalabs.architect.client.design.UiPrefs.setCritiqueByDefault(!crit));
+		hits.add(ct);
+		Panels.sprite(g, crit ? Kit.CHECKBOX_CHECKED : Kit.CHECKBOX, rx, ry + 1, 10, 10, 0xFFFFFFFF);
+		g.text(font, TextUtil.ellipsize(font, cl, colW - 13), rx + 13, ry + 2, UiBits.ink(), false);
+		ry += 14;
+		for (String line : TextUtil.wrapPlain(font, "A critic reviews each design's renders and the designer revises it (up to 2 rounds, at most about doubling its cost). Off by default.", colW)) {
 			g.text(font, line, rx, ry, UiBits.muted(), false);
 			ry += 10;
 		}

@@ -81,11 +81,29 @@ public interface Library {
 	 *                has them (the cell holding the anchor's point)
 	 * @param groundY (since 1.4.0) the template y of the entrance's feet row: the ground level the design expects
 	 * @param approach (since 1.4.0) the entrance approach placement builds in front of the door
+	 * @param critique (since 1.6.0) its latest verdict: from {@code critique.json} in its folder (a design's critique loop or a
+	 *     report, {@link Designs#critique}), else from its blueprint JSON's {@code critique} summary. A {@code critique.json}
+	 *     whose entry revision (the sha256 of the entry's {@code .nbt}) differs from the entry now is returned with
+	 *     {@link Critique#stale()} true: it judged an older version and is not reused. Its rounds carry scores but not their
+	 *     issues ({@link Critique.Round#issueCount}); the final {@code scores} and {@code openIssues} are complete. Empty for an
+	 *     entry never critiqued (and for bundled entries)
 	 */
 	record Entry(String id, String name, String type, BlockSize size, List<String> tags, Optional<String> source, Map<String, JsonElement> params,
 		Map<String, JsonElement> values, Optional<JsonObject> palette, Map<String, Port> ports, JsonObject ext, boolean bundled, boolean imported,
 		Optional<String> variantOf, Optional<BiblePin> bible, Optional<String> group, Optional<String> groupItem, Map<String, Part> parts,
-		Direction front, Map<String, BlockPos> anchors, int groundY, Approach approach) {
+		Direction front, Map<String, BlockPos> anchors, int groundY, Approach approach, Optional<Critique> critique) {
+		public Entry {
+			critique = critique == null ? Optional.empty() : critique;
+		}
+
+		/** The 1.4.0 constructor (no critique). */
+		public Entry(String id, String name, String type, BlockSize size, List<String> tags, Optional<String> source, Map<String, JsonElement> params,
+			Map<String, JsonElement> values, Optional<JsonObject> palette, Map<String, Port> ports, JsonObject ext, boolean bundled, boolean imported,
+			Optional<String> variantOf, Optional<BiblePin> bible, Optional<String> group, Optional<String> groupItem, Map<String, Part> parts,
+			Direction front, Map<String, BlockPos> anchors, int groundY, Approach approach) {
+			this(id, name, type, size, tags, source, params, values, palette, ports, ext, bundled, imported, variantOf, bible, group, groupItem, parts,
+				front, anchors, groundY, approach, Optional.empty());
+		}
 		/** The 1.2.0 constructor (no lot-fitting data: front south, no anchors, groundY 0, the default approach). */
 		public Entry(String id, String name, String type, BlockSize size, List<String> tags, Optional<String> source, Map<String, JsonElement> params,
 			Map<String, JsonElement> values, Optional<JsonObject> palette, Map<String, Port> ports, JsonObject ext, boolean bundled, boolean imported,

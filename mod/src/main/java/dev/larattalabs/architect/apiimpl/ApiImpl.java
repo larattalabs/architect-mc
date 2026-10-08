@@ -66,7 +66,9 @@ public final class ApiImpl implements ArchitectApi {
 		SurveyImpl.init();
 		TIMERS.scheduleAtFixedRate(() -> {
 			try {
-				instance().library.expire(System.currentTimeMillis());
+				long now = System.currentTimeMillis();
+				instance().library.expire(now);
+				instance().designs.expire(now);
 			} catch (Throwable t) {
 				dev.larattalabs.architect.Architect.LOGGER.warn("API timers failed", t);
 			}

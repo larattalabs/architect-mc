@@ -78,6 +78,9 @@ final class JobsImpl implements Jobs {
 	public CompletableFuture<String> run(JobSpec spec) {
 		ClientBridge b = ApiImpl.bridge();
 		String why = unavailable(b);
+		if (why == null && !spec.images().isEmpty() && !b.sidecarFeatures().contains("job.images")) {
+			why = "images in jobs need a helper with phase 5a (job.images); this one does not have it";
+		}
 		if (why != null) {
 			return ApiImpl.onServerFuture(CompletableFuture.failedFuture(new IllegalStateException(why)));
 		}
@@ -621,6 +624,10 @@ final class JobsImpl implements Jobs {
 			JsonArray bs = new JsonArray();
 			s.blobs().forEach(bs::add);
 			o.add("blobs", bs);
+		}
+		// 5a (only when set)
+		if (!s.images().isEmpty()) {
+			o.add("images", Wire5a.images(s.images()));
 		}
 		return o;
 	}

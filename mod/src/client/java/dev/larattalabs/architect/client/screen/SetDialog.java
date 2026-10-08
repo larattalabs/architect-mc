@@ -152,7 +152,9 @@ final class SetDialog {
 		int roomy4c = 18 + TextFieldView.BASE_H + TextFieldView.LINE + 4;
 		int compact4c = TextFieldView.BASE_H + 4;
 		boolean compact = m4c && footerY - 16 - 34 - roomy4c - y < 2 * ROW_H;
-		int bottomBlock = 34 + (m4c ? compact ? compact4c : roomy4c : 0);
+		// (5a) the critique row
+		boolean m5a = SetFeature.has("critique");
+		int bottomBlock = 34 + (m4c ? compact ? compact4c : roomy4c : 0) + (m5a ? 16 : 0);
 		int listH = Math.max(ROW_H, footerY - 16 - bottomBlock - y);
 		int fit = Math.max(1, listH / ROW_H);
 		s.setScrollArea(x, y, w - 6, fit * ROW_H, f.items.size() * ROW_H, ROW_H);
@@ -220,6 +222,10 @@ final class SetDialog {
 				s.textField(g, Focus.SET_CONTEXT, contextView, f.context, x, y, w, cs);
 				y += TextFieldView.BASE_H + TextFieldView.LINE + 4;
 			}
+		}
+		// (5a) "Critique and revise" for every building, its revisions (1 or 2)
+		if (m5a) {
+			y = critiqueRow(s, g, f, x, y, w, mx, my);
 		}
 		// concurrency, budget, estimate
 		int cx = x;
@@ -297,6 +303,28 @@ final class SetDialog {
 		return n < 1 ? null : Math.min(1000, n);
 	}
 
+	/** (5a) The set's critique toggle and revisions; returns the next y. */
+	private int critiqueRow(ArchitectScreen s, GuiGraphicsExtractor g, SetFeature.Form f, int x, int y, int w, int mx, int my) {
+		Font font = font();
+		int cx = x;
+		boolean on = f.critique;
+		String cl = "Critique and revise (experimental)";
+		int hw = 12 + font.width(cl) + 4;
+		s.addHit(new ArchitectScreen.Hit("set:critique", cl, cx, y, hw, 12, true, on, () -> f.critique = !f.critique));
+		Panels.sprite(g, on ? dev.larattalabs.architect.client.ui.Kit.CHECKBOX_CHECKED : dev.larattalabs.architect.client.ui.Kit.CHECKBOX, cx, y + 1, 10, 10);
+		g.text(font, cl, cx + 13, y + 2, on ? UiBits.ink() : UiBits.muted(), false);
+		cx += hw + 8;
+		g.text(font, "Revisions", cx, y + 2, on ? UiStyle.CLAY_DARK : UiBits.muted(), false);
+		cx += font.width("Revisions") + 4;
+		for (int n : dev.larattalabs.architect.design.CritiqueRules.REVISION_CHOICES) {
+			cx += s.chip(g, "set:revisions:" + n, Integer.toString(n), cx, y - 1, on && f.maxRevisions == n, on, mx, my, () -> f.maxRevisions = n) + 3;
+		}
+		cx += 6;
+		g.text(font, TextUtil.ellipsize(font, on ? "a critic scores each building; Claude revises until it ships" : "off: each building as designed",
+			Math.max(10, x + w - cx)), cx, y + 2, UiBits.muted(), false);
+		return y + 16;
+	}
+
 	static String estimateLine(SetFeature.Form f) {
 		if (!SetFeature.has("estimates")) {
 			return "no estimate (the helper has none)";
@@ -308,14 +336,21 @@ final class SetDialog {
 			return f.estimating ? "estimating…" : "estimate: fill in the buildings";
 		}
 		var e = f.estimate;
-		return String.format(Locale.ROOT, "Estimate: $%.2f–%.2f · %.0f–%.0f min%s", e.usdLow(), e.usdHigh(), e.minutesLow(), e.minutesHigh(),
-			f.estimating ? " (updating)" : "");
+		String base = String.format(Locale.ROOT, "Estimate: $%.2f–%.2f · %.0f–%.0f min", e.usdLow(), e.usdHigh(), e.minutesLow(), e.minutesHigh());
+		// (5a) with critique: the design figures plus the critique's
+		String crit = e.critique() ? String.format(Locale.ROOT, " · with critique $%.2f–%.2f, %.0f–%.0f min", e.withCritiqueUsdLow(), e
+			.withCritiqueUsdHigh(), e.withCritiqueMinutesLow(), e.withCritiqueMinutesHigh()) : "";
+		return base + crit + (f.estimating ? " (updating)" : "");
 	}
 
 	/** The bible options: installed ones (newest version), the built-in ones, and (in the set dialog) "New from a prompt…". */
 	static List<Option> bibleOptions(@Nullable String current, boolean withNew) {
 		List<Option> out = new ArrayList<>();
 		for (Bible b : SetFeature.bibles()) {
+			// (5a) an archived bible is hidden from the pickers (unless it is the one picked)
+			if (b.archived() && !b.id().equals(current)) {
+				continue;
+			}
 			out.add(new Option(b.id(), b.builtin() ? b.name() : b.name() + " v" + b.version(), b.id().equals(current)));
 		}
 		if (withNew) {

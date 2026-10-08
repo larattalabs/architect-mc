@@ -39,6 +39,8 @@ public final class DesignFeature {
 	private static final Set<String> RUNNING = new HashSet<>();
 	private static final Set<String> HANDLED = new HashSet<>();
 	private static boolean sending;
+	/** (5a) Library entries whose report critique is under way (the Library's "Critique" action; this session). */
+	public static final Set<String> REPORT_PENDING = java.util.concurrent.ConcurrentHashMap.newKeySet();
 	private static @Nullable String lastSent;
 	private static @Nullable String lastReload;
 	/** Reopens the Architect screen after plot marking (set by the screen). */
@@ -102,6 +104,11 @@ public final class DesignFeature {
 		if (massing) {
 			request.addProperty("massing", true);
 		}
+		// (5a) the critique loop: on the design itself, or (massing first) on the detail pass the approval starts
+		JsonObject critique = f.critiqueSpec();
+		if (critique != null && !massing) {
+			request.add("critique", critique);
+		}
 		sending = true;
 		return Sidecar.designRequest(request).handle((ack, err) -> {
 			sending = false;
@@ -122,12 +129,13 @@ public final class DesignFeature {
 			lastSent = id;
 			RUNNING.add(id);
 			if (massing) {
-				MassingReview.expect(id, plot);
+				MassingReview.expect(id, plot, critique);
 			} else if (plot != null) {
 				PLOT_BY_DESIGN.put(id, plot);
 			}
-			Architect.LOGGER.info("Design {} requested ({} {}{}{})", id, request.get("type").getAsString(), request.get("style").getAsString(),
-				plot != null ? ", on a plot" : "", massing ? ", massing first" : "");
+			Architect.LOGGER.info("Design {} requested ({} {}{}{}{})", id, request.get("type").getAsString(), request.get("style").getAsString(),
+				plot != null ? ", on a plot" : "", massing ? ", massing first" : "", critique != null ? ", critique and revise (" + critique.get(
+					"maxRevisions") + ")" : "");
 			return new Sent(id, null);
 		});
 	}
@@ -154,6 +162,55 @@ public final class DesignFeature {
 
 	public static CompletableFuture<SidecarLink.Ack> cancel(String designId) {
 		return Sidecar.designCancel(designId);
+	}
+
+	// ------------------------------------------------------------------ the estimate (5a: with and without critique)
+
+	/** How long the form must be still before the estimate is asked again. */
+	static final long ESTIMATE_DEBOUNCE_MS = 600;
+
+	/**
+	 * Drives the Design tab's live estimate (call every frame while the tab shows): {@code design.estimate {request}} with the
+	 * critique when it is on, so the line shows both figures. Needs a helper with estimates.
+	 */
+	public static void tickEstimate() {
+		DesignForm f = form;
+		if (!SetFeature.has("estimates") || !Sidecar.connected()) {
+			return;
+		}
+		JsonObject req = f.errors().isEmpty() ? f.requestJson() : null;
+		if (req != null) {
+			// a massing-first design is estimated as its detail pass (plus its critique), the massing is cents
+			JsonObject c = f.critiqueSpec();
+			if (c != null) {
+				req.add("critique", c);
+			}
+		}
+		String key = req == null ? null : req.toString();
+		long now = net.minecraft.util.Util.getMillis();
+		if (!java.util.Objects.equals(key, f.estimateKey)) {
+			f.estimateKey = key;
+			f.estimateChangedAt = now;
+			return;
+		}
+		if (key == null || key.equals(f.estimateSentKey) || f.estimating || now - f.estimateChangedAt < ESTIMATE_DEBOUNCE_MS) {
+			return;
+		}
+		f.estimateSentKey = key;
+		f.estimating = true;
+		JsonObject m = new JsonObject();
+		m.addProperty("type", "design.estimate");
+		m.add("request", req);
+		Sidecar.link().send(m).whenComplete((ack, err) -> {
+			f.estimating = false;
+			if (err != null || !ack.ok() || ack.result() == null) {
+				f.estimate = null;
+				f.estimateError = err != null ? err.getMessage() : ack.error();
+			} else {
+				f.estimate = dev.larattalabs.architect.apiimpl.Wire5a.estimate(ack.result());
+				f.estimateError = null;
+			}
+		});
 	}
 
 	// ------------------------------------------------------------------ plot
@@ -221,6 +278,17 @@ public final class DesignFeature {
 			// (4c) a massing job: never a library entry; MassingReview shows it when its massing is installed
 			if (d.status() == DesignStatus.FAILED) {
 				Toasts.push(Toasts.Level.WARN, "Massing failed: " + d.title(), firstLine(d.error() != null ? d.error() : d.step()), key, "designs");
+			}
+			return;
+		}
+		if (d.raw().has("critiqueOf")) {
+			// (5a) a report critique of a library entry: no new entry; its verdict is the entry's critique.json
+			String of = d.raw().get("critiqueOf").getAsString();
+			REPORT_PENDING.remove(of);
+			if (d.status() == DesignStatus.DONE) {
+				Toasts.push(Toasts.Level.INFO, "Critique ready: " + of, firstLine(d.step()), key, "library");
+			} else if (d.status() == DesignStatus.FAILED) {
+				Toasts.push(Toasts.Level.WARN, "Critique failed: " + of, firstLine(d.error() != null ? d.error() : d.step()), key, "designs");
 			}
 			return;
 		}

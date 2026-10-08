@@ -54,7 +54,7 @@ final class SetDev {
 			return state(mc);
 		}));
 		DevBridge.register("dev.set.fill", 10_000, "{name?, bible?: id | \"new\", prompt?, items?: [{type, name?, role?: landmark|ordinary, notes?}], "
-			+ "concurrency?, budgetUsd?: number|null, massingFirst?: bool, maxRedirects?: 0-10, context?: text (4c)} - set the open dialog's fields (items replace the rows)", (req, mc) -> {
+			+ "concurrency?, budgetUsd?: number|null, massingFirst?: bool, maxRedirects?: 0-10, context?: text (4c), critique?: bool, maxRevisions?: 1|2 (5a)} - set the open dialog's fields (items replace the rows)", (req, mc) -> {
 				Fields f = Fields.of(req);
 				return DevBridge.onClient(mc, () -> {
 					SetFeature.Form form = SetFeature.form();
@@ -96,6 +96,13 @@ final class SetDev {
 					}
 					if (f.has("maxRedirects")) {
 						form.maxRedirects = (int) f.num("maxRedirects", 0, 10);
+					}
+					// (5a)
+					if (f.has("critique")) {
+						form.critique = f.bool("critique");
+					}
+					if (f.has("maxRevisions")) {
+						form.maxRevisions = dev.larattalabs.architect.design.CritiqueRules.revisions((int) f.num("maxRevisions", 1, 2));
 					}
 					if (f.has("context")) {
 						form.context.set(f.str("context"));

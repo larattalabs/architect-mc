@@ -1,0 +1,21 @@
+{
+  "id": "stilt_house",
+  "n": 13,
+  "title": "stilt house",
+  "size": "S",
+  "setting": "A small house on stilts in the jungle, raised above the floor, with a ladder or stair up and a veranda.",
+  "model": "claude-sonnet-5-5",
+  "effort": "high",
+  "request": {
+    "type": "house",
+    "style": "jungle",
+    "features": [],
+    "maxSize": {
+      "x": 13,
+      "y": 14,
+      "z": 13
+    },
+    "name": "Stilt house",
+    "notes": "A small house on stilts in the jungle, raised above the floor, with a ladder or stair up and a veranda."
+  }
+}

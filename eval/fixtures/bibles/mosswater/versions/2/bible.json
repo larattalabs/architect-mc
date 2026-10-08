@@ -1,0 +1,158 @@
+{
+  "name": "Mosswater Stilts",
+  "roles": {
+    "wall": "minecraft:spruce_planks",
+    "wall_alt": "minecraft:stripped_spruce_log",
+    "trim": "minecraft:dark_oak_log",
+    "roof": "minecraft:dark_oak_planks",
+    "floor": "minecraft:spruce_planks",
+    "frame": "minecraft:mangrove_log",
+    "accent": "minecraft:moss_block",
+    "light": "minecraft:lantern",
+    "glass": "minecraft:brown_stained_glass_pane",
+    "foundation": "minecraft:mossy_cobblestone",
+    "path": "minecraft:coarse_dirt",
+    "drape": "minecraft:moss_carpet",
+    "creeper": "minecraft:vine",
+    "rail_post": "minecraft:mangrove_fence"
+  },
+  "proportions": {
+    "storey": 4,
+    "roofPitch": 0.5,
+    "overhang": 1,
+    "windowRhythm": 3,
+    "plinth": 3
+  },
+  "roofLanguage": "Low dark oak gables at half pitch (slabs and stairs), thin slab eaves overhanging 1, ridge offset by one block. No moss or growth on roofs; the walls stay fully visible below the eaves.",
+  "silhouette": "Narrow plank boxes lifted 3 blocks on mangrove stilts, one low kinked roof each, walls clearly showing; linked by low slab boardwalks.",
+  "motifs": [
+    "mangrove log stilts under every corner",
+    "spruce trapdoor shutters beside each window",
+    "lantern hung from a mangrove fence arm by the door",
+    "ridge offset by one block",
+    "upper storey jettied 1 block on a dark oak log beam",
+    "moss carpet on the pile caps at the waterline"
+  ],
+  "tiers": {
+    "humble": [
+      "wall",
+      "wall_alt",
+      "roof",
+      "frame",
+      "floor",
+      "glass",
+      "path",
+      "light"
+    ],
+    "important": [
+      "trim",
+      "foundation",
+      "accent",
+      "drape",
+      "creeper",
+      "rail_post"
+    ]
+  },
+  "lighting": "One lantern on a fence arm beside each door, plus one at boardwalk corners and pier ends. Important buildings may add a second by the main door. Dim, warm pools only.",
+  "avoid": [
+    "moss, carpet or vines on roofs or above the ground floor",
+    "dark oak logs scattered as random patches or stripes",
+    "deep or steep roofs that hide the walls",
+    "facades with fewer than 2 readable windows",
+    "buildings sitting directly on ground or water",
+    "bright clean blocks, glass blocks or window walls",
+    "stone walls above the pile caps",
+    "more than one crooked gesture per building"
+  ],
+  "components": [
+    "window",
+    "door_surround",
+    "lantern_post",
+    "roof_trim",
+    "chimney",
+    "stilt_pile",
+    "boardwalk",
+    "net_loft"
+  ],
+  "restraint": {
+    "heroMotifs": [
+      "mangrove log stilts under every corner",
+      "spruce trapdoor shutters beside each window",
+      "lantern hung from a mangrove fence arm by the door"
+    ],
+    "accentShareMax": 0.06,
+    "detailDensity": "sparse",
+    "windowsPerFacadeMin": 2
+  },
+  "format": 2,
+  "id": "mosswater",
+  "version": 2,
+  "scope": "building",
+  "prompt": "weathered fishing village on stilts, mossy and crooked",
+  "createdAt": 1791309976247,
+  "cost": {
+    "usd": 1.124835,
+    "inputTokens": 36,
+    "outputTokens": 22531,
+    "cacheReadTokens": 620266,
+    "cacheWriteTokens": 73040,
+    "turns": 25
+  },
+  "critique": {
+    "overall": 5,
+    "scores": {
+      "legibility": 4,
+      "restraint": 6,
+      "craft": 5
+    },
+    "issues": [
+      {
+        "priority": "P0",
+        "part": null,
+        "view": "sheet",
+        "what": "Windows are nearly invisible: the wall is a uniform brown plank mass with no readable glass or shutters in any tile. The facade has no windows, which breaks the bible's 2-window minimum.",
+        "fix": "Place 2x2 glass panes with a contrasting trapdoor shutter on each side, at the 3-block rhythm, so they read against the planks."
+      },
+      {
+        "priority": "P0",
+        "part": null,
+        "view": "sheet",
+        "what": "The door tiles show a dark sliver or a faint recess on a flat wall. No frame, no clear opening and no step. The entrance is unreadable.",
+        "fix": "Cut a 1x2 opening with a dark oak log frame and a lintel, plus one plank step. Keep the opening free of other blocks."
+      },
+      {
+        "priority": "P1",
+        "part": null,
+        "view": "sheet",
+        "what": "Every component sits on a house box that has no stilts or only stubby ones. The lantern post and the stilt tile show tiny floating stubs, and the 3-block lift is not conveyed.",
+        "fix": "Show each component on a raised floor with full-height mangrove stilts. Attach the lantern arm to a post that reaches the ground."
+      },
+      {
+        "priority": "P1",
+        "part": null,
+        "view": "sheet",
+        "what": "The roofs are identical, heavy and dark, and they dominate every tile. The roof is much larger than the component being shown, so the sheet reads as one repeated house.",
+        "fix": "Shrink the roofs or crop them away. Make the roof trim a distinct, visible edge detail, such as a slab eave line."
+      },
+      {
+        "priority": "P1",
+        "part": null,
+        "view": "sheet",
+        "what": "The chimney is a thin stone column with a yellow cap sitting on the roof edge. It looks like a lantern on a pole rather than a chimney, and it is not clearly attached to the ridge.",
+        "fix": "Make a 2x2 stone-brick stack rising from the ridge, with a dark cap and no yellow block."
+      },
+      {
+        "priority": "P2",
+        "part": null,
+        "view": "sheet",
+        "what": "The boardwalk is a short slab stub poking out from the door. The red fence rail is tiny and the lantern is a lone dot.",
+        "fix": "Extend the boardwalk to 3+ slabs with fence posts at the corners, and hang the lantern from one post."
+      }
+    ],
+    "summary": "The component sheet is dominated by repeated dark roofs over blank brown walls. Windows and doors are barely legible and the stilts are missing, so the components do not read as a usable kit.",
+    "ship": false,
+    "model": "claude-sonnet-5-5",
+    "cost": 0.034302,
+    "at": 1791310164645
+  }
+}

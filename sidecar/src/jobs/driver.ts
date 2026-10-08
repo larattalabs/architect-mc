@@ -42,6 +42,17 @@ export interface DriverQuery {
   /** answers to the calls that were pending when the sidecar stopped (also in the prompt) */
   resumeAnswers?: ResumeAnswer[] | undefined;
   abort: AbortController;
+  /** (5a) images sent as image content blocks before the prompt text (first query only; a resume has them) */
+  images?: DriverImage[] | undefined;
+  /** (5a) sim only: the scripted structured answer ({ simFail } fails the query) */
+  simAnswer?: unknown;
+}
+
+/** (5a) an image of a job: a PNG or JPEG file in the job's scratch dir and its label. */
+export interface DriverImage {
+  file: string;
+  label: string;
+  mediaType: 'image/png' | 'image/jpeg';
 }
 
 export interface JobDriver {

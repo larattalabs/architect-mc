@@ -10,6 +10,7 @@ import type { Logger } from './context.js';
 import { BibleIndex, Bibles, SimBibleBackend, type BibleBackend, type RunOutcome } from './bibles.js';
 import { BlobError, BlobStore } from './blobs.js';
 import { DesignBook, describeRequest, installDesign, isFinalDesign, KIT, runNode, type CheckResult, type Installed, type Limits } from './designs.js';
+import { Critiques } from './critique.js';
 import { Estimates, type EstimateCtx } from './estimates.js';
 import { Groups } from './groups.js';
 import { conformanceNote, GC_INTERVAL_MS, Massings } from './massings.js';
@@ -20,6 +21,7 @@ import { SimJobDriver } from './jobs/sim.js';
 import { Pool } from './pool.js';
 import { FEATURES, KitPalettes, type BibleRef, type ClientMessage, type Cost, type PaletteInfo, type Design, type DesignRequest, type Massing, type Outbound, type PaletteSpec, type ParamValues, type Protocol, type Status, type Variant } from './protocol.js';
 import { DesignScheduler, designKey } from './scheduler.js';
+import { addCost } from './jobs/cost.js';
 import { readSecrets, updateSecrets, type Secrets } from './secrets.js';
 import type { ClientHandle } from './server.js';
 import type { Store } from './store.js';
@@ -94,6 +96,8 @@ export class Sidecar {
   readonly estimates: Estimates;
   /** (4c) massings: records, install, delete, garbage collection */
   readonly massings: Massings;
+  /** (5a) the critique loop */
+  readonly critiques: Critiques;
   private gcTimer: NodeJS.Timeout | undefined;
   /** trusted connections */
   private connected = new Set<ClientHandle>();
@@ -127,6 +131,7 @@ export class Sidecar {
     this.estimates = new Estimates(store, () => this.now());
     this.massings = new Massings(this);
     this.jobs = new JobRunner(this);
+    this.critiques = new Critiques(this);
   }
 
   /** trusted, open connections */
@@ -168,6 +173,8 @@ export class Sidecar {
       this.statusChanged();
     }
     if (m.type === 'variant.upsert') this.reskins.variantChanged(m.variant);
+    // (5a) a finished critic call moves its design's loop on
+    if (m.type === 'job.upsert') this.critiques.jobChanged(m.job);
   }
 
   // ---- status ---------------------------------------------------------------------------------
@@ -246,15 +253,28 @@ export class Sidecar {
     fs.mkdirSync(this.config.biblesDir, { recursive: true });
     this.variantRunner.start();
     void this.loadKitInfo();
+    const critiqued: Design[] = [];
     for (const d of [...this.designs.active()].sort((a, b) => a.createdAt - b.createdAt)) {
-      this.designs.update(d.id, { status: 'queued', step: 'picked up again after a restart' });
-      this.scheduler.enqueue(d.id);
+      // (5a) a design whose loop waits for its critic needs no slot: the critique module picks it up once jobs run
+      if (this.store.data.work?.[d.id]?.critique && !this.critiques.revising(d.id)) {
+        critiqued.push(d);
+        continue;
+      }
+      this.designs.update(d.id, { status: 'queued', step: this.critiques.revising(d.id) ? 'waiting to revise after critique (picked up again after a restart)' : 'picked up again after a restart' });
+      this.scheduler.enqueue(d.id, this.critiques.revising(d.id));
     }
     this.groups.start();
     this.bibles.start();
+    // (5a) bible version GC, at start only (pins always win)
+    try {
+      this.bibleIndex.gc();
+    } catch (e) {
+      this.log.error(`bible gc: ${(e as Error).stack ?? e}`);
+    }
     this.reskins.start();
     // jobs run on the designer's backend: the sim, or Claude through the designer's SDK and auth
     this.jobs.start(jobDriver ?? (designer.name === 'sim' ? new SimJobDriver(this.config.simStepMs, this.config.jobs.simStepUsd) : new ClaudeJobDriver(designer as unknown as ClaudeHost, this.log)));
+    for (const d of critiqued) this.critiques.resume(d);
     // (4c) massing garbage collection: now, then hourly
     this.runGc();
     this.gcTimer = setInterval(() => this.runGc(), GC_INTERVAL_MS);
@@ -414,7 +434,7 @@ export class Sidecar {
         return { jobId: j.id, bibleId: j.bibleId, version: j.version };
       }
       case 'bible.revise': {
-        const j = this.bibles.revise(msg.id, msg.notes, msg.model, msg.budgetUsd);
+        const j = this.bibles.revise(msg.id, msg.notes, msg.model, msg.budgetUsd, msg.critique);
         return { jobId: j.id, bibleId: j.bibleId, version: j.version };
       }
       case 'bible.estimate':
@@ -436,6 +456,15 @@ export class Sidecar {
         return { massingId: msg.massingId, versions: this.massings.delete(msg.massingId) };
       case 'group.approve':
         return { ...this.groups.approve(msg.groupId, { approve: msg.approve ?? [], redirect: msg.redirect ?? {}, cancel: msg.cancel ?? [], owner: msg.owner }) };
+      // ---- 5a
+      case 'design.critique': {
+        const d = this.critiques.reportEntry(msg.entryId, msg.spec);
+        return { designId: d.id, entryId: msg.entryId };
+      }
+      case 'bible.delete':
+        return { ...this.bibleIndex.delete(msg.id, msg.owner) };
+      case 'bible.archive':
+        return { ...this.bibleIndex.archive(msg.id, msg.archived) };
     }
   }
 
@@ -450,6 +479,7 @@ export class Sidecar {
       ordinaryModel: this.config.groups.ordinaryModel,
       bibleModel: this.config.bibleModel,
       massingModel: this.config.massing.model,
+      criticModel: this.config.critique.model,
     };
   }
 
@@ -567,6 +597,7 @@ export class Sidecar {
     if (kind === 'budget' && running) this.designFailed(id, 'budget', step);
     else this.designs.update(id, { status: 'cancelled', step, ...(kind === 'budget' ? { error: 'budget' } : error ? { error } : {}) });
     this.scheduler.withdraw(id);
+    this.critiques.stopped(id);
     if (running) {
       try {
         this.designer?.cancel(id);
@@ -581,6 +612,12 @@ export class Sidecar {
   /** (re-skins) a group's finished entries, or undefined for a group this sidecar does not know */
   groupEntries(groupId: string): string[] | undefined {
     return this.groups.get(groupId)?.items.flatMap((it) => (it.entryId ? [it.entryId] : []));
+  }
+
+  /** (5a) What a design's own turns may spend: its budget minus what its critic calls spent. */
+  designTurnBudget(id: string): number | undefined {
+    const b = this.designBudget(id);
+    return b === undefined ? undefined : Math.max(0, Math.round((b - this.critiques.criticUsd(id)) * 1e6) / 1e6);
   }
 
   /** What a design may spend: its own budgetUsd, capped by what is left of its group's. */
@@ -646,6 +683,7 @@ export class Sidecar {
       ...(r.itemKey ? { groupItem: r.itemKey } : {}),
       ...(r.profile ? { profile: r.profile } : {}),
       ...(r.fromMassing ? { fromMassing: { id: r.fromMassing, version: r.massingVersion ?? 1 } } : {}),
+      ...(this.critiques.entrySummary(d) ? { critique: this.critiques.entrySummary(d) } : {}),
     };
   }
 
@@ -654,7 +692,22 @@ export class Sidecar {
   /** How a design is checked: the limits (the detail pass's hard size cap) and the extra build args (`--massing`). */
   checkPlan(d: Design, extra: string[] = []): { limits: Limits; extra: string[] } {
     const p = this.massings.checkPlan(d, { maxSize: d.request.maxSize, type: d.request.type, profile: d.request.profile });
-    return { limits: p.limits, extra: [...extra, ...p.extra] };
+    // (5a) a design with a bible is checked against its restraint (kit warnings `restraint: ...`)
+    const restraint = d.request.bible && !d.request.massing && this.kitHas('--restraint') ? ['--restraint', path.join('bible', 'bible.json')] : [];
+    return { limits: p.limits, extra: [...extra, ...p.extra, ...restraint] };
+  }
+
+  private kitFlags: string | undefined;
+  /** Does the kit's build.mjs know this flag? (an older kit copy) */
+  kitHas(flag: string): boolean {
+    if (this.kitFlags === undefined) {
+      try {
+        this.kitFlags = fs.readFileSync(path.join(this.config.kitDir, 'build.mjs'), 'utf8');
+      } catch {
+        this.kitFlags = '';
+      }
+    }
+    return this.kitFlags.includes(flag);
   }
 
   /** After the pristine check: the problem that fails the round (a massing that is not one; conformance errors), if any. */
@@ -666,9 +719,9 @@ export class Sidecar {
    * Install a design that passed its check, then report it done: a massing job as a massing version, anything else as a
    * library entry under a fresh id from `baseId` (never overwriting).
    */
-  installChecked(d: Design, input: { scratch: string; bp: string; baseId: string; res: CheckResult; previews: string[]; taken?: ReadonlySet<string> | undefined; name?: string | undefined; description?: string | undefined; notes?: string[] }): void {
+  installChecked(d: Design, input: { scratch: string; bp: string; baseId: string; res: CheckResult; previews: string[]; taken?: ReadonlySet<string> | undefined; name?: string | undefined; description?: string | undefined; notes?: string[]; source?: string }): void {
     const res = input.res;
-    const source = path.join(input.scratch, KIT, 'designs', `${input.bp}.mjs`);
+    const source = input.source ?? path.join(input.scratch, KIT, 'designs', `${input.bp}.mjs`);
     const s = res.sidecar!.size!;
     const size = { x: s.x, y: s.y, z: s.z };
     if (d.massing) {
@@ -687,6 +740,14 @@ export class Sidecar {
       files: this.entryFiles(d, input.scratch),
       meta: { name: input.name, description: input.description, request: d.request, createdAt: this.now(), extra: this.entryExtra(d) },
     });
+    // (5a) the critique verdict next to the entry (the input of a later polish)
+    if (d.critique?.end) {
+      try {
+        this.critiques.writeEntryCritique(path.dirname(installed.json), installed.blueprintId, d, this.store.data.work?.[d.id]?.critique);
+      } catch (e) {
+        this.log.warn(`design ${d.id}: critique.json: ${(e as Error).message}`);
+      }
+    }
     this.designDone(d.id, installed, size, [...(input.notes ?? []), conformanceNote(this.designs.get(d.id)?.conformance)].filter(Boolean).join('; '));
   }
 
@@ -705,7 +766,7 @@ export class Sidecar {
   // ---- what designers report ------------------------------------------------------------------
 
   /** A design job's progress (status + one line). Ignored once the design is final. */
-  designStep(id: string, status: 'queued' | 'designing' | 'checking' | 'rendering', step: string): void {
+  designStep(id: string, status: 'queued' | 'designing' | 'checking' | 'rendering' | 'critiquing', step: string): void {
     const before = this.designs.get(id);
     const first = before?.status === 'queued' && status === 'designing';
     this.designs.update(id, { status, step });
@@ -724,7 +785,11 @@ export class Sidecar {
     });
     // the rolling averages behind the estimates (real Claude designs only)
     const started = this.estimates.startedAt(id);
-    if (this.designer?.name === 'claude' && started !== undefined) this.estimates.record('design', d.request.model ?? this.config.claude.designModel, d.cost?.usd ?? 0, this.now() - started);
+    // (5a) the design sample is round 0 only: the loop's spend and time are the critic and revise samples
+    const c = this.designs.get(id)?.critique;
+    const loopUsd = c ? c.cost.critic.usd + c.cost.revise.usd : 0;
+    const loopMs = c ? c.rounds.reduce((a, r) => a + r.ms, 0) : 0;
+    if (this.designer?.name === 'claude' && started !== undefined) this.estimates.record('design', d.request.model ?? this.config.claude.designModel, Math.max(0, (d.cost?.usd ?? 0) - loopUsd), Math.max(1, this.now() - started - loopMs));
     this.estimates.forget(id);
     // on disk at once: a crash right after an install must not run the design (and install it) again
     this.store.flush();
@@ -739,8 +804,9 @@ export class Sidecar {
     this.log.warn(`design ${id} failed: ${truncate(step ?? error.split('\n')[0] ?? error, 200)}`);
   }
 
-  /** (protocol 2) a design's cost so far */
-  designCost(id: string, cost: Cost): void {
-    this.designs.update(id, { cost });
+  /** (protocol 2) a design's cost so far: its turns (the designer's meter) plus (5a) its critic calls */
+  designCost(id: string, turns: Cost): void {
+    const critic = this.store.data.work?.[id]?.critique?.critic;
+    this.designs.update(id, { cost: critic ? addCost(turns, critic) : turns });
   }
 }

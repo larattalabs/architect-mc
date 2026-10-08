@@ -148,8 +148,20 @@ public final class MassingReview {
 
 	/** The Design tab sent a massing job: when its massing is installed, the review opens (on {@code plot} when one was marked). */
 	public static void expect(String designId, DesignSpec.@Nullable Plot plot) {
-		PENDING.put(designId, Optional.ofNullable(plot));
+		expect(designId, plot, null);
 	}
+
+	/** (5a) As above, with the critique its detail pass gets on Approve (null: none). */
+	public static void expect(String designId, DesignSpec.@Nullable Plot plot, @Nullable JsonObject critique) {
+		PENDING.put(designId, Optional.ofNullable(plot));
+		if (critique != null) {
+			CRITIQUE_BY_DESIGN.put(designId, critique);
+		}
+	}
+
+	/** (5a) The critique the Design tab asked for, by the massing job's design id and then by massing id (this session). */
+	private static final Map<String, JsonObject> CRITIQUE_BY_DESIGN = new java.util.HashMap<>();
+	private static final Map<String, JsonObject> CRITIQUE_BY_MASSING = new java.util.HashMap<>();
 
 	/** The plot a massing was made for, or null. */
 	public static DesignSpec.@Nullable Plot plotOf(String massingId) {
@@ -161,6 +173,10 @@ public final class MassingReview {
 		Optional<DesignSpec.Plot> plot = PENDING.remove(m.designId());
 		if (plot == null) {
 			return; // not one the Design tab is waiting for (an API massing, a group's)
+		}
+		JsonObject critique = CRITIQUE_BY_DESIGN.remove(m.designId());
+		if (critique != null) {
+			CRITIQUE_BY_MASSING.put(m.id(), critique);
 		}
 		plot.ifPresent(p -> PLOT_BY_MASSING.put(m.id(), p));
 		String key = Keys.screen == null ? "B" : Keys.label(Keys.screen);
@@ -270,6 +286,11 @@ public final class MassingReview {
 			return CompletableFuture.completedFuture(null);
 		}
 		JsonObject req = MassingRules.detailRequest(r.massing().request(), r.massing().id(), r.massing().version());
+		// (5a) "Critique and revise" was on when the massing was asked for: the detail pass carries it
+		JsonObject critique = CRITIQUE_BY_MASSING.get(r.massing().id());
+		if (critique != null && SetFeature.has("critique")) {
+			req.add("critique", critique.deepCopy());
+		}
 		sending = true;
 		return Sidecar.designRequest(req).handle((ack, err) -> {
 			sending = false;

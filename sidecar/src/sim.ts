@@ -119,7 +119,6 @@ export class SimDesigner implements Designer {
     this.runs.set(id, r);
     this.sc.statusChanged();
     return this.runJob(id, r)
-      .then((): RunOutcome => 'finished')
       .catch((e): RunOutcome => {
         if (e instanceof Limited) {
           this.sc.designStep(id, 'queued', 'usage limit (simulated): waiting for the reset');
@@ -221,11 +220,13 @@ export class SimDesigner implements Designer {
     if (this.stopped || r.cancelled || this.gone(id)) throw new Cancelled();
   }
 
-  private async runJob(id: string, r: Run): Promise<void> {
+  private async runJob(id: string, r: Run): Promise<RunOutcome> {
     const sc = this.sc;
     const cfg = sc.config;
     const d = sc.designs.get(id);
-    if (!d || isFinalDesign(d)) return;
+    if (!d || isFinalDesign(d)) return 'finished';
+    // (5a) a revision after critique
+    if (sc.critiques.revising(id)) return this.revise(id, d, r);
     const req = d.request;
     const src = simSource(cfg.kitDir, req.type);
     if (!src) throw new Error(`the sim copies a kit example, but ${path.join(cfg.kitDir, 'designs')} has neither ${req.type}.mjs nor cabin.mjs`);
@@ -291,6 +292,11 @@ export class SimDesigner implements Designer {
     sc.designStep(id, 'rendering', 'rendering previews');
     const rp = await renderPreviews(scratch, res.nbt!);
     this.check(id, r);
+    const name = req.name ?? `Sim ${req.style} ${req.type}`;
+    const description = `Simulated ${d.massing ? 'massing' : 'design'} (${what})${req.notes ? `: ${truncate(req.notes, 200)}` : ''}`;
+    const notes = [note, rp.skipped ? 'no renderer' : rp.error ? `previews: ${truncate(rp.error, 80)}` : '', res.warnings.length ? `${res.warnings.length} checker warning(s)` : ''];
+    // (5a) the critique loop takes the round (the slot is given back while its critic call runs)
+    if ((await sc.critiques.roundReady(sc.designs.get(id)!, { scratch, bp, res, previews: rp.files, baseId: designBaseId(req), name, description, notes: notes.filter(Boolean) })) === 'critique') return 'critique';
     sc.installChecked(d, {
       scratch,
       bp,
@@ -300,8 +306,63 @@ export class SimDesigner implements Designer {
       taken: new Set([...this.taken].filter(([k]) => k !== id).map(([, v]) => v)),
       name: req.name ?? `Sim ${req.style} ${req.type}`,
       description: `Simulated ${d.massing ? 'massing' : 'design'} (${what})${req.notes ? `: ${truncate(req.notes, 200)}` : ''}`,
-      notes: [note, rp.skipped ? 'no renderer' : rp.error ? `previews: ${truncate(rp.error, 80)}` : '', res.warnings.length ? `${res.warnings.length} checker warning(s)` : ''],
+      notes,
     });
+    return 'finished';
+  }
+
+  /**
+   * (5a) A simulated revision: one step that costs like a design step, then the same source is checked and rendered
+   * again (the scripted critic decides the scores). Notes `sim:revise=fail` make every revision fail its check, so the
+   * loop ends check_failed after the revision's own allowance.
+   */
+  private async revise(id: string, d: Design, r: Run): Promise<RunOutcome> {
+    const sc = this.sc;
+    const cfg = sc.config;
+    const w = sc.store.data.work[id]!;
+    const bp = w.critique!.bp;
+    const req = d.request;
+    const scratch = prepareScratch({ dataDir: cfg.dataDir, kitDir: cfg.kitDir, libraryDir: cfg.libraryDir, design: d, bp, ...sc.scratchExtras(d) });
+    const design = path.join(scratch, KIT, 'designs', `${bp}.mjs`);
+    const good = fs.readFileSync(path.join(scratch, 'rounds', String(w.critique!.round - 1), `${bp}.mjs`), 'utf8');
+    for (;;) {
+      if (!sc.critiques.beforeRevision(sc.designs.get(id)!)) return 'finished';
+      sc.designStep(id, 'designing', `${sc.critiques.revisionStep(sc.designs.get(id)!)} (simulated)`);
+      let cost = sc.critiques.turnsCost(sc.designs.get(id)!);
+      // a revision costs one design step (a warm session, a smaller change than round 0)
+      for (let i = 0; i < 1; i++) {
+        try {
+          await this.sleep(this.stepMs, id, r);
+        } catch (e) {
+          sc.critiques.undoTurn(id);
+          throw e;
+        }
+        cost = { ...cost, usd: Math.round((cost.usd + cfg.simDesignUsd) * 1e6) / 1e6, turns: cost.turns + 1 };
+        sc.designCost(id, cost);
+      }
+      this.check(id, r);
+      // the revision (sim: the same source, or a broken one when the notes ask for a failing revision)
+      fs.writeFileSync(design, req.notes?.includes('sim:revise=fail') ? `${good}\nthrow new Error('a broken revision (simulated)');\n` : good);
+      sc.designStep(id, 'checking', 'checking the revision (simulated designer)');
+      sc.syncScratchBible(scratch, d);
+      const src = simSource(cfg.kitDir, req.type);
+      const open = !(BUILDING_TYPES as readonly string[]).includes(req.type);
+      const bibleArgs = req.bible && fs.existsSync(path.join(scratch, 'bible', 'bible.json')) ? ['--bible', path.join('bible', 'bible.json')] : [];
+      const plan = sc.checkPlan(d, bibleArgs);
+      const limits = d.massing ? plan.limits : { ...plan.limits, type: src === req.type || open ? req.type : undefined, profile: open ? (req.profile ?? ['door', 'lit', 'no_floating']) : undefined };
+      const res = await checkDesign(cfg.kitDir, scratch, bp, limits, 120_000, plan.extra);
+      this.check(id, r);
+      const problem = res.ok ? sc.checkOutcome(d, res) : (res.problem ?? 'the check failed');
+      if (problem) {
+        if (sc.critiques.mayFixRevision(id)) continue;
+        sc.critiques.revisionEnded(id, 'check_failed', problem);
+        return 'finished';
+      }
+      sc.designStep(id, 'rendering', 'rendering previews');
+      const rp = await renderPreviews(scratch, res.nbt!);
+      this.check(id, r);
+      return (await sc.critiques.roundReady(sc.designs.get(id)!, { scratch, bp, res, previews: rp.files, baseId: designBaseId(req) })) === 'critique' ? 'critique' : 'finished';
+    }
   }
 }
 

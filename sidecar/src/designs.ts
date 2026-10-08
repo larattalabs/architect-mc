@@ -28,7 +28,7 @@ const FINAL: ReadonlySet<DesignStatus> = new Set(['done', 'failed', 'cancelled']
 
 export const isFinalDesign = (d: Design): boolean => FINAL.has(d.status);
 
-export type DesignPatch = Partial<Pick<Design, 'status' | 'step' | 'blueprintId' | 'size' | 'previews' | 'error' | 'cost' | 'massing' | 'conformance'>>;
+export type DesignPatch = Partial<Pick<Design, 'status' | 'step' | 'blueprintId' | 'size' | 'previews' | 'error' | 'cost' | 'massing' | 'conformance' | 'critique' | 'critiqueOf'>>;
 
 export interface BookCtx {
   store: Store;
@@ -250,19 +250,22 @@ export interface CheckResult {
   json?: string;
   /** (4c) a detail pass: the kit's massing conformance result (`--massing`), when it printed one */
   conformance?: Conformance;
+  /** (5a) the kit's metrics (accentShare, detailNoise, windowsPerFacade, paletteAdherence, parts, ...), when it printed them */
+  metrics?: Record<string, unknown>;
 }
 
 /** The kit's `--json` line (`{ ok, errors[], warnings[], nbt, sidecar }`), if it printed one. */
-export function parseBuildJson(stdout: string): { ok?: boolean; errors: string[]; warnings: string[]; conformance?: Conformance } | undefined {
+export function parseBuildJson(stdout: string): { ok?: boolean; errors: string[]; warnings: string[]; conformance?: Conformance; metrics?: Record<string, unknown> } | undefined {
   const lines = stdout.split(/\r?\n/).map((l) => l.trim()).filter((l) => l.startsWith('{') && l.endsWith('}'));
   for (let i = lines.length - 1; i >= 0; i--) {
     try {
-      const j = JSON.parse(lines[i]!) as { ok?: unknown; errors?: unknown; warnings?: unknown; conformance?: unknown };
+      const j = JSON.parse(lines[i]!) as { ok?: unknown; errors?: unknown; warnings?: unknown; conformance?: unknown; metrics?: unknown };
       const list = (v: unknown) => (Array.isArray(v) ? v.map((x) => (typeof x === 'string' ? x : JSON.stringify(x))) : []);
       const c = j.conformance && typeof j.conformance === 'object' ? (j.conformance as Record<string, unknown>) : undefined;
       // (4c) `conformance: { ok, errors[], issues[] }` (warnings is accepted for issues)
       const conformance = c ? { ok: c.ok !== false && !list(c.errors).length, errors: list(c.errors), issues: list(c.issues ?? c.warnings) } : undefined;
-      return { ...(typeof j.ok === 'boolean' ? { ok: j.ok } : {}), errors: list(j.errors), warnings: list(j.warnings), ...(conformance ? { conformance } : {}) };
+      const metrics = j.metrics && typeof j.metrics === 'object' && !Array.isArray(j.metrics) ? (j.metrics as Record<string, unknown>) : undefined;
+      return { ...(typeof j.ok === 'boolean' ? { ok: j.ok } : {}), errors: list(j.errors), warnings: list(j.warnings), ...(conformance ? { conformance } : {}), ...(metrics ? { metrics } : {}) };
     } catch {
       /* not it */
     }
@@ -295,7 +298,7 @@ export async function checkDesign(kitSrc: string, scratch: string, bp: string, l
 export function finishCheck(r: NodeRun, out: string, bp: string, limits: Limits, timeoutMs: number): CheckResult {
   const j = parseBuildJson(r.stdout);
   const warnings = j?.warnings ?? [];
-  const conf = j?.conformance ? { conformance: j.conformance } : {};
+  const conf = { ...(j?.conformance ? { conformance: j.conformance } : {}), ...(j?.metrics ? { metrics: j.metrics } : {}) };
   const nbt = path.join(out, `${bp}.nbt`);
   const json = path.join(out, `${bp}.blueprint.json`);
   if (!r.ok) {

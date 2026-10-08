@@ -1228,6 +1228,14 @@ steps.bench = async () => {
 
 // ------------------------------------------------------------------ gate 11: the 1.5.0 API through apitest
 
+/** a.b.c >= x.y.z (the API only grows: 0.9.0 reports 1.6.0 and still has every 1.5.0 feature) */
+function gteVersion(v, min) {
+  const a = String(v).split('.').map(Number);
+  const b = min.split('.').map(Number);
+  for (let i = 0; i < 3; i++) if ((a[i] ?? 0) !== (b[i] ?? 0)) return (a[i] ?? 0) > (b[i] ?? 0);
+  return true;
+}
+
 const reasonsOf = (v) => (v.refusals ?? []).map((r) => r.reason ?? r);
 const j1 = (o) => JSON.stringify(o);
 
@@ -1238,7 +1246,7 @@ steps.api = async () => {
   await tp(48.5, 90, 30.5);
   const v = await api('api15');
   const want = ['journal', 'overlapLayer', 'roads', 'cellSites', 'stackQuery'];
-  check(v.version === '1.5.0' && want.every((f) => v.features.includes(f)), `api: version ${v.version}, features ${want.filter((f) => v.features.includes(f)).join(' ')}`, v);
+  check(gteVersion(v.version, '1.5.0') && want.every((f) => v.features.includes(f)), `api: version ${v.version}, features ${want.filter((f) => v.features.includes(f)).join(' ')}`, v);
   check(j1(v.overlapPolicies) === j1(['REFUSE', 'LAYER']) && j1(v.coveredPolicies) === j1(['KEEP', 'CASCADE', 'REFUSE']), 'api: OverlapPolicy and CoveredPolicy values', v);
   const reasons = await api('reasons');
   const NEW = ['OVERLAP_BUSY', 'OVERLAP_OWNED', 'LAYER_DEPTH', 'COVERED', 'TOO_STEEP', 'DEEP_WATER', 'TOO_LARGE', 'JOURNAL_UNAVAILABLE'];
@@ -1331,6 +1339,44 @@ steps.api = async () => {
   await leaveWorld();
   check(fs.readFileSync(ix, 'utf8') === '{"version":1,"entries":[', 'api: the unreadable index was not touched');
   return {};
+};
+
+/**
+ * (5a) `api15jar`: the 1.5.0 apitest jar (0.8.0, stashed in artifacts/gate5a/v080/ before 5a), unchanged, against this
+ * worktree's mod (0.9.0, API 1.6.0) - tools/apitest.mjs survival of v0.8.0 (APITEST_API_VERSION=1.5.0).
+ */
+steps.api15jar = async () => {
+  const V080 = path.join(MAIN, 'artifacts', 'gate5a', 'v080');
+  const jar = path.join(V080, 'architect_apitest-0.8.0.jar');
+  const mods = path.join(GAME_DIR, 'mods');
+  if (dev) await stopClient();
+  else if (clientPids().length) {
+    await connect(PORT, GAME_DIR, 10_000).catch(() => null);
+    await stopClient();
+  }
+  fs.mkdirSync(mods, { recursive: true });
+  fs.copyFileSync(jar, path.join(mods, 'architect_apitest-0.8.0.jar'));
+  const outDir = path.join(OUT, 'api15jar');
+  let code = 0;
+  let text = '';
+  try {
+    fs.rmSync(path.join(SAVES, 'G5A Api15'), { recursive: true, force: true });
+    await startClient('G5A Api15', { ARCHITECT_APITEST: '0', ARCHITECT_AUTOWORLD_MODE: 'survival' });
+    try {
+      text = execFileSync('node', [path.join(V080, 'tools', 'apitest.mjs'), 'survival'], {
+        env: { ...process.env, APITEST_API_VERSION: '1.5.0', ARCHITECT_DEV_PORT: String(PORT), ARCHITECT_GAME_DIR: GAME_DIR, APITEST_OUT: outDir, APITEST_GAME_DIR: GAME_DIR }, timeout: 3_600_000 }).toString();
+    } catch (e) {
+      code = e.status ?? 1;
+      text = `${e.stdout ?? ''}${e.stderr ?? ''}`;
+    }
+  } finally {
+    await stopClient();
+    fs.rmSync(path.join(mods, 'architect_apitest-0.8.0.jar'), { force: true });
+  }
+  fs.writeFileSync(path.join(OUT, 'api15jar.log'), text);
+  const fails = text.split('\n').filter((l) => l.startsWith('FAIL'));
+  check(code === 0 && fails.length === 0, `api15jar: the 1.5.0 apitest jar (unchanged) passes tools/apitest.mjs survival (v0.8.0) against 0.9.0 (${fails.length} FAIL)`, fails);
+  return { code, fails };
 };
 
 /** `api14`: the 1.4.0 apitest jar (0.7.0), unchanged, against 0.8.0 - tools/apitest.mjs survival of v0.7.0. */

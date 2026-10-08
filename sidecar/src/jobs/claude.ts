@@ -13,7 +13,7 @@
 // The MCP tool-call timeout is unbounded (MCP_TOOL_TIMEOUT is removed from the CLI env and the
 // server sets no timeout), because the runner keeps its own clock that stops while the game is
 // paused.
-import type { CanUseTool, McpServerConfig, Options, PermissionResult, SDKMessage } from '@anthropic-ai/claude-agent-sdk';
+import type { CanUseTool, McpServerConfig, Options, PermissionResult, SDKMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 import type { z as Z } from 'zod';
 import { VERSION } from '../config.js';
 import type { Logger } from '../context.js';
@@ -22,7 +22,22 @@ import { connectorHook, denyHook } from '../claude/permissions.js';
 import { loadSdk, loadZod, type Sdk } from '../claude/sdk.js';
 import { foremanPrivateVerdict, type Verdict } from '../policy.js';
 import { truncate } from '../util/text.js';
-import type { DriverQuery, DriverTool, JobDriver } from './driver.js';
+import fs from 'node:fs';
+import type { DriverImage, DriverQuery, DriverTool, JobDriver } from './driver.js';
+
+/**
+ * (5a) The prompt of a query with images: one SDK user message whose content is each image after its label, then the
+ * prompt text (docs/CONTRACT.md "Images in jobs"). The image-block path was probed under the claude login first.
+ */
+export async function* imagePrompt(text: string, images: DriverImage[]): AsyncGenerator<SDKUserMessage> {
+  const content: Array<Record<string, unknown>> = [];
+  for (const im of images) {
+    content.push({ type: 'text', text: `Image: ${im.label}` });
+    content.push({ type: 'image', source: { type: 'base64', media_type: im.mediaType, data: fs.readFileSync(im.file).toString('base64') } });
+  }
+  content.push({ type: 'text', text });
+  yield { type: 'user', session_id: '', parent_tool_use_id: null, message: { role: 'user', content } } as unknown as SDKUserMessage;
+}
 
 export const JOB_MCP_SERVER = 'architect_job';
 /** the SDK's internal tool that carries an outputFormat answer (in the CLI: `name: "StructuredOutput"`) */
@@ -141,7 +156,8 @@ export class ClaudeJobDriver implements JobDriver {
   async *query(q: DriverQuery): AsyncGenerator<SDKMessage> {
     const entry = { abort: q.abort } as Parameters<ClaudeHost['spawner']>[0] & { abort: AbortController };
     const options = await this.options(q, entry);
-    const it = this.host.queryFunction()({ prompt: q.prompt, options });
+    const prompt = q.images?.length && !q.resume ? imagePrompt(q.prompt, q.images) : q.prompt;
+    const it = this.host.queryFunction()({ prompt, options });
     const close = () => {
       this.host.abortTurn(entry!, 'cancel');
       try {

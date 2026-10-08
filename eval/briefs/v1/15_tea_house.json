@@ -1,0 +1,23 @@
+{
+  "id": "tea_house",
+  "n": 15,
+  "title": "tea house",
+  "size": "M",
+  "setting": "A tea house in a cherry grove: a low veranda, sliding screens, a small garden.",
+  "model": "claude-sonnet-5-5",
+  "effort": "high",
+  "request": {
+    "type": "house",
+    "style": "japanese",
+    "features": [
+      "garden"
+    ],
+    "maxSize": {
+      "x": 21,
+      "y": 14,
+      "z": 21
+    },
+    "name": "Tea house",
+    "notes": "A tea house in a cherry grove: a low veranda, sliding screens, a small garden."
+  }
+}

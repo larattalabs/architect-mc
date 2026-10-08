@@ -1,0 +1,26 @@
+{
+  "id": "lighthouse",
+  "n": 11,
+  "title": "lighthouse",
+  "size": "M",
+  "setting": "A lighthouse on a beach: a tall tower with a lamp room at the top and a keeper's room at the base.",
+  "model": "claude-sonnet-5-5",
+  "effort": "high",
+  "request": {
+    "type": "lighthouse",
+    "style": "coastal",
+    "features": [],
+    "maxSize": {
+      "x": 11,
+      "y": 40,
+      "z": 11
+    },
+    "name": "Lighthouse",
+    "notes": "A lighthouse on a beach: a tall tower with a lamp room at the top and a keeper's room at the base.",
+    "profile": [
+      "door",
+      "floors_reachable",
+      "tall:3"
+    ]
+  }
+}

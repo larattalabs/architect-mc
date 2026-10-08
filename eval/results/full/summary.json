@@ -1,0 +1,3437 @@
+{
+  "runId": "full-2026-10-07T2324",
+  "label": "full",
+  "tier": "full",
+  "models": null,
+  "maxRevisions": 2,
+  "capUsd": 85,
+  "authVars": {
+    "ANTHROPIC_API_KEY": false,
+    "ANTHROPIC_AUTH_TOKEN": false,
+    "CLAUDE_CODE_OAUTH_TOKEN": false,
+    "ANTHROPIC_BASE_URL": true,
+    "CLAUDE_CODE_USE_BEDROCK": false,
+    "CLAUDE_CODE_USE_VERTEX": false,
+    "CLAUDE_CODE_USE_FOUNDRY": false
+  },
+  "provenance": {
+    "sidecarVersion": "0.1.0",
+    "modVersion": "0.9.0",
+    "briefSet": "v1",
+    "hashes": {
+      "briefs": "1e503b2332ac1ee6e1cfb6123cc84af89ee9b0e8b9b6b9fcc610d2fa5f6f4a80",
+      "kit": "38b781900f6e7f98864cd6e431c73c7fd4f2c4286d696931951ec40164420d15",
+      "designPrompts": "a90bce97e378df2e467bc47871e813e003eb4092a2cf1eca1062d1ccf276f040",
+      "critic": "b7888e53874212e7f6efbefff555d79f9962e7c4679025b417f24a423e6e0bcc",
+      "judge": "a087ab438b0c93874f83e9af3245c3e46094582f7cf3a06d17629ff4794702a4"
+    },
+    "models": {
+      "critic": "claude-sonnet-5-5 (medium)",
+      "judge": "claude-opus-5-5 (medium)"
+    }
+  },
+  "stopReason": null,
+  "briefs": [
+    {
+      "id": "woodcutters_cabin",
+      "n": 1,
+      "title": "woodcutter's cabin",
+      "type": "cabin",
+      "model": "claude-sonnet-5-5",
+      "status": "done",
+      "end": "max_revisions",
+      "best": 1,
+      "revisions": 2,
+      "rounds": [
+        {
+          "n": 0,
+          "kept": true,
+          "overall": 5.33,
+          "scores": {
+            "silhouette": 6,
+            "legibility": 5,
+            "craft": 5,
+            "materials": 5,
+            "brief": 5,
+            "interior": 6
+          },
+          "ship": false,
+          "modelVerdict": "iterate",
+          "issues": {
+            "P0": 0,
+            "P1": 3,
+            "P2": 2
+          },
+          "issueParts": 5,
+          "unknownParts": 0,
+          "cost": 0.03,
+          "ms": 8212
+        },
+        {
+          "n": 1,
+          "kept": true,
+          "overall": 5.67,
+          "scores": {
+            "silhouette": 6,
+            "legibility": 5,
+            "craft": 5,
+            "materials": 5,
+            "brief": 6,
+            "interior": 7
+          },
+          "ship": false,
+          "modelVerdict": "iterate",
+          "issues": {
+            "P0": 0,
+            "P1": 4,
+            "P2": 1
+          },
+          "issueParts": 5,
+          "unknownParts": 0,
+          "cost": 0.49,
+          "ms": 99352
+        },
+        {
+          "n": 2,
+          "kept": true,
+          "overall": 5.33,
+          "scores": {
+            "silhouette": 6,
+            "legibility": 5,
+            "craft": 5,
+            "materials": 5,
+            "brief": 5,
+            "interior": 6
+          },
+          "ship": false,
+          "modelVerdict": "iterate",
+          "issues": {
+            "P0": 0,
+            "P1": 3,
+            "P2": 2
+          },
+          "issueParts": 5,
+          "unknownParts": 0,
+          "cost": 0.47,
+          "ms": 90499
+        }
+      ],
+      "round0": {
+        "errors": 0,
+        "warnings": 0,
+        "byRule": {},
+        "metrics": {
+          "accentShare": 0.147,
+          "detailNoise": 0.39,
+          "windowsMin": 2,
+          "paletteAdherence": 1,
+          "parts": 7,
+          "cellsOutsideParts": 0,
+          "blocks": 632
+        }
+      },
+      "final": {
+        "errors": 0,
+        "warnings": 0,
+        "byRule": {},
+        "metrics": {
+          "accentShare": 0.219,
+          "detailNoise": 0.367,
+          "windowsMin": 1,
+          "paletteAdherence": 1,
+          "parts": 7,
+          "cellsOutsideParts": 0,
+          "blocks": 609
+        }
+      },
+      "critic": {
+        "calls": 3,
+        "disagreements": 0,
+        "issues": 15,
+        "unknownParts": 0,
+        "partGrounding": 1
+      },
+      "judge": {
+        "outcome": "tie",
+        "revisions": 2,
+        "best": 1,
+        "views": [
+          "iso",
+          "iso_back",
+          "front",
+          "top"
+        ],
+        "calls": [
+          {
+            "order": {
+              "A": "final",
+              "B": "round0"
+            },
+            "preferred": "B",
+            "margin": "slight",
+            "dimensions": {
+              "silhouette": "A",
+              "legibility": "B",
+              "craft": "tie",
+              "materials": "A",
+              "brief": "B"
+            },
+            "reasons": "Both are the same gabled cabin with a porch and stone chimney. A's dark roof-edge trim sharpens its outline and keeps the palette tighter. B reads more clearly as a woodcutter's snowy taiga cabin: snow-capped log stumps and piles, a spruce shrub, a lit chimney cap and a clearer framed porch doorway. Its scattered stumps add slight noise, but B fits the brief better.",
+            "winner": "round0",
+            "usd": 0.0584
+          },
+          {
+            "order": {
+              "A": "round0",
+              "B": "final"
+            },
+            "preferred": "B",
+            "margin": "slight",
+            "dimensions": {
+              "silhouette": "B",
+              "legibility": "A",
+              "craft": "B",
+              "materials": "B",
+              "brief": "A"
+            },
+            "reasons": "Slight preference for B. Its dark ridge and eave trim outline the roof, and the porch posts and stepped stone chimney look more finished. A suits the snowy setting better, with more snow and a campfire on the chimney, and its door reads more clearly from the front. But A's snow caps on stumps look like noise, and its walls and roof blend into one flat brown.",
+            "winner": "final",
+            "usd": 0.059
+          }
+        ]
+      },
+      "cost": {
+        "total": 2.7454,
+        "round0": 1.7658,
+        "critic": 0.0913,
+        "revise": 0.8883,
+        "loop": 0.9796,
+        "loopCap": 1.7658,
+        "judge": 0.1174,
+        "cacheReadTokens": 5619720
+      },
+      "ms": {
+        "total": 950542,
+        "loop": 198063
+      },
+      "estimate": {
+        "usdLow": 0.8,
+        "usdHigh": 2.5,
+        "critiqueUsdLow": 0.02,
+        "critiqueUsdHigh": 2.24,
+        "minutesLow": 4,
+        "minutesHigh": 10,
+        "critiqueMinutesLow": 0.1,
+        "critiqueMinutesHigh": 9.2,
+        "midUsd": 2.78,
+        "errorPct": -1.25
+      }
+    },
+    {
+      "id": "farmhouse_porch",
+      "n": 2,
+      "title": "farmhouse with a porch",
+      "type": "house",
+      "model": "claude-sonnet-5-5",
+      "status": "done",
+      "end": "max_revisions",
+      "best": 1,
+      "revisions": 2,
+      "rounds": [
+        {
+          "n": 0,
+          "kept": true,
+          "overall": 5.67,
+          "scores": {
+            "silhouette": 6,
+            "legibility": 5,
+            "craft": 5,
+            "materials": 6,
+            "brief": 6,
+            "interior": 6
+          },
+          "ship": false,
+          "modelVerdict": "iterate",
+          "issues": {
+            "P0": 0,
+            "P1": 1,
+            "P2": 0
+          },
+          "issueParts": 1,
+          "unknownParts": 0,
+          "cost": 0.03,
+          "ms": 5685
+        },
+        {
+          "n": 1,
+          "kept": true,
+          "overall": 5.67,
+          "scores": {
+            "silhouette": 6,
+            "legibility": 5,
+            "craft": 5,
+            "materials": 6,
+            "brief": 6,
+            "interior": 6
+          },
+          "ship": false,
+          "modelVerdict": "iterate",
+          "issues": {
+            "P0": 0,
+            "P1": 1,
+            "P2": 0
+          },
+          "issueParts": 1,
+          "unknownParts": 0,
+          "cost": 0.76,
+          "ms": 147219
+        },
+        {
+          "n": 2,
+          "kept": true,
+          "overall": 5.5,
+          "scores": {
+            "silhouette": 5,
+            "legibility": 5,
+            "craft": 5,
+            "materials": 6,
+            "brief": 6,
+            "interior": 6
+          },
+          "ship": false,
+          "modelVerdict": "iterate",
+          "issues": {
+            "P0": 0,
+            "P1": 3,
+            "P2": 2
+          },
+          "issueParts": 5,
+          "unknownParts": 0,
+          "cost": 0.6,
+          "ms": 94983
+        }
+      ],
+      "round0": {
+        "errors": 0,
+        "warnings": 0,
+        "byRule": {},
+        "metrics": {
+          "accentShare": 0.07,
+          "detailNoise": 0.368,
+          "windowsMin": 2,
+          "paletteAdherence": 1,
+          "parts": 8,
+          "cellsOutsideParts": 0,
+          "blocks": 1521
+        }
+      },
+      "final": {
+        "errors": 0,
+        "warnings": 0,
+        "byRule": {},
+        "metrics": {
+          "accentShare": 0.058,
+          "detailNoise": 0.354,
+          "windowsMin": 2,
+          "paletteAdherence": 1,
+          "parts": 8,
+          "cellsOutsideParts": 0,
+          "blocks": 1471
+        }
+      },
+      "critic": {
+        "calls": 3,
+        "disagreements": 0,
+        "issues": 7,
+        "unknownParts": 0,
+        "partGrounding": 1
+      },
+      "judge": {
+        "outcome": "win",
+        "revisions": 2,
+        "best": 1,
+        "views": [
+          "iso",
+          "iso_back",
+          "front",
+          "top"
+        ],
+        "calls": [
+          {
+            "order": {
+              "A": "final",
+              "B": "round0"
+            },
+            "preferred": "A",
+            "margin": "clear",
+            "dimensions": {
+              "silhouette": "A",
+              "legibility": "A",
+              "craft": "A",
+              "materials": "A",
+              "brief": "A"
+            },
+            "reasons": "A's twin parallel gables are clean and symmetric, so it reads clearly as a farmhouse. B's cross-gable roof joins messily: there are stepped overlaps and stray yellow strips on the roof, and the back view shows a gap. Both have the same porch, chimney and garden, but A's roof is better finished and its palette is used more cleanly.",
+            "winner": "final",
+            "usd": 0.0685
+          },
+          {
+            "order": {
+              "A": "round0",
+              "B": "final"
+            },
+            "preferred": "B",
+            "margin": "clear",
+            "dimensions": {
+              "silhouette": "B",
+              "legibility": "B",
+              "craft": "B",
+              "materials": "B",
+              "brief": "tie"
+            },
+            "reasons": "B has two clean parallel gables that read clearly as a farmhouse, with a neat valley between them. A's cross-gabled roof has a messy, overlapping intersection, stray plank stripes and uneven stepping, so it looks unfinished. Both have the same porch, chimney, garden and wall treatment, so the brief is a tie. B wins on how clean its roof is.",
+            "winner": "final",
+            "usd": 0.0698
+          }
+        ]
+      },
+      "cost": {
+        "total": 3.922,
+        "round0": 2.5268,
+        "critic": 0.1093,
+        "revise": 1.2859,
+        "loop": 1.3952,
+        "loopCap": 2.5268,
+        "judge": 0.1384,
+        "cacheReadTokens": 8275184
+      },
+      "ms": {
+        "total": 1208864,
+        "loop": 247887
+      },
+      "estimate": {
+        "usdLow": 0.8,
+        "usdHigh": 2.5,
+        "critiqueUsdLow": 0.02,
+        "critiqueUsdHigh": 2.24,
+        "minutesLow": 4,
+        "minutesHigh": 10,
+        "critiqueMinutesLow": 0.1,
+        "critiqueMinutesHigh": 9.2,
+        "midUsd": 2.78,
+        "errorPct": 41.08
+      }
+    },
+    {
+      "id": "watchtower_plot",
+      "n": 3,
+      "title": "watchtower on an 11x11 plot",
+      "type": "tower",
+      "model": "claude-sonnet-5-5",
+      "status": "done",
+      "end": "budget",
+      "best": 1,
+      "revisions": 1,
+      "rounds": [
+        {
+          "n": 0,
+          "kept": true,
+          "overall": 5.5,
+          "scores": {
+            "silhouette": 6,
+            "legibility": 5,
+            "craft": 5,
+            "materials": 6,
+            "brief": 6,
+            "interior": 5
+          },
+          "ship": false,
+          "modelVerdict": "iterate",
+          "issues": {
+            "P0": 1,
+            "P1": 3,
+            "P2": 1
+          },
+          "issueParts": 5,
+          "unknownParts": 0,
+          "cost": 0.04,
+          "ms": 8881
+        },
+        {
+          "n": 1,
+          "kept": true,
+          "overall": 5.67,
+          "scores": {
+            "silhouette": 6,
+            "legibility": 6,
+            "craft": 5,
+            "materials": 6,
+            "brief": 6,
+            "interior": 5
+          },
+          "ship": false,
+          "modelVerdict": "iterate",
+          "issues": {
+            "P0": 0,
+            "P1": 3,
+            "P2": 2
+          },
+          "issueParts": 5,
+          "unknownParts": 0,
+          "cost": 0.55,
+          "ms": 114316
+        }
+      ],
+      "round0": {
+        "errors": 0,
+        "warnings": 0,
+        "byRule": {},
+        "metrics": {
+          "accentShare": 0.093,
+          "detailNoise": 0.401,
+          "windowsMin": 6,
+          "paletteAdherence": 1,
+          "parts": 7,
+          "cellsOutsideParts": 0,
+          "blocks": 962
+        }
+      },
+      "final": {
+        "errors": 0,
+        "warnings": 0,
+        "byRule": {},
+        "metrics": {
+          "accentShare": 0.017,
+          "detailNoise": 0.425,
+          "windowsMin": 8,
+          "paletteAdherence": 1,
+          "parts": 7,
+          "cellsOutsideParts": 0,
+          "blocks": 936
+        }
+      },
+      "critic": {
+        "calls": 2,
+        "disagreements": 0,
+        "issues": 10,
+        "unknownParts": 0,
+        "partGrounding": 1
+      },
+      "judge": {
+        "outcome": "win",
+        "revisions": 1,
+        "best": 1,
+        "views": [
+          "iso",
+          "iso_back",
+          "front",
+          "top"
+        ],
+        "calls": [
+          {
+            "order": {
+              "A": "final",
+              "B": "round0"
+            },
+            "preferred": "A",
+            "margin": "slight",
+            "dimensions": {
+              "silhouette": "A",
+              "legibility": "A",
+              "craft": "A",
+              "materials": "B",
+              "brief": "A"
+            },
+            "reasons": "A has the cleaner silhouette: its small lookout shelter stays inside the battlements, and its rows of windows give the walls a clear rhythm. B's oversized roof juts past the parapet, which looks heavy and awkward. B also has stray-looking yellow blocks on the wall and only single windows. B's dark timber bands do add some medieval texture.",
+            "winner": "final",
+            "usd": 0.0624
+          },
+          {
+            "order": {
+              "A": "round0",
+              "B": "final"
+            },
+            "preferred": "B",
+            "margin": "slight",
+            "dimensions": {
+              "silhouette": "B",
+              "legibility": "B",
+              "craft": "B",
+              "materials": "A",
+              "brief": "B"
+            },
+            "reasons": "B is slightly better. A's large dark roof hangs past the battlements and covers half the lookout platform, so the crenellated top is harder to read. A also has odd wooden squares on its facade. B keeps the platform open, with only a small shelter, and its rows of windows read cleanly as floors. A's dark timber bands do add some variety in materials.",
+            "winner": "final",
+            "usd": 0.0539
+          }
+        ]
+      },
+      "cost": {
+        "total": 1.6988,
+        "round0": 1.1122,
+        "critic": 0.07,
+        "revise": 0.5166,
+        "loop": 0.5866,
+        "loopCap": 1.1122,
+        "judge": 0.1164,
+        "cacheReadTokens": 3084635
+      },
+      "ms": {
+        "total": 665670,
+        "loop": 123197
+      },
+      "estimate": {
+        "usdLow": 0.8,
+        "usdHigh": 2.5,
+        "critiqueUsdLow": 0.02,
+        "critiqueUsdHigh": 2.24,
+        "minutesLow": 4,
+        "minutesHigh": 10,
+        "critiqueMinutesLow": 0.1,
+        "critiqueMinutesHigh": 9.2,
+        "midUsd": 2.78,
+        "errorPct": -38.89
+      }
+    },
+    {
+      "id": "spice_shop",
+      "n": 4,
+      "title": "spice shop with an awning",
+      "type": "shop",
+      "model": "claude-sonnet-5-5",
+      "status": "done",
+      "end": "max_revisions",
+      "best": 2,
+      "revisions": 2,
+      "rounds": [
+        {
+          "n": 0,
+          "kept": true,
+          "overall": 5.83,
+          "scores": {
+            "silhouette": 6,
+            "legibility": 5,
+            "craft": 5,
+            "materials": 6,
+            "brief": 7,
+            "interior": 6
+          },
+          "ship": false,
+          "modelVerdict": "iterate",
+          "issues": {
+            "P0": 0,
+            "P1": 1,
+            "P2": 0
+          },
+          "issueParts": 1,
+          "unknownParts": 0,
+          "cost": 0.03,
+          "ms": 7738
+        },
+        {
+          "n": 1,
+          "kept": true,
+          "overall": 5.67,
+          "scores": {
+            "silhouette": 5,
+            "legibility": 5,
+            "craft": 5,
+            "materials": 6,
+            "brief": 7,
+            "interior": 6
+          },
+          "ship": false,
+          "modelVerdict": "iterate",
+          "issues": {
+            "P0": 0,
+            "P1": 1,
+            "P2": 0
+          },
+          "issueParts": 1,
+          "unknownParts": 0,
+          "cost": 0.31,
+          "ms": 37775
+        },
+        {
+          "n": 2,
+          "kept": true,
+          "overall": 6,
+          "scores": {
+            "silhouette": 6,
+            "legibility": 5,
+            "craft": 5,
+            "materials": 6,
+            "brief": 7,
+            "interior": 7
+          },
+          "ship": false,
+          "modelVerdict": "iterate",
+          "issues": {
+            "P0": 0,
+            "P1": 3,
+            "P2": 1
+          },
+          "issueParts": 4,
+          "unknownParts": 0,
+          "cost": 0.27,
+          "ms": 34229
+        }
+      ],
+      "round0": {
+        "errors": 0,
+        "warnings": 0,
+        "byRule": {},
+        "metrics": {
+          "accentShare": 0.16,
+          "detailNoise": 0.426,
+          "windowsMin": 4,
+          "paletteAdherence": 1,
+          "parts": 13,
+          "cellsOutsideParts": 0,
+          "blocks": 1427
+        }
+      },
+      "final": {
+        "errors": 0,
+        "warnings": 0,
+        "byRule": {},
+        "metrics": {
+          "accentShare": 0.163,
+          "detailNoise": 0.431,
+          "windowsMin": 4,
+          "paletteAdherence": 1,
+          "parts": 13,
+          "cellsOutsideParts": 0,
+          "blocks": 1403
+        }
+      },
+      "critic": {
+        "calls": 3,
+        "disagreements": 0,
+        "issues": 6,
+        "unknownParts": 0,
+        "partGrounding": 1
+      },
+      "judge": {
+        "outcome": "win",
+        "revisions": 2,
+        "best": 2,
+        "views": [
+          "iso",
+          "iso_back",
+          "front",
+          "top"
+        ],
+        "calls": [
+          {
+            "order": {
+              "A": "round0",
+              "B": "final"
+            },
+            "preferred": "B",
+            "margin": "clear",
+            "dimensions": {
+              "silhouette": "B",
+              "legibility": "B",
+              "craft": "B",
+              "materials": "tie",
+              "brief": "B"
+            },
+            "reasons": "Both versions share the same ground floor: the striped awning, the spice goods and the sandstone walls. A's roof is covered in scattered, jagged sandstone blocks that look broken and noisy. B has a clean parapet with tidy rooftop rooms, so its flat-roofed desert form is crisper and looks more finished. The palettes are the same.",
+            "winner": "final",
+            "usd": 0.0621
+          },
+          {
+            "order": {
+              "A": "final",
+              "B": "round0"
+            },
+            "preferred": "A",
+            "margin": "clear",
+            "dimensions": {
+              "silhouette": "A",
+              "legibility": "A",
+              "craft": "A",
+              "materials": "tie",
+              "brief": "A"
+            },
+            "reasons": "A and B are the same building except for the roof. B adds single sandstone blocks scattered unevenly along the parapets and roof volumes. They don't form a regular row of battlements, so they read as noise and stray blocks. A's clean flat roof with stepped parapets reads more clearly as a desert bazaar shop. The awning, spice stall and palette are the same in both.",
+            "winner": "final",
+            "usd": 0.0736
+          }
+        ]
+      },
+      "cost": {
+        "total": 3.056,
+        "round0": 2.4334,
+        "critic": 0.1185,
+        "revise": 0.5041,
+        "loop": 0.6226,
+        "loopCap": 2.4334,
+        "judge": 0.1356,
+        "cacheReadTokens": 6907854
+      },
+      "ms": {
+        "total": 1235671,
+        "loop": 79742
+      },
+      "estimate": {
+        "usdLow": 0.8,
+        "usdHigh": 2.5,
+        "critiqueUsdLow": 0.02,
+        "critiqueUsdHigh": 2.24,
+        "minutesLow": 4,
+        "minutesHigh": 10,
+        "critiqueMinutesLow": 0.1,
+        "critiqueMinutesHigh": 9.2,
+        "midUsd": 2.78,
+        "errorPct": 9.93
+      }
+    },
+    {
+      "id": "coaching_inn",
+      "n": 5,
+      "title": "coaching inn",
+      "type": "tavern",
+      "model": "claude-sonnet-5-5",
+      "status": "done",
+      "end": "max_revisions",
+      "best": 2,
+      "revisions": 2,
+      "rounds": [
+        {
+          "n": 0,
+          "kept": true,
+          "overall": 5.5,
+          "scores": {
+            "silhouette": 5,
+            "legibility": 5,
+            "craft": 5,
+            "materials": 6,
+            "brief": 6,
+            "interior": 6
+          },
+          "ship": false,
+          "modelVerdict": "iterate",
+          "issues": {
+            "P0": 0,
+            "P1": 3,
+            "P2": 2
+          },
+          "issueParts": 5,
+          "unknownParts": 0,
+          "cost": 0.07,
+          "ms": 13851
+        },
+        {
+          "n": 1,
+          "kept": true,
+          "overall": 6.17,
+          "scores": {
+            "silhouette": 6,
+            "legibility": 5,
+            "craft": 6,
+            "materials": 6,
+            "brief": 7,
+            "interior": 7
+          },
+          "ship": false,
+          "modelVerdict": "iterate",
+          "issues": {
+            "P0": 0,
+            "P1": 3,
+            "P2": 0
+          },
+          "issueParts": 3,
+          "unknownParts": 0,
+          "cost": 1.09,
+          "ms": 196791
+        },
+        {
+          "n": 2,
+          "kept": true,
+          "overall": 6.17,
+          "scores": {
+            "silhouette": 6,
+            "legibility": 5,
+            "craft": 6,
+            "materials": 6,
+            "brief": 7,
+            "interior": 7
+          },
+          "ship": false,
+          "modelVerdict": "iterate",
+          "issues": {
+            "P0": 0,
+            "P1": 1,
+            "P2": 0
+          },
+          "issueParts": 1,
+          "unknownParts": 0,
+          "cost": 0.75,
+          "ms": 93626
+        }
+      ],
+      "round0": {
+        "errors": 0,
+        "warnings": 0,
+        "byRule": {},
+        "metrics": {
+          "accentShare": 0.232,
+          "detailNoise": 0.382,
+          "windowsMin": 5,
+          "paletteAdherence": 1,
+          "parts": 13,
+          "cellsOutsideParts": 0,
+          "blocks": 3780
+        }
+      },
+      "final": {
+        "errors": 0,
+        "warnings": 0,
+        "byRule": {},
+        "metrics": {
+          "accentShare": 0.265,
+          "detailNoise": 0.35,
+          "windowsMin": 4,
+          "paletteAdherence": 1,
+          "parts": 13,
+          "cellsOutsideParts": 0,
+          "blocks": 3727
+        }
+      },
+      "critic": {
+        "calls": 3,
+        "disagreements": 0,
+        "issues": 9,
+        "unknownParts": 0,
+        "partGrounding": 1
+      },
+      "judge": {
+        "outcome": "loss",
+        "revisions": 2,
+        "best": 2,
+        "views": [
+          "iso",
+          "iso_back",
+          "front",
+          "top"
+        ],
+        "calls": [
+          {
+            "order": {
+              "A": "round0",
+              "B": "final"
+            },
+            "preferred": "A",
+            "margin": "slight",
+            "dimensions": {
+              "silhouette": "A",
+              "legibility": "tie",
+              "craft": "A",
+              "materials": "B",
+              "brief": "A"
+            },
+            "reasons": "A wins narrowly. Its rows of dormers break up the long roof and show where the guest rooms are upstairs, so it reads more like a coaching inn. Its stable building has a proper roof and the yard looks more finished. B's dark roof stands out well against the timber framing, and its chimney cap is nicer. But B's roof is a plain flat slab, and the stable walls have an odd checkerboard pattern.",
+            "winner": "round0",
+            "usd": 0.086
+          },
+          {
+            "order": {
+              "A": "final",
+              "B": "round0"
+            },
+            "preferred": "B",
+            "margin": "slight",
+            "dimensions": {
+              "silhouette": "B",
+              "legibility": "B",
+              "craft": "A",
+              "materials": "B",
+              "brief": "B"
+            },
+            "reasons": "I prefer B. Its dormer roofline shows the guest rooms upstairs and has a more interesting outline than A's flat, heavy roof. B's warm brown roof suits the timber framing better than A's near-black one. Its bigger stable yard with lamp posts and a road path fits a coaching inn. A is tidier: its chimney is cleaner, while B's dormers leave gaps and look busy.",
+            "winner": "round0",
+            "usd": 0.0976
+          }
+        ]
+      },
+      "cost": {
+        "total": 4.9214,
+        "round0": 3.0198,
+        "critic": 0.1678,
+        "revise": 1.7337,
+        "loop": 1.9016,
+        "loopCap": 3.0198,
+        "judge": 0.1836,
+        "cacheReadTokens": 11134651
+      },
+      "ms": {
+        "total": 2114001,
+        "loop": 304268
+      },
+      "estimate": {
+        "usdLow": 0.8,
+        "usdHigh": 2.5,
+        "critiqueUsdLow": 0.02,
+        "critiqueUsdHigh": 2.24,
+        "minutesLow": 4,
+        "minutesHigh": 10,
+        "critiqueMinutesLow": 0.1,
+        "critiqueMinutesHigh": 9.2,
+        "midUsd": 2.78,
+        "errorPct": 77.03
+      }
+    },
+    {
+      "id": "cattle_barn",
+      "n": 6,
+      "title": "cattle barn",
+      "type": "barn",
+      "model": "claude-sonnet-5-5",
+      "status": "done",
+      "end": "budget",
+      "best": 1,
+      "revisions": 1,
+      "rounds": [
+        {
+          "n": 0,
+          "kept": true,
+          "overall": 5.67,
+          "scores": {
+            "silhouette": 6,
+            "legibility": 5,
+            "craft": 5,
+            "materials": 6,
+            "brief": 6,
+            "interior": 6
+          },
+          "ship": false,
+          "modelVerdict": "iterate",
+          "issues": {
+            "P0": 0,
+            "P1": 4,
+            "P2": 2
+          },
+          "issueParts": 6,
+          "unknownParts": 0,
+          "cost": 0.07,
+          "ms": 19298
+        },
+        {
+          "n": 1,
+          "kept": true,
+          "overall": 5.67,
+          "scores": {
+            "silhouette": 6,
+            "legibility": 5,
+            "craft": 6,
+            "materials": 5,
+            "brief": 6,
+            "interior": 6
+          },
+          "ship": false,
+          "modelVerdict": "iterate",
+          "issues": {
+            "P0": 0,
+            "P1": 3,
+            "P2": 2
+          },
+          "issueParts": 5,
+          "unknownParts": 0,
+          "cost": 0.72,
+          "ms": 131624
+        }
+      ],
+      "round0": {
+        "errors": 0,
+        "warnings": 0,
+        "byRule": {},
+        "metrics": {
+          "accentShare": 0.397,
+          "detailNoise": 0.297,
+          "windowsMin": 3,
+          "paletteAdherence": 1,
+          "parts": 11,
+          "cellsOutsideParts": 0,
+          "blocks": 3277
+        }
+      },
+      "final": {
+        "errors": 0,
+        "warnings": 0,
+        "byRule": {},
+        "metrics": {
+          "accentShare": 0.144,
+          "detailNoise": 0.284,
+          "windowsMin": 5,
+          "paletteAdherence": 1,
+          "parts": 10,
+          "cellsOutsideParts": 0,
+          "blocks": 2853
+        }
+      },
+      "critic": {
+        "calls": 2,
+        "disagreements": 0,
+        "issues": 11,
+        "unknownParts": 0,
+        "partGrounding": 1
+      },
+      "judge": {
+        "outcome": "loss",
+        "revisions": 1,
+        "best": 1,
+        "views": [
+          "iso",
+          "iso_back",
+          "front",
+          "top"
+        ],
+        "calls": [
+          {
+            "order": {
+              "A": "final",
+              "B": "round0"
+            },
+            "preferred": "B",
+            "margin": "slight",
+            "dimensions": {
+              "silhouette": "B",
+              "legibility": "B",
+              "craft": "A",
+              "materials": "B",
+              "brief": "B"
+            },
+            "reasons": "I slightly prefer B. Its gambrel-style roof with dark eaves, the stall lean-to on the side, and the hay bales and lanterns make it read more like a rustic cattle barn. Its entrance is also framed more clearly. A is a cleaner, tidier gable with fewer odd edges. However, it is plainer, and it reads more like a long house than a barn.",
+            "winner": "round0",
+            "usd": 0.086
+          },
+          {
+            "order": {
+              "A": "round0",
+              "B": "final"
+            },
+            "preferred": "A",
+            "margin": "slight",
+            "dimensions": {
+              "silhouette": "A",
+              "legibility": "B",
+              "craft": "B",
+              "materials": "tie",
+              "brief": "A"
+            },
+            "reasons": "A reads more clearly as a barn because of its gambrel-style roof and the lean-to stall wing on the side. B is the neater build: its gable front is symmetric, the wide entrance is easy to read and the eaves are tidy. But B's plain gable roof looks more like a longhouse than a barn. A's stepped roof edges look a bit noisy, but its form and the extra stall wing suit a cattle barn better.",
+            "winner": "round0",
+            "usd": 0.0862
+          }
+        ]
+      },
+      "cost": {
+        "total": 2.3915,
+        "round0": 1.6105,
+        "critic": 0.1336,
+        "revise": 0.6474,
+        "loop": 0.7811,
+        "loopCap": 1.6105,
+        "judge": 0.1722,
+        "cacheReadTokens": 3777897
+      },
+      "ms": {
+        "total": 2032298,
+        "loop": 150922
+      },
+      "estimate": {
+        "usdLow": 0.8,
+        "usdHigh": 2.5,
+        "critiqueUsdLow": 0.02,
+        "critiqueUsdHigh": 2.24,
+        "minutesLow": 4,
+        "minutesHigh": 10,
+        "critiqueMinutesLow": 0.1,
+        "critiqueMinutesHigh": 9.2,
+        "midUsd": 2.78,
+        "errorPct": -13.97
+      }
+    },
+    {
+      "id": "smithy_forge_yard",
+      "n": 7,
+      "title": "smithy with a forge yard",
+      "type": "smithy",
+      "model": "claude-sonnet-5-5",
+      "status": "done",
+      "end": "max_revisions",
+      "best": 2,
+      "revisions": 2,
+      "rounds": [
+        {
+          "n": 0,
+          "kept": true,
+          "overall": 5.17,
+          "scores": {
+            "silhouette": 6,
+            "legibility": 4,
+            "craft": 5,
+            "materials": 6,
+            "brief": 5,
+            "interior": 5
+          },
+          "ship": false,
+          "modelVerdict": "iterate",
+          "issues": {
+            "P0": 0,
+            "P1": 4,
+            "P2": 1
+          },
+          "issueParts": 5,
+          "unknownParts": 0,
+          "cost": 0.05,
+          "ms": 17157
+        },
+        {
+          "n": 1,
+          "kept": true,
+          "overall": 4.83,
+          "scores": {
+            "silhouette": 5,
+            "legibility": 4,
+            "craft": 5,
+            "materials": 5,
+            "brief": 5,
+            "interior": 5
+          },
+          "ship": false,
+          "modelVerdict": "iterate",
+          "issues": {
+            "P0": 0,
+            "P1": 1,
+            "P2": 0
+          },
+          "issueParts": 1,
+          "unknownParts": 0,
+          "cost": 0.67,
+          "ms": 147514
+        },
+        {
+          "n": 2,
+          "kept": true,
+          "overall": 5.33,
+          "scores": {
+            "silhouette": 6,
+            "legibility": 5,
+            "craft": 5,
+            "materials": 5,
+            "brief": 6,
+            "interior": 5
+          },
+          "ship": false,
+          "modelVerdict": "iterate",
+          "issues": {
+            "P0": 0,
+            "P1": 4,
+            "P2": 2
+          },
+          "issueParts": 6,
+          "unknownParts": 1,
+          "cost": 0.35,
+          "ms": 51791
+        }
+      ],
+      "round0": {
+        "errors": 0,
+        "warnings": 0,
+        "byRule": {},
+        "metrics": {
+          "accentShare": 0.121,
+          "detailNoise": 0.366,
+          "windowsMin": 0,
+          "paletteAdherence": 1,
+          "parts": 7,
+          "cellsOutsideParts": 0,
+          "blocks": 868
+        }
+      },
+      "final": {
+        "errors": 0,
+        "warnings": 0,
+        "byRule": {},
+        "metrics": {
+          "accentShare": 0.091,
+          "detailNoise": 0.399,
+          "windowsMin": 2,
+          "paletteAdherence": 1,
+          "parts": 7,
+          "cellsOutsideParts": 0,
+          "blocks": 747
+        }
+      },
+      "critic": {
+        "calls": 3,
+        "disagreements": 0,
+        "issues": 12,
+        "unknownParts": 1,
+        "partGrounding": 0.917
+      },
+      "judge": {
+        "outcome": "win",
+        "revisions": 2,
+        "best": 2,
+        "views": [
+          "iso",
+          "iso_back",
+          "front",
+          "top"
+        ],
+        "calls": [
+          {
+            "order": {
+              "A": "final",
+              "B": "round0"
+            },
+            "preferred": "A",
+            "margin": "clear",
+            "dimensions": {
+              "silhouette": "A",
+              "legibility": "A",
+              "craft": "A",
+              "materials": "tie",
+              "brief": "A"
+            },
+            "reasons": "I prefer A. It keeps the forge yard open to one side, as the brief asked, and you can see the anvil, grindstone and quench trough clearly. B puts a low roof over the yard, which closes it in and hides the workstations. B's chimney also has an odd cross-shaped cap with blocks sticking out, while A's chimney is a clean, solid stack. The two use the same palette.",
+            "winner": "final",
+            "usd": 0.0627
+          },
+          {
+            "order": {
+              "A": "round0",
+              "B": "final"
+            },
+            "preferred": "B",
+            "margin": "clear",
+            "dimensions": {
+              "silhouette": "B",
+              "legibility": "B",
+              "craft": "B",
+              "materials": "tie",
+              "brief": "B"
+            },
+            "reasons": "B has the open forge yard the brief asks for, with an anvil, a grindstone, a water quench trough, a fence and corner lantern posts. A puts a roof over the whole yard, so the work area is hidden and the brief isn't met. B's chimney is solid and believable, while A's has a fussy cross-shaped top. The two use the same palette.",
+            "winner": "final",
+            "usd": 0.0629
+          }
+        ]
+      },
+      "cost": {
+        "total": 2.9724,
+        "round0": 1.9131,
+        "critic": 0.1151,
+        "revise": 0.9441,
+        "loop": 1.0592,
+        "loopCap": 1.9131,
+        "judge": 0.1256,
+        "cacheReadTokens": 6532422
+      },
+      "ms": {
+        "total": 3067886,
+        "loop": 216462
+      },
+      "estimate": {
+        "usdLow": 0.8,
+        "usdHigh": 2.5,
+        "critiqueUsdLow": 0.02,
+        "critiqueUsdHigh": 2.24,
+        "minutesLow": 4,
+        "minutesHigh": 10,
+        "critiqueMinutesLow": 0.1,
+        "critiqueMinutesHigh": 9.2,
+        "midUsd": 2.78,
+        "errorPct": 6.92
+      }
+    },
+    {
+      "id": "mountain_chapel",
+      "n": 8,
+      "title": "mountain chapel",
+      "type": "chapel",
+      "model": "claude-sonnet-5-5",
+      "status": "done",
+      "end": "max_revisions",
+      "best": 2,
+      "revisions": 2,
+      "rounds": [
+        {
+          "n": 0,
+          "kept": true,
+          "overall": 5.5,
+          "scores": {
+            "silhouette": 6,
+            "legibility": 5,
+            "craft": 5,
+            "materials": 6,
+            "brief": 5,
+            "interior": 6
+          },
+          "ship": false,
+          "modelVerdict": "iterate",
+          "issues": {
+            "P0": 0,
+            "P1": 4,
+            "P2": 2
+          },
+          "issueParts": 6,
+          "unknownParts": 0,
+          "cost": 0.04,
+          "ms": 10029
+        },
+        {
+          "n": 1,
+          "kept": true,
+          "overall": 5.67,
+          "scores": {
+            "silhouette": 6,
+            "legibility": 5,
+            "craft": 5,
+            "materials": 6,
+            "brief": 6,
+            "interior": 6
+          },
+          "ship": false,
+          "modelVerdict": "iterate",
+          "issues": {
+            "P0": 0,
+            "P1": 2,
+            "P2": 1
+          },
+          "issueParts": 3,
+          "unknownParts": 0,
+          "cost": 0.5,
+          "ms": 95298
+        },
+        {
+          "n": 2,
+          "kept": true,
+          "overall": 6.17,
+          "scores": {
+            "silhouette": 6,
+            "legibility": 6,
+            "craft": 6,
+            "materials": 6,
+            "brief": 6,
+            "interior": 7
+          },
+          "ship": false,
+          "modelVerdict": "iterate",
+          "issues": {
+            "P0": 0,
+            "P1": 3,
+            "P2": 2
+          },
+          "issueParts": 5,
+          "unknownParts": 0,
+          "cost": 0.39,
+          "ms": 68524
+        }
+      ],
+      "round0": {
+        "errors": 0,
+        "warnings": 0,
+        "byRule": {},
+        "metrics": {
+          "accentShare": 0.317,
+          "detailNoise": 0.27,
+          "windowsMin": 1,
+          "paletteAdherence": 1,
+          "parts": 8,
+          "cellsOutsideParts": 0,
+          "blocks": 1507
+        }
+      },
+      "final": {
+        "errors": 0,
+        "warnings": 0,
+        "byRule": {},
+        "metrics": {
+          "accentShare": 0.163,
+          "detailNoise": 0.305,
+          "windowsMin": 1,
+          "paletteAdherence": 1,
+          "parts": 8,
+          "cellsOutsideParts": 0,
+          "blocks": 1248
+        }
+      },
+      "critic": {
+        "calls": 3,
+        "disagreements": 0,
+        "issues": 14,
+        "unknownParts": 0,
+        "partGrounding": 1
+      },
+      "judge": {
+        "outcome": "loss",
+        "revisions": 2,
+        "best": 2,
+        "views": [
+          "iso",
+          "iso_back",
+          "front",
+          "top"
+        ],
+        "calls": [
+          {
+            "order": {
+              "A": "final",
+              "B": "round0"
+            },
+            "preferred": "B",
+            "margin": "slight",
+            "dimensions": {
+              "silhouette": "B",
+              "legibility": "B",
+              "craft": "tie",
+              "materials": "B",
+              "brief": "B"
+            },
+            "reasons": "I slightly prefer B. Its bell tower has a broader, flared roof with an overhang, which looks more alpine. The dark wood frame makes the front door easier to read. The wood trim along the eaves warms up the grey stone and dark roof, and the snow-capped trees fit the snowy setting. A is clean but plainer. Its door is hard to pick out, and its roof eaves have no trim.",
+            "winner": "round0",
+            "usd": 0.0755
+          },
+          {
+            "order": {
+              "A": "round0",
+              "B": "final"
+            },
+            "preferred": "A",
+            "margin": "slight",
+            "dimensions": {
+              "silhouette": "A",
+              "legibility": "A",
+              "craft": "A",
+              "materials": "tie",
+              "brief": "tie"
+            },
+            "reasons": "I slightly prefer A. Both have the same plan: a steep dark roof, stained glass and an open bell tower over the entrance. A's roof is cleaner, with one snow ridge and wooden trim along the eaves. B's wide, doubled snow band makes the ridge look stepped. B's spruce trees look more alpine, while A's round trees crowd the corners, but A's main building looks better.",
+            "winner": "round0",
+            "usd": 0.0946
+          }
+        ]
+      },
+      "cost": {
+        "total": 3.2861,
+        "round0": 2.3599,
+        "critic": 0.1253,
+        "revise": 0.8009,
+        "loop": 0.9262,
+        "loopCap": 2.3599,
+        "judge": 0.1701,
+        "cacheReadTokens": 6725633
+      },
+      "ms": {
+        "total": 3256916,
+        "loop": 173851
+      },
+      "estimate": {
+        "usdLow": 0.8,
+        "usdHigh": 2.5,
+        "critiqueUsdLow": 0.02,
+        "critiqueUsdHigh": 2.24,
+        "minutesLow": 4,
+        "minutesHigh": 10,
+        "critiqueMinutesLow": 0.1,
+        "critiqueMinutesHigh": 9.2,
+        "midUsd": 2.78,
+        "errorPct": 18.21
+      }
+    },
+    {
+      "id": "gatehouse_plot",
+      "n": 9,
+      "title": "gatehouse on a 15x9 plot",
+      "type": "gatehouse",
+      "model": "claude-sonnet-5-5",
+      "status": "done",
+      "end": "max_revisions",
+      "best": 2,
+      "revisions": 2,
+      "rounds": [
+        {
+          "n": 0,
+          "kept": true,
+          "overall": 5.33,
+          "scores": {
+            "silhouette": 6,
+            "legibility": 5,
+            "craft": 5,
+            "materials": 6,
+            "brief": 6,
+            "interior": 4
+          },
+          "ship": false,
+          "modelVerdict": "iterate",
+          "issues": {
+            "P0": 0,
+            "P1": 4,
+            "P2": 1
+          },
+          "issueParts": 5,
+          "unknownParts": 0,
+          "cost": 0.03,
+          "ms": 8569
+        },
+        {
+          "n": 1,
+          "kept": true,
+          "overall": 5.5,
+          "scores": {
+            "silhouette": 6,
+            "legibility": 6,
+            "craft": 5,
+            "materials": 5,
+            "brief": 6,
+            "interior": 5
+          },
+          "ship": false,
+          "modelVerdict": "iterate",
+          "issues": {
+            "P0": 0,
+            "P1": 1,
+            "P2": 0
+          },
+          "issueParts": 1,
+          "unknownParts": 0,
+          "cost": 0.92,
+          "ms": 196296
+        },
+        {
+          "n": 2,
+          "kept": true,
+          "overall": 6,
+          "scores": {
+            "silhouette": 6,
+            "legibility": 6,
+            "craft": 6,
+            "materials": 5,
+            "brief": 7,
+            "interior": 6
+          },
+          "ship": false,
+          "modelVerdict": "iterate",
+          "issues": {
+            "P0": 0,
+            "P1": 3,
+            "P2": 2
+          },
+          "issueParts": 5,
+          "unknownParts": 1,
+          "cost": 0.29,
+          "ms": 44130
+        }
+      ],
+      "round0": {
+        "errors": 0,
+        "warnings": 0,
+        "byRule": {},
+        "metrics": {
+          "accentShare": 0.031,
+          "detailNoise": 0.417,
+          "windowsMin": 0,
+          "paletteAdherence": 1,
+          "parts": 9,
+          "cellsOutsideParts": 0,
+          "blocks": 1127
+        }
+      },
+      "final": {
+        "errors": 0,
+        "warnings": 0,
+        "byRule": {},
+        "metrics": {
+          "accentShare": 0.021,
+          "detailNoise": 0.333,
+          "windowsMin": 10,
+          "paletteAdherence": 1,
+          "parts": 9,
+          "cellsOutsideParts": 0,
+          "blocks": 1094
+        }
+      },
+      "critic": {
+        "calls": 3,
+        "disagreements": 0,
+        "issues": 11,
+        "unknownParts": 1,
+        "partGrounding": 0.909
+      },
+      "judge": {
+        "outcome": "win",
+        "revisions": 2,
+        "best": 2,
+        "views": [
+          "iso",
+          "iso_back",
+          "front",
+          "top"
+        ],
+        "calls": [
+          {
+            "order": {
+              "A": "final",
+              "B": "round0"
+            },
+            "preferred": "A",
+            "margin": "slight",
+            "dimensions": {
+              "silhouette": "A",
+              "legibility": "A",
+              "craft": "A",
+              "materials": "B",
+              "brief": "A"
+            },
+            "reasons": "A reads more clearly as a gatehouse. Its wide arched passage suits a road, its glazed windows are easy to see, and its crenellations are tidy. B adds dark caps and a dark roof deck that give some contrast. However, its gate is a cramped 3-wide slot, the wood and trapdoor clutter above it looks noisy, and its windows are faint, so its front is harder to read.",
+            "winner": "final",
+            "usd": 0.0524
+          },
+          {
+            "order": {
+              "A": "round0",
+              "B": "final"
+            },
+            "preferred": "B",
+            "margin": "clear",
+            "dimensions": {
+              "silhouette": "B",
+              "legibility": "B",
+              "craft": "B",
+              "materials": "B",
+              "brief": "B"
+            },
+            "reasons": "B has a wide, clear gate passage that reads as a road gateway, with a lintel overhead, glazed windows set out symmetrically, and an even stone palette under clean battlements. A's gate is a narrow slot cluttered with brown beams and a dark band. Its roof and the dark caps on its corners are patchy and dark, so the facade looks noisy and the entrance is harder to read.",
+            "winner": "final",
+            "usd": 0.0521
+          }
+        ]
+      },
+      "cost": {
+        "total": 3.6718,
+        "round0": 2.4331,
+        "critic": 0.0881,
+        "revise": 1.1507,
+        "loop": 1.2387,
+        "loopCap": 2.4331,
+        "judge": 0.1044,
+        "cacheReadTokens": 8456242
+      },
+      "ms": {
+        "total": 3590193,
+        "loop": 248995
+      },
+      "estimate": {
+        "usdLow": 0.8,
+        "usdHigh": 2.5,
+        "critiqueUsdLow": 0.02,
+        "critiqueUsdHigh": 2.24,
+        "minutesLow": 4,
+        "minutesHigh": 10,
+        "critiqueMinutesLow": 0.1,
+        "critiqueMinutesHigh": 9.2,
+        "midUsd": 2.78,
+        "errorPct": 32.08
+      }
+    },
+    {
+      "id": "hellish_lair",
+      "n": 10,
+      "title": "hellish lair",
+      "type": "hellish_lair",
+      "model": "claude-sonnet-5-5",
+      "status": "done",
+      "end": "max_revisions",
+      "best": 0,
+      "revisions": 2,
+      "rounds": [
+        {
+          "n": 0,
+          "kept": true,
+          "overall": 6,
+          "scores": {
+            "silhouette": 6,
+            "legibility": 6,
+            "craft": 6,
+            "materials": 6,
+            "brief": 6,
+            "interior": 6
+          },
+          "ship": false,
+          "modelVerdict": "iterate",
+          "issues": {
+            "P0": 0,
+            "P1": 3,
+            "P2": 2
+          },
+          "issueParts": 5,
+          "unknownParts": 0,
+          "cost": 0.06,
+          "ms": 14416
+        },
+        {
+          "n": 1,
+          "kept": true,
+          "overall": 5.83,
+          "scores": {
+            "silhouette": 6,
+            "legibility": 5,
+            "craft": 6,
+            "materials": 6,
+            "brief": 6,
+            "interior": 6
+          },
+          "ship": false,
+          "modelVerdict": "iterate",
+          "issues": {
+            "P0": 0,
+            "P1": 2,
+            "P2": 3
+          },
+          "issueParts": 5,
+          "unknownParts": 0,
+          "cost": 0.68,
+          "ms": 106645
+        },
+        {
+          "n": 2,
+          "kept": true,
+          "overall": 5.83,
+          "scores": {
+            "silhouette": 6,
+            "legibility": 6,
+            "craft": 6,
+            "materials": 6,
+            "brief": 6,
+            "interior": 5
+          },
+          "ship": false,
+          "modelVerdict": "iterate",
+          "issues": {
+            "P0": 0,
+            "P1": 1,
+            "P2": 0
+          },
+          "issueParts": 1,
+          "unknownParts": 0,
+          "cost": 0.31,
+          "ms": 44502
+        }
+      ],
+      "round0": {
+        "errors": 0,
+        "warnings": 0,
+        "byRule": {},
+        "metrics": {
+          "accentShare": 0.01,
+          "detailNoise": 0.308,
+          "windowsMin": 0,
+          "paletteAdherence": 1,
+          "parts": 9,
+          "cellsOutsideParts": 0,
+          "blocks": 4788
+        }
+      },
+      "final": {
+        "errors": 0,
+        "warnings": 0,
+        "byRule": {},
+        "metrics": {
+          "accentShare": 0.01,
+          "detailNoise": 0.308,
+          "windowsMin": 0,
+          "paletteAdherence": 1,
+          "parts": 9,
+          "cellsOutsideParts": 0,
+          "blocks": 4788
+        }
+      },
+      "critic": {
+        "calls": 3,
+        "disagreements": 0,
+        "issues": 11,
+        "unknownParts": 0,
+        "partGrounding": 1
+      },
+      "judge": {
+        "outcome": "identical",
+        "revisions": 2,
+        "calls": []
+      },
+      "cost": {
+        "total": 3.6086,
+        "round0": 2.5632,
+        "critic": 0.1472,
+        "revise": 0.8981,
+        "loop": 1.0454,
+        "loopCap": 2.5632,
+        "judge": 0,
+        "cacheReadTokens": 6887962
+      },
+      "ms": {
+        "total": 4386868,
+        "loop": 165563
+      },
+      "estimate": {
+        "usdLow": 0.8,
+        "usdHigh": 2.5,
+        "critiqueUsdLow": 0.02,
+        "critiqueUsdHigh": 2.24,
+        "minutesLow": 4,
+        "minutesHigh": 10,
+        "critiqueMinutesLow": 0.1,
+        "critiqueMinutesHigh": 9.2,
+        "midUsd": 2.78,
+        "errorPct": 29.81
+      }
+    },
+    {
+      "id": "lighthouse",
+      "n": 11,
+      "title": "lighthouse",
+      "type": "lighthouse",
+      "model": "claude-sonnet-5-5",
+      "status": "done",
+      "end": "budget",
+      "best": 0,
+      "revisions": 1,
+      "rounds": [
+        {
+          "n": 0,
+          "kept": true,
+          "overall": 5.83,
+          "scores": {
+            "silhouette": 7,
+            "legibility": 6,
+            "craft": 5,
+            "materials": 7,
+            "brief": 6,
+            "interior": 4
+          },
+          "ship": false,
+          "modelVerdict": "iterate",
+          "issues": {
+            "P0": 1,
+            "P1": 0,
+            "P2": 0
+          },
+          "issueParts": 1,
+          "unknownParts": 0,
+          "cost": 0.04,
+          "ms": 6956
+        },
+        {
+          "n": 1,
+          "kept": true,
+          "overall": 5.67,
+          "scores": {
+            "silhouette": 6,
+            "legibility": 6,
+            "craft": 5,
+            "materials": 7,
+            "brief": 6,
+            "interior": 4
+          },
+          "ship": false,
+          "modelVerdict": "iterate",
+          "issues": {
+            "P0": 2,
+            "P1": 2,
+            "P2": 1
+          },
+          "issueParts": 5,
+          "unknownParts": 0,
+          "cost": 0.25,
+          "ms": 47191
+        }
+      ],
+      "round0": {
+        "errors": 0,
+        "warnings": 0,
+        "byRule": {},
+        "metrics": {
+          "accentShare": 0.002,
+          "detailNoise": 0.375,
+          "windowsMin": 6,
+          "paletteAdherence": 1,
+          "parts": 8,
+          "cellsOutsideParts": 0,
+          "blocks": 1158
+        }
+      },
+      "final": {
+        "errors": 0,
+        "warnings": 0,
+        "byRule": {},
+        "metrics": {
+          "accentShare": 0.002,
+          "detailNoise": 0.375,
+          "windowsMin": 6,
+          "paletteAdherence": 1,
+          "parts": 8,
+          "cellsOutsideParts": 0,
+          "blocks": 1158
+        }
+      },
+      "critic": {
+        "calls": 2,
+        "disagreements": 0,
+        "issues": 6,
+        "unknownParts": 0,
+        "partGrounding": 1
+      },
+      "judge": {
+        "outcome": "identical",
+        "revisions": 1,
+        "calls": []
+      },
+      "cost": {
+        "total": 1.1939,
+        "round0": 0.9107,
+        "critic": 0.087,
+        "revise": 0.1963,
+        "loop": 0.2833,
+        "loopCap": 0.9107,
+        "judge": 0,
+        "cacheReadTokens": 1948827
+      },
+      "ms": {
+        "total": 3629175,
+        "loop": 54147
+      },
+      "estimate": {
+        "usdLow": 0.8,
+        "usdHigh": 2.5,
+        "critiqueUsdLow": 0.02,
+        "critiqueUsdHigh": 2.24,
+        "minutesLow": 4,
+        "minutesHigh": 10,
+        "critiqueMinutesLow": 0.1,
+        "critiqueMinutesHigh": 9.2,
+        "midUsd": 2.78,
+        "errorPct": -57.05
+      }
+    },
+    {
+      "id": "windmill",
+      "n": 12,
+      "title": "windmill",
+      "type": "windmill",
+      "model": "claude-sonnet-5-5",
+      "status": "done",
+      "end": "max_revisions",
+      "best": 2,
+      "revisions": 2,
+      "rounds": [
+        {
+          "n": 0,
+          "kept": true,
+          "overall": 5,
+          "scores": {
+            "silhouette": 5,
+            "legibility": 5,
+            "craft": 4,
+            "materials": 5,
+            "brief": 6,
+            "interior": 5
+          },
+          "ship": false,
+          "modelVerdict": "iterate",
+          "issues": {
+            "P0": 2,
+            "P1": 3,
+            "P2": 1
+          },
+          "issueParts": 6,
+          "unknownParts": 0,
+          "cost": 0.05,
+          "ms": 10620
+        },
+        {
+          "n": 1,
+          "kept": true,
+          "overall": 5.67,
+          "scores": {
+            "silhouette": 6,
+            "legibility": 5,
+            "craft": 5,
+            "materials": 6,
+            "brief": 6,
+            "interior": 6
+          },
+          "ship": false,
+          "modelVerdict": "iterate",
+          "issues": {
+            "P0": 0,
+            "P1": 4,
+            "P2": 2
+          },
+          "issueParts": 6,
+          "unknownParts": 0,
+          "cost": 0.5,
+          "ms": 93778
+        },
+        {
+          "n": 2,
+          "kept": true,
+          "overall": 5.83,
+          "scores": {
+            "silhouette": 6,
+            "legibility": 5,
+            "craft": 5,
+            "materials": 6,
+            "brief": 6,
+            "interior": 7
+          },
+          "ship": false,
+          "modelVerdict": "iterate",
+          "issues": {
+            "P0": 0,
+            "P1": 1,
+            "P2": 0
+          },
+          "issueParts": 1,
+          "unknownParts": 0,
+          "cost": 0.31,
+          "ms": 55945
+        }
+      ],
+      "round0": {
+        "errors": 0,
+        "warnings": 0,
+        "byRule": {},
+        "metrics": {
+          "accentShare": 0.336,
+          "detailNoise": 0.425,
+          "windowsMin": 4,
+          "paletteAdherence": 1,
+          "parts": 8,
+          "cellsOutsideParts": 0,
+          "blocks": 1362
+        }
+      },
+      "final": {
+        "errors": 0,
+        "warnings": 0,
+        "byRule": {},
+        "metrics": {
+          "accentShare": 0.326,
+          "detailNoise": 0.251,
+          "windowsMin": 2,
+          "paletteAdherence": 1,
+          "parts": 7,
+          "cellsOutsideParts": 0,
+          "blocks": 1180
+        }
+      },
+      "critic": {
+        "calls": 3,
+        "disagreements": 0,
+        "issues": 13,
+        "unknownParts": 0,
+        "partGrounding": 1
+      },
+      "judge": {
+        "outcome": "tie",
+        "revisions": 2,
+        "best": 2,
+        "views": [
+          "iso",
+          "iso_back",
+          "front",
+          "top"
+        ],
+        "calls": [
+          {
+            "order": {
+              "A": "final",
+              "B": "round0"
+            },
+            "preferred": "B",
+            "margin": "slight",
+            "dimensions": {
+              "silhouette": "B",
+              "legibility": "A",
+              "craft": "A",
+              "materials": "A",
+              "brief": "B"
+            },
+            "reasons": "I slightly prefer B. Its tiered body has a fenced gallery and dark bands, so it reads more like a Dutch smock mill. Its latticed sails and colourful flower meadow also fit the brief. A is cleaner, with tidy sails and a restrained palette, but it looks plainer and has hardly any meadow. B loses points for its lumpy roof and the noisy scattered flower blocks.",
+            "winner": "round0",
+            "usd": 0.0882
+          },
+          {
+            "order": {
+              "A": "round0",
+              "B": "final"
+            },
+            "preferred": "B",
+            "margin": "slight",
+            "dimensions": {
+              "silhouette": "B",
+              "legibility": "B",
+              "craft": "B",
+              "materials": "B",
+              "brief": "A"
+            },
+            "reasons": "B reads more clearly as a windmill. Its sails form a clean, even cross, its cap roof is tidy and its arched door is easy to spot. A's sails are lopsided and look broken from the front, and its roof is lumpy. A follows the brief more closely, with a flower meadow and stage galleries with dark bands, but B is better on silhouette, craft and a restrained palette.",
+            "winner": "final",
+            "usd": 0.087
+          }
+        ]
+      },
+      "cost": {
+        "total": 2.6637,
+        "round0": 1.8021,
+        "critic": 0.1528,
+        "revise": 0.7088,
+        "loop": 0.8616,
+        "loopCap": 1.8021,
+        "judge": 0.1751,
+        "cacheReadTokens": 5431232
+      },
+      "ms": {
+        "total": 4249533,
+        "loop": 160343
+      },
+      "estimate": {
+        "usdLow": 0.8,
+        "usdHigh": 2.5,
+        "critiqueUsdLow": 0.02,
+        "critiqueUsdHigh": 2.24,
+        "minutesLow": 4,
+        "minutesHigh": 10,
+        "critiqueMinutesLow": 0.1,
+        "critiqueMinutesHigh": 9.2,
+        "midUsd": 2.78,
+        "errorPct": -4.18
+      }
+    },
+    {
+      "id": "stilt_house",
+      "n": 13,
+      "title": "stilt house",
+      "type": "house",
+      "model": "claude-sonnet-5-5",
+      "status": "done",
+      "end": "max_revisions",
+      "best": 2,
+      "revisions": 2,
+      "rounds": [
+        {
+          "n": 0,
+          "kept": true,
+          "overall": 5.67,
+          "scores": {
+            "silhouette": 6,
+            "legibility": 5,
+            "craft": 5,
+            "materials": 5,
+            "brief": 7,
+            "interior": 6
+          },
+          "ship": false,
+          "modelVerdict": "iterate",
+          "issues": {
+            "P0": 0,
+            "P1": 4,
+            "P2": 2
+          },
+          "issueParts": 6,
+          "unknownParts": 0,
+          "cost": 0.03,
+          "ms": 8873
+        },
+        {
+          "n": 1,
+          "kept": true,
+          "overall": 5.5,
+          "scores": {
+            "silhouette": 6,
+            "legibility": 5,
+            "craft": 5,
+            "materials": 5,
+            "brief": 6,
+            "interior": 6
+          },
+          "ship": false,
+          "modelVerdict": "iterate",
+          "issues": {
+            "P0": 0,
+            "P1": 2,
+            "P2": 0
+          },
+          "issueParts": 2,
+          "unknownParts": 0,
+          "cost": 0.63,
+          "ms": 106593
+        },
+        {
+          "n": 2,
+          "kept": true,
+          "overall": 5.67,
+          "scores": {
+            "silhouette": 6,
+            "legibility": 5,
+            "craft": 5,
+            "materials": 5,
+            "brief": 7,
+            "interior": 6
+          },
+          "ship": false,
+          "modelVerdict": "iterate",
+          "issues": {
+            "P0": 0,
+            "P1": 1,
+            "P2": 0
+          },
+          "issueParts": 1,
+          "unknownParts": 0,
+          "cost": 0.46,
+          "ms": 53604
+        }
+      ],
+      "round0": {
+        "errors": 0,
+        "warnings": 0,
+        "byRule": {},
+        "metrics": {
+          "accentShare": 0.262,
+          "detailNoise": 0.441,
+          "windowsMin": 2,
+          "paletteAdherence": 1,
+          "parts": 9,
+          "cellsOutsideParts": 0,
+          "blocks": 679
+        }
+      },
+      "final": {
+        "errors": 0,
+        "warnings": 0,
+        "byRule": {},
+        "metrics": {
+          "accentShare": 0.205,
+          "detailNoise": 0.496,
+          "windowsMin": 3,
+          "paletteAdherence": 1,
+          "parts": 9,
+          "cellsOutsideParts": 0,
+          "blocks": 562
+        }
+      },
+      "critic": {
+        "calls": 3,
+        "disagreements": 0,
+        "issues": 9,
+        "unknownParts": 0,
+        "partGrounding": 1
+      },
+      "judge": {
+        "outcome": "loss",
+        "revisions": 2,
+        "best": 2,
+        "views": [
+          "iso",
+          "iso_back",
+          "front",
+          "top"
+        ],
+        "calls": [
+          {
+            "order": {
+              "A": "round0",
+              "B": "final"
+            },
+            "preferred": "A",
+            "margin": "slight",
+            "dimensions": {
+              "silhouette": "B",
+              "legibility": "B",
+              "craft": "B",
+              "materials": "A",
+              "brief": "A"
+            },
+            "reasons": "A looks clearly like a jungle house. It has a bamboo-yellow thatch roof, vines, leaf bushes and mossy stone stairs. B's stilts and stair are cleaner and easier to read, and A has a few floating leaf blocks. But B's dark roof and plain wood palette don't look like a jungle, and there's an odd notch in its roof at the gable. A fits the brief better overall.",
+            "winner": "round0",
+            "usd": 0.0501
+          },
+          {
+            "order": {
+              "A": "final",
+              "B": "round0"
+            },
+            "preferred": "B",
+            "margin": "slight",
+            "dimensions": {
+              "silhouette": "B",
+              "legibility": "tie",
+              "craft": "A",
+              "materials": "B",
+              "brief": "B"
+            },
+            "reasons": "The two use nearly the same stilted plan, with a veranda and stair. B reads more clearly as jungle: its pale thatch-style roof contrasts with the walls, and it adds bamboo or vine growth, mossy stone stair walls and a chimney that runs down to the ground. A's dark roof is cleaner but plainer. B also has a few stray floating leaf blocks, so A wins on craft.",
+            "winner": "round0",
+            "usd": 0.0488
+          }
+        ]
+      },
+      "cost": {
+        "total": 3.4457,
+        "round0": 2.3203,
+        "critic": 0.0895,
+        "revise": 1.0359,
+        "loop": 1.1254,
+        "loopCap": 2.3203,
+        "judge": 0.0989,
+        "cacheReadTokens": 8449924
+      },
+      "ms": {
+        "total": 4435830,
+        "loop": 169070
+      },
+      "estimate": {
+        "usdLow": 0.8,
+        "usdHigh": 2.5,
+        "critiqueUsdLow": 0.02,
+        "critiqueUsdHigh": 2.24,
+        "minutesLow": 4,
+        "minutesHigh": 10,
+        "critiqueMinutesLow": 0.1,
+        "critiqueMinutesHigh": 9.2,
+        "midUsd": 2.78,
+        "errorPct": 23.95
+      }
+    },
+    {
+      "id": "mining_hall",
+      "n": 14,
+      "title": "mining hall",
+      "type": "mining_hall",
+      "model": "claude-sonnet-5-5",
+      "status": "done",
+      "end": "max_revisions",
+      "best": 2,
+      "revisions": 2,
+      "rounds": [
+        {
+          "n": 0,
+          "kept": true,
+          "overall": 5.5,
+          "scores": {
+            "silhouette": 5,
+            "legibility": 5,
+            "craft": 5,
+            "materials": 6,
+            "brief": 6,
+            "interior": 6
+          },
+          "ship": false,
+          "modelVerdict": "iterate",
+          "issues": {
+            "P0": 0,
+            "P1": 1,
+            "P2": 0
+          },
+          "issueParts": 1,
+          "unknownParts": 0,
+          "cost": 0.05,
+          "ms": 7421
+        },
+        {
+          "n": 1,
+          "kept": true,
+          "overall": 5.67,
+          "scores": {
+            "silhouette": 6,
+            "legibility": 5,
+            "craft": 5,
+            "materials": 5,
+            "brief": 7,
+            "interior": 6
+          },
+          "ship": false,
+          "modelVerdict": "iterate",
+          "issues": {
+            "P0": 0,
+            "P1": 3,
+            "P2": 2
+          },
+          "issueParts": 5,
+          "unknownParts": 0,
+          "cost": 0.55,
+          "ms": 84046
+        },
+        {
+          "n": 2,
+          "kept": true,
+          "overall": 5.67,
+          "scores": {
+            "silhouette": 5,
+            "legibility": 5,
+            "craft": 5,
+            "materials": 6,
+            "brief": 6,
+            "interior": 7
+          },
+          "ship": false,
+          "modelVerdict": "iterate",
+          "issues": {
+            "P0": 0,
+            "P1": 3,
+            "P2": 2
+          },
+          "issueParts": 5,
+          "unknownParts": 0,
+          "cost": 0.45,
+          "ms": 77686
+        }
+      ],
+      "round0": {
+        "errors": 0,
+        "warnings": 0,
+        "byRule": {},
+        "metrics": {
+          "accentShare": 0.424,
+          "detailNoise": 0.443,
+          "windowsMin": 0,
+          "paletteAdherence": 1,
+          "parts": 9,
+          "cellsOutsideParts": 0,
+          "blocks": 5986
+        }
+      },
+      "final": {
+        "errors": 0,
+        "warnings": 0,
+        "byRule": {},
+        "metrics": {
+          "accentShare": 0.47,
+          "detailNoise": 0.377,
+          "windowsMin": 0,
+          "paletteAdherence": 1,
+          "parts": 9,
+          "cellsOutsideParts": 0,
+          "blocks": 5818
+        }
+      },
+      "critic": {
+        "calls": 3,
+        "disagreements": 0,
+        "issues": 11,
+        "unknownParts": 0,
+        "partGrounding": 1
+      },
+      "judge": {
+        "outcome": "win",
+        "revisions": 2,
+        "best": 2,
+        "views": [
+          "iso",
+          "iso_back",
+          "front",
+          "top"
+        ],
+        "calls": [
+          {
+            "order": {
+              "A": "round0",
+              "B": "final"
+            },
+            "preferred": "B",
+            "margin": "slight",
+            "dimensions": {
+              "silhouette": "B",
+              "legibility": "B",
+              "craft": "B",
+              "materials": "B",
+              "brief": "tie"
+            },
+            "reasons": "Both builds share the same hall core: a gabled hall, a timber entrance with a 3x3 passage, lanterns and a track. B's mesa steps up in clean terraces with calm, even strata, so the hall reads as cut into the cliff. A's cliff is ragged and its bands are speckled with odd blocks, which looks noisy and unfinished. A's crenellated walls do add a dwarven feel, but B is cleaner overall.",
+            "winner": "final",
+            "usd": 0.0866
+          },
+          {
+            "order": {
+              "A": "final",
+              "B": "round0"
+            },
+            "preferred": "A",
+            "margin": "slight",
+            "dimensions": {
+              "silhouette": "B",
+              "legibility": "A",
+              "craft": "A",
+              "materials": "A",
+              "brief": "B"
+            },
+            "reasons": "A is cleaner. Its stepped terracotta mesa has restrained banding, the facade is uncluttered, and the gate, doors and windows are easy to read. B's banded cliff and battlements feel more like a dwarven hall dug into the badlands. But B's speckled strata look noisy, and the odd orange and yellow blocks above the gate add clutter, so its finish is rougher overall.",
+            "winner": "final",
+            "usd": 0.0894
+          }
+        ]
+      },
+      "cost": {
+        "total": 2.9879,
+        "round0": 1.9504,
+        "critic": 0.1555,
+        "revise": 0.882,
+        "loop": 1.0375,
+        "loopCap": 1.9504,
+        "judge": 0.176,
+        "cacheReadTokens": 6476562
+      },
+      "ms": {
+        "total": 4767205,
+        "loop": 169153
+      },
+      "estimate": {
+        "usdLow": 0.8,
+        "usdHigh": 2.5,
+        "critiqueUsdLow": 0.02,
+        "critiqueUsdHigh": 2.24,
+        "minutesLow": 4,
+        "minutesHigh": 10,
+        "critiqueMinutesLow": 0.1,
+        "critiqueMinutesHigh": 9.2,
+        "midUsd": 2.78,
+        "errorPct": 7.48
+      }
+    },
+    {
+      "id": "tea_house",
+      "n": 15,
+      "title": "tea house",
+      "type": "house",
+      "model": "claude-sonnet-5-5",
+      "status": "done",
+      "end": "max_revisions",
+      "best": 2,
+      "revisions": 2,
+      "rounds": [
+        {
+          "n": 0,
+          "kept": true,
+          "overall": 5.17,
+          "scores": {
+            "silhouette": 5,
+            "legibility": 4,
+            "craft": 5,
+            "materials": 5,
+            "brief": 6,
+            "interior": 6
+          },
+          "ship": false,
+          "modelVerdict": "iterate",
+          "issues": {
+            "P0": 1,
+            "P1": 3,
+            "P2": 1
+          },
+          "issueParts": 5,
+          "unknownParts": 0,
+          "cost": 0.04,
+          "ms": 8343
+        },
+        {
+          "n": 1,
+          "kept": true,
+          "overall": 5.5,
+          "scores": {
+            "silhouette": 5,
+            "legibility": 5,
+            "craft": 6,
+            "materials": 5,
+            "brief": 6,
+            "interior": 6
+          },
+          "ship": false,
+          "modelVerdict": "iterate",
+          "issues": {
+            "P0": 0,
+            "P1": 1,
+            "P2": 0
+          },
+          "issueParts": 1,
+          "unknownParts": 0,
+          "cost": 0.59,
+          "ms": 137430
+        },
+        {
+          "n": 2,
+          "kept": true,
+          "overall": 6.17,
+          "scores": {
+            "silhouette": 5,
+            "legibility": 6,
+            "craft": 6,
+            "materials": 6,
+            "brief": 7,
+            "interior": 7
+          },
+          "ship": false,
+          "modelVerdict": "iterate",
+          "issues": {
+            "P0": 0,
+            "P1": 3,
+            "P2": 3
+          },
+          "issueParts": 6,
+          "unknownParts": 0,
+          "cost": 0.56,
+          "ms": 136894
+        }
+      ],
+      "round0": {
+        "errors": 0,
+        "warnings": 0,
+        "byRule": {},
+        "metrics": {
+          "accentShare": 0.443,
+          "detailNoise": 0.296,
+          "windowsMin": 2,
+          "paletteAdherence": 1,
+          "parts": 11,
+          "cellsOutsideParts": 0,
+          "blocks": 1401
+        }
+      },
+      "final": {
+        "errors": 0,
+        "warnings": 0,
+        "byRule": {},
+        "metrics": {
+          "accentShare": 0.43,
+          "detailNoise": 0.321,
+          "windowsMin": 3,
+          "paletteAdherence": 1,
+          "parts": 11,
+          "cellsOutsideParts": 0,
+          "blocks": 1283
+        }
+      },
+      "critic": {
+        "calls": 3,
+        "disagreements": 0,
+        "issues": 12,
+        "unknownParts": 0,
+        "partGrounding": 1
+      },
+      "judge": {
+        "outcome": "loss",
+        "revisions": 2,
+        "best": 2,
+        "views": [
+          "iso",
+          "iso_back",
+          "front",
+          "top"
+        ],
+        "calls": [
+          {
+            "order": {
+              "A": "round0",
+              "B": "final"
+            },
+            "preferred": "A",
+            "margin": "clear",
+            "dimensions": {
+              "silhouette": "A",
+              "legibility": "tie",
+              "craft": "A",
+              "materials": "A",
+              "brief": "A"
+            },
+            "reasons": "A's broad hipped roof with deep eaves reads as a Japanese tea house, and the dark timber posts and torii gate support it. B sinks its roof inside a heavy pink parapet with corner finials, so the massing looks boxy and less Japanese. The odd grey patch on B's roof and its heavy use of pink weaken it, even though B has nice lanterns and a pond.",
+            "winner": "round0",
+            "usd": 0.0704
+          },
+          {
+            "order": {
+              "A": "final",
+              "B": "round0"
+            },
+            "preferred": "B",
+            "margin": "clear",
+            "dimensions": {
+              "silhouette": "B",
+              "legibility": "B",
+              "craft": "B",
+              "materials": "B",
+              "brief": "B"
+            },
+            "reasons": "B has a broad hipped roof with deep eaves over dark timber posts, so it reads clearly as a Japanese tea house with a covered veranda. Its torii gate has a proper top beam. A's roof sits inside a pink parapet with odd corner caps and a grey patch, so it reads boxy and Western. A's chunky pink pillars also clash with the style. Both have similar gardens.",
+            "winner": "round0",
+            "usd": 0.0694
+          }
+        ]
+      },
+      "cost": {
+        "total": 2.9994,
+        "round0": 1.8094,
+        "critic": 0.1099,
+        "revise": 1.0801,
+        "loop": 1.19,
+        "loopCap": 1.8094,
+        "judge": 0.1399,
+        "cacheReadTokens": 5890073
+      },
+      "ms": {
+        "total": 5028429,
+        "loop": 282667
+      },
+      "estimate": {
+        "usdLow": 0.8,
+        "usdHigh": 2.5,
+        "critiqueUsdLow": 0.02,
+        "critiqueUsdHigh": 2.24,
+        "minutesLow": 4,
+        "minutesHigh": 10,
+        "critiqueMinutesLow": 0.1,
+        "critiqueMinutesHigh": 9.2,
+        "midUsd": 2.78,
+        "errorPct": 7.89
+      }
+    },
+    {
+      "id": "mosswater_tavern",
+      "n": 16,
+      "title": "Mosswater set: tavern (anchor)",
+      "type": "tavern",
+      "model": "claude-opus-5-5",
+      "status": "done",
+      "end": "max_revisions",
+      "best": 2,
+      "revisions": 2,
+      "rounds": [
+        {
+          "n": 0,
+          "kept": true,
+          "overall": 5.29,
+          "scores": {
+            "silhouette": 6,
+            "legibility": 4,
+            "craft": 5,
+            "materials": 5,
+            "brief": 6,
+            "bible": 4,
+            "interior": 7
+          },
+          "ship": false,
+          "modelVerdict": "iterate",
+          "issues": {
+            "P0": 1,
+            "P1": 3,
+            "P2": 1
+          },
+          "issueParts": 5,
+          "unknownParts": 0,
+          "cost": 0.06,
+          "ms": 8888
+        },
+        {
+          "n": 1,
+          "kept": true,
+          "overall": 5.43,
+          "scores": {
+            "silhouette": 6,
+            "legibility": 4,
+            "craft": 5,
+            "materials": 5,
+            "brief": 6,
+            "bible": 5,
+            "interior": 7
+          },
+          "ship": false,
+          "modelVerdict": "iterate",
+          "issues": {
+            "P0": 0,
+            "P1": 1,
+            "P2": 0
+          },
+          "issueParts": 1,
+          "unknownParts": 0,
+          "cost": 1.27,
+          "ms": 223273
+        },
+        {
+          "n": 2,
+          "kept": true,
+          "overall": 5.43,
+          "scores": {
+            "silhouette": 6,
+            "legibility": 4,
+            "craft": 5,
+            "materials": 5,
+            "brief": 6,
+            "bible": 5,
+            "interior": 7
+          },
+          "ship": false,
+          "modelVerdict": "iterate",
+          "issues": {
+            "P0": 0,
+            "P1": 3,
+            "P2": 2
+          },
+          "issueParts": 5,
+          "unknownParts": 0,
+          "cost": 0.7,
+          "ms": 101383
+        }
+      ],
+      "round0": {
+        "errors": 0,
+        "warnings": 0,
+        "byRule": {},
+        "metrics": {
+          "accentShare": 0.03,
+          "detailNoise": 0.31,
+          "windowsMin": 4,
+          "paletteAdherence": 1,
+          "parts": 13,
+          "cellsOutsideParts": 0,
+          "blocks": 1955
+        }
+      },
+      "final": {
+        "errors": 0,
+        "warnings": 0,
+        "byRule": {},
+        "metrics": {
+          "accentShare": 0.033,
+          "detailNoise": 0.304,
+          "windowsMin": 4,
+          "paletteAdherence": 1,
+          "parts": 13,
+          "cellsOutsideParts": 0,
+          "blocks": 1640
+        }
+      },
+      "critic": {
+        "calls": 3,
+        "disagreements": 0,
+        "issues": 11,
+        "unknownParts": 0,
+        "partGrounding": 1
+      },
+      "judge": {
+        "outcome": "win",
+        "revisions": 2,
+        "best": 2,
+        "views": [
+          "iso",
+          "iso_back",
+          "front",
+          "top"
+        ],
+        "calls": [
+          {
+            "order": {
+              "A": "final",
+              "B": "round0"
+            },
+            "preferred": "A",
+            "margin": "slight",
+            "dimensions": {
+              "silhouette": "tie",
+              "legibility": "B",
+              "craft": "A",
+              "materials": "A",
+              "brief": "A"
+            },
+            "reasons": "The two builds share the same stilted body and roof. A's wooden stairs and deck fit the weathered fishing-village palette. B's bright red stairs and long red railings clash with that palette. In B's front view, the railings also stick out past the building edge. B's red stair makes the entrance easier to read, but overall A looks more coherent and restrained.",
+            "winner": "final",
+            "usd": 0.0772
+          },
+          {
+            "order": {
+              "A": "round0",
+              "B": "final"
+            },
+            "preferred": "B",
+            "margin": "slight",
+            "dimensions": {
+              "silhouette": "A",
+              "legibility": "B",
+              "craft": "B",
+              "materials": "B",
+              "brief": "tie"
+            },
+            "reasons": "The two builds are nearly the same stilted tavern over the water. A's taller roof makes it read a little more like a landmark. But A's bright red stairs and the red railing running along the front look loud, and that railing sticks out past the footprint on the left. B's wooden stair and deck match the weathered palette better and make a cleaner, more readable entrance.",
+            "winner": "final",
+            "usd": 0.0781
+          }
+        ]
+      },
+      "cost": {
+        "total": 5.0949,
+        "round0": 3.0566,
+        "critic": 0.1746,
+        "revise": 1.8637,
+        "loop": 2.0383,
+        "loopCap": 3.0566,
+        "judge": 0.1553,
+        "cacheReadTokens": 7255262
+      },
+      "ms": {
+        "total": 1097494,
+        "loop": 333544
+      },
+      "estimate": {
+        "usdLow": 2,
+        "usdHigh": 3.2,
+        "critiqueUsdLow": 0.02,
+        "critiqueUsdHigh": 3.2,
+        "minutesLow": 8,
+        "minutesHigh": 13,
+        "critiqueMinutesLow": 0.1,
+        "critiqueMinutesHigh": 12.5,
+        "midUsd": 4.21,
+        "errorPct": 21.02
+      }
+    },
+    {
+      "id": "mosswater_house",
+      "n": 17,
+      "title": "Mosswater set: house",
+      "type": "house",
+      "model": "claude-sonnet-5-5",
+      "status": "done",
+      "end": "max_revisions",
+      "best": 0,
+      "revisions": 2,
+      "rounds": [
+        {
+          "n": 0,
+          "kept": true,
+          "overall": 5.13,
+          "scores": {
+            "silhouette": 5,
+            "legibility": 4,
+            "craft": 5,
+            "materials": 5,
+            "brief": 6,
+            "bible": 5,
+            "set": 5,
+            "interior": 6
+          },
+          "ship": false,
+          "modelVerdict": "iterate",
+          "issues": {
+            "P0": 2,
+            "P1": 2,
+            "P2": 1
+          },
+          "issueParts": 5,
+          "unknownParts": 0,
+          "cost": 0.07,
+          "ms": 15460
+        },
+        {
+          "n": 1,
+          "kept": true,
+          "overall": 4.63,
+          "scores": {
+            "silhouette": 5,
+            "legibility": 3,
+            "craft": 5,
+            "materials": 5,
+            "brief": 5,
+            "bible": 4,
+            "set": 5,
+            "interior": 5
+          },
+          "ship": false,
+          "modelVerdict": "iterate",
+          "issues": {
+            "P0": 2,
+            "P1": 2,
+            "P2": 1
+          },
+          "issueParts": 5,
+          "unknownParts": 0,
+          "cost": 0.39,
+          "ms": 79127
+        },
+        {
+          "n": 2,
+          "kept": true,
+          "overall": 4.5,
+          "scores": {
+            "silhouette": 5,
+            "legibility": 3,
+            "craft": 5,
+            "materials": 5,
+            "brief": 5,
+            "bible": 4,
+            "set": 4,
+            "interior": 5
+          },
+          "ship": false,
+          "modelVerdict": "iterate",
+          "issues": {
+            "P0": 1,
+            "P1": 0,
+            "P2": 0
+          },
+          "issueParts": 1,
+          "unknownParts": 0,
+          "cost": 0.68,
+          "ms": 137830
+        }
+      ],
+      "round0": {
+        "errors": 0,
+        "warnings": 0,
+        "byRule": {},
+        "metrics": {
+          "accentShare": 0,
+          "detailNoise": 0.242,
+          "windowsMin": 2,
+          "paletteAdherence": 1,
+          "parts": 6,
+          "cellsOutsideParts": 0,
+          "blocks": 646
+        }
+      },
+      "final": {
+        "errors": 0,
+        "warnings": 0,
+        "byRule": {},
+        "metrics": {
+          "accentShare": 0,
+          "detailNoise": 0.242,
+          "windowsMin": 2,
+          "paletteAdherence": 1,
+          "parts": 6,
+          "cellsOutsideParts": 0,
+          "blocks": 646
+        }
+      },
+      "critic": {
+        "calls": 3,
+        "disagreements": 0,
+        "issues": 11,
+        "unknownParts": 0,
+        "partGrounding": 1
+      },
+      "judge": {
+        "outcome": "identical",
+        "revisions": 2,
+        "calls": []
+      },
+      "cost": {
+        "total": 2.5417,
+        "round0": 1.4008,
+        "critic": 0.1927,
+        "revise": 0.9482,
+        "loop": 1.1409,
+        "loopCap": 1.4008,
+        "judge": 0,
+        "cacheReadTokens": 4976524
+      },
+      "ms": {
+        "total": 2225077,
+        "loop": 232417
+      },
+      "estimate": {
+        "usdLow": 1.08,
+        "usdHigh": 1.8,
+        "critiqueUsdLow": 0.02,
+        "critiqueUsdHigh": 1.29,
+        "minutesLow": 8.1,
+        "minutesHigh": 13.5,
+        "critiqueMinutesLow": 0.1,
+        "critiqueMinutesHigh": 4.4,
+        "midUsd": 2.095,
+        "errorPct": 21.32
+      }
+    },
+    {
+      "id": "mosswater_tower",
+      "n": 18,
+      "title": "Mosswater set: tower",
+      "type": "tower",
+      "model": "claude-sonnet-5-5",
+      "status": "done",
+      "end": "max_revisions",
+      "best": 1,
+      "revisions": 2,
+      "rounds": [
+        {
+          "n": 0,
+          "kept": true,
+          "overall": 5.5,
+          "scores": {
+            "silhouette": 6,
+            "legibility": 5,
+            "craft": 5,
+            "materials": 6,
+            "brief": 6,
+            "bible": 5,
+            "set": 5,
+            "interior": 6
+          },
+          "ship": false,
+          "modelVerdict": "iterate",
+          "issues": {
+            "P0": 0,
+            "P1": 1,
+            "P2": 0
+          },
+          "issueParts": 1,
+          "unknownParts": 0,
+          "cost": 0.05,
+          "ms": 5636
+        },
+        {
+          "n": 1,
+          "kept": true,
+          "overall": 5.63,
+          "scores": {
+            "silhouette": 6,
+            "legibility": 5,
+            "craft": 5,
+            "materials": 6,
+            "brief": 6,
+            "bible": 5,
+            "set": 6,
+            "interior": 6
+          },
+          "ship": false,
+          "modelVerdict": "iterate",
+          "issues": {
+            "P0": 0,
+            "P1": 3,
+            "P2": 2
+          },
+          "issueParts": 5,
+          "unknownParts": 0,
+          "cost": 0.44,
+          "ms": 68342
+        },
+        {
+          "n": 2,
+          "kept": true,
+          "overall": 5.5,
+          "scores": {
+            "silhouette": 6,
+            "legibility": 5,
+            "craft": 5,
+            "materials": 6,
+            "brief": 6,
+            "bible": 5,
+            "set": 5,
+            "interior": 6
+          },
+          "ship": false,
+          "modelVerdict": "iterate",
+          "issues": {
+            "P0": 0,
+            "P1": 3,
+            "P2": 2
+          },
+          "issueParts": 5,
+          "unknownParts": 0,
+          "cost": 0.33,
+          "ms": 54124
+        }
+      ],
+      "round0": {
+        "errors": 0,
+        "warnings": 0,
+        "byRule": {},
+        "metrics": {
+          "accentShare": 0,
+          "detailNoise": 0.262,
+          "windowsMin": 3,
+          "paletteAdherence": 1,
+          "parts": 8,
+          "cellsOutsideParts": 0,
+          "blocks": 904
+        }
+      },
+      "final": {
+        "errors": 0,
+        "warnings": 0,
+        "byRule": {},
+        "metrics": {
+          "accentShare": 0,
+          "detailNoise": 0.265,
+          "windowsMin": 3,
+          "paletteAdherence": 1,
+          "parts": 8,
+          "cellsOutsideParts": 0,
+          "blocks": 929
+        }
+      },
+      "critic": {
+        "calls": 3,
+        "disagreements": 0,
+        "issues": 11,
+        "unknownParts": 0,
+        "partGrounding": 1
+      },
+      "judge": {
+        "outcome": "loss",
+        "revisions": 2,
+        "best": 1,
+        "views": [
+          "iso",
+          "iso_back",
+          "front",
+          "top"
+        ],
+        "calls": [
+          {
+            "order": {
+              "A": "final",
+              "B": "round0"
+            },
+            "preferred": "B",
+            "margin": "slight",
+            "dimensions": {
+              "silhouette": "tie",
+              "legibility": "B",
+              "craft": "B",
+              "materials": "tie",
+              "brief": "tie"
+            },
+            "reasons": "I slightly prefer B. Both towers have the same shape, roof, stilts and palette. B's entry platform has a continuous railing, while A's railing has gaps and looks unfinished. B's smaller windows also make the walls look less busy. A's taller windows read more clearly as windows, but their stacked shutters add clutter.",
+            "winner": "round0",
+            "usd": 0.0587
+          },
+          {
+            "order": {
+              "A": "round0",
+              "B": "final"
+            },
+            "preferred": "A",
+            "margin": "slight",
+            "dimensions": {
+              "silhouette": "tie",
+              "legibility": "B",
+              "craft": "A",
+              "materials": "tie",
+              "brief": "A"
+            },
+            "reasons": "A and B are almost the same tower. B's taller two-block shutters read a little better as windows. But B's entry-deck railing is broken into short isolated fence sections, and the post near the stairs looks stray and unfinished. A keeps a continuous railing around the platform, which looks more finished and safer. On balance I slightly prefer A.",
+            "winner": "round0",
+            "usd": 0.0603
+          }
+        ]
+      },
+      "cost": {
+        "total": 2.1409,
+        "round0": 1.3252,
+        "critic": 0.1614,
+        "revise": 0.6544,
+        "loop": 0.8157,
+        "loopCap": 1.3252,
+        "judge": 0.119,
+        "cacheReadTokens": 4148559
+      },
+      "ms": {
+        "total": 2224600,
+        "loop": 128102
+      },
+      "estimate": {
+        "usdLow": 1.08,
+        "usdHigh": 1.8,
+        "critiqueUsdLow": 0.02,
+        "critiqueUsdHigh": 1.29,
+        "minutesLow": 8.1,
+        "minutesHigh": 13.5,
+        "critiqueMinutesLow": 0.1,
+        "critiqueMinutesHigh": 4.4,
+        "midUsd": 2.095,
+        "errorPct": 2.19
+      }
+    }
+  ],
+  "aggregates": {
+    "briefs": 18,
+    "done": 18,
+    "failed": 0,
+    "ends": {
+      "max_revisions": 15,
+      "budget": 3
+    },
+    "G1": {
+      "withRevision": 18,
+      "wins": 7,
+      "losses": 6,
+      "ties": 5,
+      "p": 0.5,
+      "significant": false,
+      "pass": false,
+      "note": "n=18 -> 13 wins needed; thresholds {\"12\":10,\"14\":11,\"16\":12,\"18\":13}"
+    },
+    "G2": {
+      "meanOverallRound0": 5.48,
+      "meanOverallInstalled": 5.76,
+      "rise": 0.28,
+      "p0ZeroAtInstall": 16,
+      "pass": false
+    },
+    "G3": {
+      "checkerErrorsInFinals": 0,
+      "warningsNotWorse": 18,
+      "warningsTotal": {
+        "round0": 0,
+        "final": 0
+      },
+      "paletteAdherence": {
+        "round0": 1,
+        "final": 1,
+        "dropPoints": 0
+      },
+      "finalsWith2Parts": 18,
+      "pass": true
+    },
+    "G4": {
+      "loopWithinCap": 18,
+      "of": 18,
+      "meanLoopUsd": 1.0572,
+      "meanRound0Usd": 2.0174,
+      "loopShare": 0.524,
+      "meanAddedMinutes": 3.18,
+      "estimateWithin50": 16,
+      "estimateTotalErrorPct": 10.46,
+      "pass": true
+    },
+    "metrics": {
+      "round0": {
+        "accentShare": 0.171,
+        "detailNoise": 0.357,
+        "windowsMin": 2.556,
+        "paletteAdherence": 1
+      },
+      "final": {
+        "accentShare": 0.145,
+        "detailNoise": 0.344,
+        "windowsMin": 3.333,
+        "paletteAdherence": 1
+      }
+    },
+    "critic": {
+      "calls": 51,
+      "disagreements": 0,
+      "partGrounding": 0.989
+    },
+    "round2": {
+      "briefs": 15,
+      "better": 7,
+      "worse": 4
+    },
+    "cost": {
+      "usd": 57.47,
+      "judge": 2.1279
+    }
+  }
+}

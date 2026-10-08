@@ -842,6 +842,11 @@ public final class JournalStore {
 		}
 	}
 
+	/** A named I/O step outside a commit (the migration's legacy move) that {@link #faultHook} can fault. */
+	static void faultStep(String name) throws IOException {
+		step(name);
+	}
+
 	private static void quietStep(String name) {
 		try {
 			step(name);

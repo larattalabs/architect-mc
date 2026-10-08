@@ -3,6 +3,7 @@ package dev.larattalabs.architect.client.design;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import dev.larattalabs.architect.client.text.TextModel;
+import dev.larattalabs.architect.design.CritiqueRules;
 import dev.larattalabs.architect.design.DesignSpec;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -45,6 +46,22 @@ public final class DesignForm {
 	public @Nullable String sendError;
 	/** (4c) "Massing first": null = the default for the size (on for L and plot, {@link dev.larattalabs.architect.design.MassingRules}). */
 	public @Nullable Boolean massingFirst;
+	/** (5a) "Critique and revise": the critique loop after the design renders (default off, {@link CritiqueRules#DEFAULT_ON}). */
+	public boolean critique = UiPrefs.critiqueByDefault();
+	/** (5a) The loop's revisions: 1 or 2. */
+	public int maxRevisions = CritiqueRules.DEFAULT_REVISIONS;
+	// (5a) the live estimate (asked once the form has been still a moment, {@link DesignFeature#tickEstimate})
+	@Nullable String estimateKey;
+	long estimateChangedAt;
+	@Nullable String estimateSentKey;
+	boolean estimating;
+	public dev.larattalabs.architect.api.@Nullable Estimate estimate;
+	public @Nullable String estimateError;
+
+	/** The {@code critique} the request carries (null: off, or a helper without the loop). */
+	public @Nullable JsonObject critiqueSpec() {
+		return CritiqueRules.spec(critique, maxRevisions, SetFeature.has("critique"));
+	}
 
 	/** Whether this request makes a massing first (a remix never does). */
 	public boolean massingFirst() {
@@ -142,6 +159,13 @@ public final class DesignForm {
 		o.addProperty("sendError", sendError);
 		o.addProperty("massingFirst", massingFirst());
 		o.addProperty("massingFirstSet", massingFirst);
+		o.addProperty("critique", critique);
+		o.addProperty("maxRevisions", maxRevisions);
+		o.add("critiqueSpec", critiqueSpec());
+		if (estimate != null) {
+			o.addProperty("estimate", CritiqueRules.estimateLine(estimate));
+		}
+		o.addProperty("estimateError", estimateError);
 		if (errors().isEmpty()) {
 			o.add("request", requestJson());
 		}

@@ -1,0 +1,26 @@
+{
+  "id": "mining_hall",
+  "n": 14,
+  "title": "mining hall",
+  "size": "L",
+  "setting": "A mining hall cut into the badlands: a great hall for the miners, cart tracks, a passage at least 3x3 through it.",
+  "model": "claude-sonnet-5-5",
+  "effort": "high",
+  "request": {
+    "type": "mining_hall",
+    "style": "dwarven",
+    "features": [],
+    "maxSize": {
+      "x": 33,
+      "y": 20,
+      "z": 33
+    },
+    "name": "Mining hall",
+    "notes": "A mining hall cut into the badlands: a great hall for the miners, cart tracks, a passage at least 3x3 through it.",
+    "profile": [
+      "door",
+      "lit",
+      "passage:3x3"
+    ]
+  }
+}

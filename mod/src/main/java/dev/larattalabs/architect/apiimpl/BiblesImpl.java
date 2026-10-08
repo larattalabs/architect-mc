@@ -103,15 +103,62 @@ public final class BiblesImpl implements Bibles {
 		} catch (IllegalArgumentException e) {
 			return ApiImpl.onServerFuture(CompletableFuture.failedFuture(e));
 		}
+		if (r.sheetCritique()) {
+			String why = DesignsImpl.unavailable4b(ApiImpl.bridge(), "critique", "sheet critiques");
+			if (why != null) {
+				return ApiImpl.onServerFuture(CompletableFuture.failedFuture(new IllegalStateException(why)));
+			}
+		}
 		return DesignsImpl.ask("bibles", "bibles", m).thenApply(this::acked);
 	}
 
 	@Override
 	public CompletableFuture<BibleJob> revise(String bibleId, String notes) {
+		return revise(bibleId, notes, false);
+	}
+
+	@Override
+	public CompletableFuture<BibleJob> revise(String bibleId, String notes, boolean sheetCritique) {
 		JsonObject m = DesignsImpl.msg("bible.revise");
 		m.addProperty("id", bibleId);
 		m.addProperty("notes", notes == null ? "" : notes);
+		if (sheetCritique) {
+			String why = DesignsImpl.unavailable4b(ApiImpl.bridge(), "critique", "sheet critiques");
+			if (why != null) {
+				return ApiImpl.onServerFuture(CompletableFuture.failedFuture(new IllegalStateException(why)));
+			}
+			m.add("critique", Wire4b.sheetCritique());
+		}
 		return DesignsImpl.ask("bibles", "bibles", m).thenApply(this::acked);
+	}
+
+	@Override
+	public CompletableFuture<List<Integer>> delete(String bibleId, @Nullable String owner) {
+		JsonObject m = DesignsImpl.msg("bible.delete");
+		m.addProperty("id", bibleId);
+		if (owner != null) {
+			m.addProperty("owner", owner);
+		}
+		return DesignsImpl.ask("bible.admin", "bible deletes", m).thenApply(res -> {
+			invalidate();
+			List<Integer> vs = new ArrayList<>();
+			if (res.has("versions") && res.get("versions").isJsonArray()) {
+				res.getAsJsonArray("versions").forEach(v -> vs.add(v.getAsInt()));
+			}
+			Architect.LOGGER.info("API: bible {} deleted (versions {})", bibleId, vs);
+			return List.copyOf(vs);
+		});
+	}
+
+	@Override
+	public CompletableFuture<Void> archive(String bibleId, boolean archived) {
+		JsonObject m = DesignsImpl.msg("bible.archive");
+		m.addProperty("id", bibleId);
+		m.addProperty("archived", archived);
+		return DesignsImpl.ask("bible.admin", "bible archives", m).thenApply(res -> {
+			invalidate();
+			return null;
+		});
 	}
 
 	/** The job named in an ack ({@code {jobId, bibleId, version}}): as the helper reported it, else a queued placeholder. */

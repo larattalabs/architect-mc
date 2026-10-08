@@ -67,7 +67,33 @@ public final class JournalMigration {
 	}
 
 	/** What an import did: entries made, legacy names, notes (unreadable snapshots, dropped leaves). */
-	public record Plan(int entries, Map<String, String> legacy, List<String> notes, List<String> flagged) {
+	public record Plan(int entries, Map<String, String> legacy, List<String> notes, List<String> flagged, boolean late) {
+	}
+
+	/**
+	 * The world the import reads (held leaves): the production adapter wraps the server and loads the chunk for each read;
+	 * tests use a map of block states.
+	 */
+	public interface MigrationWorld {
+		/** The block at {@code pos} in {@code dimension} (its chunk loaded for the read), or null when there is no such level. */
+		@Nullable BlockState read(String dimension, BlockPos pos);
+
+		boolean hasDimension(String dimension);
+
+		static MigrationWorld of(MinecraftServer server) {
+			return new MigrationWorld() {
+				@Override
+				public @Nullable BlockState read(String dimension, BlockPos pos) {
+					ServerLevel level = level(server, dimension);
+					return level == null ? null : level.getBlockState(pos);
+				}
+
+				@Override
+				public boolean hasDimension(String dimension) {
+					return level(server, dimension) != null;
+				}
+			};
+		}
 	}
 
 	private static volatile @Nullable Plan last;
@@ -83,24 +109,16 @@ public final class JournalMigration {
 
 	static void onOpen(MinecraftServer server, JournalStore store) {
 		last = null;
-		Path w = store.dir().getParent();
-		boolean fresh = store.index().entries().isEmpty() && !JournalStore.exists(w);
-		Path snapDir = w.resolve(SNAPSHOT_DIR);
 		try {
-			if (fresh && Files.exists(w.resolve(SITES_FILE))) {
-				Plan p = run(server, store, w, false);
+			Plan p = start(MigrationWorld.of(server), store);
+			if (p != null && (!p.late() || p.entries() > 0)) {
 				last = p;
-				if (p != null) {
-					Architect.LOGGER.info("World journal: imported {} entr{} from the 4d snapshots ({} file names){}", p.entries(), p.entries() == 1 ? "y" : "ies",
-						p.legacy().size(), p.notes().isEmpty() ? "" : "; " + String.join("; ", p.notes()));
-				}
-			} else if (Files.isDirectory(snapDir)) {
-				// a late import (records 0.7.0 made after a downgrade), and a move a crash interrupted
-				Plan p = run(server, store, w, true);
-				if (p != null && p.entries() > 0) {
-					last = p;
+				if (p.late()) {
 					Architect.LOGGER.info("World journal: late import of {} entr{} (sites placed by an older Architect)", p.entries(),
 						p.entries() == 1 ? "y" : "ies");
+				} else {
+					Architect.LOGGER.info("World journal: imported {} entr{} from the 4d snapshots ({} file names){}", p.entries(), p.entries() == 1 ? "y" : "ies",
+						p.legacy().size(), p.notes().isEmpty() ? "" : "; " + String.join("; ", p.notes()));
 				}
 			}
 		} catch (IOException | RuntimeException e) {
@@ -108,6 +126,24 @@ public final class JournalMigration {
 			WorldJournal.disable("The 4d snapshots could not be imported into the world journal (" + e.getMessage()
 				+ "): Architect changes no blocks until it is fixed (see the log)");
 		}
+	}
+
+	/**
+	 * What a world start does once its journal opened: the import of a world that has a sites file and no journal index yet,
+	 * else a late import (records 0.7.0 made after a downgrade) and the end of a move a crash interrupted, when the snapshot
+	 * folder is still there. Null when there was nothing to do. Throws when the import failed (nothing was written then, or
+	 * only the move is left for the next start).
+	 */
+	static @Nullable Plan start(MigrationWorld world, JournalStore store) throws IOException {
+		Path w = store.dir().getParent();
+		boolean fresh = store.index().entries().isEmpty() && !JournalStore.exists(w);
+		if (fresh && Files.exists(w.resolve(SITES_FILE))) {
+			return run(world, store, w, false);
+		}
+		if (Files.isDirectory(w.resolve(SNAPSHOT_DIR))) {
+			return run(world, store, w, true);
+		}
+		return null;
 	}
 
 	/** One thing to import: a site's snapshot, standing, placing or pending. */
@@ -119,6 +155,11 @@ public final class JournalMigration {
 	 * snapshot folder's files into {@code architect-journal/legacy/}. Null when there is nothing to do.
 	 */
 	static @Nullable Plan run(MinecraftServer server, JournalStore store, Path w, boolean late) throws IOException {
+		return run(MigrationWorld.of(server), store, w, late);
+	}
+
+	/** {@link #run(MinecraftServer, JournalStore, Path, boolean)} over any {@link MigrationWorld} (the seam the unit tests use). */
+	public static @Nullable Plan run(MigrationWorld world, JournalStore store, Path w, boolean late) throws IOException {
 		Path f = w.resolve(SITES_FILE);
 		Site.FileData data;
 		JsonObject root;
@@ -144,13 +185,18 @@ public final class JournalMigration {
 		for (Site.Pending p : data.pending()) {
 			items.add(new Item(p.site(), "pending", p.at(), p.at()));
 		}
+		List<String> unreferenced = unreferenced(snapDir, items);
 		if (late) {
 			items.removeIf(i -> !store.find(m -> m.site().equals(i.site().id())).isEmpty() || !Files.exists(snapDir.resolve(i.site().snapshot())));
 		}
-		items.sort(Comparator.comparingLong(Item::time));
+		items.sort(Comparator.comparingLong(i -> i.site().placedAt())); // layers follow placedAt (a pending site's time is its removal)
 		List<String> notes = new ArrayList<>();
 		List<String> flagged = new ArrayList<>();
 		Map<String, String> legacy = new LinkedHashMap<>();
+		if (!unreferenced.isEmpty()) {
+			notes.add("snapshot files no record names (not imported, moved to " + JournalStore.DIR + "/" + LEGACY_DIR + "/" + SNAPSHOT_DIR + "): "
+				+ String.join(", ", unreferenced));
+		}
 		JournalStore.Txn t = store.begin().label(late ? "migrate:late" : "migrate");
 		int made = 0;
 		Set<String> crates = new HashSet<>();
@@ -204,16 +250,15 @@ public final class JournalMigration {
 			made++;
 			// held leaves (4d pin): read from the world
 			if (!pending && s.pin() != null && !s.pin().heldLeaves().isEmpty()) {
-				ServerLevel level = level(server, s.dimension());
-				if (level != null) {
+				if (world.hasDimension(s.dimension())) {
 					List<Integer> held = s.pin().heldLeaves();
 					List<Cell> lc = new ArrayList<>();
 					long ll = store.newLayer();
 					BlockPos.MutableBlockPos p = new BlockPos.MutableBlockPos();
 					int dropped = 0;
 					for (int i = 0; i + 3 < held.size(); i += 4) {
-						BlockState now = level.getBlockState(p.set(held.get(i), held.get(i + 1), held.get(i + 2)));
-						if (!(now.getBlock() instanceof LeavesBlock) || !now.getValue(LeavesBlock.PERSISTENT)) {
+						BlockState now = world.read(s.dimension(), p.set(held.get(i), held.get(i + 1), held.get(i + 2)));
+						if (now == null || !(now.getBlock() instanceof LeavesBlock) || !now.getValue(LeavesBlock.PERSISTENT)) {
 							dropped++;
 							continue;
 						}
@@ -278,7 +323,7 @@ public final class JournalMigration {
 		}
 		WorldJournal.kill("migrate-after-commit");
 		moveLegacy(w, store.dir(), late);
-		return new Plan(made, legacy, notes, flagged);
+		return new Plan(made, legacy, notes, flagged, late);
 	}
 
 	private static Map<Long, Value> allBefore(SectionCells sc) {
@@ -287,6 +332,26 @@ public final class JournalMigration {
 			m.put(sc.pos(i), sc.before(i));
 		}
 		return m;
+	}
+
+	/** The files in the snapshot folder that no record names (as its snapshot or its construction target), sorted. */
+	private static List<String> unreferenced(Path snapDir, List<Item> items) throws IOException {
+		if (!Files.isDirectory(snapDir)) {
+			return List.of();
+		}
+		Set<String> named = new HashSet<>();
+		for (Item it : items) {
+			named.add(it.site().snapshot());
+			Construction c = it.site().construction();
+			if (c != null) {
+				named.add(c.target());
+			}
+		}
+		List<String> out = new ArrayList<>();
+		try (var list = Files.list(snapDir)) {
+			list.map(f -> f.getFileName().toString()).filter(n -> !named.contains(n)).sorted().forEach(out::add);
+		}
+		return out;
 	}
 
 	/** The sites a 4d queue file was placing (their snapshots become PLACING entries). */
@@ -329,9 +394,11 @@ public final class JournalMigration {
 				if (Files.exists(target)) {
 					target = to.resolve(f.getFileName() + ".dup-" + System.currentTimeMillis());
 				}
+				JournalStore.faultStep("legacy move " + f.getFileName());
 				Files.move(f, target, StandardCopyOption.ATOMIC_MOVE);
 			}
 		}
+		JournalStore.faultStep("legacy move done");
 		Files.deleteIfExists(from);
 	}
 

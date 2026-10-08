@@ -158,7 +158,7 @@ public final class Views {
 			ports(j), j.has("ext") && j.get("ext").isJsonObject() ? j.getAsJsonObject("ext").deepCopy() : new JsonObject(), e.bundled(),
 			j.has("imported") && j.get("imported").isJsonPrimitive() && j.get("imported").getAsBoolean(), Optional.ofNullable(str(j, "variantOf")),
 			Wire4b.pin(j.get("bible")), Optional.ofNullable(str(j, "group")), Optional.ofNullable(str(j, "groupItem")), Wire4b.parts(j),
-			direction(bp.front()), anchorCells(bp), bp.groundY(), approach(bp));
+			direction(bp.front()), anchorCells(bp), bp.groundY(), approach(bp), Wire5a.entry(e.dir(), bp.id(), j));
 	}
 
 	/** {@code north/east/south/west} -> the Direction (south when unknown). */

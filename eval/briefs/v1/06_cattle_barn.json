@@ -1,0 +1,23 @@
+{
+  "id": "cattle_barn",
+  "n": 6,
+  "title": "cattle barn",
+  "size": "L",
+  "setting": "A cattle barn on the savanna: stalls for cattle, a hay loft, a wide entrance.",
+  "model": "claude-sonnet-5-5",
+  "effort": "high",
+  "request": {
+    "type": "barn",
+    "style": "rustic",
+    "features": [
+      "loft"
+    ],
+    "maxSize": {
+      "x": 37,
+      "y": 22,
+      "z": 41
+    },
+    "name": "Cattle barn",
+    "notes": "A cattle barn on the savanna: stalls for cattle, a hay loft, a wide entrance."
+  }
+}

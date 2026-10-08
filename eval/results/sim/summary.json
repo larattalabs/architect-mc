@@ -1,0 +1,3058 @@
+{
+  "runId": "sim-2026-10-06T1735",
+  "label": "sim",
+  "tier": "sim",
+  "models": null,
+  "maxRevisions": 2,
+  "capUsd": null,
+  "authVars": {
+    "ANTHROPIC_API_KEY": false,
+    "ANTHROPIC_AUTH_TOKEN": false,
+    "CLAUDE_CODE_OAUTH_TOKEN": false,
+    "ANTHROPIC_BASE_URL": true,
+    "CLAUDE_CODE_USE_BEDROCK": false,
+    "CLAUDE_CODE_USE_VERTEX": false,
+    "CLAUDE_CODE_USE_FOUNDRY": false
+  },
+  "provenance": {
+    "sidecarVersion": "0.1.0",
+    "modVersion": "0.8.0",
+    "briefSet": "v1",
+    "hashes": {
+      "briefs": "1e503b2332ac1ee6e1cfb6123cc84af89ee9b0e8b9b6b9fcc610d2fa5f6f4a80",
+      "kit": "e6b381f1cc56d3c990a8c4cd944495d3d16e3d8605b5ba2c1bbb3076bca865cc",
+      "designPrompts": "a90bce97e378df2e467bc47871e813e003eb4092a2cf1eca1062d1ccf276f040",
+      "critic": "b7888e53874212e7f6efbefff555d79f9962e7c4679025b417f24a423e6e0bcc",
+      "judge": "a087ab438b0c93874f83e9af3245c3e46094582f7cf3a06d17629ff4794702a4"
+    },
+    "models": {
+      "critic": "claude-sonnet-5-5 (medium)",
+      "judge": "claude-opus-5-5 (medium)"
+    }
+  },
+  "stopReason": null,
+  "briefs": [
+    {
+      "id": "woodcutters_cabin",
+      "n": 1,
+      "title": "woodcutter's cabin",
+      "type": "cabin",
+      "model": "claude-sonnet-5-5",
+      "status": "done",
+      "end": "ship",
+      "best": 0,
+      "revisions": 0,
+      "rounds": [
+        {
+          "n": 0,
+          "kept": true,
+          "overall": 8,
+          "scores": {
+            "silhouette": 8,
+            "legibility": 8,
+            "craft": 8,
+            "materials": 8,
+            "brief": 8,
+            "interior": 8
+          },
+          "ship": true,
+          "modelVerdict": "ship",
+          "issues": {
+            "P0": 0,
+            "P1": 0,
+            "P2": 0
+          },
+          "issueParts": 0,
+          "unknownParts": 0,
+          "cost": 0.01,
+          "ms": 34
+        }
+      ],
+      "round0": {
+        "errors": 0,
+        "warnings": 0,
+        "byRule": {},
+        "metrics": {
+          "accentShare": 0,
+          "detailNoise": 0.282,
+          "windowsMin": 0,
+          "paletteAdherence": 1,
+          "parts": 6,
+          "cellsOutsideParts": 0,
+          "blocks": 495
+        }
+      },
+      "final": {
+        "errors": 0,
+        "warnings": 0,
+        "byRule": {},
+        "metrics": {
+          "accentShare": 0,
+          "detailNoise": 0.282,
+          "windowsMin": 0,
+          "paletteAdherence": 1,
+          "parts": 6,
+          "cellsOutsideParts": 0,
+          "blocks": 495
+        }
+      },
+      "critic": {
+        "calls": 1,
+        "disagreements": 0,
+        "issues": 0,
+        "unknownParts": 0,
+        "partGrounding": null
+      },
+      "judge": {
+        "outcome": "none",
+        "revisions": 0,
+        "calls": []
+      },
+      "cost": {
+        "total": 0.46,
+        "round0": 0.45,
+        "critic": 0.01,
+        "revise": 0,
+        "loop": 0.01,
+        "loopCap": 0.45,
+        "judge": 0,
+        "cacheReadTokens": 500
+      },
+      "ms": {
+        "total": 386,
+        "loop": 34
+      },
+      "estimate": {
+        "usdLow": 0.8,
+        "usdHigh": 2.5,
+        "critiqueUsdLow": 0.04,
+        "critiqueUsdHigh": 2.25,
+        "minutesLow": 4,
+        "minutesHigh": 10,
+        "critiqueMinutesLow": 0.5,
+        "critiqueMinutesHigh": 16,
+        "midUsd": 2.795,
+        "errorPct": -83.54
+      }
+    },
+    {
+      "id": "farmhouse_porch",
+      "n": 2,
+      "title": "farmhouse with a porch",
+      "type": "house",
+      "model": "claude-sonnet-5-5",
+      "status": "done",
+      "end": "ship",
+      "best": 1,
+      "revisions": 1,
+      "rounds": [
+        {
+          "n": 0,
+          "kept": true,
+          "overall": 5,
+          "scores": {
+            "silhouette": 5,
+            "legibility": 5,
+            "craft": 5,
+            "materials": 5,
+            "brief": 5,
+            "interior": 5
+          },
+          "ship": false,
+          "modelVerdict": "iterate",
+          "issues": {
+            "P0": 0,
+            "P1": 1,
+            "P2": 0
+          },
+          "issueParts": 1,
+          "unknownParts": 0,
+          "cost": 0.01,
+          "ms": 26
+        },
+        {
+          "n": 1,
+          "kept": true,
+          "overall": 8,
+          "scores": {
+            "silhouette": 8,
+            "legibility": 8,
+            "craft": 8,
+            "materials": 8,
+            "brief": 8,
+            "interior": 8
+          },
+          "ship": true,
+          "modelVerdict": "ship",
+          "issues": {
+            "P0": 0,
+            "P1": 0,
+            "P2": 0
+          },
+          "issueParts": 0,
+          "unknownParts": 0,
+          "cost": 0.16,
+          "ms": 228
+        }
+      ],
+      "round0": {
+        "errors": 0,
+        "warnings": 0,
+        "byRule": {},
+        "metrics": {
+          "accentShare": 0,
+          "detailNoise": 0.282,
+          "windowsMin": 0,
+          "paletteAdherence": 1,
+          "parts": 6,
+          "cellsOutsideParts": 0,
+          "blocks": 495
+        }
+      },
+      "final": {
+        "errors": 0,
+        "warnings": 0,
+        "byRule": {},
+        "metrics": {
+          "accentShare": 0,
+          "detailNoise": 0.282,
+          "windowsMin": 0,
+          "paletteAdherence": 1,
+          "parts": 6,
+          "cellsOutsideParts": 0,
+          "blocks": 495
+        }
+      },
+      "critic": {
+        "calls": 2,
+        "disagreements": 0,
+        "issues": 1,
+        "unknownParts": 0,
+        "partGrounding": 1
+      },
+      "judge": {
+        "outcome": "win",
+        "revisions": 1,
+        "best": 1,
+        "views": [
+          "iso",
+          "iso_back",
+          "front",
+          "top"
+        ],
+        "calls": [
+          {
+            "order": {
+              "A": "final",
+              "B": "round0"
+            },
+            "preferred": "A",
+            "margin": "clear",
+            "dimensions": {
+              "silhouette": "A",
+              "legibility": "A",
+              "craft": "tie",
+              "materials": "A",
+              "brief": "A"
+            },
+            "reasons": "simulated judge for brief 2",
+            "winner": "final",
+            "usd": 0.01
+          },
+          {
+            "order": {
+              "A": "round0",
+              "B": "final"
+            },
+            "preferred": "B",
+            "margin": "clear",
+            "dimensions": {
+              "silhouette": "B",
+              "legibility": "B",
+              "craft": "tie",
+              "materials": "B",
+              "brief": "B"
+            },
+            "reasons": "simulated judge for brief 2",
+            "winner": "final",
+            "usd": 0.01
+          }
+        ]
+      },
+      "cost": {
+        "total": 0.62,
+        "round0": 0.45,
+        "critic": 0.02,
+        "revise": 0.15,
+        "loop": 0.17,
+        "loopCap": 0.45,
+        "judge": 0.02,
+        "cacheReadTokens": 1000
+      },
+      "ms": {
+        "total": 789,
+        "loop": 254
+      },
+      "estimate": {
+        "usdLow": 0.8,
+        "usdHigh": 2.5,
+        "critiqueUsdLow": 0.04,
+        "critiqueUsdHigh": 2.25,
+        "minutesLow": 4,
+        "minutesHigh": 10,
+        "critiqueMinutesLow": 0.5,
+        "critiqueMinutesHigh": 16,
+        "midUsd": 2.795,
+        "errorPct": -77.82
+      }
+    },
+    {
+      "id": "watchtower_plot",
+      "n": 3,
+      "title": "watchtower on an 11x11 plot",
+      "type": "tower",
+      "model": "claude-sonnet-5-5",
+      "status": "done",
+      "end": "ship",
+      "best": 1,
+      "revisions": 1,
+      "rounds": [
+        {
+          "n": 0,
+          "kept": true,
+          "overall": 6,
+          "scores": {
+            "silhouette": 6,
+            "legibility": 6,
+            "craft": 6,
+            "materials": 6,
+            "brief": 6,
+            "interior": 6
+          },
+          "ship": false,
+          "modelVerdict": "iterate",
+          "issues": {
+            "P0": 0,
+            "P1": 1,
+            "P2": 0
+          },
+          "issueParts": 1,
+          "unknownParts": 0,
+          "cost": 0.01,
+          "ms": 64
+        },
+        {
+          "n": 1,
+          "kept": true,
+          "overall": 7.5,
+          "scores": {
+            "silhouette": 7,
+            "legibility": 8,
+            "craft": 7,
+            "materials": 8,
+            "brief": 7,
+            "interior": 8
+          },
+          "ship": true,
+          "modelVerdict": "ship",
+          "issues": {
+            "P0": 0,
+            "P1": 0,
+            "P2": 0
+          },
+          "issueParts": 0,
+          "unknownParts": 0,
+          "cost": 0.16,
+          "ms": 252
+        }
+      ],
+      "round0": {
+        "errors": 0,
+        "warnings": 0,
+        "byRule": {},
+        "metrics": {
+          "accentShare": 0.032,
+          "detailNoise": 0.221,
+          "windowsMin": 6,
+          "paletteAdherence": 1,
+          "parts": 5,
+          "cellsOutsideParts": 0,
+          "blocks": 706
+        }
+      },
+      "final": {
+        "errors": 0,
+        "warnings": 0,
+        "byRule": {},
+        "metrics": {
+          "accentShare": 0.032,
+          "detailNoise": 0.221,
+          "windowsMin": 6,
+          "paletteAdherence": 1,
+          "parts": 5,
+          "cellsOutsideParts": 0,
+          "blocks": 706
+        }
+      },
+      "critic": {
+        "calls": 2,
+        "disagreements": 0,
+        "issues": 1,
+        "unknownParts": 0,
+        "partGrounding": 1
+      },
+      "judge": {
+        "outcome": "win",
+        "revisions": 1,
+        "best": 1,
+        "views": [
+          "iso",
+          "iso_back",
+          "front",
+          "top"
+        ],
+        "calls": [
+          {
+            "order": {
+              "A": "final",
+              "B": "round0"
+            },
+            "preferred": "A",
+            "margin": "clear",
+            "dimensions": {
+              "silhouette": "A",
+              "legibility": "A",
+              "craft": "tie",
+              "materials": "A",
+              "brief": "A"
+            },
+            "reasons": "simulated judge for brief 3",
+            "winner": "final",
+            "usd": 0.01
+          },
+          {
+            "order": {
+              "A": "round0",
+              "B": "final"
+            },
+            "preferred": "B",
+            "margin": "clear",
+            "dimensions": {
+              "silhouette": "B",
+              "legibility": "B",
+              "craft": "tie",
+              "materials": "B",
+              "brief": "B"
+            },
+            "reasons": "simulated judge for brief 3",
+            "winner": "final",
+            "usd": 0.01
+          }
+        ]
+      },
+      "cost": {
+        "total": 0.62,
+        "round0": 0.45,
+        "critic": 0.02,
+        "revise": 0.15,
+        "loop": 0.17,
+        "loopCap": 0.45,
+        "judge": 0.02,
+        "cacheReadTokens": 1000
+      },
+      "ms": {
+        "total": 1122,
+        "loop": 316
+      },
+      "estimate": {
+        "usdLow": 0.8,
+        "usdHigh": 2.5,
+        "critiqueUsdLow": 0.04,
+        "critiqueUsdHigh": 2.25,
+        "minutesLow": 4,
+        "minutesHigh": 10,
+        "critiqueMinutesLow": 0.5,
+        "critiqueMinutesHigh": 16,
+        "midUsd": 2.795,
+        "errorPct": -77.82
+      }
+    },
+    {
+      "id": "spice_shop",
+      "n": 4,
+      "title": "spice shop with an awning",
+      "type": "shop",
+      "model": "claude-sonnet-5-5",
+      "status": "done",
+      "end": "ship",
+      "best": 2,
+      "revisions": 2,
+      "rounds": [
+        {
+          "n": 0,
+          "kept": true,
+          "overall": 5,
+          "scores": {
+            "silhouette": 5,
+            "legibility": 5,
+            "craft": 5,
+            "materials": 5,
+            "brief": 5,
+            "interior": 5
+          },
+          "ship": false,
+          "modelVerdict": "iterate",
+          "issues": {
+            "P0": 0,
+            "P1": 1,
+            "P2": 0
+          },
+          "issueParts": 1,
+          "unknownParts": 0,
+          "cost": 0.01,
+          "ms": 26
+        },
+        {
+          "n": 1,
+          "kept": true,
+          "overall": 5,
+          "scores": {
+            "silhouette": 5,
+            "legibility": 5,
+            "craft": 5,
+            "materials": 5,
+            "brief": 5,
+            "interior": 5
+          },
+          "ship": false,
+          "modelVerdict": "iterate",
+          "issues": {
+            "P0": 0,
+            "P1": 1,
+            "P2": 0
+          },
+          "issueParts": 1,
+          "unknownParts": 0,
+          "cost": 0.16,
+          "ms": 220
+        },
+        {
+          "n": 2,
+          "kept": true,
+          "overall": 7,
+          "scores": {
+            "silhouette": 7,
+            "legibility": 7,
+            "craft": 7,
+            "materials": 7,
+            "brief": 7,
+            "interior": 7
+          },
+          "ship": true,
+          "modelVerdict": "ship",
+          "issues": {
+            "P0": 0,
+            "P1": 0,
+            "P2": 0
+          },
+          "issueParts": 0,
+          "unknownParts": 0,
+          "cost": 0.16,
+          "ms": 209
+        }
+      ],
+      "round0": {
+        "errors": 0,
+        "warnings": 0,
+        "byRule": {},
+        "metrics": {
+          "accentShare": 0,
+          "detailNoise": 0.282,
+          "windowsMin": 0,
+          "paletteAdherence": 1,
+          "parts": 6,
+          "cellsOutsideParts": 0,
+          "blocks": 495
+        }
+      },
+      "final": {
+        "errors": 0,
+        "warnings": 0,
+        "byRule": {},
+        "metrics": {
+          "accentShare": 0,
+          "detailNoise": 0.282,
+          "windowsMin": 0,
+          "paletteAdherence": 1,
+          "parts": 6,
+          "cellsOutsideParts": 0,
+          "blocks": 495
+        }
+      },
+      "critic": {
+        "calls": 3,
+        "disagreements": 0,
+        "issues": 2,
+        "unknownParts": 0,
+        "partGrounding": 1
+      },
+      "judge": {
+        "outcome": "win",
+        "revisions": 2,
+        "best": 2,
+        "views": [
+          "iso",
+          "iso_back",
+          "front",
+          "top"
+        ],
+        "calls": [
+          {
+            "order": {
+              "A": "round0",
+              "B": "final"
+            },
+            "preferred": "B",
+            "margin": "clear",
+            "dimensions": {
+              "silhouette": "B",
+              "legibility": "B",
+              "craft": "tie",
+              "materials": "B",
+              "brief": "B"
+            },
+            "reasons": "simulated judge for brief 4",
+            "winner": "final",
+            "usd": 0.01
+          },
+          {
+            "order": {
+              "A": "final",
+              "B": "round0"
+            },
+            "preferred": "A",
+            "margin": "clear",
+            "dimensions": {
+              "silhouette": "A",
+              "legibility": "A",
+              "craft": "tie",
+              "materials": "A",
+              "brief": "A"
+            },
+            "reasons": "simulated judge for brief 4",
+            "winner": "final",
+            "usd": 0.01
+          }
+        ]
+      },
+      "cost": {
+        "total": 0.78,
+        "round0": 0.45,
+        "critic": 0.03,
+        "revise": 0.3,
+        "loop": 0.33,
+        "loopCap": 0.45,
+        "judge": 0.02,
+        "cacheReadTokens": 1500
+      },
+      "ms": {
+        "total": 1447,
+        "loop": 455
+      },
+      "estimate": {
+        "usdLow": 0.8,
+        "usdHigh": 2.5,
+        "critiqueUsdLow": 0.04,
+        "critiqueUsdHigh": 2.25,
+        "minutesLow": 4,
+        "minutesHigh": 10,
+        "critiqueMinutesLow": 0.5,
+        "critiqueMinutesHigh": 16,
+        "midUsd": 2.795,
+        "errorPct": -72.09
+      }
+    },
+    {
+      "id": "coaching_inn",
+      "n": 5,
+      "title": "coaching inn",
+      "type": "tavern",
+      "model": "claude-sonnet-5-5",
+      "status": "done",
+      "end": "regressed",
+      "best": 0,
+      "revisions": 1,
+      "rounds": [
+        {
+          "n": 0,
+          "kept": true,
+          "overall": 6,
+          "scores": {
+            "silhouette": 6,
+            "legibility": 6,
+            "craft": 6,
+            "materials": 6,
+            "brief": 6,
+            "interior": 6
+          },
+          "ship": false,
+          "modelVerdict": "iterate",
+          "issues": {
+            "P0": 0,
+            "P1": 1,
+            "P2": 0
+          },
+          "issueParts": 1,
+          "unknownParts": 0,
+          "cost": 0.01,
+          "ms": 22
+        },
+        {
+          "n": 1,
+          "kept": true,
+          "overall": 4,
+          "scores": {
+            "silhouette": 4,
+            "legibility": 4,
+            "craft": 4,
+            "materials": 4,
+            "brief": 4,
+            "interior": 4
+          },
+          "ship": false,
+          "modelVerdict": "iterate",
+          "issues": {
+            "P0": 0,
+            "P1": 1,
+            "P2": 0
+          },
+          "issueParts": 1,
+          "unknownParts": 0,
+          "cost": 0.16,
+          "ms": 232
+        }
+      ],
+      "round0": {
+        "errors": 0,
+        "warnings": 0,
+        "byRule": {},
+        "metrics": {
+          "accentShare": 0.223,
+          "detailNoise": 0.355,
+          "windowsMin": 4,
+          "paletteAdherence": 1,
+          "parts": 7,
+          "cellsOutsideParts": 8,
+          "blocks": 1151
+        }
+      },
+      "final": {
+        "errors": 0,
+        "warnings": 0,
+        "byRule": {},
+        "metrics": {
+          "accentShare": 0.223,
+          "detailNoise": 0.355,
+          "windowsMin": 4,
+          "paletteAdherence": 1,
+          "parts": 7,
+          "cellsOutsideParts": 8,
+          "blocks": 1151
+        }
+      },
+      "critic": {
+        "calls": 2,
+        "disagreements": 0,
+        "issues": 2,
+        "unknownParts": 0,
+        "partGrounding": 1
+      },
+      "judge": {
+        "outcome": "identical",
+        "revisions": 1,
+        "calls": []
+      },
+      "cost": {
+        "total": 0.62,
+        "round0": 0.45,
+        "critic": 0.02,
+        "revise": 0.15,
+        "loop": 0.17,
+        "loopCap": 0.45,
+        "judge": 0,
+        "cacheReadTokens": 1000
+      },
+      "ms": {
+        "total": 1840,
+        "loop": 254
+      },
+      "estimate": {
+        "usdLow": 0.8,
+        "usdHigh": 2.5,
+        "critiqueUsdLow": 0.04,
+        "critiqueUsdHigh": 2.25,
+        "minutesLow": 4,
+        "minutesHigh": 10,
+        "critiqueMinutesLow": 0.5,
+        "critiqueMinutesHigh": 16,
+        "midUsd": 2.795,
+        "errorPct": -77.82
+      }
+    },
+    {
+      "id": "cattle_barn",
+      "n": 6,
+      "title": "cattle barn",
+      "type": "barn",
+      "model": "claude-sonnet-5-5",
+      "status": "done",
+      "end": "ship",
+      "best": 1,
+      "revisions": 1,
+      "rounds": [
+        {
+          "n": 0,
+          "kept": true,
+          "overall": 5,
+          "scores": {
+            "silhouette": 5,
+            "legibility": 5,
+            "craft": 5,
+            "materials": 5,
+            "brief": 5,
+            "interior": 5
+          },
+          "ship": false,
+          "modelVerdict": "iterate",
+          "issues": {
+            "P0": 0,
+            "P1": 2,
+            "P2": 0
+          },
+          "issueParts": 2,
+          "unknownParts": 1,
+          "cost": 0.01,
+          "ms": 38
+        },
+        {
+          "n": 1,
+          "kept": true,
+          "overall": 8,
+          "scores": {
+            "silhouette": 8,
+            "legibility": 8,
+            "craft": 8,
+            "materials": 8,
+            "brief": 8,
+            "interior": 8
+          },
+          "ship": true,
+          "modelVerdict": "ship",
+          "issues": {
+            "P0": 0,
+            "P1": 0,
+            "P2": 0
+          },
+          "issueParts": 0,
+          "unknownParts": 0,
+          "cost": 0.16,
+          "ms": 247
+        }
+      ],
+      "round0": {
+        "errors": 0,
+        "warnings": 0,
+        "byRule": {},
+        "metrics": {
+          "accentShare": 0,
+          "detailNoise": 0.282,
+          "windowsMin": 0,
+          "paletteAdherence": 1,
+          "parts": 6,
+          "cellsOutsideParts": 0,
+          "blocks": 495
+        }
+      },
+      "final": {
+        "errors": 0,
+        "warnings": 0,
+        "byRule": {},
+        "metrics": {
+          "accentShare": 0,
+          "detailNoise": 0.282,
+          "windowsMin": 0,
+          "paletteAdherence": 1,
+          "parts": 6,
+          "cellsOutsideParts": 0,
+          "blocks": 495
+        }
+      },
+      "critic": {
+        "calls": 2,
+        "disagreements": 0,
+        "issues": 2,
+        "unknownParts": 1,
+        "partGrounding": 0.5
+      },
+      "judge": {
+        "outcome": "loss",
+        "revisions": 1,
+        "best": 1,
+        "views": [
+          "iso",
+          "iso_back",
+          "front",
+          "top"
+        ],
+        "calls": [
+          {
+            "order": {
+              "A": "round0",
+              "B": "final"
+            },
+            "preferred": "A",
+            "margin": "clear",
+            "dimensions": {
+              "silhouette": "A",
+              "legibility": "A",
+              "craft": "tie",
+              "materials": "A",
+              "brief": "A"
+            },
+            "reasons": "simulated judge for brief 6",
+            "winner": "round0",
+            "usd": 0.01
+          },
+          {
+            "order": {
+              "A": "final",
+              "B": "round0"
+            },
+            "preferred": "B",
+            "margin": "clear",
+            "dimensions": {
+              "silhouette": "B",
+              "legibility": "B",
+              "craft": "tie",
+              "materials": "B",
+              "brief": "B"
+            },
+            "reasons": "simulated judge for brief 6",
+            "winner": "round0",
+            "usd": 0.01
+          }
+        ]
+      },
+      "cost": {
+        "total": 0.62,
+        "round0": 0.45,
+        "critic": 0.02,
+        "revise": 0.15,
+        "loop": 0.17,
+        "loopCap": 0.45,
+        "judge": 0.02,
+        "cacheReadTokens": 1000
+      },
+      "ms": {
+        "total": 2456,
+        "loop": 285
+      },
+      "estimate": {
+        "usdLow": 0.8,
+        "usdHigh": 2.5,
+        "critiqueUsdLow": 0.04,
+        "critiqueUsdHigh": 2.25,
+        "minutesLow": 4,
+        "minutesHigh": 10,
+        "critiqueMinutesLow": 0.5,
+        "critiqueMinutesHigh": 16,
+        "midUsd": 2.795,
+        "errorPct": -77.82
+      }
+    },
+    {
+      "id": "smithy_forge_yard",
+      "n": 7,
+      "title": "smithy with a forge yard",
+      "type": "smithy",
+      "model": "claude-sonnet-5-5",
+      "status": "done",
+      "end": "max_revisions",
+      "best": 2,
+      "revisions": 2,
+      "rounds": [
+        {
+          "n": 0,
+          "kept": true,
+          "overall": 5,
+          "scores": {
+            "silhouette": 5,
+            "legibility": 5,
+            "craft": 5,
+            "materials": 5,
+            "brief": 5,
+            "interior": 5
+          },
+          "ship": false,
+          "modelVerdict": "iterate",
+          "issues": {
+            "P0": 0,
+            "P1": 1,
+            "P2": 0
+          },
+          "issueParts": 1,
+          "unknownParts": 0,
+          "cost": 0.01,
+          "ms": 28
+        },
+        {
+          "n": 1,
+          "kept": true,
+          "overall": 6,
+          "scores": {
+            "silhouette": 6,
+            "legibility": 6,
+            "craft": 6,
+            "materials": 6,
+            "brief": 6,
+            "interior": 6
+          },
+          "ship": false,
+          "modelVerdict": "iterate",
+          "issues": {
+            "P0": 0,
+            "P1": 1,
+            "P2": 0
+          },
+          "issueParts": 1,
+          "unknownParts": 0,
+          "cost": 0.16,
+          "ms": 225
+        },
+        {
+          "n": 2,
+          "kept": true,
+          "overall": 6,
+          "scores": {
+            "silhouette": 6,
+            "legibility": 6,
+            "craft": 6,
+            "materials": 6,
+            "brief": 6,
+            "interior": 6
+          },
+          "ship": false,
+          "modelVerdict": "iterate",
+          "issues": {
+            "P0": 0,
+            "P1": 1,
+            "P2": 0
+          },
+          "issueParts": 1,
+          "unknownParts": 0,
+          "cost": 0.16,
+          "ms": 197
+        }
+      ],
+      "round0": {
+        "errors": 0,
+        "warnings": 0,
+        "byRule": {},
+        "metrics": {
+          "accentShare": 0,
+          "detailNoise": 0.282,
+          "windowsMin": 0,
+          "paletteAdherence": 1,
+          "parts": 6,
+          "cellsOutsideParts": 0,
+          "blocks": 495
+        }
+      },
+      "final": {
+        "errors": 0,
+        "warnings": 0,
+        "byRule": {},
+        "metrics": {
+          "accentShare": 0,
+          "detailNoise": 0.282,
+          "windowsMin": 0,
+          "paletteAdherence": 1,
+          "parts": 6,
+          "cellsOutsideParts": 0,
+          "blocks": 495
+        }
+      },
+      "critic": {
+        "calls": 3,
+        "disagreements": 0,
+        "issues": 3,
+        "unknownParts": 0,
+        "partGrounding": 1
+      },
+      "judge": {
+        "outcome": "win",
+        "revisions": 2,
+        "best": 2,
+        "views": [
+          "iso",
+          "iso_back",
+          "front",
+          "top"
+        ],
+        "calls": [
+          {
+            "order": {
+              "A": "final",
+              "B": "round0"
+            },
+            "preferred": "A",
+            "margin": "clear",
+            "dimensions": {
+              "silhouette": "A",
+              "legibility": "A",
+              "craft": "tie",
+              "materials": "A",
+              "brief": "A"
+            },
+            "reasons": "simulated judge for brief 7",
+            "winner": "final",
+            "usd": 0.01
+          },
+          {
+            "order": {
+              "A": "round0",
+              "B": "final"
+            },
+            "preferred": "B",
+            "margin": "clear",
+            "dimensions": {
+              "silhouette": "B",
+              "legibility": "B",
+              "craft": "tie",
+              "materials": "B",
+              "brief": "B"
+            },
+            "reasons": "simulated judge for brief 7",
+            "winner": "final",
+            "usd": 0.01
+          }
+        ]
+      },
+      "cost": {
+        "total": 0.78,
+        "round0": 0.45,
+        "critic": 0.03,
+        "revise": 0.3,
+        "loop": 0.33,
+        "loopCap": 0.45,
+        "judge": 0.02,
+        "cacheReadTokens": 1500
+      },
+      "ms": {
+        "total": 3198,
+        "loop": 450
+      },
+      "estimate": {
+        "usdLow": 0.8,
+        "usdHigh": 2.5,
+        "critiqueUsdLow": 0.04,
+        "critiqueUsdHigh": 2.25,
+        "minutesLow": 4,
+        "minutesHigh": 10,
+        "critiqueMinutesLow": 0.5,
+        "critiqueMinutesHigh": 16,
+        "midUsd": 2.795,
+        "errorPct": -72.09
+      }
+    },
+    {
+      "id": "mountain_chapel",
+      "n": 8,
+      "title": "mountain chapel",
+      "type": "chapel",
+      "model": "claude-sonnet-5-5",
+      "status": "done",
+      "end": "ship",
+      "best": 1,
+      "revisions": 1,
+      "rounds": [
+        {
+          "n": 0,
+          "kept": true,
+          "overall": 6,
+          "scores": {
+            "silhouette": 6,
+            "legibility": 6,
+            "craft": 6,
+            "materials": 6,
+            "brief": 6,
+            "interior": 6
+          },
+          "ship": false,
+          "modelVerdict": "iterate",
+          "issues": {
+            "P0": 0,
+            "P1": 1,
+            "P2": 0
+          },
+          "issueParts": 1,
+          "unknownParts": 0,
+          "cost": 0.01,
+          "ms": 21
+        },
+        {
+          "n": 1,
+          "kept": true,
+          "overall": 8,
+          "scores": {
+            "silhouette": 8,
+            "legibility": 8,
+            "craft": 8,
+            "materials": 8,
+            "brief": 8,
+            "interior": 8
+          },
+          "ship": true,
+          "modelVerdict": "ship",
+          "issues": {
+            "P0": 0,
+            "P1": 0,
+            "P2": 0
+          },
+          "issueParts": 0,
+          "unknownParts": 0,
+          "cost": 0.16,
+          "ms": 203
+        }
+      ],
+      "round0": {
+        "errors": 0,
+        "warnings": 0,
+        "byRule": {},
+        "metrics": {
+          "accentShare": 0,
+          "detailNoise": 0.282,
+          "windowsMin": 0,
+          "paletteAdherence": 1,
+          "parts": 6,
+          "cellsOutsideParts": 0,
+          "blocks": 495
+        }
+      },
+      "final": {
+        "errors": 0,
+        "warnings": 0,
+        "byRule": {},
+        "metrics": {
+          "accentShare": 0,
+          "detailNoise": 0.282,
+          "windowsMin": 0,
+          "paletteAdherence": 1,
+          "parts": 6,
+          "cellsOutsideParts": 0,
+          "blocks": 495
+        }
+      },
+      "critic": {
+        "calls": 2,
+        "disagreements": 0,
+        "issues": 1,
+        "unknownParts": 0,
+        "partGrounding": 1
+      },
+      "judge": {
+        "outcome": "win",
+        "revisions": 1,
+        "best": 1,
+        "views": [
+          "iso",
+          "iso_back",
+          "front",
+          "top"
+        ],
+        "calls": [
+          {
+            "order": {
+              "A": "final",
+              "B": "round0"
+            },
+            "preferred": "A",
+            "margin": "clear",
+            "dimensions": {
+              "silhouette": "A",
+              "legibility": "A",
+              "craft": "tie",
+              "materials": "A",
+              "brief": "A"
+            },
+            "reasons": "simulated judge for brief 8",
+            "winner": "final",
+            "usd": 0.01
+          },
+          {
+            "order": {
+              "A": "round0",
+              "B": "final"
+            },
+            "preferred": "B",
+            "margin": "clear",
+            "dimensions": {
+              "silhouette": "B",
+              "legibility": "B",
+              "craft": "tie",
+              "materials": "B",
+              "brief": "B"
+            },
+            "reasons": "simulated judge for brief 8",
+            "winner": "final",
+            "usd": 0.01
+          }
+        ]
+      },
+      "cost": {
+        "total": 0.62,
+        "round0": 0.45,
+        "critic": 0.02,
+        "revise": 0.15,
+        "loop": 0.17,
+        "loopCap": 0.45,
+        "judge": 0.02,
+        "cacheReadTokens": 1000
+      },
+      "ms": {
+        "total": 2972,
+        "loop": 224
+      },
+      "estimate": {
+        "usdLow": 0.8,
+        "usdHigh": 2.5,
+        "critiqueUsdLow": 0.04,
+        "critiqueUsdHigh": 2.25,
+        "minutesLow": 4,
+        "minutesHigh": 10,
+        "critiqueMinutesLow": 0.5,
+        "critiqueMinutesHigh": 16,
+        "midUsd": 2.795,
+        "errorPct": -77.82
+      }
+    },
+    {
+      "id": "gatehouse_plot",
+      "n": 9,
+      "title": "gatehouse on a 15x9 plot",
+      "type": "gatehouse",
+      "model": "claude-sonnet-5-5",
+      "status": "done",
+      "end": "ship",
+      "best": 0,
+      "revisions": 0,
+      "rounds": [
+        {
+          "n": 0,
+          "kept": true,
+          "overall": 7,
+          "scores": {
+            "silhouette": 7,
+            "legibility": 7,
+            "craft": 7,
+            "materials": 7,
+            "brief": 7,
+            "interior": 7
+          },
+          "ship": true,
+          "modelVerdict": "ship",
+          "issues": {
+            "P0": 0,
+            "P1": 0,
+            "P2": 0
+          },
+          "issueParts": 0,
+          "unknownParts": 0,
+          "cost": 0.01,
+          "ms": 42
+        }
+      ],
+      "round0": {
+        "errors": 0,
+        "warnings": 0,
+        "byRule": {},
+        "metrics": {
+          "accentShare": 0,
+          "detailNoise": 0.19,
+          "windowsMin": 0,
+          "paletteAdherence": 1,
+          "parts": 5,
+          "cellsOutsideParts": 0,
+          "blocks": 561
+        }
+      },
+      "final": {
+        "errors": 0,
+        "warnings": 0,
+        "byRule": {},
+        "metrics": {
+          "accentShare": 0,
+          "detailNoise": 0.19,
+          "windowsMin": 0,
+          "paletteAdherence": 1,
+          "parts": 5,
+          "cellsOutsideParts": 0,
+          "blocks": 561
+        }
+      },
+      "critic": {
+        "calls": 1,
+        "disagreements": 0,
+        "issues": 0,
+        "unknownParts": 0,
+        "partGrounding": null
+      },
+      "judge": {
+        "outcome": "none",
+        "revisions": 0,
+        "calls": []
+      },
+      "cost": {
+        "total": 0.46,
+        "round0": 0.45,
+        "critic": 0.01,
+        "revise": 0,
+        "loop": 0.01,
+        "loopCap": 0.45,
+        "judge": 0,
+        "cacheReadTokens": 500
+      },
+      "ms": {
+        "total": 2625,
+        "loop": 42
+      },
+      "estimate": {
+        "usdLow": 0.8,
+        "usdHigh": 2.5,
+        "critiqueUsdLow": 0.04,
+        "critiqueUsdHigh": 2.25,
+        "minutesLow": 4,
+        "minutesHigh": 10,
+        "critiqueMinutesLow": 0.5,
+        "critiqueMinutesHigh": 16,
+        "midUsd": 2.795,
+        "errorPct": -83.54
+      }
+    },
+    {
+      "id": "hellish_lair",
+      "n": 10,
+      "title": "hellish lair",
+      "type": "hellish_lair",
+      "model": "claude-sonnet-5-5",
+      "status": "done",
+      "end": "ship",
+      "best": 1,
+      "revisions": 1,
+      "rounds": [
+        {
+          "n": 0,
+          "kept": true,
+          "overall": 5,
+          "scores": {
+            "silhouette": 5,
+            "legibility": 5,
+            "craft": 5,
+            "materials": 5,
+            "brief": 5,
+            "interior": 5
+          },
+          "ship": false,
+          "modelVerdict": "iterate",
+          "issues": {
+            "P0": 0,
+            "P1": 1,
+            "P2": 0
+          },
+          "issueParts": 1,
+          "unknownParts": 0,
+          "cost": 0.01,
+          "ms": 39
+        },
+        {
+          "n": 1,
+          "kept": true,
+          "overall": 7,
+          "scores": {
+            "silhouette": 7,
+            "legibility": 7,
+            "craft": 7,
+            "materials": 7,
+            "brief": 7,
+            "interior": 7
+          },
+          "ship": true,
+          "modelVerdict": "ship",
+          "issues": {
+            "P0": 0,
+            "P1": 0,
+            "P2": 0
+          },
+          "issueParts": 0,
+          "unknownParts": 0,
+          "cost": 0.16,
+          "ms": 186
+        }
+      ],
+      "round0": {
+        "errors": 0,
+        "warnings": 0,
+        "byRule": {},
+        "metrics": {
+          "accentShare": 0,
+          "detailNoise": 0.282,
+          "windowsMin": 0,
+          "paletteAdherence": 1,
+          "parts": 6,
+          "cellsOutsideParts": 0,
+          "blocks": 495
+        }
+      },
+      "final": {
+        "errors": 0,
+        "warnings": 0,
+        "byRule": {},
+        "metrics": {
+          "accentShare": 0,
+          "detailNoise": 0.282,
+          "windowsMin": 0,
+          "paletteAdherence": 1,
+          "parts": 6,
+          "cellsOutsideParts": 0,
+          "blocks": 495
+        }
+      },
+      "critic": {
+        "calls": 2,
+        "disagreements": 0,
+        "issues": 1,
+        "unknownParts": 0,
+        "partGrounding": 1
+      },
+      "judge": {
+        "outcome": "win",
+        "revisions": 1,
+        "best": 1,
+        "views": [
+          "iso",
+          "iso_back",
+          "front",
+          "top"
+        ],
+        "calls": [
+          {
+            "order": {
+              "A": "final",
+              "B": "round0"
+            },
+            "preferred": "A",
+            "margin": "clear",
+            "dimensions": {
+              "silhouette": "A",
+              "legibility": "A",
+              "craft": "tie",
+              "materials": "A",
+              "brief": "A"
+            },
+            "reasons": "simulated judge for brief 10",
+            "winner": "final",
+            "usd": 0.01
+          },
+          {
+            "order": {
+              "A": "round0",
+              "B": "final"
+            },
+            "preferred": "B",
+            "margin": "clear",
+            "dimensions": {
+              "silhouette": "B",
+              "legibility": "B",
+              "craft": "tie",
+              "materials": "B",
+              "brief": "B"
+            },
+            "reasons": "simulated judge for brief 10",
+            "winner": "final",
+            "usd": 0.01
+          }
+        ]
+      },
+      "cost": {
+        "total": 0.62,
+        "round0": 0.45,
+        "critic": 0.02,
+        "revise": 0.15,
+        "loop": 0.17,
+        "loopCap": 0.45,
+        "judge": 0.02,
+        "cacheReadTokens": 1000
+      },
+      "ms": {
+        "total": 3284,
+        "loop": 225
+      },
+      "estimate": {
+        "usdLow": 0.8,
+        "usdHigh": 2.5,
+        "critiqueUsdLow": 0.04,
+        "critiqueUsdHigh": 2.25,
+        "minutesLow": 4,
+        "minutesHigh": 10,
+        "critiqueMinutesLow": 0.5,
+        "critiqueMinutesHigh": 16,
+        "midUsd": 2.795,
+        "errorPct": -77.82
+      }
+    },
+    {
+      "id": "lighthouse",
+      "n": 11,
+      "title": "lighthouse",
+      "type": "lighthouse",
+      "model": "claude-sonnet-5-5",
+      "status": "done",
+      "end": "ship",
+      "best": 2,
+      "revisions": 2,
+      "rounds": [
+        {
+          "n": 0,
+          "kept": true,
+          "overall": 4,
+          "scores": {
+            "silhouette": 4,
+            "legibility": 4,
+            "craft": 4,
+            "materials": 4,
+            "brief": 4,
+            "interior": 4
+          },
+          "ship": false,
+          "modelVerdict": "iterate",
+          "issues": {
+            "P0": 0,
+            "P1": 1,
+            "P2": 0
+          },
+          "issueParts": 1,
+          "unknownParts": 0,
+          "cost": 0.01,
+          "ms": 20
+        },
+        {
+          "n": 1,
+          "kept": true,
+          "overall": 6,
+          "scores": {
+            "silhouette": 6,
+            "legibility": 6,
+            "craft": 6,
+            "materials": 6,
+            "brief": 6,
+            "interior": 6
+          },
+          "ship": false,
+          "modelVerdict": "iterate",
+          "issues": {
+            "P0": 0,
+            "P1": 1,
+            "P2": 0
+          },
+          "issueParts": 1,
+          "unknownParts": 0,
+          "cost": 0.16,
+          "ms": 207
+        },
+        {
+          "n": 2,
+          "kept": true,
+          "overall": 8,
+          "scores": {
+            "silhouette": 8,
+            "legibility": 8,
+            "craft": 8,
+            "materials": 8,
+            "brief": 8,
+            "interior": 8
+          },
+          "ship": true,
+          "modelVerdict": "ship",
+          "issues": {
+            "P0": 0,
+            "P1": 0,
+            "P2": 0
+          },
+          "issueParts": 0,
+          "unknownParts": 0,
+          "cost": 0.16,
+          "ms": 187
+        }
+      ],
+      "round0": {
+        "errors": 0,
+        "warnings": 1,
+        "byRule": {
+          "lighthouse": 1
+        },
+        "metrics": {
+          "accentShare": 0,
+          "detailNoise": 0.282,
+          "windowsMin": 0,
+          "paletteAdherence": 1,
+          "parts": 6,
+          "cellsOutsideParts": 0,
+          "blocks": 495
+        }
+      },
+      "final": {
+        "errors": 0,
+        "warnings": 1,
+        "byRule": {
+          "lighthouse": 1
+        },
+        "metrics": {
+          "accentShare": 0,
+          "detailNoise": 0.282,
+          "windowsMin": 0,
+          "paletteAdherence": 1,
+          "parts": 6,
+          "cellsOutsideParts": 0,
+          "blocks": 495
+        }
+      },
+      "critic": {
+        "calls": 3,
+        "disagreements": 0,
+        "issues": 2,
+        "unknownParts": 0,
+        "partGrounding": 1
+      },
+      "judge": {
+        "outcome": "win",
+        "revisions": 2,
+        "best": 2,
+        "views": [
+          "iso",
+          "iso_back",
+          "front",
+          "top"
+        ],
+        "calls": [
+          {
+            "order": {
+              "A": "round0",
+              "B": "final"
+            },
+            "preferred": "B",
+            "margin": "clear",
+            "dimensions": {
+              "silhouette": "B",
+              "legibility": "B",
+              "craft": "tie",
+              "materials": "B",
+              "brief": "B"
+            },
+            "reasons": "simulated judge for brief 11",
+            "winner": "final",
+            "usd": 0.01
+          },
+          {
+            "order": {
+              "A": "final",
+              "B": "round0"
+            },
+            "preferred": "A",
+            "margin": "clear",
+            "dimensions": {
+              "silhouette": "A",
+              "legibility": "A",
+              "craft": "tie",
+              "materials": "A",
+              "brief": "A"
+            },
+            "reasons": "simulated judge for brief 11",
+            "winner": "final",
+            "usd": 0.01
+          }
+        ]
+      },
+      "cost": {
+        "total": 0.78,
+        "round0": 0.45,
+        "critic": 0.03,
+        "revise": 0.3,
+        "loop": 0.33,
+        "loopCap": 0.45,
+        "judge": 0.02,
+        "cacheReadTokens": 1500
+      },
+      "ms": {
+        "total": 4473,
+        "loop": 414
+      },
+      "estimate": {
+        "usdLow": 0.8,
+        "usdHigh": 2.5,
+        "critiqueUsdLow": 0.04,
+        "critiqueUsdHigh": 2.25,
+        "minutesLow": 4,
+        "minutesHigh": 10,
+        "critiqueMinutesLow": 0.5,
+        "critiqueMinutesHigh": 16,
+        "midUsd": 2.795,
+        "errorPct": -72.09
+      }
+    },
+    {
+      "id": "windmill",
+      "n": 12,
+      "title": "windmill",
+      "type": "windmill",
+      "model": "claude-sonnet-5-5",
+      "status": "done",
+      "end": "ship",
+      "best": 1,
+      "revisions": 1,
+      "rounds": [
+        {
+          "n": 0,
+          "kept": true,
+          "overall": 6,
+          "scores": {
+            "silhouette": 6,
+            "legibility": 6,
+            "craft": 6,
+            "materials": 6,
+            "brief": 6,
+            "interior": 6
+          },
+          "ship": false,
+          "modelVerdict": "iterate",
+          "issues": {
+            "P0": 0,
+            "P1": 1,
+            "P2": 0
+          },
+          "issueParts": 1,
+          "unknownParts": 0,
+          "cost": 0.01,
+          "ms": 21
+        },
+        {
+          "n": 1,
+          "kept": true,
+          "overall": 7,
+          "scores": {
+            "silhouette": 7,
+            "legibility": 7,
+            "craft": 7,
+            "materials": 7,
+            "brief": 7,
+            "interior": 7
+          },
+          "ship": true,
+          "modelVerdict": "ship",
+          "issues": {
+            "P0": 0,
+            "P1": 0,
+            "P2": 0
+          },
+          "issueParts": 0,
+          "unknownParts": 0,
+          "cost": 0.16,
+          "ms": 230
+        }
+      ],
+      "round0": {
+        "errors": 0,
+        "warnings": 0,
+        "byRule": {},
+        "metrics": {
+          "accentShare": 0,
+          "detailNoise": 0.282,
+          "windowsMin": 0,
+          "paletteAdherence": 1,
+          "parts": 6,
+          "cellsOutsideParts": 0,
+          "blocks": 495
+        }
+      },
+      "final": {
+        "errors": 0,
+        "warnings": 0,
+        "byRule": {},
+        "metrics": {
+          "accentShare": 0,
+          "detailNoise": 0.282,
+          "windowsMin": 0,
+          "paletteAdherence": 1,
+          "parts": 6,
+          "cellsOutsideParts": 0,
+          "blocks": 495
+        }
+      },
+      "critic": {
+        "calls": 2,
+        "disagreements": 0,
+        "issues": 1,
+        "unknownParts": 0,
+        "partGrounding": 1
+      },
+      "judge": {
+        "outcome": "loss",
+        "revisions": 1,
+        "best": 1,
+        "views": [
+          "iso",
+          "iso_back",
+          "front",
+          "top"
+        ],
+        "calls": [
+          {
+            "order": {
+              "A": "round0",
+              "B": "final"
+            },
+            "preferred": "A",
+            "margin": "clear",
+            "dimensions": {
+              "silhouette": "A",
+              "legibility": "A",
+              "craft": "tie",
+              "materials": "A",
+              "brief": "A"
+            },
+            "reasons": "simulated judge for brief 12",
+            "winner": "round0",
+            "usd": 0.01
+          },
+          {
+            "order": {
+              "A": "final",
+              "B": "round0"
+            },
+            "preferred": "B",
+            "margin": "clear",
+            "dimensions": {
+              "silhouette": "B",
+              "legibility": "B",
+              "craft": "tie",
+              "materials": "B",
+              "brief": "B"
+            },
+            "reasons": "simulated judge for brief 12",
+            "winner": "round0",
+            "usd": 0.01
+          }
+        ]
+      },
+      "cost": {
+        "total": 0.62,
+        "round0": 0.45,
+        "critic": 0.02,
+        "revise": 0.15,
+        "loop": 0.17,
+        "loopCap": 0.45,
+        "judge": 0.02,
+        "cacheReadTokens": 1000
+      },
+      "ms": {
+        "total": 4009,
+        "loop": 251
+      },
+      "estimate": {
+        "usdLow": 0.8,
+        "usdHigh": 2.5,
+        "critiqueUsdLow": 0.04,
+        "critiqueUsdHigh": 2.25,
+        "minutesLow": 4,
+        "minutesHigh": 10,
+        "critiqueMinutesLow": 0.5,
+        "critiqueMinutesHigh": 16,
+        "midUsd": 2.795,
+        "errorPct": -77.82
+      }
+    },
+    {
+      "id": "stilt_house",
+      "n": 13,
+      "title": "stilt house",
+      "type": "house",
+      "model": "claude-sonnet-5-5",
+      "status": "done",
+      "end": "ship",
+      "best": 1,
+      "revisions": 1,
+      "rounds": [
+        {
+          "n": 0,
+          "kept": true,
+          "overall": 5,
+          "scores": {
+            "silhouette": 5,
+            "legibility": 5,
+            "craft": 5,
+            "materials": 5,
+            "brief": 5,
+            "interior": 5
+          },
+          "ship": false,
+          "modelVerdict": "iterate",
+          "issues": {
+            "P0": 0,
+            "P1": 1,
+            "P2": 0
+          },
+          "issueParts": 1,
+          "unknownParts": 0,
+          "cost": 0.01,
+          "ms": 23
+        },
+        {
+          "n": 1,
+          "kept": true,
+          "overall": 8,
+          "scores": {
+            "silhouette": 8,
+            "legibility": 8,
+            "craft": 8,
+            "materials": 8,
+            "brief": 8,
+            "interior": 8
+          },
+          "ship": true,
+          "modelVerdict": "ship",
+          "issues": {
+            "P0": 0,
+            "P1": 0,
+            "P2": 0
+          },
+          "issueParts": 0,
+          "unknownParts": 0,
+          "cost": 0.16,
+          "ms": 243
+        }
+      ],
+      "round0": {
+        "errors": 0,
+        "warnings": 0,
+        "byRule": {},
+        "metrics": {
+          "accentShare": 0,
+          "detailNoise": 0.282,
+          "windowsMin": 0,
+          "paletteAdherence": 1,
+          "parts": 6,
+          "cellsOutsideParts": 0,
+          "blocks": 495
+        }
+      },
+      "final": {
+        "errors": 0,
+        "warnings": 0,
+        "byRule": {},
+        "metrics": {
+          "accentShare": 0,
+          "detailNoise": 0.282,
+          "windowsMin": 0,
+          "paletteAdherence": 1,
+          "parts": 6,
+          "cellsOutsideParts": 0,
+          "blocks": 495
+        }
+      },
+      "critic": {
+        "calls": 2,
+        "disagreements": 0,
+        "issues": 1,
+        "unknownParts": 0,
+        "partGrounding": 1
+      },
+      "judge": {
+        "outcome": "win",
+        "revisions": 1,
+        "best": 1,
+        "views": [
+          "iso",
+          "iso_back",
+          "front",
+          "top"
+        ],
+        "calls": [
+          {
+            "order": {
+              "A": "round0",
+              "B": "final"
+            },
+            "preferred": "B",
+            "margin": "clear",
+            "dimensions": {
+              "silhouette": "B",
+              "legibility": "B",
+              "craft": "tie",
+              "materials": "B",
+              "brief": "B"
+            },
+            "reasons": "simulated judge for brief 13",
+            "winner": "final",
+            "usd": 0.01
+          },
+          {
+            "order": {
+              "A": "final",
+              "B": "round0"
+            },
+            "preferred": "A",
+            "margin": "clear",
+            "dimensions": {
+              "silhouette": "A",
+              "legibility": "A",
+              "craft": "tie",
+              "materials": "A",
+              "brief": "A"
+            },
+            "reasons": "simulated judge for brief 13",
+            "winner": "final",
+            "usd": 0.01
+          }
+        ]
+      },
+      "cost": {
+        "total": 0.62,
+        "round0": 0.45,
+        "critic": 0.02,
+        "revise": 0.15,
+        "loop": 0.17,
+        "loopCap": 0.45,
+        "judge": 0.02,
+        "cacheReadTokens": 1000
+      },
+      "ms": {
+        "total": 4210,
+        "loop": 266
+      },
+      "estimate": {
+        "usdLow": 0.8,
+        "usdHigh": 2.5,
+        "critiqueUsdLow": 0.04,
+        "critiqueUsdHigh": 2.25,
+        "minutesLow": 4,
+        "minutesHigh": 10,
+        "critiqueMinutesLow": 0.5,
+        "critiqueMinutesHigh": 16,
+        "midUsd": 2.795,
+        "errorPct": -77.82
+      }
+    },
+    {
+      "id": "mining_hall",
+      "n": 14,
+      "title": "mining hall",
+      "type": "mining_hall",
+      "model": "claude-sonnet-5-5",
+      "status": "done",
+      "end": "ship",
+      "best": 1,
+      "revisions": 1,
+      "rounds": [
+        {
+          "n": 0,
+          "kept": true,
+          "overall": 6,
+          "scores": {
+            "silhouette": 6,
+            "legibility": 6,
+            "craft": 6,
+            "materials": 6,
+            "brief": 6,
+            "interior": 6
+          },
+          "ship": false,
+          "modelVerdict": "iterate",
+          "issues": {
+            "P0": 0,
+            "P1": 1,
+            "P2": 0
+          },
+          "issueParts": 1,
+          "unknownParts": 0,
+          "cost": 0.01,
+          "ms": 24
+        },
+        {
+          "n": 1,
+          "kept": true,
+          "overall": 7,
+          "scores": {
+            "silhouette": 7,
+            "legibility": 7,
+            "craft": 7,
+            "materials": 7,
+            "brief": 7,
+            "interior": 7
+          },
+          "ship": true,
+          "modelVerdict": "ship",
+          "issues": {
+            "P0": 0,
+            "P1": 0,
+            "P2": 0
+          },
+          "issueParts": 0,
+          "unknownParts": 0,
+          "cost": 0.16,
+          "ms": 201
+        }
+      ],
+      "round0": {
+        "errors": 0,
+        "warnings": 1,
+        "byRule": {
+          "mining_hall": 1
+        },
+        "metrics": {
+          "accentShare": 0,
+          "detailNoise": 0.282,
+          "windowsMin": 0,
+          "paletteAdherence": 1,
+          "parts": 6,
+          "cellsOutsideParts": 0,
+          "blocks": 495
+        }
+      },
+      "final": {
+        "errors": 0,
+        "warnings": 1,
+        "byRule": {
+          "mining_hall": 1
+        },
+        "metrics": {
+          "accentShare": 0,
+          "detailNoise": 0.282,
+          "windowsMin": 0,
+          "paletteAdherence": 1,
+          "parts": 6,
+          "cellsOutsideParts": 0,
+          "blocks": 495
+        }
+      },
+      "critic": {
+        "calls": 2,
+        "disagreements": 0,
+        "issues": 1,
+        "unknownParts": 0,
+        "partGrounding": 1
+      },
+      "judge": {
+        "outcome": "win",
+        "revisions": 1,
+        "best": 1,
+        "views": [
+          "iso",
+          "iso_back",
+          "front",
+          "top"
+        ],
+        "calls": [
+          {
+            "order": {
+              "A": "round0",
+              "B": "final"
+            },
+            "preferred": "B",
+            "margin": "clear",
+            "dimensions": {
+              "silhouette": "B",
+              "legibility": "B",
+              "craft": "tie",
+              "materials": "B",
+              "brief": "B"
+            },
+            "reasons": "simulated judge for brief 14",
+            "winner": "final",
+            "usd": 0.01
+          },
+          {
+            "order": {
+              "A": "final",
+              "B": "round0"
+            },
+            "preferred": "A",
+            "margin": "clear",
+            "dimensions": {
+              "silhouette": "A",
+              "legibility": "A",
+              "craft": "tie",
+              "materials": "A",
+              "brief": "A"
+            },
+            "reasons": "simulated judge for brief 14",
+            "winner": "final",
+            "usd": 0.01
+          }
+        ]
+      },
+      "cost": {
+        "total": 0.62,
+        "round0": 0.45,
+        "critic": 0.02,
+        "revise": 0.15,
+        "loop": 0.17,
+        "loopCap": 0.45,
+        "judge": 0.02,
+        "cacheReadTokens": 1000
+      },
+      "ms": {
+        "total": 4167,
+        "loop": 225
+      },
+      "estimate": {
+        "usdLow": 0.8,
+        "usdHigh": 2.5,
+        "critiqueUsdLow": 0.04,
+        "critiqueUsdHigh": 2.25,
+        "minutesLow": 4,
+        "minutesHigh": 10,
+        "critiqueMinutesLow": 0.5,
+        "critiqueMinutesHigh": 16,
+        "midUsd": 2.795,
+        "errorPct": -77.82
+      }
+    },
+    {
+      "id": "tea_house",
+      "n": 15,
+      "title": "tea house",
+      "type": "house",
+      "model": "claude-sonnet-5-5",
+      "status": "done",
+      "end": "max_revisions",
+      "best": 2,
+      "revisions": 2,
+      "rounds": [
+        {
+          "n": 0,
+          "kept": true,
+          "overall": 5,
+          "scores": {
+            "silhouette": 5,
+            "legibility": 5,
+            "craft": 5,
+            "materials": 5,
+            "brief": 5,
+            "interior": 5
+          },
+          "ship": false,
+          "modelVerdict": "iterate",
+          "issues": {
+            "P0": 0,
+            "P1": 1,
+            "P2": 0
+          },
+          "issueParts": 1,
+          "unknownParts": 0,
+          "cost": 0.01,
+          "ms": 47
+        },
+        {
+          "n": 1,
+          "kept": true,
+          "overall": 6,
+          "scores": {
+            "silhouette": 6,
+            "legibility": 6,
+            "craft": 6,
+            "materials": 6,
+            "brief": 6,
+            "interior": 6
+          },
+          "ship": false,
+          "modelVerdict": "iterate",
+          "issues": {
+            "P0": 0,
+            "P1": 1,
+            "P2": 0
+          },
+          "issueParts": 1,
+          "unknownParts": 0,
+          "cost": 0.16,
+          "ms": 203
+        },
+        {
+          "n": 2,
+          "kept": true,
+          "overall": 6,
+          "scores": {
+            "silhouette": 6,
+            "legibility": 6,
+            "craft": 6,
+            "materials": 6,
+            "brief": 6,
+            "interior": 6
+          },
+          "ship": false,
+          "modelVerdict": "iterate",
+          "issues": {
+            "P0": 0,
+            "P1": 1,
+            "P2": 0
+          },
+          "issueParts": 1,
+          "unknownParts": 0,
+          "cost": 0.16,
+          "ms": 196
+        }
+      ],
+      "round0": {
+        "errors": 0,
+        "warnings": 0,
+        "byRule": {},
+        "metrics": {
+          "accentShare": 0,
+          "detailNoise": 0.282,
+          "windowsMin": 0,
+          "paletteAdherence": 1,
+          "parts": 6,
+          "cellsOutsideParts": 0,
+          "blocks": 495
+        }
+      },
+      "final": {
+        "errors": 0,
+        "warnings": 0,
+        "byRule": {},
+        "metrics": {
+          "accentShare": 0,
+          "detailNoise": 0.282,
+          "windowsMin": 0,
+          "paletteAdherence": 1,
+          "parts": 6,
+          "cellsOutsideParts": 0,
+          "blocks": 495
+        }
+      },
+      "critic": {
+        "calls": 3,
+        "disagreements": 0,
+        "issues": 3,
+        "unknownParts": 0,
+        "partGrounding": 1
+      },
+      "judge": {
+        "outcome": "win",
+        "revisions": 2,
+        "best": 2,
+        "views": [
+          "iso",
+          "iso_back",
+          "front",
+          "top"
+        ],
+        "calls": [
+          {
+            "order": {
+              "A": "round0",
+              "B": "final"
+            },
+            "preferred": "B",
+            "margin": "clear",
+            "dimensions": {
+              "silhouette": "B",
+              "legibility": "B",
+              "craft": "tie",
+              "materials": "B",
+              "brief": "B"
+            },
+            "reasons": "simulated judge for brief 15",
+            "winner": "final",
+            "usd": 0.01
+          },
+          {
+            "order": {
+              "A": "final",
+              "B": "round0"
+            },
+            "preferred": "A",
+            "margin": "clear",
+            "dimensions": {
+              "silhouette": "A",
+              "legibility": "A",
+              "craft": "tie",
+              "materials": "A",
+              "brief": "A"
+            },
+            "reasons": "simulated judge for brief 15",
+            "winner": "final",
+            "usd": 0.01
+          }
+        ]
+      },
+      "cost": {
+        "total": 0.78,
+        "round0": 0.45,
+        "critic": 0.03,
+        "revise": 0.3,
+        "loop": 0.33,
+        "loopCap": 0.45,
+        "judge": 0.02,
+        "cacheReadTokens": 1500
+      },
+      "ms": {
+        "total": 4629,
+        "loop": 446
+      },
+      "estimate": {
+        "usdLow": 0.8,
+        "usdHigh": 2.5,
+        "critiqueUsdLow": 0.04,
+        "critiqueUsdHigh": 2.25,
+        "minutesLow": 4,
+        "minutesHigh": 10,
+        "critiqueMinutesLow": 0.5,
+        "critiqueMinutesHigh": 16,
+        "midUsd": 2.795,
+        "errorPct": -72.09
+      }
+    },
+    {
+      "id": "mosswater_tavern",
+      "n": 16,
+      "title": "Mosswater set: tavern (anchor)",
+      "type": "tavern",
+      "model": "claude-opus-5-5",
+      "status": "done",
+      "end": "critic_failed",
+      "best": 0,
+      "revisions": 0,
+      "rounds": [
+        {
+          "n": 0,
+          "kept": true,
+          "overall": null,
+          "scores": {},
+          "ship": false,
+          "modelVerdict": null,
+          "issues": {
+            "P0": 0,
+            "P1": 0,
+            "P2": 0
+          },
+          "issueParts": 0,
+          "unknownParts": 0,
+          "cost": 0.02,
+          "ms": 42,
+          "error": "the critic failed: error_during_execution: the simulated critic failed"
+        }
+      ],
+      "round0": {
+        "errors": 0,
+        "warnings": 0,
+        "byRule": {},
+        "metrics": {
+          "accentShare": 0,
+          "detailNoise": 0.357,
+          "windowsMin": 4,
+          "paletteAdherence": 1,
+          "parts": 7,
+          "cellsOutsideParts": 8,
+          "blocks": 1151
+        }
+      },
+      "final": {
+        "errors": 0,
+        "warnings": 0,
+        "byRule": {},
+        "metrics": {
+          "accentShare": 0,
+          "detailNoise": 0.357,
+          "windowsMin": 4,
+          "paletteAdherence": 1,
+          "parts": 7,
+          "cellsOutsideParts": 8,
+          "blocks": 1151
+        }
+      },
+      "critic": {
+        "calls": 0,
+        "disagreements": 0,
+        "issues": 0,
+        "unknownParts": 0,
+        "partGrounding": null
+      },
+      "judge": {
+        "outcome": "none",
+        "revisions": 0,
+        "calls": []
+      },
+      "cost": {
+        "total": 0.47,
+        "round0": 0.45,
+        "critic": 0.02,
+        "revise": 0,
+        "loop": 0.02,
+        "loopCap": 0.45,
+        "judge": 0,
+        "cacheReadTokens": 1000
+      },
+      "ms": {
+        "total": 1003,
+        "loop": 42
+      },
+      "estimate": {
+        "usdLow": 2,
+        "usdHigh": 3.2,
+        "critiqueUsdLow": 0.04,
+        "critiqueUsdHigh": 3.2,
+        "minutesLow": 8,
+        "minutesHigh": 13,
+        "critiqueMinutesLow": 0.5,
+        "critiqueMinutesHigh": 20,
+        "midUsd": 4.22,
+        "errorPct": -88.86
+      }
+    },
+    {
+      "id": "mosswater_house",
+      "n": 17,
+      "title": "Mosswater set: house",
+      "type": "house",
+      "model": "claude-sonnet-5-5",
+      "status": "done",
+      "end": "ship",
+      "best": 1,
+      "revisions": 1,
+      "rounds": [
+        {
+          "n": 0,
+          "kept": true,
+          "overall": 6,
+          "scores": {
+            "silhouette": 6,
+            "legibility": 6,
+            "craft": 6,
+            "materials": 6,
+            "brief": 6,
+            "bible": 6,
+            "set": 6,
+            "interior": 6
+          },
+          "ship": false,
+          "modelVerdict": "iterate",
+          "issues": {
+            "P0": 0,
+            "P1": 1,
+            "P2": 0
+          },
+          "issueParts": 1,
+          "unknownParts": 0,
+          "cost": 0.01,
+          "ms": 29
+        },
+        {
+          "n": 1,
+          "kept": true,
+          "overall": 8,
+          "scores": {
+            "silhouette": 8,
+            "legibility": 8,
+            "craft": 8,
+            "materials": 8,
+            "brief": 8,
+            "bible": 8,
+            "set": 8,
+            "interior": 8
+          },
+          "ship": true,
+          "modelVerdict": "ship",
+          "issues": {
+            "P0": 0,
+            "P1": 0,
+            "P2": 0
+          },
+          "issueParts": 0,
+          "unknownParts": 0,
+          "cost": 0.16,
+          "ms": 229
+        }
+      ],
+      "round0": {
+        "errors": 0,
+        "warnings": 1,
+        "byRule": {
+          "restraint": 1
+        },
+        "metrics": {
+          "accentShare": 0,
+          "detailNoise": 0.283,
+          "windowsMin": 0,
+          "paletteAdherence": 1,
+          "parts": 6,
+          "cellsOutsideParts": 0,
+          "blocks": 495
+        }
+      },
+      "final": {
+        "errors": 0,
+        "warnings": 1,
+        "byRule": {
+          "restraint": 1
+        },
+        "metrics": {
+          "accentShare": 0,
+          "detailNoise": 0.283,
+          "windowsMin": 0,
+          "paletteAdherence": 1,
+          "parts": 6,
+          "cellsOutsideParts": 0,
+          "blocks": 495
+        }
+      },
+      "critic": {
+        "calls": 2,
+        "disagreements": 0,
+        "issues": 1,
+        "unknownParts": 0,
+        "partGrounding": 1
+      },
+      "judge": {
+        "outcome": "win",
+        "revisions": 1,
+        "best": 1,
+        "views": [
+          "iso",
+          "iso_back",
+          "front",
+          "top"
+        ],
+        "calls": [
+          {
+            "order": {
+              "A": "final",
+              "B": "round0"
+            },
+            "preferred": "A",
+            "margin": "clear",
+            "dimensions": {
+              "silhouette": "A",
+              "legibility": "A",
+              "craft": "tie",
+              "materials": "A",
+              "brief": "A"
+            },
+            "reasons": "simulated judge for brief 17",
+            "winner": "final",
+            "usd": 0.01
+          },
+          {
+            "order": {
+              "A": "round0",
+              "B": "final"
+            },
+            "preferred": "B",
+            "margin": "clear",
+            "dimensions": {
+              "silhouette": "B",
+              "legibility": "B",
+              "craft": "tie",
+              "materials": "B",
+              "brief": "B"
+            },
+            "reasons": "simulated judge for brief 17",
+            "winner": "final",
+            "usd": 0.01
+          }
+        ]
+      },
+      "cost": {
+        "total": 0.62,
+        "round0": 0.45,
+        "critic": 0.02,
+        "revise": 0.15,
+        "loop": 0.17,
+        "loopCap": 0.45,
+        "judge": 0.02,
+        "cacheReadTokens": 1000
+      },
+      "ms": {
+        "total": 2046,
+        "loop": 258
+      },
+      "estimate": {
+        "usdLow": 0.8,
+        "usdHigh": 2.5,
+        "critiqueUsdLow": 0.04,
+        "critiqueUsdHigh": 2.25,
+        "minutesLow": 4,
+        "minutesHigh": 10,
+        "critiqueMinutesLow": 0.5,
+        "critiqueMinutesHigh": 16,
+        "midUsd": 2.795,
+        "errorPct": -77.82
+      }
+    },
+    {
+      "id": "mosswater_tower",
+      "n": 18,
+      "title": "Mosswater set: tower",
+      "type": "tower",
+      "model": "claude-sonnet-5-5",
+      "status": "done",
+      "end": "ship",
+      "best": 1,
+      "revisions": 1,
+      "rounds": [
+        {
+          "n": 0,
+          "kept": true,
+          "overall": 5,
+          "scores": {
+            "silhouette": 5,
+            "legibility": 5,
+            "craft": 5,
+            "materials": 5,
+            "brief": 5,
+            "bible": 5,
+            "set": 5,
+            "interior": 5
+          },
+          "ship": false,
+          "modelVerdict": "iterate",
+          "issues": {
+            "P0": 0,
+            "P1": 1,
+            "P2": 0
+          },
+          "issueParts": 1,
+          "unknownParts": 0,
+          "cost": 0.01,
+          "ms": 25
+        },
+        {
+          "n": 1,
+          "kept": true,
+          "overall": 7,
+          "scores": {
+            "silhouette": 7,
+            "legibility": 7,
+            "craft": 7,
+            "materials": 7,
+            "brief": 7,
+            "bible": 7,
+            "set": 7,
+            "interior": 7
+          },
+          "ship": true,
+          "modelVerdict": "ship",
+          "issues": {
+            "P0": 0,
+            "P1": 0,
+            "P2": 0
+          },
+          "issueParts": 0,
+          "unknownParts": 0,
+          "cost": 0.16,
+          "ms": 221
+        }
+      ],
+      "round0": {
+        "errors": 0,
+        "warnings": 0,
+        "byRule": {},
+        "metrics": {
+          "accentShare": 0.032,
+          "detailNoise": 0.221,
+          "windowsMin": 6,
+          "paletteAdherence": 1,
+          "parts": 5,
+          "cellsOutsideParts": 0,
+          "blocks": 706
+        }
+      },
+      "final": {
+        "errors": 0,
+        "warnings": 0,
+        "byRule": {},
+        "metrics": {
+          "accentShare": 0.032,
+          "detailNoise": 0.221,
+          "windowsMin": 6,
+          "paletteAdherence": 1,
+          "parts": 5,
+          "cellsOutsideParts": 0,
+          "blocks": 706
+        }
+      },
+      "critic": {
+        "calls": 2,
+        "disagreements": 0,
+        "issues": 1,
+        "unknownParts": 0,
+        "partGrounding": 1
+      },
+      "judge": {
+        "outcome": "loss",
+        "revisions": 1,
+        "best": 1,
+        "views": [
+          "iso",
+          "iso_back",
+          "front",
+          "top"
+        ],
+        "calls": [
+          {
+            "order": {
+              "A": "final",
+              "B": "round0"
+            },
+            "preferred": "B",
+            "margin": "clear",
+            "dimensions": {
+              "silhouette": "B",
+              "legibility": "B",
+              "craft": "tie",
+              "materials": "B",
+              "brief": "B"
+            },
+            "reasons": "simulated judge for brief 18",
+            "winner": "round0",
+            "usd": 0.01
+          },
+          {
+            "order": {
+              "A": "round0",
+              "B": "final"
+            },
+            "preferred": "A",
+            "margin": "clear",
+            "dimensions": {
+              "silhouette": "A",
+              "legibility": "A",
+              "craft": "tie",
+              "materials": "A",
+              "brief": "A"
+            },
+            "reasons": "simulated judge for brief 18",
+            "winner": "round0",
+            "usd": 0.01
+          }
+        ]
+      },
+      "cost": {
+        "total": 0.62,
+        "round0": 0.45,
+        "critic": 0.02,
+        "revise": 0.15,
+        "loop": 0.17,
+        "loopCap": 0.45,
+        "judge": 0.02,
+        "cacheReadTokens": 1000
+      },
+      "ms": {
+        "total": 2171,
+        "loop": 246
+      },
+      "estimate": {
+        "usdLow": 0.8,
+        "usdHigh": 2.5,
+        "critiqueUsdLow": 0.04,
+        "critiqueUsdHigh": 2.25,
+        "minutesLow": 4,
+        "minutesHigh": 10,
+        "critiqueMinutesLow": 0.5,
+        "critiqueMinutesHigh": 16,
+        "midUsd": 2.795,
+        "errorPct": -77.82
+      }
+    }
+  ],
+  "aggregates": {
+    "briefs": 18,
+    "done": 18,
+    "failed": 0,
+    "ends": {
+      "ship": 14,
+      "regressed": 1,
+      "max_revisions": 2,
+      "critic_failed": 1
+    },
+    "G1": {
+      "withRevision": 15,
+      "wins": 11,
+      "losses": 3,
+      "ties": 1,
+      "p": 0.0287,
+      "significant": true,
+      "pass": true,
+      "note": "n=18 -> 13 wins needed; thresholds {\"12\":10,\"14\":11,\"16\":12,\"18\":13}"
+    },
+    "G2": {
+      "meanOverallRound0": 5.59,
+      "meanOverallInstalled": 7.26,
+      "rise": 1.68,
+      "p0ZeroAtInstall": 18,
+      "pass": true
+    },
+    "G3": {
+      "checkerErrorsInFinals": 0,
+      "warningsNotWorse": 18,
+      "warningsTotal": {
+        "round0": 3,
+        "final": 3
+      },
+      "paletteAdherence": {
+        "round0": 1,
+        "final": 1,
+        "dropPoints": 0
+      },
+      "finalsWith2Parts": 18,
+      "pass": true
+    },
+    "G4": {
+      "loopWithinCap": 18,
+      "of": 18,
+      "meanLoopUsd": 0.1794,
+      "meanRound0Usd": 0.45,
+      "loopShare": 0.399,
+      "meanAddedMinutes": 0,
+      "estimateWithin50": 0,
+      "estimateTotalErrorPct": -78.1,
+      "pass": false
+    },
+    "metrics": {
+      "round0": {
+        "accentShare": 0.016,
+        "detailNoise": 0.278,
+        "windowsMin": 1.111,
+        "paletteAdherence": 1
+      },
+      "final": {
+        "accentShare": 0.016,
+        "detailNoise": 0.278,
+        "windowsMin": 1.111,
+        "paletteAdherence": 1
+      }
+    },
+    "critic": {
+      "calls": 36,
+      "disagreements": 0,
+      "partGrounding": 0.957
+    },
+    "round2": {
+      "briefs": 4,
+      "better": 2,
+      "worse": 0
+    },
+    "cost": {
+      "usd": 11.61,
+      "judge": 0.28
+    }
+  }
+}

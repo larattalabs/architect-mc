@@ -28,10 +28,13 @@ import org.jspecify.annotations.Nullable;
  * @param maxRedirects (since 1.3.0) redirect rounds per item, 0-10; null = the helper's default (3)
  * @param context (since 1.3.0) text (at most 4000 characters, a {@link JsonPrimitive}) or a JSON object (at most 4000 as JSON)
  *     that goes into every item's brief, massing and detail: a concept card, the site and purpose, neighbour lots, the street
+ * @param critique (since 1.6.0, a helper with {@code "critique"}) the items' default critique (an item's own
+ *     {@link Item#critique} wins); null or OFF = none (the default: Architect never loops a whole group by default). With
+ *     massingFirst it applies to the detail passes
  */
 public record GroupRequest(String name, String bible, @Nullable Integer bibleVersion, @Nullable String owner, JsonObject ext,
 	@Nullable Integer concurrency, @Nullable Double budgetUsd, List<Item> items, boolean massingFirst, @Nullable ApprovalUi approvalUi,
-	@Nullable Integer maxRedirects, @Nullable JsonElement context) {
+	@Nullable Integer maxRedirects, @Nullable JsonElement context, @Nullable CritiqueSpec critique) {
 	/** The most items a group holds. */
 	public static final int MAX_ITEMS = 24;
 	/** The most redirect rounds per item. */
@@ -43,6 +46,16 @@ public record GroupRequest(String name, String bible, @Nullable Integer bibleVer
 		if (context != null && context.isJsonNull()) {
 			context = null;
 		}
+		if (critique != null && !critique.on()) {
+			critique = null;
+		}
+	}
+
+	/** The 1.3.0 constructor (no critique). */
+	public GroupRequest(String name, String bible, @Nullable Integer bibleVersion, @Nullable String owner, JsonObject ext, @Nullable Integer concurrency,
+		@Nullable Double budgetUsd, List<Item> items, boolean massingFirst, @Nullable ApprovalUi approvalUi, @Nullable Integer maxRedirects,
+		@Nullable JsonElement context) {
+		this(name, bible, bibleVersion, owner, ext, concurrency, budgetUsd, items, massingFirst, approvalUi, maxRedirects, context, null);
 	}
 
 	/** The 1.2.0 constructor (no massing pass, no context). */
@@ -53,7 +66,7 @@ public record GroupRequest(String name, String bible, @Nullable Integer bibleVer
 
 	/** A copy with massings first ({@code approvalUi} null = architect, {@code maxRedirects} null = the default). Since 1.3.0. */
 	public GroupRequest withMassingFirst(@Nullable ApprovalUi ui, @Nullable Integer redirects) {
-		return new GroupRequest(name, bible, bibleVersion, owner, ext, concurrency, budgetUsd, items, true, ui, redirects, context);
+		return new GroupRequest(name, bible, bibleVersion, owner, ext, concurrency, budgetUsd, items, true, ui, redirects, context, critique);
 	}
 
 	/** A copy with a context text (null or blank = none). Since 1.3.0. */
@@ -63,7 +76,12 @@ public record GroupRequest(String name, String bible, @Nullable Integer bibleVer
 
 	/** A copy with a context: a JSON object, or text as a {@link JsonPrimitive}. Since 1.3.0. */
 	public GroupRequest withContext(@Nullable JsonElement ctx) {
-		return new GroupRequest(name, bible, bibleVersion, owner, ext, concurrency, budgetUsd, items, massingFirst, approvalUi, maxRedirects, ctx);
+		return new GroupRequest(name, bible, bibleVersion, owner, ext, concurrency, budgetUsd, items, massingFirst, approvalUi, maxRedirects, ctx, critique);
+	}
+
+	/** A copy whose items are critiqued as {@code spec} by default (null or OFF = none). Since 1.6.0. */
+	public GroupRequest critique(@Nullable CritiqueSpec spec) {
+		return new GroupRequest(name, bible, bibleVersion, owner, ext, concurrency, budgetUsd, items, massingFirst, approvalUi, maxRedirects, context, spec);
 	}
 
 	/** Who approves a massingFirst group's massings. Since 1.3.0. */
@@ -103,10 +121,22 @@ public record GroupRequest(String name, String bible, @Nullable Integer bibleVer
 	 * @param wave the wave (1-8, default 1): a wave starts when every item of the earlier waves has ended, and its items get
 	 *     the earlier waves' renders as neighbours; null = 1
 	 * @param anchor designed first (wave 0)
+	 * @param critique (since 1.6.0) this item's critique; it wins over the group's. Null = the request's own
+	 *     {@link DesignRequest#critique()} when set, else the group's. {@link CritiqueSpec#OFF} turns it off for this item
 	 */
-	public record Item(@Nullable String itemKey, DesignRequest request, Role role, @Nullable Integer wave, boolean anchor) {
+	public record Item(@Nullable String itemKey, DesignRequest request, Role role, @Nullable Integer wave, boolean anchor, @Nullable CritiqueSpec critique) {
 		public Item {
 			role = role == null ? Role.ORDINARY : role;
+		}
+
+		/** The 1.2.0 constructor (the group's critique). */
+		public Item(@Nullable String itemKey, DesignRequest request, Role role, @Nullable Integer wave, boolean anchor) {
+			this(itemKey, request, role, wave, anchor, null);
+		}
+
+		/** A copy with its own critique (null = the group's, {@link CritiqueSpec#OFF} = none). Since 1.6.0. */
+		public Item critique(@Nullable CritiqueSpec spec) {
+			return new Item(itemKey, request, role, wave, anchor, spec);
 		}
 
 		/** An ordinary item in wave 1. */

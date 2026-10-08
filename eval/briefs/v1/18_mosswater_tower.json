@@ -1,0 +1,30 @@
+{
+  "id": "mosswater_tower",
+  "n": 18,
+  "title": "Mosswater set: tower",
+  "size": "M",
+  "setting": "swamp",
+  "model": "claude-sonnet-5-5",
+  "effort": "high",
+  "group": {
+    "id": "mosswater",
+    "name": "Mosswater",
+    "bible": "mosswater",
+    "concurrency": 3,
+    "itemKey": "tower",
+    "role": "ordinary",
+    "anchor": false
+  },
+  "request": {
+    "type": "tower",
+    "style": "weathered fishing village",
+    "features": [],
+    "maxSize": {
+      "x": 11,
+      "y": 30,
+      "z": 11
+    },
+    "name": "Lookout",
+    "notes": "a crooked lookout tower for spotting boats"
+  }
+}

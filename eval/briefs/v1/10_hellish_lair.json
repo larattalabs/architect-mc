@@ -1,0 +1,26 @@
+{
+  "id": "hellish_lair",
+  "n": 10,
+  "title": "hellish lair",
+  "size": "L",
+  "setting": "A hellish lair in the Nether: a throne hall, a fortified entrance, lava and soul fire light.",
+  "model": "claude-sonnet-5-5",
+  "effort": "high",
+  "request": {
+    "type": "hellish_lair",
+    "style": "hellish evil lair",
+    "features": [],
+    "maxSize": {
+      "x": 33,
+      "y": 20,
+      "z": 33
+    },
+    "name": "Hellish lair",
+    "notes": "A hellish lair in the Nether: a throne hall, a fortified entrance, lava and soul fire light.",
+    "profile": [
+      "door",
+      "lit",
+      "no_floating"
+    ]
+  }
+}

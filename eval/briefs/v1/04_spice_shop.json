@@ -1,0 +1,21 @@
+{
+  "id": "spice_shop",
+  "n": 4,
+  "title": "spice shop with an awning",
+  "size": "M",
+  "setting": "A spice shop in a desert town: an awning over the front, sacks and barrels of spices, sandstone.",
+  "model": "claude-sonnet-5-5",
+  "effort": "high",
+  "request": {
+    "type": "shop",
+    "style": "desert bazaar",
+    "features": [],
+    "maxSize": {
+      "x": 21,
+      "y": 14,
+      "z": 21
+    },
+    "name": "Spice shop",
+    "notes": "A spice shop in a desert town: an awning over the front, sacks and barrels of spices, sandstone."
+  }
+}

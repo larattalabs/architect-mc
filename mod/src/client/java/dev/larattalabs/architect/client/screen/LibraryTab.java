@@ -432,7 +432,8 @@ final class LibraryTab {
 			() -> {
 				List<ArchitectScreen.Option> opts = new ArrayList<>();
 				for (var b : dev.larattalabs.architect.client.design.SetFeature.bibles()) {
-					if (!b.id().equals(cur)) {
+					// (5a) archived bibles are hidden from the pickers
+					if (!b.id().equals(cur) && !b.archived()) {
 						opts.add(new ArchitectScreen.Option(b.id(), b.builtin() ? b.name() : b.name() + " v" + b.version(), false));
 					}
 				}
@@ -561,6 +562,12 @@ final class LibraryTab {
 		}
 		row1.add(new Btn("variants", "Variants…", false, c.canVariant(), () -> openVariants(c.id())));
 		row1.add(new Btn("remix", "Remix…", false, true, () -> s.remix(c.id())));
+		// (5a) a report critique of the entry: one critic call (about $0.1), the verdict lands in its critique.json
+		if (dev.larattalabs.architect.client.design.SetFeature.has("critique.report")) {
+			String why = dev.larattalabs.architect.design.CritiqueRules.reportRefusal(c.bundled(), false, true, Sidecar.connected());
+			row1.add(new Btn("critique", DesignFeature.REPORT_PENDING.contains(c.id()) ? "Critiquing…" : dev.larattalabs.architect.design.CritiqueRules.reportLabel(
+				reportEstimate(c)), false, why == null && !DesignFeature.REPORT_PENDING.contains(c.id()), () -> requestReport(c)));
+		}
 		List<Btn> row2 = new ArrayList<>();
 		row2.add(new Btn("rename", "Rename", false, true, () -> startEdit(Edit.RENAME, c)));
 		row2.add(new Btn("tags", "Tags", false, true, () -> startEdit(Edit.TAGS, c)));
@@ -574,7 +581,10 @@ final class LibraryTab {
 		boolean bomOpen = survival && showBom;
 		List<String> desc = c.description().isBlank() || bomOpen ? List.of() : TextUtil.wrapPlain(font, c.description(), w);
 		boolean mats = !c.materials().isEmpty() && !bomOpen;
-		int textLines = 4 + (c.userTags().isEmpty() ? 0 : 1) + Math.min(2, desc.size()) + (mats ? 1 : 0) + (survival ? 1 : 0);
+		// (5a) its critique: the verdict line, the scores, the open issues (at most 2 lines)
+		var critique = bomOpen ? java.util.Optional.<dev.larattalabs.architect.api.Critique>empty() : critiqueOf(c.id());
+		int critLines = critique.map(cr -> 1 + (cr.scores().isEmpty() ? 0 : 1) + Math.min(2, cr.openIssues().size())).orElse(0);
+		int textLines = 4 + (c.userTags().isEmpty() ? 0 : 1) + Math.min(2, desc.size()) + (mats ? 1 : 0) + (survival ? 1 : 0) + critLines;
 		int textH = textLines * 10 + 4 + (edit != Edit.NONE ? 12 : 0);
 		List<String> kinds = new ArrayList<>();
 		for (PreviewImages.Found f : PreviewImages.find(c.id())) {
@@ -650,6 +660,26 @@ final class LibraryTab {
 			g.text(font, TextUtil.ellipsize(font, "uses " + String.join(", ", matNames), w), x, ty, UiBits.muted(), false);
 			ty += 10;
 		}
+		if (critique.isPresent()) {
+			var cr = critique.get();
+			String head = (cr.mode() == dev.larattalabs.architect.api.CritiqueMode.REPORT ? "Critique (report): " : "Critique: ") + (cr.scored()
+				? String.format(java.util.Locale.ROOT, "%.1f", cr.overall()) : "not scored") + (cr.ended() && (cr.mode() != dev.larattalabs.architect.api.CritiqueMode.REPORT
+				|| !cr.scored()) ? " · " + cr.end().label() : "") + " · "
+				+ cr.openIssues().size() + " open issue" + (cr.openIssues().size() == 1 ? "" : "s") + (cr.stale() ? " · stale: the design changed since"
+					: "");
+			g.text(font, TextUtil.ellipsize(font, head, w), x, ty, cr.stale() ? UiBits.muted() : UiStyle.CLAY_DARK, false);
+			ty += 10;
+			if (!cr.scores().isEmpty()) {
+				g.text(font, TextUtil.ellipsize(font, dev.larattalabs.architect.design.CritiqueRules.scoresLine(cr.scores()), w), x, ty, cr.stale()
+					? UiBits.muted() : UiBits.ink(), false);
+				ty += 10;
+			}
+			List<String> issues = dev.larattalabs.architect.design.CritiqueRules.issueLines(cr.openIssues());
+			for (String line : issues.stream().limit(2).toList()) {
+				g.text(font, TextUtil.ellipsize(font, "· " + line, w), x, ty, UiBits.muted(), false);
+				ty += 10;
+			}
+		}
 		if (survival) {
 			// survival: what the design needs (the template; the spot adds its foundation and approach), and the BOM on demand
 			ty += 2;
@@ -678,6 +708,85 @@ final class LibraryTab {
 	}
 
 	record Btn(String id, String label, boolean primary, boolean enabled, Runnable action) {
+	}
+
+	// ------------------------------------------------------------------ (5a) critique
+
+	private record CritiqueCache(long stamp, java.util.Optional<dev.larattalabs.architect.api.Critique> critique) {
+	}
+
+	private final java.util.Map<String, CritiqueCache> critiques = new java.util.HashMap<>();
+	private final java.util.Map<String, dev.larattalabs.architect.api.Estimate> reportEstimates = new java.util.HashMap<>();
+	private final java.util.Set<String> reportAsked = new java.util.HashSet<>();
+
+	/** An entry's critique ({@code critique.json}, else its blueprint JSON summary), re-read when the file changes. */
+	java.util.Optional<dev.larattalabs.architect.api.Critique> critiqueOf(String id) {
+		Blueprints.Entry e = Blueprints.entry(id);
+		if (e == null) {
+			return java.util.Optional.empty();
+		}
+		long stamp = e.json().hashCode();
+		if (e.dir() != null) {
+			try {
+				java.nio.file.Path f = e.dir().resolve(dev.larattalabs.architect.apiimpl.Wire5a.CRITIQUE_FILE);
+				java.nio.file.Path nbt = e.dir().resolve(id + ".nbt");
+				stamp = stamp * 31 + (java.nio.file.Files.exists(f) ? java.nio.file.Files.getLastModifiedTime(f).toMillis() : 0);
+				stamp = stamp * 31 + (java.nio.file.Files.exists(nbt) ? java.nio.file.Files.getLastModifiedTime(nbt).toMillis() : 0);
+			} catch (java.io.IOException ignored) {
+				// read again
+			}
+		}
+		CritiqueCache cc = critiques.get(id);
+		if (cc == null || cc.stamp() != stamp) {
+			cc = new CritiqueCache(stamp, dev.larattalabs.architect.apiimpl.Wire5a.entry(e.dir(), id, e.json()));
+			critiques.put(id, cc);
+		}
+		return cc.critique();
+	}
+
+	/** The report's estimate for an entry (asked once per entry; the critic seed until it answers). */
+	dev.larattalabs.architect.api.@Nullable Estimate reportEstimate(LibraryCard c) {
+		if (reportAsked.add(c.id()) && dev.larattalabs.architect.client.design.SetFeature.has("estimates") && Sidecar.connected()) {
+			com.google.gson.JsonObject req = new com.google.gson.JsonObject();
+			req.addProperty("type", dev.larattalabs.architect.placement.Blueprint.TYPES.contains(c.type()) || c.type().matches("[a-z][a-z0-9_]{0,39}")
+				? c.type() : "custom");
+			req.addProperty("style", "as built");
+			req.add("features", new com.google.gson.JsonArray());
+			com.google.gson.JsonObject size = new com.google.gson.JsonObject();
+			size.addProperty("x", Math.max(7, Math.min(96, c.sizeX())));
+			size.addProperty("y", Math.max(6, Math.min(64, c.sizeY())));
+			size.addProperty("z", Math.max(7, Math.min(96, c.sizeZ())));
+			req.add("maxSize", size);
+			req.add("critique", dev.larattalabs.architect.design.CritiqueRules.reportSpec());
+			com.google.gson.JsonObject m = new com.google.gson.JsonObject();
+			m.addProperty("type", "design.estimate");
+			m.add("request", req);
+			String id = c.id();
+			Sidecar.link().send(m).whenComplete((ack, err) -> {
+				if (err == null && ack.ok() && ack.result() != null) {
+					reportEstimates.put(id, dev.larattalabs.architect.apiimpl.Wire5a.estimate(ack.result()));
+				}
+			});
+		}
+		return reportEstimates.get(c.id());
+	}
+
+	/** "Critique": {@code design.critique {entryId, spec: {mode: report}}}; the Designs tab shows it, a toast says when it is in. */
+	void requestReport(LibraryCard c) {
+		com.google.gson.JsonObject m = new com.google.gson.JsonObject();
+		m.addProperty("type", "design.critique");
+		m.addProperty("entryId", c.id());
+		m.add("spec", dev.larattalabs.architect.design.CritiqueRules.reportSpec());
+		DesignFeature.REPORT_PENDING.add(c.id());
+		Sidecar.link().send(m).whenComplete((ack, err) -> {
+			if (err != null || !ack.ok()) {
+				DesignFeature.REPORT_PENDING.remove(c.id());
+				LibraryFeature.say("Critique not started: " + (err != null ? err.getMessage() : ack.error()), true);
+			} else {
+				String did = ack.result() != null && ack.result().has("designId") ? ack.result().get("designId").getAsString() : "?";
+				LibraryFeature.say("Critiquing " + c.name() + " (" + did + "): one critic call; the Designs tab shows it", false);
+			}
+		});
 	}
 
 	/** A design's template bill of materials (survival "Needs"), cached per template fingerprint. */
@@ -804,8 +913,8 @@ final class LibraryTab {
 		}
 		ly += ArchitectScreen.CHIP_H + 6;
 		// phase 4b: style bibles (the presets above are the built-in ones); a bible re-skins with its roles
-		List<dev.larattalabs.architect.api.Bible> mine = dev.larattalabs.architect.client.design.SetFeature.bibles().stream().filter(b -> !b.builtin())
-			.toList();
+		List<dev.larattalabs.architect.api.Bible> mine = dev.larattalabs.architect.client.design.SetFeature.bibles().stream().filter(b -> !b.builtin()
+			&& (!b.archived() || b.id().equals(f.bible()))).toList();
 		if (dev.larattalabs.architect.client.design.SetFeature.has("reskin")) {
 			g.text(font, "Style bible", lx, ly, UiStyle.CLAY_DARK, false);
 			String bnote = "the presets are the built-in ones";

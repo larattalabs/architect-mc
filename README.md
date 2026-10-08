@@ -112,6 +112,24 @@ low side.
 
 <br>
 
+## Critique and revise (experimental)
+
+> **Experimental.** In the 5a eval the loop did not measurably improve designs (blind judge 7 wins, 6 losses, 5 ties over 18
+> briefs), so it stays off by default. The one-off **Critique** report is the useful part today.
+
+Turn on **Critique and revise** in the Design tab or the set dialog, or by default in the Status tab, and a second, cheaper
+Claude call reviews each design after it renders. It looks at fixed renders from five cameras, layered slices of the floors and a
+summary of the blueprint, scores silhouette, legibility, craft, materials and the brief (plus the style bible and the set's
+neighbours when there are any), and lists at most six issues, each tied to a named part. The designer then revises the same
+design, up to two times, and the best version goes into the library. Its scores and open issues show in the Designs tab and
+the Library, and **Critique** on a library entry runs a one-off report (about $0.05).
+
+The loop at most about doubles a design's cost, and it is off by default. In the gate's full eval (18 Sonnet designs), it
+added on average $1.06 and 3 minutes to a $2.02 design. A blind Opus judge preferred the revised version 7 times, the original
+6 times, and called 5 even, so a clear improvement is **not shown** yet (details in [docs/PLAN.md](docs/PLAN.md)).
+
+<br>
+
 ## The library
 
 <table>
@@ -468,7 +486,8 @@ Architect is early.
 - **A public API**, so other mods and scripts can use the library, design jobs, the ghost and sites.
 - **Matching sets:** a style bible, and several buildings designed in that one style in parallel.
 - **A massing preview:** a cheap, coarse ghost to approve before paying for the detailed design.
-- **A critique loop:** a cheaper reviewer that looks at each design's renders and sends it back for fixes.
+- **A better critique loop:** the 5a loop runs and is measured by an eval harness (`tools/eval.mjs`), but a blind judge did not
+  yet prefer its revisions clearly.
 
 <br>
 

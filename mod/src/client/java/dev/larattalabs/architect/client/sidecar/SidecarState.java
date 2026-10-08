@@ -19,16 +19,16 @@ import org.jspecify.annotations.Nullable;
  * Listeners hear about every change on the client thread.
  */
 public final class SidecarState {
-	/** {@code DesignStatus} (as AgentCraft). */
+	/** {@code DesignStatus} (as AgentCraft); (5a) CRITIQUING: the critic looks at the renders, still in progress. */
 	public enum DesignStatus {
-		QUEUED, DESIGNING, CHECKING, RENDERING, DONE, FAILED, CANCELLED, UNKNOWN;
+		QUEUED, DESIGNING, CHECKING, RENDERING, CRITIQUING, DONE, FAILED, CANCELLED, UNKNOWN;
 
 		public boolean isFinal() {
 			return this == DONE || this == FAILED || this == CANCELLED;
 		}
 
 		public boolean isRunning() {
-			return this == QUEUED || this == DESIGNING || this == CHECKING || this == RENDERING;
+			return this == QUEUED || this == DESIGNING || this == CHECKING || this == RENDERING || this == CRITIQUING;
 		}
 
 		static DesignStatus of(@Nullable String s) {
