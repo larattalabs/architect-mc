@@ -313,4 +313,81 @@ final class LibraryImpl implements Library {
 			}
 		});
 	}
+
+	// ------------------------------------------------------------------ phase 5b: versions
+
+	@Override
+	public List<dev.larattalabs.architect.api.EntryVersion> versions(String entryId) {
+		Blueprints.Entry e = Blueprints.entry(entryId);
+		return e == null ? List.of() : Views.entryVersions(entryId, e.json());
+	}
+
+	@Override
+	public Optional<Entry> entry(String entryId, int version) {
+		MinecraftServer s = ApiImpl.server();
+		if (s == null) {
+			return Optional.empty();
+		}
+		Blueprints.Version v = Blueprints.version(s, entryId, version);
+		if (v == null) {
+			return Optional.empty();
+		}
+		return Optional.of(view(v.entry(), v.entry().bundled() ? overlay() : null));
+	}
+
+	@Override
+	public CompletableFuture<dev.larattalabs.architect.api.BlueprintDelta> delta(String entryId, int from, int to) {
+		MinecraftServer s = ApiImpl.server();
+		if (s == null) {
+			return CompletableFuture.failedFuture(new IllegalStateException("no running server"));
+		}
+		// the versions are read on the server thread (templates go through its fixers); the diff runs off it
+		CompletableFuture<Blueprints.Version[]> vs = s.isSameThread() ? CompletableFuture.completedFuture(new Blueprints.Version[] {Blueprints.version(s,
+			entryId, from), Blueprints.version(s, entryId, to)}) : CompletableFuture.supplyAsync(() -> new Blueprints.Version[] {Blueprints.version(s,
+				entryId, from), Blueprints.version(s, entryId, to)}, s);
+		return ApiImpl.onServerFuture(vs.thenApplyAsync(v -> {
+			if (v[0] == null || v[1] == null) {
+				throw new IllegalArgumentException("no version " + (v[0] == null ? from : to) + " of " + entryId);
+			}
+			return Views.blueprintDelta(entryId, from, to, dev.larattalabs.architect.site.SiteDeltas.templateDelta(v[0], v[1]));
+		}));
+	}
+
+	@Override
+	public CompletableFuture<Entry> revertEntry(String entryId, int toVersion) {
+		ClientBridge b = ApiImpl.bridge();
+		if (b == null || !b.connected()) {
+			return ApiImpl.onServerFuture(CompletableFuture.failedFuture(new IllegalStateException("the design helper is not running")));
+		}
+		JsonObject m = new JsonObject();
+		m.addProperty("type", "entry.revert");
+		m.addProperty("entryId", entryId);
+		m.addProperty("toVersion", toVersion);
+		CompletableFuture<Entry> done = new CompletableFuture<>();
+		b.send(m).whenComplete((ack, err) -> {
+			if (err != null) {
+				done.completeExceptionally(err);
+				return;
+			}
+			if (!ack.has("ok") || !ack.get("ok").getAsBoolean()) {
+				done.completeExceptionally(new IllegalStateException(ack.has("error") ? ack.get("error").getAsString() : "the helper refused the revert"));
+				return;
+			}
+			MinecraftServer s = ApiImpl.server();
+			if (s == null) {
+				done.completeExceptionally(new IllegalStateException("no running server"));
+				return;
+			}
+			s.execute(() -> {
+				Blueprints.reload(s);
+				Optional<Entry> e = get(entryId);
+				if (e.isPresent()) {
+					done.complete(e.get());
+				} else {
+					done.completeExceptionally(new IllegalStateException(entryId + " is gone"));
+				}
+			});
+		});
+		return ApiImpl.onServerFuture(done);
+	}
 }

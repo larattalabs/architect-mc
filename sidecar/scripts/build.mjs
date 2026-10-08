@@ -4,6 +4,7 @@
 // bundle a real `require` for the node built-ins it loads; its optional native helpers stay external
 // (ws falls back when they are missing).
 import { build } from 'esbuild';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -20,6 +21,8 @@ await build({
   external: ['@anthropic-ai/claude-agent-sdk', 'bufferutil', 'utf-8-validate'],
   banner: { js: "import { createRequire as __architectCreateRequire } from 'node:module'; const require = __architectCreateRequire(import.meta.url);" },
   legalComments: 'none',
+  // (5b) the critic hash (src/critichash.ts): sha256 of "sidecar/src/critic.ts" + its bytes, as eval.mjs provenance() has it
+  define: { __ARCHITECT_CRITIC_HASH__: JSON.stringify(crypto.createHash('sha256').update('sidecar/src/critic.ts').update(fs.readFileSync(path.join(root, 'src', 'critic.ts'))).digest('hex')) },
   logLevel: 'warning',
 });
 console.log(`built ${path.relative(process.cwd(), path.join(root, 'dist', 'main.mjs'))}`);

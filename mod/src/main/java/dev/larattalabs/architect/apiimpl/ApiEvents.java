@@ -27,7 +27,7 @@ public final class ApiEvents {
 	private ApiEvents() {
 	}
 
-	private static void guard(String what, Runnable r) {
+	static void guard(String what, Runnable r) {
 		try {
 			r.run();
 		} catch (Throwable t) {
@@ -69,6 +69,25 @@ public final class ApiEvents {
 		guard("SITE_REMOVED", () -> SiteEvents.SITE_REMOVED.invoker().onRemoved(Views.site(null, r.site()),
 			new RemoveResult(true, List.of(), Views.items(r.returned()))));
 	}
+
+	/** A site moved to another version of its entry (phase 5b: an apply or a revert; SITE_UPDATED, wired with API 1.7.0). */
+	public static void siteUpdated(MinecraftServer server, dev.larattalabs.architect.site.SiteDeltas.Result r) {
+		if (r.before() != null && r.after() != null) {
+			guard("SITE_UPDATED", () -> SiteEvents.SITE_UPDATED.invoker().onUpdated(Views.site(server, r.before()), Views.site(server, r.after()), Views
+				.deltaResult(r)));
+		}
+		UPDATED.forEach(l -> {
+			try {
+				l.accept(r);
+			} catch (RuntimeException e) {
+				dev.larattalabs.architect.Architect.LOGGER.warn("SITE_UPDATED listener failed", e);
+			}
+		});
+	}
+
+	/** Internal listeners of site updates (the API event, the client sync). */
+	public static final java.util.List<java.util.function.Consumer<dev.larattalabs.architect.site.SiteDeltas.Result>> UPDATED =
+		new java.util.concurrent.CopyOnWriteArrayList<>();
 
 	/** A road or cell site was placed (phase 4e: SITE_PLACED fires for them too; their view's kind tells them apart). */
 	public static void placedInfra(MinecraftServer server, dev.larattalabs.architect.site.Infra i) {

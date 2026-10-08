@@ -26,6 +26,8 @@ import { BUILDING_TYPES } from './protocol.js';
 import { prepareScratch } from './scratch.js';
 import type { Designer, RunOutcome, Sidecar } from './sidecar.js';
 import { truncate } from './util/text.js';
+import { runNode } from './designs.js';
+import { simToken, type PolishBackend, type PolishTurnResult } from './polish.js';
 
 const STEPS: Array<{ status: 'designing'; step: string }> = [
   { status: 'designing', step: 'reading the brief' },
@@ -227,6 +229,8 @@ export class SimDesigner implements Designer {
     if (!d || isFinalDesign(d)) return 'finished';
     // (5a) a revision after critique
     if (sc.critiques.revising(id)) return this.revise(id, d, r);
+    // (5b) a polish: the polish engine with scripted turns
+    if (d.kind === 'polish') return sc.polishes.run(id, this.polishBackend(id, r));
     const req = d.request;
     const src = simSource(cfg.kitDir, req.type);
     if (!src) throw new Error(`the sim copies a kit example, but ${path.join(cfg.kitDir, 'designs')} has neither ${req.type}.mjs nor cabin.mjs`);
@@ -312,6 +316,75 @@ export class SimDesigner implements Designer {
   }
 
   /**
+   * (5b) The sim's polish turns, scripted by the entry's notes `sim:polish=<t1>/<t2>/...` (polish.ts simToken), one token
+   * per step: an edit of one full-block cell in the target part (always, unless `z`: no edit), `x<k>` a stray edit
+   * outside the allowed parts until fix turn k (`x`: never fixed), `t<k>` a design that throws until fix turn k, `L` a
+   * usage limit once (the step's turn runs again after the reset). Each turn costs one design step (simDesignUsd).
+   */
+  private polishBackend(id: string, r: Run): PolishBackend {
+    const sc = this.sc;
+    return {
+      name: 'sim',
+      stopping: () => this.stopped,
+      turn: async (spec): Promise<PolishTurnResult> => {
+        const tok = simToken(spec.notes, spec.step);
+        const zero = { usd: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, turns: 0 };
+        const key = `${id}:${spec.step}`;
+        if (tok.includes('L') && !this.limitedOnce.has(key)) {
+          this.limitedOnce.add(key);
+          sc.designStep(id, 'queued', 'usage limit (simulated): waiting for the reset');
+          this.hitLimit();
+          return { outcome: 'limit', cost: zero };
+        }
+        try {
+          await this.sleep(this.stepMs, id, r);
+        } catch (e) {
+          if (e instanceof Limited) return { outcome: 'limit', cost: zero };
+          return { outcome: r.cancelled || this.gone(id) ? 'cancelled' : 'stopped', cost: zero };
+        }
+        const cost = { ...zero, usd: sc.config.simDesignUsd, turns: 1 };
+        const fixAfter = (flag: string): number | undefined => {
+          const m = new RegExp(`${flag}(\\d*)`).exec(tok);
+          if (!m) return undefined;
+          return m[1] ? Number(m[1]) : Infinity;
+        };
+        const fixTurn = spec.turn - 1; // 0 = the step's own turn
+        let src = fs.readFileSync(path.join(spec.baseDir, `${spec.bp}.mjs`), 'utf8');
+        const lines: string[] = [];
+        const helper = path.join(spec.scratch, 'polish', 'simcell.mjs');
+        fs.mkdirSync(path.dirname(helper), { recursive: true });
+        fs.writeFileSync(helper, SIM_CELL);
+        const cell = async (mode: 'part' | 'outside', names: string[]) => {
+          const out = await runNode(helper, [path.join(spec.baseDir, `${spec.bp}.nbt`), mode, names.join(',')], spec.scratch, 60_000);
+          try {
+            return JSON.parse(out.stdout.trim().split('\n').pop() ?? 'null') as { d: number[]; v: string; part: string | null } | null;
+          } catch {
+            return null;
+          }
+        };
+        const block = (v: string) => (v.startsWith('minecraft:mossy_cobblestone[') ? 'minecraft:cobblestone' : 'minecraft:mossy_cobblestone');
+        const part = spec.target?.part ?? spec.allowed[0];
+        if (!tok.includes('z') && part) {
+          const c = await cell('part', [part]);
+          if (c) lines.push(`  bp.part('${part}', () => bp.set(${c.d.join(', ')}, '${block(c.v)}'));`);
+        }
+        const stray = fixAfter('x');
+        if (stray !== undefined && fixTurn < stray) {
+          const c = await cell('outside', spec.allowed);
+          if (c) lines.push(c.part ? `  bp.part('${c.part}', () => bp.set(${c.d.join(', ')}, '${block(c.v)}'));` : `  bp.set(${c.d.join(', ')}, '${block(c.v)}');`);
+        }
+        const broken = fixAfter('t');
+        if (broken !== undefined && fixTurn < broken) lines.push("  throw new Error('a broken polish (simulated)');");
+        const at = src.lastIndexOf('return bp;');
+        if (at >= 0 && lines.length) src = `${src.slice(0, at)}${lines.join('\n')}\n  ${src.slice(at)}`;
+        fs.writeFileSync(path.join(spec.scratch, 'kit', 'designs', `${spec.bp}.mjs`), src);
+        sc.designStep(id, 'designing', `polish step ${spec.step}, turn ${spec.turn} (simulated): ${tok}`);
+        return { outcome: 'done', cost };
+      },
+    };
+  }
+
+  /**
    * (5a) A simulated revision: one step that costs like a design step, then the same source is checked and rendered
    * again (the scripted critic decides the scores). Notes `sim:revise=fail` make every revision fail its check, so the
    * loop ends check_failed after the revision's own allowance.
@@ -365,6 +438,22 @@ export class SimDesigner implements Designer {
     }
   }
 }
+
+/**
+ * (5b) A cell of a base build for the sim's scripted edits (a node script in the scratch kit): the first cell (y, z, x)
+ * of `part` (`--outside a,b`: of any part not listed, or in no part), preferring full blocks so an edit does not change a
+ * neighbour's connections.
+ */
+const SIM_CELL = `import { loadVersion } from '../kit/lib/diff.mjs';
+const [file, mode, list] = process.argv.slice(2);
+const names = (list ?? '').split(',').filter(Boolean);
+const v = loadVersion(file);
+const cube = /(planks|stone|bricks|cobblestone|_log|_wood|terracotta|concrete|_block|deepslate|sandstone|plaster)\\[/;
+const pick = (c) => (mode === 'part' ? c.part === names[0] : c.part === null || !names.includes(c.part)) && !c.v.startsWith('minecraft:air');
+const cells = v.cells.filter(pick).sort((a, b) => a.d[1] - b.d[1] || a.d[2] - b.d[2] || a.d[0] - b.d[0]);
+const c = cells.find((x) => cube.test(x.v)) ?? cells[0];
+console.log(JSON.stringify(c ? { d: c.d, v: c.v, part: c.part } : null));
+`;
 
 /** Is the Agent SDK installed (for the status line, also under the sim)? */
 async function sdkResolvable(): Promise<boolean> {

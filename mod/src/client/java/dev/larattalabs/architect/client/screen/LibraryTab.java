@@ -574,6 +574,18 @@ final class LibraryTab {
 		row2.add(new Btn("favorite", c.favorite() ? "★ Starred" : "☆ Star", false, true, () -> LibraryFeature.setFavorite(c.id(), !c.favorite())));
 		row2.add(new Btn("export", "Export", false, inWorld, () -> LibraryFeature.export(c.id())));
 		row2.add(new Btn("delete", deleteArmed(c.id()) ? "Sure?" : "Delete", false, !c.bundled(), () -> delete(c)));
+		// phase 5b: versions (Compare…, Revert entry to the previous one, Polish…)
+		Blueprints.Entry ve = Blueprints.entry(c.id());
+		int headV = ve == null ? 1 : Blueprints.headVersion(ve);
+		if (headV > 1) {
+			row2.add(new Btn("compare", "Compare…", false, inWorld, () -> compare(c.id(), headV - 1, headV)));
+			row2.add(new Btn("revert_entry", "Revert to v" + (headV - 1), false, Sidecar.connected() && !c.bundled(), () -> revertEntry(c.id(), headV - 1)));
+		}
+		// (5b) polish failed its gate (G4), so per the contract it stays behind a dev flag: -Darchitect.dev.polish=true
+		if (dev.larattalabs.architect.client.design.SetFeature.has("design.polish") && Boolean.getBoolean("architect.dev.polish")) {
+			row2.add(new Btn("polish", POLISHING.contains(c.id()) ? "Polishing…" : "Polish…", false, !c.bundled() && c.canVariant() && !POLISHING.contains(c
+				.id()), () -> polish(c.id())));
+		}
 		List<List<Btn>> rows = flow(List.of(row1, row2), w);
 		int buttonsTop = y + h - rows.size() * 22 + 2;
 		// text block height
@@ -632,7 +644,7 @@ final class LibraryTab {
 			ty += 11;
 		}
 		String facts = c.type() + " · " + c.sizeX() + " × " + c.sizeY() + " × " + c.sizeZ() + (b == null ? "" : " · entrance " + b.front())
-			+ (c.createdAt() > 0 ? " · " + date(c.createdAt()) : "");
+			+ (c.createdAt() > 0 ? " · " + date(c.createdAt()) : "") + versionFacts(c.id());
 		g.text(font, TextUtil.ellipsize(font, facts, w), x, ty, UiBits.muted(), false);
 		ty += 10;
 		String prov = c.provenance(LibraryFeature::nameOf) + (c.name().equals(c.baseName()) ? "" : " · was “" + c.baseName() + "”");
@@ -708,6 +720,74 @@ final class LibraryTab {
 	}
 
 	record Btn(String id, String label, boolean primary, boolean enabled, Runnable action) {
+	}
+
+	// ------------------------------------------------------------------ phase 5b: versions
+
+	static final java.util.Set<String> POLISHING = java.util.concurrent.ConcurrentHashMap.newKeySet();
+
+	/** " · v3 (polish: fixed the roof)" for an entry with versions, else "". */
+	static String versionFacts(String id) {
+		Blueprints.Entry e = Blueprints.entry(id);
+		if (e == null) {
+			return "";
+		}
+		var lineage = dev.larattalabs.architect.library.EntryVersions.lineage(e.json(), null);
+		int head = Blueprints.headVersion(e);
+		if (head <= 1 && lineage.size() <= 1) {
+			return "";
+		}
+		var last = lineage.get(lineage.size() - 1);
+		return " · v" + head + " of " + lineage.size() + " (" + last.by() + (last.summary().isBlank() ? "" : ": " + last.summary()) + ")";
+	}
+
+	/** Compare…: the two versions as a composite in front of the player (the older one red, the newer one green) and the part summary. */
+	void compare(String id, int from, int to) {
+		var mc = net.minecraft.client.Minecraft.getInstance();
+		if (mc.player == null) {
+			return;
+		}
+		var look = mc.player.blockPosition().relative(mc.player.getDirection(), 6);
+		var layers = List.of(new dev.larattalabs.architect.api.PreviewLayer(id + "@" + from, look, net.minecraft.world.level.block.Rotation.NONE,
+			dev.larattalabs.architect.api.PreviewStyle.REMOVED, null), new dev.larattalabs.architect.api.PreviewLayer(id + "@" + to, look,
+				net.minecraft.world.level.block.Rotation.NONE, dev.larattalabs.architect.api.PreviewStyle.ADDED, null));
+		try {
+			dev.larattalabs.architect.client.placement.CompositePreview.show("architect:compare", layers);
+		} catch (IllegalArgumentException e) {
+			LibraryFeature.say("Compare: " + e.getMessage(), true);
+			return;
+		}
+		dev.larattalabs.architect.apiimpl.ApiImpl.instance().library().delta(id, from, to).whenComplete((d, err) -> mc.execute(() -> {
+			if (err != null) {
+				LibraryFeature.say("Compare: " + err.getMessage(), true);
+				return;
+			}
+			List<String> parts = new ArrayList<>();
+			d.parts().forEach((n, p) -> {
+				if (p.status() != dev.larattalabs.architect.api.PartStatus.UNCHANGED) {
+					parts.add(n + " " + p.status().name().toLowerCase(java.util.Locale.ROOT));
+				}
+			});
+			LibraryFeature.say("v" + from + " -> v" + to + ": +" + d.added() + " -" + d.removed() + " ~" + d.changed() + (parts.isEmpty() ? "" : " · " + String
+				.join(", ", parts)), false);
+		}));
+	}
+
+	void revertEntry(String id, int to) {
+		dev.larattalabs.architect.apiimpl.ApiImpl.instance().library().revertEntry(id, to).whenComplete((e, err) -> net.minecraft.client.Minecraft
+			.getInstance().execute(() -> LibraryFeature.say(err != null ? "Not reverted: " + err.getMessage() : id + " is v" + e.version() + " now (a copy of v"
+				+ to + "); placed sites can update to it", err != null)));
+	}
+
+	void polish(String id) {
+		POLISHING.add(id);
+		dev.larattalabs.architect.apiimpl.ApiImpl.instance().designs().polish(new dev.larattalabs.architect.api.PolishRequest(id)).whenComplete((d,
+			err) -> net.minecraft.client.Minecraft.getInstance().execute(() -> {
+				if (err != null) {
+					POLISHING.remove(id);
+				}
+				LibraryFeature.say(err != null ? "Not polished: " + err.getMessage() : "Polishing " + id + " (Designs tab: " + d + ")", err != null);
+			}));
 	}
 
 	// ------------------------------------------------------------------ (5a) critique

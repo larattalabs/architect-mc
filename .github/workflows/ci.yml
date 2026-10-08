@@ -21,6 +21,17 @@ jobs:
           java-version: 25
       - name: Kit tests
         run: node --test kit/test/*.test.mjs
+      - name: Mod jar without the sidecar bundle (dev marks; a release publish fails)
+        working-directory: mod
+        run: |
+          ./gradlew --no-daemon jar
+          j=build/libs/architect_mc-$(grep '^mod_version=' gradle.properties | cut -d= -f2)+nosidecar.jar
+          unzip -p "$j" META-INF/MANIFEST.MF | grep -q 'Architect-Sidecar-Bundle: missing'
+          unzip -p "$j" fabric.mod.json | grep -q '"architect_mc:bundle":"missing"'
+          if ./gradlew --no-daemon publishToMavenLocal -Prelease -Dmaven.repo.local="$RUNNER_TEMP/m2"; then
+            echo "publishToMavenLocal -Prelease without the sidecar bundle must fail"; exit 1
+          fi
+          rm -f "$j"
       - name: Sidecar check and bundle
         working-directory: sidecar
         run: |

@@ -5,6 +5,8 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { authEnv, authSourceOf, detectApiAuth, withAuthMode, ARCHITECT_NO_API_AUTH_MESSAGE } from '../src/claude/auth.js';
 import { ClaudeDesigner } from '../src/claude/designer.js';
 import { setSdkLoaderForTests } from '../src/claude/sdk.js';
+import { classifyFailure, probeFailure } from '../src/claude/failures.js';
+import { fillLoginEnv, noLoginMessage } from '../src/claude/loginenv.js';
 import { makeSidecar, until, type Harness } from './helpers.js';
 
 describe('detectApiAuth / withAuthMode (as AgentCraft)', () => {
@@ -176,5 +178,80 @@ describe('ClaudeDesigner.checkAuth', () => {
     expect(h.sc.status()).toMatchObject({ auth: 'checking', sdk: 'missing' });
     expect(h.sc.status().message).toMatch(/Waiting for the Claude Agent SDK/);
     await b.stop();
+  });
+});
+
+describe('(5b F2) the claude login without USER/LOGNAME', () => {
+  const os = () => ({ username: 'noah', homedir: '/Users/noah' });
+
+  it('fills USER and LOGNAME from the OS user, HOME from its home dir, only where unset or empty', () => {
+    const env: Record<string, string | undefined> = { PATH: '/bin', HOME: '/Users/noah' };
+    expect(fillLoginEnv(env, os)).toEqual({ filled: ['USER', 'LOGNAME'], name: 'noah' });
+    expect(env).toEqual({ PATH: '/bin', HOME: '/Users/noah', USER: 'noah', LOGNAME: 'noah' });
+    const scrubbed: Record<string, string | undefined> = { USER: '' };
+    expect(fillLoginEnv(scrubbed, os)).toEqual({ filled: ['HOME', 'USER', 'LOGNAME'], name: 'noah' });
+    expect(scrubbed).toMatchObject({ HOME: '/Users/noah', USER: 'noah', LOGNAME: 'noah' });
+    // nothing missing: nothing changes
+    const full = { USER: 'a', LOGNAME: 'a', HOME: '/h' };
+    expect(fillLoginEnv(full, os)).toEqual({ filled: [] });
+    expect(full).toEqual({ USER: 'a', LOGNAME: 'a', HOME: '/h' });
+    // no OS user name (no passwd entry): the basename of HOME
+    const e2: Record<string, string | undefined> = { HOME: '/home/steve' };
+    expect(fillLoginEnv(e2, () => ({}))).toEqual({ filled: ['USER', 'LOGNAME'], name: 'steve' });
+  });
+
+  it('the no-login message names the user and HOME, says when the sidecar filled a variable, and stays an auth failure', () => {
+    expect(noLoginMessage({ USER: 'noah', HOME: '/Users/noah' }, { filled: [] })).toBe(
+      'The claude CLI found no login (user noah, HOME /Users/noah). Log in by running `claude` and `/login` in a terminal as this user. If Minecraft starts from a scrubbed environment, keep HOME, USER and LOGNAME.',
+    );
+    expect(noLoginMessage({ USER: 'noah', HOME: '/Users/noah' }, { filled: ['USER', 'LOGNAME'], name: 'noah' })).toMatch(/\(The sidecar filled in USER, LOGNAME from the OS: noah\.\)$/);
+    expect(probeFailure('not logged in')).toBe('auth');
+    expect(classifyFailure({ authFailed: 'not logged in', errors: [], isError: true } as never)).toBe('auth');
+  });
+
+  let h: Harness | undefined;
+  afterEach(async () => {
+    await h?.close();
+    h = undefined;
+  });
+  const noLogin = () => ({ close() {}, accountInfo: async () => ({ apiKeySource: 'none', tokenSource: 'none' }) });
+
+  it('login mode, no login found, a variable filled: auth failed with the new message (account info injected)', async () => {
+    h = makeSidecar(['--use-claude-login']);
+    const env: Record<string, string | undefined> = { HOME: '/Users/noah', PATH: '/bin' };
+    const b = new ClaudeDesigner(h.sc, { queryFn: noLogin as never, loginEnv: { env, userInfo: os } });
+    expect(await b.checkAuth()).toBe(false);
+    expect(env.USER).toBe('noah');
+    expect(env.LOGNAME).toBe('noah');
+    expect(h.sc.status().auth).toBe('failed');
+    expect(h.sc.status().message).toBe(
+      'The claude CLI found no login (user noah, HOME /Users/noah). Log in by running `claude` and `/login` in a terminal as this user. If Minecraft starts from a scrubbed environment, keep HOME, USER and LOGNAME. (The sidecar filled in USER, LOGNAME from the OS: noah.)',
+    );
+    expect(h.log.lines.some((l) => /USER\/LOGNAME were unset; using noah from the OS/.test(l))).toBe(true);
+    expect(b.blocked()).toMatch(/found no login/);
+  });
+
+  it('login mode, no login found, nothing filled: the message without the note', async () => {
+    h = makeSidecar(['--use-claude-login']);
+    const env: Record<string, string | undefined> = { HOME: '/Users/noah', USER: 'noah', LOGNAME: 'noah' };
+    const b = new ClaudeDesigner(h.sc, { queryFn: noLogin as never, loginEnv: { env, userInfo: os } });
+    expect(await b.checkAuth()).toBe(false);
+    expect(h.sc.status()).toMatchObject({ auth: 'failed' });
+    expect(h.sc.status().message).toMatch(/^The claude CLI found no login \(user noah, HOME \/Users\/noah\)\..*keep HOME, USER and LOGNAME\.$/);
+    expect(h.log.lines.some((l) => /were unset/.test(l))).toBe(false);
+  });
+
+  it('login mode with a login: the fill happens before the probe and the CLI env carries it', async () => {
+    h = makeSidecar(['--use-claude-login']);
+    const env: Record<string, string | undefined> = { HOME: '/Users/noah' };
+    let seen: Record<string, string | undefined> | undefined;
+    const q = (o: { options: { env: Record<string, string | undefined> } }) => {
+      seen = { ...env };
+      void o;
+      return { close() {}, accountInfo: async () => ({ email: 'x@example.com', organization: 'Acme' }) };
+    };
+    const b = new ClaudeDesigner(h.sc, { queryFn: q as never, loginEnv: { env, userInfo: os } });
+    expect(await b.checkAuth()).toBe(true);
+    expect(seen).toMatchObject({ USER: 'noah', LOGNAME: 'noah' });
   });
 });

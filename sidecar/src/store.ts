@@ -40,6 +40,8 @@ export interface DesignWork {
   cost?: Cost;
   /** (5a) the critique loop's state (critique.ts CritiqueWork) */
   critique?: import('./critique.js').CritiqueWork;
+  /** (5b) a polish's state (polish.ts PolishWork) */
+  polish?: import('./polish.js').PolishWork;
 }
 
 /** A mod-provided tool call the client has not answered yet (survives a restart). */

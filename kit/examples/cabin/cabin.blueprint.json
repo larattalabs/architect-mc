@@ -16,6 +16,13 @@
   },
   "groundY": 1,
   "front": "south",
+  "frame": {
+    "origin": [
+      1,
+      0,
+      1
+    ]
+  },
   "materials": [
     "minecraft:spruce_log",
     "minecraft:spruce_planks",

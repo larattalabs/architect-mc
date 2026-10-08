@@ -121,6 +121,23 @@ The list below is what `dev.help` returns (`{commands: {name: description}, scre
 | `dev.site.verify` | {site, list?, max?} - the site's top-of-stack cells against its entries' after |
 | `dev.heap` | {reset?} - heap used and peak since the last reset (MB) |
 
+### Entry versions and delta apply (phase 5b)
+
+| hook | arguments, result |
+|---|---|
+| `dev.entry.versions` | {entry} - the entry's head version, its lineage and its complete version folders |
+| `dev.entry.installVersion` | {entry, dir, by?, summary?} - TEST: installs a hand-written version (the files of `dir`) as the entry's next version in the crash-safe order, delta.json from the mod's TemplateDelta, then reloads the library -> {version} |
+| `dev.entry.delta` | {entry, from, to, cells?} - the blueprint delta of two versions (TemplateDelta; the shape of `kit/tools/diff.mjs --json`) |
+| `dev.site.delta.check` | {site, version?, playerEdits?, overlap?, owner?, force?, cells?, construction?} - Sites.checkDelta -> {applicable, refusals, from, to, added, removed, changed, parts, kept, overlaps, box, notes, bom?, refund?, ghost?, ms} |
+| `dev.site.delta.apply` | {site, version?, playerEdits?, overlap?, owner?, force?, construction?} - Sites.applyDelta (ticked above 50k cells) -> {applied, from, to, written, kept, reshaped, notes, refund?} or {applied: false, refusals} |
+| `dev.site.revert` | {site, version, owner?, force?} - Sites.revert: one undo of the deltas above the version in the site's chain, else (and always in survival) a forward delta |
+| `dev.site.history` | {site} - the site's version, head version, chain and history |
+| `dev.site.delta.preview` | {site, version?, key?} - the delta ghost (ArchitectClientApi.previewDelta: ADDED, REMOVED, CHANGED, KEPT tints) -> the verdict's counts |
+| `dev.writes.count` | {box} - TEST: the positions whose block changed in the box since the last call (the first call starts counting) -> {count, cells?} |
+
+`dev.journal.killAt` accepts D1-D8 (the delta sequence). `dev.site.state` adds `version`, `headVersion`, `deviations`,
+`deltas`, `deltaRefunds` and `swaps`.
+
 ### Survival
 
 | hook | arguments, result |
@@ -242,6 +259,15 @@ there is no DevBridge hook to make layers, so tests go through the API as anothe
 ## Changelog
 
 Semi-stable: a hook may change or go, and every such change is listed here, newest first.
+
+- **2026-10-08 (phase 5b):** new `dev.entry.versions|installVersion|delta`, `dev.site.delta.check|apply|preview`,
+  `dev.site.revert`, `dev.site.history` and `dev.writes.count` (see "Entry versions and delta apply"). `dev.journal.killAt`
+  takes D1-D8; `dev.site.state` adds the version fields, the deltas, the delta refunds and the queued swaps. `CompositeMesh`
+  has a KEPT style. apitest steps `checkdelta, applydelta, srevert, shistory, outdated, eversions, edelta, erevert, polish,
+  polishest, polishget, api17`, batch `delta` items, and the version fields in site views. `tools/gate5b.mjs` drives the
+  phase 5b gate (`tools/run-gate5b-client.sh`, DevBridge 8891, sidecar 8890); `tools/eval.mjs` adds `import-round0`,
+  `verify-round0`, `run --arm polish --from` and `polish-dev`. A local build without `sidecar/dist/main.mjs` is versioned
+  `+nosidecar` and the Status tab says so in red.
 
 - **2026-10-08 (phase 5a):** `tools/p5a-ui.mjs` walks the critique UI submit paths on the sim (Design tab, set dialog, massing
   first plus critique: no critique on the massing, critique on the detail pass); the Status tab has a `critique_default` control

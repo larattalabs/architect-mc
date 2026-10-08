@@ -34,8 +34,12 @@ import { ClaudeBibleBackend } from './bible.js';
 import { ARCHITECT_NO_API_AUTH_MESSAGE, authEnv, authSourceOf, checkApiKey, directApiKey, type KeyCheck } from './auth.js';
 import { designFixPrompt, designPrompt, designStepFor, designSystemPrompt, massingFixPrompt, massingPrompt, massingSystemPrompt, MAX_DESIGN_ROUNDS, RESTART_PROMPT, revisionFixPrompt } from './brief.js';
 import { isAuthText, probeFailure } from './failures.js';
+import { ensureLoginEnv, noLoginMessage, osUserInfo, type LoginEnvFill, type UserInfoLike } from './loginenv.js';
 import { REVISION_RESTART_PROMPT } from '../critic.js';
+import type { PolishBackend, PolishTurnResult } from '../polish.js';
+import { POLISH_SYSTEM } from './polishprompts.js';
 import { costFromResult, CostMeter, zeroCost } from '../jobs/cost.js';
+import type { Cost } from '../protocol.js';
 import { connectorHook, denyHook, designVerdict } from './permissions.js';
 import { loadSdk, loadZod, type Sdk } from './sdk.js';
 import { limitFromText, StreamMapper, type RateLimitReport, type TurnStats } from './stream.js';
@@ -63,6 +67,8 @@ export interface ClaudeDesignerOptions {
   authRetryMs?: number;
   /** validates an API key against the API (tests inject a fake) */
   keyCheck?: KeyCheck;
+  /** (5b F2) the environment the login-mode fill applies to and the OS user it reads (tests inject both) */
+  loginEnv?: { env: Record<string, string | undefined>; userInfo: () => UserInfoLike };
 }
 
 /** A running CLI turn (a design turn or a job query): its abort and its process. */
@@ -211,6 +217,13 @@ export class ClaudeDesigner implements Designer {
     return { useClaudeLogin: this.sc.useClaudeLogin, storedKey: this.sc.secrets().apiKey };
   }
 
+  /** (5b F2) login mode: USER/LOGNAME/HOME filled from the OS where unset, before the auth check and every CLI spawn. */
+  loginEnvFill(): LoginEnvFill | undefined {
+    if (!this.sc.useClaudeLogin) return undefined;
+    const o = this.opts.loginEnv;
+    return ensureLoginEnv(this.sc.log, o?.env ?? process.env, o?.userInfo ?? osUserInfo);
+  }
+
   /** Resolve the SDK, then check the credentials with a live `accountInfo()` (the AgentCraft probe). */
   async checkAuth(): Promise<boolean> {
     const gen = ++this.authGen;
@@ -221,6 +234,7 @@ export class ClaudeDesigner implements Designer {
     if (gen !== this.authGen) return false;
     const sdkState = this.sdk ? 'ready' : 'missing';
     const a = this.authInputs();
+    const fill = this.loginEnvFill();
     const src = authSourceOf(process.env, a);
     if (!src.ok) {
       this.sc.setAuth({ auth: 'missing', sdk: sdkState, message: ARCHITECT_NO_API_AUTH_MESSAGE });
@@ -281,7 +295,9 @@ export class ClaudeDesigner implements Designer {
         return false;
       }
       this.markAuthFailed(
-        a.useClaudeLogin
+        a.useClaudeLogin && why === 'not logged in'
+          ? noLoginMessage(this.opts.loginEnv?.env ?? process.env, fill)
+          : a.useClaudeLogin
           ? `Claude login check failed: ${truncate(why, 200)}. Run \`claude\` and /login, then try again.`
           : `Claude API check failed: ${truncate(why, 200)}. Check the API key (or your cloud provider settings).`,
         src.source,
@@ -451,6 +467,8 @@ export class ClaudeDesigner implements Designer {
     const id = cur.id;
     const d = sc.designs.get(id);
     if (!d || isFinalDesign(d)) return 'finished';
+    // (5b) a polish of a library entry: the polish engine runs it, with this designer's turns
+    if (d.kind === 'polish') return sc.polishes.run(id, this.polishBackend(cur));
     const req = d.request;
     // (4c) a massing job builds under its massing id
     const w = (this.work[id] ??= { bp: d.massing ? d.massing.id : freeLibraryId(cfg.libraryDir, designBaseId(req), this.takenIds(id)), round: 0 });
@@ -579,6 +597,65 @@ export class ClaudeDesigner implements Designer {
     }
   }
 
+  /** per polish step session: its cost meter (a resumed session reports a cumulative cost) */
+  private polishMeters = new Map<string, CostMeter>();
+
+  /**
+   * (5b) A polish step's turn: a fresh Agent SDK session in the polish scratch dir (a fix turn resumes the step's
+   * session), the same permission policy as designs (the scratch dir only, no network; only kit/designs/<id>.mjs is
+   * writable), the polish system prompt (claude/polishprompts.ts, drafts until frozen).
+   */
+  polishBackend(cur: Current): PolishBackend {
+    return {
+      name: 'claude',
+      stopping: () => this.stopping,
+      turn: async (spec): Promise<PolishTurnResult> => {
+        const sc = this.sc;
+        const turn: Running = { abort: new AbortController() };
+        cur.turn = turn;
+        const resume = spec.resume ? sc.store.data.sessions[spec.sessionKey]?.sessionId : undefined;
+        const meter = this.polishMeters.get(spec.sessionKey) ?? new CostMeter(zeroCost());
+        this.polishMeters.set(spec.sessionKey, meter);
+        const before = meter.total();
+        meter.begin(!!resume);
+        let stats: TurnStats;
+        let reason: AbortReason | undefined;
+        try {
+          ({ stats, reason } = await this.runTurn(turn, {
+            id: spec.id,
+            bp: spec.bp,
+            sessionKey: spec.sessionKey,
+            cwd: spec.scratch,
+            prompt: spec.prompt,
+            model: spec.model,
+            effort: spec.effort,
+            ...(spec.budgetUsd !== undefined ? { maxBudgetUsd: spec.budgetUsd } : {}),
+            mcp: await this.statusMcp('design_status', 'Report one short line of progress on the polish (shown to the player in the Designs tab).', (step) => sc.designStep(spec.id, 'designing', `polish: ${step}`)),
+            ...(resume ? { resume } : {}),
+            system: POLISH_SYSTEM,
+            label: `polish ${spec.id} step ${spec.step} turn ${spec.turn}`,
+            onMessage: (msg) => {
+              if (msg.type === 'result') meter.observe(costFromResult(msg as unknown as Record<string, unknown>));
+            },
+          }));
+        } finally {
+          cur.turn = undefined;
+        }
+        const after = meter.commit();
+        const cost: Cost = { usd: Math.max(0, Math.round((after.usd - before.usd) * 1e6) / 1e6), inputTokens: Math.max(0, after.inputTokens - before.inputTokens), outputTokens: Math.max(0, after.outputTokens - before.outputTokens), cacheReadTokens: Math.max(0, after.cacheReadTokens - before.cacheReadTokens), cacheWriteTokens: Math.max(0, after.cacheWriteTokens - before.cacheWriteTokens), turns: Math.max(0, after.turns - before.turns) };
+        if (reason === 'cancel') return { outcome: 'cancelled', cost };
+        if (reason === 'shutdown' || this.stopping) return { outcome: 'stopped', cost };
+        if (stats.limited) {
+          if (!this.limited()) this.setLimit(stats.rateLimit?.resetsAt, stats.rateLimit?.type);
+          return { outcome: 'limit', cost };
+        }
+        if (stats.subtype === 'error_max_budget_usd') return { outcome: 'budget', cost, error: `the step hit its budget ($${after.usd.toFixed(4)})` };
+        if (stats.authFailed) return { outcome: 'error', cost, error: `Claude authentication failed (${stats.authFailed})` };
+        return { outcome: stats.isError ? 'error' : 'done', cost, ...(stats.isError ? { error: stats.subtype ?? stats.errors[0] ?? 'error' } : {}) };
+      },
+    };
+  }
+
   // ---- one SDK turn ---------------------------------------------------------------------------
 
   /**
@@ -587,6 +664,7 @@ export class ClaudeDesigner implements Designer {
    * the client token variable scrubbed.
    */
   env(cwd: string): Record<string, string | undefined> {
+    this.loginEnvFill();
     const base: Record<string, string | undefined> = withPathFirst({ ...process.env }, path.dirname(process.execPath));
     for (const k of Object.keys(base)) if (GIT_REDIRECT_VARS.includes(k.toUpperCase())) delete base[k];
     Object.assign(base, {

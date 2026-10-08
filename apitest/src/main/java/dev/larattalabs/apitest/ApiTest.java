@@ -64,6 +64,7 @@ public class ApiTest implements ModInitializer {
 		// registered at init, before any world: the events are static (and ArchitectApi.get() works in any init order)
 		LOG.info("apitest: Architect API {}", ArchitectApi.VERSION);
 		SiteEvents.SITE_PLACED.register(v -> event("SITE_PLACED", site(v)));
+		ApiTestDelta.register(); // phase 5b events
 		SiteEvents.SITE_REMOVED.register((v, r) -> {
 			JsonObject o = site(v);
 			o.add("result", removeJson(r));
@@ -226,6 +227,20 @@ public class ApiTest implements ModInitializer {
 			case "heights":
 			case "api15": {
 				return ApiTestJournal.step(src, a);
+			}
+			case "checkdelta":
+			case "applydelta":
+			case "srevert":
+			case "shistory":
+			case "outdated":
+			case "eversions":
+			case "edelta":
+			case "erevert":
+			case "polish":
+			case "polishest":
+			case "polishget":
+			case "api17": {
+				return ApiTestDelta.step(src, a);
 			}
 			case "bqueue":
 			case "batch":
@@ -416,6 +431,10 @@ public class ApiTest implements ModInitializer {
 		JsonArray cb = new JsonArray();
 		v.coveredBy().forEach(cb::add);
 		o.add("coveredBy", cb);
+		o.addProperty("version", v.version()); // 1.7.0
+		o.addProperty("headVersion", v.headVersion());
+		o.addProperty("deviations", v.deviations());
+		o.addProperty("updating", v.updating());
 		return o;
 	}
 

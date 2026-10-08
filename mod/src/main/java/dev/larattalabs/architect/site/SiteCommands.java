@@ -112,7 +112,23 @@ public final class SiteCommands {
 					.then(Commands.argument("site", StringArgumentType.word()).suggests((ctx, b) -> {
 						Sites.all().stream().filter(x -> x.construction() != null).forEach(x -> b.suggest(x.id()));
 						return b.buildFuture();
-					}).executes(SiteCommands::siteState))))
+					}).executes(SiteCommands::siteState)))
+				// phase 5b: /architect site update <id> [version] [keep|overwrite], revert <id> <version>, history <id>
+				.then(Commands.literal("update")
+					.then(Commands.argument("site", StringArgumentType.word()).suggests(SiteCommands::siteIds)
+						.executes(ctx -> update(ctx, 0, "keep"))
+						.then(Commands.argument("version", com.mojang.brigadier.arguments.IntegerArgumentType.integer(1))
+							.executes(ctx -> update(ctx, com.mojang.brigadier.arguments.IntegerArgumentType.getInteger(ctx, "version"), "keep"))
+							.then(Commands.literal("keep").executes(ctx -> update(ctx, com.mojang.brigadier.arguments.IntegerArgumentType.getInteger(ctx,
+								"version"), "keep")))
+							.then(Commands.literal("overwrite").executes(ctx -> update(ctx, com.mojang.brigadier.arguments.IntegerArgumentType.getInteger(ctx,
+								"version"), "overwrite"))))))
+				.then(Commands.literal("revert")
+					.then(Commands.argument("site", StringArgumentType.word()).suggests(SiteCommands::siteIds)
+						.then(Commands.argument("version", com.mojang.brigadier.arguments.IntegerArgumentType.integer(1))
+							.executes(ctx -> revert(ctx, com.mojang.brigadier.arguments.IntegerArgumentType.getInteger(ctx, "version"))))))
+				.then(Commands.literal("history")
+					.then(Commands.argument("site", StringArgumentType.word()).suggests(SiteCommands::siteIds).executes(SiteCommands::history))))
 			.then(Commands.literal("batches").executes(SiteCommands::batches))
 			.then(Commands.literal("batch")
 				.then(Commands.literal("cancel")
@@ -566,6 +582,84 @@ public final class SiteCommands {
 		src.sendSuccess(() -> Component.literal("World journal: " + idx.entries().size() + " entries (" + active + " standing), " + cells + " cells, "
 			+ String.format(java.util.Locale.ROOT, "%.1f MB", bytes / 1048576.0) + " on disk" + (bytes > warn ? " (over the " + (warn >> 20)
 				+ " MB warning)" : "") + "; cache " + dev.larattalabs.architect.survival.SurvivalWorld.journalCacheMb() + " MB"), false);
+		return 1;
+	}
+
+	// ------------------------------------------------------------------ phase 5b: versions of placed sites
+
+	private static java.util.concurrent.CompletableFuture<com.mojang.brigadier.suggestion.Suggestions> siteIds(CommandContext<CommandSourceStack> ctx,
+		com.mojang.brigadier.suggestion.SuggestionsBuilder b) {
+		Sites.all().forEach(x -> b.suggest(x.id()));
+		return b.buildFuture();
+	}
+
+	/** {@code /architect site update <id> [version] [keep|overwrite]}: the delta to that version (the head by default). */
+	private static int update(CommandContext<CommandSourceStack> ctx, int version, String edits) {
+		CommandSourceStack src = ctx.getSource();
+		String id = StringArgumentType.getString(ctx, "site");
+		Site b = Sites.get(id);
+		ServerLevel level = b == null ? null : Sites.levelOf(src.getServer(), b);
+		if (level == null) {
+			src.sendFailure(Component.literal(b == null ? "No site " + id + " (see /architect list)" : id + "'s dimension is not loaded"));
+			return 0;
+		}
+		ServerPlayer player = src.getPlayer();
+		boolean instant = !SurvivalWorld.on() || dev.larattalabs.architect.apiimpl.ApiRules.permission2(player);
+		SiteDeltas.Request r = new SiteDeltas.Request(id, version, dev.larattalabs.architect.delta.DeltaPlanner.Edits.valueOf(edits.toUpperCase(Locale.ROOT)),
+			false, b.owner(), true);
+		try {
+			SiteDeltas.Result res = instant ? SiteDeltas.apply(level, r) : Builder.applyConstructionDelta(level, r, player);
+			String kept = res.kept().isEmpty() ? "" : "; kept " + res.kept().size() + " cell(s) you changed (" + SiteDeltas.describeKept(res.kept()) + ")";
+			src.sendSuccess(() -> Component.literal("Updated " + id + " v" + res.from() + " -> v" + res.to() + ": " + res.written() + " cells written"
+				+ (instant ? "" : " (a construction site: feed its crate)") + kept + (res.notes().isEmpty() ? "" : "; " + String.join("; ", res.notes()))),
+				true);
+			return 1;
+		} catch (Sites.SiteException e) {
+			src.sendFailure(Component.literal("Not updated: " + e.getMessage()));
+			return 0;
+		}
+	}
+
+	/** {@code /architect site revert <id> <version>}: creative undoes the deltas above it; survival rebuilds it (paid). */
+	private static int revert(CommandContext<CommandSourceStack> ctx, int version) {
+		CommandSourceStack src = ctx.getSource();
+		String id = StringArgumentType.getString(ctx, "site");
+		Site b = Sites.get(id);
+		ServerLevel level = b == null ? null : Sites.levelOf(src.getServer(), b);
+		if (level == null) {
+			src.sendFailure(Component.literal(b == null ? "No site " + id : id + "'s dimension is not loaded"));
+			return 0;
+		}
+		ServerPlayer player = src.getPlayer();
+		boolean instant = !SurvivalWorld.on() || dev.larattalabs.architect.apiimpl.ApiRules.permission2(player);
+		try {
+			SiteDeltas.Result res = instant ? SiteDeltas.revert(level, id, version, b.owner(), true) : Builder.applyConstructionDelta(level,
+				new SiteDeltas.Request(id, version, dev.larattalabs.architect.delta.DeltaPlanner.Edits.KEEP, false, b.owner(), true), player);
+			src.sendSuccess(() -> Component.literal((instant ? "Reverted " : "Rebuilding ") + id + " to v" + res.to() + (res.notes().isEmpty() ? ""
+				: ": " + String.join("; ", res.notes()))), true);
+			return 1;
+		} catch (Sites.SiteException e) {
+			src.sendFailure(Component.literal("Not reverted: " + e.getMessage()));
+			return 0;
+		}
+	}
+
+	/** {@code /architect site history <id>}: the versions it stood at, and what an update would reach. */
+	private static int history(CommandContext<CommandSourceStack> ctx) {
+		CommandSourceStack src = ctx.getSource();
+		String id = StringArgumentType.getString(ctx, "site");
+		Site b = Sites.get(id);
+		if (b == null) {
+			src.sendFailure(Component.literal("No site " + id));
+			return 0;
+		}
+		int v = SiteDeltas.versionOf(src.getServer(), b);
+		int head = SiteDeltas.headVersion(b.blueprint());
+		src.sendSuccess(() -> Component.literal(id + " (" + b.blueprint() + ") stands at v" + v + (head > v ? "; v" + head + " available" : "")), false);
+		for (Site.History h : SiteDeltas.history(src.getServer(), id)) {
+			src.sendSuccess(() -> Component.literal("  v" + h.version() + " " + h.kind() + (h.revertible() ? "" : " (not undoable)") + " " + java.time.Instant
+				.ofEpochMilli(h.appliedAt())), false);
+		}
 		return 1;
 	}
 }

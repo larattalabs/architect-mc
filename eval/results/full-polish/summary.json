@@ -1,0 +1,788 @@
+{
+  "runId": "full-polish-2026-10-08T1901",
+  "label": "full-polish",
+  "tier": "full",
+  "arm": "polish",
+  "from": "full-2026-10-07T2324",
+  "maxSteps": 2,
+  "capUsd": 45,
+  "authVars": {
+    "ANTHROPIC_API_KEY": false,
+    "ANTHROPIC_AUTH_TOKEN": false,
+    "CLAUDE_CODE_OAUTH_TOKEN": false,
+    "ANTHROPIC_BASE_URL": false,
+    "CLAUDE_CODE_USE_BEDROCK": false,
+    "CLAUDE_CODE_USE_VERTEX": false,
+    "CLAUDE_CODE_USE_FOUNDRY": false
+  },
+  "provenance": {
+    "sidecarVersion": "0.1.0",
+    "modVersion": "0.10.0",
+    "briefSet": "v1",
+    "hashes": {
+      "briefs": "1e503b2332ac1ee6e1cfb6123cc84af89ee9b0e8b9b6b9fcc610d2fa5f6f4a80",
+      "kit": "b91050d976f58a55d64b6fdfee961821f02614f8d27aed0ea86fec87ce0e12d9",
+      "designPrompts": "360fdaa95c91c42c11ef5969734e9fe439cdc4ec6d98087aeba5137ff3e485ab",
+      "critic": "b7888e53874212e7f6efbefff555d79f9962e7c4679025b417f24a423e6e0bcc",
+      "judge": "a087ab438b0c93874f83e9af3245c3e46094582f7cf3a06d17629ff4794702a4"
+    },
+    "models": {
+      "critic": "claude-sonnet-5-5 (medium)",
+      "judge": "claude-opus-5-5 (medium)"
+    }
+  },
+  "precheck": {
+    "identical": 18,
+    "of": 18
+  },
+  "importCriticHash": "b7888e53874212e7f6efbefff555d79f9962e7c4679025b417f24a423e6e0bcc",
+  "smoke": {
+    "stop": true,
+    "why": [
+      "4 of 4 smoke briefs accepted no step"
+    ],
+    "noAccept": 4,
+    "g5": 0,
+    "spend": 2.257,
+    "high": 11.36
+  },
+  "stopReason": "the smoke stop rule: 4 of 4 smoke briefs accepted no step",
+  "briefs": [
+    {
+      "id": "woodcutters_cabin",
+      "n": 1,
+      "title": "woodcutter's cabin",
+      "model": "claude-sonnet-5-5",
+      "status": "done",
+      "end": "not_resolved",
+      "entryId": "gen_woodcutter_s_cabin",
+      "installedVersion": null,
+      "steps": [
+        {
+          "n": 1,
+          "part": "porch",
+          "priority": "P1",
+          "accepted": false,
+          "failure": "not_resolved",
+          "overall": 5.33,
+          "changedCells": 70,
+          "fixTurns": 0,
+          "usd": 0.4354,
+          "ms": 122053
+        },
+        {
+          "n": 2,
+          "part": "roof",
+          "priority": "P1",
+          "accepted": false,
+          "failure": "not_resolved",
+          "overall": 5.33,
+          "changedCells": 47,
+          "fixTurns": 0,
+          "usd": 0.2579,
+          "ms": 63232
+        }
+      ],
+      "accepted": 0,
+      "untargetable": 0,
+      "report": false,
+      "overall": {
+        "round0": 5.33,
+        "installed": 5.33
+      },
+      "p0AtInstall": null,
+      "round0": {
+        "errors": 0,
+        "warnings": 0,
+        "byRule": {},
+        "metrics": {
+          "accentShare": 0.147,
+          "detailNoise": 0.39,
+          "windowsMin": 2,
+          "paletteAdherence": 1,
+          "parts": 7,
+          "cellsOutsideParts": 0,
+          "blocks": 632
+        }
+      },
+      "final": {
+        "errors": 0,
+        "warnings": 0,
+        "byRule": {},
+        "metrics": {
+          "accentShare": 0.147,
+          "detailNoise": 0.39,
+          "windowsMin": 2,
+          "paletteAdherence": 1,
+          "parts": 7,
+          "cellsOutsideParts": 0,
+          "blocks": 632
+        }
+      },
+      "changedShare": 0,
+      "g5": {
+        "checked": false,
+        "violations": 0
+      },
+      "judge": {
+        "outcome": "identical",
+        "steps": 2,
+        "calls": []
+      },
+      "h2h": {
+        "outcome": "tie",
+        "loopBest": 1,
+        "views": [
+          "iso",
+          "iso_back",
+          "front",
+          "top"
+        ],
+        "calls": [
+          {
+            "order": {
+              "A": "loop",
+              "B": "polish"
+            },
+            "preferred": "B",
+            "margin": "slight",
+            "dimensions": {
+              "silhouette": "A",
+              "legibility": "B",
+              "craft": "A",
+              "materials": "tie",
+              "brief": "B"
+            },
+            "reasons": "I slightly prefer B because it fits the snowy taiga brief better. It has more snow, spruce shrubs and a lit chimney cap, and its dark log porch posts make the entrance clearer. A has a crisper roof with dark trim along the ridge and eaves, and its base is tidier. B's scattered snow-capped blocks around the base look a little like stray noise.",
+            "winner": "polish",
+            "usd": 0.0456
+          },
+          {
+            "order": {
+              "A": "polish",
+              "B": "loop"
+            },
+            "preferred": "B",
+            "margin": "slight",
+            "dimensions": {
+              "silhouette": "B",
+              "legibility": "tie",
+              "craft": "B",
+              "materials": "B",
+              "brief": "A"
+            },
+            "reasons": "B has a cleaner roof outline. Dark trim marks the roof edges and ridge, the porch has posts and railings you can read, and the chimney steps up properly. A says \"snowy taiga\" more clearly, with snow caps, a lit chimney top and foliage, but its snow-topped stumps scattered around the base look stray and noisy. The door reads about equally well in both.",
+            "winner": "loop",
+            "usd": 0.0452
+          }
+        ]
+      },
+      "targeted": {
+        "outcome": "identical",
+        "calls": []
+      },
+      "cost": {
+        "polish": 0.6934,
+        "cap": 1.77,
+        "judge": 0.0908,
+        "loop": 0.9796,
+        "round0": 1.7658
+      },
+      "ms": {
+        "polish": 185862,
+        "loop": 198063
+      },
+      "estimate": {
+        "polishUsdLow": 0.42,
+        "polishUsdHigh": 1.77,
+        "polishMinutesLow": 2.1,
+        "polishMinutesHigh": 16.8,
+        "midUsd": 1.095,
+        "errorPct": -36.68
+      },
+      "prompts": {
+        "status": "frozen",
+        "system": "f4916959fc697423538e3f32834da05476568ff5bc10b5f02ce6fcbf075bad51",
+        "brief": "8d0b4f4ca712a35bf2709de5fd8192080543260de52c91dba2acf9ba1a796735",
+        "step": "99d5bcdb45538a027e1939380f6279a930624c033927564aa1b4afc9c54f685b",
+        "scoping": "e9821a7104abb18d9d373cdf383c4f9d0371be3281cdb9db18ed0d62187105ff"
+      }
+    },
+    {
+      "id": "farmhouse_porch",
+      "n": 2,
+      "status": "not_run"
+    },
+    {
+      "id": "watchtower_plot",
+      "n": 3,
+      "title": "watchtower on an 11x11 plot",
+      "model": "claude-sonnet-5-5",
+      "status": "done",
+      "end": "budget",
+      "entryId": "gen_watchtower",
+      "installedVersion": null,
+      "steps": [],
+      "accepted": 0,
+      "untargetable": 0,
+      "report": false,
+      "overall": {
+        "round0": 5.5,
+        "installed": 5.5
+      },
+      "p0AtInstall": null,
+      "round0": {
+        "errors": 0,
+        "warnings": 0,
+        "byRule": {},
+        "metrics": {
+          "accentShare": 0.093,
+          "detailNoise": 0.401,
+          "windowsMin": 6,
+          "paletteAdherence": 1,
+          "parts": 7,
+          "cellsOutsideParts": 0,
+          "blocks": 962
+        }
+      },
+      "final": {
+        "errors": 0,
+        "warnings": 0,
+        "byRule": {},
+        "metrics": {
+          "accentShare": 0.093,
+          "detailNoise": 0.401,
+          "windowsMin": 6,
+          "paletteAdherence": 1,
+          "parts": 7,
+          "cellsOutsideParts": 0,
+          "blocks": 962
+        }
+      },
+      "changedShare": 0,
+      "g5": {
+        "checked": false,
+        "violations": 0
+      },
+      "judge": {
+        "outcome": "none",
+        "steps": 0,
+        "calls": []
+      },
+      "h2h": {
+        "outcome": "loop",
+        "loopBest": 1,
+        "views": [
+          "iso",
+          "iso_back",
+          "front",
+          "top"
+        ],
+        "calls": [
+          {
+            "order": {
+              "A": "loop",
+              "B": "polish"
+            },
+            "preferred": "A",
+            "margin": "clear",
+            "dimensions": {
+              "silhouette": "A",
+              "legibility": "A",
+              "craft": "A",
+              "materials": "B",
+              "brief": "A"
+            },
+            "reasons": "A has a clean battlemented silhouette, a small shelter, an open lookout platform and tall, evenly spaced windows. B's heavy roof covers about half the top and hangs past the parapet, hiding the battlements and shrinking the platform. Its sparse windows and odd wooden squares look noisy, though its dark wood bands add some interest.",
+            "winner": "loop",
+            "usd": 0.0726
+          },
+          {
+            "order": {
+              "A": "polish",
+              "B": "loop"
+            },
+            "preferred": "B",
+            "margin": "slight",
+            "dimensions": {
+              "silhouette": "B",
+              "legibility": "tie",
+              "craft": "B",
+              "materials": "A",
+              "brief": "B"
+            },
+            "reasons": "I slightly prefer B. A's big dark roof covers half the top and hangs past the battlements, which hides the lookout platform and makes the silhouette top-heavy. B's small shelter leaves most of the platform open, which suits a watchtower. A's dark wood bands are a nicer medieval touch, but B's rows of tall windows still read clearly. B's openings are a bit large for a defensive tower.",
+            "winner": "loop",
+            "usd": 0.0541
+          }
+        ]
+      },
+      "targeted": {
+        "outcome": "identical",
+        "calls": []
+      },
+      "cost": {
+        "polish": 0,
+        "cap": 1.11,
+        "judge": 0.1267,
+        "loop": 0.5866,
+        "round0": 1.1122
+      },
+      "ms": {
+        "polish": 684,
+        "loop": 123197
+      },
+      "estimate": {
+        "polishUsdLow": 0.42,
+        "polishUsdHigh": 1.11,
+        "polishMinutesLow": 2.1,
+        "polishMinutesHigh": 16.8,
+        "midUsd": 0.765,
+        "errorPct": -100
+      },
+      "prompts": {
+        "status": "frozen",
+        "system": "f4916959fc697423538e3f32834da05476568ff5bc10b5f02ce6fcbf075bad51",
+        "brief": "8d0b4f4ca712a35bf2709de5fd8192080543260de52c91dba2acf9ba1a796735",
+        "step": "99d5bcdb45538a027e1939380f6279a930624c033927564aa1b4afc9c54f685b",
+        "scoping": "e9821a7104abb18d9d373cdf383c4f9d0371be3281cdb9db18ed0d62187105ff"
+      }
+    },
+    {
+      "id": "spice_shop",
+      "n": 4,
+      "status": "not_run"
+    },
+    {
+      "id": "coaching_inn",
+      "n": 5,
+      "status": "not_run"
+    },
+    {
+      "id": "cattle_barn",
+      "n": 6,
+      "status": "not_run"
+    },
+    {
+      "id": "smithy_forge_yard",
+      "n": 7,
+      "status": "not_run"
+    },
+    {
+      "id": "mountain_chapel",
+      "n": 8,
+      "status": "not_run"
+    },
+    {
+      "id": "gatehouse_plot",
+      "n": 9,
+      "status": "not_run"
+    },
+    {
+      "id": "hellish_lair",
+      "n": 10,
+      "title": "hellish lair",
+      "model": "claude-sonnet-5-5",
+      "status": "done",
+      "end": "not_resolved",
+      "entryId": "gen_hellish_lair",
+      "installedVersion": null,
+      "steps": [
+        {
+          "n": 1,
+          "part": "roof_hall",
+          "priority": "P1",
+          "accepted": false,
+          "failure": "not_resolved",
+          "overall": 5.83,
+          "changedCells": 428,
+          "fixTurns": 0,
+          "usd": 0.3601,
+          "ms": 98745
+        },
+        {
+          "n": 2,
+          "part": "gatehouse",
+          "priority": "P1",
+          "accepted": false,
+          "failure": "not_resolved",
+          "overall": 5.83,
+          "changedCells": 54,
+          "fixTurns": 0,
+          "usd": 0.4234,
+          "ms": 109363
+        }
+      ],
+      "accepted": 0,
+      "untargetable": 0,
+      "report": false,
+      "overall": {
+        "round0": 6,
+        "installed": 6
+      },
+      "p0AtInstall": null,
+      "round0": {
+        "errors": 0,
+        "warnings": 0,
+        "byRule": {},
+        "metrics": {
+          "accentShare": 0.01,
+          "detailNoise": 0.308,
+          "windowsMin": 0,
+          "paletteAdherence": 1,
+          "parts": 9,
+          "cellsOutsideParts": 0,
+          "blocks": 4788
+        }
+      },
+      "final": {
+        "errors": 0,
+        "warnings": 0,
+        "byRule": {},
+        "metrics": {
+          "accentShare": 0.01,
+          "detailNoise": 0.308,
+          "windowsMin": 0,
+          "paletteAdherence": 1,
+          "parts": 9,
+          "cellsOutsideParts": 0,
+          "blocks": 4788
+        }
+      },
+      "changedShare": 0,
+      "g5": {
+        "checked": false,
+        "violations": 0
+      },
+      "judge": {
+        "outcome": "identical",
+        "steps": 2,
+        "calls": []
+      },
+      "h2h": {
+        "outcome": "identical",
+        "loopBest": 0,
+        "calls": []
+      },
+      "targeted": {
+        "outcome": "identical",
+        "calls": []
+      },
+      "cost": {
+        "polish": 0.7835,
+        "cap": 2.56,
+        "judge": 0,
+        "loop": 1.0454,
+        "round0": 2.5632
+      },
+      "ms": {
+        "polish": 208962,
+        "loop": 165563
+      },
+      "estimate": {
+        "polishUsdLow": 0.42,
+        "polishUsdHigh": 2.56,
+        "polishMinutesLow": 2.1,
+        "polishMinutesHigh": 16.8,
+        "midUsd": 1.49,
+        "errorPct": -47.42
+      },
+      "prompts": {
+        "status": "frozen",
+        "system": "f4916959fc697423538e3f32834da05476568ff5bc10b5f02ce6fcbf075bad51",
+        "brief": "8d0b4f4ca712a35bf2709de5fd8192080543260de52c91dba2acf9ba1a796735",
+        "step": "99d5bcdb45538a027e1939380f6279a930624c033927564aa1b4afc9c54f685b",
+        "scoping": "e9821a7104abb18d9d373cdf383c4f9d0371be3281cdb9db18ed0d62187105ff"
+      }
+    },
+    {
+      "id": "lighthouse",
+      "n": 11,
+      "status": "not_run"
+    },
+    {
+      "id": "windmill",
+      "n": 12,
+      "status": "not_run"
+    },
+    {
+      "id": "stilt_house",
+      "n": 13,
+      "title": "stilt house",
+      "model": "claude-sonnet-5-5",
+      "status": "done",
+      "end": "not_resolved",
+      "entryId": "gen_stilt_house",
+      "installedVersion": null,
+      "steps": [
+        {
+          "n": 1,
+          "part": "stair",
+          "priority": "P1",
+          "accepted": false,
+          "failure": "not_resolved",
+          "overall": 5.67,
+          "changedCells": 38,
+          "fixTurns": 0,
+          "usd": 0.2488,
+          "ms": 64379
+        },
+        {
+          "n": 2,
+          "part": "roof",
+          "priority": "P1",
+          "accepted": false,
+          "failure": "not_resolved",
+          "overall": 5.67,
+          "changedCells": 30,
+          "fixTurns": 0,
+          "usd": 0.2148,
+          "ms": 56296
+        }
+      ],
+      "accepted": 0,
+      "untargetable": 0,
+      "report": false,
+      "overall": {
+        "round0": 5.67,
+        "installed": 5.67
+      },
+      "p0AtInstall": null,
+      "round0": {
+        "errors": 0,
+        "warnings": 0,
+        "byRule": {},
+        "metrics": {
+          "accentShare": 0.262,
+          "detailNoise": 0.441,
+          "windowsMin": 2,
+          "paletteAdherence": 1,
+          "parts": 9,
+          "cellsOutsideParts": 0,
+          "blocks": 679
+        }
+      },
+      "final": {
+        "errors": 0,
+        "warnings": 0,
+        "byRule": {},
+        "metrics": {
+          "accentShare": 0.262,
+          "detailNoise": 0.441,
+          "windowsMin": 2,
+          "paletteAdherence": 1,
+          "parts": 9,
+          "cellsOutsideParts": 0,
+          "blocks": 679
+        }
+      },
+      "changedShare": 0,
+      "g5": {
+        "checked": false,
+        "violations": 0
+      },
+      "judge": {
+        "outcome": "identical",
+        "steps": 2,
+        "calls": []
+      },
+      "h2h": {
+        "outcome": "polish",
+        "loopBest": 2,
+        "views": [
+          "iso",
+          "iso_back",
+          "front",
+          "top"
+        ],
+        "calls": [
+          {
+            "order": {
+              "A": "polish",
+              "B": "loop"
+            },
+            "preferred": "A",
+            "margin": "slight",
+            "dimensions": {
+              "silhouette": "A",
+              "legibility": "B",
+              "craft": "B",
+              "materials": "A",
+              "brief": "A"
+            },
+            "reasons": "A reads more clearly as a jungle house. It has a thatch-style bamboo roof, mossy stone steps, climbing vines and leaves, and it is raised on stilts with a veranda. B's stairs and stilts are cleaner, but its dark roof looks generic and has a notched, unfinished-looking gable at the back. A loses some points for clutter and a few leaf blocks that look like they're floating.",
+            "winner": "polish",
+            "usd": 0.0506
+          },
+          {
+            "order": {
+              "A": "loop",
+              "B": "polish"
+            },
+            "preferred": "B",
+            "margin": "slight",
+            "dimensions": {
+              "silhouette": "B",
+              "legibility": "A",
+              "craft": "A",
+              "materials": "B",
+              "brief": "B"
+            },
+            "reasons": "B fits the jungle brief better than A. It has a bamboo-coloured roof, vines, mossy stone at the base of the stairs and a full-height chimney. These make it look like a stilt hut, and the roof overhang is good. A is cleaner and its dark roof is coherent, but it looks generic. B loses points for an odd leaf block on the wall and for vines cluttering the front.",
+            "winner": "polish",
+            "usd": 0.0484
+          }
+        ]
+      },
+      "targeted": {
+        "outcome": "identical",
+        "calls": []
+      },
+      "cost": {
+        "polish": 0.4636,
+        "cap": 2.32,
+        "judge": 0.0991,
+        "loop": 1.1254,
+        "round0": 2.3203
+      },
+      "ms": {
+        "polish": 121677,
+        "loop": 169070
+      },
+      "estimate": {
+        "polishUsdLow": 0.42,
+        "polishUsdHigh": 2.32,
+        "polishMinutesLow": 2.1,
+        "polishMinutesHigh": 16.8,
+        "midUsd": 1.37,
+        "errorPct": -66.16
+      },
+      "prompts": {
+        "status": "frozen",
+        "system": "f4916959fc697423538e3f32834da05476568ff5bc10b5f02ce6fcbf075bad51",
+        "brief": "8d0b4f4ca712a35bf2709de5fd8192080543260de52c91dba2acf9ba1a796735",
+        "step": "99d5bcdb45538a027e1939380f6279a930624c033927564aa1b4afc9c54f685b",
+        "scoping": "e9821a7104abb18d9d373cdf383c4f9d0371be3281cdb9db18ed0d62187105ff"
+      }
+    },
+    {
+      "id": "mining_hall",
+      "n": 14,
+      "status": "not_run"
+    },
+    {
+      "id": "tea_house",
+      "n": 15,
+      "status": "not_run"
+    },
+    {
+      "id": "mosswater_tavern",
+      "n": 16,
+      "status": "not_run"
+    },
+    {
+      "id": "mosswater_house",
+      "n": 17,
+      "status": "not_run"
+    },
+    {
+      "id": "mosswater_tower",
+      "n": 18,
+      "status": "not_run"
+    }
+  ],
+  "aggregates": {
+    "briefs": 18,
+    "done": 4,
+    "failed": 0,
+    "ends": {
+      "not_resolved": 3,
+      "budget": 1
+    },
+    "G1": {
+      "withStep": 3,
+      "wins": 0,
+      "losses": 0,
+      "ties": 3,
+      "identical": 3,
+      "p": 1,
+      "significant": false,
+      "pass": false,
+      "note": "thresholds {\"18\":13,\"16\":12,\"14\":11,\"12\":10}; a brief with a step but nothing accepted is identical (a tie) and stays in"
+    },
+    "G2": {
+      "meanOverallRound0": 5.63,
+      "meanOverallInstalled": 5.63,
+      "rise": 0,
+      "p0ZeroAtInstall": 4,
+      "pass": false
+    },
+    "G3": {
+      "checkerErrorsInFinals": 0,
+      "warningsNotWorse": 4,
+      "warningsTotal": {
+        "round0": 0,
+        "final": 0
+      },
+      "paletteAdherence": {
+        "round0": 1,
+        "final": 1,
+        "dropPoints": 0
+      },
+      "finalsWith2Parts": 4,
+      "pass": true
+    },
+    "G4": {
+      "withinCap": 4,
+      "of": 4,
+      "meanPolishUsd": 0.4851,
+      "meanAddedMinutes": 2.15,
+      "estimateWithin50": 2,
+      "estimateTotalErrorPct": -58.89,
+      "pass": false,
+      "recorded": {
+        "meanRound0Usd": 1.9404,
+        "sixtyPctOfRound0": 1.1642,
+        "withinSixtyPct": true,
+        "loopMeanUsd": 0.9343
+      }
+    },
+    "G5": {
+      "violations": 0,
+      "briefs": [],
+      "checked": 0,
+      "pass": true
+    },
+    "recorded": {
+      "headToHead": {
+        "polish": 1,
+        "loop": 1,
+        "tie": 1,
+        "identical": 1
+      },
+      "targeted": {
+        "fixed": 0,
+        "worse": 0,
+        "tie": 0,
+        "identical": 4
+      },
+      "steps": 6,
+      "acceptedSteps": 0,
+      "stepAcceptance": 0,
+      "scopeViolationRate": 0,
+      "baseDrift": 0,
+      "meanChangedShare": 0,
+      "costPerAcceptedStep": null,
+      "polishVsLoop": {
+        "polishMeanUsd": 0.4851,
+        "loopMeanUsd": 0.9343,
+        "polishMeanMinutes": 2.15,
+        "loopMeanMinutes": 2.73
+      }
+    },
+    "cost": {
+      "usd": 2.2571,
+      "judge": 0.3166
+    }
+  }
+}

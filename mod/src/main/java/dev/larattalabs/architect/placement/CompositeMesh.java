@@ -16,7 +16,7 @@ import org.jspecify.annotations.Nullable;
 public final class CompositeMesh {
 	/** A layer's tint (mirrors the API's {@code PreviewStyle}). */
 	public enum Style {
-		GHOST, MASSING, ADDED, REMOVED, CHANGED
+		GHOST, MASSING, ADDED, REMOVED, CHANGED, KEPT
 	}
 
 	/** The cap per key and the full-detail distance (ArchitectClientApi). */
@@ -27,6 +27,8 @@ public final class CompositeMesh {
 	static final int GREEN = 0xFF3CCB5A;
 	static final int AMBER = 0xFFF2A21C;
 	static final int RED = 0xFFE0302A;
+	/** KEPT (phase 5b): cells the player changed that a KEEP delta leaves: a yellow frame. */
+	static final int YELLOW = 0xFFF5E11E;
 	/** REMOVED: the frame's width on a face (blocks). */
 	static final float FRAME = 0.075f;
 	private static final float[] FACE_SHADE = {0.62f, 1.0f, 0.86f, 0.86f, 0.74f, 0.74f};
@@ -87,6 +89,7 @@ public final class CompositeMesh {
 			case ADDED -> 0x96000000 | mix(blockArgb, GREEN, 0.72f);
 			case CHANGED -> 0x96000000 | mix(blockArgb, AMBER, 0.72f);
 			case REMOVED -> 0x2E000000 | (RED & 0xFFFFFF);
+			case KEPT -> 0x24000000 | (YELLOW & 0xFFFFFF);
 		};
 	}
 
@@ -98,6 +101,7 @@ public final class CompositeMesh {
 			case ADDED -> 0xF03CCB5A;
 			case CHANGED -> 0xF0F2A21C;
 			case REMOVED -> 0xF0E0302A;
+			case KEPT -> 0xF8F5E11E;
 		};
 	}
 
@@ -108,6 +112,7 @@ public final class CompositeMesh {
 			case MASSING -> 0.007f;
 			case ADDED, CHANGED -> 0.012f;
 			case REMOVED -> 0.02f;
+			case KEPT -> 0.026f;
 		};
 	}
 
@@ -149,7 +154,8 @@ public final class CompositeMesh {
 	/** The mesh of a model (its exposed faces) in a style. */
 	public static CompositeMesh build(GhostModel m, Style s) {
 		int faces = m.faceCount();
-		int perFace = s == Style.REMOVED ? 5 : 1; // REMOVED: the faint fill plus a frame of 4 bars
+		boolean framed = s == Style.REMOVED || s == Style.KEPT;
+		int perFace = framed ? 5 : 1; // REMOVED, KEPT: the faint fill plus a frame of 4 bars
 		float[] xyz = new float[faces * perFace * 12];
 		int[] argb = new int[faces * perFace];
 		int q = 0;
@@ -171,9 +177,9 @@ public final class CompositeMesh {
 				if ((mask & (1 << f)) == 0) {
 					continue;
 				}
-				int c = s == Style.REMOVED ? fill : shade(fill, FACE_SHADE[f]);
+				int c = framed ? fill : shade(fill, FACE_SHADE[f]);
 				q = face(xyz, argb, q, f, x0, y0, z0, x1, y1, z1, c);
-				if (s == Style.REMOVED) {
+				if (framed) {
 					q = frame(xyz, argb, q, f, x0, y0, z0, x1, y1, z1, frame);
 				}
 			}

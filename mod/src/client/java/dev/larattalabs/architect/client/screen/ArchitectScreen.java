@@ -1329,6 +1329,7 @@ public final class ArchitectScreen extends Screen {
 			g.text(font, TextUtil.ellipsize(font, line, dw), dx, y, UiBits.muted(), false);
 			y += 10;
 		}
+		y = drawVersions(g, s, dx, y, dw, footerY, mx, my);
 		Sites.Report r = Sites.reports().get(s.id());
 		if (r != null) {
 			for (String line : TextUtil.wrapPlain(font, r.message(), dw).stream().limit(4).toList()) {
@@ -1369,6 +1370,176 @@ public final class ArchitectScreen extends Screen {
 		bx += bw(mv) + 4;
 		String undo = "Undo move";
 		button(g, "undo_move", undo, bx, by, bw(undo), false, s.movedFrom() != null, mx, my, () -> undoMove(s));
+	}
+
+	// ------------------------------------------------------------------ phase 5b: versions of a placed site
+
+	/** The site whose update is being previewed (its delta ghost shows), its verdict once the server answered. */
+	private static @Nullable String updateSite;
+	private static dev.larattalabs.architect.site.SiteDeltas.@Nullable Check updateCheck;
+	private static boolean showHistory;
+	static final String UPDATE_KEY = "architect:update";
+
+	/**
+	 * The version lines of a placed site (docs/CONTRACT.md phase 5b "Preview and UI"): "v1 · v3 available · Update…"; Update…
+	 * shows the delta ghost, the per-part list, the kept cells and in survival the bill of materials and the refunds, with Apply
+	 * and Cancel; History lists the versions with "Revert to vK" (creative) or "Rebuild as vK" (survival, a paid forward delta).
+	 */
+	private int drawVersions(GuiGraphicsExtractor g, Site s, int dx, int y, int dw, int footerY, int mx, int my) {
+		var server = net.minecraft.client.Minecraft.getInstance().getSingleplayerServer();
+		int v = server == null ? Math.max(1, s.versioning().version()) : dev.larattalabs.architect.site.SiteDeltas.versionOf(server, s);
+		int head = dev.larattalabs.architect.site.SiteDeltas.headVersion(s.blueprint());
+		y += 2;
+		String line = v == 0 ? "its version can't be found (remove or place it again)" : "v" + v + (head > v ? " · v" + head + " available" : " · up to date")
+			+ (s.versioning().deviations() > 0 ? " · " + s.versioning().deviations() + " cell(s) you changed kept" : "");
+		g.text(font, TextUtil.ellipsize(font, line, dw), dx, y, head > v && v > 0 ? UiStyle.CLAY_DARK : UiBits.muted(), false);
+		y += 12;
+		int bx = dx;
+		if (v > 0 && head > v && !s.id().equals(updateSite)) {
+			String up = "Update…";
+			button(g, "site_update", up, bx, y, bw(up), true, !s.building() && !s.placing(), mx, my, () -> previewUpdate(s, head));
+			bx += bw(up) + 4;
+		}
+		String hist = showHistory ? "Hide history" : "History";
+		button(g, "site_history", hist, bx, y, bw(hist), false, true, mx, my, () -> showHistory = !showHistory);
+		y += 22;
+		if (s.id().equals(updateSite)) {
+			var c = updateCheck;
+			if (c == null) {
+				g.text(font, "Working out the update…", dx, y, UiBits.muted(), false);
+				y += 12;
+			} else {
+				List<String> info = new java.util.ArrayList<>();
+				info.add("v" + c.from() + " -> v" + c.to() + ": +" + c.added() + " -" + c.removed() + " ~" + c.changed() + " cells");
+				c.parts().forEach((n, p) -> {
+					if (p.status() != dev.larattalabs.architect.delta.TemplateDelta.Status.UNCHANGED) {
+						info.add("  " + n + ": " + p.status().name().toLowerCase(java.util.Locale.ROOT) + " (+" + p.added() + " -" + p.removed() + " ~" + p
+							.changed() + ")");
+					}
+				});
+				if (!c.kept().isEmpty()) {
+					info.add(c.kept().size() + " cell(s) you changed stay as they are (yellow)");
+				}
+				if (!c.bom().isEmpty()) {
+					info.add("needs " + summarize(c.bom()));
+				}
+				if (!c.refund().isEmpty()) {
+					info.add("gives back " + summarize(c.refund()));
+				}
+				for (var rf : c.refusals()) {
+					info.add("! " + rf.message());
+				}
+				for (String l : info.subList(0, Math.min(info.size(), 9))) {
+					g.text(font, TextUtil.ellipsize(font, l, dw), dx, y, l.startsWith("!") ? UiBits.errorText() : UiBits.muted(), false);
+					y += 10;
+				}
+				y += 2;
+				String apply = "Apply";
+				button(g, "update_apply", apply, dx, y, bw(apply), true, c.ok(), mx, my, () -> applyUpdate(s, c.to()));
+				String cancel = "Cancel";
+				button(g, "update_cancel", cancel, dx + bw(apply) + 4, y, bw(cancel), false, true, mx, my, this::cancelUpdate);
+				y += 22;
+			}
+		}
+		if (showHistory) {
+			boolean survival = dev.larattalabs.architect.survival.SurvivalWorld.on();
+			List<int[]> chain = dev.larattalabs.architect.site.SiteDeltas.chain(s);
+			for (Site.History h : s.versioning().history()) {
+				g.text(font, TextUtil.ellipsize(font, "v" + h.version() + " · " + h.kind() + (h.revertible() ? "" : " · kept for good"), dw), dx, y, UiBits
+					.muted(), false);
+				y += 10;
+			}
+			int hx = dx;
+			java.util.Set<Integer> offered = new java.util.TreeSet<>();
+			for (int i = 0; i < chain.size() - 1; i++) {
+				offered.add(chain.get(i)[0]);
+			}
+			for (int k = 1; k <= head; k++) {
+				if (k != v && (survival || !offered.contains(k)) && offered.size() < 3) {
+					offered.add(k);
+				}
+			}
+			offered.remove(v);
+			for (int k : offered) {
+				String lbl = (survival ? "Rebuild as v" : "Revert to v") + k;
+				button(g, "site_revert_" + k, lbl, hx, y, bw(lbl), false, !s.building(), mx, my, () -> revertSite(s, k));
+				hx += bw(lbl) + 4;
+			}
+			y += 22;
+		}
+		return y;
+	}
+
+	static String summarize(java.util.Map<String, Integer> items) {
+		List<String> out = new java.util.ArrayList<>();
+		items.entrySet().stream().sorted((a, b) -> b.getValue() - a.getValue()).limit(4).forEach(e -> out.add(e.getValue() + " " + e.getKey().replace(
+			"minecraft:", "")));
+		return String.join(", ", out) + (items.size() > 4 ? ", ..." : "");
+	}
+
+	private void previewUpdate(Site s, int to) {
+		updateSite = s.id();
+		updateCheck = null;
+		dev.larattalabs.architect.client.placement.DeltaGhost.request(UPDATE_KEY, s.id(), to).whenComplete((c, err) -> net.minecraft.client.Minecraft
+			.getInstance().execute(() -> {
+				if (err != null) {
+					LibraryFeature.say("No update preview: " + err.getMessage(), true);
+					updateSite = null;
+				} else if (s.id().equals(updateSite)) {
+					updateCheck = dev.larattalabs.architect.survival.SurvivalWorld.on() ? null : c;
+					if (updateCheck == null) {
+						// survival: the construction delta's verdict (its bill of materials and refunds)
+						dev.larattalabs.architect.client.world.ServerTasks.callAsPlayer((level, player) -> dev.larattalabs.architect.site.Builder
+							.checkConstructionDelta(level, new dev.larattalabs.architect.site.SiteDeltas.Request(s.id(), to,
+								dev.larattalabs.architect.delta.DeltaPlanner.Edits.KEEP, false, s.owner(), true))).whenComplete((cc, e2) -> net.minecraft.client
+									.Minecraft.getInstance().execute(() -> updateCheck = cc != null ? cc : c));
+					}
+				}
+			}));
+	}
+
+	private void cancelUpdate() {
+		updateSite = null;
+		updateCheck = null;
+		dev.larattalabs.architect.client.placement.CompositePreview.clear(UPDATE_KEY);
+	}
+
+	private void applyUpdate(Site s, int to) {
+		dev.larattalabs.architect.client.world.ServerTasks.callAsPlayer((level, player) -> {
+			var r = new dev.larattalabs.architect.site.SiteDeltas.Request(s.id(), to, dev.larattalabs.architect.delta.DeltaPlanner.Edits.KEEP, false, s.owner(),
+				true);
+			boolean instant = !dev.larattalabs.architect.survival.SurvivalWorld.on() || dev.larattalabs.architect.apiimpl.ApiRules.permission2(player);
+			try {
+				var res = instant ? dev.larattalabs.architect.site.SiteDeltas.apply(level, r) : dev.larattalabs.architect.site.Builder.applyConstructionDelta(
+					level, r, player);
+				return "Updated " + s.id() + " to v" + res.to() + (instant ? "" : ": feed its crate");
+			} catch (Sites.SiteException e) {
+				return "!" + e.getMessage();
+			}
+		}).whenComplete((msg, err) -> net.minecraft.client.Minecraft.getInstance().execute(() -> {
+			String m = err != null ? "!" + err.getMessage() : msg;
+			boolean bad = m.startsWith("!");
+			LibraryFeature.say(bad ? m.substring(1) : m, bad);
+			cancelUpdate();
+		}));
+	}
+
+	private void revertSite(Site s, int k) {
+		dev.larattalabs.architect.client.world.ServerTasks.callAsPlayer((level, player) -> {
+			boolean instant = !dev.larattalabs.architect.survival.SurvivalWorld.on() || dev.larattalabs.architect.apiimpl.ApiRules.permission2(player);
+			try {
+				var res = instant ? dev.larattalabs.architect.site.SiteDeltas.revert(level, s.id(), k, s.owner(), true)
+					: dev.larattalabs.architect.site.Builder.applyConstructionDelta(level, new dev.larattalabs.architect.site.SiteDeltas.Request(s.id(), k,
+						dev.larattalabs.architect.delta.DeltaPlanner.Edits.KEEP, false, s.owner(), true), player);
+				return (instant ? "Reverted " : "Rebuilding ") + s.id() + " as v" + res.to();
+			} catch (Sites.SiteException e) {
+				return "!" + e.getMessage();
+			}
+		}).whenComplete((msg, err) -> net.minecraft.client.Minecraft.getInstance().execute(() -> {
+			String m = err != null ? "!" + err.getMessage() : msg;
+			boolean bad = m.startsWith("!");
+			LibraryFeature.say(bad ? m.substring(1) : m, bad);
+		}));
 	}
 
 	private void scrollbar(GuiGraphicsExtractor g, int x, int y, int h) {
@@ -1998,6 +2169,13 @@ public final class ArchitectScreen extends Screen {
 		// left: the helper
 		g.text(font, "Design helper", lx, y, UiStyle.CLAY_DARK, false);
 		y += 12;
+		if (Launcher.devBuildWithoutBundle()) {
+			for (String line : TextUtil.wrapPlain(font, Launcher.NO_BUNDLE, colW).stream().limit(3).toList()) {
+				g.text(font, line, lx, y, UiBits.errorText(), false);
+				y += 10;
+			}
+			y += 2;
+		}
 		LauncherPlan.State st = Launcher.state();
 		String fam = switch (st) {
 			case RUNNING -> "done";

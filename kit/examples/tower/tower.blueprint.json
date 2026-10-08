@@ -15,6 +15,13 @@
   },
   "groundY": 1,
   "front": "south",
+  "frame": {
+    "origin": [
+      1,
+      0,
+      1
+    ]
+  },
   "materials": [
     "minecraft:stone_bricks",
     "minecraft:deepslate_tile_stairs",

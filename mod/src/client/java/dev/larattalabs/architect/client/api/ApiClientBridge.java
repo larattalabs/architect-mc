@@ -57,6 +57,11 @@ public final class ApiClientBridge implements ClientBridge {
 			}
 
 			@Override
+			public void onEntryVersioned(JsonObject message) {
+				dev.larattalabs.architect.apiimpl.Versioned.onVersioned(message.deepCopy());
+			}
+
+			@Override
 			public void onMassingRemoved(String massingId, String reason) {
 				ApiImpl.massingRemoved(massingId);
 			}

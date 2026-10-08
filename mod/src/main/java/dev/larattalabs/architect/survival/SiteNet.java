@@ -170,8 +170,73 @@ public final class SiteNet {
 		}
 	}
 
+	/**
+	 * A delta ghost (phase 5b, {@code architect_mc:delta_preview}): the composite key it goes under, the site, the version it goes
+	 * to, and its cells section-packed as {@link RoadCells} (12-bit positions within each section) with a kind per cell (0 added,
+	 * 1 removed, 2 changed, 3 kept). Up to 200k cells. An empty section list clears the key.
+	 */
+	public record DeltaPreview(String key, String siteId, int to, long[] keys, List<int[]> cells, List<byte[]> kinds) implements CustomPacketPayload {
+		public static final Type<DeltaPreview> TYPE = new Type<>(Architect.id("delta_preview"));
+		public static final StreamCodec<RegistryFriendlyByteBuf, DeltaPreview> CODEC = StreamCodec.of((buf, p) -> {
+			buf.writeUtf(p.key);
+			buf.writeUtf(p.siteId);
+			buf.writeVarInt(p.to);
+			buf.writeVarInt(p.keys.length);
+			for (int i = 0; i < p.keys.length; i++) {
+				buf.writeLong(p.keys[i]);
+				buf.writeVarIntArray(p.cells.get(i));
+				buf.writeByteArray(p.kinds.get(i));
+			}
+		}, buf -> {
+			String key = buf.readUtf();
+			String site = buf.readUtf();
+			int to = buf.readVarInt();
+			int n = buf.readVarInt();
+			long[] keys = new long[n];
+			List<int[]> cells = new ArrayList<>(n);
+			List<byte[]> kinds = new ArrayList<>(n);
+			for (int i = 0; i < n; i++) {
+				keys[i] = buf.readLong();
+				cells.add(buf.readVarIntArray());
+				kinds.add(buf.readByteArray());
+			}
+			return new DeltaPreview(key, site, to, keys, cells, kinds);
+		});
+
+		@Override
+		public Type<DeltaPreview> type() {
+			return TYPE;
+		}
+
+		/** From world cells (packed positions) and their kinds. */
+		public static DeltaPreview of(String key, String siteId, int to, java.util.Map<Long, Byte> ghost) {
+			java.util.TreeMap<Long, List<long[]>> by = new java.util.TreeMap<>();
+			for (var e : ghost.entrySet()) {
+				long p = e.getKey();
+				by.computeIfAbsent(dev.larattalabs.architect.journal.Sections.key(p), k -> new ArrayList<>()).add(new long[] {p, e.getValue()});
+			}
+			long[] keys = new long[by.size()];
+			List<int[]> cells = new ArrayList<>();
+			List<byte[]> kinds = new ArrayList<>();
+			int i = 0;
+			for (var e : by.entrySet()) {
+				keys[i++] = e.getKey();
+				int[] c = new int[e.getValue().size()];
+				byte[] k = new byte[c.length];
+				for (int j = 0; j < c.length; j++) {
+					c[j] = dev.larattalabs.architect.journal.Sections.index(e.getValue().get(j)[0]);
+					k[j] = (byte) e.getValue().get(j)[1];
+				}
+				cells.add(c);
+				kinds.add(k);
+			}
+			return new DeltaPreview(key, siteId, to, keys, cells, kinds);
+		}
+	}
+
 	public static void init() {
 		PayloadTypeRegistry<RegistryFriendlyByteBuf> s2c = PayloadTypeRegistry.clientboundPlay();
+		s2c.registerLarge(DeltaPreview.TYPE, DeltaPreview.CODEC, 16 * 1024 * 1024);
 		s2c.registerLarge(RoadCells.TYPE, RoadCells.CODEC, 16 * 1024 * 1024);
 		s2c.registerLarge(SiteGhost.TYPE, SiteGhost.CODEC, 16 * 1024 * 1024);
 		s2c.register(SiteProgress.TYPE, SiteProgress.CODEC);

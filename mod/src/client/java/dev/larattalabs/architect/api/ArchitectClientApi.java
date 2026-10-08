@@ -51,4 +51,14 @@ public interface ArchitectClientApi {
 
 	/** The keys showing a composite now. Client thread. Since 1.3.0. */
 	Set<String> compositeKeys();
+
+	/**
+	 * Shows the delta ghost of a placed site going to {@code toVersion} (0 = the head) under {@code key}: the cells it adds,
+	 * removes and changes, and the cells the player changed that a KEEP delta keeps ({@link PreviewStyle#KEPT}), from the
+	 * server's {@code Sites.checkDelta} (it arrives a moment after the call, as {@code architect_mc:delta_preview}). Client thread.
+	 * Since 1.7.0.
+	 */
+	default void previewDelta(String key, String siteId, int toVersion) {
+		throw new UnsupportedOperationException("ArchitectClientApi.previewDelta needs Architect API 1.7.0");
+	}
 }

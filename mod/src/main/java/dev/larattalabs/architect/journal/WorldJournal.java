@@ -58,6 +58,8 @@ public final class WorldJournal {
 	public static final String CRATE = "crate";
 	/** Held leaves (CELL, written quietly). */
 	public static final String LEAVES = "leaves";
+	/** A delta of a placed site to another version of its entry (BOX, phase 5b), in the site's undo group. */
+	public static final String DELTA = "delta";
 
 	private static volatile @Nullable JournalStore store;
 	private static volatile @Nullable String unavailable;
@@ -734,6 +736,15 @@ public final class WorldJournal {
 
 	/** A named step of a change: halts the JVM when it is the armed kill point (no shutdown hooks, nothing saved). */
 	public static void kill(String point) {
+		if ((point + "+save").equals(killAt)) {
+			// TEST (5b "journal wins"): the world's chunks are saved first, as if an autosave had just run, then the halt
+			var sv = dev.larattalabs.architect.site.SiteDeltas.serverOrNull();
+			if (sv != null) {
+				sv.saveAllChunks(true, true, true);
+			}
+			Architect.LOGGER.error("World journal: kill point {} reached after a save; halting the JVM (dev.journal.killAt)", killAt);
+			Runtime.getRuntime().halt(7);
+		}
 		if (point.equals(killAt)) {
 			Architect.LOGGER.error("World journal: kill point {} reached; halting the JVM (dev.journal.killAt)", point);
 			Runtime.getRuntime().halt(7);
@@ -751,7 +762,8 @@ public final class WorldJournal {
 			return;
 		}
 		String label = writing;
-		if (k.equals("K1") && label.startsWith("P3:") || k.equals("K8") && label.startsWith("R2:") && label.contains("+handed")
+		if (k.equals("K1") && label.startsWith("P3:") || k.equals("D2") && label.startsWith("D3:") || k.equals("K8") && label.startsWith("R2:")
+			&& label.contains("+handed")
 			|| k.equals("migrate-before-commit") && label.startsWith("migrate")) {
 			Architect.LOGGER.error("World journal: kill point {} reached inside commit {}; halting the JVM", k, label);
 			Runtime.getRuntime().halt(7);

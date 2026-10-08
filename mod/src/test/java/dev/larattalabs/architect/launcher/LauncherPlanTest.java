@@ -161,6 +161,24 @@ class LauncherPlanTest {
 	}
 
 	@Test
+	void environmentFillsUserLognameAndHomeWhenMissing() {
+		// phase 5b F2: a game started from `env -i` has no USER/LOGNAME; the claude CLI then found no login
+		Map<String, String> env = LauncherPlan.environment(Map.of("PATH", "/usr/bin"), Path.of("/n/node"), false, "noah", "/Users/noah");
+		assertEquals("noah", env.get("USER"));
+		assertEquals("noah", env.get("LOGNAME"));
+		assertEquals("/Users/noah", env.get("HOME"));
+		Map<String, String> kept = LauncherPlan.environment(Map.of("PATH", "/usr/bin", "USER", "a", "LOGNAME", "b", "HOME", "/h"), Path.of("/n/node"), false,
+			"noah", "/Users/noah");
+		assertEquals("a", kept.get("USER"));
+		assertEquals("b", kept.get("LOGNAME"));
+		assertEquals("/h", kept.get("HOME"));
+		Map<String, String> blank = LauncherPlan.environment(Map.of("PATH", "/usr/bin", "USER", " "), Path.of("/n/node"), false, "noah", null);
+		assertEquals("noah", blank.get("USER"));
+		assertFalse(blank.containsKey("HOME"));
+		assertFalse(LauncherPlan.environment(Map.of("Path", "C:\\x"), Path.of("C:\\n\\node.exe"), true, "noah", "C:\\Users\\noah").containsKey("USER"));
+	}
+
+	@Test
 	void stateNamesAndTail() {
 		assertEquals("node-missing", LauncherPlan.State.NODE_MISSING.wire());
 		assertEquals("running", LauncherPlan.State.RUNNING.wire());

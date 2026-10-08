@@ -40,8 +40,141 @@ import org.jspecify.annotations.Nullable;
  */
 public record Site(String id, String blueprint, String rotation, Anchors.Bounds box, Anchors.Bounds interior, Map<String, Anchor> anchors,
 	long placedAt, String dimension, Anchors.@Nullable Bounds snapshotBox, String snapshot, @Nullable Location movedFrom, @Nullable Pin pin,
-	@Nullable Construction construction, @Nullable String owner, JsonObject ext, @Nullable Member member, boolean placing) {
+	@Nullable Construction construction, @Nullable String owner, JsonObject ext, @Nullable Member member, boolean placing, Versioning versioning) {
 	public static final String OVERWORLD = "minecraft:overworld";
+
+	/** Phase 4d shape: no versions (phase 5b derives the version from the pin when it is needed). */
+	public Site(String id, String blueprint, String rotation, Anchors.Bounds box, Anchors.Bounds interior, Map<String, Anchor> anchors,
+		long placedAt, String dimension, Anchors.@Nullable Bounds snapshotBox, String snapshot, @Nullable Location movedFrom, @Nullable Pin pin,
+		@Nullable Construction construction, @Nullable String owner, JsonObject ext, @Nullable Member member, boolean placing) {
+		this(id, blueprint, rotation, box, interior, anchors, placedAt, dimension, snapshotBox, snapshot, movedFrom, pin, construction, owner, ext, member,
+			placing, Versioning.NONE);
+	}
+
+	/**
+	 * What a site stands at (docs/CONTRACT.md phase 5b "What a site stands at"): the library entry's {@code version} (0 =
+	 * not known yet: a pre-5b record, derived once from the pin's template fingerprint), its {@code history} (placed, then
+	 * every delta, revert and forward delta, oldest first), and a delta in progress ({@code updating}: the version it goes to,
+	 * {@code reverting}: a revert's target), or 0.
+	 */
+	public record Versioning(int version, List<History> history, int updating, int reverting, int deviations) {
+		public static final Versioning NONE = new Versioning(0, List.of(), 0, 0, 0);
+
+		public Versioning {
+			history = List.copyOf(history);
+		}
+
+		public Versioning(int version, List<History> history, int updating, int reverting) {
+			this(version, history, updating, reverting, 0);
+		}
+
+		public Versioning withVersion(int v) {
+			return new Versioning(v, history, updating, reverting, deviations);
+		}
+
+		public Versioning withUpdating(int to) {
+			return new Versioning(version, history, to, reverting, deviations);
+		}
+
+		public Versioning withReverting(int to) {
+			return new Versioning(version, history, updating, to, deviations);
+		}
+
+		/** The cells the player changed that the last delta kept (KEEP): they stay until the player puts the block back. */
+		public Versioning withDeviations(int n) {
+			return new Versioning(version, history, updating, reverting, n);
+		}
+
+		public Versioning append(History h) {
+			List<History> l = new ArrayList<>(history);
+			l.add(h);
+			return new Versioning(h.version(), l, 0, 0, deviations);
+		}
+
+		public JsonObject toJson() {
+			JsonObject o = new JsonObject();
+			o.addProperty("version", version);
+			JsonArray h = new JsonArray();
+			history.forEach(x -> h.add(x.toJson()));
+			o.add("history", h);
+			if (updating > 0) {
+				o.addProperty("updating", updating);
+			}
+			if (reverting > 0) {
+				o.addProperty("reverting", reverting);
+			}
+			if (deviations > 0) {
+				o.addProperty("deviations", deviations);
+			}
+			return o;
+		}
+
+		public static Versioning fromJson(@Nullable JsonObject o) {
+			if (o == null) {
+				return NONE;
+			}
+			List<History> h = new ArrayList<>();
+			if (o.get("history") instanceof JsonArray a) {
+				for (JsonElement e : a) {
+					h.add(History.fromJson(e.getAsJsonObject()));
+				}
+			}
+			return new Versioning(o.has("version") ? o.get("version").getAsInt() : 0, h, o.has("updating") ? o.get("updating").getAsInt() : 0,
+				o.has("reverting") ? o.get("reverting").getAsInt() : 0, o.has("deviations") ? o.get("deviations").getAsInt() : 0);
+		}
+	}
+
+	/**
+	 * One step of a site's history: the version it reached, when, how ({@code placed}, {@code delta}, {@code revert},
+	 * {@code forward}), the {@code delta} journal entry that holds it (null for placed and reverts), the box corner the version
+	 * stands at, and whether it can still be journal-undone ({@code revertible}: false for construction deltas and folded ones).
+	 */
+	public record History(int version, long appliedAt, String kind, @Nullable String deltaEntry, int[] origin, boolean revertible) {
+		public JsonObject toJson() {
+			JsonObject o = new JsonObject();
+			o.addProperty("version", version);
+			o.addProperty("appliedAt", appliedAt);
+			o.addProperty("kind", kind);
+			if (deltaEntry != null) {
+				o.addProperty("deltaEntry", deltaEntry);
+			}
+			JsonArray or = new JsonArray();
+			for (int v : origin) {
+				or.add(v);
+			}
+			o.add("origin", or);
+			o.addProperty("revertible", revertible);
+			return o;
+		}
+
+		public static History fromJson(JsonObject o) {
+			int[] or = new int[3];
+			if (o.get("origin") instanceof JsonArray a && a.size() == 3) {
+				for (int i = 0; i < 3; i++) {
+					or[i] = a.get(i).getAsInt();
+				}
+			}
+			return new History(o.get("version").getAsInt(), o.has("appliedAt") ? o.get("appliedAt").getAsLong() : 0L, o.has("kind") ? o.get("kind")
+				.getAsString() : "placed", o.has("deltaEntry") ? o.get("deltaEntry").getAsString() : null, or, !o.has("revertible") || o.get("revertible")
+					.getAsBoolean());
+		}
+
+		public History withRevertible(boolean r) {
+			return new History(version, appliedAt, kind, deltaEntry, origin, r);
+		}
+	}
+
+	/** The same site at another version state. */
+	public Site withVersioning(Versioning v) {
+		return new Site(id, blueprint, rotation, box, interior, anchors, placedAt, dimension, snapshotBox, snapshot, movedFrom, pin, construction, owner,
+			ext, member, placing, v);
+	}
+
+	/** The same site with another geometry (a delta moves its box, anchors and pin; the restore box only grows). */
+	public Site withGeometry(Anchors.Bounds b, Anchors.Bounds in, Map<String, Anchor> an, Anchors.@Nullable Bounds snap, @Nullable Pin p) {
+		return new Site(id, blueprint, rotation, b, in, an, placedAt, dimension, snap, snapshot, movedFrom, p, construction, owner, ext, member, placing,
+			versioning);
+	}
 
 	/** Phase 4a shape: no group membership, not placing. */
 	public Site(String id, String blueprint, String rotation, Anchors.Bounds box, Anchors.Bounds interior, Map<String, Anchor> anchors,
@@ -93,13 +226,13 @@ public record Site(String id, String blueprint, String rotation, Anchors.Bounds 
 	/** The same site with another owner and ext (carried over by move, pin and construction changes). */
 	public Site withOwnership(@Nullable String owner, @Nullable JsonObject ext) {
 		return new Site(id, blueprint, rotation, box, interior, anchors, placedAt, dimension, snapshotBox, snapshot, movedFrom, pin, construction, owner,
-			ext == null ? new JsonObject() : ext, member, placing);
+			ext == null ? new JsonObject() : ext, member, placing, versioning);
 	}
 
 	/** The same site with another pin. */
 	public Site withPin(@Nullable Pin p) {
 		return new Site(id, blueprint, rotation, box, interior, anchors, placedAt, dimension, snapshotBox, snapshot, movedFrom, p, construction, owner, ext,
-			member, placing);
+			member, placing, versioning);
 	}
 
 	/** A construction site still building (survival, docs/CONTRACT.md phase 3): not every queued cell is in the world yet. */
@@ -109,19 +242,19 @@ public record Site(String id, String blueprint, String rotation, Anchors.Bounds 
 
 	public Site withConstruction(@Nullable Construction c) {
 		return new Site(id, blueprint, rotation, box, interior, anchors, placedAt, dimension, snapshotBox, snapshot, movedFrom, pin, c, owner, ext, member,
-			placing);
+			placing, versioning);
 	}
 
 	/** The same site in (or out of) a group. */
 	public Site withMember(@Nullable Member m) {
 		return new Site(id, blueprint, rotation, box, interior, anchors, placedAt, dimension, snapshotBox, snapshot, movedFrom, pin, construction, owner,
-			ext, m, placing);
+			ext, m, placing, versioning);
 	}
 
 	/** The same site, still placing or done placing. */
 	public Site withPlacing(boolean p) {
 		return new Site(id, blueprint, rotation, box, interior, anchors, placedAt, dimension, snapshotBox, snapshot, movedFrom, pin, construction, owner,
-			ext, member, p);
+			ext, member, p, versioning);
 	}
 
 	/** The site group it belongs to, or null. */
@@ -270,6 +403,9 @@ public record Site(String id, String blueprint, String rotation, Anchors.Bounds 
 		if (placing) {
 			o.addProperty("placing", true);
 		}
+		if (!versioning.equals(Versioning.NONE)) {
+			o.add("versions", versioning.toJson());
+		}
 		return o;
 	}
 
@@ -300,7 +436,8 @@ public record Site(String id, String blueprint, String rotation, Anchors.Bounds 
 			o.has("owner") && o.get("owner").isJsonPrimitive() ? o.get("owner").getAsString() : null,
 			o.has("ext") && o.get("ext").isJsonObject() ? o.getAsJsonObject("ext") : new JsonObject(),
 			o.has("member") && o.get("member").isJsonObject() ? Member.fromJson(o.getAsJsonObject("member")) : null,
-			o.has("placing") && o.get("placing").getAsBoolean());
+			o.has("placing") && o.get("placing").getAsBoolean(), o.has("versions") && o.get("versions").isJsonObject() ? Versioning.fromJson(o
+				.getAsJsonObject("versions")) : Versioning.NONE);
 	}
 
 	/**

@@ -18,14 +18,24 @@ import org.jspecify.annotations.Nullable;
  * @param critique (since 1.6.0) whether the critique figures are set (critique was on for at least one design)
  * @param critiqueUsdLow (since 1.6.0) what the critique adds, low; 0 without critique
  * @param critiqueMinutesLow (since 1.6.0) the wall time the critique adds, low (a group: per wave, its slots counted)
+ * @param polish (since 1.7.0) a polish estimate ({@link Designs#estimatePolish}): its figures are the polish fields (steps, fix
+ *     turns, critic calls, a report when the entry's verdict is stale)
  * @param items (since 1.6.0) a group estimate's items, each with its design and critique figures; empty for one design (and from
  *     an older helper)
  */
 public record Estimate(double usdLow, double usdHigh, double minutesLow, double minutesHigh, String basis, boolean critique, double critiqueUsdLow,
-	double critiqueUsdHigh, double critiqueMinutesLow, double critiqueMinutesHigh, List<Item> items) {
+	double critiqueUsdHigh, double critiqueMinutesLow, double critiqueMinutesHigh, List<Item> items, boolean polish, double polishUsdLow,
+	double polishUsdHigh, double polishMinutesLow, double polishMinutesHigh) {
 	public Estimate {
 		basis = basis == null ? "" : basis;
 		items = items == null ? List.of() : List.copyOf(items);
+	}
+
+	/** The 1.6.0 constructor (no polish figures). */
+	public Estimate(double usdLow, double usdHigh, double minutesLow, double minutesHigh, String basis, boolean critique, double critiqueUsdLow,
+		double critiqueUsdHigh, double critiqueMinutesLow, double critiqueMinutesHigh, List<Item> items) {
+		this(usdLow, usdHigh, minutesLow, minutesHigh, basis, critique, critiqueUsdLow, critiqueUsdHigh, critiqueMinutesLow, critiqueMinutesHigh, items,
+			false, 0, 0, 0, 0);
 	}
 
 	/** The 1.2.0 constructor (no critique figures, no items). */

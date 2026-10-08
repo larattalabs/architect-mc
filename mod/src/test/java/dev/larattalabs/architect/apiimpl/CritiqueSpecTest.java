@@ -70,7 +70,8 @@ class CritiqueSpecTest {
 	void modes() {
 		assertEquals(CritiqueMode.LOOP, CritiqueMode.of("loop"));
 		assertEquals(CritiqueMode.REPORT, CritiqueMode.of("REPORT"));
-		assertEquals(CritiqueMode.OFF, CritiqueMode.of("polish"));
+		assertEquals(CritiqueMode.POLISH, CritiqueMode.of("polish")); // 1.7.0 (was OFF in 1.6.0)
+		assertEquals(CritiqueMode.OFF, CritiqueMode.of("rebuild"));
 		assertEquals(CritiqueMode.OFF, CritiqueMode.of(null));
 		assertEquals("report", CritiqueMode.REPORT.wire());
 	}

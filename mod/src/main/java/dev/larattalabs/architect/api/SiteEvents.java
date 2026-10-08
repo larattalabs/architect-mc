@@ -186,6 +186,36 @@ public interface SiteEvents {
 		}
 	});
 
+	/**
+	 * A library entry got a new version (phase 5b: a polish, a revert of the entry, a design's new version): once per installed
+	 * version, persisted and caught up after a world load (like JOB_DONE). Server thread. Since 1.7.0.
+	 */
+	Event<EntryVersioned> ENTRY_VERSIONED = EventFactory.createArrayBacked(EntryVersioned.class, ls -> (e, from) -> {
+		for (EntryVersioned l : ls) {
+			Guard.run(() -> l.onVersioned(e, from), "ENTRY_VERSIONED");
+		}
+	});
+
+	/**
+	 * A placed site moved to another version (an apply or a revert): when the delta's writes are done; for a construction delta
+	 * at its start (SITE_PROGRESS and SITE_BUILT follow as in phase 3). Server thread. Since 1.7.0.
+	 */
+	Event<SiteUpdated> SITE_UPDATED = EventFactory.createArrayBacked(SiteUpdated.class, ls -> (a, b, r) -> {
+		for (SiteUpdated l : ls) {
+			Guard.run(() -> l.onUpdated(a, b, r), "SITE_UPDATED");
+		}
+	});
+
+	@FunctionalInterface
+	interface EntryVersioned {
+		void onVersioned(Library.Entry entry, int fromVersion);
+	}
+
+	@FunctionalInterface
+	interface SiteUpdated {
+		void onUpdated(SiteView before, SiteView after, DeltaResult result);
+	}
+
 	@FunctionalInterface
 	interface SitePlaced {
 		void onPlaced(SiteView site);

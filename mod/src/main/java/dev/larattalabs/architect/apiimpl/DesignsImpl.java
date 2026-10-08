@@ -345,7 +345,7 @@ final class DesignsImpl implements Designs {
 			Optional.ofNullable(str(raw, "blueprintId")), raw.has("cost") && raw.get("cost").isJsonObject() ? Cost.fromJson(raw.getAsJsonObject("cost"))
 			: Cost.NONE, Optional.ofNullable(str(raw, "error")), req, Optional.ofNullable(owner), num(raw, "createdAt"), num(raw, "updatedAt"),
 			Wire4c.designMassing(raw), Wire4c.conformance(raw.get("conformance")), Wire5a.record(raw.get("critique")), Optional.ofNullable(str(raw,
-				"critiqueOf")));
+				"critiqueOf")), Wire5b.polish(raw.get("polish")));
 	}
 
 	/**
@@ -379,6 +379,53 @@ final class DesignsImpl implements Designs {
 		}
 		save();
 		ApiEvents.designDone(d);
+		applyPolish(server, raw, d);
+	}
+
+	/**
+	 * A polish that installed a version with {@code apply.preview} false (API only): the deltas of its sites (listed, or every
+	 * site standing at an older version of the entry) are queued as one batch with the caller as owner. With preview (the
+	 * default) the sites only show "update available" ({@code SiteView.version} below {@code headVersion}).
+	 */
+	void applyPolish(MinecraftServer server, JsonObject raw, Design d) {
+		if (d.status() != Design.Status.DONE || d.polish().isEmpty() || d.polish().get().installedVersion() == null) {
+			return;
+		}
+		JsonObject p = raw.get("polish") instanceof JsonObject o ? o : null;
+		JsonObject apply = p != null && p.get("apply") instanceof JsonObject a ? a : null;
+		if (apply == null || !apply.has("preview") || apply.get("preview").getAsBoolean()) {
+			return;
+		}
+		String entry = p.has("entryId") ? p.get("entryId").getAsString() : d.entryId().orElse(null);
+		if (entry == null) {
+			return;
+		}
+		int head = d.polish().get().installedVersion();
+		java.util.Set<String> listed = new java.util.LinkedHashSet<>();
+		if (apply.get("sites") instanceof com.google.gson.JsonArray ids) {
+			ids.forEach(x -> listed.add(x.getAsString()));
+		}
+		List<dev.larattalabs.architect.api.Batch.Item> items = new ArrayList<>();
+		String owner = d.owner().orElse(null);
+		for (dev.larattalabs.architect.site.Site s : dev.larattalabs.architect.site.Sites.all()) {
+			if (!s.blueprint().equals(entry) || !listed.isEmpty() && !listed.contains(s.id())) {
+				continue;
+			}
+			if (dev.larattalabs.architect.site.SiteDeltas.versionOf(server, s) >= head) {
+				continue;
+			}
+			items.add(dev.larattalabs.architect.api.Batch.Item.delta("polish-" + s.id(), new dev.larattalabs.architect.api.DeltaRequest(s.id(), head, null,
+				null, null, false, new JsonObject(), owner), null, List.of()));
+		}
+		if (items.isEmpty()) {
+			return;
+		}
+		try {
+			String id = dev.larattalabs.architect.site.Batches.queue(server, dev.larattalabs.architect.api.Batch.of(owner, items));
+			Architect.LOGGER.info("Polish {} of {}: {} site update(s) queued as batch {}", d.id(), entry, items.size(), id);
+		} catch (RuntimeException e) {
+			Architect.LOGGER.warn("Polish {} of {}: the site updates could not be queued ({})", d.id(), entry, e.getMessage());
+		}
 	}
 
 	// ------------------------------------------------------------------ 5a: critique
@@ -530,6 +577,7 @@ final class DesignsImpl implements Designs {
 			String phase = switch (feature) {
 				case "massing" -> "4c";
 				case "critique", "critique.report", "job.images", "bible.admin", "bible.restraint" -> "5a";
+				case "design.polish", "entry.versions", "entry.delta", "critique.polish" -> "5b";
 				default -> "4b";
 			};
 			return what + " need a helper with phase " + phase + " (" + feature + "); this one does not have it";
@@ -894,5 +942,37 @@ final class DesignsImpl implements Designs {
 	private static long num(JsonObject o, String k) {
 		JsonElement e = o.get(k);
 		return e != null && e.isJsonPrimitive() && e.getAsJsonPrimitive().isNumber() ? e.getAsLong() : 0L;
+	}
+
+	// ------------------------------------------------------------------ phase 5b: polish
+
+	@Override
+	public CompletableFuture<String> polish(dev.larattalabs.architect.api.PolishRequest r) {
+		JsonObject m;
+		try {
+			m = Wire5b.polishMessage(r);
+		} catch (IllegalArgumentException e) {
+			return ApiImpl.onServerFuture(CompletableFuture.failedFuture(e));
+		}
+		return ask("design.polish", "polishing entries", m).thenApply(res -> {
+			String id = res.has("designId") ? res.get("designId").getAsString() : null;
+			if (id == null) {
+				throw new IllegalStateException("the helper sent no designId");
+			}
+			synchronized (this) {
+				meta.put(id, new Meta(r.owner(), r.ext().deepCopy()));
+			}
+			save();
+			Architect.LOGGER.info("API: polish {} of {} requested", id, r.entryId());
+			return id;
+		});
+	}
+
+	@Override
+	public CompletableFuture<Estimate> estimatePolish(dev.larattalabs.architect.api.PolishRequest r) {
+		JsonObject m = msg("design.estimate");
+		m.add("polish", Wire5b.spec(r));
+		m.addProperty("entryId", r.entryId());
+		return ask("design.polish", "polish estimates", m).thenApply(Wire5b::estimate);
 	}
 }

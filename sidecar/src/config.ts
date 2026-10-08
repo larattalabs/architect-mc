@@ -67,6 +67,8 @@ export interface Config {
   massing: MassingConfig;
   /** (5a) the critic */
   critique: CritiqueConfig;
+  /** (5b) polish: config polish.model (default: the entry's designer model) and polish.scopingModel (default Sonnet) */
+  polish: { model?: string | undefined; scopingModel: string };
 }
 
 export interface CritiqueConfig {
@@ -219,6 +221,7 @@ export function loadConfig(argv: string[], env: NodeJS.ProcessEnv = process.env)
       maxRedirects: typeof file.maxRedirects === 'number' && Number.isInteger(file.maxRedirects) && file.maxRedirects >= 0 && file.maxRedirects <= 10 ? file.maxRedirects : 3,
     },
     critique: critiqueConfig(file),
+    polish: polishConfig(file),
   };
 }
 
@@ -226,6 +229,11 @@ function critiqueConfig(file: Record<string, unknown>): CritiqueConfig {
   const c = file.critique && typeof file.critique === 'object' && !Array.isArray(file.critique) ? (file.critique as Record<string, unknown>) : {};
   const effort = c.effort === 'low' || c.effort === 'medium' || c.effort === 'high' ? c.effort : 'medium';
   return { model: (typeof c.model === 'string' && c.model.trim()) || DEFAULT_JOB_MODEL, effort };
+}
+
+function polishConfig(file: Record<string, unknown>): Config['polish'] {
+  const c = file.polish && typeof file.polish === 'object' && !Array.isArray(file.polish) ? (file.polish as Record<string, unknown>) : {};
+  return { ...(typeof c.model === 'string' && c.model.trim() ? { model: c.model.trim() } : {}), scopingModel: (typeof c.scopingModel === 'string' && c.scopingModel.trim()) || DEFAULT_JOB_MODEL };
 }
 
 function readConfigFile(dataDir: string): Record<string, unknown> {

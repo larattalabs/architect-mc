@@ -29,11 +29,16 @@ package dev.larattalabs.architect.api;
  * <li>{@code DEEP_WATER} (1.5.0): a road over water deeper than 1 (bridges are phase 6).</li>
  * <li>{@code TOO_LARGE} (1.5.0): a cell site of more than 1,000,000 cells.</li>
  * <li>{@code JOURNAL_UNAVAILABLE} (1.5.0): the world journal could not be read; nothing changes the world until it is fixed.</li>
+ * <li>{@code SITE_BUSY} (1.7.0): a delta on a site that is placing, a construction site (or construction delta) still building,
+ * being removed, or updating. Temporary: a queued item waits.</li>
+ * <li>{@code FRAME_CHANGED} (1.7.0): the new version changes {@code front} or the entrance's feet row: a re-place, not a delta.</li>
+ * <li>{@code VERSION_GONE} (1.7.0): the version the site stands at can't be found any more; it can be removed or placed again.</li>
+ * <li>{@code PLAYER_EDITS} (1.7.0): a delta with {@code PlayerEdits.REFUSE} would write cells the player changed.</li>
  * </ul>
  * New values are only ever appended.
  */
 public enum Reason {
 	PLAYER_IN_BOX, OCCUPIED, OVERLAP, LAVA, BLOCK_ENTITIES, BUILD_HEIGHT, DOOR_CUT, CREATIVE_ONLY_BLOCK, NOT_ALLOWED, NOT_LOADED,
 	UNKNOWN_BLUEPRINT, OTHER, CANCELLED, LOT_TOO_SMALL, TIMED_OUT, OVERLAP_BUSY, OVERLAP_OWNED, LAYER_DEPTH, COVERED, TOO_STEEP, DEEP_WATER,
-	TOO_LARGE, JOURNAL_UNAVAILABLE
+	TOO_LARGE, JOURNAL_UNAVAILABLE, SITE_BUSY, FRAME_CHANGED, VERSION_GONE, PLAYER_EDITS
 }

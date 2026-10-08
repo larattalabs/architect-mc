@@ -179,6 +179,10 @@ public final class Blueprints {
 				continue; // scratch folders, .DS_Store and the like
 			}
 			Path sidecar = folder.resolve(id + SIDECAR_SUFFIX);
+			// phase 5b: an interrupted version install is finished from its last complete versions/<m>/ (the sidecar does the same)
+			if (dev.larattalabs.architect.library.EntryVersions.repair(folder, id)) {
+				Architect.LOGGER.info("Library: {} repaired from its last complete version", id);
+			}
 			try {
 				if (!Files.exists(sidecar)) {
 					throw new IllegalArgumentException("no " + sidecar.getFileName());
@@ -197,6 +201,77 @@ public final class Blueprints {
 				problem(problems, sidecar.toString(), ex);
 			}
 		}
+	}
+
+	// ------------------------------------------------------------------ versions (phase 5b)
+
+	/**
+	 * One version of a library entry, loaded: its {@link Entry} (blueprint, template, JSON; {@code dir} = the folder it was read
+	 * from), the raw template tag as in the file (the blueprint delta reads its {@code blocks} list in file order), its parts map
+	 * ({@code <id>.parts.nbt}, null when absent) and the sha256 of the {@code .nbt}.
+	 */
+	public record Version(String id, int version, Entry entry, CompoundTag raw, @Nullable CompoundTag parts, String sha256) {
+	}
+
+	private static final Map<String, Version> VERSIONS = new java.util.concurrent.ConcurrentHashMap<>();
+
+	/** The head version number of an entry ({@code version} in its JSON; 1 for bundled and pre-5b entries). */
+	public static int headVersion(Entry e) {
+		return dev.larattalabs.architect.library.EntryVersions.version(e.json());
+	}
+
+	/**
+	 * Version {@code n} of entry {@code id}, loaded (cached: version folders never change once complete). A bundled entry has
+	 * only its head. Null when the entry or the version is gone. Needs the server (templates are upgraded with its fixers).
+	 */
+	public static @Nullable Version version(MinecraftServer server, String id, int n) {
+		Entry head = entry(id);
+		if (head == null) {
+			return null;
+		}
+		if (head.dir() == null) {
+			if (n != headVersion(head)) {
+				return null;
+			}
+			String key = "bundled:" + id + ":" + System.identityHashCode(head);
+			return VERSIONS.computeIfAbsent(key, k -> new Version(id, n, head, head.template().save(new CompoundTag()), null, ""));
+		}
+		Path where = dev.larattalabs.architect.library.EntryVersions.locate(head.dir(), id, n);
+		if (where == null) {
+			return null;
+		}
+		Path nbt = where.resolve(id + ".nbt");
+		String key;
+		try {
+			key = where + ":" + n + ":" + Files.getLastModifiedTime(nbt).toMillis() + ":" + Files.size(nbt);
+		} catch (IOException e) {
+			return null;
+		}
+		Version v = VERSIONS.get(key);
+		if (v != null) {
+			return v;
+		}
+		try {
+			com.google.gson.JsonObject json = JsonParser.parseString(Files.readString(where.resolve(id + SIDECAR_SUFFIX), StandardCharsets.UTF_8))
+				.getAsJsonObject();
+			Blueprint bp = Blueprint.fromJson(json);
+			CompoundTag raw = NbtIo.readCompressed(nbt, NbtAccounter.unlimitedHeap());
+			StructureTemplate t = readTemplate(server, raw.copy());
+			Path pf = where.resolve(id + ".parts.nbt");
+			CompoundTag parts = Files.isRegularFile(pf) ? NbtIo.readCompressed(pf, NbtAccounter.unlimitedHeap()) : null;
+			v = new Version(id, n, new Entry(bp, t, "user " + where + " (v" + n + ")", where, json), raw, parts,
+				dev.larattalabs.architect.library.EntryVersions.sha256(nbt));
+			VERSIONS.put(key, v);
+			return v;
+		} catch (Exception e) {
+			Architect.LOGGER.warn("Library: version {} of {} can't be read ({})", n, id, e.toString());
+			return null;
+		}
+	}
+
+	/** Drops the cached versions (a reload; folders that changed are read again). */
+	public static void forgetVersions() {
+		VERSIONS.clear();
 	}
 
 	/** A structure template tag, upgraded to the running game version. */

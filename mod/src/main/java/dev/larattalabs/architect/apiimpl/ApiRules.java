@@ -23,7 +23,7 @@ public final class ApiRules {
 	 */
 	public static final java.util.Set<String> JAVA_FEATURES = java.util.Set.of("sites", "events", "designs", "library", "survey", "survivalInfo",
 		"compositePreview", "batchPlacement", "siteGroups", "stages", "groupCrate", "journal", "overlapLayer", "roads", "cellSites",
-		"stackQuery");
+		"stackQuery", "entryVersions", "blueprintDelta", "deltaApply", "siteRevert", "deltaPreview");
 
 	private ApiRules() {
 	}
@@ -42,6 +42,7 @@ public final class ApiRules {
 					case "job.run", "jobs" -> "jobs";
 					case "job.tools", "jobTools" -> "jobTools";
 					case "blob.put", "blobs" -> "blobs";
+					case "design.polish" -> "polish"; // phase 5b: the helper can polish (the mod's own 5b features are Java names)
 					default -> Wire4b.FEATURE_NAMES.getOrDefault(f, Wire5a.FEATURE_NAMES.getOrDefault(f, f));
 				});
 			}
@@ -109,5 +110,10 @@ public final class ApiRules {
 	/** Sample columns along a side of {@code blocks} at {@code resolution}. */
 	public static int surveyColumns(int blocks, int resolution) {
 		return (blocks + resolution - 1) / resolution;
+	}
+
+	/** Whether a player has permission level 2 (cheats or op): INSTANT in a survival world (phase 5b deltas use it too). */
+	public static boolean permission2(net.minecraft.server.level.@Nullable ServerPlayer p) {
+		return p != null && p.createCommandSourceStack().permissions().hasPermission(net.minecraft.server.permissions.Permissions.COMMANDS_GAMEMASTER);
 	}
 }

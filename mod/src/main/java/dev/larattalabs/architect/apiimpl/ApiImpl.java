@@ -95,7 +95,14 @@ public final class ApiImpl implements ArchitectApi {
 		instance().designs.catchUpGroups();
 		instance().bibles.catchUp();
 		instance().library.catchUpReskins();
+		Versioned.catchUp(s); // phase 5b: ENTRY_VERSIONED missed while no world was loaded
+		if (!pinsHooked) {
+			pinsHooked = true;
+			dev.larattalabs.architect.site.Sites.addListener(x -> Versioned.sendPins());
+		}
 	}
+
+	private static boolean pinsHooked;
 
 	/** The client side registers its sidecar link and Library feature here (client init). */
 	public static void setClientBridge(@Nullable ClientBridge b) {
@@ -237,6 +244,10 @@ public final class ApiImpl implements ArchitectApi {
 	/** The link synced, or dropped: futures waiting for a variant fail when it drops. */
 	public static void linkChanged(boolean synced) {
 		boolean was = linkUp;
+		if (synced && !was) {
+			Versioned.resetPins();
+			runOnServer(Versioned::sendPins);
+		}
 		linkUp = synced;
 		if (was && !synced) {
 			int n = instance().library.linkLost();

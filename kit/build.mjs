@@ -4,9 +4,10 @@
 //
 // Imports kit/designs/<id>.mjs (`export const id`, `export const params` (optional), a default export taking
 // `{ palette, ...values }` and returning the Blueprint), writes
-// <out>/<id>.nbt + <out>/<id>.blueprint.json (default --out kit/out), then checks them (lib/check.mjs).
+// <out>/<id>.nbt + <out>/<id>.blueprint.json + (phase 5b) <out>/<id>.parts.nbt (the per-cell part map) (default --out
+// kit/out), then checks them (lib/check.mjs).
 // Prints warnings and errors one per line and `check: OK` or `check: FAILED`; --json prints one JSON line instead:
-// { ok, errors[], warnings[], nbt, sidecar, metrics } (metrics: lib/check.mjs computeMetrics, null when the check could not
+// { ok, errors[], warnings[], nbt, sidecar, parts, metrics } (metrics: lib/check.mjs computeMetrics, null when the check could not
 // compute them). Exit code 0 = OK, 1 = the check failed, 2 = the design threw or bad usage
 // (an unknown palette, a value outside its param's domain).
 // --palette: a preset name (lib/kit.mjs PALETTE_PRESETS) or JSON { preset?, wood?, stone?, roof?, accent? }; without it
@@ -158,7 +159,7 @@ async function main() {
   Object.assign(console, saved);
   const { bp, written, result } = r;
   if (o.json) {
-    console.log(JSON.stringify({ ok: result.ok, errors: result.errors, warnings: result.warnings, nbt: written.nbtPath, sidecar: written.jsonPath, metrics: result.metrics ?? null, ...(result.conformance ? { conformance: result.conformance } : {}) }));
+    console.log(JSON.stringify({ ok: result.ok, errors: result.errors, warnings: result.warnings, nbt: written.nbtPath, sidecar: written.jsonPath, parts: written.partsPath, metrics: result.metrics ?? null, ...(result.conformance ? { conformance: result.conformance } : {}) }));
   } else {
     const rel = (p) => path.relative(process.cwd(), p) || p;
     console.log(`${id}: ${bp.type}, ${bp.size.x}x${bp.size.y}x${bp.size.z}, ${written.blocks} blocks, ${written.bytes} bytes gz`);
