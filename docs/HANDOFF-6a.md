@@ -16,26 +16,16 @@ Working notes for resuming phase 6a. Deleted when the gate passes. The spec is d
 
 | Step (contract build order) | State |
 |---|---|
-| 1. timeout diagnosis, chunk-status verification, index bench | in progress |
-| 2. kit: IR, shapes, noise, realise, packing, lint, primitives, goldens, mega_bench | not started |
-| 3. sidecar: region.plan, worker pool, region.tiles | not started |
-| 4. mod: prepare, GENERATED_ONLY, CHUNK_BOUND, heights, tiles, records, RG points, undo | not started |
-| 5. API 1.8.0, apitest, api-compat | not started |
-| 6. gate items 1, 4-9 | not started |
+| 1. timeout diagnosis, chunk-status verification, index bench | timeouts reproduced + classified (artifacts/gate6a/timeouts.md; run 2 of the diag finishing); index bench PASS (1.7-2.9 MB, p99 11-14 ms at 2k); chunk status: ChunkGen (chunk map latest status, then IOWorker.scanChunk of `Status`), cost to measure in game (`dev.chunks.status`) |
+| 2. kit (sub-agent, branch phase/6a-kit) | engine core pushed (ad35d24); program API, plan CLI, mega_bench, region_small, goldens in progress |
+| 3. sidecar (sub-agent, phase/6a-sidecar) | DONE, merged (e4be292, ba316b8); 601 tests |
+| 4. mod | written: ChunkTickets, GENERATED_ONLY, CHUNK_BOUND, ChunkGen, GenCounter, Columns/Packed codecs, heights shards, TileStream, TileCheck (conds, ownership, trees, leaves entry), RegionItems (tile items, freeze-ahead), RegionsImpl (plan/prepare/realise/remove/records), Prepare governor, Drift, RegionHash (hash/snap/diff + classifier), MsptTrace, RG1-RG6; not yet run in game |
+| 5. API 1.8.0 / apitest / api-compat | API types + apitest region steps written; api-compat clean vs 1.7.0/1.6.0/1.5.0 jars and the 1.7.0 surface (artifacts/gate6a/api-compat.txt) |
+| 6. gate | harness tools/gate6a.mjs (base, smoke so far) |
 
-## Gate status
-
-| Gate item | State | Evidence |
-|---|---|---|
-| 1 unit/property tests | - | |
-| 2 timeout diagnosis | - | `timeouts.md` |
-| 3 chunk-status verification | - | |
-| 4 mega_bench A | - | |
-| 5 mega_bench B | - | |
-| 6 exactness | - | |
-| 7 crash RG1-RG6 | - | |
-| 8 invariant iii | - | |
-| 9 regressions | - | |
+Worktrees: `architect-mc-6a` (build), `architect-mc-6a-run` (gate client, detached; `gate6a.mjs start` checks out HEAD and builds
+the sidecar), `architect-mc-6a-diag` (0.10.0 + diag, ports 8892/8893 while it runs), `architect-mc-6a-kit`,
+`architect-mc-6a-sidecar` (sub-agents). The 1.7.0 jars: artifacts/gate6a/v0100/.
 
 ## Resume
 
