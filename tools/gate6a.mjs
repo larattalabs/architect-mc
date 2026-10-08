@@ -239,7 +239,7 @@ async function prepare(planId, inFlight) {
   return r;
 }
 async function realise(planId, opts = {}) {
-  const r = await call('dev.region.realise', { planId, lotEntries: LOT_ENTRIES, ...opts }, 300_000);
+  const r = await call('dev.region.realise', { planId, lotEntries: LOT_ENTRIES, fitLots: true, ...opts }, 300_000);
   if (r.refused) throw new Error(`realise refused: ${r.refused}`);
   log(`  realise ${planId} -> ${r.region}`);
   return r.region;

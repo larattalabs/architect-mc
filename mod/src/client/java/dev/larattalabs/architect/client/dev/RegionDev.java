@@ -152,7 +152,7 @@ public final class RegionDev {
 				return o;
 			});
 		});
-		DevBridge.register("dev.region.realise", 120_000, "{planId, lots?: {lotId: entry}, lotEntries?: [entry...] (every lot, round robin), "
+		DevBridge.register("dev.region.realise", 120_000, "{planId, lots?: {lotId: entry}, lotEntries?: [entry...] (every lot, round robin; with fitLots: the first entry that fits each lot), "
 			+ "load?: generated:<n>|loaded|bounded:<n> (default: generated, the bound from the items), autoApprove?: true, stages?, force?} - phase 6a: "
 			+ "Regions.realise -> {region} or {refused}", (req, mc) -> {
 				Fields f = Fields.of(req);
@@ -176,9 +176,13 @@ public final class RegionDev {
 					if (req.has("lotEntries")) {
 						List<String> entries = new ArrayList<>();
 						req.getAsJsonArray("lotEntries").forEach(e -> entries.add(e.getAsString()));
-						var plan = RegionsImpl.planLots(planId);
-						for (int i = 0; i < plan.size(); i++) {
-							lots.putIfAbsent(plan.get(i), entries.get(i % entries.size()));
+						if (req.has("fitLots") && req.get("fitLots").getAsBoolean()) {
+							RegionsImpl.fitLots(planId, entries).forEach(lots::putIfAbsent);
+						} else {
+							var plan = RegionsImpl.planLots(planId);
+							for (int i = 0; i < plan.size(); i++) {
+								lots.putIfAbsent(plan.get(i), entries.get(i % entries.size()));
+							}
 						}
 					}
 					return wrap(ArchitectApi.get().regions().realise(new RealiseRequest(planId, Mode.INSTANT, null, lots, load, auto, st, force, new JsonObject())),

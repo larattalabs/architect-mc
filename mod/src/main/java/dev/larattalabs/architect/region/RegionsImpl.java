@@ -808,6 +808,33 @@ public final class RegionsImpl implements Regions {
 		return p == null ? null : p.ir().claim().clone();
 	}
 
+	/**
+	 * Gate helper (DevBridge {@code dev.region.realise {fitLots}}): lot id -> the first of {@code entries}, starting at a rotating
+	 * index for variety, whose footprint fits the lot (LotFitting, as realise will); a lot nothing fits stays a pad.
+	 */
+	public static Map<String, String> fitLots(String planId, List<String> entries) {
+		Map<String, String> out = new LinkedHashMap<>();
+		PlanRec p = planRec(planId);
+		if (p == null || entries.isEmpty()) {
+			return out;
+		}
+		int k = 0;
+		for (Ir.Lot l : p.ir().lots()) {
+			int[] b = l.box();
+			for (int t = 0; t < entries.size(); t++) {
+				String e = entries.get((k + t) % entries.size());
+				Blueprint bp = Blueprints.get(e);
+				if (bp != null && LotFitting.fit(bp, new Anchors.Bounds(b[0], b[1], b[2], b[3], b[4], b[5]), l.front(), true, null, false).fits()
+					&& bp.sizeY() <= b[4] - b[1] + 1) {
+					out.put(l.id(), e);
+					break;
+				}
+			}
+			k++;
+		}
+		return out;
+	}
+
 	/** The lot ids of a plan (DevBridge: fill every lot round robin). */
 	public static List<String> planLots(String planId) {
 		PlanRec p = planRec(planId);
