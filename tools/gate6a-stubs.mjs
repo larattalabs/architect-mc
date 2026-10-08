@@ -11,18 +11,19 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const { Blueprint, PALETTES } = await import(pathToFileURL(path.join(root, 'kit', 'lib', 'kit.mjs')).href);
 const { writeBlueprint } = await import(pathToFileURL(path.join(root, 'kit', 'lib', 'write.mjs')).href);
 
+// footprints w x d include the 3 path rows in front (what fitToLot measures), so the 9x9 stub fits every mega_bench lot
 export const STUBS = [
   { id: 'g6a_stub_9', w: 9, h: 6, d: 9 },
   { id: 'g6a_stub_14', w: 14, h: 8, d: 12 },
-  { id: 'g6a_stub_19', w: 19, h: 11, d: 16 },
+  { id: 'g6a_stub_19', w: 19, h: 11, d: 15 },
   { id: 'g6a_stub_24', w: 24, h: 14, d: 20 },
 ];
 
 function stub({ id, w, h, d }) {
   const p = PALETTES.rustic;
   const X = w - 1;
-  const Z = d - 1;
-  const bp = new Blueprint({ id, type: 'custom', size: [w, h, d + 3], origin: [0, 0, 0], palette: p, interior: [1, 1, 1, X - 1, h - 2, Z - 1] });
+  const Z = d - 4; // the room; 3 path rows in front of it
+  const bp = new Blueprint({ id, type: 'custom', size: [w, h, d], origin: [0, 0, 0], palette: p, interior: [1, 1, 1, X - 1, h - 2, Z - 1] });
   bp.room([0, 0, 0, X, h - 1, Z]);
   const D = Math.floor(X / 2);
   bp.door(D, 1, Z, 'south');
