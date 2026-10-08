@@ -16,6 +16,7 @@ import type { ClientHandle } from '../src/server.js';
 import { Sidecar } from '../src/sidecar.js';
 import { SimDesigner } from '../src/sim.js';
 import { Store } from '../src/store.js';
+import { canonicalJson, sha256 } from '../src/regions.js';
 import { arsv, rmrf, SIDECAR_ROOT, tempDir, until } from './helpers.js';
 
 // ARCHITECT_REGION_KIT points it at another kit checkout (e.g. the kit branch's worktree)
@@ -164,5 +165,100 @@ describe.skipIf(!hasKit)('region plans and tiles with the real kit (mega_bench)'
       expect(Buffer.from(r.payload).equals(mine.payload), `${t.stage}/${t.set}/${t.key}`).toBe(true);
       expect(crypto.createHash('sha256').update(r.payload).digest('hex')).toBe(mine.sha);
     }
+  }, 300_000);
+});
+
+// ---- the real evaluator with a hand-made IR (until the kit's plan CLI and mega_bench land) ----------------------
+
+const hasRealise = fs.existsSync(KIT_SHAPE.realise);
+
+/** A mega_bench-sized stand-in: a 1000x1000 claim, a bowl carve (r 160, depth 28), stone platforms, a cobble sphere. */
+function standInIr(): string {
+  const ops = [
+    { op: 'shape', shape: { kind: 'bowl', c: [500, 72, 500], r: 160, depth: 28 }, material: null, cond: 0 },
+    ...Array.from({ length: 12 }, (_, i) => ({ op: 'shape', shape: { kind: 'box', min: [60 + (i % 4) * 230, 60, 60 + Math.floor(i / 4) * 300], max: [140 + (i % 4) * 230, 74, 140 + Math.floor(i / 4) * 300] }, material: 'minecraft:stone', cond: 0 })),
+    { op: 'shape', shape: { kind: 'sphere', c: [800, 80, 200], r: 30 }, material: 'minecraft:cobblestone', cond: 2 },
+  ];
+  const keys: string[] = [];
+  for (let tz = 0; tz < 16; tz++) for (let tx = 0; tx < 16; tx++) keys.push(`${tx},${tz}`);
+  const { minX, minZ, maxX, maxZ, minY, maxY } = KIT_SHAPE.claim;
+  const ir = { format: 1, id: 'stand_in', seed: '6', claim: { minX, minZ, maxX, maxZ, minY, maxY }, roles: {}, stages: ['ground'], parts: [{ id: 'ground', stage: 'ground', set: 'terrain', ops }], lots: [], anchors: {}, budget: {}, tiles: { ground: { terrain: keys, path: [] } } };
+  return canonicalJson(ir);
+}
+
+describe.skipIf(!hasRealise)('the pool with the real evaluator (a hand-made IR sent with the request)', () => {
+  let root: string;
+  const scs: Sidecar[] = [];
+  beforeAll(() => {
+    root = tempDir('arch-region-realeval-');
+  });
+  afterAll(async () => {
+    for (const sc of scs) await sc.close();
+    rmrf(root);
+  });
+
+  async function run(workers: number, order: 'forward' | 'shuffled') {
+    const dir = path.join(root, `w${workers}${order}`);
+    const cfg = loadConfig(['--data', path.join(dir, 'data'), '--library', path.join(dir, 'library'), '--kit', KIT, '--backend', 'sim'], {});
+    fs.mkdirSync(cfg.dataDir, { recursive: true });
+    cfg.regions.workers = workers;
+    cfg.regions.window = 4;
+    const sc = new Sidecar(cfg, new Store(cfg.dataDir, { debounceMs: 5 }), memoryLogger());
+    scs.push(sc);
+    await sc.start(new SimDesigner(sc, 5));
+    const irJson = standInIr();
+    const irSha = sha256(irJson);
+    const keys = (JSON.parse(irJson) as { tiles: { ground: { terrain: string[] } } }).tiles.ground.terrain;
+    const list = order === 'forward' ? keys : [...keys].reverse();
+    const out = new Map<string, string>();
+    let cells = 0;
+    let gz = 0;
+    let done = 0;
+    let rss = 0;
+    const errors: string[] = [];
+    const client: ClientHandle = {
+      id: 1, name: 'test', protocol: 2 as Protocol, paused: false, open: true, send() {},
+      async sendFlushed(m) {
+        if (m.type === 'region.tile') {
+          gz += Buffer.from(m.data, 'base64').length;
+          if (!m.more) { out.set(m.key, m.sha); cells += m.count; done++; }
+        } else if (m.type === 'region.tile.error') { errors.push(`${m.key}: ${m.message}`); done++; }
+      },
+    };
+    const heights = new Map(list.map((k) => [k, heightsOf(k).toString('base64')]));
+    const ask = async (batch: string[], withIr: boolean) => {
+      let ack: { ok: boolean; error?: string } | undefined;
+      await sc.handle({ v: 1, type: 'region.tiles.request', id: 't', planId: 'pstandin', irSha, ...(withIr ? { ir: irJson } : {}), tiles: batch.map((key) => ({ key, stage: 'ground', set: 'terrain', heights: heights.get(key)! })) } as never, (m) => { if (m.type === 'ack') ack = m; }, client);
+      return ack!;
+    };
+    expect((await ask(list.slice(0, 1), false)).error).toBe('ir_unknown');
+    const t0 = performance.now();
+    // the mod's way: W outstanding
+    let next = 0;
+    expect((await ask(list.slice(0, 4), true)).ok).toBe(true);
+    next = 4;
+    const sampler = setInterval(() => { rss = Math.max(rss, process.memoryUsage().rss); }, 50);
+    while (done < list.length) {
+      if (next - done < 4 && next < list.length) { const n = Math.min(4 - (next - done), list.length - next); expect((await ask(list.slice(next, next + n), false)).ok).toBe(true); next += n; }
+      else await new Promise((r) => setTimeout(r, 1));
+    }
+    clearInterval(sampler);
+    const wall = performance.now() - t0;
+    return { out, cells, gz, wall, errors, rss, irJson };
+  }
+
+  it('the same shas for 1 and 4 workers and both orders; the bytes equal a direct evalTile; numbers', async () => {
+    const a = await run(1, 'forward');
+    const b = await run(4, 'shuffled');
+    expect(a.errors).toEqual([]);
+    expect(b.errors).toEqual([]);
+    expect(a.out.size).toBe(256);
+    for (const [k, v] of a.out) expect(b.out.get(k), k).toBe(v);
+    const realise = (await import(pathToFileURL(KIT_SHAPE.realise).href)) as { evalTile: (ir: unknown, key: string, h: Uint8Array, o: object) => { payload: Uint8Array } };
+    for (const k of ['7,7', '0,0', '12,3']) {
+      const r = realise.evalTile(JSON.parse(a.irJson), k, heightsOf(k), { stage: 'ground', set: 'terrain' });
+      expect(crypto.createHash('sha256').update(r.payload).digest('hex'), k).toBe(a.out.get(k));
+    }
+    for (const [w, r] of [[1, a], [4, b]] as const) console.log(`[numbers] real evaluator, stand-in IR, ${w} worker(s): ${r.cells} cells in ${Math.round(r.wall)} ms = ${Math.round(r.cells / (r.wall / 1000))} cells/s, ${(r.gz / r.cells).toFixed(3)} gzip bytes/cell, peak RSS ${Math.round(r.rss / 1048576)} MB`);
   }, 300_000);
 });
