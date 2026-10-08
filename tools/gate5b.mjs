@@ -749,8 +749,10 @@ steps.edits = async () => {
     const be = await deltaCheck(site, 2, { playerEdits: mode });
     check(!be.applicable && be.refusals.some((r) => r.reason === 'BLOCK_ENTITIES'), `edits: a filled chest in a changed cell refuses BLOCK_ENTITIES (${mode})`, be.refusals);
   }
+  // Remove keeps 4e's blockers (filled containers): empty both chests first, the player's block edits stay
+  for (const c of [changedCell, chest[0]]) await cmd(`/data merge block ${c.replaceAll(',', ' ')} {Items:[]}`);
   const rm = await result(await api(`remove ${site} - force keep`), 300_000);
-  check(rm.removed, 'edits: remove (force: the player\'s chest)', rm.removed ? undefined : rm);
+  check(rm.removed, 'edits: remove (the chests emptied; the player\'s blocks still there)', rm.removed ? undefined : rm);
   const h1 = await hash(BOX);
   check(h1.sha256 === h0.sha256, 'edits: Remove restores the pre-site world, the edits included (E3)', { h0: h0.sha256, h1: h1.sha256 });
 };

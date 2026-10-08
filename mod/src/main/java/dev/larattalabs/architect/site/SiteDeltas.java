@@ -531,9 +531,13 @@ public final class SiteDeltas {
 				break;
 			}
 		}
-		// a container the player filled in a Δ cell
+		// a container the player filled in a Δ cell, in any mode (a kept cell too: docs/CONTRACT.md phase 5b "Refusals")
 		List<String> filled = new ArrayList<>();
-		for (long p : o.write().keySet()) {
+		java.util.LinkedHashSet<Long> beCells = new java.util.LinkedHashSet<>(o.write().keySet());
+		for (DeltaPlanner.Kept k : o.edited()) {
+			beCells.add(k.pos());
+		}
+		for (long p : beCells) {
 			if (cap != null) {
 				Value v = cap.at(p);
 				if (v != null && v.nbt() != null && !v.nbt().getListOrEmpty("Items").isEmpty()) {
