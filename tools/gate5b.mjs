@@ -780,13 +780,14 @@ steps.layers = async () => {
   const BOX = [-20, 50, -20, 80, 100, 75];
   await fresh('G5B Layers', FLAT);
   await tp(-30.5, 95, -30.5);
-  const h0 = await hash(BOX);
-  const T = await call('dev.cells.place', { kind: 'gate5b:pad', pad: { minX: 2, maxX: 62, minZ: 4, maxZ: 52, y: 66, top: 'minecraft:coarse_dirt', depth: 3, clear: 10 } },
-    600_000);
-  check(T.placed, `layers: pad T placed (${T.siteId})`, T.placed ? undefined : T);
-  const tree = await cmd('/place feature minecraft:oak 12 67 25');
+  // a worldgen oak west of the tavern, off the pad: v3's west wing (x 15..19) grows into its canopy (x 11..15)
+  const tree = await cmd('/place feature minecraft:oak 13 65 25');
   check(tree.success !== false, 'layers: a worldgen oak west of the tavern', tree.messages);
   await settle(2000);
+  const h0 = await hash(BOX);
+  const T = await call('dev.cells.place', { kind: 'gate5b:pad', pad: { minX: 17, maxX: 62, minZ: 4, maxZ: 52, y: 66, top: 'minecraft:coarse_dirt', depth: 3, clear: 10 } },
+    600_000);
+  check(T.placed, `layers: pad T placed (${T.siteId})`, T.placed ? undefined : T);
   // the tavern v1, LAYERed on T
   await installEntry(ID, path.join(V, 'v1'));
   const placed = await result(await api(`place ${ID} 20 67 20 INSTANT unowned noactor 0 layer`));
