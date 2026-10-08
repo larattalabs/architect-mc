@@ -205,7 +205,9 @@ async function fresh(name, from) {
   copyWorld(from, name);
   await openWorld(name);
 }
+/** The player as a spectator (it loads chunks like a player but never stands in a box: realise and undo don't wait for it). */
 async function tp(x, y, z) {
+  await cmd('/gamemode spectator');
   await cmd(`/tp @s ${x} ${y} ${z} 0 30`);
   await call('dev.waitChunks', { timeoutMs: 60_000 }, 90_000).catch(() => {});
   await sleep(1500);
