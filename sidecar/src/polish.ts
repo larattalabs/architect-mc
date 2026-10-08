@@ -597,7 +597,7 @@ export class Polishes {
    * A critic call (5a's critic, a fresh query) on a build: the base's report, or a step's result with the base's issues
    * as `previous` (so it fills `resolved`). Twice on a failure; undefined when both failed.
    */
-  private async criticCall(id: string, w: PolishWork, backend: PolishBackend, build: Base, o: { report: boolean; previous: CritiqueIssue[] | undefined; round: number; tag: string; jobKey: 'report' | 'step'; sim?: unknown }): Promise<Verdict | undefined> {
+  private async criticCall(id: string, w: PolishWork, backend: PolishBackend, build: Base, o: { report: boolean; previous: CritiqueIssue[] | undefined; round: number; tag: string; jobKey: 'report' | 'step'; sim?: ((dims: string[]) => unknown) | undefined }): Promise<Verdict | undefined> {
     const sc = this.sc;
     const scratch = this.scratchOf(id);
     const d = sc.designs.get(id)!;
@@ -626,7 +626,7 @@ export class Polishes {
       if (!jobId || !sc.jobs.book.get(jobId)) {
         const job = sc.jobs.runInternal(
           { kind: 'structured', prompt: criticPrompt(ctx), system: CRITIC_SYSTEM, model: w.spec.criticModel, effort: w.spec.criticEffort, schema: verdictSchema(dims, views), maxTurns: 3, ...(Number.isFinite(left) ? { budgetUsd: Math.max(0.01, r4(left)) } : {}), owner: POLISH_OWNER, tag: `design ${id} polish ${o.tag}` },
-          { images, ...(backend.name === 'sim' ? { simAnswer: o.sim ?? this.simBaseVerdict(d.request.notes, dims, parts, views) } : {}) },
+          { images, ...(backend.name === 'sim' ? { simAnswer: o.sim ? o.sim(dims) : this.simBaseVerdict(d.request.notes, dims, parts, views) } : {}) },
         );
         jobId = job.id;
         if (o.jobKey === 'report') w.reportJobId = jobId;
@@ -852,7 +852,7 @@ export class Polishes {
     }
     const result: Base = { dir: stepDir, warnings: warningsByRule((readObj(path.join(stepDir, 'check.json'))?.warnings as string[] | undefined) ?? []), cells: this.cellCount(stepDir, w.bp) };
     const base = w.base!;
-    const v = await this.criticCall(id, w, backend, result, { report: false, previous: base.verdict!.issues, round: cur.n, tag: `step ${cur.n}`, jobKey: 'step', sim: backend.name === 'sim' ? this.simStepVerdict(d.request.notes, w, cur) : undefined });
+    const v = await this.criticCall(id, w, backend, result, { report: false, previous: base.verdict!.issues, round: cur.n, tag: `step ${cur.n}`, jobKey: 'step', sim: backend.name === 'sim' ? (dims) => this.simStepVerdict(d.request.notes, w, cur, dims) : undefined });
     if (!v) {
       this.pushStep(id, w, cur, false, null, 'critic_failed');
       delete w.current;
@@ -1072,13 +1072,13 @@ export class Polishes {
    * (sim) A step's verdict from its token (notes `sim:polish=<t1>/<t2>/...`): `r` resolves the target (default), `n`
    * does not, `P` adds a new P0, `d<+-x>` moves the overall from the base's (default +1), `F` makes the critic fail.
    */
-  simStepVerdict(notes: string | undefined, w: PolishWork, cur: CurrentStep): unknown {
+  simStepVerdict(notes: string | undefined, w: PolishWork, cur: CurrentStep, dimsNow: string[]): unknown {
     const tok = simToken(notes, cur.n);
     if (tok.includes('F')) return { simFail: 'the simulated polish critic failed' };
     const base = w.base!.verdict!;
     const delta = Number(/d([+-]?[\d.]+)/.exec(tok)?.[1] ?? '1');
     const overall = Math.max(1, Math.min(10, (base.overall ?? 5) + delta));
-    const dims = Object.keys(base.scores).length ? Object.keys(base.scores) : ['silhouette', 'legibility', 'craft', 'materials', 'brief'];
+    const dims = dimsNow;
     const resolvedIdx = !tok.includes('n') && cur.targetIndex !== null ? [cur.targetIndex] : [];
     const issues = base.issues.filter((_i, k) => !resolvedIdx.includes(k));
     if (tok.includes('P')) issues.unshift({ priority: 'P0', part: 'simulated_new_p0', view: 'iso', what: 'a new P0 (simulated)', fix: 'undo it' });
