@@ -652,6 +652,337 @@ steps.chains = async () => {
   return { states: states.length, scripts: scripts.length };
 };
 
+/** The world cells of a box as "x,y,z" -> state string (dev.region.hash cells). */
+async function cellsIn(box) {
+  const h = await call('dev.region.hash', { box, cells: true }, 300_000);
+  const m = new Map();
+  for (const l of h.list ?? h.cells ?? []) {
+    const i = l.indexOf(' ');
+    m.set(l.slice(0, i), l.slice(i + 1));
+  }
+  return m;
+}
+const blockOf = (st) => (/\{([^}]+)\}/.exec(st) ?? [])[1] ?? st;
+const propsOf = (st) => (/\[(.*)\]/.exec(st) ?? [])[1] ?? '';
+const setState = (pos, st) => cmd(`/setblock ${pos.replaceAll(',', ' ')} ${blockOf(st)}${propsOf(st) ? '[' + propsOf(st) + ']' : ''}`);
+
+/**
+ * Gate item 2 "Minimality" and "Player edits": dev.writes.count equals |Δ'| plus the reshaped guards; a chest with items in an
+ * unchanged part keeps them; a door opened in an unchanged part stays open; a block placed in a removed part's cell is kept
+ * (KEEP, reported), replaced (OVERWRITE), or refuses (REFUSE); a filled chest in a changed cell refuses BLOCK_ENTITIES; an opened
+ * door in a changed cell counts as the site's. Remove at the end gives the pre-site world back, the edits included (E3).
+ */
+steps.edits = async () => {
+  if (!dev) await connect();
+  await flatBase();
+  const V = tavernVersions();
+  const ID = 'g5b_tavern';
+  const AT = [20, 64, 20];
+  const BOX = [-12, 50, -12, 76, 100, 70];
+  await fresh('G5B Edits', FLAT);
+  await tp(-30.5, 90, -30.5);
+  const h0 = await hash(BOX);
+  const site = await placeAtV1(ID, V, AT, 0);
+  const c2 = await deltaCheck(site, 2, { cells: true });
+  const inDelta = new Set([...(c2.ghost?.added ?? []), ...(c2.ghost?.removed ?? []), ...(c2.ghost?.changed ?? [])]);
+  const world = await cellsIn(BOX);
+  // a chest and a door in parts v2 leaves alone
+  const chest = [...world.entries()].find(([p, st]) => blockOf(st) === 'minecraft:chest' && !inDelta.has(p));
+  const doorLow = [...world.entries()].find(([p, st]) => /_door/.test(blockOf(st)) && /half=lower/.test(st) && !inDelta.has(p) && blockOf(st) !== 'minecraft:oak_door');
+  check(!!chest && !!doorLow, `edits: a chest (${chest?.[0]}) and a door (${doorLow?.[0]}) outside the delta`);
+  await cmd(`/item replace block ${chest[0].replaceAll(',', ' ')} container.0 with minecraft:diamond 7`);
+  const [dx, dy, dz] = doorLow[0].split(',').map(Number);
+  const upPos = `${dx},${dy + 1},${dz}`;
+  await setState(upPos, world.get(upPos).replace('open=false', 'open=true'));
+  await setState(doorLow[0], doorLow[1].replace('open=false', 'open=true'));
+  // minimality: the writes of the apply, counted
+  const box = c2.box;
+  const grownBox = [box[0] - 2, box[1] - 2, box[2] - 2, box[3] + 2, box[4] + 2, box[5] + 2];
+  await call('dev.writes.count', { box: grownBox });
+  const a2 = await deltaApply(site, 2);
+  const wc = await call('dev.writes.count', { box: grownBox, cells: true });
+  check(a2.applied && wc.count === a2.written + a2.reshaped, `edits: block writes ${wc.count} = |Δ'| ${a2.written} + reshaped guards ${a2.reshaped}`, { wc: wc.count, a2 });
+  const after = await cellsIn(BOX);
+  check(/open=true/.test(after.get(doorLow[0])), 'edits: the door opened in an unchanged part stays open');
+  const items = await cmd(`/data get block ${chest[0].replaceAll(',', ' ')} Items`);
+  check(JSON.stringify(items.messages).includes('diamond'), 'edits: the chest with items in an unchanged part keeps them', items.messages);
+  // back to v1 for the edit cases
+  check((await revert(site, 1)).applied, 'edits: revert to v1');
+  // an opened door in a changed cell (the yard's gate door, oak in v1, spruce in v2) counts as the site's: written, not kept
+  const w1 = await cellsIn(BOX);
+  const gate = [...w1.entries()].find(([p, st]) => blockOf(st) === 'minecraft:oak_door' && /half=lower/.test(st));
+  const [gx, gy, gz] = gate[0].split(',').map(Number);
+  await setState(`${gx},${gy + 1},${gz}`, w1.get(`${gx},${gy + 1},${gz}`).replace('open=false', 'open=true'));
+  await setState(gate[0], gate[1].replace('open=false', 'open=true'));
+  const cg = await deltaCheck(site, 2, { cells: true });
+  check(!(cg.ghost?.kept ?? []).includes(gate[0]) && (cg.ghost?.changed ?? []).includes(gate[0]), 'edits: an opened door in a changed cell counts as ours (written, not kept)');
+  // a block placed in a removed part's cell (the porch)
+  const removedCell = (cg.ghost?.removed ?? []).find((p) => w1.get(p) && !/air/.test(blockOf(w1.get(p))));
+  await cmd(`/setblock ${removedCell.replaceAll(',', ' ')} minecraft:gold_block`);
+  const refuse = await deltaCheck(site, 2, { playerEdits: 'REFUSE' });
+  check(!refuse.applicable && refuse.refusals.some((r) => r.reason === 'PLAYER_EDITS'), 'edits: REFUSE refuses PLAYER_EDITS', refuse.refusals);
+  const keep = await deltaApply(site, 2, { playerEdits: 'KEEP' });
+  const wk = await cellsIn(BOX);
+  check(keep.applied && keep.kept.some((k) => k.pos === removedCell) && blockOf(wk.get(removedCell)) === 'minecraft:gold_block',
+    'edits: KEEP keeps the player\'s block and reports it', keep.kept);
+  check(blockOf(wk.get(gate[0])) === 'minecraft:spruce_door', 'edits: the opened gate door was replaced (spruce)');
+  check((await revert(site, 1)).applied, 'edits: revert to v1 again');
+  const wr = await cellsIn(BOX);
+  check(blockOf(wr.get(removedCell)) === 'minecraft:gold_block', 'edits: the kept cell is untouched by the revert');
+  const over = await deltaApply(site, 2, { playerEdits: 'OVERWRITE' });
+  const wo = await cellsIn(BOX);
+  check(over.applied && blockOf(wo.get(removedCell)) !== 'minecraft:gold_block', `edits: OVERWRITE replaces it (${blockOf(wo.get(removedCell))})`);
+  check((await revert(site, 1)).applied, 'edits: revert to v1 a third time');
+  // a filled chest in a changed cell refuses BLOCK_ENTITIES (any mode)
+  const cc = await deltaCheck(site, 2, { cells: true });
+  const changedCell = (cc.ghost?.changed ?? []).find((p) => !/door/.test(blockOf(wr.get(p) ?? '')));
+  await cmd(`/setblock ${changedCell.replaceAll(',', ' ')} minecraft:chest`);
+  await cmd(`/item replace block ${changedCell.replaceAll(',', ' ')} container.0 with minecraft:emerald 3`);
+  for (const mode of ['KEEP', 'OVERWRITE']) {
+    const be = await deltaCheck(site, 2, { playerEdits: mode });
+    check(!be.applicable && be.refusals.some((r) => r.reason === 'BLOCK_ENTITIES'), `edits: a filled chest in a changed cell refuses BLOCK_ENTITIES (${mode})`, be.refusals);
+  }
+  const rm = await result(await api(`remove ${site} - force keep`), 300_000);
+  check(rm.removed, 'edits: remove (force: the player\'s chest)', rm.removed ? undefined : rm);
+  const h1 = await hash(BOX);
+  check(h1.sha256 === h0.sha256, 'edits: Remove restores the pre-site world, the edits included (E3)', { h0: h0.sha256, h1: h1.sha256 });
+};
+
+function permutations(a) {
+  if (a.length <= 1) return [a];
+  const out = [];
+  a.forEach((x, i) => permutations([...a.slice(0, i), ...a.slice(i + 1)]).forEach((p) => out.push([x, ...p])));
+  return out;
+}
+
+/**
+ * Gate item 2 "Layered and leaves" and "Covered": the tavern LAYERed on a cell-site pad T next to a worldgen tree, its deltas
+ * growing over T and into the tree's leaves (held leaves, the ring), a revert exact (E2); X (a cabin) LAYERed over the tavern's
+ * east side: a delta touching X's cells refuses COVERED naming X, one that doesn't applies; then every removal order of
+ * {T, tavern, X} (6, each from a copy of the same world) ends at the world before T, every cell and block entity.
+ */
+steps.layers = async () => {
+  if (!dev) await connect();
+  await flatBase();
+  const V = tavernVersions();
+  const ID = 'g5b_tavern';
+  const BOX = [-20, 50, -20, 80, 100, 75];
+  await fresh('G5B Layers', FLAT);
+  await tp(-30.5, 95, -30.5);
+  const h0 = await hash(BOX);
+  const T = await call('dev.cells.place', { kind: 'gate5b:pad', pad: { minX: 2, maxX: 62, minZ: 4, maxZ: 52, y: 66, top: 'minecraft:coarse_dirt', depth: 3, clear: 10 } },
+    600_000);
+  check(T.placed, `layers: pad T placed (${T.siteId})`, T.placed ? undefined : T);
+  const tree = await cmd('/place feature minecraft:oak 12 67 25');
+  check(tree.success !== false, 'layers: a worldgen oak west of the tavern', tree.messages);
+  await settle(2000);
+  // the tavern v1, LAYERed on T
+  await installEntry(ID, path.join(V, 'v1'));
+  const placed = await result(await api(`place ${ID} 20 67 20 INSTANT unowned noactor 0 layer`));
+  check(placed.placed, `layers: tavern placed on T (${placed.siteId})`, placed.placed ? undefined : placed);
+  const site = placed.siteId;
+  for (const v of ['v2', 'v3', 'v4', 'v5']) await installVersion(ID, path.join(V, v), v);
+  const pre2 = await hash(BOX);
+  const a2 = await deltaApply(site, 2, { overlap: 'LAYER' });
+  check(a2.applied, `layers: apply v2 over T (${a2.written} cells)`, a2.applied ? undefined : a2);
+  const pre3 = await hash(BOX);
+  const a3 = await deltaApply(site, 3, { overlap: 'LAYER' });
+  check(a3.applied, `layers: apply v3, growing west into the oak's leaves (${a3.written} cells)`, a3.applied ? undefined : a3);
+  const js = await journal();
+  const leaves = (js.entries ?? []).filter((e) => e.site === site && e.kind === 'leaves' && e.status !== 'UNDONE');
+  log(`  layers: ${leaves.length} leaves entr(ies) held by ${site}`);
+  const r2 = await revert(site, 2);
+  const back2 = await hash(BOX);
+  check(r2.applied && back2.sha256 === pre3.sha256, 'layers: revert of v3 (the growth into leaves) restores the world before it (E2)', { want: pre3.sha256,
+    got: back2.sha256 });
+  check((await deltaApply(site, 3, { overlap: 'LAYER' })).applied, 'layers: apply v3 again');
+  const a5 = await deltaApply(site, 5, { overlap: 'LAYER' });
+  check(a5.applied, 'layers: apply v5 (shrinks)', a5.applied ? undefined : a5);
+  // X: a cabin LAYERed over the tavern's east side (cells the tavern's earlier wing growth still owns)
+  const X = await result(await api('place cabin 36 67 20 INSTANT unowned noactor 0 layer'));
+  check(X.placed, `layers: X layered over the tavern's east side (${X.siteId})`, X.placed ? undefined : X);
+  const cov = await deltaCheck(site, 2, { overlap: 'LAYER' });
+  check(!cov.applicable && cov.refusals.some((r) => r.reason === 'COVERED' && r.message.includes(X.siteId)), `layers: a delta touching X's cells refuses COVERED naming ${X.siteId}`,
+    cov.refusals);
+  const free = await deltaApply(site, 1, { overlap: 'LAYER' });
+  check(free.applied, `layers: a delta that leaves X's cells alone applies (v5 -> v1, ${free.written} cells)`, free.applied ? undefined : free);
+  void pre2;
+  // every removal order of {T, tavern, X}, each from a copy of this world
+  await cmd('/save-all flush');
+  await leaveWorld();
+  copyWorld('G5B Layers', 'G5B LayersBase');
+  const ids = { T: T.siteId, H: site, X: X.siteId };
+  for (const order of permutations(['T', 'H', 'X'])) {
+    await fresh('G5B LayersOrder', 'G5B LayersBase');
+    for (const k of order) {
+      const rm = await result(await api(`remove ${ids[k]} - noforce keep`), 300_000);
+      check(rm.removed, `layers ${order.join('')}: remove ${k}`, rm.removed ? undefined : rm);
+      await settle(1000);
+    }
+    const h = await hash(BOX);
+    check(h.sha256 === h0.sha256, `layers ${order.join('')}: the world before T is back exactly`, { h0: h0.sha256, h: h.sha256 });
+  }
+};
+
+/** Arms {@code point}, runs {@code action} in a fresh copy of {@code base}, waits for the halt, restarts the client into that copy. */
+async function killRun(point, base, action) {
+  await fresh('G5B Crash', base);
+  await tp(-30.5, 90, -30.5);
+  await cmd('/save-all flush');
+  await settle(1000);
+  await call('dev.journal.killAt', { point });
+  const t0 = Date.now();
+  action().catch(() => {});
+  const died = await waitDead(180_000);
+  check(died, `crash ${point}: the JVM halted at the kill point (${((Date.now() - t0) / 1000).toFixed(1)} s)`);
+  if (!died) {
+    await connect();
+    await call('dev.journal.killAt', { point: null });
+    return false;
+  }
+  await sleep(2000);
+  await startClient('G5B Crash');
+  await tp(-30.5, 90, -30.5);
+  await settle(5000);
+  const j = await journal();
+  check(j.open && !j.unavailable, `crash ${point}: the journal opens`, { open: j.open, unavailable: j.unavailable });
+  return true;
+}
+
+/**
+ * Gate item 2 "Crash": D1-D8 of an apply and K5-K7 of a revert, each by dev.journal.killAt and a restart: the states the
+ * contract's table promises (before D3 nothing written and the record at a; D4-D6 an unclean stop rolls back to a; D7-D8 the
+ * journal wins, b; K5 nothing changed; K6 the undo never reached the disk: the deltas come back; K7 the revert settles), and a
+ * final Remove exact.
+ */
+steps.crash = async () => {
+  if (!dev) await connect();
+  await flatBase();
+  const V = tavernVersions();
+  const ID = 'g5b_tavern';
+  const BOX = [-12, 50, -12, 76, 100, 70];
+  await fresh('G5B CrashBase', FLAT);
+  await tp(-30.5, 90, -30.5);
+  const h0 = await hash(BOX);
+  const site = await placeAtV1(ID, V, [20, 64, 20], 0);
+  const H1 = (await hash(BOX)).sha256;
+  check((await deltaApply(site, 2)).applied, 'crash: reference apply v1 -> v2');
+  const H2 = (await hash(BOX)).sha256;
+  check((await revert(site, 1)).applied, 'crash: back to v1 (the base world)');
+  check((await hash(BOX)).sha256 === H1, 'crash: the base world is at v1 again');
+  await cmd('/save-all flush');
+  await leaveWorld();
+  copyWorld('G5B CrashBase', 'G5B CrashV1');
+  const out = {};
+  const expect = { D1: 1, D2: 1, D3: 1, D4: 1, D5: 1, D6: 1, D7: 2, D8: 2 };
+  for (const point of Object.keys(expect)) {
+    if (!(await killRun(point, 'G5B CrashV1', () => deltaApply(site, 2)))) continue;
+    const h = await history(site);
+    const now = (await hash(BOX)).sha256;
+    const want = expect[point] === 1 ? H1 : H2;
+    const j = await journal();
+    const placing = (j.entries ?? []).filter((e) => e.site === site && e.status === 'PLACING');
+    check(h.version === expect[point] && now === want && placing.length === 0, `crash ${point}: the site is at v${expect[point]} and the world matches it`,
+      { version: h.version, now, want, placing, versioning: h.versioning });
+    out[point] = { version: h.version, ok: now === want };
+    const rm = await result(await api(`remove ${site} - noforce keep`), 300_000);
+    check(rm.removed && (await hash(BOX)).sha256 === h0.sha256, `crash ${point}: a final Remove matches the pre-site world`, rm.removed ? undefined : rm);
+  }
+  // the revert's kill points: from v2
+  await fresh('G5B CrashV2', 'G5B CrashV1');
+  check((await deltaApply(site, 2)).applied, 'crash: the v2 base for the revert points');
+  await cmd('/save-all flush');
+  await leaveWorld();
+  const rexpect = { K5: 2, K6: 2, K7: 1 };
+  for (const point of Object.keys(rexpect)) {
+    if (!(await killRun(point, 'G5B CrashV2', () => revert(site, 1)))) continue;
+    await settle(3000);
+    const h = await history(site);
+    const now = (await hash(BOX)).sha256;
+    const want = rexpect[point] === 1 ? H1 : H2;
+    check(h.version === rexpect[point] && now === want, `crash ${point}: after the restart the site is at v${rexpect[point]} and the world matches it`,
+      { version: h.version, now, want, versioning: h.versioning });
+    out[point] = { version: h.version, ok: now === want };
+    const rm = await result(await api(`remove ${site} - noforce keep`), 300_000);
+    check(rm.removed && (await hash(BOX)).sha256 === h0.sha256, `crash ${point}: a final Remove matches the pre-site world`, rm.removed ? undefined : rm);
+  }
+  return out;
+};
+
+/**
+ * Gate item 2 "History": 8 deltas in a row on the same cells (v1 <-> v2): the stack depth stays at most 8, the 7th folds the
+ * oldest into the base, every retained version is reached by a revert exactly (v1 and v2 hashes), and Remove is exact.
+ */
+steps.history = async () => {
+  if (!dev) await connect();
+  await flatBase();
+  const V = tavernVersions();
+  const ID = 'g5b_tavern';
+  const BOX = [-12, 50, -12, 76, 100, 70];
+  await fresh('G5B History', FLAT);
+  await tp(-30.5, 90, -30.5);
+  const h0 = await hash(BOX);
+  const site = await placeAtV1(ID, V, [20, 64, 20], 0);
+  const want = { 1: (await hash(BOX)).sha256 };
+  const c = await deltaCheck(site, 2, { cells: true });
+  const roofCell = (c.ghost?.changed ?? [])[0];
+  let maxDepth = 0;
+  let folded = false;
+  for (let i = 0; i < 8; i++) {
+    const to = i % 2 === 0 ? 2 : 1;
+    const a = await deltaApply(site, to);
+    check(a.applied, `history: delta ${i + 1} (v${to})`, a.applied ? undefined : a);
+    if (a.notes.some((n) => n.startsWith('history folded'))) folded = true;
+    want[to] = want[to] ?? (await hash(BOX)).sha256;
+    const [x, y, z] = roofCell.split(',').map(Number);
+    const st = await call('dev.journal.at', { x, y, z });
+    const depth = (st.stack ?? st.layers ?? []).length;
+    maxDepth = Math.max(maxDepth, depth);
+  }
+  check(maxDepth <= 8, `history: the stack at a changed cell stays at most 8 deep (max ${maxDepth})`);
+  check(folded, 'history: the 7th delta folded the oldest into the base (a note says so)');
+  const js = await journal();
+  const deltas = (js.entries ?? []).filter((e) => e.site === site && e.kind === 'delta' && e.status !== 'UNDONE');
+  check(deltas.length <= 6, `history: ${deltas.length} delta entries stand (at most 6)`);
+  const h = await history(site);
+  const chain = h.chain.slice(0, -1).reverse();
+  for (const k of chain) {
+    const r = await revert(site, k);
+    const now = (await hash(BOX)).sha256;
+    check(r.applied && now === want[k], `history: revert to retained v${k} is exact`, { got: now, want: want[k], r: r.applied ? undefined : r });
+  }
+  const rm = await result(await api(`remove ${site} - noforce keep`), 300_000);
+  check(rm.removed && (await hash(BOX)).sha256 === h0.sha256, 'history: Remove is exact', rm.removed ? undefined : rm);
+  return { maxDepth, folded, deltas: deltas.length, chain: h.chain };
+};
+
+/** Gate item 2 "Ghost": the delta preview with ADDED, REMOVED, CHANGED and KEPT tints, in a screenshot (looked at by the builder). */
+steps.ghost = async () => {
+  if (!dev) await connect();
+  await flatBase();
+  const V = tavernVersions();
+  const ID = 'g5b_tavern';
+  await fresh('G5B Ghost', FLAT);
+  await tp(-30.5, 90, -30.5);
+  const site = await placeAtV1(ID, V, [20, 64, 20], 0);
+  check((await deltaApply(site, 2)).applied && (await revert(site, 1)).applied, 'ghost: v2 applied and reverted (a history)');
+  const c = await deltaCheck(site, 3, { cells: true });
+  const removed = (c.ghost?.removed ?? []).concat(c.ghost?.changed ?? []);
+  // a player block in a cell the update writes: KEEP keeps it (yellow)
+  const kept = removed[Math.floor(removed.length / 2)];
+  await cmd(`/setblock ${kept.replaceAll(',', ' ')} minecraft:gold_block`);
+  const g = await call('dev.site.delta.preview', { site, version: 3 }, 60_000);
+  log(`  ghost: +${g.added} -${g.removed} ~${g.changed} kept ${g.kept.length}`);
+  await settle(2500);
+  const st = await call('dev.composite.state', {}, 20_000);
+  check(JSON.stringify(st).includes('architect:delta'), 'ghost: the delta composite shows', st);
+  await call('dev.camera', { x: 50, y: 82, z: 52, lookAt: { x: 26, y: 68, z: 25 }, mode: 'spectator' }, 30_000);
+  const shot = await call('dev.screenshot', { name: 'gate5b-delta-ghost', frames: 10 }, 180_000);
+  log(`  ghost screenshot: ${shot.path}`);
+  await call('dev.release', {}, 20_000);
+  return { shot: shot.path, preview: g };
+};
+
 const which = process.argv[2];
 if (!which || !steps[which]) {
   console.log(`steps: ${Object.keys(steps).join(', ')}`);
