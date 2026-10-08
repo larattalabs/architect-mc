@@ -80,7 +80,11 @@ export function encode(root) {
 }
 
 export function encodeGzip(root) {
-  return zlib.gzipSync(encode(root), { level: 9 });
+  const out = zlib.gzipSync(encode(root), { level: 9 });
+  // The gzip header's OS byte depends on the platform zlib was built for (3 on Linux, 19 on macOS). Pin it to the macOS
+  // value every stored .nbt was written with, so a build is byte-identical everywhere and existing hashes stay valid.
+  out[9] = 19;
+  return out;
 }
 
 function readPayload(b, pos, type) {
