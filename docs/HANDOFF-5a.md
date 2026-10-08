@@ -22,7 +22,9 @@ Baseline before 5a (15fbdf6): kit 102 tests, sidecar 507 tests (18 files), mod 2
 The unchanged 1.5.0 apitest jar (`architect_apitest-0.8.0.jar`), the 0.8.0 mod jar and the 0.8.0 `tools/` are stashed in
 `artifacts/gate5a/v080/` for the binary-compatibility check.
 
-## Spend (API-equivalent, claude login, cap $120)
+## Spend (API-equivalent, claude login, cap $150)
+
+Noah raised the cap on 2026-10-07: $120 -> $150 (the Opus subset and critique-real run even past $120; never past $150 without asking).
 
 | What | USD |
 |---|---|
