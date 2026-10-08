@@ -1231,8 +1231,8 @@ async function vFits() {
 /** The village's versioned entries: each kit example as g5b_v_<kind> v1, and a hand-written v2 (another palette, the cabin without its porch). */
 async function installVillageEntries() {
   const dir = path.join(OUT, 'versions-village');
-  const v2args = { cabin: ['--values', '{"porch":false}', '--palette', 'birch'], gatehouse: ['--palette', 'spruce'], tavern: ['--palette', 'dark_oak'],
-    tower: ['--palette', 'spruce'] };
+  const v2args = { cabin: ['--palette', 'birch'], gatehouse: ['--palette', 'rustic'], tavern: ['--palette', 'dark'],
+    tower: ['--palette', 'birch'] };
   for (const k of KINDS) {
     buildKitVersion(k, VKIND(k), path.join(dir, k, 'v1'));
     buildKitVersion(k, VKIND(k), path.join(dir, k, 'v2'), v2args[k]);
@@ -1257,7 +1257,7 @@ async function villageBase() {
     stage: 'lots' })), stages: [{ name: 'lots', items: fits.map((f) => f.key) }], autoApprove: true });
   const done = await waitBatch(id, 30 * 60_000);
   const ids = {};
-  for (const e of (await since()).filter((x) => x.event === 'ITEM_PLACED' && x.batch === id)) ids[e.key] = e.site;
+  for (const i of done.items) if (i.status === 'PLACED') ids[i.key] = i.site;
   check(Object.keys(ids).length === 12, `village: the 12 lots placed (group ${done.group})`, done);
   const hPlaced = (await hash(V_BOX)).sha256;
   await cmd('/save-all flush');
