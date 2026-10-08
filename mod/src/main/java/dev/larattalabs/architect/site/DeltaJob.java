@@ -65,7 +65,7 @@ final class DeltaJob implements Placement.Job {
 	int capCursor;
 	@Nullable ChangeTracker tracker;
 	@Nullable CompletableFuture<SiteDeltas.Check> planning;
-	@Nullable CompletableFuture<WorldJournal.Captured> prep0;
+	@Nullable CompletableFuture<Object[]> prep0;
 	SiteDeltas.@Nullable Check check;
 	int replans;
 	@Nullable CompletableFuture<Object[]> prepared;
@@ -193,35 +193,42 @@ final class DeltaJob implements Placement.Job {
 		while (System.nanoTime() < deadline) {
 			switch (phase) {
 				case 0 -> { // the region: the site's restore box and the new version's box, grown by the approach and the foundation
-					int head = SiteDeltas.headVersion(b.blueprint());
-					int to = request.toVersion() <= 0 ? head : request.toVersion();
-					int from = SiteDeltas.versionOf(server, b);
-					Blueprints.Version va = Blueprints.version(server, b.blueprint(), from);
-					Blueprints.Version vb = Blueprints.version(server, b.blueprint(), to);
-					if (va == null || vb == null) {
-						fail("Version " + (va == null ? from : to) + " of " + b.blueprint() + " can't be found");
-						return true;
-					}
-					var bpb = vb.entry().blueprint();
-					int m = Math.max(bpb.sizeX(), bpb.sizeZ());
-					Anchors.Bounds rb = b.restoreBox();
-					int g = dev.larattalabs.architect.placement.Approach.Spec.MAX_LENGTH + dev.larattalabs.architect.placement.Approach.EXTEND + 2;
-					Anchors.Bounds rg = new Anchors.Bounds(rb.minX() - m - g, Math.max(level.getMinY(), rb.minY() - 14), rb.minZ() - m - g, rb.maxX() + m + g, Math
-						.min(level.getMaxY(), rb.maxY() + bpb.sizeY() + 2), rb.maxZ() + m + g);
-					// the versions' cells (decoding a large template) and the capture array: off the server thread
+					// the versions (loading and decoding a large template), their cells and the capture array: off the server thread
 					if (prep0 == null) {
+						int head = SiteDeltas.headVersion(b.blueprint());
+						int to = request.toVersion() <= 0 ? head : request.toVersion();
+						int from = SiteDeltas.versionOf(server, b);
+						String bpId = b.blueprint();
+						Anchors.Bounds rb = b.restoreBox();
+						int minY = level.getMinY();
+						int maxY = level.getMaxY();
 						prep0 = CompletableFuture.supplyAsync(() -> {
+							Blueprints.Version va = Blueprints.version(server, bpId, from);
+							Blueprints.Version vb = Blueprints.version(server, bpId, to);
+							if (va == null || vb == null) {
+								return new Object[] {"Version " + (va == null ? from : to) + " of " + bpId + " can't be found"};
+							}
 							SiteDeltas.cells(va);
 							SiteDeltas.cells(vb);
-							return WorldJournal.empty(rg);
+							var bpb = vb.entry().blueprint();
+							int m = Math.max(bpb.sizeX(), bpb.sizeZ());
+							int g = dev.larattalabs.architect.placement.Approach.Spec.MAX_LENGTH + dev.larattalabs.architect.placement.Approach.EXTEND + 2;
+							Anchors.Bounds rg = new Anchors.Bounds(rb.minX() - m - g, Math.max(minY, rb.minY() - 14), rb.minZ() - m - g, rb.maxX() + m + g, Math.min(
+								maxY, rb.maxY() + bpb.sizeY() + 2), rb.maxZ() + m + g);
+							return new Object[] {null, rg, WorldJournal.empty(rg)};
 						});
 					}
 					if (!prep0.isDone()) {
 						return false;
 					}
-					region = rg;
-					cap = prep0.join();
+					Object[] r0 = prep0.join();
 					prep0 = null;
+					if (r0[0] != null) {
+						fail((String) r0[0]);
+						return true;
+					}
+					region = (Anchors.Bounds) r0[1];
+					cap = (WorldJournal.Captured) r0[2];
 					tracker = ChangeTracker.start(level, WorldJournal.sectionsOf(region));
 					capCursor = 0;
 					total = cap.size() * 2;
@@ -596,7 +603,11 @@ final class DeltaJob implements Placement.Job {
 						Object[] ready = prepared.join();
 						prepared = null;
 						restore = (SiteJournal.Restore) ready[0];
+						long tw = System.nanoTime();
 						SiteJournal.writeCells(level, restore.pre());
+						if ((System.nanoTime() - tw) / 1_000_000 > 10) {
+							Architect.LOGGER.warn("Delta job of {}: {} pre cells written in {} ms", siteId, restore.pre().size(), (System.nanoTime() - tw) / 1_000_000);
+						}
 						writer = ready[1] == null ? new TemplateWriter(new TemplateWriter.Cells(new int[0], new net.minecraft.world.level.block.state.BlockState[0],
 							new CompoundTag[0]), BlockPos.ZERO, Sites.FLAGS) : new TemplateWriter((TemplateWriter.Cells) ready[1], new BlockPos(restore.box().minX(),
 								restore.box().minY(), restore.box().minZ()), Sites.FLAGS);
