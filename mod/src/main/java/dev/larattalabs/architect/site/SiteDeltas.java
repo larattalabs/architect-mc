@@ -1371,7 +1371,69 @@ public final class SiteDeltas {
 				}
 			}
 		}
+		lostWrites(server, s);
 	}
+
+	/**
+	 * After an unclean stop the journal and the site records are on disk, but block writes since the world's last save are
+	 * not: a site's top delta (applied, journal ACTIVE, record at its version) may find its cells back at their {@code before}.
+	 * The evidence decides, as for a pending revert (counted over the delta's own uncovered cells where before and after
+	 * differ): most hold {@code after}: it stands (the journal wins); most hold {@code before}: the world lost the update, and
+	 * the delta is undone (one undo, exact) so the record matches the world. A construction delta is left alone (its queue is
+	 * derived from the world).
+	 */
+	static void lostWrites(MinecraftServer server, JournalStore s) {
+		for (Site b : Sites.all()) {
+			List<Site.History> h = b.versioning().history();
+			if (h.size() < 2 || b.construction() != null || b.versioning().updating() > 0 || b.versioning().reverting() > 0) {
+				continue;
+			}
+			Site.History top = h.get(h.size() - 1);
+			if (top.deltaEntry() == null || !"delta".equals(top.kind()) && !"revert".equals(top.kind())) {
+				continue;
+			}
+			JournalStore.Meta m = s.index().entries().get(top.deltaEntry());
+			if (m == null || m.status() != Status.ACTIVE || !m.kind().equals(WorldJournal.DELTA)) {
+				continue;
+			}
+			ServerLevel level = Sites.levelOf(server, b);
+			if (level == null) {
+				continue;
+			}
+			int holdBefore = 0;
+			int holdAfter = 0;
+			int total = 0;
+			try {
+				for (Cell c : s.load(m.id()).cells()) {
+					if (c.after() == null || c.before().equals(c.after()) || SiteJournal.owned(m.dimension(), c.pos()) && !SiteJournal.isOwnedBy(m.dimension(),
+						c.pos(), b.id())) {
+						continue;
+					}
+					total++;
+					Value w = WorldJournal.valueAt(level, BlockPos.of(c.pos()));
+					if (WorldJournal.same(w, c.after())) {
+						holdAfter++;
+					} else if (WorldJournal.same(w, c.before())) {
+						holdBefore++;
+					}
+				}
+			} catch (IOException ex) {
+				continue;
+			}
+			if (total == 0 || holdBefore * 2 <= total) {
+				continue;
+			}
+			int prev = h.get(h.size() - 2).version();
+			try {
+				revert(level, b.id(), prev, null, true);
+				Architect.LOGGER.warn("Deltas: {}'s update to v{} never reached the world's save ({} of {} cells hold their before); undone, the site is at v{}",
+					b.id(), top.version(), holdBefore, total, prev);
+			} catch (Sites.SiteException ex) {
+				Architect.LOGGER.warn("Deltas: could not undo {}'s unsaved update ({})", b.id(), ex.getMessage());
+			}
+		}
+	}
+
 
 	/** The record after an ACTIVE delta whose D8 did not happen (K4). */
 	static Site finishFromMeta(MinecraftServer server, Site b, JournalStore.Meta m, JsonObject meta) {

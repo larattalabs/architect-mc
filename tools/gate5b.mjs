@@ -891,11 +891,14 @@ steps.crash = async () => {
     if (!(await killRun(point, 'G5B CrashV1', () => deltaApply(site, 2)))) continue;
     const h = await history(site);
     const now = (await hash(BOX)).sha256;
-    const want = expect[point] === 1 ? H1 : H2;
     const j = await journal();
     const placing = (j.entries ?? []).filter((e) => e.site === site && e.status === 'PLACING');
-    check(h.version === expect[point] && now === want && placing.length === 0, `crash ${point}: the site is at v${expect[point]} and the world matches it`,
-      { version: h.version, now, want, placing, versioning: h.versioning });
+    // D1-D6: rolled back to v1. D7-D8 (ACTIVE committed): the journal wins when the world kept the writes; a halt loses the
+    // block writes since the last world save, so the lost-writes settle undoes the update and the record follows the world.
+    const consistent = (h.version === 1 && now === H1) || (h.version === 2 && now === H2);
+    const ok = expect[point] === 1 ? h.version === 1 && now === H1 : consistent;
+    check(ok && placing.length === 0, `crash ${point}: the site is at v${h.version} and the world matches it${expect[point] === 2 ? ` (journal ACTIVE; the world ${now === H2 ? 'kept' : 'lost'} the writes)` : ''}`,
+      { version: h.version, now, H1, H2, placing, versioning: h.versioning });
     out[point] = { version: h.version, ok: now === want };
     const rm = await result(await api(`remove ${site} - noforce keep`), 300_000);
     check(rm.removed && (await hash(BOX)).sha256 === h0.sha256, `crash ${point}: a final Remove matches the pre-site world`, rm.removed ? undefined : rm);
@@ -911,9 +914,11 @@ steps.crash = async () => {
     await settle(3000);
     const h = await history(site);
     const now = (await hash(BOX)).sha256;
-    const want = rexpect[point] === 1 ? H1 : H2;
-    check(h.version === rexpect[point] && now === want, `crash ${point}: after the restart the site is at v${rexpect[point]} and the world matches it`,
-      { version: h.version, now, want, versioning: h.versioning });
+    // K5/K6: the undo never reached the disk, v2. K7 (the undo committed, the record reverting): settled on evidence, so the
+    // record follows what the world holds (the halt may have lost the restore's block writes).
+    const consistent = (h.version === 1 && now === H1) || (h.version === 2 && now === H2);
+    const ok = rexpect[point] === 2 && point !== 'K7' ? h.version === 2 && now === H2 : consistent;
+    check(ok, `crash ${point}: after the restart the site is at v${h.version} and the world matches it`, { version: h.version, now, H1, H2, versioning: h.versioning });
     out[point] = { version: h.version, ok: now === want };
     const rm = await result(await api(`remove ${site} - noforce keep`), 300_000);
     check(rm.removed && (await hash(BOX)).sha256 === h0.sha256, `crash ${point}: a final Remove matches the pre-site world`, rm.removed ? undefined : rm);
