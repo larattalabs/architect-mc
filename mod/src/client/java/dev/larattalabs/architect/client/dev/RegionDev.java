@@ -95,11 +95,11 @@ public final class RegionDev {
 							if (e != null) {
 								o.addProperty("refused", reason(e));
 							} else {
-								int[] c = RegionsImpl.planClaim(p.planId());
-								if (c != null) {
+								int[] cl = RegionsImpl.planClaim(p.planId());
+								if (cl != null) {
 									JsonArray y = new JsonArray();
-									y.add(c[1]);
-									y.add(c[4]);
+									y.add(cl[1]);
+									y.add(cl[4]);
 									o.add("claimY", y);
 								}
 							}
