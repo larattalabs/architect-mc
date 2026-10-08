@@ -107,7 +107,11 @@ public final class RegionItems {
 				}
 			}
 			if (!Batches.loaded(level, win)) {
-				heldWait(b, i, level, win);
+				// holding its tickets, its chunks are loading: try again next tick (a WAITING item is only re-checked every 20
+				// ticks, and the writer would idle); it shows as waiting after 10 s
+				if (i.ticketed && heldWait(b, i, level, win) < 10) {
+					return;
+				}
 				Batches.waitFor(b, i, Reason.NOT_LOADED, "the tile's chunks are not loaded on the server" + (b.loadChunks > 0 ? " yet" : " (walk closer)"));
 				return;
 			}
@@ -203,14 +207,14 @@ public final class RegionItems {
 	public static double maxHeldWaitSeconds;
 	public static final java.util.List<String> LONG_WAITS = new java.util.ArrayList<>();
 
-	private static void heldWait(QBatch b, QItem i, ServerLevel level, Anchors.Bounds win) {
+	private static double heldWait(QBatch b, QItem i, ServerLevel level, Anchors.Bounds win) {
 		if (!i.ticketed) {
-			return;
+			return 0;
 		}
 		long now = System.currentTimeMillis();
 		Long since = HELD_SINCE.putIfAbsent(b.id + "/" + i.key, now);
 		if (since == null) {
-			return;
+			return 0;
 		}
 		double s = (now - since) / 1000.0;
 		maxHeldWaitSeconds = Math.max(maxHeldWaitSeconds, s);
@@ -223,6 +227,7 @@ public final class RegionItems {
 			}
 			LONG_WAITS.add(i.key + " " + String.format(java.util.Locale.ROOT, "%.0f", s) + " s " + st);
 		}
+		return s;
 	}
 
 	/** One slice of a tile's freeze; on H0 the RG3 kill point. 1 done, 0 more, -1 not loaded, -2 failed. */
@@ -292,13 +297,20 @@ public final class RegionItems {
 		}
 		long deadline = Placement.deadline();
 		boolean freezing = false;
+		if (b.loadChunks > 0 && !next.isEmpty() && !next.get(0).ticketed && !jobRunning) {
+			return; // the head (the next to write) takes the budget first
+		}
 		for (int n = 1; n < next.size(); n++) {
 			QItem i = next.get(n);
 			String[] t = tileOf(i);
 			Pipe p = pipe(b, i);
 			if (p.frozen) {
-				if (TileStream.get(t[0], t[1], t[2], t[3]) == null && TileStream.available() && TileStream.outstanding(region) < w) {
+				TileStream.Tile tile = TileStream.get(t[0], t[1], t[2], t[3]);
+				if (tile == null && TileStream.available() && TileStream.outstanding(region) < w) {
 					request(r, t);
+				} else if (tile != null && tile.phase == TileStream.Phase.DECODED && p.check == null) {
+					// its cells sorted and turned into journal values off the server thread now; the world checks run when it is next
+					p.check = new TileCheck(tile.cells(), r.rec().groupId, r.rec().dimension, r.rec().claim, window(t[3], r.rec().claim));
 				}
 				continue;
 			}
