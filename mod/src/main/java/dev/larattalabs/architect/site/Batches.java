@@ -1317,6 +1317,20 @@ public final class Batches {
 	private static final Map<String, String> TICKET_WAITER = new HashMap<>();
 
 	/** Whether an item of the batch waits for ticket budget (phase 6a: the freeze ahead then leaves the budget alone). */
+	/** A batch's ticket holders and how many chunks each holds (DevBridge). */
+	public static Map<String, Integer> ticketsOf(String batchId) {
+		Map<String, Integer> out = new java.util.TreeMap<>();
+		Map<String, Set<Long>> held = TICKETS.get(batchId);
+		if (held != null) {
+			held.forEach((k, v) -> out.put(k, v.size()));
+		}
+		String w = TICKET_WAITER.get(batchId);
+		if (w != null) {
+			out.put("waiter:" + w, 0);
+		}
+		return out;
+	}
+
 	static boolean hasWaiter(QBatch b) {
 		String w = TICKET_WAITER.get(b.id);
 		QItem wi = w == null ? null : b.item(w);

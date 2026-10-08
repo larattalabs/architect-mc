@@ -883,6 +883,14 @@ public final class RegionsImpl implements Regions {
 		JsonObject sw = new JsonObject();
 		RegionItems.STARVED.forEach(sw::addProperty);
 		o.add("starvedBy", sw);
+		JsonObject lk = new JsonObject();
+		RegionItems.LEAKS.forEach(lk::addProperty);
+		o.add("ticketLeaks", lk);
+		JsonObject tk = new JsonObject();
+		var held = dev.larattalabs.architect.site.Batches.ticketsOf(l.rec().batchId);
+		held.forEach((k, v) -> tk.addProperty(k, v));
+		o.add("tickets", tk);
+		o.addProperty("ticketBound", l.rec().maxChunks);
 		com.google.gson.JsonArray lw = new com.google.gson.JsonArray();
 		RegionItems.LONG_WAITS.forEach(lw::add);
 		o.add("longWaits", lw);

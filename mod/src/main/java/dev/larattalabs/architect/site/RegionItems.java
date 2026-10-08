@@ -289,6 +289,7 @@ public final class RegionItems {
 			return;
 		}
 		writerTicks++;
+		janitor(server, b);
 		boolean jobRunning = b.items.stream().anyMatch(x -> x.status == QItem.Status.PLACING && !x.committing);
 		int w = RegionsImpl.window();
 		List<QItem> next = new ArrayList<>();
@@ -379,6 +380,32 @@ public final class RegionItems {
 		GenCounter.holders(Batches.TICKETS.getOrDefault(b.id, Map.of()).isEmpty() ? 0 : 1);
 	}
 
+	/**
+	 * Tickets a region batch holds for nothing (an item placed or failed, a freeze whose tile is frozen or no longer ahead): given
+	 * back, so the batch's budget can't silently fill up.
+	 */
+	private static void janitor(MinecraftServer server, QBatch b) {
+		Map<String, Set<Long>> held = Batches.TICKETS.get(b.id);
+		if (held == null || held.isEmpty()) {
+			return;
+		}
+		for (String k : List.copyOf(held.keySet())) {
+			String key = k.startsWith("freeze:") ? k.substring(7) : k.startsWith("job:") ? k.substring(4) : k;
+			QItem i = b.item(key);
+			Pipe p = PIPES.get(b.id + "/" + key);
+			boolean done = i == null || i.status == QItem.Status.PLACED || i.status == QItem.Status.FAILED;
+			boolean staleFreeze = k.startsWith("freeze:") && (p == null || p.frozen) && (i == null || i.status != QItem.Status.QUEUED
+				&& i.status != QItem.Status.WAITING || p != null && p.frozen);
+			if (done || staleFreeze) {
+				LEAKS.merge(k.startsWith("freeze:") ? "freeze" : k.startsWith("job:") ? "job" : "item", 1L, Long::sum);
+				Batches.untickItem(server, b, k);
+			}
+		}
+	}
+
+	/** Tickets the janitor gave back, by kind (each one a leak elsewhere: reported by dev.region.state). */
+	public static final Map<String, Long> LEAKS = new java.util.TreeMap<>();
+
 	/** A region item's wait for these reasons does not count toward its wait limit (CONTRACT "Waiting without a time limit"). */
 	static boolean uncounted(QBatch b, Reason why) {
 		return isRegion(b) && UNCOUNTED.contains(why);
@@ -418,6 +445,7 @@ public final class RegionItems {
 		maxHeldWaitSeconds = 0;
 		starvedTicks = 0;
 		STARVED.clear();
+		LEAKS.clear();
 		writerTicks = 0;
 	}
 
