@@ -16,5 +16,7 @@ public enum PreviewStyle {
 	/** Cells a change removes: red outlines on their faces (and a faint red fill). Since 1.3.0. */
 	REMOVED,
 	/** Cells a change replaces: amber. Since 1.3.0. */
-	CHANGED
+	CHANGED,
+	/** Cells of a delta the player changed, which a KEEP delta leaves as they are: yellow outlines. Since 1.7.0. */
+	KEPT
 }

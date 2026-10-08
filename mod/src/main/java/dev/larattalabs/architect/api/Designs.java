@@ -131,4 +131,22 @@ public interface Designs {
 	/** {@link #approveGroup(String, List, Map, List)} as {@code owner} (must be the group's owner when its approvalUi is owner). Since 1.3.0. */
 	CompletableFuture<Group.Approval> approveGroup(String groupId, List<String> approve, Map<String, String> redirect, List<String> cancel,
 		@Nullable String owner);
+
+	// ------------------------------------------------------------------ phase 5b: polish (API 1.7.0)
+
+	/**
+	 * Polishes an installed entry (docs/CONTRACT.md phase 5b "Polish"): a critique (reused when the entry's critique.json is not
+	 * stale), then up to {@code maxSteps} targeted steps confined to the parts the issues name, each accepted only when a fresh
+	 * critic marks its issue resolved; at most one new version installs ({@link SiteEvents#ENTRY_VERSIONED}). Completes with the
+	 * design id at the helper's ack; DESIGN_DONE carries {@link Design#polish()}. Bundled entries refuse (make a variant first),
+	 * imported ones too (no source). Since 1.7.0.
+	 */
+	default CompletableFuture<String> polish(PolishRequest r) {
+		throw new UnsupportedOperationException("Designs.polish needs Architect API 1.7.0");
+	}
+
+	/** What a polish would cost and take, as its own fields ({@link Estimate#polish}). Since 1.7.0. */
+	default CompletableFuture<Estimate> estimatePolish(PolishRequest r) {
+		throw new UnsupportedOperationException("Designs.estimatePolish needs Architect API 1.7.0");
+	}
 }

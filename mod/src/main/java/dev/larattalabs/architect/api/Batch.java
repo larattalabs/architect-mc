@@ -118,18 +118,33 @@ public record Batch(@Nullable String id, @Nullable String owner, JsonObject ext,
 	 * @param cells (1.5.0) a cell-site item
 	 */
 	public record Item(String itemKey, @Nullable PlaceRequest request, @Nullable String stage, List<String> after, @Nullable RoadRequest road,
-		@Nullable CellsRequest cells) {
+		@Nullable CellsRequest cells, @Nullable DeltaRequest delta) {
 		public Item {
 			after = after == null ? List.of() : List.copyOf(after);
-			int n = (request != null ? 1 : 0) + (road != null ? 1 : 0) + (cells != null ? 1 : 0);
+			int n = (request != null ? 1 : 0) + (road != null ? 1 : 0) + (cells != null ? 1 : 0) + (delta != null ? 1 : 0);
 			if (n != 1) {
-				throw new IllegalArgumentException("item " + itemKey + ": exactly one of request, road and cells must be given");
+				throw new IllegalArgumentException("item " + itemKey + ": exactly one of request, road, cells and delta must be given");
 			}
+		}
+
+		/** The 1.5.0 constructor (a building, road or cell-site item). */
+		public Item(String itemKey, @Nullable PlaceRequest request, @Nullable String stage, List<String> after, @Nullable RoadRequest road,
+			@Nullable CellsRequest cells) {
+			this(itemKey, request, stage, after, road, cells, null);
 		}
 
 		/** The 1.4.0 constructor (a building). */
 		public Item(String itemKey, PlaceRequest request, @Nullable String stage, List<String> after) {
 			this(itemKey, request, stage, after, null, null);
+		}
+
+		/**
+		 * A delta item (phase 5b): a placed site to another version; {@code request()} is null for it. {@code SITE_BUSY} waits under
+		 * the wait policy; {@code ITEM_PLACED} means "applied". A later delta of the same site in one batch runs after the earlier
+		 * one, in list order. Since 1.7.0.
+		 */
+		public static Item delta(String itemKey, DeltaRequest delta, @Nullable String stage, List<String> after) {
+			return new Item(itemKey, null, stage, after, null, null, delta);
 		}
 
 		public static Item of(String itemKey, PlaceRequest request) {

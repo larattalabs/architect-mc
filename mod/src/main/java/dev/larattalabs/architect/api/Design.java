@@ -18,15 +18,41 @@ import java.util.Optional;
  *     and the split cost; empty when critique is off. {@code cost} stays the total
  * @param critiqueOf (since 1.6.0) a report critique of this library entry ({@link Designs#critique}): no new entry; when done,
  *     {@code entryId} is that entry
+ * @param polish (since 1.7.0) a polish of an installed entry ({@link Designs#polish}): its steps, end and installed version; the
+ *     same entry (a new version of it), no new entry
  */
 public record Design(String id, Status status, String step, Optional<String> entryId, Cost cost, Optional<String> error, JsonObject request,
 	Optional<String> owner, long createdAt, long updatedAt, Optional<MassingRef> massing, Optional<Conformance> conformance,
-	Optional<Critique> critique, Optional<String> critiqueOf) {
+	Optional<Critique> critique, Optional<String> critiqueOf, Optional<Polish> polish) {
 	public Design {
 		massing = massing == null ? Optional.empty() : massing;
 		conformance = conformance == null ? Optional.empty() : conformance;
 		critique = critique == null ? Optional.empty() : critique;
 		critiqueOf = critiqueOf == null ? Optional.empty() : critiqueOf;
+		polish = polish == null ? Optional.empty() : polish;
+	}
+
+	/** The 1.6.0 constructor (no polish). */
+	public Design(String id, Status status, String step, Optional<String> entryId, Cost cost, Optional<String> error, JsonObject request,
+		Optional<String> owner, long createdAt, long updatedAt, Optional<MassingRef> massing, Optional<Conformance> conformance,
+		Optional<Critique> critique, Optional<String> critiqueOf) {
+		this(id, status, step, entryId, cost, error, request, owner, createdAt, updatedAt, massing, conformance, critique, critiqueOf, Optional.empty());
+	}
+
+	/** What kind of job this is (since 1.7.0): a polish of an entry carries {@link #polish()}. New values are only ever appended. */
+	public enum Kind {
+		DESIGN, MASSING, REPORT, POLISH
+	}
+
+	/** This job's kind (since 1.7.0). */
+	public Kind kind() {
+		if (polish.isPresent() || request != null && request.has("kind") && "polish".equals(request.get("kind").getAsString())) {
+			return Kind.POLISH;
+		}
+		if (isMassing()) {
+			return Kind.MASSING;
+		}
+		return isReport() ? Kind.REPORT : Kind.DESIGN;
 	}
 
 	/** The 1.3.0 constructor (no critique). */

@@ -197,4 +197,45 @@ public interface Sites {
 	default List<Layer> stack(net.minecraft.resources.ResourceKey<net.minecraft.world.level.Level> dimension, net.minecraft.core.BlockPos pos) {
 		throw new UnsupportedOperationException("Sites.stack needs Architect API 1.5.0");
 	}
+
+	// ------------------------------------------------------------------ phase 5b: delta apply (API 1.7.0)
+
+	/**
+	 * The verdict on a delta of a placed site to another version of its entry, before any write (Steward SHOULD 1: the preview as
+	 * data). Changes nothing. Server thread. Since 1.7.0.
+	 */
+	default DeltaVerdict checkDelta(DeltaRequest r) {
+		throw new UnsupportedOperationException("Sites.checkDelta needs Architect API 1.7.0");
+	}
+
+	/**
+	 * Moves a placed site to another version of its entry by writing only the cells that differ, as a new journal layer
+	 * (docs/CONTRACT.md phase 5b). Completes when the writes are done (a construction delta: when it starts; SITE_PROGRESS and
+	 * SITE_BUILT follow). Refusals complete it with {@code applied} false. Fires SITE_UPDATED. Since 1.7.0.
+	 */
+	default CompletableFuture<DeltaResult> applyDelta(DeltaRequest r) {
+		throw new UnsupportedOperationException("Sites.applyDelta needs Architect API 1.7.0");
+	}
+
+	/**
+	 * Reverts a placed site to version {@code toVersion}: where INSTANT is allowed for {@code actor}, a version in the site's
+	 * chain is reached by one undo of the deltas above it (last in, first out); any other target, and every revert in survival, is
+	 * a (paid) forward delta. Fires SITE_UPDATED. Since 1.7.0.
+	 */
+	default CompletableFuture<DeltaResult> revert(String siteId, int toVersion, net.minecraft.server.level.@Nullable ServerPlayer actor) {
+		throw new UnsupportedOperationException("Sites.revert needs Architect API 1.7.0");
+	}
+
+	/** A placed site's history, oldest first. Since 1.7.0. */
+	default List<SiteVersion> history(String siteId) {
+		throw new UnsupportedOperationException("Sites.history needs Architect API 1.7.0");
+	}
+
+	/**
+	 * The standing sites of {@code owner} (null: the player's own) whose pinned version is older than their entry's head
+	 * (Steward SHOULD 3): call it at world load, since ENTRY_VERSIONED is missed while the world is closed. Since 1.7.0.
+	 */
+	default List<OutdatedSite> outdated(@Nullable String owner) {
+		throw new UnsupportedOperationException("Sites.outdated needs Architect API 1.7.0");
+	}
 }

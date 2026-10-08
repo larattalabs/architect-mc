@@ -63,6 +63,34 @@ public interface Library {
 	/** Replaces the entry's user tags (normalised as the UI does: lower case, at most 12). Thread-safe. */
 	void setTags(String entryId, List<String> userTags);
 
+	// ------------------------------------------------------------------ phase 5b: versions (API 1.7.0)
+
+	/** An entry's versions, oldest first ({@code pinned}: a standing site stands at it). Empty for an unknown entry. Since 1.7.0. */
+	default List<EntryVersion> versions(String entryId) {
+		throw new UnsupportedOperationException("Library.versions needs Architect API 1.7.0");
+	}
+
+	/** Version {@code version} of an entry as an {@link Entry} (its own files), or empty when it is gone. Since 1.7.0. */
+	default Optional<Entry> entry(String entryId, int version) {
+		throw new UnsupportedOperationException("Library.entry(id, version) needs Architect API 1.7.0");
+	}
+
+	/**
+	 * The blueprint delta of two versions of an entry (computed by the mod, off the server thread; the part summary, no cell
+	 * lists). Fails for an unknown entry or version. Since 1.7.0.
+	 */
+	default CompletableFuture<BlueprintDelta> delta(String entryId, int from, int to) {
+		throw new UnsupportedOperationException("Library.delta needs Architect API 1.7.0");
+	}
+
+	/**
+	 * Installs a new head version that is a byte copy of version {@code toVersion} ({@code by: "revert"}); placed sites are
+	 * untouched (they show "update available"). Through the helper: fails when it is not running. Since 1.7.0.
+	 */
+	default CompletableFuture<Entry> revertEntry(String entryId, int toVersion) {
+		throw new UnsupportedOperationException("Library.revertEntry needs Architect API 1.7.0");
+	}
+
 	/**
 	 * A library entry.
 	 *
@@ -91,9 +119,21 @@ public interface Library {
 	record Entry(String id, String name, String type, BlockSize size, List<String> tags, Optional<String> source, Map<String, JsonElement> params,
 		Map<String, JsonElement> values, Optional<JsonObject> palette, Map<String, Port> ports, JsonObject ext, boolean bundled, boolean imported,
 		Optional<String> variantOf, Optional<BiblePin> bible, Optional<String> group, Optional<String> groupItem, Map<String, Part> parts,
-		Direction front, Map<String, BlockPos> anchors, int groundY, Approach approach, Optional<Critique> critique) {
+		Direction front, Map<String, BlockPos> anchors, int groundY, Approach approach, Optional<Critique> critique, int version,
+		List<EntryVersion> versions) {
 		public Entry {
 			critique = critique == null ? Optional.empty() : critique;
+			version = version <= 0 ? 1 : version;
+			versions = versions == null ? List.of() : List.copyOf(versions);
+		}
+
+		/** The 1.6.0 constructor (version 1, no lineage). */
+		public Entry(String id, String name, String type, BlockSize size, List<String> tags, Optional<String> source, Map<String, JsonElement> params,
+			Map<String, JsonElement> values, Optional<JsonObject> palette, Map<String, Port> ports, JsonObject ext, boolean bundled, boolean imported,
+			Optional<String> variantOf, Optional<BiblePin> bible, Optional<String> group, Optional<String> groupItem, Map<String, Part> parts,
+			Direction front, Map<String, BlockPos> anchors, int groundY, Approach approach, Optional<Critique> critique) {
+			this(id, name, type, size, tags, source, params, values, palette, ports, ext, bundled, imported, variantOf, bible, group, groupItem, parts,
+				front, anchors, groundY, approach, critique, 1, List.of());
 		}
 
 		/** The 1.4.0 constructor (no critique). */

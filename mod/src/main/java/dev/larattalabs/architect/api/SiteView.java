@@ -29,12 +29,21 @@ import org.jspecify.annotations.Nullable;
  */
 public record SiteView(String id, String blueprintId, @Nullable String owner, JsonObject ext, BoundingBox box, BoundingBox restoreBox,
 	Rotation rotation, ResourceKey<Level> dimension, State state, int built, int queued, @Nullable String group, @Nullable String batchId,
-	@Nullable String itemKey, String kind, Policy policy, List<String> covers, List<String> coveredBy) {
+	@Nullable String itemKey, String kind, Policy policy, List<String> covers, List<String> coveredBy, int version, int headVersion, int deviations,
+	boolean updating) {
 	public SiteView {
 		kind = kind == null ? "building" : kind;
 		policy = policy == null ? Policy.BOX : policy;
 		covers = covers == null ? List.of() : List.copyOf(covers);
 		coveredBy = coveredBy == null ? List.of() : List.copyOf(coveredBy);
+	}
+
+	/** The 1.5.0 constructor (no versions: version and headVersion 1, no deviations, not updating). */
+	public SiteView(String id, String blueprintId, @Nullable String owner, JsonObject ext, BoundingBox box, BoundingBox restoreBox,
+		Rotation rotation, ResourceKey<Level> dimension, State state, int built, int queued, @Nullable String group, @Nullable String batchId,
+		@Nullable String itemKey, String kind, Policy policy, List<String> covers, List<String> coveredBy) {
+		this(id, blueprintId, owner, ext, box, restoreBox, rotation, dimension, state, built, queued, group, batchId, itemKey, kind, policy, covers,
+			coveredBy, 1, 1, 0, false);
 	}
 
 	/** The 1.4.0 constructor (a building, BOX, nothing layered). */

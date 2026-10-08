@@ -22,7 +22,7 @@ public interface ArchitectApi {
 	 * 1.6.0: critique (report and loop) on designs, groups and items, report critiques of library entries, DESIGN_CRITIQUED,
 	 * the critique figures of estimates, images in jobs, bible delete and archive, bible restraint (phase 5a).
 	 */
-	String VERSION = "1.6.0";
+	String VERSION = "1.7.0";
 
 	/** The singleton. Safe to call from any mod's initializer (it does not depend on Architect's init order). */
 	static ArchitectApi get() {
