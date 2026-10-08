@@ -582,8 +582,19 @@ final class DeltaJob implements Placement.Job {
 					if (writer == null) {
 						if (prepared == null) {
 							String g = group;
+							String bpId = b.blueprint();
+							int turns0 = dev.larattalabs.architect.placement.BlueprintTransform.parseTurns(b.rotation());
+							int target = revertTo;
 							prepared = CompletableFuture.supplyAsync(() -> {
 								try {
+									// the record's pin and geometry for the reverted version (a large grid): warmed here, not on the server thread
+									Blueprints.Version vk = Blueprints.version(server, bpId, target);
+									if (vk != null) {
+										var tg = dev.larattalabs.architect.placement.TemplateGrid.of(vk.entry());
+										tg.ghost(turns0);
+										tg.fingerprint();
+										tg.blockEntityOffsets(turns0);
+									}
 									SiteJournal.Restore rs = SiteJournal.restore(level, siteId, g);
 									TemplateWriter.Cells cs = null;
 									if (rs.template() != null && rs.box() != null) {
