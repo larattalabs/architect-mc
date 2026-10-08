@@ -1506,6 +1506,53 @@ steps.vcheck = async () => {
   await leaveWorld();
 };
 
+/**
+ * Gate item 9: the unchanged 1.6.0 (v0.9.0) and 1.5.0 (v0.8.0) apitest jars pass their own `tools/apitest.mjs survival`
+ * against this build (the apitest mod off the classpath, the old jar in mods/), in a fresh survival world each.
+ */
+steps.apijars = async () => {
+  const runs = [
+    { api: '1.6.0', dir: path.join(OUT, 'v090'), jar: 'architect_apitest-0.9.0.jar', world: 'G5B Api16' },
+    { api: '1.5.0', dir: path.join(MAIN, 'artifacts', 'gate5a', 'v080'), jar: 'architect_apitest-0.8.0.jar', world: 'G5B Api15' },
+  ];
+  const mods = path.join(GAME_DIR, 'mods');
+  const out = {};
+  for (const r of runs) {
+    if (dev) await stopClient();
+    else if (clientPids().length) {
+      await connect(PORT, GAME_DIR, 10_000).catch(() => null);
+      await stopClient();
+    }
+    fs.mkdirSync(mods, { recursive: true });
+    fs.copyFileSync(path.join(r.dir, r.jar), path.join(mods, r.jar));
+    const outDir = path.join(OUT, `api${r.api.replace(/\./g, '')}jar`);
+    let code = 0;
+    let text = '';
+    try {
+      fs.rmSync(path.join(SAVES, r.world), { recursive: true, force: true });
+      await startClient(r.world, { ARCHITECT_APITEST: '0', ARCHITECT_AUTOWORLD_MODE: 'survival' });
+      try {
+        text = execFileSync('node', [path.join(r.dir, 'tools', 'apitest.mjs'), 'survival'], {
+          env: { ...process.env, APITEST_API_VERSION: r.api, ARCHITECT_DEV_PORT: String(PORT), ARCHITECT_GAME_DIR: GAME_DIR, APITEST_OUT: outDir,
+            APITEST_GAME_DIR: GAME_DIR }, timeout: 3_600_000 }).toString();
+      } catch (e) {
+        code = e.status ?? 1;
+        text = `${e.stdout ?? ''}${e.stderr ?? ''}`;
+      }
+    } finally {
+      await stopClient();
+      fs.rmSync(path.join(mods, r.jar), { force: true });
+    }
+    fs.writeFileSync(path.join(OUT, `api${r.api.replace(/\./g, '')}jar.log`), text);
+    const fails = text.split('\n').filter((l) => l.startsWith('FAIL'));
+    const oks = text.split('\n').filter((l) => l.startsWith('ok')).length;
+    check(code === 0 && fails.length === 0, `apijars: the ${r.api} apitest jar (unchanged) passes its tools/apitest.mjs survival against 0.10.0 (${oks} ok, ${fails.length} FAIL)`, fails);
+    out[r.api] = { code, oks, fails: fails.length };
+  }
+  await startClient('G5B Smoke');
+  return out;
+};
+
 const which = process.argv[2];
 if (!which || !steps[which]) {
   console.log(`steps: ${Object.keys(steps).join(', ')}`);
