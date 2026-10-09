@@ -21,6 +21,27 @@ class Api19Test {
 	}
 
 	@Test
+	void placeRequestPathStyle() {
+		net.minecraft.core.BlockPos at = new net.minecraft.core.BlockPos(1, 2, 3);
+		net.minecraft.world.level.block.Rotation none = net.minecraft.world.level.block.Rotation.NONE;
+		// the 1.4.0 and 1.5.0 constructors and of(): no path style (the design's own approach)
+		assertNull(new PlaceRequest("b", null, at, none, Mode.AUTO, null, new JsonObject(), false, null).pathStyle());
+		assertNull(new PlaceRequest("b", null, at, none, Mode.AUTO, null, new JsonObject(), false, null, OverlapPolicy.LAYER).pathStyle());
+		PlaceRequest r = PlaceRequest.of("b", null, at, none);
+		assertNull(r.pathStyle());
+		PlaceRequest s = r.withPathStyle(" Stone_Bricks ");
+		assertEquals("minecraft:stone_bricks", s.pathStyle());
+		assertEquals("minecraft:mud_bricks", r.withPathStyle("minecraft:mud_bricks").pathStyle());
+		assertNull(r.withPathStyle("  ").pathStyle());
+		assertNull(s.withPathStyle(null).pathStyle());
+		// withOverlap keeps the style, withPathStyle the policy
+		assertEquals("minecraft:stone_bricks", s.withOverlap(OverlapPolicy.LAYER).pathStyle());
+		assertEquals(OverlapPolicy.LAYER, s.withOverlap(OverlapPolicy.LAYER).withPathStyle("x:y").overlap());
+		assertEquals("b", s.blueprintId());
+		assertEquals(at, s.origin());
+	}
+
+	@Test
 	void regionPlanOldConstructor() {
 		RegionPlan p = new RegionPlan("p1", "mega_bench", "ps", "irs", "ss", 7L, List.of(), List.of("ground"), Map.of(), new RegionBudget(1, 2, 3, 4, 5, 6),
 			List.of("n"));

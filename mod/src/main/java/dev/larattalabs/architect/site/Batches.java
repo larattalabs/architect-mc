@@ -188,6 +188,13 @@ public final class Batches {
 				}
 			}
 			q.layer = (r.overlap() != null ? r.overlap() : spec.overlap()) == dev.larattalabs.architect.api.OverlapPolicy.LAYER;
+			q.pathStyle = r.pathStyle();
+			if (q.status != QItem.Status.FAILED) {
+				String bad = EntranceStyle.refusal(r.pathStyle());
+				if (bad != null) {
+					q.fail(Reason.OTHER.name(), bad);
+				}
+			}
 			items.add(q);
 		}
 		Batch.WaitPolicy w = spec.waitPolicy();
@@ -609,7 +616,8 @@ public final class Batches {
 			if (bp == null) {
 				continue;
 			}
-			Sites.Prediction p = Sites.predict(it.request().level(), bp, it.request().origin(), it.request().rotation());
+			Sites.Prediction p = Sites.predict(it.request().level(), bp, it.request().origin(), it.request().rotation(), EntranceStyle.plain(it.request()
+				.pathStyle()));
 			boxes.add(p.snapBox());
 			if (it == first) {
 				start = p;
@@ -910,7 +918,7 @@ public final class Batches {
 		if (!SiteJournal.warm(i.dimension, near)) {
 			return;
 		}
-		Sites.Verdict v = Sites.verdict(level, bp, origin, rot, i.force, null, true, i.construction, i.layer, b.owner);
+		Sites.Verdict v = Sites.verdict(level, bp, origin, rot, i.force, null, true, i.construction, i.layer, b.owner, styleOf(b, i));
 		if (!v.ok()) {
 			Sites.Refusal hard = v.typed().stream().filter(r -> !TEMPORARY.contains(r.reason())).findFirst().orElse(null);
 			if (hard != null) {
@@ -939,6 +947,20 @@ public final class Batches {
 		startChecked(server, b, i, level, bp, origin, rot, snap);
 	}
 
+	/**
+	 * (6b) The entrance style of a building item: a region lot's (its region's roles and walk surfaces), else its request's
+	 * {@code pathStyle}, else null (the design's own approach).
+	 */
+	static @Nullable EntranceStyle styleOf(QBatch b, QItem i) {
+		if (RegionItems.isRegion(b) && i.key.startsWith("lot:")) {
+			EntranceStyle s = EntranceStyle.region(RegionItems.regionOf(b));
+			if (s != null) {
+				return s;
+			}
+		}
+		return EntranceStyle.plain(i.pathStyle);
+	}
+
 	/** Items larger than this many cells (a design's box) check and start in separate ticks, after their grid is warm. */
 	static final long LARGE_CELLS = 100_000;
 	private static final Map<Blueprints.Entry, CompletableFuture<?>> WARMING = java.util.Collections.synchronizedMap(new java.util.WeakHashMap<>());
@@ -949,7 +971,7 @@ public final class Batches {
 		try {
 			// instant or construction: written over ticks; a construction site is converted when its last cell is written
 			long t0 = System.nanoTime();
-			PlaceJob job = Sites.beginPlacing(level, bp, origin, rot, i.force, b.owner, i.ext, member, i.construction, i.actor, i.layer);
+			PlaceJob job = Sites.beginPlacing(level, bp, origin, rot, i.force, b.owner, i.ext, member, i.construction, i.actor, i.layer, styleOf(b, i));
 			Placement.noteStart(job.siteId, System.nanoTime() - t0);
 			i.status = QItem.Status.PLACING;
 			i.siteId = job.siteId;

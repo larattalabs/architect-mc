@@ -58,6 +58,8 @@ public final class QItem {
 	public transient boolean ticketed;
 	public transient dev.larattalabs.architect.placement.Anchors.@org.jspecify.annotations.Nullable Bounds checkedSnap;
 	public @Nullable JsonObject spec;
+	/** (6b, API 1.9.0) The request's {@code pathStyle} (the entrance approach's road-surface block), or null. */
+	public @Nullable String pathStyle;
 
 	public Status status = Status.QUEUED;
 	public @Nullable String siteId;
@@ -140,6 +142,9 @@ public final class QItem {
 		if (spec != null) {
 			o.add("spec", spec.deepCopy());
 		}
+		if (pathStyle != null) {
+			o.addProperty("pathStyle", pathStyle);
+		}
 		return o;
 	}
 
@@ -164,6 +169,7 @@ public final class QItem {
 		i.layer = o.has("overlap") && "LAYER".equals(o.get("overlap").getAsString());
 		i.itemKind = o.has("itemKind") ? o.get("itemKind").getAsString() : "building";
 		i.spec = o.has("spec") && o.get("spec").isJsonObject() ? o.getAsJsonObject("spec") : null;
+		i.pathStyle = o.has("pathStyle") ? o.get("pathStyle").getAsString() : null;
 		return i;
 	}
 }

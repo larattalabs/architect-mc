@@ -113,7 +113,12 @@ final class SitesImpl implements dev.larattalabs.architect.api.Sites {
 			return List.of(new Refusal(Reason.NOT_ALLOWED, no));
 		}
 		// the dry run first: it never loads a chunk, and it lists every reason, not only the first
-		Sites.Verdict v = Sites.verdict(r.level(), bp, r.origin(), r.rotation(), r.force(), null, true, construction, layer(r), r.owner());
+		String badStyle = dev.larattalabs.architect.site.EntranceStyle.refusal(r.pathStyle());
+		if (badStyle != null) {
+			return List.of(new Refusal(Reason.OTHER, badStyle));
+		}
+		Sites.Verdict v = Sites.verdict(r.level(), bp, r.origin(), r.rotation(), r.force(), null, true, construction, layer(r), r.owner(),
+			dev.larattalabs.architect.site.EntranceStyle.plain(r.pathStyle()));
 		out[0] = v;
 		return v.typed().stream().map(x -> new Refusal(x.reason(), x.message())).toList();
 	}
@@ -130,7 +135,7 @@ final class SitesImpl implements dev.larattalabs.architect.api.Sites {
 			}
 			try {
 				Site s = Sites.place(r.level(), bp, r.origin(), r.rotation(), r.force(), r.actor() == null ? null : r.actor().getStringUUID(),
-					construction, r.owner(), r.ext(), r.actor(), null, layer(r));
+					construction, r.owner(), r.ext(), r.actor(), null, layer(r), dev.larattalabs.architect.site.EntranceStyle.plain(r.pathStyle()));
 				String note = Sites.lastNote();
 				return new PlaceResult(true, Optional.of(s.id()), List.of(), note == null ? List.of() : Arrays.asList(note.split("; ")));
 			} catch (Sites.SiteException e) {

@@ -310,6 +310,13 @@ region. Previews print as file links (with a [copy] link).
 
 Semi-stable: a hook may change or go, and every such change is listed here, newest first.
 
+- **2026-10-09 (6b addition: region lot entrances):** apitest `place` / `check` take `pathStyle=<block id>` (after the rotation
+  argument, which is then required): the request goes out with `PlaceRequest.pathStyle` (API 1.9.0), so its entrance approach is
+  that road surface and joins a road it meets (taking the road's block). The gate's plain lot next to a 4e road:
+  `dev.road.place {points: [[10,67,0],[80,67,0]], width: 3}`, then
+  `/apitest place cabin 28 67 -19 INSTANT unowned noactor 0 pathStyle=minecraft:stone_bricks` (through `dev.command`); without
+  the token the placement is unchanged. Region lots style their approach on their own (the region's `path` / `foundation` roles).
+
 - **2026-10-09 (phase 6b, mod side):** new `dev.region.check|preview|design|nudge|progress|ghost|drop|drop.state|dump|planStale`,
   `dev.survey.volume`, `dev.scenario.cams` and `dev.tiles.resends` (see "Regions (phase 6b)"). `dev.region.plan` takes `check`
   and answers report, summary, previews, irFormat, requires, kitVersion, blobs, needVolumes and progress; its timeout is 15
