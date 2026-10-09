@@ -1185,30 +1185,45 @@ steps.staged = async () => {
     await api(`sapprove ${group} lots-1`);
     await api(`sapprove ${group} ways`);
     st = await waitRegion(region, 900_000);
-    const ir = JSON.parse(fs.readFileSync(path.join(SAVES, 'G6A Order', 'architect-regions', region, 'ir.json'), 'utf8'));
-    const placedLots = st.view.lots.filter((l) => l.state === 'placed').map((l) => l.id);
-    const dir = path.join(SAVES, 'G6A Order', 'architect-regions', region, 'heights');
-    const heights = {};
+    const placedLots = st.view.lots.filter((l) => l.state === 'placed').map((l) => l.siteId);
+    await cmd('/save-all flush');
+    await leaveWorld();
+    // the columns each lot writes are its site's snapshot box (the building and its approach; the IR's lot box is larger)
+    const sites = [];
+    JSON.parse(fs.readFileSync(path.join(SAVES, 'G6A Order', 'architect-sites.json'), 'utf8'), (k, v) => {
+      if (v && v.blueprint && v.snapshotBox && placedLots.includes(v.id)) sites.push(v);
+      return v;
+    });
+    const rdir = path.join(SAVES, 'G6A Order', 'architect-regions', region);
+    const frozen = {};
+    const after = {};
     let bad = 0;
     let cols = 0;
-    for (const l of ir.lots.filter((x) => placedLots.includes(x.id))) {
-      for (let x = l.box.minX; x <= l.box.maxX; x += 3) {
-        for (let z = l.box.minZ; z <= l.box.maxZ; z += 3) {
-          const f = path.join(dir, `${Math.floor(x / 64)}.${Math.floor(z / 64)}.bin`);
-          if (!fs.existsSync(f)) { bad++; continue; }
-          const sh = readShard(f);
+    for (const site of sites) {
+      const b = site.snapshotBox;
+      for (let x = b.minX; x <= b.maxX; x++) {
+        for (let z = b.minZ; z <= b.maxZ; z++) {
+          const name = `${Math.floor(x / 64)}.${Math.floor(z / 64)}.bin`;
           cols++;
-          if (sh.missing(x, z)) { bad++; continue; }
-          const h = sh.height(x, z);
-          heights[h] = (heights[h] ?? 0) + 1;
+          const f = path.join(rdir, 'heights', name);
+          const sh = fs.existsSync(f) ? readShard(f) : null;
+          if (!sh || sh.missing(x, z)) { bad++; continue; }
+          frozen[sh.height(x, z)] = (frozen[sh.height(x, z)] ?? 0) + 1;
+          const fa = path.join(rdir, 'after', name);
+          const sa = fs.existsSync(fa) ? readShard(fa) : null;
+          if (sa && !sa.missing(x, z)) after[sa.height(x, z)] = (after[sa.height(x, z)] ?? 0) + 1;
         }
       }
     }
-    out.order = { state: st.view.state, stages: st.view.stages.map((x) => `${x.name}:${x.state}`), placedLots, sampled: cols, missingOrAbsent: bad, frozenHeights: heights };
+    const rs = st.record.stages;
+    out.order = { state: st.view.state, lotsFirst: rs['lots-1'].startedAt < rs.ways.startedAt, placedLots, columns: cols, missing: bad, frozenHeights: frozen,
+      afterHeights: after };
     log(`  order: ${JSON.stringify(out.order)}`);
-    // the flat world's land is one height: a frozen lot column at the building's height would be the post-lot surface
-    const hs = Object.keys(heights).map(Number);
-    check(placedLots.length > 0 && bad === 0 && hs.length === 1, `staged: lots-1 before ways (reordered): ${placedLots.length} lots placed, their ${cols} sampled columns frozen pre-lot (heights ${JSON.stringify(heights)})`);
+    // the flat world's land is one height: lot columns frozen at the buildings' heights would be the post-lot surface
+    const hs = Object.keys(frozen).map(Number);
+    check(out.order.lotsFirst && placedLots.length > 0 && bad === 0 && hs.length === 1 && Object.keys(after).length > 1, `staged: lots-1 before ways (reordered): `
+      + `${placedLots.length} lots placed; all ${cols} columns of their snapshot boxes frozen pre-lot (${JSON.stringify(frozen)}; after the lots: ${JSON.stringify(after)})`);
+    await openWorld('G6A Flat Base');
     await leaveWorld();
   }
   write('staged.json', out);
