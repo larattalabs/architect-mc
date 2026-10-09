@@ -956,9 +956,12 @@ steps.crash = async () => {
   const out = { ref: refEnd };
   // RG1: during prepare (on the unprepared flat world)
   {
+    // land nobody explored yet: the claim moved 8192 blocks east of the base world's explored centre (a fresh copy each run)
     await fresh('G6A Crash RG1', 'G6A Flat Base');
-    await tp(0.5, 120, 0.5);
-    const p = await plan(SMALL, 'loaded');
+    const far = { ...SMALL, claim: [SMALL.claim[0] + 8192, SMALL.claim[1], SMALL.claim[2] + 8192, SMALL.claim[3]] };
+    await tp(0.5, 120, 0.5); // the player stays away: its view would generate the claim
+    const p = await plan(far, 'loaded');
+    log(`  RG1: prepare has ${p.budget?.chunksToGenerate} chunks to generate`);
     const j0 = await call('dev.journal.state', {}, 60_000);
     await call('dev.journal.killAt', { point: 'RG1' });
     await call('dev.region.prepare', { planId: p.planId }).catch(() => null);
