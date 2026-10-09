@@ -1,0 +1,19 @@
+{
+ "scenario": "s1_floating_islands",
+ "version": 1,
+ "note": "tile shas of the IR over its own plan survey (kit windowFromSurvey), 1 worker = 4 workers shuffled; inputs in goldens/s1/",
+ "fromRun": "20261009-213343",
+ "irSha": "216700ec808dce6cfb37aed71c5fcd81a8d29dd9fdd77759ebf22745944d896d",
+ "kitVersion": "0.12.0",
+ "cells": 60309,
+ "tiles": {
+  "islands|terrain|27,13": "5e17ed6ff6ec4487aff313ac7285352582041b9c4410f9e3d869b26b6b5ee16c",
+  "islands|terrain|27,14": "d636037bb4ce13291c8bd60ca892412e0c0f9198341f3fc2cf296613302f3a09",
+  "islands|terrain|28,13": "3daa928b4aebce50d012846f70a21fce7612542e28f8da0c389384c4095548b8",
+  "islands|terrain|28,14": "ad91fb570fe005f99caca5aa55a41b42ada176eeababe7f125bba8f991b5c89f",
+  "ways|path|27,13": "796dd6d88e785caa8d5b2a586a2f702d0f7ad8ce509489643e3d9169c240b9f7",
+  "ways|path|27,14": "273473e8d389c90ebf490cc57c0c069102757539915e9eafcf4c40f679afa6eb",
+  "ways|path|28,13": "83a234c11c6855b8038243989b50051375d801b0e4b075d9ddff15a0e799ae56",
+  "ways|path|28,14": "f8867f8600727882e92074d37d0f2755af439a8f2b5a331e058a7d61480c28b2"
+ }
+}
