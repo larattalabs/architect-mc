@@ -336,3 +336,161 @@ In the sidecar a tile holds one of its plan's W slots (per connection) from eval
 socket; requests beyond W queue (at most 256 per plan and connection). A connection that goes away loses its queued and
 in-flight tiles; the plan dirs and the IR cache stay.
 Snapshot features: `region.plan`, `region.tiles`.
+
+# Phase 6b additions (pinned interfaces; CONTRACT "# Phase 6b contract" is the spec)
+
+This part pins every interface the kit, the sidecar and the mod share in 6b. Where the contract leaves a byte layout or a
+message field open, this section decides it. Everything byte-compared is little-endian and platform-independent.
+
+## IR format 2
+
+An IR is `format: 2` only when it uses a format-2 member; a format-1 IR evaluates byte-identically to 6a (the
+`mega_bench.golden.json` tile shas are the proof). `kitVersion` is `'0.12.0'` (`KIT_VERSION`).
+
+```
+{ format: 2, ...every format-1 member except inline blob data...,
+  requires: [kind...],          // sorted, unique; computed by walking the IR (never by hand)
+  blobs:    { name: { sha, bytes, kind: 'heightfield'|'mask'|'field'|'volume' } },   // side files, by sha
+  fields:   { name: { blob, type: 'u8'|'i16', minX, minZ, width, depth, res: 1|4 } },
+  volumes:  { name: { blob, box: {minX, minY, minZ, maxX, maxY, maxZ}, sha } },
+  forms:    [{ id, generator, version, params, seed, bounds, ops: [opIndex...] }],     // provenance only
+  parts[].ops[]: { op: 'shape'|'columns', ..., material: <blockState> | null | { rule: <materialRule> } } }
+```
+
+- **Kinds in `requires`** (the closed list; `KINDS_FORMAT2` in `lib/realise.mjs`): `shape:ellipsoid`, `shape:capsuleChain`,
+  `shape:wedge`, `shape:prism`, `shape:array`, `shape:instances`, `shape:warp`, `shape:strata`, `material:rule`,
+  `blobs:side`, `fields`, `volumes`, `forms`. Any of them present makes the IR format 2; none, format 1.
+- **Members a format-1 IR may also carry** (6a's phase-6 IR list, additive, not format-2 kinds): `floating:
+  [{parts: [partId], anchor: name|null}]`, `utility: [{id, stage, part, kind, width, height, points}]`, `lots[].pad.fill`
+  (`'foundation'` default, `'none'`), `paths[].supports` (`'pillar'|'arch'|'ends'`), `paths[].maxSpan`,
+  `paths[].ends` and `paths[].cells` (the deck's centre cells, for M10 and the site plan), `paths[].width`,
+  `lots[].entrance`, `parts[].kind` (`carve|add|path|pad|form`, for previews and the site plan), `parts[].floating`.
+  The evaluator ignores them; the checker and previews read them. They are emitted only when a program uses them, so
+  mega_bench's IR is unchanged.
+- **Unknown members** of a format-2 IR throw `IR: unknown member '<m>' (supported: ...)`; `graph`, `siteLots`,
+  `lotEntries` and `fits` are 7a and unknown in 6b. Unknown op, shape or rule kinds throw
+  `IR: unknown <op|shape|rule> '<kind>' (supported: ...)`. `relief`, `scatter`, `voxels` and `stamp` are reserved op names
+  that throw the same way until their phase. A format-2 blob with inline `data` throws `format 2 blobs are side files`.
+- **Stale:** `format > 2`, a `requires` kind outside `KINDS_FORMAT2`, or `kitVersion` newer than the running kit (semver
+  compare) is `PLAN_STALE`: "plan needs kit X / format N / kinds [...]; this is kit Y" (`staleReason(ir, kit)` in
+  `lib/realise.mjs`; `compileIR` throws it with the prefix `PLAN_STALE: `).
+
+## Side blobs
+
+- Plan dir: `<data>/regions/plans/<planId>/blobs/<sha>.bin`, sha = SHA-256 (hex) of the file's bytes. At most 16 MB each,
+  64 MB per plan. The kit CLI writes them with `plan ... --blobs-out <dir>` (the sidecar passes `<planDir>/blobs`).
+- World dir: `<world>/architect-regions/<regionId>/blobs/<sha>.bin`, copied by the mod when the region record is created,
+  before any tile is requested (write, fsync, rename, read back, sha checked). A missing or bad blob refuses realise with
+  `OTHER` ("blob <sha> missing") before any write.
+- **File layouts by `kind`:**
+  - `heightfield` / `mask`: `ARBL` (4 bytes), u8 version 1, u8 kind (1 heightfield, 2 mask), u16 0, i32 minX, i32 minZ,
+    i32 width, i32 depth, then the data: u16 LE per column (heightfield) or a bitset, bit i at byte i>>3 bit i&7
+    (mask); i = x + z*width.
+  - `field`: raw values, `u8` one byte or `i16` two bytes LE per sample, row-major (i + j*width); dims in `fields`.
+  - `volume`: an ARVX file (below), stored as the mod froze it (gzip); `volumes[name].sha` is its ARVX sha.
+- The evaluator gets blob bytes through `evalTile(ir, key, heights, {blobs})`, `blobs` a function `sha -> Uint8Array` or a
+  map; a missing sha throws `blob_unknown <sha>`.
+
+## Material rules
+
+`material: { rule: { rule: [{when, mat}], default, dither: 'ordered4'|'none' } }` as SETTLEMENTS §3.3; `mat` and `default`
+are block states (roles resolved at plan). Conditions (all must hold; a clause with no conditions always matches):
+- `depth: [a, b]`: `d = floor(-sd)` of the op's own shape (0 = skin), `a <= d <= b`;
+- `slopeLt: n` / `slopeGte: n`: `s = max |ground(x±1, z) - ground|, |ground(x, z±1) - ground|` over the frozen ground;
+- `field: name, gte?: n, lt?: n`: the field's sample at (x, z) (res 4: the sample `floor((x - minX) / 4)`; outside: 0);
+- `band: [a, b]`: the strata band of the nearest enclosing `strata` node (no strata: band 0);
+- `noise: {kind, dims, scale, octaves, seed}, gte?: v, lt?: v, age?: a`: the noise value at (x, y, z) plus `age`;
+- `yAbs: [a, b]`;
+- `facing: 'up'|'down'|'side'`: up = the cell above is outside the op's shape (sd > 0), down = the cell below is outside,
+  side = any of the 4 horizontal neighbours is outside (6 SDF lookups, only for cells that reach the clause).
+
+`dither: 'ordered4'`: a clause's numeric thresholds (`gte`, `lt`, `depth` bounds) are shifted by the 4x4 Bayer value
+`B[(x & 3) + 4 * (z & 3)] / 16 - 0.5` (in the condition's own units: depth in cells, noise in [-1, 1] scaled by 0.25,
+fields by 16), so transitions don't make straight lines. An op whose rule uses `facing` has at most 32 primitive shapes
+(plan error past that).
+
+## Protocol (2, additive)
+
+- **`hello` / snapshot** (protocol 2): `kitVersion` (the sidecar kit's `KIT_VERSION`), `irFormats: [1, 2]`, `irKinds`
+  (`KINDS_FORMAT2`). New features: `region.check`, `region.preview`, `region.design`, `region.blobs`, `ir.format2`.
+- **`region.plan`** gains `check?: boolean` (default true; false = `ext["architect_mc:check"] = false`: no check, no
+  previews) and `volumes?: [{name?, sha, blobId, box}]` (frozen volumes the program may read: the second plan of the
+  two-plan flow). It broadcasts **`region.progress {planId, phase: 'planning'|'checking'|'rendering'}`** when each phase
+  starts (S-6b-5).
+- **`region.planned`** gains: `irFormat` (1|2), `requires` ([]), `kitVersion` (the IR's), `blobs: [{name, sha, bytes,
+  kind, blobId}]` (each side blob is also registered in the sidecar's blob store as kind `region.blob`, so the mod reads it
+  with the existing blob read), `needVolumes: [{minX, minY, minZ, maxX, maxY, maxZ}]` (boxes the program asked for with
+  `r.needVolume`), `report` (report.json, absent with `check: false`), `previews: {top: [path], section: [path...], iso:
+  [path], siteplan: [svgPath, pngPath]}` (absolute paths in the plan dir), `sitePlan` (siteplan.json), `checkMs`,
+  `renderMs`.
+- **`region.check {planId}`** -> ack `{report}` (re-runs the check from the plan dir's IR and survey).
+- **`region.preview {planId, views?: ['top'|'section'|'iso'|'siteplan'], axes?: [[[x, y, z]...]...]}`** -> ack `{paths:
+  {view: [path]}, sitePlan}`.
+- **`region.tiles.request`** gains `blobs?: {sha: blobId}`. The sidecar resolves the IR first (`ir_unknown`, as 6a), then
+  every blob sha the IR names from the plan dir, its blob cache (`<data>/regions/blobs/<sha>.bin`) or the request's
+  `blobs` (blob-store ids, checked by sha and then cached); any missing: ack `ok: false, error: "blob_unknown
+  <sha>,<sha>..."`. The mod then uploads those from the world copy with `blob.put` (kind `region.blob`, chunked) and asks
+  again with `blobs`. At most 3 re-requests per tile and reason; then the region waits `SIDECAR_UNAVAILABLE`.
+- **`region.design {brief, card?: {site?, purpose?, style?, text?}, claim, surveyBlobId, bible?, mustPass?, model?,
+  budgetUsd?, requireFit?: false, plan?: true}`** -> ack `{designId}`; then `design.upsert` with a design of `kind:
+  "region"` whose `result` is `{outcome: 'PICKED'|'NO_TEMPLATE', fits, program, params, reason, cost, planId?, tries}`.
+  With `fits` (and `plan`), the sidecar starts `region.plan` itself and names its `planId`; without a fit the result
+  still offers the closest `program` and `params` with `fits: false` (S-6b-3), and the outcome is `NO_TEMPLATE`.
+
+## ARVX (3D volumes, `Survey.volume`)
+
+The file is `gzip(ARVX bytes)`; the volume's **sha is SHA-256 of the uncompressed ARVX bytes** (the gzip bytes differ
+between Java and Node).
+
+```
+"ARVX" (4)  u8 version = 1  u8 0 0 0
+i32 minX, minY, minZ, maxX, maxY, maxZ                      (the box, inclusive)
+columns, x-major: for x in minX..maxX, for z in minZ..maxZ:
+  runs bottom-up from minY: (u8 class, varint length)...   (lengths sum to maxY - minY + 1)
+varint ownerCount, then ownerCount x (varint byteLength + UTF-8 entry id)
+varint ownedRuns, then per OWNED run in file order: varint ownerIndex
+```
+
+Classes (u8 = the enum ordinal): `AIR 0, ROCK 1, SOIL 2, LOOSE 3, ICE 4, SNOW 5, WATER 6, LAVA 7, LOG 8, LEAVES 9, PLANT 10,
+OWNED 11, PLAYER 12, BLOCK_ENTITY 13, MISSING 14`. Precedence per cell: unloaded/ungenerated column `MISSING`; a cell a
+journal entry owns `OWNED`; a block entity `BLOCK_ENTITY`; else the block's class from `kit/voxel_classes.json` (a block
+not listed is `PLAYER`; air is `AIR`). Adjacent cells of one class (and, for OWNED, one owner) form one run.
+
+`kit/voxel_classes.json` is generated by `kit/tools/gen-blocks.mjs` from 26.3 (BlockDump, with the same block tags as the
+mod's `TerrainFit.natural` and its tree rules): `{format: 1, classes: [names in ordinal order], blocks: {"minecraft:x":
+"ROCK", ...}}`, natural blocks only. The mod bundles the same file; a JVM test asserts its enum order and file equal the
+kit's. `kit/lib/region/volume.mjs` decodes (`decodeArvx(bytes)`) and `region.mjs volume decode <arvx> [--slice y]`
+prints it.
+
+## Realised-world dumps (`ARWD`, the scenario metrics)
+
+S1's bars run on the realised world, re-surveyed. `dev.region.dump {box, light?: true, file}` writes `gzip(ARWD bytes)`:
+
+```
+"ARWD" (4)  u8 version = 1  u8 flags (bit 0: light present)  u8 0 0
+i32 minX, minY, minZ, maxX, maxY, maxZ
+varint paletteSize, then per entry: varint byteLength + UTF-8 canonical block state (as ARTL)
+columns, x-major: runs bottom-up (varint paletteIndex, varint length)
+if light: columns, x-major: runs bottom-up (u8 blockLight, varint length)
+```
+
+`kit/lib/region/dump.mjs` decodes it into the checker's cell source.
+
+## The checker report (`report.json`) and `summary.txt`
+
+```
+{ format: 1, planId?, irSha, mode: 'virtual'|'realised', resolution: {coarse: 1|4, fullPasses: n},
+  ok: bool, errors: n, warnings: n,
+  findings: [{ rule: 'M1'..'M14' | 'M3:floating_spur', severity: 'error'|'warning', part: id|null, stage: name|null,
+               count: n, sample: [[x, y, z]...] (<= 20), message }],
+  metrics: { M2: {nodes, reached, unreachable: [id...], perNode: {id: bool}}, M5: {darkSpawnable, walkArea, share},
+             M8: {edgeCells, guarded, share}, M10: [{path, maxSpan, longest, ends}], ...per rule },
+  prefix: [{ stage, M2: {...}, M3: {...} }], ms: { total, perRule: {M1: ms, ...}, prefix } }
+```
+
+Findings are sorted by (rule, part, stage); `summary.txt` is one line per finding plus the totals.
+`CheckReport` in Java carries `ok, errors, warnings, findings` (the rest stays in the JSON).
+
+## `siteplan.json`
+
+As CONTRACT §3.4 with the graph marked `derived: true` (S-6b-1); JSON Schema `kit/schemas/siteplan-1.json`.
