@@ -14,11 +14,40 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { MC_VERSION, findJar, findJava, parseArgs, workDir } from './mcjar.mjs';
+import { MC_VERSION, findJar, findJava, openZip, parseArgs, workDir } from './mcjar.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const OUT = path.resolve(HERE, '../lib/blocks.mjs');
 const TEMPLATE = path.join(HERE, 'blocks.template.mjs');
+const VOXEL_OUT = path.resolve(HERE, '../voxel_classes.json');
+
+/**
+ * (6b) Every vanilla block tag, resolved (`#minecraft:x` references expanded): {tag: [blockId...]}, read from the
+ * server jar's built-in data pack (BlockDump runs without data packs, so its BlockState.is(tag) is always false).
+ */
+export function readBlockTags(serverClassesJar) {
+  const zip = openZip(serverClassesJar);
+  const raw = {};
+  const pre = 'data/minecraft/tags/block/';
+  for (const n of zip.names()) {
+    if (!n.startsWith(pre) || !n.endsWith('.json')) continue;
+    raw[`minecraft:${n.slice(pre.length, -5)}`] = JSON.parse(zip.read(n).toString('utf8')).values.map((v) => (typeof v === 'string' ? v : v.id));
+  }
+  const out = {};
+  const resolve = (t, seen = new Set()) => {
+    if (out[t]) return out[t];
+    if (seen.has(t)) throw new Error(`tag cycle at ${t}`);
+    seen.add(t);
+    const set = new Set();
+    for (const v of raw[t] ?? []) {
+      if (v.startsWith('#')) for (const x of resolve(v.slice(1), seen)) set.add(x);
+      else set.add(v.includes(':') ? v : `minecraft:${v}`);
+    }
+    return (out[t] = [...set].sort());
+  };
+  for (const t of Object.keys(raw).sort()) resolve(t);
+  return out;
+}
 
 function listJars(dir) {
   const out = [];
@@ -47,17 +76,21 @@ export async function collect(o = {}) {
     console.error('dump: BlockDump.java');
     execFileSync(java, ['-cp', cp, path.join(HERE, 'BlockDump.java'), dumpPath], { cwd: work, stdio: ['ignore', 'ignore', 'inherit'] });
   }
-  return { report: JSON.parse(fs.readFileSync(reportPath, 'utf8')), dump: JSON.parse(fs.readFileSync(dumpPath, 'utf8')), work };
+  const tags = readBlockTags(path.join(work, 'versions', MC_VERSION, `server-${MC_VERSION}.jar`));
+  return { report: JSON.parse(fs.readFileSync(reportPath, 'utf8')), dump: JSON.parse(fs.readFileSync(dumpPath, 'utf8')), tags, work };
 }
 
 async function main() {
   const o = parseArgs(process.argv.slice(2));
-  const { report, dump, work } = await collect(o);
+  const { report, dump, tags, work } = await collect(o);
   console.error(`${Object.keys(report).length} blocks in the report, ${Object.keys(dump).length} dumped (work dir ${work})`);
   if (o['dump-only']) return;
-  const { generate } = await import('./classify.mjs');
-  const src = generate(report, dump, fs.readFileSync(TEMPLATE, 'utf8'));
+  const { generate, voxelClasses } = await import('./classify.mjs');
+  const src = generate(report, dump, fs.readFileSync(TEMPLATE, 'utf8'), tags);
   fs.writeFileSync(OUT, src);
+  const vc = voxelClasses(report, dump, tags);
+  fs.writeFileSync(VOXEL_OUT, `${JSON.stringify(vc, null, 1)}\n`);
+  console.error(`wrote ${path.relative(process.cwd(), VOXEL_OUT)} (${Object.keys(vc.blocks).length} natural blocks)`);
   console.error(`wrote ${path.relative(process.cwd(), OUT)} (${(src.length / 1024).toFixed(0)} KB)`);
 }
 

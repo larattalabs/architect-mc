@@ -231,4 +231,13 @@ export function supportOf(state) {
 }
 
 /** A vanilla bed half. */
+/** (6b) A mob can spawn on top of this block (its default state; vanilla isValidSpawn for a zombie, from the 26.3 dump). */
+export const isSpawnable = (name) => !!T[qualify(String(name).replace(/\[.*$/, ''))]?.sp;
+
+/** (6b) The block's voxel class for natural blocks (kit/voxel_classes.json), 'AIR' for air, else 'PLAYER'. */
+export function voxelClassOf(name) {
+  const n = qualify(String(name).replace(/\[.*$/, ''));
+  return T[n]?.v ?? 'PLAYER';
+}
+
 export const isBed = (name) => T[name]?.family === 'bed';
