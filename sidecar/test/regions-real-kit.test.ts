@@ -26,6 +26,7 @@ const KIT_SHAPE = {
   realise: path.join(KIT, 'lib', 'realise.mjs'),
   program: 'mega_bench',
   claim: { minX: 0, minZ: 0, maxX: 999, maxZ: 999, minY: -64, maxY: 319 },
+  /** the plan alone (6b: `check: false`, as the 6b gate's megaA; the check and previews have their own limit, regionCheckMs) */
   planBudgetMs: 30_000,
   /** a fixed seed (the IR records it; without one the sidecar picks a random u64) */
   seed: '6',
@@ -71,7 +72,7 @@ describe.skipIf(!hasKit)('region plans and tiles with the real kit (mega_bench)'
     const surveyBlobId = sc.blobs.putBytes(survey(), 'survey', 'bin');
     const t0 = Date.now();
     let ack: { ok: boolean; error?: string; result?: Record<string, unknown> } | undefined;
-    await sc.handle({ v: 1, type: 'region.plan', id: 'p', program: KIT_SHAPE.program, params: {}, seed: KIT_SHAPE.seed, claim: KIT_SHAPE.claim, surveyBlobId } as never, (m) => {
+    await sc.handle({ v: 1, type: 'region.plan', id: 'p', program: KIT_SHAPE.program, params: {}, seed: KIT_SHAPE.seed, claim: KIT_SHAPE.claim, surveyBlobId, check: false } as never, (m) => {
       if (m.type === 'ack') ack = m;
     });
     expect(ack?.ok, ack?.error).toBe(true);
