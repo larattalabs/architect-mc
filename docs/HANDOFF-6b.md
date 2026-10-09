@@ -11,10 +11,10 @@ merge, tag or publish. This file is retired into CONTRACT "Phase 6b as built" wh
 | 1. 0.11.0 apitest jar archived; player-block `Reason` pinned | jars archived (below); the `Reason` question pinned by code reading, an in-game pin is pending |
 | 2. Kit: IR format 2, shapes, material rules, primitives, `floatingIsland`, ARVX | done (kit tests) |
 | 3. Kit: virtual world, M1-M14, prefix checks, previews, `siteplan.json` | done |
-| 4. Bundled programs and fixtures, expected reports, broken variants | done: `crater_works`, `rift_city`, `sky_isle`, `walled_hill`, `floating_islands`; the gate sites' recorded surveys are pending (find-site) |
+| 4. Bundled programs and fixtures, expected reports, broken variants | done: `crater_works`, `rift_city`, `sky_isle`, `walled_hill`, `floating_islands` (lots 9+ wide and 12 tall so the 6a stubs fit; `rift_city` has a field side blob) |
 | 5. Sidecar: check, preview, blobs, `hello` versions, `region.design` | done (subagent, merged from `phase/6b-sidecar`) |
 | 6. Mod: blobs, `PLAN_STALE`, `Survey.volume`, previews/check/design/nudge, ghost, commands, DevBridge, API 1.9.0 | done in JVM tests (subagent, merged from `phase/6b-mod`); in-game checks pending |
-| 7. Tools: `find-site.mjs`, `scenarios.mjs`, scenario files, `gate6b.mjs` | next |
+| 7. Tools: `find-site.mjs`, `scenarios.mjs`, scenario files, `gate6b.mjs` | written; in-game smoke green (crater_works plan, prepare, realise with 8 lots, exact group undo); find-site running |
 | 8. Gate items 1-10, 12; S1 run and gallery (11); gate-verifier (13) | not started |
 
 ## The 0.11.0 jars (build step 1)
@@ -51,6 +51,13 @@ overwrites it and the snapshot gives it back on remove. So 0.11.0 **only clears 
 - Gate item 10(c): the mod agent read 0.11.0's code: 0.11.0 drops a format-2 region record as unreadable at load (it never
   requests a tile); to pin in game.
 - Linux determinism: the format-1 and format-2 goldens pass in a Node 22 Linux container (artifacts/gate6b/linux-determinism.txt).
+
+## Find-site and the pinned seed
+
+The pinned world seed `2026100906` is desert and warm ocean for kilometres around spawn. The first find-site pass (30
+candidates at 512) found no site with relief 0-12 over 300x300; the needs were widened (crater and rift: relief under 48,
+water under 12%; S1: relief under 30, water under 35%, plains/ocean/meadow/river at least 70%) and the search runs to
+80-150 candidates with `stopAt`. S2-S6 are searched last (they are pinned only, no bars run).
 
 ## Spend
 
