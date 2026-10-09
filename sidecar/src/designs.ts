@@ -90,7 +90,11 @@ export class DesignBook {
     }
     if (changed) {
       d.updatedAt = this.ctx.now();
-      this.ctx.store.markDirty();
+      // a design that just became final is on disk before any client hears of it: the emit writes to the sockets at
+      // once, so a crash between it and a later flush would roll back a state clients already acted on (a done
+      // massing awaiting approval would be re-run, a done design installed again)
+      if (isFinalDesign(d)) this.ctx.store.flush();
+      else this.ctx.store.markDirty();
       this.ctx.emit({ type: 'design.upsert', design: structuredClone(d) });
     }
     return d;

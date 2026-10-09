@@ -3,9 +3,11 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { checkDesign, designBaseId, freeLibraryId, installDesign, minimalEnv, parseBuildJson, refreshKit, renderPreviews, slugify, withDesignId } from '../src/designs.js';
+import { checkDesign, DesignBook, designBaseId, freeLibraryId, installDesign, minimalEnv, parseBuildJson, refreshKit, renderPreviews, slugify, withDesignId } from '../src/designs.js';
 import { DesignRequest, DesignRequestV1, parseClientMessage } from '../src/protocol.js';
 import { prepareScratch } from '../src/scratch.js';
+import { Store } from '../src/store.js';
+import type { Outbound } from '../src/protocol.js';
 import { copyKit, request, rmrf, tempDir } from './helpers.js';
 
 const req = (over: Record<string, unknown> = {}) => DesignRequest.parse(request(over));
@@ -40,6 +42,35 @@ describe('naming', () => {
   it('reads the kit --json line, tolerating other output', () => {
     expect(parseBuildJson('building...\n{"ok":false,"errors":["no door"],"warnings":[{"rule":"x"}],"nbt":"a","sidecar":{"id":"b"}}\n')).toEqual({ ok: false, errors: ['no door'], warnings: ['{"rule":"x"}'] });
     expect(parseBuildJson('check: OK')).toBeUndefined();
+  });
+});
+
+// A final design is on disk before any client hears of it: the emit writes to the sockets at once, so a SIGKILL
+// right after a client saw `done` must not roll it back (a done massing awaiting approval was re-run after a restart).
+describe('the design book', () => {
+  it('flushes a final design to state.json before emitting it; non-final changes stay debounced', () => {
+    const dir = tempDir();
+    try {
+      const store = new Store(dir, { debounceMs: 60_000 });
+      const onDisk: Array<[string, string | undefined]> = [];
+      const book = new DesignBook({
+        store,
+        now: () => Date.now(),
+        emit: (m: Outbound) => {
+          if (m.type !== 'design.upsert') return;
+          const disk = JSON.parse(fs.readFileSync(path.join(dir, 'state.json'), 'utf8')) as { designs: Array<{ id: string; status: string }> };
+          onDisk.push([m.design.status, disk.designs.find((x) => x.id === m.design.id)?.status]);
+        },
+      });
+      const d = book.create(req());
+      book.update(d.id, { status: 'designing', step: 'drawing' });
+      book.update(d.id, { status: 'done', step: 'done' });
+      // created and designing are only marked dirty (not on disk yet); done is on disk when the upsert goes out
+      expect(onDisk).toEqual([['queued', undefined], ['designing', undefined], ['done', 'done']]);
+      store.close();
+    } finally {
+      rmrf(dir);
+    }
   });
 });
 
