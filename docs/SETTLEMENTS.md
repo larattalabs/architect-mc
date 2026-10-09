@@ -1132,3 +1132,13 @@ cost nothing.
 - Region-scale survival (N4 above), and construction mode for forms and relief.
 - Writing under standing lots (6d's pad delta under a BOX cover).
 - A Terrain tab or settlement UI in Architect for players (commands, API and the gallery until regions see real use).
+
+## Noah's decisions (2026-10-08)
+
+- **Phase plan adopted:** the old 6b/6c are replaced by 6b, 6c, 7a, 7b and 7c, each with its own contract and Steward review.
+  Spend caps: 7b about $60 (cap $90) and 7c about $120 (cap $180), on the claude login. Noah is told before each paid phase starts.
+- **Survival rule:** natural cut/fill and grown natural forms are free. Connectors and buildings are construction sites with
+  a bill of materials.
+- **Gallery:** a private claude.ai page per phase, with renders and approve/reject per scenario.
+- **Reference images:** made with GPT Image 2.5. Noah generates them through his own chat interface or sets up API access
+  himself. Architect asks him when a phase is ready for them; no local image generation is used for this.
