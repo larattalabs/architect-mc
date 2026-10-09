@@ -615,13 +615,16 @@ class Part {
    * radius: 4, extra: 4}` (or true) puts cylinders on the wall line at most `every` apart, never over a gate; `crenels`
    * adds merlons on every other outer-rim cell of the wall and tower tops.
    */
-  ring(c, r0, r1, { height = 8, rise = 0, gates = [], material = 'structure', threshold = 'path', towers, crenels } = {}) {
+  ring(c, r0, r1, { height = 8, rise = 0, gates = [], material = 'structure', threshold = 'path', towers, crenels, baseY = null } = {}) {
     if (!Array.isArray(c) || c.length !== 2 || !c.every(isNum)) throw new Error(`part ${this.id}: ring centre must be [x, z]`);
     if (!(isNum(r0) && isNum(r1) && r0 >= 0 && r1 > r0)) throw new Error(`part ${this.id}: ring needs 0 <= r0 < r1`);
     if (!(isInt(height) && height >= 1 && height <= 64)) throw new Error(`part ${this.id}: ring height must be 1..64`);
     if (!(isInt(rise) && rise >= 0 && rise <= 64)) throw new Error(`part ${this.id}: ring rise must be 0..64`);
     const mat = this._mat(material, 'ring material');
-    this._shapeOp({ kind: 'ring', c: [c[0], { surface: 0 }, c[1]], r0, r1, h: height + rise + 1 }, mat, COND.IF_NATURAL);
+    // (6b) baseY: an absolute footing (a wall on a raised mass), else the frozen surface
+    if (baseY !== null && !isInt(baseY)) throw new Error(`part ${this.id}: ring baseY must be an integer`);
+    const B = baseY === null ? { surface: 0 } : { abs: baseY };
+    this._shapeOp({ kind: 'ring', c: [c[0], B, c[1]], r0, r1, h: height + rise + 1 }, mat, COND.IF_NATURAL);
     const top = height + rise + 1; // the wall's top cell is ground + height + rise
     const rm = (r0 + r1) / 2;
     const gateAt = gates.map((g) => {
@@ -637,19 +640,19 @@ class Part {
       const n = Math.max(3, Math.ceil((2 * 3.141592653589793 * rm) / every));
       for (let i = 0; i < n; i++) {
         const d = compassDir((360 * i) / n + (t.start ?? 0));
-        const tx = c[0] + d[0] * rm, tz = c[1] + d[1] * rm;
+        const tx = round(c[0] + d[0] * rm), tz = round(c[1] + d[1] * rm);
         if (gateAt.some((g) => Math.sqrt(sq(g.x - tx) + sq(g.z - tz)) < g.w / 2 + tr + 2)) continue;
-        this._shapeOp({ kind: 'cylinder', c: [tx, { surface: 0 }, tz], r: tr, h: top + extra }, mat, COND.IF_NATURAL);
+        this._shapeOp({ kind: 'cylinder', c: [tx, B, tz], r: tr, h: top + extra }, mat, COND.IF_NATURAL);
         towerList.push([round(tx), round(tz), tr]);
       }
     }
     // (6b) crenels: merlons on every other outer-rim cell of the wall top (checkerboard), plus the towers' rims
     if (crenels) {
-      const cols = new Cols({ surface: 0 }, { surface: 0 });
+      const cols = new Cols(B, B);
       const R1 = Math.ceil(r1) + 1;
       for (let z = Math.floor(c[1] - R1); z <= Math.ceil(c[1] + R1); z++) for (let x = Math.floor(c[0] - R1); x <= Math.ceil(c[0] + R1); x++) {
         const d = Math.sqrt(sq(x - c[0]) + sq(z - c[1]));
-        if (d >= r1 - 1 && d <= r1 && ((x + z) & 1) === 0) cols.add(x, z, top, top, mat);
+        if (d >= r1 - 1 && d <= r1 && ((x + z) & 1) === 0 && !gateAt.some((g) => Math.sqrt(sq(g.x - x) + sq(g.z - z)) < g.w / 2 + 1.5)) cols.add(x, z, top, top, mat);
       }
       for (const [tx, tz, tr] of towerList) {
         for (let z = Math.floor(tz - tr); z <= Math.ceil(tz + tr); z++) for (let x = Math.floor(tx - tr); x <= Math.ceil(tx + tr); x++) {
@@ -673,12 +676,12 @@ class Part {
       const p = rightOf(d);
       const rm = (r0 + r1) / 2;
       const gx = c[0] + d[0] * rm, gz = c[1] + d[1] * rm;
-      const ty = this.region.survey.heightAt(round(gx), round(gz));
+      const ty = baseY === null ? this.region.survey.heightAt(round(gx), round(gz)) : baseY;
       const v0 = -Math.floor((w - 1) / 2) - 0.25, v1 = Math.floor(w / 2) + 0.25;
       const u0 = r0 - 2, u1 = r1 + 2;
       const poly = [[u0, v0], [u1, v0], [u1, v1], [u0, v1]].map(([u, v]) => [c[0] + d[0] * u + p[0] * v, c[1] + d[1] * u + p[1] * v]);
-      this._shapeOp({ kind: 'extrude', polygon: poly, y0: { floor: 1 }, y1: { abs: ty - 1 } }, this._mat('foundation', 'foundation'), COND.IF_NATURAL);
-      this._shapeOp({ kind: 'extrude', polygon: poly, y0: { abs: ty }, y1: { abs: ty } }, this._mat(threshold, 'gate threshold'), COND.IF_NATURAL, true);
+      if (baseY === null) this._shapeOp({ kind: 'extrude', polygon: poly, y0: { floor: 1 }, y1: { abs: ty - 1 } }, this._mat('foundation', 'foundation'), COND.IF_NATURAL);
+      this._shapeOp({ kind: 'extrude', polygon: poly, y0: { abs: ty }, y1: { abs: ty } }, this._mat(threshold, 'gate threshold'), baseY === null ? COND.IF_NATURAL : COND.ALWAYS_OURS, true);
       this._shapeOp({ kind: 'extrude', polygon: poly, y0: { abs: ty + 1 }, y1: { abs: ty + h } }, null, COND.IF_NATURAL);
       out.push({ at: [round(gx), ty, round(gz)], dir: d, width: w, height: h, polygon: poly });
     });
@@ -1004,7 +1007,9 @@ class Part {
         const [x, yy, z] = key.split(',').map(Number);
         for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) {
           const nx = x + dx, nz = z + dz;
-          if (Math.max(Math.abs(nx - cx), Math.abs(nz - cz)) !== half + 2) continue;
+          const ch = Math.max(Math.abs(nx - cx), Math.abs(nz - cz));
+          // the outside ring, or a track cell with no tread near this height (the open well beside the top turn)
+          if (ch !== half + 2 && (ch < half - 1 || ch > half + 1)) continue;
           if ((tread.get(`${nx},${nz}`) ?? []).some((v) => Math.abs(v - yy) <= 2)) continue;
           if (!rails.seen?.has(`${nx},${yy},${nz}`)) {
             rails.addOnce(`${nx},${yy},${nz}`, nx, nz, yy, yy, full);
@@ -1147,9 +1152,11 @@ class Part {
     // (6b) towers: a square tower each side of the deck at both ends, from the floor to the deck + towerHeight
     if (towers) {
       const th = towers === true ? 6 : towers.height ?? 6;
-      for (const i of [0, cells.length - 1]) {
+      const at = towers === true || !towers.at ? 'both' : towers.at;
+      if (!['both', 'start', 'end'].includes(at)) throw new Error(`${what}: towers.at must be both, start or end`);
+      for (const i of at === 'both' ? [0, cells.length - 1] : at === 'start' ? [0] : [cells.length - 1]) {
         const c = cells[i];
-        for (const k of [offs[0] - 2, offs[offs.length - 1] + 2]) {
+        for (const k of [offs[0] - 3, offs[offs.length - 1] + 3]) {
           const x = c.x + c.r[0] * k, z = c.z + c.r[1] * k;
           this._shapeOp({ kind: 'box', min: [x - 1, { min: [{ floor: 1 }, { abs: ys[i] }] }, z - 1], max: [x + 1, { abs: ys[i] + th }, z + 1] }, supportM, COND.IF_AIR_OR_FLUID);
           grow(x - 1, ys[i], z - 1); grow(x + 1, ys[i] + th, z + 1);
