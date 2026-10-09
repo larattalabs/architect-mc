@@ -111,7 +111,11 @@ export class VariantBook {
     }
     if (changed) {
       v.updatedAt = this.ctx.now();
-      this.ctx.store.markDirty();
+      // a variant that just became final is on disk before any client hears of it (as DesignBook.update): after a crash
+      // between the emit and a later flush the restart would build it again and install a second library entry under
+      // a new id, next to the one the client was told about
+      if (isFinalVariant(v)) this.ctx.store.flush();
+      else this.ctx.store.markDirty();
       this.ctx.emit({ type: 'variant.upsert', variant: structuredClone(v) });
     }
     return v;

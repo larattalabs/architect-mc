@@ -32,6 +32,26 @@ function startSidecar(args: string[]): Proc {
   return { child, out, exit };
 }
 
+/**
+ * Wait until this child is up: its own sidecar.json (pid = the child's), which records the port it bound (every sidecar
+ * here starts on --port 0, so test runs in other checkouts never collide). A child that exits first is reported as a
+ * startup failure with its exit code and output, not as a timeout.
+ */
+async function ready(p: Proc, data: string, timeoutMs = 15_000): Promise<number> {
+  const file = path.join(data, 'sidecar.json');
+  const run = (): { pid: number; port: number } | undefined => {
+    try {
+      return JSON.parse(fs.readFileSync(file, 'utf8')) as { pid: number; port: number };
+    } catch {
+      return undefined;
+    }
+  };
+  const exited = () => p.child.exitCode !== null || p.child.signalCode !== null;
+  await until(() => run()?.pid === p.child.pid || exited(), timeoutMs);
+  if (exited()) throw new Error(`the sidecar exited (${p.child.exitCode ?? p.child.signalCode}) before it was ready:\n${p.out.join('').slice(-1500)}`);
+  return run()!.port;
+}
+
 async function connect(port: number) {
   const ws = new WebSocket(`ws://127.0.0.1:${port}`);
   const msgs: ServerMessage[] = [];
@@ -63,9 +83,8 @@ describe('dist/main.mjs (sim backend, fixture kit)', () => {
     library = path.join(root, 'library');
     kit = copyKit(root);
     p = startSidecar(['--port', '0', '--data', data, '--library', library, '--kit', kit, '--backend', 'sim', '--parent-pid', String(process.pid)]);
-    await until(() => fs.existsSync(path.join(data, 'sidecar.json')) && fs.existsSync(path.join(data, 'client.token')), 15_000);
-    const run = JSON.parse(fs.readFileSync(path.join(data, 'sidecar.json'), 'utf8')) as { pid: number; port: number; version: string; startedAt: number };
-    port = run.port;
+    port = await ready(p, data);
+    await until(() => fs.existsSync(path.join(data, 'client.token')), 15_000);
     token = fs.readFileSync(path.join(data, 'client.token'), 'utf8').trim();
   }, 60_000);
 
@@ -151,7 +170,7 @@ describe('dist/main.mjs (sim backend, fixture kit)', () => {
     const parent = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 1000)'], { stdio: 'ignore' });
     const data2 = path.join(root, 'data2');
     const q = startSidecar(['--port', '0', '--data', data2, '--library', library, '--kit', kit, '--backend', 'sim', '--parent-pid', String(parent.pid)]);
-    await until(() => fs.existsSync(path.join(data2, 'sidecar.json')), 15_000);
+    await ready(q, data2);
     const t0 = Date.now();
     await new Promise((r) => parent.on('exit', r));
     const code = await Promise.race([q.exit, new Promise((r) => setTimeout(() => r('timeout'), 12_000))]);
@@ -161,25 +180,25 @@ describe('dist/main.mjs (sim backend, fixture kit)', () => {
   }, 30_000);
 });
 
-// Protocol 2 through the built bundle on port 8290: negotiation (a protocol-1 client unchanged), a blob, an agent job
+// Protocol 2 through the built bundle (an ephemeral port): negotiation (a protocol-1 client unchanged), a blob, an agent job
 // whose tool call survives a SIGKILL of the sidecar (re-sent on hello after the restart, same call id), and a
 // structured job.
-describe('dist/main.mjs, protocol 2 on port 8290 (sim backend)', () => {
-  const PORT = 8290;
+describe('dist/main.mjs, protocol 2 (sim backend)', () => {
+  let port = 0;
   let root: string;
   let data: string;
   let p: Proc | undefined;
-  const args = () => ['--port', String(PORT), '--data', data, '--library', path.join(root, 'library'), '--kit', path.join(root, 'kit'), '--backend', 'sim'];
+  const args = () => ['--port', '0', '--data', data, '--library', path.join(root, 'library'), '--kit', path.join(root, 'kit'), '--backend', 'sim'];
   const tokenOf = () => fs.readFileSync(path.join(data, 'client.token'), 'utf8').trim();
   type M = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
   const find = (msgs: unknown[], pred: (m: M) => boolean) => (msgs as M[]).find(pred);
   async function start(): Promise<void> {
     if (fs.existsSync(path.join(data, 'sidecar.json'))) fs.rmSync(path.join(data, 'sidecar.json'));
     p = startSidecar(args());
-    await until(() => fs.existsSync(path.join(data, 'sidecar.json')), 15_000);
+    port = await ready(p, data);
   }
   async function hello2(client = 'mod') {
-    const c = await connect(PORT);
+    const c = await connect(port);
     c.send({ type: 'hello', client, version: 'e2e', token: tokenOf(), protocols: [1, 2] });
     await until(() => c.msgs.some((m) => m.type === 'snapshot'));
     return c;
@@ -203,7 +222,7 @@ describe('dist/main.mjs, protocol 2 on port 8290 (sim backend)', () => {
   it('negotiates protocol 2; a protocol-1 hello gets the phase 1-3 snapshot', async () => {
     const v2 = await hello2();
     expect(find(v2.msgs, (m) => m.type === 'snapshot')).toMatchObject({ protocol: 2, features: ['job.run', 'job.tools', 'blobs', 'budget', 'designs.v2', 'bibles', 'design.groups', 'named.parts', 'open.types', 'estimates', 'reskin', 'massing', 'critique', 'critique.report', 'job.images', 'bible.admin', 'bible.restraint', 'entry.versions', 'entry.delta', 'design.polish', 'critique.polish', 'region.plan', 'region.tiles', 'region.check', 'region.preview', 'region.design', 'region.blobs', 'ir.format2'], jobs: [] });
-    const v1 = await connect(PORT);
+    const v1 = await connect(port);
     v1.send({ type: 'hello', client: 'mod', version: 'old', token: tokenOf() });
     await until(() => v1.msgs.some((m) => m.type === 'snapshot'));
     expect(Object.keys(find(v1.msgs, (m) => m.type === 'snapshot')!).sort()).toEqual(['designs', 'status', 'type', 'v', 'variants', 'version']);
@@ -214,7 +233,7 @@ describe('dist/main.mjs, protocol 2 on port 8290 (sim backend)', () => {
   it('(6a) region.plan and region.tiles through the bundle: the worker module resolves next to dist/main.mjs', async () => {
     expect(fs.existsSync(path.join(SIDECAR_ROOT, 'dist', 'region-worker.mjs'))).toBe(true);
     const c = await hello2();
-    const v1 = await connect(PORT);
+    const v1 = await connect(port);
     v1.send({ type: 'hello', client: 'mod', version: 'old', token: tokenOf() });
     await until(() => v1.msgs.some((m) => m.type === 'snapshot'));
     const ackOf = async (id: string) => {
@@ -256,7 +275,7 @@ describe('dist/main.mjs, protocol 2 on port 8290 (sim backend)', () => {
     c.ws.close();
   }, 60_000);
 
-  it('an agent job with a blob; SIGKILL mid tool call; restart on the same port; the call is re-sent and the job completes', async () => {
+  it('an agent job with a blob; SIGKILL mid tool call; restart (a new ephemeral port); the call is re-sent and the job completes', async () => {
     let c = await hello2();
     c.send({ type: 'blob.put', id: 'b', kind: 'survey', data: { width: 2, depth: 1, height: [64, 66] } });
     await until(() => c.msgs.some((m) => m.type === 'ack' && m.re === 'b'));
@@ -286,28 +305,27 @@ describe('dist/main.mjs, protocol 2 on port 8290 (sim backend)', () => {
   }, 60_000);
 });
 
-// Phase 4b through the built bundle on port 8295, with the REAL kit and --debug (every outbound message is validated
+// Phase 4b through the built bundle (an ephemeral port), with the REAL kit and --debug (every outbound message is validated
 // against its schema): estimates, a bible job (sim backend: a fixed bible through the real component frame and sheet),
 // a design group with an anchor wave that survives a SIGKILL mid-group (itemKey and ext intact), and a re-skin of the
 // collection to a built-in bible.
 const REAL_KIT = path.join(SIDECAR_ROOT, '..', 'kit');
-describe.skipIf(!fs.existsSync(path.join(REAL_KIT, 'tools', 'components.mjs')))('dist/main.mjs, phase 4b on port 8295 (sim backend, real kit)', () => {
-  const PORT = 8295;
+describe.skipIf(!fs.existsSync(path.join(REAL_KIT, 'tools', 'components.mjs')))('dist/main.mjs, phase 4b (sim backend, real kit)', () => {
+  let port = 0;
   let root: string;
   let data: string;
   let p: Proc | undefined;
-  const args = () => ['--port', String(PORT), '--data', data, '--library', path.join(root, 'library'), '--kit', REAL_KIT, '--backend', 'sim', '--debug'];
+  const args = () => ['--port', '0', '--data', data, '--library', path.join(root, 'library'), '--kit', REAL_KIT, '--backend', 'sim', '--debug'];
   const tokenOf = () => fs.readFileSync(path.join(data, 'client.token'), 'utf8').trim();
   type M = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
   const last = (msgs: unknown[], pred: (m: M) => boolean) => (msgs as M[]).filter(pred).at(-1);
   async function start(): Promise<void> {
     if (fs.existsSync(path.join(data, 'sidecar.json'))) fs.rmSync(path.join(data, 'sidecar.json'));
     p = startSidecar(args());
-    await until(() => fs.existsSync(path.join(data, 'sidecar.json')) || p!.child.exitCode !== null, 15_000);
-    if (p.child.exitCode !== null) throw new Error(`the sidecar exited (${p.child.exitCode})${p.child.exitCode === 3 ? `: port ${PORT} is in use (another sidecar or test run?)` : ''}:\n${p.out.join('').slice(-1500)}`);
+    port = await ready(p, data);
   }
   async function hello2() {
-    const c = await connect(PORT);
+    const c = await connect(port);
     c.send({ type: 'hello', client: 'mod', version: 'e2e', token: tokenOf(), protocols: [1, 2] });
     await until(() => c.msgs.some((m) => m.type === 'snapshot'));
     return c;
@@ -398,27 +416,26 @@ describe.skipIf(!fs.existsSync(path.join(REAL_KIT, 'tools', 'components.mjs')))(
   }, 150_000);
 });
 
-// Phase 4c through the built bundle on port 8296, with the REAL kit (its example massings) and --debug (every outbound
+// Phase 4c through the built bundle (an ephemeral port), with the REAL kit (its example massings) and --debug (every outbound
 // message is validated against its schema): a massing, a redirect, massing.list, a detail pass from it (conformance), a
 // massingFirst group with approvalUi "owner" across a SIGKILL while it awaits approval (approve 2, redirect 1, then the
 // last), estimates with the massing pass, and massing.delete.
-describe.skipIf(!fs.existsSync(path.join(REAL_KIT, 'lib', 'massing.mjs')))('dist/main.mjs, phase 4c on port 8296 (sim backend, real kit)', () => {
-  const PORT = 8296;
+describe.skipIf(!fs.existsSync(path.join(REAL_KIT, 'lib', 'massing.mjs')))('dist/main.mjs, phase 4c (sim backend, real kit)', () => {
+  let port = 0;
   let root: string;
   let data: string;
   let p: Proc | undefined;
-  const args = () => ['--port', String(PORT), '--data', data, '--library', path.join(root, 'library'), '--kit', REAL_KIT, '--backend', 'sim', '--debug'];
+  const args = () => ['--port', '0', '--data', data, '--library', path.join(root, 'library'), '--kit', REAL_KIT, '--backend', 'sim', '--debug'];
   const tokenOf = () => fs.readFileSync(path.join(data, 'client.token'), 'utf8').trim();
   type M = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
   const last = (msgs: unknown[], pred: (m: M) => boolean) => (msgs as M[]).filter(pred).at(-1);
   async function start(): Promise<void> {
     if (fs.existsSync(path.join(data, 'sidecar.json'))) fs.rmSync(path.join(data, 'sidecar.json'));
     p = startSidecar(args());
-    await until(() => fs.existsSync(path.join(data, 'sidecar.json')) || p!.child.exitCode !== null, 15_000);
-    if (p.child.exitCode !== null) throw new Error(`the sidecar exited (${p.child.exitCode})${p.child.exitCode === 3 ? `: port ${PORT} is in use (another sidecar or test run?)` : ''}:\n${p.out.join('').slice(-1500)}`);
+    port = await ready(p, data);
   }
   async function hello2() {
-    const c = await connect(PORT);
+    const c = await connect(port);
     c.send({ type: 'hello', client: 'mod', version: 'e2e', token: tokenOf(), protocols: [1, 2] });
     await until(() => c.msgs.some((m) => m.type === 'snapshot'));
     return c;

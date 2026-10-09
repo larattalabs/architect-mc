@@ -6196,6 +6196,8 @@ The full chain is **one** run of megaA and megaB, not three. The throughput medi
 - **N-6b-3** Yes: about $0.30 expected, with a $3 cap.
 - **N-6b-4** The soft downgrade is accepted: 0.11.x writes nothing to a format-2 region, and the gate pins that behaviour.
 - **N-6b-5** Yes: the terrain half of the survival rule lands in 6c, and the connector half in 7a.
+- N-6b-1, N-6b-2 and N-6b-3: the Steward session relayed on 2026-10-09 that Noah, in that session, raised no objection to them.
+  Recorded as relayed, not as first-hand confirmation.
 
 ## Changes from Steward's review of 6b (steward-mc/docs/A6B-REVIEW.md), all accepted
 
@@ -6217,3 +6219,25 @@ Where this section and the 6b text above disagree, this section wins.
   "rendering previews") so a caller's inbox isn't silent.
 - **S-6b-6** `Survey.volume` returns summary stats alongside the grid: class counts, slope and overhang fractions, and tree and
   cave presence.
+
+## 6b addition: region lot entrances (Noah, 2026-10-09)
+
+Problem seen in the S1 renders: each region lot brings the single-building approach (a dirt-path strip and a cobblestone
+apron) that clashes with the region's own roads, stairs and decks. For **region lots only** (single placements keep today's
+approach):
+- **Style:** the approach and the pad apron take their blocks from the region's `path` and `foundation` roles. Where the
+  approach meets a road or walk-surface, it uses that surface's block.
+- **Fit:** the approach runs to the nearest walk-surface cell (road, stair, bridge deck, path) by the shortest route the 4d
+  approach rules allow. If the entrance already opens onto a walk-surface within 1 cell, there is no approach. If no
+  walk-surface is within the approach's maximum length, the default length applies, in the region style, and checker M2
+  reports the lot if the player can't reach it.
+- **Apron:** the +1 apron becomes the surrounding natural ground block, or the path role where the approach crosses it.
+  It is never the default cobblestone.
+- **Gate:** S1 and crater_works renders show no default dirt-path or cobblestone cells on lot fronts (a cell count by block,
+  plus screenshots looked at). M2 player reachability is unchanged or better. Exact undo still holds. The re-run is limited to
+  the steps this touches.
+- 7a replaces this with designed entrance connectors in the settlement graph.
+- **Extended after Steward's live runs (2026-10-09):** plain placements (not region lots) get the same behaviour **when the
+  caller asks for it**: `PlaceRequest.pathStyle` (a road surface block). The approach also takes the block of an adjacent 4e road
+  site it joins, and joins the nearest road cell. Without either, single placements are unchanged. API 1.9.0 adds the field (old
+  constructors kept). Gate: a plain lot next to a 4e road with `pathStyle` shows no default dirt-path or cobblestone on its front.

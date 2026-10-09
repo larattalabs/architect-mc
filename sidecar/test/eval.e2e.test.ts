@@ -15,10 +15,11 @@ const hasKit = fs.existsSync(path.join(REPO, 'kit', 'check.mjs'));
 
 /** a copy of the bundle (other test files rebuild dist/ while this one runs) */
 let bundle = '';
+// ARCHITECT_EVAL_PORT=0: every eval sidecar on an ephemeral port (test runs in other checkouts never collide)
 const run = (args: string[], env: NodeJS.ProcessEnv = {}) => {
   const base = { ...process.env };
   for (const k of ['ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN']) delete base[k];
-  return spawnSync(process.execPath, [EVAL, ...args], { cwd: REPO, encoding: 'utf8', env: { ...base, ARCHITECT_EVAL_SIDECAR: bundle, ...env }, timeout: 240_000 });
+  return spawnSync(process.execPath, [EVAL, ...args], { cwd: REPO, encoding: 'utf8', env: { ...base, ARCHITECT_EVAL_SIDECAR: bundle, ARCHITECT_EVAL_PORT: '0', ...env }, timeout: 240_000 });
 };
 
 describe.skipIf(!hasKit)('tools/eval.mjs (sim tier)', () => {
@@ -62,7 +63,7 @@ describe.skipIf(!hasKit)('tools/eval.mjs (sim tier)', () => {
       const ra = fs.readdirSync(out).find((d) => d.startsWith('ci-loop-'))!;
       const p = run(['run', '--tier', 'sim', '--arm', 'polish', '--from', ra, '--label', 'ci-polish', '--out', out, '--no-results', '--smoke-first']);
       expect(p.status, p.stdout + p.stderr).toBe(0);
-      expect(p.stdout).toMatch(/port 889[45]/);
+      expect(p.stdout).toMatch(/sidecar pid \d+ on port [1-9]\d*/);
       const rp = fs.readdirSync(out).find((d) => d.startsWith('ci-polish-'))!;
       const s = JSON.parse(fs.readFileSync(path.join(out, rp, 'summary.json'), 'utf8')) as { arm: string; precheck: { identical: number; of: number }; briefs: Array<{ id: string; status: string; end: string; accepted: number; installedVersion: number | null; judge: { outcome: string }; g5: { checked: boolean; violations: number }; h2h: { outcome: string }; targeted: { outcome: string } }>; aggregates: { done: number; G5: { pass: boolean }; G1: { withStep: number }; recorded: { steps: number } } };
       expect(s.arm).toBe('polish');
