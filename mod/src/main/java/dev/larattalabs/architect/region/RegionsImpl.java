@@ -876,6 +876,31 @@ public final class RegionsImpl implements Regions {
 			JsonObject w = new JsonObject();
 			waits.forEach(w::addProperty);
 			o.add("waiting", w);
+			// where the unfinished items are (the gate's configuration B walks the player there): key, status, reason, x, z
+			com.google.gson.JsonArray at = new com.google.gson.JsonArray();
+			for (QItem i : b.items) {
+				if (i.status.terminal() || at.size() >= 40) {
+					continue;
+				}
+				JsonObject e = new JsonObject();
+				e.addProperty("key", i.key);
+				e.addProperty("stage", i.stage);
+				e.addProperty("status", i.status.name());
+				if (i.reason != null) {
+					e.addProperty("reason", i.reason);
+				}
+				int x = i.x;
+				int z = i.z;
+				if (i.key.startsWith("t:")) {
+					String[] xz = i.key.substring(i.key.lastIndexOf(':') + 1).split(",");
+					x = Integer.parseInt(xz[0]) * 64 + 32;
+					z = Integer.parseInt(xz[1]) * 64 + 32;
+				}
+				e.addProperty("x", x);
+				e.addProperty("z", z);
+				at.add(e);
+			}
+			o.add("unfinished", at);
 			o.add("failed", longWaits);
 			o.addProperty("batchStatus", b.status.name());
 		}

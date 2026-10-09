@@ -408,9 +408,14 @@ final class PlaceJob implements Placement.Job {
 		int removed = 0;
 		for (net.minecraft.world.entity.Entity e : level.getEntities((net.minecraft.world.entity.Entity) null,
 			dev.larattalabs.architect.placement.Occupancy.aabb(snapBox), e -> !(e instanceof net.minecraft.world.entity.player.Player) && e.isAlive())) {
-			if (dev.larattalabs.architect.placement.Occupancy.classify(e).removable()) {
-				e.discard();
-				removed++;
+			dev.larattalabs.architect.placement.Occupancy.regionScope = batchId != null && Batches.isRegionBatch(batchId);
+			try {
+				if (dev.larattalabs.architect.placement.Occupancy.classify(e).removable()) {
+					e.discard();
+					removed++;
+				}
+			} finally {
+				dev.larattalabs.architect.placement.Occupancy.regionScope = false;
 			}
 		}
 		if (removed == 0) {

@@ -105,6 +105,12 @@ public final class Batches {
 		return BATCHES.get(id);
 	}
 
+	/** Whether the batch is a region's (phase 6a). */
+	static boolean isRegionBatch(String id) {
+		QBatch b = BATCHES.get(id);
+		return b != null && RegionItems.isRegion(b);
+	}
+
 	public static List<QBatch> all() {
 		return List.copyOf(BATCHES.values());
 	}
@@ -236,7 +242,8 @@ public final class Batches {
 		String groupId = Sites.newGroupId();
 		JsonObject bext = ext.deepCopy();
 		bext.addProperty(RegionItems.EXT_REGION, regionId);
-		QBatch b = new QBatch(id, owner, bext, groupId, items, stages, (long) Batch.WaitPolicy.DEFAULT.maxWaitSeconds() * 20L, loadChunks, false, false,
+		// S8: a region's waits have no time limit (the wait reason is shown instead)
+		QBatch b = new QBatch(id, owner, bext, groupId, items, stages, Long.MAX_VALUE, loadChunks, false, false,
 			autoApprove, false, null, System.currentTimeMillis());
 		b.generate = generate;
 		chunkBound(b);
@@ -830,7 +837,12 @@ public final class Batches {
 	/** Checks an item and starts it, makes it wait, or fails it. */
 	private static void tryStart(MinecraftServer server, QBatch b, QItem i) {
 		long t0 = System.nanoTime();
-		tryStart0(server, b, i);
+		dev.larattalabs.architect.placement.Occupancy.regionScope = RegionItems.isRegion(b);
+		try {
+			tryStart0(server, b, i);
+		} finally {
+			dev.larattalabs.architect.placement.Occupancy.regionScope = false;
+		}
 		if (System.getenv("ARCHITECT_TRACE_JOBS") != null) {
 			Architect.LOGGER.info("TRACE tick {} tryStart {} {} ms", server.getTickCount(), i.key, (System.nanoTime() - t0) / 1e6);
 		}

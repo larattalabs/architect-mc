@@ -62,6 +62,13 @@ public final class Occupancy {
 		}
 	}
 
+	/**
+	 * Phase 6a: set (server thread) while a region's item is checked or starts. Regions are creative-only (N4), and their own
+	 * terrain writes kill the animals in their way: items nobody threw count as natural drops there, so a region never waits on
+	 * a cow's beef.
+	 */
+	public static boolean regionScope;
+
 	/** The refusal for "a player in the box" (the ghost uses the same words). */
 	public static final String PLAYER_IN_BOX = "you are standing in or next to the box (look further away or nudge it)";
 
@@ -180,6 +187,10 @@ public final class Occupancy {
 		}
 		if (e instanceof ItemEntity item && NaturalDrops.natural(item)) {
 			// leaves decaying around the site, plants the placement cleared: nobody's items, so they never block a placement
+			return new Found(Kind.DROP, item.getItem().getHoverName().getString(), false);
+		}
+		if (e instanceof ItemEntity item && regionScope && !(item.getOwner() instanceof Player) && !item.getItem().has(net.minecraft.core.component.DataComponents.CUSTOM_NAME)) {
+			// phase 6a: inside a region's item, loot nobody threw is a mob's (the region's own carve kills animals in its way): cleared
 			return new Found(Kind.DROP, item.getItem().getHoverName().getString(), false);
 		}
 		if (e instanceof ItemEntity item) {

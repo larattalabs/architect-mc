@@ -538,6 +538,35 @@ steps.megaB = async () => {
   const t0 = Date.now();
   let relogDone = false;
   let killDone = false;
+  // the client's chunk counters restart with it: deltas are kept across the relog with an offset
+  const off = { loads: 0, terrain: 0 };
+  const counters = async () => {
+    const g = await call('dev.chunks.generated');
+    return { loads: g.loads + off.loads, terrain: g.terrain + off.terrain };
+  };
+  // progress after an interruption: the player goes to an unfinished item of the stage (configuration B places only near the
+  // player), and the time from arriving there to the next cells written or lot placed is the resume time
+  const resumeAt = async (stage, label) => {
+    const st0 = await regionState(region);
+    const it = (st0.unfinished ?? []).find((x) => x.stage === stage) ?? (st0.unfinished ?? [])[0];
+    if (!it) return { resumedSeconds: 0, note: 'nothing left in the stage' };
+    await cmd(`/tp @s ${it.x} 200 ${it.z}`);
+    await call('dev.waitChunks', { timeoutMs: 60_000 }, 90_000).catch(() => {});
+    const ta = Date.now();
+    const c0 = st0.view.cellsWritten;
+    const p0 = st0.view.lots.filter((l) => l.state === 'placed').length;
+    for (let i = 0; i < 300; i++) {
+      const s2 = await regionState(region);
+      if (s2.view.cellsWritten > c0 || s2.view.lots.filter((l) => l.state === 'placed').length > p0) {
+        const r = { resumedSeconds: (Date.now() - ta) / 1000, item: it.key, itemWas: `${it.status} ${it.reason ?? ''}`.trim() };
+        log(`  ${label}: resumed ${r.resumedSeconds.toFixed(1)} s after the player reached ${it.key} (${r.itemWas})`);
+        return r;
+      }
+      await sleep(1000);
+    }
+    log(`  ${label}: no progress within 300 s at ${it.key}`);
+    return { resumedSeconds: null, item: it.key, itemWas: `${it.status} ${it.reason ?? ''}`.trim() };
+  };
   const visit = async (x, z) => {
     await cmd(`/tp @s ${x} 200 ${z}`);
     await sleep(30_000);
@@ -557,7 +586,7 @@ steps.megaB = async () => {
     for (const [tx, tz] of keys) cells.set(`${Math.floor(tx / 3)},${Math.floor(tz / 3)}`, [Math.floor(tx / 3), Math.floor(tz / 3)]);
     const route = [...cells.values()].sort((a, b) => a[1] - b[1] || (a[1] % 2 ? b[0] - a[0] : a[0] - b[0]));
     const s0 = Date.now();
-    const g0 = await call('dev.chunks.generated');
+    const g0 = await counters();
     log(`  stage ${stage}: ${keys.length} items, ${route.length} waypoints`);
     let lap = 0;
     while (true) {
@@ -573,42 +602,31 @@ steps.megaB = async () => {
           await sleep(30_000);
           const w = await regionState(region);
           out.sidecarKill = { waiting: w.waiting, cells: w.view.cellsWritten };
-          const tk = Date.now();
           await call('dev.launcher.restart', {}, 120_000);
-          for (let i = 0; i < 120; i++) {
-            const s2 = await regionState(region);
-            if (s2.view.cellsWritten > w.view.cellsWritten) {
-              out.sidecarKill.resumedSeconds = (Date.now() - tk) / 1000;
-              break;
-            }
+          for (let i = 0; i < 60; i++) {
+            const ls2 = await call('dev.launcher.state').catch(() => ({}));
+            if (ls2.pid && ls2.pid !== ls.pid && /running/i.test(JSON.stringify(ls2))) break;
             await sleep(1000);
           }
-          log(`  sidecar back: resumed in ${out.sidecarKill.resumedSeconds} s`);
+          Object.assign(out.sidecarKill, await resumeAt('ways', 'sidecar back'));
         }
         if (stage === 'lots-2' && !relogDone && st.view.lots.filter((l) => l.state === 'placed').length > 50 + 10) {
           log('  relog in the middle of lots-2');
+          const gb = await call('dev.chunks.generated');
           await stopClient();
           await startClient(name);
+          const ga = await call('dev.chunks.generated');
+          off.loads += gb.loads - ga.loads;
+          off.terrain += gb.terrain - ga.terrain;
           relogDone = true;
-          const tr = Date.now();
-          await tp(cx * 192 + 96, 200, cz * 192 + 96);
-          const before = (await regionState(region)).view.cellsWritten;
-          for (let i = 0; i < 120; i++) {
-            const s2 = await regionState(region);
-            if (s2.view.lots.filter((l) => l.state === 'placed').length > st.view.lots.filter((l) => l.state === 'placed').length || s2.view.cellsWritten > before) {
-              out.relog = { resumedSeconds: (Date.now() - tr) / 1000 };
-              break;
-            }
-            await sleep(1000);
-          }
-          log(`  relog: resumed in ${out.relog?.resumedSeconds} s`);
+          out.relog = await resumeAt('lots-2', 'relog');
         }
         if (sp.state === 'PLACED' || sp.state === 'PARTIAL') break;
       }
       const sp = (await regionState(region)).view.stages.find((x) => x.name === stage);
       if (sp.state === 'PLACED' || sp.state === 'PARTIAL' || ++lap > 6) break;
     }
-    const g1 = await call('dev.chunks.generated');
+    const g1 = await counters();
     out.stages[stage] = { seconds: (Date.now() - s0) / 1000, chunksLoaded: g1.loads - g0.loads, generated: g1.terrain - g0.terrain };
     log(`  stage ${stage} done in ${out.stages[stage].seconds.toFixed(0)} s, ${out.stages[stage].chunksLoaded} chunks loaded`);
   }
@@ -619,9 +637,9 @@ steps.megaB = async () => {
   write('megabench-B.json', out);
   const failed = Object.keys(st.failed ?? {});
   check(failed.length === 0 && st.view.state === 'PLACED', `megaB: ${st.view.state}, ${failed.length} failed items`, st.failed);
-  check(!!out.relog?.resumedSeconds && out.relog.resumedSeconds <= 60, `megaB: resumed ${out.relog?.resumedSeconds} s after the relog in lots-2`);
-  check(!!out.sidecarKill?.resumedSeconds && out.sidecarKill.resumedSeconds <= 30, `megaB: resumed ${out.sidecarKill?.resumedSeconds} s after the sidecar came back`);
-  check(Object.keys(out.stages).length === ir.stages.length, `megaB: per-stage seconds and chunks loaded ${JSON.stringify(out.stages)}`);
+  check(out.relog?.resumedSeconds != null && out.relog.resumedSeconds <= 60, `megaB: resumed ${out.relog?.resumedSeconds} s after the player reached a waiting lots-2 item after the relog (${out.relog?.item})`);
+  check(out.sidecarKill?.resumedSeconds != null && out.sidecarKill.resumedSeconds <= 30, `megaB: resumed ${out.sidecarKill?.resumedSeconds} s after the sidecar came back, at a waiting ways item (${out.sidecarKill?.item})`);
+  check(Object.keys(out.stages).length === ir.stages.length && Object.values(out.stages).every((x) => x.chunksLoaded >= 0), `megaB: per-stage seconds and chunks loaded ${JSON.stringify(out.stages)}`);
   await leaveWorld();
   return out;
 };

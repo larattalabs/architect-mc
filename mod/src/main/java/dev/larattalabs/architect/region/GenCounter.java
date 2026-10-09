@@ -18,6 +18,7 @@ public final class GenCounter {
 	/** Chunks generated while a region item held tickets (checked by the gate: must stay 0 under GENERATED_ONLY). */
 	private static final AtomicLong WHILE_HELD = new AtomicLong();
 	private static volatile int holders;
+	private static final boolean TRACE = System.getenv("ARCHITECT_TRACE_JOBS") != null;
 
 	private GenCounter() {
 	}
@@ -26,7 +27,10 @@ public final class GenCounter {
 		ServerChunkEvents.CHUNK_LOAD.register((level, chunk, generated) -> {
 			LOADS.incrementAndGet();
 			if (generated) {
-				FULL.incrementAndGet();
+				long n = FULL.incrementAndGet();
+				if (TRACE && n <= 300) {
+					dev.larattalabs.architect.Architect.LOGGER.info("TRACE generated FULL chunk {} (holders {})", chunk.getPos(), holders);
+				}
 			}
 			ChunkGen.generated(Sites.dimensionId(level), chunk.getPos().pack());
 		});
@@ -34,7 +38,11 @@ public final class GenCounter {
 
 	/** Worker threads (the mixin). */
 	public static void terrain(ServerLevel level, long chunk) {
-		TERRAIN.incrementAndGet();
+		long n = TERRAIN.incrementAndGet();
+		if (TRACE && n <= 300) {
+			dev.larattalabs.architect.Architect.LOGGER.info("TRACE generated terrain {},{} (holders {})", net.minecraft.world.level.ChunkPos.getX(chunk),
+				net.minecraft.world.level.ChunkPos.getZ(chunk), holders);
+		}
 		if (holders > 0) {
 			WHILE_HELD.incrementAndGet();
 		}
