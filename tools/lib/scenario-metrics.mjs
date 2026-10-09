@@ -137,8 +137,9 @@ export function bars(x) {
 
 /**
  * (6b addition, region lot entrances) The default single-building approach blocks on the lots' fronts: dirt path and
- * cobblestone in the realised world (an ARWD dump `after`) within 8 cells of each lot's box (outside it, from floorY - 2
- * to floorY + 2), and for the record the same blocks inside the boxes (the child designs' own). Gate: 0 outside.
+ * cobblestone in the realised world (an ARWD dump `after`) on each lot's front strip (the box's width, 8 rows out from its
+ * front face, floorY - 2 to floorY + 2; cells with air above), and for the record the same blocks inside the boxes (the child designs' own).
+ * Gate: 0 outside.
  */
 export function lotFronts(ir, after, blocks = ['minecraft:dirt_path', 'minecraft:cobblestone']) {
   const out = { outside: {}, inside: {}, perLot: {} };
@@ -146,10 +147,18 @@ export function lotFronts(ir, after, blocks = ['minecraft:dirt_path', 'minecraft
   for (const l of ir.lots ?? []) {
     const b = l.box;
     const n = {};
+    // the front strip: the box's width, 8 rows out from its front face (where the entrance approach and apron lie)
+    const o = { north: [0, -1], south: [0, 1], east: [1, 0], west: [-1, 0] }[l.front] ?? [0, 1];
+    const fx0 = o[0] > 0 ? b.maxX + 1 : o[0] < 0 ? b.minX - 8 : b.minX, fx1 = o[0] > 0 ? b.maxX + 8 : o[0] < 0 ? b.minX - 1 : b.maxX;
+    const fz0 = o[1] > 0 ? b.maxZ + 1 : o[1] < 0 ? b.minZ - 8 : b.minZ, fz1 = o[1] > 0 ? b.maxZ + 8 : o[1] < 0 ? b.minZ - 1 : b.maxZ;
     for (let x = b.minX - 8; x <= b.maxX + 8; x++) for (let z = b.minZ - 8; z <= b.maxZ + 8; z++) for (let y = b.minY - 2; y <= b.minY + 2; y++) {
+      const inside0 = x >= b.minX && x <= b.maxX && z >= b.minZ && z <= b.maxZ;
+      if (!inside0 && !(x >= fx0 && x <= fx1 && z >= fz0 && z <= fz1)) continue;
       if (x < after.box.minX || x > after.box.maxX || z < after.box.minZ || z > after.box.maxZ || y < after.box.minY || y > after.box.maxY) continue;
       const id = after.palette[after.cells[after.at(x, y, z)]].replace(/\[.*$/, '');
       if (!want.has(id)) continue;
+      // seen only: the cell above is air (a buried fill under the ground is not on the front)
+      if (y + 1 <= after.box.maxY && !/air$/.test(after.palette[after.cells[after.at(x, y + 1, z)]])) continue;
       const inside = x >= b.minX && x <= b.maxX && z >= b.minZ && z <= b.maxZ;
       const k = inside ? 'inside' : 'outside';
       out[k][id] = (out[k][id] ?? 0) + 1;

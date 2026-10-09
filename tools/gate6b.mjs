@@ -348,6 +348,8 @@ async function designGate(name, siteId, req, program, { playerBlock = false } = 
       out.shots[l.id] = await shot(`${name}_${l.id}_front`);
     }
     await call('dev.release', {}).catch(() => null);
+    await tp(cx, (fx.stats?.max ?? 80) + 60, cz); // back over the centre (the region's chunks loaded for the remove)
+    await settle(3000);
   }
   // case (b): a block on a path or pad cell after realise
   let pbB = null;

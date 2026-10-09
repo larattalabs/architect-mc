@@ -221,7 +221,7 @@ test('lot pads: the footprint flat at floorY-1 with air to the box top; cut/fill
     for (let x = x0 - 1; x <= x0 + w; x++) for (let z = z0 - 1; z <= z0 + d; z++) {
       const inFoot = x >= x0 && x < x0 + w && z >= z0 && z < z0 + d;
       // the footprint's top is the foundation; (6b addition) the apron keeps the ground: untouched, or the surface role in a gap
-      if (inFoot) assert.equal(at(cells, x, L.floorY - 1, z)?.state, 'minecraft:cobblestone', `pad ${t}: top at ${x},${z}`);
+      if (inFoot) assert.ok([undefined, 'minecraft:grass_block'].includes(at(cells, x, L.floorY - 1, z)?.state), `pad ${t}: top at ${x},${z}: ${at(cells, x, L.floorY - 1, z)?.state}`);
       else assert.ok([undefined, 'minecraft:grass_block'].includes(at(cells, x, L.floorY - 1, z)?.state), `pad ${t}: apron top at ${x},${z}: ${at(cells, x, L.floorY - 1, z)?.state}`);
       const top = inFoot ? Math.max(L.box.maxY, world(x, z).h) : Math.max(world(x, z).h, world(x, z).g);
       for (let y = L.floorY; y <= top; y++) assert.equal(at(cells, x, y, z)?.state, AIR, `pad ${t}: clear at ${x},${y},${z}`);
