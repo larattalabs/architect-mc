@@ -419,6 +419,7 @@ steps.commands = async () => {
   for (let i = 0; i < 1800; i++) { const s = await call('dev.region.prepare.state', { planId }).catch(() => null); if (s && /DONE|READY|COMPLETE/i.test(JSON.stringify(s.view ?? s))) break; await sleep(2000); }
   const ir = readPlanJson(planId, 'ir.json');
   const box = [claim[0] - 8, ir.claim.minY, claim[1] - 8, claim[2] + 8, ir.claim.maxY, claim[3] + 8];
+  await settle(90_000); // the prepared chunks tick first (fluids and first block ticks settle), as the scenario runs
   await call('dev.region.hash', { box, mode: 'snap', file: path.join(OUT, 'G6B_Commands.snap.gz') }, 4 * 3_600_000);
   await say('realise', '/architect region realise fill');
   let region = null;
@@ -435,7 +436,7 @@ steps.commands = async () => {
   check(st.view.state === 'PLACED', `commands: plan, check, preview, prepare, realise fill through /architect region: ${st.view.state}, ${st.view.cellsWritten} cells`);
   check((diff.classes?.none ?? 0) === 0 && diff.mismatches <= 0.0001 * st.view.cellsWritten, `commands: /architect region remove is exact under the classified-mismatch rule (${diff.mismatches} ${JSON.stringify(diff.classes)})`);
   await leaveWorld();
-  return { planId, region, said, diff: { mismatches: diff.mismatches, classes: diff.classes } };
+  return { planId, region, said, diff: { mismatches: diff.mismatches, classes: diff.classes, list: (diff.list ?? []).filter((m) => m.class !== 'growth').slice(0, 300) } };
 };
 
 /** Item 9: each nudge once: PREPARE (not prepared), MOVE_CLOSER (LOADED_ONLY, far), START_SIDECAR (killed), APPROVE_STAGE (a dig). */
