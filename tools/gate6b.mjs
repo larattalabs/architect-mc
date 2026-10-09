@@ -695,6 +695,49 @@ steps.versionc = async () => {
   return out;
 };
 
+/**
+ * 6b addition (region lot entrances, last bullet): a plain cabin placed next to a 4e road with `pathStyle` has no default
+ * dirt path or cobblestone on its front (4e's fixture: a raised pad T, a road R across it, the cabin LAYERed facing R);
+ * the same placement without `pathStyle` keeps today's approach (control); the cabin's undo is exact.
+ */
+steps.pathstyle = async () => {
+  await ensure();
+  const { decodeArwd } = await import('../kit/lib/region/vworld.mjs');
+  const api = async (args) => { const r = await cmd(`/apitest ${args}`); const line = (r.messages ?? []).find((m) => m.startsWith('{') || m.startsWith('[') || m === 'null'); if (!line) throw new Error(`/apitest ${args}: ${JSON.stringify(r).slice(0, 300)}`); return JSON.parse(line); };
+  const result = async (p) => { if (!p.pending) return p; for (let i = 0; i < 240; i++) { const v = await api(`get ${p.pending}`); if (v?.value !== undefined && v.value !== null) return v.value; if (v?.done) return v; await sleep(500); } throw new Error('no result'); };
+  const front = [22, 60, -10, 40, 75, 4]; // the strip between the cabin's door and the road
+  const out = {};
+  for (const style of [null, 'minecraft:stone_bricks']) {
+    const name = style ? 'G6B PathStyle' : 'G6B PathStyle Ctl';
+    await fresh(name, FLAT);
+    await tp(48.5, 80, 0.5);
+    await call('dev.cells.place', { kind: 'gate4e:pad', pad: { minX: 20, maxX: 59, minZ: -24, maxZ: 15, y: 66, top: 'minecraft:coarse_dirt', depth: 3, clear: 8 } }, 600_000);
+    await call('dev.road.place', { points: [[10, 67, 0], [80, 67, 0]], width: 3 }, 180_000);
+    await settle(3000);
+    const box = [10, 55, -40, 70, 90, 20];
+    const h0 = await call('dev.region.hash', { box }, 600_000);
+    const H = await result(await api(`place cabin 28 67 -19 INSTANT unowned noactor 0 layer${style ? ` pathStyle=${style}` : ''}`));
+    await settle(3000);
+    const file = path.join(OUT, `pathstyle_${style ? 'styled' : 'control'}.arwd.gz`);
+    await call('dev.region.dump', { box: front, file }, 600_000);
+    const d = await decodeArwd(fs.readFileSync(file));
+    const count = {};
+    for (let i = 0; i < d.cells.length; i++) { const b = d.palette[d.cells[i]].replace(/\[.*/, ''); if (['minecraft:dirt_path', 'minecraft:cobblestone', 'minecraft:stone_bricks'].includes(b)) count[b] = (count[b] ?? 0) + 1; }
+    const site = H.siteId ?? H.site?.id ?? H.id;
+    const rm = site ? await result(await api(`remove ${site} - noforce`)) : null;
+    await settle(5000);
+    const h1 = await call('dev.region.hash', { box }, 600_000);
+    out[style ? 'styled' : 'control'] = { placed: H, count, undo: { removed: rm, exact: h0.sha256 === h1.sha256 } };
+    log(`  pathstyle ${style ?? 'none'}: front blocks ${JSON.stringify(count)}; notes ${JSON.stringify(H.notes ?? H.warnings ?? '').slice(0, 300)}; undo exact ${h0.sha256 === h1.sha256}`);
+  }
+  const c = out.control.count, s2 = out.styled.count;
+  check((s2['minecraft:dirt_path'] ?? 0) === 0 && (s2['minecraft:cobblestone'] ?? 0) === 0 && (c['minecraft:dirt_path'] ?? 0) > 0,
+    `pathstyle: with pathStyle the cabin's front has no default dirt path or cobblestone (${JSON.stringify(s2)}); without it today's approach stands (${JSON.stringify(c)})`);
+  check(out.styled.undo.exact && out.control.undo.exact, `pathstyle: the cabin's undo is exact (styled ${out.styled.undo.exact}, control ${out.control.undo.exact})`);
+  await leaveWorld();
+  return out;
+};
+
 // ------------------------------------------------------------------ the main
 const name = process.argv[2];
 if (!steps[name]) {
