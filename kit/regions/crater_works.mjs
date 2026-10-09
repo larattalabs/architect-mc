@@ -42,7 +42,22 @@ export default function craterWorks(ctx) {
   const ringG = [];
   for (let i = 0; i < 72; i++) { const d = compassDir(i * 5); for (const rr of [R - 2, R + 1, R + 4]) ringG.push(survey.heightAt(round(cx + d[0] * rr), round(cz + d[1] * rr))); }
   ringG.sort((a, b) => a - b);
-  const rimY = ringG[Math.floor(ringG.length * 0.9)];
+  const rimP90 = ringG[Math.floor(ringG.length * 0.9)];
+  // the gate (and the bridge to the spiral) faces the side whose ground at the gate is nearest the rim (south on a tie), so
+  // the bridge runs over the terraces, not through them; the rim is at most 6 above that gate's ground
+  // Each gate's line runs outward from the spiral's top corner (half-size A = 7 off the centre line): `o` outward, `lat`
+  // the line's offset; the ring's gate opening sits on the line (its angle nudged by A / radius, in degrees)
+  const A = 7, nudge = (7 / (R + 2.5)) * 57.29578;
+  const GATES = [
+    { a: 180 - nudge, start: 2, o: [0, 1], lat: [A, 0] },
+    { a: 90 + nudge, start: 2, o: [1, 0], lat: [0, A] },
+    { a: 0 + nudge, start: 1, o: [0, -1], lat: [A, 0] },
+    { a: 270 - nudge, start: 3, o: [-1, 0], lat: [0, A] },
+  ];
+  const on = (g, t) => [round(cx + g.lat[0] + g.o[0] * t), round(cz + g.lat[1] + g.o[1] * t)];
+  const gateY = (g) => { const p = on(g, R + 2.5); return survey.heightAt(p[0], p[1]); };
+  const gate = GATES.reduce((best, g) => (Math.abs(gateY(g) - rimP90) < Math.abs(gateY(best) - rimP90) ? g : best), GATES[0]);
+  const rimY = Math.min(rimP90, gateY(gate) + 6);
   const depth = Math.max(12, Math.min(P.depth, rimY - (claim.minY + 8)));
   const floorY = rimY - depth;
   const lining = Object.hasOwn(ctx.roles, 'scorched') ? 'scorched' : 'rock';
@@ -73,10 +88,10 @@ export default function craterWorks(ctx) {
   for (let k = 0; k + 1 < L; k++) lampRing(radii[k + 1] + 1.5, ys[k], 10); // on the terrace floor beside the rail
   for (let k = 0; k < L; k++) lampRing(radii[k] - 1.5, ys[k], 10);
   lampRing(radii[2] * 0.5, ys[2], 10);
-  const gA = 180; // the gate, the bridge and the entrance face south
+  const gA = gate.a; // the gate, the bridge and the entrance
   const gd = compassDir(gA);
   const rim = r.part('rim', { stage: 'ground' });
-  rim.ring([cx, cz], R + 1, R + 4, { height: 2, material: 'rubble', gates: [{ angle: gA, width: 5, height: 4 }] });
+  rim.ring([cx, cz], R + 1, R + 4, { height: 2, material: 'rubble', gates: [{ angle: gA, width: 7, height: 4 }] });
   // lanterns on the rim wall's top, every 10 cells or so
   {
     const rm = R + 2.5, n = Math.max(8, Math.ceil((2 * 3.141592653589793 * rm) / 10));
@@ -96,15 +111,15 @@ export default function craterWorks(ctx) {
   };
   // the spiral: a square spiral stair around a solid core at the centre, from the rim's height down to the floor (straight
   // flights of width 3 with a landing at every corner; each tread bears on the core or the step below it)
-  const A = 7; // the flights run on a square of half-size A
+  // the flights run on a square of half-size A
   const bottom = ys[2] - 1;
   const ways = r.part('ways', { stage: 'ways', set: 'path' });
-  const sp = ways.spiralTower({ center: [cx, cz], half: A, top: rimY, bottom, start: 2, lights: 8, openTop: false, id: 'spiral' }); // top at the SE corner
+  const sp = ways.spiralTower({ center: [cx, cz], half: A, top: rimY, bottom, start: gate.start, lights: 8, openTop: false, id: 'spiral' }); // top at the corner facing the gate
   const spiralTop = [sp.top.x, sp.top.y, sp.top.z];
   const spiralR = A + 2;
   // the bridge: from the rim (through the gate) to the spiral's top corner
-  const b0 = [spiralTop[0], cz + gd[1] * (R - 2)], b1 = [spiralTop[0], spiralTop[2] + 2];
-  const g0 = survey.heightAt(round(cx + gd[0] * (R + 2.5)), round(cz + gd[1] * (R + 2.5))); // the gate threshold's y
+  const b0 = on(gate, R - 2), b1 = [spiralTop[0] + gate.o[0] * 2, spiralTop[2] + gate.o[1] * 2];
+  const g0 = gateY(gate); // the gate threshold's y
   const startY = Math.max(rimY - 20, Math.min(rimY + 20, g0));
   ways.bridge([[b0[0], startY, b0[1]], [b1[0], rimY, b1[1]]], { width: 3, supports: { every: 12, bottom: (x, z) => levelAt(x, z) }, lights: 8, id: 'rim_bridge' });
   // stairs cut into each riser (k -> k + 1), on the side away from the bridge
@@ -115,10 +130,10 @@ export default function craterWorks(ctx) {
     const rOut = radii[k + 1] + run, rIn = radii[k + 1] - 1;
     ways.stair([[cx + sd[0] * rOut, ys[k] - 1, cz + sd[1] * rOut], [cx + sd[0] * rIn, ys[k + 1] - 1, cz + sd[1] * rIn]], { width: 3, lights: 6, id: `riser_stair_${k + 1}` });
   }
-  const ent = [round(cx + gd[0] * (R + 16)), round(cz + gd[1] * (R + 16))];
+  const ent = on(gate, R + 16);
   r.anchor('entrance', ent);
   r.anchor('spawn', [ent[0] + 3, ent[1]]);
-  ways.road([[ent[0], ent[1]], [round(cx + gd[0] * (R + 7)), round(cz + gd[1] * (R + 7))]], { width: 3, optional: true, id: 'rim_road' });
+  ways.road([[ent[0], ent[1]], on(gate, R + 7)], { width: 3, optional: true, id: 'rim_road' });
 
   // ---- lots on the terrace bands, facing the centre, clear of the bridge, the spiral and the stairs
   const placed = [];

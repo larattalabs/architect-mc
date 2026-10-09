@@ -5,12 +5,6 @@
  "errors": 0,
  "findings": [
   {
-   "rule": "M5",
-   "severity": "warning",
-   "part": null,
-   "reason": "a few cells of the rim wall top beside the gate are dark: the rim lanterns leave the gate (8 degrees either side) clear"
-  },
-  {
    "rule": "M8",
    "severity": "warning",
    "part": null,
