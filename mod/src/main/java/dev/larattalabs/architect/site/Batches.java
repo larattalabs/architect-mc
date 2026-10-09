@@ -953,7 +953,7 @@ public final class Batches {
 	 */
 	static @Nullable EntranceStyle styleOf(QBatch b, QItem i) {
 		if (RegionItems.isRegion(b) && i.key.startsWith("lot:")) {
-			EntranceStyle s = EntranceStyle.region(RegionItems.regionOf(b));
+			EntranceStyle s = EntranceStyle.region(RegionItems.regionOf(b), b.group);
 			if (s != null) {
 				return s;
 			}

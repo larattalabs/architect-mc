@@ -599,7 +599,7 @@ public final class Sites {
 			int step = Math.abs(r[1] + 1 - last);
 			// (6b) a styled approach may stop at a region's walk surface (a tile's ground), not only a road
 			Infra met = style == null || road == null ? null : Infras.get(road);
-			String what = style == null || met != null && met.road() ? "road " + road : "walk surface of " + road;
+			String what = style == null || met != null && met.road() ? "road " + road : road == null ? "a walk surface" : "walk surface of " + road;
 			layerNotes.add(step > 1 ? "approach meets " + what + " with a step of " + step : "approach meets " + what);
 		}
 		List<SiteJournal.Hit> hits = overlapCheck(level, snapBox, moving, layer, owner, force, out, layerNotes);

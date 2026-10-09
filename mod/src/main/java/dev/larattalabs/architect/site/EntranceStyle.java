@@ -51,6 +51,11 @@ public record EntranceStyle(String path, @Nullable String foundation, @Nullable 
 	 * tiles as walk surfaces. Null when the region is not loaded or its IR has no path role (the design's own approach then).
 	 */
 	public static @Nullable EntranceStyle region(@Nullable String regionId) {
+		return region(regionId, null);
+	}
+
+	/** {@link #region(String)}; {@code group}: the region batch's site group (its tiles' Infras carry it), null = the record's. */
+	public static @Nullable EntranceStyle region(@Nullable String regionId, @Nullable String group) {
 		RegionsImpl.Live r = regionId == null ? null : RegionsImpl.live(regionId);
 		if (r == null) {
 			return null;
@@ -64,7 +69,9 @@ public record EntranceStyle(String path, @Nullable String foundation, @Nullable 
 		if (path == null) {
 			return null;
 		}
-		String group = r.rec().groupId;
+		if (group == null || group.isEmpty()) {
+			group = r.rec().groupId;
+		}
 		return new EntranceStyle(path, role(o, "foundation"), group == null || group.isEmpty() ? null : group);
 	}
 
