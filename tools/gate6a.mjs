@@ -642,7 +642,8 @@ steps.megaB = async () => {
         if (sp.state === 'PLACED' || sp.state === 'PARTIAL') break;
       }
       const sp = (await regionState(region)).view.stages.find((x) => x.name === stage);
-      if (sp.state === 'PLACED' || sp.state === 'PARTIAL' || ++lap > 6) break;
+      // fast laps visit at most the 40 unfinished items dev.region.state lists, so they get more laps (each is short)
+      if (sp.state === 'PLACED' || sp.state === 'PARTIAL' || ++lap > (MEGAB_FAST ? 60 : 6)) break;
     }
     const g1 = await counters();
     out.stages[stage] = { seconds: (Date.now() - s0) / 1000, chunksLoaded: g1.loads - g0.loads, generated: g1.terrain - g0.terrain };

@@ -16,9 +16,9 @@ node tools/gate-run.mjs regress --only 4e-orders,4e-crash   # a subset, in chain
 
 | chain | steps | typical time |
 |---|---|---|
-| `quick` | unit tests (mod `gradlew build`, kit, sidecar vitest); the 4a/4b/4c sim suites (jobs, sets, massing); the unchanged 1.7.0/1.6.0/1.5.0 apitest jars; 4e mega-lite | about 30 min |
-| `regress` | `quick` plus the 4d gate (all); 4e orders, crash and the village/roads throughput at 4 ms; 5b chains and village; 6a mega_bench B with the **fast** walk | about 3 h |
-| `engine` | `regress` (with mega_bench B on the **full** walk instead of the fast one) plus 6a megaA, megaB, crash, eflat, inv3, staged and heap | about 5 h |
+| `quick` | unit tests (mod `gradlew build`, kit, sidecar vitest); the 4a/4b/4c sim suites (jobs, sets, massing); the unchanged 1.7.0/1.6.0/1.5.0 apitest jars; 4e mega-lite | about 10 min (measured: 9.5 min) |
+| `regress` | `quick` plus the 4d gate (all); 4e orders, crash and the village/roads throughput at 4 ms; 5b chains and village; 6a mega_bench B with the **fast** walk | about 3 h (estimate from the 6a step times) |
+| `engine` | `regress` (with mega_bench B on the **full** walk instead of the fast one) plus 6a megaA, megaB, crash, eflat, inv3, staged and heap | about 5 h (estimate) |
 
 **Policy.** A phase that touches realise, the journal or streaming (region realise, tickets, the writer, journal format or
 index, tile streaming, the undo) runs `engine` before it merges. That includes the full mega_bench, both configurations, on the
@@ -50,8 +50,9 @@ not how long the full walk takes. Compare only full-walk numbers with each other
 5. **Steps.** The steps run in chain order. Each step names its client: one of `cfg.clients` (started in its world unless it is
    already up), `none` (no client, as for unit tests), or `self` (the step starts its own clients, as apijars does). Each
    step runs in its own process group, with the timeout from the config.
-   - **TIMEOUT.** The step's group gets SIGTERM, then SIGKILL. After that, every process whose command line names the run
-     worktree is stopped: gradle, the client JVM and the sidecar. Stray apitest jars are removed from `mods/`.
+   - **TIMEOUT.** The step's group gets SIGTERM, then SIGKILL. After that, the run worktree's own processes are stopped: gradle and its daemon/workers,
+     the client JVM, the sidecar, vitest and the client scripts, matched by their paths in the worktree. Nothing else is touched
+     (an observer such as `tail -f` on a worktree log is not one of them). Stray apitest jars are removed from `mods/`.
    - **After any step that doesn't pass**, the client is stopped. The next step starts a fresh one.
    - **Verdicts.** PASS means exit 0, no `FAIL` lines, and at least one `ok` line. Unit tests use parsed counts instead of
      `ok` lines.

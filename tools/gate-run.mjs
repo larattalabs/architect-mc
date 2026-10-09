@@ -122,6 +122,13 @@ function runDirProcs() {
     .map(([, pid, pgid, cmd]) => ({ pid: Number(pid), pgid: Number(pgid), cmd }))
     .filter((p) => p.pid !== process.pid && needles.some((n) => p.cmd.includes(n)));
 }
+/** The processes the runner and the gates start in the run worktree: gradle and its daemon/workers, the client JVM, the
+ * sidecar, vitest, the client scripts. Only these are ever killed (an observer such as `tail -f <run>/...` is not). */
+function ownProcs() {
+  const marks = [...new Set([RUN, real(RUN)])].flatMap((r) => ['/mod/.gradle/loom-cache/launch.cfg', '/mod/gradle/wrapper/', '/.gradle-home/',
+    '/sidecar/dist/', '/sidecar/node_modules/', '/tools/run-'].map((m) => r + m));
+  return runDirProcs().filter((p) => marks.some((m) => p.cmd.includes(m)));
+}
 const clientProcs = () => runDirProcs().filter((p) => p.cmd.includes('/mod/.gradle/loom-cache/launch.cfg'));
 const alive = (pid) => {
   try {
@@ -267,13 +274,14 @@ writeSummary();
 
 // ------------------------------------------------------------------ processes: kill only ours
 
-/** SIGTERM, then SIGKILL, every process naming the run worktree (all started by this run: preflight found none). */
+/** SIGTERM, then SIGKILL, the run worktree's gradle/client/sidecar/vitest processes (all started by this run: preflight found
+ * nothing using the worktree). */
 async function killRunDir(why) {
-  let ps = runDirProcs();
+  let ps = ownProcs();
   if (!ps.length) return;
   log(`  killing run-worktree processes (${why}): ${ps.map((p) => p.pid).join(' ')}`);
   for (const p of ps) try { process.kill(p.pid, 'SIGTERM'); } catch {}
-  for (let i = 0; i < 30 && (ps = runDirProcs()).length; i++) await sleep(1000);
+  for (let i = 0; i < 30 && (ps = ownProcs()).length; i++) await sleep(1000);
   for (const p of ps) try { process.kill(p.pid, 'SIGKILL'); } catch {}
 }
 
@@ -319,7 +327,7 @@ async function connectDev(timeoutMs) {
 }
 
 async function stopClient(why = 'switch') {
-  if (!runDirProcs().length) {
+  if (!ownProcs().length) {
     current = null;
     return;
   }
@@ -384,12 +392,12 @@ async function startClient(key) {
 
 async function ensureClient(step) {
   if (step.client === 'none' || step.client === 'self') {
-    if (runDirProcs().length) await stopClient(`before ${step.id}`);
+    if (ownProcs().length) await stopClient(`before ${step.id}`);
     return;
   }
   const up = clientProcs().length > 0;
   if (up && current === step.client && !step.restartClient) return;
-  if (runDirProcs().length) await stopClient(`before ${step.id}`);
+  if (ownProcs().length) await stopClient(`before ${step.id}`);
   await startClient(step.client);
 }
 
