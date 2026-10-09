@@ -422,7 +422,8 @@ fields by 16), so transitions don't make straight lines. An op whose rule uses `
   with the existing blob read), `needVolumes: [{minX, minY, minZ, maxX, maxY, maxZ}]` (boxes the program asked for with
   `r.needVolume`), `report` (report.json, absent with `check: false`), `previews: {top: [path], section: [path...], iso:
   [path], siteplan: [svgPath, pngPath]}` (absolute paths in the plan dir), `sitePlan` (siteplan.json), `checkMs`,
-  `renderMs`.
+  `renderMs`, and `checkError` when the check or the previews failed while the plan itself is good (the plan is accepted
+  without a report; `region.check` re-runs it).
 - **`region.check {planId}`** -> ack `{report}` (re-runs the check from the plan dir's IR and survey).
 - **`region.preview {planId, views?: ['top'|'section'|'iso'|'siteplan'], axes?: [[[x, y, z]...]...]}`** -> ack `{paths:
   {view: [path]}, sitePlan}`.
@@ -435,7 +436,11 @@ fields by 16), so transitions don't make straight lines. An op whose rule uses `
   budgetUsd?, requireFit?: false, plan?: true}`** -> ack `{designId}`; then `design.upsert` with a design of `kind:
   "region"` whose `result` is `{outcome: 'PICKED'|'NO_TEMPLATE', fits, program, params, reason, cost, planId?, tries}`.
   With `fits` (and `plan`), the sidecar starts `region.plan` itself and names its `planId`; without a fit the result
-  still offers the closest `program` and `params` with `fits: false` (S-6b-3), and the outcome is `NO_TEMPLATE`.
+  still offers the closest `program` and `params` with `fits: false` (S-6b-3), and the outcome is `NO_TEMPLATE`. The pick
+  reads the survey through `surveySummary(ARSV)` (sidecar `regiondesign.ts`): 4a's `summary()` text (heights, water,
+  trees, natural share, biomes when the survey carries them, the 64x64 grid) rebuilt from the plan survey.
+- **`region.release {planId}`** (mod -> sidecar, no ack payload): the helper drops the plan's in-memory IR and blobs (the
+  region is done or removed, or DevBridge `dev.region.drop` forces the `ir_unknown` / `blob_unknown` resume path).
 
 ## ARVX (3D volumes, `Survey.volume`)
 
@@ -528,5 +533,5 @@ node kit/tools/volume.mjs decode <arvx> [--slice y] [--json]
 `region.tiles.request {planId, irSha, preview: true, tiles: [{key, stage?, set?}]}` (no `heights`): the sidecar evaluates
 the tile over windows built from the plan dir's `survey.bin` (`windowFromSurvey`, as the budget pass), all stages up to and
 including `stage` when given (else every stage), both sets, and answers with ordinary `region.tile` frames carrying
-`preview: true`. Nothing is written by the mod; the client draws the cells (tints: added, removed, path (walk), lot,
+`preview: true`, whose `stage` and `set` are `'*'` when the request named none (every stage, both sets). Nothing is written by the mod; the client draws the cells (tints: added, removed, path (walk), lot,
 floating).
