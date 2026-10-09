@@ -379,6 +379,8 @@ export function checkRegion({ ir, survey, blobs, volumes = [], meta = null, worl
       for (let x = b.minX; x <= b.maxX; x++) for (let z = b.minZ; z <= b.maxZ; z++) {
         const y = cv.floorY;
         if (!(vw.flags(x, y - 1, z) & F_WRITTEN) && !(vw.flags(x, y, z) & F_WRITTEN)) continue;
+        const own = ir.parts[vw.partAt(x, y - 1, z)]?.id === pid || ir.parts[vw.partAt(x, y, z)]?.id === pid;
+        if (!own) continue; // only the cavern's own floor (its bounds may overlap other parts)
         if (P.passable[vw.get(x, y, z)] && P.passable[vw.get(x, y + 1, z)] && P.spawn[vw.get(x, y - 1, z)] && light.at(x, y, z) === 0) cells.push([x, y, z]);
       }
       if (cells.length) findings.push(finding('M5', pid, partStage.get(pid), cells.length, cells, `cavern ${pid}: ${cells.length} dark spawnable floor cell(s) (its lights do not cover it)`));

@@ -223,6 +223,16 @@ export class Region {
     return [x, yy, z];
   }
 
+  /**
+   * (6b) A clearing for an anchor on the ground: natural cells (trees, plants, a bump) removed over a (2r+1)^2 square from
+   * one above the frozen ground to the column's top, so the anchor stands on open ground (M2 starts there).
+   */
+  clearing(name, [x, z], { r = 2, stage } = {}) {
+    const p = this.part(`clear_${name}`, { stage });
+    p.fill({ kind: 'box', min: [x - r, { surface: 1 }, z - r], max: [x + r, { max: [{ height: 0 }, { surface: 3 }] }, z + r] }, null, { cond: COND.IF_NATURAL });
+    return this.anchor(name, [x, z]);
+  }
+
   /** A seeded noise field spec, for `displace` (same seed and label, same values). */
   noise(field, { kind = 'simplex', octaves = 1, scale = 32, seedLabel, dims = 2 } = {}) {
     if (typeof field !== 'string' || !field) throw new Error('noise(field): field must be a name');
