@@ -302,6 +302,7 @@ async function designGate(name, siteId, req, program, { playerBlock = false } = 
   // realise over the prepared chunks (the design's plan), with the lots from the library (no model call)
   const ir = readPlanJson(planId, 'ir.json');
   const box = [claim[0] - 8, ir.claim.minY, claim[1] - 8, claim[2] + 8, ir.claim.maxY, claim[3] + 8];
+  await settle(90_000); // the prepared chunks tick first (fluids and first block ticks settle), as the scenario runs
   await call('dev.region.hash', { box, mode: 'snap', file: path.join(OUT, `${name}.snap.gz`) }, 4 * 3_600_000);
   let pb = null;
   if (playerBlock) {
@@ -346,7 +347,7 @@ async function designGate(name, siteId, req, program, { playerBlock = false } = 
   await settle(10_000);
   const diff = await call('dev.region.hash', { box, mode: 'diff', file: path.join(OUT, `${name}.snap.gz`) }, 4 * 3_600_000);
   out.remove = { removed: rm.removed, restored: rm.restored, kept: rm.kept, seconds: rm.seconds };
-  out.diff = { mismatches: diff.mismatches, classes: diff.classes, sample: (diff.sample ?? []).slice(0, 20) };
+  out.diff = { mismatches: diff.mismatches, classes: diff.classes, list: (diff.list ?? []).filter((m) => m.class !== 'growth').slice(0, 300) };
   const expected = (playerBlock ? 1 : 0) + (pbB ? 1 : 0);
   const unclassified = diff.classes?.none ?? 0;
   check(rm.removed && unclassified <= expected && diff.mismatches <= expected + 0.0001 * st.view.cellsWritten, `${name}: step 5: one Regions.remove returns the area under the 6a rules (${diff.mismatches} mismatches ${JSON.stringify(diff.classes)}; the player's blocks ${expected})`);
