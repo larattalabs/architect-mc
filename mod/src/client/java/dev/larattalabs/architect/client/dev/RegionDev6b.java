@@ -401,6 +401,7 @@ public final class RegionDev6b {
 		JsonObject m = new JsonObject();
 		m.addProperty("type", "region.release");
 		m.addProperty("planId", planId);
+		m.addProperty("evict", true); // the IR goes even when another plan (an earlier run's) shares its sha
 		Sidecar.link().send(m);
 		return deleted;
 	}

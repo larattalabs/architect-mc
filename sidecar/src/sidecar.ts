@@ -529,7 +529,7 @@ export class Sidecar {
       case 'region.tiles.request':
         return this.regions.tiles(msg, client);
       case 'region.release':
-        return this.regions.release(msg.planId, client);
+        return this.regions.release(msg.planId, client, msg.evict === true);
       // ---- 6b
       case 'region.check':
         return this.regions.check(msg.planId);

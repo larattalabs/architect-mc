@@ -1022,7 +1022,12 @@ export const RegionTilesRequestMsg = z
       for (const k of ['stage', 'set', 'heights'] as const) if (t[k] === undefined) ctx.addIssue({ code: 'custom', path: ['tiles', i, k], message: `${k} is required (unless preview)` });
     });
   });
-export const RegionReleaseMsg = z.object({ ...envelope('region.release'), planId: PlanId });
+export const RegionReleaseMsg = z.object({
+  ...envelope('region.release'),
+  planId: PlanId,
+  /** (6b) Also forget an IR other plans share (DevBridge dev.region.drop: the next tile must meet ir_unknown). */
+  evict: z.boolean().optional(),
+});
 // 6b regions (client -> sidecar)
 export const RegionCheckMsg = z.object({ ...envelope('region.check'), planId: PlanId });
 export const RegionPreviewMsg = z.object({

@@ -440,6 +440,20 @@ describe('side blobs on the tile path: blob_unknown and the re-send (fake kit)',
     expect(frames(again, 'pother')[0]!.sha).toBe(refSha);
   });
 
+  it('region.release with evict forgets an IR another plan shares (dev.region.drop: the next request meets ir_unknown)', async () => {
+    const q = (await plan(h, { check: false })).planned!;
+    const c = fakeClient();
+    // a second plan id holding the same IR (an earlier run's plan of the same program and survey)
+    expect((await call(h, tilesReq('pshared', q.irSha, ['0,0'], { ir: q.ir }), c)).ok).toBe(true);
+    await tileDone(c, 'pshared', 1);
+    fs.rmSync(h.sc.regions.planDir(q.planId), { recursive: true, force: true });
+    h.sc.regions.release(q.planId, undefined); // without evict the shared IR stays cached
+    expect((await call(h, tilesReq(q.planId, q.irSha, ['1,1']), c)).ok).toBe(true);
+    await tileDone(c, q.planId, 1);
+    h.sc.regions.release(q.planId, undefined, true);
+    expect(await call(h, tilesReq(q.planId, q.irSha, ['1,0']), c)).toMatchObject({ ok: false, error: 'ir_unknown' });
+  });
+
   it('a blob file deleted from the plan dir is found missing on the next request', async () => {
     const q = (await plan(h, { check: false, params: { sideBlobs: { only: { kind: 'mask', text: 'a lone mask' } } } })).planned!;
     const c = fakeClient();

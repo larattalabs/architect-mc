@@ -439,8 +439,8 @@ fields by 16), so transitions don't make straight lines. An op whose rule uses `
   still offers the closest `program` and `params` with `fits: false` (S-6b-3), and the outcome is `NO_TEMPLATE`. The pick
   reads the survey through `surveySummary(ARSV)` (sidecar `regiondesign.ts`): 4a's `summary()` text (heights, water,
   trees, natural share, biomes when the survey carries them, the 64x64 grid) rebuilt from the plan survey.
-- **`region.release {planId}`** (mod -> sidecar, no ack payload): the helper drops the plan's in-memory IR and blobs (the
-  region is done or removed, or DevBridge `dev.region.drop` forces the `ir_unknown` / `blob_unknown` resume path).
+- **`region.release`** gains `evict?: boolean` (6b): the cached IR goes even when other plans share its sha (DevBridge
+  `dev.region.drop` sends it so the next tile request meets `ir_unknown`, gate item 10(a)).
 
 ## ARVX (3D volumes, `Survey.volume`)
 

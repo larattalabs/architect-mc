@@ -10,7 +10,8 @@
 //   region.tiles.request ack {accepted}, or `ir_unknown`; then one `region.tile` (frames) or `region.tile.error` per tile.
 //                        At most `regionWindow` tiles per plan and connection are being evaluated or sent at once (a tile
 //                        holds its slot until its last frame is flushed to the socket); the rest wait in a queue.
-//   region.release       drops the plan's queued tiles (this connection) and its cached IR. The plan dir stays.
+//   region.release       drops the plan's queued tiles (this connection) and its cached IR (with `evict`, also when other
+//                        plans share it). The plan dir stays.
 //
 // (6b, CONTRACT "# Phase 6b contract" §1.1 "Sidecar", §2.2, §2.4, §3, §6.4; kit/REGIONS.md "# Phase 6b additions"):
 //
@@ -950,7 +951,7 @@ export class Regions {
 
   // ---- release, connections, shutdown ---------------------------------------------------------------
 
-  release(planId: string, client: ClientHandle | undefined): { planId: string; dropped: number } {
+  release(planId: string, client: ClientHandle | undefined, evict = false): { planId: string; dropped: number } {
     let dropped = 0;
     for (const [k, s] of this.sessions) {
       if (s.planId !== planId || (client && s.client.id !== client.id)) continue;
@@ -962,7 +963,7 @@ export class Regions {
     for (const [sha, e] of this.irs) {
       if (!e.plans.has(planId)) continue;
       e.plans.delete(planId);
-      if (e.plans.size) continue;
+      if (e.plans.size && !evict) continue;
       this.irs.delete(sha);
       this.pool?.dropIr(sha);
     }
