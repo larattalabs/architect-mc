@@ -14,14 +14,13 @@ Working notes for resuming phase 6a. Deleted when the gate passes. The spec is d
 
 ## State
 
-- Kit (merged from phase/6a-kit, 177 tests, Linux node:22 golden OK), sidecar (merged, 601 tests) and the mod are built.
-- Step 1 done: timeouts.md (lost shared chunk tickets; spikes = journal reads on the server thread, not generation), index
-  bench PASS. Chunk-status cost: measure with `dev.chunks.status` (todo in REPORT).
-- In game (flat world, mega_bench): 8.87M cells, 82-86k cells/s first-to-last, MSPT max 24 ms, 0 generated, wire 0.21 B/cell,
-  E-flat 0 mismatches over 258M cells; group undo took 110 s with 342/278 ms ticks -> fixed (commit prepared off-thread,
-  covering scan off-thread), to be re-measured. Writer starvation 11-13% (bar 5%) -> fixes in (head retried per tick, head
-  before freeze-ahead, check prep ahead, tile tickets released at P7), to be re-measured with the `starvedBy` breakdown.
-- Gate runs: `prepare` + `megaA` running on the mega6 world (run client on 8894/8895).
+- Kit (177 tests), sidecar (601) and mod (373) built. Step 1 done (timeouts.md, index bench PASS, api-compat clean).
+- megaA PASSES every bar (2026-10-08 23:58, before the group-save coalescing): 9.56M cells, 57.8k cells/s, MSPT max 27 ms /
+  p99 15.7 ms, 0 generated, starved 1.3%, journal 0.20 B/cell, wire 0.21 B/cell, undo 136 s max 47.8 ms, E-normal 31
+  mismatches all classified (gravity 30, live 1). Evidence `megabench-A.pass1.json`.
+- Running (chain1): megaA (final), chunkstatus, heap, megaB, eflat, forest, inv3, crash. Then apijars and the regressions
+  (4d, 4e orders/crash/roads/megalite, throughput x3, 5b chains/village/MSPT, 4a/4b/4c sim), REPORT.md, docs.
+- Sidecar e2e (bundle 4c, eval sim tier) failed 2-3 tests while a game client ran megaA: rerun idle before calling it.
 
 ## Deviations so far (for CONTRACT "Phase 6a as built")
 
@@ -30,6 +29,7 @@ Working notes for resuming phase 6a. Deleted when the gate passes. The spec is d
   their tiles, as in mega_bench; a later-stage tile over earlier lot columns would freeze post-lot).
 - Plan flow: plan (LOADED_ONLY: the prepare estimate) -> prepare -> plan again (GENERATED_ONLY: complete survey) -> realise.
   GENERATED_ONLY(n) in a survey means n at once, unlimited in all; LOAD_BOUNDED keeps 4a's total cap.
+- Exactness guards, tick slicing and journal format 2: see CONTRACT "Phase 6a as built" (drafted).
 - Drift checked at region start only, on `height` (stored heightmaps, no chunk loads), not per stage.
 - RegionPlan has no checker report/previews (6b adds them); futures fail with `RegionRefused(reason)` (API, new).
 - Lots fit flush (setback 0, approach into the street); unmapped lots stay pads; the gate maps lots with `fitLots`.
