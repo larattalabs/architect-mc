@@ -121,9 +121,9 @@ export function bars(x) {
     '0 ticks over 50 ms; p99 <= 25 ms', ms && ms.over50 === 0 && ms.p99 <= 25));
   const ef = x.exact?.flat, en = x.exact?.normal;
   const cap = 0.0001 * (x.exact?.cellsWritten ?? 0);
-  // E-normal (6a's rule): every mismatch classified; the world's own doing during the stand (growth, live blocks, gravity,
+  // E-normal (6a's rule): every mismatch classified; the world's own doing during the stand (growth, grazing, live blocks, gravity,
   // unsupported plants) is classified and not the undo's; what remains is held to 0.01% of the written cells
-  const WORLD = ['growth', 'live', 'gravity', 'unsupported'];
+  const WORLD = ['growth', 'grazed', 'live', 'gravity', 'unsupported'];
   const undoOwn = en ? en.mismatches - WORLD.reduce((a, k) => a + (en.classes?.[k] ?? 0), 0) : null;
   out.push(row('exactness', 'Exactness', `E-flat ${ef ? ef.mismatches : 'n/a'}; E-normal ${en ? `${en.mismatches} (${JSON.stringify(en.classes ?? {})}; unclassified ${en.classes?.none ?? 0}; the undo's own ${undoOwn}, cap ${cap.toFixed(0)})` : 'n/a'}`,
     'E-flat 0; E-normal all classified, <= 0.01% of written cells', ef && en && ef.mismatches === 0 && (en.classes?.none ?? 0) === 0 && undoOwn <= cap));

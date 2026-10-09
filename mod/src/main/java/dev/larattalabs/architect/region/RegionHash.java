@@ -296,7 +296,7 @@ public final class RegionHash {
 	 * column below holds the same block first (it fell), or the cell is where such a block landed (now a gravity block, before
 	 * air or fluid); {@code unsupported}: a plant or mushroom that can't survive there
 	 * now; {@code live}: the same block whose block entity changed, on a block the world itself changes ({@link LiveBlocks#LIVE_BE}: bees in
-	 * a nest, a furnace, a hopper); else {@code none} (a block-entity change on any other block is unexplained).
+	 * a nest, a furnace, a hopper); {@code grazed} (6b): grass or fern now air (a sheep ate it); else {@code none} (a block-entity change on any other block is unexplained).
 	 */
 	static String classify(ServerLevel level, BlockPos p, String was, @Nullable String now) {
 		if (now != null) {
@@ -310,6 +310,9 @@ public final class RegionHash {
 				|| growth(nb) && (wb.equals("minecraft:water") || wb.equals("minecraft:air"))
 				|| SPREAD.contains(wb) && SPREAD.contains(nb)) {
 				return "growth"; // a random tick grew or spread it (kelp, cane, vines, crops; grass onto dirt): the world's doing
+			}
+			if (LiveBlocks.grazed(wb, nb)) {
+				return "grazed"; // (6b) a sheep ate it during the stand: the world's doing
 			}
 			try {
 				BlockState ns = Packed.parse(now.contains("{") ? now.substring(0, now.indexOf('{')) : now);
