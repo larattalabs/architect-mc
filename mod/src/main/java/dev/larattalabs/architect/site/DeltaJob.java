@@ -359,17 +359,36 @@ final class DeltaJob implements Placement.Job {
 									.maxZ() - wb.minZ() + 1, 0);
 								StructureTemplate tt = new StructureTemplate();
 								tt.load(level.registryAccess().lookupOrThrow(Registries.BLOCK), tpl);
-								return new Object[] {TemplateWriter.cells(level, tt, Sites.placeSettings(Rotation.NONE)).airFirst(), wb}; // clears first (SiteDeltas.write)
+								// the cells other sites hold on top (reads every section of the site's entries: 50-80 ms for a 590k-cell site
+								// on the server thread), off it too
+								Set<Long> mk;
+								try {
+									mk = othersOnTop(level, b, o, wb);
+								} catch (Sites.SiteException e) {
+									throw new java.util.concurrent.CompletionException(e);
+								}
+								return new Object[] {TemplateWriter.cells(level, tt, Sites.placeSettings(Rotation.NONE)).airFirst(), wb, mk}; // clears first (SiteDeltas.write)
 							});
 						}
 						if (!prepared.isDone()) {
 							return false;
 						}
-						Object[] p = prepared.join();
+						Object[] p;
+						try {
+							p = prepared.join();
+						} catch (java.util.concurrent.CompletionException e) {
+							prepared = null;
+							if (e.getCause() instanceof Sites.SiteException se) {
+								throw se;
+							}
+							throw e;
+						}
 						prepared = null;
 						Anchors.Bounds wb = (Anchors.Bounds) p[1];
 						writer = new TemplateWriter((TemplateWriter.Cells) p[0], new BlockPos(wb.minX(), wb.minY(), wb.minZ()), Sites.FLAGS);
-						masked = othersOnTop(level, b, check.plan().outcome(), wb);
+						@SuppressWarnings("unchecked")
+						Set<Long> mk = (Set<Long>) p[2];
+						masked = mk;
 					}
 					TickDeferral.begin(level, held);
 					if (!masked.isEmpty()) {
