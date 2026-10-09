@@ -1142,3 +1142,28 @@ cost nothing.
 - **Gallery:** a private claude.ai page per phase, with renders and approve/reject per scenario.
 - **Reference images:** made with GPT Image 2.5. Noah generates them through his own chat interface or sets up API access
   himself. Architect asks him when a phase is ready for them; no local image generation is used for this.
+
+## Changes from Steward's review (steward-mc/docs/A7-SETTLEMENTS-REVIEW.md), all accepted
+
+- **Villagers don't climb (verified statically in 26.3):** `WalkNodeEvaluator`, `GroundPathNavigation` and `PathNavigation` have
+  no ladder or climbable handling. So ladders, scaffolding, lifts and other vertical-only connectors carry mover set
+  `{player, steward}` only. Villager routes use stairs, ramps, slabs, doors, fence gates and flat bridges. The 7a reachability
+  gate adds a **behavioural villager test** (a bed across a ladder shaft must be unreachable for villagers, and a stair route reachable).
+- **6b ships two bundled programs:** `crater_works` and a `rift`, Steward's two test prompts.
+- **Settlement graph:** nodes of up to 32 cells, typed links and mover sets. Each link also records **seconds** and **risk**
+  (fall, water, dark).
+- **Movers:** player, villager and steward. `golem` (a wide, flat, non-ladder route and the bell area) is added when Steward's
+  villager phase starts. Animals get only a "pen reachable from a farm node" check. No mounts.
+- **Ownership:** Steward owns the card, its prompt and a settlement **brief** derived from it (intent, theme, difficulty,
+  permission, budget). Architect owns the `SettlementPlan` schema, the planner prompt and the realiser.
+- **Design groups:** `GroupRequest.Item` results list the variant entry ids per item key. Massing approval is **per archetype**,
+  not per placement.
+- **Fit hint:** an optional `fit` preference on Steward's card ("carved into rock", "on stilts"), honoured by the planner as a
+  preference.
+- **Villager planner rules (7a/7c):**
+  - the bell and meeting point sit on a node with villager and golem movers and at least 5x5 of flat clear ground;
+  - each house reaches its bed node, job-site node and the bell by the villager mover only;
+  - the trading hall is within 12 blocks of the bell;
+  - golem spawn space is 3 high and 3x3, near the bell;
+  - farm nodes are next to water and villager-reachable.
+- **Scenario candidates for later:** a desert mesa town and a mangrove stilt village. A Nether fortress waits for the Nether ground search.
