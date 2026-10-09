@@ -6237,3 +6237,7 @@ approach):
   plus screenshots looked at). M2 player reachability is unchanged or better. Exact undo still holds. The re-run is limited to
   the steps this touches.
 - 7a replaces this with designed entrance connectors in the settlement graph.
+- **Extended after Steward's live runs (2026-10-09):** plain placements (not region lots) get the same behaviour **when the
+  caller asks for it**: `PlaceRequest.pathStyle` (a road surface block). The approach also takes the block of an adjacent 4e road
+  site it joins, and joins the nearest road cell. Without either, single placements are unchanged. API 1.9.0 adds the field (old
+  constructors kept). Gate: a plain lot next to a 4e road with `pathStyle` shows no default dirt-path or cobblestone on its front.

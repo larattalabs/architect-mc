@@ -268,3 +268,12 @@ Conflicts with Architect's current contracts, to resolve in those phases:
 ## Open questions
 - Track AgentCraft fixes to the copied placement code, or treat the copy as independent from now on?
 - Cost: measure tokens and time per design in phase 1, and show an estimate in the form.
+
+### Steward live-run feedback (2026-10-09), queued for 6c unless noted
+
+- `LotFit.minLotSize` (x, z needed including setback), and `fitToLot` returns a recommended rect, so planners stop hardcoding a margin.
+- Group events emit only on real transitions, with a `seq`/`lastAction` field (today `awaiting_approval` and `paused_budget` are re-sent while an action is in flight).
+- `Group.cost.byKind` (bible, massing, detail, critique); today bible cost is excluded and critique sits inside item cost.
+- `Survey.sample` gains `groundHeight` (the floor under trees), and `Survey.volume` the same.
+- Region and plain-lot entrance style: in 6b (CONTRACT "6b addition: region lot entrances").
+- Cost stays the main product constraint: a 4-design group with bible and report critiques took about 25-30 min and $12.3 notional.
