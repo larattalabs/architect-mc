@@ -457,10 +457,16 @@ public final class RegionItems {
 	static boolean inRegion(String siteId) {
 		String g = null;
 		Infra in = Infras.get(siteId);
+		if (in == null) {
+			in = Infras.pending(siteId); // a member of a group undo is pending by then
+		}
 		if (in != null) {
 			g = in.group();
 		} else {
 			Site s = Sites.get(siteId);
+			if (s == null) {
+				s = Sites.pendingRecord(siteId);
+			}
 			g = s == null ? null : s.group();
 		}
 		SiteGroupRec rec = g == null ? null : Sites.group(g);

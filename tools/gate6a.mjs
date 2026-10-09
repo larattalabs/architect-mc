@@ -550,9 +550,8 @@ steps.megaB = async () => {
     const st0 = await regionState(region);
     const it = (st0.unfinished ?? []).find((x) => x.stage === stage) ?? (st0.unfinished ?? [])[0];
     if (!it) return { resumedSeconds: 0, note: 'nothing left in the stage' };
+    const ta = Date.now(); // the player arrives: from here its chunks load and the item may start
     await cmd(`/tp @s ${it.x} 200 ${it.z}`);
-    await call('dev.waitChunks', { timeoutMs: 60_000 }, 90_000).catch(() => {});
-    const ta = Date.now();
     // that item's own progress: it leaves WAITING/QUEUED (starts or is placed)
     for (let i = 0; i < 300; i++) {
       const s2 = await regionState(region);
@@ -868,7 +867,7 @@ steps.forest = async () => {
   check(rm.removed && unexplained === 0, `forest: the undo after a 2-minute stand at randomTickSpeed 3 is exact: ${diff.mismatches} mismatches, all random-tick growth or world-made (${JSON.stringify(diff.classes)})`,
     diff.list?.slice(0, 20));
   await leaveWorld();
-  const out = { spot, before, after, leaves: leaves.length, state: st.view.state, diff: { mismatches: diff.mismatches, classes: diff.classes, list: diff.list } };
+  const out = { spot, before, after, leaves: leaves.length, state: st.view.state, remove: rm, diff: { mismatches: diff.mismatches, classes: diff.classes, list: diff.list } };
   write('forest.json', out);
   return out;
 };
@@ -929,6 +928,10 @@ async function smallRun(world, opts = {}) {
 async function restartAfterKill(world) {
   const dead = await waitDead(180_000);
   log(`  client halted: ${dead}`);
+  if (!dead) {
+    check(false, `the kill point did not halt the client (${world})`);
+    await stopClient(); // by PID, then the run goes on
+  }
   await startClient(world);
   await tp(0.5, 120, 0.5);
 }
