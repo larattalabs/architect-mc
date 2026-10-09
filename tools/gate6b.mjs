@@ -594,6 +594,85 @@ steps.versionb = async () => {
   return out;
 };
 
+/**
+ * 10(c): the downgrade. A format-2 region (rift_city) mid-realise (its ground stage placed) is saved by 0.12.0 and opened by
+ * 0.11.0 (the run worktree at tag v0.11.0, the same code as the archived jar): what 0.11.0 does with it is pinned (no cell
+ * written; its tile requests or its record), then 0.12.0 reopens the world and one Regions.remove is exact against the
+ * pre-region snap.
+ */
+steps.versionc = async () => {
+  await ensure();
+  const out = {};
+  const claim = [-128, -100, 127, 99];
+  const W = 'G6B V10c';
+  await fresh(W, FLAT);
+  await tp(0.5, 120, 0.5);
+  const p = await plan('rift_city', claim, { surveyLoad: 'bounded:256' });
+  await prepare(p.planId);
+  const p2 = await plan('rift_city', claim, { surveyLoad: 'generated:64' });
+  const ir = readPlanJson(p2.planId, 'ir.json');
+  const box = [claim[0] - 8, ir.claim.minY, claim[1] - 8, claim[2] + 8, ir.claim.maxY, claim[3] + 8];
+  const snap = path.join(OUT, 'G6B_V10c.snap.gz');
+  await call('dev.region.hash', { box, mode: 'snap', file: snap }, 3_600_000);
+  const region = await realise(p2.planId, { lots: Object.fromEntries(ir.lots.map((l) => [l.id, 'g6a_stub_9'])) });
+  const st = await waitFor(region, (x) => { const g = x.view.stages.find((s2) => s2.name === 'ground'); return g && g.tilesDone >= g.tilesTotal; }, 900_000, 'the ground stage');
+  out.at012 = { region, format: ir.format, stages: st.view.stages.map((s2) => `${s2.name} ${s2.tilesDone}/${s2.tilesTotal}`), cells: st.view.cellsWritten };
+  await leaveWorld(); // saved mid-realise: the ways and lots stages are still to come
+  const h012 = null;
+  void h012;
+  await stopClient();
+  // 0.11.0
+  const head = execFileSync('git', ['-C', root, 'rev-parse', 'HEAD']).toString().trim();
+  execFileSync('git', ['-C', RUN, 'checkout', '-q', '--detach', 'v0.11.0']);
+  const launcher = path.join(RUN, 'tools', 'run-gate6b-client.sh');
+  const placed = !fs.existsSync(launcher);
+  if (placed) fs.copyFileSync(path.join(root, 'tools', 'run-gate6b-client.sh'), launcher);
+  try {
+    execFileSync('npm', ['run', 'build'], { cwd: path.join(RUN, 'sidecar'), stdio: 'ignore' });
+    copyWorld(W, `${W} Old`);
+    await startClient(`${W} Old`, { backend: 'sim' });
+    await tp(0.5, 120, 0.5);
+    await settle(5000);
+    const a = await call('dev.region.hash', { box }, 3_600_000);
+    const list = await call('dev.region.list', {}).catch((e) => ({ error: String(e) }));
+    const st11 = await call('dev.region.state', { region }).catch((e) => ({ error: String(e) }));
+    await settle(30_000);
+    const b = await call('dev.region.hash', { box }, 3_600_000);
+    const rm = await call('dev.region.remove', { region }, 600_000).catch((e) => ({ error: String(e) }));
+    await settle(5000);
+    const c = await call('dev.region.hash', { box }, 3_600_000);
+    if (rm.removed) {
+      const d11 = await call('dev.region.hash', { box, mode: 'diff', file: snap }, 3_600_000);
+      out.removedBy011 = { mismatches: d11.mismatches, classes: d11.classes };
+      check((d11.classes?.none ?? 0) === 0 && d11.mismatches <= 0.0001 * (out.at012.cells || 1), `version (c): Regions.remove with 0.11.0 is exact on what 0.12.0 wrote (${d11.mismatches} ${JSON.stringify(d11.classes)})`);
+    }
+    const logTail = (() => { try { return fs.readFileSync(path.join(OUT, 'client.log'), 'utf8').split('\n').filter((l) => /format|region|IR|stale|unreadable/i.test(l)).slice(-40); } catch { return []; } })();
+    out.at011 = { list, state: st11, hashOpen: a.sha256, hash30s: b.sha256, remove: rm, hashAfterRemove: c.sha256, log: logTail };
+    check(a.sha256 === b.sha256, `version (c): 0.11.0 writes nothing to the format-2 region in 30 s (${a.sha256.slice(0, 12)} = ${b.sha256.slice(0, 12)})`);
+    log(`  0.11.0 sees: list ${JSON.stringify(list).slice(0, 300)}; state ${JSON.stringify(st11).slice(0, 300)}; remove ${JSON.stringify(rm).slice(0, 300)}`);
+    await leaveWorld();
+    await stopClient();
+  } finally {
+    if (placed) fs.rmSync(launcher, { force: true });
+    execFileSync('git', ['-C', RUN, 'checkout', '-q', '--detach', head]);
+    execFileSync('npm', ['run', 'build'], { cwd: path.join(RUN, 'sidecar'), stdio: 'ignore' });
+  }
+  if (out.removedBy011) return out;
+  // back on 0.12.0: the region's record survived the downgrade; remove is exact on what 0.12.0 wrote
+  await startClient(`${W} Old`, { backend: 'sim' });
+  await tp(0.5, 120, 0.5);
+  await settle(5000);
+  const back = await call('dev.region.state', { region }).catch((e) => ({ error: String(e) }));
+  await cmd('/kill @e[type=!minecraft:player]');
+  const rm2 = await call('dev.region.remove', { region, force: true }, 3_600_000).catch((e) => ({ error: String(e) }));
+  await settle(10_000);
+  const diff = await call('dev.region.hash', { box, mode: 'diff', file: snap }, 3_600_000);
+  out.back012 = { state: back.view?.state ?? back, remove: rm2, diff: { mismatches: diff.mismatches, classes: diff.classes } };
+  check(!!rm2.removed && (diff.classes?.none ?? 0) === 0 && diff.mismatches <= 0.0001 * (out.at012.cells || 1), `version (c): after the downgrade 0.12.0 still knows the region (${out.back012.state}) and one Regions.remove is exact (${diff.mismatches} ${JSON.stringify(diff.classes)})`);
+  await leaveWorld();
+  return out;
+};
+
 // ------------------------------------------------------------------ the main
 const name = process.argv[2];
 if (!steps[name]) {
