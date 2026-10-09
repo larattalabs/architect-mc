@@ -5075,6 +5075,12 @@ disagree, this section says what shipped.
   on the server thread during road checks, and single-tick cabin placements over a 256x256 pad entry. Roads and cell sites
   now warm the journal off-thread before their checks; regions use 64x64 tile entries.
 
+**Chunks generated during a realise (diagnosis).** One failed megaA run generated 161 chunks during a stall, cause unknown;
+later runs generated none. Each one is now logged whatever `ARCHITECT_TRACE_JOBS` says: the first 1000 per region with their
+position, the Architect ticket holding them (if any), whether a prepare runs, the nearest player's distance in chunks against the
+view distance, and whether they lie in the claim + 2 chunks. The count is always kept (`stats.generatedDuringRealise` in the
+region record); the logged list goes to `<region>/generated.json` when the batch ends and to `dev.region.state`.
+
 **Chunk status without loading (gate item 3).** `ChunkGen`: the chunk map's latest status when the chunk is in memory, else
 `IOWorker.scanChunk` reading only the `Status` field of the stored NBT (pending stores included), cached per chunk.
 

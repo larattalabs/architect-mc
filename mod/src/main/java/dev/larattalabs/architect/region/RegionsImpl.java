@@ -110,11 +110,14 @@ public final class RegionsImpl implements Regions {
 			TileStream.forgetRegion(null);
 			Prepare.stopAll();
 			STAGE_CHECKS.clear();
+			GENERATED.clear();
+			GenCounter.realising(false);
 		});
 		net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents.END_SERVER_TICK.register(s -> {
 			RegionSurvey.tick(s);
 			Prepare.tick(s);
 			RegionHash.tick(s);
+			generatedDuringRealise(s);
 		});
 	}
 
@@ -636,6 +639,65 @@ public final class RegionsImpl implements Regions {
 		return a[0] <= b[3] && b[0] <= a[3] && a[2] <= b[5] && b[2] <= a[5];
 	}
 
+	// ------------------------------------------------------------------ chunks generated during a realise (diagnosis)
+
+	/** Per region: the first {@link #GEN_LOGGED} chunks generated while it realised ({@code x,z holder ...}). Server thread. */
+	private static final Map<String, List<String>> GENERATED = new HashMap<>();
+	static final int GEN_LOGGED = 1000;
+
+	/**
+	 * Every tick: whether a region realises (the mixin queues generated chunks only then), and the chunks generated during a
+	 * realise since the last tick, attributed and logged whatever {@code ARCHITECT_TRACE_JOBS} says: the first 1000 per region
+	 * with their position, the Architect ticket holding them (if any), whether a prepare runs, the nearest player's distance in
+	 * chunks against the view distance, and whether they lie in the claim + 2 chunks. Counted always
+	 * ({@code stats.generatedDuringRealise}). The gate's "0 generated during realise" and its unexplained 161 are what this is for.
+	 */
+	private static void generatedDuringRealise(MinecraftServer s) {
+		List<Live> running = new ArrayList<>();
+		for (Live l : REGIONS.values()) {
+			QBatch b = l.rec().state == RegionState.PLACING ? Batches.get(l.rec().batchId) : null;
+			if (b != null && b.running()) {
+				running.add(l);
+			}
+		}
+		GenCounter.realising(!running.isEmpty());
+		long[] gen = GenCounter.drain();
+		if (gen.length <= 1 && gen[0] == 0 || running.isEmpty()) {
+			return;
+		}
+		int view = s.getPlayerList().getViewDistance();
+		boolean preparing = Prepare.running();
+		for (Live l : running) {
+			RegionRec rec = l.rec();
+			long n = (rec.stats.has("generatedDuringRealise") ? rec.stats.get("generatedDuringRealise").getAsLong() : 0) + gen.length - 1 + gen[0];
+			rec.stats.addProperty("generatedDuringRealise", n);
+			List<String> list = GENERATED.computeIfAbsent(rec.id, k -> new ArrayList<>());
+			int[] c = rec.claim;
+			for (int k = 1; k < gen.length && list.size() < GEN_LOGGED; k++) {
+				int cx = net.minecraft.world.level.ChunkPos.getX(gen[k]);
+				int cz = net.minecraft.world.level.ChunkPos.getZ(gen[k]);
+				String holder = Batches.ticketHolder(gen[k]);
+				int near = Integer.MAX_VALUE;
+				for (var p : s.getPlayerList().getPlayers()) {
+					near = Math.min(near, Math.max(Math.abs((p.getBlockX() >> 4) - cx), Math.abs((p.getBlockZ() >> 4) - cz)));
+				}
+				boolean inClaim = cx >= (c[0] >> 4) - 2 && cx <= (c[3] >> 4) + 2 && cz >= (c[2] >> 4) - 2 && cz <= (c[5] >> 4) + 2;
+				String e = cx + "," + cz + " ticket " + (holder == null ? "none" : holder) + "; prepare " + (preparing ? "running" : "idle") + "; player "
+					+ (near == Integer.MAX_VALUE ? "none" : near + " chunks away (view " + view + ")") + "; " + (inClaim ? "in" : "outside") + " the claim + 2";
+				list.add(e);
+				Architect.LOGGER.info("Region {}: chunk {} generated during realise (#{}): {}", rec.id, cx + "," + cz, list.size(), e);
+			}
+			if (gen[0] > 0) {
+				Architect.LOGGER.info("Region {}: {} more chunks generated during realise (not attributed: queue full)", rec.id, gen[0]);
+			}
+		}
+	}
+
+	/** The chunks generated while the region realised that were logged (at most 1000), for DevBridge and {@code generated.json}. */
+	public static List<String> generatedLog(String regionId) {
+		return List.copyOf(GENERATED.getOrDefault(regionId, List.of()));
+	}
+
 	// ------------------------------------------------------------------ the per-stage drift check (Steward S2)
 
 	/**
@@ -842,6 +904,19 @@ public final class RegionsImpl implements Regions {
 			"genTerrainAtStart").getAsLong() : 0));
 		l.rec().generatedWhileHeld = GenCounter.whileHeld();
 		save(l);
+		List<String> gl = GENERATED.get(region);
+		if (gl != null && !gl.isEmpty()) {
+			com.google.gson.JsonArray a = new com.google.gson.JsonArray();
+			gl.forEach(a::add);
+			JsonObject o = new JsonObject();
+			o.addProperty("count", l.rec().stats.has("generatedDuringRealise") ? l.rec().stats.get("generatedDuringRealise").getAsLong() : gl.size());
+			o.add("first", a);
+			try {
+				RegionStore.writeJson(RegionStore.region(l.world(), region).resolve("generated.json"), o);
+			} catch (IOException e) {
+				Architect.LOGGER.warn("Region {}: generated.json: {}", region, e.toString());
+			}
+		}
 		SiteEvents.REGION_STATE.invoker().onState(view(l));
 	}
 
@@ -1076,6 +1151,9 @@ public final class RegionsImpl implements Regions {
 		o.addProperty("writerTicks", RegionItems.writerTicks);
 		o.addProperty("generatedTerrain", GenCounter.terrain());
 		o.addProperty("generatedWhileHeld", GenCounter.whileHeld());
+		com.google.gson.JsonArray gd = new com.google.gson.JsonArray();
+		generatedLog(regionId).stream().limit(50).forEach(gd::add);
+		o.add("generatedDuringRealise", gd);
 		o.addProperty("tilesReceived", TileStream.RECEIVED.get());
 		o.addProperty("wireBytes", TileStream.WIRE_BYTES.get());
 		o.addProperty("wireCells", TileStream.WIRE_CELLS.get());

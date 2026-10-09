@@ -304,6 +304,11 @@ public final class Prepare {
 		return r != null ? stats(r) : LAST_STATS.get(planId);
 	}
 
+	/** Whether a prepare is generating now (server thread). */
+	static boolean running() {
+		return !RUNS.isEmpty();
+	}
+
 	static @Nullable PrepareView view(String planId) {
 		Run r = RUNS.get(planId);
 		if (r != null) {

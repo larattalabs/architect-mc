@@ -1382,6 +1382,18 @@ public final class Batches {
 	private static final Map<String, String> TICKET_WAITER = new HashMap<>();
 
 	/** Whether an item of the batch waits for ticket budget (phase 6a: the freeze ahead then leaves the budget alone). */
+	/** Who holds an Architect batch ticket on a chunk ({@code <batch>/<key>}), or null (phase 6a: generated-chunk diagnosis). */
+	public static @Nullable String ticketHolder(long chunk) {
+		for (var e : TICKETS.entrySet()) {
+			for (var h : e.getValue().entrySet()) {
+				if (h.getValue().contains(chunk)) {
+					return e.getKey() + "/" + h.getKey();
+				}
+			}
+		}
+		return null;
+	}
+
 	/** A batch's ticket holders and how many chunks each holds (DevBridge). */
 	public static Map<String, Integer> ticketsOf(String batchId) {
 		Map<String, Integer> out = new java.util.TreeMap<>();
