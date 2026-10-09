@@ -303,11 +303,50 @@ export async function decodeArwd(file) {
   return { box, palette, cells, light, W, H, D, at: (x, y, z) => ((x - box.minX) * D + (z - box.minZ)) * H + (y - box.minY) };
 }
 
+/** Encode an ARWD dump (gzip-free bytes) of `box` from `stateAt(x, y, z)` -> canonical state, `lightAt` optional (tests, tools). */
+export function encodeArwd(box, stateAt, lightAt = null) {
+  const out = [];
+  const varint = (v) => { do { let byte = v & 127; v = Math.floor(v / 128); if (v) byte |= 128; out.push(byte); } while (v); };
+  out.push(0x41, 0x52, 0x57, 0x44, 1, lightAt ? 1 : 0, 0, 0);
+  const hdr = new DataView(new ArrayBuffer(24));
+  [box.minX, box.minY, box.minZ, box.maxX, box.maxY, box.maxZ].forEach((v, i) => hdr.setInt32(i * 4, v, true));
+  out.push(...new Uint8Array(hdr.buffer));
+  const pal = new Map();
+  const cols = [];
+  for (let x = box.minX; x <= box.maxX; x++) for (let z = box.minZ; z <= box.maxZ; z++) {
+    let prev = -1, len = 0;
+    const runs = [];
+    for (let y = box.minY; y <= box.maxY; y++) {
+      const st = stateAt(x, y, z);
+      let i = pal.get(st);
+      if (i === undefined) { i = pal.size; pal.set(st, i); }
+      if (i === prev) len++; else { if (len) runs.push(prev, len); prev = i; len = 1; }
+    }
+    runs.push(prev, len);
+    cols.push(runs);
+  }
+  varint(pal.size);
+  const te = new TextEncoder();
+  for (const st of pal.keys()) { const b = te.encode(st); varint(b.length); out.push(...b); }
+  for (const runs of cols) for (const v of runs) varint(v);
+  if (lightAt) {
+    for (let x = box.minX; x <= box.maxX; x++) for (let z = box.minZ; z <= box.maxZ; z++) {
+      let prev = -1, len = 0;
+      for (let y = box.minY; y <= box.maxY; y++) { const l = lightAt(x, y, z); if (l === prev) len++; else { if (len) { out.push(prev); varint(len); } prev = l; len = 1; } }
+      out.push(prev); varint(len);
+    }
+  }
+  return Uint8Array.from(out);
+}
+
 /**
  * A world from two dumps of the same box: `before` (pristine) and `after` (realised). Cells that differ are the written
- * cells (no part attribution). `light` comes from the after dump when it carries it.
+ * cells. `light` comes from the after dump when it carries it. With `virtual` (the plan's virtual world, buildVirtual's
+ * `vw`) each written cell takes the part and walk flag the plan gave that cell (a realised cell the plan never wrote has no
+ * part), planned walk cells the realise left unchanged keep their walk flag, and `lots` (the IR's) become obstacles as in
+ * the virtual world: the realised metrics then read the same parts, floating groups and walk surfaces as the plan's check.
  */
-export function dumpWorld(before, after, claim) {
+export function dumpWorld(before, after, claim, { virtual = null, lots = [] } = {}) {
   const pal = new Palette();
   const map = (d) => d.palette.map((s) => pal.of(s));
   const pb = map(before), pa = map(after);
@@ -324,8 +363,15 @@ export function dumpWorld(before, after, claim) {
   for (let x = box.minX; x <= box.maxX; x++) for (let z = box.minZ; z <= box.maxZ; z++) for (let y = box.minY; y <= box.maxY; y++) {
     const i = after.at(x, y, z);
     const a = pa[after.cells[i]], b0 = pb[before.cells[before.at(x, y, z)]];
-    if (a !== b0) vw.set(x, y, z, a, 0, -1);
+    if (a !== b0) vw.set(x, y, z, a, virtual ? virtual.flags(x, y, z) & F_WALK : 0, virtual ? virtual.partAt(x, y, z) : -1);
   }
+  if (virtual) {
+    virtual.eachWritten((x, y, z, idx, f, part) => {
+      if (!(f & F_WALK) || !inBox(x, y, z) || (vw.flags(x, y, z) & F_WRITTEN)) return;
+      vw.set(x, y, z, pa[after.cells[after.at(x, y, z)]], F_WALK, part);
+    });
+  }
+  for (const l of lots) vw.addLot(l);
   if (after.light) vw.lightAt = (x, y, z) => (inBox(x, y, z) ? after.light[after.at(x, y, z)] : 0);
   return vw;
 }

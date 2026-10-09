@@ -13,10 +13,11 @@
     ],
     "relief": [
       14,
-      45
+      60
     ],
-    "waterMax": 5,
-    "candidates": 30,
-    "step": 512
+    "waterMax": 10,
+    "candidates": 100,
+    "step": 512,
+    "stopAt": 100
   }
 }

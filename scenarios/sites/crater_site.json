@@ -13,12 +13,13 @@
     ],
     "relief": [
       0,
-      12
+      24
     ],
-    "waterMax": 3,
-    "treesMax": 20,
+    "waterMax": 8,
+    "treesMax": 30,
     "naturalMin": 97,
-    "candidates": 30,
-    "step": 512
+    "candidates": 100,
+    "step": 512,
+    "stopAt": 104
   }
 }

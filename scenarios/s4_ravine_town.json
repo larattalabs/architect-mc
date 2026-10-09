@@ -31,7 +31,8 @@
       30,
       200
     ],
-    "candidates": 40,
-    "step": 512
+    "candidates": 100,
+    "step": 512,
+    "stopAt": 80
   }
 }

@@ -31,7 +31,7 @@
       0,
       24
     ],
-    "treesMin": 40,
+    "treesMin": 30,
     "biomes": {
       "any": [
         "forest",
@@ -40,7 +40,8 @@
       ],
       "share": 0.6
     },
-    "candidates": 30,
-    "step": 448
+    "candidates": 150,
+    "step": 448,
+    "stopAt": 90
   }
 }

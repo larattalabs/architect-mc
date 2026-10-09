@@ -474,7 +474,10 @@ columns, x-major: runs bottom-up (varint paletteIndex, varint length)
 if light: columns, x-major: runs bottom-up (u8 blockLight, varint length)
 ```
 
-`kit/lib/region/dump.mjs` decodes it into the checker's cell source.
+`kit/lib/region/vworld.mjs` decodes it (`decodeArwd`; `encodeArwd` writes one, for tests) and `dumpWorld(before, after, claim,
+{virtual, lots})` makes the checker's cell source: the cells that differ are the written cells; with `virtual` (the plan's
+virtual world) each takes the part and walk flag the plan gave it, and the IR's lots are obstacles, so the realised report
+reads the same parts and floating groups as the plan's (`checkRegion({ir, meta, world})`, `mode: 'realised'`).
 
 ## The checker report (`report.json`) and `summary.txt`
 
@@ -518,7 +521,7 @@ node kit/tools/volume.mjs decode <arvx> [--slice y] [--json]
 - Modules: `lib/region/check.mjs` (`checkRegion({ir, survey, blobs, volumes, source?}) -> report`),
   `lib/region/vworld.mjs` (the virtual world and the dump-backed cell source), `lib/region/preview.mjs`
   (`renderPreviews({ir, survey, blobs, views, axes, outDir}) -> {paths, sitePlan}`), `lib/region/siteplan.mjs`,
-  `lib/region/volume.mjs` (ARVX), `lib/region/dump.mjs` (ARWD), `lib/forms/floatingIsland.mjs`, `lib/material.mjs`.
+  `lib/region/volume.mjs` (ARVX), `lib/forms/floatingIsland.mjs`, `lib/material.mjs`.
 
 ## Ghost tiles (the region ghost, client)
 

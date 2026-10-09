@@ -17,7 +17,7 @@ import { checkRegion } from '../lib/region/check.mjs';
 import { renderPreviews } from '../lib/region/preview.mjs';
 import { validateSchema } from '../lib/region/siteplan.mjs';
 import { decodeArvx, encodeArvx } from '../lib/region/volume.mjs';
-import { buildVirtual } from '../lib/region/vworld.mjs';
+import { buildVirtual, decodeArwd, dumpWorld, encodeArwd } from '../lib/region/vworld.mjs';
 import { makeColumns } from '../lib/region/pack.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -95,6 +95,27 @@ test('previews: pixel goldens; siteplan.json validates against siteplan-1 with a
   }
   if (process.env.UPDATE_GOLDEN === '1') fs.writeFileSync(goldenFile, `${JSON.stringify({ note: 'sha256 of each preview\'s RGBA pixels (the PNG bytes depend on the bundled zlib)', cases: now }, null, 1)}\n`);
   assert.deepEqual(now, JSON.parse(fs.readFileSync(goldenFile, 'utf8')).cases);
+});
+
+test('ARWD: a realised check over before/after dumps of S1\'s virtual world (plan attribution) equals the virtual check', async () => {
+  const id = 'floating_islands';
+  const p = await plan(id);
+  const survey = synthSurvey(claimOf(CASES[id]), SEED);
+  const virt = checkRegion({ ir: p.ir, survey, blobs: p.blobs, meta: p.meta, prefix: false });
+  const { vw } = buildVirtual({ ir: p.ir, survey, blobs: p.blobs });
+  let lo = Infinity, hi = -Infinity;
+  vw.eachWritten((x, y) => { if (y < lo) lo = y; if (y > hi) hi = y; });
+  const c = p.ir.claim;
+  const box = { minX: c.minX, minY: lo - 2, minZ: c.minZ, maxX: c.maxX, maxY: hi + 2, maxZ: c.maxZ };
+  const S = vw.pal.states;
+  const before = await decodeArwd(encodeArwd(box, (x, y, z) => S[vw.base(x, y, z)]));
+  const after = await decodeArwd(encodeArwd(box, (x, y, z) => S[vw.get(x, y, z)]));
+  assert.equal(after.cells.length, (box.maxX - box.minX + 1) * (box.maxY - box.minY + 1) * (box.maxZ - box.minZ + 1));
+  const world = dumpWorld(before, after, c, { virtual: vw, lots: p.ir.lots });
+  const real = checkRegion({ ir: p.ir, meta: p.meta, world, prefix: false });
+  assert.equal(real.mode, 'realised');
+  for (const k of ['M2', 'M3', 'M4', 'M8', 'M10']) assert.deepEqual(real.metrics[k], virt.metrics[k], `${k}: realised = virtual`);
+  assert.deepEqual(real.findings.map((f) => `${f.rule}|${f.part}|${f.count}`).sort(), virt.findings.filter((f) => f.rule !== 'M1').map((f) => `${f.rule}|${f.part}|${f.count}`).sort());
 });
 
 test('ARVX: the kit decoder reads the mod encoder\'s fixtures (runs, owners, sha) and round-trips its own encoding', () => {

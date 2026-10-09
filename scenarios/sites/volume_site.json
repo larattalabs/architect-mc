@@ -17,7 +17,8 @@
     ],
     "waterMin": 1,
     "treesMin": 5,
-    "candidates": 40,
-    "step": 512
+    "candidates": 100,
+    "step": 512,
+    "stopAt": 95
   }
 }
