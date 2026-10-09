@@ -2,8 +2,8 @@
  "scenario": "s1_floating_islands",
  "version": 1,
  "note": "tile shas of the IR over its own plan survey (kit windowFromSurvey), 1 worker = 4 workers shuffled; inputs in goldens/s1/",
- "fromRun": "20261009-213343",
- "irSha": "216700ec808dce6cfb37aed71c5fcd81a8d29dd9fdd77759ebf22745944d896d",
+ "fromRun": "20261009-220654",
+ "irSha": "063101a467b1e530172c19af5c173ad7724d61992810c5a740af0ff2bb67ad49",
  "kitVersion": "0.12.0",
  "cells": 60309,
  "tiles": {
