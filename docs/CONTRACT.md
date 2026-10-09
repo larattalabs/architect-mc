@@ -5154,7 +5154,7 @@ region record); the logged list goes to `<region>/generated.json` when the batch
 - `Sites.list(owner)` hides tiles (S1); the client's Placed view still lists tiles (no player UI in 6a).
 - Sidecar plan directories live under `<data>/regions/plans`; the 30 s plan limit is wall clock.
 
-# Phase 6b contract: checker, previews, volumes, IR format 2, the scenario harness and the crater gate - DRAFT for Steward review
+# Phase 6b contract: checker, previews, volumes, IR format 2, the scenario harness and the crater gate - FROZEN after Steward review
 
 Status: **draft**, 2026-10-09. Nothing here is built. After Steward's review this becomes the "Phase 6b contract" section of
 `docs/CONTRACT.md` (frozen), following the usual process.
@@ -6196,3 +6196,24 @@ The full chain is **one** run of megaA and megaB, not three. The throughput medi
 - **N-6b-3** Yes: about $0.30 expected, with a $3 cap.
 - **N-6b-4** The soft downgrade is accepted: 0.11.x writes nothing to a format-2 region, and the gate pins that behaviour.
 - **N-6b-5** Yes: the terrain half of the survival rule lands in 6c, and the connector half in 7a.
+
+## Changes from Steward's review of 6b (steward-mc/docs/A6B-REVIEW.md), all accepted
+
+Where this section and the 6b text above disagree, this section wins.
+
+- **S-6b-1** The topology graph ships in 6b in `siteplan.json` (format 1), marked `derived: true` so it can be told apart from 7a's planned graph.
+- **S-6b-2** The crater gate's `RegionDesignRequest` receives Steward's **card fields**, not the raw string:
+  - crater: site "giant meteor crater", purpose "mining facility", style "hellish evil lair" (player text "repurposed giant
+    meteor crater mining facility, hellish evil lair");
+  - rift: site "rift", purpose "settlement" (player text "a rift settlement").
+  
+  `rift_city` is a linear carved rift with ledge terraces, bridges, a lit side hall and a floor utility corridor. Cave city and
+  ravine town are separate templates.
+- **S-6b-3** No `NO_TEMPLATE` refusal on its own: the result offers the **closest program** with `fits: false` and the reason,
+  so a caller can propose it. `Reason.NO_TEMPLATE` stays for callers that require a fit.
+- **S-6b-4** The nudge set is enough. A nudge `PREPARE` counts as the explicit start only after it has shown the prepare size and
+  time estimate.
+- **S-6b-5** Check and previews run on every plan by default. The `ext` skip is kept, and progress is reported ("checking",
+  "rendering previews") so a caller's inbox isn't silent.
+- **S-6b-6** `Survey.volume` returns summary stats alongside the grid: class counts, slope and overhang fractions, and tree and
+  cave presence.
