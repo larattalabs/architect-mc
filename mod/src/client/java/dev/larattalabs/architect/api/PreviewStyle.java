@@ -18,5 +18,10 @@ public enum PreviewStyle {
 	/** Cells a change replaces: amber. Since 1.3.0. */
 	CHANGED,
 	/** Cells of a delta the player changed, which a KEEP delta leaves as they are: yellow outlines. Since 1.7.0. */
-	KEPT
+	KEPT,
+	/**
+	 * The region ghost ({@link ArchitectClientApi#previewRegion}): added cells green, removed cells red frames, path (walk)
+	 * cells tan, lot cells blue, floating parts violet; beyond 64 blocks the claim outline and the lot boxes. Since 1.9.0.
+	 */
+	REGION
 }

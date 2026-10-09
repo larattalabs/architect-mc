@@ -341,11 +341,22 @@ final class DesignsImpl implements Designs {
 				req.add("ext", m.ext().deepCopy());
 			}
 		}
+		// phase 6b: a region design (kind "region") carries its pick's result; Design.kind() reads request.kind
+		Optional<JsonObject> result = Optional.empty();
+		if ("region".equals(str(raw, "kind")) || "region".equals(str(req, "kind"))) {
+			req.addProperty("kind", "region");
+			JsonObject res = raw.has("result") && raw.get("result").isJsonObject() ? raw.getAsJsonObject("result").deepCopy() : null;
+			String planId = id == null ? null : dev.larattalabs.architect.region.RegionDesigns.planIdOf(id);
+			if (res != null && planId != null && !res.has("planId")) {
+				res.addProperty("planId", planId);
+			}
+			result = Optional.ofNullable(res);
+		}
 		return new Design(id == null ? "?" : id, Design.Status.of(str(raw, "status")), str(raw, "step") == null ? "" : str(raw, "step"),
 			Optional.ofNullable(str(raw, "blueprintId")), raw.has("cost") && raw.get("cost").isJsonObject() ? Cost.fromJson(raw.getAsJsonObject("cost"))
 			: Cost.NONE, Optional.ofNullable(str(raw, "error")), req, Optional.ofNullable(owner), num(raw, "createdAt"), num(raw, "updatedAt"),
 			Wire4c.designMassing(raw), Wire4c.conformance(raw.get("conformance")), Wire5a.record(raw.get("critique")), Optional.ofNullable(str(raw,
-				"critiqueOf")), Wire5b.polish(raw.get("polish")));
+				"critiqueOf")), Wire5b.polish(raw.get("polish")), result);
 	}
 
 	/**
@@ -357,6 +368,9 @@ final class DesignsImpl implements Designs {
 		Design d = view(raw);
 		ApiEvents.designUpdated(d);
 		fireCritiqued(d);
+		if (d.kind() == Design.Kind.REGION) {
+			dev.larattalabs.architect.region.RegionDesigns.changed(server, d); // phase 6b: a fit plans the picked program
+		}
 		if (!d.status().isFinal()) {
 			return;
 		}

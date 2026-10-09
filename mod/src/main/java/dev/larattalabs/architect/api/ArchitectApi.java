@@ -24,8 +24,10 @@ public interface ArchitectApi {
 	 * 1.7.0: entry versions, blueprint deltas, delta apply, revert, polish (phase 5b).
 	 * 1.8.0: regions (plan, prepare, realise, undo), LoadPolicy GENERATED_ONLY, the queue-time CHUNK_BOUND, cell conditions,
 	 * the region events (phase 6a).
+	 * 1.9.0: region checks and previews, region designs (template-first), nudge actions, Survey.volume, IR format 2 and
+	 * PLAN_STALE gating, the PLAYER_BLOCKS refusal on region pads, the region ghost (phase 6b).
 	 */
-	String VERSION = "1.8.0";
+	String VERSION = "1.9.0";
 
 	/** The singleton. Safe to call from any mod's initializer (it does not depend on Architect's init order). */
 	static ArchitectApi get() {
@@ -70,6 +72,10 @@ public interface ArchitectApi {
 	 * {@code "bibleRestraint"}.
 	 * Since 1.8.0, {@code "generatedOnly"}, {@code "cellConditions"} and {@code "chunkBound"} are always there, and a 6a helper
 	 * ({@code region.plan} and {@code region.tiles}) adds {@code "regions"} and {@code "regionPrepare"}.
+	 * Since 1.9.0, {@code "surveyVolume"} and {@code "regionNudge"} are always there, and a 6b helper adds {@code "regionCheck"}
+	 * ({@code region.check}), {@code "regionPreview"} ({@code region.preview}), {@code "regionDesign"} ({@code region.design}),
+	 * {@code "irFormat2"} ({@code ir.format2}), {@code "regionBlobs"} ({@code region.blobs}) and {@code "regionGhost"} (preview
+	 * tiles: with {@code region.preview}).
 	 */
 	Set<String> features();
 }
