@@ -5113,7 +5113,12 @@ region record); the logged list goes to `<region>/generated.json` when the batch
 - **Exactness guards (E-normal).** A tile skips an air write that would let water or lava in. What stands on any changed
   cell (snow, plants, leaf litter, sand, gravel, kelp and so on) goes with it as cells of the tile's entry. Water or lava
   that flowed into air a CELL entry cleared counts as still the entry's. The E-normal classifier labels gravity (including
-  the landing cell), unsupported blocks and world-made block-entity changes (bees) as `live`.
+  the landing cell), unsupported blocks and world-made block-entity changes as `live`. `live` is strict, because it could
+  otherwise mask a real block-entity error: a mismatch that keeps its block and changes its block entity is `live` only on a
+  block the world itself changes (bee nests and hives, furnaces, smokers, blast furnaces, hoppers, brewing stands, campfires,
+  spawners and trial spawners, vaults, sculk sensors, catalysts and shriekers, conduits, beacons, creaking hearts:
+  `LiveBlocks.LIVE_BE`). On any other block (a chest whose loot table resolved, a sign) it is `none`, unexplained, and fails the
+  bar. Every `live` mismatch on record so far (megaA, the verifier's megaA, forest) is a bee nest.
 - **Ticks.** A tile's check runs in stages under the tick budget (cells, fluid guard, trees, dependents, leaves) and is
   assembled off the server thread; tile jobs capture over ticks and build their sections off-thread from 8192 cells. The
   group undo prepares its journal commit and its covering-sites scan off the server thread and checks members over ticks.

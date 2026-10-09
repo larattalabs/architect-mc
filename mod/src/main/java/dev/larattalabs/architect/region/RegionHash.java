@@ -295,15 +295,17 @@ public final class RegionHash {
 	 * E-normal's classifier. {@code gravity}: the pre-region cell is a gravity block over air or fluid, or one now gone whose
 	 * column below holds the same block first (it fell), or the cell is where such a block landed (now a gravity block, before
 	 * air or fluid); {@code unsupported}: a plant or mushroom that can't survive there
-	 * now; {@code live}: the same block whose block entity the world itself changed (bees in a hive); else {@code none}.
+	 * now; {@code live}: the same block whose block entity changed, on a block the world itself changes ({@link LiveBlocks#LIVE_BE}: bees in
+	 * a nest, a furnace, a hopper); else {@code none} (a block-entity change on any other block is unexplained).
 	 */
 	static String classify(ServerLevel level, BlockPos p, String was, @Nullable String now) {
 		if (now != null) {
-			String wb = was.contains("[") ? was.substring(0, was.indexOf('[')) : was.contains("{") ? was.substring(0, was.indexOf('{')) : was;
-			String nb = now.contains("[") ? now.substring(0, now.indexOf('[')) : now.contains("{") ? now.substring(0, now.indexOf('{')) : now;
-			if (wb.equals(nb) && (was.contains("{") || now.contains("{"))) {
-				return "live";
+			String be = LiveBlocks.sameBlockChange(was, now);
+			if (be != null) {
+				return be;
 			}
+			String wb = LiveBlocks.block(was);
+			String nb = LiveBlocks.block(now);
 			if (growth(wb) && (growth(nb) || nb.equals("minecraft:water") || nb.equals("minecraft:air"))
 				|| growth(nb) && (wb.equals("minecraft:water") || wb.equals("minecraft:air"))
 				|| SPREAD.contains(wb) && SPREAD.contains(nb)) {
