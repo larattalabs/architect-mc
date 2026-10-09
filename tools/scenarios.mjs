@@ -155,8 +155,10 @@ async function pin(id) {
   const hub = anchors.hub ?? anchors.entrance;
   const cams = {};
   for (const [n, a] of Object.entries(anchors).filter(([k]) => k.startsWith('cam_')).sort()) {
-    const target = n === 'cam_ground' ? [hub[0], hub[1] - 4, hub[2]] : [hub[0], hub[1] - 6, hub[2]];
-    cams[n] = [a[0] + 0.5, a[1], a[2] + 0.5, ...look([a[0] + 0.5, a[1], a[2] + 0.5], target)];
+    const target = [hub[0], hub[1] - 6, hub[2]];
+    const [yaw, pitch] = look([a[0] + 0.5, a[1], a[2] + 0.5], target);
+    // the ground camera looks up at the islands at a walker's angle, not straight up the tower
+    cams[n] = [a[0] + 0.5, a[1], a[2] + 0.5, yaw, n === 'cam_ground' ? Math.max(pitch, -28) : pitch];
   }
   const lotEntries = fitEntries(ir.lots);
   Object.assign(sc, { seed, cams, lotEntries });

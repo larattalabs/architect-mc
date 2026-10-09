@@ -2,10 +2,10 @@
  "note": "sha256 of each preview's RGBA pixels (the PNG bytes depend on the bundled zlib)",
  "cases": {
   "floating_islands": {
-   "top.png": "6500413001bca54c8575083b4f030fdf33b9e2de9af3ce87fd3716a479f645fa",
+   "top.png": "851a8a1484dc9fa0e6095dccb3c1c1800624c55d85e6be219a7169ea3c83a5a2",
    "section-1.png": "b5b3c6bf43d0074b049206a7c53e0ea5fc67b2f76963b1a10f8a13b042ea176f",
    "iso.png": "434876de3e661605070fe4ab8beb9b83b28f6c5caadbedc7d6199cb13fa330f9",
-   "siteplan.png": "460204155af8fe2ffb1bcc5c78791bc0075d09371e8cf65091de09064dda07a8"
+   "siteplan.png": "6b3142bfd857d63db642b6bd552a9c57f69b4a0e2181f0fe932632df4278f840"
   },
   "crater_works": {
    "top.png": "868298a4f2b58b40121ead11a1de09590e27f97633b11c156ff9d27eca3f284c",

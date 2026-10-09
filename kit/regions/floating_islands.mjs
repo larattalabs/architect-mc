@@ -113,7 +113,9 @@ export default function floatingIslands(ctx) {
   const cams = [[0, 'south'], [90, 'west'], [180, 'north'], [270, 'east']];
   for (const [a, name] of cams) { const d = compassDir(a + 180); r.anchor(`cam_${name}`, [round(cx + d[0] * (ring + 40)), alt + 25, round(cz + d[1] * (ring + 40))]); }
   r.anchor('cam_high', [cx, Math.min(claim.maxY - 1, alt + 60), cz + 30]);
-  r.anchor('cam_ground', [ex + 6, gY + 3, ez + 6]);
+  // the ground camera: a walker's eye 30 out from the stair's foot, looking back at the islands (clamped into the claim)
+  const gx = Math.max(claim.minX + 2, Math.min(claim.maxX - 2, ex + b.out[0] * 30)), gz = Math.max(claim.minZ + 2, Math.min(claim.maxZ - 2, ez + b.out[1] * 30));
+  r.anchor('cam_ground', [gx, Math.max(survey.heightAt(gx, gz), gY - 8) + 3, gz]);
   // ---- lots on the pads
   const lp = r.part('lot_pads', { stage: 'islands' });
   let li = 0;

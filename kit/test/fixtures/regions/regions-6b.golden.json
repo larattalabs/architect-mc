@@ -2,7 +2,7 @@
  "note": "S1 (floating_islands) and the four family fixtures over synthSurvey(claim, \"golden\"), node pinned to \"golden\"; tiles: stage|set|key -> sha256 of the ARTL payload",
  "cases": {
   "floating_islands": {
-   "irSha": "3bf2e5d725e097a3f14f278649220ac86104c6abac38ede0d66bfbab93a34aae",
+   "irSha": "4edf7f5de466520365c21c50ee006a43a8f5339124ad47a44a1022db7a3e5b65",
    "format": 2,
    "requires": [
     "forms",
