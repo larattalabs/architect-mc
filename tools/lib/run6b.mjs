@@ -71,8 +71,8 @@ export function clientPids() {
 export async function startClient(world, { backend = 'sim', env = {} } = {}) {
   if (clientPids().length) throw new Error(`a client of ${RUN} runs already: ${clientPids()}`);
   const opts = path.join(GAME_DIR, 'options.txt');
-  // no vsync; no clouds (the gallery's high cameras sit at cloud height)
-  if (fs.existsSync(opts)) fs.writeFileSync(opts, fs.readFileSync(opts, 'utf8').replace(/^enableVsync:true$/m, 'enableVsync:false').replace(/^renderClouds:"(true|fast|fancy)"$/m, 'renderClouds:"false"'));
+  // no vsync; no clouds (the gallery's cameras sit at cloud height; the graphics preset 'custom' lets renderClouds hold)
+  if (fs.existsSync(opts)) fs.writeFileSync(opts, fs.readFileSync(opts, 'utf8').replace(/^enableVsync:true$/m, 'enableVsync:false').replace(/^graphicsPreset:"[a-z]+"$/m, 'graphicsPreset:"custom"').replace(/^renderClouds:"[a-z]+"$/m, 'renderClouds:"false"'));
   fs.rmSync(path.join(GAME_DIR, 'architect', 'devbridge.token'), { force: true });
   setClaudeLogin(backend === 'claude');
   const out = fs.openSync(path.join(OUT, 'client.log'), 'a');
