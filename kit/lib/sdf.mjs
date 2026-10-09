@@ -4,7 +4,7 @@
 //   node.sd(y)           -> number    (signed distance at (x, y, z) of the prepared column; inside when <= 0)
 // `col` is `{ g, h, f }`: the column's frozen ground, height and floor (y-refs resolve against it).
 // Under the realise lint: only + - * / and Math.floor/sqrt/abs/min/max/imul.
-import { fnv64, makeNoise, noiseSpecError } from './noise.mjs';
+import { fnv64, makeColumnNoise, makeNoise, noiseSpecError } from './noise.mjs';
 
 /** Bigger than any distance in a world; substituted for a child known to be outside its threshold. */
 export const BIG = 1e9;
@@ -966,24 +966,70 @@ export function warpFields(noise) {
 }
 
 class Warp extends Node {
-  // `of` evaluated at p + amp * (nx, ny, nz)(p); `of` must have an absolute y extent (its y range bounds the column)
+  // `of` evaluated at p + amp * (nx, ny, nz)(p); `of` must have an absolute y extent. A column's y span comes from a table of
+  // the child's spans over its x/z bounds, dilated by amp + 1 columns (a warped point stays within amp of its cell).
   constructor(s, e, blobs, L) {
     super(e, L);
     this.amp = s.amp;
-    [this.fx, this.fy, this.fz] = warpFields(s.noise);
+    this.n3 = ['x', 'y', 'z'].map((a) => makeColumnNoise({ ...s.noise, dims: 3, seed: fnv64(s.noise.seed, 'warp', a).hex }));
     this.a = compileNode(s.of, e, blobs, L);
     const ys = staticY(s.of);
     this.ylo = ys[0] - s.amp - Math.abs(e) - 1; this.yhi = ys[1] + s.amp + Math.abs(e) + 1;
     this.minX = this.a.minX - s.amp; this.maxX = this.a.maxX + s.amp; this.minZ = this.a.minZ - s.amp; this.maxZ = this.a.maxZ + s.amp;
+    // the span table holds only when no y in the subtree depends on the column
+    this.tab = /"(surface|floor|height)":/.test(JSON.stringify(s.of)) ? false : null;
+  }
+  _table() {
+    const a = this.a, R = this.amp + 1;
+    const x0 = Math.floor(a.minX) - 1, x1 = -Math.floor(-a.maxX) + 1, z0 = Math.floor(a.minZ) - 1, z1 = -Math.floor(-a.maxZ) + 1;
+    const W = x1 - x0 + 1, D = z1 - z0 + 1;
+    if (!(W > 0 && D > 0) || W * D > 4194304) { this.tab = false; return; }
+    const col = { g: 0, h: 0, f: 0 };
+    let lo = new Float64Array(W * D).fill(BIG), hi = new Float64Array(W * D).fill(-BIG);
+    for (let j = 0; j < D; j++) for (let i = 0; i < W; i++) {
+      const x = x0 + i, z = z0 + j;
+      if (a.inXZ(x, z) && a.prep(x, z, col)) { lo[i + j * W] = a.lo; hi[i + j * W] = a.hi; }
+    }
+    // dilate by R columns: separable min (lo) / max (hi) over x, then z
+    const dil = (src, isMin, horiz) => {
+      const out = new Float64Array(W * D);
+      for (let j = 0; j < D; j++) for (let i = 0; i < W; i++) {
+        let m = isMin ? BIG : -BIG;
+        for (let k = -R; k <= R; k++) {
+          const ii = horiz ? i + k : i, jj = horiz ? j : j + k;
+          if (ii < 0 || jj < 0 || ii >= W || jj >= D) continue;
+          const v = src[ii + jj * W];
+          if (isMin ? v < m : v > m) m = v;
+        }
+        out[i + j * W] = m;
+      }
+      return out;
+    };
+    lo = dil(dil(lo, true, true), true, false);
+    hi = dil(dil(hi, false, true), false, false);
+    this.tab = { x0, z0, W, D, R, lo, hi };
   }
   prep(x, z, c) {
+    if (this.tab === null) this._table();
+    let lo = this.ylo, hi = this.yhi;
+    const t = this.tab;
+    if (t) {
+      const i = Math.floor(x) - t.x0, j = Math.floor(z) - t.z0;
+      if (i < -t.R || j < -t.R || i >= t.W + t.R || j >= t.D + t.R) return false;
+      const ii = i < 0 ? 0 : i >= t.W ? t.W - 1 : i, jj = j < 0 ? 0 : j >= t.D ? t.D - 1 : j;
+      const l = t.lo[ii + jj * t.W], h = t.hi[ii + jj * t.W];
+      if (l > h) return false;
+      lo = Math.max(lo, l - this.amp - 1); hi = Math.min(hi, h + this.amp + 1);
+      if (lo > hi) return false;
+    }
     this.x = x; this.z = z; this.c = c;
-    this.lo = this.ylo; this.hi = this.yhi;
+    this.n3[0].col(x, z); this.n3[1].col(x, z); this.n3[2].col(x, z);
+    this.lo = lo; this.hi = hi;
     return true;
   }
   sd(y) {
     const A = this.amp, x = this.x, z = this.z;
-    const qx = x + A * this.fx(x, y, z), qy = y + A * this.fy(x, y, z), qz = z + A * this.fz(x, y, z);
+    const qx = x + A * this.n3[0].at(y), qy = y + A * this.n3[1].at(y), qz = z + A * this.n3[2].at(y);
     const a = this.a;
     if (!a.inXZ(qx, qz) || !a.prep(qx, qz, this.c)) return BIG;
     if (qy < a.lo - EPS || qy > a.hi + EPS) return BIG;

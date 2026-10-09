@@ -17,7 +17,7 @@ export const PROTOCOL_VERSION = 1 as const;
 export const PROTOCOLS = [1, 2] as const;
 export type Protocol = (typeof PROTOCOLS)[number];
 /** What a protocol-2 snapshot lists in `features`. */
-export const FEATURES = ['job.run', 'job.tools', 'blobs', 'budget', 'designs.v2', 'bibles', 'design.groups', 'named.parts', 'open.types', 'estimates', 'reskin', 'massing', 'critique', 'critique.report', 'job.images', 'bible.admin', 'bible.restraint', 'entry.versions', 'entry.delta', 'design.polish', 'critique.polish', 'region.plan', 'region.tiles'] as const;
+export const FEATURES = ['job.run', 'job.tools', 'blobs', 'budget', 'designs.v2', 'bibles', 'design.groups', 'named.parts', 'open.types', 'estimates', 'reskin', 'massing', 'critique', 'critique.report', 'job.images', 'bible.admin', 'bible.restraint', 'entry.versions', 'entry.delta', 'design.polish', 'critique.polish', 'region.plan', 'region.tiles', 'region.check', 'region.preview', 'region.design', 'region.blobs', 'ir.format2'] as const;
 
 const Ts = z.number().int().nonnegative();
 const Id = z.string().min(1).max(64);
@@ -313,8 +313,10 @@ export const Design = z.object({
   conformance: Conformance.optional().describe('(4c) a detail pass: the massing conformance result (errors failed a round; issues are warnings)'),
   critique: CritiqueRecord.optional().describe('(5a) the critique rounds, the best round, the end reason and the split cost'),
   critiqueOf: z.string().optional().describe('(5a) a report critique of this library entry (design.critique): no new entry'),
-  kind: z.literal('polish').optional().describe('(5b) a polish of a library entry (design.polish): no new entry, at most one new version'),
+  kind: z.enum(['polish', 'region']).optional().describe('(5b) polish: a polish of a library entry (design.polish): no new entry, at most one new version; (6b) region: a template pick (region.design), `region` and `result` say what'),
   polish: PolishRecord.optional().describe('(5b) the polish: steps, end, installed version, the apply intent'),
+  region: z.record(z.string(), z.unknown()).optional().describe('(6b) a region design: the request (brief, card, claim, surveyBlobId, bible, mustPass, requireFit, plan) and its tries'),
+  result: z.record(z.string(), z.unknown()).optional().describe('(6b) a region design: {outcome: PICKED|NO_TEMPLATE, fits, program, params, reason, cost, planId?, tries}'),
 });
 export type Design = z.infer<typeof Design>;
 
@@ -739,6 +741,19 @@ export const MAX_TILES_PER_REQUEST = 64;
 /** The IR (canonical JSON) is at most this; over 1 MB it travels as a blob (irBlobId). */
 export const MAX_IR_BYTES = 4 * 1024 * 1024;
 export const IR_INLINE_BYTES = 1024 * 1024;
+/** (6b) a ghost tile's stage or set when the request named none: every stage / both sets. */
+export const TileOrAll = z.union([TileSet, z.literal('*')]);
+/** (6b) a box of whole blocks (inclusive). */
+export const VolumeBox = z
+  .object({ minX: z.number().int(), minY: z.number().int(), minZ: z.number().int(), maxX: z.number().int(), maxY: z.number().int(), maxZ: z.number().int() })
+  .refine((b) => b.minX <= b.maxX && b.minY <= b.maxY && b.minZ <= b.maxZ, 'a box needs min <= max on every axis');
+/** (6b) a side blob of a plan (kit/REGIONS.md "Side blobs"). */
+export const PlannedBlob = z.object({ name: z.string(), sha: z.string(), bytes: z.number().int().nonnegative(), kind: z.string(), blobId: z.string() });
+/** (6b) the preview views (kit/REGIONS.md "Kit CLI and modules (6b)"). */
+export const PREVIEW_VIEWS = ['top', 'section', 'iso', 'siteplan'] as const;
+export const PreviewView = z.enum(PREVIEW_VIEWS);
+/** (6b) section axes: at most 4 polylines of 2..64 [x, y, z] points. */
+export const SectionAxes = z.array(z.array(z.tuple([z.number().int(), z.number().int(), z.number().int()])).min(2).max(64)).min(1).max(4);
 const Base64 = (maxBytes: number) => z.string().max(Math.ceil(maxBytes / 3) * 4).regex(/^[A-Za-z0-9+/]*={0,2}$/, 'not base64');
 
 // ---- messages --------------------------------------------------------------------------------
@@ -769,6 +784,9 @@ export const SnapshotMsg = z.object({
   bibleIndex: z.array(BibleInfo).optional().describe('(4b) every installed bible (latest version) and the built-in ones'),
   reskins: z.array(Reskin).optional().describe('(4b) the last 20 re-skins plus any unfinished one'),
   massings: z.array(Massing).optional().describe('(4c) the latest version of every open massing (not detailed, its group not final) plus the last 20'),
+  kitVersion: z.string().optional().describe("(6b) the sidecar kit's KIT_VERSION (kit/lib/region/plan.mjs), 'unknown' when the kit has none"),
+  irFormats: z.array(z.number().int()).optional().describe("(6b) the IR formats the sidecar kit's evaluator reads (IR_FORMATS; [1] for an older kit)"),
+  irKinds: z.array(z.string()).optional().describe('(6b) the format-2 kinds the sidecar kit knows (KINDS_FORMAT2)'),
 });
 export const StatusMsg = z.object({ ...envelope('status'), status: Status });
 export const DesignUpsertMsgV1 = z.object({ ...envelope('design.upsert'), design: DesignV1 });
@@ -820,25 +838,39 @@ export const RegionPlannedMsg = z
     tiles: z.record(z.string(), z.unknown()).describe('{"<stage>": {terrain: [key], path: [key]}}, from the IR'),
     notes: z.array(z.string()),
     ms: z.number().int().nonnegative().optional().describe('(addition) the plan run\'s wall time'),
+    // (6b) kit/REGIONS.md "Protocol (2, additive)"
+    irFormat: z.number().int().min(1).optional().describe('(6b) the IR format (1|2)'),
+    requires: z.array(z.string()).optional().describe('(6b) the format-2 kinds the IR uses ([] for format 1)'),
+    kitVersion: z.string().optional().describe("(6b) the IR's kitVersion"),
+    blobs: z.array(PlannedBlob).optional().describe('(6b) the side blobs (each also a blob-store blob of kind region.blob)'),
+    needVolumes: z.array(VolumeBox).optional().describe('(6b) boxes the program asked for with r.needVolume'),
+    report: z.record(z.string(), z.unknown()).optional().describe('(6b) report.json (absent with check: false or when the check failed)'),
+    previews: z.record(z.string(), z.array(z.string())).optional().describe('(6b) {top: [path], section: [path...], iso: [path], siteplan: [svgPath, pngPath]} (absolute paths in the plan dir)'),
+    sitePlan: z.record(z.string(), z.unknown()).optional().describe('(6b) siteplan.json'),
+    checkMs: z.number().int().nonnegative().optional().describe('(6b) the check run\'s wall time'),
+    renderMs: z.number().int().nonnegative().optional().describe('(6b) the preview run\'s wall time'),
+    checkError: z.string().optional().describe('(6b addition) the check or the previews failed (the plan itself is good): why'),
   })
   .refine((m) => (m.ir === undefined) !== (m.irBlobId === undefined), 'exactly one of ir and irBlobId');
+export const RegionProgressMsg = z.object({ ...envelope('region.progress'), planId: PlanId, phase: z.enum(['planning', 'checking', 'rendering']) });
 export const RegionFailedMsg = z.object({ ...envelope('region.failed'), planId: PlanId, message: z.string() });
 export const RegionTileMsg = z.object({
   ...envelope('region.tile'),
   planId: PlanId,
   key: TileKey,
-  stage: StageName,
-  set: TileSet,
+  stage: StageName.describe("the request's stage; (6b) a ghost tile without one: '*' (every stage)"),
+  set: TileOrAll.describe("the request's set; (6b) a ghost tile without one: '*' (both sets)"),
+  preview: z.literal(true).optional().describe('(6b) a ghost tile (region.tiles.request preview: true): evaluated over the plan survey'),
   seq: z.number().int().nonnegative().describe('the frame number, from 0'),
   more: z.boolean().describe('true on every frame but the last'),
   data: Base64(MAX_TILE_FRAME_BYTES).describe('base64 of a slice of gzipPinned(payload), at most 1 MB of gzip bytes'),
   count: z.number().int().nonnegative().describe('cells in the tile'),
   sha: Sha256Hex.describe('SHA-256 of the whole UNCOMPRESSED ARTL payload'),
 });
-export const RegionTileErrorMsg = z.object({ ...envelope('region.tile.error'), planId: PlanId, key: TileKey, stage: StageName, set: TileSet, message: z.string() });
+export const RegionTileErrorMsg = z.object({ ...envelope('region.tile.error'), planId: PlanId, key: TileKey, stage: StageName, set: TileOrAll, preview: z.literal(true).optional(), message: z.string() });
 export const EntryVersionedMsg = z.object({ ...envelope('entry.versioned'), entryId: z.string(), version: z.number().int().min(1), from: z.number().int().min(1).describe('the head before'), by: z.enum(['design', 'polish', 'revert', 'migrated']), designId: z.string().optional() });
 
-export const ServerMessage = z.discriminatedUnion('type', [SnapshotMsg, StatusMsg, DesignUpsertMsg, VariantUpsertMsg, AckMsg, ErrorMsg, JobUpsertMsg, JobEventMsg, JobToolCallMsg, GroupUpsertMsg, BibleUpsertMsg, BibleIndexMsg, ReskinUpsertMsg, MassingUpsertMsg, MassingRemovedMsg, EntryVersionedMsg, RegionPlannedMsg, RegionFailedMsg, RegionTileMsg, RegionTileErrorMsg]);
+export const ServerMessage = z.discriminatedUnion('type', [SnapshotMsg, StatusMsg, DesignUpsertMsg, VariantUpsertMsg, AckMsg, ErrorMsg, JobUpsertMsg, JobEventMsg, JobToolCallMsg, GroupUpsertMsg, BibleUpsertMsg, BibleIndexMsg, ReskinUpsertMsg, MassingUpsertMsg, MassingRemovedMsg, EntryVersionedMsg, RegionPlannedMsg, RegionFailedMsg, RegionTileMsg, RegionTileErrorMsg, RegionProgressMsg]);
 export type ServerMessage = z.infer<typeof ServerMessage>;
 /** What protocol 1 knows: the phase 1-3 messages, with their phase 1-3 fields. */
 export const ServerMessageV1 = z.discriminatedUnion('type', [SnapshotMsgV1, StatusMsg, DesignUpsertMsgV1, VariantUpsertMsg, AckMsg, ErrorMsg]);
@@ -957,21 +989,70 @@ export const RegionPlanMsg = z.object({
   bible: BibleId.optional().describe("the bible whose roles the program resolves (its latest version unless bibleVersion)"),
   bibleVersion: z.number().int().min(1).optional(),
   roles: z.record(z.string().regex(/^[a-z][a-z0-9_]{0,39}$/), BlockState).refine((r) => Object.keys(r).length <= 128, 'at most 128 roles').optional().describe("role -> block state; wins over the bible's"),
+  check: z.boolean().optional().describe('(6b) run the checker and the previews after the plan (default true; false = ext["architect_mc:check"] = false)'),
+  volumes: z
+    .array(z.object({ name: z.string().min(1).max(64).optional(), sha: Sha256Hex.describe('SHA-256 of the UNCOMPRESSED ARVX bytes'), blobId: BlobId.describe('the gzip ARVX file'), box: VolumeBox }))
+    .max(16)
+    .optional()
+    .describe('(6b) frozen volumes the program may read (the second plan of the two-plan flow)'),
 });
 export const RegionTileReq = z.object({
   key: TileKey,
-  stage: StageName,
-  set: TileSet,
-  heights: Base64(MAX_TILE_HEIGHTS_BYTES).describe("base64 ARSV: the tile's 80x80 window at resolution 1"),
+  stage: StageName.optional().describe('required unless preview; (6b) a ghost tile: every stage up to and including this one (absent: every stage)'),
+  set: TileSet.optional().describe('required unless preview; (6b) a ghost tile: this set only (absent: both)'),
+  heights: Base64(MAX_TILE_HEIGHTS_BYTES).optional().describe("base64 ARSV: the tile's 80x80 window at resolution 1 (required unless preview)"),
 });
-export const RegionTilesRequestMsg = z.object({
-  ...envelope('region.tiles.request'),
-  planId: PlanId,
-  irSha: Sha256Hex,
-  ir: z.union([z.string().max(MAX_IR_BYTES), z.record(z.string(), z.unknown())]).optional().describe('the IR, when the sidecar answered ir_unknown: the ir.json text (preferred) or its JSON object (hashed as canonical JSON)'),
-  tiles: z.array(RegionTileReq).min(1).max(MAX_TILES_PER_REQUEST),
-});
+export const RegionTilesRequestMsg = z
+  .object({
+    ...envelope('region.tiles.request'),
+    planId: PlanId,
+    irSha: Sha256Hex,
+    ir: z.union([z.string().max(MAX_IR_BYTES), z.record(z.string(), z.unknown())]).optional().describe('the IR, when the sidecar answered ir_unknown: the ir.json text (preferred) or its JSON object (hashed as canonical JSON)'),
+    blobs: z
+      .record(Sha256Hex, BlobId)
+      .refine((b) => Object.keys(b).length <= 256, 'at most 256 blobs')
+      .optional()
+      .describe('(6b) sha -> blob-store id: the side blobs the sidecar answered blob_unknown for (uploaded with blob.put, kind region.blob)'),
+    preview: z.boolean().optional().describe('(6b) ghost tiles: evaluated over the plan dir survey, no heights'),
+    tiles: z.array(RegionTileReq).min(1).max(MAX_TILES_PER_REQUEST),
+  })
+  .superRefine((m, ctx) => {
+    if (m.preview) return;
+    m.tiles.forEach((t, i) => {
+      for (const k of ['stage', 'set', 'heights'] as const) if (t[k] === undefined) ctx.addIssue({ code: 'custom', path: ['tiles', i, k], message: `${k} is required (unless preview)` });
+    });
+  });
 export const RegionReleaseMsg = z.object({ ...envelope('region.release'), planId: PlanId });
+// 6b regions (client -> sidecar)
+export const RegionCheckMsg = z.object({ ...envelope('region.check'), planId: PlanId });
+export const RegionPreviewMsg = z.object({
+  ...envelope('region.preview'),
+  planId: PlanId,
+  views: z.array(PreviewView).min(1).max(4).optional().describe('default all four'),
+  axes: SectionAxes.optional().describe('section axes (default: the kit picks)'),
+});
+export const RegionDesignCard = z.object({
+  site: z.string().trim().min(1).max(200).optional(),
+  purpose: z.string().trim().min(1).max(200).optional(),
+  style: z.string().trim().min(1).max(200).optional(),
+  text: z.string().trim().min(1).max(2000).optional().describe("the player's own words"),
+});
+export const RegionDesignMsg = z.object({
+  ...envelope('region.design'),
+  brief: z.string().trim().min(1).max(2000),
+  card: RegionDesignCard.optional().describe('(S-6b-2) the caller\'s card fields: they reach the pick as written'),
+  claim: RegionClaim,
+  surveyBlobId: BlobId.describe('the plan survey: an ARSV columns blob'),
+  bible: BibleId.optional(),
+  bibleVersion: z.number().int().min(1).optional(),
+  mustPass: z.array(z.string().trim().min(1).max(64)).max(32).optional().describe('checker rules the caller needs to pass (told to the pick; recorded)'),
+  model: ModelId.optional().describe('default config regionDesignModel, else jobModel (Sonnet)'),
+  budgetUsd: BudgetUsd.optional().describe('hard stop on the estimated cost of the pick, across its tries'),
+  requireFit: z.boolean().optional().describe('true: no fit fails the design (error NO_TEMPLATE); default false: done with outcome NO_TEMPLATE'),
+  plan: z.boolean().optional().describe('default true: a fit starts region.plan with the program and params'),
+  owner: Owner.optional(),
+  ext: Ext.optional().describe('kept on the design; on the sim backend only, ext["architect:simAnswers"] scripts the pick answers per try'),
+});
 
 export const ClientMessage = z.discriminatedUnion('type', [
   HelloMsg,
@@ -1012,6 +1093,9 @@ export const ClientMessage = z.discriminatedUnion('type', [
   RegionPlanMsg,
   RegionTilesRequestMsg,
   RegionReleaseMsg,
+  RegionCheckMsg,
+  RegionPreviewMsg,
+  RegionDesignMsg,
 ]);
 export type ClientMessage = z.infer<typeof ClientMessage>;
 /** What a protocol-1 client may send (exactly the phase 1-3 messages and fields). */
@@ -1043,7 +1127,7 @@ export function toProtocol1(full: Record<string, unknown>): Record<string, unkno
   // (4c) massing jobs and detail passes are protocol-2 work: a protocol-1 client never sees them
   // (5a) and a report critique of a library entry (design.critique)
   // (5b) and polish designs
-  const v2Only = (d: unknown) => !!d && typeof d === 'object' && (!!(d as { critiqueOf?: unknown }).critiqueOf || (d as { kind?: unknown }).kind === 'polish' || !!(((d as { request?: Record<string, unknown> }).request ?? {}).massing || ((d as { request?: Record<string, unknown> }).request ?? {}).fromMassing));
+  const v2Only = (d: unknown) => !!d && typeof d === 'object' && (!!(d as { critiqueOf?: unknown }).critiqueOf || (d as { kind?: unknown }).kind === 'polish' || (d as { kind?: unknown }).kind === 'region' || !!(((d as { request?: Record<string, unknown> }).request ?? {}).massing || ((d as { request?: Record<string, unknown> }).request ?? {}).fromMassing));
   // (5a) critiquing is a protocol-2 status: protocol 1 sees rendering, with the step text
   const v1Status = (d: unknown) => (d && typeof d === 'object' && (d as { status?: unknown }).status === 'critiquing' ? { ...(d as Record<string, unknown>), status: 'rendering' } : d);
   if (full.type === 'design.upsert' && v2Only(full.design)) return undefined;

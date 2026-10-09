@@ -2,7 +2,12 @@
 // Special keys: 99,99 throws; 98,98 exits the thread (a crash); 97,97 spins (a timeout); 96,96 allocates until it
 // runs out of memory; 95,95 gives an incompressible ~2.5 MB payload (3 frames); 94,94 is slow (300 ms);
 // an IR with slowMs makes every tile take that long.
+// (6b) A format-2 IR mixes its side blobs' bytes (opts.blobs: sha -> bytes, a function or a Map) into the payload; a
+// missing one throws "blob_unknown <sha>". Format 1 is unchanged.
 import crypto from 'node:crypto';
+
+export const IR_FORMATS = Object.freeze([1, 2]);
+export const KINDS_FORMAT2 = Object.freeze(['blobs:side', 'fields', 'forms', 'material:rule', 'shape:ellipsoid']);
 
 function prng(seed) {
   let s = seed >>> 0;
@@ -23,7 +28,18 @@ export function evalTile(ir, key, heights, opts = {}) {
   if (key === '96,96') { const hog = []; for (;;) hog.push(new Array(1e6).fill(Math.random())); }
   if (key === '94,94') { const end = Date.now() + 300; while (Date.now() < end); }
   if (ir.slowMs) { const end = Date.now() + ir.slowMs; while (Date.now() < end); }
-  const h = crypto.createHash('sha256').update(`${ir.seed}|${key}|${stage}|${set}|`).update(heights).digest();
+  const hash = crypto.createHash('sha256').update(`${ir.seed}|${key}|${stage}|${set}|`).update(heights);
+  if (ir.format === 2) {
+    const get = typeof opts.blobs === 'function' ? opts.blobs : (sha) => opts.blobs?.get?.(sha);
+    for (const b of Object.values(ir.blobs ?? {})) {
+      const bytes = get(b.sha);
+      if (!bytes) throw new Error(`blob_unknown ${b.sha}`);
+      hash.update(bytes);
+    }
+    // a ghost-tile request evaluates a copy cut after a stage: the parts it kept show
+    hash.update(`|parts:${(ir.parts ?? []).map((p) => p.id).join(',')}`);
+  }
+  const h = hash.digest();
   let body;
   if (key === '95,95') {
     const next = prng(h.readUInt32LE(0));

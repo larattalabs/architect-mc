@@ -272,7 +272,9 @@ export function evalTile(ir, key, heights, opts = {}) {
   const [tx, tz] = parseKey(key);
   const cols = asColumns(heights);
   if (cols.resolution !== 1) throw new Error(`evalTile: heights must have resolution 1 (got ${cols.resolution})`);
-  const { stage = null, set = null, countOnly = false } = opts;
+  const { stage = null, set = null, countOnly = false, cellOps = false } = opts;
+  // (6b, the checker) the op index of every emitted cell, in payload order
+  let opsOut = cellOps ? new Int32Array(4096) : null, opsN = 0;
   if (set !== null && !SETS.includes(set)) throw new Error(`evalTile: set must be terrain or path (got '${set}')`);
   const claim = C.claim;
   const x0 = tx * 64, z0 = tz * 64;
@@ -435,6 +437,10 @@ export function evalTile(ir, key, heights, opts = {}) {
             const m = (v - opi - 1) / OP_SLOTS;
             const o = C.ops[opi];
             if (C.isAir[m]) { removed++; partStats[o.part][0]++; } else { added++; partStats[o.part][1]++; }
+            if (opsOut) {
+              if (opsN === opsOut.length) { const g = new Int32Array(opsN * 2); g.set(opsOut); opsOut = g; }
+              opsOut[opsN++] = opi;
+            }
             if (!countOnly) {
               let li = local[m];
               if (li < 0) { li = pal.length; local[m] = li; pal.push(m); }
@@ -488,5 +494,7 @@ export function evalTile(ir, key, heights, opts = {}) {
   w.varint(sections);
   w.bytes(body.buf.subarray(0, body.len));
   const payload = w.result();
-  return { payload, count, sha: sha256Hex(payload), removed, added, minY, maxY, notes };
+  const res = { payload, count, sha: sha256Hex(payload), removed, added, minY, maxY, notes };
+  if (opsOut) res.cellOps = opsOut.subarray(0, opsN);
+  return res;
 }
