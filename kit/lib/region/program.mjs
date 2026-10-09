@@ -1098,8 +1098,9 @@ class Part {
     const railM = this._mat(railMaterial, 'bridge rail');
     const offs = crossOffsets(width);
     const outer = rail ? [offs[0] - 1, offs[offs.length - 1] + 1] : [];
-    // (6b) a link over the region's own forms clears 4 above the deck (rails and lanterns of a rim it cuts through go too)
-    const headTop = over === 'ours' ? 4 : 2;
+    // (6b) a link over the region's own forms clears 6 above the deck: where it cuts a rim up to 3 deep, the rim's grass, its
+    // rail and the lantern on the rail go too (4 left a rail lantern floating over the cut on S1's pinned site)
+    const headTop = over === 'ours' ? 6 : 2;
     const walkCells = new Cols({ abs: 0 }, { abs: 0 });
     const edgeCells = new Cols({ abs: 0 }, { abs: 0 });
     const head = new Cols({ abs: 0 }, { abs: 0 });

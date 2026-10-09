@@ -2,7 +2,7 @@
  "note": "S1 (floating_islands) and the four family fixtures over synthSurvey(claim, \"golden\"), node pinned to \"golden\"; tiles: stage|set|key -> sha256 of the ARTL payload",
  "cases": {
   "floating_islands": {
-   "irSha": "30b95632ce5509e714eb4c1ea221661a05cb551eed0b4103ec57bdc528fb9918",
+   "irSha": "3bf2e5d725e097a3f14f278649220ac86104c6abac38ede0d66bfbab93a34aae",
    "format": 2,
    "requires": [
     "forms",
@@ -12,16 +12,16 @@
     "shape:strata",
     "shape:warp"
    ],
-   "cells": 58783,
+   "cells": 59411,
    "tiles": {
     "islands|terrain|-1,-1": "2cb94ff4f38ca93b811b3b64f98b587d84ab0b94511ceea76ddeafad13a22daf",
     "islands|terrain|-1,0": "1ffdf002761e4a4c5da7347a931abfc39cdc0e04893f8777ad1563501b486da5",
     "islands|terrain|0,-1": "6074d6ad1d224781ddced268fc2a8ef56c88b60ea642c2c42ece74b67578d05d",
     "islands|terrain|0,0": "c532491900316c3dbd39b1712f85fd5afdd745b2379452d6cc42c7403619afd9",
-    "ways|path|-1,-1": "9dfd713af50710017ab42e6a8b114237b2fe490ea47c2f908e2b34bcd96c39c9",
-    "ways|path|-1,0": "e9ef44f5a26e18f2d54c9487b7ad21a5b5430feb932328f9e5052abbc26b7e1a",
-    "ways|path|0,-1": "07877c326ee8904d5c7e9bbfd01c8c72690138bcae97836caac86e29e344731d",
-    "ways|path|0,0": "a231f13feaa1b40ffbe0750e6d68702be29c9239289275aef3e5308847e3ecd5"
+    "ways|path|-1,-1": "84f63b4a4e2e4f8c0590fae0954b1915f59d19d894d056f798d3b9ad89e6b5d8",
+    "ways|path|-1,0": "d3756edfc3bcab42b7ff01838b16d381ca406c6fb9a5185cf633721fb385b55d",
+    "ways|path|0,-1": "8e4ea6ec4ecfbf1c0173b06b73fe6e2d64f1298135caf1fd7073c322ad3b1c48",
+    "ways|path|0,0": "38289be82d584cac3687d2381ec5310543a6a58795a7fb6a370eb1c4bfc5278a"
    }
   },
   "crater_works": {
@@ -54,21 +54,21 @@
    }
   },
   "sky_isle": {
-   "irSha": "e54ce375950d6f03db53c8a18b6fc6749c77c73ed50205d41e7278bc091081ce",
+   "irSha": "50c1e41e1cb2d837941b9de031b7d2aaf5009058a6c5dee7cbd1db761e6b4c1d",
    "format": 1,
    "requires": [],
-   "cells": 49387,
+   "cells": 49519,
    "tiles": {
     "mass|terrain|-1,-1": "cb72926c22cc7cbe6446637d070ca4f53ed6cc9f34f4eb2ab4ac55d865c7065b",
     "mass|terrain|-1,0": "6ef43352f51d468600f1d76a436838ea6d86a9f552316fdd7b21643c007d5fb0",
     "mass|terrain|0,-1": "006a5d6f1857ef7e70d4b8f8613437beaaf4e4ceab818faae50a23a91d1f9265",
     "mass|terrain|0,0": "978569342e7f2b6aa8e78884ea3b7dbcef1df91c493482ef1b17a3bc00a22bd3",
-    "ways|path|-1,0": "2942d76fc52175e5f11a2ff248390930334f3f1ad6fe6cabee9498491fe65d3f",
-    "ways|path|0,0": "f2ce037cb8011612d4096207c6b4219818e1d41d79acdf271a1ab43149b16e03"
+    "ways|path|-1,0": "1e41caad6a38ae9b120d1b9c54e27d2f1cd3f6e35ca032f4e183723ed45327ed",
+    "ways|path|0,0": "3a50a9497f17683cf36676237e3166bca45aebf6c321dcf6dea520d5c9ac5606"
    }
   },
   "rift_city": {
-   "irSha": "43b7a79f5a9cd834723fad4aa9db886693cb7b1883af3c0ea8600f98e8ffcdf3",
+   "irSha": "29e5a129eb92638952204f4ba2c6629e02d862923a5b2b289cf5fe1d29c9a3e2",
    "format": 2,
    "requires": [
     "blobs:side",
@@ -77,7 +77,7 @@
     "shape:ellipsoid",
     "shape:warp"
    ],
-   "cells": 185657,
+   "cells": 186659,
    "tiles": {
     "ground|terrain|-1,-1": "b82bfe47c01df655605d805595c2e6f0d3d198138dc504fcedd5a66bdb7c518e",
     "ground|terrain|-1,0": "bd6c0db8fff5edefe805aaaaa015d7b0a00a2280beee0d7c3fcc37b6b6177a80",
@@ -87,14 +87,14 @@
     "ground|terrain|0,0": "6cdaa31a73c1c5874ee67917f66673b8b98b4c2cf4af6ca56d488e45fd03de95",
     "ground|terrain|1,-1": "947bb3e8ae64dead0c8afb6f073f90796341c15f28a234fae0767ef91f6e0c39",
     "ground|terrain|1,0": "c9b5de9e84b3bf832cb6b72a3cdd39a59890bd5606da07f16f76052c36ea5eb3",
-    "ways|path|-1,-1": "4342f1995e93ee37e9ccc15a43c4de370e5fbd0282fcfe28cdced30b43825fcc",
-    "ways|path|-1,0": "36981d3e47de912638e4c3cf1b5bd977782db669a52a49904c8b8dbd8059e7be",
-    "ways|path|-2,-1": "0fb310af81edea509894bdccfb9e902e0edf89c61ab9c5689cf72655adbab618",
+    "ways|path|-1,-1": "e67e57d31b6bc814848ec9284ff09be155d217725a3ea1fa22dcac84f06bb2c5",
+    "ways|path|-1,0": "7f9baf2afafb3db364b94683e924e69db4ba74e0f2ff1476918baa5509d762bd",
+    "ways|path|-2,-1": "490e34b8600f8de446e640e6913597fad9912c254a60b77a111e78f59d360b40",
     "ways|path|-2,0": "5a6fe7226031d023345cc24165b36efee625d252b20fa942c52d0ea7329e5689",
-    "ways|path|0,-1": "f66548a89a310e1a0f62d8b371a861807de8f683afb0d096637c8d42468f2f53",
-    "ways|path|0,0": "39a058db6fe7c12d82fe71ada29926d72230bd5b46e64db0f3dc5605cf1a0470",
+    "ways|path|0,-1": "432f0120b7abbb2a928b16923021a3ad57b9e1805793ff5fe4fd7121d9ca9ff4",
+    "ways|path|0,0": "1b7addea6a43c43f9b28395438605584d74b76486b4ba145936ebbfc6bc853cb",
     "ways|path|1,-1": "6d54c6bd6b4da967971fe966e8a558d09ebb49224797b5beca4739c97a019c3f",
-    "ways|path|1,0": "13656a4c448235d947e377e9ecd0e2afbc3a3c8a60144356860cc5e736f57baa"
+    "ways|path|1,0": "7fb6253490514d0bb979fa68438ba0db3f2bf94eb0b3641af2191be97758d963"
    }
   },
   "walled_hill": {
