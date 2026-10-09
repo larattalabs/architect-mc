@@ -5082,8 +5082,13 @@ disagree, this section says what shipped.
 - `CHUNK_BOUND` refuses building items only; oversized road and cell items keep 4e's "run alone" (mega-lite's 256x256 pad).
 - The default realise bound is `GENERATED_ONLY(max(64, largest need + 72))`, which fits two freezes ahead. A ticket janitor
   returns tickets an item holds for nothing.
-- Heights freeze per tile window. Lots and 4e roads do not freeze; that is correct for stage orders where lots follow their
-  tiles (mega_bench), and a later-stage tile over earlier lot columns would freeze the lot's surface.
+- Heights freeze per tile window, and **no region item writes a column before it is frozen** (H0 for every writer). A lot
+  freezes the not-yet-frozen columns of its snapshot box (the approach included), and a 4e road those of its ticketed box,
+  after their chunks are loaded and before their check and capture. So a later-stage tile over an earlier stage's lot or road
+  reads the pre-region land in any stage order, a `reorderStages` included, and no plan is refused for its stage order. This is
+  the narrow form of SETTLEMENTS.md's 7a "freeze before lots" (the item's own columns rather than the whole tile window). It is a
+  no-op on mega_bench and region_small's lots, whose columns the ground stage's tiles froze; region_small's road freezes the
+  columns of its box outside them. (SETTLEMENTS.md's 7a note, on main, still describes this as a later change.)
 - The plan flow is plan (`LOADED_ONLY`, the prepare estimate), prepare, plan again (`GENERATED_ONLY`, the complete survey),
   realise. In a survey, `GENERATED_ONLY(n)` means n chunks at once and any number in all; `LOAD_BOUNDED` keeps 4a's total cap.
 - **Drift (S2) is checked at region start and before each later stage**, on stored heightmaps (loaded chunks live; no chunk

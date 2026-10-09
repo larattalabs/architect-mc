@@ -479,6 +479,9 @@ public final class Batches {
 		if (!SiteJournal.warm(i.dimension, infraBox(i))) {
 			return;
 		}
+		if (road && RegionItems.isRegion(b) && !RegionItems.frozenFor(b, i, level, infraBox(i))) {
+			return; // phase 6a: a region road's columns are frozen before it writes (H0)
+		}
 		if (road) {
 			c = InfraPlace.checkRoad(level, InfraSpec.points(i.spec), i.spec.get("width").getAsInt(), InfraSpec.str(i.spec, "surface"), InfraSpec.str(i.spec,
 				"slab"), i.spec.get("lanterns").getAsBoolean(), i.spec.get("shallowDecks").getAsBoolean(), b.owner, i.force);
@@ -923,6 +926,10 @@ public final class Batches {
 		if (snap != null && !loaded(level, snap.grow(LeafGuard.RADIUS + 1))) {
 			waitFor(b, i, Reason.NOT_LOADED, "the area around the site is not loaded on the server (walk closer)");
 			return;
+		}
+		if (RegionItems.isRegion(b) && !RegionItems.frozenFor(b, i, level, snap != null ? snap : new Anchors.Bounds(i.x, i.y, i.z, i.x + sx - 1, i.y
+			+ bp.sizeY() - 1, i.z + sz - 1))) {
+			return; // phase 6a: a region lot's columns are frozen before it writes (H0)
 		}
 		if (large) {
 			i.checkedAt = tick;

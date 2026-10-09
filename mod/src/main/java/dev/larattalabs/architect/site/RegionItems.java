@@ -438,6 +438,46 @@ public final class RegionItems {
 		Batches.levels.put(b.id + "/" + fk, i.dimension);
 	}
 
+	/**
+	 * H0 for a region's lots and roads (phase 6a): no region item writes a column before that column's pre-region heights are
+	 * frozen. Tiles freeze their window ahead; a lot (its snapshot box, the approach included) or a road (its ticketed box) freezes
+	 * the columns of its box that no earlier item froze, here, before its check and capture. So a later-stage tile over an earlier
+	 * lot or road, in any stage order (a reorder included), reads the land as it was before the region. A no-op when every column
+	 * is frozen already (mega_bench: its ground stage's tiles cover the claim). True when the box is frozen; otherwise a slice of
+	 * the freeze ran (or the item waits for its chunks) and the item is tried again.
+	 */
+	static boolean frozenFor(QBatch b, QItem i, ServerLevel level, Anchors.Bounds box) {
+		String region = regionOf(b);
+		RegionsImpl.Live r = region == null ? null : RegionsImpl.live(region);
+		if (r == null) {
+			return true;
+		}
+		Pipe p = pipe(b, i);
+		if (p.frozen) {
+			return true;
+		}
+		if (p.freeze == null) {
+			if (Heights.missing(r.world(), r.rec().id, box.minX(), box.minZ(), box.maxX(), box.maxZ()) == 0) {
+				p.frozen = true;
+				return true;
+			}
+			p.freeze = new Heights.Freeze(r.world(), r.rec().id, box.minX(), box.minZ(), box.maxX(), box.maxZ());
+		}
+		int st = p.freeze.step(level, Placement.deadline());
+		if (st == 1) {
+			p.frozen = true;
+			p.freeze = null;
+			return true;
+		}
+		if (st == -1) {
+			Batches.waitFor(b, i, Reason.NOT_LOADED, "the site's chunks are not loaded on the server (walk closer)");
+		} else if (st == -2) {
+			p.freeze = null;
+			Batches.fail(b, i, Reason.OTHER, "the frozen heights under it could not be written");
+		}
+		return false;
+	}
+
 	/** A region stage held by its drift check goes back to PLANNED (an approval continues it). */
 	public static void holdStage(MinecraftServer server, String groupId, String stage) {
 		SiteGroupRec g = Sites.group(groupId);
