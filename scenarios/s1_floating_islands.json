@@ -38,7 +38,8 @@
       "trees": 0,
       "natural": 100,
       "missing": 0
-    }
+    },
+    "irShaAtPin": "216700ec808dce6cfb37aed71c5fcd81a8d29dd9fdd77759ebf22745944d896d"
   },
   "flat": {
     "preset": "flat",
@@ -76,10 +77,62 @@
   },
   "program": "floating_islands",
   "params": {},
-  "seed": null,
+  "seed": "12812876217755164657",
   "bible": null,
-  "lotEntries": {},
-  "cams": {},
+  "lotEntries": {
+    "lot_1": "g6a_stub_9",
+    "lot_2": "g6a_stub_9",
+    "lot_3": "g6a_stub_9",
+    "lot_4": "g6a_stub_9",
+    "lot_5": "g6a_stub_9",
+    "lot_6": "g6a_stub_9",
+    "lot_7": "g6a_stub_9",
+    "lot_8": "g6a_stub_9"
+  },
+  "cams": {
+    "cam_east": [
+      1881.5,
+      193,
+      896.5,
+      84,
+      19.7
+    ],
+    "cam_ground": [
+      1794.5,
+      77,
+      912.5,
+      -139.1,
+      -83.6
+    ],
+    "cam_high": [
+      1792.5,
+      228,
+      926.5,
+      -158.4,
+      70.1
+    ],
+    "cam_north": [
+      1792.5,
+      193,
+      807.5,
+      -5,
+      16.5
+    ],
+    "cam_south": [
+      1792.5,
+      193,
+      985.5,
+      -174,
+      19.7
+    ],
+    "cam_west": [
+      1703.5,
+      193,
+      896.5,
+      -85,
+      16.5
+    ]
+  },
   "bars": {
     "checker": "0 errors; no M1, M2, M3, M4 findings",
     "reachability": "100% of nodes; 0 unreachable lot entrances",
