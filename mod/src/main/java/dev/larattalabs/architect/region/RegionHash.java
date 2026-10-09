@@ -272,6 +272,21 @@ public final class RegionHash {
 	}
 
 	/** E-normal's classifier: whether the snapped (pre-region) cell can't stand on its own. */
+	/** Blocks that random ticks grow (phase 6a, the E-normal and forest classifier's {@code growth}). */
+	static final java.util.Set<String> GROWS = java.util.Set.of("minecraft:kelp", "minecraft:kelp_plant", "minecraft:sugar_cane", "minecraft:cactus",
+		"minecraft:bamboo", "minecraft:bamboo_sapling", "minecraft:vine", "minecraft:cave_vines", "minecraft:cave_vines_plant", "minecraft:weeping_vines",
+		"minecraft:weeping_vines_plant", "minecraft:twisting_vines", "minecraft:twisting_vines_plant", "minecraft:wheat", "minecraft:carrots",
+		"minecraft:potatoes", "minecraft:beetroots", "minecraft:sweet_berry_bush", "minecraft:cocoa", "minecraft:melon_stem", "minecraft:pumpkin_stem",
+		"minecraft:attached_melon_stem", "minecraft:attached_pumpkin_stem", "minecraft:melon", "minecraft:pumpkin", "minecraft:glow_lichen",
+		"minecraft:pointed_dripstone", "minecraft:small_amethyst_bud", "minecraft:medium_amethyst_bud", "minecraft:large_amethyst_bud",
+		"minecraft:amethyst_cluster", "minecraft:cactus_flower");
+	/** Blocks random ticks turn into each other (grass and mycelium spreading onto dirt, and back under a block). */
+	static final java.util.Set<String> SPREAD = java.util.Set.of("minecraft:dirt", "minecraft:grass_block", "minecraft:mycelium", "minecraft:podzol");
+
+	static boolean growth(String block) {
+		return GROWS.contains(block) || block.endsWith("_sapling");
+	}
+
 	static String classify(ServerLevel level, BlockPos p, String was) {
 		return classify(level, p, was, null);
 	}
@@ -288,6 +303,11 @@ public final class RegionHash {
 			String nb = now.contains("[") ? now.substring(0, now.indexOf('[')) : now.contains("{") ? now.substring(0, now.indexOf('{')) : now;
 			if (wb.equals(nb) && (was.contains("{") || now.contains("{"))) {
 				return "live";
+			}
+			if (growth(wb) && (growth(nb) || nb.equals("minecraft:water") || nb.equals("minecraft:air"))
+				|| growth(nb) && (wb.equals("minecraft:water") || wb.equals("minecraft:air"))
+				|| SPREAD.contains(wb) && SPREAD.contains(nb)) {
+				return "growth"; // a random tick grew or spread it (kelp, cane, vines, crops; grass onto dirt): the world's doing
 			}
 			try {
 				BlockState ns = Packed.parse(now.contains("{") ? now.substring(0, now.indexOf('{')) : now);

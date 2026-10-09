@@ -863,10 +863,12 @@ steps.forest = async () => {
   await cmd('/gamerule random_tick_speed 0');
   await settle(5000);
   const diff = await call('dev.region.hash', { box, mode: 'diff', file: path.join(OUT, 'G6A_Forest.snap.gz') }, 3_600_000);
-  check(rm.removed && diff.mismatches === 0, `forest: the undo after a 2-minute stand at randomTickSpeed 3 is exact (${diff.mismatches} mismatches, ${JSON.stringify(diff.classes)})`,
+  // the stand's random ticks grow kelp, cane, crops and spread grass anywhere in the box: classified (growth, live), not the undo's
+  const unexplained = diff.classes?.none ?? 0;
+  check(rm.removed && unexplained === 0, `forest: the undo after a 2-minute stand at randomTickSpeed 3 is exact: ${diff.mismatches} mismatches, all random-tick growth or world-made (${JSON.stringify(diff.classes)})`,
     diff.list?.slice(0, 20));
   await leaveWorld();
-  const out = { spot, before, after, leaves: leaves.length, state: st.view.state, diff: { mismatches: diff.mismatches, classes: diff.classes } };
+  const out = { spot, before, after, leaves: leaves.length, state: st.view.state, diff: { mismatches: diff.mismatches, classes: diff.classes, list: diff.list } };
   write('forest.json', out);
   return out;
 };
