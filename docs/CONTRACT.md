@@ -5099,6 +5099,10 @@ disagree, this section says what shipped.
 - **Journal format 2.** Sections with more than 256 cells store positions as a 4096-bit mask (0.20 bytes per cell on
   mega_bench, was 1.59). Format 1 is still read. The index is written as version 2, so 0.10.x refuses a world 0.11.0 has
   written (a safe downgrade refusal).
+- **Waits (S8).** A region's items wait without a time limit (no `maxWait` in 6a; the wait reason is shown in the region's
+  state). Inside a region's items, a dropped item nobody threw (loot of an animal the region's own carve killed) is cleared
+  like a natural drop; named items and items a player threw still refuse. Regions are creative-only (N4).
+- The group undo saves the group and its stages once at the end (each stage save wrote the 0.5 MB sites file).
 - Group undo: a player standing in a tile's box holds it (4e's rule); the gate uses a spectator player and clears mobs first.
 - `RemoveResult.kept` for group and stage undos counts kept cells (it was 0).
 - `Sites.list(owner)` hides tiles (S1); the client's Placed view still lists tiles (no player UI in 6a).
