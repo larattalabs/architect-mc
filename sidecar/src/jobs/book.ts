@@ -96,7 +96,11 @@ export class JobBook {
     }
     if (changed) {
       j.updatedAt = this.ctx.now();
-      this.ctx.store.markDirty();
+      // a job that just became final is on disk before any client hears of it (as DesignBook.update): after a crash
+      // between the emit and a later flush the restart would re-queue it and run its paid query again, although the
+      // client (or the critique loop) already has the result
+      if (isFinalJob(j)) this.ctx.store.flush();
+      else this.ctx.store.markDirty();
       this.ctx.emit({ type: 'job.upsert', job: structuredClone(j) });
     }
     return j;

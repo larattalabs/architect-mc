@@ -484,7 +484,11 @@ export class Bibles {
     }
     if (changed) {
       j.updatedAt = this.sc.now();
-      this.sc.store.markDirty();
+      // a bible job that just became final is on disk before any client hears of it (as DesignBook.update): after a
+      // crash between the emit and a later flush the restart would re-queue the installed bible's job and run its paid
+      // components round again
+      if (isFinalBibleJob(j)) this.sc.store.flush();
+      else this.sc.store.markDirty();
       this.sc.emit({ type: 'bible.upsert', bible: structuredClone(j) } as Outbound);
     }
     return j;
