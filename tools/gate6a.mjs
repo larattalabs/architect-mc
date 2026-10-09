@@ -553,11 +553,11 @@ steps.megaB = async () => {
     await cmd(`/tp @s ${it.x} 200 ${it.z}`);
     await call('dev.waitChunks', { timeoutMs: 60_000 }, 90_000).catch(() => {});
     const ta = Date.now();
-    const c0 = st0.view.cellsWritten;
-    const p0 = st0.view.lots.filter((l) => l.state === 'placed').length;
+    // that item's own progress: it leaves WAITING/QUEUED (starts or is placed)
     for (let i = 0; i < 300; i++) {
       const s2 = await regionState(region);
-      if (s2.view.cellsWritten > c0 || s2.view.lots.filter((l) => l.state === 'placed').length > p0) {
+      const now = (s2.unfinished ?? []).find((x) => x.key === it.key);
+      if (!now || now.status === 'PLACING' || now.status === 'RUNNING') {
         const r = { resumedSeconds: (Date.now() - ta) / 1000, item: it.key, itemWas: `${it.status} ${it.reason ?? ''}`.trim() };
         log(`  ${label}: resumed ${r.resumedSeconds.toFixed(1)} s after the player reached ${it.key} (${r.itemWas})`);
         return r;
