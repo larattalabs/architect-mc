@@ -227,6 +227,15 @@ steps.volume = async () => {
   await tp(cx, y0 + 140, cz);
   // the area generated first (the measurement is the sampling, not worldgen)
   await call('dev.chunks.status', { box: [box[0], box[2], box[3], box[5]] }, 600_000).catch(() => null);
+  // a warm-up sample generates the chunks; then the fresh chunks tick 90 s (fluids from worldgen settle) before the two
+  // measured samples of the unchanged area
+  const warm = await call('dev.survey.volume', { box, load: 'generated:64' }, 1_800_000);
+  if (warm.refused) throw new Error(`volume refused: ${warm.refused}`);
+  await settle(90_000);
+  // the world held still for the sha comparison (no random ticks, no mobs: the exact rules); at default rules two
+  // samples a second apart differ by a grown plant or two
+  await setRules('exact');
+  await settle(5000);
   const runs = [];
   for (let i = 0; i < 2; i++) {
     await call('dev.mspt.trace', { start: true });
@@ -244,12 +253,16 @@ steps.volume = async () => {
   check(a.fileSha === a.sha, `volume: the frozen file reads back to the sha (${String(a.fileSha).slice(0, 12)})`);
   const need = ['ROCK', 'AIR', 'WATER', 'LOG', 'LEAVES'];
   check(need.every((k) => (a.counts[k] ?? 0) > 0), `volume: ROCK, AIR, WATER, LOG and LEAVES each above 0 (${need.map((k) => `${k} ${a.counts[k] ?? 0}`).join(', ')})`);
-  const cps = Math.min(a.cellsPerSecond, b.cellsPerSecond);
+  // the rate is the caller's: cells over the wall time from the request to the frozen file (sliced over ticks), not the
+  // sampling CPU time alone; the sampler holds 1 byte per cell, so the heap is a third bound (256 MB, a deviation: the
+  // contract's rule names only time and disk)
+  const cps = Math.min(a.cells / (a.ms / 1000), b.cells / (b.ms / 1000));
   const bpc = Math.max(a.bytesPerCell, b.bytesPerCell);
-  const limit = Math.floor(Math.min(60 * cps, (64 * 1024 * 1024) / bpc) / 1e6) * 1e6;
-  log(`  volume: the cell limit at the measured rates (60 s of sampling at ${Math.round(cps)} cells/s, 64 MB at ${bpc.toFixed(4)} B/cell): ${limit}`);
+  const byTime = 60 * cps, byDisk = (64 * 1024 * 1024) / bpc, byHeap = 256 * 1024 * 1024;
+  const limit = Math.floor(Math.min(byTime, byDisk, byHeap) / 1e6) * 1e6;
+  log(`  volume: the cell limit: 60 s at ${Math.round(cps)} cells/s (wall) = ${Math.round(byTime)}, 64 MB at ${bpc.toFixed(4)} B/cell = ${Math.round(byDisk)}, heap 256 MB at 1 B/cell = ${byHeap} -> ${limit}`);
   await leaveWorld();
-  return { box, runs: runs.map((r) => ({ ...r, file: undefined })), cellsPerSecond: cps, bytesPerCell: bpc, limit, current: a.maxCells };
+  return { box, warm: { ms: warm.ms, chunksLoaded: warm.chunksLoaded }, runs: runs.map((r) => ({ ...r, file: undefined })), cellsPerSecond: cps, bytesPerCell: bpc, byTime, byDisk, byHeap, limit, current: a.maxCells };
 };
 
 /** A paid design on the claude login: the guard, the auth log, the spend ledger. */

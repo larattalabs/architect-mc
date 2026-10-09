@@ -59,7 +59,7 @@ export const MAX_PENDING_TILES = 256;
 export const IR_CACHE_SIZE = 8;
 /** (6b) The blob store kind of a region side blob (kit/REGIONS.md "Protocol (2, additive)"). */
 export const REGION_BLOB_KIND = 'region.blob';
-/** (6b) A frozen ARVX volume decompresses to at most this (16M cells is about this many bytes of runs, with room). */
+/** (6b) A frozen ARVX volume decompresses to at most this (the mod's 268M-cell limit is about 0.2 bytes of runs per natural cell). */
 const MAX_VOLUME_RAW_BYTES = 512 * 1024 * 1024;
 
 /** Refuses networking inside the plan child (Node 24's permission model has no network switch). Loaded with --import. */

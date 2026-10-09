@@ -444,6 +444,11 @@ fields by 16), so transitions don't make straight lines. An op whose rule uses `
 
 ## ARVX (3D volumes, `Survey.volume`)
 
+**The cell limit is 268M cells per volume and per region's volumes together** (`VolumeSurvey.MAX_CELLS`; over it
+`REGION_LIMIT`). Set by 6b gate item 7 on a natural 256x256x128 cliff-and-cave fixture: 9.6M cells/s wall time (sliced over
+ticks, 0 ticks over 50 ms, slices at most 5 ms), 0.039 bytes per cell frozen. The contract's rule (60 s of sampling and
+64 MB on disk) gives 578M and 1.7G; the sampler holds 1 byte per cell, so a 256 MB heap bound decides it.
+
 The file is `gzip(ARVX bytes)`; the volume's **sha is SHA-256 of the uncompressed ARVX bytes** (the gzip bytes differ
 between Java and Node).
 

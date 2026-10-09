@@ -48,10 +48,11 @@ import org.jspecify.annotations.Nullable;
  */
 public final class VolumeSurvey {
 	/**
-	 * The most cells one volume (and one region's volumes together) may hold (CONTRACT §5 "16M cells per region (est.)"; gate item
-	 * 7 measures the rate and bytes and sets the final value). {@code -Darchitect.volumeMaxCells} overrides it for measurements.
+	 * The most cells one volume (and one region's volumes together) may hold. Set by 6b gate item 7 (CONTRACT "Phase 6b as
+	 * built"): at the measured 9.6M cells/s (wall, sliced) and 0.039 bytes/cell frozen, 60 s is 578M cells and 64 MB is 1.7G; the
+	 * sampler's heap (1 byte per cell, 256 MB) is the binding bound: 268M. {@code -Darchitect.volumeMaxCells} overrides it.
 	 */
-	public static final long MAX_CELLS = Long.getLong("architect.volumeMaxCells", 16_000_000L);
+	public static final long MAX_CELLS = Long.getLong("architect.volumeMaxCells", 268_000_000L);
 	/** Where standalone volumes freeze: {@code <world>/architect/volumes/<sha>.bin}. */
 	public static final String STANDALONE_DIR = "architect/volumes";
 
