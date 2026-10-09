@@ -328,6 +328,27 @@ async function designGate(name, siteId, req, program, { playerBlock = false } = 
   } else {
     check(st.view.state === 'PLACED' && st.view.lots.every((l) => l.state === 'placed'), `${name}: steps 3-4: prepared (${out.prepareSeconds.toFixed(0)} s), realised through the queue: ${st.view.state}, every lot placed (${out.state.lots.join(', ')}), ${st.view.cellsWritten} cells`);
   }
+  // (6b addition, region lot entrances) the lots' fronts: default dirt path / cobblestone counted, and shots looked at
+  if (!playerBlock && ir.lots.length) {
+    const { decodeArwd } = await import('../kit/lib/region/vworld.mjs');
+    const { lotFronts } = await import('./lib/scenario-metrics.mjs');
+    const lb = ir.lots.reduce((u, l) => [Math.min(u[0], l.box.minX - 8), Math.min(u[1], l.box.minY - 3), Math.min(u[2], l.box.minZ - 8), Math.max(u[3], l.box.maxX + 8), Math.max(u[4], l.box.minY + 3), Math.max(u[5], l.box.maxZ + 8)], [Infinity, Infinity, Infinity, -Infinity, -Infinity, -Infinity]);
+    const file = path.join(OUT, `${name}_lots.arwd.gz`);
+    await call('dev.region.dump', { box: lb, file }, 1_800_000);
+    out.lotFronts = lotFronts(ir, await decodeArwd(fs.readFileSync(file)));
+    check(Object.keys(out.lotFronts.outside).length === 0, `${name}: no default dirt path or cobblestone on the lots' fronts (outside the boxes ${JSON.stringify(out.lotFronts.outside)}; the children's own inside ${JSON.stringify(out.lotFronts.inside)})`);
+    out.shots = {};
+    const rimCam = ir.anchors.cam_rim;
+    if (rimCam) { await call('dev.camera', { x: rimCam[0] + 0.5, y: rimCam[1] + 20, z: rimCam[2] + 0.5, lookAt: { x: centre(claim)[0], y: rimCam[1] - 30, z: centre(claim)[1] }, mode: 'spectator' }, 30_000); await settle(3000); out.shots.rim = await shot(`${name}_rim`); }
+    for (const l of ir.lots.slice(0, 2)) {
+      const e = readPlanJson(planId, 'meta.json').lots?.[l.id]?.entrance ?? [l.box.minX, l.box.minY, l.box.minZ];
+      const o = { north: [0, -1], south: [0, 1], east: [1, 0], west: [-1, 0] }[l.front];
+      await call('dev.camera', { x: e[0] + o[0] * 10 + 0.5, y: e[1] + 7, z: e[2] + o[1] * 10 + 0.5, lookAt: { x: e[0] + 0.5, y: e[1], z: e[2] + 0.5 }, mode: 'spectator' }, 30_000);
+      await settle(3000);
+      out.shots[l.id] = await shot(`${name}_${l.id}_front`);
+    }
+    await call('dev.release', {}).catch(() => null);
+  }
   // case (b): a block on a path or pad cell after realise
   let pbB = null;
   if (playerBlock) {
