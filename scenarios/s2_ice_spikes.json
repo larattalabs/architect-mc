@@ -1,0 +1,43 @@
+{
+  "id": "s2_ice_spikes",
+  "phase": "6c",
+  "version": 0,
+  "brief": "a frontier outpost among the ice spikes",
+  "world": {
+    "seed": "2026100906",
+    "preset": "normal",
+    "gamerules": "gallery"
+  },
+  "fixture": {
+    "claim": null,
+    "yRange": null,
+    "foundBy": null,
+    "surveySha": null
+  },
+  "flat": {
+    "preset": "flat",
+    "claimOffset": [
+      0,
+      0
+    ],
+    "gamerules": "exact"
+  },
+  "needs": {
+    "size": [
+      192,
+      192
+    ],
+    "relief": [
+      0,
+      60
+    ],
+    "biomes": {
+      "any": [
+        "ice_spikes"
+      ],
+      "share": 0.5
+    },
+    "candidates": 40,
+    "step": 512
+  }
+}

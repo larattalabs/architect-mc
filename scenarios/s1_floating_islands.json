@@ -1,0 +1,67 @@
+{
+  "id": "s1_floating_islands",
+  "phase": "6b",
+  "version": 1,
+  "brief": "a hamlet on floating islands, linked by rope and stone (S1 v1: stone links; rope is 7a)",
+  "world": {
+    "seed": "2026100906",
+    "preset": "normal",
+    "gamerules": "gallery"
+  },
+  "fixture": {
+    "claim": null,
+    "yRange": null,
+    "foundBy": null,
+    "surveySha": null
+  },
+  "flat": {
+    "preset": "flat",
+    "claimOffset": [
+      0,
+      0
+    ],
+    "gamerules": "exact"
+  },
+  "needs": {
+    "size": [
+      256,
+      256
+    ],
+    "relief": [
+      0,
+      14
+    ],
+    "biomes": {
+      "any": [
+        "plains",
+        "ocean",
+        "meadow"
+      ],
+      "share": 0.7
+    },
+    "naturalMin": 97,
+    "yTop": 230,
+    "candidates": 30,
+    "step": 448
+  },
+  "program": "floating_islands",
+  "params": {},
+  "seed": null,
+  "bible": null,
+  "lotEntries": {},
+  "cams": {},
+  "bars": {
+    "checker": "0 errors; no M1, M2, M3, M4 findings",
+    "reachability": "100% of nodes; 0 unreachable lot entrances",
+    "structure": "0 floating cells outside declared groups; 0 M3:floating_spur; every floating group one component",
+    "spans": "every unsupported span <= maxSpan; 'ends' bridges bear on >= 2x2 at both ends",
+    "safety": "M4 0; M5 dark spawnable < 1% of walk area; M8 100% guarded",
+    "palette": "role adherence >= 0.9",
+    "organic": "axis-run share recorded (not gated in 6b)",
+    "buildings": "kit checker 0 errors on the placed entries",
+    "mspt": "0 ticks over 50 ms; p99 <= 25 ms",
+    "exactness": "E-flat 0; E-normal classified <= 0.01% of written cells",
+    "determinism": "IR sha over 3 plans; tile shas 1 and 4 workers; golden scenarios/goldens/s1.json",
+    "gallery": "Noah's approval for this run's evidence.sha"
+  }
+}

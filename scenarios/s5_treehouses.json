@@ -1,0 +1,46 @@
+{
+  "id": "s5_treehouses",
+  "phase": "7b",
+  "version": 0,
+  "brief": "a village in the crowns of giant trees",
+  "world": {
+    "seed": "2026100906",
+    "preset": "normal",
+    "gamerules": "gallery"
+  },
+  "fixture": {
+    "claim": null,
+    "yRange": null,
+    "foundBy": null,
+    "surveySha": null
+  },
+  "flat": {
+    "preset": "flat",
+    "claimOffset": [
+      0,
+      0
+    ],
+    "gamerules": "exact"
+  },
+  "needs": {
+    "size": [
+      192,
+      192
+    ],
+    "relief": [
+      0,
+      24
+    ],
+    "treesMin": 40,
+    "biomes": {
+      "any": [
+        "forest",
+        "jungle",
+        "taiga"
+      ],
+      "share": 0.6
+    },
+    "candidates": 30,
+    "step": 448
+  }
+}

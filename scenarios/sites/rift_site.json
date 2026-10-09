@@ -1,0 +1,24 @@
+{
+  "id": "rift_site",
+  "purpose": "the rift prompt (6b gate item 8): flat ground for a carved rift, 256x160",
+  "world": {
+    "seed": "2026100906",
+    "preset": "normal",
+    "gamerules": "default"
+  },
+  "needs": {
+    "size": [
+      256,
+      160
+    ],
+    "relief": [
+      0,
+      12
+    ],
+    "waterMax": 3,
+    "treesMax": 25,
+    "naturalMin": 97,
+    "candidates": 30,
+    "step": 512
+  }
+}

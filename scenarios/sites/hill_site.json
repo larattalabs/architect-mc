@@ -1,0 +1,22 @@
+{
+  "id": "hill_site",
+  "purpose": "the walled-hill pick brief (6b gate item 8b): a hill",
+  "world": {
+    "seed": "2026100906",
+    "preset": "normal",
+    "gamerules": "default"
+  },
+  "needs": {
+    "size": [
+      220,
+      220
+    ],
+    "relief": [
+      14,
+      45
+    ],
+    "waterMax": 5,
+    "candidates": 30,
+    "step": 512
+  }
+}

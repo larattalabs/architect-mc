@@ -1,0 +1,24 @@
+{
+  "id": "crater_site",
+  "purpose": "Steward's crater gate (6b gate item 8): flat ground, 300x300",
+  "world": {
+    "seed": "2026100906",
+    "preset": "normal",
+    "gamerules": "default"
+  },
+  "needs": {
+    "size": [
+      300,
+      300
+    ],
+    "relief": [
+      0,
+      12
+    ],
+    "waterMax": 3,
+    "treesMax": 20,
+    "naturalMin": 97,
+    "candidates": 30,
+    "step": 512
+  }
+}

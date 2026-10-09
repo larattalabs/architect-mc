@@ -1,0 +1,23 @@
+{
+  "id": "volume_site",
+  "purpose": "the volume survey fixture (6b gate item 7): a natural cliff and cave area of 256x256x128 with rock, air, water, logs and leaves",
+  "world": {
+    "seed": "2026100906",
+    "preset": "normal",
+    "gamerules": "default"
+  },
+  "needs": {
+    "size": [
+      256,
+      256
+    ],
+    "relief": [
+      30,
+      160
+    ],
+    "waterMin": 1,
+    "treesMin": 5,
+    "candidates": 40,
+    "step": 512
+  }
+}
