@@ -705,7 +705,7 @@ steps.pathstyle = async () => {
   const { decodeArwd } = await import('../kit/lib/region/vworld.mjs');
   const api = async (args) => { const r = await cmd(`/apitest ${args}`); const line = (r.messages ?? []).find((m) => m.startsWith('{') || m.startsWith('[') || m === 'null'); if (!line) throw new Error(`/apitest ${args}: ${JSON.stringify(r).slice(0, 300)}`); return JSON.parse(line); };
   const result = async (p) => { if (!p.pending) return p; for (let i = 0; i < 240; i++) { const v = await api(`get ${p.pending}`); if (v?.value !== undefined && v.value !== null) return v.value; if (v?.done) return v; await sleep(500); } throw new Error('no result'); };
-  const front = [22, 60, -10, 40, 75, 4]; // the strip between the cabin's door and the road
+  const front = [22, 60, -7, 40, 75, -2]; // the strip between the cabin's box (z -19..-8) and the road (z -1..1)
   const out = {};
   for (const style of [null, 'minecraft:stone_bricks']) {
     const name = style ? 'G6B PathStyle' : 'G6B PathStyle Ctl';
