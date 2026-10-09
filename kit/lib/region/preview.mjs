@@ -150,33 +150,50 @@ function renderSection(vw, ir, axis, survey) {
 
 function renderIso(vw, ir, meta) {
   const c = ir.claim;
+  const PAL = vw.pal;
   const W = c.maxX - c.minX + 1, D = c.maxZ - c.minZ + 1;
   const step = Math.max(1, Math.ceil((W + D) / 900));
   const nx = Math.ceil(W / step), nz = Math.ceil(D / step);
   const t = step > 1 ? 1 : Math.max(1, Math.min(4, Math.floor(1200 / (W + D))));
-  const tops = new Float64Array(nx * nz), cols = new Array(nx * nz);
+  // per sampled column, its solid runs from the top down (a floating mass and the ground under it are separate runs)
+  const runs = new Array(nx * nz);
   let ylo = Infinity, yhi = -Infinity;
   for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) {
-    const [y, idx] = topCell(vw, c.minX + i * step, c.minZ + j * step);
-    tops[i + j * nx] = y; cols[i + j * nx] = idx;
-    ylo = Math.min(ylo, y); yhi = Math.max(yhi, y);
+    const x = c.minX + i * step, z = c.minZ + j * step;
+    const [lo, hi] = vw.colRange(x, z);
+    const ground = vw.colTop(x, z);
+    const list = [];
+    let top = null;
+    for (let y = hi + 2; y >= Math.min(lo, ground) - 1; y--) {
+      const idx = vw.get(x, y, z);
+      const solid = !PAL.air[idx];
+      if (solid && top === null) top = [y, idx];
+      if (!solid && top !== null) { list.push([top[0], y + 1, top[1]]); top = null; if (list.length >= 3) break; }
+    }
+    if (top !== null) list.push([top[0], Math.min(top[0], ground) - 4, top[1]]);
+    runs[i + j * nx] = list;
+    for (const r of list) { ylo = Math.min(ylo, r[1]); yhi = Math.max(yhi, r[0]); }
   }
+  if (!Number.isFinite(ylo)) { ylo = c.minY; yhi = c.minY; }
   const vs = Math.max(1, t) / step; // vertical pixels per block
   const w = (nx + nz) * t + 4, h = Math.ceil((nx + nz) * t / 2 + (yhi - ylo + 8) * vs) + 4;
   const cv = new Canvas(Math.min(w, 4096), Math.min(h, 4096), [240, 244, 248]);
   const ox = nz * t + 2, oy = Math.ceil((yhi - ylo + 4) * vs) + 2;
-  const P = (i, j, y) => [ox + (i - j) * t, oy + ((i + j) * t) / 2 - (y - ylo) * vs];
-  // back to front
+  const P2 = (i, j, y) => [ox + (i - j) * t, oy + ((i + j) * t) / 2 - (y - ylo) * vs];
+  // back to front; within a column, the lowest run first
   for (let sum = 0; sum < nx + nz - 1; sum++) for (let i = Math.max(0, sum - nz + 1); i <= Math.min(nx - 1, sum); i++) {
     const j = sum - i;
-    const y = tops[i + j * nx];
-    const [topC, sideC] = colourOf(vw.pal.states[cols[i + j * nx]]);
-    const below = Math.min(i + 1 < nx ? tops[i + 1 + j * nx] : ylo - 4, j + 1 < nz ? tops[i + (j + 1) * nx] : ylo - 4);
-    const [px, py] = P(i, j, y);
-    const [, pyb] = P(i, j, Math.min(y, below));
-    cv.rect(Math.round(px - t), Math.round(py), Math.round(px + t) - 1, Math.round(pyb + t), shade(sideC, 0.8));
-    cv.rect(Math.round(px - t), Math.round(py - t / 2), Math.round(px + t) - 1, Math.round(py + t / 2), topC);
+    const list = runs[i + j * nx];
+    for (let r = list.length - 1; r >= 0; r--) {
+      const [ytop, ybot, idx] = list[r];
+      const [topC, sideC] = colourOf(PAL.states[idx]);
+      const [px, py] = P2(i, j, ytop);
+      const [, pyb] = P2(i, j, ybot);
+      cv.rect(Math.round(px - t), Math.round(py), Math.round(px + t) - 1, Math.round(pyb + t / 2), shade(sideC, 0.8));
+      cv.rect(Math.round(px - t), Math.round(py - t / 2), Math.round(px + t) - 1, Math.round(py + t / 2), topC);
+    }
   }
+  const P = P2;
   // lots as boxes (outlines), paths on top
   for (const l of ir.lots ?? []) {
     const b = l.box;

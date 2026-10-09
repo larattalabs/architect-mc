@@ -186,7 +186,20 @@ function supportCheck(vw, ir, stage) {
   groups.forEach((g, gi) => {
     const cells = groupCells[gi];
     const inG = new CellSet();
-    for (let i = 0; i < cells.length; i += 3) inG.add(cells[i], cells[i + 1], cells[i + 2]);
+    let bx0 = Infinity, bx1 = -Infinity, by0 = Infinity, by1 = -Infinity, bz0 = Infinity, bz1 = -Infinity;
+    for (let i = 0; i < cells.length; i += 3) {
+      inG.add(cells[i], cells[i + 1], cells[i + 2]);
+      bx0 = Math.min(bx0, cells[i]); bx1 = Math.max(bx1, cells[i]); by0 = Math.min(by0, cells[i + 1]); by1 = Math.max(by1, cells[i + 1]); bz0 = Math.min(bz0, cells[i + 2]); bz1 = Math.max(bz1, cells[i + 2]);
+    }
+    // the group's cells connect through each other or through solid cells other non-floating parts wrote inside the
+    // group's box (a lot pad or a deck laid on the island is part of it); only the group's own cells are counted
+    const via = (x, y, z) => {
+      if (inG.has(x, y, z)) return true;
+      if (x < bx0 || x > bx1 || y < by0 || y > by1 || z < bz0 || z > bz1) return false;
+      if (!(vw.flags(x, y, z) & F_WRITTEN) || !solid(vw.get(x, y, z))) return false;
+      const pi = vw.partAt(x, y, z);
+      return pi < 0 || groupOf(pi) < 0;
+    };
     const seen = new CellSet();
     const comps = [];
     for (let i = 0; i < cells.length; i += 3) {
@@ -196,9 +209,11 @@ function supportCheck(vw, ir, stage) {
       seen.add(x0, y0, z0);
       for (let q = 0; q < comp.length; q += 3) {
         const x = comp[q], y = comp[q + 1], z = comp[q + 2];
-        for (const [dx, dy, dz] of DIRS6) { const nx = x + dx, ny = y + dy, nz = z + dz; if (inG.has(nx, ny, nz) && seen.add(nx, ny, nz)) comp.push(nx, ny, nz); }
+        for (const [dx, dy, dz] of DIRS6) { const nx = x + dx, ny = y + dy, nz = z + dz; if (via(nx, ny, nz) && seen.add(nx, ny, nz)) comp.push(nx, ny, nz); }
       }
-      comps.push(comp);
+      const own = [];
+      for (let q = 0; q < comp.length; q += 3) if (inG.has(comp[q], comp[q + 1], comp[q + 2])) own.push(comp[q], comp[q + 1], comp[q + 2]);
+      comps.push(own);
     }
     comps.sort((a, b) => b.length - a.length);
     const spur = comps.slice(1).flatMap((c) => { const o = []; for (let i = 0; i < c.length; i += 3) o.push([c[i], c[i + 1], c[i + 2]]); return o; });

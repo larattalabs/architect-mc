@@ -40,7 +40,7 @@ export default function floatingIslands(ctx) {
   if (alt + 30 > claim.maxY) throw new Error(`floating_islands: the claim's y range ends at ${claim.maxY}, under the islands (${alt + 30})`);
   const ir = rng('islands');
   const n = P.islands - 1;
-  const HUB = { x: cx, z: cz, y: alt, rx: 22, rz: 20 };
+  const HUB = { x: cx, z: cz, y: alt, rx: 26, rz: 24 };
   const satR = (k) => 11 + (k % 3); // 11..13
   // the ring: close enough that a hub link's whole deck is at most 24
   // a satellite's distance: its link deck (4-connected cells between the landings, r - 4 in from each rim) at most 24
@@ -78,8 +78,8 @@ export default function floatingIslands(ctx) {
   const tower = { x: cx, z: cz };
   // lots: two on the hub (west and north-east), one on each satellite (away from its landings)
   const lotPad = (isl, ox, oz) => { const px = isl.x + ox - (LOT >> 1) - 1, pz = isl.z + oz - (LOT >> 1) - 1; isl.pads.push({ at: [px, pz], size: [LOT + 2, LOT + 2] }); isl.lots.push([px + 1, pz + 1]); };
-  lotPad(islands[0], -14, 3);
-  lotPad(islands[0], 14, -10);
+  lotPad(islands[0], -16, 0);
+  lotPad(islands[0], 16, 0);
   for (let k = 1; k <= n; k++) {
     const isl = islands[k];
     const out = compassDir(isl.angle);
@@ -89,7 +89,7 @@ export default function floatingIslands(ctx) {
   for (const isl of islands) {
     const res = r.floatingIsland(isl.id, {
       at: [isl.x, isl.y, isl.z], r: [isl.rx, isl.rz], thickness: isl.id === 'hub' ? 18 : 12,
-      top: { relief: 1, pads: isl.pads, edge: 'rail', lights: 9 }, underside: { taper: 0.75, roots: isl.id === 'hub' ? 0 : 4 }, // the hub's centre holds the tower
+      top: { relief: 1, pads: isl.pads, edge: 'rail', lights: 7 }, underside: { taper: 0.75, roots: isl.id === 'hub' ? 0 : 4 }, // the hub's centre holds the tower
       // the island's anchor (an M2 node) on its first landing, where a visitor arrives
       anchorAt: isl.id === 'hub' ? [isl.x + 9, isl.z + 9] : [isl.pads[0].at[0] + 2, isl.pads[0].at[1] + 2],
     }, { stage: 'islands' });
@@ -99,7 +99,7 @@ export default function floatingIslands(ctx) {
   const ways = r.part('links', { stage: 'ways', set: 'path' });
   links.forEach(([a, b], i) => {
     const [pa, pb] = linkEnds[i];
-    ways.bridge([[pa[0], a.y, pa[1]], [pb[0], b.y, pb[1]]], { width: 3, supports: { style: 'ends' }, maxSpan: 24, lights: 8, id: `link_${a.id}_${b.id}` });
+    ways.bridge([[pa[0], a.y, pa[1]], [pb[0], b.y, pb[1]]], { width: 3, supports: { style: 'ends' }, maxSpan: 24, lights: 8, over: 'ours', id: `link_${a.id}_${b.id}` });
   });
   const A = 6;
   const gY = Math.max(survey.heightAt(tower.x, tower.z), ...[[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([sx, sz]) => survey.heightAt(tower.x + sx * A, tower.z + sz * A)));

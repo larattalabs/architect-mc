@@ -97,21 +97,10 @@ export default function craterWorks(ctx) {
   // the spiral: a square spiral stair around a solid core at the centre, from the rim's height down to the floor (straight
   // flights of width 3 with a landing at every corner; each tread bears on the core or the step below it)
   const A = 7; // the flights run on a square of half-size A
-  const corners = [[1, 1], [-1, 1], [-1, -1], [1, -1]]; // south-east first (the bridge arrives from the south)
-  const pts = [];
-  let y = rimY, k = 0;
   const bottom = ys[2] - 1;
-  while (true) {
-    const [sx, sz] = corners[k % 4];
-    pts.push([cx + sx * A, y, cz + sz * A]);
-    if (y === bottom) break;
-    y = Math.max(bottom, y - 9);
-    k++;
-  }
-  const spiralTop = pts[0];
   const ways = r.part('ways', { stage: 'ways', set: 'path' });
-  ways.fill({ kind: 'box', min: [cx - A + 2, { min: [{ floor: 1 }, { abs: bottom }] }, cz - A + 2], max: [cx + A - 2, { abs: rimY }, cz + A - 2] }, 'structure', { cond: 0 });
-  ways.stair(pts, { width: 3, railing: 'rail', lights: 8, solid: true, id: 'spiral' });
+  const sp = ways.spiralTower({ center: [cx, cz], half: A, top: rimY, bottom, start: 2, lights: 8, openTop: false, id: 'spiral' }); // top at the SE corner
+  const spiralTop = [sp.top.x, sp.top.y, sp.top.z];
   const spiralR = A + 2;
   // the bridge: from the rim (through the gate) to the spiral's top corner
   const b0 = [spiralTop[0], cz + gd[1] * (R - 2)], b1 = [spiralTop[0], spiralTop[2] + 2];

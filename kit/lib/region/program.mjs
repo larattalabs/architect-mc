@@ -931,9 +931,10 @@ class Part {
    * `half` (the flight's centre line), from `top` to `bottom` (tread y), with a flat 3-cell landing at every corner. The core
    * (half - 2) is solid from the frozen floor to `top`, so every tread bears on it or on its neighbour (M3); a rail runs round
    * the outside except at the bottom exit and the top; `lights` puts a lantern on the rail every n cells. `start`: the
-   * corner the top is at, 0..3 (NW, NE, SE, SW), running clockwise.
+   * corner the top is at, 0..3 (NW, NE, SE, SW), running clockwise. `openTop: false` rails the top landing too (a deck
+   * arriving there clears its own way through the rail).
    */
-  spiralTower({ center, half = 6, top, bottom, start = 0, material = 'structure', railing = 'rail', lights = 8, id } = {}) {
+  spiralTower({ center, half = 6, top, bottom, start = 0, material = 'structure', railing = 'rail', lights = 8, openTop = true, id } = {}) {
     this._requirePath('spiral tower');
     const what = `part ${this.id}: spiral tower`;
     if (!Array.isArray(center) || !center.every(isInt) || !isInt(half) || half < 4 || half > 16 || !isInt(top) || !isInt(bottom) || top <= bottom) throw new Error(`${what}: needs center [x, z], half 4..16, top > bottom`);
@@ -965,9 +966,9 @@ class Part {
     const grow = (x, yy, z) => { box.minX = Math.min(box.minX, x); box.maxX = Math.max(box.maxX, x); box.minY = Math.min(box.minY, yy); box.maxY = Math.max(box.maxY, yy); box.minZ = Math.min(box.minZ, z); box.maxZ = Math.max(box.maxZ, z); };
     const seen = new Set();
     cells.forEach((c, i) => {
-      const next = cells[i + 1], prev = cells[i - 1];
+      const next = cells[i + 1];
       // a stairs block on the higher cell of each step, facing up the flight (towards the previous cell)
-      const up = prev && prev.y > c.y ? null : next && next.y < c.y ? cardinalOf(Math.sign(c.x - next.x), Math.sign(c.z - next.z)) : null;
+      const up = next && next.y < c.y ? cardinalOf(Math.sign(c.x - next.x), Math.sign(c.z - next.z)) : null;
       const m = up ? stairsOf(full, up) ?? full : full;
       for (const k of [-1, 0, 1]) {
         const x = c.x + c.out[0] * k, z = c.z + c.out[1] * k;
@@ -990,29 +991,39 @@ class Part {
         head.add(x, z, c.y + 1, c.y + 2, null);
       }
     });
-    // the outside rail: every cell at Chebyshev distance half + 2 from the centre beside a tread, but not at the exits
+    // the outside rail: every cell at Chebyshev distance half + 2 beside a tread (corners included), but not at the exits
     if (railM !== null) {
       const tread = new Map();
       for (const key of seen) { const [x, yy, z] = key.split(',').map(Number); const k = `${x},${z}`; const l = tread.get(k) ?? []; l.push(yy); tread.set(k, l); }
       const nBottom = cells.findIndex((c) => c.y === bottom);
-      const exitFrom = Math.max(0, nBottom - 1);
-      const lit = new Set();
-      cells.forEach((c, i) => {
-        if (i < 3 || i >= exitFrom) return; // the top (into the hub / the landing) and the bottom exit stay open
-        const r2 = c.corner ? [[1, 1], [1, -1], [-1, 1], [-1, -1], [c.out[0] * 2, c.out[1] * 2]] : [[c.out[0] * 2, c.out[1] * 2]];
-        for (const [dx, dz] of r2) {
-          const x = c.x + dx, z = c.z + dz;
-          if (Math.max(Math.abs(x - cx), Math.abs(z - cz)) !== half + 2) continue;
-          if ((tread.get(`${x},${z}`) ?? []).some((v) => Math.abs(v - c.y) <= 2)) continue;
-          rails.addOnce(`${x},${c.y},${z}`, x, z, c.y, c.y, full);
-          rails.addOnce(`${x},${c.y + 1},${z}`, x, z, c.y + 1, c.y + 1, railM);
-          if (lights && i % lights === 0 && !lit.has(i)) { lit.add(i); rails.addOnce(`${x},${c.y + 2},${z}`, x, z, c.y + 2, c.y + 2, this._mat('minecraft:lantern', 'light')); }
-          grow(x, c.y + 2, z);
+      const open = new Set(); // the treads of the top 3 and the bottom 2 centre cells (and their corner blocks) stay unrailed
+      cells.forEach((c, i) => { if ((openTop && i < 3) || i >= Math.max(0, nBottom - 1)) for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) open.add(`${c.x + dx},${c.y},${c.z + dz}`); });
+      const lit = [];
+      for (const key of [...seen].sort()) {
+        if (open.has(key)) continue;
+        const [x, yy, z] = key.split(',').map(Number);
+        for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) {
+          const nx = x + dx, nz = z + dz;
+          if (Math.max(Math.abs(nx - cx), Math.abs(nz - cz)) !== half + 2) continue;
+          if ((tread.get(`${nx},${nz}`) ?? []).some((v) => Math.abs(v - yy) <= 2)) continue;
+          if (!rails.seen?.has(`${nx},${yy},${nz}`)) {
+            rails.addOnce(`${nx},${yy},${nz}`, nx, nz, yy, yy, full);
+            rails.addOnce(`${nx},${yy + 1},${nz}`, nx, nz, yy + 1, yy + 1, railM);
+            if (lights && !lit.some(([a, b, c]) => Math.abs(a - nx) + Math.abs(b - yy) + Math.abs(c - nz) < lights)) {
+              lit.push([nx, yy, nz]);
+              rails.addOnce(`${nx},${yy + 2},${nz}`, nx, nz, yy + 2, yy + 2, this._mat('minecraft:lantern', 'light'));
+            }
+            grow(nx, yy + 2, nz);
+          }
         }
-      });
+      }
     }
-    // the core
+    // the core, with a rail round its top (a walker who steps onto it must not fall into the stair well)
     this._shapeOp({ kind: 'box', min: [cx - half + 2, { min: [{ floor: 1 }, { abs: bottom }] }, cz - half + 2], max: [cx + half - 2, { abs: top }, cz + half - 2] }, full, COND.IF_NATURAL);
+    if (railM !== null) {
+      const k = half - 2;
+      for (let d = -k; d <= k; d++) for (const [x, z] of [[cx + d, cz - k], [cx + d, cz + k], [cx - k, cz + d], [cx + k, cz + d]]) rails.addOnce(`${x},${top + 1},${z}`, x, z, top + 1, top + 1, railM);
+    }
     this._colsOp(head, COND.IF_NATURAL);
     this._colsOp(rails, COND.IF_NATURAL);
     this._colsOp(treads, COND.IF_NATURAL, true);
@@ -1033,7 +1044,7 @@ class Part {
    * may return an absolute y to reach lower, e.g. a carved bowl's floor) at the ends and at most `every` apart.
    * `every` must be <= `maxSpan`. Arches and towers are phase 6b.
    */
-  bridge(path, { width = 3, deck = 'structure', rail = true, railMaterial = 'rail', supports = {}, maxSpan = 24, towers = false, id, lights, _unsafe = false } = {}) {
+  bridge(path, { width = 3, deck = 'structure', rail = true, railMaterial = 'rail', supports = {}, maxSpan = 24, towers = false, id, lights, over = 'air', _unsafe = false } = {}) {
     this._requirePath('bridge');
     const what = `part ${this.id}: bridge`;
     const style = supports.style ?? 'pillar';
@@ -1061,6 +1072,8 @@ class Part {
     const railM = this._mat(railMaterial, 'bridge rail');
     const offs = crossOffsets(width);
     const outer = rail ? [offs[0] - 1, offs[offs.length - 1] + 1] : [];
+    // (6b) a link over the region's own forms clears 4 above the deck (rails and lanterns of a rim it cuts through go too)
+    const headTop = over === 'ours' ? 4 : 2;
     const walkCells = new Cols({ abs: 0 }, { abs: 0 });
     const edgeCells = new Cols({ abs: 0 }, { abs: 0 });
     const head = new Cols({ abs: 0 }, { abs: 0 });
@@ -1069,14 +1082,14 @@ class Part {
     const s = this.region.survey;
     cells.forEach((c, i) => {
       walkCells.addOnce(`${c.x},${c.z}`, c.x, c.z, ys[i], ys[i], deckM);
-      head.addOnce(`${c.x},${c.z}`, c.x, c.z, ys[i] + 1, ys[i] + 2, null);
+      head.addOnce(`${c.x},${c.z}`, c.x, c.z, ys[i] + 1, ys[i] + headTop, null);
     });
     cells.forEach((c, i) => {
       const y = ys[i];
       for (const k of offs) {
         const x = c.x + c.r[0] * k, z = c.z + c.r[1] * k;
         walkCells.addOnce(`${x},${z}`, x, z, y, y, deckM);
-        head.addOnce(`${x},${z}`, x, z, y + 1, y + 2, null);
+        head.addOnce(`${x},${z}`, x, z, y + 1, y + headTop, null);
         grow(x, y, z); grow(x, y + 2, z);
       }
       for (const k of outer) {
@@ -1143,9 +1156,13 @@ class Part {
         }
       }
     }
-    this._colsOp(edgeCells, COND.IF_AIR_OR_FLUID);
+    // (6b) over: 'ours' lets the deck and its rails run over cells the region itself wrote (a link across two generated
+    // forms), as later-stage ops may (ALWAYS_OURS); 'air' (default) writes only into air or fluid
+    if (over !== 'air' && over !== 'ours') throw new Error(`${what}: over must be 'air' or 'ours'`);
+    const deckCond = over === 'ours' ? COND.ALWAYS_OURS : COND.IF_AIR_OR_FLUID;
+    this._colsOp(edgeCells, deckCond);
     this._colsOp(head, COND.IF_NATURAL);
-    this._colsOp(walkCells, COND.IF_AIR_OR_FLUID, true);
+    this._colsOp(walkCells, deckCond, true);
     // (6b) lights: a lantern on the rail post every `lights` cells (M5 on the deck)
     if (lights && rail) {
       const lm = this._mat('minecraft:lantern', 'bridge light');
@@ -1371,7 +1388,8 @@ class Part {
     // cut: the footprint to the lot box's top, the apron and batter steps to the column top
     const cut = [{ kind: 'box', min: [x0, { abs: floorY }, z0], max: [x1, { max: [{ height: 0 }, { abs: boxMaxY }] }, z1] }];
     for (let k = 0; k <= Bc; k++) cut.push(box(k, { abs: floorY + k }, { height: 0 }));
-    if (none) this._shapeOp({ kind: 'box', min: [x0 - 1, { abs: floorY }, z0 - 1], max: [x1 + 1, { abs: boxMaxY }, z1 + 1] }, null, COND.ALWAYS_OURS);
+    // (pad fill none: the mass under it is a generated form; only the footprint is cleared, its apron stays the form's)
+    if (none) this._shapeOp({ kind: 'box', min: [x0, { abs: floorY }, z0], max: [x1, { abs: boxMaxY }, z1] }, null, COND.ALWAYS_OURS);
     else this._shapeOp({ kind: 'union', of: cut }, null, COND.IF_NATURAL);
     this._shapeOp(box(0, { abs: t }, { abs: t }), fdn, none ? COND.ALWAYS_OURS : COND.IF_NATURAL);
     // front

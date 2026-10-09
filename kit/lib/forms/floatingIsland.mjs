@@ -86,7 +86,9 @@ export function floatingIsland(params) {
   const cone = { kind: 'cone', c: [x, { abs: y - coneH }, z], r0, r1: R * 0.96, h: coneH + 1 };
   const warpNoise = { kind: 'value', dims: 3, scale: Math.max(8, round(R / 2)), octaves: 1, seed: fnv64(seed, 'island-warp').hex };
   // the warp bends the whole body; the top is clipped again after it, so the walkable top never rises over y + relief
-  const warped = { kind: 'clipY', y0: null, y1: { abs: y + relief }, of: { kind: 'warp', amp, noise: warpNoise, of: { kind: 'union', of: [top, { kind: 'clipY', y0: null, y1: { abs: y }, of: cone }] } } };
+  // an unwarped cap (flat at y over the inner 85% of the top) keeps the walkable top from dipping under the pads' level
+  const cap = { kind: 'clipY', y0: { abs: y - 3 }, y1: { abs: y }, of: { kind: 'ellipsoid', c: [x, { abs: y }, z], r: [rx * 0.85, 4, rz * 0.85] } };
+  const warped = { kind: 'union', of: [cap, { kind: 'clipY', y0: null, y1: { abs: y + relief }, of: { kind: 'warp', amp, noise: warpNoise, of: { kind: 'union', of: [top, { kind: 'clipY', y0: null, y1: { abs: y }, of: cone }] } } }] };
   const bandsFrom = Math.floor((y - coneH - amp - 8) / 3);
   const body = { kind: 'strata', bands: { every: 3, offset: 0 }, of: warped };
   const rule = p.materials === 'island' ? islandRule(seed, bandsFrom) : p.materials;
@@ -165,7 +167,12 @@ export function floatingIsland(params) {
     for (let zz = pz; zz < pz + dd; zz++) for (let xx = px; xx < px + w; xx++) topY.set(`${xx},${zz}`, y);
     padsOut.push({ at: [px, pz], size: [w, dd], y });
   }
-  const inPad = (xx, zz, m = 0, lotsOnly = false) => p.top.pads.some((pd) => !(lotsOnly && pd.landing) && xx >= pd.at[0] - m && xx < pd.at[0] + pd.size[0] + m && zz >= pd.at[1] - m && zz < pd.at[1] + pd.size[1] + m);
+  // (lotsOnly: a lot pad's footprint, i.e. the pad less its 1-cell apron; landings are not lots)
+  const inPad = (xx, zz, m0 = 0, lotsOnly = false) => p.top.pads.some((pd) => {
+    if (lotsOnly && pd.landing) return false;
+    const m = lotsOnly ? m0 - 1 : m0;
+    return xx >= pd.at[0] - m && xx < pd.at[0] + pd.size[0] + m && zz >= pd.at[1] - m && zz < pd.at[1] + pd.size[1] + m;
+  });
 
   // the rim: a rail (or a 2-high wall) on every top cell beside a drop over 3 (M8)
   if (p.top.edge) {
@@ -180,7 +187,9 @@ export function floatingIsland(params) {
     const h = p.top.edge === 'wall' ? 2 : 1;
     const cols = [];
     for (const [xx, zz, ty] of rim) cols.push(xx, zz, ty + 1, ty + h, 0);
-    if (cols.length) ops.push({ op: 'columns', from: { abs: 0 }, to: { abs: 0 }, cols, materials: [p.top.edge === 'wall' ? 'rubble' : 'rail'], cond: 2, walk: false });
+    // a lantern on every 8th rail post (M5 at the edges)
+    if (p.top.lights) rim.forEach(([xx, zz, ty], i) => { if (i % 8 === 0) cols.push(xx, zz, ty + h + 1, ty + h + 1, 1); });
+    if (cols.length) ops.push({ op: 'columns', from: { abs: 0 }, to: { abs: 0 }, cols, materials: [p.top.edge === 'wall' ? 'rubble' : 'rail', 'minecraft:lantern[hanging=false]'], cond: 2, walk: false });
   }
 
   // lamp posts on a grid (M5): a fence post and a lantern, away from pads and the rim
@@ -191,7 +200,7 @@ export function floatingIsland(params) {
     const h2 = L >> 1;
     for (let zz = z + h2 - (Math.floor((rz + h2) / L) * L); zz <= z + rz; zz += L) for (let xx = x + h2 - (Math.floor((rx + h2) / L) * L); xx <= x + rx; xx += L) {
       const ty = topY.get(`${xx},${zz}`);
-      if (ty === undefined || inPad(xx, zz, 2)) continue;
+      if (ty === undefined || inPad(xx, zz, 1)) continue;
       const nb = [[1, 0], [-1, 0], [0, 1], [0, -1], [2, 0], [-2, 0], [0, 2], [0, -2]].every(([dx, dz]) => topY.get(`${xx + dx},${zz + dz}`) !== undefined);
       if (!nb) continue;
       cols.push(xx, zz, ty + 1, ty + 1, 0, xx, zz, ty + 2, ty + 2, 1);
