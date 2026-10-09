@@ -32,7 +32,16 @@ import org.jspecify.annotations.Nullable;
  * The structure template conversion is kept for migration and for the restore's template ({@link #toTemplate}).
  */
 public final class JournalNbt {
-	public static final int VERSION = 1;
+	/**
+	 * 2 (phase 6a): a section with more than 256 cells stores its positions as a 4096-bit mask ({@code m}, 64 longs) instead of
+	 * 2 bytes per cell ({@code idx}); region terrain shells compressed to 1.7 bytes per cell on positions alone. Version 1 files
+	 * are still read; 0.10.0 refuses the version 2 index (4e's downgrade rule).
+	 */
+	public static final int VERSION = 2;
+
+	static boolean known(int v) {
+		return v == 1 || v == 2;
+	}
 
 	private JournalNbt() {
 	}
@@ -146,7 +155,16 @@ public final class JournalNbt {
 				layers.putLong(Integer.toString(k), s.layer[k]);
 			}
 		}
-		t.putByteArray("idx", idx);
+		if (n > 256) {
+			long[] m = new long[64];
+			for (int k = 0; k < n; k++) {
+				int i = s.idx[k];
+				m[i >> 6] |= 1L << (i & 63);
+			}
+			t.putLongArray("m", m);
+		} else {
+			t.putByteArray("idx", idx);
+		}
 		t.putIntArray("b", b);
 		t.putIntArray("a", a);
 		if (!bn.isEmpty()) {
@@ -183,7 +201,7 @@ public final class JournalNbt {
 
 	/** Reads {@link #encode} output; throws IllegalArgumentException when it is not one. */
 	public static Region decode(CompoundTag t, long entryLayer) {
-		if (t.getIntOr("version", 0) != VERSION) {
+		if (!known(t.getIntOr("version", 0))) {
 			throw new IllegalArgumentException("not a journal region file (version " + t.getIntOr("version", 0) + ")");
 		}
 		TreeMap<Long, SectionCells> sections = new TreeMap<>();
@@ -210,8 +228,14 @@ public final class JournalNbt {
 			pal[i] = Value.intern(palList.getCompoundOrEmpty(i));
 			plain[i] = new Value(pal[i], null);
 		}
+		long[] mask = t.getLongArray("m").orElse(null);
 		byte[] ib = t.getByteArray("idx").orElse(new byte[0]);
-		int n = ib.length / 2;
+		int n = mask == null ? ib.length / 2 : 0;
+		if (mask != null) {
+			for (long w : mask) {
+				n += Long.bitCount(w);
+			}
+		}
 		int[] b = t.getIntArray("b").orElse(new int[0]);
 		int[] a = t.getIntArray("a").orElse(new int[0]);
 		if (b.length != n || a.length != n) {
@@ -224,8 +248,20 @@ public final class JournalNbt {
 		Value[] before = new Value[n];
 		Value[] after = new Value[n];
 		long[] layer = new long[n];
+		if (mask != null) {
+			int k = 0;
+			for (int wi = 0; wi < mask.length; wi++) {
+				long w = mask[wi];
+				while (w != 0) {
+					idx[k++] = (short) (wi * 64 + Long.numberOfTrailingZeros(w));
+					w &= w - 1;
+				}
+			}
+		}
 		for (int k = 0; k < n; k++) {
-			idx[k] = (short) ((ib[k * 2] & 0xFF) << 8 | ib[k * 2 + 1] & 0xFF);
+			if (mask == null) {
+				idx[k] = (short) ((ib[k * 2] & 0xFF) << 8 | ib[k * 2 + 1] & 0xFF);
+			}
 			String ks = Integer.toString(k);
 			CompoundTag bnk = bn.isEmpty() ? null : bn.getCompound(ks).orElse(null);
 			before[k] = bnk == null ? plain[b[k]] : new Value(pal[b[k]], bnk);
@@ -267,7 +303,7 @@ public final class JournalNbt {
 	}
 
 	public static Head decodeHead(CompoundTag t) {
-		if (t.getIntOr("version", 0) != VERSION) {
+		if (!known(t.getIntOr("version", 0))) {
 			throw new IllegalArgumentException("not a journal head file");
 		}
 		String m = t.getStringOr("meta", "");

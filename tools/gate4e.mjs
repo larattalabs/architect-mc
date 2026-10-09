@@ -705,6 +705,50 @@ steps.village = async () => {
   return { wall: r.wall, stats: r.stats };
 };
 
+/**
+ * The throughput margin (6a gate item 9, the procedure as clarified in CONTRACT "Phase 6a as built"): per client start, one
+ * unmeasured warm-up run of the village plus roads at 4 ms (the JIT is cold after a start: the first run measured 12-15k where the
+ * rest measured 19-27k), then 3 measured runs; the bar is their median >= 15k. A median within 5% of the bar (under 15.75k) runs
+ * 3 more and the median of 6 decides. The warm-up's number is recorded, not judged.
+ */
+steps.throughput = async () => {
+  if (!dev) await connect();
+  await flatBase();
+  if (!ctx.village || !fs.existsSync(path.join(SAVES, 'G4E VBase', 'level.dat'))) {
+    await fresh('G4E VBase', FLAT);
+    await tp(VOX + 50.5, 100, VOZ + 60.5);
+    const fits = await vFits();
+    const h0 = (await hash(V_BOX)).sha256;
+    await leaveWorld();
+    ctx.village = { fits, h0 };
+    saveCtx();
+  }
+  const one = async (name) => {
+    const r = await village('A', 4, name);
+    await leaveWorld();
+    const x = { cellsPerSecond: r.stats.cellsPerSecond, wallSeconds: r.wall, msptMax: r.stats.msptMax, ticksOver50ms: r.stats.ticksOver50ms, failed: r.failed };
+    log(`  ${name}: ${Math.round(x.cellsPerSecond)} cells/s, wall ${x.wallSeconds.toFixed(2)} s, MSPT max ${x.msptMax?.toFixed(2)}, failed ${x.failed.length}`);
+    return x;
+  };
+  const warmup = await one('G4E VWarm');
+  const runs = [];
+  for (let k = 1; k <= 3; k++) runs.push(await one(`G4E VT4 ${k}`));
+  const med = (a) => { const b = [...a].sort((x, y) => x - y); return b.length % 2 ? b[(b.length - 1) / 2] : (b[b.length / 2 - 1] + b[b.length / 2]) / 2; };
+  let median = med(runs.map((x) => x.cellsPerSecond));
+  if (median < 15_750) {
+    for (let k = 4; k <= 6; k++) runs.push(await one(`G4E VT4 ${k}`));
+    median = med(runs.map((x) => x.cellsPerSecond));
+  }
+  const nums = runs.map((x) => Math.round(x.cellsPerSecond));
+  const spread = Math.max(...nums) - Math.min(...nums);
+  check(runs.every((x) => x.failed.length === 0 && x.ticksOver50ms === 0), `throughput: ${runs.length} measured runs placed everything, no tick over 50 ms`);
+  check(median >= 15_000, `throughput: median ${Math.round(median)} cells/s at 4 ms over ${runs.length} measured runs (${nums.join(', ')}; spread ${spread}) after one `
+    + `unmeasured warm-up (${Math.round(warmup.cellsPerSecond)}); bar 15k, target 17k`);
+  const out = { procedure: 'one unmeasured warm-up per client start, then the median of 3 measured runs (6 if within 5% of the bar)', warmup, runs, median, spread };
+  fs.writeFileSync(path.join(OUT, 'throughput-warm.json'), JSON.stringify(out, null, 2));
+  return out;
+};
+
 steps.roads = async () => {
   if (!dev) await connect();
   await flatBase();

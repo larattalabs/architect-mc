@@ -17,7 +17,7 @@ export const PROTOCOL_VERSION = 1 as const;
 export const PROTOCOLS = [1, 2] as const;
 export type Protocol = (typeof PROTOCOLS)[number];
 /** What a protocol-2 snapshot lists in `features`. */
-export const FEATURES = ['job.run', 'job.tools', 'blobs', 'budget', 'designs.v2', 'bibles', 'design.groups', 'named.parts', 'open.types', 'estimates', 'reskin', 'massing', 'critique', 'critique.report', 'job.images', 'bible.admin', 'bible.restraint', 'entry.versions', 'entry.delta', 'design.polish', 'critique.polish'] as const;
+export const FEATURES = ['job.run', 'job.tools', 'blobs', 'budget', 'designs.v2', 'bibles', 'design.groups', 'named.parts', 'open.types', 'estimates', 'reskin', 'massing', 'critique', 'critique.report', 'job.images', 'bible.admin', 'bible.restraint', 'entry.versions', 'entry.delta', 'design.polish', 'critique.polish', 'region.plan', 'region.tiles'] as const;
 
 const Ts = z.number().int().nonnegative();
 const Id = z.string().min(1).max(64);
@@ -708,6 +708,39 @@ export const Job = z.object({
 });
 export type Job = z.infer<typeof Job>;
 
+// ---- phase 6a: region programs (docs/CONTRACT.md "Phase 6 contract" §6, kit/REGIONS.md "Sidecar protocol") ----
+
+/** A plan id (the sidecar picks it; it names <data>/regions/plans/<planId>/). */
+export const PLAN_ID = /^[A-Za-z0-9_-]{1,64}$/;
+export const PlanId = z.string().regex(PLAN_ID, 'plan ids are [A-Za-z0-9_-]{1,64}');
+/** A bundled region program: kit/regions/<id>.mjs */
+export const REGION_PROGRAM_ID = /^[a-z][a-z0-9_]{0,47}$/;
+/** A tile key: "<tx>,<tz>" (tile = 64x64 columns, tx = floor(x / 64)). */
+export const TILE_KEY = /^-?\d{1,7},-?\d{1,7}$/;
+export const TileKey = z.string().regex(TILE_KEY, 'a tile key is "<tx>,<tz>"');
+export const Sha256Hex = z.string().regex(/^[0-9a-f]{64}$/, 'a sha is 64 lowercase hex digits');
+export const TileSet = z.enum(['terrain', 'path']);
+export const StageName = z.string().min(1).max(64);
+/** The largest region claim the sidecar accepts (the mod refuses over 1024 unless -Darchitect.dev.bigRegions=true: 2048). */
+export const MAX_CLAIM_COLUMNS = 2048;
+export const RegionClaim = z
+  .object({ minX: z.number().int(), minZ: z.number().int(), maxX: z.number().int(), maxZ: z.number().int(), minY: z.number().int().min(-2048).max(4096), maxY: z.number().int().min(-2048).max(4096) })
+  .refine((c) => c.minX <= c.maxX && c.minZ <= c.maxZ && c.minY <= c.maxY, 'a claim needs min <= max on every axis')
+  .refine((c) => c.maxX - c.minX < MAX_CLAIM_COLUMNS && c.maxZ - c.minZ < MAX_CLAIM_COLUMNS, `a claim is at most ${MAX_CLAIM_COLUMNS}x${MAX_CLAIM_COLUMNS} columns`);
+export type RegionClaim = z.infer<typeof RegionClaim>;
+/** A block state string ("minecraft:stone", "minecraft:oak_stairs[facing=north,half=bottom]"). */
+const BlockState = z.string().min(1).max(256).regex(/^[a-z0-9_.-]+:[a-z0-9_./-]+(\[[a-z0-9_]+=[a-z0-9_]+(,[a-z0-9_]+=[a-z0-9_]+)*\])?$/, 'not a block state');
+/** One frame of a packed tile: base64 of at most 1 MB of gzip bytes. */
+export const MAX_TILE_FRAME_BYTES = 1024 * 1024;
+/** A tile's heights: base64 of an ARSV columns buffer (80x80 window: 44,828 bytes; at most 256 KB). */
+export const MAX_TILE_HEIGHTS_BYTES = 256 * 1024;
+/** Tiles in one region.tiles.request. */
+export const MAX_TILES_PER_REQUEST = 64;
+/** The IR (canonical JSON) is at most this; over 1 MB it travels as a blob (irBlobId). */
+export const MAX_IR_BYTES = 4 * 1024 * 1024;
+export const IR_INLINE_BYTES = 1024 * 1024;
+const Base64 = (maxBytes: number) => z.string().max(Math.ceil(maxBytes / 3) * 4).regex(/^[A-Za-z0-9+/]*={0,2}$/, 'not base64');
+
 // ---- messages --------------------------------------------------------------------------------
 
 const envelope = <T extends string>(type: T) => ({
@@ -772,9 +805,40 @@ export const BibleIndexMsg = z.object({ ...envelope('bible.index'), bibles: z.ar
 export const ReskinUpsertMsg = z.object({ ...envelope('reskin.upsert'), reskin: Reskin });
 export const MassingUpsertMsg = z.object({ ...envelope('massing.upsert'), massing: Massing });
 export const MassingRemovedMsg = z.object({ ...envelope('massing.removed'), massingId: MassingId, reason: z.enum(['deleted', 'gc']) });
+// 6a regions (sidecar -> client)
+export const RegionPlannedMsg = z
+  .object({
+    ...envelope('region.planned'),
+    planId: PlanId,
+    irSha: Sha256Hex.describe('SHA-256 (hex) of the canonical IR JSON (ir.json), the plan\'s identity'),
+    ir: z.string().optional().describe('the exact ir.json text (canonical JSON; its SHA-256 is irSha), when it is at most 1 MB'),
+    irBlobId: BlobId.optional().describe('instead of ir when the IR is over 1 MB: the blob (<data>/blobs/<id>) holding the exact ir.json bytes'),
+    lots: z.array(z.unknown()),
+    stages: z.array(z.string()),
+    anchors: z.record(z.string(), z.unknown()),
+    budget: z.record(z.string(), z.unknown()),
+    tiles: z.record(z.string(), z.unknown()).describe('{"<stage>": {terrain: [key], path: [key]}}, from the IR'),
+    notes: z.array(z.string()),
+    ms: z.number().int().nonnegative().optional().describe('(addition) the plan run\'s wall time'),
+  })
+  .refine((m) => (m.ir === undefined) !== (m.irBlobId === undefined), 'exactly one of ir and irBlobId');
+export const RegionFailedMsg = z.object({ ...envelope('region.failed'), planId: PlanId, message: z.string() });
+export const RegionTileMsg = z.object({
+  ...envelope('region.tile'),
+  planId: PlanId,
+  key: TileKey,
+  stage: StageName,
+  set: TileSet,
+  seq: z.number().int().nonnegative().describe('the frame number, from 0'),
+  more: z.boolean().describe('true on every frame but the last'),
+  data: Base64(MAX_TILE_FRAME_BYTES).describe('base64 of a slice of gzipPinned(payload), at most 1 MB of gzip bytes'),
+  count: z.number().int().nonnegative().describe('cells in the tile'),
+  sha: Sha256Hex.describe('SHA-256 of the whole UNCOMPRESSED ARTL payload'),
+});
+export const RegionTileErrorMsg = z.object({ ...envelope('region.tile.error'), planId: PlanId, key: TileKey, stage: StageName, set: TileSet, message: z.string() });
 export const EntryVersionedMsg = z.object({ ...envelope('entry.versioned'), entryId: z.string(), version: z.number().int().min(1), from: z.number().int().min(1).describe('the head before'), by: z.enum(['design', 'polish', 'revert', 'migrated']), designId: z.string().optional() });
 
-export const ServerMessage = z.discriminatedUnion('type', [SnapshotMsg, StatusMsg, DesignUpsertMsg, VariantUpsertMsg, AckMsg, ErrorMsg, JobUpsertMsg, JobEventMsg, JobToolCallMsg, GroupUpsertMsg, BibleUpsertMsg, BibleIndexMsg, ReskinUpsertMsg, MassingUpsertMsg, MassingRemovedMsg, EntryVersionedMsg]);
+export const ServerMessage = z.discriminatedUnion('type', [SnapshotMsg, StatusMsg, DesignUpsertMsg, VariantUpsertMsg, AckMsg, ErrorMsg, JobUpsertMsg, JobEventMsg, JobToolCallMsg, GroupUpsertMsg, BibleUpsertMsg, BibleIndexMsg, ReskinUpsertMsg, MassingUpsertMsg, MassingRemovedMsg, EntryVersionedMsg, RegionPlannedMsg, RegionFailedMsg, RegionTileMsg, RegionTileErrorMsg]);
 export type ServerMessage = z.infer<typeof ServerMessage>;
 /** What protocol 1 knows: the phase 1-3 messages, with their phase 1-3 fields. */
 export const ServerMessageV1 = z.discriminatedUnion('type', [SnapshotMsgV1, StatusMsg, DesignUpsertMsgV1, VariantUpsertMsg, AckMsg, ErrorMsg]);
@@ -882,6 +946,33 @@ export const EntryRevertMsg = z.object({ ...envelope('entry.revert'), entryId: E
 export const EntryPinsMsg = z.object({ ...envelope('entry.pins'), pins: z.record(EntryId, z.array(z.number().int().min(1)).max(4096)).describe('every entry version a standing site pins (sent at connect and when they change)') });
 export const DesignPolishMsg = z.object({ ...envelope('design.polish'), entryId: EntryId, spec: PolishSpec.optional(), owner: Owner.optional(), ext: Ext.optional() });
 
+// 6a regions (client -> sidecar)
+export const RegionPlanMsg = z.object({
+  ...envelope('region.plan'),
+  program: z.string().min(1).max(4096).describe('a bundled program id (kit/regions/<id>.mjs, [a-z][a-z0-9_]{0,47}) or a .mjs path under <gameDir>/architect/regions/programs'),
+  params: z.record(z.string().max(64), z.unknown()).refine((v) => JSON.stringify(v).length <= 64 * 1024, 'params are larger than 64 KB').describe("the program's params (JSON)"),
+  seed: z.union([z.string().regex(/^\d{1,20}$/), z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER)]).optional().describe('a u64 as a decimal string (a safe integer is accepted); absent: the sidecar picks one'),
+  claim: RegionClaim,
+  surveyBlobId: BlobId.describe('the plan survey: an ARSV columns blob'),
+  bible: BibleId.optional().describe("the bible whose roles the program resolves (its latest version unless bibleVersion)"),
+  bibleVersion: z.number().int().min(1).optional(),
+  roles: z.record(z.string().regex(/^[a-z][a-z0-9_]{0,39}$/), BlockState).refine((r) => Object.keys(r).length <= 128, 'at most 128 roles').optional().describe("role -> block state; wins over the bible's"),
+});
+export const RegionTileReq = z.object({
+  key: TileKey,
+  stage: StageName,
+  set: TileSet,
+  heights: Base64(MAX_TILE_HEIGHTS_BYTES).describe("base64 ARSV: the tile's 80x80 window at resolution 1"),
+});
+export const RegionTilesRequestMsg = z.object({
+  ...envelope('region.tiles.request'),
+  planId: PlanId,
+  irSha: Sha256Hex,
+  ir: z.union([z.string().max(MAX_IR_BYTES), z.record(z.string(), z.unknown())]).optional().describe('the IR, when the sidecar answered ir_unknown: the ir.json text (preferred) or its JSON object (hashed as canonical JSON)'),
+  tiles: z.array(RegionTileReq).min(1).max(MAX_TILES_PER_REQUEST),
+});
+export const RegionReleaseMsg = z.object({ ...envelope('region.release'), planId: PlanId });
+
 export const ClientMessage = z.discriminatedUnion('type', [
   HelloMsg,
   DesignRequestMsg,
@@ -918,6 +1009,9 @@ export const ClientMessage = z.discriminatedUnion('type', [
   EntryRevertMsg,
   EntryPinsMsg,
   DesignPolishMsg,
+  RegionPlanMsg,
+  RegionTilesRequestMsg,
+  RegionReleaseMsg,
 ]);
 export type ClientMessage = z.infer<typeof ClientMessage>;
 /** What a protocol-1 client may send (exactly the phase 1-3 messages and fields). */

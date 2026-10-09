@@ -61,9 +61,16 @@ final class SitesImpl implements dev.larattalabs.architect.api.Sites {
 		return out;
 	}
 
+	/** Phase 6a (Steward S1): a region's tiles are hidden (Regions.list has one RegionView per region) unless asked for. */
 	@Override
 	public List<SiteView> list(@Nullable String owner) {
-		return list().stream().filter(s -> ApiRules.ownerMatches(s.owner(), owner)).toList();
+		return list(owner, false);
+	}
+
+	@Override
+	public List<SiteView> list(@Nullable String owner, boolean includeTiles) {
+		return list().stream().filter(s -> ApiRules.ownerMatches(s.owner(), owner)).filter(s -> includeTiles || s.region() == null
+			|| !dev.larattalabs.architect.site.RegionKinds.tile(s.kind().startsWith("cells:") ? s.kind().substring(6) : s.kind())).toList();
 	}
 
 	@Override
@@ -314,7 +321,7 @@ final class SitesImpl implements dev.larattalabs.architect.api.Sites {
 	}
 
 	private static RemoveResult result(Groups.Removed r) {
-		return new RemoveResult(r.removed(), r.blockers(), Views.items(r.refund()), r.restored(), 0, r.handedDown(), r.cascaded());
+		return new RemoveResult(r.removed(), r.blockers(), Views.items(r.refund()), r.restored(), r.kept(), r.handedDown(), r.cascaded());
 	}
 
 	@Override

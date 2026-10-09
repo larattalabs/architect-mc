@@ -76,12 +76,12 @@ public final class JournalDev {
 					}
 				})).thenCompose(r -> r);
 			});
-		DevBridge.register("dev.journal.killAt", 10_000, "{point: K1..K8 | D1..D8 (phase 5b deltas) | migrate-before-commit | migrate-after-commit | null} - phase 4e TEST "
+		DevBridge.register("dev.journal.killAt", 10_000, "{point: K1..K8 | D1..D8 (phase 5b deltas) | RG1..RG6 (phase 6a regions) | migrate-before-commit | migrate-after-commit | null} - phase 4e TEST "
 			+ "hook: the next matching step halts the JVM (Runtime.halt, nothing saved)", (req, mc) -> {
 				JsonElement p = req.get("point");
 				String point = p == null || p.isJsonNull() ? null : p.getAsString();
-				if (point != null && !point.matches("K[1-8]|D[1-8]|D[78]\\+save|migrate-before-commit|migrate-after-commit")) {
-					throw new DevBridge.DevException("point must be K1..K8, D1..D8, migrate-before-commit or migrate-after-commit");
+				if (point != null && !point.matches("K[1-8]|D[1-8]|D[78]\\+save|RG[1-6]|migrate-before-commit|migrate-after-commit")) {
+					throw new DevBridge.DevException("point must be K1..K8, D1..D8, RG1..RG6, migrate-before-commit or migrate-after-commit");
 				}
 				WorldJournal.killAt(point);
 				JsonObject o = new JsonObject();
@@ -195,21 +195,18 @@ public final class JournalDev {
 					return o;
 				})).thenCompose(r -> r);
 			});
-		DevBridge.register("dev.region.hash", 120_000, "{box: [minX,minY,minZ,maxX,maxY,maxZ], exclude?: [[6]...], cells?: false} - phase 4e: SHA-256 "
-			+ "over every block state and block-entity NBT in the box, cells inside an excluded box left out (the order tests)", (req, mc) -> {
-				Fields f = Fields.of(req);
-				int[] b = six(f.json().get("box"));
-				List<int[]> ex = new ArrayList<>();
-				if (f.json().has("exclude")) {
-					f.json().getAsJsonArray("exclude").forEach(e -> ex.add(six(e)));
-				}
-				boolean withCells = f.optBool("cells", false);
-				long volume = (long) (b[3] - b[0] + 1) * (b[4] - b[1] + 1) * (b[5] - b[2] + 1);
-				if (volume > 8_000_000) {
-					throw new DevBridge.DevException("box too large (" + volume + " blocks)");
-				}
-				return DevBridge.onClient(mc, () -> ServerTasks.callAsPlayer((level, player) -> hash(level, b, ex, withCells))).thenCompose(r -> r);
-			});
+	}
+
+	/** 4e's dev.region.hash on a small box, at once (phase 6a's RegionDev delegates here). */
+	static CompletableFuture<JsonObject> hashNow(net.minecraft.client.Minecraft mc, JsonObject req) {
+		Fields f = Fields.of(req);
+		int[] b = six(f.json().get("box"));
+		List<int[]> ex = new ArrayList<>();
+		if (f.json().has("exclude")) {
+			f.json().getAsJsonArray("exclude").forEach(e -> ex.add(six(e)));
+		}
+		boolean withCells = f.optBool("cells", false);
+		return DevBridge.onClient(mc, () -> ServerTasks.callAsPlayer((level, player) -> hash(level, b, ex, withCells))).thenCompose(r -> r);
 	}
 
 	static int[] six(JsonElement e) {

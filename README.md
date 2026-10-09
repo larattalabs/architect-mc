@@ -506,6 +506,9 @@ Architect is early.
 - **Phases 1 to 3 passed their gates** in dev worlds in October 2026: **phase 1** (design, ghost, place, exact
   Remove) and **phase 2** (library, variants, import/export) with real Claude designs, and **phase 3** (survival
   construction sites) in fresh survival, creative and Hardcore worlds.
+- **Regions (phase 6a, built, its gate pending verification):** terrain-scale builds from region programs (pads, carved
+  bowls, roads and lots), planned once, prepared (the land generated ahead, governed), realised in 64x64 tiles over ticks and
+  undone exactly as one group. Driven by the API and dev hooks for now; commands and a player UI come later.
 - **Singleplayer only**, on **Minecraft 26.3**. Dedicated servers are out of scope: the design agent's code runs on
   your machine.
 - **Run on macOS (Apple Silicon) so far.** The launcher knows the Windows paths, but Windows hasn't been tested.

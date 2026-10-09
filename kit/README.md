@@ -25,8 +25,15 @@ node kit/tools/bible.mjs validate <bible.json> [--scope settlement] | builtin [<
 node kit/tools/preset-builds.mjs                                               # the presets still build byte-identically
 node kit/build.mjs tavern --massing kit/massings/tavern_massing/tavern_massing.blueprint.json  # detail vs its massing
 node kit/tools/massings.mjs                                                    # build + render the example massings
+node kit/tools/region.mjs plan kit/regions/mega_bench.mjs --survey s.bin --claim x0,z0,x1,z1[,y0,y1] --out <dir> [--json]  # region programs (phase 6a)
+node kit/tools/region.mjs eval <dir>/ir.json --tile tx,tz --heights h.bin [--stage s] [--set terrain|path] [--json]  # one tile's cells
+node kit/tools/region.mjs synth --box x0,z0,x1,z1 --out s.bin                  # a synthetic survey / heights window
+node kit/tools/region-bench.mjs                                                # mega_bench plan + every tile, the 6a numbers
 node --test kit/test/*.test.mjs                                                # tests (incl. the param x palette sweep)
 ```
+
+Region programs (`regions/<id>.mjs`: `mega_bench`, `region_small`) describe whole sites; the plan turns one into a Region IR
+and `lib/realise.mjs` evaluates it per 64x64 tile. See `REGIONS.md` (formats, ops, shapes, primitives, CLI).
 
 `build.mjs` writes `<out>/<id>.nbt` and `<out>/<id>.blueprint.json` (default `kit/out/`), prints `warning:` and
 `error:` lines and `check: OK` / `check: FAILED`. Exit 0 = OK, 1 = check failed, 2 = the design threw or bad usage.

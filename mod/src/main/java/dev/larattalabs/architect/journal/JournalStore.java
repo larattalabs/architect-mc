@@ -75,7 +75,8 @@ public final class JournalStore {
 	public static final String INDEX = "journal.json";
 	public static final String ENTRIES = "e";
 	public static final String HEAD = "head";
-	public static final int VERSION = 1;
+	/** 2 since phase 6a (region files may hold section masks, JournalNbt.VERSION); 1 is still read and rewritten as 2. */
+	public static final int VERSION = 2;
 	private static final Gson GSON = new GsonBuilder().disableHtmlEscaping().create();
 	private static final Pattern REGION_FILE = Pattern.compile("(-?\\d+)\\.(-?\\d+)\\.(\\d+)\\.nbt");
 	private static final Pattern HEAD_FILE = Pattern.compile("head\\.(\\d+)\\.nbt");
@@ -616,6 +617,40 @@ public final class JournalStore {
 		if (closed) {
 			return CompletableFuture.failedFuture(new IOException("the journal is closed"));
 		}
+		Prepared p;
+		try {
+			p = prepare(t);
+		} catch (IOException e) {
+			return CompletableFuture.failedFuture(e);
+		}
+		return install(p);
+	}
+
+	/**
+	 * A commit computed against a head (phase 6a): the region merges, metas and files of a {@link Txn}, made on any thread so a
+	 * big undo's commit (a region group's: hundreds of entries, millions of cells) is not built on the server thread.
+	 * {@link #submitPrepared} installs it if the head has not moved since, else the caller prepares again.
+	 */
+	public static final class Prepared {
+		final Index base;
+		final Map<String, Meta> metas;
+		final List<Write> writes;
+		final List<Path> superseded;
+		final Set<String> changed;
+		final Txn t;
+
+		Prepared(Index base, Map<String, Meta> metas, List<Write> writes, List<Path> superseded, Set<String> changed, Txn t) {
+			this.base = base;
+			this.metas = metas;
+			this.writes = writes;
+			this.superseded = superseded;
+			this.changed = changed;
+			this.t = t;
+		}
+	}
+
+	/** {@link Prepared} against the head now (any thread; reads region files through the cache). */
+	public Prepared prepare(Txn t) throws IOException {
 		Index base = head;
 		Map<String, Meta> metas = new LinkedHashMap<>(base.entries());
 		List<Write> writes = new ArrayList<>();
@@ -728,8 +763,29 @@ public final class JournalStore {
 				}
 			}
 		} catch (IOException e) {
-			return CompletableFuture.failedFuture(e);
+			throw e;
 		}
+		return new Prepared(base, metas, writes, superseded, changed, t);
+	}
+
+	/** Installs a prepared commit (server thread): null when the head moved since it was prepared (prepare it again). */
+	public synchronized @Nullable CompletableFuture<Void> submitPrepared(Prepared p) {
+		if (closed) {
+			return CompletableFuture.failedFuture(new IOException("the journal is closed"));
+		}
+		if (head != p.base) {
+			return null;
+		}
+		return install(p);
+	}
+
+	private CompletableFuture<Void> install(Prepared p) {
+		Index base = p.base;
+		Map<String, Meta> metas = p.metas;
+		List<Write> writes = p.writes;
+		List<Path> superseded = p.superseded;
+		Set<String> changed = p.changed;
+		Txn t = p.t;
 		Map<String, String> leg = new LinkedHashMap<>(base.legacy());
 		leg.putAll(t.legacy);
 		leg.values().removeIf(id -> !metas.containsKey(id));
@@ -869,13 +925,33 @@ public final class JournalStore {
 		}
 	}
 
+	/** Phase 6a: the index commits' durations (ms, the last 4096) and the index size, for the gate's bars. */
+	private final java.util.ArrayDeque<Double> indexMs = new java.util.ArrayDeque<>();
+	private volatile long indexBytes;
+
+	public synchronized double[] indexCommitMs() {
+		return indexMs.stream().mapToDouble(Double::doubleValue).toArray();
+	}
+
+	public long indexBytes() {
+		return indexBytes;
+	}
+
 	private void writeIndex(Index idx) throws IOException {
+		long t0 = System.nanoTime();
 		Files.createDirectories(dir);
 		Path f = dir.resolve(INDEX);
 		Path tmp = dir.resolve(INDEX + ".tmp");
 		String json = GSON.toJson(indexToJson(idx));
 		Files.writeString(tmp, json, StandardCharsets.UTF_8);
 		Files.move(tmp, f, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+		indexBytes = json.length();
+		synchronized (this) {
+			indexMs.addLast((System.nanoTime() - t0) / 1e6);
+			if (indexMs.size() > 4096) {
+				indexMs.removeFirst();
+			}
+		}
 		if (json.length() > 16 << 20) {
 			dev.larattalabs.architect.Architect.LOGGER.warn("World journal: the index is {} MB", json.length() >> 20);
 		}
@@ -1029,7 +1105,7 @@ public final class JournalStore {
 	}
 
 	static Index indexFromJson(JsonObject o) {
-		if (o.get("version") == null || o.get("version").getAsInt() != VERSION) {
+		if (o.get("version") == null || !(o.get("version").getAsInt() == VERSION || o.get("version").getAsInt() == 1)) {
 			throw new IllegalArgumentException("unknown journal version " + o.get("version"));
 		}
 		Map<String, Meta> metas = new LinkedHashMap<>();

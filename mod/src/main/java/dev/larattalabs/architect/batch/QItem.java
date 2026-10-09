@@ -66,6 +66,8 @@ public final class QItem {
 	public String message = "";
 	/** Game ticks spent waiting so far (counts across relogs; the wait limit is checked against it). */
 	public long waited;
+	/** Phase 6a, GENERATED_ONLY: a chunk found not generated at the last ticket attempt (MIN_VALUE: none; MAX_VALUE: still reading). Not saved. */
+	public transient long notGenerated = Long.MIN_VALUE;
 	/** The batch tick at which a waiting item is checked again. Not persisted: after a load every waiting item is checked at once. */
 	public long nextCheck;
 

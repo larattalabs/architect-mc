@@ -107,6 +107,7 @@ public final class ApiImpl implements ArchitectApi {
 	/** The client side registers its sidecar link and Library feature here (client init). */
 	public static void setClientBridge(@Nullable ClientBridge b) {
 		bridge = b;
+		dev.larattalabs.architect.region.TileStream.setLink(b == null ? null : RegionBridge.INSTANCE);
 	}
 
 	static @Nullable ClientBridge bridge() {
@@ -242,7 +243,13 @@ public final class ApiImpl implements ArchitectApi {
 	}
 
 	/** The link synced, or dropped: futures waiting for a variant fail when it drops. */
+	/** Phase 6a: {@code region.*} messages from the sidecar (the link's thread). */
+	public static void regionMessage(JsonObject m) {
+		dev.larattalabs.architect.region.RegionsImpl.onMessage(m);
+	}
+
 	public static void linkChanged(boolean synced) {
+		RegionBridge.linkChanged(synced);
 		boolean was = linkUp;
 		if (synced && !was) {
 			Versioned.resetPins();
@@ -292,6 +299,11 @@ public final class ApiImpl implements ArchitectApi {
 	@Override
 	public dev.larattalabs.architect.api.Bibles bibles() {
 		return bibles;
+	}
+
+	@Override
+	public dev.larattalabs.architect.api.Regions regions() {
+		return dev.larattalabs.architect.region.RegionsImpl.INSTANCE;
 	}
 
 	@Override

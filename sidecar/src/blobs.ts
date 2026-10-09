@@ -133,6 +133,18 @@ export class BlobStore {
     return this.put({ kind, data: value, ...(owner ? { owner } : {}) }).blobId;
   }
 
+  /** (6a) Exact bytes as a new blob (a region IR over 1 MB: the mod reads <data>/blobs/<id>). */
+  putBytes(bytes: Uint8Array, kind: string, ext = 'bin', owner?: string): string {
+    if (bytes.length > MAX_BLOB_BYTES) throw new BlobError(`blob is ${bytes.length} bytes, more than ${MAX_BLOB_BYTES}`);
+    fs.mkdirSync(this.dir, { recursive: true });
+    const now = this.now();
+    const id = this.newId();
+    fs.writeFileSync(this.file(id), bytes);
+    this.metas[id] = { id, kind, ...(owner ? { owner } : {}), ext, size: bytes.length, complete: true, createdAt: now, updatedAt: now };
+    this.store.flush();
+    return id;
+  }
+
   delete(id: string): boolean {
     if (!this.metas[id]) return false;
     this.drop(id);

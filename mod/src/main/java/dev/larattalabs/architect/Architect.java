@@ -24,6 +24,7 @@ public class Architect implements ModInitializer {
 		dev.larattalabs.architect.survival.SiteNet.init();
 		dev.larattalabs.architect.survival.SurvivalWorld.init();
 		Sites.init();
+		dev.larattalabs.architect.region.RegionsMod.init(); // phase 6a: regions, prepare, the generation counters
 		dev.larattalabs.architect.apiimpl.ApiImpl.init(); // the public API (docs/CONTRACT.md phase 4a)
 		SiteCommands.init();
 		LOGGER.info("Architect common init done");

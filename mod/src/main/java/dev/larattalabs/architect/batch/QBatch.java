@@ -42,6 +42,8 @@ public final class QBatch {
 	public boolean stopping;
 	/** Why a stopped batch stopped. */
 	public String note = "";
+	/** Phase 6a: false under {@code GENERATED_ONLY} (chunks never generated are never ticketed). */
+	public boolean generate = true;
 
 	public QBatch(String id, @Nullable String owner, JsonObject ext, String group, List<QItem> items, List<String> stages, long maxWaitTicks,
 		int loadChunks, boolean proximityFirst, boolean stopOnFailure, boolean autoApprove, boolean sharedCrate, int @Nullable [] crateAt,
@@ -62,13 +64,19 @@ public final class QBatch {
 		this.createdAt = createdAt;
 	}
 
+	/** Items by key (phase 6a: a region batch has 1-2k items; a linear search per dependency per tick was quadratic). */
+	private transient java.util.@Nullable Map<String, QItem> byKey;
+
 	public @Nullable QItem item(String key) {
-		for (QItem i : items) {
-			if (i.key.equals(key)) {
-				return i;
+		java.util.Map<String, QItem> m = byKey;
+		if (m == null || m.size() != items.size()) {
+			m = new java.util.HashMap<>(items.size() * 2);
+			for (QItem i : items) {
+				m.putIfAbsent(i.key, i);
 			}
+			byKey = m;
 		}
-		return null;
+		return m.get(key);
 	}
 
 	public boolean running() {
@@ -140,6 +148,9 @@ public final class QBatch {
 		if (!note.isEmpty()) {
 			o.addProperty("note", note);
 		}
+		if (!generate) {
+			o.addProperty("generate", false);
+		}
 		return o;
 	}
 
@@ -167,6 +178,7 @@ public final class QBatch {
 		b.cancelling = o.has("cancelling") && o.get("cancelling").getAsBoolean();
 		b.stopping = o.has("stopping") && o.get("stopping").getAsBoolean();
 		b.note = o.has("note") ? o.get("note").getAsString() : "";
+		b.generate = !o.has("generate") || o.get("generate").getAsBoolean();
 		return b;
 	}
 }

@@ -389,8 +389,8 @@ public final class WorldJournal {
 		BlockPos p = BlockPos.of(pos);
 		BlockState now = level.getBlockState(p);
 		BlockState want = state(after);
-		if (now.getBlock() != want.getBlock()) {
-			return false;
+		if (now.getBlock() != want.getBlock() && !(want.isAir() && !now.getFluidState().isEmpty()) && !(StillOurs.spread(now) && StillOurs.spread(want))) {
+			return false; // (a fluid in cleared air goes to StillOurs, phase 6a)
 		}
 		return StillOurs.holds(now, now.hasBlockEntity() ? beNbt(level, p) : null, want, after.nbt());
 	}
@@ -787,6 +787,13 @@ public final class WorldJournal {
 		o.addProperty("nextRoad", idx.nextRoad());
 		o.addProperty("nextCells", idx.nextCells());
 		o.addProperty("bytesOnDisk", s.bytesOnDisk());
+		o.addProperty("indexBytes", s.indexBytes());
+		double[] ms = s.indexCommitMs();
+		java.util.Arrays.sort(ms);
+		o.addProperty("indexCommits", ms.length);
+		o.addProperty("indexCommitP50Ms", ms.length == 0 ? 0 : ms[ms.length / 2]);
+		o.addProperty("indexCommitP99Ms", ms.length == 0 ? 0 : ms[Math.min(ms.length - 1, (int) Math.floor(ms.length * 0.99))]);
+		o.addProperty("indexCommitMaxMs", ms.length == 0 ? 0 : ms[ms.length - 1]);
 		o.addProperty("durable", s.durable() == idx);
 		JsonArray es = new JsonArray();
 		for (JournalStore.Meta m : idx.entries().values()) {

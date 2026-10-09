@@ -5060,3 +5060,96 @@ Where this section and the phase 6 text above disagree, this section wins.
 - **S11** No survival regions before Noah decides N4. Steward recommends free natural-only cut/fill (terrain is not a material),
   recorded for Noah.
 - **N8** The 15k bar stays at the median of 3, and a miss is recorded with its measured number (it still fails the gate).
+
+## Phase 6a as built (API 1.8.0, mod 0.11.0, recorded 2026-10-08)
+
+Built on branch `phase/6a`. Gate record: `artifacts/gate6a/REPORT.md` (local). Where this section and the phase 6 text
+disagree, this section says what shipped.
+
+**The 4e timeouts and spikes (gate item 2, `artifacts/gate6a/timeouts.md`).**
+- The timeouts were lost shared chunk tickets. Vanilla keeps one ticket per (type, level) and chunk, so the first of two
+  Architect holders to release one dropped it for both; the other waited `NOT_LOADED` holding its share of the bound until
+  `TIMED_OUT`. Architect's tickets are now reference counted (`ChunkTickets`). Waits a region item does not cause
+  (`NOT_LOADED`, `NOT_GENERATED`, `SIDECAR_UNAVAILABLE`, ticket turns) no longer count toward its limit.
+- The spikes were not terrain generation (vanilla's part of every slow tick was under 1 ms). They were journal region reads
+  on the server thread during road checks, and single-tick cabin placements over a 256x256 pad entry. Roads and cell sites
+  now warm the journal off-thread before their checks; regions use 64x64 tile entries.
+
+**Chunks generated during a realise (diagnosis).** One failed megaA run generated 161 chunks during a stall, cause unknown;
+later runs generated none. Each one is now logged whatever `ARCHITECT_TRACE_JOBS` says: the first 1000 per region with their
+position, the Architect ticket holding them (if any), whether a prepare runs, the nearest player's distance in chunks against the
+view distance, and whether they lie in the claim + 2 chunks. The count is always kept (`stats.generatedDuringRealise` in the
+region record); the logged list goes to `<region>/generated.json` when the batch ends and to `dev.region.state`.
+
+**Chunk status without loading (gate item 3).** `ChunkGen`: the chunk map's latest status when the chunk is in memory, else
+`IOWorker.scanChunk` reading only the `Status` field of the stored NBT (pending stores included), cached per chunk.
+
+**Deviations and decisions made while building:**
+- `CHUNK_BOUND` refuses building items only; oversized road and cell items keep 4e's "run alone" (mega-lite's 256x256 pad).
+- The default realise bound is `GENERATED_ONLY(max(64, largest need + 72))`, which fits two freezes ahead. A ticket janitor
+  returns tickets an item holds for nothing.
+- Heights freeze per tile window, and **no region item writes a column before it is frozen** (H0 for every writer). A lot
+  freezes the not-yet-frozen columns of its snapshot box (the approach included), and a 4e road those of its ticketed box,
+  after their chunks are loaded and before their check and capture. So a later-stage tile over an earlier stage's lot or road
+  reads the pre-region land in any stage order, a `reorderStages` included, and no plan is refused for its stage order. This is
+  the narrow form of SETTLEMENTS.md's 7a "freeze before lots" (the item's own columns rather than the whole tile window). It is a
+  no-op on mega_bench and region_small's lots, whose columns the ground stage's tiles froze; region_small's road freezes the
+  columns of its box outside them. (SETTLEMENTS.md's 7a note, on main, still describes this as a later change.)
+- The plan flow is plan (`LOADED_ONLY`, the prepare estimate), prepare, plan again (`GENERATED_ONLY`, the complete survey),
+  realise. In a survey, `GENERATED_ONLY(n)` means n chunks at once and any number in all; `LOAD_BOUNDED` keeps 4a's total cap.
+- **Drift (S2) is checked at region start and before each later stage**, on stored heightmaps (loaded chunks live; no chunk
+  loads). At region start the plan survey is the baseline, and `force` passes a drifted start (it covers the start check only).
+  Before any stage but the one that runs first (in the group's order, so after a `reorderStages` too) starts, up to 4096 columns of its tiles and lot boxes are compared with the region's own
+  baseline there: the height the region's placed items left (`after/<tx>.<tz>.bin`, snapshotted when each tile, road or lot
+  places), else the frozen pre-region height, else the plan survey. The tolerance is the start check's. Land changed beyond it
+  **holds the stage**: it goes back to PLANNED (`StageRules.hold`), the `RegionView` waits `DRIFTED` with "land changed since
+  planning: ...; stage <s> holds: approve it again to continue, or replan", and `REGION_STATE` fires. Continue is
+  `Sites.approveStage` on the region's group (no new API); replan is skipping the stage or removing the region. The outcome
+  (`ok`, `held`, `continued`) is kept per stage in the region record, so a relog neither checks again nor drops a hold. While
+  the check runs (asynchronous reads) the stage's items don't start and no tile ahead is frozen. After-heights are flushed at a
+  world stop; a shard lost to a crash makes that stage compare those columns with the frozen heights, which can report drift the caller continues past.
+- `RegionPlan` carries no checker report or previews (6b). Region futures fail with `RegionRefused(reason)` (new API type).
+- Lots fit flush (setback 0, the approach into the street). Unmapped lots stay pads.
+- **Exactness guards (E-normal).** A tile skips an air write that would let water or lava in. What stands on any changed
+  cell (snow, plants, leaf litter, sand, gravel, kelp and so on) goes with it as cells of the tile's entry. Water or lava
+  that flowed into air a CELL entry cleared counts as still the entry's. The E-normal classifier labels gravity (including
+  the landing cell), unsupported blocks and world-made block-entity changes as `live`. `live` is strict, because it could
+  otherwise mask a real block-entity error: a mismatch that keeps its block and changes its block entity is `live` only on a
+  block the world itself changes (bee nests and hives, furnaces, smokers, blast furnaces, hoppers, brewing stands, campfires,
+  spawners and trial spawners, vaults, sculk sensors, catalysts and shriekers, conduits, beacons, creaking hearts:
+  `LiveBlocks.LIVE_BE`). On any other block (a chest whose loot table resolved, a sign) it is `none`, unexplained, and fails the
+  bar. Every `live` mismatch on record so far (megaA, the verifier's megaA, forest) is a bee nest.
+- **Ticks.** A tile's check runs in stages under the tick budget (cells, fluid guard, trees, dependents, leaves) and is
+  assembled off the server thread; tile jobs capture over ticks and build their sections off-thread from 8192 cells. The
+  group undo prepares its journal commit and its covering-sites scan off the server thread and checks members over ticks.
+- **Journal format 2.** Sections with more than 256 cells store positions as a 4096-bit mask (0.20 bytes per cell on
+  mega_bench, was 1.59). Format 1 is still read. The index is written as version 2, so 0.10.x refuses a world 0.11.0 has
+  written (a safe downgrade refusal).
+- **Waits (S8).** A region's items wait without a time limit by default; the wait reason is shown in the region's
+  `RegionView.waiting`. **`maxWait` is opt-in**: `RealiseRequest.maxWaitSeconds` (a region option; 0 = no limit; DevBridge
+  `dev.region.realise {maxWait}`). With it set, every wait of an item counts toward the limit, the staged ones (`NOT_LOADED`,
+  `NOT_GENERATED`, `SIDECAR_UNAVAILABLE`) and its turn for the chunk budget included, and an item over it fails `TIMED_OUT` with
+  "waited N s for: <the wait reason>". The limit is per item and stages run in order, so a region whose every stage waits gives
+  up after up to (stages x maxWait). A stage held for drift is not an item wait and does not count. The **nudge action API**
+  (an action attached to the wait reason: move closer, prepare) is deferred to 6b; 6a shows the reason text only. Inside a region's items, a dropped item nobody threw (loot of an animal the region's own carve killed) is cleared
+  like a natural drop; named items and items a player threw still refuse. Regions are creative-only (N4).
+- **Still ours, more volatile changes.** Grass, mycelium and podzol turning to dirt (or back) by random ticks counts as still
+  the entry's; so does water or lava in air a CELL entry cleared. The E-normal classifier adds `growth` (kelp, cane, vines,
+  crops, saplings, grass spread) beside gravity, unsupported and live.
+- **Delta apply (5b, found by the regression).** The cells other sites hold on top of a delta's write box are computed off the
+  server thread (a 590k-cell site read every section in the first write tick: 50-84 ms on main and 6a alike).
+- **Gate procedure clarifications (after the gate-verifier's run).**
+  - *Throughput warm-up.* The JIT is cold after a client start: the verifier's first run after each start measured 12.3k and
+    13.4k, the rest 19.5-26.8k. Item 9's throughput margin is measured as **one unmeasured warm-up run of the 4e village plus
+    roads at 4 ms per client start, then the median of 3 measured runs** (`node tools/gate4e.mjs throughput`; 6 runs when the
+    median is within 5% of the bar). The warm-up's number is recorded beside them, not judged.
+  - *megaB seconds per stage* (S9) are wall time of the harness's walk, dominated by its 30 s dwell per waypoint, not an engine
+    speed. Each stage now also records its engine time (ticks in which one of its items was writing), its first start and last
+    item (`RegionRec.Stage`); chunks loaded per stage stay as measured. The megaB on record predates this; its next run reports
+    engine time per stage.
+  - *RG5* asserts that the region waited `SIDECAR_UNAVAILABLE` while the sidecar was gone (the check was always true before).
+- The group undo saves the group and its stages once at the end (each stage save wrote the 0.5 MB sites file).
+- Group undo: a player standing in a tile's box holds it (4e's rule); the gate uses a spectator player and clears mobs first.
+- `RemoveResult.kept` for group and stage undos counts kept cells (it was 0).
+- `Sites.list(owner)` hides tiles (S1); the client's Placed view still lists tiles (no player UI in 6a).
+- Sidecar plan directories live under `<data>/regions/plans`; the 30 s plan limit is wall clock.

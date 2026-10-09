@@ -392,6 +392,8 @@ public final class SidecarLink {
 						fail(gen, "hello refused: " + msg, -1);
 					}
 				}
+				case "region.planned", "region.failed", "region.tile", "region.tile.error" ->
+					dev.larattalabs.architect.apiimpl.ApiImpl.regionMessage(json); // phase 6a: handled off the client thread
 				case "snapshot" -> {
 					clientThread.execute(() -> {
 						try {

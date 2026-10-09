@@ -206,6 +206,42 @@ public interface SiteEvents {
 		}
 	});
 
+	/** A region changed state (realise queued, placed, partial, failed, removing, removed). Server thread. Since 1.8.0. */
+	Event<RegionStateChanged> REGION_STATE = EventFactory.createArrayBacked(RegionStateChanged.class, ls -> v -> {
+		for (RegionStateChanged l : ls) {
+			Guard.run(() -> l.onState(v), "REGION_STATE");
+		}
+	});
+
+	/** A region made progress (at most once per second). Server thread. Since 1.8.0. */
+	Event<RegionProgress> REGION_PROGRESS = EventFactory.createArrayBacked(RegionProgress.class, ls -> v -> {
+		for (RegionProgress l : ls) {
+			Guard.run(() -> l.onProgress(v), "REGION_PROGRESS");
+		}
+	});
+
+	/** A prepare made progress or ended (at most once per second while running). Server thread. Since 1.8.0. */
+	Event<PrepareProgress> PREPARE_PROGRESS = EventFactory.createArrayBacked(PrepareProgress.class, ls -> v -> {
+		for (PrepareProgress l : ls) {
+			Guard.run(() -> l.onProgress(v), "PREPARE_PROGRESS");
+		}
+	});
+
+	@FunctionalInterface
+	interface RegionStateChanged {
+		void onState(RegionView region);
+	}
+
+	@FunctionalInterface
+	interface RegionProgress {
+		void onProgress(RegionView region);
+	}
+
+	@FunctionalInterface
+	interface PrepareProgress {
+		void onProgress(PrepareView prepare);
+	}
+
 	@FunctionalInterface
 	interface EntryVersioned {
 		void onVersioned(Library.Entry entry, int fromVersion);

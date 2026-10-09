@@ -20,6 +20,14 @@ public interface Sites {
 	/** The sites whose owner equals {@code owner} (null: the player's own sites, those without an owner). Server thread. */
 	List<SiteView> list(@Nullable String owner);
 
+	/**
+	 * Since 1.8.0: {@link #list(String)} hides a realised region's tile sites (its one row is {@code Regions.list}); with
+	 * {@code includeTiles} they are listed too (debugging).
+	 */
+	default List<SiteView> list(@Nullable String owner, boolean includeTiles) {
+		return list(owner);
+	}
+
 	Optional<SiteView> get(String siteId);
 
 	/**

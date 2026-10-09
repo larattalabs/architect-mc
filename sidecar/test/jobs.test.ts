@@ -127,7 +127,7 @@ describe('protocol 2 over a WebSocket (sim backend)', () => {
     const c = await hello(env.port, { protocols: [1, 2] });
     const snap = c.msgs.find((m) => m.type === 'snapshot')!;
     expect(snap).toMatchObject({ protocol: 2, features: [...FEATURES], jobs: [] });
-    expect(FEATURES).toEqual(['job.run', 'job.tools', 'blobs', 'budget', 'designs.v2', 'bibles', 'design.groups', 'named.parts', 'open.types', 'estimates', 'reskin', 'massing', 'critique', 'critique.report', 'job.images', 'bible.admin', 'bible.restraint', 'entry.versions', 'entry.delta', 'design.polish', 'critique.polish']);
+    expect(FEATURES).toEqual(['job.run', 'job.tools', 'blobs', 'budget', 'designs.v2', 'bibles', 'design.groups', 'named.parts', 'open.types', 'estimates', 'reskin', 'massing', 'critique', 'critique.report', 'job.images', 'bible.admin', 'bible.restraint', 'entry.versions', 'entry.delta', 'design.polish', 'critique.polish', 'region.plan', 'region.tiles']);
     c.ws.close();
     const bad = await connect(env.port);
     bad.send({ type: 'hello', id: 'h', token: TOKEN, protocols: [3, 4] });

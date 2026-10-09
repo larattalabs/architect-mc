@@ -318,7 +318,23 @@ public final class Roads {
 				}
 			}
 		}
+		// phase 6a: the walk-surface cells of region paths (stairs, bridge decks, graded roads) count as road surface
+		for (dev.larattalabs.architect.site.Infra in : dev.larattalabs.architect.site.Infras.all()) {
+			if (!in.dimension().equals(dim) || in.placing() || !in.kind().equals(dev.larattalabs.architect.site.Infra.CELLS + dev.larattalabs.architect.site
+				.RegionKinds.PATH) || in.spec() == null || !in.spec().has("walk") || !intersects(in.box(), area)) {
+				continue;
+			}
+			for (long q : dev.larattalabs.architect.site.RegionKinds.walk(in.spec().get("walk").getAsString())) {
+				if (area.contains(BlockPos.getX(q), BlockPos.getY(q), BlockPos.getZ(q))) {
+					out.add(q);
+				}
+			}
+		}
 		return out;
+	}
+
+	private static boolean intersects(Anchors.Bounds a, Anchors.Bounds b) {
+		return a.minX() <= b.maxX() && b.minX() <= a.maxX() && a.minY() <= b.maxY() && b.minY() <= a.maxY() && a.minZ() <= b.maxZ() && b.minZ() <= a.maxZ();
 	}
 
 	/** A position as a BlockPos (helper). */

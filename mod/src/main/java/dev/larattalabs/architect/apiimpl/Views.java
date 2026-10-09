@@ -65,7 +65,8 @@ public final class Views {
 			dev.larattalabs.architect.site.SiteJournal.coveredSites(s.id()), dev.larattalabs.architect.site.SiteJournal.related(s.id(), true),
 			s.versioning().version() > 0 || server == null ? Math.max(1, s.versioning().version()) : Math.max(1,
 				dev.larattalabs.architect.site.SiteDeltas.versionOf(server, s)), Math.max(1, dev.larattalabs.architect.site.SiteDeltas.headVersion(s
-					.blueprint())), s.versioning().deviations(), s.versioning().updating() > 0 || s.versioning().reverting() > 0);
+					.blueprint())), s.versioning().deviations(), s.versioning().updating() > 0 || s.versioning().reverting() > 0, regionOfGroup(m == null
+						? null : m.group()));
 	}
 
 	/** A road or cell site as the API sees it (phase 4e). */
@@ -73,9 +74,18 @@ public final class Views {
 		Site.Member m = i.member();
 		dev.larattalabs.architect.api.Policy policy = i.road() || !"BOX".equals(i.spec().has("policy") ? i.spec().get("policy").getAsString() : "CELL")
 			? dev.larattalabs.architect.api.Policy.CELL : dev.larattalabs.architect.api.Policy.BOX;
+		String region = i.spec().has("tile") ? i.spec().get("tile").getAsString().split("\\|")[0] : regionOfGroup(m == null ? null : m.group());
 		return new SiteView(i.id(), i.kind(), i.owner(), i.ext(), box(i.box()), box(i.box()), Rotation.NONE, dimension(i.dimension()),
 			i.placing() ? State.PLACING : State.BUILT, 0, 0, m == null ? null : m.group(), m == null ? null : m.batchId(), m == null ? null : m.itemKey(),
-			i.kind(), policy, dev.larattalabs.architect.site.SiteJournal.coveredSites(i.id()), dev.larattalabs.architect.site.SiteJournal.related(i.id(), true));
+			i.kind(), policy, dev.larattalabs.architect.site.SiteJournal.coveredSites(i.id()), dev.larattalabs.architect.site.SiteJournal.related(i.id(), true),
+			1, 1, 0, false, region);
+	}
+
+	/** Phase 6a: the region of a site group (its batch ext names it), or null. */
+	static @org.jspecify.annotations.Nullable String regionOfGroup(@org.jspecify.annotations.Nullable String group) {
+		var g = group == null ? null : dev.larattalabs.architect.site.Sites.group(group);
+		return g != null && g.ext().has(dev.larattalabs.architect.site.RegionItems.EXT_REGION) ? g.ext().get(dev.larattalabs.architect.site.RegionItems
+			.EXT_REGION).getAsString() : null;
 	}
 
 	// ------------------------------------------------------------------ phase 4d: batches, groups, stages

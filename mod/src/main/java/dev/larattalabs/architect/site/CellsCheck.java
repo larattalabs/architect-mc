@@ -39,7 +39,10 @@ final class CellsCheck {
 	/** Cell items above this many cells check like this; smaller ones at once. */
 	static final int LARGE = 50_000;
 
-	private record Prep(long[] pos, Value[] values, Anchors.Bounds box, @Nullable String refusal, @Nullable Reason reason) {
+	private record Prep(long[] pos, Value[] values, Anchors.Bounds box, @Nullable String refusal, @Nullable Reason reason, byte @Nullable [] cond) {
+		Prep(long[] pos, Value[] values, Anchors.Bounds box, @Nullable String refusal, @Nullable Reason reason) {
+			this(pos, values, box, refusal, reason, null);
+		}
 	}
 
 	private final String kind;
@@ -100,6 +103,7 @@ final class CellsCheck {
 		});
 		long[] ps = new long[idx.length];
 		Value[] vs = new Value[idx.length];
+		byte[] cs = c.cond() == null ? null : new byte[idx.length];
 		int[] bb = {Integer.MAX_VALUE, Integer.MAX_VALUE, Integer.MAX_VALUE, Integer.MIN_VALUE, Integer.MIN_VALUE, Integer.MIN_VALUE};
 		Map<BlockState, Value> byState = new HashMap<>();
 		for (int k = 0; k < idx.length; k++) {
@@ -111,6 +115,9 @@ final class CellsCheck {
 					Reason.BUILD_HEIGHT);
 			}
 			ps[k] = p;
+			if (cs != null) {
+				cs[k] = c.cond()[i];
+			}
 			Value v = byState.computeIfAbsent(c.states().get(i), WorldJournal::value);
 			CompoundTag t = c.nbt().get(i);
 			vs[k] = t == null ? v : v.withNbt(t);
@@ -121,7 +128,7 @@ final class CellsCheck {
 			bb[4] = Math.max(bb[4], y);
 			bb[5] = Math.max(bb[5], Journal.z(p));
 		}
-		return new Prep(ps, vs, new Anchors.Bounds(bb[0], bb[1], bb[2], bb[3], bb[4], bb[5]), null, null);
+		return new Prep(ps, vs, new Anchors.Bounds(bb[0], bb[1], bb[2], bb[3], bb[4], bb[5]), null, null, cs);
 	}
 
 	/** The cells' box once prepared (for the chunk tickets), else null. */
@@ -180,7 +187,11 @@ final class CellsCheck {
 				return result = refused(Reason.NOT_LOADED, "the cell site is not loaded at " + x + ", " + z + " (walk closer)");
 			}
 			boolean ok = true;
-			if (naturalOnly) {
+			int cond = p.cond() == null ? -1 : p.cond()[cursor];
+			if (cond >= 0) {
+				BlockState s = chunk.getBlockState(m.set(x, Journal.y(q), z));
+				ok = dev.larattalabs.architect.region.CellCond.passes(cond, s, cond == 3 && InfraPlace.ownedBySameOwner(level, q, owner));
+			} else if (naturalOnly) {
 				BlockState s = chunk.getBlockState(m.set(x, Journal.y(q), z));
 				int f = TerrainFit.flags(s);
 				ok = (f & TerrainFit.BLOCK_ENTITY) == 0 && (s.isAir() || (f & TerrainFit.NATURAL) != 0 || (f & TerrainFit.WATER) != 0

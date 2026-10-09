@@ -256,9 +256,42 @@ there is no DevBridge hook to make layers, so tests go through the API as anothe
 | `dev.launcher.state` | {} - the launcher: state, detail, source, node, pid, reuse, log tail |
 | `dev.sidecar.state` | {} - the sidecar link and state: status (no key), designs, variants, jobs (id, status, step, error, resultBlob), groups, bibleJobs (without the request), reskins, bibleIndex (id, name, version, builtin, sheetPath), massings (4c), protocol, features |
 
+### Regions (phase 6a)
+
+| hook | arguments, result |
+|---|---|
+| `dev.region.plan` | {program, params?, claim: [x0,z0,x1,z1], seed?, surveyLoad?: loaded\|generated:<n>\|bounded:<n>, owner?} - Regions.plan -> the RegionPlan, `claimY` (the IR's y range) and `ms`, or `{refused}` |
+| `dev.region.prepare` | {planId, inFlight?, wait?: false} - Regions.prepare; with wait the answer comes when it is done: the PrepareView and the governor's `stats` (ticks, MSPT max, ticks over 50/100 ms, chunks/s) |
+| `dev.region.prepare.state` | {planId} - the prepare's view and governor numbers |
+| `dev.region.cancelPrepare` | {planId} - Regions.cancelPrepare |
+| `dev.region.realise` | {planId, lots?: {lotId: entry}, lotEntries?: [entry...], fitLots?: false, load?: generated:<n>\|loaded\|bounded:<n>, autoApprove?: true, stages?, force?, maxWait?: seconds} - Regions.realise -> {region} or {refused}; `lotEntries` fills every lot round robin, with `fitLots` the first entry that fits each lot; `maxWait` (0 = no limit) is `RealiseRequest.maxWaitSeconds` |
+| `dev.region.state` | {region} - the RegionView, the record, item counts and waits, `unfinished` (up to 40 items: key, stage, status, reason, x, z), failed items, writer starvation, the longest wait holding tickets and waits over 10 s with chunk statuses, tile streaming and generation counters |
+| `dev.region.list` | {} - every region |
+| `dev.region.remove` | {region, covered?: keep\|cascade\|refuse, force?} - Regions.remove (the group undo) -> RemoveResult + seconds |
+| `dev.region.hash` | {box \| region (claim + margin, default 8), ySpan?, exclude?, mode?: hash\|snap\|diff, file?} - sliced over ticks per 64x64 tile, chunks by short-lived tickets: `hash` (sha256 + per-tile hashes), `snap` (every cell to a gzip file), `diff` (against a snap: mismatches with the pre-region cell's class gravity\|unsupported\|none). A box up to 8M cells without region/mode answers at once as in 4e |
+| `dev.region.logs` | {box} - logs with neither a log nor solid ground under them (floating), logs, persistent and natural leaves |
+| `dev.undo.mark` / `dev.undo.check` | {sites} / {} - remember what the sites' entries give back on undo; then the world against it (mismatches) |
+| `dev.chunks.generated` | {} - chunks this session: `terrain` (terrain generated, any status), `full`, `whileHeld` (while a region item held tickets), `loads` |
+| `dev.chunks.status` | {box: [x0,z0,x1,z1]} - chunks of the box fully generated, read without loading them (ChunkGen), and the cost per chunk |
+| `dev.mspt.trace` | {start \| stop: true} - every tick's full time and Architect's write time; stop answers max/p50/p99/over 50 for all ticks, ticks with writes and ticks without (lighting and chunk sending) |
+| `dev.heap.gc` | {} - used heap after a forced GC, and the max |
+| `dev.tiles.stats` | {reset?} - tiles received, wire bytes, cells, bytes per cell, request-to-receive latency p50/p99 |
+
+`dev.journal.killAt` takes RG1-RG6; `dev.journal.state` adds `indexBytes` and the index commit times (p50, p99, max).
+
 ## Changelog
 
 Semi-stable: a hook may change or go, and every such change is listed here, newest first.
+
+- **2026-10-08 (phase 6a):** new `dev.region.plan|prepare|prepare.state|cancelPrepare|realise|state|list|remove|logs`,
+  `dev.undo.mark|check`, `dev.chunks.generated|status`, `dev.mspt.trace`, `dev.heap.gc` and `dev.tiles.stats` (see "Regions").
+  `dev.region.hash` moved to the regions hooks and takes `region`, `margin`, `ySpan` and `mode` (hash, snap, diff), sliced over
+  ticks; a small box without them answers at once as before. `dev.journal.killAt` takes RG1-RG6; `dev.journal.state` adds the
+  index size and commit times. apitest steps `api18, rplan, rprepare, rrealise, rget, rlist, rremove, revents`. `tools/gate6a.mjs`
+  drives the phase 6a gate (`tools/run-gate6a-client.sh`: the real sidecar with the sim backend, DevBridge 8893, sidecar 8892;
+  `ARCHITECT_XMX` caps the dev client's heap). `dev.region.hash` diff classes: gravity, unsupported, live, growth (random-tick
+  growth and grass spread), none. With `ARCHITECT_TRACE_JOBS` set, placement ticks over 25 ms are logged by part and generated
+  chunks by position.
 
 - **2026-10-08 (phase 5b):** new `dev.entry.versions|installVersion|delta`, `dev.site.delta.check|apply|preview`,
   `dev.site.revert`, `dev.site.history` and `dev.writes.count` (see "Entry versions and delta apply"). `dev.journal.killAt`

@@ -56,12 +56,19 @@ public final class Groups {
 		Map<String, Integer> handed = new TreeMap<>();
 		/** The cells the undo restores (its plan's stats). */
 		int restoredCells;
+		/** Phase 6a: CELL cells the undo left as they are (the world no longer held what the entry wrote: a player's block). */
+		int keptCells;
 		/** R1 in progress (not saved: a load plans again). */
 		transient dev.larattalabs.architect.journal.WorldJournal.@Nullable UndoPlanner planner;
 		transient List<String> planIds = List.of();
 		transient @Nullable CompletableFuture<Object[]> txn;
 		transient @Nullable String planGroup;
 		transient @Nullable CompletableFuture<Void> commit;
+		/** Phase 6a: how far the per-member checks got (they go over ticks). */
+		transient int scan;
+		transient int blockerScan;
+		/** Phase 6a: the sites outside the removal covering its cells, found off the server thread (it reads every section). */
+		transient @Nullable CompletableFuture<java.util.LinkedHashSet<String>> outsideF;
 		/** Construction members' deconstruct items (computed before the undo is planned, rule 7) and where they drop. */
 		final Map<String, Map<String, Integer>> decItems = new LinkedHashMap<>();
 		final Map<String, long[]> decAt = new LinkedHashMap<>();
@@ -104,6 +111,7 @@ public final class Groups {
 				handed.forEach(h::addProperty);
 				o.add("handed", h);
 				o.addProperty("restoredCells", restoredCells);
+				o.addProperty("keptCells", keptCells);
 			}
 			if (!decItems.isEmpty()) {
 				JsonObject d = new JsonObject();
@@ -134,6 +142,7 @@ public final class Groups {
 				o.getAsJsonArray("undoSites").forEach(e -> r.undoSites.add(e.getAsString()));
 				o.getAsJsonObject("handed").entrySet().forEach(e -> r.handed.put(e.getKey(), e.getValue().getAsInt()));
 				r.restoredCells = o.has("restoredCells") ? o.get("restoredCells").getAsInt() : 0;
+				r.keptCells = o.has("keptCells") ? o.get("keptCells").getAsInt() : 0;
 			}
 			if (o.has("dec")) {
 				o.getAsJsonObject("dec").entrySet().forEach(e -> {
@@ -150,9 +159,14 @@ public final class Groups {
 
 	/** What a removal ended with: removed, or stopped at a site with its blockers; every refund so far. */
 	public record Removed(boolean removed, List<String> blockers, Map<String, Integer> refund, int restored, Map<String, Integer> handedDown,
-		List<String> cascaded) {
+		List<String> cascaded, int kept) {
 		public Removed(boolean removed, List<String> blockers, Map<String, Integer> refund) {
-			this(removed, blockers, refund, 0, Map.of(), List.of());
+			this(removed, blockers, refund, 0, Map.of(), List.of(), 0);
+		}
+
+		public Removed(boolean removed, List<String> blockers, Map<String, Integer> refund, int restored, Map<String, Integer> handedDown,
+			List<String> cascaded) {
+			this(removed, blockers, refund, restored, handedDown, cascaded, 0);
 		}
 	}
 
@@ -462,7 +476,7 @@ public final class Groups {
 			r.sites.remove(0);
 		}
 		if (r.sites.isEmpty()) {
-			end(server, r, new Removed(true, List.of(), Map.copyOf(r.refund), r.restoredCells, Map.copyOf(r.handedAll), List.copyOf(r.cascaded)));
+			end(server, r, new Removed(true, List.of(), Map.copyOf(r.refund), r.restoredCells, Map.copyOf(r.handedAll), List.copyOf(r.cascaded), r.keptCells));
 			return;
 		}
 		String id = r.sites.get(0);
@@ -537,8 +551,10 @@ public final class Groups {
 						r.txn = CompletableFuture.supplyAsync(() -> {
 							try {
 								var w = p.work();
-								return new Object[] {w, SiteJournal.undoTxn(w)};
-							} catch (Sites.SiteException e) {
+								var t = SiteJournal.undoTxn(w);
+								// phase 6a: the commit's region merges too, off the server thread (a region's undo: 278 ms in one tick)
+								return new Object[] {w, t, SiteJournal.store().prepare(t)};
+							} catch (Sites.SiteException | java.io.IOException e) {
 								throw new java.util.concurrent.CompletionException(e);
 							}
 						});
@@ -554,8 +570,21 @@ public final class Groups {
 						r.txn = null;
 					}
 					dev.larattalabs.architect.journal.WorldJournal.kill("K5");
-					u = SiteJournal.submitUndo((dev.larattalabs.architect.journal.WorldJournal.UndoWork) built[0],
-						(dev.larattalabs.architect.journal.JournalStore.Txn) built[1]);
+					u = SiteJournal.submitUndoPrepared((dev.larattalabs.architect.journal.WorldJournal.UndoWork) built[0],
+						(dev.larattalabs.architect.journal.JournalStore.Prepared) built[2]);
+					if (u == null) {
+						// another commit came in meanwhile: prepare it again against the new head
+						var w = (dev.larattalabs.architect.journal.WorldJournal.UndoWork) built[0];
+						var t = (dev.larattalabs.architect.journal.JournalStore.Txn) built[1];
+						r.txn = CompletableFuture.supplyAsync(() -> {
+							try {
+								return new Object[] {w, t, SiteJournal.store().prepare(t)};
+							} catch (Sites.SiteException | java.io.IOException e) {
+								throw new java.util.concurrent.CompletionException(e);
+							}
+						});
+						return;
+					}
 				} else {
 					dev.larattalabs.architect.journal.WorldJournal.kill("K5");
 					u = SiteJournal.submitUndo(r.planner.work());
@@ -588,13 +617,17 @@ public final class Groups {
 			end(server, r, new Removed(false, List.of(dim + " is not loaded"), Map.copyOf(r.refund)));
 			return;
 		}
-		for (String id : ids) {
+		// phase 6a: the per-member checks go over ticks under the placement budget (a region's 400 members took 210 ms at once)
+		long deadline = Placement.deadline();
+		while (r.scan < ids.size()) {
+			String id = ids.get(r.scan);
 			Site s = Sites.get(id);
 			Infra inf = Infras.get(id);
 			boolean placing = s != null ? s.placing() : inf != null && inf.placing();
 			dev.larattalabs.architect.placement.Anchors.Bounds box = s != null ? s.restoreBox() : inf.box();
 			boolean player = Occupancy.scan(level, box, e -> false).stream().anyMatch(f -> f.kind() == Occupancy.Kind.PLAYER);
 			if (player || placing) {
+				r.scan = 0;
 				r.waited += Batches.RECHECK;
 				r.nextCheck = tick + Batches.RECHECK;
 				if (r.waited >= MAX_WAIT) {
@@ -603,30 +636,58 @@ public final class Groups {
 				}
 				return;
 			}
-		}
-		r.waited = 0;
-		// sites outside the removal covering its cells (phase 4e): KEEP hands down, REFUSE refuses, CASCADE takes them first
-		java.util.LinkedHashSet<String> outside = new java.util.LinkedHashSet<>();
-		java.util.ArrayDeque<String> todo = new java.util.ArrayDeque<>(ids);
-		while (!todo.isEmpty()) {
-			for (String c : SiteJournal.coveringSites(todo.poll())) {
-				if (!ids.contains(c) && outside.add(c) && r.covered == Sites.Covered.CASCADE) {
-					todo.add(c);
-				}
+			r.scan++;
+			if (System.nanoTime() >= deadline && r.scan < ids.size()) {
+				return;
 			}
 		}
+		r.waited = 0;
+		// sites outside the removal covering its cells (phase 4e): KEEP hands down, REFUSE refuses, CASCADE takes them first.
+		// Phase 6a: found off the server thread (it reads every section of every member: 342 ms in one tick for a region)
+		if (r.outsideF == null) {
+			List<String> members = List.copyOf(ids);
+			Sites.Covered cov = r.covered;
+			r.outsideF = CompletableFuture.supplyAsync(() -> {
+				java.util.LinkedHashSet<String> out = new java.util.LinkedHashSet<>();
+				java.util.Set<String> in = new java.util.HashSet<>(members);
+				java.util.ArrayDeque<String> todo = new java.util.ArrayDeque<>(members);
+				while (!todo.isEmpty()) {
+					for (String c : SiteJournal.coveringSites(todo.poll())) {
+						if (!in.contains(c) && out.add(c) && cov == Sites.Covered.CASCADE) {
+							todo.add(c);
+						}
+					}
+				}
+				return out;
+			});
+			return;
+		}
+		if (!r.outsideF.isDone()) {
+			return;
+		}
+		java.util.LinkedHashSet<String> outside;
+		try {
+			outside = r.outsideF.join();
+		} catch (RuntimeException e) {
+			r.outsideF = null;
+			end(server, r, new Removed(false, List.of("the journal could not be read (" + e.getMessage() + ")"), Map.copyOf(r.refund)));
+			return;
+		}
+		r.outsideF = null;
 		if (!outside.isEmpty() && r.covered == Sites.Covered.REFUSE) {
 			end(server, r, new Removed(false, List.of("COVERED: " + String.join(", ", outside) + " cover cells of the sites"), Map.copyOf(r.refund)));
 			return;
 		}
-		if (!outside.isEmpty() && r.covered == Sites.Covered.CASCADE) {
+		if (!outside.isEmpty() && r.covered == Sites.Covered.CASCADE && r.blockerScan == 0) {
 			List<String> top = new ArrayList<>(outside);
 			java.util.Collections.reverse(top);
+			top.removeIf(r.sites::contains);
 			ids.addAll(0, top);
 			r.sites.addAll(0, top);
 			r.cascaded.addAll(top);
 		}
-		for (String id : ids) {
+		while (r.blockerScan < ids.size()) {
+			String id = ids.get(r.blockerScan++);
 			Site s = Sites.get(id);
 			if (s == null) {
 				continue;
@@ -634,6 +695,10 @@ public final class Groups {
 			List<String> blockers = Sites.removalBlockers(level, s);
 			if (!blockers.isEmpty()) {
 				end(server, r, new Removed(false, List.of(Sites.blockersMessage(id, blockers)), Map.copyOf(r.refund)));
+				return;
+			}
+			if (System.nanoTime() >= Placement.deadline() && r.blockerScan < ids.size()) {
+				r.outsideF = CompletableFuture.completedFuture(outside); // keep what was found; go on next tick
 				return;
 			}
 		}
@@ -681,6 +746,7 @@ public final class Groups {
 		r.handed = new TreeMap<>(Sites.handedBySite(u.work()));
 		r.handedAll = new TreeMap<>(r.handed);
 		r.restoredCells = u.work().plan().stats().values().stream().mapToInt(Journal.Stats::restored).sum();
+		r.keptCells = u.work().plan().stats().values().stream().mapToInt(Journal.Stats::changed).sum();
 		r.commit = u.commit();
 		Placement.save(server, false);
 	}
@@ -721,6 +787,7 @@ public final class Groups {
 
 	private static void end(MinecraftServer server, Removal r, Removed result) {
 		REMOVALS.remove(r);
+		long t0 = System.nanoTime();
 		SiteGroupRec g = Sites.group(r.group);
 		if (g != null) {
 			if (r.stage != null) {
@@ -728,25 +795,31 @@ public final class Groups {
 					Batches.setStage(server, g, r.stage, Stage.State.UNDONE);
 				}
 			} else {
-				Sites.putGroup(server, g.withState(result.removed() ? SiteGroupRec.REMOVED : SiteGroupRec.ACTIVE));
+				SiteGroupRec n = g.withState(result.removed() ? SiteGroupRec.REMOVED : SiteGroupRec.ACTIVE);
+				java.util.LinkedHashMap<String, Stage.State> states = new java.util.LinkedHashMap<>();
 				if (result.removed()) {
 					// stages that never placed are skipped; placed ones are undone
-					SiteGroupRec n = Sites.group(r.group);
 					for (SiteGroupRec.StageRec st : n.stages()) {
 						if (st.state() == Stage.State.PLACED || st.state() == Stage.State.PARTIAL) {
-							Batches.setStage(server, Sites.group(r.group), st.name(), Stage.State.UNDONE);
+							states.put(st.name(), Stage.State.UNDONE);
 						} else if (!st.state().terminal()) {
-							Batches.setStage(server, Sites.group(r.group), st.name(), Stage.State.SKIPPED);
+							states.put(st.name(), Stage.State.SKIPPED);
 						}
 					}
 				}
+				Batches.setStages(server, n, states); // one save for the group and its stages (phase 6a)
 			}
 		}
+		Placement.lap("end:stages", t0);
+		t0 = System.nanoTime();
 		Placement.save(server, false);
+		Placement.lap("end:save", t0);
+		t0 = System.nanoTime();
 		Architect.LOGGER.info("{} {} of group {}: {}{}", r.stage == null ? "Removal" : "Undo of stage " + r.stage, result.removed() ? "done" : "stopped",
 			r.group, result.removed() ? "all sites restored" : String.join("; ", result.blockers()), result.refund().isEmpty() ? "" : "; refund "
 				+ result.refund());
 		r.futures.forEach(f -> f.complete(result));
+		Placement.lap("end:futures", t0);
 	}
 
 	// ------------------------------------------------------------------ persistence

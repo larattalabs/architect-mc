@@ -147,6 +147,16 @@ public final class InfraPlace {
 	 */
 	public static Check checkCells(ServerLevel level, String kind, Journal.Policy policy, List<BlockPos> pos, List<BlockState> states,
 		List<@Nullable CompoundTag> nbt, boolean naturalOnly, boolean layer, @Nullable String owner, boolean force, boolean dryRun) {
+		return checkCells(level, kind, policy, pos, states, nbt, null, naturalOnly, layer, owner, force, dryRun);
+	}
+
+	/**
+	 * {@link #checkCells} with per-cell conditions (phase 6a, {@code CellWrite.Cond}; -1 or null = {@code naturalOnly}). A cell
+	 * whose condition fails is skipped and noted. ALWAYS_OURS passes a cell an entry of the same owner owns.
+	 */
+	public static Check checkCells(ServerLevel level, String kind, Journal.Policy policy, List<BlockPos> pos, List<BlockState> states,
+		List<@Nullable CompoundTag> nbt, byte @Nullable [] conds, boolean naturalOnly, boolean layer, @Nullable String owner, boolean force,
+		boolean dryRun) {
 		String why = WorldJournal.unavailable();
 		if (why != null) {
 			return refused(Reason.JOURNAL_UNAVAILABLE, why);
@@ -180,7 +190,14 @@ public final class InfraPlace {
 					return refused(Reason.NOT_LOADED, "the cell site is not loaded at " + x + ", " + z + " (walk closer)");
 				}
 			}
-			if (naturalOnly) {
+			int cond = conds == null ? -1 : conds[at.get(p)];
+			if (cond >= 0) {
+				BlockState s = level.getBlockState(m.set(x, y, z));
+				if (!dev.larattalabs.architect.region.CellCond.passes(cond, s, cond == 3 && ownedBySameOwner(level, p, owner))) {
+					skipped++;
+					continue;
+				}
+			} else if (naturalOnly) {
 				int f = TerrainFit.flags(level, m.set(x, y, z));
 				BlockState s = level.getBlockState(m);
 				boolean natural = (f & TerrainFit.BLOCK_ENTITY) == 0 && (s.isAir() || (f & TerrainFit.NATURAL) != 0 || (f & TerrainFit.WATER) != 0
@@ -270,6 +287,30 @@ public final class InfraPlace {
 		return new Check(List.of(), notes, ps, vs, new Anchors.Bounds(bb[0], bb[1], bb[2], bb[3], bb[4], bb[5]), hits, spec);
 	}
 
+	/** ALWAYS_OURS for a cell site: an active entry (not leaves) of a site with the same owner has the cell. */
+	static boolean ownedBySameOwner(ServerLevel level, long p, @Nullable String owner) {
+		JournalStore js = WorldJournal.storeOrNull();
+		if (js == null) {
+			return false;
+		}
+		long k = Sections.key(p);
+		for (String id : js.inSection(Sites.dimensionId(level), k)) {
+			JournalStore.Meta mm = js.meta(id);
+			if (mm == null || !mm.active() || mm.kind().equals(WorldJournal.LEAVES) || !java.util.Objects.equals(Sites.ownerOf(mm.site()), owner)) {
+				continue;
+			}
+			try {
+				SectionCells sc = js.section(id, k);
+				if (sc != null && sc.has(Sections.index(p))) {
+					return true;
+				}
+			} catch (IOException e) {
+				return false;
+			}
+		}
+		return false;
+	}
+
 	/** The overlap rules of a cell site (REFUSE, OVERLAP_BUSY, OVERLAP_OWNED, LAYER_DEPTH), or null; notes the sites it goes on. */
 	static @Nullable Check overlapRefusal(Map<String, Integer> over, Map<String, Journal.Status> status, int deepest, boolean layer, @Nullable String owner,
 		boolean force, List<String> notes, List<SiteJournal.Hit> hits) {
@@ -315,6 +356,30 @@ public final class InfraPlace {
 		job.notes.addAll(c.notes());
 		job.plan(level, c.positions(), c.values());
 		Architect.LOGGER.info("Placing cell site {} ({}, {} cells over {})", id, kind, c.cells(), Anchors.str(c.box()));
+		return job;
+	}
+
+	/**
+	 * Starts placing a region tile (phase 6a): a cell site of kind {@code architect:terrain} or {@code architect:path}, CELL,
+	 * with the tile's held leaves as a {@code leaves} entry and its walk-surface cells in the record's spec.
+	 */
+	static InfraJob beginTile(ServerLevel level, String kind, Check c, @Nullable String owner, @Nullable JsonObject ext, Site.@Nullable Member member,
+		TileCheck.Result r, String tile) throws Sites.SiteException {
+		SiteJournal.requireAvailable();
+		String id = "c" + SiteJournal.store().newCells();
+		JsonObject spec = c.spec() == null ? new JsonObject() : c.spec().deepCopy();
+		spec.addProperty("kind", kind);
+		spec.addProperty("policy", Journal.Policy.CELL.name());
+		spec.addProperty("tile", tile);
+		Infra rec = new Infra(id, Infra.CELLS + kind, owner, ext, Sites.dimensionId(level), c.box(), System.currentTimeMillis(), member, true, spec);
+		InfraJob job = new InfraJob(id, rec.dimension(), kind, Journal.Policy.CELL, rec, member == null ? null : member.batchId(), member == null ? null
+			: member.itemKey());
+		job.notes.addAll(c.notes());
+		job.leafPos = r.leafPos();
+		job.leafBefore = r.leafBefore();
+		job.leafAfter = r.leafAfter();
+		job.tile = tile;
+		job.plan(level, c.positions(), c.values());
 		return job;
 	}
 

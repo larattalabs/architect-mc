@@ -13,9 +13,11 @@ import dev.larattalabs.architect.apiimpl.ApiRules;
 import dev.larattalabs.architect.batch.BatchRules;
 import dev.larattalabs.architect.batch.CratePlacement;
 import dev.larattalabs.architect.batch.LotFitting;
+import dev.larattalabs.architect.region.ChunkGen;
 import dev.larattalabs.architect.batch.QBatch;
 import dev.larattalabs.architect.batch.QItem;
 import dev.larattalabs.architect.batch.StageRules;
+import dev.larattalabs.architect.region.RegionsImpl;
 import dev.larattalabs.architect.placement.Anchors;
 import dev.larattalabs.architect.placement.Blueprint;
 import dev.larattalabs.architect.placement.BlueprintTransform;
@@ -60,15 +62,16 @@ public final class Batches {
 	static final TicketType TICKET = net.minecraft.core.Registry.register(BuiltInRegistries.TICKET_TYPE,
 		Identifier.fromNamespaceAndPath(Architect.MOD_ID, "placement"), new TicketType(0L, TicketType.FLAG_LOADING));
 	/** Temporary blockers: an item refused only for these waits instead of failing. */
-	static final Set<Reason> TEMPORARY = Set.of(Reason.PLAYER_IN_BOX, Reason.OCCUPIED, Reason.NOT_LOADED, Reason.OVERLAP_BUSY);
+	static final Set<Reason> TEMPORARY = Set.of(Reason.PLAYER_IN_BOX, Reason.OCCUPIED, Reason.NOT_LOADED, Reason.OVERLAP_BUSY, Reason.NOT_GENERATED,
+		Reason.SIDECAR_UNAVAILABLE);
 
 	private static final Map<String, QBatch> BATCHES = new LinkedHashMap<>();
 	private static int next = 1;
-	private static long tick;
+	static long tick;
 	private static final Map<String, Long> LAST_PROGRESS = new HashMap<>();
-	private static final Set<String> CHANGED = new HashSet<>();
+	static final Set<String> CHANGED = new HashSet<>();
 	/** Chunk tickets held, per batch, per item (or job) key. */
-	private static final Map<String, Map<String, Set<Long>>> TICKETS = new HashMap<>();
+	static final Map<String, Map<String, Set<Long>>> TICKETS = new HashMap<>();
 	private static final Map<String, List<CompletableFuture<QBatch>>> CANCELLED = new HashMap<>();
 
 	private Batches() {
@@ -87,11 +90,26 @@ public final class Batches {
 		QItem i = b == null || itemKey == null ? null : b.item(itemKey);
 		if (i != null && i.status == QItem.Status.PLACING) {
 			i.committing = true;
+			if ("tile".equals(i.itemKind)) {
+				// phase 6a: a tile's writes are done: its chunk tickets go now, so the next tile can take the budget while this
+				// one's P7 commit runs (the writer would idle on the budget otherwise)
+				MinecraftServer srv = serverOf();
+				if (srv != null) {
+					untickItem(srv, b, i.key);
+					untickItem(srv, b, "job:" + i.key);
+				}
+			}
 		}
 	}
 
 	public static @Nullable QBatch get(String id) {
 		return BATCHES.get(id);
+	}
+
+	/** Whether the batch is a region's (phase 6a). */
+	static boolean isRegionBatch(String id) {
+		QBatch b = BATCHES.get(id);
+		return b != null && RegionItems.isRegion(b);
 	}
 
 	public static List<QBatch> all() {
@@ -196,6 +214,8 @@ public final class Batches {
 		if (g != null && spec.sharedCrate() && !g.sharedCrate()) {
 			grp = grp.withSharedCrate(true, crateAt);
 		}
+		b.generate = spec.load().generate();
+		chunkBound(b);
 		Sites.putGroup(server, grp);
 		BATCHES.put(id, b);
 		Placement.save(server, false);
@@ -211,6 +231,43 @@ public final class Batches {
 		}
 		CHANGED.add(id);
 		return id;
+	}
+
+	/**
+	 * Phase 6a: queues a region's items (tiles, roads, lots, in stage order, built by {@code RegionsImpl}) as one batch in a new
+	 * site group whose stages are the region's. The batch ext names the region ({@link RegionItems#EXT_REGION}). Returns the batch.
+	 */
+	public static QBatch queueRegion(MinecraftServer server, String regionId, @Nullable String owner, JsonObject ext, List<QItem> items,
+		List<String> stages, int loadChunks, boolean generate, boolean autoApprove, int maxWaitSeconds) {
+		String id = newId();
+		String groupId = Sites.newGroupId();
+		JsonObject bext = ext.deepCopy();
+		bext.addProperty(RegionItems.EXT_REGION, regionId);
+		// S8: a region's waits have no time limit (the wait reason is shown instead), unless the caller opts in to maxWait
+		QBatch b = new QBatch(id, owner, bext, groupId, items, stages, maxWaitSeconds > 0 ? maxWaitSeconds * 20L : Long.MAX_VALUE, loadChunks, false, false,
+			autoApprove, false, null, System.currentTimeMillis());
+		b.generate = generate;
+		chunkBound(b);
+		List<SiteGroupRec.StageRec> recs = new ArrayList<>();
+		for (String st : stages) {
+			List<String> keys = items.stream().filter(i -> i.stage.equals(st)).map(i -> i.key).toList();
+			recs.add(new SiteGroupRec.StageRec(st, keys, autoApprove ? Stage.State.APPROVED : Stage.State.PLANNED, List.of(), id));
+		}
+		SiteGroupRec grp = new SiteGroupRec(groupId, owner, bext, List.of(), recs, SiteGroupRec.ACTIVE, false, null, null, System.currentTimeMillis());
+		Sites.putGroup(server, grp);
+		BATCHES.put(id, b);
+		Placement.save(server, false);
+		Architect.LOGGER.info("Queued region {} as batch {} ({} item(s), stages {}) in group {}", regionId, id, items.size(), stages, groupId);
+		for (SiteGroupRec.StageRec st : recs) {
+			ApiEvents.stageState(groupId, st);
+		}
+		for (QItem q : items) {
+			if (q.status == QItem.Status.FAILED) {
+				ApiEvents.itemFailed(b, q);
+			}
+		}
+		CHANGED.add(id);
+		return b;
 	}
 
 	/** The stage-site token of a delta item (phase 5b): {@code delta:<siteId>:<delta entry>} (never a group site). */
@@ -390,6 +447,9 @@ public final class Batches {
 			}
 			if (b.loadChunks > 0 && ck.box() != null && !i.ticketed) {
 				ticketBox(server, b, i, level, ck.box().grow(1));
+				if (notGeneratedWait(b, i)) {
+					return;
+				}
 				i.ticketed = true;
 			}
 			if (i.checked == null) {
@@ -409,8 +469,19 @@ public final class Batches {
 		} else {
 		if (b.loadChunks > 0) {
 			ticketBox(server, b, i, level, infraBox(i));
+			if (notGeneratedWait(b, i)) {
+				return;
+			}
 		}
 		tr.mark("ticket");
+		// phase 6a (the 4e spike class): the journal regions under a road or small cell site in memory first, read off the
+		// server thread, as for buildings; a road over a big pad read and decoded them in its check (50-250 ms ticks)
+		if (!SiteJournal.warm(i.dimension, infraBox(i))) {
+			return;
+		}
+		if (road && RegionItems.isRegion(b) && !RegionItems.frozenFor(b, i, level, infraBox(i))) {
+			return; // phase 6a: a region road's columns are frozen before it writes (H0)
+		}
 		if (road) {
 			c = InfraPlace.checkRoad(level, InfraSpec.points(i.spec), i.spec.get("width").getAsInt(), InfraSpec.str(i.spec, "surface"), InfraSpec.str(i.spec,
 				"slab"), i.spec.get("lanterns").getAsBoolean(), i.spec.get("shallowDecks").getAsBoolean(), b.owner, i.force);
@@ -418,7 +489,7 @@ public final class Batches {
 			cells = InfraSpec.cellsOf(i.spec);
 			tr.mark("decode");
 			c = InfraPlace.checkCells(level, i.spec.get("kind").getAsString(), dev.larattalabs.architect.journal.Journal.Policy.valueOf(i.spec.get("policy")
-				.getAsString()), cells.pos(), cells.states(), cells.nbt(), i.spec.get("naturalOnly").getAsBoolean(), i.layer, b.owner, i.force, true);
+				.getAsString()), cells.pos(), cells.states(), cells.nbt(), cells.cond(), i.spec.get("naturalOnly").getAsBoolean(), i.layer, b.owner, i.force, true);
 		}
 		}
 		tr.mark("check");
@@ -462,6 +533,10 @@ public final class Batches {
 	static void infraPlaced(MinecraftServer server, InfraJob job) {
 		QBatch b = job.batchId == null ? null : BATCHES.get(job.batchId);
 		QItem i = b == null || job.itemKey == null ? null : b.item(job.itemKey);
+		if (job.tile != null) {
+			String[] t = job.tile.split("\\|");
+			dev.larattalabs.architect.region.RegionsImpl.tilePlaced(t[0], t[1], t[2], t[3], job.siteId, job.positions.length);
+		}
 		if (i == null) {
 			return;
 		}
@@ -628,19 +703,39 @@ public final class Batches {
 			stop(server, b, "stopped: " + f.key + " failed (" + f.message + ")");
 			return;
 		}
+		long t0 = System.nanoTime();
 		String running = settleStages(server, b);
+		Placement.lap("settleStages", t0);
 		SiteGroupRec g = Sites.group(b.group);
 		Stage.State rs = running == null || g == null || g.stage(running) == null ? null : g.stage(running).state();
 		boolean approved = rs == Stage.State.APPROVED || rs == Stage.State.PLACING;
+		if (rs == Stage.State.APPROVED && RegionItems.isRegion(b) && !RegionsImpl.stageGate(server, b, running)) {
+			approved = false; // phase 6a: the stage's drift check runs, or the stage holds (land changed since planning)
+		}
+		if (RegionItems.isRegion(b) && approved) {
+			t0 = System.nanoTime();
+			RegionItems.ahead(server, b, running); // phase 6a: freeze and request the tiles after the head
+			Placement.lap("ahead", t0);
+		}
+		t0 = System.nanoTime();
 		QItem item = BatchRules.next(b, running, approved, tick, i -> distance(server, i));
+		Placement.lap("next", t0);
 		if (item != null) {
+			t0 = System.nanoTime();
 			tryStart(server, b, item);
+			if (Placement.TRACE) {
+				Placement.lap("tryStart:" + item.key, t0);
+			}
 		}
 		if (BatchRules.allDone(b) && !hasJob(b) && stagesDone(b)) {
+			t0 = System.nanoTime();
 			finish(server, b, QBatch.Status.DONE, "");
+			Placement.lap("finish", t0);
 			return;
 		}
+		t0 = System.nanoTime();
 		progress(b);
+		Placement.lap("progress", t0);
 	}
 
 	/**
@@ -682,6 +777,31 @@ public final class Batches {
 			}
 		}
 		return true;
+	}
+
+	/**
+	 * Several stages' states at once: one group save (each {@link #setStage} saves the sites file, 0.5 MB for a region; a region's
+	 * undo set six stages in one tick).
+	 */
+	static void setStages(MinecraftServer server, SiteGroupRec g, java.util.LinkedHashMap<String, Stage.State> states) {
+		SiteGroupRec n = g;
+		List<String> changed = new ArrayList<>();
+		for (var e : states.entrySet()) {
+			SiteGroupRec.StageRec was = n.stage(e.getKey());
+			if (was == null || was.state() == e.getValue()) {
+				continue;
+			}
+			Architect.LOGGER.info("Group {}: stage {} {} -> {}", g.id(), e.getKey(), StageRules.name(was.state()), StageRules.name(e.getValue()));
+			n = n.withStage(e.getKey(), s -> s.withState(e.getValue()));
+			changed.add(e.getKey());
+		}
+		if (changed.isEmpty() && n == Sites.group(g.id())) {
+			return;
+		}
+		Sites.putGroup(server, n);
+		for (String st : changed) {
+			ApiEvents.stageState(g.id(), n.stage(st));
+		}
 	}
 
 	static void setStage(MinecraftServer server, SiteGroupRec g, String stage, Stage.State state) {
@@ -726,7 +846,12 @@ public final class Batches {
 	/** Checks an item and starts it, makes it wait, or fails it. */
 	private static void tryStart(MinecraftServer server, QBatch b, QItem i) {
 		long t0 = System.nanoTime();
-		tryStart0(server, b, i);
+		dev.larattalabs.architect.placement.Occupancy.regionScope = RegionItems.isRegion(b);
+		try {
+			tryStart0(server, b, i);
+		} finally {
+			dev.larattalabs.architect.placement.Occupancy.regionScope = false;
+		}
 		if (System.getenv("ARCHITECT_TRACE_JOBS") != null) {
 			Architect.LOGGER.info("TRACE tick {} tryStart {} {} ms", server.getTickCount(), i.key, (System.nanoTime() - t0) / 1e6);
 		}
@@ -735,6 +860,10 @@ public final class Batches {
 	private static void tryStart0(MinecraftServer server, QBatch b, QItem i) {
 		if ("delta".equals(i.itemKind)) {
 			tryStartDelta(server, b, i);
+			return;
+		}
+		if ("tile".equals(i.itemKind)) {
+			RegionItems.tryStartTile(server, b, i); // phase 6a
 			return;
 		}
 		if (!"building".equals(i.itemKind)) {
@@ -755,6 +884,9 @@ public final class Batches {
 		Rotation rot = Rotation.values()[Math.floorMod(i.turns, 4)];
 		if (b.loadChunks > 0) {
 			ticketItem(server, b, i, level, bp);
+			if (notGeneratedWait(b, i)) {
+				return;
+			}
 		}
 		// a large design (phase 4e, the size cap): its grid is built off the server thread first, and its checks and its start
 		// (the second checks, the capture) go in separate ticks
@@ -795,6 +927,10 @@ public final class Batches {
 			waitFor(b, i, Reason.NOT_LOADED, "the area around the site is not loaded on the server (walk closer)");
 			return;
 		}
+		if (RegionItems.isRegion(b) && !RegionItems.frozenFor(b, i, level, snap != null ? snap : new Anchors.Bounds(i.x, i.y, i.z, i.x + sx - 1, i.y
+			+ bp.sizeY() - 1, i.z + sz - 1))) {
+			return; // phase 6a: a region lot's columns are frozen before it writes (H0)
+		}
 		if (large) {
 			i.checkedAt = tick;
 			i.checkedSnap = snap;
@@ -820,8 +956,8 @@ public final class Batches {
 			i.reason = null;
 			i.message = "";
 			startStage(server, b, i);
-			untickItem(server, b, i.key);
 			ticketJob(server, b, i, level, job.snapBox);
+			untickItem(server, b, i.key);
 			Placement.add(server, job);
 			CHANGED.add(b.id);
 		} catch (Sites.SiteException e) {
@@ -833,7 +969,10 @@ public final class Batches {
 		}
 	}
 
-	private static void startStage(MinecraftServer server, QBatch b, QItem i) {
+	static void startStage(MinecraftServer server, QBatch b, QItem i) {
+		if (RegionItems.isRegion(b)) {
+			RegionsImpl.itemStarted(b, i);
+		}
 		SiteGroupRec g = Sites.group(b.group);
 		SiteGroupRec.StageRec st = g == null ? null : g.stage(i.stage);
 		if (st != null && st.state() == Stage.State.APPROVED) {
@@ -841,7 +980,7 @@ public final class Batches {
 		}
 	}
 
-	private static boolean loaded(ServerLevel level, Anchors.Bounds box) {
+	static boolean loaded(ServerLevel level, Anchors.Bounds box) {
 		for (int cx = box.minX() >> 4; cx <= box.maxX() >> 4; cx++) {
 			for (int cz = box.minZ() >> 4; cz <= box.maxZ() >> 4; cz++) {
 				if (!level.hasChunk(cx, cz)) {
@@ -852,10 +991,10 @@ public final class Batches {
 		return true;
 	}
 
-	private static void waitFor(QBatch b, QItem i, Reason why, String msg) {
+	static void waitFor(QBatch b, QItem i, Reason why, String msg) {
 		boolean first = i.status != QItem.Status.WAITING;
 		boolean changed = first || !why.name().equals(i.reason);
-		if (!first) {
+		if (!first && !RegionItems.uncounted(b, why)) {
 			i.waited += RECHECK;
 		}
 		if (i.waited >= b.maxWaitTicks) {
@@ -872,7 +1011,7 @@ public final class Batches {
 		}
 	}
 
-	private static void fail(QBatch b, QItem i, Reason why, String msg) {
+	static void fail(QBatch b, QItem i, Reason why, String msg) {
 		i.fail(why.name(), msg);
 		CHANGED.add(b.id);
 		MinecraftServer srv = serverOf();
@@ -882,9 +1021,13 @@ public final class Batches {
 		}
 		Architect.LOGGER.info("Batch {}: item {} failed ({}): {}", b.id, i.key, why, msg);
 		ApiEvents.itemFailed(b, i);
+		if (RegionItems.isRegion(b)) {
+			RegionItems.forget(b, i);
+			dev.larattalabs.architect.region.RegionsImpl.itemDone(b, i);
+		}
 	}
 
-	private static void placedItem(MinecraftServer server, QBatch b, QItem i) {
+	static void placedItem(MinecraftServer server, QBatch b, QItem i) {
 		i.status = QItem.Status.PLACED;
 		i.reason = null;
 		i.message = "";
@@ -893,6 +1036,10 @@ public final class Batches {
 		untickItem(server, b, "job:" + i.key);
 		Placement.save(server, false);
 		ApiEvents.itemPlaced(b, i);
+		if (RegionItems.isRegion(b)) {
+			RegionItems.forget(b, i);
+			dev.larattalabs.architect.region.RegionsImpl.itemDone(b, i);
+		}
 	}
 
 	private static void progress(QBatch b) {
@@ -914,6 +1061,9 @@ public final class Batches {
 		b.note = note;
 		b.cancelling = false;
 		untickBatch(server, b);
+		if (RegionItems.isRegion(b)) {
+			dev.larattalabs.architect.region.RegionsImpl.batchDone(b);
+		}
 		Placement.save(server, false);
 		Architect.LOGGER.info("Batch {} {}: {} placed, {} failed{}", b.id, status.name().toLowerCase(java.util.Locale.ROOT),
 			b.items.stream().filter(i -> i.status == QItem.Status.PLACED).count(), b.items.stream().filter(i -> i.status == QItem.Status.FAILED).count(),
@@ -1073,7 +1223,7 @@ public final class Batches {
 
 	// ------------------------------------------------------------------ chunk tickets
 
-	private static Set<Long> chunks(Anchors.Bounds box) {
+	static Set<Long> chunks(Anchors.Bounds box) {
 		Set<Long> out = new LinkedHashSet<>();
 		for (int cx = box.minX() >> 4; cx <= box.maxX() >> 4; cx++) {
 			for (int cz = box.minZ() >> 4; cz <= box.maxZ() >> 4; cz++) {
@@ -1089,23 +1239,93 @@ public final class Batches {
 		if (held.containsKey(i.key)) {
 			return;
 		}
-		int sx = BlueprintTransform.rotatedSizeX(bp.sizeX(), bp.sizeZ(), i.turns);
-		int sz = BlueprintTransform.rotatedSizeZ(bp.sizeX(), bp.sizeZ(), i.turns);
-		int m = LotFitting.frontMargin(bp) + LeafGuard.RADIUS + 1;
-		Set<Long> want = chunks(new Anchors.Bounds(i.x - m, i.y, i.z - m, i.x + sx - 1 + m, i.y + bp.sizeY() - 1, i.z + sz - 1 + m));
+		Set<Long> want = itemChunks(i, bp);
 		int count = held.values().stream().mapToInt(Set::size).sum();
 		if (!ticketTurn(b, i) || count + want.size() > b.loadChunks) {
 			if (want.size() <= b.loadChunks) {
-				ticketWait(b, i); // it fits once the budget is free (a larger one waits for a player, LOADED_ONLY)
+				ticketWait(b, i); // it fits once the budget is free (a larger one was refused CHUNK_BOUND at queue time)
 			}
-			return; // over the bound: it waits for a player like LOADED_ONLY
+			return;
+		}
+		if (!b.generate && !generated(level, want, i)) {
+			return; // GENERATED_ONLY: never tickets a chunk that was not generated (it waits NOT_GENERATED)
 		}
 		ticketGot(b, i);
-		for (long c : want) {
-			level.getChunkSource().addTicketWithRadius(TICKET, ChunkPos.unpack(c), 0);
-		}
+		ChunkTickets.acquire(i.dimension, want, source(level));
 		held.put(i.key, want);
 		levels.put(b.id + "/" + i.key, i.dimension);
+	}
+
+	/** After a ticket attempt under GENERATED_ONLY: waits NOT_GENERATED (true), or tries again next tick while a status is read (true). */
+	static boolean notGeneratedWait(QBatch b, QItem i) {
+		long c = i.notGenerated;
+		if (c == Long.MIN_VALUE) {
+			return false;
+		}
+		i.notGenerated = Long.MIN_VALUE;
+		if (c == Long.MAX_VALUE) {
+			return true;
+		}
+		waitFor(b, i, Reason.NOT_GENERATED, "chunk " + ChunkPos.getX(c) + ", " + ChunkPos.getZ(c) + " was never generated (needs prepare)");
+		return true;
+	}
+
+	/**
+	 * GENERATED_ONLY (phase 6a): whether every chunk of {@code want} was fully generated ({@link ChunkGen}); else the item is
+	 * marked to wait {@code NOT_GENERATED} (or, while a chunk's status is still being read, to try again next tick).
+	 */
+	static boolean generated(ServerLevel level, Set<Long> want, QItem i) {
+		long r = dev.larattalabs.architect.region.TicketGate.check(want, c -> ChunkGen.state(level, c));
+		i.notGenerated = r;
+		return r == dev.larattalabs.architect.region.TicketGate.OK;
+	}
+
+	/**
+	 * The queue-time chunk check (phase 6a, CONTRACT "Queue-time chunk check"): under a policy that holds tickets, a building
+	 * (or region) item whose box + margin needs more chunks than the batch's bound could never get them; it fails
+	 * {@code CHUNK_BOUND} at once instead of waiting to {@code TIMED_OUT}. Road and cell-site items keep 4e's rule (an oversized
+	 * one takes its tickets alone when the batch holds none, so it can't time out on the bound): see CONTRACT "Phase 6a as built".
+	 */
+	private static void chunkBound(QBatch b) {
+		if (b.loadChunks <= 0) {
+			return; // LOADED_ONLY holds no tickets
+		}
+		for (QItem i : b.items) {
+			if (i.status != QItem.Status.QUEUED || !"building".equals(i.itemKind)) {
+				continue;
+			}
+			Blueprint bp = Blueprints.get(i.blueprint);
+			if (bp == null) {
+				continue;
+			}
+			String why = dev.larattalabs.architect.region.TicketGate.chunkBound(itemChunks(i, bp).size(), b.loadChunks);
+			if (why != null) {
+				i.fail(Reason.CHUNK_BOUND.name(), why);
+			}
+		}
+	}
+
+	/** The chunks a building item may touch (its box, the approach and the leaf ring): what {@link #ticketItem} tickets. */
+	static Set<Long> itemChunks(QItem i, Blueprint bp) {
+		int sx = BlueprintTransform.rotatedSizeX(bp.sizeX(), bp.sizeZ(), i.turns);
+		int sz = BlueprintTransform.rotatedSizeZ(bp.sizeX(), bp.sizeZ(), i.turns);
+		int m = LotFitting.frontMargin(bp) + LeafGuard.RADIUS + 1;
+		return chunks(new Anchors.Bounds(i.x - m, i.y, i.z - m, i.x + sx - 1 + m, i.y + bp.sizeY() - 1, i.z + sz - 1 + m));
+	}
+
+	/** The vanilla side of {@link ChunkTickets}: radius-0 {@link #TICKET}s of a level. */
+	static ChunkTickets.Source source(ServerLevel level) {
+		return new ChunkTickets.Source() {
+			@Override
+			public void add(long chunk) {
+				level.getChunkSource().addTicketWithRadius(TICKET, ChunkPos.unpack(chunk), 0);
+			}
+
+			@Override
+			public void remove(long chunk) {
+				level.getChunkSource().removeTicketWithRadius(TICKET, ChunkPos.unpack(chunk), 0);
+			}
+		};
 	}
 
 	/** The area a road or cell-site item touches (its points' or cells' box, grown by the road's width and search). */
@@ -1125,7 +1345,7 @@ public final class Batches {
 	}
 
 	/** LOAD_BOUNDED tickets for a box (a road or cell-site item), while the batch holds at most {@code loadChunks}. */
-	private static void ticketBox(MinecraftServer server, QBatch b, QItem i, ServerLevel level, Anchors.Bounds box) {
+	static void ticketBox(MinecraftServer server, QBatch b, QItem i, ServerLevel level, Anchors.Bounds box) {
 		Map<String, Set<Long>> held = TICKETS.computeIfAbsent(b.id, k -> new HashMap<>());
 		if (held.containsKey(i.key)) {
 			return;
@@ -1136,10 +1356,11 @@ public final class Batches {
 			ticketWait(b, i);
 			return;
 		}
-		ticketGot(b, i);
-		for (long c : want) {
-			level.getChunkSource().addTicketWithRadius(TICKET, ChunkPos.unpack(c), 0);
+		if (!b.generate && !generated(level, want, i)) {
+			return;
 		}
+		ticketGot(b, i);
+		ChunkTickets.acquire(i.dimension, want, source(level));
 		held.put(i.key, want);
 		levels.put(b.id + "/" + i.key, i.dimension);
 	}
@@ -1147,20 +1368,51 @@ public final class Batches {
 	/** While a job writes, its chunks (and the ring around them) stay loaded. */
 	private static void ticketJob(MinecraftServer server, QBatch b, QItem i, ServerLevel level, Anchors.Bounds snap) {
 		Set<Long> want = chunks(snap.grow(LeafGuard.RADIUS + 1));
-		for (long c : want) {
-			level.getChunkSource().addTicketWithRadius(TICKET, ChunkPos.unpack(c), 0);
-		}
+		ChunkTickets.acquire(i.dimension, want, source(level));
 		TICKETS.computeIfAbsent(b.id, k -> new HashMap<>()).put("job:" + i.key, want);
 		levels.put(b.id + "/job:" + i.key, i.dimension);
 	}
 
-	private static final Map<String, String> levels = new HashMap<>();
+	static final Map<String, String> levels = new HashMap<>();
 
 	/**
 	 * Phase 4e, LOAD_BOUNDED fairness: the first item that could not get its tickets has the next ones (later items started
 	 * every tick took the budget before its re-check, and it timed out at 600 s on a 1000x1000 run).
 	 */
 	private static final Map<String, String> TICKET_WAITER = new HashMap<>();
+
+	/** Whether an item of the batch waits for ticket budget (phase 6a: the freeze ahead then leaves the budget alone). */
+	/** Who holds an Architect batch ticket on a chunk ({@code <batch>/<key>}), or null (phase 6a: generated-chunk diagnosis). */
+	public static @Nullable String ticketHolder(long chunk) {
+		for (var e : TICKETS.entrySet()) {
+			for (var h : e.getValue().entrySet()) {
+				if (h.getValue().contains(chunk)) {
+					return e.getKey() + "/" + h.getKey();
+				}
+			}
+		}
+		return null;
+	}
+
+	/** A batch's ticket holders and how many chunks each holds (DevBridge). */
+	public static Map<String, Integer> ticketsOf(String batchId) {
+		Map<String, Integer> out = new java.util.TreeMap<>();
+		Map<String, Set<Long>> held = TICKETS.get(batchId);
+		if (held != null) {
+			held.forEach((k, v) -> out.put(k, v.size()));
+		}
+		String w = TICKET_WAITER.get(batchId);
+		if (w != null) {
+			out.put("waiter:" + w, 0);
+		}
+		return out;
+	}
+
+	static boolean hasWaiter(QBatch b) {
+		String w = TICKET_WAITER.get(b.id);
+		QItem wi = w == null ? null : b.item(w);
+		return wi != null && (wi.status == QItem.Status.QUEUED || wi.status == QItem.Status.WAITING);
+	}
 
 	private static boolean ticketTurn(QBatch b, QItem i) {
 		String w = TICKET_WAITER.get(b.id);
@@ -1183,7 +1435,7 @@ public final class Batches {
 		TICKET_WAITER.remove(b.id, i.key);
 	}
 
-	private static void untickItem(MinecraftServer server, QBatch b, String key) {
+	static void untickItem(MinecraftServer server, QBatch b, String key) {
 		Map<String, Set<Long>> held = TICKETS.get(b.id);
 		Set<Long> cs = held == null ? null : held.remove(key);
 		String dim = levels.remove(b.id + "/" + key);
@@ -1191,9 +1443,7 @@ public final class Batches {
 		if (cs == null || level == null) {
 			return;
 		}
-		for (long c : cs) {
-			level.getChunkSource().removeTicketWithRadius(TICKET, ChunkPos.unpack(c), 0);
-		}
+		ChunkTickets.release(dim, cs, source(level));
 		String w = TICKET_WAITER.get(b.id);
 		QItem wi = w == null ? null : b.item(w);
 		if (wi != null && wi.status == QItem.Status.WAITING) {
@@ -1243,13 +1493,15 @@ public final class Batches {
 		CHANGED.clear();
 		TICKETS.clear();
 		levels.clear();
+		ChunkTickets.reset();
+		RegionItems.reset();
 		CANCELLED.values().forEach(fs -> fs.forEach(f -> f.completeExceptionally(new IllegalStateException("the world stopped"))));
 		CANCELLED.clear();
 		next = 1;
 		tick = 0;
 	}
 
-	private static @Nullable MinecraftServer serverOf() {
+	static @Nullable MinecraftServer serverOf() {
 		return Placement.server();
 	}
 }
