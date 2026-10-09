@@ -88,6 +88,17 @@ function copyPlan(planId, to) {
   return to;
 }
 
+/** The y span the plan writes (its virtual world's written cells and its lots' boxes). */
+async function writtenY(planDir, ir) {
+  const { buildVirtual } = await import('../kit/lib/region/vworld.mjs');
+  const blobs = (sha) => { const f = path.join(planDir, 'blobs', `${sha}.bin`); return fs.existsSync(f) ? fs.readFileSync(f) : null; };
+  const { vw } = buildVirtual({ ir, survey: fs.readFileSync(path.join(planDir, 'survey.bin')), blobs });
+  let lo = Infinity, hi = -Infinity;
+  vw.eachWritten((x, y) => { if (y < lo) lo = y; if (y > hi) hi = y; });
+  for (const l of ir.lots) { lo = Math.min(lo, l.box.minY - 1); hi = Math.max(hi, l.box.maxY); }
+  return [Math.max(ir.claim.minY, lo), Math.min(ir.claim.maxY, hi)];
+}
+
 async function shoot(cams, dir) {
   fs.mkdirSync(dir, { recursive: true });
   const out = {};
@@ -195,7 +206,12 @@ async function runScenario(id) {
   fs.copyFileSync(path.join(planDir, 'siteplan.json'), path.join(out, 'previews', 'siteplan.json'));
   fs.copyFileSync(path.join(planDir, 'summary.txt'), path.join(out, 'summary.txt'));
   const ir = JSON.parse(fs.readFileSync(path.join(planDir, 'ir.json'), 'utf8'));
-  const box = [claim[0] - 8, ir.claim.minY, claim[1] - 8, claim[2] + 8, ir.claim.maxY, claim[3] + 8];
+  // the box: the claim + 8 over the written y span +-8 (the plan's virtual world and its lots), as 6a's exactness box
+  const ys = await writtenY(planDir, ir);
+  const box = [claim[0] - 8, ys[0] - 8, claim[1] - 8, claim[2] + 8, ys[1] + 8, claim[3] + 8];
+  // the prepared chunks tick a while first (fresh chunks settle fluids and schedule their first block ticks), player at the centre
+  await L.tp((claim[0] + claim[2]) / 2, sc.fixture.yRange[1], (claim[1] + claim[3]) / 2);
+  await L.settle(90_000);
   // the pristine cameras, then the before dump and the snap
   let before = null;
   if (!flat) { t0 = Date.now(); before = await shoot(cams, path.join(out, 'before')); T('beforeShots', t0); }
@@ -237,7 +253,7 @@ async function runScenario(id) {
   T('remove', t0);
   await L.settle(10_000);
   const diff = await L.call('dev.region.hash', { box, mode: 'diff', file: path.join(raw, 'snap.gz') }, 4 * 3_600_000);
-  const exact = { kind: flat ? 'E-flat' : 'E-normal', box, cellsWritten: rec.cellsWritten, removed: rm.removed, restored: rm.restored, mismatches: diff.mismatches, classes: diff.classes, sample: (diff.sample ?? diff.mismatchSample ?? []).slice(0, 50) };
+  const exact = { kind: flat ? 'E-flat' : 'E-normal', box, cellsWritten: rec.cellsWritten, removed: rm.removed, restored: rm.restored, mismatches: diff.mismatches, classes: diff.classes, list: (diff.list ?? []).slice(0, 400) };
   fs.writeFileSync(path.join(out, 'exact.json'), `${JSON.stringify(exact, null, 2)}\n`);
   await L.leaveWorld();
   const metrics = await computeMetrics({ sc, out, planDir, ir, irShas, mspt, cps, exact, flat });
@@ -281,7 +297,9 @@ async function computeMetrics({ sc, out, planDir, ir, irShas, mspt, cps, exact, 
     const dir = path.join(lib6.LIBRARY, entry);
     let j;
     try { j = JSON.parse(execFileSync('node', [path.join(root, 'kit', 'check.mjs'), path.join(dir, `${entry}.nbt`), path.join(dir, `${entry}.blueprint.json`), '--json', '--restraint', sc.restraint ?? 'rustic']).toString().trim().split('\n').pop()); } catch (e) { j = JSON.parse(String(e.stdout ?? '{}').trim().split('\n').pop() || '{"errors":["unreadable"]}'); }
-    buildings.push({ entry, errors: (j.errors ?? []).length, errorList: j.errors ?? [], restraint: (j.warnings ?? []).filter((w) => w.startsWith('restraint')), metrics: { detailNoise: j.metrics?.detailNoise ?? null, accentShare: j.metrics?.accentShare ?? null } });
+    // the bar reads detailNoise and accentShare against the restraint (as 5a); other restraint lines are recorded only
+    const rw = (j.warnings ?? []).filter((w) => w.startsWith('restraint'));
+    buildings.push({ entry, errors: (j.errors ?? []).length, errorList: j.errors ?? [], restraint: rw.filter((w) => /detail ?noise|accent/i.test(w)), restraintOther: rw.filter((w) => !/detail ?noise|accent/i.test(w)), metrics: { detailNoise: j.metrics?.detailNoise ?? null, accentShare: j.metrics?.accentShare ?? null } });
   }
   const ts = await tileShas(planDir);
   const gFile = path.join(SCEN, 'goldens', `${short(sc)}.json`);
@@ -296,7 +314,7 @@ async function computeMetrics({ sc, out, planDir, ir, irShas, mspt, cps, exact, 
   const ex = flat ? { flat: exact, normal: exactOther, cellsWritten: exactOther?.cellsWritten ?? 0 } : { flat: exactOther, normal: exact, cellsWritten: exact.cellsWritten };
   const plan = { report: JSON.parse(fs.readFileSync(path.join(out, 'report.json'), 'utf8')) };
   const rows = M.bars({ plan, realised, palette, organic, buildings, mspt, cellsPerSecond: cps, exact: ex, determinism: { irShas, workersSame: ts.workersSame, golden }, spendUsd: 0, approval: 'pending' });
-  const metrics = { scenario: sc.id, variant: flat ? 'flat' : 'natural', rows, palette, organic, buildings, mspt, tiles: { irSha: ts.irSha, count: Object.keys(ts.tiles).length, cells: ts.cells, workersSame: ts.workersSame, golden }, exactSibling: sibling ? path.relative(out, sibling) : null,
+  const metrics = { scenario: sc.id, worldChanges: world.worldChanges, variant: flat ? 'flat' : 'natural', rows, palette, organic, buildings, mspt, tiles: { irSha: ts.irSha, count: Object.keys(ts.tiles).length, cells: ts.cells, workersSame: ts.workersSame, golden }, exactSibling: sibling ? path.relative(out, sibling) : null,
     realised: { M2: realised.metrics.M2 && { ...realised.metrics.M2, perNode: undefined }, M3: realised.metrics.M3, M4: realised.metrics.M4, M5: realised.metrics.M5, M8: realised.metrics.M8 && { ...realised.metrics.M8, unguardedSample: (realised.metrics.M8.unguardedSample ?? []).slice(0, 20) }, M10: realised.metrics.M10, findings: realised.findings.map((f) => `${f.rule} ${f.severity} ${f.part ?? '-'} x${f.count}`) } };
   fs.writeFileSync(path.join(out, 'metrics.json'), `${JSON.stringify(metrics, null, 2)}\n`);
   for (const r of rows) L.log(`  ${r.gated ? (r.pass ? 'ok  ' : 'FAIL') : 'rec '} ${r.label}: ${r.value}`);

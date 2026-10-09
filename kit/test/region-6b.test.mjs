@@ -109,11 +109,13 @@ test('ARWD: a realised check over before/after dumps of S1\'s virtual world (pla
   const box = { minX: c.minX, minY: lo - 2, minZ: c.minZ, maxX: c.maxX, maxY: hi + 2, maxZ: c.maxZ };
   const S = vw.pal.states;
   const before = await decodeArwd(encodeArwd(box, (x, y, z) => S[vw.base(x, y, z)]));
-  const after = await decodeArwd(encodeArwd(box, (x, y, z) => S[vw.get(x, y, z)]));
+  // one cell the world changed on its own (outside every planned cell and lot): not a written cell
+  const after = await decodeArwd(encodeArwd(box, (x, y, z) => (x === c.minX && z === c.minZ && y === box.minY ? 'minecraft:kelp_plant' : S[vw.get(x, y, z)])));
   assert.equal(after.cells.length, (box.maxX - box.minX + 1) * (box.maxY - box.minY + 1) * (box.maxZ - box.minZ + 1));
   const world = dumpWorld(before, after, c, { virtual: vw, lots: p.ir.lots });
   const real = checkRegion({ ir: p.ir, meta: p.meta, world, prefix: false });
   assert.equal(real.mode, 'realised');
+  assert.equal(world.worldChanges, 1, 'the world\'s own change is counted, not written');
   for (const k of ['M2', 'M3', 'M4', 'M8', 'M10']) assert.deepEqual(real.metrics[k], virt.metrics[k], `${k}: realised = virtual`);
   assert.deepEqual(real.findings.map((f) => `${f.rule}|${f.part}|${f.count}`).sort(), virt.findings.filter((f) => f.rule !== 'M1').map((f) => `${f.rule}|${f.part}|${f.count}`).sort());
 });

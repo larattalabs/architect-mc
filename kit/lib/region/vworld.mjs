@@ -343,8 +343,9 @@ export function encodeArwd(box, stateAt, lightAt = null) {
  * A world from two dumps of the same box: `before` (pristine) and `after` (realised). Cells that differ are the written
  * cells. `light` comes from the after dump when it carries it. With `virtual` (the plan's virtual world, buildVirtual's
  * `vw`) each written cell takes the part and walk flag the plan gave that cell (a realised cell the plan never wrote has no
- * part), planned walk cells the realise left unchanged keep their walk flag, and `lots` (the IR's) become obstacles as in
- * the virtual world: the realised metrics then read the same parts, floating groups and walk surfaces as the plan's check.
+ * part), a changed cell neither the plan nor a lot's child wrote is the world's own change (base, counted in
+ * `vw.worldChanges`), planned walk cells the realise left unchanged keep their walk flag, and `lots` (the IR's) become
+ * obstacles as in the virtual world: the realised metrics then read the same parts, floating groups and walk surfaces as the plan's check.
  */
 export function dumpWorld(before, after, claim, { virtual = null, lots = [] } = {}) {
   const pal = new Palette();
@@ -353,17 +354,29 @@ export function dumpWorld(before, after, claim, { virtual = null, lots = [] } = 
   const box = after.box;
   const inBox = (x, y, z) => x >= box.minX && x <= box.maxX && y >= box.minY && y <= box.maxY && z >= box.minZ && z <= box.maxZ;
   const air = pal.of(AIR);
-  const base = (x, y, z) => (inBox(x, y, z) ? pb[before.cells[before.at(x, y, z)]] : air);
+  // with `virtual`, a cell that changed between the dumps but that neither the plan nor a lot's child wrote is the world's
+  // own change (kelp growing, grass under water turning to dirt, fluids settling): it is part of the base, not written
+  const lotBoxes = virtual ? lots.map((l) => l.box) : [];
+  const inLot = (x, y, z) => lotBoxes.some((b) => x >= b.minX && x <= b.maxX && y >= b.minY && y <= b.maxY && z >= b.minZ && z <= b.maxZ);
+  const ours = (x, y, z) => !virtual || (virtual.flags(x, y, z) & F_WRITTEN) !== 0 || inLot(x, y, z);
+  const base = (x, y, z) => {
+    if (!inBox(x, y, z)) return air;
+    const i = before.at(x, y, z);
+    return virtual && pa[after.cells[i]] !== pb[before.cells[i]] && !ours(x, y, z) ? pa[after.cells[i]] : pb[before.cells[i]];
+  };
   const colTop = (x, z) => {
     if (x < box.minX || x > box.maxX || z < box.minZ || z > box.maxZ) return box.minY;
     for (let y = box.maxY; y >= box.minY; y--) if (!pal.air[base(x, y, z)]) return y;
     return box.minY;
   };
   const vw = new VWorld({ claim: { ...claim, minY: box.minY, maxY: box.maxY }, palette: pal, base, colTop });
+  let worldChanges = 0;
   for (let x = box.minX; x <= box.maxX; x++) for (let z = box.minZ; z <= box.maxZ; z++) for (let y = box.minY; y <= box.maxY; y++) {
     const i = after.at(x, y, z);
     const a = pa[after.cells[i]], b0 = pb[before.cells[before.at(x, y, z)]];
-    if (a !== b0) vw.set(x, y, z, a, virtual ? virtual.flags(x, y, z) & F_WALK : 0, virtual ? virtual.partAt(x, y, z) : -1);
+    if (a === b0) continue;
+    if (!ours(x, y, z)) { worldChanges++; continue; }
+    vw.set(x, y, z, a, virtual ? virtual.flags(x, y, z) & F_WALK : 0, virtual ? virtual.partAt(x, y, z) : -1);
   }
   if (virtual) {
     virtual.eachWritten((x, y, z, idx, f, part) => {
@@ -372,6 +385,7 @@ export function dumpWorld(before, after, claim, { virtual = null, lots = [] } = 
     });
   }
   for (const l of lots) vw.addLot(l);
+  vw.worldChanges = worldChanges;
   if (after.light) vw.lightAt = (x, y, z) => (inBox(x, y, z) ? after.light[after.at(x, y, z)] : 0);
   return vw;
 }
