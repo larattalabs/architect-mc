@@ -451,8 +451,8 @@ steps.nudges = async () => {
   await tp(0.5, 120, 0.5);
   {
     const p = await plan('crater_works', claim, { surveyLoad: 'bounded:256' });
-    const region = await realise(p.planId, { load: 'loaded', lotEntries: LOT_ENTRIES, fitLots: true });
-    const w = await waitFor(region, (s) => kinds(s).includes('PREPARE') || kinds(s).includes('MOVE_CLOSER'), 300_000, 'a PREPARE or MOVE_CLOSER action');
+    const region = await realise(p.planId, { lotEntries: LOT_ENTRIES, fitLots: true }); // the default load: generated chunks only
+    const w = await waitFor(region, (s) => kinds(s).includes('PREPARE'), 300_000, 'a PREPARE action');
     out.prepareActions = w.actions;
     if (kinds(w).includes('PREPARE')) {
       const a = await nudge(region, 'PREPARE');
@@ -509,24 +509,31 @@ steps.nudges = async () => {
     await call('dev.region.remove', { region, force: true }, 600_000).catch(() => null);
   }
   await leaveWorld();
-  // APPROVE_STAGE: a scripted dig in the claim after the plan; the realise (no auto approval) holds the drifted stage
+  // APPROVE_STAGE (6a's staged drift): no auto approval; ground and ways approved; then the land over every lot box rises
+  // 12 (a scripted fill) and the lots stage, approved, holds DRIFTED; the nudge approves it on the changed land
   await fresh('G6B Nudge Drift', FLAT);
   await tp(0.5, 120, 0.5);
   {
+    const api = async (args) => { const r = await cmd(`/apitest ${args}`); const line = (r.messages ?? []).find((m) => m.startsWith('{') || m.startsWith('[') || m === 'null'); return line === undefined ? r : JSON.parse(line); };
     const c2 = [-100, -100, 99, 99];
     const p = await plan('crater_works', c2, { surveyLoad: 'bounded:256' });
     await prepare(p.planId);
     const p2 = await plan('crater_works', c2, { surveyLoad: 'generated:64' });
-    const g = (p2.claimY ?? [-64, 319]);
-    // the flat world's ground is at y -61..-60 (the superflat preset): dig a 16x16 pit to bedrock's top
-    void g;
-    await cmd('/fill 55 -63 55 70 -60 70 minecraft:air');
+    const ir = readPlanJson(p2.planId, 'ir.json');
     const region = await realise(p2.planId, { lotEntries: LOT_ENTRIES, fitLots: true, autoApprove: false });
-    const w = await waitFor(region, (s) => kinds(s).includes('APPROVE_STAGE'), 600_000, 'APPROVE_STAGE');
+    const group = (await stateOf(region)).view.groupId;
+    const done = (st, name) => { const g = st.view.stages.find((x) => x.name === name); return g && g.tilesDone >= g.tilesTotal && g.state !== 'PLANNED'; };
+    for (const stage of ['ground', 'ways']) {
+      await api(`sapprove ${group} ${stage}`);
+      await waitFor(region, (st) => done(st, stage), 900_000, `stage ${stage}`);
+    }
+    for (const l of ir.lots) { const b = l.box; await cmd(`/fill ${b.minX} ${b.minY} ${b.minZ} ${b.maxX} ${b.minY + 11} ${b.maxZ} minecraft:stone`); }
+    await api(`sapprove ${group} lots`);
+    const w = await waitFor(region, (s2) => kinds(s2).includes('APPROVE_STAGE'), 300_000, 'APPROVE_STAGE');
     const a = await nudge(region, 'APPROVE_STAGE');
-    const st = await waitRegion(region, 3_600_000, async (s) => { if (kinds(s).includes('APPROVE_STAGE')) await nudge(region, 'APPROVE_STAGE'); });
-    check(a.done && ['PLACED', 'PARTIAL'].includes(st.view.state), `nudges: APPROVE_STAGE on the drifted stage (${JSON.stringify(w.actions.find((x) => x.kind === 'APPROVE_STAGE'))}): ${a.message}; the region ends ${st.view.state}`);
-    out.approveStage = { action: w.actions, nudge: a, state: st.view.state };
+    const st = await waitRegion(region, 3_600_000);
+    check(a.done && ['PLACED', 'PARTIAL'].includes(st.view.state), `nudges: APPROVE_STAGE on the drifted lots stage (${JSON.stringify(w.view.waiting)}; ${JSON.stringify(w.actions.find((x) => x.kind === 'APPROVE_STAGE'))}): ${a.message}; the region ends ${st.view.state}`);
+    out.approveStage = { waiting: w.view.waiting, action: w.actions, nudge: a, state: st.view.state, lots: st.view.lots.map((l) => l.state) };
     await call('dev.region.remove', { region, force: true }, 600_000).catch(() => null);
   }
   await leaveWorld();
