@@ -677,7 +677,10 @@ public final class RegionsImpl implements Regions {
 				return realise0(s, r, (Drift.Result) o[0], id[0], (String) o[1]);
 			} catch (RuntimeException e) {
 				if (id[0] != null && REGIONS.get(id[0]) == null) {
-					RegionBlobs.delete(RegionBlobs.dir(s.getWorldPath(LevelResource.ROOT), id[0]));
+					// refused before the record: the copies made for it go (the reserved id stays unused)
+					Path w = s.getWorldPath(LevelResource.ROOT);
+					RegionBlobs.delete(RegionBlobs.dir(w, id[0]));
+					RegionBlobs.delete(RegionStore.region(w, id[0]).resolve("volumes"));
 				}
 				throw e;
 			}
