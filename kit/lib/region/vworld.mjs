@@ -30,7 +30,7 @@ export class Palette {
     this.states = [];
     this.index = new Map();
     this.passable = []; this.floor = []; this.solid = []; this.barrier = []; this.fluid = []; this.water = []; this.lava = [];
-    this.natural = []; this.gravity = []; this.emit = []; this.opaque = []; this.cost = []; this.spawn = []; this.climb = []; this.air = [];
+    this.natural = []; this.gravity = []; this.stairs = []; this.emit = []; this.opaque = []; this.cost = []; this.spawn = []; this.climb = []; this.air = [];
     this.top = [];
     this.of(AIR);
   }
@@ -58,6 +58,7 @@ export class Palette {
     const vc = air ? 'AIR' : voxelClassOf(st.name);
     this.natural.push(NATURAL_CLASSES.has(vc));
     this.gravity.push(GRAVITY.test(st.name));
+    this.stairs.push(known && BLOCKS[st.name].family === 'stairs');
     this.emit.push(known ? emissionOf(st) : 0);
     this.opaque.push(known ? opticsOf(st) === 'opaque' : true);
     this.cost.push(known ? lightCost(st) : 15);

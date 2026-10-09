@@ -766,10 +766,10 @@ class Part {
    * takes `{center: [x, z], radius, top, bottom, start: angle}` instead of a polyline and winds down from `top` to
    * `bottom` around a 3x3 core. `railing`: a role for posts on both sides.
    */
-  stair(path, { width = 3, rise = 1, landingEvery = 8, carve = true, railing = null, spiral = false, material = 'structure', id, lights, _unsafeRise } = {}) {
+  stair(path, { width = 3, rise = 1, landingEvery = 8, carve = true, railing = null, spiral = false, material = 'structure', id, lights, _unsafeRise, solid = false } = {}) {
     this._requirePath('stair');
     if (rise !== 1) throw new Error(`part ${this.id}: stair rise must be 1`);
-    const r = this._stair(path, { width, landingEvery, carve, railing, spiral, material, kind: 'stair', lights, _unsafeRise });
+    const r = this._stair(path, { width, landingEvery, carve, railing, spiral, material, kind: 'stair', lights, _unsafeRise, solid });
     const sid = id ?? `${this.id}_stair_${this.region.paths.length + 1}`;
     this.region.paths.push({ id: sid, stage: this.stage, part: this.id, kind: 'stair', box: r.box });
     this.region.meta.paths[sid] = { kind: 'stair', part: this.id, stage: this.stage, width, landingEvery, cells: r.cells };
@@ -777,7 +777,7 @@ class Part {
     return { ...r, id: sid };
   }
 
-  _stair(path, { width = 3, landingEvery = 8, carve = true, railing = null, spiral = false, material = 'structure', kind = 'stair', lights, _unsafeRise }) {
+  _stair(path, { width = 3, landingEvery = 8, carve = true, railing = null, spiral = false, material = 'structure', kind = 'stair', lights, _unsafeRise, solid = false }) {
     const what = `part ${this.id}: ${kind}`;
     if (!(isInt(width) && width >= 1 && width <= 9)) throw new Error(`${what}: width must be 1..9`);
     if (!(isInt(landingEvery) && landingEvery >= 2 && landingEvery <= 64)) throw new Error(`${what}: landingEvery must be 2..64`);
@@ -815,7 +815,8 @@ class Part {
         l.sort((a, b) => a - b);
         for (let i = 1; i < l.length; i++) if (l[i] !== l[i - 1] && l[i] - l[i - 1] < 3) throw new Error(`${what}: spiral turns at ${k} are only ${l[i] - l[i - 1]} apart (make the radius larger)`);
       }
-      core = { c: s.center, top: s.top, bottom: s.bottom };
+      core = { c: s.center, top: s.top, bottom: s.bottom, r: s.core ?? null };
+      if (core.r !== null && !(isNum(core.r) && core.r >= 1 && core.r <= s.radius - 1.5)) throw new Error(`${what}: spiral core must be 1..radius - 1.5`);
     } else {
       if (!Array.isArray(path) || path.length < 2) throw new Error(`${what}: path must be 2+ points [x, y, z]`);
       const pts3 = path.map((p, i) => {
@@ -845,13 +846,16 @@ class Part {
     // treads: centre cells first, then the cross-sections; a column keeps one tread per 3 blocks of height, so the
     // inside of a turn never puts a tread in another tread's headroom
     const colTreads = new Map();
+    // (6b) solid: a block under every tread, so each step bears on the one below it (face contact down the flight: M3)
+    const supportsC = new Cols({ abs: 0 }, { abs: 0 });
     const tread = (x, y, z, m) => {
       const k = `${x},${z}`;
       const l = colTreads.get(k) ?? [];
-      if (l.some((v) => Math.abs(v - y) < 3)) return;
+      if (l.some((v) => Math.abs(v - y) < (solid ? 4 : 3))) return;
       l.push(y);
       colTreads.set(k, l);
       treads.add(x, z, y, y, m);
+      if (solid) supportsC.add(x, z, y - 1, y - 1, full);
       if (carve) head.add(x, z, y + 1, y + 2, null);
       grow(x, y, z); grow(x, y + 2, z);
     };
@@ -871,18 +875,25 @@ class Part {
     });
     this._colsOp(rails, COND.IF_NATURAL);
     this._colsOp(head, COND.IF_NATURAL);
-    if (core) {
+    if (core && core.r !== null) {
+      // (6b) a round core the treads bear on (face contact: no tread hangs in the air)
+      this._shapeOp({ kind: 'extrude', polygon: circlePolygon(core.c[0], core.c[1], core.r, 24), y0: { min: [{ floor: 1 }, { abs: core.bottom }] }, y1: { abs: core.top } }, full, COND.IF_NATURAL);
+      const [cx, cz] = core.c.map(round), cr = Math.ceil(core.r);
+      grow(cx - cr, core.bottom, cz - cr); grow(cx + cr, core.top, cz + cr);
+    } else if (core) {
       const [cx, cz] = core.c.map(round);
       this._shapeOp({ kind: 'box', min: [cx - 1, { min: [{ floor: 1 }, { abs: core.bottom }] }, cz - 1], max: [cx + 1, { abs: core.top }, cz + 1] }, full, COND.IF_NATURAL);
       grow(cx - 1, core.bottom, cz - 1); grow(cx + 1, core.top, cz + 1);
     }
+    if (solid) this._colsOp(supportsC, COND.IF_NATURAL);
     this._colsOp(treads, COND.IF_NATURAL, true);
     // (6b) lights: a lantern on a rail post (or the tread's outer edge) every `lights` cells
     if (lights) {
       const lm = this._mat('minecraft:lantern', `${kind} light`);
       const lc = new Cols({ abs: 0 }, { abs: 0 });
       for (let i = 0; i < cells.length; i += lights) {
-        const c = cells[i], k = railM !== null ? offs[offs.length - 1] + 1 : offs[offs.length - 1];
+        // on the rail post (above the rail), else in the side wall beside the tread (never in the walk's head room)
+        const c = cells[i], k = offs[offs.length - 1] + 1;
         lc.add(c.x + c.r[0] * k, c.z + c.r[1] * k, ys[i] + (railM !== null ? 2 : 1), ys[i] + (railM !== null ? 2 : 1), lm);
       }
       this._colsOp(lc, COND.IF_NATURAL);

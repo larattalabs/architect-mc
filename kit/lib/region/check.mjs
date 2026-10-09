@@ -9,6 +9,7 @@ import { centreCells, crossOffsets, rightOf, segmentAxis } from './geom.mjs';
 
 export const RULES = ['M1', 'M2', 'M3', 'M4', 'M5', 'M6', 'M7', 'M8', 'M9', 'M10', 'M11', 'M12', 'M13', 'M14'];
 const ERRORS = new Set(['M1', 'M13', 'M14']);
+// (finding() keeps at most 20 sample positions)
 const DIRS4 = [[1, 0], [-1, 0], [0, 1], [0, -1]];
 const DIRS6 = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]];
 export const WORLD_MIN_Y = -64, WORLD_MAX_Y = 319;
@@ -90,7 +91,8 @@ export function walkGraph(vw, starts) {
       if (!vw.inClaim(nx, nz)) continue;
       for (const ny of stands(nx, nz)) {
         if (ny > y + 1 || ny < y - 3) continue;
-        if (ny === y + 1 && !P.passable[vw.get(x, y + 2, z)]) continue;
+        // a step up needs head room for the jump, unless it is onto a stairs block (walked up without jumping)
+        if (ny === y + 1 && !P.passable[vw.get(x, y + 2, z)] && !P.stairs[vw.get(nx, ny - 1, nz)]) continue;
         if (ny < y) { let ok = true; for (let yy = ny + 2; yy <= y + 1; yy++) if (!P.passable[vw.get(nx, yy, nz)]) { ok = false; break; } if (!ok) continue; }
         push(nx, ny, nz);
       }
@@ -442,10 +444,10 @@ export function checkRegion({ ir, survey, blobs, volumes = [], meta = null, worl
         }
       }
       if (!isEdge) continue;
-      if (isOpen) { open++; if (sample.length < 20) sample.push([x, y, z]); } else guarded++;
+      if (isOpen) { open++; if (sample.length < 200) sample.push([x, y, z]); } else guarded++;
     }
     const edges = guarded + open;
-    metrics.M8 = { edgeCells: edges, guarded, unguarded: open, share: edges ? guarded / edges : 1 };
+    metrics.M8 = { edgeCells: edges, guarded, unguarded: open, share: edges ? guarded / edges : 1, unguardedSample: sample.slice(0, 200) };
     if (open) findings.push(finding('M8', null, null, open, sample, `${open} of ${edges} walk cell(s) beside a drop over 3 have no barrier of at least 1.5 (${(100 * guarded / Math.max(1, edges)).toFixed(1)}% guarded)`));
   });
 
