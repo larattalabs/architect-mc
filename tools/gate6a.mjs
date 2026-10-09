@@ -612,8 +612,10 @@ steps.megaB = async () => {
         if (stage === 'lots-2' && !relogDone && st.view.lots.filter((l) => l.state === 'placed').length > 50 + 10) {
           log('  relog in the middle of lots-2');
           const gb = await call('dev.chunks.generated');
+          out.events.push(...(await api('revents').catch(() => []))); // the apitest mod's events live in the client: kept across the relog
           await stopClient();
           await startClient(name);
+          await api('revents').catch(() => null); // hooks them again
           const ga = await call('dev.chunks.generated');
           off.loads += gb.loads - ga.loads;
           off.terrain += gb.terrain - ga.terrain;
@@ -632,12 +634,21 @@ steps.megaB = async () => {
   const st = await waitRegion(region, 3_600_000);
   out.state = st;
   out.wallSeconds = (Date.now() - t0) / 1000;
-  out.events = await api('revents').catch(() => []);
+  out.events.push(...(await api('revents').catch(() => [])));
   write('megabench-B.json', out);
+  // per-stage progress events (S9): REGION_PROGRESS events whose stage list shows each stage moving (tilesDone rising or PLACING)
+  const seen = {};
+  for (const e of out.events.filter((x) => x.event === 'REGION_PROGRESS' && x.id === region)) {
+    for (const part of String(e.what).split(' ').slice(1)) {
+      const [n, state] = part.split(':');
+      if (state === 'PLACING' || state === 'PLACED') seen[n] = (seen[n] ?? 0) + 1;
+    }
+  }
   const failed = Object.keys(st.failed ?? {});
   check(failed.length === 0 && st.view.state === 'PLACED', `megaB: ${st.view.state}, ${failed.length} failed items`, st.failed);
   check(out.relog?.resumedSeconds != null && out.relog.resumedSeconds <= 60, `megaB: resumed ${out.relog?.resumedSeconds} s after the player reached a waiting lots-2 item after the relog (${out.relog?.item})`);
   check(out.sidecarKill?.resumedSeconds != null && out.sidecarKill.resumedSeconds <= 30, `megaB: resumed ${out.sidecarKill?.resumedSeconds} s after the sidecar came back, at a waiting ways item (${out.sidecarKill?.item})`);
+  check(ir.stages.every((n) => seen[n] > 0), `megaB: REGION_PROGRESS events for every stage (${JSON.stringify(seen)}; ${out.events.length} events in all)`);
   check(Object.keys(out.stages).length === ir.stages.length && Object.values(out.stages).every((x) => x.chunksLoaded >= 0), `megaB: per-stage seconds and chunks loaded ${JSON.stringify(out.stages)}`);
   await leaveWorld();
   return out;

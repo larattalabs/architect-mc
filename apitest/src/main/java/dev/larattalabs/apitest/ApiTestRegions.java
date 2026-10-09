@@ -53,11 +53,22 @@ final class ApiTestRegions {
 		}
 		hooked = true;
 		SiteEvents.REGION_STATE.register(v -> event("REGION_STATE", v.id(), v.state().name()));
-		SiteEvents.REGION_PROGRESS.register(v -> event("REGION_PROGRESS", v.id(), v.state().name()));
+		// progress fires up to once a second: one entry per change of the stages' states, with a count of the events it stands for
+		SiteEvents.REGION_PROGRESS.register(v -> event("REGION_PROGRESS", v.id(), v.state().name() + " " + v.stages().stream()
+			.map(st -> st.name() + ":" + st.state().name()).collect(java.util.stream.Collectors.joining(" "))));
 		SiteEvents.PREPARE_PROGRESS.register(v -> event("PREPARE_PROGRESS", v.planId(), v.state().name() + " " + v.chunksGenerated() + "/" + v.chunksTotal()));
 	}
 
 	private static void event(String kind, String id, String what) {
+		synchronized (EVENTS) {
+			if (!EVENTS.isEmpty()) {
+				JsonObject last = EVENTS.get(EVENTS.size() - 1).getAsJsonObject();
+				if (last.get("event").getAsString().equals(kind) && last.get("id").getAsString().equals(id) && last.get("what").getAsString().equals(what)) {
+					last.addProperty("n", (last.has("n") ? last.get("n").getAsInt() : 1) + 1);
+					return;
+				}
+			}
+		}
 		JsonObject o = new JsonObject();
 		o.addProperty("event", kind);
 		o.addProperty("id", id);
