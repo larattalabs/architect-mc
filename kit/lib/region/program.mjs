@@ -23,6 +23,7 @@ import { columnCells, compileShape, polygonDistance, sdAt, shapeError, staticY, 
 import { encodeArbl } from '../realise.mjs';
 import { ruleError } from '../material.mjs';
 import { sha256Hex } from './pack.mjs';
+import { floatingIsland } from '../forms/floatingIsland.mjs';
 import { CARDINALS, cardinalOf, centreCells, circlePolygon, compassDir, crossOffsets, dominantCardinal, rightOf, segmentAxis } from './geom.mjs';
 
 export const COND = Object.freeze({ IF_NATURAL: 0, IF_SOLID_NATURAL: 1, IF_AIR_OR_FLUID: 2, ALWAYS_OURS: 3 });
@@ -300,6 +301,21 @@ export class Region {
   }
 
   /**
+   * (6b) A floating island (lib/forms/floatingIsland.mjs) as form part `id`, declared floating with an anchor `anchor`
+   * (default: the part id) at its top centre. Returns the generator's result (pads with their y, the anchor).
+   */
+  floatingIsland(id, params, { stage, anchor } = {}) {
+    const isl = floatingIsland({ ...params, seed: params.seed ?? fnv64(this.ctx.seed, 'island', id).hex });
+    this.form(id, isl, { stage });
+    const name = anchor ?? id;
+    this.anchor(name, isl.anchor);
+    this.floating([id], { anchor: name });
+    const m = this.meta.parts[id];
+    m.island = { at: isl.params.at, r: isl.params.r, pads: isl.pads, anchor: isl.anchor };
+    return isl;
+  }
+
+  /**
    * (6b) A generated form (plan time): `gen` is a generator result `{ops, bounds, generator, version, params, seed}`; its ops
    * go into part `id` (created in `stage`) and its provenance into the IR's `forms`.
    */
@@ -308,8 +324,11 @@ export class Region {
     const from = p.ops.length;
     for (const op of gen.ops) {
       if (op.op === 'shape') { const e = shapeError(op.shape); if (e) throw new Error(`form ${id}: ${e}`); }
-      if (op.material && typeof op.material === 'object') { const e = ruleError(op.material.rule, `form ${id} material`); if (e) throw new Error(e); }
-      p._push({ ...op, cond: op.cond ?? COND.IF_AIR_OR_FLUID, walk: !!op.walk });
+      const o = { ...op, cond: op.cond ?? COND.IF_AIR_OR_FLUID, walk: !!op.walk };
+      // role names resolve here (the IR holds block states only)
+      if (op.op === 'columns') o.materials = op.materials.map((m) => this.material(m, `form ${id} material`));
+      else o.material = op.material && typeof op.material === 'object' ? this.materialRule(op.material, `form ${id} material`) : this.material(op.material, `form ${id} material`);
+      p._push(o);
     }
     this.forms.push({ id, generator: gen.generator, version: gen.version, params: gen.params, seed: gen.seed, bounds: gen.bounds, part: id, opsFrom: from, opsTo: p.ops.length });
     (this.meta.parts[id] ??= {}).kind = 'form';

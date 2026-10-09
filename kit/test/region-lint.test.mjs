@@ -82,7 +82,8 @@ test('the lint catches what it should (self-check on a snippet)', () => {
 });
 
 test('the plan path avoids trig, exp/log/pow and the exponent operator (same IR on every Node major)', () => {
-  const files = ['lib/region/program.mjs', 'lib/region/plan.mjs', 'lib/region/survey.mjs', 'lib/region/geom.mjs', ...fs.readdirSync(path.join(KIT, 'regions')).filter((f) => f.endsWith('.mjs')).map((f) => `regions/${f}`)];
+  const files = ['lib/region/program.mjs', 'lib/region/plan.mjs', 'lib/region/survey.mjs', 'lib/region/geom.mjs', ...fs.readdirSync(path.join(KIT, 'regions')).filter((f) => f.endsWith('.mjs')).map((f) => `regions/${f}`),
+    ...fs.readdirSync(path.join(KIT, 'lib', 'forms')).filter((f) => f.endsWith('.mjs')).map((f) => `lib/forms/${f}`)];
   const bad = [];
   for (const rel of files) {
     const f = path.join(KIT, rel);
