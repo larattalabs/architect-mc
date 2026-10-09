@@ -110,7 +110,10 @@ export interface PickAnswer {
   reason: string;
 }
 
-/** Why an answer is not a valid pick for this catalogue and claim ([] = valid). A fit must also hold the claim. */
+/**
+ * Why an answer is not a valid pick for this catalogue and claim ([] = valid). A fit must also hold the claim: its sides
+ * within the program's claim range either way round (the catalogue's [w, d] read as unordered sides).
+ */
 export function validatePick(answer: unknown, programs: CatalogueProgram[], claimSize: [number, number]): string[] {
   const errors: string[] = [];
   if (!answer || typeof answer !== 'object' || Array.isArray(answer)) return ['the answer is not an object'];
@@ -145,10 +148,13 @@ export function validatePick(answer: unknown, programs: CatalogueProgram[], clai
     }
   }
   if (a.fits === true && prog.claim) {
+    // either way round: the shorter side against the shorter bound, the longer against the longer
     const [w, d] = claimSize;
     const lo = prog.claim.min;
     const hi = prog.claim.max;
-    if ((lo && (w < lo[0] || d < lo[1])) || (hi && (w > hi[0] || d > hi[1])))
+    const [cs, cl] = [Math.min(w, d), Math.max(w, d)];
+    const fitsIn = (b: [number, number], ok: (c: number, x: number) => boolean) => ok(cs, Math.min(b[0], b[1])) && ok(cl, Math.max(b[0], b[1]));
+    if ((lo && !fitsIn(lo, (c, x) => c >= x)) || (hi && !fitsIn(hi, (c, x) => c <= x)))
       errors.push(`${prog.id} takes a claim of ${lo ? `${lo[0]}x${lo[1]}` : 'any'} to ${hi ? `${hi[0]}x${hi[1]}` : 'any'} columns; this claim is ${w}x${d}, so it does not fit`);
   }
   return errors;

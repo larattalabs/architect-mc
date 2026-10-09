@@ -42,7 +42,8 @@ export default function (ctx) {
   const vals = new Uint8Array(w * d * 2);
   for (let j = 0; j < d; j++) for (let i = 0; i < w; i++) { const v = 4 + ((i * 7 + j * 3) % 9); vals[2 * (i + j * w)] = v; }
   r.blob('mound', { minX: 40, minZ: 40, width: w, depth: d, values: vals, kind: 'heightfield' });
-  r.part('mound', { stage: 'ground' }).fill({ kind: 'heightfield', blob: 'mound', scale: 1, y0: { abs: 64 } }, 'minecraft:stone', { cond: 3 });
+  r.field('wet', { type: 'u8', minX: 40, minZ: 40, width: w, depth: d, res: 1, values: Array.from({ length: w * d }, (_, k) => ((k % w) * 5 + Math.floor(k / w) * 11) % 256) });
+  r.part('mound', { stage: 'ground' }).fill({ kind: 'heightfield', blob: 'mound', scale: 1, y0: { abs: 64 } }, { rule: { rule: [{ when: { field: 'wet', gte: 128 }, mat: 'minecraft:mossy_cobblestone' }], default: 'minecraft:stone', dither: 'none' } }, { cond: 3 });
   r.part('egg', { stage: 'top' }).fill({ kind: 'ellipsoid', c: [64, { abs: 84 }, 64], r: [10, 6, 12] }, 'minecraft:andesite', { cond: 3 });
   r.anchor('entrance', [10, 10]);
   r.anchor('spawn', [12, 10]);
@@ -143,10 +144,10 @@ describe.skipIf(!hasF2)('format-2 IRs with the real kit: side blobs, blob_unknow
 
   it('plans a format-2 IR: irFormat 2, requires, the side blob registered; check/previews or a checkError', () => {
     expect(planned.irFormat).toBe(2);
-    expect(planned.requires).toEqual(expect.arrayContaining(['blobs:side', 'shape:ellipsoid']));
+    expect(planned.requires).toEqual(expect.arrayContaining(['blobs:side', 'shape:ellipsoid', 'fields', 'material:rule']));
     expect(planned.kitVersion).toBe('0.12.0');
-    expect(planned.blobs).toHaveLength(1);
-    const b = planned.blobs![0]!;
+    expect(planned.blobs!.map((x) => x.kind).sort()).toEqual(['field', 'heightfield']);
+    const b = planned.blobs!.find((x) => x.name === 'mound')!;
     expect(b).toMatchObject({ name: 'mound', kind: 'heightfield' });
     const sc = sidecars[0]!;
     expect(sc.blobs.get(b.blobId)).toMatchObject({ kind: 'region.blob', size: b.bytes });
@@ -181,10 +182,12 @@ describe.skipIf(!hasF2)('format-2 IRs with the real kit: side blobs, blob_unknow
     const got: Got = new Map();
     const c = client(got);
     expect(await ask(fresh, req, c)).toMatchObject({ ok: false, error: 'ir_unknown' });
-    const b = planned.blobs![0]!;
-    expect(await ask(fresh, { ...req, ir: planned.ir }, c)).toMatchObject({ ok: false, error: `blob_unknown ${b.sha}` });
-    const id = fresh.blobs.put({ kind: 'region.blob', chunks: [sidecars[0]!.blobs.read(b.blobId).toString('base64')] }).blobId;
-    expect(await ask(fresh, { ...req, blobs: { [b.sha]: id } }, c)).toMatchObject({ ok: true });
+    const shas = planned.blobs!.map((x) => x.sha).sort();
+    const unknown = await ask(fresh, { ...req, ir: planned.ir }, c);
+    expect(unknown.ok).toBe(false);
+    expect(unknown.error!.replace('blob_unknown ', '').split(',').sort()).toEqual(shas);
+    const ids = Object.fromEntries(planned.blobs!.map((x) => [x.sha, fresh.blobs.put({ kind: 'region.blob', chunks: [sidecars[0]!.blobs.read(x.blobId).toString('base64')] }).blobId]));
+    expect(await ask(fresh, { ...req, blobs: ids }, c)).toMatchObject({ ok: true });
     await until(() => got.size === 1, 30_000);
     expect((got.values().next().value as { sha: string }).sha).toBe(direct(t.key, t.stage, t.set, heightsOf(t.key)).sha);
   });
@@ -205,5 +208,78 @@ describe.skipIf(!hasF2)('format-2 IRs with the real kit: side blobs, blob_unknow
       expect(all.sha).toBe(direct(key, null, null, surveyLib.windowFromSurvey(s, key)).sha);
       expect(ground.sha).toBe(direct(key, null, null, surveyLib.windowFromSurvey(s, key), groundOnly).sha);
     }
+  });
+});
+
+// ---- the kit's check, previews and catalogue (skipped until the kit has them) ------------------------------
+
+const TOOL = fs.existsSync(path.join(KIT, 'tools', 'region.mjs')) ? fs.readFileSync(path.join(KIT, 'tools', 'region.mjs'), 'utf8') : '';
+const hasCheck = fs.existsSync(path.join(KIT, 'lib', 'region', 'check.mjs')) && fs.existsSync(path.join(KIT, 'lib', 'region', 'preview.mjs')) && /['"]check['"]/.test(TOOL) && !/is phase 6b/.test(TOOL);
+const hasCatalogue = /['"]catalogue['"]/.test(TOOL);
+
+describe.skipIf(!hasCheck && !hasCatalogue)("the real kit's check, previews and catalogue through the sidecar", () => {
+  let root: string;
+  let sc: Sidecar;
+  const events: Outbound[] = [];
+  const ask = async (msg: Record<string, unknown>) => {
+    let ack: { ok: boolean; error?: string; result?: Record<string, unknown> } | undefined;
+    await sc.handle({ v: 1, id: 'q', ...msg } as never, (m) => {
+      if (m.type === 'ack') ack = m;
+    });
+    return ack!;
+  };
+  const CL = { minX: 0, minZ: 0, maxX: 191, maxZ: 191, minY: -64, maxY: 319 };
+
+  beforeAll(async () => {
+    root = tempDir('arch-region-check-');
+    const cfg = loadConfig(['--data', path.join(root, 'data'), '--library', path.join(root, 'library'), '--kit', KIT, '--backend', 'sim'], {});
+    fs.mkdirSync(cfg.dataDir, { recursive: true });
+    cfg.simStepMs = 10;
+    sc = new Sidecar(cfg, new Store(cfg.dataDir, { debounceMs: 5 }), memoryLogger());
+    sc.subscribe((m) => events.push(m));
+    await sc.start(new SimDesigner(sc, 5));
+  });
+  afterAll(async () => {
+    await sc.regions.idle();
+    await sc.close();
+    rmrf(root);
+  });
+
+  it.skipIf(!hasCheck)('region_small: the plan carries the report and every preview, within regionCheckMs; region.check and region.preview re-run them', async () => {
+    const surveyBlobId = sc.blobs.putBytes(survey(), 'survey', 'bin');
+    const a = await ask({ type: 'region.plan', program: 'region_small', params: {}, seed: '3', claim: CL, surveyBlobId });
+    expect(a.ok, a.error).toBe(true);
+    const planId = a.result!.planId as string;
+    await until(() => events.some((e) => (e.type === 'region.planned' || e.type === 'region.failed') && e.planId === planId), 300_000, 50);
+    const p = events.find((e): e is Planned => e.type === 'region.planned' && e.planId === planId)!;
+    expect(p, JSON.stringify(events.find((e) => e.type === 'region.failed' && e.planId === planId))).toBeDefined();
+    expect(p.checkError).toBeUndefined();
+    expect(p.report).toMatchObject({ format: 1, irSha: p.irSha });
+    expect(Array.isArray(p.report!.findings)).toBe(true);
+    for (const v of ['top', 'section', 'iso', 'siteplan']) expect(p.previews![v]!.length, v).toBeGreaterThan(0);
+    expect(p.sitePlan).toMatchObject({ format: 1 });
+    expect(p.checkMs! + p.renderMs!).toBeLessThan(sc.config.regions.checkMs);
+    expect(events.filter((e) => e.type === 'region.progress' && e.planId === planId).map((e) => (e as { phase: string }).phase)).toEqual(['planning', 'checking', 'rendering']);
+    const c = await ask({ type: 'region.check', planId });
+    expect(c.ok, c.error).toBe(true);
+    expect(c.result!.report).toMatchObject({ irSha: p.irSha });
+    const v = await ask({ type: 'region.preview', planId, views: ['top', 'siteplan'] });
+    expect(v.ok, v.error).toBe(true);
+    expect(Object.keys(v.result!.paths as object).sort()).toEqual(['siteplan', 'top']);
+    console.log(`[numbers] region_small 192x192: plan ${p.ms} ms, check ${p.checkMs} ms, render ${p.renderMs} ms`);
+  }, 360_000);
+
+  it.skipIf(!hasCatalogue)('the catalogue lists programs; a scripted pick of the first one is PICKED', async () => {
+    const programs = await sc.regions.catalogue();
+    expect(programs.length).toBeGreaterThan(0);
+    expect(programs.map((x) => x.id)).not.toContain('mega_bench');
+    const first = programs[0]!;
+    const a = await ask({ type: 'region.design', brief: 'a test site', claim: { minX: 0, minZ: 0, maxX: 255, maxZ: 255, minY: -64, maxY: 319 }, surveyBlobId: sc.blobs.putBytes(arsv(0, 0, 256, 256, () => 64), 'survey', 'bin'), plan: false, ext: { 'architect:simAnswers': [{ fits: true, program: first.id, params: {}, reason: 'scripted' }] } });
+    expect(a.ok, a.error).toBe(true);
+    const id = a.result!.designId as string;
+    await until(() => ['done', 'failed'].includes(sc.designs.get(id)?.status ?? ''), 30_000);
+    const d = sc.designs.get(id)!;
+    // a 256x256 claim may be outside the first program's claim range: then the scripted fit is (correctly) not valid
+    expect(['PICKED', 'NO_TEMPLATE']).toContain(d.result?.outcome);
   });
 });

@@ -525,6 +525,11 @@ describe('region.design units: catalogue, validation, survey summary, prompt', (
     expect(v({ program: 'crater_works', params: { lining: 'gold' } })).toEqual(['lining must be one of rock, brick (got "gold")']);
     expect(v({ program: 'crater_works', params: { size: 3 } })[0]).toMatch(/has no param "size"/);
     expect(v({ program: 'crater_works' }, [64, 64])[0]).toMatch(/takes a claim of 96x96 to 400x400 columns; this claim is 64x64/);
+    // either way round
+    const long = parseCatalogue({ programs: [{ id: 'rift', description: 'r', params: {}, claim: { min: [64, 96], max: [128, 400] } }] });
+    expect(validatePick({ fits: true, program: 'rift', params: {}, reason: 'x' }, long, [64, 300])).toEqual([]);
+    expect(validatePick({ fits: true, program: 'rift', params: {}, reason: 'x' }, long, [300, 64])).toEqual([]);
+    expect(validatePick({ fits: true, program: 'rift', params: {}, reason: 'x' }, long, [300, 300])[0]).toMatch(/this claim is 300x300/);
     expect(validatePick({ fits: false, program: 'crater_works', params: {}, reason: 'no' }, PROGRAMS, [64, 64])).toEqual([]);
     expect(validatePick('nope', PROGRAMS, [1, 1])).toEqual(['the answer is not an object']);
     expect(cleanParams({ radius: 300, lit: false, size: 1 }, PROGRAMS[0])).toEqual({ lit: false });
