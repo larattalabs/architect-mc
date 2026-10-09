@@ -58,7 +58,19 @@ export default function riftCity(ctx) {
   r.part('rift', { stage: 'ground' }).carve(rift, { lining, liningDepth: 1 });
   // the floor: flat at floorY - 1
   const floor = r.part('floor', { stage: 'ground' });
-  floor.fill({ kind: 'box', min: [x0 - half + 4, floorY - 3, cz - half + 3], max: [x1 + half - 4, floorY - 1, cz + half - 3] }, lining, { cond: 0 });
+  // the floor's damp: a field (a side blob) high along the water corridor at cz, with a hashed grain; the floor's top reads
+  // it (mud by the water, moss a little further out, the lining elsewhere)
+  const fx0 = x0 - half + 4, fz0 = cz - half + 3, fw = x1 + half - 4 - fx0 + 1, fd = cz + half - 3 - fz0 + 1;
+  const damp = new Array(fw * fd);
+  for (let j = 0; j < fd; j++) for (let i = 0; i < fw; i++) {
+    let h = Math.imul((fx0 + i) * 73856093 ^ (fz0 + j) * 19349663, 0x9e3779b1) >>> 0;
+    h = (h ^ (h >>> 15)) % 81;
+    damp[i + j * fw] = 255 - 24 * Math.abs(fz0 + j - cz) + h - 40;
+  }
+  r.field('damp', { type: 'u8', minX: fx0, minZ: fz0, width: fw, depth: fd, res: 1, values: damp });
+  floor.fill({ kind: 'box', min: [x0 - half + 4, floorY - 3, cz - half + 3], max: [x1 + half - 4, floorY - 2, cz + half - 3] }, lining, { cond: 0 });
+  floor.fill({ kind: 'box', min: [x0 - half + 4, floorY - 1, cz - half + 3], max: [x1 + half - 4, floorY - 1, cz + half - 3] },
+    { rule: { rule: [{ when: { field: 'damp', gte: 200 }, mat: 'minecraft:mud' }, { when: { field: 'damp', gte: 150 }, mat: 'minecraft:mossy_cobblestone' }], default: lining } }, { cond: 0 });
   floor.fill({ kind: 'box', min: [x0 - half + 4, floorY, cz - half + 3], max: [x1 + half - 4, floorY + 8, cz + half - 3] }, null, { cond: 0 }); // the warp's bumps off the floor
 
   // ---- ledges: mid depth, LW wide, on both walls, the north one broken round the hall
