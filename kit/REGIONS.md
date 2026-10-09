@@ -494,3 +494,36 @@ Findings are sorted by (rule, part, stage); `summary.txt` is one line per findin
 ## `siteplan.json`
 
 As CONTRACT §3.4 with the graph marked `derived: true` (S-6b-1); JSON Schema `kit/schemas/siteplan-1.json`.
+
+## Kit CLI and modules (6b)
+
+```
+node kit/tools/region.mjs plan <program.mjs> ... [--blobs-out <dir>] [--volumes <dir>]      (6a args unchanged)
+node kit/tools/region.mjs check <ir.json> --survey s.bin [--blobs <dir>] [--volumes <dir>] [--out <dir>] [--json]
+node kit/tools/region.mjs preview <ir.json> --survey s.bin [--blobs <dir>] [--views top,section,iso,siteplan]
+     [--axes <axes.json>] [--out <dir>] [--json]
+node kit/tools/region.mjs catalogue [--json]
+node kit/tools/volume.mjs decode <arvx> [--slice y] [--json]
+```
+
+- `plan --blobs-out` writes the side blobs as `<dir>/<sha>.bin`; `--volumes <dir>` holds frozen volumes as
+  `<dir>/<sha>.bin` (ARVX, gzip) that `r.needVolume(box)` may read. `plan.json` gains `needVolumes`, `irFormat`, `requires`.
+- `check` writes `<out>/report.json` and `<out>/summary.txt`; its last JSON line is `{ok: true, report: {ok, errors,
+  warnings}, ms}` (exit 0 even with findings; 1 only when the check itself failed).
+- `preview` writes `<out>/previews/top.png`, `section-<n>.png`, `iso.png`, `siteplan.svg`, `siteplan.png` and
+  `<out>/siteplan.json`; its last JSON line is `{ok: true, paths: {view: [absolute path]}, sitePlan: <path>, ms}`.
+- `catalogue` prints `{programs: [{id, description, params: {name: {type, min, max, default}}, needs: {minFlat, water,
+  relief}, claim: {min: [w, d], max: [w, d]}}]}` for every bundled program whose module exports `catalogue` (an object;
+  `catalogue = false` or none leaves it out: `mega_bench`, `region_small`).
+- Modules: `lib/region/check.mjs` (`checkRegion({ir, survey, blobs, volumes, source?}) -> report`),
+  `lib/region/vworld.mjs` (the virtual world and the dump-backed cell source), `lib/region/preview.mjs`
+  (`renderPreviews({ir, survey, blobs, views, axes, outDir}) -> {paths, sitePlan}`), `lib/region/siteplan.mjs`,
+  `lib/region/volume.mjs` (ARVX), `lib/region/dump.mjs` (ARWD), `lib/forms/floatingIsland.mjs`, `lib/material.mjs`.
+
+## Ghost tiles (the region ghost, client)
+
+`region.tiles.request {planId, irSha, preview: true, tiles: [{key, stage?, set?}]}` (no `heights`): the sidecar evaluates
+the tile over windows built from the plan dir's `survey.bin` (`windowFromSurvey`, as the budget pass), all stages up to and
+including `stage` when given (else every stage), both sets, and answers with ordinary `region.tile` frames carrying
+`preview: true`. Nothing is written by the mod; the client draws the cells (tints: added, removed, path (walk), lot,
+floating).
