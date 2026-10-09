@@ -13,16 +13,24 @@ import { Worker } from 'node:worker_threads';
 
 /** The worker module: next to this file in src/ (vitest, tsx) and next to dist/main.mjs (the build copies it). */
 export const WORKER_URL = new URL('./region-worker.mjs', import.meta.url);
+/** (6b) Plan surveys a worker keeps (ghost tiles); region-worker.mjs keeps the same number. */
+export const WORKER_SURVEYS = 4;
 
 export interface TileTask {
   irSha: string;
   /** the canonical IR JSON (sent to a worker that does not have it yet) */
   irJson: () => string;
   key: string;
-  stage: string;
-  set: 'terrain' | 'path';
-  /** the ARSV heights (copied before the transfer) */
-  heights: Uint8Array;
+  /** a ghost tile: every stage up to this one (absent: all) */
+  stage: string | undefined;
+  /** a ghost tile: this set only (absent: both) */
+  set: 'terrain' | 'path' | undefined;
+  /** the ARSV heights (copied before the transfer); absent for a ghost tile */
+  heights?: Uint8Array;
+  /** (6b) the IR's side blobs by sha, shipped with the IR (shared memory: not copied per worker) */
+  blobs?: () => Record<string, Uint8Array>;
+  /** (6b) a ghost tile: the plan survey (windows come from it, in the worker) */
+  survey?: { id: string; bytes: () => Uint8Array };
 }
 
 export type TileResult = { ok: true; gz: Buffer; count: number; sha: string; ms: number } | { ok: false; message: string };
@@ -46,6 +54,8 @@ class Slot {
   ready = false;
   /** irShas this worker has */
   irs = new Set<string>();
+  /** (6b) plan surveys this worker has (ghost tiles; the worker keeps the last few) */
+  surveys: string[] = [];
   busy: Pending | undefined;
   timer: NodeJS.Timeout | undefined;
   dead = false;
@@ -200,12 +210,23 @@ export class TilePool {
     const t = p.task;
     try {
       if (!s.irs.has(t.irSha)) {
-        s.worker.postMessage({ type: 'ir', irSha: t.irSha, irJson: t.irJson() });
+        s.worker.postMessage({ type: 'ir', irSha: t.irSha, irJson: t.irJson(), ...(t.blobs ? { blobs: t.blobs() } : {}) });
         s.irs.add(t.irSha);
       }
-      const heights = new Uint8Array(t.heights.byteLength);
-      heights.set(t.heights);
-      s.worker.postMessage({ type: 'tile', id: p.id, irSha: t.irSha, key: t.key, stage: t.stage, set: t.set, heights }, [heights.buffer]);
+      if (t.survey) {
+        if (!s.surveys.includes(t.survey.id)) {
+          s.worker.postMessage({ type: 'survey', id: t.survey.id, bytes: t.survey.bytes() });
+          s.surveys.push(t.survey.id);
+          // the worker keeps as many (WORKER_SURVEYS)
+          while (s.surveys.length > WORKER_SURVEYS) s.surveys.shift();
+        }
+        s.worker.postMessage({ type: 'tile', id: p.id, irSha: t.irSha, key: t.key, stage: t.stage, set: t.set, preview: true, surveyId: t.survey.id });
+      } else {
+        if (!t.heights) throw new Error('a tile needs heights');
+        const heights = new Uint8Array(t.heights.byteLength);
+        heights.set(t.heights);
+        s.worker.postMessage({ type: 'tile', id: p.id, irSha: t.irSha, key: t.key, stage: t.stage, set: t.set, heights }, [heights.buffer]);
+      }
     } catch (e) {
       this.fail(s, `could not hand the tile to a worker: ${(e as Error).message}`);
       return;
