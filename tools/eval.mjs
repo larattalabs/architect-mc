@@ -7,9 +7,9 @@
 //   node tools/eval.mjs rejudge <runId> [--briefs 1,3] [--out <dir>] [--ledger ...]   the blind judge again (judge cost only)
 //   node tools/eval.mjs compare <runA> <runB> [--judge] [--out <dir>]   A = before, B = after: deltas and a verdict
 //
-// A run starts its own sidecar (no game) on a free port, 8894 or 8895, with fresh data, library and bibles dirs under
-// <out>/<runId>/sidecar/, `--backend sim` for the sim tier, else `--backend claude --use-claude-login`, and drives it
-// over WebSocket protocol 2. Each brief is submitted with critique `loop`: round 0 is the no-critique design, so one run
+// A run starts its own sidecar (no game) on a free port, 8894 or 8895 (--port 0: an ephemeral one), with fresh data,
+// library and bibles dirs under <out>/<runId>/sidecar/, `--backend sim` for the sim tier, else `--backend claude
+// --use-claude-login`, and drives it over WebSocket protocol 2. Each brief is submitted with critique `loop`: round 0 is the no-critique design, so one run
 // gives the pair round 0 vs final. A blind pairwise judge (Opus) compares them twice with the order swapped.
 //
 // Guards: a real tier refuses to start when ANTHROPIC_API_KEY or ANTHROPIC_AUTH_TOKEN (or any *_API_KEY of a Claude
@@ -260,6 +260,10 @@ export function ledgerPut(file, what, usd, note) {
 // ---- the sidecar and its WebSocket --------------------------------------------------------------------------
 
 async function freePort(prefer) {
+  // 0 (--port 0, or ARCHITECT_EVAL_PORT=0 as the tests set): an ephemeral port, so test runs in several checkouts never
+  // collide; the sidecar records the port it bound in sidecar.json (startSidecar reads it back)
+  if (prefer === undefined && process.env.ARCHITECT_EVAL_PORT === '0') prefer = 0;
+  if (prefer === 0) return 0;
   if (prefer && !PORTS.includes(prefer)) throw new Error(`--port ${prefer}: the eval sidecar uses ${PORTS.join(' or ')} only`);
   for (const p of prefer ? [prefer] : PORTS) {
     const ok = await new Promise((res) => {
@@ -289,14 +293,16 @@ async function startSidecar(runDir, tier, port, before) {
   const child = spawn(process.execPath, args, { env, stdio: ['ignore', out, out] });
   const tokenFile = path.join(dirs.data, 'client.token');
   const end = Date.now() + 60_000;
+  let sj;
   for (;;) {
     if (child.exitCode !== null) throw new Error(`the sidecar exited (${child.exitCode}); see ${path.join(runDir, 'sidecar.log')}`);
-    const sj = readJson(path.join(dirs.data, 'sidecar.json'));
+    sj = readJson(path.join(dirs.data, 'sidecar.json'));
     if (sj?.pid === child.pid && fs.existsSync(tokenFile)) break;
     if (Date.now() > end) throw new Error('the sidecar did not start in 60 s');
     await new Promise((r) => setTimeout(r, 200));
   }
-  return { child, dirs, token: fs.readFileSync(tokenFile, 'utf8').trim() };
+  // the port it bound (the one asked for, or the ephemeral one for port 0)
+  return { child, dirs, port: sj.port, token: fs.readFileSync(tokenFile, 'utf8').trim() };
 }
 
 class Client {
@@ -460,7 +466,7 @@ async function cmdRun(o) {
   const sc = await startSidecar(runDir, run.tier, port);
   run.pids = [...(run.pids ?? []), sc.child.pid];
   save();
-  log(`sidecar pid ${sc.child.pid} on port ${port}`);
+  log(`sidecar pid ${sc.child.pid} on port ${sc.port}`);
   const stop = () => {
     try {
       sc.child.kill('SIGTERM');
@@ -472,7 +478,7 @@ async function cmdRun(o) {
     stop();
     process.exit(130);
   });
-  const client = new Client(port, sc.token);
+  const client = new Client(sc.port, sc.token);
   try {
     await client.connect();
     for (const id of fs.readdirSync(FIXTURE_BIBLES)) installFixtureBible(sc.dirs.bibles, id);
@@ -894,7 +900,7 @@ async function cmdRejudge(o) {
   const ids = o.briefs ? loadBriefs(o.briefs).map((b) => b.n) : run.briefs;
   const port = await freePort(o.port);
   const sc = await startSidecar(dir, run.tier, port);
-  const client = new Client(port, sc.token);
+  const client = new Client(sc.port, sc.token);
   const results = {};
   try {
     await client.connect();
@@ -960,7 +966,7 @@ async function crossJudge(o, a, b, ids) {
   if (!fs.existsSync(path.join(dir, 'run.json'))) writeJson(path.join(dir, 'run.json'), { runId: path.basename(dir), tier, briefs: [], state: {} });
   const port = await freePort(o.port);
   const sc = await startSidecar(dir, tier, port);
-  const client = new Client(port, sc.token);
+  const client = new Client(sc.port, sc.token);
   const finalImgs = (runId, x) => {
     const rd = path.join(out, runId);
     const st = readJson(path.join(rd, 'sidecar', 'data', 'state.json'), {});
@@ -1008,7 +1014,7 @@ async function cmdClutter(o) {
   const dir = path.join(out, `clutter-${run.runId}`);
   writeJson(path.join(dir, 'run.json'), { runId: path.basename(dir), tier, briefs: [], state: {} });
   const sc = await startSidecar(dir, tier, port);
-  const client = new Client(port, sc.token);
+  const client = new Client(sc.port, sc.token);
   const st = readJson(path.join(runDir, 'sidecar', 'data', 'state.json'), {});
   const results = {};
   let usd = 0;
@@ -1057,7 +1063,7 @@ async function cmdReviseBible(o) {
   writeJson(path.join(dir, 'run.json'), { runId: path.basename(dir), tier, briefs: [], state: {} });
   const port = await freePort(o.port);
   const sc = await startSidecar(dir, tier, port);
-  const client = new Client(port, sc.token);
+  const client = new Client(sc.port, sc.token);
   let usd = 0;
   try {
     await client.connect();
@@ -1270,7 +1276,7 @@ async function cmdRunPolish(o) {
   });
   run.pids = [...(run.pids ?? []), sc.child.pid];
   save();
-  log(`sidecar pid ${sc.child.pid} on port ${port}`);
+  log(`sidecar pid ${sc.child.pid} on port ${sc.port}`);
   const stop = () => {
     try {
       sc.child.kill('SIGTERM');
@@ -1282,7 +1288,7 @@ async function cmdRunPolish(o) {
     stop();
     process.exit(130);
   });
-  const client = new Client(port, sc.token);
+  const client = new Client(sc.port, sc.token);
   try {
     await client.connect();
     if (!client.features?.includes('design.polish')) throw new Error('the sidecar has no design.polish (an older bundle)');
@@ -1701,7 +1707,7 @@ async function cmdPolishDev(o) {
   const sc = await startSidecar(runDir, 'full', port, (dirs) => {
     prepared = prepareDevEntries(list, dirs.library);
   });
-  log(`polish-dev ${runId}: sidecar pid ${sc.child.pid} on port ${port}; entries ${prepared.map((p) => p.skipped ? `${p.id} (skipped: ${p.skipped})` : p.id).join(', ')}`);
+  log(`polish-dev ${runId}: sidecar pid ${sc.child.pid} on port ${sc.port}; entries ${prepared.map((p) => p.skipped ? `${p.id} (skipped: ${p.skipped})` : p.id).join(', ')}`);
   const stop = () => {
     try {
       sc.child.kill('SIGTERM');
@@ -1713,7 +1719,7 @@ async function cmdPolishDev(o) {
     stop();
     process.exit(130);
   });
-  const client = new Client(port, sc.token);
+  const client = new Client(sc.port, sc.token);
   const rows = [];
   const cap = () => {
     let c = o.maxUsd;
