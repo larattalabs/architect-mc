@@ -54,7 +54,9 @@ export class Palette {
     const coll = known ? collisionOf(st) : 'full';
     this.solid.push(!air && coll !== 'none' && coll !== 'low');
     this.top.push(known ? topOf(st) : 1);
-    this.barrier.push(!air && known && (coll === 'thin' || coll === 'full' || (coll === 'door' && st.props.open !== 'true')) && (topOf(st) >= 1.5 || coll === 'thin' || coll === 'full'));
+    // a barrier at least 1.5 tall in one block: fences, walls, panes and bars, closed fence gates (a full block is 1 tall:
+    // M8 counts it only with a second block on top)
+    this.barrier.push(!air && known && (coll === 'thin' || (BLOCKS[st.name].family === 'fence_gate' && st.props.open !== 'true')));
     const vc = air ? 'AIR' : voxelClassOf(st.name);
     this.natural.push(NATURAL_CLASSES.has(vc));
     this.gravity.push(GRAVITY.test(st.name));
