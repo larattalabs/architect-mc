@@ -5153,3 +5153,1046 @@ region record); the logged list goes to `<region>/generated.json` when the batch
 - `RemoveResult.kept` for group and stage undos counts kept cells (it was 0).
 - `Sites.list(owner)` hides tiles (S1); the client's Placed view still lists tiles (no player UI in 6a).
 - Sidecar plan directories live under `<data>/regions/plans`; the 30 s plan limit is wall clock.
+
+# Phase 6b contract: checker, previews, volumes, IR format 2, the scenario harness and the crater gate - DRAFT for Steward review
+
+Status: **draft**, 2026-10-09. Nothing here is built. After Steward's review this becomes the "Phase 6b contract" section of
+`docs/CONTRACT.md` (frozen), following the usual process.
+
+Goal: **check and show a region before it is built, and turn the first golden scenario green.** 6b adds the macro checker
+(M1-M14, plus the `player` mover for M2), the four previews and `siteplan.json`, the region ghost, the 3D volume survey,
+IR format 2 (side blobs, new shapes, material rules), the `floatingIsland` generator, the scenario harness, and Noah's
+gallery. Template-first `Regions.design` ships with two bundled programs, `crater_works` and `rift_city`, so Steward's
+phase 2 prompts can run as template picks. Golden scenario S1 (floating islands) goes green.
+
+Versions: API **1.9.0**, mod **0.12.0**, kit `KIT_VERSION` **0.12.0**. The sidecar protocol stays **2**: messages are
+additive and come with new feature names. Phases 1-6a still hold except where this section changes them. Where they
+disagree, this section wins.
+
+Sources, read for this draft:
+- `docs/SETTLEMENTS.md`, all of it. It is the binding direction, including "Noah's decisions (2026-10-08)", "Changes
+  from Steward's review" and "Note after 6a".
+  - §3.2 (IR format 2), §3.3 (material rules), §5 (the 3D volume), §9.1-9.2 (`floatingIsland`), §11 (rule numbering),
+    §15.1 (`siteplan.json`), §16 (the scenario ladder, bars, gallery), §17.2 (6b scope).
+- `docs/CONTRACT.md`:
+  - the phase 6 contract: §1 (program model, shape library, limits), §2 (primitives marked 6b), §4 (virtual world,
+    checker, views, ghost), §6 (API 1.8.0 rules and the planned 6b/6c members), §7 (budgets);
+  - the 6b and 6c gate outlines;
+  - "Changes from Steward's review of phase 6" (S4 `wedge`/`prism`/`array`, S7 no `designLots`, S8 nudge, S10 siteplan);
+  - "Phase 6a as built". The nudge action API was deferred to 6b. `RegionPlan` shipped without report or previews.
+- `docs/PLAN.md`: the 6a status (passed 2026-10-09, the open items).
+- Steward, read only:
+  - `steward-mc/docs/A5B-SPEC.md` §3 (M1-M14), §6 (fixtures, broken variants, gate);
+  - `A6-REVIEW.md` (S4, S7, S8, S10);
+  - `A7-SETTLEMENTS-REVIEW.md` (S1: ship `crater_works` and a rift; villagers don't climb);
+  - `PLAN.md` phase 2 gate ("the rift and a custom 'meteor crater mining facility' prompt").
+- Code at `main` (`dd622d6`, v0.11.0):
+  - `kit/lib/realise.mjs`: `compileIR` throws `IR: format must be 1`, and an unknown op kind throws;
+  - `kit/lib/region/plan.mjs`: `KIT_VERSION = '0.11.0'`; the IR's `blobs` are inline base64 (`kit/REGIONS.md`);
+  - `api/Regions.java`: 1.8.0 shipped `plan`, `prepare`, `cancelPrepare`, `prepareState`, `realise`, `remove`, `get` and
+    `list`. **It did not ship** `previews`, `design`, `RegionDesignRequest`, `CheckReport`, `PreviewView` or
+    `RegionPreviews`, which the phase 6 text listed;
+  - `api/Reason.java`: `PLAN_STALE` exists, but no code returns it;
+  - `api/Design.java`: `Kind { DESIGN, MASSING, REPORT, POLISH }`, so `REGION` was never added;
+  - `region/TileStream.java`: `region.tile.error` fails the tile with the sidecar's message;
+  - `kit/regions/`: only `mega_bench` and `region_small`. The four family fixtures don't exist yet;
+  - `kit/test/fixtures/regions/mega_bench.golden.json`: 6a's committed tile-sha golden.
+- `docs/GATES.md` **does not exist yet**. The `tools/gate-runner` worktree is at `dd622d6`, with no commits beyond main.
+  This draft uses the gate-runner policy as the coordinator described it:
+  - two tiers;
+  - the **full engine chain** only when realise, the journal or streaming change;
+  - otherwise the **`regress`** chain.
+
+  Where this draft names the `regress` chain, it lists the steps it means (gate item 12). When GATES.md lands, its names
+  win, provided the steps are the same.
+
+---
+
+## What 6b inherits and what it must fix
+
+| Item | Record | What this contract does |
+|---|---|---|
+| The planned 1.8.0 members that didn't ship | `previews`, `design`, `CheckReport`, `PreviewView`, `RegionPreviews`, `RegionDesignRequest`, `Design.Kind.REGION`, `RegionPlan.report/previews` | All land in **1.9.0** as additive members (§6). |
+| Nudge actions (S8), deferred from 6a | `RegionView.waiting` shows the reason text only | `WaitAction` and `Regions.nudge` (§6.3). |
+| `PLAN_STALE` is declared but unused | A newer IR fails each tile with `IR: format must be 1` | 0.12.0 refuses `PLAN_STALE` up front, at the defined points (§2.4). The behaviour of 0.11.x is stated and tested. |
+| Blobs inline in the IR | A 1024x1024 u16 field is about 2.7 MB base64 against the 4 MB IR cap (K4) | Side blobs by sha (§2.2). |
+| The old 6b gate item "Terrain tab" | N7: commands and API only | Replaced by the command and DevBridge path (gate item 9). |
+| Program authoring (old 6c) | Moved to 7c | 6b ships **template-first only**: a brief that no bundled program fits returns "no fit", not an authoring session. |
+| 6a open items | The 161 generated chunks in one early run (now logged); the structure-template memory leak on repeated 5b sizecap runs | Not fixed by 6b. Both are re-checked by the full chain: `generatedDuringRealise` must be 0 in every 6b megaA, and the leak is recorded if seen. |
+
+## Key decisions
+
+| # | Decision |
+|---|---|
+| B1 | **IR format 2 is additive and opt-in by use.** A plan emits `format: 2` only if it uses a format-2 member. Format-1 IRs evaluate byte-identically, so 6a's `mega_bench.golden.json` tile shas don't change. |
+| B2 | **Blobs leave the IR.** Format 2 names blobs by sha. They are side files in the plan dir, copied into the world dir with the IR. Realise and undo never need the plan dir. |
+| B3 | **Refuse early, never mid-write.** The supported IR formats and op/shape/rule kinds are checked at plan accept, realise start and region resume. A newer IR refuses `PLAN_STALE` before any tile is requested. |
+| B4 | **Checker on a virtual world** = plan survey + frozen volumes (where taken) + IR, evaluated by the same `realise.mjs`. The phase 6 §4 rules, unchanged except that M2 runs as the `player` mover (SETTLEMENTS §11). |
+| B5 | **Generators run at plan time and emit closed-library shapes.** `floatingIsland` is kit code, deterministic and lint-clean, and emits one bounded op per cluster. Its output is ordinary ops. |
+| B6 | **Template-first only.** `Regions.design` makes one cheap structured pick among bundled programs. With no fit, it ends `NO_TEMPLATE` (a design outcome, not an authoring session). |
+| B7 | **Evaluation is deterministic metrics plus Noah's gallery.** No model judges anything in 6b. A gallery approval is bound to a sha of the evidence it approved. |
+| B8 | **The full engine chain gates 6b**, because 6b changes the evaluator and the wire (§9.1). |
+| B9 | **Spend: template picks only.** Expected about $0.30, cap $3, on the claude login only (§10). |
+
+### Deviations from SETTLEMENTS.md and the phase 6 text (for Steward's review)
+
+| SETTLEMENTS / phase 6 says | This contract | Why |
+|---|---|---|
+| §16.3 axis-run share: "forms at most 0.25 (est.; calibrated on S1 in 6b)" | Recorded only in 6b. It is calibrated on 10 held-out island seeds by Noah's marks, and gated from 6c | Calibrating and gating on the same run is the metric gaming §18 forbids |
+| §16.3 theme fit, motifs | Not applicable to S1 in 6b (recorded only) | No connector types or district motifs exist before 7a |
+| §16.2 S1 brief "linked by rope and stone" | S1 v1 has stone links (bridges with `'ends'` supports and stairs). 7a re-runs S1 with rope bridges | Rope bridges are a 7a connector (§8.2) |
+| §16.3 Fit row, villager reachability | Not applicable in 6b | Site lots are 7a/7b, and the villager mover is 7a |
+| §3.2 IR format 2 members | Adds `requires` (the format-2 kinds used). Defers `graph`, `siteLots`, `lotEntries`, `fits`, `relief`, `scatter`, `voxels` and `stamp` | `requires` makes `PLAN_STALE` precise. The rest belong to 6c/7a |
+| §17.2: `Survey.volume` in 6b | Ships, and is gated by a measurement only (no scenario uses it) | It is the prerequisite for 7a, and the 16M-cell limit must be measured before it is set |
+| Phase 6 §8: mega_bench "one [bridge] with arches (6b)" | mega_bench is unchanged. Arches are tested on `sky_isle` and `rift_city` | Keeps 6a's `mega_bench.golden.json` as the byte-identity proof for format 1 |
+| Phase 6 §6: `previews`, `design`, `CheckReport` and related types in 1.8.0 | Land in 1.9.0 | They didn't ship in 1.8.0 |
+| §17.2 spend est. $1-3 | Expected about $0.30, cap $3 | Authoring moved to 7c; S1 is deterministic |
+| Old 6b outline: the Terrain tab gate item | Commands and DevBridge (gate item 9) | N7 |
+
+---
+
+## 1. Scope
+
+### 1.1 In scope
+
+**Kit (no game):**
+1. **The rest of the primitives** (phase 6 §2, marked 6b):
+   - `cavern` (lighting is mandatory);
+   - `utility` corridors;
+   - `floating([parts], {anchor})`;
+   - `add` with `underside: 'taper' | 'rock'`;
+   - `ring` towers and crenels;
+   - `bridge` arches and towers.
+   - New for floating sites: a `bridge` support style `'ends'` (no pillars). It is legal only when the deck's whole length
+     is at most `maxSpan` and both ends bear on cells of declared parts. M10 checks it.
+   - New: a lot pad option `pad: {fill: 'none'}` for lots on a generated mass (§4.2).
+2. **Shapes** (format 2), all pointwise and lint-safe:
+   - `ellipsoid`, `capsuleChain`;
+   - `wedge` and `prism` (Steward S4);
+   - `array(shape, step, n)` (S4);
+   - `warp` (`amp` at most 8);
+   - `strata`, `instances`.
+3. **Material rules** (SETTLEMENTS §3.3) on `shape` and `columns` ops.
+4. **IR format 2:** side blobs, `fields`, `volumes` refs, `forms` provenance, and `requires` (§2).
+5. **`floatingIsland` generator** (§4).
+6. **Virtual world and the macro checker M1-M14**, with M2 as the `player` mover and prefix checks (§3).
+7. **The four previews** `top`, `section`, `iso`, `siteplan`, and `siteplan.json` with the `graph` block (topology only,
+   from 6a paths and roads; §3.4).
+8. **Bundled programs and fixtures:**
+   - `crater_works`, `sky_isle`, `rift_city`, `walled_hill`, each with an expected checker report;
+   - the broken variants;
+   - `floating_islands` (S1's program).
+
+**Sidecar:**
+1. `region.check` and `region.preview`.
+2. Plans carry a report and previews.
+3. Blob side files and `blob_unknown`.
+4. The template pick for `region.design`.
+5. `hello` reports `irFormats` and `kitVersion`.
+
+**Mod:**
+1. `Survey.volume` and the ARVX freeze (§5).
+2. Blob copy into the world dir, and the blob re-send path.
+3. `PLAN_STALE` gating.
+4. The region ghost (client).
+5. `Regions.previews`, `Regions.design`, `Regions.nudge`.
+6. DevBridge additions.
+7. Commands (no Terrain tab, N7).
+
+**Tools:**
+1. `tools/scenarios.mjs` (run, metrics, gallery bundle).
+2. `tools/find-site.mjs`.
+3. `tools/gate6b.mjs`.
+4. The gallery page (§8).
+
+### 1.2 Not in scope (SETTLEMENTS phases)
+
+These come later:
+- **6c:** the passes (relief, hydrology, routing, districts); the op kinds `relief`, `scatter`, `voxels` and `stamp`;
+  every generator except `floatingIsland`; M17-M20.
+- **7a:** site analysis and affordances; the graph as IR data with typed edges; connectors (`rope_bridge` and the rest);
+  `nav.json`; the `villager` and `steward` movers; M8 promoted; M15 and M16.
+- **7b:** site-aware design.
+- **7c:** program authoring, planning and bible format 3.
+
+In format 2, these op kinds are **reserved names that throw** until their phase.
+
+---
+
+## 2. IR format 2
+
+### 2.1 Shape of the IR
+
+Format 2 is format 1 plus the members below (SETTLEMENTS §3.2, the 6b subset). An IR is `format: 2` only if it uses at least
+one of them. Canonical JSON (keys sorted) stays the identity (`irSha`).
+
+```
+{ format: 2, ...every format-1 member except inline blob data...,
+  requires: ["shape:ellipsoid", "shape:warp", "material:rule", ...],   // sorted; every format-2 kind the IR uses
+  blobs:   { name: { sha, bytes, kind: 'heightfield'|'mask'|'field'|'volume' } },   // no 'data': side files
+  fields:  { name: { blob, type: 'u8'|'i16', minX, minZ, width, depth, res: 1|4 } },
+  volumes: { name: { blob, box: {minX..maxZ}, sha } },                 // frozen ARVX volumes the plan read (§5)
+  forms:   [{ id, generator, version, params, seed, bounds, ops: [opIndex...] }],   // provenance only
+  parts[].ops[]: { op: 'shape'|'columns', ..., material: <blockState> | { rule: <materialRule> } }
+}
+```
+
+- `requires` is computed by the planner from the IR's actual contents, never by hand. A test asserts it equals the set of
+  kinds found by walking the IR.
+- Format-1 `blobs: {name: {minX, minZ, width, depth, data}}` (inline) stays legal **in format 1 only**. A format-2 IR with
+  inline `data` fails at plan ("format 2 blobs are side files").
+- The `graph` and `siteLots` members, and `lotEntries`/`fits`, are **7a**. The 6b evaluator rejects them as unknown
+  members of format 2.
+
+### 2.2 Side blobs
+
+- **Plan dir:** `<data>/regions/plans/<planId>/blobs/<sha>.bin`. sha is the SHA-256 of the bytes. Each blob is at most
+  16 MB, and a plan's blobs are at most 64 MB in all.
+- **World dir:** when the region record is created (before any tile is requested), the mod copies the IR and every blob
+  it names into `<world>/architect-regions/<id>/blobs/<sha>.bin`. Each copy is written, fsynced, renamed and read back,
+  with the sha checked. A missing or bad blob refuses realise with `OTHER` ("blob <sha> missing") before any write.
+- **Wire:** 4a's chunked blob path (`MAX_BLOB_BYTES` 64 MB). `region.tiles.request` may now be answered with the error
+  code `blob_unknown {shas: [...]}`.
+  - The mod then re-sends those blobs from the world copy and re-requests the tile.
+  - It follows the 6a `ir_unknown` order: IR first, then blobs.
+  - A tile is re-requested at most 3 times for the same reason. After that the region waits `SIDECAR_UNAVAILABLE` with the
+    message.
+- **Undo** reads only the journal, as before. Blobs are deleted with the region record, after the region is removed.
+
+### 2.3 Shapes and material rules (normative)
+
+| Kind | Fields | Inside / value | Bounds |
+|---|---|---|---|
+| `ellipsoid` | `c, r: [rx, ry, rz]` | `(len(p/r) - 1) * min(r) <= 0` (bound-safe) | `c ± r` |
+| `capsuleChain` | `points: [[x,y,z]...], radii: [r...]` (same length, at least 2) | distance to the nearest round-cone segment, with the radius interpolated along it | segment boxes ± max r |
+| `wedge` | `min, max, rise: 'n'\|'s'\|'e'\|'w'` | a box whose top slopes linearly from `max.y` on the `rise` side to `min.y` on the opposite side | the box |
+| `prism` | `polygon: [[x,z]...], y0, y1, apex: {line: [[x,z],[x,z]], y}` | a polygon extruded up to `y0`, then a ridge rising to `apex.y` along `line` (roofs, keeps) | polygon box, `y0..apex.y` |
+| `array` | `of, step: [dx,dy,dz], n` (1..256) | union of `of` translated by `k*step`, `k = 0..n-1`; evaluates only the copies whose bounds hold the cell | union of the copies |
+| `instances` | `of, transforms: [{t: [dx,dy,dz], rot: 0\|90\|180\|270, mirror: 'x'\|'z'\|null}]` (at most 1024) | union of `of` under each integer transform | union |
+| `warp` | `noise, amp` (integer, 1..8), `of` | `of` evaluated at `p + amp * noise3(p)` (three seeded lookups) | `of` ± amp |
+| `strata` | `of, bands: {noise?, every, offset}` | the same geometry as `of`; it also tags each cell with `band = floor((y + offset + n) / every)` for material rules | as `of` |
+
+- **Material rules** follow SETTLEMENTS §3.3 exactly:
+  - the conditions are `depth`, `slopeLt`/`slopeGte`, `field`, `band`, `noise` (+ `age`), `yAbs`, `facing`;
+  - the first matching clause wins, otherwise `default`;
+  - `dither: 'ordered4' | 'none'`;
+  - role names resolve through `ir.roles` at plan, so the IR holds block states only;
+  - `depth` and `facing` read the op's own SDF;
+  - `slope` reads frozen ground within 1 column (inside the 8 margin).
+
+  Every quantity is integer or exactly specified float, so the realise lint holds.
+- **Evaluation cost:**
+  - a `facing` condition costs 6 SDF lookups, and only cells that reach that clause pay for it;
+  - **an op whose rule uses `facing` is limited to 32 primitives** (plan error past that);
+  - `floatingIsland` emits at most 32 primitives per op (SETTLEMENTS §9.1).
+- **The realise lint** (`region-lint.test.mjs`) adds every new file on the realise path to its scan list (e.g.
+  `lib/material.mjs`, and `lib/sdf.mjs` grows).
+
+### 2.4 Versioning and unknown kinds
+
+| Who sees what | Behaviour (each a test) |
+|---|---|
+| 0.12.0 evaluator, format-1 IR | Byte-identical to 0.11.0. 6a's `mega_bench.golden.json` and `region_small`'s tiles are unchanged. |
+| 0.12.0 evaluator, format-2 IR with an unknown op, shape or rule kind, or an unknown format-2 member | `compileIR` throws `IR: unknown <op\|shape\|rule> '<kind>' (supported: ...)`. Unknown kinds still throw (K6), now with the list. Format 2 has no "ignore unknown". |
+| 0.12.0, an IR with `format > 2`, or `requires` naming a kind this kit lacks, or `kitVersion` newer than the running kit (semver compare) | Refused **`PLAN_STALE`** with "plan needs kit X / format N / kinds [...]; this is kit Y". Checked at: (a) `region.planned` accept (a dev sidecar newer than the mod); (b) `Regions.realise` start; (c) resume of a region record at world load. No tile is requested, so nothing is written. |
+| The sidecar's own check | The sidecar's `hello` snapshot gains `kitVersion` and `irFormats: [1, 2]`. The mod compares them with the IR before (a)-(c). The mod also compares its own bundled kit version with the sidecar's, and a mismatch is a log warning (dev only). |
+| **0.11.x mod with a world that holds a format-2 region** (a downgrade) | 0.11.x has no format gate. Its sidecar answers every tile request with `region.tile.error "IR: format must be 1"`. `TileStream` marks the tile `FAILED` with that message. **No cell of that region can be written by 0.11.x**, because no cell list ever arrives. **What the region's state then shows** (paused, waiting or failed items: phase 6 §1 says "the region pauses") **is not confirmed from 0.11.0's code for this draft.** Gate item 10(c) pins it and records it. `Regions.remove` still works, because undo reads the journal only. This is accepted rather than bumping a store format, because nothing can be written wrongly. |
+| A format-1 IR in a 0.12.0 world | Unchanged. No migration. |
+
+---
+
+## 3. The virtual world, the checker and the previews
+
+### 3.1 The virtual world
+
+- **Contents:** the plan survey (2.5D) + frozen volumes where the plan took one (§5) + the IR, evaluated by `realise.mjs`.
+- **Resolution:**
+  - full resolution up to 256x256;
+  - otherwise coarse (every 4th column);
+  - plus full-resolution passes around lots + 8, paths and bridges + 4, stairs, carve edges within 2, gates, and
+    **declared floating parts + 4**.
+- **Lot interiors** are their declared boxes (A5B §3).
+- Where a volume exists, the cells come from the volume. Elsewhere, columns are solid from `floor` down and air above
+  `height` (SETTLEMENTS §5.2).
+
+### 3.2 Rules
+
+M1-M14 as A5B §3, with the phase 6 severities:
+- **Errors:** M1; M13; M14's uniqueness, plus "every op in a part".
+- **Warnings:** everything else.
+
+Details per rule:
+- **M2** runs the **`player` mover** (SETTLEMENTS §11): step 1, fall at most 3, 2 headroom, stairs, bridges, doors, and
+  ladders where a program declares them. The `villager` and `steward` movers are 7a.
+
+  Reached from `entrance` are every lot entrance, every named district (part), and every `floating` group's anchor.
+  The output is a per-node reachable flag, so S1's "100% of nodes" bar is computable.
+- **M3:** non-floating solids connect to ground. A `floating` group connects internally, and to its anchor if one is
+  declared.
+  - Cells of a floating group that are unconnected to the group are reported separately as `M3:floating_spur`.
+  - Gravity blocks need support.
+- **M5** reports dark spawnable area in cells and as a share of walk area:
+  - block light 0;
+  - solid below and 2 headroom;
+  - "spawnable" from a per-block flag generated from the 26.3 data generator into `blocks.mjs`, not hand-listed (SETTLEMENTS
+    §11).
+
+  `cavern` light placement must give 0 such cells inside the cavern.
+- **M8:** walk cells beside a drop over 3 without a barrier at least 1.5 tall. It stays a warning (promotion is 7a). The
+  share guarded is reported.
+- **M10:** the span between supports is at most `maxSpan`. An `'ends'` bridge must have both ends on declared parts' cells,
+  over at least 2x2 each.
+- **Prefix checks:** M2 and M3 after each stage prefix, extended incrementally (phase 6 §4).
+- **Report:** `report.json` with `{rule, severity, part, stage, count, sample <= 20, message}`, plus `summary.txt`.
+
+  Steward and `RegionPlan.report` see the same data.
+- **Promotion** of any rule follows the usual process, recorded in PLAN.md. **6b promotes nothing** (no real generations
+  yet). It records which rules fired on the fixtures and the crater/rift runs, as promotion evidence.
+
+### 3.3 Previews
+
+As in phase 6 §4 "The four views":
+- `top`, `section` (up to 4 axes), `iso`, `siteplan` (SVG, PNG and `siteplan.json`);
+- deterministic: the same IR and survey give byte-identical PNGs (the kit's pinned encoder);
+- written to the plan dir;
+- re-rendered on demand by `region.preview`.
+
+Changes:
+- Floating parts get their own tint, and `section` draws them with their undersides.
+- Material rules render in the role or block colour of the cell's resolved block (the flat-colour palette, as today).
+
+### 3.4 `siteplan.json` (schema `siteplan/1`, a JSON Schema in `kit/schemas/siteplan-1.json`)
+
+```
+{ "format": 1, "planId", "irSha", "claim", "stages": [name],
+  "lots": [{ id, stage, rect: [x0, z0, x1, z1], floorY, front, entrance: [x, y, z], brief? }],
+  "paths": [{ id, kind: "stair"|"bridge"|"graded"|"road", stage, width, points: [[x, y, z]] }],
+  "utility": [{ id, kind, width, height, points }],
+  "anchors": { name: [x, y, z] },
+  "parts": [{ id, stage, kind: "carve"|"add"|"path"|"pad"|"form", floating: bool }],
+  "graph": { "nodes": [{ id, kind: "lot"|"anchor"|"junction", ref, at: [x, y, z], level }],
+             "edges": [{ id, from, to, type: "road"|"stair"|"bridge"|"graded", path, stage, mover: ["player"] }] } }
+```
+
+- The `graph` block is **topology only**. It is derived from 6a's paths and roads:
+  - a node per lot entrance, per anchor, and per path endpoint or junction;
+  - an edge per path segment between nodes.
+
+  7a replaces the derivation with the planned graph and adds `seconds`, `risk` and more movers (A7 review). The format
+  stays 1 if only members are added.
+- Steward reads this file (A6 S10). Any change to existing members is a format bump.
+
+### 3.5 The region ghost (client)
+
+As phase 6 §4:
+- `ArchitectClientApi.previewRegion(planId, @Nullable stage)` and `PreviewStyle.REGION` (appended);
+- the cells of tiles within 64 blocks of the player, from the same tile evaluation in preview mode over the plan
+  survey;
+- beyond 64 blocks: the claim outline and the lot boxes;
+- tints: added, removed, path, lot, floating;
+- a verdict line with the checker summary and the cell budget.
+
+Format-2 IRs preview the same way. Their blobs come from the plan dir.
+
+---
+
+## 4. The `floatingIsland` generator and S1's program
+
+### 4.1 Generator
+
+`kit/lib/forms/floatingIsland.mjs`, version 1. Plan time only, integer or fixed-point, lint-clean, with no `Math.random` or
+`Date`.
+
+```js
+floatingIsland({ at: [x, y, z], r: [rx, rz], thickness, seed, top: { relief: 0..4, pads: [{ at: [x, z], size: [w, d] }] },
+                 underside: { taper: 0.3..0.9, roots: 0..12 }, materials: 'island' | <materialRule> })
+  -> { ops: [...], parts: [...], bounds, anchor: [x, y, z], pads: [{ at, size, y }] }
+```
+
+- **Shape:**
+  - top: a flattened `ellipsoid` with noise relief, intersected `clipY`;
+  - underside: an inverted `cone`, `warp`ed (amp at most 6);
+  - hanging roots: `capsuleChain`s.
+- **Op grouping:**
+  - the island body is one op;
+  - each root cluster is one op;
+  - at most 32 primitives per op.
+- **Top pads:** declared pads are exactly flat at the returned `y`, carved into the relief.
+- **Default material rule `island`:**
+  - grass skin at depth 0, facing up;
+  - dirt at depths 1-3;
+  - stone core;
+  - stone strata bands of `andesite`/`tuff` at depth 4 and over;
+  - ore noise at depth 6 and over;
+  - `dither: ordered4`.
+
+  Roles resolve through the bible (`surface`, `subsurface`, `rock`).
+- **Output:** a `floating` declaration for the island's parts and an anchor cell (the top centre).
+
+**Property tests** (kit, no game) over 50 seeded param sets:
+1. Bounds contain every cell.
+2. Per-tile evaluation equals whole evaluation (tiles cut through the island).
+3. The island's cells are one face-connected component (M3 floating holds).
+4. Every pad is flat at its `y`, and solid under it to depth 3.
+5. Material rules resolve to valid blocks (M13).
+6. Determinism: byte-identical ops for 3 runs on Node 22 and 24, on macOS and Linux CI; a golden of shas over 20 param
+   sets.
+7. Evaluation cost per cell at most 2x `sphere`'s.
+
+### 4.2 `floating_islands` (S1's bundled program)
+
+`kit/regions/floating_islands.mjs`, params `{ islands: 5..9, spread, altitude }`.
+
+**Layout:**
+- islands at y 150-200 over plains or ocean;
+- one larger hub island with the `entrance` and `spawn` anchors reachable;
+- **stone links**: `bridge` decks with `supports: 'ends'`, where the island gaps allow spans of at most 24. Otherwise
+  `stair` links between islands at different heights, ends bearing on pads;
+- a spiral `stair` from the ground to the hub, so `entrance` is on the ground;
+- **guarded edges:** every walkable island rim, pad edge, bridge and stair beside a drop over 3 gets a rail or wall (the
+  `platform`/`bridge`/`stair` edge options, and an `edge: 'rail'|'wall'` option on `floatingIsland` pads). S1's bar is M8 at
+  100% (§8.3). On islands 150+ above ground, this is where the scenario is hardest, so the bible does **not** opt out
+  (`edges: 'open'` is not used);
+- lots on island pads with `pad: {fill: 'none'}`. The pad's own top must be solid in the virtual world (M9 checks it), with
+  no fill down to the frozen ground.
+
+**Lot children** are library entries and variants, mapped by the scenario file ($0): the kit examples plus the 6a stub
+blueprints, as mega_bench uses.
+
+**The brief's "rope" is not in 6b.** SETTLEMENTS' S1 brief says "linked by rope and stone". Rope bridges are a 7a
+connector. **S1 in 6b is "S1 v1: stone links"**, and 7a re-runs S1 with rope bridges (a changed scenario, so it returns to
+the gallery). This is question N-6b-2 for Noah.
+
+---
+
+## 5. The 3D volume survey (`Survey.volume`, ARVX)
+
+- **API** (1.9.0, additive, as SETTLEMENTS §5.1):
+
+```java
+// Survey (a default method that throws "needs Architect API 1.9.0" on older implementations)
+default CompletableFuture<Volume> volume(ServerLevel level, BoundingBox box, LoadPolicy load) { throw ...; }
+record Volume(String sha, BoundingBox box, String blobId, Map<VoxelClass, Long> counts, int missingColumns) {}
+enum VoxelClass { AIR, ROCK, SOIL, LOOSE, ICE, SNOW, WATER, LAVA, LOG, LEAVES, PLANT, OWNED, PLAYER, BLOCK_ENTITY, MISSING }
+```
+
+- **Classes:** from the kit's block table (family and collision class), exported to the mod as a generated
+  `voxel_classes.json`, so both sides classify identically. A test asserts that the Java and JS tables are equal.
+  - `OWNED` cells record the owner entry id in a side table in the blob.
+  - `PLAYER` = non-natural with no journal owner.
+- **Encoding ARVX:**
+  - a header (`ARVX`, version 1, box, column order x-major);
+  - per column, bottom-up runs `(class u8, length varint)` from `box.minY`;
+  - the owner side table;
+  - gzip.
+
+  The format is documented in `kit/REGIONS.md`, with a JS decoder in `kit/lib/region/volume.mjs`.
+- **Sampling:**
+  - sliced on the server thread under 4a's Survey budget;
+  - reads section palettes (single-valued sections cost one lookup);
+  - `LoadPolicy` as `sample` (`GENERATED_ONLY(n)` allowed).
+- **Freeze:**
+  - the volume goes to `<world>/architect-regions/<id>/volumes/<sha>.bin` (write, fsync, rename, read-back sha);
+  - it is never rewritten;
+  - plan dirs reference it by sha (IR format 2 `volumes`).
+
+  Standalone calls (no region) write to `<world>/architect/volumes/<sha>.bin` and return the `blobId`.
+- **Program access:** `r.needVolume(box)` in a program asks the planner for a volume.
+  - The two-plan flow (plan, prepare, plan again) takes requested volumes after prepare, before the second plan.
+  - The virtual world uses them (§3.1).
+
+  No 6b program **needs** a volume to plan. The fixtures use one only in the volume gate item.
+- **Limit:** 16M cells per region (est.). 6b measures it and then sets it (gate item 7). Over the limit, the plan fails
+  with the count.
+- **Not in 6b:** drift by class inside a volume (`SITE_DRIFTED`), and site lots. Those are 7a/7b.
+
+---
+
+## 6. Java API 1.9.0, protocol, events
+
+### 6.1 Rules (K7; the 1.8.0 rules, unchanged)
+
+- `ArchitectApi.VERSION = "1.9.0"`.
+- Old record constructors are kept: each widened record keeps its 1.8.0 canonical constructor as a secondary constructor.
+- New interface methods are defaults that throw `UnsupportedOperationException("... needs Architect API 1.9.0")`.
+- **Every new enum constant is appended.**
+- `tools/api-compat.mjs` checks the **unchanged 1.8.0, 1.7.0 and 1.6.0 apitest jars** (`architect_apitest-0.11.0.jar`,
+  `-0.10.0.jar`, `-0.9.0.jar`) by reference, and the 0.11.0 mod jar's 1.8.0 surface (`--surface`). All three jars pass
+  their suites against 0.12.0.
+  - **The 0.11.0 apitest jar is not archived yet.** The first 6b build step builds it from `main` at v0.11.0 into
+    `artifacts/gate6b/v0110/` before any 6b change.
+- **Behaviour changes, listed:**
+  1. A format-2 or newer-kit IR refuses `PLAN_STALE` at the three points of §2.4. This is a new refusal for 1.8.0 callers
+     only when they feed 0.12.0 a newer plan.
+  2. `RegionPlan` now carries a report and previews.
+
+     Planning time grows by the checker and the renders. Bars: coarse at most 60 s and full at most 120 s on mega_bench
+     (phase 6 §7).
+
+     `RegionPlanRequest.ext["architect_mc:check"] = false` skips both (for mega_bench gate runs).
+
+### 6.2 New and widened types
+
+```java
+interface Regions {   // additions, all default-throwing
+  CompletableFuture<RegionPreviews> previews(String planId, Set<PreviewView> views, List<List<BlockPos>> axes);
+  CompletableFuture<CheckReport> check(String planId);
+  CompletableFuture<String> design(RegionDesignRequest r);                 // -> designId (Design.Kind.REGION)
+  CompletableFuture<NudgeResult> nudge(String regionId, WaitAction.Kind action);
+}
+record CheckReport(boolean ok, int errors, int warnings, List<Finding> findings) {
+  record Finding(String rule, String severity, @Nullable String part, @Nullable String stage, int count, List<BlockPos> sample, String message) {} }
+enum PreviewView { TOP, SECTION, ISO, SITEPLAN }
+record RegionPreviews(Map<PreviewView, List<Path>> images, JsonObject sitePlan) {}
+// RegionPlan gains trailing @Nullable CheckReport report, @Nullable RegionPreviews previews, int irFormat (old constructor: null, null, 1)
+record RegionDesignRequest(String brief, ServerLevel level, BoundingBox claim, @Nullable String bible, List<String> mustPass,
+                           @Nullable String model, @Nullable Double budgetUsd, @Nullable String owner, JsonObject ext) {}
+//   no designLots (Steward S7); template-first only in 6b (an authoring fallback is 7c)
+// Design.Kind gains REGION (appended). A REGION design's result: { program, params, planId?, reason, outcome: PICKED|NO_TEMPLATE }
+record WaitAction(Kind kind, String label, @Nullable BlockPos target, @Nullable String detail) {
+  enum Kind { MOVE_CLOSER, PREPARE, START_SIDECAR, APPROVE_STAGE, REPLAN } }
+// RegionView gains trailing List<WaitAction> actions (old constructor: List.of())
+record NudgeResult(boolean done, String message) {}
+// Survey: volume(...), Volume, VoxelClass (§5)
+// Reason (appended): NO_TEMPLATE; PLAYER_BLOCKS only if the crater gate's case (a) needs it (§7.3)
+```
+
+**Nudge semantics (S8):**
+
+| Wait | Actions offered | What `nudge` does |
+|---|---|---|
+| `NOT_LOADED` (`LOADED_ONLY`) | `MOVE_CLOSER` (target = the waiting item's nearest chunk centre) | Nothing in the world. It answers the target (`done: false`, "walk to x, z"). |
+| `NOT_GENERATED` | `PREPARE` | Starts `prepare` for the region's plan. This is explicit: the caller chose it, so S6's "never silently" holds. |
+| `SIDECAR_UNAVAILABLE` | `START_SIDECAR` | Asks the sidecar supervisor to (re)start it. If it is already starting, it answers so. |
+| `DRIFTED` (stage held) | `APPROVE_STAGE`, `REPLAN` | `APPROVE_STAGE` = `Sites.approveStage` on the held stage (the 6a continue). `REPLAN` answers `done: false` with "replan with Regions.plan". 6b doesn't replan for the caller. |
+
+An action not offered for the current wait answers `done: false` with "not applicable".
+
+### 6.3 Events and features
+
+- Events: `REGION_STATE` also fires when `actions` change. `REGION_CHECKED(planId, CheckReport)` is a new event (appended).
+- **Features:** `regionCheck`, `regionPreview`, `regionGhost`, `regionDesign`, `regionNudge`, `surveyVolume`,
+  `irFormat2`.
+
+### 6.4 Sidecar protocol (2, additive)
+
+- `region.planned` gains `report`, `previews: {view: [path]}`, `sitePlan`, `irFormat`, `requires`.
+- `region.check {planId}` -> ack `{report}`; `region.preview {planId, views, axes?}` -> ack `{paths, sitePlan}`.
+- `region.tiles.request` may fail with `blob_unknown {shas}`. Blobs are sent with 4a's `blob.put` message (chunked).
+- `region.design {brief, claim, surveyBlobId, bible?, mustPass, model?, budgetUsd?}` -> ack `{designId}`, then
+  `design.upsert {kind: "region", outcome, program, params, reason, cost}`.
+- The `hello` snapshot gains `kitVersion` and `irFormats`.
+- New snapshot features: `region.check`, `region.preview`, `region.design`, `region.blobs`, `ir.format2`.
+
+**Kit CLI:**
+- `region.mjs check <ir> --survey s.bin [--volumes dir]`;
+- `region.mjs preview <ir> --survey s.bin --views ...`;
+- `region.mjs plan ... --blobs-out dir`;
+- `volume.mjs decode <arvx> [--slice y]`.
+
+Exit codes are 0/1/2 as before.
+
+### 6.5 DevBridge (DEVBRIDGE.md changelog)
+
+- `dev.region.check`, `dev.region.preview`, `dev.region.design`, `dev.region.nudge`.
+- `dev.survey.volume {box, load}`, which returns sha, counts, ms, ticks and the max tick.
+- `dev.region.ghost {planId, stage?}`, with `dev.screenshot` for screenshots.
+- `dev.scenario.cams {scenario}`: sets fixed time (6000) and clear weather, and teleports a spectator to each `cam_*`
+  anchor for `dev.screenshot`.
+- `dev.region.drop {planId, after: <tiles written>}` deletes the sidecar's plan dir and cache mid-realise, after N tiles are written (the resume test, gate item 10(a)).
+
+### 6.6 Commands (N7: no Terrain tab)
+
+`/architect region plan <program> <claim> [params]`, `check`, `preview`, `prepare`, `realise`, `remove`, `design "<brief>"`,
+`nudge <action>`. The verdicts are printed in chat, and the previews are written to the plan dir with a clickable path.
+
+---
+
+## 7. Template-first `Regions.design` and Steward's crater gate
+
+### 7.1 The pick
+
+- One structured job (Sonnet, `job.run` with a JSON schema). Its inputs:
+  - the brief;
+  - 4a's survey `summary()` (stats plus the 64x64 ASCII grid);
+  - the claim;
+  - the bible's role names;
+  - the **catalogue**: each bundled program's id, one-paragraph description, params with ranges, the terrain it needs
+    (`needs: {minFlat, water, relief}`) and its claim size range.
+- It returns `{fits: bool, program, params, reason}`. The answer is validated against the catalogue (unknown program,
+  out-of-range params) and gets **one** retry with the validation error. Then the outcome is `NO_TEMPLATE`.
+- With `fits`, the plan runs with no further model call, and the design's result names the `planId`.
+- **Catalogue in 6b:** `crater_works`, `rift_city`, `walled_hill`, `sky_isle`, `floating_islands`. `mega_bench` and
+  `region_small` are excluded (`catalogue: false`).
+- **Auth:** the sidecar's configured auth, as every job. The gate's runs use the claude login only (§10).
+
+### 7.2 The bundled programs Steward asked for
+
+- **`crater_works`** (A5B §2's sketch, made real):
+  - a carved bowl with a `scorched ?? rock` lining;
+  - a rubble rim ring;
+  - a spiral stair from the rim to the floor;
+  - 3 terraced work levels;
+  - 6-12 lots on terrace pads (offices, halls, sheds);
+  - ground roads on the rim, graded roads down the terraces;
+  - `entrance`/`spawn` outside the rim.
+
+  Params: radius 40-160, depth 12-48, lots 4-12.
+- **`rift_city`:**
+  - a carved linear rift (a `capsulePath` carve with `warp` walls, depth 20-60) with a `lining ?? rock` lining;
+  - a `cavern` side hall (lit);
+  - ledge terraces on both walls with lots;
+  - `bridge`s across the rift (pillar or arch supports from the rift floor);
+  - `stair`s from each rim to the floor;
+  - a `utility` corridor along the floor.
+
+  Params: length 96-320, width 16-48, depth 20-60, bridges 2-6.
+
+Both are also family fixtures (§9, gate item 2), with expected reports.
+
+### 7.3 Steward's crater gate (moved from the old 6c outline; A5B §6, refined)
+
+From a fresh dev world (normal worldgen, a pinned seed, a site chosen by `find-site` for "flat ground, 300x300"):
+1. `Regions.design("a repurposed meteor crater mining facility")` returns `PICKED` `crater_works`.
+2. The plan has **no M1, M2, M3 or M4 findings**, and no errors.
+3. `prepare` runs, then `realise` through the queue. The lots are filled from library entries and variants (no model call).
+4. Every lot is placed, and the region is `PLACED`.
+5. One `Regions.remove` returns the area cell for cell under the 6a exactness rules (E-normal classified, with **default**
+   gamerules as the old 6b outline said for a dev world).
+6. **The player block, case (a), before realise:** a non-natural block placed by the player inside a lot's pad area.
+   - The pad skips it (noted).
+   - The lot's child must refuse (A5B N2), the region ends `PARTIAL`, and after the group undo the block is still there.
+   - The build first pins which `Reason` 0.11.0's check gives for a non-natural, non-BE block inside a LAYERed box. If it
+     only clears it, 6b adds the appended `Reason.PLAYER_BLOCKS`, returned by `check()` and the queue. That is a
+     behaviour change to LAYER, listed in §6.1.
+7. **Case (b), after realise:** a block placed on a pad or path cell survives the group undo and is reported in `kept`.
+
+The **rift prompt** ("a rift settlement", Steward PLAN phase 2) runs the same path. It must pick `rift_city` and pass
+steps 2-5. Cases (a) and (b) run on the crater only.
+
+### 7.4 Pick accuracy
+
+Six briefs, each with its expected outcome, run on the claude login against their pinned sites:
+
+| Brief | Expected |
+|---|---|
+| "a walled town on a hill, with gates and towers" | `walled_hill` |
+| "a stone citadel floating on a single great sky rock, held up by pillars" | `sky_isle` |
+| "a scattered hamlet on several small floating islands" | `floating_islands` |
+| "a mining camp in a blasted crater" | `crater_works` |
+| "a town built down the walls of a deep canyon" | `rift_city` |
+| "a cozy two-room cottage" | `NO_TEMPLATE` |
+
+**Bar: at least 5 of 6 as expected, and the `NO_TEMPLATE` brief must be one of the 5.** `sky_isle` and `floating_islands`
+have distinct catalogue descriptions and `needs`:
+- `sky_isle` is one large mass on pillars or a taper;
+- `floating_islands` is 5-9 small unsupported islands.
+
+That way the two sky briefs can be told apart.
+
+---
+
+## 8. The scenario harness and the gallery
+
+### 8.1 Scenario files
+
+`scenarios/<id>.json`, committed, one per golden scenario (S1-S6). Only S1 must be green in 6b. S2-S6 get files with their
+fixtures found and pinned, but no bars run.
+
+```json
+{ "id": "s1_floating_islands", "phase": "6b", "version": 1,
+  "world": { "seed": "<u64 decimal>", "preset": "normal", "gamerules": "gallery" },
+  "fixture": { "claim": [x0, z0, x1, z1], "yRange": [y0, y1], "foundBy": "find-site s1 @ <sha>", "surveySha": "<sha>" },
+  "flat": { "preset": "flat", "claimOffset": [0, 0], "gamerules": "exact" },
+  "program": "floating_islands", "params": {}, "seed": "<u64 decimal>", "bible": "kit/bibles/<id>.json",
+  "lotEntries": { "lotId": "entryId@version" },
+  "cams": { "cam_hub": [x, y, z, yaw, pitch], "...": "6 fixed cameras" },
+  "bars": { "...": "§8.3" } }
+```
+
+- **Gamerule sets:**
+  - `exact`: `randomTickSpeed 0`, `doMobSpawning false`, `doFireTick false`, `doWeatherCycle false` (the 6a E-flat
+    set);
+  - `gallery`: default rules, time 6000, clear weather.
+
+  **Gallery screenshots are taken after a 2-minute stand at default random ticks** (SETTLEMENTS §18: leaf decay, melt).
+  E-flat runs at 0.
+- **`tools/find-site.mjs <scenario>`:**
+  1. surveys a grid of candidate claims in a scratch world of the pinned seed;
+  2. scores them by the scenario's needs (S1: low relief, at least 70% plains or ocean, no village within the claim + 64);
+  3. records the winner and its survey sha in the scenario file.
+
+  It runs once per scenario. The pinned file, not the tool, is the source of truth after that.
+- **Seeds are pinned three times:** the world seed, the program seed and the IR sha (recorded at the first green run). A
+  later run that gives another IR sha is a finding, unless the change log names why (a kit change).
+
+### 8.2 The harness
+
+`tools/scenarios.mjs run <scenario> --phase 6b [--flat] [--out artifacts/scenarios/6b/<id>/<runId>/]` drives the dev client
+through DevBridge:
+1. a fresh world from the pinned seed (or the flat variant);
+2. plan (a report and previews are kept);
+3. prepare;
+4. realise with `lotEntries`;
+5. a re-survey and metrics;
+6. the 2-minute stand;
+7. the 6 cameras;
+8. `Regions.remove`;
+9. the exactness check.
+
+It writes:
+- `metrics.json`: every bar, with its value, threshold and pass;
+- `report.json`, the four previews;
+- `shots/<cam>.png`;
+- `before/` (§8.4);
+- `exact.json`;
+- `run.json`: world seed, IR sha, kit/mod/sidecar versions, Node major, wall times, spend;
+- `evidence.sha`: the SHA-256 over the sorted list of (path, sha) of everything above.
+
+`tools/scenarios.mjs gallery --phase 6b` assembles the gallery bundle (§8.4). `tools/scenarios.mjs check --phase 6b` checks
+that every new or changed scenario's `metrics.json` passes and that `approvals.json` holds a matching approval.
+
+### 8.3 Bars for S1 in 6b (SETTLEMENTS §16.3, the rows that apply)
+
+| Check | Metric (on the **realised** world, re-surveyed, not the virtual one) | Bar in 6b |
+|---|---|---|
+| Checker | the plan's report | 0 errors; **no M1, M2, M3, M4 findings** |
+| Reachability (M2 `player`) | a walk graph over the realised world from `entrance` | 100% of nodes (lot entrances, island anchors); 0 unreachable lot entrances |
+| Structure (M3) | the support scan on the realised world | 0 floating cells outside declared `floating` groups; 0 `M3:floating_spur`; every floating group one component |
+| Spans (M10) | per bridge | every unsupported span at most its `maxSpan`; `'ends'` bridges bear on at least 2x2 cells at both ends |
+| Safety | M4; M5 dark spawnable share; M8 guarded share | M4 0; M5 under 1% of walk area; **M8: 100% of walk cells beside a drop over 3 guarded** (SETTLEMENTS §16.3's scenario bar; the rule itself stays a warning in the checker until 7a promotes it) |
+| Theme fit: palette | role adherence over non-terrain written cells (roles, shape variants, form materials) | at least 0.9 |
+| Theme fit: organic read | axis-run share of form boundary cells | **recorded, not gated** in 6b (below) |
+| Buildings | the kit checker over the placed lot entries; `detailNoise` and `accentShare` | 0 errors; `detailNoise` and `accentShare` within the bible's restraint (as 5a). The entries are library entries, so this is a regression guard |
+| MSPT and throughput | 6a's realise bars | 0 ticks over 50 ms, p99 at most 25 ms; the light-engine tick share recorded |
+| Exactness | E-flat on the flat variant; E-normal on the natural fixture; after one `Regions.remove` | E-flat 0 mismatches; E-normal all classified, at most 0.01% of written cells |
+| Determinism | IR sha over 3 plans; tile shas for 1 and 4 workers, forward and shuffled; macOS and Linux CI | identical; a committed golden `scenarios/goldens/s1.json` |
+| Gallery | Noah's approval (§8.4) | approved for this run's `evidence.sha` |
+
+Not applicable to S1 in 6b, stated so they aren't silently skipped:
+- `villager` reachability (7a);
+- Fit share and disturbance (site lots, 7a/7b);
+- theme-fit motifs (no connector types or district motifs before 7a; lantern posts per 24 path cells recorded only);
+- spend ±50% (S1 is a $0 run; its spend must be **$0.00**, which is checked).
+
+**Axis-run calibration.** SETTLEMENTS says the axis-run bar is "calibrated on S1 in 6b". Calibrating and gating on the same
+run is the gaming SETTLEMENTS §18 forbids. So in 6b:
+- axis-run share is **recorded only**;
+- the calibration uses **10 held-out island seeds**, not S1's seed;
+- `floatingIsland` alone is rendered and Noah marks each "reads natural / reads geometric" on the gallery's calibration
+  card;
+- the threshold that separates his marks best is proposed for 6c's gate and written into SETTLEMENTS' bar table (gated
+  from 6c on).
+
+### 8.4 The gallery: a private claude.ai page (Noah's decision)
+
+**One page per phase**, "Architect 6b gallery":
+- published with the Artifact tool as a **private** page (the default; organization-internal because it declares
+  `assets`);
+- capabilities `db`, `user`, `assets`;
+- republished to the same URL on each changed run, so Noah keeps one link.
+
+**What it shows**, per scenario that is new or changed in this phase (in 6b: S1, plus a calibration card):
+1. **A header:** scenario id and version; run id; `evidence.sha` (first 12 hex); IR sha; date; versions.
+2. **Metrics first:** the §8.3 table with pass or fail per row, and any not-gated rows labelled "recorded".
+3. **Before and after, side by side, per camera (6 cameras):**
+   - "before" is **the pristine fixture** (the same cameras in the same world before the plan; S1 has no earlier phase
+     run);
+   - from 6c on, "before" is the previous phase's green run of the same scenario, with the pristine fixture one tab away.
+4. **The previews:** top, section (each axis), iso, and the site plan (SVG). The checker summary is under them.
+5. **Exactness:** the E-flat and E-normal counts, with the classified list collapsed.
+6. **Decision controls:** Approve or Reject, a notes field, and a Submit button. Only the page's owner (Noah) can write
+   decisions. Everyone else sees them read-only.
+7. **The calibration card** (6b only): 10 island renders, each with "natural" or "geometric" toggles, stored with the same
+   mechanism.
+
+Images are uploaded as the artifact's assets (the PNGs), referenced by asset URL. The page stays under the 16 MB limit,
+since the images aren't embedded as data URIs.
+
+**How approval is recorded:**
+- **On the page:** one `db` document per decision, `approvals/<phase>__<scenario>`:
+  `{phase, scenario, runId, evidenceSha, decision: "approved"|"rejected", notes, by: <user id>, at: <ISO time>}`.
+  - Rules: `approvals` is readable at `view` and writable at `owner` only.
+  - A new Submit replaces the document. The page keeps the earlier decision under `history` in the same document.
+- **Binding:** a decision counts only for the `evidenceSha` it names. Republishing the page for a new run shows the
+  earlier decision struck through, with "evidence changed, decide again".
+- **Into the repo:** the builder reads the documents with `ArtifactData` (`list approvals`) and writes them, verbatim with
+  the page URL, to `artifacts/scenarios/6b/approvals.json`. The builder then:
+  - adds a line per scenario to PLAN.md ("S1 approved by Noah <date>, run <id>, evidence <sha12>: <notes>");
+  - commits both.
+- **Verification:** the gate-verifier cannot read claude.ai. It checks that `approvals.json`'s `evidenceSha` equals the
+  sha it recomputes from `artifacts/scenarios/6b/s1/<runId>/`, and that the decision is `approved`. A rejection with
+  notes sends the scenario back to the builder. A rejected scenario is not green.
+- **Fallback:** if the page can't be published or Noah prefers, `tools/scenarios.mjs gallery --local` writes the same page
+  as a local HTML file whose buttons write `approvals.json` directly (SETTLEMENTS §16.4's original design). The binding
+  rule is the same.
+
+---
+
+## 9. Fixtures and the broken variants
+
+- **Family fixtures** (A5B §6): `crater_works`, `sky_isle`, `rift_city`, `walled_hill`. Each has
+  `kit/test/fixtures/regions/<id>.expected.json` listing which rules fire, at what severity, on which parts, and why (a
+  one-line reason per finding). Each runs at default params on a synthetic survey (`synth.mjs`), and `crater_works` and
+  `rift_city` also on their gate sites' recorded surveys.
+- **Broken variants**, each caught by its rule (finding present, on the named part):
+
+| Variant | Rule |
+|---|---|
+| a lot with no path | M2 |
+| a carve that opens a lake (a bowl next to a surveyed water body) | M4 |
+| a floating spur (a mass of an island's part with no face contact) | M3 (`floating_spur`) |
+| a dark cavern (light disabled) | M5 |
+| a bridge span over its limit | M10 |
+| a stair with rise 2 | M7 |
+| an `'ends'` bridge with one end in air | M10 |
+| two parts with the same id | M14 (error) |
+| a role that resolves to nothing | M13 (error) |
+| a write outside the claim | M1 (error) |
+
+---
+
+## 10. Spend (claude login only)
+
+| Run | Calls | Est. |
+|---|---|---|
+| Crater gate pick ("a repurposed meteor crater mining facility") | 1 pick (+ at most 1 validation retry) | $0.01-0.05 (measured seed, phase 6 §5) |
+| Rift pick ("a rift settlement") | 1 (+1) | $0.01-0.05 |
+| Pick accuracy (gate item 8b): 6 briefs, each with its expected outcome | 6 (+ at most 6) | $0.06-0.30 |
+| Retries of the whole gate (at most 2 re-runs of the above) | up to 16 | up to $0.80 |
+| S1, the fixtures, the full chain, the gallery | none | **$0** |
+
+- **Expected about $0.30. Cap $3.** Past $3 the gate stops and asks the coordinator.
+- **Auth:** **the claude login only. Never an API key.** `tools/gate6b.mjs` refuses to start if any `ANTHROPIC_*` or
+  `CLAUDE_*` key is in its environment (as in 5b and 6c's outline). It logs the sidecar's auth mode at each paid step, and
+  the gate-verifier checks the log.
+- **Per-run cost** is recorded in each `design.upsert` and summed in `artifacts/gate6b/spend.json`. The ±50% estimate check
+  applies to the sum of picks (an expected $0.02 seed per pick).
+- **Publishing the gallery costs nothing.**
+- SETTLEMENTS estimated 6b at $1-3. This contract's count is lower because authoring is 7c and S1 is deterministic. The
+  $3 cap keeps SETTLEMENTS' upper figure.
+
+## 11. Reference images
+
+**6b needs none.** Nothing in 6b feeds images to a model:
+- the pick is text only;
+- S1 is a deterministic program;
+- the image A/B (SETTLEMENTS §16.5) starts in 7b.
+
+Noah's gallery judgment and the axis-run calibration are made against the renders themselves. The first ask for GPT Image
+2.5 references comes with the 7b contract (per scenario, for the images A/B). **Nothing to ask Noah for in 6b.**
+
+---
+
+## 12. Phase 6b gate
+
+Bars are explicit. Each item writes `artifacts/gate6b/<step>.json`, and `REPORT.md` summarises them.
+
+1. **Unit and property tests (no game, no Claude):**
+   - **Kit:**
+     - the new shapes' SDFs against analytic fixtures;
+     - `array`/`instances` equal to the explicit union;
+     - `warp` bounds (no cell outside `of` ± amp);
+     - material rules: each condition, first-match, dither, determinism;
+     - every 6b primitive's guarantee as a property (cavern light coverage, `'ends'` bridge span, ring gates with towers,
+       underside taper connectivity);
+     - the realise lint over the extended file list;
+     - `requires` computed equals walked;
+     - the format-2 compile errors (unknown op, shape, rule or member) and the inline-blob refusal;
+     - the ARVX round trip;
+     - the `floatingIsland` property tests (§4.1).
+   - **Format-1 byte identity:** `kit/test/fixtures/regions/mega_bench.golden.json` and `region_small`'s tiles are
+     **unchanged** (the same file, not regenerated).
+   - **Format-2 determinism:** IR byte-identical over 3 plan runs. S1's and the four fixtures' tile shas are identical
+     for 1 and 4 workers, forward and shuffled, on macOS and Linux CI. They are committed goldens.
+   - **Sidecar:**
+     - `region.check`, `region.preview`;
+     - `blob_unknown` and the re-send;
+     - the `hello` versions;
+     - `region.design` against the sim backend (pick, invalid pick and retry, `NO_TEMPLATE`, budget stop);
+     - the plan with report and previews within limits.
+   - **Mod, pure JVM:**
+     - the `PLAN_STALE` gates (a)-(c) with fake IRs;
+     - the blob copy with read-back, and a bad sha refusing;
+     - ARVX encoding equal to the JS decoder on fixture columns;
+     - the Java and JS `VoxelClass` tables equal;
+     - `WaitAction` per wait reason;
+     - `RegionView` and `RegionPlan` old constructors.
+2. **Fixtures and broken variants** (bridge arches and towers are tested here, on `sky_isle` and `rift_city`; mega_bench is
+   unchanged, §Deviations): each family fixture's report equals its `expected.json`. Every broken variant in §9 is
+   caught by its rule on the named part.
+3. **Prefix checks:** M2 and M3 hold on every stage prefix of `walled_hill`. The per-prefix total time is at most 2x one
+   full check.
+4. **Checker and plan time on mega_bench:** coarse at most 60 s, full-resolution at most 120 s, single-threaded, recorded
+   per rule. mega_bench's plan with the check, at most 30 s + the check.
+5. **Previews:**
+   - the goldens are byte-identical;
+   - the section and site-plan views of every fixture and of S1 have been looked at (screenshots in the report, with a
+     sentence each on what they show);
+   - `siteplan.json` validates against `siteplan-1.json` for every fixture and S1;
+   - the `graph` has a node for every lot entrance and anchor.
+6. **The region ghost:** screenshots inside and beyond 64 blocks, for `crater_works` and S1 (floating tint), looked at.
+7. **Volume survey:**
+   - `dev.survey.volume` over a natural cliff-and-cave fixture of 256x256x128 (found by `find-site`, pinned), in a dev
+     world;
+   - **0 ticks over 50 ms** while sampling; max sampling slice recorded;
+   - bytes per cell and total bytes recorded;
+   - write/fsync/read-back sha checked;
+   - the counts per class are plausible (a scan reports ROCK, AIR, WATER, LOG and LEAVES each above 0);
+   - a second sample of the unchanged area gives the same sha.
+
+   **The per-region cell limit is set from the measured cells per second and bytes** (rule: at most 60 s of sampling and
+   64 MB on disk at the measured rates, rounded down to a whole million). It is written into CONTRACT and REGIONS.md.
+8. **Steward's crater gate (§7.3), steps 1-7, plus the rift prompt (steps 1-5).** Each runs from a fresh world, on the
+   claude login.
+
+   **8b. Pick accuracy (§7.4):** at least 5 of 6 as expected, including `NO_TEMPLATE`.
+9. **The command path (replaces the Terrain tab item):**
+   - `/architect region plan|check|preview|prepare|realise|remove` on `crater_works` at 200x200 in a dev world under
+     **default** gamerules;
+   - exact under the classified-mismatch rule;
+   - `nudge` exercised once for each of `PREPARE` (a not-prepared region), `MOVE_CLOSER` (`LOADED_ONLY`, player far),
+     `START_SIDECAR` (sidecar killed) and `APPROVE_STAGE` (drift induced by a scripted dig).
+10. **Versioning:**
+    - (a) A format-2 IR planned by 0.12.0 is realised by 0.12.0 after the sidecar's plan dir is deleted mid-realise. The
+      region resumes through `ir_unknown` and then `blob_unknown`, with the same region hash as an uninterrupted run in
+      a world copy.
+    - (b) A newer IR (`format: 3`, or `kitVersion` 0.99.0) refuses `PLAN_STALE` at accept, at realise start and at
+      resume, with nothing written.
+    - (c) **The downgrade:** a world with a format-2 region mid-realise (one stage placed), opened with the 0.11.0 jar.
+      - Every tile request fails with the format message.
+      - No cell is written (`dev.region.hash` unchanged).
+      - `Regions.remove` with the 0.11.0 jar is exact on what 0.12.0 wrote.
+11. **S1 green:**
+    - every §8.3 bar passes on the natural fixture run;
+    - E-flat passes on the flat variant;
+    - the determinism golden is committed;
+    - **Noah's approval** in `approvals.json` matches the run's `evidence.sha`.
+
+    The axis-run calibration card is **not** required for S1 green. If Noah fills it in, the proposed threshold is
+    recorded for 6c. If not, 6c's contract carries the calibration.
+12. **Regressions, the full engine chain** (§12.1 says why). Steps of `tools/gate6a.mjs` unless marked:
+    - **every sidecar, kit and mod test** (including 6a's);
+    - **`megaA`** (one run, prepared, every phase 6 §7 bar, with `ext["architect_mc:check"] = false` so the plan stays
+      6a's);
+    - **`megaB`** (staged: relog and sidecar-kill resumes, per-stage engine time and chunks loaded);
+    - **`eflat`** (0 mismatches);
+    - **`forest`**;
+    - **`crash`** (RG1-RG6, K3/K7 inside a region);
+    - **`inv3`**;
+    - **`staged`**;
+    - **`heap`** (used heap after a forced GC at the 5 checkpoints, at most baseline + 1 GB; megaA under `-Xmx` = baseline +
+      2 GB; sidecar RSS at most 1.5 GB). The evaluator, the blob copy and the volume path can each move these;
+    - **`apijars`** with the unchanged 1.8.0, 1.7.0 and 1.6.0 apitest jars, and `api-compat` clean (references and the
+      1.8.0 surface);
+    - **the `regress` chain:**
+      - the 4d gate;
+      - 4e gate items 2, 5, 6, 8, 9, 10;
+      - 5b gate items 2, 4, 5;
+      - the 4a jobs, 4b and 4c sim suites;
+      - the **throughput margin**: one unmeasured warm-up, then the 4e village plus roads at 4 ms, median of 3 at least
+        15k cells/s (6 runs if within 5%).
+    - In every megaA and megaB run, `generatedDuringRealise` is **0** (the 6a open item, re-checked).
+    - **Excluded `gate6a.mjs` steps, with why:**
+      - `chunkstatus`: 6a's one-time verification of how 26.3 reads chunk status; 6b doesn't touch `ChunkGen`;
+      - `prepare` as a separate step: megaA runs prepare itself;
+      - `smoke`/`base`/`eval`: harness steps, not bars.
+13. **gate-verifier** checks the result. It reproduces items 1, 2, 5, 10(b) and 11's sha check independently, and it checks
+    that spend is within the $3 cap, on the claude login (the environment log).
+
+### 12.1 Which regression tier, and why
+
+Per the gate-runner policy (two tiers; the full chain when realise, the journal or streaming change), 6b needs **the full
+engine chain**, not only `regress`:
+- **Realise changes.** `kit/lib/realise.mjs` and `lib/sdf.mjs` gain the format-2 compile path, new shapes and per-cell
+  material-rule dispatch. That is the evaluator's hot path, so the 45k cells/s evaluation bar and the per-tile 2 s limit
+  can regress even for format-1 IRs.
+  - The format-1 golden proves the *output* is unchanged. It cannot prove the *speed*.
+  - So megaA re-measures evaluation p50/p99, starvation share and cells/s.
+- **Streaming changes.** The `blob_unknown` path, the blob re-send from the world copy, and the region record's blob copy
+  change the mod-sidecar resume logic that megaB (sidecar kill, relog) and the crash step (RG3-RG5) exercise.
+- **The journal does not change.** No store format, no journal code. That alone would allow `regress`, but either of the
+  two above requires the full chain.
+
+The full chain is **one** run of megaA and megaB, not three. The throughput median-of-3 is the only repeated item.
+
+## 13. Build order inside 6b
+
+1. Build and archive the 0.11.0 apitest jar (`artifacts/gate6b/v0110/`). Pin the player-block `Reason` question (§7.3
+   case (a)) with the 0.11.0 jar.
+2. Kit:
+   - IR format 2, `requires`, side blobs;
+   - the new shapes; material rules; the lint list;
+   - the format-1 golden check, wired first so every later kit change runs against it;
+   - the 6b primitives; `floatingIsland`; ARVX decode.
+3. Kit: the virtual world, M1-M14, prefix checks, the previews, `siteplan.json`.
+4. Bundled programs and fixtures (`crater_works`, `rift_city`, `sky_isle`, `walled_hill`, `floating_islands`), the
+   expected reports, and the broken variants.
+5. Sidecar: check, preview, blobs, `hello` versions, `region.design` (the template pick).
+6. Mod: blob copy and re-send, the `PLAN_STALE` gates, `Survey.volume`, previews/check/design/nudge, the ghost,
+   commands, DevBridge; Java 1.9.0, apitest steps, api-compat.
+7. Tools: `find-site.mjs`, `scenarios.mjs`, the scenario files (S1-S6 fixtures pinned), `gate6b.mjs`.
+8. Gate items 1-10 and 12, then S1's run and the gallery (item 11), then the gate-verifier (13).
+
+---
+
+## Open questions for Steward
+
+- **S-6b-1. `siteplan.json` format 1** (§3.4): the `graph` block is derived topology (lot entrances, anchors, path
+  endpoints, path edges with `mover: ["player"]`) until 7a replaces it with the planned graph and adds `seconds`, `risk`
+  and the other movers as new members (format stays 1). Is reading that early derived graph useful to you in 6b, or would
+  you rather it stay absent until 7a?
+- **S-6b-2. The two prompts.** The gate runs "a repurposed meteor crater mining facility" (your PLAN wording; A5B used "a
+  crater mining facility") and "a rift settlement". Are those your exact test strings? Is `rift_city`'s shape (a linear
+  carved rift, ledge terraces on both walls, bridges across, a lit side hall, a floor utility corridor) what your rift
+  means?
+- **S-6b-3. `NO_TEMPLATE`.** With authoring in 7c, a brief no bundled program fits ends the design with `NO_TEMPLATE` and
+  the pick's reason. Do you want the closest program offered anyway (with `fits: false` and the reason), so your inbox can
+  propose it, or a clean refusal?
+- **S-6b-4. The nudge actions** (§6.2): `MOVE_CLOSER`, `PREPARE`, `START_SIDECAR`, `APPROVE_STAGE`, `REPLAN`. Does your
+  inbox need any other? `PREPARE` from a nudge counts as the explicit start S6 asked for; agreed?
+- **S-6b-5. `RegionPlan.report` and previews by default.** Planning now runs the checker and renders (mega_bench: up to
+  about 3 extra minutes). Is that acceptable as the default, with `ext["architect_mc:check"] = false` to skip, or do you
+  want check and previews only on request?
+- **S-6b-6. `Survey.volume` early.** It ships in 6b with no 6b consumer beyond the measurement. Do you want to call it
+  yourself before 7a (e.g. to judge "sculpt vs find site"), and is the class set enough?
+
+## Open questions for Noah
+
+- **N-6b-1. Gallery mechanics.** One private claude.ai page per phase, republished to the same link. Approve or Reject per
+  scenario with notes, writable only by you, bound to the run's evidence sha, and mirrored by the builder into
+  `approvals.json` and PLAN.md. Is that how you want to approve, and is a 10-render "natural / geometric" calibration card
+  for the islands acceptable extra work in 6b?
+- **N-6b-2. S1 without rope.** S1's brief says "rope and stone". Rope bridges are a 7a connector, so 6b's S1 is "stone
+  links" (stone bridges and stairs), and 7a re-runs it with rope bridges and sends it back to your gallery. OK to call S1
+  green in 6b on that basis?
+- **N-6b-3. Spend.** Expected about $0.30, cap $3 (claude login only), all template picks. SETTLEMENTS said $1-3. OK?
+- **N-6b-4. Downgrade behaviour.** A world with a format-2 region opened by 0.11.x fails that region's tiles with an error (the exact region state is pinned by gate item 10(c)) and
+  writes nothing (it can still remove it exactly), rather than refusing the whole world as journal format 2 did. Accept,
+  or do you want a hard refusal (a store-format bump)?
+- **N-6b-5. Survival rule timing.** Your decision (natural cut/fill and grown forms free; connectors and buildings as
+  construction sites) isn't built in 6b, so regions still refuse in survival-toggle worlds. Proposal: implement the
+  terrain half in 6c (when forms and relief arrive) and the connector half in 7a. Or do you want it sooner?
+
+## Deferred (from 6b)
+
+- Program authoring sessions, and an authoring fallback for `NO_TEMPLATE` (7c).
+- The op kinds `relief`, `scatter`, `voxels` and `stamp`; fields produced by passes; the other generators; M17-M20 (6c).
+- `graph`/`siteLots`/`lotEntries`/`fits` in the IR; connectors (rope bridges in S1 v2); `nav.json`; the `villager` and
+  `steward` movers; the behavioural villager test; M8 promotion; M15 and M16; site analysis; volume drift by class (7a).
+- The axis-run bar as a gate (6c, from the 6b calibration).
+- Rule promotions (after real generations; recorded in PLAN.md).
+- The survival rule for regions (N-6b-5).
+- Textured region renders; a set-level critic (unchanged deferrals).
+- The 6a open items not fixed here: the cause of the 161 generated chunks (monitored), and the structure-template memory
+  leak on repeated 5b sizecap runs.
+
+## Coordinator decisions on Noah's questions (provisional; Noah may override)
+
+- **N-6b-1** The gallery as drafted: a private claude.ai page with the metrics first, then before/after renders, approve or
+  reject with notes, bound to the run's evidence sha. The 10-render calibration card is optional for Noah; skipping it doesn't
+  block S1.
+- **N-6b-2** Yes: S1 goes green in 6b with stone links only. Rope bridges arrive in 7a.
+- **N-6b-3** Yes: about $0.30 expected, with a $3 cap.
+- **N-6b-4** The soft downgrade is accepted: 0.11.x writes nothing to a format-2 region, and the gate pins that behaviour.
+- **N-6b-5** Yes: the terrain half of the survival rule lands in 6c, and the connector half in 7a.
