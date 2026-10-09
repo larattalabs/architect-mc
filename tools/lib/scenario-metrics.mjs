@@ -134,3 +134,28 @@ export function bars(x) {
   out.push(row('gallery', 'Gallery', x.approval ?? 'pending', "Noah's approval for this run's evidence.sha", x.approval === 'approved'));
   return out;
 }
+
+/**
+ * (6b addition, region lot entrances) The default single-building approach blocks on the lots' fronts: dirt path and
+ * cobblestone in the realised world (an ARWD dump `after`) within 8 cells of each lot's box (outside it, from floorY - 2
+ * to floorY + 2), and for the record the same blocks inside the boxes (the child designs' own). Gate: 0 outside.
+ */
+export function lotFronts(ir, after, blocks = ['minecraft:dirt_path', 'minecraft:cobblestone']) {
+  const out = { outside: {}, inside: {}, perLot: {} };
+  const want = new Set(blocks);
+  for (const l of ir.lots ?? []) {
+    const b = l.box;
+    const n = {};
+    for (let x = b.minX - 8; x <= b.maxX + 8; x++) for (let z = b.minZ - 8; z <= b.maxZ + 8; z++) for (let y = b.minY - 2; y <= b.minY + 2; y++) {
+      if (x < after.box.minX || x > after.box.maxX || z < after.box.minZ || z > after.box.maxZ || y < after.box.minY || y > after.box.maxY) continue;
+      const id = after.palette[after.cells[after.at(x, y, z)]].replace(/\[.*$/, '');
+      if (!want.has(id)) continue;
+      const inside = x >= b.minX && x <= b.maxX && z >= b.minZ && z <= b.maxZ;
+      const k = inside ? 'inside' : 'outside';
+      out[k][id] = (out[k][id] ?? 0) + 1;
+      if (!inside) n[id] = (n[id] ?? 0) + 1;
+    }
+    out.perLot[l.id] = n;
+  }
+  return out;
+}
