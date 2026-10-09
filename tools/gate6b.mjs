@@ -99,7 +99,7 @@ steps.smoke = async () => {
   const claim = [-100, -100, 99, 99];
   const p = await plan('crater_works', claim, { surveyLoad: 'bounded:256' });
   check(!!p.report && p.report.errors === 0, `smoke: the plan carries a report (${p.report?.errors} errors, ${p.report?.warnings} warnings)`, p.summary);
-  check(!!p.previews && Object.keys(p.previews.images ?? p.previews).length >= 4, `smoke: the plan carries previews (${JSON.stringify(p.previews).slice(0, 200)})`);
+  check(!!p.previews?.paths && Object.keys(p.previews.paths).length >= 4, `smoke: the plan carries previews (${JSON.stringify(p.previews).slice(0, 200)})`);
   const pr = await prepare(p.planId);
   const p2 = await plan('crater_works', claim, { surveyLoad: 'generated:64' });
   const yr = p2.claimY ?? [-64, 319];

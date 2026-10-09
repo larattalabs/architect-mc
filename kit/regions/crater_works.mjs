@@ -14,7 +14,7 @@ import { compassDir } from '../lib/region/geom.mjs';
 export const id = 'crater_works';
 
 export const params = {
-  radius: { type: 'int', min: 40, max: 160, default: 56, label: 'Crater radius' },
+  radius: { type: 'int', min: 40, max: 160, default: 72, label: 'Crater radius' },
   depth: { type: 'int', min: 12, max: 48, default: 24, label: 'Crater depth' },
   lots: { type: 'int', min: 4, max: 12, default: 8, label: 'Lots' },
 };
@@ -70,7 +70,7 @@ export default function craterWorks(ctx) {
     const n = Math.max(6, Math.ceil((2 * 3.141592653589793 * rad) / every));
     for (let i = 0; i < n; i++) { const d = compassDir((360 * i) / n + 7); lamps.push([round(cx + d[0] * rad), y, round(cz + d[1] * rad)]); }
   };
-  for (let k = 0; k + 1 < L; k++) lampRing(radii[k + 1] + 0.5, ys[k] + 1, 10);
+  for (let k = 0; k + 1 < L; k++) lampRing(radii[k + 1] + 1.5, ys[k], 10); // on the terrace floor beside the rail
   for (let k = 0; k < L; k++) lampRing(radii[k] - 1.5, ys[k], 10);
   lampRing(radii[2] * 0.5, ys[2], 10);
   const gA = 180; // the gate, the bridge and the entrance face south
@@ -141,7 +141,7 @@ export default function craterWorks(ctx) {
       if (placed.length >= P.lots) break outer;
       const d = compassDir(a);
       const mid = k === L - 1 ? (spiralR + 6 + radii[k] - 3) / 2 : (radii[k + 1] + radii[k]) / 2;
-      for (let s = 11; s >= 6; s--) {
+      for (let s = 12; s >= 9; s--) { // 9+ wide: the smallest library children (the 6a stubs) need 9x9
         const x0 = round(cx + d[0] * mid - s / 2), z0 = round(cz + d[1] * mid - s / 2);
         if (!okBox(k, x0, z0, s - 1)) continue;
         placed.push({ x: x0, z: z0, s: s - 1, k });
@@ -155,7 +155,7 @@ export default function craterWorks(ctx) {
     const s = p.s + 1;
     const dx = cx - (p.x + s / 2), dz = cz - (p.z + s / 2);
     const front = Math.abs(dx) > Math.abs(dz) ? (dx > 0 ? 'east' : 'west') : (dz > 0 ? 'south' : 'north');
-    pads.lot(`lot_${i + 1}`, { at: [p.x, p.z], size: [s, s], floor: ys[p.k], front, max: [s, 8, s], brief: BRIEFS[i % BRIEFS.length], stage: 'lots', pad: { maxCut: 64, maxFill: 64, edge: 'wall' } });
+    pads.lot(`lot_${i + 1}`, { at: [p.x, p.z], size: [s, s], floor: ys[p.k], front, max: [s, 12, s], brief: BRIEFS[i % BRIEFS.length], stage: 'lots', pad: { maxCut: 64, maxFill: 64, edge: 'wall' } });
   });
   // the lamps last (clear of the lots' boxes)
   const lampCols = [];

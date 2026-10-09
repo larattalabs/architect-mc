@@ -67,7 +67,7 @@ export default function walledHill(ctx) {
       if (angDiff(a, stairAngle(k)) < 25 || (k > 0 && angDiff(a, stairAngle(k - 1)) < 25) || angDiff(a, gA) < 20) continue;
       const d = compassDir(a);
       const mid = (outer + inner) / 2;
-      for (let s = 11; s >= 6; s--) {
+      for (let s = 11; s >= 9; s--) { // 9+ wide: the smallest library children (the 6a stubs) need 9x9
         const x0 = round(cx + d[0] * mid - s / 2), z0 = round(cz + d[1] * mid - s / 2);
         const cs = [[x0 - 1, z0 - 1], [x0 + s, z0 - 1], [x0 - 1, z0 + s], [x0 + s, z0 + s]];
         if (cs.some(([x, z]) => { const dd = Math.sqrt((x - cx) * (x - cx) + (z - cz) * (z - cz)); return dd > outer || dd < inner; })) continue;
@@ -81,7 +81,7 @@ export default function walledHill(ctx) {
   placed.forEach((p, i) => {
     const dx = cx - (p.x + p.s / 2), dz = cz - (p.z + p.s / 2);
     const front = Math.abs(dx) > Math.abs(dz) ? (dx > 0 ? 'east' : 'west') : (dz > 0 ? 'south' : 'north');
-    pads.lot(`lot_${i + 1}`, { at: [p.x, p.z], size: [p.s, p.s], floor: ys[p.k] + 1, front, max: [p.s, 10, p.s], brief: BRIEFS[i % BRIEFS.length], stage: p.k < 2 ? 'lots-1' : 'lots-2', pad: { maxCut: 64, maxFill: 64, edge: 'wall' } });
+    pads.lot(`lot_${i + 1}`, { at: [p.x, p.z], size: [p.s, p.s], floor: ys[p.k] + 1, front, max: [p.s, 12, p.s], brief: BRIEFS[i % BRIEFS.length], stage: p.k < 2 ? 'lots-1' : 'lots-2', pad: { maxCut: 64, maxFill: 64, edge: 'wall' } });
   });
   // and a grid of lamp posts over every level (posts on the level's top, clear of the lots, the rims and the stairs)
   const levelOf = (x, z) => { const dd = Math.sqrt((x - cx) * (x - cx) + (z - cz) * (z - cz)); for (let k = n - 1; k >= 0; k--) if (dd <= radii[k] - 3 && (k + 1 >= n || dd >= radii[k + 1] + 2)) return k; return -1; };

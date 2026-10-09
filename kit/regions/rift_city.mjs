@@ -70,15 +70,16 @@ export default function riftCity(ctx) {
   for (const side of [-1, 1]) {
     const zo = cz + side * half, zi = cz + side * (half - LW); // outer (in the wall) and inner edges
     const zA = Math.min(zo + side * 3, zi), zB = Math.max(zo + side * 3, zi);
+    const zw = zo + side * 2; // the clear space reaches 2 into the wall (room for 9-deep lots behind a walkway)
     const spans = side < 0 ? [[x0 + 12, hallX - 16], [hallX + 16, x1 - 12]] : [[x0 + 12, x1 - 12]];
     for (const [a, b] of spans) {
       if (b - a < 12) continue;
       ledges.fill({ kind: 'box', min: [a, floorY, zA], max: [b, yl - 1, zB] }, 'rock', { cond: 0 });
       ledges.fill({ kind: 'box', min: [a, yl - 1, zA], max: [b, yl - 1, zB] }, 'foundation', { cond: 0 });
-      ledges.fill({ kind: 'box', min: [a, yl, Math.min(zo, zi)], max: [b, rimY + 8, Math.max(zo, zi)] }, null, { cond: 3 }); // clear above
+      ledges.fill({ kind: 'box', min: [a, yl, Math.min(zw, zi)], max: [b, rimY + 8, Math.max(zw, zi)] }, null, { cond: 3 }); // clear above
       // the rail on the inner edge, a lantern on every 8th post
       ledges.fill({ kind: 'box', min: [a, yl, zi], max: [b, yl, zi] }, 'rail', { cond: 3 });
-      for (const xe of [a, b]) ledges.fill({ kind: 'box', min: [xe, yl, Math.min(zo, zi)], max: [xe, yl, Math.max(zo, zi)] }, 'rail', { cond: 3 }); // the ends
+      for (const xe of [a, b]) ledges.fill({ kind: 'box', min: [xe, yl, Math.min(zw, zi)], max: [xe, yl, Math.max(zw, zi)] }, 'rail', { cond: 3 }); // the ends
       for (let x = a + 2; x <= b - 2; x += 8) ledges.fill({ kind: 'box', min: [x, yl + 1, zi], max: [x, yl + 1, zi] }, 'minecraft:lantern', { cond: 3 });
       segs.push({ side, a, b, zi, zo });
     }
@@ -131,14 +132,13 @@ export default function riftCity(ctx) {
   // ---- lots on the ledges, facing the rift, clear of the bridges and the stairs
   const pads = r.part('pads', { stage: 'ground' });
   let li = 0;
-  const S = 7;
+  const S = 9; // the smallest library children (the 6a stubs) need 9x9
   for (const s of segs) {
     for (let x = s.a + 2; x + S <= s.b - 1; x += S + 4) {
       if (bx.some((b) => Math.abs(b - (x + S / 2)) < S / 2 + 4)) continue;
       if (s.stair && x + S >= s.stair[0] && x <= s.stair[1]) continue;
-      const z0 = s.side < 0 ? Math.min(s.zo, s.zi) + 1 : s.zi - s.side * 2 - S + 1 + (s.side > 0 ? 0 : 0);
-      const zz = s.side < 0 ? z0 : s.zo - S;
-      pads.lot(`lot_${++li}`, { at: [x, zz], size: [S, S], floor: yl, front: s.side < 0 ? 'south' : 'north', max: [S, 8, S], brief: BRIEFS[(li - 1) % BRIEFS.length], stage: 'lots', pad: { maxCut: 64, maxFill: 64, edge: 'wall' } });
+      const zz = s.side < 0 ? s.zo - 1 : s.zo - S + 2; // from 2 inside the wall to a walkway beside the rail
+      pads.lot(`lot_${++li}`, { at: [x, zz], size: [S, S], floor: yl, front: s.side < 0 ? 'south' : 'north', max: [S, 12, S], brief: BRIEFS[(li - 1) % BRIEFS.length], stage: 'lots', pad: { maxCut: 64, maxFill: 64, edge: 'wall' } });
     }
   }
   r.clearing('entrance', [cx + 4, cz - half - 16], { stage: 'ground' });
