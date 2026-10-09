@@ -15,12 +15,16 @@ Working notes for resuming phase 6a. Deleted when the gate passes. The spec is d
 ## State
 
 - Kit (177 tests), sidecar (601) and mod (373) built. Step 1 done (timeouts.md, index bench PASS, api-compat clean).
-- megaA PASSES every bar (2026-10-08 23:58, before the group-save coalescing): 9.56M cells, 57.8k cells/s, MSPT max 27 ms /
-  p99 15.7 ms, 0 generated, starved 1.3%, journal 0.20 B/cell, wire 0.21 B/cell, undo 136 s max 47.8 ms, E-normal 31
-  mismatches all classified (gravity 30, live 1). Evidence `megabench-A.pass1.json`.
-- Running (chain1): megaA (final), chunkstatus, heap, megaB, eflat, forest, inv3, crash. Then apijars and the regressions
+- megaA PASSES on da4564e (2026-10-09 02:15): 9.56M cells, 58.8k cells/s, MSPT max 28.5 / p99 15.5 ms, 0 generated, starved
+  1.7%, journal 0.20 B/cell, wire 0.21 B/cell, undo 134 s max 26 ms, E-normal 31 (gravity 30, live 1). Evidence
+  `megabench-A.final-da4564e.json`.
+- A run at 00:00 FAILED (2 lots TIMED_OUT on mob loot for 600 s; 161 chunks generated and 44k fluid mismatches during that
+  stall). Fixed: loot nobody threw is a drop inside region items; region waits have no time limit (S8). A 10-min stall repro
+  (named item in a lot) generated 0 chunks; the 161 are unexplained, generated-chunk positions are now traced.
+- chunkstatus PASS, heap PASS (-Xmx3G, peaks 621-716 MB vs bar 1503).
+- Running (chain2): megaB (fixed resume + per-stage chunk metrics), eflat, forest, inv3, crash, apijars. Then regressions
   (4d, 4e orders/crash/roads/megalite, throughput x3, 5b chains/village/MSPT, 4a/4b/4c sim), REPORT.md, docs.
-- Sidecar e2e (bundle 4c, eval sim tier) failed 2-3 tests while a game client ran megaA: rerun idle before calling it.
+- Sidecar e2e (bundle 4c, eval sim tier) failed 2-3 tests while a game client ran: rerun idle.
 
 ## Deviations so far (for CONTRACT "Phase 6a as built")
 
