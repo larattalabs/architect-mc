@@ -83,7 +83,7 @@ public final class Heights {
 	/**
 	 * A region item (tile, road or lot) placed: the heights now over its columns [x0..x1] x [z0..z1] (loaded chunks only) become
 	 * the drift baseline there, so a later stage's check compares against what the region built, not the pre-region land. The
-	 * touched shards are written off the server thread (best effort: a shard lost to a crash makes that stage's check compare
+	 * touched shards are written off the server thread (flushed at a world stop; a shard lost to a crash makes that stage's check compare
 	 * those columns with the frozen heights, which can report drift the player then continues past).
 	 */
 	public static void snapshotAfter(ServerLevel level, Path world, String region, int x0, int z0, int x1, int z1) {
@@ -257,6 +257,16 @@ public final class Heights {
 				}
 			}, IO);
 			return 0;
+		}
+	}
+
+	/** A world stop: the shard writes queued so far are on disk before it goes on (the I/O thread is a daemon). */
+	public static void flush() {
+		try {
+			IO.submit(() -> {
+			}).get(30, java.util.concurrent.TimeUnit.SECONDS);
+		} catch (Exception e) {
+			Architect.LOGGER.warn("Region heights: queued writes not flushed: {}", e.toString());
 		}
 	}
 

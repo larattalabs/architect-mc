@@ -1216,6 +1216,9 @@ steps.staged = async () => {
       }
     }
     const rs = st.record.stages;
+    // the stage that ran second (ways, after the reorder) had its drift check; the first-run one is the region start's
+    check(String(st.record.drift.ways ?? '').startsWith('ok') && st.record.drift['lots-1'] === undefined, `staged: after the reorder the drift check `
+      + `ran before the stage that ran second (ways: ${st.record.drift.ways}; lots-1, first: ${st.record.drift['lots-1'] ?? 'the region start\'s'})`);
     out.order = { state: st.view.state, lotsFirst: rs['lots-1'].startedAt < rs.ways.startedAt, placedLots, columns: cols, missing: bad, frozenHeights: frozen,
       afterHeights: after };
     log(`  order: ${JSON.stringify(out.order)}`);

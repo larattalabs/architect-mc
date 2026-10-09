@@ -102,6 +102,7 @@ public final class RegionsImpl implements Regions {
 
 	public static void init() {
 		net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents.SERVER_STARTED.register(RegionsImpl::started);
+		net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents.SERVER_STOPPING.register(s -> Heights.flush());
 		net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents.SERVER_STOPPED.register(s -> {
 			server = null;
 			REGIONS.clear();
@@ -716,8 +717,12 @@ public final class RegionsImpl implements Regions {
 			return true;
 		}
 		RegionRec rec = l.rec();
-		List<String> names = rec.stageNames();
-		if (names.isEmpty() || names.get(0).equals(stage) || !rec.stages.containsKey(stage)) {
+		if (!rec.stages.containsKey(stage)) {
+			return true;
+		}
+		// the stage that runs first (in the group's order: a reorder may change it) was checked at region start
+		boolean first = rec.stages.entrySet().stream().allMatch(e -> e.getKey().equals(stage) || e.getValue().startedAt == 0);
+		if (first) {
 			return true;
 		}
 		String d = rec.drift.get(stage);

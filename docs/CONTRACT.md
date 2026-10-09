@@ -5099,15 +5099,15 @@ region record); the logged list goes to `<region>/generated.json` when the batch
   realise. In a survey, `GENERATED_ONLY(n)` means n chunks at once and any number in all; `LOAD_BOUNDED` keeps 4a's total cap.
 - **Drift (S2) is checked at region start and before each later stage**, on stored heightmaps (loaded chunks live; no chunk
   loads). At region start the plan survey is the baseline, and `force` passes a drifted start (it covers the start check only).
-  Before a stage after the first starts, up to 4096 columns of its tiles and lot boxes are compared with the region's own
+  Before any stage but the one that runs first (in the group's order, so after a `reorderStages` too) starts, up to 4096 columns of its tiles and lot boxes are compared with the region's own
   baseline there: the height the region's placed items left (`after/<tx>.<tz>.bin`, snapshotted when each tile, road or lot
   places), else the frozen pre-region height, else the plan survey. The tolerance is the start check's. Land changed beyond it
   **holds the stage**: it goes back to PLANNED (`StageRules.hold`), the `RegionView` waits `DRIFTED` with "land changed since
   planning: ...; stage <s> holds: approve it again to continue, or replan", and `REGION_STATE` fires. Continue is
   `Sites.approveStage` on the region's group (no new API); replan is skipping the stage or removing the region. The outcome
   (`ok`, `held`, `continued`) is kept per stage in the region record, so a relog neither checks again nor drops a hold. While
-  the check runs (asynchronous reads) the stage's items don't start and no tile ahead is frozen. An after-heights shard lost to
-  a crash makes that stage compare those columns with the frozen heights, which can report drift the caller continues past.
+  the check runs (asynchronous reads) the stage's items don't start and no tile ahead is frozen. After-heights are flushed at a
+  world stop; a shard lost to a crash makes that stage compare those columns with the frozen heights, which can report drift the caller continues past.
 - `RegionPlan` carries no checker report or previews (6b). Region futures fail with `RegionRefused(reason)` (new API type).
 - Lots fit flush (setback 0, the approach into the street). Unmapped lots stay pads.
 - **Exactness guards (E-normal).** A tile skips an air write that would let water or lava in. What stands on any changed
@@ -5129,7 +5129,8 @@ region record); the logged list goes to `<region>/generated.json` when the batch
   `RegionView.waiting`. **`maxWait` is opt-in**: `RealiseRequest.maxWaitSeconds` (a region option; 0 = no limit; DevBridge
   `dev.region.realise {maxWait}`). With it set, every wait of an item counts toward the limit, the staged ones (`NOT_LOADED`,
   `NOT_GENERATED`, `SIDECAR_UNAVAILABLE`) and its turn for the chunk budget included, and an item over it fails `TIMED_OUT` with
-  "waited N s for: <the wait reason>". A stage held for drift is not an item wait and does not count. The **nudge action API**
+  "waited N s for: <the wait reason>". The limit is per item and stages run in order, so a region whose every stage waits gives
+  up after up to (stages x maxWait). A stage held for drift is not an item wait and does not count. The **nudge action API**
   (an action attached to the wait reason: move closer, prepare) is deferred to 6b; 6a shows the reason text only. Inside a region's items, a dropped item nobody threw (loot of an animal the region's own carve killed) is cleared
   like a natural drop; named items and items a player threw still refuse. Regions are creative-only (N4).
 - **Still ours, more volatile changes.** Grass, mycelium and podzol turning to dirt (or back) by random ticks counts as still
