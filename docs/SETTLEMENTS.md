@@ -1167,3 +1167,9 @@ cost nothing.
   - golem spawn space is 3 high and 3x3, near the bell;
   - farm nodes are next to water and villager-reachable.
 - **Scenario candidates for later:** a desert mesa town and a mangrove stilt village. A Nether fortress waits for the Nether ground search.
+
+
+## Note after 6a (2026-10-09)
+
+- The narrow form of 7a's "freeze before lots" shipped in 6a: a region lot or road freezes its not-yet-frozen columns before
+  its check and capture, so any stage order is safe. 7a still owns the general form (site lots, non-pad lots).

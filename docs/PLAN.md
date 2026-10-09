@@ -171,7 +171,11 @@ own. A9 is phase 3 itself. Order (Noah can reorder):
 
 Round 2 (R1-R11, `steward-mc/docs/ARCHITECT-ASKS.md`) is all accepted 2026-10-05 and folded in above.
 
-**Phase 6a status: built, gate pending verification** (2026-10-09; branch `phase/6a`, API 1.8.0 / mod 0.11.0;
+**Phase 6a status: PASSED 2026-10-09** (gate-verifier PASS WITH CAVEATS on 43f9304; its six findings were then fixed on
+phase/6a (per-stage drift, freeze before lot/road writes, maxWait opt-in, always-on generated-chunk log, RG5 and E-normal `live`
+tightened, throughput warm-up) and re-verified: crash, E-flat, inv3, staged, megaA, 4d, 5b, sim suites, apitest jars. Open:
+the nudge action API (6b), the unexplained 161 generated chunks in one early run (now logged), a structure-template memory
+leak on repeated 5b sizecap runs (also on 0.10.x). Original record: built (2026-10-09; branch `phase/6a`, API 1.8.0 / mod 0.11.0;
 `artifacts/gate6a/REPORT.md`, local). The macro kit engine, regions (plan, prepare, realise, remove) and mega_bench at full
 size: realise 9.56M cells at about 55-59k cells/s, MSPT max under 37 ms, 0 chunks generated, exact undo (E-flat 0, E-normal all
 classified). The 4e timeouts were lost shared chunk tickets and its spikes journal reads on the server thread, both fixed.
