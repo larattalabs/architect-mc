@@ -119,7 +119,8 @@ export function walkNodes(ir, meta, stageIdx = null) {
   const partStage = new Map(ir.parts.map((p) => [p.id, si(p.stage)]));
   const nodes = [];
   for (const l of ir.lots ?? []) {
-    const ps = partStage.get(l.part) ?? 0;
+    // a lot's entrance is a node from the lot's own stage on (its building stands from then)
+    const ps = Math.max(partStage.get(l.part) ?? 0, si(l.stage));
     if (stageIdx !== null && ps > stageIdx) continue;
     nodes.push({ id: `lot:${l.id}`, kind: 'lot', ref: l.id, at: meta?.lots?.[l.id]?.entrance ?? lotEntrance(l), part: l.part });
   }

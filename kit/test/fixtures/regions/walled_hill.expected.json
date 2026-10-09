@@ -1,0 +1,20 @@
+{
+ "program": "walled_hill",
+ "claim": 200,
+ "seed": "fixture",
+ "errors": 0,
+ "findings": [
+  {
+   "rule": "M6",
+   "severity": "warning",
+   "part": "wall",
+   "reason": "the gate threshold cells lie under the graded gate road, which passes through the gate lower than the threshold and fills over it"
+  },
+  {
+   "rule": "M8",
+   "severity": "warning",
+   "part": null,
+   "reason": "a few terrace rim and lot apron cells where a stair breaks a level rim rail, and the graded road cut beside the gate"
+  }
+ ]
+}

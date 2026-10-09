@@ -104,7 +104,7 @@ export default function floatingIslands(ctx) {
   const A = 6;
   const gY = Math.max(survey.heightAt(tower.x, tower.z), ...[[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([sx, sz]) => survey.heightAt(tower.x + sx * A, tower.z + sz * A)));
   const tw = r.part('tower', { stage: 'ways', set: 'path' });
-  const st = tw.spiralTower({ center: [tower.x, tower.z], half: A, top: alt, bottom: gY, start: 0, lights: 8, id: 'tower_stair' });
+  const st = tw.spiralTower({ center: [tower.x, tower.z], half: A, top: alt, bottom: gY - 12, ground: (x, z) => survey.heightAt(x, z), start: 0, lights: 8, id: 'tower_stair' });
   // ---- anchors and cameras
   const b = st.bottom;
   const ex = b.x + b.out[0] * 4, ez = b.z + b.out[1] * 4;

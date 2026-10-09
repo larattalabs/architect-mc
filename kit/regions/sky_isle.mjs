@@ -55,7 +55,7 @@ export default function skyIsle(ctx) {
   const tx = round(cx + gd[0] * (R + 26)) + A, tz = round(cz + gd[1] * (R + 26)); // its NW corner (the top) in line with the gate
   const gY = Math.max(...[[0, 0], [-1, -1], [1, -1], [1, 1], [-1, 1]].map(([sx, sz]) => survey.heightAt(tx + sx * A, tz + sz * A)));
   const ways = r.part('ways', { stage: 'ways', set: 'path' });
-  const st = ways.spiralTower({ center: [tx, tz], half: A, top: alt + 1, bottom: gY, start: 0, lights: 8, openTop: false, id: 'tower_stair' });
+  const st = ways.spiralTower({ center: [tx, tz], half: A, top: alt + 1, bottom: gY - 12, ground: (x, z) => survey.heightAt(x, z), start: 0, lights: 8, openTop: false, id: 'tower_stair' });
   const b0 = [tx - A, tz - A - 1], b1 = [cx, cz + R - 2];
   ways.bridge([[b0[0], alt + 1, b0[1]], [b1[0], alt + 1, b1[1]]], { width: 3, supports: { every: 8, style: 'arch', rise: 3 }, maxSpan: 12, towers: { at: 'end', height: 6 }, lights: 8, over: 'ours', id: 'gate_bridge' });
   const b = st.bottom;

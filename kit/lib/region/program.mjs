@@ -945,9 +945,10 @@ class Part {
    * (half - 2) is solid from the frozen floor to `top`, so every tread bears on it or on its neighbour (M3); a rail runs round
    * the outside except at the bottom exit and the top; `lights` puts a lantern on the rail every n cells. `start`: the
    * corner the top is at, 0..3 (NW, NE, SE, SW), running clockwise. `openTop: false` rails the top landing too (a deck
-   * arriving there clears its own way through the rail).
+   * arriving there clears its own way through the rail). `ground(x, z)`: the plan's ground; the flight stops where it
+   * meets it (an exit flush with the land), `bottom` being the lowest it may go.
    */
-  spiralTower({ center, half = 6, top, bottom, start = 0, material = 'structure', railing = 'rail', lights = 8, openTop = true, id } = {}) {
+  spiralTower({ center, half = 6, top, bottom, start = 0, material = 'structure', railing = 'rail', lights = 8, openTop = true, ground = null, id } = {}) {
     this._requirePath('spiral tower');
     const what = `part ${this.id}: spiral tower`;
     if (!Array.isArray(center) || !center.every(isInt) || !isInt(half) || half < 4 || half > 16 || !isInt(top) || !isInt(bottom) || top <= bottom) throw new Error(`${what}: needs center [x, z], half 4..16, top > bottom`);
@@ -964,14 +965,16 @@ class Part {
       const sx = Math.sign(bx - ax), sz = Math.sign(bz - az);
       const out = [sz, -sx]; // clockwise: the outward normal of a side (screen: x east, z south)
       // the corner landing (3 cells: the corner and one either side)
+      let done = false;
       for (let i = 0; i < 2 * half; i++) {
         const x = cx + ax + sx * i, z = cz + az + sz * i;
         // flat at the corner and one cell either side of it (a 3-cell landing), else one down per cell
         if (i >= 2 && i <= 2 * half - 2 && y > bottom) y--;
         push(x, z, out, i === 0);
-        if (y === bottom && i >= 2) break;
+        // (ground: stop where the flight meets the local ground, so the exit is flush with it)
+        if (i >= 2 && (y === bottom || (ground && y <= ground(x, z)))) { done = true; break; }
       }
-      if (y <= bottom) break;
+      if (done || y <= bottom) break;
       k++;
     }
     const treads = new Cols({ abs: 0 }, { abs: 0 }), head = new Cols({ abs: 0 }, { abs: 0 }), rails = new Cols({ abs: 0 }, { abs: 0 });
@@ -1008,7 +1011,7 @@ class Part {
     if (railM !== null) {
       const tread = new Map();
       for (const key of seen) { const [x, yy, z] = key.split(',').map(Number); const k = `${x},${z}`; const l = tread.get(k) ?? []; l.push(yy); tread.set(k, l); }
-      const nBottom = cells.findIndex((c) => c.y === bottom);
+      const nBottom = cells.length - 1;
       const open = new Set(); // the treads of the top 3 and the bottom 2 centre cells (and their corner blocks) stay unrailed
       cells.forEach((c, i) => { if ((openTop && i < 3) || i >= Math.max(0, nBottom - 1)) for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) open.add(`${c.x + dx},${c.y},${c.z + dz}`); });
       const lit = [];

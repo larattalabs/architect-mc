@@ -112,7 +112,7 @@ export default function riftCity(ctx) {
   const tw = ways.spiralTower({ center: [x0, cz], half: A, top: rimY, bottom: floorY - 1, start: 0, lights: 8, openTop: false, id: 'west_tower' });
   const te = ways.spiralTower({ center: [x1, cz], half: A, top: rimY, bottom: floorY - 1, start: 2, lights: 8, openTop: false, id: 'east_tower' });
   // a landing deck from the ground out to a tower's top: long enough for the height between them
-  const landingFrom = (x, zEnd, dir) => { for (let k = 8; k < 40; k++) { const z = zEnd + dir * k; if (Math.abs(gnd(x, z) - rimY) <= k - 1) return [x, gnd(x, z), z]; } return [x, rimY, zEnd + dir * 8]; };
+  const landingFrom = (x, zEnd, dir) => { for (let k = Math.max(8, Math.abs(cz + dir * zr - zEnd) + 3); k < 60; k++) { const z = zEnd + dir * k; if (Math.abs(gnd(x, z) - rimY) <= k - 1) return [x, gnd(x, z), z]; } return [x, rimY, zEnd + dir * 8]; };
   ways.bridge([landingFrom(tw.top.x, tw.top.z - 1, -1), [tw.top.x, rimY, tw.top.z - 1]], { width: 3, supports: { every: 12, bottom: levelAt }, over: 'ours', id: 'west_landing' });
   ways.bridge([landingFrom(te.top.x, te.top.z + 1, 1), [te.top.x, rimY, te.top.z + 1]], { width: 3, supports: { every: 12, bottom: levelAt }, over: 'ours', id: 'east_landing' });
   // stairs cut into each ledge (along it, then out onto the floor), one per ledge segment

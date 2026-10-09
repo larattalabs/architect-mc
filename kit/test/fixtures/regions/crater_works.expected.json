@@ -1,0 +1,20 @@
+{
+ "program": "crater_works",
+ "claim": 200,
+ "seed": "fixture",
+ "errors": 0,
+ "findings": [
+  {
+   "rule": "M5",
+   "severity": "warning",
+   "part": null,
+   "reason": "a few cells of the rim wall top beside the gate are dark: the rim lanterns leave the gate (8 degrees either side) clear"
+  },
+  {
+   "rule": "M8",
+   "severity": "warning",
+   "part": null,
+   "reason": "the rubble rim wall top is walkable where the land outside rises to it, and it stands beside the crater edge (the wall is 2 high, no parapet)"
+  }
+ ]
+}
