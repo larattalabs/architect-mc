@@ -262,9 +262,16 @@ public final class Sites {
 	public static Site place(ServerLevel level, Blueprint bp, BlockPos origin, Rotation rotation, boolean force, @Nullable String placer,
 		@Nullable Boolean construction, @Nullable String siteOwner, @Nullable JsonObject ext, @Nullable ServerPlayer actor,
 		Site.@Nullable Member member, boolean layer) throws SiteException {
+		return place(level, bp, origin, rotation, force, placer, construction, siteOwner, ext, actor, member, layer, null);
+	}
+
+	/** {@link #place}; {@code style}: the entrance approach's style (6b: {@code PlaceRequest.pathStyle}), null = the design's own. */
+	public static Site place(ServerLevel level, Blueprint bp, BlockPos origin, Rotation rotation, boolean force, @Nullable String placer,
+		@Nullable Boolean construction, @Nullable String siteOwner, @Nullable JsonObject ext, @Nullable ServerPlayer actor,
+		Site.@Nullable Member member, boolean layer, @Nullable EntranceStyle style) throws SiteException {
 		Site placed;
 		try {
-			placed = placeInternal(level, bp, origin, rotation, force, placer, construction, siteOwner, ext, member, layer);
+			placed = placeInternal(level, bp, origin, rotation, force, placer, construction, siteOwner, ext, member, layer, style);
 		} catch (SiteException e) {
 			ApiEvents.placeFailed(level, bp.id(), origin, rotation, force, construction, siteOwner, ext, actor,
 				List.of(new Refusal(e.reason(), e.getMessage())));
@@ -276,12 +283,12 @@ public final class Sites {
 
 	private static Site placeInternal(ServerLevel level, Blueprint bp, BlockPos origin, Rotation rotation, boolean force, @Nullable String owner,
 		@Nullable Boolean construction, @Nullable String siteOwner, @Nullable JsonObject ext, Site.@Nullable Member member) throws SiteException {
-		return placeInternal(level, bp, origin, rotation, force, owner, construction, siteOwner, ext, member, false);
+		return placeInternal(level, bp, origin, rotation, force, owner, construction, siteOwner, ext, member, false, null);
 	}
 
 	private static Site placeInternal(ServerLevel level, Blueprint bp, BlockPos origin, Rotation rotation, boolean force, @Nullable String owner,
-		@Nullable Boolean construction, @Nullable String siteOwner, @Nullable JsonObject ext, Site.@Nullable Member member, boolean layer)
-		throws SiteException {
+		@Nullable Boolean construction, @Nullable String siteOwner, @Nullable JsonObject ext, Site.@Nullable Member member, boolean layer,
+		@Nullable EntranceStyle style) throws SiteException {
 		MinecraftServer server = level.getServer();
 		if (loadFailed) {
 			throw new SiteException(Reason.OTHER, FILE + " could not be read when the world started (see the log); fix or move it, then restart");
@@ -289,7 +296,7 @@ public final class Sites {
 		SiteJournal.requireAvailable();
 		String id = newSiteId();
 		boolean survival = construction != null ? construction : SurvivalWorld.on();
-		Built built = build(level, bp, origin, rotation, force, null, id, survival, layer, new Who(siteOwner, ext, member, owner));
+		Built built = build(level, bp, origin, rotation, force, null, id, survival, layer, new Who(siteOwner, ext, member, owner), style);
 		Construction cs = null;
 		if (survival) {
 			try {
@@ -515,15 +522,17 @@ public final class Sites {
 	 */
 	private static @Nullable SitePlan checkSite(ServerLevel level, Blueprint bp, BlockPos origin, Rotation rotation, boolean force,
 		@Nullable Site moving, Refusals out, boolean dryRun, boolean survival) throws SiteException {
-		return checkSite(level, bp, origin, rotation, force, moving, out, dryRun, survival, false, null);
+		return checkSite(level, bp, origin, rotation, force, moving, out, dryRun, survival, false, null, null);
 	}
 
 	/**
 	 * {@link #checkSite}; {@code layer}: the LAYER overlap policy (docs/CONTRACT.md phase 4e "Overlap"), else REFUSE;
-	 * {@code owner}: the request's owner (a LAYER over another owner's site needs force).
+	 * {@code owner}: the request's owner (a LAYER over another owner's site needs force); {@code style}: the entrance approach's
+	 * style (6b: a region lot's, or a request's {@code pathStyle}), null = the design's own.
 	 */
 	private static @Nullable SitePlan checkSite(ServerLevel level, Blueprint bp, BlockPos origin, Rotation rotation, boolean force,
-		@Nullable Site moving, Refusals out, boolean dryRun, boolean survival, boolean layer, @Nullable String owner) throws SiteException {
+		@Nullable Site moving, Refusals out, boolean dryRun, boolean survival, boolean layer, @Nullable String owner, @Nullable EntranceStyle style)
+		throws SiteException {
 		Blueprints.Entry entry = Blueprints.entry(bp.id());
 		if (entry == null) {
 			out.add(Reason.UNKNOWN_BLUEPRINT, "Design " + bp.id() + " has no loaded template");
@@ -569,7 +578,7 @@ public final class Sites {
 		};
 		TerrainFit.Plan plan = TerrainFit.plan(model, box.minX(), box.minY(), box.minZ(), world);
 		tr.mark("terrain");
-		Approach.Plan approach = Approach.forBlueprint(bp, turns, box, world);
+		Approach.Plan approach = Approach.forBlueprint(bp, turns, box, world, style == null ? null : style.resolve(level, roads, dryRun));
 		tr.mark("approach");
 		SiteWarnings.Result site = SiteWarnings.forBlueprint(bp, turns, box, approach, world);
 		tr.mark("warnings");
@@ -588,7 +597,10 @@ public final class Sites {
 			int[] feet = approach.feet();
 			int last = feet.length == 0 ? box.minY() + bp.groundY() : feet[feet.length - 1];
 			int step = Math.abs(r[1] + 1 - last);
-			layerNotes.add(step > 1 ? "approach meets road " + road + " with a step of " + step : "approach meets road " + road);
+			// (6b) a styled approach may stop at a region's walk surface (a tile's ground), not only a road
+			Infra met = style == null || road == null ? null : Infras.get(road);
+			String what = style == null || met != null && met.road() ? "road " + road : road == null ? "a walk surface" : "walk surface of " + road;
+			layerNotes.add(step > 1 ? "approach meets " + what + " with a step of " + step : "approach meets " + what);
 		}
 		List<SiteJournal.Hit> hits = overlapCheck(level, snapBox, moving, layer, owner, force, out, layerNotes);
 		tr.mark("overlap");
@@ -840,6 +852,12 @@ public final class Sites {
 	/** {@link #verdict}; {@code layer}: the LAYER overlap policy, {@code owner} the request's owner (phase 4e). */
 	public static Verdict verdict(ServerLevel level, Blueprint bp, BlockPos origin, Rotation rotation, boolean force, @Nullable String movingId,
 		boolean dryRun, @Nullable Boolean construction, boolean layer, @Nullable String owner) {
+		return verdict(level, bp, origin, rotation, force, movingId, dryRun, construction, layer, owner, null);
+	}
+
+	/** {@link #verdict}; {@code style}: the entrance approach's style (6b), null = the design's own. */
+	public static Verdict verdict(ServerLevel level, Blueprint bp, BlockPos origin, Rotation rotation, boolean force, @Nullable String movingId,
+		boolean dryRun, @Nullable Boolean construction, boolean layer, @Nullable String owner, @Nullable EntranceStyle style) {
 		List<Refusal> typed = new ArrayList<>();
 		Refusals out = (r, m) -> typed.add(new Refusal(r, m));
 		boolean survival = construction != null ? construction : SurvivalWorld.on();
@@ -877,9 +895,9 @@ public final class Sites {
 					}
 				}
 			}
-			site = checkSite(level, bp, origin, rotation, force, moving, out, dryRun, survival && moving == null, layer, owner);
+			site = checkSite(level, bp, origin, rotation, force, moving, out, dryRun, survival && moving == null, layer, owner, style);
 			if (site != null && typed.isEmpty() && moving == null) {
-				checked = new Checked(checkKey(level, bp, origin, rotation, force, survival, layer, owner), level.getServer().getTickCount(), site);
+				checked = new Checked(checkKey(level, bp, origin, rotation, force, survival, layer, owner, style), level.getServer().getTickCount(), site);
 			}
 			List<String> notes = new ArrayList<>(site == null ? List.of() : siteNotes(site, site.found()));
 			if (site != null) {
@@ -928,7 +946,13 @@ public final class Sites {
 	 */
 	private static Built build(ServerLevel level, Blueprint bp, BlockPos origin, Rotation rotation, boolean force, @Nullable Site moving, String id,
 		boolean survival, boolean layer, Who who) throws SiteException {
-		SitePlan site = checkSite(level, bp, origin, rotation, force, moving, THROW, false, survival, layer, who.siteOwner());
+		return build(level, bp, origin, rotation, force, moving, id, survival, layer, who, null);
+	}
+
+	/** {@link #build}; {@code style}: the entrance approach's style (6b), null = the design's own. */
+	private static Built build(ServerLevel level, Blueprint bp, BlockPos origin, Rotation rotation, boolean force, @Nullable Site moving, String id,
+		boolean survival, boolean layer, Who who, @Nullable EntranceStyle style) throws SiteException {
+		SitePlan site = checkSite(level, bp, origin, rotation, force, moving, THROW, false, survival, layer, who.siteOwner(), style);
 		if (site == null) {
 			throw new SiteException("Internal: no site for " + bp.id());
 		}
@@ -1096,8 +1120,9 @@ public final class Sites {
 		if (a.rows() == 0) {
 			return;
 		}
-		BlockState path = blockState(bp.approach().block(), Approach.DEFAULT_BLOCK, bp.id());
+		BlockState path = approachPath(bp, a);
 		BlockState slab = blockState(bp.approach().slab(), Approach.DEFAULT_SLAB, bp.id());
+		foundation = EntranceStyle.state(a.fillBlock(), foundation);
 		BlockPos.MutableBlockPos m = new BlockPos.MutableBlockPos();
 		BlockState air = Blocks.AIR.defaultBlockState();
 		for (int i = 0; i < a.clear().length; i += 3) {
@@ -1757,6 +1782,11 @@ public final class Sites {
 	}
 
 	/** The approach's path block, or its slab. */
+	/** The path block of approach {@code a}: its style's ({@link Approach.Plan#pathBlock}), else the design's. */
+	static BlockState approachPath(Blueprint bp, Approach.Plan a) {
+		return EntranceStyle.state(a.pathBlock(), approachBlock(bp, false));
+	}
+
 	static BlockState approachBlock(Blueprint bp, boolean slab) {
 		return slab ? blockState(bp.approach().slab(), Approach.DEFAULT_SLAB, bp.id()) : blockState(bp.approach().block(), Approach.DEFAULT_BLOCK, bp.id());
 	}
@@ -1776,6 +1806,13 @@ public final class Sites {
 	 */
 	static PlaceJob beginPlacing(ServerLevel level, Blueprint bp, BlockPos origin, Rotation rotation, boolean force, @Nullable String siteOwner,
 		@Nullable JsonObject ext, Site.@Nullable Member member, boolean construction, @Nullable String placer, boolean layer) throws SiteException {
+		return beginPlacing(level, bp, origin, rotation, force, siteOwner, ext, member, construction, placer, layer, null);
+	}
+
+	/** {@link #beginPlacing}; {@code style}: the entrance approach's style (6b), null = the design's own. */
+	static PlaceJob beginPlacing(ServerLevel level, Blueprint bp, BlockPos origin, Rotation rotation, boolean force, @Nullable String siteOwner,
+		@Nullable JsonObject ext, Site.@Nullable Member member, boolean construction, @Nullable String placer, boolean layer,
+		@Nullable EntranceStyle style) throws SiteException {
 		if (loadFailed) {
 			throw new SiteException(Reason.OTHER, FILE + " could not be read when the world started (see the log); fix or move it, then restart");
 		}
@@ -1784,9 +1821,9 @@ public final class Sites {
 		// a large batch item was checked in the tick before (its verdict): that plan is used, not made again
 		Checked c = checked;
 		checked = null;
-		SitePlan site = c != null && c.key().equals(checkKey(level, bp, origin, rotation, force, construction, layer, siteOwner))
+		SitePlan site = c != null && c.key().equals(checkKey(level, bp, origin, rotation, force, construction, layer, siteOwner, style))
 			&& level.getServer().getTickCount() - c.tick() <= 1 ? c.plan()
-				: checkSite(level, bp, origin, rotation, force, null, THROW, false, construction, layer, siteOwner);
+				: checkSite(level, bp, origin, rotation, force, null, THROW, false, construction, layer, siteOwner, style);
 		if (site == null) {
 			throw new SiteException("Internal: no site for " + bp.id());
 		}
@@ -1845,6 +1882,8 @@ public final class Sites {
 		job.construction = construction;
 		job.placer = placer;
 		job.approachEnd = a ? approach.end() : null;
+		job.aPathBlock = a ? approach.pathBlock() : null;
+		job.aFillBlock = a ? approach.fillBlock() : null;
 		job.record = rec;
 		long tr4 = System.nanoTime();
 		job.startCapture(level);
@@ -1864,8 +1903,9 @@ public final class Sites {
 	private static @Nullable Checked checked;
 
 	private static String checkKey(ServerLevel level, Blueprint bp, BlockPos origin, Rotation rotation, boolean force, boolean survival, boolean layer,
-		@Nullable String owner) {
-		return dimensionId(level) + "|" + bp.id() + "|" + origin.asLong() + "|" + rotation + "|" + force + "|" + survival + "|" + layer + "|" + owner;
+		@Nullable String owner, @Nullable EntranceStyle style) {
+		return dimensionId(level) + "|" + bp.id() + "|" + origin.asLong() + "|" + rotation + "|" + force + "|" + survival + "|" + layer + "|" + owner + "|"
+			+ EntranceStyle.key(style);
 	}
 
 	/** P4 of a ticked placement (its PLACING commit is durable): the record, placing. */
@@ -1909,7 +1949,7 @@ public final class Sites {
 		int[] none = new int[0];
 		return new Built(job.turns, cur.box(), cur.restoreBox(), cur.interior(), cur.anchors(), pin, null, grid,
 			new TerrainFit.Plan(job.fill, job.clear, none, 0, none, 0, cur.restoreBox().minY() + 1), new Approach.Plan(job.aPath, job.aSlabs, job.aFill,
-				job.aClear, none, 0, none, 0, none, none, null, job.approachEnd, Integer.MIN_VALUE), cur, List.of());
+				job.aClear, none, 0, none, 0, none, none, null, job.approachEnd, Integer.MIN_VALUE, null, job.aPathBlock, job.aFillBlock), cur, List.of());
 	}
 
 	/** Saves the sites file now (roads and cell sites changed). */
@@ -1980,12 +2020,17 @@ public final class Sites {
 	 * entrance. Server thread.
 	 */
 	public static Prediction predict(ServerLevel level, Blueprint bp, BlockPos origin, Rotation rotation) {
+		return predict(level, bp, origin, rotation, null);
+	}
+
+	/** {@link #predict}; {@code style}: the entrance approach's style (6b), null = the design's own. */
+	public static Prediction predict(ServerLevel level, Blueprint bp, BlockPos origin, Rotation rotation, @Nullable EntranceStyle style) {
 		int turns = rotation.ordinal();
 		int[] out = Approach.outward(BlueprintTransform.rotateDirection(bp.front(), turns));
 		SitePlan p = null;
 		try {
 			p = checkSite(level, bp, origin, rotation, true, null, (r, m) -> {
-			}, true, false);
+			}, true, false, false, null, style);
 		} catch (SiteException | RuntimeException e) {
 			p = null;
 		}

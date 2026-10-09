@@ -118,6 +118,9 @@ final class PlaceJob implements Placement.Job {
 	@Nullable String placer;
 	/** The approach's end (the crate goes beside it), or null. */
 	double @Nullable [] approachEnd;
+	/** (6b) A styled approach's path and fill block states (Approach.Plan pathBlock / fillBlock), or null for the design's own. */
+	@Nullable String aPathBlock;
+	@Nullable String aFillBlock;
 	/** Set when the job can't go on (its design changed, its level is gone): it is rolled back instead. */
 	@Nullable String broken;
 	/** The ghost clients see while it places: the template's non-air cells, built as the writer passes them. */
@@ -552,10 +555,10 @@ final class PlaceJob implements Placement.Job {
 				return cells(level, phase == CLEAR ? clear : aClear, Blocks.AIR.defaultBlockState());
 			}
 			case A_FILL -> {
-				return cells(level, aFill, Sites.foundationState(bp()));
+				return cells(level, aFill, EntranceStyle.state(aFillBlock, Sites.foundationState(bp())));
 			}
 			case A_PATH -> {
-				return cells(level, aPath, Sites.approachBlock(bp(), false));
+				return cells(level, aPath, EntranceStyle.state(aPathBlock, Sites.approachBlock(bp(), false)));
 			}
 			case A_SLABS -> {
 				return cells(level, aSlabs, Sites.approachBlock(bp(), true));
@@ -741,6 +744,12 @@ final class PlaceJob implements Placement.Job {
 			}
 			o.add("approachEnd", e);
 		}
+		if (aPathBlock != null) {
+			o.addProperty("aPathBlock", aPathBlock);
+		}
+		if (aFillBlock != null) {
+			o.addProperty("aFillBlock", aFillBlock);
+		}
 		o.addProperty("phase", phase);
 		o.addProperty("cursor", cursor);
 		JsonArray bc = new JsonArray();
@@ -803,6 +812,8 @@ final class PlaceJob implements Placement.Job {
 			JsonArray e = o.getAsJsonArray("approachEnd");
 			j.approachEnd = new double[] {e.get(0).getAsDouble(), e.get(1).getAsDouble(), e.get(2).getAsDouble()};
 		}
+		j.aPathBlock = o.has("aPathBlock") ? o.get("aPathBlock").getAsString() : null;
+		j.aFillBlock = o.has("aFillBlock") ? o.get("aFillBlock").getAsString() : null;
 		j.phase = o.get("phase").getAsInt();
 		j.cursor = o.get("cursor").getAsInt();
 		o.getAsJsonArray("bedCells").forEach(e -> j.bedCells.add(e.getAsLong()));
