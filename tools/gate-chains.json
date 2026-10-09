@@ -1,0 +1,78 @@
+{
+  "$comment": "Chains for tools/gate-run.mjs (docs/GATES.md). Paths: 'run:<rel>' = the runner's run worktree, 'src:<rel>' = this checkout, ${RUN} ${SRC} ${MAIN} ${OUT} expand in env and links. Every client script here forces the stub or the sim sidecar; the runner refuses others.",
+  "runDir": "../architect-mc-gate-run",
+  "seedFrom": "../architect-mc-6a-run",
+  "seed": [".gradle-home", "sidecar/node_modules", "mod/run"],
+  "clientStartMin": 15,
+  "clients": {
+    "sim": { "script": "tools/run-gate6a-client.sh", "world": "API Sim" },
+    "4d": { "script": "tools/run-gate4d-client.sh", "world": "G4D Base" },
+    "4e": { "script": "tools/run-gate4e-client.sh", "world": "G4E Smoke" },
+    "5b": { "script": "tools/run-gate5b-client.sh", "world": "G5B Flat" },
+    "6a": { "script": "tools/run-gate6a-client.sh", "world": "G6A Flat Base" }
+  },
+  "steps": {
+    "unit-mod": {
+      "desc": "mod ./gradlew build (unit tests)", "cwd": "run:mod", "cmd": ["./gradlew", "--offline", "--no-daemon", "build"],
+      "env": { "GRADLE_USER_HOME": "${RUN}/.gradle-home" }, "timeoutMin": 30, "client": "none", "stopOnFail": true, "okLines": false,
+      "junit": "run:mod/build/test-results/test"
+    },
+    "unit-kit": {
+      "desc": "kit node --test", "cwd": "run:", "shell": "node --test kit/test/*.test.mjs", "timeoutMin": 10, "client": "none",
+      "okLines": false, "parse": { "tests": "ℹ tests (\\d+)", "pass": "ℹ pass (\\d+)", "fail": "ℹ fail (\\d+)" }
+    },
+    "unit-sidecar": {
+      "desc": "sidecar vitest (no client up)", "cwd": "run:sidecar", "cmd": ["npx", "vitest", "run"], "timeoutMin": 15, "client": "none",
+      "okLines": false, "parse": { "passed": "Tests\\s+(?:\\d+ failed \\| )?(\\d+) passed", "failed": "Tests\\s+(\\d+) failed" }
+    },
+    "sim-jobs": { "desc": "4a jobs sim suite", "cmd": ["node", "tools/apitest.mjs", "jobs"], "env": { "APITEST_OUT": "${OUT}/sim-jobs" }, "timeoutMin": 15, "client": "sim" },
+    "sim-sets": { "desc": "4b sets sim suite", "cmd": ["node", "tools/apitest.mjs", "sets"], "env": { "APITEST_OUT": "${OUT}/sim-sets" }, "timeoutMin": 15, "client": "sim" },
+    "sim-massing": { "desc": "4c massing sim suite", "cmd": ["node", "tools/apitest.mjs", "massing"], "env": { "APITEST_OUT": "${OUT}/sim-massing" }, "timeoutMin": 15, "client": "sim" },
+    "apijars": {
+      "desc": "unchanged 1.7.0/1.6.0/1.5.0 apitest jars (starts its own clients)", "cmd": ["node", "tools/gate6a.mjs", "apijars"], "timeoutMin": 30, "client": "self",
+      "links": { "gate6a/v0100": "${MAIN}/artifacts/gate6a/v0100" },
+      "metrics": { "jars": "gate6a/apijars.json#data" }
+    },
+    "4e-megalite": {
+      "desc": "4e mega-lite (256x256 pad, lots, roads, relog, undo)", "cmd": ["node", "tools/gate4e.mjs", "megalite"], "timeoutMin": 25, "client": "4e",
+      "metrics": { "cellsPerSecond4ms": "gate4e/megalite.json#data.runs.4.cellsPerSecond", "groupUndoSeconds": "gate4e/megalite.json#data.groupUndoSeconds", "groupUndoMsptMax": "gate4e/megalite.json#data.groupUndoMsptMax", "bytesPerCell4ms": "gate4e/megalite.json#data.runs.4.bytesPerCell" }
+    },
+    "4d-all": { "desc": "4d gate (all)", "cmd": ["node", "tools/gate4d.mjs", "all"], "timeoutMin": 45, "client": "4d" },
+    "4e-orders": { "desc": "4e removal orders", "cmd": ["node", "tools/gate4e.mjs", "orders"], "timeoutMin": 30, "client": "4e" },
+    "4e-crash": { "desc": "4e crash kill points (needs 4e-orders)", "cmd": ["node", "tools/gate4e.mjs", "crash"], "timeoutMin": 30, "client": "4e", "after": "4e-orders" },
+    "4e-throughput": {
+      "desc": "4e village + roads throughput at 4 ms (warm-up, median of 3)", "cmd": ["node", "tools/gate4e.mjs", "throughput"], "timeoutMin": 40, "client": "4e", "restartClient": true,
+      "metrics": { "medianCellsPerSecond": "gate4e/throughput.json#data.median", "spread": "gate4e/throughput.json#data.spread" }
+    },
+    "5b-chains": { "desc": "5b delta chains", "cmd": ["node", "tools/gate5b.mjs", "chains"], "timeoutMin": 60, "client": "5b" },
+    "5b-village": { "desc": "5b village", "cmd": ["node", "tools/gate5b.mjs", "village"], "timeoutMin": 20, "client": "5b" },
+    "6a-megaB-fast": {
+      "desc": "6a mega_bench B, fast walk (8 s dwell, teleport to unfinished cells)", "cmd": ["node", "tools/gate6a.mjs", "megaB", "--fast"], "timeoutMin": 120, "client": "6a",
+      "metrics": { "mode": "gate6a/megabench-B.json#mode", "wallSeconds": "gate6a/megabench-B.json#wallSeconds", "relogResumeSeconds": "gate6a/megabench-B.json#relog.resumedSeconds", "sidecarResumeSeconds": "gate6a/megabench-B.json#sidecarKill.resumedSeconds" }
+    },
+    "6a-megaA": {
+      "desc": "6a mega_bench A (prepared, full)", "cmd": ["node", "tools/gate6a.mjs", "megaA"], "timeoutMin": 45, "client": "6a",
+      "metrics": { "cellsPerSecond": "gate6a/megaA.json#data.cellsPerSecond", "msptP99": "gate6a/megaA.json#data.mspt.all.p99", "msptMax": "gate6a/megaA.json#data.mspt.all.max", "undoSeconds": "gate6a/megaA.json#data.undo.seconds", "mismatches": "gate6a/megaA.json#data.diff.mismatches" }
+    },
+    "6a-megaB": {
+      "desc": "6a mega_bench B, full walk (30 s dwell)", "cmd": ["node", "tools/gate6a.mjs", "megaB"], "timeoutMin": 180, "client": "6a",
+      "metrics": { "mode": "gate6a/megabench-B.json#mode", "wallSeconds": "gate6a/megabench-B.json#wallSeconds", "relogResumeSeconds": "gate6a/megabench-B.json#relog.resumedSeconds", "sidecarResumeSeconds": "gate6a/megabench-B.json#sidecarKill.resumedSeconds" }
+    },
+    "6a-crash": { "desc": "6a crash RG1-RG6, K3, K7", "cmd": ["node", "tools/gate6a.mjs", "crash"], "timeoutMin": 40, "client": "6a" },
+    "6a-eflat": { "desc": "6a E-flat exactness", "cmd": ["node", "tools/gate6a.mjs", "eflat"], "timeoutMin": 30, "client": "6a" },
+    "6a-inv3": { "desc": "6a inv3 order invariance", "cmd": ["node", "tools/gate6a.mjs", "inv3"], "timeoutMin": 15, "client": "6a" },
+    "6a-staged": { "desc": "6a staged drift / reorder / maxWait", "cmd": ["node", "tools/gate6a.mjs", "staged"], "timeoutMin": 30, "client": "6a" },
+    "6a-heap": {
+      "desc": "6a capped-heap mega_bench (restarts the client)", "cmd": ["node", "tools/gate6a.mjs", "heap"], "timeoutMin": 40, "client": "6a",
+      "metrics": { "xmxGb": "gate6a/heap.json#data.xmxGb", "baselineMb": "gate6a/heap.json#data.baselineMb" }
+    }
+  },
+  "chains": {
+    "quick": ["unit-mod", "unit-kit", "unit-sidecar", "sim-jobs", "sim-sets", "sim-massing", "apijars", "4e-megalite"],
+    "regress": ["unit-mod", "unit-kit", "unit-sidecar", "sim-jobs", "sim-sets", "sim-massing", "apijars", "4e-megalite",
+      "4e-orders", "4e-crash", "4e-throughput", "4d-all", "5b-chains", "5b-village", "6a-megaB-fast"],
+    "engine": ["unit-mod", "unit-kit", "unit-sidecar", "sim-jobs", "sim-sets", "sim-massing", "apijars", "4e-megalite",
+      "4e-orders", "4e-crash", "4e-throughput", "4d-all", "5b-chains", "5b-village",
+      "6a-megaA", "6a-megaB", "6a-crash", "6a-eflat", "6a-inv3", "6a-staged", "6a-heap"]
+  }
+}

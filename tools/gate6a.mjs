@@ -523,7 +523,14 @@ steps.megaA = async () => {
  * teleported every 30 s along a route through each stage's tiles and lots, stage by stage; a relog in the middle of lots-2 and
  * a sidecar kill in the middle of ways. Bars: 0 failed items, resume after the relog and after the sidecar comes back (30 s),
  * progress resumes within 60 s of the player arriving at a waiting item's chunks, per-stage progress events.
+ *
+ * `megaB --fast` (or GATE6A_MEGAB_FAST=1): the regression tier. The player dwells 8 s per waypoint instead of 30 s, and after the
+ * first lap of a stage teleports only to the 3x3-tile cells that still hold an unfinished item of that stage. The relog, the
+ * sidecar kill and every bar are the same; megabench-B.json records `mode`. GATE6A_DWELL_MS overrides the dwell in either mode.
+ * The full walk (the default) is the engine tier: docs/GATES.md.
  */
+const MEGAB_FAST = process.argv.includes('--fast') || process.env.GATE6A_MEGAB_FAST === '1';
+const MEGAB_DWELL_MS = Number(process.env.GATE6A_DWELL_MS || (MEGAB_FAST ? 8_000 : 30_000));
 steps.megaB = async () => {
   if (!dev) await connect();
   const name = 'G6A MegaB';
@@ -532,7 +539,7 @@ steps.megaB = async () => {
   await tp(0.5, 160, 0.5);
   await api('revents').catch(() => null); // hooks the region events
   const p = await plan(MEGA, 'generated:64');
-  const out = { plan: p.planId, stages: {}, events: [] };
+  const out = { plan: p.planId, mode: MEGAB_FAST ? 'fast' : 'full', dwellMs: MEGAB_DWELL_MS, stages: {}, events: [] };
   const region = await realise(p.planId, { load: 'loaded' });
   out.region = region;
   const t0 = Date.now();
@@ -568,7 +575,7 @@ steps.megaB = async () => {
   };
   const visit = async (x, z) => {
     await cmd(`/tp @s ${x} 200 ${z}`);
-    await sleep(30_000);
+    await sleep(MEGAB_DWELL_MS);
   };
   // tile centres per stage from the region's batch (dev.region.state lists stages; the tiles come from the plan's tiles)
   const tilesOf = async (stage) => {
@@ -589,7 +596,17 @@ steps.megaB = async () => {
     log(`  stage ${stage}: ${keys.length} items, ${route.length} waypoints`);
     let lap = 0;
     while (true) {
-      for (const [cx, cz] of route) {
+      let laps = route;
+      if (MEGAB_FAST && lap > 0) {
+        // fast: straight to the cells that still hold an unfinished item of this stage (the full route if none are listed)
+        const left = new Map();
+        for (const it of ((await regionState(region)).unfinished ?? []).filter((x) => x.stage === stage)) {
+          const c = [Math.floor(Math.floor(it.x / 64) / 3), Math.floor(Math.floor(it.z / 64) / 3)];
+          left.set(`${c[0]},${c[1]}`, c);
+        }
+        if (left.size) laps = [...left.values()];
+      }
+      for (const [cx, cz] of laps) {
         await visit(cx * 192 + 96, cz * 192 + 96);
         const st = await regionState(region);
         const sp = st.view.stages.find((x) => x.name === stage);
