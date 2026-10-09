@@ -278,6 +278,14 @@ final class DesignsImpl implements Designs {
 		return ApiImpl.onServerFuture(out.orTimeout(ApiTimeouts.DESIGN_MS, java.util.concurrent.TimeUnit.MILLISECONDS));
 	}
 
+	/** (6b) A design started outside {@link #request} (a region design): its owner and ext are kept as for any API design. */
+	public void remember(String id, @Nullable String owner, JsonObject ext) {
+		synchronized (this) {
+			meta.put(id, new Meta(owner, ext == null ? new JsonObject() : ext.deepCopy()));
+		}
+		save();
+	}
+
 	/**
 	 * A world loaded (server thread): DESIGN_DONE for the designs that finished while no world was loaded (their changes were
 	 * dropped then). Designs reported before are skipped (the persisted done set).
@@ -349,6 +357,10 @@ final class DesignsImpl implements Designs {
 			String planId = id == null ? null : dev.larattalabs.architect.region.RegionDesigns.planIdOf(id);
 			if (res != null && planId != null && !res.has("planId")) {
 				res.addProperty("planId", planId);
+			}
+			String planError = id == null ? null : dev.larattalabs.architect.region.RegionDesigns.planErrorOf(id);
+			if (res != null && planError != null) {
+				res.addProperty("planError", planError);
 			}
 			result = Optional.ofNullable(res);
 		}

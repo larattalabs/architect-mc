@@ -194,6 +194,24 @@ public final class ApiClientBridge implements ClientBridge {
 	}
 
 	@Override
+	public @org.jspecify.annotations.Nullable JsonObject sidecarVersions() {
+		return Sidecar.state().versions();
+	}
+
+	@Override
+	public String restartSidecar() {
+		if (Sidecar.connected()) {
+			return "connected";
+		}
+		var st = dev.larattalabs.architect.client.launcher.Launcher.state();
+		if (st == dev.larattalabs.architect.launcher.LauncherPlan.State.STARTING || st == dev.larattalabs.architect.launcher.LauncherPlan.State.INSTALLING) {
+			return "already starting (" + dev.larattalabs.architect.client.launcher.Launcher.detail() + ")";
+		}
+		dev.larattalabs.architect.client.launcher.Launcher.restart();
+		return "starting";
+	}
+
+	@Override
 	public CompletableFuture<String> designRequest(JsonObject request) {
 		return onClient(() -> Sidecar.designRequest(request).thenApply(ack -> {
 			String id = idOf(ack, "designId", "id");

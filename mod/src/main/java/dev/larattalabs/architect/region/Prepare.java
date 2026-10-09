@@ -304,6 +304,17 @@ public final class Prepare {
 		return r != null ? stats(r) : LAST_STATS.get(planId);
 	}
 
+	/** (6b) The generation rate the last finished prepare measured (chunks/s), or {@code fallback} when none ran this session. */
+	public static double measuredRate(double fallback) {
+		double best = 0;
+		for (JsonObject o : LAST_STATS.values()) {
+			if (o.has("chunksPerSecond") && o.get("generatedThisRun").getAsInt() >= 16) {
+				best = o.get("chunksPerSecond").getAsDouble();
+			}
+		}
+		return best > 0 ? best : fallback;
+	}
+
 	/** Whether a prepare is generating now (server thread). */
 	static boolean running() {
 		return !RUNS.isEmpty();

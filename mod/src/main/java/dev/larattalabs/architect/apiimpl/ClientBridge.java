@@ -50,4 +50,17 @@ public interface ClientBridge {
 
 	/** The bytes of a blob the sidecar stored ({@code <data>/blobs/<id>}), read off the calling thread. */
 	CompletableFuture<byte[]> readBlob(String blobId);
+
+	/** (6b) The helper's {@code kitVersion}, {@code irFormats} and {@code irKinds} from its snapshot, or null when unknown. */
+	default com.google.gson.@org.jspecify.annotations.Nullable JsonObject sidecarVersions() {
+		return null;
+	}
+
+	/**
+	 * (6b, the START_SIDECAR nudge) Asks the launcher to (re)start the helper. Answers what happened: {@code "starting"} (a start
+	 * was requested), {@code "already starting"}, {@code "connected"} (nothing to do), or why it can't.
+	 */
+	default String restartSidecar() {
+		return "no launcher on this side";
+	}
 }
