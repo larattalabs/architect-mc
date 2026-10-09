@@ -59,6 +59,10 @@ public final class StillOurs {
 			// phase 6a: water or lava that flowed into air an entry cleared is the entry's doing, not a player's: still ours
 			return true;
 		}
+		if (spread(now) && spread(after) && now.getBlock() != after.getBlock()) {
+			// phase 6a: grass, mycelium and podzol die to dirt under a block and spread back onto it by random ticks: the world's doing
+			return true;
+		}
 		if (now.getBlock() != after.getBlock()) {
 			return false;
 		}
@@ -73,6 +77,13 @@ public final class StillOurs {
 			return false;
 		}
 		return !(emptyContainer(afterNbt) && !emptyContainer(nowNbt));
+	}
+
+	/** Dirt and the blocks random ticks turn it into and back. */
+	static boolean spread(BlockState s) {
+		var b = s.getBlock();
+		return b == net.minecraft.world.level.block.Blocks.DIRT || b == net.minecraft.world.level.block.Blocks.GRASS_BLOCK
+			|| b == net.minecraft.world.level.block.Blocks.MYCELIUM || b == net.minecraft.world.level.block.Blocks.PODZOL;
 	}
 
 	/** A container's data with no items (no data at all counts as empty). */

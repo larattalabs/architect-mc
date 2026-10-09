@@ -389,7 +389,7 @@ public final class WorldJournal {
 		BlockPos p = BlockPos.of(pos);
 		BlockState now = level.getBlockState(p);
 		BlockState want = state(after);
-		if (now.getBlock() != want.getBlock() && !(want.isAir() && !now.getFluidState().isEmpty())) {
+		if (now.getBlock() != want.getBlock() && !(want.isAir() && !now.getFluidState().isEmpty()) && !(StillOurs.spread(now) && StillOurs.spread(want))) {
 			return false; // (a fluid in cleared air goes to StillOurs, phase 6a)
 		}
 		return StillOurs.holds(now, now.hasBlockEntity() ? beNbt(level, p) : null, want, after.nbt());
