@@ -763,6 +763,31 @@ public final class Batches {
 		return true;
 	}
 
+	/**
+	 * Several stages' states at once: one group save (each {@link #setStage} saves the sites file, 0.5 MB for a region; a region's
+	 * undo set six stages in one tick).
+	 */
+	static void setStages(MinecraftServer server, SiteGroupRec g, java.util.LinkedHashMap<String, Stage.State> states) {
+		SiteGroupRec n = g;
+		List<String> changed = new ArrayList<>();
+		for (var e : states.entrySet()) {
+			SiteGroupRec.StageRec was = n.stage(e.getKey());
+			if (was == null || was.state() == e.getValue()) {
+				continue;
+			}
+			Architect.LOGGER.info("Group {}: stage {} {} -> {}", g.id(), e.getKey(), StageRules.name(was.state()), StageRules.name(e.getValue()));
+			n = n.withStage(e.getKey(), s -> s.withState(e.getValue()));
+			changed.add(e.getKey());
+		}
+		if (changed.isEmpty() && n == Sites.group(g.id())) {
+			return;
+		}
+		Sites.putGroup(server, n);
+		for (String st : changed) {
+			ApiEvents.stageState(g.id(), n.stage(st));
+		}
+	}
+
 	static void setStage(MinecraftServer server, SiteGroupRec g, String stage, Stage.State state) {
 		SiteGroupRec.StageRec was = g.stage(stage);
 		if (was == null || was.state() == state) {

@@ -787,6 +787,7 @@ public final class Groups {
 
 	private static void end(MinecraftServer server, Removal r, Removed result) {
 		REMOVALS.remove(r);
+		long t0 = System.nanoTime();
 		SiteGroupRec g = Sites.group(r.group);
 		if (g != null) {
 			if (r.stage != null) {
@@ -794,25 +795,31 @@ public final class Groups {
 					Batches.setStage(server, g, r.stage, Stage.State.UNDONE);
 				}
 			} else {
-				Sites.putGroup(server, g.withState(result.removed() ? SiteGroupRec.REMOVED : SiteGroupRec.ACTIVE));
+				SiteGroupRec n = g.withState(result.removed() ? SiteGroupRec.REMOVED : SiteGroupRec.ACTIVE);
+				java.util.LinkedHashMap<String, Stage.State> states = new java.util.LinkedHashMap<>();
 				if (result.removed()) {
 					// stages that never placed are skipped; placed ones are undone
-					SiteGroupRec n = Sites.group(r.group);
 					for (SiteGroupRec.StageRec st : n.stages()) {
 						if (st.state() == Stage.State.PLACED || st.state() == Stage.State.PARTIAL) {
-							Batches.setStage(server, Sites.group(r.group), st.name(), Stage.State.UNDONE);
+							states.put(st.name(), Stage.State.UNDONE);
 						} else if (!st.state().terminal()) {
-							Batches.setStage(server, Sites.group(r.group), st.name(), Stage.State.SKIPPED);
+							states.put(st.name(), Stage.State.SKIPPED);
 						}
 					}
 				}
+				Batches.setStages(server, n, states); // one save for the group and its stages (phase 6a)
 			}
 		}
+		Placement.lap("end:stages", t0);
+		t0 = System.nanoTime();
 		Placement.save(server, false);
+		Placement.lap("end:save", t0);
+		t0 = System.nanoTime();
 		Architect.LOGGER.info("{} {} of group {}: {}{}", r.stage == null ? "Removal" : "Undo of stage " + r.stage, result.removed() ? "done" : "stopped",
 			r.group, result.removed() ? "all sites restored" : String.join("; ", result.blockers()), result.refund().isEmpty() ? "" : "; refund "
 				+ result.refund());
 		r.futures.forEach(f -> f.complete(result));
+		Placement.lap("end:futures", t0);
 	}
 
 	// ------------------------------------------------------------------ persistence
