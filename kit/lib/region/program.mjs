@@ -864,7 +864,7 @@ class Part {
     cells.forEach((c, i) => {
       const y = ys[i];
       for (const k of offs) if (k !== 0) tread(c.x + c.r[0] * k, y, c.z + c.r[1] * k, matAt(i));
-      if (railM !== null) {
+      if (railM !== null && !solid) {
         for (const k of [offs[0] - 1, offs[offs.length - 1] + 1]) {
           const x = c.x + c.r[0] * k, z = c.z + c.r[1] * k;
           rails.addOnce(`${x},${y},${z}`, x, z, y, y, full);
@@ -873,6 +873,27 @@ class Part {
         }
       }
     });
+    // (6b) solid stairs: a rail on every side of the flight that has no tread beside it (corners and landings included)
+    if (railM !== null && solid) {
+      const treadAt = (x, z, y) => (colTreads.get(`${x},${z}`) ?? []).some((v) => Math.abs(v - y) <= 1);
+      // the flight's two ends stay open (where it meets the ground, a landing or a deck)
+      const open = new Set();
+      const ends = cells.length > 1 ? [[cells[0], cells[1]], [cells[cells.length - 1], cells[cells.length - 2]]] : [];
+      for (const [e, nb] of ends) {
+        const dx = e.x - nb.x, dz = e.z - nb.z;
+        for (let s = 1; s <= 2; s++) for (const k of [...offs, offs[0] - 1, offs[offs.length - 1] + 1]) open.add(`${e.x + dx * s + e.r[0] * k},${e.z + dz * s + e.r[1] * k}`);
+      }
+      for (const [k, l] of colTreads) {
+        const [x, z] = k.split(',').map(Number);
+        for (const y of l) for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]]) {
+          const nx = x + dx, nz = z + dz;
+          if (treadAt(nx, nz, y) || open.has(`${nx},${nz}`)) continue;
+          rails.addOnce(`${nx},${y},${nz}`, nx, nz, y, y, full);
+          rails.addOnce(`${nx},${y + 1},${nz}`, nx, nz, y + 1, y + 1, railM);
+          grow(nx, y + 1, nz);
+        }
+      }
+    }
     this._colsOp(rails, COND.IF_NATURAL);
     this._colsOp(head, COND.IF_NATURAL);
     if (core && core.r !== null) {
@@ -894,11 +915,113 @@ class Part {
       for (let i = 0; i < cells.length; i += lights) {
         // on the rail post (above the rail), else in the side wall beside the tread (never in the walk's head room)
         const c = cells[i], k = offs[offs.length - 1] + 1;
-        lc.add(c.x + c.r[0] * k, c.z + c.r[1] * k, ys[i] + (railM !== null ? 2 : 1), ys[i] + (railM !== null ? 2 : 1), lm);
+        const x = c.x + c.r[0] * k, z = c.z + c.r[1] * k;
+        if ((colTreads.get(`${x},${z}`) ?? []).some((v) => Math.abs(v - ys[i]) <= 3)) continue;
+        lc.add(x, z, ys[i] + (railM !== null ? 2 : 1), ys[i] + (railM !== null ? 2 : 1), lm);
       }
       this._colsOp(lc, COND.IF_NATURAL);
     }
     return { cells: cells.map((c, i) => [c.x, ys[i], c.z]), box, width };
+  }
+
+  // ---------------------------------------------------------------- spiral tower (6b)
+
+  /**
+   * A square spiral stair around a solid core: flights of `width` 3 run down the four sides of a square ring of half-size
+   * `half` (the flight's centre line), from `top` to `bottom` (tread y), with a flat 3-cell landing at every corner. The core
+   * (half - 2) is solid from the frozen floor to `top`, so every tread bears on it or on its neighbour (M3); a rail runs round
+   * the outside except at the bottom exit and the top; `lights` puts a lantern on the rail every n cells. `start`: the
+   * corner the top is at, 0..3 (NW, NE, SE, SW), running clockwise.
+   */
+  spiralTower({ center, half = 6, top, bottom, start = 0, material = 'structure', railing = 'rail', lights = 8, id } = {}) {
+    this._requirePath('spiral tower');
+    const what = `part ${this.id}: spiral tower`;
+    if (!Array.isArray(center) || !center.every(isInt) || !isInt(half) || half < 4 || half > 16 || !isInt(top) || !isInt(bottom) || top <= bottom) throw new Error(`${what}: needs center [x, z], half 4..16, top > bottom`);
+    const full = this._mat(material, 'spiral tower material');
+    const railM = railing === null ? null : this._mat(railing, 'spiral tower rail');
+    const [cx, cz] = center;
+    // the centre line: corners NW, NE, SE, SW clockwise; each side runs from one corner to the next
+    const C = [[-half, -half], [half, -half], [half, half], [-half, half]];
+    const cells = []; // {x, z, y, out: [dx, dz] (outward unit along the cross-section), corner}
+    let y = top, k = start % 4, flat = 0;
+    const push = (x, z, out, corner) => cells.push({ x, z, y, out, corner });
+    while (true) {
+      const [ax, az] = C[k % 4], [bx, bz] = C[(k + 1) % 4];
+      const sx = Math.sign(bx - ax), sz = Math.sign(bz - az);
+      const out = [sz, -sx]; // clockwise: the outward normal of a side (screen: x east, z south)
+      // the corner landing (3 cells: the corner and one either side)
+      for (let i = 0; i < 2 * half; i++) {
+        const x = cx + ax + sx * i, z = cz + az + sz * i;
+        // flat at the corner and one cell either side of it (a 3-cell landing), else one down per cell
+        if (i >= 2 && i <= 2 * half - 2 && y > bottom) y--;
+        push(x, z, out, i === 0);
+        if (y === bottom && i >= 2) break;
+      }
+      if (y <= bottom) break;
+      k++;
+    }
+    const treads = new Cols({ abs: 0 }, { abs: 0 }), head = new Cols({ abs: 0 }, { abs: 0 }), rails = new Cols({ abs: 0 }, { abs: 0 });
+    const box = { minX: Infinity, minY: Infinity, minZ: Infinity, maxX: -Infinity, maxY: -Infinity, maxZ: -Infinity };
+    const grow = (x, yy, z) => { box.minX = Math.min(box.minX, x); box.maxX = Math.max(box.maxX, x); box.minY = Math.min(box.minY, yy); box.maxY = Math.max(box.maxY, yy); box.minZ = Math.min(box.minZ, z); box.maxZ = Math.max(box.maxZ, z); };
+    const seen = new Set();
+    cells.forEach((c, i) => {
+      const next = cells[i + 1], prev = cells[i - 1];
+      // a stairs block on the higher cell of each step, facing up the flight (towards the previous cell)
+      const up = prev && prev.y > c.y ? null : next && next.y < c.y ? cardinalOf(Math.sign(c.x - next.x), Math.sign(c.z - next.z)) : null;
+      const m = up ? stairsOf(full, up) ?? full : full;
+      for (const k of [-1, 0, 1]) {
+        const x = c.x + c.out[0] * k, z = c.z + c.out[1] * k;
+        const key = `${x},${c.y},${z}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        treads.add(x, z, c.y, c.y, m);
+        head.add(x, z, c.y + 1, c.y + 2, null);
+        grow(x, c.y, z); grow(x, c.y + 2, z);
+      }
+    });
+    // corner squares: fill the 3x3 corner block at the corner's y
+    cells.forEach((c) => {
+      if (!c.corner) return;
+      for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) {
+        const x = c.x + dx, z = c.z + dz, key = `${x},${c.y},${z}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        treads.add(x, z, c.y, c.y, full);
+        head.add(x, z, c.y + 1, c.y + 2, null);
+      }
+    });
+    // the outside rail: every cell at Chebyshev distance half + 2 from the centre beside a tread, but not at the exits
+    if (railM !== null) {
+      const tread = new Map();
+      for (const key of seen) { const [x, yy, z] = key.split(',').map(Number); const k = `${x},${z}`; const l = tread.get(k) ?? []; l.push(yy); tread.set(k, l); }
+      const nBottom = cells.findIndex((c) => c.y === bottom);
+      const exitFrom = Math.max(0, nBottom - 1);
+      const lit = new Set();
+      cells.forEach((c, i) => {
+        if (i < 3 || i >= exitFrom) return; // the top (into the hub / the landing) and the bottom exit stay open
+        const r2 = c.corner ? [[1, 1], [1, -1], [-1, 1], [-1, -1], [c.out[0] * 2, c.out[1] * 2]] : [[c.out[0] * 2, c.out[1] * 2]];
+        for (const [dx, dz] of r2) {
+          const x = c.x + dx, z = c.z + dz;
+          if (Math.max(Math.abs(x - cx), Math.abs(z - cz)) !== half + 2) continue;
+          if ((tread.get(`${x},${z}`) ?? []).some((v) => Math.abs(v - c.y) <= 2)) continue;
+          rails.addOnce(`${x},${c.y},${z}`, x, z, c.y, c.y, full);
+          rails.addOnce(`${x},${c.y + 1},${z}`, x, z, c.y + 1, c.y + 1, railM);
+          if (lights && i % lights === 0 && !lit.has(i)) { lit.add(i); rails.addOnce(`${x},${c.y + 2},${z}`, x, z, c.y + 2, c.y + 2, this._mat('minecraft:lantern', 'light')); }
+          grow(x, c.y + 2, z);
+        }
+      });
+    }
+    // the core
+    this._shapeOp({ kind: 'box', min: [cx - half + 2, { min: [{ floor: 1 }, { abs: bottom }] }, cz - half + 2], max: [cx + half - 2, { abs: top }, cz + half - 2] }, full, COND.IF_NATURAL);
+    this._colsOp(head, COND.IF_NATURAL);
+    this._colsOp(rails, COND.IF_NATURAL);
+    this._colsOp(treads, COND.IF_NATURAL, true);
+    const sid = id ?? `${this.id}_tower_${this.region.paths.length + 1}`;
+    this.region.paths.push({ id: sid, stage: this.stage, part: this.id, kind: 'stair', box });
+    const centre = cells.map((c) => [c.x, c.y, c.z]);
+    this.region.meta.paths[sid] = { kind: 'stair', part: this.id, stage: this.stage, width: 3, landingEvery: 2 * half, cells: centre };
+    (this.region.meta.parts[this.id] ??= {}).kind ??= 'path';
+    return { cells: centre, top: cells[0], bottom: cells[cells.length - 1], box, id: sid };
   }
 
   // ---------------------------------------------------------------- bridge
@@ -1027,9 +1150,17 @@ class Part {
     if (lights && rail) {
       const lm = this._mat('minecraft:lantern', 'bridge light');
       const lc = new Cols({ abs: 0 }, { abs: 0 });
+      // on a rail post: never over a deck cell (a diagonal deck's outer cell can be its neighbour's deck)
+      const deck = new Set();
+      cells.forEach((c) => { for (const k of offs) deck.add(`${c.x + c.r[0] * k},${c.z + c.r[1] * k}`); });
       for (let i = 0; i < cells.length; i += lights) {
-        const c = cells[i], k = outer[(i / lights) % 2];
-        lc.add(c.x + c.r[0] * k, c.z + c.r[1] * k, ys[i] + 2, ys[i] + 2, lm);
+        const c = cells[i];
+        for (const k of [outer[(i / lights) % 2], outer[1 - ((i / lights) % 2)]]) {
+          const x = c.x + c.r[0] * k, z = c.z + c.r[1] * k;
+          if (deck.has(`${x},${z}`)) continue;
+          lc.add(x, z, ys[i] + 2, ys[i] + 2, lm);
+          break;
+        }
       }
       this._colsOp(lc, COND.IF_AIR_OR_FLUID);
     }

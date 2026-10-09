@@ -45,7 +45,9 @@ export function islandParams(p) {
     top: { relief: p.top?.relief ?? 2, pads: p.top?.pads ?? [], edge: p.top?.edge ?? 'rail', lights: p.top?.lights ?? 0 },
     underside: { taper: p.underside?.taper ?? 0.7, roots: p.underside?.roots ?? 4 },
     materials: p.materials ?? 'island',
+    anchorAt: p.anchorAt ?? null,
   };
+  if (o.anchorAt !== null && !(Array.isArray(o.anchorAt) && o.anchorAt.length === 2 && o.anchorAt.every(isInt))) throw new Error('floatingIsland: anchorAt must be [x, z] integers');
   if (!Array.isArray(o.at) || o.at.length !== 3 || !o.at.every(isInt)) throw new Error('floatingIsland: at must be [x, y, z] integers');
   if (!Array.isArray(o.r) || o.r.length !== 2 || !o.r.every((v) => isNum(v) && v >= 4 && v <= 96)) throw new Error('floatingIsland: r must be [rx, rz], 4..96');
   if (!(isInt(o.thickness) && o.thickness >= 4 && o.thickness <= 96)) throw new Error('floatingIsland: thickness must be 4..96');
@@ -56,6 +58,7 @@ export function islandParams(p) {
   if (!(isInt(o.top.lights) && o.top.lights >= 0 && o.top.lights <= 32)) throw new Error('floatingIsland: top.lights must be 0 (none) or a spacing 4..32');
   for (const [i, pad] of o.top.pads.entries()) {
     if (!Array.isArray(pad.at) || !Array.isArray(pad.size) || !pad.at.every(isInt) || !pad.size.every((v) => isInt(v) && v >= 1)) throw new Error(`floatingIsland: pad ${i} needs at: [x, z] and size: [w, d] integers`);
+    if (pad.landing !== undefined && typeof pad.landing !== 'boolean') throw new Error(`floatingIsland: pad ${i} landing must be a boolean`);
   }
   return o;
 }
@@ -82,7 +85,8 @@ export function floatingIsland(params) {
   const r0 = Math.max(1, R * (1 - p.underside.taper));
   const cone = { kind: 'cone', c: [x, { abs: y - coneH }, z], r0, r1: R * 0.96, h: coneH + 1 };
   const warpNoise = { kind: 'value', dims: 3, scale: Math.max(8, round(R / 2)), octaves: 1, seed: fnv64(seed, 'island-warp').hex };
-  const warped = { kind: 'warp', amp, noise: warpNoise, of: { kind: 'union', of: [top, { kind: 'clipY', y0: null, y1: { abs: y }, of: cone }] } };
+  // the warp bends the whole body; the top is clipped again after it, so the walkable top never rises over y + relief
+  const warped = { kind: 'clipY', y0: null, y1: { abs: y + relief }, of: { kind: 'warp', amp, noise: warpNoise, of: { kind: 'union', of: [top, { kind: 'clipY', y0: null, y1: { abs: y }, of: cone }] } } };
   const bandsFrom = Math.floor((y - coneH - amp - 8) / 3);
   const body = { kind: 'strata', bands: { every: 3, offset: 0 }, of: warped };
   const rule = p.materials === 'island' ? islandRule(seed, bandsFrom) : p.materials;
@@ -161,14 +165,14 @@ export function floatingIsland(params) {
     for (let zz = pz; zz < pz + dd; zz++) for (let xx = px; xx < px + w; xx++) topY.set(`${xx},${zz}`, y);
     padsOut.push({ at: [px, pz], size: [w, dd], y });
   }
-  const inPad = (xx, zz, m = 0) => p.top.pads.some((pd) => xx >= pd.at[0] - m && xx < pd.at[0] + pd.size[0] + m && zz >= pd.at[1] - m && zz < pd.at[1] + pd.size[1] + m);
+  const inPad = (xx, zz, m = 0, lotsOnly = false) => p.top.pads.some((pd) => !(lotsOnly && pd.landing) && xx >= pd.at[0] - m && xx < pd.at[0] + pd.size[0] + m && zz >= pd.at[1] - m && zz < pd.at[1] + pd.size[1] + m);
 
   // the rim: a rail (or a 2-high wall) on every top cell beside a drop over 3 (M8)
   if (p.top.edge) {
     const rim = [];
     for (const [k, ty] of topY) {
       const [xx, zz] = k.split(',').map(Number);
-      if (inPad(xx, zz)) continue; // a lot stands on the pad: its building guards its own edge
+      if (inPad(xx, zz, 0, true)) continue; // a lot stands on the pad: its building guards its own edge (landings are railed)
       const drop = [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dz]) => { const n = topY.get(`${xx + dx},${zz + dz}`); return n === undefined || ty - n > 3; });
       if (drop) rim.push([xx, zz, ty]);
     }
@@ -183,7 +187,9 @@ export function floatingIsland(params) {
   if (p.top.lights) {
     const L = p.top.lights;
     const cols = [];
-    for (let zz = z - (Math.floor(rz / L) * L); zz <= z + rz; zz += L) for (let xx = x - (Math.floor(rx / L) * L); xx <= x + rx; xx += L) {
+    // the grid is offset by half a spacing, so the top centre (the anchor) is never a post
+    const h2 = L >> 1;
+    for (let zz = z + h2 - (Math.floor((rz + h2) / L) * L); zz <= z + rz; zz += L) for (let xx = x + h2 - (Math.floor((rx + h2) / L) * L); xx <= x + rx; xx += L) {
       const ty = topY.get(`${xx},${zz}`);
       if (ty === undefined || inPad(xx, zz, 2)) continue;
       const nb = [[1, 0], [-1, 0], [0, 1], [0, -1], [2, 0], [-2, 0], [0, 2], [0, -2]].every(([dx, dz]) => topY.get(`${xx + dx},${zz + dz}`) !== undefined);
@@ -194,10 +200,11 @@ export function floatingIsland(params) {
   }
 
   const bounds = { minX: bx0 - 1, maxX: bx1 + 1, minZ: bz0 - 1, maxZ: bz1 + 1, minY: by0, maxY: by1 + 3 };
-  const ty = topY.get(`${x},${z}`) ?? y;
+  const [ax, az] = p.anchorAt ?? [x, z];
+  const ty = topY.get(`${ax},${az}`) ?? y;
   return {
     generator: GENERATOR, version: VERSION, params: { at: p.at, r: p.r, thickness: p.thickness, top: { relief, pads: p.top.pads, edge: p.top.edge, lights: p.top.lights }, underside: p.underside, materials: typeof p.materials === 'string' ? p.materials : 'rule' },
-    seed, ops, bounds, anchor: [x, ty + 1, z], pads: padsOut, top: topY, amp,
+    seed, ops, bounds, anchor: [ax, ty + 1, az], pads: padsOut, top: topY, amp,
   };
 }
 

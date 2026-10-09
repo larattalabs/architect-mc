@@ -82,7 +82,7 @@ export function compileRule(r, { mat, fields, bands }) {
       const c = clauses[i];
       if (c.yAbs !== null && (y < c.yAbs[0] || y > c.yAbs[1])) continue;
       if (c.depth !== null) {
-        const d = Math.floor(-sd + dz);
+        const d0 = Math.floor(-sd + dz), d = d0 < 0 ? 0 : d0; // an inside cell is never shallower than its skin
         if (d < c.depth[0] || d > c.depth[1]) continue;
       }
       if (c.band !== null) {
