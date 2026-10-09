@@ -171,6 +171,11 @@ own. A9 is phase 3 itself. Order (Noah can reorder):
 
 Round 2 (R1-R11, `steward-mc/docs/ARCHITECT-ASKS.md`) is all accepted 2026-10-05 and folded in above.
 
+**Phase 6a status: built, gate pending verification** (2026-10-09; branch `phase/6a`, API 1.8.0 / mod 0.11.0;
+`artifacts/gate6a/REPORT.md`, local). The macro kit engine, regions (plan, prepare, realise, remove) and mega_bench at full
+size: realise 9.56M cells at about 55-59k cells/s, MSPT max under 37 ms, 0 chunks generated, exact undo (E-flat 0, E-normal all
+classified). The 4e timeouts were lost shared chunk tickets and its spikes journal reads on the server thread, both fixed.
+
 **Phase 4b status: PASSED 2026-10-05, with caveats** (gate-verifier; `artifacts/gate4b/REPORT.md`, local). API 1.2.0 / mod 0.5.0.
 Real Claude: bible "Mosswater Stilts" ($1.40) and a 3-building group ($6.68, 22.7 min); blind critics rate the bible set 9/10 and 8/10 "set"
 vs a no-bible control at 5/10 and 4/10; the verifier, looking independently, agrees in direction. Sim: 38/38 API checks (restart mid-group, soft budget,

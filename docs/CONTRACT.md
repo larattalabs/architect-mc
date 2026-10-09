@@ -5102,6 +5102,11 @@ disagree, this section says what shipped.
 - **Waits (S8).** A region's items wait without a time limit (no `maxWait` in 6a; the wait reason is shown in the region's
   state). Inside a region's items, a dropped item nobody threw (loot of an animal the region's own carve killed) is cleared
   like a natural drop; named items and items a player threw still refuse. Regions are creative-only (N4).
+- **Still ours, more volatile changes.** Grass, mycelium and podzol turning to dirt (or back) by random ticks counts as still
+  the entry's; so does water or lava in air a CELL entry cleared. The E-normal classifier adds `growth` (kelp, cane, vines,
+  crops, saplings, grass spread) beside gravity, unsupported and live.
+- **Delta apply (5b, found by the regression).** The cells other sites hold on top of a delta's write box are computed off the
+  server thread (a 590k-cell site read every section in the first write tick: 50-84 ms on main and 6a alike).
 - The group undo saves the group and its stages once at the end (each stage save wrote the 0.5 MB sites file).
 - Group undo: a player standing in a tile's box holds it (4e's rule); the gate uses a spectator player and clears mobs first.
 - `RemoveResult.kept` for group and stage undos counts kept cells (it was 0).

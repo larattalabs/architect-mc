@@ -265,7 +265,7 @@ there is no DevBridge hook to make layers, so tests go through the API as anothe
 | `dev.region.prepare.state` | {planId} - the prepare's view and governor numbers |
 | `dev.region.cancelPrepare` | {planId} - Regions.cancelPrepare |
 | `dev.region.realise` | {planId, lots?: {lotId: entry}, lotEntries?: [entry...], fitLots?: false, load?: generated:<n>\|loaded\|bounded:<n>, autoApprove?: true, stages?, force?} - Regions.realise -> {region} or {refused}; `lotEntries` fills every lot round robin, with `fitLots` the first entry that fits each lot |
-| `dev.region.state` | {region} - the RegionView, the record, item counts and waits, failed items, writer starvation, the longest wait holding tickets and waits over 10 s with chunk statuses, tile streaming and generation counters |
+| `dev.region.state` | {region} - the RegionView, the record, item counts and waits, `unfinished` (up to 40 items: key, stage, status, reason, x, z), failed items, writer starvation, the longest wait holding tickets and waits over 10 s with chunk statuses, tile streaming and generation counters |
 | `dev.region.list` | {} - every region |
 | `dev.region.remove` | {region, covered?: keep\|cascade\|refuse, force?} - Regions.remove (the group undo) -> RemoveResult + seconds |
 | `dev.region.hash` | {box \| region (claim + margin, default 8), ySpan?, exclude?, mode?: hash\|snap\|diff, file?} - sliced over ticks per 64x64 tile, chunks by short-lived tickets: `hash` (sha256 + per-tile hashes), `snap` (every cell to a gzip file), `diff` (against a snap: mismatches with the pre-region cell's class gravity\|unsupported\|none). A box up to 8M cells without region/mode answers at once as in 4e |
@@ -289,7 +289,9 @@ Semi-stable: a hook may change or go, and every such change is listed here, newe
   ticks; a small box without them answers at once as before. `dev.journal.killAt` takes RG1-RG6; `dev.journal.state` adds the
   index size and commit times. apitest steps `api18, rplan, rprepare, rrealise, rget, rlist, rremove, revents`. `tools/gate6a.mjs`
   drives the phase 6a gate (`tools/run-gate6a-client.sh`: the real sidecar with the sim backend, DevBridge 8893, sidecar 8892;
-  `ARCHITECT_XMX` caps the dev client's heap).
+  `ARCHITECT_XMX` caps the dev client's heap). `dev.region.hash` diff classes: gravity, unsupported, live, growth (random-tick
+  growth and grass spread), none. With `ARCHITECT_TRACE_JOBS` set, placement ticks over 25 ms are logged by part and generated
+  chunks by position.
 
 - **2026-10-08 (phase 5b):** new `dev.entry.versions|installVersion|delta`, `dev.site.delta.check|apply|preview`,
   `dev.site.revert`, `dev.site.history` and `dev.writes.count` (see "Entry versions and delta apply"). `dev.journal.killAt`
