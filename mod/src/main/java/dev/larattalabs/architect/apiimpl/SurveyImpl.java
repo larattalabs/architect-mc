@@ -40,6 +40,7 @@ public final class SurveyImpl implements Survey {
 
 	static void init() {
 		ServerTickEvents.END_SERVER_TICK.register(SurveyImpl::tick);
+		dev.larattalabs.architect.region.volume.VolumeSurvey.init();
 		ServerLifecycleEvents.SERVER_STOPPING.register(s -> {
 			for (Task t : TASKS) {
 				t.future().completeExceptionally(new IllegalStateException("the world closed"));
@@ -64,8 +65,31 @@ public final class SurveyImpl implements Survey {
 		return f;
 	}
 
+	/**
+	 * (1.9.0) {@link dev.larattalabs.architect.region.volume.VolumeSurvey}, frozen to {@code <world>/architect/volumes/<sha>.bin};
+	 * {@code blobId}: the helper's blob id (the frozen file uploaded as kind {@code region.volume}) when it is connected, else
+	 * {@code "local:<sha>"}.
+	 */
+	@Override
+	public CompletableFuture<dev.larattalabs.architect.api.Volume> volume(ServerLevel level, BoundingBox box, LoadPolicy load) {
+		return dev.larattalabs.architect.region.volume.VolumeSurvey.start(level, box, load, null).thenCompose(SurveyImpl::upload);
+	}
+
+	/** Uploads a frozen volume when the helper is connected (its blob id replaces {@code local:<sha>}); a failed upload keeps local. */
+	public static CompletableFuture<dev.larattalabs.architect.api.Volume> upload(dev.larattalabs.architect.region.volume.VolumeSurvey.Result r) {
+		dev.larattalabs.architect.api.Volume v = r.volume();
+		if (!RegionBridge.INSTANCE.connected()) {
+			return CompletableFuture.completedFuture(v);
+		}
+		return RegionBridge.put(r.gz(), "region.volume").handle((id, e) -> e != null || id == null ? v : new dev.larattalabs.architect.api.Volume(v.sha(),
+			v.box(), id, v.counts(), v.missingColumns(), v.stats()));
+	}
+
 	private static void tick(MinecraftServer server) {
 		if (TASKS.isEmpty()) {
+			if (dev.larattalabs.architect.region.volume.VolumeSurvey.busy()) {
+				dev.larattalabs.architect.region.volume.VolumeSurvey.step(System.nanoTime() + BUDGET_NANOS);
+			}
 			return;
 		}
 		long end = System.nanoTime() + BUDGET_NANOS;
@@ -87,6 +111,7 @@ public final class SurveyImpl implements Survey {
 				t.future().complete(t.grid().finish(t.state()[1]));
 			}
 		}
+		dev.larattalabs.architect.region.volume.VolumeSurvey.step(end); // volumes share the survey budget
 	}
 
 	private static void read(Task t, long k) {

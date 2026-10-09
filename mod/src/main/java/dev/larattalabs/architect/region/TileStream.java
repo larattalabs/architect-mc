@@ -22,7 +22,15 @@ import org.jspecify.annotations.Nullable;
  * queue file). When the link drops, requests in flight are dropped and asked again on reconnect.
  */
 public final class TileStream {
-	public enum Phase { REQUESTED, RECEIVED, DECODED, FAILED }
+	/**
+	 * REQUESTED .. DECODED as 6a; FAILED: the tile failed (the item fails); WAITING (6b): the helper keeps answering
+	 * {@code ir_unknown} / {@code blob_unknown} after {@link #MAX_RESENDS} re-sends, so the item waits SIDECAR_UNAVAILABLE until the
+	 * link changes (a reconnect or a restart asks again).
+	 */
+	public enum Phase { REQUESTED, RECEIVED, DECODED, FAILED, WAITING }
+
+	/** At most this many re-requests of a tile per reason ({@code ir_unknown}, {@code blob_unknown}) (CONTRACT phase 6b §2.2). */
+	public static final int MAX_RESENDS = 3;
 
 	/** The link to the sidecar (the client's {@code ClientBridge} in a singleplayer game; a seam for tests). */
 	public interface Link {
@@ -98,7 +106,7 @@ public final class TileStream {
 	public static @Nullable Tile get(String region, String stage, String set, String key) {
 		Tile t = TILES.get(id(region, stage, set, key));
 		Link l = link;
-		if (t != null && t.phase == Phase.REQUESTED && (l == null || !l.connected() || l.generation() != t.linkGen)) {
+		if (t != null && (t.phase == Phase.REQUESTED || t.phase == Phase.WAITING) && (l == null || !l.connected() || l.generation() != t.linkGen)) {
 			TILES.remove(id(region, stage, set, key), t); // asked on a link that is gone: ask again
 			return null;
 		}
@@ -116,12 +124,32 @@ public final class TileStream {
 		return n;
 	}
 
-	/**
-	 * Requests one tile ({@code region.tiles.request}); the IR goes along only when the sidecar answers {@code ir_unknown}.
-	 * Returns false when the link is down.
-	 */
+	/** Reads a side blob's bytes by sha from the world copy (null: not there). Called off the server thread. */
+	@FunctionalInterface
+	public interface BlobSource {
+		byte @Nullable [] read(String sha);
+	}
+
+	/** Uploads a blob ({@code blob.put}, chunked, kind {@code region.blob}); completes with its blob id. A seam for tests. */
+	static volatile java.util.function.BiFunction<byte[], String, CompletableFuture<String>> PUT = (b, kind) -> BlobPut.put(link, b, kind);
+	/** Re-sends by reason since the last reset (dev.region.state, the gate's 10(a)). */
+	public static final java.util.concurrent.ConcurrentHashMap<String, AtomicInteger> RESENDS = new java.util.concurrent.ConcurrentHashMap<>();
+
+	/** 6a's signature (no side blobs). */
 	public static boolean request(String region, String planId, String irSha, Function<Void, JsonObject> ir, String stage, String set, String key,
 		byte[] heights) {
+		return request(region, planId, irSha, ir, sha -> null, stage, set, key, heights);
+	}
+
+	/**
+	 * Requests one tile ({@code region.tiles.request}). The IR goes along only when the sidecar answers {@code ir_unknown}; side
+	 * blobs (6b) only when it answers {@code blob_unknown <sha>,<sha>}: they are read from the world copy ({@code blobs}),
+	 * uploaded with {@code blob.put} and the tile is asked again with {@code blobs: {sha: blobId}}. IR first, then blobs (the
+	 * sidecar resolves in that order). At most {@link #MAX_RESENDS} re-requests per reason; then the tile is {@link Phase#WAITING}
+	 * with the message (the item waits SIDECAR_UNAVAILABLE). Returns false when the link is down.
+	 */
+	public static boolean request(String region, String planId, String irSha, Function<Void, JsonObject> ir, BlobSource blobs, String stage, String set,
+		String key, byte[] heights) {
 		Link l = link;
 		if (l == null || !l.connected()) {
 			return false;
@@ -142,28 +170,239 @@ public final class TileStream {
 		one.addProperty("heights", Base64.getEncoder().encodeToString(heights));
 		tiles.add(one);
 		m.add("tiles", tiles);
+		send(l, t, m, ir, blobs, new int[2]);
+		return true;
+	}
+
+	/** One send of a tile request and what its ack asks for. {@code tries}: {ir_unknown, blob_unknown} re-requests so far. */
+	private static void send(Link l, Tile t, JsonObject m, Function<Void, JsonObject> ir, BlobSource blobs, int[] tries) {
 		l.send(m).whenComplete((ack, ex) -> {
+			if (TILES.get(id(t.region, t.stage, t.set, t.key)) != t) {
+				return; // released or asked again meanwhile
+			}
 			if (ex != null) {
 				t.error = "the request failed: " + ex.getMessage();
-				TILES.remove(id(region, stage, set, key), t);
+				TILES.remove(id(t.region, t.stage, t.set, t.key), t);
 				return;
 			}
-			if (ack.has("ok") && !ack.get("ok").getAsBoolean()) {
-				String err = ack.has("error") && !ack.get("error").isJsonNull() ? ack.get("error").getAsString() : "refused";
-				if (err.contains("ir_unknown")) {
+			if (!ack.has("ok") || ack.get("ok").getAsBoolean()) {
+				return;
+			}
+			String err = ack.has("error") && !ack.get("error").isJsonNull() ? ack.get("error").getAsString() : "refused";
+			if (err.contains("ir_unknown")) {
+				if (tries[0] >= MAX_RESENDS) {
+					waiting(t, "the helper still lacks plan " + t.planId + "'s IR after " + MAX_RESENDS + " re-sends (" + err + ")");
+					return;
+				}
+				tries[0]++;
+				RESENDS.computeIfAbsent("ir", k -> new AtomicInteger()).incrementAndGet();
+				JsonObject again = m.deepCopy();
+				again.add("ir", ir.apply(null));
+				send(l, t, again, ir, blobs, tries);
+			} else if (err.contains("blob_unknown")) {
+				if (tries[1] >= MAX_RESENDS) {
+					waiting(t, "the helper still lacks side blobs of plan " + t.planId + " after " + MAX_RESENDS + " re-sends (" + err + ")");
+					return;
+				}
+				tries[1]++;
+				RESENDS.computeIfAbsent("blob", k -> new AtomicInteger()).incrementAndGet();
+				List<String> shas = blobUnknown(err);
+				resendBlobs(shas, blobs).whenComplete((ids, e2) -> {
+					if (e2 != null) {
+						waiting(t, "side blobs could not be re-sent: " + (e2.getCause() != null ? e2.getCause().getMessage() : e2.getMessage()));
+						return;
+					}
 					JsonObject again = m.deepCopy();
-					again.add("ir", ir.apply(null));
-					l.send(again).whenComplete((a2, e2) -> {
-						if (e2 != null || a2.has("ok") && !a2.get("ok").getAsBoolean()) {
-							fail(t, "the helper refused the tile: " + (e2 != null ? e2.getMessage() : a2));
-						}
-					});
-				} else {
-					fail(t, "the helper refused the tile: " + err);
+					JsonObject bl = again.has("blobs") && again.get("blobs").isJsonObject() ? again.getAsJsonObject("blobs") : new JsonObject();
+					ids.forEach(bl::addProperty);
+					again.add("blobs", bl);
+					if (!again.has("ir") && tries[0] > 0) {
+						again.add("ir", ir.apply(null));
+					}
+					send(l, t, again, ir, blobs, tries);
+				});
+			} else {
+				fail(t, "the helper refused the tile: " + err);
+			}
+		});
+	}
+
+	/** The shas of a {@code blob_unknown <sha>,<sha>...} error (also {@code blob_unknown {shas: [...]}}). Pure. */
+	public static List<String> blobUnknown(String err) {
+		List<String> out = new ArrayList<>();
+		java.util.regex.Matcher mm = java.util.regex.Pattern.compile("[0-9a-f]{64}").matcher(err);
+		while (mm.find()) {
+			if (!out.contains(mm.group())) {
+				out.add(mm.group());
+			}
+		}
+		return out;
+	}
+
+	/** Uploads each sha's world copy as kind {@code region.blob}; sha -> blob id. A missing copy fails it. */
+	static CompletableFuture<Map<String, String>> resendBlobs(List<String> shas, BlobSource blobs) {
+		Map<String, String> out = new java.util.concurrent.ConcurrentHashMap<>();
+		CompletableFuture<Void> chain = CompletableFuture.completedFuture(null);
+		for (String sha : shas) {
+			chain = chain.thenCompose(v -> {
+				byte[] b = blobs.read(sha);
+				if (b == null) {
+					return CompletableFuture.failedFuture(new IllegalStateException("blob " + sha + " missing in the world copy"));
+				}
+				return PUT.apply(b, "region.blob").thenAccept(id -> out.put(sha, id));
+			});
+		}
+		if (shas.isEmpty()) {
+			return CompletableFuture.failedFuture(new IllegalStateException("blob_unknown named no sha"));
+		}
+		return chain.thenApply(v -> out);
+	}
+
+	private static void waiting(Tile t, String why) {
+		t.error = why;
+		t.phase = Phase.WAITING;
+		Architect.LOGGER.warn("Region {} tile {} {} {}: {}", t.region, t.key, t.stage, t.set, why);
+	}
+
+	// ------------------------------------------------------------------ preview tiles (the region ghost, 6b)
+
+	/** A preview tile ({@code preview: true}): drawn by the ghost, never written. */
+	public static final class PreviewTile {
+		public final String planId;
+		public final String key;
+		public volatile Packed.@Nullable Tile cells;
+		public volatile @Nullable String error;
+		public volatile boolean done;
+		final List<byte[]> frames = new ArrayList<>();
+		int nextSeq;
+		final CompletableFuture<PreviewTile> future = new CompletableFuture<>();
+
+		PreviewTile(String planId, String key) {
+			this.planId = planId;
+			this.key = key;
+		}
+	}
+
+	private static final Map<String, PreviewTile> PREVIEWS = new ConcurrentHashMap<>();
+	static final int PREVIEW_TIMEOUT_S = 60;
+
+	/**
+	 * Asks the helper for preview tiles of a plan (kit/REGIONS.md "Ghost tiles": every stage up to and including {@code stage},
+	 * both sets, over the plan survey); each future completes with the tile's cells (or its error). A request already out for
+	 * the same key is reused.
+	 */
+	public static List<CompletableFuture<PreviewTile>> requestPreview(String planId, String irSha, @Nullable String stage, List<String> keys) {
+		Link l = link;
+		List<CompletableFuture<PreviewTile>> out = new ArrayList<>();
+		if (l == null || !l.connected()) {
+			for (String k : keys) {
+				out.add(CompletableFuture.failedFuture(new IllegalStateException("the helper (sidecar) is not connected")));
+			}
+			return out;
+		}
+		JsonArray tiles = new JsonArray();
+		for (String k : keys) {
+			String pid = planId + "|" + (stage == null ? "" : stage) + "|" + k;
+			PreviewTile have = PREVIEWS.get(pid);
+			if (have != null) {
+				out.add(have.future);
+				continue;
+			}
+			PreviewTile t = new PreviewTile(planId, k);
+			PREVIEWS.put(pid, t);
+			// a lost frame never completes it: after a minute it ends with an error and is asked again on the ghost's next pass
+			t.future.orTimeout(PREVIEW_TIMEOUT_S, java.util.concurrent.TimeUnit.SECONDS).whenComplete((x, e) -> {
+				if (e != null) {
+					t.error = "no answer from the helper in " + PREVIEW_TIMEOUT_S + " s";
+					t.done = true;
+					PREVIEWS.remove(pid, t);
+				}
+			});
+			out.add(t.future);
+			JsonObject one = new JsonObject();
+			one.addProperty("key", k);
+			if (stage != null) {
+				one.addProperty("stage", stage);
+			}
+			tiles.add(one);
+		}
+		if (tiles.isEmpty()) {
+			return out;
+		}
+		JsonObject m = new JsonObject();
+		m.addProperty("type", "region.tiles.request");
+		m.addProperty("planId", planId);
+		m.addProperty("irSha", irSha);
+		m.addProperty("preview", true);
+		m.add("tiles", tiles);
+		l.send(m).whenComplete((ack, ex) -> {
+			String err = ex != null ? ex.getMessage() : ack.has("ok") && !ack.get("ok").getAsBoolean() ? String.valueOf(ack.get("error")) : null;
+			if (err != null) {
+				for (var e : tiles) {
+					String k = e.getAsJsonObject().get("key").getAsString();
+					PreviewTile t = PREVIEWS.remove(planId + "|" + (stage == null ? "" : stage) + "|" + k);
+					if (t != null) {
+						t.error = "the helper refused the preview: " + err;
+						t.done = true;
+						t.future.complete(t);
+					}
 				}
 			}
 		});
-		return true;
+		return out;
+	}
+
+	/** Forgets the preview tiles of a plan (the ghost was hidden; null: all). */
+	public static void forgetPreviews(@Nullable String planId) {
+		PREVIEWS.values().removeIf(t -> planId == null || t.planId.equals(planId));
+	}
+
+	private static void previewFrame(JsonObject m, String type) {
+		String planId = m.has("planId") ? m.get("planId").getAsString() : "";
+		String key = m.has("key") ? m.get("key").getAsString() : "";
+		PreviewTile t = null;
+		for (var e : PREVIEWS.entrySet()) {
+			PreviewTile x = e.getValue();
+			if (x.planId.equals(planId) && x.key.equals(key) && !x.done) {
+				t = x;
+				break;
+			}
+		}
+		if (t == null) {
+			return;
+		}
+		PreviewTile tt = t;
+		if ("region.tile.error".equals(type)) {
+			tt.error = m.has("message") ? m.get("message").getAsString() : "the tile could not be evaluated";
+			tt.done = true;
+			tt.future.complete(tt);
+			return;
+		}
+		synchronized (tt) {
+			int seq = m.get("seq").getAsInt();
+			if (seq != tt.nextSeq) {
+				tt.error = "frame " + seq + " out of order";
+				tt.done = true;
+				tt.future.complete(tt);
+				return;
+			}
+			tt.frames.add(Base64.getDecoder().decode(m.get("data").getAsString()));
+			tt.nextSeq++;
+			if (m.has("more") && m.get("more").getAsBoolean()) {
+				return;
+			}
+		}
+		tt.done = true;
+		String sha = m.get("sha").getAsString();
+		CompletableFuture.runAsync(() -> {
+			try {
+				tt.cells = Packed.decode(Packed.payload(tt.frames, sha));
+			} catch (Exception e) {
+				tt.error = "the preview tile could not be read: " + e.getMessage();
+			}
+			tt.frames.clear();
+			tt.future.complete(tt);
+		}, DECODE);
 	}
 
 	private static void fail(Tile t, String why) {
@@ -174,6 +413,10 @@ public final class TileStream {
 	/** {@code region.tile} / {@code region.tile.error} (the link's thread). */
 	public static void onMessage(JsonObject m) {
 		String type = m.get("type").getAsString();
+		if (m.has("preview") && m.get("preview").getAsBoolean()) {
+			previewFrame(m, type); // the ghost's tiles: never mixed with a realise of the same plan
+			return;
+		}
 		String region = null;
 		Tile t = null;
 		String key = m.has("key") ? m.get("key").getAsString() : "";
@@ -245,6 +488,17 @@ public final class TileStream {
 		TILES.remove(id(region, stage, set, key));
 	}
 
+	/** (6b) A region's WAITING tiles are asked again (the START_SIDECAR nudge on a connected helper); how many. */
+	public static int retryWaiting(String region) {
+		int n = 0;
+		for (var e : TILES.entrySet()) {
+			if (e.getValue().region.equals(region) && e.getValue().phase == Phase.WAITING && TILES.remove(e.getKey(), e.getValue())) {
+				n++;
+			}
+		}
+		return n;
+	}
+
 	/** A failed tile is asked again (after a fix, a resume). */
 	public static void retry(String region, String stage, String set, String key) {
 		Tile t = TILES.get(id(region, stage, set, key));
@@ -255,5 +509,8 @@ public final class TileStream {
 
 	public static void forgetRegion(@Nullable String region) {
 		TILES.values().removeIf(t -> region == null || t.region.equals(region));
+		if (region == null) {
+			PREVIEWS.clear();
+		}
 	}
 }

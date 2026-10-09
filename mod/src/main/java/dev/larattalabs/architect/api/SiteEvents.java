@@ -206,7 +206,10 @@ public interface SiteEvents {
 		}
 	});
 
-	/** A region changed state (realise queued, placed, partial, failed, removing, removed). Server thread. Since 1.8.0. */
+	/**
+	 * A region changed state (realise queued, placed, partial, failed, removing, removed), and since 1.9.0 also when its
+	 * {@link RegionView#actions()} change. Server thread. Since 1.8.0.
+	 */
 	Event<RegionStateChanged> REGION_STATE = EventFactory.createArrayBacked(RegionStateChanged.class, ls -> v -> {
 		for (RegionStateChanged l : ls) {
 			Guard.run(() -> l.onState(v), "REGION_STATE");
@@ -226,6 +229,37 @@ public interface SiteEvents {
 			Guard.run(() -> l.onProgress(v), "PREPARE_PROGRESS");
 		}
 	});
+
+	/**
+	 * A region plan's checker report is ready: with the plan ({@link Regions#plan}, unless it skipped the check) and after
+	 * {@link Regions#check}. Server thread. Since 1.9.0.
+	 */
+	Event<RegionChecked> REGION_CHECKED = EventFactory.createArrayBacked(RegionChecked.class, ls -> (id, r) -> {
+		for (RegionChecked l : ls) {
+			Guard.run(() -> l.onChecked(id, r), "REGION_CHECKED");
+		}
+	});
+
+	/**
+	 * A region plan entered a phase (Steward S-6b-5: a caller's inbox is not silent): {@code planning}, {@code checking},
+	 * {@code rendering} (the sidecar's {@code region.progress}), then {@code accepted} (the mod holds the plan) or
+	 * {@code failed}. {@code planId} is null before the sidecar named it. Server thread. Since 1.9.0.
+	 */
+	Event<RegionPlanProgress> REGION_PLAN_PROGRESS = EventFactory.createArrayBacked(RegionPlanProgress.class, ls -> (id, phase) -> {
+		for (RegionPlanProgress l : ls) {
+			Guard.run(() -> l.onPhase(id, phase), "REGION_PLAN_PROGRESS");
+		}
+	});
+
+	@FunctionalInterface
+	interface RegionChecked {
+		void onChecked(String planId, CheckReport report);
+	}
+
+	@FunctionalInterface
+	interface RegionPlanProgress {
+		void onPhase(@org.jspecify.annotations.Nullable String planId, String phase);
+	}
 
 	@FunctionalInterface
 	interface RegionStateChanged {

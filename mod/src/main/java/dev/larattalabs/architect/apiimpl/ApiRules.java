@@ -24,7 +24,7 @@ public final class ApiRules {
 	public static final java.util.Set<String> JAVA_FEATURES = java.util.Set.of("sites", "events", "designs", "library", "survey", "survivalInfo",
 		"compositePreview", "batchPlacement", "siteGroups", "stages", "groupCrate", "journal", "overlapLayer", "roads", "cellSites",
 		"stackQuery", "entryVersions", "blueprintDelta", "deltaApply", "siteRevert", "deltaPreview", "regionPrepare", "generatedOnly", "cellConditions",
-		"chunkBound");
+		"chunkBound", "surveyVolume", "regionNudge");
 
 	private ApiRules() {
 	}
@@ -46,8 +46,16 @@ public final class ApiRules {
 					case "design.polish" -> "polish"; // phase 5b: the helper can polish (the mod's own 5b features are Java names)
 					case "region.plan" -> "regions"; // phase 6a
 					case "region.tiles" -> "regions";
+					case "region.check" -> "regionCheck"; // phase 6b
+					case "region.preview" -> "regionPreview";
+					case "region.design" -> "regionDesign";
+					case "region.blobs" -> "regionBlobs";
+					case "ir.format2" -> "irFormat2";
 					default -> Wire4b.FEATURE_NAMES.getOrDefault(f, Wire5a.FEATURE_NAMES.getOrDefault(f, f));
 				});
+			}
+			if (sidecarFeatures.contains("region.preview")) {
+				out.add("regionGhost"); // the ghost's preview tiles come with the 6b helper's previews
 			}
 		}
 		return java.util.Set.copyOf(out);

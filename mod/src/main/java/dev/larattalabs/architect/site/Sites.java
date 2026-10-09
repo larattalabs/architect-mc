@@ -592,6 +592,14 @@ public final class Sites {
 		}
 		List<SiteJournal.Hit> hits = overlapCheck(level, snapBox, moving, layer, owner, force, out, layerNotes);
 		tr.mark("overlap");
+		if (moving == null && PlayerBlocks.scoped(layer, force, hits.stream().map(SiteJournal.Hit::kind).toList())) {
+			// (6b, API 1.9.0) a lot on a region's pad: the player's own blocks in its box refuse it (they stay)
+			PlayerBlocks.Found pb = PlayerBlocks.scan(level, snapBox);
+			tr.mark("playerBlocks");
+			if (pb.total() > 0) {
+				out.add(Reason.PLAYER_BLOCKS, PlayerBlocks.message(pb.first(), pb.total()));
+			}
+		}
 		String lava = TerrainFit.lavaRefusal(plan);
 		if (lava == null) {
 			lava = Approach.lavaRefusal(approach);

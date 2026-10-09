@@ -227,6 +227,8 @@ public final class SidecarState {
 	private volatile int protocol;
 	/** {@code snapshot.features} (empty for protocol 1). */
 	private volatile java.util.Set<String> features = java.util.Set.of();
+	/** (6b) {@code snapshot.kitVersion}, {@code irFormats}, {@code irKinds} as received (null before a snapshot names them). */
+	private volatile @Nullable JsonObject versions;
 	private final List<Listener> listeners = new CopyOnWriteArrayList<>();
 	private long snapshots;
 
@@ -280,6 +282,23 @@ public final class SidecarState {
 	/** The sidecar's {@code features}. Any thread. */
 	public java.util.Set<String> features() {
 		return features;
+	}
+
+	/** (6b) The helper's kit and IR versions from its snapshot ({@code kitVersion}, {@code irFormats}, {@code irKinds}), or null. Any thread. */
+	public @Nullable JsonObject versions() {
+		JsonObject v = versions;
+		return v == null ? null : v.deepCopy();
+	}
+
+	/** (6b) {@code kitVersion}, {@code irFormats} and {@code irKinds} of a snapshot (or a hello), or null when it names none. Pure. */
+	public static @Nullable JsonObject versionsOf(JsonObject snapshot) {
+		JsonObject o = new JsonObject();
+		for (String k : new String[] {"kitVersion", "irFormats", "irKinds"}) {
+			if (snapshot.has(k) && !snapshot.get(k).isJsonNull()) {
+				o.add(k, snapshot.get(k).deepCopy());
+			}
+		}
+		return o.size() == 0 ? null : o;
 	}
 
 	/** Reads {@code protocol} and {@code features} from a snapshot; absent = protocol 1 with no features. Pure. */
@@ -462,6 +481,7 @@ public final class SidecarState {
 				palettes = json.has("palettes") && !json.get("palettes").isJsonNull() ? json.get("palettes") : null;
 				protocol = protocolOf(json);
 				features = featuresOf(json);
+				versions = versionsOf(json);
 				snapshots++;
 				for (Listener l : listeners) {
 					for (Variant v : variants.values()) {

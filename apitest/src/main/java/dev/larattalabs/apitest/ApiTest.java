@@ -243,6 +243,8 @@ public class ApiTest implements ModInitializer {
 				return ApiTestDelta.step(src, a);
 			}
 			case "api18":
+			case "api19":
+			case "rnudge":
 			case "rplan":
 			case "rprepare":
 			case "rrealise":

@@ -61,4 +61,20 @@ public interface ArchitectClientApi {
 	default void previewDelta(String key, String siteId, int toVersion) {
 		throw new UnsupportedOperationException("ArchitectClientApi.previewDelta needs Architect API 1.7.0");
 	}
+
+	/**
+	 * Shows the region ghost of a plan (docs/CONTRACT.md phase 6b §3.5, {@link PreviewStyle#REGION}): within 64 blocks of the
+	 * player the cells of the plan's tiles, evaluated by the helper in preview mode over the plan survey (never written), tinted
+	 * added, removed, path (walk), lot and floating; beyond 64 blocks the claim outline and the lot boxes; and a verdict line
+	 * (the checker summary and the cell budget). {@code stage}: every stage up to and including it (null: all). It follows the
+	 * player and replaces any region ghost shown. Client thread. Since 1.9.0.
+	 */
+	default void previewRegion(String planId, @org.jspecify.annotations.Nullable String stage) {
+		throw new UnsupportedOperationException("ArchitectClientApi.previewRegion needs Architect API 1.9.0");
+	}
+
+	/** Hides the region ghost ({@link #previewRegion}). Client thread. Since 1.9.0. */
+	default void clearRegionPreview() {
+		throw new UnsupportedOperationException("ArchitectClientApi.clearRegionPreview needs Architect API 1.9.0");
+	}
 }

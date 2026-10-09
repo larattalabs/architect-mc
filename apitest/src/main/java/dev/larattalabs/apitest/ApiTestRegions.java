@@ -37,6 +37,9 @@ import net.minecraft.world.level.levelgen.structure.BoundingBox;
  * rlist [owner]         Regions.list
  * rremove &lt;region&gt; [keep|cascade|refuse] [force]   Regions.remove -> pending "rremove:&lt;region&gt;"
  * revents               the REGION_STATE / REGION_PROGRESS / PREPARE_PROGRESS events seen so far
+ * api19                 (6b, API 1.9.0) version, the 6b features present, the appended constants (Reason, Design.Kind, PreviewStyle via
+ *                       the client), WaitAction.Kind, VoxelClass, RegionPlan / RegionView old constructors, REGION_CHECKED registers
+ * rnudge &lt;region&gt; &lt;action&gt;   (6b) Regions.nudge -> {done, message} ("not applicable" for an action the wait doesn't offer)
  * </pre>
  */
 final class ApiTestRegions {
@@ -122,6 +125,55 @@ final class ApiTestRegions {
 					states.add(s.name());
 				}
 				o.add("regionStates", states);
+				return o;
+			}
+			case "api19": {
+				JsonObject o = new JsonObject();
+				o.addProperty("version", ArchitectApi.VERSION);
+				JsonArray f = new JsonArray();
+				for (String x : new String[] {"regionCheck", "regionPreview", "regionGhost", "regionDesign", "regionNudge", "surveyVolume", "irFormat2"}) {
+					if (ArchitectApi.get().features().contains(x)) {
+						f.add(x);
+					}
+				}
+				o.add("features6b", f);
+				Reason[] rs = Reason.values();
+				o.addProperty("lastReasons", rs[rs.length - 2].name() + " " + rs[rs.length - 1].name());
+				o.addProperty("designKindRegion", dev.larattalabs.architect.api.Design.Kind.REGION.ordinal());
+				JsonArray k = new JsonArray();
+				for (dev.larattalabs.architect.api.WaitAction.Kind x : dev.larattalabs.architect.api.WaitAction.Kind.values()) {
+					k.add(x.name());
+				}
+				o.add("waitActions", k);
+				JsonArray vc = new JsonArray();
+				for (dev.larattalabs.architect.api.VoxelClass x : dev.larattalabs.architect.api.VoxelClass.values()) {
+					vc.add(x.name());
+				}
+				o.add("voxelClasses", vc);
+				var plan = new dev.larattalabs.architect.api.RegionPlan("p", "x", "", "", "", 0L, java.util.List.of(), java.util.List.of(), java.util.Map.of(),
+					new dev.larattalabs.architect.api.RegionBudget(0, 0, 0, 0, 0, 0), java.util.List.of());
+				o.addProperty("planOldCtor", (plan.report() == null) + " " + (plan.previews() == null) + " " + plan.irFormat());
+				var view = new dev.larattalabs.architect.api.RegionView("r", "p", "", null, new JsonObject(), "g", new BoundingBox(0, 0, 0, 0, 0, 0),
+					RegionState.PLANNED, java.util.List.of(), java.util.List.of(), 0, java.util.Map.of(), null, null);
+				o.addProperty("viewOldCtorActions", view.actions().size());
+				SiteEvents.REGION_CHECKED.register((id, r) -> event("REGION_CHECKED", id, r.ok() + " " + r.errors() + "/" + r.warnings()));
+				o.addProperty("regionChecked", true);
+				return o;
+			}
+			case "rnudge": {
+				var f = regions.nudge(a[1], dev.larattalabs.architect.api.WaitAction.Kind.valueOf(a[2].toUpperCase(java.util.Locale.ROOT)));
+				JsonObject o = new JsonObject();
+				try {
+					var r = f.getNow(null);
+					if (r == null) {
+						o.addProperty("pending", true);
+					} else {
+						o.addProperty("done", r.done());
+						o.addProperty("message", r.message());
+					}
+				} catch (java.util.concurrent.CompletionException e) {
+					o.addProperty("refused", String.valueOf(e.getCause() != null ? e.getCause().getMessage() : e.getMessage()));
+				}
 				return o;
 			}
 			case "rplan": {

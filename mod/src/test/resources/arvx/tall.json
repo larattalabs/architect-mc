@@ -1,0 +1,65 @@
+{
+  "name": "tall",
+  "note": "ARVX fixture written by mod ArvxTest (-Darvx.write=true); <name>.bin = gzip(ARVX), sha over the uncompressed bytes",
+  "box": {
+    "minX": 100,
+    "minY": -64,
+    "minZ": -200,
+    "maxX": 100,
+    "maxY": 16399,
+    "maxZ": -198
+  },
+  "sha": "291f267d4a30a84a55766644b93918582bcaab28bb5c84de3a19057b014e2547",
+  "bytes": 52,
+  "columns": [
+    [
+      [
+        1,
+        130
+      ],
+      [
+        0,
+        16334
+      ]
+    ],
+    [
+      [
+        1,
+        64
+      ],
+      [
+        6,
+        200
+      ],
+      [
+        0,
+        16200
+      ]
+    ],
+    [
+      [
+        0,
+        16464
+      ]
+    ]
+  ],
+  "owners": [],
+  "ownedRuns": [],
+  "counts": {
+    "AIR": 48998,
+    "ROCK": 194,
+    "SOIL": 0,
+    "LOOSE": 0,
+    "ICE": 0,
+    "SNOW": 0,
+    "WATER": 200,
+    "LAVA": 0,
+    "LOG": 0,
+    "LEAVES": 0,
+    "PLANT": 0,
+    "OWNED": 0,
+    "PLAYER": 0,
+    "BLOCK_ENTITY": 0,
+    "MISSING": 0
+  }
+}

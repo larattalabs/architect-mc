@@ -20,16 +20,27 @@ import java.util.Optional;
  *     {@code entryId} is that entry
  * @param polish (since 1.7.0) a polish of an installed entry ({@link Designs#polish}): its steps, end and installed version; the
  *     same entry (a new version of it), no new entry
+ * @param result (since 1.9.0) a region design's result ({@link Regions#design}, kind {@link Kind#REGION}): {@code {outcome:
+ *     "PICKED"|"NO_TEMPLATE", fits, program, params, reason, cost, tries, planId?}} (the closest program is offered also
+ *     without a fit); empty for other kinds and while the pick runs
  */
 public record Design(String id, Status status, String step, Optional<String> entryId, Cost cost, Optional<String> error, JsonObject request,
 	Optional<String> owner, long createdAt, long updatedAt, Optional<MassingRef> massing, Optional<Conformance> conformance,
-	Optional<Critique> critique, Optional<String> critiqueOf, Optional<Polish> polish) {
+	Optional<Critique> critique, Optional<String> critiqueOf, Optional<Polish> polish, Optional<JsonObject> result) {
 	public Design {
 		massing = massing == null ? Optional.empty() : massing;
 		conformance = conformance == null ? Optional.empty() : conformance;
 		critique = critique == null ? Optional.empty() : critique;
 		critiqueOf = critiqueOf == null ? Optional.empty() : critiqueOf;
 		polish = polish == null ? Optional.empty() : polish;
+		result = result == null ? Optional.empty() : result;
+	}
+
+	/** The 1.7.0 constructor (no result). */
+	public Design(String id, Status status, String step, Optional<String> entryId, Cost cost, Optional<String> error, JsonObject request,
+		Optional<String> owner, long createdAt, long updatedAt, Optional<MassingRef> massing, Optional<Conformance> conformance,
+		Optional<Critique> critique, Optional<String> critiqueOf, Optional<Polish> polish) {
+		this(id, status, step, entryId, cost, error, request, owner, createdAt, updatedAt, massing, conformance, critique, critiqueOf, polish, Optional.empty());
 	}
 
 	/** The 1.6.0 constructor (no polish). */
@@ -39,13 +50,19 @@ public record Design(String id, Status status, String step, Optional<String> ent
 		this(id, status, step, entryId, cost, error, request, owner, createdAt, updatedAt, massing, conformance, critique, critiqueOf, Optional.empty());
 	}
 
-	/** What kind of job this is (since 1.7.0): a polish of an entry carries {@link #polish()}. New values are only ever appended. */
+	/**
+	 * What kind of job this is (since 1.7.0): a polish of an entry carries {@link #polish()}; since 1.9.0 a region design
+	 * ({@link Regions#design}) is {@link #REGION}. New values are only ever appended.
+	 */
 	public enum Kind {
-		DESIGN, MASSING, REPORT, POLISH
+		DESIGN, MASSING, REPORT, POLISH, REGION
 	}
 
 	/** This job's kind (since 1.7.0). */
 	public Kind kind() {
+		if (request != null && request.has("kind") && request.get("kind").isJsonPrimitive() && "region".equals(request.get("kind").getAsString())) {
+			return Kind.REGION;
+		}
 		if (polish.isPresent() || request != null && request.has("kind") && "polish".equals(request.get("kind").getAsString())) {
 			return Kind.POLISH;
 		}

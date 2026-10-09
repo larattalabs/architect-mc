@@ -8,6 +8,13 @@
 //                     every public or protected member of every class under dev/larattalabs/architect/api in the old MOD jar
 //                     (its whole 1.x surface, not only what one jar calls) must still exist with the same descriptor.
 //
+//   node tools/api-compat.mjs --gate6b [--artifacts <dir>] [classesDir]
+//                     phase 6b (docs/CONTRACT.md "# Phase 6b contract" §6.1): the unchanged 1.8.0, 1.7.0 and 1.6.0 apitest jars by
+//                     reference (artifacts/gate6b/v0110/architect_apitest-0.11.0.jar, gate6a/v0100/...-0.10.0.jar,
+//                     gate5b/v090/...-0.9.0.jar) and the 0.11.0 mod jar's 1.8.0 surface (gate6b/v0110/architect_mc-0.11.0.jar).
+//                     <dir> defaults to $ARCHITECT_ARTIFACTS, else ./artifacts, else ~/Developer/LarattaLabs/architect-mc/artifacts
+//                     (the main checkout: artifacts/ is gitignored, so a worktree has none). Exit 1 when any check fails.
+//
 // classesDir defaults to mod/build/classes/java/{main,client} (run the mod's build first). JAVA_HOME's javap is used (else the PATH's).
 // Also lists the old jar's switch maps over api enums (a $SwitchMap resolves constants by name, so inserted constants are safe
 // for them; a pattern switch would show up as a MatchException reference). Exit 1 when a reference is missing.
@@ -19,6 +26,43 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+if (process.argv[2] === '--gate6b') {
+  const rest = process.argv.slice(3);
+  let dir = process.env.ARCHITECT_ARTIFACTS;
+  const ai = rest.indexOf('--artifacts');
+  if (ai >= 0) {
+    dir = rest[ai + 1];
+    rest.splice(ai, 2);
+  }
+  if (!dir) {
+    const local = path.join(root, 'artifacts');
+    dir = fs.existsSync(path.join(local, 'gate6b', 'v0110')) ? local : path.join(os.homedir(), 'Developer', 'LarattaLabs', 'architect-mc', 'artifacts');
+  }
+  const checks = [
+    ['1.8.0 apitest', [path.join(dir, 'gate6b', 'v0110', 'architect_apitest-0.11.0.jar')]],
+    ['1.7.0 apitest', [path.join(dir, 'gate6a', 'v0100', 'architect_apitest-0.10.0.jar')]],
+    ['1.6.0 apitest', [path.join(dir, 'gate5b', 'v090', 'architect_apitest-0.9.0.jar')]],
+    ['1.8.0 surface', ['--surface', path.join(dir, 'gate6b', 'v0110', 'architect_mc-0.11.0.jar')]],
+  ];
+  let failed = 0;
+  for (const [name, a] of checks) {
+    const jarPath = a[a.length - 1];
+    if (!fs.existsSync(jarPath)) {
+      console.log(`FAIL ${name}: ${jarPath} is missing`);
+      failed++;
+      continue;
+    }
+    try {
+      const out = execFileSync(process.execPath, [fileURLToPath(import.meta.url), ...a, ...rest], { encoding: 'utf8', maxBuffer: 64 << 20 });
+      console.log(`ok   ${name}: ${out.trim().split('\n').pop()}`);
+    } catch (e) {
+      failed++;
+      console.log(`FAIL ${name}:\n${(e.stdout || '') + (e.stderr || '')}`);
+    }
+  }
+  console.log(failed ? `${failed} of ${checks.length} checks failed` : `all ${checks.length} checks clean`);
+  process.exit(failed ? 1 : 0);
+}
 const surface = process.argv[2] === '--surface';
 const args = surface ? process.argv.slice(3) : process.argv.slice(2);
 const jar = args[0];
