@@ -6196,6 +6196,8 @@ The full chain is **one** run of megaA and megaB, not three. The throughput medi
 - **N-6b-3** Yes: about $0.30 expected, with a $3 cap.
 - **N-6b-4** The soft downgrade is accepted: 0.11.x writes nothing to a format-2 region, and the gate pins that behaviour.
 - **N-6b-5** Yes: the terrain half of the survival rule lands in 6c, and the connector half in 7a.
+- N-6b-1, N-6b-2 and N-6b-3: the Steward session relayed on 2026-10-09 that Noah, in that session, raised no objection to them.
+  Recorded as relayed, not as first-hand confirmation.
 
 ## Changes from Steward's review of 6b (steward-mc/docs/A6B-REVIEW.md), all accepted
 
