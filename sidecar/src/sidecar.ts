@@ -41,6 +41,35 @@ export interface ScratchMassing {
   maxSize?: DesignRequest['maxSize'];
 }
 
+/**
+ * Commands whose effect is durable state (a new design, job, group, bible or variant job and the id it was given; a
+ * cancel; an approval or redirect; a tool answer; a budget or resume): that state is on disk before the ack goes out, so
+ * a crash right after the client heard "ok" cannot roll it back (a cancelled job running and spending again, an accepted
+ * request forgotten and its id handed out twice). Everything else (blob chunks, pauses, reads, estimates) stays debounced.
+ */
+const DURABLE_COMMANDS: ReadonlySet<ClientMessage['type']> = new Set<ClientMessage['type']>([
+  'design.request',
+  'design.cancel',
+  'job.run',
+  'job.cancel',
+  'job.tool.result',
+  'variant.request',
+  'import.request',
+  'design.group',
+  'group.cancel',
+  'group.extend',
+  'group.resume',
+  'group.approve',
+  'bible.request',
+  'bible.revise',
+  'bible.cancel',
+  'reskin.request',
+  'massing.redirect',
+  'massing.delete',
+  'design.critique',
+  'design.polish',
+]);
+
 /** A message the client caused that cannot be done (answered with ack ok:false). */
 export { ClientError } from './errors.js';
 import { ClientError } from './errors.js';
@@ -375,6 +404,7 @@ export class Sidecar {
     };
     try {
       const result = await this.dispatch(msg, reply, client);
+      if (DURABLE_COMMANDS.has(msg.type) && this.store.isDirty) this.store.flush();
       ack(true, result ? { result } : {});
     } catch (e) {
       const known = e instanceof ClientError || e instanceof BlobError;
