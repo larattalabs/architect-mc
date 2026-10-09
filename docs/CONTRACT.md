@@ -5086,7 +5086,17 @@ disagree, this section says what shipped.
   tiles (mega_bench), and a later-stage tile over earlier lot columns would freeze the lot's surface.
 - The plan flow is plan (`LOADED_ONLY`, the prepare estimate), prepare, plan again (`GENERATED_ONLY`, the complete survey),
   realise. In a survey, `GENERATED_ONLY(n)` means n chunks at once and any number in all; `LOAD_BOUNDED` keeps 4a's total cap.
-- Drift is checked at region start only, on stored heightmaps (no chunk loads), not per stage.
+- **Drift (S2) is checked at region start and before each later stage**, on stored heightmaps (loaded chunks live; no chunk
+  loads). At region start the plan survey is the baseline, and `force` passes a drifted start (it covers the start check only).
+  Before a stage after the first starts, up to 4096 columns of its tiles and lot boxes are compared with the region's own
+  baseline there: the height the region's placed items left (`after/<tx>.<tz>.bin`, snapshotted when each tile, road or lot
+  places), else the frozen pre-region height, else the plan survey. The tolerance is the start check's. Land changed beyond it
+  **holds the stage**: it goes back to PLANNED (`StageRules.hold`), the `RegionView` waits `DRIFTED` with "land changed since
+  planning: ...; stage <s> holds: approve it again to continue, or replan", and `REGION_STATE` fires. Continue is
+  `Sites.approveStage` on the region's group (no new API); replan is skipping the stage or removing the region. The outcome
+  (`ok`, `held`, `continued`) is kept per stage in the region record, so a relog neither checks again nor drops a hold. While
+  the check runs (asynchronous reads) the stage's items don't start and no tile ahead is frozen. An after-heights shard lost to
+  a crash makes that stage compare those columns with the frozen heights, which can report drift the caller continues past.
 - `RegionPlan` carries no checker report or previews (6b). Region futures fail with `RegionRefused(reason)` (new API type).
 - Lots fit flush (setback 0, the approach into the street). Unmapped lots stay pads.
 - **Exactness guards (E-normal).** A tile skips an air write that would let water or lava in. What stands on any changed

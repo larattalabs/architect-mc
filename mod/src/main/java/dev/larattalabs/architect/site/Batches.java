@@ -17,6 +17,7 @@ import dev.larattalabs.architect.region.ChunkGen;
 import dev.larattalabs.architect.batch.QBatch;
 import dev.larattalabs.architect.batch.QItem;
 import dev.larattalabs.architect.batch.StageRules;
+import dev.larattalabs.architect.region.RegionsImpl;
 import dev.larattalabs.architect.placement.Anchors;
 import dev.larattalabs.architect.placement.Blueprint;
 import dev.larattalabs.architect.placement.BlueprintTransform;
@@ -705,6 +706,9 @@ public final class Batches {
 		SiteGroupRec g = Sites.group(b.group);
 		Stage.State rs = running == null || g == null || g.stage(running) == null ? null : g.stage(running).state();
 		boolean approved = rs == Stage.State.APPROVED || rs == Stage.State.PLACING;
+		if (rs == Stage.State.APPROVED && RegionItems.isRegion(b) && !RegionsImpl.stageGate(server, b, running)) {
+			approved = false; // phase 6a: the stage's drift check runs, or the stage holds (land changed since planning)
+		}
 		if (RegionItems.isRegion(b) && approved) {
 			t0 = System.nanoTime();
 			RegionItems.ahead(server, b, running); // phase 6a: freeze and request the tiles after the head
@@ -959,6 +963,9 @@ public final class Batches {
 	}
 
 	static void startStage(MinecraftServer server, QBatch b, QItem i) {
+		if (RegionItems.isRegion(b)) {
+			RegionsImpl.itemStarted(b, i);
+		}
 		SiteGroupRec g = Sites.group(b.group);
 		SiteGroupRec.StageRec st = g == null ? null : g.stage(i.stage);
 		if (st != null && st.state() == Stage.State.APPROVED) {

@@ -12,6 +12,7 @@ import org.jspecify.annotations.Nullable;
  * <pre>
  * PLANNED --approve--> APPROVED --first item starts--> PLACING --all items done--> PLACED | PARTIAL --undo--> UNDONE
  * PLANNED | APPROVED --skip--> SKIPPED
+ * APPROVED --hold--> PLANNED   (phase 6a: a region stage whose land changed since planning waits for an approval again)
  * </pre>
  * A stage places only when every stage before it in the group is finished ({@link State#terminal}). Undoing a stage while a
  * later stage is placed (or partial) is refused unless forced; while a later stage is placing it is always refused.
@@ -24,6 +25,14 @@ public final class StageRules {
 		return switch (s) {
 			case PLANNED, APPROVED -> Stage.State.APPROVED;
 			default -> throw new IllegalStateException("only a planned stage can be approved (it is " + name(s) + ")");
+		};
+	}
+
+	/** A region stage not started yet is held back (its land drifted): it waits for {@link #approve} again. */
+	public static Stage.State hold(Stage.State s) {
+		return switch (s) {
+			case PLANNED, APPROVED -> Stage.State.PLANNED;
+			default -> throw new IllegalStateException("only a stage that has not started placing can be held (it is " + name(s) + ")");
 		};
 	}
 

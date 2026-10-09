@@ -52,6 +52,11 @@ public final class RegionStore {
 		return region(world, regionId).resolve("heights").resolve(tx + "." + tz + ".bin");
 	}
 
+	/** The heights a region's placed items left over tile (tx, tz) (the per-stage drift baseline). */
+	public static Path after(Path world, String regionId, int tx, int tz) {
+		return region(world, regionId).resolve("after").resolve(tx + "." + tz + ".bin");
+	}
+
 	static String safe(String id) {
 		if (!id.matches("[A-Za-z0-9_.-]{1,96}") || id.contains("..")) {
 			throw new IllegalArgumentException("bad id " + id);

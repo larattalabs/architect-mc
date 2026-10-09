@@ -87,6 +87,8 @@ public final class RegionsImpl implements Regions {
 	private static final Map<String, PlanRec> PLANS = new ConcurrentHashMap<>();
 	private static final Map<String, Live> REGIONS = new LinkedHashMap<>();
 	private static final Map<String, CompletableFuture<JsonObject>> PLANNING = new ConcurrentHashMap<>();
+	/** Per-stage drift checks running ({@code region/stage}). Server thread. */
+	private static final Map<String, CompletableFuture<Drift.Result>> STAGE_CHECKS = new HashMap<>();
 	private static @Nullable MinecraftServer server;
 	private static long lastProgress;
 	private static int nextRegion = 1;
@@ -107,6 +109,7 @@ public final class RegionsImpl implements Regions {
 			Heights.forget(null);
 			TileStream.forgetRegion(null);
 			Prepare.stopAll();
+			STAGE_CHECKS.clear();
 		});
 		net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents.END_SERVER_TICK.register(s -> {
 			RegionSurvey.tick(s);
@@ -630,6 +633,104 @@ public final class RegionsImpl implements Regions {
 		return a[0] <= b[3] && b[0] <= a[3] && a[2] <= b[5] && b[2] <= a[5];
 	}
 
+	// ------------------------------------------------------------------ the per-stage drift check (Steward S2)
+
+	/**
+	 * Whether a region stage that is approved but not started may start (Batches asks every tick; while it answers false the
+	 * stage's items don't start and no tile ahead is frozen). The first stage of the realise was checked at region start. Any
+	 * later stage is checked once, when it is about to start ({@link Drift#checkStage}, off the server thread for stored
+	 * heightmaps). Land changed beyond the tolerance holds the stage: it goes back to PLANNED, the region's view waits
+	 * {@code DRIFTED} "land changed since planning", and {@code REGION_STATE} fires. Approving the stage again continues it
+	 * ({@code continued} in the record); replanning is skipping the stage or removing the region. The outcome is kept in the
+	 * region record ({@code drift}), so a relog neither checks again nor drops a hold.
+	 */
+	public static boolean stageGate(MinecraftServer s, QBatch b, String stage) {
+		String region = b.ext.get(RegionItems.EXT_REGION).getAsString();
+		Live l = REGIONS.get(region);
+		if (l == null) {
+			return true;
+		}
+		RegionRec rec = l.rec();
+		List<String> names = rec.stageNames();
+		if (names.isEmpty() || names.get(0).equals(stage) || !rec.stages.containsKey(stage)) {
+			return true;
+		}
+		String d = rec.drift.get(stage);
+		if (d != null) {
+			if (d.startsWith("held:")) {
+				// approved again after the hold: the caller continues
+				rec.drift.put(stage, "continued:" + d.substring(5));
+				Architect.LOGGER.info("Region {}: stage {} continued after its drift hold", region, stage);
+				save(l);
+				SiteEvents.REGION_STATE.invoker().onState(view(l));
+			}
+			return true;
+		}
+		if (b.inStage(stage).stream().anyMatch(i -> i.status != QItem.Status.QUEUED && i.status != QItem.Status.WAITING)) {
+			return true; // already under way
+		}
+		String key = region + "/" + stage;
+		if (STAGE_CHECKS.containsKey(key)) {
+			return false;
+		}
+		ServerLevel level = l.level(s);
+		if (level == null) {
+			return true;
+		}
+		CompletableFuture<Drift.Result> f;
+		try {
+			f = Drift.checkStage(level, l, stage);
+		} catch (RuntimeException e) {
+			Architect.LOGGER.warn("Region {}: stage {} drift check failed: {}", region, stage, e.toString());
+			rec.drift.put(stage, "ok: not checked (" + e + ")");
+			return true;
+		}
+		STAGE_CHECKS.put(key, f);
+		f.whenComplete((r, e) -> s.execute(() -> {
+			STAGE_CHECKS.remove(key);
+			if (REGIONS.get(region) != l) {
+				return;
+			}
+			Drift.Result res = e != null || r == null ? new Drift.Result(true, "not checked: " + e, 0, 0, 0) : r;
+			if (res.ok()) {
+				rec.drift.put(stage, "ok: " + res.message());
+				Architect.LOGGER.info("Region {}: stage {} drift check ok: {}", region, stage, res.message());
+				save(l);
+				return;
+			}
+			rec.drift.put(stage, "held: " + res.message());
+			try {
+				RegionItems.holdStage(s, rec.groupId, stage);
+			} catch (RuntimeException ex) {
+				// it started meanwhile (it can't: the gate held it); nothing to hold
+				rec.drift.put(stage, "continued: " + res.message());
+			}
+			save(l);
+			Architect.LOGGER.info("Region {}: land changed since planning before stage {}: {}; the stage holds (approve it again to continue, or replan)",
+				region, stage, res.message());
+			SiteEvents.REGION_STATE.invoker().onState(view(l));
+		}));
+		return false;
+	}
+
+	/** Server thread (Batches.startStage): an item of a region stage starts. */
+	public static void itemStarted(QBatch b, QItem i) {
+		Live l = REGIONS.get(b.ext.get(RegionItems.EXT_REGION).getAsString());
+		RegionRec.Stage st = l == null ? null : l.rec().stages.get(i.stage);
+		if (st != null && st.startedAt == 0) {
+			st.startedAt = System.currentTimeMillis();
+		}
+	}
+
+	/** Server thread: a tick in which an item of the region's running stage was writing (the stage's engine time). */
+	public static void stageActive(String region, String stage) {
+		Live l = REGIONS.get(region);
+		RegionRec.Stage st = l == null ? null : l.rec().stages.get(stage);
+		if (st != null) {
+			st.activeTicks++;
+		}
+	}
+
 	// ------------------------------------------------------------------ progress (from Batches)
 
 	/** A region batch item placed or failed. */
@@ -640,6 +741,13 @@ public final class RegionsImpl implements Regions {
 			return;
 		}
 		RegionRec rec = l.rec();
+		RegionRec.Stage stg = rec.stages.get(i.stage);
+		if (stg != null) {
+			stg.lastDoneAt = System.currentTimeMillis();
+		}
+		if (i.status == QItem.Status.PLACED && server != null) {
+			snapshotAfter(l, i);
+		}
 		if (i.key.startsWith("lot:")) {
 			RegionRec.Lot ls = rec.lots.get(i.key.substring(4));
 			if (ls != null) {
@@ -651,6 +759,40 @@ public final class RegionsImpl implements Regions {
 			rec.skip("failedTiles", 1);
 		}
 		dirty(l);
+	}
+
+	/** The heights a placed item left over its columns: the later stages' drift baseline ({@link Heights#snapshotAfter}). */
+	private static void snapshotAfter(Live l, QItem i) {
+		ServerLevel level = l.level(server);
+		if (level == null) {
+			return;
+		}
+		int x0;
+		int z0;
+		int x1;
+		int z1;
+		if ("tile".equals(i.itemKind) && i.spec != null) {
+			int[] t = Ir.tile(i.spec.get("tile").getAsString());
+			x0 = Heights.TILE * t[0];
+			z0 = Heights.TILE * t[1];
+			x1 = x0 + Heights.TILE - 1;
+			z1 = z0 + Heights.TILE - 1;
+		} else if (i.siteId != null && dev.larattalabs.architect.site.Infras.get(i.siteId) != null) {
+			var bx = dev.larattalabs.architect.site.Infras.get(i.siteId).box();
+			x0 = bx.minX();
+			z0 = bx.minZ();
+			x1 = bx.maxX();
+			z1 = bx.maxZ();
+		} else if (i.siteId != null && Sites.get(i.siteId) != null) {
+			var bx = Sites.get(i.siteId).restoreBox();
+			x0 = bx.minX();
+			z0 = bx.minZ();
+			x1 = bx.maxX();
+			z1 = bx.maxZ();
+		} else {
+			return;
+		}
+		Heights.snapshotAfter(level, l.world(), l.rec().id, x0, z0, x1, z1);
 	}
 
 	/** A tile's check counted its skipped cells. */
@@ -747,8 +889,15 @@ public final class RegionsImpl implements Regions {
 		List<LotState> lots = new ArrayList<>();
 		r.lots.forEach((id, ls) -> lots.add(new LotState(id, ls.siteId, ls.state)));
 		Refusal waiting = null;
+		for (var e : r.drift.entrySet()) {
+			if (e.getValue().startsWith("held:")) {
+				waiting = new Refusal(Reason.DRIFTED, "land changed since planning: " + e.getValue().substring(5).trim() + "; stage " + e.getKey()
+					+ " holds: approve it again to continue, or replan (skip the stage, or remove the region and plan again)");
+				break;
+			}
+		}
 		QBatch b = Batches.get(r.batchId);
-		if (b != null && b.running()) {
+		if (waiting == null && b != null && b.running()) {
 			for (QItem i : b.items) {
 				if (i.status == QItem.Status.WAITING && i.reason != null) {
 					waiting = new Refusal(Reason.valueOf(i.reason), i.message);

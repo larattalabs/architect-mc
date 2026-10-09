@@ -291,6 +291,9 @@ public final class RegionItems {
 		writerTicks++;
 		janitor(server, b);
 		boolean jobRunning = b.items.stream().anyMatch(x -> x.status == QItem.Status.PLACING && !x.committing);
+		if (jobRunning) {
+			RegionsImpl.stageActive(region, runningStage); // the stage's engine time (S9)
+		}
 		int w = RegionsImpl.window();
 		List<QItem> next = new ArrayList<>();
 		for (QItem i : b.items) {
@@ -433,6 +436,15 @@ public final class RegionItems {
 		ChunkTickets.acquire(i.dimension, want, Batches.source(level));
 		held.put(fk, want);
 		Batches.levels.put(b.id + "/" + fk, i.dimension);
+	}
+
+	/** A region stage held by its drift check goes back to PLANNED (an approval continues it). */
+	public static void holdStage(MinecraftServer server, String groupId, String stage) {
+		SiteGroupRec g = Sites.group(groupId);
+		SiteGroupRec.StageRec st = g == null ? null : g.stage(stage);
+		if (st != null) {
+			Batches.setStage(server, g, stage, dev.larattalabs.architect.batch.StageRules.hold(st.state()));
+		}
 	}
 
 	/** A region item's wait for these reasons does not count toward its wait limit (CONTRACT "Waiting without a time limit"). */

@@ -43,7 +43,18 @@ public final class RegionRec {
 		public int tilesTotal;
 		public int tilesDone;
 		public long cells;
+		/** When its first item started and its last item ended (wall ms, 0 = not yet). */
+		public long startedAt;
+		public long lastDoneAt;
+		/** Engine time: server ticks in which one of its items was writing (excludes waiting for the player or the sidecar). */
+		public long activeTicks;
 	}
+
+	/**
+	 * The per-stage drift check (Steward S2), per stage: {@code ok: <numbers>}, {@code held: <numbers>} (land changed: the stage
+	 * waits PLANNED for an approval) or {@code continued: <numbers>} (approved again after a hold).
+	 */
+	public final Map<String, String> drift = new LinkedHashMap<>();
 
 	public static final class Lot {
 		public String stage = "";
@@ -96,6 +107,13 @@ public final class RegionRec {
 			j.addProperty("tilesTotal", s.tilesTotal);
 			j.addProperty("tilesDone", s.tilesDone);
 			j.addProperty("cells", s.cells);
+			if (s.startedAt > 0) {
+				j.addProperty("startedAt", s.startedAt);
+			}
+			if (s.lastDoneAt > 0) {
+				j.addProperty("lastDoneAt", s.lastDoneAt);
+			}
+			j.addProperty("activeTicks", s.activeTicks);
 			st.add(k, j);
 		});
 		o.add("stages", st);
@@ -123,6 +141,9 @@ public final class RegionRec {
 			o.addProperty("waitSince", waitSince);
 		}
 		o.addProperty("generatedWhileHeld", generatedWhileHeld);
+		JsonObject dr = new JsonObject();
+		drift.forEach(dr::addProperty);
+		o.add("drift", dr);
 		o.add("stats", stats.deepCopy());
 		return o;
 	}
@@ -147,6 +168,9 @@ public final class RegionRec {
 			s.tilesTotal = j.get("tilesTotal").getAsInt();
 			s.tilesDone = j.get("tilesDone").getAsInt();
 			s.cells = j.get("cells").getAsLong();
+			s.startedAt = j.has("startedAt") ? j.get("startedAt").getAsLong() : 0;
+			s.lastDoneAt = j.has("lastDoneAt") ? j.get("lastDoneAt").getAsLong() : 0;
+			s.activeTicks = j.has("activeTicks") ? j.get("activeTicks").getAsLong() : 0;
 			r.stages.put(e.getKey(), s);
 		}
 		for (Map.Entry<String, JsonElement> e : o.getAsJsonObject("lots").entrySet()) {
@@ -166,6 +190,9 @@ public final class RegionRec {
 			r.waitSince = o.get("waitSince").getAsLong();
 		}
 		r.generatedWhileHeld = o.has("generatedWhileHeld") ? o.get("generatedWhileHeld").getAsLong() : 0;
+		if (o.has("drift")) {
+			o.getAsJsonObject("drift").entrySet().forEach(e -> r.drift.put(e.getKey(), e.getValue().getAsString()));
+		}
 		if (o.has("stats")) {
 			o.getAsJsonObject("stats").entrySet().forEach(e -> r.stats.add(e.getKey(), e.getValue()));
 		}

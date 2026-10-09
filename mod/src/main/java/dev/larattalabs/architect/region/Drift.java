@@ -17,9 +17,10 @@ import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.level.storage.LevelResource;
 
 /**
- * The drift check at region start (CONTRACT §6 {@code DRIFTED}, Steward S2): the plan survey's {@code height} against the
- * world now, at up to 4096 sampled columns present in both: |dh| at most 2 on at least 95%, and no column over 8 inside a lot
- * box or a path. Loaded chunks are read live; others from their stored heightmap ({@code MOTION_BLOCKING_NO_LEAVES}, read off
+ * The drift checks (CONTRACT §6 {@code DRIFTED}, Steward S2: "at region start (and per stage)"). At region start ({@link #check})
+ * the plan survey's {@code height} against the world now; before each later stage ({@link #checkStage}) the stage's tiles and
+ * lots against the region's own baseline there. Up to 4096 sampled columns: |dh| at most 2 on at least 95%, and no column over 8
+ * inside a lot box. Loaded chunks are read live; others from their stored heightmap ({@code MOTION_BLOCKING_NO_LEAVES}, read off
  * the server thread), so nothing is loaded or generated. A column of a chunk never generated is skipped.
  */
 final class Drift {
@@ -30,16 +31,9 @@ final class Drift {
 	}
 
 	static CompletableFuture<Result> check(ServerLevel level, RegionsImpl.PlanRec p) {
-		Columns plan;
-		try {
-			Path f = RegionStore.plan(level.getServer().getWorldPath(LevelResource.ROOT), p.planId()).resolveSibling(p.planId() + ".survey.bin");
-			byte[] a = RegionStore.read(f);
-			if (a == null) {
-				return CompletableFuture.completedFuture(new Result(true, "no plan survey kept: not checked", 0, 0, 0));
-			}
-			plan = Columns.decode(a);
-		} catch (IOException | RuntimeException e) {
-			return CompletableFuture.completedFuture(new Result(true, "plan survey unreadable: not checked", 0, 0, 0));
+		Columns plan = planSurvey(level, p.planId());
+		if (plan == null) {
+			return CompletableFuture.completedFuture(new Result(true, "no plan survey kept: not checked", 0, 0, 0));
 		}
 		int n = plan.width * plan.depth;
 		int step = Math.max(1, (int) Math.ceil(Math.sqrt(n / 4096.0)));
@@ -55,6 +49,106 @@ final class Drift {
 				cols.add(new int[] {x, z, plan.height[k], inLot(p.ir(), x, z) ? 1 : 0});
 			}
 		}
+		return compare(level, cols, "");
+	}
+
+	/** The plan's survey as kept with the plan, or null. */
+	static @org.jspecify.annotations.Nullable Columns planSurvey(ServerLevel level, String planId) {
+		try {
+			Path f = RegionStore.plan(level.getServer().getWorldPath(LevelResource.ROOT), planId).resolveSibling(planId + ".survey.bin");
+			byte[] a = RegionStore.read(f);
+			return a == null ? null : Columns.decode(a);
+		} catch (IOException | RuntimeException e) {
+			return null;
+		}
+	}
+
+	/**
+	 * The per-stage check (Steward S2, "at region start (and per stage)"), run when a stage after the first is about to start:
+	 * up to 4096 columns sampled over the stage's tiles and lot boxes, each compared with what the region expects there now.
+	 * The baseline is, in order: the height the region's own placed items left ({@link Heights#after}), else the frozen pre-region
+	 * height ({@link Heights#shard}), else the plan survey. Same tolerance as at region start. Server thread; the world's heights
+	 * are read as in {@link #check} (loaded chunks live, others from their stored heightmap; nothing loaded or generated).
+	 */
+	static CompletableFuture<Result> checkStage(ServerLevel level, RegionsImpl.Live l, String stage) {
+		Ir ir = l.ir();
+		String region = l.rec().id;
+		Path world = l.world();
+		Columns plan = planSurvey(level, l.rec().planId);
+		List<int[]> boxes = new ArrayList<>(); // x0, z0, x1, z1, lot
+		List<String> keys = new ArrayList<>(ir.terrainTiles().getOrDefault(stage, List.of()));
+		keys.addAll(ir.pathTiles().getOrDefault(stage, List.of()));
+		for (String key : keys) {
+			int[] t = Ir.tile(key);
+			boxes.add(new int[] {Heights.TILE * t[0], Heights.TILE * t[1], Heights.TILE * t[0] + Heights.TILE - 1, Heights.TILE * t[1] + Heights.TILE - 1,
+				0});
+		}
+		for (Ir.Lot lot : ir.lots()) {
+			if (lot.stage().equals(stage)) {
+				int[] b = lot.box();
+				boxes.add(new int[] {b[0], b[2], b[3], b[5], 1});
+			}
+		}
+		long n = 0;
+		for (int[] b : boxes) {
+			n += (long) (b[2] - b[0] + 1) * (b[3] - b[1] + 1);
+		}
+		int res = plan == null ? 1 : plan.resolution;
+		int step = Math.max(1, (int) Math.ceil(Math.sqrt(n / 4096.0)));
+		step = (step + res - 1) / res * res; // on the plan's grid, so the survey is a fallback for every sampled column
+		int ox = plan == null ? 0 : plan.minX;
+		int oz = plan == null ? 0 : plan.minZ;
+		Map<Long, int[]> cols = new java.util.LinkedHashMap<>(); // x, z, expected, inLot
+		int[] from = new int[3]; // after, frozen, plan
+		for (int[] b : boxes) {
+			for (int x = ox + Math.ceilDiv(b[0] - ox, step) * step; x <= b[2]; x += step) {
+				for (int z = oz + Math.ceilDiv(b[1] - oz, step) * step; z <= b[3]; z += step) {
+					long k = ChunkPos.pack(x, z);
+					int[] had = cols.get(k);
+					if (had != null) {
+						had[3] |= b[4];
+						continue;
+					}
+					int tx = Math.floorDiv(x, Heights.TILE);
+					int tz = Math.floorDiv(z, Heights.TILE);
+					int exp = expected(Heights.after(world, region, tx, tz), Heights.shard(world, region, tx, tz), plan, x, z, from);
+					if (exp != NONE) {
+						cols.put(k, new int[] {x, z, exp, b[4]});
+					}
+				}
+			}
+		}
+		String base = String.format(java.util.Locale.ROOT, " (stage %s; baseline: %d built, %d frozen, %d plan)", stage, from[0], from[1], from[2]);
+		return compare(level, new ArrayList<>(cols.values()), base);
+	}
+
+	static final int NONE = Integer.MIN_VALUE;
+
+	/**
+	 * A column's per-stage baseline: what the region's placed items left ({@code after}), else the frozen pre-region height,
+	 * else the plan survey's; {@link #NONE} when none has it. Counts the source in {@code from} (after, frozen, plan).
+	 */
+	static int expected(Columns after, Columns frozen, @org.jspecify.annotations.Nullable Columns plan, int x, int z, int[] from) {
+		int ka = after.at(x, z);
+		if (ka >= 0 && !after.missing(ka)) {
+			from[0]++;
+			return after.height[ka];
+		}
+		int kf = frozen.at(x, z);
+		if (kf >= 0 && !frozen.missing(kf)) {
+			from[1]++;
+			return frozen.height[kf];
+		}
+		int kp = plan == null ? -1 : plan.at(x, z);
+		if (kp >= 0 && !plan.missing(kp)) {
+			from[2]++;
+			return plan.height[kp];
+		}
+		return NONE;
+	}
+
+	/** Columns {x, z, expected height, inLot} against the world's heights now. */
+	private static CompletableFuture<Result> compare(ServerLevel level, List<int[]> cols, String suffix) {
 		Map<Long, List<int[]>> byChunk = new HashMap<>();
 		for (int[] c : cols) {
 			byChunk.computeIfAbsent(ChunkPos.pack(c[0] >> 4, c[1] >> 4), k -> new ArrayList<>()).add(c);
@@ -110,7 +204,7 @@ final class Drift {
 			boolean ok = sampled == 0 || within >= 0.95 * sampled && over8 == 0;
 			String msg = sampled == 0 ? "no sampled column to compare" : String.format(java.util.Locale.ROOT, "%d of %d sampled columns within 2 (%.1f%%), %d over 8 in lots",
 				within, sampled, 100.0 * within / sampled, over8);
-			return new Result(ok, msg, sampled, within, over8);
+			return new Result(ok, msg + suffix, sampled, within, over8);
 		});
 	}
 

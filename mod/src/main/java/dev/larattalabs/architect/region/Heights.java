@@ -33,6 +33,8 @@ public final class Heights {
 	});
 	/** region id -> tile key -> shard (loaded or new). Server thread. */
 	private static final Map<String, Map<Long, Columns>> SHARDS = new HashMap<>();
+	/** region id -> tile key -> the heights its placed items left (post-write, {@code after/<tx>.<tz>.bin}). Server thread. */
+	private static final Map<String, Map<Long, Columns>> AFTER = new HashMap<>();
 
 	private Heights() {
 	}
@@ -56,6 +58,69 @@ public final class Heights {
 			m.put(key(tx, tz), c);
 		}
 		return c;
+	}
+
+	/**
+	 * The heights the region's placed items left over tile (tx, tz): the per-stage drift baseline for columns the region already
+	 * wrote ({@code height} only; every column missing until an item placed over it).
+	 */
+	public static Columns after(Path world, String region, int tx, int tz) {
+		Map<Long, Columns> m = AFTER.computeIfAbsent(region, r -> new HashMap<>());
+		Columns c = m.get(key(tx, tz));
+		if (c == null) {
+			try {
+				byte[] a = RegionStore.read(RegionStore.after(world, region, tx, tz));
+				c = a == null ? new Columns(TILE * tx, TILE * tz, TILE, TILE, 1) : Columns.decode(a);
+			} catch (IOException | RuntimeException e) {
+				Architect.LOGGER.warn("Region {}: after-heights {},{} unreadable ({})", region, tx, tz, e.toString());
+				c = new Columns(TILE * tx, TILE * tz, TILE, TILE, 1);
+			}
+			m.put(key(tx, tz), c);
+		}
+		return c;
+	}
+
+	/**
+	 * A region item (tile, road or lot) placed: the heights now over its columns [x0..x1] x [z0..z1] (loaded chunks only) become
+	 * the drift baseline there, so a later stage's check compares against what the region built, not the pre-region land. The
+	 * touched shards are written off the server thread (best effort: a shard lost to a crash makes that stage's check compare
+	 * those columns with the frozen heights, which can report drift the player then continues past).
+	 */
+	public static void snapshotAfter(ServerLevel level, Path world, String region, int x0, int z0, int x1, int z1) {
+		Set<Long> touched = new LinkedHashSet<>();
+		for (int cx = x0 >> 4; cx <= x1 >> 4; cx++) {
+			for (int cz = z0 >> 4; cz <= z1 >> 4; cz++) {
+				LevelChunk c = level.getChunkSource().getChunkNow(cx, cz);
+				if (c == null) {
+					continue;
+				}
+				for (int x = Math.max(x0, cx << 4); x <= Math.min(x1, (cx << 4) + 15); x++) {
+					for (int z = Math.max(z0, cz << 4); z <= Math.min(z1, (cz << 4) + 15); z++) {
+						int tx = Math.floorDiv(x, TILE);
+						int tz = Math.floorDiv(z, TILE);
+						Columns s = after(world, region, tx, tz);
+						int h = c.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, x & 15, z & 15);
+						s.set(s.at(x, z), h, h, h, 0);
+						touched.add(key(tx, tz));
+					}
+				}
+			}
+		}
+		Map<Path, byte[]> out = new HashMap<>();
+		for (long k : touched) {
+			int tx = (int) (k >> 32);
+			int tz = (int) k;
+			out.put(RegionStore.after(world, region, tx, tz), after(world, region, tx, tz).encode());
+		}
+		if (!out.isEmpty()) {
+			IO.execute(() -> out.forEach((f, a) -> {
+				try {
+					RegionStore.write(f, a);
+				} catch (IOException e) {
+					Architect.LOGGER.warn("Region {}: after-heights {} not written: {}", region, f.getFileName(), e.toString());
+				}
+			}));
+		}
 	}
 
 	/** Columns (x, z) of [x0..x1] x [z0..z1] that are not frozen yet. */
@@ -199,8 +264,10 @@ public final class Heights {
 	public static void forget(@Nullable String region) {
 		if (region == null) {
 			SHARDS.clear();
+			AFTER.clear();
 		} else {
 			SHARDS.remove(region);
+			AFTER.remove(region);
 		}
 	}
 }
