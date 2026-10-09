@@ -122,6 +122,42 @@ public final class RegionBlobs {
 		return out;
 	}
 
+	/** (6b, §5) The ARVX shas of the frozen volumes an IR read ({@code volumes: {name: {blob, box, sha}}}). */
+	public static List<String> volumeShas(com.google.gson.JsonObject ir) {
+		List<String> out = new ArrayList<>();
+		if (ir.get("volumes") instanceof com.google.gson.JsonObject v) {
+			for (var e : v.entrySet()) {
+				if (e.getValue() instanceof com.google.gson.JsonObject o && o.has("sha") && !out.contains(o.get("sha").getAsString())) {
+					out.add(o.get("sha").getAsString());
+				}
+			}
+		}
+		return out;
+	}
+
+	/**
+	 * (6b, §5 "Freeze") The frozen volumes a region's plan read go into {@code <world>/architect-regions/<id>/volumes/<sha>.bin}
+	 * from the standalone dir where the two-plan flow froze them (written, fsynced, renamed, read back; never rewritten). A volume
+	 * not found there is reported (its bytes are also a side blob of the IR, which the blob copy holds). Off the server thread.
+	 */
+	public static List<String> installVolumes(Path world, String regionId, List<String> arvxShas) {
+		List<String> missing = new ArrayList<>();
+		for (String sha : arvxShas) {
+			Path from = world.resolve(dev.larattalabs.architect.region.volume.VolumeSurvey.STANDALONE_DIR).resolve(sha + ".bin");
+			Path to = RegionStore.region(world, regionId).resolve("volumes").resolve(sha + ".bin");
+			try {
+				if (!Files.isRegularFile(from)) {
+					missing.add(sha);
+					continue;
+				}
+				dev.larattalabs.architect.region.volume.VolumeSurvey.freeze(to, Files.readAllBytes(from), sha);
+			} catch (IOException e) {
+				missing.add(sha);
+			}
+		}
+		return missing;
+	}
+
 	/** Deletes a region's blob copies (after the region was removed). */
 	public static void delete(Path dir) {
 		if (!Files.isDirectory(dir)) {

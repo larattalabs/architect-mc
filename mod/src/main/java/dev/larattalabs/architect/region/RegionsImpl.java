@@ -658,8 +658,14 @@ public final class RegionsImpl implements Regions {
 			}
 			id[0] = "rg" + nextRegion++; // reserved now: the blob copies go into its dir before the record exists
 			return Drift.check(level, p);
-		}).thenCompose(f -> f).thenCompose(drift -> {
-			PlanRec p = id[0] == null ? null : planRec(r.planId());
+		}).thenCompose(f -> f).thenComposeAsync(drift -> { // off the server thread: the copies are file I/O
+			PlanRec p = id[0] == null ? null : PLANS.get(r.planId());
+			if (p != null && !RegionBlobs.volumeShas(p.ir().json()).isEmpty()) {
+				List<String> miss = RegionBlobs.installVolumes(s.getWorldPath(LevelResource.ROOT), id[0], RegionBlobs.volumeShas(p.ir().json()));
+				if (!miss.isEmpty()) {
+					Architect.LOGGER.info("Region {}: frozen volumes {} not in the standalone dir (their side blobs carry them)", id[0], miss);
+				}
+			}
 			if (p == null || p.ir().blobShas().isEmpty()) {
 				return CompletableFuture.completedFuture(new Object[] {drift, null});
 			}
