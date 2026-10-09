@@ -202,7 +202,7 @@ describe('dist/main.mjs, protocol 2 on port 8290 (sim backend)', () => {
 
   it('negotiates protocol 2; a protocol-1 hello gets the phase 1-3 snapshot', async () => {
     const v2 = await hello2();
-    expect(find(v2.msgs, (m) => m.type === 'snapshot')).toMatchObject({ protocol: 2, features: ['job.run', 'job.tools', 'blobs', 'budget', 'designs.v2', 'bibles', 'design.groups', 'named.parts', 'open.types', 'estimates', 'reskin', 'massing', 'critique', 'critique.report', 'job.images', 'bible.admin', 'bible.restraint', 'entry.versions', 'entry.delta', 'design.polish', 'critique.polish', 'region.plan', 'region.tiles'], jobs: [] });
+    expect(find(v2.msgs, (m) => m.type === 'snapshot')).toMatchObject({ protocol: 2, features: ['job.run', 'job.tools', 'blobs', 'budget', 'designs.v2', 'bibles', 'design.groups', 'named.parts', 'open.types', 'estimates', 'reskin', 'massing', 'critique', 'critique.report', 'job.images', 'bible.admin', 'bible.restraint', 'entry.versions', 'entry.delta', 'design.polish', 'critique.polish', 'region.plan', 'region.tiles', 'region.check', 'region.preview', 'region.design', 'region.blobs', 'ir.format2'], jobs: [] });
     const v1 = await connect(PORT);
     v1.send({ type: 'hello', client: 'mod', version: 'old', token: tokenOf() });
     await until(() => v1.msgs.some((m) => m.type === 'snapshot'));

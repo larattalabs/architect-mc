@@ -93,6 +93,15 @@ export interface RegionsConfig {
   tileHeapMb: number;
   /** plan runs at once (config regionPlanConcurrency, default 2) */
   planConcurrency: number;
+  /** (6b) the checker and the previews after a plan, together: wall clock (config regionCheckMs, default 180000) */
+  checkMs: number;
+  /** (6b) the checker's and the renderer's heap (config regionCheckHeapMb, default 2048) */
+  checkHeapMb: number;
+  /** (6b) one side blob / a plan's side blobs in all (16 MB / 64 MB, CONTRACT 6b §2.2) */
+  blobMaxBytes: number;
+  blobsMaxBytes: number;
+  /** (6b) region.design: the pick model (config regionDesignModel, default jobModel: Sonnet) */
+  designModel?: string | undefined;
 }
 
 /** The default worker count: min(4, cores / 2), at least 1. */
@@ -113,6 +122,11 @@ function regionsConfig(file: Record<string, unknown>, libraryDir: string): Regio
     tileMs: int(file.regionTileMs, 2000, 50, 60_000),
     tileHeapMb: int(file.regionTileHeapMb, 256, 16, 4096),
     planConcurrency: int(file.regionPlanConcurrency, 2, 1, 8),
+    checkMs: int(file.regionCheckMs, 180_000, 100, 1_800_000),
+    checkHeapMb: int(file.regionCheckHeapMb, 2048, 64, 16384),
+    blobMaxBytes: 16 * 1024 * 1024,
+    blobsMaxBytes: 64 * 1024 * 1024,
+    ...(typeof file.regionDesignModel === 'string' && file.regionDesignModel.trim() ? { designModel: file.regionDesignModel.trim() } : {}),
   };
 }
 
