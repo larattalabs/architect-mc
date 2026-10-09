@@ -1165,6 +1165,14 @@ public final class RegionsImpl implements Regions {
 		}
 		l.rec().stats.addProperty("lastTileAt", now);
 		dirty(l);
+		var hook = TILE_HOOK;
+		if (hook != null) {
+			int done = 0;
+			for (RegionRec.Stage x : l.rec().stages.values()) {
+				done += x.tilesDone;
+			}
+			hook.accept(l, done);
+		}
 	}
 
 	/** The region's batch ended. */
@@ -1541,6 +1549,75 @@ public final class RegionsImpl implements Regions {
 		});
 	}
 
+	/** DevBridge (gate 10(a)): called after each tile entry of a region is placed, with the region's tiles done so far. */
+	public static volatile java.util.function.@Nullable BiConsumer<Live, Integer> TILE_HOOK;
+
+	/**
+	 * DevBridge test hook (gate item 10(b), realise start): merges {@code members} into a held plan's IR (memory and the world's
+	 * plan file), e.g. {@code {format: 3}} or {@code {kitVersion: "0.99.0"}}. False when there is no such plan.
+	 */
+	public static boolean doctorPlan(String planId, JsonObject members) {
+		PlanRec p = planRec(planId);
+		if (p == null) {
+			return false;
+		}
+		members.entrySet().forEach(e -> p.ir().json().add(e.getKey(), e.getValue().deepCopy()));
+		if (server != null) {
+			savePlan(server, p);
+		}
+		return true;
+	}
+
+	/**
+	 * DevBridge test hook (gate item 10(b), resume): merges {@code members} into a region's IR, in memory and in its
+	 * {@code ir.json} (so a relog resumes it stale too). From then on its items wait PLAN_STALE. False when there is no such region.
+	 */
+	public static boolean doctorRegion(String regionId, JsonObject members) {
+		Live l = REGIONS.get(regionId);
+		if (l == null) {
+			return false;
+		}
+		members.entrySet().forEach(e -> l.ir().json().add(e.getKey(), e.getValue().deepCopy()));
+		try {
+			RegionStore.writeJson(RegionStore.region(l.world(), regionId).resolve("ir.json"), l.ir().json());
+		} catch (IOException e) {
+			Architect.LOGGER.warn("Region {}: doctored ir.json not written: {}", regionId, e.toString());
+		}
+		String stale = staleOf(l);
+		if (stale != null) {
+			STALE_LOGGED.put(regionId, stale);
+		}
+		return true;
+	}
+
+	/** DevBridge: a plan's IR facts: requires, kitVersion, blobs, needVolumes, volumes (6b). */
+	public static JsonObject planFacts(String planId) {
+		JsonObject o = new JsonObject();
+		PlanRec p = planRec(planId);
+		if (p == null) {
+			return o;
+		}
+		JsonArray req = new JsonArray();
+		p.ir().requires().forEach(req::add);
+		o.add("requires", req);
+		o.addProperty("kitVersion", p.ir().kitVersion());
+		JsonArray bl = new JsonArray();
+		p.ir().blobShas().forEach(bl::add);
+		o.add("blobs", bl);
+		for (String k : new String[] {"needVolumes", "volumes", "checkMs", "renderMs"}) {
+			if (p.planned().has(k)) {
+				o.add(k, p.planned().get(k).deepCopy());
+			}
+		}
+		return o;
+	}
+
+	/** (6b) The region ghost's view of a plan (stages up to {@code stage}; null: all), or null when there is no such plan. */
+	public static @Nullable GhostPlan ghostPlan(String planId, @Nullable String stage) {
+		PlanRec p = planRec(planId);
+		return p == null ? null : GhostPlan.of(planId, p.irSha(), p.ir(), stage, p.planned());
+	}
+
 	/** The plan's claim {minX, minY, minZ, maxX, maxY, maxZ} (the IR's: its y range is the program's), or null. */
 	public static int @Nullable [] planClaim(String planId) {
 		PlanRec p = planRec(planId);
@@ -1592,7 +1669,13 @@ public final class RegionsImpl implements Regions {
 			o.addProperty("missing", true);
 			return o;
 		}
-		o.add("view", com.google.gson.JsonParser.parseString(new com.google.gson.Gson().toJson(view(l))).getAsJsonObject());
+		RegionView rv = view(l);
+		o.add("view", com.google.gson.JsonParser.parseString(new com.google.gson.Gson().toJson(rv)).getAsJsonObject());
+		o.add("actions", Wire6b.json(rv.actions())); // (6b) what a nudge can do about the wait
+		String stale = staleOf(l);
+		if (stale != null) {
+			o.addProperty("stale", stale);
+		}
 		o.add("record", l.rec().toJson());
 		QBatch b = Batches.get(l.rec().batchId);
 		if (b != null) {

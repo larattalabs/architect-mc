@@ -45,6 +45,28 @@ public final class RegionDev {
 		return JsonParser.parseString(GSON.toJson(o)).getAsJsonObject();
 	}
 
+	/** A RegionPlan as JSON: the 1.8.0 members, then (6b) report, summary, previews, irFormat and the plan's IR facts. */
+	static JsonObject planJson(dev.larattalabs.architect.api.RegionPlan p) {
+		JsonObject o = json(new dev.larattalabs.architect.api.RegionPlan(p.planId(), p.programId(), p.programSha(), p.irSha(), p.surveySha(), p.seed(),
+			p.lots(), p.stages(), p.anchors(), p.budget(), p.notes()));
+		o.remove("report");
+		o.remove("previews");
+		if (p.report() != null) {
+			o.add("report", dev.larattalabs.architect.region.Wire6b.json(p.report()));
+		}
+		o.addProperty("summary", dev.larattalabs.architect.region.Wire6b.summary(p.report()));
+		if (p.previews() != null) {
+			o.add("previews", dev.larattalabs.architect.region.Wire6b.json(p.previews()));
+		}
+		o.addProperty("irFormat", p.irFormat());
+		JsonObject facts = RegionsImpl.planFacts(p.planId());
+		facts.entrySet().forEach(e -> o.add(e.getKey(), e.getValue()));
+		JsonArray ph = new JsonArray();
+		RegionsImpl.progressOf(p.planId()).forEach(ph::add);
+		o.add("progress", ph);
+		return o;
+	}
+
 	static LoadPolicy load(String s) {
 		if (s == null || s.equals("loaded")) {
 			return LoadPolicy.LOADED_ONLY;
@@ -78,8 +100,9 @@ public final class RegionDev {
 	}
 
 	public static void init() {
-		DevBridge.register("dev.region.plan", 300_000, "{program, params?, claim: [x0,z0,x1,z1], seed?, surveyLoad?: loaded|generated:<n>|bounded:<n>, "
-			+ "owner?} - phase 6a: Regions.plan -> the RegionPlan (+ ms) or {refused}", (req, mc) -> {
+		DevBridge.register("dev.region.plan", 900_000, "{program, params?, claim: [x0,z0,x1,z1], seed?, surveyLoad?: loaded|generated:<n>|bounded:<n>, "
+			+ "owner?, check?: true} - phase 6a: Regions.plan -> the RegionPlan (+ ms) or {refused}; 6b: check false skips the checker and previews "
+			+ "(ext architect_mc:check), and the answer adds report, summary, previews, irFormat, requires, kitVersion, needVolumes, progress", (req, mc) -> {
 				Fields f = Fields.of(req);
 				String program = f.nonBlank("program");
 				JsonObject params = req.has("params") ? req.getAsJsonObject("params") : new JsonObject();
@@ -87,11 +110,15 @@ public final class RegionDev {
 				Long seed = req.has("seed") ? Long.parseUnsignedLong(req.get("seed").getAsString()) : null;
 				LoadPolicy load = load(f.optStr("surveyLoad", "loaded"));
 				String owner = f.optStr("owner", null);
+				JsonObject ext = new JsonObject();
+				if (!f.optBool("check", true)) {
+					ext.addProperty(RegionsImpl.EXT_CHECK, false);
+				}
 				long t0 = System.nanoTime();
 				return DevBridge.onClient(mc, () -> ServerTasks.callAsPlayer((level, player) -> ArchitectApi.get().regions().plan(new RegionPlanRequest(program,
 					params, level, new BoundingBox(c.get(0).getAsInt(), level.getMinY(), c.get(1).getAsInt(), c.get(2).getAsInt(), level.getMaxY(), c.get(3)
-						.getAsInt()), seed, null, null, load, owner, new JsonObject())))).thenCompose(x -> x).thenCompose(x -> x).thenApply(x -> x).handle((p, e) -> {
-							JsonObject o = e != null ? new JsonObject() : json(p);
+						.getAsInt()), seed, null, null, load, owner, ext)))).thenCompose(x -> x).thenCompose(x -> x).thenApply(x -> x).handle((p, e) -> {
+							JsonObject o = e != null ? new JsonObject() : planJson(p);
 							if (e != null) {
 								o.addProperty("refused", reason(e));
 							} else {

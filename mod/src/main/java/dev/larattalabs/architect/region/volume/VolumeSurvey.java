@@ -120,6 +120,7 @@ public final class VolumeSurvey {
 	}
 
 	public static void init() {
+		DumpJob.init();
 		net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents.SERVER_STOPPING.register(s -> {
 			for (Task t : TASKS) {
 				t.future.completeExceptionally(new IllegalStateException("the world closed"));
