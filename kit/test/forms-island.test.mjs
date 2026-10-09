@@ -180,5 +180,5 @@ test('floatingIsland evaluation cost per cell against a sphere (recorded)', asyn
   // evaluation per cell, the relief noise, the material rule). Recorded as a deviation (CONTRACT "Phase 6b as built"); what
   // the estimate protects is held instead: an island tile evaluates far inside the 2 s per-tile limit and above the 45k
   // cells/s evaluation bar (CONTRACT phase 6 §7).
-  assert.ok(1 / (ci * 1000) >= 45_000 * 4, `island evaluation ${(1 / (ci * 1000)).toFixed(0)} cells/s (at least 4x the 45k bar)`);
+  assert.ok(1000 / ci >= 45_000 * 4, `island evaluation ${(1000 / ci).toFixed(0)} cells/s (at least 4x the 45k bar)`);
 });
