@@ -253,7 +253,7 @@ async function runScenario(id) {
   T('remove', t0);
   await L.settle(10_000);
   const diff = await L.call('dev.region.hash', { box, mode: 'diff', file: path.join(raw, 'snap.gz') }, 4 * 3_600_000);
-  const exact = { kind: flat ? 'E-flat' : 'E-normal', box, cellsWritten: rec.cellsWritten, removed: rm.removed, restored: rm.restored, mismatches: diff.mismatches, classes: diff.classes, list: (diff.list ?? []).slice(0, 400) };
+  const exact = { kind: flat ? 'E-flat' : 'E-normal', box, cellsWritten: rec.cellsWritten, removed: rm.removed, restored: rm.restored, mismatches: diff.mismatches, classes: diff.classes, list: [...(diff.list ?? []).filter((m) => m.class !== 'growth'), ...(diff.list ?? []).filter((m) => m.class === 'growth').slice(0, 50)], listTotal: (diff.list ?? []).length };
   fs.writeFileSync(path.join(out, 'exact.json'), `${JSON.stringify(exact, null, 2)}\n`);
   await L.leaveWorld();
   const metrics = await computeMetrics({ sc, out, planDir, ir, irShas, mspt, cps, exact, flat });
