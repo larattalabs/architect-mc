@@ -287,3 +287,64 @@ export function makeNoise(spec) {
     return r < -1 ? -1 : r > 1 ? 1 : r;
   };
 }
+
+/**
+ * (6b) A noise field evaluated down columns: `col(x, z)` then `at(y)` gives exactly `makeNoise(spec)(x, y, z)` (the same
+ * float operations in the same order), with 3D value noise's x/z lerps cached per lattice y plane. Other kinds fall back to
+ * the plain field. Used by `warp`, which samples three fields at every cell of a column.
+ */
+export function makeColumnNoise(spec) {
+  const plain = makeNoise(spec);
+  if (!(spec.kind === 'value' && spec.dims === 3)) {
+    let cx = 0, cz = 0;
+    return { col(x, z) { cx = x; cz = z; }, at: (y) => plain(cx, y, cz) };
+  }
+  const [s0, s1] = fromHex64(spec.seed);
+  const [k0, k1] = mix64(s0, s1);
+  const oct = spec.octaves;
+  let norm = 0;
+  for (let o = 0, a = 1; o < oct; o++, a *= 0.5) norm += a;
+  const freq0 = 1 / spec.scale;
+  // per octave: the column's lattice x/z cell, its weights, and caches of X0(iy), X1(iy) (a window of lattice y planes)
+  const N = 64;
+  const O = [];
+  for (let o = 0, f = freq0; o < oct; o++, f *= 2) O.push({ ka: (k0 + o * 0x632be5ab) >>> 0, f, ix: 0, iz: 0, fx: 0, fz: 0, base: 0, c0: new Float64Array(N), c1: new Float64Array(N), ok: new Uint8Array(N) });
+  let cx = NaN, cz = NaN;
+  const v = (q, ix, iy, iz) => unit(hash3(q.ka, k1, ix, iy, iz));
+  const fill = (q, iy) => {
+    const k = iy - q.base;
+    if (!q.ok[k]) {
+      q.c0[k] = lerp(v(q, q.ix, iy, q.iz), v(q, q.ix + 1, iy, q.iz), q.fx);
+      q.c1[k] = lerp(v(q, q.ix, iy, q.iz + 1), v(q, q.ix + 1, iy, q.iz + 1), q.fx);
+      q.ok[k] = 1;
+    }
+    return k;
+  };
+  return {
+    col(x, z) {
+      if (x === cx && z === cz) return;
+      cx = x; cz = z;
+      for (const q of O) {
+        const xx = x * q.f, zz = z * q.f;
+        q.ix = Math.floor(xx); q.iz = Math.floor(zz);
+        q.fx = fade(xx - q.ix); q.fz = fade(zz - q.iz);
+        q.ok.fill(0);
+      }
+    },
+    at(y) {
+      let sum = 0, amp = 1;
+      for (let o = 0; o < oct; o++) {
+        const q = O[o];
+        const yy = y * q.f;
+        const iy = Math.floor(yy);
+        const fy = fade(yy - iy);
+        if (iy - q.base < 0 || iy + 1 - q.base >= N) { q.base = iy - (N >> 1); q.ok.fill(0); }
+        const k = fill(q, iy), k1 = fill(q, iy + 1);
+        sum += amp * lerp(lerp(q.c0[k], q.c0[k1], fy), lerp(q.c1[k], q.c1[k1], fy), q.fz);
+        amp *= 0.5;
+      }
+      const r = sum / norm;
+      return r < -1 ? -1 : r > 1 ? 1 : r;
+    },
+  };
+}

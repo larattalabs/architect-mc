@@ -6,6 +6,9 @@ surface for other mods' tooling (docs/CONTRACT.md phase 4a, R11): changes are re
 file, but it is not semver'd. The Java API (`dev.larattalabs.architect.api`) is the stable contract; the DevBridge is for
 tests.
 
+Gate chains that drive dev clients through the DevBridge run unattended with `tools/gate-run.mjs`; the chains, the
+two-tier mega_bench policy and how agents should wait for a run are in docs/GATES.md.
+
 ## Connecting
 
 - **Where:** `ws://127.0.0.1:<port>`, loopback only. The port is `ARCHITECT_DEV_PORT`, default `7891`. The client's sidecar port is `ARCHITECT_PORT` (default `7890`). Run several clients side by side by

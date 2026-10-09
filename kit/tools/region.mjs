@@ -10,6 +10,7 @@ import path from 'node:path';
 import { planRegion } from '../lib/region/plan.mjs';
 import { evalTile } from '../lib/realise.mjs';
 import { encodeColumns, gzipPinned } from '../lib/region/pack.mjs';
+import { decodeArvx } from '../lib/region/volume.mjs';
 import { synthColumns } from '../lib/region/synth.mjs';
 
 class Usage extends Error {}
@@ -33,7 +34,7 @@ const readJson = (f, what) => {
 };
 
 async function plan(argv) {
-  const { pos, opts } = parseArgs(argv, { params: 1, survey: 1, seed: 1, claim: 1, bible: 1, roles: 1, out: 1, json: 'flag' });
+  const { pos, opts } = parseArgs(argv, { params: 1, survey: 1, seed: 1, claim: 1, bible: 1, roles: 1, out: 1, json: 'flag', 'blobs-out': 1, volumes: 1 });
   if (pos.length !== 1) throw new Usage('plan <program.mjs> --survey s.bin --claim minX,minZ,maxX,maxZ[,minY,maxY] [...]');
   if (!opts.survey || !opts.claim) throw new Usage('plan needs --survey and --claim');
   const params = opts.params ? readJson(opts.params, '--params') : {};
@@ -47,16 +48,34 @@ async function plan(argv) {
   }
   if (opts.roles) roles = { ...roles, ...readJson(opts.roles, '--roles') };
   if (opts.seed !== undefined && !/^\d{1,20}$/.test(opts.seed)) throw new Usage('--seed must be a u64 decimal');
-  const res = await planRegion({ programFile: pos[0], params, survey, seed: opts.seed ?? null, claim: opts.claim, roles });
+  // (6b) frozen volumes the program may read: <dir>/<sha>.bin (ARVX, gzip)
+  const volumes = [];
+  if (opts.volumes) {
+    let names;
+    try { names = fs.readdirSync(opts.volumes).filter((f) => /^[0-9a-f]{64}\.bin$/.test(f)).sort(); } catch (e) { throw new Usage(`--volumes: ${e.message}`); }
+    for (const f of names) {
+      const bytes = fs.readFileSync(path.join(opts.volumes, f));
+      const decoded = decodeArvx(bytes);
+      if (decoded.sha !== f.slice(0, 64)) throw new Error(`volume ${f}: its ARVX bytes hash to ${decoded.sha}`);
+      volumes.push({ sha: decoded.sha, box: decoded.box, bytes: Uint8Array.from(bytes), decoded });
+    }
+  }
+  const res = await planRegion({ programFile: pos[0], params, survey, seed: opts.seed ?? null, claim: opts.claim, roles, volumes });
+  if (opts['blobs-out'] && res.blobs.size) {
+    fs.mkdirSync(opts['blobs-out'], { recursive: true });
+    for (const [sha, bytes] of res.blobs) fs.writeFileSync(path.join(opts['blobs-out'], `${sha}.bin`), bytes);
+  }
   if (opts.out) {
     fs.mkdirSync(opts.out, { recursive: true });
     fs.writeFileSync(path.join(opts.out, 'ir.json'), res.irJson);
+    fs.writeFileSync(path.join(opts.out, 'meta.json'), `${JSON.stringify(res.meta)}\n`);
     const ir = res.ir;
-    const planJson = { ok: true, irSha: res.irSha, id: ir.id, seed: ir.seed, claim: ir.claim, stages: ir.stages, lots: ir.lots.length, roads: ir.roads.length, paths: ir.paths.length, anchors: ir.anchors, budget: ir.budget, notes: res.notes, stats: res.stats };
+    const planJson = { ok: true, irSha: res.irSha, id: ir.id, seed: ir.seed, claim: ir.claim, stages: ir.stages, lots: ir.lots.length, roads: ir.roads.length, paths: ir.paths.length, anchors: ir.anchors, budget: ir.budget, notes: res.notes, stats: res.stats,
+      irFormat: ir.format, requires: ir.requires ?? [], needVolumes: res.needVolumes, blobs: Object.entries(ir.blobs ?? {}).filter(([, b]) => b.sha).map(([name, b]) => ({ name, ...b })) };
     fs.writeFileSync(path.join(opts.out, 'plan.json'), `${JSON.stringify(planJson, null, 2)}\n`);
   }
   const ir = res.ir;
-  const summary = { ok: true, irSha: res.irSha, stages: ir.stages, lots: ir.lots.length, anchors: ir.anchors, budget: ir.budget, tiles: res.stats.tiles, notes: res.notes, ms: res.stats.ms };
+  const summary = { ok: true, irSha: res.irSha, irFormat: ir.format, requires: ir.requires ?? [], needVolumes: res.needVolumes, stages: ir.stages, lots: ir.lots.length, anchors: ir.anchors, budget: ir.budget, tiles: res.stats.tiles, notes: res.notes, ms: res.stats.ms };
   if (opts.json) console.log(JSON.stringify(summary));
   else {
     console.log(`plan ${ir.id}: irSha ${res.irSha}`);
@@ -68,7 +87,7 @@ async function plan(argv) {
 }
 
 function evalCmd(argv) {
-  const { pos, opts } = parseArgs(argv, { tile: 1, heights: 1, stage: 1, set: 1, json: 'flag', out: 1 });
+  const { pos, opts } = parseArgs(argv, { tile: 1, heights: 1, stage: 1, set: 1, json: 'flag', out: 1, blobs: 1 });
   if (pos.length !== 1 || !opts.tile || !opts.heights) throw new Usage('eval <ir.json> --tile tx,tz --heights h.bin [--stage s] [--set terrain|path] [--json] [--out file]');
   if (!/^-?\d+,-?\d+$/.test(opts.tile)) throw new Usage('--tile must be tx,tz');
   if (opts.set && opts.set !== 'terrain' && opts.set !== 'path') throw new Usage('--set must be terrain or path');
@@ -77,7 +96,8 @@ function evalCmd(argv) {
   try { heights = fs.readFileSync(opts.heights); } catch (e) { throw new Usage(`--heights: ${e.message}`); }
   const ir = JSON.parse(irText);
   const t = performance.now();
-  const r = evalTile(ir, opts.tile, heights, { stage: opts.stage ?? null, set: opts.set ?? null });
+  const blobs = opts.blobs ? (sha) => { const f = path.join(opts.blobs, `${sha}.bin`); return fs.existsSync(f) ? fs.readFileSync(f) : null; } : undefined;
+  const r = evalTile(ir, opts.tile, heights, { stage: opts.stage ?? null, set: opts.set ?? null, blobs });
   const ms = performance.now() - t;
   const gz = gzipPinned(r.payload);
   if (opts.out) fs.writeFileSync(opts.out, r.payload);

@@ -39,7 +39,8 @@ function importsOf(file) {
 
 /** The realise set: the three roots plus their transitive imports under lib/region/ (and each other). */
 function realiseFiles() {
-  const roots = ['lib/sdf.mjs', 'lib/noise.mjs', 'lib/realise.mjs'].map((f) => path.join(KIT, f));
+  // (6b) lib/material.mjs (material rules) is on the realise path too (CONTRACT 6b §2.3)
+  const roots = ['lib/sdf.mjs', 'lib/noise.mjs', 'lib/realise.mjs', 'lib/material.mjs'].map((f) => path.join(KIT, f));
   const seen = new Set();
   const todo = [...roots];
   while (todo.length) {
@@ -49,7 +50,7 @@ function realiseFiles() {
     for (const d of importsOf(f)) {
       const rel = path.relative(KIT, d);
       if (rel.startsWith(`lib${path.sep}region${path.sep}`) || roots.includes(d)) todo.push(d);
-      else assert.fail(`${path.relative(KIT, f)} imports ${rel}, outside the realise set (lib/region/ and the three roots)`);
+      else assert.fail(`${path.relative(KIT, f)} imports ${rel}, outside the realise set (lib/region/ and the roots)`);
     }
   }
   return [...seen].sort();
@@ -58,6 +59,7 @@ function realiseFiles() {
 test('the realise set uses only exact Math members, no Date, no Math.random, no exponent operator', () => {
   const files = realiseFiles();
   assert.ok(files.some((f) => f.endsWith(path.join('region', 'pack.mjs'))), 'pack.mjs is in the set');
+  assert.ok(files.some((f) => f.endsWith('material.mjs')), 'material.mjs is in the set');
   assert.ok(!files.some((f) => /program\.mjs$|plan\.mjs$/.test(f)), 'plan-time code is not imported by realise');
   const bad = [];
   for (const f of files) {
@@ -80,7 +82,8 @@ test('the lint catches what it should (self-check on a snippet)', () => {
 });
 
 test('the plan path avoids trig, exp/log/pow and the exponent operator (same IR on every Node major)', () => {
-  const files = ['lib/region/program.mjs', 'lib/region/plan.mjs', 'lib/region/survey.mjs', 'lib/region/geom.mjs', ...fs.readdirSync(path.join(KIT, 'regions')).filter((f) => f.endsWith('.mjs')).map((f) => `regions/${f}`)];
+  const files = ['lib/region/program.mjs', 'lib/region/plan.mjs', 'lib/region/survey.mjs', 'lib/region/geom.mjs', ...fs.readdirSync(path.join(KIT, 'regions')).filter((f) => f.endsWith('.mjs')).map((f) => `regions/${f}`),
+    ...fs.readdirSync(path.join(KIT, 'lib', 'forms')).filter((f) => f.endsWith('.mjs')).map((f) => `lib/forms/${f}`)];
   const bad = [];
   for (const rel of files) {
     const f = path.join(KIT, rel);
