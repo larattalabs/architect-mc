@@ -284,6 +284,7 @@ public final class TileStream {
 	}
 
 	private static final Map<String, PreviewTile> PREVIEWS = new ConcurrentHashMap<>();
+	static final int PREVIEW_TIMEOUT_S = 60;
 
 	/**
 	 * Asks the helper for preview tiles of a plan (kit/REGIONS.md "Ghost tiles": every stage up to and including {@code stage},
@@ -309,6 +310,14 @@ public final class TileStream {
 			}
 			PreviewTile t = new PreviewTile(planId, k);
 			PREVIEWS.put(pid, t);
+			// a lost frame never completes it: after a minute it ends with an error and is asked again on the ghost's next pass
+			t.future.orTimeout(PREVIEW_TIMEOUT_S, java.util.concurrent.TimeUnit.SECONDS).whenComplete((x, e) -> {
+				if (e != null) {
+					t.error = "no answer from the helper in " + PREVIEW_TIMEOUT_S + " s";
+					t.done = true;
+					PREVIEWS.remove(pid, t);
+				}
+			});
 			out.add(t.future);
 			JsonObject one = new JsonObject();
 			one.addProperty("key", k);

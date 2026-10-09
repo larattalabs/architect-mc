@@ -56,6 +56,9 @@ public final class RegionGhost {
 	private static final Set<String> REQUESTED = new HashSet<>();
 	private static final Map<String, Integer> SHOWN = new HashMap<>();
 	private static final List<String> ERRORS = new ArrayList<>();
+	/** When a tile's preview last failed: asked again only after {@link #RETRY_MS}. */
+	private static final Map<String, Long> FAILED_AT = new HashMap<>();
+	static final long RETRY_MS = 10_000;
 	private static int ticks;
 
 	private RegionGhost() {
@@ -100,6 +103,7 @@ public final class RegionGhost {
 		REQUESTED.clear();
 		SHOWN.clear();
 		ERRORS.clear();
+		FAILED_AT.clear();
 		if (p != null) {
 			TileStream.forgetPreviews(p.planId());
 		}
@@ -141,7 +145,12 @@ public final class RegionGhost {
 		int pz = mc.player.getBlockZ();
 		List<String> near = p.tilesNear(px, pz, NEAR);
 		List<String> want = new ArrayList<>();
+		long now = System.currentTimeMillis();
 		for (String k : near) {
+			Long failed = FAILED_AT.get(k);
+			if (failed != null && now - failed < RETRY_MS) {
+				continue;
+			}
 			if (REQUESTED.add(k)) {
 				want.add(k);
 			}
@@ -169,8 +178,11 @@ public final class RegionGhost {
 					}
 					if (layers == null) {
 						String why = e != null ? e.getMessage() : t == null ? "no answer" : t.error;
-						ERRORS.add(k + ": " + why);
-						REQUESTED.remove(k); // asked again on a later tick
+						if (ERRORS.size() < 50) {
+							ERRORS.add(k + ": " + why);
+						}
+						REQUESTED.remove(k); // asked again after RETRY_MS
+						FAILED_AT.put(k, System.currentTimeMillis());
 						return;
 					}
 					SHOWN.put(k, t.cells.size());

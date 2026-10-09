@@ -1337,10 +1337,16 @@ public final class RegionsImpl implements Regions {
 			}
 			RegionView v = view(l);
 			List<dev.larattalabs.architect.api.WaitAction> was = LAST_ACTIONS.put(l.rec().id, v.actions());
-			if (was != null && !was.equals(v.actions()) || was == null && !v.actions().isEmpty()) {
+			// what changed is the kinds (and the held stage), not a MOVE_CLOSER target that follows the walking player
+			if (was != null && !actionKeys(was).equals(actionKeys(v.actions())) || was == null && !v.actions().isEmpty()) {
 				SiteEvents.REGION_STATE.invoker().onState(v);
 			}
 		}
+	}
+
+	static List<String> actionKeys(List<dev.larattalabs.architect.api.WaitAction> a) {
+		return a.stream().map(x -> x.kind() == dev.larattalabs.architect.api.WaitAction.Kind.APPROVE_STAGE ? x.kind() + ":" + x.detail() : x.kind().name())
+			.toList();
 	}
 
 	// ------------------------------------------------------------------ 6b: check, previews, design, nudge
