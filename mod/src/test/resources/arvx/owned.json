@@ -1,0 +1,108 @@
+{
+  "name": "owned",
+  "note": "ARVX fixture written by mod ArvxTest (-Darvx.write=true); <name>.bin = gzip(ARVX), sha over the uncompressed bytes",
+  "box": {
+    "minX": -3,
+    "minY": 0,
+    "minZ": 5,
+    "maxX": -2,
+    "maxY": 9,
+    "maxZ": 6
+  },
+  "sha": "a67ae9076141c5b54ff72d25716508b4a9ea77a2ca61accde46476dea627a341",
+  "bytes": 112,
+  "columns": [
+    [
+      [
+        1,
+        2
+      ],
+      [
+        11,
+        3
+      ],
+      [
+        11,
+        2
+      ],
+      [
+        0,
+        3
+      ]
+    ],
+    [
+      [
+        12,
+        1
+      ],
+      [
+        13,
+        1
+      ],
+      [
+        11,
+        4
+      ],
+      [
+        0,
+        4
+      ]
+    ],
+    [
+      [
+        5,
+        1
+      ],
+      [
+        4,
+        2
+      ],
+      [
+        7,
+        1
+      ],
+      [
+        10,
+        1
+      ],
+      [
+        0,
+        5
+      ]
+    ],
+    [
+      [
+        11,
+        10
+      ]
+    ]
+  ],
+  "owners": [
+    "e1",
+    "e2",
+    "region rg1 tile t:ground:terrain:0,0 é"
+  ],
+  "ownedRuns": [
+    0,
+    1,
+    0,
+    2
+  ],
+  "counts": {
+    "AIR": 12,
+    "ROCK": 2,
+    "SOIL": 0,
+    "LOOSE": 0,
+    "ICE": 2,
+    "SNOW": 1,
+    "WATER": 0,
+    "LAVA": 1,
+    "LOG": 0,
+    "LEAVES": 0,
+    "PLANT": 1,
+    "OWNED": 19,
+    "PLAYER": 1,
+    "BLOCK_ENTITY": 1,
+    "MISSING": 0
+  }
+}
