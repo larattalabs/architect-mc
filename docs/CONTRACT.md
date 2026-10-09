@@ -5137,6 +5137,16 @@ region record); the logged list goes to `<region>/generated.json` when the batch
   crops, saplings, grass spread) beside gravity, unsupported and live.
 - **Delta apply (5b, found by the regression).** The cells other sites hold on top of a delta's write box are computed off the
   server thread (a 590k-cell site read every section in the first write tick: 50-84 ms on main and 6a alike).
+- **Gate procedure clarifications (after the gate-verifier's run).**
+  - *Throughput warm-up.* The JIT is cold after a client start: the verifier's first run after each start measured 12.3k and
+    13.4k, the rest 19.5-26.8k. Item 9's throughput margin is measured as **one unmeasured warm-up run of the 4e village plus
+    roads at 4 ms per client start, then the median of 3 measured runs** (`node tools/gate4e.mjs throughput`; 6 runs when the
+    median is within 5% of the bar). The warm-up's number is recorded beside them, not judged.
+  - *megaB seconds per stage* (S9) are wall time of the harness's walk, dominated by its 30 s dwell per waypoint, not an engine
+    speed. Each stage now also records its engine time (ticks in which one of its items was writing), its first start and last
+    item (`RegionRec.Stage`); chunks loaded per stage stay as measured. The megaB on record predates this; its next run reports
+    engine time per stage.
+  - *RG5* asserts that the region waited `SIDECAR_UNAVAILABLE` while the sidecar was gone (the check was always true before).
 - The group undo saves the group and its stages once at the end (each stage save wrote the 0.5 MB sites file).
 - Group undo: a player standing in a tile's box holds it (4e's rule); the gate uses a spectator player and clears mobs first.
 - `RemoveResult.kept` for group and stage undos counts kept cells (it was 0).

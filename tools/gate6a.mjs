@@ -1028,7 +1028,7 @@ steps.crash = async () => {
       await sleep(1000);
     }
     const end = await finishRegion(region, r.box);
-    check(JSON.stringify(w.waiting).includes('SIDECAR_UNAVAILABLE') || w.view.waiting?.reason === 'SIDECAR_UNAVAILABLE' || true, `crash RG5: waiting while the sidecar was gone: ${JSON.stringify(w.waiting)}`);
+    check(JSON.stringify(w.waiting).includes('SIDECAR_UNAVAILABLE') || w.view.waiting?.reason === 'SIDECAR_UNAVAILABLE', `crash RG5: waiting SIDECAR_UNAVAILABLE while the sidecar was gone: ${JSON.stringify(w.waiting)}; view ${JSON.stringify(w.view.waiting)}`);
     check(resumed !== null && resumed <= 30 && end.state === 'PLACED' && end.hash === refEnd.hash && end.undoHash === r.h0, `crash RG5: resumed ${resumed} s after `
       + `the sidecar came back (bar 30 s); ${end.state}; same hash ${end.hash === refEnd.hash}; undo exact ${end.undoHash === r.h0}`, { w, end });
     out.RG5 = { resumedSeconds: resumed, waiting: w.waiting, end };
@@ -1052,6 +1052,166 @@ steps.crash = async () => {
     out[point] = { exact: h.sha256 === r.h0, left: regions.length };
   }
   await leaveWorld();
+  return out;
+};
+
+// ------------------------------------------------------------------ the gate-verifier's follow-ups (S2 per stage, S8 maxWait, H0)
+
+/** A region stage's state, polled until `want` (a predicate on the view) holds; returns the last region state. */
+async function untilRegion(region, want, timeoutMs = 600_000, label = '') {
+  const end = Date.now() + timeoutMs;
+  let st;
+  while (Date.now() < end) {
+    st = await regionState(region);
+    if (want(st)) return st;
+    await sleep(2000);
+  }
+  log(`  ${label}: not reached in ${timeoutMs / 1000} s: ${JSON.stringify(st?.view?.stages)} waiting ${JSON.stringify(st?.view?.waiting)}`);
+  return st;
+}
+const stageOf = (st, name) => st.view.stages.find((x) => x.name === name);
+const finished = (s) => ['PLACED', 'PARTIAL', 'SKIPPED', 'UNDONE'].includes(s?.state);
+
+/** The ARSV shard of a tile (Columns codec): its `height` and missing flag per column. */
+function readShard(file) {
+  const a = fs.readFileSync(file);
+  const minX = a.readInt32LE(8);
+  const minZ = a.readInt32LE(12);
+  const w = a.readInt32LE(16);
+  const d = a.readInt32LE(20);
+  const n = w * d;
+  return { minX, minZ, w, height: (x, z) => a.readInt16LE(28 + 2 * n + 2 * ((x - minX) + (z - minZ) * w)), missing: (x, z) => (a[28 + 6 * n + (x - minX) + (z - minZ) * w] & 2) !== 0 };
+}
+
+/**
+ * The staged scenario on region_small (flat prepared world): (1) the per-stage drift check (S2): stages approved one by one; no
+ * hold on the region's own pads; the land over lots-1's lot boxes raised 12 before lots-1 is approved holds it (DRIFTED, "land
+ * changed since planning", the stage back to PLANNED); approving it again continues and places it; per-stage engine time. (2)
+ * maxWait (S8): LOADED_ONLY with the player far away and maxWait 30 s fails the waiting items TIMED_OUT with their wait reason; a
+ * control without maxWait still waits after 90 s. (3) H0 for lots in any stage order: lots-1 realised before ways (reordered,
+ * ground not realised): the lots freeze their columns before they write, so ways' tiles find the pre-lot land in the shards.
+ */
+steps.staged = async () => {
+  if (!dev) await connect();
+  const out = {};
+  // (1) per-stage drift
+  {
+    await fresh('G6A Staged', 'G6A Flat Base Prepared');
+    await tp(0.5, 120, 0.5);
+    await api('revents').catch(() => null);
+    const p = await plan(SMALL, 'generated:64');
+    const region = await realise(p.planId, { autoApprove: false });
+    let st = await regionState(region);
+    const group = st.view.groupId;
+    const t0 = Date.now();
+    for (const stage of ['ground', 'ways']) {
+      await api(`sapprove ${group} ${stage}`);
+      st = await untilRegion(region, (x) => finished(stageOf(x, stage)) || x.view.waiting?.reason === 'DRIFTED', 900_000, stage);
+      log(`  ${stage}: ${stageOf(st, stage).state}; drift ${JSON.stringify(st.record.drift)}`);
+    }
+    check(finished(stageOf(st, 'ground')) && finished(stageOf(st, 'ways')) && !String(st.record.drift.ways ?? '').startsWith('held'),
+      `staged: ground and ways placed with no drift hold on the region's own land (ways: ${st.record.drift.ways})`, st.record.drift);
+    // a player raises the land over every lots-1 lot box by 12 before lots-1 is approved
+    const ir = JSON.parse(fs.readFileSync(path.join(SAVES, 'G6A Staged', 'architect-regions', region, 'ir.json'), 'utf8'));
+    const lots = ir.lots.filter((l) => l.stage === 'lots-1');
+    for (const l of lots) {
+      const b = l.box;
+      await cmd(`/fill ${b.minX} ${l.floorY} ${b.minZ} ${b.maxX} ${l.floorY + 11} ${b.maxZ} minecraft:stone`);
+    }
+    await settle(2000);
+    const evBefore = (await api('revents').catch(() => [])).length;
+    await api(`sapprove ${group} lots-1`);
+    st = await untilRegion(region, (x) => x.view.waiting?.reason === 'DRIFTED' || finished(stageOf(x, 'lots-1')), 300_000, 'lots-1 hold');
+    const held = { waiting: st.view.waiting, stage: stageOf(st, 'lots-1'), drift: st.record.drift['lots-1'] };
+    const ev = (await api('revents').catch(() => [])).slice(evBefore).filter((e) => e.id === region && e.event === 'REGION_STATE');
+    out.hold = { ...held, regionStateEvents: ev.length };
+    log(`  lots-1 after the land change: ${JSON.stringify(out.hold)}`);
+    check(held.waiting?.reason === 'DRIFTED' && /land changed since planning/.test(held.waiting?.message ?? '') && held.stage.state === 'PLANNED'
+      && String(held.drift).startsWith('held'), `staged: lots-1 holds after the land over its lots rose 12: DRIFTED "${(held.waiting?.message ?? '').slice(0, 160)}", stage ${held.stage.state}`);
+    check(ev.length > 0, `staged: REGION_STATE fired for the hold (${ev.length})`);
+    await sleep(10_000);
+    const still = await regionState(region);
+    check(stageOf(still, 'lots-1').state === 'PLANNED' && still.view.lots.every((l) => l.state !== 'placed'), 'staged: the held stage writes nothing while it holds');
+    // continue: approve again
+    await api(`sapprove ${group} lots-1`);
+    st = await waitRegion(region, 900_000);
+    out.continued = { state: st.view.state, lotsStage: stageOf(st, 'lots-1'), drift: st.record.drift, lots: st.view.lots };
+    check(String(st.record.drift['lots-1']).startsWith('continued') && finished(stageOf(st, 'lots-1')), `staged: approving lots-1 again continues it (${stageOf(st, 'lots-1').state}; region ${st.view.state})`);
+    out.stages = Object.fromEntries(Object.entries(st.record.stages).map(([k, v]) => [k, { tiles: `${v.tilesDone}/${v.tilesTotal}`, cells: v.cells,
+      engineSeconds: v.activeTicks / 20, stageWallSeconds: v.startedAt && v.lastDoneAt ? (v.lastDoneAt - v.startedAt) / 1000 : null }]));
+    out.wallSeconds = (Date.now() - t0) / 1000;
+    log(`  per stage: ${JSON.stringify(out.stages)}`);
+    await leaveWorld();
+  }
+  // (2) maxWait, and the control without it
+  for (const [name, maxWait] of [['G6A MaxWait', 30], ['G6A MaxWait Ctl', 0]]) {
+    await fresh(name, 'G6A Flat Base Prepared');
+    await tp(0.5, 120, 0.5);
+    const p = await plan(SMALL, 'generated:64');
+    await cmd('/gamerule spawn_chunk_radius 0').catch(() => null);
+    await tp(6000.5, 120, 6000.5); // far from the claim: LOADED_ONLY items wait NOT_LOADED
+    await settle(5000);
+    const loaded = await call('dev.chunks.status', { box: SMALL.claim }, 600_000);
+    const region = await realise(p.planId, { load: 'loaded', ...(maxWait ? { maxWait } : {}) });
+    const t0 = Date.now();
+    await sleep(12_000);
+    const early = await regionState(region);
+    let st;
+    if (maxWait) {
+      st = await untilRegion(region, (x) => x.batchStatus && x.batchStatus !== 'RUNNING', 300_000, 'maxWait');
+      const failed = st.failed ?? {};
+      const timed = Object.entries(failed).filter(([, v]) => /^TIMED_OUT: waited \d+ s for: /.test(v));
+      out.maxWait = { claimChunksLoaded: loaded.loaded, early: early.view.waiting, failed, seconds: (Date.now() - t0) / 1000, state: st.view.state };
+      check(early.view.waiting?.reason === 'NOT_LOADED' && /walk closer|not loaded/.test(early.view.waiting?.message ?? ''), `staged: before maxWait the region shows its wait reason (${JSON.stringify(early.view.waiting)})`);
+      check(timed.length > 0 && /not loaded/.test(timed[0][1]), `staged: maxWait ${maxWait} s: ${timed.length} items failed TIMED_OUT with the wait reason ("${timed[0]?.[1]}"), region ${st.view.state} after ${out.maxWait.seconds.toFixed(0)} s`);
+    } else {
+      await sleep(90_000);
+      st = await regionState(region);
+      out.control = { waiting: st.view.waiting, failed: st.failed, batchStatus: st.batchStatus, seconds: (Date.now() - t0) / 1000 };
+      check(Object.keys(st.failed ?? {}).length === 0 && st.batchStatus === 'RUNNING' && st.view.waiting?.reason === 'NOT_LOADED', `staged: without maxWait the region still waits after ${out.control.seconds.toFixed(0)} s (NOT_LOADED, 0 failed)`);
+    }
+    await leaveWorld();
+  }
+  // (3) H0 for lots in any stage order: lots-1 before ways, ground not realised
+  {
+    await fresh('G6A Order', 'G6A Flat Base Prepared');
+    await tp(0.5, 120, 0.5);
+    const p = await plan(SMALL, 'generated:64');
+    const region = await realise(p.planId, { autoApprove: false, stages: ['ways', 'lots-1'] });
+    let st = await regionState(region);
+    const group = st.view.groupId;
+    const order = await api(`sreorder ${group} lots-1,ways`);
+    log(`  reordered: ${JSON.stringify(order).slice(0, 300)}`);
+    await api(`sapprove ${group} lots-1`);
+    await api(`sapprove ${group} ways`);
+    st = await waitRegion(region, 900_000);
+    const ir = JSON.parse(fs.readFileSync(path.join(SAVES, 'G6A Order', 'architect-regions', region, 'ir.json'), 'utf8'));
+    const placedLots = st.view.lots.filter((l) => l.state === 'placed').map((l) => l.id);
+    const dir = path.join(SAVES, 'G6A Order', 'architect-regions', region, 'heights');
+    const heights = {};
+    let bad = 0;
+    let cols = 0;
+    for (const l of ir.lots.filter((x) => placedLots.includes(x.id))) {
+      for (let x = l.box.minX; x <= l.box.maxX; x += 3) {
+        for (let z = l.box.minZ; z <= l.box.maxZ; z += 3) {
+          const f = path.join(dir, `${Math.floor(x / 64)}.${Math.floor(z / 64)}.bin`);
+          if (!fs.existsSync(f)) { bad++; continue; }
+          const sh = readShard(f);
+          cols++;
+          if (sh.missing(x, z)) { bad++; continue; }
+          const h = sh.height(x, z);
+          heights[h] = (heights[h] ?? 0) + 1;
+        }
+      }
+    }
+    out.order = { state: st.view.state, stages: st.view.stages.map((x) => `${x.name}:${x.state}`), placedLots, sampled: cols, missingOrAbsent: bad, frozenHeights: heights };
+    log(`  order: ${JSON.stringify(out.order)}`);
+    // the flat world's land is one height: a frozen lot column at the building's height would be the post-lot surface
+    const hs = Object.keys(heights).map(Number);
+    check(placedLots.length > 0 && bad === 0 && hs.length === 1, `staged: lots-1 before ways (reordered): ${placedLots.length} lots placed, their ${cols} sampled columns frozen pre-lot (heights ${JSON.stringify(heights)})`);
+    await leaveWorld();
+  }
+  write('staged.json', out);
   return out;
 };
 
