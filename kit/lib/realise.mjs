@@ -12,6 +12,11 @@ import { ByteWriter, FLAG_MISSING, asColumns, sha256Hex, stateBytes, writeArtlHe
 export const AIR = 'minecraft:air';
 export const OP_KINDS = ['shape', 'columns'];
 export const SETS = ['terrain', 'path'];
+/** (6b) The IR formats this evaluator reads (kit/REGIONS.md "IR format 2"). */
+export const IR_FORMATS = Object.freeze([1, 2]);
+/** (6b) Every format-2 kind an IR's `requires` may name; any of them makes the IR format 2. */
+export const KINDS_FORMAT2 = Object.freeze(['blobs:side', 'fields', 'forms', 'material:rule', 'shape:array', 'shape:capsuleChain', 'shape:ellipsoid',
+  'shape:instances', 'shape:prism', 'shape:strata', 'shape:warp', 'shape:wedge', 'volumes']);
 /** Max ops in an IR (also the evaluator's buffer encoding limit). */
 export const MAX_OPS = 20000;
 const OP_SLOTS = 32768; // buffer value = (op index + 1) + material * OP_SLOTS

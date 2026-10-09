@@ -3,6 +3,8 @@
 // worker in forward order and 4 workers in shuffled order. CI runs this on Linux (Node 22), the Mac on Node 24.
 // The IR's `node` field is pinned to "golden" here (it records the Node major, which differs between the two).
 // Regenerate (only when the engine or mega_bench changes on purpose): UPDATE_GOLDEN=1 node --test kit/test/region-golden.test.mjs
+// (6b) The IR records `kitVersion`; the golden was planned by kit 0.11.0, so the test pins it (as it pins `node`): the file is
+// 6a's, unchanged, and proves that a format-1 IR evaluates byte-identically under the 6b evaluator (CONTRACT 6b B1).
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -39,7 +41,7 @@ function shuffled(arr, seed) {
 }
 
 test('mega_bench golden: IR sha and every tile sha, 1 worker forward and 4 workers shuffled', async () => {
-  const p = await planRegion({ programFile: path.join(KIT, 'regions', 'mega_bench.mjs'), survey: synthSurvey(CLAIM, SEED), claim: CLAIM, node: 'golden' });
+  const p = await planRegion({ programFile: path.join(KIT, 'regions', 'mega_bench.mjs'), survey: synthSurvey(CLAIM, SEED), claim: CLAIM, node: 'golden', kitVersion: '0.11.0' });
   const jobs = [];
   for (const stage of p.ir.stages) for (const set of ['terrain', 'path']) for (const key of p.ir.tiles[stage][set]) jobs.push({ key, stage, set });
   const id = (j) => `${j.stage}|${j.set}|${j.key}`;
