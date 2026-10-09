@@ -52,7 +52,7 @@ export async function build({ phase, local, ART, SCEN, evidenceSha }) {
   const calFile = path.join(out, 'calibration', 'calibration.json');
   if (fs.existsSync(calFile)) calibration = JSON.parse(fs.readFileSync(calFile, 'utf8')).renders;
   const data = { phase, title: `Architect ${phase} gallery`, built: new Date().toISOString(), local: !!local, scenarios, calibration };
-  fs.writeFileSync(path.join(out, 'data.json'), `${JSON.stringify(data, null, 1)}\n`);
+  if (!local) fs.writeFileSync(path.join(out, 'data.json'), `${JSON.stringify(data, null, 1)}\n`);
   const tpl = fs.readFileSync(path.join(HERE, 'gallery6b.html'), 'utf8');
   const html = tpl.replace('/*__GALLERY_DATA__*/null', JSON.stringify(data).replace(/</g, '\\u003c'));
   fs.writeFileSync(path.join(out, local ? 'local.html' : 'index.html'), html);
