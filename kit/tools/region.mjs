@@ -7,10 +7,14 @@
 // Exit 0 ok, 1 failure, 2 usage. With --json the last stdout line is one JSON object. `plan` writes only into --out.
 import fs from 'node:fs';
 import path from 'node:path';
+import { createHash } from 'node:crypto';
+import { pathToFileURL } from 'node:url';
 import { planRegion } from '../lib/region/plan.mjs';
 import { evalTile } from '../lib/realise.mjs';
 import { encodeColumns, gzipPinned } from '../lib/region/pack.mjs';
 import { decodeArvx } from '../lib/region/volume.mjs';
+import { checkRegion, summaryText } from '../lib/region/check.mjs';
+import { renderPreviews, VIEWS } from '../lib/region/preview.mjs';
 import { synthColumns } from '../lib/region/synth.mjs';
 
 class Usage extends Error {}
@@ -107,6 +111,72 @@ function evalCmd(argv) {
   return 0;
 }
 
+/** (6b) The inputs of check / preview: the IR, survey, side blobs, frozen volumes and the plan meta (beside the IR). */
+function loadPlan(pos, opts) {
+  let irText, survey;
+  try { irText = fs.readFileSync(pos[0], 'utf8'); } catch (e) { throw new Usage(`ir: ${e.message}`); }
+  try { survey = fs.readFileSync(opts.survey); } catch (e) { throw new Usage(`--survey: ${e.message}`); }
+  const ir = JSON.parse(irText);
+  const dir = path.dirname(pos[0]);
+  const blobDir = opts.blobs ?? path.join(dir, 'blobs');
+  const blobs = (sha) => { const f = path.join(blobDir, `${sha}.bin`); return fs.existsSync(f) ? fs.readFileSync(f) : null; };
+  const volumes = [];
+  if (opts.volumes) for (const f of fs.readdirSync(opts.volumes).filter((n) => /^[0-9a-f]{64}\.bin$/.test(n)).sort()) volumes.push(decodeArvx(fs.readFileSync(path.join(opts.volumes, f))));
+  let meta = null;
+  const mf = opts.meta ?? path.join(dir, 'meta.json');
+  if (fs.existsSync(mf)) meta = JSON.parse(fs.readFileSync(mf, 'utf8'));
+  return { ir, irText, survey, blobs, volumes, meta, dir };
+}
+
+function check(argv) {
+  const { pos, opts } = parseArgs(argv, { survey: 1, blobs: 1, volumes: 1, meta: 1, out: 1, json: 'flag', 'no-prefix': 'flag', 'plan-id': 1 });
+  if (pos.length !== 1 || !opts.survey) throw new Usage('check <ir.json> --survey s.bin [--blobs dir] [--volumes dir] [--meta meta.json] [--out dir] [--json]');
+  const L = loadPlan(pos, opts);
+  const report = checkRegion({ ir: L.ir, survey: L.survey, blobs: L.blobs, volumes: L.volumes, meta: L.meta, prefix: !opts['no-prefix'], planId: opts['plan-id'] });
+  delete report._world;
+  report.irSha = createHash('sha256').update(L.irText).digest('hex');
+  const out = opts.out ?? L.dir;
+  fs.mkdirSync(out, { recursive: true });
+  fs.writeFileSync(path.join(out, 'report.json'), `${JSON.stringify(report, null, 1)}\n`);
+  fs.writeFileSync(path.join(out, 'summary.txt'), summaryText(report));
+  const res = { ok: true, report: { ok: report.ok, errors: report.errors, warnings: report.warnings }, ms: report.ms.total };
+  if (opts.json) console.log(JSON.stringify(res));
+  else process.stdout.write(summaryText(report));
+  return 0;
+}
+
+function preview(argv) {
+  const { pos, opts } = parseArgs(argv, { survey: 1, blobs: 1, volumes: 1, meta: 1, out: 1, json: 'flag', views: 1, axes: 1, 'plan-id': 1 });
+  if (pos.length !== 1 || !opts.survey) throw new Usage('preview <ir.json> --survey s.bin [--views top,section,iso,siteplan] [--axes axes.json] [--out dir] [--json]');
+  const L = loadPlan(pos, opts);
+  const views = opts.views ? opts.views.split(',') : VIEWS;
+  for (const v of views) if (!VIEWS.includes(v)) throw new Usage(`--views: unknown view ${v} (${VIEWS.join(', ')})`);
+  const axes = opts.axes ? readJson(opts.axes, '--axes') : null;
+  const irSha = createHash('sha256').update(L.irText).digest('hex');
+  const r = renderPreviews({ ir: L.ir, survey: L.survey, blobs: L.blobs, volumes: L.volumes, meta: L.meta, views, axes, outDir: path.resolve(opts.out ?? L.dir), planId: opts['plan-id'] ?? null, irSha });
+  const res = { ok: true, paths: r.paths, sitePlan: r.sitePlanFile, pixels: r.pixels, ms: r.ms };
+  if (opts.json) console.log(JSON.stringify(res));
+  else for (const [v, l] of Object.entries(r.paths)) console.log(`${v}: ${l.join(', ')}`);
+  return 0;
+}
+
+async function catalogue(argv) {
+  const { opts } = parseArgs(argv, { json: 'flag' });
+  const dir = path.join(path.dirname(new URL(import.meta.url).pathname), '..', 'regions');
+  const programs = [];
+  for (const f of fs.readdirSync(dir).filter((n) => n.endsWith('.mjs')).sort()) {
+    const m = await import(pathToFileURL(path.join(dir, f)).href);
+    if (!m.catalogue || typeof m.catalogue !== 'object') continue;
+    const params = {};
+    for (const [k, v] of Object.entries(m.params ?? {})) params[k] = { type: v.type, ...(v.min !== undefined ? { min: v.min } : {}), ...(v.max !== undefined ? { max: v.max } : {}), ...(v.default !== undefined ? { default: v.default } : {}), ...(v.values ? { values: v.values } : {}) };
+    programs.push({ id: m.id, description: m.catalogue.description, params, needs: m.catalogue.needs, claim: m.catalogue.claim });
+  }
+  const out = { programs };
+  if (opts.json) console.log(JSON.stringify(out));
+  else for (const p of programs) console.log(`${p.id}: ${p.description}`);
+  return 0;
+}
+
 function synth(argv) {
   const { opts } = parseArgs(argv, { box: 1, res: 1, seed: 1, out: 1 });
   if (!opts.box || !opts.out) throw new Usage('synth --box minX,minZ,maxX,maxZ [--res 1|4] [--seed s] --out file');
@@ -127,7 +197,9 @@ async function main() {
     if (cmd === 'plan') return await plan(rest);
     if (cmd === 'eval') return evalCmd(rest);
     if (cmd === 'synth') return synth(rest);
-    if (cmd === 'check' || cmd === 'preview') throw new Usage(`${cmd} is phase 6b`);
+    if (cmd === 'check') return check(rest);
+    if (cmd === 'preview') return preview(rest);
+    if (cmd === 'catalogue') return await catalogue(rest);
     throw new Usage('usage: region.mjs plan|eval|synth ... (see kit/REGIONS.md "CLI")');
   } catch (e) {
     const usage = e instanceof Usage;
