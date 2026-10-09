@@ -504,6 +504,11 @@ async function runStep(step, rec) {
   if (r.timedOut) rec.status = 'TIMEOUT';
   else if (r.code === 0 && rec.fail === 0 && parsedFail === 0 && (step.okLines === false || rec.ok > 0)) rec.status = 'PASS';
   else rec.status = 'FAIL';
+  if (rec.status !== 'PASS' && !rec.failLines) {
+    // test runners' own failure lines (vitest " FAIL  file > test", node --test "✖ name")
+    const tf = lines.filter((l) => /^\s*(FAIL\s|✖\s)/.test(l));
+    if (tf.length) rec.failLines = tf.slice(0, 10).map((l) => l.trim().slice(0, 300));
+  }
   if (rec.status !== 'PASS') {
     const tail = lines.filter((l) => l.trim()).slice(-5);
     rec.tail = tail.map((l) => l.slice(0, 300));
