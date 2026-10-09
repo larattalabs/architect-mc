@@ -20,5 +20,37 @@
     "candidates": 100,
     "step": 512,
     "stopAt": 95
+  },
+  "fixture": {
+    "claim": [
+      896,
+      384,
+      1151,
+      639
+    ],
+    "yRange": [
+      -22,
+      141
+    ],
+    "foundBy": "find-site volume_site @ seed 2026100906",
+    "surveySha": "69c7824e47c33a565f13b031542d9931870ccde1a58ec14c27753845cfa15df2",
+    "score": 98,
+    "stats": {
+      "biomes": {
+        "plains": 39,
+        "sparse_jungle": 32,
+        "forest": 16,
+        "beach": 6,
+        "river": 3
+      },
+      "grid": [],
+      "min": 18,
+      "max": 101,
+      "mean": 73.2,
+      "water": 16,
+      "trees": 14,
+      "natural": 100,
+      "missing": 0
+    }
   }
 }

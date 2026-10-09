@@ -9,10 +9,36 @@
     "gamerules": "gallery"
   },
   "fixture": {
-    "claim": null,
-    "yRange": null,
-    "foundBy": null,
-    "surveySha": null
+    "claim": [
+      1664,
+      768,
+      1919,
+      1023
+    ],
+    "yRange": [
+      -2,
+      230
+    ],
+    "foundBy": "find-site s1_floating_islands @ seed 2026100906",
+    "surveySha": "5f59f19934af58858d2ec8fcf362ad10eaf20bbc9b932721475d85a446e06dd6",
+    "score": 86,
+    "stats": {
+      "biomes": {
+        "plains": 29,
+        "sunflower_plains": 22,
+        "cold_ocean": 16,
+        "ocean": 13,
+        "beach": 13
+      },
+      "grid": [],
+      "min": 38,
+      "max": 90,
+      "mean": 65.5,
+      "water": 43,
+      "trees": 0,
+      "natural": 100,
+      "missing": 0
+    }
   },
   "flat": {
     "preset": "flat",
@@ -29,21 +55,24 @@
     ],
     "relief": [
       0,
-      24
+      70
     ],
     "biomes": {
       "any": [
         "plains",
         "ocean",
-        "meadow"
+        "meadow",
+        "river",
+        "beach"
       ],
       "share": 0.7
     },
     "naturalMin": 97,
     "yTop": 230,
-    "candidates": 100,
+    "candidates": 150,
     "step": 448,
-    "stopAt": 105
+    "stopAt": 50,
+    "waterMax": 45
   },
   "program": "floating_islands",
   "params": {},
