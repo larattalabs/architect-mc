@@ -29,7 +29,7 @@
     "sim-sets": { "desc": "4b sets sim suite", "cmd": ["node", "tools/apitest.mjs", "sets"], "env": { "APITEST_OUT": "${OUT}/sim-sets" }, "timeoutMin": 15, "client": "sim" },
     "sim-massing": { "desc": "4c massing sim suite", "cmd": ["node", "tools/apitest.mjs", "massing"], "env": { "APITEST_OUT": "${OUT}/sim-massing" }, "timeoutMin": 15, "client": "sim" },
     "apijars": {
-      "desc": "unchanged 1.7.0/1.6.0/1.5.0 apitest jars (starts its own clients)", "cmd": ["node", "tools/gate6a.mjs", "apijars"], "timeoutMin": 30, "client": "self",
+      "desc": "unchanged 1.8.0/1.7.0/1.6.0 apitest jars (starts its own clients)", "cmd": ["node", "tools/gate6a.mjs", "apijars"], "timeoutMin": 30, "client": "self",
       "links": { "gate6a/v0100": "${MAIN}/artifacts/gate6a/v0100" },
       "metrics": { "jars": "gate6a/apijars.json#data" }
     },
@@ -60,6 +60,7 @@
     },
     "6a-crash": { "desc": "6a crash RG1-RG6, K3, K7", "cmd": ["node", "tools/gate6a.mjs", "crash"], "timeoutMin": 40, "client": "6a" },
     "6a-eflat": { "desc": "6a E-flat exactness", "cmd": ["node", "tools/gate6a.mjs", "eflat"], "timeoutMin": 30, "client": "6a" },
+    "6a-forest": { "desc": "6a forest rim (2-minute stand, exact undo)", "cmd": ["node", "tools/gate6a.mjs", "forest"], "timeoutMin": 30, "client": "6a" },
     "6a-inv3": { "desc": "6a inv3 order invariance", "cmd": ["node", "tools/gate6a.mjs", "inv3"], "timeoutMin": 15, "client": "6a" },
     "6a-staged": { "desc": "6a staged drift / reorder / maxWait", "cmd": ["node", "tools/gate6a.mjs", "staged"], "timeoutMin": 30, "client": "6a" },
     "6a-heap": {
@@ -73,6 +74,6 @@
       "4e-orders", "4e-crash", "4e-throughput", "4d-all", "5b-chains", "5b-village", "6a-megaB-fast"],
     "engine": ["unit-mod", "unit-kit", "unit-sidecar", "sim-jobs", "sim-sets", "sim-massing", "apijars", "4e-megalite",
       "4e-orders", "4e-crash", "4e-throughput", "4d-all", "5b-chains", "5b-village",
-      "6a-megaA", "6a-megaB", "6a-crash", "6a-eflat", "6a-inv3", "6a-staged", "6a-heap"]
+      "6a-megaA", "6a-megaB", "6a-crash", "6a-eflat", "6a-forest", "6a-inv3", "6a-staged", "6a-heap"]
   }
 }

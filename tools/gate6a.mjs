@@ -229,7 +229,8 @@ const KIT_EXAMPLES = ['cabin', 'gatehouse', 'tavern', 'tower'];
 const LOT_ENTRIES = [...STUB_IDS, ...KIT_EXAMPLES];
 
 async function plan(spec, surveyLoad = 'loaded', params = {}) {
-  const r = await call('dev.region.plan', { program: spec.program, claim: spec.claim, params, surveyLoad }, 600_000);
+  // (6b) check: false: the plan stays 6a's (no checker, no previews: CONTRACT 6b gate item 12, megaA with ext["architect_mc:check"] = false)
+  const r = await call('dev.region.plan', { program: spec.program, claim: spec.claim, params, surveyLoad, check: false }, 600_000);
   if (r.refused) throw new Error(`plan refused: ${r.refused}`);
   log(`  plan ${r.planId}: ir ${r.irSha?.slice(0, 12)}, ${r.lots?.length} lots, stages ${r.stages?.join(',')}, budget ${JSON.stringify(r.budget)}, ${r.ms?.toFixed(0)} ms`);
   return r;
@@ -727,9 +728,10 @@ steps.heap = async () => {
 
 steps.apijars = async () => {
   const runs = [
-    { api: '1.7.0', dir: path.join(OUT, 'v0100'), jar: 'architect_apitest-0.10.0.jar', world: 'G6A Api17' },
+    // (6b) the unchanged 1.8.0, 1.7.0 and 1.6.0 jars (CONTRACT 6b §6.1)
+    { api: '1.8.0', dir: path.join(MAIN, 'artifacts', 'gate6b', 'v0110'), jar: 'architect_apitest-0.11.0.jar', world: 'G6A Api18' },
+    { api: '1.7.0', dir: path.join(MAIN, 'artifacts', 'gate6a', 'v0100'), jar: 'architect_apitest-0.10.0.jar', world: 'G6A Api17' },
     { api: '1.6.0', dir: path.join(MAIN, 'artifacts', 'gate5b', 'v090'), jar: 'architect_apitest-0.9.0.jar', world: 'G6A Api16' },
-    { api: '1.5.0', dir: path.join(MAIN, 'artifacts', 'gate5a', 'v080'), jar: 'architect_apitest-0.8.0.jar', world: 'G6A Api15' },
   ];
   const mods = path.join(GAME_DIR, 'mods');
   const out = {};
@@ -761,7 +763,7 @@ steps.apijars = async () => {
     fs.writeFileSync(path.join(OUT, `api${r.api.replace(/\./g, '')}jar.log`), text);
     const fails = text.split('\n').filter((l) => l.startsWith('FAIL'));
     const oks = text.split('\n').filter((l) => l.startsWith('ok')).length;
-    check(code === 0 && fails.length === 0 && oks > 0, `apijars: the ${r.api} apitest jar (unchanged) passes its tools/apitest.mjs survival against 0.11.0 (${oks} ok, ${fails.length} FAIL)`, fails);
+    check(code === 0 && fails.length === 0 && oks > 0, `apijars: the ${r.api} apitest jar (unchanged) passes its tools/apitest.mjs survival against this build (${oks} ok, ${fails.length} FAIL)`, fails);
     out[r.api] = { code, oks, fails: fails.length };
   }
   await startClient('G6A Flat Base');
