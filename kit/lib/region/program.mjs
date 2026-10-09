@@ -536,14 +536,22 @@ class Part {
     const x0 = Math.floor(node.minX), x1 = Math.ceil(node.maxX), z0 = Math.floor(node.minZ), z1 = Math.ceil(node.maxZ);
     let n = 0;
     const lit = [];
+    const floorCells = [];
     for (let z = z0; z <= z1; z++) for (let x = x0; x <= x1; x++) {
       const col = { g: s.heightAt(x, z), h: s.topAt(x, z), f: s.floorAt(x, z) };
       if (sdAt(node, x, fy, z, col) > 0 || fy > col.g) continue; // only under the ground: a hollow, not open air
       if (floor === 'flat') floorCols.add(x, z, fy - 1, fy - 1, this._mat(floorMaterial, 'cavern floor'));
       n++;
+      floorCells.push([x, z]);
       if ((x - x0) % every === Math.floor(every / 2) % every && (z - z0) % every === Math.floor(every / 2) % every) { lights.add(x, z, fy, fy, lightM); lit.push([x, fy, z]); }
     }
     if (!n) throw new Error(`part ${this.id}: the cavern has no floor cell under the ground at floorY ${fy}`);
+    // the guarantee: no floor cell more than every/2 (in x and z) from a light; fill the edges the grid leaves
+    const h = Math.floor(every / 2);
+    for (const [x, z] of floorCells) {
+      if (lit.some(([lx, , lz]) => Math.abs(lx - x) <= h && Math.abs(lz - z) <= h)) continue;
+      lights.add(x, z, fy, fy, lightM); lit.push([x, fy, z]);
+    }
     if (floor === 'flat') this._colsOp(floorCols, COND.IF_NATURAL);
     this._colsOp(lights, COND.IF_NATURAL);
     const m = (this.region.meta.parts[this.id] ??= {});
