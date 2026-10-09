@@ -212,7 +212,9 @@ public final class Placement {
 			long tj = System.nanoTime();
 			try {
 				complete = j.step(srv, deadline);
-				lap("step:" + j, tj);
+				if (TRACE) {
+					lap("step:" + j, tj);
+				}
 			} catch (RuntimeException e) {
 				Architect.LOGGER.error("Placement job {} failed", j, e);
 				complete = true;
@@ -228,7 +230,9 @@ public final class Placement {
 				finishedWork += Math.max(0, j.total() - was);
 				long tc = System.nanoTime();
 				completed(srv, j);
-				lap("completed:" + j, tc);
+				if (TRACE) {
+					lap("completed:" + j, tc);
+				}
 			}
 		}
 	}

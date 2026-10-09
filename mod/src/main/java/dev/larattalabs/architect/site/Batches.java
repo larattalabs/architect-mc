@@ -716,7 +716,9 @@ public final class Batches {
 		if (item != null) {
 			t0 = System.nanoTime();
 			tryStart(server, b, item);
-			Placement.lap("tryStart:" + item.key, t0);
+			if (Placement.TRACE) {
+				Placement.lap("tryStart:" + item.key, t0);
+			}
 		}
 		if (BatchRules.allDone(b) && !hasJob(b) && stagesDone(b)) {
 			t0 = System.nanoTime();
