@@ -1420,7 +1420,21 @@ class Part {
     // (pad fill none: the mass under it is a generated form; only the footprint is cleared, its apron stays the form's)
     if (none) this._shapeOp({ kind: 'box', min: [x0, { abs: floorY }, z0], max: [x1, { abs: boxMaxY }, z1] }, null, COND.ALWAYS_OURS);
     else this._shapeOp({ kind: 'union', of: cut }, null, COND.IF_NATURAL);
-    this._shapeOp(box(0, { abs: t }, { abs: t }), fdn, none ? COND.ALWAYS_OURS : COND.IF_NATURAL);
+    // the pad's top: foundation under the footprint (the building's floor stands on it); (6b addition, region lot
+    // entrances) the 1-column apron keeps the surrounding ground: a natural or region-made top stays, only a gap (air or
+    // fluid) takes the surface role; never the foundation block. A fill-none pad's apron is the form's own top.
+    // (a plan recorded as kit 0.11.x keeps 0.11's pad: the foundation over the apron too, so its IR stays byte-identical)
+    const v = String(this.region.ctx?.kitVersion ?? '0.12.0').split('.').map(Number);
+    const legacy = v[0] === 0 && v[1] < 12;
+    this._shapeOp(legacy ? box(0, { abs: t }, { abs: t }) : { kind: 'box', min: [x0, { abs: t }, z0], max: [x1, { abs: t }, z1] }, fdn, none ? COND.ALWAYS_OURS : COND.IF_NATURAL);
+    if (!none && !legacy) {
+      const T = { abs: t };
+      const apron = { kind: 'union', of: [
+        { kind: 'box', min: [x0 - 1, T, z0 - 1], max: [x1 + 1, T, z0 - 1] }, { kind: 'box', min: [x0 - 1, T, z1 + 1], max: [x1 + 1, T, z1 + 1] },
+        { kind: 'box', min: [x0 - 1, T, z0], max: [x0 - 1, T, z1] }, { kind: 'box', min: [x1 + 1, T, z0], max: [x1 + 1, T, z1] },
+      ] };
+      this._shapeOp(apron, this._mat('surface', 'lot apron'), COND.IF_AIR_OR_FLUID);
+    }
     // front
     let fr = front;
     if (typeof front === 'string' && front.startsWith('toward:')) {
