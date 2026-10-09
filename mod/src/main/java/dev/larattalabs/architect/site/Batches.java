@@ -238,13 +238,13 @@ public final class Batches {
 	 * site group whose stages are the region's. The batch ext names the region ({@link RegionItems#EXT_REGION}). Returns the batch.
 	 */
 	public static QBatch queueRegion(MinecraftServer server, String regionId, @Nullable String owner, JsonObject ext, List<QItem> items,
-		List<String> stages, int loadChunks, boolean generate, boolean autoApprove) {
+		List<String> stages, int loadChunks, boolean generate, boolean autoApprove, int maxWaitSeconds) {
 		String id = newId();
 		String groupId = Sites.newGroupId();
 		JsonObject bext = ext.deepCopy();
 		bext.addProperty(RegionItems.EXT_REGION, regionId);
-		// S8: a region's waits have no time limit (the wait reason is shown instead)
-		QBatch b = new QBatch(id, owner, bext, groupId, items, stages, Long.MAX_VALUE, loadChunks, false, false,
+		// S8: a region's waits have no time limit (the wait reason is shown instead), unless the caller opts in to maxWait
+		QBatch b = new QBatch(id, owner, bext, groupId, items, stages, maxWaitSeconds > 0 ? maxWaitSeconds * 20L : Long.MAX_VALUE, loadChunks, false, false,
 			autoApprove, false, null, System.currentTimeMillis());
 		b.generate = generate;
 		chunkBound(b);

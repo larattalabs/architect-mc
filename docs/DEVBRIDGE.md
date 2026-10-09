@@ -264,7 +264,7 @@ there is no DevBridge hook to make layers, so tests go through the API as anothe
 | `dev.region.prepare` | {planId, inFlight?, wait?: false} - Regions.prepare; with wait the answer comes when it is done: the PrepareView and the governor's `stats` (ticks, MSPT max, ticks over 50/100 ms, chunks/s) |
 | `dev.region.prepare.state` | {planId} - the prepare's view and governor numbers |
 | `dev.region.cancelPrepare` | {planId} - Regions.cancelPrepare |
-| `dev.region.realise` | {planId, lots?: {lotId: entry}, lotEntries?: [entry...], fitLots?: false, load?: generated:<n>\|loaded\|bounded:<n>, autoApprove?: true, stages?, force?} - Regions.realise -> {region} or {refused}; `lotEntries` fills every lot round robin, with `fitLots` the first entry that fits each lot |
+| `dev.region.realise` | {planId, lots?: {lotId: entry}, lotEntries?: [entry...], fitLots?: false, load?: generated:<n>\|loaded\|bounded:<n>, autoApprove?: true, stages?, force?, maxWait?: seconds} - Regions.realise -> {region} or {refused}; `lotEntries` fills every lot round robin, with `fitLots` the first entry that fits each lot; `maxWait` (0 = no limit) is `RealiseRequest.maxWaitSeconds` |
 | `dev.region.state` | {region} - the RegionView, the record, item counts and waits, `unfinished` (up to 40 items: key, stage, status, reason, x, z), failed items, writer starvation, the longest wait holding tickets and waits over 10 s with chunk statuses, tile streaming and generation counters |
 | `dev.region.list` | {} - every region |
 | `dev.region.remove` | {region, covered?: keep\|cascade\|refuse, force?} - Regions.remove (the group undo) -> RemoveResult + seconds |

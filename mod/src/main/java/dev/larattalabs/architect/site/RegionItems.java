@@ -487,9 +487,13 @@ public final class RegionItems {
 		}
 	}
 
-	/** A region item's wait for these reasons does not count toward its wait limit (CONTRACT "Waiting without a time limit"). */
+	/**
+	 * A region item's wait for these reasons does not count toward its wait limit (CONTRACT "Waiting without a time limit"). With
+	 * no limit (the default, S8) nothing times out anyway; a caller who opts in to {@code maxWaitSeconds} wants exactly these
+	 * staged waits bounded, so then every wait counts.
+	 */
 	static boolean uncounted(QBatch b, Reason why) {
-		return isRegion(b) && UNCOUNTED.contains(why);
+		return isRegion(b) && b.maxWaitTicks == Long.MAX_VALUE && UNCOUNTED.contains(why);
 	}
 
 	/** The item is gone (placed, failed, cancelled): its pipe and any streamed cells go. */

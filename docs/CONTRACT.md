@@ -5114,8 +5114,12 @@ disagree, this section says what shipped.
 - **Journal format 2.** Sections with more than 256 cells store positions as a 4096-bit mask (0.20 bytes per cell on
   mega_bench, was 1.59). Format 1 is still read. The index is written as version 2, so 0.10.x refuses a world 0.11.0 has
   written (a safe downgrade refusal).
-- **Waits (S8).** A region's items wait without a time limit (no `maxWait` in 6a; the wait reason is shown in the region's
-  state). Inside a region's items, a dropped item nobody threw (loot of an animal the region's own carve killed) is cleared
+- **Waits (S8).** A region's items wait without a time limit by default; the wait reason is shown in the region's
+  `RegionView.waiting`. **`maxWait` is opt-in**: `RealiseRequest.maxWaitSeconds` (a region option; 0 = no limit; DevBridge
+  `dev.region.realise {maxWait}`). With it set, every wait of an item counts toward the limit, the staged ones (`NOT_LOADED`,
+  `NOT_GENERATED`, `SIDECAR_UNAVAILABLE`) and its turn for the chunk budget included, and an item over it fails `TIMED_OUT` with
+  "waited N s for: <the wait reason>". A stage held for drift is not an item wait and does not count. The **nudge action API**
+  (an action attached to the wait reason: move closer, prepare) is deferred to 6b; 6a shows the reason text only. Inside a region's items, a dropped item nobody threw (loot of an animal the region's own carve killed) is cleared
   like a natural drop; named items and items a player threw still refuse. Regions are creative-only (N4).
 - **Still ours, more volatile changes.** Grass, mycelium and podzol turning to dirt (or back) by random ticks counts as still
   the entry's; so does water or lava in air a CELL entry cleared. The E-normal classifier adds `growth` (kelp, cane, vines,

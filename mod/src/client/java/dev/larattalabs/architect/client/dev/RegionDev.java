@@ -153,12 +153,13 @@ public final class RegionDev {
 			});
 		});
 		DevBridge.register("dev.region.realise", 120_000, "{planId, lots?: {lotId: entry}, lotEntries?: [entry...] (every lot, round robin; with fitLots: the first entry that fits each lot), "
-			+ "load?: generated:<n>|loaded|bounded:<n> (default: generated, the bound from the items), autoApprove?: true, stages?, force?} - phase 6a: "
+			+ "load?: generated:<n>|loaded|bounded:<n> (default: generated, the bound from the items), autoApprove?: true, stages?, force?, maxWait?: seconds} - phase 6a: "
 			+ "Regions.realise -> {region} or {refused}", (req, mc) -> {
 				Fields f = Fields.of(req);
 				String planId = f.nonBlank("planId");
 				boolean auto = f.optBool("autoApprove", true);
 				boolean force = f.optBool("force", false);
+				int maxWait = req.has("maxWait") ? req.get("maxWait").getAsInt() : 0;
 				LoadPolicy load = req.has("load") ? load(req.get("load").getAsString()) : null;
 				List<String> stages = null;
 				if (req.has("stages")) {
@@ -185,7 +186,7 @@ public final class RegionDev {
 							}
 						}
 					}
-					return wrap(ArchitectApi.get().regions().realise(new RealiseRequest(planId, Mode.INSTANT, null, lots, load, auto, st, force, new JsonObject())),
+					return wrap(ArchitectApi.get().regions().realise(new RealiseRequest(planId, Mode.INSTANT, null, lots, load, auto, st, force, new JsonObject(), maxWait)),
 						id -> {
 							JsonObject o = new JsonObject();
 							o.addProperty("region", id);

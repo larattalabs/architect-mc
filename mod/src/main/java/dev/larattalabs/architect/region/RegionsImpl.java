@@ -515,6 +515,9 @@ public final class RegionsImpl implements Regions {
 		rec.maxChunks = load.maxChunks();
 		rec.generate = load.generate();
 		rec.stats.addProperty("drift", drift.message());
+		if (r.maxWaitSeconds() > 0) {
+			rec.stats.addProperty("maxWaitSeconds", r.maxWaitSeconds());
+		}
 		rec.stats.addProperty("realiseStartedAt", System.currentTimeMillis());
 		rec.stats.addProperty("genTerrainAtStart", GenCounter.terrain());
 		try {
@@ -526,7 +529,7 @@ public final class RegionsImpl implements Regions {
 		}
 		Live live = new Live(rec, ir, w);
 		REGIONS.put(id, live);
-		QBatch b = Batches.queueRegion(s, id, p.owner(), r.ext(), items, stages, load.maxChunks(), load.generate(), r.autoApprove());
+		QBatch b = Batches.queueRegion(s, id, p.owner(), r.ext(), items, stages, load.maxChunks(), load.generate(), r.autoApprove(), r.maxWaitSeconds());
 		rec.groupId = b.group;
 		rec.batchId = b.id;
 		rec.state = RegionState.PLACING;
