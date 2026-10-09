@@ -19,7 +19,10 @@
 import { info, normalize, qualify } from '../blocks.mjs';
 import { variant } from '../kit.mjs';
 import { fnv64 } from '../noise.mjs';
-import { columnCells, compileShape, polygonDistance, shapeError, yrefError } from '../sdf.mjs';
+import { columnCells, compileShape, polygonDistance, sdAt, shapeError, staticY, yrefError } from '../sdf.mjs';
+import { encodeArbl } from '../realise.mjs';
+import { ruleError } from '../material.mjs';
+import { sha256Hex } from './pack.mjs';
 import { CARDINALS, cardinalOf, centreCells, circlePolygon, compassDir, crossOffsets, dominantCardinal, rightOf, segmentAxis } from './geom.mjs';
 
 export const COND = Object.freeze({ IF_NATURAL: 0, IF_SOLID_NATURAL: 1, IF_AIR_OR_FLUID: 2, ALWAYS_OURS: 3 });
@@ -41,6 +44,7 @@ export const DEFAULT_MACRO_ROLES = Object.freeze({
 const isNum = (v) => typeof v === 'number' && Number.isFinite(v);
 const isInt = Number.isInteger;
 const round = (v) => Math.floor(v + 0.5);
+const sq = (v) => v * v;
 
 /**
  * The canonical block state string of `name` or `name[k=v,...]`: `minecraft:` qualified, properties validated against
@@ -158,6 +162,15 @@ export class Region {
     this.notes = [];
     this.budgetCells = null;
     this.opCount = 0;
+    // (6b)
+    this.sideBlobs = {}; // name -> {kind, bytes}
+    this.fields = {}; // name -> {blob, type, minX, minZ, width, depth, res}
+    this.forms = []; // {id, generator, version, params, seed, bounds, part, opsFrom, opsTo}
+    this.floatingDecl = []; // {parts, anchor}
+    this.utility = [];
+    this.needVolumes = [];
+    this.volumesUsed = {}; // name -> {blob, box, sha}
+    this.meta = { paths: {}, lots: {}, parts: {} };
   }
 
   /** Declare the stages, in order (at most 64). Parts and lots must then name one of them. */
@@ -225,17 +238,88 @@ export class Region {
   /** A note for the plan report. */
   note(msg) { this.notes.push(String(msg)); return this; }
 
-  /** Register a heightfield / mask blob `{minX, minZ, width, depth, data (base64)}` for shapes to name. */
+  /**
+   * Register a heightfield / mask blob `{minX, minZ, width, depth, data (base64), kind: 'heightfield'|'mask'}` for shapes to
+   * name. (6b) Blobs are side files named by sha (format 2, CONTRACT 6b B2): the IR holds `{sha, bytes, kind}`.
+   */
   blob(name, b) {
     if (typeof name !== 'string' || !/^[a-z][a-z0-9_]{0,31}$/.test(name)) throw new Error(`blob name '${name}' must match [a-z][a-z0-9_]{0,31}`);
-    if (!b || !isInt(b.minX) || !isInt(b.minZ) || !isInt(b.width) || !isInt(b.depth) || typeof b.data !== 'string') throw new Error(`blob ${name}: needs {minX, minZ, width, depth, data (base64)}`);
-    this.blobs[name] = { minX: b.minX, minZ: b.minZ, width: b.width, depth: b.depth, data: b.data };
+    if (!b || !isInt(b.minX) || !isInt(b.minZ) || !isInt(b.width) || !isInt(b.depth) || (typeof b.data !== 'string' && !(b.values instanceof Uint8Array))) throw new Error(`blob ${name}: needs {minX, minZ, width, depth, data (base64) | values (bytes)}`);
+    const kind = b.kind ?? 'heightfield';
+    if (kind !== 'heightfield' && kind !== 'mask') throw new Error(`blob ${name}: kind must be heightfield or mask`);
+    const data = b.values instanceof Uint8Array ? b.values : Uint8Array.from(Buffer.from(b.data, 'base64'));
+    this._sideBlob(name, kind, encodeArbl(kind, b.minX, b.minZ, b.width, b.depth, data));
     return name;
+  }
+
+  _sideBlob(name, kind, bytes) {
+    if (this.sideBlobs[name]) throw new Error(`blob '${name}' is defined twice`);
+    if (bytes.length > 16 * 1024 * 1024) throw new Error(`blob ${name} is ${bytes.length} bytes (at most 16 MB)`);
+    this.sideBlobs[name] = { kind, bytes };
+  }
+
+  /** (6b) A 2D field for material rules: `{type: 'u8'|'i16', minX, minZ, width, depth, res: 1|4, values}` (a side blob). */
+  field(name, f) {
+    if (typeof name !== 'string' || !/^[a-z][a-z0-9_]{0,31}$/.test(name)) throw new Error(`field name '${name}' must match [a-z][a-z0-9_]{0,31}`);
+    if (!f || (f.type !== 'u8' && f.type !== 'i16') || ![1, 4].includes(f.res ?? 1) || ![f.minX, f.minZ, f.width, f.depth].every(isInt)) throw new Error(`field ${name}: needs {type: u8|i16, minX, minZ, width, depth, res: 1|4, values}`);
+    const n = f.width * f.depth;
+    if (!f.values || f.values.length !== n) throw new Error(`field ${name}: values must have width*depth = ${n} entries`);
+    const bytes = new Uint8Array(f.type === 'u8' ? n : 2 * n);
+    for (let i = 0; i < n; i++) {
+      const v = Math.trunc(f.values[i]);
+      if (f.type === 'u8') bytes[i] = Math.max(0, Math.min(255, v));
+      else { const w = Math.max(-32768, Math.min(32767, v)) & 0xffff; bytes[2 * i] = w & 255; bytes[2 * i + 1] = w >> 8; }
+    }
+    const blob = `field_${name}`;
+    this._sideBlob(blob, 'field', bytes);
+    this.fields[name] = { blob, type: f.type, minX: f.minX, minZ: f.minZ, width: f.width, depth: f.depth, res: f.res ?? 1 };
+    return name;
+  }
+
+  /** (6b) Declare floating parts (M3: connected to each other and to `anchor` when given, not to ground). */
+  floating(partIds, { anchor = null } = {}) {
+    if (!Array.isArray(partIds) || !partIds.length) throw new Error('floating(parts): a non-empty array of part ids');
+    for (const id of partIds) if (!this.partIds.has(id)) throw new Error(`floating: no part '${id}'`);
+    if (anchor !== null && typeof anchor !== 'string') throw new Error('floating: anchor is an anchor name');
+    this.floatingDecl.push({ parts: [...partIds], anchor });
+    for (const id of partIds) { const m = (this.meta.parts[id] ??= {}); m.floating = true; }
+    return this;
+  }
+
+  /** (6b) Ask the planner for a frozen 3D volume over `box` (the two-plan flow); returns the decoded volume when it was given. */
+  needVolume(box) {
+    const b = { minX: box.minX, minY: box.minY, minZ: box.minZ, maxX: box.maxX, maxY: box.maxY, maxZ: box.maxZ };
+    if (!Object.values(b).every(isInt)) throw new Error('needVolume: box needs integer minX..maxZ');
+    this.needVolumes.push(b);
+    const v = this.ctx.volumes?.find((x) => x.box.minX === b.minX && x.box.minY === b.minY && x.box.minZ === b.minZ && x.box.maxX === b.maxX && x.box.maxY === b.maxY && x.box.maxZ === b.maxZ);
+    if (!v) return null;
+    const name = `vol_${Object.keys(this.volumesUsed).length + 1}`;
+    this._sideBlob(name, 'volume', v.bytes);
+    this.volumesUsed[name] = { blob: name, box: b, sha: v.sha };
+    return v.decoded ?? null;
+  }
+
+  /**
+   * (6b) A generated form (plan time): `gen` is a generator result `{ops, bounds, generator, version, params, seed}`; its ops
+   * go into part `id` (created in `stage`) and its provenance into the IR's `forms`.
+   */
+  form(id, gen, { stage, set = 'terrain' } = {}) {
+    const p = this.part(id, { stage, set });
+    const from = p.ops.length;
+    for (const op of gen.ops) {
+      if (op.op === 'shape') { const e = shapeError(op.shape); if (e) throw new Error(`form ${id}: ${e}`); }
+      if (op.material && typeof op.material === 'object') { const e = ruleError(op.material.rule, `form ${id} material`); if (e) throw new Error(e); }
+      p._push({ ...op, cond: op.cond ?? COND.IF_AIR_OR_FLUID, walk: !!op.walk });
+    }
+    this.forms.push({ id, generator: gen.generator, version: gen.version, params: gen.params, seed: gen.seed, bounds: gen.bounds, part: id, opsFrom: from, opsTo: p.ops.length });
+    (this.meta.parts[id] ??= {}).kind = 'form';
+    return p;
   }
 
   /** A material: a role name (ctx.roles), a block state, or null / 'air'. Returns the block state or null (air). */
   material(v, what = 'material') {
     if (v === null || v === undefined || v === 'air' || v === 'minecraft:air') return null;
+    if (v && typeof v === 'object' && v.rule) return this.materialRule(v, what);
     if (typeof v !== 'string') throw new Error(`${what}: a material is a role name or a block state (got ${JSON.stringify(v)})`);
     if (Object.prototype.hasOwnProperty.call(this.roles, v)) return this.roles[v];
     try {
@@ -243,6 +327,16 @@ export class Region {
     } catch (e) {
       throw new Error(`${what}: '${v}' is neither a role (${Object.keys(this.roles).join(', ')}) nor a block state (${e.message})`);
     }
+  }
+
+  /** (6b) A material rule with role names resolved to block states: `{rule: {rule: [{when, mat}], default, dither}}` or the inner object. */
+  materialRule(v, what = 'material') {
+    const r = v.rule && Array.isArray(v.rule.rule) ? v.rule : v;
+    const out = { rule: r.rule.map((c) => ({ when: c.when ?? {}, mat: this.material(c.mat, `${what} rule`) })), default: this.material(r.default ?? 'rock', `${what} rule default`) };
+    if (r.dither !== undefined) out.dither = r.dither;
+    const e = ruleError(out, what, new Set(Object.keys(this.fields)));
+    if (e) throw new Error(e);
+    return { rule: out };
   }
 
   /** y of a point given as a number (absolute) or {surface: dy} (the plan survey's ground + dy) at (x, z). */
@@ -329,13 +423,28 @@ class Part {
    * Add a mass of `material` (IF_AIR_OR_FLUID). `underside: 'pillars'` adds pillars to the ground under the mass's
    * grid (every `supportEvery`) and rim, from the plan survey. 'taper' and 'rock' are phase 6b.
    */
-  add(shape, material, { underside = 'flat', supportEvery = 8, pillarMaterial } = {}) {
+  add(shape, material, { underside = 'flat', supportEvery = 8, pillarMaterial, taper = 0.6, undersideMaterial } = {}) {
     const err = shapeError(shape);
     if (err) throw new Error(`part ${this.id}: add: ${err}`);
-    if (underside === 'taper' || underside === 'rock') throw new Error(`part ${this.id}: add underside '${underside}' is phase 6b`);
-    if (underside !== 'flat' && underside !== 'pillars') throw new Error(`part ${this.id}: add underside must be flat or pillars`);
+    if (!['flat', 'pillars', 'taper', 'rock'].includes(underside)) throw new Error(`part ${this.id}: add underside must be flat, pillars, taper or rock`);
     const mat = this._mat(material, 'add material');
     this._shapeOp(shape, mat, COND.IF_AIR_OR_FLUID);
+    (this.region.meta.parts[this.id] ??= {}).kind ??= 'add';
+    if (underside === 'taper' || underside === 'rock') {
+      // (6b) a seeded noise cone under the mass: from its widest footprint at its lowest y down to a point taper * radius below
+      if (!(isNum(taper) && taper >= 0.3 && taper <= 1.5)) throw new Error(`part ${this.id}: add taper must be 0.3..1.5`);
+      const ys = staticY(shape);
+      if (!ys) throw new Error(`part ${this.id}: add underside '${underside}' needs a mass with an absolute y extent`);
+      const node = compileShape(shape, this.region.blobs);
+      const cx = (node.minX + node.maxX) / 2, cz = (node.minZ + node.maxZ) / 2;
+      const r = Math.max(1, Math.min(node.maxX - node.minX, node.maxZ - node.minZ) / 2);
+      const h = Math.max(2, round(r * taper));
+      const y0 = Math.floor(ys[0]) + 1;
+      let cone = { kind: 'cone', c: [cx, y0 - h, cz], r0: 0.5, r1: r * 0.92, h: h + 1 };
+      if (underside === 'rock') cone = { kind: 'displace', amp: 2, noise: this.region.noise(`${this.id}_underside`, { kind: 'simplex', dims: 3, scale: 6, octaves: 2 }), of: cone };
+      const um = undersideMaterial === undefined ? (underside === 'rock' ? this._mat('rock', 'underside') : mat) : this._mat(undersideMaterial, 'underside material');
+      this._shapeOp(cone, um, COND.IF_AIR_OR_FLUID);
+    }
     if (underside === 'pillars') {
       if (!(isInt(supportEvery) && supportEvery >= 1 && supportEvery <= 64)) throw new Error(`part ${this.id}: supportEvery must be 1..64`);
       const pm = pillarMaterial === undefined ? mat : this._mat(pillarMaterial, 'pillar material');
@@ -363,6 +472,70 @@ class Part {
       this._colsOp(cols, COND.IF_AIR_OR_FLUID);
     }
     return this;
+  }
+
+  // ---------------------------------------------------------------- cavern (6b)
+
+  /**
+   * A hollow: `shape` with a noise edge (`noise` spec or a field name for region.noise, `amp`), carved to air (natural
+   * cells only). `floor: 'flat'` keeps everything below `floorY` (default: the shape's lowest y + 1) and lays a floor of
+   * `floorMaterial` at floorY - 1 inside the hollow. **Light is mandatory**: a light block (`light.block`, default a
+   * lantern) on the floor grid every `light.every` (default 8) cells, so no floor cell is more than every/2 from one.
+   */
+  cavern(shape, { noise, amp = 3, floor = 'flat', floorY, light = {}, floorMaterial = 'rock' } = {}) {
+    const err = shapeError(shape);
+    if (err) throw new Error(`part ${this.id}: cavern: ${err}`);
+    if (floor !== 'flat' && floor !== 'natural') throw new Error(`part ${this.id}: cavern floor must be flat or natural`);
+    if (!light || light === false) throw new Error(`part ${this.id}: cavern light is mandatory`);
+    const every = light.every ?? 8;
+    if (!(isInt(every) && every >= 2 && every <= 14)) throw new Error(`part ${this.id}: cavern light.every must be 2..14`);
+    const ys = staticY(shape);
+    if (!ys) throw new Error(`part ${this.id}: cavern needs a shape with an absolute y extent`);
+    const nz = typeof noise === 'object' && noise ? noise : this.region.noise(typeof noise === 'string' ? noise : `${this.id}_cavern`, { kind: 'simplex', dims: 3, scale: 8, octaves: 2 });
+    let hollow = amp ? { kind: 'displace', amp, noise: nz, of: shape } : shape;
+    const fy = floorY ?? Math.floor(ys[0]) + 1;
+    if (!isInt(fy)) throw new Error(`part ${this.id}: cavern floorY must be an integer`);
+    if (floor === 'flat') hollow = { kind: 'clipY', y0: { abs: fy }, y1: null, of: hollow };
+    this._shapeOp({ kind: 'clipY', y0: null, y1: { height: 0 }, of: hollow }, null, COND.IF_NATURAL);
+    const lightM = this._mat(light.block ?? 'minecraft:lantern', 'cavern light');
+    if (lightM === null) throw new Error(`part ${this.id}: cavern light block must not be air`);
+    // plan time: the floor cells (inside the hollow at floorY) and the light grid over them
+    const node = compileShape(hollow, this.region.blobs);
+    const s = this.region.survey;
+    const floorCols = new Cols({ abs: 0 }, { abs: 0 });
+    const lights = new Cols({ abs: 0 }, { abs: 0 });
+    const x0 = Math.floor(node.minX), x1 = Math.ceil(node.maxX), z0 = Math.floor(node.minZ), z1 = Math.ceil(node.maxZ);
+    let n = 0;
+    const lit = [];
+    for (let z = z0; z <= z1; z++) for (let x = x0; x <= x1; x++) {
+      const col = { g: s.heightAt(x, z), h: s.topAt(x, z), f: s.floorAt(x, z) };
+      if (sdAt(node, x, fy, z, col) > 0 || fy > col.g) continue; // only under the ground: a hollow, not open air
+      if (floor === 'flat') floorCols.add(x, z, fy - 1, fy - 1, this._mat(floorMaterial, 'cavern floor'));
+      n++;
+      if ((x - x0) % every === Math.floor(every / 2) % every && (z - z0) % every === Math.floor(every / 2) % every) { lights.add(x, z, fy, fy, lightM); lit.push([x, fy, z]); }
+    }
+    if (!n) throw new Error(`part ${this.id}: the cavern has no floor cell under the ground at floorY ${fy}`);
+    if (floor === 'flat') this._colsOp(floorCols, COND.IF_NATURAL);
+    this._colsOp(lights, COND.IF_NATURAL);
+    const m = (this.region.meta.parts[this.id] ??= {});
+    m.kind ??= 'carve';
+    (m.caverns ??= []).push({ floorY: fy, lights: lit.length, every, bounds: { minX: x0, maxX: x1, minZ: z0, maxZ: z1, minY: fy, maxY: Math.ceil(ys[1]) } });
+    return { floorY: fy, lights: lit };
+  }
+
+  // ---------------------------------------------------------------- utility (6b)
+
+  /** A reserved corridor along a polyline [[x, y, z], ...]: no blocks; the checker keeps it clear of later ops. */
+  utility(path, { width = 3, height = 3, kind = 'generic', id } = {}) {
+    if (!Array.isArray(path) || path.length < 2) throw new Error(`part ${this.id}: utility path must be 2+ points [x, y, z]`);
+    if (!(isInt(width) && width >= 1 && width <= 9 && isInt(height) && height >= 1 && height <= 16)) throw new Error(`part ${this.id}: utility width 1..9, height 1..16`);
+    const points = path.map((p, i) => {
+      if (!Array.isArray(p) || p.length !== 3) throw new Error(`part ${this.id}: utility point ${i} must be [x, y, z]`);
+      return [round(p[0]), round(this.region.planY(p[1], p[0], p[2], `utility point ${i}`)), round(p[2])];
+    });
+    const u = { id: id ?? `${this.id}_utility_${this.region.utility.length + 1}`, stage: this.stage, part: this.id, kind: String(kind), width, height, points };
+    this.region.utility.push(u);
+    return u;
   }
 
   // ---------------------------------------------------------------- platform
@@ -419,17 +592,55 @@ class Part {
    * A closed wall between radii r0 and r1 around `c` ([x, z]), following the frozen surface: from the ground block
    * (its footing) up `height + rise` blocks. `gates: [{angle | dir, width: 3, height: 4}]` (angle: compass degrees,
    * 0 = north, clockwise): each opening has at least `width` x `height` clear over a flat threshold of walk-surface
-   * cells (path role) at the plan survey's ground at the gate, filled below with foundation. Towers and crenels are 6b.
+   * cells (path role) at the plan survey's ground at the gate, filled below with foundation. (6b) `towers: {every: 48,
+   * radius: 4, extra: 4}` (or true) puts cylinders on the wall line at most `every` apart, never over a gate; `crenels`
+   * adds merlons on every other outer-rim cell of the wall and tower tops.
    */
   ring(c, r0, r1, { height = 8, rise = 0, gates = [], material = 'structure', threshold = 'path', towers, crenels } = {}) {
     if (!Array.isArray(c) || c.length !== 2 || !c.every(isNum)) throw new Error(`part ${this.id}: ring centre must be [x, z]`);
     if (!(isNum(r0) && isNum(r1) && r0 >= 0 && r1 > r0)) throw new Error(`part ${this.id}: ring needs 0 <= r0 < r1`);
     if (!(isInt(height) && height >= 1 && height <= 64)) throw new Error(`part ${this.id}: ring height must be 1..64`);
     if (!(isInt(rise) && rise >= 0 && rise <= 64)) throw new Error(`part ${this.id}: ring rise must be 0..64`);
-    if (towers) this.region.note(`part ${this.id}: ring towers are phase 6b (ignored)`);
-    if (crenels) this.region.note(`part ${this.id}: ring crenels are phase 6b (ignored)`);
     const mat = this._mat(material, 'ring material');
     this._shapeOp({ kind: 'ring', c: [c[0], { surface: 0 }, c[1]], r0, r1, h: height + rise + 1 }, mat, COND.IF_NATURAL);
+    const top = height + rise + 1; // the wall's top cell is ground + height + rise
+    const rm = (r0 + r1) / 2;
+    const gateAt = gates.map((g) => {
+      const d = Array.isArray(g.dir) ? (() => { const l = Math.sqrt(g.dir[0] * g.dir[0] + g.dir[1] * g.dir[1]); return [g.dir[0] / l, g.dir[1] / l]; })() : compassDir(g.angle ?? 0);
+      return { x: c[0] + d[0] * rm, z: c[1] + d[1] * rm, w: g.width ?? 3 };
+    });
+    // (6b) towers on the wall line, at most `every` apart, never over a gate
+    const towerList = [];
+    if (towers) {
+      const t = towers === true ? {} : towers;
+      const every = t.every ?? 48, tr = t.radius ?? 4, extra = t.extra ?? 4;
+      if (!(isInt(every) && every >= 8 && isNum(tr) && tr >= 2 && tr <= 12 && isInt(extra) && extra >= 0 && extra <= 32)) throw new Error(`part ${this.id}: ring towers: every >= 8, radius 2..12, extra 0..32`);
+      const n = Math.max(3, Math.ceil((2 * 3.141592653589793 * rm) / every));
+      for (let i = 0; i < n; i++) {
+        const d = compassDir((360 * i) / n + (t.start ?? 0));
+        const tx = c[0] + d[0] * rm, tz = c[1] + d[1] * rm;
+        if (gateAt.some((g) => Math.sqrt(sq(g.x - tx) + sq(g.z - tz)) < g.w / 2 + tr + 2)) continue;
+        this._shapeOp({ kind: 'cylinder', c: [tx, { surface: 0 }, tz], r: tr, h: top + extra }, mat, COND.IF_NATURAL);
+        towerList.push([round(tx), round(tz), tr]);
+      }
+    }
+    // (6b) crenels: merlons on every other outer-rim cell of the wall top (checkerboard), plus the towers' rims
+    if (crenels) {
+      const cols = new Cols({ surface: 0 }, { surface: 0 });
+      const R1 = Math.ceil(r1) + 1;
+      for (let z = Math.floor(c[1] - R1); z <= Math.ceil(c[1] + R1); z++) for (let x = Math.floor(c[0] - R1); x <= Math.ceil(c[0] + R1); x++) {
+        const d = Math.sqrt(sq(x - c[0]) + sq(z - c[1]));
+        if (d >= r1 - 1 && d <= r1 && ((x + z) & 1) === 0) cols.add(x, z, top, top, mat);
+      }
+      for (const [tx, tz, tr] of towerList) {
+        for (let z = Math.floor(tz - tr); z <= Math.ceil(tz + tr); z++) for (let x = Math.floor(tx - tr); x <= Math.ceil(tx + tr); x++) {
+          const d = Math.sqrt(sq(x - tx) + sq(z - tz));
+          const textra = (towers === true ? 4 : towers.extra ?? 4);
+          if (d >= tr - 1 && d <= tr && ((x + z) & 1) === 0) cols.add(x, z, top + textra, top + textra, mat);
+        }
+      }
+      this._colsOp(cols, COND.IF_NATURAL);
+    }
     const out = [];
     gates.forEach((g, gi) => {
       const w = g.width ?? 3, h = g.height ?? 4;
@@ -536,15 +747,18 @@ class Part {
    * takes `{center: [x, z], radius, top, bottom, start: angle}` instead of a polyline and winds down from `top` to
    * `bottom` around a 3x3 core. `railing`: a role for posts on both sides.
    */
-  stair(path, { width = 3, rise = 1, landingEvery = 8, carve = true, railing = null, spiral = false, material = 'structure', id } = {}) {
+  stair(path, { width = 3, rise = 1, landingEvery = 8, carve = true, railing = null, spiral = false, material = 'structure', id, lights, _unsafeRise } = {}) {
     this._requirePath('stair');
     if (rise !== 1) throw new Error(`part ${this.id}: stair rise must be 1`);
-    const r = this._stair(path, { width, landingEvery, carve, railing, spiral, material, kind: 'stair' });
-    this.region.paths.push({ id: id ?? `${this.id}_stair_${this.region.paths.length + 1}`, stage: this.stage, part: this.id, kind: 'stair', box: r.box });
-    return r;
+    const r = this._stair(path, { width, landingEvery, carve, railing, spiral, material, kind: 'stair', lights, _unsafeRise });
+    const sid = id ?? `${this.id}_stair_${this.region.paths.length + 1}`;
+    this.region.paths.push({ id: sid, stage: this.stage, part: this.id, kind: 'stair', box: r.box });
+    this.region.meta.paths[sid] = { kind: 'stair', part: this.id, stage: this.stage, width, landingEvery, cells: r.cells };
+    (this.region.meta.parts[this.id] ??= {}).kind ??= 'path';
+    return { ...r, id: sid };
   }
 
-  _stair(path, { width = 3, landingEvery = 8, carve = true, railing = null, spiral = false, material = 'structure', kind = 'stair' }) {
+  _stair(path, { width = 3, landingEvery = 8, carve = true, railing = null, spiral = false, material = 'structure', kind = 'stair', lights, _unsafeRise }) {
     const what = `part ${this.id}: ${kind}`;
     if (!(isInt(width) && width >= 1 && width <= 9)) throw new Error(`${what}: width must be 1..9`);
     if (!(isInt(landingEvery) && landingEvery >= 2 && landingEvery <= 64)) throw new Error(`${what}: landingEvery must be 2..64`);
@@ -591,7 +805,8 @@ class Part {
       });
       const pc = pathCells(pts3.map((p) => [p[0], p[2]]));
       cells = pc.cells;
-      ys = stairProfile(cells.length, pc.vertexAt.map((ci, k) => [ci, pts3[k][1]]), landingEvery, what);
+      // (_unsafeRise: the M7 broken fixture only) a profile that rises 2 per step
+      ys = _unsafeRise ? cells.map((_, i) => pts3[0][1] + 2 * i) : stairProfile(cells.length, pc.vertexAt.map((ci, k) => [ci, pts3[k][1]]), landingEvery, what);
     }
     const offs = crossOffsets(width);
     const treads = new Cols({ abs: 0 }, { abs: 0 });
@@ -643,6 +858,16 @@ class Part {
       grow(cx - 1, core.bottom, cz - 1); grow(cx + 1, core.top, cz + 1);
     }
     this._colsOp(treads, COND.IF_NATURAL, true);
+    // (6b) lights: a lantern on a rail post (or the tread's outer edge) every `lights` cells
+    if (lights) {
+      const lm = this._mat('minecraft:lantern', `${kind} light`);
+      const lc = new Cols({ abs: 0 }, { abs: 0 });
+      for (let i = 0; i < cells.length; i += lights) {
+        const c = cells[i], k = railM !== null ? offs[offs.length - 1] + 1 : offs[offs.length - 1];
+        lc.add(c.x + c.r[0] * k, c.z + c.r[1] * k, ys[i] + (railM !== null ? 2 : 1), ys[i] + (railM !== null ? 2 : 1), lm);
+      }
+      this._colsOp(lc, COND.IF_NATURAL);
+    }
     return { cells: cells.map((c, i) => [c.x, ys[i], c.z]), box, width };
   }
 
@@ -655,22 +880,23 @@ class Part {
    * may return an absolute y to reach lower, e.g. a carved bowl's floor) at the ends and at most `every` apart.
    * `every` must be <= `maxSpan`. Arches and towers are phase 6b.
    */
-  bridge(path, { width = 3, deck = 'structure', rail = true, railMaterial = 'rail', supports = {}, maxSpan = 24, towers = false, id } = {}) {
+  bridge(path, { width = 3, deck = 'structure', rail = true, railMaterial = 'rail', supports = {}, maxSpan = 24, towers = false, id, lights, _unsafe = false } = {}) {
     this._requirePath('bridge');
     const what = `part ${this.id}: bridge`;
-    if (towers) throw new Error(`${what}: towers are phase 6b`);
+    const style = supports.style ?? 'pillar';
+    if (!['pillar', 'arch', 'ends'].includes(style)) throw new Error(`${what}: supports.style must be pillar, arch or ends`);
     const every = supports.every ?? 12;
-    if ((supports.style ?? 'pillar') !== 'pillar') throw new Error(`${what}: support style '${supports.style}' is phase 6b (6a: pillar)`);
     if (!(isInt(width) && width >= 1 && width <= 9)) throw new Error(`${what}: width must be 1..9`);
     if (!(isInt(every) && every >= 1)) throw new Error(`${what}: supports.every must be a positive integer`);
     if (!(isInt(maxSpan) && maxSpan >= 1)) throw new Error(`${what}: maxSpan must be a positive integer`);
-    if (every > maxSpan) throw new Error(`${what}: supports every ${every} leave spans over maxSpan ${maxSpan}`);
+    if (every > maxSpan && !_unsafe) throw new Error(`${what}: supports every ${every} leave spans over maxSpan ${maxSpan}`);
     if (!Array.isArray(path) || path.length < 2) throw new Error(`${what}: path must be 2+ points [x, y, z]`);
     const pts3 = path.map((p, i) => {
       if (!Array.isArray(p) || p.length !== 3 || !isNum(p[0]) || !isNum(p[2])) throw new Error(`${what}: point ${i} must be [x, y, z]`);
       return [p[0], round(this.region.planY(p[1], p[0], p[2], `${what} point ${i}`)), p[2]];
     });
     const { cells, vertexAt } = pathCells(pts3.map((p) => [p[0], p[2]]));
+    if (style === 'ends' && cells.length - 1 > maxSpan && !_unsafe) throw new Error(`${what}: an 'ends' bridge spans its whole length (${cells.length - 1}), more than maxSpan ${maxSpan}`);
     const ys = new Array(cells.length);
     for (let s = 0; s + 1 < pts3.length; s++) {
       const a = vertexAt[s], b = vertexAt[s + 1], n = b - a, dy = pts3[s + 1][1] - pts3[s][1];
@@ -707,33 +933,82 @@ class Part {
         grow(x, y + 1, z);
       }
     });
-    // supports: at both ends and at most `every` apart
+    // supports: at both ends and at most `every` apart ('ends': the deck bears on its ends only, no pillars)
     const at = [];
     for (let i = 0; i < cells.length; i += every) at.push(i);
     if (at[at.length - 1] !== cells.length - 1) at.push(cells.length - 1);
-    for (const i of at) {
-      const c = cells[i];
-      const cols = new Cols({ floor: 1 }, { abs: 0 });
-      let low = null;
-      for (const k of [...outer.slice(0, 1), ...offs, ...outer.slice(1)]) {
-        const x = c.x + c.r[0] * k, z = c.z + c.r[1] * k;
-        const b = supports.bottom ? supports.bottom(x, z) : null;
-        if (b !== null && b !== undefined) {
-          if (!isInt(b)) throw new Error(`${what}: supports.bottom must return an integer y or null`);
-          low = low === null ? b : Math.min(low, b);
+    const across = [...outer.slice(0, 1), ...offs, ...outer.slice(1)];
+    const supportM = this._mat(supports.material ?? 'structure', 'bridge support');
+    if (style !== 'ends') {
+      for (const i of at) {
+        const c = cells[i];
+        const cols = new Cols({ floor: 1 }, { abs: 0 });
+        let low = null;
+        for (const k of across) {
+          const x = c.x + c.r[0] * k, z = c.z + c.r[1] * k;
+          const b = supports.bottom ? supports.bottom(x, z) : null;
+          if (b !== null && b !== undefined) {
+            if (!isInt(b)) throw new Error(`${what}: supports.bottom must return an integer y or null`);
+            low = low === null ? b : Math.min(low, b);
+          }
+          cols.add(x, z, 0, ys[i] - 1, supportM);
+          grow(x, Math.min(s.floorAt(x, z) + 1, b ?? Infinity), z);
         }
-        cols.add(x, z, 0, ys[i] - 1, this._mat('structure', 'bridge support'));
-        grow(x, Math.min(s.floorAt(x, z) + 1, b ?? Infinity), z);
+        if (low !== null) cols.from = { min: [{ floor: 1 }, { abs: low }] };
+        this._colsOp(cols, COND.IF_AIR_OR_FLUID);
       }
-      if (low !== null) cols.from = { min: [{ floor: 1 }, { abs: low }] };
-      this._colsOp(cols, COND.IF_AIR_OR_FLUID);
+    }
+    // (6b) arches: between neighbouring supports, a parabolic soffit under the deck, `rise` deep at the piers, 1 at mid-span
+    if (style === 'arch') {
+      const archDepth = supports.rise ?? Math.max(2, Math.floor(every / 3));
+      const arch = new Cols({ abs: 0 }, { abs: 0 });
+      for (let q = 0; q + 1 < at.length; q++) {
+        const i0 = at[q], i1 = at[q + 1], half = (i1 - i0) / 2;
+        if (half <= 0) continue;
+        for (let i = i0 + 1; i < i1; i++) {
+          const t = (i - i0 - half) / half; // -1 .. 1
+          const depth = Math.max(1, round(1 + (archDepth - 1) * t * t));
+          const c = cells[i];
+          for (const k of across) {
+            const x = c.x + c.r[0] * k, z = c.z + c.r[1] * k;
+            arch.addOnce(`${x},${z},${q}`, x, z, ys[i] - depth, ys[i] - 1, supportM);
+            grow(x, ys[i] - depth, z);
+          }
+        }
+      }
+      this._colsOp(arch, COND.IF_AIR_OR_FLUID);
+    }
+    // (6b) towers: a square tower each side of the deck at both ends, from the floor to the deck + towerHeight
+    if (towers) {
+      const th = towers === true ? 6 : towers.height ?? 6;
+      for (const i of [0, cells.length - 1]) {
+        const c = cells[i];
+        for (const k of [offs[0] - 2, offs[offs.length - 1] + 2]) {
+          const x = c.x + c.r[0] * k, z = c.z + c.r[1] * k;
+          this._shapeOp({ kind: 'box', min: [x - 1, { min: [{ floor: 1 }, { abs: ys[i] }] }, z - 1], max: [x + 1, { abs: ys[i] + th }, z + 1] }, supportM, COND.IF_AIR_OR_FLUID);
+          grow(x - 1, ys[i], z - 1); grow(x + 1, ys[i] + th, z + 1);
+        }
+      }
     }
     this._colsOp(edgeCells, COND.IF_AIR_OR_FLUID);
     this._colsOp(head, COND.IF_NATURAL);
     this._colsOp(walkCells, COND.IF_AIR_OR_FLUID, true);
+    // (6b) lights: a lantern on the rail post every `lights` cells (M5 on the deck)
+    if (lights && rail) {
+      const lm = this._mat('minecraft:lantern', 'bridge light');
+      const lc = new Cols({ abs: 0 }, { abs: 0 });
+      for (let i = 0; i < cells.length; i += lights) {
+        const c = cells[i], k = outer[(i / lights) % 2];
+        lc.add(c.x + c.r[0] * k, c.z + c.r[1] * k, ys[i] + 2, ys[i] + 2, lm);
+      }
+      this._colsOp(lc, COND.IF_AIR_OR_FLUID);
+    }
     const out = { id: id ?? `${this.id}_bridge_${this.region.paths.length + 1}`, stage: this.stage, part: this.id, kind: 'bridge', box };
     this.region.paths.push(out);
-    return { cells: cells.map((c, i) => [c.x, ys[i], c.z]), supports: at, box, length: cells.length };
+    this.region.meta.paths[out.id] = { kind: 'bridge', part: this.id, stage: this.stage, width, style, maxSpan, supports: style === 'ends' ? [0, cells.length - 1] : at, ends: style === 'ends',
+      cells: cells.map((c, i) => [c.x, ys[i], c.z]), right: cells.map((c) => c.r) };
+    (this.region.meta.parts[this.id] ??= {}).kind ??= 'path';
+    return { cells: cells.map((c, i) => [c.x, ys[i], c.z]), supports: at, box, length: cells.length, id: out.id };
   }
 
   // ---------------------------------------------------------------- road
@@ -884,6 +1159,8 @@ class Part {
     this._colsOp(surfC, COND.IF_NATURAL, true);
     this._colsOp(retC, COND.IF_NATURAL);
     this.region.paths.push({ id: rid, stage: this.stage, part: this.id, kind: 'graded', box });
+    this.region.meta.paths[rid] = { kind: 'graded', part: this.id, stage: this.stage, width, cells: cells.map((c, i) => [c.x, y[i], c.z]) };
+    (this.region.meta.parts[this.id] ??= {}).kind ??= 'path';
     return rid;
   }
 
@@ -907,12 +1184,14 @@ class Part {
     const [w, d] = size;
     const mx = max ?? [w, 16, d];
     if (!Array.isArray(mx) || mx.length !== 3 || !mx.every((v) => isInt(v) && v >= 1) || mx[0] > 96 || mx[1] > 64 || mx[2] > 96) throw new Error(`${what}: max must be [x, y, z] within 96x64x96`);
-    const { maxCut = 6, maxFill = 6, edge = 'slope' } = pad;
+    const { maxCut = 6, maxFill = 6, edge = 'slope', fill: padFill = 'foundation' } = pad;
+    if (padFill !== 'foundation' && padFill !== 'none') throw new Error(`${what}: pad fill must be 'foundation' or 'none'`);
     if (!(isInt(maxCut) && maxCut >= 0 && maxCut <= 64 && isInt(maxFill) && maxFill >= 0 && maxFill <= 64)) throw new Error(`${what}: pad maxCut / maxFill must be 0..64`);
     if (edge !== 'slope' && edge !== 'wall') throw new Error(`${what}: pad edge must be slope or wall`);
     const s = this.region.survey;
     const ps = s.padStats(at[0], at[1], w, d, { floorY: floor === 'auto' ? null : floor });
     if (floor !== 'auto' && !isInt(floor)) throw new Error(`${what}: floor must be 'auto' or an integer y`);
+    if (padFill === 'none') { ps.cut = 0; ps.fill = 0; } // (6b) a pad on a generated mass: no fill to the frozen ground (M9 checks the top)
     if (ps.cut > maxCut || ps.fill > maxFill) throw new Error(`${what}: the pad needs a cut of ${ps.cut} and a fill of ${ps.fill} (max ${maxCut} / ${maxFill}) at floorY ${ps.floorY}`);
     const lstage = stage === undefined ? this.stage : this.region._stage(stage);
     const floorY = ps.floorY, t = floorY - 1;
@@ -922,16 +1201,18 @@ class Part {
     const boxMaxY = floorY + mx[1] - 1;
     if (t < c.minY || boxMaxY > c.maxY) throw new Error(`${what}: the lot box y ${t}..${boxMaxY} is outside the claim's y range`);
     const fdn = this._mat(foundation, 'lot foundation'), bat = this._mat(batter, 'lot batter');
-    const Bc = edge === 'slope' ? maxCut : 0, Bf = edge === 'slope' ? maxFill : 0;
+    const none = padFill === 'none';
+    const Bc = edge === 'slope' && !none ? maxCut : 0, Bf = edge === 'slope' && !none ? maxFill : 0;
     const box = (k, ylo, yhi) => ({ kind: 'box', min: [x0 - 1 - k, ylo, z0 - 1 - k], max: [x1 + 1 + k, yhi, z1 + 1 + k] });
     // fill: batter steps (subsurface) then the pad itself (foundation, wins where they overlap)
     if (Bf > 0) this._shapeOp({ kind: 'union', of: Array.from({ length: Bf }, (_, i) => box(i + 1, { floor: 1 }, { abs: t - 2 - i })) }, bat, COND.IF_NATURAL);
-    this._shapeOp(box(0, { floor: 1 }, { abs: t - 1 }), fdn, COND.IF_NATURAL);
+    if (!none) this._shapeOp(box(0, { floor: 1 }, { abs: t - 1 }), fdn, COND.IF_NATURAL);
     // cut: the footprint to the lot box's top, the apron and batter steps to the column top
     const cut = [{ kind: 'box', min: [x0, { abs: floorY }, z0], max: [x1, { max: [{ height: 0 }, { abs: boxMaxY }] }, z1] }];
     for (let k = 0; k <= Bc; k++) cut.push(box(k, { abs: floorY + k }, { height: 0 }));
-    this._shapeOp({ kind: 'union', of: cut }, null, COND.IF_NATURAL);
-    this._shapeOp(box(0, { abs: t }, { abs: t }), fdn, COND.IF_NATURAL);
+    if (none) this._shapeOp({ kind: 'box', min: [x0 - 1, { abs: floorY }, z0 - 1], max: [x1 + 1, { abs: boxMaxY }, z1 + 1] }, null, COND.ALWAYS_OURS);
+    else this._shapeOp({ kind: 'union', of: cut }, null, COND.IF_NATURAL);
+    this._shapeOp(box(0, { abs: t }, { abs: t }), fdn, none ? COND.ALWAYS_OURS : COND.IF_NATURAL);
     // front
     let fr = front;
     if (typeof front === 'string' && front.startsWith('toward:')) {
@@ -948,9 +1229,15 @@ class Part {
       pad: { cut: ps.cut, fill: ps.fill, maxCut, maxFill, edge },
     };
     if (brief !== undefined) lot.brief = String(brief).slice(0, 500);
+    if (none) lot.pad.fill = 'none';
     this.region.lotIds.add(id);
     this.region._addLot(lot);
-    return lot;
+    // (6b) the lot's entrance (meta): the cell in front of the middle of the front edge, on the apron, at floorY
+    const mx2 = x0 + Math.floor((w - 1) / 2), mz2 = z0 + Math.floor((d - 1) / 2);
+    const ent = { north: [mx2, floorY, z0 - 1], south: [mx2, floorY, z1 + 1], west: [x0 - 1, floorY, mz2], east: [x1 + 1, floorY, mz2] }[fr];
+    this.region.meta.lots[id] = { entrance: ent, part: this.id };
+    (this.region.meta.parts[this.id] ??= {}).kind ??= 'pad';
+    return { ...lot, entrance: ent };
   }
 
   /** The centre of this part's ops' x/z bounds (for 'toward:<part>'). */
