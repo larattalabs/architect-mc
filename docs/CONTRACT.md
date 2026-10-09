@@ -6219,3 +6219,21 @@ Where this section and the 6b text above disagree, this section wins.
   "rendering previews") so a caller's inbox isn't silent.
 - **S-6b-6** `Survey.volume` returns summary stats alongside the grid: class counts, slope and overhang fractions, and tree and
   cave presence.
+
+## 6b addition: region lot entrances (Noah, 2026-10-09)
+
+Problem seen in the S1 renders: each region lot brings the single-building approach (a dirt-path strip and a cobblestone
+apron) that clashes with the region's own roads, stairs and decks. For **region lots only** (single placements keep today's
+approach):
+- **Style:** the approach and the pad apron take their blocks from the region's `path` and `foundation` roles. Where the
+  approach meets a road or walk-surface, it uses that surface's block.
+- **Fit:** the approach runs to the nearest walk-surface cell (road, stair, bridge deck, path) by the shortest route the 4d
+  approach rules allow. If the entrance already opens onto a walk-surface within 1 cell, there is no approach. If no
+  walk-surface is within the approach's maximum length, the default length applies, in the region style, and checker M2
+  reports the lot if the player can't reach it.
+- **Apron:** the +1 apron becomes the surrounding natural ground block, or the path role where the approach crosses it.
+  It is never the default cobblestone.
+- **Gate:** S1 and crater_works renders show no default dirt-path or cobblestone cells on lot fronts (a cell count by block,
+  plus screenshots looked at). M2 player reachability is unchanged or better. Exact undo still holds. The re-run is limited to
+  the steps this touches.
+- 7a replaces this with designed entrance connectors in the settlement graph.
