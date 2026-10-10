@@ -369,21 +369,16 @@ async function item7() {
   check(pl.placed && site, `item 7: placed ${entryId} as ${site}`, pl);
   const sv = await siteView(site);
   const box = parseBox(sv.box);
-  // 3 player edits: cells the site wrote, on its lowest rows near the middle
+  // 3 player edits on cells the coming version changes (the sim's change is deterministic: its redirect rule on the head's
+  // source), so checkDelta's KEEP set has them: predicted with the kit, in world coordinates (placed unrotated at the box)
   const edits = [];
-  const cx = Math.floor((box[0] + box[3]) / 2);
-  const cz = Math.floor((box[2] + box[5]) / 2);
-  outer: for (let dy = 0; dy < 6; dy++)
-    for (let dx = -4; dx <= 4; dx++)
-      for (let dz = -4; dz <= 4; dz++) {
-        const p = [cx + dx, box[1] + dy, cz + dz];
-        const at = await call('dev.journal.at', { x: p[0], y: p[1], z: p[2] }).catch(() => null);
-        const s = JSON.stringify(at ?? {});
-        if (s.includes(site) && !/"after":"minecraft:air/.test(s) && !edits.some((e) => Math.abs(e[0] - p[0]) + Math.abs(e[2] - p[2]) < 2)) {
-          edits.push(p);
-          if (edits.length === 3) break outer;
-        }
-      }
+  for (const t of await predictChanged(entryId)) {
+    const p = [box[0] + t[0], box[1] + t[1], box[2] + t[2]];
+    const at = await call('dev.journal.at', { x: p[0], y: p[1], z: p[2] }).catch(() => null);
+    if (!JSON.stringify(at ?? {}).includes(site)) continue;
+    edits.push(p);
+    if (edits.length === 3) break;
+  }
   for (const p of edits) await cmd(`/setblock ${p.join(' ')} minecraft:gold_block`);
   check(edits.length === 3, `item 7: 3 player edits at ${edits.map((p) => p.join(',')).join('; ')}`);
   // versionOf(entry, site)
@@ -444,6 +439,45 @@ async function item7() {
   }, 'the moved versionOf', 300_000);
   check(moved.status === 'FAILED' && /base_moved/.test(moved.error ?? ''), `item 7: the head moved meanwhile: base_moved (${moved.error})`, { er, moved });
   flush('c13-ingame');
+}
+
+/** The template cells (changed, not added or removed) the sim's versionOf change of an entry rewrites. */
+async function predictChanged(entryId) {
+  const lib = path.join(GAME_DIR, 'architect', 'library', entryId);
+  const src = fs.readFileSync(path.join(lib, `${entryId}.mjs`), 'utf8');
+  // the sim's rule (sidecar/src/sim.ts simRedirect): the first int param's default up by one
+  const params = /export\s+const\s+params\s*=\s*\{([\s\S]*?)\n\};/.exec(src);
+  let next = src;
+  for (const m of params ? params[1].matchAll(/(\w+)\s*:\s*\{([^}]*type:\s*'int'[^}]*)\}/g) : []) {
+    const max = /max:\s*(-?\d+)/.exec(m[2]);
+    const def = /default:\s*(-?\d+)/.exec(m[2]);
+    if (!max || !def || Number(def[1]) >= Number(max[1])) continue;
+    next = src.replace(m[0], m[0].replace(/default:\s*-?\d+/, `default: ${Number(def[1]) + 1}`));
+    break;
+  }
+  const tmp = fs.mkdtempSync(path.join(OUT, 'predict-'));
+  execFileSync('cp', ['-c', '-R', path.join(root, 'kit'), path.join(tmp, 'kit')]);
+  fs.mkdirSync(path.join(tmp, 'kit', 'designs2'));
+  const fix = (t) => t.replace(/(['"])((?:\.\.?\/)+(?:[^'"\n]*\/)?)lib\/([\w.-]+\.mjs)\1/g, (_m, q, _p, f) => `${q}../lib/${f}${q}`);
+  fs.writeFileSync(path.join(tmp, 'kit', 'designs', `${entryId}.mjs`), fix(src));
+  fs.writeFileSync(path.join(tmp, 'kit', 'designs2', `${entryId}.mjs`), fix(next));
+  const { buildDesign } = await import(path.join(tmp, 'kit', 'build.mjs'));
+  const { diffFiles } = await import(path.join(tmp, 'kit', 'lib', 'diff.mjs'));
+  const a = await buildDesign(entryId, { out: path.join(tmp, 'a'), dir: path.join(tmp, 'kit', 'designs') });
+  const b = await buildDesign(entryId, { out: path.join(tmp, 'b'), dir: path.join(tmp, 'kit', 'designs2') });
+  const d = diffFiles(a.written.nbtPath, b.written.nbtPath, { cells: true });
+  const origin = [a.bp.ox, a.bp.oy, a.bp.oz];
+  // changed cells that are not air in v1, spread out
+  const out = [];
+  for (const c of d.cells?.changed ?? []) {
+    const t = [c[0] + origin[0], c[1] + origin[1], c[2] + origin[2]];
+    const cell = a.bp.cells.get(t.join(','));
+    if (!cell || /air$/.test(cell.state.name)) continue;
+    if (out.some((o) => Math.abs(o[0] - t[0]) + Math.abs(o[1] - t[1]) + Math.abs(o[2] - t[2]) < 3)) continue;
+    out.push(t);
+  }
+  log(`predicted ${out.length} changed cells of ${entryId} (${d.changed} changed, ${d.added} added, ${d.removed} removed)`);
+  return out;
 }
 
 async function ingame() {

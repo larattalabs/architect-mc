@@ -432,9 +432,10 @@ export class Sidecar {
       const known = e instanceof ClientError || e instanceof BlobError;
       const message = known ? (e as Error).message : `internal error: ${(e as Error).message}`;
       if (!known) this.log.error(`${msg.type}: ${(e as Error).stack ?? e}`);
-      reply({ type: 'error', message, ...(msg.id ? { re: msg.id } : {}) });
-      // (0b) a typed refusal carries its Reason name and sub-code
+      // (0b) a typed refusal carries its Reason name and sub-code: the ack goes first (a client that completes a request on
+      // the `error` frame would never see the code)
       ack(false, { error: message, ...(e instanceof RefusedError ? { code: e.code, detail: e.detail } : {}) });
+      reply({ type: 'error', message, ...(msg.id ? { re: msg.id } : {}) });
     }
   }
 
