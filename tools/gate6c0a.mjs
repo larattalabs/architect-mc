@@ -497,29 +497,52 @@ steps.flow = async () => {
   const bid = await result(await api(`bqueue ${JSON.stringify({ tag: 'flow', proximity: false, owner: OWNER, items })}`));
   await cmd('/tp @s 240 -40 200');
   const bv = await waitBatch(bid);
-  check(bv.status === 'DONE' && bv.PLACED === 3, `a batch of the 3 details: ${bv.status}, ${bv.PLACED} placed`);
+  check(bv.status === 'DONE' && bv.placed === 3, `a batch of the 3 details: ${bv.status}, ${bv.placed} placed`);
   const un = await result(await api(`sgremove ${bv.group} force`), 300_000);
   check(un.removed === true || (un.removed ?? []).length === 3, `undo: the batch's site group removed (${JSON.stringify(un).slice(0, 160)})`);
-  // the 6b live-run case: a $5 budget pauses the group (paused_budget); during extend and resume nothing is re-sent
-  await api('clear');
-  const g5 = await result(await api(`opgroup fb5 flow:b5:${nk('')} ${b64(groupReq('Flow Budget', [it3()[0], it3()[1]], { bible: bdone.bible.id, budgetUsd: 5, massingFirst: true, approvalUi: 'owner' }))}`));
-  await waitGroup(g5, (g) => g.status === 'AWAITING_APPROVAL', 'the $5 group awaiting approval');
-  await result(await api(`approve f5a ${g5} ${b64({ approve: ['a', 'b'], owner: OWNER })}`));
-  const paused = await waitGroup(g5, (g) => g.status === 'PAUSED_BUDGET' || final(g.status), 'paused_budget', 180_000);
-  await settle(3000);
-  const evs = async () => (await events()).filter((e) => e.id === g5);
-  const n0 = (await evs()).length;
-  await result(await api(`groupextend ${g5} 20`));
-  await settle(1500);
-  await result(await api(`groupresume ${g5}`));
-  const g5done = await waitGroup(g5, (g) => final(g.status), 'the $5 group', 240_000);
-  const e5 = await evs();
-  const resent = e5.slice(n0).filter((e) => e.event === 'GROUP_AWAITING_APPROVAL' || (e.event === 'GROUP_UPDATED' && e.status === 'PAUSED_BUDGET'));
-  const s5 = e5.filter((e) => e.event === 'GROUP_UPDATED').map((e) => e.seq);
-  check(paused.status === 'PAUSED_BUDGET' && resent.length === 0 && s5.every((s, i) => i === 0 || s > s5[i - 1]) && g5done.status === 'DONE',
-    `the 6b live-run case ($5 budget, measured costs): paused_budget, then extend and resume: no re-sent awaiting_approval or paused_budget (${resent.length}), seq strictly increasing, ${g5done.status}`);
-  out.budget = { paused: paused.reason, seqs: s5 };
   await stopClient();
+  return out;
+};
+
+/**
+ * Item 7's live-run case (6b): measured costs and a $5 budget. The soft pause (80%) comes inside a detail pass; with the sim's step
+ * at 2.5 s (config simStepMs, set for this step only) the caller extends and resumes before the hard cap. While extend and resume are
+ * in flight nothing re-sends awaiting_approval or paused_budget; seq strictly increases.
+ */
+steps.budget = async () => {
+  const W = 'G6C0A Flow';
+  const cfgFile = path.join(GAME_DIR, 'architect', 'sidecar-data', 'config.json');
+  const had = fs.existsSync(cfgFile) ? fs.readFileSync(cfgFile, 'utf8') : null;
+  fs.writeFileSync(cfgFile, JSON.stringify({ ...(had ? JSON.parse(had) : {}), simStepMs: 2500 }));
+  const out = {};
+  try {
+    await startClient(W, { ARCHITECT_SIM_COSTS: 'measured' });
+    await api('clear');
+    const gid = await result(await api(`opgroup b5 flow:b5:${nk('')} ${b64(groupReq('Budget Five', [it3()[0], it3()[1]], { budgetUsd: 5, concurrency: 1, massingFirst: true, approvalUi: 'owner' }))}`));
+    await waitGroup(gid, (g) => g.status === 'AWAITING_APPROVAL', 'the $5 group awaiting approval', 240_000);
+    await result(await api(`approve b5a ${gid} ${b64({ approve: ['a', 'b'], owner: OWNER })}`));
+    const paused = await until(async () => {
+      const g = await api(`group0a ${gid}`);
+      return g && (g.status === 'PAUSED_BUDGET' || final(g.status)) ? g : null;
+    }, 'paused_budget', 300_000, 250);
+    const evs = async () => (await events()).filter((e) => e.id === gid);
+    const n0 = (await evs()).length;
+    const ex = await result(await api(`groupextend ${gid} 20`));
+    const rs = await result(await api(`groupresume ${gid}`));
+    const done = await waitGroup(gid, (g) => final(g.status), 'the $5 group', 300_000);
+    const e = await evs();
+    const resent = e.slice(n0).filter((x) => x.event === 'GROUP_AWAITING_APPROVAL' || (x.event === 'GROUP_UPDATED' && x.status === 'PAUSED_BUDGET'));
+    const seqs = e.filter((x) => x.event === 'GROUP_UPDATED').map((x) => x.seq);
+    out.paused = paused;
+    out.after = { status: done.status, cost: done.cost, lastAction: done.lastAction, seqs, extend: ex, resume: rs };
+    check(paused.status === 'PAUSED_BUDGET', `measured costs, a $5 budget: the group pauses (${paused.status}: ${paused.reason})`);
+    check(resent.length === 0 && seqs.every((x, k) => k === 0 || x > seqs[k - 1]), `extend and resume in flight: no re-sent awaiting_approval or paused_budget (${resent.length}); seq strictly increasing (${seqs.join(',')})`);
+    check(done.status === 'DONE', `extended to $20 and resumed: the group ends ${done.status} at $${done.cost.usd}`);
+    await stopClient();
+  } finally {
+    if (had === null) fs.rmSync(cfgFile, { force: true });
+    else fs.writeFileSync(cfgFile, had);
+  }
   return out;
 };
 
