@@ -404,8 +404,14 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   try {
     const r = await main[sub]();
     console.log(JSON.stringify(r, null, 1)?.slice(0, 4000));
-    // check: a scenario not passing or not approved; run: a gated run bar failing (the gate runner judges by the exit code)
-    const bad = (sub === 'check' && r.some((x) => !x.ok)) || (sub === 'run' && r.metrics.rows.some((x) => x.gated && !x.pass));
+    // check: a scenario not passing or not approved. run (the gate runner judges by the exit code): a gated run bar failing,
+    // except the gallery (a person's approval) and, on the flat variant, the golden (it pins the natural run's tiles; the flat
+    // run's IR shas and 1-vs-4-worker tiles must still agree). The natural run's exactness row needs the flat sibling (run it first).
+    const flatRun = sub === 'run' && r.metrics.variant === 'flat';
+    const irSame = flatRun && new Set(JSON.parse(fs.readFileSync(path.join(r.out, 'run.json'), 'utf8')).irShas).size === 1;
+    const runBad = (x) => x.gated && !x.pass && x.id !== 'gallery' && !(flatRun && x.id === 'determinism' && irSame && r.metrics.tiles.workersSame);
+    const bad = (sub === 'check' && r.some((x) => !x.ok)) || (sub === 'run' && r.metrics.rows.some(runBad));
+    if (sub === 'run') for (const x of r.metrics.rows.filter(runBad)) console.error(`FAIL ${x.id}: ${x.value} (bar: ${x.threshold})`);
     try { L?.state.dev?.close(); } catch { /* closed */ }
     process.exit(bad ? 1 : 0);
   } catch (e) {
