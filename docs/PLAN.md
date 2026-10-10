@@ -378,7 +378,7 @@ All taken. 6c slice 0 is split as C11 asks, and a flat-village slice (C10) moves
 - **C14, revert:** already supported. `Sites.revert(siteId, toVersion, actor)` (1.7.0) and applyDelta to an older
   `toVersion`; a version is pinned while a site stands at it (`EntryVersion.pinned`, never GC'd). **New in 0a:** caller pins
   (`Library.pinVersion/unpinVersion(entryId, version, owner)`), kept while any caller pin exists.
-- **C15, a shared client UI library** (world UI, nameplates, bubbles, plate declutter, screen kit, sprites) with AgentCraft and
+- **C15, a shared client UI library** (Noah 2026-10-09: NOT YET; Steward keeps its own copy, with both MIT copyright lines) (world UI, nameplates, bubbles, plate declutter, screen kit, sprites) with AgentCraft and
   Steward. It reverses the earlier "not now". The repo and ownership decision is Noah's (a new public repo, e.g. larattalabs/*-ui).
   Coordinated with AgentCraft Main; Architect migrates after the library exists.
 - **C16, streets in survival construction batches:** roads and paths as construction sites with a BOM (Noah's survival rule:
