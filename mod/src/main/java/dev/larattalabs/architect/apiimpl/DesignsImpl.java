@@ -333,9 +333,9 @@ final class DesignsImpl implements Designs {
 				if (jobs == null) {
 					throw new IllegalStateException("the API is not ready");
 				}
-				jobs.putBlob("versionOf-site", r.owner(), ctx.siteNow()).thenCompose(now -> {
+				jobs.putBlob("versionof-site", r.owner(), ctx.siteNow()).thenCompose(now -> {
 					v.addProperty("siteNow", now);
-					return jobs.putBlob("versionOf-edits", r.owner(), ctx.edits());
+					return jobs.putBlob("versionof-edits", r.owner(), ctx.edits());
 				}).whenComplete((edits, err) -> {
 					if (err != null) {
 						wired.completeExceptionally(err);

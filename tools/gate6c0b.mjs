@@ -288,7 +288,10 @@ async function item5() {
   const aw = (await groupGet(gid)).awaiting;
   check(JSON.stringify(aw) === JSON.stringify(['house', 'well']), `item 5: awaiting approval: ${aw} (the copies wait for their archetype's approval)`);
   const ap = await result(await api(`approve a5 ${gid} ${b64({ approve: ['house', 'well'], owner: 'apitest:steward' })}`));
-  check(!ap.error, 'item 5: approve (owner)', ap);
+  if (!check(!ap.error, 'item 5: approve (owner)', ap)) {
+    flush('steward-flow');
+    return;
+  }
   const fin = await until(async () => {
     const x = await groupGet(gid);
     return ['DONE', 'FAILED', 'CANCELLED'].includes(x.status) ? x : null;
@@ -385,7 +388,10 @@ async function item7() {
   check(edits.length === 3, `item 7: 3 player edits at ${edits.map((p) => p.join(',')).join('; ')}`);
   // versionOf(entry, site)
   const vd = await result(await api(`versionof v7 ${b64({ type: 'tavern', style: 'rustic', notes: 'weathered, add a lean-to', size: [48, 34, 48] })} ${entryId} ${site}`));
-  check(typeof vd === 'string', `item 7: versionOf(${entryId}, ${site}) requested (${vd})`, vd);
+  if (!check(typeof vd === 'string', `item 7: versionOf(${entryId}, ${site}) requested (${typeof vd === 'string' ? vd : JSON.stringify(vd)})`, vd)) {
+    flush('c13-ingame');
+    return;
+  }
   const vdone = await until(async () => {
     const x = await api(`designget ${vd}`);
     return ['DONE', 'FAILED', 'CANCELLED'].includes(x?.status) ? x : null;
@@ -452,7 +458,7 @@ async function ingame() {
         await fn();
       } catch (e) {
         check(false, `${name} threw: ${e.message}`);
-        flush(name.replace(' ', ''));
+        flush(name === 'item 5' ? 'steward-flow' : 'c13-ingame');
       }
     }
   } finally {
