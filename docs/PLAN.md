@@ -313,3 +313,17 @@ borrowing the concepts:
   re-runs only the risky steps.
 - **Later (after 6c):** a headless, server-only gate mode for the exactness and MSPT checks (faster, parallel, CI-able); the
   client stays for screenshots and the gallery.
+
+### Steward round 3 (steward-mc docs/ARCHITECT-ASKS.md, Noah agreed) and where it lands
+
+- **6c slice 0, "cost and API polish"** (sidecar/API only, slice-tier gate). It's the first slice of 6c, because cost is the
+  main product constraint (Steward's phase 1 gate: $31 for 8 buildings). It takes:
+  - **C1:** copies in a design group (`count`, or "variant of item X", made as free variants or re-skins, each its own item for placement, stages and undo);
+  - **C2:** cheap small items (per-item or size-rule: no report critique, optional massing skip);
+  - **C4:** stub sidecar support for consumers' $0 end-to-end gates (stub bibles, massing-first groups with approvals and redirects, well-formed fake massings);
+  - **C5:** `Designs.estimate` re-seeded from the measured numbers;
+  - **C6:** massing placement prediction (`fitToLot` for a massing: origin, rotation);
+  - the already-queued items: minLotSize, group event seq, cost.byKind, groundHeight, durable batches and BATCH_DONE catch-up, partial roads, typed bounded-field refusals (the style cap), the extendGroup warning.
+- **C3:** plain villages in **7a**. The settlement graph, lots, connectors, paths and props work for a flat village claim
+  (a region with no terrain ops), not only for sculpted regions. 7a's contract is written that way; no separate phase.
+- **Shared client UI kit** (copies in AgentCraft, Architect and Steward): a decision for Noah later. Possibly a small shared library.
