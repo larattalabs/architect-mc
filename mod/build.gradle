@@ -72,6 +72,8 @@ test {
 	useJUnitPlatform()
 	// -Darvx.write=true rewrites the ARVX fixtures (src/test/resources/arvx, ArvxTest)
 	systemProperty "arvx.write", providers.systemProperty("arvx.write").getOrElse("false")
+	// -Dc6.evidence=<file> writes 6c 0a C6's prediction evidence (MassingPredictionTest)
+	systemProperty "c6.evidence", providers.systemProperty("c6.evidence").getOrElse("")
 	testLogging {
 		events "failed"
 		exceptionFormat "full"

@@ -533,7 +533,14 @@ public final class Sites {
 	private static @Nullable SitePlan checkSite(ServerLevel level, Blueprint bp, BlockPos origin, Rotation rotation, boolean force,
 		@Nullable Site moving, Refusals out, boolean dryRun, boolean survival, boolean layer, @Nullable String owner, @Nullable EntranceStyle style)
 		throws SiteException {
-		Blueprints.Entry entry = Blueprints.entry(bp.id());
+		return checkSite(level, bp, origin, rotation, force, moving, out, dryRun, survival, layer, owner, style, null);
+	}
+
+	/** {@link #checkSite}; {@code given}: the entry to check (a massing's), else the library's entry of {@code bp}. */
+	private static @Nullable SitePlan checkSite(ServerLevel level, Blueprint bp, BlockPos origin, Rotation rotation, boolean force,
+		@Nullable Site moving, Refusals out, boolean dryRun, boolean survival, boolean layer, @Nullable String owner, @Nullable EntranceStyle style,
+		Blueprints.@Nullable Entry given) throws SiteException {
+		Blueprints.Entry entry = given != null ? given : Blueprints.entry(bp.id());
 		if (entry == null) {
 			out.add(Reason.UNKNOWN_BLUEPRINT, "Design " + bp.id() + " has no loaded template");
 			return null;
@@ -858,6 +865,21 @@ public final class Sites {
 	/** {@link #verdict}; {@code style}: the entrance approach's style (6b), null = the design's own. */
 	public static Verdict verdict(ServerLevel level, Blueprint bp, BlockPos origin, Rotation rotation, boolean force, @Nullable String movingId,
 		boolean dryRun, @Nullable Boolean construction, boolean layer, @Nullable String owner, @Nullable EntranceStyle style) {
+		return verdict(level, bp, origin, rotation, force, movingId, dryRun, construction, layer, owner, style, null);
+	}
+
+	/**
+	 * The dry-run verdict of an entry that is not in the library (6c 0a C6: a massing version read by {@code MassingFiles}),
+	 * at a new spot. It never seeds the placement's check cache, so a later {@code place()} checks its own design.
+	 */
+	public static Verdict entryVerdict(ServerLevel level, Blueprints.Entry entry, BlockPos origin, Rotation rotation, boolean force,
+		@Nullable Boolean construction, @Nullable String owner) {
+		return verdict(level, entry.blueprint(), origin, rotation, force, null, true, construction, false, owner, null, entry);
+	}
+
+	private static Verdict verdict(ServerLevel level, Blueprint bp, BlockPos origin, Rotation rotation, boolean force, @Nullable String movingId,
+		boolean dryRun, @Nullable Boolean construction, boolean layer, @Nullable String owner, @Nullable EntranceStyle style,
+		Blueprints.@Nullable Entry given) {
 		List<Refusal> typed = new ArrayList<>();
 		Refusals out = (r, m) -> typed.add(new Refusal(r, m));
 		boolean survival = construction != null ? construction : SurvivalWorld.on();
@@ -895,8 +917,8 @@ public final class Sites {
 					}
 				}
 			}
-			site = checkSite(level, bp, origin, rotation, force, moving, out, dryRun, survival && moving == null, layer, owner, style);
-			if (site != null && typed.isEmpty() && moving == null) {
+			site = checkSite(level, bp, origin, rotation, force, moving, out, dryRun, survival && moving == null, layer, owner, style, given);
+			if (site != null && typed.isEmpty() && moving == null && given == null) {
 				checked = new Checked(checkKey(level, bp, origin, rotation, force, survival, layer, owner, style), level.getServer().getTickCount(), site);
 			}
 			List<String> notes = new ArrayList<>(site == null ? List.of() : siteNotes(site, site.found()));

@@ -68,12 +68,12 @@ class Api19Test {
 	@Test
 	void enumsAppended() {
 		Reason[] r = Reason.values();
-		assertEquals(Reason.REGION_LIMIT, r[r.length - 3]);
-		assertEquals(Reason.NO_TEMPLATE, r[r.length - 2]);
-		assertEquals(Reason.PLAYER_BLOCKS, r[r.length - 1]);
+		// 1.9.0's three, then 1.10.0's (6c 0a) appended after them
+		assertEquals(List.of(Reason.REGION_LIMIT, Reason.NO_TEMPLATE, Reason.PLAYER_BLOCKS, Reason.WORLD_STOPPED, Reason.OP_KEY_CONFLICT, Reason.TILE_SLOW),
+			List.of(r).subList(r.length - 6, r.length));
 		assertEquals(Design.Kind.REGION, Design.Kind.values()[4]);
-		assertEquals(List.of("MOVE_CLOSER", "PREPARE", "START_SIDECAR", "APPROVE_STAGE", "REPLAN"), java.util.Arrays.stream(WaitAction.Kind.values()).map(
-			Enum::name).toList());
+		assertEquals(List.of("MOVE_CLOSER", "PREPARE", "START_SIDECAR", "APPROVE_STAGE", "REPLAN", "RETRY"), java.util.Arrays.stream(WaitAction.Kind.values())
+			.map(Enum::name).toList());
 	}
 
 	@Test
