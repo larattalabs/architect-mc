@@ -494,6 +494,8 @@ steps.survroad = async () => {
   const c = await api(`roadcheck ${json(road)}`);
   const bom = c.bom ?? {};
   check(c.ok && c.construction && Object.keys(bom).length > 0, `survroad: checkRoad in construction mode gives a BOM (${json(bom)}; ${json(c.refusals)})`);
+  const grass = await api(`roadcheck ${json({ ...road, points: [[X, y, Z + 40], [X + 39, y, Z + 40]] })}`);
+  check(grass.ok && grass.construction && json(grass.bom) === '{}', `survroad: a dirt path on grass is free (BOM ${json(grass.bom)})`);
   const min = [X - 4, y - 6, Z - 4], max = [X + 43, y + 6, Z + 4];
   const h0 = await hash(min, max);
   const yh = y;
