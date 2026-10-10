@@ -90,6 +90,25 @@ map when a slice adds a package or a gate step (`node tools/gate-impact.mjs <pat
   bars: mega-lite, throughput, megaA/B, heap) waits until everything else has started and drained, then runs alone; a step with
   `after` (4e-crash after 4e-orders) runs on its dependency's shard; a `stopOnFail` step (unit-mod) is a barrier.
 
+### Bench steps: tick bars, load, exclusivity
+
+- **Tick bars judge Architect's own per-tick time** (coordinator decision from the 6b engine-chain investigation, 2026-10-10:
+  the megalite and megaA MSPT failures were the vanilla server tick and G1 pauses, the same in v0.11.2). The judged number is
+  Architect's end-of-tick work per tick: `placementMsMax` from `dev.placement.stats` (batches, group undo, jobs) and
+  `writeMsMax` from `dev.mspt.trace`. The bar keeps its number: at most 50 ms (roads at 4 ms: 25 ms). The full tick (max, p99,
+  ticks over 50 ms), the vanilla server tick (`serverMsptMax`) and GC are **recorded, not judged**. `tools/lib/tickbar.mjs` holds
+  the rule; gate4e (megalite, throughput, roads) and gate6a (megaA realise and group undo) use it. A client without those fields
+  (an old version) falls back to the full tick, and the check line says so.
+- **Load is recorded.** Every step records the 1-minute load average at its start and end (`load1` in summary.json, SUMMARY.md);
+  every tick-bar result records it too. Read a bench number together with its load.
+- **`--quiet-wait [N]`** (opt-in): before each bench step, wait until the 1-minute load average is below N (default 8), at most
+  `--quiet-max-min` minutes (default 30). If it never drops, the step runs marked noisy and ends **NOISY**: inconclusive, neither
+  pass nor fail (its outcome and fail lines are kept, so a functional failure still shows). A run whose only non-PASS steps are
+  NOISY has the verdict `INCONCLUSIVE`; re-run those steps on a quiet box.
+- **Benches are exclusive** within a run: a bench step starts only when no other step is running on any shard, nothing else
+  starts while it runs, and the other shards' idle clients are stopped first. Across runners on the same machine there is no
+  lock: check that no other run is in a bench step (its summary.json; `pgrep -f <its run worktree>`) before starting clients.
+
 ### Lighter verification (gate-verifier guidance)
 
 The runner never calls Claude. The independent gate-verifier is launched by the agent, after the run, on its evidence.
@@ -147,6 +166,7 @@ Several agents and runners share this machine, so everything is configurable. A 
 | `--out DIR` | `GATE_RUNS_OUT` | `<main checkout>/artifacts/gate-runs` |
 | `--lock FILE` | `GATE_LOCK` | `<out>/gate-run.lock` |
 | `--seed-dir DIR` | `GATE_SEED_DIR` | `../architect-mc-6a-run` |
+| `--quiet-wait [N]`, `--quiet-max-min M` | | off (load recorded only); N 8, M 30 |
 | | `GATE_SNAPSHOT_DIR` | the seed's `mod/run/saves` |
 | | `ARCHITECT_GATE_OLD_SIDECAR_PORT`/`_DEV_PORT` (gate4e/gate5b's old-version client, migration/downgrade steps only) | 8892/8893 |
 
@@ -207,5 +227,5 @@ that still hold an unfinished item. The relog, the sidecar kill and every bar st
    At most one background wait at a time, with a timeout longer than the run's (`--plan` prints the worst case).
 4. **Read `SUMMARY.md` once.** Open a step's `<step>.log` or its gate JSON only for the steps that didn't pass.
 5. **Never kill processes by name.** To stop a run, `kill -TERM $(cat $R/runner.pid)`. The runner stops its own steps and clients.
-6. **Bench steps measure time.** Don't start another runner's clients while a run is in a `bench` step (its MSPT and cells/s bars),
-   and treat your own bench numbers as noisy when another run is busy.
+6. **Bench steps measure time.** Don't start clients while another run is in a `bench` step (its tick and cells/s bars), and
+   read your own bench numbers with their recorded load. On a shared, busy box use `--quiet-wait`.

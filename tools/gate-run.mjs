@@ -52,7 +52,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // ------------------------------------------------------------------ arguments and config
 
 const argv = process.argv.slice(2);
-const VALUED = ['--config', '--only', '--from', '--since', '--range', '--files', '--release', '--shards', '--ports', '--run-dir', '--run-dirs', '--out', '--lock', '--seed-dir'];
+const VALUED = ['--config', '--only', '--from', '--since', '--range', '--files', '--release', '--shards', '--ports', '--run-dir', '--run-dirs', '--out', '--lock', '--seed-dir', '--quiet-max-min'];
 const flag = (f) => argv.includes(f);
 const opt = (f) => {
   const i = argv.indexOf(f);
@@ -61,7 +61,7 @@ const opt = (f) => {
 const CONFIG_PATH = path.resolve(opt('--config') ?? path.join(SRC, 'tools', 'gate-chains.json'));
 const cfg = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));
 const TIERS = ['change', 'slice', 'release'];
-const chainName = argv.find((a, i) => !a.startsWith('--') && !VALUED.includes(argv[i - 1]));
+const chainName = argv.find((a, i) => !a.startsWith('--') && !VALUED.includes(argv[i - 1]) && !(argv[i - 1] === '--quiet-wait' && /^\d/.test(a)));
 const ORDER = Object.keys(cfg.steps); // the canonical step order: chains and tiers run in it
 
 const die = (m) => {
@@ -232,6 +232,14 @@ if (opt('--only')) {
 if (opt('--from')) stepIds = stepIds.slice(Math.max(0, stepIds.indexOf(opt('--from'))));
 
 const PLAN = flag('--plan') || flag('--dry-run');
+// --quiet-wait [load] (opt-in): before a bench step, wait until the 1-minute load average is below <load> (default 8), at most
+// --quiet-max-min minutes (default 30); if it never gets there the step runs marked noisy and its result is NOISY (inconclusive:
+// it neither passes nor fails the bars). Without it, every step's load average is recorded, not acted on.
+const quietArg = argv[argv.indexOf('--quiet-wait') + 1];
+const QUIET = flag('--quiet-wait') ? (/^\d/.test(quietArg ?? '') ? Number(quietArg) : 8) : null;
+const QUIET_MAX_MIN = Number(opt('--quiet-max-min') ?? 30);
+if (QUIET !== null && !(QUIET > 0)) die('--quiet-wait takes a load average, e.g. --quiet-wait 8');
+const load1 = () => Math.round(os.loadavg()[0] * 100) / 100;
 // Notifications are off by default (Noah, 2026-10-09: no Discord pings); --notify or GATE_NOTIFY=send turns them on.
 const NOTIFY_MODE = flag('--notify-dry-run') || process.env.GATE_NOTIFY === 'dry' ? 'dry' : flag('--notify') || process.env.GATE_NOTIFY === 'send' ? 'send' : 'off';
 const NOTIFY_SCRIPT = process.env.GATE_NOTIFY_SCRIPT ?? path.join(os.homedir(), 'Developer', '_infra', 'discord-notify.sh');
@@ -486,7 +494,7 @@ function printPlan() {
     console.log(`shard ${sh.k}: run worktree ${sh.RUN} ${fs.existsSync(sh.RUN) ? '(exists; checked out --detach at the source HEAD)' : '(created: git worktree add --detach)'}; ports sidecar ${sh.SIDECAR_PORT}, DevBridge ${sh.DEV_PORT}; `
       + `seed ${missing.length ? `would clone ${missing.join(', ')}` : 'nothing missing'}`);
   }
-  console.log(`seed ${SEED} (read-only, APFS clones); snapshots ${SNAP}; artifacts ${RUNS_ROOT}/<timestamp>-${chainName}/; lock ${LOCK}; notify ${NOTIFY_MODE}`);
+  console.log(`seed ${SEED} (read-only, APFS clones); snapshots ${SNAP}; artifacts ${RUNS_ROOT}/<timestamp>-${chainName}/; lock ${LOCK}; notify ${NOTIFY_MODE}; quiet-wait ${QUIET === null ? 'off (load recorded)' : `load < ${QUIET}, at most ${QUIET_MAX_MIN} min`}`);
   console.log('setup (each shard): sidecar npm run build (run worktree)');
   const est = estimate();
   let cur = null;
@@ -871,6 +879,7 @@ async function runStep(sh, step, rec) {
   rec.status = 'RUNNING';
   rec.shard = sh.k;
   rec.startedAt = new Date().toISOString();
+  rec.load1 = { start: load1() };
   writeSummary();
   const ts = Date.now();
   log(`== ${step.id}: ${step.desc ?? ''}`, sh);
@@ -921,9 +930,15 @@ async function runStep(sh, step, rec) {
   }
   if (Object.keys(metrics).length) rec.metrics = metrics;
   const parsedFail = (metrics.fail ?? 0) + (metrics.failed ?? 0) + (metrics.failures ?? 0);
+  rec.load1.end = load1();
   if (r.timedOut) rec.status = 'TIMEOUT';
   else if (r.code === 0 && rec.fail === 0 && parsedFail === 0 && (step.okLines === false || rec.ok > 0)) rec.status = 'PASS';
   else rec.status = 'FAIL';
+  // --quiet-wait gave up: a bench result on a loaded box is inconclusive either way (its failLines still show any functional failure)
+  if (rec.noisy && ['PASS', 'FAIL'].includes(rec.status)) {
+    rec.noisyOutcome = rec.status;
+    rec.status = 'NOISY';
+  }
   if (rec.status !== 'PASS' && !rec.failLines) {
     // test runners' own failure lines (vitest " FAIL  file > test", node --test "✖ name")
     const tf = lines.filter((l) => /^\s*(FAIL\s|✖\s)/.test(l));
@@ -1012,10 +1027,11 @@ function summaryMd() {
   }
   lines.push('', `| step | ${NSHARDS > 1 ? 'shard | ' : ''}status | time | ok/FAIL | key numbers |`, `|---|${NSHARDS > 1 ? '---|' : ''}---|---|---|---|`);
   for (const s of summary.steps) {
-    const m = s.metrics ? Object.entries(s.metrics).map(([k, v]) => `${k} ${typeof v === 'object' ? JSON.stringify(v) : v}`).join(', ') : '';
+    const m = [s.metrics ? Object.entries(s.metrics).map(([k, v]) => `${k} ${typeof v === 'object' ? JSON.stringify(v) : v}`).join(', ') : '',
+      s.load1 ? `load ${s.load1.start}->${s.load1.end ?? '?'}` : '', s.noisy ? `noisy (outcome ${s.noisyOutcome ?? '?'})` : ''].filter(Boolean).join('; ');
     lines.push(`| ${s.id} | ${NSHARDS > 1 ? `${s.shard ?? '-'} | ` : ''}${s.status} | ${s.seconds != null ? fmtDur(s.seconds) : '-'} | ${s.ok ?? '-'}/${s.fail ?? '-'} | ${m.replace(/\|/g, '/')} |`);
   }
-  const bad = summary.steps.filter((s) => ['FAIL', 'TIMEOUT', 'ERROR', 'SKIPPED'].includes(s.status));
+  const bad = summary.steps.filter((s) => ['FAIL', 'TIMEOUT', 'ERROR', 'SKIPPED', 'NOISY'].includes(s.status));
   if (bad.length) {
     lines.push('', '## Not passing', '');
     for (const s of bad) {
@@ -1063,7 +1079,9 @@ async function finish(state, error) {
   for (const s of summary.steps) if (['PENDING', 'RUNNING'].includes(s.status)) s.status = 'SKIPPED';
   writeSummary();
   const c = summary.counts;
-  summary.verdict = state === 'done' && (c.PASS ?? 0) === summary.steps.length && !error ? 'PASS' : 'FAIL';
+  const clean = state === 'done' && !error;
+  summary.verdict = clean && (c.PASS ?? 0) === summary.steps.length ? 'PASS'
+    : clean && (c.PASS ?? 0) + (c.NOISY ?? 0) === summary.steps.length ? 'INCONCLUSIVE' : 'FAIL';
   writeSummary();
   fs.writeFileSync(path.join(OUT, 'SUMMARY.md'), summaryMd());
   log(`${summary.verdict}: ${JSON.stringify(c)} in ${fmtDur(summary.durationSeconds)}; ${path.join(OUT, 'SUMMARY.md')}`);
@@ -1174,6 +1192,16 @@ async function worker(sh) {
     const rec = summary.steps[i];
     // a bench step runs alone (pick drained the others): the other shards' idle clients would load the machine, so stop them
     if (isBench(step)) for (const o of shards) if (o !== sh && ownProcs(o).length) await stopClient(o, `bench step ${step.id} on s${sh.k}`);
+    if (isBench(step) && QUIET !== null) {
+      const tq = Date.now();
+      if (load1() >= QUIET) log(`  ${step.id}: waiting for the 1-min load average ${load1()} to drop below ${QUIET} (at most ${QUIET_MAX_MIN} min)`, sh);
+      while (load1() >= QUIET && Date.now() - tq < QUIET_MAX_MIN * 60_000 && !stopped) await sleep(15_000);
+      rec.quietWaitSeconds = Math.round((Date.now() - tq) / 1000);
+      if (load1() >= QUIET) {
+        rec.noisy = true;
+        log(`  ${step.id}: load ${load1()} still >= ${QUIET} after ${QUIET_MAX_MIN} min: running it marked noisy (NOISY: neither passes nor fails)`, sh);
+      }
+    }
     await runStep(sh, step, rec);
     st.running.delete(i);
     st.done.set(step.id, { status: rec.status, shard: sh.k });

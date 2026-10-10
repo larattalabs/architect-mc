@@ -12,6 +12,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync, spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { fromTrace as ownTrace, ownOk, describe as tickText } from './lib/tickbar.mjs';
 import { DevClient } from './lib/devclient.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -500,7 +501,9 @@ steps.megaA = async () => {
   const b = r;
   check(b.state.view.state === 'PLACED', `megaA: the region is ${b.state.view.state} (${JSON.stringify(b.state.items)})`);
   check(b.cellsPerSecond >= 15_000, `megaA: realise ${Math.round(b.cellsPerSecond)} cells/s first tile to last (bar 15k; step ${Math.round(b.stepCellsPerSecond)})`);
-  check(b.mspt.all.over50 === 0 && b.mspt.all.p99 <= 25, `megaA: MSPT during realise max ${b.mspt.all.max.toFixed(1)} ms, p99 ${b.mspt.all.p99.toFixed(1)} ms, ${b.mspt.all.over50} over 50 ms`);
+  // MSPT bars judge Architect's own per-tick time; the full tick (vanilla, GC) is recorded (docs/GATES.md "Tick bars")
+  b.ownTick = ownTrace(b.mspt);
+  check(ownOk(b.ownTick), `megaA: during realise, ${tickText(b.ownTick)}`, b.ownTick);
   check(b.generatedDuringRealise.terrain === 0, `megaA: chunks generated during realise ${b.generatedDuringRealise.terrain}`);
   const failed = Object.keys(b.state.failed ?? {});
   check(failed.length === 0, `megaA: 0 failed items (${failed.length}: ${JSON.stringify(b.state.failed).slice(0, 300)})`);
@@ -509,7 +512,9 @@ steps.megaA = async () => {
   check(b.journal.bytesPerCell <= 1 && b.journal.indexBytes <= 8 << 20 && b.journal.indexCommitP99Ms <= 100, `megaA: journal ${b.journal.bytesPerCell.toFixed(2)} bytes/cell, index ${(b.journal.indexBytes / 1048576).toFixed(2)} MB, commit p99 ${b.journal.indexCommitP99Ms.toFixed(1)} ms`);
   check(b.tiles.bytesPerCell <= 4, `megaA: wire ${b.tiles.bytesPerCell.toFixed(3)} bytes/cell; tile latency p50 ${b.tiles.latencyP50Ms.toFixed(0)} ms, p99 ${b.tiles.latencyP99Ms.toFixed(0)} ms`);
   check((b.starvedShare ?? 1) <= 0.05, `megaA: writer starved ${(100 * b.starvedShare).toFixed(1)}% of its ticks (bar 5%)`);
-  check(rm.removed && b.undo.seconds <= 600 && b.undo.mspt.all.over50 === 0, `megaA: group undo ${b.undo.seconds.toFixed(0)} s, MSPT max ${b.undo.mspt.all.max.toFixed(1)} ms`);
+  b.undo.ownTick = ownTrace(b.undo.mspt);
+  check(rm.removed && b.undo.seconds <= 600 && ownOk(b.undo.ownTick), `megaA: group undo ${b.undo.seconds.toFixed(0)} s, ${tickText(b.undo.ownTick)}`, b.undo.ownTick);
+  write('megabench-A.json', r); // again, with the own-tick numbers
   const unclassified = (b.diff.classes?.none ?? 0);
   check(unclassified === 0 && b.diff.mismatches <= 0.0001 * b.cellsWritten, `megaA: E-normal: ${b.diff.mismatches} mismatches after the group undo (${JSON.stringify(b.diff.classes)}; cap ${(0.0001 * b.cellsWritten).toFixed(0)})`);
   await leaveWorld();
