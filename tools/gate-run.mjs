@@ -6,7 +6,7 @@
 // Claude credentials in the environment, strips every ANTHROPIC_* / CLAUDE* variable from its children, and runs only the
 // stub/sim client scripts.
 //
-//   node tools/gate-run.mjs <chain> [--notify-dry-run | --no-notify] [--only a,b] [--from step]
+//   node tools/gate-run.mjs <chain> [--notify | --notify-dry-run] [--only a,b] [--from step]
 //   node tools/gate-run.mjs <chain> --plan          print the plan (steps, clients, timeouts, ports, setup) and exit
 //   node tools/gate-run.mjs --list                  the chains
 //
@@ -17,7 +17,7 @@
 // Environment: ARCHITECT_GATE_SIDECAR_PORT / ARCHITECT_GATE_DEV_PORT (the game client's pair, default 8890/8891; the gates'
 // old-version clients use 8892/8893 and eval sidecars 8894/8895), GATE_RUN_DIR (run worktree, default ../architect-mc-gate-run),
 // GATE_SEED_DIR (read-only source of .gradle-home, node_modules and the gate worlds, default ../architect-mc-6a-run),
-// GATE_RUNS_OUT, GATE_NOTIFY_SCRIPT (default ~/Developer/_infra/discord-notify.sh), GATE_NOTIFY=dry|off.
+// GATE_RUNS_OUT, GATE_NOTIFY_SCRIPT (default ~/Developer/_infra/discord-notify.sh), GATE_NOTIFY=send|dry (default off).
 
 import fs from 'node:fs';
 import os from 'node:os';
@@ -46,7 +46,7 @@ const chainName = argv.find((a, i) => !a.startsWith('--') && !['--config', '--on
 if (flag('--list') || !chainName) {
   for (const [n, s] of Object.entries(cfg.chains)) console.log(`${n.padEnd(8)} ${s.length} steps: ${s.join(' ')}`);
   if (!chainName && !flag('--list')) {
-    console.error('\nusage: node tools/gate-run.mjs <chain> [--plan] [--notify-dry-run | --no-notify] [--only a,b] [--from step]');
+    console.error('\nusage: node tools/gate-run.mjs <chain> [--plan] [--notify | --notify-dry-run] [--only a,b] [--from step]');
     process.exit(2);
   }
   process.exit(0);
@@ -63,7 +63,8 @@ if (opt('--only')) {
 if (opt('--from')) stepIds = stepIds.slice(Math.max(0, stepIds.indexOf(opt('--from'))));
 
 const PLAN = flag('--plan') || flag('--dry-run');
-const NOTIFY_MODE = flag('--no-notify') || process.env.GATE_NOTIFY === 'off' ? 'off' : flag('--notify-dry-run') || process.env.GATE_NOTIFY === 'dry' ? 'dry' : 'send';
+// Notifications are off by default (Noah, 2026-10-09: no Discord pings); --notify or GATE_NOTIFY=send turns them on.
+const NOTIFY_MODE = flag('--notify-dry-run') || process.env.GATE_NOTIFY === 'dry' ? 'dry' : flag('--notify') || process.env.GATE_NOTIFY === 'send' ? 'send' : 'off';
 const NOTIFY_SCRIPT = process.env.GATE_NOTIFY_SCRIPT ?? path.join(os.homedir(), 'Developer', '_infra', 'discord-notify.sh');
 const RUN = path.resolve(process.env.GATE_RUN_DIR ?? path.resolve(SRC, cfg.runDir));
 const SEED = path.resolve(process.env.GATE_SEED_DIR ?? path.resolve(SRC, cfg.seedFrom));
