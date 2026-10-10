@@ -471,19 +471,22 @@ cd mod && ./gradlew runClient                # a dev client in its own dev world
 ```
 
 **lab-ui.** The mod's screen kit, panels, style tokens and crash guard come from
-[lab-ui](https://github.com/larattalabs/lab-ui) (`dev.larattalabs:lab_ui`), bundled jar-in-jar. Gradle finds it in this
-order:
+[lab-ui](https://github.com/larattalabs/lab-ui) (`dev.larattalabs:lab_ui`), bundled jar-in-jar at the version
+`mod/gradle.properties` pins (`lab_ui_version`). Gradle finds it in this order:
 
-1. **A lab-ui checkout** next to this repo (`../lab-ui`), or the one `-PlabUiPath=<dir>` names, as a composite build.
-   This needs no token, so it is the way to build without a GitHub login:
-   `git clone https://github.com/larattalabs/lab-ui ../lab-ui`. Check out the tag `mod/gradle.properties` pins
-   (`lab_ui_version`, e.g. `git -C ../lab-ui checkout v0.1.0`).
-2. **GitHub Packages** (`https://maven.pkg.github.com/larattalabs/lab-ui`), which needs a token even for public
+1. **A checkout you name:** `LAB_UI_DIR=<dir>` or `-Plab_ui.dir=<dir>`, built as a composite build whatever its state.
+   The build warns UNRELEASED, because the jar would nest that code labelled as the pinned version: never publish it.
+2. **A release checkout next to this repo:** `../lab-ui`, used automatically only when it is clean and its HEAD is
+   exactly the tag `v<lab_ui_version>`. This needs no token, so it is the way to build without a GitHub login:
+   `git clone --branch v0.1.0 https://github.com/larattalabs/lab-ui ../lab-ui`. A `../lab-ui` on any other commit,
+   or with local changes, is ignored.
+3. **GitHub Packages** (`https://maven.pkg.github.com/larattalabs/lab-ui`), which needs a token even for public
    packages: `gpr.user` / `gpr.key` in `~/.gradle/gradle.properties` (a classic token with `read:packages`;
    `gh auth token` works if your gh login has that scope), or `GITHUB_ACTOR` / `GITHUB_TOKEN` in the environment.
-   `-PlabUiPath=maven` skips a checkout and uses this. CI gets it with `permissions: packages: read`.
+   CI gets it with `permissions: packages: read`.
 
-Never commit the token. Once it has been downloaded, the artifact sits in the Gradle cache and `--offline` builds work.
+With none of these the build stops and says how to fix it (an `--offline` build only warns and uses the Gradle cache).
+Never commit the token.
 
 `./gradlew runClient` creates a dev world, "Architect Dev" (creative, natural terrain, seed 2026), and opens it.
 Point it at your checkout's helper with `ARCHITECT_SIDECAR_DIR=$PWD/../sidecar`. The **DevBridge** is a small

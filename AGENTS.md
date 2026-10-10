@@ -31,11 +31,12 @@ Steward (`../steward-mc`) is the main consumer of the API.
 - **Java:** `export JAVA_HOME=/opt/homebrew/opt/openjdk@25 GRADLE_USER_HOME=$PWD/.gradle-home`. In a new worktree, first run
   `cp -c -R ~/Developer/LarattaLabs/architect-mc/.gradle-home .` (an APFS clone, cheap). Then
   `cd mod && ./gradlew build --offline`.
-- **lab-ui** (`dev.larattalabs:lab_ui`, the shared UI library, jar-in-jar): Gradle uses a `../lab-ui` checkout (or
-  `-PlabUiPath=<dir>`) as a composite build when there is one, else GitHub Packages with `gpr.user`/`gpr.key` or
-  `GITHUB_ACTOR`/`GITHUB_TOKEN` (`gh auth token`; never commit it). `-PlabUiPath=maven` forces the package. A fresh
-  `.gradle-home` lacks the package, so resolve it online once (README "Development"). Guard kinds carry the
-  `architect_mc:` prefix (lab-ui's Guard state is shared by every mod that bundles it).
+- **lab-ui** (`dev.larattalabs:lab_ui`, the shared UI library, jar-in-jar): `LAB_UI_DIR`/`-Plab_ui.dir` forces a
+  checkout (warns UNRELEASED; never publish that build); else `../lab-ui` only when clean and exactly at tag
+  `v<lab_ui_version>`; else GitHub Packages with `gpr.user`/`gpr.key` or `GITHUB_ACTOR`/`GITHUB_TOKEN` (`gh auth token`;
+  never commit it). With none, an online build stops; `--offline` uses the cache. A fresh `.gradle-home` lacks the
+  package: resolve it online once. Guard kinds carry the `architect_mc:` prefix (lab-ui's Guard state is shared by
+  every mod that bundles it).
 - **Kit:** `node --test kit/test/*.test.mjs`. **Sidecar:** `cd sidecar && npm ci && npm run check` (tests, plus the
   `dist/main.mjs` bundle). A release build fails without the bundle.
 - **In-game gates:** `node tools/gate-run.mjs <change|slice|release> --since origin/main --plan`, then run it detached.

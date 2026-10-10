@@ -16,18 +16,42 @@ include ':apitest'
 project(':apitest').projectDir = file('../apitest')
 
 // lab-ui (dev.larattalabs:lab_ui, the shared client UI library), resolved in this order:
-//  1. a lab-ui checkout as a composite build: -PlabUiPath=<dir> (gradle property), else ../lab-ui next to this repo
-//     (../../lab-ui from mod/) when it exists. Its dev.larattalabs:lab_ui replaces the published one.
-//  2. GitHub Packages (mod/build.gradle), which needs a token even for public packages: gpr.user/gpr.key in
-//     ~/.gradle/gradle.properties (or $GRADLE_USER_HOME/gradle.properties), or GITHUB_ACTOR/GITHUB_TOKEN in the environment.
-// -PlabUiPath=maven skips the checkout and uses GitHub Packages.
-def labUiPathProp = providers.gradleProperty('labUiPath').orNull
-def labUiDir = labUiPathProp == null ? file('../../lab-ui') : (labUiPathProp == 'maven' ? null : file(labUiPathProp))
-if (labUiDir != null) {
-	if (new File(labUiDir, 'settings.gradle').isFile()) {
-		includeBuild(labUiDir)
-		gradle.ext.labUiSource = 'checkout ' + labUiDir.canonicalPath
-	} else if (labUiPathProp != null) {
-		throw new GradleException("labUiPath=" + labUiPathProp + " is not a lab-ui checkout (no settings.gradle in " + labUiDir.canonicalPath + ")")
+//  1. A forced lab-ui checkout: LAB_UI_DIR=<dir> or -Plab_ui.dir=<dir>, as a composite build, whatever its state (it may be
+//     unreleased code: the build warns UNRELEASED, and the nested jar is still labelled lab_ui_version).
+//  2. The sibling checkout ../lab-ui (next to this repo; ../../lab-ui from mod/), used automatically ONLY when it is clean
+//     and its HEAD is exactly the tag v<lab_ui_version>. So a sibling on lab-ui main never ships as a release.
+//  3. GitHub Packages (mod/build.gradle), which needs a token even for public packages: gpr.user/gpr.key (gradle
+//     properties) or GITHUB_ACTOR/GITHUB_TOKEN (CI: permissions packages: read). Without a token an online build stops
+//     with instructions; an --offline build may use the Gradle cache.
+def labUiVersion = providers.gradleProperty('lab_ui_version').get()
+def labUiForced = providers.environmentVariable('LAB_UI_DIR').orElse(providers.gradleProperty('lab_ui.dir')).orNull
+def labUiGit = { File dir, List<String> args ->
+	def r = providers.exec {
+		commandLine(['git', '-C', dir.absolutePath] + args)
+		ignoreExitValue = true
+	}
+	r.result.get().exitValue == 0 ? r.standardOutput.asText.get().trim() : null
+}
+if (labUiForced) {
+	def dir = file(labUiForced)
+	if (!new File(dir, 'settings.gradle').isFile()) {
+		throw new GradleException("LAB_UI_DIR / lab_ui.dir = " + labUiForced + " is not a lab-ui checkout (no settings.gradle in " + dir.canonicalPath + ")")
+	}
+	includeBuild(dir)
+	gradle.ext.labUiSource = 'checkout ' + dir.canonicalPath + ' (forced)'
+	logger.warn("lab-ui: UNRELEASED: building against the lab-ui checkout " + dir.canonicalPath + " (LAB_UI_DIR / lab_ui.dir), not the "
+		+ "released " + labUiVersion + "; the jar nests it as lab_ui-" + labUiVersion + ". Don't publish this build.")
+} else {
+	def dir = file('../../lab-ui')
+	if (new File(dir, 'settings.gradle').isFile()) {
+		def head = labUiGit(dir, ['rev-parse', 'HEAD'])
+		def tag = labUiGit(dir, ['rev-parse', '--verify', '--quiet', 'v' + labUiVersion + '^{commit}'])
+		def dirty = labUiGit(dir, ['status', '--porcelain'])
+		if (head != null && head == tag && dirty == '') {
+			includeBuild(dir)
+			gradle.ext.labUiSource = 'checkout ' + dir.canonicalPath + ' at v' + labUiVersion
+		} else {
+			logger.info("lab-ui: ../lab-ui is not a clean checkout of v" + labUiVersion + "; using the published package")
+		}
 	}
 }
