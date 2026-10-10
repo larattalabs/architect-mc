@@ -305,12 +305,17 @@ borrowing the concepts:
 - **Slices:** each phase is split into slices of a few hours, each with its own short contract (~300 lines), a focused gate and
   a minor release. Steward reviews each slice contract in the usual window.
 - **Scope freeze:** new ideas during a slice go into the next slice unless they block the current one.
-- **Risk-tiered gates** (docs/GATES.md):
-  - change: unit tests plus mapped steps;
-  - slice: quick plus affected steps;
-  - release: the full chain plus the full independent gate-verifier, overnight and unattended.
-  Duplicate heavy checks rotate at release, and routine tiers use mega-lite. Per slice, the verifier reviews the evidence and
-  re-runs only the risky steps.
+- **Risk-tiered gates** (docs/GATES.md; `node tools/gate-run.mjs change|slice|release`):
+  - change: the unit suites plus the steps the change-impact map gives the changed paths (`--since <ref>`). Minutes.
+  - slice: quick plus the affected steps. About 30 min.
+  - release: everything, overnight and unattended, then the full independent gate-verifier.
+  Duplicate heavy checks rotate at release, deterministically by release number (or ISO week), and the skips are printed: one
+  crash suite (4e or 6a); megaA always (it carries E-normal) and E-flat always; the full megaB on engine-touching releases,
+  otherwise full and `--fast` alternate; heap every other release; throughput as warm-up plus median of 3 only when
+  realise/placement changed, otherwise one smoke run. Routine tiers use mega-lite; prepared worlds are restored by APFS clone,
+  a client stays up between compatible steps, and runs shard across 2-3 clients (own ports and worktrees each).
+  Per slice, the verifier reviews the diff and the runner's SUMMARY/evidence and re-runs only the risky steps (journal, undo,
+  survival, or whatever the diff touches); full reproduction only at release. No Discord notify.
 - **Later (after 6c):** a headless, server-only gate mode for the exactness and MSPT checks (faster, parallel, CI-able); the
   client stays for screenshots and the gallery.
 
