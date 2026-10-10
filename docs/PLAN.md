@@ -388,3 +388,7 @@ All taken. 6c slice 0 is split as C11 asks, and a flat-village slice (C10) moves
   Automatic detection of player-changed cells (block-change tracking) comes later with the 6c terrain slices. **Slice 0c**
   (area marks), before V and the terrain work.
 - **0a addition:** futures still pending at world stop fail with a distinct, typed reason (`WORLD_STOPPED`), not a generic error.
+- **Gate tiers built** (branch tools/gate-tiers, merged after 6b to avoid gate-chains conflicts). Accepted for now: megaA's
+  realise p99 bar is record-only, because the own-time bar has no percentile. **0a** adds own-time percentiles in
+  `MsptTrace.stop()` and restores the p99 bar. On merge: add `6a-forest` and the 6b scenario steps to the chains, and update
+  the apijars description.
