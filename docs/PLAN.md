@@ -282,3 +282,20 @@ Conflicts with Architect's current contracts, to resolve in those phases:
 - Roads: a RoadRequest with one bad span (TOO_STEEP, "no ground within 8") is refused whole. Place the valid part, or report the failing span's waypoint indices so the caller can trim it.
 - `DesignRequest.style` is capped at 40 chars in the sidecar's protocol and fails the whole group ("Too big"). Document the cap in the Java javadoc and refuse with a typed reason on the Java side before the round trip (also for other bounded fields).
 - `extendGroup`: warn, or report the needed amount, when the new budget's 80% soft line is still below the spend, so the group re-pauses at once (Steward hit $30 -> $35 with $31 spent).
+
+### Inputs for the 6c contract: our own world-shaping toolbox (Noah, 2026-10-09)
+
+Decided: no WorldEdit or similar dependency. Its edits would bypass the journal (no exact undo, ownership, MSPT budget, crash
+safety or survival BOM), it isn't agent-friendly or deterministic, it lags new MC versions, and its code is GPL. Build our own,
+borrowing the concepts:
+- **Terrain brushes as journal-backed region ops:** smooth, erode, melt, blend, raise/lower, overlay (topsoil over subsoil),
+  fill/drain, recursive fill, cave carve.
+- **Masks and patterns:** by block, height, slope or depth; weighted block mixes; gradients.
+- **Schematic import/export** in the Sponge `.schem` format (WorldEdit's), so builds move in and out without WorldEdit at runtime.
+- **Full block vocabulary:** colour and rare blocks (concrete, terracotta, glazed, glass, wool, amethyst, sculk, prismarine,
+  Nether and End), steered by style-bible **rarity budgets** and palette-coherence checker rules.
+- **Fluids:** water and lava features with containment checks (no flooding or fire spread past the intended volume); the
+  journal restores fluids exactly.
+- **Destruction:** carving natural terrain as now. Removing other players' or mods' blocks needs an explicit permission level
+  and an ownership check, and is always undoable.
+- **Survival:** unobtainable blocks stay creative-only; rare blocks cost real materials (Noah's survival rule applies).
