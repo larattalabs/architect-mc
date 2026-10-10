@@ -766,8 +766,9 @@ steps.pathstyle = async () => {
 
 /**
  * Build step 1, pinned in game: what 0.11.0 (the run worktree at tag v0.11.0) does with a player's non-natural block (no
- * block entity) inside a region lot's box before realise: its lot child is placed over it (the block is cleared, no
- * refusal), and the group undo gives it back. 0.12.0 refuses with PLAYER_BLOCKS (craterab).
+ * block entity) inside a region lot's box before realise: its lot child is placed over it with no refusal (the block
+ * stays where the child's template has air), and it is there after the group undo. 0.12.0 refuses with PLAYER_BLOCKS
+ * (craterab).
  */
 steps.playerblock011 = async () => {
   try { await connect(10_000); await stopClient(); } catch { /* no client */ }
@@ -800,7 +801,7 @@ steps.playerblock011 = async () => {
     const back = await blockIs(at[0], at[1], at[2], 'minecraft:red_wool');
     Object.assign(out, { version: '0.11.0', lot, regionState: st.view.state, woolAfterRealise: after.ok, removed: rm.removed, woolAfterUndo: back.ok });
     log(`  0.11.0 player block: lot ${JSON.stringify(lot)}, region ${st.view.state}, wool after realise ${after.ok}, after the undo ${back.ok}`);
-    check(lot?.state === 'placed' && !after.ok && back.ok, `playerblock011: 0.11.0 places the lot over a player's block (lot ${lot?.state}; the block cleared: ${!after.ok}) and the undo gives it back (${back.ok}): it only clears it, so 6b's PLAYER_BLOCKS is new`);
+    check(lot?.state === 'placed' && back.ok, `playerblock011: 0.11.0 does not refuse a lot over a player's block (lot ${lot?.state}; the block ${after.ok ? 'stays inside the child, which leaves that cell air' : 'is overwritten'}; after the undo it is there: ${back.ok}): no Reason, so 6b's PLAYER_BLOCKS is new`);
     await leaveWorld();
     await stopClient();
   } finally {
