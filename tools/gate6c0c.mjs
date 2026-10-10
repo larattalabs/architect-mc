@@ -568,8 +568,27 @@ steps.volsha = async () => {
   return { ref, head, sha: v.sha };
 };
 
+/**
+ * Item 4 in game: a group whose item has a 41-character style fails FIELD_LIMIT with the path, and no group is created; 40 passes.
+ */
+steps.fields = async () => {
+  await ensure();
+  await fresh('G6B 0c Fields', FLAT);
+  const c0 = (await api('groupcount')).groups;
+  const r41 = await later('fieldlimit 41', 60_000);
+  await sleep(2000);
+  const c1 = (await api('groupcount')).groups;
+  check(r41.refused?.class === 'ArchitectRefused' && r41.refused.reason === 'FIELD_LIMIT' && r41.refused.message === 'items[0].request.style: 41 characters, at most 40',
+    `fields: a 41-character style fails FIELD_LIMIT with the path (${json(r41.refused)})`);
+  check(c1 === c0, `fields: no group created (${c0} -> ${c1})`);
+  const r40 = await later('fieldlimit 40', 60_000);
+  check(!!r40.groupId, `fields: 40 characters pass (${r40.groupId ?? json(r40.refused)})`);
+  if (r40.groupId) await cmd(`/apitest groupcancel ${r40.groupId}`).catch(() => {});
+  return { r41, r40, groups: [c0, c1] };
+};
+
 steps.all = async () => {
-  for (const s of ['base', 'api', 'minlot', 'roads', 'ground', 'protect', 'tags', 'survroad']) await run(s);
+  for (const s of ['base', 'api', 'minlot', 'roads', 'ground', 'protect', 'tags', 'survroad', 'fields']) await run(s);
 };
 
 const name = process.argv[2];

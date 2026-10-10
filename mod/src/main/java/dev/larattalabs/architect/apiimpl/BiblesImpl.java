@@ -97,6 +97,10 @@ public final class BiblesImpl implements Bibles {
 
 	@Override
 	public CompletableFuture<BibleJob> request(BibleRequest r) {
+		CompletableFuture<BibleJob> limit = FieldLimits.refuse(FieldLimits.bible(r)); // 6c 0c §5
+		if (limit != null) {
+			return limit;
+		}
 		JsonObject m = DesignsImpl.msg("bible.request");
 		try {
 			m.add("request", Wire4b.bibleRequest(r));

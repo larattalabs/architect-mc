@@ -35,6 +35,8 @@ import net.minecraft.world.phys.AABB;
  *                                trunk columns, the rest, and Sample.ground vs Volume.ground per column -> pending "ground:&lt;args&gt;"
  * extend &lt;group&gt; &lt;budget&gt;        Designs.extend -> pending "extend:&lt;group&gt;"
  * tagged &lt;x&gt; &lt;y&gt; &lt;z&gt; &lt;radius&gt;   the entities near a point: type, uuid, alive, tags, name
+ * fieldlimit &lt;styleLength&gt;      Designs.requestGroup with one item whose style has that many characters -> pending "fieldlimit:&lt;n&gt;":
+ *                                {groupId} or {refused: class, reason, message}; and the group count before
  * </pre>
  */
 final class ApiTest0c {
@@ -129,6 +131,35 @@ final class ApiTest0c {
 					out.add(o);
 				}
 				return out;
+			}
+			case "fieldlimit": {
+				int n = Integer.parseInt(a[1]);
+				int before = api.designs().listGroups(null).size();
+				dev.larattalabs.architect.api.DesignRequest r = new dev.larattalabs.architect.api.DesignRequest("cabin", "s".repeat(n), null, List.of(),
+					new dev.larattalabs.architect.api.BlockSize(15, 12, 15), null, null, null, null, new JsonObject(), null, null, null, null);
+				dev.larattalabs.architect.api.GroupRequest g = new dev.larattalabs.architect.api.GroupRequest("limits " + n, "birch", null, null, new JsonObject(),
+					null, null, List.of(dev.larattalabs.architect.api.GroupRequest.Item.of("i1", r)), false, null, null, null, null);
+				CompletableFuture<JsonElement> f = api.designs().requestGroup(g).handle((id, e) -> {
+					JsonObject o = new JsonObject();
+					o.addProperty("groupsBefore", before);
+					if (e != null) {
+						Throwable c = e instanceof java.util.concurrent.CompletionException && e.getCause() != null ? e.getCause() : e;
+						JsonObject x = new JsonObject();
+						x.addProperty("class", c.getClass().getSimpleName());
+						x.addProperty("reason", c instanceof dev.larattalabs.architect.api.ArchitectRefused ar ? ar.reason().name() : null);
+						x.addProperty("message", c.getMessage());
+						o.add("refused", x);
+					} else {
+						o.addProperty("groupId", id);
+					}
+					return o;
+				});
+				return ApiTest.later("fieldlimit:" + n, f);
+			}
+			case "groupcount": {
+				JsonObject o = new JsonObject();
+				o.addProperty("groups", api.designs().listGroups(null).size());
+				return o;
 			}
 			default:
 				throw new IllegalArgumentException("unknown step " + a[0]);

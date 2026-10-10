@@ -277,7 +277,9 @@ public class ApiTest implements ModInitializer {
 			case "minlot":
 			case "ground":
 			case "extend":
-			case "tagged": {
+			case "tagged":
+			case "fieldlimit":
+			case "groupcount": {
 				return ApiTest0c.step(src, a);
 			}
 			case "place":

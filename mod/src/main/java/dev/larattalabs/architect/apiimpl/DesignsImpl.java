@@ -258,6 +258,10 @@ final class DesignsImpl implements Designs {
 
 	@Override
 	public CompletableFuture<String> request(DesignRequest r) {
+		CompletableFuture<String> limit = FieldLimits.refuse(FieldLimits.design("", r)); // 6c 0c §5: FIELD_LIMIT, nothing sent
+		if (limit != null) {
+			return limit;
+		}
 		load();
 		ClientBridge b = ApiImpl.bridge();
 		if (b == null || !b.connected()) {
@@ -492,6 +496,10 @@ final class DesignsImpl implements Designs {
 
 	@Override
 	public CompletableFuture<dev.larattalabs.architect.api.Critique> critique(String entryId, dev.larattalabs.architect.api.@Nullable CritiqueSpec spec) {
+		CompletableFuture<dev.larattalabs.architect.api.Critique> limit = FieldLimits.refuse(FieldLimits.critique("critique", spec)); // 6c 0c §5
+		if (limit != null) {
+			return limit;
+		}
 		JsonObject m;
 		try {
 			m = Wire5a.critiqueMessage(entryId, spec);
@@ -635,6 +643,10 @@ final class DesignsImpl implements Designs {
 
 	@Override
 	public CompletableFuture<String> requestGroup(GroupRequest r) {
+		CompletableFuture<String> limit = FieldLimits.refuse(FieldLimits.group(r)); // 6c 0c §5: FIELD_LIMIT, no group created
+		if (limit != null) {
+			return limit;
+		}
 		JsonObject m = msg("design.group");
 		try {
 			m.add("group", Wire4b.group(r));
@@ -916,8 +928,11 @@ final class DesignsImpl implements Designs {
 
 	@Override
 	public CompletableFuture<Group.Redirected> redirectMassing(String massingId, String notes, @Nullable String owner) {
-		if (notes == null || notes.isBlank() || notes.strip().length() > 2000) {
-			return ApiImpl.onServerFuture(CompletableFuture.failedFuture(new IllegalArgumentException("redirect notes are 1 to 2000 characters")));
+		// 6c 0c §5: FIELD_LIMIT (was IllegalArgumentException before 1.12.0)
+		CompletableFuture<Group.Redirected> limit = FieldLimits.refuse(notes == null || notes.isBlank() ? "notes: empty, at least 1 character"
+			: FieldLimits.redirect(notes, owner));
+		if (limit != null) {
+			return limit;
 		}
 		JsonObject m = msg("massing.redirect");
 		m.addProperty("massingId", massingId);
@@ -988,6 +1003,10 @@ final class DesignsImpl implements Designs {
 
 	@Override
 	public CompletableFuture<String> polish(dev.larattalabs.architect.api.PolishRequest r) {
+		CompletableFuture<String> limit = FieldLimits.refuse(FieldLimits.polish(r)); // 6c 0c §5
+		if (limit != null) {
+			return limit;
+		}
 		JsonObject m;
 		try {
 			m = Wire5b.polishMessage(r);
