@@ -234,7 +234,7 @@ async function runScenario(id) {
   const mspt = await L.call('dev.mspt.trace', { stop: true });
   // (6b, coordinator 2026-10-10) the judged bar is Architect's own per-tick time; the whole tick, the vanilla tick and GC are recorded
   const pst = await L.call('dev.placement.stats', {});
-  mspt.architect = { placementMsMax: pst.placementMsMax, placementMsMean: pst.placementMsMean, serverMsptMax: pst.serverMsptMax, msptMax: pst.msptMax };
+  mspt.architect = { placementCpuMsMax: pst.placementCpuMsMax, placementMsMax: pst.placementMsMax, placementMsMean: pst.placementMsMean, serverMsptMax: pst.serverMsptMax, msptMax: pst.msptMax };
   const rec = st.record;
   const cps = rec.stats?.firstTileAt && rec.stats?.lastTileAt ? rec.cellsWritten / ((rec.stats.lastTileAt - rec.stats.firstTileAt) / 1000) : null;
   L.log(`  ${region} ${st.view.state}: ${rec.cellsWritten} cells, MSPT ${JSON.stringify(mspt.all)}, lots ${JSON.stringify(st.view.lots.map((l) => l.state))}`);

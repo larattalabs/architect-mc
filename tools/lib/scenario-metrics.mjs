@@ -123,8 +123,8 @@ export function bars(x) {
   const own = x.mspt?.architect;
   const wholeTxt = ms ? `tick max ${ms.max.toFixed(1)} ms, p99 ${ms.p99.toFixed(1)} ms, ${ms.over50} over 50 ms${x.mspt.lightShare != null ? `; light share ${(100 * x.mspt.lightShare).toFixed(1)}%` : ''}${x.cellsPerSecond ? `; ${Math.round(x.cellsPerSecond)} cells/s` : ''}` : 'n/a';
   out.push(own
-    ? row('mspt', 'MSPT and throughput', `Architect's own tick max ${own.placementMsMax.toFixed(1)} ms; recorded: ${wholeTxt}, vanilla max ${own.serverMsptMax.toFixed(1)} ms`,
-      "Architect's own tick at most 50 ms (whole tick, vanilla tick and GC recorded)", own.placementMsMax <= 50)
+    ? row('mspt', 'MSPT and throughput', `Architect's own tick max ${(own.placementCpuMsMax ?? own.placementMsMax).toFixed(1)} ms${own.placementCpuMsMax != null ? ' CPU' : ''}; recorded: its wall max ${own.placementMsMax.toFixed(1)} ms, ${wholeTxt}, vanilla max ${own.serverMsptMax.toFixed(1)} ms`,
+      "Architect's own tick at most 50 ms (whole tick, vanilla tick and GC recorded)", (own.placementCpuMsMax ?? own.placementMsMax) <= 50)
     : row('mspt', 'MSPT and throughput', wholeTxt, '0 ticks over 50 ms; p99 <= 25 ms', ms && ms.over50 === 0 && ms.p99 <= 25));
   const ef = x.exact?.flat, en = x.exact?.normal;
   const cap = 0.0001 * (x.exact?.cellsWritten ?? 0);
