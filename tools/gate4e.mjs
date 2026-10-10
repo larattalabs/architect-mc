@@ -14,6 +14,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { execFileSync, spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { fromPlacementStats as ownTick, ownOk, describe as tickText } from './lib/tickbar.mjs';
 import { DevClient } from './lib/devclient.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -23,11 +24,14 @@ fs.mkdirSync(OUT, { recursive: true });
 // the client runs from a separate worktree (compiling here never changes a running client's classes)
 const RUN = process.env.GATE4E_RUN ? path.resolve(process.env.GATE4E_RUN) : path.resolve(root, '..', 'architect-mc-4e-run');
 const V070 = path.resolve(root, '..', 'architect-mc-v070');
+// the old-version client's ports (8892/8893 unless another run holds them: ARCHITECT_GATE_OLD_SIDECAR_PORT / _DEV_PORT)
+const OLD_SIDECAR_PORT = Number(process.env.ARCHITECT_GATE_OLD_SIDECAR_PORT || 8892);
+const OLD_DEV_PORT = Number(process.env.ARCHITECT_GATE_OLD_DEV_PORT || 8893);
 /** The two clients: the 0.8.0 gate client (run worktree) and the 0.7.0 one (tag v0.7.0, for the migration and the downgrade). */
 const CLIENTS = {
   new: { name: '0.8.0', dir: RUN, port: Number(process.env.ARCHITECT_DEV_PORT || 8891), script: 'tools/run-gate4e-client.sh', env: {} },
-  old: { name: '0.7.0', dir: V070, port: 8893, script: 'tools/run-gate4d-client.sh',
-    env: { ARCHITECT_PORT: '8892', ARCHITECT_DEV_PORT: '8893', ARCHITECT_SHOTS_DIR: path.join(OUT, 'shots070') } },
+  old: { name: '0.7.0', dir: V070, port: OLD_DEV_PORT, script: 'tools/run-gate4d-client.sh',
+    env: { ARCHITECT_PORT: String(OLD_SIDECAR_PORT), ARCHITECT_DEV_PORT: String(OLD_DEV_PORT), ARCHITECT_SHOTS_DIR: path.join(OUT, 'shots070') } },
 };
 let CUR = CLIENTS.new;
 let GAME_DIR = path.join(CUR.dir, 'mod', 'run');
@@ -711,6 +715,8 @@ steps.village = async () => {
  * rest measured 19-27k), then 3 measured runs; the bar is their median >= 15k. A median within 5% of the bar (under 15.75k) runs
  * 3 more and the median of 6 decides. The warm-up's number is recorded, not judged.
  */
+/** `throughput --smoke` (or GATE4E_THROUGHPUT_SMOKE=1): one run as a smoke test instead of warm-up + median of 3 (docs/GATES.md). */
+const THROUGHPUT_SMOKE = process.argv.includes('--smoke') || process.env.GATE4E_THROUGHPUT_SMOKE === '1';
 steps.throughput = async () => {
   if (!dev) await connect();
   await flatBase();
@@ -726,10 +732,19 @@ steps.throughput = async () => {
   const one = async (name) => {
     const r = await village('A', 4, name);
     await leaveWorld();
-    const x = { cellsPerSecond: r.stats.cellsPerSecond, wallSeconds: r.wall, msptMax: r.stats.msptMax, ticksOver50ms: r.stats.ticksOver50ms, failed: r.failed };
-    log(`  ${name}: ${Math.round(x.cellsPerSecond)} cells/s, wall ${x.wallSeconds.toFixed(2)} s, MSPT max ${x.msptMax?.toFixed(2)}, failed ${x.failed.length}`);
+    const x = { cellsPerSecond: r.stats.cellsPerSecond, wallSeconds: r.wall, msptMax: r.stats.msptMax, ticksOver50ms: r.stats.ticksOver50ms, ownTick: ownTick(r.stats), failed: r.failed };
+    log(`  ${name}: ${Math.round(x.cellsPerSecond)} cells/s, wall ${x.wallSeconds.toFixed(2)} s, ${tickText(x.ownTick)}, failed ${x.failed.length}`);
     return x;
   };
+  if (THROUGHPUT_SMOKE) {
+    // the smoke mode (docs/GATES.md, release tier when the release touches neither realise nor placement): one run, no warm-up,
+    // no median. Bars: everything placed, no tick over 50 ms. The cells/s is recorded, not judged (one cold run is not a measurement).
+    const r = await one('G4E VT4 1');
+    check(r.failed.length === 0 && ownOk(r.ownTick), `throughput (smoke, 1 run): placed everything, ${tickText(r.ownTick)} (${Math.round(r.cellsPerSecond)} cells/s recorded, not judged)`);
+    const out = { mode: 'smoke', procedure: 'one run, no warm-up; cells/s recorded, not judged', runs: [r], median: r.cellsPerSecond, spread: 0 };
+    fs.writeFileSync(path.join(OUT, 'throughput-warm.json'), JSON.stringify(out, null, 2));
+    return out;
+  }
   const warmup = await one('G4E VWarm');
   const runs = [];
   for (let k = 1; k <= 3; k++) runs.push(await one(`G4E VT4 ${k}`));
@@ -741,10 +756,11 @@ steps.throughput = async () => {
   }
   const nums = runs.map((x) => Math.round(x.cellsPerSecond));
   const spread = Math.max(...nums) - Math.min(...nums);
-  check(runs.every((x) => x.failed.length === 0 && x.ticksOver50ms === 0), `throughput: ${runs.length} measured runs placed everything, no tick over 50 ms`);
+  check(runs.every((x) => x.failed.length === 0 && ownOk(x.ownTick)), `throughput: ${runs.length} measured runs placed everything, Architect's own tick max (CPU) `
+    + `${Math.max(...runs.map((x) => x.ownTick.ownMaxMs))} ms (<= 50; full tick max ${Math.max(...runs.map((x) => x.msptMax ?? 0)).toFixed(2)} ms recorded)`);
   check(median >= 15_000, `throughput: median ${Math.round(median)} cells/s at 4 ms over ${runs.length} measured runs (${nums.join(', ')}; spread ${spread}) after one `
     + `unmeasured warm-up (${Math.round(warmup.cellsPerSecond)}); bar 15k, target 17k`);
-  const out = { procedure: 'one unmeasured warm-up per client start, then the median of 3 measured runs (6 if within 5% of the bar)', warmup, runs, median, spread };
+  const out = { mode: 'full', procedure: 'one unmeasured warm-up per client start, then the median of 3 measured runs (6 if within 5% of the bar)', warmup, runs, median, spread };
   fs.writeFileSync(path.join(OUT, 'throughput-warm.json'), JSON.stringify(out, null, 2));
   return out;
 };
@@ -786,7 +802,7 @@ steps.roads = async () => {
   const fitsRoad = await vFits();
   check(fitsRoad.every((f, i) => f.predicted[2] > fits[i].predicted[2]), 'roads (A): fitToLot facing a road predicts the shorter box',
     fitsRoad.map((f, i) => [f.key, fits[i].predicted[2], f.predicted[2]]));
-  check(a.stats.ticksOver50ms === 0 && a.stats.msptMax <= 25, `roads (A) at 4 ms: MSPT max ${a.stats.msptMax?.toFixed(2)} ms (<= 25), no tick over 50 ms`, a.stats);
+  check(ownOk(ownTick(a.stats), 25), `roads (A) at 4 ms: ${tickText(ownTick(a.stats), 25)}`, ownTick(a.stats));
   await cmd('/save-all flush');
   await leaveWorld();
   copyWorld('G4E VA', 'G4E VA1');
@@ -840,8 +856,8 @@ steps.roads = async () => {
   for (const ms of [1, 10]) {
     const t = await village('A', ms, `G4E VT${ms}`);
     tp0.push({ budgetMs: ms, wallSeconds: t.wall, failed: t.failed, ...t.stats });
-    check(t.failed.length === 0 && t.stats.ticksOver50ms === 0, `throughput ${ms} ms: village + roads ${Math.round(t.stats.cellsPerSecond)} cells/s, wall ${t.wall.toFixed(1)} s, `
-      + `MSPT max ${t.stats.msptMax?.toFixed(2)} mean ${t.stats.msptMean?.toFixed(2)}, no tick over 50 ms`, t.stats);
+    check(t.failed.length === 0 && ownOk(ownTick(t.stats)), `throughput ${ms} ms: village + roads ${Math.round(t.stats.cellsPerSecond)} cells/s, wall ${t.wall.toFixed(1)} s, `
+      + tickText(ownTick(t.stats)), ownTick(t.stats));
     await cmd('/architect budget 4');
     await leaveWorld();
   }
@@ -1028,10 +1044,10 @@ steps.sizecap = async () => {
   const KB = [-10, 54, -10, 106, 130, 110];
   const h0 = (await hash(KB)).sha256;
   const pa = await placeQueued({ id: 'keep', proximity: false, items: [{ key: 'K', bp: 'g4e_keep', at: [0, 65, 0], rot: 0, mode: 'INSTANT', force: true }] }, 'keep (flat)');
-  check(pa.done.items[0].status === 'PLACED' && pa.stats.ticksOver50ms === 0, `sizecap: the 96x64x96 keep placed at 4 ms, no tick over 50 ms (max ${pa.stats.msptMax?.toFixed(2)} ms, `
+  check(pa.done.items[0].status === 'PLACED' && ownOk(ownTick(pa.stats)), `sizecap: the 96x64x96 keep placed at 4 ms, ${tickText(ownTick(pa.stats))} (`
     + `${Math.round(pa.stats.cellsPerSecond)} cells/s)`, pa.stats);
   const ra = await removeTimed(pa.site);
-  check(ra.r.removed && ra.stats.ticksOver50ms === 0, `sizecap: its Remove, no tick over 50 ms (max ${ra.stats.msptMax?.toFixed(2)} ms, ${ra.wall.toFixed(1)} s)`, ra.stats);
+  check(ra.r.removed && ownOk(ownTick(ra.stats)), `sizecap: its Remove, ${tickText(ownTick(ra.stats))} (${ra.wall.toFixed(1)} s)`, ra.stats);
   check((await hash(KB)).sha256 === h0, 'sizecap: the keep\'s Remove is exact (box + 8)');
   out.flat = { place: pa.stats, remove: ra.stats, wallPlace: pa.wall, wallRemove: ra.wall };
   await leaveWorld();
@@ -1053,7 +1069,7 @@ steps.sizecap = async () => {
   await cmd('/gamerule random_tick_speed 300');
   const pb = await placeQueued({ id: 'keept', proximity: false, items: [{ key: 'K', bp: 'g4e_keep', at, rot: 0, mode: 'INSTANT', force: true }] }, 'keep (trees, rts 300)');
   await cmd('/gamerule random_tick_speed 0');
-  check(pb.done.items[0].status === 'PLACED' && pb.stats.ticksOver50ms === 0, `sizecap: placed by a worldgen tree with randomTickSpeed 300, no tick over 50 ms (max ${pb.stats.msptMax?.toFixed(2)} ms)`, pb.stats);
+  check(pb.done.items[0].status === 'PLACED' && ownOk(ownTick(pb.stats)), `sizecap: placed by a worldgen tree with randomTickSpeed 300, ${tickText(ownTick(pb.stats))}`, pb.stats);
   const rb = await removeTimed(pb.site);
   const hb = await hash(KB2, [], true);
   const exact = hb.sha256 === h2;
@@ -1071,12 +1087,12 @@ steps.sizecap = async () => {
   await cmd('/gamerule random_tick_speed 0');
   const j = await journal();
   const ce = (j.entries ?? []).find((e) => e.site === cs.siteId);
-  check(cs.placed && ce?.cells >= 300_000 && cst.ticksOver50ms === 0, `sizecap: a ${ce?.cells}-cell cell site placed sliced in ${((Date.now() - t0) / 1000).toFixed(1)} s, `
-    + `no tick over 50 ms (max ${cst.msptMax?.toFixed(2)} ms)`, { cs, cst });
+  check(cs.placed && ce?.cells >= 300_000 && ownOk(ownTick(cst)), `sizecap: a ${ce?.cells}-cell cell site placed sliced in ${((Date.now() - t0) / 1000).toFixed(1)} s, `
+    + tickText(ownTick(cst)), { cs, cst, ownTick: ownTick(cst) });
   const drift = await verify(cs.siteId);
   log(`  the cell site before its removal: ${drift.mismatches} of ${drift.owned} cells differ from its after ${JSON.stringify(drift.first.slice(0, 5))}`);
   const rc = await removeTimed(cs.siteId);
-  check(rc.r.removed && (await hash(CB)).sha256 === h3 && rc.stats.ticksOver50ms === 0, `sizecap: its Remove is exact, no tick over 50 ms (max ${rc.stats.msptMax?.toFixed(2)} ms)`, rc);
+  check(rc.r.removed && (await hash(CB)).sha256 === h3 && ownOk(ownTick(rc.stats)), `sizecap: its Remove is exact, ${tickText(ownTick(rc.stats))}`, rc);
   out.cells = { place: cst, remove: rc.stats, cells: ce?.cells };
   await leaveWorld();
   return out;
@@ -1194,12 +1210,7 @@ steps.megalite = async () => {
   const lst = await call('dev.placement.stats', {});
   await settle(2000);
   const pv1 = await verify(pad);
-  // (6b, coordinator 2026-10-10) MSPT bars judge Architect's own per-tick time (placementMsMax); the whole tick, the vanilla
-  // tick (serverMsptMax) and GC are recorded alongside and fail nothing on their own (a shared box under load)
-  // Architect's own = the placement ticks in the server thread's CPU time (placementCpuMsMax; wall time where the build lacks it)
-  const ownMs = (st) => st.placementCpuMsMax ?? st.placementMsMax;
-  const own = (st) => `Architect max ${ownMs(st)?.toFixed(2) ?? '-'} ms CPU; recorded: its wall max ${st.placementMsMax?.toFixed(2) ?? '-'}, tick max ${st.msptMax?.toFixed(2) ?? '-'}, vanilla max ${st.serverMsptMax?.toFixed(2) ?? '-'} ms`;
-  check(!(ownMs(lst) > 50), `megalite: one lot's undo has no Architect tick over 50 ms (${own(lst)})`, lst);
+  check(ownOk(ownTick(lst)), `megalite: one lot's undo: ${tickText(ownTick(lst))}`, ownTick(lst));
   check(rl.removed && pv1.mismatches === 0 && pv1.owned > pv0.owned, `megalite: one lot's undo leaves the pad exact (the pad owns ${pv0.owned} -> ${pv1.owned} cells, `
     + `${pv1.mismatches} differ from its after; ${lotUndo.toFixed(2)} s)`, { pv0, pv1, rl });
   await leaveWorld();
@@ -1213,18 +1224,18 @@ steps.megalite = async () => {
   const gst = await call('dev.placement.stats', {});
   const h1 = (await hash(MEGA_BOX)).sha256;
   check(g.removed && h1 === h0, `megalite: the group undo is exact (${g.restored} cells in ${groupUndo.toFixed(1)} s)`, g);
-  check(ownMs(gst) <= 50, `megalite: the group undo has no Architect tick over 50 ms (${own(gst)})`, gst);
+  check(ownOk(ownTick(gst)), `megalite: the group undo: ${tickText(ownTick(gst))}`, ownTick(gst));
   await leaveWorld();
   for (const ms of [1, 10]) {
     runs[ms] = await megaRun(`G4E Mega${ms}`, ms);
-    check(runs[ms].failed.length === 0 && ownMs(runs[ms].stats) <= 50, `megalite ${ms} ms: ${Math.round(runs[ms].stats.cellsPerSecond)} cells/s, `
-      + `wall ${runs[ms].wall.toFixed(1)} s, ${own(runs[ms].stats)}`, runs[ms].stats);
+    check(runs[ms].failed.length === 0 && ownOk(ownTick(runs[ms].stats)), `megalite ${ms} ms: ${Math.round(runs[ms].stats.cellsPerSecond)} cells/s, `
+      + `wall ${runs[ms].wall.toFixed(1)} s, ${tickText(ownTick(runs[ms].stats))}`, ownTick(runs[ms].stats));
     await leaveWorld();
   }
-  check(ownMs(r4.stats) <= 50, `megalite 4 ms: ${Math.round(r4.stats.cellsPerSecond)} cells/s, wall ${r4.wall.toFixed(1)} s, ${own(r4.stats)}`, r4.stats);
+  check(ownOk(ownTick(r4.stats)), `megalite 4 ms: ${Math.round(r4.stats.cellsPerSecond)} cells/s, wall ${r4.wall.toFixed(1)} s, ${tickText(ownTick(r4.stats))}`, ownTick(r4.stats));
   const rec = Object.fromEntries(Object.entries(runs).map(([k, r]) => [k, { cellsPerSecond: r.stats.cellsPerSecond, wallSeconds: r.wall, msptMax: r.stats.msptMax,
-    msptMean: r.stats.msptMean, ticksOver50ms: r.stats.ticksOver50ms, peakHeapMb: r.heap.peakMb, journalBytes: r.journalBytes, cells: r.cells, bytesPerCell: r.bytesPerCell }]));
-  ctx.mega = { runs: rec, lotUndoSeconds: lotUndo, groupUndoSeconds: groupUndo, groupUndoMsptMax: gst.msptMax, relog: r4.relog };
+    msptMean: r.stats.msptMean, ticksOver50ms: r.stats.ticksOver50ms, ownTick: ownTick(r.stats), peakHeapMb: r.heap.peakMb, journalBytes: r.journalBytes, cells: r.cells, bytesPerCell: r.bytesPerCell }]));
+  ctx.mega = { runs: rec, lotUndoSeconds: lotUndo, groupUndoSeconds: groupUndo, groupUndoMsptMax: gst.msptMax, groupUndoOwnTick: ownTick(gst), relog: r4.relog };
   saveCtx();
   return ctx.mega;
 };

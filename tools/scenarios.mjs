@@ -404,7 +404,8 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   try {
     const r = await main[sub]();
     console.log(JSON.stringify(r, null, 1)?.slice(0, 4000));
-    const bad = sub === 'check' && r.some((x) => !x.ok);
+    // check: a scenario not passing or not approved; run: a gated run bar failing (the gate runner judges by the exit code)
+    const bad = (sub === 'check' && r.some((x) => !x.ok)) || (sub === 'run' && r.metrics.rows.some((x) => x.gated && !x.pass));
     try { L?.state.dev?.close(); } catch { /* closed */ }
     process.exit(bad ? 1 : 0);
   } catch (e) {
