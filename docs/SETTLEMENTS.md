@@ -1173,3 +1173,19 @@ cost nothing.
 
 - The narrow form of 7a's "freeze before lots" shipped in 6a: a region lot or road freezes its not-yet-frozen columns before
   its check and capture, so any stage order is safe. 7a still owns the general form (site lots, non-pad lots).
+
+## Agreed with Steward (2026-10-09, after its round-3 briefing)
+
+- **6d is scheduled, not open-ended.** It lands right after 7a, as 7a's follow-on slices. It covers delta apply to a realised
+  region's lots and connectors, and adding lots or a district to a realised region. Until then Steward evolves villages with
+  per-site `checkDelta`/`applyDelta`. Once C3 makes villages regions, region evolution has to exist.
+- **District split:** Steward owns proposing, claiming and approving a district and its purpose/brief. Architect owns its
+  layout (lots, routing, links to the existing settlement). API on the 6c/7a list: **add a district to an existing region**,
+  linked through the settlement graph (6c lays it out; 7a links it in the graph).
+- **The steward as a mover:** Steward's own mob entity paths with vanilla navigation on flat villages before 7a. From 7a on it
+  reads typed links from `nav.json`, with mover set `steward` (§15.2).
+- **One representation for repeats:** a program entry `count` gives an archetype plus variants. 6c slice 0's C1 copies use
+  it, and 7b's site variants ("3 designs, 12 placements") extend it, so Steward maps it once.
+- **7c input:** Steward's concept card **program** (role, type, count, footprint, landmark, notes;
+  steward-mc fixtures/real/*_program.json) is the input to the derived settlement brief. The planner builds on it rather than
+  starting again.
