@@ -341,3 +341,30 @@ borrowing the concepts:
     update, applied per lot, keeping each lot's adaptation.
   - **7c reuse across settlements:** promoted shapes are offered as a card choice, never applied automatically, and are
     re-checked, refitted and re-skinned to the new bible.
+
+### Steward round 4 (C7-C12; steward-mc docs/ARCHITECT-ASKS.md "Round 4", from GPT-6.1 reviews, adopted by Noah) and the new order
+
+All taken. 6c slice 0 is split as C11 asks, and a flat-village slice (C10) moves ahead of the terrain work:
+1. **Slice 0a, consumer support:**
+   - C4 stub sidecar for consumers' $0 e2e gates (Steward waits only on this);
+   - C5 estimates by kind, re-seeded from measured numbers;
+   - C6 massing placement prediction;
+   - durable finished batches with BATCH_DONE catch-up;
+   - **C9 caller operation ids**: an idempotency key on `bibles().request`, `designs().requestGroup` and `sites().queue` (same key returns the same job, group or batch), plus lookup by key;
+   - **C7 cost and time breakdown per stage** on Group and in the job log: bible, massing, detail, repair rounds, critique, queueing, usage holds;
+   - group event `seq`, `cost.byKind`, and `Bibles.cancel` returning a future.
+2. **Slice 0b, reuse and bounded effort:**
+   - C1 copies with the safeguards;
+   - C2 no report critique on small items;
+   - **C8 bounded effort for S-footprint buildings**: lower caps on repair rounds and tokens, and reusable kit components (racks, stalls, wells, sheds);
+   - **C7's benchmark**: a unique-building settlement against a repeat-heavy one, to show which stage to cut. Steward's targets: a starter settlement under $5, the first usable result within 15 min. Greywater Hamlet was $13.76 and 70 min.
+3. **Slice 0c, placement polish:**
+   - minLotSize and a recommended rect;
+   - partial roads, or the failing span reported;
+   - groundHeight under trees;
+   - typed refusals for bounded fields (the style cap);
+   - the extendGroup re-pause warning.
+4. **Slice V, flat village (C10):** on a flat claim: lots, a path from each door to the street, one shared space (a square or well) and a few props. Built so 7a's settlement graph and connectors generalise it later.
+5. Then 6c's terrain slices (passes, toolbox, generators, fluids, schematics), then 7a.
+- **C12:** VillageLayout retires only behind a joint 7a/6d gate: an existing Steward settlement migrates onto Architect lots and can still be updated (6d) and undone.
+- Not now (Steward agrees): shared UI extraction, schematic interchange urgency, shape promotion. They wait for an observed need.
