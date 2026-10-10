@@ -127,6 +127,8 @@ final class ApiTestBatch {
 							o = o.withCentreOn(FitOptions.CentreOn.BOX);
 						} else if (a[i].startsWith("setback=")) {
 							o = o.withSetback(Integer.parseInt(a[i].substring(8)));
+						} else if (a[i].startsWith("owner=")) {
+							o = o.withOwner(a[i].substring(6)); // 1.12.0
 						}
 					}
 					return fit(sites.fitToLot(a[1], lot, Direction.byName(a[3]), o));
@@ -335,6 +337,7 @@ final class ApiTestBatch {
 		f.predictedRestoreBox().ifPresent(b -> o.add("predictedRestoreBox", box(b)));
 		o.addProperty("ok", f.ok());
 		o.add("refusals", ApiTest.refusals(f.verdict().refusals()));
+		o.add("recommendedLot", box(f.recommendedLot())); // 1.12.0
 		return o;
 	}
 

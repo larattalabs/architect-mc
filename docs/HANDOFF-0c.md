@@ -39,4 +39,5 @@ names win). API 1.12.0, mod 0.15.0 (after 0a = 1.10.0 and 0b = 1.11.0). Ports 89
 ## Resume
 
 - Build: `export JAVA_HOME=/opt/homebrew/opt/openjdk@25 GRADLE_USER_HOME=$PWD/.gradle-home; cd mod && ./gradlew build --offline`.
+- Merge policy (coordinator, 2026-10-10): agents can't push to main. After the slice tier and the gate-verifier pass, push `slice/0c` and report "ready to merge"; the coordinator merges, tags and publishes.
 - The 0.14.0 baseline jars (apitest + mod) don't exist until 0b merges; archive them into `artifacts/gate6c0c/v0140/` then.
