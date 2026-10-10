@@ -278,3 +278,7 @@ Conflicts with Architect's current contracts, to resolve in those phases:
 - Region and plain-lot entrance style: in 6b (CONTRACT "6b addition: region lot entrances").
 - Cost stays the main product constraint: a 4-design group with bible and report critiques took about 25-30 min and $12.3 notional.
 - Durable finished batches: keep finished `BatchView`s across restarts, and catch up BATCH_DONE once per batch (like JOB_DONE), so a consumer that missed it before a stop can resume (Steward review, 2026-10-09).
+- Steward phase-1 gate (2026-10-09, 8 buildings): measured detail $2.50-4.60 with a report critique (landmark $3.72), massing ~$0.19, bible $1.16. Re-seed `Designs.estimate` from these (above the 4b seeds of $0.8-2.5).
+- Roads: a RoadRequest with one bad span (TOO_STEEP, "no ground within 8") is refused whole. Place the valid part, or report the failing span's waypoint indices so the caller can trim it.
+- `DesignRequest.style` is capped at 40 chars in the sidecar's protocol and fails the whole group ("Too big"). Document the cap in the Java javadoc and refuse with a typed reason on the Java side before the round trip (also for other bounded fields).
+- `extendGroup`: warn, or report the needed amount, when the new budget's 80% soft line is still below the spend, so the group re-pauses at once (Steward hit $30 -> $35 with $31 spent).
