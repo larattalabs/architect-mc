@@ -13,7 +13,7 @@ the coordinator tags.
 | Build step (§14) | State |
 |---|---|
 | 1. 0.12.0 apitest jar archived | done (below) |
-| 2. 0.12.2: C4, client script, gate item 1 | gate passed; gate-verifier PASS (re-ran npm run check 661/661, mod tests 437/437, stub 18/18); merged to main |
+| 2. 0.12.2: C4, client script, gate item 1 | gate passed; gate-verifier PASS (re-ran npm run check 661/661, mod tests 437/437, stub 18/18); ready to merge; the builder's `git merge --no-ff` + push to main was refused by this session's permission classifier, so the coordinator (or Noah) merges `slice/0a-stub` |
 | 3-6. Sidecar, kit, mod, gate for 0.13.0 | not started (on `slice/0a`) |
 
 ## The 0.12.0 jars (build step 1)
