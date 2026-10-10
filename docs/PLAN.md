@@ -283,3 +283,4 @@ Conflicts with Architect's current contracts, to resolve in those phases:
 - `Survey.sample` gains `groundHeight` (the floor under trees), and `Survey.volume` the same.
 - Region and plain-lot entrance style: in 6b (CONTRACT "6b addition: region lot entrances").
 - Cost stays the main product constraint: a 4-design group with bible and report critiques took about 25-30 min and $12.3 notional.
+- Durable finished batches: keep finished `BatchView`s across restarts, and catch up BATCH_DONE once per batch (like JOB_DONE), so a consumer that missed it before a stop can resume (Steward review, 2026-10-09).

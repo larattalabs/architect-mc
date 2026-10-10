@@ -8,7 +8,7 @@ sidecar client, and the runner refuses to start when Claude credentials are in t
 node tools/gate-run.mjs --list                      # the chains
 node tools/gate-run.mjs regress --plan              # what it would do: steps, clients, timeouts, setup, ports; runs nothing
 node tools/gate-run.mjs quick                       # run it (see "For agents" for how to launch it)
-node tools/gate-run.mjs quick --notify-dry-run      # print the Discord message instead of sending it (also GATE_NOTIFY=dry|off)
+node tools/gate-run.mjs quick --notify-dry-run      # print the Discord message it would send (notify is off by default)
 node tools/gate-run.mjs regress --only 4e-orders,4e-crash   # a subset, in chain order; --from <step> resumes a chain
 ```
 
@@ -60,7 +60,8 @@ not how long the full walk takes. Compare only full-walk numbers with each other
      build that fails). A step with `after` is skipped if that step didn't pass (4e crash needs 4e orders' context).
 6. **Ports.** The game client uses `ARCHITECT_GATE_SIDECAR_PORT` / `ARCHITECT_GATE_DEV_PORT`, default 8890/8891. The gates'
    old-version clients use 8892/8893 and eval sidecars 8894/8895. Run nothing else on 8890-8895 during a run.
-7. **End.** It writes `summary.json` and `SUMMARY.md` and sends one notify through `~/Developer/_infra/discord-notify.sh`. A
+7. **End.** It writes `summary.json` and `SUMMARY.md`. **No Discord notify by default** (Noah, 2026-10-09: don't ping Discord).
+   Only with `--notify` (or `GATE_NOTIFY=send`) does it send one through `~/Developer/_infra/discord-notify.sh`. A
    pass is routine (silent). A fail, timeout, stopOnFail stop or abort is `--critical`. The message has the chain, the
    pass/fail/timeout counts, the duration, the head and the SUMMARY.md path. It carries no secrets.
    SIGINT/SIGTERM abort cleanly, with the same summary and notify. SIGHUP is ignored.
@@ -88,7 +89,7 @@ Gate chains run for hours. Polling them from an agent session burns the subscrip
    sleep 30; R=$(ls -td ../architect-mc/artifacts/gate-runs/*-regress | head -1); echo $R
    ```
 
-2. **Wait, don't poll.** Either end your turn and let the Discord notify reach Noah, or run **one** long until-loop in the
+2. **Wait, don't poll.** Run **one** long until-loop in the
    background. The loop ends when the state is terminal or when the runner's pid is gone, so a crashed runner can't hang it:
 
    ```sh
