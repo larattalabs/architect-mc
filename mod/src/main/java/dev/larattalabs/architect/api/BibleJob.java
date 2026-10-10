@@ -15,9 +15,19 @@ import java.util.Optional;
  * @param usageLimitUntil when a usage limit holds it: when the limit resets (epoch ms), else 0
  * @param bible when done: the installed bible
  * @param request the request as the sidecar recorded it (with {@code notes} for a revision)
+ * @param opKey (since 1.10.0) the caller's operation key ({@link BibleRequest#opKey}), if it was sent with one
  */
 public record BibleJob(String id, String kind, String bibleId, int version, Status status, String step, Optional<String> error, Cost cost,
-	int rounds, long usageLimitUntil, Optional<Bible> bible, JsonObject request, long createdAt, long updatedAt) {
+	int rounds, long usageLimitUntil, Optional<Bible> bible, JsonObject request, long createdAt, long updatedAt, Optional<String> opKey) {
+	public BibleJob {
+		opKey = opKey == null ? Optional.empty() : opKey;
+	}
+
+	/** The 1.2.0 constructor (no opKey). */
+	public BibleJob(String id, String kind, String bibleId, int version, Status status, String step, Optional<String> error, Cost cost,
+		int rounds, long usageLimitUntil, Optional<Bible> bible, JsonObject request, long createdAt, long updatedAt) {
+		this(id, kind, bibleId, version, status, step, error, cost, rounds, usageLimitUntil, bible, request, createdAt, updatedAt, Optional.empty());
+	}
 	/** {@code queued -> drafting -> components -> checking -> rendering -> done}; failed and cancelled. */
 	public enum Status {
 		QUEUED, DRAFTING, COMPONENTS, CHECKING, RENDERING, DONE, FAILED, CANCELLED, UNKNOWN;

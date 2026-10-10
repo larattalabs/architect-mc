@@ -2,6 +2,7 @@ package dev.larattalabs.architect.api;
 
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -25,11 +26,26 @@ import org.jspecify.annotations.Nullable;
  */
 public record Estimate(double usdLow, double usdHigh, double minutesLow, double minutesHigh, String basis, boolean critique, double critiqueUsdLow,
 	double critiqueUsdHigh, double critiqueMinutesLow, double critiqueMinutesHigh, List<Item> items, boolean polish, double polishUsdLow,
-	double polishUsdHigh, double polishMinutesLow, double polishMinutesHigh) {
+	double polishUsdHigh, double polishMinutesLow, double polishMinutesHigh, Map<Kind, Item> byKind) {
 	public Estimate {
 		basis = basis == null ? "" : basis;
 		items = items == null ? List.of() : List.copyOf(items);
+		byKind = byKind == null ? Map.of() : Map.copyOf(byKind);
 	}
+
+	/** The 1.7.0 constructor (no lines per kind). */
+	public Estimate(double usdLow, double usdHigh, double minutesLow, double minutesHigh, String basis, boolean critique, double critiqueUsdLow,
+		double critiqueUsdHigh, double critiqueMinutesLow, double critiqueMinutesHigh, List<Item> items, boolean polish, double polishUsdLow,
+		double polishUsdHigh, double polishMinutesLow, double polishMinutesHigh) {
+		this(usdLow, usdHigh, minutesLow, minutesHigh, basis, critique, critiqueUsdLow, critiqueUsdHigh, critiqueMinutesLow, critiqueMinutesHigh, items,
+			polish, polishUsdLow, polishUsdHigh, polishMinutesLow, polishMinutesHigh, Map.of());
+	}
+
+	/**
+	 * The kinds of an {@link EstimateRequest} estimate's lines ({@link #byKind}; since 1.10.0): its key is the line's
+	 * {@link Item#itemKey} too. New values are only ever appended.
+	 */
+	public enum Kind { BIBLE, ORIGINAL, ADAPTED, COPY }
 
 	/** The 1.6.0 constructor (no polish figures). */
 	public Estimate(double usdLow, double usdHigh, double minutesLow, double minutesHigh, String basis, boolean critique, double critiqueUsdLow,

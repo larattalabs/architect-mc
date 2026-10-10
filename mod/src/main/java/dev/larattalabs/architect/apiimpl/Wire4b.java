@@ -130,7 +130,8 @@ public final class Wire4b {
 			Optional.ofNullable(str(o, "reason")), items, o.has("wave") ? (int) num(o, "wave") : -1, (int) num(o, "done"), (int) num(o, "failed"), cost(o),
 			num(o, "usageLimitUntil"), num(o, "createdAt"), num(o, "updatedAt"), o.has("massingFirst") && o.get("massingFirst").isJsonPrimitive()
 				&& o.get("massingFirst").getAsBoolean(), GroupRequest.ApprovalUi.of(str(o, "approvalUi")), (int) num(o, "maxRedirects"),
-			o.has("context") && !o.get("context").isJsonNull() ? Optional.of(o.get("context").deepCopy()) : Optional.empty(), strings(o, "awaiting"));
+			o.has("context") && !o.get("context").isJsonNull() ? Optional.of(o.get("context").deepCopy()) : Optional.empty(), strings(o, "awaiting"),
+			Wire0a.breakdown(o.get("breakdown")), num(o, "seq"), str(o, "lastAction", ""), Optional.ofNullable(str(o, "opKey")));
 	}
 
 	/** {@code BibleInfo} (bible.index, snapshot.bibleIndex, a done BibleJob's {@code bible}). */
@@ -168,7 +169,7 @@ public final class Wire4b {
 		return new BibleJob(str(o, "id", "?"), str(o, "kind", "request"), str(o, "bibleId", "?"), (int) Math.max(1, num(o, "version")),
 			BibleJob.Status.of(str(o, "status")), str(o, "step", ""), Optional.ofNullable(str(o, "error")), cost(o), (int) num(o, "rounds"),
 			num(o, "usageLimitUntil"), o.has("bible") && o.get("bible").isJsonObject() ? Optional.of(bibleInfo(o.getAsJsonObject("bible")))
-				: Optional.empty(), obj(o, "request").deepCopy(), num(o, "createdAt"), num(o, "updatedAt"));
+				: Optional.empty(), obj(o, "request").deepCopy(), num(o, "createdAt"), num(o, "updatedAt"), Optional.ofNullable(str(o, "opKey")));
 	}
 
 	/** {@code Reskin} (reskin.upsert, snapshot.reskins). */
@@ -300,6 +301,10 @@ public final class Wire4b {
 			items.add(r);
 		}
 		o.add("items", items);
+		// 6c 0a
+		if (Wire0a.opKey(g.opKey()) != null) {
+			o.addProperty("opKey", g.opKey());
+		}
 		return o;
 	}
 
@@ -339,6 +344,10 @@ public final class Wire4b {
 		// 5a: only when on (an older helper sees the 4b shape)
 		if (r.sheetCritique()) {
 			o.add("critique", sheetCritique());
+		}
+		// 6c 0a
+		if (Wire0a.opKey(r.opKey()) != null) {
+			o.addProperty("opKey", r.opKey());
 		}
 		return o;
 	}

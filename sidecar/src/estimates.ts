@@ -37,13 +37,21 @@ interface Seed {
   usd: [number, number];
   ms: [number, number];
 }
-const OPUS: Seed = { usd: [2.0, 3.2], ms: [8 * MIN, 13 * MIN] };
+/**
+ * (6c 0a, C5) Re-seeded from Steward's phase 1 (2026-10-09, docs/CONTRACT.md 6c slice 0a §3): a detail pass with its report
+ * critique $2.5-4.6 and 8-15 min, a massing $0.12-0.30 and 1-3 min, a bible $1.16-1.55 and 5-8 min, a repair round $0.3-0.9.
+ * The detail seed stands for Opus and Sonnet alike (the phase-1 mix); measured samples still replace it per model.
+ */
+export const SEED_BASIS = 'seed (Steward phase 1, 2026-10-09)';
+const OPUS: Seed = { usd: [2.5, 4.6], ms: [8 * MIN, 15 * MIN] };
+/** (6c 0a) One repair-sized turn: a repair round, and the seed of an "adapted" building (unmeasured until 7b). */
+export const REPAIR_SEED: Seed = { usd: [0.3, 0.9], ms: [1 * MIN, 3 * MIN] };
 /** Sonnet design seed, measured 2026-10-05 (4 real designs in the phase 4b gate: $0.86-2.45, 4-10 min). */
 /** Bible job seed, measured 2026-10-05 (one real bible: $1.40, 6.4 min). */
-const BIBLE: Seed = { usd: [1.2, 2.0], ms: [5 * MIN, 8 * MIN] };
-const SONNET: Seed = { usd: [0.8, 2.5], ms: [4 * MIN, 10 * MIN] };
-/** (4c) Massing job seed: the contract's $0.10-0.40 and 1-3 min (Sonnet, effort low), to be measured in the 4c gate. */
-const MASSING: Seed = { usd: [0.1, 0.4], ms: [1 * MIN, 3 * MIN] };
+const BIBLE: Seed = { usd: [1.16, 1.55], ms: [5 * MIN, 8 * MIN] };
+const SONNET: Seed = OPUS;
+/** (4c) Massing job seed, (6c 0a) re-seeded from Steward's phase 1. */
+const MASSING: Seed = { usd: [0.12, 0.3], ms: [1 * MIN, 3 * MIN] };
 /**
  * (5a) Seeds calibrated on the smoke tier (2026-10-06, 4 Sonnet designs, claude login): 8 critic calls (Sonnet 5.5,
  * medium, 5 views) $0.023-0.072 (mean $0.045), 4-19 s; 4 revisions $0.29-0.96 (mean $0.54), 0.8-3.3 min. The contract's
@@ -64,9 +72,8 @@ export const SCOPING_SEED: Seed = { usd: [0.01, 0.03], ms: [0.05 * MIN, 0.3 * MI
 /** The seed of a model family (by its id). */
 export function seedFor(model: string): { seed: Seed; family: string } {
   const m = model.toLowerCase();
-  if (m.includes('sonnet')) return { seed: SONNET, family: 'sonnet ($0.8-2.5, 4-10 min per design, measured 2026-10-05)' };
-  if (m.includes('haiku')) return { seed: { usd: [OPUS.usd[0] * 0.15, OPUS.usd[1] * 0.15], ms: [OPUS.ms[0] * 0.6, OPUS.ms[1] * 0.6] }, family: 'haiku (0.15x the Opus cost, unmeasured)' };
-  return { seed: OPUS, family: 'opus ($2.0-3.2, 8-13 min per design, measured 2026-10-05)' };
+  if (m.includes('haiku')) return { seed: { usd: [OPUS.usd[0] * 0.15, OPUS.usd[1] * 0.15], ms: [OPUS.ms[0] * 0.6, OPUS.ms[1] * 0.6] }, family: 'haiku (0.15x the detail seed, unmeasured)' };
+  return { seed: m.includes('sonnet') ? SONNET : OPUS, family: `a detail with its report critique ($2.5-4.6, 8-15 min), ${SEED_BASIS}` };
 }
 
 const r2 = (n: number) => Math.round(n * 100) / 100;
@@ -152,7 +159,7 @@ export class Estimates {
       }
       if (kind === 'scope') return { usd: SCOPE_FIX_SEED.usd, ms: SCOPE_FIX_SEED.ms, basis: `fix turn ${model}: seed ($0.1-0.4, 1-2 min)` };
       if (kind === 'scoping') return { usd: SCOPING_SEED.usd, ms: SCOPING_SEED.ms, basis: `scoping call ${model}: seed ($0.01-0.03, < 0.3 min)` };
-      if (kind === 'massing') return { usd: MASSING.usd, ms: MASSING.ms, basis: `${model}: seed, a massing ($0.10-0.40, 1-3 min)` };
+      if (kind === 'massing') return { usd: MASSING.usd, ms: MASSING.ms, basis: `${model}: a massing ($0.12-0.30, 1-3 min), ${SEED_BASIS}` };
       if (kind === 'critic') return { usd: CRITIC_SEED.usd, ms: CRITIC_SEED.ms, basis: `critic ${model}: seed ($${CRITIC_SEED.usd[0]}-${CRITIC_SEED.usd[1]}, ${CRITIC_SEED.ms[0] / MIN}-${CRITIC_SEED.ms[1] / MIN} min per call, smoke 2026-10-06)` };
       if (kind === 'revise') {
         const opus = !model.toLowerCase().includes('sonnet') && !model.toLowerCase().includes('haiku');
@@ -301,14 +308,93 @@ export class Estimates {
     return est;
   }
 
+  /**
+   * (6c 0a, C5) A mix: a new bible, originals (a massing with massingFirst, a detail pass, its report critique), adapted
+   * buildings (a placed design refitted to a new lot: one repair-sized turn, unmeasured until 7b) and copies ($0 and the
+   * variant build time). A line per kind; the totals are the sums of the lines. Time: the bible, then the massing pass and
+   * the detail pass in batches of the concurrency, then the adapted turns in batches; copies take seconds.
+   */
+  mix(m: { group?: Pick<GroupRequest, 'items' | 'massingFirst' | 'critique' | 'concurrency'> | undefined; originals: number; adapted: number; copies: number; newBible: boolean; massingFirst: boolean; reportCritique: boolean; model?: string | undefined }, ctx: EstimateCtx): Estimate & { byKind: Partial<Record<MixKind, MixLine>> } {
+    const slots = Math.max(1, Math.min(m.group?.concurrency ?? 3, ctx.designConcurrency));
+    const byKind: Partial<Record<MixKind, MixLine>> = {};
+    const bases: string[] = [];
+    const line = (k: MixKind, usd: [number, number], ms: [number, number], count: number, basis: string) => {
+      byKind[k] = { usdLow: r2(usd[0]), usdHigh: r2(usd[1]), minutesLow: r1(ms[0] / MIN), minutesHigh: r1(ms[1] / MIN), count, basis };
+      bases.push(`${k} x${count}: ${basis}`);
+    };
+    if (m.newBible) {
+      const b = this.bible({}, ctx);
+      line('bible', [b.usdLow, b.usdHigh], [b.minutesLow * MIN, b.minutesHigh * MIN], 1, b.basis);
+    }
+    // originals: the group's items (their own models) plus `originals` more of the default model
+    const models: string[] = [...(m.group?.items ?? []).map((it) => itemModel(it, ctx)), ...Array.from({ length: m.originals }, () => m.model ?? ctx.ordinaryModel)];
+    if (models.length) {
+      const massingFirst = m.massingFirst || !!m.group?.massingFirst;
+      const report = m.reportCritique || m.group?.critique?.mode === 'report';
+      const usd: [number, number] = [0, 0];
+      const lb = new Set<string>();
+      let detailMs: [number, number] = [0, 0];
+      let massMs: [number, number] = [0, 0];
+      for (const model of models) {
+        const d = this.perJob('design', model);
+        lb.add(d.basis);
+        usd[0] += d.usd[0];
+        usd[1] += d.usd[1];
+        detailMs = [Math.max(detailMs[0], d.ms[0]), Math.max(detailMs[1], d.ms[1])];
+        // measured samples are design turns only: the report critique is added; the seed already includes it
+        if (report && this.samples('design', model).length) {
+          const c = this.perJob('critic', ctx.criticModel ?? 'claude-sonnet-5-5');
+          usd[0] += c.usd[0];
+          usd[1] += c.usd[1];
+          lb.add(`report critique: ${c.basis}`);
+        }
+        if (massingFirst) {
+          const ms = this.perJob('massing', ctx.massingModel);
+          lb.add(ms.basis);
+          usd[0] += ms.usd[0];
+          usd[1] += ms.usd[1];
+          massMs = [Math.max(massMs[0], ms.ms[0]), Math.max(massMs[1], ms.ms[1])];
+        }
+      }
+      const batches = Math.ceil(models.length / slots);
+      line('original', usd, [batches * (detailMs[0] + massMs[0]), batches * (detailMs[1] + massMs[1])], models.length, [...lb].join('; '));
+    }
+    if (m.adapted > 0) {
+      const b = Math.ceil(m.adapted / slots);
+      line('adapted', [m.adapted * REPAIR_SEED.usd[0], m.adapted * REPAIR_SEED.usd[1]], [b * REPAIR_SEED.ms[0], b * REPAIR_SEED.ms[1]], m.adapted, 'one repair-sized turn ($0.3-0.9, 1-3 min), unmeasured until 7b');
+    }
+    if (m.copies > 0) line('copy', [0, 0], [m.copies * 200, m.copies * 2000], m.copies, '$0 and the variant build time (copies become real with C1 in 0b)');
+    const lines = Object.values(byKind);
+    const wait = ctx.limitUntil && ctx.limitUntil > ctx.now ? ctx.limitUntil - ctx.now : 0;
+    const sum = (f: (l: MixLine) => number) => lines.reduce((a, l) => a + f(l), 0);
+    return {
+      usdLow: r2(sum((l) => l.usdLow)),
+      usdHigh: r2(sum((l) => l.usdHigh)),
+      minutesLow: r1(sum((l) => l.minutesLow) + wait / MIN),
+      minutesHigh: r1(sum((l) => l.minutesHigh) + wait / MIN),
+      basis: [...bases, `${slots} at a time`, ...(wait ? [`a usage limit holds new turns for ${Math.ceil(wait / MIN)} min`] : [])].join('; '),
+      byKind,
+    };
+  }
+
   /** A bible job's estimate (about one design; measured separately once bibles finish). */
   bible(req: Partial<BibleRequest>, ctx: EstimateCtx): Estimate {
     const model = req.model ?? ctx.bibleModel;
     const measured = this.data.bible[model]?.length;
-    const pj = measured ? this.perJob('bible', model) : { usd: BIBLE.usd, ms: BIBLE.ms, basis: `${model}: seed, a bible job ($1.2-2.0, 5-8 min, measured 2026-10-05)` };
+    const pj = measured ? this.perJob('bible', model) : { usd: BIBLE.usd, ms: BIBLE.ms, basis: `${model}: a bible job ($1.16-1.55, 5-8 min), ${SEED_BASIS}` };
     const wait = ctx.limitUntil && ctx.limitUntil > ctx.now ? ctx.limitUntil - ctx.now : 0;
     return { usdLow: r2(pj.usd[0]), usdHigh: r2(pj.usd[1]), minutesLow: r1((pj.ms[0] + wait) / MIN), minutesHigh: r1((pj.ms[1] + wait) / MIN), basis: [pj.basis, ...(wait ? [`a usage limit holds new turns for ${Math.ceil(wait / MIN)} min`] : [])].join('; ') };
   }
+}
+
+export type MixKind = 'bible' | 'original' | 'adapted' | 'copy';
+export interface MixLine {
+  usdLow: number;
+  usdHigh: number;
+  minutesLow: number;
+  minutesHigh: number;
+  count: number;
+  basis: string;
 }
 
 interface PassEstimate {

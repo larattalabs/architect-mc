@@ -221,7 +221,7 @@ describe('dist/main.mjs, protocol 2 (sim backend)', () => {
 
   it('negotiates protocol 2; a protocol-1 hello gets the phase 1-3 snapshot', async () => {
     const v2 = await hello2();
-    expect(find(v2.msgs, (m) => m.type === 'snapshot')).toMatchObject({ protocol: 2, features: ['job.run', 'job.tools', 'blobs', 'budget', 'designs.v2', 'bibles', 'design.groups', 'named.parts', 'open.types', 'estimates', 'reskin', 'massing', 'critique', 'critique.report', 'job.images', 'bible.admin', 'bible.restraint', 'entry.versions', 'entry.delta', 'design.polish', 'critique.polish', 'region.plan', 'region.tiles', 'region.check', 'region.preview', 'region.design', 'region.blobs', 'ir.format2', 'copies', 'smallEffort', 'versionOf'], jobs: [] });
+    expect(find(v2.msgs, (m) => m.type === 'snapshot')).toMatchObject({ protocol: 2, features: ['job.run', 'job.tools', 'blobs', 'budget', 'designs.v2', 'bibles', 'design.groups', 'named.parts', 'open.types', 'estimates', 'reskin', 'massing', 'critique', 'critique.report', 'job.images', 'bible.admin', 'bible.restraint', 'entry.versions', 'entry.delta', 'design.polish', 'critique.polish', 'region.plan', 'region.tiles', 'region.check', 'region.preview', 'region.design', 'region.blobs', 'ir.format2', 'estimate.kinds', 'opKeys', 'group.breakdown', 'copies', 'smallEffort', 'versionOf'], jobs: [] });
     const v1 = await connect(port);
     v1.send({ type: 'hello', client: 'mod', version: 'old', token: tokenOf() });
     await until(() => v1.msgs.some((m) => m.type === 'snapshot'));
@@ -356,7 +356,7 @@ describe.skipIf(!fs.existsSync(path.join(REAL_KIT, 'tools', 'components.mjs')))(
     expect((snap.bibleIndex as M[]).map((b) => b.id)).toEqual(expect.arrayContaining(['rustic', 'oak', 'cherry', 'fortress']));
     // estimates
     c.send({ type: 'bible.estimate', id: 'be', request: { prompt: 'x' } });
-    expect((await ack(c, 'be')).result).toMatchObject({ usdLow: 1.2, usdHigh: 2, minutesLow: 5, minutesHigh: 8 });
+    expect((await ack(c, 'be')).result).toMatchObject({ usdLow: 1.16, usdHigh: 1.55, minutesLow: 5, minutesHigh: 8 });
     // a bible
     c.send({ type: 'bible.request', id: 'b', request: { prompt: 'weathered fishing village on stilts', name: 'Stilts', ext: { 'steward_mc:k': 1 } } });
     const b = (await ack(c, 'b')).result as M;
@@ -381,7 +381,7 @@ describe.skipIf(!fs.existsSync(path.join(REAL_KIT, 'tools', 'components.mjs')))(
       ],
     };
     c.send({ type: 'design.estimate', id: 'ge', group });
-    expect((await ack(c, 'ge')).result).toMatchObject({ minutesLow: 12, basis: expect.stringMatching(/2 waves/) });
+    expect((await ack(c, 'ge')).result).toMatchObject({ minutesLow: 16, basis: expect.stringMatching(/2 waves/) });
     c.send({ type: 'design.group', id: 'g', group });
     const g = (await ack(c, 'g')).result as M;
     expect(g.itemKeys).toEqual(['hall', 'hut', 'watch']);
@@ -469,7 +469,7 @@ describe.skipIf(!fs.existsSync(path.join(REAL_KIT, 'lib', 'massing.mjs')))('dist
     expect(snap.massings).toEqual([]);
     const req = { type: 'tavern', style: 'rustic', features: [], maxSize: { x: 64, y: 40, z: 64 }, name: 'Inn' };
     c.send({ type: 'design.estimate', id: 'me', request: { ...req, massing: true } });
-    expect((await ack(c, 'me')).result).toMatchObject({ usdLow: 0.1, usdHigh: 0.4, minutesLow: 1, minutesHigh: 3 });
+    expect((await ack(c, 'me')).result).toMatchObject({ usdLow: 0.12, usdHigh: 0.3, minutesLow: 1, minutesHigh: 3 });
     // a massing
     c.send({ type: 'design.request', id: 'm', request: { ...req, massing: true, ext: { 'steward_mc:lot': 'L9' } } });
     const m = (await ack(c, 'm')).result as M;

@@ -33,10 +33,27 @@ import org.jspecify.annotations.Nullable;
  * @param crateAt where the shared crate goes (null: one cell beside the first site's approach end)
  * @param overlap (1.5.0) the overlap policy of items whose request names none: null = REFUSE. Items of one batch may layer on
  *                earlier items of the same batch with LAYER (a terrain pad, then lots).
+ * @param opKey (1.10.0) the caller's operation key ({@code [A-Za-z0-9_.:-]{1,128}}), scoped by (owner, "batch", opKey): queueing
+ *              again with the same key and the same body returns the first batch's id and queues nothing (in any state, also
+ *              done or cancelled); with a different body it fails {@link ArchitectRefused} {@link Reason#OP_KEY_CONFLICT}. The
+ *              body is compared without the key, in its queue-file form. See {@link Sites#batchByKey}.
  */
 public record Batch(@Nullable String id, @Nullable String owner, JsonObject ext, @Nullable String group, List<Item> items, List<StageSpec> stages,
 	WaitPolicy waitPolicy, LoadPolicy load, @Nullable Boolean proximityFirst, boolean stopOnFailure, boolean autoApprove, boolean sharedCrate,
-	@Nullable BlockPos crateAt, @Nullable OverlapPolicy overlap) {
+	@Nullable BlockPos crateAt, @Nullable OverlapPolicy overlap, @Nullable String opKey) {
+	/** The 1.5.0 constructor (no opKey). */
+	public Batch(@Nullable String id, @Nullable String owner, JsonObject ext, @Nullable String group, List<Item> items, List<StageSpec> stages,
+		WaitPolicy waitPolicy, LoadPolicy load, @Nullable Boolean proximityFirst, boolean stopOnFailure, boolean autoApprove, boolean sharedCrate,
+		@Nullable BlockPos crateAt, @Nullable OverlapPolicy overlap) {
+		this(id, owner, ext, group, items, stages, waitPolicy, load, proximityFirst, stopOnFailure, autoApprove, sharedCrate, crateAt, overlap, null);
+	}
+
+	/** This batch with an operation key (since 1.10.0). */
+	public Batch withOpKey(@Nullable String key) {
+		return new Batch(id, owner, ext, group, items, stages, waitPolicy, load, proximityFirst, stopOnFailure, autoApprove, sharedCrate, crateAt, overlap,
+			key);
+	}
+
 	public Batch {
 		ext = ext == null ? new JsonObject() : ext;
 		items = items == null ? List.of() : List.copyOf(items);
@@ -59,45 +76,45 @@ public record Batch(@Nullable String id, @Nullable String owner, JsonObject ext,
 	}
 
 	public Batch withId(@Nullable String batchId) {
-		return new Batch(batchId, owner, ext, group, items, stages, waitPolicy, load, proximityFirst, stopOnFailure, autoApprove, sharedCrate, crateAt, overlap);
+		return new Batch(batchId, owner, ext, group, items, stages, waitPolicy, load, proximityFirst, stopOnFailure, autoApprove, sharedCrate, crateAt, overlap, opKey);
 	}
 
 	public Batch withExt(JsonObject e) {
-		return new Batch(id, owner, e, group, items, stages, waitPolicy, load, proximityFirst, stopOnFailure, autoApprove, sharedCrate, crateAt, overlap);
+		return new Batch(id, owner, e, group, items, stages, waitPolicy, load, proximityFirst, stopOnFailure, autoApprove, sharedCrate, crateAt, overlap, opKey);
 	}
 
 	public Batch withGroup(@Nullable String groupId) {
-		return new Batch(id, owner, ext, groupId, items, stages, waitPolicy, load, proximityFirst, stopOnFailure, autoApprove, sharedCrate, crateAt, overlap);
+		return new Batch(id, owner, ext, groupId, items, stages, waitPolicy, load, proximityFirst, stopOnFailure, autoApprove, sharedCrate, crateAt, overlap, opKey);
 	}
 
 	public Batch withStages(List<StageSpec> s, boolean approveAutomatically) {
 		return new Batch(id, owner, ext, group, items, s, waitPolicy, load, proximityFirst, stopOnFailure, approveAutomatically, sharedCrate, crateAt,
-			overlap);
+			overlap, opKey);
 	}
 
 	public Batch withWait(WaitPolicy w) {
-		return new Batch(id, owner, ext, group, items, stages, w, load, proximityFirst, stopOnFailure, autoApprove, sharedCrate, crateAt, overlap);
+		return new Batch(id, owner, ext, group, items, stages, w, load, proximityFirst, stopOnFailure, autoApprove, sharedCrate, crateAt, overlap, opKey);
 	}
 
 	public Batch withLoad(LoadPolicy l) {
-		return new Batch(id, owner, ext, group, items, stages, waitPolicy, l, proximityFirst, stopOnFailure, autoApprove, sharedCrate, crateAt, overlap);
+		return new Batch(id, owner, ext, group, items, stages, waitPolicy, l, proximityFirst, stopOnFailure, autoApprove, sharedCrate, crateAt, overlap, opKey);
 	}
 
 	public Batch withProximityFirst(@Nullable Boolean p) {
-		return new Batch(id, owner, ext, group, items, stages, waitPolicy, load, p, stopOnFailure, autoApprove, sharedCrate, crateAt, overlap);
+		return new Batch(id, owner, ext, group, items, stages, waitPolicy, load, p, stopOnFailure, autoApprove, sharedCrate, crateAt, overlap, opKey);
 	}
 
 	public Batch withStopOnFailure(boolean s) {
-		return new Batch(id, owner, ext, group, items, stages, waitPolicy, load, proximityFirst, s, autoApprove, sharedCrate, crateAt, overlap);
+		return new Batch(id, owner, ext, group, items, stages, waitPolicy, load, proximityFirst, s, autoApprove, sharedCrate, crateAt, overlap, opKey);
 	}
 
 	public Batch withSharedCrate(boolean shared, @Nullable BlockPos at) {
-		return new Batch(id, owner, ext, group, items, stages, waitPolicy, load, proximityFirst, stopOnFailure, autoApprove, shared, at, overlap);
+		return new Batch(id, owner, ext, group, items, stages, waitPolicy, load, proximityFirst, stopOnFailure, autoApprove, shared, at, overlap, opKey);
 	}
 
 	/** The same batch with an overlap policy for its items. Since 1.5.0. */
 	public Batch withOverlap(@Nullable OverlapPolicy policy) {
-		return new Batch(id, owner, ext, group, items, stages, waitPolicy, load, proximityFirst, stopOnFailure, autoApprove, sharedCrate, crateAt, policy);
+		return new Batch(id, owner, ext, group, items, stages, waitPolicy, load, proximityFirst, stopOnFailure, autoApprove, sharedCrate, crateAt, policy, opKey);
 	}
 
 	/** {@link #proximityFirst} with its default resolved. */

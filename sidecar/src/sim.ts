@@ -343,6 +343,7 @@ export class SimDesigner implements Designer {
       sc.designStep(id, 'checking', `checking the ${d.massing ? 'massing' : 'design'} (simulated designer): the check failed (sim:repair)`);
       sc.log.info(`design ${id}: round 1's check failed (simulated, sim:repair); repair round 2`);
       sc.designStep(id, 'designing', 'round 2: fixing what the check found (simulated, sim:repair)');
+      if (sw.round < 2) Object.assign(sw, { round: 2, charged: 0 });
       await this.sleep(this.stepMs, id, r);
       cost = { ...cost, usd: Math.round((cost.usd + charge(2, 1, 1, costs ? costs.repair : 0)) * 1e6) / 1e6, turns: cost.turns + 1 };
       sc.designCost(id, cost);

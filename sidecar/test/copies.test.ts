@@ -112,6 +112,9 @@ describe.skipIf(!hasKit)('copies in a group (sim backend, real kit)', () => {
     const [a, c2, c3] = f.items;
     expect(c2!.entryId && c3!.entryId).toBeTruthy();
     expect(c2!.cost.usd).toBe(0);
+    // the breakdown's COPY line: $0, time only, one per copy
+    expect(f.breakdown?.stages.copy).toMatchObject({ usd: 0, count: 2 });
+    expect(f.breakdown!.stages.copy!.ms).toBeGreaterThan(0);
     for (const c of [c2!, c3!]) {
       const e = readEntry(h, c.entryId!);
       expect(e).toMatchObject({ variantOf: a!.entryId, variantOfVersion: 1, group: g.id, groupItem: c.itemKey, derivation: { source: a!.entryId, sourceVersion: 1, kind: 'copy' } });

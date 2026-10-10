@@ -65,7 +65,10 @@ public interface Library {
 
 	// ------------------------------------------------------------------ phase 5b: versions (API 1.7.0)
 
-	/** An entry's versions, oldest first ({@code pinned}: a standing site stands at it). Empty for an unknown entry. Since 1.7.0. */
+	/**
+	 * An entry's versions, oldest first ({@code pinned}: a standing site stands at it, or since 1.10.0 a caller pins it,
+	 * {@link #pinVersion}). Empty for an unknown entry. Since 1.7.0.
+	 */
 	default List<EntryVersion> versions(String entryId) {
 		throw new UnsupportedOperationException("Library.versions needs Architect API 1.7.0");
 	}
@@ -89,6 +92,28 @@ public interface Library {
 	 */
 	default CompletableFuture<Entry> revertEntry(String entryId, int toVersion) {
 		throw new UnsupportedOperationException("Library.revertEntry needs Architect API 1.7.0");
+	}
+
+	// ------------------------------------------------------------------ phase 6c slice 0a: caller pins (API 1.10.0)
+
+	/**
+	 * Pins a version for a caller ({@code owner}, e.g. a settlement): the version is kept (not garbage-collected) while any
+	 * caller pin or a standing site holds it, and {@link EntryVersion#pinned} is true. Pins are game-wide, like the library,
+	 * and persist ({@code <gameDir>/architect/caller-pins.json}). Pinning a collected or unknown version fails
+	 * {@link ArchitectRefused} {@link Reason#VERSION_GONE}. Pinning twice is fine. Since 1.10.0.
+	 */
+	default CompletableFuture<Void> pinVersion(String entryId, int version, String owner) {
+		throw new UnsupportedOperationException("Library.pinVersion needs Architect API 1.10.0");
+	}
+
+	/** Removes a caller's pin (idempotent: an absent pin is fine). Since 1.10.0. */
+	default CompletableFuture<Void> unpinVersion(String entryId, int version, String owner) {
+		throw new UnsupportedOperationException("Library.unpinVersion needs Architect API 1.10.0");
+	}
+
+	/** The callers that pin a version, sorted. Since 1.10.0. */
+	default List<String> pinOwners(String entryId, int version) {
+		throw new UnsupportedOperationException("Library.pinOwners needs Architect API 1.10.0");
 	}
 
 	/**

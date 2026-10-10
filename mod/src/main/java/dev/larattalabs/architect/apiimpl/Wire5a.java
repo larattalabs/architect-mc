@@ -405,8 +405,10 @@ public final class Wire5a {
 				}
 			}
 		}
-		return new Estimate(d(r, "usdLow"), d(r, "usdHigh"), d(r, "minutesLow"), d(r, "minutesHigh"), Wire4b.str(r, "basis", ""), hasCritique(r), d(r,
+		Estimate e = new Estimate(d(r, "usdLow"), d(r, "usdHigh"), d(r, "minutesLow"), d(r, "minutesHigh"), Wire4b.str(r, "basis", ""), hasCritique(r), d(r,
 			"critiqueUsdLow"), d(r, "critiqueUsdHigh"), d(r, "critiqueMinutesLow"), d(r, "critiqueMinutesHigh"), items);
+		// (6c 0a) the lines per kind of a mix estimate
+		return r.has("byKind") ? Wire0a.withByKind(e, Wire0a.byKind(r)) : e;
 	}
 
 	private static boolean hasCritique(JsonObject o) {
