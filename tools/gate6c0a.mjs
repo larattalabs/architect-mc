@@ -127,8 +127,10 @@ const steps = {};
 
 steps.stub = async () => {
   const ver = fs.readFileSync(path.join(root, 'mod', 'gradle.properties'), 'utf8').match(/^mod_version=(.+)$/m)[1].trim();
-  const jar = path.resolve(opt('jar', path.join(root, 'mod', 'build', 'libs', `architect_mc-${ver}.jar`)));
-  const port = Number(opt('port', '8902'));
+  // the packed jar: the run worktree's build when GATE6C0A_RUN is set (the gate runner's unit-mod built it), else this checkout's
+  const jarRoot = process.env.GATE6C0A_RUN ? path.resolve(process.env.GATE6C0A_RUN) : root;
+  const jar = path.resolve(opt('jar', path.join(jarRoot, 'mod', 'build', 'libs', `architect_mc-${ver}.jar`)));
+  const port = Number(opt('port', process.env.ARCHITECT_PORT ?? '8902'));
   if (!fs.existsSync(jar)) throw new Error(`no ${jar} (cd sidecar && npm run build; cd mod && ./gradlew build)`);
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gate6c0a-stub-'));
   fs.rmSync(path.join(OUT, 'stub-helper.log'), { force: true });

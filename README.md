@@ -470,6 +470,24 @@ cd mod && ./gradlew test                     # mod unit tests (JAVA_HOME = a Jav
 cd mod && ./gradlew runClient                # a dev client in its own dev world
 ```
 
+**lab-ui.** The mod's screen kit, panels, style tokens and crash guard come from
+[lab-ui](https://github.com/larattalabs/lab-ui) (`dev.larattalabs:lab_ui`), bundled jar-in-jar at the version
+`mod/gradle.properties` pins (`lab_ui_version`). Gradle finds it in this order:
+
+1. **A checkout you name:** `LAB_UI_DIR=<dir>` or `-Plab_ui.dir=<dir>`, built as a composite build whatever its state.
+   The build warns UNRELEASED, because the jar would nest that code labelled as the pinned version: never publish it.
+2. **A release checkout next to this repo:** `../lab-ui`, used automatically only when it is clean and its HEAD is
+   exactly the tag `v<lab_ui_version>`. This needs no token, so it is the way to build without a GitHub login:
+   `git clone --branch v0.1.0 https://github.com/larattalabs/lab-ui ../lab-ui`. A `../lab-ui` on any other commit,
+   or with local changes, is ignored.
+3. **GitHub Packages** (`https://maven.pkg.github.com/larattalabs/lab-ui`), which needs a token even for public
+   packages: `gpr.user` / `gpr.key` in `~/.gradle/gradle.properties` (a classic token with `read:packages`;
+   `gh auth token` works if your gh login has that scope), or `GITHUB_ACTOR` / `GITHUB_TOKEN` in the environment.
+   CI gets it with `permissions: packages: read`.
+
+With none of these the build stops and says how to fix it (an `--offline` build only warns and uses the Gradle cache).
+Never commit the token.
+
 `./gradlew runClient` creates a dev world, "Architect Dev" (creative, natural terrain, seed 2026), and opens it.
 Point it at your checkout's helper with `ARCHITECT_SIDECAR_DIR=$PWD/../sidecar`. The **DevBridge** is a small
 localhost API in dev runs (port 7891) that scripts use to drive the screen, the ghost and the camera and to take
@@ -596,7 +614,8 @@ their own copy of Minecraft: Java Edition. Architect is not affiliated with Moja
 
 **Credits.** The placement code (terrain fit, entrance approach, ghost, snapshot and restore) and the blueprint kit
 come from [AgentCraft](https://github.com/blendi-remade/agentcraft) by its contributors (MIT; the notice is in
-[LICENSE](LICENSE)). Architect grew out of the building designer in the
+[LICENSE](LICENSE)). The screen kit (the Warm Studio sprites, panels and style tokens) comes bundled in
+[lab-ui](https://github.com/larattalabs/lab-ui), which carries its own MIT licence and NOTICE. Architect grew out of the building designer in the
 [nlaratta/agentcraft](https://github.com/nlaratta/agentcraft) fork and is now a separate mod.
 
 <div align="center">

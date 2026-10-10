@@ -2,17 +2,17 @@ package dev.larattalabs.architect.client.placement;
 
 import com.google.gson.JsonObject;
 import dev.larattalabs.architect.Architect;
-import dev.larattalabs.architect.client.ui.Kit;
-import dev.larattalabs.architect.client.ui.Panels;
-import dev.larattalabs.architect.client.ui.TextUtil;
-import dev.larattalabs.architect.client.ui.UiStyle;
+import dev.larattalabs.labui.client.ui.Kit;
+import dev.larattalabs.labui.client.ui.Panels;
+import dev.larattalabs.labui.client.ui.TextUtil;
+import dev.larattalabs.labui.client.ui.UiStyle;
 import dev.larattalabs.architect.client.world.ServerTasks;
 import dev.larattalabs.architect.placement.CompositeMesh;
 import dev.larattalabs.architect.region.GhostPlan;
 import dev.larattalabs.architect.region.Packed;
 import dev.larattalabs.architect.region.RegionsImpl;
 import dev.larattalabs.architect.region.TileStream;
-import dev.larattalabs.architect.ui.Guard;
+import dev.larattalabs.labui.ui.Guard;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -65,9 +65,9 @@ public final class RegionGhost {
 	}
 
 	public static void init() {
-		ClientTickEvents.END_CLIENT_TICK.register(mc -> Guard.run("placement.regionGhost", () -> tick(mc)));
+		ClientTickEvents.END_CLIENT_TICK.register(mc -> Guard.run("architect_mc:placement.regionGhost", () -> tick(mc)));
 		net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents.DISCONNECT.register((h, mc) -> mc.execute(RegionGhost::hide));
-		HudElementRegistry.addLast(Architect.id("hud/region_ghost"), dev.larattalabs.architect.client.ui.GuardedHud.of("hud.region_ghost", new Hud()));
+		HudElementRegistry.addLast(Architect.id("hud/region_ghost"), dev.larattalabs.labui.client.ui.GuardedHud.of("architect_mc:hud.region_ghost", new Hud()));
 	}
 
 	/** Shows the ghost of {@code planId} (stages up to {@code stage}; null: all), replacing any shown. */

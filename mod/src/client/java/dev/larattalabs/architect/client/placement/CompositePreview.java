@@ -11,7 +11,7 @@ import dev.larattalabs.architect.placement.CompositeMesh;
 import dev.larattalabs.architect.placement.GhostModel;
 import dev.larattalabs.architect.placement.MassingFiles;
 import dev.larattalabs.architect.placement.TemplateGrid;
-import dev.larattalabs.architect.ui.Guard;
+import dev.larattalabs.labui.ui.Guard;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -80,7 +80,7 @@ public final class CompositePreview {
 	}
 
 	public static void init() {
-		LevelRenderEvents.COLLECT_SUBMITS.register(ctx -> Guard.run("placement.composite", () -> submit(ctx)));
+		LevelRenderEvents.COLLECT_SUBMITS.register(ctx -> Guard.run("architect_mc:placement.composite", () -> submit(ctx)));
 		ClientPlayConnectionEvents.DISCONNECT.register((handler, mc) -> mc.execute(CompositePreview::clearAll));
 		dev.larattalabs.architect.client.dev.DevBridge.register("dev.composite.state", 10_000, "{reset?: false} - the composite previews: per key "
 			+ "its layers (source, origin, style, cells, quads, mode cells | outline:cap | outline:distance, error), the build and the last frame "
