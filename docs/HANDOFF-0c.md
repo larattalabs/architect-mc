@@ -8,7 +8,7 @@ names win). API 1.12.0, mod 0.15.0 (after 0a = 1.10.0 and 0b = 1.11.0). Ports 89
 | Item | State | Notes |
 |---|---|---|
 | §8 C17 protected areas | in progress | `site/Protected.java`; hooks: verdict (place, check, fitToLot, batch building, move), SiteDeltas.check (delta, checkDelta, batch delta, forward revert), revert (undo path: restore box), cells (API + batch), region plan start/accept + realise start. Roads: with §3's spans |
-| §9 C18 owner-tagged entities | todo | |
+| §9 C18 owner-tagged entities | built | `Occupancy.ownedBy`; checkSite scan (place, check, batch), both discard loops, delta check + DeltaJob, removalBlockers (remove: requester; group undo: site owner) |
 | §2 minLotSize / recommendedLot | built (String); MassingRef overload waits for 0a's fitMassingToLot | `LotFitting.minSize/recommended`, `MinLotSizeTest` |
 | §3 partial roads | todo | |
 | §4 groundHeight | todo | capture the volume sha baseline before touching VolumeSurvey |

@@ -643,7 +643,7 @@ public final class SiteDeltas {
 		if (wb != null && !unloaded[0] && cap == null) {
 			Set<Long> cells = o.entryCells();
 			List<Occupancy.Found> found = new ArrayList<>();
-			for (Occupancy.Found f : Occupancy.scan(level, wb, e -> !near(cells, e.blockPosition()))) {
+			for (Occupancy.Found f : Occupancy.scan(level, wb, e -> !near(cells, e.blockPosition()) || Occupancy.ownedBy(e, r.owner()))) {
 				found.add(f);
 			}
 			List<String> occ = Occupancy.refusals(found);

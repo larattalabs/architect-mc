@@ -137,6 +137,22 @@ public final class Occupancy {
 
 	// ------------------------------------------------------------------ entities
 
+	/** 6c 0c (C18): the scoreboard tag prefix: {@code architect:owner=<owner>} marks an entity as that owner's. */
+	public static final String OWNER_TAG = "architect:owner=";
+
+	/**
+	 * 6c 0c (C18): whether {@code e} carries {@code architect:owner=<owner>}: such an entity neither blocks that owner's ops nor
+	 * is discarded by them. A null owner matches no tag, and a player is never exempt.
+	 */
+	public static boolean ownedBy(Entity e, @org.jspecify.annotations.Nullable String owner) {
+		return owner != null && !(e instanceof Player) && e.entityTags().contains(OWNER_TAG + owner);
+	}
+
+	/** {@link #ownedBy} as a scan's ignore predicate (nothing for a null owner). */
+	public static Predicate<Entity> ownedBy(@org.jspecify.annotations.Nullable String owner) {
+		return owner == null ? e -> false : e -> ownedBy(e, owner);
+	}
+
 	/** The box as an entity AABB (cells fill x..x+1). */
 	public static AABB aabb(Anchors.Bounds box) {
 		return new AABB(box.minX(), box.minY(), box.minZ(), box.maxX() + 1, box.maxY() + 1, box.maxZ() + 1);

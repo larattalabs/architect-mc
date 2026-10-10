@@ -201,16 +201,17 @@ final class SitesImpl implements dev.larattalabs.architect.api.Sites {
 			if (!loaded(level, s.restoreBox())) {
 				return CompletableFuture.completedFuture(refused(siteId + " is not loaded on the server (a player must be near it)"));
 			}
-			List<String> blockers = Sites.removalBlockers(level, s);
+			String tagOwner = o == null ? null : o.requester(); // 6c 0c (C18): the requester's tagged entities don't block
+			List<String> blockers = Sites.removalBlockers(level, s, tagOwner);
 			if (!blockers.isEmpty()) {
 				return CompletableFuture.completedFuture(new RemoveResult(false, blockers, Map.of()));
 			}
 			try {
-				CompletableFuture<Sites.Removed> large = Sites.removeLarge(level, siteId, false, covered(o));
+				CompletableFuture<Sites.Removed> large = Sites.removeLarge(level, siteId, false, covered(o), tagOwner);
 				if (large != null) {
 					return large.thenApply(SitesImpl::result);
 				}
-				Sites.Removed done = Sites.removeDetailed(level, siteId, false, covered(o));
+				Sites.Removed done = Sites.removeDetailed(level, siteId, false, covered(o), tagOwner);
 				return CompletableFuture.completedFuture(result(done));
 			} catch (Sites.SiteException e) {
 				return CompletableFuture.completedFuture(refused(e.getMessage()));

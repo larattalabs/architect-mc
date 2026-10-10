@@ -642,7 +642,7 @@ public final class Sites {
 					+ ", which survival can't build");
 			}
 		}
-		List<Occupancy.Found> found = Occupancy.scan(level, snapBox, e -> false);
+		List<Occupancy.Found> found = Occupancy.scan(level, snapBox, Occupancy.ownedBy(owner)); // 6c 0c (C18): the owner's tagged entities
 		tr.mark("occupancy");
 		List<String> occupied = Occupancy.refusals(found);
 		if (!occupied.isEmpty()) {
@@ -1010,7 +1010,8 @@ public final class Sites {
 		LeafGuard.holdCells(level, held, FLAGS);
 		try {
 			int removed = 0;
-			for (Entity e : level.getEntities((Entity) null, Occupancy.aabb(snapBox), e -> !(e instanceof Player) && e.isAlive())) {
+			for (Entity e : level.getEntities((Entity) null, Occupancy.aabb(snapBox), e -> !(e instanceof Player) && e.isAlive()
+				&& !Occupancy.ownedBy(e, who.siteOwner()))) {
 				if (Occupancy.classify(e).removable()) {
 					e.discard();
 					removed++;
@@ -1219,6 +1220,11 @@ public final class Sites {
 	 * records pending, then the writes). Server thread.
 	 */
 	public static Removed removeDetailed(ServerLevel level, String id, boolean force, Covered covered) throws SiteException {
+		return removeDetailed(level, id, force, covered, null);
+	}
+
+	/** {@link #removeDetailed}; {@code tagOwner} (6c 0c, C18): the requester, whose tagged entities don't block. */
+	public static Removed removeDetailed(ServerLevel level, String id, boolean force, Covered covered, @Nullable String tagOwner) throws SiteException {
 		Site b = get(id);
 		if (b == null) {
 			throw new SiteException("No site " + id + " (see /architect list)");
@@ -1269,7 +1275,7 @@ public final class Sites {
 		all.add(b);
 		if (!force) {
 			for (Site x : all) {
-				List<String> blockers = removalBlockers(level, x);
+				List<String> blockers = removalBlockers(level, x, tagOwner);
 				if (!blockers.isEmpty()) {
 					throw new SiteException(blockersMessage(x.id(), blockers));
 				}
@@ -1344,6 +1350,12 @@ public final class Sites {
 	 */
 	public static java.util.concurrent.@Nullable CompletableFuture<Removed> removeLarge(ServerLevel level, String id, boolean force, Covered covered)
 		throws SiteException {
+		return removeLarge(level, id, force, covered, null);
+	}
+
+	/** {@link #removeLarge}; {@code tagOwner} (6c 0c, C18): the requester, whose tagged entities don't block. */
+	public static java.util.concurrent.@Nullable CompletableFuture<Removed> removeLarge(ServerLevel level, String id, boolean force, Covered covered,
+		@Nullable String tagOwner) throws SiteException {
 		Site b = get(id);
 		if (b == null || b.placing() || b.construction() != null || b.restoreBox().volume() <= SiteJournal.SYNC_CELLS) {
 			return null;
@@ -1370,7 +1382,7 @@ public final class Sites {
 		}
 		refusePlayerIn(level, b.restoreBox(), id, "removing it");
 		if (!force) {
-			List<String> blockers = removalBlockers(level, b);
+			List<String> blockers = removalBlockers(level, b, tagOwner);
 			if (!blockers.isEmpty()) {
 				throw new SiteException(blockersMessage(id, blockers));
 			}
@@ -1548,6 +1560,11 @@ public final class Sites {
 	 * only over the cells the site owns (a covered cell belongs to the site on top). Server thread.
 	 */
 	public static List<String> removalBlockers(ServerLevel level, Site b) {
+		return removalBlockers(level, b, null);
+	}
+
+	/** {@link #removalBlockers}; {@code tagOwner} (6c 0c, C18): entities tagged {@code architect:owner=<tagOwner>} don't block. */
+	public static List<String> removalBlockers(ServerLevel level, Site b, @Nullable String tagOwner) {
 		List<String> out = new ArrayList<>();
 		Set<BlockPos> own = ownBlockEntities(b);
 		Anchors.Bounds box = b.restoreBox();
@@ -1582,7 +1599,7 @@ public final class Sites {
 			}
 		});
 		int dropped = 0;
-		for (Entity e : level.getEntities((Entity) null, Occupancy.aabb(box), e -> e.isAlive() && !(e instanceof Player))) {
+		for (Entity e : level.getEntities((Entity) null, Occupancy.aabb(box), e -> e.isAlive() && !(e instanceof Player) && !Occupancy.ownedBy(e, tagOwner))) {
 			Occupancy.Found f = Occupancy.classify(e);
 			if (f.kind() == Occupancy.Kind.ITEM && !(e instanceof ItemEntity)) {
 				out.add(f.name() + " at " + e.blockPosition().toShortString());
