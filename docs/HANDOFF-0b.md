@@ -46,10 +46,15 @@ After 0a merges (merge origin/main first):
 - [x] Java API 1.11.0 records/enums (after 0a's: ArchitectRefused.detail, Reasons, GroupRequest after opKey), promoteCopy,
       versionOf + the site capture, Estimate.Kind SMALL/CHANGE, smallOriginals
 - [x] Breakdown COPY stage, estimates (COPY real, SMALL, CHANGE), sim costs for SMALL
-- [ ] the version bump (ArchitectApi.VERSION 1.11.0, mod_version 0.14.0) after 0a's 1.10.0 lands
-- [ ] api-compat against the 0.13.0 / 0.12.0 / 0.11.0 apitest jars (0.13.0 jar from the v0.13.0 tag)
+- [x] the version bump (ArchitectApi.VERSION 1.11.0, mod_version 0.14.0)
+- [ ] api-compat --gate6c0b against the 0.13.0 / 0.12.0 / 0.11.0 apitest jars: clean against a 0.13.0 proxy built from
+      slice/0a 2026-10-10; redo with jars from the v0.13.0 tag into artifacts/gate6c0b/v0130/
 - [x] gate driver tools/gate6c0b.mjs (unit: items 1-4, 6, 7 offline: PASS 2026-10-10; ingame: items 5, 7)
-- [ ] ingame PASS; slice run; gate-verifier
+- [x] ingame PASS (items 5 and 7, 2026-10-10, 695299f)
+- [ ] slice run: no `slice` tier on main yet, and gate4e/5b/6a's old-client steps hardcode 8892-8895 (other slices'
+      ports): a regress subset on 8906/8907 (unit-*, sim-*, 4e-megalite, 4e-orders, 4d-all, 5b-chains, 5b-village) runs in
+      artifacts/gate-runs-0b/; apijars and the old-client steps wait for the tiers runner's --ports
+- [ ] gate-verifier
 - [ ] §6 benchmark (tools/bench6c0b.mjs: paid, claude login, cap $35, spent + step cap <= $35 before each paid step)
 
 ## Steward's review (folded in)
