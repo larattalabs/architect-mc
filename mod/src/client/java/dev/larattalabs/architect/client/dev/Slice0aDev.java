@@ -20,10 +20,10 @@ public final class Slice0aDev {
 				o.addProperty("armed", true);
 				return CompletableFuture.completedFuture(o);
 			});
-		DevBridge.register("dev.api.dropAck", 5_000, "{type} - (6c 0a) the mod drops the next helper ack of that message type (bible.request, "
+		DevBridge.register("dev.api.dropAck", 5_000, "{msgType} - (6c 0a) the mod drops the next helper ack of that message type (bible.request, "
 			+ "design.group, ...): the request reaches the helper, the API future never completes (kill the client, restart, adopt by opKey)",
 			(req, mc) -> {
-				String type = Fields.of(req).str("type");
+				String type = Fields.of(req).str("msgType"); // ("type" is the hook's own message type)
 				ApiClientBridge.DROP_ACK.add(type);
 				JsonObject o = new JsonObject();
 				o.addProperty("type", type);

@@ -6800,6 +6800,69 @@ relog drive exactly the re-request path.
   `wallMs` and `firstDetailedMs` give the split on the next paid run.
 - Behaviour changes 1-3 and 6 are accepted by Steward.
 
+## Phase 6c slice 0a as built (API 1.10.0, mod 0.13.0, recorded 2026-10-10)
+
+Built on `slice/0a-stub` (0.12.2, C4) and `slice/0a` (the rest; the coordinator's branch names, not `phase/6c-0a`), with two
+sub-branches merged in (`slice/0a-c6`, `slice/0a-tiles`) and the sim's small-lot fix shipped early as 0.12.3
+(`slice/0a-simfit`). Where this section and the 0a text above disagree, this section says what shipped. Gate record:
+`artifacts/gate6c0a/*.json` and the regression runs under `artifacts/gate-runs-0a/` (local).
+
+**C4 (0.12.2, 0.12.3).** As §2, plus: `simCosts` is parsed only with `--backend sim`, the environment wins over config.json, and a
+bad value stops the helper (a typo never runs silently at $0). With costs, each round is charged its item's figure spread over its
+steps, and a step that runs again (a usage limit, a restart) adds nothing; a loop revision costs a repair round; every critic call
+(design report or loop, bible sheet) costs `critique`. `sim: true` is in the start log line, the group-final and bible-ready log
+lines and every estimate basis. Faults also come from `ext["architect:sim"]`. The launcher skips `npm ci` under the sim: a
+non-API mod change in a release §2 called "sidecar and docs only" (the bundle needs only node built-ins; the install is for the
+Agent SDK). 0.12.3: the sim fits the request's max size: the type's example at its defaults when that fits, else the parameters
+with the largest footprint that fit, else another example; a massing pass whose example massing exceeds the max installs a
+one-box stand-in the size of the fitted detail (entrance, spawn, door, path), so the detail conforms.
+
+**C5.** `design.estimate {mix}` / `Designs.estimate(EstimateRequest)`. The detail seed ($2.5-4.6, 8-15 min, with its report
+critique) stands for Opus and Sonnet alike (the phase-1 mix); Haiku stays scaled. Measured samples still replace it per model,
+and then a report critique is added on top (samples are design turns only). Lines: BIBLE (when `newBible`), ORIGINAL (massing
+with `massingFirst`, the detail), ADAPTED (one repair-sized turn, "unmeasured until 7b"), COPY ($0); the totals are their sums.
+Bars: Phase 1 $22.12-40.75 (midpoint $31.44, +1.3% of $31.03), Greywater $8.66-15.35 (midpoint $12.01, -12.8% of $13.76); Greywater's time recorded beside its 70 min: 13-23 min (approval waits and play excluded).
+
+**C6.** As §4. **Honest limits of the ±2 prediction:** the kit's example massing/detail pairs are dimensionally identical, so the
+48-case evidence shows |dx| = |dz| = dy = 0 and proves little beyond the code path. Within the conformance tolerances, a detail
+may be 2 wider than its massing and its entrance 1 column off: on a 180-degree turn that lands up to **3** off, not 2. The
+approach length (the setback) and `groundY` are **not** conformance-checked, so a detail that changes them stands deeper or
+higher than its massing predicted. `fitMassingToLot` checks through a `Sites.checkSite` overload that takes an entry (so
+`site/Sites.java` changed); an unreadable massing is UNKNOWN_BLUEPRINT.
+
+**Durable batches.** As §5. Region batches are never pruned (their region refers to them). A finished batch read from an older
+queue file counts as fired. Fire, mark, save is literal: a crash after the fire and before the save re-fires on load.
+
+**C9.** Bodies are compared by the sha256 of the canonical JSON without the key: for bible requests and groups the validated
+request; for a batch, the `Batch` record in its persisted form (level = dimension id, actor = UUID, positions as arrays). The
+helper answers a conflict with an `op_key_conflict:` ack error, mapped to `ArchitectRefused(OP_KEY_CONFLICT)`. Records with a key
+are kept at least 30 days after they are final; a key whose record is gone is dropped 30 days after it was made.
+
+**C7.** `seq` bumps on any change of the transition signature (status, reason, wave, the awaiting set, an item's status, stage,
+entry, massing version, rounds), so an item moving designing -> checking -> rendering bumps it too; `lastAction` names the
+transition (an explicit approve/redirect/extend/resume/cancel wins in its own refresh). A design's first round is what its turns
+cost while its round was 1 and it was not revising; critique is `Design.critique.cost`; repair is the rest. QUEUED and
+USAGE_HOLD time is attributed at each group refresh by the item's state since the previous one. The log line is written on
+entering awaiting approval (each massing round) and at the end. `Breakdown.bibleJobIds` lists the bible line's jobs (S-0a-3).
+
+**Events.** GROUP_UPDATED fires when `seq` grew past the last fired one, persisted (in `api-awaiting.json`), so neither a
+re-sent upsert nor a client restart re-fires it. GROUP_AWAITING_APPROVAL keeps its persisted per-massing-version tokens.
+
+**WORLD_STOPPED.** The API objects callers get are proxies of their interfaces: every future they return is tracked and failed
+at SERVER_STOPPING; a future that fails while the world stops gets WORLD_STOPPED too; Sites, Regions and Survey calls fail at once
+while no world runs. 4b's "the reskinCollection future completes after the next load" is therefore gone (behaviour change 1):
+the sets suite now expects WORLD_STOPPED there. `Regions.realise` and `Sites.cancelBatch` usually complete before a stop.
+
+**Tile timeouts.** A slow tile gets 4 evaluations (limits 2, 4, 8, 16 s; pauses 1, 2, 4 s: "retried up to 3 times"), then
+`region.tile.error {code: "timeout", attempts}`. A slow tile waiting to be asked again holds no window slot. The re-ask schedule
+is in memory (after a restart a waiting tile is asked again at once). `ARCHITECT_TEST_SLOW_TILES` works on any backend (the
+helper logs a warning). A kit-error tile is covered by a sidecar unit test, not in game.
+
+**Own time.** As §12; megaA fails (rather than falling back) when the trace has no `ownCpu`.
+
+**DevBridge.** `dev.batch.skipSave {batchId}`, `dev.api.dropAck {msgType}` (its own `type` is the hook's message type),
+`dev.api.pending`.
+
 ## Phase 6c slice 0b: reuse and bounded effort (DRAFT for Steward review)
 
 This slice is API 1.11.0 and mod 0.14.0.
