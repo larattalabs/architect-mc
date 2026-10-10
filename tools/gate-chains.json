@@ -29,8 +29,8 @@
     "sim-sets": { "desc": "4b sets sim suite", "cmd": ["node", "tools/apitest.mjs", "sets"], "env": { "APITEST_OUT": "${OUT}/sim-sets" }, "timeoutMin": 15, "client": "sim" },
     "sim-massing": { "desc": "4c massing sim suite", "cmd": ["node", "tools/apitest.mjs", "massing"], "env": { "APITEST_OUT": "${OUT}/sim-massing" }, "timeoutMin": 15, "client": "sim" },
     "apijars": {
-      "desc": "unchanged 1.8.0/1.7.0/1.6.0 apitest jars (starts its own clients)", "cmd": ["node", "tools/gate6a.mjs", "apijars"], "timeoutMin": 30, "client": "self",
-      "links": { "gate6a/v0100": "${MAIN}/artifacts/gate6a/v0100" },
+      "desc": "unchanged 1.9.0/1.8.0/1.7.0 apitest jars (starts its own clients)", "cmd": ["node", "tools/gate6a.mjs", "apijars"], "timeoutMin": 30, "client": "self",
+      "links": { "gate6a/v0100": "${MAIN}/artifacts/gate6a/v0100", "gate6c0a/v0120": "${MAIN}/artifacts/gate6c0a/v0120" },
       "metrics": { "jars": "gate6a/apijars.json#data" }
     },
     "4e-megalite": {

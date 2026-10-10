@@ -213,7 +213,7 @@ final class ApiTestBatch {
 			JsonArray c = j.getAsJsonArray("crateAt");
 			crateAt = new BlockPos(c.get(0).getAsInt(), c.get(1).getAsInt(), c.get(2).getAsInt());
 		}
-		return new Batch(j.has("id") ? j.get("id").getAsString() : null, j.has("owner") ? j.get("owner").getAsString() : null,
+		Batch out = new Batch(j.has("id") ? j.get("id").getAsString() : null, j.has("owner") ? j.get("owner").getAsString() : null,
 			j.has("ext") ? j.getAsJsonObject("ext") : new JsonObject(), j.has("group") ? j.get("group").getAsString() : null, items, stages,
 			new Batch.WaitPolicy(j.has("waitSeconds") ? j.get("waitSeconds").getAsInt() : 600),
 			j.has("loadChunks") && j.get("loadChunks").getAsInt() > 0 ? LoadPolicy.LOAD_BOUNDED(j.get("loadChunks").getAsInt()) : LoadPolicy.LOADED_ONLY,
@@ -221,6 +221,8 @@ final class ApiTestBatch {
 			j.has("stopOnFailure") && j.get("stopOnFailure").getAsBoolean(), j.has("autoApprove") && j.get("autoApprove").getAsBoolean(),
 			j.has("sharedCrate") && j.get("sharedCrate").getAsBoolean(), crateAt, j.has("overlap") ? dev.larattalabs.architect.api.OverlapPolicy.valueOf(
 				j.get("overlap").getAsString()) : null);
+		// 1.10.0 (6c 0a): {opKey}
+		return j.has("opKey") ? out.withOpKey(j.get("opKey").getAsString()) : out;
 	}
 
 	static JsonObject batchBrief(BatchView b) {
@@ -243,6 +245,7 @@ final class ApiTestBatch {
 		o.add("stages", st);
 		o.addProperty("createdAt", b.createdAt());
 		b.doneAt().ifPresent(t -> o.addProperty("doneAt", t));
+		b.opKey().ifPresent(k -> o.addProperty("opKey", k));
 		JsonArray items = new JsonArray();
 		for (BatchView.ItemView i : b.items()) {
 			JsonObject x = new JsonObject();

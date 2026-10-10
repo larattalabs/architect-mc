@@ -736,10 +736,10 @@ steps.heap = async () => {
 
 steps.apijars = async () => {
   const runs = [
-    // (6b) the unchanged 1.8.0, 1.7.0 and 1.6.0 jars (CONTRACT 6b §6.1)
+    // (6c 0a) the unchanged 1.9.0, 1.8.0 and 1.7.0 jars (CONTRACT 6c slice 0a §1, §13 item 13)
+    { api: '1.9.0', dir: path.join(MAIN, 'artifacts', 'gate6c0a', 'v0120'), jar: 'architect_apitest-0.12.0.jar', world: 'G6A Api19' },
     { api: '1.8.0', dir: path.join(MAIN, 'artifacts', 'gate6b', 'v0110'), jar: 'architect_apitest-0.11.0.jar', world: 'G6A Api18' },
     { api: '1.7.0', dir: path.join(MAIN, 'artifacts', 'gate6a', 'v0100'), jar: 'architect_apitest-0.10.0.jar', world: 'G6A Api17' },
-    { api: '1.6.0', dir: path.join(MAIN, 'artifacts', 'gate5b', 'v090'), jar: 'architect_apitest-0.9.0.jar', world: 'G6A Api16' },
   ];
   const mods = path.join(GAME_DIR, 'mods');
   const out = {};

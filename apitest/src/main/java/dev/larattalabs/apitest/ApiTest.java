@@ -126,7 +126,12 @@ public class ApiTest implements ModInitializer {
 		f.whenComplete((v, e) -> {
 			if (e != null) {
 				JsonObject err = new JsonObject();
-				err.addProperty("error", (e.getCause() != null ? e.getCause() : e).toString());
+				Throwable c = e.getCause() != null ? e.getCause() : e;
+				err.addProperty("error", c.toString());
+				// 1.10.0 (6c 0a): a typed refusal's reason (WORLD_STOPPED, OP_KEY_CONFLICT, ...)
+				if (c instanceof dev.larattalabs.architect.api.ArchitectRefused r) {
+					err.addProperty("reason", r.reason().name());
+				}
 				RESULTS.put(key, err);
 			} else {
 				RESULTS.put(key, v);
@@ -269,6 +274,21 @@ public class ApiTest implements ModInitializer {
 			case "fit":
 			case "margin": {
 				return ApiTestBatch.step(src, a);
+			}
+			case "opbible":
+			case "opgroup":
+			case "jobbykey":
+			case "groupbykey":
+			case "batchbykey":
+			case "canceljob":
+			case "pin":
+			case "unpin":
+			case "pinowners":
+			case "estmix":
+			case "fitmassing":
+			case "group0a":
+			case "api110": {
+				return ApiTest0a.step(src, a);
 			}
 			case "place":
 			case "check": {

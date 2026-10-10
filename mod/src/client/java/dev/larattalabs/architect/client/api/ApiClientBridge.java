@@ -235,8 +235,18 @@ public final class ApiClientBridge implements ClientBridge {
 		return onClient(() -> Sidecar.variantRequest(payload).thenApply(ack -> idOf(ack, "variantId", "id")));
 	}
 
+	/** (6c 0a) DevBridge {@code dev.api.dropAck}: message types whose next ack the mod drops (its future never completes). */
+	public static final java.util.Set<String> DROP_ACK = java.util.concurrent.ConcurrentHashMap.newKeySet();
+
 	@Override
 	public CompletableFuture<JsonObject> send(JsonObject message) {
+		String type = message.has("type") ? message.get("type").getAsString() : "";
+		if (DROP_ACK.remove(type)) {
+			// sent for real; the ack is dropped, as when the game dies between the request and its ack
+			Sidecar.link().send(message).thenAccept(ack -> dev.larattalabs.architect.Architect.LOGGER.warn("dev.api.dropAck: dropped the ack of {} (ok {})",
+				type, ack.ok()));
+			return new CompletableFuture<>();
+		}
 		// SidecarLink.send is thread-safe; its future completes on the client thread
 		return Sidecar.link().send(message).thenApply(ack -> {
 			JsonObject o = new JsonObject();
