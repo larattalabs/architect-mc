@@ -782,8 +782,8 @@ steps.playerblock011 = async () => {
     copyWorld(FLAT, 'G6B PB011');
     await startClient('G6B PB011', { backend: 'sim' });
     await tp(0.5, 120, 0.5);
-    const claim = [-100, -100, 99, 99];
-    const p = await call('dev.region.plan', { program: 'crater_works', claim, surveyLoad: 'bounded:256' }, 900_000);
+    const claim = [-96, -96, 95, 95]; // region_small (crater_works is new in 6b)
+    const p = await call('dev.region.plan', { program: 'region_small', claim, surveyLoad: 'bounded:256' }, 900_000);
     if (p.refused) throw new Error(`plan refused: ${p.refused}`);
     await call('dev.region.prepare', { planId: p.planId, wait: true }, 3_600_000);
     const ir = readPlanJson(p.planId, 'ir.json');
