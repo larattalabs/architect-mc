@@ -17,7 +17,30 @@ merge, tag or publish. This file is retired into CONTRACT "Phase 6b as built" wh
 | 7. Tools: `find-site.mjs`, `scenarios.mjs`, scenario files, `gate6b.mjs` | done; S1-S6 and the gate sites pinned |
 | 8. Gate items 1-10, 12; S1 run and gallery (11); gate-verifier (13) | items 1-10 green (in-game steps re-run on the final code 2026-10-10 01:17-01:33); S1 run 20261009-233143 green on every run bar, evidence eb02307bb0ec, gallery built (approval pending); engine chain running (artifacts/gate-runs/20261010-013327-engine) |
 
-## The 0.11.0 jars (build step 1)
+## The engine-chain MSPT failures (megalite, megaA): investigation (2026-10-10)
+
+The engine chain (artifacts/gate-runs/20261010-013327-engine) failed 4e-megalite (4 ms run MSPT max 65.7 ms) and 6a-megaA
+(realise max 92.8 ms; group undo 211 s, max 103.3 ms). Paired runs in `../architect-mc-6b-run` (ports 8896/8897,
+ARCHITECT_TRACE_JOBS=1, JFR) against v0.11.2 on the same box, at the same time, with the tiers chain, CI runners and other
+clients sharing it (load average 15-64):
+
+| run | realise max / p99 / over 50 | undo s / max | notes |
+|---|---|---|---|
+| megalite 6b (3 runs) | 4 ms run: 152.7, 91.3 ms | group undo max 87.2, 18.1 ms | |
+| megalite v0.11.2 (2 runs) | 4 ms run: 76.5, 88.1 ms | group undo max 37.8, 40.6 ms | v0.11.2 fails the same bar |
+| megaA 6b, JFR (load 64) | 116.5 / 31.9 / 11 | 255 s / 92.3 ms | |
+| megaA v0.11.2, JFR (load 47) | 29.5 / 16.9 / 0 | 182 s / 64.3 ms | v0.11.2 fails undo max |
+| megaA 6b, no JFR (load 30) | 37.1 / 16.9 / 0, 55.1k cells/s | 231 s / 224.6 ms | realise at 6a's level |
+| undo only, the 6a-made realised world, 6b code | | 256 s / 118.5 ms | same data, cold start |
+| undo only, the 6a-made realised world, v0.11.2 code | | 247 s / 82.1 ms | same data: same cost |
+
+- **Megalite:** the 4 ms run's max is the vanilla server tick after the relog (`serverMsptMax`), in every run including
+  main's quick run (41.4 ms server, 19.2 ms placement). G1 pauses of 24-62 ms appear in both versions. Not a 6b regression.
+- **megaA realise:** the engine run's 92.8 ms was the vanilla tick (`serverMsptMax` 86.1 ms; Architect's write max 33.6 ms).
+  JFR over the realise window shows no 6b-only frame on any thread (EntranceStyle, PlayerBlocks, staleOf, previews, checker,
+  blobs, volume survey: none); the distribution over unchanged code is the same as v0.11.2's.
+- **Undo:** the time goes to the unchanged group-undo planner (`Groups.plan` -> `UndoPlanner` -> `Journal.planUndo`, HashMap
+  heavy) and it varies with the box's load; on the same realised world v0.11.2 and 6b cost the same.
 
 Built from tag `v0.11.0` (dd622d6) in a temporary worktree `../architect-mc-v0110` (sidecar bundled, `gradlew build -x test`),
 which was removed afterwards. Archived in the main checkout (gitignored `artifacts/`):
