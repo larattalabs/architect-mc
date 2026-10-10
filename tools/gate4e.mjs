@@ -711,6 +711,8 @@ steps.village = async () => {
  * rest measured 19-27k), then 3 measured runs; the bar is their median >= 15k. A median within 5% of the bar (under 15.75k) runs
  * 3 more and the median of 6 decides. The warm-up's number is recorded, not judged.
  */
+/** `throughput --smoke` (or GATE4E_THROUGHPUT_SMOKE=1): one run as a smoke test instead of warm-up + median of 3 (docs/GATES.md). */
+const THROUGHPUT_SMOKE = process.argv.includes('--smoke') || process.env.GATE4E_THROUGHPUT_SMOKE === '1';
 steps.throughput = async () => {
   if (!dev) await connect();
   await flatBase();
@@ -730,6 +732,15 @@ steps.throughput = async () => {
     log(`  ${name}: ${Math.round(x.cellsPerSecond)} cells/s, wall ${x.wallSeconds.toFixed(2)} s, MSPT max ${x.msptMax?.toFixed(2)}, failed ${x.failed.length}`);
     return x;
   };
+  if (THROUGHPUT_SMOKE) {
+    // the smoke mode (docs/GATES.md, release tier when the release touches neither realise nor placement): one run, no warm-up,
+    // no median. Bars: everything placed, no tick over 50 ms. The cells/s is recorded, not judged (one cold run is not a measurement).
+    const r = await one('G4E VT4 1');
+    check(r.failed.length === 0 && r.ticksOver50ms === 0, `throughput (smoke, 1 run): placed everything, no tick over 50 ms (${Math.round(r.cellsPerSecond)} cells/s recorded, not judged)`);
+    const out = { mode: 'smoke', procedure: 'one run, no warm-up; cells/s recorded, not judged', runs: [r], median: r.cellsPerSecond, spread: 0 };
+    fs.writeFileSync(path.join(OUT, 'throughput-warm.json'), JSON.stringify(out, null, 2));
+    return out;
+  }
   const warmup = await one('G4E VWarm');
   const runs = [];
   for (let k = 1; k <= 3; k++) runs.push(await one(`G4E VT4 ${k}`));
@@ -744,7 +755,7 @@ steps.throughput = async () => {
   check(runs.every((x) => x.failed.length === 0 && x.ticksOver50ms === 0), `throughput: ${runs.length} measured runs placed everything, no tick over 50 ms`);
   check(median >= 15_000, `throughput: median ${Math.round(median)} cells/s at 4 ms over ${runs.length} measured runs (${nums.join(', ')}; spread ${spread}) after one `
     + `unmeasured warm-up (${Math.round(warmup.cellsPerSecond)}); bar 15k, target 17k`);
-  const out = { procedure: 'one unmeasured warm-up per client start, then the median of 3 measured runs (6 if within 5% of the bar)', warmup, runs, median, spread };
+  const out = { mode: 'full', procedure: 'one unmeasured warm-up per client start, then the median of 3 measured runs (6 if within 5% of the bar)', warmup, runs, median, spread };
   fs.writeFileSync(path.join(OUT, 'throughput-warm.json'), JSON.stringify(out, null, 2));
   return out;
 };
