@@ -441,6 +441,7 @@ function estimate() {
       const s = steps[i];
       st.pending.splice(st.pending.indexOf(i), 1);
       st.running.set(i, sh.k);
+      if (sim.length > 1 && isBench(s)) for (const o of sim) if (o !== sh) o.current = null; // the run stops idle clients for a bench step
       const start = (s.client === 'none' || s.client === 'self') ? 0 : sh.current === s.client && !s.restartClient ? 0 : famOf(sh.current) === famOf(s.client) && !s.restartClient ? 0.15 : 0.35;
       sh.current = s.client === 'none' || s.client === 'self' ? null : s.client;
       sh.freeAt = now + start + (s.estMin ?? s.timeoutMin);
@@ -1171,6 +1172,8 @@ async function worker(sh) {
     st.running.set(i, sh.k);
     const step = steps[i];
     const rec = summary.steps[i];
+    // a bench step runs alone (pick drained the others): the other shards' idle clients would load the machine, so stop them
+    if (isBench(step)) for (const o of shards) if (o !== sh && ownProcs(o).length) await stopClient(o, `bench step ${step.id} on s${sh.k}`);
     await runStep(sh, step, rec);
     st.running.delete(i);
     st.done.set(step.id, { status: rec.status, shard: sh.k });
