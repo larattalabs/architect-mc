@@ -117,8 +117,15 @@ export function bars(x) {
   out.push(row('buildings', 'Buildings', `${(x.buildings ?? []).length} entr${(x.buildings ?? []).length === 1 ? 'y' : 'ies'}; ${bErr} errors; restraint warnings ${bRes.length}; ${(x.buildings ?? []).map((b) => `${b.entry} noise ${b.metrics?.detailNoise} accent ${b.metrics?.accentShare}`).join(', ')}`,
     "0 errors; detailNoise and accentShare within the bible's restraint", (x.buildings ?? []).length > 0 && bErr === 0 && bRes.length === 0));
   const ms = x.mspt?.all;
-  out.push(row('mspt', 'MSPT and throughput', ms ? `max ${ms.max.toFixed(1)} ms, p99 ${ms.p99.toFixed(1)} ms, ${ms.over50} over 50 ms${x.mspt.lightShare != null ? `; light share ${(100 * x.mspt.lightShare).toFixed(1)}%` : ''}${x.cellsPerSecond ? `; ${Math.round(x.cellsPerSecond)} cells/s` : ''}` : 'n/a',
-    '0 ticks over 50 ms; p99 <= 25 ms', ms && ms.over50 === 0 && ms.p99 <= 25));
+  // (6b, coordinator 2026-10-10) judged: Architect's own per-tick time (placement, writes, group and plan work) at most 50 ms;
+  // the whole tick (max, p99, over 50), the vanilla tick and GC are recorded alongside. A run without the Architect figure
+  // (before this change) keeps the old whole-tick rule
+  const own = x.mspt?.architect;
+  const wholeTxt = ms ? `tick max ${ms.max.toFixed(1)} ms, p99 ${ms.p99.toFixed(1)} ms, ${ms.over50} over 50 ms${x.mspt.lightShare != null ? `; light share ${(100 * x.mspt.lightShare).toFixed(1)}%` : ''}${x.cellsPerSecond ? `; ${Math.round(x.cellsPerSecond)} cells/s` : ''}` : 'n/a';
+  out.push(own
+    ? row('mspt', 'MSPT and throughput', `Architect's own tick max ${own.placementMsMax.toFixed(1)} ms; recorded: ${wholeTxt}, vanilla max ${own.serverMsptMax.toFixed(1)} ms`,
+      "Architect's own tick at most 50 ms (whole tick, vanilla tick and GC recorded)", own.placementMsMax <= 50)
+    : row('mspt', 'MSPT and throughput', wholeTxt, '0 ticks over 50 ms; p99 <= 25 ms', ms && ms.over50 === 0 && ms.p99 <= 25));
   const ef = x.exact?.flat, en = x.exact?.normal;
   const cap = 0.0001 * (x.exact?.cellsWritten ?? 0);
   // E-normal (6a's rule): every mismatch classified; the world's own doing during the stand (growth, grazing, live blocks, gravity,
