@@ -105,7 +105,10 @@ export class TilePool {
   private closed = false;
   /** (6c 0a) tasks in a pause between timed-out attempts (no worker, not queued) */
   private pausing = new Map<Pending, NodeJS.Timeout>();
-  /** (6c 0a, the slow-tiles hook) evaluations so far per tile (irSha, key, stage, set, preview) */
+  /**
+   * (6c 0a, the slow-tiles hook) evaluations so far per tile (irSha, key, stage, set, preview). Test only, so never cleared (not
+   * on dropIr either): a release while a tile waits TILE_SLOW must not restart its overruns.
+   */
   private evals = new Map<string, number>();
   /** (tests, numbers) workers started, replaced after a crash or timeout; (6c 0a) retries after a timeout */
   stats = { started: 0, replaced: 0, tiles: 0, failed: 0, retries: 0 };
@@ -127,7 +130,6 @@ export class TilePool {
 
   /** Forget an IR in every worker (region.release, or the IR cache dropped it). */
   dropIr(irSha: string): void {
-    for (const k of this.evals.keys()) if (k.startsWith(`${irSha}|`)) this.evals.delete(k);
     for (const s of this.slots) {
       if (!s.irs.delete(irSha)) continue;
       try {
