@@ -282,6 +282,22 @@ public class ApiTest implements ModInitializer {
 			case "margin": {
 				return ApiTestBatch.step(src, a);
 			}
+			case "opbible":
+			case "opgroup":
+			case "jobbykey":
+			case "groupbykey":
+			case "batchbykey":
+			case "canceljob":
+			case "pin":
+			case "unpin":
+			case "pinowners":
+			case "estmix":
+			case "fitmassing":
+			case "group0a":
+			case "volume":
+			case "api110": {
+				return ApiTest0a.step(src, a);
+			}
 			case "place":
 			case "check": {
 				// place <bp> <x> <y> <z> <AUTO|INSTANT|CONSTRUCTION> <owned|unowned> <actor|noactor> [rotation 0-3] [force] [layer]

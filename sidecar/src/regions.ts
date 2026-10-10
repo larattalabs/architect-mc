@@ -902,7 +902,11 @@ export class Regions {
   }
 
   private getPool(): TilePool {
-    this.pool ??= new TilePool({ kitDir: this.host.config.kitDir, size: this.cfg.workers, tileMs: this.cfg.tileMs, heapMb: this.cfg.tileHeapMb, log: this.host.log });
+    if (!this.pool) {
+      const slowTiles = this.cfg.testSlowTiles;
+      if (slowTiles > 0) this.host.log.warn(`test hook ARCHITECT_TEST_SLOW_TILES=${slowTiles}: the first ${slowTiles} evaluations of each region tile overrun their limit`);
+      this.pool = new TilePool({ kitDir: this.host.config.kitDir, size: this.cfg.workers, tileMs: this.cfg.tileMs, heapMb: this.cfg.tileHeapMb, retryPauseMs: this.cfg.tileRetryPauseMs, slowTiles, log: this.host.log });
+    }
     return this.pool;
   }
 
@@ -938,7 +942,8 @@ export class Regions {
     const head = { planId: s.planId, key: job.key, stage: job.stage ?? '*', set: job.set ?? '*', ...(job.survey ? { preview: true } : {}) };
     if (!res.ok) {
       this.host.log.warn(`region plan ${s.planId} tile ${job.key} (${head.stage}/${head.set}${job.survey ? ', ghost' : ''}) failed: ${truncate(res.message, 300)}`);
-      await sendFlushed(s.client, { type: 'region.tile.error', ...head, message: truncate(res.message, 4000) } as Outbound);
+      // (6c 0a) code: 'timeout' (over its limit in every attempt: the mod waits TILE_SLOW) or 'error'; attempts: evaluations made
+      await sendFlushed(s.client, { type: 'region.tile.error', ...head, message: truncate(res.message, 4000), code: res.code, attempts: Math.max(1, res.attempts) } as Outbound);
       return;
     }
     const n = Math.max(1, Math.ceil(res.gz.length / MAX_TILE_FRAME_BYTES));
@@ -981,7 +986,7 @@ export class Regions {
   }
 
   /** Workers alive and what they did (tests, numbers). */
-  poolStats(): { workers: number; started: number; replaced: number; tiles: number; failed: number } | undefined {
+  poolStats(): { workers: number; started: number; replaced: number; tiles: number; failed: number; retries: number } | undefined {
     return this.pool ? { workers: this.pool.workers, ...this.pool.stats } : undefined;
   }
 

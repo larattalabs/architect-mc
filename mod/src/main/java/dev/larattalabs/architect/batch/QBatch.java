@@ -44,6 +44,14 @@ public final class QBatch {
 	public String note = "";
 	/** Phase 6a: false under {@code GENERATED_ONLY} (chunks never generated are never ticketed). */
 	public boolean generate = true;
+	/** (6c 0a, C9) the caller's operation key and the body hash it was queued with ({@link BatchKeys}). */
+	public @Nullable String opKey;
+	public @Nullable String opHash;
+	/**
+	 * (6c 0a) BATCH_DONE fired for it (set after the fire, before the save). A finished batch read without the field (an older
+	 * queue file) counts as fired.
+	 */
+	public boolean fired;
 
 	public QBatch(String id, @Nullable String owner, JsonObject ext, String group, List<QItem> items, List<String> stages, long maxWaitTicks,
 		int loadChunks, boolean proximityFirst, boolean stopOnFailure, boolean autoApprove, boolean sharedCrate, int @Nullable [] crateAt,
@@ -151,6 +159,13 @@ public final class QBatch {
 		if (!generate) {
 			o.addProperty("generate", false);
 		}
+		if (opKey != null) {
+			o.addProperty("opKey", opKey);
+			o.addProperty("opHash", opHash);
+		}
+		if (status != Status.RUNNING) {
+			o.addProperty("fired", fired);
+		}
 		return o;
 	}
 
@@ -179,6 +194,9 @@ public final class QBatch {
 		b.stopping = o.has("stopping") && o.get("stopping").getAsBoolean();
 		b.note = o.has("note") ? o.get("note").getAsString() : "";
 		b.generate = !o.has("generate") || o.get("generate").getAsBoolean();
+		b.opKey = o.has("opKey") ? o.get("opKey").getAsString() : null;
+		b.opHash = o.has("opHash") ? o.get("opHash").getAsString() : null;
+		b.fired = b.status != Status.RUNNING && (!o.has("fired") || o.get("fired").getAsBoolean());
 		return b;
 	}
 }

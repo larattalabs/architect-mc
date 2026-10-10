@@ -17,7 +17,7 @@ import org.junit.jupiter.api.Test;
 class Api19Test {
 	@Test
 	void version() {
-		assertEquals("1.9.0", ArchitectApi.VERSION);
+		assertEquals("1.10.0", ArchitectApi.VERSION);
 	}
 
 	@Test

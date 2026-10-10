@@ -14,6 +14,7 @@ import org.jspecify.annotations.Nullable;
  * NOT_GENERATED        PREPARE (detail: the prepare's size and time estimate)
  * SIDECAR_UNAVAILABLE  START_SIDECAR
  * DRIFTED (held)       APPROVE_STAGE (detail: the stage), REPLAN
+ * TILE_SLOW            RETRY (6c 0a: ask the helper for the slow tiles again now)
  * anything else        none
  * </pre>
  * Pure.
@@ -48,6 +49,7 @@ public final class WaitActions {
 			case DRIFTED -> List.of(new WaitAction(WaitAction.Kind.APPROVE_STAGE, c.heldStage() == null ? "Approve the held stage" : "Approve stage "
 				+ c.heldStage() + " (build on the changed land)", null, c.heldStage()), new WaitAction(WaitAction.Kind.REPLAN,
 					"Replan (remove the region and plan again)", null, null));
+			case TILE_SLOW -> List.of(new WaitAction(WaitAction.Kind.RETRY, "Ask the helper for the slow tile again now", null, null));
 			default -> List.of();
 		};
 	}

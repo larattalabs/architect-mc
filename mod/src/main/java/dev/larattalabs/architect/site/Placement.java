@@ -83,6 +83,7 @@ public final class Placement {
 			STATS.startTick(s, active());
 			traceStart = System.nanoTime();
 			traceWork = 0;
+			traceCpu = 0;
 		});
 		ServerTickEvents.END_SERVER_TICK.register(Placement::tick);
 		// the tick's full time is measured from its start to after every other end-of-tick handler (Fabric runs END_SERVER_TICK
@@ -91,7 +92,7 @@ public final class Placement {
 		ServerTickEvents.END_SERVER_TICK.addPhaseOrdering(Event.DEFAULT_PHASE, last);
 		ServerTickEvents.END_SERVER_TICK.register(last, s -> {
 			STATS.endTick(s);
-			dev.larattalabs.architect.region.MsptTrace.tick(System.nanoTime() - traceStart, traceWork);
+			dev.larattalabs.architect.region.MsptTrace.tick(System.nanoTime() - traceStart, traceWork, traceCpu);
 		});
 		ServerLifecycleEvents.SERVER_STOPPING.register(s -> save(s, true));
 		ServerLifecycleEvents.SERVER_STOPPED.register(s -> {
@@ -164,8 +165,10 @@ public final class Placement {
 		}
 		if (!JOBS.isEmpty() || STATS.tickActive) {
 			STATS.work(System.nanoTime() - start, Math.max(0, workDone() - before) + finishedWork);
-			STATS.workCpu(cpu0 < 0 ? -1 : cpuNow() - cpu0);
+			long cpu = cpu0 < 0 ? -1 : cpuNow() - cpu0;
+			STATS.workCpu(cpu);
 			traceWork += System.nanoTime() - start;
+			traceCpu = cpu < 0 || traceCpu < 0 ? -1 : traceCpu + cpu; // (6c 0a) the same work in CPU time; -1: the JVM can't tell
 		}
 		finishedWork = 0;
 	}
@@ -679,6 +682,8 @@ public final class Placement {
 
 	private static long traceStart;
 	private static long traceWork;
+	/** (6c 0a) Architect's work in this tick in the server thread's CPU time (ns; -1 when the JVM can't tell). */
+	private static long traceCpu;
 
 	private static final java.lang.management.ThreadMXBean THREADS = java.lang.management.ManagementFactory.getThreadMXBean();
 	private static final boolean CPU = THREADS.isCurrentThreadCpuTimeSupported();

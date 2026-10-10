@@ -25,8 +25,9 @@ class WaitActionsTest {
 		assertEquals(List.of(WaitAction.Kind.PREPARE), kinds(Reason.NOT_GENERATED));
 		assertEquals(List.of(WaitAction.Kind.START_SIDECAR), kinds(Reason.SIDECAR_UNAVAILABLE));
 		assertEquals(List.of(WaitAction.Kind.APPROVE_STAGE, WaitAction.Kind.REPLAN), kinds(Reason.DRIFTED));
+		assertEquals(List.of(WaitAction.Kind.RETRY), kinds(Reason.TILE_SLOW)); // (6c 0a)
 		for (Reason r : Reason.values()) {
-			if (r != Reason.NOT_LOADED && r != Reason.NOT_GENERATED && r != Reason.SIDECAR_UNAVAILABLE && r != Reason.DRIFTED) {
+			if (r != Reason.NOT_LOADED && r != Reason.NOT_GENERATED && r != Reason.SIDECAR_UNAVAILABLE && r != Reason.DRIFTED && r != Reason.TILE_SLOW) {
 				assertEquals(List.of(), kinds(r), r.name());
 			}
 		}

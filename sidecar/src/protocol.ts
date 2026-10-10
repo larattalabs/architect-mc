@@ -951,7 +951,18 @@ export const RegionTileMsg = z.object({
   count: z.number().int().nonnegative().describe('cells in the tile'),
   sha: Sha256Hex.describe('SHA-256 of the whole UNCOMPRESSED ARTL payload'),
 });
-export const RegionTileErrorMsg = z.object({ ...envelope('region.tile.error'), planId: PlanId, key: TileKey, stage: StageName, set: TileOrAll, preview: z.literal(true).optional(), message: z.string() });
+export const RegionTileErrorMsg = z.object({
+  ...envelope('region.tile.error'),
+  planId: PlanId,
+  key: TileKey,
+  stage: StageName,
+  set: TileOrAll,
+  preview: z.literal(true).optional(),
+  message: z.string(),
+  // (6c 0a, CONTRACT 0a §11; additive, protocol stays 2) an older sidecar sends neither: the mod treats that as "error"
+  code: z.enum(['timeout', 'error']).optional().describe("(6c 0a) 'timeout': over its time limit in every retry (the mod waits TILE_SLOW and asks again later); 'error': anything else (no retry)"),
+  attempts: z.number().int().min(1).optional().describe('(6c 0a) evaluations made, the retries included'),
+});
 export const EntryVersionedMsg = z.object({ ...envelope('entry.versioned'), entryId: z.string(), version: z.number().int().min(1), from: z.number().int().min(1).describe('the head before'), by: z.enum(['design', 'polish', 'revert', 'migrated']), designId: z.string().optional() });
 
 export const ServerMessage = z.discriminatedUnion('type', [SnapshotMsg, StatusMsg, DesignUpsertMsg, VariantUpsertMsg, AckMsg, ErrorMsg, JobUpsertMsg, JobEventMsg, JobToolCallMsg, GroupUpsertMsg, BibleUpsertMsg, BibleIndexMsg, ReskinUpsertMsg, MassingUpsertMsg, MassingRemovedMsg, EntryVersionedMsg, RegionPlannedMsg, RegionFailedMsg, RegionTileMsg, RegionTileErrorMsg, RegionProgressMsg]);

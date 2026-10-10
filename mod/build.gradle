@@ -74,6 +74,8 @@ test {
 	systemProperty "arvx.write", providers.systemProperty("arvx.write").getOrElse("false")
 	// -Dmirror.write=true rewrites kit/test/fixtures/mirror-oracle.json (MirrorOracleTest, slice 0b)
 	systemProperty "mirror.write", providers.systemProperty("mirror.write").getOrElse("false")
+	// -Dc6.evidence=<file> writes 6c 0a C6's prediction evidence (MassingPredictionTest)
+	systemProperty "c6.evidence", providers.systemProperty("c6.evidence").getOrElse("")
 	testLogging {
 		events "failed"
 		exceptionFormat "full"

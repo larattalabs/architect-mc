@@ -276,7 +276,10 @@ there is no DevBridge hook to make layers, so tests go through the API as anothe
 | `dev.undo.mark` / `dev.undo.check` | {sites} / {} - remember what the sites' entries give back on undo; then the world against it (mismatches) |
 | `dev.chunks.generated` | {} - chunks this session: `terrain` (terrain generated, any status), `full`, `whileHeld` (while a region item held tickets), `loads` |
 | `dev.chunks.status` | {box: [x0,z0,x1,z1]} - chunks of the box fully generated, read without loading them (ChunkGen), and the cost per chunk |
-| `dev.mspt.trace` | {start \| stop: true} - every tick's full time and Architect's write time; stop answers max/p50/p99/over 50 for all ticks, ticks with writes and ticks without (lighting and chunk sending) |
+| `dev.mspt.trace` | {start \| stop: true} - every tick's full time and Architect's write time; stop answers max/p50/p99/over 50 for all ticks, ticks with writes and ticks without (lighting and chunk sending). (6c 0a) Also `own` (wall) and `ownCpu` (the server thread's CPU time, what `Placement` measures): Architect's own time per tick, each `{ticks, p50, p99, max, mean}` over the ticks with Architect work; `ownCpu` is absent when the JVM can't measure thread CPU. The tick bars judge `ownCpu` (megaA: p99 <= 25 ms, max <= 50 ms); the full tick is recorded |
+| `dev.batch.skipSave` | {batchId} - (6c 0a) skip the queue save right after that batch's BATCH_DONE (fire, mark fired, [save]); kill the client JVM then, and BATCH_DONE fires once on the next load (the catch-up) |
+| `dev.api.dropAck` | {type} - (6c 0a) the mod drops the next helper ack of that message type (`bible.request`, `design.group`, ...): the request reaches the helper, the API future never completes; restart and adopt by opKey |
+| `dev.api.pending` | {} - (6c 0a) how many API futures are pending (WORLD_STOPPED fails them at SERVER_STOPPING) |
 | `dev.heap.gc` | {} - used heap after a forced GC, and the max |
 | `dev.tiles.stats` | {reset?} - tiles received, wire bytes, cells, bytes per cell, request-to-receive latency p50/p99 |
 
@@ -290,7 +293,7 @@ there is no DevBridge hook to make layers, so tests go through the API as anothe
 | `dev.region.check` | {planId} - Regions.check (`region.check`) -> {report, summary, ms}; fires REGION_CHECKED |
 | `dev.region.preview` | {planId, views?: [top\|section\|iso\|siteplan], axes?: [[[x,y,z]...]...] (at most 4)} - Regions.previews (`region.preview`) -> {paths, sitePlan, ms} |
 | `dev.region.design` | {brief, card?: {site?, purpose?, style?, text?}, claim: [x0,z0,x1,z1], bible?, mustPass?, model?, budgetUsd?, requireFit?, owner?, wait?: true} - Regions.design; with wait the answer comes once the design ended and, for a fit, the mod's plan of the pick was accepted or failed -> {designId, status, kind, error?, result: {outcome, fits, program, params, reason, cost, tries, planId?, planError?}, costUsd, ms} |
-| `dev.region.nudge` | {region, action: MOVE_CLOSER\|PREPARE\|START_SIDECAR\|APPROVE_STAGE\|REPLAN} - Regions.nudge -> {done, message, actions (offered before the nudge)}. PREPARE is two calls: the first answers the estimate (done false), a second within 5 minutes starts the prepare |
+| `dev.region.nudge` | {region, action: MOVE_CLOSER\|PREPARE\|START_SIDECAR\|APPROVE_STAGE\|REPLAN\|RETRY (6c 0a: TILE_SLOW)} - Regions.nudge -> {done, message, actions (offered before the nudge)}. PREPARE is two calls: the first answers the estimate (done false), a second within 5 minutes starts the prepare |
 | `dev.region.state` | (6a, extended) adds `actions` (the WaitActions as JSON; also inside `view`) and `stale` (the PLAN_STALE message when the region's IR is stale) |
 | `dev.region.progress` | {planId} - the phases a plan went through: planning, checking, rendering (the helper's `region.progress`), accepted (or failed) |
 | `dev.survey.volume` | {box: [x0,y0,z0,x1,y1,z1], load?: loaded\|generated:<n>\|bounded:<n>} - Survey.volume -> {sha, blobId, counts (per VoxelClass), missingColumns, stats {surfaceColumns, meanSlope, steepFraction, overhangFraction, treeCells, caveCells, trees, caves}, cells, ms (wall), ticks, maxTickMs (the longest sampling slice), sampleMs, cellsPerSecond (over sampleMs), bytes (the frozen gzip file), bytesPerCell, file, chunksLoaded, maxCells (the per-call/per-region limit)} or {refused: "REGION_LIMIT: ..."} |
@@ -310,6 +313,11 @@ region. Previews print as file links (with a [copy] link).
 
 Semi-stable: a hook may change or go, and every such change is listed here, newest first.
 
+- **2026-10-10 (6c slice 0a, 2):** new `dev.batch.skipSave`, `dev.api.dropAck` and `dev.api.pending`; apitest `/apitest opbible|opgroup|jobbykey|groupbykey|batchbykey|canceljob|pin|unpin|pinowners|estmix|fitmassing|group0a|api110` (API 1.10.0), and `bqueue` takes `opKey`.
+- **2026-10-10 (6c slice 0a):** `dev.mspt.trace`'s stop adds `own` and `ownCpu` (Architect's own time per tick, wall and CPU,
+  `{ticks, p50, p99, max, mean}` over the ticks with Architect work); `tools/lib/tickbar.mjs` judges them when present. Sidecar
+  test hook (env, not a DevBridge call): `ARCHITECT_TEST_SLOW_TILES=<n>` makes the first n evaluations of each region tile
+  overrun its limit (the slow-tile path: `region.tile.error code: "timeout"`, the item waits TILE_SLOW, `dev.region.nudge {action: RETRY}` or apitest `rnudge <region> RETRY`).
 - **2026-10-10 (phase 6b):** `dev.placement.stats` adds `placementCpuMsMax` and `placementCpuMsMean`: the placement ticks
   (batches, groups, jobs) in the server thread's CPU time. On a busy machine the wall-time `placementMsMax`, `msptMax` and
   `serverMsptMax` take descheduling and GC pauses; the gates' MSPT bars judge the CPU figure and record the rest.
