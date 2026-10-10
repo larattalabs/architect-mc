@@ -388,11 +388,16 @@ public final class WorldJournal {
 	public static boolean holds(Level level, long pos, Value after) {
 		BlockPos p = BlockPos.of(pos);
 		BlockState now = level.getBlockState(p);
+		return holds(now, now.hasBlockEntity() ? beNbt(level, p) : null, after);
+	}
+
+	/** {@link #holds} against a read state and block-entity NBT (6c 0c §10: a section copy, off the server thread). */
+	public static boolean holds(BlockState now, @Nullable CompoundTag nowNbt, Value after) {
 		BlockState want = state(after);
 		if (now.getBlock() != want.getBlock() && !(want.isAir() && !now.getFluidState().isEmpty()) && !(StillOurs.spread(now) && StillOurs.spread(want))) {
 			return false; // (a fluid in cleared air goes to StillOurs, phase 6a)
 		}
-		return StillOurs.holds(now, now.hasBlockEntity() ? beNbt(level, p) : null, want, after.nbt());
+		return StillOurs.holds(now, now.hasBlockEntity() ? nowNbt : null, want, after.nbt());
 	}
 
 	/** Whether a recorded value {@code v} still holds {@code after} ({@link StillOurs}). */
@@ -492,6 +497,12 @@ public final class WorldJournal {
 	 * sections until a deadline; {@link #work} once it says done. Server thread.
 	 */
 	public static final class UndoPlanner {
+		/** One worker for off-thread undo plans (6c 0c §10). */
+		static final java.util.concurrent.ExecutorService OFF_PLAN = java.util.concurrent.Executors.newSingleThreadExecutor(r -> {
+			Thread t = new Thread(r, "architect-undo-plan");
+			t.setDaemon(true);
+			return t;
+		});
 		private final ServerLevel level;
 		private final JournalStore s;
 		private final String dim;
@@ -499,11 +510,26 @@ public final class WorldJournal {
 		private final String group;
 		private final long at = System.currentTimeMillis();
 		private final TreeSet<Long> sections = new TreeSet<>();
-		private final java.util.Iterator<Long> next;
+		private java.util.Iterator<Long> next;
 		private final Set<String> undo;
 		private final Set<String> covering = new LinkedHashSet<>();
-		private final Sections.Planner planner;
+		private Sections.Planner planner;
 		private int planned;
+		/**
+		 * 6c 0c §10 (off-thread undo planning, a go/no-go spike; {@code -Darchitect.undoOffThread=false} turns it off): the
+		 * sections are copied on the server thread (block states, block-entity NBT), planned off it against the copies, then
+		 * compared with the world on the server thread; any change (or an unloaded chunk) plans again on the server thread.
+		 */
+		static final boolean OFF_THREAD = !"false".equals(System.getProperty("architect.undoOffThread"));
+		private @Nullable Map<Long, Snap> snaps;
+		private java.util.@Nullable Iterator<Long> snapNext;
+		private java.util.concurrent.@Nullable CompletableFuture<Void> offPlan;
+		private java.util.@Nullable Iterator<Long> verifyNext;
+		private boolean onThread;
+		/** Sections copied, compared; server-thread fallbacks (for the measurement). */
+		public int snapped;
+		public boolean fellBack;
+		public long offNanos;
 
 		public UndoPlanner(ServerLevel level, Collection<String> ids, String group) throws IOException {
 			this.level = level;
@@ -565,17 +591,149 @@ public final class WorldJournal {
 			return warm.isDone();
 		}
 
+		/** One section's copy: its block states (null: all air) and its block entities' NBT by section index. */
+		record Snap(net.minecraft.world.level.chunk.@Nullable PalettedContainer<BlockState> states, Map<Integer, net.minecraft.nbt.CompoundTag> nbt) {
+			BlockState at(int i) {
+				return states == null ? net.minecraft.world.level.block.Blocks.AIR.defaultBlockState() : states.get(i & 15, i >> 8 & 15, i >> 4 & 15);
+			}
+		}
+
+		/** The section's copy, or null when its chunk isn't loaded (the server-thread plan then). */
+		private @Nullable Snap snap(long k) {
+			int sx = Sections.sx(k);
+			int sy = Sections.sy(k);
+			int sz = Sections.sz(k);
+			net.minecraft.world.level.chunk.LevelChunk c = level.getChunkSource().getChunkNow(sx, sz);
+			if (c == null) {
+				return null;
+			}
+			int si = c.getSectionIndexFromSectionY(sy);
+			net.minecraft.world.level.chunk.PalettedContainer<BlockState> st = si < 0 || si >= c.getSections().length ? null : c.getSection(si).getStates()
+				.copy();
+			Map<Integer, net.minecraft.nbt.CompoundTag> nbt = new HashMap<>();
+			for (BlockPos p : c.getBlockEntitiesPos()) {
+				if (p.getY() >> 4 == sy) {
+					net.minecraft.nbt.CompoundTag t = beNbt(level, p);
+					if (t != null) {
+						nbt.put(Sections.index(p.asLong()), t);
+					}
+				}
+			}
+			return new Snap(st, nbt);
+		}
+
+		/** Whether the world still holds the copy of section {@code k} (states and block-entity NBT). */
+		private boolean unchanged(long k, Snap was) {
+			Snap now = snap(k);
+			if (now == null) {
+				return false;
+			}
+			for (int i = 0; i < 4096; i++) {
+				if (now.at(i) != was.at(i)) {
+					return false;
+				}
+			}
+			return now.nbt().equals(was.nbt());
+		}
+
 		/** Plans sections until {@code deadline} (at least one); true when every section is planned. */
 		public boolean step(long deadline) throws IOException {
 			if (!ready()) {
 				return false;
+			}
+			if (!sync && OFF_THREAD && !onThread) {
+				return stepOff(deadline);
 			}
 			int n = 0;
 			while (next.hasNext()) {
 				if (n > 0 && System.nanoTime() >= deadline) {
 					return false;
 				}
-				long k = next.next();
+				planSection(planner, next.next());
+				n++;
+			}
+			return true;
+		}
+
+		/** 6c 0c §10: copy (server thread, sliced), plan (off it), compare (server thread, sliced). */
+		private boolean stepOff(long deadline) {
+			if (snaps == null) {
+				snaps = new HashMap<>();
+				snapNext = sections.iterator();
+			}
+			int n = 0;
+			while (snapNext.hasNext()) {
+				if (n++ > 0 && System.nanoTime() >= deadline) {
+					return false;
+				}
+				long k = snapNext.next();
+				Snap sn = snap(k);
+				if (sn == null) {
+					return fallBack("chunk of section " + k + " not loaded");
+				}
+				snaps.put(k, sn);
+				snapped++;
+			}
+			if (offPlan == null) {
+				Map<Long, Snap> copy = snaps;
+				Sections.Planner off = new Sections.Planner(ids, group, at, (pos, after) -> {
+					Snap sn = copy.get(Sections.key(pos));
+					int i = Sections.index(pos);
+					return sn != null && holds(sn.at(i), sn.nbt().get(i), after);
+				}, WorldJournal::same);
+				offPlan = java.util.concurrent.CompletableFuture.runAsync(() -> {
+					long t0 = System.nanoTime();
+					try {
+						for (long k : sections) {
+							planSection(off, k);
+						}
+					} catch (IOException e) {
+						throw new java.util.concurrent.CompletionException(e);
+					}
+					planner = off;
+					offNanos = System.nanoTime() - t0;
+				}, OFF_PLAN);
+				return false;
+			}
+			if (!offPlan.isDone()) {
+				return false;
+			}
+			if (offPlan.isCompletedExceptionally()) {
+				return fallBack("the off-thread plan failed");
+			}
+			if (verifyNext == null) {
+				verifyNext = sections.iterator();
+			}
+			n = 0;
+			while (verifyNext.hasNext()) {
+				if (n++ > 0 && System.nanoTime() >= deadline) {
+					return false;
+				}
+				long k = verifyNext.next();
+				if (!unchanged(k, snaps.get(k))) {
+					return fallBack("section " + k + " changed while it planned");
+				}
+			}
+			planned = sections.size();
+			return true;
+		}
+
+		/** Plans again on the server thread from the first section. */
+		private boolean fallBack(String why) {
+			dev.larattalabs.architect.Architect.LOGGER.info("Undo {}: off-thread planning abandoned ({}); planning on the server thread", group, why);
+			onThread = true;
+			fellBack = true;
+			snaps = null;
+			covering.clear();
+			planned = 0;
+			planner = new Sections.Planner(ids, group, at, (pos, after) -> holds(level, pos, after), WorldJournal::same);
+			next = sections.iterator();
+			return false;
+		}
+
+		/** One section: its entries' slices, the covering entries, the plan. */
+		private void planSection(Sections.Planner into, long k) throws IOException {
+			{
 				List<Entry> l = new ArrayList<>();
 				for (String id : s.inSection(dim, k)) {
 					JournalStore.Meta m = s.meta(id);
@@ -610,11 +768,9 @@ public final class WorldJournal {
 						}
 					}
 				}
-				planner.add(k, l);
+				into.add(k, l);
 				planned++;
-				n++;
 			}
-			return true;
 		}
 
 		public int planned() {
