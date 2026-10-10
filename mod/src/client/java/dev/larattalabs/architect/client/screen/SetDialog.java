@@ -4,15 +4,15 @@ import dev.larattalabs.architect.api.Bible;
 import dev.larattalabs.architect.api.BibleJob;
 import dev.larattalabs.architect.apiimpl.Wire4b;
 import dev.larattalabs.architect.client.design.SetFeature;
-import dev.larattalabs.architect.client.hud.UiBits;
+import dev.larattalabs.labui.client.hud.UiBits;
 import dev.larattalabs.architect.client.screen.ArchitectScreen.Focus;
 import dev.larattalabs.architect.client.screen.ArchitectScreen.Option;
 import dev.larattalabs.architect.client.sidecar.Sidecar;
 import dev.larattalabs.architect.client.text.TextFieldView;
 import dev.larattalabs.architect.client.text.TextModel;
-import dev.larattalabs.architect.client.ui.Panels;
-import dev.larattalabs.architect.client.ui.TextUtil;
-import dev.larattalabs.architect.client.ui.UiStyle;
+import dev.larattalabs.labui.client.ui.Panels;
+import dev.larattalabs.labui.client.ui.TextUtil;
+import dev.larattalabs.labui.client.ui.UiStyle;
 import dev.larattalabs.architect.design.DesignSpec;
 import dev.larattalabs.architect.design.SetSpec;
 import java.util.ArrayList;
@@ -198,7 +198,7 @@ final class SetDialog {
 			String ml = "Massing first";
 			int hw = 12 + font.width(ml) + 4;
 			s.addHit(new ArchitectScreen.Hit("set:massing_first", ml, mx0, y + 3, hw, 12, true, on, () -> f.massingFirst = !f.massingFirst));
-			Panels.sprite(g, on ? dev.larattalabs.architect.client.ui.Kit.CHECKBOX_CHECKED : dev.larattalabs.architect.client.ui.Kit.CHECKBOX, mx0, y + 4, 10,
+			Panels.sprite(g, on ? dev.larattalabs.labui.client.ui.Kit.CHECKBOX_CHECKED : dev.larattalabs.labui.client.ui.Kit.CHECKBOX, mx0, y + 4, 10,
 				10);
 			g.text(font, ml, mx0 + 13, y + 5, on ? UiBits.ink() : UiBits.muted(), false);
 			mx0 += hw + 8;
@@ -311,7 +311,7 @@ final class SetDialog {
 		String cl = "Critique and revise (experimental)";
 		int hw = 12 + font.width(cl) + 4;
 		s.addHit(new ArchitectScreen.Hit("set:critique", cl, cx, y, hw, 12, true, on, () -> f.critique = !f.critique));
-		Panels.sprite(g, on ? dev.larattalabs.architect.client.ui.Kit.CHECKBOX_CHECKED : dev.larattalabs.architect.client.ui.Kit.CHECKBOX, cx, y + 1, 10, 10);
+		Panels.sprite(g, on ? dev.larattalabs.labui.client.ui.Kit.CHECKBOX_CHECKED : dev.larattalabs.labui.client.ui.Kit.CHECKBOX, cx, y + 1, 10, 10);
 		g.text(font, cl, cx + 13, y + 2, on ? UiBits.ink() : UiBits.muted(), false);
 		cx += hw + 8;
 		g.text(font, "Revisions", cx, y + 2, on ? UiStyle.CLAY_DARK : UiBits.muted(), false);
