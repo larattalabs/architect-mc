@@ -13,7 +13,7 @@ import dev.larattalabs.architect.client.placement.BuildPlacement;
 import dev.larattalabs.architect.client.placement.PlotMarker;
 import dev.larattalabs.architect.client.sidecar.Sidecar;
 import dev.larattalabs.architect.site.SiteCommands;
-import dev.larattalabs.architect.ui.Guard;
+import dev.larattalabs.labui.ui.Guard;
 import java.util.concurrent.CompletableFuture;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.minecraft.client.Minecraft;
@@ -32,7 +32,7 @@ public final class ScreenFeature {
 		Keys.ensureRegistered();
 		SiteCommands.screenOpener = player -> Minecraft.getInstance().execute(() -> ArchitectScreen.open(null));
 		DesignFeature.reopen = tab -> ArchitectScreen.open(ArchitectScreen.Tab.of(tab));
-		ClientTickEvents.END_CLIENT_TICK.register(mc -> Guard.run("screen.key", () -> {
+		ClientTickEvents.END_CLIENT_TICK.register(mc -> Guard.run("architect_mc:screen.key", () -> {
 			while (Keys.screen.consumeClick()) {
 				if (mc.player != null && mc.gui.screen() == null && !BuildPlacement.active() && !PlotMarker.active()) {
 					ArchitectScreen.open(null);

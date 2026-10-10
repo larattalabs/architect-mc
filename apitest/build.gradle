@@ -28,7 +28,10 @@ dependencies {
 	implementation "net.fabricmc:fabric-loader:${rootProject.loader_version}"
 	implementation "net.fabricmc.fabric-api:fabric-api:${rootProject.fabric_api_version}"
 	// Architect itself (the root project's jar). Only its api package may be used: see checkApiOnly.
-	compileOnly project(':')
+	// (lab-ui, Architect's UI library, is not part of the API: excluded, so apitest needs no GitHub Packages repository)
+	compileOnly(project(':')) {
+		exclude group: 'dev.larattalabs', module: 'lab_ui'
+	}
 	// the client half (ArchitectClientApi) lives in Architect's client source set: compile against the jar, which has both
 	clientCompileOnly files(rootProject.tasks.named('jar'))
 }

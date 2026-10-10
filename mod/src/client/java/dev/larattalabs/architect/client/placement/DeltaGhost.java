@@ -5,7 +5,7 @@ import dev.larattalabs.architect.journal.Sections;
 import dev.larattalabs.architect.placement.CompositeMesh;
 import dev.larattalabs.architect.site.SiteDeltas;
 import dev.larattalabs.architect.survival.SiteNet;
-import dev.larattalabs.architect.ui.Guard;
+import dev.larattalabs.labui.ui.Guard;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
@@ -24,7 +24,7 @@ public final class DeltaGhost {
 	}
 
 	public static void init() {
-		ClientPlayNetworking.registerGlobalReceiver(SiteNet.DeltaPreview.TYPE, (p, ctx) -> Guard.run("placement.delta", () -> accept(p)));
+		ClientPlayNetworking.registerGlobalReceiver(SiteNet.DeltaPreview.TYPE, (p, ctx) -> Guard.run("architect_mc:placement.delta", () -> accept(p)));
 	}
 
 	/** Asks the server for the delta ghost of {@code siteId} going to {@code toVersion} (0 = the head); it arrives under {@code key}. */
