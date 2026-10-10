@@ -92,23 +92,23 @@ describe('estimates', () => {
   const ctx = { designConcurrency: 3, now: 1_000_000, designModel: 'claude-opus-5-5', landmarkModel: 'claude-opus-5-5', ordinaryModel: 'claude-sonnet-5-5', bibleModel: 'claude-opus-5-5', massingModel: 'claude-sonnet-5-5' };
   const item = (o: Record<string, unknown> = {}) => ({ ...request(), ...o }) as unknown as GroupRequest['items'][number];
 
-  it('seeds Opus at $2.0-3.2 / 8-13 min, Sonnet at $0.8-2.5 / 4-10 min, a bible at $1.2-2.0; waves and concurrency shape the time', () => {
+  it('(6c 0a) seeds a detail at $2.5-4.6 / 8-15 min (Opus and Sonnet), a bible at $1.16-1.55; waves and concurrency shape the time', () => {
     const root = tempDir();
     try {
       const est = new Estimates(new Store(root, { debounceMs: 5 }));
       const one = est.group({ items: [item({ role: 'landmark' })] }, ctx);
-      expect(one).toMatchObject({ usdLow: 2, usdHigh: 3.2, minutesLow: 8, minutesHigh: 13 });
-      expect(one.basis).toMatch(/claude-opus-5-5: seed/);
+      expect(one).toMatchObject({ usdLow: 2.5, usdHigh: 4.6, minutesLow: 8, minutesHigh: 15 });
+      expect(one.basis).toMatch(/claude-opus-5-5: seed, .*Steward phase 1, 2026-10-09/);
       const three = est.group({ items: [item({ role: 'landmark', anchor: true }), item(), item()], concurrency: 3 }, ctx);
       // 1 Opus + 2 Sonnet; two waves (the anchor first, then both at once)
-      expect(three.usdLow).toBeCloseTo(2 + 2 * 0.8, 5);
-      expect(three.usdHigh).toBeCloseTo(3.2 + 2 * 2.5, 5);
-      expect(three.minutesLow).toBe(8 + 4);
-      expect(three.minutesHigh).toBe(13 + 10);
-      expect(est.group({ items: [item(), item(), item()], concurrency: 1 }, ctx).minutesHigh).toBe(30);
+      expect(three.usdLow).toBeCloseTo(3 * 2.5, 5);
+      expect(three.usdHigh).toBeCloseTo(3 * 4.6, 5);
+      expect(three.minutesLow).toBe(8 + 8);
+      expect(three.minutesHigh).toBe(15 + 15);
+      expect(est.group({ items: [item(), item(), item()], concurrency: 1 }, ctx).minutesHigh).toBe(45);
       // a usage limit adds its wait
-      expect(est.group({ items: [item()] }, { ...ctx, limitUntil: ctx.now + 10 * 60_000 }).minutesLow).toBe(14);
-      expect(est.bible({}, ctx)).toMatchObject({ usdLow: 1.2, usdHigh: 2, minutesLow: 5, minutesHigh: 8 });
+      expect(est.group({ items: [item()] }, { ...ctx, limitUntil: ctx.now + 10 * 60_000 }).minutesLow).toBe(18);
+      expect(est.bible({}, ctx)).toMatchObject({ usdLow: 1.16, usdHigh: 1.55, minutesLow: 5, minutesHigh: 8 });
     } finally {
       rmrf(root);
     }

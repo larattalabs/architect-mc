@@ -17,7 +17,7 @@ export const PROTOCOL_VERSION = 1 as const;
 export const PROTOCOLS = [1, 2] as const;
 export type Protocol = (typeof PROTOCOLS)[number];
 /** What a protocol-2 snapshot lists in `features`. */
-export const FEATURES = ['job.run', 'job.tools', 'blobs', 'budget', 'designs.v2', 'bibles', 'design.groups', 'named.parts', 'open.types', 'estimates', 'reskin', 'massing', 'critique', 'critique.report', 'job.images', 'bible.admin', 'bible.restraint', 'entry.versions', 'entry.delta', 'design.polish', 'critique.polish', 'region.plan', 'region.tiles', 'region.check', 'region.preview', 'region.design', 'region.blobs', 'ir.format2'] as const;
+export const FEATURES = ['job.run', 'job.tools', 'blobs', 'budget', 'designs.v2', 'bibles', 'design.groups', 'named.parts', 'open.types', 'estimates', 'reskin', 'massing', 'critique', 'critique.report', 'job.images', 'bible.admin', 'bible.restraint', 'entry.versions', 'entry.delta', 'design.polish', 'critique.polish', 'region.plan', 'region.tiles', 'region.check', 'region.preview', 'region.design', 'region.blobs', 'ir.format2', 'estimate.kinds', 'opKeys', 'group.breakdown'] as const;
 
 const Ts = z.number().int().nonnegative();
 const Id = z.string().min(1).max(64);
@@ -517,8 +517,25 @@ export const Estimate = z.object({
     .array(z.object({ itemKey: z.string().optional(), usdLow: z.number(), usdHigh: z.number(), minutesLow: z.number(), minutesHigh: z.number(), ...CritiqueFigures }))
     .optional()
     .describe('(5a) per item (a group estimate), the design figures and the critique figures'),
+  byKind: z
+    .partialRecord(z.enum(['bible', 'original', 'adapted', 'copy']), z.object({ usdLow: z.number(), usdHigh: z.number(), minutesLow: z.number(), minutesHigh: z.number(), count: z.number().int(), basis: z.string() }))
+    .optional()
+    .describe('(6c 0a) design.estimate {mix}: a line per kind; the lines sum to the totals'),
 });
 export type Estimate = z.infer<typeof Estimate>;
+
+/** (6c 0a, C5) A mix to estimate: originals (a group's items count as originals), adapted refits, copies and a new bible. */
+export const EstimateMix = z.object({
+  group: GroupRequest.optional().describe("its items count as originals (with its massingFirst, its critique's report mode)"),
+  originals: z.number().int().min(0).max(1000).default(0),
+  adapted: z.number().int().min(0).max(1000).default(0),
+  copies: z.number().int().min(0).max(1000).default(0),
+  newBible: z.boolean().default(false),
+  massingFirst: z.boolean().default(false),
+  reportCritique: z.boolean().default(false),
+  model: z.string().max(100).optional().describe("the originals' detail model (default: the ordinary model)"),
+});
+export type EstimateMix = z.infer<typeof EstimateMix>;
 
 export const BibleScope = z.enum(['building', 'settlement']);
 export const BibleRequest = z.object({
@@ -939,8 +956,8 @@ export const GroupCancelMsg = z.object({ ...envelope('group.cancel'), groupId: I
 export const GroupExtendMsg = z.object({ ...envelope('group.extend'), groupId: Id, budgetUsd: BudgetUsd });
 export const GroupResumeMsg = z.object({ ...envelope('group.resume'), groupId: Id });
 export const DesignEstimateMsg = z
-  .object({ ...envelope('design.estimate'), group: GroupRequest.optional(), request: DesignRequest.optional(), polish: PolishSpec.optional().describe('(5b) a polish of entryId'), entryId: z.string().regex(LIBRARY_ID).max(64).optional().describe('(5b) with polish') })
-  .refine((m) => [m.group, m.request, m.polish].filter((x) => x !== undefined).length === 1, 'send exactly one of group, request and polish');
+  .object({ ...envelope('design.estimate'), group: GroupRequest.optional(), request: DesignRequest.optional(), mix: EstimateMix.optional().describe('(6c 0a) a mix of kinds (byKind lines)'), polish: PolishSpec.optional().describe('(5b) a polish of entryId'), entryId: z.string().regex(LIBRARY_ID).max(64).optional().describe('(5b) with polish') })
+  .refine((m) => [m.group, m.request, m.polish, m.mix].filter((x) => x !== undefined).length === 1, 'send exactly one of group, request, polish and mix');
 export const BibleRequestMsg = z.object({ ...envelope('bible.request'), request: BibleRequest });
 export const BibleReviseMsg = z.object({ ...envelope('bible.revise'), id: BibleId, notes: z.string().trim().min(1).max(4000), model: ModelId.optional(), budgetUsd: BudgetUsd.optional(), critique: z.object({ mode: z.enum(['off', 'report']), model: ModelId.optional() }).optional().describe('(5a) a sheet critique at the end') });
 export const BibleEstimateMsg = z.object({ ...envelope('bible.estimate'), request: BibleRequest.optional() });

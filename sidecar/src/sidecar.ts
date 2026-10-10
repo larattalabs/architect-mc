@@ -497,6 +497,11 @@ export class Sidecar {
           if (!msg.entryId) throw new ClientError('design.estimate {polish} needs entryId');
           return { ...this.polishes.estimate(msg.entryId, msg.polish) };
         }
+        // (6c 0a, C5) a mix of kinds
+        if (msg.mix) {
+          if (msg.mix.group) this.bibleIndex.resolve(msg.mix.group.bible);
+          return this.simLabel({ ...this.estimates.mix(msg.mix, this.estimateCtx()) });
+        }
         if (msg.group) this.bibleIndex.resolve(msg.group.bible);
         return this.simLabel({ ...(msg.group ? this.estimates.group(msg.group, this.estimateCtx()) : this.estimates.design(msg.request!, this.estimateCtx())) });
       case 'bible.request': {

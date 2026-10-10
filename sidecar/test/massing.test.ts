@@ -198,18 +198,18 @@ describe('massings (sim backend, fixture kit)', () => {
     expect(() => h!.sc.massings.delete('mas_gamma')).toThrow(/no massing/);
   }, 60_000);
 
-  it('estimates: a massing ($0.10-0.40, 1-3 min), and a massingFirst group adds the massing pass', () => {
+  it('estimates: a massing ($0.12-0.30, 1-3 min), and a massingFirst group adds the massing pass', () => {
     const root = tempDir();
     const cfg = loadConfig(['--data', path.join(root, 'd'), '--library', path.join(root, 'l'), '--kit', root], {});
     fs.mkdirSync(cfg.dataDir, { recursive: true });
     const sc = new Sidecar(cfg, new Store(cfg.dataDir, { debounceMs: 5 }), memoryLogger());
     try {
-      expect(sc.estimates.design(massingReq(), sc.estimateCtx())).toMatchObject({ usdLow: 0.1, usdHigh: 0.4, minutesLow: 1, minutesHigh: 3 });
+      expect(sc.estimates.design(massingReq(), sc.estimateCtx())).toMatchObject({ usdLow: 0.12, usdHigh: 0.3, minutesLow: 1, minutesHigh: 3 });
       const items = [item('a', { role: 'landmark', anchor: true }), item('b'), item('c')];
       const plain = sc.estimates.group(GroupRequest.parse({ name: 'x', bible: 'rustic', items }), sc.estimateCtx());
       const first = sc.estimates.group(GroupRequest.parse({ name: 'x', bible: 'rustic', items, massingFirst: true }), sc.estimateCtx());
-      expect(first.usdLow).toBeCloseTo(plain.usdLow + 3 * 0.1, 5);
-      expect(first.usdHigh).toBeCloseTo(plain.usdHigh + 3 * 0.4, 5);
+      expect(first.usdLow).toBeCloseTo(plain.usdLow + 3 * 0.12, 5);
+      expect(first.usdHigh).toBeCloseTo(plain.usdHigh + 3 * 0.3, 5);
       // two waves of massings (the anchor, then two at once): 2 x 1-3 min more
       expect(first.minutesLow).toBeCloseTo(plain.minutesLow + 2, 5);
       expect(first.minutesHigh).toBeCloseTo(plain.minutesHigh + 6, 5);

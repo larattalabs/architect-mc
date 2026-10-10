@@ -5,15 +5,15 @@ Spec: docs/CONTRACT.md "Phase 6c slice 0a: consumer support (FROZEN after Stewar
 `phase/6c-0a`): `slice/0a-stub` (C4, v0.12.2, API 1.9.0) in `../architect-mc-0a-stub`, then `slice/0a` (the rest, v0.13.0 /
 API 1.10.0) in `../architect-mc-0a`, built on the stub. Ports 8900-8905 (0b has 8906-8911, 0c 8912-8917). Note: during the
 stub work another session's integration gate held 8900/8901, so the stub runs used 8902/8903 (and 8904 for a bundle probe).
-Merge (AGENTS.md from 2026-10-10): after the gate and a gate-verifier review, the builder merges `--no-ff` and checks CI;
-the coordinator tags.
+Merge (AGENTS.md, corrected): agents can't push to main; after the slice tier and a gate-verifier review, push the branch and
+report "ready to merge"; the coordinator merges, tags and publishes.
 
 ## State
 
 | Build step (§14) | State |
 |---|---|
 | 1. 0.12.0 apitest jar archived | done (below) |
-| 2. 0.12.2: C4, client script, gate item 1 | gate passed; gate-verifier PASS (re-ran npm run check 661/661, mod tests 437/437, stub 18/18); ready to merge; the builder's `git merge --no-ff` + push to main was refused by this session's permission classifier, so the coordinator (or Noah) merges `slice/0a-stub` |
+| 2. 0.12.2: C4, client script, gate item 1 | gate passed, verifier PASS; merged and published as v0.12.2 by the coordinator |
 | 3-6. Sidecar, kit, mod, gate for 0.13.0 | started on `slice/0a`: the 1.10.0 API surface only (below); no implementation yet |
 
 ## The 0.12.0 jars (build step 1)
