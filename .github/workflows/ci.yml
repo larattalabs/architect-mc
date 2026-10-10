@@ -5,9 +5,13 @@ on:
   pull_request:
 permissions:
   contents: read
+  packages: read # dev.larattalabs:lab_ui from GitHub Packages (mod/build.gradle)
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      GITHUB_ACTOR: ${{ github.actor }}
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5

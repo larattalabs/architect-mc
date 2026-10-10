@@ -12,6 +12,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { fromPlacementStats as ownTick, ownOk, describe as tickText } from './lib/tickbar.mjs';
 import { DevClient } from './lib/devclient.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -356,8 +357,7 @@ async function equality() {
   const post = await hashLots(ctx.lots);
   const postAll = (await hash(villageRegion())).sha256;
   check(v.order.length === 12, 'queue: all 12 lots placed', { order: v.order, failed: v.done.items.filter((i) => i.status !== 'PLACED') });
-  check(v.stats.ticksOver50ms === 0, `ticks: no tick over 50 ms during the batch (max ${v.stats.msptMax.toFixed(2)} ms, mean ${v.stats.msptMean.toFixed(2)} ms)`,
-    v.stats);
+  check(ownOk(ownTick(v.stats)), `ticks: during the batch, ${tickText(ownTick(v.stats))}`, ownTick(v.stats));
   const wall = (v.done.doneAt - v.done.createdAt) / 1000;
   // group undo: every site, last placed first, the whole region back exactly
   const group = v.done.group;
@@ -415,8 +415,7 @@ async function throughput() {
   await leaveWorld();
   runs.splice(1, 0, ctx.throughput4);
   for (const r of runs) {
-    check(r.ticksOver50ms === 0, `throughput ${r.budgetMs} ms: ${Math.round(r.cellsPerSecond)} cells/s, 12-lot wall ${r.wallSeconds.toFixed(1)} s, MSPT max ${r.msptMax.toFixed(2)}`
-      + ` mean ${r.msptMean.toFixed(2)}, no tick over 50 ms`, r);
+    check(ownOk(ownTick(r)), `throughput ${r.budgetMs} ms: ${Math.round(r.cellsPerSecond)} cells/s, 12-lot wall ${r.wallSeconds.toFixed(1)} s, ${tickText(ownTick(r))}`, ownTick(r));
   }
   const out = { measuredAt: new Date().toISOString(), village: '12 lots (cabin, gatehouse, tavern, tower x3), LOADED_ONLY, player in the middle',
     runs: runs.map((r) => ({ budgetMs: r.budgetMs, cellsPerSecond: r.cellsPerSecond, cells: r.cells, workSeconds: r.workSeconds, wallSeconds: r.wallSeconds,
@@ -707,7 +706,7 @@ async function survival() {
   }
   const stats = await call('dev.placement.stats', {});
   check(sites.every((s) => built.includes(s)), 'shared crate: the 3 construction sites finished from one hopper chain', { built });
-  check(stats.ticksOver50ms === 0, `survival: no tick over 50 ms (max ${stats.msptMax.toFixed(2)} ms, mean ${stats.msptMean.toFixed(2)} ms)`, stats);
+  check(ownOk(ownTick(stats)), `survival: ${tickText(ownTick(stats))}`, ownTick(stats));
   const stock1 = await api(`stock ${bv.group}`);
   check(Object.keys(stock1.outstanding).length === 0 && JSON.stringify(sortObj(stock1.delivered)) === JSON.stringify(sortObj(stock0.outstanding)),
     'stock: afterwards nothing outstanding and delivered equals the bill', { stock0, stock1 });

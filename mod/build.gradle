@@ -20,6 +20,40 @@ base {
 
 repositories {
 	mavenCentral()
+	// lab-ui from GitHub Packages, unless settings.gradle included a lab-ui checkout (see there). GitHub Packages needs a
+	// token even for public packages: gpr.user/gpr.key (gradle properties) or GITHUB_ACTOR/GITHUB_TOKEN (CI: packages: read).
+	maven {
+		name = "LabUi"
+		url = uri("https://maven.pkg.github.com/larattalabs/lab-ui")
+		credentials {
+			username = providers.gradleProperty("gpr.user").orElse(providers.environmentVariable("GITHUB_ACTOR")).getOrElse("")
+			password = providers.gradleProperty("gpr.key").orElse(providers.environmentVariable("GITHUB_TOKEN")).getOrElse("")
+		}
+		content { includeGroup "dev.larattalabs" }
+	}
+}
+
+// An actionable message when lab-ui can't be resolved (no checkout and no GitHub Packages token)
+if (gradle.ext.has("labUiSource")) {
+	logger.info("lab-ui: " + gradle.ext.labUiSource)
+	// A composite build hands compile classpaths lab-ui's main classes directory only; its jar also has the client classes
+	// (split source sets), as the published jar does. So compile against the jar.
+	afterEvaluate {
+		configurations.matching { it.name.endsWith("ompileClasspath") }.configureEach {
+			attributes.attribute(LibraryElements.LIBRARY_ELEMENTS_ATTRIBUTE, objects.named(LibraryElements, LibraryElements.JAR))
+		}
+	}
+} else if (!providers.gradleProperty("gpr.key").isPresent() && !providers.environmentVariable("GITHUB_TOKEN").isPresent()) {
+	def how = ("lab-ui " + project.lab_ui_version + " (dev.larattalabs:lab_ui) comes from GitHub Packages, which needs a token even for public"
+		+ " packages, and there is no lab-ui checkout to build instead. Either set gpr.user/gpr.key in ~/.gradle/gradle.properties"
+		+ " (a classic token with read:packages; `gh auth token` works) or GITHUB_ACTOR/GITHUB_TOKEN in the environment; or clone"
+		+ " lab-ui next to this repo at the release tag: git clone --branch v" + project.lab_ui_version
+		+ " https://github.com/larattalabs/lab-ui ../lab-ui (it must be clean and exactly at that tag). See README \"Development\".")
+	if (gradle.startParameter.offline) {
+		logger.warn("lab-ui: no token and no checkout; this --offline build needs the package in the Gradle cache. " + how)
+	} else {
+		throw new GradleException(how)
+	}
 }
 
 loom {
@@ -61,6 +95,11 @@ dependencies {
 	include("org.java-websocket:Java-WebSocket:${project.java_websocket_version}") {
 		exclude group: 'org.slf4j'
 	}
+
+	// lab-ui, the shared client UI library (kit sprites, panels, style tokens, crash guard), jar-in-jar. Minecraft 26.x is
+	// unobfuscated, so this Loom has no mod* configurations: plain implementation + include.
+	implementation "dev.larattalabs:lab_ui:${project.lab_ui_version}"
+	include "dev.larattalabs:lab_ui:${project.lab_ui_version}"
 
 	// Unit tests (src/test/java) for pure logic: placement math, design spec, launcher plan.
 	testImplementation platform("org.junit:junit-bom:${project.junit_version}")

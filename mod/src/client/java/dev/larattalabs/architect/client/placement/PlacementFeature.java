@@ -12,7 +12,7 @@ import dev.larattalabs.architect.placement.Anchors;
 import dev.larattalabs.architect.placement.BlueprintTransform;
 import dev.larattalabs.architect.site.Site;
 import dev.larattalabs.architect.site.Sites;
-import dev.larattalabs.architect.ui.Guard;
+import dev.larattalabs.labui.ui.Guard;
 import java.security.MessageDigest;
 import java.util.HexFormat;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
@@ -47,7 +47,7 @@ public final class PlacementFeature {
 	}
 
 	public static void init() {
-		ClientTickEvents.END_CLIENT_TICK.register(mc -> Guard.run("placement.tick", () -> {
+		ClientTickEvents.END_CLIENT_TICK.register(mc -> Guard.run("architect_mc:placement.tick", () -> {
 			BuildPlacement.tick(mc);
 			PlotMarker.tick(mc);
 		}));
@@ -55,10 +55,10 @@ public final class PlacementFeature {
 			BuildPlacement.cancel();
 			PlotMarker.cancelQuietly();
 		}));
-		LevelRenderEvents.COLLECT_SUBMITS.register(ctx -> Guard.run("placement.ghost", () -> GhostRenderer.submit(ctx)));
-		LevelRenderEvents.COLLECT_SUBMITS.register(ctx -> Guard.run("placement.plot", () -> GhostRenderer.submitPlot(ctx)));
-		HudElementRegistry.addLast(Architect.id("hud/placement"), dev.larattalabs.architect.client.ui.GuardedHud.of("hud.placement", new PlacementHud()));
-		HudElementRegistry.addLast(Architect.id("hud/plot_marker"), dev.larattalabs.architect.client.ui.GuardedHud.of("hud.plot_marker", new PlotHud()));
+		LevelRenderEvents.COLLECT_SUBMITS.register(ctx -> Guard.run("architect_mc:placement.ghost", () -> GhostRenderer.submit(ctx)));
+		LevelRenderEvents.COLLECT_SUBMITS.register(ctx -> Guard.run("architect_mc:placement.plot", () -> GhostRenderer.submitPlot(ctx)));
+		HudElementRegistry.addLast(Architect.id("hud/placement"), dev.larattalabs.labui.client.ui.GuardedHud.of("architect_mc:hud.placement", new PlacementHud()));
+		HudElementRegistry.addLast(Architect.id("hud/plot_marker"), dev.larattalabs.labui.client.ui.GuardedHud.of("architect_mc:hud.plot_marker", new PlotHud()));
 		registerDev();
 	}
 
