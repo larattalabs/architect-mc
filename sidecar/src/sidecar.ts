@@ -6,6 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { Config } from './config.js';
 import { simCostsLabel, VERSION } from './config.js';
+import { OpKeys } from './opkeys.js';
 import type { Logger } from './context.js';
 import { BibleIndex, Bibles, SimBibleBackend, type BibleBackend, type RunOutcome } from './bibles.js';
 import { BlobError, BlobStore } from './blobs.js';
@@ -19,7 +20,7 @@ import type { JobDriver } from './jobs/driver.js';
 import { JobRunner } from './jobs/runner.js';
 import { SimJobDriver } from './jobs/sim.js';
 import { Pool } from './pool.js';
-import { FEATURES, KitPalettes, type BibleRef, type ClientMessage, type Cost, type PaletteInfo, type Design, type DesignRequest, type Massing, type Outbound, type PaletteSpec, type ParamValues, type Protocol, type Status, type Variant } from './protocol.js';
+import { FEATURES, KitPalettes, type BibleRef, type ClientMessage, type Cost, type PaletteInfo, type Design, type DesignRequest, type Group, type Massing, type Outbound, type PaletteSpec, type ParamValues, type Protocol, type Status, type Variant } from './protocol.js';
 import { DesignScheduler, designKey } from './scheduler.js';
 import { addCost } from './jobs/cost.js';
 import { readSecrets, updateSecrets, type Secrets } from './secrets.js';
@@ -128,6 +129,8 @@ export class Sidecar {
   readonly bibles: Bibles;
   /** (4b) cost and time estimates */
   readonly estimates: Estimates;
+  /** (6c 0a, C9) caller operation keys */
+  readonly opKeys: OpKeys;
   /** (4c) massings: records, install, delete, garbage collection */
   readonly massings: Massings;
   /** (5a) the critique loop */
@@ -171,6 +174,7 @@ export class Sidecar {
     this.bibleIndex = new BibleIndex(this);
     this.bibles = new Bibles(this);
     this.estimates = new Estimates(store, () => this.now());
+    this.opKeys = new OpKeys(store, () => this.now());
     this.massings = new Massings(this);
     this.jobs = new JobRunner(this);
     this.critiques = new Critiques(this);
@@ -480,9 +484,29 @@ export class Sidecar {
         return { variantId: this.requestImport(msg.path).id };
       // ---- 4b
       case 'design.group': {
+        const ack = (g: Group, adopted: boolean) => ({ groupId: g.id, designIds: g.items.map((it) => it.designId), itemKeys: g.items.map((it) => it.itemKey), bible: g.bible, adopted });
+        // (6c 0a, C9) the same key and body: the first group, adopted (in any state); another body: op_key_conflict
+        const key = msg.group.opKey;
+        const prior = key ? this.opKeys.check('group', msg.group.owner, key, msg.group as Record<string, unknown>) : undefined;
+        const pg = prior ? this.groups.get(prior) : undefined;
+        if (pg) {
+          this.log.info(`group ${pg.id}: adopted by opKey ${key} (${pg.status})`);
+          return ack(pg, true);
+        }
         this.ensureClaudeAvailable();
         const g = this.groups.create(msg.group);
-        return { groupId: g.id, designIds: g.items.map((it) => it.designId), itemKeys: g.items.map((it) => it.itemKey), bible: g.bible };
+        if (key) this.opKeys.record('group', msg.group.owner, key, msg.group as Record<string, unknown>, g.id);
+        return ack(g, false);
+      }
+      case 'group.byKey': {
+        const e = this.opKeys.get('group', msg.owner, msg.opKey);
+        const g = e ? this.groups.get(e.id) : undefined;
+        return g ? { group: structuredClone(g) } : {};
+      }
+      case 'bible.byKey': {
+        const e = this.opKeys.get('bible', msg.owner, msg.opKey);
+        const j = e ? this.bibles.get(e.id) : undefined;
+        return j ? { job: structuredClone(j) } : {};
       }
       case 'group.cancel':
         return { groupId: this.groups.cancel(msg.groupId).id };
@@ -505,8 +529,16 @@ export class Sidecar {
         if (msg.group) this.bibleIndex.resolve(msg.group.bible);
         return this.simLabel({ ...(msg.group ? this.estimates.group(msg.group, this.estimateCtx()) : this.estimates.design(msg.request!, this.estimateCtx())) });
       case 'bible.request': {
+        const key = msg.request.opKey;
+        const prior = key ? this.opKeys.check('bible', msg.request.owner, key, msg.request as Record<string, unknown>) : undefined;
+        const pj = prior ? this.bibles.get(prior) : undefined;
+        if (pj) {
+          this.log.info(`bible job ${pj.id}: adopted by opKey ${key} (${pj.status})`);
+          return { jobId: pj.id, bibleId: pj.bibleId, version: pj.version, adopted: true };
+        }
         const j = this.bibles.request(msg.request);
-        return { jobId: j.id, bibleId: j.bibleId, version: j.version };
+        if (key) this.opKeys.record('bible', msg.request.owner, key, msg.request as Record<string, unknown>, j.id);
+        return { jobId: j.id, bibleId: j.bibleId, version: j.version, adopted: false };
       }
       case 'bible.revise': {
         const j = this.bibles.revise(msg.id, msg.notes, msg.model, msg.budgetUsd, msg.critique);
@@ -514,8 +546,11 @@ export class Sidecar {
       }
       case 'bible.estimate':
         return this.simLabel({ ...this.estimates.bible(msg.request ?? {}, this.estimateCtx()) });
-      case 'bible.cancel':
-        return { jobId: this.bibles.cancel(msg.jobId).id };
+      case 'bible.cancel': {
+        // (6c 0a) the ack carries the job, cancelled (Bibles.cancelJob)
+        const id = this.bibles.cancel(msg.jobId).id;
+        return { jobId: id, job: structuredClone(this.bibles.get(id)) };
+      }
       case 'reskin.request': {
         const r = this.reskins.request(msg.bibleId, msg.version, msg.from);
         return { reskinId: r.id, variantIds: r.variants, bible: r.bible };
@@ -953,6 +988,9 @@ export class Sidecar {
 
   /** (protocol 2) a design's cost so far: its turns (the designer's meter) plus (5a) its critic calls */
   designCost(id: string, turns: Cost): void {
+    // (6c 0a, C7) the first round's turn cost (the breakdown's MASSING/DETAIL line; later rounds are REPAIR)
+    const w = this.store.data.work?.[id];
+    if (w && (w.sim?.round ?? (w.round || 1)) <= 1 && !this.critiques.revising(id)) w.r1Usd = turns.usd;
     const critic = this.store.data.work?.[id]?.critique?.critic;
     this.designs.update(id, { cost: critic ? addCost(turns, critic) : turns });
   }

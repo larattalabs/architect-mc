@@ -31,6 +31,8 @@ import { addCost, zeroCost } from './jobs/cost.js';
 import { itemModel } from './estimates.js';
 import type { Sidecar } from './sidecar.js';
 import { ClientError } from './sidecar.js';
+import { keptForKey } from './opkeys.js';
+import { bibleLine, bumpSeq, updateBreakdown, type BreakdownWork } from './breakdown.js';
 
 export const GROUP_SNAPSHOT_LIMIT = 20;
 const GROUP_KEEP = 100;
@@ -52,6 +54,8 @@ export interface GroupWork {
   itemCost?: Record<string, Cost>;
   /** (4c) item key -> it ended without a design to say so (dropped or cancelled while awaiting approval, the hard budget) */
   ended?: Record<string, 'cancelled' | 'budget'>;
+  /** (6c 0a) the breakdown, seq and lastAction bookkeeping (breakdown.ts) */
+  bd?: BreakdownWork;
 }
 
 const FINAL_DESIGN = new Set(['done', 'failed', 'cancelled']);
@@ -64,6 +68,11 @@ export class Groups {
 
   private get all(): Group[] {
     return (this.sc.store.data.groups ??= []);
+  }
+
+  /** (6c 0a) a group's breakdown bookkeeping (made lazily for a group from an older sidecar: no bible line) */
+  private bdw(g: Group): BreakdownWork {
+    return (this.work(g.id).bd ??= { designs: {}, items: {}, lastTick: this.sc.now() });
   }
 
   private work(id: string): GroupWork {
@@ -175,13 +184,17 @@ export class Groups {
       cost: zeroCost(),
       ...(req.massingFirst ? { massingFirst: true, approvalUi: req.approvalUi ?? 'architect', maxRedirects: req.maxRedirects ?? cfg.massing.maxRedirects, awaiting: [] } : req.approvalUi ? { approvalUi: req.approvalUi } : {}),
       ...(req.context !== undefined ? { context: req.context } : {}),
+      ...(req.opKey ? { opKey: req.opKey } : {}),
       createdAt: now,
       updatedAt: now,
     };
     if (req.massingFirst) this.work(id).itemRequests = itemRequests;
+    // (6c 0a) the breakdown: the bible line is claimed now (the owner's first group to pin this version carries it)
+    this.work(id).bd = { designs: {}, items: {}, lastTick: now, bible: bibleLine(this.sc, g) };
     this.all.push(g);
     while (this.all.length > GROUP_KEEP) {
-      const k = this.all.findIndex((x) => isFinalGroup(x));
+      // (6c 0a) a group with an opKey is kept at least 30 days after it is final
+      const k = this.all.findIndex((x) => isFinalGroup(x) && !keptForKey(x, now));
       if (k < 0) break;
       const [gone] = this.all.splice(k, 1);
       if (gone) delete this.sc.store.data.groupWork?.[gone.id];
@@ -333,6 +346,7 @@ export class Groups {
       if (d && !isFinalDesign(d)) this.sc.stopDesign(d.id, 'cancelled', undefined, 'cancelled with its group item');
       out.cancelled.push(key);
     }
+    this.bdw(g).action = a.approve.length ? 'approved' : redirectKeys.length ? 'redirected' : 'cancelled';
     this.sc.store.markDirty();
     this.refresh(g, true);
     for (const d of [...Object.values(out.approved), ...Object.values(out.redirected).map((r) => r.designId)]) this.sc.scheduler.enqueue(d);
@@ -344,6 +358,7 @@ export class Groups {
     if (!g) throw new ClientError(`no group "${id}"`);
     if (isFinalGroup(g)) throw new ClientError(`group ${id} is already ${g.status}`);
     this.work(id).cancelled = true;
+    this.bdw(g).action = 'cancelled';
     g.reason = 'cancelled';
     this.sc.store.markDirty();
     for (const it of g.items) {
@@ -365,6 +380,7 @@ export class Groups {
     g.budgetUsd = budgetUsd;
     const w = this.work(id);
     delete w.softOverride;
+    this.bdw(g).action = 'extended';
     this.sc.store.markDirty();
     this.sc.log.info(`group ${id}: budget extended to $${budgetUsd}${w.paused ? ' (still paused: group.resume continues it)' : ''}`);
     this.refresh(g, true);
@@ -378,6 +394,7 @@ export class Groups {
     const w = this.work(id);
     if (w.paused) {
       w.paused = false;
+      this.bdw(g).action = 'resumed';
       // past the soft budget already: no new pause until the budget changes (the hard cap still holds)
       if (g.budgetUsd !== undefined && g.cost.usd >= g.softBudgetFraction * g.budgetUsd) w.softOverride = g.budgetUsd;
       delete g.reason;
@@ -421,6 +438,12 @@ export class Groups {
         this.again = false;
         if (this.derive(g)) emit = true;
       } while (this.again);
+      // (6c 0a) seq goes up only on a real transition; the breakdown is logged at awaiting approval and at the end
+      const was = bumpSeq(g, this.bdw(g));
+      if (was !== undefined) {
+        emit = true;
+        if ((g.status === 'awaiting_approval' && was !== 'awaiting_approval') || isFinalGroup(g)) this.sc.log.info(`group ${g.id} breakdown ${JSON.stringify(g.breakdown)}`);
+      }
       if (emit) {
         g.updatedAt = this.sc.now();
         this.sc.store.markDirty();
@@ -436,7 +459,9 @@ export class Groups {
 
   /** One pass; returns whether the group changed. */
   private derive(g: Group): boolean {
-    const before = JSON.stringify(g);
+    // (6c 0a) the breakdown's clock fields change on every pass: they alone are no change
+    const sans = (x: Group) => JSON.stringify({ ...x, breakdown: undefined });
+    const before = sans(g);
     if (isFinalGroup(g)) return false;
     const w = this.work(g.id);
     let cost: Cost = zeroCost();
@@ -509,6 +534,7 @@ export class Groups {
     if (status === 'failed' && !g.reason) g.reason = g.items.find((it) => it.error)?.error?.split('\n')[0] ?? 'every item failed';
     // a soft-budget reason only describes paused_budget: clear it on any other status (a group that finished while paused kept it)
     if (status !== 'paused_budget' && status !== 'awaiting_approval' && g.reason && g.reason.startsWith('soft budget')) delete g.reason;
-    return JSON.stringify(g) !== before;
+    updateBreakdown(this.sc, g, this.bdw(g), limited, isOpen);
+    return sans(g) !== before;
   }
 }

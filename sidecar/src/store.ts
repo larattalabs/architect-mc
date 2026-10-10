@@ -42,6 +42,8 @@ export interface DesignWork {
   critique?: import('./critique.js').CritiqueWork;
   /** (5b) a polish's state (polish.ts PolishWork) */
   polish?: import('./polish.js').PolishWork;
+  /** (6c 0a, C7) the turn cost of its first round (Sidecar.designCost): the rest is repair or critique */
+  r1Usd?: number;
   /** (6c 0a) the sim designer's rounds (sim.ts SimRoundWork) */
   sim?: import('./sim.js').SimRoundWork;
 }
@@ -117,6 +119,10 @@ export interface StateData {
   runStarts?: Record<string, number>;
   /** (4c) massing versions (massings.ts), oldest first */
   massings?: Massing[];
+  /** (6c 0a, C7) "<bibleId>@<version>|<owner>" -> the group whose breakdown carries that bible's cost */
+  bibleClaims?: Record<string, string>;
+  /** (6c 0a, C9) "<kind>|<owner>|<opKey>" -> the record it made (opkeys.ts) */
+  opKeys?: Record<string, import('./opkeys.js').OpKeyEntry>;
 }
 
 function emptyState(now: number): StateData {

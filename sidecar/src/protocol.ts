@@ -97,6 +97,9 @@ export type Ext = z.infer<typeof Ext>;
 export const ModelId = z.string().trim().min(1).max(100).regex(/^[A-Za-z0-9._:@/[\]-]+$/, 'not a model id');
 const BudgetUsd = z.number().positive().max(1000);
 const Owner = z.string().trim().min(1).max(200);
+/** (6c 0a, C9) A caller's operation key. */
+export const OpKey = z.string().regex(/^[A-Za-z0-9_.:-]{1,128}$/);
+
 
 /** (4b, R4) a building type: a preset or an open type (`hellish_lair`). */
 export const OPEN_TYPE = /^[a-z][a-z0-9_]{0,39}$/;
@@ -404,6 +407,7 @@ export const GroupRequest = z
     maxRedirects: z.number().int().min(0).max(10).optional().describe('(4c) redirect rounds per item (default 3)'),
     context: Context.optional().describe('(4c) goes into every item\'s brief (massing and detail)'),
     critique: CritiqueSpec.optional().describe('(5a) the default critique of the items (an item\'s own spec wins); default off'),
+    opKey: OpKey.optional().describe('(6c 0a) the caller\'s operation key: same (owner, key) and body returns the first group (adopted); another body is refused op_key_conflict'),
   })
   .superRefine((g, ctx) => {
     const keys = g.items.map((it, i) => it.itemKey ?? `item${i + 1}`);
@@ -439,6 +443,17 @@ export const GroupItem = z.object({
 });
 export type GroupItem = z.infer<typeof GroupItem>;
 
+/** (6c 0a, C7) A group's cost and time per stage. */
+export const BreakdownStage = z.enum(['bible', 'massing', 'detail', 'repair', 'critique', 'queued', 'usage_hold']);
+export const Breakdown = z.object({
+  stages: z.partialRecord(BreakdownStage, z.object({ usd: z.number(), ms: z.number(), count: z.number().int() })),
+  totalUsd: z.number().describe('cost.usd plus the bible line'),
+  wallMs: z.number(),
+  firstDetailedMs: z.number().describe('0 until an item is detailed'),
+  bibleJobIds: z.array(z.string()).describe('the bible jobs the bible line counts'),
+});
+export type Breakdown = z.infer<typeof Breakdown>;
+
 export const Group = z.object({
   id: Id.describe('"g<n>"'),
   name: z.string(),
@@ -462,6 +477,10 @@ export const Group = z.object({
   maxRedirects: z.number().int().optional().describe('(4c) massingFirst: redirect rounds per item'),
   context: Context.optional().describe('(4c)'),
   awaiting: z.array(ItemKey).optional().describe('(4c) the items waiting for group.approve'),
+  opKey: OpKey.optional().describe("(6c 0a) the caller's operation key"),
+  seq: z.number().int().min(0).optional().describe('(6c 0a) goes up only on a real transition (status, reason, wave, awaiting; an item status, stage, entry, massing version, rounds)'),
+  lastAction: z.string().optional().describe('(6c 0a) the last transition: created, item_started, item_done, item_failed, massing_ready, awaiting_approval, approved, redirected, paused_budget, extended, resumed, held_usage, usage_reset, cancelled, done, failed'),
+  breakdown: Breakdown.optional().describe('(6c 0a) cost and time per stage'),
   createdAt: Ts,
   updatedAt: Ts,
 });
@@ -548,6 +567,7 @@ export const BibleRequest = z.object({
   references: z.array(z.string().regex(LIBRARY_ID).max(64)).max(8).optional().describe('library entries whose look to learn from'),
   scope: BibleScope.optional().describe('settlement: also the macro roles rock, surface, subsurface, rubble, rail, structure'),
   seedPreset: z.string().regex(/^[a-z0-9_]{1,32}$/).optional().describe('start from a built-in bible (the palette presets)'),
+  opKey: z.string().regex(/^[A-Za-z0-9_.:-]{1,128}$/).optional().describe('(6c 0a) the caller\'s operation key (see design.group)'),
   critique: z.object({ mode: z.enum(['off', 'report']), model: ModelId.optional() }).optional().describe('(5a) report: the bible job ends with one critic call on sheet.png, stored in bible.json critique'),
 });
 export type BibleRequest = z.infer<typeof BibleRequest>;
@@ -597,6 +617,7 @@ export const BibleJob = z.object({
   rounds: z.number().int().optional().describe('component rounds so far'),
   usageLimitUntil: Ts.optional(),
   bible: BibleInfo.optional().describe('done: the installed bible'),
+  opKey: OpKey.optional().describe("(6c 0a) the caller's operation key"),
   createdAt: Ts,
   updatedAt: Ts,
 });
@@ -962,6 +983,9 @@ export const BibleRequestMsg = z.object({ ...envelope('bible.request'), request:
 export const BibleReviseMsg = z.object({ ...envelope('bible.revise'), id: BibleId, notes: z.string().trim().min(1).max(4000), model: ModelId.optional(), budgetUsd: BudgetUsd.optional(), critique: z.object({ mode: z.enum(['off', 'report']), model: ModelId.optional() }).optional().describe('(5a) a sheet critique at the end') });
 export const BibleEstimateMsg = z.object({ ...envelope('bible.estimate'), request: BibleRequest.optional() });
 export const BibleCancelMsg = z.object({ ...envelope('bible.cancel'), jobId: Id });
+/** (6c 0a, C9) The bible job / group a caller requested with an operation key (any state); absent = never received. */
+export const BibleByKeyMsg = z.object({ ...envelope('bible.byKey'), owner: Owner.optional(), opKey: OpKey });
+export const GroupByKeyMsg = z.object({ ...envelope('group.byKey'), owner: Owner.optional(), opKey: OpKey });
 export const ReskinRequestMsg = z.object({ ...envelope('reskin.request'), bibleId: BibleId, version: z.number().int().min(1).optional(), from: ReskinFrom });
 // 4c
 export const MassingRedirectMsg = z.object({
@@ -1099,6 +1123,8 @@ export const ClientMessage = z.discriminatedUnion('type', [
   BibleReviseMsg,
   BibleEstimateMsg,
   BibleCancelMsg,
+  BibleByKeyMsg,
+  GroupByKeyMsg,
   ReskinRequestMsg,
   MassingRedirectMsg,
   MassingListMsg,
