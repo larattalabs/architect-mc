@@ -253,7 +253,10 @@ public final class Journal {
 			}
 		}
 		// stacks at the positions the undone entries touch
-		Set<Long> positions = new java.util.LinkedHashSet<>();
+		// fastutil maps and sets keyed by packed positions throughout: java.util.HashMap degrades on them (Long.hashCode folds a
+		// BlockPos.asLong so that many positions share a hash; its bins treeify, and a section with a few dense entries took
+		// 50-220 ms in one tick under load). LongLinkedOpenHashSet keeps LinkedHashSet's insertion order (the writes' order).
+		it.unimi.dsi.fastutil.longs.LongLinkedOpenHashSet positions = new it.unimi.dsi.fastutil.longs.LongLinkedOpenHashSet();
 		for (String id : ids) {
 			for (Cell c : byId.get(id).cells()) {
 				positions.add(c.pos());
@@ -262,7 +265,7 @@ public final class Journal {
 		Map<Long, List<String[]>> stacks = stacks(byId.values(), positions); // pos -> [entryId] bottom..top (by layer)
 		Map<String, Map<Long, Cell>> cellsOf = new HashMap<>();
 		for (Entry e : byId.values()) {
-			Map<Long, Cell> m = new HashMap<>();
+			Map<Long, Cell> m = new it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap<>(e.cells().size());
 			for (Cell c : e.cells()) {
 				m.put(c.pos(), c);
 			}
@@ -275,7 +278,7 @@ public final class Journal {
 		for (String id : ids) {
 			stats.put(id, new int[3]);
 			handed.put(id, new ArrayList<>());
-			written.put(id, new HashMap<>());
+			written.put(id, new it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap<>());
 		}
 		List<Write> writes = new ArrayList<>();
 		int order = 0;
@@ -319,7 +322,7 @@ public final class Journal {
 					}
 				} else {
 					// under a cell that stays: ownership passes down
-					Map<Long, Value> nb = newBefore.computeIfAbsent(above, x -> new HashMap<>());
+					Map<Long, Value> nb = newBefore.computeIfAbsent(above, x -> new it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap<>());
 					Value v = nb.containsKey(pos) ? nb.get(pos) : cellsOf.get(above).get(pos).before();
 					Value r;
 					if (e.policy() == Policy.BOX) {
@@ -478,8 +481,8 @@ public final class Journal {
 	}
 
 	/** pos -> the active entries with a cell there, bottom first (by layer; ties by id). */
-	private static Map<Long, List<String[]>> stacks(Collection<Entry> entries, Set<Long> positions) {
-		Map<Long, List<Object[]>> tmp = new HashMap<>();
+	private static Map<Long, List<String[]>> stacks(Collection<Entry> entries, it.unimi.dsi.fastutil.longs.LongSet positions) {
+		it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap<List<Object[]>> tmp = new it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap<>();
 		for (Entry e : entries) {
 			if (!e.active()) {
 				continue;
@@ -490,15 +493,15 @@ public final class Journal {
 				}
 			}
 		}
-		Map<Long, List<String[]>> out = new HashMap<>();
-		for (var t : tmp.entrySet()) {
+		it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap<List<String[]>> out = new it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap<>(tmp.size());
+		for (var t : tmp.long2ObjectEntrySet()) {
 			List<Object[]> l = t.getValue();
 			l.sort(Comparator.comparingLong((Object[] o) -> (Long) o[0]).thenComparing(o -> (String) o[1]));
 			List<String[]> ids = new ArrayList<>();
 			for (Object[] o : l) {
 				ids.add(new String[] {(String) o[1]});
 			}
-			out.put(t.getKey(), ids);
+			out.put(t.getLongKey(), ids);
 		}
 		return out;
 	}
