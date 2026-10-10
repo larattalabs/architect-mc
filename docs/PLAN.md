@@ -175,7 +175,9 @@ Round 2 (R1-R11, `steward-mc/docs/ARCHITECT-ASKS.md`) is all accepted 2026-10-05
 and `artifacts/scenarios/6b/`, local). The checker (M1-M14), previews and site plan, IR format 2, Survey.volume (268M-cell
 limit), template-first `Regions.design` (picks 6 of 6), Steward's crater and rift gates on the claude login, the command path
 and nudges, versioning (a)-(c), the region-lot entrance style and `PlaceRequest.pathStyle`, and S1 (floating islands) green on
-every run bar; S1 waits for Noah's gallery approval. S2-S6 fixtures pinned.
+every run bar (final run 20261010-055851, evidence 1bf0b8e36a1f); S1 waits for Noah's gallery approval. S2-S6 fixtures pinned. The
+engine chain's MSPT failures were the shared machine's load (v0.11.2 fails the same bars); the MSPT bars now judge Architect's own
+per-tick CPU time, and the group undo's planner no longer degrades on packed-position hashes (fastutil maps).
 
 **Phase 6a status: PASSED 2026-10-09** (gate-verifier PASS WITH CAVEATS on 43f9304; its six findings were then fixed on
 phase/6a (per-stage drift, freeze before lot/road writes, maxWait opt-in, always-on generated-chunk log, RG5 and E-normal `live`

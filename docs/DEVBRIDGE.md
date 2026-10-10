@@ -105,7 +105,7 @@ The list below is what `dev.help` returns (`{commands: {name: description}, scre
 
 | hook | arguments, result |
 |---|---|
-| `dev.placement.stats` | {reset?: false} - while placement is active (a job, a running batch or removal, a construction site building): `budgetMs`, `ticks`, `msptMax`/`msptMean` (each tick timed from its start to after the last end-of-tick handler), `ticksOver50ms`, `serverMsptMax` (the server's own tick time, which leaves end-of-tick handlers out), `placementMsMax`/`Mean` (Architect's time per tick), `jobStartMsMax` (checks, snapshot, leaf ring and hold), `convertMsMax` (a construction site's conversion), `cells`, `workSeconds`, `cellsPerSecond`, `active`, `jobs`; reset starts over after the answer |
+| `dev.placement.stats` | {reset?: false} - while placement is active (a job, a running batch or removal, a construction site building): `budgetMs`, `ticks`, `msptMax`/`msptMean` (each tick timed from its start to after the last end-of-tick handler), `ticksOver50ms`, `serverMsptMax` (the server's own tick time, which leaves end-of-tick handlers out), `placementMsMax`/`Mean` (Architect's time per tick), `placementCpuMsMax`/`Mean` (6b: the same ticks in the server thread's CPU time, without descheduling or GC pauses; the MSPT bars judge it), `jobStartMsMax` (checks, snapshot, leaf ring and hold), `convertMsMax` (a construction site's conversion), `cells`, `workSeconds`, `cellsPerSecond`, `active`, `jobs`; reset starts over after the answer |
 | `dev.placement.jobs` | {} - the ticked jobs running now: site, kind (place\|rollback\|remove), batch, item, phase, progress, total, held (ticks held back); `slow`, `budgetMs` |
 | `dev.placement.slow` | {on: bool} - test hook: jobs write about 16 cells per tick, so a check can act in the middle of an item (cancel, relog) |
 
@@ -309,6 +309,10 @@ region. Previews print as file links (with a [copy] link).
 ## Changelog
 
 Semi-stable: a hook may change or go, and every such change is listed here, newest first.
+
+- **2026-10-10 (phase 6b):** `dev.placement.stats` adds `placementCpuMsMax` and `placementCpuMsMean`: the placement ticks
+  (batches, groups, jobs) in the server thread's CPU time. On a busy machine the wall-time `placementMsMax`, `msptMax` and
+  `serverMsptMax` take descheduling and GC pauses; the gates' MSPT bars judge the CPU figure and record the rest.
 
 - **2026-10-09 (6b addition: region lot entrances):** apitest `place` / `check` take `pathStyle=<block id>` (after the rotation
   argument, which is then required): the request goes out with `PlaceRequest.pathStyle` (API 1.9.0), so its entrance approach is

@@ -6292,3 +6292,28 @@ programs: `crater_works`, `rift_city`, `walled_hill`, `sky_isle`, `floating_isla
   variants and form materials; the axis-run share is recorded only.
 - The S1 lot children are the 9-wide 6a stub (only it fits S1's 9x9 lots); the stub's own three front path rows are part of
   its design (inside the lot box), not the approach.
+- **The engine chain and the MSPT bars (coordinator and Noah, 2026-10-10).** The first engine chain
+  (20261010-013327) failed 4e-megalite (4 ms run, tick max 65.7 ms) and 6a-megaA (realise max 92.8 ms; undo 211 s, max 103 ms).
+  Paired runs against v0.11.2 on the same box (load average 15-64: CI runners, the tiers agent's chain, other clients) showed
+  v0.11.2 failing the same bars (megalite 4 ms 76.5 / 88.1 ms; megaA undo 64 ms; undo-only on the same realised world: v0.11.2
+  247 s / 82 ms, 6b 256 s / 118 ms), the spikes in the vanilla tick and in descheduled or GC-paused placement ticks, and no
+  6b-only frame on any thread in JFR. Not a 6b regression. **The MSPT bars now judge Architect's own per-tick time:**
+  `dev.placement.stats` adds `placementCpuMsMax` / `placementCpuMsMean`, the placement ticks (batches, groups, jobs: writes,
+  checks, plan work) in the server thread's CPU time, and megalite, megaA and the scenario MSPT row judge it at 50 ms. The whole
+  tick (max, p99, over 50), the placement ticks' wall time, the vanilla tick (`serverMsptMax`) and GC are recorded, not judged.
+  Bench steps run under whatever load there is (Noah).
+- **Undo planning (journal).** The group undo's planner (`Journal.planUndo`, `Sections.Planner`) keyed packed positions in
+  `java.util.HashMap`: `Long.hashCode` folds a `BlockPos.asLong` so that many positions share a hash, the bins treeify, and one
+  section's plan took 50-220 ms in a tick under load (both versions). It now uses fastutil `Long2ObjectOpenHashMap` /
+  `LongLinkedOpenHashSet` (same iteration order for the writes; `Undo.written` is still a `HashMap` copy). Undo-only on the
+  6a-made megaA world: 159 s, tick max 43 ms (was 256 s, 118 ms). Moving the plan off the server thread is not done: the
+  planner reads the world per cell (`holds`), and per section it is now a few ms; recorded for 0c.
+- **inv3 under kit 0.12's pads.** On the flat fixture a 0.12 lot pad writes nothing (its `IF_NATURAL` ops change no cell of
+  flat grass), so no lot covers a terrain tile; the step now takes a region tile that covers another (a path over its
+  terrain) when no lot covers a pad. Same invariant, same end state in either order.
+- **S1 final run** 20261010-055851 (natural) and 20261010-055539-flat on 67eebeb (the undo-planning fix in): every run bar
+  green, evidence `1bf0b8e36a1f`, IR `46b2d75ea03a` (the golden), E-flat 0, E-normal 1017 all classified (growth 1016, live 1;
+  the undo's own 0), Architect's own tick max 22.9 ms (wall; that build had no CPU figure), $0.00. The gallery bundle is in the main checkout's
+  `artifacts/scenarios/6b/gallery/` (`SCENARIOS_ART` puts runs there). The red-brown satellite island (SE, cam_high) is
+  grass_block in the `minecraft:dappled_forest` biome's grass tint (an in-game `execute if biome` at the island; the pristine
+  before-shot shows the same patch on the ground): the world's colour, not the program's.

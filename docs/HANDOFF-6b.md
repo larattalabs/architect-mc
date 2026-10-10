@@ -15,7 +15,7 @@ merge, tag or publish. This file is retired into CONTRACT "Phase 6b as built" wh
 | 5. Sidecar: check, preview, blobs, `hello` versions, `region.design` | done (subagent, merged from `phase/6b-sidecar`) |
 | 6. Mod: blobs, `PLAN_STALE`, `Survey.volume`, previews/check/design/nudge, ghost, commands, DevBridge, API 1.9.0 | done in JVM tests (subagent, merged from `phase/6b-mod`); in-game checks pending |
 | 7. Tools: `find-site.mjs`, `scenarios.mjs`, scenario files, `gate6b.mjs` | done; S1-S6 and the gate sites pinned |
-| 8. Gate items 1-10, 12; S1 run and gallery (11); gate-verifier (13) | items 1-10 green (in-game steps re-run on the final code 2026-10-10 01:17-01:33); S1 run 20261009-233143 green on every run bar, evidence eb02307bb0ec, gallery built (approval pending); engine chain running (artifacts/gate-runs/20261010-013327-engine) |
+| 8. Gate items 1-10, 12; S1 run and gallery (11); gate-verifier (13) | items 1-10 green; **final S1 run 20261010-055851 (+ 20261010-055539-flat), evidence 1bf0b8e36a1f, green on every run bar**; gallery bundle in the main checkout's `artifacts/scenarios/6b/gallery/` (approval pending: the coordinator publishes it); engine chain: see below; gate-verifier not run yet |
 
 ## The engine-chain MSPT failures (megalite, megaA): investigation (2026-10-10)
 
