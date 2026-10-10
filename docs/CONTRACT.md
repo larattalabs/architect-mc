@@ -6330,7 +6330,7 @@ programs: `crater_works`, `rift_city`, `walled_hill`, `sky_isle`, `floating_isla
   grass_block in the `minecraft:dappled_forest` biome's grass tint (an in-game `execute if biome` at the island; the pristine
   before-shot shows the same patch on the ground): the world's colour, not the program's.
 
-## Phase 6c slice 0a: consumer support (DRAFT for Steward's review)
+## Phase 6c slice 0a: consumer support (FROZEN after Steward review)
 
 This slice is API 1.10.0 and mod 0.13.0. C4 ships early as sub-release 0.12.2, with API 1.9.0 unchanged.
 
@@ -6787,3 +6787,15 @@ relog drive exactly the re-request path.
   `RealiseRequest.maxWaitSeconds`, when set, also caps it (TIMED_OUT). No new cap.
 - **Gate precondition:** the tiers runner merges first (v0.12.1); 0a then runs `slice` plus the focused checks, with
   6a-megaB-fast added.
+
+### Changes from Steward's review of 0a (all accepted; these win)
+
+- **S-0a-1:** a scripted card through `ext["architect:simAnswer"]` is enough. A schema mismatch fails the job.
+- **S-0a-2:** ±2 origin with the same rotation is fine. No reserve of the massing box plus 2.
+- **S-0a-3:** bible cost goes to the first group that pins the version. The breakdown's bible line lists the bible job id(s) it
+  counts, so a consumer that also tracks `BibleJob` cost doesn't count it twice. A bible job that never reaches a group keeps its
+  cost on `BibleJob`. No `GroupRequest.bibleJobId`.
+- **S-0a-4:** a re-used key with a different body fails with `OP_KEY_CONFLICT`.
+- **S-0a-5:** Greywater's 70 min is wall clock including approval waits. It's recorded beside the estimate, not judged.
+  `wallMs` and `firstDetailedMs` give the split on the next paid run.
+- Behaviour changes 1-3 and 6 are accepted by Steward.
