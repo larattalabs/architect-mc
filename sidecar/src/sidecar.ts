@@ -30,6 +30,7 @@ import { checkImportPath, findVariantSource, Reskins, VariantBook, VariantRefuse
 import { EntryVersions, type VersionBy } from './versions.js';
 import { Polishes } from './polish.js';
 import { Regions } from './regions.js';
+import { RegionDesigns } from './regiondesign.js';
 
 export type { RunOutcome } from './bibles.js';
 
@@ -137,6 +138,8 @@ export class Sidecar {
   readonly polishes: Polishes;
   /** (6a) region plans and tile evaluation */
   readonly regions: Regions;
+  /** (6b) template-first region designs (region.design) */
+  readonly regionDesigns: RegionDesigns;
   private gcTimer: NodeJS.Timeout | undefined;
   /** trusted connections */
   private connected = new Set<ClientHandle>();
@@ -174,6 +177,7 @@ export class Sidecar {
     this.versions = new EntryVersions({ libraryDir: config.libraryDir, kitDir: config.kitDir, dataDir: config.dataDir, now: () => this.now(), log });
     this.polishes = new Polishes(this);
     this.regions = new Regions({ config, blobs: this.blobs, bibleIndex: this.bibleIndex, log, emit: (m) => this.emit(m), now: () => this.now() });
+    this.regionDesigns = new RegionDesigns(this);
   }
 
   /** trusted, open connections */
@@ -274,9 +278,15 @@ export class Sidecar {
       variants: this.variants.recent(),
       ...(this.palettes ? { palettes: this.palettes } : {}),
       ...(protocol >= 2
-        ? { protocol, features: [...FEATURES], jobs: this.jobs.book.recent(), groups: this.groups.recent(), bibles: this.bibles.recent(), bibleIndex: this.bibleIndex.list(), reskins: this.reskins.recent(), massings: this.massings.recent() }
+        ? { protocol, ...this.kitVersions(), jobs: this.jobs.book.recent(), groups: this.groups.recent(), bibles: this.bibles.recent(), bibleIndex: this.bibleIndex.list(), reskins: this.reskins.recent(), massings: this.massings.recent() }
         : {}),
     } as Outbound;
+  }
+
+  /** (6b) the snapshot's features and kit versions (`ir.format2`: the sidecar takes format-2 IRs; `irFormats` says what its kit's evaluator reads). */
+  private kitVersions(): { features: string[]; kitVersion: string; irFormats: number[]; irKinds: string[] } {
+    const k = this.regions.kitInfo();
+    return { features: [...FEATURES], kitVersion: k.kitVersion, irFormats: [...k.irFormats], irKinds: [...k.irKinds] };
   }
 
   /** A bible was installed: every client gets the new index. */
@@ -306,6 +316,8 @@ export class Sidecar {
     void this.loadKitInfo();
     const critiqued: Design[] = [];
     for (const d of [...this.designs.active()].sort((a, b) => a.createdAt - b.createdAt)) {
+      // (6b) a region pick is not the designer's: it carries on below, once jobs run
+      if (d.kind === 'region') continue;
       // (5a) a design whose loop waits for its critic needs no slot: the critique module picks it up once jobs run
       if (this.store.data.work?.[d.id]?.critique && !this.critiques.revising(d.id)) {
         critiqued.push(d);
@@ -326,6 +338,7 @@ export class Sidecar {
     // jobs run on the designer's backend: the sim, or Claude through the designer's SDK and auth
     this.jobs.start(jobDriver ?? (designer.name === 'sim' ? new SimJobDriver(this.config.simStepMs, this.config.jobs.simStepUsd) : new ClaudeJobDriver(designer as unknown as ClaudeHost, this.log)));
     for (const d of critiqued) this.critiques.resume(d);
+    this.regionDesigns.resume();
     // (4c) massing garbage collection: now, then hourly
     this.runGc();
     this.gcTimer = setInterval(() => this.runGc(), GC_INTERVAL_MS);
@@ -546,7 +559,14 @@ export class Sidecar {
       case 'region.tiles.request':
         return this.regions.tiles(msg, client);
       case 'region.release':
-        return this.regions.release(msg.planId, client);
+        return this.regions.release(msg.planId, client, msg.evict === true);
+      // ---- 6b
+      case 'region.check':
+        return this.regions.check(msg.planId);
+      case 'region.preview':
+        return this.regions.preview(msg.planId, msg.views, msg.axes);
+      case 'region.design':
+        return { designId: this.regionDesigns.request(msg).id };
     }
   }
 
@@ -689,6 +709,7 @@ export class Sidecar {
     if (!d) throw new ClientError(`no design "${id}"`);
     if (isFinalDesign(d)) throw new ClientError(`design ${id} is already ${d.status}`);
     this.stopDesign(id, 'cancelled', undefined, 'cancelled');
+    if (d.kind === 'region') this.regionDesigns.cancelled(d);
     this.log.info(`design ${id} cancelled`);
     return d;
   }

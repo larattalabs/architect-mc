@@ -1,0 +1,277 @@
+<title>Architect 6b Gallery</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a single review column, a survey sheet. Header facts, then the bars, then before/after plates per camera, the
+   plan's previews, exactness, and the decision at the foot of each scenario; the calibration card last. */
+:root {
+  --ground: #f3f6f7;      /* page */
+  --sheet: #ffffff;       /* raised sheets: tables, plates */
+  --ink: #17232e;         /* text */
+  --muted: #5b6b78;       /* secondary text */
+  --rule: #d6dee4;        /* hairlines */
+  --sky: #2b6f8f;         /* accent: links, focus, selected */
+  --sky-soft: #dbeaf1;
+  --pass: #1f7a4d; --pass-bg: #def2e6;
+  --fail: #b3362b; --fail-bg: #f8e1de;
+  --rec: #6a5d9e; --rec-bg: #e9e5f6;
+  --display: "Bricolage Grotesque", "Avenir Next", "Segoe UI", sans-serif;
+  --body: "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --ground: #0f161c; --sheet: #16212a; --ink: #e3ebf0; --muted: #93a4b1; --rule: #2a3a46; --sky: #7cc0de; --sky-soft: #1d3442;
+  --pass: #6fd3a0; --pass-bg: #173528; --fail: #f08b80; --fail-bg: #3b1d1a; --rec: #b4a8ea; --rec-bg: #2a2545; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --ground: #0f161c; --sheet: #16212a; --ink: #e3ebf0; --muted: #93a4b1; --rule: #2a3a46; --sky: #7cc0de; --sky-soft: #1d3442;
+  --pass: #6fd3a0; --pass-bg: #173528; --fail: #f08b80; --fail-bg: #3b1d1a; --rec: #b4a8ea; --rec-bg: #2a2545; color-scheme: dark }
+* { box-sizing: border-box }
+body { background: var(--ground); color: var(--ink); font: 15px/1.55 var(--body); padding-inline: 16px; padding-block: 24px 64px }
+main { max-width: 1120px; margin: 0 auto; display: grid; gap: 56px }
+h1, h2, h3 { font-family: var(--display); text-wrap: balance; margin: 0; line-height: 1.15 }
+h1 { font-size: clamp(28px, 4vw, 40px); font-weight: 700; letter-spacing: -0.01em }
+h2 { font-size: 26px; font-weight: 700 }
+h3 { font-size: 17px; font-weight: 500; color: var(--muted) }
+p { margin: 0; max-width: 68ch }
+.eyebrow { font: 500 12px/1 var(--mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--sky) }
+.mono { font-family: var(--mono); font-size: 13px }
+.muted { color: var(--muted) }
+a { color: var(--sky) }
+:focus-visible { outline: 2px solid var(--sky); outline-offset: 2px }
+header.top { display: grid; gap: 10px; border-bottom: 1px solid var(--rule); padding-bottom: 20px }
+section.scenario { display: grid; gap: 28px }
+.facts { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); margin: 0; background: var(--sheet); border: 1px solid var(--rule) }
+.facts div { padding: 10px 12px; min-width: 0; box-shadow: inset -1px -1px 0 var(--rule) }
+.facts dt { font: 500 11px/1.2 var(--mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted) }
+.facts dd { margin: 4px 0 0; font-family: var(--mono); font-size: 13px; overflow-wrap: anywhere }
+.block { display: grid; gap: 12px }
+.scroll { overflow-x: auto; border: 1px solid var(--rule); background: var(--sheet) }
+table { border-collapse: collapse; width: 100%; font-size: 14px; font-variant-numeric: tabular-nums }
+th, td { text-align: left; vertical-align: top; padding: 9px 12px; border-bottom: 1px solid var(--rule) }
+th { font: 500 11px/1.2 var(--mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted) }
+tr:last-child td { border-bottom: 0 }
+td.val { font-family: var(--mono); font-size: 12.5px; min-width: 260px }
+td.bar { color: var(--muted); font-size: 13px; min-width: 200px }
+.pill { display: inline-block; font: 600 11px/1 var(--mono); letter-spacing: 0.06em; text-transform: uppercase; padding: 5px 8px; border-radius: 3px; white-space: nowrap }
+.pill.pass { color: var(--pass); background: var(--pass-bg) }
+.pill.fail { color: var(--fail); background: var(--fail-bg) }
+.pill.rec { color: var(--rec); background: var(--rec-bg) }
+.pill.pend { color: var(--muted); background: var(--sky-soft) }
+.cams { display: grid; gap: 22px }
+.cam { display: grid; gap: 8px }
+.cam .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 8px }
+@media (max-width: 720px) { .cam .pair { grid-template-columns: 1fr } }
+figure { margin: 0; display: grid; gap: 4px; min-width: 0 }
+figure img { width: 100%; height: auto; display: block; border: 1px solid var(--rule); background: var(--sheet) }
+figcaption { font: 12px/1.3 var(--mono); color: var(--muted) }
+.missing { aspect-ratio: 16 / 9; display: grid; place-items: center; border: 1px dashed var(--rule); color: var(--muted); font-size: 13px }
+.previews { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px }
+pre.summary { margin: 0; padding: 12px; background: var(--sheet); border: 1px solid var(--rule); font: 12.5px/1.5 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere }
+details { background: var(--sheet); border: 1px solid var(--rule); padding: 10px 12px }
+details summary { cursor: pointer; font-weight: 500 }
+.decision { display: grid; gap: 14px; background: var(--sheet); border: 1px solid var(--rule); border-top: 3px solid var(--sky); padding: 18px }
+.choice { display: flex; flex-wrap: wrap; gap: 10px }
+.choice label { display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--rule); padding: 8px 14px; cursor: pointer; border-radius: 3px }
+.choice input:checked + span { font-weight: 600 }
+textarea { width: 100%; min-height: 90px; font: 14px/1.5 var(--body); color: var(--ink); background: var(--ground); border: 1px solid var(--rule); padding: 10px; border-radius: 3px }
+button { font: 600 14px/1 var(--body); padding: 11px 18px; border: 1px solid var(--sky); background: var(--sky); color: var(--sheet); border-radius: 3px; cursor: pointer; justify-self: start }
+button:disabled { opacity: 0.5; cursor: not-allowed }
+.status { font-size: 13px; color: var(--muted) }
+.prior { font-size: 13px; color: var(--muted) }
+.prior s { color: var(--fail) }
+.calib { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 14px }
+.calib figure { background: var(--sheet); border: 1px solid var(--rule); padding: 8px }
+.calib figure img { border: 0 }
+.toggle { display: flex; gap: 6px }
+.toggle button { flex: 1; padding: 7px 6px; font-size: 12.5px; background: transparent; color: var(--ink); border-color: var(--rule) }
+.toggle button[aria-pressed="true"] { background: var(--sky-soft); border-color: var(--sky); color: var(--ink) }
+@media (prefers-reduced-motion: no-preference) { button { transition: background-color .15s } }
+</style>
+
+<main id="app">
+  <header class="top">
+    <span class="eyebrow">Architect · settlement scenarios</span>
+    <h1 id="title">Architect 6b gallery</h1>
+    <p class="muted" id="lede">Each scenario that is new or changed in this phase, with its bars first, then the world before and after from the same six cameras. A decision counts only for the evidence sha it names.</p>
+  </header>
+</main>
+
+<script>
+const DATA = /*__GALLERY_DATA__*/null;
+const $ = (tag, attrs = {}, ...kids) => {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) { if (k === 'class') e.className = v; else if (k === 'text') e.textContent = v; else if (v != null) e.setAttribute(k, v); }
+  for (const k of kids) if (k != null) e.append(k);
+  return e;
+};
+const app = document.getElementById('app');
+document.getElementById('title').textContent = DATA.title;
+const views = { db: null, user: null, owner: false, me: null };
+const docId = (sc) => `approvals/${DATA.phase}__${sc.id}`;
+
+function pill(row) {
+  if (!row.gated) return $('span', { class: 'pill rec', text: 'recorded' });
+  if (row.id === 'gallery') return $('span', { class: 'pill pend', text: 'this page' });
+  return $('span', { class: `pill ${row.pass ? 'pass' : 'fail'}`, text: row.pass ? 'pass' : 'fail' });
+}
+function img(src, alt) {
+  if (!src) return $('div', { class: 'missing', text: 'no image' });
+  return $('img', { src, alt, loading: 'lazy' });
+}
+
+function scenario(sc) {
+  const s = $('section', { class: 'scenario', id: sc.short });
+  const failing = sc.rows.filter((r) => r.gated && r.pass === false && r.id !== 'gallery');
+  s.append($('div', { class: 'block' },
+    $('span', { class: 'eyebrow', text: `${sc.short.toUpperCase()} · version ${sc.version}` }),
+    $('h2', { text: sc.brief || sc.id }),
+    $('p', { class: 'muted', text: failing.length ? `${failing.length} bar(s) fail on this run: ${failing.map((r) => r.label).join(', ')}.` : 'Every run bar passes. Your decision is the last one.' })));
+  const facts = [['Scenario', sc.id], ['Run', sc.runId], ['Evidence', sc.evidenceSha.slice(0, 12)], ['IR sha', (sc.irSha || '').slice(0, 12)], ['Date', `${sc.date.slice(0, 4)}-${sc.date.slice(4, 6)}-${sc.date.slice(6, 8)}`],
+    ['Versions', `mod ${sc.versions?.mod} · API ${sc.versions?.api} · kit ${sc.versions?.kit}`], ['Claim', sc.claim.join(', ')], ['Seeds', `world ${sc.worldSeed} · program ${sc.programSeed}`], ['Cells written', Number(sc.cellsWritten).toLocaleString('en-US')]];
+  s.append($('dl', { class: 'facts' }, ...facts.map(([k, v]) => $('div', {}, $('dt', { text: k }), $('dd', { text: v })))));
+
+  // the bars
+  const tb = $('tbody');
+  for (const r of sc.rows) tb.append($('tr', {}, $('td', {}, pill(r)), $('td', { text: r.label }), $('td', { class: 'val', text: r.id === 'gallery' ? decisionText(sc) : r.value }), $('td', { class: 'bar', text: r.threshold })));
+  s.append($('div', { class: 'block' }, $('h3', { text: 'Bars (CONTRACT 6b §8.3), on the realised world' }),
+    $('div', { class: 'scroll' }, $('table', {}, $('thead', {}, $('tr', {}, $('th', { text: 'Result' }), $('th', { text: 'Check' }), $('th', { text: 'Value' }), $('th', { text: 'Bar' }))), tb))));
+
+  // before and after
+  const cams = $('div', { class: 'cams' });
+  for (const c of sc.cams) cams.append($('div', { class: 'cam' }, $('span', { class: 'mono muted', text: c.name }),
+    $('div', { class: 'pair' }, $('figure', {}, img(c.before, `${c.name}, pristine fixture`), $('figcaption', { text: 'before · the pristine fixture' })),
+      $('figure', {}, img(c.after, `${c.name}, after the realise and a 2-minute stand`), $('figcaption', { text: 'after · realised, 2-minute stand at default ticks' })))));
+  s.append($('div', { class: 'block' }, $('h3', { text: 'Before and after, six fixed cameras' }), cams));
+
+  // previews
+  s.append($('div', { class: 'block' }, $('h3', { text: "The plan's previews and checker summary" }),
+    $('div', { class: 'previews' }, ...sc.previews.map((p) => $('figure', {}, img(p.src, p.name), $('figcaption', { text: p.name })))),
+    $('pre', { class: 'summary', text: [sc.summary, sc.realisedFindings.length ? `realised: ${sc.realisedFindings.join('; ')}` : 'realised: no findings'].join('\n') })));
+
+  // exactness
+  const ex = sc.exact;
+  const cls = (c) => Object.entries(c || {}).map(([k, v]) => `${k}: ${v}`).join('\n') || 'none';
+  s.append($('div', { class: 'block' }, $('h3', { text: 'Exactness after one group undo' }),
+    $('p', { text: `E-flat ${ex.flat ? `${ex.flat.mismatches} mismatches (run ${ex.flat.runId})` : 'not run'} · E-normal ${ex.normal.mismatches} mismatches of ${Number(ex.normal.cellsWritten).toLocaleString('en-US')} written cells` }),
+    $('details', {}, $('summary', { text: 'Classified mismatches' }), $('pre', { class: 'summary', text: `E-normal\n${cls(ex.normal.classes)}${ex.flat ? `\n\nE-flat\n${cls(ex.flat.classes)}` : ''}` }))));
+
+  s.append(decisionPanel(sc));
+  return s;
+}
+
+const decisions = {};
+function decisionText(sc) {
+  const d = decisions[sc.id];
+  if (!d) return 'pending';
+  return d.evidenceSha === sc.evidenceSha ? `${d.decision} ${d.at?.slice(0, 10) ?? ''}` : 'evidence changed, decide again';
+}
+
+function decisionPanel(sc) {
+  const box = $('div', { class: 'decision', id: `decide-${sc.short}` });
+  const prior = $('p', { class: 'prior' });
+  const radios = $('div', { class: 'choice', role: 'radiogroup', 'aria-label': 'Decision' });
+  for (const v of ['approved', 'rejected']) {
+    const id = `d-${sc.short}-${v}`;
+    radios.append($('label', { for: id }, $('input', { type: 'radio', name: `d-${sc.short}`, id, value: v }), $('span', { text: v === 'approved' ? 'Approve' : 'Reject' })));
+  }
+  const notes = $('textarea', { id: `notes-${sc.short}`, placeholder: 'Notes: what reads well, what to change' });
+  const submit = $('button', { type: 'button', id: `submit-${sc.short}`, text: 'Submit decision' });
+  const status = $('p', { class: 'status', role: 'status' });
+  box.append($('h3', { text: `Decision for evidence ${sc.evidenceSha.slice(0, 12)}` }), prior, radios, $('label', { for: notes.id, class: 'muted', text: 'Notes' }), notes, submit, status);
+  const render = () => {
+    const d = decisions[sc.id];
+    prior.replaceChildren();
+    if (d) {
+      const line = `${d.decision} on ${d.at?.slice(0, 16).replace('T', ' ')} for ${d.evidenceSha.slice(0, 12)}${d.notes ? `: ${d.notes}` : ''}`;
+      if (d.evidenceSha === sc.evidenceSha) prior.append(`Current decision: ${line}`);
+      else prior.append('Earlier decision ', $('s', { text: line }), ' (evidence changed, decide again)');
+    } else prior.append('No decision yet.');
+    const editable = DATA.local || views.owner;
+    for (const i of box.querySelectorAll('input, textarea, button')) i.disabled = !editable;
+    if (!editable) status.textContent = views.db ? 'Only the page owner records decisions; you see them read-only.' : 'Decisions load when the page runs on claude.ai.';
+    const row = [...document.querySelectorAll(`#${sc.short} td.val`)].find((td) => td.parentElement.textContent.includes('Gallery'));
+    if (row) row.textContent = decisionText(sc);
+  };
+  box._render = render;
+  submit.addEventListener('click', async () => {
+    const choice = radios.querySelector('input:checked')?.value;
+    if (!choice) { status.textContent = 'Choose Approve or Reject first.'; return; }
+    const prev = decisions[sc.id];
+    const doc = { phase: DATA.phase, scenario: sc.id, runId: sc.runId, evidenceSha: sc.evidenceSha, decision: choice, notes: notes.value.trim(), at: new Date().toISOString(),
+      history: prev ? [...(prev.history ?? []), { ...prev, history: undefined }].map(({ history, ...h }) => h) : [] };
+    if (DATA.local) {
+      decisions[sc.id] = doc;
+      const blob = new Blob([JSON.stringify({ page: 'local', approvals: Object.values(decisions) }, null, 2)], { type: 'application/json' });
+      const a = $('a', { href: URL.createObjectURL(blob), download: 'approvals.json', text: 'Save approvals.json' });
+      status.replaceChildren('Recorded. ', a, ' into artifacts/scenarios/6b/.');
+      render();
+      return;
+    }
+    submit.disabled = true;
+    status.textContent = 'Saving…';
+    try {
+      doc.by = views.me;
+      await views.db.doc(docId(sc)).set(doc);
+      status.textContent = `Saved: ${choice} for ${sc.evidenceSha.slice(0, 12)}.`;
+    } catch (e) {
+      status.textContent = e?.code === 'invalid_argument' ? 'The page did not accept this write: only the owner records decisions.' : `Not saved (${e?.code || 'error'}). Try again in a moment.`;
+    } finally { submit.disabled = false; }
+  });
+  return box;
+}
+
+// the calibration card
+const marks = {};
+function calibration() {
+  if (!DATA.calibration?.length) return null;
+  const s = $('section', { class: 'scenario', id: 'calibration' });
+  s.append($('div', { class: 'block' }, $('span', { class: 'eyebrow', text: 'Calibration card · optional' }), $('h2', { text: 'Does this island read natural?' }),
+    $('p', { class: 'muted', text: "Ten islands from held-out seeds, not S1's. Mark each one natural or geometric. Your marks set the axis-run threshold that 6c gates on; S1 records the measure only." })));
+  const grid = $('div', { class: 'calib' });
+  for (const r of DATA.calibration) {
+    const tg = $('div', { class: 'toggle', role: 'group', 'aria-label': `Island ${r.seed}` });
+    for (const v of ['natural', 'geometric']) {
+      const b = $('button', { type: 'button', 'aria-pressed': 'false', 'data-seed': r.seed, 'data-mark': v, text: v === 'natural' ? 'Reads natural' : 'Reads geometric' });
+      b.addEventListener('click', () => mark(r.seed, v));
+      tg.append(b);
+    }
+    grid.append($('figure', {}, img(r.src, `island seed ${r.seed}`), $('figcaption', { text: `seed ${r.seed}` }), tg));
+  }
+  s.append(grid, $('p', { class: 'status', id: 'calib-status', role: 'status' }));
+  return s;
+}
+function paintMarks() {
+  for (const b of document.querySelectorAll('.toggle button')) {
+    b.setAttribute('aria-pressed', String(marks[b.dataset.seed] === b.dataset.mark));
+    b.disabled = !(DATA.local || views.owner);
+  }
+}
+async function mark(seed, v) {
+  marks[seed] = v;
+  paintMarks();
+  const st = document.getElementById('calib-status');
+  if (DATA.local || !views.db) { st.textContent = `Marked ${seed} ${v} (this page only).`; return; }
+  try { await views.db.doc(`calibration/${DATA.phase}__${seed}`).set({ phase: DATA.phase, seed, mark: v, by: views.me, at: new Date().toISOString() }); st.textContent = `Saved: ${seed} reads ${v}.`; }
+  catch (e) { st.textContent = `Not saved (${e?.code || 'error'}).`; }
+}
+
+for (const sc of DATA.scenarios) app.append(scenario(sc));
+const cal = calibration();
+if (cal) app.append(cal);
+if (!DATA.scenarios.length) app.append($('p', { class: 'muted', text: 'No scenario run is in this bundle yet.' }));
+const renderAll = () => { for (const b of document.querySelectorAll('.decision')) b._render(); paintMarks(); };
+renderAll();
+
+(async () => {
+  if (DATA.local || !window.claude?.use) return;
+  const [db, user] = await Promise.all([window.claude.use('db'), window.claude.use('user')]);
+  views.db = db; views.user = user;
+  views.owner = (await user?.isOwner()) ?? false;
+  views.me = views.owner ? await user.id().catch(() => null) : null;
+  renderAll();
+  if (!db) return;
+  for (const sc of DATA.scenarios) db.doc(docId(sc)).onSnapshot((snap) => { if (snap.exists) decisions[sc.id] = snap.data(); else delete decisions[sc.id]; renderAll(); }, () => {});
+  if (DATA.calibration?.length) db.collection('calibration').onSnapshot((q) => { for (const d of q.docs) { const v = d.data(); if (v.phase === DATA.phase) marks[v.seed] = v.mark; } paintMarks(); }, () => {});
+})();
+</script>

@@ -1,0 +1,63 @@
+{
+  "id": "s4_ravine_town",
+  "phase": "7a",
+  "version": 0,
+  "brief": "a town hanging in a ravine, bridges everywhere",
+  "world": {
+    "seed": "2026100906",
+    "preset": "normal",
+    "gamerules": "gallery"
+  },
+  "fixture": {
+    "claim": [
+      -640,
+      -80,
+      -385,
+      79
+    ],
+    "yRange": [
+      22,
+      224
+    ],
+    "foundBy": "find-site s4_ravine_town @ seed 2026100906",
+    "surveySha": "651a8639b8336fd08660b075a2263830155f068c807fc9c1057613f26b590f1f",
+    "score": 103,
+    "stats": {
+      "biomes": {
+        "desert": 50,
+        "river": 28,
+        "windswept_savanna": 19,
+        "warm_ocean": 3
+      },
+      "grid": [],
+      "min": 62,
+      "max": 184,
+      "mean": 70.5,
+      "water": 51,
+      "trees": 1,
+      "natural": 100,
+      "missing": 0
+    }
+  },
+  "flat": {
+    "preset": "flat",
+    "claimOffset": [
+      0,
+      0
+    ],
+    "gamerules": "exact"
+  },
+  "needs": {
+    "size": [
+      256,
+      160
+    ],
+    "relief": [
+      30,
+      200
+    ],
+    "candidates": 60,
+    "step": 512,
+    "stopAt": 60
+  }
+}

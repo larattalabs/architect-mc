@@ -4,7 +4,7 @@
 //   node.sd(y)           -> number    (signed distance at (x, y, z) of the prepared column; inside when <= 0)
 // `col` is `{ g, h, f }`: the column's frozen ground, height and floor (y-refs resolve against it).
 // Under the realise lint: only + - * / and Math.floor/sqrt/abs/min/max/imul.
-import { makeNoise, noiseSpecError } from './noise.mjs';
+import { fnv64, makeColumnNoise, makeNoise, noiseSpecError } from './noise.mjs';
 
 /** Bigger than any distance in a world; substituted for a child known to be outside its threshold. */
 export const BIG = 1e9;
@@ -12,6 +12,11 @@ const EPS = 1e-6;
 
 export const PRIMITIVES = ['sphere', 'box', 'cylinder', 'cone', 'bowl', 'ring', 'torus', 'capsulePath', 'extrude', 'heightfield', 'mask'];
 export const COMBINATORS = ['union', 'intersect', 'subtract', 'smooth', 'offset', 'displace', 'clipY'];
+/** (6b) Shape kinds that only format-2 IRs may use (their `requires` kind is `shape:<kind>`). */
+export const SHAPES_FORMAT2 = ['ellipsoid', 'capsuleChain', 'wedge', 'prism', 'array', 'instances', 'warp', 'strata'];
+export const WEDGE_RISE = ['n', 's', 'e', 'w'];
+/** (6b) Limits: array copies, instances, warp amplitude (the 8-column rule). */
+export const ARRAY_MAX = 256, INSTANCES_MAX = 1024, WARP_MAX_AMP = 8;
 export const BOWL_PROFILES = ['parabolic', 'spherical', 'flat'];
 /** Cells above a bowl's rim it includes by default (its `h`). */
 export const BOWL_DEFAULT_H = 32;
@@ -209,7 +214,69 @@ export function shapeError(s, where = 'shape', depth = 0) {
       if (s.y0 == null && s.y1 == null) return `${where}: clipY needs y0 or y1`;
       return first(s.y0 == null ? null : yrefError(s.y0, `${where}.y0`), s.y1 == null ? null : yrefError(s.y1, `${where}.y1`), shapeError(s.of, `${where}.of`, depth + 1));
     }
-    default: return `${where}: unknown shape kind '${k}' (${[...PRIMITIVES, ...COMBINATORS].join(', ')})`;
+    // ---- format 2 (6b)
+    case 'ellipsoid': {
+      const e = vec3('c');
+      if (e) return e;
+      if (!Array.isArray(s.r) || s.r.length !== 3 || !s.r.every((v) => isNum(v) && v > 0)) return `${where}.r must be [rx, ry, rz] > 0`;
+      return null;
+    }
+    case 'capsuleChain': {
+      if (!Array.isArray(s.points) || s.points.length < 2) return `${where}.points must have 2+ [x, y, z]`;
+      for (let i = 0; i < s.points.length; i++) {
+        const p = s.points[i];
+        if (!Array.isArray(p) || p.length !== 3 || !p.every(isNum)) return `${where}.points[${i}] must be [x, y, z] numbers`;
+      }
+      if (!Array.isArray(s.radii) || s.radii.length !== s.points.length || !s.radii.every((v) => isNum(v) && v >= 0)) return `${where}.radii must be ${s.points.length} numbers >= 0 (one per point)`;
+      return null;
+    }
+    case 'wedge': {
+      const e = first(vec3('min'), vec3('max'));
+      if (e) return e;
+      if (s.min[0] > s.max[0] || s.min[2] > s.max[2]) return `${where}: wedge min must be <= max in x and z`;
+      return WEDGE_RISE.includes(s.rise) ? null : `${where}.rise must be one of ${WEDGE_RISE.join(', ')}`;
+    }
+    case 'prism': {
+      if (!Array.isArray(s.polygon) || s.polygon.length < 3) return `${where}.polygon must have 3+ [x, z] points`;
+      for (let i = 0; i < s.polygon.length; i++) {
+        const p = s.polygon[i];
+        if (!Array.isArray(p) || p.length !== 2 || !p.every(isNum)) return `${where}.polygon[${i}] must be [x, z]`;
+      }
+      const a = s.apex;
+      if (!a || !Array.isArray(a.line) || a.line.length !== 2 || !a.line.every((p) => Array.isArray(p) && p.length === 2 && p.every(isNum)) || !isNum(a.y)) return `${where}.apex must be {line: [[x, z], [x, z]], y}`;
+      return first(yrefError(s.y0, `${where}.y0`), yrefError(s.y1, `${where}.y1`));
+    }
+    case 'array': {
+      if (!Array.isArray(s.step) || s.step.length !== 3 || !s.step.every(Number.isInteger)) return `${where}.step must be [dx, dy, dz] integers`;
+      if (!(Number.isInteger(s.n) && s.n >= 1 && s.n <= ARRAY_MAX)) return `${where}.n must be 1..${ARRAY_MAX}`;
+      return shapeError(s.of, `${where}.of`, depth + 1);
+    }
+    case 'instances': {
+      if (!Array.isArray(s.transforms) || s.transforms.length < 1 || s.transforms.length > INSTANCES_MAX) return `${where}.transforms must be 1..${INSTANCES_MAX} transforms`;
+      for (let i = 0; i < s.transforms.length; i++) {
+        const t = s.transforms[i];
+        if (!t || !Array.isArray(t.t) || t.t.length !== 3 || !t.t.every(Number.isInteger)) return `${where}.transforms[${i}].t must be [dx, dy, dz] integers`;
+        if (t.rot !== undefined && ![0, 90, 180, 270].includes(t.rot)) return `${where}.transforms[${i}].rot must be 0, 90, 180 or 270`;
+        if (t.mirror !== undefined && t.mirror !== null && t.mirror !== 'x' && t.mirror !== 'z') return `${where}.transforms[${i}].mirror must be 'x', 'z' or null`;
+      }
+      return shapeError(s.of, `${where}.of`, depth + 1);
+    }
+    case 'warp': {
+      const ne = noiseSpecError(s.noise);
+      if (ne) return `${where}.noise: ${ne}`;
+      if (!(Number.isInteger(s.amp) && s.amp >= 1 && s.amp <= WARP_MAX_AMP)) return `${where}.amp must be an integer 1..${WARP_MAX_AMP}`;
+      const e = shapeError(s.of, `${where}.of`, depth + 1);
+      if (e) return e;
+      return staticY(s.of) ? null : `${where}: a warp's shape needs an absolute y extent (no surface-relative y inside a warp)`;
+    }
+    case 'strata': {
+      const b = s.bands;
+      if (!b || !(isNum(b.every) && b.every >= 1) || (b.offset !== undefined && !isNum(b.offset))) return `${where}.bands must be {every >= 1, offset?, noise?, amp?}`;
+      if (b.noise !== undefined) { const ne = noiseSpecError(b.noise); if (ne) return `${where}.bands.noise: ${ne}`; }
+      if (b.amp !== undefined && !isNum(b.amp)) return `${where}.bands.amp must be a number`;
+      return shapeError(s.of, `${where}.of`, depth + 1);
+    }
+    default: return `${where}: unknown shape kind '${k}' (${[...PRIMITIVES, ...COMBINATORS, ...SHAPES_FORMAT2].join(', ')})`;
   }
 }
 
@@ -685,16 +752,335 @@ class ClipY extends Node {
   sd(y) { return Math.max(this.a.sd(y), this.y0 - y, y - this.y1); }
 }
 
+// ------------------------------------------------------------------ format-2 shapes (6b; kit/REGIONS.md "IR format 2")
+
+class Ellipsoid extends Node {
+  // (|p/r| - 1) * min(r): inside exactly the ellipsoid; bound-safe in the sense that it never exceeds the true distance
+  constructor(s, e, blobs, L) {
+    super(e, L);
+    [this.cx, , this.cz] = s.c; this.cyf = yrefFn(s.c[1]);
+    [this.rx, this.ry, this.rz] = s.r;
+    this.m = Math.min(this.rx, this.ry, this.rz);
+    this.k = 1 + e / this.m; // sd <= e  <=>  |p/r| <= k
+    const k = this.k > 0 ? this.k : 0;
+    this.minX = this.cx - this.rx * k; this.maxX = this.cx + this.rx * k; this.minZ = this.cz - this.rz * k; this.maxZ = this.cz + this.rz * k;
+  }
+  prep(x, z, c) {
+    if (this.k < 0) return false;
+    const u = (x - this.cx) / this.rx, w = (z - this.cz) / this.rz;
+    this.q = u * u + w * w;
+    const s = this.k * this.k - this.q;
+    if (s < 0) return false;
+    this.y0 = this.cyf(c);
+    const hh = this.ry * Math.sqrt(s);
+    this.lo = this.y0 - hh; this.hi = this.y0 + hh;
+    return true;
+  }
+  sd(y) { const v = (y - this.y0) / this.ry; return (Math.sqrt(this.q + v * v) - 1) * this.m; }
+}
+
+class CapsuleChain extends Node {
+  // round cones: per segment, the distance to the nearest point of the segment minus the radius interpolated there
+  constructor(s, e, blobs, L) {
+    super(e, L);
+    const pts = s.points, rs = s.radii;
+    const n = pts.length - 1;
+    this.n = n;
+    this.seg = new Float64Array(n * 9); // ax ay az ex ey ez l2 ra dr
+    this.box = new Float64Array(n * 6); // minX maxX minZ maxZ minY maxY (grown by rmax + e)
+    this.cand = new Int32Array(n);
+    let mnx = BIG, mxx = -BIG, mnz = BIG, mxz = -BIG;
+    for (let i = 0; i < n; i++) {
+      const a = pts[i], b = pts[i + 1], o = i * 9;
+      this.seg[o] = a[0]; this.seg[o + 1] = a[1]; this.seg[o + 2] = a[2];
+      this.seg[o + 3] = b[0] - a[0]; this.seg[o + 4] = b[1] - a[1]; this.seg[o + 5] = b[2] - a[2];
+      this.seg[o + 6] = this.seg[o + 3] * this.seg[o + 3] + this.seg[o + 4] * this.seg[o + 4] + this.seg[o + 5] * this.seg[o + 5];
+      this.seg[o + 7] = rs[i]; this.seg[o + 8] = rs[i + 1] - rs[i];
+      const g = Math.max(rs[i], rs[i + 1]) + e;
+      const B = i * 6;
+      this.box[B] = Math.min(a[0], b[0]) - g; this.box[B + 1] = Math.max(a[0], b[0]) + g;
+      this.box[B + 2] = Math.min(a[2], b[2]) - g; this.box[B + 3] = Math.max(a[2], b[2]) + g;
+      this.box[B + 4] = Math.min(a[1], b[1]) - g; this.box[B + 5] = Math.max(a[1], b[1]) + g;
+      if (g >= 0) {
+        if (this.box[B] < mnx) mnx = this.box[B]; if (this.box[B + 1] > mxx) mxx = this.box[B + 1];
+        if (this.box[B + 2] < mnz) mnz = this.box[B + 2]; if (this.box[B + 3] > mxz) mxz = this.box[B + 3];
+      }
+    }
+    this.minX = mnx; this.maxX = mxx; this.minZ = mnz; this.maxZ = mxz;
+  }
+  prep(x, z) {
+    let nc = 0, lo = BIG, hi = -BIG;
+    for (let i = 0; i < this.n; i++) {
+      const B = i * 6;
+      if (x < this.box[B] || x > this.box[B + 1] || z < this.box[B + 2] || z > this.box[B + 3] || this.box[B + 4] > this.box[B + 5]) continue;
+      const o = i * 9;
+      const ex = this.seg[o + 3], ez = this.seg[o + 5];
+      const px = x - this.seg[o], pz = z - this.seg[o + 2];
+      const l2 = ex * ex + ez * ez;
+      let t = l2 > 0 ? (px * ex + pz * ez) / l2 : 0;
+      t = t < 0 ? 0 : t > 1 ? 1 : t;
+      const dx = px - ex * t, dz = pz - ez * t;
+      const g = this.box[B + 5] - Math.max(this.seg[o + 1], this.seg[o + 1] + this.seg[o + 4]); // rmax + e
+      if (g < 0 || dx * dx + dz * dz > g * g) continue;
+      this.cand[nc++] = i;
+      if (this.box[B + 4] < lo) lo = this.box[B + 4]; if (this.box[B + 5] > hi) hi = this.box[B + 5];
+    }
+    this.nc = nc;
+    if (!nc) return false;
+    this.x = x; this.z = z; this.lo = lo; this.hi = hi;
+    return true;
+  }
+  sd(y) {
+    let best = BIG;
+    for (let k = 0; k < this.nc; k++) {
+      const o = this.cand[k] * 9;
+      const px = this.x - this.seg[o], py = y - this.seg[o + 1], pz = this.z - this.seg[o + 2];
+      const ex = this.seg[o + 3], ey = this.seg[o + 4], ez = this.seg[o + 5], l2 = this.seg[o + 6];
+      let t = l2 > 0 ? (px * ex + py * ey + pz * ez) / l2 : 0;
+      t = t < 0 ? 0 : t > 1 ? 1 : t;
+      const dx = px - ex * t, dy = py - ey * t, dz = pz - ez * t;
+      const d = Math.sqrt(dx * dx + dy * dy + dz * dz) - (this.seg[o + 7] + this.seg[o + 8] * t);
+      if (d < best) best = d;
+    }
+    return best;
+  }
+}
+
+class Wedge extends Node {
+  // a box whose top slopes linearly from max.y on the `rise` side to min.y on the opposite side
+  constructor(s, e, blobs, L) {
+    super(e, L);
+    this.x0 = s.min[0]; this.x1 = s.max[0]; this.z0 = s.min[2]; this.z1 = s.max[2];
+    this.y0f = yrefFn(s.min[1]); this.y1f = yrefFn(s.max[1]); this.rise = s.rise;
+    const g = e > 0 ? e : 0;
+    this.minX = this.x0 - g; this.maxX = this.x1 + g; this.minZ = this.z0 - g; this.maxZ = this.z1 + g;
+  }
+  prep(x, z, c) {
+    const qx = Math.max(this.x0 - x, x - this.x1), qz = Math.max(this.z0 - z, z - this.z1);
+    if (qx > this.e || qz > this.e) return false;
+    this.qxz = Math.max(qx, qz);
+    const y0 = this.y0f(c), y1 = this.y1f(c);
+    const r = this.rise;
+    const len = r === 'n' || r === 's' ? this.z1 - this.z0 : this.x1 - this.x0;
+    let f = 1;
+    if (len > 0) {
+      const t = r === 'n' ? (this.z1 - z) / len : r === 's' ? (z - this.z0) / len : r === 'e' ? (x - this.x0) / len : (this.x1 - x) / len;
+      f = t < 0 ? 0 : t > 1 ? 1 : t;
+    }
+    const slope = len > 0 ? (y1 - y0) / len : 0;
+    this.k = Math.sqrt(1 + slope * slope);
+    this.y0 = y0; this.top = y0 + (y1 - y0) * f;
+    this.lo = y0 - this.e; this.hi = this.top + this.e * this.k;
+    return this.lo <= this.hi;
+  }
+  sd(y) { return Math.max(this.qxz, this.y0 - y, (y - this.top) / this.k); }
+}
+
+class Prism extends Node {
+  // walls: the polygon from y0 to y1; roof: from y1 up to apex.y at the ridge line, falling linearly to y1 at the
+  // polygon vertex farthest from the line (a gable roof over a rectangle with the ridge on its centre line)
+  constructor(s, e, blobs, L) {
+    super(e, L);
+    this.poly = s.polygon.map((p) => [p[0], p[1]]);
+    this.y0f = yrefFn(s.y0); this.y1f = yrefFn(s.y1);
+    const [[ax, az], [bx, bz]] = s.apex.line;
+    const lx = bx - ax, lz = bz - az, ll = Math.sqrt(lx * lx + lz * lz);
+    this.ax = ax; this.az = az; this.nx = ll > 0 ? -lz / ll : 0; this.nz = ll > 0 ? lx / ll : 1;
+    this.ay = s.apex.y;
+    let dmax = 0;
+    for (const p of this.poly) { const d = Math.abs((p[0] - ax) * this.nx + (p[1] - az) * this.nz); if (d > dmax) dmax = d; }
+    this.dmax = dmax > 0 ? dmax : 1;
+    const g = e > 0 ? e : 0;
+    this.minX = Math.min(...this.poly.map((p) => p[0])) - g; this.maxX = Math.max(...this.poly.map((p) => p[0])) + g;
+    this.minZ = Math.min(...this.poly.map((p) => p[1])) - g; this.maxZ = Math.max(...this.poly.map((p) => p[1])) + g;
+  }
+  prep(x, z, c) {
+    this.pd = polygonDistance(this.poly, x, z);
+    if (this.pd > this.e) return false;
+    const y0 = this.y0f(c), y1 = this.y1f(c);
+    const d = Math.abs((x - this.ax) * this.nx + (z - this.az) * this.nz);
+    const f = 1 - d / this.dmax;
+    const rise = this.ay - y1;
+    const slope = rise / this.dmax;
+    this.k = Math.sqrt(1 + slope * slope);
+    this.y0 = y0; this.top = y1 + rise * (f < 0 ? 0 : f);
+    this.lo = y0 - this.e; this.hi = this.top + this.e * this.k;
+    return this.lo <= this.hi;
+  }
+  sd(y) { return Math.max(this.pd, this.y0 - y, (y - this.top) / this.k); }
+}
+
+/** A copy of a sub-shape under an integer transform: world = R(M(local)) + t (rot clockwise seen from above). */
+class Transform extends Node {
+  constructor(s, e, blobs, L, t, rot = 0, mirror = null) {
+    super(e, L);
+    this.tx = t[0]; this.ty = t[1]; this.tz = t[2]; this.rot = rot; this.mirror = mirror;
+    this.a = compileNode(s, e, blobs, L);
+    const cs = [[this.a.minX, this.a.minZ], [this.a.maxX, this.a.minZ], [this.a.minX, this.a.maxZ], [this.a.maxX, this.a.maxZ]].map(([x, z]) => this.fwd(x, z));
+    this.minX = Math.min(...cs.map((p) => p[0])); this.maxX = Math.max(...cs.map((p) => p[0]));
+    this.minZ = Math.min(...cs.map((p) => p[1])); this.maxZ = Math.max(...cs.map((p) => p[1]));
+  }
+  fwd(x, z) {
+    let u = this.mirror === 'x' ? -x : x, v = this.mirror === 'z' ? -z : z;
+    const r = this.rot;
+    if (r === 90) { const w = u; u = -v; v = w; } else if (r === 180) { u = -u; v = -v; } else if (r === 270) { const w = u; u = v; v = -w; }
+    return [u + this.tx, v + this.tz];
+  }
+  prep(x, z, c) {
+    let u = x - this.tx, v = z - this.tz;
+    const r = this.rot;
+    if (r === 90) { const w = u; u = v; v = -w; } else if (r === 180) { u = -u; v = -v; } else if (r === 270) { const w = u; u = -v; v = w; }
+    if (this.mirror === 'x') u = -u; else if (this.mirror === 'z') v = -v;
+    if (!this.a.inXZ(u, v) || !this.a.prep(u, v, c)) return false;
+    this.lo = this.a.lo + this.ty; this.hi = this.a.hi + this.ty;
+    return true;
+  }
+  sd(y) { return this.a.sd(y - this.ty); }
+}
+
+class ArrayShape extends Union {
+  constructor(s, e, blobs, L) {
+    const copies = [];
+    for (let k = 0; k < s.n; k++) copies.push({ __t: [k * s.step[0], k * s.step[1], k * s.step[2]] });
+    super({ of: [] }, e, blobs, L);
+    this.kids = copies.map((cp) => new Transform(s.of, e, blobs, L, cp.__t));
+    this.on = new Uint8Array(this.kids.length);
+    this.minX = Math.min(...this.kids.map((k) => k.minX)); this.maxX = Math.max(...this.kids.map((k) => k.maxX));
+    this.minZ = Math.min(...this.kids.map((k) => k.minZ)); this.maxZ = Math.max(...this.kids.map((k) => k.maxZ));
+  }
+}
+
+class Instances extends Union {
+  constructor(s, e, blobs, L) {
+    super({ of: [] }, e, blobs, L);
+    this.kids = s.transforms.map((t) => new Transform(s.of, e, blobs, L, t.t, t.rot ?? 0, t.mirror ?? null));
+    this.on = new Uint8Array(this.kids.length);
+    this.minX = Math.min(...this.kids.map((k) => k.minX)); this.maxX = Math.max(...this.kids.map((k) => k.maxX));
+    this.minZ = Math.min(...this.kids.map((k) => k.minZ)); this.maxZ = Math.max(...this.kids.map((k) => k.maxZ));
+  }
+}
+
+/** The three seeded lookups of a warp (one field per axis, derived from the spec's seed). */
+export function warpFields(noise) {
+  return ['x', 'y', 'z'].map((a) => makeNoise({ ...noise, dims: 3, seed: fnv64(noise.seed, 'warp', a).hex }));
+}
+
+class Warp extends Node {
+  // `of` evaluated at p + amp * (nx, ny, nz)(p); `of` must have an absolute y extent. A column's y span comes from a table of
+  // the child's spans over its x/z bounds, dilated by amp + 1 columns (a warped point stays within amp of its cell).
+  constructor(s, e, blobs, L) {
+    super(e, L);
+    this.amp = s.amp;
+    this.n3 = ['x', 'y', 'z'].map((a) => makeColumnNoise({ ...s.noise, dims: 3, seed: fnv64(s.noise.seed, 'warp', a).hex }));
+    this.a = compileNode(s.of, e, blobs, L);
+    const ys = staticY(s.of);
+    this.ylo = ys[0] - s.amp - Math.abs(e) - 1; this.yhi = ys[1] + s.amp + Math.abs(e) + 1;
+    this.minX = this.a.minX - s.amp; this.maxX = this.a.maxX + s.amp; this.minZ = this.a.minZ - s.amp; this.maxZ = this.a.maxZ + s.amp;
+    // the span table holds only when no y in the subtree depends on the column
+    this.tab = /"(surface|floor|height)":/.test(JSON.stringify(s.of)) ? false : null;
+  }
+  _table() {
+    const a = this.a, R = this.amp + 1;
+    const x0 = Math.floor(a.minX) - 1, x1 = -Math.floor(-a.maxX) + 1, z0 = Math.floor(a.minZ) - 1, z1 = -Math.floor(-a.maxZ) + 1;
+    const W = x1 - x0 + 1, D = z1 - z0 + 1;
+    if (!(W > 0 && D > 0) || W * D > 4194304) { this.tab = false; return; }
+    const col = { g: 0, h: 0, f: 0 };
+    let lo = new Float64Array(W * D).fill(BIG), hi = new Float64Array(W * D).fill(-BIG);
+    for (let j = 0; j < D; j++) for (let i = 0; i < W; i++) {
+      const x = x0 + i, z = z0 + j;
+      if (a.inXZ(x, z) && a.prep(x, z, col)) { lo[i + j * W] = a.lo; hi[i + j * W] = a.hi; }
+    }
+    // dilate by R columns: separable min (lo) / max (hi) over x, then z
+    const dil = (src, isMin, horiz) => {
+      const out = new Float64Array(W * D);
+      for (let j = 0; j < D; j++) for (let i = 0; i < W; i++) {
+        let m = isMin ? BIG : -BIG;
+        for (let k = -R; k <= R; k++) {
+          const ii = horiz ? i + k : i, jj = horiz ? j : j + k;
+          if (ii < 0 || jj < 0 || ii >= W || jj >= D) continue;
+          const v = src[ii + jj * W];
+          if (isMin ? v < m : v > m) m = v;
+        }
+        out[i + j * W] = m;
+      }
+      return out;
+    };
+    lo = dil(dil(lo, true, true), true, false);
+    hi = dil(dil(hi, false, true), false, false);
+    this.tab = { x0, z0, W, D, R, lo, hi };
+  }
+  prep(x, z, c) {
+    if (this.tab === null) this._table();
+    let lo = this.ylo, hi = this.yhi;
+    const t = this.tab;
+    if (t) {
+      const i = Math.floor(x) - t.x0, j = Math.floor(z) - t.z0;
+      if (i < -t.R || j < -t.R || i >= t.W + t.R || j >= t.D + t.R) return false;
+      const ii = i < 0 ? 0 : i >= t.W ? t.W - 1 : i, jj = j < 0 ? 0 : j >= t.D ? t.D - 1 : j;
+      const l = t.lo[ii + jj * t.W], h = t.hi[ii + jj * t.W];
+      if (l > h) return false;
+      lo = Math.max(lo, l - this.amp - 1); hi = Math.min(hi, h + this.amp + 1);
+      if (lo > hi) return false;
+    }
+    this.x = x; this.z = z; this.c = c;
+    this.n3[0].col(x, z); this.n3[1].col(x, z); this.n3[2].col(x, z);
+    this.lo = lo; this.hi = hi;
+    return true;
+  }
+  sd(y) {
+    const A = this.amp, x = this.x, z = this.z;
+    const qx = x + A * this.n3[0].at(y), qy = y + A * this.n3[1].at(y), qz = z + A * this.n3[2].at(y);
+    const a = this.a;
+    if (!a.inXZ(qx, qz) || !a.prep(qx, qz, this.c)) return BIG;
+    if (qy < a.lo - EPS || qy > a.hi + EPS) return BIG;
+    return a.sd(qy);
+  }
+}
+
+class Strata extends Node {
+  // the same geometry as `of`; the band index is read by material rules (lib/material.mjs)
+  constructor(s, e, blobs, L) {
+    super(e, L);
+    this.a = compileNode(s.of, e, blobs, L);
+    this.minX = this.a.minX; this.maxX = this.a.maxX; this.minZ = this.a.minZ; this.maxZ = this.a.maxZ;
+  }
+  prep(x, z, c) {
+    if (!this.a.prep(x, z, c)) return false;
+    this.lo = this.a.lo; this.hi = this.a.hi;
+    return true;
+  }
+  sd(y) { return this.a.sd(y); }
+}
+
 const CLASSES = {
   sphere: Sphere, box: Box, cylinder: Cylinder, cone: Cone, bowl: Bowl, ring: Ring, torus: Torus, capsulePath: CapsulePath,
   extrude: Extrude, heightfield: Heightfield, mask: Mask, union: Union, intersect: Intersect, subtract: Subtract,
   smooth: Smooth, offset: Offset, displace: Displace, clipY: ClipY,
+  // format 2 (6b)
+  ellipsoid: Ellipsoid, capsuleChain: CapsuleChain, wedge: Wedge, prism: Prism, array: ArrayShape, instances: Instances, warp: Warp, strata: Strata,
 };
 
 function compileNode(s, e, blobs, L = e) {
   const C = CLASSES[s?.kind];
   if (!C) throw new Error(`shape: unknown kind '${s?.kind}'`);
   return new C(s, e, blobs, L);
+}
+
+/** (6b) Every shape kind used in a shape tree (a Set), for an IR's `requires`. */
+export function shapeKinds(s, out = new Set()) {
+  if (!s || typeof s !== 'object') return out;
+  out.add(s.kind);
+  if (Array.isArray(s.of)) for (const k of s.of) shapeKinds(k, out);
+  else if (s.of) shapeKinds(s.of, out);
+  return out;
+}
+
+/** (6b) The bands spec of the first `strata` node in a shape tree (depth first), or null. */
+export function strataOf(s) {
+  if (!s || typeof s !== 'object') return null;
+  if (s.kind === 'strata') return s.bands;
+  for (const k of Array.isArray(s.of) ? s.of : s.of ? [s.of] : []) { const b = strataOf(k); if (b) return b; }
+  return null;
 }
 
 /**
@@ -739,7 +1125,7 @@ export function shapeBounds(shape, blobs) {
 }
 
 /** [lo, hi] of a shape's y extent when absolute (null when column-dependent or unbounded). */
-function staticY(s) {
+export function staticY(s) {
   const A = (r) => yrefAbs(r);
   switch (s.kind) {
     case 'sphere': { const y = A(s.c[1]); return y === null ? null : [y - s.r, y + s.r]; }
@@ -750,6 +1136,18 @@ function staticY(s) {
     case 'capsulePath': { const ys = s.points.map((p) => p[1]); return [Math.min(...ys) - s.r, Math.max(...ys) + s.r]; }
     case 'extrude': { const a = A(s.y0), b = A(s.y1); return a === null || b === null ? null : [a, b]; }
     case 'heightfield': case 'mask': return null;
+    case 'ellipsoid': { const y = A(s.c[1]); return y === null ? null : [y - s.r[1], y + s.r[1]]; }
+    case 'capsuleChain': {
+      const rmax = Math.max(...s.radii);
+      const ys = s.points.map((p) => p[1]);
+      return [Math.min(...ys) - rmax, Math.max(...ys) + rmax];
+    }
+    case 'wedge': { const a = A(s.min[1]), b = A(s.max[1]); return a === null || b === null ? null : [a, b]; }
+    case 'prism': { const a = A(s.y0), b = A(s.y1); return a === null || b === null ? null : [a, Math.max(b, s.apex.y)]; }
+    case 'array': { const r = staticY(s.of); if (!r) return null; const d = (s.n - 1) * s.step[1]; return [r[0] + Math.min(0, d), r[1] + Math.max(0, d)]; }
+    case 'instances': { const r = staticY(s.of); if (!r) return null; const ds = s.transforms.map((t) => t.t[1]); return [r[0] + Math.min(...ds), r[1] + Math.max(...ds)]; }
+    case 'warp': { const r = staticY(s.of); return r ? [r[0] - s.amp, r[1] + s.amp] : null; }
+    case 'strata': return staticY(s.of);
     case 'union': case 'smooth': {
       const rs = s.of.map(staticY);
       if (rs.some((r) => !r)) return null;

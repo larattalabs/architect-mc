@@ -43,7 +43,7 @@ const OUT = process.env.APITEST_OUT ? path.resolve(process.env.APITEST_OUT) : pa
 fs.mkdirSync(OUT, { recursive: true });
 const OWNER = 'apitest:village/1';
 // the apitest jar's compiled-in ArchitectApi.VERSION (the unchanged 1.5.0 jar of a regression run: APITEST_API_VERSION=1.5.0)
-const API_VERSION = process.env.APITEST_API_VERSION ?? '1.8.0';
+const API_VERSION = process.env.APITEST_API_VERSION ?? '1.9.0';
 // the dev client's game dir (tools/run-apitest-client.sh runs it in mod/)
 const GAME_DIR = process.env.APITEST_GAME_DIR ? path.resolve(process.env.APITEST_GAME_DIR) : path.join(root, 'mod', 'run');
 const SIDECAR_DATA = path.join(GAME_DIR, 'architect', 'sidecar-data');

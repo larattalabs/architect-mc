@@ -1,0 +1,150 @@
+{
+  "id": "s1_floating_islands",
+  "phase": "6b",
+  "version": 1,
+  "brief": "a hamlet on floating islands, linked by rope and stone (S1 v1: stone links; rope is 7a)",
+  "world": {
+    "seed": "2026100906",
+    "preset": "normal",
+    "gamerules": "gallery"
+  },
+  "fixture": {
+    "claim": [
+      1664,
+      768,
+      1919,
+      1023
+    ],
+    "yRange": [
+      -2,
+      230
+    ],
+    "foundBy": "find-site s1_floating_islands @ seed 2026100906",
+    "surveySha": "5f59f19934af58858d2ec8fcf362ad10eaf20bbc9b932721475d85a446e06dd6",
+    "score": 86,
+    "stats": {
+      "biomes": {
+        "plains": 29,
+        "sunflower_plains": 22,
+        "cold_ocean": 16,
+        "ocean": 13,
+        "beach": 13
+      },
+      "grid": [],
+      "min": 38,
+      "max": 90,
+      "mean": 65.5,
+      "water": 43,
+      "trees": 0,
+      "natural": 100,
+      "missing": 0
+    },
+    "irShaAtPin": "46b2d75ea03a3b29c9162a5120e67a6bcf0f407f28616379d91d81223f723751"
+  },
+  "flat": {
+    "preset": "flat",
+    "claimOffset": [
+      0,
+      0
+    ],
+    "gamerules": "exact"
+  },
+  "needs": {
+    "size": [
+      256,
+      256
+    ],
+    "relief": [
+      0,
+      70
+    ],
+    "biomes": {
+      "any": [
+        "plains",
+        "ocean",
+        "meadow",
+        "river",
+        "beach"
+      ],
+      "share": 0.7
+    },
+    "naturalMin": 97,
+    "yTop": 230,
+    "candidates": 150,
+    "step": 448,
+    "stopAt": 50,
+    "waterMax": 45
+  },
+  "program": "floating_islands",
+  "params": {},
+  "seed": "12812876217755164657",
+  "bible": null,
+  "lotEntries": {
+    "lot_1": "g6a_stub_9",
+    "lot_2": "g6a_stub_9",
+    "lot_3": "g6a_stub_9",
+    "lot_4": "g6a_stub_9",
+    "lot_5": "g6a_stub_9",
+    "lot_6": "g6a_stub_9",
+    "lot_7": "g6a_stub_9",
+    "lot_8": "g6a_stub_9"
+  },
+  "cams": {
+    "cam_east": [
+      1881.5,
+      193,
+      896.5,
+      84,
+      19.7
+    ],
+    "cam_ground": [
+      1788.5,
+      69,
+      936.5,
+      -158.4,
+      -28
+    ],
+    "cam_high": [
+      1792.5,
+      228,
+      926.5,
+      -158.4,
+      70.1
+    ],
+    "cam_north": [
+      1792.5,
+      193,
+      807.5,
+      -5,
+      16.5
+    ],
+    "cam_south": [
+      1792.5,
+      193,
+      985.5,
+      -174,
+      19.7
+    ],
+    "cam_west": [
+      1703.5,
+      193,
+      896.5,
+      -85,
+      16.5
+    ]
+  },
+  "bars": {
+    "checker": "0 errors; no M1, M2, M3, M4 findings",
+    "reachability": "100% of nodes; 0 unreachable lot entrances",
+    "structure": "0 floating cells outside declared groups; 0 M3:floating_spur; every floating group one component",
+    "spans": "every unsupported span <= maxSpan; 'ends' bridges bear on >= 2x2 at both ends",
+    "safety": "M4 0; M5 dark spawnable < 1% of walk area; M8 100% guarded",
+    "palette": "role adherence >= 0.9",
+    "organic": "axis-run share recorded (not gated in 6b)",
+    "buildings": "kit checker 0 errors on the placed entries",
+    "mspt": "0 ticks over 50 ms; p99 <= 25 ms",
+    "exactness": "E-flat 0; E-normal classified <= 0.01% of written cells",
+    "determinism": "IR sha over 3 plans; tile shas 1 and 4 workers; golden scenarios/goldens/s1.json",
+    "gallery": "Noah's approval for this run's evidence.sha"
+  }
+}

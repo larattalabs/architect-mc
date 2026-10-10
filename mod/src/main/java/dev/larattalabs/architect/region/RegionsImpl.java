@@ -1,5 +1,7 @@
 package dev.larattalabs.architect.region;
 
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import dev.larattalabs.architect.Architect;
@@ -87,6 +89,15 @@ public final class RegionsImpl implements Regions {
 	private static final Map<String, PlanRec> PLANS = new ConcurrentHashMap<>();
 	private static final Map<String, Live> REGIONS = new LinkedHashMap<>();
 	private static final Map<String, CompletableFuture<JsonObject>> PLANNING = new ConcurrentHashMap<>();
+	/** (6b) The server a plan was asked on (its region.progress lands there). */
+	private static final Map<String, MinecraftServer> PLAN_SERVER = new ConcurrentHashMap<>();
+	/** (6b) Per plan: the phases it went through (planning, checking, rendering, accepted), for RegionPlan.notes and DevBridge. */
+	private static final Map<String, List<String>> PROGRESS = new ConcurrentHashMap<>();
+	/** (6b) Regions whose IR is stale (PLAN_STALE at resume): region -> the message. */
+	private static final Map<String, String> STALE_LOGGED = new ConcurrentHashMap<>();
+	/** (6b) The last actions each region showed (REGION_STATE fires when they change). Server thread. */
+	private static final Map<String, List<dev.larattalabs.architect.api.WaitAction>> LAST_ACTIONS = new HashMap<>();
+	private static volatile @Nullable String lastKitWarning;
 	/** Per-stage drift checks running ({@code region/stage}). Server thread. */
 	private static final Map<String, CompletableFuture<Drift.Result>> STAGE_CHECKS = new HashMap<>();
 	private static @Nullable MinecraftServer server;
@@ -119,6 +130,7 @@ public final class RegionsImpl implements Regions {
 			Prepare.tick(s);
 			RegionHash.tick(s);
 			generatedDuringRealise(s);
+			actionsTick(s);
 		});
 	}
 
@@ -138,9 +150,17 @@ public final class RegionsImpl implements Regions {
 				}
 				try {
 					RegionRec r = RegionRec.fromJson(RegionStore.readJson(f));
-					Ir ir = Ir.of(RegionStore.readJson(d.resolve("ir.json")));
-					REGIONS.put(r.id, new Live(r, ir, w));
+					JsonObject irJson = RegionStore.readJson(d.resolve("ir.json"));
+					// (6b) read leniently: a region whose IR this mod can't evaluate still loads (it waits PLAN_STALE and can be removed)
+					Ir ir = Ir.lenient(irJson, r.claim);
+					Live live = new Live(r, ir, w);
+					REGIONS.put(r.id, live);
 					nextRegion = Math.max(nextRegion, num(r.id) + 1);
+					String stale = staleReason(irJson);
+					if (stale != null && r.state != RegionState.PLACED) {
+						STALE_LOGGED.put(r.id, stale);
+						Architect.LOGGER.warn("Region {} resumes stale (PLAN_STALE): {}; nothing of it is requested or written (it can be removed)", r.id, stale);
+					}
 				} catch (IOException | RuntimeException e) {
 					Architect.LOGGER.warn("Region {} unreadable: {}", d.getFileName(), e.toString());
 				}
@@ -205,48 +225,180 @@ public final class RegionsImpl implements Regions {
 		if (link == null || !link.connected()) {
 			return failed(Reason.SIDECAR_UNAVAILABLE, "the helper (sidecar) is not connected");
 		}
+		warnKitMismatch();
 		int res = (long) c.getXSpan() * c.getZSpan() <= 256L * 256 ? 1 : 4;
-		return RegionSurvey.sample(r.level(), c.minX(), c.minZ(), c.maxX(), c.maxZ(), res, r.surveyLoad()).thenCompose(cols -> {
+		progress(s, null, "planning");
+		CompletableFuture<RegionPlan> out = RegionSurvey.sample(r.level(), c.minX(), c.minZ(), c.maxX(), c.maxZ(), res, r.surveyLoad()).thenCompose(cols -> {
 			byte[] survey = cols.encode();
 			String surveySha = Packed.sha256(survey);
-			return BlobPut.put(link, survey, "survey").thenCompose(blobId -> {
-				JsonObject m = new JsonObject();
-				m.addProperty("type", "region.plan");
-				m.addProperty("program", r.program());
-				m.add("params", r.params().deepCopy());
-				if (r.seed() != null) {
-					m.addProperty("seed", Long.toUnsignedString(r.seed()));
+			return BlobPut.put(link, survey, "survey").thenCompose(blobId -> planOnce(link, r, blobId, surveySha, survey, null).thenCompose(o -> {
+				JsonObject planned = (JsonObject) o[0];
+				JsonArray need = planned.has("needVolumes") && planned.get("needVolumes").isJsonArray() ? planned.getAsJsonArray("needVolumes")
+					: new JsonArray();
+				if (need.isEmpty() || r.ext().has(EXT_NO_VOLUMES)) {
+					return CompletableFuture.completedFuture(o);
 				}
-				JsonObject cl = new JsonObject();
-				cl.addProperty("minX", c.minX());
-				cl.addProperty("minZ", c.minZ());
-				cl.addProperty("maxX", c.maxX());
-				cl.addProperty("maxZ", c.maxZ());
-				cl.addProperty("minY", r.level().getMinY());
-				cl.addProperty("maxY", r.level().getMaxY());
-				m.add("claim", cl);
-				m.addProperty("surveyBlobId", blobId);
-				if (r.bible() != null) {
-					m.addProperty("bible", r.bible());
-				}
-				if (r.bibleVersion() != null) {
-					m.addProperty("bibleVersion", r.bibleVersion());
-				}
-				return link.send(m).thenCompose(ack -> {
-					if (ack.has("ok") && !ack.get("ok").getAsBoolean()) {
-						return CompletableFuture.failedFuture(new IllegalStateException("the helper refused the plan: " + str(ack, "error")));
+				// (6b) the two-plan flow: the program asked for volumes (r.needVolume); sample them where their chunks are
+				// generated, then plan again with them. Otherwise the first plan stands, with a note to prepare and plan again.
+				return volumesFor(r.level(), need).thenCompose(vols -> {
+					if (vols == null) {
+						addNote(planned, "the program asked for " + need.size() + " volume" + (need.size() == 1 ? "" : "s")
+							+ " over chunks not generated yet: prepare, then plan again to read them");
+						return CompletableFuture.completedFuture(o);
 					}
-					String planId = ack.getAsJsonObject("result").get("planId").getAsString();
-					CompletableFuture<JsonObject> done = PLANNING.computeIfAbsent(planId, k -> new CompletableFuture<>());
-					return done.orTimeout(120, java.util.concurrent.TimeUnit.SECONDS).thenCompose(planned -> irOf(link, planned).thenApply(irJson -> {
-						planned.addProperty("planId", planId);
-						planned.addProperty("surveySha", surveySha);
-						return new Object[] {planned, irJson, survey};
-					}));
+					return planOnce(link, r, blobId, surveySha, survey, vols).thenApply(o2 -> {
+						addNote((JsonObject) o2[0], "read " + vols.size() + " frozen volume" + (vols.size() == 1 ? "" : "s") + " (two-plan flow)");
+						((JsonObject) o2[0]).add("volumes", vols);
+						return o2;
+					});
 				});
+			}));
+		}).thenCompose(o -> onServer(s, () -> finishPlan(r, (JsonObject) o[0], (JsonObject) o[1], (byte[]) o[2]))).thenCompose(f -> f);
+		out.whenComplete((p, e) -> {
+			if (e != null) {
+				progress(s, null, "failed");
+			}
+		});
+		return out;
+	}
+
+	/** DevBridge test hook (gate item 10(b)): members merged into the next accepted plan's IR before the PLAN_STALE gate. */
+	public static volatile @Nullable JsonObject DOCTOR_NEXT_PLAN;
+
+	/** RegionPlanRequest ext: {@code false} skips the checker and the previews (the sidecar gets {@code check: false}). */
+	public static final String EXT_CHECK = "architect_mc:check";
+	/** RegionPlanRequest ext (any value): the first plan stands even when the program asks for volumes (no two-plan flow). */
+	public static final String EXT_NO_VOLUMES = "architect_mc:noVolumes";
+
+	static boolean checkOf(RegionPlanRequest r) {
+		JsonElement e = r.ext().get(EXT_CHECK);
+		return e == null || !e.isJsonPrimitive() || !(e.getAsJsonPrimitive().isBoolean() && !e.getAsBoolean());
+	}
+
+	/** One {@code region.plan} round: send, wait for {@code region.planned}, read the IR, PLAN_STALE gate (a). {planned, ir, survey}. */
+	private static CompletableFuture<Object[]> planOnce(TileStream.Link link, RegionPlanRequest r, String blobId, String surveySha, byte[] survey,
+		@Nullable JsonArray volumes) {
+		BoundingBox c = r.claim();
+		JsonObject m = new JsonObject();
+		m.addProperty("type", "region.plan");
+		m.addProperty("program", r.program());
+		m.add("params", r.params().deepCopy());
+		if (r.seed() != null) {
+			m.addProperty("seed", Long.toUnsignedString(r.seed()));
+		}
+		JsonObject cl = new JsonObject();
+		cl.addProperty("minX", c.minX());
+		cl.addProperty("minZ", c.minZ());
+		cl.addProperty("maxX", c.maxX());
+		cl.addProperty("maxZ", c.maxZ());
+		cl.addProperty("minY", r.level().getMinY());
+		cl.addProperty("maxY", r.level().getMaxY());
+		m.add("claim", cl);
+		m.addProperty("surveyBlobId", blobId);
+		if (r.bible() != null) {
+			m.addProperty("bible", r.bible());
+		}
+		if (r.bibleVersion() != null) {
+			m.addProperty("bibleVersion", r.bibleVersion());
+		}
+		if (!checkOf(r)) {
+			m.addProperty("check", false);
+		}
+		if (volumes != null) {
+			m.add("volumes", volumes);
+		}
+		MinecraftServer s = r.level().getServer();
+		return link.send(m).thenCompose(ack -> {
+			if (ack.has("ok") && !ack.get("ok").getAsBoolean()) {
+				return CompletableFuture.failedFuture(new IllegalStateException("the helper refused the plan: " + str(ack, "error")));
+			}
+			String planId = ack.getAsJsonObject("result").get("planId").getAsString();
+			PLAN_SERVER.put(planId, s);
+			CompletableFuture<JsonObject> done = PLANNING.computeIfAbsent(planId, k -> new CompletableFuture<>());
+			long timeout = checkOf(r) ? 600 : 120; // the checker and the renders: mega_bench full resolution up to 120 s + 30 s
+			return done.orTimeout(timeout, java.util.concurrent.TimeUnit.SECONDS).thenCompose(planned -> irOf(link, planned).thenApply(irJson -> {
+				JsonObject doctor = DOCTOR_NEXT_PLAN;
+				if (doctor != null) {
+					DOCTOR_NEXT_PLAN = null; // DevBridge dev.region.planStale {at: accept}: the gate's 10(b), a newer IR at accept
+					doctor.entrySet().forEach(e -> irJson.add(e.getKey(), e.getValue().deepCopy()));
+				}
+				// (6b, §2.4 (a)) a plan this kit can't evaluate is refused at accept: nothing is kept or requested
+				String stale = staleReason(irJson);
+				if (stale != null) {
+					throw refusal(Reason.PLAN_STALE, stale);
+				}
+				planned.addProperty("planId", planId);
+				planned.addProperty("surveySha", surveySha);
+				return new Object[] {planned, irJson, survey};
+			}));
+		});
+	}
+
+	private static void addNote(JsonObject planned, String note) {
+		JsonArray n = planned.has("notes") && planned.get("notes").isJsonArray() ? planned.getAsJsonArray("notes") : new JsonArray();
+		n.add(note);
+		planned.add("notes", n);
+	}
+
+	/**
+	 * (6b) The volumes a program asked for ({@code region.planned.needVolumes} boxes), sampled under GENERATED_ONLY when every
+	 * chunk of every box is generated (else null: prepare first), frozen to the standalone dir and uploaded:
+	 * {@code [{sha, blobId, box}]} for the second {@code region.plan}. Over the per-region cell limit fails REGION_LIMIT.
+	 */
+	private static CompletableFuture<@Nullable JsonArray> volumesFor(ServerLevel level, JsonArray need) {
+		MinecraftServer s = level.getServer();
+		return onServer(s, () -> {
+			long cells = 0;
+			List<BoundingBox> boxes = new ArrayList<>();
+			for (JsonElement e : need) {
+				JsonObject b = e.getAsJsonObject();
+				BoundingBox bb = new BoundingBox(b.get("minX").getAsInt(), b.get("minY").getAsInt(), b.get("minZ").getAsInt(), b.get("maxX").getAsInt(), b.get(
+					"maxY").getAsInt(), b.get("maxZ").getAsInt());
+				boxes.add(bb);
+				cells += dev.larattalabs.architect.region.volume.VolumeSurvey.cells(bb);
+			}
+			if (cells > dev.larattalabs.architect.region.volume.VolumeSurvey.MAX_CELLS) {
+				throw refusal(Reason.REGION_LIMIT, "the program's volumes are " + cells + " cells (at most "
+					+ dev.larattalabs.architect.region.volume.VolumeSurvey.MAX_CELLS + " per region)");
+			}
+			List<CompletableFuture<Boolean>> qs = new ArrayList<>();
+			int chunks = 0;
+			for (BoundingBox bb : boxes) {
+				for (int cx = bb.minX() >> 4; cx <= bb.maxX() >> 4; cx++) {
+					for (int cz = bb.minZ() >> 4; cz <= bb.maxZ() >> 4; cz++) {
+						qs.add(ChunkStatusQ.of(level, net.minecraft.world.level.ChunkPos.pack(cx, cz)).future);
+						chunks++;
+					}
+				}
+			}
+			int bound = chunks + 8;
+			return CompletableFuture.allOf(qs.toArray(new CompletableFuture[0])).thenCompose(v -> {
+				if (qs.stream().anyMatch(q -> !q.join())) {
+					return CompletableFuture.<@Nullable JsonArray>completedFuture(null);
+				}
+				CompletableFuture<JsonArray> chain = CompletableFuture.completedFuture(new JsonArray());
+				for (BoundingBox bb : boxes) {
+					chain = chain.thenCompose(arr -> dev.larattalabs.architect.region.volume.VolumeSurvey.start(level, bb,
+						dev.larattalabs.architect.api.LoadPolicy.GENERATED_ONLY(bound), null).thenCompose(
+							dev.larattalabs.architect.apiimpl.SurveyImpl::upload).thenApply(vol -> {
+								JsonObject o = new JsonObject();
+								o.addProperty("sha", vol.sha());
+								o.addProperty("blobId", vol.blobId());
+								JsonObject b = new JsonObject();
+								b.addProperty("minX", bb.minX());
+								b.addProperty("minY", bb.minY());
+								b.addProperty("minZ", bb.minZ());
+								b.addProperty("maxX", bb.maxX());
+								b.addProperty("maxY", bb.maxY());
+								b.addProperty("maxZ", bb.maxZ());
+								o.add("box", b);
+								arr.add(o);
+								return arr;
+							}));
+				}
+				return chain.thenApply(a -> (@Nullable JsonArray) a);
 			});
-		}).thenCompose(o -> onServer(s, () -> finishPlan(r, (JsonObject) ((Object[]) o)[0], (JsonObject) ((Object[]) o)[1], (byte[]) ((Object[]) o)[2])))
-			.thenCompose(f -> f);
+		}).thenCompose(f -> f);
 	}
 
 	private static CompletableFuture<JsonObject> irOf(TileStream.Link link, JsonObject planned) {
@@ -314,8 +466,21 @@ public final class RegionsImpl implements Regions {
 			p.planned().getAsJsonArray("notes").forEach(e -> notes.add(e.isJsonPrimitive() ? e.getAsString() : e.toString()));
 		}
 		long[] b = p.ir().budget();
+		JsonObject pl = p.planned();
+		List<String> phases = PROGRESS.get(p.planId());
+		if (phases != null) {
+			notes.add("progress: " + String.join(", ", phases));
+		}
+		if (pl.has("checkMs")) {
+			notes.add("checked in " + pl.get("checkMs").getAsLong() + " ms");
+		}
+		if (pl.has("renderMs")) {
+			notes.add("previews rendered in " + pl.get("renderMs").getAsLong() + " ms");
+		}
+		int format = pl.has("irFormat") && pl.get("irFormat").isJsonPrimitive() ? pl.get("irFormat").getAsInt() : p.ir().format();
 		return new RegionPlan(p.planId(), p.programId(), p.programSha() == null ? "" : p.programSha(), p.irSha(), p.surveySha(), p.seed(), lots,
-			p.ir().stages(), anchors, new RegionBudget(b[0], b[1], b[2], tiles, p.chunks(), p.chunksToGenerate()), notes);
+			p.ir().stages(), anchors, new RegionBudget(b[0], b[1], b[2], tiles, p.chunks(), p.chunksToGenerate()), notes, Wire6b.report(pl.get("report")),
+			Wire6b.previews(pl.get("previews"), pl.get("sitePlan")), format);
 	}
 
 	static Direction dir(String s) {
@@ -353,6 +518,68 @@ public final class RegionsImpl implements Regions {
 					"chunksToGenerate").getAsInt());
 	}
 
+	// ------------------------------------------------------------------ 6b: PLAN_STALE, kit versions, blobs, progress
+
+	/** The helper's kit and IR versions ({@code hello} snapshot), or null when unknown. */
+	static IrStale.@Nullable Hello hello() {
+		return IrStale.Hello.of(dev.larattalabs.architect.apiimpl.RegionBridge.versions());
+	}
+
+	/** PLAN_STALE for a raw IR against the mod's constants and the helper's hello, or null. */
+	public static @Nullable String staleReason(@Nullable JsonObject irJson) {
+		return IrStale.reason(irJson, hello());
+	}
+
+	/** (6b, §2.4 (c)) Why a region may not be evaluated (its IR is stale), or null. Cheap: called per item start. */
+	public static @Nullable String staleOf(Live l) {
+		return staleReason(l.ir().json());
+	}
+
+	/** The dev-only log line when the helper's kit differs from the bundled one (once per difference). */
+	static void warnKitMismatch() {
+		String w = IrStale.versionWarning(hello());
+		if (w != null && !w.equals(lastKitWarning)) {
+			lastKitWarning = w;
+			if (net.fabricmc.loader.api.FabricLoader.getInstance().isDevelopmentEnvironment()) {
+				Architect.LOGGER.warn("Regions: {} (dev: a sidecar from another checkout?)", w);
+			} else {
+				Architect.LOGGER.debug("Regions: {}", w);
+			}
+		}
+	}
+
+	/** A region's side blob copies, by sha ({@code blob_unknown} re-sends read them). Off the server thread. */
+	public static TileStream.BlobSource blobSource(Live l) {
+		Path dir = RegionBlobs.dir(l.world(), l.rec().id);
+		return sha -> {
+			try {
+				Path f = dir.resolve(sha + ".bin");
+				return Files.isRegularFile(f) ? Files.readAllBytes(f) : null;
+			} catch (IOException e) {
+				return null;
+			}
+		};
+	}
+
+	/** A plan entered a phase (S-6b-5): kept for its notes and fired as REGION_PLAN_PROGRESS. Server thread. */
+	static void progress(MinecraftServer s, @Nullable String planId, String phase) {
+		if (planId != null) {
+			PROGRESS.computeIfAbsent(planId, k -> java.util.Collections.synchronizedList(new ArrayList<>())).add(phase);
+		}
+		Runnable fire = () -> SiteEvents.REGION_PLAN_PROGRESS.invoker().onPhase(planId, phase);
+		if (s.isSameThread()) {
+			fire.run();
+		} else {
+			s.execute(fire);
+		}
+	}
+
+	/** The phases a plan went through (DevBridge). */
+	public static List<String> progressOf(String planId) {
+		List<String> l = PROGRESS.get(planId);
+		return l == null ? List.of() : List.copyOf(l);
+	}
+
 	// ------------------------------------------------------------------ messages from the sidecar (the link's thread)
 
 	public static void onMessage(JsonObject m) {
@@ -369,6 +596,15 @@ public final class RegionsImpl implements Regions {
 				PLANNING.remove(id);
 			}
 			case "region.tile", "region.tile.error" -> TileStream.onMessage(m);
+			case "region.progress" -> {
+				// (6b, S-6b-5) {planId, phase: planning|checking|rendering}
+				String id = str(m, "planId", null);
+				String phase = str(m, "phase", "?");
+				MinecraftServer srv = id == null ? server : PLAN_SERVER.getOrDefault(id, server);
+				if (srv != null) {
+					srv.execute(() -> progress(srv, id, phase));
+				}
+			}
 			default -> {
 			}
 		}
@@ -408,20 +644,57 @@ public final class RegionsImpl implements Regions {
 		if (s == null) {
 			return CompletableFuture.failedFuture(new IllegalStateException("no world"));
 		}
+		String[] id = {null};
 		return onServer(s, () -> {
 			PlanRec p = planRec(r.planId());
 			ServerLevel level = p == null ? null : Sites.levelOf(s, p.dimension());
 			if (p == null || level == null) {
-				return CompletableFuture.<Drift.Result>completedFuture(null);
+				return CompletableFuture.<Drift.@Nullable Result>completedFuture(null);
 			}
+			// (6b, §2.4 (b)) refused before anything is checked, copied or requested
+			String stale = staleReason(p.ir().json());
+			if (stale != null) {
+				throw refusal(Reason.PLAN_STALE, stale);
+			}
+			id[0] = "rg" + nextRegion++; // reserved now: the blob copies go into its dir before the record exists
 			return Drift.check(level, p);
-		}).thenCompose(f -> f).thenCompose(drift -> onServer(s, () -> realise0(s, r, drift)));
+		}).thenCompose(f -> f).thenComposeAsync(drift -> { // off the server thread: the copies are file I/O
+			PlanRec p = id[0] == null ? null : PLANS.get(r.planId());
+			if (p != null && !RegionBlobs.volumeShas(p.ir().json()).isEmpty()) {
+				List<String> miss = RegionBlobs.installVolumes(s.getWorldPath(LevelResource.ROOT), id[0], RegionBlobs.volumeShas(p.ir().json()));
+				if (!miss.isEmpty()) {
+					Architect.LOGGER.info("Region {}: frozen volumes {} not in the standalone dir (their side blobs carry them)", id[0], miss);
+				}
+			}
+			if (p == null || p.ir().blobShas().isEmpty()) {
+				return CompletableFuture.completedFuture(new Object[] {drift, null});
+			}
+			// (6b, §2.2) every side blob into <world>/architect-regions/<id>/blobs (off the server thread), before the record
+			Path dir = RegionBlobs.dir(s.getWorldPath(LevelResource.ROOT), id[0]);
+			return RegionBlobs.install(dir, p.ir().blobShas(), RegionBlobs.blobIds(p.planned()), BlobPut::read).thenApply(err -> new Object[] {drift, err});
+		}).thenCompose(o -> onServer(s, () -> {
+			try {
+				return realise0(s, r, (Drift.Result) o[0], id[0], (String) o[1]);
+			} catch (RuntimeException e) {
+				if (id[0] != null && REGIONS.get(id[0]) == null) {
+					// refused before the record: the copies made for it go (the reserved id stays unused)
+					Path w = s.getWorldPath(LevelResource.ROOT);
+					RegionBlobs.delete(RegionBlobs.dir(w, id[0]));
+					RegionBlobs.delete(RegionStore.region(w, id[0]).resolve("volumes"));
+				}
+				throw e;
+			}
+		}));
 	}
 
-	private String realise0(MinecraftServer s, RealiseRequest r, Drift.@Nullable Result drift) {
+	private String realise0(MinecraftServer s, RealiseRequest r, Drift.@Nullable Result drift, @Nullable String reserved, @Nullable String blobError) {
 		PlanRec p = planRec(r.planId());
 		if (p == null) {
 			throw refusal(Reason.OTHER, "no region plan " + r.planId());
+		}
+		String stale = staleReason(p.ir().json());
+		if (stale != null) {
+			throw refusal(Reason.PLAN_STALE, stale);
 		}
 		if (r.mode() == Mode.CONSTRUCTION || dev.larattalabs.architect.survival.SurvivalWorld.on() && s.getDefaultGameType() != GameType.CREATIVE) {
 			throw refusal(Reason.NOT_ALLOWED, "regions are INSTANT only (creative, or the survival toggle off) in this version");
@@ -433,6 +706,9 @@ public final class RegionsImpl implements Regions {
 		ServerLevel level = Sites.levelOf(s, p.dimension());
 		if (level == null) {
 			throw refusal(Reason.NOT_LOADED, p.dimension() + " is not loaded");
+		}
+		if (blobError != null) {
+			throw refusal(Reason.OTHER, blobError); // (6b) "blob <sha> missing": before any write
 		}
 		Ir ir = p.ir();
 		// another owner's standing region over the claim
@@ -449,7 +725,7 @@ public final class RegionsImpl implements Regions {
 		if (!drift.ok() && !r.force()) {
 			throw refusal(Reason.DRIFTED, "land changed since planning: " + drift.message() + "; replan, or realise with force");
 		}
-		String id = "rg" + nextRegion++;
+		String id = reserved != null ? reserved : "rg" + nextRegion++;
 		Path w = s.getWorldPath(LevelResource.ROOT);
 		RegionRec rec = new RegionRec(id, p.planId(), p.irSha(), p.owner(), r.ext(), p.dimension(), ir.claim(), System.currentTimeMillis());
 		List<String> stages = r.stages() == null ? ir.stages() : r.stages().stream().filter(ir.stages()::contains).toList();
@@ -892,6 +1168,14 @@ public final class RegionsImpl implements Regions {
 		}
 		l.rec().stats.addProperty("lastTileAt", now);
 		dirty(l);
+		var hook = TILE_HOOK;
+		if (hook != null) {
+			int done = 0;
+			for (RegionRec.Stage x : l.rec().stages.values()) {
+				done += x.tilesDone;
+			}
+			hook.accept(l, done);
+		}
 	}
 
 	/** The region's batch ended. */
@@ -979,18 +1263,257 @@ public final class RegionsImpl implements Regions {
 				break;
 			}
 		}
+		String heldStage = null;
+		for (var e : r.drift.entrySet()) {
+			if (e.getValue().startsWith("held:")) {
+				heldStage = e.getKey();
+				break;
+			}
+		}
 		QBatch b = Batches.get(r.batchId);
+		QItem waitingItem = null;
 		if (waiting == null && b != null && b.running()) {
 			for (QItem i : b.items) {
 				if (i.status == QItem.Status.WAITING && i.reason != null) {
 					waiting = new Refusal(Reason.valueOf(i.reason), i.message);
+					waitingItem = i;
 					break;
 				}
 			}
 		}
+		if (waiting == null && r.state != RegionState.PLACED && r.state != RegionState.REMOVING) {
+			String stale = staleOf(l);
+			if (stale != null) {
+				waiting = new Refusal(Reason.PLAN_STALE, stale);
+			}
+		}
 		int[] c = r.claim;
+		PrepareView pv = Prepare.view(r.planId);
+		List<dev.larattalabs.architect.api.WaitAction> actions = actionsOf(l, waiting, waitingItem, heldStage, pv);
 		return new RegionView(r.id, r.planId, r.irSha, r.owner, r.ext, r.groupId, new BoundingBox(c[0], c[1], c[2], c[3], c[4], c[5]), r.state, st, lots,
-			r.cellsWritten, r.skipped, waiting, Prepare.view(r.planId));
+			r.cellsWritten, r.skipped, waiting, pv, actions);
+	}
+
+	/** (6b) The nudge actions for what the region waits for ({@link WaitActions}). */
+	static List<dev.larattalabs.architect.api.WaitAction> actionsOf(Live l, @Nullable Refusal waiting, @Nullable QItem item, @Nullable String heldStage,
+		@Nullable PrepareView pv) {
+		if (waiting == null) {
+			return List.of();
+		}
+		int[] box = null;
+		if (item != null) {
+			if ("tile".equals(item.itemKind) && item.spec != null) {
+				int[] t = Ir.tile(item.spec.get("tile").getAsString());
+				box = new int[] {Heights.TILE * t[0], Heights.TILE * t[1], Heights.TILE * t[0] + Heights.TILE - 1, Heights.TILE * t[1] + Heights.TILE - 1};
+			} else {
+				box = new int[] {item.x, item.z, item.x + 15, item.z + 15};
+			}
+		}
+		int[] player = null;
+		MinecraftServer s = server;
+		if (s != null && s.isSameThread()) {
+			var players = s.getPlayerList().getPlayers();
+			if (!players.isEmpty()) {
+				var pl = players.get(0);
+				player = new int[] {pl.getBlockX(), pl.getBlockY(), pl.getBlockZ()};
+			}
+		}
+		PlanRec p = PLANS.get(l.rec().planId);
+		int toGenerate = pv != null && pv.state() == PrepareView.State.RUNNING ? pv.chunksMissing() : p != null ? p.chunksToGenerate() : 0;
+		if (waiting.reason() == Reason.NOT_GENERATED && pv != null && pv.state() == PrepareView.State.RUNNING) {
+			return List.of(); // a prepare already runs: nothing to do but wait
+		}
+		return WaitActions.of(new WaitActions.Context(waiting.reason(), box, player, heldStage, toGenerate, Prepare.measuredRate(WaitActions.DEFAULT_RATE)));
+	}
+
+	/** Every second: REGION_STATE when a placing region's actions changed (S8). Server thread. */
+	static void actionsTick(MinecraftServer s) {
+		if (s.getTickCount() % 20 != 0) {
+			return;
+		}
+		for (Live l : REGIONS.values()) {
+			if (l.rec().state != RegionState.PLACING) {
+				continue;
+			}
+			RegionView v = view(l);
+			List<dev.larattalabs.architect.api.WaitAction> was = LAST_ACTIONS.put(l.rec().id, v.actions());
+			// what changed is the kinds (and the held stage), not a MOVE_CLOSER target that follows the walking player
+			if (was != null && !actionKeys(was).equals(actionKeys(v.actions())) || was == null && !v.actions().isEmpty()) {
+				SiteEvents.REGION_STATE.invoker().onState(v);
+			}
+		}
+	}
+
+	static List<String> actionKeys(List<dev.larattalabs.architect.api.WaitAction> a) {
+		return a.stream().map(x -> x.kind() == dev.larattalabs.architect.api.WaitAction.Kind.APPROVE_STAGE ? x.kind() + ":" + x.detail() : x.kind().name())
+			.toList();
+	}
+
+	// ------------------------------------------------------------------ 6b: check, previews, design, nudge
+
+	@Override
+	public CompletableFuture<dev.larattalabs.architect.api.CheckReport> check(String planId) {
+		MinecraftServer s = server;
+		TileStream.Link link = TileStream.link;
+		if (s == null) {
+			return CompletableFuture.failedFuture(new IllegalStateException("no world"));
+		}
+		if (link == null || !link.connected()) {
+			return failed(Reason.SIDECAR_UNAVAILABLE, "the helper (sidecar) is not connected");
+		}
+		JsonObject m = new JsonObject();
+		m.addProperty("type", "region.check");
+		m.addProperty("planId", planId);
+		progress(s, planId, "checking");
+		return link.send(m).thenCompose(ack -> onServer(s, () -> {
+			if (ack.has("ok") && !ack.get("ok").getAsBoolean()) {
+				throw refusal(Reason.OTHER, "the helper refused the check: " + str(ack, "error"));
+			}
+			JsonObject res = ack.has("result") && ack.get("result").isJsonObject() ? ack.getAsJsonObject("result") : ack;
+			dev.larattalabs.architect.api.CheckReport rep = Wire6b.report(res.get("report"));
+			if (rep == null) {
+				throw refusal(Reason.OTHER, "the helper's check answered no report");
+			}
+			PlanRec p = planRec(planId);
+			if (p != null) {
+				p.planned().add("report", res.get("report").deepCopy());
+				savePlan(s, p);
+			}
+			SiteEvents.REGION_CHECKED.invoker().onChecked(planId, rep);
+			return rep;
+		}));
+	}
+
+	@Override
+	public CompletableFuture<dev.larattalabs.architect.api.RegionPreviews> previews(String planId, java.util.Set<dev.larattalabs.architect.api.PreviewView> views,
+		List<List<BlockPos>> axes) {
+		MinecraftServer s = server;
+		TileStream.Link link = TileStream.link;
+		if (s == null) {
+			return CompletableFuture.failedFuture(new IllegalStateException("no world"));
+		}
+		if (link == null || !link.connected()) {
+			return failed(Reason.SIDECAR_UNAVAILABLE, "the helper (sidecar) is not connected");
+		}
+		if (axes != null && axes.size() > 4) {
+			return failed(Reason.REGION_LIMIT, "at most 4 section axes (" + axes.size() + " given)");
+		}
+		JsonObject m = new JsonObject();
+		m.addProperty("type", "region.preview");
+		m.addProperty("planId", planId);
+		if (views != null && !views.isEmpty()) {
+			JsonArray v = new JsonArray();
+			views.stream().sorted().forEach(x -> v.add(x.name().toLowerCase(java.util.Locale.ROOT)));
+			m.add("views", v);
+		}
+		if (axes != null && !axes.isEmpty()) {
+			JsonArray a = new JsonArray();
+			for (List<BlockPos> axis : axes) {
+				JsonArray pts = new JsonArray();
+				for (BlockPos bp : axis) {
+					JsonArray q = new JsonArray();
+					q.add(bp.getX());
+					q.add(bp.getY());
+					q.add(bp.getZ());
+					pts.add(q);
+				}
+				a.add(pts);
+			}
+			m.add("axes", a);
+		}
+		progress(s, planId, "rendering");
+		return link.send(m).thenCompose(ack -> onServer(s, () -> {
+			if (ack.has("ok") && !ack.get("ok").getAsBoolean()) {
+				throw refusal(Reason.OTHER, "the helper refused the previews: " + str(ack, "error"));
+			}
+			JsonObject res = ack.has("result") && ack.get("result").isJsonObject() ? ack.getAsJsonObject("result") : ack;
+			dev.larattalabs.architect.api.RegionPreviews pr = Wire6b.previews(res.get("paths"), res.get("sitePlan"));
+			if (pr == null) {
+				throw refusal(Reason.OTHER, "the helper's previews answered no paths");
+			}
+			return pr;
+		}));
+	}
+
+	@Override
+	public CompletableFuture<String> design(dev.larattalabs.architect.api.RegionDesignRequest r) {
+		return RegionDesigns.start(r);
+	}
+
+	@Override
+	public CompletableFuture<dev.larattalabs.architect.api.NudgeResult> nudge(String regionId, dev.larattalabs.architect.api.WaitAction.Kind action) {
+		MinecraftServer s = server;
+		Live l = REGIONS.get(regionId);
+		if (s == null || l == null) {
+			return CompletableFuture.failedFuture(new IllegalArgumentException("no region " + regionId));
+		}
+		return onServer(s, () -> nudge0(s, l, action)).thenCompose(f -> f);
+	}
+
+	/** When a PREPARE nudge showed its estimate, per region (a second one within {@link #PREPARE_CONFIRM_MS} starts it). */
+	private static final Map<String, Long> PREPARE_SHOWN = new HashMap<>();
+	public static final long PREPARE_CONFIRM_MS = 5 * 60_000L;
+
+	private static CompletableFuture<dev.larattalabs.architect.api.NudgeResult> nudge0(MinecraftServer s, Live l, dev.larattalabs.architect.api.WaitAction.Kind k) {
+		RegionView v = view(l);
+		dev.larattalabs.architect.api.WaitAction a = v.actions().stream().filter(x -> x.kind() == k).findFirst().orElse(null);
+		if (a == null) {
+			return done(false, "not applicable" + (v.waiting() == null ? " (the region waits for nothing)" : " (it waits " + v.waiting().reason() + ")"));
+		}
+		String id = l.rec().id;
+		return switch (k) {
+			case MOVE_CLOSER -> done(false, a.target() == null ? "walk closer to the region" : "walk to " + a.target().getX() + ", " + a.target().getZ());
+			case PREPARE -> {
+				Long shown = PREPARE_SHOWN.get(id);
+				long now = System.currentTimeMillis();
+				if (shown == null || now - shown > PREPARE_CONFIRM_MS) {
+					PREPARE_SHOWN.put(id, now);
+					yield done(false, "prepare would generate " + a.detail() + "; nudge PREPARE again within 5 minutes to start it");
+				}
+				PREPARE_SHOWN.remove(id);
+				PlanRec p = planRec(l.rec().planId);
+				if (p == null) {
+					yield done(false, "the region's plan " + l.rec().planId + " is gone: replan with Regions.plan");
+				}
+				Prepare.start(s, p, null);
+				Architect.LOGGER.info("Region {}: prepare started by a nudge ({})", id, a.detail());
+				yield done(true, "prepare started: " + a.detail());
+			}
+			case START_SIDECAR -> {
+				if (TileStream.available()) {
+					// connected, yet a tile waits: the helper kept answering ir_unknown/blob_unknown; ask again
+					int n = TileStream.retryWaiting(id);
+					yield done(n > 0, n > 0 ? "asked the helper again for " + n + " tile" + (n == 1 ? "" : "s") : "the helper is connected");
+				}
+				String st = dev.larattalabs.architect.apiimpl.RegionBridge.restartSidecar();
+				yield done("starting".equals(st), "starting".equals(st) ? "asked the launcher to start the helper" : "the helper is " + st);
+			}
+			case APPROVE_STAGE -> {
+				String stage = a.detail();
+				if (stage == null) {
+					yield done(false, "no held stage");
+				}
+				try {
+					ArchitectApi.get().sites(s).approveStage(l.rec().groupId, stage);
+				} catch (RuntimeException e) {
+					yield done(false, "stage " + stage + " could not be approved: " + e.getMessage());
+				}
+				yield done(true, "stage " + stage + " approved: it continues on the changed land");
+			}
+			case REPLAN -> done(false, "replan with Regions.plan (remove this region first, or skip the held stage)");
+		};
+	}
+
+	private static CompletableFuture<dev.larattalabs.architect.api.NudgeResult> done(boolean ok, String msg) {
+		return CompletableFuture.completedFuture(new dev.larattalabs.architect.api.NudgeResult(ok, msg));
+	}
+
+	static void savePlan(MinecraftServer s, PlanRec p) {
+		try {
+			RegionStore.writeJson(RegionStore.plan(s.getWorldPath(LevelResource.ROOT), p.planId()), planToJson(p));
+		} catch (IOException e) {
+			Architect.LOGGER.warn("Region plan {} could not be saved: {}", p.planId(), e.toString());
+		}
 	}
 
 	@Override
@@ -1033,6 +1556,75 @@ public final class RegionsImpl implements Regions {
 			});
 			return res;
 		});
+	}
+
+	/** DevBridge (gate 10(a)): called after each tile entry of a region is placed, with the region's tiles done so far. */
+	public static volatile java.util.function.@Nullable BiConsumer<Live, Integer> TILE_HOOK;
+
+	/**
+	 * DevBridge test hook (gate item 10(b), realise start): merges {@code members} into a held plan's IR (memory and the world's
+	 * plan file), e.g. {@code {format: 3}} or {@code {kitVersion: "0.99.0"}}. False when there is no such plan.
+	 */
+	public static boolean doctorPlan(String planId, JsonObject members) {
+		PlanRec p = planRec(planId);
+		if (p == null) {
+			return false;
+		}
+		members.entrySet().forEach(e -> p.ir().json().add(e.getKey(), e.getValue().deepCopy()));
+		if (server != null) {
+			savePlan(server, p);
+		}
+		return true;
+	}
+
+	/**
+	 * DevBridge test hook (gate item 10(b), resume): merges {@code members} into a region's IR, in memory and in its
+	 * {@code ir.json} (so a relog resumes it stale too). From then on its items wait PLAN_STALE. False when there is no such region.
+	 */
+	public static boolean doctorRegion(String regionId, JsonObject members) {
+		Live l = REGIONS.get(regionId);
+		if (l == null) {
+			return false;
+		}
+		members.entrySet().forEach(e -> l.ir().json().add(e.getKey(), e.getValue().deepCopy()));
+		try {
+			RegionStore.writeJson(RegionStore.region(l.world(), regionId).resolve("ir.json"), l.ir().json());
+		} catch (IOException e) {
+			Architect.LOGGER.warn("Region {}: doctored ir.json not written: {}", regionId, e.toString());
+		}
+		String stale = staleOf(l);
+		if (stale != null) {
+			STALE_LOGGED.put(regionId, stale);
+		}
+		return true;
+	}
+
+	/** DevBridge: a plan's IR facts: requires, kitVersion, blobs, needVolumes, volumes (6b). */
+	public static JsonObject planFacts(String planId) {
+		JsonObject o = new JsonObject();
+		PlanRec p = planRec(planId);
+		if (p == null) {
+			return o;
+		}
+		JsonArray req = new JsonArray();
+		p.ir().requires().forEach(req::add);
+		o.add("requires", req);
+		o.addProperty("kitVersion", p.ir().kitVersion());
+		JsonArray bl = new JsonArray();
+		p.ir().blobShas().forEach(bl::add);
+		o.add("blobs", bl);
+		for (String k : new String[] {"needVolumes", "volumes", "checkMs", "renderMs"}) {
+			if (p.planned().has(k)) {
+				o.add(k, p.planned().get(k).deepCopy());
+			}
+		}
+		return o;
+	}
+
+	/** (6b) The region ghost's view of a plan (stages up to {@code stage}; null: all), or null when there is no such plan. */
+	public static @Nullable GhostPlan ghostPlan(String planId, @Nullable String stage) {
+		PlanRec p = planRec(planId);
+		return p == null ? null : GhostPlan.of(planId, p.irSha(), p.ir(), stage, p.planned());
 	}
 
 	/** The plan's claim {minX, minY, minZ, maxX, maxY, maxZ} (the IR's: its y range is the program's), or null. */
@@ -1086,7 +1678,13 @@ public final class RegionsImpl implements Regions {
 			o.addProperty("missing", true);
 			return o;
 		}
-		o.add("view", com.google.gson.JsonParser.parseString(new com.google.gson.Gson().toJson(view(l))).getAsJsonObject());
+		RegionView rv = view(l);
+		o.add("view", com.google.gson.JsonParser.parseString(new com.google.gson.Gson().toJson(rv)).getAsJsonObject());
+		o.add("actions", Wire6b.json(rv.actions())); // (6b) what a nudge can do about the wait
+		String stale = staleOf(l);
+		if (stale != null) {
+			o.addProperty("stale", stale);
+		}
 		o.add("record", l.rec().toJson());
 		QBatch b = Batches.get(l.rec().batchId);
 		if (b != null) {

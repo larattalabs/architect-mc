@@ -29,7 +29,7 @@ const FINAL: ReadonlySet<DesignStatus> = new Set(['done', 'failed', 'cancelled']
 
 export const isFinalDesign = (d: Design): boolean => FINAL.has(d.status);
 
-export type DesignPatch = Partial<Pick<Design, 'status' | 'step' | 'blueprintId' | 'size' | 'previews' | 'error' | 'cost' | 'massing' | 'conformance' | 'critique' | 'critiqueOf' | 'kind' | 'polish'>>;
+export type DesignPatch = Partial<Pick<Design, 'status' | 'step' | 'blueprintId' | 'size' | 'previews' | 'error' | 'cost' | 'massing' | 'conformance' | 'critique' | 'critiqueOf' | 'kind' | 'polish' | 'region' | 'result'>>;
 
 export interface BookCtx {
   store: Store;
@@ -65,7 +65,7 @@ export class DesignBook {
   }
 
   /** A new queued design; `massing` (4c) marks a massing job and the massing version it makes. */
-  create(request: DesignRequest, massing?: Design['massing'], extra: Pick<Design, 'kind' | 'polish'> = {}): Design {
+  create(request: DesignRequest, massing?: Design['massing'], extra: Pick<Design, 'kind' | 'polish' | 'region'> = {}): Design {
     const now = this.ctx.now();
     const d: Design = { id: this.ctx.store.nextId('d'), request: structuredClone(request), status: 'queued', step: 'waiting for the designer', cost: zeroCost(), ...(massing ? { massing: { ...massing } } : {}), ...structuredClone(extra), createdAt: now, updatedAt: now };
     this.all.push(d);

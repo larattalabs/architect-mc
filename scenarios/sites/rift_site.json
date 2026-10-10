@@ -1,0 +1,54 @@
+{
+  "id": "rift_site",
+  "purpose": "the rift prompt (6b gate item 8): open ground (relief under 48 over the claim; the pinned seed is desert and ocean near spawn) for a carved rift, 256x160",
+  "world": {
+    "seed": "2026100906",
+    "preset": "normal",
+    "gamerules": "default"
+  },
+  "needs": {
+    "size": [
+      256,
+      160
+    ],
+    "relief": [
+      0,
+      48
+    ],
+    "waterMax": 12,
+    "treesMax": 30,
+    "naturalMin": 97,
+    "candidates": 80,
+    "step": 512,
+    "stopAt": 95
+  },
+  "fixture": {
+    "claim": [
+      -1152,
+      -80,
+      -897,
+      79
+    ],
+    "yRange": [
+      17,
+      130
+    ],
+    "foundBy": "find-site rift_site @ seed 2026100906",
+    "surveySha": "d2331d8feef90e182a9cbda0779eea6e0c931629f61623a8fc1f2b51e7ecfac0",
+    "score": 101,
+    "stats": {
+      "biomes": {
+        "desert": 92,
+        "river": 8
+      },
+      "grid": [],
+      "min": 57,
+      "max": 90,
+      "mean": 69.2,
+      "water": 8,
+      "trees": 0,
+      "natural": 100,
+      "missing": 0
+    }
+  }
+}

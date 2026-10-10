@@ -91,6 +91,11 @@ public final class RegionItems {
 			Batches.fail(b, i, Reason.NOT_LOADED, r.rec().dimension + " is not loaded");
 			return;
 		}
+		String stale = RegionsImpl.staleOf(r);
+		if (stale != null) {
+			Batches.waitFor(b, i, Reason.PLAN_STALE, stale); // (6b, §2.4 (c)) nothing requested, nothing written
+			return;
+		}
 		Pipe p = pipe(b, i);
 		Anchors.Bounds win = window(t[3], r.rec().claim);
 		long deadline = Placement.deadline();
@@ -146,6 +151,11 @@ public final class RegionItems {
 			String why = tile.error == null ? "the tile could not be evaluated" : tile.error;
 			TileStream.release(t[0], t[1], t[2], t[3]);
 			Batches.fail(b, i, Reason.OTHER, why);
+			return;
+		}
+		if (tile.phase == TileStream.Phase.WAITING) {
+			// (6b) the helper kept answering ir_unknown / blob_unknown: wait for it (a reconnect or restart asks again)
+			Batches.waitFor(b, i, Reason.SIDECAR_UNAVAILABLE, tile.error == null ? "the helper lacks the plan's data" : tile.error);
 			return;
 		}
 		if (tile.phase != TileStream.Phase.DECODED) {
@@ -265,7 +275,7 @@ public final class RegionItems {
 			Architect.LOGGER.warn("Region {}: tile {} has unfrozen columns after its freeze", r.rec().id, t[3]);
 			return;
 		}
-		TileStream.request(t[0], r.rec().planId, r.rec().irSha, x -> r.irJson(), t[1], t[2], t[3], w.encode());
+		TileStream.request(t[0], r.rec().planId, r.rec().irSha, x -> r.irJson(), RegionsImpl.blobSource(r), t[1], t[2], t[3], w.encode());
 	}
 
 	// ------------------------------------------------------------------ ahead of the writer
@@ -281,8 +291,8 @@ public final class RegionItems {
 			return;
 		}
 		RegionsImpl.Live r = RegionsImpl.live(region);
-		if (r == null) {
-			return;
+		if (r == null || RegionsImpl.staleOf(r) != null) {
+			return; // (6b) a stale region requests nothing ahead
 		}
 		ServerLevel level = r.level(server);
 		if (level == null) {
@@ -451,6 +461,11 @@ public final class RegionItems {
 		RegionsImpl.Live r = region == null ? null : RegionsImpl.live(region);
 		if (r == null) {
 			return true;
+		}
+		String stale = RegionsImpl.staleOf(r);
+		if (stale != null) {
+			Batches.waitFor(b, i, Reason.PLAN_STALE, stale); // (6b) a stale region writes nothing: its lots and roads wait too
+			return false;
 		}
 		Pipe p = pipe(b, i);
 		if (p.frozen) {

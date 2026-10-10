@@ -27,6 +27,12 @@ import org.jspecify.annotations.Nullable;
  * </ul>
  * Block entities on the strip are reported (placement refuses them unless forced, like in the box), lava on or beside
  * it refuses, water is a warning. Pure (the world comes in through {@link TerrainFit.World}), unit-tested.
+ *
+ * <p>Roads (phase 4e): the approach stops before the first row whose path or feet cell is a {@link TerrainFit#ROAD} cell
+ * ({@link Plan#road}); a door that opens onto a road gets no approach. Styled (6b, {@link Style}: a region lot's, or a plain
+ * placement's {@code PlaceRequest.pathStyle}): it also stops at the style's walk surfaces, runs on past the ground to the nearest
+ * one within its maximum length, and takes its blocks from the style and the surface it joins ({@link Plan#pathBlock},
+ * {@link Plan#fillBlock}). Without a style every plan is exactly the 4e one.
  */
 public final class Approach {
 	/** Clear cells above the path surface (feet, head and one more). */
@@ -112,19 +118,30 @@ public final class Approach {
 	 * @param feet per row (index 0 = the template's own row at the door), the path's feet height (block y)
 	 * @param bounds every cell the approach touches, or null when there is no approach
 	 * @param end the walkable centre of the last row (feet position: x, y, z), or null when there is no approach
+	 * @param road the road or walk-surface cell the approach stopped before (phase 4e, 6b), or null
+	 * @param pathBlock (6b) the path block of a styled approach ({@link Style}): the met surface's block or the style's path
+	 *        block; null = the blueprint's own ({@link Spec#block})
+	 * @param fillBlock (6b) the fill below a styled approach's path; null = the blueprint's foundation
 	 */
 	public record Plan(int[] path, int[] slabs, int[] fill, int[] clear, int[] water, int waterCount, int[] lava, int lavaCount,
-		int[] blockEntities, int[] feet, Anchors.@Nullable Bounds bounds, double @Nullable [] end, int ground, int @Nullable [] road) {
+		int[] blockEntities, int[] feet, Anchors.@Nullable Bounds bounds, double @Nullable [] end, int ground, int @Nullable [] road,
+		@Nullable String pathBlock, @Nullable String fillBlock) {
 		public static final Plan EMPTY = new Plan(new int[0], new int[0], new int[0], new int[0], new int[0], 0, new int[0], 0, new int[0],
 			new int[0], null, null, Integer.MIN_VALUE, null);
+
+		/** The 4e shape (no style: the blueprint's own blocks). */
+		public Plan(int[] path, int[] slabs, int[] fill, int[] clear, int[] water, int waterCount, int[] lava, int lavaCount, int[] blockEntities,
+			int[] feet, Anchors.@Nullable Bounds bounds, double @Nullable [] end, int ground, int @Nullable [] road) {
+			this(path, slabs, fill, clear, water, waterCount, lava, lavaCount, blockEntities, feet, bounds, end, ground, road, null, null);
+		}
 
 		/** The 4d shape (no road met). */
 		public Plan(int[] path, int[] slabs, int[] fill, int[] clear, int[] water, int waterCount, int[] lava, int lavaCount, int[] blockEntities,
 			int[] feet, Anchors.@Nullable Bounds bounds, double @Nullable [] end, int ground) {
-			this(path, slabs, fill, clear, water, waterCount, lava, lavaCount, blockEntities, feet, bounds, end, ground, null);
+			this(path, slabs, fill, clear, water, waterCount, lava, lavaCount, blockEntities, feet, bounds, end, ground, null, null, null);
 		}
 
-		/** Whether the approach stopped at a road (phase 4e). */
+		/** Whether the approach stopped at a road (phase 4e) or, with a {@link Style}, a walk surface (6b). */
 		public boolean metRoad() {
 			return road != null;
 		}
@@ -165,6 +182,45 @@ public final class Approach {
 		}
 	}
 
+	/**
+	 * A walk surface an approach can join (6b): the block the path takes where it joins it, and whether that block is a full
+	 * solid block (only then does the path take it).
+	 */
+	public record Met(String block, boolean full) {
+	}
+
+	/** The walk surfaces of a {@link Style}: the surface at a world cell, or null when the cell is not one. */
+	@FunctionalInterface
+	public interface Surface {
+		@Nullable Met at(int x, int y, int z);
+
+		Surface NONE = (x, y, z) -> null;
+	}
+
+	/**
+	 * A styled approach (docs/CONTRACT.md "6b addition: region lot entrances"): a region lot's, or a plain placement's that asked
+	 * for one ({@code PlaceRequest.pathStyle}). With a style the approach
+	 * <ul>
+	 * <li>stops before the first row whose path or feet cell is a {@link TerrainFit#ROAD} cell or one of the style's
+	 * {@link Surface walk surfaces}: an entrance that opens onto one within 1 cell gets no approach (0 rows);</li>
+	 * <li>runs on past the ground (up to {@link Spec#length} + {@link #EXTEND} rows) to reach the nearest one; when none is within
+	 * that, it is exactly as long as the unstyled approach;</li>
+	 * <li>takes the met surface's block when that is a full solid block, else {@code path} ({@link #joinBlock}); its fill is
+	 * {@code fill} (null = the blueprint's foundation). The half-step slabs stay the blueprint's.</li>
+	 * </ul>
+	 *
+	 * @param path the path block id (a region's {@code path} role, or the request's {@code pathStyle})
+	 * @param fill the fill block below the path (a region's {@code foundation} role), or null for the blueprint's foundation
+	 * @param surface the walk surfaces besides road cells ({@link Surface#NONE}: roads only)
+	 */
+	public record Style(String path, @Nullable String fill, Surface surface) {
+	}
+
+	/** The path block of a styled approach that met {@code met} (null: none met): its block when full and solid, else the style's. */
+	public static String joinBlock(@Nullable Met met, Style style) {
+		return met != null && met.full() && !met.block().isEmpty() ? met.block() : style.path();
+	}
+
 	private Approach() {
 	}
 
@@ -173,12 +229,17 @@ public final class Approach {
 	 * {@link Plan#EMPTY} when it has none or its sidecar turns the approach off.
 	 */
 	public static Plan forBlueprint(Blueprint bp, int turns, Anchors.Bounds box, TerrainFit.World w) {
+		return forBlueprint(bp, turns, box, w, null);
+	}
+
+	/** {@link #forBlueprint}; {@code style}: a styled approach ({@link Style}), null = the blueprint's own (unchanged). */
+	public static Plan forBlueprint(Blueprint bp, int turns, Anchors.Bounds box, TerrainFit.World w, @Nullable Style style) {
 		Anchor e = BlueprintTransform.worldAnchors(bp, turns, box.minX(), box.minY(), box.minZ())
 			.get(Blueprint.ENTRANCE);
 		if (e == null || !bp.approach().enabled()) {
 			return Plan.EMPTY;
 		}
-		return plan(box, BlueprintTransform.rotateDirection(bp.front(), turns), e.x(), e.z(), box.minY() + bp.groundY(), bp.approach(), w);
+		return plan(box, BlueprintTransform.rotateDirection(bp.front(), turns), e.x(), e.z(), box.minY() + bp.groundY(), bp.approach(), w, style);
 	}
 
 	/** The outward step (dx, dz) of a rotated front (north = -z, east = +x, south = +z, west = -x). */
@@ -197,6 +258,11 @@ public final class Approach {
 	 * entrance anchor at world ({@code ex}, {@code ez}) and the door's feet at {@code feetY} (box minY + groundY).
 	 */
 	public static Plan plan(Anchors.Bounds box, String front, double ex, double ez, int feetY, Spec spec, TerrainFit.World w) {
+		return plan(box, front, ex, ez, feetY, spec, w, null);
+	}
+
+	/** {@link #plan}; {@code style}: a styled approach ({@link Style}), null = unstyled (exactly the 4e approach). */
+	public static Plan plan(Anchors.Bounds box, String front, double ex, double ez, int feetY, Spec spec, TerrainFit.World w, @Nullable Style style) {
 		if (!spec.enabled()) {
 			return Plan.EMPTY;
 		}
@@ -215,6 +281,10 @@ public final class Approach {
 		int rows = 0;
 		int lastTarget = Integer.MIN_VALUE;
 		int[] road = null;
+		Met met = null;
+		// (6b) styled: the row at which the unstyled approach ends (it met the ground), when no walk surface is met further out
+		int groundRows = -1;
+		int groundTarget = Integer.MIN_VALUE;
 		for (int i = 1; i <= maxRows; i++) {
 			int[] ground = new int[hi - lo + 1];
 			for (int c = lo; c <= hi; c++) {
@@ -228,8 +298,10 @@ public final class Approach {
 			for (int c = lo; c <= hi && road == null; c++) {
 				int[] xz = cell(face, centre, i, c, dx, dz, alongX);
 				for (int y : new int[] {f - 1, f}) {
-					if ((w.flags(xz[0], y, xz[1]) & TerrainFit.ROAD) != 0) {
+					Met m = style == null ? null : style.surface().at(xz[0], y, xz[1]);
+					if (m != null || (w.flags(xz[0], y, xz[1]) & TerrainFit.ROAD) != 0) {
 						road = new int[] {xz[0], y, xz[1]};
+						met = m;
 						break;
 					}
 				}
@@ -241,8 +313,19 @@ public final class Approach {
 			lastTarget = target;
 			rows = i;
 			if (i >= spec.length() && feet[i] == target) {
-				break; // met the ground
+				if (style == null) {
+					break; // met the ground
+				}
+				if (groundRows < 0) {
+					groundRows = i;
+					groundTarget = target;
+				}
 			}
+		}
+		if (style != null && road == null && groundRows >= 0) {
+			// no walk surface within the maximum length: the unstyled length (its rows are the same rows)
+			rows = groundRows;
+			lastTarget = groundTarget;
 		}
 		feet = Arrays.copyOf(feet, rows + 1);
 		Cells path = new Cells();
@@ -326,11 +409,11 @@ public final class Approach {
 		if (rows == 0) {
 			// stopped at row 1 by a road: no approach cells (the box ends at the template)
 			return new Plan(new int[0], new int[0], new int[0], new int[0], new int[0], 0, lava.drawn(), lava.n, new int[0], feet, null, end,
-				lastTarget, road);
+				lastTarget, road, style == null ? null : joinBlock(met, style), style == null ? null : style.fill());
 		}
 		Anchors.Bounds bounds = new Anchors.Bounds(bb[0], bb[1], bb[2], bb[3], bb[4], bb[5]);
 		return new Plan(path.all(), slabs.all(), fill.all(), clear.all(), water.drawn(), water.n, lava.drawn(), lava.n, be.all(), feet, bounds, end, lastTarget,
-			road);
+			road, style == null ? null : joinBlock(met, style), style == null ? null : style.fill());
 	}
 
 	/**

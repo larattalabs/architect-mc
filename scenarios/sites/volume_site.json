@@ -1,0 +1,56 @@
+{
+  "id": "volume_site",
+  "purpose": "the volume survey fixture (6b gate item 7): a natural cliff and cave area of 256x256x128 with rock, air, water, logs and leaves",
+  "world": {
+    "seed": "2026100906",
+    "preset": "normal",
+    "gamerules": "default"
+  },
+  "needs": {
+    "size": [
+      256,
+      256
+    ],
+    "relief": [
+      30,
+      160
+    ],
+    "waterMin": 1,
+    "treesMin": 5,
+    "candidates": 100,
+    "step": 512,
+    "stopAt": 95
+  },
+  "fixture": {
+    "claim": [
+      896,
+      384,
+      1151,
+      639
+    ],
+    "yRange": [
+      -22,
+      141
+    ],
+    "foundBy": "find-site volume_site @ seed 2026100906",
+    "surveySha": "69c7824e47c33a565f13b031542d9931870ccde1a58ec14c27753845cfa15df2",
+    "score": 98,
+    "stats": {
+      "biomes": {
+        "plains": 39,
+        "sparse_jungle": 32,
+        "forest": 16,
+        "beach": 6,
+        "river": 3
+      },
+      "grid": [],
+      "min": 18,
+      "max": 101,
+      "mean": 73.2,
+      "water": 16,
+      "trees": 14,
+      "natural": 100,
+      "missing": 0
+    }
+  }
+}

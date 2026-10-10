@@ -42,8 +42,15 @@ package dev.larattalabs.architect.api;
  * replan, or realise with {@code force}.</li>
  * <li>{@code SIDECAR_UNAVAILABLE} (1.8.0): a region tile needs the helper (sidecar) and it is not connected. Temporary, no
  * time limit.</li>
- * <li>{@code PLAN_STALE} (1.8.0): a region plan's kit version is newer than the running kit.</li>
+ * <li>{@code PLAN_STALE} (1.8.0): a region plan needs a newer kit: its kit version is newer than the running kit, or (1.9.0) its
+ * IR format is over 2 or it names a format-2 kind this kit lacks. Refused at plan accept, realise start and region resume,
+ * before any tile is requested ("plan needs kit X / format N / kinds [...]; this is kit Y").</li>
  * <li>{@code REGION_LIMIT} (1.8.0): a region plan or a cell outside its limits (the claim, the size, the cell budget).</li>
+ * <li>{@code NO_TEMPLATE} (1.9.0): a region design that required a fit ({@code RegionDesignRequest.requireFit}) and no bundled
+ * program fits the brief.</li>
+ * <li>{@code PLAYER_BLOCKS} (1.9.0): a lot placed LAYERed on a region's pad (over a region tile entry) whose box holds the
+ * player's own blocks: non-natural, no block entity, owned by no journal entry. The lot is not placed and the blocks stay
+ * (the region ends PARTIAL); {@code force} overrides it (the blocks are overwritten and come back on remove).</li>
  * </ul>
  * New values are only ever appended.
  */
@@ -51,5 +58,5 @@ public enum Reason {
 	PLAYER_IN_BOX, OCCUPIED, OVERLAP, LAVA, BLOCK_ENTITIES, BUILD_HEIGHT, DOOR_CUT, CREATIVE_ONLY_BLOCK, NOT_ALLOWED, NOT_LOADED,
 	UNKNOWN_BLUEPRINT, OTHER, CANCELLED, LOT_TOO_SMALL, TIMED_OUT, OVERLAP_BUSY, OVERLAP_OWNED, LAYER_DEPTH, COVERED, TOO_STEEP, DEEP_WATER,
 	TOO_LARGE, JOURNAL_UNAVAILABLE, SITE_BUSY, FRAME_CHANGED, VERSION_GONE, PLAYER_EDITS, NOT_GENERATED, CHUNK_BOUND, DRIFTED,
-	SIDECAR_UNAVAILABLE, PLAN_STALE, REGION_LIMIT
+	SIDECAR_UNAVAILABLE, PLAN_STALE, REGION_LIMIT, NO_TEMPLATE, PLAYER_BLOCKS
 }

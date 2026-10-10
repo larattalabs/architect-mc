@@ -1,0 +1,78 @@
+{
+  "id": "s3_monastery",
+  "phase": "6c",
+  "version": 0,
+  "brief": "a monastery that grows down its cliff",
+  "world": {
+    "seed": "2026100906",
+    "preset": "normal",
+    "gamerules": "gallery"
+  },
+  "fixture": {
+    "claim": [
+      3604,
+      -1036,
+      3795,
+      -845
+    ],
+    "yRange": [
+      22,
+      220
+    ],
+    "foundBy": "find-site s3_monastery @ seed 2026100906",
+    "surveySha": "55b648a51e6738377321fbb2b831716caa6817eb20ce4bae38f1797313218d02",
+    "score": 77,
+    "stats": {
+      "biomes": {
+        "frozen_peaks": 32,
+        "cherry_grove": 26,
+        "sunflower_plains": 22,
+        "snowy_slopes": 11,
+        "river": 6
+      },
+      "grid": [],
+      "min": 62,
+      "max": 180,
+      "mean": 117.6,
+      "water": 10,
+      "trees": 6,
+      "natural": 100,
+      "missing": 0
+    }
+  },
+  "flat": {
+    "preset": "flat",
+    "claimOffset": [
+      0,
+      0
+    ],
+    "gamerules": "exact"
+  },
+  "needs": {
+    "size": [
+      192,
+      192
+    ],
+    "relief": [
+      40,
+      200
+    ],
+    "biomes": {
+      "any": [
+        "peaks",
+        "stony",
+        "slopes",
+        "grove",
+        "meadow"
+      ],
+      "share": 0.3
+    },
+    "candidates": 40,
+    "step": 320,
+    "stopAt": 30,
+    "center": [
+      3700,
+      -1900
+    ]
+  }
+}

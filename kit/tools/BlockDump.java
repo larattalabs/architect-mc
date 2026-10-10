@@ -54,11 +54,16 @@ public class BlockDump {
         boolean conductor;
         try { conductor = d.isRedstoneConductor(g, pos); } catch (Throwable t) { conductor = false; }
         String item = BuiltInRegistries.ITEM.getKey(b.asItem()).toString();
+        // (6b) replaceable (TerrainFit's natural plants), a block entity, and a valid mob spawn surface (M5: a zombie on top)
+        boolean replaceable = d.canBeReplaced();
+        boolean be = d.hasBlockEntity();
+        boolean spawn;
+        try { spawn = d.isValidSpawn(g, pos, net.minecraft.world.entity.EntityTypes.ZOMBIE); } catch (Throwable t) { spawn = false; }
         if (!first) w.write(",\n");
         first = false;
         w.write(q(id) + ":{\"cls\":[" + String.join(",", chain) + "],\"collision\":[" + boxes + "],\"emit\":[" + String.join(",", emit) + "]"
           + ",\"dampening\":" + d.getLightDampening() + ",\"shapeOcclusion\":" + d.useShapeForLightOcclusion()
-          + ",\"solidRender\":" + d.isSolidRender() + ",\"conductor\":" + conductor + ",\"item\":" + q(item) + "}");
+          + ",\"solidRender\":" + d.isSolidRender() + ",\"conductor\":" + conductor + ",\"item\":" + q(item) + ",\"replaceable\":" + replaceable + ",\"be\":" + be + ",\"spawn\":" + spawn + "}");
       }
       w.write("\n}\n");
     }

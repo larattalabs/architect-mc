@@ -1,0 +1,35 @@
+{
+ "note": "sha256 of each preview's RGBA pixels (the PNG bytes depend on the bundled zlib)",
+ "cases": {
+  "floating_islands": {
+   "top.png": "a0fb2350d73d98707eec42ed20dae045050fc88955cd072f63b47ffee3530a1a",
+   "section-1.png": "b5b3c6bf43d0074b049206a7c53e0ea5fc67b2f76963b1a10f8a13b042ea176f",
+   "iso.png": "0ff889a480172895401326b2699af8ddb654cbd3bd5692a43637b62181763173",
+   "siteplan.png": "6b3142bfd857d63db642b6bd552a9c57f69b4a0e2181f0fe932632df4278f840"
+  },
+  "crater_works": {
+   "top.png": "a16e48338c9a0e0f4d6147e7e13e37d2a668c73f9197ba64132ae865b4e62f84",
+   "section-1.png": "0ea1a416f2b29d19b72c4b039b020d6be190b02ea39dab4b295d90f6476d6702",
+   "iso.png": "c41cc1f55a19ffb9269909efa46d006dc5f2b871272b5c8f62c9ff4548e700c0",
+   "siteplan.png": "562be9de60f4b05ac37e225e6c8e00963bf59ad5dc95dabcb3751b5bc898d54a"
+  },
+  "sky_isle": {
+   "top.png": "80ab16e74a45e6ee500e14ad862cb499caf7bfe8b27e3ce35f9e09c09f5ffa01",
+   "section-1.png": "d5cab0b99b14f9d168af7ff96a3c131921ffa04b1238c885a5b0c2b8e8bf29cf",
+   "iso.png": "714ac1d0971ff15b4bdde82f2c359a386e6fb9cbeabcc82789e72dc35de8e31e",
+   "siteplan.png": "ab32d22d9b9de8e17113bf1e47c9a6a86eca2616d7906e2e61784a0062d17f43"
+  },
+  "rift_city": {
+   "top.png": "3e4a442ce273a517c074e0551bb32736e1dea02a54d01c37b12316b005db1a8e",
+   "section-1.png": "f2dbdcd5de50ae95da8dcb994ecc222302f4f2b5ef286c88846b87b6b4baae83",
+   "iso.png": "8601f9a7ecf1d4536ade1fc954e5dc37c7924308bc4600b3268fef8e16c1adff",
+   "siteplan.png": "00237f343b830bbaae2afd2a7fb44594ef1767e49c7334a66f5b64d3ef481262"
+  },
+  "walled_hill": {
+   "top.png": "78ebd2882ac21f3204159ba43cbfd3c29b0ebc7202177d048517965967635f2e",
+   "section-1.png": "31d0c6502a14c5a2b6cbd372f69ede07e5545c92012a349fe2205c7a4a6a476f",
+   "iso.png": "058f5c6ee63f9a1a5588d416e5903086653119ca65e807dd80d4b9e69b54e467",
+   "siteplan.png": "63d67a47b9780112ed6664041155711aa6643c10fa2040446b6daaeb36950b2b"
+  }
+ }
+}

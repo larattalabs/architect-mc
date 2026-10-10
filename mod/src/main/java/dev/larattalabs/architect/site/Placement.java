@@ -135,6 +135,7 @@ public final class Placement {
 			return;
 		}
 		long start = System.nanoTime();
+		long cpu0 = cpuNow();
 		deadline = start + budgetNanos();
 		int before = workDone();
 		SLOW.setLength(0);
@@ -163,6 +164,7 @@ public final class Placement {
 		}
 		if (!JOBS.isEmpty() || STATS.tickActive) {
 			STATS.work(System.nanoTime() - start, Math.max(0, workDone() - before) + finishedWork);
+			STATS.workCpu(cpu0 < 0 ? -1 : cpuNow() - cpu0);
 			traceWork += System.nanoTime() - start;
 		}
 		finishedWork = 0;
@@ -678,7 +680,31 @@ public final class Placement {
 	private static long traceStart;
 	private static long traceWork;
 
+	private static final java.lang.management.ThreadMXBean THREADS = java.lang.management.ManagementFactory.getThreadMXBean();
+	private static final boolean CPU = THREADS.isCurrentThreadCpuTimeSupported();
+
+	/**
+	 * (6b) The server thread's CPU time (ns), or -1 when the JVM can't tell. Architect's own per-tick time for the MSPT bars: the
+	 * wall time of a placement tick also counts the thread being descheduled on a busy machine and GC pauses, which are not ours.
+	 */
+	static long cpuNow() {
+		return CPU ? THREADS.getCurrentThreadCpuTime() : -1;
+	}
+
 	static final class Stats {
+		long cpuTicks;
+		long cpuSum;
+		long cpuMax;
+
+		void workCpu(long nanos) {
+			if (nanos < 0) {
+				return;
+			}
+			cpuTicks++;
+			cpuSum += nanos;
+			cpuMax = Math.max(cpuMax, nanos);
+		}
+
 		long ticks;
 		long tickSum;
 		long tickMax;
@@ -737,6 +763,7 @@ public final class Placement {
 		void reset() {
 			tickActive = false;
 			ticks = tickSum = tickMax = serverMax = startMax = convertMax = workTicks = workSum = workMax = cells = firstWorkAt = lastWorkAt = 0;
+			cpuTicks = cpuSum = cpuMax = 0;
 			over50 = 0;
 		}
 
@@ -753,6 +780,11 @@ public final class Placement {
 			o.addProperty("placementTicks", workTicks);
 			o.addProperty("placementMsMax", workMax / 1e6);
 			o.addProperty("placementMsMean", workTicks == 0 ? 0 : workSum / 1e6 / workTicks);
+			// (6b) the same ticks in the server thread's CPU time (descheduling and GC pauses excluded); absent when unsupported
+			if (cpuTicks > 0) {
+				o.addProperty("placementCpuMsMax", cpuMax / 1e6);
+				o.addProperty("placementCpuMsMean", cpuSum / 1e6 / cpuTicks);
+			}
 			o.addProperty("cells", cells);
 			double secs = (lastWorkAt - firstWorkAt) / 1e9;
 			o.addProperty("workSeconds", secs);

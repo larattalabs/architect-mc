@@ -244,6 +244,11 @@ public final class ApiImpl implements ArchitectApi {
 
 	/** The link synced, or dropped: futures waiting for a variant fail when it drops. */
 	/** Phase 6a: {@code region.*} messages from the sidecar (the link's thread). */
+	/** (6b) A region design's owner and ext (DesignsImpl's meta, as an API design request keeps them). */
+	public static void rememberDesign(String id, @Nullable String owner, JsonObject ext) {
+		instance().designs.remember(id, owner, ext);
+	}
+
 	public static void regionMessage(JsonObject m) {
 		dev.larattalabs.architect.region.RegionsImpl.onMessage(m);
 	}

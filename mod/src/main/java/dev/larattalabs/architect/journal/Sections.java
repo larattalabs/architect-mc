@@ -155,7 +155,7 @@ public final class Sections {
 			this.world = world;
 			this.match = match;
 			for (String id : ids) {
-				written.put(id, new java.util.HashMap<>());
+				written.put(id, new it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap<>()); // packed positions: see Journal.planUndo
 				handed.put(id, new ArrayList<>());
 				stats.put(id, new int[3]);
 			}

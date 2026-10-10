@@ -105,7 +105,7 @@ The list below is what `dev.help` returns (`{commands: {name: description}, scre
 
 | hook | arguments, result |
 |---|---|
-| `dev.placement.stats` | {reset?: false} - while placement is active (a job, a running batch or removal, a construction site building): `budgetMs`, `ticks`, `msptMax`/`msptMean` (each tick timed from its start to after the last end-of-tick handler), `ticksOver50ms`, `serverMsptMax` (the server's own tick time, which leaves end-of-tick handlers out), `placementMsMax`/`Mean` (Architect's time per tick), `jobStartMsMax` (checks, snapshot, leaf ring and hold), `convertMsMax` (a construction site's conversion), `cells`, `workSeconds`, `cellsPerSecond`, `active`, `jobs`; reset starts over after the answer |
+| `dev.placement.stats` | {reset?: false} - while placement is active (a job, a running batch or removal, a construction site building): `budgetMs`, `ticks`, `msptMax`/`msptMean` (each tick timed from its start to after the last end-of-tick handler), `ticksOver50ms`, `serverMsptMax` (the server's own tick time, which leaves end-of-tick handlers out), `placementMsMax`/`Mean` (Architect's time per tick), `placementCpuMsMax`/`Mean` (6b: the same ticks in the server thread's CPU time, without descheduling or GC pauses; the MSPT bars judge it), `jobStartMsMax` (checks, snapshot, leaf ring and hold), `convertMsMax` (a construction site's conversion), `cells`, `workSeconds`, `cellsPerSecond`, `active`, `jobs`; reset starts over after the answer |
 | `dev.placement.jobs` | {} - the ticked jobs running now: site, kind (place\|rollback\|remove), batch, item, phase, progress, total, held (ticks held back); `slow`, `budgetMs` |
 | `dev.placement.slow` | {on: bool} - test hook: jobs write about 16 cells per tick, so a check can act in the middle of an item (cancel, relog) |
 
@@ -282,9 +282,51 @@ there is no DevBridge hook to make layers, so tests go through the API as anothe
 
 `dev.journal.killAt` takes RG1-RG6; `dev.journal.state` adds `indexBytes` and the index commit times (p50, p99, max).
 
+### Regions (phase 6b)
+
+| hook | arguments, result |
+|---|---|
+| `dev.region.plan` | (6a, extended) also `check?: true`: false sends `ext["architect_mc:check"] = false` (no checker, no previews, the mega_bench gate runs). The answer adds `report` (CheckReport as JSON), `summary` (one line), `previews` ({paths: {view: [path]}, sitePlan}), `irFormat`, `requires`, `kitVersion`, `blobs` (side blob shas), `needVolumes`/`volumes` (the two-plan flow), `checkMs`, `renderMs`, `progress` (the phases). A plan whose IR is stale answers `{refused: "PLAN_STALE: plan needs ..."}` |
+| `dev.region.check` | {planId} - Regions.check (`region.check`) -> {report, summary, ms}; fires REGION_CHECKED |
+| `dev.region.preview` | {planId, views?: [top\|section\|iso\|siteplan], axes?: [[[x,y,z]...]...] (at most 4)} - Regions.previews (`region.preview`) -> {paths, sitePlan, ms} |
+| `dev.region.design` | {brief, card?: {site?, purpose?, style?, text?}, claim: [x0,z0,x1,z1], bible?, mustPass?, model?, budgetUsd?, requireFit?, owner?, wait?: true} - Regions.design; with wait the answer comes once the design ended and, for a fit, the mod's plan of the pick was accepted or failed -> {designId, status, kind, error?, result: {outcome, fits, program, params, reason, cost, tries, planId?, planError?}, costUsd, ms} |
+| `dev.region.nudge` | {region, action: MOVE_CLOSER\|PREPARE\|START_SIDECAR\|APPROVE_STAGE\|REPLAN} - Regions.nudge -> {done, message, actions (offered before the nudge)}. PREPARE is two calls: the first answers the estimate (done false), a second within 5 minutes starts the prepare |
+| `dev.region.state` | (6a, extended) adds `actions` (the WaitActions as JSON; also inside `view`) and `stale` (the PLAN_STALE message when the region's IR is stale) |
+| `dev.region.progress` | {planId} - the phases a plan went through: planning, checking, rendering (the helper's `region.progress`), accepted (or failed) |
+| `dev.survey.volume` | {box: [x0,y0,z0,x1,y1,z1], load?: loaded\|generated:<n>\|bounded:<n>} - Survey.volume -> {sha, blobId, counts (per VoxelClass), missingColumns, stats {surfaceColumns, meanSlope, steepFraction, overhangFraction, treeCells, caveCells, trees, caves}, cells, ms (wall), ticks, maxTickMs (the longest sampling slice), sampleMs, cellsPerSecond (over sampleMs), bytes (the frozen gzip file), bytesPerCell, file, chunksLoaded, maxCells (the per-call/per-region limit)} or {refused: "REGION_LIMIT: ..."} |
+| `dev.region.ghost` | {planId, stage?} \| {off: true} \| {} - the region ghost on (`previewRegion`), off, or its state -> {on, planId, stage, tiles, tilesRequested, tilesShown, cellsShown, verdict, errors}. The tiles near the player arrive over the next seconds; poll `{}` until `tilesShown` stops growing, then `dev.screenshot` |
+| `dev.scenario.cams` | {scenario: <id> (scenarios/<id>.json under $ARCHITECT_REPO, else the checkout above mod/run) \| path \| cams: {name: [x,y,z,yaw,pitch]}, cam?: name} - time 6000 and clear weather; with `cam` the camera goes there as a spectator (as `dev.camera`) -> {cams: [names], at?, camera?}. Then `dev.screenshot` |
+| `dev.region.drop` | {planId, after: <tiles written>} \| {off: true} - gate 10(a): once the plan's region has written that many tiles, deletes the helper's plan dir (`<data>/regions/plans/<planId>`) and its cached side blobs (`<data>/regions/blobs/<sha>.bin`), and sends `region.release {planId, evict: true}` (the helper drops its cached IR, even one another plan shares) -> {armed}; `dev.region.drop.state` -> {dropped, at, deleted} |
+| `dev.tiles.resends` | {reset?} - tile re-requests by reason: `ir` (ir_unknown), `blob` (blob_unknown) |
+| `dev.region.dump` | {box: [x0,y0,z0,x1,y1,z1], light?: true, file (absolute, or relative to the game dir)} - the ARWD dump (kit/REGIONS.md "Realised-world dumps"), one chunk column per 3 ms slice, written off the server thread -> {file, cells, bytes, rawBytes, sha (of the uncompressed bytes), palette, light, unloadedChunks (read as air), ms, ticks, maxTickMs}. At most 64M cells |
+| `dev.region.planStale` | {at: accept\|realise\|resume, planId? (realise), region? (resume), format?, kitVersion?, requires?: [kind]} (default `format: 3`) - gate 10(b): doctors an IR so the PLAN_STALE gate fires. `accept`: the next accepted plan's IR (then `dev.region.plan` must answer `refused: PLAN_STALE`); `realise`: the held plan's IR, memory and plan file (then `dev.region.realise` must refuse); `resume`: the region's IR in memory and its `ir.json` (its items wait PLAN_STALE at once and after a relog; `dev.region.state` shows `stale`; `dev.region.hash` must not change) -> {doctored, stale} |
+
+Chat commands (6b, N7: no Terrain tab): `/architect region plan <program> <x0> <z0> <x1> <z1> [JSON | k=v ... | nocheck]`,
+`check [planId]`, `preview [planId]`, `prepare [planId]`, `realise [planId] [fill]`, `remove [regionId]`, `state [regionId]`,
+`design <brief>` (a 200x200 claim around the player), `nudge <action> [regionId]`. Ids default to the player's last plan and
+region. Previews print as file links (with a [copy] link).
+
 ## Changelog
 
 Semi-stable: a hook may change or go, and every such change is listed here, newest first.
+
+- **2026-10-10 (phase 6b):** `dev.placement.stats` adds `placementCpuMsMax` and `placementCpuMsMean`: the placement ticks
+  (batches, groups, jobs) in the server thread's CPU time. On a busy machine the wall-time `placementMsMax`, `msptMax` and
+  `serverMsptMax` take descheduling and GC pauses; the gates' MSPT bars judge the CPU figure and record the rest.
+
+- **2026-10-09 (6b addition: region lot entrances):** apitest `place` / `check` take `pathStyle=<block id>` (after the rotation
+  argument, which is then required): the request goes out with `PlaceRequest.pathStyle` (API 1.9.0), so its entrance approach is
+  that road surface and joins a road it meets (taking the road's block). The gate's plain lot next to a 4e road:
+  `dev.road.place {points: [[10,67,0],[80,67,0]], width: 3}`, then
+  `/apitest place cabin 28 67 -19 INSTANT unowned noactor 0 pathStyle=minecraft:stone_bricks` (through `dev.command`); without
+  the token the placement is unchanged. Region lots style their approach on their own (the region's `path` / `foundation` roles).
+
+- **2026-10-09 (phase 6b, mod side):** new `dev.region.check|preview|design|nudge|progress|ghost|drop|drop.state|dump|planStale`,
+  `dev.survey.volume`, `dev.scenario.cams` and `dev.tiles.resends` (see "Regions (phase 6b)"). `dev.region.plan` takes `check`
+  and answers report, summary, previews, irFormat, requires, kitVersion, blobs, needVolumes and progress; its timeout is 15
+  minutes (the checker and renders). `dev.region.state` adds `actions` and `stale`. Chat commands `/architect region ...`.
+  apitest steps `api19` and `rnudge <region> <action>`. `tools/api-compat.mjs --gate6b` checks the 1.8.0, 1.7.0 and 1.6.0
+  apitest jars and the 0.11.0 mod jar's surface in one run.
 
 - **2026-10-08 (phase 6a):** new `dev.region.plan|prepare|prepare.state|cancelPrepare|realise|state|list|remove|logs`,
   `dev.undo.mark|check`, `dev.chunks.generated|status`, `dev.mspt.trace`, `dev.heap.gc` and `dev.tiles.stats` (see "Regions").

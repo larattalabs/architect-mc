@@ -81,4 +81,16 @@ public final class RegionBridge implements TileStream.Link {
 		}
 		return b.readBlob(blobId);
 	}
+
+	/** (6b) The helper's {@code kitVersion}, {@code irFormats}, {@code irKinds} (its snapshot), or null when unknown or not connected. */
+	public static @org.jspecify.annotations.Nullable JsonObject versions() {
+		ClientBridge b = ApiImpl.bridge();
+		return b == null || !b.connected() ? null : b.sidecarVersions();
+	}
+
+	/** (6b) Asks the launcher to (re)start the helper (the START_SIDECAR nudge); what happened. */
+	public static String restartSidecar() {
+		ClientBridge b = ApiImpl.bridge();
+		return b == null ? "no helper link on this side (a dedicated server)" : b.restartSidecar();
+	}
 }

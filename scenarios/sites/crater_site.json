@@ -1,0 +1,54 @@
+{
+  "id": "crater_site",
+  "purpose": "Steward's crater gate (6b gate item 8): open ground (relief under 48 over the claim; the pinned seed is desert and ocean near spawn), 300x300",
+  "world": {
+    "seed": "2026100906",
+    "preset": "normal",
+    "gamerules": "default"
+  },
+  "needs": {
+    "size": [
+      300,
+      300
+    ],
+    "relief": [
+      0,
+      48
+    ],
+    "waterMax": 12,
+    "treesMax": 30,
+    "naturalMin": 97,
+    "candidates": 80,
+    "step": 512,
+    "stopAt": 95
+  },
+  "fixture": {
+    "claim": [
+      -1174,
+      362,
+      -875,
+      661
+    ],
+    "yRange": [
+      4,
+      131
+    ],
+    "foundBy": "find-site crater_site @ seed 2026100906",
+    "surveySha": "96133ad04b032f954ff2335b704b3210c819ca3a4205c8ae066138ee346457e4",
+    "score": 87,
+    "stats": {
+      "biomes": {
+        "desert": 96,
+        "river": 4
+      },
+      "grid": [],
+      "min": 44,
+      "max": 91,
+      "mean": 67,
+      "water": 6,
+      "trees": 0,
+      "natural": 100,
+      "missing": 0
+    }
+  }
+}

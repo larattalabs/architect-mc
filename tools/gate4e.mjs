@@ -1194,7 +1194,12 @@ steps.megalite = async () => {
   const lst = await call('dev.placement.stats', {});
   await settle(2000);
   const pv1 = await verify(pad);
-  check(!(lst.ticksOver50ms > 0), `megalite: one lot's undo has no tick over 50 ms (max ${lst.msptMax?.toFixed(2) ?? '-'} ms)`, lst);
+  // (6b, coordinator 2026-10-10) MSPT bars judge Architect's own per-tick time (placementMsMax); the whole tick, the vanilla
+  // tick (serverMsptMax) and GC are recorded alongside and fail nothing on their own (a shared box under load)
+  // Architect's own = the placement ticks in the server thread's CPU time (placementCpuMsMax; wall time where the build lacks it)
+  const ownMs = (st) => st.placementCpuMsMax ?? st.placementMsMax;
+  const own = (st) => `Architect max ${ownMs(st)?.toFixed(2) ?? '-'} ms CPU; recorded: its wall max ${st.placementMsMax?.toFixed(2) ?? '-'}, tick max ${st.msptMax?.toFixed(2) ?? '-'}, vanilla max ${st.serverMsptMax?.toFixed(2) ?? '-'} ms`;
+  check(!(ownMs(lst) > 50), `megalite: one lot's undo has no Architect tick over 50 ms (${own(lst)})`, lst);
   check(rl.removed && pv1.mismatches === 0 && pv1.owned > pv0.owned, `megalite: one lot's undo leaves the pad exact (the pad owns ${pv0.owned} -> ${pv1.owned} cells, `
     + `${pv1.mismatches} differ from its after; ${lotUndo.toFixed(2)} s)`, { pv0, pv1, rl });
   await leaveWorld();
@@ -1208,15 +1213,15 @@ steps.megalite = async () => {
   const gst = await call('dev.placement.stats', {});
   const h1 = (await hash(MEGA_BOX)).sha256;
   check(g.removed && h1 === h0, `megalite: the group undo is exact (${g.restored} cells in ${groupUndo.toFixed(1)} s)`, g);
-  check(gst.ticksOver50ms === 0, `megalite: the group undo has no tick over 50 ms (max ${gst.msptMax?.toFixed(2)} ms)`, gst);
+  check(ownMs(gst) <= 50, `megalite: the group undo has no Architect tick over 50 ms (${own(gst)})`, gst);
   await leaveWorld();
   for (const ms of [1, 10]) {
     runs[ms] = await megaRun(`G4E Mega${ms}`, ms);
-    check(runs[ms].failed.length === 0 && runs[ms].stats.ticksOver50ms === 0, `megalite ${ms} ms: ${Math.round(runs[ms].stats.cellsPerSecond)} cells/s, `
-      + `wall ${runs[ms].wall.toFixed(1)} s, MSPT max ${runs[ms].stats.msptMax?.toFixed(2)} ms`, runs[ms].stats);
+    check(runs[ms].failed.length === 0 && ownMs(runs[ms].stats) <= 50, `megalite ${ms} ms: ${Math.round(runs[ms].stats.cellsPerSecond)} cells/s, `
+      + `wall ${runs[ms].wall.toFixed(1)} s, ${own(runs[ms].stats)}`, runs[ms].stats);
     await leaveWorld();
   }
-  check(r4.stats.ticksOver50ms === 0, `megalite 4 ms: ${Math.round(r4.stats.cellsPerSecond)} cells/s, wall ${r4.wall.toFixed(1)} s, MSPT max ${r4.stats.msptMax?.toFixed(2)} ms`, r4.stats);
+  check(ownMs(r4.stats) <= 50, `megalite 4 ms: ${Math.round(r4.stats.cellsPerSecond)} cells/s, wall ${r4.wall.toFixed(1)} s, ${own(r4.stats)}`, r4.stats);
   const rec = Object.fromEntries(Object.entries(runs).map(([k, r]) => [k, { cellsPerSecond: r.stats.cellsPerSecond, wallSeconds: r.wall, msptMax: r.stats.msptMax,
     msptMean: r.stats.msptMean, ticksOver50ms: r.stats.ticksOver50ms, peakHeapMb: r.heap.peakMb, journalBytes: r.journalBytes, cells: r.cells, bytesPerCell: r.bytesPerCell }]));
   ctx.mega = { runs: rec, lotUndoSeconds: lotUndo, groupUndoSeconds: groupUndo, groupUndoMsptMax: gst.msptMax, relog: r4.relog };

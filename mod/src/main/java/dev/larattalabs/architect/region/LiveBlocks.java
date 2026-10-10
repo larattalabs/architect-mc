@@ -10,6 +10,14 @@ final class LiveBlocks {
 	 * burning, a hopper moving items, a campfire cooking, a spawner counting down, sculk listening, a brewing stand brewing).
 	 * A same-block block-entity mismatch on anything else (a chest whose loot table resolved, a sign, a banner) is unexplained.
 	 */
+	/** (6b) Plants a grazing sheep eats down to air (its EatBlockGoal): E-normal's {@code grazed}, the world's doing. */
+	static final Set<String> GRAZED = Set.of("minecraft:short_grass", "minecraft:tall_grass", "minecraft:fern", "minecraft:large_fern");
+
+	/** (6b) Whether {@code was} -> {@code now} (block ids) is a grazed plant. */
+	static boolean grazed(String was, String now) {
+		return GRAZED.contains(block(was)) && "minecraft:air".equals(block(now));
+	}
+
 	static final Set<String> LIVE_BE = Set.of("minecraft:bee_nest", "minecraft:beehive", "minecraft:furnace", "minecraft:blast_furnace",
 		"minecraft:smoker", "minecraft:hopper", "minecraft:brewing_stand", "minecraft:campfire", "minecraft:soul_campfire", "minecraft:spawner",
 		"minecraft:trial_spawner", "minecraft:vault", "minecraft:sculk_sensor", "minecraft:calibrated_sculk_sensor", "minecraft:sculk_catalyst",

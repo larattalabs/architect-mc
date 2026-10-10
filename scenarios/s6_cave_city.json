@@ -1,0 +1,78 @@
+{
+  "id": "s6_cave_city",
+  "phase": "7b",
+  "version": 0,
+  "brief": "a city carved inside the mountain",
+  "world": {
+    "seed": "2026100906",
+    "preset": "normal",
+    "gamerules": "gallery"
+  },
+  "fixture": {
+    "claim": [
+      3672,
+      -1780,
+      3863,
+      -1589
+    ],
+    "yRange": [
+      22,
+      173
+    ],
+    "foundBy": "find-site s6_cave_city @ seed 2026100906",
+    "surveySha": "2fab9c270debba20cc8d5c2fbcdfcaf60450e784f40c7b0d8043108a9864d852",
+    "score": 34,
+    "stats": {
+      "biomes": {
+        "meadow": 73,
+        "plains": 23,
+        "forest": 2,
+        "river": 2
+      },
+      "grid": [],
+      "min": 62,
+      "max": 133,
+      "mean": 112.6,
+      "water": 2,
+      "trees": 1,
+      "natural": 100,
+      "missing": 0
+    }
+  },
+  "flat": {
+    "preset": "flat",
+    "claimOffset": [
+      0,
+      0
+    ],
+    "gamerules": "exact"
+  },
+  "needs": {
+    "size": [
+      192,
+      192
+    ],
+    "relief": [
+      40,
+      200
+    ],
+    "biomes": {
+      "any": [
+        "peaks",
+        "slopes",
+        "windswept",
+        "stony",
+        "grove",
+        "meadow"
+      ],
+      "share": 0.2
+    },
+    "candidates": 60,
+    "step": 384,
+    "stopAt": 30,
+    "center": [
+      3000,
+      -1300
+    ]
+  }
+}

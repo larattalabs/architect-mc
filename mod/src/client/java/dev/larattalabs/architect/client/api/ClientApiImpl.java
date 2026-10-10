@@ -56,4 +56,17 @@ public final class ClientApiImpl implements ArchitectClientApi {
 		}
 		dev.larattalabs.architect.client.placement.DeltaGhost.request(key, siteId, toVersion);
 	}
+
+	@Override
+	public void previewRegion(String planId, @org.jspecify.annotations.Nullable String stage) {
+		if (planId == null || planId.isBlank()) {
+			throw new IllegalArgumentException("previewRegion needs a plan id");
+		}
+		dev.larattalabs.architect.client.placement.RegionGhost.show(planId, stage);
+	}
+
+	@Override
+	public void clearRegionPreview() {
+		dev.larattalabs.architect.client.placement.RegionGhost.hide();
+	}
 }

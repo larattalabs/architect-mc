@@ -1,0 +1,120 @@
+{
+ "note": "S1 (floating_islands) and the four family fixtures over synthSurvey(claim, \"golden\"), node pinned to \"golden\"; tiles: stage|set|key -> sha256 of the ARTL payload",
+ "cases": {
+  "floating_islands": {
+   "irSha": "bde0d959b3ee557fd78e6415b77f6fde690e39e8023de2f2647dfdef98057e62",
+   "format": 2,
+   "requires": [
+    "forms",
+    "material:rule",
+    "shape:capsuleChain",
+    "shape:ellipsoid",
+    "shape:strata",
+    "shape:warp"
+   ],
+   "cells": 59411,
+   "tiles": {
+    "islands|terrain|-1,-1": "04f678d3f6858c8c0f3949e9000b873b90f9bed1e2cc55ee189b99d3b1c4afdf",
+    "islands|terrain|-1,0": "f874c3027e279ee88946c238265e7a79853daca8923d30a52522862be0652161",
+    "islands|terrain|0,-1": "bf805df90af9aa1566abfdb22f9b7c4b13a594bfe8b1179d112e8062a7d0cbdd",
+    "islands|terrain|0,0": "d0a100460d91cb688404fce7038423888637ecce8d385a50c16aa6403c2955b3",
+    "ways|path|-1,-1": "84f63b4a4e2e4f8c0590fae0954b1915f59d19d894d056f798d3b9ad89e6b5d8",
+    "ways|path|-1,0": "d3756edfc3bcab42b7ff01838b16d381ca406c6fb9a5185cf633721fb385b55d",
+    "ways|path|0,-1": "8e4ea6ec4ecfbf1c0173b06b73fe6e2d64f1298135caf1fd7073c322ad3b1c48",
+    "ways|path|0,0": "38289be82d584cac3687d2381ec5310543a6a58795a7fb6a370eb1c4bfc5278a"
+   }
+  },
+  "crater_works": {
+   "irSha": "19c79e1e91be86c3ab9b30c93df1a4396f1cc2e1704d43b386fec8011dd498eb",
+   "format": 1,
+   "requires": [],
+   "cells": 896174,
+   "tiles": {
+    "ground|terrain|-1,-1": "e02f3952861a328b6dd7c38ca950a5385fe57ffa640df0a7c1c5c9381de081d3",
+    "ground|terrain|-1,-2": "7f87925569fd8ba777948e36c3c98d300776c883ed5a4e85a1c5295f3e718d80",
+    "ground|terrain|-1,0": "87cfeb71b956c0b3c113dad9dc2688da13b4ce98dffaa6c8623ae8bd618e45a2",
+    "ground|terrain|-1,1": "98a2b82b0d84d262dff6b5b4eae7827bd85c656cfc84ff81a33caa184bc089ee",
+    "ground|terrain|-2,-1": "8e239f1d80cbaaa772fda3a83b40d0f1900f1f1be45daff11d91a08eac83d87d",
+    "ground|terrain|-2,-2": "553d35175b033dcba75c78ed90e1f76a9477bbf75e7af0a29c6fe986e0ca6886",
+    "ground|terrain|-2,0": "22b2b6c2ba3d665f061ba371cc321e7ee33bc03d6b473bfd2afaf06f151492a8",
+    "ground|terrain|-2,1": "553d35175b033dcba75c78ed90e1f76a9477bbf75e7af0a29c6fe986e0ca6886",
+    "ground|terrain|0,-1": "a9aeabcab944b898e2bf41627122f69eeb61d1e20d4fd244ae6d8e11b2335324",
+    "ground|terrain|0,-2": "46c3b43dd20bed120c5b1d43400b4b389df7d6541b7cae82eaf215ed8cdfbd27",
+    "ground|terrain|0,0": "a27fae7b7479ad079a236c5e3101fa1c68f0ff6f3dce5691f9eb1dcc70ea5f06",
+    "ground|terrain|0,1": "af0d90772c27e3904a3267ba24f7c3e2fca70384fc21eef1a4c5fc197c8843ab",
+    "ground|terrain|1,-1": "8db1a6ed9b83c8c6431e674627696eca083229932138c26b3a8bdd70a5a04c34",
+    "ground|terrain|1,-2": "553d35175b033dcba75c78ed90e1f76a9477bbf75e7af0a29c6fe986e0ca6886",
+    "ground|terrain|1,0": "e534f8d7d49e899fc93d4abca032a6598a867e86d66defdf9042f9f748efec63",
+    "ground|terrain|1,1": "553d35175b033dcba75c78ed90e1f76a9477bbf75e7af0a29c6fe986e0ca6886",
+    "ways|path|-1,-1": "d90d32ddb257e665c0d92987be2641c01888c85fa94f0db80012682b23b7af80",
+    "ways|path|-1,0": "863c46f643f640374f67e75a28526e07ad9957b3409c6940309dc29158f1bf1e",
+    "ways|path|0,-1": "2b4ae2277326de9a4bcbcf57ab78f996b8a999e5384e086abd8bf4a8243e41c8",
+    "ways|path|0,0": "6f3bd21d176d42b40e92c02000b7118f5816dd2f3a78078dd378030f5e8bbacd",
+    "ways|path|0,1": "e510bd0ede510c8c20ae32fb10a18933385387e9b99273a9757cba888d5a73ee"
+   }
+  },
+  "sky_isle": {
+   "irSha": "7cec3cc80ad4b9feca785c82ff35fafc79c065ef60dad468e5eb35cd51fbe53b",
+   "format": 1,
+   "requires": [],
+   "cells": 49519,
+   "tiles": {
+    "mass|terrain|-1,-1": "45ea38ca8f1f4cfdfbc4c7b8a9e609899354e2ef52d6c3768a10c323e441b315",
+    "mass|terrain|-1,0": "6ef43352f51d468600f1d76a436838ea6d86a9f552316fdd7b21643c007d5fb0",
+    "mass|terrain|0,-1": "e83ea6783389a6981fbe75e2d4442112e02716c2df30d1b7b67903dd8f0ef3e7",
+    "mass|terrain|0,0": "978569342e7f2b6aa8e78884ea3b7dbcef1df91c493482ef1b17a3bc00a22bd3",
+    "ways|path|-1,0": "1e41caad6a38ae9b120d1b9c54e27d2f1cd3f6e35ca032f4e183723ed45327ed",
+    "ways|path|0,0": "3a50a9497f17683cf36676237e3166bca45aebf6c321dcf6dea520d5c9ac5606"
+   }
+  },
+  "rift_city": {
+   "irSha": "8f21ac418bbeaf38a52bd18c4ea953abd27e3fd856220576abc1e91ec95adc17",
+   "format": 2,
+   "requires": [
+    "blobs:side",
+    "fields",
+    "material:rule",
+    "shape:ellipsoid",
+    "shape:warp"
+   ],
+   "cells": 186801,
+   "tiles": {
+    "ground|terrain|-1,-1": "9a855432639b3d78565574e1dc8ccffdf00897da571b9d2c4caea24ef4719409",
+    "ground|terrain|-1,0": "470132a49ec2c7c4d534468dfc1e63cdc328d5ed7c33effd6b04177a04f146b2",
+    "ground|terrain|-2,-1": "6be8d38e198b7bc8717bfefc3138426fd1e29fe15373ef86f372054d85180509",
+    "ground|terrain|-2,0": "4a1bdc7f31c4bf174e6e40f14892099d7cc2b978cd1018b037dd969e8b2060b7",
+    "ground|terrain|0,-1": "f89194bcfbd8782963da773863d5a9b88adc27cfd9598502e2732112c296922b",
+    "ground|terrain|0,0": "23e2c27044a80f812dba5fafc15a057ed8dbb39a72f19f73976b178c7a3e31db",
+    "ground|terrain|1,-1": "da176e6d85437214a8c766aadcd18cb2bf0fc4966a3ba6c3672b5d827c4e4fb3",
+    "ground|terrain|1,0": "348dac27ba61e046fd646bf97620e3a4822fb60927fbd9ade5e200c73c5415a5",
+    "ways|path|-1,-1": "9143cf465e6fe2cba7ba65994e2e74dc379c696344889285d0531a91337bfc14",
+    "ways|path|-1,0": "149cb932713d9bb46c8bb1ee6eb511079cd3fe6f090144f0c7060c6f9a66f73c",
+    "ways|path|-2,-1": "87f9f67d03ca0aeeb92b55c9d1e699e5ea3c33b0be058c8fb957d67606e1da09",
+    "ways|path|-2,0": "c085bcd0d084086c5769e1b9053b9762570ba03ef28cd6a0f3c324712af432d1",
+    "ways|path|0,-1": "6e64f8d59f0da71ca46ef38a4a009e1d06d55d34055e292ee7ef8cb2d6f5f528",
+    "ways|path|0,0": "a3cf15ecaa1fa3e21b240fd3ac62fca23134f2b6450d023b28c0096b07f92a48",
+    "ways|path|1,-1": "e1a1bf4d55ac97c9a944f142fa2428f6ef249eda0990da4423035ea648a874c3",
+    "ways|path|1,0": "4d27f0906908d57fc192dcc349b241911fd00084cff3d8228363070cfc2e932d"
+   }
+  },
+  "walled_hill": {
+   "irSha": "05ca529ac92ca6b32fa2c3df3d96e2dd5b5567b6aeef5db119c1c5fc859a687a",
+   "format": 1,
+   "requires": [],
+   "cells": 115991,
+   "tiles": {
+    "ground|terrain|-1,-1": "0d0f347137df7e3396a6bddc34ce618cd2f0e67f7cc28707260b9298142a0b14",
+    "ground|terrain|-1,0": "6f0d5d513f2729ce2188963197ada3d3bafc07db54e84cc3fbb946e45257245e",
+    "ground|terrain|-1,1": "b2c2124f3519abdaaaf416b770854cfcdc906ab43c3b361d5aa47d4ed06d3619",
+    "ground|terrain|0,-1": "8f48ffaa40552111acb84f7c5a8db4febb0000ea99b82a9c42d25736ec7dfa75",
+    "ground|terrain|0,0": "f4bbb112f7bed8320da7e81e54c7d7f51fc4796cb4ab61f8abc4a9253844df24",
+    "ground|terrain|0,1": "9e213eb6d41e96e25a77cae4267b390310d765c492151875a4e5e8f89850e51f",
+    "ways|path|-1,0": "f6962c46144dd2bddeba1e466db0f3eeb2c54b7ec260793b12b47ef38cd9a91a",
+    "ways|path|-1,1": "8fb1f893c9ff21ca47f86371ac44856d8f86636d47ee58a71d78acaac1abb4a0",
+    "ways|path|0,-1": "9296906f1c2622122b095c000007fb1d0c61bd0c30bf1d2d06c2b91e3844c89c",
+    "ways|path|0,0": "ac29ee27dd26330601e196e6d2282241d8b2ba66a1736c5ef73942f7d09b811b",
+    "ways|path|0,1": "5e858245bb6d3b78d04a289e0c2bac6de4716d71f0506fb1faba440ce9130cec"
+   }
+  }
+ }
+}

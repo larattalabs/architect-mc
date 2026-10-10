@@ -243,6 +243,8 @@ public class ApiTest implements ModInitializer {
 				return ApiTestDelta.step(src, a);
 			}
 			case "api18":
+			case "api19":
+			case "rnudge":
 			case "rplan":
 			case "rprepare":
 			case "rrealise":
@@ -270,7 +272,8 @@ public class ApiTest implements ModInitializer {
 			}
 			case "place":
 			case "check": {
-				// place <bp> <x> <y> <z> <AUTO|INSTANT|CONSTRUCTION> <owned|unowned> <actor|noactor> [rotation 0-3] [force]
+				// place <bp> <x> <y> <z> <AUTO|INSTANT|CONSTRUCTION> <owned|unowned> <actor|noactor> [rotation 0-3] [force] [layer]
+				// [owner=<id>] [pathStyle=<block id>] (1.9.0: the entrance approach styled as a road surface, joining a road it meets)
 				PlaceRequest r = request(src, a, player);
 				if (a[0].equals("check")) {
 					return verdict(api.sites(server).check(r));
@@ -401,6 +404,7 @@ public class ApiTest implements ModInitializer {
 		boolean force = false;
 		boolean layer = false;
 		String owner = owned ? OWNER : null;
+		String pathStyle = null;
 		for (int i = 9; i < a.length; i++) {
 			if (a[i].equals("force")) {
 				force = true;
@@ -408,11 +412,15 @@ public class ApiTest implements ModInitializer {
 				layer = true;
 			} else if (a[i].startsWith("owner=")) {
 				owner = a[i].substring(6);
+			} else if (a[i].startsWith("pathStyle=")) {
+				pathStyle = a[i].substring(10);
 			}
 		}
 		// 1.5.0: the overlap policy (null = REFUSE, as a 1.4.0 caller)
-		return new PlaceRequest(a[1], src.getLevel(), origin, rot, mode, owner, ext, force, actor ? player : null,
+		PlaceRequest r = new PlaceRequest(a[1], src.getLevel(), origin, rot, mode, owner, ext, force, actor ? player : null,
 			layer ? dev.larattalabs.architect.api.OverlapPolicy.LAYER : null);
+		// 1.9.0: the entrance approach's path style (6b), only when asked for (the 1.5.0 constructor otherwise, as before)
+		return pathStyle == null ? r : r.withPathStyle(pathStyle);
 	}
 
 	// ------------------------------------------------------------------ JSON views

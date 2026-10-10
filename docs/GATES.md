@@ -16,7 +16,7 @@ node tools/gate-run.mjs regress --only 4e-orders,4e-crash   # a subset, in chain
 
 | chain | steps | typical time |
 |---|---|---|
-| `quick` | unit tests (mod `gradlew build`, kit, sidecar vitest); the 4a/4b/4c sim suites (jobs, sets, massing); the unchanged 1.7.0/1.6.0/1.5.0 apitest jars; 4e mega-lite | about 10 min (measured: 9.5 min) |
+| `quick` | unit tests (mod `gradlew build`, kit, sidecar vitest); the 4a/4b/4c sim suites (jobs, sets, massing); the unchanged 1.8.0/1.7.0/1.6.0 apitest jars; 4e mega-lite | about 10 min (measured: 9.5 min) |
 | `regress` | `quick` plus the 4d gate (all); 4e orders, crash and the village/roads throughput at 4 ms; 5b chains and village; 6a mega_bench B with the **fast** walk | about 3 h (estimate from the 6a step times) |
 | `engine` | `regress` (with mega_bench B on the **full** walk instead of the fast one) plus 6a megaA, megaB, crash, eflat, inv3, staged and heap | about 5 h (estimate) |
 

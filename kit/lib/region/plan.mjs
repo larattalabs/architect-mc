@@ -6,15 +6,16 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { CORE_ROLES, MACRO_ROLES, PALETTES, ROLE_NAME, rolesOfPalette } from '../kit.mjs';
 import { fnv64, splitmix64, fromDecimal64, toDecimal64 } from '../noise.mjs';
-import { evalTile, MAX_OPS } from '../realise.mjs';
+import { evalTile, MAX_OPS, walkKinds } from '../realise.mjs';
 import { shapeBounds, yrefAbs } from '../sdf.mjs';
 import { FLAG_MISSING, asColumns, canonicalJson, makeColumns, sha256Hex } from './pack.mjs';
+import { decodeArbl } from '../realise.mjs';
 import { COND, DEFAULT_MACRO_ROLES, Region, blockState, region as makeRegion } from './program.mjs';
 import { surveyApi, windowFromSurvey } from './survey.mjs';
 import { validateParams, resolveValues } from '../params.mjs';
 
 /** The kit's region engine version (recorded in every IR). */
-export const KIT_VERSION = '0.11.0';
+export const KIT_VERSION = '0.12.0';
 
 export const LIMITS = Object.freeze({
   claim: 1024, claimBig: 2048, irBytes: 4 * 1024 * 1024, ops: MAX_OPS, lots: 1024, paths: 256, stages: 64,
@@ -24,8 +25,9 @@ export const LIMITS = Object.freeze({
 export const Y_MARGIN = 64;
 
 /** The roles a plan resolves: the rustic built-in's core roles and the macro defaults, under the bible's roles. */
-export function resolveRoles(bibleRoles = {}) {
-  const base = { ...rolesOfPalette(PALETTES.rustic), ...DEFAULT_MACRO_ROLES };
+export function resolveRoles(bibleRoles = {}, programRoles = {}) {
+  // (6b) a program's own role defaults (`export const roles`) sit between the rustic defaults and the bible's roles
+  const base = { ...rolesOfPalette(PALETTES.rustic), ...DEFAULT_MACRO_ROLES, ...programRoles };
   const out = {};
   for (const [k, v] of Object.entries({ ...base, ...bibleRoles })) {
     if (!ROLE_NAME.test(k)) throw new Error(`role name '${k}' must match ${ROLE_NAME}`);
@@ -147,7 +149,7 @@ export async function planRegion(o) {
 
   const raw = asColumns(o.survey);
   const { columns: survey, missing } = fillMissing(raw);
-  const roles = Object.freeze(resolveRoles(o.roles ?? {}));
+  let roles;
   const notes = [];
   if (missing) notes.push(`survey: ${missing} of ${survey.width * survey.depth} columns missing (filled from their neighbours)`);
 
@@ -167,11 +169,14 @@ export async function planRegion(o) {
     if (typeof id !== 'string' || !/^[a-z][a-z0-9_]{0,47}$/.test(id)) throw new Error('the program must export id matching [a-z][a-z0-9_]{0,47}');
     if (typeof mod.default !== 'function') throw new Error('the program must export default (ctx) => Region');
     validateParams(mod.params);
+    if (mod.roles !== undefined && (typeof mod.roles !== 'object' || mod.roles === null || Array.isArray(mod.roles))) throw new Error('the program\'s roles must be {role: blockState}');
+    roles = Object.freeze(resolveRoles(o.roles ?? {}, mod.roles ?? {}));
     const params = resolveValues(mod.params ?? {}, o.params ?? {});
     const seed = o.seed === undefined || o.seed === null || o.seed === 'default' ? defaultSeed(id, params, claim) : toDecimal64(...fromDecimal64(o.seed));
     Object.assign(ctx, {
       claim: Object.freeze({ ...claim }), survey: surveyApi(survey, claim), roles, seed, params: Object.freeze({ ...params }),
       kitVersion: o.kitVersion ?? KIT_VERSION, rng: (label) => makeRng(seed, String(label)),
+      volumes: o.volumes ?? [],
     });
     ctx.region = () => makeRegion(ctx);
     out = await mod.default(ctx);
@@ -196,12 +201,28 @@ export async function planRegion(o) {
   const budgetCap = r.budgetCells ?? LIMITS.budgetDefault;
   if (budgetCap > LIMITS.budgetHard) throw new Error(`budget ${budgetCap} is over the hard cap ${LIMITS.budgetHard}`);
 
+  // (6b) side blobs: name -> {sha, bytes, kind} in the IR; the bytes by sha beside it
+  const sideBytes = new Map();
+  const irBlobs = {};
+  for (const [name, b] of Object.entries(r.sideBlobs)) {
+    const sha = sha256Hex(b.bytes);
+    sideBytes.set(sha, b.bytes);
+    irBlobs[name] = { sha, bytes: b.bytes.length, kind: b.kind };
+  }
+  let total = 0;
+  for (const b of sideBytes.values()) total += b.length;
+  if (total > 64 * 1024 * 1024) throw new Error(`the plan's blobs are ${total} bytes (at most 64 MB)`);
   const blobs = Object.keys(r.blobs).length ? r.blobs : undefined;
+  const blobResolver = (name) => {
+    const e = irBlobs[name];
+    if (!e) throw new Error(`shape: blob '${name}' is not in the IR's blobs`);
+    return decodeArbl(sideBytes.get(e.sha), `blob ${name}`);
+  };
   const parts = r.parts.map((p) => {
     const si = stages.indexOf(p.stage);
     const ops = p.ops.map((op) => {
       const cond = op.cond === COND.IF_NATURAL && (p.set === 'path' || si > 0) ? COND.ALWAYS_OURS : op.cond;
-      const b = opBounds(op, blobs);
+      const b = opBounds(op, Object.keys(irBlobs).length ? blobResolver : blobs);
       return { ...op, cond, bounds: b };
     });
     return { id: p.id, stage: p.stage, set: p.set, ops };
@@ -232,6 +253,22 @@ export async function planRegion(o) {
     budget: { cells: 0, removed: 0, added: 0 }, tiles: tilesOut,
   };
   if (blobs) ir.blobs = blobs;
+  // (6b) format-2 members, only when used; then format and requires from the IR's actual contents
+  if (Object.keys(irBlobs).length) ir.blobs = irBlobs;
+  if (Object.keys(r.fields).length) ir.fields = r.fields;
+  if (Object.keys(r.volumesUsed).length) ir.volumes = r.volumesUsed;
+  if (r.forms.length) {
+    const base = new Map();
+    let n = 0;
+    for (const p of parts) { base.set(p.id, n); n += p.ops.length; }
+    ir.forms = r.forms.map((f) => ({ id: f.id, generator: f.generator, version: f.version, params: f.params, seed: f.seed, bounds: f.bounds,
+      ops: Array.from({ length: f.opsTo - f.opsFrom }, (_, k) => base.get(f.part) + f.opsFrom + k) }));
+  }
+  if (r.floatingDecl.length) ir.floating = r.floatingDecl;
+  if (r.utility.length) ir.utility = r.utility;
+  const kinds = walkKinds(ir);
+  if (kinds.length) { ir.format = 2; ir.requires = kinds; }
+  const evalBlobs = (sha) => sideBytes.get(sha);
 
   // ---- the exact budget: every tile of every change-set over the survey
   const tBudget = performance.now();
@@ -244,7 +281,7 @@ export async function planRegion(o) {
       for (const key of tilesOut[s][set]) {
         let w = windows.get(key);
         if (!w) { w = windowFromSurvey(survey, key); w.flags.forEach((f, i) => { w.flags[i] = f & ~FLAG_MISSING; }); windows.set(key, w); }
-        const e = evalTile(ir, key, w, { stage: s, set, countOnly: true });
+        const e = evalTile(ir, key, w, { stage: s, set, countOnly: true, blobs: evalBlobs });
         cells += e.count; removed += e.removed; added += e.added; evaluated++;
         if (e.minY !== null) { cellLo = Math.min(cellLo, e.minY); cellHi = Math.max(cellHi, e.maxY); }
         perStage[s][set] += e.count;
@@ -278,5 +315,8 @@ export async function planRegion(o) {
     tileEvals: evaluated, cellsPerStage: perStage, surveyMissing: missing,
   };
   // a fresh object: evalTile caches compiled IRs per object, and the claim changed after the budget pass
-  return { ir: JSON.parse(irJson), irJson, irSha: sha256Hex(irJson), notes, stats };
+  stats.irFormat = ir.format;
+  stats.requires = ir.requires ?? [];
+  const meta = { format: 1, paths: r.meta.paths, lots: r.meta.lots, parts: r.meta.parts };
+  return { ir: JSON.parse(irJson), irJson, irSha: sha256Hex(irJson), notes, stats, blobs: sideBytes, meta, needVolumes: r.needVolumes };
 }

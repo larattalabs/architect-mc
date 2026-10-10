@@ -1,0 +1,14 @@
+{
+ "program": "crater_works",
+ "claim": 200,
+ "seed": "fixture",
+ "errors": 0,
+ "findings": [
+  {
+   "rule": "M8",
+   "severity": "warning",
+   "part": null,
+   "reason": "the rubble rim wall top is walkable where the land outside rises to it, and it stands beside the crater edge (the wall is 2 high, no parapet)"
+  }
+ ]
+}

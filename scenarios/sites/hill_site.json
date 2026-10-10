@@ -1,0 +1,51 @@
+{
+  "id": "hill_site",
+  "purpose": "the walled-hill pick brief (6b gate item 8b): a hill",
+  "world": {
+    "seed": "2026100906",
+    "preset": "normal",
+    "gamerules": "default"
+  },
+  "needs": {
+    "size": [
+      220,
+      220
+    ],
+    "relief": [
+      14,
+      70
+    ],
+    "waterMax": 15,
+    "candidates": 80,
+    "step": 512,
+    "stopAt": 90
+  },
+  "fixture": {
+    "claim": [
+      -110,
+      402,
+      109,
+      621
+    ],
+    "yRange": [
+      2,
+      139
+    ],
+    "foundBy": "find-site hill_site @ seed 2026100906",
+    "surveySha": "e1fc5ba4b26b37605df6f303d57a0019511bab567c9b38b4de9801eda04e1600",
+    "score": 95,
+    "stats": {
+      "biomes": {
+        "desert": 100
+      },
+      "grid": [],
+      "min": 42,
+      "max": 99,
+      "mean": 70.9,
+      "water": 0,
+      "trees": 0,
+      "natural": 100,
+      "missing": 0
+    }
+  }
+}

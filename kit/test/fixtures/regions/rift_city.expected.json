@@ -1,0 +1,14 @@
+{
+ "program": "rift_city",
+ "claim": 256,
+ "seed": "fixture",
+ "errors": 0,
+ "findings": [
+  {
+   "rule": "M5",
+   "severity": "warning",
+   "part": null,
+   "reason": "a few floor cells between the floor lamps (every 9 along each wall) and a tower foot are dark"
+  }
+ ]
+}
