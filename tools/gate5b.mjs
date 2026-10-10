@@ -23,11 +23,14 @@ fs.mkdirSync(OUT, { recursive: true });
 // the client runs from a separate worktree (compiling here never changes a running client's classes)
 const RUN = process.env.GATE5B_RUN ? path.resolve(process.env.GATE5B_RUN) : path.resolve(root, '..', 'architect-mc-5b-run');
 const V090 = path.resolve(root, '..', 'architect-mc-v090');
+// the old-version client's ports (8892/8893 unless another run holds them: ARCHITECT_GATE_OLD_SIDECAR_PORT / _DEV_PORT)
+const OLD_SIDECAR_PORT = Number(process.env.ARCHITECT_GATE_OLD_SIDECAR_PORT || 8892);
+const OLD_DEV_PORT = Number(process.env.ARCHITECT_GATE_OLD_DEV_PORT || 8893);
 /** The two clients: the 0.10.0 gate client (run worktree) and the 0.9.0 one (tag v0.9.0, for the downgrade note). */
 const CLIENTS = {
   new: { name: '0.10.0', dir: RUN, port: Number(process.env.ARCHITECT_DEV_PORT || 8891), script: 'tools/run-gate5b-client.sh', env: {} },
-  old: { name: '0.9.0', dir: V090, port: 8893, script: 'tools/run-gate4e-client.sh',
-    env: { ARCHITECT_PORT: '8892', ARCHITECT_DEV_PORT: '8893', ARCHITECT_SHOTS_DIR: path.join(OUT, 'shots090') } },
+  old: { name: '0.9.0', dir: V090, port: OLD_DEV_PORT, script: 'tools/run-gate4e-client.sh',
+    env: { ARCHITECT_PORT: String(OLD_SIDECAR_PORT), ARCHITECT_DEV_PORT: String(OLD_DEV_PORT), ARCHITECT_SHOTS_DIR: path.join(OUT, 'shots090') } },
 };
 let CUR = CLIENTS.new;
 let GAME_DIR = path.join(CUR.dir, 'mod', 'run');

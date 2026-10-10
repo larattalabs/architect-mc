@@ -7,30 +7,34 @@
 // only the stub/sim client scripts.
 //
 //   node tools/gate-run.mjs <chain> [--shards N] [--only a,b] [--from step] [--plan]
-//   node tools/gate-run.mjs change  --since <ref> | --range A...B [--shards N] [--plan]    unit suites + the mapped steps
-//   node tools/gate-run.mjs slice   --since <ref> | --range A...B [--shards N] [--plan]    quick + the affected steps
+//   node tools/gate-run.mjs change  --since <ref> | --range A...B | --files a,b [--shards N] [--plan]   unit suites + mapped steps
+//   node tools/gate-run.mjs slice   --since <ref> | --range A...B | --files a,b [--shards N] [--plan]   quick + the affected steps
 //   node tools/gate-run.mjs release [--release <tag>] [--since <ref>] [--shards N] [--plan]  everything, duplicates rotated
 //   node tools/gate-run.mjs --list                  the chains and tiers
-//   [--notify | --notify-dry-run]                   off by default
+//   [--notify | --notify-dry-run]                   off by default (Noah: no Discord pings)
 //
 // --plan prints the selection (impact, rotation and what it skipped), the steps, clients, timeouts, resources, shards and an
 // estimated wall time, and exits without running anything.
 //
-// Shards (--shards N, at most shards.max): shard 1 is the run worktree GATE_RUN_DIR on ARCHITECT_GATE_SIDECAR_PORT /
-// ARCHITECT_GATE_DEV_PORT; shard k>1 is <run worktree>-s<k> on the k-th port pair of GATE_SHARD_PORTS (default
-// 8896:8897,8898:8899). Each shard has its own client, worktree, ports and evidence dir (<out>/s<k>/ when N > 1). Steps declare
-// what they need: steps sharing a resource never overlap, a `bench` step (timing or MSPT bars) runs alone, a step with `after`
-// runs on its dependency's shard, and a `stopOnFail` step is a barrier.
+// Where it runs (flag, else environment, else default). Several agents share this machine: a second runner names its own.
+//   --ports S:D[,S:D...]   GATE_PORTS     every shard's sidecar:DevBridge pair. Without it shard 1 is ARCHITECT_GATE_SIDECAR_PORT /
+//                                         ARCHITECT_GATE_DEV_PORT (8890/8891) and shards 2.. come from GATE_SHARD_PORTS (no default:
+//                                         a sharded run names its ports). 8892-8895 are never a shard's (old-version clients, eval).
+//   --run-dir DIR          GATE_RUN_DIR   shard 1's run worktree (../architect-mc-gate-run); shard k is <DIR>-s<k>
+//   --run-dirs A,B,C       GATE_RUN_DIRS  every shard's run worktree, explicitly
+//   --out DIR              GATE_RUNS_OUT  where runs go (<main checkout>/artifacts/gate-runs)
+//   --lock FILE            GATE_LOCK      the lock (<out>/gate-run.lock)
+//   --seed-dir DIR         GATE_SEED_DIR  read-only source of .gradle-home, node_modules and the gate worlds (../architect-mc-6a-run)
+//                          GATE_SNAPSHOT_DIR  prepared worlds restored by APFS clone (the seed's mod/run/saves)
+//                          GATE_NOTIFY=send|dry, GATE_NOTIFY_SCRIPT (~/Developer/_infra/discord-notify.sh); off by default
 //
-// Output: artifacts/gate-runs/<timestamp>-<chain>/ in the main checkout (GATE_RUNS_OUT overrides): summary.json (written at
-// the start with state "running", rewritten after every step, final state "done" | "stopped" | "aborted"), SUMMARY.md,
-// runner.log, <step>.log, the gates' own evidence under [s<k>/]gate4d/ gate4e/ gate5b/ gate6a/ sim-*/, client[-s<k>].log.
+// Shards (--shards N, at most shards.max): each has its own client, run worktree, port pair and evidence dir (<out>/s<k>/ when
+// N > 1). Steps declare what they need: steps sharing a resource never overlap, a `bench` step (timing or MSPT bars) runs alone,
+// a step with `after` runs on its dependency's shard, and a `stopOnFail` step is a barrier.
 //
-// Environment: ARCHITECT_GATE_SIDECAR_PORT / ARCHITECT_GATE_DEV_PORT (shard 1's pair, default 8890/8891; the gates' old-version
-// clients use 8892/8893 and eval sidecars 8894/8895), GATE_SHARD_PORTS, GATE_RUN_DIR (run worktree, default
-// ../architect-mc-gate-run), GATE_SEED_DIR (read-only source of .gradle-home, node_modules and the gate worlds, default
-// ../architect-mc-6a-run), GATE_SNAPSHOT_DIR (prepared worlds, default the seed's mod/run/saves), GATE_RUNS_OUT,
-// GATE_NOTIFY_SCRIPT (default ~/Developer/_infra/discord-notify.sh), GATE_NOTIFY=send|dry (default off).
+// Output: <out>/<timestamp>-<chain>/: summary.json (written at the start with state "running", rewritten after every step,
+// final state "done" | "stopped" | "aborted"), SUMMARY.md, runner.log, <step>.log, the gates' own evidence under
+// [s<k>/]gate4d/ gate4e/ gate5b/ gate6a/ sim-*/, client[-s<k>].log.
 
 import fs from 'node:fs';
 import os from 'node:os';
@@ -48,7 +52,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // ------------------------------------------------------------------ arguments and config
 
 const argv = process.argv.slice(2);
-const VALUED = ['--config', '--only', '--from', '--since', '--range', '--release', '--shards'];
+const VALUED = ['--config', '--only', '--from', '--since', '--range', '--files', '--release', '--shards', '--ports', '--run-dir', '--run-dirs', '--out', '--lock', '--seed-dir'];
 const flag = (f) => argv.includes(f);
 const opt = (f) => {
   const i = argv.indexOf(f);
@@ -120,6 +124,7 @@ function rotationKey() {
 }
 
 function rangeArg() {
+  if (opt('--files')) return null;
   if (opt('--range')) return opt('--range');
   if (opt('--since')) return `${opt('--since')}...HEAD`;
   return null;
@@ -139,12 +144,13 @@ function select() {
       range = null;
     }
   }
-  if (!range && chainName !== 'release') die(`${chainName} needs --since <ref> (e.g. origin/main) or --range A...B`);
+  const listed = opt('--files') ? opt('--files').split(',').map((f) => f.trim()).filter(Boolean) : null;
+  if (!range && !listed && chainName !== 'release') die(`${chainName} needs --since <ref> (e.g. origin/main), --range A...B or --files a,b`);
   let imp = null;
-  if (range) {
-    const files = changedFiles(SRC, range);
+  if (range || listed) {
+    const files = listed ?? changedFiles(SRC, range);
     imp = impactOf(files, cfg.impact ?? {});
-    info.range = range;
+    info.range = range ?? `--files (${files.length})`;
     info.impact = { files: imp.files, rules: Object.fromEntries(Object.entries(imp.rules).map(([k, v]) => [k, v.files.length])), unmapped: imp.unmapped, ignored: imp.ignored.length, tags: imp.tags };
     info.impactText = describeImpact(imp);
   }
@@ -154,22 +160,26 @@ function select() {
   info.placement = tags.has('placement');
   const t = cfg.tiers[chainName];
   if (chainName === 'change') {
+    // the unit suites always (minutes), unless the diff is only ignored paths (docs): then nothing
+    if (imp.files > imp.ignored.length) for (const s of t.always ?? []) want.add(s);
     for (const s of imp.change) want.add(s);
     if (imp.unmapped.length) {
       for (const s of t.fallback) want.add(s);
       info.notes.push(`unmapped files: the safe default added ${t.fallback.join(' ')}`);
     }
   } else if (chainName === 'slice') {
-    for (const s of cfg.chains[t.base]) want.add(s);
+    // a diff of only ignored paths (docs) runs nothing, as for change
+    if (imp.files > imp.ignored.length) for (const s of cfg.chains[t.base]) want.add(s);
+    else info.notes.push(`only ignored paths (docs etc.): ${t.base} skipped`);
     for (const s of [...imp.change, ...imp.slice]) want.add(s);
     if (imp.unmapped.length) {
       for (const s of t.fallback ?? []) want.add(s);
       info.notes.push(`unmapped files: the safe default is ${t.base} (already in)`);
     }
-    if (info.engine) {
+    if (info.engine && t.engineSlice?.length) {
       for (const s of t.engineSlice) want.add(s);
-      info.notes.push(`engine-touching: added ${t.engineSlice.join(' ')} (the full 1000x1000 mega_bench)`);
-    }
+      info.notes.push(`engine-touching: added ${t.engineSlice.join(' ')}`);
+    } else if (info.engine) info.notes.push('engine-touching: mega-lite covers the slice; the full 1000x1000 megaA comes only with region code, megaB only at release');
   } else {
     const rk = rotationKey();
     info.rotationKey = rk.key;
@@ -225,11 +235,13 @@ const PLAN = flag('--plan') || flag('--dry-run');
 // Notifications are off by default (Noah, 2026-10-09: no Discord pings); --notify or GATE_NOTIFY=send turns them on.
 const NOTIFY_MODE = flag('--notify-dry-run') || process.env.GATE_NOTIFY === 'dry' ? 'dry' : flag('--notify') || process.env.GATE_NOTIFY === 'send' ? 'send' : 'off';
 const NOTIFY_SCRIPT = process.env.GATE_NOTIFY_SCRIPT ?? path.join(os.homedir(), 'Developer', '_infra', 'discord-notify.sh');
-const RUN1 = path.resolve(process.env.GATE_RUN_DIR ?? path.resolve(SRC, cfg.runDir));
-const SEED = path.resolve(process.env.GATE_SEED_DIR ?? path.resolve(SRC, cfg.seedFrom));
+const RUN1 = path.resolve(opt('--run-dir') ?? process.env.GATE_RUN_DIR ?? path.resolve(SRC, cfg.runDir));
+const RUN_DIRS = (opt('--run-dirs') ?? process.env.GATE_RUN_DIRS ?? '').split(',').map((d) => d.trim()).filter(Boolean).map((d) => path.resolve(d));
+const SEED = path.resolve(opt('--seed-dir') ?? process.env.GATE_SEED_DIR ?? path.resolve(SRC, cfg.seedFrom));
 const snapDirCfg = cfg.snapshots?.dir ?? 'seed:mod/run/saves';
 const SNAP = path.resolve(process.env.GATE_SNAPSHOT_DIR ?? (snapDirCfg.startsWith('seed:') ? path.join(SEED, snapDirCfg.slice(5)) : path.resolve(SRC, snapDirCfg)));
-const RUNS_ROOT = path.resolve(process.env.GATE_RUNS_OUT ?? path.join(MAIN, 'artifacts', 'gate-runs'));
+const RUNS_ROOT = path.resolve(opt('--out') ?? process.env.GATE_RUNS_OUT ?? path.join(MAIN, 'artifacts', 'gate-runs'));
+const LOCK = path.resolve(opt('--lock') ?? process.env.GATE_LOCK ?? path.join(RUNS_ROOT, 'gate-run.lock'));
 const NSHARDS = Number(opt('--shards') ?? 1);
 if (!(Number.isInteger(NSHARDS) && NSHARDS >= 1 && NSHARDS <= (cfg.shards?.max ?? 3))) die(`--shards must be 1..${cfg.shards?.max ?? 3}`);
 
@@ -250,12 +262,19 @@ const real = (p) => {
 };
 
 // the shards: a run worktree, a port pair, an evidence dir each
-const extraPorts = (process.env.GATE_SHARD_PORTS ? process.env.GATE_SHARD_PORTS.split(',').map((p) => p.split(/[:/]/).map(Number)) : cfg.shards?.ports ?? []);
+// ports: --ports / GATE_PORTS lists every shard's pair (sidecar:dev, comma-separated); otherwise shard 1 is
+// ARCHITECT_GATE_SIDECAR_PORT/ARCHITECT_GATE_DEV_PORT (default 8890/8891) and shards 2.. come from GATE_SHARD_PORTS. There is no
+// default for shards 2..: several agents share this machine, so a sharded run names its ports.
+const pairs = (s) => s.split(',').map((p) => p.trim()).filter(Boolean).map((p) => p.split(/[:/]/).map(Number));
+const allPairs = opt('--ports') ?? process.env.GATE_PORTS;
+const portPairs = allPairs ? pairs(allPairs)
+  : [[Number(process.env.ARCHITECT_GATE_SIDECAR_PORT || 8890), Number(process.env.ARCHITECT_GATE_DEV_PORT || 8891)], ...(process.env.GATE_SHARD_PORTS ? pairs(process.env.GATE_SHARD_PORTS) : [])];
+if (RUN_DIRS.length && RUN_DIRS.length < NSHARDS) die(`--run-dirs names ${RUN_DIRS.length} dirs for ${NSHARDS} shards`);
 const shards = [];
 for (let k = 1; k <= NSHARDS; k++) {
-  const [sp, dp] = k === 1 ? [Number(process.env.ARCHITECT_GATE_SIDECAR_PORT || 8890), Number(process.env.ARCHITECT_GATE_DEV_PORT || 8891)] : extraPorts[k - 2] ?? [];
-  if (!sp || !dp) die(`shard ${k}: no port pair (GATE_SHARD_PORTS or shards.ports in the config)`);
-  const RUN = k === 1 ? RUN1 : `${RUN1}-s${k}`;
+  const [sp, dp] = portPairs[k - 1] ?? [];
+  if (!sp || !dp) die(`shard ${k}: no port pair. Name every shard's ports: --ports 8890:8891,8896:8897 (or GATE_PORTS)`);
+  const RUN = RUN_DIRS.length ? RUN_DIRS[k - 1] : k === 1 ? RUN1 : `${RUN1}-s${k}`;
   shards.push({ k, tag: NSHARDS > 1 ? `[s${k}] ` : '', RUN, GAME_DIR: path.join(RUN, 'mod', 'run'), SIDECAR_PORT: sp, DEV_PORT: dp, current: null, activeGroup: null, ev: null });
 }
 const allPorts = shards.flatMap((s) => [s.SIDECAR_PORT, s.DEV_PORT]);
@@ -264,7 +283,15 @@ for (const p of allPorts) if (p >= 8892 && p <= 8895) die(`port ${p}: 8892-8895 
 
 // a run worktree is the runner's own: never the seed (architect-mc-6a-run), this checkout or the main checkout. The gate drivers
 // find their client with an unanchored `pgrep -f <basename>/mod/.gradle/...`, so no run dir's name may end with another's.
-const knownRunDirs = [...new Set([...shards.map((s) => s.RUN), path.resolve(SRC, cfg.runDir), SEED])];
+// every sibling of a run dir counts (other agents' run worktrees live next to it)
+const siblings = (d) => {
+  try {
+    return fs.readdirSync(path.dirname(d)).map((n) => path.join(path.dirname(d), n));
+  } catch {
+    return [];
+  }
+};
+const knownRunDirs = [...new Set([...shards.map((s) => s.RUN), ...shards.flatMap((s) => siblings(s.RUN)), path.resolve(SRC, cfg.runDir), SEED])];
 for (const sh of shards) {
   for (const [what, p] of [['the seed dir', SEED], ['this checkout', SRC], ['the main checkout', MAIN], ['architect-mc-6a-run', path.resolve(SRC, '..', 'architect-mc-6a-run')]]) {
     if (real(sh.RUN) === real(p)) die(`refusing: the run dir ${sh.RUN} is ${what}`);
@@ -340,6 +367,8 @@ function childEnv(sh, extra = {}) {
     ARCHITECT_SHOTS_DIR: path.join(OUT, 'shots'),
     JAVA_HOME: process.env.JAVA_HOME ?? '/opt/homebrew/opt/openjdk@25',
     GATE_RUNNER: '1',
+    // eval sidecars (if a step starts one) on an ephemeral port, never the fixed 8894/8895 another run may hold
+    ARCHITECT_EVAL_PORT: process.env.ARCHITECT_EVAL_PORT ?? '0',
   });
   for (const [k, v] of Object.entries(extra)) env[k] = expand(String(v), sh);
   return env;
@@ -456,7 +485,7 @@ function printPlan() {
     console.log(`shard ${sh.k}: run worktree ${sh.RUN} ${fs.existsSync(sh.RUN) ? '(exists; checked out --detach at the source HEAD)' : '(created: git worktree add --detach)'}; ports sidecar ${sh.SIDECAR_PORT}, DevBridge ${sh.DEV_PORT}; `
       + `seed ${missing.length ? `would clone ${missing.join(', ')}` : 'nothing missing'}`);
   }
-  console.log(`seed ${SEED} (read-only, APFS clones); snapshots ${SNAP}; artifacts ${RUNS_ROOT}/<timestamp>-${chainName}/; notify ${NOTIFY_MODE}`);
+  console.log(`seed ${SEED} (read-only, APFS clones); snapshots ${SNAP}; artifacts ${RUNS_ROOT}/<timestamp>-${chainName}/; lock ${LOCK}; notify ${NOTIFY_MODE}`);
   console.log('setup (each shard): sidecar npm run build (run worktree)');
   const est = estimate();
   let cur = null;
@@ -503,11 +532,11 @@ if (PLAN) {
 // ------------------------------------------------------------------ the lock
 
 fs.mkdirSync(RUNS_ROOT, { recursive: true });
-const LOCK = path.join(RUNS_ROOT, 'gate-run.lock');
+fs.mkdirSync(path.dirname(LOCK), { recursive: true });
 function takeLock() {
   for (let i = 0; i < 2; i++) {
     try {
-      fs.writeFileSync(LOCK, JSON.stringify({ pid: process.pid, chain: chainName, startedAt: new Date().toISOString(), runDirs: shards.map((s) => s.RUN), ports: allPorts }), { flag: 'wx' });
+      fs.writeFileSync(LOCK, JSON.stringify({ pid: process.pid, chain: chainName, startedAt: new Date().toISOString(), runDirs: shards.map((s) => s.RUN), ports: allPorts, out: RUNS_ROOT }), { flag: 'wx' });
       return;
     } catch (e) {
       if (e.code !== 'EEXIST') throw e;
@@ -555,7 +584,7 @@ const log = (m, sh) => {
 
 const summary = {
   chain: chainName, state: 'running', verdict: null, runnerPid: process.pid, startedAt: new Date(t0).toISOString(), endedAt: null, durationSeconds: null,
-  source: SRC, head: null, sourceDirty: null, runDir: RUN1, ports: { sidecar: shards[0].SIDECAR_PORT, dev: shards[0].DEV_PORT }, out: OUT, notify: NOTIFY_MODE,
+  source: SRC, head: null, sourceDirty: null, runDir: shards[0].RUN, lock: LOCK, ports: { sidecar: shards[0].SIDECAR_PORT, dev: shards[0].DEV_PORT }, out: OUT, notify: NOTIFY_MODE,
   shards: shards.map((s) => ({ k: s.k, runDir: s.RUN, ports: { sidecar: s.SIDECAR_PORT, dev: s.DEV_PORT }, evidence: path.relative(OUT, s.ev) || '.' })),
   tier: tierInfo.kind === 'tier' ? { name: tierInfo.tier, range: tierInfo.range ?? null, engine: tierInfo.engine, placement: tierInfo.placement, impact: tierInfo.impact ?? null,
     rotationKey: tierInfo.rotationKey ?? null, rotationSource: tierInfo.rotationSource ?? null, rotation: tierInfo.rotation ?? null, notes: tierInfo.notes } : null,
@@ -1072,7 +1101,7 @@ try {
   for (const sh of shards) {
     const others = runDirProcs(sh);
     if (others.length) throw new Error(`processes already use the run worktree ${sh.RUN} (${others.map((p) => `${p.pid}`).join(', ')}); not ours, not touched`);
-    for (const p of [sh.SIDECAR_PORT, sh.DEV_PORT]) if (!(await portFree(p))) throw new Error(`port ${p} is in use (shard ${sh.k}; set ARCHITECT_GATE_SIDECAR_PORT / ARCHITECT_GATE_DEV_PORT / GATE_SHARD_PORTS)`);
+    for (const p of [sh.SIDECAR_PORT, sh.DEV_PORT]) if (!(await portFree(p))) throw new Error(`port ${p} is in use (shard ${sh.k}; set --ports / GATE_PORTS)`);
   }
   log(`gate-run ${chainName}: ${steps.length} steps (${steps.map((s) => s.id).join(' ')}); ${shards.map((s) => `shard ${s.k} ${s.RUN} ports ${s.SIDECAR_PORT}/${s.DEV_PORT}`).join('; ')}; notify ${NOTIFY_MODE}`);
   if (tierInfo.kind === 'tier') {
