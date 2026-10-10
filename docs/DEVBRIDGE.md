@@ -278,7 +278,7 @@ there is no DevBridge hook to make layers, so tests go through the API as anothe
 | `dev.chunks.status` | {box: [x0,z0,x1,z1]} - chunks of the box fully generated, read without loading them (ChunkGen), and the cost per chunk |
 | `dev.mspt.trace` | {start \| stop: true} - every tick's full time and Architect's write time; stop answers max/p50/p99/over 50 for all ticks, ticks with writes and ticks without (lighting and chunk sending). (6c 0a) Also `own` (wall) and `ownCpu` (the server thread's CPU time, what `Placement` measures): Architect's own time per tick, each `{ticks, p50, p99, max, mean}` over the ticks with Architect work; `ownCpu` is absent when the JVM can't measure thread CPU. The tick bars judge `ownCpu` (megaA: p99 <= 25 ms, max <= 50 ms); the full tick is recorded |
 | `dev.batch.skipSave` | {batchId} - (6c 0a) skip the queue save right after that batch's BATCH_DONE (fire, mark fired, [save]); kill the client JVM then, and BATCH_DONE fires once on the next load (the catch-up) |
-| `dev.api.dropAck` | {type} - (6c 0a) the mod drops the next helper ack of that message type (`bible.request`, `design.group`, ...): the request reaches the helper, the API future never completes; restart and adopt by opKey |
+| `dev.api.dropAck` | {msgType} - (6c 0a) the mod drops the next helper ack of that message type (`bible.request`, `design.group`, ...): the request reaches the helper, the API future never completes; restart and adopt by opKey |
 | `dev.api.pending` | {} - (6c 0a) how many API futures are pending (WORLD_STOPPED fails them at SERVER_STOPPING) |
 | `dev.heap.gc` | {} - used heap after a forced GC, and the max |
 | `dev.tiles.stats` | {reset?} - tiles received, wire bytes, cells, bytes per cell, request-to-receive latency p50/p99 |

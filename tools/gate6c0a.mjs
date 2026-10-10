@@ -626,9 +626,9 @@ steps.keys = async () => {
   const bspec = (x) => ({ proximity: false, owner: OWNER, opKey: `${K}:batch`, items: [{ key: 'a', bp: 'cabin', at: [x, y + 1, 0], rot: 0, mode: 'INSTANT', force: true }] });
   const counts = async () => ({ bibles: (await api('bibles')).length, jobs: (await api(`groups ${OWNER}`)).length, batches: (await api('batches')).length });
   // send all three with keys, their acks dropped
-  await call('dev.api.dropAck', { type: 'bible.request' });
+  await call('dev.api.dropAck', { msgType: 'bible.request' });
   await api(`opbible kb ${K}:bible ${b64(breq)}`);
-  await call('dev.api.dropAck', { type: 'design.group' });
+  await call('dev.api.dropAck', { msgType: 'design.group' });
   await api(`opgroup kg ${K}:group ${b64(greq)}`);
   await sleep(3000);
   const qb = await result(await api(`bqueue ${JSON.stringify(bspec(0))}`));
@@ -693,22 +693,11 @@ steps.cancel = async () => {
 /** Item 9: caller pins (a pinned v1 survives a forced-age GC; unpinned it goes; two owners: it stays until both unpin). */
 steps.pins = async () => {
   const W = 'G6C0A Flow';
+  // an entry with an older version: the seeded library's g5b_cap (v1 and its head v2; no site in this world stands at either)
+  const entry = process.env.GATE6C0A_PIN_ENTRY ?? 'g5b_cap';
+  const lib = path.join(GAME_DIR, 'architect', 'library', entry);
+  if (!check(fs.existsSync(path.join(lib, 'versions', '1')) && fs.existsSync(path.join(lib, 'versions', '2')), `${entry} has v1 and v2 (version folders in ${path.relative(RUN, lib)})`)) return {};
   await startClient(W, {});
-  const groups = await api(`groups ${OWNER}`);
-  let entry = null;
-  for (const id of groups) {
-    const g = await api(`group0a ${id}`);
-    entry = (g?.items ?? []).find((i) => i.entryId && i.status === 'DONE')?.entryId;
-    if (entry) break;
-  }
-  if (!check(!!entry, `a library entry to version (${entry})`)) return {};
-  // v2: a sim polish of one step installs a new head (v1 stays a version folder)
-  const pol = await result(await api(`polish ${entry} 1 none`), 120_000);
-  const vs = await until(async () => {
-    const x = await api(`eversions ${entry}`);
-    return (x.versions ?? []).length >= 2 ? x : null;
-  }, `${entry} v2`, 240_000, 2000).catch(() => api(`eversions ${entry}`));
-  check((vs.versions ?? []).length >= 2, `${entry} has v1 and a newer head v${vs.version} (polish ${JSON.stringify(pol).slice(0, 120)})`);
   await result(await api(`pin p1 ${entry} 1 steward:s1`));
   await result(await api(`pin p2 ${entry} 1 steward:s2`));
   const owners = await api(`pinowners ${entry} 1`);
@@ -756,7 +745,7 @@ steps.stopped = async () => {
   const many = Array.from({ length: 40 }, (_, k) => ({ key: `i${k}`, bp: 'tower', at: [300 + (k % 8) * 30, y + 1, 300 + Math.floor(k / 8) * 30], rot: 0, mode: 'CONSTRUCTION', force: true }));
   const qb = await result(await api(`bqueue ${JSON.stringify({ proximity: false, items: many })}`));
   pend.cancelBatch = await api(`bcancel ${qb}`);
-  await call('dev.api.dropAck', { type: 'design.group' });
+  await call('dev.api.dropAck', { msgType: 'design.group' });
   pend.group = await api(`opgroup wg ${K} ${b64(groupReq('Stop Group', [it3()[0]]))}`);
   const n = await call('dev.api.pending');
   log(`  pending API futures before the stop: ${n.pending}; ${JSON.stringify(pend).slice(0, 400)}`);
