@@ -595,6 +595,8 @@ export const EstimateMix = z.object({
   massingFirst: z.boolean().default(false),
   reportCritique: z.boolean().default(false),
   model: z.string().max(100).optional().describe("the originals' detail model (default: the ordinary model)"),
+  smallOriginals: z.number().int().min(0).max(1000).default(0).describe('(0b, C8) SMALL originals (the bounded pass)'),
+  changes: z.number().int().min(0).max(1000).default(0).describe('(0b, C13) changes (versionOf)'),
 });
 export type EstimateMix = z.infer<typeof EstimateMix>;
 

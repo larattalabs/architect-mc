@@ -244,4 +244,18 @@ describe.skipIf(!hasKit)('copies in a group (sim backend, real kit)', () => {
     const other = fs.readFileSync(path.join(h.sc.config.dataDir, 'designs', f.items[1]!.designId, 'BRIEF.md'), 'utf8');
     expect(other).not.toContain('A small building');
   }, 60_000);
+
+  it('estimates: COPY $0, SMALL with its caps in the basis, CHANGE from the polish seed', async () => {
+    h = await harness();
+    const ctx = (h.sc as unknown as { estimateCtx(): never }).estimateCtx();
+    const e = h.sc.estimates.mix({ group: gr({ smallBySize: true, massingFirst: true, critique: { mode: 'report' }, items: [item('m', { count: 3 }), item('shed', { maxSize: { x: 9, y: 12, z: 9 } })] }), originals: 0, adapted: 0, copies: 0, newBible: true, massingFirst: true, reportCritique: true }, ctx);
+    expect(e.byKind.original!.count).toBe(1);
+    expect(e.byKind.copy).toMatchObject({ count: 2, usdLow: 0, usdHigh: 0 });
+    expect(e.byKind.small!.count).toBe(1);
+    expect(e.byKind.small!.basis).toMatch(/2 rounds, 40 turns, effort medium/);
+    const sum = Object.values(e.byKind).reduce((a, l) => a + l!.usdHigh, 0);
+    expect(e.usdHigh).toBeCloseTo(sum, 1);
+    const c = h.sc.estimates.mix({ originals: 0, adapted: 0, copies: 0, newBible: false, massingFirst: false, reportCritique: false, changes: 1 }, ctx);
+    expect(c.byKind.change).toMatchObject({ usdLow: 0.4, usdHigh: 1.2, count: 1 });
+  }, 30_000);
 });
