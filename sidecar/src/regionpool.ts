@@ -2,9 +2,13 @@
 // `worker_threads` running src/region-worker.mjs, which imports only the kit's lib/realise.mjs (and
 // lib/region/pack.mjs). Workers start on demand, up to `size`.
 //
-// Limits per tile: `tileMs` (default 2 s) and `heapMb` (default 256 MB, resourceLimits). A tile that
-// runs over its time, or whose worker crashes or runs out of memory, fails with a message; the worker
-// is replaced and the other tiles go on. Each worker caches the parsed IRs it was sent (by irSha), so
+// Limits per tile: `tileMs` (default 2 s) and `heapMb` (default 256 MB, resourceLimits). A tile whose
+// worker crashes or runs out of memory, or whose kit code throws, fails with a message (`code: 'error'`,
+// no retry); the worker is replaced and the other tiles go on. (6c 0a, CONTRACT 0a §11) A tile over its
+// time limit is evaluated again on a fresh worker, up to TILE_ATTEMPTS evaluations in all, the limit
+// doubling each time (2, 4, 8, 16 s at the default tileMs) with 1, 2 and 4 s pauses between them; after
+// the last it fails with `code: 'timeout'`. A retry is a fresh deterministic evaluation: the bytes are
+// the same. Each worker caches the parsed IRs it was sent (by irSha), so
 // an IR crosses the thread boundary once per worker, not once per tile.
 //
 // Determinism: the pool hands back the kit's payload hash and the gzip of the kit's payload unchanged;
@@ -33,13 +37,32 @@ export interface TileTask {
   survey?: { id: string; bytes: () => Uint8Array };
 }
 
-export type TileResult = { ok: true; gz: Buffer; count: number; sha: string; ms: number } | { ok: false; message: string };
+export type TileResult =
+  | { ok: true; gz: Buffer; count: number; sha: string; ms: number; attempts: number }
+  | { ok: false; message: string; code: 'timeout' | 'error'; attempts: number };
+
+/** (6c 0a) Evaluations of one tile at most: the first and 3 retries after a timeout (CONTRACT 0a §11). */
+export const TILE_ATTEMPTS = 4;
+
+/** (6c 0a) Attempt n's time limit (n from 1): tileMs doubling each time (2, 4, 8, 16 s at the default 2 s). Pure. */
+export function attemptLimitMs(tileMs: number, attempt: number): number {
+  return tileMs * 2 ** (attempt - 1);
+}
+
+/** (6c 0a) The pause after attempt n timed out (n from 1): pauseMs doubling (1, 2, 4 s at the default 1 s). Pure. */
+export function retryPauseMs(pauseMs: number, attempt: number): number {
+  return pauseMs * 2 ** (attempt - 1);
+}
 
 export interface PoolOptions {
   kitDir: string;
   size: number;
   tileMs: number;
   heapMb: number;
+  /** (6c 0a) the first pause between timed-out attempts (default 1000 ms; tests shrink it) */
+  retryPauseMs?: number;
+  /** (6c 0a, test hook ARCHITECT_TEST_SLOW_TILES) the first n evaluations of each tile overrun (0: off) */
+  slowTiles?: number;
   log?: { warn(m: string): void; debug(m: string): void };
 }
 
@@ -47,6 +70,8 @@ interface Pending {
   id: number;
   task: TileTask;
   resolve: (r: TileResult) => void;
+  /** (6c 0a) this evaluation's number, from 1 */
+  attempt: number;
 }
 
 class Slot {
@@ -78,8 +103,15 @@ export class TilePool {
   private queue: Pending[] = [];
   private nextId = 1;
   private closed = false;
-  /** (tests, numbers) workers started, replaced after a crash or timeout */
-  stats = { started: 0, replaced: 0, tiles: 0, failed: 0 };
+  /** (6c 0a) tasks in a pause between timed-out attempts (no worker, not queued) */
+  private pausing = new Map<Pending, NodeJS.Timeout>();
+  /**
+   * (6c 0a, the slow-tiles hook) evaluations so far per tile (irSha, key, stage, set, preview). Test only, so never cleared (not
+   * on dropIr either): a release while a tile waits TILE_SLOW must not restart its overruns.
+   */
+  private evals = new Map<string, number>();
+  /** (tests, numbers) workers started, replaced after a crash or timeout; (6c 0a) retries after a timeout */
+  stats = { started: 0, replaced: 0, tiles: 0, failed: 0, retries: 0 };
 
   constructor(private opts: PoolOptions) {}
 
@@ -89,9 +121,9 @@ export class TilePool {
 
   /** Evaluate one tile. Never rejects: a failure is `{ok: false, message}`. */
   evaluate(task: TileTask): Promise<TileResult> {
-    if (this.closed) return Promise.resolve({ ok: false, message: 'the sidecar is shutting down' });
+    if (this.closed) return Promise.resolve({ ok: false, message: 'the sidecar is shutting down', code: 'error', attempts: 0 });
     return new Promise((resolve) => {
-      this.queue.push({ id: this.nextId++, task, resolve });
+      this.queue.push({ id: this.nextId++, task, resolve, attempt: 1 });
       this.pump();
     });
   }
@@ -115,12 +147,18 @@ export class TilePool {
 
   async close(): Promise<void> {
     this.closed = true;
-    for (const p of this.queue.splice(0)) p.resolve({ ok: false, message: 'the sidecar is shutting down' });
+    const down = (p: Pending): void => p.resolve({ ok: false, message: 'the sidecar is shutting down', code: 'error', attempts: p.attempt });
+    for (const p of this.queue.splice(0)) down(p);
+    for (const [p, t] of this.pausing) {
+      clearTimeout(t);
+      down(p);
+    }
+    this.pausing.clear();
     const slots = this.slots.splice(0);
     for (const s of slots) {
       s.dead = true;
       if (s.timer) clearTimeout(s.timer);
-      s.busy?.resolve({ ok: false, message: 'the sidecar is shutting down' });
+      if (s.busy) down(s.busy);
       s.busy = undefined;
     }
     await Promise.all(slots.map((s) => s.worker.terminate().catch(() => undefined)));
@@ -137,7 +175,7 @@ export class TilePool {
       } else if (m.type === 'fatal') {
         // the kit cannot be loaded: the next waiting tile carries the message; the worker is replaced
         const p = this.queue.shift();
-        p?.resolve({ ok: false, message: m.message ?? 'the worker failed to start' });
+        p?.resolve({ ok: false, message: m.message ?? 'the worker failed to start', code: 'error', attempts: p.attempt });
         this.retire(s, false);
       } else if ((m.type === 'done' || m.type === 'fail') && s.busy && s.busy.id === m.id) {
         const p = s.busy;
@@ -147,10 +185,10 @@ export class TilePool {
         if (m.type === 'done') {
           this.stats.tiles++;
           const gz = Buffer.from(m.gz!.buffer, m.gz!.byteOffset, m.gz!.byteLength);
-          p.resolve({ ok: true, gz, count: m.count ?? 0, sha: m.sha!, ms: m.ms ?? 0 });
+          p.resolve({ ok: true, gz, count: m.count ?? 0, sha: m.sha!, ms: m.ms ?? 0, attempts: p.attempt });
         } else {
           this.stats.failed++;
-          p.resolve({ ok: false, message: m.message ?? 'evaluation failed' });
+          p.resolve({ ok: false, message: m.message ?? 'evaluation failed', code: 'error', attempts: p.attempt });
         }
         this.pump();
       }
@@ -174,9 +212,34 @@ export class TilePool {
     s.busy = undefined;
     if (p) {
       this.stats.failed++;
-      p.resolve({ ok: false, message: `${why} (tile ${p.task.key})` });
+      p.resolve({ ok: false, message: `${why} (tile ${p.task.key})`, code: 'error', attempts: p.attempt });
     }
     this.retire(s, true);
+  }
+
+  /**
+   * (6c 0a) The tile ran over its limit: its worker is replaced; the tile is evaluated again on a fresh worker after a pause
+   * (which holds no worker), or, after the last attempt, fails with `code: 'timeout'`.
+   */
+  private timedOut(s: Slot, p: Pending, limitMs: number): void {
+    s.busy = undefined;
+    this.retire(s, true);
+    if (p.attempt >= TILE_ATTEMPTS) {
+      this.stats.failed++;
+      const limits = Array.from({ length: TILE_ATTEMPTS }, (_, i) => attemptLimitMs(this.opts.tileMs, i + 1) / 1000).join(', ');
+      p.resolve({ ok: false, message: `the tile took longer than its limit in each of ${p.attempt} attempts (${limits} s) (tile ${p.task.key})`, code: 'timeout', attempts: p.attempt });
+      return;
+    }
+    this.stats.retries++;
+    const pause = retryPauseMs(this.opts.retryPauseMs ?? 1000, p.attempt);
+    this.opts.log?.warn(`region tile ${p.task.key} took longer than ${limitMs} ms (attempt ${p.attempt} of ${TILE_ATTEMPTS}): evaluated again on a fresh worker in ${pause} ms`);
+    const t = setTimeout(() => {
+      if (!this.pausing.delete(p) || this.closed) return;
+      this.queue.unshift({ ...p, attempt: p.attempt + 1 });
+      this.pump();
+    }, pause);
+    t.unref();
+    this.pausing.set(p, t);
   }
 
   private retire(s: Slot, replaced: boolean): void {
@@ -208,6 +271,15 @@ export class TilePool {
   private dispatch(s: Slot, p: Pending): void {
     s.busy = p;
     const t = p.task;
+    const limitMs = attemptLimitMs(this.opts.tileMs, p.attempt);
+    // (6c 0a, test hook) the first n evaluations of each tile overrun: the worker stalls until the timer replaces it
+    let slow = false;
+    if (this.opts.slowTiles && this.opts.slowTiles > 0) {
+      const k = `${t.irSha}|${t.key}|${t.stage ?? '*'}|${t.set ?? '*'}|${t.survey ? 'ghost' : 'tile'}`;
+      const n = this.evals.get(k) ?? 0;
+      this.evals.set(k, n + 1);
+      slow = n < this.opts.slowTiles;
+    }
     try {
       if (!s.irs.has(t.irSha)) {
         s.worker.postMessage({ type: 'ir', irSha: t.irSha, irJson: t.irJson(), ...(t.blobs ? { blobs: t.blobs() } : {}) });
@@ -220,21 +292,20 @@ export class TilePool {
           // the worker keeps as many (WORKER_SURVEYS)
           while (s.surveys.length > WORKER_SURVEYS) s.surveys.shift();
         }
-        s.worker.postMessage({ type: 'tile', id: p.id, irSha: t.irSha, key: t.key, stage: t.stage, set: t.set, preview: true, surveyId: t.survey.id });
+        s.worker.postMessage({ type: 'tile', id: p.id, irSha: t.irSha, key: t.key, stage: t.stage, set: t.set, preview: true, surveyId: t.survey.id, ...(slow ? { slow: true } : {}) });
       } else {
         if (!t.heights) throw new Error('a tile needs heights');
         const heights = new Uint8Array(t.heights.byteLength);
         heights.set(t.heights);
-        s.worker.postMessage({ type: 'tile', id: p.id, irSha: t.irSha, key: t.key, stage: t.stage, set: t.set, heights }, [heights.buffer]);
+        s.worker.postMessage({ type: 'tile', id: p.id, irSha: t.irSha, key: t.key, stage: t.stage, set: t.set, heights, ...(slow ? { slow: true } : {}) }, [heights.buffer]);
       }
     } catch (e) {
       this.fail(s, `could not hand the tile to a worker: ${(e as Error).message}`);
       return;
     }
     s.timer = setTimeout(() => {
-      if (s.busy !== p) return;
-      this.opts.log?.warn(`region tile ${t.key} took longer than ${this.opts.tileMs} ms: its worker is replaced`);
-      this.fail(s, `the tile took longer than ${this.opts.tileMs / 1000} s`);
-    }, this.opts.tileMs);
+      if (s.busy !== p || s.dead) return;
+      this.timedOut(s, p, limitMs);
+    }, limitMs);
   }
 }

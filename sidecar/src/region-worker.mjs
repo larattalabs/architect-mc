@@ -12,6 +12,7 @@
 //   {type: 'drop', irSha}                  forget it
 //   {type: 'survey', id, bytes}            (6b) cache a plan survey (ghost tiles; the last 4)
 //   {type: 'tile', id, irSha, key, stage, set, heights: Uint8Array}
+//                                          (6c 0a) slow: true (test hook): overrun, never answer
 //   {type: 'tile', id, irSha, key, stage?, set?, preview: true, surveyId}
 //                                          (6b) a ghost tile: the window is the kit's windowFromSurvey(survey, key); every
 //                                          stage up to `stage` (a copy of the IR with the later stages' parts left out,
@@ -84,6 +85,11 @@ parentPort.on('message', async (m) => {
     return;
   }
   if (m.type !== 'tile') return;
+  if (m.slow) {
+    // (6c 0a, test hook ARCHITECT_TEST_SLOW_TILES) overrun: block this thread until the pool's timer terminates the worker
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0);
+    return;
+  }
   const t0 = performance.now();
   try {
     await ready;
