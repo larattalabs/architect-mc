@@ -15,7 +15,7 @@ names win). API 1.12.0, mod 0.15.0 (after 0a = 1.10.0 and 0b = 1.11.0). Ports 89
 | §6 extend warning | built | `Extension.of/minBudgetUsd`, `Designs.extend`; sidecar ack gains spentUsd + softBudgetFraction, feature `extendInfo`; `ExtensionTest`, groups.test.ts |
 | §5 FIELD_LIMIT | after 0a (ArchitectRefused) and 0b (its bounded fields) | |
 | §10 off-thread undo planning | after 0a (own-time percentiles), 2 h box | no journal/** change left on the branch if no-go |
-| §7 C16 survival roads | last; split to `slice/0d` if it overruns | dirt_path on grass free (coordinator) |
+| §7 C16 survival roads | built (merged from `slice/0c-c16`) | `site/RoadBuilder.java` reuses `Builder.Run` through a probe Site; hooks in Builder (crate acceptance, stock, keep-crate), InfraJob (convert at DONE), InfraPlace (remove: refunds + crate; mode rules), Batches (construction road item), Views/ApiEvents; gate step `survroad` passes. Downgrade check pending the 0.14.0 jar |
 
 ## Steward's review (CONTRACT "Changes from Steward's review of 0b, 0c and V")
 
@@ -41,6 +41,12 @@ need a shared crate.
   site's box the two can differ (the bar is on a forest box without sites). A snow layer (SNOW class) on a dry column makes
   `ground` one above `height` (not motion-blocking).
 - `Volume`'s over-16M-columns note is a log line (the record has no notes field).
+
+- C16: free = a `dirt_path` laid on `grass_block` only (the coordinator said "on grass"; vanilla shovels also path dirt,
+  podzol, mycelium, coarse and rooted dirt: open question). A road cell whose block already is the target isn't queued (nor
+  billed). `checkRoad` in construction mode answers for the batch case (construction, BOM, a note); a standalone placeRoad in
+  CONSTRUCTION (or AUTO in survival) is refused NOT_ALLOWED. A road's `/architect site finish` cells aren't marked free (its
+  removal refunds them as paid). The group crate is put down by the road when no house of the group made one yet.
 
 ## Resume
 
