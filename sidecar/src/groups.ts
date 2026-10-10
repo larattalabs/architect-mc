@@ -478,7 +478,7 @@ export class Groups {
         g.updatedAt = this.sc.now();
         this.sc.store.markDirty();
         this.emit(g);
-        if (isFinalGroup(g)) this.sc.log.info(`group ${g.id} ${g.status}: ${g.done} done, ${g.failed} failed, $${g.cost.usd.toFixed(4)}`);
+        if (isFinalGroup(g)) this.sc.log.info(`group ${g.id} ${g.status}: ${g.done} done, ${g.failed} failed, $${g.cost.usd.toFixed(4)}${this.sc.config.simCosts && this.sc.designerName() === 'sim' ? ' (sim: true, notional)' : ''}`);
       }
     } finally {
       this.refreshing = false;

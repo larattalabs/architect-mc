@@ -23,10 +23,10 @@ Steward (`../steward-mc`) is the main consumer of the API.
 - **Scope is frozen per slice.** New ideas go into the next slice unless they block the current one.
 - **Branches:** work on `slice/<x>` (or `phase/<x>`) in a worktree (`../architect-mc-<x>`). Never commit to main directly.
   Slices may run **in parallel** on separate worktrees and ports; merge `origin/main` into your branch when another slice lands.
-- **Merging (from 2026-10-10):** once the `slice` tier passes and a gate-verifier review of the diff plus evidence passes, the
-  slice's builder merges its own branch into main (`--no-ff`, CI green on main afterwards) and tells the coordinator. If two
-  slices claim the same API version, the second to merge takes the next minor. The coordinator tags and publishes (tag
-  `vX.Y.Z` must equal `mod_version`; CI publishes to GitHub Packages) and tells Steward.
+- **Merging:** when the `slice` tier and a gate-verifier review of the diff plus evidence pass, the builder pushes its branch
+  and reports "ready to merge". The coordinator merges into main, tags and publishes; tag `vX.Y.Z` must equal `mod_version`, and
+  CI publishes to GitHub Packages. Agents can't push to main: the permission classifier refuses it. If two slices claim the
+  same API version, the second to merge takes the next minor.
 - **CI runners and benches:** release-tier benches may ask the coordinator to pause Noah's CI runners (the LaunchAgents
   `com.laratta.ci-container-autoscale` and `com.laratta.tart-yardpaint-runner`). Noah allowed this when needed. Never pause
   them yourself.

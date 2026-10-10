@@ -38,6 +38,32 @@ const STEPS: Array<{ status: 'designing'; step: string }> = [
 /** A request asks the sim to hit a usage limit (once). */
 export const SIM_LIMIT_MARK = 'sim:usage_limit';
 
+/** (6c 0a) The ext key that scripts sim faults, as the notes' `sim:<fault>` tokens do: a string or an array of strings. */
+export const SIM_EXT = 'architect:sim';
+
+/**
+ * (6c 0a) The sim faults a request asks for: `sim:<name>` tokens in its notes, and the names in ext["architect:sim"] (a
+ * string or an array of strings, with or without the `sim:` prefix). Known names: usage_limit (one usage limit), fail (the
+ * design fails), repair (one repair round).
+ */
+export function simFaults(req: { notes?: string | undefined; ext?: Record<string, unknown> | undefined }): Set<string> {
+  const out = new Set<string>();
+  for (const m of (req.notes ?? '').matchAll(/(?:^|[^A-Za-z0-9_])sim:([a-z_]+)(?![A-Za-z0-9_=])/g)) out.add(m[1]!);
+  const e = req.ext?.[SIM_EXT];
+  for (const v of Array.isArray(e) ? e : [e]) if (typeof v === 'string' && v.trim()) out.add(v.trim().replace(/^sim:/, ''));
+  return out;
+}
+
+/** (6c 0a) The sim's round state of one design (DesignWork.sim). */
+export interface SimRoundWork {
+  /** 1 = the first design round, 2 = the repair round */
+  round: number;
+  /** what the round has charged so far (simCosts) */
+  charged: number;
+  /** sim:repair's round is done */
+  repaired?: boolean;
+}
+
 class Cancelled extends Error {}
 class Limited extends Error {}
 
@@ -198,6 +224,12 @@ export class SimDesigner implements Designer {
 
   // ---- one design -----------------------------------------------------------------------------------
 
+  /** (6c 0a) The sim's own round state of a design (persisted with its work): the round, what it charged in it, the repair. */
+  private simWork(id: string, bp: string): SimRoundWork {
+    const w = ((this.sc.store.data.work ??= {})[id] ??= { bp, round: 0 });
+    return (w.sim ??= { round: 1, charged: 0 });
+  }
+
   private sleep(ms: number, id: string, r: Run): Promise<void> {
     return new Promise<void>((resolve, reject) => {
       const done = () => {
@@ -239,18 +271,47 @@ export class SimDesigner implements Designer {
     if (!d.massing) this.taken.set(id, bp);
     const scratch = prepareScratch({ dataDir: cfg.dataDir, kitDir: cfg.kitDir, libraryDir: cfg.libraryDir, design: d, bp, ...sc.scratchExtras(d) });
     let cost = d.cost ?? zeroCost();
-    for (const s of STEPS) {
+    const faults = simFaults(req);
+    // (6c 0a) the notional per-item costs (config simCosts): round 1 costs the massing's or the detail's figure, spread over
+    // its steps so the round sums exactly; a step that runs again (a usage limit, a restart) adds nothing more
+    const costs = cfg.simCosts;
+    const sw = this.simWork(id, bp);
+    const charge = (round: number, k: number, n: number, target: number): number => {
+      if (!costs) return cfg.simDesignUsd;
+      if (sw.round !== round) Object.assign(sw, { round, charged: 0 });
+      const due = Math.round(((target * k) / n) * 1e6) / 1e6;
+      const add = Math.max(0, Math.round((due - sw.charged) * 1e6) / 1e6);
+      sw.charged = Math.max(sw.charged, due);
+      sc.store.markDirty();
+      return add;
+    };
+    for (const [i, s] of STEPS.entries()) {
+      if (sw.round > 1) break; // round 1 is behind it (a restart during the repair round)
       sc.designStep(id, s.status, `${s.step} (simulated)`);
-      if (req.notes?.includes(SIM_LIMIT_MARK) && !this.limitedOnce.has(id) && s === STEPS[1]) {
+      if (faults.has('usage_limit') && !this.limitedOnce.has(id) && s === STEPS[1]) {
         this.limitedOnce.add(id);
         sc.designStep(id, 'queued', 'usage limit (simulated): waiting for the reset');
         this.hitLimit();
         throw new Limited();
       }
       await this.sleep(this.stepMs, id, r);
-      // the sim's notional spend: simDesignUsd per step
-      cost = { ...cost, usd: Math.round((cost.usd + cfg.simDesignUsd) * 1e6) / 1e6, turns: cost.turns + 1 };
+      // the sim's notional spend: simDesignUsd per step, or (simCosts) the item's share
+      cost = { ...cost, usd: Math.round((cost.usd + charge(1, i + 1, STEPS.length, costs ? (d.massing ? costs.massing : costs.detail) : 0)) * 1e6) / 1e6, turns: cost.turns + 1 };
       sc.designCost(id, cost);
+      // (6c 0a) sim:fail: the design fails after its first step
+      if (faults.has('fail')) throw new Error('the design failed (simulated: sim:fail)');
+    }
+    // (6c 0a) sim:repair: round 1's check fails (simulated), and one repair round (round 2) fixes it
+    if (faults.has('repair') && sw.round <= 2 && !sw.repaired) {
+      this.check(id, r);
+      sc.designStep(id, 'checking', `checking the ${d.massing ? 'massing' : 'design'} (simulated designer): the check failed (sim:repair)`);
+      sc.log.info(`design ${id}: round 1's check failed (simulated, sim:repair); repair round 2`);
+      sc.designStep(id, 'designing', 'round 2: fixing what the check found (simulated, sim:repair)');
+      await this.sleep(this.stepMs, id, r);
+      cost = { ...cost, usd: Math.round((cost.usd + charge(2, 1, 1, costs ? costs.repair : 0)) * 1e6) / 1e6, turns: cost.turns + 1 };
+      sc.designCost(id, cost);
+      sw.repaired = true;
+      sc.store.markDirty();
     }
     this.check(id, r);
     const design = path.join(scratch, KIT, 'designs', `${bp}.mjs`);
@@ -410,7 +471,8 @@ export class SimDesigner implements Designer {
           sc.critiques.undoTurn(id);
           throw e;
         }
-        cost = { ...cost, usd: Math.round((cost.usd + cfg.simDesignUsd) * 1e6) / 1e6, turns: cost.turns + 1 };
+        // (6c 0a) with simCosts, a loop revision costs a repair round
+        cost = { ...cost, usd: Math.round((cost.usd + (cfg.simCosts ? cfg.simCosts.repair : cfg.simDesignUsd)) * 1e6) / 1e6, turns: cost.turns + 1 };
         sc.designCost(id, cost);
       }
       this.check(id, r);

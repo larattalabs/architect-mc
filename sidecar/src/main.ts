@@ -11,7 +11,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { ClaudeDesigner } from './claude/designer.js';
 import { newToken, removeClientToken, writeClientToken } from './clienttoken.js';
-import { ConfigError, HELP, loadConfig, VERSION, type Config } from './config.js';
+import { ConfigError, HELP, loadConfig, simCostsLabel, VERSION, type Config } from './config.js';
 import { consoleLogger } from './context.js';
 import { pidAlive, removeRunFile, writeRunFile } from './runfile.js';
 import { SidecarServer } from './server.js';
@@ -68,6 +68,7 @@ export async function main(argv: string[]): Promise<void> {
   writeRunFile(cfg.dataDir, { pid: process.pid, port: server.port, version: VERSION, startedAt: Date.now() });
   sidecar.endpoint = { port: server.port, tokenFile };
   log.info(`Architect sidecar ${VERSION} | designer ${cfg.backend} | ws://${cfg.host}:${server.port} | data ${cfg.dataDir} | library ${cfg.libraryDir} | kit ${cfg.kitDir}`);
+  if (cfg.simCosts) log.info(`sim costs: ${simCostsLabel(cfg.simCosts)}`);
 
   let shuttingDown = false;
   const shutdown = async (why: string) => {

@@ -46,6 +46,8 @@ export interface DriverQuery {
   images?: DriverImage[] | undefined;
   /** (5a) sim only: the scripted structured answer ({ simFail } fails the query) */
   simAnswer?: unknown;
+  /** (6c 0a) sim only: what each step of this query costs (default: the driver's simJobStepUsd) */
+  simStepUsd?: number;
 }
 
 /** (5a) an image of a job: a PNG or JPEG file in the job's scratch dir and its label. */

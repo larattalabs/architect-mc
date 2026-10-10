@@ -5,7 +5,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { Config } from './config.js';
-import { VERSION } from './config.js';
+import { simCostsLabel, VERSION } from './config.js';
 import type { Logger } from './context.js';
 import { BibleIndex, Bibles, SimBibleBackend, type BibleBackend, type RunOutcome } from './bibles.js';
 import { BlobError, BlobStore } from './blobs.js';
@@ -503,7 +503,7 @@ export class Sidecar {
           return { ...this.polishes.estimate(msg.entryId, msg.polish) };
         }
         if (msg.group) this.bibleIndex.resolve(msg.group.bible);
-        return { ...(msg.group ? this.estimates.group(msg.group, this.estimateCtx()) : this.estimates.design(msg.request!, this.estimateCtx())) };
+        return this.simLabel({ ...(msg.group ? this.estimates.group(msg.group, this.estimateCtx()) : this.estimates.design(msg.request!, this.estimateCtx())) });
       case 'bible.request': {
         const j = this.bibles.request(msg.request);
         return { jobId: j.id, bibleId: j.bibleId, version: j.version };
@@ -513,7 +513,7 @@ export class Sidecar {
         return { jobId: j.id, bibleId: j.bibleId, version: j.version };
       }
       case 'bible.estimate':
-        return { ...this.estimates.bible(msg.request ?? {}, this.estimateCtx()) };
+        return this.simLabel({ ...this.estimates.bible(msg.request ?? {}, this.estimateCtx()) });
       case 'bible.cancel':
         return { jobId: this.bibles.cancel(msg.jobId).id };
       case 'reskin.request': {
@@ -603,6 +603,15 @@ export class Sidecar {
     if (r.code === 2 || j.error) throw new ClientError(`the delta failed: ${String(j.error ?? truncate(r.output, 300))}`);
     const { ok: _ok, violations: _v, cells: _c, ...rest } = j;
     return { entryId, from, to, ...rest };
+  }
+
+  /**
+   * (6c 0a) The sim with notional costs (simCosts): an estimate's basis says so (`sim: true`). The figures are the normal
+   * seeds and samples, so the notional costs can be compared with them; nothing is spent.
+   */
+  simLabel<T extends { basis: string }>(e: T): T {
+    const c = this.config.simCosts;
+    return c && this.designerName() === 'sim' ? { ...e, basis: `${e.basis}; ${simCostsLabel(c)}` } : e;
   }
 
   estimateCtx(): EstimateCtx {
