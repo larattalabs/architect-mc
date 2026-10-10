@@ -272,4 +272,16 @@ describe.skipIf(!hasKit)('copies in a group (sim backend, real kit)', () => {
     await until(() => ['done', 'failed'].includes(h!.sc.designs.get(d.id)!.status), 60_000);
     expect(readEntry(h, h.sc.designs.get(d.id)!.blueprintId!).derivation).toBeUndefined();
   }, 120_000);
+
+  it('the sim builds an S-lot item (11 x 9) as a shed from smalls.mjs, its massing too, and the detail conforms', async () => {
+    h = await harness();
+    const g = h.sc.groups.create(gr({ massingFirst: true, smallBySize: true, items: [item('well', { type: 'custom', profile: ['door', 'lit', 'no_floating'], maxSize: { x: 11, y: 12, z: 9 } })] }));
+    await until(() => h!.sc.groups.get(g.id)!.status === 'awaiting_approval', 30_000);
+    h.sc.groups.approve(g.id, { approve: ['well'], redirect: {}, cancel: [] });
+    await groupDone(h, g.id);
+    const it = h.sc.groups.get(g.id)!.items[0]!;
+    expect(it.status, it.error).toBe('done');
+    const e = readEntry(h, it.entryId!) as { size: { x: number; z: number } };
+    expect(e.size.x <= 11 && e.size.z <= 9).toBe(true);
+  }, 60_000);
 });

@@ -29,6 +29,7 @@ import { truncate } from './util/text.js';
 import { runNode } from './designs.js';
 import { simToken, type PolishBackend, type PolishTurnResult } from './polish.js';
 import { designRounds, SMALL_PASS } from './claude/brief.js';
+import { fitsSmall } from './copies.js';
 
 const STEPS: Array<{ status: 'designing'; step: string }> = [
   { status: 'designing', step: 'reading the brief' },
@@ -72,6 +73,60 @@ export function simRepairs(req: { notes?: string | undefined; ext?: Record<strin
   const n = [...(req.notes ?? '').matchAll(/(?:^|[^A-Za-z0-9_])sim:repair(?![A-Za-z0-9_=])/g)].length;
   const e = req.ext?.[SIM_EXT];
   return n + (Array.isArray(e) ? e : [e]).filter((v) => typeof v === 'string' && v.trim().replace(/^sim:/, '') === 'repair').length;
+}
+
+/**
+ * (0b) A small building for the sim: the kit's examples are all larger than an S lot (11 x 9), so a request whose maxSize
+ * footprint fits 11 x 9 gets a shed composed from kit/lib/smalls.mjs (and its massing a matching volume). Both are framed to
+ * exactly their written extents (built once to measure them).
+ */
+const SIM_SMALL_FRAME = `function framed(make) {
+  const big = make([16, 16, 16], [4, 0, 4]);
+  const min = [Infinity, Infinity, Infinity];
+  const max = [-Infinity, -Infinity, -Infinity];
+  for (const k of big.cells.keys()) k.split(',').map(Number).forEach((v, i) => { min[i] = Math.min(min[i], v); max[i] = Math.max(max[i], v); });
+  return make(max.map((v, i) => v - min[i] + 1), [4 - min[0], -min[1], 4 - min[2]]);
+}`;
+export function simSmallDesign(id: string, type: string, profile: string[] | undefined): string {
+  return `import { Blueprint, PALETTES } from '../lib/kit.mjs';
+import { shed } from '../lib/smalls.mjs';
+
+export const id = '${id}';
+export const params = { roof: { type: 'enum', options: ['gable', 'lean_to'], default: 'gable', label: 'Roof' } };
+${SIM_SMALL_FRAME}
+export default function build({ palette: p = PALETTES.rustic, roof = 'gable' } = {}) {
+  return framed((size, origin) => {
+    const bp = new Blueprint({ id, name: 'Small shed', type: '${type}', ${profile ? `profile: ${JSON.stringify(profile)}, ` : ''}size, origin, groundY: 1, front: 'south', palette: p });
+    let out;
+    bp.part('main', () => { out = shed(bp, [0, 0, 0, 4, 7, 4], { roof }); });
+    bp.part('path', () => bp.set(out.standAt[0], 0, out.standAt[2], p.path));
+    bp.spot('entrance', out.standAt[0], out.standAt[2], 180);
+    bp.spot('spawn', out.standAt[0], out.standAt[2], 180);
+    bp.interior(out.interior);
+    return bp;
+  });
+}
+`;
+}
+export function simSmallMassing(id: string, type: string): string {
+  return `import { Blueprint, PALETTES } from '../lib/kit.mjs';
+import { massing } from '../lib/massing.mjs';
+
+export const id = '${id}';
+${SIM_SMALL_FRAME}
+export default function build({ palette: p = PALETTES.rustic } = {}) {
+  return framed((size, origin) => {
+    const bp = new Blueprint({ id, name: 'Small shed (massing)', type: '${type}', size, origin, palette: p, front: 'south' });
+    const m = massing(bp);
+    m.mass('main', [0, 0, 0, 4, 3, 4], { roof: 'gable', ridge: 'x', roofPart: 'roof' });
+    m.opening('main', 'south', [2, 1], [1, 2]);
+    bp.part('path', () => bp.set(2, 0, 5, p.path));
+    bp.spot('entrance', 2, 5, 180);
+    bp.spot('spawn', 2, 5, 180);
+    return bp;
+  });
+}
+`;
 }
 
 /** (0b, C8) a SMALL detail pass's notional cost under simCosts: the SMALL seed's midpoint ($0.6-1.5) */
@@ -364,6 +419,10 @@ export class SimDesigner implements Designer {
         source = withDesignId(r2.source, bp);
         what = `massing ${prev.id} v${prev.version} redirected (${r2.change})`;
         note = r2.change;
+      } else if (fitsSmall(req.maxSize)) {
+        // (0b) a small item: a small volume (the examples are larger than an S lot)
+        source = simSmallMassing(bp, req.type);
+        what = 'a small massing (sim)';
       } else {
         const ex = simMassingSource(cfg.kitDir, req.type);
         source = withDesignId(fs.readFileSync(ex ?? path.join(scratch, KIT, 'designs', `${src}.mjs`), 'utf8'), bp);
@@ -395,6 +454,10 @@ export class SimDesigner implements Designer {
         sc.designCost(id, cost);
         note = `${note}; the turned front was repaired (round 2)`;
       }
+    } else if (fitsSmall(req.maxSize)) {
+      // (0b) a small item: a shed composed from kit/lib/smalls.mjs
+      source = simSmallDesign(bp, req.type, open ? (req.profile ?? ['door', 'lit', 'no_floating']) : undefined);
+      what = 'a small shed (sim, kit/lib/smalls.mjs)';
     } else {
       // the "design": the example under the new id (an open type and its profile written in)
       source = withDesignId(fs.readFileSync(path.join(scratch, KIT, 'designs', `${src}.mjs`), 'utf8'), bp);
@@ -409,7 +472,8 @@ export class SimDesigner implements Designer {
     // (4c) the plan every designer checks with: the massing profile, or a detail pass's hard cap and --massing
     const plan = sc.checkPlan(d, bibleArgs);
     // a fallback example (cabin for a tower) is checked as what it is, not as the requested type
-    const limits = d.massing ? plan.limits : { ...plan.limits, type: src === req.type || open ? req.type : undefined, profile: open ? (req.profile ?? ['door', 'lit', 'no_floating']) : undefined };
+    const smallSrc = !d.massing && !req.versionOf && fitsSmall(req.maxSize);
+    const limits = d.massing ? plan.limits : { ...plan.limits, type: src === req.type || open || smallSrc ? req.type : undefined, profile: open ? (req.profile ?? ['door', 'lit', 'no_floating']) : undefined };
     const res = await checkDesign(cfg.kitDir, scratch, bp, limits, 120_000, plan.extra);
     this.check(id, r);
     const problem = res.ok ? sc.checkOutcome(d, res) : (sc.checkOutcome(d, res), res.problem ?? 'the check failed');
