@@ -6241,3 +6241,54 @@ approach):
   caller asks for it**: `PlaceRequest.pathStyle` (a road surface block). The approach also takes the block of an adjacent 4e road
   site it joins, and joins the nearest road cell. Without either, single placements are unchanged. API 1.9.0 adds the field (old
   constructors kept). Gate: a plain lot next to a 4e road with `pathStyle` shows no default dirt-path or cobblestone on its front.
+
+## Phase 6b as built (API 1.9.0, mod 0.12.0, recorded 2026-10-10)
+
+Built on branch `phase/6b`. Gate record: `artifacts/gate6b/REPORT.md` and the scenario runs under
+`artifacts/scenarios/6b/` (local). Where this section and the 6b text above disagree, this section says what shipped.
+
+**Kit.** IR format 2 (side blobs, fields, volumes, forms, material rules, `requires` walked), the eight new shapes, the
+material rules, the 6b primitives (`cavern`, `utility`, `floating`, ring towers and crenels, bridge arches, towers, `ends` and
+`over: 'ours'`, solid and lit stairs, `Part.spiralTower`, lot `pad.fill: 'none'`, `Region.clearing`), `floatingIsland`,
+the virtual world, M1-M14 at full resolution with prefix checks, the four previews and `siteplan.json` (format 1, its graph
+`derived: true`), ARVX, and ARWD dumps (`decodeArwd`, `encodeArwd`, `dumpWorld` with the plan's attribution). Five bundled
+programs: `crater_works`, `rift_city`, `walled_hill`, `sky_isle`, `floating_islands` (S1). The format-1 golden
+(mega_bench) is byte-identical; format-2 goldens for S1 and the four fixtures pass on macOS and in a Node 22 Linux container.
+
+**Decisions and deviations made while building:**
+- The checker has no coarse mode: full resolution meets the coarse bar (mega_bench 10.7 s in game, about 21 s on the
+  synthetic survey; bar 60 s). `report.resolution` says `{coarse: 1}`.
+- M8's barrier is a block at least 1.5 tall (fences, walls, panes, closed gates) or two blocks high.
+- The `floatingIsland` cost bar (2x a sphere per cell) is missed (about 20x); the tile limit and 45k cells/s hold.
+- Programs may export `roles`: defaults between the rustic built-ins and the bible's roles. `crater_works` names coarse dirt
+  and stone bricks for `path` and `foundation`, `rift_city` packed mud and mud bricks.
+- `crater_works` turns its gate (with the bridge, ring opening, road and entrance on the bridge's line) to the side whose
+  ground is nearest the rim, and caps the rim 6 above it: on the pinned crater site the south gate was 19 below the rim and the
+  bridge ran inside the terraces (M2). `rift_city` runs on the longest stretch with no surface water across its band (the
+  pinned rift site's lake gave 283 M4 cells) and puts no lots on a ledge segment too short for its stair; it reads a `damp`
+  field (a side blob) for its floor, so it is a format-2 IR with a side blob (gate item 10(a)).
+- A bridge with `over: 'ours'` clears 6 above its deck (4 left a rail lantern floating on S1's pinned site).
+- Lot pads (6b addition, region lot entrances): the footprint's top is the surface role; the 1-column apron keeps a natural or
+  region-made top and fills a gap with the surface role; a fill-none pad keeps the foundation over the footprint and the form's
+  top as its apron. A plan recorded as kit 0.11.x keeps 0.11's pad.
+- The region lot's entrance approach (mod): the region's `path` and `foundation` roles; it stops at the first walk surface
+  (a 4e road cell, a region path tile's walk cell, or region-made standable ground) and takes that surface's block when it is a
+  full block; an entrance opening onto one has no approach. `PlaceRequest.pathStyle` gives a plain placement the same,
+  joining 4e roads only. A plain `pathStyle` site loses the style on move and 5b delta replans (not stored on the site).
+- E-normal adds the class `grazed` (grass or fern now air: a sheep ate it during a stand), the world's doing.
+- `region.release` gains `evict` (DevBridge `dev.region.drop` sends it so a shared cached IR goes too).
+- **Survey.volume's cell limit is 268M cells** (`VolumeSurvey.MAX_CELLS`), set by gate item 7: 9.6M cells/s wall time,
+  0.039 bytes/cell frozen; 60 s and 64 MB give 578M and 1.7G, and the sampler's 1-byte-per-cell heap at 256 MB decides it
+  (a third bound the contract's rule does not name).
+- **The downgrade (10(c)), pinned:** 0.11.0 does not load a format-2 region's record (its region list is empty, `remove`
+  says "no region"), writes nothing to it, and leaves the record on disk; 0.12.0 then resumes it and one `Regions.remove` is
+  exact. 0.11.0 never requests a tile, so there is no per-tile format message.
+- The pinned world seed `2026100906` is desert and warm ocean near spawn. find-site's needs were widened (relief and water
+  caps) and gained `center` and `stopAt`; the crater site has 47 blocks of relief, and `crater_works`' catalogue says hilly
+  land is fine (one of four picks said NO_TEMPLATE while it said "relief low").
+- Scenario metrics run on the realised world: two ARWD dumps of the claim + 8 over the written y span +-8, the kit checker over
+  them with the plan's part and walk attribution; a cell the world changed on its own (kelp, grass under water) is not a
+  written cell. The prepared chunks tick 90 s before the dumps. Palette role adherence counts role blocks, their shape
+  variants and form materials; the axis-run share is recorded only.
+- The S1 lot children are the 9-wide 6a stub (only it fits S1's 9x9 lots); the stub's own three front path rows are part of
+  its design (inside the lot box), not the approach.
