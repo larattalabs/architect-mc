@@ -196,6 +196,15 @@ public final class LauncherPlan {
 		return dir == null ? Path.of(windows ? "npm.cmd" : "npm") : dir.resolve(windows ? "npm.cmd" : "npm");
 	}
 
+	/**
+	 * Whether a bundled sidecar needs {@code npm ci} before it starts (6c slice 0a, C4). The bundle carries everything but the
+	 * Agent SDK (ws and zod are bundled into {@code dist/main.mjs}; the kit is plain ESM), so the sim backend
+	 * ({@code ARCHITECT_SIDECAR_BACKEND=sim}), which never loads the SDK, skips the install.
+	 */
+	public static boolean needsInstall(@Nullable String backend) {
+		return !"sim".equals(backend);
+	}
+
 	/** The install command for a bundled sidecar: {@code npm ci --omit=dev} with a lock file, else {@code npm install --omit=dev}. */
 	public static List<String> installCommand(Path npm, boolean hasLockFile) {
 		return List.of(npm.toString(), hasLockFile ? "ci" : "install", "--omit=dev", "--no-audit", "--no-fund");

@@ -499,6 +499,64 @@ Stop it with Ctrl-C (or by its PID). The no-login message itself is unit-tested 
 
 <br>
 
+## Testing against Architect
+
+A mod that uses Architect's API (`dev.larattalabs.architect.api`) can test its flows end to end without Claude and for $0.
+The helper bundled in the published jar has a **sim backend**: designs install the kit's hand-written examples, bibles get
+a fixed palette, massings and detail passes conform, and `job.run` answers to the job's schema. It needs no Architect
+checkout, no API key and no login, and it never calls Claude.
+
+**Turn it on** in the dev client that runs your mod with the published Architect jar (Architect 0.12.2 or later):
+
+- Set `ARCHITECT_SIDECAR_BACKEND=sim` in the client's environment (or `-Darchitect.sidecar.backend=sim`). The launcher
+  starts the bundled helper with `--backend sim`, and skips its `npm ci`: the install only fetches the Agent SDK, which the
+  sim never loads.
+- Leave `ARCHITECT_SIDECAR_DIR` and `ARCHITECT_KIT_DIR` unset, so the bundled helper and kit are used.
+- A launcher script that runs Gradle under `env -i` must pass these variables through explicitly
+  (`ARCHITECT_SIDECAR_BACKEND`, and `ARCHITECT_SIM_COSTS` if you use it).
+- The status line reads "sim designer: installs kit examples, no Claude". A helper already running on the port with the
+  same version is reused, so stop a real one first.
+
+**What it does** (at the default `simStepMs` of 400, a bible, 3 massings, an approval round and 3 details take seconds;
+the whole flow stays well under 2 minutes):
+
+| Call | The sim |
+|---|---|
+| `bibles().request` | a fixed bible (or the seed preset's roles), with the reference components |
+| `requestGroup` (also `massingFirst`, `approvalUi: owner`) | each item copies the kit example of its type (cabin for unknown types); massings, redirects (a visibly different version), approval and detail passes that conform to their massing |
+| `jobs().run` | a structured job answers with a sample that satisfies the schema; an agent job calls each of your tools once |
+| `queue`, placement, undo | the real thing: the sim only replaces the design side |
+
+**Scripted answers.** `ext["architect:simAnswer"]` on a structured job is its answer. It is checked against the job's
+schema first: a mismatch fails the job at once, with the validation errors.
+
+**Faults** (sim only), in a request's or a group item's `notes` as `sim:<fault>`, or as `ext["architect:sim"]` (a string or
+a list of them):
+
+| Fault | Effect |
+|---|---|
+| `sim:fail` | the design fails after its first step (the item ends FAILED) |
+| `sim:repair` | round 1's check fails and one repair round fixes it (it costs a repair round) |
+| `sim:usage_limit` | one simulated usage limit: the group goes HELD_USAGE, then resumes (config `simLimitMs`, default 1.5 s) |
+
+A fault in a group item's notes applies to each design of that item (its massings and its detail pass).
+
+**Costs.** By default every sim cost is $0. To exercise budgets, the soft pause, `extendGroup` and the estimates with
+realistic figures, set `simCosts` in `<gameDir>/architect/sidecar-data/config.json`, or `ARCHITECT_SIM_COSTS` in the
+environment (the environment wins):
+
+- `"zero"` (the default);
+- `"measured"`: the midpoints of the costs measured in Steward's first paid run: bible $1.35, massing $0.19, detail $3.40,
+  report critique $0.10, repair round $0.50;
+- an object with those five keys, e.g. `{"bible":1,"massing":0.2,"detail":3,"critique":0.1,"repair":0.5}` (as JSON in the
+  environment variable).
+
+Each item reports its figure as its cost (a step that runs again after a usage limit or a restart adds nothing). The
+figures are notional: nothing is spent. The helper's log says `sim: true` at start and on each finished group and bible,
+and so does the basis of every estimate.
+
+<br>
+
 ## Status
 
 Architect is early.

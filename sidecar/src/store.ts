@@ -42,6 +42,8 @@ export interface DesignWork {
   critique?: import('./critique.js').CritiqueWork;
   /** (5b) a polish's state (polish.ts PolishWork) */
   polish?: import('./polish.js').PolishWork;
+  /** (6c 0a) the sim designer's rounds (sim.ts SimRoundWork) */
+  sim?: import('./sim.js').SimRoundWork;
 }
 
 /** A mod-provided tool call the client has not answered yet (survives a restart). */
@@ -75,6 +77,8 @@ export interface JobWork {
   images?: Array<{ file: string; label: string; mediaType: 'image/png' | 'image/jpeg' }>;
   /** (5a) sim only: a scripted structured answer (the critic's verdicts) */
   simAnswer?: unknown;
+  /** (6c 0a) sim only: the cost of each step of this job (simCosts: a critic call) */
+  simStepUsd?: number;
 }
 
 export interface StateData {

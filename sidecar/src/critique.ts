@@ -196,6 +196,9 @@ export class Critiques {
   highs(d: Design, cw: CritiqueWork): { critic: number; revise: number } {
     if (this.sc.designerName() === 'sim') {
       // sim-scale: one job step for the critic, one design step for a revision
+      // (6c 0a) simCosts: a critic call and a revision cost what the sim reports for them
+      const c = this.sc.config.simCosts;
+      if (c) return { critic: c.critique, revise: c.repair };
       return { critic: this.sc.config.jobs.simStepUsd, revise: this.sc.config.simDesignUsd };
     }
     const model = d.request.model ?? (d.request.massing ? this.sc.config.massing.model : this.sc.config.claude.designModel);
@@ -424,7 +427,7 @@ export class Critiques {
         owner: CRITIC_OWNER,
         tag: `design ${id} round ${n}`,
       },
-      { images, ...(sc.designerName() === 'sim' ? { simAnswer: simVerdict(d.request.notes, n, dims, parts, usedViews) } : {}) },
+      { images, ...(sc.designerName() === 'sim' ? { simAnswer: simVerdict(d.request.notes, n, dims, parts, usedViews), ...(sc.config.simCosts ? { simStepUsd: sc.config.simCosts.critique } : {}) } : {}) },
     );
     cw.pending = 'critic';
     cw.jobId = job.id;
@@ -731,7 +734,7 @@ export class Critiques {
     const dims = dimsFor(ctx);
     const job = sc.jobs.runInternal(
       { kind: 'structured', prompt: criticPrompt(ctx), system: CRITIC_SYSTEM, model, effort: sc.config.critique.effort, schema: verdictSchema(dims, ['sheet']), maxTurns: 3, owner: 'architect:sheet-critic', tag: `bible ${j.bibleId} v${j.version}` },
-      { images: [{ file: sheet, label: 'sheet (the component sheet)' }], ...(sc.designerName() === 'sim' ? { simAnswer: simVerdict(j.request.prompt, 0, dims, [], ['sheet']) } : {}) },
+      { images: [{ file: sheet, label: 'sheet (the component sheet)' }], ...(sc.designerName() === 'sim' ? { simAnswer: simVerdict(j.request.prompt, 0, dims, [], ['sheet']), ...(sc.config.simCosts ? { simStepUsd: sc.config.simCosts.critique } : {}) } : {}) },
     );
     const done = await sc.jobs.waitFinal(job.id);
     w.cost = addCost(w.cost, done.cost);
