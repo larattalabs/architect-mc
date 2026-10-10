@@ -45,7 +45,7 @@ public record Estimate(double usdLow, double usdHigh, double minutesLow, double 
 	 * The kinds of an {@link EstimateRequest} estimate's lines ({@link #byKind}; since 1.10.0): its key is the line's
 	 * {@link Item#itemKey} too. New values are only ever appended.
 	 */
-	public enum Kind { BIBLE, ORIGINAL, ADAPTED, COPY }
+	public enum Kind { BIBLE, ORIGINAL, ADAPTED, COPY, SMALL, CHANGE }
 
 	/** The 1.6.0 constructor (no polish figures). */
 	public Estimate(double usdLow, double usdHigh, double minutesLow, double minutesHigh, String basis, boolean critique, double critiqueUsdLow,

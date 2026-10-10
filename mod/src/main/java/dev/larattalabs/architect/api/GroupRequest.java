@@ -36,10 +36,40 @@ import org.jspecify.annotations.Nullable;
  *     work (in any state); with a different body the future fails {@link ArchitectRefused} {@link Reason#OP_KEY_CONFLICT}.
  *     Bodies are compared by the sha256 of the request's canonical JSON without the key. Kept as long as the record, and at
  *     least 30 days after it is final. See {@link Designs#groupByKey}.
+ * @param copyCap (since 1.11.0, a helper with {@code "copies"}) placements per design, 1-3 (default 3): of an item with
+ *     {@link Item#count} n, every copyCap-th placement starts a new archetype (an original) and the others are $0 copies of the
+ *     archetype before them; 1 = all originals. A landmark's extra count is always originals
+ * @param smallBySize (since 1.11.0, {@code "smallEffort"}) an item whose request's maxSize footprint fits 11 x 9 either way is
+ *     small ({@link Item.Effort#AUTO}): it skips the group-default report critique and runs the bounded SMALL detail pass. An
+ *     item's explicit effort wins
  */
 public record GroupRequest(String name, String bible, @Nullable Integer bibleVersion, @Nullable String owner, JsonObject ext,
 	@Nullable Integer concurrency, @Nullable Double budgetUsd, List<Item> items, boolean massingFirst, @Nullable ApprovalUi approvalUi,
-	@Nullable Integer maxRedirects, @Nullable JsonElement context, @Nullable CritiqueSpec critique, @Nullable String opKey) {
+	@Nullable Integer maxRedirects, @Nullable JsonElement context, @Nullable CritiqueSpec critique, @Nullable String opKey, int copyCap,
+	boolean smallBySize) {
+	/** The default {@link #copyCap}. */
+	public static final int DEFAULT_COPY_CAP = 3;
+
+	/** The 1.10.0 constructor (copyCap 3, no smallBySize). */
+	public GroupRequest(String name, String bible, @Nullable Integer bibleVersion, @Nullable String owner, JsonObject ext, @Nullable Integer concurrency,
+		@Nullable Double budgetUsd, List<Item> items, boolean massingFirst, @Nullable ApprovalUi approvalUi, @Nullable Integer maxRedirects,
+		@Nullable JsonElement context, @Nullable CritiqueSpec critique, @Nullable String opKey) {
+		this(name, bible, bibleVersion, owner, ext, concurrency, budgetUsd, items, massingFirst, approvalUi, maxRedirects, context, critique, opKey,
+			DEFAULT_COPY_CAP, false);
+	}
+
+	/** A copy with this copyCap (1-3). Since 1.11.0. */
+	public GroupRequest withCopyCap(int cap) {
+		return new GroupRequest(name, bible, bibleVersion, owner, ext, concurrency, budgetUsd, items, massingFirst, approvalUi, maxRedirects, context, critique,
+			opKey, cap, smallBySize);
+	}
+
+	/** A copy with the 11 x 9 small rule on or off. Since 1.11.0. */
+	public GroupRequest withSmallBySize(boolean on) {
+		return new GroupRequest(name, bible, bibleVersion, owner, ext, concurrency, budgetUsd, items, massingFirst, approvalUi, maxRedirects, context, critique,
+			opKey, copyCap, on);
+	}
+
 	/** The 1.6.0 constructor (no opKey). */
 	public GroupRequest(String name, String bible, @Nullable Integer bibleVersion, @Nullable String owner, JsonObject ext, @Nullable Integer concurrency,
 		@Nullable Double budgetUsd, List<Item> items, boolean massingFirst, @Nullable ApprovalUi approvalUi, @Nullable Integer maxRedirects,
@@ -50,7 +80,7 @@ public record GroupRequest(String name, String bible, @Nullable Integer bibleVer
 	/** A copy with an operation key. Since 1.10.0. */
 	public GroupRequest withOpKey(@Nullable String key) {
 		return new GroupRequest(name, bible, bibleVersion, owner, ext, concurrency, budgetUsd, items, massingFirst, approvalUi, maxRedirects, context, critique,
-			key);
+			key, copyCap, smallBySize);
 	}
 
 	/** The most items a group holds. */
@@ -66,6 +96,9 @@ public record GroupRequest(String name, String bible, @Nullable Integer bibleVer
 		}
 		if (critique != null && !critique.on()) {
 			critique = null;
+		}
+		if (copyCap < 1 || copyCap > 3) {
+			copyCap = DEFAULT_COPY_CAP;
 		}
 	}
 
@@ -84,7 +117,8 @@ public record GroupRequest(String name, String bible, @Nullable Integer bibleVer
 
 	/** A copy with massings first ({@code approvalUi} null = architect, {@code maxRedirects} null = the default). Since 1.3.0. */
 	public GroupRequest withMassingFirst(@Nullable ApprovalUi ui, @Nullable Integer redirects) {
-		return new GroupRequest(name, bible, bibleVersion, owner, ext, concurrency, budgetUsd, items, true, ui, redirects, context, critique, opKey);
+		return new GroupRequest(name, bible, bibleVersion, owner, ext, concurrency, budgetUsd, items, true, ui, redirects, context, critique, opKey, copyCap,
+			smallBySize);
 	}
 
 	/** A copy with a context text (null or blank = none). Since 1.3.0. */
@@ -94,12 +128,14 @@ public record GroupRequest(String name, String bible, @Nullable Integer bibleVer
 
 	/** A copy with a context: a JSON object, or text as a {@link JsonPrimitive}. Since 1.3.0. */
 	public GroupRequest withContext(@Nullable JsonElement ctx) {
-		return new GroupRequest(name, bible, bibleVersion, owner, ext, concurrency, budgetUsd, items, massingFirst, approvalUi, maxRedirects, ctx, critique, opKey);
+		return new GroupRequest(name, bible, bibleVersion, owner, ext, concurrency, budgetUsd, items, massingFirst, approvalUi, maxRedirects, ctx, critique, opKey,
+			copyCap, smallBySize);
 	}
 
 	/** A copy whose items are critiqued as {@code spec} by default (null or OFF = none). Since 1.6.0. */
 	public GroupRequest critique(@Nullable CritiqueSpec spec) {
-		return new GroupRequest(name, bible, bibleVersion, owner, ext, concurrency, budgetUsd, items, massingFirst, approvalUi, maxRedirects, context, spec, opKey);
+		return new GroupRequest(name, bible, bibleVersion, owner, ext, concurrency, budgetUsd, items, massingFirst, approvalUi, maxRedirects, context, spec, opKey,
+			copyCap, smallBySize);
 	}
 
 	/** Who approves a massingFirst group's massings. Since 1.3.0. */
@@ -141,10 +177,52 @@ public record GroupRequest(String name, String bible, @Nullable Integer bibleVer
 	 * @param anchor designed first (wave 0)
 	 * @param critique (since 1.6.0) this item's critique; it wins over the group's. Null = the request's own
 	 *     {@link DesignRequest#critique()} when set, else the group's. {@link CritiqueSpec#OFF} turns it off for this item
+	 * @param count (since 1.11.0, {@code "copies"}) placements of this item, 1-24 (default 1): the item expands into
+	 *     {@code <key>}, {@code <key>#2} ... {@code <key>#n} on {@link Group#items()} (see {@link GroupRequest#copyCap()})
+	 * @param copyOf (since 1.11.0) this item is a $0 copy of that item's archetype and counts toward its copyCap; refused with
+	 *     {@link Reason#COPY_REFUSED} (detail landmark, unknown, self, cap)
+	 * @param effort (since 1.11.0, {@code "smallEffort"}) AUTO (small by the 11 x 9 rule when the group sets smallBySize),
+	 *     STANDARD or SMALL (2 design rounds, 40 turns each at effort medium, $1.50 over the pass; a cap hit fails the item)
 	 */
-	public record Item(@Nullable String itemKey, DesignRequest request, Role role, @Nullable Integer wave, boolean anchor, @Nullable CritiqueSpec critique) {
+	public record Item(@Nullable String itemKey, DesignRequest request, Role role, @Nullable Integer wave, boolean anchor, @Nullable CritiqueSpec critique,
+		int count, @Nullable String copyOf, Effort effort) {
 		public Item {
 			role = role == null ? Role.ORDINARY : role;
+			count = Math.max(1, count);
+			effort = effort == null ? Effort.AUTO : effort;
+		}
+
+		/** The 1.6.0 constructor (one placement, AUTO effort). */
+		public Item(@Nullable String itemKey, DesignRequest request, Role role, @Nullable Integer wave, boolean anchor, @Nullable CritiqueSpec critique) {
+			this(itemKey, request, role, wave, anchor, critique, 1, null, Effort.AUTO);
+		}
+
+		/** A copy placed {@code n} times (1-24). Since 1.11.0. */
+		public Item count(int n) {
+			return new Item(itemKey, request, role, wave, anchor, critique, n, copyOf, effort);
+		}
+
+		/** A copy that is a $0 copy of item {@code key}'s archetype. Since 1.11.0. */
+		public Item copyOf(@Nullable String key) {
+			return new Item(itemKey, request, role, wave, anchor, critique, count, key, effort);
+		}
+
+		/** A copy with this effort. Since 1.11.0. */
+		public Item effort(Effort e) {
+			return new Item(itemKey, request, role, wave, anchor, critique, count, copyOf, e);
+		}
+
+		/** A group item's effort (C8). Since 1.11.0. */
+		public enum Effort {
+			AUTO, STANDARD, SMALL;
+
+			public String wire() {
+				return name().toLowerCase(Locale.ROOT);
+			}
+
+			public static Effort of(@Nullable String s) {
+				return "small".equalsIgnoreCase(s) ? SMALL : "standard".equalsIgnoreCase(s) ? STANDARD : AUTO;
+			}
 		}
 
 		/** The 1.2.0 constructor (the group's critique). */
@@ -154,7 +232,7 @@ public record GroupRequest(String name, String bible, @Nullable Integer bibleVer
 
 		/** A copy with its own critique (null = the group's, {@link CritiqueSpec#OFF} = none). Since 1.6.0. */
 		public Item critique(@Nullable CritiqueSpec spec) {
-			return new Item(itemKey, request, role, wave, anchor, spec);
+			return new Item(itemKey, request, role, wave, anchor, spec, count, copyOf, effort);
 		}
 
 		/** An ordinary item in wave 1. */

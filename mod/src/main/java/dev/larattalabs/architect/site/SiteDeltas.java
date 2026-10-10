@@ -298,6 +298,120 @@ public final class SiteDeltas {
 		return false;
 	}
 
+	// ------------------------------------------------------------------ (6c 0b, C13) a versionOf's site context
+
+	/** The most edited cells {@link #versionOfContext} lists (the counts cover all). */
+	public static final int MAX_LISTED_EDITS = 2000;
+
+	/**
+	 * A site's context for a {@code versionOf} design (server thread): the restore box as it stands (a structure template, gzip
+	 * NBT) and the player's edits, DeltaPlanner's KEEP set: every cell the site holds on top whose block in the world differs from
+	 * what the site wrote, by part and block (at most {@link #MAX_LISTED_EDITS} listed, in template coordinates of the site's
+	 * version), with counts, the site's version and its deviations.
+	 */
+	public record VersionOfContext(String entryId, int version, byte[] siteNow, JsonObject edits) {
+	}
+
+	public static VersionOfContext versionOfContext(ServerLevel level, String siteId) throws Sites.SiteException {
+		MinecraftServer server = level.getServer();
+		Site b = Sites.get(siteId);
+		if (b == null) {
+			throw new Sites.SiteException(Reason.OTHER, "No site " + siteId);
+		}
+		int from = versionOf(server, b);
+		Blueprints.Version va = from == 0 ? null : Blueprints.version(server, b.blueprint(), from);
+		if (va == null) {
+			throw new Sites.SiteException(Reason.VERSION_GONE, "The version " + siteId + " was placed from can't be found any more");
+		}
+		b = Sites.get(siteId);
+		SiteCells sc;
+		try {
+			sc = new SiteCells(WorldJournal.store(), b.id(), b.dimension());
+		} catch (IOException e) {
+			throw new Sites.SiteException(Reason.JOURNAL_UNAVAILABLE, "The journal of " + b.id() + " can't be read (" + e.getMessage() + ")");
+		}
+		// the template cells at their world positions (as the site's plan puts them), with their design part
+		SitePlanner.VersionCells cells = cells(va);
+		int turns = BlueprintTransform.parseTurns(b.rotation());
+		int[] min = siteMin(b, va);
+		var model = cells.model(va.entry().blueprint().groundY(), turns);
+		TemplateDelta.Decoded dec = TemplateDelta.decode(new TemplateDelta.Version(va.raw(), va.parts(), va.entry().json()));
+		int[] origin = dec.origin();
+		Map<String, Integer> byPart = new TreeMap<>();
+		Map<String, Integer> byBlock = new TreeMap<>();
+		JsonArray listed = new JsonArray();
+		int total = 0;
+		for (int i = 0; i < cells.count(); i++) {
+			long p = Journal.pos(min[0] + model.x(i), min[1] + model.y(i), min[2] + model.z(i));
+			if (sc.holder(p) != DeltaPlanner.Holder.SITE) {
+				continue;
+			}
+			Cell top = sc.top(p);
+			if (top == null || top.after() == null) {
+				continue;
+			}
+			BlockPos bp = BlockPos.of(p);
+			if (level.getChunkSource().getChunkNow(bp.getX() >> 4, bp.getZ() >> 4) == null) {
+				continue;
+			}
+			Value now = WorldJournal.valueAt(level, bp);
+			if (now.equals(top.after())) {
+				continue;
+			}
+			total++;
+			int tx = cells.xyz()[i * 3];
+			int ty = cells.xyz()[i * 3 + 1];
+			int tz = cells.xyz()[i * 3 + 2];
+			String part = dec.partName(TemplateDelta.pack(tx - origin[0], ty - origin[1], tz - origin[2]));
+			String block = DeltaPlanner.name(now);
+			byPart.merge(part == null ? "(none)" : part, 1, Integer::sum);
+			byBlock.merge(block, 1, Integer::sum);
+			if (listed.size() < MAX_LISTED_EDITS) {
+				JsonObject c = new JsonObject();
+				c.addProperty("x", tx);
+				c.addProperty("y", ty);
+				c.addProperty("z", tz);
+				if (part != null) {
+					c.addProperty("part", part);
+				}
+				c.addProperty("found", block);
+				c.addProperty("planned", DeltaPlanner.name(top.after()));
+				listed.add(c);
+			}
+		}
+		JsonObject edits = new JsonObject();
+		edits.addProperty("siteId", siteId);
+		edits.addProperty("entryId", b.blueprint());
+		edits.addProperty("siteVersion", from);
+		edits.addProperty("deviations", total);
+		JsonObject counts = new JsonObject();
+		counts.addProperty("kept", total);
+		counts.addProperty("listed", listed.size());
+		JsonObject bp = new JsonObject();
+		byPart.forEach(bp::addProperty);
+		counts.add("byPart", bp);
+		JsonObject bb = new JsonObject();
+		byBlock.forEach(bb::addProperty);
+		counts.add("byBlock", bb);
+		edits.add("counts", counts);
+		edits.add("cells", listed);
+		edits.addProperty("coordinates", "template coordinates of the site's version (" + from + "), before rotation");
+		// the restore box as it stands
+		Anchors.Bounds box = b.restoreBox();
+		net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemplate t = new net.minecraft.world.level.levelgen.structure.templatesystem
+			.StructureTemplate();
+		t.fillFromWorld(level, new BlockPos(box.minX(), box.minY(), box.minZ()), new net.minecraft.core.Vec3i(box.maxX() - box.minX() + 1, box.maxY()
+			- box.minY() + 1, box.maxZ() - box.minZ() + 1), false, List.of());
+		CompoundTag tag = t.save(new CompoundTag());
+		java.io.ByteArrayOutputStream bytes = new java.io.ByteArrayOutputStream();
+		try {
+			net.minecraft.nbt.NbtIo.writeCompressed(tag, bytes);
+		} catch (IOException e) {
+			throw new Sites.SiteException(Reason.OTHER, "The site's blocks can't be written: " + e.getMessage());
+		}
+		return new VersionOfContext(b.blueprint(), from, bytes.toByteArray(), edits);
+	}
+
 	// ------------------------------------------------------------------ the site's journal side
 
 	/** A site's own non-guard cells (its {@code site} and {@code delta} entries), and the other entries near it. */

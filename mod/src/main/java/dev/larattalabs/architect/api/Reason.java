@@ -57,6 +57,13 @@ package dev.larattalabs.architect.api;
  * <li>{@code TILE_SLOW} (1.10.0): a region tile's evaluation ran over its time limit in every retry of the helper. Temporary:
  * the item waits, the tile is asked for again after 30 s, 60 s, 120 s and then every 5 min, and {@link WaitAction.Kind#RETRY}
  * asks now. Only {@code RealiseRequest.maxWaitSeconds} caps it (TIMED_OUT).</li>
+ * <li>{@code COPY_REFUSED} (1.11.0): a group's copies can't be made as asked. {@link ArchitectRefused#detail()}: {@code landmark}
+ * (a copyOf naming a landmark), {@code unknown} (a copyOf naming no item), {@code self} (an item copying itself), {@code cap}
+ * (one past the archetype's copyCap); {@link Designs#promoteCopy} refused: {@code not_copy}, {@code building}, {@code final}.</li>
+ * <li>{@code VERSION_REFUSED} (1.11.0): a {@code versionOf} (or a polish) can't make the entry's next version. Detail:
+ * {@code bundled}, {@code no_source}, {@code massing}, {@code copy} (a group copy follows its source by its recipe), {@code busy}
+ * (a polish or versionOf of the entry is unfinished), {@code site_mismatch} (the site is not of that entry), {@code group}
+ * (single designs only).</li>
  * </ul>
  * New values are only ever appended.
  */
@@ -64,5 +71,6 @@ public enum Reason {
 	PLAYER_IN_BOX, OCCUPIED, OVERLAP, LAVA, BLOCK_ENTITIES, BUILD_HEIGHT, DOOR_CUT, CREATIVE_ONLY_BLOCK, NOT_ALLOWED, NOT_LOADED,
 	UNKNOWN_BLUEPRINT, OTHER, CANCELLED, LOT_TOO_SMALL, TIMED_OUT, OVERLAP_BUSY, OVERLAP_OWNED, LAYER_DEPTH, COVERED, TOO_STEEP, DEEP_WATER,
 	TOO_LARGE, JOURNAL_UNAVAILABLE, SITE_BUSY, FRAME_CHANGED, VERSION_GONE, PLAYER_EDITS, NOT_GENERATED, CHUNK_BOUND, DRIFTED,
-	SIDECAR_UNAVAILABLE, PLAN_STALE, REGION_LIMIT, NO_TEMPLATE, PLAYER_BLOCKS, WORLD_STOPPED, OP_KEY_CONFLICT, TILE_SLOW
+	SIDECAR_UNAVAILABLE, PLAN_STALE, REGION_LIMIT, NO_TEMPLATE, PLAYER_BLOCKS, WORLD_STOPPED, OP_KEY_CONFLICT, TILE_SLOW,
+	COPY_REFUSED, VERSION_REFUSED
 }

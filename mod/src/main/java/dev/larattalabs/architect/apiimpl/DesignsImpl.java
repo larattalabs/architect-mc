@@ -197,6 +197,15 @@ final class DesignsImpl implements Designs {
 			if (r.critique() != null && r.critique().on()) {
 				o.add("critique", Wire5a.spec(r.critique()));
 			}
+			// 6c 0b: versionOf (the site's files are added by requestVersionOf)
+			if (r.versionOf() != null) {
+				JsonObject v = new JsonObject();
+				v.addProperty("entryId", r.versionOf());
+				if (r.versionOfSite() != null) {
+					v.addProperty("siteId", r.versionOfSite());
+				}
+				o.add("versionOf", v);
+			}
 		}
 		return o;
 	}
@@ -259,6 +268,10 @@ final class DesignsImpl implements Designs {
 	@Override
 	public CompletableFuture<String> request(DesignRequest r) {
 		load();
+		// (6c 0b, C13) a design as an entry's next version
+		if (r.versionOf() != null) {
+			return requestVersionOf(r);
+		}
 		ClientBridge b = ApiImpl.bridge();
 		if (b == null || !b.connected()) {
 			return ApiImpl.onServerFuture(CompletableFuture.failedFuture(new IllegalStateException("the design helper is not running")));
@@ -276,6 +289,84 @@ final class DesignsImpl implements Designs {
 		});
 		// completes at the ack: the link's ack timeout and a dropped link already fail it; this is the backstop
 		return ApiImpl.onServerFuture(out.orTimeout(ApiTimeouts.DESIGN_MS, java.util.concurrent.TimeUnit.MILLISECONDS));
+	}
+
+	/**
+	 * (6c 0b, C13) {@code versionOf}: the site (if any) must be of that entry ({@code site_mismatch}); its restore box as it
+	 * stands and its player edits (the KEEP set) are captured on the server thread and sent as blobs with the request.
+	 */
+	private CompletableFuture<String> requestVersionOf(DesignRequest r) {
+		String entryId = r.versionOf();
+		if (r.group() != null) {
+			return ApiImpl.onServerFuture(CompletableFuture.failedFuture(new dev.larattalabs.architect.api.ArchitectRefused(
+				dev.larattalabs.architect.api.Reason.VERSION_REFUSED, "versionOf is for single designs only", "group")));
+		}
+		ClientBridge b0 = ApiImpl.bridge();
+		String why = unavailable4b(b0, "versionOf", "versionOf designs");
+		if (why != null) {
+			return ApiImpl.onServerFuture(CompletableFuture.failedFuture(new IllegalStateException(why)));
+		}
+		CompletableFuture<JsonObject> wired = new CompletableFuture<>();
+		ApiImpl.runOnServer(() -> {
+			try {
+				JsonObject req = wire(r, 2);
+				JsonObject v = req.getAsJsonObject("versionOf");
+				String siteId = r.versionOfSite();
+				if (siteId == null) {
+					wired.complete(req);
+					return;
+				}
+				dev.larattalabs.architect.site.Site s = dev.larattalabs.architect.site.Sites.get(siteId);
+				if (s == null) {
+					throw new dev.larattalabs.architect.api.ArchitectRefused(dev.larattalabs.architect.api.Reason.UNKNOWN_BLUEPRINT, "No site " + siteId);
+				}
+				if (!s.blueprint().equals(entryId)) {
+					throw new dev.larattalabs.architect.api.ArchitectRefused(dev.larattalabs.architect.api.Reason.VERSION_REFUSED, "site " + siteId + " is of "
+						+ s.blueprint() + ", not " + entryId, "site_mismatch");
+				}
+				var level = dev.larattalabs.architect.site.Sites.levelOf(ApiImpl.server(), s);
+				if (level == null) {
+					throw new IllegalStateException(siteId + "'s dimension is not loaded");
+				}
+				var ctx = dev.larattalabs.architect.site.SiteDeltas.versionOfContext(level, siteId);
+				var jobs = ApiImpl.instance().jobs();
+				if (jobs == null) {
+					throw new IllegalStateException("the API is not ready");
+				}
+				jobs.putBlob("versionOf-site", r.owner(), ctx.siteNow()).thenCompose(now -> {
+					v.addProperty("siteNow", now);
+					return jobs.putBlob("versionOf-edits", r.owner(), ctx.edits());
+				}).whenComplete((edits, err) -> {
+					if (err != null) {
+						wired.completeExceptionally(err);
+					} else {
+						v.addProperty("siteEdits", edits);
+						wired.complete(req);
+					}
+				});
+			} catch (dev.larattalabs.architect.site.Sites.SiteException e) {
+				wired.completeExceptionally(new dev.larattalabs.architect.api.ArchitectRefused(e.reason(), e.getMessage()));
+			} catch (RuntimeException e) {
+				wired.completeExceptionally(e);
+			}
+		});
+		return wired.thenCompose(req -> {
+			JsonObject m = msg("design.request");
+			m.add("request", req);
+			return ask("versionOf", "versionOf designs", m);
+		}).thenApply(res -> {
+			String id = res.has("designId") ? res.get("designId").getAsString() : null;
+			if (id == null) {
+				throw new IllegalStateException("the helper sent no designId");
+			}
+			synchronized (this) {
+				meta.put(id, new Meta(r.owner(), r.ext().deepCopy()));
+			}
+			save();
+			Architect.LOGGER.info("API: design {} requested: the next version of {}{}", id, entryId, r.versionOfSite() == null ? "" : " (site " + r
+				.versionOfSite() + ")");
+			return id;
+		});
 	}
 
 	/** (6b) A design started outside {@link #request} (a region design): its owner and ext are kept as for any API design. */
@@ -552,8 +643,7 @@ final class DesignsImpl implements Designs {
 		for (Group.Item i : g.items()) {
 			JsonObject raw = raws.get(i.designId());
 			var full = raw == null ? java.util.Optional.<dev.larattalabs.architect.api.Critique>empty() : Wire5a.record(raw.get("critique"));
-			items.add(full.isEmpty() ? i : new Group.Item(i.itemKey(), i.ext(), i.designId(), i.entryId(), i.status(), i.step(), i.cost(), i.wave(),
-				i.role(), i.model(), i.type(), i.name(), i.error(), i.stage(), i.massing(), i.rounds(), i.designIds(), full));
+			items.add(full.isEmpty() ? i : Wire0b.withCritique(i, full));
 		}
 		return new Group(g.id(), g.name(), g.bible(), g.owner(), g.ext(), g.concurrency(), g.budgetUsd(), g.softBudgetFraction(), g.status(), g.reason(),
 			items, g.wave(), g.done(), g.failed(), g.cost(), g.usageLimitUntil(), g.createdAt(), g.updatedAt(), g.massingFirst(), g.approvalUi(),
@@ -604,6 +694,7 @@ final class DesignsImpl implements Designs {
 				case "massing" -> "4c";
 				case "critique", "critique.report", "job.images", "bible.admin", "bible.restraint" -> "5a";
 				case "opKeys", "estimate.kinds", "group.breakdown" -> "6c slice 0a";
+				case "copies", "smallEffort", "versionOf" -> "6c slice 0b";
 				case "design.polish", "entry.versions", "entry.delta", "critique.polish" -> "5b";
 				default -> "4b";
 			};
@@ -622,8 +713,11 @@ final class DesignsImpl implements Designs {
 		return ApiImpl.onServerFuture(b.send(message).thenApply(ack -> {
 			if (!ack.has("ok") || !ack.get("ok").getAsBoolean()) {
 				String err = ack.has("error") ? ack.get("error").getAsString() : "refused by the helper";
-				// (6c 0a) a typed refusal (OP_KEY_CONFLICT)
-				RuntimeException typed = Wire0a.refusal(err);
+				// (6c 0a) a typed refusal (OP_KEY_CONFLICT); (6c 0b) one with a code and detail (COPY_REFUSED, VERSION_REFUSED)
+				RuntimeException typed = Wire0b.refusal(ack);
+				if (typed == null) {
+					typed = Wire0a.refusal(err);
+				}
 				throw new java.util.concurrent.CompletionException(typed != null ? typed : new IllegalStateException(err));
 			}
 			return ack.has("result") && ack.get("result").isJsonObject() ? ack.getAsJsonObject("result") : new JsonObject();
@@ -638,6 +732,11 @@ final class DesignsImpl implements Designs {
 
 	@Override
 	public CompletableFuture<String> requestGroup(GroupRequest r) {
+		// (6c 0b) versionOf is for single designs only
+		if (r.items().stream().anyMatch(i -> i.request().versionOf() != null)) {
+			return ApiImpl.onServerFuture(CompletableFuture.failedFuture(new dev.larattalabs.architect.api.ArchitectRefused(
+				dev.larattalabs.architect.api.Reason.VERSION_REFUSED, "versionOf is for single designs only, not group items", "group")));
+		}
 		JsonObject m = msg("design.group");
 		try {
 			m.add("group", Wire4b.group(r));
@@ -648,7 +747,9 @@ final class DesignsImpl implements Designs {
 		if (why5a != null) {
 			return ApiImpl.onServerFuture(CompletableFuture.failedFuture(new IllegalArgumentException(why5a)));
 		}
-		return ask("design.groups", "design groups", m).thenApply(res -> {
+		// (6c 0b) copies or SMALL effort need a 0b helper
+		String feature0b = Wire0b.feature(r);
+		return ask(feature0b != null ? feature0b : "design.groups", "design groups", m).thenApply(res -> {
 			String id = res.has("groupId") ? res.get("groupId").getAsString() : null;
 			if (id == null) {
 				throw new IllegalStateException("the helper sent no groupId");
@@ -721,6 +822,16 @@ final class DesignsImpl implements Designs {
 			}
 		}
 		return out;
+	}
+
+	@Override
+	public CompletableFuture<Group> promoteCopy(String groupId, String itemKey, String reason) {
+		JsonObject m = msg("group.promoteCopy");
+		m.addProperty("groupId", groupId);
+		m.addProperty("itemKey", itemKey);
+		m.addProperty("reason", reason == null || reason.isBlank() ? "promoted by the caller" : reason.strip());
+		return flying(groupId, () -> ask("copies", "promoting copies", m)).thenApply(r -> group(groupId)
+			.orElseThrow(() -> new IllegalStateException("the helper promoted " + itemKey + " but group " + groupId + " is not known here")));
 	}
 
 	@Override

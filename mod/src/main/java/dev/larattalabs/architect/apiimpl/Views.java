@@ -172,7 +172,7 @@ public final class Views {
 			j.has("imported") && j.get("imported").isJsonPrimitive() && j.get("imported").getAsBoolean(), Optional.ofNullable(str(j, "variantOf")),
 			Wire4b.pin(j.get("bible")), Optional.ofNullable(str(j, "group")), Optional.ofNullable(str(j, "groupItem")), Wire4b.parts(j),
 			direction(bp.front()), anchorCells(bp), bp.groundY(), approach(bp), Wire5a.entry(e.dir(), bp.id(), j),
-			dev.larattalabs.architect.library.EntryVersions.version(j), entryVersions(bp.id(), j));
+			dev.larattalabs.architect.library.EntryVersions.version(j), entryVersions(bp.id(), j), Wire0b.derivation(j), Wire0b.variantOfVersion(j));
 	}
 
 	/** An entry's lineage for the API, with each version's pin (a standing site stands at it). */

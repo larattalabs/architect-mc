@@ -103,6 +103,10 @@ public final class Wire0a {
 		if (r.model() != null) {
 			m.addProperty("model", r.model());
 		}
+		// 6c 0b
+		if (r.smallOriginals() > 0) {
+			m.addProperty("smallOriginals", r.smallOriginals());
+		}
 		return m;
 	}
 

@@ -166,4 +166,15 @@ public interface Designs {
 	default CompletableFuture<Optional<Group>> groupByKey(@Nullable String owner, String opKey) {
 		throw new UnsupportedOperationException("Designs.groupByKey needs Architect API 1.10.0");
 	}
+
+	/**
+	 * Make a copy a FALLBACK original (since 1.11.0, a helper with {@code "copies"}): for a copy that did not fit its lot at
+	 * placement ({@code fitToLot}), or one whose archetype failed ({@code source_failed}). Under massingFirst it is a detail pass
+	 * bound to the archetype's approved massing (no new approval); it costs as an original. Completes with the group as it
+	 * stands. Fails {@link ArchitectRefused} {@link Reason#COPY_REFUSED} for a non-copy ({@code not_copy}), a copy still
+	 * building ({@code building}) or a final group or cancelled item ({@code final}).
+	 */
+	default CompletableFuture<Group> promoteCopy(String groupId, String itemKey, String reason) {
+		throw new UnsupportedOperationException("Designs.promoteCopy needs Architect API 1.11.0");
+	}
 }
