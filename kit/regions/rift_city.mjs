@@ -13,6 +13,9 @@ import { region } from '../lib/region/program.mjs';
 
 export const id = 'rift_city';
 
+/** (6b) Role defaults under a bible: packed mud walks and mud-brick footings, as the rift's damp floor. */
+export const roles = { path: 'minecraft:packed_mud', foundation: 'minecraft:mud_bricks' };
+
 export const params = {
   length: { type: 'int', min: 96, max: 320, default: 160, label: 'Rift length' },
   width: { type: 'int', min: 16, max: 48, default: 28, label: 'Rift width' },
@@ -34,9 +37,27 @@ export default function riftCity(ctx) {
   r.stages(['ground', 'ways', 'lots']);
   const round = (v) => Math.floor(v + 0.5);
   const W = claim.maxX - claim.minX + 1, D = claim.maxZ - claim.minZ + 1;
-  const cx = claim.minX + Math.floor(W / 2), cz = claim.minZ + Math.floor(D / 2);
-  const L = Math.min(P.length, W - 40);
+  const cz = claim.minZ + Math.floor(D / 2);
   const half = Math.floor(Math.min(P.width, D - 70) / 2);
+  // the rift runs along x on the longest stretch with no surface water across its band (a carve beside a lake would let
+  // the water in: M4), centred there; 10 columns of margin at each end
+  let best = [claim.minX + 20, claim.maxX - 20], run0 = null;
+  const bestLen = () => best[1] - best[0] + 1;
+  let found = false;
+  for (let x = claim.minX + 20; x <= claim.maxX - 19; x++) {
+    let wet = x > claim.maxX - 20;
+    for (let z = cz - half - 8; !wet && z <= cz + half + 8; z += 2) if (survey.waterAt(x, z)) wet = true;
+    if (!wet && run0 === null) run0 = x;
+    if ((wet || x === claim.maxX - 20) && run0 !== null) {
+      const end = wet ? x - 1 : x;
+      if (!found || end - run0 + 1 > bestLen()) { best = [run0, end]; found = true; }
+      run0 = null;
+    }
+  }
+  const dry = found ? [best[0] + 10, best[1] - 10] : [claim.minX + 20, claim.maxX - 20];
+  if (found && dry[1] - dry[0] + 1 < W - 40) r.note(`rift: kept to the dry stretch x ${dry[0]}..${dry[1]} (surface water across the band elsewhere)`);
+  const cx = Math.floor((dry[0] + dry[1]) / 2);
+  const L = Math.min(P.length, dry[1] - dry[0] + 1);
   if (L < 80 || half < 8) throw new Error(`rift_city needs a larger claim (got ${W}x${D})`);
   const x0 = cx - Math.floor(L / 2) + half, x1 = cx + Math.floor(L / 2) - half; // the channel's straight part
   // the rim: the 90th percentile of the ground along both edges
@@ -146,6 +167,7 @@ export default function riftCity(ctx) {
   let li = 0;
   const S = 9; // the smallest library children (the 6a stubs) need 9x9
   for (const s of segs) {
+    if (!s.stair) continue; // a ledge segment too short for its stair is not reachable: no lots on it
     for (let x = s.a + 2; x + S <= s.b - 1; x += S + 4) {
       if (bx.some((b) => Math.abs(b - (x + S / 2)) < S / 2 + 4)) continue;
       if (s.stair && x + S >= s.stair[0] && x <= s.stair[1]) continue;

@@ -13,6 +13,9 @@ import { compassDir } from '../lib/region/geom.mjs';
 
 export const id = 'crater_works';
 
+/** (6b) Role defaults under a bible: a mine's packed tracks, not the rustic dirt path; dressed stone, not cobblestone. */
+export const roles = { path: 'minecraft:coarse_dirt', foundation: 'minecraft:stone_bricks' };
+
 export const params = {
   radius: { type: 'int', min: 40, max: 160, default: 72, label: 'Crater radius' },
   depth: { type: 'int', min: 12, max: 48, default: 24, label: 'Crater depth' },

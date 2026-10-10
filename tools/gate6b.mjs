@@ -379,7 +379,7 @@ async function designGate(name, siteId, req, program, { playerBlock = false } = 
     check(a.ok, `${name}: step 6: after the group undo the player's block (case a) is still there (${JSON.stringify(a.said)})`);
     if (pbB) {
       const bb = await blockIs(pbB[0], pbB[1], pbB[2], 'minecraft:blue_wool');
-      const keptOk = JSON.stringify(rm.kept ?? []).length > 2;
+      const keptOk = typeof rm.kept === "number" ? rm.kept > 0 : JSON.stringify(rm.kept ?? []).length > 2;
       check(bb.ok && keptOk, `${name}: step 7 (case b): the block on path ${out.playerBlockB.path} survives the group undo (${JSON.stringify(bb.said)}) and is reported in kept (${JSON.stringify(rm.kept).slice(0, 200)})`);
     }
   }

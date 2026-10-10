@@ -25,8 +25,9 @@ export const LIMITS = Object.freeze({
 export const Y_MARGIN = 64;
 
 /** The roles a plan resolves: the rustic built-in's core roles and the macro defaults, under the bible's roles. */
-export function resolveRoles(bibleRoles = {}) {
-  const base = { ...rolesOfPalette(PALETTES.rustic), ...DEFAULT_MACRO_ROLES };
+export function resolveRoles(bibleRoles = {}, programRoles = {}) {
+  // (6b) a program's own role defaults (`export const roles`) sit between the rustic defaults and the bible's roles
+  const base = { ...rolesOfPalette(PALETTES.rustic), ...DEFAULT_MACRO_ROLES, ...programRoles };
   const out = {};
   for (const [k, v] of Object.entries({ ...base, ...bibleRoles })) {
     if (!ROLE_NAME.test(k)) throw new Error(`role name '${k}' must match ${ROLE_NAME}`);
@@ -148,7 +149,7 @@ export async function planRegion(o) {
 
   const raw = asColumns(o.survey);
   const { columns: survey, missing } = fillMissing(raw);
-  const roles = Object.freeze(resolveRoles(o.roles ?? {}));
+  let roles;
   const notes = [];
   if (missing) notes.push(`survey: ${missing} of ${survey.width * survey.depth} columns missing (filled from their neighbours)`);
 
@@ -168,6 +169,8 @@ export async function planRegion(o) {
     if (typeof id !== 'string' || !/^[a-z][a-z0-9_]{0,47}$/.test(id)) throw new Error('the program must export id matching [a-z][a-z0-9_]{0,47}');
     if (typeof mod.default !== 'function') throw new Error('the program must export default (ctx) => Region');
     validateParams(mod.params);
+    if (mod.roles !== undefined && (typeof mod.roles !== 'object' || mod.roles === null || Array.isArray(mod.roles))) throw new Error('the program\'s roles must be {role: blockState}');
+    roles = Object.freeze(resolveRoles(o.roles ?? {}, mod.roles ?? {}));
     const params = resolveValues(mod.params ?? {}, o.params ?? {});
     const seed = o.seed === undefined || o.seed === null || o.seed === 'default' ? defaultSeed(id, params, claim) : toDecimal64(...fromDecimal64(o.seed));
     Object.assign(ctx, {

@@ -25,7 +25,7 @@
    }
   },
   "crater_works": {
-   "irSha": "2a2ee9c02f193ade00b0376a12e6e373f6a26f5abcfd82f6a2f1c5d833b52477",
+   "irSha": "81119c242bb5e4a8137af1b968562f9931c5ebaa8fffa27e34d8a0680071b6f5",
    "format": 1,
    "requires": [],
    "cells": 896174,
@@ -38,10 +38,10 @@
     "ground|terrain|-2,-2": "553d35175b033dcba75c78ed90e1f76a9477bbf75e7af0a29c6fe986e0ca6886",
     "ground|terrain|-2,0": "22b2b6c2ba3d665f061ba371cc321e7ee33bc03d6b473bfd2afaf06f151492a8",
     "ground|terrain|-2,1": "553d35175b033dcba75c78ed90e1f76a9477bbf75e7af0a29c6fe986e0ca6886",
-    "ground|terrain|0,-1": "a244fe4a452e7c99f9381b2ddf36b1b8f189a7e31cd7dcfd1be67020b8d10be3",
+    "ground|terrain|0,-1": "a9aeabcab944b898e2bf41627122f69eeb61d1e20d4fd244ae6d8e11b2335324",
     "ground|terrain|0,-2": "46c3b43dd20bed120c5b1d43400b4b389df7d6541b7cae82eaf215ed8cdfbd27",
     "ground|terrain|0,0": "a27fae7b7479ad079a236c5e3101fa1c68f0ff6f3dce5691f9eb1dcc70ea5f06",
-    "ground|terrain|0,1": "0999f8947a5d0ad828a41c932af3366b976658c58ce27340e0e7be035b97da7c",
+    "ground|terrain|0,1": "af0d90772c27e3904a3267ba24f7c3e2fca70384fc21eef1a4c5fc197c8843ab",
     "ground|terrain|1,-1": "8db1a6ed9b83c8c6431e674627696eca083229932138c26b3a8bdd70a5a04c34",
     "ground|terrain|1,-2": "553d35175b033dcba75c78ed90e1f76a9477bbf75e7af0a29c6fe986e0ca6886",
     "ground|terrain|1,0": "e534f8d7d49e899fc93d4abca032a6598a867e86d66defdf9042f9f748efec63",
@@ -68,7 +68,7 @@
    }
   },
   "rift_city": {
-   "irSha": "9f837ebf061e5a1c43936267a5b92d32df663627f513bd4c1d8fab0e28247449",
+   "irSha": "8f21ac418bbeaf38a52bd18c4ea953abd27e3fd856220576abc1e91ec95adc17",
    "format": 2,
    "requires": [
     "blobs:side",
@@ -77,24 +77,24 @@
     "shape:ellipsoid",
     "shape:warp"
    ],
-   "cells": 186659,
+   "cells": 186801,
    "tiles": {
-    "ground|terrain|-1,-1": "bc043ebcb05e7f960d1130afb9450865f75202bce5446664a6c973f54b5a3927",
-    "ground|terrain|-1,0": "55144c9b049041c6c8d80b91f0bf5337c5ad73fb85bc6f61505dc4ba429407c4",
-    "ground|terrain|-2,-1": "38cb9b9c84d8ce67aac9e832e5a61c1a7036663838b8867e59f42e4bb59948d7",
-    "ground|terrain|-2,0": "c342dfb4cb9f475f4cbaa4a23fba83c850bdb61e204595375df18d938163cd53",
-    "ground|terrain|0,-1": "78d09020e32c8c49530ef2f232e1386106d898e0ceacbcf414bcfdc607613a02",
-    "ground|terrain|0,0": "25ce022b0198abcfc3d9e947b9a262fe4d3ec43907999779cfd729f1a507c31d",
-    "ground|terrain|1,-1": "947bb3e8ae64dead0c8afb6f073f90796341c15f28a234fae0767ef91f6e0c39",
-    "ground|terrain|1,0": "c9b5de9e84b3bf832cb6b72a3cdd39a59890bd5606da07f16f76052c36ea5eb3",
-    "ways|path|-1,-1": "e67e57d31b6bc814848ec9284ff09be155d217725a3ea1fa22dcac84f06bb2c5",
-    "ways|path|-1,0": "7f9baf2afafb3db364b94683e924e69db4ba74e0f2ff1476918baa5509d762bd",
-    "ways|path|-2,-1": "490e34b8600f8de446e640e6913597fad9912c254a60b77a111e78f59d360b40",
-    "ways|path|-2,0": "5a6fe7226031d023345cc24165b36efee625d252b20fa942c52d0ea7329e5689",
-    "ways|path|0,-1": "432f0120b7abbb2a928b16923021a3ad57b9e1805793ff5fe4fd7121d9ca9ff4",
-    "ways|path|0,0": "1b7addea6a43c43f9b28395438605584d74b76486b4ba145936ebbfc6bc853cb",
-    "ways|path|1,-1": "6d54c6bd6b4da967971fe966e8a558d09ebb49224797b5beca4739c97a019c3f",
-    "ways|path|1,0": "7fb6253490514d0bb979fa68438ba0db3f2bf94eb0b3641af2191be97758d963"
+    "ground|terrain|-1,-1": "9a855432639b3d78565574e1dc8ccffdf00897da571b9d2c4caea24ef4719409",
+    "ground|terrain|-1,0": "470132a49ec2c7c4d534468dfc1e63cdc328d5ed7c33effd6b04177a04f146b2",
+    "ground|terrain|-2,-1": "6be8d38e198b7bc8717bfefc3138426fd1e29fe15373ef86f372054d85180509",
+    "ground|terrain|-2,0": "4a1bdc7f31c4bf174e6e40f14892099d7cc2b978cd1018b037dd969e8b2060b7",
+    "ground|terrain|0,-1": "f89194bcfbd8782963da773863d5a9b88adc27cfd9598502e2732112c296922b",
+    "ground|terrain|0,0": "23e2c27044a80f812dba5fafc15a057ed8dbb39a72f19f73976b178c7a3e31db",
+    "ground|terrain|1,-1": "da176e6d85437214a8c766aadcd18cb2bf0fc4966a3ba6c3672b5d827c4e4fb3",
+    "ground|terrain|1,0": "348dac27ba61e046fd646bf97620e3a4822fb60927fbd9ade5e200c73c5415a5",
+    "ways|path|-1,-1": "9143cf465e6fe2cba7ba65994e2e74dc379c696344889285d0531a91337bfc14",
+    "ways|path|-1,0": "149cb932713d9bb46c8bb1ee6eb511079cd3fe6f090144f0c7060c6f9a66f73c",
+    "ways|path|-2,-1": "87f9f67d03ca0aeeb92b55c9d1e699e5ea3c33b0be058c8fb957d67606e1da09",
+    "ways|path|-2,0": "c085bcd0d084086c5769e1b9053b9762570ba03ef28cd6a0f3c324712af432d1",
+    "ways|path|0,-1": "6e64f8d59f0da71ca46ef38a4a009e1d06d55d34055e292ee7ef8cb2d6f5f528",
+    "ways|path|0,0": "a3cf15ecaa1fa3e21b240fd3ac62fca23134f2b6450d023b28c0096b07f92a48",
+    "ways|path|1,-1": "e1a1bf4d55ac97c9a944f142fa2428f6ef249eda0990da4423035ea648a874c3",
+    "ways|path|1,0": "4d27f0906908d57fc192dcc349b241911fd00084cff3d8228363070cfc2e932d"
    }
   },
   "walled_hill": {
