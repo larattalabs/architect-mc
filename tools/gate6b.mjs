@@ -373,7 +373,10 @@ async function designGate(name, siteId, req, program, { playerBlock = false } = 
   out.diff = { mismatches: diff.mismatches, classes: diff.classes, list: (diff.list ?? []).filter((m) => m.class !== 'growth').slice(0, 300) };
   const expected = (playerBlock ? 1 : 0) + (pbB ? 1 : 0);
   const unclassified = diff.classes?.none ?? 0;
-  check(rm.removed && unclassified <= expected && diff.mismatches <= expected + 0.0001 * st.view.cellsWritten, `${name}: step 5: one Regions.remove returns the area under the 6a rules (${diff.mismatches} mismatches ${JSON.stringify(diff.classes)}; the player's blocks ${expected})`);
+  // 6a's E-normal rule: every mismatch classified (the player's own blocks aside); the world's doing (growth, grazing, live
+  // blocks, gravity, unsupported plants) is not the undo's; the rest at most 0.01% of the written cells
+  const worldMade = ['growth', 'grazed', 'live', 'gravity', 'unsupported'].reduce((a, k) => a + (diff.classes?.[k] ?? 0), 0);
+  check(rm.removed && unclassified <= expected && diff.mismatches - worldMade <= expected + 0.0001 * st.view.cellsWritten, `${name}: step 5: one Regions.remove returns the area under the 6a rules (${diff.mismatches} mismatches ${JSON.stringify(diff.classes)}; the player's blocks ${expected})`);
   if (playerBlock) {
     const a = await blockIs(pb[0], pb[1], pb[2], 'minecraft:red_wool');
     check(a.ok, `${name}: step 6: after the group undo the player's block (case a) is still there (${JSON.stringify(a.said)})`);

@@ -23,8 +23,8 @@ export const params = {
 };
 
 export const catalogue = {
-  description: 'A crater facility: one large carved circular bowl (a meteor crater or a pit mine) lined with scorched rock, a rubble rim, a bridge from the rim to a central spiral stair down to the floor, three terraced work levels stepping down inside the bowl, and 4-12 lots (offices, halls, sheds) on the terraces. For mining camps, pits, quarries and crater lairs on fairly flat open ground.',
-  needs: { minFlat: 0.5, water: false, relief: 'low' },
+  description: 'A crater facility: one large carved circular bowl (a meteor crater or a pit mine) lined with scorched rock, a rubble rim, a bridge from the rim to a central spiral stair down to the floor, three terraced work levels stepping down inside the bowl, and 4-12 lots (offices, halls, sheds) on the terraces. For mining camps, pits, quarries and crater lairs on open ground: the bowl is carved, so rolling or hilly land (up to about 50 blocks of relief over the claim) is fine; the rim and its gate follow the land.',
+  needs: { minFlat: 0.3, water: false, relief: 'low to moderate (up to ~50)' },
   claim: { min: [120, 120], max: [400, 400] },
 };
 
