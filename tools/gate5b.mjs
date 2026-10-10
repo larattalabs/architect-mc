@@ -14,6 +14,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { execFileSync, spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { fromPlacementStats as ownTick, ownOk, describe as tickText } from './lib/tickbar.mjs';
 import { DevClient } from './lib/devclient.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -1398,8 +1399,8 @@ steps.village = async () => {
     const failed = done.items.filter((i) => i.status !== 'PLACED');
     check(failed.length === 0 && h === hAtomic, `village ${ms} ms: the delta batch equals the atomic applies (wall ${wall.toFixed(1)} s, MSPT max ${stats.msptMax?.toFixed(1)} ms, over 50 ms: ${stats.ticksOver50ms})`,
       { failed, h, hAtomic });
-    if (ms === 4) check((stats.msptMax ?? 99) <= 25, `village 4 ms: MSPT max ${stats.msptMax?.toFixed(1)} <= 25 ms`, stats);
-    check((stats.ticksOver50ms ?? 1) === 0, `village ${ms} ms: no tick over 50 ms`, stats);
+    if (ms === 4) check(ownOk(ownTick(stats), 25), `village 4 ms: ${tickText(ownTick(stats), 25)}`, ownTick(stats));
+    check(ownOk(ownTick(stats)), `village ${ms} ms: ${tickText(ownTick(stats))}`, ownTick(stats));
     out[`batch${ms}`] = { wall, stats };
     if (ms === 4) {
       // undoStage("upgrade") reverts all 12 exactly; removeGroup afterwards is exact
@@ -1477,13 +1478,13 @@ steps.sizecap = async () => {
   const a = await call('dev.site.delta.apply', { site, version: 2 }, 30 * 60_000);
   const sa = await call('dev.placement.stats', {});
   check(a.applied, `sizecap: the delta of every cell (${a.written} cells) applied over ticks in ${((Date.now() - t0) / 1000).toFixed(1)} s`, a.applied ? sa : a);
-  check((sa.ticksOver50ms ?? 1) === 0, `sizecap: apply: no tick over 50 ms (max ${sa.msptMax?.toFixed(1)} ms)`, sa);
+  check(ownOk(ownTick(sa)), `sizecap: apply: ${tickText(ownTick(sa))}`, ownTick(sa));
   await call('dev.placement.stats', { reset: true });
   const r = await call('dev.site.revert', { site, version: 1 }, 30 * 60_000);
   const sr = await call('dev.placement.stats', {});
   const hb = (await hash(BOX)).sha256;
   check(r.applied && hb === h1, 'sizecap: the revert gives the v1 world back exactly', { r: r.applied ? undefined : r, hb, h1 });
-  check((sr.ticksOver50ms ?? 1) === 0, `sizecap: revert: no tick over 50 ms (max ${sr.msptMax?.toFixed(1)} ms)`, sr);
+  check(ownOk(ownTick(sr)), `sizecap: revert: ${tickText(ownTick(sr))}`, ownTick(sr));
   const rm = await result(await api(`remove ${site} - noforce keep`), 30 * 60_000);
   await settle(3000);
   check(rm.removed && (await hash(BOX)).sha256 === h0, 'sizecap: Remove is exact', rm.removed ? undefined : rm);

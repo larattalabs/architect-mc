@@ -98,7 +98,17 @@ map when a slice adds a package or a gate step (`node tools/gate-impact.mjs <pat
   `writeMsMax` from `dev.mspt.trace`. The bar keeps its number: at most 50 ms (roads at 4 ms: 25 ms). The full tick (max, p99,
   ticks over 50 ms), the vanilla server tick (`serverMsptMax`) and GC are **recorded, not judged**. `tools/lib/tickbar.mjs` holds
   the rule; gate4e (megalite, throughput, roads) and gate6a (megaA realise and group undo) use it. A client without those fields
-  (an old version) falls back to the full tick, and the check line says so.
+  (an old version) falls back to the full tick, and the check line says so. Converted: gate4d (batch ticks, throughput,
+  survival), gate4e (megalite, throughput, roads, sizecap), gate5b (village, sizecap), gate6a (megaA realise and group undo).
+  - **Dropped, pending Noah's/the coordinator's acceptance:** megaA's realise bar `p99 <= 25 ms` was a full-tick percentile;
+    `dev.mspt.trace` has no percentile of Architect's own time, so it is now recorded only, and megaA judges Architect's own
+    max <= 50 ms. Restoring it needs a small mod change (own-time percentiles in `MsptTrace.stop()`; the driver would use them
+    when present).
+  - **Still judging the full tick:** gate6a `prepare` (max <= 100 ms, <= 1% of ticks over 50 ms): prepare's work is the server's
+    own chunk generation, which has no Architect/vanilla split. gate4d's "full tick >= the server's own tick" is a measurement
+    sanity check, not a bar.
+  - Own time is not load-proof: on a box at load 30+ with three clients up, Architect's own max reached 98 ms (megalite 4 ms).
+    The bar removes vanilla-tick and GC noise, not CPU contention; use `--quiet-wait` on a busy box.
 - **Load is recorded.** Every step records the 1-minute load average at its start and end (`load1` in summary.json, SUMMARY.md);
   every tick-bar result records it too. Read a bench number together with its load.
 - **`--quiet-wait [N]`** (opt-in): before each bench step, wait until the 1-minute load average is below N (default 8), at most

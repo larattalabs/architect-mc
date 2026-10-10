@@ -1044,10 +1044,10 @@ steps.sizecap = async () => {
   const KB = [-10, 54, -10, 106, 130, 110];
   const h0 = (await hash(KB)).sha256;
   const pa = await placeQueued({ id: 'keep', proximity: false, items: [{ key: 'K', bp: 'g4e_keep', at: [0, 65, 0], rot: 0, mode: 'INSTANT', force: true }] }, 'keep (flat)');
-  check(pa.done.items[0].status === 'PLACED' && pa.stats.ticksOver50ms === 0, `sizecap: the 96x64x96 keep placed at 4 ms, no tick over 50 ms (max ${pa.stats.msptMax?.toFixed(2)} ms, `
+  check(pa.done.items[0].status === 'PLACED' && ownOk(ownTick(pa.stats)), `sizecap: the 96x64x96 keep placed at 4 ms, ${tickText(ownTick(pa.stats))} (`
     + `${Math.round(pa.stats.cellsPerSecond)} cells/s)`, pa.stats);
   const ra = await removeTimed(pa.site);
-  check(ra.r.removed && ra.stats.ticksOver50ms === 0, `sizecap: its Remove, no tick over 50 ms (max ${ra.stats.msptMax?.toFixed(2)} ms, ${ra.wall.toFixed(1)} s)`, ra.stats);
+  check(ra.r.removed && ownOk(ownTick(ra.stats)), `sizecap: its Remove, ${tickText(ownTick(ra.stats))} (${ra.wall.toFixed(1)} s)`, ra.stats);
   check((await hash(KB)).sha256 === h0, 'sizecap: the keep\'s Remove is exact (box + 8)');
   out.flat = { place: pa.stats, remove: ra.stats, wallPlace: pa.wall, wallRemove: ra.wall };
   await leaveWorld();
@@ -1069,7 +1069,7 @@ steps.sizecap = async () => {
   await cmd('/gamerule random_tick_speed 300');
   const pb = await placeQueued({ id: 'keept', proximity: false, items: [{ key: 'K', bp: 'g4e_keep', at, rot: 0, mode: 'INSTANT', force: true }] }, 'keep (trees, rts 300)');
   await cmd('/gamerule random_tick_speed 0');
-  check(pb.done.items[0].status === 'PLACED' && pb.stats.ticksOver50ms === 0, `sizecap: placed by a worldgen tree with randomTickSpeed 300, no tick over 50 ms (max ${pb.stats.msptMax?.toFixed(2)} ms)`, pb.stats);
+  check(pb.done.items[0].status === 'PLACED' && ownOk(ownTick(pb.stats)), `sizecap: placed by a worldgen tree with randomTickSpeed 300, ${tickText(ownTick(pb.stats))}`, pb.stats);
   const rb = await removeTimed(pb.site);
   const hb = await hash(KB2, [], true);
   const exact = hb.sha256 === h2;
@@ -1087,12 +1087,12 @@ steps.sizecap = async () => {
   await cmd('/gamerule random_tick_speed 0');
   const j = await journal();
   const ce = (j.entries ?? []).find((e) => e.site === cs.siteId);
-  check(cs.placed && ce?.cells >= 300_000 && cst.ticksOver50ms === 0, `sizecap: a ${ce?.cells}-cell cell site placed sliced in ${((Date.now() - t0) / 1000).toFixed(1)} s, `
-    + `no tick over 50 ms (max ${cst.msptMax?.toFixed(2)} ms)`, { cs, cst });
+  check(cs.placed && ce?.cells >= 300_000 && ownOk(ownTick(cst)), `sizecap: a ${ce?.cells}-cell cell site placed sliced in ${((Date.now() - t0) / 1000).toFixed(1)} s, `
+    + tickText(ownTick(cst)), { cs, cst, ownTick: ownTick(cst) });
   const drift = await verify(cs.siteId);
   log(`  the cell site before its removal: ${drift.mismatches} of ${drift.owned} cells differ from its after ${JSON.stringify(drift.first.slice(0, 5))}`);
   const rc = await removeTimed(cs.siteId);
-  check(rc.r.removed && (await hash(CB)).sha256 === h3 && rc.stats.ticksOver50ms === 0, `sizecap: its Remove is exact, no tick over 50 ms (max ${rc.stats.msptMax?.toFixed(2)} ms)`, rc);
+  check(rc.r.removed && (await hash(CB)).sha256 === h3 && ownOk(ownTick(rc.stats)), `sizecap: its Remove is exact, ${tickText(ownTick(rc.stats))}`, rc);
   out.cells = { place: cst, remove: rc.stats, cells: ce?.cells };
   await leaveWorld();
   return out;
