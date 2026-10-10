@@ -24,7 +24,7 @@ const { RUN, OUT, GAME_DIR, SAVES, call, check, cmd, connect, fails, leaveWorld,
 
 refuseKeys();
 const SEED = '2026101000';
-const FLAT = 'G6B 0c Superflat', FOREST = 'G6B 0c Forest', BOOT = 'G6B 0c Flat';
+const FLAT = 'G6B 0c Superflat', FOREST = 'G6B 0c Forest', BOOT = 'G6B 0c Flat', SURV = 'G6B 0c Survival';
 const A = 'test:a', B = 'test:b';
 
 // ---- the apitest mod
@@ -103,7 +103,15 @@ steps.base = async () => {
     await cmd('/save-all flush');
     await leaveWorld();
   }
-  return { worlds: [FLAT, FOREST], seed: SEED };
+  if (!fs.existsSync(path.join(SAVES, SURV, 'level.dat'))) {
+    await openWorld(SURV, { mode: 'survival', preset: 'flat', seed: SEED, cheats: true });
+    for (const r of ['random_tick_speed 0', 'mob_griefing false', 'advance_time false', 'advance_weather false', 'spawn_mobs false', 'spawn_monsters false']) await cmd(`/gamerule ${r}`);
+    await cmd('/time set 6000');
+    await call('dev.survival.set', { on: true });
+    await cmd('/save-all flush');
+    await leaveWorld();
+  }
+  return { worlds: [FLAT, FOREST, SURV], seed: SEED };
 };
 
 /** Item 10 (in game part): the version, the appended reasons and the features. */
@@ -462,8 +470,84 @@ steps.tags = async () => {
   return out;
 };
 
+/**
+ * Item 6 (C16): in a survival world, a batch of 2 houses and a 40-cell road with a shared crate. checkRoad's BOM equals the
+ * road's outstanding bill after placing; exactly that BOM builds it to BUILT; the built cells equal an INSTANT road beside it;
+ * the undo restores the ground exactly; without sharedCrate the road is refused NOT_ALLOWED.
+ */
+steps.survroad = async () => {
+  await ensure();
+  await fresh('G6B 0c SurvRoad', SURV);
+  await call('dev.survival.set', { on: true });
+  const X = 2000, Z = 2000;
+  await cmd('/gamemode creative');
+  await tp(X + 20.5, 0, Z + 10.5, 0, 89);
+  const y = await feet(X, Z);
+  // stone under both strips (gravel surface: a paid road), with a one-block step at x+20.. (fill and slabs)
+  for (const dz of [0, 20]) {
+    await cmd(`/fill ${X - 3} ${y - 1} ${Z + dz - 3} ${X + 42} ${y - 1} ${Z + dz + 3} minecraft:stone`);
+    await cmd(`/fill ${X + 20} ${y} ${Z + dz - 3} ${X + 42} ${y} ${Z + dz + 3} minecraft:stone`);
+  }
+  await settle(2000);
+  const pts = (dz) => [[X, y, Z + dz], [X + 20, y, Z + dz], [X + 39, y + 1, Z + dz]];
+  const road = { points: pts(0), width: 1, owner: A, mode: 'CONSTRUCTION' };
+  const c = await api(`roadcheck ${json(road)}`);
+  const bom = c.bom ?? {};
+  check(c.ok && c.construction && Object.keys(bom).length > 0, `survroad: checkRoad in construction mode gives a BOM (${json(bom)}; ${json(c.refusals)})`);
+  const min = [X - 4, y - 6, Z - 4], max = [X + 43, y + 6, Z + 4];
+  const h0 = await hash(min, max);
+  const yh = y;
+  const batch = { owner: A, sharedCrate: true, autoApprove: true, crateAt: [X + 20, yh, Z - 10], items: [
+    { key: 'h1', bp: 'cabin', at: [X, yh, Z - 40], mode: 'AUTO' }, { key: 'h2', bp: 'cabin', at: [X + 25, yh, Z - 40], mode: 'AUTO' },
+    { key: 'r1', road: { ...road, mode: 'AUTO' } }] };
+  const bid = await later(`bqueue ${json(batch)}`);
+  let bv;
+  for (let i = 0; i < 120; i++) {
+    bv = await api(`batch ${bid}`);
+    if (bv.items?.every((it) => ['PLACED', 'FAILED'].includes(it.status))) break;
+    await sleep(1000);
+  }
+  const items = Object.fromEntries((bv.items ?? []).map((it) => [it.key, it]));
+  check(['h1', 'h2', 'r1'].every((k) => items[k]?.status === 'PLACED'), `survroad: the batch placed (${json(bv.items?.map((i) => [i.key, i.status, i.reason, i.message]))})`);
+  const roadId = items.r1?.site;
+  const st = await api(`stock ${bv.group}`);
+  const out = st.outstandingBySite?.[roadId] ?? {};
+  check(json(out) === json(bom), `survroad: the road's outstanding bill equals checkRoad's BOM (${json(out)} vs ${json(bom)})`);
+  const sites = (await api('sites')).all;
+  const rv = sites.find((s) => s.id === roadId);
+  check(rv?.state === 'BUILDING' && rv.queued > 0, `survroad: ${roadId} is a construction road (${rv?.state}, ${rv?.built}/${rv?.queued})`);
+  // the houses finish free; the road gets exactly its BOM
+  for (const k of ['h1', 'h2']) await call('dev.site.finish', { site: items[k].site }, 60_000);
+  const ins = await call('dev.crate.insert', { site: roadId, items: bom }, 60_000);
+  check(json(ins.accepted) === json(bom), `survroad: the crate takes exactly the BOM (${json(ins.accepted)})`);
+  let done;
+  for (let i = 0; i < 180; i++) {
+    done = (await api('sites')).all.find((s) => s.id === roadId);
+    if (done?.state === 'BUILT') break;
+    await sleep(1000);
+  }
+  check(done?.state === 'BUILT', `survroad: fed exactly its BOM, ${roadId} is BUILT (${done?.state} ${done?.built}/${done?.queued})`);
+  const inst = await later(`road ${json({ points: pts(20), width: 1, owner: A, mode: 'INSTANT', actor: true, tag: 'inst' })}`);
+  check(inst.placed, `survroad: an INSTANT road on the identical strip beside it (${inst.siteId}; ${json(inst.refusals)})`);
+  await settle(2000);
+  const ha = await hash([X - 1, y - 3, Z - 1], [X + 40, y + 4, Z + 1]);
+  const hb = await hash([X - 1, y - 3, Z + 19], [X + 40, y + 4, Z + 21]);
+  check(ha === hb, `survroad: the built road equals the INSTANT road cell for cell (${ha.slice(0, 12)} / ${hb.slice(0, 12)})`);
+  const rm = await later(`remove ${roadId} ${A} noforce`);
+  await settle(3000);
+  const h1 = await hash(min, max);
+  check(rm.removed && h1 === h0, `survroad: the undo restores the pre-state (world diff ${h1 === h0 ? 0 : 'NOT 0'}; ${json(rm.blockers)})`);
+  const nb = await later(`bqueue ${json({ owner: A, items: [{ key: 'r2', road: { ...road, points: pts(20), mode: 'AUTO' } }] })}`);
+  await sleep(3000);
+  const nbv = await api(`batch ${nb}`);
+  check(nbv.items?.[0]?.status === 'FAILED' && nbv.items[0].reason === 'NOT_ALLOWED', `survroad: without sharedCrate refused NOT_ALLOWED (${json(nbv.items?.[0])})`);
+  const solo = await later(`road ${json({ ...road, points: pts(20), tag: 'solo' })}`);
+  check(reasons(solo).includes('NOT_ALLOWED'), `survroad: a standalone CONSTRUCTION placeRoad refused NOT_ALLOWED (${json(solo.refusals)})`);
+  return { bom, stock: st, batch: bv, built: done, instant: inst };
+};
+
 steps.all = async () => {
-  for (const s of ['base', 'api', 'minlot', 'roads', 'ground', 'protect', 'tags']) await run(s);
+  for (const s of ['base', 'api', 'minlot', 'roads', 'ground', 'protect', 'tags', 'survroad']) await run(s);
 };
 
 const name = process.argv[2];

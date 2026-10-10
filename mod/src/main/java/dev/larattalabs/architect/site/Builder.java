@@ -1270,7 +1270,8 @@ public final class Builder {
 
 	/** Dev / test hook: books items into the crate as a hopper would (counting equivalents). Returns what went in per item. */
 	public static Map<String, Integer> insertItems(MinecraftServer srv, String id, Map<String, Integer> items) throws Sites.SiteException {
-		Site s = requireBuilding(id);
+		Infra road = Infras.get(id);
+		Site s = road != null && road.building() ? RoadBuilder.probe(road) : requireBuilding(id); // 6c 0c (C16): a road's crate too
 		ServerLevel level = Sites.levelOf(srv, s);
 		CrateBlockEntity crate = level == null ? null : crate(level, s, true);
 		if (crate == null) {
@@ -1309,6 +1310,9 @@ public final class Builder {
 	 * later deconstruct refunds nothing for them). Cells something blocks are left; chunks must be loaded. Returns the cells placed.
 	 */
 	public static int finish(MinecraftServer srv, String id) throws Sites.SiteException {
+		if (Sites.get(id) == null && Infras.get(id) != null) {
+			return RoadBuilder.finish(srv, id); // 6c 0c (C16)
+		}
 		Site s = requireBuilding(id);
 		ServerLevel level = Sites.levelOf(srv, s);
 		Run r = level == null ? null : run(srv, s);
