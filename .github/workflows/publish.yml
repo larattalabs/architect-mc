@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
-  packages: write
+  packages: write # publishes architect_mc; also reads dev.larattalabs:lab_ui (write includes read)
 jobs:
   publish:
     runs-on: ubuntu-latest

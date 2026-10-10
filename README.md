@@ -470,6 +470,21 @@ cd mod && ./gradlew test                     # mod unit tests (JAVA_HOME = a Jav
 cd mod && ./gradlew runClient                # a dev client in its own dev world
 ```
 
+**lab-ui.** The mod's screen kit, panels, style tokens and crash guard come from
+[lab-ui](https://github.com/larattalabs/lab-ui) (`dev.larattalabs:lab_ui`), bundled jar-in-jar. Gradle finds it in this
+order:
+
+1. **A lab-ui checkout** next to this repo (`../lab-ui`), or the one `-PlabUiPath=<dir>` names, as a composite build.
+   This needs no token, so it is the way to build without a GitHub login:
+   `git clone https://github.com/larattalabs/lab-ui ../lab-ui`. Check out the tag `mod/gradle.properties` pins
+   (`lab_ui_version`, e.g. `git -C ../lab-ui checkout v0.1.0`).
+2. **GitHub Packages** (`https://maven.pkg.github.com/larattalabs/lab-ui`), which needs a token even for public
+   packages: `gpr.user` / `gpr.key` in `~/.gradle/gradle.properties` (a classic token with `read:packages`;
+   `gh auth token` works if your gh login has that scope), or `GITHUB_ACTOR` / `GITHUB_TOKEN` in the environment.
+   `-PlabUiPath=maven` skips a checkout and uses this. CI gets it with `permissions: packages: read`.
+
+Never commit the token. Once it has been downloaded, the artifact sits in the Gradle cache and `--offline` builds work.
+
 `./gradlew runClient` creates a dev world, "Architect Dev" (creative, natural terrain, seed 2026), and opens it.
 Point it at your checkout's helper with `ARCHITECT_SIDECAR_DIR=$PWD/../sidecar`. The **DevBridge** is a small
 localhost API in dev runs (port 7891) that scripts use to drive the screen, the ghost and the camera and to take
