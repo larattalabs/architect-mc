@@ -36,11 +36,18 @@ repositories {
 // An actionable message when lab-ui can't be resolved (no checkout and no GitHub Packages token)
 if (gradle.ext.has("labUiSource")) {
 	logger.info("lab-ui: " + gradle.ext.labUiSource)
+	// A composite build hands compile classpaths lab-ui's main classes directory only; its jar also has the client classes
+	// (split source sets), as the published jar does. So compile against the jar.
+	afterEvaluate {
+		configurations.matching { it.name.endsWith("ompileClasspath") }.configureEach {
+			attributes.attribute(LibraryElements.LIBRARY_ELEMENTS_ATTRIBUTE, objects.named(LibraryElements, LibraryElements.JAR))
+		}
+	}
 } else if (!providers.gradleProperty("gpr.key").isPresent() && !providers.environmentVariable("GITHUB_TOKEN").isPresent()) {
-	logger.warn("lab-ui: no ../lab-ui checkout and no GitHub Packages token. If dev.larattalabs:lab_ui:" + project.lab_ui_version
+	logger.warn("lab-ui: no lab-ui checkout in use (../lab-ui or -PlabUiPath) and no GitHub Packages token. If dev.larattalabs:lab_ui:" + project.lab_ui_version
 		+ " is not in the Gradle cache the build fails: clone https://github.com/larattalabs/lab-ui next to this repo (or pass"
 		+ " -PlabUiPath=<dir>), or set gpr.user/gpr.key in ~/.gradle/gradle.properties (a classic token with read:packages;"
-		+ " `gh auth token` works) or GITHUB_ACTOR/GITHUB_TOKEN. See README \"Building\".")
+		+ " `gh auth token` works) or GITHUB_ACTOR/GITHUB_TOKEN. See README \"Development\".")
 }
 
 loom {
