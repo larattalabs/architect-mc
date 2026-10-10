@@ -372,6 +372,8 @@ export class SimDesigner implements Designer {
   }
 
   private sleep(ms: number, id: string, r: Run): Promise<void> {
+    // stopped or cancelled before the step began (e.g. during the async fit): no step at all
+    if (this.stopped || r.cancelled || this.gone(id)) return Promise.reject(new Cancelled());
     return new Promise<void>((resolve, reject) => {
       const done = () => {
         clearTimeout(t);
