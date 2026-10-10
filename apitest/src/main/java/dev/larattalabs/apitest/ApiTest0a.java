@@ -123,6 +123,16 @@ final class ApiTest0a {
 				return ApiTestBatch.fit(api.sites(src.getServer()).fitMassingToLot(new MassingRef(a[1], Integer.parseInt(a[2])), lot, Direction.byName(a[4]),
 					FitOptions.DEFAULT.withLevel(src.getLevel())));
 			}
+			case "volume": {
+				// volume <key> x0 y0 z0 x1 y1 z1: Survey.volume (LOADED_ONLY)
+				BoundingBox b = new BoundingBox(Integer.parseInt(a[2]), Integer.parseInt(a[3]), Integer.parseInt(a[4]), Integer.parseInt(a[5]),
+					Integer.parseInt(a[6]), Integer.parseInt(a[7]));
+				return ApiTest.later("volume:" + a[1], api.survey().volume(src.getLevel(), b, dev.larattalabs.architect.api.LoadPolicy.LOADED_ONLY).thenApply(v -> {
+					JsonObject o = new JsonObject();
+					o.addProperty("done", true);
+					return o;
+				}));
+			}
 			case "group0a":
 				return api.designs().group(a[1]).<JsonElement>map(ApiTestSets::group).orElse(JsonNull.INSTANCE);
 			case "api110": {
