@@ -219,4 +219,19 @@ describe.skipIf(!hasKit)('copies in a group (sim backend, real kit)', () => {
     expect(g.items.map((i) => i.effort ?? 'standard')).toEqual(['small', 'small', 'standard']);
     h.sc.groups.cancel(g.id);
   }, 60_000);
+
+  it('C8: two sim:repair fail a SMALL item at round 2 (rounds); a STANDARD one repairs twice and passes; the SMALL brief composes from smalls.mjs', async () => {
+    h = await harness();
+    const g = h.sc.groups.create(gr({ items: [item('s', { effort: 'small', notes: 'sim:repair sim:repair' }), item('t', { notes: 'sim:repair sim:repair' })] }));
+    await groupDone(h, g.id);
+    const f = h.sc.groups.get(g.id)!;
+    expect(f.items[0]).toMatchObject({ status: 'failed', effort: 'small' });
+    expect(f.items[0]!.error).toMatch(/^rounds: the SMALL pass used its 2 rounds/);
+    expect(f.items[1]!.status).toBe('done');
+    const brief = fs.readFileSync(path.join(h.sc.config.dataDir, 'designs', f.items[0]!.designId, 'BRIEF.md'), 'utf8');
+    expect(brief).toContain('## A small building (the SMALL pass: 2 rounds, 40 turns each)');
+    expect(brief).toContain('kit/lib/smalls.mjs');
+    const other = fs.readFileSync(path.join(h.sc.config.dataDir, 'designs', f.items[1]!.designId, 'BRIEF.md'), 'utf8');
+    expect(other).not.toContain('A small building');
+  }, 60_000);
 });

@@ -28,6 +28,7 @@ import type { Designer, RunOutcome, Sidecar } from './sidecar.js';
 import { truncate } from './util/text.js';
 import { runNode } from './designs.js';
 import { simToken, type PolishBackend, type PolishTurnResult } from './polish.js';
+import { designRounds, SMALL_PASS } from './claude/brief.js';
 
 const STEPS: Array<{ status: 'designing'; step: string }> = [
   { status: 'designing', step: 'reading the brief' },
@@ -62,7 +63,19 @@ export interface SimRoundWork {
   charged: number;
   /** sim:repair's round is done */
   repaired?: boolean;
+  /** (0b) repair rounds done (one per sim:repair token) */
+  repairs?: number;
 }
+
+/** (0b) How many repair rounds a request scripts: one per `sim:repair` token in its notes (and ext["architect:sim"]). */
+export function simRepairs(req: { notes?: string | undefined; ext?: Record<string, unknown> | undefined }): number {
+  const n = [...(req.notes ?? '').matchAll(/(?:^|[^A-Za-z0-9_])sim:repair(?![A-Za-z0-9_=])/g)].length;
+  const e = req.ext?.[SIM_EXT];
+  return n + (Array.isArray(e) ? e : [e]).filter((v) => typeof v === 'string' && v.trim().replace(/^sim:/, '') === 'repair').length;
+}
+
+/** (0b, C8) a SMALL detail pass's notional cost under simCosts: the SMALL seed's midpoint ($0.6-1.5) */
+export const SIM_SMALL_DETAIL_USD = 1.05;
 
 class Cancelled extends Error {}
 class Limited extends Error {}
@@ -272,6 +285,10 @@ export class SimDesigner implements Designer {
     const scratch = prepareScratch({ dataDir: cfg.dataDir, kitDir: cfg.kitDir, libraryDir: cfg.libraryDir, design: d, bp, ...sc.scratchExtras(d) });
     let cost = d.cost ?? zeroCost();
     const faults = simFaults(req);
+    // (0b, C8) a SMALL detail pass: its caps, as the real designer has them
+    const small = req.effort === 'small' && !d.massing;
+    const maxRounds = designRounds(req);
+    if (small && !sc.store.data.work?.[id]?.sim) sc.log.info(`design ${id}: SMALL pass (sim): ${SMALL_PASS.rounds} rounds, ${SMALL_PASS.maxTurns} turns, effort ${SMALL_PASS.effort}, $${SMALL_PASS.budgetUsd}`);
     // (6c 0a) the notional per-item costs (config simCosts): round 1 costs the massing's or the detail's figure, spread over
     // its steps so the round sums exactly; a step that runs again (a usage limit, a restart) adds nothing more
     const costs = cfg.simCosts;
@@ -296,10 +313,27 @@ export class SimDesigner implements Designer {
       }
       await this.sleep(this.stepMs, id, r);
       // the sim's notional spend: simDesignUsd per step, or (simCosts) the item's share
-      cost = { ...cost, usd: Math.round((cost.usd + charge(1, i + 1, STEPS.length, costs ? (d.massing ? costs.massing : costs.detail) : 0)) * 1e6) / 1e6, turns: cost.turns + 1 };
+      cost = { ...cost, usd: Math.round((cost.usd + charge(1, i + 1, STEPS.length, costs ? (d.massing ? costs.massing : small ? SIM_SMALL_DETAIL_USD : costs.detail) : 0)) * 1e6) / 1e6, turns: cost.turns + 1 };
       sc.designCost(id, cost);
       // (6c 0a) sim:fail: the design fails after its first step
       if (faults.has('fail')) throw new Error('the design failed (simulated: sim:fail)');
+    }
+    // (0b) more than one sim:repair: each is a repair round, up to the design's rounds (a SMALL pass has 2: a second repair
+    // fails it with `rounds`)
+    const repairs = simRepairs(req);
+    if (repairs > 1) {
+      for (let k = sw.repairs ?? 0; k < repairs; k++) {
+        this.check(id, r);
+        const round = k + 2;
+        if (round > maxRounds) throw new Error(`${small ? `rounds: the SMALL pass used its ${maxRounds} rounds (effort SMALL)` : `the design used its ${maxRounds} rounds`}: the check failed (simulated, sim:repair x${repairs})`);
+        sc.designStep(id, 'designing', `round ${round} of ${maxRounds}: fixing what the check found (simulated, sim:repair)`);
+        await this.sleep(this.stepMs, id, r);
+        cost = { ...cost, usd: Math.round((cost.usd + charge(round, 1, 1, costs ? costs.repair : 0)) * 1e6) / 1e6, turns: cost.turns + 1 };
+        sc.designCost(id, cost);
+        sw.repairs = k + 1;
+        sc.store.markDirty();
+      }
+      sw.repaired = true;
     }
     // (6c 0a) sim:repair: round 1's check fails (simulated), and one repair round (round 2) fixes it
     if (faults.has('repair') && sw.round <= 2 && !sw.repaired) {

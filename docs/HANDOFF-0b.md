@@ -42,6 +42,20 @@ After 0a merges (merge origin/main first):
 - [ ] gate driver tools/gate6c0b.mjs items 1-8; slice run; gate-verifier
 - [ ] §6 benchmark (paid, claude login, cap $35, spend.json before each paid step)
 
+## Steward's review (folded in)
+
+- Small rule: explicit `effort` SMALL/STANDARD wins over the 11x9 rule (done in copies.ts itemEffort). Interpretation of "the
+  11x9 rule is the default": it is how AUTO resolves when the group sets `smallBySize`; without `smallBySize` an item stays
+  STANDARD, keeping §1's "behaves exactly as in 1.10.0". Flag to the coordinator if Steward meant smallBySize on by default.
+- A capped S item fails (`budget` / `rounds`), no STANDARD retry: done (designer.ts, sim).
+- Copies of a failed archetype fail with `source_failed`; the caller decides `promoteCopy`: done (groups.ts).
+
 ## Decisions taken (not in the contract)
 
-(none yet)
+- Copies are never stopped by a group's hard cap (they cost $0); a copy whose archetype is stopped fails `source_failed`.
+- promoteCopy is refused (COPY_REFUSED) with detail `not_copy`, `building` (not final yet) or `final` (group or item ended).
+  A `source_failed` copy may be promoted while the group is still open.
+- A recipe's levers count only when effective (the single-lever build changes a cell). Lever 1 offers both the roof-kin shift
+  and the trim/frame swap (roof first), because a design may not use the roof's stone.
+- The recipe seed is (group id, archetype key); the copy's ordinal picks its place, so siblings differ.
+- Several `sim:repair` tokens are several repair rounds (gate item 6's "two sim:repair").

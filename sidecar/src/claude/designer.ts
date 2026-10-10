@@ -32,7 +32,7 @@ import { descendantsOf, killSnapshot, killTree, orphansOf, processTable, type Pr
 import { truncate } from '../util/text.js';
 import { ClaudeBibleBackend } from './bible.js';
 import { ARCHITECT_NO_API_AUTH_MESSAGE, authEnv, authSourceOf, checkApiKey, directApiKey, type KeyCheck } from './auth.js';
-import { designFixPrompt, designPrompt, designStepFor, designSystemPrompt, massingFixPrompt, massingPrompt, massingSystemPrompt, MAX_DESIGN_ROUNDS, RESTART_PROMPT, revisionFixPrompt } from './brief.js';
+import { designFixPrompt, designPrompt, designRounds, designStepFor, designSystemPrompt, massingFixPrompt, massingPrompt, massingSystemPrompt, RESTART_PROMPT, revisionFixPrompt, SMALL_PASS } from './brief.js';
 import { isAuthText, probeFailure } from './failures.js';
 import { ensureLoginEnv, noLoginMessage, osUserInfo, type LoginEnvFill, type UserInfoLike } from './loginenv.js';
 import { REVISION_RESTART_PROMPT } from '../critic.js';
@@ -478,6 +478,9 @@ export class ClaudeDesigner implements Designer {
     const sessionKey = `design:${id}`;
     const meter = new CostMeter(w.cost ?? zeroCost());
     const model = req.model ?? (isMassing ? cfg.massing.model : this.cfg.designModel);
+    // (0b, C8) the SMALL detail pass: 2 rounds, 40 turns at medium, $1.50 over the whole pass
+    const maxRounds = designRounds(req);
+    const small = req.effort === 'small' && !isMassing;
     for (;;) {
       if (this.cancelled(id)) return 'finished';
       // (5a) a revision after critique: the loop may end it first (the group's soft budget)
@@ -497,12 +500,18 @@ export class ClaudeDesigner implements Designer {
       const prompt = w.pending ?? (resume ? (revising ? REVISION_RESTART_PROMPT : RESTART_PROMPT) : isMassing ? massingPrompt(w.bp) : designPrompt(w.bp));
       if (!revising) w.round++;
       sc.store.markDirty();
-      sc.designStep(id, 'designing', revising ? sc.critiques.revisionStep(sc.designs.get(id)!) : w.round === 1 ? 'the designer is reading the brief' : `revising the design (round ${w.round} of ${MAX_DESIGN_ROUNDS})`);
+      sc.designStep(id, 'designing', revising ? sc.critiques.revisionStep(sc.designs.get(id)!) : w.round === 1 ? 'the designer is reading the brief' : `revising the design (round ${w.round} of ${maxRounds})`);
       const turn: Running = { abort: new AbortController() };
       cur.turn = turn;
       // the SDK's maxBudgetUsd counts only this query(): give it what is left (a revision: within the loop's cap too)
       const loopLeft = revising ? sc.critiques.revisionBudget(sc.designs.get(id)!) : undefined;
-      const caps = [this.cfg.maxBudgetUsd, budget !== undefined ? meter.remaining(budget) : undefined, loopLeft].filter((n): n is number => typeof n === 'number' && n > 0);
+      // (0b, C8) a SMALL pass: what is left of its $1.50 (cumulative over its rounds), within the group's remainder
+      const smallLeft = small ? Math.max(0.01, Math.round((SMALL_PASS.budgetUsd - meter.total().usd) * 1e6) / 1e6) : undefined;
+      if (small && meter.total().usd >= SMALL_PASS.budgetUsd) {
+        sc.designFailed(id, 'budget', `failed: budget (effort SMALL: $${meter.total().usd.toFixed(4)} of the $${SMALL_PASS.budgetUsd} pass)`);
+        return 'finished';
+      }
+      const caps = [this.cfg.maxBudgetUsd, budget !== undefined ? meter.remaining(budget) : undefined, loopLeft, smallLeft].filter((n): n is number => typeof n === 'number' && n > 0);
       meter.begin(!!resume);
       const { stats, reason } = await this.runTurn(turn, {
         id,
@@ -514,7 +523,7 @@ export class ClaudeDesigner implements Designer {
         ...(caps.length ? { maxBudgetUsd: Math.min(...caps) } : {}),
         mcp: await this.designMcp(id),
         ...(resume ? { resume } : {}),
-        ...(isMassing ? { effort: cfg.massing.effort, maxTurns: cfg.massing.maxTurns, system: massingSystemPrompt() } : {}),
+        ...(isMassing ? { effort: cfg.massing.effort, maxTurns: cfg.massing.maxTurns, system: massingSystemPrompt() } : small ? { effort: SMALL_PASS.effort, maxTurns: SMALL_PASS.maxTurns } : {}),
         onMessage: (msg) => {
           const step = designStepFor(msg, w.bp);
           if (step) sc.designStep(id, 'designing', step);
@@ -525,12 +534,12 @@ export class ClaudeDesigner implements Designer {
       w.cost = meter.commit();
       sc.store.markDirty();
       if (reason === 'cancel' || this.cancelled(id)) return 'finished';
-      if (stats.subtype === 'error_max_budget_usd' && (budget !== undefined || loopLeft !== undefined) && reason !== 'shutdown' && !this.stopping) {
+      if (stats.subtype === 'error_max_budget_usd' && (budget !== undefined || loopLeft !== undefined || small) && reason !== 'shutdown' && !this.stopping) {
         if (revising) {
           sc.critiques.revisionEnded(id, 'budget', `the revision hit its budget ($${w.cost.usd.toFixed(4)})`);
           return 'finished';
         }
-        sc.designFailed(id, 'budget', `failed: budget ($${w.cost.usd.toFixed(4)} of $${budget})`);
+        sc.designFailed(id, 'budget', small ? `failed: budget (effort SMALL: $${w.cost.usd.toFixed(4)} of the $${SMALL_PASS.budgetUsd} pass)` : `failed: budget ($${w.cost.usd.toFixed(4)} of $${budget})`);
         return 'finished';
       }
       if (reason === 'shutdown' || this.stopping) {
@@ -575,14 +584,15 @@ export class ClaudeDesigner implements Designer {
           sc.critiques.revisionEnded(id, 'check_failed', problem);
           return 'finished';
         }
-        if (w.round < MAX_DESIGN_ROUNDS) {
-          w.pending = (isMassing ? massingFixPrompt : designFixPrompt)(w.bp, problem, w.round + 1);
+        if (w.round < maxRounds) {
+          w.pending = (isMassing ? massingFixPrompt : designFixPrompt)(w.bp, problem, w.round + 1, maxRounds);
           sc.store.markDirty();
           sc.designStep(id, 'designing', `check failed: ${truncate(problem.split('\n')[0] ?? problem, 80)}`);
           continue;
         }
         const ended = stats.isError ? ` (the designer's last turn ended: ${stats.subtype ?? stats.errors[0] ?? 'error'})` : '';
-        sc.designFailed(id, `${problem}${ended}`);
+        // (0b, C8) a SMALL pass that used its rounds fails with `rounds` (no STANDARD retry)
+        sc.designFailed(id, small ? `rounds: the SMALL pass used its ${maxRounds} rounds (effort SMALL): ${problem}${ended}` : `${problem}${ended}`);
         return 'finished';
       }
       sc.designStep(id, 'rendering', 'rendering previews');
