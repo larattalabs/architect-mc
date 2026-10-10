@@ -764,6 +764,53 @@ steps.pathstyle = async () => {
   return out;
 };
 
+/**
+ * Build step 1, pinned in game: what 0.11.0 (the run worktree at tag v0.11.0) does with a player's non-natural block (no
+ * block entity) inside a region lot's box before realise: its lot child is placed over it (the block is cleared, no
+ * refusal), and the group undo gives it back. 0.12.0 refuses with PLAYER_BLOCKS (craterab).
+ */
+steps.playerblock011 = async () => {
+  try { await connect(10_000); await stopClient(); } catch { /* no client */ }
+  const head = execFileSync('git', ['-C', root, 'rev-parse', 'HEAD']).toString().trim();
+  execFileSync('git', ['-C', RUN, 'checkout', '-q', '--detach', 'v0.11.0']);
+  const launcher = path.join(RUN, 'tools', 'run-gate6b-client.sh');
+  const placed = !fs.existsSync(launcher);
+  if (placed) fs.copyFileSync(path.join(root, 'tools', 'run-gate6b-client.sh'), launcher);
+  const out = {};
+  try {
+    execFileSync('npm', ['run', 'build'], { cwd: path.join(RUN, 'sidecar'), stdio: 'ignore' });
+    copyWorld(FLAT, 'G6B PB011');
+    await startClient('G6B PB011', { backend: 'sim' });
+    await tp(0.5, 120, 0.5);
+    const claim = [-100, -100, 99, 99];
+    const p = await call('dev.region.plan', { program: 'crater_works', claim, surveyLoad: 'bounded:256' }, 900_000);
+    if (p.refused) throw new Error(`plan refused: ${p.refused}`);
+    await call('dev.region.prepare', { planId: p.planId, wait: true }, 3_600_000);
+    const ir = readPlanJson(p.planId, 'ir.json');
+    const l = ir.lots[0], b = l.box;
+    const at = [b.minX + 2, b.minY + 1, b.minZ + 2];
+    await cmd(`/setblock ${at[0]} ${at[1]} ${at[2]} minecraft:red_wool`);
+    const r = await call('dev.region.realise', { planId: p.planId, lots: Object.fromEntries(ir.lots.map((x) => [x.id, 'g6a_stub_9'])) }, 300_000);
+    const st = await waitRegion(r.region, 3_600_000);
+    const lot = st.view.lots.find((x) => x.id === l.id);
+    const after = await blockIs(at[0], at[1], at[2], 'minecraft:red_wool');
+    await cmd('/kill @e[type=!minecraft:player]');
+    const rm = await call('dev.region.remove', { region: r.region }, 3_600_000);
+    await settle(5000);
+    const back = await blockIs(at[0], at[1], at[2], 'minecraft:red_wool');
+    Object.assign(out, { version: '0.11.0', lot, regionState: st.view.state, woolAfterRealise: after.ok, removed: rm.removed, woolAfterUndo: back.ok });
+    log(`  0.11.0 player block: lot ${JSON.stringify(lot)}, region ${st.view.state}, wool after realise ${after.ok}, after the undo ${back.ok}`);
+    check(lot?.state === 'placed' && !after.ok && back.ok, `playerblock011: 0.11.0 places the lot over a player's block (lot ${lot?.state}; the block cleared: ${!after.ok}) and the undo gives it back (${back.ok}): it only clears it, so 6b's PLAYER_BLOCKS is new`);
+    await leaveWorld();
+    await stopClient();
+  } finally {
+    if (placed) fs.rmSync(launcher, { force: true });
+    execFileSync('git', ['-C', RUN, 'checkout', '-q', '--detach', head]);
+    execFileSync('npm', ['run', 'build'], { cwd: path.join(RUN, 'sidecar'), stdio: 'ignore' });
+  }
+  return out;
+};
+
 // ------------------------------------------------------------------ the main
 const name = process.argv[2];
 if (!steps[name]) {
