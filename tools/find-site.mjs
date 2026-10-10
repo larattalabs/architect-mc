@@ -8,7 +8,7 @@
 // A scenario is scenarios/<id>.json (the golden scenarios S1-S6) or scenarios/sites/<id>.json (gate sites: the crater and
 // rift sites, the volume fixture, the pick sites). Its `needs`:
 //   {size: [w, d], relief: [min, max] (height range over the claim), biomes: {any: [substring...], share: 0..1},
-//    waterMax, waterMin, treesMin, naturalMin (percent), avoidStructures: true}
+//    waterMax, waterMin, treesMin, naturalMin (percent), avoidStructures: true, center: [x, z] (the spiral's centre), stopAt}
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -85,7 +85,9 @@ export async function findSite(id, io) {
   const needs = sc.needs;
   const [w, d] = needs.size;
   let best = null, tried = 0;
-  for (const [ox, oz] of candidates(needs.candidates ?? 30, needs.step ?? 448)) {
+  const [c0x, c0z] = needs.center ?? [0, 0]; // (a spiral round another point: where an earlier search saw the biome)
+  for (const [ox0, oz0] of candidates(needs.candidates ?? 30, needs.step ?? 448)) {
+    const ox = ox0 + c0x, oz = oz0 + c0z;
     tried++;
     const x0 = ox - Math.floor(w / 2), z0 = oz - Math.floor(d / 2), x1 = x0 + w - 1, z1 = z0 + d - 1;
     await io.tp(ox + 0.5, 220, oz + 0.5);

@@ -40,8 +40,12 @@
       ],
       "share": 0.3
     },
-    "candidates": 150,
-    "step": 512,
-    "stopAt": 50
+    "candidates": 100,
+    "step": 448,
+    "stopAt": 40,
+    "center": [
+      1400,
+      -700
+    ]
   }
 }
