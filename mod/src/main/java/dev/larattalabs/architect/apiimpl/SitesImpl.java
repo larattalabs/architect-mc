@@ -422,13 +422,31 @@ final class SitesImpl implements dev.larattalabs.architect.api.Sites {
 			if (no != null) {
 				v = new Verdict(List.of(new Refusal(Reason.NOT_ALLOWED, no)), List.of(), construction, Map.of(), Optional.empty(), Optional.empty());
 			} else {
-				Sites.Verdict sv = Sites.entryVerdict(level, entry, origin, rot, opt.force(), construction, null);
+				Sites.Verdict sv = Sites.entryVerdict(level, entry, origin, rot, opt.force(), construction, opt.owner()); // 6c 0c: the owner's areas
 				List<Refusal> refused = sv.typed().stream().map(x -> new Refusal(x.reason(), x.message())).toList();
 				v = new Verdict(refused, sv.notes(), construction, Map.of(), Optional.ofNullable(sv.box()).map(Views::box),
 					Optional.ofNullable(sv.snapshotBox()).map(Views::box), overlaps(sv.overlaps(), refused), 0);
 			}
 		}
-		return new LotFit(origin, rot, Views.box(f.box()), v.restoreBox(), v);
+		return new LotFit(origin, rot, Views.box(f.box()), v.restoreBox(), v, Views.box(LotFitting.recommended(f, lb, streetSide.getName())));
+	}
+
+	/** 6c 0c §2: {@link #minLotSize(String, FitOptions)} for an installed massing version (as {@link #fitMassingToLot} reads it). */
+	@Override
+	public dev.larattalabs.architect.api.LotSize minLotSize(dev.larattalabs.architect.api.MassingRef massing, FitOptions o) {
+		FitOptions opt = o == null ? FitOptions.DEFAULT : o;
+		String ref = massing == null ? "null" : massing.toString();
+		if (massing == null || massing.version() < 1 || !MassingFiles.exists(ref)) {
+			throw new IllegalArgumentException("No massing " + ref + " is installed");
+		}
+		Blueprint bp;
+		try {
+			bp = MassingFiles.read(ref).blueprint();
+		} catch (java.io.IOException e) {
+			throw new IllegalArgumentException("Massing " + ref + " could not be read: " + e.getMessage(), e);
+		}
+		int[] m = LotFitting.minSize(bp, opt.setback(), opt.approachIntoStreet());
+		return new dev.larattalabs.architect.api.LotSize(m[0], m[1], m[2], LotFitting.frontMargin(bp));
 	}
 
 	@Override
