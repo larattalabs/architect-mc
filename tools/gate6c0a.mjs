@@ -634,7 +634,7 @@ steps.keys = async () => {
   const qb = await result(await api(`bqueue ${JSON.stringify(bspec(0))}`));
   await sleep(1500);
   const pend = await api('get opbible:kb');
-  check(pend.value === undefined || pend.value === null, 'dev.api.dropAck: the bible request future stays pending (its ack dropped)');
+  check(pend.value === undefined || pend.value === null, `dev.api.dropAck: the bible request future stays pending (its ack dropped): ${JSON.stringify(pend).slice(0, 300)}`);
   await killClient();
   await startClient(W, {});
   const jb = await result(await api(`jobbykey kj ${OWNER} ${K}:bible`));
@@ -702,10 +702,13 @@ steps.pins = async () => {
     if (entry) break;
   }
   if (!check(!!entry, `a library entry to version (${entry})`)) return {};
-  // v2: a revert to v1 makes a new head (v1 stays a version folder)
-  const rv = await result(await api(`erevert ${entry} 1`), 120_000);
-  const vs = await api(`eversions ${entry}`);
-  check(Array.isArray(vs) ? vs.length >= 2 : (vs.versions ?? []).length >= 2, `${entry} has v1 and a newer head (${JSON.stringify(rv).slice(0, 120)})`);
+  // v2: a sim polish of one step installs a new head (v1 stays a version folder)
+  const pol = await result(await api(`polish ${entry} 1 none`), 120_000);
+  const vs = await until(async () => {
+    const x = await api(`eversions ${entry}`);
+    return (x.versions ?? []).length >= 2 ? x : null;
+  }, `${entry} v2`, 240_000, 2000).catch(() => api(`eversions ${entry}`));
+  check((vs.versions ?? []).length >= 2, `${entry} has v1 and a newer head v${vs.version} (polish ${JSON.stringify(pol).slice(0, 120)})`);
   await result(await api(`pin p1 ${entry} 1 steward:s1`));
   await result(await api(`pin p2 ${entry} 1 steward:s2`));
   const owners = await api(`pinowners ${entry} 1`);
