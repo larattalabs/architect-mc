@@ -114,8 +114,19 @@ final class ApiTestSets {
 		for (JsonElement e : o.getAsJsonArray("items")) {
 			JsonObject i = e.getAsJsonObject();
 			// 1.6.0: an item's own critique is {itemCritique: spec} (its request's {critique} is the design's)
-			items.add(new GroupRequest.Item(s(i, "itemKey"), design(i), GroupRequest.Role.of(s(i, "role")), i.has("wave") ? i.get("wave").getAsInt() : null,
-				i.has("anchor") && i.get("anchor").getAsBoolean(), i.has("itemCritique") ? ApiTestCritique.spec(i.getAsJsonObject("itemCritique")) : null));
+			GroupRequest.Item it = new GroupRequest.Item(s(i, "itemKey"), design(i), GroupRequest.Role.of(s(i, "role")), i.has("wave") ? i.get("wave").getAsInt() : null,
+				i.has("anchor") && i.get("anchor").getAsBoolean(), i.has("itemCritique") ? ApiTestCritique.spec(i.getAsJsonObject("itemCritique")) : null);
+			// 1.11.0: {count?, copyOf?, effort?: auto|standard|small}
+			if (i.has("count")) {
+				it = it.count(i.get("count").getAsInt());
+			}
+			if (s(i, "copyOf") != null) {
+				it = it.copyOf(s(i, "copyOf"));
+			}
+			if (s(i, "effort") != null) {
+				it = it.effort(GroupRequest.Item.Effort.of(s(i, "effort")));
+			}
+			items.add(it);
 		}
 		GroupRequest g = new GroupRequest(s(o, "name"), s(o, "bible"), o.has("bibleVersion") ? o.get("bibleVersion").getAsInt() : null, s(o, "owner")
 			!= null ? s(o, "owner") : ApiTest.OWNER, o.has("ext") ? o.getAsJsonObject("ext") : null, o.has("concurrency") ? o.get("concurrency").getAsInt()
@@ -130,6 +141,13 @@ final class ApiTestSets {
 		}
 		if (o.has("critique")) {
 			g = g.critique(ApiTestCritique.spec(o.getAsJsonObject("critique")));
+		}
+		// 1.11.0: {copyCap?, smallBySize?}
+		if (o.has("copyCap")) {
+			g = g.withCopyCap(o.get("copyCap").getAsInt());
+		}
+		if (o.has("smallBySize")) {
+			g = g.withSmallBySize(o.get("smallBySize").getAsBoolean());
 		}
 		return g;
 	}
@@ -337,9 +355,30 @@ final class ApiTestSets {
 			j.add("designIds", ds);
 			j.addProperty("awaitingApproval", i.awaitingApproval());
 			j.addProperty("detailed", i.detailed());
+			// 1.11.0
+			j.addProperty("kind", i.kind().name());
+			j.addProperty("copyOf", i.copyOf().orElse(null));
+			j.addProperty("variantJob", i.variantJob().orElse(null));
+			j.addProperty("fallbackReason", i.fallbackReason().orElse(null));
+			j.addProperty("effort", i.effort().name());
 			items.add(j);
 		}
 		o.add("items", items);
+		// 1.10.0 breakdown (1.11.0 adds the COPY stage)
+		JsonObject bd = new JsonObject();
+		g.breakdown().stages().forEach((st, l) -> {
+			JsonObject x = new JsonObject();
+			x.addProperty("usd", l.usd());
+			x.addProperty("ms", l.ms());
+			x.addProperty("count", l.count());
+			bd.add(st.name(), x);
+		});
+		JsonObject bdo = new JsonObject();
+		bdo.add("stages", bd);
+		bdo.addProperty("totalUsd", g.breakdown().totalUsd());
+		bdo.addProperty("firstDetailedMs", g.breakdown().firstDetailedMs());
+		bdo.addProperty("wallMs", g.breakdown().wallMs());
+		o.add("breakdown", bdo);
 		o.addProperty("massingFirst", g.massingFirst());
 		o.addProperty("approvalUi", g.approvalUi().wire());
 		o.addProperty("maxRedirects", g.maxRedirects());
