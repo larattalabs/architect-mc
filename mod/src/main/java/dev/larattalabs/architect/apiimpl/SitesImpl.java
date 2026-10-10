@@ -29,6 +29,7 @@ import dev.larattalabs.architect.api.Verdict;
 import dev.larattalabs.architect.placement.Anchors;
 import dev.larattalabs.architect.placement.Blueprint;
 import dev.larattalabs.architect.placement.Blueprints;
+import dev.larattalabs.architect.placement.MassingFiles;
 import dev.larattalabs.architect.placement.TemplateGrid;
 import dev.larattalabs.architect.site.Builder;
 import dev.larattalabs.architect.site.Site;
@@ -358,6 +359,56 @@ final class SitesImpl implements dev.larattalabs.architect.api.Sites {
 				Map.of(), Optional.of(Views.box(f.box())), Optional.empty());
 		} else {
 			v = check(new PlaceRequest(blueprintId, level, origin, rot, opt.mode(), null, new JsonObject(), opt.force(), opt.actor()));
+		}
+		return new LotFit(origin, rot, Views.box(f.box()), v.restoreBox(), v);
+	}
+
+	/**
+	 * 6c 0a C6: {@link #fitToLot}'s fit on a massing version's template (read by {@link MassingFiles}, never the library), with the
+	 * normal dry-run verdict there. The massing's template has no bill of materials worth quoting, so a construction verdict's
+	 * BOM is empty. An unknown massing or version, or one that cannot be read, is UNKNOWN_BLUEPRINT, shaped as fitToLot's.
+	 */
+	@Override
+	public LotFit fitMassingToLot(dev.larattalabs.architect.api.MassingRef massing, BoundingBox lot, Direction streetSide, FitOptions o) {
+		FitOptions opt = o == null ? FitOptions.DEFAULT : o;
+		ServerLevel level = opt.level() != null ? opt.level() : server.overworld();
+		Anchors.Bounds lb = new Anchors.Bounds(lot.minX(), lot.minY(), lot.minZ(), lot.maxX(), lot.maxY(), lot.maxZ());
+		String ref = massing == null ? "null" : massing.toString();
+		Blueprints.Entry entry = null;
+		String unknown = "No massing " + ref + " is installed";
+		if (massing != null && massing.version() >= 1 && MassingFiles.exists(ref)) {
+			try {
+				entry = MassingFiles.read(ref);
+			} catch (java.io.IOException | RuntimeException e) {
+				unknown = "Massing " + ref + " could not be read: " + (e.getMessage() == null ? e.toString() : e.getMessage());
+			}
+		}
+		if (entry == null) {
+			Verdict v = new Verdict(List.of(new Refusal(Reason.UNKNOWN_BLUEPRINT, unknown)), List.of(), false, Map.of(), Optional.empty(), Optional.empty());
+			return new LotFit(new BlockPos(lot.minX(), lot.minY(), lot.minZ()), Rotation.NONE, lot, Optional.empty(), v);
+		}
+		if (streetSide == null || streetSide.getAxis().isVertical()) {
+			throw new IllegalArgumentException("streetSide must be north, east, south or west");
+		}
+		LotFitting.Fit f = LotFitting.fit(entry.blueprint(), lb, streetSide.getName(), opt.centreOn() == FitOptions.CentreOn.BOX, opt.setback(),
+			opt.approachIntoStreet());
+		BlockPos origin = new BlockPos(f.ox(), f.oy(), f.oz());
+		Rotation rot = Rotation.values()[f.turns()];
+		boolean construction = ApiRules.construction(opt.mode(), SurvivalWorld.on());
+		Verdict v;
+		if (!f.fits()) {
+			v = new Verdict(List.of(new Refusal(Reason.LOT_TOO_SMALL, "The lot is too small for massing " + ref + ": " + f.why())), List.of(), construction,
+				Map.of(), Optional.of(Views.box(f.box())), Optional.empty());
+		} else {
+			String no = ApiRules.modeRefusal(opt.mode(), SurvivalWorld.on(), opt.actor() != null, permission2(opt.actor()));
+			if (no != null) {
+				v = new Verdict(List.of(new Refusal(Reason.NOT_ALLOWED, no)), List.of(), construction, Map.of(), Optional.empty(), Optional.empty());
+			} else {
+				Sites.Verdict sv = Sites.entryVerdict(level, entry, origin, rot, opt.force(), construction, null);
+				List<Refusal> refused = sv.typed().stream().map(x -> new Refusal(x.reason(), x.message())).toList();
+				v = new Verdict(refused, sv.notes(), construction, Map.of(), Optional.ofNullable(sv.box()).map(Views::box),
+					Optional.ofNullable(sv.snapshotBox()).map(Views::box), overlaps(sv.overlaps(), refused), 0);
+			}
 		}
 		return new LotFit(origin, rot, Views.box(f.box()), v.restoreBox(), v);
 	}

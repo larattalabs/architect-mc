@@ -241,8 +241,47 @@ for (const e of EXAMPLES) {
     assert.ok(c.ok);
     assert.ok(c.compared.parts >= 2, `${c.compared.parts} parts compared`);
     assert.ok(c.compared.roofs >= 1, 'a roof form compared');
+    assert.equal(c.compared.entrance, true, 'the entrance column compared');
   });
 }
+
+// (6c 0a, C6) the front and the entrance column, which make Sites.fitMassingToLot predict the detail's fit
+test('conformance (6c 0a C6): a turned front is an error, an entrance column more than 1 off an issue', async () => {
+  for (const e of EXAMPLES) {
+    const m = readJson(path.join(MASSINGS, `${e}_massing`, `${e}_massing.blueprint.json`));
+    const d = readJson(path.join(KIT, 'examples', e, `${e}.blueprint.json`));
+    for (const f of ['north', 'east', 'west']) {
+      const c = checkConformance({ ...d, front: f }, m);
+      assert.equal(c.ok, false, `${e} turned ${f}`);
+      assert.deepEqual(c.errors, [`front: the design faces ${f}, the massing south (keep the massing's front: it would stand turned on its lot)`], e);
+      assert.ok(!has(c.issues, /^entrance:/), 'no entrance issue on top of a turned front');
+    }
+    const moved = (dx) => ({ ...d, anchors: { ...d.anchors, entrance: { ...d.anchors.entrance, x: d.anchors.entrance.x + dx } } });
+    for (const dx of [-1, 1]) assert.deepEqual([checkConformance(moved(dx), m).errors, checkConformance(moved(dx), m).issues], [[], []], `${e} entrance ${dx}`);
+    for (const dx of [-2, 2, 5]) {
+      const c = checkConformance(moved(dx), m);
+      assert.deepEqual(c.errors, [], `${e} entrance ${dx}: an issue, not an error`);
+      const mc = Math.floor(m.anchors.entrance.x);
+      assert.deepEqual(c.issues, [`entrance: column x=${mc + dx} is ${dx > 0 ? '+' : ''}${dx} off the massing's x=${mc} (more than 1; it moves the building on its lot)`], `${e} entrance ${dx}`);
+    }
+    // moving the entrance in depth (z on a south front) is not a column change
+    const deeper = { ...d, anchors: { ...d.anchors, entrance: { ...d.anchors.entrance, z: d.anchors.entrance.z - 3 } } };
+    assert.deepEqual(checkConformance(deeper, m).issues, [], e);
+  }
+  // an east/west front compares z; the front is case-blind and defaults to south; no entrance on either side: nothing compared
+  const side = (front, x, z) => ({ id: 's', massing: true, front, size: { x: 9, y: 9, z: 9 }, parts: { a: { box: [0, 0, 0, 8, 8, 8] } }, anchors: { entrance: { x, y: 1, z } } });
+  assert.deepEqual(checkConformance(side('east', 1.5, 4.5), side('east', 7.5, 4.5)).issues, []);
+  assert.ok(has(checkConformance(side('east', 4.5, 1.5), side('east', 4.5, 4.5)).issues, /^entrance: column z=1 is -3 off the massing's z=4/));
+  assert.deepEqual(checkConformance(side('SOUTH', 4.5, 1.5), side('south', 4.5, 4.5)).errors, []);
+  const nofront = side(undefined, 4.5, 1.5);
+  delete nofront.front;
+  assert.deepEqual(checkConformance(nofront, side('south', 4.5, 4.5)).errors, []);
+  assert.equal(checkConformance(nofront, side('west', 4.5, 4.5)).errors.length, 1);
+  const bare = side('south', 0, 0);
+  delete bare.anchors;
+  const c = checkConformance(bare, side('south', 4.5, 4.5));
+  assert.deepEqual([c.errors, c.issues, c.compared.entrance], [[], [], false]);
+});
 
 test('conformance: the non-conforming fixture pair has each problem, the size cap as an error', async () => {
   const mm = await buildDesign('hall_massing', { out: tmp, dir: FIX });
