@@ -198,9 +198,17 @@ The named chains still exist (`node tools/gate-run.mjs <chain>`):
 
 | chain | steps | typical time |
 |---|---|---|
-| `quick` | unit tests; the 4a/4b/4c sim suites (jobs, sets, massing); the unchanged apitest jars; 4e mega-lite | 9.5 min serial (measured); see the shard timings below |
+| `quick` | unit tests; the 4a/4b/4c sim suites (jobs, sets, massing); the unchanged apitest jars; 4e mega-lite | 9.5 min serial on a quiet box; ~10 min on 3 shards on a loaded box (below) |
 | `regress` | `quick` plus 4d (all); 4e orders, crash, throughput; 5b chains and village; 6a megaB `--fast` | about 3 h serial |
 | `engine` | `regress` (with the full megaB) plus 6a megaA, megaB, crash, eflat, inv3, staged and heap | about 5 h serial |
+
+**Measured (2026-10-10, a shared box at load average 12-36: the 6b engine chain, rust builds, other clients).** Serial quick on a
+quiet box: 9m30s. On the loaded box: serial quick ran 10m12s up to the end of apijars (megalite not reached); `quick --shards 3`
+ran 10m06s and 10m24s (the latter including the first setup of two new run worktrees, 25 s). Sharding quick saves only the unit
+and sim suites: its critical path is unit-mod (a barrier), then apijars (3-7 min, it starts its own clients), then mega-lite (a
+bench step, alone), so expect about 6 min on a quiet box. Sharding pays off in `slice` and `release`, where the long steps
+(4d-all, 5b-chains, 4e-orders, the 6a suites) run side by side: the plan's estimate for a 6b-sized slice is 1h48m serial,
+59 min on 3 shards; for a release, 3h10m serial, 2h23m on 3 shards. A `change` run for a driver change (6 steps) took 8m03s.
 
 `gate6a.mjs megaB --fast` dwells 8 s per waypoint instead of 30 s and, after a stage's first lap, teleports only to the cells
 that still hold an unfinished item. The relog, the sidecar kill and every bar stay the same, and `megabench-B.json` records
