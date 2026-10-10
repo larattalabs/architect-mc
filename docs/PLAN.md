@@ -368,3 +368,23 @@ All taken. 6c slice 0 is split as C11 asks, and a flat-village slice (C10) moves
 5. Then 6c's terrain slices (passes, toolbox, generators, fluids, schematics), then 7a.
 - **C12:** VillageLayout retires only behind a joint 7a/6d gate: an existing Steward settlement migrates onto Architect lots and can still be updated (6d) and undone.
 - Not now (Steward agrees): shared UI extraction, schematic interchange urgency, shape promotion. They wait for an observed need.
+
+### Steward round 5 (C13-C17; steward-mc docs/ARCHITECT-ASKS.md "Round 5", Noah approved): what Steward's phase 3 needs
+
+- **C13, design as the next version of an entry:** today only polish (dev flag) and revert install versions, and remix makes a
+  new entry. Add `DesignRequest.versionOf(entryId[, siteId])`: a free-text change request, designed with the entry and (when
+  given) the placed site's current state and the player's kept edits as context, installed as the entry's next version.
+  Change requests then flow through checkDelta/applyDelta and `outdated`. **Slice 0b.**
+- **C14, revert:** already supported. `Sites.revert(siteId, toVersion, actor)` (1.7.0) and applyDelta to an older
+  `toVersion`; a version is pinned while a site stands at it (`EntryVersion.pinned`, never GC'd). **New in 0a:** caller pins
+  (`Library.pinVersion/unpinVersion(entryId, version, owner)`), kept while any caller pin exists.
+- **C15, a shared client UI library** (world UI, nameplates, bubbles, plate declutter, screen kit, sprites) with AgentCraft and
+  Steward. It reverses the earlier "not now". The repo and ownership decision is Noah's (a new public repo, e.g. larattalabs/*-ui).
+  Coordinated with AgentCraft Main; Architect migrates after the library exists.
+- **C16, streets in survival construction batches:** roads and paths as construction sites with a BOM (Noah's survival rule:
+  connectors cost materials). **Slice 0c.**
+- **C17, protected areas:** caller-marked write bounds that no placement, delta, road or terrain op of that owner touches
+  (refused with a typed reason). "Natural" stays a block type; a player's dirt paths count as natural, so protection is by area.
+  Automatic detection of player-changed cells (block-change tracking) comes later with the 6c terrain slices. **Slice 0c**
+  (area marks), before V and the terrain work.
+- **0a addition:** futures still pending at world stop fail with a distinct, typed reason (`WORLD_STOPPED`), not a generic error.
