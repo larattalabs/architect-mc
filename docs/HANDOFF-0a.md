@@ -13,7 +13,7 @@ the coordinator tags.
 | Build step (§14) | State |
 |---|---|
 | 1. 0.12.0 apitest jar archived | done (below) |
-| 2. 0.12.2: C4, client script, gate item 1 | built; gate passed (below); awaiting the verifier, then merge |
+| 2. 0.12.2: C4, client script, gate item 1 | gate passed; gate-verifier PASS (re-ran npm run check 661/661, mod tests 437/437, stub 18/18); merged to main |
 | 3-6. Sidecar, kit, mod, gate for 0.13.0 | not started (on `slice/0a`) |
 
 ## The 0.12.0 jars (build step 1)
@@ -68,3 +68,6 @@ removed afterwards. In the main checkout (gitignored `artifacts/`):
   restart; GROUP_UPDATED's ledger is in memory, so it fires once after a restart. 0.13.0's `seq` addresses that.
 - Not run for the stub: apijars (no API change), the in-game Steward flow with batch + undo (§13 item 1's full form; it goes
   into the 0a slice gate with the packed-jar client).
+
+Verifier notes (low): in the zero-cost path a restart mid-`sim:repair` re-adds `simDesignUsd` for the repair round (only the
+simCosts path is idempotent); `simWork()` creates a `work[id]` entry for every sim design.
