@@ -221,6 +221,10 @@ public final class RegionsImpl implements Regions {
 		if (c.getXSpan() > big || c.getZSpan() > big) {
 			return failed(Reason.REGION_LIMIT, "the claim is " + c.getXSpan() + "x" + c.getZSpan() + " columns (at most " + big + "x" + big + ")");
 		}
+		String prot = protectedClaim(Sites.dimensionId(r.level()), r.owner(), new int[] {c.minX(), c.minY(), c.minZ(), c.maxX(), c.maxY(), c.maxZ()});
+		if (prot != null) {
+			return failed(Reason.PROTECTED, prot);
+		}
 		TileStream.Link link = TileStream.link;
 		if (link == null || !link.connected()) {
 			return failed(Reason.SIDECAR_UNAVAILABLE, "the helper (sidecar) is not connected");
@@ -326,6 +330,11 @@ public final class RegionsImpl implements Regions {
 				String stale = staleReason(irJson);
 				if (stale != null) {
 					throw refusal(Reason.PLAN_STALE, stale);
+				}
+				// 6c 0c (C17): the claim against the owner's protected areas at accept (an area marked while it planned)
+				String prot = protectedClaim(Sites.dimensionId(r.level()), r.owner(), new int[] {c.minX(), c.minY(), c.minZ(), c.maxX(), c.maxY(), c.maxZ()});
+				if (prot != null) {
+					throw refusal(Reason.PROTECTED, prot);
 				}
 				planned.addProperty("planId", planId);
 				planned.addProperty("surveySha", surveySha);
@@ -711,6 +720,11 @@ public final class RegionsImpl implements Regions {
 			throw refusal(Reason.OTHER, blobError); // (6b) "blob <sha> missing": before any write
 		}
 		Ir ir = p.ir();
+		// 6c 0c (C17): an area marked after planning refuses the realise (no per-tile check)
+		String prot = protectedClaim(p.dimension(), p.owner(), ir.claim());
+		if (prot != null) {
+			throw refusal(Reason.PROTECTED, prot);
+		}
 		// another owner's standing region over the claim
 		for (Live l : REGIONS.values()) {
 			if (l.rec().state != RegionState.REMOVING && overlaps(l.rec().claim, ir.claim()) && !java.util.Objects.equals(l.rec().owner, p.owner())
@@ -1791,6 +1805,13 @@ public final class RegionsImpl implements Regions {
 			super(r, msg);
 			this.reason = r;
 		}
+	}
+
+	/** 6c 0c (C17): the refusal message when the claim {minX, minY, minZ, maxX, maxY, maxZ} touches a protected area of {@code owner}. */
+	static @Nullable String protectedClaim(String dimension, @Nullable String owner, int[] claim) {
+		dev.larattalabs.architect.api.ProtectedArea a = dev.larattalabs.architect.site.Protected.hit(dimension, owner, claim[0], claim[2], claim[3],
+			claim[5]);
+		return a == null ? null : dev.larattalabs.architect.site.Protected.message("The region's claim", a);
 	}
 
 	static RegionException refusal(Reason r, String msg) {

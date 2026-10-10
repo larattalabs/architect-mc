@@ -51,6 +51,9 @@ package dev.larattalabs.architect.api;
  * <li>{@code PLAYER_BLOCKS} (1.9.0): a lot placed LAYERed on a region's pad (over a region tile entry) whose box holds the
  * player's own blocks: non-natural, no block entity, owned by no journal entry. The lot is not placed and the blocks stay
  * (the region ends PARTIAL); {@code force} overrides it (the blocks are overwritten and come back on remove).</li>
+ * <li>{@code PROTECTED} (1.12.0): the op writes into a protected area of its owner ({@link Sites#protect}); {@code force}
+ * doesn't override it: lift the area ({@link Sites#unprotect}).</li>
+ * <li>{@code FIELD_LIMIT} (1.12.0): a bounded request field is out of range ({@code Limits}); nothing was sent.</li>
  * </ul>
  * New values are only ever appended.
  */
@@ -58,5 +61,7 @@ public enum Reason {
 	PLAYER_IN_BOX, OCCUPIED, OVERLAP, LAVA, BLOCK_ENTITIES, BUILD_HEIGHT, DOOR_CUT, CREATIVE_ONLY_BLOCK, NOT_ALLOWED, NOT_LOADED,
 	UNKNOWN_BLUEPRINT, OTHER, CANCELLED, LOT_TOO_SMALL, TIMED_OUT, OVERLAP_BUSY, OVERLAP_OWNED, LAYER_DEPTH, COVERED, TOO_STEEP, DEEP_WATER,
 	TOO_LARGE, JOURNAL_UNAVAILABLE, SITE_BUSY, FRAME_CHANGED, VERSION_GONE, PLAYER_EDITS, NOT_GENERATED, CHUNK_BOUND, DRIFTED,
-	SIDECAR_UNAVAILABLE, PLAN_STALE, REGION_LIMIT, NO_TEMPLATE, PLAYER_BLOCKS
+	SIDECAR_UNAVAILABLE, PLAN_STALE, REGION_LIMIT, NO_TEMPLATE, PLAYER_BLOCKS,
+	// 1.12.0 (6c slice 0c), after 0a's and 0b's
+	PROTECTED, FIELD_LIMIT
 }

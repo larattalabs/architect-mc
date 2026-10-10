@@ -26,8 +26,10 @@ public interface ArchitectApi {
 	 * the region events (phase 6a).
 	 * 1.9.0: region checks and previews, region designs (template-first), nudge actions, Survey.volume, IR format 2 and
 	 * PLAN_STALE gating, the PLAYER_BLOCKS refusal on region pads, the region ghost (phase 6b).
+	 * 1.12.0: minLotSize and the recommended lot, partial roads, ground heights, bounded fields refused in the mod, the extend
+	 * warning, survival construction roads, protected areas, owner-tagged entities (phase 6c slice 0c).
 	 */
-	String VERSION = "1.9.0";
+	String VERSION = "1.12.0";
 
 	/** The singleton. Safe to call from any mod's initializer (it does not depend on Architect's init order). */
 	static ArchitectApi get() {

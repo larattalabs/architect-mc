@@ -154,6 +154,7 @@ public final class Sites {
 		WorldJournal.init(); // the journal opens (and imports 4d worlds) before the sites load
 		dev.larattalabs.architect.journal.JournalMigration.init();
 		dev.larattalabs.architect.site.roads.RoadSync.init();
+		Protected.init(); // 6c 0c (C17)
 		ServerLifecycleEvents.SERVER_STARTED.register(server -> {
 			worldDir = server.getWorldPath(LevelResource.ROOT);
 			load(server);
@@ -858,6 +859,15 @@ public final class Sites {
 	/** {@link #verdict}; {@code style}: the entrance approach's style (6b), null = the design's own. */
 	public static Verdict verdict(ServerLevel level, Blueprint bp, BlockPos origin, Rotation rotation, boolean force, @Nullable String movingId,
 		boolean dryRun, @Nullable Boolean construction, boolean layer, @Nullable String owner, @Nullable EntranceStyle style) {
+		return verdict(level, bp, origin, rotation, force, movingId, dryRun, construction, layer, owner, style, true);
+	}
+
+	/**
+	 * {@link #verdict}; {@code protect} (6c 0c, C17): the owner's protected areas apply to the predicted restore box (a move: the
+	 * moving site's owner). False for a region's items: a region is checked at plan accept and realise start only.
+	 */
+	public static Verdict verdict(ServerLevel level, Blueprint bp, BlockPos origin, Rotation rotation, boolean force, @Nullable String movingId,
+		boolean dryRun, @Nullable Boolean construction, boolean layer, @Nullable String owner, @Nullable EntranceStyle style, boolean protect) {
 		List<Refusal> typed = new ArrayList<>();
 		Refusals out = (r, m) -> typed.add(new Refusal(r, m));
 		boolean survival = construction != null ? construction : SurvivalWorld.on();
@@ -896,6 +906,12 @@ public final class Sites {
 				}
 			}
 			site = checkSite(level, bp, origin, rotation, force, moving, out, dryRun, survival && moving == null, layer, owner, style);
+			if (site != null && protect) {
+				dev.larattalabs.architect.api.ProtectedArea pa = Protected.hit(dimensionId(level), moving != null ? moving.owner() : owner, site.snapBox());
+				if (pa != null) {
+					out.add(Reason.PROTECTED, Protected.message(moving != null ? "Moving " + movingId : "Placing " + bp.id(), pa));
+				}
+			}
 			if (site != null && typed.isEmpty() && moving == null) {
 				checked = new Checked(checkKey(level, bp, origin, rotation, force, survival, layer, owner, style), level.getServer().getTickCount(), site);
 			}

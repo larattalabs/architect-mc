@@ -101,8 +101,8 @@ public final class InfraApi {
 			}
 			k++;
 		}
-		return InfraPlace.checkCells(r.level(), r.kind(), Journal.Policy.valueOf(r.policy().name()), pos, st, nbt, cond, r.naturalOnly(),
-			r.overlap() == dev.larattalabs.architect.api.OverlapPolicy.LAYER, r.owner(), r.force(), dryRun);
+		return InfraPlace.protect(r.level(), InfraPlace.checkCells(r.level(), r.kind(), Journal.Policy.valueOf(r.policy().name()), pos, st, nbt, cond,
+			r.naturalOnly(), r.overlap() == dev.larattalabs.architect.api.OverlapPolicy.LAYER, r.owner(), r.force(), dryRun), r.owner(), "The cell site");
 	}
 
 	public static Verdict checkCells(CellsRequest r) {

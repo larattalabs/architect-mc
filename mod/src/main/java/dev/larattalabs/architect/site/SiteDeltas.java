@@ -567,6 +567,11 @@ public final class SiteDeltas {
 			}
 		};
 		DeltaPlanner.Outcome o = DeltaPlanner.outcome(set.delta(), pb.snapBox(), stacks, nowW, r.edits());
+		// 6c 0c (C17): every cell the delta writes against the owner's protected areas (force doesn't override it)
+		dev.larattalabs.architect.api.ProtectedArea prot = Protected.hitCells(b.dimension(), r.owner(), o.write().keySet());
+		if (prot != null) {
+			out.add(new Refusal(Reason.PROTECTED, Protected.message("The update of " + r.siteId(), prot), false));
+		}
 		if (unloaded[0]) {
 			out.add(new Refusal(Reason.NOT_LOADED, "the site is not loaded on the server (walk closer)", true));
 		}
@@ -1164,6 +1169,11 @@ public final class SiteDeltas {
 				throw new Sites.SiteException(f.reason(), f.message());
 			}
 			return applyChecked(level, c, false, "forward");
+		}
+		// 6c 0c (C17): a revert by the site's owner writes inside its restore box
+		dev.larattalabs.architect.api.ProtectedArea pa = Protected.hit(b.dimension(), owner, b.restoreBox());
+		if (pa != null) {
+			throw new Sites.SiteException(Reason.PROTECTED, Protected.message("Reverting " + siteId, pa));
 		}
 		return undoSuffix(level, b, idx, deltas, ch.get(idx)[0], from);
 	}

@@ -246,4 +246,38 @@ public interface Sites {
 	default List<OutdatedSite> outdated(@Nullable String owner) {
 		throw new UnsupportedOperationException("Sites.outdated needs Architect API 1.7.0");
 	}
+
+	// ------------------------------------------------------------------ 1.12.0 (docs/CONTRACT.md phase 6c slice 0c)
+
+	/**
+	 * Marks a protected area (C17, §8): ops of {@code a.owner()} started from now on that would write into it are refused
+	 * {@link Reason#PROTECTED}, whatever their {@code force}. The same (owner, id) replaces. Throws IllegalArgumentException for
+	 * a missing owner or id, an area over 4,096 columns on a side, or a 1,025th area of one owner. Server thread. Since 1.12.0.
+	 */
+	default ProtectedArea protect(ProtectedArea a) {
+		throw new UnsupportedOperationException("Sites.protect needs Architect API 1.12.0");
+	}
+
+	/** Lifts a protected area; false when there was none. Server thread. Since 1.12.0. */
+	default boolean unprotect(String owner, String areaId) {
+		throw new UnsupportedOperationException("Sites.unprotect needs Architect API 1.12.0");
+	}
+
+	/** The protected areas of {@code owner}, or (null) of every owner. Since 1.12.0. */
+	default List<ProtectedArea> protectedAreas(@Nullable String owner) {
+		throw new UnsupportedOperationException("Sites.protectedAreas needs Architect API 1.12.0");
+	}
+
+	/**
+	 * The smallest lot {@link #fitToLot} accepts for a design (§2): {@code alongStreet × deep} fits, one block less on either
+	 * axis is {@link Reason#LOT_TOO_SMALL}. {@code o}'s setback and approachIntoStreet apply as in fitToLot. Since 1.12.0.
+	 */
+	default LotSize minLotSize(String blueprintId, FitOptions o) {
+		throw new UnsupportedOperationException("Sites.minLotSize needs Architect API 1.12.0");
+	}
+
+	/** {@link #minLotSize(String, FitOptions)} for a massing. Since 1.12.0. */
+	default LotSize minLotSize(MassingRef massing, FitOptions o) {
+		throw new UnsupportedOperationException("Sites.minLotSize(MassingRef) needs Architect API 1.12.0");
+	}
 }

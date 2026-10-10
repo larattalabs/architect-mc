@@ -500,6 +500,9 @@ public final class Batches {
 		}
 		}
 		tr.mark("check");
+		if (!road && !RegionItems.isRegion(b)) {
+			c = InfraPlace.protect(level, c, b.owner, "The cell site " + i.key); // 6c 0c (C17), checked when the item starts
+		}
 		if (!c.ok()) {
 			tr.done();
 			Sites.Refusal r = c.refusals().get(0);
@@ -918,7 +921,8 @@ public final class Batches {
 		if (!SiteJournal.warm(i.dimension, near)) {
 			return;
 		}
-		Sites.Verdict v = Sites.verdict(level, bp, origin, rot, i.force, null, true, i.construction, i.layer, b.owner, styleOf(b, i));
+		Sites.Verdict v = Sites.verdict(level, bp, origin, rot, i.force, null, true, i.construction, i.layer, b.owner, styleOf(b, i),
+			!RegionItems.isRegion(b));
 		if (!v.ok()) {
 			Sites.Refusal hard = v.typed().stream().filter(r -> !TEMPORARY.contains(r.reason())).findFirst().orElse(null);
 			if (hard != null) {

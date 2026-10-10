@@ -287,6 +287,19 @@ public final class InfraPlace {
 		return new Check(List.of(), notes, ps, vs, new Anchors.Bounds(bb[0], bb[1], bb[2], bb[3], bb[4], bb[5]), hits, spec);
 	}
 
+	/**
+	 * 6c 0c (C17): a checked cell site against {@code owner}'s protected areas: refused {@code PROTECTED} when a cell lies in one
+	 * (force doesn't override it). A region's items aren't checked (the realise start was).
+	 */
+	static Check protect(ServerLevel level, Check c, @Nullable String owner, String what) {
+		if (!c.ok()) {
+			return c;
+		}
+		dev.larattalabs.architect.api.ProtectedArea a = Protected.hitCells(Sites.dimensionId(level), owner, c.positions());
+		return a == null ? c : new Check(List.of(new Sites.Refusal(Reason.PROTECTED, Protected.message(what, a))), c.notes(), new long[0], new Value[0],
+			null, List.of(), null);
+	}
+
 	/** ALWAYS_OURS for a cell site: an active entry (not leaves) of a site with the same owner has the cell. */
 	static boolean ownedBySameOwner(ServerLevel level, long p, @Nullable String owner) {
 		JournalStore js = WorldJournal.storeOrNull();

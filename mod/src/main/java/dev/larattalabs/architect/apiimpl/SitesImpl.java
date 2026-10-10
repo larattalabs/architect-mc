@@ -357,9 +357,20 @@ final class SitesImpl implements dev.larattalabs.architect.api.Sites {
 			v = new Verdict(List.of(new Refusal(Reason.LOT_TOO_SMALL, "The lot is too small for " + blueprintId + ": " + f.why())), List.of(), construction,
 				Map.of(), Optional.of(Views.box(f.box())), Optional.empty());
 		} else {
-			v = check(new PlaceRequest(blueprintId, level, origin, rot, opt.mode(), null, new JsonObject(), opt.force(), opt.actor()));
+			v = check(new PlaceRequest(blueprintId, level, origin, rot, opt.mode(), opt.owner(), new JsonObject(), opt.force(), opt.actor()));
 		}
-		return new LotFit(origin, rot, Views.box(f.box()), v.restoreBox(), v);
+		return new LotFit(origin, rot, Views.box(f.box()), v.restoreBox(), v, Views.box(LotFitting.recommended(f, lb, streetSide.getName())));
+	}
+
+	@Override
+	public dev.larattalabs.architect.api.LotSize minLotSize(String blueprintId, FitOptions o) {
+		FitOptions opt = o == null ? FitOptions.DEFAULT : o;
+		Blueprint bp = Blueprints.get(blueprintId);
+		if (bp == null) {
+			throw new IllegalArgumentException("No design " + blueprintId + " in the library");
+		}
+		int[] m = LotFitting.minSize(bp, opt.setback(), opt.approachIntoStreet());
+		return new dev.larattalabs.architect.api.LotSize(m[0], m[1], m[2], LotFitting.frontMargin(bp));
 	}
 
 	@Override
@@ -498,5 +509,22 @@ final class SitesImpl implements dev.larattalabs.architect.api.Sites {
 			out.add(new dev.larattalabs.architect.api.OutdatedSite((String) o[0], (String) o[1], (int) o[2], (int) o[3]));
 		}
 		return out;
+	}
+
+	// ------------------------------------------------------------------ 1.12.0 (docs/CONTRACT.md phase 6c slice 0c)
+
+	@Override
+	public dev.larattalabs.architect.api.ProtectedArea protect(dev.larattalabs.architect.api.ProtectedArea a) {
+		return dev.larattalabs.architect.site.Protected.protect(a);
+	}
+
+	@Override
+	public boolean unprotect(String owner, String areaId) {
+		return dev.larattalabs.architect.site.Protected.unprotect(owner, areaId);
+	}
+
+	@Override
+	public List<dev.larattalabs.architect.api.ProtectedArea> protectedAreas(@Nullable String owner) {
+		return dev.larattalabs.architect.site.Protected.list(owner);
 	}
 }
