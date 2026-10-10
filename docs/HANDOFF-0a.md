@@ -13,8 +13,8 @@ the coordinator tags.
 | Build step (§14) | State |
 |---|---|
 | 1. 0.12.0 apitest jar archived | done (below) |
-| 2. 0.12.2: C4, client script, gate item 1 | gate passed; gate-verifier PASS (re-ran npm run check 661/661, mod tests 437/437, stub 18/18); merged to main |
-| 3-6. Sidecar, kit, mod, gate for 0.13.0 | not started (on `slice/0a`) |
+| 2. 0.12.2: C4, client script, gate item 1 | gate passed; gate-verifier PASS (re-ran npm run check 661/661, mod tests 437/437, stub 18/18); ready to merge; the builder's `git merge --no-ff` + push to main was refused by this session's permission classifier, so the coordinator (or Noah) merges `slice/0a-stub` |
+| 3-6. Sidecar, kit, mod, gate for 0.13.0 | started on `slice/0a`: the 1.10.0 API surface only (below); no implementation yet |
 
 ## The 0.12.0 jars (build step 1)
 
@@ -71,3 +71,18 @@ removed afterwards. In the main checkout (gitignored `artifacts/`):
 
 Verifier notes (low): in the zero-cost path a restart mid-`sim:repair` re-adds `simDesignUsd` for the repair round (only the
 simCosts path is idempotent); `simWork()` creates a `work[id]` entry for every sim design.
+
+## 0.13.0 progress (`slice/0a`)
+
+API surface written, compiles, not yet implemented or versioned (`ArchitectApi.VERSION` still 1.9.0): `ArchitectRefused`
+(RegionRefused re-parented, `reason()` kept as an override); Reasons `WORLD_STOPPED, OP_KEY_CONFLICT, TILE_SLOW` appended;
+`WaitAction.Kind.RETRY` (nudge RETRY asks for waiting tiles again via `TileStream.retryWaiting`); `EstimateRequest`,
+`Estimate.byKind` + `Estimate.Kind`; `Group` + `Breakdown` (with `bibleJobIds`, S-0a-3), `seq`, `lastAction`, `opKey`,
+`costByKind()`; `BibleJob/BatchView.opKey`; `BibleRequest/GroupRequest/Batch.opKey` (+ `withOpKey`); `Designs.estimate(EstimateRequest)`,
+`groupByKey`; `Bibles.cancelJob`, `jobByKey`; `Sites.fitMassingToLot`, `batchByKey`; `Library.pinVersion/unpinVersion/pinOwners`.
+Every widened record keeps its old constructor; withers carry `opKey`.
+
+Next, in order: sidecar (opKeys + byKey messages, seq/lastAction/breakdown + log line, estimates C5, cancel ack, tile retry),
+kit conformance (C6), mod implementation (wire parsing, durable batches, WORLD_STOPPED sweep, pins, TileStream, MsptTrace,
+DevBridge `dev.batch.skipSave` / `dev.api.dropAck`, event firing on seq), then `tools/gate6c0a.mjs` items 1-13 and the slice tier
+(needs the tiers runner on main).

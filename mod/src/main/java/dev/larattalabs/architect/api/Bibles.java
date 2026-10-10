@@ -69,4 +69,22 @@ public interface Bibles {
 
 	/** The bible jobs of {@code owner} (null: all), including the ones that finished while the caller was away. Newest first. */
 	List<BibleJob> jobs(@Nullable String owner);
+
+	/**
+	 * Cancels a bible job and completes with the job, cancelled, at the helper's ack. Fails like {@link Designs#cancelGroup}:
+	 * "no job", "already &lt;status&gt;", or {@link Reason#SIDECAR_UNAVAILABLE} ({@link ArchitectRefused}). BIBLE_DONE fires once,
+	 * as for {@link #cancel}. Since 1.10.0.
+	 */
+	default CompletableFuture<BibleJob> cancelJob(String jobId) {
+		throw new UnsupportedOperationException("Bibles.cancelJob needs Architect API 1.10.0");
+	}
+
+	/**
+	 * The bible job requested with this operation key by this owner (null: the player), in any state
+	 * ({@link BibleRequest#opKey}). Empty means the helper never received it. Fails {@link ArchitectRefused}
+	 * {@link Reason#SIDECAR_UNAVAILABLE} while the helper is not connected (never "empty" then). Since 1.10.0.
+	 */
+	default CompletableFuture<Optional<BibleJob>> jobByKey(@Nullable String owner, String opKey) {
+		throw new UnsupportedOperationException("Bibles.jobByKey needs Architect API 1.10.0");
+	}
 }

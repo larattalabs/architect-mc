@@ -18,9 +18,26 @@ import org.jspecify.annotations.Nullable;
  * @param seedPreset start from a built-in bible (a palette preset name), or null
  * @param sheetCritique (since 1.6.0, a helper with {@code "critique"}) the job ends with one report critique of its
  *     {@code sheet.png} (component legibility and restraint, about $0.05), kept as {@link Bible#critique()}
+ * @param opKey (since 1.10.0) the caller's operation key ({@code [A-Za-z0-9_.:-]{1,128}}), scoped by (owner, kind, opKey); a null
+ *     owner means the player. Sending again with the same key and the same body returns the first operation and starts no new
+ *     work (in any state); with a different body the future fails {@link ArchitectRefused} {@link Reason#OP_KEY_CONFLICT}.
+ *     Bodies are compared by the sha256 of the request's canonical JSON without the key. Kept as long as the record, and at
+ *     least 30 days after it is final. See {@link Bibles#jobByKey}.
  */
 public record BibleRequest(String prompt, @Nullable String name, @Nullable String owner, JsonObject ext, @Nullable String model,
-	@Nullable Double budgetUsd, List<String> references, @Nullable String scope, @Nullable String seedPreset, boolean sheetCritique) {
+	@Nullable Double budgetUsd, List<String> references, @Nullable String scope, @Nullable String seedPreset, boolean sheetCritique,
+	@Nullable String opKey) {
+	/** The 1.6.0 constructor (no opKey). */
+	public BibleRequest(String prompt, @Nullable String name, @Nullable String owner, JsonObject ext, @Nullable String model, @Nullable Double budgetUsd,
+		List<String> references, @Nullable String scope, @Nullable String seedPreset, boolean sheetCritique) {
+		this(prompt, name, owner, ext, model, budgetUsd, references, scope, seedPreset, sheetCritique, null);
+	}
+
+	/** A copy with an operation key. Since 1.10.0. */
+	public BibleRequest withOpKey(@Nullable String key) {
+		return new BibleRequest(prompt, name, owner, ext, model, budgetUsd, references, scope, seedPreset, sheetCritique, key);
+	}
+
 	public BibleRequest {
 		ext = ext == null ? new JsonObject() : ext;
 		references = references == null ? List.of() : List.copyOf(references);
@@ -34,7 +51,7 @@ public record BibleRequest(String prompt, @Nullable String name, @Nullable Strin
 
 	/** A copy with (or without) the sheet critique. Since 1.6.0. */
 	public BibleRequest withSheetCritique(boolean on) {
-		return new BibleRequest(prompt, name, owner, ext, model, budgetUsd, references, scope, seedPreset, on);
+		return new BibleRequest(prompt, name, owner, ext, model, budgetUsd, references, scope, seedPreset, on, opKey);
 	}
 
 	/** Just a prompt (and an optional name). */

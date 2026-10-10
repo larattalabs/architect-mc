@@ -51,6 +51,12 @@ package dev.larattalabs.architect.api;
  * <li>{@code PLAYER_BLOCKS} (1.9.0): a lot placed LAYERed on a region's pad (over a region tile entry) whose box holds the
  * player's own blocks: non-natural, no block entity, owned by no journal entry. The lot is not placed and the blocks stay
  * (the region ends PARTIAL); {@code force} overrides it (the blocks are overwritten and come back on remove).</li>
+ * <li>{@code WORLD_STOPPED} (1.10.0): the world stopped while the future was pending, or no world runs. Work in the helper goes
+ * on: find it again after the next load with the {@code *ByKey} lookups or the listings ({@link ArchitectRefused}).</li>
+ * <li>{@code OP_KEY_CONFLICT} (1.10.0): an operation key re-used by the same owner for the same kind with another body.</li>
+ * <li>{@code TILE_SLOW} (1.10.0): a region tile's evaluation ran over its time limit in every retry of the helper. Temporary:
+ * the item waits, the tile is asked for again after 30 s, 60 s, 120 s and then every 5 min, and {@link WaitAction.Kind#RETRY}
+ * asks now. Only {@code RealiseRequest.maxWaitSeconds} caps it (TIMED_OUT).</li>
  * </ul>
  * New values are only ever appended.
  */
@@ -58,5 +64,5 @@ public enum Reason {
 	PLAYER_IN_BOX, OCCUPIED, OVERLAP, LAVA, BLOCK_ENTITIES, BUILD_HEIGHT, DOOR_CUT, CREATIVE_ONLY_BLOCK, NOT_ALLOWED, NOT_LOADED,
 	UNKNOWN_BLUEPRINT, OTHER, CANCELLED, LOT_TOO_SMALL, TIMED_OUT, OVERLAP_BUSY, OVERLAP_OWNED, LAYER_DEPTH, COVERED, TOO_STEEP, DEEP_WATER,
 	TOO_LARGE, JOURNAL_UNAVAILABLE, SITE_BUSY, FRAME_CHANGED, VERSION_GONE, PLAYER_EDITS, NOT_GENERATED, CHUNK_BOUND, DRIFTED,
-	SIDECAR_UNAVAILABLE, PLAN_STALE, REGION_LIMIT, NO_TEMPLATE, PLAYER_BLOCKS
+	SIDECAR_UNAVAILABLE, PLAN_STALE, REGION_LIMIT, NO_TEMPLATE, PLAYER_BLOCKS, WORLD_STOPPED, OP_KEY_CONFLICT, TILE_SLOW
 }

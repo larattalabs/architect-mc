@@ -26,17 +26,95 @@ import java.util.Optional;
  * @param maxRedirects (since 1.3.0) redirect rounds per item (0 when not massingFirst)
  * @param context (since 1.3.0) the group's context, as requested
  * @param awaiting (since 1.3.0) the items waiting for {@link Designs#approveGroup} (their massing is done)
+ * @param breakdown (since 1.10.0) the cost and time per stage ({@link Breakdown#EMPTY} from an older helper)
+ * @param seq (since 1.10.0) goes up only on a real transition (status, reason, wave, the awaiting set; an item's status, stage,
+ *     entry, massing version or rounds), never for cost or step text; 0 from an older helper. GROUP_UPDATED fires only when it grew.
+ * @param lastAction (since 1.10.0) what the last transition was: {@code created, item_started, item_done, item_failed,
+ *     massing_ready, awaiting_approval, approved, redirected, paused_budget, extended, resumed, held_usage, usage_reset, cancelled,
+ *     done, failed}; "" from an older helper
+ * @param opKey (since 1.10.0) the caller's operation key ({@link GroupRequest#opKey}), if it was sent with one
  */
 public record Group(String id, String name, BiblePin bible, Optional<String> owner, JsonObject ext, int concurrency, Optional<Double> budgetUsd,
 	double softBudgetFraction, Status status, Optional<String> reason, List<Item> items, int wave, int done, int failed, Cost cost,
 	long usageLimitUntil, long createdAt, long updatedAt, boolean massingFirst, GroupRequest.ApprovalUi approvalUi, int maxRedirects,
-	Optional<JsonElement> context, List<String> awaiting) {
+	Optional<JsonElement> context, List<String> awaiting, Breakdown breakdown, long seq, String lastAction, Optional<String> opKey) {
 	public Group {
 		items = List.copyOf(items);
 		ext = ext == null ? new JsonObject() : ext;
 		approvalUi = approvalUi == null ? GroupRequest.ApprovalUi.ARCHITECT : approvalUi;
 		context = context == null ? Optional.empty() : context;
 		awaiting = awaiting == null ? List.of() : List.copyOf(awaiting);
+		breakdown = breakdown == null ? Breakdown.EMPTY : breakdown;
+		lastAction = lastAction == null ? "" : lastAction;
+		opKey = opKey == null ? Optional.empty() : opKey;
+	}
+
+	/** The 1.3.0 constructor (no breakdown, seq, lastAction or opKey). */
+	public Group(String id, String name, BiblePin bible, Optional<String> owner, JsonObject ext, int concurrency, Optional<Double> budgetUsd,
+		double softBudgetFraction, Status status, Optional<String> reason, List<Item> items, int wave, int done, int failed, Cost cost,
+		long usageLimitUntil, long createdAt, long updatedAt, boolean massingFirst, GroupRequest.ApprovalUi approvalUi, int maxRedirects,
+		Optional<JsonElement> context, List<String> awaiting) {
+		this(id, name, bible, owner, ext, concurrency, budgetUsd, softBudgetFraction, status, reason, items, wave, done, failed, cost, usageLimitUntil,
+			createdAt, updatedAt, massingFirst, approvalUi, maxRedirects, context, awaiting, Breakdown.EMPTY, 0, "", Optional.empty());
+	}
+
+	/**
+	 * The cost per kind, derived from {@link #breakdown}: {@code bible}, {@code massing}, {@code detail} (its first rounds and
+	 * repairs) and {@code critique}. Since 1.10.0; empty from an older helper.
+	 */
+	public Map<String, Double> costByKind() {
+		return breakdown.costByKind();
+	}
+
+	/**
+	 * A group's cost and time per stage (since 1.10.0; docs/CONTRACT.md 6c slice 0a §7).
+	 * <ul>
+	 * <li>{@code BIBLE}: the job(s) that made the pinned bible version ({@link #bibleJobIds}), counted in the first group of the same
+	 * owner that pins that version; later groups show it as 0;</li>
+	 * <li>{@code MASSING}: the first round of each massing; {@code DETAIL}: the first design round of each detail pass;</li>
+	 * <li>{@code REPAIR}: rounds 2 and later, of massings and details; {@code CRITIQUE}: critic calls and loop revisions;</li>
+	 * <li>{@code QUEUED} and {@code USAGE_HOLD}: time only.</li>
+	 * </ul>
+	 * {@code Line.ms} is summed item time.
+	 *
+	 * @param totalUsd {@link Group#cost} plus the bible line
+	 * @param wallMs the group's wall time so far
+	 * @param firstDetailedMs the time to the first detailed item (0 until there is one)
+	 * @param bibleJobIds the bible jobs the bible line counts (so a caller tracking {@link BibleJob} cost does not count them twice)
+	 */
+	public record Breakdown(Map<Stage, Line> stages, double totalUsd, long wallMs, long firstDetailedMs, List<String> bibleJobIds) {
+		public static final Breakdown EMPTY = new Breakdown(Map.of(), 0, 0, 0, List.of());
+
+		public Breakdown {
+			stages = stages == null ? Map.of() : Map.copyOf(stages);
+			bibleJobIds = bibleJobIds == null ? List.of() : List.copyOf(bibleJobIds);
+		}
+
+		/** The line of a stage (zero when absent). */
+		public Line line(Stage s) {
+			return stages.getOrDefault(s, Line.ZERO);
+		}
+
+		/** bible, massing, detail (DETAIL + REPAIR) and critique, in USD; empty when there are no lines. */
+		public Map<String, Double> costByKind() {
+			if (stages.isEmpty()) {
+				return Map.of();
+			}
+			Map<String, Double> m = new java.util.LinkedHashMap<>();
+			m.put("bible", line(Stage.BIBLE).usd());
+			m.put("massing", line(Stage.MASSING).usd());
+			m.put("detail", line(Stage.DETAIL).usd() + line(Stage.REPAIR).usd());
+			m.put("critique", line(Stage.CRITIQUE).usd());
+			return java.util.Collections.unmodifiableMap(m);
+		}
+
+		/** New values are only ever appended. */
+		public enum Stage { BIBLE, MASSING, DETAIL, REPAIR, CRITIQUE, QUEUED, USAGE_HOLD }
+
+		/** One stage: its cost, its summed item time and how many passes, rounds or calls it counts. */
+		public record Line(double usd, long ms, int count) {
+			public static final Line ZERO = new Line(0, 0, 0);
+		}
 	}
 
 	/** The 1.2.0 constructor (not massingFirst). */
