@@ -74,15 +74,39 @@ simCosts path is idempotent); `simWork()` creates a `work[id]` entry for every s
 
 ## 0.13.0 progress (`slice/0a`)
 
-API surface written, compiles, not yet implemented or versioned (`ArchitectApi.VERSION` still 1.9.0): `ArchitectRefused`
-(RegionRefused re-parented, `reason()` kept as an override); Reasons `WORLD_STOPPED, OP_KEY_CONFLICT, TILE_SLOW` appended;
-`WaitAction.Kind.RETRY` (nudge RETRY asks for waiting tiles again via `TileStream.retryWaiting`); `EstimateRequest`,
-`Estimate.byKind` + `Estimate.Kind`; `Group` + `Breakdown` (with `bibleJobIds`, S-0a-3), `seq`, `lastAction`, `opKey`,
-`costByKind()`; `BibleJob/BatchView.opKey`; `BibleRequest/GroupRequest/Batch.opKey` (+ `withOpKey`); `Designs.estimate(EstimateRequest)`,
-`groupByKey`; `Bibles.cancelJob`, `jobByKey`; `Sites.fitMassingToLot`, `batchByKey`; `Library.pinVersion/unpinVersion/pinOwners`.
-Every widened record keeps its old constructor; withers carry `opKey`.
+Built (all pushed on `slice/0a`; API 1.10.0, mod 0.13.0):
+- **Sidecar:** C5 estimates by kind (`design.estimate {mix}`, `byKind` lines that sum to the totals; seeds re-based on Steward's
+  phase 1: a detail with report critique $2.5-4.6 / 8-15 min for Opus and Sonnet alike, massing $0.12-0.30, bible $1.16-1.55,
+  repair/adapted $0.3-0.9; measured samples still win, and then the report critique is added on top); C9 opKeys (`opkeys.ts`:
+  canonical-JSON sha256 without the key, `adopted` acks, `op_key_conflict:` errors, `bible.byKey` / `group.byKey`, the key flushed
+  to state.json before the ack, records with keys kept 30 days after final); C7 (`breakdown.ts`: seq/lastAction on the
+  transition signature only, the per-stage breakdown with the bible line claimed by the owner's first group, QUEUED/USAGE_HOLD
+  time attributed per refresh, the `group <id> breakdown {json}` log line on entering awaiting approval and at the end);
+  `bible.cancel` acks with the job. Features `estimate.kinds`, `opKeys`, `group.breakdown`.
+- **Tiles + own time** (subagent, merged from `slice/0a-tiles`): 4 evaluations (limits 2/4/8/16 s, pauses 1/2/4 s; the
+  contract's "up to 3 times" read as 3 retries), `region.tile.error {code, attempts}`, `ARCHITECT_TEST_SLOW_TILES`; TileStream
+  WAITING with TILE_SLOW and the 30 s / 60 s / 120 s / 5 min re-asks, RETRY nudge; `MsptTrace` `own`/`ownCpu`, megaA judged on
+  `ownCpu.p99 <= 25`, `max <= 50`; `tools/lib/tickbar.mjs` copied from integrate/tiers-labui plus additions (expect a small
+  conflict when that lands: keep these lines).
+- **C6** (subagent, merged from `slice/0a-c6`): kit conformance (front = error, entrance column > 1 off = issue),
+  `fitMassingToLot` (via a `Sites.checkSite` overload taking an entry; touches `site/Sites.java`), `MassingPredictionTest` (48
+  cases, all equal rotation, |dx| = |dz| = dy = 0; `artifacts/gate6c0a/c6.json`). Open: the example pairs are dimensionally
+  identical, so the evidence is trivially 0; within conformance tolerances a 180-degree case can reach |dx| = 3 (a detail 2
+  wider with its entrance 1 off), and approach length / groundY are not conformance-checked. For Steward / the coordinator.
+- **Mod:** the 1.10.0 surface; wire (opKey, breakdown, seq, lastAction, byKind, mix); OP_KEY_CONFLICT from the ack prefix;
+  `groupByKey` / `jobByKey` (SIDECAR_UNAVAILABLE when not connected); `cancelJob`; GROUP_UPDATED only on seq growth (the last
+  fired seq persisted in api-awaiting.json "seq"), nothing fired while approve/extend/resume is in flight against an old helper;
+  durable batches (`QBatch.fired`, fire -> mark -> save, `catchUpDone` on world load, 256 / 30-day retention, region batches never
+  pruned); batch opKeys (`BatchKeys`: the Batch record's persisted form, level = dimension id, actor = UUID); caller pins
+  (`CallerPins`, caller-pins.json, merged into entry.pins and `EntryVersion.pinned`); WORLD_STOPPED (`StopSweep`: the API objects
+  are interface proxies whose futures are tracked and failed at SERVER_STOPPING; Sites/Regions/Survey calls fail at once with no
+  world); DevBridge `dev.batch.skipSave`, `dev.api.dropAck`, `dev.api.pending`; apitest 0a steps.
+- **Compat:** `node tools/api-compat.mjs --gate6c0a`: 4/4 clean (0.12.0/0.11.0/0.10.0 apitest jars, 0.12.0 surface;
+  RegionRefused re-parented under ArchitectRefused passed without teaching the tool anything). apijars moved to 1.9/1.8/1.7.
+- **Gate driver:** `tools/gate6c0a.mjs flow|budget|fit|batches|keys|cancel|pins|stopped|tiles` against a run worktree
+  `../architect-mc-0a-run` (seeded from ../architect-mc-6a-run like the runner), ports 8902/8903 (8900/8901 are held by the
+  coordinator's integration gate).
 
-Next, in order: sidecar (opKeys + byKey messages, seq/lastAction/breakdown + log line, estimates C5, cancel ack, tile retry),
-kit conformance (C6), mod implementation (wire parsing, durable batches, WORLD_STOPPED sweep, pins, TileStream, MsptTrace,
-DevBridge `dev.batch.skipSave` / `dev.api.dropAck`, event firing on seq), then `tools/gate6c0a.mjs` items 1-13 and the slice tier
-(needs the tiers runner on main).
+Known: `JournalIndexBenchTest` (commit p99 bar) fails under the machine's load (load average 50-70 from parallel sessions);
+unrelated to 0a; re-run when quiet. The slice tier needs the tiers runner (not on main yet); the old runner's migration steps
+hard-code 8892/8893, which is the other agent's range.
