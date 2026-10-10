@@ -21,8 +21,15 @@ Steward (`../steward-mc`) is the main consumer of the API.
 
 - **Work in slices** of a few hours. Each has a short contract that Steward reviews, a focused gate and a minor release.
 - **Scope is frozen per slice.** New ideas go into the next slice unless they block the current one.
-- **Branches:** work on `phase/<x>` in a worktree (`../architect-mc-<x>`). Never commit to main directly. The coordinator
-  merges, tags and publishes; tag `vX.Y.Z` must equal `mod_version`, and CI publishes to GitHub Packages.
+- **Branches:** work on `slice/<x>` (or `phase/<x>`) in a worktree (`../architect-mc-<x>`). Never commit to main directly.
+  Slices may run **in parallel** on separate worktrees and ports; merge `origin/main` into your branch when another slice lands.
+- **Merging:** when the `slice` tier and a gate-verifier review of the diff plus evidence pass, the builder pushes its branch
+  and reports "ready to merge". The coordinator merges into main, tags and publishes; tag `vX.Y.Z` must equal `mod_version`, and
+  CI publishes to GitHub Packages. Agents can't push to main: the permission classifier refuses it. If two slices claim the
+  same API version, the second to merge takes the next minor.
+- **CI runners and benches:** release-tier benches may ask the coordinator to pause Noah's CI runners (the LaunchAgents
+  `com.laratta.ci-container-autoscale` and `com.laratta.tart-yardpaint-runner`). Noah allowed this when needed. Never pause
+  them yourself.
 - **Keep the API binary compatible:** keep old record constructors, add new methods as defaults that throw, and append enum
   values at the end. Check with `tools/api-compat.mjs` against the archived apitest jars.
 

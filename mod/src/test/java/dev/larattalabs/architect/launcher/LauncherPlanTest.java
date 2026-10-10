@@ -151,6 +151,10 @@ class LauncherPlanTest {
 		assertFalse(LauncherPlan.command(Path.of("node"), Path.of("/s"), 7999, Path.of("/d"), Path.of("/l"), null, 1, false, "--evil").contains("--evil"));
 		assertEquals(List.of("/n/npm", "ci", "--omit=dev", "--no-audit", "--no-fund"), LauncherPlan.installCommand(Path.of("/n/npm"), true));
 		assertEquals("install", LauncherPlan.installCommand(Path.of("/n/npm"), false).get(1));
+		// (6c 0a) the sim backend skips npm ci (the install is only for the Agent SDK)
+		assertFalse(LauncherPlan.needsInstall("sim"));
+		assertTrue(LauncherPlan.needsInstall(null));
+		assertTrue(LauncherPlan.needsInstall("claude"));
 	}
 
 	@Test

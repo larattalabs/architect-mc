@@ -315,7 +315,7 @@ for (const sh of shards) {
 // steps: only $0 commands; clients: only the stub/sim scripts
 const PAID = /(-real\b|--tier\s+(smoke|full)\b|--backend\s+claude\b|--use-claude-login\b|\bpaid\b)/;
 const SAFE_CLIENTS = new Set(['tools/run-gate4d-client.sh', 'tools/run-gate4e-client.sh', 'tools/run-gate5b-client.sh', 'tools/run-gate6a-client.sh',
-  'tools/run-gate6b-client.sh']);
+  'tools/run-gate6b-client.sh', 'tools/run-gate6c0a-client.sh']);
 for (const id of stepIds) {
   const s = cfg.steps[id];
   if (!s) die(`chain ${chainName}: unknown step ${id}`);

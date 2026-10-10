@@ -6329,3 +6329,1664 @@ programs: `crater_works`, `rift_city`, `walled_hill`, `sky_isle`, `floating_isla
   `artifacts/scenarios/6b/gallery/` (`SCENARIOS_ART` puts runs there). The red-brown satellite island (SE, cam_high) is
   grass_block in the `minecraft:dappled_forest` biome's grass tint (an in-game `execute if biome` at the island; the pristine
   before-shot shows the same patch on the ground): the world's colour, not the program's.
+
+## Phase 6c slice 0a: consumer support (FROZEN after Steward review)
+
+This slice is API 1.10.0 and mod 0.13.0. C4 ships early as sub-release 0.12.2, with API 1.9.0 unchanged.
+
+- **Branch:** `phase/6c-0a`, in the worktree `../architect-mc-6c-0a`.
+- **Spend:** $0. Everything runs on the sim or the stub; there is no claude-login run.
+- **Scope:** the 0a list in PLAN.md "Steward round 4" item 1, plus:
+  - the round 5 additions: C14 caller pins, `WORLD_STOPPED` and own-time percentiles;
+  - the coordinator's tile-timeout item from CONTRACT "Phase 6b as built".
+  
+  Everything else waits for 0b or 0c (see Deferred).
+- **Precondition:** the gate tiers branch (`tools/gate-tiers`) is merged to main before this slice's gate runs. Main's
+  `gate-chains.json` only has quick, regress and engine. The `slice` tier, the impact map and the own-time tick bars exist only on
+  that branch.
+
+### 0. What exists today (main, v0.12.0)
+
+- **C4 stub.**
+  - The real sidecar's `--backend sim` already covers everything the stub needs:
+    - bibles (`SimBibleBackend`: roles, components, the settlement roles);
+    - design groups, including massingFirst, `approvalUi: owner`, approvals and redirects;
+    - detail passes that conform to their massing;
+    - `job.run` with schema-satisfying answers. `ext["architect:simAnswer"]` scripts one.
+  - The mod's launcher passes `ARCHITECT_SIDECAR_BACKEND=sim` for both the dev-dir and the bundled sidecar.
+  - Steward's `run-e2e-client.sh` doesn't use it. It points at `mod/src/test/resources/stub-sidecar`, a 360-line launcher-test stub
+    that handles only 6 message types (no bibles, groups, massings or jobs). Gates 4d, 4e and 5b use that stub, so it stays as it is.
+- **C5.** `estimates.ts` keeps rolling samples per model. Its seeds come from 4b, 4c and 5a: design $0.8-3.2, massing $0.10-0.40,
+  bible $1.2-2.0. It has no kinds.
+- **C6.**
+  - `Sites.fitToLot` resolves library entries only, through `Blueprints.get`.
+  - Massings read as `Blueprints.Entry` through `MassingFiles` (`id@v`).
+  - Conformance (`kit/lib/massing.mjs`) checks parts, roofs and size. It doesn't check the front or the entrance.
+- **Batches.** Finished `BatchView`s are kept until the world stops. BATCH_DONE fires live only.
+- **C9.** None of the existing ids is idempotent:
+  - `GroupRequest.id` is "ignored when taken";
+  - `Batch.id` "must be unused";
+  - bible jobs take no id.
+- **C7.** `Group.cost` is the sum of the items. The bible is excluded, and the critique sits inside the item cost (the split is in
+  `Design.critique`).
+- **Group events.** The mod dedupes in `RecordBook.fire`. `awaiting_approval` and `paused_budget` re-fire while an action is in flight.
+- **Bibles.** `void cancel(jobId)` is fire-and-forget.
+- **C14.** `EntryVersion.pinned` means a standing site stands at that version. `entry.pins` reports the pinned versions, and the
+  sidecar's GC keeps them.
+- **Futures at stop** fail with `IllegalStateException` or `TimeoutException`. Only the region futures have a type
+  (`RegionRefused`).
+- **Tile timeouts.** `regionpool.ts` fails a tile that runs over `regionTileMs` (2 s), and its item fails with it.
+- **MsptTrace.** It has full-tick percentiles, plus the write wall time's max and mean. The judged figure, `placementCpuMs*`, has no
+  percentile.
+
+### 1. API 1.10.0 rules and behaviour changes
+
+**Rules (as in 1.9.0):**
+- `ArchitectApi.VERSION = "1.10.0"`.
+- Every widened record keeps its 1.9.0 constructor as a secondary constructor.
+- New interface methods are defaults that throw "... needs Architect API 1.10.0".
+- New enum constants are appended.
+- `tools/api-compat.mjs` checks the **unchanged 0.12.0, 0.11.0 and 0.10.0 apitest jars** (API 1.9.0, 1.8.0 and 1.7.0) and the 0.12.0
+  mod jar's surface (`--surface`). All three jars pass their suites against 0.13.0.
+
+**New types:** `ArchitectRefused extends RuntimeException` with `Reason reason()`. `RegionRefused` is re-parented under it.
+Inserting a superclass is binary compatible; if api-compat flags it, the tool is taught this one case.
+
+**New Reasons (appended):** `WORLD_STOPPED`, `OP_KEY_CONFLICT`, `TILE_SLOW`. `WaitAction.Kind` gains `RETRY` (appended).
+
+**Behaviour changes:**
+1. Futures pending at world stop fail with `ArchitectRefused(WORLD_STOPPED)` instead of `IllegalStateException` (§10).
+2. GROUP_UPDATED fires only on real transitions, so less often (§7).
+3. `Sites.batches(owner)` and `batch(id)` return finished batches across restarts (§4).
+4. `EntryVersion.pinned` also means "a caller pin exists" (§9).
+5. A tile timeout no longer fails the item, so the region doesn't go PARTIAL; it waits with TILE_SLOW (§11).
+6. A detail whose front differs from its massing's now fails conformance, a repair round. In paid runs that can cost one repair
+   round, about $0.3-0.9. The $0 gate does not measure this.
+
+### 2. C4: the sim as the consumer stub (ships first, as 0.12.2)
+
+- **Turning it on:**
+  - A consumer sets `ARCHITECT_SIDECAR_BACKEND=sim` on a dev client running the published jar. No Architect checkout is needed.
+  - The bundled sidecar then runs with `--backend sim`.
+  - If the bundled install (`npm ci --omit=dev`) exists only for the Agent SDK, sim mode skips it. 0.12.2 checks which is true.
+  - README gains "Testing against Architect".
+  - The sim never calls Claude.
+- **Sim costs:** set with config `simCosts` (in `sidecar-data/config.json`) or `ARCHITECT_SIM_COSTS`.
+  - `"zero"` is the default, so existing gates don't change.
+  - `"measured"` reports §3's seed midpoints as notional costs:
+
+    | Item | Notional cost |
+    |---|---|
+    | bible | $1.35 |
+    | massing | $0.19 |
+    | detail | $3.40 |
+    | report critique | $0.10 |
+    | repair round | $0.50 |
+
+    With these, budgets, the soft pause, `extendGroup`, `cost.byKind` and the estimates behave as in a real run.
+  - An object with those five keys sets the costs directly.
+  - These costs are labelled `sim: true` in `basis` and in the log. Nothing is spent.
+- **Faults (sim only, in a request's notes or ext):**
+  - `sim:usage_limit` already exists;
+  - `sim:fail` (new) makes the design fail;
+  - `sim:repair` (new) adds one repair round.
+- **Scripted job answers:** a `simAnswer` is now validated against the job's schema; a mismatch fails the job.
+- **Speed:** a Steward-sized flow (bible, 3 massings, approval, 3 details) finishes in under 2 minutes at the default `simStepMs`
+  of 400.
+- **0.12.2** is a patch: sidecar and docs only, API 1.9.0. Its mini-gate is §13 item 1.
+
+### 3. C5: estimates by kind, re-seeded
+
+- **Seeds.** Measured samples still replace them per model. The basis reads "seed (Steward phase 1, 2026-10-09)".
+
+  | Pass | Cost | Time |
+  |---|---|---|
+  | detail with a report critique | $2.5-4.6 | 8-15 min |
+  | massing | $0.12-0.30 | 1-3 min |
+  | bible | $1.16-1.55 | 5-8 min |
+  | repair round | $0.3-0.9 | |
+
+  The critique's figures stay reported separately, as today.
+- **Kinds:**
+  - **original:** a share of the bible, plus massing, detail and critique;
+  - **adapted:** a placed design refitted to a new lot. Seeded at one repair-sized turn ($0.3-0.9), with the basis "unmeasured
+    until 7b";
+  - **copy:** $0, plus the variant build time. It becomes real with C1 in 0b.
+- **API:**
+
+  ```java
+  CompletableFuture<Estimate> estimate(EstimateRequest r);              // Designs, default-throwing
+  record EstimateRequest(@Nullable GroupRequest group, int originals, int adapted, int copies, boolean newBible,
+                         boolean massingFirst, boolean reportCritique, @Nullable String model) {}
+  // Estimate gains trailing Map<Kind, Item> byKind; enum Estimate.Kind { BIBLE, ORIGINAL, ADAPTED, COPY }
+  ```
+
+  With `group` set, its items count as originals.
+- **Bars** (unit tests: Steward's runs replayed through the estimator, with no samples):
+  - **Phase 1:** 8 originals, a new bible, massingFirst, report critique. The cost band contains $31.03, and the midpoint is within
+    ±25% of it.
+  - **Greywater Hamlet:** 3 originals and a new bible. The cost band contains $13.76, and the midpoint is within ±25%.
+  - **Greywater's time:** its ~70 min includes the player's approval wait and the play, which the estimate leaves out. So the time
+    estimate is recorded next to it, not judged (question S-0a-5).
+
+### 4. C6: massing placement prediction
+
+```java
+LotFit fitMassingToLot(MassingRef massing, BoundingBox lot, Direction streetSide, FitOptions o);   // Sites, default-throwing
+```
+
+- **Fit and check.** It uses the same `LotFitting.fit` as `fitToLot`, on the massing version's template (read via `MassingFiles`).
+  The verdict is the normal check against the massing's template and approach at that spot.
+- **Unknown massing or version:** `UNKNOWN_BLUEPRINT`.
+- **Prediction.** A detail from that massing version, fitted with `fitToLot` to the same lot, gets the **same rotation**, and its
+  origin is within **±2 on x and z and equal in y**.
+- **Conformance changes (kit), which make the prediction hold:**
+  - a different `front` is an **error**, so the round goes back to the designer;
+  - an entrance column more than 1 off is an **issue**.
+
+### 5. Durable finished batches
+
+- **Kept across restarts.** DONE, CANCELLED and STOPPED batches stay in `architect-queue.json`.
+- **Retention:** the newest 256 finished batches per world, and every batch finished in the last 30 days, whichever keeps more.
+- **Ids:** the `b<n>` counter is persisted, so a batch id is never reused.
+- **BATCH_DONE fires once per batch, in this order:**
+  1. fire BATCH_DONE;
+  2. mark the batch "fired";
+  3. save the queue.
+- **Catch-up.** On world load, BATCH_DONE fires for every finished batch that isn't marked fired, as JOB_DONE's catch-up does.
+  - After a clean stop, the event fires exactly once.
+  - After a crash, it fires at least once. Consumers dedupe by batch id, and the javadoc says so.
+- **DevBridge:** `dev.batch.skipSave {batchId}` skips the save after that batch's fire, so the gate can crash inside the window.
+
+### 6. C9: caller operation ids
+
+- **The key.** `BibleRequest`, `GroupRequest` and `Batch` gain a trailing `@Nullable String opKey`, matching
+  `[A-Za-z0-9_.:-]{1,128}`. A key is scoped by **(owner, kind, opKey)**; a null owner means the player.
+- **Same key, same body:** the call returns the first call's result and starts no new work:
+  - the same `BibleJob`, as it stands now;
+  - the same group id;
+  - the same batch id.
+  
+  That holds in any state, including final or cancelled.
+- **Same key, different body:** the call fails with `ArchitectRefused(OP_KEY_CONFLICT)`.
+- **How bodies are compared:** by the sha256 of the request's canonical JSON, without `opKey`. For a `Batch`, that is its persisted
+  queue-file form (dimension id, actor UUID), not the live objects.
+- **Where keys are written:**
+  - **Bible jobs and groups:** in the sidecar's `state.json`, in the same write that creates the job, before the ack.
+  - **Batches:** in `architect-queue.json`, in the save made when the batch is queued.
+- **Retention:** a key lives as long as its record, and for at least 30 days after the record is final.
+- **After a crash between the request and its ack:**
+  - If the request arrived, the key exists, and a retry or a lookup adopts the work.
+  - If it didn't arrive, the lookup is empty, and a retry starts the work once.
+- **Lookups:**
+
+  ```java
+  CompletableFuture<Optional<BibleJob>> jobByKey(@Nullable String owner, String opKey);   // Bibles
+  CompletableFuture<Optional<Group>> groupByKey(@Nullable String owner, String opKey);    // Designs
+  Optional<BatchView> batchByKey(@Nullable String owner, String opKey);                   // Sites, server thread
+  ```
+
+  - A sidecar lookup fails with `SIDECAR_UNAVAILABLE` when the sidecar isn't connected. It never answers "empty" then, because
+    empty must mean "never received".
+  - `BibleJob`, `Group` and `BatchView` gain `Optional<String> opKey`.
+- **Protocol (2, additive):**
+  - `bible.request` and `design.group` take `opKey`;
+  - their acks gain `adopted`;
+  - new messages `bible.byKey` and `group.byKey`;
+  - the feature `opKeys`.
+- **DevBridge:** `dev.api.dropAck {type}` drops the next ack of that message type in the mod.
+
+### 7. C7 per-stage breakdown, and group events
+
+```java
+// Group gains trailing Breakdown breakdown, long seq, String lastAction (old constructors: EMPTY, 0, ""), and:
+Map<String, Double> costByKind();          // bible, massing, detail, critique; derived from breakdown
+record Breakdown(Map<Stage, Line> stages, double totalUsd, long wallMs, long firstDetailedMs) {
+  enum Stage { BIBLE, MASSING, DETAIL, REPAIR, CRITIQUE, QUEUED, USAGE_HOLD }
+  record Line(double usd, long ms, int count) {} }
+```
+
+- **Stages:**
+  - DETAIL is the first design round of each detail pass.
+  - REPAIR is rounds 2 and later, for massings and details.
+  - CRITIQUE is critic calls and loop revisions.
+  - QUEUED and USAGE_HOLD carry time only.
+  - `ms` is summed item time. `wallMs` is the group's wall time. `firstDetailedMs` is the time to the first detailed item (Steward's
+    15-minute target).
+- **The bible line:** the job or jobs that made the pinned bible version. That cost is counted in the first group of the same owner
+  that pins the version; later groups show it as 0 (question S-0a-3).
+- **Totals:** `Group.cost` keeps its meaning, the sum of the items. `totalUsd` = `cost.usd` + the bible line.
+- **Job log:** one `group <id> breakdown {json}` line goes to `sidecar-data/logs/sidecar.log` at awaiting approval and at the final
+  state.
+- **`seq`:** set by the sidecar and persisted. It goes up only when one of these changes:
+  - the status, the reason, the wave or the awaiting set;
+  - an item's status, stage, entryId, massing version or rounds.
+  
+  Cost, step text and `updatedAt` don't bump it, and `group(id)` still returns them.
+- **`lastAction` values:**
+  - creation and items: `created`, `item_started`, `item_done`, `item_failed`;
+  - massing and approval: `massing_ready`, `awaiting_approval`, `approved`, `redirected`;
+  - budget: `paused_budget`, `extended`, `resumed`;
+  - usage limit: `held_usage`, `usage_reset`;
+  - the end: `cancelled`, `done`, `failed`.
+- **What the mod fires:**
+  - **GROUP_UPDATED:** only when `seq` grew.
+  - **GROUP_AWAITING_APPROVAL:** only on a transition into it, or for a newly waiting massing version.
+  - Neither fires again while an approve, redirect, extend or resume is in flight.
+  - Against an older sidecar with no `seq`, the mod keeps today's dedupe.
+
+### 8. Bibles.cancelJob
+
+```java
+default CompletableFuture<BibleJob> cancelJob(String jobId)   // `void cancel` stays: its return type can't change
+```
+
+It completes with the job, cancelled, at the ack. It fails like `cancelGroup` does:
+- "no job";
+- "already <status>";
+- `SIDECAR_UNAVAILABLE`.
+
+BIBLE_DONE fires once, as today.
+
+### 9. C14: caller version pins
+
+```java
+CompletableFuture<Void> pinVersion(String entryId, int version, String owner);     // Library, default-throwing
+CompletableFuture<Void> unpinVersion(String entryId, int version, String owner);
+List<String> pinOwners(String entryId, int version);
+```
+
+- **Where pins live:** pins are game-wide, like the library. They persist in `<gameDir>/architect/caller-pins.json` and are merged
+  into `entry.pins`.
+- **What a pin keeps:** a version stays while a site stands at it or any caller pin exists.
+- **Errors:** pinning a collected or unknown version fails with `VERSION_GONE`. Unpinning is idempotent.
+
+### 10. WORLD_STOPPED
+
+- **Which futures fail.** At SERVER_STOPPING, every pending API future fails with `ArchitectRefused(WORLD_STOPPED)`:
+  - Sites: place, remove, queue, cancelBatch, removeGroup, undoStage, applyDelta, revert, placeRoad, placeCells;
+  - Regions;
+  - Survey;
+  - the Designs, Bibles, Library and Jobs futures that wait on an ack or an outcome (`PendingFutures.failAll`).
+- **Sidecar work keeps running.** The caller finds it again with §6's lookups or the listings after the next load.
+- **Until a world starts,** calls that need one fail at once with WORLD_STOPPED.
+
+### 11. Tile-evaluation timeouts
+
+- **Sidecar retries:**
+  - A tile over its limit is retried on a fresh worker, up to 3 times.
+  - The limit doubles each time (2, 4, 8 s), with 1, 2 and 4 s pauses between attempts.
+  - After that it answers `region.tile.error {code: "timeout", attempts}`.
+  - Every other error answers `code: "error"`, with no retry.
+  - A retry is a fresh deterministic evaluation, so the bytes are unchanged.
+- **Mod (`TileStream`):**
+  - A `timeout` error puts the tile in WAITING, and the item waits with `Refusal(TILE_SLOW)`.
+  - The mod asks for the tile again after 30 s, 60 s and 120 s, then every 5 min.
+  - The region stays REALISING and offers `RETRY` (`nudge`, which asks again now).
+  - A non-timeout error still fails the tile and its item, so only that can make a region PARTIAL.
+- **Test hook (sidecar, dev only):** `ARCHITECT_TEST_SLOW_TILES=<n>` makes the first n evaluations of each tile overrun.
+
+### 12. Own-time percentiles
+
+- `MsptTrace.tick` also takes the per-tick placement CPU time that `Placement` already measures.
+- `stop()` adds `own` (wall) and `ownCpu`. Each has ticks, p50, p99, max and mean, over the ticks with Architect work.
+- **megaA's bars:** realise and undo are judged on `ownCpu.p99 ≤ 25 ms` (6a's p99 bar, restored on Architect's own time) and
+  `ownCpu.max ≤ 50 ms`.
+- `tools/lib/tickbar.mjs` uses these fields when present. The full tick is recorded, not judged.
+
+### 13. Gate (slice tier, $0)
+
+**Evidence:** each item writes `artifacts/gate6c0a/<item>.json`, and `REPORT.md` summarises them.
+
+**Driver:** `tools/gate6c0a.mjs`, added to the impact map, with a new client script `tools/run-gate6c0a-client.sh`. That script runs
+a packed jar with `ARCHITECT_SIDECAR_BACKEND=sim` and is added to the runner's `SAFE_CLIENTS`.
+
+**Spend:** `spend.json` must read $0.00.
+
+1. **0.12.2 mini-gate:**
+   - unit-sidecar, the three sim suites and apijars;
+   - the **Steward-style flow** on the **packed 0.12.2 jar** with `simCosts: "measured"`:
+     1. a scripted `job.run` card;
+     2. a bible;
+     3. a 3-item massingFirst group with `approvalUi: owner`;
+     4. one redirect, then approve;
+     5. a client restart while awaiting approval: the group is re-read and nothing re-fires;
+     6. the details;
+     7. a batch of the 3, then undo.
+     
+     Every wait is bounded.
+   - `sim:fail`, `sim:repair` and `sim:usage_limit` give FAILED, a repair round and HELD_USAGE.
+2. **C5:** the §3 cost bars pass, the `byKind` lines sum to the totals, and in the sim the item-1 flow's notional cost is inside its
+   estimate band.
+3. **C6:** every kit example massing/detail pair, on 4 street sides × 3 lot sizes, gets the same rotation and an origin within ±2.
+   A turned front fails conformance. In game, `fitMassingToLot` and the later `fitToLot` agree on one lot.
+4. **Durable batches:**
+   - After a clean stop and load, a finished batch is still DONE and BATCH_DONE doesn't re-fire.
+   - With `dev.batch.skipSave` and then the client JVM killed, BATCH_DONE fires once on load.
+   - Ids are not reused after the retention drop.
+5. **C9:** for each of `bibles().request`, `requestGroup` and `queue`:
+   - send with an opKey, `dev.api.dropAck`, kill the client and restart;
+   - `*ByKey` adopts the work, and a re-request returns the same id;
+   - the job, group and batch counts are unchanged;
+   - a different body gives OP_KEY_CONFLICT;
+   - another owner's key is a separate operation;
+   - a lookup with the sidecar down gives SIDECAR_UNAVAILABLE.
+6. **C7:**
+   - all the stage lines are present, and `totalUsd` = `cost.usd` + the bible line, to $0.001;
+   - QUEUED > 0 at concurrency 1;
+   - USAGE_HOLD > 0 under `sim:usage_limit`;
+   - the log line appears at awaiting approval and at the final state.
+7. **Events:**
+   - `seq` strictly increases, with no repeats.
+   - GROUP_AWAITING_APPROVAL fires once per massing round.
+   - The 6b live-run case gets no re-sent `awaiting_approval` or `paused_budget` while an action is in flight. It is reproduced with
+     `simCosts: "measured"` and a $5 budget.
+8. **cancelJob:** the future completes CANCELLED and BIBLE_DONE fires once. A second cancel fails "already cancelled". With the
+   helper down it fails SIDECAR_UNAVAILABLE.
+9. **Pins:**
+   - a pinned v1 survives a forced-age GC, and unpinned it is collected;
+   - with two owners pinning v1, it stays until both unpin.
+10. **WORLD_STOPPED:** stop the world with a long `queue`, a `realise`, a `Survey.volume` and an unacked `requestGroup` pending. All
+    four fail with `reason() == WORLD_STOPPED`, and after the next load the group is found by its key.
+11. **Tile timeout:**
+    - Sidecar unit tests cover the retry, the doubling, `code`, and byte-identical output.
+    - In game, a mega-lite region with `SLOW_TILES=4` ends **PLACED** with the unhooked run's evidence sha. It shows TILE_SLOW, and
+      `RETRY` works.
+    - With `=2`, it passes inside the sidecar's retries.
+    - A kit-error tile still fails.
+12. **Own time:** `dev.mspt.trace` returns `own` and `ownCpu`. megaA is judged on them, with the load recorded. A NOISY result is
+    re-run, not waived.
+13. **API compatibility:** api-compat and the three apitest jars, as in §1. The 0.12.0 apitest jar is built from `v0.12.0` into
+    `artifacts/gate6c0a/v0120/` before any 0a change, and `gate6a.mjs apijars` moves to 1.9, 1.8 and 1.7.
+14. **gate-verifier (slice):** it reviews the diff against this contract and the evidence, and re-runs items 4, 5, 10 and 11, the
+    crash, adoption, stop and wait paths.
+
+**Not a gate item:** Steward's own `e2e.mjs stub`. After 0.12.2, Steward switches `run-e2e-client.sh` to the sim and runs it, and
+Architect records the result in PLAN.md.
+
+#### 13.1 Which regression tier, and why
+
+**The `slice` tier:** `quick` plus the impact map's slice steps.
+
+| Paths touched | Steps they add |
+|---|---|
+| `region/**` (TileStream, MsptTrace) | 6a-staged, 6a-inv3, 6a-megaA |
+| `site/**` (Batches, Placement) | 4e-orders, 4d-all, 5b-village |
+| the API and the sidecar | the sim suites and apijars |
+| the kit | sim-sets, sim-massing, 4e-megalite |
+| `batch/` or `placement/`, if C6 has to touch LotFitting | 4e-throughput, 5b-chains |
+
+**Plus `6a-megaB-fast`, added by hand.** The tile retry changes TileStream's streaming state machine, and megaB's sidecar kill and
+relog drive exactly the re-request path.
+
+**Not `release` or `engine`:**
+- There is no journal or store-format change. The queue file only gains fields.
+- The realise output is unchanged (item 11's sha check).
+- The crash suites rotate at the 0.13.0 release.
+
+**Time:** about 45 min on 3 shards.
+
+### 14. Build order
+
+1. Build and archive the 0.12.0 apitest jar.
+2. Build 0.12.2:
+   - the C4 work;
+   - `run-gate6c0a-client.sh` and the runner allowlist;
+   - gate item 1;
+   - the coordinator tags it.
+3. Sidecar: opKeys, seq, the breakdown, estimates, the tile retry and the cancel ack.
+4. Kit: conformance.
+5. Mod: the 1.10.0 types, durable batches, the WORLD_STOPPED sweep, pins, TileStream, MsptTrace and the DevBridge hooks.
+6. Gate: the gate driver, the impact rows, the slice run, then the verifier.
+
+### Open questions for Steward
+
+- **S-0a-1. The scripted card.** Is a fixed card from `ext["architect:simAnswer"]`, validated against your schema, enough for
+  `e2e.mjs stub`? And will you switch `run-e2e-client.sh` to `ARCHITECT_SIDECAR_BACKEND=sim`?
+- **S-0a-2. Ghost accuracy.** Is "same rotation, origin within ±2" good enough for approval ghosts? The alternative is to reserve the
+  massing box plus 2.
+- **S-0a-3. Bible cost.** Should the first group of an owner to pin a bible version carry its cost? The alternative is an explicit
+  `GroupRequest.bibleJobId`.
+- **S-0a-4. Conflicting keys.** When a key is re-used with a different body, should it fail with OP_KEY_CONFLICT (proposed), or
+  silently return the first operation?
+- **S-0a-5. Greywater's 70 minutes.** What did they cover (approval waits, placement)? The answer decides whether the time estimate
+  can be judged against it.
+
+### Open questions for Noah
+
+- **N-0a-1. Early sub-release.** Is the 0.12.2 sub-release (C4 only, API unchanged) OK, so Steward's $0 gate starts early?
+- **N-0a-2. Slow tiles.** Should slow tiles wait indefinitely (retried every 5 min, with RETRY), or should the wait be capped, say at
+  1 h, and then fail as TIMED_OUT?
+
+### Deferred
+
+- **To 0b:**
+  - C1 copies (the `copy` estimate becomes real), C2, C8 and C13;
+  - the C7 benchmark of unique against repeat-heavy settlements, against the $5 / 15 min targets. 0a's breakdown is its
+    instrument.
+- **To 0c:**
+  - minLotSize and the recommended rect;
+  - partial roads;
+  - groundHeight;
+  - typed refusals for bounded fields;
+  - the extendGroup warning;
+  - C16, C17 and C18.
+- **Later:**
+  - measured `adapted` estimates (7b);
+  - off-thread undo planning;
+  - the headless gate mode;
+  - retiring the launcher-test stub.
+
+## Coordinator decisions (2026-10-10)
+
+- **Version numbers:** v0.12.1 is the tiers + lab-ui integration (no API change). C4's early consumer-stub sub-release is
+  therefore **v0.12.2** (API 1.9.0 unchanged), and the rest of 0a is v0.13.0 / API 1.10.0. All "0.12.1" references above have
+  been renumbered.
+- **Ship the stub early:** yes. Steward's $0 end-to-end gate waits only on it.
+- **Slow tiles:** follow the S8 rule. A slow tile waits without a limit by default, showing `TILE_SLOW` and the `RETRY` nudge.
+  `RealiseRequest.maxWaitSeconds`, when set, also caps it (TIMED_OUT). No new cap.
+- **Gate precondition:** the tiers runner merges first (v0.12.1); 0a then runs `slice` plus the focused checks, with
+  6a-megaB-fast added.
+
+### Changes from Steward's review of 0a (all accepted; these win)
+
+- **S-0a-1:** a scripted card through `ext["architect:simAnswer"]` is enough. A schema mismatch fails the job.
+- **S-0a-2:** ±2 origin with the same rotation is fine. No reserve of the massing box plus 2.
+- **S-0a-3:** bible cost goes to the first group that pins the version. The breakdown's bible line lists the bible job id(s) it
+  counts, so a consumer that also tracks `BibleJob` cost doesn't count it twice. A bible job that never reaches a group keeps its
+  cost on `BibleJob`. No `GroupRequest.bibleJobId`.
+- **S-0a-4:** a re-used key with a different body fails with `OP_KEY_CONFLICT`.
+- **S-0a-5:** Greywater's 70 min is wall clock including approval waits. It's recorded beside the estimate, not judged.
+  `wallMs` and `firstDetailedMs` give the split on the next paid run.
+- Behaviour changes 1-3 and 6 are accepted by Steward.
+
+## Phase 6c slice 0b: reuse and bounded effort (DRAFT for Steward review)
+
+This slice is API 1.11.0 and mod 0.14.0.
+
+- **Branch:** `phase/6c-0b`, in the worktree `../architect-mc-6c-0b`.
+- **Scope:** PLAN.md "Steward round 4" item 2 with the round 3 "Refinements", plus C13 from round 5:
+  - C1 copies with the safeguards;
+  - C2, narrowed;
+  - C8 bounded effort for S buildings;
+  - C13 `versionOf`;
+  - the C7 benchmark.
+
+  Everything else waits (see Deferred).
+- **Precondition:** 0a is merged and tagged v0.13.0 (API 1.10.0) before 0b's gate runs. 0b uses 0a's `Breakdown`, `costByKind`,
+  `Estimate.Kind` and `simCosts`, which exist only in 0a's contract until then.
+- **Spend:** the gate is $0 (sim). The C7 benchmark (§6) is the only paid run, on Noah's claude login.
+  - **Expected about $24. Cap $35.**
+
+### 0. What exists today (main, v0.12.x; 0a contracted, not built)
+
+- **Variants.**
+  - `VariantRunner` (`variants.ts`) copies an entry's `.mjs`, builds it with a palette, values or a bible's roles, runs the
+    pristine-kit check (the entry's type and profile), renders and installs.
+  - It's free: no Claude.
+  - It builds **without `--max`** and without massing conformance.
+- **Lineage.**
+  - `variantOf` is set by player variants, re-skins and remixes alike, so it can't mean "follows its source".
+  - `polish.ts:963` carries a `variantOfVersion` key forward, but nothing writes it.
+- **Groups.** One design per item. There is no `count`, no "variant of item X" and no copy stage.
+- **Mirror.**
+  - The kit can't mirror block states. `sdf.mjs` mirrors region geometry only.
+  - The mod's `TemplateWriter` can apply a vanilla `Mirror`, but no API exposes it.
+- **C2.**
+  - A per-item `critique(OFF)` has existed since 1.6.0, and critique is OFF unless asked for. Only a size rule is missing.
+  - A report critique is one critic call, $0.02-0.08 (the 5a seed), so C2 alone saves little. C8 and C1 are the levers.
+- **C8.**
+  - `MAX_DESIGN_ROUNDS = 4` is a constant, also used in the fix-prompt text.
+  - Detail turns run `maxTurns` 120 at effort high; massings run 20 at low.
+  - The SDK levers are `maxTurns`, `maxBudgetUsd` and `effort`. There is no per-query token cap, so "token cap" here means those.
+  - The kit has no small-building components.
+- **C13.**
+  - Only polish (a dev flag) and revert make versions. A remix makes a new entry.
+  - `checkDelta`, `applyDelta` and `outdated` work between versions of one entry.
+  - `DeltaPlanner` already computes a site's player-changed cells (the KEEP set).
+- **The sim** installs real kit examples with their `.mjs` and params, so copies, conformance and versions run for real at $0.
+
+### 1. API 1.11.0 rules and behaviour changes
+
+- **Rules (as in 1.10.0):**
+  - `ArchitectApi.VERSION = "1.11.0"`;
+  - widened records keep their 1.10.0 constructors;
+  - new interface methods are defaults that throw "... needs Architect API 1.11.0";
+  - enum constants are appended.
+- **api-compat:** `tools/api-compat.mjs` checks the **0.13.0, 0.12.0 and 0.11.0 apitest jars** (API 1.10, 1.9 and 1.8) and the
+  0.13.0 mod jar's surface. All three suites pass against 0.14.0.
+- **New Reasons (appended):** `COPY_REFUSED` and `VERSION_REFUSED`.
+- **`ArchitectRefused`** gains a trailing `String detail()` (`""` by default), which carries the sub-code (§2.1, §5).
+- **Feature flags:** `copies`, `smallEffort`, `versionOf`.
+- **Behaviour changes:**
+  - `makeVariant` and re-skins also write `variantOfVersion` and a `derivation` (§2.4). Their builds are unchanged.
+  - An item with no `count` or `copyOf`, in a group without `smallBySize`, behaves exactly as in 1.10.0.
+
+### 2. C1: copies in a design group
+
+#### 2.1 Request
+
+```java
+// GroupRequest.Item gains trailing: int count (default 1, 1..24), @Nullable String copyOf, Effort effort (§4)
+// GroupRequest gains trailing: int copyCap (default 3, 1..3; 1 = "all original"), boolean smallBySize (§3)
+```
+
+- **`count` = n.** The item expands into the items `<key>`, `<key>#2` ... `<key>#n`.
+  - Every `copyCap`-th placement starts a new **archetype** (an original); the others are **copies** of the archetype before
+    them. So x6 at cap 3 is 2 designs x 3.
+  - Later archetypes get the note "another design for the same program, not a near-copy of `<key>`".
+  - A LANDMARK item's extra count becomes originals, never copies.
+- **`copyOf` = "variant of item X":** the item becomes a copy of X's archetype and counts toward its cap.
+- **`COPY_REFUSED`,** with `detail` `landmark`, `unknown`, `self` or `cap`: a `copyOf` naming a landmark, an unknown item or
+  itself, or one past the cap.
+- **Cost.** Copies cost $0 and count as `COPY` in `Designs.estimate` (0a §3; it becomes real here). They are never held by
+  `paused_budget`; only fallback originals (§2.3) are.
+
+#### 2.2 Items, stages and variation
+
+```java
+// Group.Item gains trailing: Kind kind (ORIGINAL, COPY, FALLBACK), Optional<String> copyOf (the archetype's itemKey),
+//   Optional<String> variantJob, Optional<String> fallbackReason, Effort effort
+// Group.Stage and Breakdown.Stage gain COPY (appended; time only, $0)
+```
+
+- **The copy stage.** A copy waits for its archetype to be DONE, then builds in stage COPY on the VariantRunner (seconds).
+  - Its `designId` is `""`; `variantJob` names the variant job.
+  - It is its own item for placement, stages and undo.
+- **massingFirst.** The archetype's approval covers its copies (Steward's "once per design").
+  - **A redirect** carries the copies to the new massing version.
+  - **A dropped, cancelled or failed archetype** fails its copies with `source_failed`.
+- **Variation** is deterministic, with no Claude: a recipe chosen by a seeded hash of (group id, itemKey), from three levers.
+  1. **Palette shift inside the bible.** The copy builds with a derived bible, the group's bible with one shift. In order:
+     - swap `wall` and `wall_alt`;
+     - set the roof to another member of its stone family (`stoneFamilyOf`), or swap `trim` and `frame`;
+     - set `accent` to another role's block.
+
+     The bible's restraint rules apply as for any build.
+  2. **One declared param changes:** an int ±1 within its bounds, a bool flips, an enum takes its next option. This lever is
+     skipped when the design has no params.
+  3. **Mirror** left-right across the front axis, so `front` is unchanged.
+     - The kit gains `build.mjs --mirror`, a `Blueprint` option. It maps the cross-front coordinate of every `set`, anchor, port,
+       part, camera and the approach, and mirrors direction properties as vanilla does.
+     - A north or south front uses `Mirror.FRONT_BACK` (x flips); an east or west front uses `LEFT_RIGHT` (z flips).
+     - Placement code is untouched.
+- **The rule:** every copy shifts the palette, changes a param where one exists, and every second copy (`#2`) is mirrored.
+  Rotation is the caller's (street side).
+- **Testable:** each copy differs from its archetype and from each sibling in at least 2 levers, and `kit/lib/diff.mjs` finds at
+  least **10%** of the written cells changed.
+- **Sim faults:** `sim:copyfail` and `sim:copysize`.
+
+#### 2.3 Checks and fallback (never forced)
+
+- **The checks.** Every copy passes:
+  - the full kit check of a design;
+  - `--max` at the copy item's own `maxSize`;
+  - under massingFirst, conformance against the archetype's approved massing **mirrored with the copy**.
+- **Retries.** Up to 3 recipes are tried. When all fail, the item becomes **FALLBACK**, an original:
+  - under massingFirst, a detail pass bound to the archetype's approved massing (no new approval);
+  - otherwise, a design from the item's request.
+
+  `fallbackReason` is `size`, `conformance` or `check`, with the message.
+- **Placement-time fit is the caller's.** A `fitToLot` failure at placement can promote the copy:
+  `CompletableFuture<Group> promoteCopy(String groupId, String itemKey, String reason)` (Designs, default-throwing). It makes the
+  copy a FALLBACK original. It is refused for a non-copy, a copy still building, or a final group.
+
+#### 2.4 One representation with 7b and 6d
+
+```java
+// Library.Entry gains trailing Optional<Derivation> derivation, OptionalInt variantOfVersion
+record Derivation(String source, int sourceVersion, Kind kind, JsonObject recipe) {
+  enum Kind { VARIANT, RESKIN, COPY, SITE }   // SITE: reserved for 7b's site-adapted designs
+}
+```
+
+- **A copy's recipe** is `{shift, values, mirror, bible pin, group, itemKey}`: enough to rebuild it from any later source version.
+  That is 6d's update path, so there's no migration.
+- **7b** adds its fit parameters under `kind: SITE`. A program `count` there gives an archetype plus site variants, in this
+  shape.
+- **Who writes what:** `makeVariant` writes VARIANT, re-skins write RESKIN, a remix writes none.
+- **Following the source.** Only COPY and SITE derivations follow their source in 6d.
+- **New versions keep it.** The polish carry-list (`polish.ts:963`) and the `versionOf` install keep `derivation` and
+  `variantOfVersion`.
+- **Polish or `versionOf` of a COPY entry** is refused (`VERSION_REFUSED`, `copy`) in 0b. 6d would overwrite the change when it
+  re-applies the recipe.
+
+### 3. C2: no report critique on small items
+
+- **What counts as small:**
+  - effort `SMALL` (§4); or
+  - with the group's `smallBySize`, an item whose `maxSize` footprint fits 11 x 9 either way. That is Steward's S lot minus the
+    approach margin (S-0b-1).
+- **What is skipped:** only the group-default **report** critique.
+  - An explicit item `critique` still wins.
+  - Massings stay for everything.
+- **The breakdown** shows CRITIQUE as 0 for that item.
+
+### 4. C8: bounded effort for S buildings
+
+`GroupRequest.Item.Effort { AUTO, STANDARD, SMALL }`. AUTO means SMALL by §3's size rule when `smallBySize` is set, else STANDARD.
+
+| A SMALL detail pass (config `small`, in its basis) | STANDARD today | SMALL |
+|---|---|---|
+| design rounds (first + repairs) | 4 | **2** |
+| `maxTurns` per round | 120 | **40** |
+| effort | high | **medium** |
+| `maxBudgetUsd` over its turns | the group's remainder | **$1.50**, within the remainder |
+| massing | 20 turns, low | unchanged |
+
+- **Rounds.** `MAX_DESIGN_ROUNDS` becomes per design, and the fix prompt says "round r of 2".
+- **A cap hit** fails the item (`budget` or `rounds`, with `effort: SMALL`). There is no STANDARD retry (S-0b-2).
+- **Kit components** (new `kit/lib/smalls.mjs`). The builders are palette-role driven and parametric, `(bp, box, opts)`:
+  - `rack` (length, levels);
+  - `stall` (awning role, counter side);
+  - `well` (round or square, roofed);
+  - `shed` (lean-to or gable, door side).
+
+  Each passes the checker standalone under every built-in bible. The SMALL brief says to compose from them. The module is
+  **append-only** after release (a changed builder gets a new name), so polish rebuilds never drift.
+- **Estimates.** `Estimate.Kind` gains `SMALL` (appended), seeded at $0.6-1.5 and 3-6 min, with the basis "unmeasured until §6".
+  `EstimateRequest` gains a trailing `int smallOriginals`.
+- **Sim:** SMALL items report their caps and use the SMALL seed midpoint under `simCosts: "measured"`.
+
+### 5. C13: `versionOf`, a design as the entry's next version
+
+```java
+// DesignRequest gains trailing @Nullable String versionOf, @Nullable String versionOfSite; `notes` is the change request
+DesignRequest versionOf(String entryId, @Nullable String siteId);   // copy-with
+```
+
+- **`VERSION_REFUSED`,** by `detail`:
+  - polish's `bundled`, `no_source` and `massing`;
+  - `copy` (§2.4);
+  - `busy`: a polish or `versionOf` of the entry is unfinished;
+  - `site_mismatch`;
+  - `group`: single designs only in 0b.
+
+  Unknown ids give `UNKNOWN_BLUEPRINT`.
+- **The base is the head version.** The site is context only. Basing on an older site version would offer head-version sites a
+  version that drops their changes.
+- **Context,** as scratch files, not in `context`:
+  - the head's `.mjs`, renders and JSON;
+  - with a site, `context/site-now.nbt`: the restore box as it stands, captured on the server thread;
+  - with a site, `context/site-edits.json`: DeltaPlanner's KEEP set by part and block, at most 2000 cells listed, plus counts,
+    the site's version and its deviations.
+- **The brief:** apply the change, keep `front` and the parts, and leave the player's edited cells alone unless the request is
+  about them.
+- **Frame guard:** exactly `TemplateDelta`'s frame check (front and frame). A result that fails it is a repair round, before
+  install.
+  - **Growth is allowed** (5b deltas handle growth cells), up to the request's `maxSize`, by default the base's size.
+  - A FRAME_CHANGED delta is never offered.
+- **Install:** head + 1, with `by: 'design'`, parent = base, the `designId`, and the change request as the summary.
+  - If the head moved meanwhile, it fails `base_moved`, and its cost is kept.
+  - Then `checkDelta`, `applyDelta` and `outdated` work unchanged.
+  - Copies of the entry don't change (6d).
+- **Estimates.** `Estimate.Kind` gains `CHANGE` (appended), seeded from the polish step ($0.4-1.2, Sonnet).
+- **Protocol:** `design.request` takes `versionOf {entryId, siteId?}`, with the site files; the feature is `versionOf`.
+- **Sim:** the sim changes the head as a sim redirect does.
+
+### 6. The C7 benchmark (paid, claude login)
+
+**Question:** which stage to cut, and how far copies and SMALL get toward Steward's targets (a starter settlement under $5, the
+first usable result within 15 min).
+
+**Setup:**
+- It runs on the 0b build, after gate items 1-8 pass.
+- Each arm gets its own new bible (a shared bible's cost would land on the first group only).
+- The driver auto-approves massings and auto-resumes soft pauses, so only the hard cap stops a group.
+- It places on a flat claim with pad lots.
+
+| Arm | Program | Originals / placements | Seed estimate |
+|---|---|---|---|
+| **U, unique** (Greywater-like) | 3 M, massingFirst, report critique | 3 / 3 | bible 1.35 + massings 0.57 + details 10.2 = **~$12** (high ~$18) |
+| **R, repeat-heavy** | 2 M x `count` 3, 2 S (shed, well), massingFirst, report critique, `smallBySize` | 4 / 8 | 1.35 + 0.76 + 6.8 + 2 x ~1.0 = **~$11** (high ~$17) |
+| **C13 smoke** | one `versionOf` on R's first archetype with its site ("weathered, add a lean-to") | | ~$0.5-1.5 |
+
+**Cap $35, enforced mechanically:**
+- U runs with `budgetUsd` $18 and R with $14 (hard caps);
+- the C13 request has `budgetUsd` $3;
+- the driver sums `spend.json` before each paid step and stops past $35.
+
+One run per arm. An infrastructure failure may re-run an arm once, only within the cap.
+
+**Auth:** the claude login only, never an API key. `tools/gate6c0b.mjs bench` refuses to start with any `ANTHROPIC_*` key set,
+and logs the auth mode at each paid step.
+
+**Recorded** (`artifacts/gate6c0b/bench-<arm>.json`):
+- the 0a Breakdown (each stage's usd and ms, `totalUsd`, `wallMs`, `firstDetailedMs`; USAGE_HOLD is excluded from the time
+  figures);
+- usd per placement;
+- each item's kind and effort;
+- repair rounds;
+- fallbacks;
+- previews.
+
+**Judged:** both arms reach a final state within $35 with complete breakdowns. A budget stop is data, not a failure.
+
+**Not judged:**
+- $5 and 15 min; a miss is reported "not shown", with the numbers;
+- Noah looks at R's copies and S items, and any he calls visibly cheap is recorded against C1/C8.
+
+**What it decides.** These are proposals in PLAN.md for Noah and Steward, not automatic:
+1. **The next cut,** by U's largest stage share:
+   - BIBLE ≥ 25%: built-in or cheaper bibles for starter cards;
+   - DETAIL dominant: bounded effort for M, or model tiering;
+   - REPAIR ≥ 20%: kit and brief fixes.
+2. **Whether copies and SMALL reach the targets** (R's usd per placement and `firstDetailedMs`). This feeds Steward's default
+   copy policy and card mix.
+3. **Re-seeding** the SMALL, COPY and CHANGE estimates from the samples.
+4. **The C8 caps:** keep them, or loosen them if S items hit them or look cheap.
+
+### 7. Gate (slice tier plus focused checks)
+
+**Evidence:** `artifacts/gate6c0b/<item>.json` and `REPORT.md`.
+
+**Driver:** `tools/gate6c0b.mjs` (sim), added to the impact map; `bench` is §6.
+
+**Spend:** `spend.json` reads $0.00 through item 8, and at most $35 after item 9.
+
+1. **Expansion:**
+   - x6 at cap 3 gives 2 archetypes and 4 copies, with the right keys;
+   - cap 1 gives 6 originals;
+   - a LANDMARK x2 gives 2 originals;
+   - each `COPY_REFUSED` detail is produced.
+2. **Variation:**
+   - for every kit example with params, under every built-in bible, copies `#2` and `#3` meet "2 levers and 10%";
+   - a mirrored copy keeps `front`.
+   - **The mirror oracle:** a mod test dumps vanilla's mirrored states for the kit's block list to a JSON fixture, and a kit test
+     compares the kit's mirror table against it.
+   - **In game:** a mirrored copy's `fitToLot` agrees with `fitMassingToLot` on the **mirrored** massing (C6's ±2).
+3. **Fallback:**
+   - `sim:copyfail` and `sim:copysize` reach FALLBACK with the right reason;
+   - under massingFirst, it binds the approved massing with no new approval;
+   - `promoteCopy` works and refuses as in §2.3;
+   - a dropped archetype fails its copies with `source_failed`;
+   - copies run while the group is `paused_budget`.
+4. **Derivation:**
+   - a copy's recipe rebuilds it byte-identically from `sourceVersion`;
+   - VARIANT and RESKIN are written, and a remix writes none;
+   - `derivation` survives a polish of a VARIANT entry;
+   - a COPY entry refuses polish and `versionOf`;
+   - `Library.Entry` exposes it all.
+5. **In game, Steward-style** (sim, `simCosts: "measured"`):
+   1. a massingFirst group with an x3 item and a SMALL item;
+   2. approve;
+   3. COPY stages;
+   4. a batch of 4;
+   5. undo one copy.
+
+   Then check:
+   - each copy is its own site;
+   - the breakdown's COPY line is $0;
+   - the notional cost is inside the `byKind` estimate.
+6. **C2 and C8:**
+   - a `smallBySize` item skips the report critique, but an explicit item critique runs;
+   - a SMALL basis shows 2 rounds, 40 turns and medium;
+   - two `sim:repair` fail it at round 2;
+   - every `smalls.mjs` builder passes the checker under every built-in bible.
+7. **C13:**
+   1. place a site and make 3 player edits;
+   2. `versionOf(entry, site)` installs head + 1 (`by: design`);
+   3. `outdated` lists the site;
+   4. `checkDelta` reports 3 kept cells;
+   5. `applyDelta(KEEP)` keeps them, and undo restores the site.
+
+   Then check:
+   - a grown result passes;
+   - a front-changing sim result is repaired before install;
+   - every refusal detail;
+   - `base_moved`.
+8. **API compatibility,** as in §1. The 0.13.0 apitest jar is built from `v0.13.0` into `artifacts/gate6c0b/v0130/` before any
+   0b change.
+9. **§6's benchmark,** paid and capped.
+10. **gate-verifier (slice):** it reviews the diff against this contract and the evidence, re-runs items 2, 3 and 7, and checks
+    §6's spend and auth logs.
+
+#### 7.1 Which regression tier, and why
+
+**The `slice` tier:** `quick` plus the impact map's slice steps.
+
+| Paths touched | Steps they add |
+|---|---|
+| the sidecar (groups, variants, designer, estimates, versions) | sim-jobs, sim-sets, sim-massing |
+| the API and apiimpl | apijars, 4d-all |
+| the kit (mirror, `smalls.mjs`, the brief) | sim-sets, sim-massing, 4e-megalite |
+| `site/**` or `delta/**` (the `versionOf` site capture) | 4e-orders, 5b-village, 5b-chains |
+
+**Not `release` or `engine`:** there is no journal, placement or realise change, because the mirror is baked into templates.
+
+**Time:** about 40 min on 3 shards, plus §6 (about 1-1.5 h wall time, detached, with one until-loop wait).
+
+### 8. Build order
+
+1. Archive the 0.13.0 apitest jar.
+2. Kit: the mirror and its oracle fixture, `smalls.mjs`, the SMALL brief.
+3. Sidecar:
+   - expansion, COPY, recipes, checks and fallback;
+   - derivation;
+   - the SMALL caps;
+   - `versionOf`;
+   - estimates;
+   - the sim faults.
+4. Mod: the 1.11.0 records, `promoteCopy`, `versionOf` and the site capture.
+5. Gate items 1-8, the slice run, the verifier.
+6. §6 within its cap. Its results go into PLAN.md.
+
+### Open questions for Steward
+
+- **S-0b-1. The small rule.** Is "footprint fits 11 x 9 either way" the right rule, or will you always set `effort: SMALL`
+  yourself?
+- **S-0b-2. A capped S item fails.** Fail it so you re-plan (proposed), or retry once at STANDARD inside the group budget?
+- **S-0b-3. A failed or dropped archetype.** Fail its copies with `source_failed` so you call `promoteCopy` (proposed), or
+  promote the first copy to archetype automatically?
+
+### Open questions for Noah
+
+- **N-0b-1. Benchmark spend.** Is ~$24 expected with a $35 hard cap OK? The cheaper option drops arm U and uses Greywater's
+  $13.76 as the unique figure: ~$12, cap $17, but then there is no stage split for unique buildings, which is the question C7
+  asks.
+- **N-0b-2. Variation bar.** Is "2 of 3 levers and at least 10% of cells changed" enough? You judge the previews in §6 either way.
+
+### Deferred
+
+- **To 0c:** as listed in 0a (minLotSize, partial roads, groundHeight, typed field refusals, the extendGroup warning, C16, C17,
+  C18).
+- **6d:** a source's new version applied to its COPY and SITE followers, by recipe.
+- **7b:** SITE derivations, adapt-first, and measured `adapted` estimates.
+- **Later, or on an observed need:**
+  - a placement-time mirror in the API;
+  - a rotation hint for copies;
+  - `versionOf` inside groups;
+  - a STANDARD retry for capped S items;
+  - a $0 template path for S buildings straight from `smalls.mjs` (the likely next cut if §6 shows S items still too costly);
+  - whatever stage §6 points to.
+
+## Phase 6c slice 0c: placement polish and protected areas (DRAFT for Steward review)
+
+This slice is API 1.12.0 and mod 0.15.0. Those numbers assume 0a ships as 1.10.0 / 0.13.0 and 0b as 1.11.0 / 0.14.0; the
+coordinator confirms them at merge. SETTLEMENTS.md still gives 1.11.0 to 7a and 1.12.0 to 7b. Those entries move up (N-0c-3).
+
+- **Branch:** `phase/6c-0c`, in the worktree `../architect-mc-6c-0c`.
+- **Spend:** $0. Everything runs on the sim or in game. There is no claude-login run.
+- **Scope:**
+  - PLAN.md "Steward round 4" item 3: minLotSize, partial roads, groundHeight, bounded fields, the extendGroup warning;
+  - round 5's C16 and C17, and C18;
+  - off-thread group-undo planning, as a go/no-go (§10).
+
+  Anything else goes to the next slice.
+- **Parallel build, third merge.** It may be built alongside 0a and 0b, but it merges after both. Before its gate it rebases on
+  main with 0a and 0b in (§11). Two things depend on 0a:
+  - §5 throws 0a's `ArchitectRefused`. That item is built last, on top of 0a.
+  - The new `Reason` constants come after 0a's (and 0b's, if any).
+
+### 0. What exists today (main, v0.12.x)
+
+- **minLotSize.**
+  - `LotFitting.fit` (batch/) needs the rotated footprint plus the setback. The setback defaults to the approach length.
+    Anything less is `LOT_TOO_SMALL` with a `why`.
+  - Nothing returns the size it needs. Steward hardcodes `LotBrief.APPROACH_MARGIN = 5`.
+  - `LotFit` has the origin, rotation, box, restore box and verdict. `OverlapMargin` gives the front growth
+    (approach + `Approach.EXTEND`).
+- **Roads.**
+  - `RoadPlan.plan` returns on the first bad centre column and refuses the whole road: no ground within 8, cut or fill over 4
+    (TOO_STEEP), water deeper than 1 (DEEP_WATER), lava, or unloaded (NOT_LOADED).
+  - Cut and fill are judged after one `smooth()` over the whole line.
+  - The centre line doesn't remember which waypoint segment a cell came from.
+  - Other sites' columns are already skipped and noted.
+- **Survey.**
+  - `Sample.height` is `MOTION_BLOCKING_NO_LEAVES`, so under a tree it is the top log.
+  - `floor` is `OCEAN_FLOOR`, which logs also block.
+  - The `tree` bit marks the column, but nothing gives the soil under it.
+  - `Volume` classifies LOG, LEAVES and PLANT per cell, and `Volume.Stats` already defines a surface that skips them, but it
+    exposes no per-column array.
+  - The region survey (`RegionSurvey`, ARSV) is separate, and this slice doesn't touch it.
+- **Bounded fields.**
+  - zod in `sidecar/src/protocol.ts` bounds them, for example style 1-40 trimmed, name 1-40, notes 2000, materials 200,
+    features 6 × `FEATURE_RE`, group name 1-60, items 24, owner 200, ext 64 KB, model id 100.
+  - The Java side checks almost none of them. A long style fails the whole group at the sidecar ("Too big").
+  - `DesignsImpl` fails some futures with `IllegalArgumentException`, for example redirect notes.
+- **extendGroup.**
+  - `CompletableFuture<Void>`.
+  - `groups.ts extend` clears the soft override, so a budget whose 80% line is still under the spend re-pauses at once.
+  - `Group` already carries `budgetUsd`, `softBudgetFraction` and `cost`.
+- **Survival roads (C16).**
+  - `InfraPlace.modeRefusal` refuses a road with NOT_ALLOWED when its mode is CONSTRUCTION, or AUTO in a survival world.
+    A batch's road items in survival fail.
+  - The builder (`Builder.Run`, `planConvert`, `convertNow`, crate helpers) is written against a `Site` with a `Blueprint`.
+    Roads are `Infra` records and have neither.
+  - `Verdict.bom`, `SiteView.built/queued`, `Stock.outstandingBySite` and the shared crate (`Batch.sharedCrate/crateAt`)
+    already exist.
+  - `dirt_path` costs one dirt (`survival_items.json`).
+- **Protected areas (C17).** Nothing exists in Architect. Steward keeps its own `Settlement.Area`: id, label, dimension,
+  x0/z0/x1/z1 at every height. Its layouts avoid those areas, and it drops lots that fall inside one.
+- **Occupancy (C18).**
+  - `Occupancy.scan(level, box, ignore)` already takes an ignore predicate, but every caller passes `e -> false`:
+    - `Sites` check (place, move);
+    - `DeltaJob`;
+    - `SiteDeltas`;
+    - `Groups` (players only);
+    - the client ghost.
+  - Removal and undo go through `Sites.removalBlockers`, which loops over the entities itself.
+  - The placement discard loops (`Sites` P5, `PlaceJob`) remove "removable" entities (unnamed hostiles, projectiles, drops).
+- **Undo planning.**
+  - The group undo plans each section on the server thread (`Sections.Planner` → `Journal.planUndo`). Since 6b's fastutil
+    fix, that takes a few ms per section.
+  - The planner reads the world per cell through the `Journal.World.holds` interface.
+
+### 1. API 1.12.0 rules and behaviour changes
+
+**Rules (as in 1.10.0):**
+- `ArchitectApi.VERSION = "1.12.0"`.
+- Widened records keep their 1.11.0 constructors.
+- New interface methods are defaults that throw "... needs Architect API 1.12.0".
+- `tools/api-compat.mjs` checks the 0.14.0, 0.13.0 and 0.12.0 apitest jars and the 0.14.0 mod jar's surface. All three apitest
+  jars pass against 0.15.0.
+
+**New Reasons** (appended after 0a's and 0b's):
+- `PROTECTED`: the op writes into a protected area of its owner (§8);
+- `FIELD_LIMIT`: a bounded request field is out of range (§5).
+
+**Behaviour changes:**
+1. A request field over a sidecar bound now fails in the mod, before the round trip, with `ArchitectRefused(FIELD_LIMIT)`.
+   This includes the redirect notes, which threw `IllegalArgumentException` before. A caller that caught IAE must catch
+   `ArchitectRefused` (a RuntimeException).
+2. In a survival world, a road in a batch with a shared crate builds as a construction site. Before, it failed NOT_ALLOWED.
+3. Entities tagged `architect:owner=<owner>` no longer block that owner's placements, deltas, removals and undos, and are
+   never discarded by them (§9).
+4. `Sample` and `Volume` gain ground heights (§4). Nothing that exists changes: `height`, `floor`, ARVX bytes and the volume sha
+   stay as they are.
+
+### 2. Lot size and the recommended lot (minLotSize)
+
+```java
+LotSize minLotSize(String blueprintId, FitOptions o);                 // Sites, default-throwing
+LotSize minLotSize(MassingRef massing, FitOptions o);                 // the same for a massing (0a's fitMassingToLot)
+record LotSize(int alongStreet, int deep, int setback, int frontMargin) {
+  BoundingBox at(BoundingBox lot, Direction streetSide); }            // the minimal lot anchored as fitToLot anchors
+// LotFit gains trailing BoundingBox recommendedLot (old constructor: the lot passed in)
+```
+
+- `alongStreet` and `deep` are the rotated footprint, with `deep` including the setback, so they are the same for every
+  street side. They are exactly what `LotFitting` accepts:
+  - a lot of `alongStreet × deep` fits;
+  - one block less on either axis is `LOT_TOO_SMALL`.
+- `frontMargin` is `OverlapMargin.front`, shown for planners. It isn't part of `deep`, because the restore box may already
+  reach into the street (as today).
+- **`recommendedLot`** is the smallest lot that holds this fit: the street-edge row, along to the back of the footprint, the
+  footprint's width, and the y span of the lot passed in.
+  - Placed with `fitToLot`, it gives the same origin and rotation.
+  - On `LOT_TOO_SMALL`, it is the lot the design would need, anchored on the street edge, so it extends past the lot given.
+- Steward can drop `APPROACH_MARGIN` and size lots from `minLotSize`.
+
+### 3. Partial roads, or the failing span reported
+
+```java
+// RoadRequest gains trailing boolean partial (old constructors: false)
+record RoadSpan(int fromPoint, int toPoint, Reason reason, String message, BlockPos at) {}
+// Verdict gains trailing List<RoadSpan> spans; PlaceResult gains trailing List<RoadSpan> skipped (old constructors: empty)
+```
+
+- **Spans.** A failing centre column is mapped to its waypoint segment `[i, i+1]`.
+  - Neighbouring failing segments merge into one span.
+  - Span-local reasons: TOO_STEEP (no ground, or cut or fill), DEEP_WATER, LAVA and PROTECTED (§8).
+  - NOT_LOADED stays a whole-road refusal, because it is temporary and a waiting item waits for it.
+- **`checkRoad`** always lists every failing span, whether `partial` is set or not. The first one is also the refusal, as today.
+- **`partial: true`:**
+  - The failing segments are dropped, and the remaining runs are re-planned and smoothed each on its own.
+  - Runs are re-planned until no span fails. That takes at most one round per segment, and it is deterministic.
+  - Runs of at least 2 centre cells are placed as **one road site with gaps**: one journal entry and one undo.
+  - `PlaceResult.skipped` lists the dropped spans, and a note names them.
+  - If nothing remains, the road is refused with the first span's reason.
+- **Batches.** A road item with `partial` places like this. Its `ItemView.message` names the skipped spans.
+
+### 4. Ground heights under trees (Survey)
+
+- **Sample.** `Sample` gains trailing `int[] ground`.
+  - Per column, ground is the highest cell that isn't air, a fluid, LOG, LEAVES or PLANT. The kit's `voxel_classes.json` table
+    (`VoxelTable`) decides LOG, LEAVES and PLANT, as it does for volumes.
+  - Built blocks count as ground, so a roof is ground.
+  - On a dry column without trees it equals `height`. Under water it is the bed (fluids aren't ground), the same as `floor`
+    when no tree stands in the water.
+  - A missing column gives `MISSING`.
+  - The old constructor copies `height`.
+  - `toJson` gains `ground`. The summary grid is unchanged.
+  - `RegionSurvey` has its own sampler, so region survey time doesn't change.
+- **Volume.** `Volume` gains a trailing `int[] ground` record component; the old constructor gives an empty array.
+  - Indexed `i + j * width` over the box's columns.
+  - The same definition, applied to the classes. OWNED, PLAYER and BLOCK_ENTITY count as ground.
+  - `MISSING` where the column has no ground inside the box, or wasn't read.
+  - It is derived while sampling. The ARVX bytes, the sha and the frozen file don't change.
+  - Its size is capped at 16M columns (64 MB). A wider box leaves it empty and says so in a note.
+- **Consistency bar.** On the same columns, `Sample.ground` (resolution 1) equals `Volume.ground` in every column, when the
+  volume box reaches below the ground and above the tree tops.
+
+### 5. Bounded fields refused in the mod
+
+- **`api/Limits.java`** has public constants, one per bounded field the sidecar's zod schemas bound, for these requests:
+  `DesignRequest`, `GroupRequest` (and its items), `BibleRequest`, `CritiqueSpec`, `PolishRequest` and redirect notes.
+  - Examples: `STYLE_MAX = 40`, `NAME_MAX = 40`, `NOTES_MAX = 2000`, `MATERIALS_MAX = 200`, `FEATURES_MAX = 6`,
+    `GROUP_NAME_MAX = 60`, `GROUP_ITEMS_MAX = 24`, `OWNER_MAX = 200`, `EXT_MAX_BYTES = 65536`, `MODEL_ID_MAX = 100`.
+  - Each request record's javadoc names its caps.
+- **Same rule as zod:** trim where zod trims, then compare the UTF-16 length (and the regex where zod has one).
+- **The check:** `requestGroup`, `request`, `bibles().request`, critique, polish and redirect check before sending.
+  - A violation fails the future with `ArchitectRefused(FIELD_LIMIT)`.
+  - The message gives the path and the limit, e.g. `items[3].request.style: 47 characters, at most 40`.
+  - Nothing is sent and no group is created.
+- **Drift guard.** A sidecar unit test reads the Java constants (from `Limits.java`, by regex) and asserts they equal the zod
+  bounds. A field zod bounds that `Limits` lacks fails the test.
+
+### 6. extendGroup: the re-pause warning
+
+```java
+default CompletableFuture<Extension> extend(String groupId, double budgetUsd)   // Designs; extendGroup stays (its type can't change)
+record Extension(Group group, double spentUsd, double softLineUsd, boolean pausesAgain, double minBudgetUsd) {}
+```
+
+- `softLineUsd = budgetUsd × softBudgetFraction`.
+- `pausesAgain = spentUsd ≥ softLineUsd`. This is the sidecar's own comparison: equality pauses.
+- `minBudgetUsd` is the smallest whole-cent budget B with `spentUsd < B × softBudgetFraction`, using the same double arithmetic
+  as the sidecar.
+- **The ack.** Today the `group.extend` ack carries only `groupId` and `budgetUsd`. It gains `spentUsd` and `softBudgetFraction`.
+  That is two additive fields in `sidecar.ts` and the feature `extendInfo`. `groups.ts` is untouched, which keeps this item out
+  of 0a's work there. Against an older sidecar, the mod uses its cached `Group`.
+- The extend still happens when `pausesAgain` is true. The caller decides whether to extend further or resume.
+- The javadoc of `extendGroup` points to `extend`.
+
+### 7. C16: roads in survival construction batches, with a BOM
+
+- **When it applies.** In a survival-toggle world, a road item of a batch with `sharedCrate` (and optionally `crateAt`), with mode
+  AUTO or CONSTRUCTION, becomes a **construction road**.
+  - Refused with NOT_ALLOWED and its own message:
+    - a standalone `placeRoad` in CONSTRUCTION;
+    - a road in a batch without a shared crate.
+  - INSTANT keeps today's actor rule.
+  - Cell sites stay INSTANT only.
+- **What placing does.**
+  - It plans the road as INSTANT would and journals the before state, so undo is exact.
+  - Cut cells (natural blocks removed) are cleared at placement, with no drops and at no cost, as a building site's cleared cells
+    are.
+  - The other written cells are queued for the builder in centre-line order: fill, surface, slabs, decks, posts and lanterns.
+- **Cost.** Each queued cell costs `SurvivalItems.cost` of its target, so `dirt_path` costs one dirt (N-0c-2).
+  `checkRoad` in construction mode fills `Verdict.bom`, and `Verdict.construction` is true.
+- **Building.**
+  - The builder takes the road from the group's shared crate, in batch order with the group's buildings.
+  - `SiteView.built/queued`, `Stock.outstandingBySite` (keyed by the road's id), the ghost sync, SITE_PROGRESS, `finish` and
+    deconstruct-with-refunds work as for buildings.
+  - A finished road matches what INSTANT would have written.
+- **Implementation note.**
+  - `Infra` gains a nullable `Construction`.
+  - The builder's `Run`, crate and stock helpers take a "construction target" (a `Site` or a road `Infra`) instead of a `Site`.
+  - Buildings keep their code path.
+- **Downgrade (expected; not yet checked against 0.14.0's `Infra` reader).** 0.14.0 should read an `Infra` with an unknown
+  `construction` field as a finished INSTANT road. Its cells stand as far as they were built. One `remove` should still be exact:
+  the journal holds the before state, and unbuilt cells never held their `after`. Gate item 6 pins this, and if it fails, the
+  fix is in 0c.
+
+### 8. C17: protected areas
+
+```java
+ProtectedArea protect(ProtectedArea a);                      // Sites, server thread; same (owner, id) replaces
+boolean unprotect(String owner, String areaId);
+List<ProtectedArea> protectedAreas(@Nullable String owner);  // null: every owner
+record ProtectedArea(String owner, String id, ResourceKey<Level> dimension, int x0, int z0, int x1, int z1, String label) {}
+```
+
+- **The area.** Columns `x0..x1 × z0..z1` at every height, which is Steward's `Area`.
+  - `owner` is required, by the `<modid>:<thing>` convention. A null owner (the player) can't mark areas in 0c.
+  - At most 1,024 areas per owner, each at most 4,096 × 4,096 columns.
+  - Areas are kept per world, in `<world>/architect/protected.json` (written to a temp file, then renamed).
+- **Where they apply.** Only to ops of the same owner, and only to work started after the mark.
+  - The op is refused with `PROTECTED`, naming the area's id and label.
+  - **`force` doesn't override it.** The caller lifts the area instead.
+- **Which cells each op is checked on:**
+
+  | Op | Checked against |
+  |---|---|
+  | `place`, `check`, a batch building item, a move | the predicted restore box (approach and foundation included) |
+  | `applyDelta` / `checkDelta`, `revert` (the site's owner), a batch delta item | every cell the delta writes |
+  | `placeRoad` / `checkRoad`, a batch road item | every road cell; with `partial`, a protected stretch is a skipped span (§3) |
+  | `placeCells` / `checkCells`, a batch cells item | every cell |
+  | `fitToLot` | its verdict; `FitOptions` gains trailing `@Nullable String owner` |
+  | `Regions` plan accept, and realise start | the claim; an area marked after planning refuses the realise, so there is no per-tile check |
+
+- **Never refused:** remove, undo, `undoStage` and `removeGroup`. They only put back what was there.
+- **Already running:**
+  - A queued batch item is checked when it starts. A refusal there fails the item; it doesn't wait.
+  - A standing construction site keeps building.
+- **Events:** none in 0c. Steward owns the areas and knows when it changes them.
+
+### 9. C18: the caller's own entities don't occupy
+
+- **The tag.** An entity carrying the scoreboard tag `architect:owner=<owner>` (`Entity.getTags()`) matches requests with the
+  same owner. The owner comes from:
+  - `PlaceRequest` or the batch;
+  - `DeltaRequest`;
+  - the site's owner, for revert and group undo;
+  - `RemoveOptions.requester`.
+- **No match:**
+  - A null owner matches no tag.
+  - Players are never exempt.
+  - Another owner's tag counts as untagged.
+- **Every path:** `Occupancy.scan`'s callers (check, place, move, delta), `removalBlockers` (remove, undo, group undo), and the two
+  discard loops. A matching entity neither blocks nor is discarded, including a tagged hostile.
+- **Architect doesn't move it.** An ignored entity stays where it is and can be built into or buried by a restore. Moving it first
+  is the caller's job (S-0c-2).
+- **Setting the tag.** Callers set it with `entity.addTag(...)` or NBT (`Tags:[...]`). The `/tag` command can't, because ':' and
+  '=' aren't word characters.
+
+### 10. Off-thread group-undo planning (go/no-go)
+
+- **Spike, timeboxed at 2 h, and the first thing cut.**
+  - On the server thread: copy the section's block states, and the NBT of its block-entity cells.
+  - Off the thread: plan against that copy, through `Journal.World`.
+  - Back on the server thread: re-check `holds` for each cell about to be written. A changed cell is planned again on the server
+    thread.
+- **Ships only if** megaA's undo-only run on the 6a-made world, against main:
+  - lowers the undo's `ownCpu.p99` by at least 30%;
+  - doesn't raise its max;
+  - keeps E-normal at 0 undo-caused cells;
+  - passes the 4e crash suite.
+- **No-go:** the measurement goes in "as built", and it moves to Later.
+- **Gate cost:** it touches `journal/**`, which adds the engine tag (4e-orders, 4e-crash, 6a-eflat, megaA) to the slice.
+
+### 11. Files touched (merge notes)
+
+| Item | Files | Shared with |
+|---|---|---|
+| API | `api/{ArchitectApi,Reason,Sites,Designs,LotFit,FitOptions,RoadRequest,Verdict,PlaceResult,Sample,Volume}.java`; new `LotSize`, `RoadSpan`, `ProtectedArea`, `Extension`, `Limits` | 0a: `Reason`, `ArchitectApi`, `Sites` (fitMassingToLot), `Designs` (estimate). 0b: `Designs`, `DesignRequest` |
+| §2 | `batch/LotFitting.java`, `apiimpl/SitesImpl.java` (fitToLot, minLotSize) | 0a C6 (`fitMassingToLot` in SitesImpl) |
+| §3 | `site/roads/RoadPlan.java`, `site/InfraPlace.java`, `site/InfraApi.java` | none |
+| §4 | `apiimpl/SurveyImpl.java`, `apiimpl/SurveyGrid.java`, `region/volume/VolumeSurvey.java` | none |
+| §5 | `apiimpl/{DesignsImpl,BiblesImpl}.java`, `sidecar/test/limits.test.ts` | 0a and 0b: DesignsImpl |
+| §6 | `apiimpl/DesignsImpl.java` | 0a: `groups.ts` (avoided) |
+| §7 | `site/{Builder,Construction,Infra,Infras,InfraJob,InfraPlace,Batches}.java`, `survival/*` (stock) | 0a: `Batches` (durable batches, opKey) |
+| §8 | new `site/Protected.java`; check hooks in `site/{Sites,SiteDeltas,InfraPlace,Batches}.java`, `region/RegionsImpl.java` (plan/realise only) | 0a: `Batches`, `RegionsImpl` (WORLD_STOPPED) |
+| §9 | `placement/Occupancy.java`, `site/{Sites,PlaceJob,DeltaJob,SiteDeltas,Groups}.java`, `apiimpl/SitesImpl.java` | none |
+| §10 | `journal/{Sections,WorldJournal}.java`, `site/Groups.java` | none |
+
+- **Rebase points:** `Reason` order, `VERSION`, the api-compat baselines and the impact-map rows.
+- **Dependencies on 0a:** §5 needs `ArchitectRefused`, and §10's bar needs MsptTrace's `ownCpu`. If 0a hasn't merged, they wait.
+- **No change to:** the kit, the journal format, or the sites-file format beyond the fields `Infra` gains. The protocol only
+  gains §6's two ack fields.
+
+### 12. Gate (slice tier, $0)
+
+**Evidence:** `artifacts/gate6c0c/<item>.json`, summarised in `REPORT.md`.
+
+**Driver:** `tools/gate6c0c.mjs` with `tools/run-gate6c0c-client.sh`, a packed jar on the sim. Survival items use a survival-toggle
+world, as the p3 client does. `spend.json` must read $0.00.
+
+1. **minLotSize** (unit): for every kit example design and massing, × 4 street sides:
+   - a lot of exactly `minLotSize` fits, and one block less on either axis is LOT_TOO_SMALL;
+   - `fitToLot(recommendedLot)` gives the same origin and rotation as the first fit;
+   - a too-small lot's `recommendedLot` fits.
+
+   In game: one Steward-sized lot sized from `minLotSize` places.
+2. **Partial roads:**
+   - Unit, on synthetic terrain with a 6-high step on segment 2 of 4: `checkRoad` reports span [2,3] with TOO_STEEP.
+   - With `partial`, two runs are placed as one site, `skipped` = [2,3], and one undo restores both runs exactly.
+   - A deep-water segment and a lava segment are reported the same way.
+   - NOT_LOADED still refuses the whole road.
+   - In game, on the flat fixture with a 6-high wall built across segment 2: placed partial, then undone. The undo's world diff
+     over the restore box is 0.
+3. **groundHeight:**
+   - In game, on a forest box: `Sample.ground` < `height` on tree columns, equals it elsewhere, and equals `Volume.ground` in
+     every column.
+   - The volume sha is unchanged from a 0.14.0 run on the same box.
+4. **Bounded fields:**
+   - A group with a 41-character style fails `FIELD_LIMIT`, with the path in the message and no group created (the sidecar's
+     group count is unchanged).
+   - 40 characters passes.
+   - The sidecar drift test passes.
+   - Each `Limits` constant gets one unit test at the boundary and one past it.
+5. **extendGroup:**
+   - A unit test on the 6b live case: $30 → $35 with $31 spent gives `pausesAgain` and `minBudgetUsd` 38.76. At 38.75 the line
+     is exactly $31.00, which pauses.
+   - A sidecar unit test: extending to `minBudgetUsd` doesn't re-pause, and to one cent less does.
+6. **Survival road:** in a survival world, a batch of 2 houses and a 40-cell road with a shared crate.
+   - `checkRoad` gives a non-empty `bom`, and it equals the road's `Stock.outstandingBySite` after placing.
+   - Feeding exactly that BOM builds it to BUILT.
+   - The built cells equal an INSTANT road on an identical flat strip beside it, cell for cell relative to the road's start.
+   - Undo restores the pre-state: the world diff over the restore box is 0.
+   - Without `sharedCrate`, it is refused NOT_ALLOWED.
+   - Downgrade: with the road half built, 0.14.0 loads it as a road, and one `remove` leaves a world diff of 0.
+7. **Protected areas:** one area of owner `test:a` across a test strip.
+   - Every op in §8's table, including the batch item kinds, a move, and region realise after a late mark, is refused
+     PROTECTED.
+   - Nothing is written: the journal and the world diff are empty.
+   - `force` doesn't change that.
+
+   Also:
+   - a partial road crossing the area places both sides and skips the area span;
+   - the same ops by owner `test:b` and by the player pass;
+   - remove, undo and `undoStage` of a `test:a` site whose box was marked after placing all succeed;
+   - the area survives a save and reload.
+8. **Owner-tagged entities:**
+   - A villager tagged `architect:owner=test:a` stands in a `test:a` site's box. Group undo, `remove`, `applyDelta` and a new
+     `place` over it all go ahead, and the villager is alive and not discarded.
+   - The same villager untagged blocks (OCCUPIED, or the removal blockers).
+   - Tagged `test:b`, it blocks `test:a`.
+   - A tagged unnamed zombie isn't discarded.
+   - A player in the box still blocks.
+9. **Undo planning** (if built): §10's bars, on megaA undo-only with the load recorded. If it isn't built, the measurement is
+   recorded.
+10. **API compatibility:** api-compat and the three apitest jars (§1). The 0.14.0 apitest jar is built from `v0.14.0` into
+    `artifacts/gate6c0c/v0140/` before any 0c change.
+11. **gate-verifier (slice):** it reviews the diff against this contract and the evidence, and re-runs items 6, 7 and 8.
+
+**The tier:** `slice` (quick plus the impact map's steps for `site/**`, `api/**`, `survival/**`, `batch/**`, `placement/**`: 4e-orders,
+4d-all, 5b-village, 5b-chains, 4e-throughput, the sim suites, apijars). The `RegionsImpl` hook matches the `region/**` rule,
+which adds 6a-staged, 6a-inv3 and 6a-megaA and the engine tag. megaA runs there as a regression check: the hook is only a claim
+check and changes no tile path. If §10 ships, its `journal/**` steps are added as well. About 60-75 min on 3 shards.
+
+### 13. Build order
+
+1. Archive the 0.14.0 apitest jar.
+2. §4 and §2.
+3. §3.
+4. §9.
+5. §8.
+6. §7.
+7. §6.
+8. §5, once 0a is in.
+9. §10, timeboxed.
+10. The gate driver, the slice run and the verifier.
+
+### Open questions for Steward
+
+- **S-0c-1. Removal and undo.** Remove and undo are never refused by a protected area, because they only restore. Is that right,
+  or should an undo that would restore cells inside an area also refuse?
+- **S-0c-2. Tagged entities.** Architect ignores tagged entities but doesn't move them. Will Steward move its villagers out of a
+  box before an undo or delta, or should Architect teleport a tagged mob to the nearest standable cell outside the box?
+- **S-0c-3. Regions.** Is refusing a region claim that touches an area enough for 0c? The alternative is to carve areas out of the
+  claim, which is kit work for the terrain slices.
+- **S-0c-4. Partial roads.** Is one road site with gaps, plus the skipped waypoint spans, what you need? Or do you want one site
+  per run?
+- **S-0c-5. Survival roads.** Is a shared crate an acceptable requirement for survival roads? Steward's batches already use one
+  per settlement.
+
+### Open questions for Noah
+
+- **N-0c-1. C16's size.** C16 is the largest item, because the builder must take roads as well as buildings. If it runs past
+  about half the slice, should it split into its own slice "0d" before V, so the rest of 0c ships?
+- **N-0c-2. Road surfaces.** Should a `dirt_path` surface laid on existing grass or dirt cost one dirt (proposed, the plain
+  survival rule)? The alternative is to make it free, as a shovel would.
+- **N-0c-3. Numbering.** SETTLEMENTS.md gives API 1.11.0 to 7a and 1.12.0 to 7b. With 0a, 0b and 0c at 1.10.0-1.12.0, 7a and 7b
+  move to 1.13.0 and later. Should SETTLEMENTS.md be renumbered at this merge?
+
+### Deferred
+
+- **To the 6c terrain slices:**
+  - automatic detection of player-changed cells (block-change tracking) as protection;
+  - region programs that route around areas;
+  - areas binding every owner (a world-wide "never touch").
+- **Later:**
+  - protected-area events;
+  - areas for the player (a null owner) in Architect's own UI;
+  - an explicit entity UUID set on `RemoveOptions`, `DeltaRequest` or `Batch` (C18's alternative), if a caller needs it;
+  - cell sites in construction mode;
+  - off-thread undo planning, if §10 is a no-go.
+
+## Phase 6c slice V: flat village (C10) (DRAFT for Steward review)
+
+This slice is API 1.13.0 and mod 0.16.0. It comes after 0a (1.10.0 / 0.13.0), 0b (1.11.0 / 0.14.0) and 0c (1.12.0 / 0.15.0).
+**0b and 0c aren't written yet. Renumber if they shift, and follow 0c as built.**
+
+- **Branch:** `phase/6c-v`, in the worktree `../architect-mc-6c-v`.
+- **Spend:** $0. Lot entries are bundled kit designs as free variants. There is no pick and no claude-login run.
+- **Scope (C10, narrow).** On a flat claim: lots, a path from each door to the street, one shared space (a square or a well
+  green), a few props, and the villager rules that are cheap on flat ground. It is built as one bundled region program
+  (`flat_village`) plus kit components, so 7a's graph and connectors generalise it without a migration.
+- **Not in scope:**
+  - retiring VillageLayout (C12);
+  - survival;
+  - additions to a standing village (6d);
+  - terrain (the 6c terrain slices).
+
+### 0. Facts V depends on
+
+- **Regions are INSTANT only.** They refuse `NOT_ALLOWED` in survival-toggle worlds (D12, N4). **So V serves Steward's Patron
+  worlds only.**
+- **Program params** are `int`, `bool` or `enum`. Nothing carries a list of lots.
+- **The rustic default `path` role is `minecraft:dirt_path`**, and `rubble` is cobblestone. A program that exports no `roles`
+  lays dirt path on lot fronts.
+- **The 6b region-lot approach** (`Approach`, at most 16 rows) uses the `path`/`foundation` roles and stops at the first walk
+  surface: a 4e road cell, or a region cell with the walk flag. `fitToLot` with `CentreOn.ENTRANCE` (the default) centres the
+  entrance column on the lot's street-side span. Neither `LotFit` nor the designs expose a door port.
+- **IR `graph` is reserved for 7a.** A kit from 6b or earlier throws "unknown member" on it. `siteplan.json`'s graph is derived
+  (`derived: true`).
+- **Steward's `VillageLayout`** (read only):
+  - one straight street, with lots on both sides, filled outward from the centre;
+  - the hints `central`, `edge`, `near_water` and `high_ground`;
+  - street 5 (road 3 plus verges), lot gap 3, slope at most 3, margin 2;
+  - `unplaced`.
+
+  There are no door paths, no shared space and no props.
+- **0c, assumed:** C17 protected areas are caller-marked rects per owner. They are enforced as write bounds on that owner's
+  placements, roads and terrain ops, with a typed refusal. 0c also brings `minLotSize` with a recommended rect.
+
+### 1. "Flat village" means
+
+**There are no carve, add, terrace, ring, form or cavern ops.** The only terrain changes are:
+- lot pads with `maxCut` and `maxFill` of 2;
+- surface-layer swaps (the top block, plus clearing plants and trees above it) for the street verges, the lanes and the
+  square.
+
+**Nothing is forced.** A lot that needs more than that goes to `unplaced`. A street that can't be a ground road fails the plan,
+with the numbers.
+
+### 2. The program `flat_village` (kit/regions/flat_village.mjs)
+
+**Layout `street`** (the only layout in V) is VillageLayout's geometry and defaults, ported to JS:
+- one straight street, east-west or north-south, whichever places more lots, then scored as VillageLayout scores;
+- lots on both sides;
+- the same rules and hint scoring (`near_water` on the survey's water flag).
+
+**The shared space is at the street's middle.**
+- `square` (the default) is `squareSize` 9-15, default 11, paved in the `path` role with walk cells.
+- `well` is a 7x7 green beside the street, for small claims.
+- The street is **two road items that end at the square's edges**, so the road's own lanterns never fall inside the square.
+- The landmark lot, `central` lots and the trading hall front the square first.
+
+**Lanes.** There is one per lot, from the lot's entrance to the street verge or the square's edge.
+- They are `laneWidth` 1-3 wide (default 2), in the `path` role, with walk cells, in a `path`-set part of stage `ground`.
+- **The entrance is the centre of the lot's front edge, where `fitToLot` centres the entrance by default.** The lane ends on
+  the cell just outside the lot box, at the floor y (K5, SETTLEMENTS §8.4). No region op writes inside a lot box.
+- When a fit moves the entrance off-centre (a box held inside the lot), the 6b approach joins the door to the lane, which it
+  meets as a walk surface.
+- Door-aligned lanes from the real fits are 7a's link pass (Deferred).
+
+**Stages:** `ground` (pads, square, lanes), then `street` (the road items), then `lots`, then `props`. Props come last, are
+written into air only (`IF_AIR_OR_FLUID`) and stand on the surface.
+
+**Roles.** The program exports `roles` (as `crater_works` does), and a bible overrides them:
+- `path`: `minecraft:gravel`;
+- `foundation`: `minecraft:stone_bricks`;
+- `light`: `minecraft:lantern`.
+
+With a bible whose `path` *is* dirt path, bar 5 is recorded as not applicable.
+
+**Params:**
+- `shared`;
+- `squareSize`, `laneWidth`;
+- `lamps`: `none`, `few` or `street`;
+- `bell`: bool, default false (S-V-2);
+- `requireAll`: bool, default false;
+- `lots` (§4).
+
+**Catalogue:** `catalogue = false`. Adding it to `Regions.design`'s pick changes the pick prompt, and so 6b's pick accuracy,
+which would need a paid re-run (Deferred).
+
+### 3. Kit components (kit/lib/region/village.mjs, props.mjs)
+
+Plan-time builder functions. Each one:
+- emits a named part, compiled to `columns` ops (no new op kind; the evaluator is untouched);
+- registers its graph nodes and ports (§5).
+
+7a reuses them as they are, or as connectors.
+
+| Component | Emits | Guarantees (property-tested) |
+|---|---|---|
+| `r.streetLayout(specs, rules)` | lots (through `r.lot`), the street line, `unplaced` | no overlap; inside the claim minus the margin; gaps kept; every lot fronts the street or the square |
+| `r.square` / `r.green` | the paving swap (walk), a `plaza` node, the `bell` anchor | a 5x5 bell area: one y, standable, 2 clear; a 3x3x3 golem space within 8; nothing else writes in either |
+| `r.lane(from, to, w)` | the surface swap (walk) | 4-connected; rise at most 1 per cell; never in a lot box, the bell area or keep-out |
+| `well` | a 3x3 stone-brick ring around a `water_cauldron[level=3]`, a roof on 4 posts | **dry: no fluid writes in V** (fluid ordering between section writes is untested in regions); supported |
+| `lamp_post` / `bench` / `planter` | a fence post with a lantern / stairs facing the square / a trapdoor rim with flowers | supported; beside walk cells, never on them |
+| `bell` (opt-in) | a bell on a post at the bell area's edge | outside the bell area |
+
+**Props are never placed** in a lot box, on a walk cell, in the bell area or golem space, or in keep-out. The counts are at
+most 1 well, 2-4 benches and 4 planters. Lamps go every 12 or fewer cells along the lanes and at the square's corners; the
+street's 4e road lanterns cover the street. Bible-styled props are 7a §8.3.
+
+### 4. Input and output
+
+**`params.lots`** is a param type `lots`. It is **allowed in region programs only**: `kit/lib/params.mjs` refuses it in design
+params, and variant enumeration never walks it. At most 40 lots, each:
+
+```json
+{ "id": "cottage_1", "type": "cottage", "role": "artisan cottage", "size": [9, 9], "landmark": false,
+  "placement": "central|edge|near_water|high_ground|null", "villager": "dwelling|job|trading_hall|farm|none", "brief": "..." }
+```
+
+- It is Steward's `VillageLayout.LotSpec` plus `villager`.
+- `id` matches `LOT_ID` and is unique.
+- `size` includes the setback; 0c's `minLotSize` is how a caller sizes a lot for a known entry.
+
+**Output (no new Java types):**
+- `RegionPlan.lots` holds the placed lots only.
+- The unplaced lots are listed in `notes` (one line, `unplaced: a, b`) and in `siteplan.json`'s `unplaced: [{id, reason}]`.
+- Each lot gets `LotSpec.ext["architect_mc:village"] = {role, type, villager, entrance: [x, y, z], lane, water, bellDistance}`.
+  `water` is the distance to surveyed water, or null.
+- The plan fails only on the street, or with `requireAll` when a lot is unplaced.
+
+**Protected areas.** `region.plan` gains `keepOut: [[x0, z0, x1, z1]]`.
+- The mod fills it with the request owner's 0c areas that meet the claim.
+- The kit exposes it as `ctx.keepOut` and `ctx.survey.keptOutAt(x, z)`.
+- The layout, the street, the lanes, the square and the props avoid it.
+- 0c's write bound still refuses at realise, which covers an area marked after the plan.
+
+### 5. The graph: 7a's shape, now
+
+V's IR carries `graph` in SETTLEMENTS §8.1's exact shape, restricted:
+- **nodes:** `{id, kind: lot|plaza|junction, ref, level: 0, ports: [{name, at, facing, width}]}`. Lots get an `entrance` port;
+  the plaza gets `bell` plus a port per lane or street;
+- **edges:** `{id, from: 'node.port', to: 'node.port', type: road|path, width, stage: 'ground'}`.
+
+**Gating:**
+- `graph` becomes a known member in this slice's kit version, allowed in format 1. The evaluator ignores it.
+- **The kit's `KIT_VERSION` bump makes older mods refuse such plans `PLAN_STALE`** (6b §2.4). It also changes every IR's sha,
+  because the IR carries `kitVersion`.
+
+**`siteplan.json`** emits the IR's graph with `derived: false`, and edges gain `"villager"` in `mover` where that mover reaches
+them. Without a graph, it emits 6b's derived graph unchanged. V adds values (`plaza`, `path`, `villager`) and the member
+`unplaced`, and changes no member (S-V-3).
+
+**No migration later:** 7a keeps the node, port and edge ids, and adds `auto`, the connector types, `seconds` and `risk`.
+
+### 6. Villager rules on flat ground
+
+**The kit's `villager` mover is a conservative flat subset.**
+- It is the player walk graph without ladders, scaffolding or bubble columns, without falls over 1, and with only wooden doors
+  passable (fence gates and trapdoors count as closed).
+- **The in-game behavioural test (gate item 4) is the authority on 26.3.** A disagreement with it is a kit finding.
+
+**New findings.** They are warnings in the checker and S7 bars here. They continue at M22, since SETTLEMENTS §11 reserves
+M15-M21.
+- **`M2:villager`:** every dwelling, job, trading_hall or farm lot reaches the bell node from its entrance.
+- **M22:** the 5x5 bell area is one y, standable and 2 clear, with a 3x3x3 golem space within 8 of the bell.
+- **M23:** the trading-hall lot's entrance is within 12 of the bell anchor, as horizontal Euclidean distance.
+- **M24:** a farm lot's rect is within 2 of surveyed surface water. With no water in the claim it is only a note, and
+  `water: null` tells the caller to ask the design for its own water.
+
+The layout makes these hold by construction:
+- the trading hall fronts the square;
+- farms score `near_water`;
+- the bell area is reserved before props.
+
+The checker verifies the result regardless.
+
+### 7. Gate (slice tier, $0)
+
+**Evidence** goes to `artifacts/gate6c-v/<item>.json` and `REPORT.md`, written by the driver `tools/gate6cv.mjs` (added to the
+impact map). The scenarios run through 6b's `tools/scenarios.mjs`, phase `6c-v`. `spend.json` must read $0.00.
+
+**S7, `scenarios/s7_flat_village.json`:**
+- **Fixture:** found by `find-site s7` on the pinned seed. It needs relief of at most 2 over at least 85% of a 112x112 claim,
+  surface water inside the claim's outer 16-cell band (so M24 is gated), and no village within the claim + 64. Spawn is desert
+  and warm ocean, so the search goes outward with `center`/`stopAt`. If nothing qualifies within 4096, the coordinator pins a
+  second seed.
+- **Flat variant:** superflat, for E-flat.
+- **Program:** 10 lots, Steward-shaped:
+  - a landmark hall (L) and a trading hall (M);
+  - 4 cottages (S, `dwelling`);
+  - a smithy and a bakery (`job`);
+  - an inn (M);
+  - a farm (M, `farm`).
+- **Bible:** a fixture bible whose `path` and `foundation` aren't dirt path or cobblestone.
+- **Lot entries:** free variants of `cabin`, `tavern` and `tower`, sized to each lot and pinned as `entry@version`.
+
+**Bars,** on the realised world re-surveyed through 6b's ARWD path:
+
+| # | Check | Bar |
+|---|---|---|
+| 1 | Plan report | 0 errors; no M1-M4; `M2:villager` and M22-M24 clean |
+| 2 | Reachability, `player` | 100% of nodes (lot entrances, plaza, bell, `entrance`); 0 unreachable lot entrances |
+| 3 | Reachability, `villager` (kit) | 100% of dwelling, job, trading-hall and farm lots reach the bell |
+| 4 | Door to street | for every placed lot, a walk path from its **door cell** to a street or square walk cell over approach and lane cells, each a role block, its shape variant, or the street surface. The door cell is the placed site's entrance anchor (the blueprint's, transformed by the placement, read through DevBridge). 100% |
+| 5 | Lot fronts | written `minecraft:dirt_path` or `minecraft:cobblestone` cells in the **front zone** = 0. The front zone is the lot's front edge row ±1 (the apron) plus the approach and lane cells. Only cells that differ from the before-dump count, so natural cobble is excluded |
+| 6 | Villager rules | M22, M23 and M24 hold on the realised world |
+| 7 | Props | the realised counts per kind equal the plan's; every prop cell supported (M3); 0 prop cells in lot boxes, walk cells, the bell area or golem space |
+| 8 | Safety | M4 0; M5 dark spawnable share under 1% of walk area |
+| 9 | Palette | role adherence at least 0.9 |
+| 10 | Exactness | E-flat 0 (flat variant); E-normal all classified, at most 0.01% of written cells |
+| 11 | Determinism | IR sha identical over 3 plans; tile shas for 1 and 4 workers equal a committed `scenarios/goldens/s7.json` (macOS and Linux CI) |
+| 12 | MSPT | Architect's own CPU per placement tick at most 50 ms; the whole tick recorded |
+| 13 | Spend | $0.00 |
+| 14 | Gallery | Noah approves this run's `evidence.sha` (6b §8.4; one private page "Architect 6c-V gallery") |
+
+**Gate items:**
+1. **Unit and property tests (no game).**
+   - **Layout:** 500 seeded synthetic flat claims with random lot lists. No overlap; inside the margin; gaps; fronting; lanes
+     outside lot boxes and keep-out; `unplaced` exact; deterministic.
+   - **VillageLayout parity:** on 3 grids and spec lists exported once from Steward's `VillageLayoutTest` (committed JSON),
+     `street` places at least as many lots.
+   - **Props:** each prop's guarantees.
+   - **The villager mover:** a step of 2 blocks; a ladder isn't used; a wooden door passes; a fence gate blocks.
+   - **The `lots` type:** refused in design params; bad id, duplicate, size and over-40 refused.
+   - **Schema:** `siteplan.json` validates against the widened schema.
+   - **Goldens:** `mega_bench.golden.json` and S1's committed tile-sha golden are **unchanged** (IR shas change with
+     `kitVersion`, so the bar is on tiles).
+2. **Broken variants**, each caught on its named part:
+
+   | Variant | Caught by |
+   |---|---|
+   | a lot with no lane | M2 |
+   | the trading hall at 20 | M23 |
+   | a prop in the bell area | M22 |
+   | a farm at 10 from water | M24 |
+   | a lane into a lot box | M1 error |
+   | a lane across keep-out | plan refusal |
+
+3. **S7:** the natural run (bars 1-12) and the flat variant (bar 10).
+4. **Behavioural villager test.** A new DevBridge hook, `dev.nav.villager {from, to}`, spawns a no-AI villager with
+   `FOLLOW_RANGE` raised over the claim, runs vanilla `PathNavigation.createPath(to, 0)`, returns `canReach` and the node
+   count, and discards the villager.
+   - **Bar:** 100% of bar 3's lots reach the bell from their door cell.
+   - **Range control:** a straight 100-cell flat path is found first, so a failure means "not walkable", not "out of range".
+   - **Negative control** (a fixture variant): a cottage raised 3 with only a ladder is unreachable for both the kit mover and
+     vanilla.
+5. **Protected area.** A rect over a third of the claim is marked through 0c's API for the plan's owner.
+   - The plan routes around it, and realise writes 0 cells in it (ARWD diff).
+   - A plan made before the mark and realised after it refuses with 0c's typed reason, writing nothing.
+6. **Steward flow on 0a's sim:**
+   1. `Regions.plan(flat_village, lots)` from the `lantern_shore` card's program at Steward's S/M/L sizes;
+   2. a sim massingFirst group over the lot ids;
+   3. `fitToLot`;
+   4. `realise(lotEntries)`;
+   5. one exact `Regions.remove`.
+
+   A deliberately oversized lot comes back in `unplaced`.
+7. **Regressions (the slice tier).** `quick` plus the impact rows for:
+   - the kit region code: 6a-staged, 6a-inv3, 4e-megalite;
+   - the sidecar plan path: the sim suites;
+   - the API: apijars, and api-compat against the unchanged 0.15.0, 0.14.0 and 0.13.0 apitest jars plus the 0.15.0 surface.
+
+   Also S1's run bars, and the 6b fixtures' `expected.json`, unchanged. **Not `engine`:** no realise, journal or streaming code
+   changes, and the format-1 golden is the proof.
+8. **gate-verifier (slice).** It reviews the diff against this contract, recomputes S7's evidence sha, and re-runs items 1, 4
+   and 5.
+9. **Noah's approval** (bar 14). **S7 is green only when it is approved.**
+
+### 8. API 1.13.0 (binary compatible)
+
+- `VERSION = "1.13.0"`, with the usual rules (old constructors kept, default-throwing methods, enums appended).
+- **No new records or methods.** V travels in the program id and `params`, `LotSpec.ext`, `RegionPlan.notes` and
+  `siteplan.json`.
+- **Features:** `flatVillage`, `regionGraph`, `villagerMover`, `planKeepOut`.
+- **Protocol 2, additive:** `region.plan.keepOut`; the snapshot feature `region.keepOut`; the kit CLI's `plan --keep-out <json>`.
+- **Behaviour changes:**
+  1. A plan carrying `graph` refuses `PLAN_STALE` on older mods.
+  2. `region.plan` sends the owner's protected areas. Programs that don't read `keepOut` give unchanged tiles.
+
+### 9. How Steward calls it
+
+**Patron, flat or as-is card, flat claim:**
+1. `Regions.plan("flat_village", params)`, where `params.lots` is the card program expanded exactly as `program.specs()` does
+   today. **No Claude call.** The previews and `unplaced` go to the card screen.
+2. Design each placed lot as today: a massing-first group keyed by lot id, with 0b's copies.
+3. `fitToLot` with the default `CentreOn.ENTRANCE`.
+4. `realise(lotEntries)`.
+
+`Regions.remove` is the undo. Per-lot `Sites` deltas evolve lots until 6d.
+
+**Everything else stays on today's path:** Supplied, Hardcore, additions, and sculpted sites (`Regions.design`).
+
+### 10. C12: retiring VillageLayout later (nothing retires in V)
+
+- **V keeps the village adoptable.** The `street` layout is VillageLayout's geometry, lot ids are the caller's, and graph ids are
+  stable, so a standing VillageLayout village is a valid `flat_village` shape. The mapping is recorded in `kit/REGIONS.md`.
+- **The joint 7a/6d gate adds `Regions.adopt`.** It makes the standing sites a region record **without writing a cell**: the
+  lots point at the existing site ids, the street at its road site, and the graph comes from the layout. Then the gate runs a
+  6d addition (a lot, or the square), a 6d `applyDelta` on one lot, and one exact `Regions.remove` of everything.
+- **Steward migrates on load,** and falls back to the legacy path on a refusal. It deletes VillageLayout only after that gate,
+  and once region survival covers Supplied and Hardcore.
+
+### 11. Build order
+
+1. Archive the 0.15.0 apitest jar.
+2. Kit: the `lots` type, the components, the program and its roles, `graph`, the siteplan widening, the villager mover, M22-M24,
+   the variants and goldens.
+3. Sidecar: `keepOut`.
+4. Mod: the `keepOut` fill, the features, `dev.nav.villager`.
+5. S7: `find-site`, the scenario file, the entries, the runs, the gallery, then the verifier.
+
+**Size:** this is at the top of "a few hours". If it runs long, the `well` green and the planters move to the next slice; the
+bars stay the same.
+
+### Open questions for Steward
+
+- **S-V-1. Lot input.** Is `params.lots` (your `LotSpec` plus `villager`) right? Will you send `villager` per lot from the
+  card's roles, or should Architect infer it from `type`?
+- **S-V-2. A bell.** Should V place a bell (which creates the meeting POI and changes villager behaviour), or only reserve the
+  anchor? The draft does the anchor only.
+- **S-V-3. `siteplan.json` values.** Can your reader take `plaza`, `path`, `villager` in `mover`, and `unplaced` under format 1?
+  Or do you want an opt-in format 2?
+- **S-V-4. Scope.** Is it OK that V is for new Patron flat settlements only, while Supplied, Hardcore and additions stay on
+  VillageLayout until region survival and 6d?
+- **S-V-5. Unplaced lots.** List them and continue (the default, as VillageLayout does), or fail by default when a landmark
+  doesn't fit?
+
+### Open questions for Noah
+
+- **N-V-1. The look.** The defaults are a square, 2-wide gravel lanes, lamps on the lanes and at the square, benches, planters
+  and a dry well (a cauldron). Is there anything you don't want?
+- **N-V-2. The gallery's buildings** are free kit variants (cabin, tavern, tower) at $0, not Claude designs. Is that fine for
+  judging the layout?
+- **N-V-3. Survival.** V is Patron-only until regions get the survival rule (natural cut and fill free; street, lanes and props
+  as construction sites with a BOM, C16). Should region survival come right after V?
+
+### Deferred
+
+- **To 7a:**
+  - door-aligned lanes from the real fits (the link pass);
+  - curved or branching streets, several squares, districts;
+  - `auto` routing, connectors, `seconds`/`risk`, `nav.json`;
+  - promoting the villager mover;
+  - the `golem` and `steward` movers;
+  - bible-styled props.
+- **To 6d:** additions to a realised village (VillageLayout's `streetZ` and `xLo`/`xHi`), and per-lot deltas inside a region.
+- **To the C12 gate:** `Regions.adopt`, and VillageLayout's retirement.
+- **To region survival (N4/C16):** Supplied and Hardcore. **To a fluids slice:** wells and channels with water sources.
+- **To a paid slice:** `flat_village` in the pick catalogue, with 6b's pick accuracy re-run.
+
+## Coordinator decisions on the 0b, 0c and V drafts (2026-10-10; provisional where Noah may override)
+
+- **Order and versions:** 0a, 0b and 0c build in parallel. They merge in order 0a (1.10.0), 0b (1.11.0), 0c (1.12.0), then V
+  (1.13.0). If the merge order changes, the API minor follows it. SETTLEMENTS.md's later numbers (7a, 7b, ...) shift and are
+  updated as slices land.
+- **0b C7 benchmark:** both arms (unique and repeat-heavy) plus the C13 smoke run. Expected ~$24, hard cap **$35** on Noah's
+  claude login (confirmed by Noah 2026-10-10). The variation bar is as drafted.
+- **0c:** survival roads (C16) split into slice **0d** if they overrun. On survival roads, a `dirt_path` laid on grass is free
+  (shovel-equivalent), and other written cells cost their item.
+- **V:** Patron-only scope accepted for now. The default look is the drafted roles (gravel path, stone-brick foundation).
+  Free kit variants are fine for the S7 gallery. Region survival is scheduled after V (Noah's survival rule: terrain free,
+  connectors and buildings cost materials).
