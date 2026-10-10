@@ -124,6 +124,7 @@ async function unit() {
   check(all(scCase(/derivation COPY rebuilds byte-identically/, 'copies.test.ts')), "item 4: a copy's recipe rebuilds it byte-identically from sourceVersion; a COPY entry refuses polish (VERSION_REFUSED copy)");
   check(all(scCase(/\(0b\) a player variant records derivation VARIANT/, 'polish.test.ts')), 'item 4: a player variant writes derivation VARIANT and variantOfVersion; derivation survives a polish of a VARIANT entry');
   check(all(scCase(/every refusal detail; base_moved/, 'versionof.test.ts')), 'item 4: a COPY entry refuses versionOf (VERSION_REFUSED copy)');
+  check(all(scCase(/a re-skin writes RESKIN, a remix writes none/, 'copies.test.ts')), 'item 4: a re-skin writes derivation RESKIN; a remix writes none');
   check(gradle.code === 0, 'item 4: Library.Entry exposes derivation and variantOfVersion (Wire0bTest)');
   flush('derivation');
   // item 6: C2 and C8

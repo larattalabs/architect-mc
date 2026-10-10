@@ -8,7 +8,7 @@ import { execFileSync } from 'node:child_process';
 import { afterEach, describe, expect, it } from 'vitest';
 import { loadConfig, type Config } from '../src/config.js';
 import { memoryLogger } from '../src/context.js';
-import { GroupRequest, type Outbound } from '../src/protocol.js';
+import { DesignRequest, GroupRequest, type Outbound } from '../src/protocol.js';
 import { Sidecar } from '../src/sidecar.js';
 import { SimDesigner } from '../src/sim.js';
 import { Store } from '../src/store.js';
@@ -258,4 +258,18 @@ describe.skipIf(!hasKit)('copies in a group (sim backend, real kit)', () => {
     const c = h.sc.estimates.mix({ originals: 0, adapted: 0, copies: 0, newBible: false, massingFirst: false, reportCritique: false, changes: 1 }, ctx);
     expect(c.byKind.change).toMatchObject({ usdLow: 0.4, usdHigh: 1.2, count: 1 });
   }, 30_000);
+
+  it('derivation: a re-skin writes RESKIN, a remix writes none', async () => {
+    h = await harness();
+    const g = h.sc.groups.create(gr({ items: [item('a')] }));
+    await groupDone(h, g.id);
+    const a = h.sc.groups.get(g.id)!.items[0]!.entryId!;
+    const r = h.sc.reskins.request('cherry', undefined, { entries: [a] });
+    await until(() => h!.sc.reskins.get(r.id)!.status !== 'building', 60_000);
+    const re = h.sc.reskins.get(r.id)!.entries[0]!;
+    expect(readEntry(h, re)).toMatchObject({ variantOf: a, variantOfVersion: 1, derivation: { source: a, sourceVersion: 1, kind: 'reskin', recipe: { bible: { id: 'cherry' } } } });
+    const d = h.sc.requestDesign(DesignRequest.parse(request({ type: 'cabin', remix: a, maxSize: { x: 64, y: 64, z: 64 } })));
+    await until(() => ['done', 'failed'].includes(h!.sc.designs.get(d.id)!.status), 60_000);
+    expect(readEntry(h, h.sc.designs.get(d.id)!.blueprintId!).derivation).toBeUndefined();
+  }, 120_000);
 });
