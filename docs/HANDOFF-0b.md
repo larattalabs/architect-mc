@@ -16,6 +16,13 @@ Delete this file when the gate passes.
    exists, the jar is built from a clean checkout of the tag (not from this branch) into `artifacts/gate6c0b/v0130/`.
 4. Merge policy (coordinator, 2026-10-10): agents can't push to main. When the slice tier and the gate-verifier pass, push
    `slice/0b` and report "ready to merge"; the coordinator merges, tags and publishes.
+5. slice/0a (1.10.0, in progress) was merged into slice/0b early (2026-10-10) so the 1.11.0 Java surface builds on 0a's
+   types; when 0a lands on main, origin/main is merged again.
+6. Item 2's "in game" fit check is a mod unit test (MirrorFitTest) of LotFitting.fit, the function fitToLot and
+   fitMassingToLot both run, over the copy stage's own recipe for every kit example (kit/tools/mirror-fit-fixture.mjs), on
+   4 street sides x 3 lot sizes. 0a's fitMassingToLot was not implemented yet when this was built.
+7. The §6 bench drives the claude-login sidecar over the protocol (tools/bench6c0b.mjs) without a game: no placement on
+   pad lots (placement is $0 and does not change the measured figures), and the C13 smoke runs without a site.
 3. The `slice` tier runner is not on main yet (main has quick/regress/engine). Use it if it lands before the gate; otherwise
    the existing chains.
 
@@ -36,11 +43,14 @@ Independent of 0a (do first):
 
 After 0a merges (merge origin/main first):
 
-- [ ] Java API 1.11.0 records/enums (after 0a's: ArchitectRefused.detail, Reasons, GroupRequest after opKey), promoteCopy,
+- [x] Java API 1.11.0 records/enums (after 0a's: ArchitectRefused.detail, Reasons, GroupRequest after opKey), promoteCopy,
       versionOf + the site capture, Estimate.Kind SMALL/CHANGE, smallOriginals
-- [ ] Breakdown COPY stage, estimates (COPY real, SMALL, CHANGE), sim costs for SMALL
-- [ ] gate driver tools/gate6c0b.mjs items 1-8; slice run; gate-verifier
-- [ ] §6 benchmark (paid, claude login, cap $35, spend.json before each paid step)
+- [x] Breakdown COPY stage, estimates (COPY real, SMALL, CHANGE), sim costs for SMALL
+- [ ] the version bump (ArchitectApi.VERSION 1.11.0, mod_version 0.14.0) after 0a's 1.10.0 lands
+- [ ] api-compat against the 0.13.0 / 0.12.0 / 0.11.0 apitest jars (0.13.0 jar from the v0.13.0 tag)
+- [x] gate driver tools/gate6c0b.mjs (unit: items 1-4, 6, 7 offline: PASS 2026-10-10; ingame: items 5, 7)
+- [ ] ingame PASS; slice run; gate-verifier
+- [ ] §6 benchmark (tools/bench6c0b.mjs: paid, claude login, cap $35, spent + step cap <= $35 before each paid step)
 
 ## Steward's review (folded in)
 
