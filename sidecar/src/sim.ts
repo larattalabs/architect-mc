@@ -18,6 +18,7 @@
 // example's size). A detail pass builds the type's design example with --massing, so the example pairs conform.
 import fs from 'node:fs';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { loadSdk } from './claude/sdk.js';
 import { zeroCost } from './jobs/cost.js';
 import { checkDesign, designBaseId, freeLibraryId, isFinalDesign, KIT, renderPreviews, withDesignId } from './designs.js';
@@ -81,6 +82,146 @@ export function simMassingSource(kitDir: string, type: string): string | undefin
   for (const f of [`${type}_massing.mjs`, `${type}.mjs`, 'cabin_massing.mjs', 'cabin.mjs']) if (fs.existsSync(path.join(dir, f))) return path.join(dir, f);
   const any = fs.existsSync(dir) ? fs.readdirSync(dir).filter((f) => f.endsWith('.mjs')).sort()[0] : undefined;
   return any ? path.join(dir, any) : undefined;
+}
+
+// ---- (6c 0a) fitting the request's maxSize ------------------------------------------------------------------
+
+type Size3 = { x: number; y: number; z: number };
+type ParamSpec = { type: string; min?: number; max?: number; default?: unknown; options?: unknown[] };
+interface Built {
+  size: Size3;
+  front?: string;
+  anchors?: { entrance?: { x: number; y: number; z: number; yaw?: number }; spawn?: { x: number; y: number; z: number; yaw?: number } };
+}
+interface KitModule {
+  params?: Record<string, ParamSpec>;
+  default: (values?: Record<string, unknown>) => Built;
+}
+const fits = (s: Size3, m: Size3) => s.x <= m.x && s.y <= m.y && s.z <= m.z;
+
+async function loadKitModule(file: string): Promise<KitModule> {
+  // a fresh copy each time is not needed: the kit examples are fixed for the sidecar's life
+  return (await import(pathToFileURL(file).href)) as KitModule;
+}
+
+/** Every combination of a design's params (ints over their range, bools both ways, enums their options), defaults first. */
+function paramCombos(params: Record<string, ParamSpec>): Array<Record<string, unknown>> {
+  let out: Array<Record<string, unknown>> = [{}];
+  for (const [k, sp] of Object.entries(params)) {
+    let vals: unknown[];
+    if (sp.type === 'int' && Number.isInteger(sp.min) && Number.isInteger(sp.max)) vals = Array.from({ length: sp.max! - sp.min! + 1 }, (_, i) => sp.max! - i);
+    else if (sp.type === 'bool') vals = [true, false];
+    else if (sp.type === 'enum' && Array.isArray(sp.options)) vals = sp.options;
+    else vals = [sp.default];
+    vals = [sp.default, ...vals.filter((v) => v !== sp.default)];
+    const next: Array<Record<string, unknown>> = [];
+    for (const o of out) for (const v of vals) next.push({ ...o, [k]: v });
+    out = next.slice(0, 4096);
+  }
+  return out;
+}
+
+/**
+ * (6c 0a) The kit example (and its param values) the sim builds for a request of `type` within `maxSize`: the type's own example
+ * at its defaults when that fits (as before), else the combination of its params with the largest footprint that fits, else the
+ * other examples the same way. Undefined when nothing in the kit fits (the request then fails as before, with the checker's reason).
+ */
+export async function simFit(kitDir: string, type: string, maxSize: Size3 | undefined): Promise<{ src: string; values: Record<string, unknown>; built: Built; changed: boolean } | undefined> {
+  const dir = path.join(kitDir, 'designs');
+  const own = simSource(kitDir, type);
+  const order = [...new Set([...(own ? [own] : []), ...(fs.existsSync(dir) ? fs.readdirSync(dir).filter((f) => f.endsWith('.mjs')).map((f) => f.slice(0, -4)).sort() : [])])];
+  for (const src of order) {
+    let mod: KitModule;
+    try {
+      mod = await loadKitModule(path.join(dir, `${src}.mjs`));
+    } catch {
+      continue;
+    }
+    const defaults = Object.fromEntries(Object.entries(mod.params ?? {}).map(([k, v]) => [k, v.default]));
+    let best: { values: Record<string, unknown>; built: Built; area: number; changes: number } | undefined;
+    for (const combo of paramCombos(mod.params ?? {})) {
+      let built: Built;
+      try {
+        built = mod.default({ ...combo });
+      } catch {
+        continue;
+      }
+      if (maxSize && !fits(built.size, maxSize)) continue;
+      const changes = Object.keys(combo).filter((k) => combo[k] !== defaults[k]).length;
+      if (changes === 0) return { src, values: combo, built, changed: src !== own };
+      const area = built.size.x * built.size.z;
+      if (!best || area > best.area || (area === best.area && changes < best.changes)) best = { values: combo, built, area, changes };
+    }
+    if (best) return { src, values: best.values, built: best.built, changed: true };
+  }
+  return undefined;
+}
+
+/** A design source with its params' defaults (the params block and the build() signature) set to `values`. */
+export function withDefaults(source: string, values: Record<string, unknown>): string {
+  let out = source;
+  for (const [k, v] of Object.entries(values)) {
+    const lit = typeof v === 'string' ? `'${v}'` : String(v);
+    out = out.replace(new RegExp(`(\\b${k}\\s*:\\s*\\{[^}]*?default:\\s*)('[^']*'|-?\\d+|true|false)`), `$1${lit}`);
+    out = out.replace(new RegExp(`(\\b${k}\\s*=\\s*)('[^']*'|-?\\d+|true|false)(\\s*[,}])`), `$1${lit}$3`);
+  }
+  return out;
+}
+
+/** The size of a kit example massing at its defaults (undefined when it can't be built here). */
+async function massingSize(file: string): Promise<Size3 | undefined> {
+  try {
+    return (await loadKitModule(file)).default().size;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * (6c 0a) A stand-in massing for a request the kit's example massings don't fit: one box, as large as the fitted detail (so the
+ * detail conforms: size, front, entrance), under the massing profile. Its source has no params (a redirect changes nothing).
+ */
+export function standInMassing(bp: string, type: string, d: Built): string {
+  const s = d.size;
+  const e = d.anchors?.entrance;
+  const front = (d.front ?? 'south').toLowerCase();
+  const ex = Math.max(1, Math.min(s.x - 2, Math.floor(e?.x ?? s.x / 2)));
+  const ez = Math.max(1, Math.min(s.z - 2, Math.floor(e?.z ?? s.z - 1)));
+  const yaw = e?.yaw ?? (front === 'north' ? 0 : front === 'east' ? 270 : front === 'west' ? 90 : 180);
+  const h = Math.max(3, s.y - 1);
+  // the box stops one row short of the entrance (the entrance and the spawn stand outside it, as the detail's do); the door faces it
+  const box =
+    front === 'south' ? [0, 0, 0, s.x - 1, h, Math.max(2, ez - 1)]
+    : front === 'north' ? [0, 0, Math.min(s.z - 3, ez + 1), s.x - 1, h, s.z - 1]
+    : front === 'east' ? [0, 0, 0, Math.max(2, ex - 1), h, s.z - 1]
+    : [Math.min(s.x - 3, ex + 1), 0, 0, s.x - 1, h, s.z - 1];
+  const door = front === 'east' || front === 'west' ? [ez, 1] : [ex, 1];
+  // the path from the door to the template's edge (the template's extents are the declared size)
+  const path0 =
+    front === 'south' ? [Math.max(0, ex - 1), box[5]! + 1, Math.min(s.x - 1, ex + 1), s.z - 1]
+    : front === 'north' ? [Math.max(0, ex - 1), 0, Math.min(s.x - 1, ex + 1), box[2]! - 1]
+    : front === 'east' ? [box[3]! + 1, Math.max(0, ez - 1), s.x - 1, Math.min(s.z - 1, ez + 1)]
+    : [0, Math.max(0, ez - 1), box[0]! - 1, Math.min(s.z - 1, ez + 1)];
+  const sp = d.anchors?.spawn;
+  const sx = Math.max(0, Math.min(s.x - 1, Math.floor(sp?.x ?? ex)));
+  const sz = Math.max(0, Math.min(s.z - 1, Math.floor(sp?.z ?? s.z - 1)));
+  return `// A stand-in massing (the sim, 6c 0a): one box the size of the fitted kit example, for a request its example massings exceed.
+import { Blueprint, PALETTES } from '../lib/kit.mjs';
+import { massing } from '../lib/massing.mjs';
+
+export const id = '${bp}';
+
+export default function build({ palette: p = PALETTES.rustic } = {}) {
+  const bp = new Blueprint({ id, name: 'Stand-in massing', type: '${type}', size: [${s.x}, ${s.y}, ${s.z}], palette: p, front: '${front}' });
+  const m = massing(bp);
+  m.mass('main', [${box.join(', ')}]);
+  m.opening('main', '${front}', [${door.join(', ')}], [1, 2]);
+  bp.part('path', () => bp.floor(${path0.join(', ')}, 0, p.path));
+  bp.spot('entrance', ${ex}, ${ez}, ${yaw});
+  bp.spot('spawn', ${sx}, ${sz}, ${yaw});
+  return bp;
+}
+`;
 }
 
 /** A redirect in the sim: bump the first int param's default (if it can grow), else turn the first gable roof into a hip. */
@@ -264,8 +405,10 @@ export class SimDesigner implements Designer {
     // (5b) a polish: the polish engine with scripted turns
     if (d.kind === 'polish') return sc.polishes.run(id, this.polishBackend(id, r));
     const req = d.request;
-    const src = simSource(cfg.kitDir, req.type);
+    let src = simSource(cfg.kitDir, req.type);
     if (!src) throw new Error(`the sim copies a kit example, but ${path.join(cfg.kitDir, 'designs')} has neither ${req.type}.mjs nor cabin.mjs`);
+    // (6c 0a) the example (and its params) that fits the request's max size (a small lot: a smaller cabin, a stand-in massing)
+    const fit = await simFit(cfg.kitDir, req.type, req.maxSize);
     // (4c) a massing job builds under its massing id
     const bp = d.massing ? d.massing.id : freeLibraryId(cfg.libraryDir, designBaseId(req), new Set([...this.taken].filter(([k]) => k !== id).map(([, v]) => v)));
     if (!d.massing) this.taken.set(id, bp);
@@ -330,18 +473,28 @@ export class SimDesigner implements Designer {
         note = r2.change;
       } else {
         const ex = simMassingSource(cfg.kitDir, req.type);
-        source = withDesignId(fs.readFileSync(ex ?? path.join(scratch, KIT, 'designs', `${src}.mjs`), 'utf8'), bp);
-        what = ex ? `the kit example massing ${path.basename(ex, '.mjs')}` : `the kit example ${src} (the kit has no example massing)`;
-        if (!ex) note = 'no example massing in the kit';
+        const exSize = ex ? await massingSize(ex) : undefined;
+        if (fit && req.maxSize && (!ex || (exSize && !fits(exSize, req.maxSize)))) {
+          // (6c 0a) the example massing exceeds the max size: a one-box stand-in the size of the fitted detail
+          source = standInMassing(bp, req.type, fit.built);
+          what = `a stand-in massing ${fit.built.size.x}x${fit.built.size.y}x${fit.built.size.z} (the kit's example massing exceeds ${req.maxSize.x}x${req.maxSize.y}x${req.maxSize.z})`;
+          note = 'a stand-in massing (the example massing is over the max size)';
+        } else {
+          source = withDesignId(fs.readFileSync(ex ?? path.join(scratch, KIT, 'designs', `${src}.mjs`), 'utf8'), bp);
+          what = ex ? `the kit example massing ${path.basename(ex, '.mjs')}` : `the kit example ${src} (the kit has no example massing)`;
+          if (!ex) note = 'no example massing in the kit';
+        }
       }
       // the massing profile has no type rules: the requested type is written in
       source = source.replace(/type:\s*'(?!(?:int|bool|enum)')[a-z0-9_]+'/, `type: '${req.type}'`);
     } else {
-      // the "design": the example under the new id (an open type and its profile written in)
+      // the "design": the example under the new id (an open type and its profile written in); (6c 0a) fitted to the max size
+      if (fit?.changed) src = fit.src;
       source = withDesignId(fs.readFileSync(path.join(scratch, KIT, 'designs', `${src}.mjs`), 'utf8'), bp);
+      if (fit?.changed) source = withDefaults(source, fit.values);
       if (open) source = source.replace(new RegExp(`type: '${src}'`), `type: '${req.type}', profile: ${JSON.stringify(req.profile ?? ['door', 'lit', 'no_floating'])}`);
-      what = `the kit example ${src}`;
-      if (src !== req.type) note = `copied ${src} (no ${req.type} example)`;
+      what = `the kit example ${src}${fit?.changed && Object.keys(fit.values).length ? ` (${Object.entries(fit.values).map(([k, v]) => `${k} ${v}`).join(', ')}: fitted to the max size)` : ''}`;
+      if (src !== req.type) note = `copied ${src} (no ${req.type} example${fit?.changed ? ' that fits' : ''})`;
     }
     fs.writeFileSync(design, source);
     sc.designStep(id, 'checking', `checking the ${d.massing ? 'massing' : 'design'} (simulated designer)`);
