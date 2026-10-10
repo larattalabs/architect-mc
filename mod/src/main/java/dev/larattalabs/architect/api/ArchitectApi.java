@@ -78,6 +78,8 @@ public interface ArchitectApi {
 	 * ({@code region.check}), {@code "regionPreview"} ({@code region.preview}), {@code "regionDesign"} ({@code region.design}),
 	 * {@code "irFormat2"} ({@code ir.format2}), {@code "regionBlobs"} ({@code region.blobs}) and {@code "regionGhost"} (preview
 	 * tiles: with {@code region.preview}).
+	 * Since 1.12.0, a 0c helper adds {@code "extendInfo"} (its {@code group.extend} ack carries the spend and soft fraction that
+	 * {@link Designs#extend} reports; without it the cached group's are used).
 	 */
 	Set<String> features();
 }

@@ -55,9 +55,18 @@ public interface Designs {
 
 	/**
 	 * Raises a group's hard budget to {@code budgetUsd} (above what it spent). A group paused at its soft budget stays paused:
-	 * {@link #resumeGroup} next. Since 1.2.0.
+	 * {@link #resumeGroup} next. Since 1.2.0. Since 1.12.0, {@link #extend} also says whether the new budget's soft line is
+	 * still under the spend (the group pauses again at once) and the smallest budget that isn't.
 	 */
 	CompletableFuture<Void> extendGroup(String groupId, double budgetUsd);
+
+	/**
+	 * {@link #extendGroup}, with the re-pause warning ({@link Extension}, docs/CONTRACT.md phase 6c slice 0c §6). The extend
+	 * happens even when {@code pausesAgain}. Since 1.12.0.
+	 */
+	default CompletableFuture<Extension> extend(String groupId, double budgetUsd) {
+		throw new UnsupportedOperationException("Designs.extend needs Architect API 1.12.0");
+	}
 
 	/** Resumes a group paused at its soft budget ({@link Group.Status#PAUSED_BUDGET}). Since 1.2.0. */
 	CompletableFuture<Void> resumeGroup(String groupId);

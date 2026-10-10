@@ -488,7 +488,8 @@ export class Sidecar {
         return { groupId: this.groups.cancel(msg.groupId).id };
       case 'group.extend': {
         const g = this.groups.extend(msg.groupId, msg.budgetUsd);
-        return { groupId: g.id, budgetUsd: g.budgetUsd };
+        // (6c 0c §6, feature extendInfo) the spend and soft fraction, so the mod can say whether the group pauses again
+        return { groupId: g.id, budgetUsd: g.budgetUsd, spentUsd: g.cost.usd, softBudgetFraction: g.softBudgetFraction };
       }
       case 'group.resume':
         return { groupId: this.groups.resume(msg.groupId).id, status: this.groups.get(msg.groupId)?.status };

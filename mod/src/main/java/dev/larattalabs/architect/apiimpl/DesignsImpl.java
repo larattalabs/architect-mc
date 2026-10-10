@@ -688,6 +688,20 @@ final class DesignsImpl implements Designs {
 		return ask("design.groups", "design groups", m).thenApply(r -> null);
 	}
 
+	/** 6c 0c §6: the extend with its re-pause warning; an older helper's ack lacks the spend, so the cached group's is used. */
+	@Override
+	public CompletableFuture<dev.larattalabs.architect.api.Extension> extend(String groupId, double budgetUsd) {
+		JsonObject m = msg("group.extend");
+		m.addProperty("groupId", groupId);
+		m.addProperty("budgetUsd", budgetUsd);
+		return ask("design.groups", "design groups", m).thenApply(r -> {
+			Group cached = group(groupId).orElse(null);
+			double spent = r.has("spentUsd") ? r.get("spentUsd").getAsDouble() : cached == null ? 0 : cached.cost().usd();
+			double fraction = r.has("softBudgetFraction") ? r.get("softBudgetFraction").getAsDouble() : cached == null ? 0.8 : cached.softBudgetFraction();
+			return dev.larattalabs.architect.api.Extension.of(cached, budgetUsd, spent, fraction);
+		});
+	}
+
 	@Override
 	public CompletableFuture<Void> resumeGroup(String groupId) {
 		JsonObject m = msg("group.resume");

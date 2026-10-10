@@ -12,7 +12,7 @@ names win). API 1.12.0, mod 0.15.0 (after 0a = 1.10.0 and 0b = 1.11.0). Ports 89
 | §2 minLotSize / recommendedLot | built (String); MassingRef overload waits for 0a's fitMassingToLot | `LotFitting.minSize/recommended`, `MinLotSizeTest` |
 | §3 partial roads | built | `RoadPlan.plan(..., protect, partial)`: per-segment failures, per-run smoothing rounds, spans merged; `RoadSpansTest`. Roads' C17 check is span-local (centre and side columns, lantern posts skipped) |
 | §4 groundHeight | built | `Volume.ground` derived in `VolumeSurvey.encode` (ARVX sha pinned by `GroundHeightTest` from the pre-§4 encoder); `Sample.ground` in `SurveyImpl.ground` (scan down from WORLD_SURFACE with the volume's classOf; a journal-owned LOG/LEAVES/PLANT counts) |
-| §6 extend warning | todo | |
+| §6 extend warning | built | `Extension.of/minBudgetUsd`, `Designs.extend`; sidecar ack gains spentUsd + softBudgetFraction, feature `extendInfo`; `ExtensionTest`, groups.test.ts |
 | §5 FIELD_LIMIT | after 0a (ArchitectRefused) and 0b (its bounded fields) | |
 | §10 off-thread undo planning | after 0a (own-time percentiles), 2 h box | no journal/** change left on the branch if no-go |
 | §7 C16 survival roads | last; split to `slice/0d` if it overruns | dirt_path on grass free (coordinator) |
