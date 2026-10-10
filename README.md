@@ -550,7 +550,8 @@ their own copy of Minecraft: Java Edition. Architect is not affiliated with Moja
 
 **Credits.** The placement code (terrain fit, entrance approach, ghost, snapshot and restore) and the blueprint kit
 come from [AgentCraft](https://github.com/blendi-remade/agentcraft) by its contributors (MIT; the notice is in
-[LICENSE](LICENSE)). Architect grew out of the building designer in the
+[LICENSE](LICENSE)). The screen kit (the Warm Studio sprites, panels and style tokens) comes bundled in
+[lab-ui](https://github.com/larattalabs/lab-ui), which carries its own MIT licence and NOTICE. Architect grew out of the building designer in the
 [nlaratta/agentcraft](https://github.com/nlaratta/agentcraft) fork and is now a separate mod.
 
 <div align="center">
