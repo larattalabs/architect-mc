@@ -1147,6 +1147,8 @@ export class Blueprint {
     if (this.partNames.length) s.parts = this.partBoxes();
     if (this.profile !== undefined) s.profile = [...this.profile];
     if (this.massing) s.massing = true;
+    // (0b) a mirrored build (lib/mirror.mjs): the axis that flipped
+    if (this.mirrored) s.mirrored = this.mirrored;
     return s;
   }
 }

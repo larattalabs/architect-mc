@@ -72,6 +72,8 @@ test {
 	useJUnitPlatform()
 	// -Darvx.write=true rewrites the ARVX fixtures (src/test/resources/arvx, ArvxTest)
 	systemProperty "arvx.write", providers.systemProperty("arvx.write").getOrElse("false")
+	// -Dmirror.write=true rewrites kit/test/fixtures/mirror-oracle.json (MirrorOracleTest, slice 0b)
+	systemProperty "mirror.write", providers.systemProperty("mirror.write").getOrElse("false")
 	testLogging {
 		events "failed"
 		exceptionFormat "full"
