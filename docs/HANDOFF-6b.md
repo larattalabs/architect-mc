@@ -45,14 +45,13 @@ clients sharing it (load average 15-64):
 ### Outcome (2026-10-10)
 
 - Decision (coordinator, Noah): the spikes are machine load; the MSPT bars judge Architect's own per-tick time. Judged as the
-  placement ticks' wall time it still failed (megalite 86/166 ms, megaA 138/169 ms), so the builder **proposes (pending the
-  coordinator's OK)** the server-thread CPU time (`placementCpuMsMax`, new in `dev.placement.stats`, c717804); whole tick, wall
+  placement ticks' wall time it still failed (megalite 86/166 ms, megaA 138/169 ms), so the builder proposed (coordinator accepted) the server-thread CPU time (`placementCpuMsMax`, new in `dev.placement.stats`, c717804); whole tick, wall
   time, vanilla tick and GC are recorded. Gate scripts changed: gate4e megalite, gate6a megaA, the scenario MSPT row. GATES.md
   belongs to the tiers agent (the coordinator passes the change on).
 - Undo planning fix (7d17d67): fastutil maps in `Journal.planUndo` / `Sections.Planner`. Undo-only on the 6a-made megaA world:
   JFR planning : restoring samples 351 : 311 (6b before 884 : 439, v0.11.2 844 : 570), group-work ticks >= 25 ms about 46 -> 1.
   Wall time stays load-bound (gate runs 195-229 s). Off-thread planning: recorded for 0c.
-- For 0c: the sidecar's 2 s per-tile evaluation limit fails tiles when the machine stalls (065651: region PARTIAL).
+- For slice 0a (coordinator): an evaluation timeout retries with backoff, never fails the tile; no PARTIAL region from timeouts alone.
 - inv3 now tests a path tile over its terrain tile; lot-over-pad undo order is no longer covered on the flat fixture.
 - inv3 fix (7730153): kit 0.12 pads on flat ground write no cell, so no lot covers a pad; the step uses a tile pair.
 - Re-runs: 20261010-055352-engine (11 steps on 7730153: unit-mod, sim-jobs/sets/massing, 4e-orders, 4e-crash, 6a-crash,
@@ -63,7 +62,7 @@ clients sharing it (load average 15-64):
   undo 211 s with Architect CPU max 19.7 ms (PASS), but realise Architect CPU max **51.5 ms** (bar 50; wall 71.0 ms, whole tick
   71.9, p99 22.7, vanilla 32.8): FAIL by 1.5 ms. The three c717804 megaA runs give realise CPU max 37.1 (own worktree), 42.3
   and 51.5 ms; on Apple's mixed P/E cores a descheduled-to-E-core tick costs more CPU time for the same work, so the CPU figure
-  is not load-free either. Open: the coordinator decides (re-run on a quieter moment, or accept with the caveat).
+  is not load-free either. Accepted by the coordinator with the caveat (2026-10-10).
 
 ## The 0.11.0 jars (build step 1)
 

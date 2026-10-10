@@ -6299,7 +6299,7 @@ programs: `crater_works`, `rift_city`, `walled_hill`, `sky_isle`, `floating_isla
   247 s / 82 ms, 6b 256 s / 118 ms), the spikes in the vanilla tick and in descheduled or GC-paused placement ticks, and no
   6b-only frame on any thread in JFR. Not a 6b regression (the coordinator and Noah accepted this, and set the MSPT bars to
   judge Architect's own per-tick time). Judged as the placement ticks' wall time (`placementMsMax`) they still failed under
-  the load (megalite 86 and 166 ms, megaA 138 and 169 ms), so **the builder proposes (pending the coordinator's OK)** measuring
+  the load (megalite 86 and 166 ms, megaA 138 and 169 ms), so the builder proposed, and the coordinator accepted, measuring
   it in CPU time:
   `dev.placement.stats` adds `placementCpuMsMax` / `placementCpuMsMean`, the placement ticks (batches, groups, jobs: writes,
   checks, plan work) in the server thread's CPU time, and megalite, megaA and the scenario MSPT row judge it at 50 ms. The whole
@@ -6308,6 +6308,10 @@ programs: `crater_works`, `rift_city`, `walled_hill`, `sky_isle`, `floating_isla
   max 26.4 ms at 4 ms, group undo 12.9 ms); 6a-megaA (20261010-071231): PLACED, 45.3k cells/s, undo 211 s with Architect CPU
   max 19.7 ms, realise Architect CPU max 51.5 ms (37.1 and 42.3 ms in two other runs; the 065651 run went PARTIAL when two
   tiles passed the sidecar's 2 s evaluation limit during a machine stall). Mixed P/E cores make CPU time load-dependent too.
+  **Accepted by the coordinator (2026-10-10)** with that caveat: the three c717804 megaA realise maxima are 37.1, 42.3 and 51.5 ms
+  of Architect CPU (load average 30-60).
+- **For slice 0a (coordinator):** a tile evaluation that passes the sidecar's 2 s limit retries with backoff instead of failing
+  the tile, and a region never goes PARTIAL for timeouts alone (a busy server stalled two megaA tiles past the limit).
 - **Undo planning (journal).** The group undo's planner (`Journal.planUndo`, `Sections.Planner`) keyed packed positions in
   `java.util.HashMap`: `Long.hashCode` folds a `BlockPos.asLong` so that many positions share a hash, the bins treeify, and one
   section's plan took 50-220 ms in a tick under load (both versions). It now uses fastutil `Long2ObjectOpenHashMap` /
