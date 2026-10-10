@@ -6301,7 +6301,10 @@ programs: `crater_works`, `rift_city`, `walled_hill`, `sky_isle`, `floating_isla
   `dev.placement.stats` adds `placementCpuMsMax` / `placementCpuMsMean`, the placement ticks (batches, groups, jobs: writes,
   checks, plan work) in the server thread's CPU time, and megalite, megaA and the scenario MSPT row judge it at 50 ms. The whole
   tick (max, p99, over 50), the placement ticks' wall time, the vanilla tick (`serverMsptMax`) and GC are recorded, not judged.
-  Bench steps run under whatever load there is (Noah).
+  Bench steps run under whatever load there is (Noah). Re-runs on c717804: 4e-megalite PASS (20261010-065651: Architect CPU
+  max 26.4 ms at 4 ms, group undo 12.9 ms); 6a-megaA (20261010-071231): PLACED, 45.3k cells/s, undo 211 s with Architect CPU
+  max 19.7 ms, realise Architect CPU max 51.5 ms (37.1 and 42.3 ms in two other runs; the 065651 run went PARTIAL when two
+  tiles passed the sidecar's 2 s evaluation limit during a machine stall). Mixed P/E cores make CPU time load-dependent too.
 - **Undo planning (journal).** The group undo's planner (`Journal.planUndo`, `Sections.Planner`) keyed packed positions in
   `java.util.HashMap`: `Long.hashCode` folds a `BlockPos.asLong` so that many positions share a hash, the bins treeify, and one
   section's plan took 50-220 ms in a tick under load (both versions). It now uses fastutil `Long2ObjectOpenHashMap` /

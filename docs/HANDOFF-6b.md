@@ -42,6 +42,27 @@ clients sharing it (load average 15-64):
 - **Undo:** the time goes to the unchanged group-undo planner (`Groups.plan` -> `UndoPlanner` -> `Journal.planUndo`, HashMap
   heavy) and it varies with the box's load; on the same realised world v0.11.2 and 6b cost the same.
 
+### Outcome (2026-10-10)
+
+- Decision (coordinator, Noah): the spikes are machine load. **The MSPT bars judge Architect's own per-tick time**, measured as
+  the placement ticks' server-thread CPU time (`placementCpuMsMax`, new in `dev.placement.stats`, c717804); whole tick, wall
+  time, vanilla tick and GC are recorded. Gate scripts changed: gate4e megalite, gate6a megaA, the scenario MSPT row. GATES.md
+  belongs to the tiers agent (the coordinator passes the change on).
+- Undo planning fix (7d17d67): fastutil maps in `Journal.planUndo` / `Sections.Planner`. Undo-only on the 6a-made megaA world:
+  159 s, max 43 ms (6b before: 256 s / 118 ms; v0.11.2: 247 s / 82 ms). Off-thread planning: recorded for 0c.
+- inv3 fix (7730153): kit 0.12 pads on flat ground write no cell, so no lot covers a pad; the step uses a tile pair.
+- Re-runs: 20261010-055352-engine (11 steps on 7730153: unit-mod, sim-jobs/sets/massing, 4e-orders, 4e-crash, 6a-crash,
+  6a-eflat, 6a-inv3 PASS; megalite and megaA failed on wall time, no CPU figure in that build); 20261010-065651-engine
+  (c717804): 4e-megalite PASS (Architect CPU max 26.4 ms; wall 68 ms; whole tick 195.6 ms); 6a-megaA's MSPT bars PASS
+  (realise CPU max 42.3 ms, undo 217 s CPU max 23.9 ms) but 2 tiles failed the sidecar's 2 s evaluation limit while the box
+  stalled (ticks to 890 ms wall, 194 over 50 ms): region PARTIAL. megaA re-run 20261010-071231-engine: PLACED, 45.3k cells/s,
+  undo 211 s with Architect CPU max 19.7 ms (PASS), but realise Architect CPU max **51.5 ms** (bar 50; wall 71.0 ms, whole tick
+  71.9, p99 22.7, vanilla 32.8): FAIL by 1.5 ms. The three c717804 megaA runs give realise CPU max 37.1 (own worktree), 42.3
+  and 51.5 ms; on Apple's mixed P/E cores a descheduled-to-E-core tick costs more CPU time for the same work, so the CPU figure
+  is not load-free either. Open: the coordinator decides (re-run on a quieter moment, or accept with the caveat).
+
+## The 0.11.0 jars (build step 1)
+
 Built from tag `v0.11.0` (dd622d6) in a temporary worktree `../architect-mc-v0110` (sidecar bundled, `gradlew build -x test`),
 which was removed afterwards. Archived in the main checkout (gitignored `artifacts/`):
 
