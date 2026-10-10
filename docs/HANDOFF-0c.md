@@ -11,7 +11,7 @@ names win). API 1.12.0, mod 0.15.0 (after 0a = 1.10.0 and 0b = 1.11.0). Ports 89
 | §9 C18 owner-tagged entities | built | `Occupancy.ownedBy`; checkSite scan (place, check, batch), both discard loops, delta check + DeltaJob, removalBlockers (remove: requester; group undo: site owner) |
 | §2 minLotSize / recommendedLot | built (String); MassingRef overload waits for 0a's fitMassingToLot | `LotFitting.minSize/recommended`, `MinLotSizeTest` |
 | §3 partial roads | built | `RoadPlan.plan(..., protect, partial)`: per-segment failures, per-run smoothing rounds, spans merged; `RoadSpansTest`. Roads' C17 check is span-local (centre and side columns, lantern posts skipped) |
-| §4 groundHeight | todo | capture the volume sha baseline before touching VolumeSurvey |
+| §4 groundHeight | built | `Volume.ground` derived in `VolumeSurvey.encode` (ARVX sha pinned by `GroundHeightTest` from the pre-§4 encoder); `Sample.ground` in `SurveyImpl.ground` (scan down from WORLD_SURFACE with the volume's classOf; a journal-owned LOG/LEAVES/PLANT counts) |
 | §6 extend warning | todo | |
 | §5 FIELD_LIMIT | after 0a (ArchitectRefused) and 0b (its bounded fields) | |
 | §10 off-thread undo planning | after 0a (own-time percentiles), 2 h box | no journal/** change left on the branch if no-go |
@@ -30,6 +30,11 @@ names win). API 1.12.0, mod 0.15.0 (after 0a = 1.10.0 and 0b = 1.11.0). Ports 89
 - A run shorter than 2 centre cells between skipped spans is left out and noted ("short"), not reported as a span.
 - A partial road's `PlaceResult.skipped` isn't saved with the job; after a restart its notes (and the batch item's message)
   still name the skipped segments.
+
+- `Volume` counts a journal-owned air cell as ground (OWNED, per the contract); `Sample.ground` only sees blocks, so inside a
+  site's box the two can differ (the bar is on a forest box without sites). A snow layer (SNOW class) on a dry column makes
+  `ground` one above `height` (not motion-blocking).
+- `Volume`'s over-16M-columns note is a log line (the record has no notes field).
 
 ## Resume
 

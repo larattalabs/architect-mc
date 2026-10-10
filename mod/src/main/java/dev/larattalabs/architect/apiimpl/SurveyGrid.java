@@ -18,7 +18,11 @@ import org.jspecify.annotations.Nullable;
  */
 public final class SurveyGrid {
 	/** One sampled column. */
-	public record Column(int height, int floor, String top, boolean water, boolean tree, boolean natural) {
+	public record Column(int height, int floor, String top, boolean water, boolean tree, boolean natural, int ground) {
+		/** Without a ground height (it equals {@code height}). */
+		public Column(int height, int floor, String top, boolean water, boolean tree, boolean natural) {
+			this(height, floor, top, water, tree, natural, height);
+		}
 	}
 
 	/** The world, read per chunk. */
@@ -39,6 +43,7 @@ public final class SurveyGrid {
 	final int biomeDepth;
 	private final int[] height;
 	private final int[] floor;
+	private final int[] ground;
 	private final int[] top;
 	private final BitSet water = new BitSet();
 	private final BitSet tree = new BitSet();
@@ -66,10 +71,12 @@ public final class SurveyGrid {
 		biomeDepth = ApiRules.surveyColumns(dBlocks, 4);
 		height = new int[width * depth];
 		floor = new int[width * depth];
+		ground = new int[width * depth];
 		top = new int[width * depth];
 		biome = new int[biomeWidth * biomeDepth];
 		Arrays.fill(height, Sample.MISSING);
 		Arrays.fill(floor, Sample.MISSING);
+		Arrays.fill(ground, Sample.MISSING);
 		Arrays.fill(top, -1);
 		Arrays.fill(biome, -1);
 		missing.set(0, width * depth);
@@ -144,6 +151,7 @@ public final class SurveyGrid {
 			Column c = src.column(colX(idx % width), colZ(idx / width));
 			height[idx] = c.height();
 			floor[idx] = c.floor();
+			ground[idx] = c.ground();
 			top[idx] = blockIds.computeIfAbsent(c.top(), x -> blockIds.size());
 			water.set(idx, c.water());
 			tree.set(idx, c.tree());
@@ -167,7 +175,7 @@ public final class SurveyGrid {
 	public Sample finish(int chunksLoaded) {
 		return new Sample(minX, minZ, maxX, maxZ, resolution, width, depth, height, floor, top, List.copyOf(blockIds.keySet()),
 			Sample.slopes(height, width, depth), water, tree, natural, missing, biomeWidth, biomeDepth, biome, List.copyOf(biomeIds.keySet()),
-			missingChunks, chunksLoaded);
+			missingChunks, chunksLoaded, ground);
 	}
 
 	/** Reads everything at once (tests, small areas). {@code loaded}: whether a chunk can be read. */

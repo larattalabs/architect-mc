@@ -24,14 +24,26 @@ import java.util.Map;
  * <li>{@code water}: water lies above the floor (the top fluid block is water);</li>
  * <li>{@code tree}: logs or leaves stand above the height (or are the top);</li>
  * <li>{@code natural}: the top block is natural terrain (soil, stone, sand, snow, ice, plants, water...), nothing built;</li>
- * <li>{@code biome}: one per 4x4 columns of the area (independent of the resolution), indexes into {@link #biomes()}, -1 missing.</li>
+ * <li>{@code biome}: one per 4x4 columns of the area (independent of the resolution), indexes into {@link #biomes()}, -1 missing;</li>
+ * <li>{@code ground} (1.12.0): the y of the highest cell that isn't air, a fluid, LOG, LEAVES or PLANT (the kit's
+ * {@code voxel_classes.json}, as {@link Survey#volume} classifies): the soil under a tree. Built blocks count, so a roof is
+ * ground (a building's own logs, leaves and plants too). On a dry column without trees it equals {@code height}; under water it
+ * is the bed. The 1.9.0 constructor copies {@code height}.</li>
  * </ul>
  * The arrays are the sample's own: don't change them.
  */
 public record Sample(int minX, int minZ, int maxX, int maxZ, int resolution, int width, int depth, int[] height, int[] floor, int[] top,
 	List<String> blocks, int[] slope, BitSet water, BitSet tree, BitSet natural, BitSet missing, int biomeWidth, int biomeDepth, int[] biome,
-	List<String> biomes, List<long[]> missingChunks, int chunksLoaded) {
+	List<String> biomes, List<long[]> missingChunks, int chunksLoaded, int[] ground) {
 	public static final int MISSING = Integer.MIN_VALUE;
+
+	/** The 1.0 constructor ({@code ground}: a copy of {@code height}). */
+	public Sample(int minX, int minZ, int maxX, int maxZ, int resolution, int width, int depth, int[] height, int[] floor, int[] top,
+		List<String> blocks, int[] slope, BitSet water, BitSet tree, BitSet natural, BitSet missing, int biomeWidth, int biomeDepth, int[] biome,
+		List<String> biomes, List<long[]> missingChunks, int chunksLoaded) {
+		this(minX, minZ, maxX, maxZ, resolution, width, depth, height, floor, top, blocks, slope, water, tree, natural, missing, biomeWidth, biomeDepth,
+			biome, biomes, missingChunks, chunksLoaded, height.clone());
+	}
 	/** The largest ASCII grid {@link #summary()} draws, per side. */
 	public static final int SUMMARY_GRID = 64;
 
@@ -202,6 +214,7 @@ public record Sample(int minX, int minZ, int maxX, int maxZ, int resolution, int
 		o.addProperty("depth", depth);
 		o.add("height", ints(height));
 		o.add("floor", ints(floor));
+		o.add("ground", ints(ground));
 		o.add("top", ints(top));
 		o.add("slope", ints(slope));
 		o.add("water", bits(water));

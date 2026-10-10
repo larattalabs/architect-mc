@@ -82,7 +82,7 @@ public final class SurveyImpl implements Survey {
 			return CompletableFuture.completedFuture(v);
 		}
 		return RegionBridge.put(r.gz(), "region.volume").handle((id, e) -> e != null || id == null ? v : new dev.larattalabs.architect.api.Volume(v.sha(),
-			v.box(), id, v.counts(), v.missingColumns(), v.stats()));
+			v.box(), id, v.counts(), v.missingColumns(), v.stats(), v.ground()));
 	}
 
 	private static void tick(MinecraftServer server) {
@@ -156,7 +156,70 @@ public final class SurveyImpl implements Survey {
 		boolean tree = top.is(BlockTags.LOGS) || top.is(BlockTags.LEAVES)
 			|| withLeaves > h && c.getBlockState(p.set(x, withLeaves, z)).is(BlockTags.LEAVES);
 		String id = BuiltInRegistries.BLOCK.getKey(top.getBlock()).toString();
-		return new SurveyGrid.Column(h, floor, id, water, tree, natural(top, water));
+		return new SurveyGrid.Column(h, floor, id, water, tree, natural(top, water), ground(c, x, z));
+	}
+
+	/** Server thread only: block state -> voxel class (the volume's {@code classOf}). */
+	private static final java.util.IdentityHashMap<BlockState, Byte> CLASSES = new java.util.IdentityHashMap<>();
+
+	/**
+	 * 6c 0c §4: a column's ground: the highest cell (from the highest non-air block, {@code WORLD_SURFACE}) whose voxel class
+	 * isn't air, a fluid, LOG, LEAVES or PLANT, as {@code Volume.ground}; a LOG, LEAVES or PLANT cell a journal entry owns is
+	 * ground (the volume's OWNED). {@link Sample#MISSING} when there is none.
+	 */
+	static int ground(LevelChunk c, int x, int z) {
+		int lx = x & 15;
+		int lz = z & 15;
+		int top = c.getHeight(Heightmap.Types.WORLD_SURFACE, lx, lz);
+		dev.larattalabs.architect.region.volume.VoxelTable table = dev.larattalabs.architect.region.volume.VoxelTable.get();
+		BlockPos.MutableBlockPos p = new BlockPos.MutableBlockPos();
+		String dim = null;
+		for (int y = top; y >= c.getMinY(); y--) {
+			byte k = dev.larattalabs.architect.region.volume.VolumeSurvey.classOf(c.getBlockState(p.set(x, y, z)), table, CLASSES);
+			if (dev.larattalabs.architect.region.volume.VolumeSurvey.groundClass(k)) {
+				return y;
+			}
+			if (k == dev.larattalabs.architect.api.VoxelClass.LOG.ordinal() || k == dev.larattalabs.architect.api.VoxelClass.LEAVES.ordinal()
+				|| k == dev.larattalabs.architect.api.VoxelClass.PLANT.ordinal()) {
+				if (dim == null) {
+					dim = c.getLevel().dimension().identifier().toString();
+				}
+				if (owned(dim, x, y, z)) {
+					return y;
+				}
+			}
+		}
+		return Sample.MISSING;
+	}
+
+	/** Whether an active journal entry (not guard leaves) holds the cell. */
+	private static boolean owned(String dim, int x, int y, int z) {
+		dev.larattalabs.architect.journal.JournalStore store = dev.larattalabs.architect.journal.WorldJournal.storeOrNull();
+		if (store == null) {
+			return false;
+		}
+		long pos = dev.larattalabs.architect.journal.Journal.pos(x, y, z);
+		long key = dev.larattalabs.architect.journal.Sections.key(pos);
+		List<String> ids = store.inSection(dim, key);
+		if (ids.isEmpty()) {
+			return false;
+		}
+		int idx = dev.larattalabs.architect.journal.Sections.index(pos);
+		for (String id : ids) {
+			dev.larattalabs.architect.journal.JournalStore.Meta m = store.meta(id);
+			if (m == null || !m.active() || dev.larattalabs.architect.journal.WorldJournal.LEAVES.equals(m.kind())) {
+				continue;
+			}
+			try {
+				dev.larattalabs.architect.journal.SectionCells sc = store.section(id, key);
+				if (sc != null && sc.has(idx)) {
+					return true;
+				}
+			} catch (java.io.IOException e) {
+				return false;
+			}
+		}
+		return false;
 	}
 
 	/** Natural terrain at the top of a column: soil, stone, sand, snow and ice, logs and leaves, water, lava. */
