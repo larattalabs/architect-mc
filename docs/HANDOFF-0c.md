@@ -13,7 +13,7 @@ names win). API 1.12.0, mod 0.15.0 (after 0a = 1.10.0 and 0b = 1.11.0). Ports 89
 | §3 partial roads | built | `RoadPlan.plan(..., protect, partial)`: per-segment failures, per-run smoothing rounds, spans merged; `RoadSpansTest`. Roads' C17 check is span-local (centre and side columns, lantern posts skipped) |
 | §4 groundHeight | built | `Volume.ground` derived in `VolumeSurvey.encode` (ARVX sha pinned by `GroundHeightTest` from the pre-§4 encoder); `Sample.ground` in `SurveyImpl.ground` (scan down from WORLD_SURFACE with the volume's classOf; a journal-owned LOG/LEAVES/PLANT counts) |
 | §6 extend warning | built | `Extension.of/minBudgetUsd`, `Designs.extend`; sidecar ack gains spentUsd + softBudgetFraction, feature `extendInfo`; `ExtensionTest`, groups.test.ts |
-| §5 FIELD_LIMIT | after 0a (ArchitectRefused) and 0b (its bounded fields) | |
+| §5 FIELD_LIMIT | built (0a's `ArchitectRefused` copied verbatim; take 0a's at merge) | `api/Limits`, `apiimpl/FieldLimits` (request, requestGroup, critique, polish, redirectMassing, bibles.request); `FieldLimitsTest`; `sidecar/test/limits.test.ts` (zod walker); gate step `fields`. Re-run the drift test after merging 0b: its new bounded fields need constants |
 | §10 off-thread undo planning | after 0a (own-time percentiles), 2 h box | no journal/** change left on the branch if no-go |
 | §7 C16 survival roads | built (merged from `slice/0c-c16`) | `site/RoadBuilder.java` reuses `Builder.Run` through a probe Site; hooks in Builder (crate acceptance, stock, keep-crate), InfraJob (convert at DONE), InfraPlace (remove: refunds + crate; mode rules), Batches (construction road item), Views/ApiEvents; gate step `survroad` passes. Downgrade check pending the 0.14.0 jar |
 
@@ -47,6 +47,11 @@ need a shared crate.
   billed). `checkRoad` in construction mode answers for the batch case (construction, BOM, a note); a standalone placeRoad in
   CONSTRUCTION (or AUTO in survival) is refused NOT_ALLOWED. A road's `/architect site finish` cells aren't marked free (its
   removal refunds them as paid). The group crate is put down by the road when no house of the group made one yet.
+
+- §5 covers string lengths, list sizes, ext (keys, 64 KB as JSON), context and the zod patterns of those fields; numeric
+  ranges (budgetUsd, wave, concurrency...) aren't in `Limits` (the drift test walks max lengths and patterns only).
+- §10 spike is on `slice/0c-undo` (not merged): `WorldJournal.UndoPlanner` copies sections on the server thread, plans off it,
+  compares, falls back on any change. Go/no-go needs 0a's ownCpu on megaA undo-only.
 
 ## Resume
 
