@@ -30,6 +30,8 @@
     "0a-pins": { "desc": "6c 0a item 9: caller pins and a forced-age GC (the seeded g5b_cap)", "cmd": ["node", "tools/gate6c0a.mjs", "pins"], "env": { "GATE6C0A_RUN": "${RUN}", "GATE6C0A_OUT": "${OUT}/gate6c0a" }, "timeoutMin": 15, "client": "self", "estMin": 4 },
     "0a-stopped": { "desc": "6c 0a item 10: WORLD_STOPPED", "cmd": ["node", "tools/gate6c0a.mjs", "stopped"], "env": { "GATE6C0A_RUN": "${RUN}", "GATE6C0A_OUT": "${OUT}/gate6c0a" }, "timeoutMin": 15, "client": "self", "estMin": 4 },
     "0a-tiles": { "desc": "6c 0a item 11: slow tiles (unhooked, SLOW_TILES=4 with RETRY, =2)", "cmd": ["node", "tools/gate6c0a.mjs", "tiles"], "env": { "GATE6C0A_RUN": "${RUN}", "GATE6C0A_OUT": "${OUT}/gate6c0a" }, "timeoutMin": 30, "client": "self", "estMin": 10 },
+    "0b-unit": { "desc": "6c 0b items 1-4, 6 and 7 (offline): kit mirror oracle, smalls, variation; sidecar copies/versionOf; MirrorOracleTest, Wire0bTest, MirrorFitTest", "cmd": ["node", "tools/gate6c0b.mjs", "unit"], "env": { "GATE6C0B_OUT": "${OUT}/gate6c0b" }, "timeoutMin": 30, "client": "none", "estMin": 8 },
+    "0b-ingame": { "desc": "6c 0b items 5 and 7 in game: the copies flow (x3 + SMALL, approve, COPY stages, batch of 4, undo a copy) and C13 versionOf with a site, refusals, base_moved", "cmd": ["node", "tools/gate6c0b.mjs", "ingame"], "env": { "GATE6C0B_RUN": "${RUN}", "GATE6C0B_OUT": "${OUT}/gate6c0b" }, "timeoutMin": 40, "client": "self", "estMin": 12 },
     "4e-megalite": { "desc": "4e mega-lite (256x256 pad, lots, roads, relog, undo)", "cmd": ["node", "tools/gate4e.mjs", "megalite"], "timeoutMin": 25, "client": "4e", "metrics": { "cellsPerSecond4ms": "gate4e/megalite.json#data.runs.4.cellsPerSecond", "groupUndoSeconds": "gate4e/megalite.json#data.groupUndoSeconds", "groupUndoOwnMsMax": "gate4e/megalite.json#data.groupUndoOwnTick.ownMaxMs", "groupUndoMsptMax": "gate4e/megalite.json#data.groupUndoMsptMax", "bytesPerCell4ms": "gate4e/megalite.json#data.runs.4.bytesPerCell" }, "estMin": 1.7, "resources": ["bench"], "restore": ["G4E Flat"] },
     "4d-all": { "desc": "4d gate (all)", "cmd": ["node", "tools/gate4d.mjs", "all"], "timeoutMin": 45, "client": "4d", "estMin": 18.6 },
     "4e-orders": { "desc": "4e removal orders", "cmd": ["node", "tools/gate4e.mjs", "orders"], "timeoutMin": 30, "client": "4e", "estMin": 8.2 },
@@ -123,7 +125,8 @@
       { "name": "driver: scenarios", "paths": ["tools/scenarios.mjs", "tools/lib/scenario-*.mjs", "tools/lib/gallery6b.*"], "change": ["6b-scenario-s1-flat"], "slice": ["6b-scenario-s1"] },
       { "name": "driver: gate6a", "paths": ["tools/gate6a*.mjs", "tools/run-gate6a-client.sh"], "change": ["apijars"], "slice": ["6a-eflat", "6a-inv3", "6a-staged"] },
       { "name": "gate runner (verified by its own --plan and any run)", "paths": ["tools/gate-run.mjs", "tools/gate-chains.json", "tools/gate-impact.mjs"], "change": [], "slice": [] },
-      { "name": "other tools", "paths": ["tools/**", "package*.json"], "change": [], "slice": [] }
+      { "name": "other tools", "paths": ["tools/**", "package*.json"], "change": [], "slice": [] },
+      {"name": "6c 0b copies, effort, versionOf", "paths": ["sidecar/src/copies.ts", "sidecar/src/versionof.ts", "sidecar/src/variants.ts", "kit/lib/mirror.mjs", "kit/lib/smalls.mjs", "kit/lib/variation.mjs", "kit/tools/copy-recipe.mjs", "kit/tools/mirror-fit-fixture.mjs", "tools/gate6c0b.mjs", "mod/src/main/java/dev/larattalabs/architect/apiimpl/Wire0b.java"], "change": ["0b-unit"], "slice": ["0b-ingame"]}
     ]
   }
 }
