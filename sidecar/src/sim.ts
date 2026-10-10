@@ -280,9 +280,11 @@ export class SimDesigner implements Designer {
     const src = simSource(cfg.kitDir, req.type);
     if (!src) throw new Error(`the sim copies a kit example, but ${path.join(cfg.kitDir, 'designs')} has neither ${req.type}.mjs nor cabin.mjs`);
     // (4c) a massing job builds under its massing id
-    const bp = d.massing ? d.massing.id : freeLibraryId(cfg.libraryDir, designBaseId(req), new Set([...this.taken].filter(([k]) => k !== id).map(([, v]) => v)));
-    if (!d.massing) this.taken.set(id, bp);
+    // (0b, C13) a versionOf builds under the entry's own id
+    const bp = d.massing ? d.massing.id : req.versionOf ? req.versionOf.entryId : freeLibraryId(cfg.libraryDir, designBaseId(req), new Set([...this.taken].filter(([k]) => k !== id).map(([, v]) => v)));
+    if (!d.massing && !req.versionOf) this.taken.set(id, bp);
     const scratch = prepareScratch({ dataDir: cfg.dataDir, kitDir: cfg.kitDir, libraryDir: cfg.libraryDir, design: d, bp, ...sc.scratchExtras(d) });
+    sc.prepareVersionOfScratch(d, scratch, bp);
     let cost = d.cost ?? zeroCost();
     const faults = simFaults(req);
     // (0b, C8) a SMALL detail pass: its caps, as the real designer has them
@@ -369,6 +371,29 @@ export class SimDesigner implements Designer {
       }
       // the massing profile has no type rules: the requested type is written in
       source = source.replace(/type:\s*'(?!(?:int|bool|enum)')[a-z0-9_]+'/, `type: '${req.type}'`);
+    } else if (req.versionOf) {
+      // (0b, C13) the head changed as a sim redirect changes a massing (an int param's default up by one, else gable -> hip)
+      const base = fs.readFileSync(path.join(scratch, 'context', 'base', `${bp}.mjs`), 'utf8');
+      const r2 = simRedirect(base);
+      source = r2.source;
+      what = `${bp} v${req.versionOf.baseVersion ?? 1} changed (${r2.change})`;
+      note = r2.change;
+      // sim:frontchange: round 1 turns the front (the frame guard refuses it), a repair round puts it back
+      if (faults.has('frontchange')) {
+        const turned = source.replace(/front:\s*'(north|south|east|west)'/, (_m, f: string) => `front: '${f === 'east' ? 'west' : 'east'}'`);
+        fs.writeFileSync(design, turned);
+        sc.designStep(id, 'checking', 'checking the design (simulated designer): the front was turned (sim:frontchange)');
+        const r1 = await checkDesign(cfg.kitDir, scratch, bp, sc.checkPlan(d).limits, 120_000, sc.checkPlan(d).extra);
+        this.check(id, r);
+        const p1 = r1.ok ? sc.checkOutcome(d, r1) : r1.problem;
+        sc.log.info(`design ${id}: round 1's check failed (simulated, sim:frontchange): ${(p1 ?? 'it passed?').split('\n')[0]}; repair round 2`);
+        if (!p1) throw new Error('sim:frontchange: the frame guard did not refuse the turned front');
+        sc.designStep(id, 'designing', `round 2: fixing what the check found (simulated): ${p1.split('\n')[0]}`);
+        await this.sleep(this.stepMs, id, r);
+        cost = { ...cost, usd: Math.round((cost.usd + charge(2, 1, 1, costs ? costs.repair : 0)) * 1e6) / 1e6, turns: cost.turns + 1 };
+        sc.designCost(id, cost);
+        note = `${note}; the turned front was repaired (round 2)`;
+      }
     } else {
       // the "design": the example under the new id (an open type and its profile written in)
       source = withDesignId(fs.readFileSync(path.join(scratch, KIT, 'designs', `${src}.mjs`), 'utf8'), bp);

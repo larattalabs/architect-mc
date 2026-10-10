@@ -471,10 +471,12 @@ export class ClaudeDesigner implements Designer {
     if (d.kind === 'polish') return sc.polishes.run(id, this.polishBackend(cur));
     const req = d.request;
     // (4c) a massing job builds under its massing id
-    const w = (this.work[id] ??= { bp: d.massing ? d.massing.id : freeLibraryId(cfg.libraryDir, designBaseId(req), this.takenIds(id)), round: 0 });
+    // (0b, C13) a versionOf builds under the entry's own id (installed as its next version)
+    const w = (this.work[id] ??= { bp: d.massing ? d.massing.id : req.versionOf ? req.versionOf.entryId : freeLibraryId(cfg.libraryDir, designBaseId(req), this.takenIds(id)), round: 0 });
     const isMassing = !!d.massing;
     sc.store.markDirty();
     const scratch = prepareScratch({ dataDir: cfg.dataDir, kitDir: cfg.kitDir, libraryDir: cfg.libraryDir, design: d, bp: w.bp, ...sc.scratchExtras(d) });
+    sc.prepareVersionOfScratch(d, scratch, w.bp);
     const sessionKey = `design:${id}`;
     const meter = new CostMeter(w.cost ?? zeroCost());
     const model = req.model ?? (isMassing ? cfg.massing.model : this.cfg.designModel);

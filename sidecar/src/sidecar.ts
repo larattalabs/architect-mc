@@ -74,6 +74,7 @@ const DURABLE_COMMANDS: ReadonlySet<ClientMessage['type']> = new Set<ClientMessa
 /** A message the client caused that cannot be done (answered with ack ok:false). */
 export { ClientError, RefusedError } from './errors.js';
 import { ClientError, RefusedError } from './errors.js';
+import { frameProblem, prepareVersionOf, writeVersionContext } from './versionof.js';
 
 /**
  * Runs design jobs: the Claude designer (claude/designer.ts) or the sim (sim.ts). The scheduler hands it one design at a
@@ -704,6 +705,8 @@ export class Sidecar {
     // (auth `checking`, also while the SDK is still being installed: the design queues and starts
     // once the check passes)
     let req = request;
+    // (0b, C13) versionOf: refusals, the base pinned to the head
+    if (req.versionOf) req = prepareVersionOf(this, req);
     // (4c) the detail pass of a massing: pin its version; it inherits the massing's bible
     if (req.fromMassing) {
       const m = this.massings.get(req.fromMassing, req.massingVersion);
@@ -915,7 +918,48 @@ export class Sidecar {
 
   /** After the pristine check: the problem that fails the round (a massing that is not one; conformance errors), if any. */
   checkOutcome(d: Design, res: CheckResult): string | undefined {
-    return this.massings.checkOutcome(d, res);
+    // (0b, C13) the frame guard of a versionOf: a changed front or entrance feet row is a repair round
+    return this.massings.checkOutcome(d, res) ?? frameProblem(this, d, res);
+  }
+
+  /** (0b, C13) A versionOf design's scratch: the design file starts as the head's source; the context files; the brief. */
+  prepareVersionOfScratch(d: Design, scratch: string, bp: string): void {
+    if (!d.request.versionOf) return;
+    const lines = writeVersionContext(this, d, scratch);
+    const file = path.join(scratch, KIT, 'designs', `${bp}.mjs`);
+    if (!fs.existsSync(file)) fs.copyFileSync(path.join(scratch, 'context', 'base', `${bp}.mjs`), file);
+    const own = path.join(this.versions.dir(bp), 'bible');
+    if (fs.existsSync(own) && !fs.existsSync(path.join(scratch, 'bible'))) fs.cpSync(own, path.join(scratch, 'bible'), { recursive: true });
+    const brief = path.join(scratch, 'BRIEF.md');
+    const text = fs.existsSync(brief) ? fs.readFileSync(brief, 'utf8') : '';
+    if (!text.includes('## A new version of')) fs.writeFileSync(brief, `${text.trimEnd()}\n\n${lines.join('\n')}\n`);
+  }
+
+  /** (0b, C13) Install a versionOf design as head + 1 (by 'design', parent = its base); `base_moved` if the head moved. */
+  private installVersionOf(d: Design, input: { scratch: string; bp: string; res: CheckResult; previews: string[]; source: string; notes?: string[] }): void {
+    const v = d.request.versionOf!;
+    const base = v.baseVersion ?? 1;
+    const head = this.versions.head(v.entryId);
+    if (head !== base) {
+      this.designFailed(d.id, 'base_moved', `failed: base_moved (${v.entryId} moved from v${base} to v${head} meanwhile; the cost is kept)`);
+      return;
+    }
+    const res = input.res;
+    const baseJson = this.versions.top(v.entryId) ?? {};
+    const json: Record<string, unknown> = { ...(res.sidecar as Record<string, unknown>) };
+    for (const k of ['name', 'description', 'createdAt', 'request', 'ext', 'bible', 'group', 'groupItem', 'profile', 'variantOf', 'variantOfVersion', 'derivation', 'fromMassing']) if (baseJson[k] !== undefined) json[k] = baseJson[k];
+    const parts = res.nbt!.replace(/\.nbt$/, '.parts.nbt');
+    const version = this.versions.install(
+      v.entryId,
+      { nbt: res.nbt!, json, ...(fs.existsSync(parts) ? { parts } : {}), source: input.source, previews: input.previews, files: this.entryFiles(d, input.scratch) },
+      { by: 'design', parent: base, designId: d.id, summary: truncate(`versionOf: ${(d.request.notes ?? '').replace(/\s+/g, ' ').trim()}`, 200) },
+    );
+    this.entryVersioned(v.entryId, version, head, 'design', d.id);
+    const s = res.sidecar!.size!;
+    this.designs.update(d.id, { status: 'done', step: `done: ${v.entryId} v${version} (versionOf v${base}, ${s.x}x${s.y}x${s.z})${input.notes?.filter(Boolean).length ? `; ${input.notes.filter(Boolean).join('; ')}` : ''}`, blueprintId: v.entryId, size: { x: s.x, y: s.y, z: s.z }, previews: input.previews });
+    this.estimates.forget(d.id);
+    this.store.flush();
+    this.log.info(`design ${d.id}: ${v.entryId} v${version} installed (versionOf v${base})`);
   }
 
   /**
@@ -927,6 +971,11 @@ export class Sidecar {
     const source = input.source ?? path.join(input.scratch, KIT, 'designs', `${input.bp}.mjs`);
     const s = res.sidecar!.size!;
     const size = { x: s.x, y: s.y, z: s.z };
+    // (0b, C13) a new version of an existing entry
+    if (d.request.versionOf) {
+      this.installVersionOf(d, { scratch: input.scratch, bp: input.bp, res, previews: input.previews, source, ...(input.notes ? { notes: input.notes } : {}) });
+      return;
+    }
     if (d.massing) {
       const m = this.massings.install(d, { nbt: res.nbt!, sidecar: res.sidecar!, source, previews: input.previews, files: this.entryFiles(d, input.scratch), createdAt: this.now() });
       this.massingDone(d.id, m, (input.notes ?? []).filter(Boolean).join('; '));

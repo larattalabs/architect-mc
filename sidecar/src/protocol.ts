@@ -287,7 +287,16 @@ export const DesignRequest = DesignRequestBase.extend({
   redirect: z.object({ fromVersion: z.number().int().min(1), notes: z.string().max(2000) }).optional().describe('(4c) set by the sidecar: a massing redirect (the version it starts from and the notes)'),
   critique: CritiqueSpec.optional().describe('(5a) critique this design: report (one critic call) or loop (revise on the verdict); default off'),
   effort: z.enum(['standard', 'small']).optional().describe('(0b, C8) set by the sidecar for a group item: small = the bounded SMALL detail pass (2 rounds, 40 turns, medium, $1.50)'),
-  versionOf: z.object({ entryId: z.string().regex(/^[a-z0-9_]+$/).max(64), siteId: z.string().min(1).max(200).optional() }).optional().describe('(0b, C13) design the next version of this entry (notes = the change request); the site files come with it'),
+  versionOf: z
+    .object({
+      entryId: z.string().regex(/^[a-z0-9_]+$/).max(64),
+      siteId: z.string().min(1).max(200).optional(),
+      siteNow: z.string().min(1).max(64).optional().describe('a blob: the site\'s restore box as it stands (context/site-now.nbt), captured by the mod'),
+      siteEdits: z.string().min(1).max(64).optional().describe("a blob: the site's KEEP set (context/site-edits.json)"),
+      baseVersion: z.number().int().min(1).optional().describe('set by the sidecar: the head version it bases on'),
+    })
+    .optional()
+    .describe('(0b, C13) design the next version of this entry (notes = the change request); the site files come with it as blobs'),
 }).superRefine(noDuplicateFeatures).superRefine((r, ctx) => {
   if (r.massing && r.fromMassing) ctx.addIssue({ code: 'custom', path: ['fromMassing'], message: 'a request is a massing or the detail of one, not both' });
   if (r.massingVersion !== undefined && !r.fromMassing) ctx.addIssue({ code: 'custom', path: ['massingVersion'], message: 'massingVersion needs fromMassing' });

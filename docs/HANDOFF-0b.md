@@ -23,16 +23,16 @@ Delete this file when the gate passes.
 
 Independent of 0a (do first):
 
-- [ ] kit: `Blueprint` mirror + `build.mjs --mirror` (kit/lib/mirror.mjs), the mod oracle fixture and the kit test
-- [ ] kit: `kit/lib/smalls.mjs` (rack, stall, well, shed), checker under every built-in bible; the SMALL brief
-- [ ] sidecar: group `count` / `copyOf` / `copyCap` expansion, COPY_REFUSED details (sidecar/src/copies.ts)
-- [ ] sidecar: copy recipes (palette shift, param, mirror), the 2-lever / 10% test over every example x bible
-- [ ] sidecar: the COPY stage on the VariantRunner (--max, mirrored conformance, derived bible), fallback, source_failed,
+- [x] kit: `Blueprint` mirror + `build.mjs --mirror` (kit/lib/mirror.mjs), the mod oracle fixture and the kit test
+- [x] kit: `kit/lib/smalls.mjs` (rack, stall, well, shed), checker under every built-in bible; the SMALL brief
+- [x] sidecar: group `count` / `copyOf` / `copyCap` expansion, COPY_REFUSED details (sidecar/src/copies.ts)
+- [x] sidecar: copy recipes (palette shift, param, mirror), the 2-lever / 10% test over every example x bible
+- [x] sidecar: the COPY stage on the VariantRunner (--max, mirrored conformance, derived bible), fallback, source_failed,
       promoteCopy (sidecar half), copies while paused_budget
-- [ ] sidecar: `derivation` + `variantOfVersion` (VARIANT, RESKIN, COPY), polish carry, byte-identical rebuild
-- [ ] sidecar: C2 size rule (`smallBySize`, 11 x 9 either way)
-- [ ] sidecar: C8 caps (2 rounds, 40 turns, medium, $1.50 cumulative per detail pass)
-- [ ] sidecar: C13 `versionOf` (context files, frame guard, head + 1, base_moved, refusals, sim)
+- [x] sidecar: `derivation` + `variantOfVersion` (VARIANT, RESKIN, COPY), polish carry, byte-identical rebuild
+- [x] sidecar: C2 size rule (`smallBySize`, 11 x 9 either way)
+- [x] sidecar: C8 caps (2 rounds, 40 turns, medium, $1.50 cumulative per detail pass)
+- [x] sidecar: C13 `versionOf` (context files, frame guard, head + 1, base_moved, refusals, sim)
 
 After 0a merges (merge origin/main first):
 
@@ -51,6 +51,11 @@ After 0a merges (merge origin/main first):
 - Copies of a failed archetype fail with `source_failed`; the caller decides `promoteCopy`: done (groups.ts).
 
 ## Decisions taken (not in the contract)
+
+- versionOf: the site files travel as blobs (`versionOf.siteNow`, `versionOf.siteEdits`, put by the mod); the sidecar pins
+  `baseVersion` = the head; the new version inherits the head's bible pin; a polish is refused `busy` while a versionOf of
+  the entry is unfinished (both make head + 1). The notes must be non-empty (the change request).
+- Sim: `sim:frontchange` turns the front in round 1 of a versionOf (the frame guard makes it a repair round).
 
 - Copies are never stopped by a group's hard cap (they cost $0); a copy whose archetype is stopped fails `source_failed`.
 - promoteCopy is refused (COPY_REFUSED) with detail `not_copy`, `building` (not final yet) or `final` (group or item ended).
