@@ -7990,3 +7990,14 @@ bars stay the same.
 - **V:** Patron-only scope accepted for now. The default look is the drafted roles (gravel path, stone-brick foundation).
   Free kit variants are fine for the S7 gallery. Region survival is scheduled after V (Noah's survival rule: terrain free,
   connectors and buildings cost materials).
+
+## Changes from Steward's review of 0b, 0c and V (2026-10-10; all accepted, these win)
+
+- **0b:** the 11x9 small rule is the default, and an explicit `effort: SMALL` (or STANDARD) wins over it. A capped S item FAILS,
+  with no silent retry at STANDARD. Copies of a failed archetype fail with `source_failed`; the caller decides `promoteCopy`.
+- **0c:** remove and undo are never refused. No teleporting of tagged entities: ignoring them is enough, and the caller moves
+  its own. Refusing a region claim that touches an area is enough for 0c. A road is one site with gaps plus the skipped
+  waypoint spans. A shared crate is required for survival roads.
+- **V:** `params.lots` = LotSpec plus `villager`, which the caller sends per lot (inferred from `type` only when absent). The
+  bell is an anchor only by default, opt-in to place. `siteplan.json` stays format 1. Patron-only. Unplaced lots are listed and
+  the plan continues.
