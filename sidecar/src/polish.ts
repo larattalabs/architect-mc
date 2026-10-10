@@ -283,7 +283,7 @@ export class Polishes {
   request(entryId: string, spec: PolishSpec, opts: { owner?: string; ext?: Ext; parentDesign?: string } = {}): Design {
     const sc = this.sc;
     sc.ensureClaudeAvailable();
-    const json = sc.versions.checkVersionable(entryId);
+    const json = sc.versions.checkChangeable(entryId);
     const r = this.resolve(entryId, spec, json);
     if (!sc.versions.versionDir(entryId, r.fromVersion)) throw new VersionRefused('no_version', `${entryId} has no version ${r.fromVersion}`);
     if (r.fromVersion > sc.versions.head(entryId)) throw new VersionRefused('no_version', `${entryId} has no version ${r.fromVersion}`);
@@ -960,7 +960,7 @@ export class Polishes {
     const built = readObj(path.join(final.dir, `${w.bp}.blueprint.json`)) ?? {};
     const json: Record<string, unknown> = { ...built };
     for (const k of Object.keys(fromJson)) if (!(k in json)) json[k] = fromJson[k];
-    for (const k of ['name', 'description', 'createdAt', 'request', 'ext', 'bible', 'group', 'groupItem', 'profile', 'variantOf', 'variantOfVersion']) if (fromJson[k] !== undefined) json[k] = fromJson[k];
+    for (const k of ['name', 'description', 'createdAt', 'request', 'ext', 'bible', 'group', 'groupItem', 'profile', 'variantOf', 'variantOfVersion', 'derivation']) if (fromJson[k] !== undefined) json[k] = fromJson[k];
     const v = final.verdict!;
     json.critique = { mode: 'polish', end: w.end ?? 'polished', overall: v.overall, scores: v.scores, openIssues: v.issues, steps: d.polish?.steps.length ?? 0 };
     const head = sc.versions.head(w.entryId);

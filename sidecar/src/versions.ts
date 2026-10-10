@@ -23,7 +23,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { withDesignId } from './designs.js';
-import { ClientError } from './errors.js';
+import { ClientError, RefusedError } from './errors.js';
 import { readJson, writeFileAtomic } from './util/fsx.js';
 
 export const MAX_VERSIONS = 32;
@@ -48,12 +48,13 @@ export interface LineageEntry {
 /** Why a version of this entry cannot be made (polish / revert): docs/CONTRACT.md "Refused". */
 export type VersionRefusal = 'bundled' | 'no_source' | 'massing';
 
-export class VersionRefused extends ClientError {
+export class VersionRefused extends RefusedError {
   constructor(
-    readonly code: VersionRefusal | 'no_entry' | 'no_version',
+    readonly refusal: VersionRefusal | 'no_entry' | 'no_version' | 'copy' | 'busy' | 'site_mismatch' | 'group' | 'base_moved',
     message: string,
   ) {
-    super(`${code}: ${message}`);
+    // (0b) a typed refusal: VERSION_REFUSED with the sub-code (no_entry / no_version stay plain errors on the wire too)
+    super('VERSION_REFUSED', refusal, message);
   }
 }
 
@@ -177,6 +178,17 @@ export class EntryVersions {
     }
     if (json.massing === true) throw new VersionRefused('massing', `${entryId} is a massing (massings keep their own versions)`);
     if (json.imported === true || !fs.existsSync(path.join(this.dir(entryId), `${entryId}.mjs`))) throw new VersionRefused('no_source', `${entryId} has no source (${entryId}.mjs): an imported structure cannot get versions`);
+    return json;
+  }
+
+  /**
+   * (0b) Can the entry get a CHANGED version (polish, versionOf)? As checkVersionable, and a COPY entry is refused: 6d
+   * re-applies its recipe to the source's new versions and would overwrite the change.
+   */
+  checkChangeable(entryId: string): Record<string, unknown> {
+    const json = this.checkVersionable(entryId);
+    const der = json.derivation as { kind?: string } | undefined;
+    if (der?.kind === 'copy') throw new VersionRefused('copy', `${entryId} is a copy in a design group (it follows its source by its recipe): promote it, or change its source`);
     return json;
   }
 

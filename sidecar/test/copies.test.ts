@@ -132,6 +132,13 @@ describe.skipIf(!hasKit)('copies in a group (sim backend, real kit)', () => {
         rmrf(tmp);
       }
     }
+    // (§2.4) a COPY entry refuses polish (VERSION_REFUSED, copy)
+    try {
+      h.sc.polishes.request(c2!.entryId!, {});
+      throw new Error('not refused');
+    } catch (err) {
+      expect(err).toMatchObject({ code: 'VERSION_REFUSED', detail: 'copy' });
+    }
     // the two copies differ (the first mirrored, the second not)
     const r2 = (readEntry(h, c2!.entryId!).derivation as { recipe: { mirror: boolean } }).recipe;
     const r3 = (readEntry(h, c3!.entryId!).derivation as { recipe: { mirror: boolean } }).recipe;
