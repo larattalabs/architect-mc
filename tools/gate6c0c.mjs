@@ -79,7 +79,8 @@ async function feet(x, z) {
 }
 
 steps.start = async () => {
-  const head = execFileSync('git', ['-C', root, 'rev-parse', 'HEAD']).toString().trim();
+  // GATE6C0C_REF: another build (an older release, for the volume sha and the downgrade checks)
+  const head = execFileSync('git', ['-C', root, 'rev-parse', process.env.GATE6C0C_REF ?? 'HEAD']).toString().trim();
   execFileSync('git', ['-C', RUN, 'checkout', '-q', '--detach', head]);
   execFileSync('npm', ['run', 'build'], { cwd: path.join(RUN, 'sidecar'), stdio: 'ignore' });
   await startClient(process.argv[3] ?? BOOT, { backend: 'sim' });
@@ -546,6 +547,25 @@ steps.survroad = async () => {
   const solo = await later(`road ${json({ ...road, points: pts(20), tag: 'solo' })}`);
   check(reasons(solo).includes('NOT_ALLOWED'), `survroad: a standalone CONSTRUCTION placeRoad refused NOT_ALLOWED (${json(solo.refusals)})`);
   return { bom, stock: st, batch: bv, built: done, instant: inst };
+};
+
+/**
+ * Item 3's sha bar: the volume of the ground step's box (ground.json) on a fresh copy of the forest world, through the
+ * DevBridge (any version). Run once on this build and once on the older one (GATE6C0C_REF); `volsha-<ref>.json` each.
+ */
+steps.volsha = async () => {
+  await ensure();
+  const g = JSON.parse(fs.readFileSync(path.join(OUT, 'ground.json'), 'utf8')).data;
+  const [x0, y0, z0, x1, y1, z1] = g.box;
+  await fresh('G6B 0c VolSha', FOREST);
+  await tp((x0 + x1) / 2 + 0.5, 140, (z0 + z1) / 2 + 0.5, 0, 89);
+  await settle(5000);
+  const v = await call('dev.survey.volume', { box: g.box, load: 'loaded' }, 600_000);
+  const ref = process.env.GATE6C0C_REF ?? 'HEAD';
+  const head = execFileSync('git', ['-C', RUN, 'rev-parse', 'HEAD']).toString().trim();
+  fs.writeFileSync(path.join(OUT, `volsha-${ref.replaceAll('/', '_')}.json`), JSON.stringify({ ref, head, box: g.box, sha: v.sha, counts: v.counts }, null, 2));
+  check(!!v.sha, `volsha: ${ref} (${head.slice(0, 10)}): ${v.sha}`);
+  return { ref, head, sha: v.sha };
 };
 
 steps.all = async () => {
