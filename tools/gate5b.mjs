@@ -14,6 +14,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { execFileSync, spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { fromPlacementStats as ownTick, ownOk, describe as tickText } from './lib/tickbar.mjs';
 import { DevClient } from './lib/devclient.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -23,11 +24,14 @@ fs.mkdirSync(OUT, { recursive: true });
 // the client runs from a separate worktree (compiling here never changes a running client's classes)
 const RUN = process.env.GATE5B_RUN ? path.resolve(process.env.GATE5B_RUN) : path.resolve(root, '..', 'architect-mc-5b-run');
 const V090 = path.resolve(root, '..', 'architect-mc-v090');
+// the old-version client's ports (8892/8893 unless another run holds them: ARCHITECT_GATE_OLD_SIDECAR_PORT / _DEV_PORT)
+const OLD_SIDECAR_PORT = Number(process.env.ARCHITECT_GATE_OLD_SIDECAR_PORT || 8892);
+const OLD_DEV_PORT = Number(process.env.ARCHITECT_GATE_OLD_DEV_PORT || 8893);
 /** The two clients: the 0.10.0 gate client (run worktree) and the 0.9.0 one (tag v0.9.0, for the downgrade note). */
 const CLIENTS = {
   new: { name: '0.10.0', dir: RUN, port: Number(process.env.ARCHITECT_DEV_PORT || 8891), script: 'tools/run-gate5b-client.sh', env: {} },
-  old: { name: '0.9.0', dir: V090, port: 8893, script: 'tools/run-gate4e-client.sh',
-    env: { ARCHITECT_PORT: '8892', ARCHITECT_DEV_PORT: '8893', ARCHITECT_SHOTS_DIR: path.join(OUT, 'shots090') } },
+  old: { name: '0.9.0', dir: V090, port: OLD_DEV_PORT, script: 'tools/run-gate4e-client.sh',
+    env: { ARCHITECT_PORT: String(OLD_SIDECAR_PORT), ARCHITECT_DEV_PORT: String(OLD_DEV_PORT), ARCHITECT_SHOTS_DIR: path.join(OUT, 'shots090') } },
 };
 let CUR = CLIENTS.new;
 let GAME_DIR = path.join(CUR.dir, 'mod', 'run');
@@ -1395,8 +1399,8 @@ steps.village = async () => {
     const failed = done.items.filter((i) => i.status !== 'PLACED');
     check(failed.length === 0 && h === hAtomic, `village ${ms} ms: the delta batch equals the atomic applies (wall ${wall.toFixed(1)} s, MSPT max ${stats.msptMax?.toFixed(1)} ms, over 50 ms: ${stats.ticksOver50ms})`,
       { failed, h, hAtomic });
-    if (ms === 4) check((stats.msptMax ?? 99) <= 25, `village 4 ms: MSPT max ${stats.msptMax?.toFixed(1)} <= 25 ms`, stats);
-    check((stats.ticksOver50ms ?? 1) === 0, `village ${ms} ms: no tick over 50 ms`, stats);
+    if (ms === 4) check(ownOk(ownTick(stats), 25), `village 4 ms: ${tickText(ownTick(stats), 25)}`, ownTick(stats));
+    check(ownOk(ownTick(stats)), `village ${ms} ms: ${tickText(ownTick(stats))}`, ownTick(stats));
     out[`batch${ms}`] = { wall, stats };
     if (ms === 4) {
       // undoStage("upgrade") reverts all 12 exactly; removeGroup afterwards is exact
@@ -1474,13 +1478,13 @@ steps.sizecap = async () => {
   const a = await call('dev.site.delta.apply', { site, version: 2 }, 30 * 60_000);
   const sa = await call('dev.placement.stats', {});
   check(a.applied, `sizecap: the delta of every cell (${a.written} cells) applied over ticks in ${((Date.now() - t0) / 1000).toFixed(1)} s`, a.applied ? sa : a);
-  check((sa.ticksOver50ms ?? 1) === 0, `sizecap: apply: no tick over 50 ms (max ${sa.msptMax?.toFixed(1)} ms)`, sa);
+  check(ownOk(ownTick(sa)), `sizecap: apply: ${tickText(ownTick(sa))}`, ownTick(sa));
   await call('dev.placement.stats', { reset: true });
   const r = await call('dev.site.revert', { site, version: 1 }, 30 * 60_000);
   const sr = await call('dev.placement.stats', {});
   const hb = (await hash(BOX)).sha256;
   check(r.applied && hb === h1, 'sizecap: the revert gives the v1 world back exactly', { r: r.applied ? undefined : r, hb, h1 });
-  check((sr.ticksOver50ms ?? 1) === 0, `sizecap: revert: no tick over 50 ms (max ${sr.msptMax?.toFixed(1)} ms)`, sr);
+  check(ownOk(ownTick(sr)), `sizecap: revert: ${tickText(ownTick(sr))}`, ownTick(sr));
   const rm = await result(await api(`remove ${site} - noforce keep`), 30 * 60_000);
   await settle(3000);
   check(rm.removed && (await hash(BOX)).sha256 === h0, 'sizecap: Remove is exact', rm.removed ? undefined : rm);

@@ -1,79 +1,118 @@
 {
-  "$comment": "Chains for tools/gate-run.mjs (docs/GATES.md). Paths: 'run:<rel>' = the runner's run worktree, 'src:<rel>' = this checkout, ${RUN} ${SRC} ${MAIN} ${OUT} expand in env and links. Every client script here forces the stub or the sim sidecar; the runner refuses others.",
+  "$comment": "Chains and tiers for tools/gate-run.mjs (docs/GATES.md). Paths: 'run:<rel>' = the runner's run worktree (a shard's own), 'src:<rel>' = this checkout, ${RUN} ${SRC} ${MAIN} ${OUT} expand in env and links (${OUT} is the shard's evidence dir). Every client script here forces the stub or the sim sidecar; the runner refuses others. Step fields: estMin (measured minutes, for --plan), resources (steps sharing a resource never overlap; 'bench' = the step runs alone: its bars are timing/MSPT), restore (prepared worlds cloned from the snapshot store before the step), after (needs that step's PASS, same shard), stopOnFail (a barrier: nothing else starts until it passes).",
   "runDir": "../architect-mc-gate-run",
   "seedFrom": "../architect-mc-6a-run",
   "seed": [".gradle-home", "sidecar/node_modules", "mod/run"],
   "clientStartMin": 15,
   "clients": {
-    "sim": { "script": "tools/run-gate6a-client.sh", "world": "API Sim" },
-    "4d": { "script": "tools/run-gate4d-client.sh", "world": "G4D Base" },
-    "4e": { "script": "tools/run-gate4e-client.sh", "world": "G4E Smoke" },
-    "5b": { "script": "tools/run-gate5b-client.sh", "world": "G5B Flat" },
-    "6a": { "script": "tools/run-gate6a-client.sh", "world": "G6A Flat Base" }
+    "sim": { "script": "tools/run-gate6a-client.sh", "world": "API Sim", "family": "sim" },
+    "4d": { "script": "tools/run-gate4d-client.sh", "world": "G4D Base", "family": "stub" },
+    "4e": { "script": "tools/run-gate4e-client.sh", "world": "G4E Smoke", "family": "stub" },
+    "5b": { "script": "tools/run-gate5b-client.sh", "world": "G5B Flat", "family": "stub" },
+    "6a": { "script": "tools/run-gate6a-client.sh", "world": "G6A Flat Base", "family": "sim" },
+    "6b": { "script": "tools/run-gate6b-client.sh", "world": "G6A Flat Base", "family": "sim" }
   },
   "steps": {
-    "unit-mod": {
-      "desc": "mod ./gradlew build (unit tests)", "cwd": "run:mod", "cmd": ["./gradlew", "--offline", "--no-daemon", "build"],
-      "env": { "GRADLE_USER_HOME": "${RUN}/.gradle-home" }, "timeoutMin": 30, "client": "none", "stopOnFail": true, "okLines": false,
-      "junit": "run:mod/build/test-results/test"
-    },
-    "unit-kit": {
-      "desc": "kit node --test", "cwd": "run:", "shell": "node --test kit/test/*.test.mjs", "timeoutMin": 10, "client": "none",
-      "okLines": false, "parse": { "tests": "ℹ tests (\\d+)", "pass": "ℹ pass (\\d+)", "fail": "ℹ fail (\\d+)" }
-    },
-    "unit-sidecar": {
-      "desc": "sidecar vitest (no client up)", "cwd": "run:sidecar", "cmd": ["npx", "vitest", "run"], "timeoutMin": 15, "client": "none",
-      "okLines": false, "parse": { "passed": "Tests\\s+(?:\\d+ failed \\| )?(\\d+) passed", "failed": "Tests\\s+(\\d+) failed" }
-    },
-    "sim-jobs": { "desc": "4a jobs sim suite", "cmd": ["node", "tools/apitest.mjs", "jobs"], "env": { "APITEST_OUT": "${OUT}/sim-jobs" }, "timeoutMin": 15, "client": "sim" },
-    "sim-sets": { "desc": "4b sets sim suite", "cmd": ["node", "tools/apitest.mjs", "sets"], "env": { "APITEST_OUT": "${OUT}/sim-sets" }, "timeoutMin": 15, "client": "sim" },
-    "sim-massing": { "desc": "4c massing sim suite", "cmd": ["node", "tools/apitest.mjs", "massing"], "env": { "APITEST_OUT": "${OUT}/sim-massing" }, "timeoutMin": 15, "client": "sim" },
-    "apijars": {
-      "desc": "unchanged 1.8.0/1.7.0/1.6.0 apitest jars (starts its own clients)", "cmd": ["node", "tools/gate6a.mjs", "apijars"], "timeoutMin": 30, "client": "self",
-      "links": { "gate6a/v0100": "${MAIN}/artifacts/gate6a/v0100" },
-      "metrics": { "jars": "gate6a/apijars.json#data" }
-    },
-    "4e-megalite": {
-      "desc": "4e mega-lite (256x256 pad, lots, roads, relog, undo)", "cmd": ["node", "tools/gate4e.mjs", "megalite"], "timeoutMin": 25, "client": "4e",
-      "metrics": { "cellsPerSecond4ms": "gate4e/megalite.json#data.runs.4.cellsPerSecond", "groupUndoSeconds": "gate4e/megalite.json#data.groupUndoSeconds", "groupUndoMsptMax": "gate4e/megalite.json#data.groupUndoMsptMax", "bytesPerCell4ms": "gate4e/megalite.json#data.runs.4.bytesPerCell" }
-    },
-    "4d-all": { "desc": "4d gate (all)", "cmd": ["node", "tools/gate4d.mjs", "all"], "timeoutMin": 45, "client": "4d" },
-    "4e-orders": { "desc": "4e removal orders", "cmd": ["node", "tools/gate4e.mjs", "orders"], "timeoutMin": 30, "client": "4e" },
-    "4e-crash": { "desc": "4e crash kill points (needs 4e-orders)", "cmd": ["node", "tools/gate4e.mjs", "crash"], "timeoutMin": 30, "client": "4e", "after": "4e-orders" },
-    "4e-throughput": {
-      "desc": "4e village + roads throughput at 4 ms (warm-up, median of 3)", "cmd": ["node", "tools/gate4e.mjs", "throughput"], "timeoutMin": 40, "client": "4e", "restartClient": true,
-      "metrics": { "medianCellsPerSecond": "gate4e/throughput.json#data.median", "spread": "gate4e/throughput.json#data.spread" }
-    },
-    "5b-chains": { "desc": "5b delta chains", "cmd": ["node", "tools/gate5b.mjs", "chains"], "timeoutMin": 60, "client": "5b" },
-    "5b-village": { "desc": "5b village", "cmd": ["node", "tools/gate5b.mjs", "village"], "timeoutMin": 20, "client": "5b" },
-    "6a-megaB-fast": {
-      "desc": "6a mega_bench B, fast walk (8 s dwell, teleport to unfinished cells)", "cmd": ["node", "tools/gate6a.mjs", "megaB", "--fast"], "timeoutMin": 120, "client": "6a",
-      "metrics": { "mode": "gate6a/megabench-B.json#mode", "wallSeconds": "gate6a/megabench-B.json#wallSeconds", "relogResumeSeconds": "gate6a/megabench-B.json#relog.resumedSeconds", "sidecarResumeSeconds": "gate6a/megabench-B.json#sidecarKill.resumedSeconds" }
-    },
-    "6a-megaA": {
-      "desc": "6a mega_bench A (prepared, full)", "cmd": ["node", "tools/gate6a.mjs", "megaA"], "timeoutMin": 45, "client": "6a",
-      "metrics": { "cellsPerSecond": "gate6a/megaA.json#data.cellsPerSecond", "msptP99": "gate6a/megaA.json#data.mspt.all.p99", "msptMax": "gate6a/megaA.json#data.mspt.all.max", "undoSeconds": "gate6a/megaA.json#data.undo.seconds", "mismatches": "gate6a/megaA.json#data.diff.mismatches" }
-    },
-    "6a-megaB": {
-      "desc": "6a mega_bench B, full walk (30 s dwell)", "cmd": ["node", "tools/gate6a.mjs", "megaB"], "timeoutMin": 180, "client": "6a",
-      "metrics": { "mode": "gate6a/megabench-B.json#mode", "wallSeconds": "gate6a/megabench-B.json#wallSeconds", "relogResumeSeconds": "gate6a/megabench-B.json#relog.resumedSeconds", "sidecarResumeSeconds": "gate6a/megabench-B.json#sidecarKill.resumedSeconds" }
-    },
-    "6a-crash": { "desc": "6a crash RG1-RG6, K3, K7", "cmd": ["node", "tools/gate6a.mjs", "crash"], "timeoutMin": 40, "client": "6a" },
-    "6a-eflat": { "desc": "6a E-flat exactness", "cmd": ["node", "tools/gate6a.mjs", "eflat"], "timeoutMin": 30, "client": "6a" },
-    "6a-forest": { "desc": "6a forest rim (2-minute stand, exact undo)", "cmd": ["node", "tools/gate6a.mjs", "forest"], "timeoutMin": 30, "client": "6a" },
-    "6a-inv3": { "desc": "6a inv3 order invariance", "cmd": ["node", "tools/gate6a.mjs", "inv3"], "timeoutMin": 15, "client": "6a" },
-    "6a-staged": { "desc": "6a staged drift / reorder / maxWait", "cmd": ["node", "tools/gate6a.mjs", "staged"], "timeoutMin": 30, "client": "6a" },
-    "6a-heap": {
-      "desc": "6a capped-heap mega_bench (restarts the client)", "cmd": ["node", "tools/gate6a.mjs", "heap"], "timeoutMin": 40, "client": "6a",
-      "metrics": { "xmxGb": "gate6a/heap.json#data.xmxGb", "baselineMb": "gate6a/heap.json#data.baselineMb" }
-    }
+    "unit-mod": { "desc": "mod ./gradlew build (unit tests)", "cwd": "run:mod", "cmd": ["./gradlew", "--offline", "--no-daemon", "build"], "env": { "GRADLE_USER_HOME": "${RUN}/.gradle-home" }, "timeoutMin": 30, "client": "none", "stopOnFail": true, "okLines": false, "junit": "run:mod/build/test-results/test", "estMin": 0.6 },
+    "unit-kit": { "desc": "kit node --test", "cwd": "run:", "shell": "node --test kit/test/*.test.mjs", "timeoutMin": 10, "client": "none", "okLines": false, "parse": { "tests": "ℹ tests (\\d+)", "pass": "ℹ pass (\\d+)", "fail": "ℹ fail (\\d+)" }, "estMin": 0.2 },
+    "unit-sidecar": { "desc": "sidecar vitest (no client up)", "cwd": "run:sidecar", "cmd": ["npx", "vitest", "run"], "timeoutMin": 15, "client": "none", "okLines": false, "parse": { "passed": "Tests\\s+(?:\\d+ failed \\| )?(\\d+) passed", "failed": "Tests\\s+(\\d+) failed" }, "estMin": 0.65 },
+    "sim-jobs": { "desc": "4a jobs sim suite", "cmd": ["node", "tools/apitest.mjs", "jobs"], "env": { "APITEST_OUT": "${OUT}/sim-jobs" }, "timeoutMin": 15, "client": "sim", "estMin": 0.5 },
+    "sim-sets": { "desc": "4b sets sim suite", "cmd": ["node", "tools/apitest.mjs", "sets"], "env": { "APITEST_OUT": "${OUT}/sim-sets" }, "timeoutMin": 15, "client": "sim", "estMin": 1 },
+    "sim-massing": { "desc": "4c massing sim suite", "cmd": ["node", "tools/apitest.mjs", "massing"], "env": { "APITEST_OUT": "${OUT}/sim-massing" }, "timeoutMin": 15, "client": "sim", "estMin": 1 },
+    "apijars": { "desc": "unchanged 0.11.0/0.10.0/0.9.0 apitest jars (API 1.8.0/1.7.0/1.6.0; starts its own clients)", "cmd": ["node", "tools/gate6a.mjs", "apijars"], "timeoutMin": 30, "client": "self", "links": { "gate6b/v0110": "${MAIN}/artifacts/gate6b/v0110", "gate6a/v0100": "${MAIN}/artifacts/gate6a/v0100", "gate5b/v090": "${MAIN}/artifacts/gate5b/v090" }, "metrics": { "jars": "gate6a/apijars.json#data" }, "estMin": 3.1 },
+    "4e-megalite": { "desc": "4e mega-lite (256x256 pad, lots, roads, relog, undo)", "cmd": ["node", "tools/gate4e.mjs", "megalite"], "timeoutMin": 25, "client": "4e", "metrics": { "cellsPerSecond4ms": "gate4e/megalite.json#data.runs.4.cellsPerSecond", "groupUndoSeconds": "gate4e/megalite.json#data.groupUndoSeconds", "groupUndoOwnMsMax": "gate4e/megalite.json#data.groupUndoOwnTick.ownMaxMs", "groupUndoMsptMax": "gate4e/megalite.json#data.groupUndoMsptMax", "bytesPerCell4ms": "gate4e/megalite.json#data.runs.4.bytesPerCell" }, "estMin": 1.7, "resources": ["bench"], "restore": ["G4E Flat"] },
+    "4d-all": { "desc": "4d gate (all)", "cmd": ["node", "tools/gate4d.mjs", "all"], "timeoutMin": 45, "client": "4d", "estMin": 18.6 },
+    "4e-orders": { "desc": "4e removal orders", "cmd": ["node", "tools/gate4e.mjs", "orders"], "timeoutMin": 30, "client": "4e", "estMin": 8.2 },
+    "4e-crash": { "desc": "4e crash kill points (needs 4e-orders)", "cmd": ["node", "tools/gate4e.mjs", "crash"], "timeoutMin": 30, "client": "4e", "after": "4e-orders", "estMin": 6.5 },
+    "4e-throughput": { "desc": "4e village + roads throughput at 4 ms (warm-up, median of 3)", "cmd": ["node", "tools/gate4e.mjs", "throughput"], "timeoutMin": 40, "client": "4e", "restartClient": true, "metrics": { "medianCellsPerSecond": "gate4e/throughput.json#data.median", "spread": "gate4e/throughput.json#data.spread" }, "estMin": 2.5, "resources": ["bench"], "restore": ["G4E Flat", "G4E VBase"] },
+    "4e-throughput-smoke": { "desc": "4e village + roads throughput, smoke (one run, no warm-up; cells/s recorded, not judged)", "cmd": ["node", "tools/gate4e.mjs", "throughput", "--smoke"], "timeoutMin": 20, "client": "4e", "restartClient": true, "metrics": { "cellsPerSecond": "gate4e/throughput.json#data.median", "mode": "gate4e/throughput.json#data.mode" }, "estMin": 1.5, "resources": ["bench"], "restore": ["G4E Flat", "G4E VBase"] },
+    "5b-chains": { "desc": "5b delta chains", "cmd": ["node", "tools/gate5b.mjs", "chains"], "timeoutMin": 60, "client": "5b", "estMin": 30.6 },
+    "5b-village": { "desc": "5b village", "cmd": ["node", "tools/gate5b.mjs", "village"], "timeoutMin": 20, "client": "5b", "estMin": 2 },
+    "6a-megaA": { "desc": "6a mega_bench A (prepared, full)", "cmd": ["node", "tools/gate6a.mjs", "megaA"], "timeoutMin": 45, "client": "6a", "metrics": { "cellsPerSecond": "gate6a/megaA.json#data.cellsPerSecond", "msptMax": "gate6a/megaA.json#data.placement.placementCpuMsMax", "undoMsptMax": "gate6a/megaA.json#data.undo.placement.placementCpuMsMax", "wholeTickP99": "gate6a/megaA.json#data.mspt.all.p99", "wholeTickMax": "gate6a/megaA.json#data.mspt.all.max", "undoSeconds": "gate6a/megaA.json#data.undo.seconds", "mismatches": "gate6a/megaA.json#data.diff.mismatches" }, "estMin": 11, "resources": ["bench"], "restore": ["G6A Mega Base Prepared"] },
+    "6a-megaB": { "desc": "6a mega_bench B, full walk (30 s dwell)", "cmd": ["node", "tools/gate6a.mjs", "megaB"], "timeoutMin": 180, "client": "6a", "metrics": { "mode": "gate6a/megabench-B.json#mode", "wallSeconds": "gate6a/megabench-B.json#wallSeconds", "relogResumeSeconds": "gate6a/megabench-B.json#relog.resumedSeconds", "sidecarResumeSeconds": "gate6a/megabench-B.json#sidecarKill.resumedSeconds" }, "estMin": 78, "resources": ["bench"], "restore": ["G6A Mega Base Prepared"] },
+    "6a-megaB-fast": { "desc": "6a mega_bench B, fast walk (8 s dwell, teleport to unfinished cells)", "cmd": ["node", "tools/gate6a.mjs", "megaB", "--fast"], "timeoutMin": 120, "client": "6a", "metrics": { "mode": "gate6a/megabench-B.json#mode", "wallSeconds": "gate6a/megabench-B.json#wallSeconds", "relogResumeSeconds": "gate6a/megabench-B.json#relog.resumedSeconds", "sidecarResumeSeconds": "gate6a/megabench-B.json#sidecarKill.resumedSeconds" }, "estMin": 25, "resources": ["bench"], "restore": ["G6A Mega Base Prepared"] },
+    "6a-crash": { "desc": "6a crash RG1-RG6, K3, K7", "cmd": ["node", "tools/gate6a.mjs", "crash"], "timeoutMin": 40, "client": "6a", "estMin": 12.5 },
+    "6a-eflat": { "desc": "6a E-flat exactness", "cmd": ["node", "tools/gate6a.mjs", "eflat"], "timeoutMin": 30, "client": "6a", "estMin": 8, "restore": ["G6A Flat Mega Prepared"] },
+    "6a-forest": { "desc": "6a forest rim (2-minute stand, exact undo)", "cmd": ["node", "tools/gate6a.mjs", "forest"], "timeoutMin": 30, "client": "6a", "estMin": 3.3, "restore": ["G6A Mega Base Prepared"] },
+    "6b-smoke": { "desc": "6b smoke: plan, check report, previews, blobs (sim); the checker time bar", "shell": "node tools/gate6b.mjs base && node tools/gate6b.mjs smoke && node tools/gate6b.mjs checktime", "timeoutMin": 15, "client": "6b", "estMin": 1.7 },
+    "6b-ghost": { "desc": "6b region ghost and preview UI (sim)", "shell": "node tools/gate6b.mjs base && node tools/gate6b.mjs ghost", "timeoutMin": 15, "client": "6b", "estMin": 1.2 },
+    "6b-volume": { "desc": "6b volume survey (bench: 0 whole ticks over 50 ms while sampling)", "shell": "node tools/gate6b.mjs base && node tools/gate6b.mjs volume", "timeoutMin": 15, "client": "6b", "estMin": 2, "resources": ["bench"] },
+    "6b-commands": { "desc": "6b /architect region commands (sim)", "shell": "node tools/gate6b.mjs base && node tools/gate6b.mjs commands", "timeoutMin": 15, "client": "6b", "estMin": 3 },
+    "6b-nudges": { "desc": "6b nudges (sim)", "shell": "node tools/gate6b.mjs base && node tools/gate6b.mjs nudges", "timeoutMin": 15, "client": "6b", "estMin": 3 },
+    "6b-pathstyle": { "desc": "6b region-lot entrances, pathStyle (sim)", "shell": "node tools/gate6b.mjs base && node tools/gate6b.mjs pathstyle", "timeoutMin": 15, "client": "6b", "estMin": 0.7 },
+    "6b-versions": { "desc": "6b IR format 2 / versionOf (a, b) (sim)", "shell": "node tools/gate6b.mjs base && node tools/gate6b.mjs versiona && node tools/gate6b.mjs versionb", "timeoutMin": 15, "client": "6b", "estMin": 2.7 },
+    "6b-versionc": { "desc": "6b downgrade: 0.11.0 on a format-2 region, back to this build (stops the 6b client, checks out v0.11.0 in the run dir, starts it, and back; leaves this build's client up)", "shell": "node tools/gate6b.mjs base && node tools/gate6b.mjs versionc", "timeoutMin": 40, "client": "6b", "estMin": 6 },
+    "6b-scenario-s1": { "desc": "scenario S1 floating islands, flat then natural (pinned seed; plan, prepare, realise, 2-minute stand, cameras, E-flat + E-normal undo, golden; every gated run bar but the gallery approval)", "shell": "node tools/gate6b.mjs base || exit 1; rc=0; node tools/scenarios.mjs run s1 --phase 6b --flat --out $SCENARIOS_ART/s1-flat || rc=1; node tools/scenarios.mjs run s1 --phase 6b --out $SCENARIOS_ART/s1 || rc=1; exit $rc", "timeoutMin": 60, "client": "6b", "okLines": false, "estMin": 6.5, "resources": ["bench"] },
+    "6b-scenario-s1-flat": { "desc": "scenario S1 floating islands, flat variant (E-flat exactness; every gated run bar)", "shell": "node tools/gate6b.mjs base && node tools/scenarios.mjs run s1 --phase 6b --flat --out $SCENARIOS_ART/s1-flat", "timeoutMin": 30, "client": "6b", "okLines": false, "estMin": 2, "resources": ["bench"] },
+    "6a-inv3": { "desc": "6a inv3 order invariance", "cmd": ["node", "tools/gate6a.mjs", "inv3"], "timeoutMin": 15, "client": "6a", "estMin": 1.5 },
+    "6a-staged": { "desc": "6a staged drift / reorder / maxWait", "cmd": ["node", "tools/gate6a.mjs", "staged"], "timeoutMin": 30, "client": "6a", "estMin": 15 },
+    "6a-heap": { "desc": "6a capped-heap mega_bench (restarts the client)", "cmd": ["node", "tools/gate6a.mjs", "heap"], "timeoutMin": 40, "client": "6a", "metrics": { "xmxGb": "gate6a/heap.json#data.xmxGb", "baselineMb": "gate6a/heap.json#data.baselineMb" }, "estMin": 5.5, "resources": ["bench"], "restore": ["G6A Mega Base Prepared"] }
   },
   "chains": {
     "quick": ["unit-mod", "unit-kit", "unit-sidecar", "sim-jobs", "sim-sets", "sim-massing", "apijars", "4e-megalite"],
-    "regress": ["unit-mod", "unit-kit", "unit-sidecar", "sim-jobs", "sim-sets", "sim-massing", "apijars", "4e-megalite",
-      "4e-orders", "4e-crash", "4e-throughput", "4d-all", "5b-chains", "5b-village", "6a-megaB-fast"],
-    "engine": ["unit-mod", "unit-kit", "unit-sidecar", "sim-jobs", "sim-sets", "sim-massing", "apijars", "4e-megalite",
-      "4e-orders", "4e-crash", "4e-throughput", "4d-all", "5b-chains", "5b-village",
-      "6a-megaA", "6a-megaB", "6a-crash", "6a-eflat", "6a-forest", "6a-inv3", "6a-staged", "6a-heap"]
+    "regress": ["unit-mod", "unit-kit", "unit-sidecar", "sim-jobs", "sim-sets", "sim-massing", "apijars", "4e-megalite", "4e-orders", "4e-crash", "4e-throughput", "4d-all", "5b-chains", "5b-village", "6a-megaB-fast"],
+    "engine": ["unit-mod", "unit-kit", "unit-sidecar", "sim-jobs", "sim-sets", "sim-massing", "apijars", "4e-megalite", "4e-orders", "4e-crash", "4e-throughput", "4d-all", "5b-chains", "5b-village", "6a-megaA", "6a-megaB", "6a-crash", "6a-eflat", "6a-forest", "6a-inv3", "6a-staged", "6a-heap"]
+  },
+  "shards": {
+    "$comment": "--shards N (at most max). Each shard has its own run worktree (shard 1: --run-dir/GATE_RUN_DIR; shard k: <run dir>-s<k>, or --run-dirs) and port pair (--ports S:D,S:D,... / GATE_PORTS; no default for shards 2..: name them, several agents share the machine). 8892-8895 are never a shard's: the gates' old-version clients and eval sidecars use them.",
+    "max": 3
+  },
+  "snapshots": {
+    "$comment": "Prepared worlds a step restores (APFS clone, cp -c -R) from the snapshot store instead of regenerating; the store is the seed's saves (GATE_SNAPSHOT_DIR overrides). Restoring also undoes whatever an earlier step or run left in that world.",
+    "dir": "seed:mod/run/saves"
+  },
+  "tiers": {
+    "$comment": "The three tiers (docs/GATES.md). change = the unit suites + the impact map's change steps (minutes; a docs-only diff runs nothing); slice = quick + the change and slice steps of the impact (about 30 min; engineSlice is added on engine-touching diffs, empty: the full mega_bench waits for release); release = everything, unattended overnight, with the duplicates rotated deterministically by the rotation key (--release <tag>: the tag's index among the version-sorted v* tags; else the ISO week), then the full independent gate-verifier.",
+    "change": { "always": ["unit-mod", "unit-kit", "unit-sidecar"], "fallback": ["unit-mod", "unit-kit", "unit-sidecar"] },
+    "slice": { "base": "quick", "fallback": [], "engineSlice": [] },
+    "release": {
+      "always": ["unit-mod", "unit-kit", "unit-sidecar", "sim-jobs", "sim-sets", "sim-massing", "apijars", "4e-megalite", "4e-orders", "4d-all", "5b-chains", "5b-village", "6a-megaA", "6a-eflat", "6a-forest", "6a-inv3", "6a-staged", "6b-smoke", "6b-ghost", "6b-volume", "6b-commands", "6b-nudges", "6b-pathstyle", "6b-versions", "6b-versionc", "6b-scenario-s1", "6b-scenario-s1-flat"],
+      "rotate": [
+        { "name": "crash suite", "why": "one crash suite per release, alternating 4e and 6a", "options": [["4e-crash"], ["6a-crash"]] },
+        { "name": "megaB", "why": "megaB every release: the full walk on engine-touching releases, else alternating full / --fast", "when": { "tag": "engine", "steps": ["6a-megaB"] }, "options": [["6a-megaB"], ["6a-megaB-fast"]] },
+        { "name": "heap", "why": "the capped-heap mega_bench every other release (opposite to the full megaB)", "options": [[], ["6a-heap"]] },
+        { "name": "throughput", "why": "warm-up + median of 3 only on releases touching realise or placement, else one run as a smoke test", "when": { "tag": "placement", "steps": ["4e-throughput"] }, "options": [["4e-throughput-smoke"]] }
+      ],
+      "notes": [
+        "E-flat (6a-eflat) runs every release; E-normal is asserted inside megaA (the diff after its group undo), so megaA every release covers it.",
+        "mega-lite (4e-megalite, 256x256) is in every tier; the full 1000x1000 mega_bench: megaA at every release and in slices whose diff touches region code (the impact map), megaB only at release."
+      ]
+    }
+  },
+  "impact": {
+    "$comment": "Change-impact map (tools/gate-impact.mjs): every rule matching a changed path counts. change: steps a `change` run picks; slice: extra steps a `slice` run adds (on top of quick and the change steps); tags: engine (realise, the journal, regions, tiles, the undo: slices add tiers.slice.engineSlice; releases run the full megaB), placement (realise/placement throughput: releases run the full throughput). A path no rule covers is UNMAPPED: change falls back to every unit suite, and it is printed. Extend the map when a slice adds a package or a gate step.",
+    "ignore": ["docs/**", "**/*.md", "eval/results/**", "eval/briefs/**", ".github/**", ".gitignore", "LICENSE*", "**/*.png", "mod/logs/**"],
+    "rules": [
+      { "name": "journal", "paths": ["mod/src/main/java/dev/larattalabs/architect/journal/**"], "change": ["unit-mod", "4e-orders", "4e-crash", "6a-eflat"], "slice": [], "tags": ["engine"] },
+      { "name": "region", "paths": ["mod/src/main/java/dev/larattalabs/architect/region/**"], "change": ["unit-mod", "6a-staged"], "slice": ["6a-megaA", "6a-inv3", "6b-ghost", "6b-volume", "6b-nudges", "6b-versions"], "tags": ["engine", "placement"] },
+      { "name": "placement and realise", "paths": ["mod/src/main/java/dev/larattalabs/architect/placement/**", "mod/src/main/java/dev/larattalabs/architect/batch/**"], "change": ["unit-mod", "4e-megalite"], "slice": ["4e-orders", "4e-throughput", "4d-all", "5b-chains"], "tags": ["engine", "placement"] },
+      { "name": "delta", "paths": ["mod/src/main/java/dev/larattalabs/architect/delta/**"], "change": ["unit-mod", "5b-village"], "slice": ["5b-chains"], "tags": ["placement"] },
+      { "name": "sites and roads", "paths": ["mod/src/main/java/dev/larattalabs/architect/site/**"], "change": ["unit-mod", "4e-megalite"], "slice": ["4e-orders", "4d-all", "5b-village", "6b-pathstyle"] },
+      { "name": "API surface", "paths": ["mod/src/main/java/dev/larattalabs/architect/api/**", "mod/src/main/java/dev/larattalabs/architect/apiimpl/**"], "change": ["unit-mod", "apijars"], "slice": ["sim-jobs", "sim-sets", "sim-massing", "4d-all"] },
+      { "name": "survival", "paths": ["mod/src/main/java/dev/larattalabs/architect/survival/**", "mod/src/client/java/dev/larattalabs/architect/survival/**"], "change": ["unit-mod", "apijars"], "slice": ["4d-all"] },
+      { "name": "mod: other server code", "paths": ["mod/src/main/java/dev/larattalabs/architect/*.java", "mod/src/main/java/dev/larattalabs/architect/design/**", "mod/src/main/java/dev/larattalabs/architect/library/**", "mod/src/main/java/dev/larattalabs/architect/launcher/**", "mod/src/main/java/dev/larattalabs/architect/mixin/**", "mod/src/main/java/dev/larattalabs/architect/ui/**", "mod/src/main/java/dev/larattalabs/architect/world/**"], "change": ["unit-mod", "sim-jobs"], "slice": ["sim-sets", "sim-massing"] },
+      { "name": "mod: client", "paths": ["mod/src/client/java/dev/larattalabs/architect/**", "mod/src/client/resources/**"], "change": ["unit-mod", "sim-jobs"], "slice": ["sim-sets", "sim-massing", "apijars"] },
+      { "name": "mod: resources", "paths": ["mod/src/main/resources/**"], "change": ["unit-mod"], "slice": ["4e-megalite"] },
+      { "name": "mod: any server code", "paths": ["mod/src/main/java/**"], "change": ["unit-mod"], "slice": [] },
+      { "name": "mod: tests", "paths": ["mod/src/test/**"], "change": ["unit-mod"], "slice": [] },
+      { "name": "mod: build", "paths": ["mod/*.gradle*", "mod/gradle.properties", "mod/gradle/**", "mod/run-template/**"], "change": ["unit-mod", "sim-jobs", "4e-megalite"], "slice": [] },
+      { "name": "apitest mod", "paths": ["apitest/**"], "change": ["sim-jobs", "sim-sets", "sim-massing"], "slice": ["4e-megalite", "4d-all"] },
+      { "name": "sidecar", "paths": ["sidecar/**"], "change": ["unit-sidecar", "sim-jobs", "sim-sets", "sim-massing"], "slice": [] },
+      { "name": "sidecar: regions", "paths": ["sidecar/src/region*", "sidecar/src/regions.ts"], "change": ["unit-sidecar"], "slice": ["6a-staged", "6a-inv3"], "tags": ["engine"] },
+      { "name": "kit: region synthesis", "paths": ["kit/lib/region/**", "kit/regions/**"], "change": ["unit-kit", "6a-inv3"], "slice": ["6a-staged", "6a-eflat", "6b-versions", "6b-scenario-s1"], "tags": ["engine"] },
+      { "name": "kit", "paths": ["kit/**"], "change": ["unit-kit"], "slice": ["sim-sets", "sim-massing", "4e-megalite", "6b-smoke", "6b-ghost", "6b-scenario-s1-flat"] },
+      { "name": "scenarios", "paths": ["scenarios/**"], "change": ["unit-kit", "6b-scenario-s1-flat"], "slice": ["6b-scenario-s1"] },
+      { "name": "eval fixtures", "paths": ["eval/fixtures/**", "tools/eval.mjs"], "change": ["unit-sidecar"], "slice": [] },
+      { "name": "driver: apitest suites", "paths": ["tools/apitest.mjs", "tools/run-apitest-client.sh"], "change": ["sim-jobs", "sim-sets", "sim-massing"], "slice": [] },
+      { "name": "driver: devclient", "paths": ["tools/lib/**"], "change": ["sim-jobs", "4e-megalite"], "slice": [] },
+      { "name": "driver: gate4d", "paths": ["tools/gate4d.mjs", "tools/run-gate4d-client.sh"], "change": [], "slice": ["4d-all"] },
+      { "name": "driver: gate4e", "paths": ["tools/gate4e*.mjs", "tools/run-gate4e-client.sh"], "change": ["4e-megalite", "4e-throughput-smoke"], "slice": ["4e-orders", "4e-crash"] },
+      { "name": "driver: gate5b", "paths": ["tools/gate5b*.mjs", "tools/run-gate5b-client.sh"], "change": ["5b-village"], "slice": ["5b-chains"] },
+      { "name": "driver: gate6b", "paths": ["tools/gate6b.mjs", "tools/lib/run6b.mjs", "tools/run-gate6b-client.sh", "tools/find-site.mjs"], "change": ["6b-smoke"], "slice": ["6b-ghost", "6b-volume", "6b-commands", "6b-nudges", "6b-pathstyle", "6b-versions"] },
+      { "name": "driver: scenarios", "paths": ["tools/scenarios.mjs", "tools/lib/scenario-*.mjs", "tools/lib/gallery6b.*"], "change": ["6b-scenario-s1-flat"], "slice": ["6b-scenario-s1"] },
+      { "name": "driver: gate6a", "paths": ["tools/gate6a*.mjs", "tools/run-gate6a-client.sh"], "change": ["apijars"], "slice": ["6a-eflat", "6a-inv3", "6a-staged"] },
+      { "name": "gate runner (verified by its own --plan and any run)", "paths": ["tools/gate-run.mjs", "tools/gate-chains.json", "tools/gate-impact.mjs"], "change": [], "slice": [] },
+      { "name": "other tools", "paths": ["tools/**", "package*.json"], "change": [], "slice": [] }
+    ]
   }
 }

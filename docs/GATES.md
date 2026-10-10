@@ -1,103 +1,264 @@
-# Gates: the unattended runner
+# Gates: the unattended runner and the risk-tiered policy
 
-`tools/gate-run.mjs` runs a named chain of gate steps (`tools/gate-chains.json`) against dev clients driven through the
-DevBridge (docs/DEVBRIDGE.md), with nobody watching. It costs $0: there are no Claude calls. Every client is a stub or sim
-sidecar client, and the runner refuses to start when Claude credentials are in the environment.
+`tools/gate-run.mjs` runs gate steps (`tools/gate-chains.json`) against dev clients driven through the DevBridge
+(docs/DEVBRIDGE.md), with nobody watching. It costs $0: there are no Claude calls. Every client is a stub or sim sidecar client,
+and the runner refuses to start when Claude credentials are in the environment.
 
 ```sh
-node tools/gate-run.mjs --list                      # the chains
-node tools/gate-run.mjs regress --plan              # what it would do: steps, clients, timeouts, setup, ports; runs nothing
-node tools/gate-run.mjs quick                       # run it (see "For agents" for how to launch it)
-node tools/gate-run.mjs quick --notify-dry-run      # print the Discord message it would send (notify is off by default)
-node tools/gate-run.mjs regress --only 4e-orders,4e-crash   # a subset, in chain order; --from <step> resumes a chain
+node tools/gate-run.mjs --list                                   # the chains and tiers
+node tools/gate-run.mjs change --since origin/main --plan        # what a tier would run, and why; runs nothing
+node tools/gate-run.mjs change --since origin/main               # minutes: the unit suites + the steps the diff maps to
+node tools/gate-run.mjs slice  --since origin/main --shards 3 --ports 8890:8891,8896:8897,8898:8899   # ~30 min
+node tools/gate-run.mjs release --release v0.12.0 --shards 3 --ports ...   # overnight: everything, duplicates rotated
+node tools/gate-run.mjs quick                                    # a named chain (quick | regress | engine), as before
+node tools/gate-impact.mjs --since origin/main                   # just the change-impact report
 ```
 
-## Chains and the two-tier policy
+## The policy (Noah, 2026-10-09; PLAN.md "Process from 6c on")
 
-| chain | steps | typical time |
+Gates are tiered by risk. Run the cheapest tier that covers the change, and the expensive checks once per release.
+
+| tier | what runs | when | typical time |
+|---|---|---|---|
+| `change` | the three unit suites (mod `gradlew build`, kit, sidecar vitest) + the steps the impact map gives the changed paths. A docs-only diff runs nothing. | every commit or small change, while iterating | minutes (a journal change: ~16 min; a driver change: ~7 min) |
+| `slice` | `quick` (units, the 4a/4b/4c sim suites, the apitest jars, 4e mega-lite) + the change and slice steps of the impact. A docs-only diff runs nothing. | before a slice merges | about 30 min (a journal slice: ~32 min on one shard) |
+| `release` | everything, with the duplicate heavy checks rotated (below); then the full independent gate-verifier | once per release (or weekly), unattended and overnight | 2-3 h on 3 shards (a 6b-sized release: ~2h20m estimated) |
+
+Pick the range with `--since <ref>` (the diff `<ref>...HEAD`, from the merge base), `--range A...B`, or `--files a,b`.
+`release` with no range uses the last tag reachable from HEAD; with no tag at all it counts as engine- and placement-touching.
+
+### Rotation at release
+
+The rotation key is deterministic: with `--release <tag>` it is that tag's index among the version-sorted `v*` tags (a tag not
+made yet counts where it would sort); without it, the ISO week. The same release always rotates the same way. `--plan`, the
+runner log, `summary.json` (`tier.rotation`) and `SUMMARY.md` all list what ran, what was **skipped**, and when the skipped
+step runs next.
+
+| check | rule |
+|---|---|
+| crash suite | one per release: `4e-crash` and `6a-crash` alternate |
+| mega_bench A | `6a-megaA` every release. It also asserts **E-normal** (the diff after its group undo), so E-normal needs no step of its own |
+| mega_bench B | full walk (`6a-megaB`) on engine-touching releases; otherwise full and `--fast` alternate |
+| E-flat | `6a-eflat` every release |
+| heap | `6a-heap` every other release, opposite the full megaB |
+| throughput | warm-up + median of 3 (`4e-throughput`) only when realise/placement changed (the `placement` tag); otherwise one smoke run (`4e-throughput-smoke`: recorded, not judged) |
+
+Always at release: units, sim suites, apijars, mega-lite, 4e-orders, 4d-all, 5b-chains, 5b-village, 6a-megaA, 6a-eflat, 6a-forest,
+6a-inv3, 6a-staged, and the sim 6b steps (6b-smoke, -ghost, -volume, -commands, -nudges, -pathstyle, -versions, -versionc,
+-scenario-s1, -scenario-s1-flat).
+
+The 6b steps run `tools/gate6b.mjs` and `tools/scenarios.mjs` on the `6b` client (`tools/run-gate6b-client.sh`, always the sim
+backend), each after `gate6b.mjs base` (idempotent: it creates the pinned-seed G6B worlds in the run dir the first time). The
+paid 6b steps (crater, craterab, rift, picks: the claude login) and the one-off pins (findsite, playerblock011, the scenario
+pin/golden/gallery/calibrate) are not in any tier; they run by hand under a contract's spend cap. A scenario step fails when a
+gated run bar fails (`scenarios.mjs run` exits 1); the gallery approval stays a person's.
+
+"Engine-touching" and "placement-touching" are tags on impact rules: the journal, regions, region synthesis and the realise and
+placement code are `engine`; regions, placement and deltas are `placement`.
+
+### Change-impact mapping
+
+`impact` in `tools/gate-chains.json` maps path globs to steps (`tools/gate-impact.mjs` applies it to
+`git diff --name-only`). Each rule has the steps a `change` run picks (`change`), the extra steps a `slice` run adds (`slice`) and
+its tags. Every matching rule counts. The main rules:
+
+| paths | change | slice adds |
 |---|---|---|
-| `quick` | unit tests (mod `gradlew build`, kit, sidecar vitest); the 4a/4b/4c sim suites (jobs, sets, massing); the unchanged 1.8.0/1.7.0/1.6.0 apitest jars; 4e mega-lite | about 10 min (measured: 9.5 min) |
-| `regress` | `quick` plus the 4d gate (all); 4e orders, crash and the village/roads throughput at 4 ms; 5b chains and village; 6a mega_bench B with the **fast** walk | about 3 h (estimate from the 6a step times) |
-| `engine` | `regress` (with mega_bench B on the **full** walk instead of the fast one) plus 6a megaA, megaB, crash, eflat, inv3, staged and heap | about 5 h (estimate) |
+| `journal/**` (engine) | unit-mod, 4e-orders, 4e-crash, 6a-eflat | |
+| `region/**` (engine, placement) | unit-mod, 6a-staged | 6a-megaA, 6a-inv3, 6b-ghost, 6b-volume, 6b-nudges, 6b-versions |
+| `placement/**`, `batch/**` (engine, placement) | unit-mod, 4e-megalite | 4e-orders, 4e-throughput, 4d-all, 5b-chains |
+| `delta/**` (placement) | unit-mod, 5b-village | 5b-chains |
+| `site/**` | unit-mod, 4e-megalite | 4e-orders, 4d-all, 5b-village, 6b-pathstyle |
+| `api/**`, `apiimpl/**` | unit-mod, apijars | sim-jobs, sim-sets, sim-massing, 4d-all |
+| `survival/**` | unit-mod, apijars | 4d-all |
+| `sidecar/**` | unit-sidecar, sim-jobs, sim-sets, sim-massing | |
+| `sidecar/src/region*` (engine) | unit-sidecar | 6a-staged, 6a-inv3 |
+| `kit/**` | unit-kit | sim-sets, sim-massing, 4e-megalite, 6b-smoke, 6b-ghost, 6b-scenario-s1-flat |
+| `kit/lib/region/**`, `kit/regions/**` (engine) | unit-kit, 6a-inv3 | 6a-staged, 6a-eflat, 6b-versions, 6b-scenario-s1 |
+| `scenarios/**` | unit-kit, 6b-scenario-s1-flat | 6b-scenario-s1 |
+| `tools/gate6b.mjs`, `tools/lib/run6b.mjs`, `tools/find-site.mjs` | 6b-smoke | the other sim 6b steps |
+| `tools/scenarios.mjs`, `tools/lib/scenario-*.mjs` | 6b-scenario-s1-flat | 6b-scenario-s1 |
+| a gate driver (`tools/gate4e.mjs`, ...) | that gate's cheap steps | its longer steps |
+| any other `mod/src/main/java/**` | unit-mod | |
 
-**Policy.** A phase that touches realise, the journal or streaming (region realise, tickets, the writer, journal format or
-index, tile streaming, the undo) runs `engine` before it merges. That includes the full mega_bench, both configurations, on the
-full 30 s walk. Every other phase runs `regress`. Use `quick` while iterating.
+Ignored (nothing to run): `docs/**`, `**/*.md`, eval results and briefs, `.github/**`, images, `mod/logs/**`. A path no rule and
+no ignore glob covers is **unmapped**: `change` falls back to the unit suites, `slice` to `quick`, and the plan prints it. Extend the
+map when a slice adds a package or a gate step (`node tools/gate-impact.mjs <path>` shows what a path maps to).
 
-`gate6a.mjs megaB --fast` (or `GATE6A_MEGAB_FAST=1`) is the regression tier of mega_bench B. It dwells 8 s per waypoint instead of 30 s.
-After a stage's first lap it teleports only to the 3x3-tile cells that still hold an unfinished item. The relog, the
-sidecar kill and every bar stay the same, and `megabench-B.json` records `mode: fast|full`. The fast walk shows whether B still works,
-not how long the full walk takes. Compare only full-walk numbers with each other.
+### Faster runs
+
+- **mega-lite in routine tiers.** `4e-megalite` (256x256) is in every tier. The full 1000x1000 mega_bench runs at release, and megaA
+  also in slices whose diff touches region code.
+- **Prepared worlds are restored, not regenerated.** A step's `restore` worlds are APFS-cloned (`cp -c -R`, seconds, no disk) from
+  the snapshot store (the seed's `mod/run/saves`, `GATE_SNAPSHOT_DIR`) before it runs. That also undoes whatever an earlier
+  step left in them.
+- **A client stays up between compatible steps.** Steps on the same client reuse it; steps on another client of the same family
+  (same sidecar kind and mods: `stub` = 4d/4e/5b, `sim` = sim/6a) switch worlds in the same process instead of restarting.
+- **Parallel shards.** `--shards N` (2-3) runs N clients at once, each with its own run worktree, port pair and evidence dir
+  (`<run>/s<k>/`). Steps declare what they need: steps sharing a `resources` entry never overlap; a `bench` step (timing or MSPT
+  bars: mega-lite, throughput, megaA/B, heap) waits until everything else has started and drained, then runs alone; a step with
+  `after` (4e-crash after 4e-orders) runs on its dependency's shard; a `stopOnFail` step (unit-mod) is a barrier.
+
+### Bench steps: tick bars, load, exclusivity
+
+- **MSPT bars judge Architect's own per-tick time: `placementCpuMsMax` <= 50 ms; whole tick, placement wall time,
+  `serverMsptMax` and GC are recorded, not judged; bench steps run under whatever load there is.** (Coordinator decision from the
+  6b engine-chain investigation, 2026-10-10, verified in 6b's release check: the megalite and megaA MSPT failures were the vanilla
+  server tick and G1 pauses, the same in v0.11.2; judged as wall time the placement ticks still failed under load, so the judged
+  figure is their server-thread CPU time.) `placementCpuMsMax` comes from `dev.placement.stats` (batches, group undo, jobs: all
+  of Architect's end-of-tick work, in the server thread's CPU time). The bar keeps its number: at most 50 ms (roads at 4 ms and
+  the 5b village at 4 ms: 25 ms). `tools/lib/tickbar.mjs` holds the rule; every bar uses it or the same field: gate4d (batch
+  ticks, throughput, survival), gate4e (megalite, throughput, roads, sizecap), gate5b (village, sizecap), gate6a (megaA realise
+  and group undo), and the scenario MSPT row (`tools/lib/scenario-metrics.mjs`). A build without the CPU field (an old version)
+  falls back to the wall time, then to the whole tick, and the check line says which. `dev.mspt.trace` has no CPU figure (its
+  `writeMsMax` is wall time); its whole-tick max, p99 and over-50 count are recorded next to the result. In
+  `gate-chains.json` the megaA `msptMax` metric is the realise CPU figure (`undoMsptMax` the undo's); `wholeTickP99` and
+  `wholeTickMax` are recorded.
+  - **p99 is record-only:** megaA's realise bar `p99 <= 25 ms` was a whole-tick percentile, and there is no percentile of
+    Architect's own time yet. Slice 0a adds own-time percentiles (`MsptTrace.stop()` / `dev.placement.stats`); the driver judges
+    them when present.
+  - **Still judging the whole tick:** gate6a `prepare` (max <= 100 ms, <= 1% of ticks over 50 ms): prepare's work is the
+    server's own chunk generation, which has no Architect/vanilla split. gate6b `volume` (0 ticks over 50 ms while sampling; its
+    own sampling slice is recorded as wall time). gate4d's "full tick >= the server's own tick" is a measurement sanity check,
+    not a bar.
+  - The CPU figure is not load-free either: on Apple's mixed P/E cores a tick descheduled to an E core costs more CPU time for
+    the same work (6b's three c717804 megaA runs: realise CPU max 37.1, 42.3, 51.5 ms; accepted by the coordinator with that
+    caveat). `--quiet-wait` stays opt-in for a busy box.
+- **Load is recorded.** Every step records the 1-minute load average at its start and end (`load1` in summary.json, SUMMARY.md);
+  every tick-bar result records it too. Read a bench number together with its load.
+- **`--quiet-wait [N]`** (opt-in): before each bench step, wait until the 1-minute load average is below N (default 8), at most
+  `--quiet-max-min` minutes (default 30). If it never drops, the step runs marked noisy and ends **NOISY**: inconclusive, neither
+  pass nor fail (its outcome and fail lines are kept, so a functional failure still shows). A run whose only non-PASS steps are
+  NOISY has the verdict `INCONCLUSIVE`; re-run those steps on a quiet box.
+- **Benches are exclusive** within a run: a bench step starts only when no other step is running on any shard, nothing else
+  starts while it runs, and the other shards' idle clients are stopped first. Across runners on the same machine there is no
+  lock: check that no other run is in a bench step (its summary.json; `pgrep -f <its run worktree>`) before starting clients.
+
+### Lighter verification (gate-verifier guidance)
+
+The runner never calls Claude. The independent gate-verifier is launched by the agent, after the run, on its evidence.
+
+- **Per change:** no verifier. The `change` run's SUMMARY.md is the record.
+- **Per slice:** the gate-verifier **reviews**, it does not reproduce:
+  1. the diff (`git diff <base>...HEAD`) against the slice contract;
+  2. the runner's `SUMMARY.md`, `summary.json` (tier, impact, unmapped paths, every step's status and key numbers) and the evidence
+     of the steps that matter (gate JSONs under `gate4e/`, `gate6a/`, ...), checking that the run's head is the slice head and
+     that the selection covered the diff;
+  3. then it **re-runs only the risky steps**: anything touching the journal, the undo or survival, plus the steps for whatever the
+     diff touches that the verifier judges risky (`node tools/gate-run.mjs change --only <steps> ...` on its own ports).
+- **Per release:** full reproduction. The `release` run, then the full independent gate-verifier, which reproduces the gates
+  itself (every bar, every step, not only the runner's word).
 
 ## What a run does
 
 1. **Guards.** It refuses to start if any of these is set: `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, `CLAUDE_CODE_OAUTH_TOKEN`
    or `AWS_BEARER_TOKEN_BEDROCK`. Every child process gets an environment without any `ANTHROPIC_*` or `CLAUDE*` variable. It
    refuses steps that look paid (`*-real`, `--tier smoke|full`, `--backend claude`) and client scripts other than
-   `run-gate4d/4e/5b/6a-client.sh`, which use the stub or the sim sidecar. It also refuses a run dir that is this checkout, the main
-   checkout or the seed.
-2. **Lock.** It holds `artifacts/gate-runs/gate-run.lock` (pid, chain), so a second run refuses to start. A lock whose pid has died is
-   stale and is taken over.
-3. **Preflight.** It refuses if any process already uses the run worktree, or if the two ports are taken. Everything it later kills is
-   therefore its own.
-4. **Setup.** The clients run from the runner's own worktree, `../architect-mc-gate-run` (`GATE_RUN_DIR`). That worktree is created with
-   `git worktree add --detach` and checked out at this checkout's HEAD for every run. On its first run, `.gradle-home`,
-   `sidecar/node_modules` and `mod/run` (the gate worlds, the prepared mega worlds and the library) are APFS-cloned from
-   `../architect-mc-6a-run` (`GATE_SEED_DIR`). That copy is read-only, nothing is written back to it, and the clone takes seconds and
-   almost no disk. The sidecar is then built.
-   **The clients run the committed HEAD. The drivers (`tools/*.mjs`) run from this checkout's working tree.** `--plan`
-   warns when the tree is dirty.
-5. **Steps.** The steps run in chain order. Each step names its client: one of `cfg.clients` (started in its world unless it is
-   already up), `none` (no client, as for unit tests), or `self` (the step starts its own clients, as apijars does). Each
-   step runs in its own process group, with the timeout from the config.
-   - **TIMEOUT.** The step's group gets SIGTERM, then SIGKILL. After that, the run worktree's own processes are stopped: gradle and its daemon/workers,
-     the client JVM, the sidecar, vitest and the client scripts, matched by their paths in the worktree. Nothing else is touched
-     (an observer such as `tail -f` on a worktree log is not one of them). Stray apitest jars are removed from `mods/`.
-   - **After any step that doesn't pass**, the client is stopped. The next step starts a fresh one.
-   - **Verdicts.** PASS means exit 0, no `FAIL` lines, and at least one `ok` line. Unit tests use parsed counts instead of
-     `ok` lines.
-   - **Failures.** The run continues past a failure, unless the step is `stopOnFail` (`unit-mod`: no point running gates on a
-     build that fails). A step with `after` is skipped if that step didn't pass (4e crash needs 4e orders' context).
-6. **Ports.** The game client uses `ARCHITECT_GATE_SIDECAR_PORT` / `ARCHITECT_GATE_DEV_PORT`, default 8890/8891. The gates'
-   old-version clients use 8892/8893 and eval sidecars 8894/8895. Run nothing else on 8890-8895 during a run.
-7. **End.** It writes `summary.json` and `SUMMARY.md`. **No Discord notify by default** (Noah, 2026-10-09: don't ping Discord).
-   Only with `--notify` (or `GATE_NOTIFY=send`) does it send one through `~/Developer/_infra/discord-notify.sh`. A
-   pass is routine (silent). A fail, timeout, stopOnFail stop or abort is `--critical`. The message has the chain, the
-   pass/fail/timeout counts, the duration, the head and the SUMMARY.md path. It carries no secrets.
-   SIGINT/SIGTERM abort cleanly, with the same summary and notify. SIGHUP is ignored.
+   `run-gate4d/4e/5b/6a-client.sh`, which use the stub or the sim sidecar. It refuses a run dir that is this checkout, the main
+   checkout or the seed, and a run dir whose name ends with a sibling's (the drivers find their client with an unanchored `pgrep`).
+2. **Lock.** It holds the lock (`<out>/gate-run.lock`, or `--lock`) with its pid, chain, run dirs and ports, so a second run on the
+   same lock refuses to start. A lock whose pid has died is stale and is taken over.
+3. **Preflight.** It refuses if any process already uses a run worktree, or if a shard's ports are taken. Everything it later kills
+   is therefore its own.
+4. **Setup.** The clients run from the runner's own worktrees. Each is created with `git worktree add --detach` and checked out at
+   this checkout's HEAD for every run. On a worktree's first run, `.gradle-home`, `sidecar/node_modules` and `mod/run` (the gate
+   worlds, the prepared mega worlds and the library) are APFS-cloned from the seed (`../architect-mc-6a-run`). The seed is
+   read-only; nothing is written back to it. The sidecar is then built.
+   **The clients run the committed HEAD. The drivers (`tools/*.mjs`) run from this checkout's working tree.** `--plan` warns
+   when the tree is dirty, so commit before a run.
+5. **Steps.** Each step names its client: one of `cfg.clients`, `none` (unit tests) or `self` (the step starts its own clients, as
+   apijars does). Each step runs in its own process group, with the timeout from the config.
+   - **TIMEOUT.** The step's group gets SIGTERM, then SIGKILL. After that, the shard's run-worktree processes are stopped (gradle
+     and its daemon/workers, the client JVM, the sidecar, vitest, the client scripts, matched by their paths in that worktree).
+     Nothing else is touched. Stray apitest jars are removed from `mods/`.
+   - **After any step that doesn't pass**, that shard's client is stopped. Its next step starts a fresh one.
+   - **Verdicts.** PASS means exit 0, no `FAIL` lines, and at least one `ok` line. Unit tests use parsed counts instead.
+   - **Failures.** The run continues past a failure, unless the step is `stopOnFail`. A step with `after` is skipped if that
+     step didn't pass.
+6. **End.** It writes `summary.json` and `SUMMARY.md`. **No Discord notify by default** (Noah, 2026-10-09: no Discord pings).
+   Only `--notify` (or `GATE_NOTIFY=send`) sends one; leave it off. SIGINT/SIGTERM abort cleanly, with the same summary.
+   SIGHUP is ignored.
 
-**Output.** Everything goes to `artifacts/gate-runs/<YYYYMMDD-HHMMSS>-<chain>/` in the main checkout (`GATE_RUNS_OUT` overrides):
+### Where it runs: ports, worktrees, lock, output
 
-- `summary.json`:
-  - `state` is `running` | `done` | `stopped` | `aborted`, and `verdict` is `PASS` | `FAIL`.
-  - Each step has its status, seconds, ok/FAIL counts, the first FAIL lines and key numbers. Examples of key numbers:
-    unit test counts, mega-lite cells/s, throughput median, megaA cells/s and MSPT p99, megaB resume times.
-  - The file is rewritten after every step.
-- `SUMMARY.md`
-- `runner.pid`, `runner.log`, `setup.log`, `client.log`, `notify.json`
-- `<step>.log`
-- The gates' evidence: `gate4d/`, `gate4e/`, `gate5b/`, `gate6a/` (shared by that gate's steps, so context carries over) and `sim-*/`.
+Several agents and runners share this machine, so everything is configurable. A flag wins over the environment.
+
+| flag | environment | default |
+|---|---|---|
+| `--ports S:D[,S:D...]` (every shard's sidecar:DevBridge pair) | `GATE_PORTS`; or `ARCHITECT_GATE_SIDECAR_PORT`/`ARCHITECT_GATE_DEV_PORT` for shard 1 and `GATE_SHARD_PORTS` for shards 2.. | shard 1: 8890:8891; shards 2..: **none, name them** |
+| `--run-dir DIR` (shard k>1: `DIR-s<k>`) | `GATE_RUN_DIR` | `../architect-mc-gate-run` |
+| `--run-dirs A,B,C` (every shard's, explicitly) | `GATE_RUN_DIRS` | |
+| `--out DIR` | `GATE_RUNS_OUT` | `<main checkout>/artifacts/gate-runs` |
+| `--lock FILE` | `GATE_LOCK` | `<out>/gate-run.lock` |
+| `--seed-dir DIR` | `GATE_SEED_DIR` | `../architect-mc-6a-run` |
+| `--quiet-wait [N]`, `--quiet-max-min M` | | off (load recorded only); N 8, M 30 |
+| | `GATE_SNAPSHOT_DIR` | the seed's `mod/run/saves` |
+| | `ARCHITECT_GATE_OLD_SIDECAR_PORT`/`_DEV_PORT` (gate4e/gate5b's old-version client, migration/downgrade steps only) | 8892/8893 |
+
+8892-8895 are never a shard's: the old-version clients default to 8892/8893, and eval sidecars to 8894/8895 (the runner gives
+its children `ARCHITECT_EVAL_PORT=0`, an ephemeral port). A second runner next to the default one uses its own ports, run dir(s)
+and out dir (its own lock follows), for example:
+
+```sh
+node tools/gate-run.mjs quick --shards 3 --ports 8900:8901,8902:8903,8904:8905 \
+  --run-dir ../architect-mc-gate-run2 --out ../architect-mc/artifacts/gate-runs-tiers
+```
+
+### Output
+
+Everything goes to `<out>/<YYYYMMDD-HHMMSS>-<chain or tier>/`:
+
+- `summary.json`: `state` is `running` | `done` | `stopped` | `aborted`, and `verdict` is `PASS` | `FAIL`. `tier` holds the range,
+  the impact (files, rules, unmapped), the engine/placement tags, the rotation key and the rotation (ran, skipped, next). Each step
+  has its status, shard, seconds, ok/FAIL counts, the first FAIL lines and key numbers (unit test counts, mega-lite cells/s,
+  throughput median, megaA cells/s and MSPT p99, megaB resume times). Rewritten after every step.
+- `SUMMARY.md`: the verdict, the tier and rotation, a step table and the steps that didn't pass.
+- `runner.pid`, `runner.log`, `setup[-s<k>].log`, `client[-s<k>].log`, `<step>.log`.
+- The gates' evidence: `[s<k>/]gate4d/`, `gate4e/`, `gate5b/`, `gate6a/` (shared by a gate's steps on that shard, so context
+  carries over) and `sim-*/`.
+
+## Chains
+
+The named chains still exist (`node tools/gate-run.mjs <chain>`):
+
+| chain | steps | typical time |
+|---|---|---|
+| `quick` | unit tests; the 4a/4b/4c sim suites (jobs, sets, massing); the unchanged 0.11.0/0.10.0/0.9.0 apitest jars (API 1.8.0/1.7.0/1.6.0); 4e mega-lite | 9.5 min serial on a quiet box; ~10 min on 3 shards on a loaded box (below) |
+| `regress` | `quick` plus 4d (all); 4e orders, crash, throughput; 5b chains and village; 6a megaB `--fast` | about 3 h serial |
+| `engine` | `regress` (with the full megaB) plus 6a megaA, megaB, crash, eflat, forest, inv3, staged and heap | about 5 h serial |
+
+**Measured (2026-10-10, a shared box at load average 12-36: the 6b engine chain, rust builds, other clients).** Serial quick on a
+quiet box: 9m30s. On the loaded box: serial quick ran 10m12s up to the end of apijars (megalite not reached); `quick --shards 3`
+ran 10m06s and 10m24s (the latter including the first setup of two new run worktrees, 25 s). Sharding quick saves only the unit
+and sim suites: its critical path is unit-mod (a barrier), then apijars (3-7 min, it starts its own clients), then mega-lite (a
+bench step, alone), so expect about 6 min on a quiet box. Sharding pays off in `slice` and `release`, where the long steps
+(4d-all, 5b-chains, 4e-orders, the 6a suites) run side by side: the plan's estimate for a 6b-sized slice is 1h48m serial,
+59 min on 3 shards; for a release, 3h10m serial, 2h23m on 3 shards. A `change` run for a driver change (6 steps) took 8m03s.
+
+`gate6a.mjs megaB --fast` dwells 8 s per waypoint instead of 30 s and, after a stage's first lap, teleports only to the cells
+that still hold an unfinished item. The relog, the sidecar kill and every bar stay the same, and `megabench-B.json` records
+`mode: fast|full`. Compare only full-walk numbers with each other.
 
 ## For agents: launch, then wait once
 
-Gate chains run for hours. Polling them from an agent session burns the subscription for nothing. Do this instead:
-
-1. **Launch it detached** and note the run dir:
-
-   ```sh
-   nohup node tools/gate-run.mjs regress > /tmp/gate-run.out 2>&1 &
-   sleep 30; R=$(ls -td ../architect-mc/artifacts/gate-runs/*-regress | head -1); echo $R
-   ```
-
-2. **Wait, don't poll.** Run **one** long until-loop in the
-   background. The loop ends when the state is terminal or when the runner's pid is gone, so a crashed runner can't hang it:
+1. **Plan first.** `node tools/gate-run.mjs <tier> --since origin/main --plan` (plus your ports and dirs). Check the selection,
+   the unmapped paths and the estimate. Commit first: the clients run HEAD.
+2. **Launch it detached** and note the run dir:
 
    ```sh
-   until grep -qE '"state": "(done|stopped|aborted)"' $R/summary.json || ! kill -0 $(cat $R/runner.pid) 2>/dev/null; do sleep 300; done
+   nohup node tools/gate-run.mjs slice --since origin/main > /tmp/gate-run.out 2>&1 &
+   sleep 30; R=$(ls -td ../architect-mc/artifacts/gate-runs/*-slice | head -1); echo $R
    ```
 
-   Never check every few minutes from the conversation. At most one background wait at a time, with a timeout longer than
-   the chain's (`--plan` prints the worst case).
-3. **Read `SUMMARY.md` once.** Open a step's `<step>.log` or its gate JSON only for the steps that didn't pass.
-4. **Never kill processes by name.** If a run must stop, `kill -TERM $(cat $R/runner.pid)`. The runner stops its own steps
-   and clients.
+3. **Wait, don't poll.** Run **one** long until-loop in the background. It ends when the state is terminal or when the runner's
+   pid is gone, so a crashed runner can't hang it:
+
+   ```sh
+   until grep -qE '"state": "(done|stopped|aborted)"' $R/summary.json || ! kill -0 $(cat $R/runner.pid) 2>/dev/null; do sleep 120; done
+   ```
+
+   At most one background wait at a time, with a timeout longer than the run's (`--plan` prints the worst case).
+4. **Read `SUMMARY.md` once.** Open a step's `<step>.log` or its gate JSON only for the steps that didn't pass.
+5. **Never kill processes by name.** To stop a run, `kill -TERM $(cat $R/runner.pid)`. The runner stops its own steps and clients.
+6. **Bench steps measure time.** Don't start clients while another run is in a `bench` step (its tick and cells/s bars), and
+   read your own bench numbers with their recorded load. On a shared, busy box use `--quiet-wait`.
