@@ -24,7 +24,7 @@ const { RUN, OUT, GAME_DIR, SAVES, call, check, cmd, connect, fails, leaveWorld,
 
 refuseKeys();
 const SEED = '2026101000';
-const FLAT = 'G6B 0c Flat', FOREST = 'G6B 0c Forest';
+const FLAT = 'G6B 0c Superflat', FOREST = 'G6B 0c Forest', BOOT = 'G6B 0c Flat';
 const A = 'test:a', B = 'test:b';
 
 // ---- the apitest mod
@@ -82,7 +82,7 @@ steps.start = async () => {
   const head = execFileSync('git', ['-C', root, 'rev-parse', 'HEAD']).toString().trim();
   execFileSync('git', ['-C', RUN, 'checkout', '-q', '--detach', head]);
   execFileSync('npm', ['run', 'build'], { cwd: path.join(RUN, 'sidecar'), stdio: 'ignore' });
-  await startClient(process.argv[3] ?? FLAT, { backend: 'sim' });
+  await startClient(process.argv[3] ?? BOOT, { backend: 'sim' });
   fs.writeFileSync(path.join(OUT, 'spend.json'), `${JSON.stringify({ capUsd: 0, totalUsd: 0, runs: [] }, null, 2)}\n`);
   return { head };
 };
@@ -143,7 +143,7 @@ steps.minlot = async () => {
 };
 
 /** A stone pad with its top at y 19 under the road strip of item 2 (the flat world's ground is too shallow for a trench). */
-async function pad(x0, z0, x1, z1, top = 19) {
+async function pad(x0, z0, x1, z1, top) {
   const y0 = await feet(x0, z0) - 1;
   for (let x = x0; x <= x1; x += 20) await cmd(`/fill ${x} ${y0} ${z0} ${Math.min(x1, x + 19)} ${top} ${z1} minecraft:stone`);
 }
@@ -156,13 +156,14 @@ steps.roads = async () => {
   await ensure();
   await fresh('G6B 0c Roads', FLAT);
   const X = 500, Z = 500;
-  await tp(X + 20.5, 40, Z + 0.5, 0, 89);
-  await pad(X - 4, Z - 8, X + 44, Z + 8);
-  await cmd(`/fill ${X + 24} 2 ${Z - 8} ${X + 27} 19 ${Z + 8} minecraft:air`);
+  await tp(X + 20.5, 100, Z + 0.5, 0, 89);
+  const T = (await feet(X, Z)) + 20;
+  await pad(X - 4, Z - 8, X + 44, Z + 8, T);
+  await cmd(`/fill ${X + 24} ${T - 17} ${Z - 8} ${X + 27} ${T} ${Z + 8} minecraft:air`);
   await settle(2000);
-  const pts = [0, 10, 20, 30, 40].map((d) => [X + d, 20, Z]);
+  const pts = [0, 10, 20, 30, 40].map((d) => [X + d, T + 1, Z]);
   const road = { points: pts, width: 3, owner: A };
-  const min = [X - 6, -64, Z - 10], max = [X + 46, 40, Z + 10];
+  const min = [X - 6, T - 40, Z - 10], max = [X + 46, T + 12, Z + 10];
   const h0 = await hash(min, max);
   const e0 = await entries();
   const c = await api(`roadcheck ${json(road)}`);
@@ -188,7 +189,7 @@ steps.ground = async () => {
   await ensure();
   await fresh('G6B 0c Ground', FOREST);
   const loc = await cmd('/locate biome minecraft:forest');
-  const m = (loc.messages ?? []).join(' ').match(/\[(-?\d+), ~, (-?\d+)\]/);
+  const m = (loc.messages ?? []).join(' ').match(/\[(-?\d+), (?:~|-?\d+), (-?\d+)\]/);
   if (!m) throw new Error(`no forest: ${json(loc)}`);
   const [fx, fz] = [Number(m[1]), Number(m[2])];
   await tp(fx + 0.5, 140, fz + 0.5, 0, 89);
@@ -276,7 +277,7 @@ steps.protect = async () => {
   const bq = await later(`bqueue ${json({ owner: A, autoApprove: true, items: [{ key: 'b1', bp: 'cabin', at: [X + 50, y, Z + 5], mode: 'INSTANT' }] })}`);
   await sleep(8000);
   const bv = await api(`batch ${bq}`);
-  const grp = (await api('sgroups')).find?.((g) => g.owner === A) ?? null;
+  const grp = (await api(`sgroups ${A}`)).find?.((g) => g.owner === A) ?? null;
   const rp = await call('dev.region.plan', { program: 'region_small', claim: [X + 200, Z - 96, X + 391, Z + 95], surveyLoad: 'bounded:256', check: false, owner: A }, 900_000);
   check(!!rp.planId, `protect: a region of test:a planned before the mark (${rp.planId ?? json(rp)})`);
   // the mark: the strip x X..X+400, z Z-100..Z+100 (the sites, the region's claim, the road and cell strips)
@@ -302,15 +303,15 @@ steps.protect = async () => {
   const bbv = await api(`batch ${bb}`);
   refused('batch building item', (bbv.items ?? []).map((i) => i.reason));
   for (const f of [false, true]) {
-    refused(`checkDelta${f ? ' force' : ''}`, await call('dev.site.delta.check', { site: s2, version: 1, owner: A, force: f }, 60_000));
-    refused(`applyDelta${f ? ' force' : ''}`, await call('dev.site.delta.apply', { site: s2, version: 1, owner: A, force: f }, 60_000).catch((e) => ({ refusals: [{ reason: String(e).includes('PROTECTED') ? 'PROTECTED' : String(e) }] })));
+    refused(`checkDelta${f ? ' force' : ''}`, await api(`checkdelta ${s2} 1 ${A}${f ? ' force' : ''}`));
+    refused(`applyDelta${f ? ' force' : ''}`, await later(`applydelta ${s2} 1 ${A}${f ? ' force' : ''}`));
   }
   refused('revert', await later(`srevert ${s2} 1`).then((r) => r.refusals ? r : { refusals: [{ reason: String(r.error ?? json(r)).includes('protected') ? 'PROTECTED' : json(r) }] }));
   const bd = await later(`bqueue ${json({ owner: A, items: [{ key: 'd1', delta: { site: s2, version: 1, owner: A, force: true } }] })}`);
   await sleep(6000);
   refused('batch delta item', ((await api(`batch ${bd}`)).items ?? []).map((i) => i.reason));
   const yr = await feet(X + 100, Z - 20);
-  const road = { points: [[X + 100, yr, Z - 140], [X + 100, yr, Z], [X + 100, yr, Z + 140]], width: 3, owner: A };
+  const road = { points: [[X + 100, yr, Z - 140], [X + 100, yr, Z - 105], [X + 100, yr, Z + 105], [X + 100, yr, Z + 140]], width: 3, owner: A };
   for (const f of [false, true]) {
     refused(`checkRoad${f ? ' force' : ''}`, await api(`roadcheck ${json({ ...road, force: f })}`));
     refused(`placeRoad${f ? ' force' : ''}`, await later(`road ${json({ ...road, force: f, tag: 'pr' + f })}`));
@@ -337,7 +338,7 @@ steps.protect = async () => {
   const mvc = await call('dev.build.confirm', {}, 60_000).catch((e) => ({ error: String(e) }));
   await call('dev.build.cancel', {}, 10_000).catch(() => {});
   out.move = { state: mv, confirm: mvc };
-  check(json(mv).includes('PROTECTED') || json(mvc).includes('protected area'), `protect: a move of ${s1} into the area refused PROTECTED (${json(mvc).slice(0, 200)})`);
+  check(json(mv).includes('PROTECTED') || json(mvc).includes('protectedarea'), `protect: a move of ${s1} into the area refused PROTECTED (${json(mvc).slice(0, 200)})`);
   await settle(3000);
   const h1 = await hash(min, max);
   const e1 = await entries();
@@ -358,7 +359,7 @@ steps.protect = async () => {
   // remove, undo and undoStage of test:a sites marked after placing
   const rm = await later(`remove ${s1} ${A} noforce`);
   check(rm.removed, `protect: remove of ${s1} succeeds (${json(rm.blockers)})`);
-  const g = (await api('sgroups')).find?.((x) => x.owner === A && (x.sites ?? []).length) ?? grp;
+  const g = (await api(`sgroups ${A}`)).find?.((x) => (x.sites ?? []).length) ?? grp;
   if (g) {
     const st = (g.stages ?? [])[0]?.name ?? bq;
     const un = await later(`sundo ${g.group} ${st}`);
@@ -414,7 +415,7 @@ steps.tags = async () => {
   // group undo over a tagged villager
   const bq = await later(`bqueue ${json({ owner: A, autoApprove: true, items: [{ key: 'g1', bp: 'cabin', at: [X + 80, y, Z], mode: 'INSTANT' }] })}`);
   await sleep(8000);
-  const g = (await api('sgroups')).find?.((x) => x.owner === A);
+  const g = (await api(`sgroups ${A}`)).find?.((x) => (x.sites ?? []).length);
   await summon('minecraft:villager', X + 84.5, y, Z + 4.5, A);
   const gu = g ? await later(`sgremove ${g.group} noforce ${A}`, 300_000) : { error: 'no group' };
   check(gu.removed, `tags: group undo goes ahead (${json(gu.blockers ?? gu)})`);
@@ -436,12 +437,21 @@ steps.tags = async () => {
   check(!rb.removed && rb.blockers.length > 0, `tags: untagged, it blocks the removal (${json(rb.blockers)})`);
   await kill();
   await later(`remove ${s3} ${A} noforce`);
-  // a tagged unnamed zombie isn't discarded
+  // a tagged unnamed zombie isn't discarded (at night: a zombie burns at noon); an untagged one is (the control)
+  await cmd('/time set 18000');
+  await cmd('/difficulty easy'); // a peaceful world summons no zombie
+  await summon('minecraft:zombie', X + 44.5, y, Z + 4.5, null);
+  const pu = await later(`place cabin ${X + 40} ${y} ${Z} INSTANT unowned noactor 0 owner=${A}`);
+  const zu = (await alive(X + 44, y, Z + 4, 'minecraft:zombie')).length;
+  check(pu.placed && zu === 0 && pu.notes.some((n) => n.includes('zombie')), `tags: control: an untagged unnamed zombie is discarded (${pu.placed})`);
+  if (pu.siteId) await later(`remove ${pu.siteId} ${A} noforce`);
   await summon('minecraft:zombie', X + 4.5, y, Z + 4.5, A);
   const pz = await later(`place cabin ${X} ${y} ${Z} INSTANT unowned noactor 0 owner=${A}`);
   check(pz.placed && (await alive(X + 4, y, Z + 4, 'minecraft:zombie')).length === 1, `tags: a tagged unnamed zombie isn't discarded (${pz.placed})`);
   await later(`remove ${pz.siteId} ${A} noforce`);
   await kill();
+  await cmd('/difficulty peaceful');
+  await cmd('/time set 6000');
   // a player in the box still blocks
   await cmd('/gamemode creative');
   await cmd(`/tp @s ${X + 4.5} ${y} ${Z + 4.5}`);
