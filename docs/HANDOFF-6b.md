@@ -14,8 +14,8 @@ merge, tag or publish. This file is retired into CONTRACT "Phase 6b as built" wh
 | 4. Bundled programs and fixtures, expected reports, broken variants | done: `crater_works`, `rift_city`, `sky_isle`, `walled_hill`, `floating_islands` (lots 9+ wide and 12 tall so the 6a stubs fit; `rift_city` has a field side blob) |
 | 5. Sidecar: check, preview, blobs, `hello` versions, `region.design` | done (subagent, merged from `phase/6b-sidecar`) |
 | 6. Mod: blobs, `PLAN_STALE`, `Survey.volume`, previews/check/design/nudge, ghost, commands, DevBridge, API 1.9.0 | done in JVM tests (subagent, merged from `phase/6b-mod`); in-game checks pending |
-| 7. Tools: `find-site.mjs`, `scenarios.mjs`, scenario files, `gate6b.mjs` | written; in-game smoke green (crater_works plan, prepare, realise with 8 lots, exact group undo); find-site running |
-| 8. Gate items 1-10, 12; S1 run and gallery (11); gate-verifier (13) | not started |
+| 7. Tools: `find-site.mjs`, `scenarios.mjs`, scenario files, `gate6b.mjs` | done; S1-S6 and the gate sites pinned |
+| 8. Gate items 1-10, 12; S1 run and gallery (11); gate-verifier (13) | items 1-10 green (in-game steps re-run on the final code 2026-10-10 01:17-01:33); S1 run 20261009-233143 green on every run bar, evidence eb02307bb0ec, gallery built (approval pending); engine chain running (artifacts/gate-runs/20261010-013327-engine) |
 
 ## The 0.11.0 jars (build step 1)
 
