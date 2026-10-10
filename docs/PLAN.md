@@ -327,3 +327,17 @@ borrowing the concepts:
 - **C3:** plain villages in **7a**. The settlement graph, lots, connectors, paths and props work for a flat village claim
   (a region with no terrain ops), not only for sculpted regions. 7a's contract is written that way; no separate phase.
 - **Shared client UI kit** (copies in AgentCraft, Architect and Steward): a decision for Noah later. Possibly a small shared library.
+- **Refinements (Steward, Noah agreed; steward-mc PLAN "Copies, adaptations and originals"):**
+  - **C1 safeguards:** never copy landmarks or one-off buildings. At most 2-3 placements per design, then a new design (x6 becomes
+    2 designs x 3). Each copy changes the palette, at least one exposed parameter where the design has one, and mirror or
+    rotation. Every variant passes the full checker (it already does: `VariantRunner` runs the pristine-kit check). A copy that
+    fails fit or the checker on its lot falls back to an original design, never forced. Copies carry `variantOf` and their
+    source version from the start, so 6d needs no migration.
+  - **C2 narrowed:** skip only the report critique on small items. Massings stay for everything.
+  - **C5:** estimate by kind (original, adapted, copy), so a card can show e.g. "4 original, 3 designs adapted to 7 lots, 3 shared".
+  - **7b, adapt first:** per lot, try `fitToSite` of an existing design first; an original design is the fallback (fit or checker
+    fails, or a landmark). Steward sets the policy (copy caps, an "all original" card choice).
+  - **6d, updates follow the source:** a new version of a source design is offered to its variants and site-adapted copies as one
+    update, applied per lot, keeping each lot's adaptation.
+  - **7c reuse across settlements:** promoted shapes are offered as a card choice, never applied automatically, and are
+    re-checked, refitted and re-skinned to the new bible.
