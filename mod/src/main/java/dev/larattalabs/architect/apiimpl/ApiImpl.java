@@ -58,7 +58,11 @@ public final class ApiImpl implements ArchitectApi {
 			stopping = false;
 		});
 		ServerLifecycleEvents.SERVER_STARTED.register(ApiImpl::started);
-		ServerLifecycleEvents.SERVER_STOPPING.register(s -> stopping = true);
+		ServerLifecycleEvents.SERVER_STOPPING.register(s -> {
+			stopping = true;
+			StopSweep.stop(); // 6c 0a: every pending API future fails WORLD_STOPPED
+		});
+		StopSweep.stoppingFlag(() -> stopping);
 		ServerLifecycleEvents.SERVER_STOPPED.register(s -> {
 			server = null;
 			stopping = false;
@@ -272,19 +276,28 @@ public final class ApiImpl implements ArchitectApi {
 
 	// ------------------------------------------------------------------ ArchitectApi
 
+	// (6c 0a) the API objects callers get are wrapped: their futures fail WORLD_STOPPED when the world stops (StopSweep)
+	private final Library libraryApi = StopSweep.wrap(Library.class, library, false);
+	private final Survey surveyApi = StopSweep.wrap(Survey.class, survey, true);
+	private final Jobs jobsApi = StopSweep.wrap(Jobs.class, jobs, false);
+	private final Designs designsApi = StopSweep.wrap(Designs.class, designs, false);
+	private final dev.larattalabs.architect.api.Bibles biblesApi = StopSweep.wrap(dev.larattalabs.architect.api.Bibles.class, bibles, false);
+	private final dev.larattalabs.architect.api.Regions regionsApi = StopSweep.wrap(dev.larattalabs.architect.api.Regions.class,
+		dev.larattalabs.architect.region.RegionsImpl.INSTANCE, true);
+
 	@Override
 	public Library library() {
-		return library;
+		return libraryApi;
 	}
 
 	@Override
 	public Sites sites(MinecraftServer s) {
-		return new SitesImpl(s);
+		return StopSweep.wrap(Sites.class, new SitesImpl(s), true);
 	}
 
 	@Override
 	public Survey survey() {
-		return survey;
+		return surveyApi;
 	}
 
 	@Override
@@ -294,22 +307,22 @@ public final class ApiImpl implements ArchitectApi {
 
 	@Override
 	public Jobs jobs() {
-		return jobs;
+		return jobsApi;
 	}
 
 	@Override
 	public Designs designs() {
-		return designs;
+		return designsApi;
 	}
 
 	@Override
 	public dev.larattalabs.architect.api.Bibles bibles() {
-		return bibles;
+		return biblesApi;
 	}
 
 	@Override
 	public dev.larattalabs.architect.api.Regions regions() {
-		return dev.larattalabs.architect.region.RegionsImpl.INSTANCE;
+		return regionsApi;
 	}
 
 	@Override
