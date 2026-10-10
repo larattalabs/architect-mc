@@ -6329,3 +6329,461 @@ programs: `crater_works`, `rift_city`, `walled_hill`, `sky_isle`, `floating_isla
   `artifacts/scenarios/6b/gallery/` (`SCENARIOS_ART` puts runs there). The red-brown satellite island (SE, cam_high) is
   grass_block in the `minecraft:dappled_forest` biome's grass tint (an in-game `execute if biome` at the island; the pristine
   before-shot shows the same patch on the ground): the world's colour, not the program's.
+
+## Phase 6c slice 0a: consumer support (DRAFT for Steward's review)
+
+This slice is API 1.10.0 and mod 0.13.0. C4 ships early as sub-release 0.12.2, with API 1.9.0 unchanged.
+
+- **Branch:** `phase/6c-0a`, in the worktree `../architect-mc-6c-0a`.
+- **Spend:** $0. Everything runs on the sim or the stub; there is no claude-login run.
+- **Scope:** the 0a list in PLAN.md "Steward round 4" item 1, plus:
+  - the round 5 additions: C14 caller pins, `WORLD_STOPPED` and own-time percentiles;
+  - the coordinator's tile-timeout item from CONTRACT "Phase 6b as built".
+  
+  Everything else waits for 0b or 0c (see Deferred).
+- **Precondition:** the gate tiers branch (`tools/gate-tiers`) is merged to main before this slice's gate runs. Main's
+  `gate-chains.json` only has quick, regress and engine. The `slice` tier, the impact map and the own-time tick bars exist only on
+  that branch.
+
+### 0. What exists today (main, v0.12.0)
+
+- **C4 stub.**
+  - The real sidecar's `--backend sim` already covers everything the stub needs:
+    - bibles (`SimBibleBackend`: roles, components, the settlement roles);
+    - design groups, including massingFirst, `approvalUi: owner`, approvals and redirects;
+    - detail passes that conform to their massing;
+    - `job.run` with schema-satisfying answers. `ext["architect:simAnswer"]` scripts one.
+  - The mod's launcher passes `ARCHITECT_SIDECAR_BACKEND=sim` for both the dev-dir and the bundled sidecar.
+  - Steward's `run-e2e-client.sh` doesn't use it. It points at `mod/src/test/resources/stub-sidecar`, a 360-line launcher-test stub
+    that handles only 6 message types (no bibles, groups, massings or jobs). Gates 4d, 4e and 5b use that stub, so it stays as it is.
+- **C5.** `estimates.ts` keeps rolling samples per model. Its seeds come from 4b, 4c and 5a: design $0.8-3.2, massing $0.10-0.40,
+  bible $1.2-2.0. It has no kinds.
+- **C6.**
+  - `Sites.fitToLot` resolves library entries only, through `Blueprints.get`.
+  - Massings read as `Blueprints.Entry` through `MassingFiles` (`id@v`).
+  - Conformance (`kit/lib/massing.mjs`) checks parts, roofs and size. It doesn't check the front or the entrance.
+- **Batches.** Finished `BatchView`s are kept until the world stops. BATCH_DONE fires live only.
+- **C9.** None of the existing ids is idempotent:
+  - `GroupRequest.id` is "ignored when taken";
+  - `Batch.id` "must be unused";
+  - bible jobs take no id.
+- **C7.** `Group.cost` is the sum of the items. The bible is excluded, and the critique sits inside the item cost (the split is in
+  `Design.critique`).
+- **Group events.** The mod dedupes in `RecordBook.fire`. `awaiting_approval` and `paused_budget` re-fire while an action is in flight.
+- **Bibles.** `void cancel(jobId)` is fire-and-forget.
+- **C14.** `EntryVersion.pinned` means a standing site stands at that version. `entry.pins` reports the pinned versions, and the
+  sidecar's GC keeps them.
+- **Futures at stop** fail with `IllegalStateException` or `TimeoutException`. Only the region futures have a type
+  (`RegionRefused`).
+- **Tile timeouts.** `regionpool.ts` fails a tile that runs over `regionTileMs` (2 s), and its item fails with it.
+- **MsptTrace.** It has full-tick percentiles, plus the write wall time's max and mean. The judged figure, `placementCpuMs*`, has no
+  percentile.
+
+### 1. API 1.10.0 rules and behaviour changes
+
+**Rules (as in 1.9.0):**
+- `ArchitectApi.VERSION = "1.10.0"`.
+- Every widened record keeps its 1.9.0 constructor as a secondary constructor.
+- New interface methods are defaults that throw "... needs Architect API 1.10.0".
+- New enum constants are appended.
+- `tools/api-compat.mjs` checks the **unchanged 0.12.0, 0.11.0 and 0.10.0 apitest jars** (API 1.9.0, 1.8.0 and 1.7.0) and the 0.12.0
+  mod jar's surface (`--surface`). All three jars pass their suites against 0.13.0.
+
+**New types:** `ArchitectRefused extends RuntimeException` with `Reason reason()`. `RegionRefused` is re-parented under it.
+Inserting a superclass is binary compatible; if api-compat flags it, the tool is taught this one case.
+
+**New Reasons (appended):** `WORLD_STOPPED`, `OP_KEY_CONFLICT`, `TILE_SLOW`. `WaitAction.Kind` gains `RETRY` (appended).
+
+**Behaviour changes:**
+1. Futures pending at world stop fail with `ArchitectRefused(WORLD_STOPPED)` instead of `IllegalStateException` (§10).
+2. GROUP_UPDATED fires only on real transitions, so less often (§7).
+3. `Sites.batches(owner)` and `batch(id)` return finished batches across restarts (§4).
+4. `EntryVersion.pinned` also means "a caller pin exists" (§9).
+5. A tile timeout no longer fails the item, so the region doesn't go PARTIAL; it waits with TILE_SLOW (§11).
+6. A detail whose front differs from its massing's now fails conformance, a repair round. In paid runs that can cost one repair
+   round, about $0.3-0.9. The $0 gate does not measure this.
+
+### 2. C4: the sim as the consumer stub (ships first, as 0.12.2)
+
+- **Turning it on:**
+  - A consumer sets `ARCHITECT_SIDECAR_BACKEND=sim` on a dev client running the published jar. No Architect checkout is needed.
+  - The bundled sidecar then runs with `--backend sim`.
+  - If the bundled install (`npm ci --omit=dev`) exists only for the Agent SDK, sim mode skips it. 0.12.2 checks which is true.
+  - README gains "Testing against Architect".
+  - The sim never calls Claude.
+- **Sim costs:** set with config `simCosts` (in `sidecar-data/config.json`) or `ARCHITECT_SIM_COSTS`.
+  - `"zero"` is the default, so existing gates don't change.
+  - `"measured"` reports §3's seed midpoints as notional costs:
+
+    | Item | Notional cost |
+    |---|---|
+    | bible | $1.35 |
+    | massing | $0.19 |
+    | detail | $3.40 |
+    | report critique | $0.10 |
+    | repair round | $0.50 |
+
+    With these, budgets, the soft pause, `extendGroup`, `cost.byKind` and the estimates behave as in a real run.
+  - An object with those five keys sets the costs directly.
+  - These costs are labelled `sim: true` in `basis` and in the log. Nothing is spent.
+- **Faults (sim only, in a request's notes or ext):**
+  - `sim:usage_limit` already exists;
+  - `sim:fail` (new) makes the design fail;
+  - `sim:repair` (new) adds one repair round.
+- **Scripted job answers:** a `simAnswer` is now validated against the job's schema; a mismatch fails the job.
+- **Speed:** a Steward-sized flow (bible, 3 massings, approval, 3 details) finishes in under 2 minutes at the default `simStepMs`
+  of 400.
+- **0.12.2** is a patch: sidecar and docs only, API 1.9.0. Its mini-gate is §13 item 1.
+
+### 3. C5: estimates by kind, re-seeded
+
+- **Seeds.** Measured samples still replace them per model. The basis reads "seed (Steward phase 1, 2026-10-09)".
+
+  | Pass | Cost | Time |
+  |---|---|---|
+  | detail with a report critique | $2.5-4.6 | 8-15 min |
+  | massing | $0.12-0.30 | 1-3 min |
+  | bible | $1.16-1.55 | 5-8 min |
+  | repair round | $0.3-0.9 | |
+
+  The critique's figures stay reported separately, as today.
+- **Kinds:**
+  - **original:** a share of the bible, plus massing, detail and critique;
+  - **adapted:** a placed design refitted to a new lot. Seeded at one repair-sized turn ($0.3-0.9), with the basis "unmeasured
+    until 7b";
+  - **copy:** $0, plus the variant build time. It becomes real with C1 in 0b.
+- **API:**
+
+  ```java
+  CompletableFuture<Estimate> estimate(EstimateRequest r);              // Designs, default-throwing
+  record EstimateRequest(@Nullable GroupRequest group, int originals, int adapted, int copies, boolean newBible,
+                         boolean massingFirst, boolean reportCritique, @Nullable String model) {}
+  // Estimate gains trailing Map<Kind, Item> byKind; enum Estimate.Kind { BIBLE, ORIGINAL, ADAPTED, COPY }
+  ```
+
+  With `group` set, its items count as originals.
+- **Bars** (unit tests: Steward's runs replayed through the estimator, with no samples):
+  - **Phase 1:** 8 originals, a new bible, massingFirst, report critique. The cost band contains $31.03, and the midpoint is within
+    ±25% of it.
+  - **Greywater Hamlet:** 3 originals and a new bible. The cost band contains $13.76, and the midpoint is within ±25%.
+  - **Greywater's time:** its ~70 min includes the player's approval wait and the play, which the estimate leaves out. So the time
+    estimate is recorded next to it, not judged (question S-0a-5).
+
+### 4. C6: massing placement prediction
+
+```java
+LotFit fitMassingToLot(MassingRef massing, BoundingBox lot, Direction streetSide, FitOptions o);   // Sites, default-throwing
+```
+
+- **Fit and check.** It uses the same `LotFitting.fit` as `fitToLot`, on the massing version's template (read via `MassingFiles`).
+  The verdict is the normal check against the massing's template and approach at that spot.
+- **Unknown massing or version:** `UNKNOWN_BLUEPRINT`.
+- **Prediction.** A detail from that massing version, fitted with `fitToLot` to the same lot, gets the **same rotation**, and its
+  origin is within **±2 on x and z and equal in y**.
+- **Conformance changes (kit), which make the prediction hold:**
+  - a different `front` is an **error**, so the round goes back to the designer;
+  - an entrance column more than 1 off is an **issue**.
+
+### 5. Durable finished batches
+
+- **Kept across restarts.** DONE, CANCELLED and STOPPED batches stay in `architect-queue.json`.
+- **Retention:** the newest 256 finished batches per world, and every batch finished in the last 30 days, whichever keeps more.
+- **Ids:** the `b<n>` counter is persisted, so a batch id is never reused.
+- **BATCH_DONE fires once per batch, in this order:**
+  1. fire BATCH_DONE;
+  2. mark the batch "fired";
+  3. save the queue.
+- **Catch-up.** On world load, BATCH_DONE fires for every finished batch that isn't marked fired, as JOB_DONE's catch-up does.
+  - After a clean stop, the event fires exactly once.
+  - After a crash, it fires at least once. Consumers dedupe by batch id, and the javadoc says so.
+- **DevBridge:** `dev.batch.skipSave {batchId}` skips the save after that batch's fire, so the gate can crash inside the window.
+
+### 6. C9: caller operation ids
+
+- **The key.** `BibleRequest`, `GroupRequest` and `Batch` gain a trailing `@Nullable String opKey`, matching
+  `[A-Za-z0-9_.:-]{1,128}`. A key is scoped by **(owner, kind, opKey)**; a null owner means the player.
+- **Same key, same body:** the call returns the first call's result and starts no new work:
+  - the same `BibleJob`, as it stands now;
+  - the same group id;
+  - the same batch id.
+  
+  That holds in any state, including final or cancelled.
+- **Same key, different body:** the call fails with `ArchitectRefused(OP_KEY_CONFLICT)`.
+- **How bodies are compared:** by the sha256 of the request's canonical JSON, without `opKey`. For a `Batch`, that is its persisted
+  queue-file form (dimension id, actor UUID), not the live objects.
+- **Where keys are written:**
+  - **Bible jobs and groups:** in the sidecar's `state.json`, in the same write that creates the job, before the ack.
+  - **Batches:** in `architect-queue.json`, in the save made when the batch is queued.
+- **Retention:** a key lives as long as its record, and for at least 30 days after the record is final.
+- **After a crash between the request and its ack:**
+  - If the request arrived, the key exists, and a retry or a lookup adopts the work.
+  - If it didn't arrive, the lookup is empty, and a retry starts the work once.
+- **Lookups:**
+
+  ```java
+  CompletableFuture<Optional<BibleJob>> jobByKey(@Nullable String owner, String opKey);   // Bibles
+  CompletableFuture<Optional<Group>> groupByKey(@Nullable String owner, String opKey);    // Designs
+  Optional<BatchView> batchByKey(@Nullable String owner, String opKey);                   // Sites, server thread
+  ```
+
+  - A sidecar lookup fails with `SIDECAR_UNAVAILABLE` when the sidecar isn't connected. It never answers "empty" then, because
+    empty must mean "never received".
+  - `BibleJob`, `Group` and `BatchView` gain `Optional<String> opKey`.
+- **Protocol (2, additive):**
+  - `bible.request` and `design.group` take `opKey`;
+  - their acks gain `adopted`;
+  - new messages `bible.byKey` and `group.byKey`;
+  - the feature `opKeys`.
+- **DevBridge:** `dev.api.dropAck {type}` drops the next ack of that message type in the mod.
+
+### 7. C7 per-stage breakdown, and group events
+
+```java
+// Group gains trailing Breakdown breakdown, long seq, String lastAction (old constructors: EMPTY, 0, ""), and:
+Map<String, Double> costByKind();          // bible, massing, detail, critique; derived from breakdown
+record Breakdown(Map<Stage, Line> stages, double totalUsd, long wallMs, long firstDetailedMs) {
+  enum Stage { BIBLE, MASSING, DETAIL, REPAIR, CRITIQUE, QUEUED, USAGE_HOLD }
+  record Line(double usd, long ms, int count) {} }
+```
+
+- **Stages:**
+  - DETAIL is the first design round of each detail pass.
+  - REPAIR is rounds 2 and later, for massings and details.
+  - CRITIQUE is critic calls and loop revisions.
+  - QUEUED and USAGE_HOLD carry time only.
+  - `ms` is summed item time. `wallMs` is the group's wall time. `firstDetailedMs` is the time to the first detailed item (Steward's
+    15-minute target).
+- **The bible line:** the job or jobs that made the pinned bible version. That cost is counted in the first group of the same owner
+  that pins the version; later groups show it as 0 (question S-0a-3).
+- **Totals:** `Group.cost` keeps its meaning, the sum of the items. `totalUsd` = `cost.usd` + the bible line.
+- **Job log:** one `group <id> breakdown {json}` line goes to `sidecar-data/logs/sidecar.log` at awaiting approval and at the final
+  state.
+- **`seq`:** set by the sidecar and persisted. It goes up only when one of these changes:
+  - the status, the reason, the wave or the awaiting set;
+  - an item's status, stage, entryId, massing version or rounds.
+  
+  Cost, step text and `updatedAt` don't bump it, and `group(id)` still returns them.
+- **`lastAction` values:**
+  - creation and items: `created`, `item_started`, `item_done`, `item_failed`;
+  - massing and approval: `massing_ready`, `awaiting_approval`, `approved`, `redirected`;
+  - budget: `paused_budget`, `extended`, `resumed`;
+  - usage limit: `held_usage`, `usage_reset`;
+  - the end: `cancelled`, `done`, `failed`.
+- **What the mod fires:**
+  - **GROUP_UPDATED:** only when `seq` grew.
+  - **GROUP_AWAITING_APPROVAL:** only on a transition into it, or for a newly waiting massing version.
+  - Neither fires again while an approve, redirect, extend or resume is in flight.
+  - Against an older sidecar with no `seq`, the mod keeps today's dedupe.
+
+### 8. Bibles.cancelJob
+
+```java
+default CompletableFuture<BibleJob> cancelJob(String jobId)   // `void cancel` stays: its return type can't change
+```
+
+It completes with the job, cancelled, at the ack. It fails like `cancelGroup` does:
+- "no job";
+- "already <status>";
+- `SIDECAR_UNAVAILABLE`.
+
+BIBLE_DONE fires once, as today.
+
+### 9. C14: caller version pins
+
+```java
+CompletableFuture<Void> pinVersion(String entryId, int version, String owner);     // Library, default-throwing
+CompletableFuture<Void> unpinVersion(String entryId, int version, String owner);
+List<String> pinOwners(String entryId, int version);
+```
+
+- **Where pins live:** pins are game-wide, like the library. They persist in `<gameDir>/architect/caller-pins.json` and are merged
+  into `entry.pins`.
+- **What a pin keeps:** a version stays while a site stands at it or any caller pin exists.
+- **Errors:** pinning a collected or unknown version fails with `VERSION_GONE`. Unpinning is idempotent.
+
+### 10. WORLD_STOPPED
+
+- **Which futures fail.** At SERVER_STOPPING, every pending API future fails with `ArchitectRefused(WORLD_STOPPED)`:
+  - Sites: place, remove, queue, cancelBatch, removeGroup, undoStage, applyDelta, revert, placeRoad, placeCells;
+  - Regions;
+  - Survey;
+  - the Designs, Bibles, Library and Jobs futures that wait on an ack or an outcome (`PendingFutures.failAll`).
+- **Sidecar work keeps running.** The caller finds it again with §6's lookups or the listings after the next load.
+- **Until a world starts,** calls that need one fail at once with WORLD_STOPPED.
+
+### 11. Tile-evaluation timeouts
+
+- **Sidecar retries:**
+  - A tile over its limit is retried on a fresh worker, up to 3 times.
+  - The limit doubles each time (2, 4, 8 s), with 1, 2 and 4 s pauses between attempts.
+  - After that it answers `region.tile.error {code: "timeout", attempts}`.
+  - Every other error answers `code: "error"`, with no retry.
+  - A retry is a fresh deterministic evaluation, so the bytes are unchanged.
+- **Mod (`TileStream`):**
+  - A `timeout` error puts the tile in WAITING, and the item waits with `Refusal(TILE_SLOW)`.
+  - The mod asks for the tile again after 30 s, 60 s and 120 s, then every 5 min.
+  - The region stays REALISING and offers `RETRY` (`nudge`, which asks again now).
+  - A non-timeout error still fails the tile and its item, so only that can make a region PARTIAL.
+- **Test hook (sidecar, dev only):** `ARCHITECT_TEST_SLOW_TILES=<n>` makes the first n evaluations of each tile overrun.
+
+### 12. Own-time percentiles
+
+- `MsptTrace.tick` also takes the per-tick placement CPU time that `Placement` already measures.
+- `stop()` adds `own` (wall) and `ownCpu`. Each has ticks, p50, p99, max and mean, over the ticks with Architect work.
+- **megaA's bars:** realise and undo are judged on `ownCpu.p99 ≤ 25 ms` (6a's p99 bar, restored on Architect's own time) and
+  `ownCpu.max ≤ 50 ms`.
+- `tools/lib/tickbar.mjs` uses these fields when present. The full tick is recorded, not judged.
+
+### 13. Gate (slice tier, $0)
+
+**Evidence:** each item writes `artifacts/gate6c0a/<item>.json`, and `REPORT.md` summarises them.
+
+**Driver:** `tools/gate6c0a.mjs`, added to the impact map, with a new client script `tools/run-gate6c0a-client.sh`. That script runs
+a packed jar with `ARCHITECT_SIDECAR_BACKEND=sim` and is added to the runner's `SAFE_CLIENTS`.
+
+**Spend:** `spend.json` must read $0.00.
+
+1. **0.12.2 mini-gate:**
+   - unit-sidecar, the three sim suites and apijars;
+   - the **Steward-style flow** on the **packed 0.12.2 jar** with `simCosts: "measured"`:
+     1. a scripted `job.run` card;
+     2. a bible;
+     3. a 3-item massingFirst group with `approvalUi: owner`;
+     4. one redirect, then approve;
+     5. a client restart while awaiting approval: the group is re-read and nothing re-fires;
+     6. the details;
+     7. a batch of the 3, then undo.
+     
+     Every wait is bounded.
+   - `sim:fail`, `sim:repair` and `sim:usage_limit` give FAILED, a repair round and HELD_USAGE.
+2. **C5:** the §3 cost bars pass, the `byKind` lines sum to the totals, and in the sim the item-1 flow's notional cost is inside its
+   estimate band.
+3. **C6:** every kit example massing/detail pair, on 4 street sides × 3 lot sizes, gets the same rotation and an origin within ±2.
+   A turned front fails conformance. In game, `fitMassingToLot` and the later `fitToLot` agree on one lot.
+4. **Durable batches:**
+   - After a clean stop and load, a finished batch is still DONE and BATCH_DONE doesn't re-fire.
+   - With `dev.batch.skipSave` and then the client JVM killed, BATCH_DONE fires once on load.
+   - Ids are not reused after the retention drop.
+5. **C9:** for each of `bibles().request`, `requestGroup` and `queue`:
+   - send with an opKey, `dev.api.dropAck`, kill the client and restart;
+   - `*ByKey` adopts the work, and a re-request returns the same id;
+   - the job, group and batch counts are unchanged;
+   - a different body gives OP_KEY_CONFLICT;
+   - another owner's key is a separate operation;
+   - a lookup with the sidecar down gives SIDECAR_UNAVAILABLE.
+6. **C7:**
+   - all the stage lines are present, and `totalUsd` = `cost.usd` + the bible line, to $0.001;
+   - QUEUED > 0 at concurrency 1;
+   - USAGE_HOLD > 0 under `sim:usage_limit`;
+   - the log line appears at awaiting approval and at the final state.
+7. **Events:**
+   - `seq` strictly increases, with no repeats.
+   - GROUP_AWAITING_APPROVAL fires once per massing round.
+   - The 6b live-run case gets no re-sent `awaiting_approval` or `paused_budget` while an action is in flight. It is reproduced with
+     `simCosts: "measured"` and a $5 budget.
+8. **cancelJob:** the future completes CANCELLED and BIBLE_DONE fires once. A second cancel fails "already cancelled". With the
+   helper down it fails SIDECAR_UNAVAILABLE.
+9. **Pins:**
+   - a pinned v1 survives a forced-age GC, and unpinned it is collected;
+   - with two owners pinning v1, it stays until both unpin.
+10. **WORLD_STOPPED:** stop the world with a long `queue`, a `realise`, a `Survey.volume` and an unacked `requestGroup` pending. All
+    four fail with `reason() == WORLD_STOPPED`, and after the next load the group is found by its key.
+11. **Tile timeout:**
+    - Sidecar unit tests cover the retry, the doubling, `code`, and byte-identical output.
+    - In game, a mega-lite region with `SLOW_TILES=4` ends **PLACED** with the unhooked run's evidence sha. It shows TILE_SLOW, and
+      `RETRY` works.
+    - With `=2`, it passes inside the sidecar's retries.
+    - A kit-error tile still fails.
+12. **Own time:** `dev.mspt.trace` returns `own` and `ownCpu`. megaA is judged on them, with the load recorded. A NOISY result is
+    re-run, not waived.
+13. **API compatibility:** api-compat and the three apitest jars, as in §1. The 0.12.0 apitest jar is built from `v0.12.0` into
+    `artifacts/gate6c0a/v0120/` before any 0a change, and `gate6a.mjs apijars` moves to 1.9, 1.8 and 1.7.
+14. **gate-verifier (slice):** it reviews the diff against this contract and the evidence, and re-runs items 4, 5, 10 and 11, the
+    crash, adoption, stop and wait paths.
+
+**Not a gate item:** Steward's own `e2e.mjs stub`. After 0.12.2, Steward switches `run-e2e-client.sh` to the sim and runs it, and
+Architect records the result in PLAN.md.
+
+#### 13.1 Which regression tier, and why
+
+**The `slice` tier:** `quick` plus the impact map's slice steps.
+
+| Paths touched | Steps they add |
+|---|---|
+| `region/**` (TileStream, MsptTrace) | 6a-staged, 6a-inv3, 6a-megaA |
+| `site/**` (Batches, Placement) | 4e-orders, 4d-all, 5b-village |
+| the API and the sidecar | the sim suites and apijars |
+| the kit | sim-sets, sim-massing, 4e-megalite |
+| `batch/` or `placement/`, if C6 has to touch LotFitting | 4e-throughput, 5b-chains |
+
+**Plus `6a-megaB-fast`, added by hand.** The tile retry changes TileStream's streaming state machine, and megaB's sidecar kill and
+relog drive exactly the re-request path.
+
+**Not `release` or `engine`:**
+- There is no journal or store-format change. The queue file only gains fields.
+- The realise output is unchanged (item 11's sha check).
+- The crash suites rotate at the 0.13.0 release.
+
+**Time:** about 45 min on 3 shards.
+
+### 14. Build order
+
+1. Build and archive the 0.12.0 apitest jar.
+2. Build 0.12.2:
+   - the C4 work;
+   - `run-gate6c0a-client.sh` and the runner allowlist;
+   - gate item 1;
+   - the coordinator tags it.
+3. Sidecar: opKeys, seq, the breakdown, estimates, the tile retry and the cancel ack.
+4. Kit: conformance.
+5. Mod: the 1.10.0 types, durable batches, the WORLD_STOPPED sweep, pins, TileStream, MsptTrace and the DevBridge hooks.
+6. Gate: the gate driver, the impact rows, the slice run, then the verifier.
+
+### Open questions for Steward
+
+- **S-0a-1. The scripted card.** Is a fixed card from `ext["architect:simAnswer"]`, validated against your schema, enough for
+  `e2e.mjs stub`? And will you switch `run-e2e-client.sh` to `ARCHITECT_SIDECAR_BACKEND=sim`?
+- **S-0a-2. Ghost accuracy.** Is "same rotation, origin within ±2" good enough for approval ghosts? The alternative is to reserve the
+  massing box plus 2.
+- **S-0a-3. Bible cost.** Should the first group of an owner to pin a bible version carry its cost? The alternative is an explicit
+  `GroupRequest.bibleJobId`.
+- **S-0a-4. Conflicting keys.** When a key is re-used with a different body, should it fail with OP_KEY_CONFLICT (proposed), or
+  silently return the first operation?
+- **S-0a-5. Greywater's 70 minutes.** What did they cover (approval waits, placement)? The answer decides whether the time estimate
+  can be judged against it.
+
+### Open questions for Noah
+
+- **N-0a-1. Early sub-release.** Is the 0.12.2 sub-release (C4 only, API unchanged) OK, so Steward's $0 gate starts early?
+- **N-0a-2. Slow tiles.** Should slow tiles wait indefinitely (retried every 5 min, with RETRY), or should the wait be capped, say at
+  1 h, and then fail as TIMED_OUT?
+
+### Deferred
+
+- **To 0b:**
+  - C1 copies (the `copy` estimate becomes real), C2, C8 and C13;
+  - the C7 benchmark of unique against repeat-heavy settlements, against the $5 / 15 min targets. 0a's breakdown is its
+    instrument.
+- **To 0c:**
+  - minLotSize and the recommended rect;
+  - partial roads;
+  - groundHeight;
+  - typed refusals for bounded fields;
+  - the extendGroup warning;
+  - C16, C17 and C18.
+- **Later:**
+  - measured `adapted` estimates (7b);
+  - off-thread undo planning;
+  - the headless gate mode;
+  - retiring the launcher-test stub.
+
+## Coordinator decisions (2026-10-10)
+
+- **Version numbers:** v0.12.1 is the tiers + lab-ui integration (no API change). C4's early consumer-stub sub-release is
+  therefore **v0.12.2** (API 1.9.0 unchanged), and the rest of 0a is v0.13.0 / API 1.10.0. All "0.12.1" references above have
+  been renumbered.
+- **Ship the stub early:** yes. Steward's $0 end-to-end gate waits only on it.
+- **Slow tiles:** follow the S8 rule. A slow tile waits without a limit by default, showing `TILE_SLOW` and the `RETRY` nudge.
+  `RealiseRequest.maxWaitSeconds`, when set, also caps it (TIMED_OUT). No new cap.
+- **Gate precondition:** the tiers runner merges first (v0.12.1); 0a then runs `slice` plus the focused checks, with
+  6a-megaB-fast added.
