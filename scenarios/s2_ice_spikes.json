@@ -9,10 +9,36 @@
     "gamerules": "gallery"
   },
   "fixture": {
-    "claim": null,
-    "yRange": null,
-    "foundBy": null,
-    "surveySha": null
+    "claim": [
+      2508,
+      1588,
+      2699,
+      1779
+    ],
+    "yRange": [
+      22,
+      124
+    ],
+    "foundBy": "find-site s2_ice_spikes @ seed 2026100906",
+    "surveySha": "3459469b6c70a5d4a661aa8af429d68bb08af33c7aef7cd9dad59da98a926fb5",
+    "score": 17,
+    "stats": {
+      "biomes": {
+        "frozen_ocean": 48,
+        "deep_frozen_ocean": 27,
+        "ice_spikes": 15,
+        "snowy_beach": 5,
+        "snowy_plains": 5
+      },
+      "grid": [],
+      "min": 62,
+      "max": 84,
+      "mean": 63.3,
+      "water": 46,
+      "trees": 0,
+      "natural": 100,
+      "missing": 0
+    }
   },
   "flat": {
     "preset": "flat",
@@ -35,14 +61,14 @@
       "any": [
         "ice_spikes"
       ],
-      "share": 0.3
+      "share": 0.15
     },
-    "candidates": 120,
-    "step": 384,
-    "stopAt": 50,
+    "candidates": 25,
+    "step": 96,
+    "stopAt": 15,
     "center": [
-      2400,
-      1400
+      2700,
+      1780
     ]
   }
 }

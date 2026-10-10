@@ -9,10 +9,35 @@
     "gamerules": "gallery"
   },
   "fixture": {
-    "claim": null,
-    "yRange": null,
-    "foundBy": null,
-    "surveySha": null
+    "claim": [
+      3672,
+      -1780,
+      3863,
+      -1589
+    ],
+    "yRange": [
+      22,
+      173
+    ],
+    "foundBy": "find-site s6_cave_city @ seed 2026100906",
+    "surveySha": "2fab9c270debba20cc8d5c2fbcdfcaf60450e784f40c7b0d8043108a9864d852",
+    "score": 34,
+    "stats": {
+      "biomes": {
+        "meadow": 73,
+        "plains": 23,
+        "forest": 2,
+        "river": 2
+      },
+      "grid": [],
+      "min": 62,
+      "max": 133,
+      "mean": 112.6,
+      "water": 2,
+      "trees": 1,
+      "natural": 100,
+      "missing": 0
+    }
   },
   "flat": {
     "preset": "flat",
@@ -36,16 +61,18 @@
         "peaks",
         "slopes",
         "windswept",
-        "stony"
+        "stony",
+        "grove",
+        "meadow"
       ],
-      "share": 0.3
+      "share": 0.2
     },
-    "candidates": 100,
-    "step": 448,
-    "stopAt": 40,
+    "candidates": 60,
+    "step": 384,
+    "stopAt": 30,
     "center": [
-      1400,
-      -700
+      3000,
+      -1300
     ]
   }
 }

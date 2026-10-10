@@ -9,10 +9,36 @@
     "gamerules": "gallery"
   },
   "fixture": {
-    "claim": null,
-    "yRange": null,
-    "foundBy": null,
-    "surveySha": null
+    "claim": [
+      3328,
+      -1600,
+      3519,
+      -1409
+    ],
+    "yRange": [
+      22,
+      156
+    ],
+    "foundBy": "find-site s5_treehouses @ seed 2026100906",
+    "surveySha": "7051db564be5b693dbd6219c9563f49acfd5812a167a395ea2b23bd12b2080d7",
+    "score": 64,
+    "stats": {
+      "biomes": {
+        "forest": 46,
+        "river": 15,
+        "old_growth_birch_forest": 14,
+        "birch_forest": 13,
+        "plains": 10
+      },
+      "grid": [],
+      "min": 62,
+      "max": 116,
+      "mean": 77.2,
+      "water": 21,
+      "trees": 34,
+      "natural": 100,
+      "missing": 0
+    }
   },
   "flat": {
     "preset": "flat",
@@ -29,7 +55,7 @@
     ],
     "relief": [
       0,
-      24
+      70
     ],
     "treesMin": 30,
     "biomes": {
@@ -40,12 +66,12 @@
       ],
       "share": 0.6
     },
-    "candidates": 80,
-    "step": 384,
-    "stopAt": 80,
+    "candidates": 40,
+    "step": 256,
+    "stopAt": 60,
     "center": [
-      2112,
-      -128
+      3168,
+      -1760
     ]
   }
 }

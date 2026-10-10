@@ -9,10 +9,36 @@
     "gamerules": "gallery"
   },
   "fixture": {
-    "claim": null,
-    "yRange": null,
-    "foundBy": null,
-    "surveySha": null
+    "claim": [
+      3604,
+      -1036,
+      3795,
+      -845
+    ],
+    "yRange": [
+      22,
+      220
+    ],
+    "foundBy": "find-site s3_monastery @ seed 2026100906",
+    "surveySha": "55b648a51e6738377321fbb2b831716caa6817eb20ce4bae38f1797313218d02",
+    "score": 77,
+    "stats": {
+      "biomes": {
+        "frozen_peaks": 32,
+        "cherry_grove": 26,
+        "sunflower_plains": 22,
+        "snowy_slopes": 11,
+        "river": 6
+      },
+      "grid": [],
+      "min": 62,
+      "max": 180,
+      "mean": 117.6,
+      "water": 10,
+      "trees": 6,
+      "natural": 100,
+      "missing": 0
+    }
   },
   "flat": {
     "preset": "flat",
@@ -35,16 +61,18 @@
       "any": [
         "peaks",
         "stony",
-        "slopes"
+        "slopes",
+        "grove",
+        "meadow"
       ],
-      "share": 0.4
+      "share": 0.3
     },
-    "candidates": 100,
-    "step": 448,
-    "stopAt": 50,
+    "candidates": 40,
+    "step": 320,
+    "stopAt": 30,
     "center": [
-      1400,
-      -700
+      3700,
+      -1900
     ]
   }
 }
