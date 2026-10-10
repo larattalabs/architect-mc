@@ -7984,7 +7984,7 @@ bars stay the same.
   (1.13.0). If the merge order changes, the API minor follows it. SETTLEMENTS.md's later numbers (7a, 7b, ...) shift and are
   updated as slices land.
 - **0b C7 benchmark:** both arms (unique and repeat-heavy) plus the C13 smoke run. Expected ~$24, hard cap **$35** on Noah's
-  claude login (in line with earlier approved caps; Noah may override). The variation bar is as drafted.
+  claude login (confirmed by Noah 2026-10-10). The variation bar is as drafted.
 - **0c:** survival roads (C16) split into slice **0d** if they overrun. On survival roads, a `dirt_path` laid on grass is free
   (shovel-equivalent), and other written cells cost their item.
 - **V:** Patron-only scope accepted for now. The default look is the drafted roles (gravel path, stone-brick foundation).
