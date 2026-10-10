@@ -322,6 +322,48 @@ final class LibraryImpl implements Library {
 		return e == null ? List.of() : Views.entryVersions(entryId, e.json());
 	}
 
+	// ------------------------------------------------------------------ 6c 0a: caller pins
+
+	@Override
+	public CompletableFuture<Void> pinVersion(String entryId, int version, String owner) {
+		MinecraftServer s = ApiImpl.server();
+		if (s == null) {
+			return CompletableFuture.failedFuture(new dev.larattalabs.architect.api.ArchitectRefused(dev.larattalabs.architect.api.Reason.WORLD_STOPPED,
+				"no world is running"));
+		}
+		if (owner == null || owner.isBlank()) {
+			return CompletableFuture.failedFuture(new IllegalArgumentException("a pin needs an owner"));
+		}
+		return ApiImpl.onServerFuture(CompletableFuture.supplyAsync(() -> {
+			if (Blueprints.version(s, entryId, version) == null) {
+				throw new dev.larattalabs.architect.api.ArchitectRefused(dev.larattalabs.architect.api.Reason.VERSION_GONE, "version " + version + " of "
+					+ entryId + " is unknown or was garbage-collected");
+			}
+			if (CallerPins.pin(entryId, version, owner)) {
+				dev.larattalabs.architect.Architect.LOGGER.info("API: {} v{} pinned by {}", entryId, version, owner);
+				Versioned.sendPins();
+			}
+			return (Void) null;
+		}, s));
+	}
+
+	@Override
+	public CompletableFuture<Void> unpinVersion(String entryId, int version, String owner) {
+		if (CallerPins.unpin(entryId, version, owner)) {
+			dev.larattalabs.architect.Architect.LOGGER.info("API: {} v{} unpinned by {}", entryId, version, owner);
+			MinecraftServer s = ApiImpl.server();
+			if (s != null) {
+				s.execute(Versioned::sendPins);
+			}
+		}
+		return CompletableFuture.completedFuture(null);
+	}
+
+	@Override
+	public List<String> pinOwners(String entryId, int version) {
+		return CallerPins.owners(entryId, version);
+	}
+
 	@Override
 	public Optional<Entry> entry(String entryId, int version) {
 		MinecraftServer s = ApiImpl.server();

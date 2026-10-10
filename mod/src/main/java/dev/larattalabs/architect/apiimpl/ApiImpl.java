@@ -96,6 +96,7 @@ public final class ApiImpl implements ArchitectApi {
 		instance().bibles.catchUp();
 		instance().library.catchUpReskins();
 		Versioned.catchUp(s); // phase 5b: ENTRY_VERSIONED missed while no world was loaded
+		dev.larattalabs.architect.site.Batches.catchUpDone(s); // 6c 0a: BATCH_DONE not reported before a crash
 		if (!pinsHooked) {
 			pinsHooked = true;
 			dev.larattalabs.architect.site.Sites.addListener(x -> Versioned.sendPins());

@@ -141,6 +141,20 @@ public final class Batches {
 	 * design, an actorless INSTANT where it isn't allowed) fail at once. Returns the batch id. Server thread.
 	 */
 	public static String queue(MinecraftServer server, Batch spec) {
+		// (6c 0a, C9) an operation key: the same (owner, key) and body returns the first batch, in any state, and queues nothing
+		String key = dev.larattalabs.architect.apiimpl.Wire0a.opKey(spec.opKey());
+		String hash = key == null ? null : dev.larattalabs.architect.batch.BatchKeys.hash(spec);
+		if (key != null) {
+			QBatch prior = byKey(spec.owner(), key);
+			if (prior != null) {
+				if (hash.equals(prior.opHash)) {
+					Architect.LOGGER.info("Batch {}: adopted by opKey {} ({})", prior.id, key, prior.status.name().toLowerCase(java.util.Locale.ROOT));
+					return prior.id;
+				}
+				throw new dev.larattalabs.architect.api.ArchitectRefused(Reason.OP_KEY_CONFLICT, "opKey \"" + key + "\" (batch" + (spec.owner() == null ? ""
+					: ", " + spec.owner()) + ") was used for another batch (" + prior.id + ")");
+			}
+		}
 		String id = spec.id() != null && !spec.id().isBlank() ? spec.id() : newId();
 		if (BATCHES.containsKey(id)) {
 			throw new IllegalArgumentException("batch id " + id + " is in use");
@@ -222,9 +236,12 @@ public final class Batches {
 			grp = grp.withSharedCrate(true, crateAt);
 		}
 		b.generate = spec.load().generate();
+		b.opKey = key;
+		b.opHash = hash;
 		chunkBound(b);
 		Sites.putGroup(server, grp);
 		BATCHES.put(id, b);
+		// the key is in the queue file in the save made when the batch is queued
 		Placement.save(server, false);
 		Architect.LOGGER.info("Queued batch {} ({} item(s), stages {}) into group {}{}", id, items.size(), plan.stages(), groupId,
 			g == null ? "" : " (appended)");
@@ -1086,12 +1103,12 @@ public final class Batches {
 		if (RegionItems.isRegion(b)) {
 			dev.larattalabs.architect.region.RegionsImpl.batchDone(b);
 		}
-		Placement.save(server, false);
 		Architect.LOGGER.info("Batch {} {}: {} placed, {} failed{}", b.id, status.name().toLowerCase(java.util.Locale.ROOT),
 			b.items.stream().filter(i -> i.status == QItem.Status.PLACED).count(), b.items.stream().filter(i -> i.status == QItem.Status.FAILED).count(),
 			note.isEmpty() ? "" : " (" + note + ")");
 		ApiEvents.batchProgress(b);
-		ApiEvents.batchDone(b);
+		// (6c 0a) BATCH_DONE once: fire, mark fired, then save (a crash before the save: it fires again on load, at least once)
+		fireDone(server, b);
 		List<CompletableFuture<QBatch>> fs = CANCELLED.remove(b.id);
 		if (fs != null) {
 			fs.forEach(f -> f.complete(b));
@@ -1482,6 +1499,61 @@ public final class Batches {
 			untickItem(server, b, k);
 		}
 		TICKETS.remove(b.id);
+	}
+
+	// ------------------------------------------------------------------ 6c 0a: durable finished batches, operation keys
+
+	/** Finished batches kept: the newest {@value} per world, plus every one finished in the last 30 days. */
+	public static final int KEEP_FINISHED = 256;
+	public static final long KEEP_MS = 30L * 24 * 3600_000;
+	/** DevBridge {@code dev.batch.skipSave}: the batches whose save after BATCH_DONE is skipped (the crash window, for the gate). */
+	public static final Set<String> SKIP_SAVE = java.util.Collections.synchronizedSet(new HashSet<>());
+
+	/** BATCH_DONE, then mark it fired, then save the queue (unless the gate's hook skips that save). Drops old finished batches. */
+	static void fireDone(MinecraftServer server, QBatch b) {
+		ApiEvents.batchDone(b);
+		b.fired = true;
+		prune(System.currentTimeMillis());
+		if (SKIP_SAVE.remove(b.id)) {
+			Architect.LOGGER.warn("Batch {}: the save after BATCH_DONE is skipped (dev.batch.skipSave)", b.id);
+			return;
+		}
+		Placement.save(server, false);
+	}
+
+	/** A world loaded (server thread): BATCH_DONE for every finished batch not marked fired (as JOB_DONE's catch-up). */
+	public static void catchUpDone(MinecraftServer server) {
+		for (QBatch b : List.copyOf(BATCHES.values())) {
+			if (!b.running() && !b.fired) {
+				Architect.LOGGER.info("Batch {}: BATCH_DONE was not reported before the stop; firing it now", b.id);
+				fireDone(server, b);
+			}
+		}
+	}
+
+	/**
+	 * Drops finished batches beyond the newest {@link #KEEP_FINISHED} that finished more than 30 days ago (region batches stay:
+	 * their region refers to them). Ids are never reused: the counter is persisted.
+	 */
+	static void prune(long now) {
+		List<QBatch> done = BATCHES.values().stream().filter(x -> !x.running() && x.fired && !RegionItems.isRegion(x))
+			.sorted(java.util.Comparator.comparingLong((QBatch x) -> x.doneAt).reversed()).toList();
+		for (int k = KEEP_FINISHED; k < done.size(); k++) {
+			QBatch x = done.get(k);
+			if (now - x.doneAt > KEEP_MS) {
+				BATCHES.remove(x.id);
+			}
+		}
+	}
+
+	/** The batch an owner (null: the player) queued with this key, in any state. */
+	public static @Nullable QBatch byKey(@Nullable String owner, String key) {
+		for (QBatch b : BATCHES.values()) {
+			if (key.equals(b.opKey) && java.util.Objects.equals(owner, b.owner)) {
+				return b;
+			}
+		}
+		return null;
 	}
 
 	// ------------------------------------------------------------------ persistence

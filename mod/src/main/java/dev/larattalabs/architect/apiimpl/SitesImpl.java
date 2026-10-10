@@ -274,6 +274,12 @@ final class SitesImpl implements dev.larattalabs.architect.api.Sites {
 	}
 
 	@Override
+	public Optional<BatchView> batchByKey(@Nullable String owner, String opKey) {
+		QBatch b = Batches.byKey(owner, java.util.Objects.requireNonNull(dev.larattalabs.architect.apiimpl.Wire0a.opKey(opKey), "opKey"));
+		return b == null ? Optional.empty() : Optional.of(Views.batch(b));
+	}
+
+	@Override
 	public List<BatchView> batches(@Nullable String owner) {
 		return Batches.all().stream().filter(b -> ApiRules.ownerMatches(b.owner, owner)).map(Views::batch).toList();
 	}
