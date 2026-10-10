@@ -392,3 +392,7 @@ All taken. 6c slice 0 is split as C11 asks, and a flat-village slice (C10) moves
   realise p99 bar is record-only, because the own-time bar has no percentile. **0a** adds own-time percentiles in
   `MsptTrace.stop()` and restores the p99 bar. On merge: add `6a-forest` and the 6b scenario steps to the chains, and update
   the apijars description.
+- **C18 (Steward), the caller's own entities don't occupy (slice 0c):** occupancy checks ignore entities the request's owner
+  marks as its own, through an entity tag `architect:owner=<owner>` matching the request's owner. That works for every API path
+  (remove, delta, batch, revert) with no new request fields. An optional explicit UUID set on RemoveOptions/DeltaRequest/Batch
+  can be added if a caller needs it.
