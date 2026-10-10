@@ -522,6 +522,19 @@ export class Groups {
 
   /** Start, fail or fall back copies; returns whether anything changed. */
   private advanceCopies(g: Group): boolean {
+    // a variant made here reports back (variant.upsert) before the item records it: no refresh until we are done
+    if (this.advancing) return false;
+    this.advancing = true;
+    try {
+      return this.advanceCopiesNow(g);
+    } finally {
+      this.advancing = false;
+    }
+  }
+
+  private advancing = false;
+
+  private advanceCopiesNow(g: Group): boolean {
     const w = this.work(g.id);
     let changed = false;
     for (const it of g.items) {
@@ -617,6 +630,7 @@ export class Groups {
 
   /** (0b) A variant changed: a copy's group follows. */
   variantChanged(v: { copy?: { group: string } | undefined }): void {
+    if (this.advancing) return;
     const g = v.copy ? this.get(v.copy.group) : undefined;
     if (g) this.refresh(g);
   }
