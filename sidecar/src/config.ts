@@ -5,7 +5,7 @@
 //
 // <data>/config.json (optional, hand-edited): { "designModel", "effort", "maxTurns", "maxBudgetUsd",
 // "simStepMs", "jobModel", "jobConcurrency", "simJobStepUsd", (6a) "regionWorkers", "regionWindow", ... }.
-// ARCHITECT_DESIGN_MODEL overrides designModel, ARCHITECT_JOB_MODEL jobModel.
+// ARCHITECT_DESIGN_MODEL overrides designModel, ARCHITECT_JOB_MODEL jobModel, (6c 0a) ARCHITECT_SIM_COSTS simCosts.
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -72,6 +72,11 @@ export interface Config {
   polish: { model?: string | undefined; scopingModel: string };
   /** (6a) region programs: planning and tile evaluation */
   regions: RegionsConfig;
+  /**
+   * (6c 0a, C4) sim only: the notional per-item costs (config simCosts, env ARCHITECT_SIM_COSTS, which wins); undefined =
+   * "zero", the default, where the older simDesignUsd / simJobStepUsd step costs apply unchanged
+   */
+  simCosts?: SimCosts | undefined;
 }
 
 export interface RegionsConfig {
@@ -282,7 +287,63 @@ export function loadConfig(argv: string[], env: NodeJS.ProcessEnv = process.env)
     critique: critiqueConfig(file),
     polish: polishConfig(file),
     regions: regionsConfig(file, need('library')),
+    simCosts: backend === 'sim' ? simCostsConfig(env.ARCHITECT_SIM_COSTS?.trim() ? env.ARCHITECT_SIM_COSTS : file.simCosts) : undefined,
   };
+}
+
+/**
+ * (6c 0a, C4) The sim's notional costs per item (USD). They are labelled `sim: true` (the estimate's basis, the log); nothing
+ * is spent. bible: a bible job (its draft and components passes share it); massing: a massing (round 1); detail: a detail
+ * pass or a single design (round 1); critique: one critic call (a report critique, a loop's critic, a bible sheet critique);
+ * repair: one repair round (round 2 and later: `sim:repair`, a loop revision).
+ */
+export interface SimCosts {
+  mode: 'measured' | 'custom';
+  bible: number;
+  massing: number;
+  detail: number;
+  critique: number;
+  repair: number;
+}
+
+/** "measured": the midpoints of the seeds measured in Steward's phase 1 (2026-10-09), docs/CONTRACT.md 6c slice 0a §2. */
+export const MEASURED_SIM_COSTS: SimCosts = { mode: 'measured', bible: 1.35, massing: 0.19, detail: 3.4, critique: 0.1, repair: 0.5 };
+const SIM_COST_KEYS = ['bible', 'massing', 'detail', 'critique', 'repair'] as const;
+
+/**
+ * simCosts: absent or "zero" -> undefined; "measured" -> {@link MEASURED_SIM_COSTS}; an object with the five keys (USD, >= 0;
+ * in the env, as JSON) -> those. Anything else is a ConfigError, so a typo does not silently run at $0.
+ */
+export function simCostsConfig(raw: unknown): SimCosts | undefined {
+  if (raw === undefined || raw === null || raw === '') return undefined;
+  let v: unknown = raw;
+  if (typeof v === 'string') {
+    const t = v.trim();
+    if (t === 'zero') return undefined;
+    if (t === 'measured') return { ...MEASURED_SIM_COSTS };
+    if (!t.startsWith('{')) throw new ConfigError(`simCosts must be "zero", "measured" or an object with ${SIM_COST_KEYS.join(', ')} (got ${JSON.stringify(t).slice(0, 80)})`);
+    try {
+      v = JSON.parse(t);
+    } catch {
+      throw new ConfigError('simCosts: not valid JSON');
+    }
+  }
+  if (!v || typeof v !== 'object' || Array.isArray(v)) throw new ConfigError(`simCosts must be "zero", "measured" or an object with ${SIM_COST_KEYS.join(', ')}`);
+  const o = v as Record<string, unknown>;
+  const out: SimCosts = { mode: 'custom', bible: 0, massing: 0, detail: 0, critique: 0, repair: 0 };
+  for (const k of SIM_COST_KEYS) {
+    const n = o[k];
+    if (typeof n !== 'number' || !Number.isFinite(n) || n < 0 || n > 1000) throw new ConfigError(`simCosts.${k} must be a number of USD from 0 to 1000 (got ${JSON.stringify(n)})`);
+    out[k] = n;
+  }
+  const extra = Object.keys(o).filter((k) => !(SIM_COST_KEYS as readonly string[]).includes(k));
+  if (extra.length) throw new ConfigError(`simCosts: unknown key${extra.length === 1 ? '' : 's'} ${extra.join(', ')}`);
+  return out;
+}
+
+/** The log/basis label of the sim's notional costs. */
+export function simCostsLabel(c: SimCosts): string {
+  return `sim: true, notional sim costs "${c.mode}" (nothing is spent): bible $${c.bible}, massing $${c.massing}, detail $${c.detail}, critique $${c.critique}, repair round $${c.repair}`;
 }
 
 function critiqueConfig(file: Record<string, unknown>): CritiqueConfig {

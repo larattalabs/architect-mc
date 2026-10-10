@@ -167,6 +167,13 @@ export class JobRunner {
     if (sim !== undefined && this.driver.name === 'sim') this.book.work(j.id)!.simAnswer = sim;
     this.log.info(`job ${j.id} (${spec.kind}${spec.owner ? `, ${spec.owner}` : ''}${spec.tag ? `, ${spec.tag}` : ''}) requested`);
     this.starterClients.set(j.id, client);
+    // (6c 0a) a scripted answer is checked against the job's schema now: a mismatch fails the job at once (no re-ask)
+    const bad = sim !== undefined && this.driver.name === 'sim' ? simAnswerProblems(sim, spec.schema) : [];
+    if (bad.length) {
+      // after the ack (the caller learns the job id first, as for any job that fails)
+      setTimeout(() => this.fail(j.id, `the scripted answer (ext architect:simAnswer) does not match the job's schema: ${truncate(bad.join('; '), 1000)}`), 0);
+      return j;
+    }
     this.enqueue(j.id, spec.kind);
     this.kick();
     return j;
@@ -176,7 +183,7 @@ export class JobRunner {
    * (5a) A job the sidecar runs for itself (the critic, the bible sheet critique): no client, the images are files
    * (copied into the job's scratch dir now), and on the sim backend an optional scripted answer.
    */
-  runInternal(spec: JobSpec, opts: { images?: Array<{ file: string; label: string }>; simAnswer?: unknown } = {}): Job {
+  runInternal(spec: JobSpec, opts: { images?: Array<{ file: string; label: string }>; simAnswer?: unknown; simStepUsd?: number } = {}): Job {
     if (!this.driver) throw new Error('jobs are not running yet');
     const images = (opts.images ?? []).map((im) => {
       const buf = fs.readFileSync(im.file);
@@ -186,6 +193,8 @@ export class JobRunner {
     if (images.length) this.storeImages(j.id, images);
     const w = this.book.work(j.id)!;
     if (opts.simAnswer !== undefined) w.simAnswer = opts.simAnswer;
+    // (6c 0a) sim only: what each of this job's steps costs (simCosts: a critic call)
+    if (opts.simStepUsd !== undefined) w.simStepUsd = opts.simStepUsd;
     this.sc.store.markDirty();
     this.log.info(`job ${j.id} (${spec.kind}, ${spec.owner ?? 'sidecar'}${spec.tag ? `, ${spec.tag}` : ''}${images.length ? `, ${images.length} image${images.length === 1 ? '' : 's'}` : ''}) started by the sidecar`);
     this.enqueue(j.id, spec.kind);
@@ -633,6 +642,7 @@ export class JobRunner {
           abort: r.abort,
           ...(w.images?.length ? { images: w.images } : {}),
           ...(w.simAnswer !== undefined && this.driver!.name === 'sim' ? { simAnswer: w.simAnswer } : {}),
+          ...(w.simStepUsd !== undefined && this.driver!.name === 'sim' ? { simStepUsd: w.simStepUsd } : {}),
         });
         for await (const msg of q) {
           if (r.abort.signal.aborted) break;
@@ -745,4 +755,19 @@ function tryJson(text: string): unknown {
     }
   }
   return undefined;
+}
+
+/**
+ * (6c 0a) What is wrong with a consumer's scripted sim answer against the job's schema (empty: fine, or nothing to check).
+ * `{ simFail }` scripts a failure and is not checked; `{ simLimitMs, answer }` is checked on its answer.
+ */
+export function simAnswerProblems(sim: unknown, schema: Record<string, unknown> | undefined): string[] {
+  if (!schema) return [];
+  let answer = sim;
+  if (answer && typeof answer === 'object' && !Array.isArray(answer)) {
+    const o = answer as Record<string, unknown>;
+    if ('simFail' in o) return [];
+    if ('simLimitMs' in o) answer = o.answer;
+  }
+  return validateJson(answer, schema);
 }
