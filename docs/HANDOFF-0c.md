@@ -17,6 +17,12 @@ names win). API 1.12.0, mod 0.15.0 (after 0a = 1.10.0 and 0b = 1.11.0). Ports 89
 | §10 off-thread undo planning | after 0a (own-time percentiles), 2 h box | no journal/** change left on the branch if no-go |
 | §7 C16 survival roads | last; split to `slice/0d` if it overruns | dirt_path on grass free (coordinator) |
 
+## Steward's review (CONTRACT "Changes from Steward's review of 0b, 0c and V")
+
+Confirms the drafted choices, all as built: remove and undo never refused; tagged entities ignored, not moved; a region
+claim touching an area is refused (no carving); a partial road is one site with gaps plus the skipped spans; survival roads
+need a shared crate.
+
 ## Deviations so far
 
 - `LotFit`'s 1.4.0 constructor sets `recommendedLot` to the template box (the contract's "the lot passed in" isn't known to
