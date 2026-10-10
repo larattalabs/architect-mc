@@ -110,3 +110,18 @@ Built (all pushed on `slice/0a`; API 1.10.0, mod 0.13.0):
 Known: `JournalIndexBenchTest` (commit p99 bar) fails under the machine's load (load average 50-70 from parallel sessions);
 unrelated to 0a; re-run when quiet. The slice tier needs the tiers runner (not on main yet); the old runner's migration steps
 hard-code 8892/8893, which is the other agent's range.
+
+## Gate state (2026-10-10, late)
+
+- In game, `tools/gate6c0a.mjs` against `../architect-mc-0a-run` (8902/8903), all passing: flow 15/15 (items 1, 2, 6, 7 incl. the
+  restart while awaiting approval), budget 3/3 (the $5 live-run case, simStepMs 2500 for that step), fit 6/6 (C6 in game), batches
+  3/3 (item 4), keys 10/10 (item 5, incl. SIDECAR_UNAVAILABLE), cancel 2/2 (item 8), pins 6/6 (item 9, forced-age GC on the seeded
+  g5b_cap), stopped 3/3 (item 10: the volume and the unacked group failed WORLD_STOPPED; the realise and cancelBatch had completed
+  before the stop), tiles 4/4 (item 11: SLOW_TILES=4 PLACED with the unhooked sha, TILE_SLOW + RETRY; =2 inside the retries).
+  Evidence `artifacts/gate6c0a/*.json`. Not in game: a kit-error tile (sidecar unit test covers `code: "error"`).
+- Regression: the tiers runner is not on main, so the old runner's `regress` chain (which has 6a-megaB-fast) runs on 8904/8905
+  with run dir `../architect-mc-0a-gate`, out `artifacts/gate-runs-0a/`; then `engine --only 6a-megaA,6a-inv3,6a-staged` for the
+  region rows of the impact map. Machine load is 50-85 (parallel sessions): bench verdicts may be NOISY.
+- Still to do before "ready to merge": those runs, the gate-verifier, the RC jar for Steward's consumer check.
+- Steward's S-lot bug (the sim's cabin massing over max 11x24x9): fixed in `sim.ts` (`simFit`, `withDefaults`, `standInMassing`)
+  with `test/sim-fit.test.ts`; also on `slice/0a-simfit` (origin/main + the two commits, mod 0.12.3) for a patch release.
