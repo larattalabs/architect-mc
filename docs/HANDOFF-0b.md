@@ -14,6 +14,8 @@ Delete this file when the gate passes.
 1. Worktree and branch follow the coordinator (`../architect-mc-0b`, `slice/0b`), not the contract's `phase/6c-0b`.
 2. Build order step 1 (archive the 0.13.0 apitest jar "before any 0b change") can't run before 0a is tagged. When `v0.13.0`
    exists, the jar is built from a clean checkout of the tag (not from this branch) into `artifacts/gate6c0b/v0130/`.
+4. Merge policy (coordinator, 2026-10-10): agents can't push to main. When the slice tier and the gate-verifier pass, push
+   `slice/0b` and report "ready to merge"; the coordinator merges, tags and publishes.
 3. The `slice` tier runner is not on main yet (main has quick/regress/engine). Use it if it lands before the gate; otherwise
    the existing chains.
 

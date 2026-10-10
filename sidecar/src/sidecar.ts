@@ -19,7 +19,7 @@ import type { JobDriver } from './jobs/driver.js';
 import { JobRunner } from './jobs/runner.js';
 import { SimJobDriver } from './jobs/sim.js';
 import { Pool } from './pool.js';
-import { FEATURES, KitPalettes, type BibleRef, type ClientMessage, type Cost, type PaletteInfo, type Design, type DesignRequest, type Massing, type Outbound, type PaletteSpec, type ParamValues, type Protocol, type Status, type Variant } from './protocol.js';
+import { FEATURES, KitPalettes, type BibleRef, type ClientMessage, type Cost, type PaletteInfo, type Design, type DesignRequest, type Massing, type Outbound, type PaletteSpec, type ParamValues, type Protocol, type Status, type Variant, type Group, type GroupItem } from './protocol.js';
 import { DesignScheduler, designKey } from './scheduler.js';
 import { addCost } from './jobs/cost.js';
 import { readSecrets, updateSecrets, type Secrets } from './secrets.js';
@@ -72,8 +72,8 @@ const DURABLE_COMMANDS: ReadonlySet<ClientMessage['type']> = new Set<ClientMessa
 ]);
 
 /** A message the client caused that cannot be done (answered with ack ok:false). */
-export { ClientError } from './errors.js';
-import { ClientError } from './errors.js';
+export { ClientError, RefusedError } from './errors.js';
+import { ClientError, RefusedError } from './errors.js';
 
 /**
  * Runs design jobs: the Claude designer (claude/designer.ts) or the sim (sim.ts). The scheduler hands it one design at a
@@ -219,7 +219,11 @@ export class Sidecar {
       this.groups.designChanged(m.design);
       this.statusChanged();
     }
-    if (m.type === 'variant.upsert') this.reskins.variantChanged(m.variant);
+    if (m.type === 'variant.upsert') {
+      this.reskins.variantChanged(m.variant);
+      // (0b) a copy's group follows its variant job
+      this.groups.variantChanged(m.variant);
+    }
     // (5a) a finished critic call moves its design's loop on
     if (m.type === 'job.upsert') this.critiques.jobChanged(m.job);
   }
@@ -412,7 +416,7 @@ export class Sidecar {
   // ---- client messages ------------------------------------------------------------------------
 
   async handle(msg: ClientMessage, reply: (m: Outbound) => void, client?: ClientHandle): Promise<void> {
-    const ack = (ok: boolean, extra: { error?: string; result?: Record<string, unknown> } = {}) => {
+    const ack = (ok: boolean, extra: { error?: string; code?: string; detail?: string; result?: Record<string, unknown> } = {}) => {
       if (msg.id) reply({ type: 'ack', re: msg.id, ok, ...extra });
     };
     try {
@@ -424,7 +428,8 @@ export class Sidecar {
       const message = known ? (e as Error).message : `internal error: ${(e as Error).message}`;
       if (!known) this.log.error(`${msg.type}: ${(e as Error).stack ?? e}`);
       reply({ type: 'error', message, ...(msg.id ? { re: msg.id } : {}) });
-      ack(false, { error: message });
+      // (0b) a typed refusal carries its Reason name and sub-code
+      ack(false, { error: message, ...(e instanceof RefusedError ? { code: e.code, detail: e.detail } : {}) });
     }
   }
 
@@ -524,6 +529,11 @@ export class Sidecar {
         return { massings: this.massings.list(msg.owner, msg.massingId) };
       case 'massing.delete':
         return { massingId: msg.massingId, versions: this.massings.delete(msg.massingId) };
+      case 'group.promoteCopy': {
+        const g = this.groups.promoteCopy(msg.groupId, msg.itemKey, msg.reason);
+        const it = g.items.find((x) => x.itemKey === msg.itemKey)!;
+        return { groupId: g.id, itemKey: it.itemKey, designId: it.designId };
+      }
       case 'group.approve':
         return { ...this.groups.approve(msg.groupId, { approve: msg.approve ?? [], redirect: msg.redirect ?? {}, cancel: msg.cancel ?? [], owner: msg.owner }) };
       // ---- 5a
@@ -622,6 +632,34 @@ export class Sidecar {
     const pin = bible !== undefined ? this.bibleIndex.resolve(bible).pin : undefined;
     const v = this.variants.create({ kind: 'variant', from, ...(palette !== undefined ? { palette } : {}), ...(values !== undefined ? { values } : {}), ...(name !== undefined ? { name } : {}), ...(pin ? { bible: pin } : {}), ...(reskin ? { reskin } : {}) });
     this.log.info(`variant ${v.id} of ${from} requested${palette !== undefined ? `: palette ${JSON.stringify(palette)}` : ''}${pin ? `: bible ${pin.id} v${pin.version}` : ''}${values ? `, values ${JSON.stringify(values)}` : ''}`);
+    this.variantRunner.enqueue(v.id);
+    return v;
+  }
+
+  /**
+   * (0b) A copy's variant job: built from its archetype's entry with the group's bible pin and a recipe (the runner
+   * chooses it), checked at the copy item's own maxSize and, under massingFirst, against the archetype's massing.
+   */
+  requestCopy(g: Group, it: GroupItem, arch: GroupItem, ordinal: number): Variant {
+    const req = this.store.data.groupWork?.[g.id]?.itemRequests?.[it.itemKey];
+    const v = this.variants.create({
+      kind: 'variant',
+      from: arch.entryId!,
+      bible: g.bible,
+      ...(it.name ? { name: it.name } : {}),
+      copy: {
+        group: g.id,
+        itemKey: it.itemKey,
+        archetype: arch.itemKey,
+        ordinal,
+        attempts: 0,
+        plan: {
+          ...(req ? { request: req } : {}),
+          ...(g.massingFirst && arch.massing ? { massing: arch.massing } : {}),
+        },
+      },
+    });
+    this.log.info(`group ${g.id}: ${it.itemKey} copies ${arch.itemKey} (${arch.entryId}): variant ${v.id}`);
     this.variantRunner.enqueue(v.id);
     return v;
   }
@@ -736,6 +774,31 @@ export class Sidecar {
   }
 
   // ---- what a design job gets (4b): budget, bible, neighbours, entry fields --------------------
+
+  // ---- (0b) what the variant runner asks for copies --------------------------------------------------
+
+  /** an entry's head version (1 for a bundled example or an entry without versions) */
+  entryHead(entryId: string): number {
+    try {
+      return this.versions.head(entryId);
+    } catch {
+      return 1;
+    }
+  }
+
+  copySiblings(groupId: string, archetype: string, ordinal: number): Array<Record<string, unknown>> {
+    return this.groups.copySiblings(groupId, archetype, ordinal);
+  }
+
+  massingFile(id: string, version: number): string | undefined {
+    const m = this.massings.get(id, version);
+    const f = m ? path.join(m.dir, `${m.id}.blueprint.json`) : undefined;
+    return f && fs.existsSync(f) ? f : undefined;
+  }
+
+  get simFaults(): boolean {
+    return this.config.backend === 'sim';
+  }
 
   /** (re-skins) a group's finished entries, or undefined for a group this sidecar does not know */
   groupEntries(groupId: string): string[] | undefined {

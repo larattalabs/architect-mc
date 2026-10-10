@@ -200,7 +200,8 @@ export async function chooseRecipe({ load, bible, params = {}, values = {}, seed
     if (max && (bp.size.x > max.x || bp.size.y > max.y || bp.size.z > max.z)) return false;
     if (massing) {
       const m = mirror ? mirrorSidecar(massing, mirrorAxisOf(bp.front)) : massing;
-      if (!checkConformance(JSON.parse(JSON.stringify(bp.sidecar())), m).ok) return false;
+      // the check's rule: conformance errors (the massing's size + 2) fail; issues stay warnings
+      if (checkConformance(JSON.parse(JSON.stringify(bp.sidecar())), m).errors.length) return false;
     }
     return true;
   };

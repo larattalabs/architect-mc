@@ -17,7 +17,7 @@ export const PROTOCOL_VERSION = 1 as const;
 export const PROTOCOLS = [1, 2] as const;
 export type Protocol = (typeof PROTOCOLS)[number];
 /** What a protocol-2 snapshot lists in `features`. */
-export const FEATURES = ['job.run', 'job.tools', 'blobs', 'budget', 'designs.v2', 'bibles', 'design.groups', 'named.parts', 'open.types', 'estimates', 'reskin', 'massing', 'critique', 'critique.report', 'job.images', 'bible.admin', 'bible.restraint', 'entry.versions', 'entry.delta', 'design.polish', 'critique.polish', 'region.plan', 'region.tiles', 'region.check', 'region.preview', 'region.design', 'region.blobs', 'ir.format2'] as const;
+export const FEATURES = ['job.run', 'job.tools', 'blobs', 'budget', 'designs.v2', 'bibles', 'design.groups', 'named.parts', 'open.types', 'estimates', 'reskin', 'massing', 'critique', 'critique.report', 'job.images', 'bible.admin', 'bible.restraint', 'entry.versions', 'entry.delta', 'design.polish', 'critique.polish', 'region.plan', 'region.tiles', 'region.check', 'region.preview', 'region.design', 'region.blobs', 'ir.format2', 'copies', 'smallEffort', 'versionOf'] as const;
 
 const Ts = z.number().int().nonnegative();
 const Id = z.string().min(1).max(64);
@@ -107,6 +107,11 @@ export const Profile = z.array(z.string().regex(PROFILE_RULE, 'a profile rule is
 export const BIBLE_ID = /^[a-z0-9_]{1,64}$/;
 export const BibleId = z.string().regex(BIBLE_ID, 'bible ids are [a-z0-9_]{1,64}');
 export const ItemKey = z.string().min(1).max(100).regex(/^[A-Za-z0-9_.:/-]+$/, 'item keys are [A-Za-z0-9_.:/-]{1,100}');
+/** (0b) a group item's key as the sidecar reports it: a caller's key, or an expanded `<key>#<n>` (count) */
+export const GroupItemKey = z.string().min(1).max(104).regex(/^[A-Za-z0-9_.:/-]+(#[0-9]{1,2})?$/, 'group item keys are <itemKey> or <itemKey>#<n>');
+/** (0b, C8) a group item's effort: auto (small by the size rule when smallBySize is set), standard or small */
+export const ItemEffort = z.enum(['auto', 'standard', 'small']);
+export type ItemEffort = z.infer<typeof ItemEffort>;
 export const ItemRole = z.enum(['landmark', 'ordinary']);
 export type ItemRole = z.infer<typeof ItemRole>;
 /** (4c) a massing id: mas_<slug> (stable across versions) */
@@ -281,6 +286,8 @@ export const DesignRequest = DesignRequestBase.extend({
   context: Context.optional().describe('(4c) text (<= 4000 chars) or JSON for the brief: site, purpose, neighbour lots; a group sets it on every item'),
   redirect: z.object({ fromVersion: z.number().int().min(1), notes: z.string().max(2000) }).optional().describe('(4c) set by the sidecar: a massing redirect (the version it starts from and the notes)'),
   critique: CritiqueSpec.optional().describe('(5a) critique this design: report (one critic call) or loop (revise on the verdict); default off'),
+  effort: z.enum(['standard', 'small']).optional().describe('(0b, C8) set by the sidecar for a group item: small = the bounded SMALL detail pass (2 rounds, 40 turns, medium, $1.50)'),
+  versionOf: z.object({ entryId: z.string().regex(/^[a-z0-9_]+$/).max(64), siteId: z.string().min(1).max(200).optional() }).optional().describe('(0b, C13) design the next version of this entry (notes = the change request); the site files come with it'),
 }).superRefine(noDuplicateFeatures).superRefine((r, ctx) => {
   if (r.massing && r.fromMassing) ctx.addIssue({ code: 'custom', path: ['fromMassing'], message: 'a request is a massing or the detail of one, not both' });
   if (r.massingVersion !== undefined && !r.fromMassing) ctx.addIssue({ code: 'custom', path: ['massingVersion'], message: 'massingVersion needs fromMassing' });
@@ -359,6 +366,19 @@ export const Variant = z.object({
   error: z.string().optional().describe('failed: why, with the checker lines'),
   bible: z.object({ id: BibleId, version: z.number().int().min(1) }).optional().describe('(4b) a re-skin: the bible (and version) it is built with'),
   reskin: Id.optional().describe('(4b) the reskin.request this variant belongs to'),
+  copy: z
+    .object({
+      group: z.string(),
+      itemKey: GroupItemKey,
+      archetype: GroupItemKey,
+      ordinal: z.number().int().min(1),
+      attempts: z.number().int().min(0).optional(),
+      recipe: z.record(z.string(), z.unknown()).optional().describe('the recipe that built (or the last one tried)'),
+      fallbackReason: z.enum(['size', 'conformance', 'check']).optional().describe('failed: why every recipe failed'),
+      plan: z.record(z.string(), z.unknown()).optional().describe("the runner's inputs: the copy item's request, the archetype's massing"),
+    })
+    .optional()
+    .describe('(0b) a copy in a design group: built from its archetype entry with a recipe'),
   createdAt: Ts,
   updatedAt: Ts,
 });
@@ -386,6 +406,9 @@ export const GroupItemInput = DesignRequestBase.extend({
   owner: Owner.optional(),
   budgetUsd: BudgetUsd.optional(),
   critique: CritiqueSpec.optional().describe("(5a) this item's critique (wins over the group's)"),
+  count: z.number().int().min(1).max(MAX_GROUP_ITEMS).optional().describe('(0b, C1) placements of this item: <key>, <key>#2 ... <key>#n; every copyCap-th starts a new archetype, the others are $0 copies'),
+  copyOf: ItemKey.optional().describe("(0b, C1) this item is a copy of that item's archetype (counts toward its copyCap)"),
+  effort: ItemEffort.optional().describe('(0b, C8) default auto'),
 }).superRefine(noDuplicateFeatures);
 export type GroupItemInput = z.infer<typeof GroupItemInput>;
 
@@ -404,6 +427,8 @@ export const GroupRequest = z
     maxRedirects: z.number().int().min(0).max(10).optional().describe('(4c) redirect rounds per item (default 3)'),
     context: Context.optional().describe('(4c) goes into every item\'s brief (massing and detail)'),
     critique: CritiqueSpec.optional().describe('(5a) the default critique of the items (an item\'s own spec wins); default off'),
+    copyCap: z.number().int().min(1).max(3).optional().describe('(0b, C1) placements per design (an archetype and its copies); default 3, 1 = all originals'),
+    smallBySize: z.boolean().optional().describe('(0b, C2/C8) an item whose maxSize footprint fits 11 x 9 either way is small: no report critique, the SMALL detail pass'),
   })
   .superRefine((g, ctx) => {
     const keys = g.items.map((it, i) => it.itemKey ?? `item${i + 1}`);
@@ -418,9 +443,9 @@ export const GroupStatus = z
 export type GroupStatus = z.infer<typeof GroupStatus>;
 
 export const GroupItem = z.object({
-  itemKey: ItemKey,
+  itemKey: GroupItemKey,
   ext: Ext.optional(),
-  designId: Id,
+  designId: z.union([Id, z.literal('')]).describe('the item\'s current design ("" for a copy: it has a variant job)'),
   entryId: z.string().optional().describe('done: the library entry'),
   status: DesignStatus,
   step: z.string(),
@@ -431,11 +456,17 @@ export const GroupItem = z.object({
   type: z.string(),
   name: z.string().optional(),
   error: z.string().optional(),
-  stage: z.enum(['massing', 'approval', 'detail']).optional().describe('(4c, massingFirst) massing: its massing (or a redirect) is designing; approval: it waits for group.approve; detail: its detail pass'),
+  stage: z.enum(['massing', 'approval', 'detail', 'copy']).optional().describe('(4c, massingFirst) massing: its massing (or a redirect) is designing; approval: it waits for group.approve; detail: its detail pass; (0b) copy: a copy waiting for or building from its archetype'),
   massing: z.object({ id: MassingId, version: z.number().int().min(1) }).optional().describe('(4c) the item\'s massing (the latest version)'),
   rounds: z.number().int().min(0).optional().describe('(4c) redirect rounds so far (capped at the group\'s maxRedirects)'),
   designIds: z.array(Id).optional().describe('(4c) every design of the item, oldest first (massings, redirects, the detail); designId is the latest'),
   critique: z.object({ rounds: z.number().int(), best: z.number().int().optional(), end: EndReason.optional(), overall: z.number().nullable().optional() }).optional().describe('(5a) the critique summary of its design'),
+  kind: z.enum(['original', 'copy', 'fallback']).optional().describe('(0b, C1) original (absent = original), copy (a $0 variant of its archetype) or fallback (a copy whose recipes all failed, or promoted: an original)'),
+  copyOf: GroupItemKey.optional().describe("(0b) a copy or fallback: its archetype's itemKey"),
+  variantJob: Id.optional().describe('(0b) a copy: its variant job'),
+  fallbackReason: z.string().optional().describe('(0b) a fallback: size | conformance | check | promoted, with the message'),
+  effort: z.enum(['standard', 'small']).optional().describe('(0b, C8) the effort its detail pass runs with'),
+  recipe: z.record(z.string(), z.unknown()).optional().describe('(0b) a copy: its recipe (shift, values, mirror, ...)'),
 });
 export type GroupItem = z.infer<typeof GroupItem>;
 
@@ -461,7 +492,9 @@ export const Group = z.object({
   approvalUi: z.enum(['architect', 'owner']).optional().describe('(4c) default architect'),
   maxRedirects: z.number().int().optional().describe('(4c) massingFirst: redirect rounds per item'),
   context: Context.optional().describe('(4c)'),
-  awaiting: z.array(ItemKey).optional().describe('(4c) the items waiting for group.approve'),
+  awaiting: z.array(GroupItemKey).optional().describe('(4c) the items waiting for group.approve'),
+  copyCap: z.number().int().optional().describe('(0b) placements per design'),
+  smallBySize: z.boolean().optional().describe('(0b)'),
   createdAt: Ts,
   updatedAt: Ts,
 });
@@ -797,6 +830,8 @@ export const AckMsg = z.object({
   re: z.string().describe('the `id` of the client message'),
   ok: z.boolean(),
   error: z.string().optional(),
+  code: z.string().optional().describe('(0b) a typed refusal: COPY_REFUSED | VERSION_REFUSED (the mod maps it to Reason)'),
+  detail: z.string().optional().describe('(0b) the refusal sub-code (landmark, unknown, self, cap; bundled, no_source, massing, copy, busy, site_mismatch, group, base_moved)'),
   result: z.record(z.string(), z.unknown()).optional().describe('design.request: {designId}; variant.request / import.request: {variantId}; job.run: {jobId}; blob.put: {blobId, size, complete}'),
 });
 export const ErrorMsg = z.object({ ...envelope('error'), message: z.string(), re: z.string().optional() });
@@ -957,12 +992,18 @@ export const MassingRedirectMsg = z.object({
 });
 export const MassingListMsg = z.object({ ...envelope('massing.list'), owner: Owner.optional(), massingId: MassingId.optional().describe('every version of this massing (default: the latest of each)') });
 export const MassingDeleteMsg = z.object({ ...envelope('massing.delete'), massingId: MassingId });
+export const GroupPromoteCopyMsg = z.object({
+  ...envelope('group.promoteCopy'),
+  groupId: Id,
+  itemKey: GroupItemKey,
+  reason: z.string().trim().min(1).max(500).describe('why (e.g. a fitToLot failure at placement)'),
+});
 export const GroupApproveMsg = z.object({
   ...envelope('group.approve'),
   groupId: Id,
-  approve: z.array(ItemKey).max(MAX_GROUP_ITEMS).optional().describe('items whose detail pass starts'),
-  redirect: z.record(ItemKey, z.string().trim().min(1).max(2000)).optional().describe('itemKey -> notes: a new massing version'),
-  cancel: z.array(ItemKey).max(MAX_GROUP_ITEMS).optional().describe('(addition) items to drop (they end cancelled)'),
+  approve: z.array(GroupItemKey).max(MAX_GROUP_ITEMS).optional().describe('items whose detail pass starts'),
+  redirect: z.record(GroupItemKey, z.string().trim().min(1).max(2000)).optional().describe('itemKey -> notes: a new massing version'),
+  cancel: z.array(GroupItemKey).max(MAX_GROUP_ITEMS).optional().describe('(addition) items to drop (they end cancelled)'),
   owner: Owner.optional().describe('who approves: must be the group\'s owner when its approvalUi is "owner"'),
 });
 
@@ -1087,6 +1128,7 @@ export const ClientMessage = z.discriminatedUnion('type', [
   MassingListMsg,
   MassingDeleteMsg,
   GroupApproveMsg,
+  GroupPromoteCopyMsg,
   DesignCritiqueMsg,
   BibleDeleteMsg,
   BibleArchiveMsg,

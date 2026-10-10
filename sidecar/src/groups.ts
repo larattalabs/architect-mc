@@ -29,6 +29,8 @@ import { DesignRequest } from './protocol.js';
 import { isFinalDesign } from './designs.js';
 import { addCost, zeroCost } from './jobs/cost.js';
 import { itemModel } from './estimates.js';
+import { expandItems, itemCritique, withNote } from './copies.js';
+import { RefusedError } from './errors.js';
 import type { Sidecar } from './sidecar.js';
 import { ClientError } from './sidecar.js';
 
@@ -52,6 +54,8 @@ export interface GroupWork {
   itemCost?: Record<string, Cost>;
   /** (4c) item key -> it ended without a design to say so (dropped or cancelled while awaiting approval, the hard budget) */
   ended?: Record<string, 'cancelled' | 'budget'>;
+  /** (0b) copy item key -> its place among its archetype's copies */
+  ordinals?: Record<string, number>;
 }
 
 const FINAL_DESIGN = new Set(['done', 'failed', 'cancelled']);
@@ -111,37 +115,75 @@ export class Groups {
     const items: GroupItem[] = [];
     const designs: Design[] = [];
     const itemRequests: Record<string, DesignRequestT> = {};
-    for (const [i, it] of req.items.entries()) {
-      const itemKey = it.itemKey ?? `item${i + 1}`;
+    // (0b) count / copyOf / copyCap: the placements (originals and copies); refusals before anything is created
+    const expanded = expandItems(req);
+    const waveOf = new Map<string, number>();
+    const ordinals: Record<string, number> = {};
+    for (const e of expanded) {
+      const it = e.input;
+      const itemKey = e.itemKey;
       const role = it.role ?? 'ordinary';
-      const wave = it.anchor ? 0 : (it.wave ?? 1);
+      const wave = e.kind === 'copy' ? (waveOf.get(e.copyOf!) ?? 1) : it.anchor ? 0 : (it.wave ?? 1);
+      waveOf.set(itemKey, wave);
       const model = itemModel(it, cfg.groups);
-      const { itemKey: _k, role: _r, anchor: _a, wave: _w, model: _m, ext, owner, budgetUsd: _b, critique: itemCritique, ...base } = it;
-      // (5a) the item's critique wins over the group's default
-      const critique = itemCritique ?? req.critique;
-      const request = DesignRequest.parse({
-        ...base,
-        ...(critique && critique.mode !== 'off' ? { critique } : {}),
-        ...(owner ?? req.owner ? { owner: owner ?? req.owner } : {}),
-        ...(ext && Object.keys(ext).length ? { ext } : {}),
-        model,
-        bible: pin.id,
-        bibleVersion: pin.version,
-        group: id,
-        itemKey,
-        wave,
-        role,
-        ...(req.context !== undefined ? { context: req.context } : {}),
-      });
+      const { itemKey: _k, role: _r, anchor: _a, wave: _w, model: _m, ext, owner, budgetUsd: _b, critique: ownCritique, ...base } = it;
+      // (5a) the item's critique wins over the group's default; (0b, C2) a small item drops the default report critique
+      const critique = itemCritique(ownCritique, req.critique, e.effort);
+      const request = withNote(
+        DesignRequest.parse({
+          ...base,
+          ...(critique && critique.mode !== 'off' ? { critique } : {}),
+          ...(owner ?? req.owner ? { owner: owner ?? req.owner } : {}),
+          ...(ext && Object.keys(ext).length ? { ext } : {}),
+          model,
+          bible: pin.id,
+          bibleVersion: pin.version,
+          group: id,
+          itemKey,
+          wave,
+          role,
+          ...(req.context !== undefined ? { context: req.context } : {}),
+          ...(e.effort === 'small' ? { effort: 'small' as const } : {}),
+        }),
+        e.note,
+      );
+      const small = e.effort === 'small' ? { effort: 'small' as const } : {};
+      // (0b) a copy has no design: it waits for its archetype, then builds on the variant queue ($0)
+      if (e.kind === 'copy') {
+        itemRequests[itemKey] = request;
+        ordinals[itemKey] = e.ordinal!;
+        items.push({
+          itemKey,
+          ...(ext && Object.keys(ext).length ? { ext } : {}),
+          designId: '',
+          status: 'queued',
+          step: `waiting for ${e.copyOf} (a copy)`,
+          cost: zeroCost(),
+          wave,
+          role,
+          model,
+          type: request.type,
+          ...(request.name ? { name: request.name } : {}),
+          stage: 'copy' as const,
+          kind: 'copy' as const,
+          copyOf: e.copyOf!,
+          ...small,
+        });
+        continue;
+      }
       // (4c) massing first: the item's first design is its massing (the massing model); the detail pass comes at approval
       let d: Design;
       if (req.massingFirst) {
         itemRequests[itemKey] = request;
         // (5a) the critique belongs to the detail pass, not the item's massing
-        const { critique: _c, ...noCritique } = request;
+        const { critique: _c, effort: _ef, ...noCritique } = request;
         const mreq: DesignRequestT = { ...noCritique, massing: true, model: cfg.massing.model };
         d = this.sc.designs.create(mreq, { id: this.sc.massings.reserveId(mreq), version: 1 });
-      } else d = this.sc.designs.create(request);
+      } else {
+        // (0b) an archetype's request is kept: a copy that falls back designs from it
+        if (expanded.some((x) => x.copyOf === itemKey)) itemRequests[itemKey] = request;
+        d = this.sc.designs.create(request);
+      }
       designs.push(d);
       items.push({
         itemKey,
@@ -156,8 +198,10 @@ export class Groups {
         type: request.type,
         ...(request.name ? { name: request.name } : {}),
         ...(req.massingFirst ? { stage: 'massing' as const, massing: { ...d.massing! }, rounds: 0, designIds: [d.id] } : {}),
+        ...small,
       });
     }
+    const copies = expanded.filter((e) => e.kind === 'copy');
     const g: Group = {
       id,
       name: req.name,
@@ -175,10 +219,13 @@ export class Groups {
       cost: zeroCost(),
       ...(req.massingFirst ? { massingFirst: true, approvalUi: req.approvalUi ?? 'architect', maxRedirects: req.maxRedirects ?? cfg.massing.maxRedirects, awaiting: [] } : req.approvalUi ? { approvalUi: req.approvalUi } : {}),
       ...(req.context !== undefined ? { context: req.context } : {}),
+      ...(req.copyCap !== undefined ? { copyCap: req.copyCap } : copies.length ? { copyCap: 3 } : {}),
+      ...(req.smallBySize ? { smallBySize: true } : {}),
       createdAt: now,
       updatedAt: now,
     };
-    if (req.massingFirst) this.work(id).itemRequests = itemRequests;
+    if (Object.keys(itemRequests).length) this.work(id).itemRequests = itemRequests;
+    if (copies.length) this.work(id).ordinals = ordinals;
     this.all.push(g);
     while (this.all.length > GROUP_KEEP) {
       const k = this.all.findIndex((x) => isFinalGroup(x));
@@ -189,7 +236,7 @@ export class Groups {
     this.sc.store.markDirty();
     this.sc.pool.setLaneCap(`group:${id}`, g.concurrency);
     this.refresh(g, true);
-    this.sc.log.info(`group ${id} "${g.name}": ${items.length} item(s), bible ${pin.id} v${pin.version}, concurrency ${g.concurrency}${g.budgetUsd !== undefined ? `, budget $${g.budgetUsd}` : ''}${g.massingFirst ? `, massing first (approval: ${g.approvalUi}, ${g.maxRedirects} redirect(s) per item)` : ''}`);
+    this.sc.log.info(`group ${id} "${g.name}": ${items.length} item(s)${copies.length ? ` (${copies.length} cop${copies.length === 1 ? 'y' : 'ies'}, cap ${g.copyCap})` : ''}, bible ${pin.id} v${pin.version}, concurrency ${g.concurrency}${g.budgetUsd !== undefined ? `, budget $${g.budgetUsd}` : ''}${g.massingFirst ? `, massing first (approval: ${g.approvalUi}, ${g.maxRedirects} redirect(s) per item)` : ''}`);
     for (const d of designs) this.sc.scheduler.enqueue(d.id);
     return g;
   }
@@ -347,7 +394,13 @@ export class Groups {
     g.reason = 'cancelled';
     this.sc.store.markDirty();
     for (const it of g.items) {
-      const d = this.sc.designs.get(it.designId);
+      // (0b) a copy: a queued variant is dropped; one building finishes (its entry stays in the library, as a finished item's)
+      if (it.kind === 'copy') {
+        if (!['done', 'failed', 'cancelled'].includes(it.status)) (this.work(id).ended ??= {})[it.itemKey] = 'cancelled';
+        if (it.variantJob && this.sc.variants.get(it.variantJob)?.status === 'queued') this.sc.variants.update(it.variantJob, { status: 'failed', step: 'cancelled with its group', error: 'cancelled' });
+        continue;
+      }
+      const d = it.designId ? this.sc.designs.get(it.designId) : undefined;
       if (d && !isFinalDesign(d)) this.sc.stopDesign(it.designId, 'cancelled', undefined, 'cancelled with its group');
       // (4c) an item awaiting approval has no design left to cancel
       if (it.stage === 'approval') (this.work(id).ended ??= {})[it.itemKey] ??= 'cancelled';
@@ -430,8 +483,142 @@ export class Groups {
     } finally {
       this.refreshing = false;
     }
+    // (0b) copies: start the ones whose archetype is done, fail the ones whose archetype ended, fall back
+    if (!isFinalGroup(g) && this.advanceCopies(g)) this.refresh(g, true);
     // a wave may have opened, a pause lifted
     this.sc.pool.kick();
+  }
+
+  // ---- (0b) copies ----------------------------------------------------------------------------------
+
+  /** A copy item's state from its variant job (and its end, when it was cancelled). */
+  private syncCopy(g: Group, it: GroupItem): void {
+    const w = this.work(g.id);
+    const ended = w.ended?.[it.itemKey];
+    const v = it.variantJob ? this.sc.variants.get(it.variantJob) : undefined;
+    if (v) {
+      if (v.status === 'done' && v.blueprintId) {
+        it.status = 'done';
+        it.entryId = v.blueprintId;
+        it.step = v.step;
+        if (v.copy?.recipe) it.recipe = v.copy.recipe;
+      } else if (v.status === 'failed') {
+        // a failed variant with a fallback reason becomes a FALLBACK original (advanceCopies); until then it is building
+        if (!v.copy?.fallbackReason) {
+          it.status = ended ? 'cancelled' : 'failed';
+          it.error = v.error ?? 'the copy failed';
+          it.step = v.step;
+        }
+      } else if (!ended) {
+        it.status = v.status === 'queued' ? 'queued' : 'checking';
+        it.step = v.step;
+      }
+    }
+    if (ended && it.status !== 'done') {
+      it.status = 'cancelled';
+      it.step = 'cancelled with its group';
+    }
+  }
+
+  /** Start, fail or fall back copies; returns whether anything changed. */
+  private advanceCopies(g: Group): boolean {
+    const w = this.work(g.id);
+    let changed = false;
+    for (const it of g.items) {
+      if (it.kind !== 'copy' || w.ended?.[it.itemKey]) continue;
+      if (['done', 'failed', 'cancelled'].includes(it.status) && !it.variantJob) continue;
+      const arch = g.items.find((x) => x.itemKey === it.copyOf);
+      if (!it.variantJob) {
+        if (!arch) continue;
+        const archEnded = !!w.ended?.[arch.itemKey] || arch.status === 'failed' || arch.status === 'cancelled';
+        if (arch.status === 'done' && arch.entryId && (arch.stage === undefined || arch.stage === 'detail')) {
+          const v = this.sc.requestCopy(g, it, arch, w.ordinals?.[it.itemKey] ?? 1);
+          it.variantJob = v.id;
+          it.status = 'checking';
+          it.step = `building the copy of ${arch.entryId}`;
+          changed = true;
+        } else if (archEnded) {
+          it.status = 'failed';
+          it.error = 'source_failed';
+          it.step = `failed: its archetype ${arch.itemKey} ${w.ended?.[arch.itemKey] ?? arch.status} (source_failed)`;
+          changed = true;
+        }
+        continue;
+      }
+      const v = this.sc.variants.get(it.variantJob);
+      if (v?.status === 'failed' && v.copy?.fallbackReason) {
+        this.fallBack(g, it, `${v.copy.fallbackReason}: ${(v.error ?? '').split('\n')[0]}`.slice(0, 300));
+        changed = true;
+      }
+    }
+    if (changed) this.sc.store.markDirty();
+    return changed;
+  }
+
+  /** A copy becomes a FALLBACK original: under massingFirst the detail pass of its archetype's approved massing. */
+  private fallBack(g: Group, it: GroupItem, reason: string): void {
+    const w = this.work(g.id);
+    const base = w.itemRequests?.[it.itemKey];
+    if (!base) {
+      it.status = 'failed';
+      it.error = `fallback: the item has lost its request (${reason})`;
+      return;
+    }
+    const arch = g.items.find((x) => x.itemKey === it.copyOf);
+    const req: DesignRequestT = g.massingFirst && arch?.massing ? { ...base, fromMassing: arch.massing.id, massingVersion: arch.massing.version } : base;
+    const d = this.sc.designs.create(req);
+    it.kind = 'fallback';
+    it.designId = d.id;
+    it.designIds = [...(it.designIds ?? []), d.id];
+    it.status = d.status;
+    it.step = d.step;
+    it.fallbackReason = reason;
+    delete it.entryId;
+    delete it.error;
+    delete it.recipe;
+    if (g.massingFirst) it.stage = 'detail';
+    else delete it.stage;
+    this.sc.log.info(`group ${g.id}: ${it.itemKey} falls back to an original (${reason}); design ${d.id}${g.massingFirst && arch?.massing ? ` bound to massing ${arch.massing.id} v${arch.massing.version}` : ''}`);
+    this.sc.scheduler.enqueue(d.id);
+  }
+
+  /**
+   * (0b) promoteCopy: a copy that did not fit at placement becomes a FALLBACK original. Refused for a non-copy, a copy
+   * still building, or a final group.
+   */
+  promoteCopy(id: string, itemKey: string, reason: string): Group {
+    const g = this.get(id);
+    if (!g) throw new ClientError(`no group "${id}"`);
+    if (isFinalGroup(g)) throw new RefusedError('COPY_REFUSED', 'final', `group ${id} is already ${g.status}`);
+    const it = g.items.find((x) => x.itemKey === itemKey);
+    if (!it) throw new ClientError(`group ${id} has no item "${itemKey}"`);
+    if (it.kind !== 'copy') throw new RefusedError('COPY_REFUSED', 'not_copy', `item ${itemKey} is not a copy (${it.kind ?? 'original'})`);
+    if (this.work(id).ended?.[itemKey]) throw new RefusedError('COPY_REFUSED', 'final', `item ${itemKey} was cancelled`);
+    if (it.status !== 'done' && it.status !== 'failed') throw new RefusedError('COPY_REFUSED', 'building', `item ${itemKey} is still building (${it.status})`);
+    this.fallBack(g, it, `promoted: ${reason}`);
+    this.sc.store.markDirty();
+    this.refresh(g, true);
+    return g;
+  }
+
+  /** (0b) What a copy's variant job needs from its group at run time: the recipes of its archetype's earlier copies. */
+  copySiblings(groupId: string, archetype: string, ordinal: number): Array<Record<string, unknown>> {
+    const g = this.get(groupId);
+    if (!g) return [];
+    const w = this.work(groupId);
+    return g.items
+      .filter((x) => x.kind === 'copy' && x.copyOf === archetype && (w.ordinals?.[x.itemKey] ?? 0) < ordinal)
+      .sort((a, b) => (w.ordinals?.[a.itemKey] ?? 0) - (w.ordinals?.[b.itemKey] ?? 0))
+      .flatMap((x) => {
+        const r = x.recipe ?? (x.variantJob ? this.sc.variants.get(x.variantJob)?.copy?.recipe : undefined);
+        return r ? [r] : [];
+      });
+  }
+
+  /** (0b) A variant changed: a copy's group follows. */
+  variantChanged(v: { copy?: { group: string } | undefined }): void {
+    const g = v.copy ? this.get(v.copy.group) : undefined;
+    if (g) this.refresh(g);
   }
 
   /** One pass; returns whether the group changed. */
@@ -441,7 +628,12 @@ export class Groups {
     const w = this.work(g.id);
     let cost: Cost = zeroCost();
     for (const it of g.items) {
-      const d = this.sc.designs.get(it.designId);
+      // (0b) a copy follows its variant job
+      if (it.kind === 'copy') {
+        this.syncCopy(g, it);
+        continue;
+      }
+      const d = it.designId ? this.sc.designs.get(it.designId) : undefined;
       const committed = w.itemCost?.[it.itemKey] ?? zeroCost();
       if (d) {
         it.status = d.status;
@@ -469,7 +661,7 @@ export class Groups {
     g.designs = g.items.map((it) => ({ id: it.designId, status: it.status, step: it.step }));
     // an item is open while its design is, or while it awaits approval
     const isOpen = (it: GroupItem) => !w.ended?.[it.itemKey] && (it.stage === 'approval' || !FINAL_DESIGN.has(it.status));
-    g.done = g.items.filter((it) => it.status === 'done' && (it.stage === undefined || it.stage === 'detail')).length;
+    g.done = g.items.filter((it) => it.status === 'done' && (it.stage === undefined || it.stage === 'detail' || it.stage === 'copy')).length;
     g.failed = g.items.filter((it) => !isOpen(it) && (it.status === 'failed' || it.status === 'cancelled')).length;
     const open = g.items.filter(isOpen);
     const waves = open.map((it) => it.wave);
@@ -477,11 +669,13 @@ export class Groups {
     else delete g.wave;
     if (g.massingFirst) g.awaiting = open.filter((it) => it.stage === 'approval').map((it) => it.itemKey);
     // budget: the hard cap stops everything left, the soft one pauses dispatching
-    if (g.budgetUsd !== undefined && open.length) {
+    if (g.budgetUsd !== undefined && open.some((it) => it.kind !== 'copy')) {
       if (g.cost.usd >= g.budgetUsd) {
         g.reason = 'budget';
         for (const it of open) {
           if (it.stage === 'approval') (w.ended ??= {})[it.itemKey] = 'budget';
+          // (0b) copies cost nothing: they go on (a copy whose archetype is stopped fails with source_failed)
+          else if (it.kind === 'copy') continue;
           else this.sc.stopDesign(it.designId, 'budget', 'budget', `stopped: the group budget ($${g.budgetUsd}) is spent`);
         }
         this.again = true;
