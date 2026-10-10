@@ -68,17 +68,27 @@ public final class InfraPlace {
 	 * toggle on, refuses NOT_ALLOWED; INSTANT in a survival-toggle world needs a creative world (cell sites) or an actor with
 	 * permission level 2 (roads, the buildings' rule).
 	 */
+	/** 6c 0c (C16): a construction road outside a batch with a shared crate. */
+	static final String CONSTRUCTION_ROAD = "a construction road is built from a batch's shared crate: queue it in a Batch with sharedCrate (placeRoad "
+		+ "alone is INSTANT only)";
+
+	/** 6c 0c (C16): whether a road request is a construction road (CONSTRUCTION, or AUTO with the survival toggle on). */
+	static boolean constructionRoad(MinecraftServer server, dev.larattalabs.architect.api.Mode mode) {
+		return mode == dev.larattalabs.architect.api.Mode.CONSTRUCTION || mode == dev.larattalabs.architect.api.Mode.AUTO && SurvivalWorld.on()
+			&& server.getDefaultGameType() != GameType.CREATIVE;
+	}
+
 	static @Nullable String modeRefusal(MinecraftServer server, dev.larattalabs.architect.api.Mode mode, @Nullable ServerPlayer actor, boolean cells) {
 		boolean survival = SurvivalWorld.on();
 		boolean creative = server.getDefaultGameType() == GameType.CREATIVE;
 		if (mode == dev.larattalabs.architect.api.Mode.CONSTRUCTION) {
-			return (cells ? "cell sites" : "roads") + " are INSTANT only in this version (no construction mode)";
+			return cells ? "cell sites are INSTANT only (no construction mode)" : CONSTRUCTION_ROAD;
 		}
 		if (!survival || creative) {
 			return null;
 		}
 		if (mode == dev.larattalabs.architect.api.Mode.AUTO) {
-			return "this world builds construction sites, and " + (cells ? "cell sites" : "roads") + " have no construction mode yet";
+			return cells ? "this world builds construction sites, and cell sites have no construction mode" : CONSTRUCTION_ROAD;
 		}
 		if (cells) {
 			return "a cell site needs INSTANT placement, which this survival world does not allow";
@@ -142,6 +152,17 @@ public final class InfraPlace {
 	/** Starts placing a road ({@link InfraJob}); the caller adds it to {@link Placement}. */
 	static InfraJob beginRoad(ServerLevel level, Check c, @Nullable String owner, @Nullable JsonObject ext, Site.@Nullable Member member)
 		throws Sites.SiteException {
+		return beginRoad(level, c, owner, ext, member, false);
+	}
+
+	/** {@link #beginRoad}; {@code construction} (6c 0c, C16): built by the builder from the batch's shared crate once placed. */
+	static InfraJob beginRoad(ServerLevel level, Check c, @Nullable String owner, @Nullable JsonObject ext, Site.@Nullable Member member,
+		boolean construction) throws Sites.SiteException {
+		if (construction) {
+			JsonObject spec = c.spec() == null ? new JsonObject() : c.spec().deepCopy();
+			spec.addProperty(RoadBuilder.SPEC_CONSTRUCTION, true);
+			c = new Check(c.refusals(), c.notes(), c.positions(), c.values(), c.box(), c.overlaps(), spec, c.spans());
+		}
 		if (!c.ok()) {
 			throw new Sites.SiteException(c.refusals().get(0).reason(), c.refusals().get(0).message());
 		}
@@ -435,6 +456,7 @@ public final class InfraPlace {
 		if (!cover.isEmpty() && covered == Sites.Covered.REFUSE) {
 			throw new Sites.SiteException(Reason.COVERED, cover.size() + " site(s) cover cells of " + id + " (" + String.join(", ", cover) + ")");
 		}
+		RoadBuilder.beforeRemove(level, i); // 6c 0c (C16): a construction road's refunds and the group's crate
 		List<String> cascaded = new ArrayList<>();
 		List<String> infraCover = new ArrayList<>();
 		if (!cover.isEmpty() && covered == Sites.Covered.CASCADE) {

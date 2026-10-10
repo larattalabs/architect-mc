@@ -130,6 +130,7 @@ public final class Builder {
 
 	public static void init() {
 		ServerTickEvents.END_SERVER_TICK.register(Builder::tick);
+		RoadBuilder.init(); // 6c 0c (C16): construction roads
 		ServerLifecycleEvents.SERVER_STARTED.register(s -> server = s);
 		ServerLifecycleEvents.SERVER_STOPPED.register(s -> {
 			RUNS.clear();
@@ -493,6 +494,20 @@ public final class Builder {
 		return out;
 	}
 
+	/** 6c 0c (C16): whether a construction site of {@code groupId} still builds from the group's shared crate. */
+	static boolean anyBuildingShared(String groupId) {
+		for (Site o : Sites.all()) {
+			if (o.building() && groupId.equals(o.group()) && sharedGroup(o) != null) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	static long ticksNow() {
+		return ticks;
+	}
+
 	/** The building sites a crate feeds: the site, or every building site of the group sharing it (placement order). */
 	private static List<Site> fedBy(String crateOwner) {
 		if (!crateOwner.startsWith(SiteGroupRec.CRATE_PREFIX)) {
@@ -552,7 +567,19 @@ public final class Builder {
 				crate.ledger().credit(item -> unbuiltFor(srv, owner, item)).forEach((k, v) -> credit.merge(k, v, Integer::sum));
 			}
 		}
+		RoadBuilder.stock(srv, g, bySite, total); // 6c 0c (C16): the group's construction roads, by road id
 		Construction.Crate gc = g.crate();
+		if (crates.isEmpty() && gc != null && srv.overworld() != null) {
+			// only roads build from it (no construction site of the group has a crate record): read the group's crate itself
+			for (ServerLevel lv : srv.getAllLevels()) {
+				if (lv.getBlockEntity(new BlockPos(gc.x(), gc.y(), gc.z())) instanceof CrateBlockEntity be && g.crateOwner().equals(be.siteId())
+					&& crates.add(be.getBlockPos())) {
+					be.ledger().delivered().forEach((k, v) -> delivered.merge(k, v, Integer::sum));
+					be.ledger().credit(item -> unbuiltFor(srv, g.crateOwner(), item)).forEach((k, v) -> credit.merge(k, v, Integer::sum));
+					break;
+				}
+			}
+		}
 		SiteGroupRec now = Sites.group(g.id());
 		if (crates.isEmpty() && now != null) {
 			delivered.putAll(now.delivered()); // the shared crate is gone (every site built): its ledger was kept on the group
@@ -562,7 +589,7 @@ public final class Builder {
 
 	/** What the sites a crate feeds still need of {@code item}. */
 	private static int unbuiltFor(MinecraftServer srv, String crateOwner, String item) {
-		int n = 0;
+		int n = RoadBuilder.unbuiltFor(srv, crateOwner, item); // 6c 0c (C16)
 		for (Site s : fedBy(crateOwner)) {
 			Run r = run(srv, s);
 			if (r != null) {
@@ -583,7 +610,7 @@ public final class Builder {
 		}
 		if (siteId.startsWith(SiteGroupRec.CRATE_PREFIX)) {
 			// a group's shared crate: what any of its building sites still needs (R6)
-			if (fedBy(siteId).isEmpty()) {
+			if (fedBy(siteId).isEmpty() && !RoadBuilder.feeds(siteId)) {
 				return null;
 			}
 			return crate.ledger().accept(item, it -> unbuiltFor(srv, siteId, it), Equivalents.bundled(), commit);
@@ -1054,7 +1081,7 @@ public final class Builder {
 	private static void complete(MinecraftServer srv, ServerLevel level, Site s, Run r, @Nullable CrateBlockEntity crate) {
 		Construction c = s.construction();
 		// a group's shared crate stays while another of its sites still builds (R6)
-		boolean keepCrate = !otherBuildingShared(s).isEmpty();
+		boolean keepCrate = !otherBuildingShared(s).isEmpty() || s.group() != null && !RoadBuilder.building(s.group()).isEmpty();
 		keepDelivered(srv, s, crate, keepCrate);
 		Map<String, Integer> left = crate != null && !keepCrate ? crate.ledger().takeStock() : Map.of();
 		BlockPos at = c.crate() != null ? new BlockPos(c.crate().x(), c.crate().y(), c.crate().z()) : dropPos(s);
@@ -1439,7 +1466,7 @@ public final class Builder {
 			at = new BlockPos(c.crate().x(), c.crate().y(), c.crate().z());
 			CrateBlockEntity crate = crate(level, s, true);
 			// a shared crate other sites still build from stays; this site's refunds drop at its cell (R6)
-			if (crate != null && otherBuildingShared(s).isEmpty()) {
+			if (crate != null && otherBuildingShared(s).isEmpty() && (s.group() == null || RoadBuilder.building(s.group()).isEmpty())) {
 				keepDelivered(srv, s, crate, false);
 				stock = crate.ledger().takeStock();
 				restoreCrateCell(level, c.crate());

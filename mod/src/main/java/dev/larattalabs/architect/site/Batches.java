@@ -419,14 +419,17 @@ public final class Batches {
 		(road ? it.road().ext() : it.cells().ext()).entrySet().forEach(e -> ext.add(e.getKey(), e.getValue().deepCopy()));
 		ServerPlayer actor = road ? it.road().actor() : it.cells().actor();
 		BlockPos first = road ? it.road().points().get(0) : it.cells().cells().isEmpty() ? BlockPos.ZERO : it.cells().cells().get(0).pos();
+		// 6c 0c (C16): a road in CONSTRUCTION (or AUTO in survival) is a construction road, built from the batch's shared crate
+		boolean consRoad = road && InfraPlace.constructionRoad(server, it.road().mode());
 		QItem q = new QItem(it.itemKey(), stage, it.after(), road ? "road" : "cells", Sites.dimensionId(level), first.getX(), first.getY(), first.getZ(), 0,
 			road ? it.road().force()
-			: it.cells().force(), ext, actor == null ? null : actor.getStringUUID(), false, survival);
+			: it.cells().force(), ext, actor == null ? null : actor.getStringUUID(), consRoad && spec.sharedCrate(), survival);
 		q.itemKind = road ? "road" : "cells";
 		q.spec = road ? InfraSpec.road(it.road()) : InfraSpec.cells(it.cells());
 		var overlap = road ? null : it.cells().overlap() != null ? it.cells().overlap() : spec.overlap();
 		q.layer = overlap == dev.larattalabs.architect.api.OverlapPolicy.LAYER;
-		String no = InfraPlace.modeRefusal(server, road ? it.road().mode() : it.cells().mode(), actor, !road);
+		String no = consRoad ? spec.sharedCrate() ? null : "a construction road needs a batch with sharedCrate (its cells are paid from the shared crate)"
+			: InfraPlace.modeRefusal(server, road ? it.road().mode() : it.cells().mode(), actor, !road);
 		if (no != null) {
 			q.fail(Reason.NOT_ALLOWED.name(), no);
 		}
@@ -520,7 +523,7 @@ public final class Batches {
 			return;
 		}
 		try {
-			InfraJob job = road ? InfraPlace.beginRoad(level, c, b.owner, i.ext, member) : InfraPlace.beginCells(level, i.spec.get("kind").getAsString(),
+			InfraJob job = road ? InfraPlace.beginRoad(level, c, b.owner, i.ext, member, i.construction) : InfraPlace.beginCells(level, i.spec.get("kind").getAsString(),
 				dev.larattalabs.architect.journal.Journal.Policy.valueOf(i.spec.get("policy").getAsString()), c, b.owner, i.ext, member);
 			tr.mark("begin");
 			tr.done();

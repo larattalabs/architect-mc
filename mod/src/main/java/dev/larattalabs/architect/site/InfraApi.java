@@ -61,6 +61,15 @@ public final class InfraApi {
 	}
 
 	public static Verdict checkRoad(RoadRequest r) {
+		if (InfraPlace.constructionRoad(r.level().getServer(), r.mode())) {
+			// 6c 0c (C16): what a batch with a shared crate would build: construction, with the road's bill of materials
+			InfraPlace.Check c = road(r);
+			Verdict v = verdict(c, List.of());
+			List<String> notes = new ArrayList<>(v.notes());
+			notes.add("a construction road: placed by a batch with sharedCrate, built from its crate");
+			return new Verdict(v.refusals(), notes, true, dev.larattalabs.architect.apiimpl.Views.items(c.ok() ? RoadBuilder.bom(r.level(), c.positions(), c
+				.values()) : Map.of()), v.box(), v.restoreBox(), v.overlaps(), v.cells(), v.spans());
+		}
 		String mode = InfraPlace.modeRefusal(r.level().getServer(), r.mode(), r.actor(), false);
 		if (mode != null) {
 			return verdict(new InfraPlace.Check(List.of(), List.of(), new long[0], new Journal.Value[0], null, List.of(), null), List.of(new Refusal(
