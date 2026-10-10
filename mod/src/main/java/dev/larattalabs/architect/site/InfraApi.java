@@ -37,11 +37,27 @@ public final class InfraApi {
 		boolean blocking = !refusals.isEmpty() && refusals.stream().anyMatch(r -> r.reason() == Reason.OVERLAP || r.reason() == Reason.OVERLAP_BUSY
 			|| r.reason() == Reason.OVERLAP_OWNED || r.reason() == Reason.LAYER_DEPTH);
 		by.forEach((s, n) -> overlaps.add(new dev.larattalabs.architect.api.Overlap(s, Sites.ownerOf(s), n, blocking)));
-		return new Verdict(refusals, c.notes(), false, Map.of(), box, box, overlaps, c.cells());
+		return new Verdict(refusals, c.notes(), false, Map.of(), box, box, overlaps, c.cells(), spans(c));
+	}
+
+	/** 6c 0c §3: a check's road spans as the API's. */
+	static List<dev.larattalabs.architect.api.RoadSpan> spans(InfraPlace.Check c) {
+		List<dev.larattalabs.architect.api.RoadSpan> out = new ArrayList<>();
+		for (dev.larattalabs.architect.site.roads.RoadPlan.Span s : c.spans()) {
+			Reason r;
+			try {
+				r = Reason.valueOf(s.reason());
+			} catch (IllegalArgumentException e) {
+				r = Reason.OTHER;
+			}
+			out.add(new dev.larattalabs.architect.api.RoadSpan(s.fromPoint(), s.toPoint(), r, s.message(), new BlockPos(s.x(), s.y(), s.z())));
+		}
+		return out;
 	}
 
 	private static InfraPlace.Check road(RoadRequest r) {
-		return InfraPlace.checkRoad(r.level(), r.points(), r.width(), r.surface(), r.slab(), r.lanterns(), r.shallowDecks(), r.owner(), r.force());
+		return InfraPlace.checkRoad(r.level(), r.points(), r.width(), r.surface(), r.slab(), r.lanterns(), r.shallowDecks(), r.owner(), r.force(), r.partial(),
+			r.owner());
 	}
 
 	public static Verdict checkRoad(RoadRequest r) {
@@ -59,7 +75,11 @@ public final class InfraApi {
 			return CompletableFuture.completedFuture(new PlaceResult(false, Optional.empty(), List.of(new Refusal(Reason.NOT_ALLOWED, mode)), List.of()));
 		}
 		InfraPlace.Check c = road(r);
-		return start(r.level(), c, () -> InfraPlace.beginRoad(r.level(), c, r.owner(), r.ext(), null));
+		return start(r.level(), c, () -> {
+			InfraJob j = InfraPlace.beginRoad(r.level(), c, r.owner(), r.ext(), null);
+			j.skipped.addAll(spans(c));
+			return j;
+		});
 	}
 
 	private interface Begin {
@@ -69,7 +89,7 @@ public final class InfraApi {
 	private static CompletableFuture<PlaceResult> start(ServerLevel level, InfraPlace.Check c, Begin b) {
 		if (!c.ok()) {
 			return CompletableFuture.completedFuture(new PlaceResult(false, Optional.empty(), c.refusals().stream().map(x -> new Refusal(x.reason(),
-				x.message())).toList(), c.notes()));
+				x.message())).toList(), c.notes(), spans(c)));
 		}
 		try {
 			InfraJob job = b.begin();

@@ -19,9 +19,12 @@ import org.jspecify.annotations.Nullable;
  * @param lanterns a fence post with a lantern beside the walkway, the first 6 blocks out, then every 12
  * @param shallowDecks 1-deep water gets an oak slab deck in the air above it (else those cells are skipped and noted)
  * @param mode INSTANT only in 4e (survival roads are not in 4e); the same actor rules as buildings
+ * @param partial (1.12.0) drop the failing waypoint segments ({@link RoadSpan}) and place the rest as one road with gaps (one
+ *                journal entry, one undo); {@link PlaceResult#skipped} lists them. Nothing left refuses with the first span.
+ *                NOT_LOADED still refuses the whole road
  */
 public record RoadRequest(ServerLevel level, List<BlockPos> points, int width, @Nullable String surface, @Nullable String slab, boolean lanterns,
-	boolean shallowDecks, Mode mode, @Nullable String owner, JsonObject ext, @Nullable ServerPlayer actor, boolean force) {
+	boolean shallowDecks, Mode mode, @Nullable String owner, JsonObject ext, @Nullable ServerPlayer actor, boolean force, boolean partial) {
 	public RoadRequest {
 		points = List.copyOf(points);
 		width = width <= 0 ? 3 : width;
@@ -29,8 +32,19 @@ public record RoadRequest(ServerLevel level, List<BlockPos> points, int width, @
 		ext = ext == null ? new JsonObject() : ext;
 	}
 
+	/** The 1.5.0 constructor (not partial). */
+	public RoadRequest(ServerLevel level, List<BlockPos> points, int width, @Nullable String surface, @Nullable String slab, boolean lanterns,
+		boolean shallowDecks, Mode mode, @Nullable String owner, JsonObject ext, @Nullable ServerPlayer actor, boolean force) {
+		this(level, points, width, surface, slab, lanterns, shallowDecks, mode, owner, ext, actor, force, false);
+	}
+
 	/** A width-3 automatic road without lanterns or decks, no owner or actor. */
 	public static RoadRequest of(ServerLevel level, List<BlockPos> points) {
-		return new RoadRequest(level, points, 3, null, null, false, false, Mode.AUTO, null, new JsonObject(), null, false);
+		return new RoadRequest(level, points, 3, null, null, false, false, Mode.AUTO, null, new JsonObject(), null, false, false);
+	}
+
+	/** The same request, partial or not (1.12.0). */
+	public RoadRequest withPartial(boolean p) {
+		return new RoadRequest(level, points, width, surface, slab, lanterns, shallowDecks, mode, owner, ext, actor, force, p);
 	}
 }

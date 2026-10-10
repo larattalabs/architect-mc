@@ -44,7 +44,12 @@ public final class InfraPlace {
 
 	/** A checked road or cell site: its cells and box, or the typed refusals; its notes and the sites it lies on. */
 	public record Check(List<Sites.Refusal> refusals, List<String> notes, long[] positions, Value[] values, Anchors.@Nullable Bounds box,
-		List<SiteJournal.Hit> overlaps, @Nullable JsonObject spec) {
+		List<SiteJournal.Hit> overlaps, @Nullable JsonObject spec, List<dev.larattalabs.architect.site.roads.RoadPlan.Span> spans) {
+		public Check(List<Sites.Refusal> refusals, List<String> notes, long[] positions, Value[] values, Anchors.@Nullable Bounds box,
+			List<SiteJournal.Hit> overlaps, @Nullable JsonObject spec) {
+			this(refusals, notes, positions, values, box, overlaps, spec, List.of());
+		}
+
 		public boolean ok() {
 			return refusals.isEmpty();
 		}
@@ -88,6 +93,16 @@ public final class InfraPlace {
 	/** Checks and plans a road (never loads a chunk: an unloaded column refuses NOT_LOADED). */
 	public static Check checkRoad(ServerLevel level, List<BlockPos> points, int width, @Nullable String surface, @Nullable String slab, boolean lanterns,
 		boolean decks, @Nullable String owner, boolean force) {
+		return checkRoad(level, points, width, surface, slab, lanterns, decks, owner, force, false, null);
+	}
+
+	/**
+	 * {@link #checkRoad}; 6c 0c: {@code partial} drops failing waypoint segments (§3), {@code protectOwner} the owner whose
+	 * protected areas apply (C17; null for a region's road: its realise start was checked). Every failing span is in
+	 * {@link Check#spans} (with partial: the skipped ones).
+	 */
+	public static Check checkRoad(ServerLevel level, List<BlockPos> points, int width, @Nullable String surface, @Nullable String slab, boolean lanterns,
+		boolean decks, @Nullable String owner, boolean force, boolean partial, @Nullable String protectOwner) {
 		String why = WorldJournal.unavailable();
 		if (why != null) {
 			return refused(Reason.JOURNAL_UNAVAILABLE, why);
@@ -105,20 +120,23 @@ public final class InfraPlace {
 		}
 		Roads.Planned p;
 		try {
-			p = Roads.plan(level, xs, ys, zs, width, surface, slab, lanterns, decks, owner, force, Sites::ownerOf, Sites::busy);
+			p = Roads.plan(level, xs, ys, zs, width, surface, slab, lanterns, decks, owner, force, Sites::ownerOf, Sites::busy, protectOwner, partial);
 		} catch (IllegalArgumentException e) {
 			return refused(Reason.OTHER, e.getMessage());
 		}
 		if (!p.ok()) {
 			return new Check(List.of(new Sites.Refusal(p.reason() == null ? Reason.OTHER : p.reason(), p.refusal())), p.notes(), new long[0], new Value[0],
-				null, List.of(), null);
+				null, List.of(), null, p.spans());
 		}
 		List<SiteJournal.Hit> hits = new ArrayList<>();
 		for (String s : p.layeredOver()) {
 			hits.add(new SiteJournal.Hit(s, "", "cells", Journal.Policy.CELL, Journal.Status.ACTIVE, 0, 0));
 		}
-		return new Check(List.of(), p.notes(), p.positions(), p.values(), p.box(), hits, Roads.spec(xs, ys, zs, width, surface, slab, lanterns, decks,
-			p.plan()));
+		JsonObject spec = Roads.spec(xs, ys, zs, width, surface, slab, lanterns, decks, p.plan());
+		if (partial) {
+			spec.addProperty("partial", true);
+		}
+		return new Check(List.of(), p.notes(), p.positions(), p.values(), p.box(), hits, spec, p.spans());
 	}
 
 	/** Starts placing a road ({@link InfraJob}); the caller adds it to {@link Placement}. */

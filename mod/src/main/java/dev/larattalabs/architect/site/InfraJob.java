@@ -76,6 +76,8 @@ final class InfraJob implements Placement.Job {
 	/** Phase 6a: the region tile this job writes ({@code region|stage|set|key}), or null. */
 	@Nullable String tile;
 	final List<String> notes = new ArrayList<>();
+	/** 6c 0c §3: a partial road's skipped spans, for its PlaceResult (not saved: the notes name them too). */
+	final List<dev.larattalabs.architect.api.RoadSpan> skipped = new ArrayList<>();
 	/** Who waits for it (the API's placeRoad / placeCells). */
 	transient final List<CompletableFuture<PlaceResult>> futures = new ArrayList<>();
 
@@ -452,7 +454,7 @@ final class InfraJob implements Placement.Job {
 					if (done.road()) {
 						dev.larattalabs.architect.site.roads.RoadSync.changed(server, dimension, done.box());
 					}
-					futures.forEach(x -> x.complete(new PlaceResult(true, Optional.of(siteId), List.of(), List.copyOf(notes))));
+					futures.forEach(x -> x.complete(new PlaceResult(true, Optional.of(siteId), List.of(), List.copyOf(notes), List.copyOf(skipped))));
 					return true;
 				}
 				default -> {

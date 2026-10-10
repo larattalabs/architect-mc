@@ -7,10 +7,10 @@ names win). API 1.12.0, mod 0.15.0 (after 0a = 1.10.0 and 0b = 1.11.0). Ports 89
 
 | Item | State | Notes |
 |---|---|---|
-| §8 C17 protected areas | in progress | `site/Protected.java`; hooks: verdict (place, check, fitToLot, batch building, move), SiteDeltas.check (delta, checkDelta, batch delta, forward revert), revert (undo path: restore box), cells (API + batch), region plan start/accept + realise start. Roads: with §3's spans |
+| §8 C17 protected areas | in progress | `site/Protected.java`; hooks: verdict (place, check, fitToLot, batch building, move), SiteDeltas.check (delta, checkDelta, batch delta, forward revert), revert (undo path: restore box), cells (API + batch), region plan start/accept + realise start. Roads: span-local via §3 |
 | §9 C18 owner-tagged entities | built | `Occupancy.ownedBy`; checkSite scan (place, check, batch), both discard loops, delta check + DeltaJob, removalBlockers (remove: requester; group undo: site owner) |
 | §2 minLotSize / recommendedLot | built (String); MassingRef overload waits for 0a's fitMassingToLot | `LotFitting.minSize/recommended`, `MinLotSizeTest` |
-| §3 partial roads | todo | |
+| §3 partial roads | built | `RoadPlan.plan(..., protect, partial)`: per-segment failures, per-run smoothing rounds, spans merged; `RoadSpansTest`. Roads' C17 check is span-local (centre and side columns, lantern posts skipped) |
 | §4 groundHeight | todo | capture the volume sha baseline before touching VolumeSurvey |
 | §6 extend warning | todo | |
 | §5 FIELD_LIMIT | after 0a (ArchitectRefused) and 0b (its bounded fields) | |
@@ -22,6 +22,14 @@ names win). API 1.12.0, mod 0.15.0 (after 0a = 1.10.0 and 0b = 1.11.0). Ports 89
 - `LotFit`'s 1.4.0 constructor sets `recommendedLot` to the template box (the contract's "the lot passed in" isn't known to
   that constructor).
 - Revert's undo path (no forward delta) is checked against the site's restore box, not per cell.
+
+- A step or wall can't fail TOO_STEEP (the ground search stops 8 above the hint, so the smoothed profile needs at most 4):
+  the §3 unit test and the in-game check use a trench (no ground within 8) instead of the "6-high step / wall".
+- With a pre-smoothing failure, the cut/fill check runs per run (the failing segments left out), so a non-partial road's
+  first span can differ from 4e's single refusal when a cut/fill failure sits before a water/lava/no-ground one.
+- A run shorter than 2 centre cells between skipped spans is left out and noted ("short"), not reported as a span.
+- A partial road's `PlaceResult.skipped` isn't saved with the job; after a restart its notes (and the batch item's message)
+  still name the skipped segments.
 
 ## Resume
 

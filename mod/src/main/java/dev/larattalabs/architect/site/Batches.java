@@ -491,7 +491,8 @@ public final class Batches {
 		}
 		if (road) {
 			c = InfraPlace.checkRoad(level, InfraSpec.points(i.spec), i.spec.get("width").getAsInt(), InfraSpec.str(i.spec, "surface"), InfraSpec.str(i.spec,
-				"slab"), i.spec.get("lanterns").getAsBoolean(), i.spec.get("shallowDecks").getAsBoolean(), b.owner, i.force);
+				"slab"), i.spec.get("lanterns").getAsBoolean(), i.spec.get("shallowDecks").getAsBoolean(), b.owner, i.force, i.spec.has("partial")
+				&& i.spec.get("partial").getAsBoolean(), RegionItems.isRegion(b) ? null : b.owner); // 6c 0c: partial (§3), protected areas (C17)
 		} else {
 			cells = InfraSpec.cellsOf(i.spec);
 			tr.mark("decode");
@@ -565,6 +566,13 @@ public final class Batches {
 			Sites.putGroup(server, n);
 		}
 		placedItem(server, b, i);
+		// 6c 0c §3: a partial road's item names its skipped spans
+		for (String note : job.notes) {
+			if (note.startsWith("skipped segment")) {
+				i.message = note;
+				CHANGED.add(b.id);
+			}
+		}
 	}
 
 	static void infraFailed(MinecraftServer server, InfraJob job, String why) {
