@@ -63,6 +63,11 @@ clients sharing it (load average 15-64):
   71.9, p99 22.7, vanilla 32.8): FAIL by 1.5 ms. The three c717804 megaA runs give realise CPU max 37.1 (own worktree), 42.3
   and 51.5 ms; on Apple's mixed P/E cores a descheduled-to-E-core tick costs more CPU time for the same work, so the CPU figure
   is not load-free either. Accepted by the coordinator with the caveat (2026-10-10).
+- The steps the journal change touches (20261010-072634-engine, c717804-era HEAD cef0da7): apijars, 4e-throughput, 4d-all,
+  5b-chains, 6a-megaB (full walk), 6a-forest, 6a-staged, 6a-heap PASS; 5b-village failed its whole-tick bar (4 ms MSPT max
+  34.4 ms, bar 25) at load 30+ and passed on a single re-run at load 2.5 (20261010-095043: 22.1 ms). Every engine step has
+  now passed on the fixed code, megaA with the accepted CPU caveat. Still to do for the release check: the gate-verifier and
+  Noah's gallery approval (gallery: the main checkout's `artifacts/scenarios/6b/gallery/`, evidence 1bf0b8e36a1f...).
 
 ## The 0.11.0 jars (build step 1)
 
