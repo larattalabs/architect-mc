@@ -8,6 +8,8 @@ import path from 'node:path';
 import zlib from 'node:zlib';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { FEATURES, parseClientMessage, ServerMessage, toProtocol1, type Outbound, type Protocol } from '../src/protocol.js';
+import { loadConfig } from '../src/config.js';
+import { attemptLimitMs, retryPauseMs, TILE_ATTEMPTS } from '../src/regionpool.js';
 import { canonicalJson, permissionFlag, sha256 } from '../src/regions.js';
 import type { ClientHandle } from '../src/server.js';
 import { SimDesigner } from '../src/sim.js';
@@ -146,7 +148,13 @@ describe('region.* schemas', () => {
     const tile = { v: 1, type: 'region.tile', planId: 'p1', key: '0,0', stage: 'ground', set: 'path', seq: 0, more: false, data: 'AAAA', count: 3, sha };
     expect(ServerMessage.safeParse(tile).success).toBe(true);
     expect(ServerMessage.safeParse({ ...tile, data: 'A'.repeat(1_400_000) }).success).toBe(false);
-    expect(ServerMessage.safeParse({ v: 1, type: 'region.tile.error', planId: 'p1', key: '0,0', stage: 'ground', set: 'terrain', message: 'x' }).success).toBe(true);
+    const tileErr = { v: 1, type: 'region.tile.error', planId: 'p1', key: '0,0', stage: 'ground', set: 'terrain', message: 'x' };
+    expect(ServerMessage.safeParse(tileErr).success).toBe(true);
+    // (6c 0a) code and attempts, additive
+    expect(ServerMessage.safeParse({ ...tileErr, code: 'timeout', attempts: 4 }).success).toBe(true);
+    expect(ServerMessage.safeParse({ ...tileErr, code: 'error', attempts: 1 }).success).toBe(true);
+    expect(ServerMessage.safeParse({ ...tileErr, code: 'slow' }).success).toBe(false);
+    expect(ServerMessage.safeParse({ ...tileErr, attempts: 0 }).success).toBe(false);
     expect(ServerMessage.safeParse({ v: 1, type: 'region.failed', planId: 'p1', message: 'x' }).success).toBe(true);
     for (const m of [planned, tile, { v: 1, type: 'region.failed', planId: 'p1', message: 'x' }]) expect(toProtocol1(m)).toBeUndefined();
     expect(FEATURES).toContain('region.plan');
@@ -365,25 +373,26 @@ describe('region.tiles (fake kit)', () => {
     for (const f of frames) expect(ServerMessage.safeParse({ v: 1, ...f }).success).toBe(true);
   });
 
-  it('a throwing, crashing, timed-out or out-of-memory tile answers region.tile.error; the others go on', async () => {
+  it('a throwing, crashing or out-of-memory tile answers region.tile.error code "error" at once; the others go on', async () => {
     h.cfg.regions.tileMs = 1000;
     h.cfg.regions.tileHeapMb = 64;
     // a fresh pool picks the limits up
     await h.sc.regions.close();
     const c = fakeClient();
-    const keys = ['0,0', '99,99', '1,0', '98,98', '2,0', '97,97', '3,0', '96,96', '4,0'];
-    expect(await call(h, tilesReq(planned.planId, planned.irSha, keys), c)).toMatchObject({ ok: true, result: { accepted: 9 } });
-    await until(() => tileAnswers(c, planned.planId).done.size === 9, 40_000);
+    const keys = ['0,0', '99,99', '1,0', '98,98', '2,0', '3,0', '96,96', '4,0'];
+    expect(await call(h, tilesReq(planned.planId, planned.irSha, keys), c)).toMatchObject({ ok: true, result: { accepted: 8 } });
+    await until(() => tileAnswers(c, planned.planId).done.size === 8, 40_000);
     const { frames, errors } = tileAnswers(c, planned.planId);
     const err = (k: string) => errors.find((e) => e.key === k)?.message ?? '';
     expect(err('99,99')).toContain('fake evaluator refused tile 99,99');
     expect(err('98,98')).toMatch(/exited|crashed/);
-    expect(err('97,97')).toMatch(/longer than 1 s/);
     expect(err('96,96')).toMatch(/out of memory \(64 MB per worker\)/);
-    expect(errors).toHaveLength(4);
+    expect(errors).toHaveLength(3);
+    // (6c 0a) not a timeout: code "error", evaluated once (no retry)
+    for (const e of errors) expect(e, e.key).toMatchObject({ code: 'error', attempts: 1 });
     expect(new Set(frames.map((f) => f.key))).toEqual(new Set(['0,0', '1,0', '2,0', '3,0', '4,0']));
     const stats = h.sc.regions.poolStats()!;
-    expect(stats.replaced).toBeGreaterThanOrEqual(3);
+    expect(stats.replaced).toBeGreaterThanOrEqual(2);
     expect(stats.workers).toBeLessThanOrEqual(2);
     // and the pool still works
     const c2 = fakeClient();
@@ -391,6 +400,126 @@ describe('region.tiles (fake kit)', () => {
     await until(() => tileAnswers(c2, planned.planId).frames.length === 1);
     h.cfg.regions.tileMs = 2000;
     h.cfg.regions.tileHeapMb = 256;
+  });
+});
+
+// ---- tile timeouts (6c 0a, CONTRACT 0a §11) ---------------------------------------------------------
+
+describe('tile timeouts: retries on a fresh worker (6c 0a)', () => {
+  let h: Harness;
+  let planned: Planned;
+  const TILE_MS = 300;
+  const PAUSE_MS = 50;
+  beforeAll(async () => {
+    h = makeSidecar(['--backend', 'sim']);
+    h.cfg.regions.workers = 2;
+    h.cfg.regions.window = 4;
+    h.cfg.regions.tileMs = TILE_MS;
+    h.cfg.regions.tileRetryPauseMs = PAUSE_MS;
+    await h.sc.start(new SimDesigner(h.sc, 20));
+    planned = (await plan(h, { seed: '11' })).planned!;
+  });
+  afterAll(async () => {
+    await h.close();
+  });
+
+  /** A fresh pool with the slow-tiles hook at n (as ARCHITECT_TEST_SLOW_TILES=n). */
+  async function hook(n: number): Promise<void> {
+    await h.sc.regions.close();
+    h.cfg.regions.testSlowTiles = n;
+  }
+
+  /** Evaluate keys on a new client; per key: the assembled tile (sha, gz sha) or the error. */
+  async function evaluate(keys: string[]) {
+    const c = fakeClient();
+    const t0 = Date.now();
+    expect(await call(h, tilesReq(planned.planId, planned.irSha, keys), c)).toMatchObject({ ok: true });
+    await until(() => tileAnswers(c, planned.planId).done.size === keys.length, 60_000);
+    const ms = Date.now() - t0;
+    const { frames, errors } = tileAnswers(c, planned.planId);
+    const out = new Map<string, { sha: string; gz: string } | TileErr>();
+    for (const k of keys) {
+      const fs = frames.filter((f) => f.key === k);
+      if (fs.length) {
+        const t = assemble(fs);
+        out.set(k, { sha: t.sha, gz: crypto.createHash('sha256').update(t.gz).digest('hex') });
+      } else out.set(k, errors.find((e) => e.key === k)!);
+    }
+    for (const m of [...frames, ...errors]) expect(ServerMessage.safeParse({ v: 1, ...m }).success).toBe(true);
+    return { out, ms };
+  }
+
+  it('ARCHITECT_TEST_SLOW_TILES is read from the environment (off by default)', () => {
+    const args = ['--data', path.join(h.root, 'cfgdata'), '--library', path.join(h.root, 'cfglib'), '--kit', h.cfg.kitDir];
+    expect(loadConfig(args, {}).regions).toMatchObject({ testSlowTiles: 0, tileRetryPauseMs: 1000, tileMs: 2000 });
+    expect(loadConfig(args, { ARCHITECT_TEST_SLOW_TILES: '4' }).regions.testSlowTiles).toBe(4);
+    expect(loadConfig(args, { ARCHITECT_TEST_SLOW_TILES: 'x' }).regions.testSlowTiles).toBe(0);
+  });
+
+  it('the schedule: 4 evaluations, limits 2, 4, 8, 16 s and pauses 1, 2, 4 s at the defaults', () => {
+    expect(TILE_ATTEMPTS).toBe(4);
+    expect([1, 2, 3, 4].map((a) => attemptLimitMs(2000, a))).toEqual([2000, 4000, 8000, 16_000]);
+    expect([1, 2, 3].map((a) => retryPauseMs(1000, a))).toEqual([1000, 2000, 4000]);
+    expect(h.cfg.regions.tileRetryPauseMs).toBe(PAUSE_MS);
+  });
+
+  it('a tile over its limit in every attempt answers code "timeout" after 4 evaluations, the limit doubling', async () => {
+    await hook(0); // a fresh pool: its stats count from 0
+    const { out, ms } = await evaluate(['97,97', '0,0']);
+    const e = out.get('97,97') as TileErr;
+    expect(e).toMatchObject({ type: 'region.tile.error', code: 'timeout', attempts: 4 });
+    expect(e.message).toMatch(/longer than its limit in each of 4 attempts \(0\.3, 0\.6, 1\.2, 2\.4 s\)/);
+    // the limits doubled (300 + 600 + 1200 + 2400 ms) and the pauses too (50 + 100 + 200 ms); without doubling it would be ~1.35 s
+    expect(ms).toBeGreaterThanOrEqual(4500 + 350 - 100);
+    const st = h.sc.regions.poolStats()!;
+    expect(st.retries).toBe(3);
+    expect(st.replaced).toBe(4);
+    // the other tile was not held up by the pauses
+    expect(out.get('0,0')).toHaveProperty('sha');
+  });
+
+  it('ARCHITECT_TEST_SLOW_TILES=2 passes inside the retries, with the unhooked bytes', async () => {
+    const keys = ['0,0', '1,0', '5,-3'];
+    await hook(0);
+    const ref = (await evaluate(keys)).out;
+    await hook(2);
+    const { out } = await evaluate(keys);
+    for (const k of keys) {
+      expect(out.get(k), k).toHaveProperty('sha');
+      expect(out.get(k), k).toEqual(ref.get(k));
+    }
+    // each tile: 2 overruns, 2 retries, its third evaluation answered
+    expect(h.sc.regions.poolStats()!.retries).toBe(2 * keys.length);
+  });
+
+  it('ARCHITECT_TEST_SLOW_TILES=4 answers code "timeout"; asked again, the 5th evaluation gives the unhooked bytes', async () => {
+    await hook(0);
+    const ref = (await evaluate(['2,0'])).out.get('2,0');
+    await hook(4);
+    const first = (await evaluate(['2,0'])).out.get('2,0') as TileErr;
+    expect(first).toMatchObject({ code: 'timeout', attempts: 4 });
+    // the mod asks again later (TILE_SLOW): the same pool's count goes on
+    const again = (await evaluate(['2,0'])).out.get('2,0');
+    expect(again).toEqual(ref);
+    expect(h.sc.regions.poolStats()!.retries).toBe(3);
+  });
+
+  it('a kit error is code "error" with no retry', async () => {
+    await hook(0);
+    const { out } = await evaluate(['99,99']);
+    expect(out.get('99,99')).toMatchObject({ code: 'error', attempts: 1 });
+    expect((out.get('99,99') as TileErr).message).toContain('fake evaluator refused tile 99,99');
+    expect(h.sc.regions.poolStats()!.retries).toBe(0);
+  });
+
+  it('a pause between attempts holds no worker and ends on shutdown', async () => {
+    await hook(1);
+    const c = fakeClient();
+    await call(h, tilesReq(planned.planId, planned.irSha, ['7,7']), c);
+    await until(() => (h.sc.regions.poolStats()?.retries ?? 0) === 1, 10_000);
+    // in its pause (50 ms) or its second attempt: close resolves without hanging
+    await h.sc.regions.close();
+    h.cfg.regions.testSlowTiles = 0;
   });
 });
 
