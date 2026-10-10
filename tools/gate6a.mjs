@@ -492,16 +492,20 @@ steps.megaA = async () => {
   await cmd('/kill @e[type=!minecraft:player]');
   await settle(5000);
   await call('dev.mspt.trace', { start: true });
+  await call('dev.placement.stats', { reset: true });
   const t0 = Date.now();
   const rm = await call('dev.region.remove', { region: r.region }, 4 * 3_600_000);
-  r.undo = { seconds: (Date.now() - t0) / 1000, result: rm, mspt: await call('dev.mspt.trace', { stop: true }) };
+  r.undo = { seconds: (Date.now() - t0) / 1000, result: rm, mspt: await call('dev.mspt.trace', { stop: true }), placement: await call('dev.placement.stats', {}) };
   await settle(10_000);
   r.diff = await call('dev.region.hash', { box: r.box, mode: 'diff', file: path.join(OUT, 'G6A_MegaA.snap.gz') }, 4 * 3_600_000);
   write('megabench-A.json', r);
   const b = r;
   check(b.state.view.state === 'PLACED', `megaA: the region is ${b.state.view.state} (${JSON.stringify(b.state.items)})`);
   check(b.cellsPerSecond >= 15_000, `megaA: realise ${Math.round(b.cellsPerSecond)} cells/s first tile to last (bar 15k; step ${Math.round(b.stepCellsPerSecond)})`);
-  check(b.mspt.all.over50 === 0 && b.mspt.all.p99 <= 25, `megaA: MSPT during realise max ${b.mspt.all.max.toFixed(1)} ms, p99 ${b.mspt.all.p99.toFixed(1)} ms, ${b.mspt.all.over50} over 50 ms`);
+  // (6b, coordinator 2026-10-10) MSPT bars judge Architect's own per-tick time (placementMsMax: placement, writes, group and
+  // plan work); the whole tick (max, p99, over 50), the vanilla tick (serverMsptMax) and GC are recorded, not judged
+  check(b.placement.placementMsMax <= 50, `megaA: realise: Architect's own tick max ${b.placement.placementMsMax.toFixed(1)} ms (bar 50); recorded: MSPT max `
+    + `${b.mspt.all.max.toFixed(1)} ms, p99 ${b.mspt.all.p99.toFixed(1)} ms, ${b.mspt.all.over50} over 50 ms, vanilla max ${b.placement.serverMsptMax.toFixed(1)} ms`);
   check(b.generatedDuringRealise.terrain === 0, `megaA: chunks generated during realise ${b.generatedDuringRealise.terrain}`);
   const failed = Object.keys(b.state.failed ?? {});
   check(failed.length === 0, `megaA: 0 failed items (${failed.length}: ${JSON.stringify(b.state.failed).slice(0, 300)})`);
@@ -510,7 +514,8 @@ steps.megaA = async () => {
   check(b.journal.bytesPerCell <= 1 && b.journal.indexBytes <= 8 << 20 && b.journal.indexCommitP99Ms <= 100, `megaA: journal ${b.journal.bytesPerCell.toFixed(2)} bytes/cell, index ${(b.journal.indexBytes / 1048576).toFixed(2)} MB, commit p99 ${b.journal.indexCommitP99Ms.toFixed(1)} ms`);
   check(b.tiles.bytesPerCell <= 4, `megaA: wire ${b.tiles.bytesPerCell.toFixed(3)} bytes/cell; tile latency p50 ${b.tiles.latencyP50Ms.toFixed(0)} ms, p99 ${b.tiles.latencyP99Ms.toFixed(0)} ms`);
   check((b.starvedShare ?? 1) <= 0.05, `megaA: writer starved ${(100 * b.starvedShare).toFixed(1)}% of its ticks (bar 5%)`);
-  check(rm.removed && b.undo.seconds <= 600 && b.undo.mspt.all.over50 === 0, `megaA: group undo ${b.undo.seconds.toFixed(0)} s, MSPT max ${b.undo.mspt.all.max.toFixed(1)} ms`);
+  check(rm.removed && b.undo.seconds <= 600 && b.undo.placement.placementMsMax <= 50, `megaA: group undo ${b.undo.seconds.toFixed(0)} s, Architect's own tick max `
+    + `${b.undo.placement.placementMsMax.toFixed(1)} ms (bar 50); recorded: MSPT max ${b.undo.mspt.all.max.toFixed(1)} ms, ${b.undo.mspt.all.over50} over 50 ms, vanilla max ${b.undo.placement.serverMsptMax.toFixed(1)} ms`);
   const unclassified = (b.diff.classes?.none ?? 0);
   check(unclassified === 0 && b.diff.mismatches <= 0.0001 * b.cellsWritten, `megaA: E-normal: ${b.diff.mismatches} mismatches after the group undo (${JSON.stringify(b.diff.classes)}; cap ${(0.0001 * b.cellsWritten).toFixed(0)})`);
   await leaveWorld();
@@ -910,31 +915,48 @@ steps.inv3 = async () => {
   const st = await waitRegion(r.region, 3_600_000);
   const lot = st.view.lots.find((l) => l.siteId);
   const all = (await api('sites')).all;
-  const lotView = all.find((x) => x.id === lot.siteId);
-  const covers = lotView.covers ?? [];
-  const pad = covers.find((c) => all.find((x) => x.id === c && x.kind === 'cells:architect:terrain'));
-  const b = lotView.box;
-  const m = /minX=(-?\d+), minY=(-?\d+), minZ=(-?\d+), maxX=(-?\d+), maxY=(-?\d+), maxZ=(-?\d+)/.exec(String(b));
-  const bb = m.slice(1).map(Number);
+  const boxOf = (v) => /minX=(-?\d+), minY=(-?\d+), minZ=(-?\d+), maxX=(-?\d+), maxY=(-?\d+), maxZ=(-?\d+)/.exec(String(v))?.slice(1).map(Number);
+  const isTile = (id) => all.some((x) => x.id === id && /^cells:architect:(terrain|path)$/.test(x.kind));
+  // the pair: a lot and the terrain pad it LAYERs over (6a). With kit 0.12's pads (6b) a lot on ground that is already flat
+  // and grassed writes no pad (its IF_NATURAL ops change nothing), so no lot covers a tile on the flat fixture; then the pair
+  // is a region tile that covers another (a path over its terrain), the same invariant: two overlapping entries undone in
+  // either order give the same end state
+  let upper = lot.siteId;
+  let pad = (all.find((x) => x.id === upper)?.covers ?? []).find((c) => all.find((x) => x.id === c && x.kind === 'cells:architect:terrain'));
+  if (!pad) {
+    const over = all.find((x) => isTile(x.id) && (x.covers ?? []).some(isTile));
+    upper = over?.id;
+    pad = over?.covers.find(isTile);
+  }
+  write('inv3-sites.json', all.map((x) => ({ id: x.id, kind: x.kind, box: x.box, covers: x.covers, coveredBy: x.coveredBy })));
+  if (!pad) {
+    check(false, 'inv3: no lot or tile of the region covers another entry (nothing to undo in two orders)');
+    await leaveWorld();
+    return { lot: lot.siteId };
+  }
+  log(`  inv3 pair: ${upper} over ${pad} (lot ${lot.siteId} covers ${JSON.stringify(all.find((x) => x.id === lot.siteId)?.covers ?? [])})`);
+  const bb = boxOf(all.find((x) => x.id === upper).box);
   const cell = [bb[0] + 1, bb[1] + 1, bb[2] + 1];
   await cmd(`/setblock ${cell.join(' ')} minecraft:gold_block`);
   await cmd('/save-all flush');
   await leaveWorld();
   copyWorld('G6A Inv3', 'G6A Inv3 B');
   await openWorld('G6A Inv3');
-  await api(`remove ${pad} - force keep`).then((x) => result(x, 600_000));
-  await api(`remove ${lot.siteId} - force keep`).then((x) => result(x, 600_000));
+  const ra1 = await api(`remove ${pad} - force keep`).then((x) => result(x, 600_000));
+  const ra2 = await api(`remove ${upper} - force keep`).then((x) => result(x, 600_000));
   await settle(3000);
   const ha = await call('dev.region.hash', { box: r.box }, 3_600_000);
   await leaveWorld();
   await openWorld('G6A Inv3 B');
-  await api(`remove ${lot.siteId} - force keep`).then((x) => result(x, 600_000));
-  await api(`remove ${pad} - force keep`).then((x) => result(x, 600_000));
+  const rb1 = await api(`remove ${upper} - force keep`).then((x) => result(x, 600_000));
+  const rb2 = await api(`remove ${pad} - force keep`).then((x) => result(x, 600_000));
   await settle(3000);
   const hb = await call('dev.region.hash', { box: r.box }, 3_600_000);
-  check(!!pad && ha.sha256 === hb.sha256, `inv3: pad ${pad} then lot ${lot.siteId}, or lot then pad, give the same end state (${ha.sha256.slice(0, 12)} / ${hb.sha256.slice(0, 12)})`);
+  const removed = [ra1, ra2, rb1, rb2].every((x) => x?.removed);
+  check(removed && ha.sha256 === hb.sha256, `inv3: ${pad} then ${upper}, or ${upper} then ${pad}, give the same end state (${ha.sha256.slice(0, 12)} / ${hb.sha256.slice(0, 12)}; `
+    + `4 removes ${removed ? 'done' : 'NOT all done'})`);
   await leaveWorld();
-  return { pad, lot: lot.siteId, cell, a: ha.sha256, b: hb.sha256 };
+  return { pad, upper, lot: lot.siteId, cell, a: ha.sha256, b: hb.sha256 };
 };
 
 // ------------------------------------------------------------------ gate 7: crash points RG1-RG6, K3/K7 inside a region
