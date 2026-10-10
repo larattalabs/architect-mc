@@ -299,3 +299,17 @@ borrowing the concepts:
 - **Destruction:** carving natural terrain as now. Removing other players' or mods' blocks needs an explicit permission level
   and an ownership check, and is always undoable.
 - **Survival:** unobtainable blocks stay creative-only; rare blocks cost real materials (Noah's survival rule applies).
+
+### Process from 6c on (Noah, 2026-10-09)
+
+- **Slices:** each phase is split into slices of a few hours, each with its own short contract (~300 lines), a focused gate and
+  a minor release. Steward reviews each slice contract in the usual window.
+- **Scope freeze:** new ideas during a slice go into the next slice unless they block the current one.
+- **Risk-tiered gates** (docs/GATES.md):
+  - change: unit tests plus mapped steps;
+  - slice: quick plus affected steps;
+  - release: the full chain plus the full independent gate-verifier, overnight and unattended.
+  Duplicate heavy checks rotate at release, and routine tiers use mega-lite. Per slice, the verifier reviews the evidence and
+  re-runs only the risky steps.
+- **Later (after 6c):** a headless, server-only gate mode for the exactness and MSPT checks (faster, parallel, CI-able); the
+  client stays for screenshots and the gallery.
