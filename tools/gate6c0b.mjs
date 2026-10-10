@@ -99,7 +99,7 @@ async function unit() {
     check(false, `sidecar suites ran (${e.message})`);
   }
   // the mod
-  const gradle = run(path.join(root, 'mod', 'gradlew'), ['test', '--offline', '--tests', '*MirrorOracleTest', '--tests', '*Wire0bTest'], path.join(root, 'mod'), { JAVA_HOME: '/opt/homebrew/opt/openjdk@25', GRADLE_USER_HOME: path.join(root, '.gradle-home') });
+  const gradle = run(path.join(root, 'mod', 'gradlew'), ['test', '--offline', '--tests', '*MirrorOracleTest', '--tests', '*Wire0bTest', '--tests', '*MirrorFitTest'], path.join(root, 'mod'), { JAVA_HOME: '/opt/homebrew/opt/openjdk@25', GRADLE_USER_HOME: path.join(root, '.gradle-home') });
   fs.writeFileSync(path.join(OUT, 'unit-mod.log'), gradle.out);
   const kitCase = (re) => kc.filter((c) => re.test(c.name));
   const scCase = (re, file) => tests.filter((t) => (!file || t.file === file) && re.test(t.name) && t.status !== 'skipped');
@@ -113,6 +113,7 @@ async function unit() {
   check(all(kitCase(/mirror table equals vanilla|oracle covers|vanilla never changes/)) && gradle.code === 0, 'item 2: the mirror oracle: the mod dumps vanilla BlockState.mirror for every block (MirrorOracleTest, fixture equal), the kit table equals it for every state, both mirrors', kitCase(/mirror|oracle/));
   check(all(kitCase(/front kept|east front flips z/)), 'item 2: a mirrored copy keeps front (cells, anchors, ports and the interior mapped)', kitCase(/front/));
   check(all(scCase(/x3 item: one design, two \$0 copies/, 'copies.test.ts')), 'item 2: the first copy is mirrored, the second not; the recipe meets the bar (sidecar, real kit)');
+  check(gradle.code === 0 && /MirrorFitTest/.test(fs.readdirSync(path.join(root, 'mod', 'build', 'test-results', 'test')).join(' ')), "item 2: a mirrored copy's fit agrees with its mirrored massing's (LotFitting, the function fitToLot and fitMassingToLot share: same rotation, origin within +-2, equal y; 4 street sides x 3 lot sizes, every example, the copy stage's own recipe)");
   flush('variation');
   // item 3: fallback
   check(all(scCase(/sim:copyfail and sim:copysize/, 'copies.test.ts')), 'item 3: sim:copyfail and sim:copysize reach FALLBACK with the reason (check / size)');
