@@ -14,16 +14,16 @@ import dev.larattalabs.architect.apiimpl.Wire4b;
 import dev.larattalabs.architect.apiimpl.Wire4c;
 import dev.larattalabs.architect.client.hud.Keys;
 import dev.larattalabs.architect.client.hud.Toasts;
-import dev.larattalabs.architect.client.hud.UiBits;
+import dev.larattalabs.labui.client.hud.UiBits;
 import dev.larattalabs.architect.client.placement.BuildPlacement;
 import dev.larattalabs.architect.client.placement.CompositePreview;
 import dev.larattalabs.architect.client.sidecar.Sidecar;
 import dev.larattalabs.architect.client.sidecar.SidecarLink;
 import dev.larattalabs.architect.client.sidecar.SidecarState;
-import dev.larattalabs.architect.client.ui.Kit;
-import dev.larattalabs.architect.client.ui.Panels;
-import dev.larattalabs.architect.client.ui.TextUtil;
-import dev.larattalabs.architect.client.ui.UiStyle;
+import dev.larattalabs.labui.client.ui.Kit;
+import dev.larattalabs.labui.client.ui.Panels;
+import dev.larattalabs.labui.client.ui.TextUtil;
+import dev.larattalabs.labui.client.ui.UiStyle;
 import dev.larattalabs.architect.design.DesignSpec;
 import dev.larattalabs.architect.design.MassingRules;
 import dev.larattalabs.architect.placement.Blueprint;
@@ -119,7 +119,7 @@ public final class MassingReview {
 			shownSet = null;
 			shownItems = List.of();
 		}));
-		HudElementRegistry.addLast(Architect.id("hud/massing_review"), dev.larattalabs.architect.client.ui.GuardedHud.of("hud.massing_review",
+		HudElementRegistry.addLast(Architect.id("hud/massing_review"), dev.larattalabs.labui.client.ui.GuardedHud.of("architect_mc:hud.massing_review",
 			new Hud()));
 		MassingDev.register();
 	}

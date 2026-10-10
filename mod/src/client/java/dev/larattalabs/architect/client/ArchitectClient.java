@@ -33,7 +33,7 @@ public class ArchitectClient implements ClientModInitializer {
 		dev.larattalabs.architect.client.placement.DeltaGhost.init(); // phase 5b: the delta ghost (architect_mc:delta_preview)
 		dev.larattalabs.architect.client.api.ApiClientBridge.init(); // the public API's client side (docs/CONTRACT.md phase 4a)
 		Launcher.init();
-		HudElementRegistry.addLast(Architect.id("hud/toasts"), dev.larattalabs.architect.client.ui.GuardedHud.of("hud.toasts", new Toasts()));
+		HudElementRegistry.addLast(Architect.id("hud/toasts"), dev.larattalabs.labui.client.ui.GuardedHud.of("architect_mc:hud.toasts", new Toasts()));
 		ClientLifecycleEvents.CLIENT_STARTED.register(ArchitectClient::onStarted);
 		ClientLifecycleEvents.CLIENT_STOPPING.register(client -> DevBridge.stopBridge());
 		Architect.LOGGER.info("Architect client init (devPort={}, mute={}, takeFocus={}, autoWorld={})", ClientEnv.DEV_PORT, ClientEnv.MUTE,
