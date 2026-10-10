@@ -401,12 +401,13 @@ async function item7() {
   check(ev.version === 2, `item 7: installs head + 1 (head ${ev.version})`, ev);
   const last = (ev.versions ?? []).at(-1);
   check(!last || last.by === 'design' || last.by === 'DESIGN', `item 7: the new version is by design (${last?.by})`, last);
-  const od = await api('outdated -');
+  const OWNER = 'apitest:village/1'; // apitest places `owned` sites as this owner
+  const od = await api(`outdated ${OWNER}`);
   check(JSON.stringify(od).includes(site), `item 7: outdated lists ${site}`, od);
-  const chk = await api(`checkdelta ${site} 2 keep`);
+  const chk = await api(`checkdelta ${site} 2 keep ${OWNER}`);
   const kept = Array.isArray(chk.kept) ? chk.kept.length : chk.kept;
   check(kept === 3, `item 7: checkDelta reports 3 kept cells (got ${kept})`, chk);
-  const ap = await result(await api(`applydelta ${site} 2 keep`));
+  const ap = await result(await api(`applydelta ${site} 2 keep ${OWNER}`));
   check(ap.applied === true && (Array.isArray(ap.kept) ? ap.kept.length : ap.kept) === 3, `item 7: applyDelta(KEEP) applied, the 3 edits kept`, ap);
   let goldLeft = 0;
   for (const p of edits) {
@@ -432,8 +433,8 @@ async function item7() {
     const r4 = await refused('r4', `${b64({ type: 'tavern', notes: 'x' })} ${copyEntry} ${site}`);
     check(r4.reason === 'VERSION_REFUSED' && r4.detail === 'site_mismatch', `item 7: a site of another entry is refused (${r4.detail})`, r4);
   } else check(false, 'item 7: the copy refusals need item 5 first');
-  const busyA = await refused('r5', `${b64({ type: 'tavern', notes: 'first change' })} ${entryId} -`);
-  const r6 = await refused('r6', `${b64({ type: 'tavern', notes: 'second change' })} ${entryId} -`);
+  const busyA = await refused('r5', `${b64({ type: 'tavern', notes: 'first change', size: [48, 34, 48] })} ${entryId} -`);
+  const r6 = await refused('r6', `${b64({ type: 'tavern', notes: 'second change', size: [48, 34, 48] })} ${entryId} -`);
   check(typeof busyA === 'string' && r6.reason === 'VERSION_REFUSED' && r6.detail === 'busy', `item 7: a second versionOf while one runs is refused busy (${r6.detail})`, { busyA, r6 });
   // base_moved: the head moves (an entry revert) while that versionOf runs
   const er = await result(await api(`erevert ${entryId} 1`));

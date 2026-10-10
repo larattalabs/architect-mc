@@ -247,6 +247,11 @@ public final class ApiClientBridge implements ClientBridge {
 			if (ack.result() != null) {
 				o.add("result", ack.result().deepCopy());
 			}
+			// (6c 0b) a typed refusal
+			if (ack.code() != null) {
+				o.addProperty("code", ack.code());
+				o.addProperty("detail", ack.detail() == null ? "" : ack.detail());
+			}
 			return o;
 		});
 	}
