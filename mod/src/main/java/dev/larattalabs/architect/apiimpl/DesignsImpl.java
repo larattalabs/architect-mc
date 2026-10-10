@@ -557,7 +557,7 @@ final class DesignsImpl implements Designs {
 		}
 		return new Group(g.id(), g.name(), g.bible(), g.owner(), g.ext(), g.concurrency(), g.budgetUsd(), g.softBudgetFraction(), g.status(), g.reason(),
 			items, g.wave(), g.done(), g.failed(), g.cost(), g.usageLimitUntil(), g.createdAt(), g.updatedAt(), g.massingFirst(), g.approvalUi(),
-			g.maxRedirects(), g.context(), g.awaiting());
+			g.maxRedirects(), g.context(), g.awaiting(), g.breakdown(), g.seq(), g.lastAction(), g.opKey());
 	}
 
 	// ------------------------------------------------------------------ groups (4b)
@@ -603,6 +603,7 @@ final class DesignsImpl implements Designs {
 			String phase = switch (feature) {
 				case "massing" -> "4c";
 				case "critique", "critique.report", "job.images", "bible.admin", "bible.restraint" -> "5a";
+				case "opKeys", "estimate.kinds", "group.breakdown" -> "6c slice 0a";
 				case "design.polish", "entry.versions", "entry.delta", "critique.polish" -> "5b";
 				default -> "4b";
 			};
@@ -620,8 +621,10 @@ final class DesignsImpl implements Designs {
 		}
 		return ApiImpl.onServerFuture(b.send(message).thenApply(ack -> {
 			if (!ack.has("ok") || !ack.get("ok").getAsBoolean()) {
-				throw new java.util.concurrent.CompletionException(new IllegalStateException(ack.has("error") ? ack.get("error").getAsString()
-					: "refused by the helper"));
+				String err = ack.has("error") ? ack.get("error").getAsString() : "refused by the helper";
+				// (6c 0a) a typed refusal (OP_KEY_CONFLICT)
+				RuntimeException typed = Wire0a.refusal(err);
+				throw new java.util.concurrent.CompletionException(typed != null ? typed : new IllegalStateException(err));
 			}
 			return ack.has("result") && ack.get("result").isJsonObject() ? ack.getAsJsonObject("result") : new JsonObject();
 		}));
@@ -650,9 +653,56 @@ final class DesignsImpl implements Designs {
 			if (id == null) {
 				throw new IllegalStateException("the helper sent no groupId");
 			}
-			Architect.LOGGER.info("API: design group {} ({} items{}) requested", id, r.items().size(), r.owner() == null ? "" : ", " + r.owner());
+			boolean adopted = res.has("adopted") && res.get("adopted").getAsBoolean();
+			Architect.LOGGER.info("API: design group {} ({} items{}) {}", id, r.items().size(), r.owner() == null ? "" : ", " + r.owner(), adopted
+				? "adopted by opKey " + r.opKey() : "requested");
 			return id;
 		});
+	}
+
+	@Override
+	public CompletableFuture<Optional<Group>> groupByKey(@Nullable String owner, String opKey) {
+		JsonObject m = msg("group.byKey");
+		try {
+			m.addProperty("opKey", java.util.Objects.requireNonNull(Wire0a.opKey(opKey), "opKey"));
+		} catch (RuntimeException e) {
+			return ApiImpl.onServerFuture(CompletableFuture.failedFuture(e));
+		}
+		if (owner != null) {
+			m.addProperty("owner", owner);
+		}
+		return askLookup("opKeys", m).thenApply(res -> {
+			if (!res.has("group") || !res.get("group").isJsonObject()) {
+				return Optional.<Group>empty();
+			}
+			// merged like an upsert (no events: fireGroup runs when the upserts come)
+			JsonObject g = groups.merge(res.getAsJsonObject("group"));
+			return Optional.of(withCritiques(Wire4b.group(g != null ? g : res.getAsJsonObject("group"))));
+		});
+	}
+
+	/**
+	 * (6c 0a) A sidecar lookup: fails {@link dev.larattalabs.architect.api.ArchitectRefused} SIDECAR_UNAVAILABLE while the helper is
+	 * not connected (never "empty" then), else as {@link #ask}.
+	 */
+	static CompletableFuture<JsonObject> askLookup(String feature, JsonObject m) {
+		ClientBridge b = ApiImpl.bridge();
+		if (b == null || !b.connected()) {
+			return ApiImpl.onServerFuture(CompletableFuture.failedFuture(new dev.larattalabs.architect.api.ArchitectRefused(
+				dev.larattalabs.architect.api.Reason.SIDECAR_UNAVAILABLE, "the Architect helper is not running")));
+		}
+		return ask(feature, "operation keys", m);
+	}
+
+	@Override
+	public CompletableFuture<Estimate> estimate(dev.larattalabs.architect.api.EstimateRequest r) {
+		JsonObject m = msg("design.estimate");
+		try {
+			m.add("mix", Wire0a.mix(r));
+		} catch (IllegalArgumentException e) {
+			return ApiImpl.onServerFuture(CompletableFuture.failedFuture(e));
+		}
+		return ask("estimate.kinds", "estimates by kind", m).thenApply(Wire4b::estimate);
 	}
 
 	@Override
@@ -685,14 +735,14 @@ final class DesignsImpl implements Designs {
 		JsonObject m = msg("group.extend");
 		m.addProperty("groupId", groupId);
 		m.addProperty("budgetUsd", budgetUsd);
-		return ask("design.groups", "design groups", m).thenApply(r -> null);
+		return flying(groupId, () -> ask("design.groups", "design groups", m)).thenApply(r -> null);
 	}
 
 	@Override
 	public CompletableFuture<Void> resumeGroup(String groupId) {
 		JsonObject m = msg("group.resume");
 		m.addProperty("groupId", groupId);
-		return ask("design.groups", "design groups", m).thenApply(r -> null);
+		return flying(groupId, () -> ask("design.groups", "design groups", m)).thenApply(r -> null);
 	}
 
 	@Override
@@ -738,11 +788,20 @@ final class DesignsImpl implements Designs {
 	void fireGroup(JsonObject raw) {
 		RecordBook.Firing f = groups.fire(raw);
 		Group g = withCritiques(Wire4b.group(raw));
-		boolean awaiting = awaitingFires(g);
-		if (!f.updated() && !f.done() && !awaiting) {
+		// (6c 0a) with the helper's seq: GROUP_UPDATED only when seq grew past the last one fired (persisted, so a restart or a
+		// re-sent upsert never re-fires); against an older helper (no seq), today's dedupe, and nothing while an action is in flight
+		boolean updated;
+		boolean flying = inFlight.containsKey(g.id());
+		if (g.seq() > 0) {
+			updated = seqGrew(g);
+		} else {
+			updated = f.updated() && !flying;
+		}
+		boolean awaiting = (g.seq() > 0 || !flying) && awaitingFires(g);
+		if (!updated && !f.done() && !awaiting) {
 			return;
 		}
-		if (f.updated()) {
+		if (updated) {
 			ApiEvents.groupUpdated(g);
 		}
 		if (awaiting) {
@@ -786,32 +845,71 @@ final class DesignsImpl implements Designs {
 		return Blueprints.gameDataDir().resolve("api-awaiting.json");
 	}
 
-	/** Whether GROUP_AWAITING_APPROVAL fires for {@code g} now (and remembers it, persisted). */
-	private synchronized boolean awaitingFires(Group g) {
-		if (g.status() != Group.Status.AWAITING_APPROVAL) {
+	/** (6c 0a) The groups with an approve, redirect, extend or resume in flight (count of actions). */
+	private final java.util.concurrent.ConcurrentHashMap<String, Integer> inFlight = new java.util.concurrent.ConcurrentHashMap<>();
+	/** (6c 0a) group key -> the last seq GROUP_UPDATED fired for (persisted in api-awaiting.json "seq"), newest last. */
+	private final LinkedHashMap<String, Long> firedSeq = new LinkedHashMap<>();
+	private static final int SEQ_KEEP = 1000;
+
+	/** (6c 0a) Marks an action on a group in flight until its future completes. */
+	<T> CompletableFuture<T> flying(String groupId, java.util.function.Supplier<CompletableFuture<T>> send) {
+		inFlight.merge(groupId, 1, Integer::sum);
+		CompletableFuture<T> f;
+		try {
+			f = send.get();
+		} catch (RuntimeException e) {
+			inFlight.computeIfPresent(groupId, (k, n) -> n <= 1 ? null : n - 1);
+			throw e;
+		}
+		return f.whenComplete((v, e) -> inFlight.computeIfPresent(groupId, (k, n) -> n <= 1 ? null : n - 1));
+	}
+
+	/** (6c 0a) Whether {@code g}'s seq grew past the last one fired (and remembers it, persisted). */
+	private synchronized boolean seqGrew(Group g) {
+		loadAwaiting();
+		String k = JobLedger.key(g.id(), g.createdAt());
+		Long last = firedSeq.get(k);
+		if (last != null && g.seq() <= last) {
 			return false;
 		}
-		if (!awaitingLoaded) {
-			awaitingLoaded = true;
-			try {
-				Path f = awaitingFile();
-				if (Files.exists(f)) {
-					List<String> keys = new ArrayList<>();
-					JsonParser.parseString(Files.readString(f, StandardCharsets.UTF_8)).getAsJsonObject().getAsJsonArray("reported").forEach(e -> keys.add(e
-						.getAsString()));
-					awaitingLedger.restore(keys);
+		firedSeq.remove(k);
+		firedSeq.put(k, g.seq());
+		while (firedSeq.size() > SEQ_KEEP) {
+			firedSeq.remove(firedSeq.keySet().iterator().next());
+		}
+		saveAwaiting();
+		return true;
+	}
+
+	private void loadAwaiting() {
+		if (awaitingLoaded) {
+			return;
+		}
+		awaitingLoaded = true;
+		try {
+			Path f = awaitingFile();
+			if (Files.exists(f)) {
+				JsonObject o = JsonParser.parseString(Files.readString(f, StandardCharsets.UTF_8)).getAsJsonObject();
+				List<String> keys = new ArrayList<>();
+				o.getAsJsonArray("reported").forEach(e -> keys.add(e.getAsString()));
+				awaitingLedger.restore(keys);
+				if (o.has("seq") && o.get("seq").isJsonObject()) {
+					o.getAsJsonObject("seq").entrySet().forEach(e -> firedSeq.put(e.getKey(), e.getValue().getAsLong()));
 				}
-			} catch (IOException | RuntimeException e) {
-				Architect.LOGGER.warn("Could not read {}; GROUP_AWAITING_APPROVAL may fire again", awaitingFile(), e);
 			}
+		} catch (IOException | RuntimeException e) {
+			Architect.LOGGER.warn("Could not read {}; GROUP_AWAITING_APPROVAL / GROUP_UPDATED may fire again", awaitingFile(), e);
 		}
-		if (!awaitingLedger.fire(JobLedger.key(g.id(), g.createdAt()), Wire4c.awaitingTokens(g))) {
-			return false;
-		}
+	}
+
+	private void saveAwaiting() {
 		JsonObject o = new JsonObject();
 		JsonArray a = new JsonArray();
 		awaitingLedger.keys().forEach(a::add);
 		o.add("reported", a);
+		JsonObject sq = new JsonObject();
+		firedSeq.forEach(sq::addProperty);
+		o.add("seq", sq);
 		try {
 			Path f = awaitingFile();
 			Files.createDirectories(f.getParent());
@@ -821,6 +919,18 @@ final class DesignsImpl implements Designs {
 		} catch (IOException e) {
 			Architect.LOGGER.warn("Could not save {}", awaitingFile(), e);
 		}
+	}
+
+	/** Whether GROUP_AWAITING_APPROVAL fires for {@code g} now (and remembers it, persisted). */
+	private synchronized boolean awaitingFires(Group g) {
+		if (g.status() != Group.Status.AWAITING_APPROVAL) {
+			return false;
+		}
+		loadAwaiting();
+		if (!awaitingLedger.fire(JobLedger.key(g.id(), g.createdAt()), Wire4c.awaitingTokens(g))) {
+			return false;
+		}
+		saveAwaiting();
 		return true;
 	}
 
@@ -932,7 +1042,7 @@ final class DesignsImpl implements Designs {
 		@Nullable String owner) {
 		JsonObject m = Wire4c.approveMessage(groupId, approve == null ? List.of() : approve, redirect == null ? Map.of() : redirect, cancel == null
 			? List.of() : cancel, owner);
-		return ask("massing", "group approvals", m).thenApply(Wire4c::approval);
+		return flying(groupId, () -> ask("massing", "group approvals", m)).thenApply(Wire4c::approval);
 	}
 
 	/** On every connect (protocol 2, massing): {@code massing.list {}}, the latest version of every massing, merged (no events). */

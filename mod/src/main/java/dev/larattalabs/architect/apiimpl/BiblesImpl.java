@@ -192,6 +192,46 @@ public final class BiblesImpl implements Bibles {
 		});
 	}
 
+	/** (6c 0a) Completes with the job, cancelled, at the helper's ack. */
+	@Override
+	public CompletableFuture<BibleJob> cancelJob(String jobId) {
+		JsonObject m = DesignsImpl.msg("bible.cancel");
+		m.addProperty("jobId", jobId);
+		return DesignsImpl.askLookup("bibles", m).thenApply(res -> {
+			if (res.has("job") && res.get("job").isJsonObject()) {
+				JsonObject j = jobs.merge(res.getAsJsonObject("job"));
+				return Wire4b.bibleJob(j != null ? j : res.getAsJsonObject("job"));
+			}
+			// an older helper acks {jobId} only
+			JsonObject known = jobs.get(jobId);
+			JsonObject j = known != null ? known.deepCopy() : new JsonObject();
+			j.addProperty("id", jobId);
+			j.addProperty("status", "cancelled");
+			return Wire4b.bibleJob(j);
+		});
+	}
+
+	/** (6c 0a) The job a caller requested with this key, in any state; SIDECAR_UNAVAILABLE while the helper is not connected. */
+	@Override
+	public CompletableFuture<Optional<BibleJob>> jobByKey(@Nullable String owner, String opKey) {
+		JsonObject m = DesignsImpl.msg("bible.byKey");
+		try {
+			m.addProperty("opKey", java.util.Objects.requireNonNull(Wire0a.opKey(opKey), "opKey"));
+		} catch (RuntimeException e) {
+			return ApiImpl.onServerFuture(CompletableFuture.failedFuture(e));
+		}
+		if (owner != null) {
+			m.addProperty("owner", owner);
+		}
+		return DesignsImpl.askLookup("opKeys", m).thenApply(res -> {
+			if (!res.has("job") || !res.get("job").isJsonObject()) {
+				return Optional.<BibleJob>empty();
+			}
+			JsonObject j = jobs.merge(res.getAsJsonObject("job"));
+			return Optional.of(Wire4b.bibleJob(j != null ? j : res.getAsJsonObject("job")));
+		});
+	}
+
 	@Override
 	public CompletableFuture<Estimate> estimate(@Nullable BibleRequest r) {
 		JsonObject m = DesignsImpl.msg("bible.estimate");
