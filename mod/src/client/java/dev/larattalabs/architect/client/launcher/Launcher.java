@@ -491,6 +491,11 @@ public final class Launcher {
 		if (!Files.exists(target.resolve("package.json"))) {
 			return true;
 		}
+		// (6c 0a) the sim backend never loads the Agent SDK, the only thing the install is for
+		if (!LauncherPlan.needsInstall(ClientEnv.raw("ARCHITECT_SIDECAR_BACKEND"))) {
+			Architect.LOGGER.info("Launcher: the sim backend needs no npm install (the Agent SDK is not used)");
+			return true;
+		}
 		String lock = Files.exists(target.resolve("package-lock.json")) ? sha256(Files.readAllBytes(target.resolve("package-lock.json"))) : "no-lock";
 		if (lock.equals(readString(target.resolve(".installed")))) {
 			return true;

@@ -400,6 +400,8 @@ export interface BibleWork {
   problem?: string;
   cost: Cost;
   startedAt?: number;
+  /** (6c 0a) sim only: the notional bible cost charged so far (simCosts) */
+  simCharged?: number;
 }
 
 /** What a backend gets for one pass. */
@@ -797,7 +799,7 @@ export class Bibles {
         const info = this.sc.bibleIndex.get(j.bibleId, j.version);
         if (this.sc.designerName() === 'claude' && w.startedAt) this.sc.estimates.record('bible', j.request.model ?? this.sc.config.bibleModel, w.cost.usd, this.sc.now() - w.startedAt);
         this.update(id, { status: 'done', step: `done: ${j.bibleId} v${j.version} (${comps.length} components${c.warnings.length ? `, ${c.warnings.length} warning(s)` : ''})`, ...(info ? { bible: info } : {}) });
-        this.sc.log.info(`bible ${j.bibleId} v${j.version} is ready in ${info?.dir ?? this.sc.config.biblesDir} ($${w.cost.usd.toFixed(4)})`);
+        this.sc.log.info(`bible ${j.bibleId} v${j.version} is ready in ${info?.dir ?? this.sc.config.biblesDir} ($${w.cost.usd.toFixed(4)}${this.sc.config.simCosts && this.sc.designerName() === 'sim' ? ', sim: true, notional' : ''})`);
         this.sc.bibleIndexChanged();
         return 'finished';
       }
@@ -853,8 +855,7 @@ export class SimBibleBackend implements BibleBackend {
           glass: 'minecraft:red_stained_glass_pane', foundation: 'minecraft:blackstone', path: 'minecraft:coarse_dirt',
         };
     if ((p.job.request.scope ?? 'building') === 'settlement') Object.assign(roles, { rock: 'minecraft:stone', surface: 'minecraft:grass_block', subsurface: 'minecraft:dirt', rubble: 'minecraft:cobblestone', rail: 'minecraft:rail', structure: 'minecraft:oak_planks' });
-    const usd = this.sc.config.simDesignUsd;
-    if (usd > 0) this.sc.bibles.setCost(p.job.id, { ...p.work.cost, usd: Math.round((p.work.cost.usd + usd) * 1e6) / 1e6, turns: p.work.cost.turns + 1 });
+    this.charge(p, 'draft');
     return {
       ok: true,
       bible: {
@@ -872,8 +873,23 @@ export class SimBibleBackend implements BibleBackend {
     await this.sleep(this.stepMs);
     if (this.stops.delete(p.job.id)) return { ok: false, outcome: 'finished' };
     // the starting library (the reference components) is the sim's answer
-    const usd = this.sc.config.simDesignUsd;
-    if (usd > 0) this.sc.bibles.setCost(p.job.id, { ...p.work.cost, usd: Math.round((p.work.cost.usd + usd) * 1e6) / 1e6, turns: p.work.cost.turns + 1 });
+    this.charge(p, 'components');
     return { ok: true };
+  }
+
+  /**
+   * A pass's notional cost: simDesignUsd per pass, or (6c 0a, simCosts) the bible's figure, half at the draft and the rest at
+   * the components pass, so a bible job sums exactly to it (a pass that runs again adds nothing more).
+   */
+  private charge(p: BiblePass, pass: 'draft' | 'components'): void {
+    const c = this.sc.config.simCosts;
+    let usd = this.sc.config.simDesignUsd;
+    if (c) {
+      const due = pass === 'draft' ? Math.round((c.bible / 2) * 1e6) / 1e6 : c.bible;
+      usd = Math.max(0, Math.round((due - (p.work.simCharged ?? 0)) * 1e6) / 1e6);
+      p.work.simCharged = Math.max(p.work.simCharged ?? 0, due);
+      this.sc.store.markDirty();
+    }
+    if (usd > 0) this.sc.bibles.setCost(p.job.id, { ...p.work.cost, usd: Math.round((p.work.cost.usd + usd) * 1e6) / 1e6, turns: p.work.cost.turns + 1 });
   }
 }

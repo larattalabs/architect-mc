@@ -55,8 +55,9 @@ export class SimJobDriver implements JobDriver {
     const st: SimSession = (sessions[sessionId] ??= { next: 0, results: [], usd: 0, steps: 0 });
     const save = () => fs.writeFileSync(file, JSON.stringify(sessions));
     const startUsd = st.usd;
+    const stepUsd = q.simStepUsd ?? this.stepUsd;
     const step = () => {
-      st.usd = Math.round((st.usd + this.stepUsd) * 1e6) / 1e6;
+      st.usd = Math.round((st.usd + stepUsd) * 1e6) / 1e6;
       st.steps++;
       save();
     };
