@@ -44,12 +44,16 @@ clients sharing it (load average 15-64):
 
 ### Outcome (2026-10-10)
 
-- Decision (coordinator, Noah): the spikes are machine load. **The MSPT bars judge Architect's own per-tick time**, measured as
-  the placement ticks' server-thread CPU time (`placementCpuMsMax`, new in `dev.placement.stats`, c717804); whole tick, wall
+- Decision (coordinator, Noah): the spikes are machine load; the MSPT bars judge Architect's own per-tick time. Judged as the
+  placement ticks' wall time it still failed (megalite 86/166 ms, megaA 138/169 ms), so the builder **proposes (pending the
+  coordinator's OK)** the server-thread CPU time (`placementCpuMsMax`, new in `dev.placement.stats`, c717804); whole tick, wall
   time, vanilla tick and GC are recorded. Gate scripts changed: gate4e megalite, gate6a megaA, the scenario MSPT row. GATES.md
   belongs to the tiers agent (the coordinator passes the change on).
 - Undo planning fix (7d17d67): fastutil maps in `Journal.planUndo` / `Sections.Planner`. Undo-only on the 6a-made megaA world:
-  159 s, max 43 ms (6b before: 256 s / 118 ms; v0.11.2: 247 s / 82 ms). Off-thread planning: recorded for 0c.
+  JFR planning : restoring samples 351 : 311 (6b before 884 : 439, v0.11.2 844 : 570), group-work ticks >= 25 ms about 46 -> 1.
+  Wall time stays load-bound (gate runs 195-229 s). Off-thread planning: recorded for 0c.
+- For 0c: the sidecar's 2 s per-tile evaluation limit fails tiles when the machine stalls (065651: region PARTIAL).
+- inv3 now tests a path tile over its terrain tile; lot-over-pad undo order is no longer covered on the flat fixture.
 - inv3 fix (7730153): kit 0.12 pads on flat ground write no cell, so no lot covers a pad; the step uses a tile pair.
 - Re-runs: 20261010-055352-engine (11 steps on 7730153: unit-mod, sim-jobs/sets/massing, 4e-orders, 4e-crash, 6a-crash,
   6a-eflat, 6a-inv3 PASS; megalite and megaA failed on wall time, no CPU figure in that build); 20261010-065651-engine
