@@ -394,7 +394,7 @@ async function computeMetrics({ sc, out, planDir, ir, irShas, mspt, cps, exact, 
     const door = VB.doorToStreet(ir, meta, world, nav);
     const fronts = VB.villageFronts(ir, meta, before, after, door);
     const props = VB.villageProps(ir, meta, world, realised, vw);
-    rows = VB.villageBars({ plan, realised, door, fronts, props }, rows);
+    rows = VB.villageBars({ plan, realised, door, fronts, props, nav }, rows);
     village = { door: Object.fromEntries(Object.entries(door).map(([k, d]) => [k, { ...d, path: undefined, pathLength: d.path?.length }])), fronts, props, nav: VB.navSummary(nav),
       M2villager: realised.metrics.M2villager, M22: realised.metrics.M22, M23: realised.metrics.M23, M24: realised.metrics.M24, graph: realised.metrics.graph };
   }

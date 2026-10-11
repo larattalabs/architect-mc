@@ -141,7 +141,12 @@ export async function findSite(id, io) {
   const [w, d] = needs.size;
   let best = null, tried = 0;
   const [c0x, c0z] = needs.center ?? [0, 0]; // (a spiral round another point: where an earlier search saw the biome)
+  // (6c V) a search split over several clients: FINDSITE_PART=k/n takes every n-th candidate from the k-th, and
+  // FINDSITE_RESULT=<file> receives the winner instead of the scenario file (merge it by hand)
+  const [pk, pn] = (process.env.FINDSITE_PART ?? '0/1').split('/').map(Number);
+  let ci = -1;
   for (const [ox0, oz0] of candidates(needs.candidates ?? 30, needs.step ?? 448)) {
+    if (++ci % pn !== pk) continue;
     const ox = ox0 + c0x, oz = oz0 + c0z;
     tried++;
     const x0 = ox - Math.floor(w / 2), z0 = oz - Math.floor(d / 2), x1 = x0 + w - 1, z1 = z0 + d - 1;
@@ -176,7 +181,8 @@ export async function findSite(id, io) {
   const surveySha = crypto.createHash('sha256').update(best.summary).digest('hex');
   const y = [Math.max(-64, best.stats.min - 40), Math.min(319, Math.max(best.stats.max + 40, needs.yTop ?? 0))];
   sc.fixture = { ...(sc.fixture ?? {}), claim: best.claim, yRange: y, foundBy: `find-site ${id} @ seed ${sc.world?.seed}`, surveySha, score: best.score, stats: best.stats };
-  fs.writeFileSync(file, `${JSON.stringify(sc, null, 2)}\n`);
+  if (process.env.FINDSITE_RESULT) fs.writeFileSync(process.env.FINDSITE_RESULT, `${JSON.stringify(sc.fixture, null, 2)}\n`);
+  else fs.writeFileSync(file, `${JSON.stringify(sc, null, 2)}\n`);
   return { claim: best.claim, score: best.score, tried, surveySha };
 }
 

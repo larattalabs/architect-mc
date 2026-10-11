@@ -313,6 +313,12 @@ region. Previews print as file links (with a [copy] link).
 
 Semi-stable: a hook may change or go, and every such change is listed here, newest first.
 
+- **2026-10-11 (6c slice V):** new `dev.nav.villager {from: [x,y,z] (feet), to: [x,y,z] (feet), range?: 256, accuracy?: 0}`: a
+  no-AI villager (never added to the world) on `from`, `FOLLOW_RANGE` = range (16-2048), doors openable, vanilla
+  `PathNavigation.createPath(to, accuracy)` -> `{path, canReach, nodes, end: [x,y,z], followRange, ms}`; the villager is discarded.
+  New `dev.site.anchors {site}`: a placed site's anchors in world coordinates (the blueprint's entrance, spawn, ... through its
+  placement) -> `{site, anchors: {name: {x, y, z, yaw, pitch}}, box}`. `dev.region.plan` takes `bible` (a bible id: the plan's
+  roles; RegionPlanRequest.bible).
 - **2026-10-10 (6c slice 0a, 2):** new `dev.batch.skipSave`, `dev.api.dropAck` and `dev.api.pending`; apitest `/apitest opbible|opgroup|jobbykey|groupbykey|batchbykey|canceljob|pin|unpin|pinowners|estmix|fitmassing|group0a|api110` (API 1.10.0), and `bqueue` takes `opKey`.
 - **2026-10-10 (6c slice 0a):** `dev.mspt.trace`'s stop adds `own` and `ownCpu` (Architect's own time per tick, wall and CPU,
   `{ticks, p50, p99, max, mean}` over the ticks with Architect work); `tools/lib/tickbar.mjs` judges them when present. Sidecar

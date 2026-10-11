@@ -141,6 +141,9 @@ export function villageBars(x, base) {
   out.push(row('reachability', '2 Reachability, player', M2 ? `${M2.reached}/${M2.nodes} nodes; unreachable lot entrances ${lotUn.length}` : 'n/a', '100% of nodes; 0 unreachable lot entrances', M2 && M2.reached === M2.nodes && lotUn.length === 0));
   const MV = R.M2villager;
   out.push(row('villager', '3 Reachability, villager (kit)', MV ? `${MV.reached}/${MV.lots} villager lots reach the bell${MV.unreachable.length ? ` (not: ${MV.unreachable.join(', ')})` : ''}` : 'n/a', '100% of dwelling, job, trading-hall and farm lots', MV && MV.lots > 0 && MV.reached === MV.lots));
+  const nv = x.nav ? navSummary(x.nav) : null;
+  out.push(row('vanilla', '3b Villager paths (vanilla, item 4)', nv ? `${nv.reached}/${nv.lots} villager lots: dev.nav.villager reaches the bell from the door cell${nv.not.length ? ` (not: ${nv.not.join(', ')})` : ''}` : 'n/a',
+    '100% of bar 3\'s lots', nv && nv.lots > 0 && nv.reached === nv.lots));
   const dts = Object.values(x.door ?? {});
   const dOk = dts.filter((d) => d.ok).length;
   out.push(row('door', '4 Door to street', `${dOk}/${dts.length} placed lots walk from the door cell to the street over role blocks${dts.some((d) => !d.ok) ? ` (not: ${Object.entries(x.door).filter(([, d]) => !d.ok).map(([k, d]) => `${k}: ${d.why}`).join('; ')})` : ''}`, '100%', dts.length > 0 && dOk === dts.length));

@@ -22,7 +22,8 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const here = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 process.env.GATE6B_RUN ??= path.resolve(here, '..', 'architect-mc-V-run');
-process.env.GATE6B_OUT ??= process.env.GATE6CV_OUT ?? path.join(path.resolve(here, '..', 'architect-mc'), 'artifacts', 'gate6c-v');
+// GATE6CV_OUT wins over the runner's GATE6B_OUT (the gate runner gives every step its 6b evidence dir)
+process.env.GATE6B_OUT = process.env.GATE6CV_OUT ?? process.env.GATE6B_OUT ?? path.join(path.resolve(here, '..', 'architect-mc'), 'artifacts', 'gate6c-v');
 process.env.GATE6B_SIDECAR_PORT ??= '8906';
 process.env.GATE6B_DEV_PORT ??= '8907';
 const L = await import('./lib/run6b.mjs');
@@ -216,10 +217,14 @@ function scenario(args) {
   return { code: r.status, fails: t.split('\n').filter((l) => /^FAIL /.test(l)), tail: t.split('\n').slice(-30).join('\n') };
 }
 const S7_ART = () => path.join(process.env.SCENARIOS_ART ? path.resolve(process.env.SCENARIOS_ART) : path.join(path.resolve(root, '..', 'architect-mc'), 'artifacts', 'scenarios'), '6c-v', 's7');
+/** The latest S7 run (natural or flat) with metrics: under the scenarios' default dir, or a runner's $SCENARIOS_ART/s7[-flat]. */
 const latest = (flat) => {
   const d = S7_ART();
-  const runs = fs.existsSync(d) ? fs.readdirSync(d).filter((x) => x.endsWith('-flat') === flat && fs.existsSync(path.join(d, x, 'metrics.json'))).sort() : [];
-  return runs.length ? path.join(d, runs[runs.length - 1]) : null;
+  const runs = fs.existsSync(d) ? fs.readdirSync(d).filter((x) => x.endsWith('-flat') === flat && fs.existsSync(path.join(d, x, 'metrics.json'))).sort().map((x) => path.join(d, x)) : [];
+  const r = process.env.SCENARIOS_ART && path.join(path.resolve(process.env.SCENARIOS_ART), flat ? 's7-flat' : 's7');
+  if (r && fs.existsSync(path.join(r, 'metrics.json'))) runs.push(r);
+  runs.sort((a, b) => fs.statSync(path.join(a, 'metrics.json')).mtimeMs - fs.statSync(path.join(b, 'metrics.json')).mtimeMs);
+  return runs.length ? runs[runs.length - 1] : null;
 };
 
 steps.s7flat = async () => {
@@ -256,7 +261,7 @@ steps.nav = async () => {
     const vl = Object.entries(nav.lots).filter(([, l]) => ['dwelling', 'job', 'trading_hall', 'farm'].includes(l.villager));
     out.s7 = { run: path.basename(dir), lots: Object.fromEntries(vl.map(([k, l]) => [k, { door: l.door, canReach: l.canReach, nodes: l.nodes }])) };
     check(vl.length > 0 && vl.every(([, l]) => l.canReach), `nav: vanilla villager paths from every villager lot's door cell to the bell in S7 (${vl.filter(([, l]) => l.canReach).length}/${vl.length})`, out.s7);
-  } else check(false, 'nav: no S7 natural run with nav.json (run s7 first)');
+  } else { out.s7 = 'no S7 natural run here: its door-to-bell paths are S7\'s own bar (3b)'; log(`  ${out.s7}`); }
   await fresh('G6B V Nav', FLAT);
   const X = 3000, Z = 3000;
   await tp(X + 50.5, -40, Z + 0.5, 0, 89);
@@ -316,7 +321,7 @@ steps.protect = async () => {
   const box = [claim[0] - 8, yr[0] - 2, claim[1] - 8, claim[2] + 8, Math.min(yr[1], -20), claim[3] + 8];
   const before = path.join(OUT, 'protect-before.arwd.gz'), after = path.join(OUT, 'protect-after.arwd.gz');
   await call('dev.region.dump', { box, file: before, light: false }, 900_000);
-  const region = await realise(p.planId, { lots: Object.fromEntries(ir.lots.map((l) => [l.id, S7.entryFor[l.id] ?? 'g6a_stub_9'])) });
+  const region = await realise(p.planId, { lots: Object.fromEntries(ir.lots.map((l) => [l.id, 'g6a_stub_9'])) });
   const st = await waitRegion(region, 3_600_000);
   out.realise = { state: st.view.state, cells: st.view.cellsWritten, lots: st.view.lots.map((l) => `${l.id}:${l.state}`) };
   await call('dev.region.dump', { box, file: after, light: false }, 900_000);

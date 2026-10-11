@@ -545,3 +545,68 @@ the tile over windows built from the plan dir's `survey.bin` (`windowFromSurvey`
 including `stage` when given (else every stage), both sets, and answers with ordinary `region.tile` frames carrying
 `preview: true`, whose `stage` and `set` are `'*'` when the request named none (every stage, both sets). Nothing is written by the mod; the client draws the cells (tints: added, removed, path (walk), lot,
 floating).
+
+# Phase 6c slice V additions (flat village, C10; CONTRACT "Phase 6c slice V")
+
+## Kit 0.16.0
+
+`KIT_VERSION` (and `EVAL_KIT_VERSION`, the mod's `IrStale.KIT_VERSION`) is `0.16.0`. Every IR records it, so every IR sha changed; the
+tiles did not (the golden tests pin `kitVersion: '0.12.0'` as they pin `node`). An older mod or helper refuses a 0.16.0 plan
+`PLAN_STALE` ("plan needs kit 0.16.0").
+
+## New IR members (format 1 and 2; the evaluator ignores them)
+
+- `graph: {nodes, edges}`: SETTLEMENTS §8.1's shape, restricted. Nodes `{id, kind: lot|plaza|junction, ref, level: 0, at: [x, y, z],
+  ports: [{name, at, facing, width}]}`; edges `{id, from: 'node.port', to: 'node.port', type: road|path, width, stage: 'ground',
+  path}`. Built with `r.graphNode` / `r.graphEdge`; 7a keeps the ids and adds `auto`, connectors, `seconds` and `risk`.
+- `keepOut: [[x0, z0, x1, z1]]`: the request owner's protected rects the program honoured. Present only when the program read
+  `ctx.keepOut` or `ctx.survey.keptOutAt` (an empty list when it read none given), so other programs' IRs carry nothing new. The
+  mod refuses PROTECTED, at accept and at realise, any area meeting the claim whose exact rect is not in this list.
+- `lots[].ext`: a program's lot data, copied into `LotSpec.ext` (flat_village: `"architect_mc:village"`).
+
+## `region.plan.keepOut` and the CLI
+
+`region.plan {..., keepOut?: [[x0, z0, x1, z1]]}` (at most 1024; snapshot feature `region.keepOut`). The sidecar writes it to
+`<planDir>/keepout.json` and passes `plan ... --keep-out <file>` (the CLI also takes inline JSON). Programs read `ctx.keepOut` (sorted,
+unique rects) and `ctx.survey.keptOutAt(x, z)`.
+
+## The `lots` param type
+
+Region programs only (`validateParams(params, {region: true})`; a design's params refuse it), never a variant axis
+(`cornerValues` skips it). At most 40 lots, each `{id (LOT_ID, unique), type, role?, size: [alongStreet, deep] (5-96), landmark?,
+placement?: central|edge|near_water|high_ground, villager?: dwelling|job|trading_hall|farm|none, brief?}`: Steward's
+`VillageLayout.LotSpec` plus `villager` (inferred from `type` only when absent).
+
+## `flat_village` (kit/regions/flat_village.mjs) and its components
+
+- `lib/region/village.mjs`: `layoutStreet` (pure: VillageLayout's geometry and scoring ported, both orientations, the shared space
+  at the street's middle, the square's frontage to the trading hall, the landmark and central lots first, farms moved within 2 of
+  water where a slot allows), `streetLayout(r, specs, o)` (emits pads, lots, the square or green, verges, lanes, the two road items
+  ending at the square's edges, the graph), `square`, `lane`, `surfaceOps` (columns ops: levelled fill / top / 2 clear, or a
+  ground-following swap). No carve, add, terrace, ring, form or cavern op.
+- `lib/region/props.mjs`: the dry well (a cauldron, no fluid), lamp posts, benches, planters and the opt-in bell, planned in the
+  shared space into air only, beside walk cells and never on them, never in a lot box, the bell area, the golem space or keep-out.
+- Roles (a bible's win): `path` gravel, `foundation` stone bricks, `light` lantern. `catalogue = false`.
+- `meta.village`: the bell, bell area and golem space, lanes, props, per-lot villager data, unplaced; the checker's village rules
+  and S7's bars read it.
+
+## The checker (`lib/region/check.mjs`)
+
+`walkGraph(vw, starts, {mover: 'villager'})`: the player graph without climbing (ladders, vines, scaffolding), bubble columns or
+swimming, falls of at most 1, only wooden doors passable (fence gates, trapdoors, iron and copper doors closed), and no standing
+on a 1.5-tall barrier. With `meta.village`: `M2:villager` (villager lots reach the bell), M2 on the graph (every lot node joins
+the plaza), M22 (bell area, golem space), M23 (trading hall within 12), M24 (farm within 2 of water; no water: a note), and an M1
+error for a village part writing inside a lot box. All warnings but M1.
+
+## `siteplan.json` (format 1, widened)
+
+With an IR graph: `graph.derived: false`, its nodes (with `ports`) and edges (with `width`, `path`, and `mover` `['player']` plus
+`'villager'` where the villager mover from the bell reaches both ends). Lanes are `paths[]` of kind `path`; `unplaced: [{id,
+reason}]`. Without an IR graph: 6b's derived graph, unchanged.
+
+## C12: a standing VillageLayout village as a flat_village shape
+
+VillageLayout's `Plan` maps one to one: its `Lot`s are flat_village lots (`id`, `type`, `role`, `sizeX`/`sizeZ` = `size`
+[alongStreet, deep], `front` SOUTH/NORTH = the `ew` orientation's -z/+z sides, `x`/`z` = `at`), `streetZ` is the street's centre line
+(`streetV`, street 5 wide), `streetX0..streetX1` its extent. Steward's street has no square: an adopted village gets the plaza node
+at the street's middle and no square cells. `Regions.adopt` (the joint 7a/6d gate) records the standing sites without writing a cell.
