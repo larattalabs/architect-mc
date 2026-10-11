@@ -8169,8 +8169,20 @@ SCH depends on nothing and can fill any idle lane. The **6c close-out** (at the 
 when the last 6c slice merges.
 
 **Size against SETTLEMENTS.** SETTLEMENTS sized 6c at about 1.0 (6a = 1.0), before Noah added the toolbox on 2026-10-09.
-With the toolbox, region survival (N-6b-5) and the optional PT, this batch is about 16 short slices, roughly twice that size.
-Track A alone is the SETTLEMENTS 6c scope.
+- **SETTLEMENTS' 6c row:** T1, T2, T3, D, H, HY, F1, F2, F3, S2 and S3 (passes, the whole generator library, scatter and
+  stamps, contained water, M17-M20, S2 and S3 v1).
+- **Added since:** MP, B, VOC and SCH (Noah's toolbox), RS (N-6b-5) and PT (a 0c deferral, optional), plus H's fluid brushes.
+
+That is 16 short slices after W, roughly twice SETTLEMENTS' estimate.
+
+**Rebase points between parallel slices** (as 0c §11 listed them): `KIT_VERSION` (kit `plan.mjs`, `realise.mjs`, the mod's
+`IrStale`), `mod_version`, `VERSION`, `Reason` order, `realise.mjs` `OPS_RESERVED`/`KINDS_FORMAT2`/`MEMBERS_FORMAT2`, the
+checker's `RULES`, `gate-chains.json` and the impact map. Records widened by more than one slice take their trailing components
+in merge order:
+- `RegionView`: B (`brush`), D (`beside`), RS (`crate`);
+- `RegionPlanRequest`: D (`beside`), PT (`respectPlayerChanges`);
+- `BrushRequest`: H (`fluid`), PT (`respectPlayerChanges`);
+- `BrushKind`: H appends after B.
 
 ### Open questions for Steward
 
@@ -8181,6 +8193,7 @@ Track A alone is the SETTLEMENTS 6c scope.
 - **S-T2-1:** movers per edge from the card, or inferred.
 - **S-T2-2:** ladders on player-only edges.
 - **S-B-1:** grouped strokes, or one region per stroke.
+- **S-B-2:** areas binding every owner (0c's deferral; nothing else in the batch places it).
 - **S-S2-1:** S2's lot list as a fair card stand-in.
 - **S-T3-1:** stone bridges and plain tunnels until 7a.
 - **S-H-1:** a pond beside farm lots.
@@ -8201,8 +8214,10 @@ Track A alone is the SETTLEMENTS 6c scope.
 4. **Fluids in survival (N-H-1):** water free and lava costing a bucket, both free, or both creative-only? RS refuses fluids until
    this is decided.
 5. **The connector half of region survival (N-RS-1):** keep it in 7a (N-6b-5), or pull path parts and props into RS?
-6. **Scheduling.** Does 7a wait for all of 6c, or only for track A (S2 and S3 v1 green, T3 merged)? SETTLEMENTS says 7a
-   depends on 6c's routing. This draft assumes 7a may start once track A and T3 are in, with tracks B and C finishing alongside.
+6. **Scheduling.** SETTLEMENTS says 7a depends on "6c (routing)", which is T2 and T3. Does 7a also wait for the 6c close-out
+   (S2 and S3 v1 green, F3's forest variant, mega_bench A with forms), and for the additions (MP, B, VOC, SCH, RS, PT)? This
+   draft assumes 7a may start after T2, T3 and S2, with the rest of 6c and the additions finishing alongside, and the close-out
+   gating 7a's merge rather than its start.
 7. **Scope additions against SETTLEMENTS §17.2's 6c row**, each recorded here rather than made silently:
    - the toolbox slices (MP, B, H's brushes, VOC, SCH), from Noah's 2026-10-09 decision;
    - **M25** fluid containment and **M26** region rarity, new rules not in SETTLEMENTS §11;
@@ -8239,7 +8254,8 @@ slice merges first, W takes the next minor.
   4. gravity blocks over gaps.
 - **Not in scope:** anything else from V's deferred list (door-aligned lanes, curved streets, bible-styled props: 7a), region
   survival (the "RS" slice below), and any terrain op.
-- **Depends on:** V merged. Nothing in the terrain slices depends on W except S2 (item 3) and T1 (it shares `RegionSurvey`).
+- **Depends on:** V merged. **Later slices build on W:** T1 (it shares `RegionSurvey`), T2 and S2/S3 (`lightCover`), T3 (the
+  `gravity` flag and the frozen-river fixture), S2 (frozen water) and RS.
 
 ### 0. Facts W depends on
 
@@ -8971,7 +8987,7 @@ record BrushRequest(String owner, ResourceKey<Level> dimension, BrushKind kind, 
                     int strength, @Nullable Mask mask, @Nullable Pattern pattern, Destruction destruction, @Nullable UUID actor, long seed) {}
 enum BrushKind { SMOOTH, ERODE, MELT, BLEND, RAISE, LOWER, OVERLAY, CAVE_CARVE }   // H appends FILL, DRAIN, FLOOD_FILL
 enum BrushShape { SPHERE, CYLINDER }
-enum Destruction { NATURAL_ONLY, PLAYER_BLOCKS }
+enum Destruction { NATURAL_ONLY, PLAYER_BLOCKS }   // not the Reason PLAYER_BLOCKS, which stays a refusal
 // RegionView gains trailing @Nullable String brush (the kind, for a stroke; old constructor: null)
 ```
 
@@ -9053,6 +9069,9 @@ rule. 4. Commands. 5. Fixtures, gate.
 ### Open questions for Steward
 
 - **S-B-1.** Do you want strokes grouped (one undo for a set of strokes, as a site group), or one region per stroke as drafted?
+- **S-B-2. World-wide areas.** 0c deferred "areas binding every owner (a world-wide never-touch)" to the terrain slices. B
+  checks only the stroke owner's C17 areas. Do you need areas that bind every owner (brushes, regions and sites of any caller)
+  in 6c? If so, it is a small addition to B (an `owner: "*"` area, set at permission 4); otherwise it stays deferred.
 
 ### Open questions for Noah
 
@@ -9061,6 +9080,7 @@ rule. 4. Commands. 5. Fixtures, gate.
 ### Deferred
 
 - Fill, drain, recursive fill (H). Brushes in survival (RS). A brush tool item and a preview ghost for strokes (later, with a UI).
+- Areas binding every owner (0c's deferral), unless S-B-2 asks for them in B.
 
 ## Phase 6c slice S2: the ice-spike outpost goes green (DRAFT for Steward review)
 
@@ -9457,8 +9477,8 @@ API 1.25.0, mod 0.28.0 (wave 4). SETTLEMENTS §4.4; "Agreed with Steward (2026-1
 // RegionView gains trailing @Nullable String beside
 ```
 
-- `VERSION = "1.25.0"`; usual rules. **New Reason** (appended): `CLAIM_OVERLAP` (the new claim overlaps the standing region's
-  claim beyond the seam, §3).
+- `VERSION = "1.25.0"`; usual rules. No new Reason: a claim that overlaps the standing region's beyond the seam (§3) is refused
+  with the existing `OVERLAP` and a message naming the seam.
 - **Features:** `districtsPass`, `besideRegion`. `KIT_VERSION` 0.28.0.
 
 ### 2. The `districts` pass
@@ -9485,7 +9505,7 @@ const d = r.pass('districts', { districts: [
 
 - `RegionPlanRequest.beside = regionId`: the plan reads the standing region's IR (lots, graph nodes and ports, claim, roads) as
   obstacles and join points. The new claim may overlap the standing one only in a seam of at most 16 columns, and never over
-  its lots or roads; otherwise `CLAIM_OVERLAP`.
+  its lots or roads; otherwise `OVERLAP`.
 - **The join:** one routed edge (T2/T3) from a new node to the standing region's nearest compatible port, written by the **new**
   region (its cells, its undo). The standing region writes nothing.
 - **Undo:** `Regions.remove(new)` removes the district and its join; the standing region is untouched. Removing the standing
@@ -9508,7 +9528,7 @@ const d = r.pass('districts', { districts: [
 | 2 | Level bands | every district on `districts_demo` sits in its band |
 | 3 | Connectivity | every district node reaches every other by the plan's edges; the realised graph's `player` reachability 100% |
 | 4 | Loopiness | added loop cost within 0.15 of the tree's (±0.02) |
-| 5 | Beside: overlap | a claim overlapping the village's lots refused `CLAIM_OVERLAP`, nothing written |
+| 5 | Beside: overlap | a claim overlapping the village's lots refused `OVERLAP`, nothing written |
 | 6 | Beside: undo | `Regions.remove(new)`: 0 changed cells in the standing village (ARWD diff over its claim) and E-flat 0 over the new claim |
 | 7 | Beside: join | the join is walkable `player` and `villager` (kit and `dev.nav.villager`) from a new lot to the village's bell |
 | 8 | Determinism | IR sha over 3 plans; tile shas 1 and 4 workers; golden `scenarios/goldens/districts_demo.json`; macOS and Linux CI |
@@ -9763,8 +9783,8 @@ default CompletableFuture<Path> exportSchematic(String entryId, @Nullable Intege
 default CompletableFuture<Path> exportSiteSchematic(String siteId, Path dir)          // Sites: the site's current cells
 ```
 
-- Defaults throw "needs Architect API 1.28.0". **New Reasons** (appended): `FORMAT` (not a Sponge schematic, or an unknown
-  version), `TOO_BIG` (over the template cap).
+- Defaults throw "needs Architect API 1.28.0". **New Reason** (appended): `FORMAT` (not a Sponge schematic, or an unknown
+  version). Over the template cap is the existing `TOO_LARGE`.
 - **Features:** `schematics`. The protocol's variant `kind` enum gains `'import-schem'` (additive).
 
 ### 2. Reading (versions 2 and 3)
@@ -9803,7 +9823,7 @@ unknown block, an oversized one, a corrupt one); optionally a WorldEdit-made fil
 | 1 | Round trip | every kit example: `.nbt` -> `.schem` -> entry gives the same cells and block-entity NBT (100%) |
 | 2 | Determinism | two exports of an entry byte-identical; macOS and Linux CI produce the same bytes |
 | 3 | Versions | the v2 and v3 fixtures import; the old-DataVersion fixture upgrades with 0 unknown states |
-| 4 | Refusals | unknown block, oversize and corrupt fixtures refused with `FORMAT`/`TOO_BIG` and a message; nothing installed |
+| 4 | Refusals | unknown block, oversize and corrupt fixtures refused with `FORMAT`/`TOO_LARGE` and a message; nothing installed |
 | 5 | Placement | an imported `.schem` places and removes exactly (Remove-exact round trip, the phase 1 rule) |
 | 6 | Sites | `exportSiteSchematic` of a placed and edited site equals its current cells |
 | 7 | Clean room | the review records that no WorldEdit source was consulted; the code cites the spec |
