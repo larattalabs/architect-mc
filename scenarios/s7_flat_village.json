@@ -49,8 +49,8 @@
       0,
       0
     ],
-    "candidates": 1100,
-    "step": 256,
+    "candidates": 460,
+    "step": 384,
     "stopAt": 185
   },
   "program": "flat_village",

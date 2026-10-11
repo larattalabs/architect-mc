@@ -143,7 +143,7 @@ const isV = (sc) => sc.phase === '6c-v';
  */
 async function prepV(sc) {
   if (sc.bibleFixture) {
-    const dst = path.join(L.SIDECAR_DATA, 'bibles', sc.bible, 'versions', '1');
+    const dst = path.join(L.GAME_DIR, 'architect', 'bibles', sc.bible, 'versions', '1'); // the helper's installed bibles
     fs.mkdirSync(dst, { recursive: true });
     fs.copyFileSync(path.join(SCEN, sc.bibleFixture), path.join(dst, 'bible.json'));
   }
@@ -365,7 +365,7 @@ async function computeMetrics({ sc, out, planDir, ir, irShas, mspt, cps, exact, 
   const organic = M.axisRunShare(ir, vw);
   const lib6 = L ?? await lib();
   const buildings = [];
-  for (const entry of [...new Set(Object.values(sc.lotEntries))].sort()) {
+  for (const entry of [...new Set(Object.values(sc.lotEntries).map((e) => e.replace(/@\d+$/, '')))].sort()) { // (6c V) entry@version pins
     const dir = path.join(lib6.LIBRARY, entry);
     let j;
     try { j = JSON.parse(execFileSync('node', [path.join(root, 'kit', 'check.mjs'), path.join(dir, `${entry}.nbt`), path.join(dir, `${entry}.blueprint.json`), '--json', '--restraint', sc.restraint ?? 'rustic']).toString().trim().split('\n').pop()); } catch (e) { j = JSON.parse(String(e.stdout ?? '{}').trim().split('\n').pop() || '{"errors":["unreadable"]}'); }

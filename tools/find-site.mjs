@@ -98,7 +98,9 @@ export async function fineChecks(io, needs, [x0, z0, x1, z1]) {
     if (cols.length < expect * 0.98) return { ...out, ok: false, why: `heights: ${cols.length} of ${expect} columns` };
     if (needs.flat) {
       const hist = new Map();
-      for (const c of cols) hist.set(c[2], (hist.get(c[2]) ?? 0) + 1);
+      // the terrain's relief: the ground under trees (the 6th field, 0c's Sample.ground), else the height
+      const g = (c) => (c.length > 5 ? c[5] : c[2]);
+      for (const c of cols) hist.set(g(c), (hist.get(g(c)) ?? 0) + 1);
       let best = 0, at = null;
       for (const h of hist.keys()) {
         let n = 0;
