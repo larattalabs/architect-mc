@@ -317,6 +317,8 @@ steps.pathbibles = async () => {
 steps.frozen = async () => {
   await ensure();
   const out = {};
+  // S7's fixture bible and lot entries (a fresh run worktree has neither): installed as a scenario run does, before the world opens
+  out.prep = scenario(['prep', 's7']);
   await fresh('G6B W Frozen', await L.seedBase(FROZEN_SEED));
   await L.setRules('gallery');
   const [x0, z0, x1, z1] = FROZEN_CLAIM;

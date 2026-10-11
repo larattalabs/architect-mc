@@ -501,6 +501,8 @@ function checkPhase(phase) {
 const main = {
   pin: () => pin(args[1]),
   run: () => runScenario(args[1]),
+  // (6c W) a village scenario's fixture bible and lot entries, installed as a run does (`--bible <id>` for another bible)
+  prep: async () => { await lib(); const sc = readSc(args[1]); if (opt('bible')) { sc.bible = opt('bible'); sc.bibleFixture = `bibles/${opt('bible')}.json`; } if (isV(sc)) await prepV(sc); return { bible: sc.bible, entries: Object.keys(sc.entries ?? {}) }; },
   metrics: () => metricsOf(path.resolve(args[1])),
   golden: () => golden(args[1], path.resolve(args[2])),
   check: () => checkPhase(opt('phase', '6b')),
