@@ -16,12 +16,14 @@
 // Every primitive compiles, at plan time, into low-level pointwise ops (`shape` and `columns`, kit/REGIONS.md "Ops")
 // that lib/realise.mjs evaluates per tile. Plan-time code: any JS, but no trig (the IR must be the same on every Node
 // major); directions come from lib/region/geom.mjs.
-import { info, normalize, qualify } from '../blocks.mjs';
+import { info, normalize, qualify, tagBlocks } from '../blocks.mjs';
 import { variant } from '../kit.mjs';
 import { fnv64 } from '../noise.mjs';
 import { columnCells, compileShape, polygonDistance, sdAt, shapeError, staticY, yrefError } from '../sdf.mjs';
 import { encodeArbl } from '../realise.mjs';
 import { ruleError } from '../material.mjs';
+import { maskError } from '../mask.mjs';
+import { isPattern, mapPatternMats, patternError } from '../pattern.mjs';
 import { sha256Hex } from './pack.mjs';
 import { floatingIsland } from '../forms/floatingIsland.mjs';
 import { CARDINALS, cardinalOf, centreCells, circlePolygon, compassDir, crossOffsets, dominantCardinal, rightOf, segmentAxis } from './geom.mjs';
@@ -150,6 +152,8 @@ export class Region {
     this.claim = ctx.claim;
     this.survey = ctx.survey;
     this.roles = ctx.roles;
+    // (6c MP) the bible's role patterns (resolved: block states), painted where an op takes a pattern
+    this.rolePatterns = ctx.patterns ?? {};
     this._stages = null;
     this.parts = [];
     this.partIds = new Set();
@@ -228,12 +232,15 @@ export class Region {
 
   get stageList() { return this._stages ?? this._implicit ?? ['main']; }
 
-  /** A part: the unit of per-part counts and (6d) diffs. `set`: 'terrain' (default) or 'path'. */
-  part(id, { stage, set = 'terrain' } = {}) {
+  /**
+   * A part: the unit of per-part counts and (6d) diffs. `set`: 'terrain' (default) or 'path'. (6c MP) `mask`: every op of the
+   * part keeps only the cells it selects (an op's own mask wins).
+   */
+  part(id, { stage, set = 'terrain', mask } = {}) {
     if (typeof id !== 'string' || !PART_ID.test(id)) throw new Error(`part id '${id}' must match ${PART_ID}`);
     if (this.partIds.has(id)) throw new Error(`part id '${id}' is used twice (part ids are unique)`);
     if (set !== 'terrain' && set !== 'path') throw new Error(`part ${id}: set must be 'terrain' or 'path'`);
-    const p = new Part(this, id, this._stage(stage), set);
+    const p = new Part(this, id, this._stage(stage), set, mask === undefined || mask === null ? null : this.mask(mask, `part ${id}: mask`));
     this.partIds.add(id);
     this.parts.push(p);
     return p;
@@ -261,6 +268,58 @@ export class Region {
     const p = this.part(`clear_${name}`, { stage });
     p.fill({ kind: 'box', min: [x - r, { surface: 1 }, z - r], max: [x + r, { max: [{ height: 0 }, { surface: 3 }] }, z + r] }, null, { cond: COND.IF_NATURAL });
     return this.anchor(name, [x, z]);
+  }
+
+  /**
+   * (6c MP) A mask for an op (lib/mask.mjs), resolved for the IR: block ids and tags qualified and checked against the 26.3
+   * tables, a noise term's label (`{noise: 'age'}`) turned into its seeded spec (this.noise). Throws with the path on a bad spec.
+   */
+  mask(spec, what = 'mask') {
+    const fix = (m) => {
+      if (!m || typeof m !== 'object' || Array.isArray(m)) return m;
+      if (Array.isArray(m.all)) return { ...m, all: m.all.map(fix) };
+      if (Array.isArray(m.any)) return { ...m, any: m.any.map(fix) };
+      if (m.not !== undefined) return { ...m, not: fix(m.not) };
+      if (typeof m.noise === 'string') return { ...m, noise: this.noise(m.noise) };
+      if (Array.isArray(m.block)) {
+        return { ...m, block: m.block.map((b) => {
+          if (typeof b !== 'string') return b;
+          if (b.startsWith('#')) {
+            const t = `#${qualify(b.slice(1))}`;
+            if (!tagBlocks(t)) throw new Error(`${what}: '${b}' is not a 26.3 block tag`);
+            return t;
+          }
+          info(b);
+          return qualify(b);
+        }) };
+      }
+      return m;
+    };
+    const out = fix(spec);
+    const e = maskError(out, what, { fields: new Set(Object.keys(this.fields)) });
+    if (e) throw new Error(e);
+    return out;
+  }
+
+  /** (6c MP) A pattern (lib/pattern.mjs) with its roles resolved to block states: the IR's `{pattern: spec}` material. */
+  pattern(spec, what = 'pattern') {
+    const e0 = patternError(spec, what);
+    if (e0) throw new Error(e0);
+    const out = mapPatternMats(spec, (m) => this.material(m, `${what} mat`));
+    const e = patternError(out, what, { fields: new Set(Object.keys(this.fields)) });
+    if (e) throw new Error(e);
+    return { pattern: out };
+  }
+
+  /**
+   * (6c MP) A material where a pattern is welcome (fill, carve, material rule clauses): a pattern spec ({mix} / {gradient} /
+   * {pattern: spec}), a role with a bible pattern (painted with it), or anything `material` takes.
+   */
+  paint(v, what = 'material') {
+    if (v && typeof v === 'object' && v.pattern !== undefined) return this.pattern(v.pattern, what);
+    if (isPattern(v)) return this.pattern(v, what);
+    if (typeof v === 'string' && Object.prototype.hasOwnProperty.call(this.rolePatterns, v)) return { pattern: this.rolePatterns[v] };
+    return this.material(v, what);
   }
 
   /** A seeded noise field spec, for `displace` (same seed and label, same values). */
@@ -379,6 +438,7 @@ export class Region {
   material(v, what = 'material') {
     if (v === null || v === undefined || v === 'air' || v === 'minecraft:air') return null;
     if (v && typeof v === 'object' && v.rule) return this.materialRule(v, what);
+    if (v && typeof v === 'object' && (v.pattern !== undefined || isPattern(v))) throw new Error(`${what}: a pattern is taken by fill, carve and material rules (this primitive needs one block)`);
     if (typeof v !== 'string') throw new Error(`${what}: a material is a role name or a block state (got ${JSON.stringify(v)})`);
     if (Object.prototype.hasOwnProperty.call(this.roles, v)) return this.roles[v];
     try {
@@ -391,7 +451,7 @@ export class Region {
   /** (6b) A material rule with role names resolved to block states: `{rule: {rule: [{when, mat}], default, dither}}` or the inner object. */
   materialRule(v, what = 'material') {
     const r = v.rule && Array.isArray(v.rule.rule) ? v.rule : v;
-    const out = { rule: r.rule.map((c) => ({ when: c.when ?? {}, mat: this.material(c.mat, `${what} rule`) })), default: this.material(r.default ?? 'rock', `${what} rule default`) };
+    const out = { rule: r.rule.map((c) => ({ when: c.when ?? {}, mat: this.paint(c.mat, `${what} rule`) })), default: this.paint(r.default ?? 'rock', `${what} rule default`) };
     if (r.dither !== undefined) out.dither = r.dither;
     const e = ruleError(out, what, new Set(Object.keys(this.fields)));
     if (e) throw new Error(e);
@@ -417,12 +477,14 @@ export class Region {
 }
 
 class Part {
-  constructor(region, id, stage, set) {
+  constructor(region, id, stage, set, mask = null) {
     this.region = region;
     this.id = id;
     this.stage = stage;
     this.set = set;
     this.ops = [];
+    // (6c MP) the part's mask: every shape and columns op it emits gets it (an op's own mask wins)
+    this.mask = mask;
   }
 
   get roles() { return this.region.roles; }
@@ -430,15 +492,25 @@ class Part {
 
   _push(op) {
     this.region.opCount++;
+    if (this.mask !== null && op.mask === undefined) op.mask = this.mask;
     this.ops.push(op);
   }
 
-  /** Low-level: every cell inside `shape` gets `material` (null: air) with `cond` and `walk`. */
-  fill(shape, material, { cond = COND.IF_NATURAL, walk = false } = {}) {
+  _paint(v, what) { return this.region.paint(v, `${this.id}: ${what}`); }
+  _mask(m, what = 'mask') { return m === undefined || m === null ? undefined : this.region.mask(m, `${this.id}: ${what}`); }
+
+  /**
+   * Low-level: every cell inside `shape` gets `material` (null: air) with `cond` and `walk`. (6c MP) `material` may be a
+   * pattern ({mix} / {gradient}, or a role with a bible pattern); `mask` keeps only the cells it selects.
+   */
+  fill(shape, material, { cond = COND.IF_NATURAL, walk = false, mask } = {}) {
     const err = shapeError(shape);
     if (err) throw new Error(`part ${this.id}: ${err}`);
     if (!isInt(cond) || cond < 0 || cond > 3) throw new Error(`part ${this.id}: cond must be 0..3`);
-    this._push({ op: 'shape', shape, material: this._mat(material, 'fill material'), cond, walk: !!walk });
+    const op = { op: 'shape', shape, material: this._paint(material, 'fill material'), cond, walk: !!walk };
+    const m = this._mask(mask);
+    if (m !== undefined) op.mask = m;
+    this._push(op);
     return this;
   }
 
@@ -462,17 +534,20 @@ class Part {
    * fill them with a role. `lining`: a role written as a shell of `liningDepth` around the void, at or below the
    * column's floor, only over solid natural cells (IF_SOLID_NATURAL).
    */
-  carve(shape, { to = 'air', lining = null, liningDepth = 1, naturalOnly = true } = {}) {
+  carve(shape, { to = 'air', lining = null, liningDepth = 1, naturalOnly = true, mask } = {}) {
     const err = shapeError(shape);
     if (err) throw new Error(`part ${this.id}: carve: ${err}`);
     if (!(isNum(liningDepth) && liningDepth > 0 && liningDepth <= 8)) throw new Error(`part ${this.id}: carve liningDepth must be 0 < d <= 8`);
     const cond = naturalOnly ? COND.IF_NATURAL : COND.ALWAYS_OURS;
+    // (6c MP) the lining and `to` may be patterns; `mask` applies to both ops
+    const m = this._mask(mask);
+    const withMask = (op) => (m === undefined ? op : { ...op, mask: m });
     if (lining !== null) {
       const shell = { kind: 'clipY', y0: null, y1: { floor: 0 }, of: { kind: 'subtract', of: [{ kind: 'offset', d: liningDepth, of: shape }, shape] } };
-      this._shapeOp(shell, this._mat(lining, 'carve lining'), COND.IF_SOLID_NATURAL);
+      this._push(withMask({ op: 'shape', shape: shell, material: this._paint(lining, 'carve lining'), cond: COND.IF_SOLID_NATURAL, walk: false }));
     }
-    const toMat = this._mat(to, 'carve to');
-    this._shapeOp(toMat === null ? { kind: 'clipY', y0: null, y1: { height: 0 }, of: shape } : shape, toMat, cond);
+    const toMat = this._paint(to, 'carve to');
+    this._push(withMask({ op: 'shape', shape: toMat === null ? { kind: 'clipY', y0: null, y1: { height: 0 }, of: shape } : shape, material: toMat, cond, walk: false }));
     return this;
   }
 

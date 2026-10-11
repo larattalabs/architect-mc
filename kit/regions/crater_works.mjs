@@ -8,6 +8,9 @@
 //   - 4-12 lots on the terrace bands (offices, halls, sheds), facing the centre;
 //   - a ground road from the entrance (outside the rim) to the bridge; `entrance` and `spawn` outside the rim.
 // Stages: ground (carve, terraces, rim, pads), ways (bridge, spiral, stairs, road), lots.
+// (6c MP) `toolbox: true` is the masks-and-patterns demo (docs/CONTRACT.md 6c slice MP §4): the rim keeps only the columns
+// whose frozen ground slopes at most 3 (a mask), the bowl's lining and the terraces' walls take a 3-block mix, and the
+// terrace floors a depth gradient. Off (the default, left out of the params), the plan is exactly as before.
 import { region } from '../lib/region/program.mjs';
 import { compassDir } from '../lib/region/geom.mjs';
 
@@ -20,6 +23,7 @@ export const params = {
   radius: { type: 'int', min: 40, max: 160, default: 72, label: 'Crater radius' },
   depth: { type: 'int', min: 12, max: 48, default: 24, label: 'Crater depth' },
   lots: { type: 'int', min: 4, max: 12, default: 8, label: 'Lots' },
+  toolbox: { type: 'bool', default: false, omitDefault: true, label: 'Masks and patterns demo' },
 };
 
 export const catalogue = {
@@ -64,19 +68,24 @@ export default function craterWorks(ctx) {
   const depth = Math.max(12, Math.min(P.depth, rimY - (claim.minY + 8)));
   const floorY = rimY - depth;
   const lining = Object.hasOwn(ctx.roles, 'scorched') ? 'scorched' : 'rock';
+  const toolbox = P.toolbox === true;
+  // (6c MP) the demo's wall mix: the lining's block, andesite and the rubble role, 6:3:1
+  const wallMix = { mix: [{ w: 6, mat: lining }, { w: 3, mat: 'minecraft:andesite' }, { w: 1, mat: 'rubble' }], seedLabel: 'wall' };
 
   // ---- ground: the bowl, the terraces, the rim
-  r.part('crater', { stage: 'ground' }).carve({ kind: 'bowl', c: [cx, { abs: rimY }, cz], r: R, depth, profile: 'spherical', h: 40 }, { lining, liningDepth: 2 });
+  r.part('crater', { stage: 'ground' }).carve({ kind: 'bowl', c: [cx, { abs: rimY }, cz], r: R, depth, profile: 'spherical', h: 40 }, { lining: toolbox ? wallMix : lining, liningDepth: 2 });
   const L = 3;
   const radii = [0.9, 0.66, 0.42].map((f) => R * f);
   const ys = [0, 1, 2].map((k) => rimY - round((depth * (k + 1)) / (L + 1)));
   const base = floorY - 3;
+  // (6c MP) the floors' depth gradient (below the frozen ground): the path role on the top level, the lining on the floor
+  const floorPaint = { gradient: { by: 'depth', stops: [{ at: rimY - ys[0] + 1, mat: 'path' }, { at: rimY - ys[L - 1] + 1, mat: lining }] }, dither: 'ordered4' };
   const ter = r.part('terraces', { stage: 'ground' });
   ter.fill({ kind: 'cylinder', c: [cx, { abs: ys[0] }, cz], r: radii[0], h: rimY + 40 - ys[0] }, null, { cond: 0 }); // level 0 clear above
   for (let k = 0; k < L; k++) {
     if (k > 0) ter.fill({ kind: 'cylinder', c: [cx, { abs: ys[k] }, cz], r: radii[k], h: ys[k - 1] - ys[k] }, null, { cond: 0 });
-    ter.fill({ kind: 'cylinder', c: [cx, { abs: base }, cz], r: radii[k], h: ys[k] - 1 - base }, 'rock', { cond: 0 });
-    ter.fill({ kind: 'cylinder', c: [cx, { abs: ys[k] - 1 }, cz], r: radii[k], h: 1 }, lining, { cond: 0 });
+    ter.fill({ kind: 'cylinder', c: [cx, { abs: base }, cz], r: radii[k], h: ys[k] - 1 - base }, toolbox ? wallMix : 'rock', { cond: 0 });
+    ter.fill({ kind: 'cylinder', c: [cx, { abs: ys[k] - 1 }, cz], r: radii[k], h: 1 }, toolbox ? floorPaint : lining, { cond: 0 });
   }
   // rails on each level's inner edge (the riser below it), lanterns on them and along the wall
   const rails = r.part('rails', { stage: 'ground' });
@@ -93,7 +102,7 @@ export default function craterWorks(ctx) {
   lampRing(radii[2] * 0.5, ys[2], 10);
   const gA = gate.a; // the gate, the bridge and the entrance
   const gd = compassDir(gA);
-  const rim = r.part('rim', { stage: 'ground' });
+  const rim = r.part('rim', { stage: 'ground', ...(toolbox ? { mask: { slope: [0, 3] } } : {}) });
   rim.ring([cx, cz], R + 1, R + 4, { height: 2, material: 'rubble', gates: [{ angle: gA, width: 7, height: 4 }] });
   // lanterns on the rim wall's top, every 10 cells or so
   {
