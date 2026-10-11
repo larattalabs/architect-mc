@@ -8294,3 +8294,344 @@ tag, since `Columns` changes), the sim suites, apijars, 6b-scenario-s1 and 6cv-s
 
 - Lighting inside lots from the design side (7b), bible-styled lamps (7a §8.3).
 - Region survival (the RS slice).
+
+## Phase 6c slice T1: passes, fields and relief (DRAFT for Steward review)
+
+API 1.15.0, mod 0.18.0 (wave 1, after W). SETTLEMENTS §4 and §4.1.
+
+- **Branch:** `slice/T1`, worktree `../architect-mc-T1`. **Spend:** $0.
+- **Scope:** the plan-time pass framework (`r.pass`), fields produced by passes, the second plan's survey at resolution 1 up to
+  1024x1024, the plan budget for programs with passes (120 s, 2 GB), the `relief` op kind, the `relief` pass (blending) and
+  the erosion touch-up.
+- **Not in scope:** hydrology (H), routing (T2), districts (D), brushes (B; they reuse `relief`).
+- **Depends on:** W (both touch `RegionSurvey`/`Columns`). Parallel with F1 and MP.
+
+### 0. Facts
+
+- **Ops:** `realise.mjs` `OP_KINDS = ['shape', 'columns']`; `OPS_RESERVED = ['relief', 'scatter', 'voxels', 'stamp']` throw
+  until their slice. A format-2 IR names the kinds it uses in `requires`; an older kit refuses it `PLAN_STALE` (6b §2.4).
+- **Fields exist** as program-made side blobs: `r.field(name, f)` (`program.mjs` ~303), IR `fields` member, and the material
+  rule's `field` clause (`material.mjs`, sampled nearest at res 1, the covering sample at res 4). No pass produces one yet.
+- **Plan limits:** `sidecar/src/config.ts` `regionPlanMs` 30,000 and `regionPlanHeapMb` 1,024, one budget for every program.
+- **Survey resolution:** the plan survey (ARSV) is resolution 1 up to 256x256 columns, else 4 (`kit/lib/region/survey.mjs`).
+  The two-plan flow (plan, prepare, plan again) is 6a's as built.
+- **6a's terrain primitives** (`terrace`, `lot` pads with `pad.edge: 'slope'` batters, `platform`) make straight 1:1 batters
+  and flat steps; the 6b axis-run share reads them as geometric.
+- **K2/K3:** realise is pointwise within 8 columns, under the lint (no trig, no `**`, no `Math.random`).
+
+### 1. API 1.15.0
+
+- `VERSION = "1.15.0"`; api-compat against the 0.17.0, 0.16.0 and 0.15.0 apitest jars and the 0.17.0 surface.
+- **No new records or methods.** Pass timings travel in `RegionPlan.notes` and `siteplan.json` (`passes: [{name, ms, heapMb}]`).
+- **Features:** `planPasses`, `reliefOp`. **Config:** `regionPassPlanMs` (default 120,000) and `regionPassPlanHeapMb` (2,048).
+- **Behaviour changes:** a program that declares passes gets the larger budget and a resolution-1 second survey (§3). An IR
+  using `relief` is format 2 with `requires: ['relief']`; 0.17.0 refuses it `PLAN_STALE`. `KIT_VERSION` 0.18.0.
+
+### 2. The pass framework
+
+```js
+// kit/lib/region/passes/<name>.mjs; a program calls
+const blend = r.pass('relief', { around: [...pads, ...corridors], radius: 12, maxCut: 6, maxFill: 6, erode: { thermal: 2, stream: 1 } });
+// -> { fields: { relief }, ops: [one 'relief' op per stage], data: { pinned, iterations, ms } }
+```
+
+- A pass is a bundled, deterministic function `(survey, volumes, intent) -> { fields, ops, data }`. It runs in the pristine-kit
+  child process at plan time, never at realise.
+- **Math:** integer or fixed-point only. The realise lint applies to `passes/**` (a `region-lint` test), so replans are stable
+  across Node majors (6d's diff-by-part needs that).
+- **Declaring:** a program exports `passes: ['relief', ...]`. The sidecar reads it from the catalogue entry and picks the
+  pass budget before it spawns the plan. A program that calls an undeclared pass fails the plan with a typed note.
+- **Timing:** each pass reports wall ms and peak heap; the plan notes list them (`pass relief: 4.2 s, 310 MB`).
+- **Fields:** a pass's fields are side blobs like `r.field`'s (`<planDir>/blobs/<sha>.bin`, K4), named `relief`, `flow`, `wet`.
+
+### 3. The second survey at resolution 1
+
+- When the program declares passes, the second plan's ARSV survey is resolution 1 up to 1024x1024 columns (about 7 MB), sent
+  over 4a's blob path. Claims past 1024 on a side stay at resolution 4 and the pass runs coarse (noted).
+- The first plan is unchanged. Programs without passes are unchanged (their tiles and IR content, save `kitVersion`).
+
+### 4. The `relief` op
+
+```
+{ op: 'relief', field, mode: 'delta'|'target', cut: cond, fill: materialRule, maxCut, maxFill }
+```
+
+- **At realise**, a column with frozen ground `g` and field value `dh` becomes ground `g + dh` (`delta`), or exactly `dh`
+  (`target`, for pad columns). Cut above with `cut` (default `IF_NATURAL`); fill below with the rule (`surface` skin,
+  `subsurface` to depth 3, `rock` core). `maxCut`/`maxFill` clamp per column.
+- **Drift:** a column whose frozen ground differs from the plan survey still gets `g + dh`, so the blend follows the real
+  surface (SETTLEMENTS §4.1).
+- **Pointwise:** one field sample per column; K2 holds without a margin.
+- **Undo:** tile CELL entries, as every region write.
+
+### 5. The `relief` pass and the erosion touch-up
+
+- **Blending:** pins = pad columns at their target y, corridor centre lines at their profile y. Integer Jacobi relaxation over
+  the claim at resolution 1, a fixed iteration count (`radius * 4`), only within `radius` of a pin; columns outside keep
+  `dh = 0`. Output `fields.relief` (i16 dh) and one `relief` op per stage that has pins.
+- Pad columns are `target`, so pads stay flat; the 1:1 batter of `lot`/`terrace` is replaced by the blend when the program
+  passes `pad.edge: 'blend'` (new value; `slope` stays as it was).
+- **Erosion touch-up (optional, `erode`):** `thermal` iterations move material from a column to its lowest neighbour while
+  the drop exceeds 2; `stream` iterations cut along D8 flow by accumulation. Total extra |dh| at most 4 per column; it never
+  moves a pinned column. It roughens fills into scree and gullies; vanilla terrain is not re-simulated.
+
+### 6. Gate (slice tier, $0)
+
+**Fixtures:**
+- `relief_demo` (bundled, `catalogue = false`): three pads and two corridors on **S3's pinned claim** (natural, realised), plus
+  its flat variant (the program first `add`s a hill, so E-flat sees cut, fill and blend).
+- A synthetic 1024x1024 survey (seeded noise terrain, committed generator) for plan time only.
+
+**Evidence:** `artifacts/gate6c-t1/`, driver `tools/gate6ct1.mjs`. `spend.json` $0.00.
+
+| # | Check | Bar |
+|---|---|---|
+| 1 | Blend smoothness (virtual and realised `relief_demo`) | in the blended band, at least 95% of adjacent-column steps are at most 1; 0 steps over 3 |
+| 2 | Pads | every pad column at its target y (0 off) |
+| 3 | Clamps | 100% of columns within `maxCut`/`maxFill`; erosion's extra |dh| at most 4 |
+| 4 | Organic read | axis-run share of relief boundary cells: recorded, and lower than the same program with `pad.edge: 'slope'` |
+| 5 | Plan time, 1024x1024 synthetic | relief pass at most 60 s, the whole plan at most 120 s, peak heap at most 2 GB (median of 3) |
+| 6 | Determinism | IR sha over 3 plans; field blob shas; tile shas for 1 and 4 workers, forward and shuffled; macOS and Linux CI; goldens `scenarios/goldens/relief_demo.json` |
+| 7 | Tile evaluation | p50 and p99 per tile recorded; p99 under 2 s; evaluation at least 45k cells/s |
+| 8 | Exactness | flat variant E-flat 0; natural E-normal all classified, at most 0.01% of written cells |
+| 9 | MSPT | Architect's own CPU per tick at most 50 ms, p99 at most 25 ms |
+| 10 | Checker | `relief_demo`: 0 errors, no M1-M4 |
+| 11 | Compatibility | 0.17.0 refuses a `relief` IR `PLAN_STALE` and writes nothing; format-1 goldens, S1's and S7's tile goldens and `mega_bench.golden.json` unchanged |
+| 12 | API | api-compat clean; three apitest jars pass |
+| 13 | Spend | $0.00 |
+
+**Unit:** the pass lint; an undeclared pass fails; `relief` op parse and refusal paths; Jacobi on a 5x5 hand case; erosion
+never moves a pin.
+
+**Tier:** slice: quick plus kit region (6a-staged, 6a-inv3, 4e-megalite), `region/**` (6a-megaA, 6b-ghost, 6b-volume,
+6b-nudges, 6b-versions; engine tag, the evaluator gains an op kind), the sim suites, apijars, 6b-scenario-s1, 6cv-scenario-s7.
+**gate-verifier** re-runs items 1, 6 and 8.
+
+### 7. Build order
+
+1. Archive the 0.17.0 apitest jar. 2. Pass framework, lint, budget plumbing. 3. Resolution-1 second survey.
+4. `relief` op (kit evaluator, `requires`, mod `IrStale`). 5. `relief` pass and erosion. 6. `relief_demo`, fixtures, gate.
+
+### Open questions for Steward
+
+- **S-T1-1.** Is 120 s acceptable as the worst-case plan time on a 1024x1024 claim, shown to the player as "planning"? Steward's
+  card flow waits on it.
+
+### Open questions for Noah
+
+- **N-T1-1.** `pad.edge: 'blend'` changes how pads meet the land. Make it the default for new programs from S2/S3 on (old
+  programs keep `slope`)?
+
+### Deferred
+
+- Erosion as a regeneration (never: touch-ups only). Relief under standing lots (6d). Brush use of `relief` (B).
+
+## Phase 6c slice F1: forms I, ice spikes and rock spires (DRAFT for Steward review)
+
+API 1.16.0, mod 0.19.0 (wave 1, parallel with T1 and MP). SETTLEMENTS §9.1, §9.2 and §11 (M17).
+
+- **Branch:** `slice/F1`, worktree `../architect-mc-F1`. **Spend:** $0.
+- **Scope:** the generators `iceSpike` and `rockSpire`; the `voxels` op kind (baked forms as side blobs); the generator rules
+  (one bounded op per cluster, bake past a cost threshold); **M17 melt**.
+- **Not in scope:** the other generators and M18/M19 (F3), scatter and stamps (F2), M20 (H).
+- **Depends on:** V (6b's format-2 shapes and `r.form`). Nothing in T1. S2 depends on F1.
+
+### 0. Facts
+
+- `kit/lib/forms/floatingIsland.mjs` is the only generator; `r.form(id, gen)` and `r.floatingIsland` emit closed-library
+  shapes (`ellipsoid`, `capsuleChain`, `warp`, `strata`, `instances`, `cone`) with material rules. IR `forms` records provenance.
+- `voxels` is in `OPS_RESERVED`. Side blobs: `r.blob`/`_sideBlob`, at most 16 MB each; IR at most 4 MB and 20,000 ops (K4).
+- The evaluator culls ops by bounds per column, but evaluates an op's whole shape tree per cell (SETTLEMENTS §9.1).
+- Vanilla 26.3: `ice` and snow layers melt at block light above 11; `packed_ice`, `blue_ice` and `snow_block` don't.
+- S2's fixture holds natural ice spikes (15% `ice_spikes` biome), read through `Survey.volume` (class `ICE`).
+
+### 1. API 1.16.0
+
+- `VERSION = "1.16.0"`; api-compat against 0.18.0, 0.17.0, 0.16.0 jars and the 0.18.0 surface. **No new records or methods.**
+- **Features:** `formsIce`, `formsRock`, `voxelsOp`. A `voxels` IR is format 2, `requires: ['voxels']`; 0.18.0 refuses it.
+- `KIT_VERSION` 0.19.0. Checker `RULES` gains `M17` (warning; a bar in S2).
+
+### 2. Generator rules (all generators, now and in F3)
+
+- **One bounded op per cluster** (a spike, a ledge, a lobe), at most 32 primitives per op. A property test fails a generator
+  that emits more.
+- **Bake past a cost threshold:** a form whose op count would exceed 400 (est.; measured here, see bar 6) is emitted as one
+  `voxels` op instead.
+- **Absolute y:** skeletons are resolved at plan time; bases reach 6 below the plan ground with `IF_NATURAL`/`IF_AIR_OR_FLUID`
+  skirts, so drift up to 6 is absorbed inside K2's margin.
+- **Species params:** each generator ships bundled presets; a bible may name others within the generator's param schema.
+
+### 3. `iceSpike`
+
+- Clusters of thin `cone`s (radius 1-4, height 8-48), a few leaning (an integer offset per 8 of height), each cluster one op.
+- Materials: `packed_ice` core, `blue_ice` accents (a noise clause), `snow_block` caps (`facing: up`, depth 0). **Never `ice` or
+  snow layers** in a spike.
+- **Kept spikes:** `r.keepNatural('ICE', box)` reads the frozen volume and marks those cells `keep`, so lots and routes avoid
+  them and no op writes them (an IR `keep` list per part, checked as an M1 error if written).
+
+### 4. `rockSpire`
+
+- Stacked `warp`ed `cone`s with ledges (a ledge is a `clipY`ped `ellipsoid` lobe), one op per stack segment.
+- Materials: `strata` bands (stone, andesite, tuff, deepslate by `yAbs`), weathered skin by `age` noise, moss by the `wet`
+  field when one exists (T1/H), else by noise.
+- M3: every segment rests on the one below or on ground; overhangs past 4 get a `capsuleChain` buttress.
+
+### 5. The `voxels` op
+
+```
+{ op: 'voxels', blob, origin: [x, y, z], rotation: 0|90|180|270 }   // blob: ARTL-like palette + packed positions
+```
+
+- Realise copies the cells that fall in the tile's window; pointwise by position, so tile-independent.
+- Cond per cell: `IF_NATURAL` by default (a form never overwrites built blocks).
+- Bounds are the blob's box; the evaluator culls by them.
+
+### 6. M17 melt
+
+- **Rule:** no `ice` or snow-layer cell within reach of block light above 11, on the virtual world with every light the plan
+  writes (the kit's light model). Natural ice the plan doesn't write counts too when a planned light reaches it.
+- **Finding:** per part, the cells and the light that reaches them. Warning in the checker; a gated bar in S2.
+
+### 7. Gate (slice tier, $0)
+
+**Fixtures:** `forms_demo` (bundled, `catalogue = false`): 6 ice-spike clusters and 3 rock spires on **S2's pinned claim**
+(natural, realised, with the claim's natural spikes kept), plus a flat variant. Property tests over 200 seeds per generator.
+
+**Evidence:** `artifacts/gate6c-f1/`, driver `tools/gate6cf1.mjs`. `spend.json` $0.00.
+
+| # | Check | Bar |
+|---|---|---|
+| 1 | Bounded ops (property, 200 seeds each) | 100% of ops at most 32 primitives; 0 forms over 400 ops not baked |
+| 2 | Structure | M3 0 floating cells on the realised `forms_demo`; 0 overhangs over 4 without a buttress |
+| 3 | Melt | M17 0 on the plan and on the realised world after a 2-minute stand at default random ticks; ice and snow-layer counts unchanged by the stand |
+| 4 | Kept spikes | 0 written cells in `keep` sets (ARWD diff) |
+| 5 | Organic read | axis-run share of form boundary cells: recorded per generator (gated from S2, see N-F1-1) |
+| 6 | Bake threshold | evaluation cost per op measured; the 400 threshold confirmed or re-set from the data, recorded |
+| 7 | `voxels` | realised cells equal the baked blob exactly; tile shas equal for 1 and 4 workers, shuffled |
+| 8 | Tile evaluation | p99 under 2 s per tile; at least 45k cells/s |
+| 9 | Determinism | IR and blob shas over 3 plans; golden `scenarios/goldens/forms_demo.json`; macOS and Linux CI |
+| 10 | Exactness | flat E-flat 0; natural E-normal classified, at most 0.01% |
+| 11 | MSPT | own CPU at most 50 ms, p99 at most 25 ms; light-engine tick share recorded |
+| 12 | Compatibility | 0.18.0 refuses `voxels` `PLAN_STALE`; S1, S7 and mega_bench tile goldens unchanged |
+| 13 | API, spend | api-compat clean; jars pass; $0.00 |
+
+**Broken variants:** an `ice` spike under a lantern (M17), a spire with a 6-wide unbuttressed overhang (M3), a spike written
+over a kept natural spike (M1).
+
+**Tier:** slice: quick, kit region rows, `region/**` (engine tag: a new op kind), sim suites, apijars, 6b-scenario-s1.
+**gate-verifier** re-runs items 2, 3 and 7.
+
+### 8. Build order
+
+1. Archive the 0.18.0 apitest jar. 2. Generator rules and their property harness. 3. `voxels`. 4. `iceSpike`, `keepNatural`.
+5. `rockSpire`. 6. M17. 7. `forms_demo`, gate.
+
+### Open questions for Noah
+
+- **N-F1-1. The axis-run bar.** 6b's calibration card (10 held-out island seeds) was optional for S1 and, as far as the records
+  show, wasn't filled in. Gate S2 and S3 at SETTLEMENTS' estimate (forms at most 0.25), fill the card first, or keep the
+  metric recorded only through 6c?
+
+### Deferred
+
+- `giantTree`, `mushroom`, `coral`, `roots`, `stalactites`, M18, M19 (F3). Melt over time for snow on roofs (recorded only).
+
+## Phase 6c slice MP: masks and patterns (DRAFT for Steward review)
+
+API 1.17.0, mod 0.20.0 (wave 1, parallel with T1 and F1). PLAN "Inputs for the 6c contract: our own world-shaping toolbox".
+
+- **Branch:** `slice/MP`, worktree `../architect-mc-MP`. **Spend:** $0.
+- **Scope:** the toolbox's **masks** (by block, height, slope, depth, field, noise; combinable) and **patterns** (weighted
+  block mixes, gradients), as pointwise kit data usable by every op, by scatter (F2) and by brushes (B). The Java records that
+  carry them (`Mask`, `Pattern`), so B's API can take them.
+- **Not in scope:** brushes themselves (B), rarity budgets (VOC), fluids in patterns (H).
+- **Depends on:** V. Parallel with T1 and F1. B, F2 and VOC build on it.
+
+### 0. Facts
+
+- **Material rules** (`kit/lib/material.mjs`) pick a block per cell from conditions (`depth`, `slopeLt/Gte`, `field`, `band`,
+  `noise`, `yAbs`, `facing`, `age`) with ordered Bayer `dither`. Each clause's `mat` is one role or block state.
+- **Conds** on ops are fixed enums (`IF_NATURAL`, `IF_AIR_OR_FLUID`, ...). Nothing selects cells by their current block or
+  height band.
+- The kit's voxel classes (`voxel_classes.json`) and `blocks.mjs` tags exist; block tags from 26.3 data are not in the kit.
+- WorldEdit's concepts (masks, patterns, gradients) are the model; no WorldEdit code is used (Noah's decision).
+
+### 1. API 1.17.0
+
+- `VERSION = "1.17.0"`; api-compat against the previous three apitest jars and the previous surface.
+- **New records** (in `dev.larattalabs.architect.api`), used by B and by `RegionPlanRequest.params` as JSON:
+  ```java
+  record Mask(JsonObject spec) { static Mask parse(String text); String toText(); }   // validated against the kit schema
+  record Pattern(JsonObject spec) { static Pattern parse(String text); String toText(); }
+  ```
+  `parse` throws `ArchitectRefused(FIELD_LIMIT)` with a path on a bad spec, checked by the same schema the kit uses
+  (`kit/schemas/mask.json`, `pattern.json`, bundled; a drift test like 0c's `Limits`).
+- **Features:** `masks`, `patterns`. IRs using them are format 2 with `requires: ['mask']` / `['pattern']`. `KIT_VERSION` 0.20.0.
+
+### 2. Masks
+
+```
+{ all: [ {block: ['#minecraft:dirt', 'minecraft:grass_block']}, {height: [60, 90]}, {slope: [0, 2]},
+         {depth: [0, 3]}, {field: 'wet', gte: 170}, {not: {noise: 'age', gte: 0.6}} ] }
+```
+
+- **Terms:** `block` (ids or `#tags`, matched against the cell's current block from the frozen volume or, without one, the
+  column's top), `height` (absolute y), `slope` (frozen ground, as material rules), `depth` (cells below the frozen surface),
+  `field`, `noise`, `class` (the voxel class: `ROCK`, `SOIL`, `ICE`, ...). Combinators `all`, `any`, `not`.
+- **Pointwise:** every term reads the cell, its column or the frozen columns within 8 (K2). `block` on non-surface cells
+  needs a frozen volume for the box (`r.needVolume`); without one the plan refuses with a typed note.
+- **Where:** every `shape`, `columns` and `relief` op gains an optional `mask`; a cell the mask rejects is skipped (not
+  written, not part of the entry). Scatter density and brushes take masks too.
+- **Tags:** `blocks.mjs` gains the 26.3 block tags (generated from the data dump, never hand-listed).
+
+### 3. Patterns
+
+```
+{ mix: [ {w: 6, mat: 'stone'}, {w: 3, mat: 'andesite'}, {w: 1, mat: 'cobblestone'} ], seedLabel: 'wall' }
+{ gradient: { by: 'y'|'depth'|{field: 'wet'}, stops: [ {at: 60, mat: 'sand'}, {at: 64, mat: 'grass_block'} ] }, dither: 'ordered4' }
+```
+
+- **`mix`:** a per-cell choice by an integer hash of (seed, label, x, y, z) over the weights; shares converge to the weights.
+- **`gradient`:** the stop interval by `y`, `depth` or a field, blended across the interval with the ordered Bayer dither, so
+  bands don't make hard lines.
+- **Where:** anywhere a `mat` is accepted: a material rule clause's `mat`, an op's `material`, a role in a bible (a role may
+  name a pattern; a re-skin still changes only roles).
+- **Roles:** a pattern's entries may be roles or block states; roles resolve through the bible as today.
+
+### 4. Gate (slice tier, $0)
+
+**Fixtures:** `crater_works` with a demo param set `toolbox: true` that masks its rim fill to `{slope: [0, 3]}` and paints
+its walls with a 3-block mix and its floor with a depth gradient; on 6b's crater fixture (natural) and its flat variant.
+
+**Evidence:** `artifacts/gate6c-mp/`, driver `tools/gate6cmp.mjs`. `spend.json` $0.00.
+
+| # | Check | Bar |
+|---|---|---|
+| 1 | Mix shares (property, 50 seeds x 10k cells) | each block's share within ±2 points of its weight |
+| 2 | Gradients | monotone by stop order over 1,000 random columns; dither leaves no straight boundary run of 6 or more on a flat gradient |
+| 3 | Masks | equal to a brute-force reference evaluator on 500 random masks x 2,000 cells: 100% |
+| 4 | Tile independence | tile shas for 1 and 4 workers, forward and shuffled, equal on the demo |
+| 5 | Determinism | IR sha over 3 plans; golden `scenarios/goldens/crater_toolbox.json`; macOS and Linux CI |
+| 6 | Schema drift | the Java `Mask`/`Pattern` validation and the kit schema agree on 200 generated valid and invalid specs |
+| 7 | Exactness | flat E-flat 0; natural E-normal classified, at most 0.01% |
+| 8 | Unchanged | `crater_works` without `toolbox` keeps its tile shas; S1, S7, mega_bench tile goldens unchanged |
+| 9 | Compatibility | the previous mod refuses a `mask`/`pattern` IR `PLAN_STALE` |
+| 10 | Tile evaluation, MSPT | p99 under 2 s per tile, at least 45k cells/s; own CPU at most 50 ms |
+| 11 | API, spend | api-compat clean; jars pass; $0.00 |
+
+**Tier:** slice: quick, kit region rows, `region/**` (engine tag: the evaluator changes), `api/**`, sim suites, apijars,
+6b-scenario-s1. **gate-verifier** re-runs items 3, 4 and 7.
+
+### 5. Build order
+
+1. Archive the previous apitest jar. 2. Tags in `blocks.mjs`. 3. Masks (kit, schema). 4. Patterns. 5. Java records and drift
+test. 6. The crater demo, gate.
+
+### Open questions for Steward
+
+- **S-MP-1.** Do you want to send masks and patterns yourself (for example, a district's ground cover from the card), or only
+  through bibles and bundled programs?
+
+### Deferred
+
+- Fluids in patterns (H). Masks reading other mods' block-entity data (never).
