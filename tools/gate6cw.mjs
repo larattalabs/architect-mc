@@ -280,12 +280,12 @@ steps.lampsoff = async () => {
 
 steps.pathbibles = async () => {
   await ensure();
-  const bibles = [['coarse_dirt', null], ['packed_mud', 'g6cw_path_packed_mud'], ['stone_bricks', 'g6cw_path_stone_bricks'], ['oak_planks', 'g6cw_path_oak_planks']];
+  // (S7's own fixture bible, coarse dirt, run here too: the step stands alone on a fresh run worktree)
+  const bibles = [['coarse_dirt', 'g6cv_village'], ['packed_mud', 'g6cw_path_packed_mud'], ['stone_bricks', 'g6cw_path_stone_bricks'], ['oak_planks', 'g6cw_path_oak_planks']];
   const out = {};
   for (const [blk, bible] of bibles) {
     let dir;
-    if (!bible) dir = latest('s7', true);
-    else { const r = scenario(['run', 's7', '--phase', PHASE, '--flat', '--bible', bible]); dir = latest(`s7-${bible}`, true); out[`${blk}Exit`] = r.code; }
+    { const r = scenario(['run', 's7', '--phase', PHASE, '--flat', '--bible', bible]); dir = latest(`s7-${bible}`, true); out[`${blk}Exit`] = r.code; }
     if (!dir) { check(false, `pathbibles: no flat run for ${blk}`); continue; }
     const { ir, meta, world } = await runWorld(dir);
     const m = readJ(dir, 'metrics.json');
