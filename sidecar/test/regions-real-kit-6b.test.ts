@@ -154,7 +154,7 @@ describe.skipIf(!hasF2)('format-2 IRs with the real kit: side blobs, blob_unknow
     expect(sha256(sc.blobs.read(b.blobId))).toBe(b.sha);
     if (sc.regions.kitInfo().caps.check) expect(planned.report).toBeDefined();
     else expect(planned.checkError).toMatch(/no checker/);
-    expect(sc.snapshot(2)).toMatchObject({ kitVersion: '0.12.0', irFormats: [1, 2] });
+    expect(sc.snapshot(2)).toMatchObject({ kitVersion: '0.16.0', irFormats: [1, 2] });
   });
 
   it('streams its tiles with the same shas as the kit evaluating them here', async () => {
