@@ -628,7 +628,7 @@ steps.keys = async () => {
   const greq = groupReq('Key Group', [it3()[0]]);
   const y = await groundAt(0, 0);
   const bspec = (x) => ({ proximity: false, owner: OWNER, opKey: `${K}:batch`, items: [{ key: 'a', bp: 'cabin', at: [x, y + 1, 0], rot: 0, mode: 'INSTANT', force: true }] });
-  const counts = async () => ({ bibles: (await api('bibles')).length, jobs: (await api(`groups ${OWNER}`)).length, batches: (await api('batches')).length });
+  const counts = async () => ({ bibles: (await api('bibles')).length, jobs: (await api(`groups ${OWNER}`)).length, batches: (await api(`batches ${OWNER}`)).length });
   // send all three with keys, their acks dropped
   await call('dev.api.dropAck', { msgType: 'bible.request' });
   await api(`opbible kb ${K}:bible ${b64(breq)}`);
@@ -732,7 +732,7 @@ steps.pins = async () => {
   return { entry };
 };
 
-/** Item 10: WORLD_STOPPED (a pending removeGroup / queue cancel, a realise, a Survey.volume and an unacked requestGroup). */
+/** Item 10: WORLD_STOPPED (a pending Sites.removeGroup, a Regions.remove, a Survey.volume and an unacked requestGroup; the realise). */
 steps.stopped = async () => {
   const W = 'G6C0A Stop';
   fs.rmSync(path.join(SAVES, W), { recursive: true, force: true });
@@ -746,9 +746,17 @@ steps.stopped = async () => {
   pend.realise = await api(`rrealise ${JSON.stringify({ planId: p.planId, tag: K, lots: {} })}`).catch((e) => ({ error: String(e) }));
   pend.volume = await api(`volume vs -300 -64 -300 300 120 300`).catch((e) => ({ error: String(e) }));
   const y = await groundAt(300, 300);
-  const many = Array.from({ length: 40 }, (_, k) => ({ key: `i${k}`, bp: 'tower', at: [300 + (k % 8) * 30, y + 1, 300 + Math.floor(k / 8) * 30], rot: 0, mode: 'CONSTRUCTION', force: true }));
+  // a long Sites future: 24 towers placed, then their site group removed (the undo runs over many ticks)
+  await cmd('/tp @s 400 -40 400');
+  await call('dev.waitChunks', { timeoutMs: 60_000 }, 90_000).catch(() => {});
+  const many = Array.from({ length: 24 }, (_, k) => ({ key: `i${k}`, bp: 'tower', at: [300 + (k % 6) * 30, y + 1, 300 + Math.floor(k / 6) * 30], rot: 0, mode: 'INSTANT', force: true }));
   const qb = await result(await api(`bqueue ${JSON.stringify({ proximity: false, items: many })}`));
-  pend.cancelBatch = await api(`bcancel ${qb}`);
+  const qv = await waitBatch(qb, 300_000);
+  // a long Regions future: the realising region removed once it has written cells
+  const region = (await result(pend.realise, 60_000))?.region;
+  if (region) await until(async () => ((await call('dev.region.state', { region }, 60_000)).view?.cellsWritten ?? 0) > 0, 'the region writing', 300_000, 2000).catch(() => null);
+  pend.removeGroup = await api(`sgremove ${qv.group} force`);
+  if (region) pend.regionRemove = await api(`rremove ${region} keep force`);
   await call('dev.api.dropAck', { msgType: 'design.group' });
   pend.group = await api(`opgroup wg ${K} ${b64(groupReq('Stop Group', [it3()[0]]))}`);
   const n = await call('dev.api.pending');
@@ -758,7 +766,7 @@ steps.stopped = async () => {
   await call('dev.world.open', { name: W }, 30_000);
   await waitInWorld();
   const res = {};
-  for (const k of ['realise', 'volume', 'cancelBatch', 'group']) {
+  for (const k of ['realise', 'volume', 'removeGroup', 'regionRemove', 'group']) {
     const key = pend[k]?.pending;
     res[k] = key ? (await api(`get ${key}`)).value : pend[k];
   }
@@ -768,6 +776,7 @@ steps.stopped = async () => {
   const otherFail = Object.entries(res).filter(([, v]) => v?.error && v?.reason !== 'WORLD_STOPPED').map(([k]) => k);
   const stillPending = Object.entries(res).filter(([, v]) => v === undefined || v === null).map(([k]) => k);
   check(res.group?.reason === 'WORLD_STOPPED', `the unacked requestGroup failed WORLD_STOPPED (${JSON.stringify(res.group)})`);
+  check(stopped.includes('removeGroup') && stopped.includes('regionRemove'), `a pending Sites future (removeGroup) and a pending Regions future (remove) failed WORLD_STOPPED (${stopped.join(', ')})`, res);
   check(otherFail.length === 0 && stillPending.length === 0 && stopped.length >= 2, `every future pending at the stop failed with reason() == WORLD_STOPPED (${stopped.join(', ')}; completed before the stop: ${Object.keys(res).filter((k) => !stopped.includes(k)).join(', ') || '-'})`, res);
   const g = await result(await api(`groupbykey wk ${OWNER} ${K}`));
   check(g?.id && g.opKey === K, `after the next load the group is found by its key (${g?.id})`);
