@@ -113,7 +113,9 @@ export function villageProps(ir, meta, world, realised, vw) {
   const area = new Set(v.bellArea.map(([x, z]) => key(x, z))), golem = new Set(v.golem.map(([x, z]) => key(x, z)));
   for (const p of v.props ?? []) {
     planned[p.kind] = (planned[p.kind] ?? 0) + 1;
-    const ok = p.cells.every(([x, y, z, s]) => world.pal.states[world.get(x, y, z)] === s);
+    // the block, not its connection properties (a fence's sides, a waterlogged flag): the world fills those in
+    const blk = (s) => s.replace(/\[.*$/, '');
+    const ok = p.cells.every(([x, y, z, s]) => blk(world.pal.states[world.get(x, y, z)]) === blk(s));
     if (ok) built[p.kind] = (built[p.kind] ?? 0) + 1;
     for (const [x, y, z] of p.cells) {
       const inLot = (ir.lots ?? []).some((l) => x >= l.box.minX && x <= l.box.maxX && z >= l.box.minZ && z <= l.box.maxZ);

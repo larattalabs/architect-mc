@@ -150,14 +150,21 @@ async function prepV(sc) {
   if (sc.entries) {
     const { loadDesign } = await import('../kit/build.mjs');
     const { writeBlueprint } = await import('../kit/lib/write.mjs');
+    // built in the fixture bible's roles (Steward re-skins with its settlement bible): the designs' own path rows are its path
+    const bible = sc.bibleFixture ? JSON.parse(fs.readFileSync(path.join(SCEN, sc.bibleFixture), 'utf8')) : null;
     for (const [id, e] of Object.entries(sc.entries)) {
       const dir = path.join(L.LIBRARY, id);
-      if (fs.existsSync(path.join(dir, `${id}.nbt`))) continue;
-      const bp = await loadDesign(e.design, { values: e.values ?? {} });
+      const spec = JSON.stringify({ ...e, bible: bible?.roles ?? null });
+      if (fs.existsSync(path.join(dir, `${id}.nbt`)) && fs.existsSync(path.join(dir, 'g6cv.spec.json')) && fs.readFileSync(path.join(dir, 'g6cv.spec.json'), 'utf8') === spec) continue;
+      // a settlement bible names few roles: the rustic core roles under its own
+      const { PALETTES, rolesOfPalette } = await import('../kit/lib/kit.mjs');
+      const roles = bible ? { ...rolesOfPalette(PALETTES.rustic), ...bible.roles } : null;
+      const bp = await loadDesign(e.design, { values: e.values ?? {}, ...(roles ? { palette: { bible: { id: sc.bible, version: 1, roles } } } : {}) });
       bp.id = id;
       bp.name = `${e.design} ${JSON.stringify(e.values ?? {})}`;
       writeBlueprint(bp, dir);
-      L.log(`  entry ${id}: ${e.design} ${JSON.stringify(e.values ?? {})} -> ${dir}`);
+      fs.writeFileSync(path.join(dir, 'g6cv.spec.json'), spec);
+      L.log(`  entry ${id}: ${e.design} ${JSON.stringify(e.values ?? {})}${bible ? ` in ${sc.bible}'s roles` : ''} -> ${dir}`);
     }
   }
 }
