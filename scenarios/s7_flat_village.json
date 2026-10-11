@@ -4,7 +4,7 @@
   "version": 1,
   "brief": "a flat village of 10 Steward-shaped lots on one street with a square, lanes, props and the villager rules (C10)",
   "world": {
-    "seed": "2026100906",
+    "seed": "2026101102",
     "preset": "normal",
     "gamerules": "gallery"
   },
@@ -353,80 +353,133 @@
   },
   "fixture": {
     "claim": [
+      4168,
       1480,
-      -3128,
-      1591,
-      -3017
+      4279,
+      1591
     ],
     "yRange": [
-      20,
-      130
+      11,
+      109
     ],
-    "provisional": true,
-    "foundBy": "PROVISIONAL (not S7's bar): find-site s7_flat_village @ seed 2026100906 qualified no site within ~4100 (460 candidates, step 384; artifacts/gate6c-v/findsite/summary.json). This is the best candidate with surface water in the outer band whose flat_village plan is clean (10 lots, 0 errors, only M5 in the virtual world): band share 0.616 of 0.85, water 14 band columns. The contract's second-seed case is the coordinator's.",
+    "foundBy": "find-site s7_flat_village @ seed 2026101102 (the coordinator's second-seed search, 2026-10-11): the first seed of 2026101101..06 with a qualifying site; its only qualifier",
     "stats": {
       "biomes": {
-        "plains": 73,
-        "beach": 26,
-        "sparse_jungle": 1
+        "snowy_plains": 45,
+        "frozen_river": 20,
+        "snowy_taiga": 19,
+        "snowy_beach": 13,
+        "frozen_ocean": 3
       },
-      "relief": 23,
-      "water": 2,
+      "grid": [],
+      "min": 51,
+      "max": 69,
+      "mean": 62.3,
+      "water": 4,
       "trees": 1,
-      "flatShare": 0.616,
-      "flatBand": [
-        63,
-        65
-      ],
-      "localShare": 0.388,
-      "waterBand": 14,
-      "waterInner": 0
+      "natural": 100,
+      "missing": 0,
+      "fine": {
+        "ok": true,
+        "columns": 784,
+        "flatShare": 0.865,
+        "flatBand": [
+          62,
+          64
+        ],
+        "localShare": 0.633,
+        "waterBand": 33,
+        "waterInner": 0,
+        "plan": {
+          "refused": null,
+          "lots": 10,
+          "errors": 0,
+          "findings": [],
+          "notes": []
+        },
+        "structure": {
+          "none": "Could not find a structure of type \"#minecraft:village\" nearby"
+        }
+      }
     },
-    "irShaAtPin": "79348894301ad51ecdee1bbf6189dd3329cf28b5b0f37645eaed0afebd8bb017"
+    "worldSeed": "2026101102",
+    "surveySha": "700785fb10609078258e77a7227a641feac38d55591549bab4e739ec2627de54",
+    "score": 161.5,
+    "tried": 153,
+    "irShaAtPin": "c6a703ef39dacc6b4e4dce24f47384ca7f71a76db48d671681834d1ebe6afa91"
   },
-  "seed": "10959497901047012117",
+  "search": {
+    "rule": "S7's needs unchanged: one 3-level ground band over >= 85% of the claim's columns, surface water in the outer 16-cell band, no village within the half-diagonal + 64, flat_village planned clean (10 lots, 0 errors, M1-M4, M2:villager, M22-M24 clean); 460 candidates per seed (step 384 around 0,0, about 4100 out)",
+    "seeds": [
+      {
+        "seed": "2026100906",
+        "candidates": 460,
+        "qualified": 0,
+        "bestBandShare": 0.879,
+        "note": "6b's pinned seed: no qualifier (artifacts/gate6c-v/findsite/summary.json)"
+      },
+      {
+        "seed": "2026101101",
+        "candidates": 460,
+        "qualified": 0,
+        "bestBandShare": 0.718
+      },
+      {
+        "seed": "2026101102",
+        "candidates": 460,
+        "qualified": 1,
+        "pinned": [
+          4168,
+          1480,
+          4279,
+          1591
+        ]
+      }
+    ]
+  },
+  "seed": "6131375778884475900",
   "cams": {
     "cam_east": [
-      1591.5,
-      96,
-      -3072.5,
-      90.8,
-      46.2
+      4279.5,
+      93,
+      1535.5,
+      115.1,
+      30
     ],
     "cam_ground": [
-      1563.5,
-      68,
-      -3066.5,
+      4229.5,
+      65,
+      1515.5,
       135,
       41
     ],
     "cam_high": [
-      1535.5,
-      136,
-      -3066.5,
-      -106.8,
-      73.5
+      4223.5,
+      133,
+      1541.5,
+      179.1,
+      66.8
     ],
     "cam_north": [
-      1535.5,
-      96,
-      -3127.5,
-      -21.5,
-      31.6
+      4223.5,
+      93,
+      1480.5,
+      1,
+      51.6
     ],
     "cam_south": [
-      1535.5,
-      96,
-      -3016.5,
-      -159.2,
-      30.8
+      4223.5,
+      93,
+      1591.5,
+      179.7,
+      23.6
     ],
     "cam_west": [
-      1480.5,
-      96,
-      -3072.5,
-      -90.4,
-      25.2
+      4168.5,
+      93,
+      1535.5,
+      -115.9,
+      30.7
     ]
   },
   "lotEntries": {
