@@ -340,7 +340,9 @@ async function village(name, budget, opts = {}) {
   await fresh(name);
   await cmd(`/architect budget ${budget}`);
   await cmd('/save-off');
-  const pre = opts.pre ? await hashLots(ctx.lots) : null;
+  // the cells too, so a group undo that is not exact says which cells differ
+  const preCells = opts.pre ? await hashLotsCells(ctx.lots) : null;
+  const pre = preCells ? Object.fromEntries(Object.entries(preCells).map(([k, v]) => [k, v.sha256])) : null;
   const preAll = opts.pre ? (await hash(villageRegion())).sha256 : null;
   await call('dev.placement.stats', { reset: true });
   await mark();
@@ -349,7 +351,7 @@ async function village(name, budget, opts = {}) {
   const stats = await call('dev.placement.stats', {});
   const ev = await since();
   const order = ev.filter((e) => e.event === 'ITEM_PLACED' && e.batch === id).map((e) => e.key);
-  return { id, done, stats, ev, order, pre, preAll };
+  return { id, done, stats, ev, order, pre, preAll, preCells };
 }
 
 async function equality() {
@@ -370,8 +372,9 @@ async function equality() {
     { removed: rev.map((e) => e.id), placed: placedSites });
   const back = await hashLots(ctx.lots);
   const backAll = (await hash(villageRegion())).sha256;
-  check(Object.keys(back).every((k) => back[k] === v.pre[k]) && backAll === v.preAll, 'group undo: every lot region (box + 7) and the whole village are back exactly',
-    { pre: v.pre, back, preAll: v.preAll, backAll });
+  const exact = Object.keys(back).every((k) => back[k] === v.pre[k]) && backAll === v.preAll;
+  check(exact, 'group undo: every lot region (box + 7) and the whole village are back exactly',
+    { pre: v.pre, back, preAll: v.preAll, backAll, ...(exact ? {} : { cells: cellDiff(v.preCells, await hashLotsCells(ctx.lots)) }) });
   await cmd('/save-on');
   // the atomic reference, one by one in the order the batch placed them, in another copy of the same world
   await fresh('G4D Atomic');
