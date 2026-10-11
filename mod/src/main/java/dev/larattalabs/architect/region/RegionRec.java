@@ -38,6 +38,11 @@ public final class RegionRec {
 	/** Chunks whose terrain was generated while this region's items held tickets (the gate's 0). */
 	public long generatedWhileHeld;
 	public final JsonObject stats = new JsonObject();
+	/** (6c X, C20) The realise's operation key and its body hash ({@link RegionKeys}); null without one. */
+	/** (6c X, C22) When the removal finished (epoch ms; 0: not removed): the REMOVED tombstone's time. */
+	public long removedAt;
+	public @Nullable String opKey;
+	public @Nullable String opHash;
 
 	public static final class Stage {
 		public int tilesTotal;
@@ -145,6 +150,13 @@ public final class RegionRec {
 		drift.forEach(dr::addProperty);
 		o.add("drift", dr);
 		o.add("stats", stats.deepCopy());
+		if (removedAt > 0) {
+			o.addProperty("removedAt", removedAt);
+		}
+		if (opKey != null) {
+			o.addProperty("opKey", opKey);
+			o.addProperty("opHash", opHash);
+		}
 		return o;
 	}
 
@@ -196,6 +208,9 @@ public final class RegionRec {
 		if (o.has("stats")) {
 			o.getAsJsonObject("stats").entrySet().forEach(e -> r.stats.add(e.getKey(), e.getValue()));
 		}
+		r.removedAt = o.has("removedAt") ? o.get("removedAt").getAsLong() : 0L;
+		r.opKey = o.has("opKey") ? o.get("opKey").getAsString() : null;
+		r.opHash = o.has("opHash") ? o.get("opHash").getAsString() : null;
 		return r;
 	}
 

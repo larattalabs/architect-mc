@@ -143,7 +143,8 @@ public final class Views {
 			default -> dev.larattalabs.architect.api.SiteGroup.State.ACTIVE;
 		};
 		return new dev.larattalabs.architect.api.SiteGroup(g.id(), g.owner(), g.ext(), g.sites(), g.stages().stream().map(Views::stage).toList(), state,
-			g.crate() == null ? Optional.empty() : Optional.of(new BlockPos(g.crate().x(), g.crate().y(), g.crate().z())));
+			g.crate() == null ? Optional.empty() : Optional.of(new BlockPos(g.crate().x(), g.crate().y(), g.crate().z())),
+			g.removedAt() > 0 ? Optional.of(g.removedAt()) : Optional.empty());
 	}
 
 	/** Item ids -> items (unknown ids dropped). */

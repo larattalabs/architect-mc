@@ -116,7 +116,8 @@ public final class BatchKeys {
 		return e.toString();
 	}
 
-	static String sha256(String s) {
+	/** The hex sha256 of {@code s} (UTF-8). */
+	public static String sha256(String s) {
 		try {
 			return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(s.getBytes(StandardCharsets.UTF_8)));
 		} catch (NoSuchAlgorithmException e) {

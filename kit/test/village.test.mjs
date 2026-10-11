@@ -12,7 +12,7 @@ import { surveyApi } from '../lib/region/survey.mjs';
 import { checkRegion } from '../lib/region/check.mjs';
 import { sitePlan, validateSchema } from '../lib/region/siteplan.mjs';
 import { layoutStreet, lane, surfaceOps, STREET_RULES } from '../lib/region/village.mjs';
-import { LOTS_MAX, cornerValues, validateLots, validateParams } from '../lib/params.mjs';
+import { LOTS_MAX, LOT_EXT_MAX, cornerValues, validateLots, validateParams } from '../lib/params.mjs';
 import { Palette, VWorld } from '../lib/region/vworld.mjs';
 import { walkGraph, nodeReached } from '../lib/region/check.mjs';
 import { build } from '../regions/flat_village.mjs';
@@ -335,4 +335,50 @@ test('broken variants: each caught on its named part', async () => {
   assert.ok(!r.ok);
   // a lane across keep-out: the plan is refused (the lane's builder refuses it; the throw fails the plan)
   await assert.rejects(variant({ after: (reg, L) => { const e = L.lots[0].entrance; lane(reg.parts.find((q) => q.id === 'lanes'), 'lane_x', e, [e[0] + 6, e[1], e[2]], 2, { o: 'ew', keepOut: [[e[0] + 3, e[2] - 2, e[0] + 3, e[2] + 2]] }); } }), /lane lane_x crosses keep-out/);
+});
+
+// ------------------------------------------------------------------ 6c X, C19: lot ext from the plan
+
+test('C19: a lot\'s ext is validated (object, namespace:name keys, 4096 characters), architect_mc: keys dropped', () => {
+  const ok = { id: 'cottage_1', type: 'cottage', size: [11, 14] };
+  const e = { 'steward_mc:lot': 'cottage_1', 'steward_mc:role': 'dwelling', 'steward_mc:build': { id: 'b7', n: [1, 2] } };
+  assert.deepEqual(validateLots([{ ...ok, ext: e }])[0].ext, e);
+  assert.ok(!('ext' in validateLots([ok])[0]), 'no ext given, none in the normalised lot (other IRs unchanged)');
+  assert.ok(!('ext' in validateLots([{ ...ok, ext: {} }])[0]), 'an empty ext is no ext');
+  // the namespace guard: Architect\'s keys are dropped, the caller\'s stay
+  const g = validateLots([{ ...ok, ext: { 'architect_mc:lot': 'forged', 'architect_mc:village': { role: 'forged' }, 'steward_mc:lot': 'x' } }])[0].ext;
+  assert.deepEqual(g, { 'steward_mc:lot': 'x' });
+  assert.ok(!('ext' in validateLots([{ ...ok, ext: { 'architect_mc:lot': 'forged' } }])[0]), 'only Architect\'s keys: no ext left');
+  // bounds: exactly 4096 characters passes, 4097 fails, with the path
+  const pad = (n) => { const o = { 'steward_mc:x': '' }; o['steward_mc:x'] = 'a'.repeat(n - JSON.stringify(o).length); return o; };
+  assert.equal(JSON.stringify(pad(LOT_EXT_MAX)).length, LOT_EXT_MAX);
+  assert.doesNotThrow(() => validateLots([{ ...ok, ext: pad(LOT_EXT_MAX) }]));
+  assert.throws(() => validateLots([{ ...ok, ext: pad(LOT_EXT_MAX + 1) }]), /lots\[0\]\.ext: 4097 characters as JSON, at most 4096/);
+  assert.throws(() => validateLots([{ ...ok, ext: [1] }]), /lots\[0\]\.ext must be an object/);
+  assert.throws(() => validateLots([{ ...ok, ext: 'x' }]), /lots\[0\]\.ext must be an object/);
+  assert.throws(() => validateLots([{ ...ok, ext: { nonamespace: 1 } }]), /lots\[0\]\.ext: key 'nonamespace' is not namespace:name/);
+  // the input is not aliased
+  const src = { 'steward_mc:b': { a: 1 } };
+  const out = validateLots([{ ...ok, ext: src }])[0].ext;
+  out['steward_mc:b'].a = 2;
+  assert.equal(src['steward_mc:b'].a, 1);
+});
+
+test('C19: the plan copies the caller\'s ext onto the lot, the program\'s own architect_mc:village wins', async () => {
+  const survey = flatSurvey(CLAIM112, { water: POND });
+  const ext = { 'steward_mc:lot': 'trading_hall_1', 'steward_mc:role': 'trade', 'steward_mc:build': 'b7', 'architect_mc:village': { role: 'forged' } };
+  const lots = S7_LOTS.map((l) => (l.id === 'trading_hall_1' ? { ...l, ext } : l));
+  const p = await plan({ params: { lots }, survey, claim: CLAIM112 });
+  const l = p.ir.lots.find((q) => q.id === 'trading_hall_1');
+  assert.equal(l.ext['steward_mc:lot'], 'trading_hall_1');
+  assert.equal(l.ext['steward_mc:role'], 'trade');
+  assert.equal(l.ext['steward_mc:build'], 'b7');
+  assert.equal(l.ext['architect_mc:village'].villager, 'trading_hall', 'the caller\'s architect_mc: value is ignored');
+  assert.ok(p.ir.lots.filter((q) => q.id !== 'trading_hall_1').every((q) => Object.keys(q.ext).join() === 'architect_mc:village'), 'other lots: Architect\'s key only');
+  // the same plan without ext: only the lot\'s ext differs (the seed comes from the params, so props may differ; every other lot is the same)
+  const base = await plan({ params: { lots: S7_LOTS }, survey, claim: CLAIM112 });
+  assert.deepEqual(p.ir.lots.filter((q) => q.id !== 'trading_hall_1'), base.ir.lots.filter((q) => q.id !== 'trading_hall_1'));
+  // a plan is deterministic with ext
+  const again = await plan({ params: { lots }, survey, claim: CLAIM112 });
+  assert.equal(again.irSha, p.irSha);
 });

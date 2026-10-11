@@ -171,7 +171,36 @@ public final class Groups {
 	}
 
 	private static final List<Removal> REMOVALS = new ArrayList<>();
+	/** (6c X, C22) Removals that stopped with restorations unfinished (their undo committed): a retry resumes them, it never starts over. */
+	private static final List<Removal> STALLED = new ArrayList<>();
+
+	private static @Nullable Removal stalled(String group, @Nullable String stage) {
+		for (Removal r : STALLED) {
+			if (r.group.equals(group) && java.util.Objects.equals(r.stage, stage)) {
+				return r;
+			}
+		}
+		return null;
+	}
+
+	/** A retry takes over a stalled removal: its undo and remaining members, a fresh future. */
+	private static Removal resume(Removal r, CompletableFuture<Removed> f) {
+		STALLED.remove(r);
+		r.futures.clear();
+		r.futures.add(f);
+		r.current = null;
+		r.waited = 0;
+		r.nextCheck = 0;
+		r.started = true;
+		REMOVALS.add(r);
+		return r;
+	}
 	private static long tick;
+
+	/** DevBridge {@code dev.undo.failRestore} (6c X, C22): break the removal restore after {@code skip} finished ones (-1: off). */
+	public static void failRestore(int skip) {
+		RestoreJob.failSkip = skip;
+	}
 
 	private Groups() {
 	}
@@ -248,6 +277,10 @@ public final class Groups {
 		if (owner != null) {
 			return CompletableFuture.completedFuture(new Removed(false, List.of(owner), Map.of()));
 		}
+		// (6c X, C22) a group this world already removed: removed again, nothing written (its tombstone keeps the time)
+		if (SiteGroupRec.REMOVED.equals(g.state()) && stalled(groupId, null) == null && REMOVALS.stream().noneMatch(x -> x.group.equals(groupId))) {
+			return CompletableFuture.completedFuture(new Removed(true, List.of(), Map.of()));
+		}
 		for (Removal r : REMOVALS) {
 			if (r.group.equals(groupId) && r.stage == null) {
 				CompletableFuture<Removed> f = new CompletableFuture<>();
@@ -261,9 +294,16 @@ public final class Groups {
 			}
 		}
 		Sites.putGroup(server, g.withState(SiteGroupRec.REMOVING));
+		CompletableFuture<Removed> f = new CompletableFuture<>();
+		Removal st = stalled(groupId, null);
+		if (st != null) {
+			resume(st, f);
+			Placement.save(server, false);
+			Architect.LOGGER.info("Removing group {}: resuming the earlier removal ({} site(s) left to restore)", groupId, st.sites.size());
+			return f;
+		}
 		Removal r = new Removal(groupId, null, requester, force);
 		r.covered = covered;
-		CompletableFuture<Removed> f = new CompletableFuture<>();
 		r.futures.add(f);
 		REMOVALS.add(r);
 		Placement.save(server, false);
@@ -297,6 +337,13 @@ public final class Groups {
 		}
 		if (g.stages().get(i).sites().stream().anyMatch(x -> x.startsWith(Batches.DELTA_TOKEN))) {
 			return undoDeltaStage(server, g, stage, g.stages().get(i).sites(), force);
+		}
+		Removal st = stalled(groupId, stage);
+		if (st != null) {
+			CompletableFuture<Removed> f = new CompletableFuture<>();
+			resume(st, f);
+			Placement.save(server, false);
+			return f;
 		}
 		Removal r = new Removal(groupId, stage, null, true);
 		r.covered = covered;
@@ -599,6 +646,11 @@ public final class Groups {
 			return;
 		}
 		while (!r.sites.isEmpty() && Sites.get(r.sites.get(0)) == null && Infras.get(r.sites.get(0)) == null) {
+			if (Sites.pendingRecord(r.sites.get(0)) != null || Infras.pending(r.sites.get(0)) != null) {
+				// (6c X, C22) its restoration is unfinished (an earlier removal's): never answer removed over it
+				end(server, r, new Removed(false, List.of(r.sites.get(0) + " has an unfinished restoration that this removal cannot resume"), Map.copyOf(r.refund)));
+				return;
+			}
 			r.sites.remove(0);
 		}
 		if (r.sites.isEmpty()) {
@@ -775,11 +827,13 @@ public final class Groups {
 		for (Removal r : REMOVALS) {
 			if (job.siteId.equals(r.current)) {
 				r.current = null;
+				if (job.broken != null) {
+					// (6c X, C22) a restore that broke is not done: the member stays (pending) for the retry
+					end(server, r, new Removed(false, List.of(job.siteId + ": " + job.broken), Map.copyOf(r.refund)));
+					return;
+				}
 				r.sites.remove(job.siteId);
 				written.add(job.siteId);
-				if (job.broken != null) {
-					end(server, r, new Removed(false, List.of(job.siteId + ": " + job.broken), Map.copyOf(r.refund)));
-				}
 				return;
 			}
 		}
@@ -787,6 +841,10 @@ public final class Groups {
 
 	private static void end(MinecraftServer server, Removal r, Removed result) {
 		REMOVALS.remove(r);
+		STALLED.removeIf(x -> x.group.equals(r.group) && java.util.Objects.equals(x.stage, r.stage));
+		if (!result.removed() && r.undo != null && r.undoSites.stream().anyMatch(id -> Sites.pendingRecord(id) != null || Infras.pending(id) != null)) {
+			STALLED.add(r); // (6c X, C22) restorations are still pending: the retry resumes them
+		}
 		long t0 = System.nanoTime();
 		SiteGroupRec g = Sites.group(r.group);
 		if (g != null) {
@@ -827,14 +885,21 @@ public final class Groups {
 	static JsonArray toJson() {
 		JsonArray a = new JsonArray();
 		REMOVALS.forEach(r -> a.add(r.toJson()));
+		STALLED.forEach(r -> {
+			JsonObject o = r.toJson();
+			o.addProperty("stalled", true);
+			a.add(o);
+		});
 		return a;
 	}
 
 	static void load(JsonArray a) {
 		REMOVALS.clear();
+		STALLED.clear();
 		for (JsonElement e : a) {
 			try {
-				REMOVALS.add(Removal.fromJson(e.getAsJsonObject()));
+				Removal rm = Removal.fromJson(e.getAsJsonObject());
+				(e.getAsJsonObject().has("stalled") ? STALLED : REMOVALS).add(rm);
 			} catch (RuntimeException ex) {
 				Architect.LOGGER.warn("Could not read a group removal {}", e, ex);
 			}
@@ -845,6 +910,7 @@ public final class Groups {
 		written.clear();
 		REMOVALS.forEach(r -> r.futures.forEach(f -> f.completeExceptionally(new IllegalStateException("the world stopped"))));
 		REMOVALS.clear();
+		STALLED.clear();
 		tick = 0;
 	}
 }

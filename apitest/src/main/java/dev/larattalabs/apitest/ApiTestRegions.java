@@ -40,7 +40,12 @@ import net.minecraft.world.level.levelgen.structure.BoundingBox;
  * api19                 (6b, API 1.9.0) version, the 6b features present, the appended constants (Reason, Design.Kind, PreviewStyle via
  *                       the client), WaitAction.Kind, VoxelClass, RegionPlan / RegionView old constructors, REGION_CHECKED registers
  * rnudge &lt;region&gt; &lt;action&gt;   (6b) Regions.nudge -> {done, message} ("not applicable" for an action the wait doesn't offer)
+ * api114                (6c X, API 1.14.0) version, the features, the old constructors (by reflection, public API only), the two new
+ *                       default methods, no new Reason
+ * rplanbykey &lt;owner|-&gt; &lt;key&gt;      (1.14.0) Regions.planByKey -> the plan or null
+ * rrealisebykey &lt;owner|-&gt; &lt;key&gt;   (1.14.0) Regions.realiseByKey -> the RegionView or null
  * </pre>
+ * rplan / rrealise take {@code opKey} (and rplan {@code ext}) in their JSON from 1.14.0.
  */
 final class ApiTestRegions {
 	private static final Gson GSON = new GsonBuilder().disableHtmlEscaping().create();
@@ -183,7 +188,7 @@ final class ApiTestRegions {
 				RegionPlanRequest r = new RegionPlanRequest(j.get("program").getAsString(), j.has("params") ? j.getAsJsonObject("params") : new JsonObject(),
 					level, new BoundingBox(c.get(0).getAsInt(), level.getMinY(), c.get(1).getAsInt(), c.get(2).getAsInt(), level.getMaxY(), c.get(3).getAsInt()),
 					j.has("seed") ? Long.parseUnsignedLong(j.get("seed").getAsString()) : null, null, null, load(j.has("load") ? j.get("load").getAsString() : null),
-					j.has("owner") ? j.get("owner").getAsString() : null, new JsonObject());
+					j.has("owner") ? j.get("owner").getAsString() : null, new JsonObject(), j.has("opKey") ? j.get("opKey").getAsString() : null);
 				return ApiTest.later("rplan:" + (j.has("tag") ? j.get("tag").getAsString() : "last"), regions.plan(r).handle((p, e) -> e != null ? err(e)
 					: json(p)));
 			}
@@ -204,7 +209,8 @@ final class ApiTestRegions {
 					}
 				}
 				RealiseRequest r = new RealiseRequest(j.get("planId").getAsString(), Mode.INSTANT, src.getPlayer(), lots, j.has("load") ? load(j.get("load")
-					.getAsString()) : null, true, stages, j.has("force") && j.get("force").getAsBoolean(), new JsonObject());
+					.getAsString()) : null, true, stages, j.has("force") && j.get("force").getAsBoolean(), new JsonObject(), 0,
+					j.has("opKey") ? j.get("opKey").getAsString() : null);
 				return ApiTest.later("rrealise:" + (j.has("tag") ? j.get("tag").getAsString() : "last"), regions.realise(r).handle((id, e) -> {
 					if (e != null) {
 						return err(e);
@@ -214,6 +220,49 @@ final class ApiTestRegions {
 					return o;
 				}));
 			}
+			case "api114": {
+				JsonObject o = new JsonObject();
+				o.addProperty("version", ArchitectApi.VERSION);
+				JsonArray f = new JsonArray();
+				for (String x : new String[] {"regionOpKeys", "lotExt"}) {
+					if (ArchitectApi.get().features().contains(x)) {
+						f.add(x);
+					}
+				}
+				o.add("features114", f);
+				Reason[] rs = Reason.values();
+				o.addProperty("lastReasons", rs[rs.length - 2].name() + " " + rs[rs.length - 1].name());
+				try {
+					// the 1.13.0 constructors still exist and leave the key null
+					var rr = RealiseRequest.class.getConstructor(String.class, Mode.class, net.minecraft.server.level.ServerPlayer.class, Map.class, LoadPolicy.class,
+						boolean.class, java.util.List.class, boolean.class, JsonObject.class, int.class).newInstance("p", Mode.INSTANT, null, Map.of(), null, true, null, false,
+							new JsonObject(), 0);
+					var pr = RegionPlanRequest.class.getConstructor(String.class, JsonObject.class, net.minecraft.server.level.ServerLevel.class, BoundingBox.class,
+						Long.class, String.class, Integer.class, LoadPolicy.class, String.class, JsonObject.class).newInstance("mega_bench", new JsonObject(), null,
+							new BoundingBox(0, 0, 0, 1, 1, 1), null, null, null, LoadPolicy.LOADED_ONLY, null, new JsonObject());
+					o.addProperty("oldCtors", rr.opKey() == null && pr.opKey() == null);
+				} catch (ReflectiveOperationException e) {
+					o.addProperty("oldCtors", false);
+					o.addProperty("oldCtorsError", e.toString());
+				}
+				var rc = RealiseRequest.class.getRecordComponents();
+				var pc = RegionPlanRequest.class.getRecordComponents();
+				o.addProperty("trailing", rc[rc.length - 1].getName() + " " + pc[pc.length - 1].getName());
+				boolean defaults = true;
+				for (String m : new String[] {"planByKey", "realiseByKey"}) {
+					try {
+						defaults &= Regions.class.getMethod(m, String.class, String.class).isDefault();
+					} catch (NoSuchMethodException e) {
+						defaults = false;
+					}
+				}
+				o.addProperty("byKeyDefaults", defaults);
+				return o;
+			}
+			case "rplanbykey":
+				return regions.planByKey("-".equals(a[1]) ? null : a[1], a[2]).map(ApiTestRegions::json).orElse(com.google.gson.JsonNull.INSTANCE);
+			case "rrealisebykey":
+				return regions.realiseByKey("-".equals(a[1]) ? null : a[1], a[2]).map(ApiTestRegions::json).orElse(com.google.gson.JsonNull.INSTANCE);
 			case "rget":
 				return regions.get(a[1]).map(ApiTestRegions::json).orElse(com.google.gson.JsonNull.INSTANCE);
 			case "rlist": {
