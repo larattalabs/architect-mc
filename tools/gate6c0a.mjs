@@ -128,7 +128,7 @@ const steps = {};
 steps.stub = async () => {
   const ver = fs.readFileSync(path.join(root, 'mod', 'gradle.properties'), 'utf8').match(/^mod_version=(.+)$/m)[1].trim();
   const jar = path.resolve(opt('jar', path.join(root, 'mod', 'build', 'libs', `architect_mc-${ver}.jar`)));
-  const port = Number(opt('port', '8902'));
+  const port = Number(opt('port', process.env.ARCHITECT_PORT ?? '8902'));
   if (!fs.existsSync(jar)) throw new Error(`no ${jar} (cd sidecar && npm run build; cd mod && ./gradlew build)`);
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gate6c0a-stub-'));
   fs.rmSync(path.join(OUT, 'stub-helper.log'), { force: true });
@@ -447,7 +447,8 @@ steps.flow = async () => {
   await startClient(W, { ARCHITECT_SIM_COSTS: 'measured' });
   const out = {};
   const v = await api('api110');
-  check(v.version === '1.10.0', `ArchitectApi.VERSION ${v.version}; the last Reasons ${v.lastReasons}`);
+  // 1.10.0 or later (a later minor appends after 1.10.0's)
+  check(v.version.localeCompare('1.10.0', undefined, { numeric: true }) >= 0, `ArchitectApi.VERSION ${v.version}; the last Reasons ${v.lastReasons}`);
   const est = await result(await api(`estmix f ${b64({ originals: 3, newBible: true, massingFirst: true })}`));
   out.estimate = est;
   const sumKinds = Object.values(est.byKind ?? {}).reduce((a, l) => a + l.usdLow, 0);

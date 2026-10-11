@@ -373,21 +373,6 @@ final class ApiTestSets {
 			items.add(j);
 		}
 		o.add("items", items);
-		// 1.10.0 breakdown (1.11.0 adds the COPY stage)
-		JsonObject bd = new JsonObject();
-		g.breakdown().stages().forEach((st, l) -> {
-			JsonObject x = new JsonObject();
-			x.addProperty("usd", l.usd());
-			x.addProperty("ms", l.ms());
-			x.addProperty("count", l.count());
-			bd.add(st.name(), x);
-		});
-		JsonObject bdo = new JsonObject();
-		bdo.add("stages", bd);
-		bdo.addProperty("totalUsd", g.breakdown().totalUsd());
-		bdo.addProperty("firstDetailedMs", g.breakdown().firstDetailedMs());
-		bdo.addProperty("wallMs", g.breakdown().wallMs());
-		o.add("breakdown", bdo);
 		o.addProperty("massingFirst", g.massingFirst());
 		o.addProperty("approvalUi", g.approvalUi().wire());
 		o.addProperty("maxRedirects", g.maxRedirects());
