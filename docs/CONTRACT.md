@@ -10129,3 +10129,49 @@ SETTLEMENTS §17.2's 6c gate, run once when the last 6c slice merges (whichever 
   E-normal classified;
 - per-tile evaluation p50/p99 on S2, S3 and the forest-heavy variant (F3): p99 under 2 s, at least 45k cells/s;
 - the full `release` tier and the full gate-verifier; 6b's gate items as regressions.
+
+## Phase 6c slice X: region consumer asks C19 and C20 (DRAFT for Steward review, 2026-10-11)
+
+Next free API minor at merge (expected 1.15.0 if it merges before T1; the house rule applies), mod to match. Wave 1, parallel
+with T1, F1 and MP. Depends on V only. Spend $0. From Steward's V adoption work (plan, design per lot with copies, fitToLot,
+realise).
+
+### 1. C19: lot ext onto the lot's site
+
+Today only `architect_mc:lot` lands on a realised lot's site. Steward needs its own keys (`steward_mc:lot`, `steward_mc:role`,
+`steward_mc:build`) there, so a site found later says what it is without re-reading the plan.
+- **From the plan:** a lot entry in the program's `lots` params may carry `ext` (an object). The plan copies it onto that
+  lot's `LotSpec.ext`, and the realise copies it onto the lot's site ext. Keys under the `architect_mc:` namespace are
+  Architect's and a caller's value for them is ignored (the realise's own `architect_mc:lot` wins).
+- **From the realise:** `RealiseRequest` gains a trailing `Map<String, JsonObject> lotExt` (lot id to ext). The old
+  constructor is kept (empty map). A realise ext merges over the plan's, key by key.
+- Bounds: at most 4 KB of ext JSON per lot, else FIELD_LIMIT with the field path. Unknown lot ids refuse FIELD_LIMIT too.
+- The site ext survives save and reload, versionOf, polish and undo-redo of the region, like `architect_mc:lot` today.
+
+### 2. C20: opKey on region plans and realises
+
+As for groups and batches (0a C9): `RegionPlanRequest` and `RealiseRequest` gain a trailing `@Nullable String opKey` (old
+constructors kept).
+- Same owner + same kind + same key + same body returns the existing plan or realise; another body refuses
+  OP_KEY_CONFLICT.
+- `Regions.planByKey(owner, key)` and `Regions.realiseByKey(owner, key)` (defaults that throw on older implementations)
+  find them after a restart, including a realise that was interrupted and resumed.
+- A realise pending at a world stop still fails WORLD_STOPPED (0a); it is found by key after the next load.
+- Keys are kept as long as the plan or region exists; the existing opKey retention rules apply.
+
+### 3. Gate
+
+| # | Item | Bar |
+|---|---|---|
+| 1 | Unit | ext copy plan to LotSpec to site; merge order; namespace guard; 4 KB and unknown-lot FIELD_LIMIT; opKey idempotence and conflict |
+| 2 | In game (S7 flat) | plan with lot ext, realise with a lotExt map: every lot site carries the merged ext; save, reload: unchanged; undo, redo: unchanged |
+| 3 | Restart by key | realise with an opKey, stop the world mid-realise (pending future fails WORLD_STOPPED), reload: `realiseByKey` finds it and it completes; a second realise with the same key and body returns it, with another body OP_KEY_CONFLICT |
+| 4 | Regressions | `slice` tier |
+| 5 | API compatibility | api-compat against the previous three apitest jars; new record components trailing, old constructors kept |
+
+Evidence in `artifacts/gateX/`. Steward's consumer check on the RC as usual.
+
+### Open questions for Steward
+
+- **S-X-1:** is per-lot ext from the plan enough, or do you need the realise-time `lotExt` map too (both are drafted)?
+- **S-X-2:** 4 KB per lot enough?
