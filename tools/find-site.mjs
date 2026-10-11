@@ -49,6 +49,8 @@ export function parseSummary(text) {
 /** Score a surveyed candidate against the needs: null = rejected, else higher is better. */
 export function score(s, needs) {
   if (s.min === undefined || s.missing > 0) return null;
+  // (6c V) frozen water is still water: a site over a frozen river or sea (the survey reads ice as dry ground) is refused
+  if (needs.noFrozen && Object.keys(s.biomes ?? {}).some((b) => /frozen|ice_spikes/.test(b))) return null;
   const relief = s.max - s.min;
   if (needs.relief && (relief < needs.relief[0] || relief > needs.relief[1])) return null;
   if (needs.waterMax !== undefined && s.water > needs.waterMax) return null;

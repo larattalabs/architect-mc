@@ -173,7 +173,8 @@
         "M23",
         "M24"
       ]
-    }
+    },
+    "noFrozen": true
   },
   "program": "flat_village",
   "params": {
