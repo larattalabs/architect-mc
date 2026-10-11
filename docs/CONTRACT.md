@@ -8955,3 +8955,478 @@ rule. 4. Commands. 5. Fixtures, gate.
 ### Deferred
 
 - Fill, drain, recursive fill (H). Brushes in survival (RS). A brush tool item and a preview ghost for strokes (later, with a UI).
+
+## Phase 6c slice S2: the ice-spike outpost goes green (DRAFT for Steward review)
+
+API 1.21.0, mod 0.24.0 (wave 3). SETTLEMENTS §16.2 (S2), §16.3 (bars), §17.2 (6c gate).
+
+- **Branch:** `slice/S2`, worktree `../architect-mc-S2`. **Spend:** $0 (lots are library variants; no pick, no claude login).
+- **Scope:** the bundled program `ice_outpost` (`catalogue = false`), S2's scenario run, its golden and its gallery page. It
+  composes what W, T1, F1, F2 and T2 built; new kit code is limited to the program and S2's fixture bible.
+- **Not in scope:** S2 from its one-line brief (7c), connectors such as rope bridges (7a), site-aware lots (7b).
+- **Depends on:** W (frozen water, lamps), T1 (relief blending), F1 (`iceSpike`, kept spikes, M17), F2 (snow and boulder
+  scatter), T2 (routes). T3 is optional: if merged, the program may use a bridge move; S2's bars don't require one.
+
+### 0. Facts
+
+- **Fixture** (`scenarios/s2_ice_spikes.json`): seed 2026100906, claim `[2508,1588,2699,1779]` (192x192), y 22-124, biomes
+  frozen ocean 48%, deep frozen ocean 27%, ice spikes 15%, snowy beach 5%, snowy plains 5%; relief 62-84. W re-pins its
+  `surveySha` (frozen water now reads as water), so roughly 75% of the claim is water to the planner.
+- S1 (6b) and S7 (V) are the templates for the scenario file, the harness (`tools/scenarios.mjs`), goldens and gallery.
+- Lot entries: free variants of kit designs (`cabin`, `tavern`, `tower`, as S7), sized per lot and pinned `entry@version`.
+
+### 1. API 1.21.0
+
+- `VERSION = "1.21.0"`; usual rules. **No new records or methods.** Feature `scenarioS2`. `KIT_VERSION` 0.24.0.
+
+### 2. The program `ice_outpost`
+
+- **Layout:** the land band (ice spikes, snowy beach and plains) holds 6-8 lots: a watch tower (landmark), a longhouse, a
+  smithy, a store and 3-4 huts. Lots avoid kept natural spikes (`keepNatural('ICE')`) and frozen water.
+- **Terrain:** pads on `pad.edge: 'blend'` (T1 relief), packed-snow `surface` role; no carving.
+- **Forms:** 4-8 generated `iceSpike` clusters filling gaps between natural spikes, never within 6 of a lot or route.
+- **Routes:** T2 routes from a gate node to every lot entrance, `maxGrade` 0.2, villager movers on hut edges.
+- **Scatter:** snow layers (where M17 allows), boulders, a few spruce stumps; none on walk cells.
+- **Lights:** W's `lightCover` over lot aprons and routes, in the bible's `light` role (lanterns, never torches near ice).
+- **Bible:** a fixture "frontier outpost" bible (spruce, stone bricks, packed ice accents) in `scenarios/bibles/`.
+
+### 3. Bars (on the realised world, re-surveyed; SETTLEMENTS §16.3)
+
+| # | Check | Bar |
+|---|---|---|
+| 1 | Checker | 0 errors; no M1-M4 findings |
+| 2 | Reachability `player` | 100% of nodes; 0 unreachable lot entrances |
+| 3 | Reachability `villager` (kit and vanilla `dev.nav.villager`) | recorded for the huts (SETTLEMENTS gates villager reachability from 7a) |
+| 4 | Structure | M3 0 floating cells; 0 `M3:gravity` |
+| 5 | Safety | M4 0; full M5 under 1% of walk area; M8 100% of walk cells beside a drop over 3 guarded |
+| 6 | Melt | **M17 0** on the plan, and on the realised world after a 2-minute stand at default random ticks; ice, snow-layer and kept-spike cell counts unchanged by the stand |
+| 7 | Kept spikes | 0 written cells in the natural spikes' `keep` sets |
+| 8 | Palette | role adherence at least 0.9 (form materials count) |
+| 9 | Organic read | axis-run share of form and relief boundary cells: per N-F1-1 (gated at 0.25, or recorded) |
+| 10 | Buildings | kit checker 0 errors over the placed entries; `detailNoise`, `accentShare` within the bible's restraint |
+| 11 | MSPT | own CPU at most 50 ms, p99 at most 25 ms; light-engine tick share recorded |
+| 12 | Tile evaluation | p50 and p99 per tile recorded; p99 under 2 s |
+| 13 | Exactness | flat variant E-flat 0; natural E-normal all classified, at most 0.01% of written cells |
+| 14 | Determinism | IR sha over 3 plans; tile shas for 1 and 4 workers, forward and shuffled; golden `scenarios/goldens/s2.json`; macOS and Linux CI |
+| 15 | Spend | $0.00 |
+| 16 | Gallery | Noah approves this run's `evidence.sha` on the private page "Architect 6c gallery" (section S2), with before/after renders and the 6 cameras |
+
+### 4. Gate items
+
+1. **Feasibility first.** `find-site`'s score on the re-pinned survey must leave room for 6 lots on land. If the plan can't
+   place 6 lots, the coordinator re-pins S2 (a needs rule of at least 30% land), and the reason is recorded. No bar moves.
+2. S2 natural (bars 1-14) and flat variant (bar 13).
+3. Regressions: S1 and S7 still green on their goldens (`6b-scenario-s1`, `6cv-scenario-s7`).
+4. The gallery, then Noah's approval. **S2 is green only when approved.**
+
+**Evidence:** `artifacts/scenarios/6c/s2/`, `artifacts/gate6c-s2/REPORT.md`; driver `tools/scenarios.mjs run s2 --phase 6c`;
+chain step `6c-scenario-s2` added to `gate-chains.json` (and to `release`'s `always`).
+
+**Tier:** slice: quick, kit region rows, sim suites, apijars, 6b-scenario-s1, 6cv-scenario-s7, 6c-scenario-s2. No engine
+change is expected. **gate-verifier** recomputes S2's evidence sha and re-runs items 2 and 6.
+
+### 5. Build order
+
+1. Item 1 (feasibility on the re-pinned survey). 2. The program and bible. 3. Runs, golden, gallery. 4. Verifier, approval.
+
+### Open questions for Steward
+
+- **S-S2-1.** Is the lot list (tower, longhouse, smithy, store, huts) a fair stand-in for what your card would ask on this
+  claim, for comparing with 7c's brief run later?
+
+### Open questions for Noah
+
+- **N-S2-1.** The outpost lives on the 25% of the claim that is land; the frozen sea stays untouched. Fine, or do you want a
+  version that builds out over the ice (it would need piers, and ice melts under lights)?
+
+### Deferred
+
+- Rope bridges and piers (7a connectors). S2 from its brief (7c).
+
+## Phase 6c slice T3: bridge and tunnel moves (DRAFT for Steward review)
+
+API 1.22.0, mod 0.25.0 (wave 3). SETTLEMENTS §4.3 (the `bridge` and `tunnel` moves).
+
+- **Branch:** `slice/T3`, worktree `../architect-mc-T3`. **Spend:** $0.
+- **Scope:** the route pass's **bridge** move (a straight jump across a gap or water up to `bridgeMax`) and **tunnel** move
+  (through rock in a frozen volume up to `tunnelMax`); the new primitive `r.tunnel`; volume reads for routing corridors.
+- **Not in scope:** typed connectors (rope bridges, catwalks, lifts: 7a §8.2); sag, suspension and styling from a bible (7a).
+- **Depends on:** T2. Parallel with S2 and H.
+
+### 0. Facts
+
+- 6a's `bridge(path, {deck, rail, supports, maxSpan, towers})` builds a straight polyline deck with pillars down to ground;
+  M10 checks every unsupported span against `maxSpan` and `'ends'` bearing.
+- `Survey.volume` (6b) freezes a 3D box (ARVX, classes per cell); `r.needVolume(box)` asks for one at plan time.
+- 6a's `cavern` and `carve` give carved voids with lining and lights; M5 checks cavern floors.
+- After W, frozen water is water, so a bridge is how a route crosses a frozen river.
+
+### 1. API 1.22.0
+
+- `VERSION = "1.22.0"`; usual rules. **No new records or methods.** Features `routeBridges`, `routeTunnels`. `KIT_VERSION`
+  0.25.0. No new op kind (tunnels are `shape` carves plus `columns` floors and lights).
+
+### 2. The bridge move
+
+- **Where:** from a walk cell, straight along the heading over cells that are a **gap** (the ground drops more than 4 below
+  the deck line) or water, landing on a walk cell at most 1 off the deck's y, within `bridgeMax` (default 32).
+- **Cost:** span x (2 + depth / 8) plus a fixed 24 per bridge, so routes prefer the ground when it's close.
+- **Output:** a 6a `bridge` with `maxSpan` 8, pillars to ground, rails; deck y fixed at plan time (absolute, K2). M10 and M8
+  apply as for any bridge.
+- **Movers:** a flat bridge carries `villager`.
+
+### 3. The tunnel move and `r.tunnel`
+
+- **Where:** from a walk cell into rock (classes `ROCK`, `SOIL` over at least 3 above the tunnel's top) of a frozen volume,
+  straight or with one bend, up to `tunnelMax` (default 48), at most 1 rise per 4 cells. The pass asks for the corridor's volume
+  (`needVolume`) on its coarse pass and plans the fine pass against it.
+- **Refused** where the tunnel would come within 2 of water, lava or a cave void (M4 safety by construction).
+- **`r.tunnel(path, {width: 3, height: 3, lining, lights: 6, portal})`:** a `capsuleChain`/box carve (`IF_NATURAL`), a levelled
+  floor in the `path` role, lining only where the rock is loose (sand, gravel: `gravity` from W), lights every 6 on the walls
+  (no light on the floor's walk cells), portals framed in the `structure` role.
+- **Cost:** 3 per cell plus a fixed 40, so short ridges are crossed by tunnels only when climbing costs more.
+- **Movers:** a flat tunnel carries `villager`.
+
+### 4. Gate (slice tier, $0)
+
+**Fixtures:**
+- `crossings_demo` (bundled, `catalogue = false`) on 6b's `rift_city` fixture (a sculpted rift: bridges) and a synthetic ridge
+  added by the program on a flat world (a tunnel), plus a frozen-river crossing on S7's rejected site 2026101102 (a bridge over
+  frozen water). The flat world variants give E-flat.
+
+**Evidence:** `artifacts/gate6c-t3/`, driver `tools/gate6ct3.mjs`. `spend.json` $0.00.
+
+| # | Check | Bar |
+|---|---|---|
+| 1 | Moves chosen | the rift gets at least 1 bridge, the ridge 1 tunnel, the frozen river 1 bridge; each route's cost recorded against the walk-only alternative |
+| 2 | Spans | M10: every unsupported span at most `maxSpan`; both ends bear on at least 2x2 |
+| 3 | Fall guard | M8: 100% of bridge deck walk cells guarded |
+| 4 | Tunnel safety | M4 0; M3 0 floating (roof and lining); M5 under 1% of tunnel floor cells |
+| 5 | Reachability | `player` 100% across every crossing; `villager` kit and vanilla `dev.nav.villager` 100% across the flat bridge and the tunnel |
+| 6 | Frozen water | the S7 rejected site's route crosses on a bridge and realises complete (never PARTIAL) |
+| 7 | Determinism | IR sha over 3 plans; tile shas 1 and 4 workers; golden `scenarios/goldens/crossings_demo.json`; macOS and Linux CI |
+| 8 | Exactness | flat E-flat 0 (rift and ridge); natural E-normal classified, at most 0.01% |
+| 9 | Plan time | the pass with volume reads at most 60 s on each fixture |
+| 10 | MSPT, evaluation | own CPU at most 50 ms, p99 at most 25 ms; tile p99 under 2 s |
+| 11 | Unchanged | S1, S7, S2, mega_bench tile goldens |
+| 12 | API, spend | api-compat clean; jars pass; $0.00 |
+
+**Broken variants:** a tunnel within 1 of a water pocket (plan refusal), a bridge with `maxSpan` 40 (M10), a tunnel without
+lights (M5).
+
+**Tier:** slice: quick, kit region rows, sim suites, apijars, 6b-scenario-s1, 6cv-scenario-s7, 6c-scenario-s2. **gate-verifier**
+re-runs items 2, 4 and 6.
+
+### 5. Build order
+
+1. Archive the previous apitest jar. 2. Bridge move and output. 3. Volume reads in the pass. 4. Tunnel move and `r.tunnel`.
+5. Fixtures, gate.
+
+### Open questions for Steward
+
+- **S-T3-1.** Are 6a stone bridges and plain tunnels acceptable for your settlements until 7a's typed connectors, or should the
+  planner avoid crossings until then?
+
+### Deferred
+
+- Rope bridges, catwalks, lifts, suspension and sag (7a). Tunnels through player-built or other owners' blocks (never).
+
+## Phase 6c slice H: contained fluids (DRAFT for Steward review)
+
+API 1.23.0, mod 0.26.0 (wave 3). SETTLEMENTS §4.2 ("designed water, contained"), §11 (M20), §18 ("Fluids"); PLAN toolbox "Fluids" and the fill/drain
+brushes.
+
+- **Branch:** `slice/H`, worktree `../architect-mc-H`. **Spend:** $0.
+- **Scope:**
+  - **fluid writes in region tiles** (still source blocks of water and lava), with exact undo;
+  - **M25 fluid containment** (new) and **M20 fire**;
+  - pools and lava features (`r.pool`);
+  - the brush kinds `FILL`, `DRAIN`, `FLOOD_FILL` (appended to B's enum);
+  - V's deferred **wet well**.
+- **Not in scope:** the `hydrology` pass and channels (HY, next), flowing rivers (deferred, SETTLEMENTS §21), M16 flood
+  behaviour (7a), coral (F3).
+- **Depends on:** B (the brush path). The engine is touched: this slice runs the engine tag. HY and F3 depend on H.
+
+### 0. Facts
+
+- 6a writes regions without fluid updates (write flags), and a tile skips air writes that would let water in (E-normal guard).
+  No region has written a fluid yet: V kept its well dry because "fluid ordering between section writes is untested".
+- M4 (6b) finds cleared cells that open onto water or lava. Nothing checks where a **placed** fluid would flow.
+- The journal restores block states exactly; water and lava sources are block states (`level=0`), `waterlogged` is volatile
+  under "still ours".
+- Vanilla 26.3: water spreads 7 horizontally on a solid floor and falls without limit; lava spreads 3 in the Overworld; lava
+  ignites flammable blocks near it.
+
+### 1. API 1.23.0
+
+- `VERSION = "1.23.0"`; usual rules. `BrushKind` gains `FILL`, `DRAIN`, `FLOOD_FILL` (appended). `BrushRequest` gains trailing
+  `@Nullable String fluid` (`minecraft:water` or `minecraft:lava`; old constructor: null).
+- **Features:** `regionFluids`, `fluidBrushes`. `KIT_VERSION` 0.26.0. Checker `RULES` gains `M20`, `M25`.
+- **Behaviour change:** region IRs may write fluid source cells (a format-2 `requires: ['fluids']`); the previous mod refuses
+  them `PLAN_STALE`.
+
+### 2. Fluid writes and undo
+
+- **Declared volumes:** every fluid a program writes belongs to a declared `fluid` part: `{id, fluid, cells | shape, spill: [...]}`.
+  Only sources are written (level 0); no flowing states.
+- **Order:** within a tile, fluid cells are written last, after every solid cell of the tile; a fluid part whose containment
+  touches another tile waits until those tiles' solids are written (a stage barrier per fluid part). Neighbour updates stay
+  off during the write; one fluid tick is scheduled for each written source after the part completes, so vanilla sees the
+  final shape.
+- **Undo:** removing a fluid part restores the before states (air or the old block) and removes our sources first, then solids;
+  water a player later placed is kept and reported (CELL policy).
+- **Crash:** a crash between solids and fluids leaves no fluid written (the barrier); settle at start completes or undoes the
+  part (6a's crash rules).
+
+### 3. M25 containment and M20 fire
+
+- **M25 (new):** a static flow simulation on the virtual world from every declared source: water spreads up to 7 over solid
+  floors and falls through air, lava 3 (Overworld). Every reached cell must be inside the declared volume or a declared spill
+  cell. A finding lists the escaping cells. **Error** in the checker (a fluid outside its volume can't be undone exactly).
+- **M20 (SETTLEMENTS §11):** no flammable block (from the 26.3 data: `flammable` flag in `blocks.mjs`) within 2 of lava or an
+  open fire source. Warning, gated as a bar here.
+
+### 4. Pools, lava features and the fluid brushes
+
+- `r.pool(shape, fluid, {rim})`: a carve, a rim (the `structure` role or natural), the fluid, one part.
+- `FILL` (fill the shape's air below `center.y` with the fluid), `DRAIN` (remove our-or-natural fluid sources inside the shape;
+  cells become air or `IF_NATURAL` subsurface by a `drainTo` param), `FLOOD_FILL` (from `center`, a plan-time 6-connected fill
+  of air below a level, bounded by `radius` and 50,000 cells; refused if it would escape the bound).
+- Each runs as a stroke (B) with M25 on the plan; an escape refuses the stroke with the escaping cells.
+- **Wet well:** V's `well` prop gains `water: true` (one source in the cauldron's place; a 3x3 ring contains it). `flat_village`
+  keeps the dry well by default.
+
+### 5. Gate (slice tier plus the engine tag, $0)
+
+**Fixtures:** `water_demo` (bundled, `catalogue = false`) on S3's claim: a pond, a stepped pair of pools joined by a declared
+waterfall cell, and a lava pit with a stone rim; its flat variant (the program sculpts a valley first). A synthetic leaky basin
+(broken variant).
+
+**Evidence:** `artifacts/gate6c-h/`, driver `tools/gate6ch.mjs`. `spend.json` $0.00.
+
+| # | Check | Bar |
+|---|---|---|
+| 1 | Containment, plan | M25 0 on `water_demo`; the leaky basin variant caught with its escaping cells |
+| 2 | Containment, world | after a 2-minute stand at default random ticks, 0 fluid cells (source or flowing) outside the declared volumes and spills (re-surveyed) |
+| 3 | Fire | M20 0; 0 fire blocks in the claim after the stand |
+| 4 | Undo | E-flat 0 on the flat variant **including fluid cells**; natural E-normal classified, at most 0.01% |
+| 5 | Crash | a crash between a pool's solids and its fluids (6a crash harness): settle leaves 0 fluid outside volumes and the region either complete or undone exactly |
+| 6 | Brushes | FILL, DRAIN and FLOOD_FILL each: plan-time M25 0, realised containment as bar 2, one undo exact; a FLOOD_FILL that escapes is refused with nothing written |
+| 7 | Determinism | IR sha over 3 plans; tile shas 1 and 4 workers; golden `scenarios/goldens/water_demo.json`; macOS and Linux CI |
+| 8 | MSPT | own CPU at most 50 ms, p99 at most 25 ms; the fluid-tick share recorded |
+| 9 | Wet well | S7 flat variant with `water: true`: M25 0, the well holds 1 source after the stand, undo exact |
+| 10 | Unchanged | S1, S7, S2 and mega_bench tile goldens (dry programs write no fluid) |
+| 11 | API, spend | api-compat clean; jars pass; $0.00 |
+
+**Tier:** slice plus the engine tag (`region/**`, `journal/**` if the barrier touches it): 4e-orders, 4e-crash or 6a-crash,
+6a-eflat, 6a-megaA, the scenario steps, sim suites, apijars. About 75-90 min on 3 shards. **gate-verifier** re-runs items 2,
+4 and 5.
+
+### 6. Build order
+
+1. Archive the previous apitest jar. 2. Fluid parts, ordering, barrier, undo, crash. 3. M25, M20. 4. `r.pool`. 5. Fluid brushes.
+6. Wet well. 7. Fixtures, gate.
+
+### Open questions for Steward
+
+- **S-H-1.** Farms (M24) want water within 2. Should the planner add a small contained pond beside a farm lot when the claim
+  has none, now that fluids are possible?
+
+### Open questions for Noah
+
+- **N-H-1. Fluids in survival (for RS).** Is placed water free (vanilla water is infinite) while placed lava costs a lava bucket
+  per source? Or are both free as "natural", or both creative-only?
+
+### Deferred
+
+- The hydrology pass and channels (HY). Flowing rivers and waterfalls beyond declared cells (SETTLEMENTS §21). M16 flood
+  behaviour (7a). Bubble-column lifts (7a).
+
+## Phase 6c slice HY: hydrology and channels (DRAFT for Steward review)
+
+API 1.24.0, mod 0.27.0 (wave 4). SETTLEMENTS §4.2.
+
+- **Branch:** `slice/HY`, worktree `../architect-mc-HY`. **Spend:** $0.
+- **Scope:** the `hydrology` pass (priority flood, D8 flow, accumulation) with the `flow` and `wet` fields; opt-in **channels**
+  laid as H's contained fluid parts (level reaches, declared waterfall cells with basins); `wet` wired into material rules,
+  masks and scatter density.
+- **Not in scope:** flowing rivers (SETTLEMENTS §21), M16 (7a), regenerating vanilla rivers.
+- **Depends on:** T1 (passes, fields) and H (fluid parts, M25). Parallel with D and VOC.
+
+### 0. Facts
+
+- T1's framework runs passes at plan time on the resolution-1 survey; fields are side blobs; material rules (`field`), MP's
+  masks and F2's scatter density already read fields by name.
+- H writes declared fluid parts of still sources, proved by M25, undone exactly; waterfall cells are declared spills.
+- The survey's `WATER` and (after W) `FROZEN` flags mark existing water; `floor` is the bed.
+
+### 1. API 1.24.0
+
+- `VERSION = "1.24.0"`; usual rules. **No new records or methods.** Feature `hydrologyPass`. `KIT_VERSION` 0.27.0.
+
+### 2. The pass
+
+```js
+const h = r.pass('hydrology', { channelAt: 400, wetFalloff: 12, minReach: 6 });
+// -> fields.flow (u8, log2 accumulation), fields.wet (u8), data.channels: [{ reaches: [{y, cells}], falls: [{at, basin}] }]
+```
+
+- **Filling:** priority-flood on integer ground heights (a min-heap by (height, index)), so flats drain deterministically.
+- **D8 flow** with ties broken by direction index; accumulation in index order of the filled surface.
+- **`wet`:** `min(255, a * log2(accumulation) + b * max(0, wetFalloff - distanceToWater))` with integer `a`, `b` (fixed in the
+  pass); surveyed water and frozen water both count as water.
+- **Channels (opt-in, `channelAt`):** cells with accumulation over the threshold form a channel graph. Each channel is cut into
+  **reaches** of one level; between reaches with a drop, a declared waterfall cell and a basin of at least 3x3x2. Reaches
+  shorter than `minReach` merge. Each channel is an H fluid part (carve, banks in the `surface` role where needed, still water),
+  so M25 proves it before realise.
+- **Avoidance:** channels avoid lot boxes, keep sets, keep-out and routes (a route crossing a channel gets a T3 bridge or a
+  culvert: a 1-wide covered cell with a slab deck).
+
+### 3. Gate (slice tier, $0)
+
+**Fixtures:** `hydro_demo` (bundled, `catalogue = false`) on S3's pinned claim (its river and slopes: fields, 1 channel with at
+least one fall, moss and fern scatter by `wet`); the flat variant (the program sculpts a valley first); the 1024x1024 synthetic
+survey for plan time.
+
+**Evidence:** `artifacts/gate6c-hy/`, driver `tools/gate6chy.mjs`. `spend.json` $0.00.
+
+| # | Check | Bar |
+|---|---|---|
+| 1 | Fill and flow (unit) | every filled cell drains to the claim edge or a surveyed water body; 0 cycles; hand cases match |
+| 2 | Determinism | `flow` and `wet` blob shas over 3 plans and across macOS and Linux CI; IR sha; tile shas 1 and 4 workers; golden `scenarios/goldens/hydro_demo.json` |
+| 3 | Plan time | the pass at most 30 s on the 1024x1024 synthetic (median of 3) |
+| 4 | Channels | M25 0 on the plan; every reach level; every drop over 1 has a declared fall and basin |
+| 5 | Containment, world | after a 2-minute stand, 0 fluid cells outside channel volumes and spills |
+| 6 | Wet follows water | over the claim, the mean `wet` of cells within 4 of water is at least 3x that of cells over 16 away; moss/fern scatter density correlates (recorded) |
+| 7 | Crossings | 0 route cells flooded; every route crossing has a bridge or culvert |
+| 8 | Exactness | flat E-flat 0 including fluids; natural E-normal classified, at most 0.01% |
+| 9 | MSPT, evaluation | own CPU at most 50 ms, p99 at most 25 ms; tile p99 under 2 s |
+| 10 | Unchanged | S1, S2, S7 and mega_bench tile goldens |
+| 11 | API, spend | api-compat clean; jars pass; $0.00 |
+
+**Tier:** slice: quick, kit region rows, sim suites, apijars, the scenario steps; the engine tag only if H's barrier code changes.
+**gate-verifier** re-runs items 2, 4 and 5.
+
+### 4. Build order
+
+1. Archive the previous apitest jar. 2. Fill, D8, accumulation, fields. 3. Channels as fluid parts. 4. Avoidance and culverts.
+5. Fixtures, gate.
+
+### Open questions for Noah
+
+- **N-HY-1.** Channels are opt-in per program. Should S3's monastery get one (a stepped stream down the terraces), or keep S3 v1
+  dry and leave water features to later scenarios?
+
+### Deferred
+
+- Flowing rivers (SETTLEMENTS §21). Irrigation for farms from channels (with Steward's farm rules, 7a).
+
+## Phase 6c slice D: districts, and a district beside a standing region (DRAFT for Steward review)
+
+API 1.25.0, mod 0.28.0 (wave 4). SETTLEMENTS §4.4; "Agreed with Steward (2026-10-09)": "add a district to an existing region
+... (6c lays it out; 7a links it in the graph)".
+
+- **Branch:** `slice/D`, worktree `../architect-mc-D`. **Spend:** $0.
+- **Scope:**
+  - the `districts` pass: districts to candidate areas, nodes to lots, edges by route cost (a minimum spanning tree plus
+    loops);
+  - **a district beside a standing region:** planned against the region's lots, graph and claim, realised as its own region
+    with its own undo, joined by one routed edge.
+- **Not in scope:** affordances and site lots (7a §6). The 6c pass uses **survey candidates**; 7a feeds affordances through the
+  same interface. Graph links between regions as typed connectors (7a). Region evolution and deltas (6d).
+- **Depends on:** T2 (route costs). S3 depends on D.
+
+### 0. Facts
+
+- SETTLEMENTS §4.4 assigns nodes to **affordances** (§6), which are 7a. In 6c the only inputs are the survey (2.5D, resolution
+  1 after T1), frozen volumes, and `ctx.survey.flatAreas({size, maxRange})` (6a).
+- V's graph is the shape 7a keeps (nodes, ports, edges); V's `flat_village` makes one street district by hand.
+- A region is one record with one claim; `Regions.remove` undoes all of it. Nothing links two regions today.
+- C17 areas and `keepOut` (V) already constrain plans.
+
+### 1. API 1.25.0
+
+```java
+// RegionPlanRequest gains trailing @Nullable String beside (a standing region's id; old constructors: null)
+// RegionView gains trailing @Nullable String beside
+```
+
+- `VERSION = "1.25.0"`; usual rules. **New Reason** (appended): `CLAIM_OVERLAP` (the new claim overlaps the standing region's
+  claim beyond the seam, §3).
+- **Features:** `districtsPass`, `besideRegion`. `KIT_VERSION` 0.28.0.
+
+### 2. The `districts` pass
+
+```js
+const d = r.pass('districts', { districts: [
+    { id: 'cloister', lots: 4, size: [48, 48], levelBand: 'high', prefer: ['flat'], near: ['church'] },
+    { id: 'fields',   lots: 3, size: [64, 40], levelBand: 'low',  prefer: ['flat', 'wet'] } ],
+  candidates: 'survey', loopiness: 0.15 });
+// -> data.assign: { districtId: candidateId }, lots[], graph nodes and edges (V's shape), data.unplaced
+```
+
+- **Candidates (6c):** flat areas from the survey at sizes the districts ask for, each with its level band (claim height
+  terciles), slope, `wet` (HY, when present), distance to water, and keep-out and C17 exclusions applied. Interface:
+  `{id, rect, y, tags}`, which 7a's affordances also produce.
+- **Assignment:** integer scores (size fit, level band, `prefer` tags, `near` adjacency). With at most 64 candidates per
+  district, an exact assignment (Hungarian on integer costs); otherwise greedy by score, ties by id.
+- **Lots inside a district:** V's `layoutStreet` rules on the district's rect (its street is the district's main edge).
+- **Edges:** T2 route costs between district nodes; a minimum spanning tree, plus the cheapest non-tree edges until the
+  added cost reaches `loopiness` of the tree's. Each edge is routed by T2.
+- **Unplaced:** a district with no candidate is listed (`unplaced`), as V's lots are.
+
+### 3. A district beside a standing region
+
+- `RegionPlanRequest.beside = regionId`: the plan reads the standing region's IR (lots, graph nodes and ports, claim, roads) as
+  obstacles and join points. The new claim may overlap the standing one only in a seam of at most 16 columns, and never over
+  its lots or roads; otherwise `CLAIM_OVERLAP`.
+- **The join:** one routed edge (T2/T3) from a new node to the standing region's nearest compatible port, written by the **new**
+  region (its cells, its undo). The standing region writes nothing.
+- **Undo:** `Regions.remove(new)` removes the district and its join; the standing region is untouched. Removing the standing
+  region first is allowed (journal layering); the join's end is then reported as dangling in the new region's notes.
+- **`siteplan.json`:** the new region's graph gets an edge to `<standingRegion>:<node>.<port>` with `external: true`.
+  7a turns it into a typed link (S-D-2).
+
+### 4. Gate (slice tier, $0)
+
+**Fixtures:**
+- `districts_demo` (bundled, `catalogue = false`) on **S3's pinned claim**: 3 districts at three level bands, loopiness 0.15.
+- On S7's flat variant: a standing `flat_village`, then a 4-lot district `beside` it.
+- 300 seeded synthetic claims (property tests).
+
+**Evidence:** `artifacts/gate6c-d/`, driver `tools/gate6cd.mjs`. `spend.json` $0.00.
+
+| # | Check | Bar |
+|---|---|---|
+| 1 | Assignment (property) | on 300 claims, the exact assignment's cost is at most the greedy's; 0 lots in keep-out or C17 areas; `unplaced` exact |
+| 2 | Level bands | every district on `districts_demo` sits in its band |
+| 3 | Connectivity | every district node reaches every other by the plan's edges; the realised graph's `player` reachability 100% |
+| 4 | Loopiness | added loop cost within 0.15 of the tree's (±0.02) |
+| 5 | Beside: overlap | a claim overlapping the village's lots refused `CLAIM_OVERLAP`, nothing written |
+| 6 | Beside: undo | `Regions.remove(new)`: 0 changed cells in the standing village (ARWD diff over its claim) and E-flat 0 over the new claim |
+| 7 | Beside: join | the join is walkable `player` and `villager` (kit and `dev.nav.villager`) from a new lot to the village's bell |
+| 8 | Determinism | IR sha over 3 plans; tile shas 1 and 4 workers; golden `scenarios/goldens/districts_demo.json`; macOS and Linux CI |
+| 9 | Plan time | the pass plus its routes at most 60 s on S3's claim |
+| 10 | Exactness | flat E-flat 0; natural E-normal classified, at most 0.01% |
+| 11 | MSPT, evaluation | own CPU at most 50 ms, p99 at most 25 ms; tile p99 under 2 s |
+| 12 | Unchanged | S1, S2, S7, mega_bench tile goldens |
+| 13 | API, spend | api-compat clean; jars pass; $0.00 |
+
+**Tier:** slice: quick, kit region rows, `region/**` (the `beside` claim check), `api/**`, sim suites, apijars, the scenario
+steps. **gate-verifier** re-runs items 3, 6 and 7.
+
+### 5. Build order
+
+1. Archive the previous apitest jar. 2. Candidates and assignment. 3. Lots per district, edges. 4. `beside` (API, claim check,
+join). 5. Fixtures, gate.
+
+### Open questions for Steward
+
+- **S-D-1. Districts before affordances.** 6c places districts on survey candidates (flat areas by level band). Enough for
+  your phase 2, or do you need to wait for 7a's affordances before using districts?
+- **S-D-2. The join.** One routed edge written by the new region, with an `external` graph edge. Does that match how you
+  propose and approve a district (you own the proposal; Architect owns the layout)?
+
+### Deferred
+
+- Affordance candidates and site lots (7a). Typed links between regions (7a). Deltas to the standing region (6d).
