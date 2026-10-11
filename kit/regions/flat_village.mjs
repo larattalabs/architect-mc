@@ -5,10 +5,12 @@
 // swaps only. Nothing is forced: a lot that needs more goes to `unplaced`; a street that can't be a ground road fails the plan.
 //
 // Stages: ground (pads, the shared space, verges, lanes), street (the two road items), lots, props (into air only).
-// Params: lots (the caller's lot list, region programs only), shared, squareSize, laneWidth, lamps, bell, requireAll.
+// Params: lots (the caller's lot list, region programs only), shared, squareSize, laneWidth, lamps, bell, requireAll,
+// (6c W) apronLamps (r.lightCover: the lot aprons and batters lit with the bible's fixture; on by default).
 import { region } from '../lib/region/program.mjs';
 import { STREET_RULES, streetLayout } from '../lib/region/village.mjs';
-import { emitProps, planProps } from '../lib/region/props.mjs';
+import { emitProps, lampFixture, planProps } from '../lib/region/props.mjs';
+import { lightCover } from '../lib/region/light.mjs';
 
 export const id = 'flat_village';
 export const description = 'A flat village: lots on one street, a square or well green, lanes, props, villager rules (6c V).';
@@ -24,6 +26,7 @@ export const params = {
   laneWidth: { type: 'int', min: 1, max: 3, default: 2, label: 'Lane width' },
   lamps: { type: 'enum', options: ['none', 'few', 'street'], default: 'street', label: 'Lamps' },
   bell: { type: 'bool', default: false, label: 'Place a bell' },
+  apronLamps: { type: 'bool', default: true, label: 'Light the lot aprons' },
   requireAll: { type: 'bool', default: false, label: 'Every lot or fail' },
 };
 
@@ -57,6 +60,15 @@ export function build(ctx, { _unsafe = {}, after } = {}) {
   cam('cam_east', c.maxX, cz, 30);
   cam('cam_west', c.minX, cz, 30);
   cam('cam_ground', L.res.bell[0] + 6, L.res.bell[2] + 6, 2);
+  // (6c W) light the lot aprons and batters (r.lightCover) with the bible's fixture: the checker's full M5 under 1%
+  if (p.apronLamps && !_unsafe.noApronLamps) {
+    const reserved = new Set([...L.res.area, ...L.res.golem].map(([x, z]) => `${x},${z}`));
+    for (const k of props?.noWalk ?? []) reserved.add(k);
+    const cover = lightCover(r, { fixture: lampFixture(r), stage: 'props', keepOut: keepOut ?? [], reserved, laneCells: Object.values(L.laneCells).flat() });
+    r.meta.village.apronLamps = { fixture: cover.fixture, perLot: cover.perLot, before: cover.before, after: cover.after, capped: cover.capped };
+    r.meta.village.props.push(...cover.lamps.map((l, i) => ({ kind: 'apron_lamp', id: `apron_lamp_${i + 1}`, lot: l.lot, cells: l.cells })));
+    r.meta.village.propCounts.apron_lamp = cover.lamps.length;
+  }
   if (after) after(r, L);
   return r;
 }

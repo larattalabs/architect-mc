@@ -1,0 +1,258 @@
+// r.lightCover (docs/CONTRACT.md "Phase 6c slice W" §3, with the Coordinator addition: bible-styled lamps): light the walk area
+// the checker's M5 counts (every reached floor the region wrote: lot aprons and batter steps too), at plan time, with lamps in
+// the bible's fixture (fixtures.mjs) beside the lots. Opt-in per program: only a program that calls it changes.
+//
+// Method (deterministic):
+//   1. The plan so far as a draft IR (plan.mjs draftIR) -> its virtual world (buildVirtual), the walk graph from the entrance
+//      anchor (the checker's), and the target set: reached cells whose floor the region wrote and a mob can spawn on.
+//   2. Block light over that world from its emitters (the shared space's lamps) plus a model of the 4e street lanterns (the
+//      mod lays them at realise: the IR road's spacing and side, its lamp or 4e's lantern); lot boxes are opaque (the building
+//      that stands there blocks light, and its own lights are ignored: the cover is conservative).
+//   3. Candidates beside each lot (the lamp prop's rules: supported, standable, never on a walk cell, a lane or door path, in a
+//      lot box, the bell area, golem space or keep-out): the lot's corners outside the apron's diagonal first, then the batter
+//      feet (the ring past the apron: edge middles and quarters, then further out), each group ordered by (lot id, x, z).
+//   4. Greedy: add the candidate that lights the most dark targets (light from the fixture's real level), ties by candidate
+//      order, until the dark targets are under 0.5% of the target set or no candidate helps; at most 4 lamps per lot. A lamp
+//      that would cut a walk node off the entrance is dropped and the cover is run again without it.
+// Emits part `props_apron` (stage `props`, into air only), each lot's lamp positions on its ext (`architect_mc:village`.lamps),
+// meta.village.apronLamps (per-lot counts, before / after), the lamps as props (kind `apron_lamp`) and a plan note.
+import { draftIR } from './plan.mjs';
+import { buildVirtual, F_WALK, F_WRITTEN } from './vworld.mjs';
+import { nodeReached, walkGraph, walkNodes } from './check.mjs';
+import { centreCells, crossOffsets, rightOf, segmentAxis } from './geom.mjs';
+import { ARM_DIRS, DEFAULT_FIXTURE, fixtureCells } from './fixtures.mjs';
+import { COND } from './program.mjs';
+
+const DIRS6 = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]];
+export const COVER_SHARE = 0.005;
+export const LAMPS_PER_LOT = 4;
+
+/** Block light from sources [[x, y, z, level]...] over vw (opaque cells and lot boxes stop it): Map "x,y,z" -> level. */
+function lightFrom(vw, sources, opaque) {
+  const P = vw.pal;
+  const L = new Map();
+  const buckets = Array.from({ length: 16 }, () => []);
+  for (const [x, y, z, lv] of sources) {
+    const k = `${x},${y},${z}`;
+    if ((L.get(k) ?? 0) < lv) { L.set(k, lv); buckets[lv].push([x, y, z]); }
+  }
+  for (let lv = 15; lv >= 2; lv--) {
+    for (const [x, y, z] of buckets[lv]) {
+      if (L.get(`${x},${y},${z}`) !== lv) continue;
+      for (const [dx, dy, dz] of DIRS6) {
+        const nx = x + dx, ny = y + dy, nz = z + dz;
+        if (!vw.inClaim(nx, nz) || opaque(nx, ny, nz)) continue;
+        const v = lv - P.cost[vw.get(nx, ny, nz)];
+        const k = `${nx},${ny},${nz}`;
+        if (v > (L.get(k) ?? 0)) { L.set(k, v); if (v >= 2) buckets[v].push([nx, ny, nz]); }
+      }
+    }
+  }
+  return L;
+}
+
+/** The 4e street lanterns as the mod lays them (RoadPlan.lanterns: the first `first` out, then every `every`, beside the walkway). */
+function roadLights(vw, ir, fixtureOf) {
+  const out = [];
+  const P = vw.pal;
+  for (const r of ir.roads ?? []) {
+    if (!r.lanterns) continue;
+    const pts = r.points.map((p) => [p[0], p[2]]);
+    const { cells } = centreCells(pts);
+    const offs = crossOffsets(r.width);
+    const hi = offs[offs.length - 1], lo = offs[0];
+    const walk = new Set();
+    for (const c of cells) {
+      const a = pts[Math.min(c.seg, pts.length - 1)], b = pts[Math.min(c.seg + 1, pts.length - 1)];
+      const rr = rightOf(segmentAxis(a, b));
+      for (const k of offs) walk.add(`${c.x + rr[0] * k},${c.z + rr[1] * k}`);
+    }
+    const lamp = r.lamp ?? null;
+    const every = lamp ? lamp.every : 12, first = lamp ? lamp.first : 6;
+    const f = fixtureOf(lamp);
+    let since = every - first;
+    for (let i = 1; i < cells.length - 1; i++) {
+      since += 1;
+      if (since + 1e-9 < every) continue;
+      const c = cells[i], n = cells[i + 1];
+      const dx = Math.sign(n.x - c.x), dz = Math.sign(n.z - c.z);
+      const rx = -dz, rz = dx;
+      const feet = vw.colTop(c.x, c.z) + 1;
+      let placed = false;
+      for (const side of [hi + 1, lo - 1]) {
+        const qx = c.x + side * rx, qz = c.z + side * rz;
+        if (walk.has(`${qx},${qz}`) || !vw.inClaim(qx, qz)) continue;
+        for (const dy of [0, 1, -1]) {
+          const y = feet + dy;
+          if (!P.solid[vw.get(qx, y - 1, qz)] || !P.air[vw.get(qx, y, qz)] || !P.air[vw.get(qx, y + 1, qz)]) continue;
+          const la = lamp ? lamp.cells[lamp.light] : [0, 1];
+          out.push([qx + la[0] * dx, y + la[1], qz + la[0] * dz, f.level]);
+          placed = true;
+          break;
+        }
+        if (placed) break;
+      }
+      since = placed ? 0 : every / 2;
+    }
+  }
+  return out;
+}
+
+/**
+ * `r.lightCover({fixture, stage, keepOut, reserved, laneCells, maxPerLot, share})`: plan and emit the apron and batter lamps.
+ * `reserved`: "x,z" columns no lamp may take (the bell area, golem space, the props' own); `laneCells`: the lanes' cells
+ * (door paths). Returns `{lamps: [{lot, at, cells}], perLot, before, after, targets, capped}`.
+ */
+export function lightCover(r, { fixture, stage = 'props', keepOut = [], reserved = new Set(), laneCells = [], maxPerLot = LAMPS_PER_LOT, share = COVER_SHARE, _drop = null } = {}) {
+  const { ir, blobs } = draftIR(r);
+  const meta = { lots: r.meta.lots, parts: r.meta.parts };
+  const surveyCols = r.ctx.survey.columns;
+  const vw = buildVirtual({ ir, survey: surveyCols, blobs }).vw;
+  const P = vw.pal;
+  const start = ir.anchors?.entrance;
+  const opaque = (x, y, z) => P.opaque[vw.get(x, y, z)] || !!vw.lotAt(x, y, z);
+  const nodes = walkNodes(ir, meta, null);
+  const reach0 = walkGraph(vw, start ? [start] : []);
+  const nodesOk0 = nodes.map((n) => nodeReached(reach0, n.at));
+  // ---- targets: reached cells whose floor the region wrote and a mob spawns on
+  const targets = [];
+  const ra = reach0.reached;
+  for (let i = 0; i < ra.length; i += 3) {
+    const x = ra[i], y = ra[i + 1], z = ra[i + 2];
+    if ((vw.flags(x, y - 1, z) & F_WRITTEN) && P.spawn[vw.get(x, y - 1, z)]) targets.push([x, y, z]);
+  }
+  const tIndex = new Map(targets.map((t, i) => [`${t[0]},${t[1]},${t[2]}`, i]));
+  // ---- the base light: written emitters plus the modelled street lanterns
+  const sources = [];
+  vw.eachWritten((x, y, z, idx) => { const e = P.emit[idx]; if (e > 0) sources.push([x, y, z, e]); });
+  sources.push(...roadLights(vw, ir, (lamp) => (lamp ? { level: fixture.level } : DEFAULT_FIXTURE)));
+  const base = lightFrom(vw, sources, opaque);
+  const dark = new Set();
+  targets.forEach((t, i) => { if (!((base.get(`${t[0]},${t[1]},${t[2]}`) ?? 0) > 0)) dark.add(i); });
+  const before = { targets: targets.length, dark: dark.size, share: targets.length ? dark.size / targets.length : 0 };
+  // ---- candidates
+  const lanes = new Set(laneCells.map((c) => `${c[0]},${c[2]}`));
+  const boxes = ir.lots.map((l) => l.box);
+  const inBox = (x, z) => boxes.some((b) => x >= b.minX && x <= b.maxX && z >= b.minZ && z <= b.maxZ);
+  const kept = (x, z) => keepOut.some((k) => x >= k[0] && x <= k[2] && z >= k[1] && z <= k[3]);
+  const entrances = new Set(ir.lots.map((l) => { const e = r.meta.lots[l.id]?.entrance; return e ? `${e[0]},${e[2]}` : ''; }));
+  const colOk = (x, z) => vw.inClaim(x, z) && !inBox(x, z) && !lanes.has(`${x},${z}`) && !reserved.has(`${x},${z}`) && !kept(x, z) && !entrances.has(`${x},${z}`);
+  const standY = (x, z, h) => {
+    const [lo, hi] = vw.colRange(x, z);
+    // the column's top floor: supported (solid, not a fluid), not a walk cell, with air for the fixture above it
+    for (let y = hi + 2; y >= lo - 1; y--) {
+      const f = vw.get(x, y - 1, z);
+      if (P.air[f]) continue;
+      if (!P.solid[f] || P.fluid[f] || (vw.flags(x, y - 1, z) & F_WALK)) return null;
+      for (let k = 0; k < h; k++) if (!P.air[vw.get(x, y + k, z)]) return null;
+      return y;
+    }
+    return null;
+  };
+  const cands = [];
+  const order = [...ir.lots].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  const groups = [[], [], []];
+  for (const l of order) {
+    const b = l.box, x0 = b.minX, x1 = b.maxX, z0 = b.minZ, z1 = b.maxZ;
+    const mx = Math.floor((x0 + x1) / 2), mz = Math.floor((z0 + z1) / 2);
+    const qx = [Math.floor((x0 + mx) / 2), Math.floor((mx + x1) / 2)], qz = [Math.floor((z0 + mz) / 2), Math.floor((mz + z1) / 2)];
+    // 1: the corners outside the apron's diagonal
+    for (const [x, z] of [[x0 - 2, z0 - 2], [x1 + 2, z0 - 2], [x0 - 2, z1 + 2], [x1 + 2, z1 + 2]]) groups[0].push({ lot: l.id, x, z });
+    // 2: the batter feet next to the apron: edge middles and quarters, one ring out
+    for (const x of [mx, ...qx]) for (const z of [z0 - 2, z1 + 2]) groups[1].push({ lot: l.id, x, z });
+    for (const z of [mz, ...qz]) for (const x of [x0 - 2, x1 + 2]) groups[1].push({ lot: l.id, x, z });
+    // 3: further out (the foot of a deeper batter)
+    for (const d of [3, 4]) {
+      for (const [x, z] of [[x0 - d, z0 - d], [x1 + d, z0 - d], [x0 - d, z1 + d], [x1 + d, z1 + d]]) groups[2].push({ lot: l.id, x, z });
+      for (const x of [mx, ...qx]) for (const z of [z0 - 1 - d, z1 + 1 + d]) groups[2].push({ lot: l.id, x, z });
+      for (const z of [mz, ...qz]) for (const x of [x0 - 1 - d, x1 + 1 + d]) groups[2].push({ lot: l.id, x, z });
+    }
+  }
+  const seen = new Set();
+  for (const g of groups) {
+    g.sort((a, b) => (a.lot < b.lot ? -1 : a.lot > b.lot ? 1 : 0) || a.x - b.x || a.z - b.z);
+    for (const c of g) {
+      const key = `${c.x},${c.z}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const arms = fixture.kind === 'hanging_lantern' ? ARM_DIRS : [undefined];
+      for (const arm of arms) {
+        if (!colOk(c.x, c.z)) break;
+        const y = standY(c.x, c.z, fixture.kind === 'hanging_lantern' ? 3 : fixture.height);
+        if (y === null) break;
+        const fc = fixtureCells(fixture, [c.x, y, c.z], { arm });
+        // every footprint column free (the gibbet's arm column: off walk cells, lanes and boxes), every cell in air
+        if (!fc.foot.every(([x, z]) => colOk(x, z)) || !fc.cells.every(([x, yy, z]) => P.air[vw.get(x, yy, z)] && !(vw.flags(x, yy - 1, z) & F_WALK))) continue;
+        if (_drop && _drop.has(`${c.x},${c.z}`)) break;
+        cands.push({ ...c, y, arm, cells: fc.cells, lightAt: fc.lightAt, foot: fc.foot });
+        break;
+      }
+    }
+  }
+  // ---- each candidate's reach over the targets (its own light, the fixture's level)
+  for (const c of cands) {
+    const L = lightFrom(vw, [[...c.lightAt, fixture.level]], opaque);
+    c.reach = [];
+    for (const [k, v] of L) if (v > 0) { const i = tIndex.get(k); if (i !== undefined) c.reach.push(i); }
+  }
+  // ---- greedy
+  const chosen = [];
+  const perLot = Object.fromEntries(ir.lots.map((l) => [l.id, 0]));
+  const goal = () => targets.length === 0 || dark.size / targets.length < share;
+  const taken = new Set();
+  while (!goal()) {
+    let best = null, gain = 0;
+    for (const c of cands) {
+      if (taken.has(c) || perLot[c.lot] >= maxPerLot) continue;
+      if (c.foot.some(([x, z]) => chosen.some((o) => o.foot.some(([ox, oz]) => Math.abs(ox - x) + Math.abs(oz - z) <= 1)))) continue; // never side by side
+      let g = 0;
+      for (const i of c.reach) if (dark.has(i)) g++;
+      if (g > gain) { gain = g; best = c; }
+    }
+    if (!best) break;
+    taken.add(best);
+    chosen.push(best);
+    perLot[best.lot]++;
+    for (const i of best.reach) dark.delete(i);
+  }
+  // ---- the lamps must not cut a walk node off the entrance
+  if (chosen.length) {
+    for (const c of chosen) for (const [x, y, z, s] of c.cells) vw.set(x, y, z, P.of(s), 0);
+    const g = walkGraph(vw, start ? [start] : []);
+    const lost = nodes.filter((n, i) => nodesOk0[i] && !nodeReached(g, n.at));
+    if (lost.length) {
+      // drop the lamps nearest each lost node and plan the cover again without their columns
+      const drop = new Set(_drop ?? []);
+      for (const n of lost) {
+        let near = null, nd = Infinity;
+        for (const c of chosen) { const d = Math.abs(c.x - n.at[0]) + Math.abs(c.z - n.at[2]); if (d < nd) { nd = d; near = c; } }
+        if (near) drop.add(`${near.x},${near.z}`);
+      }
+      if (drop.size > (_drop?.size ?? 0)) return lightCover(r, { fixture, stage, keepOut, reserved, laneCells, maxPerLot, share, _drop: drop });
+    }
+  }
+  const after = { targets: targets.length, dark: dark.size, share: targets.length ? dark.size / targets.length : 0 };
+  const capped = !goal();
+  // ---- emit
+  const lamps = chosen.map((c) => ({ lot: c.lot, at: [c.x, c.y, c.z], cells: c.cells }));
+  lamps.sort((a, b) => (a.lot < b.lot ? -1 : a.lot > b.lot ? 1 : 0) || a.at[0] - b.at[0] || a.at[2] - b.at[2]);
+  if (lamps.length) {
+    const part = r.part('props_apron', { stage });
+    const mats = [], mi = new Map(), cols = [];
+    for (const l of lamps) for (const [x, y, z, s] of l.cells) {
+      let i = mi.get(s);
+      if (i === undefined) { i = mats.length; mats.push(s); mi.set(s, i); }
+      cols.push(x, z, y, y, i);
+    }
+    part._push({ op: 'columns', from: { abs: 0 }, to: { abs: 0 }, cols, materials: mats, cond: COND.IF_AIR_OR_FLUID, walk: false });
+    (r.meta.parts[part.id] ??= {}).kind = 'add';
+  }
+  // each lot's lamp positions on its ext (Steward's panels; later additions keep clear of them)
+  for (const l of r.lots) {
+    const v = l.ext?.['architect_mc:village'];
+    if (v) v.lamps = lamps.filter((m) => m.lot === l.id).map((m) => [...m.at]);
+  }
+  const counts = Object.fromEntries(Object.entries(perLot).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)));
+  r.note(`apron lamps (${fixture.kind}, light ${fixture.level}): ${Object.entries(counts).map(([k, n]) => `${k} ${n}`).join(', ')}; dark ${(100 * before.share).toFixed(1)}% -> ${(100 * after.share).toFixed(2)}% of ${targets.length} walk cells at plan time${capped ? ` (capped at ${maxPerLot} per lot: not covered)` : ''}`);
+  return { lamps, perLot: counts, before, after, targets: targets.length, capped, fixture: { kind: fixture.kind, level: fixture.level } };
+}

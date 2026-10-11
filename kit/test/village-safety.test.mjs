@@ -56,7 +56,7 @@ test('gravity: 500 seeded claims, 1-3 deep gaps under lanes, verges and aprons, 
     const claim = { minX: R.int(-200, 200), minZ: R.int(-200, 200), minY: -64, maxY: 319 };
     claim.maxX = claim.minX + W - 1; claim.maxZ = claim.minZ + D - 1;
     const roles = { path: paths[n % 3] };
-    const params = { lots: LOTS.slice(0, R.int(2, 4)), squareSize: R.pick([9, 11]), laneWidth: R.int(1, 3), lamps: 'none' };
+    const params = { lots: LOTS.slice(0, R.int(2, 4)), squareSize: R.pick([9, 11]), laneWidth: R.int(1, 3), lamps: 'none', apronLamps: false };
     // the dry plan gives the lanes, verges and aprons; gaps go under a random share of them, then the claim is planned again
     const dry = await planRegion({ programFile: PROGRAM, node: 'test', params, survey: gapSurvey(claim), claim, roles, seed: String(n) });
     const v = dry.meta.village;
@@ -164,4 +164,100 @@ test('frozen water: a farm needs unfrozen water (M24 counts WATER without FROZEN
   assert.equal(p.meta.village.waterAny, false);
   const ext = p.ir.lots.find((l) => l.id === 'farm_1').ext['architect_mc:village'];
   assert.ok(ext.water !== null, 'the ext\'s near_water distance counts the frozen river');
+});
+
+// ------------------------------------------------------------------ item 1 and the coordinator's addition: fixtures, lightCover
+
+import fs from 'node:fs';
+import { DEFAULT_FIXTURE, fixtureCells, fixtureFor, roadLamp } from '../lib/region/fixtures.mjs';
+import { buildVirtual, F_WALK } from '../lib/region/vworld.mjs';
+import { sitePlan, validateSchema } from '../lib/region/siteplan.mjs';
+
+test('fixtures: picked from the bible\'s light role, light levels from the blocks\' own emission', () => {
+  const lv = (l) => fixtureFor(l).level;
+  assert.equal(lv('minecraft:lantern'), 15);
+  assert.equal(lv('minecraft:soul_lantern'), 10);
+  assert.equal(lv('minecraft:torch'), 14);
+  assert.equal(lv('minecraft:soul_torch'), 10);
+  assert.equal(lv('minecraft:end_rod'), 14);
+  assert.equal(lv('minecraft:sea_lantern'), 15);
+  const kinds = ['minecraft:lantern', 'minecraft:soul_lantern', 'minecraft:torch', 'minecraft:end_rod', 'minecraft:sea_lantern', 'minecraft:lantern[hanging=true]'].map((l) => fixtureFor(l).kind);
+  assert.deepEqual(kinds, ['lantern_post', 'soul_lantern_post', 'torch_post', 'end_rod', 'bollard', 'hanging_lantern']);
+  assert.equal(fixtureFor(undefined).kind, 'lantern_post', 'no light role: the lantern post');
+  assert.equal(fixtureFor('minecraft:lantern', 'minecraft:spruce_fence').post.replace(/\[.*$/, ''), 'minecraft:spruce_fence', 'the post in the bible\'s wood');
+  assert.equal(roadLamp(DEFAULT_FIXTURE), null, '4e\'s own fence and lantern: no road lamp member');
+  assert.equal(roadLamp(fixtureFor('minecraft:soul_lantern')).every, 8, 'a weaker light: closer street lamps');
+  // the gibbet: 3 posts, the arm one cell out at the top (joined), the lantern hanging under the arm
+  const g = fixtureCells(fixtureFor('minecraft:lantern[hanging=true]'), [0, 65, 0], { arm: 'east' });
+  assert.deepEqual(g.lightAt, [1, 66, 0]);
+  assert.match(g.cells[2][3], /east=true/);
+  assert.match(g.cells[3][3], /west=true/);
+  assert.match(g.cells[4][3], /hanging=true/);
+});
+
+const GOLD = path.join(KIT, '..', 'scenarios', 'goldens', 's7');
+const s7 = () => {
+  const ir = JSON.parse(fs.readFileSync(path.join(GOLD, 'ir.json'), 'utf8'));
+  return { ir, survey: fs.readFileSync(path.join(GOLD, 'survey.bin')) };
+};
+const planS7 = (roles, hooks = null) => {
+  const { ir, survey } = s7();
+  const claim = { ...ir.claim, minY: -64, maxY: 319 };
+  const o = { params: ir.params, roles: { ...ir.roles, ...roles }, survey, claim, seed: ir.seed, node: 'test' };
+  if (!hooks) return planRegion({ programFile: PROGRAM, ...o });
+  return planRegion({ program: { id: 'flat_village_broken', params: flatVillage.params, roles: flatVillage.roles, default: (ctx) => build(ctx, hooks) }, programSource: 'broken lamps', ...o });
+};
+
+test('lightCover on S7 (its pinned survey and lots): the lots\' aprons and batters lit, at most 4 lamps a lot, never on a walk cell, a lot box, the bell area or golem space; ext lamps; siteplan props; deterministic', async () => {
+  const p = await planS7({});
+  const v = p.meta.village, a = v.apronLamps;
+  assert.ok(a.before.share > 0.01, `dark before ${a.before.share}`);
+  assert.ok(a.after.share < 0.005, `dark after ${a.after.share}`);
+  assert.equal(a.capped, false);
+  for (const n of Object.values(a.perLot)) assert.ok(n <= 4);
+  const lamps = v.props.filter((q) => q.kind === 'apron_lamp');
+  assert.equal(lamps.length, Object.values(a.perLot).reduce((x, y) => x + y, 0));
+  assert.ok(p.notes.some((n) => /^apron lamps \(lantern_post, light 15\): /.test(n)), 'the per-lot counts in the notes');
+  const { vw } = buildVirtual({ ir: p.ir, survey: s7().survey, blobs: () => null });
+  const area = new Set(v.bellArea.map(([x, z]) => `${x},${z}`)), golem = new Set(v.golem.map(([x, z]) => `${x},${z}`));
+  for (const l of lamps) for (const [x, y, z] of l.cells) {
+    assert.ok(!p.ir.lots.some((b) => x >= b.box.minX && x <= b.box.maxX && z >= b.box.minZ && z <= b.box.maxZ), `${l.id} outside the lot boxes`);
+    assert.ok(!(vw.flags(x, y - 1, z) & F_WALK) && !(vw.flags(x, y, z) & F_WALK), `${l.id} not on a walk cell`);
+    assert.ok(!area.has(`${x},${z}`) && !golem.has(`${x},${z}`), `${l.id} off the bell area and golem space`);
+  }
+  // each lot's ext carries its lamp positions
+  for (const l of p.ir.lots) assert.deepEqual(l.ext['architect_mc:village'].lamps, lamps.filter((q) => q.lot === l.id).map((q) => q.cells[0].slice(0, 3)));
+  // the checker: every walk node still reached, no M3 on the lamps
+  const rep = checkRegion({ ir: p.ir, survey: s7().survey, meta: p.meta, prefix: false });
+  assert.equal(rep.metrics.M2.reached, rep.metrics.M2.nodes);
+  assert.ok(!rep.findings.some((f) => f.part === 'props_apron'), rep.findings.map((f) => `${f.rule} ${f.part}`).join('; '));
+  const sp = sitePlan({ ir: p.ir, meta: p.meta, vw });
+  assert.deepEqual(validateSchema(sp), []);
+  assert.equal(sp.props.filter((q) => q.kind === 'apron_lamp').length, lamps.length);
+  for (const l of sp.lots) assert.equal(l.lamps, a.perLot[l.id]);
+  assert.equal((await planS7({})).irSha, p.irSha, 'deterministic');
+  // the broken variant: no apron lamps
+  const off = await planS7({}, { _unsafe: { noApronLamps: true } });
+  assert.ok(!off.ir.parts.some((q) => q.id === 'props_apron'));
+});
+
+test('lightCover with the bible\'s fixtures: infernal (soul lantern), coastal (sea lantern), gibbet; a weak light takes more lamps, never over 4 a lot', async () => {
+  const counts = {};
+  for (const [name, light, rail] of [['infernal', 'minecraft:soul_lantern', 'minecraft:crimson_fence'], ['coastal', 'minecraft:sea_lantern', 'minecraft:birch_fence'], ['gibbet', 'minecraft:lantern[hanging=true]', 'minecraft:dark_oak_fence']]) {
+    const p = await planS7({ light, rail });
+    const a = p.meta.village.apronLamps;
+    counts[name] = Object.values(a.perLot).reduce((x, y) => x + y, 0);
+    for (const n of Object.values(a.perLot)) assert.ok(n <= 4, name);
+    // a weak light that can't cover within 4 says so in the note
+    if (a.capped) assert.ok(p.notes.some((n) => /capped at 4 per lot: not covered/.test(n)), name);
+    else assert.ok(a.after.share < 0.005, `${name}: ${a.after.share}`);
+    const block = (s) => s.replace(/\[.*$/, '');
+    const lamps = p.meta.village.props.filter((q) => q.kind === 'apron_lamp' || q.kind === 'lamp');
+    assert.ok(lamps.length && lamps.every((q) => q.cells.some((c) => block(c[3]) === block(light))), `${name}: the lamps carry the bible's light`);
+    assert.ok(lamps.every((q) => q.cells.every((c) => block(c[3]) === block(light) || block(c[3]) === rail)), `${name}: the posts in the bible's wood`);
+    // the street's lanterns: the bible's fixture (format 2, road:lamp) unless it is 4e's own
+    for (const r of p.ir.roads) assert.ok(r.lamp && r.lamp.cells.some((c) => block(c[2]) === block(light)), `${name}: road ${r.id}`);
+    assert.ok(p.ir.requires.includes('road:lamp'));
+  }
+  assert.ok(counts.infernal > counts.coastal, `the soul lantern (10) needs more lamps than the sea lantern (15): ${JSON.stringify(counts)}`);
 });
