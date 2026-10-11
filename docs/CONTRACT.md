@@ -8117,3 +8117,180 @@ findsite/summary.json), S7's runs under `artifacts/scenarios/6c-v/s7/`, the slic
 - **V:** `params.lots` = LotSpec plus `villager`, which the caller sends per lot (inferred from `type` only when absent). The
   bell is an anchor only by default, opt-in to place. `siteplan.json` stays format 1. Patron-only. Unplaced lots are listed and
   the plan continues.
+
+## Phase 6c slice W: village safety (DRAFT for Steward review)
+
+This slice is API 1.14.0 and mod 0.17.0, after V (1.13.0 / 0.16.0). The coordinator confirms the numbers at merge; if another
+slice merges first, W takes the next minor.
+
+- **Branch:** `slice/W`, in the worktree `../architect-mc-W`.
+- **Spend:** $0. Sim and stub only, no claude-login run.
+- **Scope**, in this order (PLAN "6c slice V: queued for the next slice", plus 0b's proposal 5):
+  0. the COPY line's ms in the C7 breakdown (small, goes first);
+  1. light the lot aprons and batters, so the checker's **full** M5 is under 1% on S7 (Steward's top ask);
+  2. 4e road lanterns on non-ground path blocks;
+  3. frozen water in the plan survey;
+  4. gravity blocks over gaps.
+- **Not in scope:** anything else from V's deferred list (door-aligned lanes, curved streets, bible-styled props: 7a), region
+  survival (the "RS" slice below), and any terrain op.
+- **Depends on:** V merged. Nothing in the terrain slices depends on W except S2 (item 3) and T1 (it shares `RegionSurvey`).
+
+### 0. Facts W depends on
+
+- **COPY ms.** `sidecar/src/breakdown.ts` accrues copy time only while a refresh sees an item in state `copy` (lines ~98-141).
+  A copy that is queued, built and done between two refreshes records 0 ms; R's bench run counted 4 copies at 0 ms.
+- **Aprons and batters.** `r.lot` (`kit/lib/region/program.mjs` ~1415-1500) writes a 1-column apron around the footprint
+  (`surface`, `IF_AIR_OR_FLUID`) and, with `pad.edge: 'slope'`, 1:1 batter steps (`subsurface`). Both are reached
+  region-written floors, so the checker's M5 counts them. Nothing lights them: V's lamps go on lanes and the square only
+  (`kit/lib/region/props.mjs`). On S7's pinned run, the full M5 read 11.8% of 695 cells; V's ruled bar 8 (walk cells plus
+  door paths) read 0.00% of 558.
+- **K5:** no region op writes inside a lot box. Props are never on walk cells, in the bell area, golem space or keep-out.
+- **Road lanterns.** `RoadPlan.lanterns` (~772-822) puts a fence post and a lantern beside the walkway only where
+  `ground(below)` holds, and `ground` is DIRT, SAND, STONE, MUD or PATH. `RoadTerrain.kind` gives packed mud, stone bricks
+  and planks `BUILT`, so a bible whose `path` is one of those gets no posts on its verges (measured: M5 2.21% with packed mud).
+  `RoadPlan.surfaceFor` already avoids gravel on an unsupported centre cell (`free()`), so 4e's own surface is safe.
+- **Frozen water.** `Columns.java` sets `WATER` from the top block's fluid state only. Ice, packed ice and frosted ice over
+  water read as dry ground with `floor = ground`. Flag bits used: WATER 1, MISSING 2, TREE 4, LAVA 8; bits 16-128 are free.
+  `Volume` already classifies `ICE`. `find-site`'s `noFrozen` (V) is a biome heuristic that also rejects `ice_spikes`, which
+  S2 needs. S7's rejected site 2026101102 (`[4168,1480,4279,1591]`, a frozen river and sea) planned clean and realised PARTIAL.
+- **S2's pinned fixture** is about 75% frozen and deep frozen ocean (`scenarios/s2_ice_spikes.json` biome stats).
+- **Gravity.** The kit's lane, verge and square swaps (`village.mjs` `surfaceOps`, `columns` ops) write the `path` role on top
+  of whatever is under it. The default `path` is gravel. `blocks.mjs` has no gravity flag.
+- **S7's gallery approval is pending** on V's evidence sha `c31c6de43ce1`. Item 1 adds lamps, so S7's evidence sha moves.
+
+### 1. API 1.14.0 rules and behaviour changes
+
+- `VERSION = "1.14.0"`, the usual rules (old constructors kept, default-throwing methods, enums appended).
+  `tools/api-compat.mjs` checks the 0.16.0, 0.15.0 and 0.14.0 apitest jars and the 0.16.0 surface.
+- **`Sample` gains a trailing `BitSet frozen`:** columns whose top is ice over water (§5). The old constructors give an empty
+  set. `Sample.water` is **unchanged** (the fluid at the top only), so a caller's water logic doesn't move.
+- **Features:** `frozenWater`, `apronLights`.
+- **Behaviour changes:**
+  1. A region plan over frozen water treats it as water (§5). Plans over frozen claims change; their survey sha moves.
+  2. A 4e road whose verge is the caller's own built path gets lantern posts there (§4).
+  3. `flat_village` adds lamp posts beside lot aprons and batters (§3). Its IR and tiles change; S7's golden is re-committed.
+  4. `KIT_VERSION` 0.17.0: every IR sha moves. Format-1 tiles, S1's tile golden and `mega_bench.golden.json` don't.
+
+### 2. Item 0: the COPY line
+
+- A copy's time is the span from its variant job's start to its `done`, taken from the item's own transition timestamps
+  (`startedAt`, `doneAt` in the group store), not from refresh sampling. Waiting for its archetype stays out of it, as 0b set.
+- `Group.breakdown.copy.ms` is the sum over done copies. No other line changes.
+- **Bar:** a unit test where 4 copies start and finish inside one refresh interval gives `copy.ms > 0`, equal to the sum of
+  their spans; every other line of R's recorded breakdown fixture is byte-identical.
+
+### 3. Item 1: lighting the lot aprons and batters
+
+- **A kit helper `r.lightCover(opts)`**, called by a program after its lots, lanes and props. It is **opt-in per program**, so
+  programs that don't call it give unchanged tiles. `flat_village` calls it; S1, `mega_bench` and the 6b fixtures don't.
+- **Target set:** every walk cell the checker's M5 counts on the plan's virtual world: the reached region-written floors,
+  including aprons and batter steps.
+- **Method** (plan time, deterministic):
+  1. The kit's block-light model (`check.mjs blockLight`) over the virtual world with V's lamps and the road lanterns in.
+  2. Candidate cells: the `lamp_post` prop's rules (supported, standable, never on a walk cell, in a lot box, the bell area,
+     golem space or keep-out). Lot corners outside the apron's diagonal first, then batter feet, ordered by (lot id, x, z).
+  3. Greedy: add the candidate that lights the most dark target cells, until dark spawnable cells are under 0.5% of the target
+     set, or each lot has 4 lamps. Ties by candidate order.
+- Buildings' own lights are ignored at plan time (their entries aren't installed yet), so the cover is conservative.
+- **Lamp style:** V's `lamp_post` (a fence post with a lantern), in the bible's `light` role. Bible-styled lamps stay 7a.
+- **Gallery note:** the lamp count per lot is in `siteplan.json` props and the plan notes, so Noah can judge clutter.
+
+### 4. Item 2: road lanterns on built path
+
+- A lantern post's foot may also be a `BUILT` cell that is **journal-owned by the road's own owner** (a region's verge, a path
+  the same caller placed). A player's block or another owner's never counts.
+- The road's own planned surface cells stay excluded (the post goes beside the walkway).
+- **Bar** (the S7 flat variant, three fixture bibles whose `path` is packed mud, stone bricks and oak planks):
+  - the road lantern count equals the coarse-dirt bible's on the same plan, exactly;
+  - M5 over the street and verges is 0.00%.
+- A focused unit test in `RoadPlanTest`: a verge of each of the three blocks, owned by the owner, gets posts; owned by another
+  owner or by nobody (BUILT), gets none.
+
+### 5. Item 3: frozen water
+
+**Recommended (open question S-W-1):** treat frozen water as water, with the information kept.
+- **ARSV flag `FROZEN = 16`:** the column's top block is `ice`, `packed_ice`, `blue_ice` or `frosted_ice`, and a water cell
+  lies within 3 below it. Such a column also gets `WATER`, and `floor` is the bed under the water, as for open water.
+- Land ice (an ice spike on snow, packed ice on stone) is not frozen water and stays ground.
+- **The kit** treats FROZEN as water everywhere WATER applies (roads, pads, lanes, the street's ground check), except M24:
+  a farm needs unfrozen water, so M24 counts WATER without FROZEN.
+- **The 4e road code:** `RoadTerrain.kind` classifies ice over water as `WATER` for depth, so a road over a frozen river is
+  DEEP_WATER (a partial road skips that span; a decked 1-deep crossing works as for open water).
+- **find-site** reads FROZEN from the survey; `noFrozen` drops its biome heuristic, so S2's search can keep `ice_spikes`.
+- **Pinned surveys:** a survey with frozen columns gets new bytes. S2's and S3's `surveySha` are re-pinned at the same claim
+  (recorded with the reason). S1's and S7's must not move: a bar.
+- **The alternative (S-W-1 b):** keep ice as ground, and refuse a plan whose roads, pads or lanes touch frozen water with a
+  typed note naming the frozen columns. It is smaller, but S2 would then plan buildings on sea ice that melts under their own lights
+  (M17).
+
+### 6. Item 4: gravity blocks over gaps
+
+- **`blocks.mjs` gains a `gravity` flag** per block, generated from the 26.3 data dump (`kit/tools/BlockDump.java`: blocks
+  whose class extends `FallingBlock`), not hand-listed.
+- **The rule, in the kit's surface swaps** (`surfaceOps`, the square, verges, lanes) and in `r.lot`'s apron: where the written
+  block has `gravity` and the cell under it is a gap in the frozen ground (air, fluid, a plant or snow layer), the op also
+  writes the `foundation` role under it when the gap is 1 deep, and otherwise swaps the surface for `subsurface` (never
+  gravity) in that column.
+- **Checker:** M3 gains the sub-finding `M3:gravity` (an unsupported gravity block in a written cell). Warning, gated as a bar.
+- **Property test:** 500 seeded synthetic claims with random 1-3 deep gaps under lanes, verges and aprons, with gravel, sand
+  and concrete powder as `path`: 0 `M3:gravity`.
+
+### 7. Gate (slice tier, $0)
+
+**Evidence:** `artifacts/gate6c-w/<item>.json` and `REPORT.md`, by `tools/gate6cw.mjs` (added to the impact map).
+`spend.json` must read $0.00.
+
+| # | Check | Bar |
+|---|---|---|
+| 1 | COPY ms | §2's unit test; other breakdown lines unchanged |
+| 2 | Full M5 on S7 natural (realised, re-surveyed; every reached region-written floor) | under 1% |
+| 3 | V's bar 8 (walk cells plus door paths) on the same run | still 0.00% |
+| 4 | Lamp clutter | at most 4 lamps per lot; the per-lot count recorded; 0 lamp cells on walk cells, lot boxes, bell area, golem space, keep-out |
+| 5 | Road lanterns, three path bibles (S7 flat variant) | count equal to the coarse-dirt bible's; street M5 0.00% |
+| 6 | Frozen water: S7's rejected site 2026101102 | planned with the street off the frozen river, or refused with a note naming frozen columns; never PARTIAL at realise |
+| 7 | Frozen water: survey shas | S1's and S7's unchanged; S2's and S3's re-pinned with the FROZEN count recorded |
+| 8 | Gravity | §6's property test 0; S7 natural and the gravity broken variant: 0 `M3:gravity` on the realised world |
+| 9 | S7 run bars 1-13 (V's table, bar 8 as ruled) | all pass |
+| 10 | Exactness | S7 flat E-flat 0; natural E-normal classified, at most 0.01% of written cells |
+| 11 | Determinism | IR sha identical over 3 plans; S7 tile shas for 1 and 4 workers equal the re-committed golden (macOS and Linux CI) |
+| 12 | Goldens that must not move | `mega_bench.golden.json`, S1's tile golden, the 6b fixtures' `expected.json` |
+| 13 | MSPT | Architect's own CPU per tick at most 50 ms on S7 natural |
+| 14 | API | api-compat clean; the three apitest jars pass |
+| 15 | Spend | $0.00 |
+| 16 | Gallery | Noah approves S7's new evidence sha on "Architect 6c-V gallery" (a new section, W) |
+
+**Broken variants** (each caught on its named part): a lot with lamps removed (M5 full over 1%), a gravel lane over a 2-deep
+gap with the rule off (`M3:gravity`), a road over frozen water with FROZEN ignored (plan note, then DEEP_WATER at check).
+
+**Tier:** `slice`: quick plus the impact rows for the kit region code (6a-staged, 6a-inv3, 4e-megalite), `site/**`
+(4e-orders, 4d-all, 5b-village, 6b-pathstyle), `region/**` (6a-megaA, 6b-ghost, 6b-volume, 6b-nudges, 6b-versions; the engine
+tag, since `Columns` changes), the sim suites, apijars, 6b-scenario-s1 and 6cv-scenario-s7. About 60-75 min on 3 shards.
+**gate-verifier (slice)** reviews the diff and the evidence, recomputes S7's evidence sha, and re-runs items 2, 5 and 6.
+
+### 8. Build order
+
+1. Archive the 0.16.0 apitest jar.
+2. Item 0 (sidecar only).
+3. Item 4 (the `gravity` flag, the kit rule, M3:gravity).
+4. Item 3 (ARSV FROZEN, `RoadTerrain`, kit, find-site, re-pins).
+5. Item 2 (`RoadPlan.lanterns`).
+6. Item 1 (`r.lightCover`, S7 re-run, golden).
+7. The gate driver, the slice run, the verifier, the gallery section.
+
+### Open questions for Steward
+
+- **S-W-1. Frozen water.** Treat it as water (recommended, §5) or refuse plans that touch it? Does your `VillageLayout`'s
+  `near_water` want `Sample.frozen` excluded too?
+- **S-W-2. Lamps per lot.** Up to 4 lamp posts per lot beside the apron. Acceptable, or should the cover prefer lights inside
+  the design (a request to the designer, 7b) and accept a higher full M5 until then?
+
+### Open questions for Noah
+
+- **N-W-1. S7's approval.** W changes S7's evidence sha (lamps). Approve V's sha `c31c6de43ce1` now and W's after, or only
+  W's?
+- **N-W-2. The look of the lamps.** Fence posts with lanterns, at most 4 per lot. Fine, or a different default light?
+
+### Deferred
+
+- Lighting inside lots from the design side (7b), bible-styled lamps (7a §8.3).
+- Region survival (the RS slice).
