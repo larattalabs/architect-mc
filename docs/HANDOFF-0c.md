@@ -53,6 +53,13 @@ need a shared crate.
 - §10 spike is on `slice/0c-undo` (not merged): `WorldJournal.UndoPlanner` copies sections on the server thread, plans off it,
   compares, falls back on any change. Go/no-go needs 0a's ownCpu on megaA undo-only.
 
+## Gate runs
+
+- Trial slice tier 2026-10-10 23:22 (`artifacts/gate-runs-0c/20261010-232225-slice`, 2 shards on 8914-8917), at load 40-77
+  while 0a's and 0b's tiers ran too: 13 PASS, 8 FAIL. sim-jobs/sets/massing: `tools/apitest.mjs` expected VERSION 1.9.0
+  (fixed: 1.12.0). Tick bars (megalite, 4d, megaA realise), 4e throughput and the 1.8.0 jar's SITE_PROGRESS gap (876 ms)
+  are load. 4d "group undo ... back exactly" (L5) fails in 0a's, 0b's and integ runs too: not 0c's.
+
 ## Resume
 
 - Build: `export JAVA_HOME=/opt/homebrew/opt/openjdk@25 GRADLE_USER_HOME=$PWD/.gradle-home; cd mod && ./gradlew build --offline`.
