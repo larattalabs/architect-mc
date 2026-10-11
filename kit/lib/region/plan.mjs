@@ -337,6 +337,6 @@ export async function planRegion(o) {
   // a fresh object: evalTile caches compiled IRs per object, and the claim changed after the budget pass
   stats.irFormat = ir.format;
   stats.requires = ir.requires ?? [];
-  const meta = { format: 1, paths: r.meta.paths, lots: r.meta.lots, parts: r.meta.parts, ...(r.meta.village ? { village: r.meta.village } : {}) };
+  const meta = { format: 1, paths: r.meta.paths, lots: r.meta.lots, parts: r.meta.parts, ...(r.meta.village ? { village: r.meta.village } : {}), ...(r.meta.gravity ? { gravity: r.meta.gravity } : {}) };
   return { ir: JSON.parse(irJson), irJson, irSha: sha256Hex(irJson), notes, stats, blobs: sideBytes, meta, needVolumes: r.needVolumes };
 }

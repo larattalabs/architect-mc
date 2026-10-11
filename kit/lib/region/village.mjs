@@ -13,6 +13,7 @@
 import { COND } from './program.mjs';
 import { inRects } from './survey.mjs';
 import { crossOffsets } from './geom.mjs';
+import { isGravity } from '../blocks.mjs';
 
 /** VillageLayout.Rules.defaults(): street 5 (road 3 plus a verge each side), lot gap 3, slope at most 3, margin 2. */
 export const STREET_RULES = Object.freeze({ streetWidth: 5, lotGap: 3, maxSlope: 3, claimMargin: 2 });
@@ -346,12 +347,38 @@ function slopeTotal(o, p, survey) {
 
 // ------------------------------------------------------------------ surface ops (columns)
 
-/** Column ops for a set of cells levelled at y (abs) or following the ground (y null): fill below, the top (role, walk), 2 clear. */
-export function surfaceOps(part, cells, role, { walk = true, subsurface = 'subsurface' } = {}) {
+/**
+ * (6c W, item 4) The gap under a surface cell written at `y` in column (x, z), on the frozen plan survey: the number of fluid
+ * cells (water, or frozen water's water) between the cell below it and the bed. 0 on dry land and over a fill.
+ */
+export function gapUnder(survey, x, y, z) {
+  if (!survey.waterAt(x, z)) return 0;
+  const u = y - 1, floor = survey.floorAt(x, z), ground = survey.heightAt(x, z);
+  return u > floor && u <= ground ? u - floor : 0;
+}
+
+/**
+ * Column ops for a set of cells levelled at y (abs) or following the ground (y null): fill below, the top (role, walk), 2 clear.
+ * (6c W, item 4) When the top block falls (sand, gravel, concrete powder: blocks.mjs `isGravity`) and the cell under it is a gap
+ * in the frozen ground, a 1-deep gap gets the `foundation` role under it and a deeper one takes the `subsurface` role as its top
+ * (never a falling block). A top that doesn't fall, or a cell with nothing under it to fill, writes exactly as before.
+ */
+export function surfaceOps(part, cells, role, { walk = true, subsurface = 'subsurface', _noGravityRule = false } = {}) {
   const r = part.region;
   const top = r.material(role, `${part.id}: surface`), sub = r.material(subsurface, `${part.id}: subsurface`);
   const lev = cells.filter((c) => c[1] !== null), fol = cells.filter((c) => c[1] === null);
   const ops = [];
+  // the gravity rule: the cells whose top would stand over a gap, by the fix they need
+  let under = [], swap = [];
+  if (!_noGravityRule && isGravity(top)) {
+    const s = r.survey;
+    const gap = (x, y, z) => gapUnder(s, x, y ?? s.heightAt(x, z), z);
+    const keep = [];
+    for (const c of lev) { const g = gap(c[0], c[1], c[2]); if (g === 1) under.push(c); else if (g > 1) swap.push(c); else keep.push(c); }
+    const keepF = [];
+    for (const c of fol) { const g = gap(c[0], null, c[2]); if (g === 1) under.push(c); else if (g > 1) swap.push(c); else keepF.push(c); }
+    if (under.length || swap.length) { lev.length = 0; lev.push(...keep, ...under.filter((c) => c[1] !== null)); fol.length = 0; fol.push(...keepF, ...under.filter((c) => c[1] === null)); }
+  }
   if (lev.length) {
     // fill from the ground up to y - 1, the top at y, cleared from y + 1 to the column's top (at least 2 above the ground)
     ops.push({ from: { surface: 0 }, to: { abs: 0 }, cols: lev.flatMap(([x, y, z]) => [x, z, 1, y - 1, 0]), materials: [sub], walk: false });
@@ -362,7 +389,28 @@ export function surfaceOps(part, cells, role, { walk = true, subsurface = 'subsu
     ops.push({ from: { surface: 0 }, to: { surface: 0 }, cols: fol.flatMap(([x, , z]) => [x, z, 0, 0, 0]), materials: [top], walk });
     ops.push({ from: { surface: 1 }, to: { max: [{ height: 0 }, { surface: 2 }] }, cols: fol.flatMap(([x, , z]) => [x, z, 0, 0, 0]), materials: [null], walk: false });
   }
+  if (under.length) {
+    // a 1-deep gap: the foundation under the top (the gap's one fluid cell)
+    const s = r.survey;
+    const fdn = r.material(isGravity(r.material('foundation', 'gravity fill')) ? 'subsurface' : 'foundation', `${part.id}: gravity fill`);
+    ops.push({ from: { abs: 0 }, to: { abs: 0 }, cols: under.flatMap(([x, y, z]) => { const yy = (y ?? s.heightAt(x, z)) - 1; return [x, z, yy, yy, 0]; }), materials: [fdn], walk: false });
+  }
+  if (swap.length) {
+    // a deeper gap: the top takes the subsurface role (never a falling block), as it was otherwise
+    const alt = isGravity(sub) ? r.material('foundation', `${part.id}: gravity swap`) : sub;
+    const sl = swap.filter((c) => c[1] !== null), sf = swap.filter((c) => c[1] === null);
+    if (sl.length) {
+      ops.push({ from: { surface: 0 }, to: { abs: 0 }, cols: sl.flatMap(([x, y, z]) => [x, z, 1, y - 1, 0]), materials: [sub], walk: false });
+      ops.push({ from: { abs: 0 }, to: { abs: 0 }, cols: sl.flatMap(([x, y, z]) => [x, z, y, y, 0]), materials: [alt], walk });
+      ops.push({ from: { abs: 0 }, to: { max: [{ height: 0 }, { surface: 2 }] }, cols: sl.flatMap(([x, y, z]) => [x, z, y + 1, 0, 0]), materials: [null], walk: false });
+    }
+    if (sf.length) {
+      ops.push({ from: { surface: 0 }, to: { surface: 0 }, cols: sf.flatMap(([x, , z]) => [x, z, 0, 0, 0]), materials: [alt], walk });
+      ops.push({ from: { surface: 1 }, to: { max: [{ height: 0 }, { surface: 2 }] }, cols: sf.flatMap(([x, , z]) => [x, z, 0, 0, 0]), materials: [null], walk: false });
+    }
+  }
   for (const op of ops) part._push({ op: 'columns', from: op.from, to: op.to, cols: op.cols, materials: op.materials, cond: COND.IF_NATURAL, walk: op.walk });
+  if (under.length || swap.length) ((r.meta.gravity ??= {})[part.id] ??= { under: 0, swap: 0 }, r.meta.gravity[part.id].under += under.length, r.meta.gravity[part.id].swap += swap.length);
   return part;
 }
 
@@ -391,15 +439,15 @@ export function reservations(o, sh) {
 }
 
 /** The square (or the green): levelled at its y and paved in the `path` role with walk cells, prop cells paved without walk. */
-export function square(r, sh, { stage = 'ground', o, noWalk = new Set() } = {}) {
+export function square(r, sh, { stage = 'ground', o, noWalk = new Set(), noGravityRule = false } = {}) {
   const p = r.part(sh.kind === 'square' ? 'square' : 'green', { stage, set: 'path' });
   const cells = [], still = [];
   for (let u = sh.u0; u <= sh.u1; u++) for (let v = sh.v0; v <= sh.v1; v++) {
     const [x, z] = toWorld(o, u, v);
     (noWalk.has(`${x},${z}`) ? still : cells).push([x, sh.y, z]);
   }
-  surfaceOps(p, cells, sh.kind === 'square' ? 'path' : 'surface');
-  if (still.length) surfaceOps(p, still, sh.kind === 'square' ? 'path' : 'surface', { walk: false });
+  surfaceOps(p, cells, sh.kind === 'square' ? 'path' : 'surface', { _noGravityRule: noGravityRule });
+  if (still.length) surfaceOps(p, still, sh.kind === 'square' ? 'path' : 'surface', { walk: false, _noGravityRule: noGravityRule });
   (r.meta.parts[p.id] ??= {}).kind = 'path';
   return p;
 }
@@ -413,7 +461,7 @@ export const green = (r, sh, o) => square(r, sh, o);
  * top). 4-connected: across the street axis first, then along it. Never inside a lot box (`_unsafe` skips that guard: the broken
  * variant the checker's M1 must catch) and never across keep-out (that refuses the plan). Returns its top cells [x, y, z].
  */
-export function lane(part, id, from, to, w, { o, boxes = [], keepOut = [], _unsafe = false }) {
+export function lane(part, id, from, to, w, { o, boxes = [], keepOut = [], _unsafe = false, noGravityRule = false }) {
   const y = from[1] - 1;
   const [fu, fv] = toLocal(o, from[0], from[2]);
   const [tu, tv] = toLocal(o, to[0], to[2]);
@@ -433,7 +481,7 @@ export function lane(part, id, from, to, w, { o, boxes = [], keepOut = [], _unsa
     if (keepOut.length && inRects(keepOut, x, z)) throw new Error(`lane ${id} crosses keep-out at ${x},${z}`);
     if (!_unsafe) for (const b of boxes) if (x >= b.minX && x <= b.maxX && z >= b.minZ && z <= b.maxZ) throw new Error(`lane ${id} enters lot ${b.id}'s box at ${x},${z}`);
   }
-  surfaceOps(part, cells, 'path');
+  surfaceOps(part, cells, 'path', { _noGravityRule: noGravityRule });
   return cells;
 }
 
@@ -475,7 +523,7 @@ export function streetLayout(r, specs, { rules = STREET_RULES, shared = { kind: 
   }
   // the shared space (the props' cells, from the caller's planProps, paved without walk)
   const propsPlan = planProps ? planProps({ o, sh, res, lots: lotOut, layout: L }) : null;
-  square(r, sh, { stage: sg, o, noWalk: propsPlan?.noWalk ?? new Set() });
+  square(r, sh, { stage: sg, o, noWalk: propsPlan?.noWalk ?? new Set(), noGravityRule: !!_unsafe.noGravityRule });
   // the verges: the street's two outer rows, outside the shared space (surface swap, walk)
   const verges = r.part('verges', { stage: sg, set: 'path' });
   const sv = L.road.sv;
@@ -484,7 +532,7 @@ export function streetLayout(r, specs, { rules = STREET_RULES, shared = { kind: 
     if (sh.kind === 'square' && u >= sh.u0 && u <= sh.u1) continue;
     for (const dv of [-half, half]) { const [x, z] = toWorld(o, u, sv + dv); vcells.push([x, null, z]); }
   }
-  if (vcells.length) surfaceOps(verges, vcells, 'path');
+  if (vcells.length) surfaceOps(verges, vcells, 'path', { _noGravityRule: !!_unsafe.noGravityRule });
   (r.meta.parts.verges ??= {}).kind = 'path';
   // the plaza and the street's junctions
   const pl = plaza(r, sh, res.bell);
@@ -505,13 +553,13 @@ export function streetLayout(r, specs, { rules = STREET_RULES, shared = { kind: 
       to = [...toWorld(o, eu, tv)];
       to = [to[0], e[1], to[1]];
       pl.ports.push({ name: id, at: to, facing: l.front, width: laneWidth });
-      laneCells[s.id] = lane(lanes, id, e, to, laneWidth, { o, boxes, keepOut, _unsafe: _unsafe.laneIntoBox === s.id });
+      laneCells[s.id] = lane(lanes, id, e, to, laneWidth, { o, boxes, keepOut, _unsafe: _unsafe.laneIntoBox === s.id, noGravityRule: !!_unsafe.noGravityRule });
       r.graphEdge({ id, from: `lot:${s.id}.entrance`, to: `plaza.${id}`, type: 'path', width: laneWidth, path: id });
     } else {
       const tv = l.side < 0 ? sv - half : sv + half;
       const t2 = toWorld(o, eu, tv);
       to = [t2[0], e[1], t2[1]];
-      laneCells[s.id] = lane(lanes, id, e, to, laneWidth, { o, boxes, keepOut, _unsafe: _unsafe.laneIntoBox === s.id });
+      laneCells[s.id] = lane(lanes, id, e, to, laneWidth, { o, boxes, keepOut, _unsafe: _unsafe.laneIntoBox === s.id, noGravityRule: !!_unsafe.noGravityRule });
       const jw = toWorld(o, eu, sv);
       junctions.push({ u: eu, side: l.side, id: s.id, at: [jw[0], L.streetY, jw[1]] });
     }
