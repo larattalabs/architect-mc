@@ -8212,6 +8212,33 @@ in merge order:
   - **N-SCH-1:** fixtures are built from the public spec. A real WorldEdit-exported file is added later if Noah exports one.
     It doesn't block SCH.
 
+### Changes from Steward's review of the batch (2026-10-11; these win over every slice draft below)
+
+All slice drafts in this batch are **FROZEN** with these answers (W and X were frozen earlier). S-T2-2 and S-H-1 are Noah's
+answers, relayed by Steward.
+- **S-T1-1:** a 120 s worst-case plan is accepted (Steward shows "laying out the village"; claims at most 257 across,
+  districts at most 129; Steward sets no plan timeout under 120 s).
+- **S-MP-1:** masks and patterns reach Steward only through bibles and bundled programs for now. No card field. Revisit with
+  Steward's phase 2.
+- **S-T2-1:** movers are inferred from the end nodes' lot kinds; a per-edge override may come later (keep room for it).
+- **S-T2-2 (Noah):** ladders are on for player-only edges (lookouts, watchtowers). Villager edges never use ladders.
+- **S-B-1:** one region per brush stroke, as drafted.
+- **S-B-2:** areas binding every owner (`*`) stay deferred; not in 6c.
+- **S-S2-1:** S2's lot list is a fair hillside-card stand-in. **Add a farm lot to S2** to bring it closer.
+- **S-T3-1:** stone bridges and plain tunnels until 7a are accepted. **Addition:** the plan and the region report which edges
+  crossed water or rock (a per-edge `crossing: bridge|tunnel` with what it crossed), so Steward's card and history can say so.
+- **S-H-1 (Noah):** yes to a small contained pond beside a decorative farm lot on a dry claim: on the lot, never outside the
+  claim or in a protected area, removed with the region. **Working farms are different** (7b / functional modules): water
+  designed into the farm for yield, every farmland block hydrated (a source per 9x9, channels on that spacing), not a pond
+  added beside it. Carried to 7b.
+- **S-D-1:** districts on survey candidates are enough; Steward's own districts stay its own until the joint gate.
+- **S-D-2:** Steward proposes and approves, Architect lays out. **The join's site belongs to the district's region**, so
+  undoing the district removes its join.
+- **S-VOC-1:** default rarity budgets are enough for now. **Keep the budget field on the bible request**; Steward will pass
+  budgets when a card's style asks for a rare palette.
+- **S-RS-1:** RS is useful; Steward adopts it at its phase 4.
+- **S-PT-1:** PT is **dropped from 6c**. C17 areas cover it until 6d, and updates already keep player edits.
+
 ### Open questions for Steward
 
 - **S-W-1:** treat frozen water as water (recommended), or refuse plans that touch it.
