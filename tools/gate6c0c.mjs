@@ -587,6 +587,66 @@ steps.fields = async () => {
   return { r41, r40, groups: [c0, c1] };
 };
 
+/**
+ * Item 6's downgrade: a construction road half built by this build (`downgrade a`), then the world opened by 0.14.0
+ * (`GATE6C0C_REF=v0.14.0 ... start`, then `downgrade b`): 0.14.0 lists it as a road, and one remove leaves a world diff of 0.
+ */
+steps.downgrade = async () => {
+  await ensure();
+  const part = process.argv[3] ?? 'a';
+  const W = 'G6B 0c Downgrade';
+  const f = path.join(OUT, 'downgrade-state.json');
+  const X = 2600, Z = 2600;
+  if (part === 'a') {
+    await fresh(W, SURV);
+    await call('dev.survival.set', { on: true });
+    await cmd('/gamemode creative');
+    await tp(X + 20.5, 0, Z + 10.5, 0, 89);
+    const y = await feet(X, Z);
+    await cmd(`/fill ${X - 3} ${y - 1} ${Z - 3} ${X + 42} ${y - 1} ${Z + 3} minecraft:stone`);
+    await settle(2000);
+    const min = [X - 4, y - 6, Z - 4], max = [X + 43, y + 6, Z + 4];
+    const h0 = await hash(min, max);
+    const road = { points: [[X, y, Z], [X + 39, y, Z]], width: 1, owner: A, mode: 'AUTO' };
+    const bom = (await api(`roadcheck ${json({ ...road, mode: 'CONSTRUCTION' })}`)).bom;
+    const bid = await later(`bqueue ${json({ owner: A, sharedCrate: true, autoApprove: true, crateAt: [X + 20, y, Z - 10], items: [
+      { key: 'h1', bp: 'cabin', at: [X, y, Z - 40], mode: 'AUTO' }, { key: 'r1', road }] })}`);
+    let bv;
+    for (let i = 0; i < 120; i++) {
+      bv = await api(`batch ${bid}`);
+      if (bv.items?.every((it) => ['PLACED', 'FAILED'].includes(it.status))) break;
+      await sleep(1000);
+    }
+    const items = Object.fromEntries(bv.items.map((it) => [it.key, it]));
+    const roadId = items.r1.site;
+    await call('dev.site.finish', { site: items.h1.site }, 60_000);
+    const half = Object.fromEntries(Object.entries(bom).map(([k, v]) => [k, Math.floor(v / 2)]));
+    await call('dev.crate.insert', { site: roadId, items: half }, 60_000);
+    let rv;
+    for (let i = 0; i < 60; i++) {
+      rv = (await api('sites')).all.find((s) => s.id === roadId);
+      if (rv && rv.built >= Object.values(half).reduce((a, b) => a + b, 0)) break;
+      await sleep(1000);
+    }
+    check(rv && rv.state === 'BUILDING' && rv.built > 0 && rv.built < rv.queued, `downgrade a: ${roadId} half built (${rv?.built}/${rv?.queued})`);
+    await cmd('/save-all flush');
+    await leaveWorld();
+    fs.writeFileSync(f, JSON.stringify({ roadId, min, max, h0, half: rv }, null, 2));
+    return { roadId, built: rv };
+  }
+  const st = JSON.parse(fs.readFileSync(f, 'utf8'));
+  await openWorld(W);
+  await tp(X + 20.5, 0, Z + 10.5, 0, 89);
+  const v = (await api('version').catch(() => ({})));
+  const sv = (await api('sites')).all.find((s) => s.id === st.roadId);
+  check(!!sv && (sv.kind === 'road' || sv.blueprint === 'road'), `downgrade b: API ${v.version ?? '?'} lists ${st.roadId} as a road (${json(sv ?? {}).slice(0, 200)})`);
+  const rm = await later(`remove ${st.roadId} ${A} noforce`);
+  await settle(3000);
+  const h1 = await hash(st.min, st.max);
+  check(rm.removed && h1 === st.h0, `downgrade b: one remove by the older build leaves a world diff of ${h1 === st.h0 ? 0 : 'NOT 0'} (${json(rm.blockers ?? [])})`);
+  return { version: v, site: sv, remove: rm };
+};
+
 steps.all = async () => {
   for (const s of ['base', 'api', 'minlot', 'roads', 'ground', 'protect', 'tags', 'survroad', 'fields']) await run(s);
 };
