@@ -293,6 +293,7 @@ final class ApiTestSets {
 		o.addProperty("error", j.error().orElse(null));
 		o.add("cost", cost(j.cost()));
 		o.addProperty("owner", j.owner().orElse(null));
+		j.opKey().ifPresent(k -> o.addProperty("opKey", k));
 		j.bible().ifPresent(b -> o.add("bible", bible(b)));
 		return o;
 	}
@@ -313,6 +314,14 @@ final class ApiTestSets {
 		o.add("cost", cost(g.cost()));
 		o.addProperty("usageLimitUntil", g.usageLimitUntil());
 		o.addProperty("updatedAt", g.updatedAt());
+		// 1.10.0 (6c 0a)
+		o.addProperty("seq", g.seq());
+		o.addProperty("lastAction", g.lastAction());
+		g.opKey().ifPresent(k -> o.addProperty("opKey", k));
+		o.add("breakdown", ApiTest0a.breakdown(g.breakdown()));
+		JsonObject ck = new JsonObject();
+		g.costByKind().forEach(ck::addProperty);
+		o.add("costByKind", ck);
 		JsonArray items = new JsonArray();
 		for (Group.Item i : g.items()) {
 			JsonObject j = new JsonObject();

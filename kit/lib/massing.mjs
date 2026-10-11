@@ -210,17 +210,20 @@ const FACE_NAMES = ['west (x0)', 'bottom (y0)', 'north (z0)', 'east (x1)', 'top 
 /**
  * Massing conformance (docs/CONTRACT.md phase 4c, with Steward's 4c review): a detail design's sidecar against its
  * massing's sidecar.
- *   errors (the size cap binds): the detail's size is at most the massing's size + 2 on every axis
+ *   errors: the detail's size is at most the massing's size + 2 on every axis (the size cap binds), and (6c 0a, C6)
+ *     the front matches the massing's: a turned detail would stand turned on the lot the massing was fitted
+ *     to (Sites.fitMassingToLot), so the round goes back to the designer
  *   issues (warnings): every massing part exists in the detail (extra parts are fine), each massing part's box is within
- *     1 of the detail part's box on every face, the size is not more than 2 under the massing's, and the roof forms match
- *     where both record one (`parts.<name>.roof`)
- * Boxes are template coordinates, so both templates are compared from their minimum corners.
- * @returns {{ ok: boolean, errors: string[], issues: string[], compared: { parts: number, roofs: number } }}
+ *     1 of the detail part's box on every face, the size is not more than 2 under the massing's, the roof forms match
+ *     where both record one (`parts.<name>.roof`), and (6c 0a, C6) the entrance column (anchors.entrance: x on a
+ *     north/south front, z on an east/west one) is within 1 of the massing's where both have an entrance
+ * Boxes and anchors are template coordinates, so both templates are compared from their minimum corners.
+ * @returns {{ ok: boolean, errors: string[], issues: string[], compared: { parts: number, roofs: number, entrance: boolean } }}
  */
 export function checkConformance(detail, massing) {
   const errors = [];
   const issues = [];
-  const compared = { parts: 0, roofs: 0 };
+  const compared = { parts: 0, roofs: 0, entrance: false };
   if (!massing || typeof massing !== 'object') return { ok: false, errors: ['the massing sidecar is not an object'], issues, compared };
   if (massing.massing !== true) issues.push(`the reference sidecar '${massing.id}' is not a massing (no massing: true)`);
   const ds = detail.size ?? {};
@@ -229,6 +232,21 @@ export function checkConformance(detail, massing) {
     if (!Number.isInteger(ds[a]) || !Number.isInteger(ms[a])) { errors.push(`size: ${a} missing in ${!Number.isInteger(ds[a]) ? 'the design' : 'the massing'}`); continue; }
     if (ds[a] > ms[a] + 2) errors.push(`size: ${a} is ${ds[a]}, over the massing's ${ms[a]} + 2 (the approved massing caps the size)`);
     else if (ds[a] < ms[a] - 2) issues.push(`size: ${a} is ${ds[a]}, more than 2 under the massing's ${ms[a]}`);
+  }
+  // (6c 0a, C6) the front and the entrance column: what Sites.fitToLot turns and centres by
+  const df = String(detail.front ?? 'south').toLowerCase();
+  const mf = String(massing.front ?? 'south').toLowerCase();
+  if (df !== mf) errors.push(`front: the design faces ${df}, the massing ${mf} (keep the massing's front: it would stand turned on its lot)`);
+  else {
+    const de = detail.anchors?.entrance;
+    const me = massing.anchors?.entrance;
+    const axis = mf === 'east' || mf === 'west' ? 'z' : 'x';
+    if (Number.isFinite(de?.[axis]) && Number.isFinite(me?.[axis])) {
+      compared.entrance = true;
+      const dc = Math.floor(de[axis]);
+      const mc = Math.floor(me[axis]);
+      if (Math.abs(dc - mc) > 1) issues.push(`entrance: column ${axis}=${dc} is ${dc - mc > 0 ? '+' : ''}${dc - mc} off the massing's ${axis}=${mc} (more than 1; it moves the building on its lot)`);
+    }
   }
   const mp = massing.parts && typeof massing.parts === 'object' ? massing.parts : {};
   const dp = detail.parts && typeof detail.parts === 'object' ? detail.parts : {};

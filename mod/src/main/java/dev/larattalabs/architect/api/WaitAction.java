@@ -10,7 +10,8 @@ import org.jspecify.annotations.Nullable;
  * <li>{@code NOT_LOADED}: {@link Kind#MOVE_CLOSER}, {@code target} the waiting item's nearest chunk centre;</li>
  * <li>{@code NOT_GENERATED}: {@link Kind#PREPARE}, {@code detail} the prepare's size and time estimate;</li>
  * <li>{@code SIDECAR_UNAVAILABLE}: {@link Kind#START_SIDECAR};</li>
- * <li>{@code DRIFTED} (a stage held): {@link Kind#APPROVE_STAGE} ({@code detail} the stage) and {@link Kind#REPLAN}.</li>
+ * <li>{@code DRIFTED} (a stage held): {@link Kind#APPROVE_STAGE} ({@code detail} the stage) and {@link Kind#REPLAN};</li>
+ * <li>{@code TILE_SLOW} (since 1.10.0): {@link Kind#RETRY} ({@link Regions#nudge} asks for the slow tiles again now).</li>
  * </ul>
  * Since 1.9.0.
  *
@@ -18,5 +19,5 @@ import org.jspecify.annotations.Nullable;
  */
 public record WaitAction(Kind kind, String label, @Nullable BlockPos target, @Nullable String detail) {
 	/** New values are only ever appended. */
-	public enum Kind { MOVE_CLOSER, PREPARE, START_SIDECAR, APPROVE_STAGE, REPLAN }
+	public enum Kind { MOVE_CLOSER, PREPARE, START_SIDECAR, APPROVE_STAGE, REPLAN, RETRY }
 }

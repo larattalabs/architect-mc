@@ -31,10 +31,28 @@ import org.jspecify.annotations.Nullable;
  * @param critique (since 1.6.0, a helper with {@code "critique"}) the items' default critique (an item's own
  *     {@link Item#critique} wins); null or OFF = none (the default: Architect never loops a whole group by default). With
  *     massingFirst it applies to the detail passes
+ * @param opKey (since 1.10.0) the caller's operation key ({@code [A-Za-z0-9_.:-]{1,128}}), scoped by (owner, kind, opKey); a null
+ *     owner means the player. Sending again with the same key and the same body returns the first operation and starts no new
+ *     work (in any state); with a different body the future fails {@link ArchitectRefused} {@link Reason#OP_KEY_CONFLICT}.
+ *     Bodies are compared by the sha256 of the request's canonical JSON without the key. Kept as long as the record, and at
+ *     least 30 days after it is final. See {@link Designs#groupByKey}.
  */
 public record GroupRequest(String name, String bible, @Nullable Integer bibleVersion, @Nullable String owner, JsonObject ext,
 	@Nullable Integer concurrency, @Nullable Double budgetUsd, List<Item> items, boolean massingFirst, @Nullable ApprovalUi approvalUi,
-	@Nullable Integer maxRedirects, @Nullable JsonElement context, @Nullable CritiqueSpec critique) {
+	@Nullable Integer maxRedirects, @Nullable JsonElement context, @Nullable CritiqueSpec critique, @Nullable String opKey) {
+	/** The 1.6.0 constructor (no opKey). */
+	public GroupRequest(String name, String bible, @Nullable Integer bibleVersion, @Nullable String owner, JsonObject ext, @Nullable Integer concurrency,
+		@Nullable Double budgetUsd, List<Item> items, boolean massingFirst, @Nullable ApprovalUi approvalUi, @Nullable Integer maxRedirects,
+		@Nullable JsonElement context, @Nullable CritiqueSpec critique) {
+		this(name, bible, bibleVersion, owner, ext, concurrency, budgetUsd, items, massingFirst, approvalUi, maxRedirects, context, critique, null);
+	}
+
+	/** A copy with an operation key. Since 1.10.0. */
+	public GroupRequest withOpKey(@Nullable String key) {
+		return new GroupRequest(name, bible, bibleVersion, owner, ext, concurrency, budgetUsd, items, massingFirst, approvalUi, maxRedirects, context, critique,
+			key);
+	}
+
 	/** The most items a group holds. */
 	public static final int MAX_ITEMS = 24;
 	/** The most redirect rounds per item. */
@@ -66,7 +84,7 @@ public record GroupRequest(String name, String bible, @Nullable Integer bibleVer
 
 	/** A copy with massings first ({@code approvalUi} null = architect, {@code maxRedirects} null = the default). Since 1.3.0. */
 	public GroupRequest withMassingFirst(@Nullable ApprovalUi ui, @Nullable Integer redirects) {
-		return new GroupRequest(name, bible, bibleVersion, owner, ext, concurrency, budgetUsd, items, true, ui, redirects, context, critique);
+		return new GroupRequest(name, bible, bibleVersion, owner, ext, concurrency, budgetUsd, items, true, ui, redirects, context, critique, opKey);
 	}
 
 	/** A copy with a context text (null or blank = none). Since 1.3.0. */
@@ -76,12 +94,12 @@ public record GroupRequest(String name, String bible, @Nullable Integer bibleVer
 
 	/** A copy with a context: a JSON object, or text as a {@link JsonPrimitive}. Since 1.3.0. */
 	public GroupRequest withContext(@Nullable JsonElement ctx) {
-		return new GroupRequest(name, bible, bibleVersion, owner, ext, concurrency, budgetUsd, items, massingFirst, approvalUi, maxRedirects, ctx, critique);
+		return new GroupRequest(name, bible, bibleVersion, owner, ext, concurrency, budgetUsd, items, massingFirst, approvalUi, maxRedirects, ctx, critique, opKey);
 	}
 
 	/** A copy whose items are critiqued as {@code spec} by default (null or OFF = none). Since 1.6.0. */
 	public GroupRequest critique(@Nullable CritiqueSpec spec) {
-		return new GroupRequest(name, bible, bibleVersion, owner, ext, concurrency, budgetUsd, items, massingFirst, approvalUi, maxRedirects, context, spec);
+		return new GroupRequest(name, bible, bibleVersion, owner, ext, concurrency, budgetUsd, items, massingFirst, approvalUi, maxRedirects, context, spec, opKey);
 	}
 
 	/** Who approves a massingFirst group's massings. Since 1.3.0. */

@@ -8,6 +8,10 @@
 //                     every public or protected member of every class under dev/larattalabs/architect/api in the old MOD jar
 //                     (its whole 1.x surface, not only what one jar calls) must still exist with the same descriptor.
 //
+//   node tools/api-compat.mjs --gate6c0a [--artifacts <dir>] [classesDir]
+//                     phase 6c slice 0a: the unchanged 0.12.0, 0.11.0 and 0.10.0 apitest jars (API 1.9.0, 1.8.0, 1.7.0) and the 0.12.0
+//                     mod jar's 1.9.0 surface (artifacts/gate6c0a/v0120/).
+//
 //   node tools/api-compat.mjs --gate6b [--artifacts <dir>] [classesDir]
 //                     phase 6b (docs/CONTRACT.md "# Phase 6b contract" §6.1): the unchanged 1.8.0, 1.7.0 and 1.6.0 apitest jars by
 //                     reference (artifacts/gate6b/v0110/architect_apitest-0.11.0.jar, gate6a/v0100/...-0.10.0.jar,
@@ -26,7 +30,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-if (process.argv[2] === '--gate6b') {
+if (process.argv[2] === '--gate6b' || process.argv[2] === '--gate6c0a') {
+  const c0a = process.argv[2] === '--gate6c0a';
   const rest = process.argv.slice(3);
   let dir = process.env.ARCHITECT_ARTIFACTS;
   const ai = rest.indexOf('--artifacts');
@@ -36,9 +41,15 @@ if (process.argv[2] === '--gate6b') {
   }
   if (!dir) {
     const local = path.join(root, 'artifacts');
-    dir = fs.existsSync(path.join(local, 'gate6b', 'v0110')) ? local : path.join(os.homedir(), 'Developer', 'LarattaLabs', 'architect-mc', 'artifacts');
+    dir = fs.existsSync(path.join(local, c0a ? 'gate6c0a' : 'gate6b', c0a ? 'v0120' : 'v0110')) ? local : path.join(os.homedir(), 'Developer', 'LarattaLabs', 'architect-mc', 'artifacts');
   }
-  const checks = [
+  // (6c 0a) the unchanged 0.12.0, 0.11.0 and 0.10.0 apitest jars (API 1.9.0, 1.8.0, 1.7.0) and the 0.12.0 mod jar's 1.9.0 surface
+  const checks = c0a ? [
+    ['1.9.0 apitest', [path.join(dir, 'gate6c0a', 'v0120', 'architect_apitest-0.12.0.jar')]],
+    ['1.8.0 apitest', [path.join(dir, 'gate6b', 'v0110', 'architect_apitest-0.11.0.jar')]],
+    ['1.7.0 apitest', [path.join(dir, 'gate6a', 'v0100', 'architect_apitest-0.10.0.jar')]],
+    ['1.9.0 surface', ['--surface', path.join(dir, 'gate6c0a', 'v0120', 'architect_mc-0.12.0.jar')]],
+  ] : [
     ['1.8.0 apitest', [path.join(dir, 'gate6b', 'v0110', 'architect_apitest-0.11.0.jar')]],
     ['1.7.0 apitest', [path.join(dir, 'gate6a', 'v0100', 'architect_apitest-0.10.0.jar')]],
     ['1.6.0 apitest', [path.join(dir, 'gate5b', 'v090', 'architect_apitest-0.9.0.jar')]],

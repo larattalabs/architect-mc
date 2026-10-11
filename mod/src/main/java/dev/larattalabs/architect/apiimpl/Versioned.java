@@ -121,6 +121,8 @@ public final class Versioned {
 				pins.computeIfAbsent(site.blueprint(), k -> new TreeSet<>()).add(v);
 			}
 		}
+		// (6c 0a) caller pins keep their versions too
+		CallerPins.pinned().forEach((k, vs) -> pins.computeIfAbsent(k, x -> new TreeSet<>()).addAll(vs));
 		JsonObject p = new JsonObject();
 		pins.forEach((k, vs) -> {
 			JsonArray a = new JsonArray();

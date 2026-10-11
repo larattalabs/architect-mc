@@ -25,12 +25,32 @@ public final class TileStream {
 	/**
 	 * REQUESTED .. DECODED as 6a; FAILED: the tile failed (the item fails); WAITING (6b): the helper keeps answering
 	 * {@code ir_unknown} / {@code blob_unknown} after {@link #MAX_RESENDS} re-sends, so the item waits SIDECAR_UNAVAILABLE until the
-	 * link changes (a reconnect or a restart asks again).
+	 * link changes (a reconnect or a restart asks again). (6c 0a) Also WAITING, with {@link Tile#slow}: the helper answered
+	 * {@code region.tile.error code: "timeout"} (over its time limit in every one of its retries); the item waits TILE_SLOW and
+	 * the tile is asked again after {@link #slowDelayMs} (30 s, 60 s, 120 s, then every 5 min), or now by {@link #retryWaiting}.
 	 */
 	public enum Phase { REQUESTED, RECEIVED, DECODED, FAILED, WAITING }
 
 	/** At most this many re-requests of a tile per reason ({@code ir_unknown}, {@code blob_unknown}) (CONTRACT phase 6b §2.2). */
 	public static final int MAX_RESENDS = 3;
+
+	/**
+	 * (6c 0a, CONTRACT 0a §11) How long a slow tile waits before it is asked again after its {@code round}-th timeout answer (from
+	 * 1): 30 s, 60 s, 120 s, then every 5 min. Pure.
+	 */
+	public static long slowDelayMs(int round) {
+		return switch (round) {
+			case 0, 1 -> 30_000L;
+			case 2 -> 60_000L;
+			case 3 -> 120_000L;
+			default -> 300_000L;
+		};
+	}
+
+	/** (6c 0a) The clock of the slow-tile schedule (ms; a seam for tests). */
+	static volatile java.util.function.LongSupplier CLOCK = System::currentTimeMillis;
+	/** (6c 0a) Timeout answers so far per tile id (kept across its re-requests; gone once it arrives, or is released). */
+	private static final Map<String, Integer> SLOW_ROUNDS = new ConcurrentHashMap<>();
 
 	/** The link to the sidecar (the client's {@code ClientBridge} in a singleplayer game; a seam for tests). */
 	public interface Link {
@@ -58,6 +78,11 @@ public final class TileStream {
 		public volatile long receivedAt;
 		public volatile int wireBytes;
 		public volatile int count;
+		/** (6c 0a) WAITING because the helper timed out on it (TILE_SLOW), not for missing data */
+		public volatile boolean slow;
+		/** (6c 0a) a slow tile: its timeout answers so far, and when it is asked again ({@link #CLOCK} ms) */
+		public volatile int slowRound;
+		public volatile long askAgainAt;
 
 		Tile(String region, String planId, String stage, String set, String key) {
 			this.region = region;
@@ -110,14 +135,26 @@ public final class TileStream {
 			TILES.remove(id(region, stage, set, key), t); // asked on a link that is gone: ask again
 			return null;
 		}
+		if (t != null && slowDue(t, CLOCK.getAsLong())) {
+			TILES.remove(id(region, stage, set, key), t); // (6c 0a) a slow tile's wait is over: ask again
+			return null;
+		}
 		return t;
 	}
 
-	/** Tiles of a region requested and not yet released (the window). */
+	/** (6c 0a) Whether a slow tile is due to be asked again at {@code nowMs}. Pure. */
+	static boolean slowDue(Tile t, long nowMs) {
+		return t.phase == Phase.WAITING && t.slow && nowMs >= t.askAgainAt;
+	}
+
+	/**
+	 * Tiles of a region requested and not yet released (the window). (6c 0a) A slow tile waiting to be asked again holds no slot:
+	 * the helper holds nothing for it.
+	 */
 	public static int outstanding(String region) {
 		int n = 0;
 		for (Tile t : TILES.values()) {
-			if (t.region.equals(region) && t.phase != Phase.FAILED) {
+			if (t.region.equals(region) && t.phase != Phase.FAILED && !(t.phase == Phase.WAITING && t.slow)) {
 				n++;
 			}
 		}
@@ -410,6 +447,27 @@ public final class TileStream {
 		t.phase = Phase.FAILED;
 	}
 
+	/**
+	 * (6c 0a) The helper timed out on the tile in every one of its retries ({@code code: "timeout"}): the tile waits (TILE_SLOW)
+	 * and is asked again after {@link #slowDelayMs} of its timeout answers so far.
+	 */
+	static void slow(Tile t, String message, int attempts) {
+		int round = SLOW_ROUNDS.merge(id(t.region, t.stage, t.set, t.key), 1, Integer::sum);
+		long delay = slowDelayMs(round);
+		t.slowRound = round;
+		t.askAgainAt = CLOCK.getAsLong() + delay;
+		t.slow = true;
+		t.error = "the helper's evaluation of tile " + t.key + " ran over its time limit in " + (attempts > 0 ? "all " + attempts : "every")
+			+ " attempts (" + message + "); asked again in " + delay / 1000 + " s (timeout " + round + ")";
+		t.phase = Phase.WAITING;
+		Architect.LOGGER.warn("Region {} tile {} {} {} is slow: {}", t.region, t.key, t.stage, t.set, t.error);
+	}
+
+	/** (6c 0a) A slow tile's timeout answers so far (0: none). */
+	public static int slowRound(String region, String stage, String set, String key) {
+		return SLOW_ROUNDS.getOrDefault(id(region, stage, set, key), 0);
+	}
+
 	/** {@code region.tile} / {@code region.tile.error} (the link's thread). */
 	public static void onMessage(JsonObject m) {
 		String type = m.get("type").getAsString();
@@ -433,7 +491,14 @@ public final class TileStream {
 			return; // dropped (a reconnect, a released region)
 		}
 		if ("region.tile.error".equals(type)) {
-			fail(t, m.has("message") ? m.get("message").getAsString() : "the tile could not be evaluated");
+			String msg = m.has("message") ? m.get("message").getAsString() : "the tile could not be evaluated";
+			// (6c 0a) only code "timeout" waits; "error", or no code (an older helper), fails the tile as before
+			String code = m.has("code") && m.get("code").isJsonPrimitive() ? m.get("code").getAsString() : null;
+			if ("timeout".equals(code)) {
+				slow(t, msg, m.has("attempts") && m.get("attempts").isJsonPrimitive() ? m.get("attempts").getAsInt() : 0);
+			} else {
+				fail(t, msg);
+			}
 			return;
 		}
 		int seq = m.get("seq").getAsInt();
@@ -478,6 +543,7 @@ public final class TileStream {
 				Architect.LOGGER.warn("Region tile {} {} {}: {}", tt.key, tt.stage, tt.set, ex.toString());
 				fail(tt, "the tile could not be read: " + (ex.getCause() != null ? ex.getCause().getMessage() : ex.getMessage()));
 			} else {
+				SLOW_ROUNDS.remove(id(tt.region, tt.stage, tt.set, tt.key));
 				tt.phase = Phase.DECODED;
 			}
 		});
@@ -486,9 +552,13 @@ public final class TileStream {
 	/** The tile's cells are committed (P7) or the item is gone: its memory goes. */
 	public static void release(String region, String stage, String set, String key) {
 		TILES.remove(id(region, stage, set, key));
+		SLOW_ROUNDS.remove(id(region, stage, set, key));
 	}
 
-	/** (6b) A region's WAITING tiles are asked again (the START_SIDECAR nudge on a connected helper); how many. */
+	/**
+	 * (6b) A region's WAITING tiles are asked again (the START_SIDECAR nudge on a connected helper; (6c 0a) the RETRY nudge for
+	 * slow tiles, whose schedule goes on from its count); how many.
+	 */
 	public static int retryWaiting(String region) {
 		int n = 0;
 		for (var e : TILES.entrySet()) {
@@ -509,6 +579,7 @@ public final class TileStream {
 
 	public static void forgetRegion(@Nullable String region) {
 		TILES.values().removeIf(t -> region == null || t.region.equals(region));
+		SLOW_ROUNDS.keySet().removeIf(k -> region == null || k.startsWith(region + "|"));
 		if (region == null) {
 			PREVIEWS.clear();
 		}

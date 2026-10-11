@@ -5,14 +5,14 @@ import dev.larattalabs.architect.Architect;
 import dev.larattalabs.architect.client.dev.DevBridge;
 import dev.larattalabs.architect.client.dev.Fields;
 import dev.larattalabs.architect.client.hud.Toasts;
-import dev.larattalabs.architect.client.ui.GuardedHud;
+import dev.larattalabs.labui.client.ui.GuardedHud;
 import dev.larattalabs.architect.client.world.ServerTasks;
 import dev.larattalabs.architect.site.Builder;
 import dev.larattalabs.architect.site.Site;
 import dev.larattalabs.architect.site.Sites;
 import dev.larattalabs.architect.survival.SiteNet;
 import dev.larattalabs.architect.survival.SurvivalWorld;
-import dev.larattalabs.architect.ui.Guard;
+import dev.larattalabs.labui.ui.Guard;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -36,20 +36,20 @@ public final class SurvivalFeature {
 	}
 
 	public static void init() {
-		ClientPlayNetworking.registerGlobalReceiver(SiteNet.SiteGhost.TYPE, (p, ctx) -> Guard.run("survival.ghost", () -> SiteGhosts.onGhost(p)));
-		ClientPlayNetworking.registerGlobalReceiver(SiteNet.SiteProgress.TYPE, (p, ctx) -> Guard.run("survival.progress", () -> SiteGhosts.onProgress(p)));
-		ClientPlayNetworking.registerGlobalReceiver(SiteNet.SiteStatus.TYPE, (p, ctx) -> Guard.run("survival.status", () -> SiteGhosts.onStatus(p)));
-		ClientPlayNetworking.registerGlobalReceiver(SiteNet.SiteClear.TYPE, (p, ctx) -> Guard.run("survival.clear", () -> {
+		ClientPlayNetworking.registerGlobalReceiver(SiteNet.SiteGhost.TYPE, (p, ctx) -> Guard.run("architect_mc:survival.ghost", () -> SiteGhosts.onGhost(p)));
+		ClientPlayNetworking.registerGlobalReceiver(SiteNet.SiteProgress.TYPE, (p, ctx) -> Guard.run("architect_mc:survival.progress", () -> SiteGhosts.onProgress(p)));
+		ClientPlayNetworking.registerGlobalReceiver(SiteNet.SiteStatus.TYPE, (p, ctx) -> Guard.run("architect_mc:survival.status", () -> SiteGhosts.onStatus(p)));
+		ClientPlayNetworking.registerGlobalReceiver(SiteNet.SiteClear.TYPE, (p, ctx) -> Guard.run("architect_mc:survival.clear", () -> {
 			SiteGhosts.onClear(p);
 			if (p.finished()) {
 				Toasts.push(Toasts.Level.INFO, p.name() + " is built", "The construction site " + p.siteId() + " is finished; the crate gave back its leftovers");
 			}
 		}));
-		ClientPlayNetworking.registerGlobalReceiver(SiteNet.CrateOpen.TYPE, (p, ctx) -> Guard.run("survival.crate", () ->
+		ClientPlayNetworking.registerGlobalReceiver(SiteNet.CrateOpen.TYPE, (p, ctx) -> Guard.run("architect_mc:survival.crate", () ->
 			Minecraft.getInstance().gui.setScreen(new CrateScreen(p.siteId()))));
 		ClientPlayConnectionEvents.DISCONNECT.register((handler, mc) -> mc.execute(SiteGhosts::clear));
-		LevelRenderEvents.COLLECT_SUBMITS.register(ctx -> Guard.run("survival.ghost.render", () -> SiteGhostRenderer.submit(ctx)));
-		HudElementRegistry.addLast(Architect.id("hud/construction"), GuardedHud.of("hud.construction", new SiteHud()));
+		LevelRenderEvents.COLLECT_SUBMITS.register(ctx -> Guard.run("architect_mc:survival.ghost.render", () -> SiteGhostRenderer.submit(ctx)));
+		HudElementRegistry.addLast(Architect.id("hud/construction"), GuardedHud.of("architect_mc:hud.construction", new SiteHud()));
 		registerDev();
 	}
 

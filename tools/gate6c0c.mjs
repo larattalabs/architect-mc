@@ -79,7 +79,8 @@ async function feet(x, z) {
 }
 
 steps.start = async () => {
-  const head = execFileSync('git', ['-C', root, 'rev-parse', 'HEAD']).toString().trim();
+  // GATE6C0C_REF: another build (an older release, for the volume sha and the downgrade checks)
+  const head = execFileSync('git', ['-C', root, 'rev-parse', process.env.GATE6C0C_REF ?? 'HEAD']).toString().trim();
   execFileSync('git', ['-C', RUN, 'checkout', '-q', '--detach', head]);
   execFileSync('npm', ['run', 'build'], { cwd: path.join(RUN, 'sidecar'), stdio: 'ignore' });
   await startClient(process.argv[3] ?? BOOT, { backend: 'sim' });
@@ -548,8 +549,46 @@ steps.survroad = async () => {
   return { bom, stock: st, batch: bv, built: done, instant: inst };
 };
 
+/**
+ * Item 3's sha bar: the volume of the ground step's box (ground.json) on a fresh copy of the forest world, through the
+ * DevBridge (any version). Run once on this build and once on the older one (GATE6C0C_REF); `volsha-<ref>.json` each.
+ */
+steps.volsha = async () => {
+  await ensure();
+  const g = JSON.parse(fs.readFileSync(path.join(OUT, 'ground.json'), 'utf8')).data;
+  const [x0, y0, z0, x1, y1, z1] = g.box;
+  await fresh('G6B 0c VolSha', FOREST);
+  await tp((x0 + x1) / 2 + 0.5, 140, (z0 + z1) / 2 + 0.5, 0, 89);
+  await settle(5000);
+  const v = await call('dev.survey.volume', { box: g.box, load: 'loaded' }, 600_000);
+  const ref = process.env.GATE6C0C_REF ?? 'HEAD';
+  const head = execFileSync('git', ['-C', RUN, 'rev-parse', 'HEAD']).toString().trim();
+  fs.writeFileSync(path.join(OUT, `volsha-${ref.replaceAll('/', '_')}.json`), JSON.stringify({ ref, head, box: g.box, sha: v.sha, counts: v.counts }, null, 2));
+  check(!!v.sha, `volsha: ${ref} (${head.slice(0, 10)}): ${v.sha}`);
+  return { ref, head, sha: v.sha };
+};
+
+/**
+ * Item 4 in game: a group whose item has a 41-character style fails FIELD_LIMIT with the path, and no group is created; 40 passes.
+ */
+steps.fields = async () => {
+  await ensure();
+  await fresh('G6B 0c Fields', FLAT);
+  const c0 = (await api('groupcount')).groups;
+  const r41 = await later('fieldlimit 41', 60_000);
+  await sleep(2000);
+  const c1 = (await api('groupcount')).groups;
+  check(r41.refused?.class === 'ArchitectRefused' && r41.refused.reason === 'FIELD_LIMIT' && r41.refused.message === 'items[0].request.style: 41 characters, at most 40',
+    `fields: a 41-character style fails FIELD_LIMIT with the path (${json(r41.refused)})`);
+  check(c1 === c0, `fields: no group created (${c0} -> ${c1})`);
+  const r40 = await later('fieldlimit 40', 60_000);
+  check(!!r40.groupId, `fields: 40 characters pass (${r40.groupId ?? json(r40.refused)})`);
+  if (r40.groupId) await cmd(`/apitest groupcancel ${r40.groupId}`).catch(() => {});
+  return { r41, r40, groups: [c0, c1] };
+};
+
 steps.all = async () => {
-  for (const s of ['base', 'api', 'minlot', 'roads', 'ground', 'protect', 'tags', 'survroad']) await run(s);
+  for (const s of ['base', 'api', 'minlot', 'roads', 'ground', 'protect', 'tags', 'survroad', 'fields']) await run(s);
 };
 
 const name = process.argv[2];
