@@ -136,6 +136,30 @@ public final class Views {
 			st.crate() == null ? Optional.empty() : Optional.of(st.crate()));
 	}
 
+	/** 6c Y (C24): a stockpile's view. */
+	public static dev.larattalabs.architect.api.Stockpile stockpile(dev.larattalabs.architect.site.Stockpiles.View v) {
+		Map<String, Map<Item, Integer>> byT = new LinkedHashMap<>();
+		v.outstandingByTarget().forEach((id, m) -> byT.put(id, items(m)));
+		Identifier dim = Identifier.tryParse(v.dimension());
+		return new dev.larattalabs.architect.api.Stockpile(v.owner(), net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.DIMENSION,
+			dim == null ? Identifier.fromNamespaceAndPath("minecraft", "overworld") : dim), v.crates(), v.capacityStacks(), v.usedStacks(), items(v.stock()), items(v
+				.reserved()), items(v.credit()), items(v.delivered()), items(v.consumed()), items(v.returned()), items(v.withdrawn()), items(v.dropped()),
+			items(v.refundOverflow()), byT, items(v.outstanding()), v.feedOrder(), Map.of(), v.missingCrates());
+	}
+
+	/** Items -> item ids (the API's maps going in). */
+	public static Map<String, Integer> ids(Map<Item, Integer> items) {
+		Map<String, Integer> out = new java.util.TreeMap<>();
+		if (items != null) {
+			items.forEach((it, n) -> {
+				if (it != null && n != null && n > 0) {
+					out.merge(BuiltInRegistries.ITEM.getKey(it).toString(), n, Integer::sum);
+				}
+			});
+		}
+		return out;
+	}
+
 	public static dev.larattalabs.architect.api.SiteGroup group(dev.larattalabs.architect.site.SiteGroupRec g) {
 		dev.larattalabs.architect.api.SiteGroup.State state = switch (g.state()) {
 			case dev.larattalabs.architect.site.SiteGroupRec.REMOVING -> dev.larattalabs.architect.api.SiteGroup.State.REMOVING;

@@ -38,6 +38,8 @@ public final class Limits {
 	public static final int EXT_MAX_BYTES = 65536;
 	/** (1.14.0) A region plan's lot {@code ext} ({@code params.<lots>[i].ext}): at most 4096 characters as JSON, keys {@code namespace:name}. */
 	public static final int LOT_EXT_MAX = 4096;
+	/** (1.18.0, C24) A stockpile's crates: at most 16 (FIELD_LIMIT past it). */
+	public static final int STOCKPILE_CRATES = 16;
 	/** {@code model}, trimmed, {@link #MODEL_ID_RE} (every request and critique). */
 	public static final int MODEL_ID_MAX = 100;
 	public static final Pattern MODEL_ID_RE = Pattern.compile("^[A-Za-z0-9._:@/\\[\\]-]+$");

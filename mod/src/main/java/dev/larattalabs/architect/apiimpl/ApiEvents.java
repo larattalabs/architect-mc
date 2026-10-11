@@ -116,6 +116,11 @@ public final class ApiEvents {
 		guard("SITE_BUILT", () -> SiteEvents.SITE_BUILT.invoker().onBuilt(Views.infra(i)));
 	}
 
+	/** 6c Y (C24): an owner's stockpile changed (the caller rate-limits). */
+	public static void stockpileChanged(MinecraftServer server, String owner) {
+		guard("STOCKPILE_CHANGED", () -> SiteEvents.STOCKPILE_CHANGED.invoker().onChanged(owner));
+	}
+
 	public static void built(MinecraftServer server, Site s) {
 		guard("SITE_BUILT", () -> SiteEvents.SITE_BUILT.invoker().onBuilt(Views.site(server, s)));
 	}
