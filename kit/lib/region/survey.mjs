@@ -27,11 +27,22 @@ export function windowFromSurvey(survey, key) {
   return w;
 }
 
-/** The `ctx.survey` object for a claim. */
-export function surveyApi(survey, claim) {
+/** (6c V) Is (x, z) inside one of the keep-out rects [[x0, z0, x1, z1], ...] (inclusive)? */
+export function inRects(rects, x, z) {
+  for (const r of rects) if (x >= r[0] && x <= r[2] && z >= r[1] && z <= r[3]) return true;
+  return false;
+}
+
+/**
+ * The `ctx.survey` object for a claim. (6c V) `keepOut`: the request owner's protected rects that meet the claim
+ * ([[x0, z0, x1, z1]], `region.plan.keepOut`); `onKeepOut()` is called when the program reads them (`keptOutAt`).
+ */
+export function surveyApi(survey, claim, { keepOut = [], onKeepOut = () => {} } = {}) {
   const c = asColumns(survey);
   const at = (x, z) => sampleIndex(c, x, z);
   const api = {
+    /** (6c V) inside one of the owner's protected areas (region.plan keepOut): nothing may be written there */
+    keptOutAt: (x, z) => { onKeepOut(); return inRects(keepOut, x, z); },
     columns: c,
     resolution: c.resolution,
     /** the region's ground (water counts as ground: its top) */

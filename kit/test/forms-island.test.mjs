@@ -50,7 +50,7 @@ function paramsOf(k) {
 async function plan(params) {
   let isl;
   const prog = { id: 'island_test', default: (ctx) => { const g = region(ctx); g.stages(['main']); isl = g.floatingIsland('isle', params, { stage: 'main' }); g.anchor('entrance', [CLAIM.minX + 2, CLAIM.minZ + 2]); g.anchor('spawn', [CLAIM.minX + 3, CLAIM.minZ + 2]); return g; } };
-  const p = await planRegion({ program: prog, programSource: 'island_test', survey: flatSurvey(), claim: CLAIM, node: 'golden' });
+  const p = await planRegion({ program: prog, programSource: 'island_test', survey: flatSurvey(), claim: CLAIM, node: 'golden', kitVersion: '0.12.0' }); // (6c V) golden IR shas of kit 0.12.0
   return { p, isl };
 }
 

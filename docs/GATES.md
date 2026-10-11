@@ -74,8 +74,9 @@ its tags. Every matching rule counts. The main rules:
 | `sidecar/**` | unit-sidecar, sim-jobs, sim-sets, sim-massing | |
 | `sidecar/src/region*` (engine) | unit-sidecar | 6a-staged, 6a-inv3 |
 | `kit/**` | unit-kit | sim-sets, sim-massing, 4e-megalite, 6b-smoke, 6b-ghost, 6b-scenario-s1-flat |
-| `kit/lib/region/**`, `kit/regions/**` (engine) | unit-kit, 6a-inv3 | 6a-staged, 6a-eflat, 6b-versions, 6b-scenario-s1 |
-| `scenarios/**` | unit-kit, 6b-scenario-s1-flat | 6b-scenario-s1 |
+| `kit/lib/region/**`, `kit/regions/**` (engine) | unit-kit, 6a-inv3 | 6a-staged, 6a-eflat, 6b-versions, 6b-scenario-s1, 6cv-scenario-s7 |
+| `scenarios/**` | unit-kit, 6b-scenario-s1-flat | 6b-scenario-s1, 6cv-scenario-s7 |
+| slice V: the village components, `flat_village`, `tools/gate6cv.mjs`, S7 | v-unit | v-ingame, 6cv-scenario-s7 |
 | `tools/gate6b.mjs`, `tools/lib/run6b.mjs`, `tools/find-site.mjs` | 6b-smoke | the other sim 6b steps |
 | `tools/scenarios.mjs`, `tools/lib/scenario-*.mjs` | 6b-scenario-s1-flat | 6b-scenario-s1 |
 | a gate driver (`tools/gate4e.mjs`, ...) | that gate's cheap steps | its longer steps |

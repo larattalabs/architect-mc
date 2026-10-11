@@ -289,7 +289,7 @@ export function renderPreviews({ ir, survey, blobs, volumes = [], meta = null, w
   const vw = world ?? buildVirtual({ ir, survey, filled: fillMissing(survey).columns, blobs, volumes }).vw;
   const dir = path.join(outDir, 'previews');
   fs.mkdirSync(dir, { recursive: true });
-  const sp = sitePlan({ ir, meta, planId, irSha });
+  const sp = sitePlan({ ir, meta, planId, irSha, vw });
   const paths = {};
   const pixels = {};
   const put = (view, name, cv) => {

@@ -315,6 +315,19 @@ is shown (R 7.5 min, U 14.7 min).
 5. Minor follow-up: R's breakdown COPY line counted 4 copies but 0 ms (the copies built between two refreshes). It is time
    only, so no cost is affected; fix it in the next slice that touches breakdown.ts.
 
+## 6c slice V: queued for the next slice (coordinator, 2026-10-11)
+
+From V's gate (CONTRACT "Phase 6c slice V as built"):
+1. **Light the lot aprons and batters.** On natural ground the pads' aprons and batters are reached region-written floors, and
+   the checker's M5 counts them dark (11.8% on S7's provisional fixture). V's bar 8 is ruled over the walk cells plus the
+   door-to-street paths; the full M5 is recorded as data until this lands.
+2. **4e street lanterns on non-ground path blocks.** The road's lantern posts stand only on blocks the road code calls ground, so a
+   bible whose `path` is packed mud, stone bricks or planks gets a dark street (measured: M5 2.21% with packed mud).
+3. **Ice reads as dry ground in the plan survey.** A plan can look clean and then fail a road over a frozen river or sea
+   (S7's rejected 2026101102 site realised PARTIAL). The survey should treat ice as water, or the plan should refuse.
+4. **Gravity blocks over gaps.** With the default gravel `path`, a levelled lane or verge over a gap can leave an unsupported
+   gravity block (an M3 warning on one candidate plan).
+
 ## Open questions
 - Track AgentCraft fixes to the copied placement code, or treat the copy as independent from now on?
 - Cost: measure tokens and time per design in phase 1, and show an estimate in the form.

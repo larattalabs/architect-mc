@@ -107,6 +107,7 @@ final class ApiTestJournal {
 								c.add(s.height()[k]);
 								c.add(s.water().get(k) ? 1 : 0);
 								c.add(s.tree().get(k) ? 1 : 0);
+								c.add(s.ground()[k]); // (6c V) the ground under trees (0c's Sample.ground): find-site's relief
 								out.add(c);
 							}
 						}

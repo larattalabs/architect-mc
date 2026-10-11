@@ -41,7 +41,8 @@ import org.jspecify.annotations.Nullable;
  * group's crate. Placing runs the instant road unchanged (its journal entry's {@code before} is the ground, its {@code after} the
  * target, so an undo is exact); then every changed cell that isn't a cut (cut cells stay cleared, free) goes back to its
  * {@code before} and is queued in centre-line order, bottom up per column. Each queued cell costs its target's items, except a
- * {@code dirt_path} on {@code grass_block}, which is free (the coordinator: a shovel's work). Costs come from the entry's
+ * {@code dirt_path} on {@code grass_block}, {@code dirt}, {@code coarse_dirt}, {@code podzol}, {@code mycelium} or {@code rooted_dirt},
+ * which is free (the coordinator: a shovel's work; 6c V extends 0c's grass-only rule to every block a shovel paths). Costs come from the entry's
  * {@code before}, never the live world, so {@code checkRoad}'s BOM equals the stock's outstanding bill after placing. The
  * builder's {@link Builder.Run} is reused through a probe {@link Site} (the road's id, box and construction), so the crate's
  * acceptance, the ledger and the ghost work as for buildings. Server thread.
@@ -69,9 +70,13 @@ public final class RoadBuilder {
 
 	// ------------------------------------------------------------------ costs
 
-	/** Whether a road cell is free: a dirt path laid on grass (N-0c-2, the coordinator's decision). */
+	/**
+	 * Whether a road cell is free: a dirt path laid on a block a shovel paths (N-0c-2, the coordinator's decision: grass in 0c; 6c V,
+	 * coordinator with Steward: dirt, coarse dirt, podzol, mycelium and rooted dirt too).
+	 */
 	static boolean freeCell(BlockState before, BlockState target) {
-		return target.is(Blocks.DIRT_PATH) && before.is(Blocks.GRASS_BLOCK);
+		return target.is(Blocks.DIRT_PATH) && (before.is(Blocks.GRASS_BLOCK) || before.is(Blocks.DIRT) || before.is(Blocks.COARSE_DIRT) || before.is(
+			Blocks.PODZOL) || before.is(Blocks.MYCELIUM) || before.is(Blocks.ROOTED_DIRT));
 	}
 
 	/** Whether the road queues a cell: it writes a block (not a cut to air) other than the one there. */

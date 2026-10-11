@@ -293,8 +293,11 @@ test('format-2 compile errors: unknown op, shape, rule, member; inline blobs; mi
   assert.throws(() => compileIR(b), /IR: unknown shape 'blob3d' \(supported: /);
   const c = base(); c.parts[0].ops[0].material = { rule: { rule: [{ when: { wetness: 3 }, mat: 'minecraft:mud' }] } }; c.requires = ['material:rule'];
   assert.throws(() => compileIR(c), /IR: unknown rule 'wetness' \(supported: /);
-  const d = base(); d.graph = { nodes: [] };
-  assert.throws(() => compileIR(d), /IR: unknown member 'graph'/);
+  // (6c V) `graph` and `keepOut` are known members from kit 0.16.0; 7a's `siteLots` is still unknown
+  const d = base(); d.siteLots = [];
+  assert.throws(() => compileIR(d), /IR: unknown member 'siteLots'/);
+  const gv = base(); gv.graph = { nodes: [], edges: [] }; gv.keepOut = [[0, 0, 1, 1]];
+  assert.doesNotThrow(() => compileIR(gv));
   const e = base(); e.blobs = { h: { minX: 0, minZ: 0, width: 1, depth: 1, data: 'AAA=' } };
   assert.throws(() => compileIR(e), /format 2 blobs are side files/);
   const f = base(); f.parts[0].ops[0].shape = { kind: 'ellipsoid', c: [0, 70, 0], r: [1, 1, 1] };
@@ -312,12 +315,12 @@ test('PLAN_STALE: format 3, unknown requires, a newer kit; the running kit versi
   const base = () => ir2([{ op: 'shape', shape: box, material: 'minecraft:stone', cond: 0, walk: false }]);
   assert.equal(staleReason(base()), null);
   const f3 = base(); f3.format = 3;
-  assert.match(staleReason(f3), /plan needs format 3; this is kit 0\.12\.0/);
+  assert.equal(staleReason(f3), `plan needs format 3; this is kit ${KIT_VERSION}`);
   assert.throws(() => compileIR(f3), /^Error: PLAN_STALE: plan needs format 3/);
   const k = base(); k.requires = ['shape:voronoi'];
   assert.match(staleReason(k), /kinds \[shape:voronoi\]/);
   const v = base(); v.kitVersion = '0.99.0';
-  assert.match(staleReason(v), /^plan needs kit 0\.99\.0; this is kit 0\.12\.0$/);
+  assert.equal(staleReason(v), `plan needs kit 0.99.0; this is kit ${KIT_VERSION}`);
   assert.equal(semverCompare('0.12.0', '0.11.9'), 1);
   assert.equal(semverCompare('0.12.0', '0.12.0'), 0);
   assert.equal(semverCompare('0.9.10', '0.10.0'), -1);

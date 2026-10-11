@@ -101,7 +101,7 @@ public final class RegionDev {
 
 	public static void init() {
 		DevBridge.register("dev.region.plan", 900_000, "{program, params?, claim: [x0,z0,x1,z1], seed?, surveyLoad?: loaded|generated:<n>|bounded:<n>, "
-			+ "owner?, check?: true} - phase 6a: Regions.plan -> the RegionPlan (+ ms) or {refused}; 6b: check false skips the checker and previews "
+			+ "owner?, check?: true, bible? (6c V)} - phase 6a: Regions.plan -> the RegionPlan (+ ms) or {refused}; 6b: check false skips the checker and previews "
 			+ "(ext architect_mc:check), and the answer adds report, summary, previews, irFormat, requires, kitVersion, needVolumes, progress", (req, mc) -> {
 				Fields f = Fields.of(req);
 				String program = f.nonBlank("program");
@@ -110,6 +110,7 @@ public final class RegionDev {
 				Long seed = req.has("seed") ? Long.parseUnsignedLong(req.get("seed").getAsString()) : null;
 				LoadPolicy load = load(f.optStr("surveyLoad", "loaded"));
 				String owner = f.optStr("owner", null);
+				String bible = f.optStr("bible", null);
 				JsonObject ext = new JsonObject();
 				if (!f.optBool("check", true)) {
 					ext.addProperty(RegionsImpl.EXT_CHECK, false);
@@ -117,7 +118,7 @@ public final class RegionDev {
 				long t0 = System.nanoTime();
 				return DevBridge.onClient(mc, () -> ServerTasks.callAsPlayer((level, player) -> ArchitectApi.get().regions().plan(new RegionPlanRequest(program,
 					params, level, new BoundingBox(c.get(0).getAsInt(), level.getMinY(), c.get(1).getAsInt(), c.get(2).getAsInt(), level.getMaxY(), c.get(3)
-						.getAsInt()), seed, null, null, load, owner, ext)))).thenCompose(x -> x).thenCompose(x -> x).thenApply(x -> x).handle((p, e) -> {
+						.getAsInt()), seed, bible, null, load, owner, ext)))).thenCompose(x -> x).thenCompose(x -> x).thenApply(x -> x).handle((p, e) -> {
 							JsonObject o = e != null ? new JsonObject() : planJson(p);
 							if (e != null) {
 								o.addProperty("refused", reason(e));
@@ -233,14 +234,15 @@ public final class RegionDev {
 			o.add("regions", a);
 			return o;
 		}));
-		DevBridge.register("dev.region.remove", 4 * 3_600_000L, "{region, covered?: keep|cascade|refuse, force?} - phase 6a: Regions.remove (the group undo) "
-			+ "-> RemoveResult + seconds", (req, mc) -> {
+		DevBridge.register("dev.region.remove", 4 * 3_600_000L, "{region, covered?: keep|cascade|refuse, force?, requester? (6c V: the owner removing "
+			+ "its own region)} - phase 6a: Regions.remove (the group undo) -> RemoveResult + seconds", (req, mc) -> {
 				Fields f = Fields.of(req);
 				String region = f.nonBlank("region");
 				CoveredPolicy cp = CoveredPolicy.valueOf(f.optStr("covered", "keep").toUpperCase(java.util.Locale.ROOT));
 				boolean force = f.optBool("force", false);
+				String requester = f.optStr("requester", null);
 				long t0 = System.nanoTime();
-				return ServerTasks.callOnServer(s -> ArchitectApi.get().regions().remove(region, new RemoveOptions(force, null, cp))).thenCompose(x -> wrap(x,
+				return ServerTasks.callOnServer(s -> ArchitectApi.get().regions().remove(region, new RemoveOptions(force, requester, cp))).thenCompose(x -> wrap(x,
 					r -> {
 						JsonObject o = json(r);
 						o.addProperty("seconds", (System.nanoTime() - t0) / 1e9);

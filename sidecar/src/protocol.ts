@@ -17,7 +17,7 @@ export const PROTOCOL_VERSION = 1 as const;
 export const PROTOCOLS = [1, 2] as const;
 export type Protocol = (typeof PROTOCOLS)[number];
 /** What a protocol-2 snapshot lists in `features`. */
-export const FEATURES = ['job.run', 'job.tools', 'blobs', 'budget', 'designs.v2', 'bibles', 'design.groups', 'named.parts', 'open.types', 'estimates', 'reskin', 'massing', 'critique', 'critique.report', 'job.images', 'bible.admin', 'bible.restraint', 'entry.versions', 'entry.delta', 'design.polish', 'critique.polish', 'region.plan', 'region.tiles', 'region.check', 'region.preview', 'region.design', 'region.blobs', 'ir.format2', 'estimate.kinds', 'opKeys', 'group.breakdown', 'copies', 'smallEffort', 'versionOf', 'extendInfo'] as const;
+export const FEATURES = ['job.run', 'job.tools', 'blobs', 'budget', 'designs.v2', 'bibles', 'design.groups', 'named.parts', 'open.types', 'estimates', 'reskin', 'massing', 'critique', 'critique.report', 'job.images', 'bible.admin', 'bible.restraint', 'entry.versions', 'entry.delta', 'design.polish', 'critique.polish', 'region.plan', 'region.tiles', 'region.check', 'region.preview', 'region.design', 'region.blobs', 'ir.format2', 'estimate.kinds', 'opKeys', 'group.breakdown', 'copies', 'smallEffort', 'versionOf', 'extendInfo', 'region.keepOut'] as const;
 
 const Ts = z.number().int().nonnegative();
 const Id = z.string().min(1).max(64);
@@ -1099,6 +1099,11 @@ export const RegionPlanMsg = z.object({
     .max(16)
     .optional()
     .describe('(6b) frozen volumes the program may read (the second plan of the two-plan flow)'),
+  keepOut: z
+    .array(z.tuple([z.number().int(), z.number().int(), z.number().int(), z.number().int()]).refine((r) => r[0] <= r[2] && r[1] <= r[3], 'a keep-out rect is [x0, z0, x1, z1] with x0 <= x1, z0 <= z1'))
+    .max(1024)
+    .optional()
+    .describe("(6c V) the request owner's protected areas that meet the claim, [[x0, z0, x1, z1]] (all heights): a program reads them as ctx.keepOut"),
 });
 export const RegionTileReq = z.object({
   key: TileKey,

@@ -17,6 +17,7 @@ import {
   stopClient, tp, waitRegion, write,
 } from './lib/run6b.mjs';
 import { findSite, SCENARIO_DIR, readScenario } from './find-site.mjs';
+import * as L6 from './lib/run6b.mjs';
 
 refuseKeys();
 
@@ -83,8 +84,10 @@ steps.findsite = async () => {
   for (const id of ids) {
     const sc = readScenario(id);
     if (sc.fixture?.surveySha && !process.env.REFIND) { out[id] = { pinned: sc.fixture }; continue; }
-    await fresh('G6B FindSite', BASE);
-    out[id] = await findSite(id, { call, cmd, tp, log });
+    // (6c V) FINDSITE_SEED searches another world seed (its own base world); else the scenario's own
+    const seed = process.env.FINDSITE_SEED ?? sc.world?.seed;
+    await fresh('G6B FindSite', await L6.seedBase(seed));
+    out[id] = await findSite(id, { call, cmd, tp, log, seed });
     check(!!out[id].claim, `findsite ${id}: ${JSON.stringify(out[id].claim)} score ${out[id].score} (${out[id].tried} candidates)`);
   }
   await leaveWorld();

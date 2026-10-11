@@ -8,7 +8,13 @@
 // A scenario is scenarios/<id>.json (the golden scenarios S1-S6) or scenarios/sites/<id>.json (gate sites: the crater and
 // rift sites, the volume fixture, the pick sites). Its `needs`:
 //   {size: [w, d], relief: [min, max] (height range over the claim), biomes: {any: [substring...], share: 0..1},
-//    waterMax, waterMin, treesMin, naturalMin (percent), avoidStructures: true, center: [x, z] (the spiral's centre), stopAt}
+//    waterMax, waterMin, treesMin, naturalMin (percent), avoidStructures: true, center: [x, z] (the spiral's centre), stopAt,
+//    (6c V) flat: {range, share, res, squares?} (at least `share` of the columns within one band `range` high, from /apitest
+//    heights: the gate; `squares: n` records the share of n x n squares whose ground range is at most `range`, as survey.flatAreas),
+//    planCheck: {program, params, lots, clean: [rule regex]} (the program planned on the claim with the check: at least `lots` lots,
+//    0 errors, no finding of the `clean` rules),
+//    waterBand: {band, min} (at least `min` surface-water columns inside the claim's outer `band` cells),
+//    noStructure: {id, margin} (/locate finds none within the claim's half-diagonal + margin)}
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -43,6 +49,8 @@ export function parseSummary(text) {
 /** Score a surveyed candidate against the needs: null = rejected, else higher is better. */
 export function score(s, needs) {
   if (s.min === undefined || s.missing > 0) return null;
+  // (6c V) frozen water is still water: a site over a frozen river or sea (the survey reads ice as dry ground) is refused
+  if (needs.noFrozen && Object.keys(s.biomes ?? {}).some((b) => /frozen|ice_spikes/.test(b))) return null;
   const relief = s.max - s.min;
   if (needs.relief && (relief < needs.relief[0] || relief > needs.relief[1])) return null;
   if (needs.waterMax !== undefined && s.water > needs.waterMax) return null;
@@ -75,6 +83,81 @@ export function candidates(n, step) {
   return out;
 }
 
+/** (6c V) The fine checks on a candidate that passed the summary: flat share, water in the outer band, no structure near. */
+export async function fineChecks(io, needs, [x0, z0, x1, z1]) {
+  const out = { ok: true };
+  if (needs.flat || needs.waterBand) {
+    const res = needs.flat?.res ?? 4; // (Survey.sample takes 1 or 4: 2 is sampled at 4)
+    const r = await io.cmd(`/apitest heights ${x0} ${z0} ${x1} ${z1} ${res}`);
+    let v = JSON.parse((r.messages ?? []).find((m) => m.startsWith('{') || m.startsWith('[')) ?? 'null');
+    for (let i = 0; v?.pending && i < 600; i++) {
+      const g = await io.cmd(`/apitest get ${v.pending}`);
+      const line = (g.messages ?? []).find((m) => m.startsWith('{'));
+      const w = line ? JSON.parse(line) : null;
+      if (w?.value) { v = w.value; break; }
+      await new Promise((res2) => setTimeout(res2, 1000));
+    }
+    const cols = Array.isArray(v) ? v : [];
+    const expect = Math.ceil((x1 - x0 + 1) / res) * Math.ceil((z1 - z0 + 1) / res);
+    out.columns = cols.length;
+    if (cols.length < expect * 0.98) return { ...out, ok: false, why: `heights: ${cols.length} of ${expect} columns` };
+    const g = (c) => (c.length > 5 ? c[5] : c[2]); // the ground under trees (0c's Sample.ground), else the height
+    if (needs.flat) {
+      // the strict reading (the gate): the share of the columns inside one band `range` high
+      const hist = new Map();
+      for (const c of cols) hist.set(g(c), (hist.get(g(c)) ?? 0) + 1);
+      let best = 0, at = null;
+      for (const h of hist.keys()) {
+        let n = 0;
+        for (let y = h; y <= h + needs.flat.range; y++) n += hist.get(y) ?? 0;
+        if (n > best) { best = n; at = h; }
+      }
+      out.flatShare = Math.round((1000 * best) / cols.length) / 1000;
+      out.flatBand = [at, at + needs.flat.range];
+      if (out.flatShare < needs.flat.share) out.ok = false;
+      // recorded only: local relief, as the kit's survey.flatAreas (the share of squares x squares whose range is <= range)
+      if (needs.flat.squares) {
+        const S = needs.flat.squares;
+        const sq = new Map();
+        for (const c of cols) {
+          const k = `${Math.floor((c[0] - x0) / S)},${Math.floor((c[1] - z0) / S)}`;
+          const r = sq.get(k) ?? [Infinity, -Infinity];
+          r[0] = Math.min(r[0], g(c)); r[1] = Math.max(r[1], g(c));
+          sq.set(k, r);
+        }
+        const flat = [...sq.values()].filter(([lo, hi]) => hi - lo <= needs.flat.range).length;
+        out.localShare = Math.round((1000 * flat) / sq.size) / 1000;
+      }
+    }
+    if (needs.waterBand) {
+      const b = needs.waterBand.band;
+      const inBand = (x, z) => x - x0 < b || x1 - x < b || z - z0 < b || z1 - z < b;
+      out.waterBand = cols.filter((c) => c[3] && inBand(c[0], c[1])).length;
+      out.waterInner = cols.filter((c) => c[3] && !inBand(c[0], c[1])).length;
+      if (out.waterBand < (needs.waterBand.min ?? 1)) out.ok = false;
+    }
+  }
+  // (6c V) the last acceptance: the program itself on the claim (with the check): every lot placed, 0 errors, the named rules clean
+  if (out.ok && needs.planCheck) {
+    const pc = needs.planCheck;
+    const p = await io.call('dev.region.plan', { program: pc.program, claim: [x0, z0, x1, z1], params: pc.params ?? {}, surveyLoad: 'bounded:256', check: true }, 900_000);
+    const f = (p.report?.findings ?? []).filter((x) => (pc.clean ?? []).some((r) => new RegExp(`^${r}$`).test(x.rule)));
+    out.plan = { refused: p.refused ?? null, lots: p.lots?.length ?? 0, errors: p.report?.errors ?? null, findings: f.map((x) => `${x.rule} ${x.message}`.slice(0, 160)), notes: (p.notes ?? []).filter((n) => /unplaced/.test(n)) };
+    if (p.refused || out.plan.lots < (pc.lots ?? 0) || out.plan.errors !== 0 || f.length) out.ok = false;
+  }
+  if (out.ok && needs.noStructure) {
+    const cx = Math.floor((x0 + x1) / 2), cz = Math.floor((z0 + z1) / 2);
+    await io.tp(cx + 0.5, 200, cz + 0.5);
+    const r = await io.cmd(`/locate structure ${needs.noStructure.id}`);
+    const msg = (r.messages ?? []).join(' ');
+    const m = /\[(-?\d+), [^,]+, (-?\d+)\]/.exec(msg);
+    const half = Math.ceil(Math.hypot(x1 - x0, z1 - z0) / 2);
+    out.structure = m ? { at: [+m[1], +m[2]], dist: Math.round(Math.hypot(+m[1] - cx, +m[2] - cz)) } : { none: msg.slice(0, 160) };
+    if (m && out.structure.dist <= half + needs.noStructure.margin) out.ok = false;
+  }
+  return out;
+}
+
 /**
  * Find and pin a site. `io` = {call, cmd, tp, log} from tools/lib/run6b.mjs (a client in a world of the pinned seed).
  * Returns {claim, score, tried, summary, surveySha}.
@@ -86,7 +169,12 @@ export async function findSite(id, io) {
   const [w, d] = needs.size;
   let best = null, tried = 0;
   const [c0x, c0z] = needs.center ?? [0, 0]; // (a spiral round another point: where an earlier search saw the biome)
+  // (6c V) a search split over several clients: FINDSITE_PART=k/n takes every n-th candidate from the k-th, and
+  // FINDSITE_RESULT=<file> receives the winner instead of the scenario file (merge it by hand)
+  const [pk, pn] = (process.env.FINDSITE_PART ?? '0/1').split('/').map(Number);
+  let ci = -1;
   for (const [ox0, oz0] of candidates(needs.candidates ?? 30, needs.step ?? 448)) {
+    if (++ci % pn !== pk) continue;
     const ox = ox0 + c0x, oz = oz0 + c0z;
     tried++;
     const x0 = ox - Math.floor(w / 2), z0 = oz - Math.floor(d / 2), x1 = x0 + w - 1, z1 = z0 + d - 1;
@@ -107,14 +195,23 @@ export async function findSite(id, io) {
     const s = parseSummary(sample.summary);
     const sc0 = score(s, needs);
     io.log(`  ${id}: candidate ${x0},${z0} relief ${s.max - s.min}, water ${s.water}%, trees ${s.trees}%, natural ${s.natural}%, biomes ${JSON.stringify(s.biomes)} -> ${sc0}`);
-    if (sc0 !== null && (!best || sc0 > best.score)) best = { claim: [x0, z0, x1, z1], score: sc0, summary: sample.summary, stats: s };
+    let fine = null;
+    if (sc0 !== null && (needs.flat || needs.waterBand || needs.noStructure)) {
+      fine = await fineChecks(io, needs, [x0, z0, x1, z1]);
+      io.log(`  ${id}: candidate ${x0},${z0} fine ${JSON.stringify(fine)}`);
+      if (!fine.ok) continue;
+    }
+    const sc1 = sc0 === null ? null : fine ? Math.round((sc0 + fine.flatShare * 100) * 100) / 100 : sc0;
+    if (sc1 !== null && (!best || sc1 > best.score)) best = { claim: [x0, z0, x1, z1], score: sc1, summary: sample.summary, stats: fine ? { ...s, fine } : s };
     if (best && needs.stopAt !== undefined && best.score >= needs.stopAt) break;
   }
   if (!best) return { claim: null, tried };
   const surveySha = crypto.createHash('sha256').update(best.summary).digest('hex');
   const y = [Math.max(-64, best.stats.min - 40), Math.min(319, Math.max(best.stats.max + 40, needs.yTop ?? 0))];
-  sc.fixture = { ...(sc.fixture ?? {}), claim: best.claim, yRange: y, foundBy: `find-site ${id} @ seed ${sc.world?.seed}`, surveySha, score: best.score, stats: best.stats };
-  fs.writeFileSync(file, `${JSON.stringify(sc, null, 2)}\n`);
+  const seed = io.seed ?? sc.world?.seed;
+  sc.fixture = { ...(sc.fixture ?? {}), claim: best.claim, yRange: y, foundBy: `find-site ${id} @ seed ${seed}`, worldSeed: String(seed), surveySha, score: best.score, stats: best.stats, tried };
+  if (process.env.FINDSITE_RESULT) fs.writeFileSync(process.env.FINDSITE_RESULT, `${JSON.stringify(sc.fixture, null, 2)}\n`);
+  else fs.writeFileSync(file, `${JSON.stringify(sc, null, 2)}\n`);
   return { claim: best.claim, score: best.score, tried, surveySha };
 }
 

@@ -49,24 +49,24 @@ class PlanStaleTest {
 
 	@Test
 	void formatThree() {
-		assertEquals("plan needs format 3; this is kit 0.12.0", IrStale.reason(ir(3, "0.12.0"), null));
+		assertEquals("plan needs format 3; this is kit " + IrStale.KIT_VERSION, IrStale.reason(ir(3, "0.12.0"), null));
 	}
 
 	@Test
 	void newerKit() {
-		assertEquals("plan needs kit 0.99.0; this is kit 0.12.0", IrStale.reason(ir(2, "0.99.0", "shape:wedge"), null));
+		assertEquals("plan needs kit 0.99.0; this is kit " + IrStale.KIT_VERSION, IrStale.reason(ir(2, "0.99.0", "shape:wedge"), null));
 		assertNull(IrStale.reason(ir(1, "0.12.0-dev"), null), "pre-release parts compare as the kit's semverCompare (numbers only)");
 	}
 
 	@Test
 	void unknownKind() {
-		assertEquals("plan needs kinds [shape:torus, op:relief]; this is kit 0.12.0", IrStale.reason(ir(2, "0.12.0", "shape:ellipsoid", "shape:torus",
+		assertEquals("plan needs kinds [shape:torus, op:relief]; this is kit " + IrStale.KIT_VERSION, IrStale.reason(ir(2, "0.12.0", "shape:ellipsoid", "shape:torus",
 			"op:relief"), null));
 	}
 
 	@Test
 	void allThreeInTheKitsOrder() {
-		assertEquals("plan needs kit 0.99.0 / format 3 / kinds [shape:torus]; this is kit 0.12.0", IrStale.reason(ir(3, "0.99.0", "shape:torus"), null));
+		assertEquals("plan needs kit 0.99.0 / format 3 / kinds [shape:torus]; this is kit " + IrStale.KIT_VERSION, IrStale.reason(ir(3, "0.99.0", "shape:torus"), null));
 	}
 
 	@Test
@@ -75,10 +75,10 @@ class PlanStaleTest {
 		IrStale.Hello old = new IrStale.Hello("0.11.0", List.of(1), List.of());
 		assertEquals("plan needs kit 0.12.0 / format 2; this is kit 0.11.0", IrStale.reason(ir(2, "0.12.0", "shape:ellipsoid"), old));
 		// a newer helper never widens what the mod accepts
-		IrStale.Hello newer = new IrStale.Hello("0.13.0", List.of(1, 2, 3), List.of("shape:torus"));
-		assertEquals("plan needs format 3; this is kit 0.12.0", IrStale.reason(ir(3, "0.12.0"), newer));
-		assertTrue(IrStale.versionWarning(newer).contains("0.13.0"));
-		assertNull(IrStale.versionWarning(new IrStale.Hello("0.12.0", List.of(1, 2), List.of())));
+		IrStale.Hello newer = new IrStale.Hello("0.99.0", List.of(1, 2, 3), List.of("shape:torus"));
+		assertEquals("plan needs format 3; this is kit " + IrStale.KIT_VERSION, IrStale.reason(ir(3, "0.12.0"), newer));
+		assertTrue(IrStale.versionWarning(newer).contains("0.99.0"));
+		assertNull(IrStale.versionWarning(new IrStale.Hello(IrStale.KIT_VERSION, List.of(1, 2), List.of())));
 	}
 
 	@Test
@@ -91,7 +91,7 @@ class PlanStaleTest {
 		assertEquals(List.of("fields"), h.irKinds());
 		assertNull(IrStale.Hello.of(JsonParser.parseString("{\"protocol\": 2}").getAsJsonObject()), "a 6a helper names none");
 		// a helper naming only some kinds refuses the others
-		assertEquals("plan needs kinds [shape:warp]; this is kit 0.12.0", IrStale.reason(ir(2, "0.12.0", "fields", "shape:warp"), h));
+		assertEquals("plan needs kinds [shape:warp]; this is kit 0.12.0", IrStale.reason(ir(2, "0.12.0", "fields", "shape:warp"), h)); // the helper is the narrower kit
 	}
 
 	@Test

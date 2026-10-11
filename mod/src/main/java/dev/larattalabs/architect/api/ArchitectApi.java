@@ -29,7 +29,7 @@ public interface ArchitectApi {
 	 * 1.12.0: minLotSize and the recommended lot, partial roads, ground heights, bounded fields refused in the mod, the extend
 	 * warning, survival construction roads, protected areas, owner-tagged entities (phase 6c slice 0c).
 	 */
-	String VERSION = "1.12.0";
+	String VERSION = "1.13.0";
 
 	/** The singleton. Safe to call from any mod's initializer (it does not depend on Architect's init order). */
 	static ArchitectApi get() {
@@ -80,6 +80,11 @@ public interface ArchitectApi {
 	 * tiles: with {@code region.preview}).
 	 * Since 1.12.0, a 0c helper adds {@code "extendInfo"} (its {@code group.extend} ack carries the spend and soft fraction that
 	 * {@link Designs#extend} reports; without it the cached group's are used).
+	 * Since 1.13.0, a V helper ({@code region.keepOut}) adds {@code "planKeepOut"} ({@link Regions#plan} sends the owner's
+	 * protected areas that meet the claim as {@code keepOut}; a program that honours them is planned around them),
+	 * {@code "flatVillage"} (the bundled {@code flat_village} program: {@code params.lots}, unplaced lots in {@code notes},
+	 * {@code LotSpec.ext["architect_mc:village"]}), {@code "regionGraph"} (the IR's settlement graph in {@code siteplan.json},
+	 * {@code derived: false}) and {@code "villagerMover"} (the checker's villager mover and M22-M24).
 	 */
 	Set<String> features();
 }

@@ -172,6 +172,36 @@ export class Region {
     this.needVolumes = [];
     this.volumesUsed = {}; // name -> {blob, box, sha}
     this.meta = { paths: {}, lots: {}, parts: {} };
+    // (6c V) the settlement graph: nodes {id, kind, ref, level, at, ports: [{name, at, facing, width}]}, edges {id, from, to, type,
+    // width, stage, path, mover}
+    this.graph = { nodes: [], edges: [] };
+    this.graphIds = new Set();
+  }
+
+  /** (6c V) A graph node (SETTLEMENTS §8.1): `{id, kind: lot|plaza|junction, ref, at, ports}`; ids unique. */
+  graphNode({ id, kind, ref = null, at, ports = [] }) {
+    if (typeof id !== 'string' || !/^[a-z][a-z0-9_:.-]{0,63}$/.test(id)) throw new Error(`graph node id '${id}' is not valid`);
+    if (this.graphIds.has(id)) throw new Error(`graph id '${id}' is used twice`);
+    if (!['lot', 'plaza', 'junction'].includes(kind)) throw new Error(`graph node ${id}: kind must be lot, plaza or junction`);
+    this.graphIds.add(id);
+    const n = { id, kind, ref, level: 0, at: [...at], ports: ports.map((p) => ({ name: p.name, at: [...p.at], facing: p.facing, width: p.width })) };
+    this.graph.nodes.push(n);
+    return n;
+  }
+
+  /** (6c V) A graph edge `{id, from: 'node.port', to: 'node.port', type: road|path, width, path}` in stage `ground`. */
+  graphEdge({ id, from, to, type, width, path }) {
+    if (this.graphIds.has(id)) throw new Error(`graph id '${id}' is used twice`);
+    if (type !== 'road' && type !== 'path') throw new Error(`graph edge ${id}: type must be road or path`);
+    for (const end of [from, to]) {
+      const [n, p] = String(end).split('.');
+      const node = this.graph.nodes.find((x) => x.id === n);
+      if (!node || !node.ports.some((q) => q.name === p)) throw new Error(`graph edge ${id}: no port '${end}'`);
+    }
+    this.graphIds.add(id);
+    const e = { id, from, to, type, width, stage: 'ground', path };
+    this.graph.edges.push(e);
+    return e;
   }
 
   /** Declare the stages, in order (at most 64). Parts and lots must then name one of them. */
@@ -1382,7 +1412,7 @@ class Part {
    * the numbers. `floor`: 'auto' (balanced cut and fill) or the floorY. `front`: a cardinal or 'toward:<anchor|part>'.
    * `max: [x, y, z]`: the child cap (default [w, 16, d]). `stage`: the lot's stage (default this part's).
    */
-  lot(id, { at, size, floor = 'auto', front = 'south', max, brief, pad = {}, foundation = 'foundation', batter = 'subsurface', stage } = {}) {
+  lot(id, { at, size, floor = 'auto', front = 'south', max, brief, pad = {}, foundation = 'foundation', batter = 'subsurface', stage, ext } = {}) {
     const what = `lot ${id}`;
     if (typeof id !== 'string' || !LOT_ID.test(id)) throw new Error(`lot id '${id}' must match ${LOT_ID}`);
     if (this.region.lotIds.has(id)) throw new Error(`lot id '${id}' is used twice`);
@@ -1454,6 +1484,8 @@ class Part {
     };
     if (brief !== undefined) lot.brief = String(brief).slice(0, 500);
     if (none) lot.pad.fill = 'none';
+    // (6c V) caller data carried to LotSpec.ext (e.g. "architect_mc:village"); only when given, so other IRs are unchanged
+    if (ext !== undefined) lot.ext = JSON.parse(JSON.stringify(ext));
     this.region.lotIds.add(id);
     this.region._addLot(lot);
     // (6b) the lot's entrance (meta): the cell in front of the middle of the front edge, on the apron, at floorY

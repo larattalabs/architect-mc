@@ -15,7 +15,7 @@ import { surveyApi, windowFromSurvey } from './survey.mjs';
 import { validateParams, resolveValues } from '../params.mjs';
 
 /** The kit's region engine version (recorded in every IR). */
-export const KIT_VERSION = '0.12.0';
+export const KIT_VERSION = '0.16.0';
 
 export const LIMITS = Object.freeze({
   claim: 1024, claimBig: 2048, irBytes: 4 * 1024 * 1024, ops: MAX_OPS, lots: 1024, paths: 256, stages: 64,
@@ -36,6 +36,18 @@ export function resolveRoles(bibleRoles = {}, programRoles = {}) {
   }
   for (const k of [...CORE_ROLES, ...MACRO_ROLES]) if (!out[k]) throw new Error(`role ${k} resolves to nothing`);
   return out;
+}
+
+/** (6c V) Validate keep-out rects: [[x0, z0, x1, z1], ...] integers, x0 <= x1, z0 <= z1, at most 1024; sorted, unique. */
+export function parseKeepOut(v) {
+  const a = typeof v === 'string' ? JSON.parse(v) : v;
+  if (!Array.isArray(a) || a.length > 1024) throw new Error('keepOut must be an array of at most 1024 [x0, z0, x1, z1] rects');
+  const out = a.map((r, i) => {
+    if (!Array.isArray(r) || r.length !== 4 || !r.every(Number.isInteger) || r[0] > r[2] || r[1] > r[3]) throw new Error(`keepOut[${i}] must be [x0, z0, x1, z1] integers with x0 <= x1, z0 <= z1`);
+    return [...r];
+  });
+  out.sort((p, q) => p[0] - q[0] || p[1] - q[1] || p[2] - q[2] || p[3] - q[3]);
+  return out.filter((r, i) => i === 0 || r.join() !== out[i - 1].join());
 }
 
 /** Parse a claim: an object or "minX,minZ,maxX,maxZ[,minY,maxY]" (inclusive). */
@@ -147,6 +159,8 @@ export async function planRegion(o) {
   if (W > maxSide || D > maxSide) throw new Error(`REGION_LIMIT: the claim is ${W}x${D} columns (at most ${maxSide}x${maxSide}${big ? '' : '; 2048 with ARCHITECT_BIG_REGIONS=1'})`);
   if (claim.minY < LIMITS.worldMinY || claim.maxY > LIMITS.worldMaxY) throw new Error('REGION_LIMIT: the claim y range is outside any world');
 
+  const keepOut = parseKeepOut(o.keepOut ?? []);
+  let keepOutRead = false;
   const raw = asColumns(o.survey);
   const { columns: survey, missing } = fillMissing(raw);
   let roles;
@@ -168,17 +182,20 @@ export async function planRegion(o) {
     const id = mod.id;
     if (typeof id !== 'string' || !/^[a-z][a-z0-9_]{0,47}$/.test(id)) throw new Error('the program must export id matching [a-z][a-z0-9_]{0,47}');
     if (typeof mod.default !== 'function') throw new Error('the program must export default (ctx) => Region');
-    validateParams(mod.params);
+    validateParams(mod.params, { region: true });
     if (mod.roles !== undefined && (typeof mod.roles !== 'object' || mod.roles === null || Array.isArray(mod.roles))) throw new Error('the program\'s roles must be {role: blockState}');
     roles = Object.freeze(resolveRoles(o.roles ?? {}, mod.roles ?? {}));
     const params = resolveValues(mod.params ?? {}, o.params ?? {});
     const seed = o.seed === undefined || o.seed === null || o.seed === 'default' ? defaultSeed(id, params, claim) : toDecimal64(...fromDecimal64(o.seed));
+    const onKeepOut = () => { keepOutRead = true; };
     Object.assign(ctx, {
-      claim: Object.freeze({ ...claim }), survey: surveyApi(survey, claim), roles, seed, params: Object.freeze({ ...params }),
+      claim: Object.freeze({ ...claim }), survey: surveyApi(survey, claim, { keepOut, onKeepOut }), roles, seed, params: Object.freeze({ ...params }),
       kitVersion: o.kitVersion ?? KIT_VERSION, rng: (label) => makeRng(seed, String(label)),
       volumes: o.volumes ?? [],
     });
     ctx.region = () => makeRegion(ctx);
+    // (6c V) the owner's protected rects; a program that reads them records them in the IR (`keepOut`: the areas it honoured)
+    Object.defineProperty(ctx, 'keepOut', { enumerable: true, get: () => { keepOutRead = true; return keepOut.map((k) => [...k]); } });
     out = await mod.default(ctx);
     regionObj = out;
     ctx.__id = id; ctx.__params = params;
@@ -266,6 +283,9 @@ export async function planRegion(o) {
   }
   if (r.floatingDecl.length) ir.floating = r.floatingDecl;
   if (r.utility.length) ir.utility = r.utility;
+  // (6c V) the settlement graph (SETTLEMENTS §8.1's shape; a format-1 member the evaluator ignores) and the honoured keep-out
+  if (r.graph.nodes.length) ir.graph = { nodes: r.graph.nodes, edges: r.graph.edges };
+  if (keepOutRead) ir.keepOut = keepOut.map((k) => [...k]);
   const kinds = walkKinds(ir);
   if (kinds.length) { ir.format = 2; ir.requires = kinds; }
   const evalBlobs = (sha) => sideBytes.get(sha);
@@ -317,6 +337,6 @@ export async function planRegion(o) {
   // a fresh object: evalTile caches compiled IRs per object, and the claim changed after the budget pass
   stats.irFormat = ir.format;
   stats.requires = ir.requires ?? [];
-  const meta = { format: 1, paths: r.meta.paths, lots: r.meta.lots, parts: r.meta.parts };
+  const meta = { format: 1, paths: r.meta.paths, lots: r.meta.lots, parts: r.meta.parts, ...(r.meta.village ? { village: r.meta.village } : {}) };
   return { ir: JSON.parse(irJson), irJson, irSha: sha256Hex(irJson), notes, stats, blobs: sideBytes, meta, needVolumes: r.needVolumes };
 }
