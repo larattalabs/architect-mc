@@ -350,5 +350,37 @@
     "12 mspt": "Architect's own CPU per placement tick <= 50 ms",
     "13 spend": "$0.00",
     "14 gallery": "Noah approves this run's evidence.sha"
+  },
+  "fixture": {
+    "claim": [
+      1480,
+      -3128,
+      1591,
+      -3017
+    ],
+    "yRange": [
+      20,
+      130
+    ],
+    "provisional": true,
+    "foundBy": "PROVISIONAL (not S7's bar): find-site s7_flat_village @ seed 2026100906 qualified no site within ~4100 (460 candidates, step 384; artifacts/gate6c-v/findsite/summary.json). This is the best candidate with surface water in the outer band whose flat_village plan is clean (10 lots, 0 errors, only M5 in the virtual world): band share 0.616 of 0.85, water 14 band columns. The contract's second-seed case is the coordinator's.",
+    "stats": {
+      "biomes": {
+        "plains": 73,
+        "beach": 26,
+        "sparse_jungle": 1
+      },
+      "relief": 23,
+      "water": 2,
+      "trees": 1,
+      "flatShare": 0.616,
+      "flatBand": [
+        63,
+        65
+      ],
+      "localShare": 0.388,
+      "waterBand": 14,
+      "waterInner": 0
+    }
   }
 }
