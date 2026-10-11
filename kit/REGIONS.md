@@ -574,8 +574,13 @@ unique rects) and `ctx.survey.keptOutAt(x, z)`.
 
 Region programs only (`validateParams(params, {region: true})`; a design's params refuse it), never a variant axis
 (`cornerValues` skips it). At most 40 lots, each `{id (LOT_ID, unique), type, role?, size: [alongStreet, deep] (5-96), landmark?,
-placement?: central|edge|near_water|high_ground, villager?: dwelling|job|trading_hall|farm|none, brief?}`: Steward's
-`VillageLayout.LotSpec` plus `villager` (inferred from `type` only when absent).
+placement?: central|edge|near_water|high_ground, villager?: dwelling|job|trading_hall|farm|none, brief?, ext?}`: Steward's
+`VillageLayout.LotSpec` plus `villager` (inferred from `type` only when absent) and, since 6c X (C19), `ext`: the caller's own data
+for the lot, an object of `namespace:name` keys, at most 4096 characters as JSON (the mod refuses a larger one FIELD_LIMIT with the
+path, e.g. `params.lots[2].ext`). It is copied onto the IR lot's `ext` (so onto `LotSpec.ext`) and the realise copies it onto the
+lot's site. Keys under `architect_mc:` are Architect's: a caller's value for them is dropped (flat_village adds its own
+`architect_mc:village` to the lot; it stays on the LotSpec and does not go to the site, where Architect's own key is
+`architect_mc:lot`). A lot with no `ext` gives an IR identical to 0.16.0's.
 
 ## `flat_village` (kit/regions/flat_village.mjs) and its components
 

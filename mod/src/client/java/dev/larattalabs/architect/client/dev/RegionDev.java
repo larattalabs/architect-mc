@@ -82,8 +82,8 @@ public final class RegionDev {
 
 	private static String reason(Throwable e) {
 		Throwable c = e instanceof java.util.concurrent.CompletionException && e.getCause() != null ? e.getCause() : e;
-		if (c instanceof RegionsImpl.RegionException r) {
-			return r.reason + ": " + r.getMessage();
+		if (c instanceof dev.larattalabs.architect.api.ArchitectRefused r) { // RegionException is one (6c X: OP_KEY_CONFLICT is not)
+			return r.reason() + ": " + r.getMessage();
 		}
 		return String.valueOf(c.getMessage());
 	}
