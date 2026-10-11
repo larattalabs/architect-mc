@@ -39,7 +39,7 @@ export function scenarioPath(id) {
 }
 const readSc = (id) => JSON.parse(fs.readFileSync(scenarioPath(id), 'utf8'));
 const writeSc = (sc) => fs.writeFileSync(scenarioPath(sc.id), `${JSON.stringify(sc, null, 2)}\n`);
-const short = (sc) => sc.id.split('_')[0];
+const short = (sc) => sc.short ?? sc.id.split('_')[0]; // (6c F1) forms_demo names its own (goldens/forms_demo.json)
 const sha256 = (b) => crypto.createHash('sha256').update(b).digest('hex');
 
 /** SHA-256 over the sorted (path, sha) list of every file under dir except raw/ (CONTRACT 6b §8.2). */
@@ -75,7 +75,12 @@ export async function tileShas(planDir) {
   const tag = (r) => `${r.stage}|${r.set}|${r.key}`;
   const m1 = Object.fromEntries(one.map((r) => [tag(r), r.sha])), m4 = Object.fromEntries(four.map((r) => [tag(r), r.sha]));
   const same = Object.keys(m1).length === Object.keys(m4).length && Object.keys(m1).every((k) => m1[k] === m4[k]);
-  return { irSha: sha256(irJson), tiles: Object.fromEntries(Object.keys(m1).sort().map((k) => [k, m1[k]])), cells: one.reduce((n, r) => n + r.count, 0), workersSame: same };
+  // (6c F1) evaluation time per tile, from the single worker's forward pass
+  const ms = one.map((r) => r.ms ?? 0).sort((a, b) => a - b);
+  const cells = one.reduce((n, r) => n + r.count, 0);
+  const timing = { count: ms.length, p99Ms: ms.length ? ms[Math.min(ms.length - 1, Math.floor(ms.length * 0.99))] : 0, maxMs: ms.length ? ms[ms.length - 1] : 0, totalMs: ms.reduce((a, b) => a + b, 0) };
+  timing.cellsPerSecond = timing.totalMs > 0 ? cells / (timing.totalMs / 1000) : 0;
+  return { irSha: sha256(irJson), tiles: Object.fromEntries(Object.keys(m1).sort().map((k) => [k, m1[k]])), cells, workersSame: same, timing };
 }
 
 // ------------------------------------------------------------------ in-game steps (lazy: the offline commands need no client)
@@ -135,6 +140,7 @@ export function fitEntries(lots) {
 
 // ------------------------------------------------------------------ (6c V) the flat village scenario (S7)
 const isV = (sc) => sc.phase === '6c-v';
+const isF1 = (sc) => sc.phase === '6c-f1'; // (6c F1) forms_demo on S2's claim
 
 /**
  * (6c V) Before the world opens: the fixture bible (scenarios/<bibleFixture>, installed as the sidecar's bible `sc.bible` v1) and the
@@ -319,6 +325,8 @@ async function runScenario(id) {
     t0 = Date.now();
     await L.settle(120_000);
     T('stand', t0);
+    // (6c F1) the world after the stand: M17 on the realised world and the melt across the stand
+    if (isF1(sc)) { t0 = Date.now(); await L.call('dev.region.dump', { box, file: path.join(raw, 'after-stand.arwd.gz') }, 1_800_000); T('standDump', t0); }
     t0 = Date.now();
     shots = await shoot(cams, path.join(out, 'shots'));
     T('shots', t0);
@@ -366,7 +374,7 @@ async function computeMetrics({ sc, out, planDir, ir, irShas, mspt, cps, exact, 
   const before = await decodeArwd(fs.readFileSync(path.join(raw, 'before.arwd.gz')));
   const after = await decodeArwd(fs.readFileSync(path.join(raw, 'after.arwd.gz')));
   const world = dumpWorld(before, after, ir.claim, { virtual: vw, lots: ir.lots });
-  const realised = checkRegion({ ir, meta, world, prefix: false });
+  const realised = checkRegion({ ir, meta, world, prefix: false, ...(isF1(sc) ? { blobs } : {}) });
   fs.writeFileSync(path.join(out, 'realised-report.json'), `${JSON.stringify(realised, null, 1)}\n`);
   const palette = M.paletteAdherence(ir, world);
   const organic = M.axisRunShare(ir, vw);
@@ -399,6 +407,22 @@ async function computeMetrics({ sc, out, planDir, ir, irShas, mspt, cps, exact, 
   const ex = flat ? { flat: exact, normal: exactOther, cellsWritten: exactOther?.cellsWritten ?? 0 } : { flat: exactOther, normal: exact, cellsWritten: exact.cellsWritten };
   const plan = { report: JSON.parse(fs.readFileSync(path.join(out, 'report.json'), 'utf8')) };
   let rows = M.bars({ plan, realised, palette, organic, buildings, mspt, cellsPerSecond: cps, exact: ex, determinism: { irShas, workersSame: ts.workersSame, golden }, spendUsd: 0, approval: 'pending' });
+  // (6c F1) forms_demo's own bars: melt across the stand, kept cells, voxels, tile evaluation
+  let forms = null;
+  if (isF1(sc)) {
+    const F = await import('./lib/scenario-forms.mjs');
+    const standFile = path.join(raw, 'after-stand.arwd.gz');
+    const stand = fs.existsSync(standFile) ? await decodeArwd(fs.readFileSync(standFile)) : null;
+    const realisedStand = stand ? checkRegion({ ir, meta, world: dumpWorld(before, stand, ir.claim, { virtual: vw, lots: ir.lots }), prefix: false, blobs }) : null;
+    if (realisedStand) fs.writeFileSync(path.join(out, 'realised-stand-report.json'), `${JSON.stringify({ ...realisedStand, _world: undefined }, null, 1)}\n`);
+    const melt = stand ? F.meltAcrossStand(after, stand, F.plannedLights(vw)) : null;
+    const kept = F.keptDiff(ir, F.planVolumes(planDir, ir), before, after);
+    const voxels = F.voxelsExact(ir, planDir, after);
+    const organicPer = {};
+    for (const gname of [...new Set((ir.forms ?? []).map((f) => f.generator))]) organicPer[gname] = M.axisRunShare({ ...ir, forms: ir.forms.filter((f) => f.generator === gname), floating: [] }, vw).share;
+    rows = F.formsBars({ plan, realised, realisedStand, melt, kept, voxels, organic, organicPer, workersSame: ts.workersSame, tiles: ts.timing, mspt }, rows);
+    forms = { melt, kept, voxels, organicPer, tiles: ts.timing, realisedM17: (realisedStand ?? realised).metrics.M17, realisedM3: realised.metrics.M3, meta: meta.forms ?? null };
+  }
   // (6c V) S7's own bars (CONTRACT V §7): the door-to-street walk, the lot fronts, the villager rules, the props
   let village = null;
   if (isV(sc)) {
@@ -414,7 +438,7 @@ async function computeMetrics({ sc, out, planDir, ir, irShas, mspt, cps, exact, 
   }
   const fronts = M.lotFronts(ir, after);
   L.log(`  lot fronts: outside the boxes ${JSON.stringify(fronts.outside)}; inside (the children's own) ${JSON.stringify(fronts.inside)}`);
-  const metrics = { scenario: sc.id, worldChanges: world.worldChanges, cellsPerSecond: cps, lotFronts: fronts, ...(village ? { village } : {}), variant: flat ? 'flat' : 'natural', rows, palette, organic, buildings, mspt, tiles: { irSha: ts.irSha, count: Object.keys(ts.tiles).length, cells: ts.cells, workersSame: ts.workersSame, golden }, exactSibling: sibling ? path.relative(out, sibling) : null,
+  const metrics = { scenario: sc.id, worldChanges: world.worldChanges, cellsPerSecond: cps, lotFronts: fronts, ...(village ? { village } : {}), ...(forms ? { forms } : {}), variant: flat ? 'flat' : 'natural', rows, palette, organic, buildings, mspt, tiles: { irSha: ts.irSha, count: Object.keys(ts.tiles).length, cells: ts.cells, workersSame: ts.workersSame, golden }, exactSibling: sibling ? path.relative(out, sibling) : null,
     realised: { M2: realised.metrics.M2 && { ...realised.metrics.M2, perNode: undefined }, M3: realised.metrics.M3, M4: realised.metrics.M4, M5: realised.metrics.M5, M8: realised.metrics.M8 && { ...realised.metrics.M8, unguardedSample: (realised.metrics.M8.unguardedSample ?? []).slice(0, 20) }, M10: realised.metrics.M10, findings: realised.findings.map((f) => `${f.rule} ${f.severity} ${f.part ?? '-'} x${f.count}`) } };
   fs.writeFileSync(path.join(out, 'metrics.json'), `${JSON.stringify(metrics, null, 2)}\n`);
   for (const r of rows) L.log(`  ${r.gated ? (r.pass ? 'ok  ' : 'FAIL') : 'rec '} ${r.label}: ${r.value}`);
