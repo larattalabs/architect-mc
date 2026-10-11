@@ -26,6 +26,8 @@ process.env.GATE6B_RUN ??= path.resolve(here, '..', 'architect-mc-V-run');
 process.env.GATE6B_OUT = process.env.GATE6CV_OUT ?? process.env.GATE6B_OUT ?? path.join(path.resolve(here, '..', 'architect-mc'), 'artifacts', 'gate6c-v');
 process.env.GATE6B_SIDECAR_PORT ??= '8906';
 process.env.GATE6B_DEV_PORT ??= '8907';
+// the scenario runs under the main checkout's artifacts (tools/scenarios.mjs's default is this checkout's), unless a runner says
+process.env.SCENARIOS_ART ??= path.join(path.resolve(here, '..', 'architect-mc'), 'artifacts', 'scenarios');
 const L = await import('./lib/run6b.mjs');
 const { RUN, OUT, SAVES, SIDECAR_DATA, LIBRARY, call, check, cmd, connect, fails, leaveWorld, log, openWorld, refuseKeys, results, root, settle, sleep, startClient,
   state, stopClient, tp, write, copyWorld, plan, prepare, realise, waitRegion } = L;
@@ -216,7 +218,7 @@ function scenario(args) {
   fs.appendFileSync(path.join(OUT, 'scenarios.log'), t);
   return { code: r.status, fails: t.split('\n').filter((l) => /^FAIL /.test(l)), tail: t.split('\n').slice(-30).join('\n') };
 }
-const S7_ART = () => path.join(process.env.SCENARIOS_ART ? path.resolve(process.env.SCENARIOS_ART) : path.join(path.resolve(root, '..', 'architect-mc'), 'artifacts', 'scenarios'), '6c-v', 's7');
+const S7_ART = () => path.join(path.resolve(process.env.SCENARIOS_ART), '6c-v', 's7');
 /** The latest S7 run (natural or flat) with metrics: under the scenarios' default dir, or a runner's $SCENARIOS_ART/s7[-flat]. */
 const latest = (flat) => {
   const d = S7_ART();
