@@ -51,11 +51,14 @@ After 0a merges (merge origin/main first):
       slice/0a 2026-10-10; redo with jars from the v0.13.0 tag into artifacts/gate6c0b/v0130/
 - [x] gate driver tools/gate6c0b.mjs (unit: items 1-4, 6, 7 offline: PASS 2026-10-10; ingame: items 5, 7)
 - [x] ingame PASS (items 5 and 7, 2026-10-10, 695299f)
-- [ ] slice run: no `slice` tier on main yet, and gate4e/5b/6a's old-client steps hardcode 8892-8895 (other slices'
-      ports): a regress subset on 8906/8907 (unit-*, sim-*, 4e-megalite, 4e-orders, 4d-all, 5b-chains, 5b-village) runs in
-      artifacts/gate-runs-0b/; apijars and the old-client steps wait for the tiers runner's --ports
-- [ ] gate-verifier
-- [ ] §6 benchmark (tools/bench6c0b.mjs: paid, claude login, cap $35, spent + step cap <= $35 before each paid step)
+- [x] slice tier (v0.12.4 runner, 3 shards on 8906-8911, artifacts/gate-runs-0b/20261011-000214-slice + the re-run of its
+      failed steps in the next *-slice dir): every step PASS except 4d-all. 4d-all: the tick bar is marginal under machine
+      load, and the group-undo exactness check is intermittent (a different lot each time). A probe of slice/0a's head failed
+      it too, and a probe of main (844e040) passed: it comes with the merged 0a, not 0b (0b adds no placement/undo code).
+      Re-run 4d-all after 0a lands.
+- [x] gate-verifier (2026-10-11): PASS on items 1-8 and 10, no blocking issues (item 8 waits for the v0.13.0 jars)
+- [ ] §6 benchmark: BLOCKED until 0a merges (contract: runs last, on the 0b build with 0a merged);
+      `node tools/gate6c0b.mjs bench run` (= tools/bench6c0b.mjs) (tools/bench6c0b.mjs: paid, claude login, cap $35, spent + step cap <= $35 before each paid step)
 
 ## Steward's review (folded in)
 
