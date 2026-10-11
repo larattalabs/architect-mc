@@ -202,16 +202,17 @@ final class SitesImpl implements dev.larattalabs.architect.api.Sites {
 			if (!loaded(level, s.restoreBox())) {
 				return CompletableFuture.completedFuture(refused(siteId + " is not loaded on the server (a player must be near it)"));
 			}
-			List<String> blockers = Sites.removalBlockers(level, s);
+			String tagOwner = o == null ? null : o.requester(); // 6c 0c (C18): the requester's tagged entities don't block
+			List<String> blockers = Sites.removalBlockers(level, s, tagOwner);
 			if (!blockers.isEmpty()) {
 				return CompletableFuture.completedFuture(new RemoveResult(false, blockers, Map.of()));
 			}
 			try {
-				CompletableFuture<Sites.Removed> large = Sites.removeLarge(level, siteId, false, covered(o));
+				CompletableFuture<Sites.Removed> large = Sites.removeLarge(level, siteId, false, covered(o), tagOwner);
 				if (large != null) {
 					return large.thenApply(SitesImpl::result);
 				}
-				Sites.Removed done = Sites.removeDetailed(level, siteId, false, covered(o));
+				Sites.Removed done = Sites.removeDetailed(level, siteId, false, covered(o), tagOwner);
 				return CompletableFuture.completedFuture(result(done));
 			} catch (Sites.SiteException e) {
 				return CompletableFuture.completedFuture(refused(e.getMessage()));
@@ -364,9 +365,20 @@ final class SitesImpl implements dev.larattalabs.architect.api.Sites {
 			v = new Verdict(List.of(new Refusal(Reason.LOT_TOO_SMALL, "The lot is too small for " + blueprintId + ": " + f.why())), List.of(), construction,
 				Map.of(), Optional.of(Views.box(f.box())), Optional.empty());
 		} else {
-			v = check(new PlaceRequest(blueprintId, level, origin, rot, opt.mode(), null, new JsonObject(), opt.force(), opt.actor()));
+			v = check(new PlaceRequest(blueprintId, level, origin, rot, opt.mode(), opt.owner(), new JsonObject(), opt.force(), opt.actor()));
 		}
-		return new LotFit(origin, rot, Views.box(f.box()), v.restoreBox(), v);
+		return new LotFit(origin, rot, Views.box(f.box()), v.restoreBox(), v, Views.box(LotFitting.recommended(f, lb, streetSide.getName())));
+	}
+
+	@Override
+	public dev.larattalabs.architect.api.LotSize minLotSize(String blueprintId, FitOptions o) {
+		FitOptions opt = o == null ? FitOptions.DEFAULT : o;
+		Blueprint bp = Blueprints.get(blueprintId);
+		if (bp == null) {
+			throw new IllegalArgumentException("No design " + blueprintId + " in the library");
+		}
+		int[] m = LotFitting.minSize(bp, opt.setback(), opt.approachIntoStreet());
+		return new dev.larattalabs.architect.api.LotSize(m[0], m[1], m[2], LotFitting.frontMargin(bp));
 	}
 
 	/**
@@ -410,13 +422,31 @@ final class SitesImpl implements dev.larattalabs.architect.api.Sites {
 			if (no != null) {
 				v = new Verdict(List.of(new Refusal(Reason.NOT_ALLOWED, no)), List.of(), construction, Map.of(), Optional.empty(), Optional.empty());
 			} else {
-				Sites.Verdict sv = Sites.entryVerdict(level, entry, origin, rot, opt.force(), construction, null);
+				Sites.Verdict sv = Sites.entryVerdict(level, entry, origin, rot, opt.force(), construction, opt.owner()); // 6c 0c: the owner's areas
 				List<Refusal> refused = sv.typed().stream().map(x -> new Refusal(x.reason(), x.message())).toList();
 				v = new Verdict(refused, sv.notes(), construction, Map.of(), Optional.ofNullable(sv.box()).map(Views::box),
 					Optional.ofNullable(sv.snapshotBox()).map(Views::box), overlaps(sv.overlaps(), refused), 0);
 			}
 		}
-		return new LotFit(origin, rot, Views.box(f.box()), v.restoreBox(), v);
+		return new LotFit(origin, rot, Views.box(f.box()), v.restoreBox(), v, Views.box(LotFitting.recommended(f, lb, streetSide.getName())));
+	}
+
+	/** 6c 0c §2: {@link #minLotSize(String, FitOptions)} for an installed massing version (as {@link #fitMassingToLot} reads it). */
+	@Override
+	public dev.larattalabs.architect.api.LotSize minLotSize(dev.larattalabs.architect.api.MassingRef massing, FitOptions o) {
+		FitOptions opt = o == null ? FitOptions.DEFAULT : o;
+		String ref = massing == null ? "null" : massing.toString();
+		if (massing == null || massing.version() < 1 || !MassingFiles.exists(ref)) {
+			throw new IllegalArgumentException("No massing " + ref + " is installed");
+		}
+		Blueprint bp;
+		try {
+			bp = MassingFiles.read(ref).blueprint();
+		} catch (java.io.IOException e) {
+			throw new IllegalArgumentException("Massing " + ref + " could not be read: " + e.getMessage(), e);
+		}
+		int[] m = LotFitting.minSize(bp, opt.setback(), opt.approachIntoStreet());
+		return new dev.larattalabs.architect.api.LotSize(m[0], m[1], m[2], LotFitting.frontMargin(bp));
 	}
 
 	@Override
@@ -555,5 +585,22 @@ final class SitesImpl implements dev.larattalabs.architect.api.Sites {
 			out.add(new dev.larattalabs.architect.api.OutdatedSite((String) o[0], (String) o[1], (int) o[2], (int) o[3]));
 		}
 		return out;
+	}
+
+	// ------------------------------------------------------------------ 1.12.0 (docs/CONTRACT.md phase 6c slice 0c)
+
+	@Override
+	public dev.larattalabs.architect.api.ProtectedArea protect(dev.larattalabs.architect.api.ProtectedArea a) {
+		return dev.larattalabs.architect.site.Protected.protect(a);
+	}
+
+	@Override
+	public boolean unprotect(String owner, String areaId) {
+		return dev.larattalabs.architect.site.Protected.unprotect(owner, areaId);
+	}
+
+	@Override
+	public List<dev.larattalabs.architect.api.ProtectedArea> protectedAreas(@Nullable String owner) {
+		return dev.larattalabs.architect.site.Protected.list(owner);
 	}
 }

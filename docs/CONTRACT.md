@@ -7700,6 +7700,24 @@ check and changes no tile path. If §10 ships, its `journal/**` steps are added 
   - cell sites in construction mode;
   - off-thread undo planning, if §10 is a no-go.
 
+### Phase 6c slice 0c as built (API 1.12.0, mod 0.15.0, recorded 2026-10-11)
+
+Branch `slice/0c` (worktree `../architect-mc-0c`; the coordinator's names, not `phase/6c-0c`). $0: sim only, no Claude call.
+Evidence: `artifacts/gate6c0c/` (REPORT.md, one JSON per step), the slice tier in `artifacts/gate-runs-0c/`.
+
+| § | As built |
+|---|---|
+| §2 minLotSize | `Sites.minLotSize(String\|MassingRef, FitOptions)`, `LotSize` (+ `at`), `LotFit.recommendedLot` (the 1.4.0 constructor gives the template box: it doesn't know the lot). `fitMassingToLot` gets `recommendedLot` and the owner's areas too. Unit: every kit design and massing × 4 sides × 3 setback rules. |
+| §3 partial roads | `RoadRequest.partial`, `RoadSpan`, `Verdict.spans`, `PlaceResult.skipped`. Failures per waypoint segment; runs smoothed each on its own, one segment per run per round. A step or wall can't fail TOO_STEEP (the ground search stops 8 above the hint, so the smoothed profile needs at most 4), so the tests use a trench (no ground within 8). A run shorter than 2 centre cells is left out and noted. |
+| §4 ground | `Sample.ground` (scan down from WORLD_SURFACE with the volume's classes; a journal-owned log/leaves/plant counts), `Volume.ground` (derived in the encoder; the ARVX sha unchanged: pinned unit test; in game the same sha on main, 0.14.0 and 0c). Volume counts a journal-owned air cell as ground (OWNED); Sample sees blocks only. |
+| §5 FIELD_LIMIT | `api/Limits` (lengths, list sizes, ext, context, the zod patterns), checked before sending (request, requestGroup, critique, polish, redirectMassing, bibles.request); `sidecar/test/limits.test.ts` walks the zod schemas. Numeric ranges aren't in Limits. |
+| §6 extend | `Designs.extend` -> `Extension`; the ack carries `spentUsd` and `softBudgetFraction` (feature `extendInfo`). |
+| §7 C16 | `site/RoadBuilder` (the builder's `Run` through a probe Site). Free: a `dirt_path` on `grass_block` only (dirt, podzol, mycelium... cost: open question). A cell already holding its target block isn't queued. Downgrade checked: 0.14.0 lists a half-built road and removes it with a world diff of 0. |
+| §8 C17 | `Sites.protect/unprotect/protectedAreas`, `<world>/architect/protected.json`. Revert's undo path is checked on the site's restore box. A move is checked on the moving site's owner. |
+| §9 C18 | `architect:owner=<owner>` tags skip occupancy, both discard loops and removal blockers (remove: the requester; group undo: the site's owner). |
+| Gate | Slice tier `artifacts/gate-runs-0c/20261011-060252-slice` 19 PASS, 3 load flakes (sim-massing composite keys, the 1.11.0 jar's SITE_PROGRESS gap, 6b-nudges) PASS on re-run `20261011-070130-slice`; focused items `artifacts/gate6c0c/REPORT.md` all pass; api-compat clean against the 0.14.0/0.13.0/0.12.0 apitest jars and the 0.14.0 surface; gate-verifier PASS (re-ran items 6, 7, 8). SETTLEMENTS.md numbering (N-0c-3) not touched here. |
+| §10 | No-go. megaA undo ownCpu p99 / max: 0c 9.33 / 20.36 and 7.40 / 18.29 ms; spike 6.71 / 12.34 and 6.55 / 12.57 ms, but both spike runs fell back to server-thread planning (an unloaded chunk; a section that changed while it planned), so the gap is load. Branch `slice/0c-undo` kept; to Later. |
+
 ## Phase 6c slice V: flat village (C10) (DRAFT for Steward review)
 
 This slice is API 1.13.0 and mod 0.16.0. It comes after 0a (1.10.0 / 0.13.0), 0b (1.11.0 / 0.14.0) and 0c (1.12.0 / 0.15.0).

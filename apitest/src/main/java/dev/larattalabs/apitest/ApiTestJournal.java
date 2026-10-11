@@ -146,7 +146,7 @@ final class ApiTestJournal {
 			j.has("slab") ? j.get("slab").getAsString() : null, j.has("lanterns") && j.get("lanterns").getAsBoolean(), j.has("decks")
 				&& j.get("decks").getAsBoolean(), j.has("mode") ? Mode.valueOf(j.get("mode").getAsString()) : Mode.INSTANT, j.has("owner") ? j.get("owner")
 					.getAsString() : null, j.has("ext") ? j.getAsJsonObject("ext") : new JsonObject(), j.has("actor") && j.get("actor").getAsBoolean() ? player
-						: null, j.has("force") && j.get("force").getAsBoolean());
+						: null, j.has("force") && j.get("force").getAsBoolean(), j.has("partial") && j.get("partial").getAsBoolean()); // 1.12.0: partial
 	}
 
 	static BlockState block(String id) {

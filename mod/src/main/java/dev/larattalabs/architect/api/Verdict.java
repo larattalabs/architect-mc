@@ -16,20 +16,29 @@ import net.minecraft.world.level.levelgen.structure.BoundingBox;
  *            road or cell site ({@link Sites#checkRoad}, {@link Sites#checkCells}) both are the box of the cells it changes
  * @param overlaps (1.5.0) the standing sites its restore box overlaps, per site
  * @param cells (1.5.0) a road's or cell site's cell count (0 for a building)
+ * @param spans (1.12.0) {@link Sites#checkRoad}: every failing span of the road, partial or not (the first is also the
+ *              refusal, unless the road is partial); empty otherwise
  */
 public record Verdict(List<Refusal> refusals, List<String> notes, boolean construction, Map<Item, Integer> bom, Optional<BoundingBox> box,
-	Optional<BoundingBox> restoreBox, List<Overlap> overlaps, int cells) {
+	Optional<BoundingBox> restoreBox, List<Overlap> overlaps, int cells, List<RoadSpan> spans) {
 	public Verdict {
 		refusals = List.copyOf(refusals);
 		notes = List.copyOf(notes);
 		bom = Map.copyOf(bom);
 		overlaps = List.copyOf(overlaps);
+		spans = spans == null ? List.of() : List.copyOf(spans);
+	}
+
+	/** The 1.5.0 constructor (no spans). */
+	public Verdict(List<Refusal> refusals, List<String> notes, boolean construction, Map<Item, Integer> bom, Optional<BoundingBox> box,
+		Optional<BoundingBox> restoreBox, List<Overlap> overlaps, int cells) {
+		this(refusals, notes, construction, bom, box, restoreBox, overlaps, cells, List.of());
 	}
 
 	/** The 1.4.0 constructor. */
 	public Verdict(List<Refusal> refusals, List<String> notes, boolean construction, Map<Item, Integer> bom, Optional<BoundingBox> box,
 		Optional<BoundingBox> restoreBox) {
-		this(refusals, notes, construction, bom, box, restoreBox, List.of(), 0);
+		this(refusals, notes, construction, bom, box, restoreBox, List.of(), 0, List.of());
 	}
 
 	public boolean ok() {

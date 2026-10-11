@@ -45,6 +45,9 @@ final class InfraSpec {
 		o.addProperty("lanterns", r.lanterns());
 		o.addProperty("shallowDecks", r.shallowDecks());
 		o.addProperty("force", r.force());
+		if (r.partial()) {
+			o.addProperty("partial", true); // 6c 0c §3
+		}
 		return o;
 	}
 

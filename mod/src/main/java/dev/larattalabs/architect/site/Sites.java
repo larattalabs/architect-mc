@@ -154,6 +154,7 @@ public final class Sites {
 		WorldJournal.init(); // the journal opens (and imports 4d worlds) before the sites load
 		dev.larattalabs.architect.journal.JournalMigration.init();
 		dev.larattalabs.architect.site.roads.RoadSync.init();
+		Protected.init(); // 6c 0c (C17)
 		ServerLifecycleEvents.SERVER_STARTED.register(server -> {
 			worldDir = server.getWorldPath(LevelResource.ROOT);
 			load(server);
@@ -648,7 +649,7 @@ public final class Sites {
 					+ ", which survival can't build");
 			}
 		}
-		List<Occupancy.Found> found = Occupancy.scan(level, snapBox, e -> false);
+		List<Occupancy.Found> found = Occupancy.scan(level, snapBox, Occupancy.ownedBy(owner)); // 6c 0c (C18): the owner's tagged entities
 		tr.mark("occupancy");
 		List<String> occupied = Occupancy.refusals(found);
 		if (!occupied.isEmpty()) {
@@ -865,7 +866,16 @@ public final class Sites {
 	/** {@link #verdict}; {@code style}: the entrance approach's style (6b), null = the design's own. */
 	public static Verdict verdict(ServerLevel level, Blueprint bp, BlockPos origin, Rotation rotation, boolean force, @Nullable String movingId,
 		boolean dryRun, @Nullable Boolean construction, boolean layer, @Nullable String owner, @Nullable EntranceStyle style) {
-		return verdict(level, bp, origin, rotation, force, movingId, dryRun, construction, layer, owner, style, null);
+		return verdict(level, bp, origin, rotation, force, movingId, dryRun, construction, layer, owner, style, null, true);
+	}
+
+	/**
+	 * {@link #verdict}; {@code protect} (6c 0c, C17): the owner's protected areas apply to the predicted restore box (a move: the
+	 * moving site's owner). False for a region's items: a region is checked at plan accept and realise start only.
+	 */
+	public static Verdict verdict(ServerLevel level, Blueprint bp, BlockPos origin, Rotation rotation, boolean force, @Nullable String movingId,
+		boolean dryRun, @Nullable Boolean construction, boolean layer, @Nullable String owner, @Nullable EntranceStyle style, boolean protect) {
+		return verdict(level, bp, origin, rotation, force, movingId, dryRun, construction, layer, owner, style, null, protect);
 	}
 
 	/**
@@ -874,12 +884,12 @@ public final class Sites {
 	 */
 	public static Verdict entryVerdict(ServerLevel level, Blueprints.Entry entry, BlockPos origin, Rotation rotation, boolean force,
 		@Nullable Boolean construction, @Nullable String owner) {
-		return verdict(level, entry.blueprint(), origin, rotation, force, null, true, construction, false, owner, null, entry);
+		return verdict(level, entry.blueprint(), origin, rotation, force, null, true, construction, false, owner, null, entry, true);
 	}
 
 	private static Verdict verdict(ServerLevel level, Blueprint bp, BlockPos origin, Rotation rotation, boolean force, @Nullable String movingId,
 		boolean dryRun, @Nullable Boolean construction, boolean layer, @Nullable String owner, @Nullable EntranceStyle style,
-		Blueprints.@Nullable Entry given) {
+		Blueprints.@Nullable Entry given, boolean protect) {
 		List<Refusal> typed = new ArrayList<>();
 		Refusals out = (r, m) -> typed.add(new Refusal(r, m));
 		boolean survival = construction != null ? construction : SurvivalWorld.on();
@@ -918,6 +928,12 @@ public final class Sites {
 				}
 			}
 			site = checkSite(level, bp, origin, rotation, force, moving, out, dryRun, survival && moving == null, layer, owner, style, given);
+			if (site != null && protect) {
+				dev.larattalabs.architect.api.ProtectedArea pa = Protected.hit(dimensionId(level), moving != null ? moving.owner() : owner, site.snapBox());
+				if (pa != null) {
+					out.add(Reason.PROTECTED, Protected.message(moving != null ? "Moving " + movingId : "Placing " + bp.id(), pa));
+				}
+			}
 			if (site != null && typed.isEmpty() && moving == null && given == null) {
 				checked = new Checked(checkKey(level, bp, origin, rotation, force, survival, layer, owner, style), level.getServer().getTickCount(), site);
 			}
@@ -1016,7 +1032,8 @@ public final class Sites {
 		LeafGuard.holdCells(level, held, FLAGS);
 		try {
 			int removed = 0;
-			for (Entity e : level.getEntities((Entity) null, Occupancy.aabb(snapBox), e -> !(e instanceof Player) && e.isAlive())) {
+			for (Entity e : level.getEntities((Entity) null, Occupancy.aabb(snapBox), e -> !(e instanceof Player) && e.isAlive()
+				&& !Occupancy.ownedBy(e, who.siteOwner()))) {
 				if (Occupancy.classify(e).removable()) {
 					e.discard();
 					removed++;
@@ -1225,6 +1242,11 @@ public final class Sites {
 	 * records pending, then the writes). Server thread.
 	 */
 	public static Removed removeDetailed(ServerLevel level, String id, boolean force, Covered covered) throws SiteException {
+		return removeDetailed(level, id, force, covered, null);
+	}
+
+	/** {@link #removeDetailed}; {@code tagOwner} (6c 0c, C18): the requester, whose tagged entities don't block. */
+	public static Removed removeDetailed(ServerLevel level, String id, boolean force, Covered covered, @Nullable String tagOwner) throws SiteException {
 		Site b = get(id);
 		if (b == null) {
 			throw new SiteException("No site " + id + " (see /architect list)");
@@ -1275,7 +1297,7 @@ public final class Sites {
 		all.add(b);
 		if (!force) {
 			for (Site x : all) {
-				List<String> blockers = removalBlockers(level, x);
+				List<String> blockers = removalBlockers(level, x, tagOwner);
 				if (!blockers.isEmpty()) {
 					throw new SiteException(blockersMessage(x.id(), blockers));
 				}
@@ -1350,6 +1372,12 @@ public final class Sites {
 	 */
 	public static java.util.concurrent.@Nullable CompletableFuture<Removed> removeLarge(ServerLevel level, String id, boolean force, Covered covered)
 		throws SiteException {
+		return removeLarge(level, id, force, covered, null);
+	}
+
+	/** {@link #removeLarge}; {@code tagOwner} (6c 0c, C18): the requester, whose tagged entities don't block. */
+	public static java.util.concurrent.@Nullable CompletableFuture<Removed> removeLarge(ServerLevel level, String id, boolean force, Covered covered,
+		@Nullable String tagOwner) throws SiteException {
 		Site b = get(id);
 		if (b == null || b.placing() || b.construction() != null || b.restoreBox().volume() <= SiteJournal.SYNC_CELLS) {
 			return null;
@@ -1376,7 +1404,7 @@ public final class Sites {
 		}
 		refusePlayerIn(level, b.restoreBox(), id, "removing it");
 		if (!force) {
-			List<String> blockers = removalBlockers(level, b);
+			List<String> blockers = removalBlockers(level, b, tagOwner);
 			if (!blockers.isEmpty()) {
 				throw new SiteException(blockersMessage(id, blockers));
 			}
@@ -1554,6 +1582,11 @@ public final class Sites {
 	 * only over the cells the site owns (a covered cell belongs to the site on top). Server thread.
 	 */
 	public static List<String> removalBlockers(ServerLevel level, Site b) {
+		return removalBlockers(level, b, null);
+	}
+
+	/** {@link #removalBlockers}; {@code tagOwner} (6c 0c, C18): entities tagged {@code architect:owner=<tagOwner>} don't block. */
+	public static List<String> removalBlockers(ServerLevel level, Site b, @Nullable String tagOwner) {
 		List<String> out = new ArrayList<>();
 		Set<BlockPos> own = ownBlockEntities(b);
 		Anchors.Bounds box = b.restoreBox();
@@ -1588,7 +1621,7 @@ public final class Sites {
 			}
 		});
 		int dropped = 0;
-		for (Entity e : level.getEntities((Entity) null, Occupancy.aabb(box), e -> e.isAlive() && !(e instanceof Player))) {
+		for (Entity e : level.getEntities((Entity) null, Occupancy.aabb(box), e -> e.isAlive() && !(e instanceof Player) && !Occupancy.ownedBy(e, tagOwner))) {
 			Occupancy.Found f = Occupancy.classify(e);
 			if (f.kind() == Occupancy.Kind.ITEM && !(e instanceof ItemEntity)) {
 				out.add(f.name() + " at " + e.blockPosition().toShortString());

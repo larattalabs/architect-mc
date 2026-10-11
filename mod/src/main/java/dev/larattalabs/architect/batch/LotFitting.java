@@ -119,6 +119,39 @@ public final class LotFitting {
 		return new Fit(turns, box, why == null, why, sb);
 	}
 
+	/**
+	 * 6c 0c §2, minLotSize: {@code {alongStreet, deep, setback}} of a fit: the rotated footprint's width along the street and its
+	 * depth plus the setback. The same for every street side (the entrance faces the street, so the footprint turns with it).
+	 */
+	public static int[] minSize(Blueprint bp, @Nullable Integer setback, boolean intoStreet) {
+		Anchor e = bp.anchors().get(Blueprint.ENTRANCE);
+		int length = bp.approach().enabled() && e != null ? bp.approach().length() : 0;
+		return minSize(bp.sizeX(), bp.sizeZ(), bp.front(), length, setback, intoStreet);
+	}
+
+	public static int[] minSize(int sizeX, int sizeZ, String front, int approachLength, @Nullable Integer setback, boolean intoStreet) {
+		int turns = BlueprintTransform.turnsToFace(front, "north");
+		int width = BlueprintTransform.rotatedSizeX(sizeX, sizeZ, turns);
+		int depth = BlueprintTransform.rotatedSizeZ(sizeX, sizeZ, turns);
+		int sb = intoStreet ? 0 : setback != null ? setback : approachLength;
+		return new int[] {width, depth + sb, sb};
+	}
+
+	/**
+	 * 6c 0c §2, a fit's recommended lot: the street-edge row to the back of the footprint, the footprint's width, the y span of
+	 * {@code lot}. fitToLot on it gives the same origin and rotation (its span is the width, so the footprint is clamped onto it).
+	 */
+	public static Anchors.Bounds recommended(Fit f, Anchors.Bounds lot, String streetSide) {
+		Anchors.Bounds b = f.box();
+		return switch (streetSide.toLowerCase(java.util.Locale.ROOT)) {
+			case "north" -> new Anchors.Bounds(b.minX(), lot.minY(), lot.minZ(), b.maxX(), lot.maxY(), b.maxZ());
+			case "south" -> new Anchors.Bounds(b.minX(), lot.minY(), b.minZ(), b.maxX(), lot.maxY(), lot.maxZ());
+			case "west" -> new Anchors.Bounds(lot.minX(), lot.minY(), b.minZ(), b.maxX(), lot.maxY(), b.maxZ());
+			case "east" -> new Anchors.Bounds(b.minX(), lot.minY(), b.minZ(), lot.maxX(), lot.maxY(), b.maxZ());
+			default -> throw new IllegalArgumentException("street side must be north/east/south/west, not " + streetSide);
+		};
+	}
+
 	/** The worst-case growth of a restore box past its template box at the front: the approach plus its extension. */
 	public static int frontMargin(Blueprint bp) {
 		return bp.approach().enabled() && bp.anchors().containsKey(Blueprint.ENTRANCE) ? bp.approach().length() + Approach.EXTEND : 0;

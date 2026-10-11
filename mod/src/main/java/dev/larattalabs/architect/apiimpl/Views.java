@@ -75,8 +75,10 @@ public final class Views {
 		dev.larattalabs.architect.api.Policy policy = i.road() || !"BOX".equals(i.spec().has("policy") ? i.spec().get("policy").getAsString() : "CELL")
 			? dev.larattalabs.architect.api.Policy.CELL : dev.larattalabs.architect.api.Policy.BOX;
 		String region = i.spec().has("tile") ? i.spec().get("tile").getAsString().split("\\|")[0] : regionOfGroup(m == null ? null : m.group());
+		int[] prog = dev.larattalabs.architect.site.RoadBuilder.progress(dev.larattalabs.architect.site.SiteDeltas.serverOrNull(), i); // 6c 0c (C16)
 		return new SiteView(i.id(), i.kind(), i.owner(), i.ext(), box(i.box()), box(i.box()), Rotation.NONE, dimension(i.dimension()),
-			i.placing() ? State.PLACING : State.BUILT, 0, 0, m == null ? null : m.group(), m == null ? null : m.batchId(), m == null ? null : m.itemKey(),
+			i.placing() ? State.PLACING : i.building() ? State.BUILDING : State.BUILT, prog[0], prog[1], m == null ? null : m.group(), m == null ? null
+				: m.batchId(), m == null ? null : m.itemKey(),
 			i.kind(), policy, dev.larattalabs.architect.site.SiteJournal.coveredSites(i.id()), dev.larattalabs.architect.site.SiteJournal.related(i.id(), true),
 			1, 1, 0, false, region);
 	}

@@ -436,14 +436,17 @@ public final class Batches {
 		(road ? it.road().ext() : it.cells().ext()).entrySet().forEach(e -> ext.add(e.getKey(), e.getValue().deepCopy()));
 		ServerPlayer actor = road ? it.road().actor() : it.cells().actor();
 		BlockPos first = road ? it.road().points().get(0) : it.cells().cells().isEmpty() ? BlockPos.ZERO : it.cells().cells().get(0).pos();
+		// 6c 0c (C16): a road in CONSTRUCTION (or AUTO in survival) is a construction road, built from the batch's shared crate
+		boolean consRoad = road && InfraPlace.constructionRoad(server, it.road().mode());
 		QItem q = new QItem(it.itemKey(), stage, it.after(), road ? "road" : "cells", Sites.dimensionId(level), first.getX(), first.getY(), first.getZ(), 0,
 			road ? it.road().force()
-			: it.cells().force(), ext, actor == null ? null : actor.getStringUUID(), false, survival);
+			: it.cells().force(), ext, actor == null ? null : actor.getStringUUID(), consRoad && spec.sharedCrate(), survival);
 		q.itemKind = road ? "road" : "cells";
 		q.spec = road ? InfraSpec.road(it.road()) : InfraSpec.cells(it.cells());
 		var overlap = road ? null : it.cells().overlap() != null ? it.cells().overlap() : spec.overlap();
 		q.layer = overlap == dev.larattalabs.architect.api.OverlapPolicy.LAYER;
-		String no = InfraPlace.modeRefusal(server, road ? it.road().mode() : it.cells().mode(), actor, !road);
+		String no = consRoad ? spec.sharedCrate() ? null : "a construction road needs a batch with sharedCrate (its cells are paid from the shared crate)"
+			: InfraPlace.modeRefusal(server, road ? it.road().mode() : it.cells().mode(), actor, !road);
 		if (no != null) {
 			q.fail(Reason.NOT_ALLOWED.name(), no);
 		}
@@ -508,7 +511,8 @@ public final class Batches {
 		}
 		if (road) {
 			c = InfraPlace.checkRoad(level, InfraSpec.points(i.spec), i.spec.get("width").getAsInt(), InfraSpec.str(i.spec, "surface"), InfraSpec.str(i.spec,
-				"slab"), i.spec.get("lanterns").getAsBoolean(), i.spec.get("shallowDecks").getAsBoolean(), b.owner, i.force);
+				"slab"), i.spec.get("lanterns").getAsBoolean(), i.spec.get("shallowDecks").getAsBoolean(), b.owner, i.force, i.spec.has("partial")
+				&& i.spec.get("partial").getAsBoolean(), RegionItems.isRegion(b) ? null : b.owner); // 6c 0c: partial (§3), protected areas (C17)
 		} else {
 			cells = InfraSpec.cellsOf(i.spec);
 			tr.mark("decode");
@@ -517,6 +521,9 @@ public final class Batches {
 		}
 		}
 		tr.mark("check");
+		if (!road && !RegionItems.isRegion(b)) {
+			c = InfraPlace.protect(level, c, b.owner, "The cell site " + i.key); // 6c 0c (C17), checked when the item starts
+		}
 		if (!c.ok()) {
 			tr.done();
 			Sites.Refusal r = c.refusals().get(0);
@@ -533,7 +540,7 @@ public final class Batches {
 			return;
 		}
 		try {
-			InfraJob job = road ? InfraPlace.beginRoad(level, c, b.owner, i.ext, member) : InfraPlace.beginCells(level, i.spec.get("kind").getAsString(),
+			InfraJob job = road ? InfraPlace.beginRoad(level, c, b.owner, i.ext, member, i.construction) : InfraPlace.beginCells(level, i.spec.get("kind").getAsString(),
 				dev.larattalabs.architect.journal.Journal.Policy.valueOf(i.spec.get("policy").getAsString()), c, b.owner, i.ext, member);
 			tr.mark("begin");
 			tr.done();
@@ -579,6 +586,13 @@ public final class Batches {
 			Sites.putGroup(server, n);
 		}
 		placedItem(server, b, i);
+		// 6c 0c §3: a partial road's item names its skipped spans
+		for (String note : job.notes) {
+			if (note.startsWith("skipped segment")) {
+				i.message = note;
+				CHANGED.add(b.id);
+			}
+		}
 	}
 
 	static void infraFailed(MinecraftServer server, InfraJob job, String why) {
@@ -935,7 +949,8 @@ public final class Batches {
 		if (!SiteJournal.warm(i.dimension, near)) {
 			return;
 		}
-		Sites.Verdict v = Sites.verdict(level, bp, origin, rot, i.force, null, true, i.construction, i.layer, b.owner, styleOf(b, i));
+		Sites.Verdict v = Sites.verdict(level, bp, origin, rot, i.force, null, true, i.construction, i.layer, b.owner, styleOf(b, i),
+			!RegionItems.isRegion(b));
 		if (!v.ok()) {
 			Sites.Refusal hard = v.typed().stream().filter(r -> !TEMPORARY.contains(r.reason())).findFirst().orElse(null);
 			if (hard != null) {

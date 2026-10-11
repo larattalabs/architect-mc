@@ -66,6 +66,9 @@ package dev.larattalabs.architect.api;
  * {@code bundled}, {@code no_source}, {@code massing}, {@code copy} (a group copy follows its source by its recipe), {@code busy}
  * (a polish or versionOf of the entry is unfinished), {@code site_mismatch} (the site is not of that entry), {@code group}
  * (single designs only).</li>
+ * <li>{@code PROTECTED} (1.12.0): the op writes into a protected area of its owner ({@link Sites#protect}); {@code force}
+ * doesn't override it: lift the area ({@link Sites#unprotect}).</li>
+ * <li>{@code FIELD_LIMIT} (1.12.0): a bounded request field is out of range ({@code Limits}); nothing was sent.</li>
  * </ul>
  * New values are only ever appended.
  */
@@ -74,5 +77,7 @@ public enum Reason {
 	UNKNOWN_BLUEPRINT, OTHER, CANCELLED, LOT_TOO_SMALL, TIMED_OUT, OVERLAP_BUSY, OVERLAP_OWNED, LAYER_DEPTH, COVERED, TOO_STEEP, DEEP_WATER,
 	TOO_LARGE, JOURNAL_UNAVAILABLE, SITE_BUSY, FRAME_CHANGED, VERSION_GONE, PLAYER_EDITS, NOT_GENERATED, CHUNK_BOUND, DRIFTED,
 	SIDECAR_UNAVAILABLE, PLAN_STALE, REGION_LIMIT, NO_TEMPLATE, PLAYER_BLOCKS, WORLD_STOPPED, OP_KEY_CONFLICT, TILE_SLOW,
-	COPY_REFUSED, VERSION_REFUSED
+	COPY_REFUSED, VERSION_REFUSED,
+	// 1.12.0 (6c slice 0c), after 0a's and 0b's
+	PROTECTED, FIELD_LIMIT
 }

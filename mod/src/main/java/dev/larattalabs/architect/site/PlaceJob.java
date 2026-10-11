@@ -410,7 +410,8 @@ final class PlaceJob implements Placement.Job {
 		dev.larattalabs.architect.placement.LeafGuard.holdCells(level, heldLeaves, Sites.FLAGS);
 		int removed = 0;
 		for (net.minecraft.world.entity.Entity e : level.getEntities((net.minecraft.world.entity.Entity) null,
-			dev.larattalabs.architect.placement.Occupancy.aabb(snapBox), e -> !(e instanceof net.minecraft.world.entity.player.Player) && e.isAlive())) {
+			dev.larattalabs.architect.placement.Occupancy.aabb(snapBox), e -> !(e instanceof net.minecraft.world.entity.player.Player) && e.isAlive()
+				&& !dev.larattalabs.architect.placement.Occupancy.ownedBy(e, record == null ? null : record.owner()))) { // 6c 0c (C18)
 			dev.larattalabs.architect.placement.Occupancy.regionScope = batchId != null && Batches.isRegionBatch(batchId);
 			try {
 				if (dev.larattalabs.architect.placement.Occupancy.classify(e).removable()) {

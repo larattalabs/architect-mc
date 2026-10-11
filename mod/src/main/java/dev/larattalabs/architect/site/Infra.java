@@ -13,9 +13,17 @@ import org.jspecify.annotations.Nullable;
  * @param kind {@code road} or {@code cells:<namespaced kind>}
  * @param box the box of every cell it changes
  * @param spec what made it (a road's points, width, surface...; a cell site's kind, policy and cell count)
+ * @param construction (6c 0c, C16) a survival construction road's queue and crate ({@link RoadBuilder}); null for an instant one.
+ *                     An older Architect ignores the field and reads the road as a finished instant one
  */
 public record Infra(String id, String kind, @Nullable String owner, JsonObject ext, String dimension, Anchors.Bounds box, long placedAt,
-	Site.@Nullable Member member, boolean placing, JsonObject spec) {
+	Site.@Nullable Member member, boolean placing, JsonObject spec, @Nullable Construction construction) {
+	/** Without a construction (an instant road or a cell site). */
+	public Infra(String id, String kind, @Nullable String owner, JsonObject ext, String dimension, Anchors.Bounds box, long placedAt,
+		Site.@Nullable Member member, boolean placing, JsonObject spec) {
+		this(id, kind, owner, ext, dimension, box, placedAt, member, placing, spec, null);
+	}
+
 	public static final String ROAD = "road";
 	public static final String CELLS = "cells:";
 
@@ -34,15 +42,24 @@ public record Infra(String id, String kind, @Nullable String owner, JsonObject e
 	}
 
 	public Infra withPlacing(boolean p) {
-		return new Infra(id, kind, owner, ext, dimension, box, placedAt, member, p, spec);
+		return new Infra(id, kind, owner, ext, dimension, box, placedAt, member, p, spec, construction);
 	}
 
 	public Infra withBox(Anchors.Bounds b) {
-		return new Infra(id, kind, owner, ext, dimension, b, placedAt, member, placing, spec);
+		return new Infra(id, kind, owner, ext, dimension, b, placedAt, member, placing, spec, construction);
 	}
 
 	public Infra withMember(Site.@Nullable Member m) {
-		return new Infra(id, kind, owner, ext, dimension, box, placedAt, m, placing, spec);
+		return new Infra(id, kind, owner, ext, dimension, box, placedAt, m, placing, spec, construction);
+	}
+
+	public Infra withConstruction(@Nullable Construction c) {
+		return new Infra(id, kind, owner, ext, dimension, box, placedAt, member, placing, spec, c);
+	}
+
+	/** A construction road still building. */
+	public boolean building() {
+		return construction != null && construction.building();
 	}
 
 	@Override
@@ -75,6 +92,9 @@ public record Infra(String id, String kind, @Nullable String owner, JsonObject e
 			o.addProperty("placing", true);
 		}
 		o.add("spec", spec.deepCopy());
+		if (construction != null) {
+			o.add("construction", construction.toJson());
+		}
 		return o;
 	}
 
@@ -84,6 +104,7 @@ public record Infra(String id, String kind, @Nullable String owner, JsonObject e
 			o.has("dimension") ? o.get("dimension").getAsString() : Site.OVERWORLD, Anchors.boundsFromJson(o.getAsJsonObject("box")),
 			o.has("placedAt") ? o.get("placedAt").getAsLong() : 0L,
 			o.has("member") && o.get("member").isJsonObject() ? Site.Member.fromJson(o.getAsJsonObject("member")) : null,
-			o.has("placing") && o.get("placing").getAsBoolean(), o.has("spec") && o.get("spec").isJsonObject() ? o.getAsJsonObject("spec") : new JsonObject());
+			o.has("placing") && o.get("placing").getAsBoolean(), o.has("spec") && o.get("spec").isJsonObject() ? o.getAsJsonObject("spec") : new JsonObject(),
+			o.has("construction") && o.get("construction").isJsonObject() ? Construction.fromJson(o.getAsJsonObject("construction")) : null);
 	}
 }

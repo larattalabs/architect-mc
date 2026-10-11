@@ -40,6 +40,11 @@ public final class Roads {
 	/** A road planned: its plan, the cells it changes (positions and values) and its box; or a refusal. */
 	public record Planned(RoadPlan.Plan plan, long[] positions, Value[] values, Anchors.@Nullable Bounds box, @Nullable String refusal,
 		@Nullable Reason reason, List<String> notes, List<String> layeredOver) {
+		/** 6c 0c §3: the failing spans (a refusal's, or with partial the skipped ones). */
+		public List<RoadPlan.Span> spans() {
+			return plan.spans();
+		}
+
 		public boolean ok() {
 			return refusal == null;
 		}
@@ -52,6 +57,16 @@ public final class Roads {
 	public static Planned plan(ServerLevel level, int[] xs, int[] ys, int[] zs, int width, @Nullable String surface, @Nullable String slab, boolean lanterns,
 		boolean decks, @Nullable String owner, boolean force, java.util.function.Function<String, @Nullable String> ownerOf,
 		java.util.function.BiFunction<String, Journal.Status, @Nullable String> busy) {
+		return plan(level, xs, ys, zs, width, surface, slab, lanterns, decks, owner, force, ownerOf, busy, null, false);
+	}
+
+	/**
+	 * {@link #plan}; 6c 0c: {@code protectOwner} the owner whose protected areas apply (null: none, as for a region's road),
+	 * {@code partial} drops the failing waypoint segments ({@link RoadPlan#plan}).
+	 */
+	public static Planned plan(ServerLevel level, int[] xs, int[] ys, int[] zs, int width, @Nullable String surface, @Nullable String slab, boolean lanterns,
+		boolean decks, @Nullable String owner, boolean force, java.util.function.Function<String, @Nullable String> ownerOf,
+		java.util.function.BiFunction<String, Journal.Status, @Nullable String> busy, @Nullable String protectOwner, boolean partial) {
 		String dim = level.dimension().identifier().toString();
 		JournalStore js = WorldJournal.storeOrNull();
 		Map<Long, String> ownedCache = new HashMap<>();
@@ -65,7 +80,12 @@ public final class Roads {
 			ownedCache.put(p, o);
 			return o;
 		};
-		RoadPlan.Plan plan = RoadPlan.plan(xs, ys, zs, width, lanterns, decks, new RoadTerrain(level), owned);
+		dev.larattalabs.architect.site.Protected.Columns pc = dev.larattalabs.architect.site.Protected.columns(dim, protectOwner);
+		RoadPlan.Protect protect = pc == null ? null : (x, z) -> {
+			dev.larattalabs.architect.api.ProtectedArea a = pc.at(x, z);
+			return a == null ? null : dev.larattalabs.architect.site.Protected.message("The road", a);
+		};
+		RoadPlan.Plan plan = RoadPlan.plan(xs, ys, zs, width, lanterns, decks, new RoadTerrain(level), owned, protect, partial);
 		if (plan.refused()) {
 			Reason r = Reason.OTHER;
 			try {

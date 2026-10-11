@@ -294,7 +294,7 @@ public final class VolumeSurvey {
 		return one[0] < 0 ? -1 : one[0];
 	}
 
-	static byte classOf(BlockState s, VoxelTable table, IdentityHashMap<BlockState, Byte> memo) {
+	public static byte classOf(BlockState s, VoxelTable table, IdentityHashMap<BlockState, Byte> memo) {
 		Byte c = memo.get(s);
 		if (c == null) {
 			VoxelClass v = s.hasBlockEntity() ? VoxelClass.BLOCK_ENTITY : s.isAir() ? VoxelClass.AIR : table.of(s.getBlock());
@@ -384,7 +384,7 @@ public final class VolumeSurvey {
 		double ms = (System.nanoTime() - t.started) / 1e6;
 		Measure m = new Measure(cells, ms, t.ticks, t.maxTick / 1e6, t.sampleNanos / 1e6, gz.length, gz.length / (double) cells, file.toString(), t.loaded);
 		Volume v = new Volume(enc.sha, new BoundingBox(t.box[0], t.box[1], t.box[2], t.box[3], t.box[4], t.box[5]), "local:" + enc.sha, enc.counts,
-			enc.missingColumns, enc.stats);
+			enc.missingColumns, enc.stats, enc.ground);
 		return new Result(v, gz, file, m);
 	}
 
@@ -410,7 +410,46 @@ public final class VolumeSurvey {
 	}
 
 	/** The encoded volume: the ARVX bytes, sha, counts per class, missing columns, stats. */
-	public record Encoded(byte[] raw, String sha, Map<VoxelClass, Long> counts, int missingColumns, Volume.Stats stats) {
+	public record Encoded(byte[] raw, String sha, Map<VoxelClass, Long> counts, int missingColumns, Volume.Stats stats, int[] ground) {
+	}
+
+	/** 6c 0c §4: whether a class is ground (anything but air, a fluid, LOG, LEAVES, PLANT or MISSING). */
+	public static boolean groundClass(int c) {
+		return c != VoxelClass.AIR.ordinal() && c != VoxelClass.WATER.ordinal() && c != VoxelClass.LAVA.ordinal() && c != VoxelClass.LOG.ordinal()
+			&& c != VoxelClass.LEAVES.ordinal() && c != VoxelClass.PLANT.ordinal() && c != VoxelClass.MISSING.ordinal();
+	}
+
+	/**
+	 * 6c 0c §4: per column ({@code i + j * w}, i along x, j along z) the world y of the highest ground cell, or
+	 * {@link dev.larattalabs.architect.api.Sample#MISSING}; empty past {@link Volume#GROUND_MAX_COLUMNS} columns. Pure.
+	 */
+	public static int[] ground(int[] box, byte[] cells, boolean[] missingCol) {
+		int w = box[3] - box[0] + 1;
+		int d = box[5] - box[2] + 1;
+		int h = box[4] - box[1] + 1;
+		if ((long) w * d > Volume.GROUND_MAX_COLUMNS) {
+			dev.larattalabs.architect.Architect.LOGGER.info("Volume {}: {} columns, over {}: no ground array", java.util.Arrays.toString(box), (long) w * d,
+				Volume.GROUND_MAX_COLUMNS);
+			return new int[0];
+		}
+		int[] g = new int[w * d];
+		for (int i = 0; i < w; i++) {
+			for (int k = 0; k < d; k++) {
+				int c = i * d + k;
+				int out = dev.larattalabs.architect.api.Sample.MISSING;
+				if (!missingCol[c]) {
+					int base = c * h;
+					for (int y = h - 1; y >= 0; y--) {
+						if (groundClass(cells[base + y])) {
+							out = box[1] + y;
+							break;
+						}
+					}
+				}
+				g[i + k * w] = out;
+			}
+		}
+		return g;
 	}
 
 	/** Pure: cells (index ((x * d) + z) * h + y, box-relative) -> ARVX + stats. */
@@ -450,7 +489,7 @@ public final class VolumeSurvey {
 		for (VoxelClass v : VoxelClass.values()) {
 			counts.put(v, cnt[v.ordinal()]);
 		}
-		return new Encoded(raw, Arvx.sha256(raw), counts, missing, stats(w, d, h, cells, missingCol));
+		return new Encoded(raw, Arvx.sha256(raw), counts, missing, stats(w, d, h, cells, missingCol), ground(box, cells, missingCol));
 	}
 
 	static boolean terrainSolid(int c) {

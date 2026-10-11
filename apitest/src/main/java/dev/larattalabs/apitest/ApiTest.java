@@ -298,6 +298,18 @@ public class ApiTest implements ModInitializer {
 			case "api110": {
 				return ApiTest0a.step(src, a);
 			}
+			case "api112":
+			case "protect":
+			case "unprotect":
+			case "areas":
+			case "minlot":
+			case "ground":
+			case "extend":
+			case "tagged":
+			case "fieldlimit":
+			case "groupcount": {
+				return ApiTest0c.step(src, a);
+			}
 			case "place":
 			case "check": {
 				// place <bp> <x> <y> <z> <AUTO|INSTANT|CONSTRUCTION> <owned|unowned> <actor|noactor> [rotation 0-3] [force] [layer]
@@ -503,6 +515,7 @@ public class ApiTest implements ModInitializer {
 		JsonArray n = new JsonArray();
 		r.notes().forEach(n::add);
 		o.add("notes", n);
+		o.add("skipped", ApiTest0c.spans(r.skipped())); // 1.12.0
 		return o;
 	}
 
@@ -555,6 +568,7 @@ public class ApiTest implements ModInitializer {
 		});
 		o.add("overlaps", ov);
 		o.addProperty("cells", v.cells());
+		o.add("spans", ApiTest0c.spans(v.spans())); // 1.12.0
 		return o;
 	}
 

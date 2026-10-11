@@ -271,7 +271,7 @@ final class DeltaJob implements Placement.Job {
 					// occupancy (server thread)
 					Anchors.Bounds wb = SiteDeltas.boundsOf(check.plan().outcome().entryCells());
 					if (wb != null) {
-						List<String> occ = Occupancy.refusals(Occupancy.scan(level, wb, e -> false));
+						List<String> occ = Occupancy.refusals(Occupancy.scan(level, wb, Occupancy.ownedBy(request.owner()))); // 6c 0c (C18)
 						if (!occ.isEmpty()) {
 							tracker.stop();
 							tracker = null;

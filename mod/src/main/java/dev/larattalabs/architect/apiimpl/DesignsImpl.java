@@ -267,6 +267,10 @@ final class DesignsImpl implements Designs {
 
 	@Override
 	public CompletableFuture<String> request(DesignRequest r) {
+		CompletableFuture<String> limit = FieldLimits.refuse(FieldLimits.design("", r)); // 6c 0c §5: FIELD_LIMIT, nothing sent
+		if (limit != null) {
+			return limit;
+		}
 		load();
 		// (6c 0b, C13) a design as an entry's next version
 		if (r.versionOf() != null) {
@@ -583,6 +587,10 @@ final class DesignsImpl implements Designs {
 
 	@Override
 	public CompletableFuture<dev.larattalabs.architect.api.Critique> critique(String entryId, dev.larattalabs.architect.api.@Nullable CritiqueSpec spec) {
+		CompletableFuture<dev.larattalabs.architect.api.Critique> limit = FieldLimits.refuse(FieldLimits.critique("critique", spec)); // 6c 0c §5
+		if (limit != null) {
+			return limit;
+		}
 		JsonObject m;
 		try {
 			m = Wire5a.critiqueMessage(entryId, spec);
@@ -732,6 +740,10 @@ final class DesignsImpl implements Designs {
 
 	@Override
 	public CompletableFuture<String> requestGroup(GroupRequest r) {
+		CompletableFuture<String> limit = FieldLimits.refuse(FieldLimits.group(r)); // 6c 0c §5: FIELD_LIMIT, no group created
+		if (limit != null) {
+			return limit;
+		}
 		// (6c 0b) versionOf is for single designs only
 		if (r.items().stream().anyMatch(i -> i.request().versionOf() != null)) {
 			return ApiImpl.onServerFuture(CompletableFuture.failedFuture(new dev.larattalabs.architect.api.ArchitectRefused(
@@ -847,6 +859,20 @@ final class DesignsImpl implements Designs {
 		m.addProperty("groupId", groupId);
 		m.addProperty("budgetUsd", budgetUsd);
 		return flying(groupId, () -> ask("design.groups", "design groups", m)).thenApply(r -> null);
+	}
+
+	/** 6c 0c §6: the extend with its re-pause warning; an older helper's ack lacks the spend, so the cached group's is used. */
+	@Override
+	public CompletableFuture<dev.larattalabs.architect.api.Extension> extend(String groupId, double budgetUsd) {
+		JsonObject m = msg("group.extend");
+		m.addProperty("groupId", groupId);
+		m.addProperty("budgetUsd", budgetUsd);
+		return ask("design.groups", "design groups", m).thenApply(r -> {
+			Group cached = group(groupId).orElse(null);
+			double spent = r.has("spentUsd") ? r.get("spentUsd").getAsDouble() : cached == null ? 0 : cached.cost().usd();
+			double fraction = r.has("softBudgetFraction") ? r.get("softBudgetFraction").getAsDouble() : cached == null ? 0.8 : cached.softBudgetFraction();
+			return dev.larattalabs.architect.api.Extension.of(cached, budgetUsd, spent, fraction);
+		});
 	}
 
 	@Override
@@ -1123,8 +1149,11 @@ final class DesignsImpl implements Designs {
 
 	@Override
 	public CompletableFuture<Group.Redirected> redirectMassing(String massingId, String notes, @Nullable String owner) {
-		if (notes == null || notes.isBlank() || notes.strip().length() > 2000) {
-			return ApiImpl.onServerFuture(CompletableFuture.failedFuture(new IllegalArgumentException("redirect notes are 1 to 2000 characters")));
+		// 6c 0c §5: FIELD_LIMIT (was IllegalArgumentException before 1.12.0)
+		CompletableFuture<Group.Redirected> limit = FieldLimits.refuse(notes == null || notes.isBlank() ? "notes: empty, at least 1 character"
+			: FieldLimits.redirect(notes, owner));
+		if (limit != null) {
+			return limit;
 		}
 		JsonObject m = msg("massing.redirect");
 		m.addProperty("massingId", massingId);
@@ -1195,6 +1224,10 @@ final class DesignsImpl implements Designs {
 
 	@Override
 	public CompletableFuture<String> polish(dev.larattalabs.architect.api.PolishRequest r) {
+		CompletableFuture<String> limit = FieldLimits.refuse(FieldLimits.polish(r)); // 6c 0c §5
+		if (limit != null) {
+			return limit;
+		}
 		JsonObject m;
 		try {
 			m = Wire5b.polishMessage(r);

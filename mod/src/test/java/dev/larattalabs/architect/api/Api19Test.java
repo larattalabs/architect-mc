@@ -17,7 +17,8 @@ import org.junit.jupiter.api.Test;
 class Api19Test {
 	@Test
 	void version() {
-		assertEquals("1.11.0", ArchitectApi.VERSION);
+		String[] v = ArchitectApi.VERSION.split("\\.");
+		assertTrue(Integer.parseInt(v[0]) == 1 && Integer.parseInt(v[1]) >= 9, ArchitectApi.VERSION); // later slices append
 	}
 
 	@Test
@@ -68,11 +69,9 @@ class Api19Test {
 	@Test
 	void enumsAppended() {
 		Reason[] r = Reason.values();
-		// the 1.9.0 tail, at its ordinals (later versions append after it)
-		int t = Reason.PLAYER_BLOCKS.ordinal();
-		assertEquals(Reason.REGION_LIMIT, r[t - 2]);
-		assertEquals(Reason.NO_TEMPLATE, r[t - 1]);
-		assertEquals(34, t);
+		assertEquals(Reason.REGION_LIMIT, r[Reason.PLAYER_BLOCKS.ordinal() - 2]);
+		assertEquals(Reason.NO_TEMPLATE, r[Reason.PLAYER_BLOCKS.ordinal() - 1]);
+		assertEquals(34, Reason.PLAYER_BLOCKS.ordinal(), "1.9.0's last constant keeps its place (later ones append)");
 		assertEquals(Design.Kind.REGION, Design.Kind.values()[4]);
 		// the 1.9.0 kinds first (1.10.0 appends RETRY)
 		assertEquals(List.of("MOVE_CLOSER", "PREPARE", "START_SIDECAR", "APPROVE_STAGE", "REPLAN"), java.util.Arrays.stream(WaitAction.Kind.values()).map(

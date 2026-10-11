@@ -73,6 +73,22 @@ public final class RoadPlan {
 		@Nullable String at(int x, int y, int z);
 	}
 
+	/**
+	 * 6c 0c (C17): the request owner's protected columns: the message naming the area, or null. A protected column fails its
+	 * waypoint segment ({@code PROTECTED}).
+	 */
+	@FunctionalInterface
+	public interface Protect {
+		@Nullable String at(int x, int z);
+	}
+
+	/**
+	 * 6c 0c §3: a failing stretch of the road: waypoint segments {@code [fromPoint, toPoint]} (neighbouring failing segments
+	 * merged), the first failure's reason (an API {@code Reason} name), message and cell.
+	 */
+	public record Span(int fromPoint, int toPoint, String reason, String message, int x, int y, int z) {
+	}
+
 	/** What a road puts into a cell. */
 	public enum Block {
 		AIR("minecraft:air"),
@@ -121,9 +137,17 @@ public final class RoadPlan {
 	 * @param ownedBy columns left as they are per owning site
 	 */
 	public record Plan(List<Op> ops, List<Cell> cells, @Nullable String refusal, @Nullable String reason, Map<String, Integer> skipped,
-		Map<String, Integer> ownedBy, int centre, int[] lanterns) {
+		Map<String, Integer> ownedBy, int centre, int[] lanterns, List<Span> spans) {
+		public Plan(List<Op> ops, List<Cell> cells, @Nullable String refusal, @Nullable String reason, Map<String, Integer> skipped,
+			Map<String, Integer> ownedBy, int centre, int[] lanterns) {
+			this(ops, cells, refusal, reason, skipped, ownedBy, centre, lanterns, List.of());
+		}
+
 		public List<String> notes() {
 			List<String> out = new ArrayList<>();
+			if (refusal == null && !spans.isEmpty()) {
+				out.add("skipped " + spansText(spans));
+			}
 			skipped.forEach((k, n) -> out.add(note(k, n)));
 			ownedBy.forEach((site, n) -> out.add(n + " cell" + (n == 1 ? "" : "s") + " of " + site + " left as they are"));
 			return out;
@@ -132,6 +156,15 @@ public final class RoadPlan {
 		public boolean refused() {
 			return refusal != null;
 		}
+	}
+
+	/** "segments [2,3] (TOO_STEEP), [5,6] (PROTECTED)". */
+	public static String spansText(List<Span> spans) {
+		List<String> parts = new ArrayList<>();
+		for (Span sp : spans) {
+			parts.add("[" + sp.fromPoint() + "," + sp.toPoint() + "] (" + sp.reason() + ")");
+		}
+		return (spans.size() == 1 ? "segment " : "segments ") + String.join(", ", parts);
 	}
 
 	static String note(String reason, int n) {
@@ -143,6 +176,7 @@ public final class RoadPlan {
 			case "steep" -> cells + " beside the road needing more than " + MAX_SIDE + " of cut or fill left out";
 			case "lantern" -> n + " lantern" + (n == 1 ? "" : "s") + " without room for a post";
 			case "ore" -> cells + " of exposed ore left unpaved";
+			case "short" -> cells + " on the centre line between skipped segments left out (a run shorter than 2)";
 			default -> cells + " skipped (" + reason + ")";
 		};
 	}
@@ -227,7 +261,7 @@ public final class RoadPlan {
 				int y = (int) Math.round(ys[s] + (ys[s + 1] - ys[s]) * t);
 				long k = ((long) x << 32) ^ (z & 0xFFFFFFFFL);
 				if (seen.add(k)) {
-					out.add(new int[] {x, y, z});
+					out.add(new int[] {x, y, z, s}); // [3]: the waypoint segment (6c 0c §3)
 				}
 				if (i == n) {
 					break;
@@ -319,6 +353,20 @@ public final class RoadPlan {
 	 * water. {@code owned}: cells of other sites and roads (the road leaves those columns alone).
 	 */
 	public static Plan plan(int[] xs, int[] ys, int[] zs, int width, boolean lanterns, boolean decks, World w, Owned owned) {
+		return plan(xs, ys, zs, width, lanterns, decks, w, owned, null, false);
+	}
+
+	/**
+	 * {@link #plan}; 6c 0c §3: every failing centre column is mapped to its waypoint segment and neighbouring failing segments
+	 * merge into {@link Plan#spans} (TOO_STEEP, DEEP_WATER, LAVA, PROTECTED; NOT_LOADED stays a whole-road refusal). The runs
+	 * between failing segments are smoothed each on its own, a run's worst cut or fill failing its segment, until no run fails
+	 * (one segment per run per round, so at most one round per segment). Without {@code partial} any span refuses the road
+	 * (the first span is the refusal; no span: exactly the 4e plan). With {@code partial} the failing segments are dropped and the
+	 * runs of at least 2 centre cells are planned as one road with gaps; nothing left refuses with the first span.
+	 * {@code protect}: the owner's protected columns (C17), centre and side columns and lantern posts.
+	 */
+	public static Plan plan(int[] xs, int[] ys, int[] zs, int width, boolean lanterns, boolean decks, World w, Owned owned, @Nullable Protect protect,
+		boolean partial) {
 		Map<String, Integer> skipped = new LinkedHashMap<>();
 		Map<String, Integer> ownedBy = new LinkedHashMap<>();
 		if (xs.length < 2 || xs.length > MAX_POINTS) {
@@ -332,8 +380,9 @@ public final class RoadPlan {
 			return refused("road too long (" + line.size() + " centre cells, at most " + MAX_CENTRE + "); split it", "OTHER");
 		}
 		int n = line.size();
-		int[] g = new int[n];
-		boolean[] wet = new boolean[n];
+		int nSeg = xs.length - 1;
+		int[] offs = offsets(width);
+		// NOT_LOADED first: temporary, a whole-road refusal (a waiting item waits for it)
 		for (int i = 0; i < n; i++) {
 			int[] c = line.get(i);
 			for (int y = c[1] - SEARCH; y <= c[1] + SEARCH + 1; y++) {
@@ -341,34 +390,145 @@ public final class RoadPlan {
 					return refused("the road is not loaded at " + c[0] + ", " + c[2] + " (walk closer)", "NOT_LOADED");
 				}
 			}
+		}
+		// the span-local failures before smoothing, the first per segment
+		String[] segReason = new String[nSeg];
+		String[] segMsg = new String[nSeg];
+		int[][] segAt = new int[nSeg][];
+		int[] g = new int[n];
+		boolean[] wet = new boolean[n];
+		for (int i = 0; i < n; i++) {
+			int[] c = line.get(i);
+			int sg = c[3];
+			String why = null;
+			String reason = null;
 			int f = groundFeet(w, c[0], c[2], c[1]);
 			if (f == Integer.MIN_VALUE) {
-				return refused("no ground within " + SEARCH + " of y " + c[1] + " at column " + c[0] + ", " + c[2], "TOO_STEEP");
-			}
-			if (w.at(c[0], f - 1, c[2]) == LAVA) {
-				return refused("lava under the road at " + c[0] + ", " + (f - 1) + ", " + c[2], "LAVA");
-			}
-			if (w.at(c[0], f - 1, c[2]) == WATER) {
+				why = "no ground within " + SEARCH + " of y " + c[1] + " at column " + c[0] + ", " + c[2];
+				reason = "TOO_STEEP";
+			} else if (w.at(c[0], f - 1, c[2]) == LAVA) {
+				why = "lava under the road at " + c[0] + ", " + (f - 1) + ", " + c[2];
+				reason = "LAVA";
+			} else if (w.at(c[0], f - 1, c[2]) == WATER) {
 				int d = waterDepth(w, c[0], f, c[2]);
 				if (d > 1) {
-					return refused("water " + d + " deep at " + c[0] + ", " + c[2] + " (bridges are phase 6)", "DEEP_WATER");
+					why = "water " + d + " deep at " + c[0] + ", " + c[2] + " (bridges are phase 6)";
+					reason = "DEEP_WATER";
+				} else {
+					wet[i] = true;
 				}
-				wet[i] = true;
 			}
-			g[i] = f;
+			if (why == null && protect != null) {
+				int[] r = right(line, i);
+				for (int k : offs) {
+					String pm = protect.at(c[0] + k * r[0], c[2] + k * r[1]);
+					if (pm != null) {
+						why = pm;
+						reason = "PROTECTED";
+						break;
+					}
+				}
+			}
+			g[i] = f == Integer.MIN_VALUE ? c[1] : f;
+			if (why != null && segReason[sg] == null) {
+				segReason[sg] = reason;
+				segMsg[sg] = why;
+				segAt[sg] = new int[] {c[0], f == Integer.MIN_VALUE ? c[1] : f - 1, c[2]};
+			}
 		}
-		int[] t = smooth(g);
-		for (int i = 0; i < n; i++) {
-			if (Math.abs(t[i] - g[i]) > MAX_CUT_FILL) {
-				int[] c = line.get(i);
-				return refused("column " + c[0] + ", " + c[2] + " needs " + Math.abs(t[i] - g[i]) + " of " + (t[i] > g[i] ? "fill" : "cut") + " (at most "
-					+ MAX_CUT_FILL + ")", "TOO_STEEP");
+		// the runs between failing segments, smoothed each on its own until no run fails
+		int[] t = new int[n];
+		while (true) {
+			boolean changed = false;
+			int i = 0;
+			while (i < n) {
+				if (segReason[line.get(i)[3]] != null) {
+					i++;
+					continue;
+				}
+				int j = i;
+				while (j < n && segReason[line.get(j)[3]] == null) {
+					j++;
+				}
+				int[] run = java.util.Arrays.copyOfRange(g, i, j);
+				int[] rt = smooth(run);
+				int worst = -1;
+				int dev = MAX_CUT_FILL;
+				for (int k = 0; k < run.length; k++) {
+					t[i + k] = rt[k];
+					if (Math.abs(rt[k] - run[k]) > dev) {
+						dev = Math.abs(rt[k] - run[k]);
+						worst = i + k;
+					}
+				}
+				if (worst >= 0) {
+					int[] c = line.get(worst);
+					segReason[c[3]] = "TOO_STEEP";
+					segMsg[c[3]] = "column " + c[0] + ", " + c[2] + " needs " + Math.abs(t[worst] - g[worst]) + " of " + (t[worst] > g[worst] ? "fill" : "cut")
+						+ " (at most " + MAX_CUT_FILL + ")";
+					segAt[c[3]] = new int[] {c[0], g[worst] - 1, c[2]};
+					changed = true;
+				}
+				i = j;
 			}
+			if (!changed) {
+				break;
+			}
+		}
+		List<Span> spans = new ArrayList<>();
+		for (int sg = 0; sg < nSeg; sg++) {
+			if (segReason[sg] == null) {
+				continue;
+			}
+			int e = sg;
+			while (e + 1 < nSeg && segReason[e + 1] != null) {
+				e++;
+			}
+			spans.add(new Span(sg, e + 1, segReason[sg], segMsg[sg], segAt[sg][0], segAt[sg][1], segAt[sg][2]));
+			sg = e;
+		}
+		boolean[] keep = new boolean[n];
+		int kept = 0;
+		for (int i = 0; i < n; i++) {
+			keep[i] = segReason[line.get(i)[3]] == null;
+		}
+		if (!spans.isEmpty()) {
+			Span first = spans.get(0);
+			if (!partial) {
+				return refusedSpans(first.message(), first.reason(), spans);
+			}
+			// runs shorter than 2 centre cells are left out
+			for (int i = 0; i < n;) {
+				if (!keep[i]) {
+					i++;
+					continue;
+				}
+				int j = i;
+				while (j < n && keep[j]) {
+					j++;
+				}
+				if (j - i < 2) {
+					for (int k = i; k < j; k++) {
+						keep[k] = false;
+						bump(skipped, "short");
+					}
+				}
+				i = j;
+			}
+		}
+		for (boolean k : keep) {
+			kept += k ? 1 : 0;
+		}
+		if (kept == 0) {
+			Span first = spans.get(0);
+			return refusedSpans(first.message(), first.reason(), spans);
 		}
 		// the walkway columns: centre first, then the sides (right of travel positive)
 		LinkedHashMap<Long, Col> cols = new LinkedHashMap<>();
-		int[] offs = offsets(width);
 		for (int i = 0; i < n; i++) {
+			if (!keep[i]) {
+				continue;
+			}
 			int[] c = line.get(i);
 			int[] nx = line.get(Math.min(n - 1, i + 1));
 			int[] pv = line.get(Math.max(0, i - 1));
@@ -476,10 +636,10 @@ public final class RoadPlan {
 		}
 		List<Integer> lan = new ArrayList<>();
 		if (lanterns) {
-			lanterns(line, t, width, accepted, w, owned, ops, lan, skipped);
+			lanterns(line, t, keep, width, accepted, w, owned, protect, ops, lan, skipped);
 		}
 		int[] la = lan.stream().mapToInt(Integer::intValue).toArray();
-		return new Plan(List.copyOf(ops), List.copyOf(cells), null, null, skipped, ownedBy, n, la);
+		return new Plan(List.copyOf(ops), List.copyOf(cells), null, null, skipped, ownedBy, n, la, List.copyOf(spans));
 	}
 
 	private static long key(int x, int z) {
@@ -492,6 +652,23 @@ public final class RoadPlan {
 
 	private static Plan refused(String why, String reason) {
 		return new Plan(List.of(), List.of(), why, reason, Map.of(), Map.of(), 0, new int[0]);
+	}
+
+	private static Plan refusedSpans(String why, String reason, List<Span> spans) {
+		return new Plan(List.of(), List.of(), why, reason, Map.of(), Map.of(), 0, new int[0], List.copyOf(spans));
+	}
+
+	/** The right-of-travel unit step {rx, rz} at centre cell {@code i} (a corner: beside its x step), as the walkway uses it. */
+	private static int[] right(List<int[]> line, int i) {
+		int n = line.size();
+		int[] nx = line.get(Math.min(n - 1, i + 1));
+		int[] pv = line.get(Math.max(0, i - 1));
+		int dx = Integer.signum(nx[0] - pv[0]);
+		int dz = Integer.signum(nx[2] - pv[2]);
+		if (dx != 0 && dz != 0) {
+			dz = 0;
+		}
+		return new int[] {-dz, dx};
 	}
 
 	/** A column's ops, bottom to top; null when it can be made, else why not. */
@@ -592,15 +769,15 @@ public final class RoadPlan {
 	}
 
 	/** AgentCraft's lanterns: a fence post with a lantern beside the walkway, the first 6 blocks out, then every 12. */
-	private static void lanterns(List<int[]> line, int[] t, int width, Map<Long, Col> walk, World w, Owned owned, List<Op> ops, List<Integer> out,
-		Map<String, Integer> skipped) {
+	private static void lanterns(List<int[]> line, int[] t, boolean[] keep, int width, Map<Long, Col> walk, World w, Owned owned, @Nullable Protect protect,
+		List<Op> ops, List<Integer> out, Map<String, Integer> skipped) {
 		int[] offs = offsets(width);
 		int hi = offs[offs.length - 1];
 		int lo = offs[0];
 		double since = LANTERN_SPACING - LANTERN_FIRST;
 		for (int i = 1; i < line.size() - 1; i++) {
 			since += 1;
-			if (since + 1e-9 < LANTERN_SPACING) {
+			if (since + 1e-9 < LANTERN_SPACING || !keep[i]) {
 				continue;
 			}
 			int[] c = line.get(i);
@@ -624,7 +801,7 @@ public final class RoadPlan {
 					if (!ground(below) || !open(f) || !open(l) || f == STACK || l == STACK) {
 						continue;
 					}
-					if (owned.at(qx, y, qz) != null || owned.at(qx, y + 1, qz) != null) {
+					if (owned.at(qx, y, qz) != null || owned.at(qx, y + 1, qz) != null || protect != null && protect.at(qx, qz) != null) {
 						continue;
 					}
 					ops.add(new Op(qx, y, qz, Block.FENCE, f));

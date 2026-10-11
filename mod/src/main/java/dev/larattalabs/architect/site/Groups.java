@@ -692,7 +692,7 @@ public final class Groups {
 			if (s == null) {
 				continue;
 			}
-			List<String> blockers = Sites.removalBlockers(level, s);
+			List<String> blockers = Sites.removalBlockers(level, s, s.owner()); // 6c 0c (C18): the site owner's tagged entities
 			if (!blockers.isEmpty()) {
 				end(server, r, new Removed(false, List.of(Sites.blockersMessage(id, blockers)), Map.copyOf(r.refund)));
 				return;

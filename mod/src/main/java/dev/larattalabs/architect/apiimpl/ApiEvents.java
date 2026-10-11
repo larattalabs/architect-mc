@@ -107,6 +107,15 @@ public final class ApiEvents {
 		guard("SITE_PROGRESS", () -> SiteEvents.SITE_PROGRESS.invoker().onProgress(Views.site(server, s)));
 	}
 
+	/** 6c 0c (C16): a construction road's progress and completion. */
+	public static void progressInfra(MinecraftServer server, dev.larattalabs.architect.site.Infra i) {
+		guard("SITE_PROGRESS", () -> SiteEvents.SITE_PROGRESS.invoker().onProgress(Views.infra(i)));
+	}
+
+	public static void builtInfra(MinecraftServer server, dev.larattalabs.architect.site.Infra i) {
+		guard("SITE_BUILT", () -> SiteEvents.SITE_BUILT.invoker().onBuilt(Views.infra(i)));
+	}
+
 	public static void built(MinecraftServer server, Site s) {
 		guard("SITE_BUILT", () -> SiteEvents.SITE_BUILT.invoker().onBuilt(Views.site(server, s)));
 	}

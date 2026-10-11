@@ -44,7 +44,12 @@ public final class InfraPlace {
 
 	/** A checked road or cell site: its cells and box, or the typed refusals; its notes and the sites it lies on. */
 	public record Check(List<Sites.Refusal> refusals, List<String> notes, long[] positions, Value[] values, Anchors.@Nullable Bounds box,
-		List<SiteJournal.Hit> overlaps, @Nullable JsonObject spec) {
+		List<SiteJournal.Hit> overlaps, @Nullable JsonObject spec, List<dev.larattalabs.architect.site.roads.RoadPlan.Span> spans) {
+		public Check(List<Sites.Refusal> refusals, List<String> notes, long[] positions, Value[] values, Anchors.@Nullable Bounds box,
+			List<SiteJournal.Hit> overlaps, @Nullable JsonObject spec) {
+			this(refusals, notes, positions, values, box, overlaps, spec, List.of());
+		}
+
 		public boolean ok() {
 			return refusals.isEmpty();
 		}
@@ -63,17 +68,27 @@ public final class InfraPlace {
 	 * toggle on, refuses NOT_ALLOWED; INSTANT in a survival-toggle world needs a creative world (cell sites) or an actor with
 	 * permission level 2 (roads, the buildings' rule).
 	 */
+	/** 6c 0c (C16): a construction road outside a batch with a shared crate. */
+	static final String CONSTRUCTION_ROAD = "a construction road is built from a batch's shared crate: queue it in a Batch with sharedCrate (placeRoad "
+		+ "alone is INSTANT only)";
+
+	/** 6c 0c (C16): whether a road request is a construction road (CONSTRUCTION, or AUTO with the survival toggle on). */
+	static boolean constructionRoad(MinecraftServer server, dev.larattalabs.architect.api.Mode mode) {
+		return mode == dev.larattalabs.architect.api.Mode.CONSTRUCTION || mode == dev.larattalabs.architect.api.Mode.AUTO && SurvivalWorld.on()
+			&& server.getDefaultGameType() != GameType.CREATIVE;
+	}
+
 	static @Nullable String modeRefusal(MinecraftServer server, dev.larattalabs.architect.api.Mode mode, @Nullable ServerPlayer actor, boolean cells) {
 		boolean survival = SurvivalWorld.on();
 		boolean creative = server.getDefaultGameType() == GameType.CREATIVE;
 		if (mode == dev.larattalabs.architect.api.Mode.CONSTRUCTION) {
-			return (cells ? "cell sites" : "roads") + " are INSTANT only in this version (no construction mode)";
+			return cells ? "cell sites are INSTANT only (no construction mode)" : CONSTRUCTION_ROAD;
 		}
 		if (!survival || creative) {
 			return null;
 		}
 		if (mode == dev.larattalabs.architect.api.Mode.AUTO) {
-			return "this world builds construction sites, and " + (cells ? "cell sites" : "roads") + " have no construction mode yet";
+			return cells ? "this world builds construction sites, and cell sites have no construction mode" : CONSTRUCTION_ROAD;
 		}
 		if (cells) {
 			return "a cell site needs INSTANT placement, which this survival world does not allow";
@@ -88,6 +103,16 @@ public final class InfraPlace {
 	/** Checks and plans a road (never loads a chunk: an unloaded column refuses NOT_LOADED). */
 	public static Check checkRoad(ServerLevel level, List<BlockPos> points, int width, @Nullable String surface, @Nullable String slab, boolean lanterns,
 		boolean decks, @Nullable String owner, boolean force) {
+		return checkRoad(level, points, width, surface, slab, lanterns, decks, owner, force, false, null);
+	}
+
+	/**
+	 * {@link #checkRoad}; 6c 0c: {@code partial} drops failing waypoint segments (§3), {@code protectOwner} the owner whose
+	 * protected areas apply (C17; null for a region's road: its realise start was checked). Every failing span is in
+	 * {@link Check#spans} (with partial: the skipped ones).
+	 */
+	public static Check checkRoad(ServerLevel level, List<BlockPos> points, int width, @Nullable String surface, @Nullable String slab, boolean lanterns,
+		boolean decks, @Nullable String owner, boolean force, boolean partial, @Nullable String protectOwner) {
 		String why = WorldJournal.unavailable();
 		if (why != null) {
 			return refused(Reason.JOURNAL_UNAVAILABLE, why);
@@ -105,25 +130,39 @@ public final class InfraPlace {
 		}
 		Roads.Planned p;
 		try {
-			p = Roads.plan(level, xs, ys, zs, width, surface, slab, lanterns, decks, owner, force, Sites::ownerOf, Sites::busy);
+			p = Roads.plan(level, xs, ys, zs, width, surface, slab, lanterns, decks, owner, force, Sites::ownerOf, Sites::busy, protectOwner, partial);
 		} catch (IllegalArgumentException e) {
 			return refused(Reason.OTHER, e.getMessage());
 		}
 		if (!p.ok()) {
 			return new Check(List.of(new Sites.Refusal(p.reason() == null ? Reason.OTHER : p.reason(), p.refusal())), p.notes(), new long[0], new Value[0],
-				null, List.of(), null);
+				null, List.of(), null, p.spans());
 		}
 		List<SiteJournal.Hit> hits = new ArrayList<>();
 		for (String s : p.layeredOver()) {
 			hits.add(new SiteJournal.Hit(s, "", "cells", Journal.Policy.CELL, Journal.Status.ACTIVE, 0, 0));
 		}
-		return new Check(List.of(), p.notes(), p.positions(), p.values(), p.box(), hits, Roads.spec(xs, ys, zs, width, surface, slab, lanterns, decks,
-			p.plan()));
+		JsonObject spec = Roads.spec(xs, ys, zs, width, surface, slab, lanterns, decks, p.plan());
+		if (partial) {
+			spec.addProperty("partial", true);
+		}
+		return new Check(List.of(), p.notes(), p.positions(), p.values(), p.box(), hits, spec, p.spans());
 	}
 
 	/** Starts placing a road ({@link InfraJob}); the caller adds it to {@link Placement}. */
 	static InfraJob beginRoad(ServerLevel level, Check c, @Nullable String owner, @Nullable JsonObject ext, Site.@Nullable Member member)
 		throws Sites.SiteException {
+		return beginRoad(level, c, owner, ext, member, false);
+	}
+
+	/** {@link #beginRoad}; {@code construction} (6c 0c, C16): built by the builder from the batch's shared crate once placed. */
+	static InfraJob beginRoad(ServerLevel level, Check c, @Nullable String owner, @Nullable JsonObject ext, Site.@Nullable Member member,
+		boolean construction) throws Sites.SiteException {
+		if (construction) {
+			JsonObject spec = c.spec() == null ? new JsonObject() : c.spec().deepCopy();
+			spec.addProperty(RoadBuilder.SPEC_CONSTRUCTION, true);
+			c = new Check(c.refusals(), c.notes(), c.positions(), c.values(), c.box(), c.overlaps(), spec, c.spans());
+		}
 		if (!c.ok()) {
 			throw new Sites.SiteException(c.refusals().get(0).reason(), c.refusals().get(0).message());
 		}
@@ -287,6 +326,19 @@ public final class InfraPlace {
 		return new Check(List.of(), notes, ps, vs, new Anchors.Bounds(bb[0], bb[1], bb[2], bb[3], bb[4], bb[5]), hits, spec);
 	}
 
+	/**
+	 * 6c 0c (C17): a checked cell site against {@code owner}'s protected areas: refused {@code PROTECTED} when a cell lies in one
+	 * (force doesn't override it). A region's items aren't checked (the realise start was).
+	 */
+	static Check protect(ServerLevel level, Check c, @Nullable String owner, String what) {
+		if (!c.ok()) {
+			return c;
+		}
+		dev.larattalabs.architect.api.ProtectedArea a = Protected.hitCells(Sites.dimensionId(level), owner, c.positions());
+		return a == null ? c : new Check(List.of(new Sites.Refusal(Reason.PROTECTED, Protected.message(what, a))), c.notes(), new long[0], new Value[0],
+			null, List.of(), null);
+	}
+
 	/** ALWAYS_OURS for a cell site: an active entry (not leaves) of a site with the same owner has the cell. */
 	static boolean ownedBySameOwner(ServerLevel level, long p, @Nullable String owner) {
 		JournalStore js = WorldJournal.storeOrNull();
@@ -404,6 +456,7 @@ public final class InfraPlace {
 		if (!cover.isEmpty() && covered == Sites.Covered.REFUSE) {
 			throw new Sites.SiteException(Reason.COVERED, cover.size() + " site(s) cover cells of " + id + " (" + String.join(", ", cover) + ")");
 		}
+		RoadBuilder.beforeRemove(level, i); // 6c 0c (C16): a construction road's refunds and the group's crate
 		List<String> cascaded = new ArrayList<>();
 		List<String> infraCover = new ArrayList<>();
 		if (!cover.isEmpty() && covered == Sites.Covered.CASCADE) {

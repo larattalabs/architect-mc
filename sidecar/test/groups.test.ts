@@ -278,6 +278,40 @@ describe.skipIf(!hasKit)('design groups (sim backend, real kit)', () => {
     expect(h.sc.groups.get(g.id)!.cost.usd).toBeCloseTo(1.2, 5);
   }, 60_000);
 
+  // 6c 0c §6: the mod's Extension.minBudgetUsd (the same double arithmetic): the smallest whole-cent budget whose soft line is above the spend
+  const minBudgetUsd = (spent: number, fraction: number): number => {
+    let cents = Math.max(1, Math.floor((spent / fraction) * 100) - 2);
+    while (!(spent < fraction * (cents / 100))) cents++;
+    while (cents > 1 && spent < fraction * ((cents - 1) / 100)) cents--;
+    return cents / 100;
+  };
+
+  it('extend: the ack carries the spend and soft fraction; extending to minBudgetUsd does not re-pause, one cent less does (6c 0c §6)', async () => {
+    h = await harness({ designConcurrency: 1, simDesignUsd: 0.1 });
+    const g = h.sc.groups.create(GroupRequest.parse({ name: 'Extended', bible: 'birch', budgetUsd: 1, concurrency: 1, items: [item('i1'), item('i2'), item('i3'), item('i4')] }));
+    await until(() => h!.sc.groups.get(g.id)!.status === 'paused_budget', 30_000);
+    await until(() => h!.sc.groups.get(g.id)!.items[2]!.status === 'done', 10_000);
+    // the 6b live case's numbers: $31 spent at 0.8 needs $38.76 ($38.75's line is exactly $31.00, which pauses)
+    expect(minBudgetUsd(31, 0.8)).toBe(38.76);
+    expect(31 >= 0.8 * 38.75).toBe(true);
+    const replies: Outbound[] = [];
+    await h.sc.handle({ v: 1, type: 'group.extend', id: 'x1', groupId: g.id, budgetUsd: 1.05 } as never, (m) => replies.push(m));
+    const spent = h.sc.groups.get(g.id)!.cost.usd;
+    const ack = replies.find((m) => m.type === 'ack') as unknown as { ok: boolean; result: Record<string, unknown> };
+    expect(ack.ok).toBe(true);
+    expect(ack.result).toMatchObject({ groupId: g.id, budgetUsd: 1.05, spentUsd: spent, softBudgetFraction: 0.8 });
+    const min = minBudgetUsd(spent, 0.8);
+    // resumed past the soft line (the override), then extended: in one synchronous turn, so the spend can't move in between
+    h.sc.groups.resume(g.id);
+    expect(h.sc.groups.get(g.id)!.status).not.toBe('paused_budget');
+    h.sc.groups.extend(g.id, Math.round((min - 0.01) * 100) / 100);
+    expect(h.sc.groups.get(g.id)!.status).toBe('paused_budget');
+    h.sc.groups.resume(g.id);
+    h.sc.groups.extend(g.id, min);
+    expect(h.sc.groups.get(g.id)!.status).not.toBe('paused_budget');
+    await groupDone(h, g.id);
+  }, 60_000);
+
   it('the hard cap stops what is left with error "budget"', async () => {
     h = await harness({ designConcurrency: 2, simDesignUsd: 0.1 });
     h.sc.config.groups.softBudgetFraction = 1;

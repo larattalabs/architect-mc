@@ -15,10 +15,18 @@ import org.jspecify.annotations.Nullable;
  * @param approachIntoStreet the front face on the lot edge (setback 0), the approach running out into the street
  * @param level where the verdict is checked (null: the overworld)
  * @param mode and {@code force}, {@code actor}: as in a {@link PlaceRequest}, for the verdict
+ * @param owner (1.12.0) the request's owner, for the verdict: its protected areas apply ({@link Reason#PROTECTED}); null = the
+ *              player's (no areas)
  */
 public record FitOptions(CentreOn centreOn, @Nullable Integer setback, boolean approachIntoStreet, @Nullable ServerLevel level, Mode mode, boolean force,
-	@Nullable ServerPlayer actor) {
-	public static final FitOptions DEFAULT = new FitOptions(CentreOn.ENTRANCE, null, false, null, Mode.AUTO, false, null);
+	@Nullable ServerPlayer actor, @Nullable String owner) {
+	public static final FitOptions DEFAULT = new FitOptions(CentreOn.ENTRANCE, null, false, null, Mode.AUTO, false, null, null);
+
+	/** The 1.4.0 constructor (no owner). */
+	public FitOptions(CentreOn centreOn, @Nullable Integer setback, boolean approachIntoStreet, @Nullable ServerLevel level, Mode mode, boolean force,
+		@Nullable ServerPlayer actor) {
+		this(centreOn, setback, approachIntoStreet, level, mode, force, actor, null);
+	}
 
 	public FitOptions {
 		centreOn = centreOn == null ? CentreOn.ENTRANCE : centreOn;
@@ -29,19 +37,24 @@ public record FitOptions(CentreOn centreOn, @Nullable Integer setback, boolean a
 	}
 
 	public FitOptions withLevel(@Nullable ServerLevel l) {
-		return new FitOptions(centreOn, setback, approachIntoStreet, l, mode, force, actor);
+		return new FitOptions(centreOn, setback, approachIntoStreet, l, mode, force, actor, owner);
 	}
 
 	public FitOptions withApproachIntoStreet(boolean into) {
-		return new FitOptions(centreOn, setback, into, level, mode, force, actor);
+		return new FitOptions(centreOn, setback, into, level, mode, force, actor, owner);
 	}
 
 	public FitOptions withCentreOn(CentreOn c) {
-		return new FitOptions(c, setback, approachIntoStreet, level, mode, force, actor);
+		return new FitOptions(c, setback, approachIntoStreet, level, mode, force, actor, owner);
 	}
 
 	public FitOptions withSetback(@Nullable Integer s) {
-		return new FitOptions(centreOn, s, approachIntoStreet, level, mode, force, actor);
+		return new FitOptions(centreOn, s, approachIntoStreet, level, mode, force, actor, owner);
+	}
+
+	/** The same options with an owner (1.12.0). */
+	public FitOptions withOwner(@Nullable String o) {
+		return new FitOptions(centreOn, setback, approachIntoStreet, level, mode, force, actor, o);
 	}
 
 	/** What is centred on the lot's street-side span. */

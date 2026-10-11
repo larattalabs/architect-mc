@@ -15,9 +15,22 @@ import net.minecraft.world.level.levelgen.structure.BoundingBox;
  * @param counts cells per class (every class present, zeros included)
  * @param missingColumns columns not read (unloaded or never generated under the load policy): their cells are MISSING
  * @param stats summary numbers (Steward S-6b-6)
+  * @param ground (1.12.0) per box column, indexed {@code i + j * width} ({@code i = x - minX}, {@code j = z - minZ}): the y of the
+ *               highest cell that isn't air, a fluid, LOG, LEAVES or PLANT (OWNED, PLAYER and BLOCK_ENTITY count), or
+ *               {@link Sample#MISSING} where the column has none inside the box or wasn't read; empty past
+ *               {@link #GROUND_MAX_COLUMNS} columns. Derived from the cells: the ARVX bytes and sha don't change
  */
-public record Volume(String sha, BoundingBox box, String blobId, Map<VoxelClass, Long> counts, int missingColumns, Stats stats) {
+public record Volume(String sha, BoundingBox box, String blobId, Map<VoxelClass, Long> counts, int missingColumns, Stats stats, int[] ground) {
+	/** (1.12.0) At most this many columns get a {@link #ground} array; a wider box leaves it empty (and logs so). */
+	public static final int GROUND_MAX_COLUMNS = 16 << 20;
+
+	/** The 1.9.0 constructor (no ground array). */
+	public Volume(String sha, BoundingBox box, String blobId, Map<VoxelClass, Long> counts, int missingColumns, Stats stats) {
+		this(sha, box, blobId, counts, missingColumns, stats, new int[0]);
+	}
+
 	public Volume {
+		ground = ground == null ? new int[0] : ground;
 		Map<VoxelClass, Long> m = new EnumMap<>(VoxelClass.class);
 		for (VoxelClass c : VoxelClass.values()) {
 			m.put(c, counts.getOrDefault(c, 0L));
@@ -27,6 +40,17 @@ public record Volume(String sha, BoundingBox box, String blobId, Map<VoxelClass,
 
 	public long count(VoxelClass c) {
 		return counts.get(c);
+	}
+
+	/** (1.12.0) The ground y of box column ({@code x}, {@code z}) (world coordinates), or {@link Sample#MISSING}. */
+	public int groundAt(int x, int z) {
+		int i = x - box.minX();
+		int j = z - box.minZ();
+		int w = box.getXSpan();
+		if (ground.length == 0 || i < 0 || j < 0 || i >= w || j >= box.getZSpan()) {
+			return Sample.MISSING;
+		}
+		return ground[i + j * w];
 	}
 
 	/**
