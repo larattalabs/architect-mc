@@ -184,9 +184,10 @@ describe.skipIf(!hasKit)('copies in a group (sim backend, real kit)', () => {
   }, 120_000);
 
   it('promoteCopy: a done copy becomes a FALLBACK original; refused for a non-copy, a copy still building, a final group', async () => {
-    h = await harness({ designConcurrency: 1 });
-    const g = h.sc.groups.create(gr({ concurrency: 1, items: [item('a', { count: 2 }), item('slow')] }));
-    await until(() => h!.sc.groups.get(g.id)!.items[1]!.status === 'done', 60_000);
+    h = await harness();
+    // massingFirst; item b is never approved, so the group stays open (awaiting approval) while a and its copy finish
+    const g = h.sc.groups.create(gr({ massingFirst: true, items: [item('a', { count: 2 }), item('b')] }));
+    await until(() => h!.sc.groups.get(g.id)!.status === 'awaiting_approval', 30_000);
     const code = (fn: () => unknown) => {
       try {
         fn();
@@ -195,13 +196,18 @@ describe.skipIf(!hasKit)('copies in a group (sim backend, real kit)', () => {
       }
       return undefined;
     };
+    expect(code(() => h!.sc.groups.promoteCopy(g.id, 'a#2', 'x'))).toBe('building');
+    h.sc.groups.approve(g.id, { approve: ['a'], redirect: {}, cancel: [] });
+    await until(() => h!.sc.groups.get(g.id)!.items[1]!.status === 'done', 60_000);
     expect(code(() => h!.sc.groups.promoteCopy(g.id, 'a', 'x'))).toBe('not_copy');
     h.sc.groups.promoteCopy(g.id, 'a#2', 'fitToLot failed: too deep');
     const it = h.sc.groups.get(g.id)!.items[1]!;
-    expect(it).toMatchObject({ kind: 'fallback', fallbackReason: 'promoted: fitToLot failed: too deep' });
+    expect(it).toMatchObject({ kind: 'fallback', fallbackReason: 'promoted: fitToLot failed: too deep', stage: 'detail' });
     expect(it.designId).not.toBe('');
+    expect(h.sc.designs.get(it.designId)!.request).toMatchObject({ fromMassing: h.sc.groups.get(g.id)!.items[0]!.massing!.id });
+    await until(() => h!.sc.groups.get(g.id)!.items[1]!.status === 'done', 60_000);
+    h.sc.groups.approve(g.id, { approve: [], redirect: {}, cancel: ['b'] });
     await groupDone(h, g.id);
-    expect(h.sc.groups.get(g.id)!.items[1]!.status).toBe('done');
     expect(code(() => h!.sc.groups.promoteCopy(g.id, 'a#2', 'x'))).toBe('final');
   }, 120_000);
 

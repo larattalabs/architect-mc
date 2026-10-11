@@ -118,7 +118,7 @@ async function unit() {
   // item 3: fallback
   check(all(scCase(/sim:copyfail and sim:copysize/, 'copies.test.ts')), 'item 3: sim:copyfail and sim:copysize reach FALLBACK with the reason (check / size)');
   check(all(scCase(/massingFirst: the archetype's approval covers its copies/, 'copies.test.ts')), "item 3: under massingFirst a fallback binds the archetype's approved massing with no new approval; a dropped archetype fails its copies with source_failed");
-  check(all(scCase(/promoteCopy/, 'copies.test.ts')), 'item 3: promoteCopy works and refuses (not_copy, final)');
+  check(all(scCase(/promoteCopy/, 'copies.test.ts')), 'item 3: promoteCopy works (a FALLBACK detail pass bound to the archetype massing) and refuses (building, not_copy, final)');
   check(all(scCase(/copies run while the group is paused_budget/, 'copies.test.ts')), 'item 3: copies run while the group is paused_budget');
   flush('fallback');
   // item 4: derivation
