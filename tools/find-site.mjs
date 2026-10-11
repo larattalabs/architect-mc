@@ -10,7 +10,9 @@
 //   {size: [w, d], relief: [min, max] (height range over the claim), biomes: {any: [substring...], share: 0..1},
 //    waterMax, waterMin, treesMin, naturalMin (percent), avoidStructures: true, center: [x, z] (the spiral's centre), stopAt,
 //    (6c V) flat: {range, share, res, squares?} (at least `share` of the columns within one band `range` high, from /apitest
-//    heights; with `squares: n`, the share of the claim's n x n squares whose ground range is at most `range`, as survey.flatAreas),
+//    heights: the gate; `squares: n` records the share of n x n squares whose ground range is at most `range`, as survey.flatAreas),
+//    planCheck: {program, params, lots, clean: [rule regex]} (the program planned on the claim with the check: at least `lots` lots,
+//    0 errors, no finding of the `clean` rules),
 //    waterBand: {band, min} (at least `min` surface-water columns inside the claim's outer `band` cells),
 //    noStructure: {id, margin} (/locate finds none within the claim's half-diagonal + margin)}
 import fs from 'node:fs';
@@ -97,26 +99,10 @@ export async function fineChecks(io, needs, [x0, z0, x1, z1]) {
     const expect = Math.ceil((x1 - x0 + 1) / res) * Math.ceil((z1 - z0 + 1) / res);
     out.columns = cols.length;
     if (cols.length < expect * 0.98) return { ...out, ok: false, why: `heights: ${cols.length} of ${expect} columns` };
-    if (needs.flat?.squares) {
-      // (6c V) local relief, as the kit's survey.flatAreas: the share of the claim's squares (size x size) whose ground range is at
-      // most `range` (a flat claim for pads with cut and fill <= 2, not a level plain)
-      const S = needs.flat.squares;
-      const g = (c) => (c.length > 5 ? c[5] : c[2]);
-      const sq = new Map();
-      for (const c of cols) {
-        const k = `${Math.floor((c[0] - x0) / S)},${Math.floor((c[1] - z0) / S)}`;
-        const r = sq.get(k) ?? [Infinity, -Infinity];
-        r[0] = Math.min(r[0], g(c)); r[1] = Math.max(r[1], g(c));
-        sq.set(k, r);
-      }
-      const flat = [...sq.values()].filter(([lo, hi]) => hi - lo <= needs.flat.range).length;
-      out.flatShare = Math.round((1000 * flat) / sq.size) / 1000;
-      out.flatSquares = `${flat}/${sq.size}`;
-      if (out.flatShare < needs.flat.share) out.ok = false;
-    } else if (needs.flat) {
+    const g = (c) => (c.length > 5 ? c[5] : c[2]); // the ground under trees (0c's Sample.ground), else the height
+    if (needs.flat) {
+      // the strict reading (the gate): the share of the columns inside one band `range` high
       const hist = new Map();
-      // the terrain's relief: the ground under trees (the 6th field, 0c's Sample.ground), else the height
-      const g = (c) => (c.length > 5 ? c[5] : c[2]);
       for (const c of cols) hist.set(g(c), (hist.get(g(c)) ?? 0) + 1);
       let best = 0, at = null;
       for (const h of hist.keys()) {
@@ -127,7 +113,20 @@ export async function fineChecks(io, needs, [x0, z0, x1, z1]) {
       out.flatShare = Math.round((1000 * best) / cols.length) / 1000;
       out.flatBand = [at, at + needs.flat.range];
       if (out.flatShare < needs.flat.share) out.ok = false;
-    } else out.flatShare = 0;
+      // recorded only: local relief, as the kit's survey.flatAreas (the share of squares x squares whose range is <= range)
+      if (needs.flat.squares) {
+        const S = needs.flat.squares;
+        const sq = new Map();
+        for (const c of cols) {
+          const k = `${Math.floor((c[0] - x0) / S)},${Math.floor((c[1] - z0) / S)}`;
+          const r = sq.get(k) ?? [Infinity, -Infinity];
+          r[0] = Math.min(r[0], g(c)); r[1] = Math.max(r[1], g(c));
+          sq.set(k, r);
+        }
+        const flat = [...sq.values()].filter(([lo, hi]) => hi - lo <= needs.flat.range).length;
+        out.localShare = Math.round((1000 * flat) / sq.size) / 1000;
+      }
+    }
     if (needs.waterBand) {
       const b = needs.waterBand.band;
       const inBand = (x, z) => x - x0 < b || x1 - x < b || z - z0 < b || z1 - z < b;
@@ -135,6 +134,14 @@ export async function fineChecks(io, needs, [x0, z0, x1, z1]) {
       out.waterInner = cols.filter((c) => c[3] && !inBand(c[0], c[1])).length;
       if (out.waterBand < (needs.waterBand.min ?? 1)) out.ok = false;
     }
+  }
+  // (6c V) the last acceptance: the program itself on the claim (with the check): every lot placed, 0 errors, the named rules clean
+  if (out.ok && needs.planCheck) {
+    const pc = needs.planCheck;
+    const p = await io.call('dev.region.plan', { program: pc.program, claim: [x0, z0, x1, z1], params: pc.params ?? {}, surveyLoad: 'bounded:256', check: true }, 900_000);
+    const f = (p.report?.findings ?? []).filter((x) => (pc.clean ?? []).some((r) => new RegExp(`^${r}$`).test(x.rule)));
+    out.plan = { refused: p.refused ?? null, lots: p.lots?.length ?? 0, errors: p.report?.errors ?? null, findings: f.map((x) => `${x.rule} ${x.message}`.slice(0, 160)), notes: (p.notes ?? []).filter((n) => /unplaced/.test(n)) };
+    if (p.refused || out.plan.lots < (pc.lots ?? 0) || out.plan.errors !== 0 || f.length) out.ok = false;
   }
   if (out.ok && needs.noStructure) {
     const cx = Math.floor((x0 + x1) / 2), cz = Math.floor((z0 + z1) / 2);
