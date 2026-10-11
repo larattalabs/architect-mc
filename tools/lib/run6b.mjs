@@ -169,8 +169,8 @@ export async function setRules(kind) {
 }
 
 /** Plan a region through DevBridge; refused plans throw. */
-export async function plan(program, claim, { params = {}, surveyLoad = 'loaded', check = true, seed } = {}) {
-  const r = await call('dev.region.plan', { program, claim, params, surveyLoad, check, ...(seed ? { seed } : {}) }, 900_000);
+export async function plan(program, claim, { params = {}, surveyLoad = 'loaded', check = true, seed, bible, owner } = {}) {
+  const r = await call('dev.region.plan', { program, claim, params, surveyLoad, check, ...(seed ? { seed } : {}), ...(bible ? { bible } : {}), ...(owner ? { owner } : {}) }, 900_000);
   if (r.refused) throw new Error(`plan refused: ${r.refused}`);
   log(`  plan ${r.planId}: ${program} ir ${r.irSha?.slice(0, 12)} format ${r.irFormat}, ${r.lots?.length} lots, budget ${JSON.stringify(r.budget)}, ${Math.round(r.ms ?? 0)} ms; ${r.summary ?? ''}`);
   return r;

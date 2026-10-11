@@ -46,12 +46,187 @@
     },
     "naturalMin": 95,
     "center": [
-      1792,
-      896
+      0,
+      0
     ],
-    "candidates": 400,
-    "step": 128,
-    "stopAt": 190
+    "candidates": 1100,
+    "step": 256,
+    "stopAt": 185
   },
-  "program": "flat_village"
+  "program": "flat_village",
+  "params": {
+    "lots": [
+      {
+        "id": "hall_1",
+        "type": "hall",
+        "role": "landmark hall",
+        "size": [
+          18,
+          20
+        ],
+        "landmark": true,
+        "villager": "job",
+        "brief": "the village hall"
+      },
+      {
+        "id": "trading_hall_1",
+        "type": "trading_hall",
+        "role": "trading hall",
+        "size": [
+          14,
+          17
+        ],
+        "villager": "trading_hall"
+      },
+      {
+        "id": "cottage_1",
+        "type": "cottage",
+        "role": "cottage",
+        "size": [
+          11,
+          14
+        ],
+        "villager": "dwelling"
+      },
+      {
+        "id": "cottage_2",
+        "type": "cottage",
+        "role": "cottage",
+        "size": [
+          11,
+          14
+        ],
+        "villager": "dwelling"
+      },
+      {
+        "id": "cottage_3",
+        "type": "cottage",
+        "role": "cottage",
+        "size": [
+          11,
+          14
+        ],
+        "villager": "dwelling"
+      },
+      {
+        "id": "cottage_4",
+        "type": "cottage",
+        "role": "cottage",
+        "size": [
+          11,
+          14
+        ],
+        "villager": "dwelling"
+      },
+      {
+        "id": "smithy_1",
+        "type": "smithy",
+        "role": "smithy",
+        "size": [
+          11,
+          14
+        ],
+        "villager": "job"
+      },
+      {
+        "id": "bakery_1",
+        "type": "bakery",
+        "role": "bakery",
+        "size": [
+          11,
+          14
+        ],
+        "villager": "job"
+      },
+      {
+        "id": "inn_1",
+        "type": "tavern",
+        "role": "inn",
+        "size": [
+          14,
+          17
+        ],
+        "villager": "job"
+      },
+      {
+        "id": "farm_1",
+        "type": "farm",
+        "role": "farm",
+        "size": [
+          14,
+          17
+        ],
+        "villager": "farm",
+        "placement": "near_water"
+      }
+    ]
+  },
+  "bible": "g6cv_village",
+  "bibleFixture": "bibles/g6cv_village.json",
+  "entries": {
+    "g6cv_tower_w9f4": {
+      "design": "tower",
+      "values": {
+        "width": 9,
+        "floors": 4
+      }
+    },
+    "g6cv_tavern_l12": {
+      "design": "tavern",
+      "values": {
+        "length": 12
+      }
+    },
+    "g6cv_cabin_w9d7": {
+      "design": "cabin",
+      "values": {
+        "width": 9,
+        "depth": 7
+      }
+    },
+    "g6cv_cabin_w9d6": {
+      "design": "cabin",
+      "values": {
+        "width": 9,
+        "depth": 6,
+        "porch": false
+      }
+    },
+    "g6cv_tower_w5f3": {
+      "design": "tower",
+      "values": {
+        "width": 5,
+        "floors": 3
+      }
+    }
+  },
+  "entryFor": {
+    "hall_1": "g6cv_tower_w9f4@1",
+    "trading_hall_1": "g6cv_tavern_l12@1",
+    "inn_1": "g6cv_tavern_l12@1",
+    "farm_1": "g6cv_cabin_w9d7@1",
+    "cottage_1": "g6cv_cabin_w9d6@1",
+    "cottage_2": "g6cv_cabin_w9d6@1",
+    "cottage_3": "g6cv_cabin_w9d6@1",
+    "cottage_4": "g6cv_cabin_w9d6@1",
+    "smithy_1": "g6cv_tower_w5f3@1",
+    "bakery_1": "g6cv_tower_w5f3@1"
+  },
+  "restraint": "rustic",
+  "bars": {
+    "1 plan report": "0 errors; no M1-M4; M2:villager and M22-M24 clean",
+    "2 reachability, player": "100% of nodes; 0 unreachable lot entrances",
+    "3 reachability, villager (kit)": "100% of dwelling, job, trading-hall and farm lots reach the bell",
+    "4 door to street": "every placed lot: a walk from its door cell to a street or square walk cell over role blocks; 100%",
+    "5 lot fronts": "0 written dirt_path or cobblestone cells in the front zones",
+    "6 villager rules": "M22, M23, M24 hold on the realised world",
+    "7 props": "realised counts = the plan's; supported; 0 in lot boxes, walk cells, bell area or golem space",
+    "8 safety": "M4 0; M5 dark spawnable < 1% of walk area",
+    "9 palette": "role adherence >= 0.9",
+    "10 exactness": "E-flat 0 (flat variant); E-normal all classified, <= 0.01% of written cells",
+    "11 determinism": "IR sha identical over 3 plans; tile shas for 1 and 4 workers = scenarios/goldens/s7.json",
+    "12 mspt": "Architect's own CPU per placement tick <= 50 ms",
+    "13 spend": "$0.00",
+    "14 gallery": "Noah approves this run's evidence.sha"
+  }
 }

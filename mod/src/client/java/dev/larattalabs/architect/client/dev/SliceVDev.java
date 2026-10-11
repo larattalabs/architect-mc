@@ -23,6 +23,7 @@ public final class SliceVDev {
 	}
 
 	public static void init() {
+		initAnchors();
 		DevBridge.register("dev.nav.villager", 120_000, "{from: [x,y,z] (feet), to: [x,y,z] (feet), range?: 256, accuracy?: 0} - (6c V) a no-AI "
 			+ "villager at from, FOLLOW_RANGE = range, vanilla PathNavigation.createPath(to, accuracy) -> {canReach, nodes, end: [x,y,z], "
 			+ "path: bool, ms}; the villager is discarded", (req, mc) -> {
@@ -65,6 +66,27 @@ public final class SliceVDev {
 						v.discard();
 					}
 					o.addProperty("ms", (System.nanoTime() - t0) / 1e6);
+					return o;
+				});
+			});
+	}
+
+	static void initAnchors() {
+		DevBridge.register("dev.site.anchors", 10_000, "{site} - (6c V) a placed site's anchors in world coordinates (the blueprint's entrance, "
+			+ "spawn, ... transformed by its placement) -> {site, anchors: {name: {x, y, z, yaw, pitch}}, box}", (req, mc) -> {
+				String id = req.get("site").getAsString();
+				return ServerTasks.callOnServer(s -> {
+					JsonObject o = new JsonObject();
+					dev.larattalabs.architect.site.Site site = dev.larattalabs.architect.site.Sites.get(id);
+					if (site == null) {
+						o.addProperty("error", "no site " + id);
+						return o;
+					}
+					o.addProperty("site", id);
+					JsonObject a = new JsonObject();
+					site.anchors().forEach((k, v) -> a.add(k, dev.larattalabs.architect.placement.Anchors.anchorJson(v)));
+					o.add("anchors", a);
+					o.add("box", dev.larattalabs.architect.placement.Anchors.boundsJson(site.box()));
 					return o;
 				});
 			});

@@ -133,6 +133,66 @@ export function fitEntries(lots) {
   return out;
 }
 
+// ------------------------------------------------------------------ (6c V) the flat village scenario (S7)
+const isV = (sc) => sc.phase === '6c-v';
+
+/**
+ * (6c V) Before the world opens: the fixture bible (scenarios/<bibleFixture>, installed as the sidecar's bible `sc.bible` v1) and the
+ * lot entries (free variants of the kit's cabin, tavern and tower at the scenario's params, built with the kit into the library,
+ * $0; the library loads them when the world opens).
+ */
+async function prepV(sc) {
+  if (sc.bibleFixture) {
+    const dst = path.join(L.SIDECAR_DATA, 'bibles', sc.bible, 'versions', '1');
+    fs.mkdirSync(dst, { recursive: true });
+    fs.copyFileSync(path.join(SCEN, sc.bibleFixture), path.join(dst, 'bible.json'));
+  }
+  if (sc.entries) {
+    const { loadDesign } = await import('../kit/build.mjs');
+    const { writeBlueprint } = await import('../kit/lib/write.mjs');
+    for (const [id, e] of Object.entries(sc.entries)) {
+      const dir = path.join(L.LIBRARY, id);
+      if (fs.existsSync(path.join(dir, `${id}.nbt`))) continue;
+      const bp = await loadDesign(e.design, { values: e.values ?? {} });
+      bp.id = id;
+      bp.name = `${e.design} ${JSON.stringify(e.values ?? {})}`;
+      writeBlueprint(bp, dir);
+      L.log(`  entry ${id}: ${e.design} ${JSON.stringify(e.values ?? {})} -> ${dir}`);
+    }
+  }
+}
+
+/**
+ * (6c V, CONTRACT V §7 item 4) After the realise: each placed lot's door cell (the placed site's entrance anchor, through
+ * DevBridge) and, for every villager lot, vanilla's villager path from it to the bell (dev.nav.villager: a no-AI villager,
+ * FOLLOW_RANGE raised over the claim). Writes nav.json.
+ */
+async function villageNav(sc, region, ir, out) {
+  const st = await L.call('dev.region.state', { region }, 60_000);
+  const meta = JSON.parse(fs.readFileSync(path.join(out, 'raw', 'plan', 'meta.json'), 'utf8'));
+  const bell = ir.anchors.bell;
+  const range = Math.max(ir.claim.maxX - ir.claim.minX, ir.claim.maxZ - ir.claim.minZ) + 32;
+  const lots = {};
+  for (const l of st.view.lots ?? []) {
+    const v = meta.village?.lots?.[l.id];
+    const o = { state: l.state, siteId: l.siteId ?? null, villager: v?.villager ?? null };
+    if (l.siteId) {
+      const a = await L.call('dev.site.anchors', { site: l.siteId }, 30_000);
+      const e = a.anchors?.entrance;
+      if (e) o.door = [Math.floor(e.x), Math.round(e.y), Math.floor(e.z)];
+      o.box = a.box;
+    }
+    if (o.door && ['dwelling', 'job', 'trading_hall', 'farm'].includes(o.villager)) {
+      const n = await L.call('dev.nav.villager', { from: o.door, to: bell, range }, 120_000);
+      Object.assign(o, { canReach: !!n.canReach, nodes: n.nodes, end: n.end ?? null });
+    }
+    lots[l.id] = o;
+  }
+  const nav = { bell, range, lots };
+  fs.writeFileSync(path.join(out, 'nav.json'), `${JSON.stringify(nav, null, 2)}\n`);
+  return nav;
+}
+
 /** yaw/pitch (Minecraft: yaw 0 = +z, 90 = -x) from an eye at `a` looking at `b`. */
 export function look(a, b) {
   const dx = b[0] - a[0], dy = b[1] - a[1], dz = b[2] - a[2];
@@ -147,10 +207,11 @@ async function pin(id) {
   const sc = readSc(id);
   if (!sc.fixture?.claim) throw new Error(`${id}: the fixture is not pinned (node tools/gate6b.mjs findsite ${id})`);
   const seed = sc.seed ?? BigInt.asUintN(64, BigInt(`0x${sha256(`${sc.id}@${sc.world.seed}`).slice(0, 16)}`)).toString();
+  if (isV(sc)) await prepV(sc);
   await L.fresh(`G6B Pin ${short(sc)}`, BASE);
   const c = sc.fixture.claim;
   await L.tp((c[0] + c[2]) / 2, sc.fixture.yRange[1], (c[1] + c[3]) / 2);
-  const p = await L.plan(sc.program, c, { params: sc.params, surveyLoad: 'bounded:256', seed });
+  const p = await L.plan(sc.program, c, { params: sc.params, surveyLoad: 'bounded:256', seed, bible: sc.bible ?? undefined });
   const ir = JSON.parse(fs.readFileSync(path.join(L.SIDECAR_DATA, 'regions', 'plans', p.planId, 'ir.json'), 'utf8'));
   const anchors = ir.anchors;
   const hub = anchors.hub ?? anchors.entrance;
@@ -161,7 +222,7 @@ async function pin(id) {
     // the ground camera looks up at the islands at a walker's angle, not straight up the tower
     cams[n] = [a[0] + 0.5, a[1], a[2] + 0.5, yaw, n === 'cam_ground' ? Math.max(pitch, -28) : pitch];
   }
-  const lotEntries = fitEntries(ir.lots);
+  const lotEntries = isV(sc) ? Object.fromEntries(ir.lots.map((l) => [l.id, sc.entryFor[l.id]])) : fitEntries(ir.lots);
   Object.assign(sc, { seed, cams, lotEntries });
   sc.fixture.irShaAtPin = p.irSha;
   writeSc(sc);
@@ -187,6 +248,7 @@ async function runScenario(id) {
   const claim = [c[0] + off[0], c[1] + off[1], c[2] + off[0], c[3] + off[1]];
   const cams = Object.fromEntries(Object.entries(sc.cams).map(([k, v]) => [k, [v[0] + off[0], v[1], v[2] + off[1], v[3], v[4]]]));
   L.log(`== scenario ${sc.id} ${flat ? 'flat' : 'natural'} run ${runId} -> ${out}`);
+  if (isV(sc)) await prepV(sc);
   let t0 = Date.now();
   await L.fresh(`G6B Scn ${short(sc)}${flat ? ' Flat' : ''}`, flat ? FLAT : BASE);
   await L.setRules(flat ? 'exact' : 'gallery');
@@ -194,14 +256,15 @@ async function runScenario(id) {
   T('world', t0);
   // plan (kept), prepare, the realised plan (+2 for the IR sha)
   t0 = Date.now();
-  const p1 = await L.plan(sc.program, claim, { params: sc.params, surveyLoad: 'bounded:256', seed: sc.seed });
+  const bible = sc.bible ?? undefined;
+  const p1 = await L.plan(sc.program, claim, { params: sc.params, surveyLoad: 'bounded:256', seed: sc.seed, bible });
   T('plan', t0);
   t0 = Date.now();
   const pr = await L.prepare(p1.planId);
   T('prepare', t0);
-  const p2 = await L.plan(sc.program, claim, { params: sc.params, surveyLoad: 'generated:64', seed: sc.seed });
+  const p2 = await L.plan(sc.program, claim, { params: sc.params, surveyLoad: 'generated:64', seed: sc.seed, bible });
   const irShas = [p2.irSha];
-  for (let i = 0; i < 2; i++) irShas.push((await L.plan(sc.program, claim, { params: sc.params, surveyLoad: 'generated:64', seed: sc.seed })).irSha);
+  for (let i = 0; i < 2; i++) irShas.push((await L.plan(sc.program, claim, { params: sc.params, surveyLoad: 'generated:64', seed: sc.seed, bible })).irSha);
   const planDir = copyPlan(p2.planId, path.join(raw, 'plan'));
   fs.copyFileSync(path.join(planDir, 'report.json'), path.join(out, 'report.json'));
   fs.mkdirSync(path.join(out, 'previews'), { recursive: true });
@@ -241,6 +304,8 @@ async function runScenario(id) {
   t0 = Date.now();
   const d1 = await L.call('dev.region.dump', { box, file: path.join(raw, 'after.arwd.gz') }, 1_800_000);
   T('afterDump', t0);
+  // (6c V) the door cells and vanilla's villager paths, before the stand
+  if (isV(sc)) { t0 = Date.now(); await villageNav(sc, region, ir, out); T('nav', t0); }
   // the stand and the cameras (natural only)
   let shots = null;
   if (!flat) {
@@ -320,10 +385,22 @@ async function computeMetrics({ sc, out, planDir, ir, irShas, mspt, cps, exact, 
   const exactOther = sibling ? JSON.parse(fs.readFileSync(path.join(sibling, 'exact.json'), 'utf8')) : null;
   const ex = flat ? { flat: exact, normal: exactOther, cellsWritten: exactOther?.cellsWritten ?? 0 } : { flat: exactOther, normal: exact, cellsWritten: exact.cellsWritten };
   const plan = { report: JSON.parse(fs.readFileSync(path.join(out, 'report.json'), 'utf8')) };
-  const rows = M.bars({ plan, realised, palette, organic, buildings, mspt, cellsPerSecond: cps, exact: ex, determinism: { irShas, workersSame: ts.workersSame, golden }, spendUsd: 0, approval: 'pending' });
+  let rows = M.bars({ plan, realised, palette, organic, buildings, mspt, cellsPerSecond: cps, exact: ex, determinism: { irShas, workersSame: ts.workersSame, golden }, spendUsd: 0, approval: 'pending' });
+  // (6c V) S7's own bars (CONTRACT V §7): the door-to-street walk, the lot fronts, the villager rules, the props
+  let village = null;
+  if (isV(sc)) {
+    const VB = await import('./lib/scenario-village.mjs');
+    const nav = fs.existsSync(path.join(out, 'nav.json')) ? JSON.parse(fs.readFileSync(path.join(out, 'nav.json'), 'utf8')) : { lots: {} };
+    const door = VB.doorToStreet(ir, meta, world, nav);
+    const fronts = VB.villageFronts(ir, meta, before, after, door);
+    const props = VB.villageProps(ir, meta, world, realised, vw);
+    rows = VB.villageBars({ plan, realised, door, fronts, props }, rows);
+    village = { door: Object.fromEntries(Object.entries(door).map(([k, d]) => [k, { ...d, path: undefined, pathLength: d.path?.length }])), fronts, props, nav: VB.navSummary(nav),
+      M2villager: realised.metrics.M2villager, M22: realised.metrics.M22, M23: realised.metrics.M23, M24: realised.metrics.M24, graph: realised.metrics.graph };
+  }
   const fronts = M.lotFronts(ir, after);
   L.log(`  lot fronts: outside the boxes ${JSON.stringify(fronts.outside)}; inside (the children's own) ${JSON.stringify(fronts.inside)}`);
-  const metrics = { scenario: sc.id, worldChanges: world.worldChanges, cellsPerSecond: cps, lotFronts: fronts, variant: flat ? 'flat' : 'natural', rows, palette, organic, buildings, mspt, tiles: { irSha: ts.irSha, count: Object.keys(ts.tiles).length, cells: ts.cells, workersSame: ts.workersSame, golden }, exactSibling: sibling ? path.relative(out, sibling) : null,
+  const metrics = { scenario: sc.id, worldChanges: world.worldChanges, cellsPerSecond: cps, lotFronts: fronts, ...(village ? { village } : {}), variant: flat ? 'flat' : 'natural', rows, palette, organic, buildings, mspt, tiles: { irSha: ts.irSha, count: Object.keys(ts.tiles).length, cells: ts.cells, workersSame: ts.workersSame, golden }, exactSibling: sibling ? path.relative(out, sibling) : null,
     realised: { M2: realised.metrics.M2 && { ...realised.metrics.M2, perNode: undefined }, M3: realised.metrics.M3, M4: realised.metrics.M4, M5: realised.metrics.M5, M8: realised.metrics.M8 && { ...realised.metrics.M8, unguardedSample: (realised.metrics.M8.unguardedSample ?? []).slice(0, 20) }, M10: realised.metrics.M10, findings: realised.findings.map((f) => `${f.rule} ${f.severity} ${f.part ?? '-'} x${f.count}`) } };
   fs.writeFileSync(path.join(out, 'metrics.json'), `${JSON.stringify(metrics, null, 2)}\n`);
   for (const r of rows) L.log(`  ${r.gated ? (r.pass ? 'ok  ' : 'FAIL') : 'rec '} ${r.label}: ${r.value}`);

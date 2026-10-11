@@ -1,0 +1,10 @@
+{
+  "name": "G6C-V village fixture",
+  "scope": "settlement",
+  "prompt": "S7's fixture bible (CONTRACT 6c V §7): a path and a foundation that are not dirt path or cobblestone, so bar 5 is meaningful and the bible's roles win over the program's",
+  "roles": {
+    "path": "minecraft:packed_mud",
+    "foundation": "minecraft:mud_bricks",
+    "light": "minecraft:lantern"
+  }
+}
