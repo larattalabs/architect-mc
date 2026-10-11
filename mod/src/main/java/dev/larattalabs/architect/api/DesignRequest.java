@@ -36,7 +36,8 @@ import org.jspecify.annotations.Nullable;
 public record DesignRequest(String type, String style, @Nullable String materials, List<String> features, BlockSize maxSize, @Nullable String name,
 	@Nullable String notes, @Nullable String remix, @Nullable String owner, JsonObject ext, @Nullable String model, @Nullable Double budgetUsd,
 	@Nullable String bible, @Nullable String group, List<String> profile, @Nullable Integer bibleVersion, boolean massing, @Nullable String fromMassing,
-	@Nullable Integer massingVersion, @Nullable JsonElement context, @Nullable CritiqueSpec critique) {
+	@Nullable Integer massingVersion, @Nullable JsonElement context, @Nullable CritiqueSpec critique, @Nullable String versionOf,
+	@Nullable String versionOfSite) {
 	/** The most characters of a context (text, or JSON as text). */
 	public static final int MAX_CONTEXT = 4000;
 
@@ -50,6 +51,24 @@ public record DesignRequest(String type, String style, @Nullable String material
 		if (critique != null && !critique.on()) {
 			critique = null;
 		}
+	}
+
+	/** The 1.6.0 constructor (no versionOf). */
+	public DesignRequest(String type, String style, @Nullable String materials, List<String> features, BlockSize maxSize, @Nullable String name,
+		@Nullable String notes, @Nullable String remix, @Nullable String owner, JsonObject ext, @Nullable String model, @Nullable Double budgetUsd,
+		@Nullable String bible, @Nullable String group, List<String> profile, @Nullable Integer bibleVersion, boolean massing, @Nullable String fromMassing,
+		@Nullable Integer massingVersion, @Nullable JsonElement context, @Nullable CritiqueSpec critique) {
+		this(type, style, materials, features, maxSize, name, notes, remix, owner, ext, model, budgetUsd, bible, group, profile, bibleVersion, massing,
+			fromMassing, massingVersion, context, critique, null, null);
+	}
+
+	/**
+	 * A copy that designs the next version of {@code entryId} (its {@code notes} are the change request), with the site
+	 * {@code siteId} as context (null = none). Since 1.11.0.
+	 */
+	public DesignRequest versionOf(String entryId, @Nullable String siteId) {
+		return new DesignRequest(type, style, materials, features, maxSize, name, notes, remix, owner, ext, model, budgetUsd, bible, group, profile,
+			bibleVersion, massing, fromMassing, massingVersion, context, critique, entryId, siteId);
 	}
 
 	/** The 1.3.0 constructor (no critique). */
@@ -79,19 +98,19 @@ public record DesignRequest(String type, String style, @Nullable String material
 	/** A copy with an open type's profile. Since 1.2.0. */
 	public DesignRequest withProfile(List<String> rules) {
 		return new DesignRequest(type, style, materials, features, maxSize, name, notes, remix, owner, ext, model, budgetUsd, bible, group, rules,
-			bibleVersion, massing, fromMassing, massingVersion, context, critique);
+			bibleVersion, massing, fromMassing, massingVersion, context, critique, versionOf, versionOfSite);
 	}
 
 	/** A copy designed with a style bible (null version = its latest). Since 1.2.0. */
 	public DesignRequest withBible(@Nullable String bibleId, @Nullable Integer version) {
 		return new DesignRequest(type, style, materials, features, maxSize, name, notes, remix, owner, ext, model, budgetUsd, bibleId, group, profile,
-			version, massing, fromMassing, massingVersion, context, critique);
+			version, massing, fromMassing, massingVersion, context, critique, versionOf, versionOfSite);
 	}
 
 	/** A copy that is (true) or is not (false) a massing job. Since 1.3.0. */
 	public DesignRequest massing(boolean on) {
 		return new DesignRequest(type, style, materials, features, maxSize, name, notes, remix, owner, ext, model, budgetUsd, bible, group, profile,
-			bibleVersion, on, on ? null : fromMassing, on ? null : massingVersion, context, critique);
+			bibleVersion, on, on ? null : fromMassing, on ? null : massingVersion, context, critique, versionOf, versionOfSite);
 	}
 
 	/** A copy that is the detail pass of the massing's latest version. Since 1.3.0. */
@@ -102,7 +121,7 @@ public record DesignRequest(String type, String style, @Nullable String material
 	/** A copy that is the detail pass of one massing version (null = its latest). Since 1.3.0. */
 	public DesignRequest fromMassing(@Nullable String massingId, @Nullable Integer version) {
 		return new DesignRequest(type, style, materials, features, maxSize, name, notes, remix, owner, ext, model, budgetUsd, bible, group, profile,
-			bibleVersion, massingId == null && massing, massingId, massingId == null ? null : version, context, critique);
+			bibleVersion, massingId == null && massing, massingId, massingId == null ? null : version, context, critique, versionOf, versionOfSite);
 	}
 
 	/** A copy with a context text (null or blank = none). Since 1.3.0. */
@@ -113,12 +132,12 @@ public record DesignRequest(String type, String style, @Nullable String material
 	/** A copy with a context: a JSON object, or text as a {@link JsonPrimitive} (null = none). Since 1.3.0. */
 	public DesignRequest withContext(@Nullable JsonElement ctx) {
 		return new DesignRequest(type, style, materials, features, maxSize, name, notes, remix, owner, ext, model, budgetUsd, bible, group, profile,
-			bibleVersion, massing, fromMassing, massingVersion, ctx, critique);
+			bibleVersion, massing, fromMassing, massingVersion, ctx, critique, versionOf, versionOfSite);
 	}
 
 	/** A copy critiqued as {@code spec} (null or OFF = none). Since 1.6.0. */
 	public DesignRequest critique(@Nullable CritiqueSpec spec) {
 		return new DesignRequest(type, style, materials, features, maxSize, name, notes, remix, owner, ext, model, budgetUsd, bible, group, profile,
-			bibleVersion, massing, fromMassing, massingVersion, context, spec);
+			bibleVersion, massing, fromMassing, massingVersion, context, spec, versionOf, versionOfSite);
 	}
 }

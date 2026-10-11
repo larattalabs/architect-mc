@@ -49,8 +49,14 @@ public final class SidecarLink {
 	private static final long HANDSHAKE_MS = 15_000;
 	private static final long PING_MS = 15_000;
 
-	/** An {@code ack}: {@code re} the request id, {@code ok}, an {@code error} or a {@code result}. */
-	public record Ack(String re, boolean ok, @Nullable String error, @Nullable JsonObject result) {
+	/**
+	 * An {@code ack}: {@code re} the request id, {@code ok}, an {@code error} or a {@code result}; (6c 0b) a typed refusal's
+	 * {@code code} and {@code detail}.
+	 */
+	public record Ack(String re, boolean ok, @Nullable String error, @Nullable JsonObject result, @Nullable String code, @Nullable String detail) {
+		public Ack(String re, boolean ok, @Nullable String error, @Nullable JsonObject result) {
+			this(re, ok, error, result, null, null);
+		}
 	}
 
 	private final URI uri;
@@ -373,7 +379,8 @@ public final class SidecarLink {
 			switch (type) {
 				case "ack" -> {
 					Ack ack = new Ack(SidecarState.str(json, "re", ""), json.has("ok") && json.get("ok").getAsBoolean(), SidecarState.str(json, "error", null),
-						json.has("result") && json.get("result").isJsonObject() ? json.getAsJsonObject("result") : null);
+						json.has("result") && json.get("result").isJsonObject() ? json.getAsJsonObject("result") : null, SidecarState.str(json, "code", null),
+						SidecarState.str(json, "detail", null));
 					CompletableFuture<Ack> f = pendingAcks.remove(ack.re());
 					if (f != null) {
 						f.complete(ack);

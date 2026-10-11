@@ -17,7 +17,7 @@ import org.junit.jupiter.api.Test;
 class Api19Test {
 	@Test
 	void version() {
-		assertEquals("1.10.0", ArchitectApi.VERSION);
+		assertEquals("1.11.0", ArchitectApi.VERSION);
 	}
 
 	@Test
@@ -68,12 +68,15 @@ class Api19Test {
 	@Test
 	void enumsAppended() {
 		Reason[] r = Reason.values();
-		// 1.9.0's three, then 1.10.0's (6c 0a) appended after them
-		assertEquals(List.of(Reason.REGION_LIMIT, Reason.NO_TEMPLATE, Reason.PLAYER_BLOCKS, Reason.WORLD_STOPPED, Reason.OP_KEY_CONFLICT, Reason.TILE_SLOW),
-			List.of(r).subList(r.length - 6, r.length));
+		// the 1.9.0 tail, at its ordinals (later versions append after it)
+		int t = Reason.PLAYER_BLOCKS.ordinal();
+		assertEquals(Reason.REGION_LIMIT, r[t - 2]);
+		assertEquals(Reason.NO_TEMPLATE, r[t - 1]);
+		assertEquals(34, t);
 		assertEquals(Design.Kind.REGION, Design.Kind.values()[4]);
-		assertEquals(List.of("MOVE_CLOSER", "PREPARE", "START_SIDECAR", "APPROVE_STAGE", "REPLAN", "RETRY"), java.util.Arrays.stream(WaitAction.Kind.values())
-			.map(Enum::name).toList());
+		// the 1.9.0 kinds first (1.10.0 appends RETRY)
+		assertEquals(List.of("MOVE_CLOSER", "PREPARE", "START_SIDECAR", "APPROVE_STAGE", "REPLAN"), java.util.Arrays.stream(WaitAction.Kind.values()).map(
+			Enum::name).toList().subList(0, 5));
 	}
 
 	@Test

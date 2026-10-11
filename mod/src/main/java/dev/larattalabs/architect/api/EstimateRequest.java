@@ -11,7 +11,14 @@ import org.jspecify.annotations.Nullable;
  * @param copies copies of an existing design ($0 plus the variant build time)
  * @param newBible whether a new bible is made first
  * @param model the model of the originals' detail passes, or null for the helper's default
+ * @param smallOriginals (since 1.11.0) SMALL originals: the bounded detail pass (2 rounds, 40 turns, medium, $1.50), seeded at
+ *     $0.6-1.5 and 3-6 min. A group's items count by kind: its copies as COPY, its small items as SMALL
  */
 public record EstimateRequest(@Nullable GroupRequest group, int originals, int adapted, int copies, boolean newBible, boolean massingFirst,
-	boolean reportCritique, @Nullable String model) {
+	boolean reportCritique, @Nullable String model, int smallOriginals) {
+	/** The 1.10.0 constructor (no SMALL originals). */
+	public EstimateRequest(@Nullable GroupRequest group, int originals, int adapted, int copies, boolean newBible, boolean massingFirst,
+		boolean reportCritique, @Nullable String model) {
+		this(group, originals, adapted, copies, newBible, massingFirst, reportCritique, model, 0);
+	}
 }

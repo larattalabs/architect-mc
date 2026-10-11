@@ -12,15 +12,59 @@
 //     goes through kit/import.mjs (custom profile, import severity), is rendered and installed with
 //     `imported: true` and no source
 //   - VariantRunner: one job at a time, on its own queue, so a variant never waits behind a design
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import type { Logger } from './context.js';
 import type { Config } from './config.js';
-import { checkDesign, finishCheck, freeLibraryId, installDesign, KIT, CHECK_DIR, refreshKit, renderPreviews, runNode, slugify, withDesignId, type Sidecar as SidecarJson } from './designs.js';
+import { checkDesign, finishCheck, freeLibraryId, installDesign, KIT, CHECK_DIR, refreshKit, renderPreviews, runNode, slugify, withDesignId, type CheckResult, type Sidecar as SidecarJson } from './designs.js';
 import type { BibleIndex } from './bibles.js';
 import type { BiblePin, DesignRequest, Outbound, PaletteSpec, ParamValues, Reskin, ReskinFrom, Variant, VariantStatus } from './protocol.js';
 import type { Store } from './store.js';
 import { truncate } from './util/text.js';
+import { SIM_COPY_FAIL, SIM_COPY_SIZE } from './copies.js';
+
+/** (0b) the kit's recipe (kit/lib/variation.mjs chooseRecipe) */
+export interface CopyRecipe {
+  shift: { name: string; set: Record<string, string> } | null;
+  param: { name: string; value: unknown } | null;
+  roles: Record<string, string>;
+  values: Record<string, unknown>;
+  mirror: boolean;
+  ordinal: number;
+  attempt: number;
+  levers?: string[];
+  changed?: number;
+  bar?: boolean;
+}
+
+/** (0b) The same 32-bit seed as kit/lib/variation.mjs seedOf (sha256 of the parts joined by NUL). */
+export function seedOf(...parts: string[]): number {
+  return crypto.createHash('sha256').update(parts.join('\u0000')).digest().readUInt32BE(0);
+}
+
+/** What a copy's derivation records (§2.4): enough to rebuild it from any later source version. */
+function recipeRecord(r: CopyRecipe, v: Variant, c: NonNullable<Variant['copy']>): Record<string, unknown> {
+  return { shift: r.shift, param: r.param, values: r.values, mirror: r.mirror, roles: r.roles, bible: v.bible, group: c.group, itemKey: c.itemKey, archetype: c.archetype, ordinal: c.ordinal, attempt: r.attempt, ...(r.levers ? { levers: r.levers } : {}), ...(r.changed !== undefined ? { changed: r.changed } : {}), ...(r.bar !== undefined ? { bar: r.bar } : {}) };
+}
+
+function recipeLabel(r: CopyRecipe): string {
+  return [r.shift ? `shift ${r.shift.name}` : 'no shift', r.param ? `${r.param.name} ${JSON.stringify(r.param.value)}` : 'no param', r.mirror ? 'mirrored' : 'not mirrored'].join(', ');
+}
+
+function parseJsonLine(stdout: string): unknown {
+  const line = stdout.trim().split('\n').filter(Boolean).pop();
+  try {
+    return line ? JSON.parse(line) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** A sim fault's check result (no build). */
+function simFault(kind: 'check' | 'size'): CheckResult {
+  return { ok: false, problem: kind === 'size' ? 'the checker refused the design:\n- size exceeds the limit (sim:copysize)' : 'the checker refused the design:\n- sim:copyfail', output: '', warnings: [] };
+}
 
 export const VARIANT_SNAPSHOT_LIMIT = 20;
 const VARIANT_KEEP = 100;
@@ -35,7 +79,7 @@ export class VariantRefused extends Error {}
 
 // ---- the book ---------------------------------------------------------------------------------
 
-export type VariantPatch = Partial<Pick<Variant, 'status' | 'step' | 'blueprintId' | 'size' | 'previews' | 'error' | 'name'>>;
+export type VariantPatch = Partial<Pick<Variant, 'status' | 'step' | 'blueprintId' | 'size' | 'previews' | 'error' | 'name' | 'copy'>>;
 
 export interface VariantBookCtx {
   store: Store;
@@ -69,7 +113,7 @@ export class VariantBook {
     return [...extra, ...tail].sort((a, b) => a.createdAt - b.createdAt).map((v) => structuredClone(v));
   }
 
-  create(fields: Pick<Variant, 'kind' | 'from'> & Partial<Pick<Variant, 'palette' | 'values' | 'name' | 'bible' | 'reskin'>>): Variant {
+  create(fields: Pick<Variant, 'kind' | 'from'> & Partial<Pick<Variant, 'palette' | 'values' | 'name' | 'bible' | 'reskin' | 'copy'>>): Variant {
     const now = this.ctx.now();
     const v: Variant = {
       id: this.ctx.store.nextId('v'),
@@ -82,6 +126,7 @@ export class VariantBook {
       ...(fields.name !== undefined ? { name: fields.name } : {}),
       ...(fields.bible !== undefined ? { bible: { ...fields.bible } } : {}),
       ...(fields.reskin !== undefined ? { reskin: fields.reskin } : {}),
+      ...(fields.copy !== undefined ? { copy: structuredClone(fields.copy) } : {}),
       createdAt: now,
       updatedAt: now,
     };
@@ -301,7 +346,18 @@ export interface VariantHost {
   /** (4b) re-skins build with a bible's roles */
   readonly bibleIndex: Pick<BibleIndex, 'resolve'>;
   now(): number;
+  /** (0b) an entry's head version (1 for a bundled example or an entry without versions) */
+  entryHead?(entryId: string): number;
+  /** (0b) a copy: the recipes of its archetype's earlier copies */
+  copySiblings?(groupId: string, archetype: string, ordinal: number): Array<Record<string, unknown>>;
+  /** (0b) a massing version's blueprint JSON path */
+  massingFile?(id: string, version: number): string | undefined;
+  /** (0b) the sim backend: copies honour the sim faults (sim:copyfail, sim:copysize) */
+  readonly simFaults?: boolean;
 }
+
+/** (0b) Up to this many recipes per copy; then the item falls back to an original. */
+export const COPY_RECIPES = 3;
 
 export class VariantRunner {
   private queue: string[] = [];
@@ -353,6 +409,7 @@ export class VariantRunner {
             const v = this.host.variants.get(id);
             if (!v || isFinalVariant(v)) continue;
             if (v.kind === 'import') await this.runImport(v);
+            else if (v.copy) await this.runCopy(v);
             else await this.runVariant(v);
             const done = this.host.variants.get(id);
             if (done?.status === 'done') this.host.log.info(`${v.kind} ${id} is ready: ${done.blueprintId} in ${((Date.now() - t0) / 1000).toFixed(1)}s`);
@@ -452,6 +509,19 @@ export class VariantRunner {
           // kit records it too), else the bible the entry was built with
           extra: {
             variantOf: v.from,
+            // (0b, §2.4) which version it was made from, and how (a re-skin or a player variant; their builds are unchanged)
+            variantOfVersion: this.host.entryHead?.(v.from) ?? 1,
+            derivation: {
+              source: v.from,
+              sourceVersion: this.host.entryHead?.(v.from) ?? 1,
+              kind: v.reskin || v.bible ? 'reskin' : 'variant',
+              recipe: {
+                ...(v.palette !== undefined ? { palette: v.palette } : {}),
+                ...(v.values !== undefined ? { values: v.values } : {}),
+                ...(v.bible ? { bible: v.bible } : {}),
+                ...(v.reskin ? { reskin: v.reskin } : {}),
+              },
+            },
             displayName,
             ...(isExt(entry.ext) ? { ext: entry.ext } : {}),
             ...(v.bible ? { bible: v.bible } : entry.bible && typeof entry.bible === 'object' ? { bible: entry.bible } : {}),
@@ -461,6 +531,107 @@ export class VariantRunner {
         },
       });
       this.finish(v.id, installed.blueprintId, sc, installed.previews, [r.error ? `previews: ${truncate(r.error, 80)}` : '', res.warnings.length ? `${res.warnings.length} checker warning(s)` : ''].filter(Boolean).join('; '), displayName);
+    } finally {
+      this.taken.delete(bp);
+    }
+  }
+
+  /**
+   * (0b, §2.2-§2.4) A copy in a design group: the archetype entry's source under a new id, a recipe chosen by the kit
+   * (tools/copy-recipe.mjs: palette shift inside the group's bible, one param, the mirror), built and checked with the
+   * full kit check at the copy item's own maxSize and, under massingFirst, conformance against the archetype's massing
+   * mirrored with it. Up to COPY_RECIPES recipes; when all fail, the job fails with `copy.fallbackReason` and the group
+   * makes the item a FALLBACK original. Installed with `derivation: { kind: 'copy', recipe }` (rebuildable from
+   * sourceVersion) and the copy item's group, itemKey, ext and request.
+   */
+  private async runCopy(v: Variant): Promise<void> {
+    const cfg = this.host.config;
+    const c = v.copy!;
+    const plan = (c.plan ?? {}) as { request?: DesignRequest; massing?: { id: string; version: number } };
+    const req = plan.request;
+    this.step(v.id, `copying ${v.from}`);
+    const src = findVariantSource(cfg.libraryDir, cfg.kitDir, v.from);
+    const entry = src.entry ?? {};
+    const scratch = this.scratch(v.id);
+    const bp = freeLibraryId(cfg.libraryDir, `${v.from.slice(0, 40)}_copy`, this.taken);
+    this.taken.add(bp);
+    try {
+      const design = path.join(scratch, KIT, 'designs', `${bp}.mjs`);
+      fs.writeFileSync(design, withDesignId(normalizeKitImports(fs.readFileSync(src.sourceFile, 'utf8')), bp));
+      const own = path.join(path.dirname(src.sourceFile), 'bible');
+      if (!src.bundled && fs.existsSync(own)) fs.cpSync(own, path.join(scratch, 'bible'), { recursive: true });
+      if (!v.bible) throw new Error('a copy needs its group\'s bible pin');
+      const target = this.host.bibleIndex.resolve(v.bible);
+      const bible = JSON.parse(fs.readFileSync(target.files.json, 'utf8')) as { id?: string; version?: number; roles: Record<string, string>; name?: string };
+      fs.copyFileSync(target.files.json, path.join(scratch, 'group-bible.json'));
+      const values = entry.values && typeof entry.values === 'object' ? (entry.values as Record<string, unknown>) : {};
+      const massingFile = plan.massing ? this.host.massingFile?.(plan.massing.id, plan.massing.version) : undefined;
+      if (plan.massing && !massingFile) throw new Error(`the archetype's massing ${plan.massing.id} v${plan.massing.version} is gone`);
+      const sourceVersion = this.host.entryHead?.(v.from) ?? 1;
+      const siblings = this.host.copySiblings?.(c.group, c.archetype, c.ordinal) ?? [];
+      const faultText = `${req?.notes ?? ''} ${JSON.stringify(req?.ext ?? {})}`;
+      const fault = this.host.simFaults ? (faultText.includes(SIM_COPY_FAIL) ? 'check' : faultText.includes(SIM_COPY_SIZE) ? 'size' : undefined) : undefined;
+      const type = typeof entry.type === 'string' ? entry.type : req?.type;
+      const profile = Array.isArray(entry.profile) ? (entry.profile as string[]) : undefined;
+      let last: { reason: 'size' | 'conformance' | 'check'; problem: string } | undefined;
+      for (let attempt = 0; attempt < COPY_RECIPES; attempt++) {
+        this.step(v.id, `choosing recipe ${attempt + 1} of ${COPY_RECIPES} for ${c.itemKey}`);
+        fs.writeFileSync(path.join(scratch, 'recipe-request.json'), JSON.stringify({ bible: { id: bible.id ?? v.bible.id, version: bible.version ?? v.bible.version, roles: bible.roles }, values, seed: seedOf(c.group, c.archetype), ordinal: c.ordinal, siblings, ...(req?.maxSize ? { max: req.maxSize } : {}), ...(massingFile ? { massing: massingFile } : {}), attempt }));
+        const rr = await runNode(path.join(KIT, 'tools', 'copy-recipe.mjs'), [bp, '--in', 'recipe-request.json'], scratch, KIT_TIMEOUT_MS);
+        const parsed = parseJsonLine(rr.stdout) as { ok?: boolean; recipe?: CopyRecipe; error?: string } | undefined;
+        if (!parsed?.ok || !parsed.recipe) {
+          last = { reason: 'check', problem: parsed?.error ?? truncate(rr.output, 600) };
+          continue;
+        }
+        const recipe = parsed.recipe;
+        const derived = { id: bible.id ?? v.bible.id, version: bible.version ?? v.bible.version, ...(bible.name ? { name: bible.name } : {}), roles: recipe.roles };
+        fs.writeFileSync(path.join(scratch, 'copy-bible.json'), `${JSON.stringify(derived, null, 2)}\n`);
+        const extra = ['--bible', 'copy-bible.json', ...(Object.keys(recipe.values ?? {}).length ? ['--values', JSON.stringify(recipe.values)] : []), ...(recipe.mirror ? ['--mirror'] : []), ...(massingFile ? ['--massing', massingFile] : []), '--restraint', 'group-bible.json'];
+        this.host.variants.update(v.id, { step: `building ${bp} (recipe ${attempt + 1}: ${recipeLabel(recipe)})`, copy: { ...c, attempts: attempt + 1, recipe: recipeRecord(recipe, v, c) } });
+        const res = fault ? simFault(fault) : await checkDesign(cfg.kitDir, scratch, bp, { maxSize: req?.maxSize, type, ...(profile ? { profile } : {}) }, KIT_TIMEOUT_MS, extra);
+        if (!res.ok) {
+          last = { reason: fault ?? (res.conformance?.errors.length ? 'conformance' : /exceeds the (limit|maximum)|size .* exceeds/.test(res.problem ?? '') ? 'size' : 'check'), problem: res.problem ?? 'the check failed' };
+          this.host.log.info(`copy ${v.id} (${c.itemKey}): recipe ${attempt + 1} failed (${last.reason}): ${truncate((res.problem ?? '').split('\n')[0] ?? '', 160)}`);
+          continue;
+        }
+        this.step(v.id, 'rendering previews');
+        const r = await renderPreviews(scratch, res.nbt!, KIT_TIMEOUT_MS);
+        const sc = res.sidecar!;
+        const name = typeof entry.name === 'string' ? entry.name : typeof sc.name === 'string' ? sc.name : v.from;
+        const displayName = truncate(`${req?.name ?? name} (copy ${c.ordinal + 1})`, 80);
+        const installed = installDesign({
+          library: cfg.libraryDir,
+          baseId: bp,
+          taken: this.othersTaken(bp),
+          nbt: res.nbt!,
+          sidecar: sc,
+          source: design,
+          previews: r.files,
+          files: fs.existsSync(path.join(scratch, 'bible')) ? ['bible.json', 'bible.md', 'components.mjs'].map((f) => ({ from: path.join(scratch, 'bible', f), to: path.join('bible', f) })) : [],
+          meta: {
+            name: req?.name ?? name,
+            description: typeof entry.description === 'string' ? entry.description : undefined,
+            request: req,
+            createdAt: this.host.now(),
+            extra: {
+              variantOf: v.from,
+              variantOfVersion: sourceVersion,
+              derivation: { source: v.from, sourceVersion, kind: 'copy', recipe: recipeRecord(recipe, v, c) },
+              displayName,
+              bible: v.bible,
+              group: c.group,
+              groupItem: c.itemKey,
+              ...(isExt(req?.ext) ? { ext: req!.ext } : {}),
+              ...(profile ? { profile } : {}),
+            },
+          },
+        });
+        this.host.variants.update(v.id, { copy: { ...c, attempts: attempt + 1, recipe: recipeRecord(recipe, v, c) } });
+        this.finish(v.id, installed.blueprintId, sc, installed.previews, [`recipe ${attempt + 1}: ${recipeLabel(recipe)}`, r.error ? `previews: ${truncate(r.error, 80)}` : '', res.warnings.length ? `${res.warnings.length} checker warning(s)` : ''].filter(Boolean).join('; '), displayName);
+        return;
+      }
+      const why = last ?? { reason: 'check' as const, problem: 'no recipe' };
+      this.host.variants.update(v.id, { status: 'failed', step: `failed: ${COPY_RECIPES} recipes failed (${why.reason}); the item falls back to an original`, error: why.problem, copy: { ...this.host.variants.get(v.id)!.copy!, fallbackReason: why.reason } });
     } finally {
       this.taken.delete(bp);
     }

@@ -283,12 +283,15 @@ export class Polishes {
   request(entryId: string, spec: PolishSpec, opts: { owner?: string; ext?: Ext; parentDesign?: string } = {}): Design {
     const sc = this.sc;
     sc.ensureClaudeAvailable();
-    const json = sc.versions.checkVersionable(entryId);
+    const json = sc.versions.checkChangeable(entryId);
     const r = this.resolve(entryId, spec, json);
     if (!sc.versions.versionDir(entryId, r.fromVersion)) throw new VersionRefused('no_version', `${entryId} has no version ${r.fromVersion}`);
     if (r.fromVersion > sc.versions.head(entryId)) throw new VersionRefused('no_version', `${entryId} has no version ${r.fromVersion}`);
     const open = sc.designs.active().find((d) => d.kind === 'polish' && d.polish?.entryId === entryId);
     if (open) throw new ClientError(`${entryId} is being polished already (design ${open.id})`);
+    // (0b, C13) a versionOf of the entry is unfinished: both would make head + 1
+    const vo = sc.designs.active().find((d) => d.request.versionOf?.entryId === entryId);
+    if (vo) throw new VersionRefused('busy', `${entryId} has an unfinished versionOf (design ${vo.id})`);
     const req: DesignRequest = { ...this.requestOf(json, r.model), ...(opts.owner ? { owner: opts.owner } : {}), ...(opts.ext ? { ext: opts.ext } : {}) };
     const record: PolishRecord = { entryId, fromVersion: r.fromVersion, steps: [], installedVersion: null, ...(r.apply ? { apply: r.apply } : {}), prompts: { ...POLISH_PROMPT_HASHES } };
     // kind and polish from the first upsert on (a protocol-1 client never sees it)
@@ -960,7 +963,7 @@ export class Polishes {
     const built = readObj(path.join(final.dir, `${w.bp}.blueprint.json`)) ?? {};
     const json: Record<string, unknown> = { ...built };
     for (const k of Object.keys(fromJson)) if (!(k in json)) json[k] = fromJson[k];
-    for (const k of ['name', 'description', 'createdAt', 'request', 'ext', 'bible', 'group', 'groupItem', 'profile', 'variantOf', 'variantOfVersion']) if (fromJson[k] !== undefined) json[k] = fromJson[k];
+    for (const k of ['name', 'description', 'createdAt', 'request', 'ext', 'bible', 'group', 'groupItem', 'profile', 'variantOf', 'variantOfVersion', 'derivation']) if (fromJson[k] !== undefined) json[k] = fromJson[k];
     const v = final.verdict!;
     json.critique = { mode: 'polish', end: w.end ?? 'polished', overall: v.overall, scores: v.scores, openIssues: v.issues, steps: d.polish?.steps.length ?? 0 };
     const head = sc.versions.head(w.entryId);

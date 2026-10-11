@@ -276,6 +276,45 @@ Conflicts with Architect's current contracts, to resolve in those phases:
 - **One sidecar.** Two mods must not each install the SDK (~200 MB) and keep separate auth. Steward's Claude calls go
   through Architect's sidecar via A8.
 
+## 6c slice 0b: the C7 benchmark and its proposals (2026-10-11)
+
+Run: `tools/bench6c0b.mjs` on the 0b build (0a merged), Noah's claude login only, hard cap $35. **Spent $18.69.** Evidence
+(local): `artifacts/gate6c0b/bench-U.json`, `bench-R.json`, `bench-C13.json`, `spend.json`, `bench.log`. One run per arm, each
+with its own new bible, massingFirst with auto-approve, report critique. The bench drove the helper over the protocol without
+a game (no lot placement; the C13 smoke had no site).
+
+| | U (unique: 3 M) | R (repeat-heavy: 2 M x3 + 2 S) |
+|---|---|---|
+| total (bible + group) | **$9.14** (1.08 + 8.06) | **$8.28** (1.04 + 7.25) |
+| per placement | $3.05 (3) | **$1.04** (8) |
+| first detailed item, from the bible's start | 14.7 min | **7.5 min** |
+| wall | 28.2 min | 18.8 min |
+| BIBLE | $1.08, 12% | $1.04, 13% |
+| MASSING | $0.51, 6% (3) | $0.63, 8% (4) |
+| DETAIL | **$7.37, 81%** (3) | **$6.51, 79%** (4: 2 M $3.56 / $2.41, 2 S $0.65 / $0.64) |
+| REPAIR | $0 (0 rounds) | $0 (0 rounds) |
+| CRITIQUE | $0.18, 2% | $0.10, 1% (S items skip it) |
+| COPY | n/a | $0, 4 copies (built in seconds) |
+| fallbacks | 0 | 0 |
+
+C13 smoke (versionOf on R's first archetype, "weathered, add a lean-to"): done, **$1.27, 5.0 min**, head + 1.
+
+Against Steward's targets: under $5 for a starter settlement is **not shown** (R $8.28). The first usable result within 15 min
+is shown (R 7.5 min, U 14.7 min).
+
+**Proposals (for Noah and Steward; nothing changes automatically):**
+1. **The next cut is DETAIL** (81% of U, 79% of R; BIBLE is 12-13%, under the 25% rule; REPAIR is 0). That calls for bounded
+   effort for M buildings (a STANDARD-lite pass) or model tiering of the detail pass. An M original costs $2.2-3.6 here.
+2. **Copies and SMALL work.** R's 8 placements cost about the same as U's 3 (-9% total, 3x cheaper per placement). Reaching
+   $5 needs the M originals at about $1.5 each, or one M design per starter with the others as copies (copyCap 3 already
+   used). Suggested Steward default: copies on (cap 3), S items as SMALL.
+3. **Re-seed:** SMALL $0.6-1.5 -> **$0.5-1.0, 3-6 min** (measured $0.64-0.65; the 2 rounds / 40 turns / $1.50 caps were
+   never hit). CHANGE $0.4-1.2 -> **$0.8-1.6, 4-8 min** (measured $1.27, 5.0 min). COPY: $0, seconds (as seeded).
+4. **C8 caps: keep them.** Neither S item came near a cap (no repair round, about $0.65 of the $1.50). Noah to judge whether the
+   S buildings look cheap; their previews are in `artifacts/gate6c0b/bench/library/`.
+5. Minor follow-up: R's breakdown COPY line counted 4 copies but 0 ms (the copies built between two refreshes). It is time
+   only, so no cost is affected; fix it in the next slice that touches breakdown.ts.
+
 ## Open questions
 - Track AgentCraft fixes to the copied placement code, or treat the copy as independent from now on?
 - Cost: measure tokens and time per design in phase 1, and show an estimate in the form.

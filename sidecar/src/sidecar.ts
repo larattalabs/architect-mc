@@ -20,7 +20,7 @@ import type { JobDriver } from './jobs/driver.js';
 import { JobRunner } from './jobs/runner.js';
 import { SimJobDriver } from './jobs/sim.js';
 import { Pool } from './pool.js';
-import { FEATURES, KitPalettes, type BibleRef, type ClientMessage, type Cost, type PaletteInfo, type Design, type DesignRequest, type Group, type Massing, type Outbound, type PaletteSpec, type ParamValues, type Protocol, type Status, type Variant } from './protocol.js';
+import { FEATURES, KitPalettes, type BibleRef, type ClientMessage, type Cost, type PaletteInfo, type Design, type DesignRequest, type Group, type Massing, type Outbound, type PaletteSpec, type ParamValues, type Protocol, type Status, type Variant, type GroupItem } from './protocol.js';
 import { DesignScheduler, designKey } from './scheduler.js';
 import { addCost } from './jobs/cost.js';
 import { readSecrets, updateSecrets, type Secrets } from './secrets.js';
@@ -73,8 +73,9 @@ const DURABLE_COMMANDS: ReadonlySet<ClientMessage['type']> = new Set<ClientMessa
 ]);
 
 /** A message the client caused that cannot be done (answered with ack ok:false). */
-export { ClientError } from './errors.js';
-import { ClientError } from './errors.js';
+export { ClientError, RefusedError } from './errors.js';
+import { ClientError, RefusedError } from './errors.js';
+import { frameProblem, prepareVersionOf, writeVersionContext } from './versionof.js';
 
 /**
  * Runs design jobs: the Claude designer (claude/designer.ts) or the sim (sim.ts). The scheduler hands it one design at a
@@ -223,7 +224,11 @@ export class Sidecar {
       this.groups.designChanged(m.design);
       this.statusChanged();
     }
-    if (m.type === 'variant.upsert') this.reskins.variantChanged(m.variant);
+    if (m.type === 'variant.upsert') {
+      this.reskins.variantChanged(m.variant);
+      // (0b) a copy's group follows its variant job
+      this.groups.variantChanged(m.variant);
+    }
     // (5a) a finished critic call moves its design's loop on
     if (m.type === 'job.upsert') this.critiques.jobChanged(m.job);
   }
@@ -416,7 +421,7 @@ export class Sidecar {
   // ---- client messages ------------------------------------------------------------------------
 
   async handle(msg: ClientMessage, reply: (m: Outbound) => void, client?: ClientHandle): Promise<void> {
-    const ack = (ok: boolean, extra: { error?: string; result?: Record<string, unknown> } = {}) => {
+    const ack = (ok: boolean, extra: { error?: string; code?: string; detail?: string; result?: Record<string, unknown> } = {}) => {
       if (msg.id) reply({ type: 'ack', re: msg.id, ok, ...extra });
     };
     try {
@@ -427,8 +432,10 @@ export class Sidecar {
       const known = e instanceof ClientError || e instanceof BlobError;
       const message = known ? (e as Error).message : `internal error: ${(e as Error).message}`;
       if (!known) this.log.error(`${msg.type}: ${(e as Error).stack ?? e}`);
+      // (0b) a typed refusal carries its Reason name and sub-code: the ack goes first (a client that completes a request on
+      // the `error` frame would never see the code)
+      ack(false, { error: message, ...(e instanceof RefusedError ? { code: e.code, detail: e.detail } : {}) });
       reply({ type: 'error', message, ...(msg.id ? { re: msg.id } : {}) });
-      ack(false, { error: message });
     }
   }
 
@@ -564,6 +571,11 @@ export class Sidecar {
         return { massings: this.massings.list(msg.owner, msg.massingId) };
       case 'massing.delete':
         return { massingId: msg.massingId, versions: this.massings.delete(msg.massingId) };
+      case 'group.promoteCopy': {
+        const g = this.groups.promoteCopy(msg.groupId, msg.itemKey, msg.reason);
+        const it = g.items.find((x) => x.itemKey === msg.itemKey)!;
+        return { groupId: g.id, itemKey: it.itemKey, designId: it.designId };
+      }
       case 'group.approve':
         return { ...this.groups.approve(msg.groupId, { approve: msg.approve ?? [], redirect: msg.redirect ?? {}, cancel: msg.cancel ?? [], owner: msg.owner }) };
       // ---- 5a
@@ -675,6 +687,34 @@ export class Sidecar {
     return v;
   }
 
+  /**
+   * (0b) A copy's variant job: built from its archetype's entry with the group's bible pin and a recipe (the runner
+   * chooses it), checked at the copy item's own maxSize and, under massingFirst, against the archetype's massing.
+   */
+  requestCopy(g: Group, it: GroupItem, arch: GroupItem, ordinal: number): Variant {
+    const req = this.store.data.groupWork?.[g.id]?.itemRequests?.[it.itemKey];
+    const v = this.variants.create({
+      kind: 'variant',
+      from: arch.entryId!,
+      bible: g.bible,
+      ...(it.name ? { name: it.name } : {}),
+      copy: {
+        group: g.id,
+        itemKey: it.itemKey,
+        archetype: arch.itemKey,
+        ordinal,
+        attempts: 0,
+        plan: {
+          ...(req ? { request: req } : {}),
+          ...(g.massingFirst && arch.massing ? { massing: arch.massing } : {}),
+        },
+      },
+    });
+    this.log.info(`group ${g.id}: ${it.itemKey} copies ${arch.itemKey} (${arch.entryId}): variant ${v.id}`);
+    this.variantRunner.enqueue(v.id);
+    return v;
+  }
+
   /** import.request: refused at once unless the path is an .nbt in the import folders. */
   requestImport(file: string): Variant {
     try {
@@ -706,6 +746,8 @@ export class Sidecar {
     // (auth `checking`, also while the SDK is still being installed: the design queues and starts
     // once the check passes)
     let req = request;
+    // (0b, C13) versionOf: refusals, the base pinned to the head
+    if (req.versionOf) req = prepareVersionOf(this, req);
     // (4c) the detail pass of a massing: pin its version; it inherits the massing's bible
     if (req.fromMassing) {
       const m = this.massings.get(req.fromMassing, req.massingVersion);
@@ -785,6 +827,31 @@ export class Sidecar {
   }
 
   // ---- what a design job gets (4b): budget, bible, neighbours, entry fields --------------------
+
+  // ---- (0b) what the variant runner asks for copies --------------------------------------------------
+
+  /** an entry's head version (1 for a bundled example or an entry without versions) */
+  entryHead(entryId: string): number {
+    try {
+      return this.versions.head(entryId);
+    } catch {
+      return 1;
+    }
+  }
+
+  copySiblings(groupId: string, archetype: string, ordinal: number): Array<Record<string, unknown>> {
+    return this.groups.copySiblings(groupId, archetype, ordinal);
+  }
+
+  massingFile(id: string, version: number): string | undefined {
+    const m = this.massings.get(id, version);
+    const f = m ? path.join(m.dir, `${m.id}.blueprint.json`) : undefined;
+    return f && fs.existsSync(f) ? f : undefined;
+  }
+
+  get simFaults(): boolean {
+    return this.config.backend === 'sim';
+  }
 
   /** (re-skins) a group's finished entries, or undefined for a group this sidecar does not know */
   groupEntries(groupId: string): string[] | undefined {
@@ -892,7 +959,48 @@ export class Sidecar {
 
   /** After the pristine check: the problem that fails the round (a massing that is not one; conformance errors), if any. */
   checkOutcome(d: Design, res: CheckResult): string | undefined {
-    return this.massings.checkOutcome(d, res);
+    // (0b, C13) the frame guard of a versionOf: a changed front or entrance feet row is a repair round
+    return this.massings.checkOutcome(d, res) ?? frameProblem(this, d, res);
+  }
+
+  /** (0b, C13) A versionOf design's scratch: the design file starts as the head's source; the context files; the brief. */
+  prepareVersionOfScratch(d: Design, scratch: string, bp: string): void {
+    if (!d.request.versionOf) return;
+    const lines = writeVersionContext(this, d, scratch);
+    const file = path.join(scratch, KIT, 'designs', `${bp}.mjs`);
+    if (!fs.existsSync(file)) fs.copyFileSync(path.join(scratch, 'context', 'base', `${bp}.mjs`), file);
+    const own = path.join(this.versions.dir(bp), 'bible');
+    if (fs.existsSync(own) && !fs.existsSync(path.join(scratch, 'bible'))) fs.cpSync(own, path.join(scratch, 'bible'), { recursive: true });
+    const brief = path.join(scratch, 'BRIEF.md');
+    const text = fs.existsSync(brief) ? fs.readFileSync(brief, 'utf8') : '';
+    if (!text.includes('## A new version of')) fs.writeFileSync(brief, `${text.trimEnd()}\n\n${lines.join('\n')}\n`);
+  }
+
+  /** (0b, C13) Install a versionOf design as head + 1 (by 'design', parent = its base); `base_moved` if the head moved. */
+  private installVersionOf(d: Design, input: { scratch: string; bp: string; res: CheckResult; previews: string[]; source: string; notes?: string[] }): void {
+    const v = d.request.versionOf!;
+    const base = v.baseVersion ?? 1;
+    const head = this.versions.head(v.entryId);
+    if (head !== base) {
+      this.designFailed(d.id, 'base_moved', `failed: base_moved (${v.entryId} moved from v${base} to v${head} meanwhile; the cost is kept)`);
+      return;
+    }
+    const res = input.res;
+    const baseJson = this.versions.top(v.entryId) ?? {};
+    const json: Record<string, unknown> = { ...(res.sidecar as Record<string, unknown>) };
+    for (const k of ['name', 'description', 'createdAt', 'request', 'ext', 'bible', 'group', 'groupItem', 'profile', 'variantOf', 'variantOfVersion', 'derivation', 'fromMassing']) if (baseJson[k] !== undefined) json[k] = baseJson[k];
+    const parts = res.nbt!.replace(/\.nbt$/, '.parts.nbt');
+    const version = this.versions.install(
+      v.entryId,
+      { nbt: res.nbt!, json, ...(fs.existsSync(parts) ? { parts } : {}), source: input.source, previews: input.previews, files: this.entryFiles(d, input.scratch) },
+      { by: 'design', parent: base, designId: d.id, summary: truncate(`versionOf: ${(d.request.notes ?? '').replace(/\s+/g, ' ').trim()}`, 200) },
+    );
+    this.entryVersioned(v.entryId, version, head, 'design', d.id);
+    const s = res.sidecar!.size!;
+    this.designs.update(d.id, { status: 'done', step: `done: ${v.entryId} v${version} (versionOf v${base}, ${s.x}x${s.y}x${s.z})${input.notes?.filter(Boolean).length ? `; ${input.notes.filter(Boolean).join('; ')}` : ''}`, blueprintId: v.entryId, size: { x: s.x, y: s.y, z: s.z }, previews: input.previews });
+    this.estimates.forget(d.id);
+    this.store.flush();
+    this.log.info(`design ${d.id}: ${v.entryId} v${version} installed (versionOf v${base})`);
   }
 
   /**
@@ -904,6 +1012,11 @@ export class Sidecar {
     const source = input.source ?? path.join(input.scratch, KIT, 'designs', `${input.bp}.mjs`);
     const s = res.sidecar!.size!;
     const size = { x: s.x, y: s.y, z: s.z };
+    // (0b, C13) a new version of an existing entry
+    if (d.request.versionOf) {
+      this.installVersionOf(d, { scratch: input.scratch, bp: input.bp, res, previews: input.previews, source, ...(input.notes ? { notes: input.notes } : {}) });
+      return;
+    }
     if (d.massing) {
       const m = this.massings.install(d, { nbt: res.nbt!, sidecar: res.sidecar!, source, previews: input.previews, files: this.entryFiles(d, input.scratch), createdAt: this.now() });
       this.massingDone(d.id, m, (input.notes ?? []).filter(Boolean).join('; '));

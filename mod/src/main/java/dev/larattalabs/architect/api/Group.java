@@ -108,8 +108,8 @@ public record Group(String id, String name, BiblePin bible, Optional<String> own
 			return java.util.Collections.unmodifiableMap(m);
 		}
 
-		/** New values are only ever appended. */
-		public enum Stage { BIBLE, MASSING, DETAIL, REPAIR, CRITIQUE, QUEUED, USAGE_HOLD }
+		/** New values are only ever appended. COPY (since 1.11.0): the copy stage, time only ($0). */
+		public enum Stage { BIBLE, MASSING, DETAIL, REPAIR, CRITIQUE, QUEUED, USAGE_HOLD, COPY }
 
 		/** One stage: its cost, its summed item time and how many passes, rounds or calls it counts. */
 		public record Line(double usd, long ms, int count) {
@@ -159,9 +159,12 @@ public record Group(String id, String name, BiblePin bible, Optional<String> own
 		return items.stream().filter(i -> i.itemKey().equals(itemKey)).findFirst();
 	}
 
-	/** {@code massing | approval | detail}: where a massingFirst item is (since 1.3.0). */
+	/**
+	 * {@code massing | approval | detail}: where a massingFirst item is (since 1.3.0); COPY (since 1.11.0): a copy waiting for
+	 * or building from its archetype.
+	 */
 	public enum Stage {
-		MASSING, APPROVAL, DETAIL;
+		MASSING, APPROVAL, DETAIL, COPY;
 
 		public String wire() {
 			return name().toLowerCase(Locale.ROOT);
@@ -217,16 +220,45 @@ public record Group(String id, String name, BiblePin bible, Optional<String> own
 	 *     round in full, as {@link Design#critique()}); otherwise from the item's summary, whose {@code rounds} is only a count:
 	 *     then {@link Critique#rounds()} is empty, {@code scores} and {@code openIssues} are empty, and the best round's number,
 	 *     the end reason and the overall are set. Empty when critique is off
+	 * @param kind (since 1.11.0) ORIGINAL, COPY (a $0 variant of its archetype, built in stage COPY; its {@code designId} is
+	 *     {@code ""}) or FALLBACK (a copy whose recipes all failed, or promoted with {@link Designs#promoteCopy}: an original)
+	 * @param copyOf (since 1.11.0) a copy or fallback: its archetype's itemKey
+	 * @param variantJob (since 1.11.0) a copy: its variant job
+	 * @param fallbackReason (since 1.11.0) a fallback: {@code size | conformance | check | promoted}, with the message
+	 * @param effort (since 1.11.0) the effort its detail pass runs with (STANDARD or SMALL)
 	 */
 	public record Item(String itemKey, JsonObject ext, String designId, Optional<String> entryId, Design.Status status, String step, Cost cost,
 		int wave, GroupRequest.Role role, String model, String type, Optional<String> name, Optional<String> error, Optional<Stage> stage,
-		Optional<MassingRef> massing, int rounds, List<String> designIds, Optional<Critique> critique) {
+		Optional<MassingRef> massing, int rounds, List<String> designIds, Optional<Critique> critique, Kind kind, Optional<String> copyOf,
+		Optional<String> variantJob, Optional<String> fallbackReason, GroupRequest.Item.Effort effort) {
 		public Item {
 			ext = ext == null ? new JsonObject() : ext;
 			stage = stage == null ? Optional.empty() : stage;
 			massing = massing == null ? Optional.empty() : massing;
 			designIds = designIds == null ? List.of() : List.copyOf(designIds);
 			critique = critique == null ? Optional.empty() : critique;
+			kind = kind == null ? Kind.ORIGINAL : kind;
+			copyOf = copyOf == null ? Optional.empty() : copyOf;
+			variantJob = variantJob == null ? Optional.empty() : variantJob;
+			fallbackReason = fallbackReason == null ? Optional.empty() : fallbackReason;
+			effort = effort == null || effort == GroupRequest.Item.Effort.AUTO ? GroupRequest.Item.Effort.STANDARD : effort;
+		}
+
+		/** The 1.6.0 constructor (an original, STANDARD). */
+		public Item(String itemKey, JsonObject ext, String designId, Optional<String> entryId, Design.Status status, String step, Cost cost, int wave,
+			GroupRequest.Role role, String model, String type, Optional<String> name, Optional<String> error, Optional<Stage> stage,
+			Optional<MassingRef> massing, int rounds, List<String> designIds, Optional<Critique> critique) {
+			this(itemKey, ext, designId, entryId, status, step, cost, wave, role, model, type, name, error, stage, massing, rounds, designIds, critique,
+				Kind.ORIGINAL, Optional.empty(), Optional.empty(), Optional.empty(), GroupRequest.Item.Effort.STANDARD);
+		}
+
+		/** What an item is (since 1.11.0). New values are only ever appended. */
+		public enum Kind {
+			ORIGINAL, COPY, FALLBACK;
+
+			public static Kind of(@org.jspecify.annotations.Nullable String s) {
+				return "copy".equalsIgnoreCase(s) ? COPY : "fallback".equalsIgnoreCase(s) ? FALLBACK : ORIGINAL;
+			}
 		}
 
 		/** The 1.3.0 constructor (no critique). */
@@ -249,9 +281,9 @@ public record Group(String id, String name, BiblePin bible, Optional<String> own
 			return stage.orElse(null) == Stage.APPROVAL && status == Design.Status.DONE;
 		}
 
-		/** Whether the item is finished as a building: done with no stage, or done in its detail stage (since 1.3.0). */
+		/** Whether the item is finished as a building: done with no stage, or done in its detail (or, 1.11.0, copy) stage (since 1.3.0). */
 		public boolean detailed() {
-			return status == Design.Status.DONE && (stage.isEmpty() || stage.get() == Stage.DETAIL);
+			return status == Design.Status.DONE && (stage.isEmpty() || stage.get() == Stage.DETAIL || stage.get() == Stage.COPY);
 		}
 	}
 }

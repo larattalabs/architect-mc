@@ -7,13 +7,28 @@ package dev.larattalabs.architect.api;
  */
 public class ArchitectRefused extends RuntimeException {
 	private final Reason reason;
+	private final String detail;
 
 	public ArchitectRefused(Reason reason, String message) {
+		this(reason, message, "");
+	}
+
+	/** With a sub-code ({@link #detail()}). Since 1.11.0. */
+	public ArchitectRefused(Reason reason, String message, String detail) {
 		super(message);
 		this.reason = reason;
+		this.detail = detail == null ? "" : detail;
 	}
 
 	public Reason reason() {
 		return reason;
+	}
+
+	/**
+	 * The refusal's sub-code ({@code ""} when it has none): {@link Reason#COPY_REFUSED} and {@link Reason#VERSION_REFUSED} name
+	 * which rule refused. Since 1.11.0.
+	 */
+	public String detail() {
+		return detail;
 	}
 }

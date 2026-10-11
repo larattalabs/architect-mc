@@ -1600,6 +1600,7 @@ public final class ArchitectScreen extends Screen {
 			case MASSING -> "massing" + m + " · " + status + rounds;
 			case APPROVAL -> it.awaitingApproval() ? "massing" + m + " waits for approval" + rounds : "massing" + m + " · " + status + rounds;
 			case DETAIL -> "detail of massing" + m + " · " + status;
+			case COPY -> "copy of " + it.copyOf().orElse("?") + " · " + status;
 		};
 	}
 
