@@ -9,15 +9,16 @@
 import { COMBINATORS, compileShape, PRIMITIVES, SHAPES_FORMAT2, sdAt, shapeKinds, strataOf, yrefFn } from './sdf.mjs';
 import { compileRule, decodeField, FACING_MAX_PRIMITIVES, ruleError, ruleUsesFacing } from './material.mjs';
 import { ByteWriter, FLAG_MISSING, asColumns, sha256Hex, stateBytes, writeArtlHeader } from './region/pack.mjs';
+import { ROTATIONS, decodeVoxels, turnState, turnXZ, voxelAt, voxelsBounds } from './region/voxels.mjs';
 
 export const AIR = 'minecraft:air';
-export const OP_KINDS = ['shape', 'columns'];
+export const OP_KINDS = ['shape', 'columns', 'voxels'];
 export const SETS = ['terrain', 'path'];
 /** (6b) The IR formats this evaluator reads (kit/REGIONS.md "IR format 2"). */
 export const IR_FORMATS = Object.freeze([1, 2]);
 /** (6b) Every format-2 kind an IR's `requires` may name; any of them makes the IR format 2. */
 export const KINDS_FORMAT2 = Object.freeze(['blobs:side', 'fields', 'forms', 'material:rule', 'shape:array', 'shape:capsuleChain', 'shape:ellipsoid',
-  'shape:instances', 'shape:prism', 'shape:strata', 'shape:warp', 'shape:wedge', 'volumes']);
+  'shape:instances', 'shape:prism', 'shape:strata', 'shape:warp', 'shape:wedge', 'volumes', 'voxels']);
 /** Max ops in an IR (also the evaluator's buffer encoding limit). */
 export const MAX_OPS = 20000;
 const OP_SLOTS = 32768; // buffer value = (op index + 1) + material * OP_SLOTS
@@ -25,8 +26,8 @@ const EPS = 1e-6;
 /** How far beyond the claim's y range clipped cells are counted. */
 const CLIP_COUNT_MARGIN = 64;
 
-/** (6b) Op kinds reserved for later phases (they throw as unknown until then). */
-export const OPS_RESERVED = ['relief', 'scatter', 'voxels', 'stamp'];
+/** (6b) Op kinds reserved for later phases (they throw as unknown until then). (6c F1) `voxels` is built. */
+export const OPS_RESERVED = ['relief', 'scatter', 'stamp'];
 /** (6b) The members a format-2 IR may have (anything else throws). */
 export const MEMBERS_FORMAT2 = ['anchors', 'blobs', 'budget', 'claim', 'fields', 'floating', 'format', 'forms', 'graph', 'id', 'keepOut', 'kitVersion', 'lots', 'node', 'params',
   'parts', 'paths', 'programSha', 'requires', 'roads', 'roles', 'rules', 'seed', 'stages', 'tiles', 'utility', 'volumes'];
@@ -66,6 +67,7 @@ export function walkKinds(ir) {
   for (const p of ir.parts ?? []) for (const o of p.ops ?? []) {
     if (o.op === 'shape') for (const s of shapeKinds(o.shape)) if (SHAPES_FORMAT2.includes(s)) k.add(`shape:${s}`);
     if (o.material && typeof o.material === 'object') k.add('material:rule');
+    if (o.op === 'voxels') k.add('voxels'); // (6c F1)
   }
   if (ir.blobs && Object.values(ir.blobs).some((b) => b && b.sha !== undefined)) k.add('blobs:side');
   if (ir.fields && Object.keys(ir.fields).length) k.add('fields');
@@ -134,6 +136,7 @@ export function compileIR(ir, opts = {}) {
   if (stale) throw new Error(`PLAN_STALE: ${stale}`);
   if (!ir || !IR_FORMATS.includes(ir.format)) throw new Error(`IR: format must be one of ${IR_FORMATS.join(', ')}`);
   const f2 = ir.format === 2;
+  let blobBytes = null; // (6c F1) a side blob's bytes by IR blob name (format 2)
   let blobFn = ir.blobs, fieldFn = () => { throw new Error('IR: fields need format 2'); };
   if (f2) {
     for (const k of Object.keys(ir)) if (!MEMBERS_FORMAT2.includes(k)) throw new Error(`IR: unknown member '${k}' (supported: ${MEMBERS_FORMAT2.join(', ')})`);
@@ -142,6 +145,11 @@ export function compileIR(ir, opts = {}) {
     const miss = walked.filter((k) => !req.includes(k));
     if (miss.length) throw new Error(`IR: requires misses [${miss.join(', ')}]`);
     const get = blobGetter(opts.blobs);
+    blobBytes = (name) => {
+      const b = ir.blobs?.[name];
+      if (!b) throw new Error(`IR: blob '${name}' is not in the IR's blobs`);
+      return get(b.sha);
+    };
     const decoded = new Map();
     for (const [name, b] of Object.entries(ir.blobs ?? {})) {
       if (!b || typeof b !== 'object') throw new Error(`IR: blob ${name} must be {sha, bytes, kind}`);
@@ -226,6 +234,30 @@ export function compileIR(ir, opts = {}) {
         const idx = new Map();
         for (const [k, l] of index) idx.set(k, Int32Array.from(l));
         ops.push({ ...base, kind: 1, rule, from: yrefFn(o.from ?? { abs: 0 }), to: yrefFn(o.to ?? { abs: 0 }), entries: e, colIndex: idx, minX, maxX, minZ, maxZ });
+      } else if (o.op === 'voxels') {
+        // (6c F1) baked cells from an ARVB side blob, copied pointwise by position (tile-independent)
+        if (!f2) throw new Error(`${where}: a voxels op needs format 2`);
+        const org = o.origin;
+        if (!Array.isArray(org) || org.length !== 3 || !org.every(Number.isInteger)) throw new Error(`${where}: voxels origin must be [x, y, z] integers`);
+        const rot = o.rotation ?? 0;
+        if (!ROTATIONS.includes(rot)) throw new Error(`${where}: voxels rotation must be 0, 90, 180 or 270`);
+        if (typeof o.blob !== 'string') throw new Error(`${where}: voxels blob must be a blob name`);
+        const v = decodeVoxels(blobBytes(o.blob), `blob ${o.blob}`);
+        const k = ROTATIONS.indexOf(rot);
+        const palMat = v.palette.map((st) => mat(st === AIR ? null : turnState(st, k)));
+        const lists = new Map();
+        for (let i = 0; i < v.count; i++) {
+          const [lx, ly, lz] = voxelAt(v, i);
+          const [dx, dz] = turnXZ(lx, lz, v.size[0], v.size[2], k);
+          const key = colKey(org[0] + dx, org[2] + dz);
+          let l = lists.get(key);
+          if (!l) { l = []; lists.set(key, l); }
+          l.push(org[1] + ly, palMat[v.pal[i]]);
+        }
+        const idx = new Map();
+        for (const [key, l] of lists) idx.set(key, Int32Array.from(l));
+        const bb = voxelsBounds(v, org, rot);
+        ops.push({ ...base, kind: 2, colIndex: idx, minX: bb.minX, maxX: bb.maxX, minZ: bb.minZ, maxZ: bb.maxZ });
       } else throw new Error(`IR: unknown op '${o.op}' (supported: ${OP_KINDS.join(', ')})`);
     }
   }
@@ -236,7 +268,7 @@ export function compileIR(ir, opts = {}) {
 }
 
 /** Count the primitive shapes of a shape tree (array/instances count their copies). */
-function primitiveCount(s) {
+export function primitiveCount(s) {
   if (!s || typeof s !== 'object') return 0;
   if (PRIMITIVES.includes(s.kind) || ['ellipsoid', 'capsuleChain', 'wedge', 'prism'].includes(s.kind)) return 1;
   const kids = Array.isArray(s.of) ? s.of : s.of ? [s.of] : [];
@@ -394,6 +426,19 @@ export function evalTile(ir, key, heights, opts = {}) {
                   }
                 }
                 if (any) { if (a - yBase < wLo) wLo = a - yBase; if (b - yBase > wHi) wHi = b - yBase; }
+              } else if (o.kind === 2) {
+                // (6c F1) voxels: the column's baked cells (y, material) pairs, clipped to the claim like any op
+                const list = o.colIndex.get(colKey(wx, wz));
+                if (!list) continue;
+                if (!inClaimXZ) { for (let q = 0; q < list.length; q += 2) { const y = list[q]; if (y >= cMinY - CLIP_COUNT_MARGIN && y <= cMaxY + CLIP_COUNT_MARGIN) clipped++; } continue; }
+                for (let q = 0; q < list.length; q += 2) {
+                  const y = list[q];
+                  if (y < cMinY || y > cMaxY) { if (y >= cMinY - CLIP_COUNT_MARGIN && y <= cMaxY + CLIP_COUNT_MARGIN) clipped++; continue; }
+                  const row = y - yBase;
+                  buf[row * 256 + cell] = tag + list[q + 1] * OP_SLOTS;
+                  if (row < wLo) wLo = row;
+                  if (row > wHi) wHi = row;
+                }
               } else {
                 const list = o.colIndex.get(colKey(wx, wz));
                 if (!list) continue;
