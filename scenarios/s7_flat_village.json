@@ -4,7 +4,7 @@
   "version": 1,
   "brief": "a flat village of 10 Steward-shaped lots on one street with a square, lanes, props and the villager rules (C10)",
   "world": {
-    "seed": "2026101102",
+    "seed": "2026100906",
     "preset": "normal",
     "gamerules": "gallery"
   },
@@ -354,133 +354,80 @@
   },
   "fixture": {
     "claim": [
-      4168,
       1480,
-      4279,
-      1591
+      -3128,
+      1591,
+      -3017
     ],
     "yRange": [
-      11,
-      109
+      20,
+      130
     ],
-    "foundBy": "find-site s7_flat_village @ seed 2026101102 (the coordinator's second-seed search, 2026-10-11): the first seed of 2026101101..06 with a qualifying site; its only qualifier",
+    "provisional": true,
+    "foundBy": "PROVISIONAL (not S7's bar): find-site s7_flat_village @ seed 2026100906 qualified no site within ~4100 (460 candidates, step 384; artifacts/gate6c-v/findsite/summary.json). This is the best candidate with surface water in the outer band whose flat_village plan is clean (10 lots, 0 errors, only M5 in the virtual world): band share 0.616 of 0.85, water 14 band columns. The contract's second-seed case is the coordinator's.",
     "stats": {
       "biomes": {
-        "snowy_plains": 45,
-        "frozen_river": 20,
-        "snowy_taiga": 19,
-        "snowy_beach": 13,
-        "frozen_ocean": 3
+        "plains": 73,
+        "beach": 26,
+        "sparse_jungle": 1
       },
-      "grid": [],
-      "min": 51,
-      "max": 69,
-      "mean": 62.3,
-      "water": 4,
+      "relief": 23,
+      "water": 2,
       "trees": 1,
-      "natural": 100,
-      "missing": 0,
-      "fine": {
-        "ok": true,
-        "columns": 784,
-        "flatShare": 0.865,
-        "flatBand": [
-          62,
-          64
-        ],
-        "localShare": 0.633,
-        "waterBand": 33,
-        "waterInner": 0,
-        "plan": {
-          "refused": null,
-          "lots": 10,
-          "errors": 0,
-          "findings": [],
-          "notes": []
-        },
-        "structure": {
-          "none": "Could not find a structure of type \"#minecraft:village\" nearby"
-        }
-      }
+      "flatShare": 0.616,
+      "flatBand": [
+        63,
+        65
+      ],
+      "localShare": 0.388,
+      "waterBand": 14,
+      "waterInner": 0
     },
-    "worldSeed": "2026101102",
-    "surveySha": "700785fb10609078258e77a7227a641feac38d55591549bab4e739ec2627de54",
-    "score": 161.5,
-    "tried": 153,
-    "irShaAtPin": "c6a703ef39dacc6b4e4dce24f47384ca7f71a76db48d671681834d1ebe6afa91"
+    "irShaAtPin": "79348894301ad51ecdee1bbf6189dd3329cf28b5b0f37645eaed0afebd8bb017"
   },
-  "search": {
-    "rule": "S7's needs unchanged: one 3-level ground band over >= 85% of the claim's columns, surface water in the outer 16-cell band, no village within the half-diagonal + 64, flat_village planned clean (10 lots, 0 errors, M1-M4, M2:villager, M22-M24 clean); 460 candidates per seed (step 384 around 0,0, about 4100 out)",
-    "seeds": [
-      {
-        "seed": "2026100906",
-        "candidates": 460,
-        "qualified": 0,
-        "bestBandShare": 0.879,
-        "note": "6b's pinned seed: no qualifier (artifacts/gate6c-v/findsite/summary.json)"
-      },
-      {
-        "seed": "2026101101",
-        "candidates": 460,
-        "qualified": 0,
-        "bestBandShare": 0.718
-      },
-      {
-        "seed": "2026101102",
-        "candidates": 460,
-        "qualified": 1,
-        "pinned": [
-          4168,
-          1480,
-          4279,
-          1591
-        ]
-      }
-    ]
-  },
-  "seed": "6131375778884475900",
+  "seed": "10959497901047012117",
   "cams": {
     "cam_east": [
-      4279.5,
-      93,
-      1535.5,
-      115.1,
-      30
+      1591.5,
+      96,
+      -3072.5,
+      90.8,
+      46.2
     ],
     "cam_ground": [
-      4229.5,
-      65,
-      1515.5,
+      1563.5,
+      68,
+      -3066.5,
       135,
       41
     ],
     "cam_high": [
-      4223.5,
-      133,
-      1541.5,
-      179.1,
-      66.8
+      1535.5,
+      136,
+      -3066.5,
+      -106.8,
+      73.5
     ],
     "cam_north": [
-      4223.5,
-      93,
-      1480.5,
-      1,
-      51.6
+      1535.5,
+      96,
+      -3127.5,
+      -21.5,
+      31.6
     ],
     "cam_south": [
-      4223.5,
-      93,
-      1591.5,
-      179.7,
-      23.6
+      1535.5,
+      96,
+      -3016.5,
+      -159.2,
+      30.8
     ],
     "cam_west": [
-      4168.5,
-      93,
-      1535.5,
-      -115.9,
-      30.7
+      1480.5,
+      96,
+      -3072.5,
+      -90.4,
+      25.2
     ]
   },
   "lotEntries": {
@@ -494,5 +441,92 @@
     "bakery_1": "g6cv_tower_w5f3@1",
     "inn_1": "g6cv_tavern_l12@1",
     "farm_1": "g6cv_cabin_w9d7@1"
+  },
+  "search": {
+    "rule": "S7's needs unchanged (one 3-level ground band over >= 85% of the columns, surface water in the outer 16-cell band, no village within the half-diagonal + 64, flat_village planned clean), plus frozen water counts as water; 460 candidates per seed (step 384 around 0,0, about 4100 out)",
+    "result": "no qualifying site on 6b's seed or on the coordinator's 6 second seeds; S7 stays on the provisional fixture, coordinator's call (artifacts/gate6c-v/findsite/summary.json, findsite-seeds/summary.json)",
+    "seeds": [
+      {
+        "seed": "2026100906",
+        "qualified": 0,
+        "best": {
+          "bandShare": 0.879,
+          "water": "none in the band"
+        }
+      },
+      {
+        "seed": "2026101101",
+        "qualified": 0,
+        "best": {
+          "claimCorner": [
+            -3128,
+            3400
+          ],
+          "bandShare": 0.718,
+          "water": "none in the band; frozen river"
+        }
+      },
+      {
+        "seed": "2026101102",
+        "qualified": 0,
+        "best": {
+          "claimCorner": [
+            4168,
+            1480
+          ],
+          "bandShare": 0.865,
+          "waterBand": 33,
+          "plan": "clean",
+          "refused": "frozen river and sea under the square: pinned, realised PARTIAL (a road failed), props unbuilt, palette 0.341, E-normal 39 unclassified; frozen water is water"
+        }
+      },
+      {
+        "seed": "2026101103",
+        "qualified": 0,
+        "best": {
+          "claimCorner": [
+            1096,
+            328
+          ],
+          "bandShare": 0.708,
+          "waterBand": 5
+        }
+      },
+      {
+        "seed": "2026101104",
+        "qualified": 0,
+        "best": {
+          "claimCorner": [
+            4168,
+            -1592
+          ],
+          "bandShare": 0.531
+        }
+      },
+      {
+        "seed": "2026101105",
+        "qualified": 0,
+        "best": {
+          "claimCorner": [
+            -1976,
+            -1208
+          ],
+          "bandShare": 0.793,
+          "water": "none"
+        }
+      },
+      {
+        "seed": "2026101106",
+        "qualified": 0,
+        "best": {
+          "claimCorner": [
+            -440,
+            -1208
+          ],
+          "bandShare": 0.768,
+          "water": "none"
+        }
+      }
+    ]
   }
 }
