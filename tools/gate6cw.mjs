@@ -400,7 +400,7 @@ steps.surveys = async () => {
       check(s.frozen === 0 && (gSha === null || s.sha === gSha), `item 7: ${id}'s plan survey unchanged (frozen ${s.frozen}; sha ${s.sha.slice(0, 12)}${gSha ? ` = golden ${gSha.slice(0, 12)}` : ''})`);
     } else {
       check(s.missing === 0, `item 7: ${id}'s plan survey: ${s.frozen} frozen column(s) of ${s.columns}; sha ${s.sha.slice(0, 12)} (V's reading ${vSha.slice(0, 12)}${s.frozen ? ': moved' : ': unchanged'})`);
-      sc.fixture.planSurvey = { sha: s.sha, kitVersion: '0.17.0', resolution: s.resolution, columns: s.columns, water: s.water, frozen: s.frozen, previousSha: vSha,
+      sc.fixture.planSurvey = { sha: s.sha, kitVersion: '0.18.0', resolution: s.resolution, columns: s.columns, water: s.water, frozen: s.frozen, previousSha: vSha,
         reason: '6c W (CONTRACT W §5, gate item 7): frozen water reads as water (ARSV FROZEN with WATER, floor at the bed), so a survey with frozen columns gets new bytes; re-pinned at the same claim' };
       if (process.env.GATE6CW_REPIN === '1') fs.writeFileSync(file, `${JSON.stringify(sc, null, 2)}\n`);
     }

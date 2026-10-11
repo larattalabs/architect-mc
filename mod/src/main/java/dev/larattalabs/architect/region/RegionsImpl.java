@@ -72,7 +72,7 @@ public final class RegionsImpl implements Regions {
 
 	/** A plan the mod holds: the IR, its survey, the sidecar's answer. */
 	public record PlanRec(String planId, String programId, String programSha, String irSha, String surveySha, long seed, String dimension, int[] claim,
-		@Nullable String owner, JsonObject ext, JsonObject planned, Ir ir, int chunks, int chunksToGenerate) {
+		@Nullable String owner, JsonObject ext, JsonObject planned, Ir ir, int chunks, int chunksToGenerate, @Nullable String opKey, @Nullable String opHash) {
 	}
 
 	/** A region in memory: its record, IR and world. */
@@ -97,6 +97,22 @@ public final class RegionsImpl implements Regions {
 	private static final Map<String, String> STALE_LOGGED = new ConcurrentHashMap<>();
 	/** (6b) The last actions each region showed (REGION_STATE fires when they change). Server thread. */
 	private static final Map<String, List<dev.larattalabs.architect.api.WaitAction>> LAST_ACTIONS = new HashMap<>();
+	/** (6c X, C20) A plan's operation key in the registry: its body hash, the plan once accepted, the future while it plans. */
+	private record KeyedPlan(String hash, @Nullable String planId, @Nullable CompletableFuture<RegionPlan> future) {
+	}
+
+	/** (6c X, C20) A realise that has not written its region record yet. */
+	private record KeyedRealise(String hash, CompletableFuture<String> future) {
+	}
+
+	/** (6c X, C20) {@link RegionKeys#scope} of (owner, "region.plan", key) -> the plan (loaded from the plans' key files at world start). */
+	/** (6c X, C22) Removed regions (removed.json): their tombstones, loaded at world start. */
+	private static final Map<String, RegionRec> TOMBS = new ConcurrentHashMap<>();
+	private static final Map<String, KeyedPlan> PLAN_KEYS = new ConcurrentHashMap<>();
+	/** (6c X, C20) Realises starting with a key (before their region exists; after that REGIONS holds the key). Server thread. */
+	private static final Map<String, KeyedRealise> REALISE_KEYS = new HashMap<>();
+	/** DevBridge {@code dev.region.holdRealise} (gate item 3): the next keyed realise's future stays pending after its region record is saved. */
+	private static volatile boolean holdNextRealise;
 	private static volatile @Nullable String lastKitWarning;
 	/** Per-stage drift checks running ({@code region/stage}). Server thread. */
 	private static final Map<String, CompletableFuture<Drift.Result>> STAGE_CHECKS = new HashMap<>();
@@ -118,6 +134,9 @@ public final class RegionsImpl implements Regions {
 			server = null;
 			REGIONS.clear();
 			PLANS.clear();
+			PLAN_KEYS.clear();
+			REALISE_KEYS.clear();
+			TOMBS.clear();
 			Heights.forget(null);
 			TileStream.forgetRegion(null);
 			Prepare.stopAll();
@@ -139,13 +158,30 @@ public final class RegionsImpl implements Regions {
 		REGIONS.clear();
 		Path w = s.getWorldPath(LevelResource.ROOT);
 		Path root = RegionStore.root(w);
+		PLAN_KEYS.clear();
+		REALISE_KEYS.clear();
+		TOMBS.clear();
 		if (!Files.isDirectory(root)) {
 			return;
 		}
+		loadPlanKeys(root.resolve("plans"));
 		try (var st = Files.list(root)) {
 			for (Path d : st.toList()) {
 				Path f = d.resolve("region.json");
 				if (!Files.isRegularFile(f)) {
+					Path rm = d.resolve("removed.json");
+					if (Files.isRegularFile(rm)) {
+						try {
+							RegionRec t = RegionRec.fromJson(RegionStore.readJson(rm));
+							if (t.removedAt <= 0) {
+								t.removedAt = Files.getLastModifiedTime(rm).toMillis(); // a record written before 6c X: its file's time
+							}
+							t.state = RegionState.REMOVED;
+							TOMBS.put(t.id, t);
+						} catch (IOException | RuntimeException e) {
+							Architect.LOGGER.warn("Removed region {} unreadable: {}", d.getFileName(), e.toString());
+						}
+					}
 					continue;
 				}
 				try {
@@ -170,6 +206,28 @@ public final class RegionsImpl implements Regions {
 		}
 		Prepare.resumeAll(s);
 		Architect.LOGGER.info("Regions: {} loaded", REGIONS.size());
+	}
+
+	/** (6c X, C20) The plans' key files ({@code plans/<id>.key.json}: {owner?, opKey, opHash, planId}) into the registry. */
+	private static void loadPlanKeys(Path plans) {
+		if (!Files.isDirectory(plans)) {
+			return;
+		}
+		try (var st = Files.list(plans)) {
+			for (Path f : st.filter(x -> x.getFileName().toString().endsWith(".key.json")).toList()) {
+				try {
+					JsonObject o = RegionStore.readJson(f);
+					if (o != null && o.has("opKey") && o.has("opHash") && o.has("planId")) {
+						PLAN_KEYS.put(RegionKeys.scope(o.has("owner") ? o.get("owner").getAsString() : null, "region.plan", o.get("opKey").getAsString()),
+							new KeyedPlan(o.get("opHash").getAsString(), o.get("planId").getAsString(), null));
+					}
+				} catch (IOException | RuntimeException e) {
+					Architect.LOGGER.warn("Region plan key {} unreadable: {}", f.getFileName(), e.toString());
+				}
+			}
+		} catch (IOException e) {
+			Architect.LOGGER.warn("Region plan keys unreadable: {}", e.toString());
+		}
 	}
 
 	private static int num(String id) {
@@ -213,6 +271,86 @@ public final class RegionsImpl implements Regions {
 	public CompletableFuture<RegionPlan> plan(RegionPlanRequest r) {
 		MinecraftServer s = r.level().getServer();
 		server = s;
+		// (6c X, C19) a lot's ext out of bounds: FIELD_LIMIT with the path, nothing sent
+		String limit = dev.larattalabs.architect.apiimpl.FieldLimits.lotExt(r.params());
+		if (limit != null) {
+			return failed(Reason.FIELD_LIMIT, limit);
+		}
+		// (6c X, C20) an operation key: the same (owner, key) and body returns the existing plan (also while it plans); another body refuses
+		String key;
+		try {
+			key = dev.larattalabs.architect.apiimpl.Wire0a.opKey(r.opKey());
+		} catch (IllegalArgumentException e) {
+			return CompletableFuture.failedFuture(e);
+		}
+		if (key == null) {
+			return plan0(r, s, null, null);
+		}
+		String hash = RegionKeys.hash(RegionKeys.planBody(r));
+		String scope = RegionKeys.scope(r.owner(), "region.plan", key);
+		CompletableFuture<RegionPlan> mine = new CompletableFuture<>();
+		KeyedPlan[] prior = {null};
+		PLAN_KEYS.compute(scope, (k, old) -> {
+			if (old != null && old.planId() != null && planRec(old.planId()) == null) {
+				old = null; // its plan file is gone: the key is too
+			}
+			prior[0] = old;
+			return old != null ? old : new KeyedPlan(hash, null, mine);
+		});
+		KeyedPlan kp = prior[0];
+		if (kp != null) {
+			if (!kp.hash().equals(hash)) {
+				return CompletableFuture.failedFuture(new dev.larattalabs.architect.api.ArchitectRefused(Reason.OP_KEY_CONFLICT, "opKey \"" + key
+					+ "\" (region.plan" + (r.owner() == null ? "" : ", " + r.owner()) + ") was used for another plan" + (kp.planId() != null ? " (" + kp.planId() + ")" : "")));
+			}
+			if (kp.planId() != null) {
+				PlanRec pr = planRec(kp.planId());
+				Architect.LOGGER.info("Region plan {}: adopted by opKey {}", kp.planId(), key);
+				return CompletableFuture.completedFuture(view(pr));
+			}
+			Architect.LOGGER.info("Region plan: adopted by opKey {} (still planning)", key);
+			return kp.future();
+		}
+		CompletableFuture<RegionPlan> out = plan0(r, s, key, hash);
+		out.whenComplete((v, e) -> {
+			if (e != null) {
+				PLAN_KEYS.remove(scope); // nothing was kept: the key can be used again
+				mine.completeExceptionally(e);
+			} else {
+				PLAN_KEYS.put(scope, new KeyedPlan(hash, v.planId(), null));
+				mine.complete(v);
+			}
+		});
+		return mine;
+	}
+
+	/** (6c X, C20) The plan of an owner's operation key, in any state, after a restart too; empty while it still plans. */
+	@Override
+	public Optional<RegionPlan> planByKey(@Nullable String owner, String opKey) {
+		String key = java.util.Objects.requireNonNull(dev.larattalabs.architect.apiimpl.Wire0a.opKey(opKey), "opKey");
+		KeyedPlan kp = PLAN_KEYS.get(RegionKeys.scope(owner, "region.plan", key));
+		PlanRec p = kp == null || kp.planId() == null ? null : planRec(kp.planId());
+		return p == null ? Optional.empty() : Optional.of(view(p));
+	}
+
+	/** (6c X, C20) The region an owner realised with this operation key (the plan's owner), in any state; empty once it was removed. */
+	@Override
+	public Optional<RegionView> realiseByKey(@Nullable String owner, String opKey) {
+		String key = java.util.Objects.requireNonNull(dev.larattalabs.architect.apiimpl.Wire0a.opKey(opKey), "opKey");
+		Live l = regionByKey(owner, key);
+		return l == null ? Optional.empty() : Optional.of(view(l));
+	}
+
+	private static @Nullable Live regionByKey(@Nullable String owner, String key) {
+		for (Live l : REGIONS.values()) {
+			if (key.equals(l.rec().opKey) && java.util.Objects.equals(owner, l.rec().owner)) {
+				return l;
+			}
+		}
+		return null;
+	}
+
+	private CompletableFuture<RegionPlan> plan0(RegionPlanRequest r, MinecraftServer s, @Nullable String opKey, @Nullable String opHash) {
 		if (r.level().dimension() != Level.OVERWORLD) {
 			return failed(Reason.NOT_ALLOWED, "regions are Overworld only in this version");
 		}
@@ -256,7 +394,7 @@ public final class RegionsImpl implements Regions {
 					});
 				});
 			}));
-		}).thenCompose(o -> onServer(s, () -> finishPlan(r, (JsonObject) o[0], (JsonObject) o[1], (byte[]) o[2]))).thenCompose(f -> f);
+		}).thenCompose(o -> onServer(s, () -> finishPlan(r, (JsonObject) o[0], (JsonObject) o[1], (byte[]) o[2], opKey, opHash))).thenCompose(f -> f);
 		out.whenComplete((p, e) -> {
 			if (e != null) {
 				progress(s, null, "failed");
@@ -432,7 +570,8 @@ public final class RegionsImpl implements Regions {
 	}
 
 	/** Server thread: the chunks of claim + 2 chunks and which were never generated (the prepare estimate), then the plan. */
-	private CompletableFuture<RegionPlan> finishPlan(RegionPlanRequest r, JsonObject planned, JsonObject irJson, byte[] survey) {
+	private CompletableFuture<RegionPlan> finishPlan(RegionPlanRequest r, JsonObject planned, JsonObject irJson, byte[] survey, @Nullable String opKey,
+		@Nullable String opHash) {
 		Ir ir = Ir.of(irJson);
 		String planId = planned.get("planId").getAsString();
 		List<Long> chunks = Prepare.chunksOf(ir.claim());
@@ -449,12 +588,23 @@ public final class RegionsImpl implements Regions {
 			}
 			long seed = Long.parseUnsignedLong(ir.seed());
 			PlanRec p = new PlanRec(planId, str(planned, "programId", ir.id()), str(irJson, "programSha"), planned.get("irSha").getAsString(), planned.get(
-				"surveySha").getAsString(), seed, Sites.dimensionId(level), ir.claim(), r.owner(), r.ext(), planned, ir, chunks.size(), missing);
+				"surveySha").getAsString(), seed, Sites.dimensionId(level), ir.claim(), r.owner(), r.ext(), planned, ir, chunks.size(), missing, opKey, opHash);
 			PLANS.put(planId, p);
 			try {
 				Path w = level.getServer().getWorldPath(LevelResource.ROOT);
 				RegionStore.writeJson(RegionStore.plan(w, planId), planToJson(p));
 				RegionStore.write(RegionStore.plan(w, planId).resolveSibling(planId + ".survey.bin"), survey);
+				if (opKey != null) {
+					// (6c X, C20) the key file (small, so a world start finds every key without reading the IRs)
+					JsonObject k = new JsonObject();
+					k.addProperty("planId", planId);
+					if (r.owner() != null) {
+						k.addProperty("owner", r.owner());
+					}
+					k.addProperty("opKey", opKey);
+					k.addProperty("opHash", opHash);
+					RegionStore.writeJson(RegionStore.plan(w, planId).resolveSibling(planId + ".key.json"), k);
+				}
 			} catch (IOException e) {
 				Architect.LOGGER.warn("Region plan {} could not be saved: {}", planId, e.toString());
 			}
@@ -529,6 +679,10 @@ public final class RegionsImpl implements Regions {
 		o.add("ir", p.ir().json());
 		o.addProperty("chunks", p.chunks());
 		o.addProperty("chunksToGenerate", p.chunksToGenerate());
+		if (p.opKey() != null) {
+			o.addProperty("opKey", p.opKey());
+			o.addProperty("opHash", p.opHash());
+		}
 		return o;
 	}
 
@@ -537,7 +691,7 @@ public final class RegionsImpl implements Regions {
 		return new PlanRec(o.get("planId").getAsString(), str(o, "programId"), str(o, "programSha"), o.get("irSha").getAsString(), str(o, "surveySha"),
 			Long.parseUnsignedLong(o.get("seed").getAsString()), o.get("dimension").getAsString(), ir.claim(), o.has("owner") ? o.get("owner").getAsString()
 				: null, o.has("ext") ? o.getAsJsonObject("ext") : new JsonObject(), o.getAsJsonObject("planned"), ir, o.get("chunks").getAsInt(), o.get(
-					"chunksToGenerate").getAsInt());
+					"chunksToGenerate").getAsInt(), o.has("opKey") ? o.get("opKey").getAsString() : null, o.has("opHash") ? o.get("opHash").getAsString() : null);
 	}
 
 	// ------------------------------------------------------------------ 6b: PLAN_STALE, kit versions, blobs, progress
@@ -666,6 +820,66 @@ public final class RegionsImpl implements Regions {
 		if (s == null) {
 			return CompletableFuture.failedFuture(new IllegalStateException("no world"));
 		}
+		// (6c X, C20) an operation key, scoped by the plan's owner: the same key and body returns the existing realise's region id
+		// (also while it starts); another body refuses OP_KEY_CONFLICT. A region found by key is final or running: nothing is queued.
+		String key;
+		try {
+			key = dev.larattalabs.architect.apiimpl.Wire0a.opKey(r.opKey());
+		} catch (IllegalArgumentException e) {
+			return CompletableFuture.failedFuture(e);
+		}
+		if (key == null) {
+			return realise0(s, r);
+		}
+		return onServer(s, () -> {
+			PlanRec p = planRec(r.planId());
+			String owner = p == null ? null : p.owner();
+			String hash = RegionKeys.hash(RegionKeys.realiseBody(r));
+			String scope = RegionKeys.scope(owner, "region.realise", key);
+			Live live = regionByKey(owner, key);
+			if (live != null) {
+				if (!hash.equals(live.rec().opHash)) {
+					throw conflict(key, owner, live.rec().id);
+				}
+				Architect.LOGGER.info("Region {}: realise adopted by opKey {} ({})", live.rec().id, key, live.rec().state.name().toLowerCase(java.util.Locale.ROOT));
+				return CompletableFuture.completedFuture(live.rec().id);
+			}
+			KeyedRealise kr = REALISE_KEYS.get(scope);
+			if (kr != null) {
+				if (!kr.hash().equals(hash)) {
+					throw conflict(key, owner, null);
+				}
+				Architect.LOGGER.info("Realise adopted by opKey {} (still starting)", key);
+				return kr.future();
+			}
+			CompletableFuture<String> mine = new CompletableFuture<>();
+			REALISE_KEYS.put(scope, new KeyedRealise(hash, mine));
+			realise0(s, r).whenComplete((id, e) -> onServer(s, () -> {
+				REALISE_KEYS.remove(scope);
+				if (e != null) {
+					mine.completeExceptionally(e instanceof java.util.concurrent.CompletionException && e.getCause() != null ? e.getCause() : e);
+				} else if (holdNextRealise) {
+					holdNextRealise = false; // DevBridge: the region record is saved, the caller's future never completes (it fails at a stop)
+				} else {
+					mine.complete(id);
+				}
+				return null;
+			}));
+			return mine;
+		}).thenCompose(f -> f);
+	}
+
+	/** (6c X) Hold the next keyed realise's future after its region record is saved (the gate's item 3). */
+	public static void holdNextRealise(boolean on) {
+		holdNextRealise = on;
+	}
+
+	private static dev.larattalabs.architect.api.ArchitectRefused conflict(String key, @Nullable String owner, @Nullable String regionId) {
+		return new dev.larattalabs.architect.api.ArchitectRefused(Reason.OP_KEY_CONFLICT, "opKey \"" + key + "\" (region.realise" + (owner == null ? ""
+			: ", " + owner) + ") was used for another realise" + (regionId != null ? " (" + regionId + ")" : ""));
+	}
+
+	private CompletableFuture<String> realise0(MinecraftServer s, RealiseRequest r) {
 		String[] id = {null};
 		return onServer(s, () -> {
 			PlanRec p = planRec(r.planId());
@@ -756,6 +970,10 @@ public final class RegionsImpl implements Regions {
 		String id = reserved != null ? reserved : "rg" + nextRegion++;
 		Path w = s.getWorldPath(LevelResource.ROOT);
 		RegionRec rec = new RegionRec(id, p.planId(), p.irSha(), p.owner(), r.ext(), p.dimension(), ir.claim(), System.currentTimeMillis());
+		if (r.opKey() != null) {
+			rec.opKey = r.opKey();
+			rec.opHash = RegionKeys.hash(RegionKeys.realiseBody(r));
+		}
 		List<String> stages = r.stages() == null ? ir.stages() : r.stages().stream().filter(ir.stages()::contains).toList();
 		List<QItem> items = new ArrayList<>();
 		int maxNeed = 36;
@@ -806,7 +1024,7 @@ public final class RegionsImpl implements Regions {
 				ls.entry = entry;
 				List<String> after = deps(st, terrainKeys, pathKeys, grow(lot.box(), 8));
 				after.addAll(roadKeys);
-				QItem li = lotItem(level, rec, lot, entry, after, r);
+				QItem li = lotItem(level, rec, ir, lot, entry, after, r);
 				if (li != null) {
 					items.add(li);
 					ls.state = li.status == QItem.Status.FAILED ? "failed:" + li.reason : "queued";
@@ -927,10 +1145,29 @@ public final class RegionsImpl implements Regions {
 		return q;
 	}
 
-	private static @Nullable QItem lotItem(ServerLevel level, RegionRec rec, Ir.Lot lot, String entry, List<String> after, RealiseRequest r) {
+	/**
+	 * (6c X, C19) The caller's part of a lot's {@code ext} in the IR ({@code lots[].ext}): every key outside the {@code architect_mc:}
+	 * namespace, deep-copied. The namespace is Architect's (the program's own {@code architect_mc:village} stays on the LotSpec, not on
+	 * the site). Looked up by lot id.
+	 */
+	static JsonObject planLotExt(Ir ir, String lotId) {
+		JsonObject out = new JsonObject();
+		if (ir.json().get("lots") instanceof JsonArray lots) {
+			for (JsonElement e : lots) {
+				if (e instanceof JsonObject lo && lotId.equals(str(lo, "id")) && lo.get("ext") instanceof JsonObject le) {
+					le.entrySet().stream().filter(x -> !x.getKey().startsWith("architect_mc:")).forEach(x -> out.add(x.getKey(), x.getValue().deepCopy()));
+					break;
+				}
+			}
+		}
+		return out;
+	}
+
+	private static @Nullable QItem lotItem(ServerLevel level, RegionRec rec, Ir ir, Ir.Lot lot, String entry, List<String> after, RealiseRequest r) {
 		String bpId = entry.contains("@") ? entry.substring(0, entry.indexOf('@')) : entry;
 		Blueprint bp = Blueprints.get(bpId);
-		JsonObject ext = new JsonObject();
+		// (6c X, C19) the plan's lot ext (the caller's keys, from params.lots[].ext) onto the lot's site; then Architect's own key, which wins
+		JsonObject ext = planLotExt(ir, lot.id());
 		ext.addProperty("architect_mc:lot", lot.id());
 		int[] b = lot.box();
 		QItem q;
@@ -1268,6 +1505,9 @@ public final class RegionsImpl implements Regions {
 	@Override
 	public Optional<RegionView> get(String regionId) {
 		Live l = REGIONS.get(regionId);
+		if (l == null && TOMBS.containsKey(regionId)) {
+			return Optional.of(tombView(TOMBS.get(regionId))); // (6c X, C22) a removed region: REMOVED with its time
+		}
 		return l == null ? Optional.empty() : Optional.of(view(l));
 	}
 
@@ -1329,6 +1569,15 @@ public final class RegionsImpl implements Regions {
 		List<dev.larattalabs.architect.api.WaitAction> actions = actionsOf(l, waiting, waitingItem, heldStage, pv);
 		return new RegionView(r.id, r.planId, r.irSha, r.owner, r.ext, r.groupId, new BoundingBox(c[0], c[1], c[2], c[3], c[4], c[5]), r.state, st, lots,
 			r.cellsWritten, r.skipped, waiting, pv, actions);
+	}
+
+	/** (6c X, C22) The view of a removed region: REMOVED, with the time its removal finished. */
+	static RegionView tombView(RegionRec r) {
+		int[] c = r.claim;
+		List<LotState> lots = new ArrayList<>();
+		r.lots.forEach((id, ls) -> lots.add(new LotState(id, ls.siteId, ls.state)));
+		return new RegionView(r.id, r.planId, r.irSha, r.owner, r.ext, r.groupId, new BoundingBox(c[0], c[1], c[2], c[3], c[4], c[5]), RegionState.REMOVED,
+			List.of(), lots, r.cellsWritten, r.skipped, null, null, List.of(), r.removedAt);
 	}
 
 	/** (6b) The nudge actions for what the region waits for ({@link WaitActions}). */
@@ -1562,6 +1811,10 @@ public final class RegionsImpl implements Regions {
 	public CompletableFuture<RemoveResult> remove(String regionId, RemoveOptions o) {
 		MinecraftServer s = server;
 		Live l = REGIONS.get(regionId);
+		if (s != null && l == null && TOMBS.containsKey(regionId)) {
+			// (6c X, C22) already removed: removed again, nothing written
+			return CompletableFuture.completedFuture(new RemoveResult(true, List.of(), Map.of()));
+		}
 		if (s == null || l == null) {
 			return CompletableFuture.failedFuture(new IllegalArgumentException("no region " + regionId));
 		}
@@ -1581,6 +1834,9 @@ public final class RegionsImpl implements Regions {
 		return ArchitectApi.get().sites(s).removeGroup(l.rec().groupId, o).thenApply(res -> {
 			s.execute(() -> {
 				if (res.removed()) {
+					l.rec().state = RegionState.REMOVED;
+					l.rec().removedAt = System.currentTimeMillis();
+					TOMBS.put(l.rec().id, l.rec());
 					REGIONS.remove(l.rec().id);
 					Heights.forget(l.rec().id);
 					TileStream.forgetRegion(l.rec().id);

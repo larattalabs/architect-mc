@@ -535,7 +535,7 @@ export function streetLayout(r, specs, { rules = STREET_RULES, shared = { kind: 
     const lot = pads.lot(s.id, {
       at: [l.rect[0], l.rect[1]], size: [l.rect[2] - l.rect[0] + 1, l.rect[3] - l.rect[1] + 1], floor: l.floorY, front: l.front,
       max: [l.rect[2] - l.rect[0] + 1, maxHeight, l.rect[3] - l.rect[1] + 1], brief: s.brief, pad: { maxCut: PAD_MAX, maxFill: PAD_MAX }, stage: sl,
-      ext: { 'architect_mc:village': { role: s.role, type: s.type, villager: s.villager, entrance: l.entrance, lane: `lane_${s.id}`, water, bellDistance, slot: l.slot, landmark: s.landmark, placement: s.placement } },
+      ext: { ...s.ext, 'architect_mc:village': { role: s.role, type: s.type, villager: s.villager, entrance: l.entrance, lane: `lane_${s.id}`, water, bellDistance, slot: l.slot, landmark: s.landmark, placement: s.placement } },
     });
     boxes.push({ id: s.id, ...lot.box });
     lotOut.push({ ...l, lot });

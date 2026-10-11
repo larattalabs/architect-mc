@@ -69,6 +69,54 @@ public final class FieldLimits {
 		return n > Limits.EXT_MAX_BYTES ? path + ": " + n + " characters as JSON, at most " + Limits.EXT_MAX_BYTES : null;
 	}
 
+	/**
+	 * (6c X, C19) A region plan's lot ext: every param whose value is an array of objects with an {@code ext} member is a lot list
+	 * (the mod does not know which param the program declares as {@code lots}); each such {@code ext} must be an object of
+	 * {@code namespace:name} keys (at most 200 characters) and at most {@link Limits#LOT_EXT_MAX} characters as JSON, else the first
+	 * violation with its path ({@code params.lots[2].ext: 4097 characters as JSON, at most 4096}). Null: fine. Pure.
+	 */
+	public static @Nullable String lotExt(@Nullable JsonObject params) {
+		if (params == null) {
+			return null;
+		}
+		for (var p : params.entrySet()) {
+			if (!(p.getValue() instanceof com.google.gson.JsonArray a)) {
+				continue;
+			}
+			for (int i = 0; i < a.size(); i++) {
+				if (!(a.get(i) instanceof JsonObject lot) || !lot.has("ext") || lot.get("ext").isJsonNull()) {
+					continue;
+				}
+				String path = "params." + p.getKey() + "[" + i + "].ext";
+				if (!(lot.get("ext") instanceof JsonObject e)) {
+					return path + ": must be an object";
+				}
+				String why = lotExtOne(path, e);
+				if (why != null) {
+					return why;
+				}
+			}
+		}
+		return null;
+	}
+
+	/** One lot's ext (see {@link #lotExt}). */
+	static @Nullable String lotExtOne(String path, JsonObject e) {
+		int n = e.toString().length();
+		if (n > Limits.LOT_EXT_MAX) {
+			return path + ": " + n + " characters as JSON, at most " + Limits.LOT_EXT_MAX;
+		}
+		for (String k : e.keySet()) {
+			if (k.length() > Limits.EXT_KEY_MAX) {
+				return path + ": a key of " + k.length() + " characters, at most " + Limits.EXT_KEY_MAX;
+			}
+			if (!ApiRules.extKeyValid(k)) {
+				return path + ": key \"" + (k.length() > 40 ? k.substring(0, 40) + "..." : k) + "\" is not namespace:name";
+			}
+		}
+		return null;
+	}
+
 	static @Nullable String context(String path, @Nullable JsonElement c) {
 		if (c == null) {
 			return null;

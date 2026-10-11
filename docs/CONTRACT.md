@@ -8188,9 +8188,8 @@ in merge order:
 
 - **N-W-1:** Noah approved V's gallery at `c31c6de43ce1` (v0.16.0). W's lamps are visible, so W's S7 gallery is approved by
   Noah again when W is ready.
-- **N-F2-1 (stamps in the public repo): open for Noah.** Until he answers, F2 ships the `stamp` op and the harvester, and the
-  stamp library is harvested locally and kept out of the repo and the jar. If he allows it, the harvested library ships later
-  with no API change.
+- **N-F2-1 (stamps in the public repo): decided by Noah (2026-10-11), local-only.** F2 ships the `stamp` op and the harvester.
+  The stamp library is harvested locally from the player's own game and is never committed or bundled in the jar.
 - **N-F1-1:** the axis-run metric stays recorded only through 6c. An uncalibrated estimate doesn't gate.
 - **N-H-1:** survival fluids: placed water source cells are free (water is renewable), and each placed lava source cell
   costs one lava bucket from the crate. Containment (M25) applies in both modes. RS uses this.
@@ -10148,3 +10147,93 @@ SETTLEMENTS §17.2's 6c gate, run once when the last 6c slice merges (whichever 
   E-normal classified;
 - per-tile evaluation p50/p99 on S2, S3 and the forest-heavy variant (F3): p99 under 2 s, at least 45k cells/s;
 - the full `release` tier and the full gate-verifier; 6b's gate items as regressions.
+
+## Phase 6c slice X: region consumer asks C19 and C20 (FROZEN 2026-10-11 after Steward's review)
+
+Next free API minor at merge (expected 1.15.0 if it merges before T1; the house rule applies), mod to match. Wave 1, parallel
+with T1, F1 and MP. Depends on V only. Spend $0. From Steward's V adoption work (plan, design per lot with copies, fitToLot,
+realise).
+
+### 1. C19: lot ext onto the lot's site
+
+Today only `architect_mc:lot` lands on a realised lot's site. Steward needs its own keys (`steward_mc:lot`, `steward_mc:role`,
+`steward_mc:build`) there, so a site found later says what it is without re-reading the plan.
+- **From the plan:** a lot entry in the program's `lots` params may carry `ext` (an object). The plan copies it onto that
+  lot's `LotSpec.ext`, and the realise copies it onto the lot's site ext. Keys under the `architect_mc:` namespace are
+  Architect's and a caller's value for them is ignored (the realise's own `architect_mc:lot` wins).
+- **From the realise:** `RealiseRequest` gains a trailing `Map<String, JsonObject> lotExt` (lot id to ext). The old
+  constructor is kept (empty map). A realise ext merges over the plan's, key by key.
+- Bounds: at most 4 KB of ext JSON per lot, else FIELD_LIMIT with the field path. Unknown lot ids refuse FIELD_LIMIT too.
+- The site ext survives save and reload, versionOf, polish and undo-redo of the region, like `architect_mc:lot` today.
+
+### 2. C20: opKey on region plans and realises
+
+As for groups and batches (0a C9): `RegionPlanRequest` and `RealiseRequest` gain a trailing `@Nullable String opKey` (old
+constructors kept).
+- Same owner + same kind + same key + same body returns the existing plan or realise; another body refuses
+  OP_KEY_CONFLICT.
+- `Regions.planByKey(owner, key)` and `Regions.realiseByKey(owner, key)` (defaults that throw on older implementations)
+  find them after a restart, including a realise that was interrupted and resumed.
+- A realise pending at a world stop still fails WORLD_STOPPED (0a); it is found by key after the next load.
+- Keys are kept as long as the plan or region exists; the existing opKey retention rules apply.
+
+### 3. Gate
+
+| # | Item | Bar |
+|---|---|---|
+| 1 | Unit | ext copy plan to LotSpec to site; merge order; namespace guard; 4 KB and unknown-lot FIELD_LIMIT; opKey idempotence and conflict |
+| 2 | In game (S7 flat) | plan with lot ext, realise with a lotExt map: every lot site carries the merged ext; save, reload: unchanged; undo, redo: unchanged |
+| 3 | Restart by key | realise with an opKey, stop the world mid-realise (pending future fails WORLD_STOPPED), reload: `realiseByKey` finds it and it completes; a second realise with the same key and body returns it, with another body OP_KEY_CONFLICT |
+| 4 | Regressions | `slice` tier |
+| 5 | API compatibility | api-compat against the previous three apitest jars; new record components trailing, old constructors kept |
+
+Evidence in `artifacts/gateX/`. Steward's consumer check on the RC as usual.
+
+### Open questions for Steward
+
+- **S-X-1:** is per-lot ext from the plan enough, or do you need the realise-time `lotExt` map too (both are drafted)?
+- **S-X-2:** 4 KB per lot enough?
+
+### Changes from Steward's review of X (2026-10-11; these win)
+
+- **S-X-1:** the plan's lot `ext` is enough. **Drop `RealiseRequest.lotExt`** and its merge rule; the realise copies the
+  plan's lot ext onto the site. Gate item 2 uses plan ext only.
+- **S-X-2:** 4 KB per lot stays (Steward's is about 250 bytes).
+- Steward will use opKeys `steward.<build>.vplan` and `steward.<build>.vrealise`.
+
+### Coordinator addition: C22, removal correctness (Steward ask after round 6, 2026-10-11; part of X's frozen scope)
+
+From the GPT review of Steward's V adoption (steward-mc docs/ARCHITECT-ASKS.md):
+- **(a) A retried removal must not report success over unfinished restorations.** A removal moves members into pending
+  records before restoring them. On a retry after a failed restore, `Groups` (about line 601 at v0.16.0) drops members missing
+  from the active site and infra maps without checking the pending records, and can answer `removed=true`. Fix: a removal
+  (region or group) first finishes every pending restoration it owns, or refuses with the failing member, and answers
+  `removed=true` only when every member's restore committed.
+- **(b) A finished removal is recognisable later.** Both:
+  - a remove of a region or group that this world already removed answers `removed=true` again (idempotent), with nothing
+    written;
+  - `Regions.get` (and the group lookup) keep a REMOVED tombstone with the time it finished, surviving save and reload.
+    Tombstones are kept as long as opKey records are (0a retention); an unknown id still refuses as today.
+- New record state or component: trailing, with old constructors kept; any new enum value appended.
+- **Gate additions:** (a) inject a restore failure (a dev hook) mid-removal, retry: the retry finishes the pending
+  restoration and the world diff against the pre-placement snapshot is 0, or it refuses; never `removed=true` with a diff.
+  (b) remove, drop the answer, reload, remove again: `removed=true`, nothing written; `Regions.get` shows REMOVED with its time.
+
+
+### Phase 6c slice X as built (API 1.14.0, mod 0.17.0, recorded 2026-10-11)
+
+Branch `slice/X` (worktree `../architect-mc-X`). $0: sim and stub only (`artifacts/gate6c-x/spend.json`). Evidence: `artifacts/gate6c-x/`
+(one JSON per `tools/gate6cx.mjs` step, REPORT.md, api-compat.txt), the slice tier under `artifacts/gate-runs-X/`. Ports 8912-8917.
+
+| § | As built |
+|---|---|
+| API | `VERSION` 1.14.0, mod 0.17.0. `RegionPlanRequest` and `RealiseRequest` gain a trailing `@Nullable String opKey` (the 1.13.0 constructors kept; `RealiseRequest` keeps both its 9- and 10-argument forms). No `lotExt` (Steward's S-X-1). `Regions.planByKey(owner, key)` returns `Optional<RegionPlan>`, `Regions.realiseByKey(owner, key)` returns `Optional<RegionView>`: synchronous, defaults that throw "needs Architect API 1.14.0". No new Reason (OP_KEY_CONFLICT and FIELD_LIMIT exist). Features `regionOpKeys` and `lotExt` (Java side, always present). `Limits.LOT_EXT_MAX` = 4096. `RegionPlan` and `RegionView` carry no opKey (the contract did not ask). |
+| C19 kit | `lots[].ext` is a member of the `lots` param type (`kit/lib/params.mjs`): an object of `namespace:name` keys (each at most 200 characters), at most 4096 characters as compact JSON; keys under `architect_mc:` are dropped (ignored, not refused); a lot whose ext has no key left carries none, so an IR with no ext is byte-identical to 0.16.0's. `village.mjs` merges it under the program's own `architect_mc:village`, which wins. No KIT_VERSION bump (deviation from the batch rule: no IR member or op kind is new, and a plan without ext keeps its sha). |
+| C19 mod | `FieldLimits.lotExt(params)` runs at the top of `Regions.plan`: every param holding an array of objects with an `ext` member is a lot list (the mod does not know which param the program declares as `lots`); a bad ext refuses FIELD_LIMIT with the path, e.g. `params.lots[1].ext: 4097 characters as JSON, at most 4096`, `... must be an object`, `... key "x" is not namespace:name`. The unknown-lot-id refusal of the draft is moot without `lotExt`. The realise copies the IR lot's ext onto the lot's site, looked up by lot id: **the caller's keys only**; `architect_mc:village` stays on the LotSpec, and the realise's own `architect_mc:lot` is set last and wins. Persistence is the existing site ext's (save, reload, versionOf, polish). "Redo" in gate item 2 is a new realise of the same plan: the engine has no region redo. |
+| C20 plans | Scope (owner, "region.plan", key); body = the request as `BatchKeys` writes it with the claim's x/z columns only (y is ignored by the plan) and without the key. A registry holds the key from the call, so a second call while the first still plans gets the same future; a failed plan frees the key. A plan with a key writes `plans/<planId>.key.json` (small) next to its plan file; `PlanRec` and the plan JSON carry `opKey`/`opHash`; the world start reads the key files, so `planByKey` finds it after a restart. Plans are never pruned, so keys are kept as long as the plan. |
+| C20 realises | Scope (the plan's owner, "region.realise", key), because `RealiseRequest` has no owner. The key and the body hash (`BatchKeys` form, the actor by UUID, the lot entries sorted) live in the region record (`region.json` `opKey`/`opHash`), written with the record before the future completes; a realise still starting (drift check, blob copies) is held in an in-memory registry, so a concurrent twin shares its future. Same key and body returns the region id in any state; another body, OP_KEY_CONFLICT. `realiseByKey` scans the regions; a removed region ends its key (the key can then make a new region). A realise whose record was not yet written at a stop leaves nothing to find (the caller re-sends). |
+| Hooks | `dev.region.plan` / `dev.region.realise` take `opKey`; `dev.region.holdRealise {on}` keeps the next keyed realise's future pending after its record is saved (gate item 3: it then fails WORLD_STOPPED at the stop while the region is found by key after the reload); DevBridge shows any ArchitectRefused as `REASON: message`. apitest: `api114`, `rplanbykey`, `rrealisebykey`, `opKey` in `rplan`/`rrealise`. |
+| C22 (a) | `Groups` keeps a **stalled** removal (its undo, undo sites and remaining members) when it ends with a pending restoration; a retry of the group (or stage) removal resumes it and answers removed=true only when every member's restore committed. A restore job that broke no longer marks its member written or drops it from the list. The planning loop that dropped members missing from the active maps now refuses when one of them has a pending record. Stalled removals are saved with the removals (`stalled: true`). Region removal goes through `removeGroup`, so a region retry resumes the same way. |
+| C22 (b) | `SiteGroupRec` gains a trailing `removedAt` (the 10- and 11-component constructors kept; set when the state becomes `removed`, kept by a second finish, cleared by other states); `SiteGroup` a trailing `Optional<Long> removedAt` (the 1.4.0 constructor kept). Removing a removed group answers removed=true and writes nothing. `RegionState.REMOVED` is appended; `RegionView` gains a trailing `long removedAt` (0 unless REMOVED; both older constructors kept; a `long`, not an `Optional`, so Gson-based tools can print it). A removed region's record `removed.json` (now with `removedAt`; one written before 6c X uses its file time) is read at the world start as a tombstone: `Regions.get(id)` answers a REMOVED view, `Regions.remove(id)` answers removed=true with nothing written, `Regions.list` omits it, an unknown id still refuses. Tombstones are kept forever (at least as long as opKey records). |
+| Hook (C22) | `dev.undo.failRestore {skip}`: let `skip` removal restores finish, then break the next one before its site record is finished (-1 disarms). |
+| Gate | Slice tier `artifacts/gate-runs-X/20261011-182748-slice` (2 shards, 8912-8915, old-version clients 8916/8917, `--quiet-wait`, head fbb8ed2): 27 PASS, including unit-mod 498, unit-kit 246, apijars on the 0.16.0/0.15.0/0.14.0 jars (45 ok each), x-unit, **x-ingame** (53 ok: lotext, keys, removal, apicompat), v-ingame, 5b-chains, 4d-all, 4e-orders, 6a-megaA (own CPU max 24.6 ms, 50.7k cells/s), 6a-eflat, 6a-staged, 6a-inv3, the 6b steps and S1. Three steps did not pass and were fixed or re-run: unit-sidecar (the Limits drift guard did not know `LOT_EXT_MAX`: fixed in the guard) and v-unit (the X checkout lacked `sidecar/node_modules`: environment), re-run PASS at 524df06 with 6cv-scenario-s7 (NOISY at load 37 in the slice run, PASS on a quiet box: `20261011-204414-change`). `api-compat --gate6cx` 4/4 clean (0.16.0, 0.15.0, 0.14.0 apitest jars, 0.16.0 surface; baseline built from tag v0.16.0, `artifacts/gate6c-x/v0160`). Items: 1 unit (Api114Test 6, RegionKeysTest 5, the kit's C19 tests), 2 `lotext` (14 checks: 10/10 S7 flat lot sites carry the ext, 4097 refuses FIELD_LIMIT `params.lots[1].ext`, save/reload and undo/redo byte equal), 3 `keys` (plan idempotence, conflict, in-flight twin, owner scope, planByKey after the reload; a realise held pending fails WORLD_STOPPED, `realiseByKey` finds rg1 PLACING after the reload, it completes, a second realise returns it, another body OP_KEY_CONFLICT, removal ends the key), 5 api-compat, C22 `removal` (injected restore failure: removed=false and PARTIAL, the retry resumes and the world hash equals the pre-placement one; remove, reload, remove again: removed=true, world unchanged, REMOVED with the same removedAt for the region and the group). Evidence of the manual dev-client runs: `artifacts/gate6c-x/` (the contract says `gateX/`; named like the other slices). Known flakes in the box's tier (4d-all group undo on G4D Base gravity gravel, sim-massing, the apijars SITE_PROGRESS gap, 6b-nudges under load) did not occur in this run. |

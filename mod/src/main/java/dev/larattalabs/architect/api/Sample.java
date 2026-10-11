@@ -29,7 +29,7 @@ import java.util.Map;
  * {@code voxel_classes.json}, as {@link Survey#volume} classifies): the soil under a tree. Built blocks count, so a roof is
  * ground (a building's own logs, leaves and plants too). On a dry column without trees it equals {@code height}; under water it
  * is the bed. The 1.9.0 constructor copies {@code height}.</li>
- * <li>{@code frozen} (1.14.0): the top block is ice, packed ice, blue ice or frosted ice with water within 3 cells below it
+ * <li>{@code frozen} (1.15.0): the top block is ice, packed ice, blue ice or frosted ice with water within 3 cells below it
  * (frozen water: a frozen river, lake or sea). {@code water} is unchanged (the fluid at the top only), so a frozen column is
  * in {@code frozen} and not in {@code water}; land ice (an ice spike on snow, packed ice on stone) is in neither. The older
  * constructors give an empty set.</li>
@@ -41,7 +41,7 @@ public record Sample(int minX, int minZ, int maxX, int maxZ, int resolution, int
 	List<String> biomes, List<long[]> missingChunks, int chunksLoaded, int[] ground, BitSet frozen) {
 	public static final int MISSING = Integer.MIN_VALUE;
 
-	/** The 1.12.0 constructor (no {@code frozen}: an empty set). */
+	/** The 1.12.0 (and 1.14.0) constructor (no {@code frozen}: an empty set). */
 	public Sample(int minX, int minZ, int maxX, int maxZ, int resolution, int width, int depth, int[] height, int[] floor, int[] top,
 		List<String> blocks, int[] slope, BitSet water, BitSet tree, BitSet natural, BitSet missing, int biomeWidth, int biomeDepth, int[] biome,
 		List<String> biomes, List<long[]> missingChunks, int chunksLoaded, int[] ground) {
@@ -234,7 +234,7 @@ public record Sample(int minX, int minZ, int maxX, int maxZ, int resolution, int
 		o.add("natural", bits(natural));
 		o.add("missing", bits(missing));
 		if (!frozen.isEmpty()) {
-			o.add("frozen", bits(frozen)); // (1.14.0) only when a column is frozen water, so other blobs are unchanged
+			o.add("frozen", bits(frozen)); // (1.15.0) only when a column is frozen water, so other blobs are unchanged
 		}
 		JsonArray bl = new JsonArray();
 		blocks.forEach(bl::add);

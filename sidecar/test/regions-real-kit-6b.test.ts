@@ -145,7 +145,7 @@ describe.skipIf(!hasF2)('format-2 IRs with the real kit: side blobs, blob_unknow
   it('plans a format-2 IR: irFormat 2, requires, the side blob registered; check/previews or a checkError', () => {
     expect(planned.irFormat).toBe(2);
     expect(planned.requires).toEqual(expect.arrayContaining(['blobs:side', 'shape:ellipsoid', 'fields', 'material:rule']));
-    expect(planned.kitVersion).toBe('0.17.0'); // (6c W) the kit's KIT_VERSION
+    expect(planned.kitVersion).toBe('0.18.0'); // (6c W) the kit's KIT_VERSION
     expect(planned.blobs!.map((x) => x.kind).sort()).toEqual(['field', 'heightfield']);
     const b = planned.blobs!.find((x) => x.name === 'mound')!;
     expect(b).toMatchObject({ name: 'mound', kind: 'heightfield' });
@@ -154,7 +154,7 @@ describe.skipIf(!hasF2)('format-2 IRs with the real kit: side blobs, blob_unknow
     expect(sha256(sc.blobs.read(b.blobId))).toBe(b.sha);
     if (sc.regions.kitInfo().caps.check) expect(planned.report).toBeDefined();
     else expect(planned.checkError).toMatch(/no checker/);
-    expect(sc.snapshot(2)).toMatchObject({ kitVersion: '0.17.0', irFormats: [1, 2] });
+    expect(sc.snapshot(2)).toMatchObject({ kitVersion: '0.18.0', irFormats: [1, 2] });
   });
 
   it('streams its tiles with the same shas as the kit evaluating them here', async () => {

@@ -574,8 +574,13 @@ unique rects) and `ctx.survey.keptOutAt(x, z)`.
 
 Region programs only (`validateParams(params, {region: true})`; a design's params refuse it), never a variant axis
 (`cornerValues` skips it). At most 40 lots, each `{id (LOT_ID, unique), type, role?, size: [alongStreet, deep] (5-96), landmark?,
-placement?: central|edge|near_water|high_ground, villager?: dwelling|job|trading_hall|farm|none, brief?}`: Steward's
-`VillageLayout.LotSpec` plus `villager` (inferred from `type` only when absent).
+placement?: central|edge|near_water|high_ground, villager?: dwelling|job|trading_hall|farm|none, brief?, ext?}`: Steward's
+`VillageLayout.LotSpec` plus `villager` (inferred from `type` only when absent) and, since 6c X (C19), `ext`: the caller's own data
+for the lot, an object of `namespace:name` keys, at most 4096 characters as JSON (the mod refuses a larger one FIELD_LIMIT with the
+path, e.g. `params.lots[2].ext`). It is copied onto the IR lot's `ext` (so onto `LotSpec.ext`) and the realise copies it onto the
+lot's site. Keys under `architect_mc:` are Architect's: a caller's value for them is dropped (flat_village adds its own
+`architect_mc:village` to the lot; it stays on the LotSpec and does not go to the site, where Architect's own key is
+`architect_mc:lot`). A lot with no `ext` gives an IR identical to 0.16.0's.
 
 ## `flat_village` (kit/regions/flat_village.mjs) and its components
 
@@ -613,9 +618,9 @@ at the street's middle and no square cells. `Regions.adopt` (the joint 7a/6d gat
 
 # Phase 6c slice W additions (village safety; CONTRACT "Phase 6c slice W")
 
-## Kit 0.17.0
+## Kit 0.18.0
 
-`KIT_VERSION` (`EVAL_KIT_VERSION`, the mod's `IrStale.KIT_VERSION`) is `0.17.0`: every IR sha moves. Format-1 tiles, S1's tile golden
+`KIT_VERSION` (`EVAL_KIT_VERSION`, the mod's `IrStale.KIT_VERSION`) is `0.18.0`: every IR sha moves. Format-1 tiles, S1's tile golden
 and `mega_bench.golden.json` don't (no program but `flat_village` calls the new helpers).
 
 ## ARSV `FROZEN` (flag 16)
@@ -624,7 +629,7 @@ A column whose top block is ice, packed ice, blue ice or frosted ice with water 
 carries `FROZEN | WATER`, and its `floor` is the bed under the ice and the water. Land ice (an ice spike on snow, packed ice on
 stone) is ground. The kit treats it as water everywhere (`survey.waterAt`; `survey.frozenAt` names it), except a farm: M24 and
 the farm placement count unfrozen water only. A plan refused over it says `frozen water at x,z`. The mod's 4e road code reads ice
-over water as water too (`RoadTerrain`), so a road over a frozen river is `DEEP_WATER`. `Sample.frozen` (API 1.14.0) is the
+over water as water too (`RoadTerrain`), so a road over a frozen river is `DEEP_WATER`. `Sample.frozen` (API 1.15.0) is the
 public side.
 
 ## Gravity (`blocks.mjs` `g`, `isGravity`)
@@ -648,7 +653,7 @@ lantern and soul torch 10). The square's lamps and the apron lamps use it; a wea
 `roads[].lamp: {cells: [[along, dy, state]...], light, first, every}`: the street's lanterns in the bible's fixture, written for a
 road travelling east (the mod turns the offsets and states to the road's travel), spaced `every` = floor(12 * level / 15) from
 `first` = every / 2. Present only when the fixture is not 4e's own oak fence and lantern, so other roads are unchanged. A mod
-before 0.17.0 refuses such a plan `PLAN_STALE`. 4e's lantern posts may also stand on a built cell the road's own owner placed
+before 0.18.0 refuses such a plan `PLAN_STALE`. 4e's lantern posts may also stand on a built cell the road's own owner placed
 (a region's verge in packed mud, stone bricks or planks).
 
 ## `r.lightCover` (`lib/region/light.mjs`; flat_village's `apronLamps`, on by default)
