@@ -328,6 +328,18 @@ From V's gate (CONTRACT "Phase 6c slice V as built"):
 4. **Gravity blocks over gaps.** With the default gravel `path`, a levelled lane or verge over a gap can leave an unsupported
    gravity block (an M3 warning on one candidate plan).
 
+## v0.16.0 release tier (2026-10-11)
+
+Run `architect-mc-rel016-out/20261011-164227-release` (3 shards, load 12-98 throughout from parallel slice builds): 28/31
+pass. apijars (1.11.0 jar, SITE_PROGRESS gap) and 6b-commands (24 growth cells at load 32-57) passed on re-run. **4d-all**
+failed on one bar only: Architect's own tick max <= 50 ms (53.3, 59.7, 50.1 ms; one tick over each time; 61 other checks ok).
+An interleaved A/B (`architect-mc-ab-out`, ab.log) put v0.15.0 at 56.6 / 45.7 ms and v0.16.0 at 52.7 / 54.5 ms under similar
+load: **load, not a v0.16.0 regression.** Coordinator verdict: v0.16.0's release tier passes.
+
+**Queued (tools, next slice that touches gates):** 4d-all judges a single-tick max, which sits on the bar under load for both
+versions. Record own-CPU p99 and `traceCpu` phases in 4d (as megaA does), judge p99 <= 25 ms with the max recorded, and keep
+the 50 ms max only under `--quiet-wait`.
+
 ## Open questions
 - Track AgentCraft fixes to the copied placement code, or treat the copy as independent from now on?
 - Cost: measure tokens and time per design in phase 1, and show an estimate in the form.
