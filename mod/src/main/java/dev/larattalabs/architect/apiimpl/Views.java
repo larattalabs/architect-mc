@@ -99,7 +99,7 @@ public final class Views {
 		}
 		return new dev.larattalabs.architect.api.BatchView(b.id, b.owner, b.ext.deepCopy(), b.group,
 			dev.larattalabs.architect.api.BatchView.Status.valueOf(b.status.name()), items, b.stages, b.createdAt,
-			b.doneAt > 0 ? Optional.of(b.doneAt) : Optional.empty());
+			b.doneAt > 0 ? Optional.of(b.doneAt) : Optional.empty(), Optional.ofNullable(b.opKey));
 	}
 
 	public static dev.larattalabs.architect.api.ItemEvent itemEvent(dev.larattalabs.architect.batch.QBatch b, dev.larattalabs.architect.batch.QItem i) {
@@ -183,6 +183,8 @@ public final class Views {
 				pinned.add(s.versioning().version() > 0 ? s.versioning().version() : dev.larattalabs.architect.library.EntryVersions.version(j));
 			}
 		}
+		// (6c 0a) or a caller pins it
+		pinned.addAll(CallerPins.pinned().getOrDefault(id, java.util.Set.of()));
 		List<dev.larattalabs.architect.api.EntryVersion> out = new ArrayList<>();
 		for (var l : dev.larattalabs.architect.library.EntryVersions.lineage(j, null)) {
 			out.add(new dev.larattalabs.architect.api.EntryVersion(l.n(), l.createdAt(), l.by(), l.parent(), l.designId(), l.summary(), l.nbtSha256(),

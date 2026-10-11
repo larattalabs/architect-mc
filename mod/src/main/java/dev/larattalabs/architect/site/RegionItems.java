@@ -153,12 +153,22 @@ public final class RegionItems {
 			Batches.fail(b, i, Reason.OTHER, why);
 			return;
 		}
+		if (tile.phase == TileStream.Phase.WAITING && tile.slow) {
+			// (6c 0a) the helper timed out on it in all its retries: wait (TILE_SLOW, the RETRY nudge); TileStream asks again after
+			// 30 s, 60 s, 120 s, then every 5 min. No limit unless the caller set maxWaitSeconds (then it counts: TIMED_OUT)
+			Batches.waitFor(b, i, Reason.TILE_SLOW, tile.error == null ? "the tile's evaluation is slow" : tile.error);
+			return;
+		}
 		if (tile.phase == TileStream.Phase.WAITING) {
 			// (6b) the helper kept answering ir_unknown / blob_unknown: wait for it (a reconnect or restart asks again)
 			Batches.waitFor(b, i, Reason.SIDECAR_UNAVAILABLE, tile.error == null ? "the helper lacks the plan's data" : tile.error);
 			return;
 		}
 		if (tile.phase != TileStream.Phase.DECODED) {
+			if (i.status == QItem.Status.WAITING && Reason.TILE_SLOW.name().equals(i.reason)) {
+				// (6c 0a) a slow tile asked again: it still waits TILE_SLOW while the helper evaluates it (and that time counts)
+				Batches.waitFor(b, i, Reason.TILE_SLOW, i.message);
+			}
 			return; // evaluating or decoding: tried again next tick
 		}
 		if (i.status == QItem.Status.WAITING) {

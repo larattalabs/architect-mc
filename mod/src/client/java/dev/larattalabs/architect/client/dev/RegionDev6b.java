@@ -155,7 +155,7 @@ public final class RegionDev6b {
 						return o;
 					});
 			});
-		DevBridge.register("dev.region.nudge", 120_000, "{region, action: MOVE_CLOSER|PREPARE|START_SIDECAR|APPROVE_STAGE|REPLAN} - phase 6b: "
+		DevBridge.register("dev.region.nudge", 120_000, "{region, action: MOVE_CLOSER|PREPARE|START_SIDECAR|APPROVE_STAGE|REPLAN|RETRY} - phase 6b (RETRY: 6c 0a): "
 			+ "Regions.nudge -> {done, message, actions (before)}", (req, mc) -> {
 				Fields f = Fields.of(req);
 				String region = f.nonBlank("region");
@@ -163,7 +163,7 @@ public final class RegionDev6b {
 				try {
 					k = WaitAction.Kind.valueOf(f.nonBlank("action").toUpperCase(Locale.ROOT));
 				} catch (IllegalArgumentException e) {
-					throw new DevBridge.DevException("action is MOVE_CLOSER | PREPARE | START_SIDECAR | APPROVE_STAGE | REPLAN");
+					throw new DevBridge.DevException("action is MOVE_CLOSER | PREPARE | START_SIDECAR | APPROVE_STAGE | REPLAN | RETRY");
 				}
 				return ServerTasks.callOnServer(s -> {
 					JsonArray before = ArchitectApi.get().regions().get(region).map(v -> Wire6b.json(v.actions())).orElse(new JsonArray());

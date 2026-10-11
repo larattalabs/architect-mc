@@ -51,3 +51,41 @@ export function describe(o, limitMs = 50) {
   return `Architect's own tick max ${o.ownMaxMs} ms ${what} (<= ${limitMs}); recorded: its wall max ${o.wallMaxMs ?? '-'} ms, `
     + `whole tick max ${f.msptMax ?? f.traceMax ?? '-'} ms${p99}, vanilla max ${f.serverMsptMax ?? '-'} ms, ${f.ticksOver50ms ?? f.over50 ?? '-'} ticks over 50, load ${o.load1}`;
 }
+
+// (6c 0a, CONTRACT 0a §12) dev.mspt.trace now answers own-time percentiles: `own` (wall) and `ownCpu` (the server thread's CPU
+// time, what Placement measures), each {ticks, p50, p99, max, mean} over the ticks with Architect work. When ownCpu is present it
+// is the judged number (p99 and max); dev.placement.stats and the whole tick stay recorded. A build without it falls back to
+// fromStatsAndTrace (max only), and the line says so.
+
+/** dev.placement.stats + a dev.mspt.trace stop result: fromStatsAndTrace, judged on the trace's ownCpu when present. */
+export function fromOwnTime(st = {}, t = {}) {
+  const o = fromStatsAndTrace(st, t);
+  const c = t.ownCpu;
+  if (c && typeof c.max === 'number' && typeof c.p99 === 'number') {
+    o.ownMaxMs = r2(c.max);
+    o.ownMeanMs = r2(c.mean);
+    o.ownP99Ms = r2(c.p99);
+    o.ownP50Ms = r2(c.p50);
+    o.ownTicks = c.ticks;
+    o.judged = 'cpu';
+    o.source = 'trace';
+    o.fallback = false;
+  }
+  if (t.own && typeof t.own.max === 'number') o.ownWall = { p50: r2(t.own.p50), p99: r2(t.own.p99), max: r2(t.own.max), mean: r2(t.own.mean), ticks: t.own.ticks };
+  return o;
+}
+
+/**
+ * The own-time percentile bar: p99 <= p99LimitMs and max <= maxLimitMs (megaA: 25 and 50). Without a trace p99 (an old build) it
+ * fails unless `allowNoP99`, which judges the max only.
+ */
+export const ownPctOk = (o, p99LimitMs = 25, maxLimitMs = 50, allowNoP99 = false) =>
+  ownOk(o, maxLimitMs) && (typeof o.ownP99Ms === 'number' ? o.ownP99Ms <= p99LimitMs : allowNoP99);
+
+/** The check line for ownPctOk: the judged p99 and max, then the recorded ones. */
+export function describePct(o, p99LimitMs = 25, maxLimitMs = 50) {
+  if (typeof o.ownP99Ms !== 'number') return `[no own-time percentiles in this build: p99 not judged] ${describe(o, maxLimitMs)}`;
+  const w = o.ownWall;
+  return `Architect's own tick CPU p99 ${o.ownP99Ms} ms (<= ${p99LimitMs}), max ${o.ownMaxMs} ms (<= ${maxLimitMs}) over ${o.ownTicks} ticks with work; `
+    + `recorded: own wall p99 ${w?.p99 ?? '-'} ms, max ${w?.max ?? '-'} ms; ${describe(o, maxLimitMs).replace(/^.*?; recorded: /, '')}`;
+}

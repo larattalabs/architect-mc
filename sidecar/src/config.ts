@@ -5,7 +5,8 @@
 //
 // <data>/config.json (optional, hand-edited): { "designModel", "effort", "maxTurns", "maxBudgetUsd",
 // "simStepMs", "jobModel", "jobConcurrency", "simJobStepUsd", (6a) "regionWorkers", "regionWindow", ... }.
-// ARCHITECT_DESIGN_MODEL overrides designModel, ARCHITECT_JOB_MODEL jobModel, (6c 0a) ARCHITECT_SIM_COSTS simCosts.
+// ARCHITECT_DESIGN_MODEL overrides designModel, ARCHITECT_JOB_MODEL jobModel, (6c 0a) ARCHITECT_SIM_COSTS simCosts;
+// (6c 0a, test hook) ARCHITECT_TEST_SLOW_TILES=<n> makes the first n evaluations of each region tile overrun (regions.testSlowTiles).
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -107,6 +108,13 @@ export interface RegionsConfig {
   blobsMaxBytes: number;
   /** (6b) region.design: the pick model (config regionDesignModel, default jobModel: Sonnet) */
   designModel?: string | undefined;
+  /**
+   * (6c 0a, test hook, dev only) env ARCHITECT_TEST_SLOW_TILES=<n>: the first n evaluations of each tile overrun their limit
+   * (CONTRACT 0a §11). 0: off.
+   */
+  testSlowTiles: number;
+  /** (6c 0a) the first pause between timed-out attempts of a tile, in ms (1000; doubling: 1, 2, 4 s). Not a config key: tests shrink it. */
+  tileRetryPauseMs: number;
 }
 
 /** The default worker count: min(4, cores / 2), at least 1. */
@@ -115,7 +123,7 @@ export function defaultRegionWorkers(): number {
   return Math.max(1, Math.min(4, Math.floor(cores / 2)));
 }
 
-function regionsConfig(file: Record<string, unknown>, libraryDir: string): RegionsConfig {
+function regionsConfig(file: Record<string, unknown>, libraryDir: string, env: NodeJS.ProcessEnv = {}): RegionsConfig {
   const int = (v: unknown, d: number, lo: number, hi: number) => (typeof v === 'number' && Number.isFinite(v) ? Math.max(lo, Math.min(hi, Math.round(v))) : d);
   return {
     programsDir: path.join(path.dirname(libraryDir), 'regions', 'programs'),
@@ -132,6 +140,8 @@ function regionsConfig(file: Record<string, unknown>, libraryDir: string): Regio
     blobMaxBytes: 16 * 1024 * 1024,
     blobsMaxBytes: 64 * 1024 * 1024,
     ...(typeof file.regionDesignModel === 'string' && file.regionDesignModel.trim() ? { designModel: file.regionDesignModel.trim() } : {}),
+    tileRetryPauseMs: 1000,
+    testSlowTiles: /^\d{1,3}$/.test(env.ARCHITECT_TEST_SLOW_TILES?.trim() ?? '') ? Number(env.ARCHITECT_TEST_SLOW_TILES!.trim()) : 0,
   };
 }
 
@@ -286,7 +296,7 @@ export function loadConfig(argv: string[], env: NodeJS.ProcessEnv = process.env)
     },
     critique: critiqueConfig(file),
     polish: polishConfig(file),
-    regions: regionsConfig(file, need('library')),
+    regions: regionsConfig(file, need('library'), env),
     simCosts: backend === 'sim' ? simCostsConfig(env.ARCHITECT_SIM_COSTS?.trim() ? env.ARCHITECT_SIM_COSTS : file.simCosts) : undefined,
   };
 }

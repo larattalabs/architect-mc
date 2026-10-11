@@ -12,7 +12,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync, spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { fromStatsAndTrace as ownTick, ownOk, describe as tickText } from './lib/tickbar.mjs';
+import { fromOwnTime as ownTick, ownPctOk, describePct as tickText } from './lib/tickbar.mjs';
 import { DevClient } from './lib/devclient.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -503,12 +503,11 @@ steps.megaA = async () => {
   const b = r;
   check(b.state.view.state === 'PLACED', `megaA: the region is ${b.state.view.state} (${JSON.stringify(b.state.items)})`);
   check(b.cellsPerSecond >= 15_000, `megaA: realise ${Math.round(b.cellsPerSecond)} cells/s first tile to last (bar 15k; step ${Math.round(b.stepCellsPerSecond)})`);
-  // (6b, coordinator 2026-10-10) MSPT bars judge Architect's own per-tick time: the placement ticks in the server thread's CPU
-  // time (dev.placement.stats placementCpuMsMax; wall time where a build lacks it). The placement wall time, the whole tick
-  // (max, p99, over 50), the vanilla tick (serverMsptMax) and GC are recorded, not judged (docs/GATES.md "Tick bars").
-  // The old realise bar p99 <= 25 ms was a whole-tick percentile: recorded only until slice 0a adds own-time percentiles.
+  // (6b, coordinator 2026-10-10) MSPT bars judge Architect's own per-tick time; the whole tick (max, p99, over 50), the vanilla
+  // tick (serverMsptMax) and GC are recorded, not judged (docs/GATES.md "Tick bars"). (6c 0a, CONTRACT 0a §12) Judged on
+  // dev.mspt.trace's ownCpu: p99 <= 25 ms (6a's p99 bar, on Architect's own time) and max <= 50 ms; no ownCpu fails
   b.ownTick = ownTick(b.placement, b.mspt);
-  check(ownOk(b.ownTick), `megaA: realise: ${tickText(b.ownTick)}`, b.ownTick);
+  check(ownPctOk(b.ownTick, 25, 50), `megaA: realise: ${tickText(b.ownTick, 25, 50)}`, b.ownTick);
   check(b.generatedDuringRealise.terrain === 0, `megaA: chunks generated during realise ${b.generatedDuringRealise.terrain}`);
   const failed = Object.keys(b.state.failed ?? {});
   check(failed.length === 0, `megaA: 0 failed items (${failed.length}: ${JSON.stringify(b.state.failed).slice(0, 300)})`);
@@ -518,7 +517,7 @@ steps.megaA = async () => {
   check(b.tiles.bytesPerCell <= 4, `megaA: wire ${b.tiles.bytesPerCell.toFixed(3)} bytes/cell; tile latency p50 ${b.tiles.latencyP50Ms.toFixed(0)} ms, p99 ${b.tiles.latencyP99Ms.toFixed(0)} ms`);
   check((b.starvedShare ?? 1) <= 0.05, `megaA: writer starved ${(100 * b.starvedShare).toFixed(1)}% of its ticks (bar 5%)`);
   b.undo.ownTick = ownTick(b.undo.placement, b.undo.mspt);
-  check(rm.removed && b.undo.seconds <= 600 && ownOk(b.undo.ownTick), `megaA: group undo ${b.undo.seconds.toFixed(0)} s, ${tickText(b.undo.ownTick)}`, b.undo.ownTick);
+  check(rm.removed && b.undo.seconds <= 600 && ownPctOk(b.undo.ownTick, 25, 50), `megaA: group undo ${b.undo.seconds.toFixed(0)} s, ${tickText(b.undo.ownTick, 25, 50)}`, b.undo.ownTick);
   write('megabench-A.json', r); // again, with the own-tick numbers
   const unclassified = (b.diff.classes?.none ?? 0);
   check(unclassified === 0 && b.diff.mismatches <= 0.0001 * b.cellsWritten, `megaA: E-normal: ${b.diff.mismatches} mismatches after the group undo (${JSON.stringify(b.diff.classes)}; cap ${(0.0001 * b.cellsWritten).toFixed(0)})`);
@@ -733,14 +732,14 @@ steps.heap = async () => {
   return out;
 };
 
-// ------------------------------------------------------------------ gate 9: the unchanged 0.11.0/0.10.0/0.9.0 apitest jars (API 1.8.0, 1.7.0, 1.6.0)
+// ------------------------------------------------------------------ gate 9: the unchanged 1.7.0, 1.6.0 and 1.5.0 apitest jars
 
 steps.apijars = async () => {
   const runs = [
-    // (6b) the unchanged 1.8.0, 1.7.0 and 1.6.0 jars (CONTRACT 6b §6.1)
+    // (6c 0a) the unchanged 1.9.0, 1.8.0 and 1.7.0 jars (CONTRACT 6c slice 0a §1, §13 item 13)
+    { api: '1.9.0', dir: path.join(MAIN, 'artifacts', 'gate6c0a', 'v0120'), jar: 'architect_apitest-0.12.0.jar', world: 'G6A Api19' },
     { api: '1.8.0', dir: path.join(MAIN, 'artifacts', 'gate6b', 'v0110'), jar: 'architect_apitest-0.11.0.jar', world: 'G6A Api18' },
     { api: '1.7.0', dir: path.join(MAIN, 'artifacts', 'gate6a', 'v0100'), jar: 'architect_apitest-0.10.0.jar', world: 'G6A Api17' },
-    { api: '1.6.0', dir: path.join(MAIN, 'artifacts', 'gate5b', 'v090'), jar: 'architect_apitest-0.9.0.jar', world: 'G6A Api16' },
   ];
   const mods = path.join(GAME_DIR, 'mods');
   const out = {};

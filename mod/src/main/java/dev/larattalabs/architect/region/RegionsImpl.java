@@ -1501,6 +1501,11 @@ public final class RegionsImpl implements Regions {
 				yield done(true, "stage " + stage + " approved: it continues on the changed land");
 			}
 			case REPLAN -> done(false, "replan with Regions.plan (remove this region first, or skip the held stage)");
+			case RETRY -> {
+				// (6c 0a) TILE_SLOW: ask the helper again now for the region's waiting tiles
+				int n = TileStream.retryWaiting(id);
+				yield done(n > 0, n > 0 ? "asked the helper again for " + n + " slow tile" + (n == 1 ? "" : "s") : "no tile waits");
+			}
 		};
 	}
 

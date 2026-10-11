@@ -345,7 +345,9 @@ public final class RegionDev {
 				}).thenCompose(x -> x);
 			});
 		DevBridge.register("dev.mspt.trace", 10_000, "{start | stop: true} - phase 6a: per-tick times: the whole tick, Architect's write slices, the rest; "
-			+ "stop answers max, p99, ticks over 50 ms, and the same for ticks with no Architect write slice (lighting and chunk sending)", (req, mc) -> {
+			+ "stop answers max, p99, ticks over 50 ms, and the same for ticks with no Architect write slice (lighting and chunk sending); "
+			+ "(6c 0a) own and ownCpu: Architect's own time per tick, wall and server-thread CPU, {ticks, p50, p99, max, mean} over the ticks with "
+			+ "Architect work (ownCpu absent when the JVM can't measure thread CPU)", (req, mc) -> {
 				boolean stop = Fields.of(req).optBool("stop", false);
 				return CompletableFuture.completedFuture(stop ? dev.larattalabs.architect.region.MsptTrace.stop() : dev.larattalabs.architect.region.MsptTrace
 					.start());

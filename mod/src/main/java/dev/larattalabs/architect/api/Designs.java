@@ -149,4 +149,21 @@ public interface Designs {
 	default CompletableFuture<Estimate> estimatePolish(PolishRequest r) {
 		throw new UnsupportedOperationException("Designs.estimatePolish needs Architect API 1.7.0");
 	}
+
+	/**
+	 * What a mix of originals, adapted and copied buildings (and a new bible) would cost and take, with a line per kind
+	 * ({@link Estimate#byKind}; docs/CONTRACT.md 6c slice 0a §3). The lines sum to the totals. Since 1.10.0.
+	 */
+	default CompletableFuture<Estimate> estimate(EstimateRequest r) {
+		throw new UnsupportedOperationException("Designs.estimate(EstimateRequest) needs Architect API 1.10.0");
+	}
+
+	/**
+	 * The group requested with this operation key by this owner (null: the player), in any state ({@link GroupRequest#opKey}).
+	 * Empty means the helper never received it. Fails {@link ArchitectRefused} {@link Reason#SIDECAR_UNAVAILABLE} while the
+	 * helper is not connected (never "empty" then). Since 1.10.0.
+	 */
+	default CompletableFuture<Optional<Group>> groupByKey(@Nullable String owner, String opKey) {
+		throw new UnsupportedOperationException("Designs.groupByKey needs Architect API 1.10.0");
+	}
 }
