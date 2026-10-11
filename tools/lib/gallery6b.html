@@ -134,7 +134,7 @@ function scenario(sc) {
   // the bars
   const tb = $('tbody');
   for (const r of sc.rows) tb.append($('tr', {}, $('td', {}, pill(r)), $('td', { text: r.label }), $('td', { class: 'val', text: r.id === 'gallery' ? decisionText(sc) : r.value }), $('td', { class: 'bar', text: r.threshold })));
-  s.append($('div', { class: 'block' }, $('h3', { text: 'Bars (CONTRACT 6b §8.3), on the realised world' }),
+  s.append($('div', { class: 'block' }, $('h3', { text: DATA.barsTitle || 'Bars (CONTRACT 6b §8.3), on the realised world' }),
     $('div', { class: 'scroll' }, $('table', {}, $('thead', {}, $('tr', {}, $('th', { text: 'Result' }), $('th', { text: 'Check' }), $('th', { text: 'Value' }), $('th', { text: 'Bar' }))), tb))));
 
   // before and after

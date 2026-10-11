@@ -51,10 +51,13 @@ export async function build({ phase, local, ART, SCEN, evidenceSha }) {
   let calibration = [];
   const calFile = path.join(out, 'calibration', 'calibration.json');
   if (fs.existsSync(calFile)) calibration = JSON.parse(fs.readFileSync(calFile, 'utf8')).renders;
-  const data = { phase, title: `Architect ${phase} gallery`, built: new Date().toISOString(), local: !!local, scenarios, calibration };
+  // (6c V) the slice's own page title and bar reference
+  const title = phase === '6c-v' ? 'Architect 6c-V gallery' : `Architect ${phase} gallery`;
+  const barsTitle = phase === '6c-v' ? 'Bars (CONTRACT 6c slice V §7), on the realised world' : 'Bars (CONTRACT 6b §8.3), on the realised world';
+  const data = { phase, title, barsTitle, built: new Date().toISOString(), local: !!local, scenarios, calibration };
   if (!local) fs.writeFileSync(path.join(out, 'data.json'), `${JSON.stringify(data, null, 1)}\n`);
   const tpl = fs.readFileSync(path.join(HERE, 'gallery6b.html'), 'utf8');
-  const html = tpl.replace('/*__GALLERY_DATA__*/null', JSON.stringify(data).replace(/</g, '\\u003c'));
+  const html = tpl.replace('<title>Architect 6b Gallery</title>', `<title>${title}</title>`).replace('/*__GALLERY_DATA__*/null', JSON.stringify(data).replace(/</g, '\\u003c'));
   fs.writeFileSync(path.join(out, local ? 'local.html' : 'index.html'), html);
   return { out, scenarios: scenarios.map((s) => ({ id: s.id, runId: s.runId, evidence: s.evidenceSha.slice(0, 12), failing: s.rows.filter((r) => r.gated && r.pass === false && r.id !== 'gallery').map((r) => r.id) })), calibration: calibration.length };
 }
