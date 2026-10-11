@@ -10509,6 +10509,14 @@ roads, deltas) with reservations. 4. Refund routing and the credit keys. 5. Adop
 - **N-Y-2. Split.** Y is larger than a usual slice (it reworks the feed and refund paths of `Builder`, `RoadBuilder` and
   deltas). Ship as one slice, or Y1 (C24 and migration) then Y2 (C25, C26)? Steward's phase 4 needs Y1 first.
 
+### Coordinator decisions on Y (2026-10-11)
+
+- **N-Y-1:** 27 stacks per crate, as drafted. The storehouse grows by adding crate blocks; survival capacity is real. Refunds
+  that don't fit drop at a stockpile crate (counted in `refundOverflow`), never at the site.
+- **N-Y-2:** split. **Y1** = C24 (stockpile, feed order, ledger, refunds, migration; gate items 2-9 and 12-13). **Y2** = C25
+  and C26 (waiting status, full BOM; gate items 10-11). Y2 doesn't need Y1's stockpile, so the two build **in parallel** on
+  separate worktrees and ports; each takes the next free minor at merge. Y1 is Steward's phase 4 blocker and is reviewed first.
+
 ### Deferred
 
 - Hardcore's difference. Villager or entity hauling. Cross-dimension stockpiles. A batch BOM call (unless S-Y-4). Crash-exact
