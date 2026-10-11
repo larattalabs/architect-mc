@@ -128,26 +128,29 @@ export function villageProps(ir, meta, world, realised, vw) {
 }
 
 /**
- * Bar 8's walk area for a village: the village's walk cells (the street, its verges, the lanes and the square, walk-flagged in
- * the plan's virtual world, roads included), standing on the realised block, block light 0 and spawnable = dark. The checker's
- * M5 counts every reached floor the region wrote, so the lot pads' aprons and batters too (recorded beside it).
+ * Bar 8's walk area for a village (coordinator ruling, 2026-10-11): the village's walk cells (the street, its verges, the lanes
+ * and the square, walk-flagged in the plan's virtual world, roads included) plus every lot's door-to-street path cells (bar 4's
+ * walks, up to and including the entrance cell). A cell is dark when its realised floor is spawnable and the block light at its
+ * feet is 0. The checker's M5 (every reached floor the region wrote: the lot pads' aprons and batters too) is recorded beside it.
  */
-export function walkDark(world, vw) {
+export function walkDark(world, vw, door = {}) {
   const P = world.pal;
-  let n = 0, dark = 0;
+  let n = 0, dark = 0, doorCells = 0;
   const sample = [];
   const seen = new Set();
-  vw.eachWritten((x, y, z, idx, f) => {
-    if (!(f & 2)) return;
+  const visit = (x, fy, z, fromDoor) => {
     const k = `${x},${z}`;
     if (seen.has(k)) return;
     seen.add(k);
-    const fl = world.get(x, y, z), a = world.get(x, y + 1, z), b = world.get(x, y + 2, z);
-    if (!P.passable[a] || !P.passable[b]) return; // a prop or a post stands on it: not a walk cell now
+    const fl = world.get(x, fy, z), a = world.get(x, fy + 1, z), b = world.get(x, fy + 2, z);
+    if (!fromDoor && (!P.passable[a] || !P.passable[b])) return; // a prop or a post stands on it: not a walk cell now
     n++;
-    if (P.spawn[fl] && world.lightAt && world.lightAt(x, y + 1, z) === 0) { dark++; if (sample.length < 20) sample.push([x, y + 1, z]); }
-  });
-  return { walkCells: n, dark, share: n ? dark / n : 0, sample, light: !!world.lightAt };
+    if (fromDoor) doorCells++;
+    if (P.spawn[fl] && world.lightAt && world.lightAt(x, fy + 1, z) === 0) { dark++; if (sample.length < 20) sample.push([x, fy + 1, z]); }
+  };
+  vw.eachWritten((x, y, z, idx, f) => { if (f & 2) visit(x, y, z, false); });
+  for (const d of Object.values(door)) for (const [x, y, z] of d.path ?? []) visit(x, y - 1, z, true);
+  return { walkCells: n, doorPathCells: doorCells, dark, share: n ? dark / n : 0, sample, light: !!world.lightAt };
 }
 
 const row = (id, label, value, threshold, pass, gated = true) => ({ id, label, value, threshold, pass: gated ? !!pass : null, gated });
@@ -180,7 +183,7 @@ export function villageBars(x, base) {
   out.push(row('props', '7 Props', pp ? `planned ${JSON.stringify(pp.planned)}, built ${JSON.stringify(pp.built)}; unsupported ${pp.unsupported}; misplaced ${pp.misplaced.length}` : 'n/a',
     "realised counts = the plan's; every cell supported; 0 in lot boxes, walk cells, bell area or golem space", pp && pp.equal && pp.unsupported === 0 && pp.misplaced.length === 0));
   const M4 = R.M4?.breaches ?? null, M5 = R.M5, wd = x.walkDark;
-  out.push(row('safety', '8 Safety', `M4 ${M4}; M5 ${wd ? `${(100 * wd.share).toFixed(2)}% dark spawnable of ${wd.walkCells} walk cells (street, verges, lanes, square)` : 'n/a'}; recorded: the checker's M5 ${M5 ? (100 * M5.share).toFixed(2) : '?'}% of ${M5?.walkArea ?? '?'} reached region-written floors (lot aprons and batters included)`,
+  out.push(row('safety', '8 Safety', `M4 ${M4}; M5 ${wd ? `${(100 * wd.share).toFixed(2)}% dark spawnable of ${wd.walkCells} walk cells (street, verges, lanes, square, and ${wd.doorPathCells} door-path cells)` : 'n/a'}; recorded: the checker's M5 ${M5 ? (100 * M5.share).toFixed(2) : '?'}% of ${M5?.walkArea ?? '?'} reached region-written floors (lot aprons and batters included)`,
     'M4 0; M5 < 1% of walk area', M4 === 0 && wd && wd.light && wd.share < 0.01));
   for (const [id, label] of [['palette', '9 Palette'], ['exactness', '10 Exactness'], ['determinism', '11 Determinism'], ['mspt', '12 MSPT'], ['spend', '13 Spend'], ['gallery', '14 Gallery']]) {
     const r = by[id];

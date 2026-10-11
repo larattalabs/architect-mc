@@ -147,6 +147,23 @@ export function copyWorld(from, to) {
   execFileSync('cp', ['-c', '-R', src, dst]);
   fs.rmSync(path.join(dst, 'session.lock'), { force: true });
 }
+/**
+ * (6c V) The normal-preset base world of a world seed: 'G6B Seed Base' for 6b's pinned seed 2026100906 (made by gate6b base),
+ * else 'G6B Seed <seed>', created here the first time (creative, cheats, default rules), then left.
+ */
+export async function seedBase(seed) {
+  if (!seed || String(seed) === '2026100906') return 'G6B Seed Base';
+  const name = `G6B Seed ${seed}`;
+  if (!fs.existsSync(path.join(SAVES, name, 'level.dat'))) {
+    await leaveWorld();
+    await openWorld(name, { mode: 'creative', preset: 'normal', seed: String(seed), cheats: true });
+    await setRules('default');
+    await tp(0.5, 200, 0.5);
+    await cmd('/save-all flush');
+    await leaveWorld();
+  }
+  return name;
+}
 export async function fresh(name, from) {
   await leaveWorld();
   copyWorld(from, name);

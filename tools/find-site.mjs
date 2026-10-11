@@ -206,7 +206,8 @@ export async function findSite(id, io) {
   if (!best) return { claim: null, tried };
   const surveySha = crypto.createHash('sha256').update(best.summary).digest('hex');
   const y = [Math.max(-64, best.stats.min - 40), Math.min(319, Math.max(best.stats.max + 40, needs.yTop ?? 0))];
-  sc.fixture = { ...(sc.fixture ?? {}), claim: best.claim, yRange: y, foundBy: `find-site ${id} @ seed ${sc.world?.seed}`, surveySha, score: best.score, stats: best.stats };
+  const seed = io.seed ?? sc.world?.seed;
+  sc.fixture = { ...(sc.fixture ?? {}), claim: best.claim, yRange: y, foundBy: `find-site ${id} @ seed ${seed}`, worldSeed: String(seed), surveySha, score: best.score, stats: best.stats, tried };
   if (process.env.FINDSITE_RESULT) fs.writeFileSync(process.env.FINDSITE_RESULT, `${JSON.stringify(sc.fixture, null, 2)}\n`);
   else fs.writeFileSync(file, `${JSON.stringify(sc, null, 2)}\n`);
   return { claim: best.claim, score: best.score, tried, surveySha };

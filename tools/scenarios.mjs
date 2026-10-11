@@ -215,7 +215,7 @@ async function pin(id) {
   if (!sc.fixture?.claim) throw new Error(`${id}: the fixture is not pinned (node tools/gate6b.mjs findsite ${id})`);
   const seed = sc.seed ?? BigInt.asUintN(64, BigInt(`0x${sha256(`${sc.id}@${sc.world.seed}`).slice(0, 16)}`)).toString();
   if (isV(sc)) await prepV(sc);
-  await L.fresh(`G6B Pin ${short(sc)}`, BASE);
+  await L.fresh(`G6B Pin ${short(sc)}`, await L.seedBase(sc.world.seed));
   const c = sc.fixture.claim;
   await L.tp((c[0] + c[2]) / 2, sc.fixture.yRange[1], (c[1] + c[3]) / 2);
   const p = await L.plan(sc.program, c, { params: sc.params, surveyLoad: 'bounded:256', seed, bible: sc.bible ?? undefined });
@@ -257,7 +257,7 @@ async function runScenario(id) {
   L.log(`== scenario ${sc.id} ${flat ? 'flat' : 'natural'} run ${runId} -> ${out}`);
   if (isV(sc)) await prepV(sc);
   let t0 = Date.now();
-  await L.fresh(`G6B Scn ${short(sc)}${flat ? ' Flat' : ''}`, flat ? FLAT : BASE);
+  await L.fresh(`G6B Scn ${short(sc)}${flat ? ' Flat' : ''}`, flat ? FLAT : await L.seedBase(sc.world.seed));
   await L.setRules(flat ? 'exact' : 'gallery');
   await L.tp((claim[0] + claim[2]) / 2, sc.fixture.yRange[1], (claim[1] + claim[3]) / 2);
   T('world', t0);
@@ -407,7 +407,7 @@ async function computeMetrics({ sc, out, planDir, ir, irShas, mspt, cps, exact, 
     const door = VB.doorToStreet(ir, meta, world, nav);
     const fronts = VB.villageFronts(ir, meta, before, after, door);
     const props = VB.villageProps(ir, meta, world, realised, vw);
-    const walkDark = VB.walkDark(world, vw);
+    const walkDark = VB.walkDark(world, vw, door);
     rows = VB.villageBars({ plan, realised, door, fronts, props, nav, walkDark }, rows);
     village = { walkDark, door: Object.fromEntries(Object.entries(door).map(([k, d]) => [k, { ...d, path: undefined, pathLength: d.path?.length }])), fronts, props, nav: VB.navSummary(nav),
       M2villager: realised.metrics.M2villager, M22: realised.metrics.M22, M23: realised.metrics.M23, M24: realised.metrics.M24, graph: realised.metrics.graph };
