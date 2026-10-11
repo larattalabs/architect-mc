@@ -11,7 +11,7 @@
 // versionOf on R's first archetype (no site: the bench runs without a game; see HANDOFF-0b deviations).
 //
 // Safety: refuses to start with ANTHROPIC_API_KEY / ANTHROPIC_AUTH_TOKEN / CLAUDE_CODE_OAUTH_TOKEN / AWS_BEARER_TOKEN_BEDROCK set,
-// scrubs ANTHROPIC_* from the sidecar's env, logs the auth mode at each paid step and stops unless it is the claude login.
+// scrubs ANTHROPIC_* and CLAUDE* from the sidecar's env, logs the auth mode at each paid step and stops unless it is the claude login.
 // Before each paid step: spent (spend.json, actual) + the step's cap must stay <= $35. A usage-limit hold is waited out; a
 // hold over 30 minutes stops the run (state kept, exit 4) so the builder can commit, push and report.
 //
@@ -106,7 +106,9 @@ async function startSidecar() {
   const data = path.join(BENCH, 'data');
   fs.mkdirSync(data, { recursive: true });
   fs.rmSync(path.join(data, 'client.token'), { force: true });
-  const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => !/^ANTHROPIC_/.test(k)));
+  // no ANTHROPIC_* (keys, base URLs) and none of this agent session's CLAUDE* variables: the helper's SDK uses Noah's own
+  // claude login (its keychain credentials), not the calling session's
+  const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => !/^(ANTHROPIC_|CLAUDE)/.test(k)));
   const out = fs.openSync(path.join(BENCH, 'sidecar.log'), 'a');
   proc = spawn(process.execPath, ['--import', 'tsx', 'src/main.ts', '--port', String(PORT), '--data', data, '--library', path.join(BENCH, 'library'), '--kit', path.join(root, 'kit'), '--bibles', path.join(BENCH, 'bibles'), '--massings', path.join(BENCH, 'massings'), '--use-claude-login'], { cwd: path.join(root, 'sidecar'), env, stdio: ['ignore', out, out] });
   log(`sidecar pid ${proc.pid} on ${PORT}`);
