@@ -8635,3 +8635,323 @@ test. 6. The crater demo, gate.
 ### Deferred
 
 - Fluids in patterns (H). Masks reading other mods' block-entity data (never).
+
+## Phase 6c slice T2: slope-aware routing and switchbacks (DRAFT for Steward review)
+
+API 1.18.0, mod 0.21.0 (wave 2). SETTLEMENTS §4.3, without the bridge and tunnel moves (T3).
+
+- **Branch:** `slice/T2`, worktree `../architect-mc-T2`. **Spend:** $0.
+- **Scope:** the `route` pass: A* with heading over the resolution-1 survey, a grade limit from which **switchbacks** emerge,
+  walk, stair and ladder moves, obstacles (lots, forms, `keep` sets, **keep-out areas**), a discount on existing paths and 4e
+  roads (hysteresis), and output as ordinary primitives plus graph edges in V's shape.
+- **Not in scope:** bridge and tunnel moves (T3); connectors and the link pass (7a); districts (D).
+- **Depends on:** T1 (the pass framework and the resolution-1 survey). S2, T3 and D depend on T2.
+- **Closes 0c's deferral** "region programs that route around areas" (keep-out).
+
+### 0. Facts
+
+- 6a's primitives: `road(path, {mode: 'ground'|'graded'})` (4e roads, the IR `roads` member), `stair(path, {rise, landingEvery})`
+  with landings, `bridge` (straight polyline, pillars, `maxSpan`), `platform`, `pillar`. Every path is the program's own
+  polyline today; "routed roads (pathfinding)" was deferred from the phase 6 contract to here.
+- V's graph: nodes `{id, kind, ref, level, ports}`, edges `{id, from, to, type: road|path, width, stage, path}`; 7a keeps the ids.
+- `ctx.keepOut` and `ctx.survey.keptOutAt(x, z)` (V); 0c's write bound still refuses at realise.
+- The kit's walk graphs: `player` (step 1, ladders, falls at most 3) and the conservative flat `villager` mover (V);
+  `dev.nav.villager` runs vanilla `PathNavigation` in game.
+- 4e's ground road refuses cut or fill over 4 per centre column (TOO_STEEP); a graded road cuts and retains.
+
+### 1. API 1.18.0
+
+- `VERSION = "1.18.0"`; usual rules and api-compat. **No new records or methods.**
+- **Features:** `routePass`. `KIT_VERSION` 0.21.0. No new op kind (routes emit `columns`, `shape`, roads and stairs), so a routed
+  IR stays format 1 unless the program uses format-2 members.
+
+### 2. The `route` pass
+
+```js
+const net = r.pass('route', { edges: [{ from: 'gate', to: 'hall', width: 3, movers: ['player', 'villager'] }, ...],
+                              maxGrade: 0.25, hairpinLanding: 3, stairs: true, ladders: false });
+// -> data.edges[i] = { id, path: [[x,y,z]...], segments: [{kind: 'walk'|'stair'|'ladder', from, to}], cost }
+```
+
+- **State:** `(x, z, heading)` with 8 headings at resolution 1. y is the survey ground plus the route's own cut/fill decision.
+- **Moves and costs** (integers): walk (length, plus grade, plus cut/fill volume, plus water); turn (by angle); **stair** (rise
+  1 per cell, a landing every 8; only when `stairs`); **ladder** (vertical, only on an edge whose `movers` lacks `villager`,
+  Steward's review: villagers don't climb).
+- **Grade limit:** a walk move steeper than `maxGrade` over an 8-cell window is not legal. A hairpin needs a landing of
+  `hairpinLanding` x `hairpinLanding` at one y. So switchbacks emerge on slopes steeper than the limit.
+- **Obstacles:** lot boxes and their aprons, form bounds, `keep` sets, keep-out rects, the claim margin, lava. Water costs a
+  lot but is legal only where T3 adds bridges; in T2 an edge that can't avoid water fails with a typed note.
+- **Hysteresis:** cells already on a 4e road or a region path cost a third (6d replanning needs stable routes).
+- **Search:** coarse to fine. A corridor search at resolution 4, then the resolution-1 search within 16 of the coarse path.
+  Ties by (f, g, x, z, heading). Deterministic.
+- **Output:** each edge becomes primitives: `road` (graded where the profile cuts or fills over 2, else ground) for walk runs,
+  `stair` for stair runs, a ladder column (the `ladder` block on a support face) for ladder runs; plus a graph edge with the
+  path and `movers`. Lamps along the result use W's `lightCover`.
+
+### 3. Gate (slice tier, $0)
+
+**Fixtures:**
+- `route_demo` (bundled, `catalogue = false`) on **S3's pinned claim**: 4 nodes from valley floor to a shoulder about 60 above,
+  edges with `maxGrade` 0.25, one villager edge and one player-only edge; plus a keep-out rect across the direct line.
+- A synthetic 1:2 slope (seeded) where the straight line is about 0.5 grade, for the switchback property.
+- The flat variant (the program `add`s a hill first) for E-flat.
+
+**Evidence:** `artifacts/gate6c-t2/`, driver `tools/gate6ct2.mjs`. `spend.json` $0.00.
+
+| # | Check | Bar |
+|---|---|---|
+| 1 | Grade | 100% of walk runs within `maxGrade` over every 8-cell window (realised, re-surveyed) |
+| 2 | Switchbacks (synthetic 1:2) | every edge found; at least one hairpin per 16 rise; every hairpin has its landing |
+| 3 | Reachability `player` | 100% of edge endpoints reach each other on the realised world |
+| 4 | Reachability `villager` | every villager edge: kit mover 100%, and vanilla `dev.nav.villager` 100% end to end; 0 ladder segments on villager edges |
+| 5 | Keep-out | 0 cells written in the rect (ARWD diff); the route's length recorded against the unconstrained one |
+| 6 | Hysteresis | re-planning with one node moved by 4 keeps at least 80% of the other edges' cells |
+| 7 | Plan time | the pass at most 30 s on S3's claim; on the 1024x1024 synthetic with 20 edges at most 90 s (median of 3) |
+| 8 | Determinism | IR sha over 3 plans; tile shas 1 and 4 workers; golden `scenarios/goldens/route_demo.json`; macOS and Linux CI |
+| 9 | Checker | 0 errors; no M1-M4; M5 under 1% over route walk cells |
+| 10 | Exactness | flat E-flat 0; natural E-normal classified, at most 0.01% |
+| 11 | MSPT, evaluation | own CPU at most 50 ms, p99 at most 25 ms; tile p99 under 2 s |
+| 12 | Unchanged | S1, S7, mega_bench tile goldens |
+| 13 | API, spend | api-compat clean; jars pass; $0.00 |
+
+**Broken variants:** a ladder on a villager edge (M2:villager), a route through keep-out with the obstacle off (plan refusal),
+a 0.4 grade straight run with the limit off (bar 1's checker form, `M2:grade`, a new warning sub-finding).
+
+**Tier:** slice: quick, kit region rows, sim suites, apijars, 6b-scenario-s1, 6cv-scenario-s7. No `region/**` Java change is
+expected; if one lands, its rows join. **gate-verifier** re-runs items 1, 4 and 5.
+
+### 4. Build order
+
+1. Archive the previous apitest jar. 2. The search (coarse and fine) with unit cases. 3. Moves and costs. 4. Output to
+primitives and graph. 5. `route_demo`, the synthetic slope, gate.
+
+### Open questions for Steward
+
+- **S-T2-1. Movers per edge.** Do you set `movers` per edge from the card (dwelling paths `villager`, lookouts `player`), or
+  should the planner infer them from the end nodes' lot kinds?
+- **S-T2-2. Ladders.** Off by default (`ladders: false`). Want them on for player-only edges in your cards?
+
+### Deferred
+
+- Bridge and tunnel moves (T3). Typed connectors, `seconds` and `risk` (7a). Routes over standing lots (6d).
+
+## Phase 6c slice F2: scatter and feature stamps (DRAFT for Steward review)
+
+API 1.19.0, mod 0.22.0 (wave 2). SETTLEMENTS §3.4 "Scatter without a global pass", §9.3 and §9.4.
+
+- **Branch:** `slice/F2`, worktree `../architect-mc-F2`. **Spend:** $0.
+- **Scope:** the `scatter` op kind (a hashed jittered grid; ground, wall and ceiling anchors; density by number, field or mask);
+  the `stamp` op kind and the kit's stamp library; the DevBridge harvester `dev.feature.stamp`; the bundled scatter items
+  (plants, boulders, stumps, moss carpets, snow layers, glow lichen, path lanterns).
+- **Not in scope:** live capture of vanilla features at realise (deferred, SETTLEMENTS §9.4); coral and other water items (F3).
+- **Depends on:** T1 (fields for density) and MP (masks for density). S2 and S3 depend on F2.
+
+### 0. Facts
+
+- `scatter` and `stamp` are in `OPS_RESERVED`. K2: a tile reads at most 8 columns past its window.
+- Vanilla features (huge mushrooms, dripstone clusters, fossils, trees, geodes) are Java code that can't run in the sidecar.
+- `M17` (F1) catches snow layers that a planned light would melt.
+- **SETTLEMENTS N7 is unanswered:** shipping stamps harvested from vanilla features in a public repo (block lists produced by
+  running vanilla code). Noah's 2026-10-08 decisions don't cover it. §4 has the fallback.
+
+### 1. API 1.19.0
+
+- `VERSION = "1.19.0"`; usual rules. **DevBridge (DEVBRIDGE.md changelog):** `dev.feature.stamp {feature, seeds, ground}`.
+  **No new API records or methods.**
+- **Features:** `scatterOp`, `stampOp`. IRs using them are format 2 (`requires: ['scatter']`, `['stamp']`). `KIT_VERSION` 0.22.0.
+
+### 2. The `scatter` op
+
+```
+{ op: 'scatter', grid: 6, jitter: 4, density: 0.3 | {field: 'wet', scale: [40, 200]} | {mask},
+  items: [{ w: 5, shape|stamp|block, material?, anchor: 'ground'|'ceiling'|'wall', radius }], seedLabel: 'shrubs', cond }
+```
+
+- The plane is cut into `grid`-sized cells. Each cell's integer hash (seed, label, cell) gives at most one jittered point,
+  whether it fires (the density) and which item (the weights). A tile evaluates every grid cell within its window plus the
+  largest item radius (at most 8). Same seed, same placements in any tile order.
+- **Anchors:** `ground` (the frozen ground's top, or the relief/written surface below the item in this IR), `ceiling` (the
+  first solid cell above in a frozen volume), `wall` (a solid side face in a frozen volume). Ceiling and wall need a volume.
+- **Supports:** an item is placed only where its anchor block is solid and full on that face; plants only on their vanilla
+  soils (generated from the 26.3 data: `#minecraft:dirt`, sand for cacti, and so on).
+- Items larger than 8 columns are not scatter: the program places them as explicit ops.
+- **Density masks** (MP) and fields (T1) make decoration follow the plan: moss and ferns by `wet`, none on walk cells, lamps by
+  distance to paths.
+
+### 3. Bundled items
+
+`boulder` (a warped ellipsoid up to radius 3, rock material rule), `stump`, `shrub`, `fern_patch`, `moss_carpet`, `snow_layer`
+(only where M17 allows), `glow_lichen` (walls and ceilings), `path_lantern` (W's `lamp_post`, by distance to path cells).
+Each has property tests: supported, never on a walk cell, never in a lot box or keep-out.
+
+### 4. Stamps
+
+- **Harvest:** `dev.feature.stamp {feature, seeds, ground}` places a configured vanilla feature in a scratch superflat world
+  at a fixed spot, captures the cells it wrote (diff against the before state), and writes
+  `kit/stamps/<feature>/<seed>.bin` (palette, positions, root cell; ARTL-like, gzip OS byte pinned). Harvested once per
+  Minecraft version by `tools/harvest-stamps.mjs`.
+- **The `stamp` op:** `{op: 'stamp', id: 'huge_brown_mushroom/3', at, rotation}` places one at a plan-chosen position, `IF_NATURAL`
+  / `IF_AIR_OR_FLUID`, plus a root skirt of the stamp's base block down to the frozen ground (at most 6). The checker and the
+  previews see it.
+- **First library:** huge brown and red mushrooms, dripstone clusters, fossils, and 5 vanilla tree species (8 seeds each).
+- **N7 fallback (if Noah says no to shipping them):** the op and the harvester ship; `kit/stamps/` stays out of the repo and
+  the release, and is harvested locally by the gate. Scatter items that use stamps then fall back to bundled shapes.
+
+### 5. Gate (slice tier, $0)
+
+**Fixtures:** `scatter_demo` (bundled, `catalogue = false`) over **S2's pinned claim** (snow layers, boulders, a stamp of each
+library feature) with a few lanterns to exercise M17; the flat variant; and a cave box from the 6b volume fixture for ceiling
+and wall anchors.
+
+**Evidence:** `artifacts/gate6c-f2/`, driver `tools/gate6cf2.mjs`. `spend.json` $0.00.
+
+| # | Check | Bar |
+|---|---|---|
+| 1 | Tile independence | scatter placements identical for 1 and 4 workers, forward and shuffled; tile shas equal |
+| 2 | Density | over 50 seeds, the fired share per density band within ±3 points of the density |
+| 3 | Supports | 0 unsupported items on the realised world (M3), 0 plants on wrong soil, 0 items on walk cells, lot boxes, keep-out |
+| 4 | Melt | M17 0, before and after a 2-minute stand; snow-layer count unchanged by the stand |
+| 5 | Stamps | realised cells equal the stamp's cells (rotated) plus its skirt; 0 floating cells |
+| 6 | Harvest reproducibility | re-harvesting each stamp on the same version gives the same bytes |
+| 7 | Determinism | IR sha over 3 plans; golden `scenarios/goldens/scatter_demo.json`; macOS and Linux CI |
+| 8 | Exactness | flat E-flat 0; natural E-normal classified, at most 0.01% |
+| 9 | Evaluation, MSPT | tile p99 under 2 s, at least 45k cells/s; own CPU at most 50 ms, p99 at most 25 ms |
+| 10 | Compatibility | the previous mod refuses `scatter`/`stamp` IRs `PLAN_STALE`; S1, S7 and mega_bench tile goldens unchanged |
+| 11 | API, spend | api-compat clean; jars pass; $0.00 |
+
+**Tier:** slice: quick, kit region rows, `region/**` (engine tag: new op kinds), the DevBridge rows, sim suites, apijars,
+6b-scenario-s1. **gate-verifier** re-runs items 1, 3 and 5.
+
+### 6. Build order
+
+1. Archive the previous apitest jar. 2. `scatter` (kit evaluator, anchors, supports). 3. Bundled items. 4. The harvester and
+the `stamp` op. 5. `scatter_demo`, gate.
+
+### Open questions for Noah
+
+- **N-F2-1 (SETTLEMENTS N7). Shipping vanilla feature stamps** in the public repo and jar (block lists produced by running
+  vanilla feature code, like the kit's tables from the 26.3 data generator). Yes, or the fallback in §4?
+
+### Deferred
+
+- Live capture of features at realise (until stamps prove too rigid). Coral, kelp and other water scatter (F3, after H).
+
+## Phase 6c slice B: terrain brushes as journal-backed region ops (DRAFT for Steward review)
+
+API 1.20.0, mod 0.23.0 (wave 2). PLAN "Inputs for the 6c contract: our own world-shaping toolbox" (brushes, destruction).
+
+- **Branch:** `slice/B`, worktree `../architect-mc-B`. **Spend:** $0.
+- **Scope:** brushes for the API, commands and agents: smooth, erode, melt, blend, raise, lower, overlay, cave carve. Each stroke
+  is a small region (plan, realise, journal), so undo, ownership, the MSPT budget, crash safety and layering come from the
+  existing engine. Masks and patterns (MP) shape every stroke. **Noah's destruction rule.**
+- **Not in scope:** fill, drain and recursive fill (they write fluids: H); brushes in survival (RS); a brush UI beyond commands.
+- **Depends on:** T1 (`relief` and its kernels) and MP (masks, patterns).
+
+### 0. Facts
+
+- A region is planned in the sidecar's pristine-kit child, realised in tiles as CELL entries, and undone by `Regions.remove`
+  in any order through the journal (4e LAYER, 6a). Regions refuse `NOT_ALLOWED` in survival-toggle worlds and outside the
+  Overworld (`RegionsImpl`).
+- Ownership: the journal knows every Architect-written cell and its owner. Cells no entry owns are natural (by voxel class) or
+  a player's/other mod's blocks (class `PLAYER`, `BLOCK_ENTITY`).
+- K2 forbids non-local work at realise: a cave worm or a flood fill must be resolved at plan time.
+- WorldEdit's brush set is the model (Noah: no WorldEdit dependency; GPL code is not read or copied).
+
+### 1. API 1.20.0
+
+```java
+default CompletableFuture<RegionView> brush(BrushRequest r)              // Regions; default throws "needs Architect API 1.20.0"
+record BrushRequest(String owner, ResourceKey<Level> dimension, BrushKind kind, BrushShape shape, BlockPos center, int radius,
+                    int strength, @Nullable Mask mask, @Nullable Pattern pattern, Destruction destruction, @Nullable UUID actor, long seed) {}
+enum BrushKind { SMOOTH, ERODE, MELT, BLEND, RAISE, LOWER, OVERLAY, CAVE_CARVE }   // H appends FILL, DRAIN, FLOOD_FILL
+enum BrushShape { SPHERE, CYLINDER }
+enum Destruction { NATURAL_ONLY, PLAYER_BLOCKS }
+// RegionView gains trailing @Nullable String brush (the kind, for a stroke; old constructor: null)
+```
+
+- **Limits:** `radius` 1-32, `strength` 1-16 (`Limits.BRUSH_*`, refused `FIELD_LIMIT`). A stroke is one region record.
+- **New Reason** (appended): `PERMISSION` (§4).
+- **Features:** `brushes`. `KIT_VERSION` 0.23.0 (the bundled `brush` program).
+
+### 2. How a stroke runs
+
+1. The mod surveys the brush box plus 8 (sliced; a frozen volume for `CAVE_CARVE`, `MELT` and any `block` mask term).
+2. The sidecar plans the bundled program `brush` with the request as params. **No Claude call.**
+3. The plan's IR is realised at once (no prepare: a stroke refuses `NOT_LOADED` over unloaded chunks).
+4. `Regions.remove(id)` undoes it, in any order with other strokes and sites.
+
+Every stroke writes `IF_NATURAL` cells only, unless `destruction` says otherwise (§4); cells a site, road or delta owns are
+skipped (K5), and noted.
+
+### 3. The kinds
+
+| Kind | What it does (inside the shape, after the mask) | Built from |
+|---|---|---|
+| `SMOOTH` | moves the surface toward its local integer mean; edges pinned to the outside ground | T1 relief, Jacobi |
+| `ERODE` | thermal plus stream touch-up; extra |dh| at most `strength` | T1 erosion |
+| `MELT` | removes exposed natural cells with at least 4 air neighbours, `strength` rounds (rounds off spikes and overhangs) | plan-time cell list as `voxels`-style air writes |
+| `BLEND` | blends the surface between the shape's edge and its centre so a cut or fill meets the land | T1 relief, pins at the edge |
+| `RAISE` / `LOWER` | `±strength` at the centre, a smooth integer falloff to 0 at the edge; fill by the pattern or the column's own surface rule | `relief` delta |
+| `OVERLAY` | replaces the top `strength` cells with the pattern (topsoil over subsoil); the mask picks columns | `columns` ops |
+| `CAVE_CARVE` | a seeded 3D worm from the centre, resolved at plan time to `capsuleChain` segments with `warp`; floor levelled where a mover needs it | `shape` subtract, `cavern` rules |
+
+**Pointwise at realise:** each kind's non-local work (means, worms, exposure counts) runs at plan time and lands as fields,
+shapes or cell lists (K2). Fill blocks come from the pattern, else the column's surface/subsurface/rock rule.
+
+### 4. Destruction (Noah's rule)
+
+- `NATURAL_ONLY` (default): natural cells only.
+- `PLAYER_BLOCKS`: may also clear blocks no journal entry owns that aren't natural (a player's or another mod's builds).
+  - **Permission:** `actor` must be a player with permission level 2 or more, or the server console; else `PERMISSION`.
+  - **Ownership:** a cell owned by **another owner's** journal entry is never touched (skipped, noted). The caller's own entries
+    are layered over as usual.
+  - **Always undoable:** before states and block-entity NBT are journaled; nothing drops (containers keep their contents in the
+    journal and get them back on undo).
+- `owner` must be set (`<modid>:<thing>`, or `architect:player` for commands). C17 areas of that owner refuse the stroke.
+
+### 5. Commands
+
+`/architect brush <kind> [radius] [strength] [mask <text>] [pattern <text>] [shape]` at the block the player looks at (reach
+64), and `/architect brush undo` (the player's last stroke). Creative or permission 2.
+
+### 6. Gate (slice tier, $0)
+
+**Fixtures:** `brush_demo` strokes on the flat variant (the gate first raises a sculpted bump field) and on a corner of **S3's
+pinned claim**; one player-built wall and one other owner's road in the box.
+
+**Evidence:** `artifacts/gate6c-b/`, driver `tools/gate6cb.mjs`. `spend.json` $0.00.
+
+| # | Check | Bar |
+|---|---|---|
+| 1 | Each kind's property (unit, 100 seeds each) | SMOOTH lowers the max adjacent step; RAISE/LOWER give exactly `±strength` at the centre and 0 at the edge; ERODE extra |dh| at most `strength`; OVERLAY depth exact on masked columns; MELT never adds a cell |
+| 2 | Natural only | `NATURAL_ONLY` strokes write 0 non-natural cells (the wall stays) |
+| 3 | Ownership | 0 cells of the other owner's road written by any stroke, any destruction |
+| 4 | Permission | `PLAYER_BLOCKS` without permission refused `PERMISSION`, nothing written; with it, the wall is cleared and one undo restores it with its block entities |
+| 5 | Undo in any order | 5 overlapping strokes, undone in 3 orders: E-flat 0 each time; E-normal classified on the natural corner |
+| 6 | Cave carve | M3 0 floating; M4 0 breaches into water or lava |
+| 7 | Latency | a radius-16 stroke from command to realised: p50 at most 2 s, p95 at most 5 s (10 strokes) |
+| 8 | Determinism | same request and seed, same IR sha and tile shas |
+| 9 | MSPT | own CPU at most 50 ms, p99 at most 25 ms |
+| 10 | Survival and dimensions | refused `NOT_ALLOWED` in a survival-toggle world (until RS) and outside the Overworld |
+| 11 | Unchanged | S1, S7, mega_bench tile goldens |
+| 12 | API, spend | api-compat clean; jars pass; $0.00 |
+
+**Tier:** slice: quick, kit region rows, `region/**` (engine tag), `api/**`, `site/**` (ownership checks), the 4e crash suite
+once (a stroke is a region write), sim suites, apijars. **gate-verifier** re-runs items 3, 4 and 5.
+
+### 7. Build order
+
+1. Archive the previous apitest jar. 2. The `brush` program and the kinds (kit). 3. The API, the stroke path, the destruction
+rule. 4. Commands. 5. Fixtures, gate.
+
+### Open questions for Steward
+
+- **S-B-1.** Do you want strokes grouped (one undo for a set of strokes, as a site group), or one region per stroke as drafted?
+
+### Open questions for Noah
+
+- **N-B-1.** `PLAYER_BLOCKS` at permission level 2 (operators). Right level, or 4 (owner) only?
+
+### Deferred
+
+- Fill, drain, recursive fill (H). Brushes in survival (RS). A brush tool item and a preview ghost for strokes (later, with a UI).
