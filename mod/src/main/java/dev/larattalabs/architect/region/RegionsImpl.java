@@ -128,6 +128,7 @@ public final class RegionsImpl implements Regions {
 	}
 
 	public static void init() {
+		dev.larattalabs.architect.site.Groups.GROUP_ENDED = RegionsImpl::groupEnded;
 		net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents.SERVER_STARTED.register(RegionsImpl::started);
 		net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents.SERVER_STOPPING.register(s -> Heights.flush());
 		net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents.SERVER_STOPPED.register(s -> {
@@ -145,6 +146,10 @@ public final class RegionsImpl implements Regions {
 			GenCounter.realising(false);
 		});
 		net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents.END_SERVER_TICK.register(s -> {
+			if (reconcilePending) {
+				reconcilePending = false;
+				reconcileRemovals();
+			}
 			RegionSurvey.tick(s);
 			Prepare.tick(s);
 			RegionHash.tick(s);
@@ -205,6 +210,7 @@ public final class RegionsImpl implements Regions {
 			Architect.LOGGER.warn("Regions unreadable: {}", e.toString());
 		}
 		Prepare.resumeAll(s);
+		reconcilePending = true;
 		Architect.LOGGER.info("Regions: {} loaded", REGIONS.size());
 	}
 
@@ -1822,30 +1828,70 @@ public final class RegionsImpl implements Regions {
 		l.rec().state = RegionState.REMOVING;
 		save(l);
 		SiteEvents.REGION_STATE.invoker().onState(view(l));
-		return ArchitectApi.get().sites(s).removeGroup(l.rec().groupId, o).thenApply(res -> {
-			s.execute(() -> {
-				if (res.removed()) {
-					l.rec().state = RegionState.REMOVED;
-					l.rec().removedAt = System.currentTimeMillis();
-					TOMBS.put(l.rec().id, l.rec());
-					REGIONS.remove(l.rec().id);
-					Heights.forget(l.rec().id);
-					TileStream.forgetRegion(l.rec().id);
-					try {
-						RegionStore.writeJson(RegionStore.region(l.world(), l.rec().id).resolve("removed.json"), l.rec().toJson());
-						Files.deleteIfExists(RegionStore.region(l.world(), l.rec().id).resolve("region.json"));
-					} catch (IOException e) {
-						Architect.LOGGER.warn("Region {}: {}", l.rec().id, e.toString());
-					}
-				} else {
-					l.rec().state = RegionState.PARTIAL;
-					save(l);
-				}
-				SiteEvents.REGION_STATE.invoker().onState(view(l));
-			});
-			return res;
-		});
+		// (C23) the region's end state is set by groupEnded (Groups.GROUP_ENDED), from the removal itself, not from this future:
+		// a removal resumed after a load has no future, and every end (or early answer) of the group's removal reaches the hook
+		// on the server thread before this future completes
+		return ArchitectApi.get().sites(s).removeGroup(l.rec().groupId, o);
 	}
+
+	/**
+	 * (C23) A whole-group removal ended (Groups, server thread): the REMOVING region of that group ends as an uninterrupted removal
+	 * ends it: REMOVED (removedAt, the tombstone, its key ended) or PARTIAL (the stopped removal). Only a REMOVING region changes,
+	 * once: a removal of a region's group through the site API leaves the region's state alone, as before.
+	 */
+	private static void groupEnded(String groupId, dev.larattalabs.architect.site.Groups.Removed res) {
+		for (Live l : List.copyOf(REGIONS.values())) {
+			if (l.rec().state == RegionState.REMOVING && java.util.Objects.equals(l.rec().groupId, groupId)) {
+				SiteGroupRec g = Sites.group(groupId);
+				finishRemoval(l, res.removed(), g != null && g.removedAt() > 0 ? g.removedAt() : System.currentTimeMillis());
+			}
+		}
+	}
+
+	private static void finishRemoval(Live l, boolean removed, long at) {
+		if (REGIONS.get(l.rec().id) != l || l.rec().state != RegionState.REMOVING) {
+			return;
+		}
+		if (removed) {
+			l.rec().state = RegionState.REMOVED;
+			l.rec().removedAt = at;
+			TOMBS.put(l.rec().id, l.rec());
+			REGIONS.remove(l.rec().id);
+			Heights.forget(l.rec().id);
+			TileStream.forgetRegion(l.rec().id);
+			try {
+				RegionStore.writeJson(RegionStore.region(l.world(), l.rec().id).resolve("removed.json"), l.rec().toJson());
+				Files.deleteIfExists(RegionStore.region(l.world(), l.rec().id).resolve("region.json"));
+			} catch (IOException e) {
+				Architect.LOGGER.warn("Region {}: {}", l.rec().id, e.toString());
+			}
+		} else {
+			l.rec().state = RegionState.PARTIAL;
+			save(l);
+		}
+		Architect.LOGGER.info("Region {}: removal {} ({})", l.rec().id, removed ? "done: REMOVED" : "stopped: PARTIAL", l.rec().groupId);
+		SiteEvents.REGION_STATE.invoker().onState(view(l));
+	}
+
+	/**
+	 * (C23) Once per world, on its first tick (after the regions and the placement queue loaded): a region still REMOVING whose
+	 * group has no removal in progress ends from its group's persisted state (a stop between the group's end and the region's
+	 * record): the group REMOVED gives REMOVED with the group's time; otherwise PARTIAL (a retry resumes or restarts the removal).
+	 */
+	private static void reconcileRemovals() {
+		for (Live l : List.copyOf(REGIONS.values())) {
+			if (l.rec().state != RegionState.REMOVING || l.rec().groupId == null || dev.larattalabs.architect.site.Groups.removalRunning(l.rec().groupId)) {
+				continue;
+			}
+			SiteGroupRec g = Sites.group(l.rec().groupId);
+			boolean removed = g != null && SiteGroupRec.REMOVED.equals(g.state());
+			Architect.LOGGER.info("Region {} was REMOVING with no removal of group {} in progress: it ends {}", l.rec().id, l.rec().groupId,
+				removed ? "REMOVED (the group is removed)" : "PARTIAL");
+			finishRemoval(l, removed, removed && g.removedAt() > 0 ? g.removedAt() : System.currentTimeMillis());
+		}
+	}
+
+	private static volatile boolean reconcilePending;
 
 	/** DevBridge (gate 10(a)): called after each tile entry of a region is placed, with the region's tiles done so far. */
 	public static volatile java.util.function.@Nullable BiConsumer<Live, Integer> TILE_HOOK;

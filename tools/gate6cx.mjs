@@ -14,6 +14,10 @@
 //                                     restart; realise opKey: stop the world with the future pending (WORLD_STOPPED), realiseByKey finds
 //                                     the region after the reload, it completes, a second realise returns it, another body conflicts
 //     removal                         C22 (a) a restore failure injected mid-removal, the retry finishes it, world diff 0; (b) remove, reload, remove again: removed=true, nothing written; REMOVED tombstones with their time
+//     resume                          C23 (v0.17.1): a removal stopped mid-way (the world left and reopened) resumes and ends the region as
+//                                     an uninterrupted one: (a) REMOVED with removedAt, key ended, world exact, removed again; (b) a restore
+//                                     failure after the reload: PARTIAL (never REMOVING), a reload, the retry finishes exactly; (c) two
+//                                     restarts mid-removal; (d) the same for a plain site group (Sites.removeGroup)
 //     apicompat                       item 5: tools/api-compat.mjs --gate6cx (needs the mod's classes: gradle build first)
 //     report                          REPORT.md over the step JSONs
 //
@@ -434,6 +438,214 @@ steps.removal = async () => {
   return out;
 };
 
+// ------------------------------------------------------------------ C23: a removal resumed after a restart ends the region
+
+const jobsNow = async () => ((await call('dev.placement.jobs', {}, 30_000)).jobs ?? []);
+/** Waits until `n` distinct members' restore jobs have been seen (the undo committed, n-1 members restored, one writing). */
+async function midRemoval(seen, n, label, timeoutMs = 900_000) {
+  const end = Date.now() + timeoutMs;
+  while (Date.now() < end) {
+    for (const j of await jobsNow()) if (j.kind === 'remove' && j.site) seen.add(j.site);
+    if (seen.size >= n) return [...seen];
+    await sleep(250);
+  }
+  throw new Error(`${label}: no ${n} member restores seen (${[...seen].join(', ')})`);
+}
+/** The world stops (left: saved, the server shut down) and opens again. */
+async function restart(world) {
+  await leaveWorld();
+  await openWorld(world);
+}
+const slowOn = (on) => call('dev.placement.slow', { on });
+async function regionEnd(region, timeoutMs = 1_800_000) {
+  const end = Date.now() + timeoutMs;
+  let v;
+  while (Date.now() < end) {
+    v = await api(`rget ${region}`);
+    if (v && v.state !== 'REMOVING') return v;
+    await sleep(1000);
+  }
+  throw new Error(`region ${region} still ${v?.state}`);
+}
+async function groupEnd(g, timeoutMs = 1_800_000) {
+  const end = Date.now() + timeoutMs;
+  let v;
+  while (Date.now() < end) {
+    v = await api(`sgroup ${g}`);
+    if (v && v.state !== 'REMOVING') return v;
+    await sleep(1000);
+  }
+  throw new Error(`group ${g} still ${v?.state}`);
+}
+
+steps.resume = async () => {
+  await ensure();
+  await prepS7();
+  const out = {};
+  const W = 'G6B X Resume';
+  await fresh(W, FLAT);
+  await L.setRules('exact');
+  await tp(CENTRE[0], 120, CENTRE[1]);
+  const params = { ...S7.params };
+  const P = (surveyLoad) => call('dev.region.plan', { program: S7.program, claim: CLAIM, params, surveyLoad, check: false, bible: S7.bible, seed: S7.seed }, 900_000);
+  const p0 = await P('bounded:256');
+  await prepare(p0.planId);
+  const p = await P('generated:64');
+  const yr = p.claimY ?? [-64, 64];
+  const min = [CLAIM[0] - 8, yr[0] - 8, CLAIM[1] - 8], max = [CLAIM[2] + 8, yr[1] + 8, CLAIM[3] + 8];
+  const h0 = await hashBox(min, max);
+  /** A placed region (with an opKey), its entities gone, the removal started (pending) under slow writes. */
+  async function placedThenRemoving(label, opKey) {
+    await slowOn(false);
+    const region = await L.realise(p.planId, opKey ? { lots: S7.lotEntries, opKey } : { lots: S7.lotEntries });
+    const st = await waitRegion(region, 3_600_000);
+    check(st.view.state === 'PLACED', `resume ${label}: the region is placed (${region} ${st.view.state})`);
+    const g = (await api(`rget ${region}`)).groupId;
+    await cmd('/kill @e[type=!minecraft:player]');
+    await slowOn(true);
+    const pend = await api(`rremove ${region}`);
+    return { region, g, pend };
+  }
+  /** After a reopen: the removal is still running (it was stopped mid-way, not finished before the stop). */
+  async function stillRemoving(label, region, g) {
+    const v = await api(`rget ${region}`);
+    const gv = await api(`sgroup ${g}`);
+    check(v?.state === 'REMOVING' && gv?.state === 'REMOVING', `resume ${label}: after the reopen the region and its group read REMOVING (the removal was stopped mid-way and resumes) (${v?.state}, ${gv?.state})`);
+  }
+  try {
+    // ---- (a) stop mid-removal, reopen: the resumed removal alone ends the region REMOVED
+    {
+      const K = `steward.c23${rid}.a`;
+      const { region, g, pend } = await placedThenRemoving('(a)', K);
+      const seen = new Set();
+      out.a = { region, before: await midRemoval(seen, 2, '(a)') };
+      const t0 = Date.now();
+      await restart(W);
+      out.a.pendingAfterStop = await api(`get ${pend.pending}`).catch((e) => String(e));
+      await stillRemoving('(a)', region, g);
+      await slowOn(false);
+      const v = await regionEnd(region);
+      out.a.end = { state: v.state, removedAt: v.removedAt };
+      check(v.state === 'REMOVED' && v.removedAt >= t0 && v.removedAt <= Date.now(), `resume (a): with no retry the resumed removal ends the region REMOVED with removedAt (${v.state}, ${v.removedAt})`);
+      const gv = await api(`sgroup ${g}`);
+      check(gv?.state === 'REMOVED' && gv.removedAt === v.removedAt, `resume (a): its group is REMOVED with the same time (${gv?.state}, ${gv?.removedAt})`);
+      await settle(3000);
+      const h1 = await hashBox(min, max);
+      check(h1 === h0, `resume (a): the world hash equals the pre-placement one (${h1 === h0 ? 'equal' : 'DIFFERS'})`);
+      check((await api(`rrealisebykey - ${K}`)) === null, 'resume (a): the region\'s realise key ended (realiseByKey is empty)');
+      check(!(await api('rlist')).some((x) => x.id === region), 'resume (a): Regions.list omits the removed region');
+      const again = await call('dev.region.remove', { region }, 600_000);
+      await settle(2000);
+      check(again.removed === true && (await hashBox(min, max)) === h0, `resume (a): a second remove answers removed=true and writes nothing (${json(again).slice(0, 100)})`);
+    }
+    // ---- (b) a restore failure injected after the reopen: PARTIAL (never REMOVING); a reload; the retry finishes exactly
+    {
+      const { region, g } = await placedThenRemoving('(b)', null);
+      const seen = new Set();
+      out.b = { region, before: await midRemoval(seen, 2, '(b)') };
+      await restart(W);
+      await stillRemoving('(b)', region, g);
+      await call('dev.undo.failRestore', { skip: 0 });
+      const v = await regionEnd(region);
+      await call('dev.undo.failRestore', { skip: -1 });
+      await slowOn(false);
+      out.b.stopped = { state: v.state };
+      check(v.state === 'PARTIAL', `resume (b): the resumed removal that failed ends the region PARTIAL, as an uninterrupted failure does (${v.state})`);
+      const gv = await api(`sgroup ${g}`);
+      check(gv?.state === 'ACTIVE', `resume (b): its group is ACTIVE again (${gv?.state})`);
+      await settle(3000);
+      check((await api(`rget ${region}`))?.state === 'PARTIAL', 'resume (b): and it stays PARTIAL');
+      const hMid = await hashBox(min, max);
+      check(hMid !== h0, 'resume (b): the world differs from the pre-placement snapshot after the failure (the control)');
+      // the gap X noted: a reload between the injected failure and its retry
+      await restart(W);
+      const v2 = await api(`rget ${region}`);
+      check(v2?.state === 'PARTIAL', `resume (b): PARTIAL survives a reload before the retry (${v2?.state})`);
+      const r2 = await call('dev.region.remove', { region }, 3_600_000);
+      await settle(5000);
+      const h1 = await hashBox(min, max);
+      out.b.retry = { removed: r2.removed, blockers: r2.blockers, equal: h1 === h0 };
+      check(!(r2.removed && h1 !== h0), 'resume (b): never removed=true over a world diff');
+      check(r2.removed === true && h1 === h0, `resume (b): the retry after the reload finishes the stalled restoration: removed=true, world hash equal (${r2.removed}; ${h1 === h0 ? 'equal' : 'DIFFERS'})`);
+      const v3 = await api(`rget ${region}`);
+      check(v3?.state === 'REMOVED' && v3.removedAt > 0, `resume (b): Regions.get shows REMOVED with its time (${v3?.state}, ${v3?.removedAt})`);
+    }
+    // ---- (c) two restarts mid-removal
+    {
+      const { region, g } = await placedThenRemoving('(c)', null);
+      const seen = new Set();
+      out.c = { region, first: await midRemoval(seen, 2, '(c) first') };
+      const t0 = Date.now();
+      await restart(W);
+      await stillRemoving('(c) first', region, g);
+      out.c.second = await midRemoval(seen, seen.size + 1, '(c) second');
+      await restart(W);
+      await stillRemoving('(c) second', region, g);
+      await slowOn(false);
+      const v = await regionEnd(region);
+      out.c.end = { state: v.state, removedAt: v.removedAt };
+      check(v.state === 'REMOVED' && v.removedAt >= t0, `resume (c): after two restarts the removal ends the region REMOVED with removedAt (${v.state}, ${v.removedAt})`);
+      await settle(3000);
+      const h1 = await hashBox(min, max);
+      check(h1 === h0, `resume (c): the world hash equals the pre-placement one (${h1 === h0 ? 'equal' : 'DIFFERS'})`);
+      const again = await call('dev.region.remove', { region }, 600_000);
+      check(again.removed === true, 'resume (c): a second remove answers removed=true');
+    }
+    // ---- (d) a plain site group (no region): the same through Sites.removeGroup
+    {
+      await slowOn(false);
+      const x0 = CLAIM[2] + 48, z0 = CLAIM[1] + 16;
+      const bmin = [x0 - 8, -64, z0 - 8], bmax = [x0 + 3 * 32 + 8, 40, z0 + 40];
+      await tp(x0 + 40, 120, z0 + 10);
+      await call('dev.waitChunks', { timeoutMs: 60_000 }, 90_000).catch(() => {});
+      let y = -60; // the flat world's first air row, unless the heights say otherwise
+      try {
+        const h = await result(await api(`heights ${x0} ${z0} ${x0} ${z0} 1`), 60_000);
+        if (Array.isArray(h) && Number.isFinite(h[0]?.[2])) y = h[0][2];
+      } catch { /* the default */ }
+      out.dY = y;
+      const hd0 = await hashBox(bmin, bmax);
+      const ids = Object.keys(S7.entries).slice(0, 3);
+      const items = ids.map((bp, i) => ({ key: `d${i}`, bp, at: [x0 + i * 32, y, z0], rot: 0, mode: 'INSTANT', force: true }));
+      const bid = await result(await api(`bqueue ${JSON.stringify({ id: `c23d${rid}`, proximity: false, items })}`));
+      check(typeof bid === 'string', `resume (d): a batch of ${items.length} queued (${json(bid).slice(0, 80)})`);
+      let bv;
+      for (let i = 0; i < 600; i++) {
+        bv = await api(`batch ${bid}`);
+        if (['DONE', 'CANCELLED', 'STOPPED'].includes(bv?.status)) break;
+        await sleep(1000);
+      }
+      const g = bv.group;
+      check(bv.status === 'DONE' && !!g, `resume (d): the batch is DONE in group ${g} (${bv.status})`);
+      await cmd('/kill @e[type=!minecraft:player]');
+      await slowOn(true);
+      const pend = await api(`sgremove ${g}`);
+      const seen = new Set();
+      out.d = { group: g, before: await midRemoval(seen, 2, '(d)') };
+      const t0 = Date.now();
+      await restart(W);
+      out.d.pendingAfterStop = await api(`get ${pend.pending}`).catch((e) => String(e));
+      const gm = await api(`sgroup ${g}`);
+      check(gm?.state === 'REMOVING', `resume (d): after the reopen the group reads REMOVING (stopped mid-way) (${gm?.state})`);
+      await slowOn(false);
+      const gv = await groupEnd(g);
+      out.d.end = { state: gv.state, removedAt: gv.removedAt };
+      check(gv.state === 'REMOVED' && gv.removedAt >= t0 && gv.removedAt <= Date.now(), `resume (d): with no retry the resumed group removal ends REMOVED with removedAt (${gv.state}, ${gv.removedAt})`);
+      await settle(3000);
+      const hd1 = await hashBox(bmin, bmax);
+      check(hd1 === hd0, `resume (d): the world hash equals the pre-placement one (${hd1 === hd0 ? 'equal' : 'DIFFERS'})`);
+      const again = await result(await api(`sgremove ${g}`), 120_000);
+      check(again?.removed === true, `resume (d): removing the group again answers removed=true (${json(again).slice(0, 100)})`);
+    }
+  } finally {
+    await slowOn(false).catch(() => {});
+    await call('dev.undo.failRestore', { skip: -1 }).catch(() => {});
+  }
+  await leaveWorld();
+  spendZero();
+  return out;
+};
+
 // ------------------------------------------------------------------ item 5: API compatibility
 
 steps.apicompat = async () => {
@@ -453,7 +665,7 @@ steps.apicompat = async () => {
 
 steps.report = async () => {
   const rows = [];
-  for (const s of ['unit', 'lotext', 'keys', 'removal', 'apicompat']) {
+  for (const s of ['unit', 'lotext', 'keys', 'removal', 'resume', 'apicompat']) {
     const f = path.join(OUT, `${s}.json`);
     if (!fs.existsSync(f)) { rows.push(`| ${s} | not run | |`); continue; }
     const j = JSON.parse(fs.readFileSync(f, 'utf8'));

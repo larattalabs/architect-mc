@@ -197,6 +197,35 @@ public final class Groups {
 	}
 	private static long tick;
 
+	/**
+	 * (C23) Called on the server thread when a whole-group removal ends (not a stage undo), with the group id and the result,
+	 * before the removal's futures complete. A removal resumed after a load has no future of its own (its callers' futures failed
+	 * at the stop), so whatever depends on the end (a region's REMOVED/PARTIAL state) hangs here, keyed by the group id, not on a
+	 * future. The early answers of {@link #removeGroup} (the owner refusal, an already removed group, no such group) call it too.
+	 */
+	public static volatile java.util.function.@Nullable BiConsumer<String, Removed> GROUP_ENDED;
+
+	private static void groupEnded(String group, Removed result) {
+		var h = GROUP_ENDED;
+		if (h != null) {
+			try {
+				h.accept(group, result);
+			} catch (RuntimeException e) {
+				Architect.LOGGER.error("Group {}: the removal's end listener failed", group, e);
+			}
+		}
+	}
+
+	/** (C23) Whether a whole-group removal of this group is in progress (not a stalled one). */
+	public static boolean removalRunning(String groupId) {
+		for (Removal r : REMOVALS) {
+			if (r.group.equals(groupId) && r.stage == null) {
+				return true;
+			}
+		}
+		return false;
+	}
+
 	/** DevBridge {@code dev.undo.failRestore} (6c X, C22): break the removal restore after {@code skip} finished ones (-1: off). */
 	public static void failRestore(int skip) {
 		RestoreJob.failSkip = skip;
@@ -271,15 +300,20 @@ public final class Groups {
 		Sites.Covered covered) {
 		SiteGroupRec g = Sites.group(groupId);
 		if (g == null) {
+			groupEnded(groupId, new Removed(false, List.of("no site group " + groupId), Map.of()));
 			return CompletableFuture.failedFuture(new IllegalArgumentException("no site group " + groupId));
 		}
 		String owner = ApiRules.removeRefusal(groupId, g.owner(), requester, force);
 		if (owner != null) {
-			return CompletableFuture.completedFuture(new Removed(false, List.of(owner), Map.of()));
+			Removed no = new Removed(false, List.of(owner), Map.of());
+			groupEnded(groupId, no);
+			return CompletableFuture.completedFuture(no);
 		}
 		// (6c X, C22) a group this world already removed: removed again, nothing written (its tombstone keeps the time)
 		if (SiteGroupRec.REMOVED.equals(g.state()) && stalled(groupId, null) == null && REMOVALS.stream().noneMatch(x -> x.group.equals(groupId))) {
-			return CompletableFuture.completedFuture(new Removed(true, List.of(), Map.of()));
+			Removed yes = new Removed(true, List.of(), Map.of());
+			groupEnded(groupId, yes);
+			return CompletableFuture.completedFuture(yes);
 		}
 		for (Removal r : REMOVALS) {
 			if (r.group.equals(groupId) && r.stage == null) {
@@ -876,6 +910,9 @@ public final class Groups {
 		Architect.LOGGER.info("{} {} of group {}: {}{}", r.stage == null ? "Removal" : "Undo of stage " + r.stage, result.removed() ? "done" : "stopped",
 			r.group, result.removed() ? "all sites restored" : String.join("; ", result.blockers()), result.refund().isEmpty() ? "" : "; refund "
 				+ result.refund());
+		if (r.stage == null) {
+			groupEnded(r.group, result); // (C23) before the futures: a resumed removal has none
+		}
 		r.futures.forEach(f -> f.complete(result));
 		Placement.lap("end:futures", t0);
 	}
