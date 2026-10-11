@@ -39,7 +39,10 @@ gate passes.
 - [x] mod: VERSION 1.13.0, mod 0.16.0, features, keepOut fill + honoured refusal, LotSpec ext, dev.nav.villager, dev.site.anchors,
       dev.region.plan bible, C16 free surfaces; `gradlew build` passes; api-compat clean vs 0.15.0/0.14.0/0.13.0 + 0.15.0 surface
 - [x] gate driver `tools/gate6cv.mjs`, S7 scenario + bars (`tools/lib/scenario-village.mjs`), chain steps v-unit/v-ingame/6cv-scenario-s7
-- [ ] S7 fixture: find-site running split 3 ways (`artifacts/gate6c-v/findsite/run-p*.out`, results `result-p*.json`). The search
+- [x] S7: strict search found no site (coordinator's second-seed case; findsite/summary.json); provisional fixture
+      [1480,-3128,1591,-3017] pinned; flat + natural runs pass bars 1-13; golden s7; gallery https://claude.ai/artifact/AHUxAGLT42pfRy5YUHdojG
+- [x] slice tier 20261011-093554-slice: 26 PASS, S1 golden failed on IR sha (kitVersion) -> fixed (tiles), re-run 20261011-103647-slice PASS
+- [ ] (old note) S7 fixture: find-site running split 3 ways (`artifacts/gate6c-v/findsite/run-p*.out`, results `result-p*.json`). The search
       rewrites the scenario file only through FINDSITE_RESULT; merge the fixture into `scenarios/s7_flat_village.json` (a full copy of
       the scenario was kept before the search). Then `scenarios.mjs pin s7`, the flat and natural runs, `golden s7 <run>`, the gallery.
 - [ ] gate6cv items in game (nav, protect, steward, survroad), slice tier, gate-verifier
