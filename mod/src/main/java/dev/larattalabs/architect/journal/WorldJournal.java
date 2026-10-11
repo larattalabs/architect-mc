@@ -600,10 +600,18 @@ public final class WorldJournal {
 
 		/** The section's copy, or null when its chunk isn't loaded (the server-thread plan then). */
 		private @Nullable Snap snap(long k) {
+			return snap(k, true);
+		}
+
+		private @Nullable Snap snap(long k, boolean load) {
 			int sx = Sections.sx(k);
 			int sy = Sections.sy(k);
 			int sz = Sections.sz(k);
+			// an unloaded chunk is loaded here, on the server thread, as the server-thread plan's world reads would (sliced per section)
 			net.minecraft.world.level.chunk.LevelChunk c = level.getChunkSource().getChunkNow(sx, sz);
+			if (c == null && load) {
+				c = level.getChunk(sx, sz);
+			}
 			if (c == null) {
 				return null;
 			}
@@ -624,9 +632,9 @@ public final class WorldJournal {
 
 		/** Whether the world still holds the copy of section {@code k} (states and block-entity NBT). */
 		private boolean unchanged(long k, Snap was) {
-			Snap now = snap(k);
+			Snap now = snap(k, false);
 			if (now == null) {
-				return false;
+				return true; // unloaded since its copy: nothing in it changed (an unloaded chunk doesn't tick)
 			}
 			for (int i = 0; i < 4096; i++) {
 				if (now.at(i) != was.at(i)) {
