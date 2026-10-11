@@ -1,4 +1,4 @@
 package dev.larattalabs.architect.api;
 
-/** A region's state (A5B N8 plus prepare). New values are only ever appended. Since 1.8.0; REMOVED (1.15.0) is the tombstone of a removed region. */
+/** A region's state (A5B N8 plus prepare). New values are only ever appended. Since 1.8.0; REMOVED (1.14.0) is the tombstone of a removed region. */
 public enum RegionState { PLANNED, PREPARING, PREPARED, PLACING, PLACED, PARTIAL, FAILED, REMOVING, REMOVED }

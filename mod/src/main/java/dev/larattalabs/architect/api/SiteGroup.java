@@ -13,7 +13,7 @@ import org.jspecify.annotations.Nullable;
  * @param sites its standing sites, in placement order
  * @param stages every stage, in order (appended batches add theirs at the end)
  * @param crate the shared crate (survival, {@code sharedCrate}), when it has one
- * @param removedAt (since 1.15.0) when the removal finished (epoch ms), for a {@link State#REMOVED} group: its tombstone, kept across save and reload
+ * @param removedAt (since 1.14.0) when the removal finished (epoch ms), for a {@link State#REMOVED} group: its tombstone, kept across save and reload
  */
 public record SiteGroup(String id, @Nullable String owner, JsonObject ext, List<String> sites, List<Stage> stages, State state,
 	Optional<BlockPos> crate, Optional<Long> removedAt) {

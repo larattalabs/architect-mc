@@ -20,7 +20,7 @@ import org.jspecify.annotations.Nullable;
  *              {@link RegionView#waiting()}). Above 0, opt-in: an item that has waited that long in all, for any reason (the
  *              player's chunks, the helper, its turn for the chunk budget), fails {@link Reason#TIMED_OUT} with the wait reason in
  *              its message. A stage held for drift is not an item wait and does not count.
- * @param opKey (since 1.15.0) the caller's operation key ({@code [A-Za-z0-9_.:-]{1,128}}), scoped by (the plan's owner, "region.realise",
+ * @param opKey (since 1.14.0) the caller's operation key ({@code [A-Za-z0-9_.:-]{1,128}}), scoped by (the plan's owner, "region.realise",
  *     opKey); a null key is the old behaviour. The same key with the same body returns the existing realise's region id, in any state
  *     (also while the realise is still starting); with a different body the future fails {@link ArchitectRefused}
  *     {@link Reason#OP_KEY_CONFLICT}. The body is every other component (the actor by UUID). Found after a restart by
@@ -37,7 +37,7 @@ public record RealiseRequest(String planId, Mode mode, @Nullable ServerPlayer ac
 		maxWaitSeconds = Math.max(0, maxWaitSeconds);
 	}
 
-	/** The 1.14.0 constructor (no opKey). */
+	/** The 1.13.0 constructor (no opKey). */
 	public RealiseRequest(String planId, Mode mode, @Nullable ServerPlayer actor, Map<String, String> lotEntries, @Nullable LoadPolicy load,
 		boolean autoApprove, @Nullable List<String> stages, boolean force, JsonObject ext, int maxWaitSeconds) {
 		this(planId, mode, actor, lotEntries, load, autoApprove, stages, force, ext, maxWaitSeconds, null);

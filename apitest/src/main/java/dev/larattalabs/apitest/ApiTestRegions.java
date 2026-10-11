@@ -40,12 +40,12 @@ import net.minecraft.world.level.levelgen.structure.BoundingBox;
  * api19                 (6b, API 1.9.0) version, the 6b features present, the appended constants (Reason, Design.Kind, PreviewStyle via
  *                       the client), WaitAction.Kind, VoxelClass, RegionPlan / RegionView old constructors, REGION_CHECKED registers
  * rnudge &lt;region&gt; &lt;action&gt;   (6b) Regions.nudge -> {done, message} ("not applicable" for an action the wait doesn't offer)
- * api115                (6c X, API 1.15.0) version, the features, the old constructors (by reflection, public API only), the two new
+ * api114                (6c X, API 1.14.0) version, the features, the old constructors (by reflection, public API only), the two new
  *                       default methods, no new Reason
- * rplanbykey &lt;owner|-&gt; &lt;key&gt;      (1.15.0) Regions.planByKey -> the plan or null
- * rrealisebykey &lt;owner|-&gt; &lt;key&gt;   (1.15.0) Regions.realiseByKey -> the RegionView or null
+ * rplanbykey &lt;owner|-&gt; &lt;key&gt;      (1.14.0) Regions.planByKey -> the plan or null
+ * rrealisebykey &lt;owner|-&gt; &lt;key&gt;   (1.14.0) Regions.realiseByKey -> the RegionView or null
  * </pre>
- * rplan / rrealise take {@code opKey} (and rplan {@code ext}) in their JSON from 1.15.0.
+ * rplan / rrealise take {@code opKey} (and rplan {@code ext}) in their JSON from 1.14.0.
  */
 final class ApiTestRegions {
 	private static final Gson GSON = new GsonBuilder().disableHtmlEscaping().create();
@@ -220,7 +220,7 @@ final class ApiTestRegions {
 					return o;
 				}));
 			}
-			case "api115": {
+			case "api114": {
 				JsonObject o = new JsonObject();
 				o.addProperty("version", ArchitectApi.VERSION);
 				JsonArray f = new JsonArray();
@@ -229,11 +229,11 @@ final class ApiTestRegions {
 						f.add(x);
 					}
 				}
-				o.add("features115", f);
+				o.add("features114", f);
 				Reason[] rs = Reason.values();
 				o.addProperty("lastReasons", rs[rs.length - 2].name() + " " + rs[rs.length - 1].name());
 				try {
-					// the 1.14.0 constructors still exist and leave the key null
+					// the 1.13.0 constructors still exist and leave the key null
 					var rr = RealiseRequest.class.getConstructor(String.class, Mode.class, net.minecraft.server.level.ServerPlayer.class, Map.class, LoadPolicy.class,
 						boolean.class, java.util.List.class, boolean.class, JsonObject.class, int.class).newInstance("p", Mode.INSTANT, null, Map.of(), null, true, null, false,
 							new JsonObject(), 0);

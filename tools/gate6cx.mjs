@@ -127,7 +127,7 @@ steps.unit = async () => {
   const c19 = out.c19.names.filter((l) => /C19/.test(l));
   check(out.c19.code === 0 && out.c19.fail === 0 && c19.length === 2 && c19.every((l) => l.startsWith('✔')), `item 1: the kit's C19 tests (ext validated, 4096/4097, namespace guard, plan -> LotSpec) and the rest of the village suite: ${out.c19.pass} pass, ${out.c19.fail} fail`, out.c19.failing);
   const env = { ...process.env, JAVA_HOME: process.env.JAVA_HOME ?? '/opt/homebrew/opt/openjdk@25', GRADLE_USER_HOME: process.env.GRADLE_USER_HOME ?? path.join(root, '.gradle-home') };
-  const g = spawnSync('./gradlew', ['test', '--offline', '--tests', '*Api115Test', '--tests', '*RegionKeysTest', '--tests', '*Api113Test', '--tests', '*PlanStaleTest'],
+  const g = spawnSync('./gradlew', ['test', '--offline', '--tests', '*Api114Test', '--tests', '*RegionKeysTest', '--tests', '*Api113Test', '--tests', '*PlanStaleTest'],
     { cwd: path.join(root, 'mod'), env, encoding: 'utf8', timeout: 1_800_000 });
   const xml = (n) => {
     const f = path.join(root, 'mod', 'build', 'test-results', 'test', `TEST-dev.larattalabs.architect.${n}.xml`);
@@ -135,9 +135,9 @@ steps.unit = async () => {
     const m = /tests="(\d+)" skipped="(\d+)" failures="(\d+)" errors="(\d+)"/.exec(t);
     return m ? { tests: +m[1], failures: +m[3] + +m[4] } : null;
   };
-  out.java = { code: g.status, api115: xml('api.Api115Test'), keys: xml('region.RegionKeysTest') };
-  check(g.status === 0 && out.java.api115?.tests >= 6 && out.java.api115.failures === 0 && out.java.keys?.tests >= 5 && out.java.keys.failures === 0,
-    `item 1: Api115Test (old constructors, trailing components, default methods, no new Reason, ext bounds at 4096/4097) ${JSON.stringify(out.java.api115)} and RegionKeysTest (body hashes, scopes, plan ext -> site ext, region record) ${JSON.stringify(out.java.keys)}`);
+  out.java = { code: g.status, api114: xml('api.Api114Test'), keys: xml('region.RegionKeysTest') };
+  check(g.status === 0 && out.java.api114?.tests >= 6 && out.java.api114.failures === 0 && out.java.keys?.tests >= 5 && out.java.keys.failures === 0,
+    `item 1: Api114Test (old constructors, trailing components, default methods, no new Reason, ext bounds at 4096/4097) ${JSON.stringify(out.java.api114)} and RegionKeysTest (body hashes, scopes, plan ext -> site ext, region record) ${JSON.stringify(out.java.keys)}`);
   out.kit = nodeTest(fs.readdirSync(path.join(root, 'kit', 'test')).filter((f) => f.endsWith('.test.mjs')).map((f) => `kit/test/${f}`));
   check(out.kit.code === 0 && out.kit.fail === 0, `item 1: the whole kit suite: ${out.kit.pass} pass, ${out.kit.fail} fail`, out.kit.failing);
   spendZero();
@@ -444,9 +444,9 @@ steps.apicompat = async () => {
   // the apitest mod's own reflection check, in game, when a client is up
   if (state.dev || (await connect(5_000).then(() => true).catch(() => false))) {
     if (!(await call('dev.state')).inWorld) await openWorld(FLAT);
-    const v = await api('api115');
-    check(v.oldCtors === true && /^opKey opKey$/.test(v.trailing) && v.byKeyDefaults === true && v.features115?.length === 2 && v.lastReasons === 'PROTECTED FIELD_LIMIT',
-      `item 5: apitest api115: old constructors kept, trailing opKey, default methods, no new Reason (${json(v)})`);
+    const v = await api('api114');
+    check(v.oldCtors === true && /^opKey opKey$/.test(v.trailing) && v.byKeyDefaults === true && v.features114?.length === 2 && v.lastReasons === 'PROTECTED FIELD_LIMIT',
+      `item 5: apitest api114: old constructors kept, trailing opKey, default methods, no new Reason (${json(v)})`);
   }
   return { out: t };
 };

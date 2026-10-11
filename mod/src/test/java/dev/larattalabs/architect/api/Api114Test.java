@@ -17,14 +17,14 @@ import net.minecraft.world.level.levelgen.structure.BoundingBox;
 import org.junit.jupiter.api.Test;
 
 /**
- * API 1.15.0 (docs/CONTRACT.md phase 6c slice X, C19 and C20): the old constructors are kept (binary compatibility), the new record
+ * API 1.14.0 (docs/CONTRACT.md phase 6c slice X, C19 and C20): the old constructors are kept (binary compatibility), the new record
  * components are trailing, the new interface methods are defaults that throw, no Reason is added, and a lot's ext is bounded.
  */
-class Api115Test {
+class Api114Test {
 	@Test
 	void version() {
 		String[] v = ArchitectApi.VERSION.split("\\.");
-		assertTrue(Integer.parseInt(v[0]) == 1 && Integer.parseInt(v[1]) >= 15, ArchitectApi.VERSION); // later slices append
+		assertTrue(Integer.parseInt(v[0]) == 1 && Integer.parseInt(v[1]) >= 14, ArchitectApi.VERSION); // later slices append
 	}
 
 	@Test
@@ -35,7 +35,7 @@ class Api115Test {
 
 	@Test
 	void oldConstructorsKept() throws Exception {
-		// the 1.14.0 shapes, by descriptor: a jar compiled against them still links
+		// the 1.13.0 shapes, by descriptor: a jar compiled against them still links
 		assertEquals(RegionPlanRequest.class, RegionPlanRequest.class.getConstructor(String.class, JsonObject.class, net.minecraft.server.level.ServerLevel.class,
 			BoundingBox.class, Long.class, String.class, Integer.class, LoadPolicy.class, String.class, JsonObject.class).getDeclaringClass());
 		assertEquals(RealiseRequest.class, RealiseRequest.class.getConstructor(String.class, Mode.class, net.minecraft.server.level.ServerPlayer.class, Map.class,
@@ -98,8 +98,8 @@ class Api115Test {
 				return List.of();
 			}
 		};
-		assertEquals("Regions.planByKey needs Architect API 1.15.0", assertThrows(UnsupportedOperationException.class, () -> old.planByKey(null, "k")).getMessage());
-		assertEquals("Regions.realiseByKey needs Architect API 1.15.0", assertThrows(UnsupportedOperationException.class, () -> old.realiseByKey(null, "k")).getMessage());
+		assertEquals("Regions.planByKey needs Architect API 1.14.0", assertThrows(UnsupportedOperationException.class, () -> old.planByKey(null, "k")).getMessage());
+		assertEquals("Regions.realiseByKey needs Architect API 1.14.0", assertThrows(UnsupportedOperationException.class, () -> old.realiseByKey(null, "k")).getMessage());
 	}
 
 	@Test

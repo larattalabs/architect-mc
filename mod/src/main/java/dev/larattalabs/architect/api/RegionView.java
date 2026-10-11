@@ -25,7 +25,7 @@ public record RegionView(String id, String planId, String irSha, @Nullable Strin
 		actions = actions == null ? List.of() : List.copyOf(actions);
 	}
 
-	/** The 1.9.0 constructor: no removedAt (since 1.15.0: when a {@link RegionState#REMOVED} tombstone's removal finished, epoch ms; 0 for any other state). */
+	/** The 1.9.0 constructor: no removedAt (since 1.14.0: when a {@link RegionState#REMOVED} tombstone's removal finished, epoch ms; 0 for any other state). */
 	public RegionView(String id, String planId, String irSha, @Nullable String owner, JsonObject ext, String groupId, BoundingBox claim,
 		RegionState state, List<StageProgress> stages, List<LotState> lots, long cellsWritten, Map<String, Long> cellsSkipped, @Nullable Refusal waiting,
 		@Nullable PrepareView prepare, List<WaitAction> actions) {

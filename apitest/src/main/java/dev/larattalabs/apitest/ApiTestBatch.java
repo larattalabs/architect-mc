@@ -303,7 +303,7 @@ final class ApiTestBatch {
 		g.stages().forEach(s -> st.add(stage(s)));
 		o.add("stages", st);
 		g.crate().ifPresent(c -> o.addProperty("crate", c.getX() + "," + c.getY() + "," + c.getZ()));
-		g.removedAt().ifPresent(t -> o.addProperty("removedAt", t)); // 1.15.0
+		g.removedAt().ifPresent(t -> o.addProperty("removedAt", t)); // 1.14.0
 		return o;
 	}
 

@@ -36,7 +36,7 @@ public final class Limits {
 	/** {@code ext}: each key at most 200 characters, the whole at most 64 KB as JSON (every request). */
 	public static final int EXT_KEY_MAX = 200;
 	public static final int EXT_MAX_BYTES = 65536;
-	/** (1.15.0) A region plan's lot {@code ext} ({@code params.<lots>[i].ext}): at most 4096 characters as JSON, keys {@code namespace:name}. */
+	/** (1.14.0) A region plan's lot {@code ext} ({@code params.<lots>[i].ext}): at most 4096 characters as JSON, keys {@code namespace:name}. */
 	public static final int LOT_EXT_MAX = 4096;
 	/** {@code model}, trimmed, {@link #MODEL_ID_RE} (every request and critique). */
 	public static final int MODEL_ID_MAX = 100;
