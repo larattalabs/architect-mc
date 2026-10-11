@@ -7,7 +7,9 @@ import { F_WALK, F_WRITTEN, buildVirtual } from './vworld.mjs';
 import { fillMissing } from './plan.mjs';
 import { centreCells, crossOffsets, rightOf, segmentAxis } from './geom.mjs';
 
-export const RULES = ['M1', 'M2', 'M3', 'M4', 'M5', 'M6', 'M7', 'M8', 'M9', 'M10', 'M11', 'M12', 'M13', 'M14'];
+export const RULES = ['M1', 'M2', 'M3', 'M4', 'M5', 'M6', 'M7', 'M8', 'M9', 'M10', 'M11', 'M12', 'M13', 'M14', 'M22', 'M23', 'M24'];
+/** (6c V) The parts a flat village's components emit (the M1 lot-box rule applies to them only). */
+const VILLAGE_PARTS = /^(square|green|verges|lanes|props_[a-z]+)$/;
 const ERRORS = new Set(['M1', 'M13', 'M14']);
 // (finding() keeps at most 20 sample positions)
 const DIRS4 = [[1, 0], [-1, 0], [0, 1], [0, -1]];
@@ -53,17 +55,22 @@ function finding(rule, part, stage, count, sample, message) {
  * climbable cell); steps of 1 up (with head room for the jump), falls of at most 3, ladders and vines up and down, doors
  * and gates open. Lot boxes are obstacles (their interiors are declared, not known).
  */
-export function walkGraph(vw, starts) {
+export function walkGraph(vw, starts, { mover = 'player' } = {}) {
   const P = vw.pal, c = vw.claim;
   const cache = new Map();
+  // (6c V) the `villager` mover (CONTRACT V §6): the player graph without ladders, scaffolding or bubble columns, without falls
+  // over 1, with only wooden doors passable (fence gates and trapdoors closed), and no swimming
+  const V = mover === 'villager';
+  const pass = V ? P.vpass : P.passable;
+  const fallMax = V ? 1 : 3;
   const standAt = (x, y, z) => {
     if (vw.lotAt(x, y, z) || vw.lotAt(x, y + 1, z)) return false;
     const a = vw.get(x, y, z), b = vw.get(x, y + 1, z);
-    if (!P.passable[a] || !P.passable[b] || P.lava[a] || P.lava[b]) return false;
-    if (P.climb[a]) return true;
+    if (!pass[a] || !pass[b] || P.lava[a] || P.lava[b]) return false;
+    if (!V && P.climb[a]) return true;
     const f = vw.get(x, y - 1, z);
-    if (P.floor[f]) return true;
-    return P.water[f] && P.air[a]; // swimming on the surface
+    if (P.floor[f] && !(V && P.bubble[f])) return true;
+    return !V && P.water[f] && P.air[a]; // swimming on the surface (the player only)
   };
   const stands = (x, z) => {
     const k = (x - c.minX) + (z - c.minZ) * vw.W;
@@ -90,13 +97,14 @@ export function walkGraph(vw, starts) {
       const nx = x + dx, nz = z + dz;
       if (!vw.inClaim(nx, nz)) continue;
       for (const ny of stands(nx, nz)) {
-        if (ny > y + 1 || ny < y - 3) continue;
+        if (ny > y + 1 || ny < y - fallMax) continue;
         // a step up needs head room for the jump, unless it is onto a stairs block (walked up without jumping)
-        if (ny === y + 1 && !P.passable[vw.get(x, y + 2, z)] && !P.stairs[vw.get(nx, ny - 1, nz)]) continue;
-        if (ny < y) { let ok = true; for (let yy = ny + 2; yy <= y + 1; yy++) if (!P.passable[vw.get(nx, yy, nz)]) { ok = false; break; } if (!ok) continue; }
+        if (ny === y + 1 && !pass[vw.get(x, y + 2, z)] && !P.stairs[vw.get(nx, ny - 1, nz)]) continue;
+        if (ny < y) { let ok = true; for (let yy = ny + 2; yy <= y + 1; yy++) if (!pass[vw.get(nx, yy, nz)]) { ok = false; break; } if (!ok) continue; }
         push(nx, ny, nz);
       }
     }
+    if (V) continue; // no climbing
     // climbing
     const here = vw.get(x, y, z);
     if (P.climb[here] || P.climb[vw.get(x, y + 1, z)]) {
@@ -108,7 +116,7 @@ export function walkGraph(vw, starts) {
 }
 
 /** Is a node (feet cell) reached: the cell, or a 4-neighbour, within 1 in y. */
-function nodeReached(g, [x, y, z]) {
+export function nodeReached(g, [x, y, z]) {
   for (const [dx, dz] of [[0, 0], ...DIRS4]) for (let dy = -1; dy <= 1; dy++) if (g.seen.has(x + dx, y + dy, z + dz)) return true;
   return false;
 }
@@ -325,6 +333,10 @@ export function checkRegion({ ir, survey, blobs, volumes = [], meta = null, worl
       if (!start) findings.push(finding('M2', null, null, 1, [], 'the region has no entrance anchor'));
     }
   });
+
+  // ---- (6c V) the villager rules and the graph, when the plan is a village (meta.village)
+  const village = meta?.village;
+  if (village) time('M22', () => villageRules({ ir, vw, village, want, findings, metrics, partStage }));
 
   // ---- M3 support
   if (want.has('M3')) time('M3', () => {
@@ -566,6 +578,95 @@ export function checkRegion({ ir, survey, blobs, volumes = [], meta = null, worl
     ok: errors === 0, errors, warnings: findings.length - errors, findings, metrics, prefix: prefixes, ms, nodes: nodes.map((n) => ({ id: n.id, kind: n.kind, ref: n.ref, at: n.at })),
     _world: vw,
   };
+}
+
+/**
+ * (6c V, CONTRACT V §6) The flat-village rules: `M2:villager` (every dwelling, job, trading_hall or farm lot reaches the bell by
+ * the kit's villager mover), the graph (every lot node joins the plaza through the IR's edges: M2), M22 (the 5x5 bell area one
+ * y, standable, 2 clear; a 3x3x3 golem space within 8 of the bell), M23 (the trading hall's entrance within 12 of the bell,
+ * horizontal Euclidean), M24 (a farm's rect within 2 of surveyed water; with no water in the claim a note), and M1 (a village
+ * part's cell inside a lot box: an error). Warnings but M1, as every macro rule.
+ */
+function villageRules({ ir, vw, village, want, findings, metrics, partStage }) {
+  const P = vw.pal;
+  const bell = village.bell;
+  const lots = village.lots ?? {};
+  // M2:villager
+  const g = walkGraph(vw, [bell], { mover: 'villager' });
+  const per = {}, un = [];
+  for (const [id, l] of Object.entries(lots)) {
+    if (!['dwelling', 'job', 'trading_hall', 'farm'].includes(l.villager)) continue;
+    const ok = nodeReached(g, l.entrance);
+    per[id] = ok;
+    if (!ok) un.push(id);
+  }
+  metrics.M2villager = { mover: 'villager', lots: Object.keys(per).length, reached: Object.keys(per).length - un.length, unreachable: un, perLot: per, walkCells: g.reached.length / 3 };
+  if (want.has('M2') && un.length) findings.push(finding('M2:villager', 'lanes', partStage.get('lanes') ?? null, un.length, un.map((id) => lots[id].entrance), `${un.length} villager lot(s) do not reach the bell by the villager mover: ${un.join(', ')}`));
+  // the graph: every lot node joins the plaza through the IR's edges
+  if (ir.graph) {
+    const adj = new Map();
+    for (const e of ir.graph.edges) {
+      const a = e.from.split('.')[0], b = e.to.split('.')[0];
+      if (!adj.has(a)) adj.set(a, []);
+      if (!adj.has(b)) adj.set(b, []);
+      adj.get(a).push(b); adj.get(b).push(a);
+    }
+    const seen = new Set(['plaza']);
+    const q = ['plaza'];
+    while (q.length) for (const n of adj.get(q.shift()) ?? []) if (!seen.has(n)) { seen.add(n); q.push(n); }
+    const cut = ir.graph.nodes.filter((n) => n.kind === 'lot' && !seen.has(n.id));
+    metrics.graph = { nodes: ir.graph.nodes.length, edges: ir.graph.edges.length, joined: ir.graph.nodes.length - cut.length, cut: cut.map((n) => n.id) };
+    if (want.has('M2') && cut.length) findings.push(finding('M2', 'lanes', partStage.get('lanes') ?? null, cut.length, cut.map((n) => n.at), `graph: ${cut.length} lot(s) have no lane or street edge to the plaza: ${cut.map((n) => n.ref).join(', ')}`));
+  }
+  // M22: the bell area and the golem space
+  const y = village.bellY;
+  const badArea = [];
+  for (const [x, z] of village.bellArea) {
+    const f = vw.get(x, y - 1, z), a = vw.get(x, y, z), b = vw.get(x, y + 1, z);
+    if (!P.floor[f] || !P.passable[a] || !P.passable[b] || vw.lotAt(x, y, z)) badArea.push([x, y, z]);
+  }
+  const badGolem = [];
+  for (const [x, z] of village.golem) {
+    if (!P.floor[vw.get(x, y - 1, z)]) badGolem.push([x, y - 1, z]);
+    for (let dy = 0; dy < 3; dy++) if (!P.passable[vw.get(x, y + dy, z)] || P.water[vw.get(x, y + dy, z)]) badGolem.push([x, y + dy, z]);
+  }
+  const gd = Math.hypot(village.golemCentre[0] - bell[0], village.golemCentre[1] - bell[2]);
+  metrics.M22 = { bellArea: village.bellArea.length, bad: badArea.length, golemBad: badGolem.length, golemDistance: Math.round(gd * 10) / 10 };
+  if (want.has('M22')) {
+    if (badArea.length) findings.push(finding('M22', null, null, badArea.length, badArea, `the 5x5 bell area at y ${y} has ${badArea.length} cell(s) not standable with 2 clear (one y)`));
+    if (badGolem.length || gd > 8) findings.push(finding('M22', null, null, Math.max(1, badGolem.length), badGolem, `the 3x3x3 golem space ${badGolem.length ? `has ${badGolem.length} blocked cell(s)` : ''}${gd > 8 ? ` is ${gd.toFixed(1)} from the bell (at most 8)` : ''}`.trim()));
+  }
+  // M23: the trading hall's entrance within 12 of the bell anchor
+  const m23 = {};
+  for (const [id, l] of Object.entries(lots)) {
+    if (l.villager !== 'trading_hall') continue;
+    const d = Math.hypot(l.entrance[0] - bell[0], l.entrance[2] - bell[2]);
+    m23[id] = Math.round(d * 10) / 10;
+    if (want.has('M23') && d > 12) findings.push(finding('M23', 'pads', partStage.get('pads') ?? null, 1, [l.entrance], `trading hall ${id}: its entrance is ${d.toFixed(1)} from the bell (at most 12)`));
+  }
+  metrics.M23 = m23;
+  // M24: a farm's rect within 2 of surveyed water
+  const m24 = {};
+  for (const [id, l] of Object.entries(lots)) {
+    if (l.villager !== 'farm') continue;
+    m24[id] = l.water;
+    if (!village.waterAny) continue; // no water in the claim: a note (water: null tells the caller to ask the design for its own)
+    if (want.has('M24') && (l.water === null || l.water > 2)) findings.push(finding('M24', 'pads', partStage.get('pads') ?? null, 1, [l.entrance], `farm ${id}: its lot is ${l.water} from surveyed water (at most 2)`));
+  }
+  metrics.M24 = { farms: m24, waterInClaim: !!village.waterAny, note: village.waterAny ? null : 'no surface water in the claim: water null, the design brings its own' };
+  // M1: a village part writing into a lot box
+  if (want.has('M1')) {
+    const byPart = new Map();
+    vw.eachWritten((x, yy, z, idx, f, pi) => {
+      const pid = ir.parts[pi]?.id;
+      if (!pid || !VILLAGE_PARTS.test(pid)) return;
+      for (const l of ir.lots ?? []) {
+        const b = l.box;
+        if (x >= b.minX && x <= b.maxX && z >= b.minZ && z <= b.maxZ && yy >= b.minY - 1 && yy <= b.maxY) { const a = byPart.get(pid) ?? []; a.push([x, yy, z]); byPart.set(pid, a); return; }
+      }
+    });
+    for (const [pid, cells] of byPart) findings.push(finding('M1', pid, partStage.get(pid) ?? null, cells.length, cells, `${cells.length} cell(s) of ${pid} fall inside a lot box (no region op writes inside a lot box)`));
+  }
 }
 
 /** One line per finding plus the totals (summary.txt). */

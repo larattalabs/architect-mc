@@ -32,6 +32,7 @@ export class Palette {
     this.passable = []; this.floor = []; this.solid = []; this.barrier = []; this.fluid = []; this.water = []; this.lava = [];
     this.natural = []; this.gravity = []; this.stairs = []; this.emit = []; this.opaque = []; this.cost = []; this.spawn = []; this.climb = []; this.air = [];
     this.top = [];
+    this.vpass = []; this.bubble = []; // (6c V) the villager mover: passable for a villager; bubble columns
     this.of(AIR);
   }
   of(s) {
@@ -66,6 +67,13 @@ export class Palette {
     this.cost.push(known ? lightCost(st) : 15);
     this.spawn.push(known && isSpawnable(st.name) && isFloor(st));
     this.climb.push(known && isClimbable(st));
+    // (6c V) villagers: wooden doors open (iron doors don't); fence gates and trapdoors count as closed; no climbing cells
+    // (ladders, vines, scaffolding); a bubble column is never a floor or a passage
+    const fam = known ? BLOCKS[st.name].family : null;
+    const vp = this.passable[i] && !this.climb[i] && st.name !== 'minecraft:scaffolding' && st.name !== 'minecraft:bubble_column'
+      && fam !== 'fence_gate' && fam !== 'trapdoor' && !(fam === 'door' && /(iron|copper)_door$/.test(st.name));
+    this.vpass.push(vp);
+    this.bubble.push(st.name === 'minecraft:bubble_column');
     return i;
   }
 }

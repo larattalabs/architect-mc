@@ -33,7 +33,7 @@
     "flat": {
       "range": 2,
       "share": 0.85,
-      "res": 2
+      "res": 4
     },
     "waterBand": {
       "band": 16,

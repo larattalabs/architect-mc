@@ -82,7 +82,7 @@ export function candidates(n, step) {
 export async function fineChecks(io, needs, [x0, z0, x1, z1]) {
   const out = { ok: true };
   if (needs.flat || needs.waterBand) {
-    const res = needs.flat?.res ?? 2;
+    const res = needs.flat?.res ?? 4; // (Survey.sample takes 1 or 4: 2 is sampled at 4)
     const r = await io.cmd(`/apitest heights ${x0} ${z0} ${x1} ${z1} ${res}`);
     let v = JSON.parse((r.messages ?? []).find((m) => m.startsWith('{') || m.startsWith('[')) ?? 'null');
     for (let i = 0; v?.pending && i < 600; i++) {

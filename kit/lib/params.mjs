@@ -7,8 +7,53 @@
 const NAME = /^[a-z][a-zA-Z0-9_]{0,31}$/;
 const OPTION = /^[a-z0-9_]{1,32}$/;
 
-/** Throws when a design's `params` export is malformed (the design is broken, not the request). */
-export function validateParams(params) {
+/** (6c V) At most this many lots in a `lots` param (a region program's lot list). */
+export const LOTS_MAX = 40;
+const LOT_ID_RE = /^[a-z][a-z0-9_]{0,47}$/;
+const LOT_PLACEMENTS = ['central', 'edge', 'near_water', 'high_ground'];
+export const LOT_VILLAGER = ['dwelling', 'job', 'trading_hall', 'farm', 'none'];
+
+/**
+ * (6c V) Validate a `lots` value: at most LOTS_MAX lots, each `{id, type, role?, size: [alongStreet, deep], landmark?, placement?,
+ * villager?, brief?}` (Steward's VillageLayout.LotSpec plus `villager`). Returns the normalised list (role defaults to type;
+ * villager, when absent, inferred from type). Throws with the path on a bad value.
+ */
+export function validateLots(v, where = 'lots') {
+  if (!Array.isArray(v)) throw new Error(`${where} must be an array of lots`);
+  if (v.length > LOTS_MAX) throw new Error(`${where}: ${v.length} lots (at most ${LOTS_MAX})`);
+  const seen = new Set();
+  return v.map((l, i) => {
+    const w = `${where}[${i}]`;
+    if (!l || typeof l !== 'object' || Array.isArray(l)) throw new Error(`${w} must be an object`);
+    for (const k of Object.keys(l)) if (!['id', 'type', 'role', 'size', 'landmark', 'placement', 'villager', 'brief'].includes(k)) throw new Error(`${w}: unknown member '${k}'`);
+    if (typeof l.id !== 'string' || !LOT_ID_RE.test(l.id)) throw new Error(`${w}.id must match ${LOT_ID_RE}`);
+    if (seen.has(l.id)) throw new Error(`${w}.id '${l.id}' is used twice`);
+    seen.add(l.id);
+    if (typeof l.type !== 'string' || !/^[a-z][a-z0-9_]{0,31}$/.test(l.type)) throw new Error(`${w}.type must match [a-z][a-z0-9_]{0,31}`);
+    if (l.role !== undefined && l.role !== null && (typeof l.role !== 'string' || l.role.length > 60)) throw new Error(`${w}.role must be a string (<= 60)`);
+    if (!Array.isArray(l.size) || l.size.length !== 2 || !l.size.every((n) => Number.isInteger(n) && n >= 5 && n <= 96)) throw new Error(`${w}.size must be [alongStreet, deep], integers 5..96`);
+    if (l.landmark !== undefined && typeof l.landmark !== 'boolean') throw new Error(`${w}.landmark must be true or false`);
+    if (l.placement !== undefined && l.placement !== null && !LOT_PLACEMENTS.includes(l.placement)) throw new Error(`${w}.placement must be one of ${LOT_PLACEMENTS.join(', ')} or null`);
+    if (l.villager !== undefined && l.villager !== null && !LOT_VILLAGER.includes(l.villager)) throw new Error(`${w}.villager must be one of ${LOT_VILLAGER.join(', ')}`);
+    if (l.brief !== undefined && l.brief !== null && (typeof l.brief !== 'string' || l.brief.length > 500)) throw new Error(`${w}.brief must be a string (<= 500)`);
+    return { id: l.id, type: l.type, role: l.role ?? l.type, size: [...l.size], landmark: !!l.landmark, placement: l.placement ?? null,
+      villager: l.villager ?? inferVillager(l.type), ...(l.brief ? { brief: l.brief } : {}) };
+  });
+}
+
+/** (6c V) The villager use a lot's type implies when the caller sends none (S-V-1: the caller's own value wins). */
+export function inferVillager(type) {
+  const t = String(type);
+  if (/(^|_)(trading|market|hall_of_trade|trade)/.test(t)) return 'trading_hall';
+  if (/(farm|field|barn|orchard|pasture|garden)/.test(t)) return 'farm';
+  if (/(cottage|house|home|cabin|hut|dwelling|lodge)/.test(t)) return 'dwelling';
+  if (/(smith|forge|bakery|baker|mill|workshop|shop|mason|tannery|brewery|fletcher|library|chapel|church|temple|inn|tavern|stable|cartographer|fisher|butcher|weaver|smithy)/.test(t)) return 'job';
+  return 'none';
+}
+
+/** Throws when a design's `params` export is malformed (the design is broken, not the request). `region`: a region program's
+ * params, which may also declare the `lots` type (6c V; refused in design params). */
+export function validateParams(params, { region = false } = {}) {
   if (params === undefined) return;
   if (!params || typeof params !== 'object' || Array.isArray(params)) throw new Error('params must be an object { name: { type, ... } }');
   for (const [name, p] of Object.entries(params)) {
@@ -27,13 +72,16 @@ export function validateParams(params) {
       if (!Array.isArray(p.options) || p.options.length < 2 || !p.options.every((o) => typeof o === 'string' && OPTION.test(o))) throw new Error(`${where}.options must be 2+ strings matching ${OPTION}`);
       if (new Set(p.options).size !== p.options.length) throw new Error(`${where}.options has duplicates`);
       if (!p.options.includes(p.default)) throw new Error(`${where}: default '${p.default}' is not one of its options`);
-    } else throw new Error(`${where}.type must be int, bool or enum (got '${p.type}')`);
+    } else if (p.type === 'lots') {
+      if (!region) throw new Error(`${where}: the 'lots' type is allowed in region programs only`);
+      validateLots(p.default ?? [], `${where}.default`);
+    } else throw new Error(`${where}.type must be int, bool or enum${region ? ' (or lots)' : ''} (got '${p.type}')`);
   }
 }
 
 /** The defaults of every param. */
 export function defaultValues(params = {}) {
-  return Object.fromEntries(Object.entries(params).map(([k, p]) => [k, p.default]));
+  return Object.fromEntries(Object.entries(params).map(([k, p]) => [k, p.type === 'lots' ? validateLots(p.default ?? [], `params.${k}`) : p.default]));
 }
 
 /**
@@ -49,7 +97,7 @@ export function resolveValues(params = {}, given = {}) {
     if (p.type === 'int' && !(Number.isInteger(v) && v >= p.min && v <= p.max)) throw new Error(`values: ${k} must be an integer ${p.min}..${p.max} (got ${JSON.stringify(v)})`);
     if (p.type === 'bool' && typeof v !== 'boolean') throw new Error(`values: ${k} must be true or false (got ${JSON.stringify(v)})`);
     if (p.type === 'enum' && !p.options.includes(v)) throw new Error(`values: ${k} must be one of ${p.options.join(', ')} (got ${JSON.stringify(v)})`);
-    out[k] = v;
+    out[k] = p.type === 'lots' ? validateLots(v, `values: ${k}`) : v;
   }
   return out;
 }
@@ -58,6 +106,7 @@ export function resolveValues(params = {}, given = {}) {
 export function cornerValues(params = {}) {
   let combos = [{}];
   for (const [k, p] of Object.entries(params)) {
+    if (p.type === 'lots') continue; // (6c V) a lot list is the caller's data, never a variant axis
     const vals = p.type === 'int' ? [...new Set([p.min, p.max])] : p.type === 'bool' ? [false, true] : [...p.options];
     combos = combos.flatMap((c) => vals.map((v) => ({ ...c, [k]: v })));
   }
