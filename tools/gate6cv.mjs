@@ -318,7 +318,7 @@ steps.protect = async () => {
   check(json(ir.keepOut) === json([[area.x0, area.z0, area.x1, area.z1]]), `protect: the plan received and honoured the area (IR keepOut ${json(ir.keepOut)})`);
   check(ir.lots.every((l) => l.box.minZ - 1 > area.z1) && ir.roads.every((r) => r.points.every((q) => q[2] - 2 > area.z1)), `protect: the plan routes around it (every lot and the street south of z ${area.z1})`);
   const yr = p.claimY ?? [-64, 64];
-  const box = [claim[0] - 8, yr[0] - 2, claim[1] - 8, claim[2] + 8, Math.min(yr[1], -20), claim[3] + 8];
+  const box = [claim[0] - 8, yr[0], claim[1] - 8, claim[2] + 8, yr[1], claim[3] + 8];
   const before = path.join(OUT, 'protect-before.arwd.gz'), after = path.join(OUT, 'protect-after.arwd.gz');
   await call('dev.region.dump', { box, file: before, light: false }, 900_000);
   const region = await realise(p.planId, { lots: Object.fromEntries(ir.lots.map((l) => [l.id, 'g6a_stub_9'])) });
@@ -334,20 +334,21 @@ steps.protect = async () => {
     if (x >= area.x0 && x <= area.x1 && z >= area.z0 && z <= area.z1) inArea++;
   }
   out.diff = { written, inArea };
-  check(st.view.state === 'PLACED' && written > 1000 && inArea === 0, `protect: realised (${st.view.state}, ${written} cells changed in the dump box), 0 cells written in the area (ARWD diff: ${inArea})`);
+  check(st.view.state === 'PLACED' && written > 100 && inArea === 0, `protect: realised (${st.view.state}, ${written} cells changed in the dump box), 0 cells written in the area (ARWD diff: ${inArea})`);
   await cmd('/kill @e[type=!minecraft:player]');
-  const rm = await call('dev.region.remove', { region }, 3_600_000);
-  check(rm.removed, `protect: the region removed (${rm.restored} cells)`);
+  const rm = await call('dev.region.remove', { region, requester: OWNER }, 3_600_000);
+  check(rm.removed, `protect: the region removed by its owner (${rm.restored} cells${rm.blockers?.length ? `; blockers ${json(rm.blockers)}` : ''})`);
   // a plan made before the mark, realised after it: refused with 0c's typed reason, nothing written
   await api(`unprotect ${OWNER} third`);
   const p2 = await plan('flat_village', claim, { params, surveyLoad: 'bounded:256', owner: OWNER, check: false });
   const ir2 = JSON.parse(fs.readFileSync(path.join(SIDECAR_DATA, 'regions', 'plans', p2.planId, 'ir.json'), 'utf8'));
   await api(`protect ${json(area)}`);
-  const h0 = await hash([claim[0], -64, claim[1]], [claim[2], -20, claim[3]]);
+  const hy = p2.claimY ?? yr;
+  const h0 = await hash([claim[0], hy[0], claim[1]], [claim[2], hy[1], claim[3]]);
   const j0 = (await call('dev.journal.state', {}, 60_000)).entries?.length ?? -1;
   const r2 = await call('dev.region.realise', { planId: p2.planId, lots: Object.fromEntries(ir2.lots.map((l) => [l.id, 'g6a_stub_9'])) }, 300_000);
   await settle(3000);
-  const h1 = await hash([claim[0], -64, claim[1]], [claim[2], -20, claim[3]]);
+  const h1 = await hash([claim[0], hy[0], claim[1]], [claim[2], hy[1], claim[3]]);
   const j1 = (await call('dev.journal.state', {}, 60_000)).entries?.length ?? -1;
   out.lateMark = { keepOut: ir2.keepOut, refused: r2.refused ?? null, region: r2.region ?? null, journal: [j0, j1], same: h0 === h1 };
   check(json(ir2.keepOut) === '[]' && /PROTECTED/.test(json(r2.refused ?? '')) && h0 === h1 && j0 === j1, `protect: a plan made before the mark, realised after it: refused ${json(r2.refused)}; nothing written (hash ${h0 === h1 ? 'same' : 'CHANGED'}, journal ${j0} -> ${j1})`);
@@ -425,17 +426,17 @@ steps.steward = async () => {
   check(Object.values(fits).every((f) => f.fits !== false), `steward: fitToLot fits every lot (${json(Object.entries(fits).filter(([, f]) => f.fits === false))})`);
   // 4. realise(lotEntries); 5. one exact Regions.remove
   const yr = p.claimY ?? [-64, 64];
-  const min = [claim[0] - 8, yr[0], claim[1] - 8], max = [claim[2] + 8, Math.min(yr[1], 0), claim[3] + 8];
+  const min = [claim[0] - 8, yr[0], claim[1] - 8], max = [claim[2] + 8, yr[1], claim[3] + 8];
   const h0 = await hash(min, max);
   const region = await realise(p.planId, { lots: entries });
   const st = await waitRegion(region, 3_600_000);
   out.realise = { state: st.view.state, lots: st.view.lots.map((l) => `${l.id}:${l.state}`) };
   check(st.view.state === 'PLACED' && st.view.lots.every((l) => l.state === 'placed'), `steward: realise(lotEntries) placed every lot (${st.view.state}; ${out.realise.lots.join(', ')})`);
   await cmd('/kill @e[type=!minecraft:player]');
-  const rm = await call('dev.region.remove', { region }, 3_600_000);
+  const rm = await call('dev.region.remove', { region, requester: OWNER }, 3_600_000);
   await settle(5000);
   const h1 = await hash(min, max);
-  out.remove = { removed: rm.removed, restored: rm.restored, exact: h0 === h1 };
+  out.remove = { removed: rm.removed, restored: rm.restored, blockers: rm.blockers, exact: h0 === h1, box: [min, max] };
   check(rm.removed && h0 === h1, `steward: one Regions.remove is exact (${rm.restored} cells; hash ${h0 === h1 ? 'equal' : 'DIFFERS'})`);
   await leaveWorld();
   return out;

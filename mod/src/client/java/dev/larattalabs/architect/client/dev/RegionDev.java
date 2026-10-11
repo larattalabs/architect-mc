@@ -234,14 +234,15 @@ public final class RegionDev {
 			o.add("regions", a);
 			return o;
 		}));
-		DevBridge.register("dev.region.remove", 4 * 3_600_000L, "{region, covered?: keep|cascade|refuse, force?} - phase 6a: Regions.remove (the group undo) "
-			+ "-> RemoveResult + seconds", (req, mc) -> {
+		DevBridge.register("dev.region.remove", 4 * 3_600_000L, "{region, covered?: keep|cascade|refuse, force?, requester? (6c V: the owner removing "
+			+ "its own region)} - phase 6a: Regions.remove (the group undo) -> RemoveResult + seconds", (req, mc) -> {
 				Fields f = Fields.of(req);
 				String region = f.nonBlank("region");
 				CoveredPolicy cp = CoveredPolicy.valueOf(f.optStr("covered", "keep").toUpperCase(java.util.Locale.ROOT));
 				boolean force = f.optBool("force", false);
+				String requester = f.optStr("requester", null);
 				long t0 = System.nanoTime();
-				return ServerTasks.callOnServer(s -> ArchitectApi.get().regions().remove(region, new RemoveOptions(force, null, cp))).thenCompose(x -> wrap(x,
+				return ServerTasks.callOnServer(s -> ArchitectApi.get().regions().remove(region, new RemoveOptions(force, requester, cp))).thenCompose(x -> wrap(x,
 					r -> {
 						JsonObject o = json(r);
 						o.addProperty("seconds", (System.nanoTime() - t0) / 1e9);
