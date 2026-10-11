@@ -127,6 +127,29 @@ export function villageProps(ir, meta, world, realised, vw) {
   return { planned, built, equal: JSON.stringify(Object.entries(planned).sort()) === JSON.stringify(Object.entries(built).sort()), unsupported: m3.reduce((a, f) => a + f.count, 0), misplaced };
 }
 
+/**
+ * Bar 8's walk area for a village: the village's walk cells (the street, its verges, the lanes and the square, walk-flagged in
+ * the plan's virtual world, roads included), standing on the realised block, block light 0 and spawnable = dark. The checker's
+ * M5 counts every reached floor the region wrote, so the lot pads' aprons and batters too (recorded beside it).
+ */
+export function walkDark(world, vw) {
+  const P = world.pal;
+  let n = 0, dark = 0;
+  const sample = [];
+  const seen = new Set();
+  vw.eachWritten((x, y, z, idx, f) => {
+    if (!(f & 2)) return;
+    const k = `${x},${z}`;
+    if (seen.has(k)) return;
+    seen.add(k);
+    const fl = world.get(x, y, z), a = world.get(x, y + 1, z), b = world.get(x, y + 2, z);
+    if (!P.passable[a] || !P.passable[b]) return; // a prop or a post stands on it: not a walk cell now
+    n++;
+    if (P.spawn[fl] && world.lightAt && world.lightAt(x, y + 1, z) === 0) { dark++; if (sample.length < 20) sample.push([x, y + 1, z]); }
+  });
+  return { walkCells: n, dark, share: n ? dark / n : 0, sample, light: !!world.lightAt };
+}
+
 const row = (id, label, value, threshold, pass, gated = true) => ({ id, label, value, threshold, pass: gated ? !!pass : null, gated });
 
 /** S7's bar rows (CONTRACT V §7's table, 1-14), from the gathered inputs and 6b's rows (`base`: palette, mspt, exactness, ...). */
@@ -156,8 +179,9 @@ export function villageBars(x, base) {
   const pp = x.props;
   out.push(row('props', '7 Props', pp ? `planned ${JSON.stringify(pp.planned)}, built ${JSON.stringify(pp.built)}; unsupported ${pp.unsupported}; misplaced ${pp.misplaced.length}` : 'n/a',
     "realised counts = the plan's; every cell supported; 0 in lot boxes, walk cells, bell area or golem space", pp && pp.equal && pp.unsupported === 0 && pp.misplaced.length === 0));
-  const M4 = R.M4?.breaches ?? null, M5 = R.M5;
-  out.push(row('safety', '8 Safety', `M4 ${M4}; M5 ${M5 ? (100 * M5.share).toFixed(2) : '?'}% dark spawnable of ${M5?.walkArea ?? '?'} walk cells`, 'M4 0; M5 < 1% of walk area', M4 === 0 && M5 && M5.share < 0.01));
+  const M4 = R.M4?.breaches ?? null, M5 = R.M5, wd = x.walkDark;
+  out.push(row('safety', '8 Safety', `M4 ${M4}; M5 ${wd ? `${(100 * wd.share).toFixed(2)}% dark spawnable of ${wd.walkCells} walk cells (street, verges, lanes, square)` : 'n/a'}; recorded: the checker's M5 ${M5 ? (100 * M5.share).toFixed(2) : '?'}% of ${M5?.walkArea ?? '?'} reached region-written floors (lot aprons and batters included)`,
+    'M4 0; M5 < 1% of walk area', M4 === 0 && wd && wd.light && wd.share < 0.01));
   for (const [id, label] of [['palette', '9 Palette'], ['exactness', '10 Exactness'], ['determinism', '11 Determinism'], ['mspt', '12 MSPT'], ['spend', '13 Spend'], ['gallery', '14 Gallery']]) {
     const r = by[id];
     if (r) out.push({ ...r, label, ...(id === 'determinism' ? { threshold: 'IR sha identical over 3 plans; tiles for 1 and 4 workers = scenarios/goldens/s7.json' } : {}) });

@@ -11,8 +11,8 @@ import { tileShas } from '../../tools/scenarios.mjs';
 const GOLD = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'scenarios', 'goldens');
 const files = fs.existsSync(GOLD) ? fs.readdirSync(GOLD).filter((f) => f.endsWith('.json')).sort() : [];
 
-test('scenario goldens exist for the green 6b scenario (S1)', () => {
-  assert.ok(files.includes('s1.json'), `scenarios/goldens/s1.json (have: ${files.join(', ') || 'none'})`);
+test('scenario goldens exist for the green scenarios (6b S1, 6c V S7)', () => {
+  for (const g of ['s1.json', 's7.json']) assert.ok(files.includes(g), `scenarios/goldens/${g} (have: ${files.join(', ') || 'none'})`);
 });
 
 for (const f of files) {
