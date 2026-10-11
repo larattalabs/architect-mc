@@ -58,7 +58,7 @@ const result = async (pending, timeoutMs = 120_000) => {
   throw new Error(`no result for ${key}`);
 };
 const later = async (args, t) => result(await api(args), t);
-const hash = async (min, max) => (await call('dev.box.hash', { min, max }, 600_000)).sha256;
+const hash = async (min, max) => (await call('dev.region.hash', { box: [...min, ...max] }, 3_600_000)).sha256; // sliced over ticks (no size cap)
 
 const steps = {};
 async function run(name) {
