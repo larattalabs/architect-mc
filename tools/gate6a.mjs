@@ -388,6 +388,9 @@ async function megaRun(name, opts = {}) {
   const heaps = [];
   let lastStage = null;
   const st = await waitRegion(region, 4 * 3_600_000, async (s) => {
+    // (6c W) a lot waiting OCCUPIED holds a mob in its box (4e's rule: it would be buried). W reads frozen water as water, so
+    // mega6's plan moved a lot onto a resting polar bear; the gate clears the mobs, as megaA's undo already does
+    if (s.waiting?.OCCUPIED) { out.mobsCleared = (out.mobsCleared ?? 0) + 1; await cmd('/kill @e[type=!minecraft:player]'); }
     const running = s.view.stages.find((x) => x.tilesDone < x.tilesTotal || x.state === 'PLACING');
     const name2 = running?.name ?? 'done';
     if (name2 !== lastStage) {
