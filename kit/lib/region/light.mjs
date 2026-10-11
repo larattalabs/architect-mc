@@ -14,7 +14,7 @@
 //   4. Greedy: add the candidate that lights the most dark targets (light from the fixture's real level), ties by candidate
 //      order, until the dark targets are under 0.5% of the target set or no candidate helps; at most 4 lamps per lot. A lamp
 //      that would cut a walk node off the entrance is dropped and the cover is run again without it.
-// Emits part `props_apron` (stage `props`, into air only), each lot's lamp positions on its ext (`architect_mc:village`.lamps),
+// Emits part `props_apron` (stage `props`, natural cells only: a plant on the post's cell is replaced), each lot's lamp positions on its ext (`architect_mc:village`.lamps),
 // meta.village.apronLamps (per-lot counts, before / after), the lamps as props (kind `apron_lamp`) and a plan note.
 import { draftIR } from './plan.mjs';
 import { buildVirtual, F_WALK, F_WRITTEN } from './vworld.mjs';
@@ -244,7 +244,9 @@ export function lightCover(r, { fixture, stage = 'props', keepOut = [], reserved
       if (i === undefined) { i = mats.length; mats.push(s); mi.set(s, i); }
       cols.push(x, z, y, y, i);
     }
-    part._push({ op: 'columns', from: { abs: 0 }, to: { abs: 0 }, cols, materials: mats, cond: COND.IF_AIR_OR_FLUID, walk: false });
+    // natural cells only (not into air only): the plan survey has no plants, so a lamp's post cell may hold short grass or a
+    // flower the plan reads as air; IF_AIR_OR_FLUID would skip it and leave the light floating (S7's first W run: 2 of 7)
+    part._push({ op: 'columns', from: { abs: 0 }, to: { abs: 0 }, cols, materials: mats, cond: COND.IF_NATURAL, walk: false });
     (r.meta.parts[part.id] ??= {}).kind = 'add';
   }
   // each lot's lamp positions on its ext (Steward's panels; later additions keep clear of them)

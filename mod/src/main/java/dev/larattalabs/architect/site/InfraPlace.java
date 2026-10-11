@@ -113,12 +113,16 @@ public final class InfraPlace {
 	 */
 	public static Check checkRoad(ServerLevel level, List<BlockPos> points, int width, @Nullable String surface, @Nullable String slab, boolean lanterns,
 		boolean decks, @Nullable String owner, boolean force, boolean partial, @Nullable String protectOwner) {
-		return checkRoad(level, points, width, surface, slab, lanterns, decks, owner, force, partial, protectOwner, null);
+		return checkRoad(level, points, width, surface, slab, lanterns, decks, owner, force, partial, protectOwner, null, null);
 	}
 
-	/** {@link #checkRoad}; 6c W: {@code lamp} the bible's lamp fixture for the lanterns (a region road's IR {@code lamp}; null: 4e's). */
+	/**
+	 * {@link #checkRoad}; 6c W: {@code lamp} the bible's lamp fixture for the lanterns (a region road's IR {@code lamp}; null: 4e's),
+	 * {@code ownGroup} the road's site group (a region's: its own verge counts as the road owner's for a lantern post's foot).
+	 */
 	public static Check checkRoad(ServerLevel level, List<BlockPos> points, int width, @Nullable String surface, @Nullable String slab, boolean lanterns,
-		boolean decks, @Nullable String owner, boolean force, boolean partial, @Nullable String protectOwner, @Nullable JsonObject lamp) {
+		boolean decks, @Nullable String owner, boolean force, boolean partial, @Nullable String protectOwner, @Nullable JsonObject lamp,
+		@Nullable String ownGroup) {
 		String why = WorldJournal.unavailable();
 		if (why != null) {
 			return refused(Reason.JOURNAL_UNAVAILABLE, why);
@@ -136,7 +140,7 @@ public final class InfraPlace {
 		}
 		Roads.Planned p;
 		try {
-			p = Roads.plan(level, xs, ys, zs, width, surface, slab, lanterns, decks, owner, force, Sites::ownerOf, Sites::busy, protectOwner, partial, lamp);
+			p = Roads.plan(level, xs, ys, zs, width, surface, slab, lanterns, decks, owner, force, Sites::ownerOf, Sites::busy, protectOwner, partial, lamp, ownGroup);
 		} catch (IllegalArgumentException e) {
 			return refused(Reason.OTHER, e.getMessage());
 		}

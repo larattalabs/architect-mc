@@ -37,7 +37,9 @@ export async function build({ phase, local, ART, SCEN, evidenceSha }) {
     const dst = path.join(img, short);
     fs.mkdirSync(dst, { recursive: true });
     const cp = (from, name) => { if (!fs.existsSync(from)) return null; fs.copyFileSync(from, path.join(dst, name)); return `img/${short}/${name}`; };
-    const cams = Object.keys(sc.cams).map((c) => ({ name: c, before: cp(path.join(nat, 'before', `${c}.png`), `before_${c}.png`), after: cp(path.join(nat, 'shots', `${c}.png`), `after_${c}.png`) }));
+    // (6c W) plus any camera the run added (cam_lamp: the apron lamp close-up)
+    const extra = fs.existsSync(path.join(nat, 'shots')) ? fs.readdirSync(path.join(nat, 'shots')).filter((n) => n.endsWith('.png')).map((n) => n.slice(0, -4)).filter((n) => !(n in sc.cams)) : [];
+    const cams = [...Object.keys(sc.cams), ...extra].map((c) => ({ name: c, before: cp(path.join(nat, 'before', `${c}.png`), `before_${c}.png`), after: cp(path.join(nat, 'shots', `${c}.png`), `after_${c}.png`) }));
     const pv = path.join(nat, 'previews');
     const previews = fs.readdirSync(pv).filter((n) => /\.(png|svg)$/.test(n) && n !== 'siteplan.png').sort().map((n) => ({ name: n.replace(/\.(png|svg)$/, ''), src: cp(path.join(pv, n), `preview_${n}`) }));
     scenarios.push({

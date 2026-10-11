@@ -363,7 +363,8 @@ steps.frozen = async () => {
     }
   }
   if (line) {
-    const c = await call('dev.road.check', { points: [[line.x0, line.y, line.z], [line.x1, line.y, line.z]], width: 3 }, 60_000);
+    // (a refused check comes back as a DevError carrying the verdict)
+    const c = await call('dev.road.check', { points: [[line.x0, line.y, line.z], [line.x1, line.y, line.z]], width: 3 }, 60_000).catch((e) => e.response ?? { error: e.message });
     out.road = { line, refusals: c.refusals ?? c.refused ?? null, ok: c.ok ?? null };
     check(JSON.stringify(c).includes('DEEP_WATER'), `item 6: a 4e ground road along ${line.x1 - line.x0 + 1} frozen columns is refused DEEP_WATER (${JSON.stringify(c.refusals ?? c).slice(0, 200)})`);
   } else check(false, 'item 6: no run of 12 frozen columns to lay a road on');

@@ -313,6 +313,9 @@ region. Previews print as file links (with a [copy] link).
 
 Semi-stable: a hook may change or go, and every such change is listed here, newest first.
 
+- **2026-10-11 (6c slice W):** new `dev.region.survey {claim: [x0,z0,x1,z1], surveyLoad?: bounded:256, file?}`: the region plan
+  survey (ARSV) a plan of the claim would send -> `{sha, resolution, columns, missing, water, frozen, frozenSample}` (`file`: the
+  bytes written there). apitest `heights` adds a 7th column per sample, `frozen` (`Sample.frozen`).
 - **2026-10-11 (6c slice V):** new `dev.nav.villager {from: [x,y,z] (feet), to: [x,y,z] (feet), range?: 256, accuracy?: 0}`: a
   no-AI villager (never added to the world) on `from`, `FOLLOW_RANGE` = range (16-2048), doors openable, vanilla
   `PathNavigation.createPath(to, accuracy)` -> `{path, canReach, nodes, end: [x,y,z], followRange, ms}`; the villager is discarded.

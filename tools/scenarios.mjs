@@ -283,6 +283,19 @@ async function runScenario(id) {
   fs.copyFileSync(path.join(planDir, 'siteplan.json'), path.join(out, 'previews', 'siteplan.json'));
   fs.copyFileSync(path.join(planDir, 'summary.txt'), path.join(out, 'summary.txt'));
   const ir = JSON.parse(fs.readFileSync(path.join(planDir, 'ir.json'), 'utf8'));
+  // (6c W) a close-up camera on the first apron lamp (the lamp look for the gallery): 4 out and 2 up, on the side away from its lot
+  if (!flat) {
+    const pm = JSON.parse(fs.readFileSync(path.join(planDir, 'meta.json'), 'utf8'));
+    const lamp = (pm.village?.props ?? []).find((p) => p.kind === 'apron_lamp');
+    if (lamp) {
+      const [lx, ly, lz] = lamp.cells[0];
+      const lot = ir.lots.find((l) => l.id === lamp.lot)?.box;
+      const sx = lot && lx < (lot.minX + lot.maxX) / 2 ? -1 : 1, sz = lot && lz < (lot.minZ + lot.maxZ) / 2 ? -1 : 1;
+      const eye = [lx + 0.5 + 4 * sx, ly + 2.6, lz + 0.5 + 4 * sz];
+      const [yaw, pitch] = look(eye, [lx + 0.5, ly + 1, lz + 0.5]);
+      cams.cam_lamp = [...eye, yaw, pitch];
+    }
+  }
   // the box: the claim + 8 over the written y span +-8 (the plan's virtual world and its lots), as 6a's exactness box
   const ys = await writtenY(planDir, ir);
   const box = [claim[0] - 8, ys[0] - 8, claim[1] - 8, claim[2] + 8, ys[1] + 8, claim[3] + 8];
