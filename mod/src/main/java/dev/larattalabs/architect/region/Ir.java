@@ -26,7 +26,11 @@ public record Ir(JsonObject json, String id, String kitVersion, String seed, int
 	}
 
 	/** A ground road: 4e RoadRequest points. */
-	public record Road(String id, String stage, List<int[]> points, int width, @Nullable String surface, boolean lanterns) {
+	public record Road(String id, String stage, List<int[]> points, int width, @Nullable String surface, boolean lanterns, @Nullable JsonObject lamp) {
+		/** Without a lamp (4e's fence and lantern). */
+		public Road(String id, String stage, List<int[]> points, int width, @Nullable String surface, boolean lanterns) {
+			this(id, stage, points, width, surface, lanterns, null);
+		}
 	}
 
 	/**
@@ -66,7 +70,8 @@ public record Ir(JsonObject json, String id, String kitVersion, String seed, int
 				List<int[]> pts = new ArrayList<>();
 				r.getAsJsonArray("points").forEach(p -> pts.add(ints(p.getAsJsonArray())));
 				roads.add(new Road(r.get("id").getAsString(), r.get("stage").getAsString(), pts, r.has("width") ? r.get("width").getAsInt() : 3, str(r,
-					"surface"), !r.has("lanterns") || r.get("lanterns").getAsBoolean()));
+					"surface"), !r.has("lanterns") || r.get("lanterns").getAsBoolean(), r.has("lamp") && r.get("lamp").isJsonObject() ? r.getAsJsonObject("lamp")
+						: null)); // 6c W: the bible's lamp fixture (format 2, kind road:lamp)
 			}
 		}
 		Map<String, int[]> anchors = new LinkedHashMap<>();

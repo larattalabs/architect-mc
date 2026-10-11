@@ -110,7 +110,7 @@ public final class RoadSync {
 							continue;
 						}
 						String n = a.name();
-						if (n.equals("minecraft:air") || n.equals("minecraft:oak_fence") || n.equals("minecraft:lantern")) {
+						if (n.equals("minecraft:air") || RoadPlan.isLampBlock(n)) { // 6c W: any lamp fixture's blocks
 							continue;
 						}
 						c.add(sc.index(j));

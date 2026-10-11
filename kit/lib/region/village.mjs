@@ -14,6 +14,10 @@ import { COND } from './program.mjs';
 import { inRects } from './survey.mjs';
 import { crossOffsets } from './geom.mjs';
 import { isGravity } from '../blocks.mjs';
+import { fixtureFor, roadLamp } from './fixtures.mjs';
+
+/** (6c W) The village's lamp fixture (the bible's `light` on its `rail`): as props.mjs lampFixture (no import cycle). */
+const lampFixture = (r) => fixtureFor(r.material('light', 'lamp light'), r.material('rail', 'lamp post'));
 
 /** VillageLayout.Rules.defaults(): street 5 (road 3 plus a verge each side), lot gap 3, slope at most 3, margin 2. */
 export const STREET_RULES = Object.freeze({ streetWidth: 5, lotGap: 3, maxSlope: 3, claimMargin: 2 });
@@ -593,7 +597,7 @@ export function streetLayout(r, specs, { rules = STREET_RULES, shared = { kind: 
     const pts = [toWorld(o, ch.a, sv), toWorld(o, ch.b, sv)];
     const why = street._groundRoadProblem(pts.map((q) => [q[0], null, q[1]]));
     if (why) throw new Error(`flat village: the street (${ch.rid}) can't be a ground road: ${why}`);
-    street.road(pts, { width: rules.streetWidth - 2, surface: 'path', lanterns: true, mode: 'ground', id: ch.rid });
+    street.road(pts, { width: rules.streetWidth - 2, surface: 'path', lanterns: true, mode: 'ground', id: ch.rid, lamp: roadLamp(lampFixture(r)) });
     roads.push(ch.rid);
     if (ch.endPort) pl.ports.push({ name: ch.endPort, at: at3(ch.b), facing: facingU(-1), width: rules.streetWidth });
     if (ch.startPort) pl.ports.push({ name: ch.startPort, at: at3(ch.a), facing: facingU(1), width: rules.streetWidth });

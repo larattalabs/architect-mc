@@ -915,7 +915,11 @@ public final class RegionsImpl implements Regions {
 		road.points().forEach(pt -> pts.add(new BlockPos(pt[0], pt[1], pt[2])));
 		var rr = new dev.larattalabs.architect.api.RoadRequest(level, pts, road.width(), road.surface(), null, road.lanterns(), false, Mode.INSTANT, rec.owner,
 			new JsonObject(), null, true);
-		return dev.larattalabs.architect.site.RegionQueue.roadItem(level, rec.id, "road:" + road.id(), road.stage(), after, rr);
+		QItem q = dev.larattalabs.architect.site.RegionQueue.roadItem(level, rec.id, "road:" + road.id(), road.stage(), after, rr);
+		if (road.lamp() != null) {
+			q.spec.add("lamp", road.lamp().deepCopy()); // 6c W: the bible's lamp fixture for the street's lanterns
+		}
+		return q;
 	}
 
 	private static @Nullable QItem lotItem(ServerLevel level, RegionRec rec, Ir.Lot lot, String entry, List<String> after, RealiseRequest r) {

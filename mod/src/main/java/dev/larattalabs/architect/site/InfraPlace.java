@@ -113,6 +113,12 @@ public final class InfraPlace {
 	 */
 	public static Check checkRoad(ServerLevel level, List<BlockPos> points, int width, @Nullable String surface, @Nullable String slab, boolean lanterns,
 		boolean decks, @Nullable String owner, boolean force, boolean partial, @Nullable String protectOwner) {
+		return checkRoad(level, points, width, surface, slab, lanterns, decks, owner, force, partial, protectOwner, null);
+	}
+
+	/** {@link #checkRoad}; 6c W: {@code lamp} the bible's lamp fixture for the lanterns (a region road's IR {@code lamp}; null: 4e's). */
+	public static Check checkRoad(ServerLevel level, List<BlockPos> points, int width, @Nullable String surface, @Nullable String slab, boolean lanterns,
+		boolean decks, @Nullable String owner, boolean force, boolean partial, @Nullable String protectOwner, @Nullable JsonObject lamp) {
 		String why = WorldJournal.unavailable();
 		if (why != null) {
 			return refused(Reason.JOURNAL_UNAVAILABLE, why);
@@ -130,7 +136,7 @@ public final class InfraPlace {
 		}
 		Roads.Planned p;
 		try {
-			p = Roads.plan(level, xs, ys, zs, width, surface, slab, lanterns, decks, owner, force, Sites::ownerOf, Sites::busy, protectOwner, partial);
+			p = Roads.plan(level, xs, ys, zs, width, surface, slab, lanterns, decks, owner, force, Sites::ownerOf, Sites::busy, protectOwner, partial, lamp);
 		} catch (IllegalArgumentException e) {
 			return refused(Reason.OTHER, e.getMessage());
 		}
@@ -143,6 +149,9 @@ public final class InfraPlace {
 			hits.add(new SiteJournal.Hit(s, "", "cells", Journal.Policy.CELL, Journal.Status.ACTIVE, 0, 0));
 		}
 		JsonObject spec = Roads.spec(xs, ys, zs, width, surface, slab, lanterns, decks, p.plan());
+		if (lamp != null) {
+			spec.add("lamp", lamp.deepCopy()); // 6c W: the fixture the road's lanterns were built with
+		}
 		if (partial) {
 			spec.addProperty("partial", true);
 		}
