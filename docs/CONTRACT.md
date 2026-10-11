@@ -10247,7 +10247,7 @@ Branch `slice/X` (worktree `../architect-mc-X`). $0: sim and stub only (`artifac
 | Hook (C22) | `dev.undo.failRestore {skip}`: let `skip` removal restores finish, then break the next one before its site record is finished (-1 disarms). |
 | Gate | Slice tier `artifacts/gate-runs-X/20261011-182748-slice` (2 shards, 8912-8915, old-version clients 8916/8917, `--quiet-wait`, head fbb8ed2): 27 PASS, including unit-mod 498, unit-kit 246, apijars on the 0.16.0/0.15.0/0.14.0 jars (45 ok each), x-unit, **x-ingame** (53 ok: lotext, keys, removal, apicompat), v-ingame, 5b-chains, 4d-all, 4e-orders, 6a-megaA (own CPU max 24.6 ms, 50.7k cells/s), 6a-eflat, 6a-staged, 6a-inv3, the 6b steps and S1. Three steps did not pass and were fixed or re-run: unit-sidecar (the Limits drift guard did not know `LOT_EXT_MAX`: fixed in the guard) and v-unit (the X checkout lacked `sidecar/node_modules`: environment), re-run PASS at 524df06 with 6cv-scenario-s7 (NOISY at load 37 in the slice run, PASS on a quiet box: `20261011-204414-change`). `api-compat --gate6cx` 4/4 clean (0.16.0, 0.15.0, 0.14.0 apitest jars, 0.16.0 surface; baseline built from tag v0.16.0, `artifacts/gate6c-x/v0160`). Items: 1 unit (Api114Test 6, RegionKeysTest 5, the kit's C19 tests), 2 `lotext` (14 checks: 10/10 S7 flat lot sites carry the ext, 4097 refuses FIELD_LIMIT `params.lots[1].ext`, save/reload and undo/redo byte equal), 3 `keys` (plan idempotence, conflict, in-flight twin, owner scope, planByKey after the reload; a realise held pending fails WORLD_STOPPED, `realiseByKey` finds rg1 PLACING after the reload, it completes, a second realise returns it, another body OP_KEY_CONFLICT, removal ends the key), 5 api-compat, C22 `removal` (injected restore failure: removed=false and PARTIAL, the retry resumes and the world hash equals the pre-placement one; remove, reload, remove again: removed=true, world unchanged, REMOVED with the same removedAt for the region and the group). Evidence of the manual dev-client runs: `artifacts/gate6c-x/` (the contract says `gateX/`; named like the other slices). Known flakes in the box's tier (4d-all group undo on G4D Base gravity gravel, sim-massing, the apijars SITE_PROGRESS gap, 6b-nudges under load) did not occur in this run. |
 
-## Phase 6c slice Y: settlement stockpile (C24-C26) (DRAFT for Steward review)
+## Phase 6c slice Y: settlement stockpile (C24-C26) (FROZEN 2026-10-11 after Steward's review; built as Y1 and Y2)
 
 Next free API minor at merge (the house rule applies; main is at 1.14.0), mod to match. Steward round 7 (steward-mc
 docs/ARCHITECT-ASKS.md C24-C26; its PLAN "Phase 4" waits on C24). Noah's survival rules (PLAN "Inputs for the 6c contract":
@@ -10516,6 +10516,27 @@ roads, deltas) with reservations. 4. Refund routing and the credit keys. 5. Adop
 - **N-Y-2:** split. **Y1** = C24 (stockpile, feed order, ledger, refunds, migration; gate items 2-9 and 12-13). **Y2** = C25
   and C26 (waiting status, full BOM; gate items 10-11). Y2 doesn't need Y1's stockpile, so the two build **in parallel** on
   separate worktrees and ports; each takes the next free minor at merge. Y1 is Steward's phase 4 blocker and is reviewed first.
+
+### Changes from Steward's review of Y (2026-10-11; these win)
+
+- **S-Y-1:** a blocked target keeps its reservation for transient blockers (a player in a cell, a support not yet built).
+  **Exception:** a target whose whole remaining frontier is in unloaded chunks does not reserve (Steward builds LOADED_ONLY;
+  a far house first in order must not starve loaded targets near the player). **New gate item (Y1):** two targets, the first
+  in feed order entirely in unloaded chunks: the loaded second target is fed and builds; when the first's chunks load, its
+  reservation returns.
+- **S-Y-2:** a reorder list, as drafted.
+- **S-Y-3:** accept only what a build needs (Y1). A general storehouse is later.
+- **S-Y-4:** summing each item's `bomFull`, `checkRoad` and `checkDelta` is enough; no `checkBatch`.
+- **S-Y-5:** 100 ticks, as drafted.
+- **S-Y-6:** one dimension per stockpile, as drafted.
+- **S-Y-7:** drop RS's region crate (`RealiseRequest.crateAt`, `RegionView.crate`); regions draw from the stockpile.
+- **Addition (Y1): `dissolveStockpile(owner, to)`.** For an abandoned settlement: one call hands every remaining unit,
+  reserved or not, to a player (`to` = a player, items to the inventory with overflow dropped at the player) or drops it at a
+  crate (`to` = null), restores every crate block, and ends the stockpile. Allowed while stock is over capacity and with targets
+  building: their reservations are released and they fall back to waiting (C25) with no stockpile (as for an owner without
+  one). Every unit is counted in `withdrawn` or `dropped`, so the ledger identity holds. **Gate item:** dissolve with
+  reserved stock and a building target: conservation sum exact; crates restored; the target reports waiting.
+- **N-Y-1, N-Y-2:** Steward agrees (27 stacks per crate; Y1 before Y2, built in parallel).
 
 ### Deferred
 
