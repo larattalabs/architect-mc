@@ -22,6 +22,7 @@ import dev.larattalabs.architect.survival.Refunds;
 import dev.larattalabs.architect.survival.SiteNet;
 import dev.larattalabs.architect.survival.SurvivalItems;
 import dev.larattalabs.architect.survival.SurvivalWorld;
+import dev.larattalabs.architect.survival.WaitCalc;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -131,6 +132,7 @@ public final class Builder {
 	public static void init() {
 		ServerTickEvents.END_SERVER_TICK.register(Builder::tick);
 		RoadBuilder.init(); // 6c 0c (C16): construction roads
+		SiteWaits.init(); // 6c Y2 (C25): waiting status
 		ServerLifecycleEvents.SERVER_STARTED.register(s -> server = s);
 		ServerLifecycleEvents.SERVER_STOPPED.register(s -> {
 			RUNS.clear();
@@ -926,6 +928,7 @@ public final class Builder {
 			}
 		}
 		syncGhosts(srv);
+		SiteWaits.flush(srv);
 	}
 
 	/** Whether a SITE_PROGRESS is due: the built count changed and a second passed since the last one. Pure. */
@@ -959,10 +962,13 @@ public final class Builder {
 			return;
 		}
 		if (crate == null || c.paused()) {
+			// C25: a pause or a crate that is gone ends a wait; a crate in an unloaded chunk only interrupts the count
+			SiteWaits.observe(srv, level, s.id(), c.paused() || r.crateMissing ? WaitCalc.Outcome.ENDED : WaitCalc.Outcome.IDLE);
 			return;
 		}
 		Ledger ledger = crate.ledger();
 		int budget = SurvivalWorld.blocksPerTick();
+		boolean starved = false;
 		BitSet free = c.free();
 		boolean freeChanged = false;
 		int placed = 0;
@@ -984,6 +990,8 @@ public final class Builder {
 				continue;
 			}
 			if (!r.affordable(i, ledger)) {
+				// C25: a frontier cell (its support is built) the stock cannot pay
+				starved |= r.support[i] < 0 || r.built.get(r.support[i]);
 				continue;
 			}
 			if (r.support[i] >= 0 && !r.built.get(r.support[i])) {
@@ -1026,6 +1034,7 @@ public final class Builder {
 		if (placed > 0) {
 			crate.ledgerChanged();
 		}
+		SiteWaits.observe(srv, level, s.id(), placed > 0 ? WaitCalc.Outcome.PLACED : starved ? WaitCalc.Outcome.STARVED : WaitCalc.Outcome.IDLE);
 		if (freeChanged) {
 			Sites.replace(srv, s.withConstruction(c.withFree(free)));
 			s = Sites.get(s.id());
@@ -1095,6 +1104,7 @@ public final class Builder {
 		Sites.replace(srv, done);
 		sendClear(srv, r, true);
 		r.blockedSince.clear();
+		SiteWaits.ended(srv, s.id());
 		String msg = r.name + " (" + s.id() + ") is built" + (left.isEmpty() ? "" : "; the crate's leftovers ("
 			+ Refunds.Tally.total(left) + " items) lie where it stood");
 		for (ServerPlayer p : level.players()) {
@@ -1177,13 +1187,11 @@ public final class Builder {
 		String needs = "";
 		if (crate != null) {
 			avail.addAll(crate.ledger().stock().keySet());
-			int most = 0;
-			for (var e : r.unbuilt.entrySet()) {
-				int miss = crate.ledger().missing(e.getKey(), r::unbuiltCost);
-				if (miss > most) {
-					most = miss;
-					needs = miss + " × " + itemName(e.getKey()); // "112 × spruce log": item names have no plural form
-				}
+			// C25: the first item the build runs short of, in build order (the same answer as SiteWait.nextNeeded()[0])
+			var w = SiteWaits.view(srv, s.id());
+			if (w != null && !w.nextNeeded().isEmpty()) {
+				var n = w.nextNeeded().get(0);
+				needs = n.count() + " × " + itemName(net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(n.item()).toString()); // "112 × spruce log": item names have no plural form
 			}
 		}
 		Construction.Crate cc = s.construction().crate();
@@ -1204,6 +1212,7 @@ public final class Builder {
 
 	/** The site left (removed, forgotten): its ghost goes from every client. */
 	static void forget(MinecraftServer srv, String id) {
+		SiteWaits.ended(srv, id);
 		Run r = RUNS.remove(id);
 		if (r != null) {
 			sendClear(srv, r, false);
@@ -1588,6 +1597,7 @@ public final class Builder {
 		int built = r.built.cardinality();
 		o.addProperty("built", built);
 		o.addProperty("percent", r.size() == 0 ? 100 : built * 100 / r.size());
+		o.add("wait", SiteWaits.json(SiteWaits.view(srv, id), level)); // 6c Y2 (C25)
 		o.addProperty("waterlogged", r.waterlogged);
 		o.add("bom", counts(r.bom));
 		o.addProperty("bomTotal", Refunds.Tally.total(r.bom));

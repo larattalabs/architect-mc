@@ -301,4 +301,12 @@ public interface Sites {
 	default LotSize minLotSize(MassingRef massing, FitOptions o) {
 		throw new UnsupportedOperationException("Sites.minLotSize(MassingRef) needs Architect API 1.12.0");
 	}
+
+	/**
+	 * (C25) The waiting status of a construction target: a building site or a construction road (by id). Empty when the id is not a
+	 * construction target. A built target answers {@code waiting=false} with an empty list. Server thread. Since 1.19.0.
+	 */
+	default java.util.Optional<SiteWait> waiting(String targetId) {
+		throw new UnsupportedOperationException("Sites.waiting needs Architect API 1.19.0");
+	}
 }
