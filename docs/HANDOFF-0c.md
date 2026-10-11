@@ -60,6 +60,13 @@ need a shared crate.
   (fixed: 1.12.0). Tick bars (megalite, 4d, megaA realise), 4e throughput and the 1.8.0 jar's SITE_PROGRESS gap (876 ms)
   are load. 4d "group undo ... back exactly" (L5) fails in 0a's, 0b's and integ runs too: not 0c's.
 
+- Final slice tier on the merged head (0a + 0b in), `artifacts/gate-runs-0c/20261011-060252-slice`, 3 shards on 8912-8917:
+  19 PASS, 3 FAIL (sim-massing composite keys, the 1.11.0 jar's SITE_PROGRESS gap 931 ms, 6b-nudges PREPARE timeout),
+  all three known load flakes (the first two also fail in 0a/0b/integ runs); re-run at load 3:
+  `20261011-070130-slice` 3/3 PASS. Focused steps: `artifacts/gate6c0c/REPORT.md` (all pass, incl. downgrade on 0.14.0 and
+  the volume sha equal on main, 0.14.0 and 0c). api-compat clean against the 0.14.0/0.13.0/0.12.0 apitest jars and the
+  0.14.0 surface.
+
 ## Resume
 
 - Build: `export JAVA_HOME=/opt/homebrew/opt/openjdk@25 GRADLE_USER_HOME=$PWD/.gradle-home; cd mod && ./gradlew build --offline`.
