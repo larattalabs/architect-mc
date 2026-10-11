@@ -1,10 +1,15 @@
 // forms_demo (docs/CONTRACT.md 6c F1 §7): the forms I fixture, not a catalogue program. On S2's pinned claim (or its flat
-// variant) it grows 6 `iceSpike` clusters and 3 `rockSpire`s on land, keeps the claim's natural ice (`keepNatural('ICE')`: the
-// frozen sea and the natural spikes are never written, and no form stands within 3 of them), and lights each ice cluster with a
-// soul-lantern post (block light 10: melt-safe beside ice and snow, M17). One spire is baked to a `voxels` op (`bake`, default
-// on) so the gate sees a baked form realised. Two-plan flow: the first plan asks for the claim's volume; the second reads it.
-// Deterministic: placement is a sorted scan of a grid, no Math.random.
+// variant) it grows up to 6 `iceSpike` clusters and 3 `rockSpire`s on land among the claim's natural ice, keeps that ice
+// (`keepNatural('ICE')`: the frozen sea and the natural spikes are never written: a form whose cells meet a kept cell, or come
+// within 1 of one, is not placed there), and lights each ice cluster with a soul-lantern post (block light 10: melt-safe beside
+// ice and snow, M17). The first spire is baked to a `voxels` op (`bake`, default on) so the gate sees a baked form realised.
+// Two-plan flow: the first plan asks for the claim's volume; the second reads it. Deterministic: candidate sites are a sorted
+// scan of a grid, each form grown at plan time and tested cell by cell; no Math.random.
 import { region } from '../lib/region/program.mjs';
+import { fnv64 } from '../lib/noise.mjs';
+import { iceSpike } from '../lib/forms/iceSpike.mjs';
+import { rockSpire } from '../lib/forms/rockSpire.mjs';
+import { formCells } from '../lib/forms/rules.mjs';
 
 export const id = 'forms_demo';
 export const catalogue = false;
@@ -15,8 +20,15 @@ export const params = {
   lamps: { type: 'bool', default: true, label: 'Soul-lantern posts' },
 };
 
-/** The site of a form: footprint radius, and the slope it accepts. */
-const SPIKE_R = 9, SPIRE_R = 16, KEEP_GAP = 3;
+const AIR = 'minecraft:air';
+const SPIRES = [
+  { preset: 'pinnacle', radius: [4, 5], ledge: [3, 4] },
+  { preset: 'hoodoo' },
+  { preset: 'tower', radius: [4, 6], ledge: [3, 4] },
+];
+const SPIKES = ['classic', 'needles', 'stubby'];
+/** Tries per form before giving it up (each try grows the form and tests its cells). */
+const TRIES = { rockSpire: 80, iceSpike: 200 };
 
 /** `build(ctx, hooks)`: the program with the gate's broken-variant hooks (`hooks.after(r, info)`). */
 export function build(ctx, hooks = {}) {
@@ -30,8 +42,8 @@ export function build(ctx, hooks = {}) {
   const box = { minX: claim.minX, minZ: claim.minZ, maxX: claim.maxX, maxZ: claim.maxZ, minY: Math.max(claim.minY, st.minFloor - 8), maxY: Math.min(claim.maxY, st.maxTop + 8) };
   const keep = r.keepNatural('ICE', box, { stage: 'forms' });
   const vol = keep ? r.needVolume(box) : null;
-  // land: not water in the survey; with the volume, the column's top solid cell is soil, rock, loose or snow (not ice or water)
-  const VC_TOP_OK = new Set([1, 2, 3, 5]); // ROCK, SOIL, LOOSE, SNOW (lib/region/volume.mjs VOXEL_CLASSES)
+  // land: not water in the survey; with the volume, the column's top solid cell is rock, soil, loose or snow (not ice or water)
+  const TOP_OK = new Set([1, 2, 3, 5]); // ROCK, SOIL, LOOSE, SNOW (lib/region/volume.mjs VOXEL_CLASSES)
   const topClass = (x, z) => {
     if (!vol) return null;
     const lx = x - vol.box.minX, lz = z - vol.box.minZ;
@@ -44,63 +56,100 @@ export function build(ctx, hooks = {}) {
     }
     return null;
   };
-  const land = (x, z) => !survey.waterAt(x, z) && !survey.missingAt(x, z) && (vol ? VC_TOP_OK.has(topClass(x, z)) : true);
-  const used = [];
-  const free = (x, z, rad) => used.every(([ux, uz, ur]) => Math.max(Math.abs(ux - x), Math.abs(uz - z)) > ur + rad + 2);
-  /** Sites of radius `rad` on a grid: all land, no kept ice within rad + KEEP_GAP, ground range at most `relief`; flattest first. */
-  const sites = (rad, relief, step) => {
+  const inClaim = (x, z) => x >= claim.minX && x <= claim.maxX && z >= claim.minZ && z <= claim.maxZ;
+  const land = (x, z) => inClaim(x, z) && !survey.waterAt(x, z) && !survey.missingAt(x, z) && (vol ? TOP_OK.has(topClass(x, z)) : true);
+  // candidate sites: a land core of radius `core` with a ground range of at most `relief`; flattest first, then north-west first
+  const sites = (core, relief, margin) => {
     const out = [];
-    for (let z = claim.minZ + rad + 4; z <= claim.maxZ - rad - 4; z += step) {
-      for (let x = claim.minX + rad + 4; x <= claim.maxX - rad - 4; x += step) {
+    for (let z = claim.minZ + margin; z <= claim.maxZ - margin; z += 2) {
+      for (let x = claim.minX + margin; x <= claim.maxX - margin; x += 2) {
         let ok = true, lo = Infinity, hi = -Infinity;
-        for (let dz = -rad; dz <= rad && ok; dz += 2) for (let dx = -rad; dx <= rad; dx += 2) {
+        for (let dz = -core; dz <= core && ok; dz++) for (let dx = -core; dx <= core; dx++) {
           if (!land(x + dx, z + dz)) { ok = false; break; }
           const g = survey.heightAt(x + dx, z + dz);
           lo = Math.min(lo, g); hi = Math.max(hi, g);
         }
-        if (!ok || hi - lo > relief) continue;
-        if (keep && keep.near(x, z, rad + KEEP_GAP)) continue;
-        out.push({ x, z, range: hi - lo, y: survey.heightAt(x, z) });
+        if (ok && hi - lo <= relief) out.push({ x, z, range: hi - lo, y: survey.heightAt(x, z) });
       }
     }
     out.sort((a, b) => a.range - b.range || a.z - b.z || a.x - b.x);
     return out;
   };
-  const presetsSpire = ['pinnacle', 'tower', 'hoodoo'];
-  const presetsIce = ['classic', 'needles', 'stubby'];
-  const spires = [], spikes = [];
-  for (const s of sites(SPIRE_R, 6, 8)) {
-    if (spires.length >= P.spires) break;
-    if (!free(s.x, s.z, SPIRE_R)) continue;
-    used.push([s.x, s.z, SPIRE_R]);
-    spires.push(s);
-  }
-  for (const s of sites(SPIKE_R, 4, 6)) {
-    if (spikes.length >= P.spikes) break;
-    if (!free(s.x, s.z, SPIKE_R)) continue;
-    used.push([s.x, s.z, SPIKE_R]);
-    spikes.push(s);
-  }
-  if (spires.length < P.spires || spikes.length < P.spikes) r.note(`forms_demo: placed ${spires.length}/${P.spires} spires and ${spikes.length}/${P.spikes} ice clusters (not enough land clear of kept ice)`);
+  // the cells taken so far (forms and lamps), and the test: inside the claim, off every kept cell and its 1-neighbourhood, and
+  // 2 cells clear of every placed form's column
+  const takenCols = new Set();
+  const keptNear = (x, y, z) => !!keep && keep.has(x, y, z);
+  const fits = (gen) => {
+    const { cells } = formCells(gen.ops);
+    const cols = new Set();
+    for (const [k, s] of cells) {
+      if (s === AIR) continue;
+      const [x, y, z] = k.split(',').map(Number);
+      if (!inClaim(x, z) || keptNear(x, y, z)) return null;
+      cols.add(`${x},${z}`);
+    }
+    for (const k of cols) {
+      const [x, z] = k.split(',').map(Number);
+      for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) if (takenCols.has(`${x + dx},${z + dz}`)) return null;
+    }
+    return cols;
+  };
+  const groundAt = (x, z) => survey.heightAt(x, z);
   const forms = [];
-  spires.forEach((s, i) => {
-    const g = r.rockSpire(`spire_${i + 1}`, { at: [s.x, s.y, s.z], preset: presetsSpire[i % 3] }, { stage: 'forms', bake: P.bake && i === 0 });
-    forms.push({ id: `spire_${i + 1}`, kind: 'rockSpire', at: [s.x, s.y, s.z], ops: g.ops.length, baked: P.bake && i === 0 });
-  });
+  const clearOf = { rockSpire: 3, iceSpike: 2 };
+  const place = (kind, idx, cands, grow) => {
+    let tries = 0;
+    for (const s of cands) {
+      if (tries >= TRIES[kind]) break;
+      // a quick pre-test: no kept column and no taken column within `clear` of the site
+      if ((keep && keep.near(s.x, s.z, clearOf[kind])) || [...Array(2 * clearOf[kind] + 1).keys()].some((a) => [...Array(2 * clearOf[kind] + 1).keys()].some((b) => takenCols.has(`${s.x + a - clearOf[kind]},${s.z + b - clearOf[kind]}`)))) continue;
+      const fid = `${kind === 'rockSpire' ? 'spire' : 'ice'}_${idx + 1}`;
+      tries++;
+      const gen = grow(fid, s);
+      const cols = fits(gen);
+      if (!cols) continue;
+      for (const k of cols) takenCols.add(k);
+      return { fid, gen, site: s };
+    }
+    return null;
+  };
+  const spireSites = sites(3, 5, 12), spikeSites = sites(1, 4, 8);
+  let nSpires = 0, nSpikes = 0;
+  for (let i = 0; i < P.spires; i++) {
+    const spec = SPIRES[i % SPIRES.length];
+    const got = place('rockSpire', nSpires, spireSites, (fid, s) => rockSpire({ ...spec, at: [s.x, s.y, s.z], seed: fnv64(ctx.seed, 'rockSpire', fid).hex }, { groundAt }));
+    if (!got) continue;
+    const bake = P.bake && nSpires === 0;
+    r.form(got.fid, got.gen, { stage: 'forms', bake });
+    forms.push({ id: got.fid, kind: 'rockSpire', preset: spec.preset, at: [got.site.x, got.site.y, got.site.z], ops: got.gen.ops.length, baked: bake, supports: got.gen.supports, trimmed: got.gen.trimmed });
+    nSpires++;
+  }
   const lamps = r.part('lamps', { stage: 'forms' });
   const lampCols = [];
-  spikes.forEach((s, i) => {
-    const g = r.iceSpike(`ice_${i + 1}`, { at: [s.x, s.y, s.z], preset: presetsIce[i % 3] }, { stage: 'forms' });
-    forms.push({ id: `ice_${i + 1}`, kind: 'iceSpike', at: [s.x, s.y, s.z], ops: g.ops.length, spikes: g.spikes.length });
-    if (!P.lamps) return;
-    // a soul-lantern post just outside the cluster, on land, on the side facing the claim's centre
-    const cx = (claim.minX + claim.maxX) >> 1, cz = (claim.minZ + claim.maxZ) >> 1;
-    const dx = Math.sign(cx - s.x), dz = Math.sign(cz - s.z);
-    const lx = s.x + dx * (SPIKE_R - 1), lz = s.z + dz * (SPIKE_R - 1);
-    if (!land(lx, lz)) return;
-    const gy = survey.heightAt(lx, lz);
-    lampCols.push(lx, lz, gy + 1, gy + 2, 0, lx, lz, gy + 3, gy + 3, 1);
-  });
+  for (let i = 0; i < P.spikes; i++) {
+    const preset = SPIKES[i % SPIKES.length];
+    const got = place('iceSpike', nSpikes, spikeSites, (fid, s) => iceSpike({ preset, at: [s.x, s.y, s.z], seed: fnv64(ctx.seed, 'iceSpike', fid).hex }, { groundAt }));
+    if (!got) continue;
+    r.form(got.fid, got.gen, { stage: 'forms' });
+    nSpikes++;
+    const f = { id: got.fid, kind: 'iceSpike', preset, at: [got.site.x, got.site.y, got.site.z], ops: got.gen.ops.length, spikes: got.gen.spikes.length, lamp: null };
+    forms.push(f);
+    if (!P.lamps) continue;
+    // a soul-lantern post on land 2 to 4 cells off the cluster's footprint, on the side nearest the claim's centre first
+    const b = got.gen.bounds;
+    const cands = [];
+    for (let d = 2; d <= 4; d++) cands.push([b.maxX + d, got.site.z], [b.minX - d, got.site.z], [got.site.x, b.maxZ + d], [got.site.x, b.minZ - d]);
+    for (const [lx, lz] of cands) {
+      if (!land(lx, lz) || takenCols.has(`${lx},${lz}`)) continue;
+      const gy = survey.heightAt(lx, lz);
+      if ([1, 2, 3].some((dy) => keptNear(lx, gy + dy, lz))) continue;
+      lampCols.push(lx, lz, gy + 1, gy + 2, 0, lx, lz, gy + 3, gy + 3, 1);
+      takenCols.add(`${lx},${lz}`);
+      f.lamp = [lx, gy + 3, lz];
+      break;
+    }
+  }
+  if (nSpires < P.spires || nSpikes < P.spikes) r.note(`forms_demo: placed ${nSpires}/${P.spires} spires and ${nSpikes}/${P.spikes} ice clusters (not enough land clear of kept ice)`);
   // IF_NATURAL: the post replaces a natural snow layer or plant, never a built block
   if (lampCols.length) lamps._push({ op: 'columns', from: { abs: 0 }, to: { abs: 0 }, cols: lampCols, materials: [lamps._mat('minecraft:spruce_fence', 'lamp post'), lamps._mat('minecraft:soul_lantern', 'lamp')], cond: 0, walk: false });
   // anchors: the entrance and spawn on the land nearest the claim's centre; a hub; cameras on a ring above the claim
@@ -110,7 +159,7 @@ export function build(ctx, hooks = {}) {
     for (let dz = -rr; dz <= rr && !best; dz += 2) for (let dx = -rr; dx <= rr; dx += 2) {
       if (Math.max(Math.abs(dx), Math.abs(dz)) !== rr) continue;
       const x = cx + dx, z = cz + dz;
-      if (land(x, z) && free(x, z, 2) && !(keep && keep.near(x, z, 2))) { best = [x, z]; break; }
+      if (land(x, z) && !takenCols.has(`${x},${z}`) && !(keep && keep.near(x, z, 2))) { best = [x, z]; break; }
     }
   }
   const [ex, ez] = best ?? [cx, cz];

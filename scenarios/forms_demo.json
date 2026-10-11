@@ -12,14 +12,71 @@
     "gamerules": "gallery"
   },
   "fixture": {
-    "claim": [2508, 1588, 2699, 1779],
-    "yRange": [22, 124],
-    "foundBy": "S2's pinned fixture (scenarios/s2_ice_spikes.json)"
+    "claim": [
+      2508,
+      1588,
+      2699,
+      1779
+    ],
+    "yRange": [
+      22,
+      124
+    ],
+    "foundBy": "S2's pinned fixture (scenarios/s2_ice_spikes.json)",
+    "irShaAtPin": "a2c1adeab45be12afb6872861ca551d27462aac5622a2d7c6f6366246255a3c2"
   },
   "flat": {
     "preset": "flat",
-    "claimOffset": [0, 0],
+    "claimOffset": [
+      0,
+      0
+    ],
     "gamerules": "exact"
   },
-  "lotEntries": {}
+  "lotEntries": {},
+  "seed": "8896510109583805153",
+  "cams": {
+    "cam_e": [
+      2699.5,
+      144,
+      1683.5,
+      90.3,
+      42
+    ],
+    "cam_ground": [
+      2629.5,
+      68,
+      1707.5,
+      132.8,
+      17
+    ],
+    "cam_high": [
+      2603.5,
+      184,
+      1703.5,
+      178.6,
+      80.8
+    ],
+    "cam_n": [
+      2603.5,
+      144,
+      1588.5,
+      0.3,
+      42.6
+    ],
+    "cam_s": [
+      2603.5,
+      144,
+      1779.5,
+      179.7,
+      42
+    ],
+    "cam_w": [
+      2508.5,
+      144,
+      1683.5,
+      -90.3,
+      42.6
+    ]
+  }
 }
