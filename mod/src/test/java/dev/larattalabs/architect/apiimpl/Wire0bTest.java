@@ -29,9 +29,10 @@ class Wire0bTest {
 	@Test
 	void enumsAppended() {
 		Reason[] r = Reason.values();
-		assertEquals(Reason.COPY_REFUSED, r[r.length - 2]);
-		assertEquals(Reason.VERSION_REFUSED, r[r.length - 1]);
-		assertEquals(Reason.TILE_SLOW, r[r.length - 3]);
+		// 1.11.0's two right after 1.10.0's TILE_SLOW (later versions append after them)
+		int t = Reason.TILE_SLOW.ordinal();
+		assertEquals(Reason.COPY_REFUSED, r[t + 1]);
+		assertEquals(Reason.VERSION_REFUSED, r[t + 2]);
 		assertEquals(Estimate.Kind.SMALL, Estimate.Kind.values()[4]);
 		assertEquals(Estimate.Kind.CHANGE, Estimate.Kind.values()[5]);
 		assertEquals(Group.Stage.COPY, Group.Stage.values()[3]);
