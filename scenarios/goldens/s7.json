@@ -2,9 +2,9 @@
  "scenario": "s7_flat_village",
  "version": 1,
  "note": "tile shas of the IR over its own plan survey (kit windowFromSurvey), 1 worker = 4 workers shuffled; inputs in goldens/s7/",
- "fromRun": "20261011-185054",
- "irSha": "3f02e71ee2a319affc8b3ec4112b993d29acac2f1096742e8413b29cf8b74b0e",
- "kitVersion": "0.17.0",
+ "fromRun": "20261011-214611",
+ "irSha": "adece50dd600e1d5deb860b44a12ba1f7fc0a3333f7dff46077da475bbe04480",
+ "kitVersion": "0.18.0",
  "cells": 68139,
  "tiles": {
   "ground|path|24,-48": "051a81a2a083034248e87203bc3a450d97adfe05aa750c26acd999d58c561b92",
