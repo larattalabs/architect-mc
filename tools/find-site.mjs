@@ -9,7 +9,8 @@
 // rift sites, the volume fixture, the pick sites). Its `needs`:
 //   {size: [w, d], relief: [min, max] (height range over the claim), biomes: {any: [substring...], share: 0..1},
 //    waterMax, waterMin, treesMin, naturalMin (percent), avoidStructures: true, center: [x, z] (the spiral's centre), stopAt,
-//    (6c V) flat: {range, share, res} (at least `share` of the columns within one band `range` high, from /apitest heights),
+//    (6c V) flat: {range, share, res, squares?} (at least `share` of the columns within one band `range` high, from /apitest
+//    heights; with `squares: n`, the share of the claim's n x n squares whose ground range is at most `range`, as survey.flatAreas),
 //    waterBand: {band, min} (at least `min` surface-water columns inside the claim's outer `band` cells),
 //    noStructure: {id, margin} (/locate finds none within the claim's half-diagonal + margin)}
 import fs from 'node:fs';
@@ -96,7 +97,23 @@ export async function fineChecks(io, needs, [x0, z0, x1, z1]) {
     const expect = Math.ceil((x1 - x0 + 1) / res) * Math.ceil((z1 - z0 + 1) / res);
     out.columns = cols.length;
     if (cols.length < expect * 0.98) return { ...out, ok: false, why: `heights: ${cols.length} of ${expect} columns` };
-    if (needs.flat) {
+    if (needs.flat?.squares) {
+      // (6c V) local relief, as the kit's survey.flatAreas: the share of the claim's squares (size x size) whose ground range is at
+      // most `range` (a flat claim for pads with cut and fill <= 2, not a level plain)
+      const S = needs.flat.squares;
+      const g = (c) => (c.length > 5 ? c[5] : c[2]);
+      const sq = new Map();
+      for (const c of cols) {
+        const k = `${Math.floor((c[0] - x0) / S)},${Math.floor((c[1] - z0) / S)}`;
+        const r = sq.get(k) ?? [Infinity, -Infinity];
+        r[0] = Math.min(r[0], g(c)); r[1] = Math.max(r[1], g(c));
+        sq.set(k, r);
+      }
+      const flat = [...sq.values()].filter(([lo, hi]) => hi - lo <= needs.flat.range).length;
+      out.flatShare = Math.round((1000 * flat) / sq.size) / 1000;
+      out.flatSquares = `${flat}/${sq.size}`;
+      if (out.flatShare < needs.flat.share) out.ok = false;
+    } else if (needs.flat) {
       const hist = new Map();
       // the terrain's relief: the ground under trees (the 6th field, 0c's Sample.ground), else the height
       const g = (c) => (c.length > 5 ? c[5] : c[2]);
