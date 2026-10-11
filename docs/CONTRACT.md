@@ -8184,6 +8184,35 @@ in merge order:
 - `BrushRequest`: H (`fluid`), PT (`respectPlayerChanges`);
 - `BrushKind`: H appends after B.
 
+### Coordinator decisions on the batch (2026-10-11; these win over the questions below)
+
+- **N-W-1:** Noah approved V's gallery at `c31c6de43ce1` (v0.16.0). W's lamps are visible, so W's S7 gallery is approved by
+  Noah again when W is ready.
+- **N-F2-1 (stamps in the public repo): open for Noah.** Until he answers, F2 ships the `stamp` op and the harvester, and the
+  stamp library is harvested locally and kept out of the repo and the jar. If he allows it, the harvested library ships later
+  with no API change.
+- **N-F1-1:** the axis-run metric stays recorded only through 6c. An uncalibrated estimate doesn't gate.
+- **N-H-1:** survival fluids: placed water source cells are free (water is renewable), and each placed lava source cell
+  costs one lava bucket from the crate. Containment (M25) applies in both modes. RS uses this.
+- **N-RS-1:** the connector half of region survival stays in 7a (N-6b-5).
+- **Scheduling:** as drafted. 7a may start after T2, T3 and S2. The 6c close-out (S2, S3 v1, F3's forest variant, mega_bench A
+  with forms) gates 7a's merge, not its start. The toolbox additions finish alongside.
+- **Scope:** the additions are accepted as recorded (the toolbox slices from Noah's 2026-10-09 decision, M25, M26, `beside`,
+  RS, and PT as optional). The 6c close-out updates SETTLEMENTS §17.2's API numbers and closes N-0c-3.
+- **Spend:** $0 for the whole batch, as drafted. N-VOC-1's paid check comes back as its own decision when it's needed.
+- **Smaller calls:**
+  - **N-W-2:** lamps use the bible's lighting role, a lantern on a fence post in the bible's wood by default.
+  - **N-T1-1:** `blend` is the default pad edge for programs that declare passes. Existing programs keep their edge, so the
+    S1, S7 and mega_bench goldens don't move.
+  - **N-B-1:** `PLAYER_BLOCKS` removal needs permission level 2 (op).
+  - **N-S2-1:** S2 plans on land only.
+  - **N-HY-1:** S3 v1 has no stream. S3 doesn't depend on HY; a stream can come with 7b's v2.
+  - **N-VOC-2:** the drafted default rarity budgets are accepted.
+  - **N-S3-1:** "v1 terraced" means buildings on terraces cut into the slope, with retaining walls and switchback paths.
+    Cliff-built is 7b's v2.
+  - **N-SCH-1:** fixtures are built from the public spec. A real WorldEdit-exported file is added later if Noah exports one.
+    It doesn't block SCH.
+
 ### Open questions for Steward
 
 - **S-W-1:** treat frozen water as water (recommended), or refuse plans that touch it.
