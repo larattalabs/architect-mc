@@ -6863,6 +6863,17 @@ helper logs a warning). A kit-error tile is covered by a sidecar unit test, not 
 **DevBridge.** `dev.batch.skipSave {batchId}`, `dev.api.dropAck {msgType}` (its own `type` is the hook's message type),
 `dev.api.pending`.
 
+**Gate (slice tier, $0).** `node tools/gate-run.mjs slice --since origin/main` (2 shards, 8902-8905), run 20261010-231718: 31 of
+34 steps PASS, including the ten `0a-*` steps (items 1-11 in game and at the protocol), apijars on the 0.12.0/0.11.0/0.10.0 jars,
+6a-megaA (own CPU p99 12.3 ms, max 48.4 ms; undo p99 10.3, max 24.4), 6a-inv3, 6a-staged, 6a-eflat and the 6b steps. The 3
+FAILs (4e-megalite, 4d-all, 4e-throughput: own tick CPU 51-62 ms, throughput 12k) came at machine load 30-55 from parallel
+sessions, as the 0b and 0c runs of the same hour. Re-run with `--quiet-wait`: 4d-all PASS, 6a-megaB-fast PASS; an A/B on a quiet
+box, main v0.12.4 then 0a back to back: 4e-megalite PASS on both (own CPU max 43.7 / 24.2 ms), 4e-throughput PASS on both
+(median 20.3k / 21.9k cells/s). `api-compat --gate6c0a` 4/4 clean. Item 10 re-run with a pending `Sites.removeGroup` and
+`Regions.remove`: both, and the unacked group, fail WORLD_STOPPED. Not exercised in game: a kit-error tile (unit test), the
+256-batch retention drop (code review). gate-verifier: functional items pass (it re-ran items 4, 5, 10, 11); its bench
+reservation is resolved by the A/B above.
+
 ## Phase 6c slice 0b: reuse and bounded effort (DRAFT for Steward review)
 
 This slice is API 1.11.0 and mod 0.14.0.
