@@ -30,7 +30,7 @@ const SEED = 'golden';
 /** S1 and the four family fixtures, over synthetic land (the golden seed). */
 const CASES = { floating_islands: 256, crater_works: 200, sky_isle: 240, rift_city: 256, walled_hill: 200 };
 const claimOf = (size) => { const h = size / 2; return { minX: -h, minZ: -h, maxX: h - 1, maxZ: h - 1, minY: -64, maxY: 319 }; };
-const plan = (id) => planRegion({ programFile: path.join(KIT, 'regions', `${id}.mjs`), survey: synthSurvey(claimOf(CASES[id]), SEED), claim: claimOf(CASES[id]), node: 'golden' });
+const plan = (id) => planRegion({ programFile: path.join(KIT, 'regions', `${id}.mjs`), survey: synthSurvey(claimOf(CASES[id]), SEED), claim: claimOf(CASES[id]), node: 'golden', kitVersion: '0.12.0' }); // (6c V) the goldens were planned by kit 0.12.0: pinned, as node is
 
 function evalIn(irJson, jobs, blobs) {
   return new Promise((resolve, reject) => {

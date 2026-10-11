@@ -312,12 +312,12 @@ test('PLAN_STALE: format 3, unknown requires, a newer kit; the running kit versi
   const base = () => ir2([{ op: 'shape', shape: box, material: 'minecraft:stone', cond: 0, walk: false }]);
   assert.equal(staleReason(base()), null);
   const f3 = base(); f3.format = 3;
-  assert.match(staleReason(f3), /plan needs format 3; this is kit 0\.12\.0/);
+  assert.equal(staleReason(f3), `plan needs format 3; this is kit ${KIT_VERSION}`);
   assert.throws(() => compileIR(f3), /^Error: PLAN_STALE: plan needs format 3/);
   const k = base(); k.requires = ['shape:voronoi'];
   assert.match(staleReason(k), /kinds \[shape:voronoi\]/);
   const v = base(); v.kitVersion = '0.99.0';
-  assert.match(staleReason(v), /^plan needs kit 0\.99\.0; this is kit 0\.12\.0$/);
+  assert.equal(staleReason(v), `plan needs kit 0.99.0; this is kit ${KIT_VERSION}`);
   assert.equal(semverCompare('0.12.0', '0.11.9'), 1);
   assert.equal(semverCompare('0.12.0', '0.12.0'), 0);
   assert.equal(semverCompare('0.9.10', '0.10.0'), -1);

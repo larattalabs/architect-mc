@@ -31,7 +31,7 @@ export const OPS_RESERVED = ['relief', 'scatter', 'voxels', 'stamp'];
 export const MEMBERS_FORMAT2 = ['anchors', 'blobs', 'budget', 'claim', 'fields', 'floating', 'format', 'forms', 'id', 'kitVersion', 'lots', 'node', 'params',
   'parts', 'paths', 'programSha', 'requires', 'roads', 'roles', 'rules', 'seed', 'stages', 'tiles', 'utility', 'volumes'];
 /** (6b) The running kit's version (kept equal to lib/region/plan.mjs KIT_VERSION by a test). */
-export const EVAL_KIT_VERSION = '0.12.0';
+export const EVAL_KIT_VERSION = '0.16.0';
 
 /** Compare two semver strings (major.minor.patch, numeric): -1, 0, 1. */
 export function semverCompare(a, b) {

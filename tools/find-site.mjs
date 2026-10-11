@@ -8,7 +8,10 @@
 // A scenario is scenarios/<id>.json (the golden scenarios S1-S6) or scenarios/sites/<id>.json (gate sites: the crater and
 // rift sites, the volume fixture, the pick sites). Its `needs`:
 //   {size: [w, d], relief: [min, max] (height range over the claim), biomes: {any: [substring...], share: 0..1},
-//    waterMax, waterMin, treesMin, naturalMin (percent), avoidStructures: true, center: [x, z] (the spiral's centre), stopAt}
+//    waterMax, waterMin, treesMin, naturalMin (percent), avoidStructures: true, center: [x, z] (the spiral's centre), stopAt,
+//    (6c V) flat: {range, share, res} (at least `share` of the columns within one band `range` high, from /apitest heights),
+//    waterBand: {band, min} (at least `min` surface-water columns inside the claim's outer `band` cells),
+//    noStructure: {id, margin} (/locate finds none within the claim's half-diagonal + margin)}
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -75,6 +78,58 @@ export function candidates(n, step) {
   return out;
 }
 
+/** (6c V) The fine checks on a candidate that passed the summary: flat share, water in the outer band, no structure near. */
+export async function fineChecks(io, needs, [x0, z0, x1, z1]) {
+  const out = { ok: true };
+  if (needs.flat || needs.waterBand) {
+    const res = needs.flat?.res ?? 2;
+    const r = await io.cmd(`/apitest heights ${x0} ${z0} ${x1} ${z1} ${res}`);
+    let v = JSON.parse((r.messages ?? []).find((m) => m.startsWith('{') || m.startsWith('[')) ?? 'null');
+    for (let i = 0; v?.pending && i < 600; i++) {
+      const g = await io.cmd(`/apitest get ${v.pending}`);
+      const line = (g.messages ?? []).find((m) => m.startsWith('{'));
+      const w = line ? JSON.parse(line) : null;
+      if (w?.value) { v = w.value; break; }
+      await new Promise((res2) => setTimeout(res2, 1000));
+    }
+    const cols = Array.isArray(v) ? v : [];
+    const expect = Math.ceil((x1 - x0 + 1) / res) * Math.ceil((z1 - z0 + 1) / res);
+    out.columns = cols.length;
+    if (cols.length < expect * 0.98) return { ...out, ok: false, why: `heights: ${cols.length} of ${expect} columns` };
+    if (needs.flat) {
+      const hist = new Map();
+      for (const c of cols) hist.set(c[2], (hist.get(c[2]) ?? 0) + 1);
+      let best = 0, at = null;
+      for (const h of hist.keys()) {
+        let n = 0;
+        for (let y = h; y <= h + needs.flat.range; y++) n += hist.get(y) ?? 0;
+        if (n > best) { best = n; at = h; }
+      }
+      out.flatShare = Math.round((1000 * best) / cols.length) / 1000;
+      out.flatBand = [at, at + needs.flat.range];
+      if (out.flatShare < needs.flat.share) out.ok = false;
+    } else out.flatShare = 0;
+    if (needs.waterBand) {
+      const b = needs.waterBand.band;
+      const inBand = (x, z) => x - x0 < b || x1 - x < b || z - z0 < b || z1 - z < b;
+      out.waterBand = cols.filter((c) => c[3] && inBand(c[0], c[1])).length;
+      out.waterInner = cols.filter((c) => c[3] && !inBand(c[0], c[1])).length;
+      if (out.waterBand < (needs.waterBand.min ?? 1)) out.ok = false;
+    }
+  }
+  if (out.ok && needs.noStructure) {
+    const cx = Math.floor((x0 + x1) / 2), cz = Math.floor((z0 + z1) / 2);
+    await io.tp(cx + 0.5, 200, cz + 0.5);
+    const r = await io.cmd(`/locate structure ${needs.noStructure.id}`);
+    const msg = (r.messages ?? []).join(' ');
+    const m = /\[(-?\d+), [^,]+, (-?\d+)\]/.exec(msg);
+    const half = Math.ceil(Math.hypot(x1 - x0, z1 - z0) / 2);
+    out.structure = m ? { at: [+m[1], +m[2]], dist: Math.round(Math.hypot(+m[1] - cx, +m[2] - cz)) } : { none: msg.slice(0, 160) };
+    if (m && out.structure.dist <= half + needs.noStructure.margin) out.ok = false;
+  }
+  return out;
+}
+
 /**
  * Find and pin a site. `io` = {call, cmd, tp, log} from tools/lib/run6b.mjs (a client in a world of the pinned seed).
  * Returns {claim, score, tried, summary, surveySha}.
@@ -107,7 +162,14 @@ export async function findSite(id, io) {
     const s = parseSummary(sample.summary);
     const sc0 = score(s, needs);
     io.log(`  ${id}: candidate ${x0},${z0} relief ${s.max - s.min}, water ${s.water}%, trees ${s.trees}%, natural ${s.natural}%, biomes ${JSON.stringify(s.biomes)} -> ${sc0}`);
-    if (sc0 !== null && (!best || sc0 > best.score)) best = { claim: [x0, z0, x1, z1], score: sc0, summary: sample.summary, stats: s };
+    let fine = null;
+    if (sc0 !== null && (needs.flat || needs.waterBand || needs.noStructure)) {
+      fine = await fineChecks(io, needs, [x0, z0, x1, z1]);
+      io.log(`  ${id}: candidate ${x0},${z0} fine ${JSON.stringify(fine)}`);
+      if (!fine.ok) continue;
+    }
+    const sc1 = sc0 === null ? null : fine ? Math.round((sc0 + fine.flatShare * 100) * 100) / 100 : sc0;
+    if (sc1 !== null && (!best || sc1 > best.score)) best = { claim: [x0, z0, x1, z1], score: sc1, summary: sample.summary, stats: fine ? { ...s, fine } : s };
     if (best && needs.stopAt !== undefined && best.score >= needs.stopAt) break;
   }
   if (!best) return { claim: null, tried };

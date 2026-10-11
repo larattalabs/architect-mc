@@ -1,0 +1,57 @@
+{
+  "id": "s7_flat_village",
+  "phase": "6c-v",
+  "version": 1,
+  "brief": "a flat village of 10 Steward-shaped lots on one street with a square, lanes, props and the villager rules (C10)",
+  "world": {
+    "seed": "2026100906",
+    "preset": "normal",
+    "gamerules": "gallery"
+  },
+  "flat": {
+    "preset": "flat",
+    "claimOffset": [
+      0,
+      0
+    ],
+    "gamerules": "exact"
+  },
+  "needs": {
+    "size": [
+      112,
+      112
+    ],
+    "biomes": {
+      "any": [
+        "plains",
+        "meadow",
+        "savanna",
+        "river"
+      ],
+      "share": 0.6
+    },
+    "flat": {
+      "range": 2,
+      "share": 0.85,
+      "res": 2
+    },
+    "waterBand": {
+      "band": 16,
+      "min": 1
+    },
+    "waterMax": 12,
+    "noStructure": {
+      "id": "#minecraft:village",
+      "margin": 64
+    },
+    "naturalMin": 95,
+    "center": [
+      1792,
+      896
+    ],
+    "candidates": 400,
+    "step": 128,
+    "stopAt": 190
+  },
+  "program": "flat_village"
+}
