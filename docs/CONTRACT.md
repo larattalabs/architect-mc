@@ -8268,7 +8268,7 @@ in merge order:
    - N-S3-1: what "v1 terraced" means.
    - N-SCH-1: a real WorldEdit `.schem` fixture.
 
-## Phase 6c slice W: village safety (DRAFT for Steward review)
+## Phase 6c slice W: village safety (FROZEN 2026-10-11 after Steward's review)
 
 This slice is API 1.14.0 and mod 0.17.0, after V (1.13.0 / 0.16.0). The coordinator confirms the numbers at merge; if another
 slice merges first, W takes the next minor.
@@ -8445,6 +8445,17 @@ tag, since `Columns` changes), the sim suites, apijars, 6b-scenario-s1 and 6cv-s
 
 - Lighting inside lots from the design side (7b), bible-styled lamps (7a §8.3).
 - Region survival (the RS slice).
+
+### Changes from Steward's review of W (2026-10-11; these win)
+
+- **S-W-1:** (a). Frozen water counts as water: FROZEN together with WATER, the floor is read at the bed, and M24 needs
+  unfrozen water. Steward will read `Sample.frozen` itself (no lot on it; it counts as water for `near_water`).
+- **S-W-2:** up to 4 lamps per lot is accepted. Lit aprons come first, with the checker's full M5 under 1% on S7. Report the
+  per-lot count in `siteplan.json` and the notes, so Noah can judge clutter.
+- **Addition:** each lot's lamp positions go on its `LotSpec.ext` as `architect_mc:village.lamps` (a list of world
+  positions), so Steward's panels can show them and later additions can keep clear of them.
+- N-W-1 and N-W-2 stay with Noah. N-W-2's default is the coordinator's: a lantern on a fence post in the bible's wood.
+
 
 ## Phase 6c slice T1: passes, fields and relief (DRAFT for Steward review)
 
