@@ -221,10 +221,9 @@ public final class RegionsImpl implements Regions {
 		if (c.getXSpan() > big || c.getZSpan() > big) {
 			return failed(Reason.REGION_LIMIT, "the claim is " + c.getXSpan() + "x" + c.getZSpan() + " columns (at most " + big + "x" + big + ")");
 		}
-		String prot = protectedClaim(Sites.dimensionId(r.level()), r.owner(), new int[] {c.minX(), c.minY(), c.minZ(), c.maxX(), c.maxY(), c.maxZ()});
-		if (prot != null) {
-			return failed(Reason.PROTECTED, prot);
-		}
+		// 6c V: the owner's protected areas that meet the claim go to the plan as keepOut (a program that honours them records them
+		// in its IR); the claim is judged against them at accept and at realise (protectedClaim with the IR's honoured set). 0c refused
+		// here at once; a program that reads no keepOut is now refused at accept, with the same reason.
 		TileStream.Link link = TileStream.link;
 		if (link == null || !link.connected()) {
 			return failed(Reason.SIDECAR_UNAVAILABLE, "the helper (sidecar) is not connected");
@@ -311,6 +310,11 @@ public final class RegionsImpl implements Regions {
 		if (volumes != null) {
 			m.add("volumes", volumes);
 		}
+		// 6c V: the owner's protected areas that meet the claim (an older helper ignores the member)
+		JsonArray keepOut = keepOutOf(Sites.dimensionId(r.level()), r.owner(), new int[] {c.minX(), c.minY(), c.minZ(), c.maxX(), c.maxY(), c.maxZ()});
+		if (!keepOut.isEmpty()) {
+			m.add("keepOut", keepOut);
+		}
 		MinecraftServer s = r.level().getServer();
 		return link.send(m).thenCompose(ack -> {
 			if (ack.has("ok") && !ack.get("ok").getAsBoolean()) {
@@ -331,8 +335,10 @@ public final class RegionsImpl implements Regions {
 				if (stale != null) {
 					throw refusal(Reason.PLAN_STALE, stale);
 				}
-				// 6c 0c (C17): the claim against the owner's protected areas at accept (an area marked while it planned)
-				String prot = protectedClaim(Sites.dimensionId(r.level()), r.owner(), new int[] {c.minX(), c.minY(), c.minZ(), c.maxX(), c.maxY(), c.maxZ()});
+				// 6c 0c (C17): the claim against the owner's protected areas at accept (an area marked while it planned); 6c V: except the
+				// areas the program honoured (the IR's keepOut)
+				String prot = protectedClaim(Sites.dimensionId(r.level()), r.owner(), new int[] {c.minX(), c.minY(), c.minZ(), c.maxX(), c.maxY(), c.maxZ()},
+					honoured(irJson));
 				if (prot != null) {
 					throw refusal(Reason.PROTECTED, prot);
 				}
@@ -458,12 +464,19 @@ public final class RegionsImpl implements Regions {
 
 	static RegionPlan view(PlanRec p) {
 		List<LotSpec> lots = new ArrayList<>();
+		JsonArray irLots = p.ir().json().get("lots") instanceof JsonArray a ? a : new JsonArray();
+		int li = 0;
 		for (Ir.Lot l : p.ir().lots()) {
 			int[] b = l.box();
 			JsonObject ext = new JsonObject();
 			if (l.part() != null) {
 				ext.addProperty("part", l.part());
 			}
+			// 6c V: the program's lot data (e.g. "architect_mc:village" = {role, type, villager, entrance, lane, water, bellDistance})
+			if (li < irLots.size() && irLots.get(li) instanceof JsonObject lo && lo.get("ext") instanceof JsonObject le) {
+				le.entrySet().forEach(e -> ext.add(e.getKey(), e.getValue().deepCopy()));
+			}
+			li++;
 			lots.add(new LotSpec(l.id(), l.stage(), new BoundingBox(b[0], b[1], b[2], b[3], b[4], b[5]), l.floorY(), dir(l.front()), l.brief(), new BlockSize(
 				l.max()[0], l.max()[1], l.max()[2]), ext));
 		}
@@ -720,8 +733,9 @@ public final class RegionsImpl implements Regions {
 			throw refusal(Reason.OTHER, blobError); // (6b) "blob <sha> missing": before any write
 		}
 		Ir ir = p.ir();
-		// 6c 0c (C17): an area marked after planning refuses the realise (no per-tile check)
-		String prot = protectedClaim(p.dimension(), p.owner(), ir.claim());
+		// 6c 0c (C17): an area marked after planning refuses the realise (no per-tile check); 6c V: the areas the program honoured
+		// (the IR's keepOut, the exact rects it was planned around) don't
+		String prot = protectedClaim(p.dimension(), p.owner(), ir.claim(), honoured(ir.json()));
 		if (prot != null) {
 			throw refusal(Reason.PROTECTED, prot);
 		}
@@ -1814,9 +1828,59 @@ public final class RegionsImpl implements Regions {
 
 	/** 6c 0c (C17): the refusal message when the claim {minX, minY, minZ, maxX, maxY, maxZ} touches a protected area of {@code owner}. */
 	static @Nullable String protectedClaim(String dimension, @Nullable String owner, int[] claim) {
-		dev.larattalabs.architect.api.ProtectedArea a = dev.larattalabs.architect.site.Protected.hit(dimension, owner, claim[0], claim[2], claim[3],
-			claim[5]);
-		return a == null ? null : dev.larattalabs.architect.site.Protected.message("The region's claim", a);
+		return protectedClaim(dimension, owner, claim, java.util.Set.of());
+	}
+
+	/**
+	 * 6c V: as above, except the areas whose exact rect {@code "x0,z0,x1,z1"} is in {@code honoured} (the IR's keepOut: the program
+	 * was planned around them). An area marked or moved after the plan is not in it, so it still refuses.
+	 */
+	static @Nullable String protectedClaim(String dimension, @Nullable String owner, int[] claim, java.util.Set<String> honoured) {
+		for (dev.larattalabs.architect.api.ProtectedArea a : dev.larattalabs.architect.site.Protected.of(dimension, owner)) {
+			if (a.intersects(claim[0], claim[2], claim[3], claim[5]) && !honoured.contains(a.x0() + "," + a.z0() + "," + a.x1() + "," + a.z1())) {
+				return dev.larattalabs.architect.site.Protected.message("The region's claim", a);
+			}
+		}
+		return null;
+	}
+
+	/** 6c V: {@code region.plan}'s keepOut: the owner's areas that meet the claim, [[x0, z0, x1, z1]] sorted (as the kit sorts them). */
+	static JsonArray keepOutOf(String dimension, @Nullable String owner, int[] claim) {
+		List<int[]> rects = new ArrayList<>();
+		for (dev.larattalabs.architect.api.ProtectedArea a : dev.larattalabs.architect.site.Protected.of(dimension, owner)) {
+			if (a.intersects(claim[0], claim[2], claim[3], claim[5])) {
+				rects.add(new int[] {a.x0(), a.z0(), a.x1(), a.z1()});
+			}
+		}
+		rects.sort(java.util.Comparator.<int[]>comparingInt(q -> q[0]).thenComparingInt(q -> q[1]).thenComparingInt(q -> q[2]).thenComparingInt(q -> q[3]));
+		JsonArray out = new JsonArray();
+		String last = null;
+		for (int[] q : rects) {
+			String k = q[0] + "," + q[1] + "," + q[2] + "," + q[3];
+			if (k.equals(last)) {
+				continue;
+			}
+			last = k;
+			JsonArray a = new JsonArray();
+			for (int v : q) {
+				a.add(v);
+			}
+			out.add(a);
+		}
+		return out;
+	}
+
+	/** 6c V: the rects an IR's program honoured ({@code keepOut}, as "x0,z0,x1,z1"); empty when it read none. */
+	static java.util.Set<String> honoured(@Nullable JsonObject ir) {
+		java.util.Set<String> out = new java.util.HashSet<>();
+		if (ir != null && ir.get("keepOut") instanceof JsonArray a) {
+			for (JsonElement e : a) {
+				if (e instanceof JsonArray q && q.size() == 4) {
+					out.add(q.get(0).getAsInt() + "," + q.get(1).getAsInt() + "," + q.get(2).getAsInt() + "," + q.get(3).getAsInt());
+				}
+			}
+		}
+		return out;
 	}
 
 	static RegionException refusal(Reason r, String msg) {

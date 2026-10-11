@@ -118,7 +118,7 @@ export interface KitInfo {
   /** KINDS_FORMAT2, [] without one */
   irKinds: string[];
   /** the plan CLI takes --blobs-out / --volumes; the kit has check, preview, catalogue (tools/region.mjs and the modules) */
-  caps: { blobsOut: boolean; volumes: boolean; check: boolean; preview: boolean; catalogue: boolean };
+  caps: { blobsOut: boolean; volumes: boolean; check: boolean; preview: boolean; catalogue: boolean; keepOut: boolean };
 }
 
 /** (6b) The side blob shas a format-2 IR names (`blobs: {name: {sha, bytes, kind}}`); format-1 blobs are inline: none. */
@@ -238,7 +238,7 @@ export class Regions {
   kitInfo(): KitInfo {
     if (this.info) return this.info;
     const kit = this.host.config.kitDir;
-    const info: KitInfo = { kitVersion: 'unknown', irFormats: [1], irKinds: [], caps: { blobsOut: false, volumes: false, check: false, preview: false, catalogue: false } };
+    const info: KitInfo = { kitVersion: 'unknown', irFormats: [1], irKinds: [], caps: { blobsOut: false, volumes: false, check: false, preview: false, catalogue: false, keepOut: false } };
     let tool = '';
     try {
       tool = fs.readFileSync(path.join(kit, 'tools', 'region.mjs'), 'utf8');
@@ -252,6 +252,7 @@ export class Regions {
       check: fs.existsSync(path.join(kit, 'lib', 'region', 'check.mjs')) && /['"]check['"]/.test(tool),
       preview: fs.existsSync(path.join(kit, 'lib', 'region', 'preview.mjs')) && /['"]preview['"]/.test(tool),
       catalogue: /['"]catalogue['"]/.test(tool),
+      keepOut: tool.includes("'keep-out'"),
     };
     const perm = permissionFlag();
     try {
@@ -311,6 +312,9 @@ export class Regions {
     const info = this.kitInfo();
     if (volumes.length && !info.caps.volumes) throw new ClientError(`the kit (${info.kitVersion}) cannot read volumes (its plan CLI has no --volumes)`);
     const check = msg.check !== false;
+    // (6c V) the owner's protected areas: to the plan CLI as a file (an older kit has no --keep-out and plans without them; the
+    // mod then refuses the claim as 0c did, because the IR records no honoured areas)
+    const keepOut = info.caps.keepOut ? (msg.keepOut ?? []) : [];
     const planId = `p${this.host.now().toString(36)}${crypto.randomBytes(3).toString('hex')}`;
     fs.mkdirSync(this.planDir(planId), { recursive: true });
     const dir = fs.realpathSync(this.planDir(planId));
@@ -324,6 +328,7 @@ export class Regions {
     }
     const hasBible = !!bible || Object.keys(roles).length > 0;
     if (hasBible) fs.writeFileSync(path.join(dir, 'bible.json'), JSON.stringify({ ...(bible ? { id: bible.id, version: bible.version } : {}), roles }));
+    if (keepOut.length) fs.writeFileSync(path.join(dir, 'keepout.json'), JSON.stringify(keepOut));
     const request = {
       planId,
       program: program.label,
@@ -336,12 +341,13 @@ export class Regions {
       roles,
       check,
       ...(volumes.length ? { volumes: volumes.map((v) => ({ ...(v.name ? { name: v.name } : {}), sha: v.sha, blobId: v.blobId, box: v.box })) } : {}),
+      ...(keepOut.length ? { keepOut } : {}),
       createdAt: this.host.now(),
     };
     fs.writeFileSync(path.join(dir, 'request.json'), JSON.stringify(request, null, 2));
     this.host.log.info(`region plan ${planId}: ${program.label}, claim ${msg.claim.minX},${msg.claim.minZ}..${msg.claim.maxX},${msg.claim.maxZ} y ${msg.claim.minY}..${msg.claim.maxY}, seed ${seed}${bible ? `, bible ${bible.id} v${bible.version}` : ''}${volumes.length ? `, ${volumes.length} volume${volumes.length === 1 ? '' : 's'}` : ''}${check ? '' : ', no check'}`);
     this.planning.add(planId);
-    const p = this.withPlanSlot(() => this.runPlan(planId, dir, program, { seed, claim: msg.claim, hasBible, request, check, volumes: volumes.length > 0 })).finally(() => this.planning.delete(planId));
+    const p = this.withPlanSlot(() => this.runPlan(planId, dir, program, { seed, claim: msg.claim, hasBible, request, check, volumes: volumes.length > 0, keepOut: keepOut.length > 0 })).finally(() => this.planning.delete(planId));
     this.running.add(p);
     void p.finally(() => this.running.delete(p));
     return { planId, seed };
@@ -396,9 +402,9 @@ export class Regions {
   /**
    * The kit CLI's arguments (kit/REGIONS.md "Plan CLI"). The one place that knows the CLI's shape:
    *   plan <program.mjs> --params <f> --survey <f> --seed <u64> --claim minX,minZ,maxX,maxZ,minY,maxY [--bible <f>] --out <planDir> --json
-   *   (6b) [--blobs-out <planDir>/blobs] [--volumes <planDir>/volumes]
+   *   (6b) [--blobs-out <planDir>/blobs] [--volumes <planDir>/volumes]   (6c V) [--keep-out <planDir>/keepout.json]
    */
-  planArgs(dir: string, program: ProgramRef, o: { seed: string; claim: PlanMsg['claim']; hasBible: boolean; volumes?: boolean }): string[] {
+  planArgs(dir: string, program: ProgramRef, o: { seed: string; claim: PlanMsg['claim']; hasBible: boolean; volumes?: boolean; keepOut?: boolean }): string[] {
     const c = o.claim;
     const caps = this.kitInfo().caps;
     return [
@@ -414,6 +420,7 @@ export class Regions {
       ...(o.hasBible ? ['--bible', path.join(dir, 'bible.json')] : []),
       ...(caps.blobsOut ? ['--blobs-out', path.join(dir, 'blobs')] : []),
       ...(o.volumes ? ['--volumes', path.join(dir, 'volumes')] : []),
+      ...(o.keepOut ? ['--keep-out', path.join(dir, 'keepout.json')] : []),
       '--out',
       dir,
       '--json',
@@ -471,7 +478,7 @@ export class Regions {
     planId: string,
     dir: string,
     program: ProgramRef,
-    o: { seed: string; claim: PlanMsg['claim']; hasBible: boolean; request: Record<string, unknown>; check: boolean; volumes: boolean },
+    o: { seed: string; claim: PlanMsg['claim']; hasBible: boolean; request: Record<string, unknown>; check: boolean; volumes: boolean; keepOut?: boolean },
   ): Promise<void> {
     const t0 = Date.now();
     const fail = (message: string) => {

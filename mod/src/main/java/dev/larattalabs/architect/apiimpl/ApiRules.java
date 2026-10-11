@@ -51,11 +51,18 @@ public final class ApiRules {
 					case "region.design" -> "regionDesign";
 					case "region.blobs" -> "regionBlobs";
 					case "ir.format2" -> "irFormat2";
+					case "region.keepOut" -> "planKeepOut"; // 6c V
 					default -> Wire4b.FEATURE_NAMES.getOrDefault(f, Wire5a.FEATURE_NAMES.getOrDefault(f, f));
 				});
 			}
 			if (sidecarFeatures.contains("region.preview")) {
 				out.add("regionGhost"); // the ghost's preview tiles come with the 6b helper's previews
+			}
+			if (sidecarFeatures.contains("region.keepOut")) {
+				// 6c V: a V helper's kit has the flat_village program, the IR graph and the villager mover with M22-M24
+				out.add("flatVillage");
+				out.add("regionGraph");
+				out.add("villagerMover");
 			}
 		}
 		return java.util.Set.copyOf(out);

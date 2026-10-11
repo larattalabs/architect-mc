@@ -25,7 +25,8 @@ import org.junit.jupiter.api.Test;
 class Api112Test {
 	@Test
 	void version() {
-		assertEquals("1.12.0", ArchitectApi.VERSION);
+		String[] v = ArchitectApi.VERSION.split("\\.");
+		assertTrue(Integer.parseInt(v[0]) == 1 && Integer.parseInt(v[1]) >= 12, ArchitectApi.VERSION); // later slices append (6c V: 1.13.0)
 	}
 
 	@Test

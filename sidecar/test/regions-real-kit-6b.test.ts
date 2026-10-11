@@ -145,7 +145,7 @@ describe.skipIf(!hasF2)('format-2 IRs with the real kit: side blobs, blob_unknow
   it('plans a format-2 IR: irFormat 2, requires, the side blob registered; check/previews or a checkError', () => {
     expect(planned.irFormat).toBe(2);
     expect(planned.requires).toEqual(expect.arrayContaining(['blobs:side', 'shape:ellipsoid', 'fields', 'material:rule']));
-    expect(planned.kitVersion).toBe('0.12.0');
+    expect(planned.kitVersion).toBe('0.16.0'); // (6c V) the kit's KIT_VERSION
     expect(planned.blobs!.map((x) => x.kind).sort()).toEqual(['field', 'heightfield']);
     const b = planned.blobs!.find((x) => x.name === 'mound')!;
     expect(b).toMatchObject({ name: 'mound', kind: 'heightfield' });
