@@ -14,7 +14,7 @@ names win). API 1.12.0, mod 0.15.0 (after 0a = 1.10.0 and 0b = 1.11.0). Ports 89
 | §4 groundHeight | built | `Volume.ground` derived in `VolumeSurvey.encode` (ARVX sha pinned by `GroundHeightTest` from the pre-§4 encoder); `Sample.ground` in `SurveyImpl.ground` (scan down from WORLD_SURFACE with the volume's classOf; a journal-owned LOG/LEAVES/PLANT counts) |
 | §6 extend warning | built | `Extension.of/minBudgetUsd`, `Designs.extend`; sidecar ack gains spentUsd + softBudgetFraction, feature `extendInfo`; `ExtensionTest`, groups.test.ts |
 | §5 FIELD_LIMIT | built (0a's `ArchitectRefused` copied verbatim; take 0a's at merge) | `api/Limits`, `apiimpl/FieldLimits` (request, requestGroup, critique, polish, redirectMassing, bibles.request); `FieldLimitsTest`; `sidecar/test/limits.test.ts` (zod walker); gate step `fields`. Re-run the drift test after merging 0b: its new bounded fields need constants |
-| §10 off-thread undo planning | after 0a (own-time percentiles), 2 h box | no journal/** change left on the branch if no-go |
+| §10 off-thread undo planning | NO-GO (measured; branch `slice/0c-undo` kept, not merged) | megaA undo ownCpu (artifacts/gate-runs-0c-undo): main-equivalent 0c p99 9.33 / 7.40 ms, max 20.36 / 18.29 ms (load 21 / 11); spike p99 6.71 / 6.55, max 12.34 / 12.57 (load 7 / 6). Both spike runs fell back to server-thread planning (an unloaded chunk; then a section that changed while it planned: falling gravel), so the gap is load, not the off-thread plan; at like load -11% < the 30% bar. No journal/** change on slice/0c |
 | §7 C16 survival roads | built (merged from `slice/0c-c16`) | `site/RoadBuilder.java` reuses `Builder.Run` through a probe Site; hooks in Builder (crate acceptance, stock, keep-crate), InfraJob (convert at DONE), InfraPlace (remove: refunds + crate; mode rules), Batches (construction road item), Views/ApiEvents; gate step `survroad` passes. Downgrade check pending the 0.14.0 jar |
 
 ## Steward's review (CONTRACT "Changes from Steward's review of 0b, 0c and V")
@@ -51,7 +51,7 @@ need a shared crate.
 - §5 covers string lengths, list sizes, ext (keys, 64 KB as JSON), context and the zod patterns of those fields; numeric
   ranges (budgetUsd, wave, concurrency...) aren't in `Limits` (the drift test walks max lengths and patterns only).
 - §10 spike is on `slice/0c-undo` (not merged): `WorldJournal.UndoPlanner` copies sections on the server thread, plans off it,
-  compares, falls back on any change. Go/no-go needs 0a's ownCpu on megaA undo-only.
+  compares, falls back on any change. No-go; to Later. A per-section re-plan (instead of a whole fallback) would be the next try.
 
 ## Gate runs
 
