@@ -106,6 +106,8 @@ public final class RegionsImpl implements Regions {
 	}
 
 	/** (6c X, C20) {@link RegionKeys#scope} of (owner, "region.plan", key) -> the plan (loaded from the plans' key files at world start). */
+	/** (6c X, C22) Removed regions (removed.json): their tombstones, loaded at world start. */
+	private static final Map<String, RegionRec> TOMBS = new ConcurrentHashMap<>();
 	private static final Map<String, KeyedPlan> PLAN_KEYS = new ConcurrentHashMap<>();
 	/** (6c X, C20) Realises starting with a key (before their region exists; after that REGIONS holds the key). Server thread. */
 	private static final Map<String, KeyedRealise> REALISE_KEYS = new HashMap<>();
@@ -134,6 +136,7 @@ public final class RegionsImpl implements Regions {
 			PLANS.clear();
 			PLAN_KEYS.clear();
 			REALISE_KEYS.clear();
+			TOMBS.clear();
 			Heights.forget(null);
 			TileStream.forgetRegion(null);
 			Prepare.stopAll();
@@ -157,6 +160,7 @@ public final class RegionsImpl implements Regions {
 		Path root = RegionStore.root(w);
 		PLAN_KEYS.clear();
 		REALISE_KEYS.clear();
+		TOMBS.clear();
 		if (!Files.isDirectory(root)) {
 			return;
 		}
@@ -165,6 +169,19 @@ public final class RegionsImpl implements Regions {
 			for (Path d : st.toList()) {
 				Path f = d.resolve("region.json");
 				if (!Files.isRegularFile(f)) {
+					Path rm = d.resolve("removed.json");
+					if (Files.isRegularFile(rm)) {
+						try {
+							RegionRec t = RegionRec.fromJson(RegionStore.readJson(rm));
+							if (t.removedAt <= 0) {
+								t.removedAt = Files.getLastModifiedTime(rm).toMillis(); // a record written before 6c X: its file's time
+							}
+							t.state = RegionState.REMOVED;
+							TOMBS.put(t.id, t);
+						} catch (IOException | RuntimeException e) {
+							Architect.LOGGER.warn("Removed region {} unreadable: {}", d.getFileName(), e.toString());
+						}
+					}
 					continue;
 				}
 				try {
@@ -1479,6 +1496,9 @@ public final class RegionsImpl implements Regions {
 	@Override
 	public Optional<RegionView> get(String regionId) {
 		Live l = REGIONS.get(regionId);
+		if (l == null && TOMBS.containsKey(regionId)) {
+			return Optional.of(tombView(TOMBS.get(regionId))); // (6c X, C22) a removed region: REMOVED with its time
+		}
 		return l == null ? Optional.empty() : Optional.of(view(l));
 	}
 
@@ -1540,6 +1560,15 @@ public final class RegionsImpl implements Regions {
 		List<dev.larattalabs.architect.api.WaitAction> actions = actionsOf(l, waiting, waitingItem, heldStage, pv);
 		return new RegionView(r.id, r.planId, r.irSha, r.owner, r.ext, r.groupId, new BoundingBox(c[0], c[1], c[2], c[3], c[4], c[5]), r.state, st, lots,
 			r.cellsWritten, r.skipped, waiting, pv, actions);
+	}
+
+	/** (6c X, C22) The view of a removed region: REMOVED, with the time its removal finished. */
+	static RegionView tombView(RegionRec r) {
+		int[] c = r.claim;
+		List<LotState> lots = new ArrayList<>();
+		r.lots.forEach((id, ls) -> lots.add(new LotState(id, ls.siteId, ls.state)));
+		return new RegionView(r.id, r.planId, r.irSha, r.owner, r.ext, r.groupId, new BoundingBox(c[0], c[1], c[2], c[3], c[4], c[5]), RegionState.REMOVED,
+			List.of(), lots, r.cellsWritten, r.skipped, null, null, List.of(), r.removedAt);
 	}
 
 	/** (6b) The nudge actions for what the region waits for ({@link WaitActions}). */
@@ -1773,6 +1802,10 @@ public final class RegionsImpl implements Regions {
 	public CompletableFuture<RemoveResult> remove(String regionId, RemoveOptions o) {
 		MinecraftServer s = server;
 		Live l = REGIONS.get(regionId);
+		if (s != null && l == null && TOMBS.containsKey(regionId)) {
+			// (6c X, C22) already removed: removed again, nothing written
+			return CompletableFuture.completedFuture(new RemoveResult(true, List.of(), Map.of()));
+		}
 		if (s == null || l == null) {
 			return CompletableFuture.failedFuture(new IllegalArgumentException("no region " + regionId));
 		}
@@ -1792,6 +1825,9 @@ public final class RegionsImpl implements Regions {
 		return ArchitectApi.get().sites(s).removeGroup(l.rec().groupId, o).thenApply(res -> {
 			s.execute(() -> {
 				if (res.removed()) {
+					l.rec().state = RegionState.REMOVED;
+					l.rec().removedAt = System.currentTimeMillis();
+					TOMBS.put(l.rec().id, l.rec());
 					REGIONS.remove(l.rec().id);
 					Heights.forget(l.rec().id);
 					TileStream.forgetRegion(l.rec().id);

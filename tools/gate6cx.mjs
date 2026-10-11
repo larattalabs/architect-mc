@@ -13,6 +13,7 @@
 //     keys                            item 3 (in game): plan opKey idempotence, conflict, in-flight dedupe, owner scope, found after a
 //                                     restart; realise opKey: stop the world with the future pending (WORLD_STOPPED), realiseByKey finds
 //                                     the region after the reload, it completes, a second realise returns it, another body conflicts
+//     removal                         C22 (a) a restore failure injected mid-removal, the retry finishes it, world diff 0; (b) remove, reload, remove again: removed=true, nothing written; REMOVED tombstones with their time
 //     apicompat                       item 5: tools/api-compat.mjs --gate6cx (needs the mod's classes: gradle build first)
 //     report                          REPORT.md over the step JSONs
 //
@@ -356,6 +357,83 @@ steps.keys = async () => {
   return out;
 };
 
+// ------------------------------------------------------------------ C22: removal correctness
+
+const hashBox = async (min, max) => (await call('dev.region.hash', { box: [...min, ...max] }, 3_600_000)).sha256;
+
+steps.removal = async () => {
+  await ensure();
+  await prepS7();
+  const out = {};
+  await fresh('G6B X Removal', FLAT);
+  await L.setRules('exact');
+  await tp(CENTRE[0], 120, CENTRE[1]);
+  const params = { ...S7.params };
+  const P = (surveyLoad) => call('dev.region.plan', { program: S7.program, claim: CLAIM, params, surveyLoad, check: false, bible: S7.bible, seed: S7.seed }, 900_000);
+  const p0 = await P('bounded:256');
+  await prepare(p0.planId);
+  const p = await P('generated:64');
+  const yr = p.claimY ?? [-64, 64];
+  const min = [CLAIM[0] - 8, yr[0] - 8, CLAIM[1] - 8], max = [CLAIM[2] + 8, yr[1] + 8, CLAIM[3] + 8];
+  const h0 = await hashBox(min, max);
+  // ---- (a) a restore breaks mid-removal; the retry finishes the pending restoration (or refuses); never removed over a diff
+  const region = await L.realise(p.planId, { lots: S7.lotEntries });
+  const st = await waitRegion(region, 3_600_000);
+  check(st.view.state === 'PLACED', `removal: the region is placed (${st.view.state})`);
+  await cmd('/kill @e[type=!minecraft:player]');
+  await call('dev.undo.failRestore', { skip: 3 });
+  const r1 = await call('dev.region.remove', { region }, 3_600_000);
+  await call('dev.undo.failRestore', { skip: -1 });
+  out.first = { removed: r1.removed, blockers: r1.blockers };
+  check(r1.removed === false && /injected restore failure/.test(JSON.stringify(r1.blockers)), `removal (a): the removal with an injected restore failure answers removed=false (${JSON.stringify(r1.blockers).slice(0, 160)})`);
+  const mid = await api(`rget ${region}`);
+  check(mid?.state === 'PARTIAL', `removal (a): the region is not REMOVED after a failed removal (${mid?.state})`);
+  await settle(3000);
+  const hMid = await hashBox(min, max);
+  check(hMid !== h0, 'removal (a): the world differs from the pre-placement snapshot after the failed removal (the control)');
+  let r2 = await call('dev.region.remove', { region }, 3_600_000);
+  out.retry = { removed: r2.removed, blockers: r2.blockers };
+  await settle(5000);
+  const h1 = await hashBox(min, max);
+  out.diff = { h0: h0.slice(0, 12), h1: h1.slice(0, 12) };
+  check(!(r2.removed && h1 !== h0), 'removal (a): never removed=true over a world diff');
+  check((r2.removed && h1 === h0) || r2.removed === false, `removal (a): the retry finished the pending restoration and the diff is 0 (removed=${r2.removed}; hash ${h1 === h0 ? 'equal' : 'DIFFERS'})`);
+  check(r2.removed === true && h1 === h0, 'removal (a): and it answered removed=true (the retry resumed, it did not refuse)');
+  // ---- (b) a finished removal is recognisable: removed again, nothing written; REMOVED with its time, across a reload
+  const reg2 = await L.realise(p.planId, { lots: S7.lotEntries });
+  const st2 = await waitRegion(reg2, 3_600_000);
+  check(st2.view.state === 'PLACED', `removal (b): the region is placed again (${st2.view.state})`);
+  const g = (await api(`rget ${reg2}`)).groupId;
+  await cmd('/kill @e[type=!minecraft:player]');
+  const t0 = Date.now();
+  const d1 = await call('dev.region.remove', { region: reg2 }, 3_600_000); // the answer is dropped
+  await settle(5000);
+  check(d1.removed === true, 'removal (b): the first removal answers removed=true');
+  const hA = await hashBox(min, max);
+  const tomb = await api(`rget ${reg2}`);
+  check(tomb?.state === 'REMOVED' && tomb.removedAt >= t0 - 1000 && tomb.removedAt <= Date.now(), `removal (b): Regions.get shows REMOVED with its time (${tomb?.state}, ${tomb?.removedAt})`);
+  const grp = await api(`sgroup ${g}`);
+  check(grp?.state === 'REMOVED' && grp.removedAt > 0, `removal (b): the group lookup shows REMOVED with its time (${grp?.state}, ${grp?.removedAt})`);
+  await cmd('/save-all flush');
+  await leaveWorld();
+  await openWorld('G6B X Removal');
+  const tomb2 = await api(`rget ${reg2}`);
+  const grp2 = await api(`sgroup ${g}`);
+  check(tomb2?.state === 'REMOVED' && tomb2.removedAt === tomb.removedAt, `removal (b): the region tombstone survives save and reload with the same time (${tomb2?.state}, ${tomb2?.removedAt})`);
+  check(grp2?.state === 'REMOVED' && grp2.removedAt === grp.removedAt, `removal (b): the group tombstone survives save and reload with the same time (${grp2?.removedAt})`);
+  const again = await call('dev.region.remove', { region: reg2 }, 600_000);
+  await settle(3000);
+  const hB = await hashBox(min, max);
+  check(again.removed === true && hB === hA && hA === h0, `removal (b): remove again after the reload answers removed=true and writes nothing (world hash ${hB === hA ? 'unchanged' : 'CHANGED'}, equals the pre-placement ${hA === h0})`);
+  const gAgain = await result(await api(`sgremove ${g} noforce`), 120_000);
+  check(gAgain?.removed === true, `removal (b): removing the removed group again answers removed=true (${json(gAgain).slice(0, 120)})`);
+  const unknown = await call('dev.region.remove', { region: 'rg99999' }, 60_000).catch((e) => ({ error: String(e.message ?? e) }));
+  check(!!unknown.error || unknown.refused, `removal (b): an unknown region id still refuses (${json(unknown).slice(0, 120)})`);
+  await leaveWorld();
+  spendZero();
+  return out;
+};
+
 // ------------------------------------------------------------------ item 5: API compatibility
 
 steps.apicompat = async () => {
@@ -375,7 +453,7 @@ steps.apicompat = async () => {
 
 steps.report = async () => {
   const rows = [];
-  for (const s of ['unit', 'lotext', 'keys', 'apicompat']) {
+  for (const s of ['unit', 'lotext', 'keys', 'removal', 'apicompat']) {
     const f = path.join(OUT, `${s}.json`);
     if (!fs.existsSync(f)) { rows.push(`| ${s} | not run | |`); continue; }
     const j = JSON.parse(fs.readFileSync(f, 'utf8'));

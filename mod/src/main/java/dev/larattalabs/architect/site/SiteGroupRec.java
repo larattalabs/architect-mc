@@ -22,7 +22,7 @@ import org.jspecify.annotations.Nullable;
  * @param delivered what the shared crate was given, kept once its last site is built and the crate is gone (the ledger lived in it)
  */
 public record SiteGroupRec(String id, @Nullable String owner, JsonObject ext, List<String> sites, List<StageRec> stages, String state,
-	boolean sharedCrate, Construction.@Nullable Crate crate, int @Nullable [] crateAt, long createdAt, java.util.Map<String, Integer> delivered) {
+	boolean sharedCrate, Construction.@Nullable Crate crate, int @Nullable [] crateAt, long createdAt, java.util.Map<String, Integer> delivered, long removedAt) {
 	public static final String ACTIVE = "active";
 	public static final String REMOVING = "removing";
 	public static final String REMOVED = "removed";
@@ -38,11 +38,17 @@ public record SiteGroupRec(String id, @Nullable String owner, JsonObject ext, Li
 
 	public SiteGroupRec(String id, @Nullable String owner, JsonObject ext, List<String> sites, List<StageRec> stages, String state, boolean sharedCrate,
 		Construction.@Nullable Crate crate, int @Nullable [] crateAt, long createdAt) {
-		this(id, owner, ext, sites, stages, state, sharedCrate, crate, crateAt, createdAt, java.util.Map.of());
+		this(id, owner, ext, sites, stages, state, sharedCrate, crate, crateAt, createdAt, java.util.Map.of(), 0L);
+	}
+
+	/** The 11-component shape (before 6c X's removedAt). */
+	public SiteGroupRec(String id, @Nullable String owner, JsonObject ext, List<String> sites, List<StageRec> stages, String state, boolean sharedCrate,
+		Construction.@Nullable Crate crate, int @Nullable [] crateAt, long createdAt, java.util.Map<String, Integer> delivered) {
+		this(id, owner, ext, sites, stages, state, sharedCrate, crate, crateAt, createdAt, delivered, 0L);
 	}
 
 	public SiteGroupRec withDelivered(java.util.Map<String, Integer> d) {
-		return new SiteGroupRec(id, owner, ext, sites, stages, state, sharedCrate, crate, crateAt, createdAt, d);
+		return new SiteGroupRec(id, owner, ext, sites, stages, state, sharedCrate, crate, crateAt, createdAt, d, removedAt);
 	}
 
 	/** A stage: its items, state, placed sites (placement order) and the batch that added it. */
@@ -107,11 +113,11 @@ public record SiteGroupRec(String id, @Nullable String owner, JsonObject ext, Li
 	}
 
 	public SiteGroupRec withSites(List<String> s) {
-		return new SiteGroupRec(id, owner, ext, s, stages, state, sharedCrate, crate, crateAt, createdAt, delivered);
+		return new SiteGroupRec(id, owner, ext, s, stages, state, sharedCrate, crate, crateAt, createdAt, delivered, removedAt);
 	}
 
 	public SiteGroupRec withStages(List<StageRec> s) {
-		return new SiteGroupRec(id, owner, ext, sites, s, state, sharedCrate, crate, crateAt, createdAt, delivered);
+		return new SiteGroupRec(id, owner, ext, sites, s, state, sharedCrate, crate, crateAt, createdAt, delivered, removedAt);
 	}
 
 	/** The same group with one stage changed. */
@@ -124,15 +130,17 @@ public record SiteGroupRec(String id, @Nullable String owner, JsonObject ext, Li
 	}
 
 	public SiteGroupRec withState(String s) {
-		return new SiteGroupRec(id, owner, ext, sites, stages, s, sharedCrate, crate, crateAt, createdAt, delivered);
+		// (6c X, C22) a group that finishes its removal keeps the time as a tombstone; any other state clears it
+		long at = REMOVED.equals(s) ? (REMOVED.equals(state) && removedAt > 0 ? removedAt : System.currentTimeMillis()) : 0L;
+		return new SiteGroupRec(id, owner, ext, sites, stages, s, sharedCrate, crate, crateAt, createdAt, delivered, at);
 	}
 
 	public SiteGroupRec withCrate(Construction.@Nullable Crate c) {
-		return new SiteGroupRec(id, owner, ext, sites, stages, state, sharedCrate, c, crateAt, createdAt, delivered);
+		return new SiteGroupRec(id, owner, ext, sites, stages, state, sharedCrate, c, crateAt, createdAt, delivered, removedAt);
 	}
 
 	public SiteGroupRec withSharedCrate(boolean shared, int @Nullable [] at) {
-		return new SiteGroupRec(id, owner, ext, sites, stages, state, shared, crate, at, createdAt);
+		return new SiteGroupRec(id, owner, ext, sites, stages, state, shared, crate, at, createdAt, java.util.Map.of(), removedAt);
 	}
 
 	/** The crate block entity's owner id for this group's shared crate. */
@@ -170,6 +178,9 @@ public record SiteGroupRec(String id, @Nullable String owner, JsonObject ext, Li
 			o.add("crateAt", c);
 		}
 		o.addProperty("createdAt", createdAt);
+		if (removedAt > 0) {
+			o.addProperty("removedAt", removedAt);
+		}
 		if (!delivered.isEmpty()) {
 			JsonObject d = new JsonObject();
 			new java.util.TreeMap<>(delivered).forEach(d::addProperty);
@@ -194,7 +205,7 @@ public record SiteGroupRec(String id, @Nullable String owner, JsonObject ext, Li
 			o.has("ext") && o.get("ext").isJsonObject() ? o.getAsJsonObject("ext") : new JsonObject(), strings(o, "sites"), stages,
 			o.has("state") ? o.get("state").getAsString() : ACTIVE, o.has("sharedCrate") && o.get("sharedCrate").getAsBoolean(),
 			o.has("crate") && o.get("crate").isJsonObject() ? Construction.Crate.fromJson(o.getAsJsonObject("crate")) : null, at,
-			o.has("createdAt") ? o.get("createdAt").getAsLong() : 0L, counts(o));
+			o.has("createdAt") ? o.get("createdAt").getAsLong() : 0L, counts(o), o.has("removedAt") ? o.get("removedAt").getAsLong() : 0L);
 	}
 
 	private static java.util.Map<String, Integer> counts(JsonObject o) {

@@ -62,6 +62,9 @@ final class RestoreJob implements Placement.Job {
 	transient SiteJournal.@Nullable Restore restore;
 	@Nullable List<String> dropsBefore;
 	@Nullable String broken;
+	/** (6c X, C22) DevBridge {@code dev.undo.failRestore}: let this many removal restores finish their writes, then break the next one mid-removal (-1: off). */
+	public static volatile int failSkip = -1;
+	private transient boolean failCounted;
 	boolean done;
 	/** Why a rollback happens (the item's ITEM_FAILED message). */
 	String why = "";
@@ -277,6 +280,17 @@ final class RestoreJob implements Placement.Job {
 		} finally {
 			UpdateMask.end();
 			TickDeferral.end();
+		}
+		if (failSkip >= 0 && REMOVE.equals(purpose)) {
+			if (failSkip == 0) {
+				failSkip = -1;
+				broken = "injected restore failure (dev hook, 6c X)";
+				return true;
+			}
+			if (!failCounted) {
+				failCounted = true;
+				failSkip--;
+			}
 		}
 		if (!writer.done()) {
 			return false;

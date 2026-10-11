@@ -3,6 +3,7 @@ package dev.larattalabs.architect.api;
 import com.google.gson.JsonObject;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
 import org.jspecify.annotations.Nullable;
 
@@ -15,13 +16,20 @@ import org.jspecify.annotations.Nullable;
  */
 public record RegionView(String id, String planId, String irSha, @Nullable String owner, JsonObject ext, String groupId, BoundingBox claim,
 	RegionState state, List<StageProgress> stages, List<LotState> lots, long cellsWritten, Map<String, Long> cellsSkipped, @Nullable Refusal waiting,
-	@Nullable PrepareView prepare, List<WaitAction> actions) {
+	@Nullable PrepareView prepare, List<WaitAction> actions, long removedAt) {
 	public RegionView {
 		ext = ext == null ? new JsonObject() : ext;
 		stages = List.copyOf(stages);
 		lots = List.copyOf(lots);
 		cellsSkipped = Map.copyOf(cellsSkipped);
 		actions = actions == null ? List.of() : List.copyOf(actions);
+	}
+
+	/** The 1.9.0 constructor: no removedAt (since 1.15.0: when a {@link RegionState#REMOVED} tombstone's removal finished, epoch ms; 0 for any other state). */
+	public RegionView(String id, String planId, String irSha, @Nullable String owner, JsonObject ext, String groupId, BoundingBox claim,
+		RegionState state, List<StageProgress> stages, List<LotState> lots, long cellsWritten, Map<String, Long> cellsSkipped, @Nullable Refusal waiting,
+		@Nullable PrepareView prepare, List<WaitAction> actions) {
+		this(id, planId, irSha, owner, ext, groupId, claim, state, stages, lots, cellsWritten, cellsSkipped, waiting, prepare, actions, 0L);
 	}
 
 	/** The 1.8.0 constructor: no actions. */

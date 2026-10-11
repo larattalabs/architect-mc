@@ -232,6 +232,13 @@ public final class RegionDev {
 				o.addProperty("holding", Fields.of(req).optBool("on", true));
 				return o;
 			}));
+		DevBridge.register("dev.undo.failRestore", 10_000, "{skip?: 0} - 6c X (C22): let `skip` removal restores finish their writes, then break the next one "
+			+ "(\"injected restore failure\") before its site record is finished; -1 disarms", (req, mc) -> ServerTasks.callOnServer(s -> {
+				dev.larattalabs.architect.site.Groups.failRestore(Fields.of(req).has("skip") ? req.get("skip").getAsInt() : 0);
+				JsonObject o = new JsonObject();
+				o.addProperty("armed", Fields.of(req).has("skip") ? req.get("skip").getAsInt() : 0);
+				return o;
+			}));
 		DevBridge.register("dev.region.state", 10_000, "{region} - phase 6a: the RegionView, its record's numbers, the queue's item counts, "
 			+ "writer starvation, tile streaming and generation counters", (req, mc) -> {
 				String region = Fields.of(req).nonBlank("region");
