@@ -420,10 +420,10 @@ steps.steward = async () => {
   for (const l of ir.lots) {
     const b = l.box;
     const f = await api(`fit ${entries[l.id]} ${[b.minX, b.minY, b.minZ, b.maxX, b.maxY, b.maxZ].join(',')} ${l.front} owner=${OWNER}`);
-    fits[l.id] = { fits: f.fits ?? f.ok ?? null, verdict: f.verdict?.ok ?? null, why: f.why ?? f.verdict?.refusals?.map((r) => r.reason) ?? null };
+    fits[l.id] = { fits: f.ok ?? null, rotation: f.rotation, refusals: (f.refusals ?? []).map((r) => r.reason ?? r) };
   }
   out.fits = fits;
-  check(Object.values(fits).every((f) => f.fits !== false), `steward: fitToLot fits every lot (${json(Object.entries(fits).filter(([, f]) => f.fits === false))})`);
+  check(Object.values(fits).every((f) => f.fits === true), `steward: fitToLot fits every lot (${json(Object.entries(fits).filter(([, f]) => f.fits === false))})`);
   // 4. realise(lotEntries); 5. one exact Regions.remove
   const yr = p.claimY ?? [-64, 64];
   const min = [claim[0] - 8, yr[0], claim[1] - 8], max = [claim[2] + 8, yr[1], claim[3] + 8];
