@@ -46,5 +46,6 @@ gate passes.
       rewrites the scenario file only through FINDSITE_RESULT; merge the fixture into `scenarios/s7_flat_village.json` (a full copy of
       the scenario was kept before the search). Then `scenarios.mjs pin s7`, the flat and natural runs, `golden s7 <run>`, the gallery.
 - [x] gate6cv items in game (nav, protect, steward, survroad), slice tier
-- [ ] gate-verifier: FAIL on bar 8's walk-area definition (coordinator ruling) + S7 second seed (coordinator); everything else verified
+- [x] bar 8 ruled (walk cells + door paths): 0.00% of 558 on the provisional run
+- [ ] S7 second seed: none of 2026101101..06 qualifies (02's qualifier is a frozen river); stopped per the ruling; fixture is the coordinator's call
 - [x] as-built in CONTRACT.md (rulings marked open); branch pushed. Retire this file when the coordinator's rulings close the gate.
