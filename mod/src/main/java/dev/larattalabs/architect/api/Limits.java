@@ -45,6 +45,13 @@ public final class Limits {
 	public static final int CONTEXT_MAX = 4000;
 	/** A plot's {@code dimension}. */
 	public static final int PLOT_DIMENSION_MAX = 200;
+	/** {@code versionOf}: the entry id ({@code [a-z0-9_]}, at most 64) and the site id (at most 200). */
+	public static final int VERSION_OF_ENTRY_MAX = 64;
+	public static final int VERSION_OF_SITE_MAX = 200;
+	/** {@code versionOf}'s blobs (set by Architect): blob ids, at most 64. */
+	public static final int BLOB_ID_MAX = 64;
+	/** A group design's {@code itemKey} (set by the helper: {@code <itemKey>} or {@code <itemKey>#<n>}). */
+	public static final int GROUP_ITEM_KEY_MAX = 104;
 
 	// ---- GroupRequest
 	/** {@code name}, trimmed: 1-60. */
@@ -53,6 +60,8 @@ public final class Limits {
 	public static final int GROUP_ITEMS_MAX = 24;
 	/** An item's {@code itemKey}: {@link #ITEM_KEY_RE}, at most 100. */
 	public static final int ITEM_KEY_MAX = 100;
+	/** An item's {@code copyOf}: an item key (at most 100). */
+	public static final int COPY_OF_MAX = 100;
 	public static final Pattern ITEM_KEY_RE = Pattern.compile("^[A-Za-z0-9_.:/-]+$");
 
 	// ---- CritiqueSpec

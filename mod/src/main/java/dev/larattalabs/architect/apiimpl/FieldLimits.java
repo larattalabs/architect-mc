@@ -108,7 +108,8 @@ public final class FieldLimits {
 			+ "features", r.features(), Limits.FEATURES_MAX), len(p + "name", r.name(), Limits.NAME_MAX, true), len(p + "notes", r.notes(), Limits.NOTES_MAX,
 				false), len(p + "remix", r.remix(), Limits.REMIX_MAX, false), count(p + "profile", r.profile(), Limits.PROFILE_MAX), len(p + "owner", r.owner(),
 					Limits.OWNER_MAX, true), ext(p + "ext", r.ext()), model(p + "model", r.model()), len(p + "group", r.group(), Limits.GROUP_ID_MAX, false),
-			context(p + "context", r.context()), critique(p + "critique", r.critique()));
+			context(p + "context", r.context()), critique(p + "critique", r.critique()), len(p + "versionOf.entryId", r.versionOf(), Limits.VERSION_OF_ENTRY_MAX,
+				false), len(p + "versionOf.siteId", r.versionOfSite(), Limits.VERSION_OF_SITE_MAX, false));
 		if (why != null) {
 			return why;
 		}
@@ -130,8 +131,8 @@ public final class FieldLimits {
 		for (int i = 0; i < g.items().size(); i++) {
 			GroupRequest.Item it = g.items().get(i);
 			String p = "items[" + i + "]";
-			why = first(len(p + ".itemKey", it.itemKey(), Limits.ITEM_KEY_MAX, false), pattern(p + ".itemKey", it.itemKey(), Limits.ITEM_KEY_RE, false), design(p
-				+ ".request", it.request()), critique(p + ".critique", it.critique()));
+			why = first(len(p + ".itemKey", it.itemKey(), Limits.ITEM_KEY_MAX, false), pattern(p + ".itemKey", it.itemKey(), Limits.ITEM_KEY_RE, false), len(p
+				+ ".copyOf", it.copyOf(), Limits.COPY_OF_MAX, false), design(p + ".request", it.request()), critique(p + ".critique", it.critique()));
 			if (why != null) {
 				return why;
 			}
