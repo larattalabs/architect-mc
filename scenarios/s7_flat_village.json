@@ -381,6 +381,64 @@
       "localShare": 0.388,
       "waterBand": 14,
       "waterInner": 0
-    }
+    },
+    "irShaAtPin": "79348894301ad51ecdee1bbf6189dd3329cf28b5b0f37645eaed0afebd8bb017"
+  },
+  "seed": "10959497901047012117",
+  "cams": {
+    "cam_east": [
+      1591.5,
+      96,
+      -3072.5,
+      90.8,
+      46.2
+    ],
+    "cam_ground": [
+      1563.5,
+      68,
+      -3066.5,
+      135,
+      41
+    ],
+    "cam_high": [
+      1535.5,
+      136,
+      -3066.5,
+      -106.8,
+      73.5
+    ],
+    "cam_north": [
+      1535.5,
+      96,
+      -3127.5,
+      -21.5,
+      31.6
+    ],
+    "cam_south": [
+      1535.5,
+      96,
+      -3016.5,
+      -159.2,
+      30.8
+    ],
+    "cam_west": [
+      1480.5,
+      96,
+      -3072.5,
+      -90.4,
+      25.2
+    ]
+  },
+  "lotEntries": {
+    "hall_1": "g6cv_tower_w9f4@1",
+    "trading_hall_1": "g6cv_tavern_l12@1",
+    "cottage_1": "g6cv_cabin_w9d6@1",
+    "cottage_2": "g6cv_cabin_w9d6@1",
+    "cottage_3": "g6cv_cabin_w9d6@1",
+    "cottage_4": "g6cv_cabin_w9d6@1",
+    "smithy_1": "g6cv_tower_w5f3@1",
+    "bakery_1": "g6cv_tower_w5f3@1",
+    "inn_1": "g6cv_tavern_l12@1",
+    "farm_1": "g6cv_cabin_w9d7@1"
   }
 }
