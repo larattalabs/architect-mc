@@ -326,7 +326,12 @@ Client -> sidecar (each is acked like every message, `{ok, error?, result?}`):
   must hash to `irSha`. The IR cache is by sha, so a known IR is found under any `planId`. At most 64 tiles per request.
   Then one `region.tile` per tile, in any order:
   `region.tile {planId, key, stage, set, seq, more, data, count, sha}` (`data`: base64 of a slice of the gzip bytes, at most
-  1 MB per frame, `seq` from 0; `count` and `sha` on every frame), or `region.tile.error {planId, key, stage, set, message}`.
+  1 MB per frame, `seq` from 0; `count` and `sha` on every frame), or `region.tile.error {planId, key, stage, set, message,
+  code?, attempts?}`. (6c 0a) A tile over its time limit (`regionTileMs`, 2 s) is evaluated again on a fresh worker, up to 4
+  evaluations, the limit doubling (2, 4, 8, 16 s) with 1, 2 and 4 s pauses; then it answers `code: "timeout"` (the mod waits
+  TILE_SLOW and asks again later). Any other error answers `code: "error"` at once. `attempts`: the evaluations made. An older
+  sidecar sends neither field (an error). Test hook: env `ARCHITECT_TEST_SLOW_TILES=<n>` makes the first n evaluations of
+  each tile overrun.
 - `region.release {planId}` -> ack `{planId, dropped}`: drop this connection's queued tiles and the cached IR. The plan dir
   stays (a later request without `ir` still finds the IR there).
 

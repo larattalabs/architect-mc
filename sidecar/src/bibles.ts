@@ -26,6 +26,7 @@ import { copyBible } from './scratch.js';
 import { zeroCost } from './jobs/cost.js';
 import type { Sidecar } from './sidecar.js';
 import { ClientError } from './sidecar.js';
+import { keptForKey } from './opkeys.js';
 import { truncate } from './util/text.js';
 
 export const BIBLE_SNAPSHOT_LIMIT = 20;
@@ -498,11 +499,12 @@ export class Bibles {
 
   private create(kind: BibleJob['kind'], bibleId: string, version: number, request: BibleJob['request']): BibleJob {
     const now = this.sc.now();
-    const j: BibleJob = { id: this.sc.store.nextId('b'), kind, bibleId, version, request: structuredClone(request), status: 'queued', step: 'waiting for a design slot', cost: zeroCost(), createdAt: now, updatedAt: now };
+    const j: BibleJob = { id: this.sc.store.nextId('b'), kind, bibleId, version, request: structuredClone(request), status: 'queued', step: 'waiting for a design slot', cost: zeroCost(), ...(request.opKey ? { opKey: request.opKey } : {}), createdAt: now, updatedAt: now };
     this.all.push(j);
     this.works[j.id] = { draftRetries: 0, round: 0, cost: zeroCost() };
     while (this.all.length > BIBLE_KEEP) {
-      const k = this.all.findIndex((x) => isFinalBibleJob(x));
+      // (6c 0a) a job with an opKey is kept at least 30 days after it is final
+      const k = this.all.findIndex((x) => isFinalBibleJob(x) && !keptForKey(x, now));
       if (k < 0) break;
       const [gone] = this.all.splice(k, 1);
       if (gone) delete this.works[gone.id];

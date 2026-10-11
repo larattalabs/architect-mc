@@ -68,7 +68,10 @@ public interface Sites {
 		throw new UnsupportedOperationException("Sites.queue needs Architect API 1.4.0");
 	}
 
-	/** A batch (running or finished; finished ones are kept until the world stops). Since 1.4.0. */
+	/**
+	 * A batch (running or finished). Since 1.4.0; since 1.10.0 finished batches are kept across restarts (the newest 256 per
+	 * world and every one finished in the last 30 days, whichever keeps more), and batch ids are never reused.
+	 */
 	default Optional<BatchView> batch(String batchId) {
 		throw new UnsupportedOperationException("Sites.batch needs Architect API 1.4.0");
 	}
@@ -152,6 +155,24 @@ public interface Sites {
 	 */
 	default LotFit fitToLot(String blueprintId, BoundingBox lot, Direction streetSide, FitOptions options) {
 		throw new UnsupportedOperationException("Sites.fitToLot needs Architect API 1.4.0");
+	}
+
+	/**
+	 * Predicts where a detail of a massing version will stand on a lot (docs/CONTRACT.md 6c slice 0a §4): the same fit as
+	 * {@link #fitToLot}, on the massing version's template, with the normal verdict there. A detail of that version fitted to the
+	 * same lot gets the same rotation and an origin within 2 on x and z (equal in y). An unknown massing or version is
+	 * {@link Reason#UNKNOWN_BLUEPRINT}. No placement happens. Since 1.10.0.
+	 */
+	default LotFit fitMassingToLot(MassingRef massing, BoundingBox lot, Direction streetSide, FitOptions options) {
+		throw new UnsupportedOperationException("Sites.fitMassingToLot needs Architect API 1.10.0");
+	}
+
+	/**
+	 * The batch queued with this operation key by this owner (null: the player), in any state ({@link Batch#opKey}). Server
+	 * thread. Since 1.10.0.
+	 */
+	default Optional<BatchView> batchByKey(@Nullable String owner, String opKey) {
+		throw new UnsupportedOperationException("Sites.batchByKey needs Architect API 1.10.0");
 	}
 
 	/** How far a design's restore box reaches past its template box in the worst case (sides and back: 0). Since 1.4.0. */

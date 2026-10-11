@@ -240,7 +240,7 @@ final class ApiTestRegions {
 		Throwable c = e instanceof java.util.concurrent.CompletionException && e.getCause() != null ? e.getCause() : e;
 		JsonObject o = new JsonObject();
 		o.addProperty("error", c.getClass().getSimpleName() + ": " + c.getMessage());
-		if (c instanceof dev.larattalabs.architect.api.RegionRefused r) {
+		if (c instanceof dev.larattalabs.architect.api.ArchitectRefused r) { // (1.10.0) RegionRefused, WORLD_STOPPED
 			o.addProperty("reason", r.reason().name());
 		}
 		return o;

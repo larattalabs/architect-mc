@@ -781,7 +781,7 @@ switch (step) {
         `open type: ${ot.value} -> ${otEntry?.id} type ${otEntry?.type}, profile ${JSON.stringify(otDone?.request?.profile)}`, { otDone, otEntry });
 
       // ---- 4b work that finishes while no world is loaded: BIBLE_DONE, GROUP_DONE and RESKIN_DONE fire once the next world has
-      // loaded (the reskinCollection future completes then too), once each
+      // loaded once each (1.10.0: the reskinCollection future pending at the leave fails WORLD_STOPPED)
       await api('clear');
       const cbj = await result(await api(`bible cu${tag} ${b64({ prompt: 'a quiet mill town', name: `Mill ${tag}` })}`), 30_000);
       const cgid = (await result(await api(`group cg ${b64({ name: `Catch-up ${tag}`, bible: 'oak', concurrency: 2, items: [
@@ -820,7 +820,10 @@ switch (step) {
             ? `, ${evs[0]?.entriesLoaded?.length} entries loaded` : ''})`, evs);
       }
       const rkf = await result(rkp, 30_000);
-      check(rkf.status === 'DONE' && rkf.id === rOut?.id && rkf.completedOn === 'Server thread', `the reskinCollection future completed (${rkf.id}, ${rkf.entries?.length} entries)`);
+      // (1.10.0, 6c 0a §10) a future pending when the world stops fails WORLD_STOPPED (the re-skin goes on: RESKIN_DONE above);
+      // before 1.10.0 it completed after the next load
+      if (API_VERSION.localeCompare('1.10.0', undefined, { numeric: true }) >= 0) check(rkf.reason === 'WORLD_STOPPED', `the reskinCollection future pending at the world stop failed WORLD_STOPPED (${rkf.reason}: ${rkf.error})`);
+      else check(rkf.status === 'DONE' && rkf.id === rOut?.id && rkf.completedOn === 'Server thread', `the reskinCollection future completed (${rkf.id}, ${rkf.entries?.length} entries)`);
 
       // ---- Sites.survival() and WORLD_MODE_CHANGED: the toggle in this world, then a fresh creative and a fresh survival world
       const s0 = await api('survival');
