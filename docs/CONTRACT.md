@@ -10129,7 +10129,7 @@ SETTLEMENTS §17.2's 6c gate, run once when the last 6c slice merges (whichever 
 - per-tile evaluation p50/p99 on S2, S3 and the forest-heavy variant (F3): p99 under 2 s, at least 45k cells/s;
 - the full `release` tier and the full gate-verifier; 6b's gate items as regressions.
 
-## Phase 6c slice X: region consumer asks C19 and C20 (DRAFT for Steward review, 2026-10-11)
+## Phase 6c slice X: region consumer asks C19 and C20 (FROZEN 2026-10-11 after Steward's review)
 
 Next free API minor at merge (expected 1.15.0 if it merges before T1; the house rule applies), mod to match. Wave 1, parallel
 with T1, F1 and MP. Depends on V only. Spend $0. From Steward's V adoption work (plan, design per lot with copies, fitToLot,
@@ -10174,3 +10174,10 @@ Evidence in `artifacts/gateX/`. Steward's consumer check on the RC as usual.
 
 - **S-X-1:** is per-lot ext from the plan enough, or do you need the realise-time `lotExt` map too (both are drafted)?
 - **S-X-2:** 4 KB per lot enough?
+
+### Changes from Steward's review of X (2026-10-11; these win)
+
+- **S-X-1:** the plan's lot `ext` is enough. **Drop `RealiseRequest.lotExt`** and its merge rule; the realise copies the
+  plan's lot ext onto the site. Gate item 2 uses plan ext only.
+- **S-X-2:** 4 KB per lot stays (Steward's is about 250 bytes).
+- Steward will use opKeys `steward.<build>.vplan` and `steward.<build>.vrealise`.
