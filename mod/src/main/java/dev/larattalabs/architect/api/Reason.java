@@ -52,7 +52,9 @@ package dev.larattalabs.architect.api;
  * player's own blocks: non-natural, no block entity, owned by no journal entry. The lot is not placed and the blocks stay
  * (the region ends PARTIAL); {@code force} overrides it (the blocks are overwritten and come back on remove).</li>
  * <li>{@code WORLD_STOPPED} (1.10.0): the world stopped while the future was pending, or no world runs. Work in the helper goes
- * on: find it again after the next load with the {@code *ByKey} lookups or the listings ({@link ArchitectRefused}).</li>
+ * on: find it again after the next load with the {@code *ByKey} lookups or the listings ({@link ArchitectRefused}). * It is not an outcome: never record the work as failed on it. The sweep runs in {@code SERVER_STOPPING}'s default phase,
+ * so end your own session in a phase ordered before it ({@code addPhaseOrdering(yourPhase, Event.DEFAULT_PHASE)}), or
+ * ignore WORLD_STOPPED in your handlers.</li>
  * <li>{@code OP_KEY_CONFLICT} (1.10.0): an operation key re-used by the same owner for the same kind with another body.</li>
  * <li>{@code TILE_SLOW} (1.10.0): a region tile's evaluation ran over its time limit in every retry of the helper. Temporary:
  * the item waits, the tile is asked for again after 30 s, 60 s, 120 s and then every 5 min, and {@link WaitAction.Kind#RETRY}
