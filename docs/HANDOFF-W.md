@@ -1,4 +1,4 @@
-# HANDOFF-W: slice W, village safety (API 1.14.0, mod 0.17.0)
+# HANDOFF-W: slice W, village safety (API 1.15.0, mod 0.18.0; renumbered after slice X merged first as 1.14.0 / 0.17.0)
 
 Contract: docs/CONTRACT.md "Phase 6c slice W" (FROZEN), its "Changes from Steward's review of W" and the "Coordinator
 addition (Noah, 2026-10-11)" (bible-styled lamps). Branch `slice/W`, worktree `../architect-mc-W`. Ports 8906-8911 only
@@ -14,6 +14,12 @@ addition (Noah, 2026-10-11)" (bible-styled lamps). Branch `slice/W`, worktree `.
 - [x] Item 2 road lanterns on the owner's built verge (`RoadPlan.OwnFoot`, `RoadPlanTest`).
 - [x] Item 1 `r.lightCover` (`kit/lib/region/light.mjs`) and the fixture catalogue (`fixtures.mjs`, square lamps, `road:lamp`).
 - [x] Driver `tools/gate6cw.mjs`, `dev.region.survey`, W rows on S7, `scenarios.mjs run --bible`, W bibles, impact rules.
+- [x] Merged origin/main (X, v0.17.0); renumbered to API 1.15.0 / mod 0.18.0 / kit 0.18.0; 0.17.0 baseline in
+      `artifacts/gate6c-w/v0170/` (tag v0.17.0, `../architect-mc-W-v0170`); api-compat --gate6cw against 0.17.0/0.16.0/0.15.0 clean.
+- [x] First slice tier `artifacts/gate-runs-W/20261011-194019-slice` (pre-merge): FAIL on w-ingame (bible not installed on a fresh
+      run worktree: fixed, `scenarios.mjs prep`), 6cw-scenario-s7 (lampsoff's OUT env: fixed), 4d-all (tick bar 51.5 ms at load 28),
+      6a-megaA (TIMEOUT: one lot WAITING OCCUPIED). MSPT A/B (`artifacts/gate6c-w/mspt-ab.json`): v0.16.0 also over 50 under load.
+- [ ] Chain 3 (post-merge) on 8906/8907: S7 flat/natural, golden, lampsoff, frozen, variants, pathbibles, gallery; then republish.
 - [ ] In-game chain on 8906/8907 (client pid in the run log; run worktree `../architect-mc-W-run`): base, s7flat, s7, lampsoff,
       frozen, variants, surveys, pathbibles, gallery. Log: the session scratchpad `w-chain.log`; evidence `artifacts/gate6c-w/`.
 - [ ] S7 golden re-committed from W's natural run; S2/S3 `fixture.planSurvey` written (`GATE6CW_REPIN=1 ... surveys`).
