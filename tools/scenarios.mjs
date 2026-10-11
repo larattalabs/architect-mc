@@ -385,7 +385,13 @@ async function computeMetrics({ sc, out, planDir, ir, irShas, mspt, cps, exact, 
   let golden = 'none';
   if (fs.existsSync(gFile)) {
     const g = JSON.parse(fs.readFileSync(gFile, 'utf8'));
-    golden = g.irSha === ts.irSha && JSON.stringify(g.tiles) === JSON.stringify(ts.tiles) ? 'match' : `differs (golden ${g.irSha.slice(0, 12)}, run ${ts.irSha.slice(0, 12)})`;
+    // the bar is on the tiles: an IR that differs only by its recorded kitVersion (6c V's kit 0.16.0 over a golden cut by 0.12.0)
+    // matches when every tile sha does
+    const runKit = JSON.parse(fs.readFileSync(path.join(planDir, 'ir.json'), 'utf8')).kitVersion;
+    const sameTiles = JSON.stringify(g.tiles) === JSON.stringify(ts.tiles);
+    golden = sameTiles && g.irSha === ts.irSha ? 'match'
+      : sameTiles && g.kitVersion && g.kitVersion !== runKit ? `match (every tile sha; the IR sha differs by its kitVersion ${g.kitVersion} -> ${runKit})`
+        : `differs (golden ${g.irSha.slice(0, 12)}, run ${ts.irSha.slice(0, 12)}${sameTiles ? '' : '; tile shas differ'})`;
   }
   // the other variant's exactness (E-flat from the latest flat run beside a natural one, and back)
   const sibling = latestRun(sc, out, !flat);

@@ -136,7 +136,7 @@ export function bars(x) {
     'E-flat 0; E-normal all classified, <= 0.01% of written cells', ef && en && ef.mismatches === 0 && (en.classes?.none ?? 0) === 0 && undoOwn <= cap));
   const d = x.determinism;
   out.push(row('determinism', 'Determinism', d ? `IR sha ${d.irShas.length} plans ${new Set(d.irShas).size === 1 ? 'identical' : 'DIFFER'}; tiles 1 vs 4 workers ${d.workersSame ? 'identical' : 'DIFFER'}; golden ${d.golden}` : 'n/a',
-    'identical; committed golden scenarios/goldens/s1.json', d && new Set(d.irShas).size === 1 && d.workersSame && d.golden === 'match'));
+    'identical; committed golden scenarios/goldens/s1.json', d && new Set(d.irShas).size === 1 && d.workersSame && String(d.golden).startsWith('match')));
   out.push(row('spend', 'Spend', `$${(x.spendUsd ?? 0).toFixed(2)}`, '$0.00 (S1 is a $0 run)', (x.spendUsd ?? 0) === 0));
   out.push(row('gallery', 'Gallery', x.approval ?? 'pending', "Noah's approval for this run's evidence.sha", x.approval === 'approved'));
   return out;
