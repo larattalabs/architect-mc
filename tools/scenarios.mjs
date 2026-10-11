@@ -244,8 +244,12 @@ async function runScenario(id) {
   const sc = readSc(id);
   const flat = !!opt('flat');
   const phase = opt('phase', '6b');
+  // (6c W) `--bible <id>`: the run with another fixture bible (scenarios/bibles/<id>.json, installed as bible <id> v1): the W path
+  // bibles and the gallery's looks. Its runs go to <phase>/<short>-<id>/; its golden row compares with S7's own golden (recorded).
+  const bibleOpt = opt('bible');
+  if (bibleOpt) { sc.bible = bibleOpt; sc.bibleFixture = `bibles/${bibleOpt}.json`; }
   const runId = `${new Date().toISOString().replace(/[-:]/g, '').replace(/\..*$/, '').replace('T', '-')}${flat ? '-flat' : ''}`;
-  const out = path.resolve(opt('out') || path.join(ART, phase, short(sc), runId));
+  const out = path.resolve(opt('out') || path.join(ART, phase, bibleOpt ? `${short(sc)}-${bibleOpt}` : short(sc), runId));
   const raw = path.join(out, 'raw');
   fs.mkdirSync(raw, { recursive: true });
   const t = {};
@@ -340,7 +344,7 @@ async function runScenario(id) {
   const api = /String VERSION = "([^"]+)"/.exec(fs.readFileSync(path.join(root, 'mod', 'src', 'main', 'java', 'dev', 'larattalabs', 'architect', 'api', 'ArchitectApi.java'), 'utf8'))?.[1];
   const hello = await L.call('dev.state').catch(() => ({}));
   const run = {
-    scenario: sc.id, version: sc.version, phase, runId, variant: flat ? 'flat' : 'natural', worldSeed: sc.world.seed, programSeed: sc.seed, claim, irSha: p2.irSha, irShas,
+    scenario: sc.id, version: sc.version, phase, runId, variant: flat ? 'flat' : 'natural', bible: sc.bible ?? null, worldSeed: sc.world.seed, programSeed: sc.seed, claim, irSha: p2.irSha, irShas,
     planId: p2.planId, region, state: st.view.state, cellsWritten: rec.cellsWritten, lots: sc.lotEntries,
     versions: { mod: /mod_version\s*=\s*(\S+)/.exec(gp)?.[1], api, kit: ir.kitVersion, sidecar: hello.sidecar?.version ?? hello.sidecarVersion ?? null, minecraft: /minecraft_version\s*=\s*(\S+)/.exec(gp)?.[1], node: process.versions.node.split('.')[0], head: execFileSync('git', ['-C', root, 'rev-parse', 'HEAD']).toString().trim() },
     wallSeconds: t, prepare: pr.stats ?? null, dumps: { before: { sha: d0.sha, cells: d0.cells }, after: { sha: d1.sha, cells: d1.cells } }, snap: { cells: snap.cells }, before, shots,
@@ -408,8 +412,8 @@ async function computeMetrics({ sc, out, planDir, ir, irShas, mspt, cps, exact, 
     const fronts = VB.villageFronts(ir, meta, before, after, door);
     const props = VB.villageProps(ir, meta, world, realised, vw);
     const walkDark = VB.walkDark(world, vw, door);
-    rows = VB.villageBars({ plan, realised, door, fronts, props, nav, walkDark }, rows);
-    village = { walkDark, door: Object.fromEntries(Object.entries(door).map(([k, d]) => [k, { ...d, path: undefined, pathLength: d.path?.length }])), fronts, props, nav: VB.navSummary(nav),
+    rows = VB.villageBars({ plan, realised, door, fronts, props, nav, walkDark, lamps: meta.village?.apronLamps ?? null }, rows);
+    village = { lamps: meta.village?.apronLamps ?? null, walkDark, door: Object.fromEntries(Object.entries(door).map(([k, d]) => [k, { ...d, path: undefined, pathLength: d.path?.length }])), fronts, props, nav: VB.navSummary(nav),
       M2villager: realised.metrics.M2villager, M22: realised.metrics.M22, M23: realised.metrics.M23, M24: realised.metrics.M24, graph: realised.metrics.graph };
   }
   const fronts = M.lotFronts(ir, after);

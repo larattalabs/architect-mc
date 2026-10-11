@@ -35,6 +35,7 @@ public class ArchitectClient implements ClientModInitializer {
 		dev.larattalabs.architect.client.dev.RegionDev6b.init(); // phase 6b hooks (check, previews, design, nudge, volumes, ghost, dumps)
 		dev.larattalabs.architect.client.dev.Slice0aDev.init(); // phase 6c slice 0a hooks (skipSave, dropAck)
 		dev.larattalabs.architect.client.dev.SliceVDev.init(); // phase 6c slice V hooks (dev.nav.villager)
+		dev.larattalabs.architect.client.dev.SliceWDev.init(); // phase 6c slice W hooks (dev.region.survey)
 		dev.larattalabs.architect.client.api.ApiClientBridge.init(); // the public API's client side (docs/CONTRACT.md phase 4a)
 		Launcher.init();
 		HudElementRegistry.addLast(Architect.id("hud/toasts"), dev.larattalabs.labui.client.ui.GuardedHud.of("architect_mc:hud.toasts", new Toasts()));

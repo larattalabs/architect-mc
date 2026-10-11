@@ -910,6 +910,11 @@ public final class RegionsImpl implements Regions {
 		return x0 <= b[3] && b[0] <= x0 + Heights.TILE - 1 && z0 <= b[5] && b[2] <= z0 + Heights.TILE - 1;
 	}
 
+	/** 6c W (DevBridge dev.region.survey): the plan survey a region plan of this claim would send (resolution 1 up to 256x256, else 4). */
+	public static CompletableFuture<Columns> planSurvey(ServerLevel level, int x0, int z0, int x1, int z1, LoadPolicy load) {
+		return RegionSurvey.planSurvey(level, x0, z0, x1, z1, load);
+	}
+
 	private static QItem roadItem(ServerLevel level, RegionRec rec, Ir.Road road, List<String> after) {
 		List<BlockPos> pts = new ArrayList<>();
 		road.points().forEach(pt -> pts.add(new BlockPos(pt[0], pt[1], pt[2])));

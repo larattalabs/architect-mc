@@ -1,0 +1,11 @@
+{
+  "name": "G6C-W coastal village",
+  "scope": "settlement",
+  "prompt": "W gallery (CONTRACT 6c W, Coordinator addition): a coastal look for S7: sea-lantern bollards on birch posts, packed-mud paths and stone-brick foundations",
+  "roles": {
+    "path": "minecraft:packed_mud",
+    "foundation": "minecraft:stone_bricks",
+    "light": "minecraft:sea_lantern",
+    "rail": "minecraft:birch_fence"
+  }
+}

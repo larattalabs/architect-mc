@@ -1,0 +1,11 @@
+{
+  "name": "G6C-W infernal village",
+  "scope": "settlement",
+  "prompt": "W gallery (CONTRACT 6c W, Coordinator addition): an infernal look for S7: soul lanterns on crimson fence posts, blackstone paths and nether-brick foundations",
+  "roles": {
+    "path": "minecraft:blackstone",
+    "foundation": "minecraft:nether_bricks",
+    "light": "minecraft:soul_lantern",
+    "rail": "minecraft:crimson_fence"
+  }
+}
