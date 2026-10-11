@@ -136,4 +136,35 @@ class Api115Test {
 		assertEquals("params.lots[1].ext: key \"nonamespace\" is not namespace:name", FieldLimits.lotExt(params("{\"nonamespace\": 1}")));
 		assertTrue(FieldLimits.lotExt(params("{\"" + "k".repeat(150) + ":" + "v".repeat(60) + "\": 1}")).startsWith("params.lots[1].ext: a key of 211 characters, at most 200"));
 	}
+
+	@Test
+	void c22TombstonesAreBinaryCompatible() throws Exception {
+		RegionState[] rs = RegionState.values();
+		assertEquals(RegionState.REMOVED, rs[rs.length - 1]);
+		assertEquals(RegionState.REMOVING, rs[rs.length - 2]);
+		var vc = RegionView.class.getRecordComponents();
+		assertEquals("removedAt", vc[vc.length - 1].getName());
+		RegionView.class.getConstructor(String.class, String.class, String.class, String.class, JsonObject.class, String.class, BoundingBox.class, RegionState.class,
+			List.class, List.class, long.class, Map.class, Refusal.class, PrepareView.class, List.class); // 1.9.0
+		RegionView.class.getConstructor(String.class, String.class, String.class, String.class, JsonObject.class, String.class, BoundingBox.class, RegionState.class,
+			List.class, List.class, long.class, Map.class, Refusal.class, PrepareView.class); // 1.8.0
+		SiteGroup.class.getConstructor(String.class, String.class, JsonObject.class, List.class, List.class, SiteGroup.State.class, java.util.Optional.class); // 1.4.0
+		var g = new SiteGroup("g", null, null, List.of(), List.of(), SiteGroup.State.REMOVED, java.util.Optional.empty());
+		assertTrue(g.removedAt().isEmpty());
+	}
+
+	@Test
+	void groupTombstoneKeepsItsTime() {
+		var rec = new dev.larattalabs.architect.site.SiteGroupRec("g1", null, new JsonObject(), List.of(), List.of(), dev.larattalabs.architect.site.SiteGroupRec.ACTIVE,
+			false, null, null, 1L);
+		assertEquals(0L, rec.removedAt());
+		var removing = rec.withState(dev.larattalabs.architect.site.SiteGroupRec.REMOVING);
+		assertEquals(0L, removing.removedAt());
+		var removed = removing.withState(dev.larattalabs.architect.site.SiteGroupRec.REMOVED);
+		assertTrue(removed.removedAt() > 0);
+		assertEquals(removed.removedAt(), dev.larattalabs.architect.site.SiteGroupRec.fromJson(removed.toJson()).removedAt(), "survives save and reload");
+		assertEquals(removed.removedAt(), removed.withState(dev.larattalabs.architect.site.SiteGroupRec.REMOVED).removedAt(), "a second finish keeps the first time");
+		assertEquals(0L, removed.withState(dev.larattalabs.architect.site.SiteGroupRec.ACTIVE).removedAt());
+		assertEquals(removed.removedAt(), removed.withSites(List.of("a")).removedAt(), "other updates keep it");
+	}
 }
