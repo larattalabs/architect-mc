@@ -5,6 +5,7 @@ import com.google.gson.JsonObject;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.OptionalInt;
 import java.util.concurrent.CompletableFuture;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -140,16 +141,32 @@ public interface Library {
 	 *     {@link Critique#stale()} true: it judged an older version and is not reused. Its rounds carry scores but not their
 	 *     issues ({@link Critique.Round#issueCount}); the final {@code scores} and {@code openIssues} are complete. Empty for an
 	 *     entry never critiqued (and for bundled entries)
+	 * @param derivation (since 1.11.0) how it was derived from another entry: a player variant (VARIANT), a re-skin (RESKIN) or a
+	 *     group copy (COPY, with the recipe that rebuilds it from any later source version); empty for designs and remixes.
+	 *     Kept by new versions
+	 * @param variantOfVersion (since 1.11.0) the version of {@link #variantOf} it was made from
 	 */
 	record Entry(String id, String name, String type, BlockSize size, List<String> tags, Optional<String> source, Map<String, JsonElement> params,
 		Map<String, JsonElement> values, Optional<JsonObject> palette, Map<String, Port> ports, JsonObject ext, boolean bundled, boolean imported,
 		Optional<String> variantOf, Optional<BiblePin> bible, Optional<String> group, Optional<String> groupItem, Map<String, Part> parts,
 		Direction front, Map<String, BlockPos> anchors, int groundY, Approach approach, Optional<Critique> critique, int version,
-		List<EntryVersion> versions) {
+		List<EntryVersion> versions, Optional<Derivation> derivation, OptionalInt variantOfVersion) {
 		public Entry {
 			critique = critique == null ? Optional.empty() : critique;
 			version = version <= 0 ? 1 : version;
 			versions = versions == null ? List.of() : List.copyOf(versions);
+			derivation = derivation == null ? Optional.empty() : derivation;
+			variantOfVersion = variantOfVersion == null ? OptionalInt.empty() : variantOfVersion;
+		}
+
+		/** The 1.5.0 constructor (no derivation). */
+		public Entry(String id, String name, String type, BlockSize size, List<String> tags, Optional<String> source, Map<String, JsonElement> params,
+			Map<String, JsonElement> values, Optional<JsonObject> palette, Map<String, Port> ports, JsonObject ext, boolean bundled, boolean imported,
+			Optional<String> variantOf, Optional<BiblePin> bible, Optional<String> group, Optional<String> groupItem, Map<String, Part> parts,
+			Direction front, Map<String, BlockPos> anchors, int groundY, Approach approach, Optional<Critique> critique, int version,
+			List<EntryVersion> versions) {
+			this(id, name, type, size, tags, source, params, values, palette, ports, ext, bundled, imported, variantOf, bible, group, groupItem, parts,
+				front, anchors, groundY, approach, critique, version, versions, Optional.empty(), OptionalInt.empty());
 		}
 
 		/** The 1.6.0 constructor (version 1, no lineage). */
@@ -183,6 +200,39 @@ public interface Library {
 			Optional<String> variantOf) {
 			this(id, name, type, size, tags, source, params, values, palette, ports, ext, bundled, imported, variantOf, Optional.empty(), Optional.empty(),
 				Optional.empty(), Map.of());
+		}
+	}
+
+	/**
+	 * How an entry was derived from another (since 1.11.0, docs/CONTRACT.md 6c 0b §2.4). One representation with 7b and 6d.
+	 *
+	 * @param source the entry it was made from
+	 * @param sourceVersion the source's version it was made from
+	 * @param kind VARIANT (a player variant), RESKIN (a re-skin to another bible), COPY (a copy in a design group) or SITE
+	 *     (reserved for 7b's site-adapted designs). Only COPY and SITE follow their source (6d)
+	 * @param recipe what rebuilds it: a copy's {@code {shift, param, values, mirror, roles, bible, group, itemKey, ...}}; a
+	 *     variant's palette and values; a re-skin's bible
+	 */
+	record Derivation(String source, int sourceVersion, Kind kind, JsonObject recipe) {
+		public Derivation {
+			recipe = recipe == null ? new JsonObject() : recipe;
+		}
+
+		/** New values are only ever appended. */
+		public enum Kind {
+			VARIANT, RESKIN, COPY, SITE;
+
+			public static Kind of(@Nullable String s) {
+				if (s == null) {
+					return VARIANT;
+				}
+				return switch (s.toLowerCase(java.util.Locale.ROOT)) {
+					case "reskin" -> RESKIN;
+					case "copy" -> COPY;
+					case "site" -> SITE;
+					default -> VARIANT;
+				};
+			}
 		}
 	}
 

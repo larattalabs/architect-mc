@@ -95,6 +95,21 @@ describe.skipIf(!hasKit)('polish (sim backend, real kit)', () => {
     h = undefined;
   });
 
+  it('(0b) a player variant records derivation VARIANT and variantOfVersion; a polish of it keeps both', async () => {
+    h = await harness();
+    const e = await entry(h, 'sim:issues=P1@roof sim:polish=er');
+    const v = h.sc.requestVariant(e, undefined, undefined, 'Inn variant');
+    await until(() => ['done', 'failed'].includes(h!.sc.variants.get(v.id)!.status), 60_000);
+    const ve = h.sc.variants.get(v.id)!.blueprintId!;
+    expect(top(h, ve)).toMatchObject({ variantOf: e, variantOfVersion: 1, derivation: { source: e, sourceVersion: 1, kind: 'variant', recipe: {} } });
+    const d = await polish(h, ve);
+    expect(d.status, d.error).toBe('done');
+    expect(d.polish, JSON.stringify(d.polish)).toMatchObject({ installedVersion: 2 });
+    const j = top(h, ve);
+    expect(j.version).toBe(2);
+    expect(j).toMatchObject({ variantOf: e, variantOfVersion: 1, derivation: { source: e, kind: 'variant' } });
+  }, 120_000);
+
   it('polished: two targeted steps (P1 roof, then P1 taproom), one new version with delta.json and critique.json format 2', async () => {
     h = await harness();
     const e = await entry(h, 'sim:issues=P1@roof,P2@-,P1@taproom sim:polish=er/er');

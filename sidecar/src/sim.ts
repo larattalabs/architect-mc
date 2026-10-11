@@ -29,6 +29,8 @@ import type { Designer, RunOutcome, Sidecar } from './sidecar.js';
 import { truncate } from './util/text.js';
 import { runNode } from './designs.js';
 import { simToken, type PolishBackend, type PolishTurnResult } from './polish.js';
+import { designRounds, SMALL_PASS } from './claude/brief.js';
+import { fitsSmall } from './copies.js';
 
 const STEPS: Array<{ status: 'designing'; step: string }> = [
   { status: 'designing', step: 'reading the brief' },
@@ -63,7 +65,52 @@ export interface SimRoundWork {
   charged: number;
   /** sim:repair's round is done */
   repaired?: boolean;
+  /** (0b) repair rounds done (one per sim:repair token) */
+  repairs?: number;
 }
+
+/** (0b) How many repair rounds a request scripts: one per `sim:repair` token in its notes (and ext["architect:sim"]). */
+export function simRepairs(req: { notes?: string | undefined; ext?: Record<string, unknown> | undefined }): number {
+  const n = [...(req.notes ?? '').matchAll(/(?:^|[^A-Za-z0-9_])sim:repair(?![A-Za-z0-9_=])/g)].length;
+  const e = req.ext?.[SIM_EXT];
+  return n + (Array.isArray(e) ? e : [e]).filter((v) => typeof v === 'string' && v.trim().replace(/^sim:/, '') === 'repair').length;
+}
+
+/**
+ * (0b) A small building for the sim: the kit's examples are all larger than an S lot (11 x 9), so a SMALL request whose maxSize
+ * footprint fits 11 x 9 gets a shed composed from kit/lib/smalls.mjs (its massing is 0a's fitted stand-in). Both are framed to
+ * exactly their written extents (built once to measure them).
+ */
+const SIM_SMALL_FRAME = `function framed(make) {
+  const big = make([16, 16, 16], [4, 0, 4]);
+  const min = [Infinity, Infinity, Infinity];
+  const max = [-Infinity, -Infinity, -Infinity];
+  for (const k of big.cells.keys()) k.split(',').map(Number).forEach((v, i) => { min[i] = Math.min(min[i], v); max[i] = Math.max(max[i], v); });
+  return make(max.map((v, i) => v - min[i] + 1), [4 - min[0], -min[1], 4 - min[2]]);
+}`;
+export function simSmallDesign(id: string, type: string, profile: string[] | undefined): string {
+  return `import { Blueprint, PALETTES } from '../lib/kit.mjs';
+import { shed } from '../lib/smalls.mjs';
+
+export const id = '${id}';
+export const params = { roof: { type: 'enum', options: ['gable', 'lean_to'], default: 'gable', label: 'Roof' } };
+${SIM_SMALL_FRAME}
+export default function build({ palette: p = PALETTES.rustic, roof = 'gable' } = {}) {
+  return framed((size, origin) => {
+    const bp = new Blueprint({ id, name: 'Small shed', type: '${type}', ${profile ? `profile: ${JSON.stringify(profile)}, ` : ''}size, origin, groundY: 1, front: 'south', palette: p });
+    let out;
+    bp.part('main', () => { out = shed(bp, [0, 0, 0, 4, 7, 4], { roof }); });
+    bp.part('path', () => bp.set(out.standAt[0], 0, out.standAt[2], p.path));
+    bp.spot('entrance', out.standAt[0], out.standAt[2], 180);
+    bp.spot('spawn', out.standAt[0], out.standAt[2], 180);
+    bp.interior(out.interior);
+    return bp;
+  });
+}
+`;
+}
+/** (0b, C8) a SMALL detail pass's notional cost under simCosts: the SMALL seed's midpoint ($0.6-1.5) */
+export const SIM_SMALL_DETAIL_USD = 1.05;
 
 class Cancelled extends Error {}
 class Limited extends Error {}
@@ -412,11 +459,17 @@ export class SimDesigner implements Designer {
     // (6c 0a) the example (and its params) that fits the request's max size (a small lot: a smaller cabin, a stand-in massing)
     const fit = await simFit(cfg.kitDir, req.type, req.maxSize);
     // (4c) a massing job builds under its massing id
-    const bp = d.massing ? d.massing.id : freeLibraryId(cfg.libraryDir, designBaseId(req), new Set([...this.taken].filter(([k]) => k !== id).map(([, v]) => v)));
-    if (!d.massing) this.taken.set(id, bp);
+    // (0b, C13) a versionOf builds under the entry's own id
+    const bp = d.massing ? d.massing.id : req.versionOf ? req.versionOf.entryId : freeLibraryId(cfg.libraryDir, designBaseId(req), new Set([...this.taken].filter(([k]) => k !== id).map(([, v]) => v)));
+    if (!d.massing && !req.versionOf) this.taken.set(id, bp);
     const scratch = prepareScratch({ dataDir: cfg.dataDir, kitDir: cfg.kitDir, libraryDir: cfg.libraryDir, design: d, bp, ...sc.scratchExtras(d) });
+    sc.prepareVersionOfScratch(d, scratch, bp);
     let cost = d.cost ?? zeroCost();
     const faults = simFaults(req);
+    // (0b, C8) a SMALL detail pass: its caps, as the real designer has them
+    const small = req.effort === 'small' && !d.massing;
+    const maxRounds = designRounds(req);
+    if (small && !sc.store.data.work?.[id]?.sim) sc.log.info(`design ${id}: SMALL pass (sim): ${SMALL_PASS.rounds} rounds, ${SMALL_PASS.maxTurns} turns, effort ${SMALL_PASS.effort}, $${SMALL_PASS.budgetUsd}`);
     // (6c 0a) the notional per-item costs (config simCosts): round 1 costs the massing's or the detail's figure, spread over
     // its steps so the round sums exactly; a step that runs again (a usage limit, a restart) adds nothing more
     const costs = cfg.simCosts;
@@ -441,10 +494,27 @@ export class SimDesigner implements Designer {
       }
       await this.sleep(this.stepMs, id, r);
       // the sim's notional spend: simDesignUsd per step, or (simCosts) the item's share
-      cost = { ...cost, usd: Math.round((cost.usd + charge(1, i + 1, STEPS.length, costs ? (d.massing ? costs.massing : costs.detail) : 0)) * 1e6) / 1e6, turns: cost.turns + 1 };
+      cost = { ...cost, usd: Math.round((cost.usd + charge(1, i + 1, STEPS.length, costs ? (d.massing ? costs.massing : small ? SIM_SMALL_DETAIL_USD : costs.detail) : 0)) * 1e6) / 1e6, turns: cost.turns + 1 };
       sc.designCost(id, cost);
       // (6c 0a) sim:fail: the design fails after its first step
       if (faults.has('fail')) throw new Error('the design failed (simulated: sim:fail)');
+    }
+    // (0b) more than one sim:repair: each is a repair round, up to the design's rounds (a SMALL pass has 2: a second repair
+    // fails it with `rounds`)
+    const repairs = simRepairs(req);
+    if (repairs > 1) {
+      for (let k = sw.repairs ?? 0; k < repairs; k++) {
+        this.check(id, r);
+        const round = k + 2;
+        if (round > maxRounds) throw new Error(`${small ? `rounds: the SMALL pass used its ${maxRounds} rounds (effort SMALL)` : `the design used its ${maxRounds} rounds`}: the check failed (simulated, sim:repair x${repairs})`);
+        sc.designStep(id, 'designing', `round ${round} of ${maxRounds}: fixing what the check found (simulated, sim:repair)`);
+        await this.sleep(this.stepMs, id, r);
+        cost = { ...cost, usd: Math.round((cost.usd + charge(round, 1, 1, costs ? costs.repair : 0)) * 1e6) / 1e6, turns: cost.turns + 1 };
+        sc.designCost(id, cost);
+        sw.repairs = k + 1;
+        sc.store.markDirty();
+      }
+      sw.repaired = true;
     }
     // (6c 0a) sim:repair: round 1's check fails (simulated), and one repair round (round 2) fixes it
     if (faults.has('repair') && sw.round <= 2 && !sw.repaired) {
@@ -489,6 +559,34 @@ export class SimDesigner implements Designer {
       }
       // the massing profile has no type rules: the requested type is written in
       source = source.replace(/type:\s*'(?!(?:int|bool|enum)')[a-z0-9_]+'/, `type: '${req.type}'`);
+    } else if (req.versionOf) {
+      // (0b, C13) the head changed as a sim redirect changes a massing (an int param's default up by one, else gable -> hip)
+      const base = fs.readFileSync(path.join(scratch, 'context', 'base', `${bp}.mjs`), 'utf8');
+      const r2 = simRedirect(base);
+      source = r2.source;
+      what = `${bp} v${req.versionOf.baseVersion ?? 1} changed (${r2.change})`;
+      note = r2.change;
+      // sim:frontchange: round 1 turns the front (the frame guard refuses it), a repair round puts it back
+      if (faults.has('frontchange')) {
+        const turned = source.replace(/front:\s*'(north|south|east|west)'/, (_m, f: string) => `front: '${f === 'east' ? 'west' : 'east'}'`);
+        fs.writeFileSync(design, turned);
+        sc.designStep(id, 'checking', 'checking the design (simulated designer): the front was turned (sim:frontchange)');
+        const r1 = await checkDesign(cfg.kitDir, scratch, bp, sc.checkPlan(d).limits, 120_000, sc.checkPlan(d).extra);
+        this.check(id, r);
+        const p1 = r1.ok ? sc.checkOutcome(d, r1) : r1.problem;
+        sc.log.info(`design ${id}: round 1's check failed (simulated, sim:frontchange): ${(p1 ?? 'it passed?').split('\n')[0]}; repair round 2`);
+        if (!p1) throw new Error('sim:frontchange: the frame guard did not refuse the turned front');
+        sc.designStep(id, 'designing', `round 2: fixing what the check found (simulated): ${p1.split('\n')[0]}`);
+        await this.sleep(this.stepMs, id, r);
+        cost = { ...cost, usd: Math.round((cost.usd + charge(2, 1, 1, costs ? costs.repair : 0)) * 1e6) / 1e6, turns: cost.turns + 1 };
+        sc.designCost(id, cost);
+        note = `${note}; the turned front was repaired (round 2)`;
+      }
+    } else if (req.effort === 'small' && fitsSmall(req.maxSize)) {
+      // (0b) a SMALL item on an S lot: a shed composed from kit/lib/smalls.mjs, as the SMALL brief asks (the massing is 0a's fitted
+      // stand-in)
+      source = simSmallDesign(bp, req.type, open ? (req.profile ?? ['door', 'lit', 'no_floating']) : undefined);
+      what = 'a small shed (sim, kit/lib/smalls.mjs)';
     } else {
       // the "design": the example under the new id (an open type and its profile written in); (6c 0a) fitted to the max size
       if (fit?.changed) src = fit.src;
@@ -505,7 +603,8 @@ export class SimDesigner implements Designer {
     // (4c) the plan every designer checks with: the massing profile, or a detail pass's hard cap and --massing
     const plan = sc.checkPlan(d, bibleArgs);
     // a fallback example (cabin for a tower) is checked as what it is, not as the requested type
-    const limits = d.massing ? plan.limits : { ...plan.limits, type: src === req.type || open ? req.type : undefined, profile: open ? (req.profile ?? ['door', 'lit', 'no_floating']) : undefined };
+    const smallSrc = !d.massing && !req.versionOf && req.effort === 'small' && fitsSmall(req.maxSize);
+    const limits = d.massing ? plan.limits : { ...plan.limits, type: src === req.type || open || smallSrc ? req.type : undefined, profile: open ? (req.profile ?? ['door', 'lit', 'no_floating']) : undefined };
     const res = await checkDesign(cfg.kitDir, scratch, bp, limits, 120_000, plan.extra);
     this.check(id, r);
     const problem = res.ok ? sc.checkOutcome(d, res) : (sc.checkOutcome(d, res), res.problem ?? 'the check failed');

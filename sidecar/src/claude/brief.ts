@@ -7,6 +7,33 @@ import { BUILDING_TYPES, type BuildingType, type Context, type DesignRequest, ty
 /** design agent turns per job (the first + follow-ups after a failed check) */
 export const MAX_DESIGN_ROUNDS = 4;
 
+/**
+ * (0b, C8) The bounded SMALL detail pass (config `small` in the estimate's basis): 2 design rounds (first + 1 repair), 40
+ * turns per round at effort medium, $1.50 over the whole pass (within the group's remainder). A cap hit fails the item
+ * (`budget` or `rounds`); there is no STANDARD retry. Massings are unchanged.
+ */
+export const SMALL_PASS = { rounds: 2, maxTurns: 40, effort: 'medium' as const, budgetUsd: 1.5 };
+
+/** (0b) the design rounds a design gets: 2 for a SMALL detail pass, else MAX_DESIGN_ROUNDS */
+export function designRounds(req: Pick<DesignRequest, 'effort' | 'massing'>): number {
+  return req.effort === 'small' && !req.massing ? SMALL_PASS.rounds : MAX_DESIGN_ROUNDS;
+}
+
+/** (0b, C8) The SMALL brief: compose from kit/lib/smalls.mjs, keep it short. */
+export function smallSection(): string[] {
+  return [
+    '## A small building (the SMALL pass: 2 rounds, 40 turns each)',
+    '',
+    '- This is a small building with a bounded budget: be quick and direct. Compose it from the small-building components in `kit/lib/smalls.mjs` (`import { rack, stall, well, shed } from \'../lib/smalls.mjs\'`): each is `(bp, box, opts)` with `box` = [x0,y0,z0,x1,y1,z1] in design coordinates (y0 the floor row) and reads only the palette roles, so it re-skins with the bible.',
+    "  - `rack(bp, box, { length, levels })`: a drying or market rack (levels 1-3)",
+    "  - `stall(bp, box, { awning: 'accent' | 'roof' | <role>, counter: <side> })`: a market stall with a counter and an awning",
+    "  - `well(bp, box, { shape: 'round' | 'square', roofed })`: a well, optionally roofed",
+    "  - `shed(bp, box, { roof: 'gable' | 'lean_to', door: <side> })`: a one-room hut; it returns `{ door, interior, standAt }` for your interior box and anchors",
+    '- Each returns `standAt` (a feet cell in front of it): put `entrance` and `spawn` there. Add a few details of your own if you have turns left, but a clean, checked building is the goal; skip the params beyond one or two.',
+    '',
+  ];
+}
+
 /** One style line per building type: what makes it read as that type. */
 export const TYPE_GUIDE: Record<BuildingType, string> = {
   house:
@@ -243,8 +270,8 @@ export function massingPrompt(bp: string): string {
   return `Make the massing described in BRIEF.md as kit/designs/${bp}.mjs. Read BRIEF.md and the "Massing designs" section of kit/README.md, write the massing, build and check it, look at the iso render once, then end with a one-line summary.`;
 }
 
-export function massingFixPrompt(bp: string, problem: string, round: number): string {
-  return `The sidecar re-checked your massing with a fresh copy of the kit and it did not pass (round ${round} of ${MAX_DESIGN_ROUNDS}):\n${problem}\n\nFix kit/designs/${bp}.mjs (only that file counts), run the build command from BRIEF.md until the check is OK, then end with a one-line summary.`;
+export function massingFixPrompt(bp: string, problem: string, round: number, max = MAX_DESIGN_ROUNDS): string {
+  return `The sidecar re-checked your massing with a fresh copy of the kit and it did not pass (round ${round} of ${max}):\n${problem}\n\nFix kit/designs/${bp}.mjs (only that file counts), run the build command from BRIEF.md until the check is OK, then end with a one-line summary.`;
 }
 
 /** The style-bible section of BRIEF.md (4b). */
@@ -300,6 +327,7 @@ export function designBrief(req: DesignRequest, bp: string, opts: BriefOptions):
     ...contextSection(req.context),
     ...(bound ? massingBindingSection(bound.record, m) : []),
     ...(opts.bible ? bibleSection(opts.bible, bp) : []),
+    ...(req.effort === 'small' ? smallSection() : []),
     ...(opts.neighbours?.length
       ? [
           '## Neighbours',
@@ -351,8 +379,8 @@ export function designPrompt(bp: string): string {
   return `Design the building described in BRIEF.md as kit/designs/${bp}.mjs. Read BRIEF.md, CONTRACT.md and kit/README.md, look at the closest example design, write the design, then build, check, look at the renders and iterate as BRIEF.md says until the checker passes and it looks right. End with a one-line summary.`;
 }
 
-export function designFixPrompt(bp: string, problem: string, round: number): string {
-  return `The sidecar re-checked your design with a fresh copy of the kit and it did not pass (round ${round} of ${MAX_DESIGN_ROUNDS}):\n${problem}\n\nFix kit/designs/${bp}.mjs (only that file counts), run the build command from BRIEF.md until the check is OK and the size fits, look at the renders again if there is a renderer, then end with a one-line summary.`;
+export function designFixPrompt(bp: string, problem: string, round: number, max = MAX_DESIGN_ROUNDS): string {
+  return `The sidecar re-checked your design with a fresh copy of the kit and it did not pass (round ${round} of ${max}):\n${problem}\n\nFix kit/designs/${bp}.mjs (only that file counts), run the build command from BRIEF.md until the check is OK and the size fits, look at the renders again if there is a renderer, then end with a one-line summary.`;
 }
 
 /** (5a) a revision after critique whose check failed (its own allowance, not MAX_DESIGN_ROUNDS) */

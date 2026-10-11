@@ -73,8 +73,9 @@ class Api19Test {
 		assertEquals(Reason.NO_TEMPLATE, r[Reason.PLAYER_BLOCKS.ordinal() - 1]);
 		assertEquals(34, Reason.PLAYER_BLOCKS.ordinal(), "1.9.0's last constant keeps its place (later ones append)");
 		assertEquals(Design.Kind.REGION, Design.Kind.values()[4]);
-		assertEquals(List.of("MOVE_CLOSER", "PREPARE", "START_SIDECAR", "APPROVE_STAGE", "REPLAN", "RETRY"), java.util.Arrays.stream(WaitAction.Kind.values())
-			.map(Enum::name).toList());
+		// the 1.9.0 kinds first (1.10.0 appends RETRY)
+		assertEquals(List.of("MOVE_CLOSER", "PREPARE", "START_SIDECAR", "APPROVE_STAGE", "REPLAN"), java.util.Arrays.stream(WaitAction.Kind.values()).map(
+			Enum::name).toList().subList(0, 5));
 	}
 
 	@Test

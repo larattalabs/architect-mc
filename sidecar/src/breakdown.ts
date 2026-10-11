@@ -13,7 +13,7 @@
 import type { Design, Group, GroupItem } from './protocol.js';
 import type { Sidecar } from './sidecar.js';
 
-type Stage = 'bible' | 'massing' | 'detail' | 'repair' | 'critique' | 'queued' | 'usage_hold';
+type Stage = 'bible' | 'massing' | 'detail' | 'repair' | 'critique' | 'queued' | 'usage_hold' | 'copy';
 interface DesignFig {
   kind: 'massing' | 'detail';
   first: number;
@@ -27,7 +27,7 @@ interface DesignFig {
 }
 export interface BreakdownWork {
   designs: Record<string, DesignFig>;
-  items: Record<string, { queuedMs: number; holdMs: number; state?: ItemState; designId?: string }>;
+  items: Record<string, { queuedMs: number; holdMs: number; copyMs?: number; state?: ItemState; designId?: string }>;
   lastTick: number;
   firstDetailedAt?: number;
   bible?: { usd: number; ms: number; jobIds: string[] };
@@ -38,7 +38,7 @@ export interface BreakdownWork {
   /** the transition fields of the last bump, per item (to name the action) */
   prev?: { status: string; items: Record<string, { status: string; stage?: string }> };
 }
-type ItemState = 'queued' | 'held' | 'active' | 'repair' | 'critiquing' | 'other';
+type ItemState = 'queued' | 'held' | 'active' | 'repair' | 'critiquing' | 'copy' | 'other';
 
 const r6 = (n: number) => Math.round(n * 1e6) / 1e6;
 const RUN = new Set(['designing', 'checking', 'rendering']);
@@ -95,11 +95,17 @@ export function updateBreakdown(sc: Sidecar, g: Group, bw: BreakdownWork, limite
       const f = iw.designId ? bw.designs[iw.designId] : undefined;
       if (iw.state === 'queued') iw.queuedMs += dt;
       else if (iw.state === 'held') iw.holdMs += dt;
+      else if (iw.state === 'copy') iw.copyMs = (iw.copyMs ?? 0) + dt;
       else if (f && iw.state === 'active') f.ms += dt;
       else if (f && iw.state === 'repair') f.repairMs += dt;
       else if (f && iw.state === 'critiquing') f.critiqueMs += dt;
     }
-    const d = sc.designs.get(it.designId);
+    // (0b) a copy: time only, while its variant job builds (waiting for its archetype is not queueing for a slot)
+    if (it.kind === 'copy') {
+      iw.state = isOpen(it) && it.status === 'checking' ? 'copy' : 'other';
+      continue;
+    }
+    const d = it.designId ? sc.designs.get(it.designId) : undefined;
     if (d) bw.designs[d.id] = figure(sc, d, bw.designs[d.id]);
     const open = isOpen(it) && it.stage !== 'approval';
     iw.designId = it.designId;
@@ -114,6 +120,7 @@ export function updateBreakdown(sc: Sidecar, g: Group, bw: BreakdownWork, limite
     critique: { usd: 0, ms: 0, count: 0 },
     queued: { usd: 0, ms: 0, count: 0 },
     usage_hold: { usd: 0, ms: 0, count: 0 },
+    copy: { usd: 0, ms: 0, count: g.items.filter((it) => it.kind === 'copy' && it.status === 'done').length },
   };
   for (const f of Object.values(bw.designs)) {
     const l = lines[f.kind];
@@ -131,6 +138,7 @@ export function updateBreakdown(sc: Sidecar, g: Group, bw: BreakdownWork, limite
     lines.queued.ms += iw.queuedMs;
     if (iw.queuedMs > 0) lines.queued.count++;
     lines.usage_hold.ms += iw.holdMs;
+    lines.copy.ms += iw.copyMs ?? 0;
     if (iw.holdMs > 0) lines.usage_hold.count++;
   }
   const stages: Record<string, { usd: number; ms: number; count: number }> = {};

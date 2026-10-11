@@ -128,9 +128,10 @@ public class ApiTest implements ModInitializer {
 				JsonObject err = new JsonObject();
 				Throwable c = e.getCause() != null ? e.getCause() : e;
 				err.addProperty("error", c.toString());
-				// 1.10.0 (6c 0a): a typed refusal's reason (WORLD_STOPPED, OP_KEY_CONFLICT, ...)
-				if (c instanceof dev.larattalabs.architect.api.ArchitectRefused r) {
-					err.addProperty("reason", r.reason().name());
+				// 1.11.0: a typed refusal's reason and detail
+				if (c instanceof dev.larattalabs.architect.api.ArchitectRefused ar) {
+					err.addProperty("reason", ar.reason().name());
+					err.addProperty("detail", ar.detail());
 				}
 				RESULTS.put(key, err);
 			} else {
@@ -232,6 +233,12 @@ public class ApiTest implements ModInitializer {
 			case "heights":
 			case "api15": {
 				return ApiTestJournal.step(src, a);
+			}
+			case "promote":
+			case "versionof":
+			case "estimatemix":
+			case "api111": {
+				return ApiTest0b.step(src, a);
 			}
 			case "checkdelta":
 			case "applydelta":
@@ -649,6 +656,17 @@ public class ApiTest implements ModInitializer {
 		JsonObject parts = new JsonObject();
 		e.parts().forEach((n, p) -> parts.addProperty(n, p.cells()));
 		o.add("parts", parts);
+		// 1.11.0
+		o.addProperty("version", e.version());
+		e.variantOfVersion().ifPresent(v -> o.addProperty("variantOfVersion", v));
+		e.derivation().ifPresent(d -> {
+			JsonObject j = new JsonObject();
+			j.addProperty("source", d.source());
+			j.addProperty("sourceVersion", d.sourceVersion());
+			j.addProperty("kind", d.kind().name());
+			j.add("recipe", d.recipe());
+			o.add("derivation", j);
+		});
 		return o;
 	}
 }

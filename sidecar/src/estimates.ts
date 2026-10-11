@@ -6,6 +6,7 @@
 // phase 1-2 Opus figure of $1-1.5 was for smaller, simpler designs). Only the Claude backend records samples.
 // Phase 4c adds the `massing` kind (seeded at $0.10-0.40 and 1-3 min, the contract's figure until the gate measures it);
 // a group with massingFirst estimates both passes (redirects are not in the estimate: they are the player's choice).
+import { expandItems } from './copies.js';
 import type { BibleRequest, CritiqueSpec, DesignRequest, Estimate, GroupRequest } from './protocol.js';
 import type { Store } from './store.js';
 
@@ -46,6 +47,14 @@ export const SEED_BASIS = 'seed (Steward phase 1, 2026-10-09)';
 const OPUS: Seed = { usd: [2.5, 4.6], ms: [8 * MIN, 15 * MIN] };
 /** (6c 0a) One repair-sized turn: a repair round, and the seed of an "adapted" building (unmeasured until 7b). */
 export const REPAIR_SEED: Seed = { usd: [0.3, 0.9], ms: [1 * MIN, 3 * MIN] };
+/** (0b, C8) A SMALL detail pass (2 rounds, 40 turns, medium, $1.50): seeded at $0.6-1.5 and 3-6 min, unmeasured until §6. */
+export const SMALL_SEED: Seed = { usd: [0.6, 1.5], ms: [3 * MIN, 6 * MIN] };
+export const SMALL_BASIS = 'SMALL pass (config small: 2 rounds, 40 turns, effort medium, $1.50): seed $0.6-1.5, 3-6 min, unmeasured until §6';
+/** (0b, C13) A change (versionOf): seeded from the polish step ($0.4-1.2, Sonnet). */
+export const CHANGE_SEED: Seed = { usd: [0.4, 1.2], ms: [2 * MIN, 8 * MIN] };
+export const CHANGE_BASIS = 'a change (versionOf): seed from the polish step ($0.4-1.2, Sonnet)';
+/** (0b, C1) A copy: $0 and the variant build time (measured in the 0b sim gate: seconds). */
+export const COPY_BASIS = '$0 and the variant build time (a copy: no Claude)';
 /** Sonnet design seed, measured 2026-10-05 (4 real designs in the phase 4b gate: $0.86-2.45, 4-10 min). */
 /** Bible job seed, measured 2026-10-05 (one real bible: $1.40, 6.4 min). */
 const BIBLE: Seed = { usd: [1.16, 1.55], ms: [5 * MIN, 8 * MIN] };
@@ -294,6 +303,13 @@ export class Estimates {
 
   /** One design's estimate (a massing job's when the request is one). */
   design(req: DesignRequest, ctx: EstimateCtx): Estimate {
+    // (0b, C13) a change of an entry (versionOf): the CHANGE seed
+    if (req.versionOf) {
+      const wait = ctx.limitUntil && ctx.limitUntil > ctx.now ? ctx.limitUntil - ctx.now : 0;
+      return { usdLow: CHANGE_SEED.usd[0], usdHigh: CHANGE_SEED.usd[1], minutesLow: r1((CHANGE_SEED.ms[0] + wait) / MIN), minutesHigh: r1((CHANGE_SEED.ms[1] + wait) / MIN), basis: CHANGE_BASIS };
+    }
+    // (0b, C8) a SMALL detail pass
+    if (req.effort === 'small') return { usdLow: SMALL_SEED.usd[0], usdHigh: SMALL_SEED.usd[1], minutesLow: r1(SMALL_SEED.ms[0] / MIN), minutesHigh: r1(SMALL_SEED.ms[1] / MIN), basis: SMALL_BASIS };
     if (req.massing) {
       const model = req.model ?? ctx.massingModel;
       const pj = this.perJob('massing', model);
@@ -314,7 +330,16 @@ export class Estimates {
    * variant build time). A line per kind; the totals are the sums of the lines. Time: the bible, then the massing pass and
    * the detail pass in batches of the concurrency, then the adapted turns in batches; copies take seconds.
    */
-  mix(m: { group?: Pick<GroupRequest, 'items' | 'massingFirst' | 'critique' | 'concurrency'> | undefined; originals: number; adapted: number; copies: number; newBible: boolean; massingFirst: boolean; reportCritique: boolean; model?: string | undefined }, ctx: EstimateCtx): Estimate & { byKind: Partial<Record<MixKind, MixLine>> } {
+  mix(m0: { group?: Pick<GroupRequest, 'items' | 'massingFirst' | 'critique' | 'concurrency' | 'copyCap' | 'smallBySize'> | undefined; originals: number; adapted: number; copies: number; newBible: boolean; massingFirst: boolean; reportCritique: boolean; model?: string | undefined; smallOriginals?: number | undefined; changes?: number | undefined }, ctx: EstimateCtx): Estimate & { byKind: Partial<Record<MixKind, MixLine>> } {
+    // (0b) a group's placements: copies count as COPY, small originals as SMALL, the rest as ORIGINAL
+    let m = m0;
+    let smallModels = m0.smallOriginals ?? 0;
+    if (m0.group && (m0.group.items.some((it) => it.count !== undefined || it.copyOf !== undefined || it.effort !== undefined) || m0.group.smallBySize)) {
+      const ex = expandItems({ name: 'estimate', bible: 'x', ...m0.group } as GroupRequest);
+      const originals = ex.filter((e) => e.kind === 'original' && e.effort === 'standard').map((e) => ({ ...e.input, itemKey: e.itemKey }));
+      smallModels += ex.filter((e) => e.kind === 'original' && e.effort === 'small').length;
+      m = { ...m0, group: { ...m0.group, items: originals as GroupRequest['items'] }, copies: m0.copies + ex.filter((e) => e.kind === 'copy').length };
+    }
     const slots = Math.max(1, Math.min(m.group?.concurrency ?? 3, ctx.designConcurrency));
     const byKind: Partial<Record<MixKind, MixLine>> = {};
     const bases: string[] = [];
@@ -363,7 +388,18 @@ export class Estimates {
       const b = Math.ceil(m.adapted / slots);
       line('adapted', [m.adapted * REPAIR_SEED.usd[0], m.adapted * REPAIR_SEED.usd[1]], [b * REPAIR_SEED.ms[0], b * REPAIR_SEED.ms[1]], m.adapted, 'one repair-sized turn ($0.3-0.9, 1-3 min), unmeasured until 7b');
     }
-    if (m.copies > 0) line('copy', [0, 0], [m.copies * 200, m.copies * 2000], m.copies, '$0 and the variant build time (copies become real with C1 in 0b)');
+    if (smallModels > 0) {
+      // a SMALL item still gets its massing under massingFirst; it never gets the default report critique
+      const ms = m.massingFirst || !!m.group?.massingFirst ? this.perJob('massing', ctx.massingModel) : { usd: [0, 0] as [number, number], ms: [0, 0] as [number, number] };
+      const b = Math.ceil(smallModels / slots);
+      line('small', [smallModels * (SMALL_SEED.usd[0] + ms.usd[0]), smallModels * (SMALL_SEED.usd[1] + ms.usd[1])], [b * (SMALL_SEED.ms[0] + ms.ms[0]), b * (SMALL_SEED.ms[1] + ms.ms[1])], smallModels, SMALL_BASIS);
+    }
+    if ((m.changes ?? 0) > 0) {
+      const n = m.changes!;
+      const b = Math.ceil(n / slots);
+      line('change', [n * CHANGE_SEED.usd[0], n * CHANGE_SEED.usd[1]], [b * CHANGE_SEED.ms[0], b * CHANGE_SEED.ms[1]], n, CHANGE_BASIS);
+    }
+    if (m.copies > 0) line('copy', [0, 0], [m.copies * 200, m.copies * 2000], m.copies, COPY_BASIS);
     const lines = Object.values(byKind);
     const wait = ctx.limitUntil && ctx.limitUntil > ctx.now ? ctx.limitUntil - ctx.now : 0;
     const sum = (f: (l: MixLine) => number) => lines.reduce((a, l) => a + f(l), 0);
@@ -387,7 +423,7 @@ export class Estimates {
   }
 }
 
-export type MixKind = 'bible' | 'original' | 'adapted' | 'copy';
+export type MixKind = 'bible' | 'original' | 'adapted' | 'copy' | 'small' | 'change';
 export interface MixLine {
   usdLow: number;
   usdHigh: number;

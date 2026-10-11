@@ -52,11 +52,20 @@ package dev.larattalabs.architect.api;
  * player's own blocks: non-natural, no block entity, owned by no journal entry. The lot is not placed and the blocks stay
  * (the region ends PARTIAL); {@code force} overrides it (the blocks are overwritten and come back on remove).</li>
  * <li>{@code WORLD_STOPPED} (1.10.0): the world stopped while the future was pending, or no world runs. Work in the helper goes
- * on: find it again after the next load with the {@code *ByKey} lookups or the listings ({@link ArchitectRefused}).</li>
+ * on: find it again after the next load with the {@code *ByKey} lookups or the listings ({@link ArchitectRefused}). * It is not an outcome: never record the work as failed on it. The sweep runs in {@code SERVER_STOPPING}'s default phase,
+ * so end your own session in a phase ordered before it ({@code addPhaseOrdering(yourPhase, Event.DEFAULT_PHASE)}), or
+ * ignore WORLD_STOPPED in your handlers.</li>
  * <li>{@code OP_KEY_CONFLICT} (1.10.0): an operation key re-used by the same owner for the same kind with another body.</li>
  * <li>{@code TILE_SLOW} (1.10.0): a region tile's evaluation ran over its time limit in every retry of the helper. Temporary:
  * the item waits, the tile is asked for again after 30 s, 60 s, 120 s and then every 5 min, and {@link WaitAction.Kind#RETRY}
  * asks now. Only {@code RealiseRequest.maxWaitSeconds} caps it (TIMED_OUT).</li>
+ * <li>{@code COPY_REFUSED} (1.11.0): a group's copies can't be made as asked. {@link ArchitectRefused#detail()}: {@code landmark}
+ * (a copyOf naming a landmark), {@code unknown} (a copyOf naming no item), {@code self} (an item copying itself), {@code cap}
+ * (one past the archetype's copyCap); {@link Designs#promoteCopy} refused: {@code not_copy}, {@code building}, {@code final}.</li>
+ * <li>{@code VERSION_REFUSED} (1.11.0): a {@code versionOf} (or a polish) can't make the entry's next version. Detail:
+ * {@code bundled}, {@code no_source}, {@code massing}, {@code copy} (a group copy follows its source by its recipe), {@code busy}
+ * (a polish or versionOf of the entry is unfinished), {@code site_mismatch} (the site is not of that entry), {@code group}
+ * (single designs only).</li>
  * <li>{@code PROTECTED} (1.12.0): the op writes into a protected area of its owner ({@link Sites#protect}); {@code force}
  * doesn't override it: lift the area ({@link Sites#unprotect}).</li>
  * <li>{@code FIELD_LIMIT} (1.12.0): a bounded request field is out of range ({@code Limits}); nothing was sent.</li>
@@ -68,6 +77,7 @@ public enum Reason {
 	UNKNOWN_BLUEPRINT, OTHER, CANCELLED, LOT_TOO_SMALL, TIMED_OUT, OVERLAP_BUSY, OVERLAP_OWNED, LAYER_DEPTH, COVERED, TOO_STEEP, DEEP_WATER,
 	TOO_LARGE, JOURNAL_UNAVAILABLE, SITE_BUSY, FRAME_CHANGED, VERSION_GONE, PLAYER_EDITS, NOT_GENERATED, CHUNK_BOUND, DRIFTED,
 	SIDECAR_UNAVAILABLE, PLAN_STALE, REGION_LIMIT, NO_TEMPLATE, PLAYER_BLOCKS, WORLD_STOPPED, OP_KEY_CONFLICT, TILE_SLOW,
+	COPY_REFUSED, VERSION_REFUSED,
 	// 1.12.0 (6c slice 0c), after 0a's and 0b's
 	PROTECTED, FIELD_LIMIT
 }

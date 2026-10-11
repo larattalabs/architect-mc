@@ -451,7 +451,8 @@ steps.flow = async () => {
   await startClient(W, { ARCHITECT_SIM_COSTS: 'measured' });
   const out = {};
   const v = await api('api110');
-  check(v.version === '1.10.0', `ArchitectApi.VERSION ${v.version}; the last Reasons ${v.lastReasons}`);
+  // 1.10.0 or later (a later minor appends after 1.10.0's)
+  check(v.version.localeCompare('1.10.0', undefined, { numeric: true }) >= 0, `ArchitectApi.VERSION ${v.version}; the last Reasons ${v.lastReasons}`);
   const est = await result(await api(`estmix f ${b64({ originals: 3, newBible: true, massingFirst: true })}`));
   out.estimate = est;
   const sumKinds = Object.values(est.byKind ?? {}).reduce((a, l) => a + l.usdLow, 0);

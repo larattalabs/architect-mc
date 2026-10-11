@@ -116,11 +116,13 @@ public final class Wire4b {
 					continue;
 				}
 				JsonObject i = e.getAsJsonObject();
-				items.add(new Group.Item(str(i, "itemKey", "?"), obj(i, "ext").deepCopy(), str(i, "designId", "?"), Optional.ofNullable(str(i, "entryId")),
+				// (0b) a copy's designId is "": its designIds are empty until it falls back
+				String did = str(i, "designId", "?");
+				items.add(Wire0b.item(new Group.Item(str(i, "itemKey", "?"), obj(i, "ext").deepCopy(), did, Optional.ofNullable(str(i, "entryId")),
 					Design.Status.of(str(i, "status")), str(i, "step", ""), cost(i), (int) num(i, "wave"), GroupRequest.Role.of(str(i, "role")),
 					str(i, "model", ""), str(i, "type", ""), Optional.ofNullable(str(i, "name")), Optional.ofNullable(str(i, "error")),
 					Group.Stage.of(str(i, "stage")), Wire4c.ref(i.get("massing")), (int) num(i, "rounds"), i.has("designIds") ? strings(i, "designIds")
-						: List.of(str(i, "designId", "?")), Wire5a.summary(i.get("critique"))));
+						: did.isEmpty() ? List.of() : List.of(did), Wire5a.summary(i.get("critique"))), i));
 			}
 		}
 		Double budget = dbl(o, "budgetUsd");
@@ -298,9 +300,12 @@ public final class Wire4b {
 			} else if (it.wave() != null) {
 				r.addProperty("wave", it.wave());
 			}
+			// 6c 0b: count, copyOf, effort (only when set)
+			Wire0b.itemFields(it, r);
 			items.add(r);
 		}
 		o.add("items", items);
+		Wire0b.groupFields(g, o);
 		// 6c 0a
 		if (Wire0a.opKey(g.opKey()) != null) {
 			o.addProperty("opKey", g.opKey());
