@@ -129,7 +129,7 @@ function scenario(sc) {
     $('h2', { text: sc.lookOnly ? `The same village in the ${sc.look} bible` : sc.earlier ? 'Slice V\'s run, as approved' : sc.look ? 'S7 with slice W: lit aprons and the bible\'s lamps' : (sc.brief || sc.id) }),
     sc.lookOnly ? $('p', { class: 'muted', text: `A look only: the lamps come from this bible's light and rail roles${sc.bible ? ` (bible ${sc.bible})` : ''}. Its bars are recorded, not gated; the decision is on the rustic run above.` }) : null,
     sc.earlier ? $('p', { class: 'muted', text: 'Kept for comparison: slice V\'s run before the apron lamps. Its approval stands for its own evidence sha.' }) : null,
-    $('p', { class: 'muted', text: failing.length ? `${failing.length} bar(s) fail on this run: ${failing.map((r) => r.label).join(', ')}.` : 'Every run bar passes. Your decision is the last one.' })));
+    sc.lookOnly ? null : $('p', { class: 'muted', text: failing.length ? `${failing.length} bar(s) fail on this run: ${failing.map((r) => r.label).join(', ')}.` : 'Every run bar passes. Your decision is the last one.' })));
   const facts = [['Scenario', sc.id], ['Run', sc.runId], ['Evidence', sc.evidenceSha.slice(0, 12)], ['IR sha', (sc.irSha || '').slice(0, 12)], ['Date', `${sc.date.slice(0, 4)}-${sc.date.slice(4, 6)}-${sc.date.slice(6, 8)}`],
     ['Versions', `mod ${sc.versions?.mod} · API ${sc.versions?.api} · kit ${sc.versions?.kit}`], ['Claim', sc.claim.join(', ')], ['Seeds', `world ${sc.worldSeed} · program ${sc.programSeed}`], ['Cells written', Number(sc.cellsWritten).toLocaleString('en-US')]];
   s.append($('dl', { class: 'facts' }, ...facts.map(([k, v]) => $('div', {}, $('dt', { text: k }), $('dd', { text: v })))));
