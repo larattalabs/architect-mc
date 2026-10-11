@@ -85,7 +85,7 @@ export function rectWater(wd, r) {
  * Returns `{orientation, streetV, streetY, u0, u1, shared, lots: [{spec, u, v, w, d, side, rect, front, floorY, groundY,
  * slot}], unplaced: [{id, reason}], score}` or `{fail: why}` when no street fits.
  */
-export function layoutStreet({ claim, survey, specs, rules = STREET_RULES, shared = { kind: 'square', size: 11 }, keepOut = [] }) {
+export function layoutStreet({ claim, survey, specs, rules = STREET_RULES, shared = { kind: 'square', size: 11 }, keepOut = [], _unsafe = {} }) {
   const ordered = specs.map((s, i) => ({ ...s, _i: i })).sort((a, b) => orderOf(a) - orderOf(b) || a._i - b._i);
   const wd = ordered.some((s) => s.placement === 'near_water' || s.villager === 'farm') ? waterDistance(survey, claim) : null;
   let best = null;
@@ -101,7 +101,7 @@ export function layoutStreet({ claim, survey, specs, rules = STREET_RULES, share
       if (sh.fail) { fails.push(sh.fail); continue; }
       for (const firstNeg of [true, false]) {
         for (const upFirst of [true, false]) {
-          const p = tryStreetSkipping({ o, F, claim, survey, specs: ordered, rules, sv, sh, firstNeg, upFirst, keepOut, wd });
+          const p = tryStreetSkipping({ o, F, claim, survey, specs: ordered, rules, sv, sh, firstNeg, upFirst, keepOut, wd, _unsafe });
           const street = streetCheck(o, p, sh, survey, rules, keepOut, claim);
           if (street.fail) { fails.push(street.fail); continue; }
           const score = p.lots.length * 1_000_000 + hintScore(o, p, survey, claim, wd) - slopeTotal(o, p, survey) * 10 - Math.abs(dv);
@@ -213,7 +213,7 @@ function tryStreet(a) {
   const obstacles = [{ rect: sh.rect, gap: 1 }];
   // the square's frontage: one lot on each side, centred on the square's middle (its entrance on the square's edge)
   if (sh.kind === 'square') {
-    const cands = left.filter((s) => squareOrder(s) < 9).sort((p, q) => squareOrder(p) - squareOrder(q) || p._i - q._i);
+    const cands = left.filter((s) => squareOrder(s) < 9 && s.id !== a._unsafe?.notOnSquare).sort((p, q) => squareOrder(p) - squareOrder(q) || p._i - q._i);
     for (const side of firstNeg ? [-1, 1] : [1, -1]) {
       for (const s of cands) {
         if (placed.some((l) => l.spec === s)) continue;
@@ -255,7 +255,7 @@ function tryStreet(a) {
     const room = (k) => cur[k].up <= F.u1 - m || cur[k].down >= F.u0 + m;
     if (!room(-1) && !room(1)) break;
   }
-  nearWater(a, placed, obstacles);
+  if (!a._unsafe?.noNearWater) nearWater(a, placed, obstacles);
   return { lots: placed, left, why };
 }
 
@@ -449,7 +449,7 @@ export function lane(part, id, from, to, w, { o, boxes = [], keepOut = [], _unsa
 export function streetLayout(r, specs, { rules = STREET_RULES, shared = { kind: 'square', size: 11 }, laneWidth = 2, stages = {}, maxHeight = 32, requireAll = false, planProps = null, _unsafe = {} } = {}) {
   const ctx = r.ctx;
   const keepOut = ctx.keepOut ?? [];
-  const L = layoutStreet({ claim: r.claim, survey: r.survey, specs, rules, shared, keepOut });
+  const L = layoutStreet({ claim: r.claim, survey: r.survey, specs, rules, shared, keepOut, _unsafe });
   if (L.fail) throw new Error(`flat village: ${L.fail}`);
   if (requireAll && L.unplaced.length) throw new Error(`flat village: requireAll, and ${L.unplaced.length} lot(s) are unplaced: ${L.unplaced.map((u) => `${u.id} (${u.reason})`).join(', ')}`);
   const o = L.orientation, sh = L.shared;

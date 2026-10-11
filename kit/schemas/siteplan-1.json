@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/larattalabs/architect-mc/kit/schemas/siteplan-1.json",
   "title": "siteplan/1",
-  "description": "A region plan's geometry as data (docs/CONTRACT.md phase 6b §3.4). Members may be added within format 1; any change to an existing member is a format bump.",
+  "description": "A region plan's geometry as data (docs/CONTRACT.md phase 6b §3.4; widened in 6c V without changing a member: edge type and path kind `path`, node kind `plaza`, mover `villager`, optional node `ports`, edge `width` and top-level `unplaced`, `derived` false for an IR graph). Members may be added within format 1; any change to an existing member is a format bump.",
   "type": "object",
   "required": ["format", "planId", "irSha", "claim", "stages", "lots", "paths", "utility", "anchors", "parts", "graph"],
   "properties": {
@@ -15,7 +15,7 @@
       "id": { "type": "string" }, "stage": { "type": "string" }, "rect": { "$ref": "#/$defs/rect" }, "floorY": { "type": "integer" },
       "front": { "enum": ["north", "south", "east", "west"] }, "entrance": { "$ref": "#/$defs/xyz" }, "brief": { "type": "string" } } } },
     "paths": { "type": "array", "items": { "type": "object", "required": ["id", "kind", "stage", "width", "points"], "additionalProperties": false, "properties": {
-      "id": { "type": "string" }, "kind": { "enum": ["stair", "bridge", "graded", "road"] }, "stage": { "type": "string" }, "width": { "type": "integer", "minimum": 1 },
+      "id": { "type": "string" }, "kind": { "enum": ["stair", "bridge", "graded", "road", "path"] }, "stage": { "type": "string" }, "width": { "type": "integer", "minimum": 1 },
       "points": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/xyz" } } } } },
     "utility": { "type": "array", "items": { "type": "object", "required": ["id", "kind", "width", "height", "points"], "additionalProperties": false, "properties": {
       "id": { "type": "string" }, "kind": { "type": "string" }, "width": { "type": "integer" }, "height": { "type": "integer" }, "points": { "type": "array", "items": { "$ref": "#/$defs/xyz" } } } } },
@@ -23,12 +23,16 @@
     "parts": { "type": "array", "items": { "type": "object", "required": ["id", "stage", "kind", "floating"], "additionalProperties": false, "properties": {
       "id": { "type": "string" }, "stage": { "type": "string" }, "kind": { "enum": ["carve", "add", "path", "pad", "form"] }, "floating": { "type": "boolean" } } } },
     "graph": { "type": "object", "required": ["derived", "nodes", "edges"], "additionalProperties": false, "properties": {
-      "derived": { "const": true },
+      "derived": { "type": "boolean" },
       "nodes": { "type": "array", "items": { "type": "object", "required": ["id", "kind", "ref", "at", "level"], "additionalProperties": false, "properties": {
-        "id": { "type": "string" }, "kind": { "enum": ["lot", "anchor", "junction"] }, "ref": { "type": ["string", "null"] }, "at": { "$ref": "#/$defs/xyz" }, "level": { "type": "integer" } } } },
+        "id": { "type": "string" }, "kind": { "enum": ["lot", "anchor", "junction", "plaza"] }, "ref": { "type": ["string", "null"] }, "at": { "$ref": "#/$defs/xyz" }, "level": { "type": "integer" },
+        "ports": { "type": "array", "items": { "type": "object", "required": ["name", "at", "facing", "width"], "additionalProperties": false, "properties": {
+          "name": { "type": "string" }, "at": { "$ref": "#/$defs/xyz" }, "facing": { "enum": ["north", "south", "east", "west", "up"] }, "width": { "type": "integer", "minimum": 1 } } } } } } },
       "edges": { "type": "array", "items": { "type": "object", "required": ["id", "from", "to", "type", "path", "stage", "mover"], "additionalProperties": false, "properties": {
-        "id": { "type": "string" }, "from": { "type": "string" }, "to": { "type": "string" }, "type": { "enum": ["road", "stair", "bridge", "graded"] },
-        "path": { "type": "string" }, "stage": { "type": "string" }, "mover": { "type": "array", "items": { "enum": ["player"] } } } } } } }
+        "id": { "type": "string" }, "from": { "type": "string" }, "to": { "type": "string" }, "type": { "enum": ["road", "stair", "bridge", "graded", "path"] }, "width": { "type": "integer", "minimum": 1 },
+        "path": { "type": "string" }, "stage": { "type": "string" }, "mover": { "type": "array", "items": { "enum": ["player", "villager"] } } } } } } },
+    "unplaced": { "type": "array", "items": { "type": "object", "required": ["id", "reason"], "additionalProperties": false, "properties": {
+      "id": { "type": "string" }, "reason": { "type": "string" } } } }
   },
   "$defs": {
     "xyz": { "type": "array", "minItems": 3, "maxItems": 3, "items": { "type": "integer" } },

@@ -3,7 +3,7 @@
 // marked `derived: true` (S-6b-1), derived from the paths and roads: a node per lot entrance, per anchor and per path
 // endpoint or junction; an edge per path segment between nodes.
 import { centreCells } from './geom.mjs';
-import { lotEntrance } from './check.mjs';
+import { lotEntrance, nodeReached, walkGraph } from './check.mjs';
 
 const near = (a, b, d = 3) => Math.max(Math.abs(a[0] - b[0]), Math.abs(a[2] - b[2])) <= d && Math.abs(a[1] - b[1]) <= 2;
 
@@ -36,8 +36,27 @@ export function partKinds(ir, meta) {
   });
 }
 
-/** Build siteplan.json for a plan. */
-export function sitePlan({ ir, meta, planId = null, irSha = null }) {
+/**
+ * (6c V) The IR's own graph (`derived: false`): its nodes and edges as planned, each edge's `mover` the player's plus
+ * 'villager' where the kit's villager mover (from the bell anchor, over `vw`) reaches both its ends.
+ */
+function irGraph(ir, meta, vw) {
+  const ports = new Map();
+  for (const n of ir.graph.nodes) for (const p of n.ports ?? []) ports.set(`${n.id}.${p.name}`, p.at);
+  let vg = null;
+  const bell = meta?.village?.bell ?? ir.anchors?.bell;
+  if (vw && bell) vg = walkGraph(vw, [bell], { mover: 'villager' });
+  const nodes = ir.graph.nodes.map((n) => ({ id: n.id, kind: n.kind, ref: n.ref, at: [...n.at], level: n.level, ports: (n.ports ?? []).map((p) => ({ name: p.name, at: [...p.at], facing: p.facing, width: p.width })) }));
+  const edges = ir.graph.edges.map((e) => {
+    const a = ports.get(e.from), b = ports.get(e.to);
+    const v = vg && a && b && nodeReached(vg, a) && nodeReached(vg, b);
+    return { id: e.id, from: e.from, to: e.to, type: e.type, width: e.width, path: e.path, stage: e.stage, mover: v ? ['player', 'villager'] : ['player'] };
+  });
+  return { derived: false, nodes, edges };
+}
+
+/** Build siteplan.json for a plan. (6c V) `vw`: the virtual world (the villager mover's reach on the IR's graph). */
+export function sitePlan({ ir, meta, planId = null, irSha = null, vw = null }) {
   const lots = (ir.lots ?? []).map((l) => {
     const o = { id: l.id, stage: l.stage, rect: [l.box.minX, l.box.minZ, l.box.maxX, l.box.maxZ], floorY: l.floorY, front: l.front, entrance: meta?.lots?.[l.id]?.entrance ?? lotEntrance(l) };
     if (l.brief) o.brief = l.brief;
@@ -91,11 +110,17 @@ export function sitePlan({ ir, meta, planId = null, irSha = null }) {
     }
   });
   for (const p of paths) delete p._cells;
-  return {
+  // (6c V) a village's lanes are paths of kind 'path'; its unplaced lots; the IR's graph when it carries one
+  const lanes = meta?.village?.lanes ?? {};
+  for (const [lotId, cells] of Object.entries(lanes)) if (cells.length) paths.push({ id: `lane_${lotId}`, kind: 'path', stage: ir.parts.find((p) => p.id === 'lanes')?.stage ?? ir.stages[0], width: meta.village.laneWidth ?? 2, points: corners(cells) });
+  paths.sort((a, b) => a.id.localeCompare(b.id));
+  const out = {
     format: 1, planId, irSha, claim: { ...ir.claim }, stages: [...ir.stages], lots, paths, utility, anchors,
     parts: partKinds(ir, meta),
-    graph: { derived: true, nodes, edges },
+    graph: ir.graph ? irGraph(ir, meta, vw) : { derived: true, nodes, edges },
   };
+  if (meta?.village) out.unplaced = (meta.village.unplaced ?? []).map((u) => ({ id: u.id, reason: u.reason }));
+  return out;
 }
 
 // ------------------------------------------------------------------ a small JSON Schema validator (the subset siteplan-1 uses)

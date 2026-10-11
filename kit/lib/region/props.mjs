@@ -67,30 +67,65 @@ export function planProps(r, { o, sh, res, lots, laneWidth = 2, lamps = 'street'
   const kept = (x, z) => keepOut.some((k) => x >= k[0] && x <= k[2] && z >= k[1] && z <= k[3]);
   const props = [];
   const counts = {};
+  const taken = new Set(); // the props' own footprint columns
   const tryPlace = (kind, u, v, o2 = {}, max = Infinity) => {
     if ((counts[kind] ?? 0) >= max) return false;
     const at = toWorld(o, u, v);
     const p = propCells(kind, r, at, o2);
     // a prop's footprint, plus one column around it, stays clear of the reserved columns (beside walk cells, not on them)
     for (const [x, z] of p.foot) if (!inside(x, z) || reserved.has(key(x, z)) || kept(x, z)) return false;
-    for (const [x, z] of p.foot) reserved.add(key(x, z));
+    // beside walk cells: one 4-neighbour of the footprint stays a walk cell of the space (kept from later props)
+    const foot = new Set(p.foot.map(([x, z]) => key(x, z)));
+    let beside = null, bestRank = Infinity;
+    const [ccx, ccz] = toWorld(o, sh.cu, cv);
+    for (const [x, z] of p.foot) for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const k = key(x + dx, z + dz);
+      if (foot.has(k) || !inside(x + dx, z + dz) || taken.has(k)) continue;
+      const rank = (reserved.has(k) ? 0 : 1000) + Math.abs(x + dx - ccx) + Math.abs(z + dz - ccz);
+      if (rank < bestRank) { bestRank = rank; beside = k; }
+    }
+    if (!beside) return false;
+    for (const [x, z] of p.foot) { reserved.add(key(x, z)); taken.add(key(x, z)); }
+    reserved.add(beside);
     counts[kind] = (counts[kind] ?? 0) + 1;
     props.push({ kind, id: `${kind}_${counts[kind]}`, cells: p.cells.map(([x, dy, z, s]) => [x, sh.y + dy, z, s]), foot: p.foot });
     return true;
   };
   const { u0, u1, v0, v1 } = sh;
-  if (bell) tryPlace('bell', sh.cu, cv - Math.floor(5 / 2) - 1, { facing: frontOf(o, -1) === 'south' ? 'south' : 'east' }, 1);
-  if (lamps !== 'none') {
-    const corners = lamps === 'few' ? [[u0, v0], [u1, v1]] : [[u0, v0], [u1, v0], [u0, v1], [u1, v1]];
-    for (const [u, v] of corners) tryPlace('lamp', u, v);
+  // every placement inside the space, the preferred spots first (a generic scan when those are taken: small squares, lots'
+  // lanes, the street's entries)
+  const cells = [];
+  for (let u = u0; u <= u1; u++) for (let v = v0; v <= v1; v++) cells.push([u, v]);
+  const far = (u, v) => -(Math.abs(u - sh.cu) + Math.abs(v - cv));
+  const scan = (kind, prefer, o2, max, w = 1) => {
+    for (const [u, v] of prefer) if (tryPlace(kind, u, v, typeof o2 === 'function' ? o2(u, v) : o2, max)) return true;
+    const rest = cells.filter(([u, v]) => u + w - 1 <= u1 && v + w - 1 <= v1).sort((a2, b2) => far(...a2) - far(...b2) || a2[0] - b2[0] || a2[1] - b2[1]);
+    for (const [u, v] of rest) if (tryPlace(kind, u, v, typeof o2 === 'function' ? o2(u, v) : o2, max)) return true;
+    return false;
+  };
+  if (bell) scan('bell', [[sh.cu, cv - 3], [sh.cu, cv + 3], [sh.cu - 3, cv], [sh.cu + 3, cv]], { facing: o === 'ew' ? 'north' : 'west' }, 1);
+  if (sh.kind === 'square') {
+    scan('well', [[u0, v0], [u0, v1 - 2], [u1 - 2, v0], [u1 - 2, v1 - 2]], {}, 1, 3);
   }
   if (sh.kind === 'square') {
-    for (const [u, v] of [[u0, v1 - 3], [u0, v0 + 1], [u1 - 2, v1 - 3], [u1 - 2, v0 + 1]]) if (tryPlace('well', u, v, {}, 1)) break;
-    // benches on the -v and +v edges, facing the square (their backs to the edge)
-    // a stairs block's tall back is on its `facing` side: the edge behind the bench (-v edge: frontOf(o, 1), +v edge: frontOf(o, -1))
-    for (const du of [-3, 3, -4, 4]) for (const side of [-1, 1]) tryPlace('bench', sh.cu + du, side < 0 ? v0 : v1, { facing: frontOf(o, -side) }, 4);
+    // benches on the -v and +v edges, facing the square: a stairs block's tall back is on its `facing` side, the edge behind it
+    // 2 on a square up to 11, 4 on a larger one (room for the planters)
+    const maxBench = sh.u1 - sh.u0 + 1 <= 11 ? 2 : 4;
+    let benches = 0;
+    for (const du of [-3, 3, -4, 4, -2, 2, -5, 5, -1, 1]) for (const side of [-1, 1]) if (benches < maxBench && tryPlace('bench', sh.cu + du, side < 0 ? v0 : v1, { facing: frontOf(o, -side) }, 4)) benches++;
+  }
+  if (sh.kind === 'square') {
+    // planters (a plus of trapdoors round a flower on grass) in the free corners
     const flowers = ['minecraft:poppy', 'minecraft:dandelion', 'minecraft:cornflower', 'minecraft:oxeye_daisy'];
     for (const [u, v] of [[u0 + 1, v0 + 1], [u1 - 1, v0 + 1], [u0 + 1, v1 - 1], [u1 - 1, v1 - 1]]) tryPlace('planter', u, v, { flower: rng ? rng.pick(flowers) : flowers[0] }, 4);
+  }
+  if (lamps !== 'none') {
+    const corners = lamps === 'few' ? [[u0, v0], [u1, v1]] : [[u0, v0], [u1, v0], [u0, v1], [u1, v1]];
+    // a corner, or the free edge cell nearest to it
+    for (const [cu0, cv0] of corners) {
+      const near = cells.filter(([u, v]) => u === u0 || u === u1 || v === v0 || v === v1).sort((a2, b2) => (Math.abs(a2[0] - cu0) + Math.abs(a2[1] - cv0)) - (Math.abs(b2[0] - cu0) + Math.abs(b2[1] - cv0)) || a2[0] - b2[0] || a2[1] - b2[1]);
+      for (const [u, v] of near) if (tryPlace('lamp', u, v)) break;
+    }
   }
   const noWalk = new Set();
   for (const p of props) for (const [x, z] of p.foot) noWalk.add(key(x, z));

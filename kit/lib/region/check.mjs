@@ -69,7 +69,7 @@ export function walkGraph(vw, starts, { mover = 'player' } = {}) {
     if (!pass[a] || !pass[b] || P.lava[a] || P.lava[b]) return false;
     if (!V && P.climb[a]) return true;
     const f = vw.get(x, y - 1, z);
-    if (P.floor[f] && !(V && P.bubble[f])) return true;
+    if (P.floor[f] && !(V && (P.bubble[f] || P.barrier[f]))) return true; // a villager can't stand on a 1.5-tall fence, wall or gate
     return !V && P.water[f] && P.air[a]; // swimming on the surface (the player only)
   };
   const stands = (x, z) => {

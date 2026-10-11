@@ -293,8 +293,11 @@ test('format-2 compile errors: unknown op, shape, rule, member; inline blobs; mi
   assert.throws(() => compileIR(b), /IR: unknown shape 'blob3d' \(supported: /);
   const c = base(); c.parts[0].ops[0].material = { rule: { rule: [{ when: { wetness: 3 }, mat: 'minecraft:mud' }] } }; c.requires = ['material:rule'];
   assert.throws(() => compileIR(c), /IR: unknown rule 'wetness' \(supported: /);
-  const d = base(); d.graph = { nodes: [] };
-  assert.throws(() => compileIR(d), /IR: unknown member 'graph'/);
+  // (6c V) `graph` and `keepOut` are known members from kit 0.16.0; 7a's `siteLots` is still unknown
+  const d = base(); d.siteLots = [];
+  assert.throws(() => compileIR(d), /IR: unknown member 'siteLots'/);
+  const gv = base(); gv.graph = { nodes: [], edges: [] }; gv.keepOut = [[0, 0, 1, 1]];
+  assert.doesNotThrow(() => compileIR(gv));
   const e = base(); e.blobs = { h: { minX: 0, minZ: 0, width: 1, depth: 1, data: 'AAA=' } };
   assert.throws(() => compileIR(e), /format 2 blobs are side files/);
   const f = base(); f.parts[0].ops[0].shape = { kind: 'ellipsoid', c: [0, 70, 0], r: [1, 1, 1] };
