@@ -119,3 +119,49 @@ test('gravity broken variant: a gravel verge (where the lanes meet the street) o
   const good = await run(false);
   assert.equal(checkRegion({ ir: good.ir, survey, meta: good.meta, prefix: false, rules: ['M3'] }).findings.filter((x) => x.rule === 'M3:gravity').length, 0);
 });
+
+// ------------------------------------------------------------------ item 3: frozen water
+
+/** A flat survey at y with a frozen river (ice over 3 water, bed at y - 4) along z in [z0, z1]; `asGround`: the old reading. */
+function riverSurvey(claim, [z0, z1], { asGround = false, y = 64 } = {}) {
+  const W = claim.maxX - claim.minX + 1, D = claim.maxZ - claim.minZ + 1;
+  const c = makeColumns(claim.minX, claim.minZ, W, D, 1);
+  for (let j = 0; j < D; j++) for (let i = 0; i < W; i++) {
+    const k = i + j * W, z = claim.minZ + j, ice = z >= z0 && z <= z1;
+    c.ground[k] = y; c.height[k] = y;
+    c.floor[k] = ice && !asGround ? y - 4 : y;
+    c.flags[k] = ice && !asGround ? 1 | 16 : 0; // WATER | FROZEN
+  }
+  return c;
+}
+
+test('frozen water: FROZEN is water (the street keeps off the frozen river, or the plan is refused naming a frozen column)', async () => {
+  const claim = { minX: 0, minZ: 0, maxX: 111, maxZ: 111, minY: -64, maxY: 319 };
+  const params = { lots: LOTS, lamps: 'none' };
+  // frozen water over most of the claim: no street or square fits, and the refusal names a frozen column
+  let refused = null;
+  try { await planRegion({ programFile: PROGRAM, node: 'test', params, survey: riverSurvey(claim, [8, 103]), claim }); } catch (e) { refused = e.message; }
+  assert.match(refused ?? '', /^flat village: .*frozen water (under the shared space )?at -?\d+,-?\d+/, refused);
+  // the broken reading (ice as dry ground, FROZEN ignored): the plan is clean over the river (4e then refuses DEEP_WATER at realise)
+  const blind = await planRegion({ programFile: PROGRAM, node: 'test', params, survey: riverSurvey(claim, [8, 103], { asGround: true }), claim });
+  assert.ok(blind.ir.roads.length > 0);
+  // a river across the claim: the plan places the street and the lots off it (no lot, lane or street column stands on it)
+  for (const band of [[0, 9], [40, 52]]) {
+    const ok = await planRegion({ programFile: PROGRAM, node: 'test', params, survey: riverSurvey(claim, band), claim });
+    const on = (z) => z >= band[0] && z <= band[1];
+    for (const l of ok.ir.lots) for (let z = l.box.minZ - 1; z <= l.box.maxZ + 1; z++) assert.ok(!on(z), `lot ${l.id} off the river ${band}`);
+    for (const r of ok.ir.roads) for (const p of r.points) assert.ok(!on(p[2]), `road ${r.id} off the river ${band}`);
+    for (const cells of Object.values(ok.meta.village.lanes)) for (const c of cells) assert.ok(!on(c[2]), `lanes off the river ${band}`);
+  }
+});
+
+test('frozen water: a farm needs unfrozen water (M24 counts WATER without FROZEN); near_water counts frozen water', async () => {
+  const claim = { minX: 0, minZ: 0, maxX: 111, maxZ: 111, minY: -64, maxY: 319 };
+  const lots = [{ id: 'farm_1', type: 'farm', size: [14, 17], villager: 'farm', placement: 'near_water' }, ...LOTS.slice(0, 2)];
+  const p = await planRegion({ programFile: PROGRAM, node: 'test', params: { lots, lamps: 'none' }, survey: riverSurvey(claim, [0, 6]), claim });
+  const f = p.meta.village.lots.farm_1;
+  assert.equal(f.water, null, 'M24: no unfrozen water');
+  assert.equal(p.meta.village.waterAny, false);
+  const ext = p.ir.lots.find((l) => l.id === 'farm_1').ext['architect_mc:village'];
+  assert.ok(ext.water !== null, 'the ext\'s near_water distance counts the frozen river');
+});

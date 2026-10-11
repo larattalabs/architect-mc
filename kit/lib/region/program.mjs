@@ -1293,7 +1293,7 @@ class Part {
     let lo = -Infinity, hi = Infinity;
     const M = GROUND_ROAD_MARGIN;
     for (const c of cells) {
-      if (s.waterAt(c.x, c.z)) return `water at ${c.x},${c.z}`;
+      if (s.waterAt(c.x, c.z)) return s.frozenAt?.(c.x, c.z) ? `frozen water at ${c.x},${c.z}` : `water at ${c.x},${c.z}`;
       const g = s.heightAt(c.x, c.z);
       lo = Math.max(g - M, lo - 1);
       hi = Math.min(g + M, hi + 1);

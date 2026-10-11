@@ -16,7 +16,7 @@ import org.junit.jupiter.api.Test;
 class Api113Test {
 	@Test
 	void version() {
-		assertEquals("1.13.0", ArchitectApi.VERSION);
+		assertTrue(ArchitectApi.VERSION.compareTo("1.13.0") >= 0, ArchitectApi.VERSION); // later slices append (6c W: 1.14.0)
 	}
 
 	@Test

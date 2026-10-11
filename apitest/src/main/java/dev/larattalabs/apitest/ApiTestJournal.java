@@ -40,7 +40,7 @@ import net.minecraft.world.level.block.state.BlockState;
  * sundo2 &lt;group&gt; &lt;stage&gt; &lt;keep|cascade|refuse&gt; [force]   undoStage(RemoveOptions) -> pending "sundo2:&lt;group&gt;:&lt;stage&gt;"
  * reasons             every Reason name (the 1.5.0 ones appended)
  * api15               version, the 1.5.0 features
- * heights &lt;x1&gt; &lt;z1&gt; &lt;x2&gt; &lt;z2&gt; &lt;res&gt;   Survey.sample (loaded chunks): every column as [x, z, height, water?1:0, tree?1:0] (gate scouting)
+ * heights &lt;x1&gt; &lt;z1&gt; &lt;x2&gt; &lt;z2&gt; &lt;res&gt;   Survey.sample (loaded chunks): every column as [x, z, height, water?1:0, tree?1:0, ground, frozen?1:0] (gate scouting)
  * </pre>
  */
 final class ApiTestJournal {
@@ -108,6 +108,7 @@ final class ApiTestJournal {
 								c.add(s.water().get(k) ? 1 : 0);
 								c.add(s.tree().get(k) ? 1 : 0);
 								c.add(s.ground()[k]); // (6c V) the ground under trees (0c's Sample.ground): find-site's relief
+								c.add(s.frozen().get(k) ? 1 : 0); // (6c W) frozen water (Sample.frozen): find-site's noFrozen
 								out.add(c);
 							}
 						}

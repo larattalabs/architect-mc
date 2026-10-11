@@ -156,7 +156,9 @@ public final class SurveyImpl implements Survey {
 		boolean tree = top.is(BlockTags.LOGS) || top.is(BlockTags.LEAVES)
 			|| withLeaves > h && c.getBlockState(p.set(x, withLeaves, z)).is(BlockTags.LEAVES);
 		String id = BuiltInRegistries.BLOCK.getKey(top.getBlock()).toString();
-		return new SurveyGrid.Column(h, floor, id, water, tree, natural(top, water), ground(c, x, z));
+		// 6c W: ice over water (a frozen river, lake or sea), as the region survey's FROZEN; Sample.water stays the top fluid only
+		boolean frozen = !water && dev.larattalabs.architect.region.Columns.frozenWater(c, x, h, z);
+		return new SurveyGrid.Column(h, floor, id, water, tree, natural(top, water), ground(c, x, z), frozen);
 	}
 
 	/** Server thread only: block state -> voxel class (the volume's {@code classOf}). */

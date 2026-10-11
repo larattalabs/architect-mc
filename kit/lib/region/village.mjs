@@ -53,11 +53,11 @@ const orderOf = (s) => (s.placement === 'central' ? 0 : s.landmark ? 1 : s.place
 const squareOrder = (s) => (s.villager === 'trading_hall' ? 0 : s.landmark ? 1 : s.placement === 'central' ? 2 : 9);
 
 /** Each column's 8-neighbour step distance to the nearest surveyed water column (Steward's Grid.waterDistance), over the claim. */
-export function waterDistance(survey, claim) {
+export function waterDistance(survey, claim, { unfrozen = false } = {}) {
   const W = claim.maxX - claim.minX + 1, D = claim.maxZ - claim.minZ + 1;
   const d = new Int32Array(W * D).fill(0x7fffffff);
   const q = [];
-  for (let j = 0; j < D; j++) for (let i = 0; i < W; i++) if (survey.waterAt(claim.minX + i, claim.minZ + j)) { d[i + j * W] = 0; q.push(i + j * W); }
+  for (let j = 0; j < D; j++) for (let i = 0; i < W; i++) if (survey.waterAt(claim.minX + i, claim.minZ + j) && !(unfrozen && survey.frozenAt?.(claim.minX + i, claim.minZ + j))) { d[i + j * W] = 0; q.push(i + j * W); }
   for (let h = 0; h < q.length; h++) {
     const k = q[h], i = k % W, j = (k - i) / W;
     for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) {
@@ -69,6 +69,14 @@ export function waterDistance(survey, claim) {
   }
   const any = q.length > 0;
   return { any, at: (x, z) => (x < claim.minX || z < claim.minZ || x > claim.maxX || z > claim.maxZ ? 0x7fffffff : d[(x - claim.minX) + (z - claim.minZ) * W]) };
+}
+
+/** (6c W) Does the claim's survey hold a frozen-water column? */
+export function hasFrozen(survey, claim) {
+  if (!survey.frozenAt) return false;
+  const r = survey.resolution ?? 1;
+  for (let x = claim.minX; x <= claim.maxX; x += r) for (let z = claim.minZ; z <= claim.maxZ; z += r) if (survey.frozenAt(x, z)) return true;
+  return false;
 }
 
 /** The distance (8-neighbour steps) from a world rect to surveyed water: the least over its cells, or null without water. */
@@ -89,6 +97,8 @@ export function rectWater(wd, r) {
 export function layoutStreet({ claim, survey, specs, rules = STREET_RULES, shared = { kind: 'square', size: 11 }, keepOut = [], _unsafe = {} }) {
   const ordered = specs.map((s, i) => ({ ...s, _i: i })).sort((a, b) => orderOf(a) - orderOf(b) || a._i - b._i);
   const wd = ordered.some((s) => s.placement === 'near_water' || s.villager === 'farm') ? waterDistance(survey, claim) : null;
+  // (6c W) a farm needs unfrozen water (M24); near_water counts frozen water as water (S-W-1)
+  const wdFarm = wd && hasFrozen(survey, claim) ? waterDistance(survey, claim, { unfrozen: true }) : wd;
   let best = null;
   const fails = [];
   for (const o of ['ew', 'ns']) {
@@ -102,10 +112,10 @@ export function layoutStreet({ claim, survey, specs, rules = STREET_RULES, share
       if (sh.fail) { fails.push(sh.fail); continue; }
       for (const firstNeg of [true, false]) {
         for (const upFirst of [true, false]) {
-          const p = tryStreetSkipping({ o, F, claim, survey, specs: ordered, rules, sv, sh, firstNeg, upFirst, keepOut, wd, _unsafe });
+          const p = tryStreetSkipping({ o, F, claim, survey, specs: ordered, rules, sv, sh, firstNeg, upFirst, keepOut, wd, wdFarm, _unsafe });
           const street = streetCheck(o, p, sh, survey, rules, keepOut, claim);
           if (street.fail) { fails.push(street.fail); continue; }
-          const score = p.lots.length * 1_000_000 + hintScore(o, p, survey, claim, wd) - slopeTotal(o, p, survey) * 10 - Math.abs(dv);
+          const score = p.lots.length * 1_000_000 + hintScore(o, p, survey, claim, wd, wdFarm) - slopeTotal(o, p, survey) * 10 - Math.abs(dv);
           if (!best || p.lots.length > best.lots.length || (p.lots.length === best.lots.length && score > best.score)) {
             best = { ...p, ...street, orientation: o, streetV: sv, shared: sh, score };
           }
@@ -113,7 +123,8 @@ export function layoutStreet({ claim, survey, specs, rules = STREET_RULES, share
       }
     }
   }
-  if (!best) return { fail: fails.length ? fails.sort()[0] : 'no street fits the claim' };
+  // (6c W) a claim refused over frozen water says so, naming a frozen column
+  if (!best) { const fz = fails.filter((f) => /frozen/.test(f)).sort(); return { fail: fz.length ? fz[0] : fails.length ? fails.sort()[0] : 'no street fits the claim' }; }
   const placed = new Set(best.lots.map((l) => l.spec.id));
   const unplaced = specs.filter((s) => !placed.has(s.id)).map((s) => ({ id: s.id, reason: best.why.get(s.id) ?? 'no_room' }));
   return { orientation: best.orientation, streetV: best.streetV, streetY: best.streetY, u0: best.u0, u1: best.u1, shared: best.shared, lots: best.lots, unplaced, score: best.score, road: best.road };
@@ -138,7 +149,7 @@ function placeShared(o, F, claim, survey, sv, cu, shared, rules, keepOut) {
     const wr = rectWorld(o, u0, v0, u1, v1);
     if (keepOut.some((k) => rectsMeet(grow(wr, 1), k))) { why = 'the shared space meets keep-out'; continue; }
     const st = levelStats(survey, wr);
-    if (st.water) { why = 'water under the shared space'; continue; }
+    if (st.water) { why = st.frozen ? `frozen water under the shared space at ${st.frozen}` : 'water under the shared space'; continue; }
     const y = st.top;
     if (st.cut > PAD_MAX || st.fill > PAD_MAX) { why = `the shared space needs a cut of ${st.cut} and a fill of ${st.fill} (at most ${PAD_MAX})`; continue; }
     return { kind: shared.kind, u0, u1, v0, v1, side, cu: c, y, rect: wr };
@@ -149,11 +160,11 @@ function placeShared(o, F, claim, survey, sv, cu, shared, rules, keepOut) {
 /** A levelled area's top y (the median ground) and the cut and fill it needs; whether any column is water. */
 export function levelStats(survey, [x0, z0, x1, z1]) {
   const g = [];
-  let water = false;
-  for (let x = x0; x <= x1; x++) for (let z = z0; z <= z1; z++) { g.push(survey.heightAt(x, z)); if (survey.waterAt(x, z)) water = true; }
+  let water = false, frozen = null;
+  for (let x = x0; x <= x1; x++) for (let z = z0; z <= z1; z++) { g.push(survey.heightAt(x, z)); if (survey.waterAt(x, z)) { water = true; if (!frozen && survey.frozenAt?.(x, z)) frozen = `${x},${z}`; } }
   const s = [...g].sort((a, b) => a - b);
   const top = s[s.length >> 1];
-  return { top, cut: Math.max(0, s[s.length - 1] - top), fill: Math.max(0, top - s[0]), water };
+  return { top, cut: Math.max(0, s[s.length - 1] - top), fill: Math.max(0, top - s[0]), water, frozen };
 }
 
 /** VillageLayout.tryStreetSkipping: when a lot fits nowhere, lay the street again without it (at most 3 stale drops in a row). */
@@ -266,13 +277,15 @@ function tryStreet(a) {
  * where the claim allows it; otherwise it stays (and M24 reports it).
  */
 function nearWater(a, placed, obstacles) {
-  const { o, F, rules, sv, sh, wd } = a;
-  if (!wd?.any) return;
+  const { o, F, rules, sv, sh } = a;
+  if (!a.wd?.any) return;
   const half = Math.floor(rules.streetWidth / 2);
   const m = rules.claimMargin;
   for (const l of [...placed]) {
     const s = l.spec;
     if (l.slot !== 'street' || !(s.villager === 'farm' || s.placement === 'near_water')) continue;
+    const wd = s.villager === 'farm' ? (a.wdFarm ?? a.wd) : a.wd;
+    if (!wd.any) continue;
     const cur = rectWater(wd, l.rect);
     if (cur !== null && cur <= FARM_WATER) continue;
     const others = placed.filter((x) => x !== l);
@@ -310,7 +323,7 @@ function streetCheck(o, p, sh, survey, rules, keepOut, claim) {
   for (let u = u0; u <= u1; u++) {
     if (sh.kind === 'square' && u >= sh.u0 && u <= sh.u1) { lo = -Infinity; hi = Infinity; continue; }
     const [x, z] = toWorld(o, u, sv);
-    if (survey.waterAt(x, z)) return { fail: `the street crosses water at ${x},${z}` };
+    if (survey.waterAt(x, z)) return { fail: survey.frozenAt?.(x, z) ? `the street crosses frozen water at ${x},${z}` : `the street crosses water at ${x},${z}` };
     const g = survey.heightAt(x, z);
     lo = Math.max(g - 3, lo - 1); hi = Math.min(g + 3, hi + 1);
     if (lo > hi) return { fail: `the street is too steep for a ground road at ${x},${z}` };
@@ -319,7 +332,7 @@ function streetCheck(o, p, sh, survey, rules, keepOut, claim) {
 }
 
 /** VillageLayout.hintScore (higher is better): near_water close to water, central close to the centre, edge far, high_ground above the mean. */
-function hintScore(o, p, survey, claim, wd) {
+function hintScore(o, p, survey, claim, wd, wdFarm = wd) {
   if (!p.lots.length) return 0;
   const mean = p.lots.reduce((s, l) => s + l.groundY, 0) / p.lots.length;
   const cx = Math.floor((claim.minX + claim.maxX) / 2), cz = Math.floor((claim.minZ + claim.maxZ) / 2);
@@ -328,7 +341,7 @@ function hintScore(o, p, survey, claim, wd) {
     const r = l.rect;
     const toCentre = Math.hypot(Math.floor((r[0] + r[2]) / 2) - cx, Math.floor((r[1] + r[3]) / 2) - cz);
     const hint = l.spec.placement ?? (l.spec.villager === 'farm' ? 'near_water' : null);
-    if (hint === 'near_water') { const b = wd ? rectWater(wd, r) : null; score -= b === null ? 2000 : Math.min(b, 60) * 40; } else if (hint === 'central') score -= Math.floor(toCentre * 20);
+    if (hint === 'near_water') { const w = l.spec.villager === 'farm' ? wdFarm : wd; const b = w ? rectWater(w, r) : null; score -= b === null ? 2000 : Math.min(b, 60) * 40; } else if (hint === 'central') score -= Math.floor(toCentre * 20);
     else if (hint === 'edge') score += Math.floor(toCentre * 10);
     else if (hint === 'high_ground') score += Math.floor((l.groundY - mean) * 60);
   }
@@ -505,6 +518,8 @@ export function streetLayout(r, specs, { rules = STREET_RULES, shared = { kind: 
   const sg = stages.ground ?? 'ground', ss = stages.street ?? 'street', sl = stages.lots ?? 'lots';
   const res = reservations(o, sh);
   const wd = waterDistance(r.survey, r.claim);
+  // (6c W) M24's water is unfrozen water (a farm can't use ice); the same as wd on a claim with no frozen column
+  const wdU = hasFrozen(r.survey, r.claim) ? waterDistance(r.survey, r.claim, { unfrozen: true }) : wd;
   // pads and lots (stage ground; the lots' own stage `lots`)
   const pads = r.part('pads', { stage: sg });
   const boxes = [];
@@ -611,8 +626,8 @@ export function streetLayout(r, specs, { rules = STREET_RULES, shared = { kind: 
   r.meta.village = {
     orientation: o, streetV: sv, shared: { kind: sh.kind, rect: sh.rect, y: sh.y }, bell: res.bell, bellArea: res.area.map(([x, z]) => [x, z]), bellY: res.y,
     golem: res.golem.map(([x, z]) => [x, z]), golemCentre: res.golemCentre, unplaced: L.unplaced, lanes: laneCells, roads, laneWidth,
-    lots: Object.fromEntries(lotOut.map((l) => [l.spec.id, { villager: l.spec.villager, slot: l.slot, entrance: l.entrance, rect: l.rect, water: rectWater(wd, l.rect) }])),
-    waterAny: wd.any, keepOut,
+    lots: Object.fromEntries(lotOut.map((l) => [l.spec.id, { villager: l.spec.villager, slot: l.slot, entrance: l.entrance, rect: l.rect, water: rectWater(wdU, l.rect) }])),
+    waterAny: wdU.any, keepOut,
   };
   return { ...L, res, lots: lotOut, boxes, laneCells, plaza: pl, propsPlan };
 }
