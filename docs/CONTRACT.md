@@ -10181,3 +10181,21 @@ Evidence in `artifacts/gateX/`. Steward's consumer check on the RC as usual.
   plan's lot ext onto the site. Gate item 2 uses plan ext only.
 - **S-X-2:** 4 KB per lot stays (Steward's is about 250 bytes).
 - Steward will use opKeys `steward.<build>.vplan` and `steward.<build>.vrealise`.
+
+### Coordinator addition: C22, removal correctness (Steward ask after round 6, 2026-10-11; part of X's frozen scope)
+
+From the GPT review of Steward's V adoption (steward-mc docs/ARCHITECT-ASKS.md):
+- **(a) A retried removal must not report success over unfinished restorations.** A removal moves members into pending
+  records before restoring them. On a retry after a failed restore, `Groups` (about line 601 at v0.16.0) drops members missing
+  from the active site and infra maps without checking the pending records, and can answer `removed=true`. Fix: a removal
+  (region or group) first finishes every pending restoration it owns, or refuses with the failing member, and answers
+  `removed=true` only when every member's restore committed.
+- **(b) A finished removal is recognisable later.** Both:
+  - a remove of a region or group that this world already removed answers `removed=true` again (idempotent), with nothing
+    written;
+  - `Regions.get` (and the group lookup) keep a REMOVED tombstone with the time it finished, surviving save and reload.
+    Tombstones are kept as long as opKey records are (0a retention); an unknown id still refuses as today.
+- New record state or component: trailing, with old constructors kept; any new enum value appended.
+- **Gate additions:** (a) inject a restore failure (a dev hook) mid-removal, retry: the retry finishes the pending
+  restoration and the world diff against the pre-placement snapshot is 0, or it refuses; never `removed=true` with a diff.
+  (b) remove, drop the answer, reload, remove again: `removed=true`, nothing written; `Regions.get` shows REMOVED with its time.
