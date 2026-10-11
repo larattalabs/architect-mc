@@ -265,9 +265,17 @@ async function runC13(c) {
   const t0 = Date.now();
   const d = await c.send({ type: 'design.request', request: { type: 'house', style: 'weathered coastal', features: [], maxSize: { x: 19, y: 20, z: 17 }, notes: 'weathered, add a lean-to', budgetUsd: ARMS.C13.capUsd, versionOf: { entryId: arch.entryId } } });
   let x;
+  let heldSince;
   for (;;) {
     x = c.designs.get(d.designId);
     if (x && ['done', 'failed', 'cancelled'].includes(x.status)) break;
+    if (c.status?.limitUntil && c.status.limitUntil > Date.now()) {
+      heldSince ??= Date.now();
+      if (Date.now() - heldSince > HOLD_MAX_MS) {
+        recordPaid('C13:versionOf', x?.cost?.usd ?? 0);
+        throw Object.assign(new Error('C13: usage-limit hold over 30 min'), { held: true });
+      }
+    } else heldSince = undefined;
     recordPaid('C13:versionOf', x?.cost?.usd ?? 0);
     await sleep(5000);
   }
