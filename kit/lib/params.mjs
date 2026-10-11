@@ -12,11 +12,17 @@ export const LOTS_MAX = 40;
 const LOT_ID_RE = /^[a-z][a-z0-9_]{0,47}$/;
 const LOT_PLACEMENTS = ['central', 'edge', 'near_water', 'high_ground'];
 export const LOT_VILLAGER = ['dwelling', 'job', 'trading_hall', 'farm', 'none'];
+/** (6c X, C19) A lot's `ext`: at most this many characters as compact JSON (the mod's FIELD_LIMIT measures the same), keys `namespace:name`. */
+export const LOT_EXT_MAX = 4096;
+const EXT_KEY_RE = /^[a-z0-9_.-]+:\S+$/;
+const EXT_KEY_MAX = 200;
 
 /**
  * (6c V) Validate a `lots` value: at most LOTS_MAX lots, each `{id, type, role?, size: [alongStreet, deep], landmark?, placement?,
- * villager?, brief?}` (Steward's VillageLayout.LotSpec plus `villager`). Returns the normalised list (role defaults to type;
- * villager, when absent, inferred from type). Throws with the path on a bad value.
+ * villager?, brief?, ext?}` (Steward's VillageLayout.LotSpec plus `villager`; 6c X adds `ext`: an object of `namespace:name` keys, at most
+ * LOT_EXT_MAX characters as JSON, copied onto the lot's LotSpec.ext and by the realise onto the lot's site; a key under `architect_mc:`
+ * is Architect's, so a caller's value for it is dropped). Returns the normalised list (role defaults to type; villager, when absent,
+ * inferred from type; `ext` only when the caller's has a key left). Throws with the path on a bad value.
  */
 export function validateLots(v, where = 'lots') {
   if (!Array.isArray(v)) throw new Error(`${where} must be an array of lots`);
@@ -25,7 +31,7 @@ export function validateLots(v, where = 'lots') {
   return v.map((l, i) => {
     const w = `${where}[${i}]`;
     if (!l || typeof l !== 'object' || Array.isArray(l)) throw new Error(`${w} must be an object`);
-    for (const k of Object.keys(l)) if (!['id', 'type', 'role', 'size', 'landmark', 'placement', 'villager', 'brief'].includes(k)) throw new Error(`${w}: unknown member '${k}'`);
+    for (const k of Object.keys(l)) if (!['id', 'type', 'role', 'size', 'landmark', 'placement', 'villager', 'brief', 'ext'].includes(k)) throw new Error(`${w}: unknown member '${k}'`);
     if (typeof l.id !== 'string' || !LOT_ID_RE.test(l.id)) throw new Error(`${w}.id must match ${LOT_ID_RE}`);
     if (seen.has(l.id)) throw new Error(`${w}.id '${l.id}' is used twice`);
     seen.add(l.id);
@@ -36,9 +42,25 @@ export function validateLots(v, where = 'lots') {
     if (l.placement !== undefined && l.placement !== null && !LOT_PLACEMENTS.includes(l.placement)) throw new Error(`${w}.placement must be one of ${LOT_PLACEMENTS.join(', ')} or null`);
     if (l.villager !== undefined && l.villager !== null && !LOT_VILLAGER.includes(l.villager)) throw new Error(`${w}.villager must be one of ${LOT_VILLAGER.join(', ')}`);
     if (l.brief !== undefined && l.brief !== null && (typeof l.brief !== 'string' || l.brief.length > 500)) throw new Error(`${w}.brief must be a string (<= 500)`);
+    const ext = l.ext === undefined || l.ext === null ? undefined : validateLotExt(l.ext, `${w}.ext`);
     return { id: l.id, type: l.type, role: l.role ?? l.type, size: [...l.size], landmark: !!l.landmark, placement: l.placement ?? null,
-      villager: l.villager ?? inferVillager(l.type), ...(l.brief ? { brief: l.brief } : {}) };
+      villager: l.villager ?? inferVillager(l.type), ...(l.brief ? { brief: l.brief } : {}), ...(ext && Object.keys(ext).length ? { ext } : {}) };
   });
+}
+
+/** (6c X, C19) A lot's caller ext: a plain object, at most LOT_EXT_MAX characters as JSON, `namespace:name` keys (<= 200 characters); the
+ * `architect_mc:` namespace is Architect's and a caller's keys under it are dropped. Returns a copy. */
+export function validateLotExt(e, where = 'ext') {
+  if (!e || typeof e !== 'object' || Array.isArray(e)) throw new Error(`${where} must be an object`);
+  const n = JSON.stringify(e).length;
+  if (n > LOT_EXT_MAX) throw new Error(`${where}: ${n} characters as JSON, at most ${LOT_EXT_MAX}`);
+  const out = {};
+  for (const k of Object.keys(e)) {
+    if (k.length > EXT_KEY_MAX || !EXT_KEY_RE.test(k)) throw new Error(`${where}: key '${k.length > 40 ? `${k.slice(0, 40)}...` : k}' is not namespace:name (at most ${EXT_KEY_MAX} characters)`);
+    if (k.startsWith('architect_mc:')) continue;
+    out[k] = JSON.parse(JSON.stringify(e[k]));
+  }
+  return out;
 }
 
 /** (6c V) The villager use a lot's type implies when the caller sends none (S-V-1: the caller's own value wins). */

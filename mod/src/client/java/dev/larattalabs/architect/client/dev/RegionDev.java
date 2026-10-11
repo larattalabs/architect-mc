@@ -101,7 +101,7 @@ public final class RegionDev {
 
 	public static void init() {
 		DevBridge.register("dev.region.plan", 900_000, "{program, params?, claim: [x0,z0,x1,z1], seed?, surveyLoad?: loaded|generated:<n>|bounded:<n>, "
-			+ "owner?, check?: true, bible? (6c V)} - phase 6a: Regions.plan -> the RegionPlan (+ ms) or {refused}; 6b: check false skips the checker and previews "
+			+ "owner?, check?: true, bible? (6c V), opKey? (6c X)} - phase 6a: Regions.plan -> the RegionPlan (+ ms) or {refused}; 6b: check false skips the checker and previews "
 			+ "(ext architect_mc:check), and the answer adds report, summary, previews, irFormat, requires, kitVersion, needVolumes, progress", (req, mc) -> {
 				Fields f = Fields.of(req);
 				String program = f.nonBlank("program");
@@ -111,6 +111,7 @@ public final class RegionDev {
 				LoadPolicy load = load(f.optStr("surveyLoad", "loaded"));
 				String owner = f.optStr("owner", null);
 				String bible = f.optStr("bible", null);
+				String planKey = f.optStr("opKey", null);
 				JsonObject ext = new JsonObject();
 				if (!f.optBool("check", true)) {
 					ext.addProperty(RegionsImpl.EXT_CHECK, false);
@@ -118,7 +119,7 @@ public final class RegionDev {
 				long t0 = System.nanoTime();
 				return DevBridge.onClient(mc, () -> ServerTasks.callAsPlayer((level, player) -> ArchitectApi.get().regions().plan(new RegionPlanRequest(program,
 					params, level, new BoundingBox(c.get(0).getAsInt(), level.getMinY(), c.get(1).getAsInt(), c.get(2).getAsInt(), level.getMaxY(), c.get(3)
-						.getAsInt()), seed, bible, null, load, owner, ext)))).thenCompose(x -> x).thenCompose(x -> x).thenApply(x -> x).handle((p, e) -> {
+						.getAsInt()), seed, bible, null, load, owner, ext, planKey)))).thenCompose(x -> x).thenCompose(x -> x).thenApply(x -> x).handle((p, e) -> {
 							JsonObject o = e != null ? new JsonObject() : planJson(p);
 							if (e != null) {
 								o.addProperty("refused", reason(e));
@@ -181,7 +182,7 @@ public final class RegionDev {
 			});
 		});
 		DevBridge.register("dev.region.realise", 120_000, "{planId, lots?: {lotId: entry}, lotEntries?: [entry...] (every lot, round robin; with fitLots: the first entry that fits each lot), "
-			+ "load?: generated:<n>|loaded|bounded:<n> (default: generated, the bound from the items), autoApprove?: true, stages?, force?, maxWait?: seconds} - phase 6a: "
+			+ "load?: generated:<n>|loaded|bounded:<n> (default: generated, the bound from the items), autoApprove?: true, stages?, force?, maxWait?: seconds, opKey? (6c X)} - phase 6a: "
 			+ "Regions.realise -> {region} or {refused}", (req, mc) -> {
 				Fields f = Fields.of(req);
 				String planId = f.nonBlank("planId");
@@ -189,6 +190,7 @@ public final class RegionDev {
 				boolean force = f.optBool("force", false);
 				int maxWait = req.has("maxWait") ? req.get("maxWait").getAsInt() : 0;
 				LoadPolicy load = req.has("load") ? load(req.get("load").getAsString()) : null;
+				String realiseKey = f.optStr("opKey", null);
 				List<String> stages = null;
 				if (req.has("stages")) {
 					stages = new ArrayList<>();
@@ -214,7 +216,8 @@ public final class RegionDev {
 							}
 						}
 					}
-					return wrap(ArchitectApi.get().regions().realise(new RealiseRequest(planId, Mode.INSTANT, null, lots, load, auto, st, force, new JsonObject(), maxWait)),
+					return wrap(ArchitectApi.get().regions().realise(new RealiseRequest(planId, Mode.INSTANT, null, lots, load, auto, st, force, new JsonObject(), maxWait,
+						realiseKey)),
 						id -> {
 							JsonObject o = new JsonObject();
 							o.addProperty("region", id);
@@ -222,6 +225,13 @@ public final class RegionDev {
 						});
 				})).thenCompose(x -> x).thenCompose(x -> x);
 			});
+		DevBridge.register("dev.region.holdRealise", 10_000, "{on?: true} - 6c X (gate item 3): the next realise with an opKey keeps its future pending after its "
+			+ "region record is saved (so it fails WORLD_STOPPED at a stop, and the region is found by key after the next load)", (req, mc) -> ServerTasks.callOnServer(s -> {
+				RegionsImpl.holdNextRealise(Fields.of(req).optBool("on", true));
+				JsonObject o = new JsonObject();
+				o.addProperty("holding", Fields.of(req).optBool("on", true));
+				return o;
+			}));
 		DevBridge.register("dev.region.state", 10_000, "{region} - phase 6a: the RegionView, its record's numbers, the queue's item counts, "
 			+ "writer starvation, tile streaming and generation counters", (req, mc) -> {
 				String region = Fields.of(req).nonBlank("region");

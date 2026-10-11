@@ -85,4 +85,22 @@ public interface Regions {
 	default CompletableFuture<NudgeResult> nudge(String regionId, WaitAction.Kind action) {
 		throw new UnsupportedOperationException("Regions.nudge needs Architect API 1.9.0");
 	}
+
+	/**
+	 * The plan an owner (null: the player) planned with this operation key ({@link RegionPlanRequest#opKey}), in any state, after a
+	 * restart too (the key is kept in the plan's record). Empty: no such plan (or it is still planning, and nothing was kept yet). Since
+	 * 1.15.0.
+	 */
+	default Optional<RegionPlan> planByKey(@Nullable String owner, String opKey) {
+		throw new UnsupportedOperationException("Regions.planByKey needs Architect API 1.15.0");
+	}
+
+	/**
+	 * The region an owner (the plan's owner; null: the player) realised with this operation key ({@link RealiseRequest#opKey}), in any
+	 * state, after a restart too, including a realise that was interrupted by a stop and resumed (its record is written before the
+	 * future completes). Empty: none, or it was removed. Since 1.15.0.
+	 */
+	default Optional<RegionView> realiseByKey(@Nullable String owner, String opKey) {
+		throw new UnsupportedOperationException("Regions.realiseByKey needs Architect API 1.15.0");
+	}
 }
