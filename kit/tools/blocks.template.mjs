@@ -241,3 +241,34 @@ export function voxelClassOf(name) {
 }
 
 export const isBed = (name) => T[name]?.family === 'bed';
+
+// (6c MP) The vanilla 26.3 block tags, from the server jar's built-in data pack: tag -> its values as the data pack lists them
+// (block ids and `#tag` references, space separated and bare: `minecraft:` implied), resolved on first use. Generated, never
+// hand-listed.
+const TAGS = {};
+/*@@TAGS@@*/
+
+/** (6c MP) Every block tag name (`minecraft:logs`, ...), sorted. */
+export const BLOCK_TAGS = Object.freeze(Object.keys(TAGS).map((t) => `minecraft:${t}`).sort());
+
+const tagCache = new Map();
+/** (6c MP) The block ids of a tag (`#minecraft:logs`, `minecraft:logs` or `logs`), or null when there is no such tag. */
+export function tagBlocks(tag) {
+  const t = qualify(String(tag).replace(/^#/, ''));
+  const k = t.startsWith('minecraft:') ? t.slice(10) : null;
+  if (k === null || !Object.prototype.hasOwnProperty.call(TAGS, k)) return null;
+  let s = tagCache.get(k);
+  if (!s) {
+    const set = new Set();
+    for (const v of TAGS[k] ? TAGS[k].split(' ') : []) {
+      if (v.startsWith('#')) for (const b of tagBlocks(v) ?? []) set.add(b);
+      else set.add(`minecraft:${v}`);
+    }
+    s = Object.freeze([...set].sort());
+    tagCache.set(k, s);
+  }
+  return s;
+}
+
+/** (6c MP) Is block `name` (a state's name part) in tag `tag`? */
+export const hasTag = (name, tag) => (tagBlocks(tag) ?? []).includes(qualify(String(name).replace(/\[.*$/, '')));
