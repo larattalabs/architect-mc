@@ -8188,9 +8188,8 @@ in merge order:
 
 - **N-W-1:** Noah approved V's gallery at `c31c6de43ce1` (v0.16.0). W's lamps are visible, so W's S7 gallery is approved by
   Noah again when W is ready.
-- **N-F2-1 (stamps in the public repo): open for Noah.** Until he answers, F2 ships the `stamp` op and the harvester, and the
-  stamp library is harvested locally and kept out of the repo and the jar. If he allows it, the harvested library ships later
-  with no API change.
+- **N-F2-1 (stamps in the public repo): decided by Noah (2026-10-11), local-only.** F2 ships the `stamp` op and the harvester.
+  The stamp library is harvested locally from the player's own game and is never committed or bundled in the jar.
 - **N-F1-1:** the axis-run metric stays recorded only through 6c. An uncalibrated estimate doesn't gate.
 - **N-H-1:** survival fluids: placed water source cells are free (water is renewable), and each placed lava source cell
   costs one lava bucket from the crate. Containment (M25) applies in both modes. RS uses this.
