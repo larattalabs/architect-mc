@@ -32,7 +32,7 @@
     },
     "flat": {
       "range": 2,
-      "share": 0.85,
+      "share": 0.6,
       "res": 4,
       "squares": 16
     },
@@ -363,8 +363,7 @@
       20,
       130
     ],
-    "provisional": true,
-    "foundBy": "PROVISIONAL (not S7's bar): find-site s7_flat_village @ seed 2026100906 qualified no site within ~4100 (460 candidates, step 384; artifacts/gate6c-v/findsite/summary.json). This is the best candidate with surface water in the outer band whose flat_village plan is clean (10 lots, 0 errors, only M5 in the virtual world): band share 0.616 of 0.85, water 14 band columns. The contract's second-seed case is the coordinator's.",
+    "foundBy": "find-site s7_flat_village @ seed 2026100906, pinned as S7's fixture by coordinator ruling (2026-10-11): the 85% band was a rule for choosing the fixture, not a product bar; no site on 7 seeds (~3,200 candidates) had both a band of at least 85% and unfrozen water in the outer band; this site is harder (band share 0.616, 14 band water columns) and passes every bar",
     "stats": {
       "biomes": {
         "plains": 73,
@@ -444,7 +443,7 @@
   },
   "search": {
     "rule": "S7's needs unchanged (one 3-level ground band over >= 85% of the columns, surface water in the outer 16-cell band, no village within the half-diagonal + 64, flat_village planned clean), plus frozen water counts as water; 460 candidates per seed (step 384 around 0,0, about 4100 out)",
-    "result": "no qualifying site on 6b's seed or on the coordinator's 6 second seeds; S7 stays on the provisional fixture, coordinator's call (artifacts/gate6c-v/findsite/summary.json, findsite-seeds/summary.json)",
+    "result": "no site on the 7 seeds met the 0.85 band with unfrozen water; the coordinator pinned seed 2026100906 [1480,-3128,1591,-3017] (band 0.616) under the 0.6 rule",
     "seeds": [
       {
         "seed": "2026100906",
@@ -527,6 +526,7 @@
           "water": "none"
         }
       }
-    ]
+    ],
+    "fixtureRule": "band share >= 0.6, unfrozen surface water in the outer 16, no village within claim + 64, plan clean (coordinator ruling 2026-10-11; was 0.85)"
   }
 }

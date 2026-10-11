@@ -323,7 +323,9 @@ From V's gate (CONTRACT "Phase 6c slice V as built"):
    door-to-street paths; the full M5 is recorded as data until this lands.
 2. **4e street lanterns on non-ground path blocks.** The road's lantern posts stand only on blocks the road code calls ground, so a
    bible whose `path` is packed mud, stone bricks or planks gets a dark street (measured: M5 2.21% with packed mud).
-3. **Gravity blocks over gaps.** With the default gravel `path`, a levelled lane or verge over a gap can leave an unsupported
+3. **Ice reads as dry ground in the plan survey.** A plan can look clean and then fail a road over a frozen river or sea
+   (S7's rejected 2026101102 site realised PARTIAL). The survey should treat ice as water, or the plan should refuse.
+4. **Gravity blocks over gaps.** With the default gravel `path`, a levelled lane or verge over a gap can leave an unsupported
    gravity block (an M3 warning on one candidate plan).
 
 ## Open questions
