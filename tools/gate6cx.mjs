@@ -365,6 +365,7 @@ steps.apicompat = async () => {
   check(r.status === 0 && /all 4 checks clean/.test(t), `item 5: api-compat against the 0.16.0, 0.15.0 and 0.14.0 apitest jars and the 0.16.0 surface: ${t.trim().split('\n').pop()}`);
   // the apitest mod's own reflection check, in game, when a client is up
   if (state.dev || (await connect(5_000).then(() => true).catch(() => false))) {
+    if (!(await call('dev.state')).inWorld) await openWorld(FLAT);
     const v = await api('api115');
     check(v.oldCtors === true && /^opKey opKey$/.test(v.trailing) && v.byKeyDefaults === true && v.features115?.length === 2 && v.lastReasons === 'PROTECTED FIELD_LIMIT',
       `item 5: apitest api115: old constructors kept, trailing opKey, default methods, no new Reason (${json(v)})`);
