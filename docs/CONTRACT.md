@@ -10313,10 +10313,11 @@ Optional<SiteWait> waiting(String targetId);             // C25
 record StockpileRequest(String owner, ResourceKey<Level> dimension, List<BlockPos> crates) {}
 record Stockpile(String owner, ResourceKey<Level> dimension, List<BlockPos> crates, int capacityStacks, int usedStacks,
     Map<Item,Integer> stock, Map<Item,Integer> reserved, Map<Item,Integer> credit, Map<Item,Integer> delivered,
-    Map<Item,Integer> consumed, Map<Item,Integer> returned, Map<Item,Integer> withdrawn, Map<Item,Integer> overflowDropped,
+    Map<Item,Integer> consumed, Map<Item,Integer> returned, Map<Item,Integer> withdrawn, Map<Item,Integer> dropped,
+    Map<Item,Integer> refundOverflow,
     Map<String, Map<Item,Integer>> outstandingByTarget, Map<Item,Integer> outstanding, List<String> feedOrder,
     Map<String, SiteWait> waiting, List<BlockPos> missingCrates) {}
-record SiteWait(String targetId, boolean waiting, long waitingSince, List<ItemCount> nextNeeded, int moreItems) {}
+record SiteWait(String targetId, boolean waiting, long waitingSince, List<ItemCount> nextNeeded, int moreUnits) {}
 record ItemCount(Item item, int count) {}
 ```
 
@@ -10334,6 +10335,8 @@ record ItemCount(Item item, int count) {}
 - **Identity.** One stockpile per owner string; a null owner (the player's own sites) never has one and keeps today's crates.
   Its crate blocks carry `stockpile:<owner>` in the block entity (a new prefix, never a valid group id, so it can't collide
   with `group:`). An owner has a stockpile from `createStockpile` until its last crate is removed with nothing building.
+- **Survival only.** `createStockpile` refuses NOT_ALLOWED while the survival toggle is off. If the toggle goes off later, the
+  stockpile and its ledger stay; INSTANT items simply don't use it.
 - **Opt-in.** An owner **without** a stockpile behaves exactly as v0.17.0 (per-site crates, `sharedCrate` groups, delta crates,
   the standalone-road refusal). An owner **with** one: every new construction item of that owner draws from it, and none
   places a crate of its own:
@@ -10360,10 +10363,10 @@ record ItemCount(Item item, int count) {}
   lost: the ledger is the owner's, not the block's. The cell is listed in `missingCrates`, capacity drops by 27 stacks
   (stock above capacity stays, but nothing new enters until it fits), and the builder keeps feeding from the stock.
   `removeStockpileCrate` restores the cell's journal before-state; refused while it would leave the stock over capacity, unless
-  `force`, which drops the excess at that cell (counted in `overflowDropped`). Removing the last crate with targets building is
+  `force`, which drops the excess at that cell (taken out of stock, counted in `dropped`). Removing the last crate with targets building is
   refused even with `force`. `/architect stockpile removecrate <pos>` needs permission level 2.
 - **Persistence.** `<world>/architect/stockpiles.json` (temp file, then rename): per owner the crates, dimension, ledger
-  (delivered, consumed, returned, withdrawn, overflowDropped per item), feed order, credited-refund keys (§4) and waits. It is
+  (delivered, consumed, returned, withdrawn, dropped, refundOverflow per item), feed order, credited-refund keys (§4) and waits. It is
   written in the same world-save callback that saves chunks (autosave and stop), and on crate and feed-order changes.
 - **Crash bound (recorded, not judged).** A clean stop saves ledger and chunks together. On a hard kill, the file and the
   chunks may come from different saves: items in flight since the last autosave can be duplicated or lost (as for any
@@ -10374,7 +10377,8 @@ record ItemCount(Item item, int count) {}
 
 - **Targets** are the owner's building construction sites (buildings and delta sites) and construction roads. One loop per
   owner replaces the separate `Builder.tick`/`RoadBuilder.tick` visits for stockpile targets (legacy targets keep theirs).
-- **Default order:** placement order (a batch's items in batch order). `setFeedOrder` moves the listed ids to the front, in
+- **Default order:** a batch's items in batch item order (not the order `proximityFirst` places them in), then later targets
+  in placement order. `setFeedOrder` moves the listed ids to the front, in
   that order; the others keep their relative order. Unknown or finished ids refuse FIELD_LIMIT naming them. The order survives
   restart; a finished target leaves it.
 - **Semantics: reservation by item.** A target at position k may consume a unit of item X only from
@@ -10387,10 +10391,11 @@ record ItemCount(Item item, int count) {}
 
 ### 4. Ledger and refund routing (C24)
 
-- **Identity, per item, at every tick:** `stock = delivered + returned - consumed - withdrawn - overflowDropped >= 0`.
+- **Identity, per item, at every tick:** `stock = delivered + returned - consumed - withdrawn - dropped >= 0`.
+  `returned` counts only what entered the stock; `refundOverflow` (refunds that never entered it) is outside the identity.
   `reserved` and `credit` are derived (credit = max(0, stock - total unbuilt cost)).
 - **Returned** = refunds and leftovers credited into the stockpile, up to capacity; the rest drops as item entities at the
-  owner's first present crate (else the target's `dropPos`) and is booked in `overflowDropped`. For a stockpile target:
+  owner's first present crate (else the target's `dropPos`) and is booked in `refundOverflow`. For a stockpile target:
   - deconstruct and undo (`Sites.remove`, `removeGroup`, `undoStage`, region removal): the `Refunds.Tally.refund` part is
     returned; **the player's blocks** (`PLAYER_DROP`) still drop at the site as today, since they never were the stockpile's;
   - construction-delta refunds (removed cells at the start, `refundSwap` at the swap) and a survival revert's refunds;
@@ -10423,8 +10428,8 @@ record ItemCount(Item item, int count) {}
   - `waitingSince`: the world's game time (ticks) at the start edge; 0 when not waiting. Saved, so a 10-minute timer survives
     a restart; after a reload the state is recomputed and a still-waiting target keeps its `waitingSince` with no new event.
   - `nextNeeded`: walk the unbuilt queue in build order, spending `stock - reserved` as the builder would; each item enters the
-    list at its first shortfall; `count` is its whole shortfall for the target. At most 8 entries (`moreItems` counts the rest).
-    The full list's counts sum to the target's outstanding minus what is available to it. Filled whenever any shortfall exists,
+    list at its first shortfall; `count` is its whole shortfall for the target. At most 8 entries; `moreUnits` is the units of
+    the omitted ones, so the counts plus `moreUnits` equal the target's outstanding minus what is available to it. Filled whenever any shortfall exists,
     waiting or not.
 - **Event `SITE_WAITING`** fires on the start edge (after the 100 ticks) and on the stop edge (a cell placed, paused, built or
   removed), never twice for the same edge, and at most once per 20 ticks per target.
@@ -10435,11 +10440,12 @@ record ItemCount(Item item, int count) {}
 - `Verdict.bomFull` for a construction `check`: template plus foundation fill plus approach, computed from the dry-run
   `SitePlan` that `precheck` already builds, with the builder's own exclusions (cells that already hold their target, cut
   cells cleared free, a dirt path passing `RoadBuilder.freeCell`). `bom` keeps its old meaning (template only).
-- `bomExact` is true when the plan was complete (all chunks loaded, no refusal); otherwise `bomFull` is the template BOM and
-  `bomExact` false.
-- **Bar:** on an unchanged world, `bomFull` equals the site's `outstandingBySite` right after placing, item for item. The
-  known drift sources are block ticks settled at P6 (gravity blocks, grass turning to dirt) and terrain changed between check
-  and place; any fixture that differs is reported with the cell list.
+- `bomExact` is true when the plan was complete (all chunks loaded, no refusal) **and** no planned cell is a known drift
+  source: a block tick settled at P6 (a gravity block over a gap, grass turned to dirt under a solid block). Incomplete:
+  `bomFull` is the template BOM. Complete with drift sources: `bomFull` is the plan's count, `bomExact` false.
+- **Bar:** on an unchanged world, when `bomExact` is true, `bomFull` equals the site's `outstandingBySite` right after placing,
+  item for item. When false, every item is within 2 units and the differing cells are listed. Terrain changed between check
+  and place is outside the bar.
 - **A whole build's bill** is the sum of its items' `check` `bomFull`, `checkRoad` `bom` and `checkDelta` `bom`. No batch check
   is added unless Steward asks (S-Y-4).
 
@@ -10448,9 +10454,11 @@ record ItemCount(Item item, int count) {}
 **Fixtures:** the p3 survival client (survival toggle on), owner `test:settle`, a 3-crate stockpile. A batch of 3 houses (4d
 kit examples) and a 40-cell C16 road, one standalone construction road, one update delta and one survival revert. Items enter
 only through `dev.crate.insert` and scripted hoppers with **exact items, no equivalents** (one separate equivalents unit test),
-so every item is counted in its own unit. **Conservation** is checked per item at every checkpoint:
-`player and hopper inventories + stockpile stock + item entities spawned by Architect + the cost of paid cells standing =
-constant` (withdrawn items land back in an inventory, so they stay counted).
+so every item is counted in its own unit. The driver places some blocks by hand inside a house (for the player-drop rule) and
+never mines by hand (vanilla drops differ from cost). The stockpile has room for the fixture's whole BOM, or the driver feeds in
+waves. **Conservation** is checked per item at every checkpoint: `player and hopper inventories + stockpile stock + item
+entities spawned by Architect + the cost of paid cells standing + the driver's hand-placed blocks standing = constant`
+(withdrawn items land back in an inventory, so they stay counted).
 
 **Evidence:** `artifacts/gate6c-y/`, driver `tools/gate6cy.mjs`, `spend.json` $0.00.
 
@@ -10461,12 +10469,12 @@ constant` (withdrawn items land back in an inventory, so they stay counted).
 | 3 | Feed order | `setFeedOrder` puts house 3 first; feeding the exact total BOM in shuffled order: house 3 is BUILT first, then the rest in order; with house 3 blocked (a player in a cell), the others build only from surplus |
 | 4 | Conservation, feed | the conservation sum is constant (difference 0 for every item) at 10 checkpoints during feeding and building |
 | 5 | Refunds | deconstruct one built house and undo the road: `returned` equals each one's `Refunds` tally; the player's blocks drop at the site; conservation difference 0 |
-| 6 | Overflow | with capacity filled by credit, a deconstruct returns up to capacity and drops the rest: `overflowDropped` equals the counted entities; difference 0 |
+| 6 | Overflow | with capacity filled by credit, a deconstruct returns up to capacity and drops the rest: `refundOverflow` equals the counted entities; difference 0 |
 | 7 | Credited once | `dev.undo.failRestore` mid-removal, then retry: the refund is credited once; difference 0 |
 | 8 | Restart mid-feed | clean stop while hoppers feed and the builder places; reload: ledger equal, conservation difference 0, building resumes. A hard kill (`kill -9`, PID) after an autosave: the drift is recorded and stays within the units moved since that save |
 | 9 | Crate gone | `/setblock` air on one crate: nothing lost, `missingCrates` lists it, capacity drops; `removeStockpileCrate` with excess refused, with `force` drops exactly the excess |
-| 10 | Waiting | a target fed nothing: `SITE_WAITING` start after 100-110 ticks, `nextNeeded` in build order with counts summing to its outstanding; insert `nextNeeded[0]`: stop edge within 20 ticks of the next placed cell; a player-blocked or paused target never reports waiting; `waitingSince` survives a reload with no duplicate event |
-| 11 | Full BOM | 12 lots of the 4d varied-terrain fixture: `bomFull` equals the placed site's outstanding exactly in at least 11 of 12, every item of the 12th within 2 units, differences listed |
+| 10 | Waiting | a target fed nothing: `SITE_WAITING` start after 100-110 ticks, `nextNeeded` in build order, its counts plus `moreUnits` equal to its outstanding; insert `nextNeeded[0]`: stop edge within 20 ticks of the next placed cell; a player-blocked or paused target never reports waiting; `waitingSince` survives a reload with no duplicate event |
+| 11 | Full BOM | 12 lots of the 4d varied-terrain fixture: every lot with `bomExact` true matches the placed site's outstanding exactly (at least 10 of the 12 are); the others within 2 units per item, differing cells listed |
 | 12 | Migration | a 0.17.0 survival world with a half-built `sharedCrate` group and a per-site crate loads unchanged (Stock equal, builds finish as before); `adoptCrates` moves their stock in with difference 0 and their crate cells restored; downgrade to 0.17.0 recorded |
 | 13 | Unchanged without a stockpile | the 4d-all and phase 3 survival steps pass unchanged; Hardcore step unchanged |
 | 14 | API, spend | api-compat clean against the previous three apitest jars; apijars pass; $0.00 |
