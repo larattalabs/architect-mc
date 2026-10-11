@@ -1,0 +1,494 @@
+{
+ "source": "artifacts/gate6c0b/bench/data/state.json, group g2 (Bench R), trimmed to what breakdown.ts reads",
+ "group": {
+  "id": "g2",
+  "createdAt": 1791695860913,
+  "cost": {
+   "usd": 7.246607,
+   "inputTokens": 17481,
+   "outputTokens": 233962,
+   "cacheReadTokens": 14059109,
+   "cacheWriteTokens": 519540,
+   "turns": 243
+  },
+  "bible": {
+   "id": "bib_saltmere_r",
+   "version": 1
+  },
+  "owner": "bench:6c0b",
+  "items": [
+   {
+    "itemKey": "house",
+    "status": "done",
+    "stage": "detail",
+    "designId": "d11"
+   },
+   {
+    "itemKey": "house#2",
+    "kind": "copy",
+    "status": "done",
+    "stage": "copy",
+    "designId": "",
+    "variantJob": "v3"
+   },
+   {
+    "itemKey": "house#3",
+    "kind": "copy",
+    "status": "done",
+    "stage": "copy",
+    "designId": "",
+    "variantJob": "v4"
+   },
+   {
+    "itemKey": "workshop",
+    "status": "done",
+    "stage": "detail",
+    "designId": "d12"
+   },
+   {
+    "itemKey": "workshop#2",
+    "kind": "copy",
+    "status": "done",
+    "stage": "copy",
+    "designId": "",
+    "variantJob": "v1"
+   },
+   {
+    "itemKey": "workshop#3",
+    "kind": "copy",
+    "status": "done",
+    "stage": "copy",
+    "designId": "",
+    "variantJob": "v2"
+   },
+   {
+    "itemKey": "shed",
+    "status": "done",
+    "stage": "detail",
+    "designId": "d13"
+   },
+   {
+    "itemKey": "well",
+    "status": "done",
+    "stage": "detail",
+    "designId": "d14"
+   }
+  ],
+  "breakdown": {
+   "stages": {
+    "bible": {
+     "usd": 1.036429,
+     "ms": 262954,
+     "count": 1
+    },
+    "massing": {
+     "usd": 0.633469,
+     "ms": 155173,
+     "count": 4
+    },
+    "detail": {
+     "usd": 6.510424,
+     "ms": 1618923,
+     "count": 4
+    },
+    "repair": {
+     "usd": 0,
+     "ms": 0,
+     "count": 0
+    },
+    "critique": {
+     "usd": 0.102714,
+     "ms": 17964,
+     "count": 2
+    },
+    "queued": {
+     "usd": 0,
+     "ms": 146220,
+     "count": 4
+    },
+    "usage_hold": {
+     "usd": 0,
+     "ms": 0,
+     "count": 0
+    },
+    "copy": {
+     "usd": 0,
+     "ms": 1573,
+     "count": 4
+    }
+   },
+   "totalUsd": 8.283036,
+   "wallMs": 858774,
+   "firstDetailedMs": 183197,
+   "bibleJobIds": [
+    "b2"
+   ]
+  }
+ },
+ "bd": {
+  "designs": {
+   "d7": {
+    "kind": "massing",
+    "first": 0.155927,
+    "repair": 0,
+    "critique": 0,
+    "repairs": 0,
+    "critics": 0,
+    "ms": 39538,
+    "repairMs": 0,
+    "critiqueMs": 0
+   },
+   "d8": {
+    "kind": "massing",
+    "first": 0.168096,
+    "repair": 0,
+    "critique": 0,
+    "repairs": 0,
+    "critics": 0,
+    "ms": 37562,
+    "repairMs": 0,
+    "critiqueMs": 0
+   },
+   "d9": {
+    "kind": "massing",
+    "first": 0.156818,
+    "repair": 0,
+    "critique": 0,
+    "repairs": 0,
+    "critics": 0,
+    "ms": 43284,
+    "repairMs": 0,
+    "critiqueMs": 0
+   },
+   "d10": {
+    "kind": "massing",
+    "first": 0.152628,
+    "repair": 0,
+    "critique": 0,
+    "repairs": 0,
+    "critics": 0,
+    "ms": 34789,
+    "repairMs": 0,
+    "critiqueMs": 0
+   },
+   "d11": {
+    "kind": "detail",
+    "first": 3.349169,
+    "repair": 0,
+    "critique": 0.049961,
+    "repairs": 0,
+    "critics": 1,
+    "ms": 773535,
+    "repairMs": 0,
+    "critiqueMs": 9292
+   },
+   "d12": {
+    "kind": "detail",
+    "first": 2.18426,
+    "repair": 0,
+    "critique": 0.052753,
+    "repairs": 0,
+    "critics": 1,
+    "ms": 644539,
+    "repairMs": 0,
+    "critiqueMs": 8672
+   },
+   "d13": {
+    "kind": "detail",
+    "first": 0.488552,
+    "repair": 0,
+    "critique": 0,
+    "repairs": 0,
+    "critics": 0,
+    "ms": 107851,
+    "repairMs": 0,
+    "critiqueMs": 0
+   },
+   "d14": {
+    "kind": "detail",
+    "first": 0.488443,
+    "repair": 0,
+    "critique": 0,
+    "repairs": 0,
+    "critics": 0,
+    "ms": 92998,
+    "repairMs": 0,
+    "critiqueMs": 0
+   }
+  },
+  "items": {
+   "house": {
+    "queuedMs": 90,
+    "holdMs": 0,
+    "designId": "d11",
+    "state": "other"
+   },
+   "house#2": {
+    "queuedMs": 0,
+    "holdMs": 0,
+    "state": "other",
+    "copyMs": 285
+   },
+   "house#3": {
+    "queuedMs": 0,
+    "holdMs": 0,
+    "state": "other",
+    "copyMs": 358
+   },
+   "workshop": {
+    "queuedMs": 171,
+    "holdMs": 0,
+    "designId": "d12",
+    "state": "other"
+   },
+   "workshop#2": {
+    "queuedMs": 0,
+    "holdMs": 0,
+    "state": "other",
+    "copyMs": 424
+   },
+   "workshop#3": {
+    "queuedMs": 0,
+    "holdMs": 0,
+    "state": "other",
+    "copyMs": 506
+   },
+   "shed": {
+    "queuedMs": 249,
+    "holdMs": 0,
+    "designId": "d13",
+    "state": "other"
+   },
+   "well": {
+    "queuedMs": 145710,
+    "holdMs": 0,
+    "designId": "d14",
+    "state": "other"
+   }
+  },
+  "lastTick": 1791696719687,
+  "bible": {
+   "usd": 1.036429,
+   "ms": 262954,
+   "jobIds": [
+    "b2"
+   ]
+  },
+  "sig": "[\"done\",null,null,[],[[\"house\",\"done\",\"detail\",\"gen_weathered_coastal_house_2\",1,0],[\"house#2\",\"done\",\"copy\",\"gen_weathered_coastal_house_2_copy\",null,0],[\"house#3\",\"done\",\"copy\",\"gen_weathered_coastal_house_2_copy_2\",null,0],[\"workshop\",\"done\",\"detail\",\"gen_weathered_coastal_shop\",1,0],[\"workshop#2\",\"done\",\"copy\",\"gen_weathered_coastal_shop_copy\",null,0],[\"workshop#3\",\"done\",\"copy\",\"gen_weathered_coastal_shop_copy_2\",null,0],[\"shed\",\"done\",\"detail\",\"gen_net_shed\",1,0],[\"well\",\"done\",\"detail\",\"gen_village_well\",1,0]]]",
+  "seq": 47,
+  "prev": {
+   "status": "done",
+   "items": {
+    "house": {
+     "status": "done",
+     "stage": "detail"
+    },
+    "house#2": {
+     "status": "done",
+     "stage": "copy"
+    },
+    "house#3": {
+     "status": "done",
+     "stage": "copy"
+    },
+    "workshop": {
+     "status": "done",
+     "stage": "detail"
+    },
+    "workshop#2": {
+     "status": "done",
+     "stage": "copy"
+    },
+    "workshop#3": {
+     "status": "done",
+     "stage": "copy"
+    },
+    "shed": {
+     "status": "done",
+     "stage": "detail"
+    },
+    "well": {
+     "status": "done",
+     "stage": "detail"
+    }
+   }
+  },
+  "firstDetailedAt": 1791696044110
+ },
+ "designs": [
+  {
+   "id": "d7",
+   "status": "done",
+   "massing": {
+    "version": 1
+   },
+   "cost": {
+    "usd": 0.155927
+   }
+  },
+  {
+   "id": "d8",
+   "status": "done",
+   "massing": {
+    "version": 1
+   },
+   "cost": {
+    "usd": 0.168096
+   }
+  },
+  {
+   "id": "d9",
+   "status": "done",
+   "massing": {
+    "version": 1
+   },
+   "cost": {
+    "usd": 0.156818
+   }
+  },
+  {
+   "id": "d10",
+   "status": "done",
+   "massing": {
+    "version": 1
+   },
+   "cost": {
+    "usd": 0.152628
+   }
+  },
+  {
+   "id": "d11",
+   "status": "done",
+   "cost": {
+    "usd": 3.39913
+   },
+   "critique": {
+    "rounds": [
+     {}
+    ],
+    "cost": {
+     "critic": {
+      "usd": 0.049961,
+      "inputTokens": 4634,
+      "outputTokens": 1024,
+      "cacheReadTokens": 1290,
+      "cacheWriteTokens": 8728,
+      "turns": 2
+     },
+     "revise": {
+      "usd": 0,
+      "inputTokens": 0,
+      "outputTokens": 0,
+      "cacheReadTokens": 0,
+      "cacheWriteTokens": 0,
+      "turns": 0
+     }
+    }
+   }
+  },
+  {
+   "id": "d12",
+   "status": "done",
+   "cost": {
+    "usd": 2.237013
+   },
+   "critique": {
+    "rounds": [
+     {}
+    ],
+    "cost": {
+     "critic": {
+      "usd": 0.052753,
+      "inputTokens": 4707,
+      "outputTokens": 950,
+      "cacheReadTokens": 11147,
+      "cacheWriteTokens": 9097,
+      "turns": 3
+     },
+     "revise": {
+      "usd": 0,
+      "inputTokens": 0,
+      "outputTokens": 0,
+      "cacheReadTokens": 0,
+      "cacheWriteTokens": 0,
+      "turns": 0
+     }
+    }
+   }
+  },
+  {
+   "id": "d13",
+   "status": "done",
+   "cost": {
+    "usd": 0.488552
+   }
+  },
+  {
+   "id": "d14",
+   "status": "done",
+   "cost": {
+    "usd": 0.488443
+   }
+  }
+ ],
+ "work": {
+  "d7": {
+   "r1Usd": 0.155927,
+   "round": 1
+  },
+  "d8": {
+   "r1Usd": 0.168096,
+   "round": 1
+  },
+  "d9": {
+   "r1Usd": 0.156818,
+   "round": 1
+  },
+  "d10": {
+   "r1Usd": 0.152628,
+   "round": 1
+  },
+  "d11": {
+   "r1Usd": 3.349169,
+   "round": 1
+  },
+  "d12": {
+   "r1Usd": 2.18426,
+   "round": 1
+  },
+  "d13": {
+   "r1Usd": 0.488552,
+   "round": 1
+  },
+  "d14": {
+   "r1Usd": 0.488443,
+   "round": 1
+  }
+ },
+ "variants": [
+  {
+   "id": "v1",
+   "status": "done",
+   "createdAt": 1791696589434,
+   "updatedAt": 1791696589896
+  },
+  {
+   "id": "v2",
+   "status": "done",
+   "createdAt": 1791696589479,
+   "updatedAt": 1791696590402
+  },
+  {
+   "id": "v3",
+   "status": "done",
+   "createdAt": 1791696719012,
+   "updatedAt": 1791696719322
+  },
+  {
+   "id": "v4",
+   "status": "done",
+   "createdAt": 1791696719043,
+   "updatedAt": 1791696719681
+  }
+ ]
+}

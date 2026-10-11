@@ -8456,6 +8456,25 @@ tag, since `Columns` changes), the sim suites, apijars, 6b-scenario-s1 and 6cv-s
   positions), so Steward's panels can show them and later additions can keep clear of them.
 - N-W-1 and N-W-2 stay with Noah. N-W-2's default is the coordinator's: a lantern on a fence post in the bible's wood.
 
+### Coordinator addition (Noah, 2026-10-11): bible-styled lamps (part of W's frozen scope)
+
+Noah's answers: **N-W-1** V's S7 sha `c31c6de43ce1` is approved; he approves W's after he sees it. **N-W-2** a lantern on a
+fence post stays the default.
+
+This pulls part of 7a §8.3 forward:
+- The bible's `light` role chooses the fixture for every lamp W's programs place: the apron and batter lamps
+  (`r.lightCover`) and the street, lane and square lamps (`props.mjs`).
+- A small **fixture catalogue** in the kit, each fixture a short deterministic block stack: lantern post (the default),
+  soul-lantern post, torch post, end rod, sea-lantern post or bollard, and a hanging lantern from a beam (a post-and-arm
+  gibbet). The fixture is picked from the bible's `light` block; a bible with no `light` role keeps the lantern post.
+- Each fixture still meets M5: coverage is computed from the fixture's real light level (torch 14, soul lantern and soul
+  torch 10, end rod 14, lantern 15, sea lantern 15), so a weaker fixture gets more posts or a closer spacing. The cap of 4
+  per lot holds where it can; a weak fixture that can't meet M5 within 4 is reported.
+- Wall-mounted lamps on the buildings are design-side and stay in 7b.
+- The gallery shows S7 with at least 3 bibles: rustic (lantern post), infernal (soul lantern or torch), and coastal or sky
+  (sea lantern or end rod). Noah judges the look there.
+- C19 and C20 (Steward's asks) are not in W.
+
 
 ## Phase 6c slice T1: passes, fields and relief (DRAFT for Steward review)
 
