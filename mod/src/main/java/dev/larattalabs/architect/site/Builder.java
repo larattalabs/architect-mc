@@ -1598,6 +1598,30 @@ public final class Builder {
 		o.addProperty("built", built);
 		o.addProperty("percent", r.size() == 0 ? 100 : built * 100 / r.size());
 		o.add("wait", SiteWaits.json(SiteWaits.view(srv, id), level)); // 6c Y2 (C25)
+		// the gate's independent cross-check of nextNeeded: the distinct items of the unbuilt cells in build order (first 12), and the
+		// first unbuilt cells (a player standing in one blocks it)
+		JsonArray order = new JsonArray();
+		JsonArray nextCells = new JsonArray();
+		java.util.LinkedHashSet<String> seen = new java.util.LinkedHashSet<>();
+		for (int i = r.built.nextClearBit(0); i < r.size(); i = r.built.nextClearBit(i + 1)) {
+			for (SurvivalItems.Cost x : r.cost.get(i)) {
+				if (seen.size() < 12 && seen.add(x.item())) {
+					order.add(x.item());
+				}
+			}
+			if (nextCells.size() < 12 && level != null) {
+				BlockPos p = r.pos(i);
+				JsonObject cell = new JsonObject();
+				cell.addProperty("x", p.getX());
+				cell.addProperty("y", p.getY());
+				cell.addProperty("z", p.getZ());
+				cell.addProperty("block", Cells.blockId(r.target[i]));
+				cell.addProperty("solid", !r.target[i].getCollisionShape(level, p).isEmpty());
+				nextCells.add(cell);
+			}
+		}
+		o.add("order", order);
+		o.add("nextCells", nextCells);
 		o.addProperty("waterlogged", r.waterlogged);
 		o.add("bom", counts(r.bom));
 		o.addProperty("bomTotal", Refunds.Tally.total(r.bom));

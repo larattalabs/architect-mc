@@ -178,12 +178,22 @@ class SiteWaitTest {
 	}
 
 	@Test
-	void aStartAndStopInsideTheWindowAreBothDeferredAndCancelEachOther() {
+	void edgesComeOutOnceEachInOrderAtMostEveryTwentyTicks() {
 		Latch l = new Latch();
-		assertEquals(Edge.START, run(l, 0, 100, Outcome.STARVED));
-		l.tick(100, Outcome.PLACED);
-		assertEquals(Edge.NONE, run(l, 101, 100, Outcome.STARVED), "waiting again; the last edge reported was START, so nothing new to say");
-		assertTrue(l.waiting());
+		List<String> seen = new ArrayList<>();
+		long lastAt = Long.MIN_VALUE / 2;
+		for (long t = 0; t < 400; t++) {
+			Outcome o = t < 100 ? Outcome.STARVED : t == 105 ? Outcome.PLACED : t < 106 ? Outcome.IDLE : Outcome.STARVED;
+			l.tick(t, o);
+			Edge e = l.poll(t);
+			if (e != Edge.NONE) {
+				assertTrue(t - lastAt >= WaitCalc.EVENT_TICKS, e + " at " + t);
+				lastAt = t;
+				seen.add(e + "@" + t);
+			}
+		}
+		// start at 99; the stop at 105 is deferred to 119; the next 100 starved ticks (106..205) start it again at 205
+		assertEquals(List.of("START@99", "STOP@119", "START@205"), seen);
 	}
 
 	@Test
