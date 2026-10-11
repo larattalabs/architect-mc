@@ -246,7 +246,15 @@ async function waiting() {
   const placedA = evs0.find((e) => e.event === 'SITE_PLACED' && e.id === A);
   // B: paused at once (the crate screen's button)
   await call('dev.crate.open', { site: B });
-  await call('dev.crate.press', { control: 'pause' });
+  for (let i = 0; ; i++) { // the screen registers its buttons when it draws and has its site state
+    await sleep(1000);
+    try {
+      await call('dev.crate.press', { control: 'pause' });
+      break;
+    } catch (e) {
+      if (i >= 8) throw e;
+    }
+  }
   await call('dev.crate.press', { control: 'close' });
   check((await siteState(B)).paused === true, 'B is paused');
   // C: the player stands in the first solid cell it would place, then C is fed everything
