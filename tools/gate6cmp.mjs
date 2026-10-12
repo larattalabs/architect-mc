@@ -176,7 +176,8 @@ steps.stale = async () => {
 // ------------------------------------------------------------------ item 11: API compatibility
 
 steps.apicompat = async () => {
-  const classes = fs.existsSync(path.join(RUN, 'mod', 'build', 'classes', 'java', 'main')) ? [path.join(RUN, 'mod', 'build', 'classes', 'java', 'main')] : [];
+  // the run worktree's classes (built by unit-mod at this head): main and client (the client API lives there)
+  const classes = fs.existsSync(path.join(RUN, 'mod', 'build', 'classes', 'java', 'main')) ? [['main', 'client'].map((d) => path.join(RUN, 'mod', 'build', 'classes', 'java', d)).join(path.delimiter)] : [];
   const r = spawnSync(process.execPath, [path.join(root, 'tools', 'api-compat.mjs'), '--gate6cmp', ...classes], { cwd: root, encoding: 'utf8', env: { ...process.env, JAVA_HOME } });
   const t = `${r.stdout}${r.stderr}`;
   fs.writeFileSync(path.join(OUT, 'api-compat.txt'), t);

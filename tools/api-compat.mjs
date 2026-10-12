@@ -107,7 +107,8 @@ if (process.argv[2] === '--gate6b' || process.argv[2] === '--gate6c0a' || proces
 const surface = process.argv[2] === '--surface';
 const args = surface ? process.argv.slice(3) : process.argv.slice(2);
 const jar = args[0];
-const classDirs = args[1] ? [path.resolve(args[1])] : ['main', 'client'].map((s) => path.join(root, 'mod', 'build', 'classes', 'java', s));
+// a classesDir may list several dirs (path.delimiter-separated: main and client)
+const classDirs = args[1] ? args[1].split(path.delimiter).map((d) => path.resolve(d)) : ['main', 'client'].map((s) => path.join(root, 'mod', 'build', 'classes', 'java', s));
 if (!jar) {
   console.error('usage: node tools/api-compat.mjs [--surface] <old.jar> [classesDir]');
   process.exit(2);
