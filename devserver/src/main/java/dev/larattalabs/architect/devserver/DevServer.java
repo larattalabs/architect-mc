@@ -172,6 +172,7 @@ public final class DevServer implements ModInitializer {
 		PortedHooks.init();
 		JournalDev.init();
 		RegionDev.init();
+		dev.larattalabs.architect.devserver.gen.RegionDev6b.init();
 		DeltaDev.init();
 		SliceVDev.init();
 		ServerSidecar.init();

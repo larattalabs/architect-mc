@@ -72,6 +72,14 @@ public final class ServerSidecar implements ClientBridge {
 		return Blueprints.gameDataDir().resolve("sidecar-data");
 	}
 
+	public static Path dataDirPublic() {
+		return dataDir();
+	}
+
+	public static SidecarLink linkPublic() {
+		return link;
+	}
+
 	static Path logFile() {
 		return dataDir().resolve("sidecar.log");
 	}

@@ -129,8 +129,8 @@ public final class CoreHooks {
 			});
 		for (String clientOnly : new String[] {"dev.screenshot", "dev.hud", "dev.key", "dev.type", "dev.click", "dev.ui.open", "dev.ui.state",
 			"dev.ui.click", "dev.ui.focus", "dev.build.start", "dev.build.state", "dev.build.confirm", "dev.build.cancel", "dev.build.rotate",
-			"dev.build.nudge", "dev.build.lock", "dev.library.state", "dev.composite.state", "dev.composite.clear", "dev.region.ghost", "dev.crate.open",
-			"dev.crate.state", "dev.crate.press", "dev.ghosts.state", "dev.scenario.cams"}) {
+			"dev.build.nudge", "dev.build.lock", "dev.library.state", "dev.composite.state", "dev.composite.clear", "dev.crate.open",
+			"dev.crate.state", "dev.crate.press", "dev.ghosts.state"}) {
 			DevBridge.register(clientOnly, 5_000, "client-only (headless: refused)", (req, mc) -> CompletableFuture.failedFuture(new DevBridge.DevException(
 				ClientOnly.WHY + " (" + clientOnly + ")")));
 		}

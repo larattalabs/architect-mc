@@ -35,7 +35,7 @@ def clientSidecar = rootProject.file("src/client/java/dev/larattalabs/architect/
 def genHooks = tasks.register("genHooks", Sync) {
 	into(generatedHooks)
 	from(clientDev) {
-		include "JournalDev.java", "RegionDev.java", "DeltaDev.java", "SliceVDev.java", "Fields.java"
+		include "JournalDev.java", "RegionDev.java", "RegionDev6b.java", "DeltaDev.java", "SliceVDev.java", "Fields.java"
 		into("dev/larattalabs/architect/devserver/gen")
 		filter { String line ->
 			if (line.startsWith("package dev.larattalabs.architect.client.dev;")) {
@@ -46,6 +46,13 @@ def genHooks = tasks.register("genHooks", Sync) {
 				return line.replace("dev.larattalabs.architect.client.world.", "dev.larattalabs.architect.devserver.gen.")
 					.replace("dev.larattalabs.architect.client.dev.", "dev.larattalabs.architect.devserver.gen.")
 			}
+			// RegionDev6b: the ghost, the sidecar and the camera come from the headless stand-ins of the same names in the gen package
+			// (RegionGhost answers client-only; Sidecar is the devserver's link; DevCommands.camera moves the bot)
+			if (line.startsWith("import dev.larattalabs.architect.client.placement.RegionGhost;")
+				|| line.startsWith("import dev.larattalabs.architect.client.sidecar.Sidecar;") || line.startsWith("import net.minecraft.client.Minecraft;")) {
+				return ""
+			}
+			line = line.replace("static Minecraft mc()", "static Mc mc()").replace("Minecraft.getInstance()", "Mc.INSTANCE")
 			// the handler's game parameter (unused by these hooks but passed along) is the headless host's stand-in
 			line = line.replace("net.minecraft.client.Minecraft ", "dev.larattalabs.architect.devserver.gen.Mc ")
 			// the delta ghost renders on the client: headless, dev.site.delta.preview answers that it is client-only
