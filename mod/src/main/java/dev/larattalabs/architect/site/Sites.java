@@ -1084,7 +1084,25 @@ public final class Sites {
 					removed++;
 				}
 			}
-			if (!site.template().placeInWorld(level, site.placePos(), site.placePos(), site.settings(), level.getRandom(), FLAGS)) {
+			net.minecraft.world.level.ServerLevelAccessor accessor = level;
+			if (System.getenv("ARCHITECT_TRACE_DOORS") != null) {
+				accessor = (net.minecraft.world.level.ServerLevelAccessor) java.lang.reflect.Proxy.newProxyInstance(Sites.class.getClassLoader(),
+					new Class<?>[] {net.minecraft.world.level.ServerLevelAccessor.class}, (proxy, m, args) -> {
+						if (m.getName().equals("setBlock") && args.length == 3 && args[1] instanceof BlockState ns && args[0] instanceof BlockPos bp0) {
+							BlockState old0 = level.getBlockState(bp0);
+							if (old0.getBlock() instanceof net.minecraft.world.level.block.DoorBlock && !(ns.getBlock() instanceof net.minecraft.world.level.block.DoorBlock)) {
+								Architect.LOGGER.info("TRACE door {} {} replaced by {} flags {}", bp0.toShortString(), old0, ns, args[2],
+									new Throwable("stack"));
+							}
+						}
+						try {
+							return m.invoke(level, args);
+						} catch (java.lang.reflect.InvocationTargetException e) {
+							throw e.getCause();
+						}
+					});
+			}
+			if (!site.template().placeInWorld(accessor, site.placePos(), site.placePos(), site.settings(), level.getRandom(), System.getenv("ARCHITECT_TRACE_FLAG16") != null ? FLAGS | 16 : FLAGS)) {
 				throw new IllegalStateException("template " + bp.id() + " placed nothing (empty template?)");
 			}
 			traceDoors(level, snapBox, "template");
