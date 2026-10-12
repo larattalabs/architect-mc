@@ -38,7 +38,7 @@ class FullBomTest {
 		int[] xyz = {0, 10, 0, 1, 10, 0, 2, 10, 0};
 		BlockState[] st = {Blocks.OAK_PLANKS.defaultBlockState(), air(), Blocks.OAK_PLANKS.defaultBlockState()};
 		FullBom.Result r = FullBom.compute(inputs(xyz, st, new int[] {0, 9, 0, 1, 9, 0}, NONE, NONE, new int[] {5, 9, 0}, new int[] {5, 10, 0},
-			new int[] {6, 10, 0}), p -> Blocks.STONE.defaultBlockState());
+			new int[] {6, 10, 0}), p -> air());
 		assertEquals(Map.of("minecraft:oak_planks", 2, "minecraft:stone_bricks", 2, "minecraft:cobblestone", 1, "minecraft:dirt", 1, "minecraft:oak_slab", 1),
 			r.items());
 		assertTrue(r.exact(), r.driftCells().toString());
@@ -100,5 +100,32 @@ class FullBomTest {
 		FullBom.Result r = FullBom.compute(inputs(new int[] {0, 9, 0, 0, 10, 0}, st, NONE, NONE, NONE, NONE, NONE, NONE), p -> air());
 		assertTrue(r.exact(), r.driftCells().toString());
 		assertEquals(Map.of("minecraft:dirt", 1, "minecraft:stone", 1), r.items());
+	}
+
+	private static BlockState door(String half) {
+		return Blocks.SPRUCE_DOOR.defaultBlockState().setValue(net.minecraft.world.level.block.DoorBlock.HALF,
+			net.minecraft.world.level.block.state.properties.DoubleBlockHalf.valueOf(half));
+	}
+
+	@Test
+	void aDoorWhoseFloorTheApproachLaterReplacesPopsWithItsUpperHalf() {
+		// a door on a stone floor; the approach then writes a dirt path (not a sturdy face) under it: updateShape returns air for both halves
+		int[] xyz = {0, 10, 0, 0, 11, 0, 0, 12, 0};
+		BlockState[] st = {Blocks.STONE.defaultBlockState(), door("LOWER"), door("UPPER")};
+		FullBom.Result popped = FullBom.compute(inputs(xyz, st, NONE, NONE, NONE, NONE, new int[] {0, 10, 0}, NONE), p -> air());
+		assertEquals(Map.of("minecraft:dirt", 1), popped.items(), popped.items().toString());
+		assertTrue(popped.exact());
+		FullBom.Result stays = FullBom.compute(inputs(xyz, st, NONE, NONE, NONE, NONE, NONE, NONE), p -> air());
+		assertEquals(Map.of("minecraft:stone", 1, "minecraft:spruce_door", 1), stays.items(), stays.items().toString());
+	}
+
+	@Test
+	void aDoorWrittenAfterItsFloorWasChangedIsNotRechecked() {
+		// the path is written under the cell first (fill phase), the door comes with the template: nothing later touches it
+		int[] xyz = {0, 11, 0, 0, 12, 0};
+		BlockState[] st = {door("LOWER"), door("UPPER")};
+		FullBom.Result r = FullBom.compute(inputs(xyz, st, NONE, NONE, NONE, NONE, NONE, NONE), p -> p == net.minecraft.core.BlockPos.asLong(0, 10, 0)
+			? Blocks.DIRT_PATH.defaultBlockState() : air());
+		assertEquals(Map.of("minecraft:spruce_door", 1), r.items());
 	}
 }

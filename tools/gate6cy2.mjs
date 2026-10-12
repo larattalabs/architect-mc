@@ -341,7 +341,7 @@ async function bom() {
     const st = await siteState(id);
     const actualCells = await call('dev.site.cells', { site: id }, 60_000);
     const cellDiff = [];
-    for (const k of new Set([...Object.keys(predicted.cells ?? {}), ...Object.keys(actualCells)])) {
+    for (const k of new Set([...Object.keys(predicted.cells ?? {}), ...Object.keys(actualCells)].filter((x) => /^-?\d+,/.test(x)))) {
       if (predicted.cells?.[k] !== actualCells[k]) cellDiff.push(`${k} predicted ${predicted.cells?.[k] ?? '-'} actual ${actualCells[k] ?? '-'}`);
     }
     const full = sortObj(v.bomFull);

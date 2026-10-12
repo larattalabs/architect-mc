@@ -104,12 +104,14 @@ final class FullBom {
 	 */
 	static Result compute(Inputs in, LongFunction<@Nullable BlockState> world) {
 		Map<Long, BlockState> writes = new HashMap<>();
+		Map<Long, Integer> phase = new HashMap<>(); // the build step of a cell's last write: 0 template, 1 fill, 2 cut, 3 approach cut, 4 approach fill, 5 path, 6 slabs
 		Set<Long> queued = new LinkedHashSet<>();
 		BlockState air = Blocks.AIR.defaultBlockState();
 		// 1. the template (air cells are written too: a room is cleared), 2. unsafe beds out
 		for (int i = 0; i < in.templateStates().length; i++) {
 			long p = BlockPos.asLong(in.templateXyz()[3 * i], in.templateXyz()[3 * i + 1], in.templateXyz()[3 * i + 2]);
 			BlockState s = in.templateStates()[i];
+			phase.put(p, 0);
 			if (s.getBlock() instanceof BedBlock && in.unsafeBed().test(p, s)) {
 				writes.put(p, air);
 				queued.add(p);
@@ -120,12 +122,12 @@ final class FullBom {
 				queued.add(p);
 			}
 		}
-		cells(in.fill(), in.foundation(), writes, queued);
-		cells(in.clear(), air, writes, null);
-		cells(in.approachClear(), air, writes, null);
-		cells(in.approachFill(), in.approachFillState(), writes, queued);
-		cells(in.approachPath(), in.path(), writes, queued);
-		cells(in.approachSlabs(), in.slab(), writes, queued);
+		cells(in.fill(), in.foundation(), writes, queued, phase, 1);
+		cells(in.clear(), air, writes, null, phase, 2);
+		cells(in.approachClear(), air, writes, null, phase, 3);
+		cells(in.approachFill(), in.approachFillState(), writes, queued, phase, 4);
+		cells(in.approachPath(), in.path(), writes, queued, phase, 5);
+		cells(in.approachSlabs(), in.slab(), writes, queued, phase, 6);
 		Map<String, Integer> items = new TreeMap<>();
 		List<String> drift = new ArrayList<>();
 		boolean[] unknown = {false};
@@ -135,6 +137,68 @@ final class FullBom {
 			BlockState w = writes.get(p);
 			return w != null ? w : world.apply(p);
 		};
+		// the shape updates of the writes (Level.setBlock without UPDATE_KNOWN_SHAPE): a cell is told about each neighbour written AFTER it,
+		// and a block whose updateShape answers air (a door over a floor the approach then replaced, what hung on it) is destroyed with
+		// its drops suppressed. A block written after its neighbours, or beside neighbours no later step wrote, is never re-checked.
+		net.minecraft.world.level.LevelReader reader = reader(at, unknown);
+		net.minecraft.world.level.ScheduledTickAccess ticks = (net.minecraft.world.level.ScheduledTickAccess) java.lang.reflect.Proxy.newProxyInstance(
+			FullBom.class.getClassLoader(), new Class<?>[] {net.minecraft.world.level.ScheduledTickAccess.class}, (proxy, m, args) -> {
+				if (m.getName().equals("scheduleTick")) {
+					return null;
+				}
+				if (m.getName().equals("hashCode")) {
+					return System.identityHashCode(proxy);
+				}
+				if (m.getName().equals("equals")) {
+					return proxy == args[0];
+				}
+				throw new UnsupportedOperationException(m.getName());
+			});
+		net.minecraft.util.RandomSource random = net.minecraft.util.RandomSource.create(0L);
+		net.minecraft.core.Direction[] dirs = net.minecraft.core.Direction.values();
+		for (int round = 0; round < 8; round++) {
+			boolean changed = false;
+			for (long p : queued) {
+				BlockState s = writes.get(p);
+				if (s == null || s.isAir()) {
+					continue;
+				}
+				int pc = phase.getOrDefault(p, 0);
+				BlockPos cell = BlockPos.of(p);
+				for (net.minecraft.core.Direction d : dirs) {
+					BlockPos np = cell.relative(d);
+					if (phase.getOrDefault(np.asLong(), -1) <= pc) {
+						continue;
+					}
+					BlockState nb = at.apply(np.asLong());
+					if (nb == null) {
+						unknown[0] = true;
+						continue;
+					}
+					BlockState now = writes.get(p);
+					BlockState after;
+					try {
+						after = now.updateShape(reader, ticks, cell, d, np, nb, random);
+					} catch (RuntimeException e) {
+						unknown[0] = true;
+						continue;
+					}
+					if (after != now) {
+						writes.put(p, after);
+						if (after.isAir()) {
+							phase.put(p, 99);
+						}
+						changed = true;
+						if (after.isAir()) {
+							break;
+						}
+					}
+				}
+			}
+			if (!changed) {
+				break;
+			}
+		}
 		for (long p : queued) {
 			BlockState s = writes.get(p);
 			if (s == null || s.isAir()) {
@@ -153,14 +217,52 @@ final class FullBom {
 		return new Result(items, drift.isEmpty() && !unknown[0], drift, n, finalStates);
 	}
 
-	private static void cells(int[] xyz, BlockState s, Map<Long, BlockState> writes, @Nullable Set<Long> queued) {
+	private static void cells(int[] xyz, BlockState s, Map<Long, BlockState> writes, @Nullable Set<Long> queued, Map<Long, Integer> phase, int step) {
 		for (int i = 0; i + 2 < xyz.length; i += 3) {
 			long p = BlockPos.asLong(xyz[i], xyz[i + 1], xyz[i + 2]);
 			writes.put(p, s);
+			phase.put(p, step);
 			if (queued != null) {
 				queued.add(p);
 			}
 		}
+	}
+
+	/** A {@link net.minecraft.world.level.LevelReader} over the planned cells: {@code getBlockState} and {@code getFluidState}, nothing else. */
+	static net.minecraft.world.level.LevelReader reader(LongFunction<@Nullable BlockState> at, boolean[] unknown) {
+		return (net.minecraft.world.level.LevelReader) java.lang.reflect.Proxy.newProxyInstance(FullBom.class.getClassLoader(),
+			new Class<?>[] {net.minecraft.world.level.LevelReader.class}, (proxy, m, args) -> {
+				switch (m.getName()) {
+					case "getBlockState", "getFluidState" -> {
+						if (args != null && args.length == 1 && args[0] instanceof BlockPos pos) {
+							BlockState st = at.apply(pos.asLong());
+							if (st == null) {
+								unknown[0] = true;
+								st = Blocks.AIR.defaultBlockState();
+							}
+							return m.getName().equals("getBlockState") ? st : st.getFluidState();
+						}
+					}
+					case "getBlockEntity" -> {
+						return null;
+					}
+					case "hashCode" -> {
+						return System.identityHashCode(proxy);
+					}
+					case "equals" -> {
+						return proxy == args[0];
+					}
+					case "toString" -> {
+						return "FullBom.reader";
+					}
+					default -> {
+					}
+				}
+				if (m.isDefault()) {
+					return java.lang.reflect.InvocationHandler.invokeDefault(proxy, m, args);
+				}
+				throw new UnsupportedOperationException(m.getName());
+			});
 	}
 
 	/** Why the settle at P6 may change this cell's cost, or null. */
