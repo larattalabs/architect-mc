@@ -1064,7 +1064,7 @@ steps.migrate = async () => {
     const ids = { g1: b.items.g1.site, g2: b.items.g2.site, s3: s3.siteId };
     const half = (m) => Object.fromEntries(Object.entries(m).map(([k, n]) => [k, Math.ceil(n / 2)]));
     // half built: a quarter fed and built, then paused (the 0.17.0 crate screen's Pause) and another quarter fed: the crates hold stock
-    const pauseOld = async (id) => { await call('dev.crate.open', { site: id }); await call('dev.crate.press', { control: 'pause' }); await call('dev.crate.press', { control: 'close' }).catch(() => {}); };
+    const pauseOld = async (id) => { await call('dev.crate.open', { site: id }); await sleep(1500); await call('dev.crate.press', { control: 'pause' }); await call('dev.crate.press', { control: 'close' }).catch(() => {}); };
     const sg = await api(`stock ${b.group}`);
     const ss = await siteState(ids.s3);
     const bom3 = Object.fromEntries((ss.rows ?? []).map((r) => [r.item, r.missing]).filter(([, n]) => n > 0));
