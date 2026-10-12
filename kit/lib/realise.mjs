@@ -13,20 +13,22 @@ import { ROTATIONS, decodeVoxels, turnState, turnXZ, voxelAt, voxelsBounds } fro
 import { compileMask, maskError, maskUses } from './mask.mjs';
 import { compilePattern, isPattern, patternError } from './pattern.mjs';
 import { VOXEL_CLASSES, classAt as volumeClassAt, decodeArvx } from './region/volume.mjs';
+import { compileScatter, compileStamp, scatterTileCells, stampTileCells } from './region/scatter.mjs';
 
 export const AIR = 'minecraft:air';
-export const OP_KINDS = ['shape', 'columns', 'voxels', 'relief'];
+export const OP_KINDS = ['shape', 'columns', 'voxels', 'relief', 'scatter', 'stamp'];
 export const SETS = ['terrain', 'path'];
 /** (6b) The IR formats this evaluator reads (kit/REGIONS.md "IR format 2"). */
 export const IR_FORMATS = Object.freeze([1, 2]);
 /** (6b) Every format-2 kind an IR's `requires` may name; any of them makes the IR format 2. */
 export const KINDS_FORMAT2 = Object.freeze(['blobs:side', 'fields', 'forms', 'material:rule', 'shape:array', 'shape:capsuleChain', 'shape:ellipsoid',
   'shape:instances', 'shape:prism', 'shape:strata', 'shape:warp', 'shape:wedge', 'volumes', 'road:lamp', 'voxels',
-  'mask', 'pattern', 'relief']);
+  'mask', 'pattern', 'relief', 'scatter', 'stamp']);
 // (6c W) 'road:lamp': a 4e road's `lamp` (the bible's lamp fixture for its lanterns; kit/lib/region/fixtures.mjs roadLamp). A mod
 // before 0.18.0 would lay its own fence and lantern, so the plan needs it (PLAN_STALE there).
 // (6c MP) `mask` (an op's mask) and `pattern` (a pattern anywhere a material goes) from kit 0.19.0
 // (6c T1) 'relief': a `relief` op (kit/REGIONS.md "The relief op"); a kit before 0.20.0 throws on the op kind.
+// (6c F2) 'scatter' and 'stamp': the `scatter` and `stamp` ops (kit/REGIONS.md "Kit 0.22.0"; lib/region/scatter.mjs).
 /** Max ops in an IR (also the evaluator's buffer encoding limit). */
 export const MAX_OPS = 20000;
 const OP_SLOTS = 32768; // buffer value = (op index + 1) + material * OP_SLOTS
@@ -34,8 +36,9 @@ const EPS = 1e-6;
 /** How far beyond the claim's y range clipped cells are counted. */
 const CLIP_COUNT_MARGIN = 64;
 
-/** (6b) Op kinds reserved for later phases (they throw as unknown until then). (6c F1) `voxels` is built; (6c T1) `relief` is built. */
-export const OPS_RESERVED = ['scatter', 'stamp'];
+/** (6b) Op kinds reserved for later phases (they throw as unknown until then). (6c F1) `voxels`, (6c T1) `relief` and (6c F2) `scatter`
+ * and `stamp` are built: none is reserved now. */
+export const OPS_RESERVED = [];
 /** (6b) The members a format-2 IR may have (anything else throws). */
 export const MEMBERS_FORMAT2 = ['anchors', 'blobs', 'budget', 'claim', 'fields', 'floating', 'format', 'forms', 'graph', 'id', 'keepOut', 'kitVersion', 'lots', 'node', 'params',
   'parts', 'paths', 'programSha', 'requires', 'roads', 'roles', 'rules', 'seed', 'stages', 'tiles', 'utility', 'volumes'];
@@ -43,7 +46,7 @@ export const MEMBERS_FORMAT2 = ['anchors', 'blobs', 'budget', 'claim', 'fields',
 // members from kit 0.16.0, in format 1 and 2; the evaluator ignores them. An older kit refuses such a plan PLAN_STALE by the
 // kitVersion bump.
 /** (6b) The running kit's version (kept equal to lib/region/plan.mjs KIT_VERSION by a test). */
-export const EVAL_KIT_VERSION = '0.20.0';
+export const EVAL_KIT_VERSION = '0.22.0';
 
 /** Compare two semver strings (major.minor.patch, numeric): -1, 0, 1. */
 export function semverCompare(a, b) {
@@ -85,6 +88,8 @@ export function walkKinds(ir) {
     if (o.mask !== undefined) k.add('mask');
     if (o.op === 'voxels') k.add('voxels'); // (6c F1)
     if (o.op === 'relief') { k.add('relief'); if (o.fill && typeof o.fill === 'object' && o.fill.rule) k.add('material:rule'); } // (6c T1)
+    if (o.op === 'scatter') k.add('scatter'); // (6c F2)
+    if (o.op === 'stamp') k.add('stamp');
   }
   if (ir.blobs && Object.values(ir.blobs).some((b) => b && b.sha !== undefined)) k.add('blobs:side');
   if (ir.fields && Object.keys(ir.fields).length) k.add('fields');
@@ -199,15 +204,17 @@ export function compileIR(ir, opts = {}) {
   }
   const fieldNames = new Set(Object.keys(ir.fields ?? {}));
   // (6c MP) a class mask reads the IR's frozen volumes (ARVX side blobs), decoded once on first use
-  let classFn = null;
+  let classFn = null, classIdx = null;
   if (f2 && Object.keys(ir.volumes ?? {}).length) {
     const get = blobGetter(opts.blobs);
     let vols = null;
-    classFn = (x, y, z) => {
+    // (6c F2) the class index of a cell, or null outside every volume (scatter's anchors)
+    classIdx = (x, y, z) => {
       if (!vols) vols = Object.values(ir.volumes).map((v) => decodeArvx(get(ir.blobs?.[v.blob]?.sha ?? v.sha)));
-      for (const v of vols) { const c = volumeClassAt(v, x, y, z); if (c !== 14) return VOXEL_CLASSES[c]; }
-      return 'MISSING';
+      for (const v of vols) { const c = volumeClassAt(v, x, y, z); if (c !== 14) return c; }
+      return null;
     };
+    classFn = (x, y, z) => { const c = classIdx(x, y, z); return c === null ? 'MISSING' : VOXEL_CLASSES[c]; };
   }
   const claim = ir.claim;
   for (const k of ['minX', 'minZ', 'maxX', 'maxZ', 'minY', 'maxY']) if (!Number.isInteger(claim?.[k])) throw new Error(`IR: claim.${k} must be an integer`);
@@ -299,6 +306,16 @@ export function compileIR(ir, opts = {}) {
         ops.push({ ...base, kind: 2, colIndex: idx, minX: bb.minX, maxX: bb.maxX, minZ: bb.minZ, maxZ: bb.maxZ });
       } else if (o.op === 'relief') {
         ops.push({ ...base, ...compileRelief(o, where, f2, fieldNames, fieldFn, mat) });
+      } else if (o.op === 'scatter' || o.op === 'stamp') {
+        // (6c F2) evaluated per tile into column lists (lib/region/scatter.mjs), then copied like voxels
+        if (!f2) throw new Error(`${where}: a ${o.op} op needs format 2`);
+        const sctx = { blobBytes, mat, fieldNames, fieldFn, seed: ir.seed, lots: ir.lots, keepOut: ir.keepOut, claim,
+          compileMask: (spec, w) => compileOpMask({ mask: spec }, w, f2, fieldNames, fieldFn, classFn) };
+        const si = (ir.stages ?? []).indexOf(p.stage);
+        // the relief ops before it in an earlier or the same stage: the ground a scatter anchor stands on
+        const reliefs = o.op === 'scatter' ? ops.filter((q) => q.kind === 3 && (ir.stages ?? []).indexOf(parts[q.part].stage) <= si) : [];
+        if (o.op === 'scatter') ops.push({ ...base, mask: null, ...compileScatter(o, where, sctx), reliefs, classIdx });
+        else ops.push({ ...base, ...compileStamp(o, where, sctx) });
       } else throw new Error(`IR: unknown op '${o.op}' (supported: ${OP_KINDS.join(', ')})`);
     }
   }
@@ -470,6 +487,44 @@ export function evalTile(ir, key, heights, opts = {}) {
 
   // (6c MP) the column a mask reads: the frozen ground and the slope (env.slope, at R.x / R.z)
   const MC = { g: 0, slope: env.slope };
+  // (6c F2) scatter and stamp ops: their cells in this tile's columns, computed once per tile (Map op index -> Map(col -> [y, m...]))
+  let tileLists = null;
+  for (const o of sel) {
+    if (o.kind !== 4 && o.kind !== 5) continue;
+    tileLists ??= new Map();
+    const gAt = (x, z) => {
+      const i = x - cols.minX, j = z - cols.minZ;
+      if (i < 0 || j < 0 || i >= cols.width || j >= cols.depth) return null;
+      const k = i + j * cols.width;
+      return cols.flags[k] & FLAG_MISSING ? null : cols.ground[k];
+    };
+    const fAt = (x, z) => {
+      const i = x - cols.minX, j = z - cols.minZ;
+      if (i < 0 || j < 0 || i >= cols.width || j >= cols.depth) return FLAG_MISSING;
+      return cols.flags[i + j * cols.width];
+    };
+    if (o.kind === 5) { tileLists.set(o.index, stampTileCells(o, x0, z0, { groundAt: gAt })); continue; }
+    const reliefTop = (x, z, g) => {
+      let top = g;
+      for (const q of o.reliefs) {
+        const v = reliefAt(q.field, x, z);
+        if (v === RELIEF_NONE) continue;
+        let dh = q.target ? v - g : v;
+        if (dh < -q.maxCut) dh = -q.maxCut; else if (dh > q.maxFill) dh = q.maxFill;
+        if (dh === 0 && !q.target) continue;
+        top = g + dh;
+      }
+      return top;
+    };
+    const mcol = { g: 0, slope: () => 0 };
+    const maskCol = (x, z) => {
+      const g = gAt(x, z) ?? 0;
+      mcol.g = g;
+      mcol.slope = () => Math.max(Math.abs((gAt(x + 1, z) ?? g) - g), Math.abs((gAt(x - 1, z) ?? g) - g), Math.abs((gAt(x, z + 1) ?? g) - g), Math.abs((gAt(x, z - 1) ?? g) - g));
+      return mcol;
+    };
+    tileLists.set(o.index, scatterTileCells(o, x0, z0, { groundAt: gAt, flagsAt: fAt, hasVolume: !!o.classIdx, classAt: o.classIdx, reliefTop, maskCol }));
+  }
   if (sel.length) try {
     for (let cx = 0; cx < 4; cx++) {
       for (let cz = 0; cz < 4; cz++) {
@@ -543,6 +598,19 @@ export function evalTile(ir, key, heights, opts = {}) {
               } else if (o.kind === 2) {
                 // (6c F1) voxels: the column's baked cells (y, material) pairs, clipped to the claim like any op
                 const list = o.colIndex.get(colKey(wx, wz));
+                if (!list) continue;
+                if (!inClaimXZ) { for (let q = 0; q < list.length; q += 2) { const y = list[q]; if (y >= cMinY - CLIP_COUNT_MARGIN && y <= cMaxY + CLIP_COUNT_MARGIN) clipped++; } continue; }
+                for (let q = 0; q < list.length; q += 2) {
+                  const y = list[q];
+                  if (y < cMinY || y > cMaxY) { if (y >= cMinY - CLIP_COUNT_MARGIN && y <= cMaxY + CLIP_COUNT_MARGIN) clipped++; continue; }
+                  const row = y - yBase;
+                  buf[row * 256 + cell] = tag + list[q + 1] * OP_SLOTS;
+                  if (row < wLo) wLo = row;
+                  if (row > wHi) wHi = row;
+                }
+              } else if (o.kind === 4 || o.kind === 5) {
+                // (6c F2) scatter / stamp: this tile's (y, material) pairs of the column, clipped to the claim like any op
+                const list = tileLists.get(o.index).get(colKey(wx, wz));
                 if (!list) continue;
                 if (!inClaimXZ) { for (let q = 0; q < list.length; q += 2) { const y = list[q]; if (y >= cMinY - CLIP_COUNT_MARGIN && y <= cMaxY + CLIP_COUNT_MARGIN) clipped++; } continue; }
                 for (let q = 0; q < list.length; q += 2) {

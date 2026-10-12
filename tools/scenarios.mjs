@@ -147,6 +147,7 @@ export function fitEntries(lots) {
 const isV = (sc) => sc.phase === '6c-v';
 const isT1 = (sc) => sc.phase === '6c-t1'; // (6c T1) relief_demo on S3's claim
 const isF1 = (sc) => sc.phase === '6c-f1'; // (6c F1) forms_demo on S2's claim
+const isF2 = (sc) => sc.phase === '6c-f2'; // (6c F2) scatter_demo on S2's claim and the 6b volume fixture's cave
 
 /**
  * (6c V) Before the world opens: the fixture bible (scenarios/<bibleFixture>, installed as the sidecar's bible `sc.bible` v1) and the
@@ -288,7 +289,7 @@ async function runScenario(id) {
   // (6c F1) a plan that reads a frozen volume of a live world (forms_demo keeps the natural ice) sees the world's own changes between
   // plans (a plant breaking, water freezing): the three plans of the IR sha check run with the world's ticking frozen (/tick freeze)
   // (6c T1) relief_demo's land too: S3's flowing water moves the plan survey between plans
-  const freeze = isF1(sc) || isT1(sc);
+  const freeze = isF1(sc) || isT1(sc) || isF2(sc); // (6c F2) scatter_demo reads the frozen volume too
   if (freeze) await L.cmd('/tick freeze');
   let p2, irShas;
   try {
@@ -359,7 +360,7 @@ async function runScenario(id) {
     await L.settle(120_000);
     T('stand', t0);
     // (6c F1) the world after the stand: M17 on the realised world and the melt across the stand
-    if (isF1(sc)) { t0 = Date.now(); await L.call('dev.region.dump', { box, file: path.join(raw, 'after-stand.arwd.gz') }, 1_800_000); T('standDump', t0); }
+    if (isF1(sc) || isF2(sc)) { t0 = Date.now(); await L.call('dev.region.dump', { box, file: path.join(raw, 'after-stand.arwd.gz') }, 1_800_000); T('standDump', t0); }
     t0 = Date.now();
     shots = await shoot(cams, path.join(out, 'shots'));
     T('shots', t0);
@@ -407,7 +408,7 @@ async function computeMetrics({ sc, out, planDir, ir, irShas, mspt, cps, exact, 
   const before = await decodeArwd(fs.readFileSync(path.join(raw, 'before.arwd.gz')));
   const after = await decodeArwd(fs.readFileSync(path.join(raw, 'after.arwd.gz')));
   const world = dumpWorld(before, after, ir.claim, { virtual: vw, lots: ir.lots });
-  const realised = checkRegion({ ir, meta, world, prefix: false, ...(isF1(sc) ? { blobs } : {}) });
+  const realised = checkRegion({ ir, meta, world, prefix: false, ...(isF1(sc) || isF2(sc) ? { blobs } : {}) });
   fs.writeFileSync(path.join(out, 'realised-report.json'), `${JSON.stringify(realised, null, 1)}\n`);
   const palette = M.paletteAdherence(ir, world);
   const organic = M.axisRunShare(ir, vw);
@@ -421,7 +422,7 @@ async function computeMetrics({ sc, out, planDir, ir, irShas, mspt, cps, exact, 
     const rw = (j.warnings ?? []).filter((w) => w.startsWith('restraint'));
     buildings.push({ entry, errors: (j.errors ?? []).length, errorList: j.errors ?? [], restraint: rw.filter((w) => /detail ?noise|accent/i.test(w)), restraintOther: rw.filter((w) => !/detail ?noise|accent/i.test(w)), metrics: { detailNoise: j.metrics?.detailNoise ?? null, accentShare: j.metrics?.accentShare ?? null } });
   }
-  const ts = await tileShas(planDir, { timingPasses: isF1(sc) || isT1(sc) ? 3 : 1 });
+  const ts = await tileShas(planDir, { timingPasses: isF1(sc) || isT1(sc) || isF2(sc) ? 3 : 1 });
   const gFile = path.join(SCEN, 'goldens', `${short(sc)}.json`);
   let golden = 'none';
   if (fs.existsSync(gFile)) {
@@ -462,13 +463,17 @@ async function computeMetrics({ sc, out, planDir, ir, irShas, mspt, cps, exact, 
       }
     }
   }
+  // (6c F2) the committed golden is the stamps-off plan of a run's own survey (N-F2-1: no vanilla stamp in the repo): the row holds
+  // the golden itself (its committed inputs re-plan to its IR sha and its tile shas, as T1's); this run's IR, with the local stamps,
+  // is its own (its determinism: the IR sha over 3 plans and 1 vs 4 workers). A fixture without a golden (`sc.golden: false`) says so.
+  if (isF2(sc)) golden = sc.golden === false ? 'none (this fixture keeps no golden: scatter_demo\'s is the slice\'s)' : await f2Golden(sc, ts);
   // the other variant's exactness (E-flat from the latest flat run beside a natural one, and back)
   const sibling = latestRun(sc, out, !flat);
   const exactOther = sibling ? JSON.parse(fs.readFileSync(path.join(sibling, 'exact.json'), 'utf8')) : null;
   // (6c F1) the world's own freezing during the stand: an unclassified mismatch where still water became ice (or a snow layer
   // fell) at a cell the plan never writes is the cold biome's doing, not the undo's: classed `freeze` (a world class)
   const freezeOf = (e) => {
-    if (!e || flat || !isF1(sc) || !(e.classes?.none > 0)) return e;
+    if (!e || flat || !(isF1(sc) || isF2(sc)) || !(e.classes?.none > 0)) return e;
     const moved = (e.list ?? []).filter((m) => m.class === 'none' && !(vw.flags(...m.pos.split(',').map(Number)) & F_WRITTEN)
       && ((/^minecraft:water/.test(m.was) && /^minecraft:ice$/.test(m.now)) || (/air$/.test(m.was) && /^minecraft:snow\[/.test(m.now))));
     if (!moved.length) return e;
@@ -505,6 +510,25 @@ async function computeMetrics({ sc, out, planDir, ir, irShas, mspt, cps, exact, 
     rows = F.formsBars({ plan, realised, realisedStand, melt, kept, voxels, organic, organicPer, workersSame: ts.workersSame, tiles: ts.timing, mspt, load1: Math.round((await import('node:os')).loadavg()[0] * 10) / 10 }, rows);
     forms = { melt, kept, voxels, organicPer, tiles: ts.timing, realisedM17: (realisedStand ?? realised).metrics.M17, realisedM3: realised.metrics.M3, meta: meta.forms ?? null };
   }
+  // (6c F2) scatter_demo's own bars (CONTRACT F2 §5): supports, melt across the stand, stamps realised exactly, the placements
+  let scatterM = null;
+  if (isF2(sc)) {
+    const F = await import('./lib/scenario-forms.mjs');
+    const SC = await import('./lib/scenario-scatter.mjs');
+    const standFile = path.join(raw, 'after-stand.arwd.gz');
+    const stand = fs.existsSync(standFile) ? await decodeArwd(fs.readFileSync(standFile)) : null;
+    const realisedStand = stand ? checkRegion({ ir, meta, world: dumpWorld(before, stand, ir.claim, { virtual: vw, lots: ir.lots }), prefix: false, blobs }) : null;
+    if (realisedStand) fs.writeFileSync(path.join(out, 'realised-stand-report.json'), `${JSON.stringify({ ...realisedStand, _world: undefined }, null, 1)}\n`);
+    const melt = stand ? F.meltAcrossStand(after, stand, F.plannedLights(vw)) : null;
+    const supports = SC.supports({ ir, vw, after, realised });
+    const planned = SC.asPlanned({ ir, vw, after });
+    const snow = SC.snowAcrossStand({ ir, vw, after, stand });
+    const stampsMissing = (meta.stamps ?? []).filter((x) => x.missing).map((x) => x.id);
+    rows = SC.scatterBars({ plan, realised, realisedStand, melt, supports, planned, snow, stampsMissing, workersSame: ts.workersSame, tiles: ts.timing, mspt, load1: Math.round((await import('node:os')).loadavg()[0] * 10) / 10 }, rows);
+    // the determinism row: identical over 3 plans and 1 vs 4 workers, and the golden held (a fixture without one: recorded)
+    rows = rows.map((r) => (r.id === 'determinism' ? { ...r, pass: new Set(irShas).size === 1 && ts.workersSame && (String(golden).startsWith('match') || sc.golden === false), threshold: sc.golden === false ? 'identical (this fixture keeps no golden)' : 'identical; the committed golden scenarios/goldens/scatter_demo.json (stamps off) holds' } : r));
+    scatterM = { melt, supports, planned, snow, stampsMissing, tiles: ts.timing, realisedM17: (realisedStand ?? realised).metrics.M17, realisedM3: realised.metrics.M3, meta: meta.scatterDemo ?? null, scatter: meta.scatter ?? null, stamps: meta.stamps ?? null };
+  }
   // (6c T1) relief_demo's own bars (CONTRACT T1 §6): items 1-4 and 10 (tools/lib/scenario-relief.mjs), item 7's tile evaluation
   let relief = null;
   if (isT1(sc)) {
@@ -530,7 +554,7 @@ async function computeMetrics({ sc, out, planDir, ir, irShas, mspt, cps, exact, 
   }
   const fronts = M.lotFronts(ir, after);
   L.log(`  lot fronts: outside the boxes ${JSON.stringify(fronts.outside)}; inside (the children's own) ${JSON.stringify(fronts.inside)}`);
-  const metrics = { scenario: sc.id, worldChanges: world.worldChanges, cellsPerSecond: cps, lotFronts: fronts, ...(village ? { village } : {}), ...(forms ? { forms } : {}), ...(relief ? { relief } : {}), variant: flat ? 'flat' : 'natural', rows, palette, organic, buildings, mspt, tiles: { irSha: ts.irSha, count: Object.keys(ts.tiles).length, cells: ts.cells, workersSame: ts.workersSame, golden }, exactSibling: sibling ? path.relative(out, sibling) : null,
+  const metrics = { scenario: sc.id, worldChanges: world.worldChanges, cellsPerSecond: cps, lotFronts: fronts, ...(village ? { village } : {}), ...(forms ? { forms } : {}), ...(relief ? { relief } : {}), ...(scatterM ? { scatter: scatterM } : {}), variant: flat ? 'flat' : 'natural', rows, palette, organic, buildings, mspt, tiles: { irSha: ts.irSha, count: Object.keys(ts.tiles).length, cells: ts.cells, workersSame: ts.workersSame, golden }, exactSibling: sibling ? path.relative(out, sibling) : null,
     realised: { M2: realised.metrics.M2 && { ...realised.metrics.M2, perNode: undefined }, M3: realised.metrics.M3, M4: realised.metrics.M4, M5: realised.metrics.M5, M8: realised.metrics.M8 && { ...realised.metrics.M8, unguardedSample: (realised.metrics.M8.unguardedSample ?? []).slice(0, 20) }, M10: realised.metrics.M10, findings: realised.findings.map((f) => `${f.rule} ${f.severity} ${f.part ?? '-'} x${f.count}`) } };
   fs.writeFileSync(path.join(out, 'metrics.json'), `${JSON.stringify(metrics, null, 2)}\n`);
   for (const r of rows) L.log(`  ${r.gated ? (r.pass ? 'ok  ' : 'FAIL') : 'rec '} ${r.id === 'mspt' || r.id === 't1-tiles' ? 'BAR ' : ''}${r.label}: ${r.value}`); // the mspt row is a timing bar (recorded, not blocking in change/slice)
@@ -559,9 +583,60 @@ async function metricsOf(runDir) {
   return { evidence: ev.sha, failing: m.rows.filter((r) => r.gated && !r.pass).map((r) => r.id) };
 }
 
+/** (6c F2) The decoded frozen volumes an IR names, from a dir of its side blobs: [{sha, box, bytes, decoded}] (planRegion's form). */
+async function irVolumesIn(ir, blobDir) {
+  const { decodeArvx } = await import('../kit/lib/region/volume.mjs');
+  const out = [];
+  for (const v of Object.values(ir.volumes ?? {})) {
+    const f = path.join(blobDir, `${ir.blobs[v.blob].sha}.bin`);
+    const bytes = fs.readFileSync(f);
+    const decoded = decodeArvx(bytes);
+    out.push({ sha: decoded.sha, box: decoded.box, bytes: Uint8Array.from(bytes), decoded });
+  }
+  return out;
+}
+
+/** (6c F2) Re-plan a plan dir's inputs (its survey and frozen volumes) with params `over` and no stamps: {p, ir}. */
+async function replanStampsOff(planDir, over = {}) {
+  const { planRegion } = await import('../kit/lib/region/plan.mjs');
+  const ir = JSON.parse(fs.readFileSync(path.join(planDir, 'ir.json'), 'utf8'));
+  const volumes = await irVolumesIn(ir, path.join(planDir, 'blobs'));
+  const p = await planRegion({ programFile: path.join(root, 'kit', 'regions', `${ir.id}.mjs`), params: { ...ir.params, ...over }, survey: fs.readFileSync(path.join(planDir, 'survey.bin')), seed: ir.seed, claim: { ...ir.claim, minY: -64, maxY: 319 }, roles: ir.roles, volumes, stamps: null });
+  return { p, ir };
+}
+
+/** (6c F2) The golden row: the committed golden's inputs (stamps off) re-plan to its IR sha, and their tiles to its tile shas. */
+async function f2Golden(sc, ts) {
+  const gFile = path.join(SCEN, 'goldens', `${short(sc)}.json`), gDir = path.join(SCEN, 'goldens', short(sc));
+  if (!fs.existsSync(gFile) || !fs.existsSync(path.join(gDir, 'ir.json'))) return 'none';
+  const g = JSON.parse(fs.readFileSync(gFile, 'utf8'));
+  const { p } = await replanStampsOff(gDir);
+  const gts = await tileShas(gDir);
+  const ok = p.irSha === g.irSha && gts.irSha === g.irSha && gts.workersSame && JSON.stringify(gts.tiles) === JSON.stringify(g.tiles);
+  return ok ? `match (the golden's committed inputs, stamps off (N-F2-1), re-plan to its IR ${g.irSha.slice(0, 12)} and its ${Object.keys(g.tiles).length} tile shas, 1 = 4 workers; this run's IR ${ts.irSha.slice(0, 12)}, with the local stamps, is its own)`
+    : `differs (the golden's inputs re-plan to ${p.irSha.slice(0, 12)}, golden ${g.irSha.slice(0, 12)}; tiles ${JSON.stringify(gts.tiles) === JSON.stringify(g.tiles) ? 'equal' : 'differ'})`;
+}
+
 /** scenarios/goldens/<short>.json: the IR sha and tile shas over the run's own plan inputs, which are committed beside it. */
 async function golden(id, runDir) {
   const sc = readSc(id);
+  if (isF2(sc)) {
+    // (6c F2, N-F2-1) the run's own survey and volumes re-planned with the stamps off: no vanilla stamp is ever committed
+    const { p } = await replanStampsOff(path.join(runDir, 'raw', 'plan'), { stamps: false });
+    if (Object.keys(p.ir.blobs ?? {}).some((n) => n.startsWith('stamp_')) || (p.ir.requires ?? []).includes('stamp')) throw new Error('the stamps-off plan still names a stamp');
+    const gDir = path.join(SCEN, 'goldens', short(sc));
+    fs.mkdirSync(path.join(gDir, 'blobs'), { recursive: true });
+    fs.writeFileSync(path.join(gDir, 'ir.json'), p.irJson);
+    fs.copyFileSync(path.join(runDir, 'raw', 'plan', 'survey.bin'), path.join(gDir, 'survey.bin'));
+    fs.writeFileSync(path.join(gDir, 'meta.json'), JSON.stringify(p.meta));
+    for (const [sha, bytes] of p.blobs) fs.writeFileSync(path.join(gDir, 'blobs', `${sha}.bin`), bytes);
+    const ts = await tileShas(gDir);
+    if (!ts.workersSame) throw new Error('1 and 4 workers differ');
+    const run = JSON.parse(fs.readFileSync(path.join(runDir, 'run.json'), 'utf8'));
+    const g = { scenario: sc.id, version: sc.version, note: `the stamps-off plan (params.stamps false; N-F2-1: no vanilla stamp in the repo) of run ${run.runId}'s own survey and frozen volume: IR sha and tile shas over its own plan survey (kit windowFromSurvey), 1 worker = 4 workers shuffled; inputs in goldens/${short(sc)}/`, fromRun: run.runId, irSha: ts.irSha, kitVersion: p.ir.kitVersion, cells: ts.cells, tiles: ts.tiles };
+    fs.writeFileSync(path.join(SCEN, 'goldens', `${short(sc)}.json`), `${JSON.stringify(g, null, 1)}\n`);
+    return { irSha: ts.irSha, tiles: Object.keys(ts.tiles).length, stampsOff: true };
+  }
   const planDir = path.join(runDir, 'raw', 'plan');
   const ts = await tileShas(planDir);
   if (!ts.workersSame) throw new Error('1 and 4 workers differ');
