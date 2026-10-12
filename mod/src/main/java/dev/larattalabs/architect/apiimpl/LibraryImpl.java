@@ -208,8 +208,8 @@ final class LibraryImpl implements Library {
 			byte[] bytes = dev.larattalabs.architect.library.Schematics.encode((net.minecraft.nbt.CompoundTag) r[0], (String) r[1], (Long) r[2],
 				(Integer) r[3]);
 			try {
-				Path out = dev.larattalabs.architect.library.Schematics.write(dir, dev.larattalabs.architect.library.Schematics.exportName(entryId, version,
-					false), bytes);
+				Path out = dev.larattalabs.architect.library.Schematics.write(dir, dev.larattalabs.architect.library.Schematics.exportName(entryId, version),
+					bytes);
 				Architect.LOGGER.info("API: {} exported as a schematic: {} ({} bytes)", entryId, out, bytes.length);
 				return out;
 			} catch (IOException ex) {

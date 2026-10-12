@@ -126,7 +126,8 @@ public interface Library {
 	 * {@code ext["architect_mc:schem"]} holding the file's {@code Metadata} {@code Name} and {@code Author} (when present), its
 	 * {@code Version} and {@code DataVersion}. The mod reads and validates the file and upgrades its block states and block-entity
 	 * data to this game's version with vanilla's data fixers, then the helper checks, renders and installs it: fails when the
-	 * helper is not running. Entities are skipped (counted in the import's step line); biomes are ignored. {@code groundY} is
+	 * helper is not running. Entities are skipped (counted in {@code ext["architect_mc:schem"].entitiesSkipped}); biomes are
+	 * ignored. {@code groundY} is
 	 * {@code -Offset.y} when that is a row of the schematic above its bottom row, else 1 (as a {@code .nbt} import).
 	 *
 	 * <p>Refusals ({@link ArchitectRefused}, nothing installed): {@link Reason#FORMAT} for a file that is not a Sponge
@@ -151,7 +152,7 @@ public interface Library {
 
 	/**
 	 * Exports an entry (at {@code version}, null = its head) as a Sponge Schematic version 3 file, {@code <dir>/<id>.schem}
-	 * (or {@code <id>-v<version>.schem} for an older version). Cells the template does not write are
+	 * (or {@code <id>-v<version>.schem} when a version is given). Cells the template does not write are
 	 * {@code minecraft:structure_void}, which an import maps back to "not written"; {@code Offset} puts the entry's
 	 * {@code groundY} row at y 0; {@code Metadata} is {@code {Name, Author: "Architect", Date}} with the date the entry (version)
 	 * was installed, so two exports of one entry are byte-identical. Fails {@link ArchitectRefused}

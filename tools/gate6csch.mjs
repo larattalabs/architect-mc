@@ -249,6 +249,16 @@ async function roundtrip() {
       `${imp.id}: groundY ${imp.groundY} (the example's ${gy}), tags ${imp.tags.join(',')}, ext architect_mc:schem`, imp);
     bar(imp.ms < 60_000, `import ${e} took ${imp.ms} ms (at most 60 s)`, { ms: imp.ms });
   }
+  // item 2 for a user entry: Metadata.Date is its install time (not now), so two exports of it are byte-identical too
+  const user = libraryIds().find((x) => /^imp_cabin(_\d+)?$/.test(x));
+  if (check(!!user, `a user entry to export (${user})`)) {
+    const created = JSON.parse(fs.readFileSync(path.join(LIBRARY, user, `${user}.blueprint.json`), 'utf8')).createdAt;
+    const a = await exportEntry(user, dirA);
+    await sleep(1100);
+    const b = await exportEntry(user, dirB);
+    const p = parseSchem(fs.readFileSync(a.file));
+    check(!a.error && a.sha256 === b.sha256 && created > 0 && BigInt(created) === p.date, `item 2: two exports of the user entry ${user} a second apart are byte-identical; Metadata.Date ${p.date} = its createdAt ${created}`, { a: a.sha256, b: b.sha256, created, date: String(p.date) });
+  }
   // block entities: the hut fixture (a chest with items, a sign) -> entry -> .schem -> entry
   const hut = await importSchem(path.join(FIX, 'v3_hut.schem'));
   if (check(!hut.error && !!hut.id, `the v3 hut fixture imports as ${hut.id ?? hut.error}`, hut)) {
@@ -309,6 +319,14 @@ async function refusals() {
   const after = libraryIds();
   check(JSON.stringify(after) === JSON.stringify(before), `item 4: nothing installed (${before.length} library entries before and after)`, { before: before.length, after: after.length });
   check(stagedFiles().length === 0, `item 4: nothing left staged in schem-staging (${stagedFiles().length})`);
+  // the export refusals
+  const ex1 = await exportEntry('no_such_entry', path.join(WORK, 'refused'));
+  check(ex1.reason === 'UNKNOWN_BLUEPRINT', `exportSchematic of an unknown entry refused ${ex1.reason}`, ex1);
+  const ex2 = await exportEntry('cabin', path.join(WORK, 'refused'), 99);
+  check(ex2.reason === 'VERSION_GONE', `exportSchematic of an unknown version refused ${ex2.reason}`, ex2);
+  const ex3 = await result(await api(`schemsite ${key('s')} s_none ${b64(path.join(WORK, 'refused'))}`), 60_000);
+  check(ex3.reason === 'UNKNOWN_BLUEPRINT', `exportSiteSchematic of an unknown site refused ${ex3.reason}`, ex3);
+  check(!fs.existsSync(path.join(WORK, 'refused')) || fs.readdirSync(path.join(WORK, 'refused')).length === 0, 'the refused exports wrote nothing');
   // unknownAs
   const ua = await importSchem(path.join(FIX, 'unknown_block.schem'), 'Modded Hut', { 'architect_mc:unknownAs': 'minecraft:stone' });
   check(!ua.error && ua.ext?.['architect_mc:schem']?.replaced?.length === 2, `unknownAs minecraft:stone: imported as ${ua.id ?? ua.error}, replaced ${ua.ext?.['architect_mc:schem']?.replaced?.join(', ')}`, ua);
@@ -543,7 +561,8 @@ async function ui() {
 
 async function apicompat() {
   const v = await api('apisch');
-  check(v.version === '1.20.0' && v.schematics === true && v.formatLast === true, `apitest apisch: VERSION ${v.version} (placeholder), feature schematics, Reason FORMAT appended last`, v);
+  const want = /String VERSION = "([^"]+)"/.exec(fs.readFileSync(path.join(root, 'mod', 'src', 'main', 'java', 'dev', 'larattalabs', 'architect', 'api', 'ArchitectApi.java'), 'utf8'))[1];
+  check(v.version === want && v.schematics === true && v.formatAppended === true, `apitest apisch: VERSION ${v.version} (this checkout's ${want}), feature schematics, Reason FORMAT appended after FIELD_LIMIT`, v);
   const base = RUN ?? root;
   const classes = ['main', 'client'].map((s) => path.join(base, 'mod', 'build', 'classes', 'java', s)).join(path.delimiter);
   const r = spawnSync('node', [path.join(root, 'tools', 'api-compat.mjs'), '--gate6csch', classes], { encoding: 'utf8', env: { ...process.env, JAVA_HOME: process.env.JAVA_HOME ?? '/opt/homebrew/opt/openjdk@25' } });

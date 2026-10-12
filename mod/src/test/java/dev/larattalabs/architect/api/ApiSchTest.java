@@ -19,14 +19,15 @@ class ApiSchTest {
 	@Test
 	void version() {
 		String[] v = ArchitectApi.VERSION.split("\\.");
-		assertTrue(Integer.parseInt(v[0]) == 1 && Integer.parseInt(v[1]) >= 20, ArchitectApi.VERSION); // a placeholder; the coordinator sets it
+		// the branch carries the 1.20.0 placeholder; the coordinator sets the next free minor at merge (after main's 1.15.0)
+		assertTrue(Integer.parseInt(v[0]) == 1 && Integer.parseInt(v[1]) >= 16, ArchitectApi.VERSION);
 	}
 
 	@Test
 	void formatIsAppended() {
-		Reason[] r = Reason.values();
-		assertEquals(Reason.FORMAT, r[r.length - 1]);
-		assertEquals(Reason.FIELD_LIMIT, r[r.length - 2]);
+		// appended after 1.12.0's PROTECTED, FIELD_LIMIT (another slice of the batch may append before or after it)
+		assertEquals(Reason.PROTECTED.ordinal() + 1, Reason.FIELD_LIMIT.ordinal());
+		assertTrue(Reason.FORMAT.ordinal() > Reason.FIELD_LIMIT.ordinal());
 	}
 
 	@Test

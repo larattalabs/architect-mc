@@ -307,9 +307,9 @@ public final class Schematics {
 		return Schematic.gzip(root);
 	}
 
-	/** The file name an export writes ({@code <id>.schem}, {@code <id>-v<n>.schem} for an older version). */
-	public static String exportName(String id, @Nullable Integer version, boolean head) {
-		return id + (version == null || head ? "" : "-v" + version) + ".schem";
+	/** The file name an export writes ({@code <id>.schem}, {@code <id>-v<n>.schem} when a version is given). */
+	public static String exportName(String id, @Nullable Integer version) {
+		return id + (version == null ? "" : "-v" + version) + ".schem";
 	}
 
 	/** Writes bytes atomically ({@code .tmp} then move). */

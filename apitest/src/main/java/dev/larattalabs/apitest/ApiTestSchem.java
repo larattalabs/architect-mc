@@ -50,7 +50,7 @@ public final class ApiTestSchem {
 				JsonObject o = new JsonObject();
 				o.addProperty("version", ArchitectApi.VERSION);
 				o.addProperty("schematics", api.features().contains("schematics"));
-				o.addProperty("formatLast", Reason.values()[Reason.values().length - 1] == Reason.FORMAT);
+				o.addProperty("formatAppended", Reason.FORMAT.ordinal() > Reason.FIELD_LIMIT.ordinal());
 				return o;
 			}
 			default:
