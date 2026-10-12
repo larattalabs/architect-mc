@@ -1087,16 +1087,20 @@ public final class Sites {
 			if (!site.template().placeInWorld(level, site.placePos(), site.placePos(), site.settings(), level.getRandom(), FLAGS)) {
 				throw new IllegalStateException("template " + bp.id() + " placed nothing (empty template?)");
 			}
+			traceDoors(level, snapBox, "template");
 			BedsOut beds = removeUnsafeBeds(level, site.grid(), site.turns(), box);
 			BlockState foundation = foundationState(bp);
 			BlockPos.MutableBlockPos m = new BlockPos.MutableBlockPos();
 			for (int i = 0; i < plan.fill().length; i += 3) {
 				level.setBlock(m.set(plan.fill()[i], plan.fill()[i + 1], plan.fill()[i + 2]), foundation, FLAGS);
 			}
+			traceDoors(level, snapBox, "fill");
 			for (int i = 0; i < plan.clear().length; i += 3) {
 				level.setBlock(m.set(plan.clear()[i], plan.clear()[i + 1], plan.clear()[i + 2]), Blocks.AIR.defaultBlockState(), FLAGS);
 			}
+			traceDoors(level, snapBox, "clear");
 			applyApproach(level, bp, approach, foundation);
+			traceDoors(level, snapBox, "approach");
 			// a tall plant whose other half was inside the box (now gone) would float: take its outside half too
 			for (BlockPos half : plants) {
 				BlockState outside = level.getBlockState(half);
@@ -1198,6 +1202,25 @@ public final class Sites {
 		// one row more below the lowest written cell: the ground under the foundation changes while the site stands (grass
 		// under a solid block turns to dirt), and Remove must put that back too
 		return new Anchors.Bounds(u.minX(), Math.min(u.minY(), plan.minY()) - 1, u.minZ(), u.maxX(), u.maxY(), u.maxZ());
+	}
+
+	private static void traceDoors(ServerLevel level, Anchors.Bounds b, String step) {
+		if (System.getenv("ARCHITECT_TRACE_DOORS") == null) {
+			return;
+		}
+		StringBuilder sb = new StringBuilder();
+		BlockPos.MutableBlockPos mp = new BlockPos.MutableBlockPos();
+		for (int x = b.minX(); x <= b.maxX(); x++) {
+			for (int y = b.minY(); y <= b.maxY(); y++) {
+				for (int z = b.minZ(); z <= b.maxZ(); z++) {
+					BlockState st = level.getBlockState(mp.set(x, y, z));
+					if (st.getBlock() instanceof net.minecraft.world.level.block.DoorBlock) {
+						sb.append(' ').append(x).append(',').append(y).append(',').append(z).append(st.getValue(net.minecraft.world.level.block.DoorBlock.HALF).toString().charAt(0));
+					}
+				}
+			}
+		}
+		Architect.LOGGER.info("TRACE doors after {}:{}", step, sb);
 	}
 
 	private static void applyApproach(ServerLevel level, Blueprint bp, Approach.Plan a, BlockState foundation) {
