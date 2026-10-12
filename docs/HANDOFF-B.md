@@ -24,10 +24,26 @@ Resume notes for `slice/B` (worktree `../architect-mc-B`). Delete this file when
 
 ## Status
 
-- [x] worktree, baseline jars, apijars pointed at 0.21.0/0.20.0/0.19.0
-- [ ] RAISE end to end (API, stroke path, overlapping strokes undo in any order, another owner's road)
-- [ ] destruction, permission, commands
-- [ ] ARVX v2 + block mask
-- [ ] the other kinds (kit kernels + property tests)
-- [ ] gate6cb.mjs, chain steps, impact rule, apitest `apib`, api-compat `--gate6cb`
-- [ ] slice tier, gate-verifier, as-built, push
+- [x] worktree, baseline jars, apijars pointed at 0.21.0/0.20.0/0.19.0 (baseline apijars PASS on unchanged code:
+  `artifacts/gate-runs-B/20261012-211407-change`)
+- [x] API 1.21.0 (BrushRequest/Kind/Shape, Destruction, Regions.brush, RegionView.brush, Reason.PERMISSION, Limits.BRUSH_*), the
+  `brushes` feature (sidecar `region.brush`)
+- [x] stroke path `region/Brushes.java` (survey res 1 + volume, one plan, realise at once, future at PLACED), RegionRec.brush,
+  TileCheck PLAYER_BLOCKS + same-owner stroke layering + never unbreakable blocks
+- [x] commands `region/BrushCommands.java`; DevBridge `dev.brush`, `dev.brush.stats` (SliceBDev, generated headless)
+- [x] ARVX v2 (Java + kit), `r.needVolume(box, {blocks})`, `volume:blocks` kind, `blockTags`, the block mask term real
+- [x] kit kernels `kit/lib/region/brush.mjs`, program `kit/regions/brush.mjs`, `json` param type; kit tests brush-b (11 pass)
+- [x] gate driver `tools/gate6cb.mjs` (unit, stale, apicompat, ingame = flat-owned/flat-undo/flat-permission/flat-misc, natural),
+  chain steps b-unit, b-ingame (host server), impact rule; apitest `apib`
+- [ ] first in-game run: `artifacts/gate-runs-B/20261012-214530-change` (b-unit, b-ingame)
+- [ ] slice tier, gate-verifier (re-runs items 3, 4, 5: `node tools/gate6cb.mjs flat-owned|flat-permission|flat-undo`), as-built,
+  docs (REGIONS.md ARVX v2 + brush, DEVBRIDGE hooks, GATES impact row), push
+
+## Deviations so far (for as-built)
+
+- SMOOTH's property: the largest step between inside columns never rises and drops unless the pinned edge holds it (88 lowered,
+  5 held, 7 already flat of 100 seeds); the roughness falls on 99. Strict lowering is impossible where outside columns pin both
+  sides of an inside column (edges pinned, §3).
+- A brush's surface kinds move the columns whose ground lies inside the shape; water and lava columns keep their surface.
+- MELT and CAVE_CARVE emit cell lists (absolute `columns` runs), CAVE_CARVE is not a `capsuleChain` shape: the worm is resolved
+  against the frozen volume at plan time (it stops short of fluids, floating bits are carved too).
