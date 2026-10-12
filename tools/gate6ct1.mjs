@@ -72,7 +72,8 @@ steps.start = async () => {
   const head = execFileSync('git', ['-C', root, 'rev-parse', 'HEAD']).toString().trim();
   execFileSync('git', ['-C', RUN, 'checkout', '-q', '--detach', head]);
   execFileSync('npm', ['run', 'build'], { cwd: path.join(RUN, 'sidecar'), stdio: 'ignore' });
-  await startClient(process.argv[3] ?? FLAT, { backend: 'sim' });
+  // a lobby world, never a base: the client's autoworld would create a missing base as a normal world (MP's lesson)
+  await startClient(process.argv[3] ?? 'G6C T1 Lobby', { backend: 'sim' });
   spendZero();
   return { head };
 };

@@ -66,16 +66,36 @@ export function smoothness(tops, band) {
 
 const NOT_GROUND = /(^minecraft:(air|cave_air|void_air|water|lava|snow|short_grass|tall_grass|fern|large_fern|dead_bush|vine|glow_lichen|bubble_column)$)|leaves|_log$|_wood$|flower|tulip|poppy|dandelion|orchid|allium|bluet|daisy|cornflower|lily|rose|lilac|peony|sapling|mushroom$|sweet_berry|pink_petals|wildflowers|leaf_litter|bush$|torch|lantern|_fence|_wall$|carpet/;
 
-/** The realised top per column (key -> y): from `fromY` down, the first cell that is ground (not air, a plant, a tree, a prop). */
-export function dumpTops(dump, cols, above = 6) {
+/**
+ * The realised top per column (key -> y): from above the column down, the first cell that is ground (not air, a plant, a tree, a
+ * prop). With `allowed` (the relief ops' fill blocks), a column whose top is another block was written over by something else (a
+ * lot's approach stair over the band): it is left out and counted in `out.other`.
+ */
+export function dumpTops(dump, cols, above = 6, allowed = null) {
   const out = new Map();
+  out.other = [];
   const name = (s) => s.replace(/\[.*$/, '');
   for (const [k, c] of cols) {
     const { x, z } = c;
     if (x < dump.box.minX || x > dump.box.maxX || z < dump.box.minZ || z > dump.box.maxZ) continue;
-    for (let y = Math.min(dump.box.maxY, Math.max(c.top, c.g) + above); y >= dump.box.minY; y--) {
-      if (!NOT_GROUND.test(name(dump.palette[dump.cells[dump.at(x, y, z)]]))) { out.set(k, y); break; }
+    // from the dump's top (anything a later writer stacked on the column is seen; trees and plants are skipped)
+    for (let y = above === null ? dump.box.maxY : Math.min(dump.box.maxY, Math.max(c.top, c.g) + above); y >= dump.box.minY; y--) {
+      const st = dump.palette[dump.cells[dump.at(x, y, z)]];
+      if (NOT_GROUND.test(name(st))) continue;
+      if (allowed && !allowed.has(name(st))) out.other.push([x, y, z, st.slice(0, 40)]); else out.set(k, y);
+      break;
     }
+  }
+  return out;
+}
+
+/** The blocks the IR's relief ops fill with (names, without properties). */
+export function reliefBlocks(ir) {
+  const out = new Set();
+  const add = (s) => { if (typeof s === 'string') out.add(s.replace(/\[.*$/, '')); };
+  for (const p of ir.parts) for (const o of p.ops) {
+    if (o.op !== 'relief') continue;
+    if (o.fill && typeof o.fill === 'object') { for (const c of o.fill.rule.rule) add(c.mat); add(o.fill.rule.default); } else add(o.fill);
   }
   return out;
 }
@@ -147,11 +167,13 @@ export async function reliefMetrics({ planDir, ir, survey, blobs, vw, after = nu
   const virtualTops = new Map([...cols].map(([k, c]) => [k, c.top]));
   const sVirtual = smoothness(virtualTops, delta);
   let sRealised = null, clampsRealised = null;
+  let other = null;
   if (after) {
-    const rt = dumpTops(after, cols);
+    const rt = dumpTops(after, cols, null, reliefBlocks(ir));
+    other = rt.other;
     sRealised = smoothness(rt, delta);
     if (before) {
-      const bt = dumpTops(before, new Map([...cols].map(([k, c]) => [k, { ...c, top: c.g }])));
+      const bt = dumpTops(before, new Map([...cols].map(([k, c]) => [k, { ...c, top: c.g }])), null);
       let n = 0, within = 0;
       const out = [];
       for (const [k, c] of cols) {
@@ -189,17 +211,21 @@ export async function reliefMetrics({ planDir, ir, survey, blobs, vw, after = nu
     erosion: { maxExtra, erodedCols, pinMoved },
     pads,
     organic, organicSlope,
+    otherWriters: other ? { columns: other.length, sample: other.slice(0, 10) } : null,
   };
 }
 
 const row = (id, label, value, threshold, pass, gated = true) => ({ id, label, value, threshold, pass: gated ? !!pass : null, gated });
 
 /** The T1 rows (appended to the scenario's rows); `check` = the plan report (item 10). */
-export function reliefBars(m, report, rows) {
-  const out = [...rows];
+export function reliefBars(m, report, rows, { flat = false, metaFlat = null } = {}) {
+  // relief_demo is a terrain fixture with no lights or rails: the 6b safety row (M5 dark, M8 guards) is recorded, as F1's forms rows
+  const out = rows.map((r) => (r.id === 'safety' ? { ...r, gated: false, pass: null, label: `${r.label} (recorded: a terrain fixture)` } : r));
+  // the flat variant must have run on a flat world (MP's lesson: an autoworld base is a normal world)
+  if (flat) out.push(row('t1-flatworld', 'T1 flat variant on a flat world', `relief_demo read the survey as ${metaFlat ? 'flat (the hill raised)' : 'NOT flat'}`, 'flat', metaFlat === true));
   const s = (x) => (x ? `${(100 * x.share).toFixed(1)}% of ${x.pairs} steps <= 1, ${x.over3} over 3 (max ${x.max})` : 'n/a');
   const smooth = (x) => !x || (x.share >= 0.95 && x.over3 === 0);
-  out.push(row('t1-smooth', 'T1 1 Blend smoothness (virtual; realised)', `${s(m.smoothVirtual)}; ${s(m.smoothRealised)}`, '>= 95% of steps <= 1; 0 over 3', smooth(m.smoothVirtual) && smooth(m.smoothRealised)));
+  out.push(row('t1-smooth', 'T1 1 Blend smoothness (virtual; realised)', `${s(m.smoothVirtual)}; ${s(m.smoothRealised)}${m.otherWriters?.columns ? ` (${m.otherWriters.columns} band columns topped by another writer, left out)` : ''}`, '>= 95% of steps <= 1; 0 over 3', smooth(m.smoothVirtual) && smooth(m.smoothRealised)));
   out.push(row('t1-pads', 'T1 2 Pads at their target', `${m.pads.off} of ${m.pads.cols} pad and apron columns off`, '0 off', m.pads.off === 0));
   const cr = m.clampsRealised;
   out.push(row('t1-clamps', 'T1 3 Clamps; erosion extra', `plan ${m.clamps.within}/${m.clamps.columns}${cr ? `, realised ${cr.within}/${cr.columns}` : ''} within maxCut/maxFill; erosion extra max ${m.erosion.maxExtra} over ${m.erosion.erodedCols} columns, pins moved ${m.erosion.pinMoved}`,

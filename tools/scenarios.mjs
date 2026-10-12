@@ -283,9 +283,19 @@ async function runScenario(id) {
   t0 = Date.now();
   const pr = await L.prepare(p1.planId);
   T('prepare', t0);
-  const p2 = await L.plan(sc.program, claim, { params: sc.params, surveyLoad: 'generated:64', seed: sc.seed, bible });
-  const irShas = [p2.irSha];
-  for (let i = 0; i < 2; i++) irShas.push((await L.plan(sc.program, claim, { params: sc.params, surveyLoad: 'generated:64', seed: sc.seed, bible })).irSha);
+  // (6c F1) a plan that reads a frozen volume of a live world (forms_demo keeps the natural ice) sees the world's own changes between
+  // plans (a plant breaking, water freezing): the three plans of the IR sha check run with the world's ticking frozen (/tick freeze)
+  // (6c T1) relief_demo's land too: S3's flowing water moves the plan survey between plans
+  const freeze = isT1(sc);
+  if (freeze) await L.cmd('/tick freeze');
+  let p2, irShas;
+  try {
+    p2 = await L.plan(sc.program, claim, { params: sc.params, surveyLoad: 'generated:64', seed: sc.seed, bible });
+    irShas = [p2.irSha];
+    for (let i = 0; i < 2; i++) irShas.push((await L.plan(sc.program, claim, { params: sc.params, surveyLoad: 'generated:64', seed: sc.seed, bible })).irSha);
+  } finally {
+    if (freeze) await L.cmd('/tick unfreeze');
+  }
   const planDir = copyPlan(p2.planId, path.join(raw, 'plan'));
   fs.copyFileSync(path.join(planDir, 'report.json'), path.join(out, 'report.json'));
   fs.mkdirSync(path.join(out, 'previews'), { recursive: true });
@@ -423,7 +433,17 @@ async function computeMetrics({ sc, out, planDir, ir, irShas, mspt, cps, exact, 
   // the other variant's exactness (E-flat from the latest flat run beside a natural one, and back)
   const sibling = latestRun(sc, out, !flat);
   const exactOther = sibling ? JSON.parse(fs.readFileSync(path.join(sibling, 'exact.json'), 'utf8')) : null;
-  const ex = flat ? { flat: exact, normal: exactOther, cellsWritten: exactOther?.cellsWritten ?? 0 } : { flat: exactOther, normal: exact, cellsWritten: exact.cellsWritten };
+  // (6c T1) the world's flowing water: an unclassified mismatch where the snapshot held flowing (non-source) water and the world now
+  // holds air is a stream that moved between the snapshot and the write (SETTLEMENTS §4.2: flowing water is outside E-normal), classed
+  // `flow` (a world class); the plan never places flowing water
+  const flowOf = (e) => {
+    if (!e || flat || !isT1(sc) || !(e.classes?.none > 0)) return e;
+    const moved = (e.list ?? []).filter((m) => m.class === 'none' && /^minecraft:water\[level=[1-9]/.test(m.was) && /^minecraft:(air|cave_air)$/.test(m.now));
+    if (!moved.length) return e;
+    const classes = { ...e.classes, none: e.classes.none - moved.length, flow: (e.classes.flow ?? 0) + moved.length };
+    return { ...e, classes, list: e.list.map((m) => (moved.includes(m) ? { ...m, class: 'flow' } : m)) };
+  };
+  const ex = flat ? { flat: exact, normal: exactOther, cellsWritten: exactOther?.cellsWritten ?? 0 } : { flat: exactOther, normal: flowOf(exact), cellsWritten: exact.cellsWritten };
   const plan = { report: JSON.parse(fs.readFileSync(path.join(out, 'report.json'), 'utf8')) };
   let rows = M.bars({ plan, realised, palette, organic, buildings, mspt, cellsPerSecond: cps, exact: ex, determinism: { irShas, workersSame: ts.workersSame, golden }, spendUsd: 0, approval: 'pending' });
   // (6c T1) relief_demo's own bars (CONTRACT T1 §6): items 1-4 and 10 (tools/lib/scenario-relief.mjs), item 7's tile evaluation
@@ -431,7 +451,7 @@ async function computeMetrics({ sc, out, planDir, ir, irShas, mspt, cps, exact, 
   if (isT1(sc)) {
     const T = await import('./lib/scenario-relief.mjs');
     const rm = await T.reliefMetrics({ planDir, ir, survey, blobs, vw, after, before });
-    rows = T.reliefBars(rm, plan.report, rows);
+    rows = T.reliefBars(rm, plan.report, rows, { flat, metaFlat: meta.relief?.flat ?? null });
     const tm = ts.timing;
     rows.push({ id: 't1-tiles', label: 'T1 7 Tile evaluation (best of 3 per tile)', value: `p50 ${tm.p50Ms.toFixed(1)} ms, p99 ${tm.p99Ms.toFixed(1)} ms, max ${tm.maxMs.toFixed(1)} ms over ${tm.count} tiles; ${Math.round(tm.cellsPerSecond)} cells/s`, threshold: 'p99 < 2 s; >= 45k cells/s', pass: tm.p99Ms < 2000 && tm.cellsPerSecond >= 45_000, gated: true });
     relief = { ...rm, tiles: tm, meta: meta.relief ?? null, passes: meta.passes ?? null };
