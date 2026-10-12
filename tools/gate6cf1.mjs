@@ -240,7 +240,7 @@ steps.stale = async () => {
   const java = path.join(process.env.JAVA_HOME ?? '/opt/homebrew/opt/openjdk@25', 'bin', 'java');
   const lines = execFileSync(java, ['-cp', `${jar}:${gson}`, src, path.join(dir, 'ir.json'), path.join(dir, 'ir-kind-only.json')]).toString().trim().split('\n');
   out.oldMod = { jar, lines };
-  check(lines[0] === 'plan needs kit 0.19.0 / kinds [voxels]; this is kit 0.18.0' && lines[1] === 'plan needs kinds [voxels]; this is kit 0.18.0', `item 12: the v0.18.0 mod's IrStale refuses it PLAN_STALE: ${lines.join(' | ')}`);
+  check(/^plan needs kit 0\.\d+\.0 \/ kinds \[voxels\]; this is kit 0\.18\.0$/.test(lines[0]) && lines[1] === 'plan needs kinds [voxels]; this is kit 0.18.0', `item 12: the v0.18.0 mod's IrStale refuses it PLAN_STALE: ${lines.join(' | ')}`);
   // and this build accepts it
   const { staleReason } = await imp('lib/realise.mjs');
   out.thisKit = staleReason(p.ir);

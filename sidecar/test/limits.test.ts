@@ -107,7 +107,8 @@ describe('Limits.java against the zod bounds (6c 0c §5)', () => {
 
   it('every Limits constant is used by a bound (no stale constant), but for the custom-refined ones', () => {
     const used = new Set(all.map((b) => constantOf(b.path)));
-    const custom = new Set(['EXT_MAX_BYTES', 'CRITIQUE_VIEWS_MAX', 'LOT_EXT_MAX', 'STOCKPILE_CRATES']);
+    // (6c B) the brush's radius and strength are the mod's own bounds (no sidecar message carries them; kit/lib/region/brush.mjs BRUSH_LIMITS, held equal by kit/test/brush-b.test.mjs)
+    const custom = new Set(['EXT_MAX_BYTES', 'CRITIQUE_VIEWS_MAX', 'LOT_EXT_MAX', 'STOCKPILE_CRATES', 'BRUSH_RADIUS_MIN', 'BRUSH_RADIUS_MAX', 'BRUSH_STRENGTH_MIN', 'BRUSH_STRENGTH_MAX']);
     const stale = [...ints.keys()].filter((k) => !used.has(k) && !custom.has(k));
     expect(stale).toEqual([]);
   });
