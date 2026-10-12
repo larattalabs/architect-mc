@@ -31,7 +31,7 @@ A headless gate server (docs/GATES.md "Headless gates") serves the same protocol
 `headless: true`.
 
 - **Generated hooks.** The hooks in the client's `client/dev/` files `JournalDev`, `RegionDev`, `RegionDev6b`, `DeltaDev`,
-  `SliceVDev` and `SliceWDev` (and `Fields`) run headless as they are: `devserver/build.gradle` `genHooks` compiles copies with
+  `SliceVDev`, `SliceWDev` and `StockpileDev` (and `Fields`) run headless as they are: `devserver/build.gradle` `genHooks` compiles copies with
   only the package and imports changed.
   - **Rule for those files:** no reference to client classes (`net.minecraft.client.*`, `dev.larattalabs.architect.client.*`)
     besides `ServerTasks`, `DevBridge` and the handler's `mc` parameter. A new one fails the build, `unit-mod` included.
@@ -39,7 +39,7 @@ A headless gate server (docs/GATES.md "Headless gates") serves the same protocol
   - A new hook file of that kind goes into `genHooks`'s list.
 - **Hand ports.** The server-side hooks of the client feature classes are hand ports in `devserver/.../gen/PortedHooks.java`:
   - PlacementFeature: sites, placement stats, jobs, slow, box hash, capture;
-  - SurvivalFeature: survival, site state, crate insert, finish, deconstruct, mine, items near, site cells, BOM predict;
+  - SurvivalFeature: survival, site state, crate insert (`exact`, `stockpile:<owner>`), finish, deconstruct, mine, items near, site cells, BOM predict;
   - Slice0aDev;
   - ScreenFeature: launcher and sidecar state.
 
