@@ -1,0 +1,35 @@
+{
+  "id": "relief_demo",
+  "short": "relief_demo",
+  "phase": "6c-t1",
+  "version": 0,
+  "brief": "relief fixture: three pads on pad.edge blend and two path corridors on S3's pinned claim, the relief pass blending the land around them with the erosion touch-up (docs/CONTRACT.md 6c T1 §6); on the flat variant a hill raised through the pass's base, a pad sunk 2 below the ground",
+  "program": "relief_demo",
+  "params": {},
+  "world": {
+    "seed": "2026100906",
+    "preset": "normal",
+    "gamerules": "gallery"
+  },
+  "fixture": {
+    "claim": [
+      3604,
+      -1036,
+      3795,
+      -845
+    ],
+    "yRange": [
+      22,
+      220
+    ],
+    "foundBy": "S3's pinned fixture (scenarios/s3_monastery.json)"
+  },
+  "flat": {
+    "preset": "flat",
+    "claimOffset": [
+      0,
+      0
+    ],
+    "gamerules": "exact"
+  }
+}

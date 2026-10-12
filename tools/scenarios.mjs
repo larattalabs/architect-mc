@@ -39,7 +39,7 @@ export function scenarioPath(id) {
 }
 const readSc = (id) => JSON.parse(fs.readFileSync(scenarioPath(id), 'utf8'));
 const writeSc = (sc) => fs.writeFileSync(scenarioPath(sc.id), `${JSON.stringify(sc, null, 2)}\n`);
-const short = (sc) => sc.id.split('_')[0];
+const short = (sc) => sc.short ?? sc.id.split('_')[0]; // (6c F1) forms_demo names its own (goldens/forms_demo.json)
 const sha256 = (b) => crypto.createHash('sha256').update(b).digest('hex');
 
 /** SHA-256 over the sorted (path, sha) list of every file under dir except raw/ (CONTRACT 6b §8.2). */
@@ -58,7 +58,7 @@ export function evidenceSha(dir) {
 }
 
 /** Tile shas of a plan's IR over its own survey, with 1 worker forward and 4 workers shuffled. */
-export async function tileShas(planDir) {
+export async function tileShas(planDir, { timingPasses = 1 } = {}) {
   const irJson = fs.readFileSync(path.join(planDir, 'ir.json'), 'utf8');
   const ir = JSON.parse(irJson);
   const survey = fs.readFileSync(path.join(planDir, 'survey.bin'));
@@ -75,7 +75,16 @@ export async function tileShas(planDir) {
   const tag = (r) => `${r.stage}|${r.set}|${r.key}`;
   const m1 = Object.fromEntries(one.map((r) => [tag(r), r.sha])), m4 = Object.fromEntries(four.map((r) => [tag(r), r.sha]));
   const same = Object.keys(m1).length === Object.keys(m4).length && Object.keys(m1).every((k) => m1[k] === m4[k]);
-  return { irSha: sha256(irJson), tiles: Object.fromEntries(Object.keys(m1).sort().map((k) => [k, m1[k]])), cells: one.reduce((n, r) => n + r.count, 0), workersSame: same };
+  // (6c F1) evaluation time per tile: the single worker's forward pass, or with `timingPasses` > 1 the best of that many passes
+  // in one warm worker (a cold JIT and a loaded box inflate single samples)
+  const best = Object.fromEntries(one.map((r) => [tag(r), r.ms ?? 0]));
+  if (timingPasses > 1) for (const r of await run(Array.from({ length: timingPasses }, () => jobs).flat())) best[tag(r)] = Math.min(best[tag(r)], r.ms ?? 0);
+  const ms = Object.values(best).sort((a, b) => a - b);
+  const cells = one.reduce((n, r) => n + r.count, 0);
+  const timing = { passes: timingPasses, count: ms.length, p99Ms: ms.length ? ms[Math.min(ms.length - 1, Math.floor(ms.length * 0.99))] : 0, maxMs: ms.length ? ms[ms.length - 1] : 0, totalMs: ms.reduce((a, b) => a + b, 0) };
+  timing.cellsPerSecond = timing.totalMs > 0 ? cells / (timing.totalMs / 1000) : 0;
+  timing.p50Ms = ms.length ? ms[ms.length >> 1] : 0; // (6c T1)
+  return { irSha: sha256(irJson), tiles: Object.fromEntries(Object.keys(m1).sort().map((k) => [k, m1[k]])), cells, workersSame: same, timing };
 }
 
 // ------------------------------------------------------------------ in-game steps (lazy: the offline commands need no client)
@@ -135,6 +144,7 @@ export function fitEntries(lots) {
 
 // ------------------------------------------------------------------ (6c V) the flat village scenario (S7)
 const isV = (sc) => sc.phase === '6c-v';
+const isT1 = (sc) => sc.phase === '6c-t1'; // (6c T1) relief_demo on S3's claim
 
 /**
  * (6c V) Before the world opens: the fixture bible (scenarios/<bibleFixture>, installed as the sidecar's bible `sc.bible` v1) and the
@@ -397,7 +407,7 @@ async function computeMetrics({ sc, out, planDir, ir, irShas, mspt, cps, exact, 
     const rw = (j.warnings ?? []).filter((w) => w.startsWith('restraint'));
     buildings.push({ entry, errors: (j.errors ?? []).length, errorList: j.errors ?? [], restraint: rw.filter((w) => /detail ?noise|accent/i.test(w)), restraintOther: rw.filter((w) => !/detail ?noise|accent/i.test(w)), metrics: { detailNoise: j.metrics?.detailNoise ?? null, accentShare: j.metrics?.accentShare ?? null } });
   }
-  const ts = await tileShas(planDir);
+  const ts = await tileShas(planDir, { timingPasses: isT1(sc) ? 3 : 1 });
   const gFile = path.join(SCEN, 'goldens', `${short(sc)}.json`);
   let golden = 'none';
   if (fs.existsSync(gFile)) {
@@ -416,6 +426,16 @@ async function computeMetrics({ sc, out, planDir, ir, irShas, mspt, cps, exact, 
   const ex = flat ? { flat: exact, normal: exactOther, cellsWritten: exactOther?.cellsWritten ?? 0 } : { flat: exactOther, normal: exact, cellsWritten: exact.cellsWritten };
   const plan = { report: JSON.parse(fs.readFileSync(path.join(out, 'report.json'), 'utf8')) };
   let rows = M.bars({ plan, realised, palette, organic, buildings, mspt, cellsPerSecond: cps, exact: ex, determinism: { irShas, workersSame: ts.workersSame, golden }, spendUsd: 0, approval: 'pending' });
+  // (6c T1) relief_demo's own bars (CONTRACT T1 §6): items 1-4 and 10 (tools/lib/scenario-relief.mjs), item 7's tile evaluation
+  let relief = null;
+  if (isT1(sc)) {
+    const T = await import('./lib/scenario-relief.mjs');
+    const rm = await T.reliefMetrics({ planDir, ir, survey, blobs, vw, after, before });
+    rows = T.reliefBars(rm, plan.report, rows);
+    const tm = ts.timing;
+    rows.push({ id: 't1-tiles', label: 'T1 7 Tile evaluation (best of 3 per tile)', value: `p50 ${tm.p50Ms.toFixed(1)} ms, p99 ${tm.p99Ms.toFixed(1)} ms, max ${tm.maxMs.toFixed(1)} ms over ${tm.count} tiles; ${Math.round(tm.cellsPerSecond)} cells/s`, threshold: 'p99 < 2 s; >= 45k cells/s', pass: tm.p99Ms < 2000 && tm.cellsPerSecond >= 45_000, gated: true });
+    relief = { ...rm, tiles: tm, meta: meta.relief ?? null, passes: meta.passes ?? null };
+  }
   // (6c V) S7's own bars (CONTRACT V §7): the door-to-street walk, the lot fronts, the villager rules, the props
   let village = null;
   if (isV(sc)) {
@@ -431,10 +451,10 @@ async function computeMetrics({ sc, out, planDir, ir, irShas, mspt, cps, exact, 
   }
   const fronts = M.lotFronts(ir, after);
   L.log(`  lot fronts: outside the boxes ${JSON.stringify(fronts.outside)}; inside (the children's own) ${JSON.stringify(fronts.inside)}`);
-  const metrics = { scenario: sc.id, worldChanges: world.worldChanges, cellsPerSecond: cps, lotFronts: fronts, ...(village ? { village } : {}), variant: flat ? 'flat' : 'natural', rows, palette, organic, buildings, mspt, tiles: { irSha: ts.irSha, count: Object.keys(ts.tiles).length, cells: ts.cells, workersSame: ts.workersSame, golden }, exactSibling: sibling ? path.relative(out, sibling) : null,
+  const metrics = { scenario: sc.id, worldChanges: world.worldChanges, cellsPerSecond: cps, lotFronts: fronts, ...(village ? { village } : {}), ...(relief ? { relief } : {}), variant: flat ? 'flat' : 'natural', rows, palette, organic, buildings, mspt, tiles: { irSha: ts.irSha, count: Object.keys(ts.tiles).length, cells: ts.cells, workersSame: ts.workersSame, golden }, exactSibling: sibling ? path.relative(out, sibling) : null,
     realised: { M2: realised.metrics.M2 && { ...realised.metrics.M2, perNode: undefined }, M3: realised.metrics.M3, M4: realised.metrics.M4, M5: realised.metrics.M5, M8: realised.metrics.M8 && { ...realised.metrics.M8, unguardedSample: (realised.metrics.M8.unguardedSample ?? []).slice(0, 20) }, M10: realised.metrics.M10, findings: realised.findings.map((f) => `${f.rule} ${f.severity} ${f.part ?? '-'} x${f.count}`) } };
   fs.writeFileSync(path.join(out, 'metrics.json'), `${JSON.stringify(metrics, null, 2)}\n`);
-  for (const r of rows) L.log(`  ${r.gated ? (r.pass ? 'ok  ' : 'FAIL') : 'rec '} ${r.id === 'mspt' ? 'BAR ' : ''}${r.label}: ${r.value}`); // the mspt row is a timing bar (recorded, not blocking in change/slice)
+  for (const r of rows) L.log(`  ${r.gated ? (r.pass ? 'ok  ' : 'FAIL') : 'rec '} ${r.id === 'mspt' || r.id === 't1-tiles' ? 'BAR ' : ''}${r.label}: ${r.value}`); // the mspt row is a timing bar (recorded, not blocking in change/slice)
   return metrics;
 }
 
@@ -525,7 +545,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
       && !(flatRun && x.id === 'determinism' && irSame && r.metrics.tiles.workersSame) && !(flatRun && x.id === 'exactness' && eFlat0);
     const bad = (sub === 'check' && r.some((x) => !x.ok)) || (sub === 'run' && r.metrics.rows.some(runBad));
     if (sub === 'run') console.error(`${r.metrics.rows.filter(runBad).length} failure(s) (scenario run)`);
-    if (sub === 'run') for (const x of r.metrics.rows.filter(runBad)) console.error(`FAIL ${x.id === 'mspt' ? 'BAR ' : ''}${x.id}: ${x.value} (bar: ${x.threshold})`);
+    if (sub === 'run') for (const x of r.metrics.rows.filter(runBad)) console.error(`FAIL ${x.id === 'mspt' || x.id === 't1-tiles' ? 'BAR ' : ''}${x.id}: ${x.value} (bar: ${x.threshold})`);
     try { L?.state.dev?.close(); } catch { /* closed */ }
     process.exit(bad ? 1 : 0);
   } catch (e) {
