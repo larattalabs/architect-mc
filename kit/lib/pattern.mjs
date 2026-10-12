@@ -3,7 +3,7 @@
 //   {mix: [{w, mat}, ...], seedLabel}       a per-cell choice by an integer hash of (seed, label, x, y, z) over the weights;
 //                                           the shares converge to the weights
 //   {gradient: {by, stops: [{at, mat}]}, dither}   the stop interval by `y`, `depth` (below the frozen ground) or {field};
-//                                           blended across each interval with the ordered 4x4 Bayer dither (no hard lines)
+//                                           blended across each interval with an ordered 4x4 dither (no hard lines)
 // In an IR every mat is a block state or null (air); a program or a bible names roles, resolved at plan time. The spec is
 // checked by kit/schemas/pattern.json (lib/specschema.mjs) plus the rules below; the mod's api.Pattern runs the same checks.
 // Under the realise lint.
@@ -15,7 +15,10 @@ import { sampleField } from './material.mjs';
 const SCHEMA = JSON.parse(fs.readFileSync(new URL('../schemas/pattern.json', import.meta.url), 'utf8'));
 export const PATTERN_SCHEMA = SCHEMA;
 export const PATTERN_KINDS = Object.freeze(['mix', 'gradient']);
-const BAYER4 = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
+// The gradient's ordered 4x4 threshold matrix: Bayer-like (each value 0..15 once, neighbours far apart), with every row and every
+// column holding one threshold from each quarter, so along x or z a band's edge moves within every 4 cells and a flat gradient
+// draws no straight boundary (Bayer's own matrix has a column of mid thresholds: a straight edge when an interval is 3 high).
+const DITHER4 = [0, 8, 4, 12, 13, 5, 9, 1, 6, 14, 2, 10, 11, 3, 15, 7];
 
 /** Is `v` a pattern spec (an object with `mix` or `gradient`)? */
 export const isPattern = (v) => !!v && typeof v === 'object' && !Array.isArray(v) && (v.mix !== undefined || v.gradient !== undefined);
@@ -99,7 +102,7 @@ export function compilePattern(spec, { mat, fields = null, seed = '0' }) {
     let i = 0;
     while (v >= at[i + 1]) i++;
     const t = (v - at[i]) / (at[i + 1] - at[i]);
-    const th = dither ? (BAYER4[(x & 3) + 4 * (z & 3)] + 0.5) / 16 : 0.5;
+    const th = dither ? (DITHER4[(x & 3) + 4 * (z & 3)] + 0.5) / 16 : 0.5;
     return t >= th ? ms[i + 1] : ms[i];
   };
 }
