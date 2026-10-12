@@ -90,6 +90,7 @@ export function validateParams(params, { region = false } = {}) {
       if (p.default < p.min || p.default > p.max) throw new Error(`${where}: default ${p.default} is outside ${p.min}..${p.max}`);
     } else if (p.type === 'bool') {
       if (typeof p.default !== 'boolean') throw new Error(`${where}.default must be true or false`);
+      if (p.omitDefault !== undefined && typeof p.omitDefault !== 'boolean') throw new Error(`${where}.omitDefault must be true or false`);
     } else if (p.type === 'enum') {
       if (!Array.isArray(p.options) || p.options.length < 2 || !p.options.every((o) => typeof o === 'string' && OPTION.test(o))) throw new Error(`${where}.options must be 2+ strings matching ${OPTION}`);
       if (new Set(p.options).size !== p.options.length) throw new Error(`${where}.options has duplicates`);
@@ -121,6 +122,9 @@ export function resolveValues(params = {}, given = {}) {
     if (p.type === 'enum' && !p.options.includes(v)) throw new Error(`values: ${k} must be one of ${p.options.join(', ')} (got ${JSON.stringify(v)})`);
     out[k] = p.type === 'lots' ? validateLots(v, `values: ${k}`) : v;
   }
+  // (6c MP) a bool param with `omitDefault: true` (an opt-in demo switch) is left out at its default, so a program that gains
+  // one keeps its default seed, IR and tiles
+  for (const [k, p] of Object.entries(params)) if (p.type === 'bool' && p.omitDefault === true && out[k] === p.default) delete out[k];
   return out;
 }
 

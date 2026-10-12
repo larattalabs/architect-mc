@@ -14,6 +14,7 @@ import { decodeArbl } from '../realise.mjs';
 import { COND, DEFAULT_MACRO_ROLES, Region, blockState, region as makeRegion } from './program.mjs';
 import { surveyApi, windowFromSurvey } from './survey.mjs';
 import { validateParams, resolveValues } from '../params.mjs';
+import { mapPatternMats, patternError } from '../pattern.mjs';
 
 /** The kit's region engine version (recorded in every IR). */
 export const KIT_VERSION = '0.19.0';
@@ -105,6 +106,27 @@ export function resolveRoles(bibleRoles = {}, programRoles = {}) {
   }
   for (const k of [...CORE_ROLES, ...MACRO_ROLES]) if (!out[k]) throw new Error(`role ${k} resolves to nothing`);
   return out;
+}
+
+/**
+ * (6c MP) A bible's role patterns `{role: pattern}` resolved against the plan's roles: every role named must be a role, and
+ * every mat a role name (resolved to its block) or a block state. Returns `{role: pattern}` with block states (frozen).
+ */
+export function resolvePatterns(patterns = {}, roles = {}) {
+  if (!patterns || typeof patterns !== 'object' || Array.isArray(patterns)) throw new Error('patterns must be {role: pattern}');
+  const out = {};
+  for (const k of Object.keys(patterns).sort()) {
+    if (!Object.prototype.hasOwnProperty.call(roles, k)) throw new Error(`patterns.${k}: '${k}' is not a role (a pattern paints a role the bible names)`);
+    const e0 = patternError(patterns[k], `patterns.${k}`);
+    if (e0) throw new Error(e0);
+    const p = mapPatternMats(patterns[k], (m) => {
+      if (m === null || m === 'air' || m === 'minecraft:air') return null;
+      if (Object.prototype.hasOwnProperty.call(roles, m)) return roles[m];
+      try { return blockState(m); } catch (e) { throw new Error(`patterns.${k}: '${m}' is neither a role nor a block state (${e.message})`); }
+    });
+    out[k] = Object.freeze(p);
+  }
+  return Object.freeze(out);
 }
 
 /** (6c V) Validate keep-out rects: [[x0, z0, x1, z1], ...] integers, x0 <= x1, z0 <= z1, at most 1024; sorted, unique. */
@@ -226,6 +248,7 @@ export function opBounds(op, blobs, bytesOf = null) {
  * @param {string|null} [o.seed] u64 decimal string (default: defaultSeed)
  * @param {object|string} o.claim
  * @param {object} [o.roles] extra / bible roles {role: blockState}
+ * @param {object} [o.patterns] (6c MP) the bible's role patterns {role: pattern} (lib/pattern.mjs; mats are roles or block states)
  * @param {string} [o.kitVersion] / [o.node] recorded in the IR (defaults: KIT_VERSION, this Node's major)
  * @returns {Promise<{ir, irJson, irSha, notes: string[], stats}>}
  */
@@ -264,11 +287,12 @@ export async function planRegion(o) {
     validateParams(mod.params, { region: true });
     if (mod.roles !== undefined && (typeof mod.roles !== 'object' || mod.roles === null || Array.isArray(mod.roles))) throw new Error('the program\'s roles must be {role: blockState}');
     roles = Object.freeze(resolveRoles(o.roles ?? {}, mod.roles ?? {}));
+    const patterns = resolvePatterns(o.patterns ?? {}, roles);
     const params = resolveValues(mod.params ?? {}, o.params ?? {});
     const seed = o.seed === undefined || o.seed === null || o.seed === 'default' ? defaultSeed(id, params, claim) : toDecimal64(...fromDecimal64(o.seed));
     const onKeepOut = () => { keepOutRead = true; };
     Object.assign(ctx, {
-      claim: Object.freeze({ ...claim }), survey: surveyApi(survey, claim, { keepOut, onKeepOut }), roles, seed, params: Object.freeze({ ...params }),
+      claim: Object.freeze({ ...claim }), survey: surveyApi(survey, claim, { keepOut, onKeepOut }), roles, patterns, seed, params: Object.freeze({ ...params }),
       kitVersion: o.kitVersion ?? KIT_VERSION, rng: (label) => makeRng(seed, String(label)),
       volumes: o.volumes ?? [],
     });

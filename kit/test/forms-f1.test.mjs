@@ -85,6 +85,9 @@ test('voxels: realise copies exactly the turned cells, tile by tile, any tile or
   const { ir } = voxelsIr(bytes, [0, 70, 0], 0, claim);
   assert.throws(() => compileIR({ ...ir, format: 1, requires: undefined, blobs: undefined }), /needs format 2|blob/);
   assert.throws(() => compileIR({ ...ir, requires: ['blobs:side'] }, { blobs: () => bytes }), /requires misses \[voxels\]/);
+  // (v0.19.0, F1 + MP) masks are on shape and columns ops only: a mask on a voxels op is refused, never silently dropped
+  const masked = { ...ir, requires: [...ir.requires, 'mask'], parts: ir.parts.map((p) => ({ ...p, ops: p.ops.map((o) => ({ ...o, mask: { height: [0, 100] } })) })) };
+  assert.throws(() => compileIR(masked, { blobs: () => bytes }), /voxels op takes no mask/);
 });
 
 // ------------------------------------------------------------------ the generator rules over 200 seeds each

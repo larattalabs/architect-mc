@@ -29,6 +29,8 @@ export function paletteAdherence(ir, world) {
   for (const p of ir.parts ?? []) {
     for (const op of p.ops ?? []) {
       if (op.material?.rule) blockIds(op.material.rule, ruleMats);
+      else if (op.material?.pattern) blockIds(op.material.pattern, ruleMats); // (6c MP) a pattern's blocks, as a rule's
+      if (op.op === 'columns') for (const m of op.materials ?? []) if (m?.pattern) blockIds(m.pattern, ruleMats);
       else if (formParts.has(p.id)) blockIds(op.material, ruleMats); // a form's own materials (its generator's roots, rock)
     }
   }

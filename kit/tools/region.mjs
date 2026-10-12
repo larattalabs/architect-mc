@@ -45,10 +45,13 @@ async function plan(argv) {
   let survey;
   try { survey = fs.readFileSync(opts.survey); } catch (e) { throw new Usage(`--survey: ${e.message}`); }
   let roles = {};
+  let patterns = {};
   if (opts.bible) {
     const b = readJson(opts.bible, '--bible');
-    if (!b || typeof b.roles !== 'object') throw new Usage('--bible must be {id?, version?, roles: {role: blockState}}');
+    if (!b || typeof b.roles !== 'object') throw new Usage('--bible must be {id?, version?, roles: {role: blockState}, patterns?}');
     roles = { ...b.roles };
+    // (6c MP) the bible's role patterns
+    if (b.patterns && typeof b.patterns === 'object') patterns = { ...b.patterns };
   }
   if (opts.roles) roles = { ...roles, ...readJson(opts.roles, '--roles') };
   if (opts.seed !== undefined && !/^\d{1,20}$/.test(opts.seed)) throw new Usage('--seed must be a u64 decimal');
@@ -70,7 +73,7 @@ async function plan(argv) {
     const v = String(opts['keep-out']).trim();
     try { keepOut = JSON.parse(v.startsWith('[') ? v : fs.readFileSync(v, 'utf8')); } catch (e) { throw new Usage(`--keep-out: ${e.message}`); }
   }
-  const res = await planRegion({ programFile: pos[0], params, survey, seed: opts.seed ?? null, claim: opts.claim, roles, volumes, keepOut });
+  const res = await planRegion({ programFile: pos[0], params, survey, seed: opts.seed ?? null, claim: opts.claim, roles, patterns, volumes, keepOut });
   if (opts['blobs-out'] && res.blobs.size) {
     fs.mkdirSync(opts['blobs-out'], { recursive: true });
     for (const [sha, bytes] of res.blobs) fs.writeFileSync(path.join(opts['blobs-out'], `${sha}.bin`), bytes);
