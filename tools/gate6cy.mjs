@@ -867,9 +867,10 @@ steps.restart = async () => {
       await cmd(`/item replace block ${c3[0]} ${c3[1] + 2} ${c3[2]} container.${slot++} with ${k} ${n}`);
       cons.add({ [k]: n }, cons.injected);
     }
-    await cons.insert(`stockpile:${OWNER}`, { 'minecraft:cobblestone': 39, 'minecraft:dirt': 15 });
+    // the chest holds exact needs only (a unit no target misses would go in as an equivalent: not counted in its own unit)
     await sleep(4000);
     const pt = await cons.point('feeding');
+    check(exact(pt), `restart a: conservation exact while feeding (${json(pt.diff)})`);
     const a = await cons.parts();
     check(sum(a.containers) > 0 && sum(a.paidStanding) > 0, `restart a: hoppers feed (chest/hopper ${sum(a.containers)}) and the builder places (paid ${sum(a.paidStanding)})`);
     out.before = { point: pt, built: (await siteOf(h.siteId)).built };
@@ -901,7 +902,7 @@ steps.restart = async () => {
     const atSave = await cons.parts();
     const totSave = cons.total(atSave);
     const injAtSave = { ...cons.injected };
-    await cons.insert(`stockpile:${OWNER}`, { 'minecraft:spruce_log': 30, 'minecraft:spruce_planks': 30 });
+    await cons.insert(`stockpile:${OWNER}`, { 'minecraft:dark_oak_stairs': 30, 'minecraft:dark_oak_planks': 30 });
     await sleep(3000);
     const pre = await cons.parts();
     const moved = {};
