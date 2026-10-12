@@ -10289,7 +10289,7 @@ without its future, and the region's end state was set only in that future's cal
   - `20261012-003204-change`: x-ingame 53/0;
   - `20261012-005926-change` (head f3f63c8, after the verifier fix): x-unit 3/0, x-resume 46/0 including (e) and (f).
 - **Verification.** A gate-verifier reviewed 5136579 and re-ran (a)-(d): PASS, with the refusal defect above. Its negative
-  control (the new gate on unfixed v0.17.0) hangs in REMOVING in case (a). It then reviewed the delta and re-ran (e) and (f).
+  control (the new gate on unfixed v0.17.0) hangs in REMOVING in case (a). Its review of the delta (f3f63c8), with (e) and (f) re-run, is to be recorded here.
 
 ## Phase 6c slice Y: settlement stockpile (C24-C26) (FROZEN 2026-10-11 after Steward's review; built as Y1 and Y2)
 
