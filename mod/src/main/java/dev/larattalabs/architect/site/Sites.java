@@ -1088,6 +1088,17 @@ public final class Sites {
 				throw new IllegalStateException("template " + bp.id() + " placed nothing (empty template?)");
 			}
 			traceDoors(level, snapBox, "template");
+			if (System.getenv("ARCHITECT_TRACE_DOORS") != null) {
+				GhostModel gm = site.grid().ghost(site.turns());
+				BlockState[] gs = site.grid().states();
+				for (int i = 0; i < gm.count(); i++) {
+					if (gs[i].getBlock() instanceof net.minecraft.world.level.block.DoorBlock && gs[i].getValue(net.minecraft.world.level.block.DoorBlock.HALF) == net.minecraft.world.level.block.state.properties.DoubleBlockHalf.LOWER) {
+						BlockPos dp = new BlockPos(box.minX() + gm.x(i), box.minY() + gm.y(i), box.minZ() + gm.z(i));
+						Architect.LOGGER.info("TRACE door cell {} now {} below {} (template cell below: {}) above {}", dp.toShortString(), level.getBlockState(dp), level.getBlockState(dp.below()),
+							gm.count() > 0 ? "?" : "", level.getBlockState(dp.above()));
+					}
+				}
+			}
 			BedsOut beds = removeUnsafeBeds(level, site.grid(), site.turns(), box);
 			BlockState foundation = foundationState(bp);
 			BlockPos.MutableBlockPos m = new BlockPos.MutableBlockPos();
