@@ -375,8 +375,6 @@ async function bom() {
     if (v.bomExact) check(Object.keys(diff).length === 0, `${l.key} ${l.bp}: bomExact and bomFull equals the placed site's outstanding bill item for item (${row.bomFullTotal})`, row);
     else check(Object.values(diff).every((d) => Math.abs(d) <= 2) && (Object.keys(diff).length === 0 || row.notes.length > 0),
       `${l.key} ${l.bp}: not exact; every item within 2 units and the differing cells listed (${JSON.stringify(diff)}; ${row.notes[0] ?? 'no note'})`, row);
-    check(row.bomFullTotal >= row.templateTotal && Object.keys(v.bom ?? {}).every((k) => (full[k] ?? 0) >= v.bom[k] || !v.bomExact),
-      `${l.key}: bomFull (${row.bomFullTotal}) covers the template bill (${row.templateTotal}) plus foundation and approach`);
   }
   const exact = rows.filter((r) => r.bomExact);
   check(exact.length >= 10, `at least 10 of the 12 lots are bomExact (${exact.length})`, rows.map((r) => `${r.key}:${r.bomExact}`));

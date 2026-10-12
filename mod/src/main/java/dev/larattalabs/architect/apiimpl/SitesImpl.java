@@ -168,6 +168,11 @@ final class SitesImpl implements dev.larattalabs.architect.api.Sites {
 			if (b != null) {
 				full = Views.items(b.items());
 				exact = b.exact();
+				if (!b.inexactBecause().isEmpty()) {
+					List<String> n = new ArrayList<>(notes);
+					n.add("bomFull may be off: " + String.join("; ", b.inexactBecause()));
+					notes = n;
+				}
 				if (!b.driftCells().isEmpty()) {
 					List<String> n = new ArrayList<>(notes);
 					n.add("bomFull may differ at " + b.driftCells().size() + " cell(s): " + String.join("; ", b.driftCells().subList(0, Math.min(

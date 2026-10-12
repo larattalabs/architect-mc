@@ -49,7 +49,7 @@ final class FullBom {
 	static final int MAX_LISTED = 16;
 
 	/** The bill by item id, whether it is exact, and the drift cells (for the verdict's notes). */
-	record Result(Map<String, Integer> items, boolean exact, List<String> driftCells, int cells, Map<Long, BlockState> states) {
+	record Result(Map<String, Integer> items, boolean exact, List<String> driftCells, int cells, Map<Long, BlockState> states, List<String> inexactBecause) {
 	}
 
 	private FullBom() {
@@ -109,7 +109,7 @@ final class FullBom {
 	 * neighbours). So a door written over a hillside, whose upper cell the template clears next, is gone before the first block is built.
 	 */
 	static Result compute(Inputs in, LongFunction<@Nullable BlockState> world) {
-		boolean[] unknown = {false};
+		Flag unknown = new Flag();
 		Sim sim = new Sim(world, unknown);
 		Set<Long> queued = new LinkedHashSet<>();
 		BlockState air = Blocks.AIR.defaultBlockState();
@@ -143,7 +143,7 @@ final class FullBom {
 				BlockState st = sim.at(p);
 				BlockState nst = sim.at(np.asLong());
 				if (st == null || nst == null) {
-					unknown[0] = true;
+					unknown.set("a cell next to the template is not loaded");
 					continue;
 				}
 				BlockState updated = sim.shape(st, cell, d, np, nst);
@@ -168,7 +168,7 @@ final class FullBom {
 				BlockPos np = cell.relative(d);
 				BlockState nb = sim.at(np.asLong());
 				if (nb == null) {
-					unknown[0] = true;
+					unknown.set("a cell next to the template is not loaded");
 					continue;
 				}
 				u = sim.shape(u, cell, d, np, nb);
@@ -207,7 +207,23 @@ final class FullBom {
 				drift.add(BlockPos.getX(p) + "," + BlockPos.getY(p) + "," + BlockPos.getZ(p) + " " + Cells.blockId(s) + " (" + why + ")");
 			}
 		}
-		return new Result(items, drift.isEmpty() && !unknown[0] && !sim.runaway, drift, count, finalStates);
+		if (sim.runaway) {
+			unknown.set("the shape updates did not settle");
+		}
+		return new Result(items, drift.isEmpty() && !unknown.on, drift, count, finalStates, List.copyOf(unknown.why));
+	}
+
+	/** Whether the bill may be off, and why (for the verdict's notes). */
+	static final class Flag {
+		boolean on;
+		final Set<String> why = new LinkedHashSet<>();
+
+		void set(String reason) {
+			on = true;
+			if (why.size() < 6) {
+				why.add(reason);
+			}
+		}
 	}
 
 	/** {@code Block.UPDATE_SHAPE_ORDER}: the order a block is told about its neighbours. */
@@ -218,7 +234,7 @@ final class FullBom {
 	static final class Sim {
 		final Map<Long, BlockState> writes = new HashMap<>();
 		private final LongFunction<@Nullable BlockState> world;
-		private final boolean[] unknown;
+		private final Flag unknown;
 		private final net.minecraft.world.level.LevelReader reader;
 		private final net.minecraft.world.level.ScheduledTickAccess ticks = noTicks();
 		private final net.minecraft.util.RandomSource random = net.minecraft.util.RandomSource.create(0L);
@@ -228,7 +244,7 @@ final class FullBom {
 		private int steps;
 		boolean runaway;
 
-		Sim(LongFunction<@Nullable BlockState> world, boolean[] unknown) {
+		Sim(LongFunction<@Nullable BlockState> world, Flag unknown) {
 			this.world = world;
 			this.unknown = unknown;
 			this.reader = reader(this::at, unknown);
@@ -246,7 +262,7 @@ final class FullBom {
 			try {
 				return st.updateShape(reader, ticks, pos, toNeighbour, neighbour, neighbourState, random);
 			} catch (RuntimeException e) {
-				unknown[0] = true;
+				unknown.set("a cell the plan reads is not loaded");
 				return st;
 			}
 		}
@@ -255,7 +271,7 @@ final class FullBom {
 		void set(long p, BlockState s, boolean cascade) {
 			BlockState old = at(p);
 			if (old == null) {
-				unknown[0] = true;
+				unknown.set("an updateShape threw");
 			}
 			if (old == s) {
 				return;
@@ -281,7 +297,7 @@ final class FullBom {
 					BlockState changedState = queueStates.poll();
 					BlockState cur = at(u[0]);
 					if (cur == null) {
-						unknown[0] = true;
+						unknown.set("a cell the plan reads is not loaded");
 						continue;
 					}
 					BlockState next = shape(cur, BlockPos.of(u[0]), net.minecraft.core.Direction.values()[(int) u[1]], BlockPos.of(u[2]), changedState);
@@ -336,7 +352,7 @@ final class FullBom {
 	}
 
 	/** A {@link net.minecraft.world.level.LevelReader} over the planned cells: {@code getBlockState} and {@code getFluidState}, nothing else. */
-	static net.minecraft.world.level.LevelReader reader(LongFunction<@Nullable BlockState> at, boolean[] unknown) {
+	static net.minecraft.world.level.LevelReader reader(LongFunction<@Nullable BlockState> at, Flag unknown) {
 		return (net.minecraft.world.level.LevelReader) java.lang.reflect.Proxy.newProxyInstance(FullBom.class.getClassLoader(),
 			new Class<?>[] {net.minecraft.world.level.LevelReader.class}, (proxy, m, args) -> {
 				switch (m.getName()) {
@@ -344,7 +360,7 @@ final class FullBom {
 						if (args != null && args.length == 1 && args[0] instanceof BlockPos pos) {
 							BlockState st = at.apply(pos.asLong());
 							if (st == null) {
-								unknown[0] = true;
+								unknown.set("a cell a block asks about is not loaded");
 								st = Blocks.AIR.defaultBlockState();
 							}
 							return m.getName().equals("getBlockState") ? st : st.getFluidState();
@@ -373,11 +389,11 @@ final class FullBom {
 	}
 
 	/** Why the settle at P6 may change this cell's cost, or null. */
-	private static @Nullable String drift(LongFunction<@Nullable BlockState> at, long p, BlockState s, boolean[] unknown) {
+	private static @Nullable String drift(LongFunction<@Nullable BlockState> at, long p, BlockState s, Flag unknown) {
 		if (s.getBlock() instanceof FallingBlock) {
 			BlockState below = at.apply(BlockPos.asLong(BlockPos.getX(p), BlockPos.getY(p) - 1, BlockPos.getZ(p)));
 			if (below == null) {
-				unknown[0] = true;
+				unknown.set("the cell below a gravity block is not loaded");
 				return null;
 			}
 			return FallingBlock.isFree(below) ? "gravity block over a free cell" : null;
@@ -385,7 +401,7 @@ final class FullBom {
 		if (s.getBlock() instanceof PathBlock || s.is(Blocks.FARMLAND)) {
 			BlockState above = at.apply(BlockPos.asLong(BlockPos.getX(p), BlockPos.getY(p) + 1, BlockPos.getZ(p)));
 			if (above == null) {
-				unknown[0] = true;
+				unknown.set("the cell above a path is not loaded");
 				return null;
 			}
 			if (above.isSolid() && !(above.getBlock() instanceof net.minecraft.world.level.block.FenceGateBlock)
@@ -399,7 +415,7 @@ final class FullBom {
 			for (int[] o : d) {
 				BlockState nb = at.apply(BlockPos.asLong(BlockPos.getX(p) + o[0], BlockPos.getY(p) + o[1], BlockPos.getZ(p) + o[2]));
 				if (nb == null) {
-					unknown[0] = true;
+					unknown.set("a neighbour of a coral is not loaded");
 					return null;
 				}
 				if (nb.getFluidState().is(Fluids.WATER) || nb.getFluidState().is(Fluids.FLOWING_WATER)) {

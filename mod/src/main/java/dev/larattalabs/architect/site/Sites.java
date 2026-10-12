@@ -870,7 +870,7 @@ public final class Sites {
 	/** At most this many drift cells are named in a verdict's notes. */
 	public static final int BOM_NOTE_CELLS = 16;
 
-	public record BomFull(Map<String, Integer> items, boolean exact, List<String> driftCells) {
+	public record BomFull(Map<String, Integer> items, boolean exact, List<String> driftCells, List<String> inexactBecause) {
 	}
 
 	/**
@@ -883,7 +883,7 @@ public final class Sites {
 			return null;
 		}
 		FullBom.Result r = FullBom.of(level, bp, v.plan());
-		return r == null ? null : new BomFull(r.items(), r.exact() && v.refusals().isEmpty(), r.driftCells());
+		return r == null ? null : new BomFull(r.items(), r.exact() && v.refusals().isEmpty(), r.driftCells(), r.inexactBecause());
 	}
 
 	/** {@link Verdict} for placing {@code bp} (or moving {@code movingId} with it); changes nothing; never loads a chunk. Server thread. */
