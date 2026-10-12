@@ -132,6 +132,8 @@ public final class Builder {
 	public static void init() {
 		ServerTickEvents.END_SERVER_TICK.register(Builder::tick);
 		RoadBuilder.init(); // 6c 0c (C16): construction roads
+		Stockpiles.init(); // 6c Y (C24): settlement stockpiles
+		ServerTickEvents.END_SERVER_TICK.register(Stockpiles::tick);
 		SiteWaits.init(); // 6c Y2 (C25): waiting status
 		ServerLifecycleEvents.SERVER_STARTED.register(s -> server = s);
 		ServerLifecycleEvents.SERVER_STOPPED.register(s -> {
@@ -140,6 +142,52 @@ public final class Builder {
 			REFUNDED.clear();
 			server = null;
 		});
+	}
+
+	// ------------------------------------------------------------------ where a target's items come from
+
+	/**
+	 * Where a construction target's items come from (6c Y): its own crate's {@link Ledger} (a legacy target), or its owner's
+	 * stockpile at its place in the feed order ({@link Stockpiles}: {@code stock - reserved}).
+	 */
+	interface Purse {
+		/** What the target may use of {@code item} now. */
+		int stock(String item);
+
+		/** The builder placed a cell: its items are consumed. */
+		void pay(List<SurvivalItems.Cost> costs);
+
+		/** A swap's old block (paid) goes back: into the stockpile, or dropped at {@code fallback} (beside a legacy crate). */
+		void giveBack(Map<String, Integer> items, BlockPos fallback);
+
+		/** After this tick's placements. */
+		void changed();
+	}
+
+	/** A legacy target's purse: its crate's ledger; a swap's refund drops above the crate. */
+	static Purse ledgerPurse(ServerLevel level, CrateBlockEntity crate) {
+		Ledger ledger = crate.ledger();
+		return new Purse() {
+			@Override
+			public int stock(String item) {
+				return ledger.stock(item);
+			}
+
+			@Override
+			public void pay(List<SurvivalItems.Cost> costs) {
+				Builder.pay(ledger, costs);
+			}
+
+			@Override
+			public void giveBack(Map<String, Integer> items, BlockPos fallback) {
+				dropItems(level, fallback, items, null);
+			}
+
+			@Override
+			public void changed() {
+				crate.ledgerChanged();
+			}
+		};
 	}
 
 	// ------------------------------------------------------------------ the run-time state of one site
@@ -285,17 +333,51 @@ public final class Builder {
 		}
 
 		boolean affordable(int i, Ledger ledger) {
+			return affordable(i, ledger::stock);
+		}
+
+		/** Whether cell {@code i} (with its pair's second) is affordable from {@code stock} (6c Y: a stockpile's {@code stock - reserved}). */
+		boolean affordable(int i, java.util.function.ToIntFunction<String> stock) {
 			Map<String, Integer> need = new HashMap<>();
 			cost.get(i).forEach(c -> need.merge(c.item(), c.count(), Integer::sum));
 			if (second[i] >= 0) {
 				cost.get(second[i]).forEach(c -> need.merge(c.item(), c.count(), Integer::sum));
 			}
 			for (var e : need.entrySet()) {
-				if (ledger.stock(e.getKey()) < e.getValue()) {
+				if (stock.applyAsInt(e.getKey()) < e.getValue()) {
 					return false;
 				}
 			}
 			return true;
+		}
+
+		/** (6c Y, S-Y-1) The tick of the last frontier check and its answer: some frontier cell is in a loaded chunk. */
+		long frontierAt = Long.MIN_VALUE / 2;
+		boolean frontier = true;
+
+		/**
+		 * Whether some of the remaining frontier (an unbuilt cell whose support, if queued, is built) is in a loaded chunk. Checked
+		 * at most once per 20 ticks (stops at the first loaded frontier cell). A target whose whole frontier is unloaded doesn't
+		 * reserve (Steward's S-Y-1 exception).
+		 */
+		boolean frontierLoaded(ServerLevel level, long now) {
+			if (now - frontierAt < 20 && now >= frontierAt) {
+				return frontier;
+			}
+			frontierAt = now;
+			frontier = false;
+			BlockPos.MutableBlockPos m = new BlockPos.MutableBlockPos();
+			for (int i = built.nextClearBit(0); i < queue.length; i = built.nextClearBit(i + 1)) {
+				if (isSecond[i] || support[i] >= 0 && !built.get(support[i])) {
+					continue;
+				}
+				int[] o = Construction.offsets(queue[i], dx, dz);
+				if (level.isLoaded(m.set(box.minX() + o[0], box.minY() + o[1], box.minZ() + o[2]))) {
+					frontier = true;
+					break;
+				}
+			}
+			return frontier;
 		}
 
 		void markBuilt(int i, boolean on) {
@@ -337,15 +419,29 @@ public final class Builder {
 		 * own rescans never load a chunk.
 		 */
 		int rescan(ServerLevel level, boolean load) {
+			return rescan(level, load, false);
+		}
+
+		/** {@code quiet} (6c Y1, a stockpile's target): reads loaded chunks without a ticket ({@link #stateIfLoaded}). */
+		int rescan(ServerLevel level, boolean load, boolean quiet) {
 			int changed = 0;
 			BlockPos.MutableBlockPos m = new BlockPos.MutableBlockPos();
 			for (int i = 0; i < queue.length; i++) {
 				int[] o = Construction.offsets(queue[i], dx, dz);
 				m.set(box.minX() + o[0], box.minY() + o[1], box.minZ() + o[2]);
-				if (!load && !level.isLoaded(m)) {
-					continue;
+				BlockState st;
+				if (quiet && !load) {
+					st = stateIfLoaded(level, m);
+					if (st == null) {
+						continue;
+					}
+				} else {
+					if (!load && !level.isLoaded(m)) {
+						continue;
+					}
+					st = level.getBlockState(m);
 				}
-				boolean b = matches(level.getBlockState(m), i);
+				boolean b = matches(st, i);
 				if (b != built.get(i)) {
 					markBuilt(i, b);
 					changed++;
@@ -583,10 +679,33 @@ public final class Builder {
 			}
 		}
 		SiteGroupRec now = Sites.group(g.id());
+		Stockpiles.Pile pile = crates.isEmpty() ? Stockpiles.get(g.owner()) : null;
+		if (pile != null && groupDrawsFrom(g, pile)) {
+			// 6c Y: its sites draw from the owner's stockpile: that stockpile's delivered and credit, the group's own outstanding
+			delivered.putAll(pile.ledger().delivered());
+			credit.putAll(Stockpiles.credit(srv, pile));
+			List<BlockPos> cr = pile.crates();
+			return new GroupStock(delivered, credit, bySite, total, cr.isEmpty() ? null : cr.get(0));
+		}
 		if (crates.isEmpty() && now != null) {
 			delivered.putAll(now.delivered()); // the shared crate is gone (every site built): its ledger was kept on the group
 		}
 		return new GroupStock(delivered, credit, bySite, total, gc == null ? null : new BlockPos(gc.x(), gc.y(), gc.z()));
+	}
+
+	/** 6c Y: whether a group's construction sites or roads draw from {@code pile} (crate-less constructions of its owner). */
+	static boolean groupDrawsFrom(SiteGroupRec g, Stockpiles.Pile pile) {
+		for (String id : g.sites()) {
+			Site s = Sites.get(id);
+			if (s != null && Stockpiles.pileOf(s) == pile) {
+				return true;
+			}
+			Infra i = Infras.get(id);
+			if (i != null && Stockpiles.pileOf(i) == pile) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/** What the sites a crate feeds still need of {@code item}. */
@@ -609,6 +728,9 @@ public final class Builder {
 		MinecraftServer srv = server;
 		if (srv == null || siteId == null || siteId.isEmpty()) {
 			return null;
+		}
+		if (siteId.startsWith(Stockpiles.PREFIX)) {
+			return Stockpiles.accept(srv, siteId, item, commit); // 6c Y: the owner's stockpile, pooled over its building targets
 		}
 		if (siteId.startsWith(SiteGroupRec.CRATE_PREFIX)) {
 			// a group's shared crate: what any of its building sites still needs (R6)
@@ -648,6 +770,20 @@ public final class Builder {
 	 * target over the snapshot box, orders the queue and picks the crate's cell. Writes nothing else.
 	 */
 	static ConvertPlan planConvert(ServerLevel level, Blueprint bp, Sites.Built built, String id, @Nullable String owner) throws Sites.SiteException {
+		return planConvert(level, bp, built, id, owner, null);
+	}
+
+	/**
+	 * {@link #planConvert}; {@code siteOwner} (6c Y): the site's owner. When it has a stockpile, the site draws from it and gets no
+	 * crate of its own (a shared crate or crateAt of its batch is ignored).
+	 */
+	static ConvertPlan planConvert(ServerLevel level, Blueprint bp, Sites.Built built, String id, @Nullable String owner, @Nullable String siteOwner)
+		throws Sites.SiteException {
+		String dimNo = Stockpiles.dimensionRefusal(siteOwner, Sites.dimensionId(level));
+		if (dimNo != null) {
+			throw new Sites.SiteException(dev.larattalabs.architect.api.Reason.NOT_ALLOWED, dimNo);
+		}
+		boolean stockpiled = Stockpiles.drawsFrom(siteOwner, Sites.dimensionId(level));
 		Anchors.Bounds sb = built.snapshotBox();
 		int dx = sb.maxX() - sb.minX() + 1;
 		int dz = sb.maxZ() - sb.minZ() + 1;
@@ -716,9 +852,14 @@ public final class Builder {
 		}
 		// the crate: outside the snapshot box, at the approach's end (or 2 out from the entrance); a batch whose group shares one
 		// crate (phase 4d, R6) puts it down once (at crateAt, or beside the first site's approach end) and every site uses it
-		String sharedId = SHARED_CRATE.get();
+		String sharedId = stockpiled ? null : SHARED_CRATE.get();
 		SiteGroupRec grp = sharedId == null ? null : Sites.group(sharedId);
 		Construction.Crate crate = null;
+		if (stockpiled) {
+			Architect.LOGGER.info("Construction site {} ({}): {} cells queued; it draws from the stockpile of {}", id, bp.id(), n, siteOwner);
+			return new ConvertPlan(id, new Construction(Construction.BUILDING, queue, JOURNAL_TARGET, null, new BitSet(), false, owner), target, sb, false,
+				null);
+		}
 		if (grp != null && grp.crate() != null) {
 			Construction.Crate gc = grp.crate();
 			if (level.getBlockEntity(new BlockPos(gc.x(), gc.y(), gc.z())) instanceof CrateBlockEntity be && grp.crateOwner().equals(be.siteId())) {
@@ -823,8 +964,14 @@ public final class Builder {
 	 * nothing of the world (the caller takes the placement down).
 	 */
 	static Construction convertNow(ServerLevel level, Blueprint bp, Sites.Built built, String id, @Nullable String owner) throws Sites.SiteException {
+		return convertNow(level, bp, built, id, owner, null);
+	}
+
+	/** {@link #convertNow}; {@code siteOwner}: the site's owner (6c Y: its stockpile). */
+	static Construction convertNow(ServerLevel level, Blueprint bp, Sites.Built built, String id, @Nullable String owner, @Nullable String siteOwner)
+		throws Sites.SiteException {
 		long t0 = System.nanoTime();
-		ConvertPlan p = planConvert(level, bp, built, id, owner);
+		ConvertPlan p = planConvert(level, bp, built, id, owner, siteOwner);
 		SiteJournal.await(commitConvert(level, p), "the construction plan of " + id);
 		placeCrate(level, p);
 		clear(level, p.construction(), p.sb(), 0, Long.MAX_VALUE);
@@ -903,8 +1050,8 @@ public final class Builder {
 		server = srv;
 		ticks++;
 		for (Site s : Sites.all()) {
-			if (s.construction() == null || !s.building()) {
-				continue;
+			if (s.construction() == null || !s.building() || Stockpiles.fed(s)) {
+				continue; // 6c Y: a stockpile's targets are fed by its owner loop (Stockpiles.tick), in feed order
 			}
 			ServerLevel level = Sites.levelOf(srv, s);
 			Run r = level == null ? null : run(srv, s);
@@ -912,23 +1059,43 @@ public final class Builder {
 				continue;
 			}
 			try {
-				step(srv, level, s, r);
+				step(srv, level, s, r, null);
 			} catch (RuntimeException e) {
 				Architect.LOGGER.error("Construction site {}: builder step failed", s.id(), e);
 			}
-			Site now = Sites.get(s.id());
-			if (now != null && now.building()) {
-				long[] last = PROGRESS.computeIfAbsent(s.id(), k -> new long[] {Long.MIN_VALUE / 2, r.built.cardinality()});
-				int built = r.built.cardinality();
-				if (progressDue(last[0], (int) last[1], ticks, built)) {
-					last[0] = ticks;
-					last[1] = built;
-					dev.larattalabs.architect.apiimpl.ApiEvents.progress(srv, now);
-				}
-			}
+			progressEvent(srv, s.id(), r);
 		}
 		syncGhosts(srv);
 		SiteWaits.flush(srv);
+	}
+
+	/** 6c Y: one owner-loop turn of a stockpile's construction site (the builder's step with the stockpile's purse). */
+	static void stepFed(MinecraftServer srv, ServerLevel level, Site s, Run r, Purse purse) {
+		try {
+			step(srv, level, s, r, purse);
+		} catch (RuntimeException e) {
+			Architect.LOGGER.error("Construction site {}: builder step failed", s.id(), e);
+		}
+		progressEvent(srv, s.id(), r);
+	}
+
+	/** SITE_PROGRESS, rate-limited (at most once per second per site, when the built count changed). */
+	private static void progressEvent(MinecraftServer srv, String id, Run r) {
+		Site now = Sites.get(id);
+		if (now != null && now.building()) {
+			long[] last = PROGRESS.computeIfAbsent(id, k -> new long[] {Long.MIN_VALUE / 2, r.built.cardinality()});
+			int built = r.built.cardinality();
+			if (progressDue(last[0], (int) last[1], ticks, built)) {
+				last[0] = ticks;
+				last[1] = built;
+				dev.larattalabs.architect.apiimpl.ApiEvents.progress(srv, now);
+			}
+		}
+	}
+
+	/** 6c Y: a site's run is decoded again on its next use (its crate changed: adopted into a stockpile). */
+	static void forgetRun(String id) {
+		RUNS.remove(id);
 	}
 
 	/** Whether a SITE_PROGRESS is due: the built count changed and a second passed since the last one. Pure. */
@@ -949,24 +1116,27 @@ public final class Builder {
 		return r == null ? new int[] {0, c.size()} : new int[] {r.built.cardinality(), r.size()};
 	}
 
-	private static void step(MinecraftServer srv, ServerLevel level, Site s, Run r) {
+	private static void step(MinecraftServer srv, ServerLevel level, Site s, Run r, @Nullable Purse fed) {
 		if (ticks % 20 == 0) {
-			r.rescan(level);
+			r.rescan(level, false, fed != null);
 		}
 		Construction c = s.construction();
-		CrateBlockEntity crate = crate(level, s, false);
+		CrateBlockEntity crate = fed == null ? crate(level, s, false) : null;
 		BlockPos cp = c.crate() == null ? null : new BlockPos(c.crate().x(), c.crate().y(), c.crate().z());
-		r.crateMissing = cp == null || level.isLoaded(cp) && crate == null;
+		r.crateMissing = fed == null && (cp == null || level.isLoaded(cp) && crate == null);
 		if (r.built.cardinality() == r.size()) {
 			complete(srv, level, s, r, crate);
 			return;
 		}
-		if (crate == null || c.paused()) {
-			// C25: a pause or a crate that is gone ends a wait; a crate in an unloaded chunk only interrupts the count
-			SiteWaits.observe(srv, level, s.id(), c.paused() || r.crateMissing ? WaitCalc.Outcome.ENDED : WaitCalc.Outcome.IDLE);
+		if (fed == null && crate == null || c.paused()) {
+			// C25: a pause or a crate that is gone ends a wait; a crate in an unloaded chunk only interrupts the count. 6c Y1: a
+			// crate-less target of an owner with no stockpile (dissolved) waits for materials: nothing can feed it
+			boolean pileless = fed == null && c.crate() == null && s.owner() != null && !c.paused();
+			SiteWaits.observe(srv, level, s.id(), pileless ? WaitCalc.Outcome.STARVED : c.paused() || r.crateMissing ? WaitCalc.Outcome.ENDED
+				: WaitCalc.Outcome.IDLE);
 			return;
 		}
-		Ledger ledger = crate.ledger();
+		Purse purse = fed != null ? fed : ledgerPurse(level, crate);
 		int budget = SurvivalWorld.blocksPerTick();
 		boolean starved = false;
 		BitSet free = c.free();
@@ -981,15 +1151,17 @@ public final class Builder {
 				continue; // placed with its first
 			}
 			BlockPos p = r.pos(i);
-			if (!level.isLoaded(p)) {
-				continue; // only cells in loaded chunks progress; never load one
+			// only cells in loaded chunks progress; never load one (6c Y1: a stockpile's target reads without a ticket, so its chunks
+			// unload once nobody is near: a far target's frontier can be unloaded, S-Y-1)
+			BlockState now = fed != null ? stateIfLoaded(level, p) : level.isLoaded(p) ? level.getBlockState(p) : null;
+			if (now == null) {
+				continue;
 			}
-			BlockState now = level.getBlockState(p);
 			if (r.matches(now, i)) {
 				r.markBuilt(i, true); // already there (the player placed it)
 				continue;
 			}
-			if (!r.affordable(i, ledger)) {
+			if (!r.affordable(i, purse::stock)) {
 				// C25: a frontier cell (its support is built) the stock cannot pay
 				starved |= r.support[i] < 0 || r.built.get(r.support[i]);
 				continue;
@@ -1001,23 +1173,39 @@ public final class Builder {
 			BlockPos q = j >= 0 ? r.pos(j) : null;
 			// phase 5b: a swap replaces the old version's block only now that the new item is in the crate; the old block is
 			// refunded when it was paid (the free bit) and is still the site's
-			boolean swapNow = r.holdsOld(now, i) && (q == null || r.holdsOld(level.getBlockState(q), j) || free(level, q, level.getBlockState(q), r.target[j]));
-			if (!swapNow && (!free(level, p, now, r.target[i]) || q != null && (!level.isLoaded(q) || !free(level, q, level.getBlockState(q), r.target[j])))) {
-				r.blockedSince.putIfAbsent(i, ticks);
-				continue;
+			boolean swapNow;
+			BlockState qs = null;
+			if (fed != null) {
+				// 6c Y1, a stockpile's target: its pair's cell without a ticket (an unloaded pair waits)
+				qs = q == null ? null : stateIfLoaded(level, q);
+				if (q != null && qs == null) {
+					continue;
+				}
+				swapNow = r.holdsOld(now, i) && (q == null || r.holdsOld(qs, j) || free(level, q, qs, r.target[j]));
+				if (!swapNow && (!free(level, p, now, r.target[i]) || q != null && !free(level, q, qs, r.target[j]))) {
+					r.blockedSince.putIfAbsent(i, ticks);
+					continue;
+				}
+			} else {
+				// a legacy target: as in 0.17.0
+				swapNow = r.holdsOld(now, i) && (q == null || r.holdsOld(level.getBlockState(q), j) || free(level, q, level.getBlockState(q), r.target[j]));
+				if (!swapNow && (!free(level, p, now, r.target[i]) || q != null && (!level.isLoaded(q) || !free(level, q, level.getBlockState(q), r.target[j])))) {
+					r.blockedSince.putIfAbsent(i, ticks);
+					continue;
+				}
 			}
 			r.blockedSince.remove(i);
 			if (swapNow) {
-				refundSwap(level, s, r, i, free);
-				if (j >= 0 && r.holdsOld(level.getBlockState(q), j)) {
-					refundSwap(level, s, r, j, free);
+				refundSwap(level, s, r, i, free, purse);
+				if (j >= 0 && r.holdsOld(qs != null ? qs : level.getBlockState(q), j)) {
+					refundSwap(level, s, r, j, free, purse);
 				}
 				freeChanged = true;
 			}
-			pay(ledger, r.cost.get(i));
+			purse.pay(r.cost.get(i));
 			put(level, r, i, p, true);
 			if (j >= 0) {
-				pay(ledger, r.cost.get(j));
+				purse.pay(r.cost.get(j));
 				put(level, r, j, q, false);
 			}
 			// a cell finish placed free, mined since and now paid for: it is refundable again
@@ -1032,7 +1220,7 @@ public final class Builder {
 			placed++;
 		}
 		if (placed > 0) {
-			crate.ledgerChanged();
+			purse.changed();
 		}
 		SiteWaits.observe(srv, level, s.id(), placed > 0 ? WaitCalc.Outcome.PLACED : starved ? WaitCalc.Outcome.STARVED : WaitCalc.Outcome.IDLE);
 		if (freeChanged) {
@@ -1048,6 +1236,22 @@ public final class Builder {
 		for (SurvivalItems.Cost c : costs) {
 			ledger.consume(c.item(), c.count());
 		}
+	}
+
+	/**
+	 * 6c Y1: a cell's block when its chunk is loaded, else null, without a chunk ticket. {@code Level.getBlockState} goes through
+	 * {@code getChunk(FULL, load)}, which adds a one-tick UNKNOWN ticket each time: read every tick, it kept a construction site's
+	 * chunks loaded for good.
+	 */
+	static @Nullable BlockState stateIfLoaded(ServerLevel level, BlockPos p) {
+		net.minecraft.world.level.chunk.LevelChunk c = level.getChunkSource().getChunkNow(p.getX() >> 4, p.getZ() >> 4);
+		return c == null ? null : c.getBlockState(p);
+	}
+
+	/** 6c Y1: a block entity when its chunk is loaded, else null, without a chunk ticket. */
+	public static @Nullable BlockEntity entityIfLoaded(ServerLevel level, BlockPos p) {
+		net.minecraft.world.level.chunk.LevelChunk c = level.getChunkSource().getChunkNow(p.getX() >> 4, p.getZ() >> 4);
+		return c == null ? null : c.getBlockEntity(p);
 	}
 
 	/** Whether the builder may write a cell holding {@code now}: air, fluid or a replaceable plant, and no one stands in it. */
@@ -1185,7 +1389,24 @@ public final class Builder {
 		CrateBlockEntity crate = crate(level, s, false);
 		List<String> avail = new ArrayList<>();
 		String needs = "";
-		if (crate != null) {
+		Stockpiles.Pile pile = s.construction() != null && s.construction().crate() == null ? Stockpiles.get(s.owner()) : null;
+		if (pile != null) {
+			// 6c Y: what it may use at its place in the feed order; "needs": its largest shortfall beyond that
+			Map<String, Integer> av = Stockpiles.availableTo(srv, s.id());
+			av.forEach((k, v) -> {
+				if (v > 0) {
+					avail.add(k);
+				}
+			});
+			int most = 0;
+			for (var e : r.unbuilt.entrySet()) {
+				int miss = Math.max(0, e.getValue() - av.getOrDefault(e.getKey(), 0));
+				if (miss > most) {
+					most = miss;
+					needs = miss + " × " + itemName(e.getKey());
+				}
+			}
+		} else if (crate != null) {
 			avail.addAll(crate.ledger().stock().keySet());
 			// C25: the first item the build runs short of, in build order (the same answer as SiteWait.nextNeeded()[0])
 			var w = SiteWaits.view(srv, s.id());
@@ -1233,6 +1454,16 @@ public final class Builder {
 
 	/** Right-click on a crate: the crate screen, or (a crate no site owns) the crate goes, giving back what it held. */
 	public static void openCrate(ServerLevel level, ServerPlayer player, CrateBlockEntity crate) {
+		if (crate.siteId().startsWith(Stockpiles.PREFIX)) {
+			// 6c Y: a stockpile crate opens its stockpile's screen; one whose stockpile is gone stays (never taken away here)
+			Stockpiles.Pile p = Stockpiles.byId(crate.siteId().substring(Stockpiles.PREFIX.length()));
+			if (p != null && p.crates().contains(crate.getBlockPos())) {
+				send(player, new SiteNet.CrateOpen(crate.siteId()));
+			} else {
+				player.sendSystemMessage(Component.literal("[Architect] This stockpile crate belongs to no stockpile in this world"));
+			}
+			return;
+		}
 		Site s = Sites.get(crate.siteId());
 		if (crate.siteId().startsWith(SiteGroupRec.CRATE_PREFIX)) {
 			List<Site> fed = fedBy(crate.siteId());
@@ -1254,6 +1485,29 @@ public final class Builder {
 
 	/** Moves every item the site needs from the player's inventory into its crate. Returns the items moved. */
 	public static int insertFromInventory(ServerPlayer player, String id) throws Sites.SiteException {
+		CrateBlockEntity pileCrate = stockpileCrate(player.level().getServer(), id, false);
+		if (pileCrate != null || id.startsWith(Stockpiles.PREFIX)) {
+			// 6c Y: a stockpile (by its id, or by one of its targets): through its nearest present crate
+			if (pileCrate == null || player.level() != pileCrate.getLevel() || player.blockPosition().distSqr(pileCrate.getBlockPos()) > 16 * 16) {
+				CrateBlockEntity near = nearestStockpileCrate(player, id);
+				if (near == null) {
+					throw new Sites.SiteException("Stand next to a crate of the stockpile to fill it");
+				}
+				pileCrate = near;
+			}
+			int moved = 0;
+			var inv = player.getInventory();
+			for (int slot = 0; slot < inv.getContainerSize(); slot++) {
+				ItemStack st = inv.getItem(slot);
+				if (!st.isEmpty()) {
+					moved += pileCrate.insert(st);
+				}
+			}
+			if (moved > 0) {
+				inv.setChanged();
+			}
+			return moved;
+		}
 		Site s = requireBuilding(id);
 		ServerLevel level = Sites.levelOf(player.level().getServer(), s);
 		CrateBlockEntity crate = level == null ? null : crate(level, s, false);
@@ -1279,10 +1533,24 @@ public final class Builder {
 
 	/** Dev / test hook: books items into the crate as a hopper would (counting equivalents). Returns what went in per item. */
 	public static Map<String, Integer> insertItems(MinecraftServer srv, String id, Map<String, Integer> items) throws Sites.SiteException {
-		Infra road = Infras.get(id);
-		Site s = road != null && road.building() ? RoadBuilder.probe(road) : requireBuilding(id); // 6c 0c (C16): a road's crate too
-		ServerLevel level = Sites.levelOf(srv, s);
-		CrateBlockEntity crate = level == null ? null : crate(level, s, true);
+		return insertItems(srv, id, items, false);
+	}
+
+	/**
+	 * {@link #insertItems}; {@code exact} (6c Y1 gate): only units taken as themselves go in (an insert that an equivalent would take
+	 * stops), so a driver counts every item in its own unit.
+	 */
+	public static Map<String, Integer> insertItems(MinecraftServer srv, String id, Map<String, Integer> items, boolean exact) throws Sites.SiteException {
+		CrateBlockEntity crate = stockpileCrate(srv, id, true); // 6c Y: "stockpile:<owner>", or a stockpile's target
+		if (crate == null && id.startsWith(Stockpiles.PREFIX)) {
+			throw new Sites.SiteException("The stockpile " + id + " has no present crate");
+		}
+		if (crate == null) {
+			Infra road = Infras.get(id);
+			Site s = road != null && road.building() ? RoadBuilder.probe(road) : requireBuilding(id); // 6c 0c (C16): a road's crate too
+			ServerLevel level = Sites.levelOf(srv, s);
+			crate = level == null ? null : crate(level, s, true);
+		}
 		if (crate == null) {
 			throw new Sites.SiteException("The crate of " + id + " is missing");
 		}
@@ -1293,9 +1561,67 @@ public final class Builder {
 				throw new Sites.SiteException("Unknown item " + e.getKey());
 			}
 			ItemStack st = new ItemStack(it, e.getValue());
+			if (exact) {
+				int n = 0;
+				while (!st.isEmpty()) {
+					Ledger.Accepted a = accepts(crate.siteId(), crate, e.getKey(), false);
+					if (a == null || a.converted()) {
+						break;
+					}
+					ItemStack one = st.split(1);
+					n += crate.insert(one);
+				}
+				in.put(e.getKey(), n);
+				continue;
+			}
 			in.put(e.getKey(), crate.insert(st));
 		}
 		return in;
+	}
+
+	/** 6c Y: the owner of the stockpile {@code id} names ({@code stockpile:<owner>}, or a target drawing from it), or null. */
+	static Stockpiles.@Nullable Pile pileNamed(String id) {
+		if (id.startsWith(Stockpiles.PREFIX)) {
+			return Stockpiles.named(id);
+		}
+		Site s = Sites.get(id);
+		if (s != null) {
+			return Stockpiles.pileOf(s);
+		}
+		Infra i = Infras.get(id);
+		return i == null ? null : Stockpiles.pileOf(i);
+	}
+
+	/** 6c Y: the first present crate block of the stockpile {@code id} names, or null. {@code load}: load its chunk. */
+	static @Nullable CrateBlockEntity stockpileCrate(MinecraftServer srv, String id, boolean load) {
+		Stockpiles.Pile p = pileNamed(id);
+		ServerLevel level = p == null ? null : Sites.levelOf(srv, p.dimension());
+		if (level == null) {
+			return null;
+		}
+		for (BlockPos c : p.crates()) {
+			if ((load || level.isLoaded(c)) && level.getBlockEntity(c) instanceof CrateBlockEntity be && be.siteId().equals(Stockpiles.PREFIX + p.id())) {
+				return be;
+			}
+		}
+		return null;
+	}
+
+	private static @Nullable CrateBlockEntity nearestStockpileCrate(ServerPlayer player, String id) {
+		Stockpiles.Pile p = pileNamed(id);
+		if (p == null || !(player.level() instanceof ServerLevel level) || !Sites.dimensionId(level).equals(p.dimension())) {
+			return null;
+		}
+		CrateBlockEntity best = null;
+		double bd = 16 * 16;
+		for (BlockPos c : p.crates()) {
+			double d = player.blockPosition().distSqr(c);
+			if (d <= bd && level.isLoaded(c) && level.getBlockEntity(c) instanceof CrateBlockEntity be && be.siteId().equals(Stockpiles.PREFIX + p.id())) {
+				best = be;
+				bd = d;
+			}
+		}
+		return best;
 	}
 
 	public static void setPaused(MinecraftServer srv, String id, boolean paused) throws Sites.SiteException {
@@ -1374,11 +1700,29 @@ public final class Builder {
 	// ------------------------------------------------------------------ deconstruct
 
 	/** What a deconstruct gives back: refunds, the player's blocks and the crate's stock, and where they drop. */
-	record Deconstruction(Refunds.Tally tally, Map<String, Integer> crateStock, BlockPos at, int queued, int missing) {
+	record Deconstruction(Refunds.Tally tally, Map<String, Integer> crateStock, BlockPos at, int queued, int missing, @Nullable String stockpile,
+		@Nullable String key) {
+		Deconstruction(Refunds.Tally tally, Map<String, Integer> crateStock, BlockPos at, int queued, int missing) {
+			this(tally, crateStock, at, queued, missing, null, null);
+		}
+
+		/** What drops at {@link #at}: refunds (a legacy site), the player's blocks and the crate's stock. A stockpile's refunds are credited instead. */
 		Map<String, Integer> all() {
-			Map<String, Integer> m = new TreeMap<>(tally.refund());
+			Map<String, Integer> m = new TreeMap<>(stockpile == null ? tally.refund() : Map.of());
 			tally.playerBlocks().forEach((k, v) -> m.merge(k, v, Integer::sum));
 			crateStock.forEach((k, v) -> m.merge(k, v, Integer::sum));
+			return m;
+		}
+
+		/** 6c Y: the refunds credited into the owner's stockpile under {@link #key} (a stockpile's target), else nothing. */
+		Map<String, Integer> credit() {
+			return stockpile == null ? Map.of() : tally.refund();
+		}
+
+		/** Everything given back (the RemoveResult's refund): what drops plus what is credited. */
+		Map<String, Integer> reported() {
+			Map<String, Integer> m = new TreeMap<>(all());
+			credit().forEach((k, v) -> m.merge(k, v, Integer::sum));
 			return m;
 		}
 
@@ -1391,6 +1735,10 @@ public final class Builder {
 			o.addProperty("queued", queued);
 			o.addProperty("missingOrMined", missing);
 			o.addProperty("dropAt", at.toShortString());
+			if (stockpile != null) {
+				o.addProperty("stockpile", stockpile);
+				o.addProperty("creditKey", key);
+			}
 			return o;
 		}
 	}
@@ -1475,6 +1823,14 @@ public final class Builder {
 		Construction c = s.construction();
 		Map<String, Integer> stock = Map.of();
 		BlockPos at = dropPos(s);
+		Stockpiles.Pile pile = Stockpiles.pileOf(s);
+		if (pile != null) {
+			// 6c Y: a stockpile's target: its refunds are credited into the stockpile (once, keyed by this placement); the player's
+			// blocks still drop at the site (they never were the stockpile's)
+			Deconstruction d = new Deconstruction(tally, Map.of(), at, r == null ? 0 : r.size(), missing, pile.owner(), creditKey(s));
+			lastDeconstruction = d;
+			return d;
+		}
 		if (c.crate() != null) {
 			at = new BlockPos(c.crate().x(), c.crate().y(), c.crate().z());
 			CrateBlockEntity crate = crate(level, s, true);
@@ -1495,6 +1851,7 @@ public final class Builder {
 
 	/** After the restore: the deconstruct's items drop at the crate's cell (kept from the restore's drop cleanup). */
 	static void dropDeconstruction(ServerLevel level, Site s, Deconstruction d, Sites.Drops drops) {
+		creditRefund(level, d.stockpile(), d.key(), d.credit(), d.at(), drops);
 		dropItems(level, d.at(), d.all(), drops);
 		forget(level.getServer(), s.id());
 		Construction c = s.construction();
@@ -1502,6 +1859,28 @@ public final class Builder {
 			Architect.LOGGER.info("Deconstructed {}: refund {} ({} items), the player's blocks {}, crate stock {}, {} queued cells missing or mined",
 				s.id(), d.tally().refund(), Refunds.Tally.total(d.tally().refund()), d.tally().playerBlocks(), d.crateStock(), d.missing());
 		}
+	}
+
+	/** 6c Y: the credit key of a site's deconstruct (§4 "Exactly once"): this placement of the site, whatever removal takes it down. */
+	static String creditKey(Site s) {
+		return "site:" + s.id() + "@" + s.placedAt();
+	}
+
+	/**
+	 * 6c Y: credits a stockpile target's refunds into its owner's stockpile under {@code key} (once); with the stockpile gone
+	 * (dissolved meanwhile), they drop at {@code at} as a legacy site's would.
+	 */
+	static void creditRefund(ServerLevel level, @Nullable String owner, @Nullable String key, Map<String, Integer> items, BlockPos at,
+		Sites.@Nullable Drops drops) {
+		if (owner == null || key == null || items.isEmpty()) {
+			return;
+		}
+		Stockpiles.Pile p = Stockpiles.get(owner);
+		if (p == null) {
+			dropItems(level, at, items, drops);
+			return;
+		}
+		Stockpiles.credit(level.getServer(), p, key, items, at);
 	}
 
 	/** Where items go when the crate is gone: the site's spawn anchor, else above the box's middle. */
@@ -1539,6 +1918,17 @@ public final class Builder {
 
 	/** A site's construction state: queue, built, BOM rows (needed / delivered / placed / missing), ledger, blocked cells. */
 	public static JsonObject state(MinecraftServer srv, String id) throws Sites.SiteException {
+		if (id.startsWith(Stockpiles.PREFIX)) {
+			// 6c Y: a stockpile's crate screen and DevBridge view
+			Stockpiles.Pile named = Stockpiles.named(id);
+			JsonObject o = named == null ? null : Stockpiles.json(srv, named.owner());
+			if (o == null) {
+				throw new Sites.SiteException("No stockpile " + id.substring(Stockpiles.PREFIX.length()));
+			}
+			o.addProperty("site", id);
+			o.addProperty("state", "stockpile");
+			return o;
+		}
 		JsonObject o = stateOf(srv, id);
 		// phase 4e: its journal entries, the cells another site covers, the sites it lies on and under
 		JsonObject j = SiteJournal.siteJson(id);
@@ -1673,6 +2063,16 @@ public final class Builder {
 		if (s.building() && r.crateMissing) {
 			notes.add("crate missing: the site can't take items; Deconstruct from the Library still works (refunds placed cells only)");
 		}
+		Stockpiles.Pile pile = Stockpiles.pileOf(s);
+		if (pile != null) {
+			// 6c Y: it draws from its owner's stockpile: what it may use at its place in the feed order
+			o.addProperty("stockpile", pile.owner());
+			o.add("available", counts(Stockpiles.availableTo(srv, id)));
+			o.addProperty("feedPosition", pile.order().indexOf(id));
+		} else if (c.crate() == null && s.owner() != null && s.building()) {
+			notes.add("no stockpile: it waits until its owner has one again");
+			o.addProperty("noStockpile", true);
+		}
 		o.add("notes", notes);
 		Deconstruction d = lastDeconstruction;
 		if (d != null) {
@@ -1721,6 +2121,28 @@ public final class Builder {
 		return List.copyOf(out);
 	}
 
+	/**
+	 * 6c Y1 audit: what a construction site's paid cells standing cost, per item: queued cells built and not placed free, and swap
+	 * cells still holding their old paid block (at the old block's cost; it is refunded at the swap). Rescans the site first.
+	 */
+	static Map<String, Integer> paidStanding(ServerLevel level, Site s, Run r) {
+		r.rescan(level, false, true); // never loads a chunk (a far target's cells keep their last known state)
+		r.newlyCount = 0;
+		BitSet free = s.construction().free();
+		Map<String, Integer> out = new TreeMap<>();
+		for (int i = 0; i < r.size(); i++) {
+			if (free.get(i)) {
+				continue;
+			}
+			if (r.built.get(i)) {
+				r.cost.get(i).forEach(c -> out.merge(c.item(), c.count(), Integer::sum));
+			} else if (r.old != null && r.swap.get(i) && r.old[i] != null && r.holdsOld(level.getBlockState(r.pos(i)), i)) {
+				Cells.cost(r.old[i]).forEach(c -> out.merge(c.item(), c.count(), Integer::sum));
+			}
+		}
+		return out;
+	}
+
 	/** Test hook (dev.site.cells): every queued cell of a construction site as "x,y,z" to the block id of its target. */
 	public static JsonObject cellsJson(MinecraftServer srv, String id) {
 		JsonObject o = new JsonObject();
@@ -1754,7 +2176,7 @@ public final class Builder {
 	static final boolean TRACE_REFUNDS = System.getenv("ARCHITECT_TRACE_REFUNDS") != null;
 
 	/** A swap: the old block's item goes to the crate's cell (when it was paid), and the cell counts as paid for its new block. */
-	private static void refundSwap(ServerLevel level, Site s, Run r, int i, BitSet free) {
+	private static void refundSwap(ServerLevel level, Site s, Run r, int i, BitSet free, Purse purse) {
 		if (r.old != null && r.old[i] != null && !free.get(i)) {
 			Map<String, Integer> items = new TreeMap<>();
 			Cells.cost(r.old[i]).forEach(c -> items.merge(c.item(), c.count(), Integer::sum));
@@ -1763,7 +2185,7 @@ public final class Builder {
 			}
 			Construction c = s.construction();
 			BlockPos at = c.crate() != null ? new BlockPos(c.crate().x(), c.crate().y(), c.crate().z()).above() : dropPos(s);
-			dropItems(level, at, items, null);
+			purse.giveBack(items, at); // a legacy crate: dropped above it; a stockpile: credited as it happens (6c Y)
 			items.forEach((k, v) -> REFUNDED.computeIfAbsent(s.id(), x -> new ConcurrentHashMap<>()).merge(k, v, Integer::sum));
 		}
 		free.clear(i);
@@ -1855,6 +2277,12 @@ public final class Builder {
 		}
 		MinecraftServer srv = level.getServer();
 		Site before = Sites.get(r.siteId());
+		String dimNo = Stockpiles.dimensionRefusal(before.owner(), before.dimension());
+		if (dimNo != null) {
+			throw new Sites.SiteException(dev.larattalabs.architect.api.Reason.NOT_ALLOWED, dimNo); // 6c Y (S-Y-6)
+		}
+		// 6c Y: an owner with a stockpile: the delta draws from it (no crate of its own) and its refunds are credited into it
+		boolean stockpiled = Stockpiles.drawsFrom(before.owner(), before.dimension());
 		BitSet paidBefore = paidCells(before);
 		Anchors.Bounds oldBox = before.restoreBox();
 		Construction oldC = before.construction();
@@ -1956,7 +2384,7 @@ public final class Builder {
 			}
 		}
 		// the crate: beside the new version's approach end (its own crate entry in the site's undo group)
-		BlockPos cp = deltaCratePos(level, s, c.plan().pb());
+		BlockPos cp = stockpiled ? null : deltaCratePos(level, s, c.plan().pb());
 		Construction.Crate crate = null;
 		if (cp != null) {
 			BlockState wasC = level.getBlockState(cp);
@@ -1979,7 +2407,11 @@ public final class Builder {
 		Site built = s.withConstruction(nc).withVersioning(new Site.Versioning(s.versioning().version(), h, 0, 0, s.versioning().deviations()));
 		Sites.replace(srv, built);
 		RUNS.remove(s.id());
-		dropItems(level, crate != null ? cp.above() : dropPos(s), refunded, null);
+		if (stockpiled) {
+			creditRefund(level, s.owner(), "delta:" + entry + ":" + s.id(), refunded, dropPos(s), null);
+		} else {
+			dropItems(level, crate != null ? cp.above() : dropPos(s), refunded, null);
+		}
 		refunded.forEach((k, v) -> REFUNDED.computeIfAbsent(s.id(), x -> new ConcurrentHashMap<>()).merge(k, v, Integer::sum));
 		Architect.LOGGER.info("Construction delta of {} v{} -> v{}: {} cells queued ({} swaps), refunds {}", s.id(), res.from(), res.to(), n, swap
 			.cardinality(), refunded);

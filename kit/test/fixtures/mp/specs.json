@@ -1,0 +1,4719 @@
+{
+ "note": "kit/test/mp-specs.mjs driftSpecs: 100 masks and 100 patterns, every other one broken; valid/error from the kit (lib/mask.mjs maskError, lib/pattern.mjs patternError); the mod's MaskPatternDriftTest asserts api.Mask / api.Pattern agree",
+ "specs": [
+  {
+   "kind": "mask",
+   "spec": {
+    "block": [
+     "Minecraft:Stone"
+    ]
+   },
+   "valid": false,
+   "error": "mask.block[0]: does not match ^#?([a-z0-9_.-]+:)?[a-z0-9_./-]+$"
+  },
+  {
+   "kind": "mask",
+   "spec": {
+    "slope": [
+     1,
+     4
+    ]
+   },
+   "valid": true,
+   "error": null
+  },
+  {
+   "kind": "mask",
+   "spec": {
+    "depth": [
+     -3
+    ]
+   },
+   "valid": false,
+   "error": "mask.depth: fewer than 2 items"
+  },
+  {
+   "kind": "mask",
+   "spec": {
+    "any": [
+     {
+      "all": [
+       {
+        "any": [
+         {
+          "field": "wet",
+          "gte": 2,
+          "lt": 98
+         }
+        ]
+       },
+       {
+        "all": [
+         {
+          "class": [
+           "LOG"
+          ]
+         },
+         {
+          "slope": [
+           0,
+           0
+          ]
+         },
+         {
+          "slope": [
+           0,
+           4
+          ]
+         }
+        ]
+       },
+       {
+        "field": "wet",
+        "lt": 233
+       }
+      ]
+     },
+     {
+      "all": [
+       {
+        "any": [
+         {
+          "field": "wet",
+          "gte": 155
+         },
+         {
+          "field": "wet",
+          "gte": 31,
+          "lt": 129
+         },
+         {
+          "block": [
+           "#minecraft:base_stone_overworld",
+           "minecraft:coarse_dirt",
+           "minecraft:grass_block",
+           "minecraft:stone"
+          ]
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "valid": true,
+   "error": null
+  },
+  {
+   "kind": "mask",
+   "spec": {
+    "block": [
+     "Minecraft:Stone"
+    ]
+   },
+   "valid": false,
+   "error": "mask.block[0]: does not match ^#?([a-z0-9_.-]+:)?[a-z0-9_./-]+$"
+  },
+  {
+   "kind": "mask",
+   "spec": {
+    "height": [
+     60,
+     62
+    ]
+   },
+   "valid": true,
+   "error": null
+  },
+  {
+   "kind": "mask",
+   "spec": {
+    "block": [
+     "Minecraft:Stone"
+    ]
+   },
+   "valid": false,
+   "error": "mask.block[0]: does not match ^#?([a-z0-9_.-]+:)?[a-z0-9_./-]+$"
+  },
+  {
+   "kind": "mask",
+   "spec": {
+    "class": [
+     "LOG",
+     "SNOW"
+    ]
+   },
+   "valid": true,
+   "error": null
+  },
+  {
+   "kind": "mask",
+   "spec": {
+    "all": []
+   },
+   "valid": false,
+   "error": "mask.all: fewer than 1 items"
+  },
+  {
+   "kind": "mask",
+   "spec": {
+    "noise": {
+     "kind": "simplex",
+     "dims": 3,
+     "scale": 8,
+     "octaves": 1,
+     "seed": "e989dd42153836fd"
+    },
+    "lt": -0.34
+   },
+   "valid": true,
+   "error": null
+  },
+  {
+   "kind": "mask",
+   "spec": {
+    "any": [
+     {
+      "height": [
+       0,
+       1
+      ]
+     },
+     {
+      "height": [
+       0,
+       1
+      ]
+     },
+     {
+      "height": [
+       0,
+       1
+      ]
+     },
+     {
+      "height": [
+       0,
+       1
+      ]
+     },
+     {
+      "height": [
+       0,
+       1
+      ]
+     },
+     {
+      "height": [
+       0,
+       1
+      ]
+     },
+     {
+      "height": [
+       0,
+       1
+      ]
+     },
+     {
+      "height": [
+       0,
+       1
+      ]
+     },
+     {
+      "height": [
+       0,
+       1
+      ]
+     },
+     {
+      "height": [
+       0,
+       1
+      ]
+     },
+     {
+      "height": [
+       0,
+       1
+      ]
+     },
+     {
+      "height": [
+       0,
+       1
+      ]
+     },
+     {
+      "height": [
+       0,
+       1
+      ]
+     },
+     {
+      "height": [
+       0,
+       1
+      ]
+     },
+     {
+      "height": [
+       0,
+       1
+      ]
+     },
+     {
+      "height": [
+       0,
+       1
+      ]
+     },
+     {
+      "height": [
+       0,
+       1
+      ]
+     }
+    ]
+   },
+   "valid": false,
+   "error": "mask.any: more than 16 items"
+  },
+  {
+   "kind": "mask",
+   "spec": {
+    "height": [
+     67,
+     72
+    ]
+   },
+   "valid": true,
+   "error": null
+  },
+  {
+   "kind": "mask",
+   "spec": {
+    "block": [
+     "#minecraft:dirt",
+     "minecraft:coarse_dirt"
+    ],
+    "bogus": true
+   },
+   "valid": false,
+   "error": "mask: a mask is one of {all}, {any}, {not}, {block}, {height}, {slope}, {depth}, {field}, {noise}, {class}"
+  },
+  {
+   "kind": "mask",
+   "spec": {
+    "all": [
+     {
+      "all": [
+       {
+        "height": [
+         76,
+         77
+        ]
+       },
+       {
+        "all": [
+         {
+          "slope": [
+           0,
+           1
+          ]
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "all": [
+       {
+        "slope": [
+         1,
+         5
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "valid": true,
+   "error": null
+  },
+  {
+   "kind": "mask",
+   "spec": {
+    "any": [
+     {
+      "height": [
+       0,
+       1
+      ]
+     },
+     {
+      "height": [
+       0,
+       1
+      ]
+     },
+     {
+      "height": [
+       0,
+       1
+      ]
+     },
+     {
+      "height": [
+       0,
+       1
+      ]
+     },
+     {
+      "height": [
+       0,
+       1
+      ]
+     },
+     {
+      "height": [
+       0,
+       1
+      ]
+     },
+     {
+      "height": [
+       0,
+       1
+      ]
+     },
+     {
+      "height": [
+       0,
+       1
+      ]
+     },
+     {
+      "height": [
+       0,
+       1
+      ]
+     },
+     {
+      "height": [
+       0,
+       1
+      ]
+     },
+     {
+      "height": [
+       0,
+       1
+      ]
+     },
+     {
+      "height": [
+       0,
+       1
+      ]
+     },
+     {
+      "height": [
+       0,
+       1
+      ]
+     },
+     {
+      "height": [
+       0,
+       1
+      ]
+     },
+     {
+      "height": [
+       0,
+       1
+      ]
+     },
+     {
+      "height": [
+       0,
+       1
+      ]
+     },
+     {
+      "height": [
+       0,
+       1
+      ]
+     }
+    ]
+   },
+   "valid": false,
+   "error": "mask.any: more than 16 items"
+  },
+  {
+   "kind": "mask",
+   "spec": {
+    "slope": [
+     1,
+     5
+    ]
+   },
+   "valid": true,
+   "error": null
+  },
+  {
+   "kind": "mask",
+   "spec": {
+    "all": []
+   },
+   "valid": false,
+   "error": "mask.all: fewer than 1 items"
+  },
+  {
+   "kind": "mask",
+   "spec": {
+    "not": {
+     "not": {
+      "class": [
+       "OWNED",
+       "LOG"
+      ]
+     }
+    }
+   },
+   "valid": true,
+   "error": null
+  },
+  {
+   "kind": "mask",
+   "spec": {
+    "any": [
+     {
+      "block": [
+       "#minecraft:base_stone_overworld"
+      ]
+     },
+     {
+      "class": [
+       "PLAYER"
+      ],
+      "bogus": true
+     }
+    ]
+   },
+   "valid": false,
+   "error": "mask.any[1]: a mask is one of {all}, {any}, {not}, {block}, {height}, {slope}, {depth}, {field}, {noise}, {class}"
+  },
+  {
+   "kind": "mask",
+   "spec": {
+    "slope": [
+     0,
+     2
+    ]
+   },
+   "valid": true,
+   "error": null
+  },
+  {
+   "kind": "mask",
+   "spec": {
+    "not": {
+     "not": {
+      "not": {
+       "not": {
+        "not": {
+         "not": {
+          "not": {
+           "not": {
+            "height": [
+             0,
+             1
+            ]
+           }
+          }
+         }
+        }
+       }
+      }
+     }
+    }
+   },
+   "valid": false,
+   "error": "mask.not.not.not.not.not.not.not.not: nested more than 8 deep"
+  },
+  {
+   "kind": "mask",
+   "spec": {
+    "all": [
+     {
+      "height": [
+       72,
+       80
+      ]
+     },
+     {
+      "block": [
+       "minecraft:dirt",
+       "minecraft:oak_log"
+      ]
+     },
+     {
+      "block": [
+       "#minecraft:logs",
+       "minecraft:grass_block"
+      ]
+     }
+    ]
+   },
+   "valid": true,
+   "error": null
+  },
+  {
+   "kind": "mask",
+   "spec": {
+    "class": [
+     "ROCK",
+     "GRANITE"
+    ]
+   },
+   "valid": false,
+   "error": "mask.class[1]: must be one of \"AIR\", \"ROCK\", \"SOIL\", \"LOOSE\", \"ICE\", \"SNOW\", \"WATER\", \"LAVA\", \"LOG\", \"LEAVES\", \"PLANT\", \"OWNED\", \"PLAYER\", \"BLOCK_ENTITY\", \"MISSING\""
+  },
+  {
+   "kind": "mask",
+   "spec": {
+    "any": [
+     {
+      "noise": {
+       "kind": "simplex",
+       "dims": 2,
+       "scale": 4,
+       "octaves": 3,
+       "seed": "7ddc3e0c73707aca"
+      },
+      "lt": 0.11
+     },
+     {
+      "depth": [
+       -4,
+       3
+      ]
+     },
+     {
+      "all": [
+       {
+        "depth": [
+         2,
+         4
+        ]
+       },
+       {
+        "all": [
+         {
+          "noise": {
+           "kind": "simplex",
+           "dims": 3,
+           "scale": 16,
+           "octaves": 3,
+           "seed": "51b5351a4f3e7e63"
+          },
+          "gte": 0.05
+         },
+         {
+          "depth": [
+           -3,
+           2
+          ]
+         },
+         {
+          "slope": [
+           2,
+           5
+          ]
+         }
+        ]
+       },
+       {
+        "any": [
+         {
+          "block": [
+           "minecraft:sand",
+           "minecraft:grass_block"
+          ]
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "valid": true,
+   "error": null
+  },
+  {
+   "kind": "mask",
+   "spec": {
+    "block": [
+     "Minecraft:Stone"
+    ]
+   },
+   "valid": false,
+   "error": "mask.block[0]: does not match ^#?([a-z0-9_.-]+:)?[a-z0-9_./-]+$"
+  },
+  {
+   "kind": "mask",
+   "spec": {
+    "any": [
+     {
+      "height": [
+       66,
+       80
+      ]
+     },
+     {
+      "all": [
+       {
+        "any": [
+         {
+          "depth": [
+           4,
+           12
+          ]
+         },
+         {
+          "depth": [
+           1,
+           7
+          ]
+         },
+         {
+          "slope": [
+           2,
+           5
+          ]
+         }
+        ]
+       },
+       {
+        "field": "wet",
+        "gte": 56
+       },
+       {
+        "noise": {
+         "kind": "value",
+         "dims": 3,
+         "scale": 16,
+         "octaves": 3,
+         "seed": "af47ab268af34ad6"
+        },
+        "gte": -0.5,
+        "lt": 0.39
+       }
+      ]
+     }
+    ]
+   },
+   "valid": true,
+   "error": null
+  },
+  {
+   "kind": "mask",
+   "spec": {
+    "class": [
+     "ROCK",
+     "GRANITE"
+    ]
+   },
+   "valid": false,
+   "error": "mask.class[1]: must be one of \"AIR\", \"ROCK\", \"SOIL\", \"LOOSE\", \"ICE\", \"SNOW\", \"WATER\", \"LAVA\", \"LOG\", \"LEAVES\", \"PLANT\", \"OWNED\", \"PLAYER\", \"BLOCK_ENTITY\", \"MISSING\""
+  },
+  {
+   "kind": "mask",
+   "spec": {
+    "not": {
+     "depth": [
+      -4,
+      4
+     ]
+    }
+   },
+   "valid": true,
+   "error": null
+  },
+  {
+   "kind": "mask",
+   "spec": {
+    "all": [
+     {
+      "any": [
+       {
+        "not": {
+         "depth": [
+          2,
+          5
+         ]
+        }
+       },
+       {
+        "class": [
+         "BLOCK_ENTITY"
+        ]
+       }
+      ]
+     },
+     {
+      "block": 7
+     }
+    ]
+   },
+   "valid": false,
+   "error": "mask.all[1].block: expected array, got integer"
+  },
+  {
+   "kind": "mask",
+   "spec": {
+    "depth": [
+     3,
+     5
+    ]
+   },
+   "valid": true,
+   "error": null
+  },
+  {
+   "kind": "mask",
+   "spec": {
+    "all": [
+     {
+      "block": [
+       "minecraft:sand",
+       "#minecraft:base_stone_overworld",
+       "minecraft:oak_log"
+      ],
+      "bogus": true
+     },
+     {
+      "not": {
+       "all": [
+        {
+         "noise": {
+          "kind": "value",
+          "dims": 3,
+          "scale": 32,
+          "octaves": 1,
+          "seed": "161cc24323906b88"
+         },
+         "gte": -0.5,
+         "lt": 0.7
+        }
+       ]
+      }
+     }
+    ]
+   },
+   "valid": false,
+   "error": "mask.all[0]: a mask is one of {all}, {any}, {not}, {block}, {height}, {slope}, {depth}, {field}, {noise}, {class}"
+  },
+  {
+   "kind": "mask",
+   "spec": {
+    "not": {
+     "noise": {
+      "kind": "simplex",
+      "dims": 3,
+      "scale": 32,
+      "octaves": 1,
+      "seed": "21ab473c86d11065"
+     },
+     "gte": -0.78
+    }
+   },
+   "valid": true,
+   "error": null
+  },
+  {
+   "kind": "mask",
+   "spec": {
+    "block": [
+     "Minecraft:Stone"
+    ]
+   },
+   "valid": false,
+   "error": "mask.block[0]: does not match ^#?([a-z0-9_.-]+:)?[a-z0-9_./-]+$"
+  },
+  {
+   "kind": "mask",
+   "spec": {
+    "height": [
+     78,
+     86
+    ]
+   },
+   "valid": true,
+   "error": null
+  },
+  {
+   "kind": "mask",
+   "spec": {
+    "block": [
+     "Minecraft:Stone"
+    ]
+   },
+   "valid": false,
+   "error": "mask.block[0]: does not match ^#?([a-z0-9_.-]+:)?[a-z0-9_./-]+$"
+  },
+  {
+   "kind": "mask",
+   "spec": {
+    "slope": [
+     3,
+     7
+    ]
+   },
+   "valid": true,
+   "error": null
+  },
+  {
+   "kind": "mask",
+   "spec": {
+    "noise": {
+     "kind": "simplex",
+     "dims": 2,
+     "scale": 16,
+     "octaves": 2,
+     "seed": "xyz"
+    },
+    "gte": 0
+   },
+   "valid": false,
+   "error": "mask.noise.seed: does not match ^[0-9a-f]{16}$"
+  },
+  {
+   "kind": "mask",
+   "spec": {
+    "not": {
+     "field": "wet",
+     "lt": 113
+    }
+   },
+   "valid": true,
+   "error": null
+  },
+  {
+   "kind": "mask",
+   "spec": {
+    "noise": {
+     "kind": "simplex",
+     "dims": 3,
+     "scale": 16,
+     "octaves": 1,
+     "seed": "xyz"
+    },
+    "gte": 0
+   },
+   "valid": false,
+   "error": "mask.noise.seed: does not match ^[0-9a-f]{16}$"
+  },
+  {
+   "kind": "mask",
+   "spec": {
+    "not": {
+     "any": [
+      {
+       "any": [
+        {
+         "noise": {
+          "kind": "value",
+          "dims": 2,
+          "scale": 8,
+          "octaves": 1,
+          "seed": "2a33e74612f29aa1"
+         },
+         "gte": -0.03
+        }
+       ]
+      },
+      {
+       "field": "wet",
+       "lt": 213
+      }
+     ]
+    }
+   },
+   "valid": true,
+   "error": null
+  },
+  {
+   "kind": "mask",
+   "spec": {
+    "any": [
+     {
+      "height": [
+       0,
+       1
+      ]
+     },
+     {
+      "height": [
+       0,
+       1
+      ]
+     },
+     {
+      "height": [
+       0,
+       1
+      ]
+     },
+     {
+      "height": [
+       0,
+       1
+      ]
+     },
+     {
+      "height": [
+       0,
+       1
+      ]
+     },
+     {
+      "height": [
+       0,
+       1
+      ]
+     },
+     {
+      "height": [
+       0,
+       1
+      ]
+     },
+     {
+      "height": [
+       0,
+       1
+      ]
+     },
+     {
+      "height": [
+       0,
+       1
+      ]
+     },
+     {
+      "height": [
+       0,
+       1
+      ]
+     },
+     {
+      "height": [
+       0,
+       1
+      ]
+     },
+     {
+      "height": [
+       0,
+       1
+      ]
+     },
+     {
+      "height": [
+       0,
+       1
+      ]
+     },
+     {
+      "height": [
+       0,
+       1
+      ]
+     },
+     {
+      "height": [
+       0,
+       1
+      ]
+     },
+     {
+      "height": [
+       0,
+       1
+      ]
+     },
+     {
+      "height": [
+       0,
+       1
+      ]
+     }
+    ]
+   },
+   "valid": false,
+   "error": "mask.any: more than 16 items"
+  },
+  {
+   "kind": "mask",
+   "spec": {
+    "depth": [
+     3,
+     5
+    ]
+   },
+   "valid": true,
+   "error": null
+  },
+  {
+   "kind": "mask",
+   "spec": {
+    "all": [
+     {
+      "all": [
+       {
+        "any": [
+         {
+          "height": [
+           59,
+           64
+          ]
+         },
+         {
+          "block": [
+           "#minecraft:dirt"
+          ]
+         }
+        ]
+       },
+       {
+        "slope": [
+         3,
+         3
+        ]
+       },
+       {
+        "field": "wet",
+        "gte": 36,
+        "lt": 54
+       }
+      ]
+     },
+     {
+      "all": [
+       {
+        "noise": {
+         "kind": "simplex",
+         "dims": 2,
+         "scale": 32,
+         "octaves": 1,
+         "seed": "43befff3f33faba2"
+        },
+        "gte": -0.5,
+        "lt": 0.51
+       },
+       {
+        "any": [
+         {
+          "height": [
+           67,
+           81
+          ]
+         }
+        ]
+       }
+      ]
+     }
+    ],
+    "extra": 1
+   },
+   "valid": false,
+   "error": "mask: a mask is one of {all}, {any}, {not}, {block}, {height}, {slope}, {depth}, {field}, {noise}, {class}"
+  },
+  {
+   "kind": "mask",
+   "spec": {
+    "any": [
+     {
+      "height": [
+       61,
+       65
+      ]
+     },
+     {
+      "height": [
+       61,
+       71
+      ]
+     }
+    ]
+   },
+   "valid": true,
+   "error": null
+  },
+  {
+   "kind": "mask",
+   "spec": {
+    "any": [
+     {
+      "height": [
+       0,
+       1
+      ]
+     },
+     {
+      "height": [
+       0,
+       1
+      ]
+     },
+     {
+      "height": [
+       0,
+       1
+      ]
+     },
+     {
+      "height": [
+       0,
+       1
+      ]
+     },
+     {
+      "height": [
+       0,
+       1
+      ]
+     },
+     {
+      "height": [
+       0,
+       1
+      ]
+     },
+     {
+      "height": [
+       0,
+       1
+      ]
+     },
+     {
+      "height": [
+       0,
+       1
+      ]
+     },
+     {
+      "height": [
+       0,
+       1
+      ]
+     },
+     {
+      "height": [
+       0,
+       1
+      ]
+     },
+     {
+      "height": [
+       0,
+       1
+      ]
+     },
+     {
+      "height": [
+       0,
+       1
+      ]
+     },
+     {
+      "height": [
+       0,
+       1
+      ]
+     },
+     {
+      "height": [
+       0,
+       1
+      ]
+     },
+     {
+      "height": [
+       0,
+       1
+      ]
+     },
+     {
+      "height": [
+       0,
+       1
+      ]
+     },
+     {
+      "height": [
+       0,
+       1
+      ]
+     }
+    ]
+   },
+   "valid": false,
+   "error": "mask.any: more than 16 items"
+  },
+  {
+   "kind": "mask",
+   "spec": {
+    "all": [
+     {
+      "all": [
+       {
+        "slope": [
+         1,
+         2
+        ]
+       },
+       {
+        "any": [
+         {
+          "noise": {
+           "kind": "simplex",
+           "dims": 3,
+           "scale": 32,
+           "octaves": 3,
+           "seed": "f2f74aec9963253b"
+          },
+          "gte": -0.5,
+          "lt": 0.24
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "height": [
+       73,
+       83
+      ]
+     },
+     {
+      "noise": {
+       "kind": "value",
+       "dims": 3,
+       "scale": 16,
+       "octaves": 2,
+       "seed": "c1a89ed16bdb247d"
+      },
+      "gte": 0.15
+     }
+    ]
+   },
+   "valid": true,
+   "error": null
+  },
+  {
+   "kind": "mask",
+   "spec": {
+    "all": []
+   },
+   "valid": false,
+   "error": "mask.all: fewer than 1 items"
+  },
+  {
+   "kind": "mask",
+   "spec": {
+    "any": [
+     {
+      "all": [
+       {
+        "height": [
+         58,
+         63
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "valid": true,
+   "error": null
+  },
+  {
+   "kind": "mask",
+   "spec": {
+    "height": [
+     1.5,
+     3
+    ]
+   },
+   "valid": false,
+   "error": "mask.height[0]: expected integer, got number"
+  },
+  {
+   "kind": "mask",
+   "spec": {
+    "all": [
+     {
+      "class": [
+       "WATER"
+      ]
+     }
+    ]
+   },
+   "valid": true,
+   "error": null
+  },
+  {
+   "kind": "mask",
+   "spec": {
+    "noise": 7,
+    "gte": 0.23
+   },
+   "valid": false,
+   "error": "mask.noise: expected object, got integer"
+  },
+  {
+   "kind": "mask",
+   "spec": {
+    "all": [
+     {
+      "field": "wet",
+      "gte": 153
+     },
+     {
+      "all": [
+       {
+        "block": [
+         "minecraft:sand",
+         "minecraft:coarse_dirt",
+         "#minecraft:logs"
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "valid": true,
+   "error": null
+  },
+  {
+   "kind": "mask",
+   "spec": {
+    "not": {
+     "not": {
+      "any": [
+       {
+        "slope": [
+         2
+        ]
+       }
+      ]
+     }
+    }
+   },
+   "valid": false,
+   "error": "mask.not.not.any[0].slope: fewer than 2 items"
+  },
+  {
+   "kind": "mask",
+   "spec": {
+    "depth": [
+     -4,
+     -3
+    ]
+   },
+   "valid": true,
+   "error": null
+  },
+  {
+   "kind": "mask",
+   "spec": {
+    "block": [
+     "minecraft:dirt",
+     "minecraft:andesite"
+    ],
+    "bogus": true
+   },
+   "valid": false,
+   "error": "mask: a mask is one of {all}, {any}, {not}, {block}, {height}, {slope}, {depth}, {field}, {noise}, {class}"
+  },
+  {
+   "kind": "mask",
+   "spec": {
+    "height": [
+     78,
+     90
+    ]
+   },
+   "valid": true,
+   "error": null
+  },
+  {
+   "kind": "mask",
+   "spec": {
+    "any": [
+     {
+      "height": [
+       0,
+       1
+      ]
+     },
+     {
+      "height": [
+       0,
+       1
+      ]
+     },
+     {
+      "height": [
+       0,
+       1
+      ]
+     },
+     {
+      "height": [
+       0,
+       1
+      ]
+     },
+     {
+      "height": [
+       0,
+       1
+      ]
+     },
+     {
+      "height": [
+       0,
+       1
+      ]
+     },
+     {
+      "height": [
+       0,
+       1
+      ]
+     },
+     {
+      "height": [
+       0,
+       1
+      ]
+     },
+     {
+      "height": [
+       0,
+       1
+      ]
+     },
+     {
+      "height": [
+       0,
+       1
+      ]
+     },
+     {
+      "height": [
+       0,
+       1
+      ]
+     },
+     {
+      "height": [
+       0,
+       1
+      ]
+     },
+     {
+      "height": [
+       0,
+       1
+      ]
+     },
+     {
+      "height": [
+       0,
+       1
+      ]
+     },
+     {
+      "height": [
+       0,
+       1
+      ]
+     },
+     {
+      "height": [
+       0,
+       1
+      ]
+     },
+     {
+      "height": [
+       0,
+       1
+      ]
+     }
+    ]
+   },
+   "valid": false,
+   "error": "mask.any: more than 16 items"
+  },
+  {
+   "kind": "mask",
+   "spec": {
+    "all": [
+     {
+      "field": "wet",
+      "gte": 1
+     },
+     {
+      "noise": {
+       "kind": "simplex",
+       "dims": 2,
+       "scale": 32,
+       "octaves": 1,
+       "seed": "f3573e9065ef947b"
+      },
+      "gte": 0.01
+     },
+     {
+      "depth": [
+       -4,
+       4
+      ]
+     }
+    ]
+   },
+   "valid": true,
+   "error": null
+  },
+  {
+   "kind": "mask",
+   "spec": {
+    "not": {
+     "noise": [],
+     "gte": -0.15
+    }
+   },
+   "valid": false,
+   "error": "mask.not.noise: expected object, got array"
+  },
+  {
+   "kind": "mask",
+   "spec": {
+    "not": {
+     "any": [
+      {
+       "all": [
+        {
+         "slope": [
+          3,
+          3
+         ]
+        },
+        {
+         "class": [
+          "SOIL",
+          "OWNED",
+          "BLOCK_ENTITY",
+          "AIR"
+         ]
+        },
+        {
+         "class": [
+          "ICE"
+         ]
+        }
+       ]
+      },
+      {
+       "slope": [
+        1,
+        5
+       ]
+      }
+     ]
+    }
+   },
+   "valid": true,
+   "error": null
+  },
+  {
+   "kind": "mask",
+   "spec": {
+    "any": [
+     {
+      "height": [
+       0,
+       1
+      ]
+     },
+     {
+      "height": [
+       0,
+       1
+      ]
+     },
+     {
+      "height": [
+       0,
+       1
+      ]
+     },
+     {
+      "height": [
+       0,
+       1
+      ]
+     },
+     {
+      "height": [
+       0,
+       1
+      ]
+     },
+     {
+      "height": [
+       0,
+       1
+      ]
+     },
+     {
+      "height": [
+       0,
+       1
+      ]
+     },
+     {
+      "height": [
+       0,
+       1
+      ]
+     },
+     {
+      "height": [
+       0,
+       1
+      ]
+     },
+     {
+      "height": [
+       0,
+       1
+      ]
+     },
+     {
+      "height": [
+       0,
+       1
+      ]
+     },
+     {
+      "height": [
+       0,
+       1
+      ]
+     },
+     {
+      "height": [
+       0,
+       1
+      ]
+     },
+     {
+      "height": [
+       0,
+       1
+      ]
+     },
+     {
+      "height": [
+       0,
+       1
+      ]
+     },
+     {
+      "height": [
+       0,
+       1
+      ]
+     },
+     {
+      "height": [
+       0,
+       1
+      ]
+     }
+    ]
+   },
+   "valid": false,
+   "error": "mask.any: more than 16 items"
+  },
+  {
+   "kind": "mask",
+   "spec": {
+    "slope": [
+     1,
+     1
+    ]
+   },
+   "valid": true,
+   "error": null
+  },
+  {
+   "kind": "mask",
+   "spec": {
+    "height": [
+     1.5,
+     3
+    ]
+   },
+   "valid": false,
+   "error": "mask.height[0]: expected integer, got number"
+  },
+  {
+   "kind": "mask",
+   "spec": {
+    "height": [
+     64,
+     75
+    ]
+   },
+   "valid": true,
+   "error": null
+  },
+  {
+   "kind": "mask",
+   "spec": {
+    "any": [
+     {
+      "height": [
+       0,
+       1
+      ]
+     },
+     {
+      "height": [
+       0,
+       1
+      ]
+     },
+     {
+      "height": [
+       0,
+       1
+      ]
+     },
+     {
+      "height": [
+       0,
+       1
+      ]
+     },
+     {
+      "height": [
+       0,
+       1
+      ]
+     },
+     {
+      "height": [
+       0,
+       1
+      ]
+     },
+     {
+      "height": [
+       0,
+       1
+      ]
+     },
+     {
+      "height": [
+       0,
+       1
+      ]
+     },
+     {
+      "height": [
+       0,
+       1
+      ]
+     },
+     {
+      "height": [
+       0,
+       1
+      ]
+     },
+     {
+      "height": [
+       0,
+       1
+      ]
+     },
+     {
+      "height": [
+       0,
+       1
+      ]
+     },
+     {
+      "height": [
+       0,
+       1
+      ]
+     },
+     {
+      "height": [
+       0,
+       1
+      ]
+     },
+     {
+      "height": [
+       0,
+       1
+      ]
+     },
+     {
+      "height": [
+       0,
+       1
+      ]
+     },
+     {
+      "height": [
+       0,
+       1
+      ]
+     }
+    ]
+   },
+   "valid": false,
+   "error": "mask.any: more than 16 items"
+  },
+  {
+   "kind": "mask",
+   "spec": {
+    "height": [
+     68,
+     75
+    ]
+   },
+   "valid": true,
+   "error": null
+  },
+  {
+   "kind": "mask",
+   "spec": {
+    "all": [
+     {
+      "depth": [
+       -5,
+       -3
+      ]
+     },
+     {
+      "not": {
+       "not": {
+        "block": [
+         "minecraft:coarse_dirt",
+         "minecraft:grass_block"
+        ]
+       }
+      }
+     },
+     {
+      "class": [
+       "SNOW",
+       "PLANT"
+      ]
+     }
+    ],
+    "extra": 1
+   },
+   "valid": false,
+   "error": "mask: a mask is one of {all}, {any}, {not}, {block}, {height}, {slope}, {depth}, {field}, {noise}, {class}"
+  },
+  {
+   "kind": "mask",
+   "spec": {
+    "class": [
+     "LAVA",
+     "PLANT"
+    ]
+   },
+   "valid": true,
+   "error": null
+  },
+  {
+   "kind": "mask",
+   "spec": {
+    "class": [
+     "ROCK",
+     "GRANITE"
+    ]
+   },
+   "valid": false,
+   "error": "mask.class[1]: must be one of \"AIR\", \"ROCK\", \"SOIL\", \"LOOSE\", \"ICE\", \"SNOW\", \"WATER\", \"LAVA\", \"LOG\", \"LEAVES\", \"PLANT\", \"OWNED\", \"PLAYER\", \"BLOCK_ENTITY\", \"MISSING\""
+  },
+  {
+   "kind": "mask",
+   "spec": {
+    "any": [
+     {
+      "depth": [
+       3,
+       11
+      ]
+     },
+     {
+      "height": [
+       76,
+       88
+      ]
+     },
+     {
+      "not": {
+       "any": [
+        {
+         "height": [
+          73,
+          73
+         ]
+        },
+        {
+         "class": [
+          "LAVA",
+          "SOIL",
+          "MISSING"
+         ]
+        },
+        {
+         "block": [
+          "minecraft:gravel",
+          "#minecraft:dirt",
+          "#minecraft:base_stone_overworld"
+         ]
+        }
+       ]
+      }
+     }
+    ]
+   },
+   "valid": true,
+   "error": null
+  },
+  {
+   "kind": "mask",
+   "spec": {
+    "field": 7,
+    "gte": 168
+   },
+   "valid": false,
+   "error": "mask.field: expected string, got integer"
+  },
+  {
+   "kind": "mask",
+   "spec": {
+    "any": [
+     {
+      "not": {
+       "all": [
+        {
+         "block": [
+          "minecraft:dirt",
+          "#minecraft:logs"
+         ]
+        }
+       ]
+      }
+     }
+    ]
+   },
+   "valid": true,
+   "error": null
+  },
+  {
+   "kind": "mask",
+   "spec": {
+    "field": "wet",
+    "gte": 5,
+    "lt": 5
+   },
+   "valid": false,
+   "error": "mask: gte must be under lt"
+  },
+  {
+   "kind": "mask",
+   "spec": {
+    "noise": {
+     "kind": "simplex",
+     "dims": 2,
+     "scale": 8,
+     "octaves": 1,
+     "seed": "b92430bd98313ccd"
+    },
+    "gte": -0.49
+   },
+   "valid": true,
+   "error": null
+  },
+  {
+   "kind": "mask",
+   "spec": {
+    "any": [
+     {
+      "any": [
+       {
+        "height": [
+         69,
+         70
+        ]
+       }
+      ]
+     },
+     {
+      "all": [
+       {
+        "height": [
+         77,
+         82
+        ]
+       },
+       {
+        "class": [
+         "LEAVES",
+         "WATER"
+        ]
+       },
+       {
+        "all": [
+         {
+          "noise": {
+           "kind": "simplex",
+           "dims": 3,
+           "scale": 32,
+           "octaves": 1,
+           "seed": "06bc27145e764d3e"
+          },
+          "lt": -0.67
+         },
+         {
+          "class": [
+           "BLOCK_ENTITY"
+          ]
+         },
+         {
+          "depth": [
+           -1,
+           7
+          ]
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "all": [
+       {
+        "class": [
+         "LOOSE"
+        ]
+       },
+       {
+        "noise": {
+         "kind": "value",
+         "dims": 2,
+         "scale": 4,
+         "octaves": 3,
+         "seed": "b8f24e33c12ef16d"
+        },
+        "lt": 0.42
+       }
+      ]
+     }
+    ],
+    "extra": 1
+   },
+   "valid": false,
+   "error": "mask: a mask is one of {all}, {any}, {not}, {block}, {height}, {slope}, {depth}, {field}, {noise}, {class}"
+  },
+  {
+   "kind": "mask",
+   "spec": {
+    "not": {
+     "any": [
+      {
+       "depth": [
+        -4,
+        4
+       ]
+      },
+      {
+       "all": [
+        {
+         "block": [
+          "minecraft:sand",
+          "minecraft:oak_log",
+          "#minecraft:logs"
+         ]
+        },
+        {
+         "noise": {
+          "kind": "value",
+          "dims": 3,
+          "scale": 8,
+          "octaves": 1,
+          "seed": "055d9c6388622d70"
+         },
+         "lt": 0.71
+        },
+        {
+         "slope": [
+          1,
+          5
+         ]
+        }
+       ]
+      }
+     ]
+    }
+   },
+   "valid": true,
+   "error": null
+  },
+  {
+   "kind": "mask",
+   "spec": {
+    "class": [
+     "ROCK",
+     "GRANITE"
+    ]
+   },
+   "valid": false,
+   "error": "mask.class[1]: must be one of \"AIR\", \"ROCK\", \"SOIL\", \"LOOSE\", \"ICE\", \"SNOW\", \"WATER\", \"LAVA\", \"LOG\", \"LEAVES\", \"PLANT\", \"OWNED\", \"PLAYER\", \"BLOCK_ENTITY\", \"MISSING\""
+  },
+  {
+   "kind": "mask",
+   "spec": {
+    "any": [
+     {
+      "class": [
+       "BLOCK_ENTITY",
+       "LEAVES"
+      ]
+     },
+     {
+      "all": [
+       {
+        "depth": [
+         -2,
+         6
+        ]
+       },
+       {
+        "depth": [
+         3,
+         3
+        ]
+       },
+       {
+        "block": [
+         "#minecraft:logs"
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "valid": true,
+   "error": null
+  },
+  {
+   "kind": "mask",
+   "spec": {
+    "class": [
+     "LOOSE",
+     "OWNED",
+     "PLAYER"
+    ],
+    "bogus": true
+   },
+   "valid": false,
+   "error": "mask: a mask is one of {all}, {any}, {not}, {block}, {height}, {slope}, {depth}, {field}, {noise}, {class}"
+  },
+  {
+   "kind": "mask",
+   "spec": {
+    "block": [
+     "#minecraft:base_stone_overworld",
+     "minecraft:oak_log",
+     "minecraft:gravel"
+    ]
+   },
+   "valid": true,
+   "error": null
+  },
+  {
+   "kind": "mask",
+   "spec": {
+    "block": [
+     "Minecraft:Stone"
+    ]
+   },
+   "valid": false,
+   "error": "mask.block[0]: does not match ^#?([a-z0-9_.-]+:)?[a-z0-9_./-]+$"
+  },
+  {
+   "kind": "mask",
+   "spec": {
+    "block": [
+     "#minecraft:dirt",
+     "#minecraft:base_stone_overworld"
+    ]
+   },
+   "valid": true,
+   "error": null
+  },
+  {
+   "kind": "mask",
+   "spec": {
+    "height": [
+     1.5,
+     3
+    ]
+   },
+   "valid": false,
+   "error": "mask.height[0]: expected integer, got number"
+  },
+  {
+   "kind": "mask",
+   "spec": {
+    "depth": [
+     -2,
+     5
+    ]
+   },
+   "valid": true,
+   "error": null
+  },
+  {
+   "kind": "mask",
+   "spec": {
+    "height": [
+     1.5,
+     3
+    ]
+   },
+   "valid": false,
+   "error": "mask.height[0]: expected integer, got number"
+  },
+  {
+   "kind": "mask",
+   "spec": {
+    "slope": [
+     3,
+     3
+    ]
+   },
+   "valid": true,
+   "error": null
+  },
+  {
+   "kind": "mask",
+   "spec": {
+    "block": [
+     "Minecraft:Stone"
+    ]
+   },
+   "valid": false,
+   "error": "mask.block[0]: does not match ^#?([a-z0-9_.-]+:)?[a-z0-9_./-]+$"
+  },
+  {
+   "kind": "mask",
+   "spec": {
+    "not": {
+     "class": [
+      "PLAYER",
+      "OWNED"
+     ]
+    }
+   },
+   "valid": true,
+   "error": null
+  },
+  {
+   "kind": "mask",
+   "spec": {
+    "field": "wet",
+    "gte": 5,
+    "lt": 5
+   },
+   "valid": false,
+   "error": "mask: gte must be under lt"
+  },
+  {
+   "kind": "mask",
+   "spec": {
+    "block": [
+     "minecraft:stone",
+     "minecraft:dirt"
+    ]
+   },
+   "valid": true,
+   "error": null
+  },
+  {
+   "kind": "mask",
+   "spec": {
+    "field": "wet",
+    "gte": 5,
+    "lt": 5
+   },
+   "valid": false,
+   "error": "mask: gte must be under lt"
+  },
+  {
+   "kind": "mask",
+   "spec": {
+    "height": [
+     74,
+     82
+    ]
+   },
+   "valid": true,
+   "error": null
+  },
+  {
+   "kind": "mask",
+   "spec": {
+    "block": [
+     "Minecraft:Stone"
+    ]
+   },
+   "valid": false,
+   "error": "mask.block[0]: does not match ^#?([a-z0-9_.-]+:)?[a-z0-9_./-]+$"
+  },
+  {
+   "kind": "mask",
+   "spec": {
+    "not": {
+     "all": [
+      {
+       "all": [
+        {
+         "noise": {
+          "kind": "simplex",
+          "dims": 3,
+          "scale": 32,
+          "octaves": 2,
+          "seed": "b91fd99f646a5be8"
+         },
+         "lt": 0.25
+        },
+        {
+         "noise": {
+          "kind": "value",
+          "dims": 3,
+          "scale": 4,
+          "octaves": 3,
+          "seed": "7aa4b1b05493020f"
+         },
+         "lt": 0.04
+        }
+       ]
+      },
+      {
+       "any": [
+        {
+         "class": [
+          "AIR",
+          "MISSING",
+          "ROCK"
+         ]
+        },
+        {
+         "class": [
+          "SOIL",
+          "MISSING"
+         ]
+        },
+        {
+         "depth": [
+          -1,
+          4
+         ]
+        }
+       ]
+      }
+     ]
+    }
+   },
+   "valid": true,
+   "error": null
+  },
+  {
+   "kind": "mask",
+   "spec": {
+    "class": [
+     "ROCK",
+     "GRANITE"
+    ]
+   },
+   "valid": false,
+   "error": "mask.class[1]: must be one of \"AIR\", \"ROCK\", \"SOIL\", \"LOOSE\", \"ICE\", \"SNOW\", \"WATER\", \"LAVA\", \"LOG\", \"LEAVES\", \"PLANT\", \"OWNED\", \"PLAYER\", \"BLOCK_ENTITY\", \"MISSING\""
+  },
+  {
+   "kind": "mask",
+   "spec": {
+    "any": [
+     {
+      "any": [
+       {
+        "all": [
+         {
+          "block": [
+           "minecraft:gravel",
+           "minecraft:dirt",
+           "minecraft:oak_log",
+           "minecraft:stone"
+          ]
+         },
+         {
+          "depth": [
+           -5,
+           -4
+          ]
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "slope": [
+       2,
+       4
+      ]
+     }
+    ]
+   },
+   "valid": true,
+   "error": null
+  },
+  {
+   "kind": "mask",
+   "spec": {
+    "noise": {
+     "kind": "value",
+     "dims": 2,
+     "scale": 32,
+     "octaves": 1,
+     "seed": "xyz"
+    },
+    "gte": 0
+   },
+   "valid": false,
+   "error": "mask.noise.seed: does not match ^[0-9a-f]{16}$"
+  },
+  {
+   "kind": "mask",
+   "spec": {
+    "any": [
+     {
+      "all": [
+       {
+        "all": [
+         {
+          "noise": {
+           "kind": "value",
+           "dims": 3,
+           "scale": 32,
+           "octaves": 1,
+           "seed": "d66fe87aac383a64"
+          },
+          "gte": 0.74
+         }
+        ]
+       },
+       {
+        "field": "wet",
+        "lt": 142
+       }
+      ]
+     },
+     {
+      "block": [
+       "#minecraft:base_stone_overworld",
+       "minecraft:sand",
+       "minecraft:grass_block"
+      ]
+     },
+     {
+      "all": [
+       {
+        "all": [
+         {
+          "noise": {
+           "kind": "simplex",
+           "dims": 2,
+           "scale": 32,
+           "octaves": 2,
+           "seed": "a09d8d4d25a38284"
+          },
+          "gte": -0.5,
+          "lt": 0.61
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "valid": true,
+   "error": null
+  },
+  {
+   "kind": "mask",
+   "spec": {
+    "all": [
+     {
+      "all": [
+       {
+        "class": [
+         "PLANT",
+         "OWNED",
+         "SNOW"
+        ],
+        "bogus": true
+       }
+      ]
+     }
+    ]
+   },
+   "valid": false,
+   "error": "mask.all[0].all[0]: a mask is one of {all}, {any}, {not}, {block}, {height}, {slope}, {depth}, {field}, {noise}, {class}"
+  },
+  {
+   "kind": "mask",
+   "spec": {
+    "slope": [
+     0,
+     2
+    ]
+   },
+   "valid": true,
+   "error": null
+  },
+  {
+   "kind": "pattern",
+   "spec": {
+    "gradient": {
+     "by": "depth",
+     "stops": [
+      {
+       "at": 1,
+       "mat": "minecraft:sand"
+      },
+      {
+       "at": 2,
+       "mat": "minecraft:stone"
+      }
+     ]
+    },
+    "dither": "bayer8"
+   },
+   "valid": false,
+   "error": "pattern.dither: must be one of \"ordered4\", \"none\""
+  },
+  {
+   "kind": "pattern",
+   "spec": {
+    "mix": [
+     {
+      "w": 9,
+      "mat": "minecraft:stone"
+     }
+    ]
+   },
+   "valid": true,
+   "error": null
+  },
+  {
+   "kind": "pattern",
+   "spec": {
+    "gradient": {
+     "by": "x",
+     "stops": [
+      {
+       "at": 1,
+       "mat": "minecraft:sand"
+      },
+      {
+       "at": 2,
+       "mat": "minecraft:stone"
+      }
+     ]
+    }
+   },
+   "valid": false,
+   "error": "pattern.gradient.by: by is 'y', 'depth' or {field}"
+  },
+  {
+   "kind": "pattern",
+   "spec": {
+    "gradient": {
+     "by": "depth",
+     "stops": [
+      {
+       "at": 51,
+       "mat": "minecraft:coarse_dirt"
+      },
+      {
+       "at": 58,
+       "mat": "minecraft:grass_block"
+      }
+     ]
+    }
+   },
+   "valid": true,
+   "error": null
+  },
+  {
+   "kind": "pattern",
+   "spec": {
+    "gradient": {
+     "by": "depth",
+     "stops": [
+      {
+       "at": 1,
+       "mat": "minecraft:sand"
+      },
+      {
+       "at": 2,
+       "mat": "minecraft:stone"
+      }
+     ]
+    },
+    "dither": "bayer8"
+   },
+   "valid": false,
+   "error": "pattern.dither: must be one of \"ordered4\", \"none\""
+  },
+  {
+   "kind": "pattern",
+   "spec": {
+    "gradient": {
+     "by": "y",
+     "stops": [
+      {
+       "at": 46,
+       "mat": "minecraft:andesite"
+      },
+      {
+       "at": 48,
+       "mat": "minecraft:dirt"
+      },
+      {
+       "at": 54,
+       "mat": "minecraft:sand"
+      },
+      {
+       "at": 61,
+       "mat": "minecraft:oak_log"
+      },
+      {
+       "at": 62,
+       "mat": "minecraft:sand"
+      }
+     ]
+    },
+    "dither": "none"
+   },
+   "valid": true,
+   "error": null
+  },
+  {
+   "kind": "pattern",
+   "spec": {
+    "mix": [
+     {
+      "w": 12,
+      "mat": "minecraft:coarse_dirt"
+     },
+     {
+      "w": 10,
+      "mat": "minecraft:grass_block"
+     }
+    ],
+    "seedLabel": "a1",
+    "extra": 1
+   },
+   "valid": false,
+   "error": "pattern: a pattern is {mix} or {gradient}"
+  },
+  {
+   "kind": "pattern",
+   "spec": {
+    "mix": [
+     {
+      "w": 3,
+      "mat": "minecraft:coarse_dirt"
+     },
+     {
+      "w": 9,
+      "mat": "minecraft:stone"
+     }
+    ]
+   },
+   "valid": true,
+   "error": null
+  },
+  {
+   "kind": "pattern",
+   "spec": {
+    "mix": [
+     {
+      "w": 0,
+      "mat": "minecraft:stone"
+     }
+    ]
+   },
+   "valid": false,
+   "error": "pattern.mix[0].w: under 1"
+  },
+  {
+   "kind": "pattern",
+   "spec": {
+    "gradient": {
+     "by": "depth",
+     "stops": [
+      {
+       "at": 67,
+       "mat": "minecraft:grass_block"
+      },
+      {
+       "at": 71,
+       "mat": "minecraft:dirt"
+      },
+      {
+       "at": 75,
+       "mat": "minecraft:grass_block"
+      }
+     ]
+    },
+    "dither": "none"
+   },
+   "valid": true,
+   "error": null
+  },
+  {
+   "kind": "pattern",
+   "spec": {
+    "mix": [
+     {
+      "w": 1,
+      "mat": "Stone Bricks"
+     }
+    ]
+   },
+   "valid": false,
+   "error": "pattern.mix[0].mat: does not match ^[a-z0-9_:]+(\\[[a-z0-9_=,]*\\])?$"
+  },
+  {
+   "kind": "pattern",
+   "spec": {
+    "mix": [
+     {
+      "w": 12,
+      "mat": "minecraft:andesite"
+     },
+     {
+      "w": 10,
+      "mat": "minecraft:coarse_dirt"
+     },
+     {
+      "w": 8,
+      "mat": "minecraft:stone"
+     },
+     {
+      "w": 15,
+      "mat": "minecraft:stone"
+     },
+     {
+      "w": 6,
+      "mat": "minecraft:oak_log"
+     }
+    ],
+    "seedLabel": "a1"
+   },
+   "valid": true,
+   "error": null
+  },
+  {
+   "kind": "pattern",
+   "spec": {
+    "mix": [
+     {
+      "w": 1.5,
+      "mat": "minecraft:stone"
+     }
+    ]
+   },
+   "valid": false,
+   "error": "pattern.mix[0].w: expected integer, got number"
+  },
+  {
+   "kind": "pattern",
+   "spec": {
+    "mix": [
+     {
+      "w": 3,
+      "mat": "minecraft:sand"
+     },
+     {
+      "w": 10,
+      "mat": "minecraft:andesite"
+     }
+    ],
+    "seedLabel": "floor"
+   },
+   "valid": true,
+   "error": null
+  },
+  {
+   "kind": "pattern",
+   "spec": {
+    "gradient": {
+     "by": "depth",
+     "stops": [
+      {
+       "at": 1,
+       "mat": "minecraft:sand"
+      },
+      {
+       "at": 2,
+       "mat": "minecraft:stone"
+      }
+     ]
+    },
+    "dither": "bayer8"
+   },
+   "valid": false,
+   "error": "pattern.dither: must be one of \"ordered4\", \"none\""
+  },
+  {
+   "kind": "pattern",
+   "spec": {
+    "gradient": {
+     "by": {
+      "field": "wet"
+     },
+     "stops": [
+      {
+       "at": 46,
+       "mat": "minecraft:grass_block"
+      },
+      {
+       "at": 51,
+       "mat": "minecraft:sand"
+      },
+      {
+       "at": 53,
+       "mat": "minecraft:stone"
+      },
+      {
+       "at": 56,
+       "mat": "minecraft:sand"
+      }
+     ]
+    }
+   },
+   "valid": true,
+   "error": null
+  },
+  {
+   "kind": "pattern",
+   "spec": {
+    "mix": [
+     {
+      "w": 5,
+      "mat": "minecraft:gravel"
+     },
+     {
+      "w": 13,
+      "mat": "minecraft:sand"
+     }
+    ],
+    "seedLabel": "mix",
+    "extra": 1
+   },
+   "valid": false,
+   "error": "pattern: a pattern is {mix} or {gradient}"
+  },
+  {
+   "kind": "pattern",
+   "spec": {
+    "mix": [
+     {
+      "w": 17,
+      "mat": "minecraft:grass_block"
+     },
+     {
+      "w": 2,
+      "mat": "minecraft:sand"
+     },
+     {
+      "w": 9,
+      "mat": "minecraft:gravel"
+     }
+    ],
+    "seedLabel": "a1"
+   },
+   "valid": true,
+   "error": null
+  },
+  {
+   "kind": "pattern",
+   "spec": {
+    "mix": [
+     {
+      "w": 0,
+      "mat": "minecraft:stone"
+     }
+    ]
+   },
+   "valid": false,
+   "error": "pattern.mix[0].w: under 1"
+  },
+  {
+   "kind": "pattern",
+   "spec": {
+    "mix": [
+     {
+      "w": 19,
+      "mat": "minecraft:gravel"
+     },
+     {
+      "w": 3,
+      "mat": "minecraft:coarse_dirt"
+     },
+     {
+      "w": 18,
+      "mat": "minecraft:grass_block"
+     },
+     {
+      "w": 17,
+      "mat": "minecraft:coarse_dirt"
+     },
+     {
+      "w": 11,
+      "mat": "minecraft:gravel"
+     }
+    ],
+    "seedLabel": "floor"
+   },
+   "valid": true,
+   "error": null
+  },
+  {
+   "kind": "pattern",
+   "spec": {
+    "gradient": {
+     "by": "y",
+     "stops": [
+      {
+       "at": 64,
+       "mat": "minecraft:sand"
+      },
+      {
+       "at": 64,
+       "mat": "minecraft:stone"
+      }
+     ]
+    }
+   },
+   "valid": false,
+   "error": "pattern.gradient.stops[1].at must be over the stop before it"
+  },
+  {
+   "kind": "pattern",
+   "spec": {
+    "gradient": {
+     "by": "depth",
+     "stops": [
+      {
+       "at": 66,
+       "mat": "minecraft:gravel"
+      },
+      {
+       "at": 71,
+       "mat": "minecraft:dirt"
+      },
+      {
+       "at": 74,
+       "mat": "minecraft:sand"
+      },
+      {
+       "at": 76,
+       "mat": "minecraft:andesite"
+      }
+     ]
+    },
+    "dither": "ordered4"
+   },
+   "valid": true,
+   "error": null
+  },
+  {
+   "kind": "pattern",
+   "spec": {
+    "gradient": {
+     "by": "y",
+     "stops": [
+      {
+       "at": 64,
+       "mat": "minecraft:sand"
+      },
+      {
+       "at": 64,
+       "mat": "minecraft:stone"
+      }
+     ]
+    }
+   },
+   "valid": false,
+   "error": "pattern.gradient.stops[1].at must be over the stop before it"
+  },
+  {
+   "kind": "pattern",
+   "spec": {
+    "mix": [
+     {
+      "w": 3,
+      "mat": "minecraft:grass_block"
+     }
+    ]
+   },
+   "valid": true,
+   "error": null
+  },
+  {
+   "kind": "pattern",
+   "spec": {
+    "gradient": {
+     "by": "x",
+     "stops": [
+      {
+       "at": 1,
+       "mat": "minecraft:sand"
+      },
+      {
+       "at": 2,
+       "mat": "minecraft:stone"
+      }
+     ]
+    }
+   },
+   "valid": false,
+   "error": "pattern.gradient.by: by is 'y', 'depth' or {field}"
+  },
+  {
+   "kind": "pattern",
+   "spec": {
+    "gradient": {
+     "by": {
+      "field": "wet"
+     },
+     "stops": [
+      {
+       "at": 43,
+       "mat": "minecraft:grass_block"
+      },
+      {
+       "at": 45,
+       "mat": "minecraft:dirt"
+      },
+      {
+       "at": 46,
+       "mat": "minecraft:sand"
+      },
+      {
+       "at": 54,
+       "mat": "minecraft:dirt"
+      },
+      {
+       "at": 60,
+       "mat": "minecraft:stone"
+      },
+      {
+       "at": 64,
+       "mat": "minecraft:dirt"
+      }
+     ]
+    },
+    "dither": "ordered4"
+   },
+   "valid": true,
+   "error": null
+  },
+  {
+   "kind": "pattern",
+   "spec": {
+    "mix": [
+     {
+      "w": 1,
+      "mat": "Stone Bricks"
+     }
+    ]
+   },
+   "valid": false,
+   "error": "pattern.mix[0].mat: does not match ^[a-z0-9_:]+(\\[[a-z0-9_=,]*\\])?$"
+  },
+  {
+   "kind": "pattern",
+   "spec": {
+    "mix": [
+     {
+      "w": 16,
+      "mat": "minecraft:sand"
+     },
+     {
+      "w": 18,
+      "mat": "minecraft:gravel"
+     }
+    ]
+   },
+   "valid": true,
+   "error": null
+  },
+  {
+   "kind": "pattern",
+   "spec": {
+    "mix": []
+   },
+   "valid": false,
+   "error": "pattern.mix: fewer than 1 items"
+  },
+  {
+   "kind": "pattern",
+   "spec": {
+    "mix": [
+     {
+      "w": 10,
+      "mat": "minecraft:sand"
+     },
+     {
+      "w": 4,
+      "mat": "minecraft:grass_block"
+     },
+     {
+      "w": 4,
+      "mat": "minecraft:stone"
+     }
+    ],
+    "seedLabel": "mix"
+   },
+   "valid": true,
+   "error": null
+  },
+  {
+   "kind": "pattern",
+   "spec": {
+    "mix": []
+   },
+   "valid": false,
+   "error": "pattern.mix: fewer than 1 items"
+  },
+  {
+   "kind": "pattern",
+   "spec": {
+    "gradient": {
+     "by": "depth",
+     "stops": [
+      {
+       "at": 68,
+       "mat": "minecraft:dirt"
+      },
+      {
+       "at": 69,
+       "mat": "minecraft:gravel"
+      },
+      {
+       "at": 72,
+       "mat": "minecraft:sand"
+      },
+      {
+       "at": 75,
+       "mat": "minecraft:andesite"
+      },
+      {
+       "at": 78,
+       "mat": "minecraft:gravel"
+      }
+     ]
+    }
+   },
+   "valid": true,
+   "error": null
+  },
+  {
+   "kind": "pattern",
+   "spec": {
+    "gradient": {
+     "by": "depth",
+     "stops": [
+      {
+       "at": 1,
+       "mat": "minecraft:sand"
+      },
+      {
+       "at": 2,
+       "mat": "minecraft:stone"
+      }
+     ]
+    },
+    "dither": "bayer8"
+   },
+   "valid": false,
+   "error": "pattern.dither: must be one of \"ordered4\", \"none\""
+  },
+  {
+   "kind": "pattern",
+   "spec": {
+    "mix": [
+     {
+      "w": 11,
+      "mat": "minecraft:oak_log"
+     },
+     {
+      "w": 11,
+      "mat": "minecraft:dirt"
+     },
+     {
+      "w": 20,
+      "mat": "minecraft:dirt"
+     },
+     {
+      "w": 3,
+      "mat": "minecraft:andesite"
+     }
+    ],
+    "seedLabel": "floor"
+   },
+   "valid": true,
+   "error": null
+  },
+  {
+   "kind": "pattern",
+   "spec": {
+    "mix": [
+     {
+      "w": 1,
+      "mat": "Stone Bricks"
+     }
+    ]
+   },
+   "valid": false,
+   "error": "pattern.mix[0].mat: does not match ^[a-z0-9_:]+(\\[[a-z0-9_=,]*\\])?$"
+  },
+  {
+   "kind": "pattern",
+   "spec": {
+    "gradient": {
+     "by": "depth",
+     "stops": [
+      {
+       "at": 56,
+       "mat": "minecraft:grass_block"
+      },
+      {
+       "at": 64,
+       "mat": "minecraft:grass_block"
+      }
+     ]
+    },
+    "dither": "ordered4"
+   },
+   "valid": true,
+   "error": null
+  },
+  {
+   "kind": "pattern",
+   "spec": {
+    "mix": [
+     {
+      "w": 1,
+      "mat": "minecraft:stone"
+     }
+    ],
+    "gradient": {
+     "by": "y",
+     "stops": [
+      {
+       "at": 1,
+       "mat": null
+      },
+      {
+       "at": 2,
+       "mat": null
+      }
+     ]
+    }
+   },
+   "valid": false,
+   "error": "pattern: a pattern is {mix} or {gradient}"
+  },
+  {
+   "kind": "pattern",
+   "spec": {
+    "gradient": {
+     "by": {
+      "field": "wet"
+     },
+     "stops": [
+      {
+       "at": 56,
+       "mat": "minecraft:andesite"
+      },
+      {
+       "at": 64,
+       "mat": "minecraft:coarse_dirt"
+      },
+      {
+       "at": 72,
+       "mat": "minecraft:stone"
+      },
+      {
+       "at": 77,
+       "mat": "minecraft:coarse_dirt"
+      }
+     ]
+    }
+   },
+   "valid": true,
+   "error": null
+  },
+  {
+   "kind": "pattern",
+   "spec": {
+    "gradient": {
+     "by": "depth",
+     "stops": [
+      {
+       "at": 61,
+       "mat": "minecraft:oak_log"
+      },
+      {
+       "at": 66,
+       "mat": "minecraft:stone"
+      },
+      {
+       "at": 68,
+       "mat": "minecraft:stone"
+      }
+     ]
+    },
+    "dither": "none",
+    "extra": 1
+   },
+   "valid": false,
+   "error": "pattern: a pattern is {mix} or {gradient}"
+  },
+  {
+   "kind": "pattern",
+   "spec": {
+    "mix": [
+     {
+      "w": 7,
+      "mat": "minecraft:coarse_dirt"
+     },
+     {
+      "w": 20,
+      "mat": "minecraft:dirt"
+     },
+     {
+      "w": 1,
+      "mat": "minecraft:oak_log"
+     },
+     {
+      "w": 16,
+      "mat": "minecraft:andesite"
+     }
+    ]
+   },
+   "valid": true,
+   "error": null
+  },
+  {
+   "kind": "pattern",
+   "spec": {
+    "mix": []
+   },
+   "valid": false,
+   "error": "pattern.mix: fewer than 1 items"
+  },
+  {
+   "kind": "pattern",
+   "spec": {
+    "mix": [
+     {
+      "w": 8,
+      "mat": "minecraft:sand"
+     },
+     {
+      "w": 13,
+      "mat": "minecraft:sand"
+     },
+     {
+      "w": 7,
+      "mat": "minecraft:oak_log"
+     }
+    ]
+   },
+   "valid": true,
+   "error": null
+  },
+  {
+   "kind": "pattern",
+   "spec": {
+    "gradient": {
+     "by": "y",
+     "stops": [
+      {
+       "at": 64,
+       "mat": "minecraft:sand"
+      },
+      {
+       "at": 64,
+       "mat": "minecraft:stone"
+      }
+     ]
+    }
+   },
+   "valid": false,
+   "error": "pattern.gradient.stops[1].at must be over the stop before it"
+  },
+  {
+   "kind": "pattern",
+   "spec": {
+    "gradient": {
+     "by": "depth",
+     "stops": [
+      {
+       "at": 53,
+       "mat": "minecraft:coarse_dirt"
+      },
+      {
+       "at": 59,
+       "mat": "minecraft:oak_log"
+      }
+     ]
+    }
+   },
+   "valid": true,
+   "error": null
+  },
+  {
+   "kind": "pattern",
+   "spec": {
+    "mix": [
+     {
+      "w": 1.5,
+      "mat": "minecraft:stone"
+     }
+    ]
+   },
+   "valid": false,
+   "error": "pattern.mix[0].w: expected integer, got number"
+  },
+  {
+   "kind": "pattern",
+   "spec": {
+    "mix": [
+     {
+      "w": 14,
+      "mat": "minecraft:sand"
+     },
+     {
+      "w": 9,
+      "mat": "minecraft:sand"
+     },
+     {
+      "w": 18,
+      "mat": "minecraft:stone"
+     },
+     {
+      "w": 19,
+      "mat": "minecraft:gravel"
+     },
+     {
+      "w": 5,
+      "mat": "minecraft:gravel"
+     }
+    ],
+    "seedLabel": "wall"
+   },
+   "valid": true,
+   "error": null
+  },
+  {
+   "kind": "pattern",
+   "spec": {
+    "mix": [
+     {
+      "w": 1,
+      "mat": "minecraft:stone"
+     }
+    ],
+    "gradient": {
+     "by": "y",
+     "stops": [
+      {
+       "at": 1,
+       "mat": null
+      },
+      {
+       "at": 2,
+       "mat": null
+      }
+     ]
+    }
+   },
+   "valid": false,
+   "error": "pattern: a pattern is {mix} or {gradient}"
+  },
+  {
+   "kind": "pattern",
+   "spec": {
+    "gradient": {
+     "by": "y",
+     "stops": [
+      {
+       "at": 42,
+       "mat": "minecraft:sand"
+      },
+      {
+       "at": 44,
+       "mat": "minecraft:oak_log"
+      },
+      {
+       "at": 45,
+       "mat": "minecraft:sand"
+      }
+     ]
+    }
+   },
+   "valid": true,
+   "error": null
+  },
+  {
+   "kind": "pattern",
+   "spec": {
+    "mix": [
+     {
+      "w": 14,
+      "mat": "minecraft:stone"
+     },
+     {
+      "w": 7,
+      "mat": "minecraft:sand"
+     },
+     {
+      "w": 9,
+      "mat": "minecraft:dirt"
+     },
+     {
+      "w": 5,
+      "mat": "minecraft:andesite"
+     }
+    ],
+    "seedLabel": "wall",
+    "extra": 1
+   },
+   "valid": false,
+   "error": "pattern: a pattern is {mix} or {gradient}"
+  },
+  {
+   "kind": "pattern",
+   "spec": {
+    "mix": [
+     {
+      "w": 14,
+      "mat": "minecraft:andesite"
+     }
+    ],
+    "seedLabel": "mix"
+   },
+   "valid": true,
+   "error": null
+  },
+  {
+   "kind": "pattern",
+   "spec": {
+    "gradient": {
+     "by": "x",
+     "stops": [
+      {
+       "at": 1,
+       "mat": "minecraft:sand"
+      },
+      {
+       "at": 2,
+       "mat": "minecraft:stone"
+      }
+     ]
+    }
+   },
+   "valid": false,
+   "error": "pattern.gradient.by: by is 'y', 'depth' or {field}"
+  },
+  {
+   "kind": "pattern",
+   "spec": {
+    "mix": [
+     {
+      "w": 18,
+      "mat": "minecraft:sand"
+     },
+     {
+      "w": 16,
+      "mat": "minecraft:stone"
+     },
+     {
+      "w": 7,
+      "mat": "minecraft:sand"
+     }
+    ],
+    "seedLabel": "wall"
+   },
+   "valid": true,
+   "error": null
+  },
+  {
+   "kind": "pattern",
+   "spec": {
+    "mix": [
+     {
+      "w": 1,
+      "mat": "Stone Bricks"
+     }
+    ]
+   },
+   "valid": false,
+   "error": "pattern.mix[0].mat: does not match ^[a-z0-9_:]+(\\[[a-z0-9_=,]*\\])?$"
+  },
+  {
+   "kind": "pattern",
+   "spec": {
+    "gradient": {
+     "by": "depth",
+     "stops": [
+      {
+       "at": 60,
+       "mat": "minecraft:grass_block"
+      },
+      {
+       "at": 66,
+       "mat": "minecraft:gravel"
+      },
+      {
+       "at": 72,
+       "mat": "minecraft:stone"
+      }
+     ]
+    },
+    "dither": "ordered4"
+   },
+   "valid": true,
+   "error": null
+  },
+  {
+   "kind": "pattern",
+   "spec": {
+    "mix": [
+     {
+      "w": 3,
+      "mat": "minecraft:grass_block"
+     },
+     {
+      "w": 18,
+      "mat": "minecraft:grass_block"
+     },
+     {
+      "w": 7,
+      "mat": "minecraft:andesite"
+     }
+    ],
+    "seedLabel": "wall",
+    "extra": 1
+   },
+   "valid": false,
+   "error": "pattern: a pattern is {mix} or {gradient}"
+  },
+  {
+   "kind": "pattern",
+   "spec": {
+    "mix": [
+     {
+      "w": 15,
+      "mat": "minecraft:sand"
+     },
+     {
+      "w": 18,
+      "mat": "minecraft:gravel"
+     }
+    ]
+   },
+   "valid": true,
+   "error": null
+  },
+  {
+   "kind": "pattern",
+   "spec": {
+    "gradient": {
+     "by": "y",
+     "stops": [
+      {
+       "at": 64,
+       "mat": "minecraft:sand"
+      },
+      {
+       "at": 64,
+       "mat": "minecraft:stone"
+      }
+     ]
+    }
+   },
+   "valid": false,
+   "error": "pattern.gradient.stops[1].at must be over the stop before it"
+  },
+  {
+   "kind": "pattern",
+   "spec": {
+    "mix": [
+     {
+      "w": 16,
+      "mat": "minecraft:oak_log"
+     },
+     {
+      "w": 13,
+      "mat": "minecraft:oak_log"
+     },
+     {
+      "w": 12,
+      "mat": "minecraft:grass_block"
+     }
+    ],
+    "seedLabel": "wall"
+   },
+   "valid": true,
+   "error": null
+  },
+  {
+   "kind": "pattern",
+   "spec": {
+    "mix": [
+     {
+      "w": 0,
+      "mat": "minecraft:stone"
+     }
+    ]
+   },
+   "valid": false,
+   "error": "pattern.mix[0].w: under 1"
+  },
+  {
+   "kind": "pattern",
+   "spec": {
+    "gradient": {
+     "by": {
+      "field": "wet"
+     },
+     "stops": [
+      {
+       "at": 56,
+       "mat": "minecraft:dirt"
+      },
+      {
+       "at": 61,
+       "mat": "minecraft:stone"
+      },
+      {
+       "at": 64,
+       "mat": "minecraft:grass_block"
+      },
+      {
+       "at": 72,
+       "mat": "minecraft:sand"
+      },
+      {
+       "at": 73,
+       "mat": "minecraft:andesite"
+      },
+      {
+       "at": 78,
+       "mat": "minecraft:grass_block"
+      }
+     ]
+    }
+   },
+   "valid": true,
+   "error": null
+  },
+  {
+   "kind": "pattern",
+   "spec": {
+    "gradient": {
+     "by": "y",
+     "stops": [
+      {
+       "at": 64,
+       "mat": "minecraft:sand"
+      },
+      {
+       "at": 64,
+       "mat": "minecraft:stone"
+      }
+     ]
+    }
+   },
+   "valid": false,
+   "error": "pattern.gradient.stops[1].at must be over the stop before it"
+  },
+  {
+   "kind": "pattern",
+   "spec": {
+    "mix": [
+     {
+      "w": 2,
+      "mat": "minecraft:gravel"
+     },
+     {
+      "w": 9,
+      "mat": "minecraft:stone"
+     },
+     {
+      "w": 1,
+      "mat": "minecraft:coarse_dirt"
+     },
+     {
+      "w": 4,
+      "mat": "minecraft:coarse_dirt"
+     },
+     {
+      "w": 6,
+      "mat": "minecraft:oak_log"
+     }
+    ]
+   },
+   "valid": true,
+   "error": null
+  },
+  {
+   "kind": "pattern",
+   "spec": {
+    "gradient": {
+     "by": "y",
+     "stops": [
+      {
+       "at": 64,
+       "mat": "minecraft:sand"
+      },
+      {
+       "at": 64,
+       "mat": "minecraft:stone"
+      }
+     ]
+    }
+   },
+   "valid": false,
+   "error": "pattern.gradient.stops[1].at must be over the stop before it"
+  },
+  {
+   "kind": "pattern",
+   "spec": {
+    "mix": [
+     {
+      "w": 6,
+      "mat": "minecraft:oak_log"
+     }
+    ]
+   },
+   "valid": true,
+   "error": null
+  },
+  {
+   "kind": "pattern",
+   "spec": {
+    "mix": []
+   },
+   "valid": false,
+   "error": "pattern.mix: fewer than 1 items"
+  },
+  {
+   "kind": "pattern",
+   "spec": {
+    "gradient": {
+     "by": "depth",
+     "stops": [
+      {
+       "at": 59,
+       "mat": "minecraft:coarse_dirt"
+      },
+      {
+       "at": 65,
+       "mat": "minecraft:stone"
+      },
+      {
+       "at": 69,
+       "mat": "minecraft:grass_block"
+      },
+      {
+       "at": 73,
+       "mat": "minecraft:oak_log"
+      }
+     ]
+    },
+    "dither": "ordered4"
+   },
+   "valid": true,
+   "error": null
+  },
+  {
+   "kind": "pattern",
+   "spec": {
+    "gradient": {
+     "by": "depth",
+     "stops": [
+      {
+       "at": 1,
+       "mat": "minecraft:sand"
+      },
+      {
+       "at": 2,
+       "mat": "minecraft:stone"
+      }
+     ]
+    },
+    "dither": "bayer8"
+   },
+   "valid": false,
+   "error": "pattern.dither: must be one of \"ordered4\", \"none\""
+  },
+  {
+   "kind": "pattern",
+   "spec": {
+    "gradient": {
+     "by": {
+      "field": "wet"
+     },
+     "stops": [
+      {
+       "at": 70,
+       "mat": "minecraft:sand"
+      },
+      {
+       "at": 71,
+       "mat": "minecraft:gravel"
+      },
+      {
+       "at": 79,
+       "mat": "minecraft:coarse_dirt"
+      },
+      {
+       "at": 87,
+       "mat": "minecraft:andesite"
+      }
+     ]
+    }
+   },
+   "valid": true,
+   "error": null
+  },
+  {
+   "kind": "pattern",
+   "spec": {
+    "gradient": {
+     "by": "y",
+     "stops": [
+      {
+       "at": 64,
+       "mat": "minecraft:sand"
+      }
+     ]
+    }
+   },
+   "valid": false,
+   "error": "pattern.gradient.stops: fewer than 2 items"
+  },
+  {
+   "kind": "pattern",
+   "spec": {
+    "gradient": {
+     "by": {
+      "field": "wet"
+     },
+     "stops": [
+      {
+       "at": 64,
+       "mat": "minecraft:sand"
+      },
+      {
+       "at": 67,
+       "mat": "minecraft:grass_block"
+      }
+     ]
+    },
+    "dither": "ordered4"
+   },
+   "valid": true,
+   "error": null
+  },
+  {
+   "kind": "pattern",
+   "spec": {
+    "gradient": {
+     "by": "x",
+     "stops": [
+      {
+       "at": 1,
+       "mat": "minecraft:sand"
+      },
+      {
+       "at": 2,
+       "mat": "minecraft:stone"
+      }
+     ]
+    }
+   },
+   "valid": false,
+   "error": "pattern.gradient.by: by is 'y', 'depth' or {field}"
+  },
+  {
+   "kind": "pattern",
+   "spec": {
+    "gradient": {
+     "by": "depth",
+     "stops": [
+      {
+       "at": 57,
+       "mat": "minecraft:stone"
+      },
+      {
+       "at": 65,
+       "mat": "minecraft:sand"
+      },
+      {
+       "at": 73,
+       "mat": "minecraft:sand"
+      },
+      {
+       "at": 74,
+       "mat": "minecraft:stone"
+      }
+     ]
+    },
+    "dither": "none"
+   },
+   "valid": true,
+   "error": null
+  },
+  {
+   "kind": "pattern",
+   "spec": {
+    "mix": [
+     {
+      "w": 13,
+      "mat": "minecraft:dirt"
+     },
+     {
+      "w": 5,
+      "mat": "minecraft:coarse_dirt"
+     },
+     {
+      "w": 18,
+      "mat": "minecraft:sand"
+     },
+     {
+      "w": 10,
+      "mat": "minecraft:grass_block"
+     }
+    ],
+    "seedLabel": "mix",
+    "extra": 1
+   },
+   "valid": false,
+   "error": "pattern: a pattern is {mix} or {gradient}"
+  },
+  {
+   "kind": "pattern",
+   "spec": {
+    "mix": [
+     {
+      "w": 6,
+      "mat": "minecraft:grass_block"
+     },
+     {
+      "w": 6,
+      "mat": "minecraft:dirt"
+     }
+    ]
+   },
+   "valid": true,
+   "error": null
+  },
+  {
+   "kind": "pattern",
+   "spec": {
+    "gradient": {
+     "by": "x",
+     "stops": [
+      {
+       "at": 1,
+       "mat": "minecraft:sand"
+      },
+      {
+       "at": 2,
+       "mat": "minecraft:stone"
+      }
+     ]
+    }
+   },
+   "valid": false,
+   "error": "pattern.gradient.by: by is 'y', 'depth' or {field}"
+  },
+  {
+   "kind": "pattern",
+   "spec": {
+    "gradient": {
+     "by": "y",
+     "stops": [
+      {
+       "at": 64,
+       "mat": "minecraft:stone"
+      },
+      {
+       "at": 72,
+       "mat": "minecraft:dirt"
+      },
+      {
+       "at": 77,
+       "mat": "minecraft:sand"
+      }
+     ]
+    }
+   },
+   "valid": true,
+   "error": null
+  },
+  {
+   "kind": "pattern",
+   "spec": {
+    "gradient": {
+     "by": "y",
+     "stops": [
+      {
+       "at": 64,
+       "mat": "minecraft:sand"
+      },
+      {
+       "at": 64,
+       "mat": "minecraft:stone"
+      }
+     ]
+    }
+   },
+   "valid": false,
+   "error": "pattern.gradient.stops[1].at must be over the stop before it"
+  },
+  {
+   "kind": "pattern",
+   "spec": {
+    "gradient": {
+     "by": {
+      "field": "wet"
+     },
+     "stops": [
+      {
+       "at": 59,
+       "mat": "minecraft:oak_log"
+      },
+      {
+       "at": 66,
+       "mat": "minecraft:dirt"
+      },
+      {
+       "at": 74,
+       "mat": "minecraft:gravel"
+      },
+      {
+       "at": 80,
+       "mat": "minecraft:grass_block"
+      },
+      {
+       "at": 86,
+       "mat": "minecraft:andesite"
+      }
+     ]
+    }
+   },
+   "valid": true,
+   "error": null
+  },
+  {
+   "kind": "pattern",
+   "spec": {
+    "gradient": {
+     "by": "y",
+     "stops": [
+      {
+       "at": 64,
+       "mat": "minecraft:sand"
+      },
+      {
+       "at": 64,
+       "mat": "minecraft:stone"
+      }
+     ]
+    }
+   },
+   "valid": false,
+   "error": "pattern.gradient.stops[1].at must be over the stop before it"
+  },
+  {
+   "kind": "pattern",
+   "spec": {
+    "mix": [
+     {
+      "w": 10,
+      "mat": "minecraft:sand"
+     },
+     {
+      "w": 8,
+      "mat": "minecraft:dirt"
+     }
+    ],
+    "seedLabel": "a1"
+   },
+   "valid": true,
+   "error": null
+  },
+  {
+   "kind": "pattern",
+   "spec": {
+    "gradient": {
+     "by": "y",
+     "stops": [
+      {
+       "at": 64,
+       "mat": "minecraft:coarse_dirt"
+      },
+      {
+       "at": 67,
+       "mat": "minecraft:coarse_dirt"
+      },
+      {
+       "at": 71,
+       "mat": "minecraft:dirt"
+      }
+     ]
+    },
+    "dither": "none",
+    "extra": 1
+   },
+   "valid": false,
+   "error": "pattern: a pattern is {mix} or {gradient}"
+  },
+  {
+   "kind": "pattern",
+   "spec": {
+    "gradient": {
+     "by": {
+      "field": "wet"
+     },
+     "stops": [
+      {
+       "at": 45,
+       "mat": "minecraft:stone"
+      },
+      {
+       "at": 48,
+       "mat": "minecraft:gravel"
+      },
+      {
+       "at": 53,
+       "mat": "minecraft:stone"
+      }
+     ]
+    }
+   },
+   "valid": true,
+   "error": null
+  },
+  {
+   "kind": "pattern",
+   "spec": {
+    "mix": []
+   },
+   "valid": false,
+   "error": "pattern.mix: fewer than 1 items"
+  },
+  {
+   "kind": "pattern",
+   "spec": {
+    "gradient": {
+     "by": "depth",
+     "stops": [
+      {
+       "at": 59,
+       "mat": "minecraft:sand"
+      },
+      {
+       "at": 64,
+       "mat": "minecraft:coarse_dirt"
+      },
+      {
+       "at": 67,
+       "mat": "minecraft:coarse_dirt"
+      },
+      {
+       "at": 68,
+       "mat": "minecraft:oak_log"
+      },
+      {
+       "at": 69,
+       "mat": "minecraft:stone"
+      }
+     ]
+    },
+    "dither": "none"
+   },
+   "valid": true,
+   "error": null
+  },
+  {
+   "kind": "pattern",
+   "spec": {
+    "mix": []
+   },
+   "valid": false,
+   "error": "pattern.mix: fewer than 1 items"
+  },
+  {
+   "kind": "pattern",
+   "spec": {
+    "mix": [
+     {
+      "w": 15,
+      "mat": "minecraft:gravel"
+     },
+     {
+      "w": 18,
+      "mat": "minecraft:gravel"
+     }
+    ],
+    "seedLabel": "a1"
+   },
+   "valid": true,
+   "error": null
+  },
+  {
+   "kind": "pattern",
+   "spec": {
+    "mix": []
+   },
+   "valid": false,
+   "error": "pattern.mix: fewer than 1 items"
+  },
+  {
+   "kind": "pattern",
+   "spec": {
+    "gradient": {
+     "by": "y",
+     "stops": [
+      {
+       "at": 57,
+       "mat": "minecraft:grass_block"
+      },
+      {
+       "at": 58,
+       "mat": "minecraft:stone"
+      },
+      {
+       "at": 62,
+       "mat": "minecraft:sand"
+      },
+      {
+       "at": 63,
+       "mat": "minecraft:coarse_dirt"
+      },
+      {
+       "at": 67,
+       "mat": "minecraft:stone"
+      }
+     ]
+    }
+   },
+   "valid": true,
+   "error": null
+  },
+  {
+   "kind": "pattern",
+   "spec": {
+    "mix": [
+     {
+      "w": 1,
+      "mat": "Stone Bricks"
+     }
+    ]
+   },
+   "valid": false,
+   "error": "pattern.mix[0].mat: does not match ^[a-z0-9_:]+(\\[[a-z0-9_=,]*\\])?$"
+  },
+  {
+   "kind": "pattern",
+   "spec": {
+    "gradient": {
+     "by": {
+      "field": "wet"
+     },
+     "stops": [
+      {
+       "at": 49,
+       "mat": "minecraft:gravel"
+      },
+      {
+       "at": 56,
+       "mat": "minecraft:coarse_dirt"
+      },
+      {
+       "at": 64,
+       "mat": "minecraft:stone"
+      }
+     ]
+    },
+    "dither": "none"
+   },
+   "valid": true,
+   "error": null
+  },
+  {
+   "kind": "pattern",
+   "spec": {
+    "gradient": {
+     "by": "y",
+     "stops": [
+      {
+       "at": 64,
+       "mat": "minecraft:sand"
+      }
+     ]
+    }
+   },
+   "valid": false,
+   "error": "pattern.gradient.stops: fewer than 2 items"
+  },
+  {
+   "kind": "pattern",
+   "spec": {
+    "mix": [
+     {
+      "w": 12,
+      "mat": "minecraft:sand"
+     }
+    ],
+    "seedLabel": "mix"
+   },
+   "valid": true,
+   "error": null
+  },
+  {
+   "kind": "pattern",
+   "spec": {
+    "mix": [
+     {
+      "w": 0,
+      "mat": "minecraft:stone"
+     }
+    ]
+   },
+   "valid": false,
+   "error": "pattern.mix[0].w: under 1"
+  },
+  {
+   "kind": "pattern",
+   "spec": {
+    "mix": [
+     {
+      "w": 11,
+      "mat": "minecraft:stone"
+     },
+     {
+      "w": 1,
+      "mat": "minecraft:andesite"
+     },
+     {
+      "w": 13,
+      "mat": "minecraft:sand"
+     },
+     {
+      "w": 12,
+      "mat": "minecraft:sand"
+     }
+    ],
+    "seedLabel": "wall"
+   },
+   "valid": true,
+   "error": null
+  },
+  {
+   "kind": "pattern",
+   "spec": {
+    "mix": [
+     {
+      "w": 1,
+      "mat": "minecraft:stone"
+     }
+    ],
+    "gradient": {
+     "by": "y",
+     "stops": [
+      {
+       "at": 1,
+       "mat": null
+      },
+      {
+       "at": 2,
+       "mat": null
+      }
+     ]
+    }
+   },
+   "valid": false,
+   "error": "pattern: a pattern is {mix} or {gradient}"
+  },
+  {
+   "kind": "pattern",
+   "spec": {
+    "gradient": {
+     "by": "y",
+     "stops": [
+      {
+       "at": 62,
+       "mat": "minecraft:grass_block"
+      },
+      {
+       "at": 70,
+       "mat": "minecraft:dirt"
+      },
+      {
+       "at": 75,
+       "mat": "minecraft:sand"
+      },
+      {
+       "at": 82,
+       "mat": "minecraft:sand"
+      },
+      {
+       "at": 90,
+       "mat": "minecraft:sand"
+      }
+     ]
+    },
+    "dither": "ordered4"
+   },
+   "valid": true,
+   "error": null
+  },
+  {
+   "kind": "pattern",
+   "spec": {
+    "mix": []
+   },
+   "valid": false,
+   "error": "pattern.mix: fewer than 1 items"
+  },
+  {
+   "kind": "pattern",
+   "spec": {
+    "gradient": {
+     "by": "depth",
+     "stops": [
+      {
+       "at": 55,
+       "mat": "minecraft:coarse_dirt"
+      },
+      {
+       "at": 62,
+       "mat": "minecraft:sand"
+      },
+      {
+       "at": 66,
+       "mat": "minecraft:stone"
+      },
+      {
+       "at": 69,
+       "mat": "minecraft:grass_block"
+      },
+      {
+       "at": 77,
+       "mat": "minecraft:dirt"
+      }
+     ]
+    }
+   },
+   "valid": true,
+   "error": null
+  },
+  {
+   "kind": "pattern",
+   "spec": {
+    "mix": [
+     {
+      "w": 1.5,
+      "mat": "minecraft:stone"
+     }
+    ]
+   },
+   "valid": false,
+   "error": "pattern.mix[0].w: expected integer, got number"
+  },
+  {
+   "kind": "pattern",
+   "spec": {
+    "gradient": {
+     "by": "y",
+     "stops": [
+      {
+       "at": 50,
+       "mat": "minecraft:stone"
+      },
+      {
+       "at": 54,
+       "mat": "minecraft:oak_log"
+      },
+      {
+       "at": 61,
+       "mat": "minecraft:andesite"
+      },
+      {
+       "at": 63,
+       "mat": "minecraft:sand"
+      }
+     ]
+    },
+    "dither": "none"
+   },
+   "valid": true,
+   "error": null
+  }
+ ]
+}

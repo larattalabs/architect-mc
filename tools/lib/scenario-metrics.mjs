@@ -29,6 +29,8 @@ export function paletteAdherence(ir, world) {
   for (const p of ir.parts ?? []) {
     for (const op of p.ops ?? []) {
       if (op.material?.rule) blockIds(op.material.rule, ruleMats);
+      else if (op.material?.pattern) blockIds(op.material.pattern, ruleMats); // (6c MP) a pattern's blocks, as a rule's
+      if (op.op === 'columns') for (const m of op.materials ?? []) if (m?.pattern) blockIds(m.pattern, ruleMats);
       else if (formParts.has(p.id)) blockIds(op.material, ruleMats); // a form's own materials (its generator's roots, rock)
     }
   }
@@ -130,7 +132,7 @@ export function bars(x) {
   const cap = 0.0001 * (x.exact?.cellsWritten ?? 0);
   // E-normal (6a's rule): every mismatch classified; the world's own doing during the stand (growth, grazing, live blocks, gravity,
   // unsupported plants) is classified and not the undo's; what remains is held to 0.01% of the written cells
-  const WORLD = ['growth', 'grazed', 'live', 'gravity', 'unsupported', 'flow']; // (6c T1) flow: a stream's flowing water that moved (scenarios.mjs)
+  const WORLD = ['growth', 'grazed', 'live', 'gravity', 'unsupported', 'freeze', 'flow']; // (6c F1) freeze: water freezing / snow falling where the plan writes nothing; (6c T1) flow: a stream's flowing water that moved (scenarios.mjs)
   const undoOwn = en ? en.mismatches - WORLD.reduce((a, k) => a + (en.classes?.[k] ?? 0), 0) : null;
   out.push(row('exactness', 'Exactness', `E-flat ${ef ? ef.mismatches : 'n/a'}; E-normal ${en ? `${en.mismatches} (${JSON.stringify(en.classes ?? {})}; unclassified ${en.classes?.none ?? 0}; the undo's own ${undoOwn}, cap ${cap.toFixed(0)})` : 'n/a'}`,
     'E-flat 0; E-normal all classified, <= 0.01% of written cells', ef && en && ef.mismatches === 0 && (en.classes?.none ?? 0) === 0 && undoOwn <= cap));

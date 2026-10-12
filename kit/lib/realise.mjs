@@ -9,17 +9,23 @@
 import { COMBINATORS, compileShape, PRIMITIVES, SHAPES_FORMAT2, sdAt, shapeKinds, strataOf, yrefFn } from './sdf.mjs';
 import { compileRule, decodeField, FACING_MAX_PRIMITIVES, ruleError, ruleUsesFacing } from './material.mjs';
 import { ByteWriter, FLAG_MISSING, asColumns, sha256Hex, stateBytes, writeArtlHeader } from './region/pack.mjs';
+import { ROTATIONS, decodeVoxels, turnState, turnXZ, voxelAt, voxelsBounds } from './region/voxels.mjs';
+import { compileMask, maskError, maskUses } from './mask.mjs';
+import { compilePattern, isPattern, patternError } from './pattern.mjs';
+import { VOXEL_CLASSES, classAt as volumeClassAt, decodeArvx } from './region/volume.mjs';
 
 export const AIR = 'minecraft:air';
-export const OP_KINDS = ['shape', 'columns', 'relief'];
+export const OP_KINDS = ['shape', 'columns', 'voxels', 'relief'];
 export const SETS = ['terrain', 'path'];
 /** (6b) The IR formats this evaluator reads (kit/REGIONS.md "IR format 2"). */
 export const IR_FORMATS = Object.freeze([1, 2]);
 /** (6b) Every format-2 kind an IR's `requires` may name; any of them makes the IR format 2. */
 export const KINDS_FORMAT2 = Object.freeze(['blobs:side', 'fields', 'forms', 'material:rule', 'shape:array', 'shape:capsuleChain', 'shape:ellipsoid',
-  'shape:instances', 'shape:prism', 'shape:strata', 'shape:warp', 'shape:wedge', 'volumes', 'road:lamp', 'relief']);
+  'shape:instances', 'shape:prism', 'shape:strata', 'shape:warp', 'shape:wedge', 'volumes', 'road:lamp', 'voxels',
+  'mask', 'pattern', 'relief']);
 // (6c W) 'road:lamp': a 4e road's `lamp` (the bible's lamp fixture for its lanterns; kit/lib/region/fixtures.mjs roadLamp). A mod
 // before 0.18.0 would lay its own fence and lantern, so the plan needs it (PLAN_STALE there).
+// (6c MP) `mask` (an op's mask) and `pattern` (a pattern anywhere a material goes) from kit 0.19.0
 // (6c T1) 'relief': a `relief` op (kit/REGIONS.md "The relief op"); a kit before 0.20.0 throws on the op kind.
 /** Max ops in an IR (also the evaluator's buffer encoding limit). */
 export const MAX_OPS = 20000;
@@ -28,8 +34,8 @@ const EPS = 1e-6;
 /** How far beyond the claim's y range clipped cells are counted. */
 const CLIP_COUNT_MARGIN = 64;
 
-/** (6b) Op kinds reserved for later phases (they throw as unknown until then). */
-export const OPS_RESERVED = ['scatter', 'voxels', 'stamp']; // (6c T1) relief is built
+/** (6b) Op kinds reserved for later phases (they throw as unknown until then). (6c F1) `voxels` is built; (6c T1) `relief` is built. */
+export const OPS_RESERVED = ['scatter', 'stamp'];
 /** (6b) The members a format-2 IR may have (anything else throws). */
 export const MEMBERS_FORMAT2 = ['anchors', 'blobs', 'budget', 'claim', 'fields', 'floating', 'format', 'forms', 'graph', 'id', 'keepOut', 'kitVersion', 'lots', 'node', 'params',
   'parts', 'paths', 'programSha', 'requires', 'roads', 'roles', 'rules', 'seed', 'stages', 'tiles', 'utility', 'volumes'];
@@ -66,10 +72,19 @@ export function staleReason(ir, kitVersion = EVAL_KIT_VERSION) {
  */
 export function walkKinds(ir) {
   const k = new Set();
+  const isPat = (m) => !!m && typeof m === 'object' && m.pattern !== undefined;
   for (const p of ir.parts ?? []) for (const o of p.ops ?? []) {
     if (o.op === 'shape') for (const s of shapeKinds(o.shape)) if (SHAPES_FORMAT2.includes(s)) k.add(`shape:${s}`);
-    if (o.material && typeof o.material === 'object') k.add('material:rule');
-    if (o.op === 'relief') { k.add('relief'); if (o.fill && typeof o.fill === 'object') k.add('material:rule'); }
+    if (o.material && typeof o.material === 'object') {
+      if (o.material.rule) {
+        k.add('material:rule');
+        if (isPat(o.material.rule.default) || (o.material.rule.rule ?? []).some((c) => isPat(c?.mat))) k.add('pattern');
+      } else if (isPat(o.material)) k.add('pattern');
+    }
+    if (o.op === 'columns' && (o.materials ?? []).some(isPat)) k.add('pattern');
+    if (o.mask !== undefined) k.add('mask');
+    if (o.op === 'voxels') k.add('voxels'); // (6c F1)
+    if (o.op === 'relief') { k.add('relief'); if (o.fill && typeof o.fill === 'object' && o.fill.rule) k.add('material:rule'); } // (6c T1)
   }
   if (ir.blobs && Object.values(ir.blobs).some((b) => b && b.sha !== undefined)) k.add('blobs:side');
   if (ir.fields && Object.keys(ir.fields).length) k.add('fields');
@@ -139,6 +154,7 @@ export function compileIR(ir, opts = {}) {
   if (stale) throw new Error(`PLAN_STALE: ${stale}`);
   if (!ir || !IR_FORMATS.includes(ir.format)) throw new Error(`IR: format must be one of ${IR_FORMATS.join(', ')}`);
   const f2 = ir.format === 2;
+  let blobBytes = null; // (6c F1) a side blob's bytes by IR blob name (format 2)
   let blobFn = ir.blobs, fieldFn = () => { throw new Error('IR: fields need format 2'); };
   if (f2) {
     for (const k of Object.keys(ir)) if (!MEMBERS_FORMAT2.includes(k)) throw new Error(`IR: unknown member '${k}' (supported: ${MEMBERS_FORMAT2.join(', ')})`);
@@ -147,6 +163,11 @@ export function compileIR(ir, opts = {}) {
     const miss = walked.filter((k) => !req.includes(k));
     if (miss.length) throw new Error(`IR: requires misses [${miss.join(', ')}]`);
     const get = blobGetter(opts.blobs);
+    blobBytes = (name) => {
+      const b = ir.blobs?.[name];
+      if (!b) throw new Error(`IR: blob '${name}' is not in the IR's blobs`);
+      return get(b.sha);
+    };
     const decoded = new Map();
     for (const [name, b] of Object.entries(ir.blobs ?? {})) {
       if (!b || typeof b !== 'object') throw new Error(`IR: blob ${name} must be {sha, bytes, kind}`);
@@ -177,6 +198,17 @@ export function compileIR(ir, opts = {}) {
     for (const k of ['requires', 'fields', 'volumes', 'forms']) if (ir[k] !== undefined) throw new Error(`IR: '${k}' needs format 2`);
   }
   const fieldNames = new Set(Object.keys(ir.fields ?? {}));
+  // (6c MP) a class mask reads the IR's frozen volumes (ARVX side blobs), decoded once on first use
+  let classFn = null;
+  if (f2 && Object.keys(ir.volumes ?? {}).length) {
+    const get = blobGetter(opts.blobs);
+    let vols = null;
+    classFn = (x, y, z) => {
+      if (!vols) vols = Object.values(ir.volumes).map((v) => decodeArvx(get(ir.blobs?.[v.blob]?.sha ?? v.sha)));
+      for (const v of vols) { const c = volumeClassAt(v, x, y, z); if (c !== 14) return VOXEL_CLASSES[c]; }
+      return 'MISSING';
+    };
+  }
   const claim = ir.claim;
   for (const k of ['minX', 'minZ', 'maxX', 'maxZ', 'minY', 'maxY']) if (!Number.isInteger(claim?.[k])) throw new Error(`IR: claim.${k} must be an integer`);
   const mats = [];
@@ -198,20 +230,28 @@ export function compileIR(ir, opts = {}) {
       if (ops.length >= MAX_OPS) throw new Error(`IR: more than ${MAX_OPS} ops`);
       const cond = o.cond ?? 0;
       if (!(Number.isInteger(cond) && cond >= 0 && cond <= 3)) throw new Error(`${where}: cond must be 0..3`);
-      const base = { index: ops.length, part: pi, cond, walk: o.walk ? 1 : 0 };
+      const base = { index: ops.length, part: pi, cond, walk: o.walk ? 1 : 0, mask: compileOpMask(o, where, f2, fieldNames, fieldFn, classFn) };
       if (o.op === 'shape') {
         for (const k of shapeKinds(o.shape)) {
           if (!f2 && SHAPES_FORMAT2.includes(k)) throw new Error(`${where}: shape '${k}' needs format 2`);
           if (f2 && !PRIMITIVES.includes(k) && !SHAPES_FORMAT2.includes(k) && !COMBINATORS.includes(k)) throw new Error(`IR: unknown shape '${k}' (supported: ${[...PRIMITIVES, ...COMBINATORS, ...SHAPES_FORMAT2].join(', ')})`);
         }
         const node = compileShape(o.shape, blobFn);
-        const rule = compileOpRule(o, where, f2, fieldNames, fieldFn, mat, () => compileShape(o.shape, blobFn), o.shape);
-        ops.push({ ...base, kind: 0, node, rule, mat: rule ? 0 : mat(o.material), minX: node.minX, maxX: node.maxX, minZ: node.minZ, maxZ: node.maxZ });
+        const rule = compileOpRule(o, where, f2, fieldNames, fieldFn, mat, () => compileShape(o.shape, blobFn), o.shape, ir.seed);
+        const paint = rule ? null : compileOpPattern(o.material, `${where} material`, f2, fieldNames, fieldFn, mat, ir.seed);
+        ops.push({ ...base, kind: 0, node, rule, paint, mat: rule || paint ? 0 : mat(o.material), minX: node.minX, maxX: node.maxX, minZ: node.minZ, maxZ: node.maxZ });
       } else if (o.op === 'columns') {
         const cols = o.cols;
         if (!Array.isArray(cols) || cols.length % 5 !== 0) throw new Error(`${where}: cols must be a flat array of [x, z, a, b, m] entries`);
-        const rule = compileOpRule(o, where, f2, fieldNames, fieldFn, mat, null, null);
-        const materials = rule ? [0] : (o.materials ?? []).map(mat);
+        const rule = compileOpRule(o, where, f2, fieldNames, fieldFn, mat, null, null, ir.seed);
+        // (6c MP) a pattern entry is a per-cell material: its index is stored as -(k + 1) into `paints`
+        const paints = [];
+        const materials = rule ? [0] : (o.materials ?? []).map((m, i) => {
+          const pt = compileOpPattern(m, `${where} materials[${i}]`, f2, fieldNames, fieldFn, mat, ir.seed);
+          if (!pt) return mat(m);
+          paints.push(pt);
+          return -paints.length;
+        });
         if (!materials.length) throw new Error(`${where}: columns op needs materials`);
         if (rule && cols.some((v, i) => i % 5 === 4 && v !== 0)) throw new Error(`${where}: a columns op with a material rule has material index 0 only`);
         const n = cols.length / 5;
@@ -230,7 +270,33 @@ export function compileIR(ir, opts = {}) {
         }
         const idx = new Map();
         for (const [k, l] of index) idx.set(k, Int32Array.from(l));
-        ops.push({ ...base, kind: 1, rule, from: yrefFn(o.from ?? { abs: 0 }), to: yrefFn(o.to ?? { abs: 0 }), entries: e, colIndex: idx, minX, maxX, minZ, maxZ });
+        ops.push({ ...base, kind: 1, rule, paints, from: yrefFn(o.from ?? { abs: 0 }), to: yrefFn(o.to ?? { abs: 0 }), entries: e, colIndex: idx, minX, maxX, minZ, maxZ });
+      } else if (o.op === 'voxels') {
+        // (6c F1) baked cells from an ARVB side blob, copied pointwise by position (tile-independent)
+        if (!f2) throw new Error(`${where}: a voxels op needs format 2`);
+        // (v0.19.0, F1 + MP) masks are on shape and columns ops only (CONTRACT MP as built); refused, never silently dropped
+        if (o.mask !== undefined) throw new Error(`${where}: a voxels op takes no mask (masks are on shape and columns ops)`);
+        const org = o.origin;
+        if (!Array.isArray(org) || org.length !== 3 || !org.every(Number.isInteger)) throw new Error(`${where}: voxels origin must be [x, y, z] integers`);
+        const rot = o.rotation ?? 0;
+        if (!ROTATIONS.includes(rot)) throw new Error(`${where}: voxels rotation must be 0, 90, 180 or 270`);
+        if (typeof o.blob !== 'string') throw new Error(`${where}: voxels blob must be a blob name`);
+        const v = decodeVoxels(blobBytes(o.blob), `blob ${o.blob}`);
+        const k = ROTATIONS.indexOf(rot);
+        const palMat = v.palette.map((st) => mat(st === AIR ? null : turnState(st, k)));
+        const lists = new Map();
+        for (let i = 0; i < v.count; i++) {
+          const [lx, ly, lz] = voxelAt(v, i);
+          const [dx, dz] = turnXZ(lx, lz, v.size[0], v.size[2], k);
+          const key = colKey(org[0] + dx, org[2] + dz);
+          let l = lists.get(key);
+          if (!l) { l = []; lists.set(key, l); }
+          l.push(org[1] + ly, palMat[v.pal[i]]);
+        }
+        const idx = new Map();
+        for (const [key, l] of lists) idx.set(key, Int32Array.from(l));
+        const bb = voxelsBounds(v, org, rot);
+        ops.push({ ...base, kind: 2, colIndex: idx, minX: bb.minX, maxX: bb.maxX, minZ: bb.minZ, maxZ: bb.maxZ });
       } else if (o.op === 'relief') {
         ops.push({ ...base, ...compileRelief(o, where, f2, fieldNames, fieldFn, mat) });
       } else throw new Error(`IR: unknown op '${o.op}' (supported: ${OP_KINDS.join(', ')})`);
@@ -243,7 +309,7 @@ export function compileIR(ir, opts = {}) {
 }
 
 /** Count the primitive shapes of a shape tree (array/instances count their copies). */
-function primitiveCount(s) {
+export function primitiveCount(s) {
   if (!s || typeof s !== 'object') return 0;
   if (PRIMITIVES.includes(s.kind) || ['ellipsoid', 'capsuleChain', 'wedge', 'prism'].includes(s.kind)) return 1;
   const kids = Array.isArray(s.of) ? s.of : s.of ? [s.of] : [];
@@ -254,16 +320,38 @@ function primitiveCount(s) {
 }
 
 /** Compile an op's material rule (format 2), or null for a plain material. */
-function compileOpRule(o, where, f2, fieldNames, fieldFn, mat, second, shape) {
+function compileOpRule(o, where, f2, fieldNames, fieldFn, mat, second, shape, seed) {
   const m = o.material;
-  if (!m || typeof m !== 'object') return null;
+  if (!m || typeof m !== 'object' || m.rule === undefined) return null;
   if (!f2) throw new Error(`${where}: a material rule needs format 2`);
   const r = m.rule;
   const err = ruleError(r, `${where} material`, fieldNames);
   if (err) throw new Error(err);
   if (ruleUsesFacing(r) && shape && primitiveCount(shape) > FACING_MAX_PRIMITIVES) throw new Error(`${where}: a rule with facing allows at most ${FACING_MAX_PRIMITIVES} primitive shapes (this op has ${primitiveCount(shape)})`);
-  const pick = compileRule(r, { mat, fields: fieldFn, bands: shape ? strataOf(shape) : null });
+  const pick = compileRule(r, { mat, fields: fieldFn, bands: shape ? strataOf(shape) : null, paint: (p, w) => compileOpPattern(p, w, f2, fieldNames, fieldFn, mat, seed) });
   return { pick, facing: ruleUsesFacing(r), node2: ruleUsesFacing(r) && second ? second() : null };
+}
+
+/** (6c MP) Compile a `{pattern: spec}` material (format 2) to `pick(x, y, z, g)`, or null for anything else. */
+function compileOpPattern(m, where, f2, fieldNames, fieldFn, mat, seed) {
+  if (!m || typeof m !== 'object' || m.pattern === undefined) return null;
+  if (!f2) throw new Error(`${where}: a pattern needs format 2`);
+  for (const k of Object.keys(m)) if (k !== 'pattern') throw new Error(`${where}: a pattern material is {pattern: spec} (unexpected '${k}')`);
+  if (!isPattern(m.pattern)) throw new Error(`${where}: a pattern is {mix} or {gradient}`);
+  const err = patternError(m.pattern, `${where}.pattern`, { fields: fieldNames });
+  if (err) throw new Error(err);
+  for (const x of m.pattern.mix ?? m.pattern.gradient.stops) if (x.mat !== null && x.mat !== undefined && !/^minecraft:/.test(x.mat)) throw new Error(`${where}.pattern: '${x.mat}' is not a block state (an IR names blocks; roles resolve at plan time)`);
+  return compilePattern(m.pattern, { mat, fields: fieldFn, seed: seed ?? '0' });
+}
+
+/** (6c MP) Compile an op's mask (format 2) to `test(x, y, z, col)`, or null when it has none. */
+function compileOpMask(o, where, f2, fieldNames, fieldFn, classFn) {
+  if (o.mask === undefined) return null;
+  if (!f2) throw new Error(`${where}: a mask needs format 2`);
+  const err = maskError(o.mask, `${where} mask`, { fields: fieldNames });
+  if (err) throw new Error(err);
+  if (maskUses(o.mask, 'class') && !classFn) throw new Error(`MASK_NEEDS_VOLUME: ${where}: a mask's class term reads the frozen volumes, and the IR has none (r.needVolume(box) over the masked ops)`);
+  return compileMask(o.mask, { fields: fieldFn, classAt: classFn });
 }
 
 /** (6c T1) A relief field's "no value here" sample: the op writes nothing in that column (also outside the field). */
@@ -288,12 +376,14 @@ function compileRelief(o, where, f2, fieldNames, fieldFn, mat) {
   const cut = o.cut ?? 0;
   if (!(Number.isInteger(cut) && cut >= 0 && cut <= 3)) throw new Error(`${where}: relief cut must be a cond 0..3`);
   for (const k of ['maxCut', 'maxFill']) if (!(Number.isInteger(o[k]) && o[k] >= 0 && o[k] <= RELIEF_MAX_CLAMP)) throw new Error(`${where}: relief ${k} must be 0..${RELIEF_MAX_CLAMP}`);
-  if (o.fill === undefined || o.fill === null || (typeof o.fill !== 'string' && typeof o.fill !== 'object')) throw new Error(`${where}: relief fill must be a block state or a material rule`);
+  if (o.fill === undefined || o.fill === null || (typeof o.fill !== 'string' && !(typeof o.fill === 'object' && o.fill.rule))) throw new Error(`${where}: relief fill must be a block state or a material rule`);
+  // (v0.21.0, T1 over F1 + MP) masks are on shape and columns ops only; refused, never silently dropped
+  if (o.mask !== undefined) throw new Error(`${where}: a relief op takes no mask (masks are on shape and columns ops)`);
   const f = fieldFn(o.field);
   if (f.type !== 'i16') throw new Error(`${where}: relief field '${o.field}' must be i16`);
   const rule = typeof o.fill === 'object' ? compileOpRule({ material: o.fill }, `${where} fill`, f2, fieldNames, fieldFn, mat, null, null) : null;
   return {
-    kind: 2, cond: cut, field: f, target: mode === 'target', rule, mat: rule ? 0 : mat(o.fill), maxCut: o.maxCut, maxFill: o.maxFill,
+    kind: 3, cond: cut, field: f, target: mode === 'target', rule, mat: rule ? 0 : mat(o.fill), maxCut: o.maxCut, maxFill: o.maxFill,
     minX: f.minX, maxX: f.minX + f.width * f.res - 1, minZ: f.minZ, maxZ: f.minZ + f.depth * f.res - 1,
   };
 }
@@ -368,6 +458,7 @@ export function evalTile(ir, key, heights, opts = {}) {
     return sdAt(R.node2, x, R.y, z, colN) > 0;
   };
   const env = {
+    g: () => col.g,
     up: () => (R.cols ? R.y === R.b : R.y + 1 > R.hi + EPS || R.node.sd(R.y + 1) > 0),
     down: () => (R.cols ? R.y === R.a : R.y - 1 < R.lo - EPS || R.node.sd(R.y - 1) > 0),
     side: () => (R.cols || !R.node2 ? false : outsideAt(1, 0) || outsideAt(-1, 0) || outsideAt(0, 1) || outsideAt(0, -1)),
@@ -377,6 +468,8 @@ export function evalTile(ir, key, heights, opts = {}) {
     },
   };
 
+  // (6c MP) the column a mask reads: the frozen ground and the slope (env.slope, at R.x / R.z)
+  const MC = { g: 0, slope: env.slope };
   if (sel.length) try {
     for (let cx = 0; cx < 4; cx++) {
       for (let cz = 0; cz < 4; cz++) {
@@ -397,7 +490,7 @@ export function evalTile(ir, key, heights, opts = {}) {
             if (ci < 0 || cj < 0 || ci >= cols.width || cj >= cols.depth) { missing++; continue; }
             const idx = ci + cj * cols.width;
             if (cols.flags[idx] & FLAG_MISSING) { missing++; continue; }
-            col.g = cols.ground[idx]; col.h = cols.height[idx]; col.f = cols.floor[idx];
+            col.g = cols.ground[idx]; col.h = cols.height[idx]; col.f = cols.floor[idx]; MC.g = col.g;
             const inClaimXZ = wx >= claim.minX && wx <= claim.maxX && wz >= claim.minZ && wz <= claim.maxZ;
             const cell = lz * 16 + lx;
             for (let k = first; k < sel.length; k++) {
@@ -427,12 +520,19 @@ export function evalTile(ir, key, heights, opts = {}) {
                 if (a > b) continue;
                 let row = a - yBase;
                 let any = false;
+                const mask = o.mask;
+                if (mask) { R.x = wx; R.z = wz; }
                 if (o.rule) {
                   const pick = o.rule.pick;
                   R.x = wx; R.z = wz; R.node = node; R.node2 = o.rule.node2; R.lo = node.lo; R.hi = node.hi; R.cols = false;
                   for (let y = a; y <= b; y++, row++) {
                     const v = node.sd(y);
-                    if (v <= 0) { R.y = y; buf[row * 256 + cell] = tag + pick(wx, y, wz, v, env) * OP_SLOTS; any = true; }
+                    if (v <= 0 && (mask === null || mask(wx, y, wz, MC))) { R.y = y; buf[row * 256 + cell] = tag + pick(wx, y, wz, v, env) * OP_SLOTS; any = true; }
+                  }
+                } else if (o.paint || mask) {
+                  const paint = o.paint;
+                  for (let y = a; y <= b; y++, row++) {
+                    if (node.sd(y) <= 0 && (mask === null || mask(wx, y, wz, MC))) { buf[row * 256 + cell] = paint ? tag + paint(wx, y, wz, col.g) * OP_SLOTS : val; any = true; }
                   }
                 } else {
                   for (let y = a; y <= b; y++, row++) {
@@ -441,6 +541,19 @@ export function evalTile(ir, key, heights, opts = {}) {
                 }
                 if (any) { if (a - yBase < wLo) wLo = a - yBase; if (b - yBase > wHi) wHi = b - yBase; }
               } else if (o.kind === 2) {
+                // (6c F1) voxels: the column's baked cells (y, material) pairs, clipped to the claim like any op
+                const list = o.colIndex.get(colKey(wx, wz));
+                if (!list) continue;
+                if (!inClaimXZ) { for (let q = 0; q < list.length; q += 2) { const y = list[q]; if (y >= cMinY - CLIP_COUNT_MARGIN && y <= cMaxY + CLIP_COUNT_MARGIN) clipped++; } continue; }
+                for (let q = 0; q < list.length; q += 2) {
+                  const y = list[q];
+                  if (y < cMinY || y > cMaxY) { if (y >= cMinY - CLIP_COUNT_MARGIN && y <= cMaxY + CLIP_COUNT_MARGIN) clipped++; continue; }
+                  const row = y - yBase;
+                  buf[row * 256 + cell] = tag + list[q + 1] * OP_SLOTS;
+                  if (row < wLo) wLo = row;
+                  if (row > wHi) wHi = row;
+                }
+              } else if (o.kind === 3) {
                 // (6c T1) relief: the column's new ground `top` from the frozen ground and the field; cut above it (air up to
                 // RELIEF_CLEAR over the old ground), fill from the old ground up to it with the fill rule (depth = top - y)
                 const v = reliefAt(o.field, wx, wz);
@@ -479,13 +592,22 @@ export function evalTile(ir, key, heights, opts = {}) {
                   if (a < cMinY) { clipped += span(Math.max(a, cMinY - CLIP_COUNT_MARGIN), Math.min(b, cMinY - 1)); a = cMinY; }
                   if (b > cMaxY) { clipped += span(Math.max(a, cMaxY + 1), Math.min(b, cMaxY + CLIP_COUNT_MARGIN)); b = cMaxY; }
                   if (a > b) continue;
+                  const mask = o.mask;
+                  if (mask) { R.x = wx; R.z = wz; }
                   if (o.rule) {
                     const pick = o.rule.pick;
                     R.x = wx; R.z = wz; R.a = ua; R.b = ub; R.cols = true;
-                    for (let y = a, row = a - yBase; y <= b; y++, row++) { R.y = y; buf[row * 256 + cell] = tag + pick(wx, y, wz, y - ub, env) * OP_SLOTS; }
+                    for (let y = a, row = a - yBase; y <= b; y++, row++) {
+                      if (mask !== null && !mask(wx, y, wz, MC)) continue;
+                      R.y = y; buf[row * 256 + cell] = tag + pick(wx, y, wz, y - ub, env) * OP_SLOTS;
+                    }
+                  } else if (E[ei + 4] < 0) {
+                    const paint = o.paints[-E[ei + 4] - 1];
+                    for (let y = a, row = a - yBase; y <= b; y++, row++) if (mask === null || mask(wx, y, wz, MC)) buf[row * 256 + cell] = tag + paint(wx, y, wz, col.g) * OP_SLOTS;
                   } else {
                     const val = tag + E[ei + 4] * OP_SLOTS;
-                    for (let y = a, row = a - yBase; y <= b; y++, row++) buf[row * 256 + cell] = val;
+                    if (mask === null) for (let y = a, row = a - yBase; y <= b; y++, row++) buf[row * 256 + cell] = val;
+                    else for (let y = a, row = a - yBase; y <= b; y++, row++) if (mask(wx, y, wz, MC)) buf[row * 256 + cell] = val;
                   }
                   if (a - yBase < wLo) wLo = a - yBase;
                   if (b - yBase > wHi) wHi = b - yBase;

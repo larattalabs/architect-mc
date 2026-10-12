@@ -16,14 +16,21 @@
 // Every primitive compiles, at plan time, into low-level pointwise ops (`shape` and `columns`, kit/REGIONS.md "Ops")
 // that lib/realise.mjs evaluates per tile. Plan-time code: any JS, but no trig (the IR must be the same on every Node
 // major); directions come from lib/region/geom.mjs.
-import { info, normalize, qualify } from '../blocks.mjs';
+import { info, normalize, qualify, tagBlocks } from '../blocks.mjs';
 import { variant } from '../kit.mjs';
 import { fnv64 } from '../noise.mjs';
 import { columnCells, compileShape, polygonDistance, sdAt, shapeError, staticY, yrefError } from '../sdf.mjs';
 import { encodeArbl } from '../realise.mjs';
 import { ruleError } from '../material.mjs';
+import { maskError } from '../mask.mjs';
+import { isPattern, mapPatternMats, patternError } from '../pattern.mjs';
 import { sha256Hex } from './pack.mjs';
+import { voxelsSize } from './voxels.mjs';
 import { floatingIsland } from '../forms/floatingIsland.mjs';
+import { iceSpike } from '../forms/iceSpike.mjs';
+import { rockSpire } from '../forms/rockSpire.mjs';
+import { BAKE_OPS, bakeOps } from '../forms/rules.mjs';
+import { VOXEL_CLASSES, VC, classAt } from './volume.mjs';
 import { PASSES, PASS_NAMES } from './passes/index.mjs';
 import { CARDINALS, cardinalOf, centreCells, circlePolygon, compassDir, crossOffsets, dominantCardinal, rightOf, segmentAxis } from './geom.mjs';
 
@@ -151,6 +158,8 @@ export class Region {
     this.claim = ctx.claim;
     this.survey = ctx.survey;
     this.roles = ctx.roles;
+    // (6c MP) the bible's role patterns (resolved: block states), painted where an op takes a pattern
+    this.rolePatterns = ctx.patterns ?? {};
     this._stages = null;
     this.parts = [];
     this.partIds = new Set();
@@ -268,12 +277,15 @@ export class Region {
 
   get stageList() { return this._stages ?? this._implicit ?? ['main']; }
 
-  /** A part: the unit of per-part counts and (6d) diffs. `set`: 'terrain' (default) or 'path'. */
-  part(id, { stage, set = 'terrain' } = {}) {
+  /**
+   * A part: the unit of per-part counts and (6d) diffs. `set`: 'terrain' (default) or 'path'. (6c MP) `mask`: every op of the
+   * part keeps only the cells it selects (an op's own mask wins).
+   */
+  part(id, { stage, set = 'terrain', mask } = {}) {
     if (typeof id !== 'string' || !PART_ID.test(id)) throw new Error(`part id '${id}' must match ${PART_ID}`);
     if (this.partIds.has(id)) throw new Error(`part id '${id}' is used twice (part ids are unique)`);
     if (set !== 'terrain' && set !== 'path') throw new Error(`part ${id}: set must be 'terrain' or 'path'`);
-    const p = new Part(this, id, this._stage(stage), set);
+    const p = new Part(this, id, this._stage(stage), set, mask === undefined || mask === null ? null : this.mask(mask, `part ${id}: mask`));
     this.partIds.add(id);
     this.parts.push(p);
     return p;
@@ -301,6 +313,58 @@ export class Region {
     const p = this.part(`clear_${name}`, { stage });
     p.fill({ kind: 'box', min: [x - r, { surface: 1 }, z - r], max: [x + r, { max: [{ height: 0 }, { surface: 3 }] }, z + r] }, null, { cond: COND.IF_NATURAL });
     return this.anchor(name, [x, z]);
+  }
+
+  /**
+   * (6c MP) A mask for an op (lib/mask.mjs), resolved for the IR: block ids and tags qualified and checked against the 26.3
+   * tables, a noise term's label (`{noise: 'age'}`) turned into its seeded spec (this.noise). Throws with the path on a bad spec.
+   */
+  mask(spec, what = 'mask') {
+    const fix = (m) => {
+      if (!m || typeof m !== 'object' || Array.isArray(m)) return m;
+      if (Array.isArray(m.all)) return { ...m, all: m.all.map(fix) };
+      if (Array.isArray(m.any)) return { ...m, any: m.any.map(fix) };
+      if (m.not !== undefined) return { ...m, not: fix(m.not) };
+      if (typeof m.noise === 'string') return { ...m, noise: this.noise(m.noise) };
+      if (Array.isArray(m.block)) {
+        return { ...m, block: m.block.map((b) => {
+          if (typeof b !== 'string') return b;
+          if (b.startsWith('#')) {
+            const t = `#${qualify(b.slice(1))}`;
+            if (!tagBlocks(t)) throw new Error(`${what}: '${b}' is not a 26.3 block tag`);
+            return t;
+          }
+          info(b);
+          return qualify(b);
+        }) };
+      }
+      return m;
+    };
+    const out = fix(spec);
+    const e = maskError(out, what, { fields: new Set(Object.keys(this.fields)) });
+    if (e) throw new Error(e);
+    return out;
+  }
+
+  /** (6c MP) A pattern (lib/pattern.mjs) with its roles resolved to block states: the IR's `{pattern: spec}` material. */
+  pattern(spec, what = 'pattern') {
+    const e0 = patternError(spec, what);
+    if (e0) throw new Error(e0);
+    const out = mapPatternMats(spec, (m) => this.material(m, `${what} mat`));
+    const e = patternError(out, what, { fields: new Set(Object.keys(this.fields)) });
+    if (e) throw new Error(e);
+    return { pattern: out };
+  }
+
+  /**
+   * (6c MP) A material where a pattern is welcome (fill, carve, material rule clauses): a pattern spec ({mix} / {gradient} /
+   * {pattern: spec}), a role with a bible pattern (painted with it), or anything `material` takes.
+   */
+  paint(v, what = 'material') {
+    if (v && typeof v === 'object' && v.pattern !== undefined) return this.pattern(v.pattern, what);
+    if (isPattern(v)) return this.pattern(v, what);
+    if (typeof v === 'string' && Object.prototype.hasOwnProperty.call(this.rolePatterns, v)) return { pattern: this.rolePatterns[v] };
+    return this.material(v, what);
   }
 
   /** A seeded noise field spec, for `displace` (same seed and label, same values). */
@@ -371,13 +435,62 @@ export class Region {
   needVolume(box) {
     const b = { minX: box.minX, minY: box.minY, minZ: box.minZ, maxX: box.maxX, maxY: box.maxY, maxZ: box.maxZ };
     if (!Object.values(b).every(isInt)) throw new Error('needVolume: box needs integer minX..maxZ');
+    // (6c F1) asking again for the same box gives the same volume (keepNatural and the program may both read it)
+    const same = (x) => x.minX === b.minX && x.minY === b.minY && x.minZ === b.minZ && x.maxX === b.maxX && x.maxY === b.maxY && x.maxZ === b.maxZ;
+    const had = Object.entries(this.volumesUsed).find(([, u]) => same(u.box));
+    if (had) return this._volumeDecoded?.get(had[0]) ?? null;
+    if (this.needVolumes.some(same)) return null;
     this.needVolumes.push(b);
     const v = this.ctx.volumes?.find((x) => x.box.minX === b.minX && x.box.minY === b.minY && x.box.minZ === b.minZ && x.box.maxX === b.maxX && x.box.maxY === b.maxY && x.box.maxZ === b.maxZ);
     if (!v) return null;
     const name = `vol_${Object.keys(this.volumesUsed).length + 1}`;
     this._sideBlob(name, 'volume', v.bytes);
     this.volumesUsed[name] = { blob: name, box: b, sha: v.sha };
+    (this._volumeDecoded ??= new Map()).set(name, v.decoded ?? null);
     return v.decoded ?? null;
+  }
+
+  /**
+   * (6c F1 §3) Keep the frozen volume's natural cells of class `cls` (a VoxelClass name, e.g. 'ICE') inside `box`: they go into
+   * the IR as a `keep` entry `{volume, class, box}` on part `part` (default `keep_<class>`, created in `stage`), so the checker
+   * refuses (M1, an error) any op that writes one, and the program can keep its lots, routes and forms off them. Returns
+   * `{volume, cells, columns: Set("x,z"), has(x, y, z), near(x, z, r)}`, or null on the first plan (no volume yet: the two-plan
+   * flow plans again with it).
+   */
+  keepNatural(cls, box, { part = null, stage } = {}) {
+    if (!VOXEL_CLASSES.includes(cls) || ['AIR', 'MISSING', 'OWNED', 'PLAYER'].includes(cls)) throw new Error(`keepNatural: '${cls}' is not a natural voxel class`);
+    const v = this.needVolume(box);
+    if (!v) return null;
+    const name = Object.entries(this.volumesUsed).find(([, u]) => u.box.minX === box.minX && u.box.minY === box.minY && u.box.minZ === box.minZ && u.box.maxX === box.maxX && u.box.maxY === box.maxY && u.box.maxZ === box.maxZ)[0];
+    const pid = part ?? `keep_${cls.toLowerCase()}`;
+    let p = this.parts.find((q) => q.id === pid);
+    if (!p) { p = this.part(pid, { stage }); (this.meta.parts[pid] ??= {}).kind = 'keep'; }
+    p.keep = [...(p.keep ?? []), { volume: name, class: cls, box: { minX: box.minX, minY: box.minY, minZ: box.minZ, maxX: box.maxX, maxY: box.maxY, maxZ: box.maxZ } }];
+    const want = VC[cls];
+    const columns = new Set();
+    let cells = 0;
+    for (let x = box.minX; x <= box.maxX; x++) for (let z = box.minZ; z <= box.maxZ; z++) for (let y = box.minY; y <= box.maxY; y++) {
+      if (classAt(v, x, y, z) !== want) continue;
+      cells++;
+      columns.add(`${x},${z}`);
+    }
+    const has = (x, y, z) => x >= box.minX && x <= box.maxX && y >= box.minY && y <= box.maxY && z >= box.minZ && z <= box.maxZ && classAt(v, x, y, z) === want;
+    const near = (x, z, r) => { for (let dx = -r; dx <= r; dx++) for (let dz = -r; dz <= r; dz++) if (columns.has(`${x + dx},${z + dz}`)) return true; return false; };
+    return { volume: name, part: pid, cells, columns, has, near };
+  }
+
+  /** (6c F1) An `iceSpike` cluster (lib/forms/iceSpike.mjs) as form part `id`, on the plan ground. Options as `form` (`bake`). */
+  iceSpike(id, params, opts = {}) {
+    const gen = iceSpike({ ...params, seed: params.seed ?? fnv64(this.ctx.seed, 'iceSpike', id).hex }, { groundAt: (x, z) => this.survey.heightAt(x, z) });
+    this.form(id, gen, opts);
+    return gen;
+  }
+
+  /** (6c F1) A `rockSpire` (lib/forms/rockSpire.mjs) as form part `id`, on the plan ground. Options as `form` (`bake`, `_unsafe`). */
+  rockSpire(id, params, { _unsafe, ...opts } = {}) {
+    const gen = rockSpire({ ...params, seed: params.seed ?? fnv64(this.ctx.seed, 'rockSpire', id).hex }, { groundAt: (x, z) => this.survey.heightAt(x, z), _unsafe });
+    this.form(id, gen, opts);
+    return gen;
   }
 
   /**
@@ -399,18 +512,29 @@ export class Region {
    * (6b) A generated form (plan time): `gen` is a generator result `{ops, bounds, generator, version, params, seed}`; its ops
    * go into part `id` (created in `stage`) and its provenance into the IR's `forms`.
    */
-  form(id, gen, { stage, set = 'terrain' } = {}) {
+  form(id, gen, { stage, set = 'terrain', bake = 'auto' } = {}) {
+    if (![true, false, 'auto'].includes(bake)) throw new Error(`form ${id}: bake must be true, false or 'auto'`);
     const p = this.part(id, { stage, set });
     const from = p.ops.length;
+    const resolved = [];
     for (const op of gen.ops) {
       if (op.op === 'shape') { const e = shapeError(op.shape); if (e) throw new Error(`form ${id}: ${e}`); }
       const o = { ...op, cond: op.cond ?? COND.IF_AIR_OR_FLUID, walk: !!op.walk };
       // role names resolve here (the IR holds block states only)
       if (op.op === 'columns') o.materials = op.materials.map((m) => this.material(m, `form ${id} material`));
       else o.material = op.material && typeof op.material === 'object' ? this.materialRule(op.material, `form ${id} material`) : this.material(op.material, `form ${id} material`);
-      p._push(o);
+      resolved.push(o);
     }
-    this.forms.push({ id, generator: gen.generator, version: gen.version, params: gen.params, seed: gen.seed, bounds: gen.bounds, part: id, opsFrom: from, opsTo: p.ops.length });
+    // (6c F1 §2) past BAKE_OPS ops (or when asked) the form is baked: one voxels op over an ARVB side blob
+    let baked = null;
+    if (bake === true || (bake === 'auto' && resolved.length > BAKE_OPS)) {
+      const blob = `vox_${id}`.slice(0, 32);
+      const b = bakeOps(resolved, blob, { cond: COND.IF_NATURAL });
+      this._sideBlob(blob, 'voxels', b.bytes);
+      p._push(b.op);
+      baked = { blob, cells: b.cells, ops: resolved.length };
+    } else for (const o of resolved) p._push(o);
+    this.forms.push({ id, generator: gen.generator, version: gen.version, params: gen.params, seed: gen.seed, bounds: gen.bounds, part: id, opsFrom: from, opsTo: p.ops.length, ...(baked ? { baked } : {}) });
     (this.meta.parts[id] ??= {}).kind = 'form';
     return p;
   }
@@ -419,6 +543,7 @@ export class Region {
   material(v, what = 'material') {
     if (v === null || v === undefined || v === 'air' || v === 'minecraft:air') return null;
     if (v && typeof v === 'object' && v.rule) return this.materialRule(v, what);
+    if (v && typeof v === 'object' && (v.pattern !== undefined || isPattern(v))) throw new Error(`${what}: a pattern is taken by fill, carve and material rules (this primitive needs one block)`);
     if (typeof v !== 'string') throw new Error(`${what}: a material is a role name or a block state (got ${JSON.stringify(v)})`);
     if (Object.prototype.hasOwnProperty.call(this.roles, v)) return this.roles[v];
     try {
@@ -431,7 +556,7 @@ export class Region {
   /** (6b) A material rule with role names resolved to block states: `{rule: {rule: [{when, mat}], default, dither}}` or the inner object. */
   materialRule(v, what = 'material') {
     const r = v.rule && Array.isArray(v.rule.rule) ? v.rule : v;
-    const out = { rule: r.rule.map((c) => ({ when: c.when ?? {}, mat: this.material(c.mat, `${what} rule`) })), default: this.material(r.default ?? 'rock', `${what} rule default`) };
+    const out = { rule: r.rule.map((c) => ({ when: c.when ?? {}, mat: this.paint(c.mat, `${what} rule`) })), default: this.paint(r.default ?? 'rock', `${what} rule default`) };
     if (r.dither !== undefined) out.dither = r.dither;
     const e = ruleError(out, what, new Set(Object.keys(this.fields)));
     if (e) throw new Error(e);
@@ -457,12 +582,14 @@ export class Region {
 }
 
 class Part {
-  constructor(region, id, stage, set) {
+  constructor(region, id, stage, set, mask = null) {
     this.region = region;
     this.id = id;
     this.stage = stage;
     this.set = set;
     this.ops = [];
+    // (6c MP) the part's mask: every shape and columns op it emits gets it (an op's own mask wins)
+    this.mask = mask;
   }
 
   get roles() { return this.region.roles; }
@@ -470,15 +597,25 @@ class Part {
 
   _push(op) {
     this.region.opCount++;
+    if (this.mask !== null && op.mask === undefined) op.mask = this.mask;
     this.ops.push(op);
   }
 
-  /** Low-level: every cell inside `shape` gets `material` (null: air) with `cond` and `walk`. */
-  fill(shape, material, { cond = COND.IF_NATURAL, walk = false } = {}) {
+  _paint(v, what) { return this.region.paint(v, `${this.id}: ${what}`); }
+  _mask(m, what = 'mask') { return m === undefined || m === null ? undefined : this.region.mask(m, `${this.id}: ${what}`); }
+
+  /**
+   * Low-level: every cell inside `shape` gets `material` (null: air) with `cond` and `walk`. (6c MP) `material` may be a
+   * pattern ({mix} / {gradient}, or a role with a bible pattern); `mask` keeps only the cells it selects.
+   */
+  fill(shape, material, { cond = COND.IF_NATURAL, walk = false, mask } = {}) {
     const err = shapeError(shape);
     if (err) throw new Error(`part ${this.id}: ${err}`);
     if (!isInt(cond) || cond < 0 || cond > 3) throw new Error(`part ${this.id}: cond must be 0..3`);
-    this._push({ op: 'shape', shape, material: this._mat(material, 'fill material'), cond, walk: !!walk });
+    const op = { op: 'shape', shape, material: this._paint(material, 'fill material'), cond, walk: !!walk };
+    const m = this._mask(mask);
+    if (m !== undefined) op.mask = m;
+    this._push(op);
     return this;
   }
 
@@ -502,17 +639,20 @@ class Part {
    * fill them with a role. `lining`: a role written as a shell of `liningDepth` around the void, at or below the
    * column's floor, only over solid natural cells (IF_SOLID_NATURAL).
    */
-  carve(shape, { to = 'air', lining = null, liningDepth = 1, naturalOnly = true } = {}) {
+  carve(shape, { to = 'air', lining = null, liningDepth = 1, naturalOnly = true, mask } = {}) {
     const err = shapeError(shape);
     if (err) throw new Error(`part ${this.id}: carve: ${err}`);
     if (!(isNum(liningDepth) && liningDepth > 0 && liningDepth <= 8)) throw new Error(`part ${this.id}: carve liningDepth must be 0 < d <= 8`);
     const cond = naturalOnly ? COND.IF_NATURAL : COND.ALWAYS_OURS;
+    // (6c MP) the lining and `to` may be patterns; `mask` applies to both ops
+    const m = this._mask(mask);
+    const withMask = (op) => (m === undefined ? op : { ...op, mask: m });
     if (lining !== null) {
       const shell = { kind: 'clipY', y0: null, y1: { floor: 0 }, of: { kind: 'subtract', of: [{ kind: 'offset', d: liningDepth, of: shape }, shape] } };
-      this._shapeOp(shell, this._mat(lining, 'carve lining'), COND.IF_SOLID_NATURAL);
+      this._push(withMask({ op: 'shape', shape: shell, material: this._paint(lining, 'carve lining'), cond: COND.IF_SOLID_NATURAL, walk: false }));
     }
-    const toMat = this._mat(to, 'carve to');
-    this._shapeOp(toMat === null ? { kind: 'clipY', y0: null, y1: { height: 0 }, of: shape } : shape, toMat, cond);
+    const toMat = this._paint(to, 'carve to');
+    this._push(withMask({ op: 'shape', shape: toMat === null ? { kind: 'clipY', y0: null, y1: { height: 0 }, of: shape } : shape, material: toMat, cond, walk: false }));
     return this;
   }
 
@@ -1550,6 +1690,11 @@ class Part {
       } else if (o.op === 'relief') { // (6c T1) the field's extent
         const f = this.region.fields[o.field];
         if (f) { x0 = Math.min(x0, f.minX); x1 = Math.max(x1, f.minX + f.width * f.res - 1); z0 = Math.min(z0, f.minZ); z1 = Math.max(z1, f.minZ + f.depth * f.res - 1); }
+      } else if (o.op === 'voxels') {
+        // (6c F1) the baked box
+        const [sx, , sz] = voxelsSize(this.region.sideBlobs[o.blob].bytes);
+        const odd = o.rotation === 90 || o.rotation === 270;
+        x0 = Math.min(x0, o.origin[0]); x1 = Math.max(x1, o.origin[0] + (odd ? sz : sx) - 1); z0 = Math.min(z0, o.origin[2]); z1 = Math.max(z1, o.origin[2] + (odd ? sx : sz) - 1);
       } else {
         for (let i = 0; i < o.cols.length; i += 5) { x0 = Math.min(x0, o.cols[i]); x1 = Math.max(x1, o.cols[i]); z0 = Math.min(z0, o.cols[i + 1]); z1 = Math.max(z1, o.cols[i + 1]); }
       }

@@ -15,7 +15,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { CORE_ROLES, MACRO_ROLES, PALETTES, PALETTE_PRESETS, ROLE_NAME, palette, rolesOfPalette } from './kit.mjs';
-import { qualify } from './blocks.mjs';
+import { info, qualify } from './blocks.mjs';
+import { patternError, patternMats } from './pattern.mjs';
 import { REQUIRED_COMPONENTS, buildFrame } from './components.mjs';
 import { checkBlueprint } from './check.mjs';
 
@@ -195,6 +196,19 @@ export function validateBible(j, opts = {}) {
       if (!Array.isArray(list) || !list.every((r) => typeof r === 'string')) { err(`tiers.${t} must be a list of role names`); continue; }
       const unknown = list.filter((r) => !b.roles?.[r]);
       if (unknown.length) err(`tiers.${t}: ${unknown.join(', ')} ${unknown.length > 1 ? 'are not roles' : 'is not a role'} of this bible`);
+    }
+  }
+  // (6c MP) role patterns: {role: pattern} (lib/pattern.mjs), each a role this bible names; mats are its roles or block states
+  if (b.patterns !== undefined) {
+    if (!b.patterns || typeof b.patterns !== 'object' || Array.isArray(b.patterns)) err('patterns must be an object { role: pattern }');
+    else for (const [k, v] of Object.entries(b.patterns)) {
+      if (!b.roles?.[k]) { err(`patterns.${k}: '${k}' is not a role of this bible`); continue; }
+      const pe = patternError(v, `patterns.${k}`);
+      if (pe) { err(pe); continue; }
+      for (const m of patternMats(v)) {
+        if (m === null || b.roles?.[m]) continue;
+        try { info(String(m).replace(/\[.*$/, '')); } catch { err(`patterns.${k}: '${m}' is neither a role of this bible nor a block`); }
+      }
     }
   }
   if (b.components !== undefined && !(Array.isArray(b.components) && b.components.every((c) => typeof c === 'string' && /^[a-z][a-z0-9_]{0,39}$/.test(c)))) err('components must be a list of component names ([a-z][a-z0-9_]*)');

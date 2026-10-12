@@ -287,8 +287,8 @@ test('requires is computed by walking the IR; format 1 stays format 1', () => {
 test('format-2 compile errors: unknown op, shape, rule, member; inline blobs; missing requires; format-1 misuse', () => {
   const box = { kind: 'box', min: [1, 70, 1], max: [2, 71, 2] };
   const base = () => ir2([{ op: 'shape', shape: box, material: 'minecraft:stone', cond: 0, walk: false }]);
-  const a = base(); a.parts[0].ops[0].op = 'scatter'; // (6c T1) relief is built; scatter is still reserved
-  assert.throws(() => compileIR(a), /IR: unknown op 'scatter' \(supported: shape, columns, relief\)/);
+  const a = base(); a.parts[0].ops[0].op = 'scatter'; // (6c F1) voxels and (6c T1) relief are built; scatter is still reserved
+  assert.throws(() => compileIR(a), /IR: unknown op 'scatter' \(supported: shape, columns, voxels, relief\)/);
   const b = base(); b.parts[0].ops[0].shape = { kind: 'union', of: [box, { kind: 'blob3d' }] };
   assert.throws(() => compileIR(b), /IR: unknown shape 'blob3d' \(supported: /);
   const c = base(); c.parts[0].ops[0].material = { rule: { rule: [{ when: { wetness: 3 }, mat: 'minecraft:mud' }] } }; c.requires = ['material:rule'];

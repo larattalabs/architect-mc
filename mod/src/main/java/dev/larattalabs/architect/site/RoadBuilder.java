@@ -128,7 +128,8 @@ public final class RoadBuilder {
 			throw new Sites.SiteException("the construction road " + road.id() + " has no journal target");
 		}
 		SiteGroupRec g = road.group() == null ? null : Sites.group(road.group());
-		if (g == null || !g.sharedCrate()) {
+		boolean fromPile = Stockpiles.drawsFrom(road.owner(), road.dimension()); // 6c Y: the owner's stockpile, no crate of its own
+		if (!fromPile && (g == null || !g.sharedCrate())) {
 			throw new Sites.SiteException(dev.larattalabs.architect.api.Reason.NOT_ALLOWED, "a construction road needs its batch's shared crate");
 		}
 		int dx = box.maxX() - box.minX() + 1;
@@ -153,7 +154,7 @@ public final class RoadBuilder {
 		}
 		cells.sort(Comparator.<int[]>comparingInt(c -> c[1]).thenComparingInt(c -> c[4]).thenComparingInt(c -> c[3]).thenComparingInt(c -> c[2]));
 		int[] queue = cells.stream().mapToInt(c -> c[0]).toArray();
-		Construction.Crate crate = ensureCrate(level, g, road);
+		Construction.Crate crate = fromPile ? null : ensureCrate(level, g, road);
 		// every queued cell back to its before (no drops, no neighbour shape updates); cut cells stay cleared
 		BlockPos.MutableBlockPos m = new BlockPos.MutableBlockPos();
 		int[] topDown = queue.clone();
@@ -163,7 +164,8 @@ public final class RoadBuilder {
 			level.setBlock(m.set(box.minX() + o[0], box.minY() + o[1], box.minZ() + o[2]), before.states[topDown[i]], Builder.CLEAR_FLAGS);
 		}
 		Construction c = new Construction(Construction.BUILDING, queue, Builder.JOURNAL_TARGET, crate, new BitSet(), false, null);
-		Architect.LOGGER.info("Construction road {}: {} cells queued, crate at {},{},{}", road.id(), queue.length, crate.x(), crate.y(), crate.z());
+		Architect.LOGGER.info("Construction road {}: {} cells queued, {}", road.id(), queue.length, crate == null ? "from the stockpile of " + road.owner()
+			: "crate at " + crate.x() + "," + crate.y() + "," + crate.z());
 		RUNS.remove(road.id());
 		BEFORE.remove(road.id());
 		return road.withConstruction(c);
@@ -321,8 +323,8 @@ public final class RoadBuilder {
 	static void tick(MinecraftServer srv) {
 		ticks++;
 		for (Infra i : Infras.all()) {
-			if (!i.building() || i.placing()) {
-				continue;
+			if (!i.building() || i.placing() || Stockpiles.fed(i)) {
+				continue; // 6c Y: a stockpile's roads are fed by its owner loop
 			}
 			ServerLevel level = Sites.levelOf(srv, i.dimension());
 			Builder.Run r = level == null ? null : run(srv, i);
@@ -330,42 +332,58 @@ public final class RoadBuilder {
 				continue;
 			}
 			try {
-				step(srv, level, i, r);
+				step(srv, level, i, r, null);
 			} catch (RuntimeException e) {
 				Architect.LOGGER.error("Construction road {}: builder step failed", i.id(), e);
 			}
-			Infra now = Infras.get(i.id());
-			if (now != null && now.building()) {
-				long[] last = PROGRESS.computeIfAbsent(i.id(), k -> new long[] {Long.MIN_VALUE / 2, r.built.cardinality()});
-				int built = r.built.cardinality();
-				if (Builder.progressDue(last[0], (int) last[1], ticks, built)) {
-					last[0] = ticks;
-					last[1] = built;
-					dev.larattalabs.architect.apiimpl.ApiEvents.progressInfra(srv, now);
-				}
-			}
+			progressEvent(srv, i.id(), r);
 		}
 		syncGhosts(srv);
 	}
 
-	private static void step(MinecraftServer srv, ServerLevel level, Infra road, Builder.Run r) {
+	/** 6c Y: one owner-loop turn of a stockpile's construction road. */
+	static void stepFed(MinecraftServer srv, ServerLevel level, Infra road, Builder.Run r, Builder.Purse purse) {
+		try {
+			step(srv, level, road, r, purse);
+		} catch (RuntimeException e) {
+			Architect.LOGGER.error("Construction road {}: builder step failed", road.id(), e);
+		}
+		progressEvent(srv, road.id(), r);
+	}
+
+	private static void progressEvent(MinecraftServer srv, String id, Builder.Run r) {
+		Infra now = Infras.get(id);
+		if (now != null && now.building()) {
+			long[] last = PROGRESS.computeIfAbsent(id, k -> new long[] {Long.MIN_VALUE / 2, r.built.cardinality()});
+			int built = r.built.cardinality();
+			if (Builder.progressDue(last[0], (int) last[1], ticks, built)) {
+				last[0] = ticks;
+				last[1] = built;
+				dev.larattalabs.architect.apiimpl.ApiEvents.progressInfra(srv, now);
+			}
+		}
+	}
+
+	private static void step(MinecraftServer srv, ServerLevel level, Infra road, Builder.Run r, Builder.@Nullable Purse fed) {
 		if (ticks % 20 == 0) {
-			r.rescan(level);
+			r.rescan(level, false, fed != null);
 		}
 		Site s = probe(road);
 		Construction c = road.construction();
-		CrateBlockEntity crate = Builder.crate(level, s, false);
+		CrateBlockEntity crate = fed == null ? Builder.crate(level, s, false) : null;
 		BlockPos cp = c.crate() == null ? null : new BlockPos(c.crate().x(), c.crate().y(), c.crate().z());
-		r.crateMissing = cp == null || level.isLoaded(cp) && crate == null;
+		r.crateMissing = fed == null && (cp == null || level.isLoaded(cp) && crate == null);
 		if (r.built.cardinality() == r.size()) {
 			complete(srv, level, road, r, crate);
 			return;
 		}
-		if (crate == null || c.paused()) {
-			SiteWaits.observe(srv, level, road.id(), c.paused() || r.crateMissing ? WaitCalc.Outcome.ENDED : WaitCalc.Outcome.IDLE); // C25
+		if (fed == null && crate == null || c.paused()) {
+			boolean pileless = fed == null && c.crate() == null && road.owner() != null && !c.paused(); // 6c Y1: a dissolved stockpile's road
+			SiteWaits.observe(srv, level, road.id(), pileless ? WaitCalc.Outcome.STARVED : c.paused() || r.crateMissing ? WaitCalc.Outcome.ENDED
+				: WaitCalc.Outcome.IDLE); // C25
 			return;
 		}
-		Ledger ledger = crate.ledger();
+		Builder.Purse purse = fed != null ? fed : Builder.ledgerPurse(level, crate);
 		BlockState[] before = BEFORE.get(road.id());
 		boolean starved = false;
 		int budget = SurvivalWorld.blocksPerTick();
@@ -375,10 +393,11 @@ public final class RoadBuilder {
 			i = r.built.nextClearBit(i + 1)) {
 			scanned++;
 			BlockPos p = r.pos(i);
-			if (!level.isLoaded(p)) {
+			// 6c Y1: a stockpile's road reads without a chunk ticket (Builder.stateIfLoaded)
+			BlockState now = fed != null ? Builder.stateIfLoaded(level, p) : level.isLoaded(p) ? level.getBlockState(p) : null;
+			if (now == null) {
 				continue;
 			}
-			BlockState now = level.getBlockState(p);
 			if (r.matches(now, i)) {
 				r.markBuilt(i, true);
 				continue;
@@ -386,7 +405,7 @@ public final class RoadBuilder {
 			// bottom up: the queued cell below first (a gravel surface never falls into unbuilt fill); an attachable's support first
 			int below = r.queuePos(p.below());
 			boolean supported = !(below >= 0 && !r.built.get(below) || r.support[i] >= 0 && !r.built.get(r.support[i]));
-			if (!r.affordable(i, ledger)) {
+			if (!r.affordable(i, purse::stock)) {
 				starved |= supported; // C25: a frontier cell the stock cannot pay
 				continue;
 			}
@@ -400,15 +419,13 @@ public final class RoadBuilder {
 				continue;
 			}
 			r.blockedSince.remove(i);
-			for (SurvivalItems.Cost x : r.cost.get(i)) {
-				ledger.consume(x.item(), x.count());
-			}
+			purse.pay(r.cost.get(i));
 			Builder.put(level, r, i, p, true);
 			budget--;
 			placed++;
 		}
 		if (placed > 0) {
-			crate.ledgerChanged();
+			purse.changed();
 		}
 		SiteWaits.observe(srv, level, road.id(), placed > 0 ? WaitCalc.Outcome.PLACED : starved ? WaitCalc.Outcome.STARVED : WaitCalc.Outcome.IDLE);
 		if (r.built.cardinality() == r.size()) {
@@ -519,6 +536,21 @@ public final class RoadBuilder {
 			return;
 		}
 		MinecraftServer srv = level.getServer();
+		Stockpiles.Pile pile = Stockpiles.pileOf(road);
+		if (pile != null) {
+			// 6c Y: a stockpile's road: its paid cells standing are credited into the stockpile (once per placement); no crate here
+			Map<String, Integer> refund = refundOf(level, road);
+			Builder.creditRefund(level, pile.owner(), creditKey(road), refund, dropAt(road), null);
+			Builder.Run r = RUNS.get(road.id());
+			if (r != null) {
+				Builder.sendClear(srv, r, false);
+			}
+			RUNS.remove(road.id());
+			BEFORE.remove(road.id());
+			PROGRESS.remove(road.id());
+			Architect.LOGGER.info("Construction road {} removed: refunds {} credited to the stockpile of {}", road.id(), refund, pile.owner());
+			return;
+		}
 		Map<String, Integer> refund = new LinkedHashMap<>();
 		BlockPos at = c.crate() == null ? new BlockPos((road.box().minX() + road.box().maxX()) / 2, road.box().maxY() + 1, (road.box().minZ()
 			+ road.box().maxZ()) / 2) : new BlockPos(c.crate().x(), c.crate().y(), c.crate().z());
@@ -551,6 +583,29 @@ public final class RoadBuilder {
 		SiteWaits.ended(srv, road.id());
 		Builder.dropItems(level, at, refund, null);
 		Architect.LOGGER.info("Construction road {} removed: refunds and crate stock {} at {}", road.id(), refund, at.toShortString());
+	}
+
+	/** 6c Y: the credit key of a road's removal (this placement of the road). */
+	static String creditKey(Infra road) {
+		return "road:" + road.id() + "@" + road.placedAt();
+	}
+
+	/** Where a road's items drop without a crate: above its box's middle. */
+	static BlockPos dropAt(Infra road) {
+		return new BlockPos((road.box().minX() + road.box().maxX()) / 2, road.box().maxY() + 1, (road.box().minZ() + road.box().maxZ()) / 2);
+	}
+
+	/** 6c Y: what a construction road's removal refunds: the cost of its paid cells standing as built (loading its chunks). */
+	static Map<String, Integer> refundOf(ServerLevel level, Infra road) {
+		Map<String, Integer> refund = new TreeMap<>();
+		Builder.Run r = road.construction() == null ? null : run(level.getServer(), road);
+		if (r != null) {
+			r.rescan(level, true);
+			for (int q = r.built.nextSetBit(0); q >= 0; q = r.built.nextSetBit(q + 1)) {
+				r.cost.get(q).forEach(x -> refund.merge(x.item(), x.count(), Integer::sum));
+			}
+		}
+		return refund;
 	}
 
 	/** The DevBridge's view of a construction road (dev.site.state's shape, roughly): built, queued, outstanding. */

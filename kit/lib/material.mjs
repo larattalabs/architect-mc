@@ -2,6 +2,7 @@
 // `{rule: {rule: [{when, mat}], default, dither}}`, which picks a block per cell from pointwise quantities. Under the
 // realise lint: only + - * / and Math.floor/sqrt/abs/min/max/imul.
 import { makeNoise, noiseSpecError } from './noise.mjs';
+import { isPattern, patternError } from './pattern.mjs';
 
 export const RULE_CONDITIONS = ['depth', 'slopeLt', 'slopeGte', 'field', 'band', 'noise', 'yAbs', 'facing', 'gte', 'lt', 'age'];
 export const FACINGS = ['up', 'down', 'side'];
@@ -20,7 +21,12 @@ const range = (v) => Array.isArray(v) && v.length === 2 && isNum(v[0]) && isNum(
 export function ruleError(r, where = 'rule', fields = null) {
   if (!r || typeof r !== 'object' || !Array.isArray(r.rule)) return `${where}: a material rule is {rule: [{when, mat}], default, dither}`;
   if (r.dither !== undefined && !DITHERS.includes(r.dither)) return `${where}.dither must be ${DITHERS.join(' or ')}`;
-  const matErr = (m, w) => (m === null || typeof m === 'string' ? null : `${w} must be a block state or null`);
+  // (6c MP) a clause's mat (or the default) may be a pattern: {pattern: spec}
+  const matErr = (m, w) => {
+    if (m === null || typeof m === 'string') return null;
+    if (m && typeof m === 'object' && !Array.isArray(m) && Object.keys(m).length === 1 && isPattern(m.pattern)) return patternError(m.pattern, `${w}.pattern`, { fields });
+    return `${w} must be a block state, null or {pattern}`;
+  };
   const e0 = matErr(r.default ?? null, `${where}.default`);
   if (e0) return e0;
   if (r.rule.length > 64) return `${where}: at most 64 clauses`;
@@ -55,18 +61,22 @@ export const ruleUsesFacing = (r) => r.rule.some((c) => c.when?.facing !== undef
 /**
  * Compile a validated rule. `mat(state)` maps a block state (or null) to the evaluator's material index; `fields(name)`
  * gives a decoded field `{type, minX, minZ, width, depth, res, values}`; `bands` is the op shape's strata spec (or null).
- * Returns `pick(x, y, z, sd, env) -> material index`, where `env` = `{up(), down(), side(), slope()}` (lazy: called only by
- * the clauses that need them).
+ * Returns `pick(x, y, z, sd, env) -> material index`, where `env` = `{up(), down(), side(), slope(), g()}` (lazy: called only
+ * by the clauses that need them; `g()` is the column's frozen ground, for a pattern mat). `paint(m, where)` compiles a
+ * `{pattern}` mat (6c MP).
  */
-export function compileRule(r, { mat, fields, bands }) {
+export function compileRule(r, { mat, fields, bands, paint = null }) {
   const dither = r.dither === 'ordered4';
-  const def = mat(r.default ?? null);
+  // (6c MP) a pattern mat compiles (through `paint(m, where)`) to pick(x, y, z, g); a plain one to its index
+  const M = (m, w) => (m && typeof m === 'object' ? paint(m, w) : mat(m ?? null));
+  const def0 = M(r.default ?? null, 'rule default');
+  const def = typeof def0 === 'number' ? def0 : -1;
   const strataNoise = bands?.noise ? makeNoise(bands.noise) : null;
   const sEvery = bands?.every ?? 1, sOff = bands?.offset ?? 0, sAmp = bands?.amp ?? 0;
   const clauses = r.rule.map((c) => {
     const w = c.when ?? {};
     return {
-      m: mat(c.mat ?? null),
+      m: M(c.mat ?? null, 'rule clause'),
       depth: w.depth ?? null, band: w.band ?? null, yAbs: w.yAbs ?? null,
       slopeLt: w.slopeLt ?? null, slopeGte: w.slopeGte ?? null, facing: w.facing ?? null,
       field: w.field !== undefined ? fields(w.field) : null,
@@ -108,9 +118,9 @@ export function compileRule(r, { mat, fields, bands }) {
         const ok = c.facing === 'up' ? env.up() : c.facing === 'down' ? env.down() : env.side();
         if (!ok) continue;
       }
-      return c.m;
+      return typeof c.m === 'number' ? c.m : c.m(x, y, z, env.g());
     }
-    return def;
+    return def >= 0 ? def : def0(x, y, z, env.g());
   };
 }
 

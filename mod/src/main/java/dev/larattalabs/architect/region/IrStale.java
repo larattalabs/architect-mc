@@ -24,7 +24,8 @@ public final class IrStale {
 	public static final List<Integer> IR_FORMATS = List.of(1, 2);
 	/** {@code KINDS_FORMAT2} in kit/lib/realise.mjs (the closed list of kinds a format-2 IR's {@code requires} may name). */
 	public static final List<String> KINDS_FORMAT2 = List.of("blobs:side", "fields", "forms", "material:rule", "shape:array", "shape:capsuleChain",
-		"shape:ellipsoid", "shape:instances", "shape:prism", "shape:strata", "shape:warp", "shape:wedge", "volumes", "road:lamp", "relief");
+		"shape:ellipsoid", "shape:instances", "shape:prism", "shape:strata", "shape:warp", "shape:wedge", "volumes", "road:lamp", "voxels",
+		"mask", "pattern", "relief");
 
 	private IrStale() {
 	}

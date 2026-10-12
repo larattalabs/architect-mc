@@ -19,6 +19,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.level.block.Rotation;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
+import dev.larattalabs.architect.api.ArchitectRefused;
 import dev.larattalabs.architect.api.PlaceResult;
 import dev.larattalabs.architect.api.Reason;
 import dev.larattalabs.architect.api.Refusal;
@@ -630,5 +631,101 @@ final class SitesImpl implements dev.larattalabs.architect.api.Sites {
 	@Override
 	public List<dev.larattalabs.architect.api.ProtectedArea> protectedAreas(@Nullable String owner) {
 		return dev.larattalabs.architect.site.Protected.list(owner);
+	}
+	// ------------------------------------------------------------------ 1.17.0 (6c Y, C24): stockpiles
+
+	private static ArchitectRefused refused(Sites.SiteException e) {
+		return new ArchitectRefused(e.reason(), e.getMessage());
+	}
+
+	private dev.larattalabs.architect.api.Stockpile pileView(String owner) {
+		dev.larattalabs.architect.site.Stockpiles.View v = dev.larattalabs.architect.site.Stockpiles.view(server, owner);
+		if (v == null) {
+			throw new ArchitectRefused(Reason.NOT_ALLOWED, owner + " has no stockpile");
+		}
+		return Views.stockpile(v);
+	}
+
+	@Override
+	public dev.larattalabs.architect.api.Stockpile createStockpile(dev.larattalabs.architect.api.StockpileRequest r) {
+		try {
+			dev.larattalabs.architect.site.Stockpiles.create(server, r.owner(), r.dimension().identifier().toString(), r.crates());
+		} catch (Sites.SiteException e) {
+			throw refused(e);
+		}
+		return pileView(r.owner());
+	}
+
+	@Override
+	public dev.larattalabs.architect.api.Stockpile addStockpileCrate(String owner, net.minecraft.resources.ResourceKey<net.minecraft.world.level.Level> dimension,
+		net.minecraft.core.BlockPos at) {
+		try {
+			dev.larattalabs.architect.site.Stockpiles.addCrate(server, owner, dimension.identifier().toString(), at);
+		} catch (Sites.SiteException e) {
+			throw refused(e);
+		}
+		return pileView(owner);
+	}
+
+	@Override
+	public RemoveResult removeStockpileCrate(String owner, net.minecraft.core.BlockPos at, boolean force) {
+		try {
+			dev.larattalabs.architect.site.Stockpiles.CrateRemoval r = dev.larattalabs.architect.site.Stockpiles.removeCrate(server, owner, at, force);
+			return new RemoveResult(r.removed(), r.refusal() == null ? List.of() : List.of(r.refusal()), Views.items(r.dropped()));
+		} catch (Sites.SiteException e) {
+			throw refused(e);
+		}
+	}
+
+	@Override
+	public Optional<dev.larattalabs.architect.api.Stockpile> stockpile(String owner) {
+		dev.larattalabs.architect.site.Stockpiles.View v = dev.larattalabs.architect.site.Stockpiles.view(server, owner);
+		return v == null ? Optional.empty() : Optional.of(Views.stockpile(v));
+	}
+
+	@Override
+	public List<String> feedOrder(String owner) {
+		try {
+			return dev.larattalabs.architect.site.Stockpiles.feedOrder(server, owner);
+		} catch (Sites.SiteException e) {
+			throw refused(e);
+		}
+	}
+
+	@Override
+	public List<String> setFeedOrder(String owner, List<String> ids) {
+		try {
+			return dev.larattalabs.architect.site.Stockpiles.setFeedOrder(server, owner, ids);
+		} catch (Sites.SiteException e) {
+			throw refused(e);
+		}
+	}
+
+	@Override
+	public Map<net.minecraft.world.item.Item, Integer> withdraw(String owner, Map<net.minecraft.world.item.Item, Integer> items, ServerPlayer to) {
+		try {
+			return Views.items(dev.larattalabs.architect.site.Stockpiles.withdraw(server, owner, Views.ids(items), to));
+		} catch (Sites.SiteException e) {
+			throw refused(e);
+		}
+	}
+
+	@Override
+	public dev.larattalabs.architect.api.Stockpile adoptCrates(String owner) {
+		try {
+			dev.larattalabs.architect.site.Stockpiles.adopt(server, owner);
+		} catch (Sites.SiteException e) {
+			throw refused(e);
+		}
+		return pileView(owner);
+	}
+
+	@Override
+	public Map<net.minecraft.world.item.Item, Integer> dissolveStockpile(String owner, @Nullable ServerPlayer to) {
+		try {
+			return Views.items(dev.larattalabs.architect.site.Stockpiles.dissolve(server, owner, to));
+		} catch (Sites.SiteException e) {
+			throw refused(e);
+		}
 	}
 }

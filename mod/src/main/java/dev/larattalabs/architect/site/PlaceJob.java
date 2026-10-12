@@ -634,7 +634,7 @@ final class PlaceJob implements Placement.Job {
 			Builder.SHARED_CRATE.set(g != null && g.sharedCrate() ? g.id() : null);
 			try {
 				long t0 = System.nanoTime();
-				Builder.ConvertPlan p = Builder.planConvert(level, bp, built, siteId, placer);
+				Builder.ConvertPlan p = Builder.planConvert(level, bp, built, siteId, placer, record == null ? null : record.owner());
 				commit = Builder.commitConvert(level, p);
 				convert = p.construction();
 				newCrate = p.newCrate();

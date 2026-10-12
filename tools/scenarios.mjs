@@ -39,7 +39,8 @@ export function scenarioPath(id) {
 }
 const readSc = (id) => JSON.parse(fs.readFileSync(scenarioPath(id), 'utf8'));
 const writeSc = (sc) => fs.writeFileSync(scenarioPath(sc.id), `${JSON.stringify(sc, null, 2)}\n`);
-const short = (sc) => sc.short ?? sc.id.split('_')[0]; // (6c F1) forms_demo names its own (goldens/forms_demo.json)
+// (6c MP) a scenario may name its short id (its golden and run dirs); else the id's first word
+const short = (sc) => sc.short ?? sc.id.split('_')[0];
 const sha256 = (b) => crypto.createHash('sha256').update(b).digest('hex');
 
 /** SHA-256 over the sorted (path, sha) list of every file under dir except raw/ (CONTRACT 6b §8.2). */
@@ -145,6 +146,7 @@ export function fitEntries(lots) {
 // ------------------------------------------------------------------ (6c V) the flat village scenario (S7)
 const isV = (sc) => sc.phase === '6c-v';
 const isT1 = (sc) => sc.phase === '6c-t1'; // (6c T1) relief_demo on S3's claim
+const isF1 = (sc) => sc.phase === '6c-f1'; // (6c F1) forms_demo on S2's claim
 
 /**
  * (6c V) Before the world opens: the fixture bible (scenarios/<bibleFixture>, installed as the sidecar's bible `sc.bible` v1) and the
@@ -286,7 +288,7 @@ async function runScenario(id) {
   // (6c F1) a plan that reads a frozen volume of a live world (forms_demo keeps the natural ice) sees the world's own changes between
   // plans (a plant breaking, water freezing): the three plans of the IR sha check run with the world's ticking frozen (/tick freeze)
   // (6c T1) relief_demo's land too: S3's flowing water moves the plan survey between plans
-  const freeze = isT1(sc);
+  const freeze = isF1(sc) || isT1(sc);
   if (freeze) await L.cmd('/tick freeze');
   let p2, irShas;
   try {
@@ -356,6 +358,8 @@ async function runScenario(id) {
     t0 = Date.now();
     await L.settle(120_000);
     T('stand', t0);
+    // (6c F1) the world after the stand: M17 on the realised world and the melt across the stand
+    if (isF1(sc)) { t0 = Date.now(); await L.call('dev.region.dump', { box, file: path.join(raw, 'after-stand.arwd.gz') }, 1_800_000); T('standDump', t0); }
     t0 = Date.now();
     shots = await shoot(cams, path.join(out, 'shots'));
     T('shots', t0);
@@ -392,7 +396,7 @@ async function runScenario(id) {
 
 /** The metrics of a run directory (also `scenarios.mjs metrics <runDir>` to recompute after a kit fix). */
 async function computeMetrics({ sc, out, planDir, ir, irShas, mspt, cps, exact, flat }) {
-  const { decodeArwd, dumpWorld, buildVirtual } = await import('../kit/lib/region/vworld.mjs');
+  const { decodeArwd, dumpWorld, buildVirtual, F_WRITTEN } = await import('../kit/lib/region/vworld.mjs');
   const { checkRegion } = await import('../kit/lib/region/check.mjs');
   const M = await import('./lib/scenario-metrics.mjs');
   const raw = path.join(out, 'raw');
@@ -403,7 +407,7 @@ async function computeMetrics({ sc, out, planDir, ir, irShas, mspt, cps, exact, 
   const before = await decodeArwd(fs.readFileSync(path.join(raw, 'before.arwd.gz')));
   const after = await decodeArwd(fs.readFileSync(path.join(raw, 'after.arwd.gz')));
   const world = dumpWorld(before, after, ir.claim, { virtual: vw, lots: ir.lots });
-  const realised = checkRegion({ ir, meta, world, prefix: false });
+  const realised = checkRegion({ ir, meta, world, prefix: false, ...(isF1(sc) ? { blobs } : {}) });
   fs.writeFileSync(path.join(out, 'realised-report.json'), `${JSON.stringify(realised, null, 1)}\n`);
   const palette = M.paletteAdherence(ir, world);
   const organic = M.axisRunShare(ir, vw);
@@ -417,7 +421,7 @@ async function computeMetrics({ sc, out, planDir, ir, irShas, mspt, cps, exact, 
     const rw = (j.warnings ?? []).filter((w) => w.startsWith('restraint'));
     buildings.push({ entry, errors: (j.errors ?? []).length, errorList: j.errors ?? [], restraint: rw.filter((w) => /detail ?noise|accent/i.test(w)), restraintOther: rw.filter((w) => !/detail ?noise|accent/i.test(w)), metrics: { detailNoise: j.metrics?.detailNoise ?? null, accentShare: j.metrics?.accentShare ?? null } });
   }
-  const ts = await tileShas(planDir, { timingPasses: isT1(sc) ? 3 : 1 });
+  const ts = await tileShas(planDir, { timingPasses: isF1(sc) || isT1(sc) ? 3 : 1 });
   const gFile = path.join(SCEN, 'goldens', `${short(sc)}.json`);
   let golden = 'none';
   if (fs.existsSync(gFile)) {
@@ -426,7 +430,14 @@ async function computeMetrics({ sc, out, planDir, ir, irShas, mspt, cps, exact, 
     // matches when every tile sha does
     const runKit = JSON.parse(fs.readFileSync(path.join(planDir, 'ir.json'), 'utf8')).kitVersion;
     const sameTiles = JSON.stringify(g.tiles) === JSON.stringify(ts.tiles);
+    // (6c F1) a plan that reads a frozen volume of the live world (forms_demo's kept ice) records that volume's sha: a fresh world
+    // copy differs by a few natural cells (plants, water), so with every tile sha equal and the IR equal but for its volume blobs,
+    // the golden matches
+    const noVol = (j) => { const o = JSON.parse(JSON.stringify(j)); for (const [n, b] of Object.entries(o.blobs ?? {})) if (b.kind === 'volume') delete o.blobs[n]; delete o.volumes; return JSON.stringify(o); };
+    const gIr = fs.existsSync(path.join(SCEN, 'goldens', short(sc), 'ir.json')) ? JSON.parse(fs.readFileSync(path.join(SCEN, 'goldens', short(sc), 'ir.json'), 'utf8')) : null;
+    const volOnly = sameTiles && gIr && noVol(gIr) === noVol(JSON.parse(fs.readFileSync(path.join(planDir, 'ir.json'), 'utf8')));
     golden = sameTiles && g.irSha === ts.irSha ? 'match'
+      : volOnly ? 'match (every tile sha; the IR differs only by its frozen volume of the live world)'
       : sameTiles && g.kitVersion && g.kitVersion !== runKit ? `match (every tile sha; the IR sha differs by its kitVersion ${g.kitVersion} -> ${runKit})`
         : `differs (golden ${g.irSha.slice(0, 12)}, run ${ts.irSha.slice(0, 12)}${sameTiles ? '' : '; tile shas differ'})`;
     // (6c T1) relief_demo plans from the live world's survey (S3: flowing water, plants and leaves move a fresh copy's survey, and the
@@ -454,6 +465,16 @@ async function computeMetrics({ sc, out, planDir, ir, irShas, mspt, cps, exact, 
   // the other variant's exactness (E-flat from the latest flat run beside a natural one, and back)
   const sibling = latestRun(sc, out, !flat);
   const exactOther = sibling ? JSON.parse(fs.readFileSync(path.join(sibling, 'exact.json'), 'utf8')) : null;
+  // (6c F1) the world's own freezing during the stand: an unclassified mismatch where still water became ice (or a snow layer
+  // fell) at a cell the plan never writes is the cold biome's doing, not the undo's: classed `freeze` (a world class)
+  const freezeOf = (e) => {
+    if (!e || flat || !isF1(sc) || !(e.classes?.none > 0)) return e;
+    const moved = (e.list ?? []).filter((m) => m.class === 'none' && !(vw.flags(...m.pos.split(',').map(Number)) & F_WRITTEN)
+      && ((/^minecraft:water/.test(m.was) && /^minecraft:ice$/.test(m.now)) || (/air$/.test(m.was) && /^minecraft:snow\[/.test(m.now))));
+    if (!moved.length) return e;
+    const classes = { ...e.classes, none: e.classes.none - moved.length, freeze: (e.classes.freeze ?? 0) + moved.length };
+    return { ...e, classes, list: e.list.map((m) => (moved.includes(m) ? { ...m, class: 'freeze' } : m)) };
+  };
   // (6c T1) the world's flowing water: an unclassified mismatch where the snapshot held flowing (non-source) water and the world now
   // holds air is a stream that moved between the snapshot and the write (SETTLEMENTS §4.2: flowing water is outside E-normal), classed
   // `flow` (a world class); the plan never places flowing water
@@ -464,9 +485,26 @@ async function computeMetrics({ sc, out, planDir, ir, irShas, mspt, cps, exact, 
     const classes = { ...e.classes, none: e.classes.none - moved.length, flow: (e.classes.flow ?? 0) + moved.length };
     return { ...e, classes, list: e.list.map((m) => (moved.includes(m) ? { ...m, class: 'flow' } : m)) };
   };
-  const ex = flat ? { flat: exact, normal: exactOther, cellsWritten: exactOther?.cellsWritten ?? 0 } : { flat: exactOther, normal: flowOf(exact), cellsWritten: exact.cellsWritten };
+  const exN = flowOf(freezeOf(exact));
+  const ex = flat ? { flat: exact, normal: exactOther, cellsWritten: exactOther?.cellsWritten ?? 0 } : { flat: exactOther, normal: exN, cellsWritten: exact.cellsWritten };
   const plan = { report: JSON.parse(fs.readFileSync(path.join(out, 'report.json'), 'utf8')) };
   let rows = M.bars({ plan, realised, palette, organic, buildings, mspt, cellsPerSecond: cps, exact: ex, determinism: { irShas, workersSame: ts.workersSame, golden }, spendUsd: 0, approval: 'pending' });
+  // (6c F1) forms_demo's own bars: melt across the stand, kept cells, voxels, tile evaluation
+  let forms = null;
+  if (isF1(sc)) {
+    const F = await import('./lib/scenario-forms.mjs');
+    const standFile = path.join(raw, 'after-stand.arwd.gz');
+    const stand = fs.existsSync(standFile) ? await decodeArwd(fs.readFileSync(standFile)) : null;
+    const realisedStand = stand ? checkRegion({ ir, meta, world: dumpWorld(before, stand, ir.claim, { virtual: vw, lots: ir.lots }), prefix: false, blobs }) : null;
+    if (realisedStand) fs.writeFileSync(path.join(out, 'realised-stand-report.json'), `${JSON.stringify({ ...realisedStand, _world: undefined }, null, 1)}\n`);
+    const melt = stand ? F.meltAcrossStand(after, stand, F.plannedLights(vw)) : null;
+    const kept = F.keptDiff(ir, F.planVolumes(planDir, ir), before, after);
+    const voxels = F.voxelsExact(ir, planDir, after);
+    const organicPer = {};
+    for (const gname of [...new Set((ir.forms ?? []).map((f) => f.generator))]) organicPer[gname] = M.axisRunShare({ ...ir, forms: ir.forms.filter((f) => f.generator === gname), floating: [] }, vw).share;
+    rows = F.formsBars({ plan, realised, realisedStand, melt, kept, voxels, organic, organicPer, workersSame: ts.workersSame, tiles: ts.timing, mspt, load1: Math.round((await import('node:os')).loadavg()[0] * 10) / 10 }, rows);
+    forms = { melt, kept, voxels, organicPer, tiles: ts.timing, realisedM17: (realisedStand ?? realised).metrics.M17, realisedM3: realised.metrics.M3, meta: meta.forms ?? null };
+  }
   // (6c T1) relief_demo's own bars (CONTRACT T1 §6): items 1-4 and 10 (tools/lib/scenario-relief.mjs), item 7's tile evaluation
   let relief = null;
   if (isT1(sc)) {
@@ -492,7 +530,7 @@ async function computeMetrics({ sc, out, planDir, ir, irShas, mspt, cps, exact, 
   }
   const fronts = M.lotFronts(ir, after);
   L.log(`  lot fronts: outside the boxes ${JSON.stringify(fronts.outside)}; inside (the children's own) ${JSON.stringify(fronts.inside)}`);
-  const metrics = { scenario: sc.id, worldChanges: world.worldChanges, cellsPerSecond: cps, lotFronts: fronts, ...(village ? { village } : {}), ...(relief ? { relief } : {}), variant: flat ? 'flat' : 'natural', rows, palette, organic, buildings, mspt, tiles: { irSha: ts.irSha, count: Object.keys(ts.tiles).length, cells: ts.cells, workersSame: ts.workersSame, golden }, exactSibling: sibling ? path.relative(out, sibling) : null,
+  const metrics = { scenario: sc.id, worldChanges: world.worldChanges, cellsPerSecond: cps, lotFronts: fronts, ...(village ? { village } : {}), ...(forms ? { forms } : {}), ...(relief ? { relief } : {}), variant: flat ? 'flat' : 'natural', rows, palette, organic, buildings, mspt, tiles: { irSha: ts.irSha, count: Object.keys(ts.tiles).length, cells: ts.cells, workersSame: ts.workersSame, golden }, exactSibling: sibling ? path.relative(out, sibling) : null,
     realised: { M2: realised.metrics.M2 && { ...realised.metrics.M2, perNode: undefined }, M3: realised.metrics.M3, M4: realised.metrics.M4, M5: realised.metrics.M5, M8: realised.metrics.M8 && { ...realised.metrics.M8, unguardedSample: (realised.metrics.M8.unguardedSample ?? []).slice(0, 20) }, M10: realised.metrics.M10, findings: realised.findings.map((f) => `${f.rule} ${f.severity} ${f.part ?? '-'} x${f.count}`) } };
   fs.writeFileSync(path.join(out, 'metrics.json'), `${JSON.stringify(metrics, null, 2)}\n`);
   for (const r of rows) L.log(`  ${r.gated ? (r.pass ? 'ok  ' : 'FAIL') : 'rec '} ${r.id === 'mspt' || r.id === 't1-tiles' ? 'BAR ' : ''}${r.label}: ${r.value}`); // the mspt row is a timing bar (recorded, not blocking in change/slice)

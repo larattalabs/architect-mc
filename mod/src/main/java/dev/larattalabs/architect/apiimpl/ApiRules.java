@@ -24,7 +24,7 @@ public final class ApiRules {
 	public static final java.util.Set<String> JAVA_FEATURES = java.util.Set.of("sites", "events", "designs", "library", "survey", "survivalInfo",
 		"compositePreview", "batchPlacement", "siteGroups", "stages", "groupCrate", "journal", "overlapLayer", "roads", "cellSites",
 		"stackQuery", "entryVersions", "blueprintDelta", "deltaApply", "siteRevert", "deltaPreview", "regionPrepare", "generatedOnly", "cellConditions",
-		"chunkBound", "surveyVolume", "regionNudge", "regionOpKeys", "lotExt", "frozenWater", "siteWaiting", "fullBom");
+		"chunkBound", "surveyVolume", "regionNudge", "regionOpKeys", "lotExt", "frozenWater", "siteWaiting", "fullBom", "stockpile");
 
 	private ApiRules() {
 	}
@@ -53,12 +53,18 @@ public final class ApiRules {
 					case "ir.format2" -> "irFormat2";
 					case "region.keepOut" -> "planKeepOut"; // 6c V
 					case "region.lightCover" -> "apronLights"; // 6c W
+					case "region.forms1" -> "formsIce"; // 6c F1 (with formsRock and voxelsOp, below)
 					case "region.passes" -> "planPasses"; // 6c T1 (with reliefOp, below)
 					default -> Wire4b.FEATURE_NAMES.getOrDefault(f, Wire5a.FEATURE_NAMES.getOrDefault(f, f));
 				});
 			}
 			if (sidecarFeatures.contains("region.preview")) {
 				out.add("regionGhost"); // the ghost's preview tiles come with the 6b helper's previews
+			}
+			if (sidecarFeatures.contains("region.forms1")) {
+				// 6c F1: a forms-I helper's kit has the iceSpike and rockSpire generators and the voxels op
+				out.add("formsRock");
+				out.add("voxelsOp");
 			}
 			if (sidecarFeatures.contains("region.passes")) {
 				out.add("reliefOp"); // 6c T1: a T1 helper's kit has the relief op and pass

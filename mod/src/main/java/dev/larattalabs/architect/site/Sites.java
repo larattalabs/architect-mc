@@ -301,7 +301,7 @@ public final class Sites {
 		Construction cs = null;
 		if (survival) {
 			try {
-				cs = Builder.convertNow(level, bp, built, id, owner);
+				cs = Builder.convertNow(level, bp, built, id, owner, siteOwner);
 			} catch (SiteException | RuntimeException e) {
 				Architect.LOGGER.error("Making {} a construction site failed; taking the placement down", id, e);
 				unbuild(level, built);
@@ -647,6 +647,10 @@ public final class Sites {
 			if (!creative.isEmpty()) {
 				out.add(Reason.CREATIVE_ONLY_BLOCK, "This design uses " + String.join(", ", creative.stream().map(c -> c.replace("minecraft:", "")).toList())
 					+ ", which survival can't build");
+			}
+			String pileDim = Stockpiles.dimensionRefusal(owner, dimensionId(level)); // 6c Y (S-Y-6): one dimension per stockpile
+			if (pileDim != null) {
+				out.add(Reason.NOT_ALLOWED, "Not placed: " + pileDim);
 			}
 		}
 		List<Occupancy.Found> found = Occupancy.scan(level, snapBox, Occupancy.ownedBy(owner)); // 6c 0c (C18): the owner's tagged entities
@@ -1598,7 +1602,7 @@ public final class Sites {
 		notifyListeners();
 		Architect.LOGGER.info("Removed site {} ({}): restored box {}{}; its journal entries are kept until the next world start", id, b.blueprint(),
 			Anchors.str(b.restoreBox()), force ? " (forced)" : "");
-		Removed r = new Removed(b, dec == null ? Map.of() : Map.copyOf(dec.all()), stats.restored(), stats.changed(), handed, cascaded, notes);
+		Removed r = new Removed(b, dec == null ? Map.of() : Map.copyOf(dec.reported()), stats.restored(), stats.changed(), handed, cascaded, notes);
 		if (event) {
 			ApiEvents.removed(server, r);
 		}
@@ -2099,6 +2103,15 @@ public final class Sites {
 	}
 
 	/** A pending site's record as it was taken down (for a restore job that resumes after the record went pending). */
+	/** 6c Y1 (the audit): the pending (removed, not settled) site records, the last one per id. */
+	static List<Site> pendingSites() {
+		Map<String, Site> m = new LinkedHashMap<>();
+		for (Site.Pending p : state.pending()) {
+			m.put(p.site().id(), p.site());
+		}
+		return List.copyOf(m.values());
+	}
+
 	static @Nullable Site pendingRecord(String id) {
 		Site.Pending found = null;
 		for (Site.Pending p : state.pending()) {

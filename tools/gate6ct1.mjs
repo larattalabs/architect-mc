@@ -11,8 +11,8 @@
 //     plantime                          item 5: relief_demo on the synthetic 1024x1024 survey through the plan CLI with the helper's
 //                                       sandbox flags and the pass budget (2 GB heap), median of 3 (BAR); item 6 offline: the IR sha and
 //                                       the field blob shas over the 3 plans, tile shas 1 = 4 workers, forward and shuffled
-//     stale                             item 11: the v0.17.0 kit and the 0.17.0 mod's IrStale refuse a relief plan PLAN_STALE
-//     apicompat                         item 12: tools/api-compat.mjs --gate6cw (the 0.17.0, 0.16.0, 0.15.0 apitest jars, the 0.17.0 surface)
+//     stale                             item 11: the v0.20.0 kit and the 0.20.0 mod's IrStale refuse a relief plan PLAN_STALE
+//     apicompat                         item 12: tools/api-compat.mjs --gate6ct1 (the 0.20.0, 0.19.0, 0.18.0 apitest jars, the 0.20.0 surface)
 //     res1                              §3 in game: a program with passes on a 320x320 claim gets its second plan over a resolution-1
 //                                       survey (320x320 columns); a program without passes keeps the resolution-4 survey
 //     reliefflat | relief               relief_demo on S3's pinned claim, flat then natural (scenarios.mjs, phase 6c-t1): items 1-4, 6-10
@@ -178,10 +178,10 @@ steps.plantime = async () => {
 
 steps.stale = async () => {
   const out = {};
-  const dir = path.join(OUT, 'v0170-src');
+  const dir = path.join(OUT, 'v0200-src');
   fs.rmSync(dir, { recursive: true, force: true });
   fs.mkdirSync(dir, { recursive: true });
-  execFileSync('sh', ['-c', `git -C '${root}' archive v0.17.0 kit | tar -x -C '${dir}'`]);
+  execFileSync('sh', ['-c', `git -C '${root}' archive v0.20.0 kit | tar -x -C '${dir}'`]);
   // a relief plan from this kit: relief_demo on a flat claim (the hill and the blend)
   const { planRegion } = await imp('lib/region/plan.mjs');
   const { makeColumns } = await imp('lib/region/pack.mjs');
@@ -196,15 +196,15 @@ steps.stale = async () => {
   let compiled = null;
   try { old.compileIR(p.ir, { blobs: (sha) => p.blobs.get(sha) }); } catch (e) { compiled = e.message; }
   out.oldKit.compile = compiled;
-  check(/^PLAN_STALE: plan needs kit 0\.20\.0 \/ kinds \[relief\]; this is kit /.test(compiled ?? ''), `item 11: the v0.17.0 kit (${out.oldKit.version}) refuses the plan: ${compiled}`);
-  check(/^plan needs kinds \[relief\]; this is kit /.test(out.oldKit.kindOnly ?? ''), `item 11: the v0.17.0 kit names the kind alone: ${out.oldKit.kindOnly}`);
+  check(/^PLAN_STALE: plan needs kit 0\.20\.0 \/ kinds \[relief\]; this is kit /.test(compiled ?? ''), `item 11: the v0.20.0 kit (${out.oldKit.version}) refuses the plan: ${compiled}`);
+  check(/^plan needs kinds \[relief\]; this is kit /.test(out.oldKit.kindOnly ?? ''), `item 11: the v0.20.0 kit names the kind alone: ${out.oldKit.kindOnly}`);
   // nothing written: a stale plan never reaches a tile (the old evaluator throws before any cell)
   let wrote = null;
   try { wrote = old.evalTile(p.ir, '1,1', survey, { blobs: (sha) => p.blobs.get(sha) }).count; } catch (e) { wrote = `refused: ${e.message.slice(0, 60)}`; }
   out.oldKit.evalTile = wrote;
-  check(typeof wrote === 'string' && wrote.startsWith('refused: PLAN_STALE'), `item 11: the v0.17.0 evaluator writes nothing (${wrote})`);
-  // the v0.17.0 mod jar's IrStale on the same IR (its own compiled class, run with gson)
-  const jar = path.join(MAIN_ART(), 'gate6c-w', 'v0170', 'architect_mc-0.17.0.jar');
+  check(typeof wrote === 'string' && wrote.startsWith('refused: PLAN_STALE'), `item 11: the v0.20.0 evaluator writes nothing (${wrote})`);
+  // the v0.20.0 mod jar's IrStale on the same IR (its own compiled class, run with gson)
+  const jar = path.join(MAIN_ART(), 'gate6c-t1', 'v0200', 'architect_mc-0.20.0.jar');
   const gson = execFileSync('sh', ['-c', `ls '${path.join(root, '.gradle-home')}'/caches/modules-2/files-2.1/com.google.code.gson/gson/*/*/gson-*.jar | grep -v sources | head -1`]).toString().trim();
   const src = path.join(dir, 'Stale.java');
   fs.writeFileSync(src, 'import com.google.gson.*;\npublic class Stale { public static void main(String[] a) throws Exception { for (String f : a) { JsonObject ir = JsonParser.parseString(java.nio.file.Files.readString(java.nio.file.Path.of(f))).getAsJsonObject(); System.out.println(dev.larattalabs.architect.region.IrStale.reason(ir, null)); } } }\n');
@@ -212,7 +212,7 @@ steps.stale = async () => {
   fs.writeFileSync(path.join(dir, 'ir-kind-only.json'), JSON.stringify(asOld));
   const lines = execFileSync(path.join(JAVA_HOME, 'bin', 'java'), ['-cp', `${jar}:${gson}`, src, path.join(dir, 'ir.json'), path.join(dir, 'ir-kind-only.json')]).toString().trim().split('\n');
   out.oldMod = { jar, lines };
-  check(/^plan needs kit 0\.20\.0 \/ kinds \[relief\]; this is kit /.test(lines[0]) && /^plan needs kinds \[relief\]; this is kit /.test(lines[1] ?? ''), `item 11: the v0.17.0 mod's IrStale refuses it PLAN_STALE: ${lines.join(' | ')}`);
+  check(/^plan needs kit 0\.20\.0 \/ kinds \[relief\]; this is kit /.test(lines[0]) && /^plan needs kinds \[relief\]; this is kit /.test(lines[1] ?? ''), `item 11: the v0.20.0 mod's IrStale refuses it PLAN_STALE: ${lines.join(' | ')}`);
   const { staleReason } = await imp('lib/realise.mjs');
   out.thisKit = staleReason(p.ir);
   check(out.thisKit === null, 'item 11: this kit (0.20.0) accepts it');
@@ -222,10 +222,10 @@ steps.stale = async () => {
 steps.apicompat = async () => {
   // this checkout's main and client classes, compiled at its HEAD first (incremental; api-compat's default class dirs)
   execFileSync('./gradlew', ['compileJava', 'compileClientJava', '--offline', '-q'], { cwd: path.join(root, 'mod'), env: { ...process.env, JAVA_HOME, GRADLE_USER_HOME: path.join(root, '.gradle-home') }, stdio: 'ignore' });
-  const r = spawnSync(process.execPath, [path.join(root, 'tools', 'api-compat.mjs'), '--gate6cw'], { cwd: root, encoding: 'utf8', env: { ...process.env, JAVA_HOME } });
+  const r = spawnSync(process.execPath, [path.join(root, 'tools', 'api-compat.mjs'), '--gate6ct1'], { cwd: root, encoding: 'utf8', env: { ...process.env, JAVA_HOME } });
   const t = `${r.stdout}${r.stderr}`;
   fs.writeFileSync(path.join(OUT, 'api-compat.txt'), t);
-  check(r.status === 0 && /all 4 checks clean/.test(t), `item 12: api-compat against the 0.17.0, 0.16.0 and 0.15.0 apitest jars and the 0.17.0 surface: ${t.trim().split('\n').pop()}`);
+  check(r.status === 0 && /all 4 checks clean/.test(t), `item 12: api-compat against the 0.20.0, 0.19.0 and 0.18.0 apitest jars and the 0.20.0 surface: ${t.trim().split('\n').pop()}`);
   spendZero();
   return { out: t };
 };
