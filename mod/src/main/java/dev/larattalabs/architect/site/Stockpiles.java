@@ -265,7 +265,8 @@ public final class Stockpiles {
 		ServerLevel level = Sites.levelOf(srv, p.dimension);
 		List<CrateRec> out = new ArrayList<>();
 		for (CrateRec c : p.crates) {
-			if (level == null || !level.isLoaded(c.pos()) || level.getBlockEntity(c.pos()) instanceof CrateBlockEntity be && p.crateOwner().equals(be
+			// read without a chunk ticket (Builder.entityIfLoaded): the crates' chunks unload like any other
+			if (level == null || !level.isLoaded(c.pos()) || Builder.entityIfLoaded(level, c.pos()) instanceof CrateBlockEntity be && p.crateOwner().equals(be
 				.siteId())) {
 				out.add(c);
 			}

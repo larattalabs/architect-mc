@@ -365,7 +365,7 @@ public final class RoadBuilder {
 
 	private static void step(MinecraftServer srv, ServerLevel level, Infra road, Builder.Run r, Builder.@Nullable Purse fed) {
 		if (ticks % 20 == 0) {
-			r.rescan(level);
+			r.rescan(level, false, fed != null);
 		}
 		Site s = probe(road);
 		Construction c = road.construction();
@@ -388,10 +388,11 @@ public final class RoadBuilder {
 			i = r.built.nextClearBit(i + 1)) {
 			scanned++;
 			BlockPos p = r.pos(i);
-			if (!level.isLoaded(p)) {
+			// 6c Y1: a stockpile's road reads without a chunk ticket (Builder.stateIfLoaded)
+			BlockState now = fed != null ? Builder.stateIfLoaded(level, p) : level.isLoaded(p) ? level.getBlockState(p) : null;
+			if (now == null) {
 				continue;
 			}
-			BlockState now = level.getBlockState(p);
 			if (r.matches(now, i)) {
 				r.markBuilt(i, true);
 				continue;

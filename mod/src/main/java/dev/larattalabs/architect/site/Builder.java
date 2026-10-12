@@ -417,15 +417,29 @@ public final class Builder {
 		 * own rescans never load a chunk.
 		 */
 		int rescan(ServerLevel level, boolean load) {
+			return rescan(level, load, false);
+		}
+
+		/** {@code quiet} (6c Y1, a stockpile's target): reads loaded chunks without a ticket ({@link #stateIfLoaded}). */
+		int rescan(ServerLevel level, boolean load, boolean quiet) {
 			int changed = 0;
 			BlockPos.MutableBlockPos m = new BlockPos.MutableBlockPos();
 			for (int i = 0; i < queue.length; i++) {
 				int[] o = Construction.offsets(queue[i], dx, dz);
 				m.set(box.minX() + o[0], box.minY() + o[1], box.minZ() + o[2]);
-				if (!load && !level.isLoaded(m)) {
-					continue;
+				BlockState st;
+				if (quiet && !load) {
+					st = stateIfLoaded(level, m);
+					if (st == null) {
+						continue;
+					}
+				} else {
+					if (!load && !level.isLoaded(m)) {
+						continue;
+					}
+					st = level.getBlockState(m);
 				}
-				boolean b = matches(level.getBlockState(m), i);
+				boolean b = matches(st, i);
 				if (b != built.get(i)) {
 					markBuilt(i, b);
 					changed++;
@@ -1101,7 +1115,7 @@ public final class Builder {
 
 	private static void step(MinecraftServer srv, ServerLevel level, Site s, Run r, @Nullable Purse fed) {
 		if (ticks % 20 == 0) {
-			r.rescan(level);
+			r.rescan(level, false, fed != null);
 		}
 		Construction c = s.construction();
 		CrateBlockEntity crate = fed == null ? crate(level, s, false) : null;
@@ -1128,10 +1142,12 @@ public final class Builder {
 				continue; // placed with its first
 			}
 			BlockPos p = r.pos(i);
-			if (!level.isLoaded(p)) {
-				continue; // only cells in loaded chunks progress; never load one
+			// only cells in loaded chunks progress; never load one (6c Y1: a stockpile's target reads without a ticket, so its chunks
+			// unload once nobody is near: a far target's frontier can be unloaded, S-Y-1)
+			BlockState now = fed != null ? stateIfLoaded(level, p) : level.isLoaded(p) ? level.getBlockState(p) : null;
+			if (now == null) {
+				continue;
 			}
-			BlockState now = level.getBlockState(p);
 			if (r.matches(now, i)) {
 				r.markBuilt(i, true); // already there (the player placed it)
 				continue;
@@ -1146,15 +1162,31 @@ public final class Builder {
 			BlockPos q = j >= 0 ? r.pos(j) : null;
 			// phase 5b: a swap replaces the old version's block only now that the new item is in the crate; the old block is
 			// refunded when it was paid (the free bit) and is still the site's
-			boolean swapNow = r.holdsOld(now, i) && (q == null || r.holdsOld(level.getBlockState(q), j) || free(level, q, level.getBlockState(q), r.target[j]));
-			if (!swapNow && (!free(level, p, now, r.target[i]) || q != null && (!level.isLoaded(q) || !free(level, q, level.getBlockState(q), r.target[j])))) {
-				r.blockedSince.putIfAbsent(i, ticks);
-				continue;
+			boolean swapNow;
+			BlockState qs = null;
+			if (fed != null) {
+				// 6c Y1, a stockpile's target: its pair's cell without a ticket (an unloaded pair waits)
+				qs = q == null ? null : stateIfLoaded(level, q);
+				if (q != null && qs == null) {
+					continue;
+				}
+				swapNow = r.holdsOld(now, i) && (q == null || r.holdsOld(qs, j) || free(level, q, qs, r.target[j]));
+				if (!swapNow && (!free(level, p, now, r.target[i]) || q != null && !free(level, q, qs, r.target[j]))) {
+					r.blockedSince.putIfAbsent(i, ticks);
+					continue;
+				}
+			} else {
+				// a legacy target: as in 0.17.0
+				swapNow = r.holdsOld(now, i) && (q == null || r.holdsOld(level.getBlockState(q), j) || free(level, q, level.getBlockState(q), r.target[j]));
+				if (!swapNow && (!free(level, p, now, r.target[i]) || q != null && (!level.isLoaded(q) || !free(level, q, level.getBlockState(q), r.target[j])))) {
+					r.blockedSince.putIfAbsent(i, ticks);
+					continue;
+				}
 			}
 			r.blockedSince.remove(i);
 			if (swapNow) {
 				refundSwap(level, s, r, i, free, purse);
-				if (j >= 0 && r.holdsOld(level.getBlockState(q), j)) {
+				if (j >= 0 && r.holdsOld(qs != null ? qs : level.getBlockState(q), j)) {
 					refundSwap(level, s, r, j, free, purse);
 				}
 				freeChanged = true;
@@ -1192,6 +1224,22 @@ public final class Builder {
 		for (SurvivalItems.Cost c : costs) {
 			ledger.consume(c.item(), c.count());
 		}
+	}
+
+	/**
+	 * 6c Y1: a cell's block when its chunk is loaded, else null, without a chunk ticket. {@code Level.getBlockState} goes through
+	 * {@code getChunk(FULL, load)}, which adds a one-tick UNKNOWN ticket each time: read every tick, it kept a construction site's
+	 * chunks loaded for good.
+	 */
+	static @Nullable BlockState stateIfLoaded(ServerLevel level, BlockPos p) {
+		net.minecraft.world.level.chunk.LevelChunk c = level.getChunkSource().getChunkNow(p.getX() >> 4, p.getZ() >> 4);
+		return c == null ? null : c.getBlockState(p);
+	}
+
+	/** 6c Y1: a block entity when its chunk is loaded, else null, without a chunk ticket. */
+	public static @Nullable BlockEntity entityIfLoaded(ServerLevel level, BlockPos p) {
+		net.minecraft.world.level.chunk.LevelChunk c = level.getChunkSource().getChunkNow(p.getX() >> 4, p.getZ() >> 4);
+		return c == null ? null : c.getBlockEntity(p);
 	}
 
 	/** Whether the builder may write a cell holding {@code now}: air, fluid or a replaceable plant, and no one stands in it. */
