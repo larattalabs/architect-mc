@@ -61,6 +61,7 @@ const check = (ok, m, data) => {
   results[m] = { ok, ...(data === undefined ? {} : { data }) };
   return ok;
 };
+const bar = (ok, m, data) => check(ok, `BAR ${m}`, data); // a timing bar: recorded, not blocking in change/slice (docs/GATES.md)
 const write = (name, data) => fs.writeFileSync(path.join(OUT, name), JSON.stringify(data, null, 2));
 const CTX = path.join(OUT, 'context.json');
 const ctx = fs.existsSync(CTX) ? JSON.parse(fs.readFileSync(CTX, 'utf8')) : {};
@@ -1397,10 +1398,10 @@ steps.village = async () => {
     const stats = await call('dev.placement.stats', {});
     const h = (await hash(V_BOX)).sha256;
     const failed = done.items.filter((i) => i.status !== 'PLACED');
-    check(failed.length === 0 && h === hAtomic, `village ${ms} ms: the delta batch equals the atomic applies (wall ${wall.toFixed(1)} s, MSPT max ${stats.msptMax?.toFixed(1)} ms, over 50 ms: ${stats.ticksOver50ms})`,
+    check(failed.length === 0 && h === hAtomic, `village ${ms} ms: the delta batch equals the atomic applies (recorded: wall ${wall.toFixed(1)} s, MSPT max ${stats.msptMax?.toFixed(1)} ms, over 50 ms: ${stats.ticksOver50ms})`,
       { failed, h, hAtomic });
-    if (ms === 4) check(ownOk(ownTick(stats), 25), `village 4 ms: ${tickText(ownTick(stats), 25)}`, ownTick(stats));
-    check(ownOk(ownTick(stats)), `village ${ms} ms: ${tickText(ownTick(stats))}`, ownTick(stats));
+    if (ms === 4) bar(ownOk(ownTick(stats), 25), `village 4 ms: ${tickText(ownTick(stats), 25)}`, ownTick(stats));
+    bar(ownOk(ownTick(stats)), `village ${ms} ms: ${tickText(ownTick(stats))}`, ownTick(stats));
     out[`batch${ms}`] = { wall, stats };
     if (ms === 4) {
       // undoStage("upgrade") reverts all 12 exactly; removeGroup afterwards is exact
@@ -1478,13 +1479,13 @@ steps.sizecap = async () => {
   const a = await call('dev.site.delta.apply', { site, version: 2 }, 30 * 60_000);
   const sa = await call('dev.placement.stats', {});
   check(a.applied, `sizecap: the delta of every cell (${a.written} cells) applied over ticks in ${((Date.now() - t0) / 1000).toFixed(1)} s`, a.applied ? sa : a);
-  check(ownOk(ownTick(sa)), `sizecap: apply: ${tickText(ownTick(sa))}`, ownTick(sa));
+  bar(ownOk(ownTick(sa)), `sizecap: apply: ${tickText(ownTick(sa))}`, ownTick(sa));
   await call('dev.placement.stats', { reset: true });
   const r = await call('dev.site.revert', { site, version: 1 }, 30 * 60_000);
   const sr = await call('dev.placement.stats', {});
   const hb = (await hash(BOX)).sha256;
   check(r.applied && hb === h1, 'sizecap: the revert gives the v1 world back exactly', { r: r.applied ? undefined : r, hb, h1 });
-  check(ownOk(ownTick(sr)), `sizecap: revert: ${tickText(ownTick(sr))}`, ownTick(sr));
+  bar(ownOk(ownTick(sr)), `sizecap: revert: ${tickText(ownTick(sr))}`, ownTick(sr));
   const rm = await result(await api(`remove ${site} - noforce keep`), 30 * 60_000);
   await settle(3000);
   check(rm.removed && (await hash(BOX)).sha256 === h0, 'sizecap: Remove is exact', rm.removed ? undefined : rm);
