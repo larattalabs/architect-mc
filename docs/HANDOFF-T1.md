@@ -16,8 +16,11 @@ Gate range: `--since origin/slice/W` until W lands on main (then merge origin/ma
 
 ## Status
 
-- [ ] kit: relief op (evaluator), pass framework, relief pass + erosion, `pad.edge: 'blend'`, relief_demo, tests, lint
-- [ ] sidecar: pass budget, FEATURES, tests
-- [ ] mod: versions, IrStale, features, resolution-1 second survey, test
-- [ ] gate: tools/gate6ct1.mjs, gate-chains steps + impact rule, scenario rows, goldens
-- [ ] slice tier run, gate-verifier, CONTRACT as-built, retire this file
+- [x] kit: relief op, pass framework, relief pass + erosion, `pad.edge: 'blend'`, relief_demo, tests (263/263), lint; REGIONS.md
+- [x] sidecar: pass budget from the declared passes (source regex), `region.passes`, region.planned `passes`; test regions-passes
+- [x] mod: 0.20.0 / 1.17.0, IrStale relief, planPasses/reliefOp, resolution-1 second survey (secondSurveyRes), PassesT1Test; build green
+- [x] merged origin/main (v0.18.0: W, Y2, C23) at c3b766f
+- [x] gate driver tools/gate6ct1.mjs; steps t1-unit, t1-ingame, 6ct1-scenario-relief; impact rule; plantime/stale/apicompat green
+- [x] relief_demo pinned (run worktree ../architect-mc-T1-run, ports 8918/8919)
+- [ ] scenario runs flat + natural, golden (scenarios.mjs golden relief_demo <natural run>), res1 in game
+- [ ] slice tier run (`--since origin/main`, ports 8920-8923 for the runner), gate-verifier, CONTRACT as-built, retire this file
