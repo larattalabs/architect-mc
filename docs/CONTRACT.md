@@ -10218,3 +10218,36 @@ Branch `slice/X` (worktree `../architect-mc-X`). $0: sim and stub only (`artifac
 | C22 (b) | `SiteGroupRec` gains a trailing `removedAt` (the 10- and 11-component constructors kept; set when the state becomes `removed`, kept by a second finish, cleared by other states); `SiteGroup` a trailing `Optional<Long> removedAt` (the 1.4.0 constructor kept). Removing a removed group answers removed=true and writes nothing. `RegionState.REMOVED` is appended; `RegionView` gains a trailing `long removedAt` (0 unless REMOVED; both older constructors kept; a `long`, not an `Optional`, so Gson-based tools can print it). A removed region's record `removed.json` (now with `removedAt`; one written before 6c X uses its file time) is read at the world start as a tombstone: `Regions.get(id)` answers a REMOVED view, `Regions.remove(id)` answers removed=true with nothing written, `Regions.list` omits it, an unknown id still refuses. Tombstones are kept forever (at least as long as opKey records). |
 | Hook (C22) | `dev.undo.failRestore {skip}`: let `skip` removal restores finish, then break the next one before its site record is finished (-1 disarms). |
 | Gate | Slice tier `artifacts/gate-runs-X/20261011-182748-slice` (2 shards, 8912-8915, old-version clients 8916/8917, `--quiet-wait`, head fbb8ed2): 27 PASS, including unit-mod 498, unit-kit 246, apijars on the 0.16.0/0.15.0/0.14.0 jars (45 ok each), x-unit, **x-ingame** (53 ok: lotext, keys, removal, apicompat), v-ingame, 5b-chains, 4d-all, 4e-orders, 6a-megaA (own CPU max 24.6 ms, 50.7k cells/s), 6a-eflat, 6a-staged, 6a-inv3, the 6b steps and S1. Three steps did not pass and were fixed or re-run: unit-sidecar (the Limits drift guard did not know `LOT_EXT_MAX`: fixed in the guard) and v-unit (the X checkout lacked `sidecar/node_modules`: environment), re-run PASS at 524df06 with 6cv-scenario-s7 (NOISY at load 37 in the slice run, PASS on a quiet box: `20261011-204414-change`). `api-compat --gate6cx` 4/4 clean (0.16.0, 0.15.0, 0.14.0 apitest jars, 0.16.0 surface; baseline built from tag v0.16.0, `artifacts/gate6c-x/v0160`). Items: 1 unit (Api114Test 6, RegionKeysTest 5, the kit's C19 tests), 2 `lotext` (14 checks: 10/10 S7 flat lot sites carry the ext, 4097 refuses FIELD_LIMIT `params.lots[1].ext`, save/reload and undo/redo byte equal), 3 `keys` (plan idempotence, conflict, in-flight twin, owner scope, planByKey after the reload; a realise held pending fails WORLD_STOPPED, `realiseByKey` finds rg1 PLACING after the reload, it completes, a second realise returns it, another body OP_KEY_CONFLICT, removal ends the key), 5 api-compat, C22 `removal` (injected restore failure: removed=false and PARTIAL, the retry resumes and the world hash equals the pre-placement one; remove, reload, remove again: removed=true, world unchanged, REMOVED with the same removedAt for the region and the group). Evidence of the manual dev-client runs: `artifacts/gate6c-x/` (the contract says `gateX/`; named like the other slices). Known flakes in the box's tier (4d-all group undo on G4D Base gravity gravel, sim-massing, the apijars SITE_PROGRESS gap, 6b-nudges under load) did not occur in this run. |
+
+#### C23 as built (v0.17.1, API 1.14.0 unchanged; recorded 2026-10-12)
+
+Steward's review: a region removal resumed after a restart could stay REMOVING forever. `Groups.load` restores the removal
+without its future, and the region's end state was set only in that future's callback. Branch `fix/c23-resumed-removal`
+(worktree `../architect-mc-c23`, ports 8912-8917).
+
+- **Fix.** `Groups.end` calls an internal hook, `Groups.GROUP_ENDED(groupId, Removed)`, when a whole-group removal ends (not a
+  stage undo). It runs on the server thread before the futures complete. `removeGroup`'s early answers call it too: the owner
+  refusal, an already removed group, no such group.
+- **Region end.** `RegionsImpl` ends the REMOVING region of that group from the hook, once:
+  - removed: REMOVED, with the group's `removedAt`, the tombstone, and the key ended;
+  - failed: PARTIAL, as an uninterrupted failure gives.
+
+  The remove future no longer touches the state. A site-API removal of a region's group still leaves the region's state alone.
+- **Restart safety.** On a world's first tick, a region still REMOVING whose group has no removal running ends from the group's
+  saved state: REMOVED if the group is removed, else PARTIAL. This closes the window between the group's save and the
+  region's record.
+- **Groups.** A resumed group removal already ended its group from the persisted removal; gate (d) shows this.
+- **Gate.** `tools/gate6cx.mjs resume`, runner step `x-resume`, mapped under `change` for `Groups.java`, `RegionsImpl.java`
+  and `gate6cx.mjs`. Each case stops the world mid-removal under `dev.placement.slow`, after at least two members' restores
+  have been seen.
+  - (a) The removal resumes and finishes with no retry: REMOVED with `removedAt`, the group's time equal, the world hash equal
+    to the pre-placement one, the key ended, omitted from the list, and a second remove answers removed=true.
+  - (b) A restore failure injected after the reload: PARTIAL (never REMOVING), the group ACTIVE, PARTIAL across a reload (X's
+    noted gap), then the retry gives REMOVED with an exact world.
+  - (c) Two restarts mid-removal.
+  - (d) The same for a plain site group.
+- **Evidence.** `artifacts/gate-runs-c23/`, all at head 5136579:
+  - `20261011-230813-change`: x-resume 30/0;
+  - `20261011-231631-change`: the change tier. unit-mod 498, unit-kit 246, unit-sidecar 705, sim-jobs, x-unit, x-resume 30/0
+    and 6a-staged PASS. 4e-megalite was NOISY at load 40-48, with every bar ok;
+  - `20261012-003204-change`: x-ingame 53/0.
