@@ -1,0 +1,26 @@
+{
+ "scenario": "route_demo",
+ "version": 0,
+ "note": "tile shas of the IR over its own plan survey (kit windowFromSurvey), 1 worker = 4 workers shuffled; inputs in goldens/route_demo/",
+ "fromRun": "20261012-234513",
+ "irSha": "aa5bf49c026bfd18af53354fe6de7191c0f4bfe8b214e08db0042970d9621de6",
+ "kitVersion": "0.21.0",
+ "cells": 9393,
+ "tiles": {
+  "ground|terrain|56,-14": "ad3ae975e5cecb148867ef74757bd2dffd10cc6b9a149698edd2e3e333c219b1",
+  "ground|terrain|56,-15": "48091daeeec8a65c389dfac249d8ec0a5610c3d37f02f5f3cecbe0c83d5dfde2",
+  "ground|terrain|57,-14": "f0226372d034d0227b4edbc9aadc59cc772894844d2b78ede311af35787727ef",
+  "ground|terrain|57,-15": "c0b6bab726cc90789bbef11fde450e996d731f81b7f606c7672580d19b344ec3",
+  "ground|terrain|57,-16": "9c440b368e3f7e154baa6b19b42ad1032f698ce4cf4f7aadd56875ac77cf2084",
+  "routes|path|56,-14": "0cd4080c4fafbf691d0d6d5fb78f53f592612291ce5ba4a6c42ad3c99137a818",
+  "routes|path|56,-15": "6248e61c66eb8f08a22cc008af9c6e9bdba40533bc58437bd0d258137168709e",
+  "routes|path|57,-15": "9c83f3b41e44cc1172085a631326921fa62664454ba08cb4406a5db76d3f78df",
+  "routes|path|57,-16": "958a2d9e5e0e441ec76e706a05610959ec58f4399464989b21a3f8da2fa3e3b7",
+  "routes|terrain|56,-14": "f465917aa6d8cd3de5ed57f3b005ce654141626eef22311dbad6d569d992f3e6",
+  "routes|terrain|56,-15": "c22bf05519cdeb175abb0daff354025730ae8db01b41281ab250f6356d4a2627",
+  "routes|terrain|56,-16": "553d35175b033dcba75c78ed90e1f76a9477bbf75e7af0a29c6fe986e0ca6886",
+  "routes|terrain|57,-14": "553d35175b033dcba75c78ed90e1f76a9477bbf75e7af0a29c6fe986e0ca6886",
+  "routes|terrain|57,-15": "1ad5dac63c1b92356279aec179c5960297e89cf4a2986fd06fa00d1998008271",
+  "routes|terrain|57,-16": "07fb62058fdacea8dcaa09413034fc77ba48d5f0b215a6610ea73b82ac961a58"
+ }
+}
