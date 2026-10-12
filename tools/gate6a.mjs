@@ -736,10 +736,10 @@ steps.heap = async () => {
 
 steps.apijars = async () => {
   const runs = [
-    // (6c X) the unchanged 1.13.0, 1.12.0 and 1.11.0 jars (CONTRACT 6c slice X gate item 5; the 1.13.0 jar built from the v0.16.0 tag)
+    // (6c MP) the unchanged 1.14.0, 1.13.0 and 1.12.0 jars (CONTRACT 6c slice MP gate item 11; the 1.14.0 jar built from the v0.17.0 tag)
+    { api: '1.14.0', dir: path.join(MAIN, 'artifacts', 'gate6c-mp', 'v0170'), jar: 'architect_apitest-0.17.0.jar', world: 'G6A Api114' },
     { api: '1.13.0', dir: path.join(MAIN, 'artifacts', 'gate6c-x', 'v0160'), jar: 'architect_apitest-0.16.0.jar', world: 'G6A Api113' },
     { api: '1.12.0', dir: path.join(MAIN, 'artifacts', 'gate6c-v', 'v0150'), jar: 'architect_apitest-0.15.0.jar', world: 'G6A Api112' },
-    { api: '1.11.0', dir: path.join(MAIN, 'artifacts', 'gate6c0c', 'v0140'), jar: 'architect_apitest-0.14.0.jar', world: 'G6A Api111' },
   ];
   const mods = path.join(GAME_DIR, 'mods');
   const out = {};

@@ -1,0 +1,76 @@
+{
+  "id": "crater_toolbox",
+  "short": "crater_toolbox",
+  "phase": "6c-mp",
+  "version": 1,
+  "brief": "the masks-and-patterns demo (CONTRACT 6c slice MP \u00a74): crater_works with toolbox on: the rim masked to {slope: [0, 3]}, the lining and terrace walls a 3-block mix, the terrace floors a depth gradient; on 6b's crater fixture and its flat variant",
+  "world": {
+    "seed": "2026100906",
+    "preset": "normal",
+    "gamerules": "default"
+  },
+  "fixture": {
+    "claim": [
+      -1174,
+      362,
+      -875,
+      661
+    ],
+    "yRange": [
+      4,
+      131
+    ],
+    "foundBy": "find-site crater_site @ seed 2026100906",
+    "surveySha": "96133ad04b032f954ff2335b704b3210c819ca3a4205c8ae066138ee346457e4",
+    "score": 87,
+    "stats": {
+      "biomes": {
+        "desert": 96,
+        "river": 4
+      },
+      "grid": [],
+      "min": 44,
+      "max": 91,
+      "mean": 67,
+      "water": 6,
+      "trees": 0,
+      "natural": 100,
+      "missing": 0
+    }
+  },
+  "flat": {
+    "preset": "flat",
+    "claimOffset": [
+      0,
+      0
+    ],
+    "gamerules": "exact"
+  },
+  "needs": {
+    "size": [
+      300,
+      300
+    ],
+    "relief": [
+      0,
+      48
+    ],
+    "waterMax": 12,
+    "treesMax": 30,
+    "naturalMin": 97,
+    "candidates": 80,
+    "step": 512,
+    "stopAt": 95
+  },
+  "program": "crater_works",
+  "params": {
+    "toolbox": true
+  },
+  "bible": null,
+  "bars": {
+    "exactness": "E-flat 0; E-normal classified <= 0.01% of written cells (MP item 7)",
+    "mspt": "Architect's own tick at most 50 ms (MP item 10)",
+    "determinism": "IR sha over 3 plans; tile shas 1 and 4 workers; golden scenarios/goldens/crater_toolbox.json (MP item 5)",
+    "other": "the 6b scenario rows are recorded; tools/gate6cmp.mjs judges MP's items"
+  }
+}

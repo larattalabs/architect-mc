@@ -39,7 +39,8 @@ export function scenarioPath(id) {
 }
 const readSc = (id) => JSON.parse(fs.readFileSync(scenarioPath(id), 'utf8'));
 const writeSc = (sc) => fs.writeFileSync(scenarioPath(sc.id), `${JSON.stringify(sc, null, 2)}\n`);
-const short = (sc) => sc.id.split('_')[0];
+// (6c MP) a scenario may name its short id (its golden and run dirs); else the id's first word
+const short = (sc) => sc.short ?? sc.id.split('_')[0];
 const sha256 = (b) => crypto.createHash('sha256').update(b).digest('hex');
 
 /** SHA-256 over the sorted (path, sha) list of every file under dir except raw/ (CONTRACT 6b §8.2). */
