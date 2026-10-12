@@ -327,7 +327,12 @@ async function runScenario(id) {
   await L.settle(90_000);
   // the pristine cameras, then the before dump and the snap
   let before = null;
-  if (!flat) { t0 = Date.now(); before = await shoot(cams, path.join(out, 'before')); T('beforeShots', t0); }
+  // (6c F2) on a headless host (docs/GATES.md "Headless gates") there is no camera: a scenario without a gallery bar (F2) runs
+  // there without its shots (recorded in run.json); every other scenario keeps the client
+  const headless = (await L.call('dev.state').catch(() => ({}))).headless === true;
+  if (headless && !isF2(sc)) throw new Error('this scenario shoots its cameras: run it on a client (only F2\'s scenarios run headless)');
+  const shotsOn = !flat && !headless;
+  if (shotsOn) { t0 = Date.now(); before = await shoot(cams, path.join(out, 'before')); T('beforeShots', t0); }
   await L.tp((claim[0] + claim[2]) / 2, sc.fixture.yRange[1], (claim[1] + claim[3]) / 2);
   t0 = Date.now();
   const d0 = await L.call('dev.region.dump', { box, file: path.join(raw, 'before.arwd.gz') }, 1_800_000);
@@ -361,9 +366,11 @@ async function runScenario(id) {
     T('stand', t0);
     // (6c F1) the world after the stand: M17 on the realised world and the melt across the stand
     if (isF1(sc) || isF2(sc)) { t0 = Date.now(); await L.call('dev.region.dump', { box, file: path.join(raw, 'after-stand.arwd.gz') }, 1_800_000); T('standDump', t0); }
-    t0 = Date.now();
-    shots = await shoot(cams, path.join(out, 'shots'));
-    T('shots', t0);
+    if (shotsOn) {
+      t0 = Date.now();
+      shots = await shoot(cams, path.join(out, 'shots'));
+      T('shots', t0);
+    } else shots = { skipped: 'headless host (no camera); F2 has no gallery bar' };
   }
   // the group undo and the exactness diff
   await L.tp((claim[0] + claim[2]) / 2, sc.fixture.yRange[1], (claim[1] + claim[3]) / 2);
