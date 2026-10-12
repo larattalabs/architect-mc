@@ -39,6 +39,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import net.minecraft.world.item.Item;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Supplier;
@@ -158,9 +159,31 @@ final class SitesImpl implements dev.larattalabs.architect.api.Sites {
 		}
 		Anchors.Bounds box = v[0] == null ? null : v[0].box();
 		Anchors.Bounds snap = v[0] == null ? null : v[0].snapshotBox();
-		return new Verdict(refused, v[0] == null ? List.of() : v[0].notes(), construction, Views.items(bom),
+		// C26: the whole bill from the dry-run plan; the template's bill when no plan could be made (not exact)
+		Map<Item, Integer> full = Views.items(bom);
+		boolean exact = false;
+		List<String> notes = v[0] == null ? List.of() : v[0].notes();
+		if (construction && bp != null && v[0] != null) {
+			Sites.BomFull b = Sites.fullBom(r.level(), bp, v[0]);
+			if (b != null) {
+				full = Views.items(b.items());
+				exact = b.exact();
+				if (!b.inexactBecause().isEmpty()) {
+					List<String> n = new ArrayList<>(notes);
+					n.add("bomFull may be off: " + String.join("; ", b.inexactBecause()));
+					notes = n;
+				}
+				if (!b.driftCells().isEmpty()) {
+					List<String> n = new ArrayList<>(notes);
+					n.add("bomFull may differ at " + b.driftCells().size() + " cell(s): " + String.join("; ", b.driftCells().subList(0, Math.min(
+						dev.larattalabs.architect.site.Sites.BOM_NOTE_CELLS, b.driftCells().size()))));
+					notes = n;
+				}
+			}
+		}
+		return new Verdict(refused, notes, construction, Views.items(bom),
 			Optional.ofNullable(box).map(Views::box), Optional.ofNullable(snap).map(Views::box), v[0] == null ? List.of() : overlaps(v[0].overlaps(),
-				refused), 0);
+				refused), 0, List.of(), full, exact);
 	}
 
 	/** The overlapped sites per site: owner, cells, whether one of the refusals is about it. */
@@ -335,6 +358,11 @@ final class SitesImpl implements dev.larattalabs.architect.api.Sites {
 
 	private static RemoveResult result(Groups.Removed r) {
 		return new RemoveResult(r.removed(), r.blockers(), Views.items(r.refund()), r.restored(), r.kept(), r.handedDown(), r.cascaded());
+	}
+
+	@Override
+	public Optional<dev.larattalabs.architect.api.SiteWait> waiting(String targetId) {
+		return dev.larattalabs.architect.site.SiteWaits.waiting(server, targetId);
 	}
 
 	@Override

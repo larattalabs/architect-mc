@@ -53,6 +53,8 @@ export const FLAG_WATER = 1;
 export const FLAG_MISSING = 2;
 export const FLAG_TREE = 4;
 export const FLAG_LAVA = 8;
+/** (6c W) frozen water: the top is ice over water (ARSV FROZEN, Columns.FROZEN); such a column carries FLAG_WATER too */
+export const FLAG_FROZEN = 16;
 
 /**
  * A decoded columns object: `{ minX, minZ, width, depth, resolution, ground, height, floor (Int16Array), flags (Uint8Array) }`.

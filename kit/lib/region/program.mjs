@@ -1323,7 +1323,7 @@ class Part {
    * where given), width 1-9, cut/fill at most 12, retaining edges where a cut or fill exceeds 2. `optional: true` drops a
    * road that cannot be built (with a note) instead of failing the plan. Returns `{mode, ids}` or null when dropped.
    */
-  road(path, { width = 3, surface = null, lanterns = true, mode = 'ground', optional = false, id, foundation = 'foundation', retain = 'structure' } = {}) {
+  road(path, { width = 3, surface = null, lanterns = true, mode = 'ground', optional = false, id, foundation = 'foundation', retain = 'structure', lamp = null } = {}) {
     this._requirePath('road');
     const what = `part ${this.id}: road`;
     const rid = id ?? `${this.id}_road_${this.region.roads.length + this.region.paths.length + 1}`;
@@ -1340,7 +1340,7 @@ class Part {
     try {
       if (mode === 'ground') {
         const why = width > 5 ? `width ${width} > 5` : this._groundRoadProblem(pts);
-        if (!why) return { mode: 'ground', ids: this._groundRoad(rid, pts, { width, surface, lanterns }) };
+        if (!why) return { mode: 'ground', ids: this._groundRoad(rid, pts, { width, surface, lanterns, lamp }) };
         this.region.note(`road ${rid}: converted to graded (${why})`);
       }
       return { mode: 'graded', ids: [this._gradedRoad(rid, pts, { width, surface, foundation, retain })] };
@@ -1358,7 +1358,7 @@ class Part {
     let lo = -Infinity, hi = Infinity;
     const M = GROUND_ROAD_MARGIN;
     for (const c of cells) {
-      if (s.waterAt(c.x, c.z)) return `water at ${c.x},${c.z}`;
+      if (s.waterAt(c.x, c.z)) return s.frozenAt?.(c.x, c.z) ? `frozen water at ${c.x},${c.z}` : `water at ${c.x},${c.z}`;
       const g = s.heightAt(c.x, c.z);
       lo = Math.max(g - M, lo - 1);
       hi = Math.min(g + M, hi + 1);
@@ -1367,7 +1367,7 @@ class Part {
     return null;
   }
 
-  _groundRoad(rid, pts, { width, surface, lanterns }) {
+  _groundRoad(rid, pts, { width, surface, lanterns, lamp = null }) {
     const s = this.region.survey;
     // split long segments so no segment has more than half the cell cap
     const fine = [pts[0]];
@@ -1397,6 +1397,8 @@ class Part {
       const points = g.map((p) => [p[0], p[1] ?? s.heightAt(p[0], p[2]), p[2]]);
       const r = { id, stage: this.stage, part: this.id, points, width, lanterns: !!lanterns };
       if (sm !== null) r.surface = sm;
+      // (6c W) the bible's lamp fixture for the lanterns (fixtures.mjs roadLamp; format 2, kind road:lamp), only when not 4e's own
+      if (lanterns && lamp) r.lamp = JSON.parse(JSON.stringify(lamp));
       this.region.roads.push(r);
       ids.push(id);
     });

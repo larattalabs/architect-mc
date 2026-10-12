@@ -49,6 +49,12 @@ final class RegionSurvey {
 	private RegionSurvey() {
 	}
 
+	/** 6c W (DevBridge dev.region.survey, through RegionsImpl.planSurvey): the plan survey a region plan of this claim would send. */
+	static CompletableFuture<Columns> planSurvey(ServerLevel level, int x0, int z0, int x1, int z1, LoadPolicy load) {
+		int res = (long) (x1 - x0 + 1) * (z1 - z0 + 1) <= 256L * 256 ? 1 : 4;
+		return sample(level, x0, z0, x1, z1, res, load);
+	}
+
 	static CompletableFuture<Columns> sample(ServerLevel level, int x0, int z0, int x1, int z1, int res, LoadPolicy load) {
 		int w = (x1 - x0) / res + 1;
 		int d = (z1 - z0) / res + 1;

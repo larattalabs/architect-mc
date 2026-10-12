@@ -85,6 +85,9 @@ public interface ArchitectApi {
 	 * {@code "flatVillage"} (the bundled {@code flat_village} program: {@code params.lots}, unplaced lots in {@code notes},
 	 * {@code LotSpec.ext["architect_mc:village"]}), {@code "regionGraph"} (the IR's settlement graph in {@code siteplan.json},
 	 * {@code derived: false}) and {@code "villagerMover"} (the checker's villager mover and M22-M24).
+	 * Since 1.15.0, {@code "frozenWater"} is always there (the region survey reads ice over water as water, {@link Sample#frozen}),
+	 * and a W helper ({@code region.lightCover}) adds {@code "apronLights"} ({@code flat_village} lights its lot aprons and batters
+	 * with the bible's lamp fixture; each lot's lamps on {@code LotSpec.ext["architect_mc:village"].lamps}).
 	 * Since 1.16.0, a forms-I helper ({@code region.forms1}) adds {@code "formsIce"} (the kit's {@code iceSpike} generator and
 	 * {@code keepNatural}), {@code "formsRock"} (the {@code rockSpire} generator) and {@code "voxelsOp"} (the {@code voxels} op: a
 	 * plan that uses it requires the {@code voxels} kind, and an older game refuses it PLAN_STALE); its checker has M17 (melt).

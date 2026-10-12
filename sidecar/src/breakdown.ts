@@ -6,7 +6,9 @@
 // show 0), listing the job ids. A design's first round is what its turn cost was while its round was 1 and it was not
 // revising (DesignWork.r1Usd, set by Sidecar.designCost); critique is Design.critique.cost (critic + revise); repair is the
 // rest. Each design's figures are kept in the group's work, so they outlive the design records state.json trims.
-// `ms` is summed item time, attributed at each refresh by the item's state since the last one.
+// `ms` is summed item time, attributed at each refresh by the item's state since the last one, except COPY: (6c W) a copy's
+// time is the span from its variant job's start (it left the variant queue) to its done, read from the job's own
+// timestamps, so a copy queued, built and done between two refreshes still counts. Waiting for its archetype stays out.
 //
 // `seq` goes up only when a transition field changes: the status, the reason, the wave, the awaiting set, or an item's
 // status, stage, entryId, massing version or rounds. Cost, step text and updatedAt never bump it.
@@ -27,7 +29,7 @@ interface DesignFig {
 }
 export interface BreakdownWork {
   designs: Record<string, DesignFig>;
-  items: Record<string, { queuedMs: number; holdMs: number; copyMs?: number; state?: ItemState; designId?: string }>;
+  items: Record<string, { queuedMs: number; holdMs: number; copyMs?: number; startedAt?: number; doneAt?: number; state?: ItemState; designId?: string }>;
   lastTick: number;
   firstDetailedAt?: number;
   bible?: { usd: number; ms: number; jobIds: string[] };
@@ -95,14 +97,19 @@ export function updateBreakdown(sc: Sidecar, g: Group, bw: BreakdownWork, limite
       const f = iw.designId ? bw.designs[iw.designId] : undefined;
       if (iw.state === 'queued') iw.queuedMs += dt;
       else if (iw.state === 'held') iw.holdMs += dt;
-      else if (iw.state === 'copy') iw.copyMs = (iw.copyMs ?? 0) + dt;
       else if (f && iw.state === 'active') f.ms += dt;
       else if (f && iw.state === 'repair') f.repairMs += dt;
       else if (f && iw.state === 'critiquing') f.critiqueMs += dt;
     }
     // (0b) a copy: time only, while its variant job builds (waiting for its archetype is not queueing for a slot)
     if (it.kind === 'copy') {
-      iw.state = isOpen(it) && it.status === 'checking' ? 'copy' : 'other';
+      iw.state = 'other';
+      const v = it.variantJob ? sc.variants.get(it.variantJob) : undefined;
+      if (v && v.status !== 'queued') iw.startedAt ??= sc.store.data.variantStarts?.[v.id] ?? v.createdAt;
+      if (v && v.status === 'done' && it.status === 'done' && iw.startedAt !== undefined) {
+        iw.doneAt ??= v.updatedAt;
+        iw.copyMs = Math.max(0, iw.doneAt - iw.startedAt);
+      }
       continue;
     }
     const d = it.designId ? sc.designs.get(it.designId) : undefined;

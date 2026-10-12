@@ -511,7 +511,7 @@ public final class Sites {
 	};
 
 	/** A site that passed {@link #checkSite}: everything {@link #build} needs, so it never looks at the world twice. */
-	private record SitePlan(StructureTemplate template, int turns, StructurePlaceSettings settings, BlockPos placePos, Anchors.Bounds box,
+	record SitePlan(StructureTemplate template, int turns, StructurePlaceSettings settings, BlockPos placePos, Anchors.Bounds box,
 		TemplateGrid grid, TerrainFit.Plan plan, Approach.Plan approach, Anchors.Bounds snapBox, List<Occupancy.Found> found, SiteWarnings.Result site,
 		List<String> layerNotes, List<SiteJournal.Hit> overlaps) {
 	}
@@ -819,12 +819,17 @@ public final class Sites {
 
 	/** The server's verdict on a site: every reason {@link #place} (or {@link #move}) would refuse it for, and its notes. */
 	public record Verdict(List<String> refusals, List<String> notes, List<Refusal> typed, Anchors.@Nullable Bounds box,
-		Anchors.@Nullable Bounds snapshotBox, boolean construction, List<SiteJournal.Hit> overlaps) {
+		Anchors.@Nullable Bounds snapshotBox, boolean construction, List<SiteJournal.Hit> overlaps, @Nullable SitePlan plan) {
 		public Verdict {
 			refusals = List.copyOf(refusals);
 			notes = List.copyOf(notes);
 			typed = List.copyOf(typed);
 			overlaps = List.copyOf(overlaps);
+		}
+
+		public Verdict(List<String> refusals, List<String> notes, List<Refusal> typed, Anchors.@Nullable Bounds box, Anchors.@Nullable Bounds snapshotBox,
+			boolean construction, List<SiteJournal.Hit> overlaps) {
+			this(refusals, notes, typed, box, snapshotBox, construction, overlaps, null);
 		}
 
 		public Verdict(List<String> refusals, List<String> notes, List<Refusal> typed, Anchors.@Nullable Bounds box, Anchors.@Nullable Bounds snapshotBox,
@@ -839,6 +844,46 @@ public final class Sites {
 		public boolean ok() {
 			return refusals.isEmpty();
 		}
+	}
+
+	/** C26: a construction placement's whole bill from its dry-run plan: item id to count, whether it is exact, and the cells that may differ. */
+	/** Test hook (dev.bom.predict): the cells the full BOM predicts for a placement, as "x,y,z" to block id. */
+	public static JsonObject debugBom(ServerLevel level, Blueprint bp, BlockPos origin, Rotation rotation, boolean force) {
+		Verdict v = verdict(level, bp, origin, rotation, force, null, true, true, false, null, null, null, true);
+		JsonObject o = new JsonObject();
+		JsonArray refusals = new JsonArray();
+		v.refusals().forEach(refusals::add);
+		o.add("refusals", refusals);
+		if (v.plan() == null) {
+			return o;
+		}
+		FullBom.Result r = FullBom.of(level, bp, v.plan());
+		JsonObject cells = new JsonObject();
+		if (r != null) {
+			r.states().forEach((p, st) -> cells.addProperty(BlockPos.getX(p) + "," + BlockPos.getY(p) + "," + BlockPos.getZ(p), Cells.blockId(st)));
+			o.addProperty("exact", r.exact());
+		}
+		o.add("cells", cells);
+		return o;
+	}
+
+	/** At most this many drift cells are named in a verdict's notes. */
+	public static final int BOM_NOTE_CELLS = 16;
+
+	public record BomFull(Map<String, Integer> items, boolean exact, List<String> driftCells, List<String> inexactBecause) {
+	}
+
+	/**
+	 * The full BOM of the plan behind a dry-run {@link Verdict} (template, foundation fill and approach), or null when no plan could
+	 * be made (the verdict is not a construction placement, or the site was not loaded). Exact only when there is no refusal and no
+	 * planned cell is a known drift source ({@link FullBom}). Server thread.
+	 */
+	public static @Nullable BomFull fullBom(ServerLevel level, Blueprint bp, Verdict v) {
+		if (v.plan() == null || !v.construction()) {
+			return null;
+		}
+		FullBom.Result r = FullBom.of(level, bp, v.plan());
+		return r == null ? null : new BomFull(r.items(), r.exact() && v.refusals().isEmpty(), r.driftCells(), r.inexactBecause());
 	}
 
 	/** {@link Verdict} for placing {@code bp} (or moving {@code movingId} with it); changes nothing; never loads a chunk. Server thread. */
@@ -950,7 +995,7 @@ public final class Sites {
 
 	private static Verdict verdictOf(List<Refusal> typed, List<String> notes, @Nullable SitePlan site, boolean construction) {
 		return new Verdict(typed.stream().map(Refusal::message).toList(), notes, typed, site == null ? null : site.box(),
-			site == null ? null : site.snapBox(), construction, site == null ? List.of() : site.overlaps());
+			site == null ? null : site.snapBox(), construction, site == null ? List.of() : site.overlaps(), site);
 	}
 
 	private static List<String> siteNotes(SitePlan s, List<Occupancy.Found> found) {

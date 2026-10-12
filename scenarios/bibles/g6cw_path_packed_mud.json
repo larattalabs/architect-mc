@@ -1,0 +1,10 @@
+{
+  "name": "G6C-W path packed_mud",
+  "scope": "settlement",
+  "prompt": "W gate item 5 (CONTRACT 6c W \u00a74): S7's fixture bible with its path in packed mud (a built block: 4e's road code calls it BUILT), everything else as g6cv_village, so the road lantern count compares with the coarse-dirt bible's",
+  "roles": {
+    "path": "minecraft:packed_mud",
+    "foundation": "minecraft:mud_bricks",
+    "light": "minecraft:lantern"
+  }
+}

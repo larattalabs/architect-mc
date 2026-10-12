@@ -8482,6 +8482,50 @@ tag, since `Columns` changes), the sim suites, apijars, 6b-scenario-s1 and 6cv-s
   positions), so Steward's panels can show them and later additions can keep clear of them.
 - N-W-1 and N-W-2 stay with Noah. N-W-2's default is the coordinator's: a lantern on a fence post in the bible's wood.
 
+### Coordinator addition (Noah, 2026-10-11): bible-styled lamps (part of W's frozen scope)
+
+Noah's answers: **N-W-1** V's S7 sha `c31c6de43ce1` is approved; he approves W's after he sees it. **N-W-2** a lantern on a
+fence post stays the default.
+
+This pulls part of 7a §8.3 forward:
+- The bible's `light` role chooses the fixture for every lamp W's programs place: the apron and batter lamps
+  (`r.lightCover`) and the street, lane and square lamps (`props.mjs`).
+- A small **fixture catalogue** in the kit, each fixture a short deterministic block stack: lantern post (the default),
+  soul-lantern post, torch post, end rod, sea-lantern post or bollard, and a hanging lantern from a beam (a post-and-arm
+  gibbet). The fixture is picked from the bible's `light` block; a bible with no `light` role keeps the lantern post.
+- Each fixture still meets M5: coverage is computed from the fixture's real light level (torch 14, soul lantern and soul
+  torch 10, end rod 14, lantern 15, sea lantern 15), so a weaker fixture gets more posts or a closer spacing. The cap of 4
+  per lot holds where it can; a weak fixture that can't meet M5 within 4 is reported.
+- Wall-mounted lamps on the buildings are design-side and stay in 7b.
+- The gallery shows S7 with at least 3 bibles: rustic (lantern post), infernal (soul lantern or torch), and coastal or sky
+  (sea lantern or end rod). Noah judges the look there.
+- C19 and C20 (Steward's asks) are not in W.
+
+### Phase 6c slice W as built (API 1.15.0, mod 0.18.0, kit 0.18.0, recorded 2026-10-11)
+
+Branch `slice/W` (worktree `../architect-mc-W`; run worktree `../architect-mc-W-run`). $0: sim and stub only, no Claude call
+(`artifacts/gate6c-w/spend.json`). Ports 8906-8911. Evidence: `artifacts/gate6c-w/` (one JSON per gate6cw step, REPORT.md,
+api-compat.txt, mspt-ab.json, the v0160 baseline), S7's runs under `artifacts/scenarios/6c-w/`, the slice tier under
+`artifacts/gate-runs-W/`.
+
+| § | As built |
+|---|---|
+| Versions | Renumbered after slice X merged first (1.14.0 / 0.17.0; coordinator, 2026-10-11): `VERSION` 1.15.0; `mod_version` 0.18.0; `KIT_VERSION` = `EVAL_KIT_VERSION` = `IrStale.KIT_VERSION` = 0.18.0 (every IR sha moved; S1's tile golden, mega_bench and the 6b fixtures did not). Features: `frozenWater` always; `apronLights` with a W helper (`region.lightCover`). `Sample` gains a trailing `BitSet frozen` (the 1.0 and 1.12.0 constructors give an empty set; `toJson` adds `frozen` only when a column is frozen). The contract's "1.14.0" reads 1.15.0 throughout (`Sample.frozen` is 1.15.0). api-compat clean against the 0.17.0, 0.16.0 and 0.15.0 apitest jars and the 0.17.0 surface (`node tools/api-compat.mjs --gate6cw`; the 0.17.0 jars built from tag v0.17.0 into `artifacts/gate6c-w/v0170/`; before the merge, the 0.16.0/0.15.0/0.14.0 jars, also clean). `gate6a apijars` runs the 0.17.0/0.16.0/0.15.0 jars. X's caller ext and W's `lamps` share the lot's ext (X copies the caller's keys; W adds `lamps` inside `architect_mc:village`). |
+| §2 COPY | `breakdown.ts`: a copy's time is its variant job's span, from its first non-queued status (`VariantBook` records `store.data.variantStarts`) to its done (the final variant's `updatedAt`), summed over done copies; refresh sampling no longer feeds it. `breakdown-copy.test.ts`: 4 copies queued, built and done inside one refresh interval through the real `VariantBook` give `copy.ms` = the sum of their spans (1500); R's recorded group (`test/fixtures/breakdown-r.json`, from `artifacts/gate6c0b/bench`) gives every other line byte-identical. Deviation: a variant from before W has no recorded start, so its span runs from `createdAt` (R's fixture: 2333 ms over 4 copies, recorded 1573). |
+| §3 lightCover | `kit/lib/region/light.mjs` `lightCover(r, opts)`, called by `flat_village` (bool param `apronLamps`, default on; S1, mega_bench and the 6b fixtures don't call it). Over the plan's own virtual world (`plan.mjs draftIR` + `buildVirtual`): targets = reached written floors a mob spawns on; light = the world's emitters plus a model of 4e's street lanterns; lot boxes opaque. Candidates: the lots' corners outside the apron diagonal, then batter feet (ring 2 edge middles and quarters, then rings 3-4), each group by (lot id, x, z); greedy until dark < 0.5% or 4 lamps a lot; a lamp that cuts a walk node is dropped and the cover re-run. Part `props_apron` (stage props). On S7: dark 17.9% -> 0.13% of 754 targets at plan time with 7 lamps. Deviation: the lamps write into natural cells (IF_NATURAL), not air only: the plan survey has no plants, and on the first W run 2 of 7 posts stood in short grass and their lanterns floated (M3 on `props_apron`). |
+| §3 ext | Each lot's lamp positions (the post's foot cell) are `LotSpec.ext["architect_mc:village"].lamps` (a list inside the existing object Steward reads, `VPlan.java`; the contract's `architect_mc:village.lamps`). `siteplan.json` (format 1, widened): `props: [{kind, id, lot?, at}]` and `lots[].lamps`; notes `apron lamps (<fixture>, light n): <lot> n, ...`. |
+| §4 road lanterns | `RoadPlan.OwnFoot`: a lantern post's foot may be a BUILT cell whose top journal entry is the road owner's own, or (a region road, which may have no owner) its own site group's; the block there must still be the one the entry wrote (a player's block on the verge never counts). `RoadPlanTest`: an owned verge gets the natural verge's count, another owner's or nobody's none. Deviation: the group rule (region roads carry no owner when the caller sends none). |
+| Coordinator addition | `kit/lib/region/fixtures.mjs`: `lantern_post`, `soul_lantern_post`, `torch_post` (torch or soul torch), `end_rod`, `bollard` (sea lantern, glowstone, shroomlight, froglights), `hanging_lantern` (a lantern written `[hanging=true]`: 3 posts, an arm, the lantern under it), posts in the bible's `rail` role (oak fence by default); levels from `blocks.mjs` emission (15, 10, 14/10, 14, 15, 15). The square's lamps use the fixture (weaker light: more edge lamps, at most 8). The street: IR road member `lamp` (format 2, kind `road:lamp`, appended to `KINDS_FORMAT2` in kit and mod) only when the fixture isn't 4e's own oak fence and lantern; written for an eastward road, turned by the mod (`RoadPlan.Lamp`, `Block.LAMP`, `BlockState.rotate`); spacing every floor(12 * level / 15) from every/2. RoadSync and the approach's road-surface filters skip any lamp block (`RoadPlan.isLampBlock`). Deviation: the lamp positions on ext are the apron lamps only (the square's and the street's are the village's own). |
+| §5 frozen water | `Columns.FROZEN = 16` (ice, packed, blue or frosted ice with water within 3 below, only ice or water between) with `WATER`, floor at the bed; `Columns.frozenWater`, `iceTop`. `RoadTerrain`: ice over water is WATER. Kit: `FLAG_FROZEN`, `survey.frozenAt`; `waterAt` covers it; farms and M24 use unfrozen water (`waterDistance(..., {unfrozen})`), the ext's `water` counts it; refusals name it (`frozen water at x,z`). find-site: `noFrozen` reads `Sample.frozen` (apitest `heights` column 7); the band counts unfrozen water only. DevBridge `dev.region.survey`. |
+| §6 gravity | `blocks.mjs` `g` (FallingBlock, generated: sand, red sand, gravel, 16 concrete powders, 3 anvils, dragon egg; regeneration added only `g`), `isGravity`. `surfaceOps`: a falling top over a 1-deep gap gets the foundation under it, deeper the subsurface as its top. `r.lot`'s apron needs no change (it stands on the pad's foundation fill: recorded deviation). The kit's 4e road model in the virtual world leaves water columns out, as 4e does. `M3:gravity` (warning). Property test: 500 claims, gaps 1-3 under lanes, verges, aprons, gravel/sand/lime concrete powder: 0 `M3:gravity`. |
+| Item 7 (surveys) | Deviation: the scenario files' `fixture.surveySha` is find-site's `Sample.summary()` sha, which W doesn't change; the plan survey (ARSV) is what FROZEN moves. S1's and S7's plan surveys equal their goldens' `survey.bin` (frozen 0). S2: 9516 frozen of 36864, sha 708981a82252 (V's reading 064c0e5e2c87); S3: 3 frozen, re-pinned as `fixture.planSurvey` with the reason; S3's bytes vary between surveys of the live world (flowing water, with or without W), so its pin is the FROZEN count. |
+| S7 (W) | Natural `artifacts/scenarios/6c-w/s7/20261011-214611` (evidence **bcf90fec7773**, mod 0.18.0): every bar 1-13 passes, plus W's rows. Full M5 **0.00% of 695** reached written floors (V: 11.8%); bar 8 0.00% of 558; props built = planned (7 apron lamps); 0 `M3:gravity`; E-normal 695, all growth; golden re-committed from this run (`scenarios/goldens/s7*`; its survey.bin unchanged); own CPU max 16.3 ms. Flat `20261011-214333-flat`: E-flat 0 over 329. Per-lot lamps (lantern post, light 15): hall_1 2, inn_1 2, cottage_3 1, farm_1 1, smithy_1 1, bakery_1 0, cottage_1 0, cottage_2 0, cottage_4 0, trading_hall_1 0 (7). Lamps removed (`lampsoff`, the kit's light over the realised dump): every lamp 0.00%, hall_1's 2 removed 3.45%, all removed 11.80% (caught). |
+| Item 5 (path bibles) | S7 flat with coarse dirt, packed mud, stone bricks and oak planks paths (`scenarios/bibles/g6cw_path_*`): road lanterns 7 = 7 = 7 = 7; M5 over the street, verges, lanes and square 0.00% of 495 each. |
+| Item 6 (frozen site) | 2026101102 `[4168,1480,4279,1591]`: the plan survey reads 5904 frozen columns (of 6377 water); `Sample.frozen` 354 of 784 at resolution 4 (`Sample.water` unchanged); the plan places the street off the frozen water (0 street columns on it) and realises **PLACED** (V: PARTIAL); a 4e ground road along 12 frozen columns is refused `DEEP_WATER` ("water 9 deep"). Variant: with FROZEN read as ground (V's reading) the plan is clean with its street over 62 frozen columns. |
+| Gallery | "Architect 6c-V gallery" republished at the same URL (https://claude.ai/artifact/AHUxAGLT42pfRy5YUHdojG) with a W section: S7 with W (decision for evidence bcf90fec7773), the lamp close-up `cam_lamp`, the per-lot lamp table, the same village in the infernal bible (soul lanterns on crimson posts, light 10: 4 lamps on each of 4 lots, 17 in all, the cover capped at plan time; realised full M5 0.29%) and the coastal bible (sea-lantern bollards on birch posts: 7 lamps, 0.00%), and V's approved run kept below. Approval pending (Noah). |
+| Gate | Slice tier `artifacts/gate-runs-W/20261011-221014-slice` (3 shards, 8906-8911, post-merge HEAD): 27 PASS, including unit-mod 503, unit-kit 254, apijars (0.17.0/0.16.0/0.15.0), w-unit, 6cw-scenario-s7, v-unit, v-ingame, 0b-*, 4e-orders, 5b-village, 6a-eflat/staged/inv3, the 6b steps. Not passing, each traced: unit-sidecar (a 60 s hook timeout and a parent-pid race at load 43-62; the two files pass, `gate6c-w/unit-sidecar-two.log`, and the full suite 707 locally), w-ingame (pathbibles needed its own coarse-dirt run: fixed, PASS in `20261012-000348-change`), 6a-megaA (W's FROZEN moved a mega6 lot onto a resting polar bear, OCCUPIED until TIMEOUT: the driver now clears mobs while a lot waits OCCUPIED; `20261012-012051-change` fails only a timing bar), 6b-scenario-s1 (timing bar only), 4d-all (group-undo/stages exactness on L1/L2: the known "4d-all group undo on G4D Base gravity gravel" flake, also in `gate-runs-0b/20261011-013317-slice` and `gate-runs-0c/20261010-232225-slice` before W; its rerun hit a world-open timeout at load ~50). Under the gate policy update (GATES.md, 2026-10-12) timing bars are recorded, not judged, and 4d-all is not re-run for W. api-compat `--gate6cw` 4/4 clean. gate-verifier (review, no re-run needed: the road code only reads the journal): **PASS**, with S7's evidence sha recomputed (bcf90fec7773) and the kit suite (254) and api-compat re-run; caveat: one clean 4d-all on a quiet box before merge, if the coordinator wants it. HANDOFF-W retired. |
+| MSPT note | Under load (load average 17-35 from other runs) S7 flat twice read Architect's own CPU 52.7 and 62.7 ms. An interleaved A/B on the same box (`artifacts/gate6c-w/mspt-ab.json`): v0.16.0 48.7 and 19.0 ms, W 17.9 and 8.8 ms; the post-merge W runs read 16.3 ms (natural). Load, not W. |
+
 
 ## Phase 6c slice T1: passes, fields and relief (DRAFT for Steward review)
 
@@ -10270,6 +10314,50 @@ Branch `slice/X` (worktree `../architect-mc-X`). $0: sim and stub only (`artifac
 | Hook (C22) | `dev.undo.failRestore {skip}`: let `skip` removal restores finish, then break the next one before its site record is finished (-1 disarms). |
 | Gate | Slice tier `artifacts/gate-runs-X/20261011-182748-slice` (2 shards, 8912-8915, old-version clients 8916/8917, `--quiet-wait`, head fbb8ed2): 27 PASS, including unit-mod 498, unit-kit 246, apijars on the 0.16.0/0.15.0/0.14.0 jars (45 ok each), x-unit, **x-ingame** (53 ok: lotext, keys, removal, apicompat), v-ingame, 5b-chains, 4d-all, 4e-orders, 6a-megaA (own CPU max 24.6 ms, 50.7k cells/s), 6a-eflat, 6a-staged, 6a-inv3, the 6b steps and S1. Three steps did not pass and were fixed or re-run: unit-sidecar (the Limits drift guard did not know `LOT_EXT_MAX`: fixed in the guard) and v-unit (the X checkout lacked `sidecar/node_modules`: environment), re-run PASS at 524df06 with 6cv-scenario-s7 (NOISY at load 37 in the slice run, PASS on a quiet box: `20261011-204414-change`). `api-compat --gate6cx` 4/4 clean (0.16.0, 0.15.0, 0.14.0 apitest jars, 0.16.0 surface; baseline built from tag v0.16.0, `artifacts/gate6c-x/v0160`). Items: 1 unit (Api114Test 6, RegionKeysTest 5, the kit's C19 tests), 2 `lotext` (14 checks: 10/10 S7 flat lot sites carry the ext, 4097 refuses FIELD_LIMIT `params.lots[1].ext`, save/reload and undo/redo byte equal), 3 `keys` (plan idempotence, conflict, in-flight twin, owner scope, planByKey after the reload; a realise held pending fails WORLD_STOPPED, `realiseByKey` finds rg1 PLACING after the reload, it completes, a second realise returns it, another body OP_KEY_CONFLICT, removal ends the key), 5 api-compat, C22 `removal` (injected restore failure: removed=false and PARTIAL, the retry resumes and the world hash equals the pre-placement one; remove, reload, remove again: removed=true, world unchanged, REMOVED with the same removedAt for the region and the group). Evidence of the manual dev-client runs: `artifacts/gate6c-x/` (the contract says `gateX/`; named like the other slices). Known flakes in the box's tier (4d-all group undo on G4D Base gravity gravel, sim-massing, the apijars SITE_PROGRESS gap, 6b-nudges under load) did not occur in this run. |
 
+#### C23 as built (v0.17.1, API 1.14.0 unchanged; recorded 2026-10-12)
+
+Steward's review: a region removal resumed after a restart could stay REMOVING forever. `Groups.load` restores the removal
+without its future, and the region's end state was set only in that future's callback. Branch `fix/c23-resumed-removal`
+(worktree `../architect-mc-c23`, ports 8912-8917).
+
+- **Fix.** `Groups.end` calls an internal hook, `Groups.GROUP_ENDED(groupId, Removed)`, when a whole-group removal ends (not a
+  stage undo). It runs on the server thread before the futures complete. `removeGroup`'s answer for an already removed group calls it too. A refusal
+  (the owner rule, no such group) does not, because it ends no removal: another caller's removal may be running. The region's own
+  refused call ends it PARTIAL in `RegionsImpl.removeGroup`, and only when that call started or joined no removal (verifier
+  finding: a foreign `removeGroup` used to flip a REMOVING region to PARTIAL while its removal kept running).
+- **Region end.** `RegionsImpl` ends the REMOVING region of that group from the hook, once:
+  - removed: REMOVED, with the group's `removedAt`, the tombstone, and the key ended;
+  - failed: PARTIAL, as an uninterrupted failure gives.
+
+  The remove future no longer touches the state. A site-API removal of a region's group still leaves the region's state alone.
+- **Restart safety.** On a world's first tick, a region still REMOVING whose group has no removal running ends from the group's
+  saved state: REMOVED if the group is removed, else PARTIAL. This closes the window between the group's save and the
+  region's record. The dev hook `dev.region.dropRemovalEnd {on}` leaves the next group end's region REMOVING, to simulate that
+  stop.
+- **Groups.** A resumed group removal already ended its group from the persisted removal; gate (d) shows this.
+- **Gate.** `tools/gate6cx.mjs resume`, runner step `x-resume`, mapped under `change` for `Groups.java`, `RegionsImpl.java`
+  and `gate6cx.mjs`. Each case stops the world mid-removal under `dev.placement.slow`, after at least two members' restores
+  have been seen.
+  - (a) The removal resumes and finishes with no retry: REMOVED with `removedAt`, the group's time equal, the world hash equal
+    to the pre-placement one, the key ended, omitted from the list, and a second remove answers removed=true.
+  - (b) A restore failure injected after the reload: PARTIAL (never REMOVING), the group ACTIVE, PARTIAL across a reload (X's
+    noted gap), then the retry gives REMOVED with an exact world.
+  - (c) Two restarts mid-removal.
+  - (d) The same for a plain site group.
+  - (e) Another requester's `removeGroup` of the REMOVING region's group, without force: refused; the region stays REMOVING,
+    then ends REMOVED with an exact world.
+  - (f) The reconcile. (f1) The group REMOVED, the region record left REMOVING: after a restart, REMOVED with the group's
+    `removedAt`, an exact world, and removed=true again. (f2) The group ACTIVE after a failed restore, the region record left
+    REMOVING: after a restart, PARTIAL; the retry gives REMOVED with an exact world.
+- **Evidence.** `artifacts/gate-runs-c23/`, all at head 5136579:
+  - `20261011-230813-change`: x-resume 30/0;
+  - `20261011-231631-change`: the change tier. unit-mod 498, unit-kit 246, unit-sidecar 705, sim-jobs, x-unit, x-resume 30/0
+    and 6a-staged PASS. 4e-megalite was NOISY at load 40-48, with every bar ok;
+  - `20261012-003204-change`: x-ingame 53/0;
+  - `20261012-005926-change` (head f3f63c8, after the verifier fix): x-unit 3/0, x-resume 46/0 including (e) and (f).
+- **Verification.** A gate-verifier reviewed 5136579 and re-ran (a)-(d): PASS, with the refusal defect above. Its negative
+  control (the new gate on unfixed v0.17.0) hangs in REMOVING in case (a). Its review of the delta (f3f63c8) passed with no defects: x-resume 46/0 at 8e6d2bb (`artifacts/gate-runs-c23-verify2/20261012-033453-change`), (e), (f1) and (f2) included.
+
 ## Phase 6c slice Y: settlement stockpile (C24-C26) (FROZEN 2026-10-11 after Steward's review; built as Y1 and Y2)
 
 Next free API minor at merge (the house rule applies; main is at 1.14.0), mod to match. Steward round 7 (steward-mc
@@ -10565,3 +10653,37 @@ roads, deltas) with reservations. 4. Refund routing and the credit keys. 5. Adop
 
 - Hardcore's difference. Villager or entity hauling. Cross-dimension stockpiles. A batch BOM call (unless S-Y-4). Crash-exact
   ledgers (a write-ahead log per feed) if the recorded kill drift matters.
+
+### Slice Y2 as built (C25 waiting status, C26 full BOM; API 1.15.0 / mod 0.18.0, batched with W)
+
+- **API.** `SiteWait`/`ItemCount` exactly as §1, `Sites.waiting(String)` (default throws), `SiteEvents.SITE_WAITING`, `Verdict` trailing
+  `bomFull`, `bomExact` (the 1.12.0 constructor kept), `SiteView` trailing wait (old constructors kept), features `siteWaiting` and
+  `fullBom`. **Deviation:** the `SiteView` component is `siteWait`, because `wait` is not a legal record component name (it clashes
+  with `Object.wait()`). No Reason, no Limits constant.
+- **Waiting is a latch** (`survival/WaitCalc`, `site/SiteWaits`): it starts after 100 consecutive builder ticks with no cell placed and
+  at least one unbuilt, supported, loaded frontier cell the stock cannot pay (starved); once on it holds until a cell is placed, or the
+  target is paused, its crate is gone, built or removed. An unloaded chunk, a player in a cell or a restart never end it. The 20-tick
+  limit defers an edge, never drops it; the stop edge of a built or removed target fires at once. `waitingSince` is the world game
+  time, saved in `<world>/architect/waits.json` (written when a wait starts or ends and at world stop); after a reload the latch is
+  restored without an event. Roads use the same hooks (`RoadBuilder.step`). Seam for Y1: `SiteWaits.source(Source)` returns the
+  units available to a target (`stock - reserved`); the default reads its own or its group's crate (reserved 0).
+- **nextNeeded** walks the unbuilt cells in build order per item (an item enters at the first cell its available stock cannot pay;
+  count = its whole shortfall); the crate screen and HUD "needs" line use `nextNeeded[0]`. Cached by built count and stock hash.
+- **bomFull** (`site/FullBom`) mirrors `Builder.planConvert` from the dry-run `SitePlan`: it runs the placement's writes (template in
+  saved order, `placeInWorld`'s edge-face and final shape-update passes, unsafe beds out, foundation, terrain cut, approach) through a
+  small simulator of `Level.setBlock`'s shape-update cascades, because vanilla destroys what a write leaves unsupported (a door over a
+  hillside cell the template clears, a standing lantern on a chest, a door over a gap the foundation closes later). Each remaining
+  cell costs `Cells.cost`. `bomExact` is false on any refusal, an unloaded neighbour, a throwing `updateShape`, or a known drift
+  source (gravity block over a free cell; dirt path or farmland under a solid block when its item would differ; coral with no
+  water); the cells are listed in `Verdict.notes` ("bomFull may differ ..." / "may be off: reason"). A dirt path that turns to dirt
+  costs the same item, so is not a drift. An incomplete plan answers the template BOM with `bomExact` false.
+- **Gate** `tools/gate6cy2.mjs` (driver names differ from the contract's `gate6cy.mjs`, which Y1 owns), steps `y2-unit`, `y2-ingame`
+  (`y2-bom` alone), evidence `artifacts/gate6c-y2/`. Item 10: A starts waiting exactly 100 ticks after SITE_PLACED; nextNeeded equals the
+  independent build-order walk and counts + moreUnits = the bill; inserting nextNeeded[0] gives a stop edge within 20 ticks; a paused
+  site and a site with the player in its cell (fed everything) never wait; waitingSince is equal after a clean reload with no second
+  start event. Item 11: on the 12 lots of a varied-terrain world, every lot's bomFull equals the placed site's bill item for item
+  (11 of 12 exact, the 12th inexact with an equal bill; earlier iterations missed 4-6 lots by 1-2 doors or 2 lanterns each, which is
+  what drove the simulator). Item 14: `api-compat --gate6cy2` 4/4 (0.17.0, 0.16.0, 0.15.0 apitest jars and the 0.17.0 surface; baseline
+  built from tag v0.17.0 into `artifacts/gate6c-y2/v0170`), apijars on those jars.
+- **Not covered in game:** the road wait path (code shared with sites, covered by V's survroad regression step only); the Y1 stockpile
+  seam. Dev hooks added: `dev.site.cells`, `dev.bom.predict`, and `wait`/`order`/`nextCells` in `dev.site.state`.

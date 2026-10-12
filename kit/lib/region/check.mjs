@@ -234,7 +234,7 @@ function supportCheck(vw, ir, stage) {
   if (gravity.length) {
     const by = new Map();
     for (const [x, y, z, pi] of gravity) { const l = by.get(pi) ?? []; l.push([x, y, z]); by.set(pi, l); }
-    for (const [pi, cells] of by) findings.push(finding('M3', partId(pi), stage, cells.length, cells, `${cells.length} gravity block(s) without support under them`));
+    for (const [pi, cells] of by) findings.push(finding('M3:gravity', partId(pi), stage, cells.length, cells, `${cells.length} gravity block(s) without support under them`));
   }
   const floating = [...floatingByPart.values()].reduce((a, l) => a + l.length, 0);
   return { findings, metrics: { floatingCells: floating, groups: groupStats, gravity: gravity.length } };

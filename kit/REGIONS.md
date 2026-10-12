@@ -617,6 +617,60 @@ VillageLayout's `Plan` maps one to one: its `Lot`s are flat_village lots (`id`, 
 (`streetV`, street 5 wide), `streetX0..streetX1` its extent. Steward's street has no square: an adopted village gets the plaza node
 at the street's middle and no square cells. `Regions.adopt` (the joint 7a/6d gate) records the standing sites without writing a cell.
 
+# Phase 6c slice W additions (village safety; CONTRACT "Phase 6c slice W")
+
+## Kit 0.18.0
+
+`KIT_VERSION` (`EVAL_KIT_VERSION`, the mod's `IrStale.KIT_VERSION`) is `0.18.0`: every IR sha moves. Format-1 tiles, S1's tile golden
+and `mega_bench.golden.json` don't (no program but `flat_village` calls the new helpers).
+
+## ARSV `FROZEN` (flag 16)
+
+A column whose top block is ice, packed ice, blue ice or frosted ice with water within 3 below it (only ice or water between)
+carries `FROZEN | WATER`, and its `floor` is the bed under the ice and the water. Land ice (an ice spike on snow, packed ice on
+stone) is ground. The kit treats it as water everywhere (`survey.waterAt`; `survey.frozenAt` names it), except a farm: M24 and
+the farm placement count unfrozen water only. A plan refused over it says `frozen water at x,z`. The mod's 4e road code reads ice
+over water as water too (`RoadTerrain`), so a road over a frozen river is `DEEP_WATER`. `Sample.frozen` (API 1.15.0) is the
+public side.
+
+## Gravity (`blocks.mjs` `g`, `isGravity`)
+
+Generated from the 26.3 classes (`FallingBlock`: sand, red sand, gravel, the 16 concrete powders, the anvils, the dragon egg).
+`surfaceOps` (the square, verges, lanes): where the written top falls and the cell under it is a gap in the plan survey's ground
+(water to the bed), a 1-deep gap gets the `foundation` role under it and a deeper one takes the `subsurface` role as its top.
+`r.lot`'s apron stands on the pad's foundation fill already. The checker's M3 reports an unsupported gravity block in a written
+cell as `M3:gravity` (a warning).
+
+## Lamp fixtures (`lib/region/fixtures.mjs`)
+
+The bible's `light` role picks the fixture, on a post of its `rail` role (a fence in its wood; oak by default):
+`lantern_post` (the default, also with no `light` role), `soul_lantern_post`, `torch_post` (a torch or soul torch), `end_rod`,
+`bollard` (a full-block light: sea lantern, glowstone, shroomlight, froglights), `hanging_lantern` (a lantern written
+`[hanging=true]`: a post-and-arm gibbet). The level is the light block's own emission (lantern 15, torch 14, end rod 14, soul
+lantern and soul torch 10). The square's lamps and the apron lamps use it; a weaker light adds square lamps (at most 8).
+
+## The road's `lamp` (format 2, kind `road:lamp`)
+
+`roads[].lamp: {cells: [[along, dy, state]...], light, first, every}`: the street's lanterns in the bible's fixture, written for a
+road travelling east (the mod turns the offsets and states to the road's travel), spaced `every` = floor(12 * level / 15) from
+`first` = every / 2. Present only when the fixture is not 4e's own oak fence and lantern, so other roads are unchanged. A mod
+before 0.18.0 refuses such a plan `PLAN_STALE`. 4e's lantern posts may also stand on a built cell the road's own owner placed
+(a region's verge in packed mud, stone bricks or planks).
+
+## `r.lightCover` (`lib/region/light.mjs`; flat_village's `apronLamps`, on by default)
+
+At plan time, over the plan's own virtual world (`plan.mjs draftIR`): the target set is every reached floor the region wrote that a
+mob spawns on (the checker's M5 area: aprons and batter steps too); the light is the world's emitters plus a model of the 4e street
+lanterns, with lot boxes opaque (the cover is conservative). Candidates beside each lot (the corners outside the apron's diagonal,
+then the batter feet) are added greedily, most dark targets lit first, until the dark share is under 0.5% or a lot has 4 lamps. A
+lamp that would cut a walk node off the entrance is dropped. It emits part `props_apron` (stage `props`), each lot's lamp positions
+on `ext["architect_mc:village"].lamps`, `meta.village.apronLamps` (fixture, per-lot counts, the dark share before and after,
+`capped`), the lamps as props of kind `apron_lamp`, and a note `apron lamps (<fixture>, light n): <lot> n, ...`.
+
+## `siteplan.json` (format 1, widened)
+
+A village with apron lamps adds `props: [{kind, id, lot?, at}]` (the shared space's props and the apron lamps) and `lots[].lamps`.
+
 ## Kit 0.19.0 (6c slice F1: forms I)
 
 - **The `voxels` op** (format 2, `requires: ['voxels']`; an older kit or mod refuses it `PLAN_STALE`): `{op: 'voxels', blob,

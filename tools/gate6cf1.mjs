@@ -9,8 +9,8 @@
 //                                       measured, determinism and the golden, the goldens of S1/S7/mega_bench unchanged
 //     variants                          the broken variants (kit, no game): an ice spike under a lantern (M17), a 6-wide unbuttressed
 //                                       ledge (M3), a spike over a kept natural spike (M1)
-//     stale                             item 12: the v0.17.0 kit and mod refuse a voxels plan PLAN_STALE (no game: their own code)
-//     apicompat                         item 13: api-compat against the 0.17.0, 0.16.0 and 0.15.0 apitest jars and the 0.17.0 surface
+//     stale                             item 12: the v0.18.0 kit and mod refuse a voxels plan PLAN_STALE (no game: their own code)
+//     apicompat                         item 13: api-compat against the 0.18.0, 0.17.0 and 0.16.0 apitest jars and the 0.18.0 surface
 //     pin                               forms_demo's program seed and cameras on S2's claim (scenarios/forms_demo.json), once
 //     flat | natural                    items 2-5, 7-11: tools/scenarios.mjs run forms_demo (the flat variant first: E-flat)
 //     report                            REPORT.md over the step JSONs
@@ -205,14 +205,14 @@ steps.variants = async () => {
   return out;
 };
 
-// ------------------------------------------------------------------ item 12: v0.17.0 refuses a voxels plan
+// ------------------------------------------------------------------ item 12: v0.18.0 (the previous release) refuses a voxels plan
 
 steps.stale = async () => {
   const out = {};
-  const dir = path.join(OUT, 'v0170-src');
+  const dir = path.join(OUT, 'v0180-src');
   fs.rmSync(dir, { recursive: true, force: true });
   fs.mkdirSync(dir, { recursive: true });
-  execFileSync('sh', ['-c', `git -C '${root}' archive v0.17.0 kit | tar -x -C '${dir}'`]);
+  execFileSync('sh', ['-c', `git -C '${root}' archive v0.18.0 kit | tar -x -C '${dir}'`]);
   // a voxels plan from this kit: forms_demo on a flat claim (its first spire baked)
   const { planRegion } = await imp('lib/region/plan.mjs');
   const { makeColumns } = await imp('lib/region/pack.mjs');
@@ -223,15 +223,15 @@ steps.stale = async () => {
   out.requires = p.ir.requires;
   out.kitVersion = p.ir.kitVersion;
   const old = await import(pathToFileURL(path.join(dir, 'kit', 'lib', 'realise.mjs')).href);
-  const asOld = { ...p.ir, kitVersion: '0.16.0' }; // the kind alone, as if a 0.16.0 kit had written it
+  const asOld = { ...p.ir, kitVersion: '0.18.0' }; // the kind alone, as if a 0.18.0 kit had written it
   out.oldKit = { version: old.EVAL_KIT_VERSION, reason: old.staleReason(p.ir), kindOnly: old.staleReason(asOld) };
   let compiled = null;
   try { old.compileIR(p.ir, { blobs: (sha) => p.blobs.get(sha) }); } catch (e) { compiled = e.message; }
   out.oldKit.compile = compiled;
-  check(/^PLAN_STALE: plan needs kit 0\.19\.0 \/ kinds \[voxels\]; this is kit 0\.16\.0$/.test(compiled ?? ''), `item 12: the v0.17.0 kit (${out.oldKit.version}) refuses the plan: ${compiled}`);
-  check(out.oldKit.kindOnly === 'plan needs kinds [voxels]; this is kit 0.16.0', `item 12: the v0.17.0 kit names the kind alone: ${out.oldKit.kindOnly}`);
-  // the v0.17.0 mod jar's IrStale on the same IR (its own compiled class, run with gson)
-  const jar = path.join(MAIN_ART(), 'gate6c-f1', 'v0170', 'architect_mc-0.17.0.jar');
+  check(/^PLAN_STALE: plan needs kit 0\.19\.0 \/ kinds \[voxels\]; this is kit 0\.18\.0$/.test(compiled ?? ''), `item 12: the v0.18.0 kit (${out.oldKit.version}) refuses the plan: ${compiled}`);
+  check(out.oldKit.kindOnly === 'plan needs kinds [voxels]; this is kit 0.18.0', `item 12: the v0.18.0 kit names the kind alone: ${out.oldKit.kindOnly}`);
+  // the v0.18.0 mod jar's IrStale on the same IR (its own compiled class, run with gson)
+  const jar = path.join(MAIN_ART(), 'gate6c-f1', 'v0180', 'architect_mc-0.18.0.jar');
   const gson = execFileSync('sh', ['-c', `ls '${path.join(root, '.gradle-home')}'/caches/modules-2/files-2.1/com.google.code.gson/gson/*/*/gson-*.jar | grep -v sources | head -1`]).toString().trim();
   const src = path.join(dir, 'Stale.java');
   fs.writeFileSync(src, 'import com.google.gson.*;\npublic class Stale { public static void main(String[] a) throws Exception { for (String f : a) { JsonObject ir = JsonParser.parseString(java.nio.file.Files.readString(java.nio.file.Path.of(f))).getAsJsonObject(); System.out.println(dev.larattalabs.architect.region.IrStale.reason(ir, null)); } } }\n');
@@ -240,7 +240,7 @@ steps.stale = async () => {
   const java = path.join(process.env.JAVA_HOME ?? '/opt/homebrew/opt/openjdk@25', 'bin', 'java');
   const lines = execFileSync(java, ['-cp', `${jar}:${gson}`, src, path.join(dir, 'ir.json'), path.join(dir, 'ir-kind-only.json')]).toString().trim().split('\n');
   out.oldMod = { jar, lines };
-  check(lines[0] === 'plan needs kit 0.19.0 / kinds [voxels]; this is kit 0.16.0' && lines[1] === 'plan needs kinds [voxels]; this is kit 0.16.0', `item 12: the v0.17.0 mod's IrStale refuses it PLAN_STALE: ${lines.join(' | ')}`);
+  check(lines[0] === 'plan needs kit 0.19.0 / kinds [voxels]; this is kit 0.18.0' && lines[1] === 'plan needs kinds [voxels]; this is kit 0.18.0', `item 12: the v0.18.0 mod's IrStale refuses it PLAN_STALE: ${lines.join(' | ')}`);
   // and this build accepts it
   const { staleReason } = await imp('lib/realise.mjs');
   out.thisKit = staleReason(p.ir);
@@ -257,7 +257,7 @@ steps.apicompat = async () => {
   const r = spawnSync(process.execPath, [path.join(root, 'tools', 'api-compat.mjs'), '--gate6cf1'], { cwd: root, encoding: 'utf8', env: { ...process.env, JAVA_HOME: process.env.JAVA_HOME ?? '/opt/homebrew/opt/openjdk@25' } });
   const t = `${r.stdout}${r.stderr}`;
   fs.writeFileSync(path.join(OUT, 'api-compat.txt'), t);
-  check(r.status === 0 && /all 4 checks clean/.test(t), `item 13: api-compat against the 0.17.0, 0.16.0 and 0.15.0 apitest jars and the 0.17.0 surface: ${t.trim().split('\n').pop()}`);
+  check(r.status === 0 && /all 4 checks clean/.test(t), `item 13: api-compat against the 0.18.0, 0.17.0 and 0.16.0 apitest jars and the 0.18.0 surface: ${t.trim().split('\n').pop()}`);
   spendZero();
   return { out: t };
 };

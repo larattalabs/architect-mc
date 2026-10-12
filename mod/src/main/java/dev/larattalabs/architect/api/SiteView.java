@@ -27,16 +27,27 @@ import org.jspecify.annotations.Nullable;
  * @param covers (1.5.0) the sites it lies on top of (any cell)
  * @param coveredBy (1.5.0) the sites lying on top of it (any cell)
  * @param region (1.8.0) the region it belongs to (a tile, road or lot of a realised region), or null
+ * @param siteWait (1.15.0) a construction site's or road's waiting status ({@link SiteWait}); null for an instant site. (The
+ *                 contract's name {@code wait} is not allowed for a record component: it clashes with {@code Object.wait()}.)
  */
 public record SiteView(String id, String blueprintId, @Nullable String owner, JsonObject ext, BoundingBox box, BoundingBox restoreBox,
 	Rotation rotation, ResourceKey<Level> dimension, State state, int built, int queued, @Nullable String group, @Nullable String batchId,
 	@Nullable String itemKey, String kind, Policy policy, List<String> covers, List<String> coveredBy, int version, int headVersion, int deviations,
-	boolean updating, @Nullable String region) {
+	boolean updating, @Nullable String region, @Nullable SiteWait siteWait) {
 	public SiteView {
 		kind = kind == null ? "building" : kind;
 		policy = policy == null ? Policy.BOX : policy;
 		covers = covers == null ? List.of() : List.copyOf(covers);
 		coveredBy = coveredBy == null ? List.of() : List.copyOf(coveredBy);
+	}
+
+	/** The 1.8.0 constructor (no waiting status: null). */
+	public SiteView(String id, String blueprintId, @Nullable String owner, JsonObject ext, BoundingBox box, BoundingBox restoreBox,
+		Rotation rotation, ResourceKey<Level> dimension, State state, int built, int queued, @Nullable String group, @Nullable String batchId,
+		@Nullable String itemKey, String kind, Policy policy, List<String> covers, List<String> coveredBy, int version, int headVersion, int deviations,
+		boolean updating, @Nullable String region) {
+		this(id, blueprintId, owner, ext, box, restoreBox, rotation, dimension, state, built, queued, group, batchId, itemKey, kind, policy, covers,
+			coveredBy, version, headVersion, deviations, updating, region, null);
 	}
 
 	/** The 1.7.0 constructor (no region). */
