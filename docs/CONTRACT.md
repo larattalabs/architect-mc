@@ -8212,6 +8212,33 @@ in merge order:
   - **N-SCH-1:** fixtures are built from the public spec. A real WorldEdit-exported file is added later if Noah exports one.
     It doesn't block SCH.
 
+### Changes from Steward's review of the batch (2026-10-11; these win over every slice draft below)
+
+All slice drafts in this batch are **FROZEN** with these answers (W and X were frozen earlier). S-T2-2 and S-H-1 are Noah's
+answers, relayed by Steward.
+- **S-T1-1:** a 120 s worst-case plan is accepted (Steward shows "laying out the village"; claims at most 257 across,
+  districts at most 129; Steward sets no plan timeout under 120 s).
+- **S-MP-1:** masks and patterns reach Steward only through bibles and bundled programs for now. No card field. Revisit with
+  Steward's phase 2.
+- **S-T2-1:** movers are inferred from the end nodes' lot kinds; a per-edge override may come later (keep room for it).
+- **S-T2-2 (Noah):** ladders are on for player-only edges (lookouts, watchtowers). Villager edges never use ladders.
+- **S-B-1:** one region per brush stroke, as drafted.
+- **S-B-2:** areas binding every owner (`*`) stay deferred; not in 6c.
+- **S-S2-1:** S2's lot list is a fair hillside-card stand-in. **Add a farm lot to S2** to bring it closer.
+- **S-T3-1:** stone bridges and plain tunnels until 7a are accepted. **Addition:** the plan and the region report which edges
+  crossed water or rock (a per-edge `crossing: bridge|tunnel` with what it crossed), so Steward's card and history can say so.
+- **S-H-1 (Noah):** yes to a small contained pond beside a decorative farm lot on a dry claim: on the lot, never outside the
+  claim or in a protected area, removed with the region. **Working farms are different** (7b / functional modules): water
+  designed into the farm for yield, every farmland block hydrated (a source per 9x9, channels on that spacing), not a pond
+  added beside it. Carried to 7b.
+- **S-D-1:** districts on survey candidates are enough; Steward's own districts stay its own until the joint gate.
+- **S-D-2:** Steward proposes and approves, Architect lays out. **The join's site belongs to the district's region**, so
+  undoing the district removes its join.
+- **S-VOC-1:** default rarity budgets are enough for now. **Keep the budget field on the bible request**; Steward will pass
+  budgets when a card's style asks for a rare palette.
+- **S-RS-1:** RS is useful; Steward adopts it at its phase 4.
+- **S-PT-1:** PT is **dropped from 6c**. C17 areas cover it until 6d, and updates already keep player edits.
+
 ### Open questions for Steward
 
 - **S-W-1:** treat frozen water as water (recommended), or refuse plans that touch it.
@@ -10026,6 +10053,7 @@ draft ("region survival is scheduled after V").
     half, except free shovel paths (C16's `freeCell` rule).
 - **Not in scope:** the connector half (path and structure parts as construction, 7a); Hardcore changes (phase 3 rules hold).
 - **Depends on:** W. It should merge after B and H so their stroke kinds and fluid parts get the rule (§2's table).
+- **Stockpile (slice Y, 2026-10-11):** RS now builds on Y: a region's lots and roads draw from the owner's stockpile, not a region crate (S-Y-7 settles `crateAt`/`CrateView`).
 
 ### 0. Facts
 
@@ -10261,3 +10289,299 @@ Branch `slice/X` (worktree `../architect-mc-X`). $0: sim and stub only (`artifac
 | C22 (b) | `SiteGroupRec` gains a trailing `removedAt` (the 10- and 11-component constructors kept; set when the state becomes `removed`, kept by a second finish, cleared by other states); `SiteGroup` a trailing `Optional<Long> removedAt` (the 1.4.0 constructor kept). Removing a removed group answers removed=true and writes nothing. `RegionState.REMOVED` is appended; `RegionView` gains a trailing `long removedAt` (0 unless REMOVED; both older constructors kept; a `long`, not an `Optional`, so Gson-based tools can print it). A removed region's record `removed.json` (now with `removedAt`; one written before 6c X uses its file time) is read at the world start as a tombstone: `Regions.get(id)` answers a REMOVED view, `Regions.remove(id)` answers removed=true with nothing written, `Regions.list` omits it, an unknown id still refuses. Tombstones are kept forever (at least as long as opKey records). |
 | Hook (C22) | `dev.undo.failRestore {skip}`: let `skip` removal restores finish, then break the next one before its site record is finished (-1 disarms). |
 | Gate | Slice tier `artifacts/gate-runs-X/20261011-182748-slice` (2 shards, 8912-8915, old-version clients 8916/8917, `--quiet-wait`, head fbb8ed2): 27 PASS, including unit-mod 498, unit-kit 246, apijars on the 0.16.0/0.15.0/0.14.0 jars (45 ok each), x-unit, **x-ingame** (53 ok: lotext, keys, removal, apicompat), v-ingame, 5b-chains, 4d-all, 4e-orders, 6a-megaA (own CPU max 24.6 ms, 50.7k cells/s), 6a-eflat, 6a-staged, 6a-inv3, the 6b steps and S1. Three steps did not pass and were fixed or re-run: unit-sidecar (the Limits drift guard did not know `LOT_EXT_MAX`: fixed in the guard) and v-unit (the X checkout lacked `sidecar/node_modules`: environment), re-run PASS at 524df06 with 6cv-scenario-s7 (NOISY at load 37 in the slice run, PASS on a quiet box: `20261011-204414-change`). `api-compat --gate6cx` 4/4 clean (0.16.0, 0.15.0, 0.14.0 apitest jars, 0.16.0 surface; baseline built from tag v0.16.0, `artifacts/gate6c-x/v0160`). Items: 1 unit (Api114Test 6, RegionKeysTest 5, the kit's C19 tests), 2 `lotext` (14 checks: 10/10 S7 flat lot sites carry the ext, 4097 refuses FIELD_LIMIT `params.lots[1].ext`, save/reload and undo/redo byte equal), 3 `keys` (plan idempotence, conflict, in-flight twin, owner scope, planByKey after the reload; a realise held pending fails WORLD_STOPPED, `realiseByKey` finds rg1 PLACING after the reload, it completes, a second realise returns it, another body OP_KEY_CONFLICT, removal ends the key), 5 api-compat, C22 `removal` (injected restore failure: removed=false and PARTIAL, the retry resumes and the world hash equals the pre-placement one; remove, reload, remove again: removed=true, world unchanged, REMOVED with the same removedAt for the region and the group). Evidence of the manual dev-client runs: `artifacts/gate6c-x/` (the contract says `gateX/`; named like the other slices). Known flakes in the box's tier (4d-all group undo on G4D Base gravity gravel, sim-massing, the apijars SITE_PROGRESS gap, 6b-nudges under load) did not occur in this run. |
+
+## Phase 6c slice Y: settlement stockpile (C24-C26) (FROZEN 2026-10-11 after Steward's review; built as Y1 and Y2)
+
+Next free API minor at merge (the house rule applies; main is at 1.14.0), mod to match. Steward round 7 (steward-mc
+docs/ARCHITECT-ASKS.md C24-C26; its PLAN "Phase 4" waits on C24). Noah's survival rules (PLAN "Inputs for the 6c contract":
+unobtainable blocks stay creative-only, rare blocks cost real materials; N-H-1: one lava bucket per lava source).
+
+- **Branch:** `slice/Y`, worktree `../architect-mc-Y`. **Spend:** $0 (sim, stub and dev hooks only).
+- **Depends on:** V, X (C22's resumable removal) and 0c (C16 construction roads, C17's owner rules). **Parallel** with the
+  terrain track (T1, T2, ...) and the forms track; it touches `site/`, `survival/` and `batch/`, not `region/` or the kit.
+- **RS builds on Y:** a region's lots and roads draw from the owner's stockpile (one line added to RS below; RS's own
+  `crateAt`/`CrateView` are an open question here, not changed in this draft).
+- **Scope:** C24 (one stockpile per owner, feed order, owner ledger, refund routing, legacy adoption), C25 (waiting status and
+  event), C26 (the full BOM on `Verdict`).
+- **Not in scope:** Hardcore's difference (Steward: later; Hardcore builds as Supplied), cost-table changes (VOC), fluid
+  placement (H, RS), item transport by villagers or entities (the stockpile is a ledger with block inlets).
+
+### 0. Facts (v0.17.0)
+
+- **Ledger.** `survival/Ledger` (delivered / placed per item, stock = delivered - placed, credit = stock beyond the unbuilt
+  cost) lives in `CrateBlockEntity` and is saved with the crate's chunk. The crate holds no items: one input slot that is always
+  empty; it accepts a unit only while a site it feeds still misses it (`Builder.accepts`, with `Equivalents`), and nothing can
+  be taken out.
+- **Crate owners.** A crate's block entity carries the site id, or `group:<id>` (`SiteGroupRec.CRATE_PREFIX`) for a shared crate
+  (`Batch.sharedCrate/crateAt`, R6). `Builder.sharedGroup/crateOwner/fedBy/unbuiltFor` resolve it; `Sites.stock(groupId)`
+  (`Builder.groupStock` plus `RoadBuilder.stock`) reports a group's delivered, credit and outstanding by site and road.
+- **Feed order today** is greedy: `Builder.tick` visits building sites in `Sites.all()` order and `RoadBuilder.tick` visits
+  roads in its own loop; each takes any affordable cell (`Run.affordable`), so a later site can take an item an earlier one
+  needs next.
+- **Every path that removes or bypasses a crate today** (a stockpile crate must survive all of them):
+  - `Builder.complete`: `keepCrate`, then `keepDelivered`, `ledger().takeStock()` (leftovers **dropped** at the crate cell),
+    `restoreCrateCell`, `SiteJournal.releaseKind(…, CRATE)`;
+  - `Builder.prepareDeconstruct`, last-site branch: same, refunds and stock dropped at the crate cell (`dropDeconstruction`);
+  - `RoadBuilder.ensureCrate` (puts the group crate down with its own `SiteJournal.crateEntry`) and `RoadBuilder.complete`;
+  - `Builder.applyConstructionDelta` and `deltaCratePos`: a **new crate per delta** (its own crate entry in the site's undo
+    group) unless the group shares one; delta refunds (`refunded`) and `refundSwap` items are **dropped** above the crate;
+  - `InfraPlace.modeRefusal`: a standalone `placeRoad` CONSTRUCTION is refused (`CONSTRUCTION_ROAD`); `RoadBuilder.convert`
+    refuses a road without its group's shared crate.
+- **Waiting** exists only client side: `Builder.status` sends `SiteNet.SiteStatus` with one "needs" line (the item with the
+  largest shortfall), `paused`, `blockedReported` and `crateMissing`. The API has `SITE_PROGRESS` (rate-limited by
+  `Builder.progressDue`, 20 ticks) and `SITE_BUILT`.
+- **BOM.** `SitesImpl.check` fills `Verdict.bom` from `Builder.templateBom(grid)` only, although `precheck` already runs
+  `Sites.plan` (`TerrainFit.Plan`, `Approach.Plan`, the snapshot box) in dry-run. `checkRoad` (C16) and `checkDelta` (5b)
+  already give exact BOMs.
+- **Removal.** `Groups` keeps a removal's `refund` map in its saved record and (X, C22) resumes a stalled removal; construction
+  refunds are tallied in `prepareDeconstruct` before the restore.
+
+### 1. API (next free minor)
+
+- `VERSION` bumped; features `stockpile`, `siteWaiting`, `fullBom`. Usual rules: old record constructors kept, new `Sites`
+  methods are defaults that throw ("needs Architect API 1.x.0"), new enum values appended, new events are new static fields.
+
+```java
+// Sites (server thread; owner required, <modid>:<thing>, as C17)
+Stockpile createStockpile(StockpileRequest r);          // idempotent per owner; adds the named crates
+Stockpile addStockpileCrate(String owner, ResourceKey<Level> dim, BlockPos at);
+RemoveResult removeStockpileCrate(String owner, BlockPos at, boolean force);
+Optional<Stockpile> stockpile(String owner);            // C24's "Sites.stock(owner)" (renamed: stock(String) exists)
+List<String> feedOrder(String owner);                    // target ids (sites, roads, delta sites), first fed first
+List<String> setFeedOrder(String owner, List<String> ids);   // listed ids move to the front in that order
+Map<Item, Integer> withdraw(String owner, Map<Item, Integer> items, ServerPlayer to);  // credit only
+Stockpile adoptCrates(String owner);                     // legacy crates of this owner join the stockpile (§5)
+Optional<SiteWait> waiting(String targetId);             // C25
+
+record StockpileRequest(String owner, ResourceKey<Level> dimension, List<BlockPos> crates) {}
+record Stockpile(String owner, ResourceKey<Level> dimension, List<BlockPos> crates, int capacityStacks, int usedStacks,
+    Map<Item,Integer> stock, Map<Item,Integer> reserved, Map<Item,Integer> credit, Map<Item,Integer> delivered,
+    Map<Item,Integer> consumed, Map<Item,Integer> returned, Map<Item,Integer> withdrawn, Map<Item,Integer> dropped,
+    Map<Item,Integer> refundOverflow,
+    Map<String, Map<Item,Integer>> outstandingByTarget, Map<Item,Integer> outstanding, List<String> feedOrder,
+    Map<String, SiteWait> waiting, List<BlockPos> missingCrates) {}
+record SiteWait(String targetId, boolean waiting, long waitingSince, List<ItemCount> nextNeeded, int moreUnits) {}
+record ItemCount(Item item, int count) {}
+```
+
+- `Verdict` gains trailing `Map<Item,Integer> bomFull` and `boolean bomExact` (§7); the 1.12.0 constructor is kept (empty map,
+  false). `SiteView` gains trailing `@Nullable SiteWait wait` (null for instant sites; the 1.8.0 constructor kept).
+- `Stock` (per group) is unchanged; for a group whose sites draw from a stockpile it reports that stockpile's `delivered` and
+  `credit` and the group's own outstanding, with `crate` = the stockpile's first crate.
+- **Events:** `SiteEvents.SITE_WAITING` (`onWaiting(SiteView site, SiteWait wait)`) on each start and stop edge (§6), and
+  `SiteEvents.STOCKPILE_CHANGED` (`onChanged(String owner)`), at most once per 20 ticks per owner, after any delivery,
+  consumption, return, withdrawal or crate change. No new Reason: refusals use `NOT_ALLOWED`, `FIELD_LIMIT`, `PROTECTED`,
+  `NOT_LOADED` and `CREATIVE_ONLY_BLOCK` with their messages.
+
+### 2. The stockpile (C24 data model)
+
+- **Identity.** One stockpile per owner string; a null owner (the player's own sites) never has one and keeps today's crates.
+  Its crate blocks carry `stockpile:<owner>` in the block entity (a new prefix, never a valid group id, so it can't collide
+  with `group:`). An owner has a stockpile from `createStockpile` until its last crate is removed with nothing building.
+- **Survival only.** `createStockpile` refuses NOT_ALLOWED while the survival toggle is off. If the toggle goes off later, the
+  stockpile and its ledger stay; INSTANT items simply don't use it.
+- **Opt-in.** An owner **without** a stockpile behaves exactly as v0.17.0 (per-site crates, `sharedCrate` groups, delta crates,
+  the standalone-road refusal). An owner **with** one: every new construction item of that owner draws from it, and none
+  places a crate of its own:
+  - batch buildings and roads (`sharedCrate`/`crateAt` are ignored with a note);
+  - standalone `placeRoad` in CONSTRUCTION or AUTO (no longer refused for that owner);
+  - construction deltas (`applyDelta`, `revert`, batch delta items): no `deltaCratePos` crate.
+- **Crate blocks.** The owner names cells; Architect puts the existing `architect_mc:construction_crate` there (only into
+  air or a replaceable block, outside every standing site's restore box and every protected area of another owner; else
+  refused with the cell). Each crate has its own journal entry labelled `stockpile:<owner>`, **outside** every group and site
+  undo: `removeGroup`, `undoStage`, a site's deconstruct and `Builder.complete` never remove a stockpile crate.
+  - At most 16 crates per stockpile (`Limits.STOCKPILE_CRATES`, FIELD_LIMIT past it). No distance limit.
+  - **Dimension:** one per stockpile, fixed by `StockpileRequest.dimension`. A crate in another dimension is refused; a
+    construction item of the owner in another dimension is refused NOT_ALLOWED ("the owner's stockpile is in <dim>").
+- **Capacity.** 27 stacks per crate (a chest's). `usedStacks` = sum over items of ceil(stock / max stack size).
+- **Inserting** (hopper, dropper, "insert from inventory", `dev.crate.insert`) at any crate books into the owner ledger. A unit
+  is accepted while some building target of the owner still misses it (today's rule, `Equivalents` included, pooled over all
+  targets) **and** it fits; an unneeded or non-fitting unit stays in the hopper or inventory. The crate stays one always-empty
+  slot. Creative-only blocks are never needed, so never accepted.
+- **Withdrawing.** Only **credit** (stock beyond what every building target still needs) comes out: from the crate screen (a new
+  "take" button per item) or `Sites.withdraw` (into the player's inventory; what doesn't fit drops at the player). Automation
+  can't extract (`canTakeItemThroughFace` stays false).
+- **A crate block broken or gone.** Players can't break one (strength -1 as today; a creative break is refused with "remove it
+  with /architect stockpile removecrate or through its owner"). If it disappears anyway (another mod, `/setblock`), nothing is
+  lost: the ledger is the owner's, not the block's. The cell is listed in `missingCrates`, capacity drops by 27 stacks
+  (stock above capacity stays, but nothing new enters until it fits), and the builder keeps feeding from the stock.
+  `removeStockpileCrate` restores the cell's journal before-state; refused while it would leave the stock over capacity, unless
+  `force`, which drops the excess at that cell (taken out of stock, counted in `dropped`). Removing the last crate with targets building is
+  refused even with `force`. `/architect stockpile removecrate <pos>` needs permission level 2.
+- **Persistence.** `<world>/architect/stockpiles.json` (temp file, then rename): per owner the crates, dimension, ledger
+  (delivered, consumed, returned, withdrawn, dropped, refundOverflow per item), feed order, credited-refund keys (§4) and waits. It is
+  written in the same world-save callback that saves chunks (autosave and stop), and on crate and feed-order changes.
+- **Crash bound (recorded, not judged).** A clean stop saves ledger and chunks together. On a hard kill, the file and the
+  chunks may come from different saves: items in flight since the last autosave can be duplicated or lost (as for any
+  cross-chunk item move in vanilla). The gate records the drift after a kill and the bar is "within the units fed or placed
+  since the last save".
+
+### 3. Feed order (C24)
+
+- **Targets** are the owner's building construction sites (buildings and delta sites) and construction roads. One loop per
+  owner replaces the separate `Builder.tick`/`RoadBuilder.tick` visits for stockpile targets (legacy targets keep theirs).
+- **Default order:** a batch's items in batch item order (not the order `proximityFirst` places them in), then later targets
+  in placement order. `setFeedOrder` moves the listed ids to the front, in
+  that order; the others keep their relative order. Unknown or finished ids refuse FIELD_LIMIT naming them. The order survives
+  restart; a finished target leaves it.
+- **Semantics: reservation by item.** A target at position k may consume a unit of item X only from
+  `stock(X) - reserved_k(X)`, where `reserved_k(X)` is the unbuilt cost of X over the targets at positions 1..k-1 that are
+  building and not paused. A higher target that is blocked (a player in a cell, an unloaded chunk, a missing support) still
+  reserves; a paused one doesn't. Within one target the builder's order is unchanged (phase 3: bottom up, supports first, pairs
+  together). The per-tick block budget (4d) is shared and spent in feed order.
+- So a lower target builds only from surplus: with exact BOMs fed in any order, targets finish in feed order. Steward wants
+  "this house first"; it gets it, and C25 says what a waiting lower target needs beyond the reservations.
+
+### 4. Ledger and refund routing (C24)
+
+- **Identity, per item, at every tick:** `stock = delivered + returned - consumed - withdrawn - dropped >= 0`.
+  `returned` counts only what entered the stock; `refundOverflow` (refunds that never entered it) is outside the identity.
+  `reserved` and `credit` are derived (credit = max(0, stock - total unbuilt cost)).
+- **Returned** = refunds and leftovers credited into the stockpile, up to capacity; the rest drops as item entities at the
+  owner's first present crate (else the target's `dropPos`) and is booked in `refundOverflow`. For a stockpile target:
+  - deconstruct and undo (`Sites.remove`, `removeGroup`, `undoStage`, region removal): the `Refunds.Tally.refund` part is
+    returned; **the player's blocks** (`PLAYER_DROP`) still drop at the site as today, since they never were the stockpile's;
+  - construction-delta refunds (removed cells at the start, `refundSwap` at the swap) and a survival revert's refunds;
+  - `Builder.complete`: no crate leftovers exist (the stock stays in the stockpile); nothing drops.
+- **Exactly once.** A refund is credited under the key `(removal id or delta entry, site id)`, stored with the ledger in the
+  same save. C22's resumed removal and a retried delta find the key and credit nothing again.
+- **Lava (N-H-1).** When a cost names a container item (`lava_bucket`), consuming it returns one `bucket` to the stockpile.
+  Fluid parts themselves stay with H and RS.
+- **`Sites.stock(groupId)`** keeps answering for groups; per-site `outstandingBySite` and road ids are unchanged.
+
+### 5. Migration of old worlds and legacy crates
+
+- **No stockpile, no change.** A world from 0.17.0 loads with no `stockpiles.json`; every site, group, road and delta behaves
+  exactly as before, and its crates keep their `<siteId>` or `group:<id>` owners.
+- **Owner gets a stockpile while legacy targets build:** they keep their own crate until they finish (the old paths, unchanged).
+  `adoptCrates(owner)` moves them over: for each legacy crate of the owner (per-site, group or delta), its `takeStock()` is
+  returned into the stockpile (overflow dropped and booked), its group's `delivered` is added to the stockpile's, the crate
+  cell is restored and its journal kind released (`SiteJournal.releaseKind`), and its targets join the feed order at the end in
+  placement order. Idempotent; refused for another owner's crate.
+- **Downgrade.** 0.17.0 ignores `stockpiles.json`. A stockpile crate block then has an owner id 0.17.0 doesn't know, so it
+  accepts nothing, and stockpile targets show "crate missing" and pause. Remove stays exact (journals unchanged). The ledger is
+  kept for the next upgrade. Recorded in the gate, not supported.
+
+### 6. Waiting status (C25)
+
+- **`SiteWait`** for every construction target (sites and roads), stockpile or legacy (for a legacy crate, `reserved` is 0).
+  - `waiting`: building, not paused, not BUILT, its crate (or stockpile) present, and for at least **100 ticks** in a row it
+    placed no cell while at least one frontier cell (unbuilt, support built, chunk loaded) was unaffordable from
+    `stock - reserved`. A target held only by players in cells, unloaded chunks or a pause is **not** waiting for materials.
+  - `waitingSince`: the world's game time (ticks) at the start edge; 0 when not waiting. Saved, so a 10-minute timer survives
+    a restart; after a reload the state is recomputed and a still-waiting target keeps its `waitingSince` with no new event.
+  - `nextNeeded`: walk the unbuilt queue in build order, spending `stock - reserved` as the builder would; each item enters the
+    list at its first shortfall; `count` is its whole shortfall for the target. At most 8 entries; `moreUnits` is the units of
+    the omitted ones, so the counts plus `moreUnits` equal the target's outstanding minus what is available to it. Filled whenever any shortfall exists,
+    waiting or not.
+- **Event `SITE_WAITING`** fires on the start edge (after the 100 ticks) and on the stop edge (a cell placed, paused, built or
+  removed), never twice for the same edge, and at most once per 20 ticks per target.
+- The crate screen and HUD "needs" line switch to `nextNeeded[0]`, so the screen and the API agree.
+
+### 7. Full BOM before placing (C26)
+
+- `Verdict.bomFull` for a construction `check`: template plus foundation fill plus approach, computed from the dry-run
+  `SitePlan` that `precheck` already builds, with the builder's own exclusions (cells that already hold their target, cut
+  cells cleared free, a dirt path passing `RoadBuilder.freeCell`). `bom` keeps its old meaning (template only).
+- `bomExact` is true when the plan was complete (all chunks loaded, no refusal) **and** no planned cell is a known drift
+  source: a block tick settled at P6 (a gravity block over a gap, grass turned to dirt under a solid block). Incomplete:
+  `bomFull` is the template BOM. Complete with drift sources: `bomFull` is the plan's count, `bomExact` false.
+- **Bar:** on an unchanged world, when `bomExact` is true, `bomFull` equals the site's `outstandingBySite` right after placing,
+  item for item. When false, every item is within 2 units and the differing cells are listed. Terrain changed between check
+  and place is outside the bar.
+- **A whole build's bill** is the sum of its items' `check` `bomFull`, `checkRoad` `bom` and `checkDelta` `bom`. No batch check
+  is added unless Steward asks (S-Y-4).
+
+### 8. Gate (slice tier, $0)
+
+**Fixtures:** the p3 survival client (survival toggle on), owner `test:settle`, a 3-crate stockpile. A batch of 3 houses (4d
+kit examples) and a 40-cell C16 road, one standalone construction road, one update delta and one survival revert. Items enter
+only through `dev.crate.insert` and scripted hoppers with **exact items, no equivalents** (one separate equivalents unit test),
+so every item is counted in its own unit. The driver places some blocks by hand inside a house (for the player-drop rule) and
+never mines by hand (vanilla drops differ from cost). The stockpile has room for the fixture's whole BOM, or the driver feeds in
+waves. **Conservation** is checked per item at every checkpoint: `player and hopper inventories + stockpile stock + item
+entities spawned by Architect + the cost of paid cells standing + the driver's hand-placed blocks standing = constant`
+(withdrawn items land back in an inventory, so they stay counted).
+
+**Evidence:** `artifacts/gate6c-y/`, driver `tools/gate6cy.mjs`, `spend.json` $0.00.
+
+| # | Check | Bar |
+|---|---|---|
+| 1 | Unit | ledger identity, reservation order, `nextNeeded` walk, refund key idempotence, capacity in stacks, adoption, `bomFull` exclusions (`StockpileTest`, `FeedOrderTest`, `SiteWaitTest`) |
+| 2 | One storehouse | all six targets build from the stockpile; 0 crates placed besides the 3 named; the standalone road is accepted; each target BUILT and cell-identical to its INSTANT twin |
+| 3 | Feed order | `setFeedOrder` puts house 3 first; feeding the exact total BOM in shuffled order: house 3 is BUILT first, then the rest in order; with house 3 blocked (a player in a cell), the others build only from surplus |
+| 4 | Conservation, feed | the conservation sum is constant (difference 0 for every item) at 10 checkpoints during feeding and building |
+| 5 | Refunds | deconstruct one built house and undo the road: `returned` equals each one's `Refunds` tally; the player's blocks drop at the site; conservation difference 0 |
+| 6 | Overflow | with capacity filled by credit, a deconstruct returns up to capacity and drops the rest: `refundOverflow` equals the counted entities; difference 0 |
+| 7 | Credited once | `dev.undo.failRestore` mid-removal, then retry: the refund is credited once; difference 0 |
+| 8 | Restart mid-feed | clean stop while hoppers feed and the builder places; reload: ledger equal, conservation difference 0, building resumes. A hard kill (`kill -9`, PID) after an autosave: the drift is recorded and stays within the units moved since that save |
+| 9 | Crate gone | `/setblock` air on one crate: nothing lost, `missingCrates` lists it, capacity drops; `removeStockpileCrate` with excess refused, with `force` drops exactly the excess |
+| 10 | Waiting | a target fed nothing: `SITE_WAITING` start after 100-110 ticks, `nextNeeded` in build order, its counts plus `moreUnits` equal to its outstanding; insert `nextNeeded[0]`: stop edge within 20 ticks of the next placed cell; a player-blocked or paused target never reports waiting; `waitingSince` survives a reload with no duplicate event |
+| 11 | Full BOM | 12 lots of the 4d varied-terrain fixture: every lot with `bomExact` true matches the placed site's outstanding exactly (at least 10 of the 12 are); the others within 2 units per item, differing cells listed |
+| 12 | Migration | a 0.17.0 survival world with a half-built `sharedCrate` group and a per-site crate loads unchanged (Stock equal, builds finish as before); `adoptCrates` moves their stock in with difference 0 and their crate cells restored; downgrade to 0.17.0 recorded |
+| 13 | Unchanged without a stockpile | the 4d-all and phase 3 survival steps pass unchanged; Hardcore step unchanged |
+| 14 | API, spend | api-compat clean against the previous three apitest jars; apijars pass; $0.00 |
+
+**Tier:** slice: quick, `site/**`, `survival/**` (4d-all, the phase 3 survival step, 5b-chains for deltas), 0c's survival-road
+step, X's removal step, apijars. **gate-verifier** re-runs items 4, 5, 7 and 8.
+
+### 9. Build order
+
+1. Archive the previous apitest jar. 2. `Stockpile` store, crate registration, persistence. 3. The owner feed loop (sites,
+roads, deltas) with reservations. 4. Refund routing and the credit keys. 5. Adoption. 6. `SiteWait`, events, the crate screen.
+7. `bomFull`. 8. Fixtures, gate.
+
+### Open questions for Steward
+
+- **S-Y-1. Reservation semantics.** A blocked high-priority target holds its items (drafted). Or visit order only, where lower
+  targets may take what a blocked higher one needs next?
+- **S-Y-2. Feed order API.** A reorder list (drafted), or an integer priority per batch item?
+- **S-Y-3. Withdrawal.** Credit only, from the crate screen and `Sites.withdraw` (drafted). Do you need deposits of unneeded
+  items (a general storehouse), or is "accept only what a build needs" right?
+- **S-Y-4. Batch BOM.** Is summing per-item `check`/`checkRoad`/`checkDelta` enough for the card, or do you want one
+  `checkBatch` call?
+- **S-Y-5. Waiting threshold.** 100 ticks without a placed cell before `waiting` (drafted)?
+- **S-Y-6. Dimension.** One dimension per stockpile, items of the owner elsewhere refused (drafted)?
+- **S-Y-7. RS.** RS's draft gives each region a crate (`RealiseRequest.crateAt`, `RegionView.crate`). With Y, a region's lots and
+  roads draw from the owner's stockpile; drop those two components from RS (recommended), or keep `crateAt` as "add a crate
+  to the stockpile here"?
+
+### Open questions for Noah
+
+- **N-Y-1. Capacity.** 27 stacks per crate (drafted), or unlimited (refunds never drop)?
+- **N-Y-2. Split.** Y is larger than a usual slice (it reworks the feed and refund paths of `Builder`, `RoadBuilder` and
+  deltas). Ship as one slice, or Y1 (C24 and migration) then Y2 (C25, C26)? Steward's phase 4 needs Y1 first.
+
+### Coordinator decisions on Y (2026-10-11)
+
+- **N-Y-1:** 27 stacks per crate, as drafted. The storehouse grows by adding crate blocks; survival capacity is real. Refunds
+  that don't fit drop at a stockpile crate (counted in `refundOverflow`), never at the site.
+- **N-Y-2:** split. **Y1** = C24 (stockpile, feed order, ledger, refunds, migration; gate items 2-9 and 12-13). **Y2** = C25
+  and C26 (waiting status, full BOM; gate items 10-11). Y2 doesn't need Y1's stockpile, so the two build **in parallel** on
+  separate worktrees and ports; each takes the next free minor at merge. Y1 is Steward's phase 4 blocker and is reviewed first.
+
+### Changes from Steward's review of Y (2026-10-11; these win)
+
+- **S-Y-1:** a blocked target keeps its reservation for transient blockers (a player in a cell, a support not yet built).
+  **Exception:** a target whose whole remaining frontier is in unloaded chunks does not reserve (Steward builds LOADED_ONLY;
+  a far house first in order must not starve loaded targets near the player). **New gate item (Y1):** two targets, the first
+  in feed order entirely in unloaded chunks: the loaded second target is fed and builds; when the first's chunks load, its
+  reservation returns.
+- **S-Y-2:** a reorder list, as drafted.
+- **S-Y-3:** accept only what a build needs (Y1). A general storehouse is later.
+- **S-Y-4:** summing each item's `bomFull`, `checkRoad` and `checkDelta` is enough; no `checkBatch`.
+- **S-Y-5:** 100 ticks, as drafted.
+- **S-Y-6:** one dimension per stockpile, as drafted.
+- **S-Y-7:** drop RS's region crate (`RealiseRequest.crateAt`, `RegionView.crate`); regions draw from the stockpile.
+- **Addition (Y1): `dissolveStockpile(owner, to)`.** For an abandoned settlement: one call hands every remaining unit,
+  reserved or not, to a player (`to` = a player, items to the inventory with overflow dropped at the player) or drops it at a
+  crate (`to` = null), restores every crate block, and ends the stockpile. Allowed while stock is over capacity and with targets
+  building: their reservations are released and they fall back to waiting (C25) with no stockpile (as for an owner without
+  one). Every unit is counted in `withdrawn` or `dropped`, so the ledger identity holds. **Gate item:** dissolve with
+  reserved stock and a building target: conservation sum exact; crates restored; the target reports waiting.
+- **N-Y-1, N-Y-2:** Steward agrees (27 stacks per crate; Y1 before Y2, built in parallel).
+
+### Deferred
+
+- Hardcore's difference. Villager or entity hauling. Cross-dimension stockpiles. A batch BOM call (unless S-Y-4). Crash-exact
+  ledgers (a write-ahead log per feed) if the recorded kill drift matters.
