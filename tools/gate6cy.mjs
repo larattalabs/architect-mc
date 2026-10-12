@@ -28,7 +28,7 @@
 //     migrate a|b                   item 12: a: on 0.17.0 (GATE6CY_REF=v0.17.0 start) a half-built sharedCrate group and a per-site crate;
 //                                   b: this build: loads unchanged, builds finish as before (copy 1); adoptCrates moves the stock in with
 //                                   difference 0, cells restored (copy 2); downgrade (c/d) recorded
-//     apicompat                     item 14: tools/api-compat.mjs against the 0.18.0, 0.17.0, 0.16.0 apitest jars (0.18.0 and 0.17.0 built from their tags) and the 0.18.0 surface
+//     apicompat                     item 14: tools/api-compat.mjs against the 0.19.0, 0.18.0, 0.17.0 apitest jars (each built from its tag) and the 0.19.0 surface
 //     report                        REPORT.md over the step JSONs
 //
 // Evidence: artifacts/gate6c-y1/<step>.json in the main checkout (GATE6CY_OUT overrides), all.log, REPORT.md, spend.json ($0.00).
@@ -1233,8 +1233,8 @@ steps.unit = async () => {
 
 steps.apicompat = async () => {
   const y1 = path.join(MAIN_ART, 'gate6c-y1');
-  const jars = [['1.15.0 apitest', [path.join(y1, 'v0180', 'architect_apitest-0.18.0.jar')]], ['1.14.0 apitest', [path.join(y1, 'v0170', 'architect_apitest-0.17.0.jar')]],
-    ['1.13.0 apitest', [path.join(MAIN_ART, 'gate6c-x', 'v0160', 'architect_apitest-0.16.0.jar')]], ['1.15.0 surface', ['--surface', path.join(y1, 'v0180', 'architect_mc-0.18.0.jar')]]];
+  const jars = [['1.16.0 apitest', [path.join(y1, 'v0190', 'architect_apitest-0.19.0.jar')]], ['1.15.0 apitest', [path.join(y1, 'v0180', 'architect_apitest-0.18.0.jar')]],
+    ['1.14.0 apitest', [path.join(y1, 'v0170', 'architect_apitest-0.17.0.jar')]], ['1.16.0 surface', ['--surface', path.join(y1, 'v0190', 'architect_mc-0.19.0.jar')]]];
   const lines = [];
   let ok = 0;
   for (const [label, args] of jars) {
