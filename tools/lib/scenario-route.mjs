@@ -75,7 +75,8 @@ export async function routeMetrics({ sc, ir, meta, report, realised, nav, before
     out.hysteresis = [];
     for (const n of NAMES) {
       if (ir.params[`${n}X`] === undefined) continue;
-      const moved = await planRegion({ ...opts, params: { ...ir.params, [`${n}X`]: ir.params[`${n}X`] + 4 }, keepOut: ir.keepOut ?? [] });
+      const routePrefer = (meta.route?.edges ?? []).flatMap((e) => (e.path ?? []).map(([x, , z]) => [x, z])); // (the earlier plan's routes)
+      const moved = await planRegion({ ...opts, params: { ...ir.params, [`${n}X`]: ir.params[`${n}X`] + 4 }, keepOut: ir.keepOut ?? [], routePrefer });
       let kept = 0, total = 0;
       for (const e of meta.route.edges) {
         if (!e.ok || e.from === n || e.to === n) continue;

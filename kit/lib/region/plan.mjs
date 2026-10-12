@@ -316,6 +316,8 @@ export async function planRegion(o) {
       kitVersion: o.kitVersion ?? KIT_VERSION, rng: (label) => makeRng(seed, String(label)),
       volumes: o.volumes ?? [],
       passes: Object.freeze([...passes]), // (6c T1) the declared passes (r.pass refuses any other)
+      // (6c T2) cells the route pass prefers (hysteresis: an earlier plan's routes, 6d replanning; [[x, z]])
+      routePrefer: Object.freeze((o.routePrefer ?? []).map((q) => Object.freeze([q[0], q[1]]))),
     });
     ctx.region = () => makeRegion(ctx);
     // (6c V) the owner's protected rects; a program that reads them records them in the IR (`keepOut`: the areas it honoured)

@@ -277,8 +277,10 @@ steps.hyst = async () => {
   const p1 = await planRegion({ ...opts, params: sc.params });
   const cells = (e) => new Set((e?.path ?? []).map(([x, , z]) => `${x},${z}`));
   const out = { moves: [] };
+  // the re-plan prefers the first plan's routes (hysteresis: an earlier plan's routes cost a third, as 6d's replanning passes them)
+  const routePrefer = p1.meta.route.edges.flatMap((e) => (e.path ?? []).map(([x, , z]) => [x, z]));
   for (const n of ['gate', 'hall', 'chapel', 'lookout']) for (const [ax, d] of [['X', 4], ['Z', 4], ['X', -4], ['Z', -4]]) {
-    const p2 = await planRegion({ ...opts, params: { ...sc.params, [`${n}${ax}`]: sc.params[`${n}${ax}`] + d } });
+    const p2 = await planRegion({ ...opts, params: { ...sc.params, [`${n}${ax}`]: sc.params[`${n}${ax}`] + d }, routePrefer });
     let kept = 0, total = 0;
     for (const e of p1.meta.route.edges) {
       if (e.from === n || e.to === n) continue;
@@ -289,7 +291,7 @@ steps.hyst = async () => {
     out.moves.push({ moved: `${n} ${ax}${d > 0 ? '+' : ''}${d}`, kept, total, share: total ? kept / total : 1 });
   }
   const worst = out.moves.reduce((a, m) => (m.share < a.share ? m : a), out.moves[0]);
-  check(out.moves.every((m) => m.share >= 0.8), `item 6: one node moved by 4 (each lot, x and z, both ways: ${out.moves.length} re-plans) keeps the other edges' cells: worst ${worst.moved} ${worst.kept}/${worst.total} (${(100 * worst.share).toFixed(1)}%)`);
+  check(out.moves.every((m) => m.share >= 0.8), `item 6: one node moved by 4 (each lot, x and z, both ways: ${out.moves.length} re-plans) keeps the other edges' cells (the re-plan prefers the first plan's routes): worst ${worst.moved} ${worst.kept}/${worst.total} (${(100 * worst.share).toFixed(1)}%)`);
   return out;
 };
 

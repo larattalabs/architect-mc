@@ -280,7 +280,7 @@ export class Region {
     for (const p of this.parts) for (const k of p.keep ?? []) hard.push([k.box.minX, k.box.minZ, k.box.maxX, k.box.maxZ]);
     const keepOut = [...(this.ctx.keepOut ?? []), ...(it.keepOut ?? [])].map((k) => [...k]);
     // hysteresis: the caller's cells, 4e roads and graded paths already in the plan
-    const prefer = (it.prefer ?? []).map((p) => [p[0], p[p.length - 1]]);
+    const prefer = [...(it.prefer ?? []), ...(this.ctx.routePrefer ?? [])].map((p) => [p[0], p[p.length - 1]]);
     for (const rd of this.roads) { const { cells } = centreCells(rd.points.map((q) => [q[0], q[2]])); for (const c of cells) prefer.push([c.x, c.z]); }
     for (const m of Object.values(this.meta.paths)) if (m.kind === 'graded' && Array.isArray(m.cells)) for (const q of m.cells) prefer.push([q[0], q[2]]);
     const stage = it.stage ?? this.stageList[this.stageList.length - 1];

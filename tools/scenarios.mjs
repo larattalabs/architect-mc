@@ -517,7 +517,16 @@ async function computeMetrics({ sc, out, planDir, ir, irShas, mspt, cps, exact, 
     const classes = { ...e.classes, none: e.classes.none - moved.length, melt: (e.classes.melt ?? 0) + moved.length };
     return { ...e, classes, list: e.list.map((m) => (moved.includes(m) ? { ...m, class: 'melt' } : m)) };
   };
-  const exN = meltOf(flowOf(freezeOf(exact)));
+  // (6c T2) leaves already decaying in the snapshot: non-persistent leaves at distance 7 (vanilla decays them on a random tick, whatever
+  // the region does) gone to air at a cell the plan never writes: classed `decay` (a world class)
+  const decayOf = (e) => {
+    if (!e || flat || !isT2(sc) || !(e.classes?.none > 0)) return e;
+    const moved = (e.list ?? []).filter((m) => m.class === 'none' && /_leaves\[.*distance=7.*persistent=false/.test(m.was) && /^minecraft:(air|cave_air)$/.test(m.now) && !(vw.flags(...m.pos.split(',').map(Number)) & F_WRITTEN));
+    if (!moved.length) return e;
+    const classes = { ...e.classes, none: e.classes.none - moved.length, decay: (e.classes.decay ?? 0) + moved.length };
+    return { ...e, classes, list: e.list.map((m) => (moved.includes(m) ? { ...m, class: 'decay' } : m)) };
+  };
+  const exN = decayOf(meltOf(flowOf(freezeOf(exact))));
   const ex = flat ? { flat: exact, normal: exactOther, cellsWritten: exactOther?.cellsWritten ?? 0 } : { flat: exactOther, normal: exN, cellsWritten: exact.cellsWritten };
   const plan = { report: JSON.parse(fs.readFileSync(path.join(out, 'report.json'), 'utf8')) };
   let rows = M.bars({ plan, realised, palette, organic, buildings, mspt, cellsPerSecond: cps, exact: ex, determinism: { irShas, workersSame: ts.workersSame, golden }, spendUsd: 0, approval: 'pending' });
