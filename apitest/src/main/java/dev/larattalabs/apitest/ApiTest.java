@@ -247,6 +247,12 @@ public class ApiTest implements ModInitializer {
 			case "api15": {
 				return ApiTestJournal.step(src, a);
 			}
+			case "schemimport":
+			case "schemexport":
+			case "schemsite":
+			case "apisch": {
+				return ApiTestSchem.step(src, a);
+			}
 			case "promote":
 			case "versionof":
 			case "estimatemix":
