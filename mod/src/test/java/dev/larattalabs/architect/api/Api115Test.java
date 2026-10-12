@@ -18,7 +18,8 @@ import org.junit.jupiter.api.Test;
 class Api115Test {
 	@Test
 	void version() {
-		assertEquals("1.15.0", ArchitectApi.VERSION);
+		String[] v = ArchitectApi.VERSION.split("\\.");
+		assertTrue(Integer.parseInt(v[0]) == 1 && Integer.parseInt(v[1]) >= 15, ArchitectApi.VERSION); // later slices append (6c MP: 1.16.0)
 	}
 
 	@Test
