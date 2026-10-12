@@ -1721,6 +1721,20 @@ public final class Builder {
 		return List.copyOf(out);
 	}
 
+	/** Test hook (dev.site.cells): every queued cell of a construction site as "x,y,z" to the block id of its target. */
+	public static JsonObject cellsJson(MinecraftServer srv, String id) {
+		JsonObject o = new JsonObject();
+		Site s = Sites.get(id);
+		Run r = s == null ? null : run(srv, s);
+		if (r != null) {
+			for (int i = 0; i < r.size(); i++) {
+				BlockPos p = r.pos(i);
+				o.addProperty(p.getX() + "," + p.getY() + "," + p.getZ(), Cells.blockId(r.target[i]));
+			}
+		}
+		return o;
+	}
+
 	/** Test hook: the block-entity NBT a cell holds now (the gate's cell-for-cell comparison). */
 	static String beNbt(ServerLevel level, BlockPos p) {
 		BlockEntity be = level.getBlockEntity(p);

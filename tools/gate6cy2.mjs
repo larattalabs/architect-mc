@@ -336,14 +336,20 @@ async function bom() {
   const rows = [];
   for (const l of ctx.lots) {
     const v = await verdict(l);
+    const predicted = await call('dev.bom.predict', { bp: l.bp, at: l.at, rot: l.rot, force: true }, 60_000);
     const id = await place(l);
     const st = await siteState(id);
+    const actualCells = await call('dev.site.cells', { site: id }, 60_000);
+    const cellDiff = [];
+    for (const k of new Set([...Object.keys(predicted.cells ?? {}), ...Object.keys(actualCells)])) {
+      if (predicted.cells?.[k] !== actualCells[k]) cellDiff.push(`${k} predicted ${predicted.cells?.[k] ?? '-'} actual ${actualCells[k] ?? '-'}`);
+    }
     const full = sortObj(v.bomFull);
     const actual = sortObj(st.bom);
     const keys = [...new Set([...Object.keys(full), ...Object.keys(actual)])];
     const diff = Object.fromEntries(keys.filter((k) => (full[k] ?? 0) !== (actual[k] ?? 0)).map((k) => [k, (full[k] ?? 0) - (actual[k] ?? 0)]));
     const row = { key: l.key, bp: l.bp, site: id, bomExact: v.bomExact, ok: v.ok, refusals: (v.refusals ?? []).map((r) => r.reason), diff,
-      bomFullTotal: bomTotal(full), outstandingTotal: bomTotal(actual), templateTotal: bomTotal(v.bom), notes: (v.notes ?? []).filter((n) => /bomFull/.test(n)) };
+      bomFullTotal: bomTotal(full), outstandingTotal: bomTotal(actual), templateTotal: bomTotal(v.bom), cellDiff: cellDiff.slice(0, 40), cellDiffCount: cellDiff.length, notes: (v.notes ?? []).filter((n) => /bomFull/.test(n)) };
     rows.push(row);
     log(`  ${l.key} ${l.bp}: bomFull ${row.bomFullTotal} vs outstanding ${row.outstandingTotal}, exact=${v.bomExact}, diff ${JSON.stringify(diff)}`);
     if (v.bomExact) check(Object.keys(diff).length === 0, `${l.key} ${l.bp}: bomExact and bomFull equals the placed site's outstanding bill item for item (${row.bomFullTotal})`, row);
@@ -355,8 +361,8 @@ async function bom() {
   const exact = rows.filter((r) => r.bomExact);
   check(exact.length >= 10, `at least 10 of the 12 lots are bomExact (${exact.length})`, rows.map((r) => `${r.key}:${r.bomExact}`));
   check(exact.every((r) => Object.keys(r.diff).length === 0), 'every bomExact lot matches exactly');
-  write('bom.json', { rows, results });
   await leaveWorld();
+  return { rows };
 }
 
 // ------------------------------------------------------------------ item 14: API compatibility

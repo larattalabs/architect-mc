@@ -48,7 +48,7 @@ final class FullBom {
 	static final int MAX_LISTED = 16;
 
 	/** The bill by item id, whether it is exact, and the drift cells (for the verdict's notes). */
-	record Result(Map<String, Integer> items, boolean exact, List<String> driftCells, int cells) {
+	record Result(Map<String, Integer> items, boolean exact, List<String> driftCells, int cells, Map<Long, BlockState> states) {
 	}
 
 	private FullBom() {
@@ -130,6 +130,7 @@ final class FullBom {
 		List<String> drift = new ArrayList<>();
 		boolean[] unknown = {false};
 		int n = 0;
+		Map<Long, BlockState> finalStates = new java.util.LinkedHashMap<>();
 		LongFunction<@Nullable BlockState> at = p -> {
 			BlockState w = writes.get(p);
 			return w != null ? w : world.apply(p);
@@ -140,6 +141,7 @@ final class FullBom {
 				continue;
 			}
 			n++;
+			finalStates.put(p, s);
 			for (SurvivalItems.Cost c : Cells.cost(s)) {
 				items.merge(c.item(), c.count(), Integer::sum);
 			}
@@ -148,7 +150,7 @@ final class FullBom {
 				drift.add(BlockPos.getX(p) + "," + BlockPos.getY(p) + "," + BlockPos.getZ(p) + " " + Cells.blockId(s) + " (" + why + ")");
 			}
 		}
-		return new Result(items, drift.isEmpty() && !unknown[0], drift, n);
+		return new Result(items, drift.isEmpty() && !unknown[0], drift, n, finalStates);
 	}
 
 	private static void cells(int[] xyz, BlockState s, Map<Long, BlockState> writes, @Nullable Set<Long> queued) {

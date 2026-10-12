@@ -847,6 +847,26 @@ public final class Sites {
 	}
 
 	/** C26: a construction placement's whole bill from its dry-run plan: item id to count, whether it is exact, and the cells that may differ. */
+	/** Test hook (dev.bom.predict): the cells the full BOM predicts for a placement, as "x,y,z" to block id. */
+	public static JsonObject debugBom(ServerLevel level, Blueprint bp, BlockPos origin, Rotation rotation, boolean force) {
+		Verdict v = verdict(level, bp, origin, rotation, force, null, true, true, false, null, null, null, true);
+		JsonObject o = new JsonObject();
+		JsonArray refusals = new JsonArray();
+		v.refusals().forEach(refusals::add);
+		o.add("refusals", refusals);
+		if (v.plan() == null) {
+			return o;
+		}
+		FullBom.Result r = FullBom.of(level, bp, v.plan());
+		JsonObject cells = new JsonObject();
+		if (r != null) {
+			r.states().forEach((p, st) -> cells.addProperty(BlockPos.getX(p) + "," + BlockPos.getY(p) + "," + BlockPos.getZ(p), Cells.blockId(st)));
+			o.addProperty("exact", r.exact());
+		}
+		o.add("cells", cells);
+		return o;
+	}
+
 	/** At most this many drift cells are named in a verdict's notes. */
 	public static final int BOM_NOTE_CELLS = 16;
 
