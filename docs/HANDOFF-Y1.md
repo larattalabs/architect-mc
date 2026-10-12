@@ -14,9 +14,14 @@ Contract: docs/CONTRACT.md "Phase 6c slice Y" (FROZEN), its Steward changes and 
       credited with keys; Groups persists `credit` per member and credits after the member's restore.
 - [x] API 1.18.0: Stockpile, StockpileRequest, SiteWait, ItemCount (Y2's types, as frozen; `waiting` empty), Sites methods,
       STOCKPILE_CHANGED, Limits.STOCKPILE_CRATES, feature `stockpile`.
-- [ ] DevBridge hooks, `/architect stockpile`, crate screen take buttons, apitest commands.
-- [ ] `tools/gate6cy.mjs` + gate-chains steps (y-unit, y-ingame) + impact rule.
-- [ ] Slice tier, focused items, api-compat, gate-verifier, as-built, retire this file.
+- [x] DevBridge hooks, `/architect stockpile`, crate screen take buttons, apitest commands.
+- [x] `tools/gate6cy.mjs` + gate-chains steps (y-unit, y-ingame) + impact rule (adds 5b-chains, x-ingame).
+- [x] Focused items all pass on the manual client (8930/8931): unit, store, order, unloaded, refunds, overflow, once, restart a/b/kill/c,
+      gone, dissolve, migrate a-d, apicompat 4/4. 0c survroad on this build passes (`artifacts/gate6c-y1/c0c/`).
+- [x] Merged origin/main d68e756 (gate policy tooling); as-built drafted in CONTRACT.
+- [ ] gate3 survival + hardcore on a p3 client (8934/8935) - running.
+- [ ] Slice tier (`artifacts/gate-runs-Y1/`, 2 shards 8930-8933, waits for a machine slot) - launched.
+- [ ] gate-verifier (re-runs items 4, 5, 7, 8 itself), finalize as-built, retire this file, push.
 
 ## Decisions (record in as-built)
 
