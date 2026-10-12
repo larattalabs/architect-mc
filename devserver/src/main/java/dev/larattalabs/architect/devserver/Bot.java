@@ -18,6 +18,8 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.network.CommonListenerCookie;
 import net.minecraft.server.network.config.PrepareSpawnTask;
 import net.minecraft.server.network.ServerCommonPacketListenerImpl;
+import net.minecraft.server.network.ServerGamePacketListenerImpl;
+import net.minecraft.network.protocol.game.ServerboundAcceptTeleportationPacket;
 import net.minecraft.server.players.NameAndId;
 import net.minecraft.world.entity.HumanoidArm;
 import net.minecraft.world.entity.player.ChatVisiblity;
@@ -98,15 +100,42 @@ public final class Bot {
 		});
 	}
 
+	private static Field awaitingPosition;
+	private static Field awaitingTeleport;
 	private static Field keepAlivePending;
 	private static Field keepAliveChallenge;
 
-	/** Answers the server's keep-alive for the bot, so it is never timed out (end of each server tick). */
+	/**
+	 * The bot's per-tick work that the network loop does for a client's player (its connection is in no listener's list):
+	 * {@code ServerGamePacketListenerImpl.tick()} (the player's own tick: movement, falling, chunk tracking as it moves; the
+	 * keep-alive), then the keep-alive answered, so it is never timed out. End of each server tick.
+	 */
 	static void tick(MinecraftServer server) {
 		ServerPlayer p = player(server);
 		if (p == null || p.connection == null) {
 			return;
 		}
+		try {
+			// a teleport waits for the client's confirmation (then resends it); the bot confirms at once, at the server's position
+			if (awaitingPosition == null) {
+				awaitingPosition = ServerGamePacketListenerImpl.class.getDeclaredField("awaitingPositionFromClient");
+				awaitingTeleport = ServerGamePacketListenerImpl.class.getDeclaredField("awaitingTeleport");
+				awaitingPosition.setAccessible(true);
+				awaitingTeleport.setAccessible(true);
+			}
+			if (awaitingPosition.get(p.connection) != null) {
+				p.connection.handleAcceptTeleportPacket(new ServerboundAcceptTeleportationPacket(awaitingTeleport.getInt(p.connection), p.getX(), p.getY(),
+					p.getZ(), p.getYRot(), p.getXRot()));
+			}
+		} catch (ReflectiveOperationException e) {
+			throw new IllegalStateException("devserver: the bot's teleport fields moved", e);
+		}
+		p.connection.tick();
+		if (p.isRemoved()) {
+			return;
+		}
+		// a client's move packets do this (handleMovePlayer): chunk tracking and tickets follow the player
+		p.level().getChunkSource().move(p);
 		try {
 			if (keepAlivePending == null) {
 				keepAlivePending = ServerCommonPacketListenerImpl.class.getDeclaredField("keepAlivePending");
