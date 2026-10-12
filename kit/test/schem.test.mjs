@@ -8,7 +8,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parse } from '../lib/nbt.mjs';
-import { encodeSchem, parseSchem, readSchem, schemToStructure, stateString, structureToSchem, SchemError } from '../lib/schem.mjs';
+import { encodeSchem, parseSchem, readSchem, schemToStructure, structureCells, structureToSchem, SchemError } from '../lib/schem.mjs';
 import { prepareImport } from '../lib/importer.mjs';
 import { fixtures } from './fixtures/schem/make.mjs';
 
@@ -21,30 +21,7 @@ const examples = () => fs.readdirSync(path.join(KIT, 'examples')).filter((e) => 
 const readStructure = (e) => parse(fs.readFileSync(path.join(KIT, 'examples', e, `${e}.nbt`)));
 const groundYOf = (e) => JSON.parse(fs.readFileSync(path.join(KIT, 'examples', e, `${e}.blueprint.json`), 'utf8')).groundY ?? 1;
 
-/** A plain, order-free form of a tag (for comparing block-entity data). */
-function canon(tag) {
-  if (tag.t === 'compound') return Object.fromEntries(Object.keys(tag.v).sort().map((k) => [k, canon(tag.v[k])]));
-  if (tag.t === 'list') return tag.v.map(canon);
-  if (tag.t === 'long') return `${tag.v}L`;
-  if (tag.t === 'longArray') return tag.v.map((n) => `${n}L`);
-  return [tag.t, tag.v];
-}
-
-/** Every written cell of a structure: "x,y,z" -> state string (properties sorted) + block-entity data. */
-export function cells(structure) {
-  const pal = structure.v.palette.v.map((e) => {
-    const s = stateString(e);
-    const open = s.indexOf('[');
-    return open < 0 ? s : `${s.slice(0, open)}[${s.slice(open + 1, -1).split(',').sort().join(',')}]`;
-  });
-  const out = {};
-  for (const b of structure.v.blocks.v) {
-    const st = pal[b.v.state.v];
-    if (st === 'minecraft:structure_void') continue;
-    out[b.v.pos.v.map((t) => t.v).join(',')] = b.v.nbt ? `${st} ${JSON.stringify(canon(b.v.nbt))}` : st;
-  }
-  return out;
-}
+const cells = structureCells;
 
 const exportOf = (e) => encodeSchem(structureToSchem(readStructure(e), { name: e, date: 0n, groundY: groundYOf(e) }));
 

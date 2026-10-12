@@ -496,7 +496,20 @@ public final class Schematic {
 				{
 					def.setLevel(9);
 				}
-			}; DataOutputStream out = new DataOutputStream(gz)) {
+			}) {
+				gz.write(raw(root)); // one write, as tools/lib/SchemGzip.java (the Linux check) does
+			}
+			return bo.toByteArray();
+		} catch (IOException e) {
+			throw new IllegalStateException(e);
+		}
+	}
+
+	/** The uncompressed NBT bytes of a root compound (named ""), compound keys in sorted order. */
+	public static byte[] raw(CompoundTag root) {
+		try {
+			ByteArrayOutputStream bo = new ByteArrayOutputStream();
+			try (DataOutputStream out = new DataOutputStream(bo)) {
 				out.writeByte(Tag.TAG_COMPOUND);
 				out.writeUTF("");
 				writeSorted(root, out);

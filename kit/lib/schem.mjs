@@ -277,6 +277,37 @@ export function structureToSchem(structure, meta) {
   });
 }
 
+/** A plain, order-free form of a tag (for comparing block-entity data): compounds sorted, every scalar with its type. */
+export function canonTag(tag) {
+  if (tag.t === 'compound') return Object.fromEntries(Object.keys(tag.v).sort().map((k) => [k, canonTag(tag.v[k])]));
+  if (tag.t === 'list') return tag.v.map(canonTag);
+  if (tag.t === 'long') return `${tag.v}L`;
+  if (tag.t === 'longArray') return tag.v.map((n) => `${n}L`);
+  if (tag.t === 'intArray' || tag.t === 'byteArray') return [tag.t, [...tag.v]];
+  return [tag.t, tag.v];
+}
+
+/** "ns:name[b=..,a=..]" with the properties sorted. */
+export function sortedState(s) {
+  const open = s.indexOf('[');
+  return open < 0 ? s : `${s.slice(0, open)}[${s.slice(open + 1, -1).split(',').sort().join(',')}]`;
+}
+
+/**
+ * Every written cell of a structure (tagged root): "x,y,z" -> the state (properties sorted), plus " " and the block entity's
+ * data (canonTag JSON) when it has one; structure_void cells are not written.
+ */
+export function structureCells(structure) {
+  const pal = structure.v.palette.v.map((e) => sortedState(stateString(e)));
+  const out = {};
+  for (const b of structure.v.blocks.v) {
+    const st = pal[b.v.state.v];
+    if (st === STRUCTURE_VOID) continue;
+    out[b.v.pos.v.map((t) => t.v).join(',')] = b.v.nbt ? `${st} ${JSON.stringify(canonTag(b.v.nbt))}` : st;
+  }
+  return out;
+}
+
 /** Sort every compound's keys (the mod writes them sorted too), so bytes depend only on the content. */
 export function sortKeys(tag) {
   if (tag.t === 'compound') return nbt.compound(Object.fromEntries(Object.keys(tag.v).sort().map((k) => [k, sortKeys(tag.v[k])])));
