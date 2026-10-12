@@ -355,13 +355,15 @@ steps['flat-permission'] = async () => {
   const list0 = (await call('dev.region.list')).regions?.length ?? 0;
   const a = await brush({ ...req, actor: 'none' });
   check(a.reason === 'PERMISSION', `item 4: PLAYER_BLOCKS without an actor refused PERMISSION (${a.refused})`);
-  const deop = await cmd('/deop @s');
+  const who = (await call('dev.brush.perm')).name;
+  const deop = await cmd(`/deop ${who}`);
   const perm = await call('dev.brush.perm');
   log(`  /deop @s: ${(deop.messages ?? []).join(' ')}; permission2 now ${perm.permission2} (${perm.name})`);
   const b = await brush({ ...req, actor: 'me' });
   if (b.region) await undo(b.region);
   check(b.reason === 'PERMISSION', `item 4: PLAYER_BLOCKS by a player without permission level 2 refused PERMISSION (${b.refused})`);
-  await cmd('/op @s');
+  await cmd(`/op ${who}`);
+  check(perm.permission2 === false && (await call('dev.brush.perm')).permission2 === true, `the player's permission level 2 off (/deop) then on again (/op): ${perm.permission2} -> true`);
   const list1 = (await call('dev.region.list')).regions?.length ?? 0;
   const wh1 = await boxHash(w.min, w.max);
   check(list1 === list0 && wh1.sha256 === fx.wall.sha256, `item 4: the refused strokes wrote nothing (regions ${list0} -> ${list1}; the wall unchanged)`);
