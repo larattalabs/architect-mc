@@ -198,6 +198,27 @@ final class LibraryDev {
 					throw new DevBridge.DevException("export failed: " + cause(err).getMessage());
 				});
 			});
+		DevBridge.register("dev.library.export.schem", 30_000, "{entry?} - (6c SCH) the selected entry's Export .schem button: "
+			+ "architect/exports/<id>/<id>.schem -> {file, bytes, sha256}", (req, mc) -> {
+				Fields f = Fields.of(req);
+				return DevBridge.onClient(mc, () -> {
+					library(mc);
+					return LibraryFeature.exportSchem(entry(f).id());
+				}).thenCompose(x -> x).thenApply(p -> {
+					JsonObject o = new JsonObject();
+					try {
+						byte[] b = java.nio.file.Files.readAllBytes(p);
+						o.addProperty("file", p.toAbsolutePath().toString());
+						o.addProperty("bytes", b.length);
+						o.addProperty("sha256", java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256").digest(b)));
+					} catch (java.io.IOException | java.security.NoSuchAlgorithmException e) {
+						throw new DevBridge.DevException("export written but unreadable: " + e.getMessage());
+					}
+					return o;
+				}).exceptionally(err -> {
+					throw new DevBridge.DevException("export failed: " + cause(err).getMessage());
+				});
+			});
 		DevBridge.register("dev.library.import.list", 10_000, "{} - Import…: opens the dialog and lists the .nbt files (imports/ and this world's "
 			+ "structure-block saves)", (req, mc) -> DevBridge.onClient(mc, () -> {
 				ArchitectScreen s = library(mc);

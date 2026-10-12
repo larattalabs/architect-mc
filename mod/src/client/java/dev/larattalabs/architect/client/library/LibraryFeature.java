@@ -20,6 +20,8 @@ import dev.larattalabs.architect.library.LibraryCard;
 import dev.larattalabs.architect.library.LibraryMeta;
 import dev.larattalabs.architect.library.LibraryQuery;
 import dev.larattalabs.architect.library.Palettes;
+import dev.larattalabs.architect.library.Schematic;
+import dev.larattalabs.architect.library.Schematics;
 import dev.larattalabs.architect.library.VariantForm;
 import dev.larattalabs.architect.placement.Blueprint;
 import dev.larattalabs.architect.placement.Blueprints;
@@ -375,15 +377,43 @@ public final class LibraryFeature {
 		return lastImportId;
 	}
 
-	/** Sends {@code import.request {path}}; completes with the job id (or fails with why not). */
+	/**
+	 * Sends {@code import.request {path}}; completes with the job id (or fails with why not). (6c SCH) A {@code .schem} is read,
+	 * upgraded with vanilla's data fixers and checked here first ({@link Schematics#stageImport}; a refusal says why and nothing
+	 * is sent), then staged for the helper's {@code import-schem} job.
+	 */
 	public static CompletableFuture<String> importFile(Path file) {
 		if (!Sidecar.connected()) {
 			importError = "The design helper is not running (Status tab)";
 			return CompletableFuture.failedFuture(new IOException(importError));
 		}
+		boolean schem = file.getFileName().toString().toLowerCase(java.util.Locale.ROOT).endsWith(".schem");
+		if (schem && !Sidecar.state().features().contains("import.schem")) {
+			importError = "Not imported: the design helper is too old for schematics (update it)";
+			return CompletableFuture.failedFuture(new IOException(importError));
+		}
 		importSending = true;
 		importError = null;
-		return Sidecar.importRequest(file.toAbsolutePath().toString()).handle((ack, err) -> {
+		CompletableFuture<SidecarLink.Ack> sent;
+		if (schem) {
+			Minecraft mc = Minecraft.getInstance();
+			sent = CompletableFuture.supplyAsync(() -> {
+				try {
+					return Schematics.stageImport(Blueprints.gameDataDir(), file, null, null);
+				} catch (Schematic.Refused r) {
+					throw new CompletionException(new IOException(r.reason() + ": " + r.getMessage()));
+				} catch (IOException e) {
+					throw new CompletionException(e);
+				}
+			}).thenComposeAsync(st -> Sidecar.link().send(st.message()).whenComplete((ack, err) -> {
+				if (err != null || !ack.ok()) {
+					Schematics.unstage(st.file());
+				}
+			}), mc);
+		} else {
+			sent = Sidecar.importRequest(file.toAbsolutePath().toString());
+		}
+		return sent.handle((ack, err) -> {
 			importSending = false;
 			String jobId = err == null && ack.ok() ? jobId(ack) : null;
 			if (jobId == null) {
@@ -395,6 +425,22 @@ public final class LibraryFeature {
 			say("Importing " + file.getFileName() + ": the Designs tab shows its progress", false);
 			return jobId;
 		});
+	}
+
+	/**
+	 * (6c SCH) Export as a Sponge schematic: {@code <gameDir>/architect/exports/<id>/<id>.schem} (through the API, which the
+	 * {@code /architect export <id> schem} command also uses). Completes on the client thread with the file.
+	 */
+	public static CompletableFuture<Path> exportSchem(String id) {
+		Path dir = Exchange.exportDir(Blueprints.gameDataDir(), id);
+		Minecraft mc = Minecraft.getInstance();
+		return dev.larattalabs.architect.api.ArchitectApi.get().library().exportSchematic(id, null, dir).whenCompleteAsync((p, err) -> {
+			if (err != null) {
+				say("Export failed: " + cause(err).getMessage(), true);
+			} else {
+				say("Exported to architect/exports/" + id + "/" + p.getFileName() + " (a Sponge schematic, version 3)", false);
+			}
+		}, mc);
 	}
 
 	// ------------------------------------------------------------------ variants
@@ -512,6 +558,13 @@ public final class LibraryFeature {
 		}
 		boolean wasRunning = previous == null ? RUNNING.contains(v.id()) : previous.status().isRunning();
 		RUNNING.remove(v.id());
+		// (6c SCH) an import-schem job's staged structure is gone with the job
+		if (v.from() != null && "import-schem".equals(v.raw().has("kind") ? v.raw().get("kind").getAsString() : null)) {
+			Path staged = Path.of(v.from());
+			if (Schematics.isStaged(Blueprints.gameDataDir(), staged)) {
+				Schematics.unstage(staged);
+			}
+		}
 		if (!wasRunning || !HANDLED.add(v.id())) {
 			return;
 		}
@@ -541,7 +594,9 @@ public final class LibraryFeature {
 	/** "Variant of Lakeside Cabin" / "Import of house.nbt". */
 	public static String title(Variant v) {
 		if (v.isImport()) {
-			String p = v.path() == null ? "a structure" : Path.of(v.path()).getFileName().toString();
+			JsonObject schem = v.raw().has("schem") && v.raw().get("schem").isJsonObject() ? v.raw().getAsJsonObject("schem") : null;
+			String p = schem != null && schem.has("file") ? schem.get("file").getAsString() : v.path() == null ? "a structure" : Path.of(v.path()).getFileName()
+				.toString();
 			return "Import of " + p;
 		}
 		return "Variant of " + (v.from() == null ? "?" : nameOf(v.from()));

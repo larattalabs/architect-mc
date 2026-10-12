@@ -29,7 +29,7 @@ public interface ArchitectApi {
 	 * 1.12.0: minLotSize and the recommended lot, partial roads, ground heights, bounded fields refused in the mod, the extend
 	 * warning, survival construction roads, protected areas, owner-tagged entities (phase 6c slice 0c).
 	 */
-	String VERSION = "1.15.0";
+	String VERSION = "1.20.0";
 
 	/** The singleton. Safe to call from any mod's initializer (it does not depend on Architect's init order). */
 	static ArchitectApi get() {
@@ -88,6 +88,8 @@ public interface ArchitectApi {
 	 * Since 1.15.0, {@code "frozenWater"} is always there (the region survey reads ice over water as water, {@link Sample#frozen}),
 	 * and a W helper ({@code region.lightCover}) adds {@code "apronLights"} ({@code flat_village} lights its lot aprons and batters
 	 * with the bible's lamp fixture; each lot's lamps on {@code LotSpec.ext["architect_mc:village"].lamps}).
+	 * Since 1.20.0, {@code "schematics"} is always there: Sponge schematic import ({@link Library#importSchematic}, through the
+	 * helper) and export ({@link Library#exportSchematic}, {@link Sites#exportSiteSchematic}, in the mod).
 	 */
 	Set<String> features();
 }

@@ -18,6 +18,7 @@ import { nbt, parse, encode, TAG } from './nbt.mjs';
 import zlib from 'node:zlib';
 
 export const STRUCTURE_VOID = 'minecraft:structure_void';
+export const STATE_FIELD_NAMES_DV = 5006;
 export const CAP = { x: 96, y: 64, z: 96 };
 
 export class SchemError extends Error {
@@ -172,6 +173,8 @@ export function schemToStructure(p) {
   const bes = new Map(p.blockEntities.map((b) => [`${b.x},${b.y},${b.z}`, b.data]));
   const remap = new Map();
   const palette = [];
+  // a structure palette entry is {id, properties} from DataVersion 5006 (vanilla's BlockStateFieldNamesFix), {Name, Properties} before
+  const legacy = p.dataVersion < STATE_FIELD_NAMES_DV;
   const blocks = [];
   for (let y = 0; y < p.height; y++) {
     for (let z = 0; z < p.length; z++) {
@@ -181,8 +184,8 @@ export function schemToStructure(p) {
         if (st.name === STRUCTURE_VOID) continue;
         if (!remap.has(pi)) {
           remap.set(pi, palette.length);
-          const e = { Name: nbt.str(st.name) };
-          if (Object.keys(st.props).length) e.Properties = nbt.compound(Object.fromEntries(Object.entries(st.props).map(([k, v]) => [k, nbt.str(v)])));
+          const e = { [legacy ? 'Name' : 'id']: nbt.str(st.name) };
+          if (Object.keys(st.props).length) e[legacy ? 'Properties' : 'properties'] = nbt.compound(Object.fromEntries(Object.entries(st.props).map(([k, v]) => [k, nbt.str(v)])));
           palette.push(nbt.compound(e));
         }
         const b = { pos: nbt.list('int', [nbt.int(x), nbt.int(y), nbt.int(z)]), state: nbt.int(remap.get(pi)) };
@@ -201,10 +204,11 @@ export function schemToStructure(p) {
   });
 }
 
-/** A structure palette entry ({Name, Properties}) as a state string, properties in their stored order. */
+/** A structure palette entry ({id, properties}, or the older {Name, Properties}) as a state string, properties in their stored order. */
 export function stateString(entry) {
-  const name = entry.v.Name?.v ?? entry.v.id?.v;
-  const props = entry.v.Properties?.t === 'compound' ? Object.entries(entry.v.Properties.v).map(([k, v]) => `${k}=${v.v}`) : [];
+  const name = entry.v.id?.v ?? entry.v.Name?.v;
+  const pt = entry.v.properties ?? entry.v.Properties;
+  const props = pt?.t === 'compound' ? Object.entries(pt.v).map(([k, v]) => `${k}=${v.v}`) : [];
   return props.length ? `${name}[${props.join(',')}]` : name;
 }
 

@@ -2,6 +2,7 @@ package dev.larattalabs.architect.api;
 
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -115,6 +116,50 @@ public interface Library {
 	/** The callers that pin a version, sorted. Since 1.10.0. */
 	default List<String> pinOwners(String entryId, int version) {
 		throw new UnsupportedOperationException("Library.pinOwners needs Architect API 1.10.0");
+	}
+
+	// ------------------------------------------------------------------ 6c slice SCH: Sponge schematics (API 1.20.0)
+
+	/**
+	 * Imports a Sponge Schematic (version 2 or 3, gzipped NBT; docs/CONTRACT.md "Phase 6c slice SCH") as a new library entry,
+	 * like a {@code .nbt} import: a plain structure entry (no source, no variants), tagged {@code imported} and {@code schem},
+	 * {@code ext["architect_mc:schem"]} holding the file's {@code Metadata} {@code Name} and {@code Author} (when present), its
+	 * {@code Version} and {@code DataVersion}. The mod reads and validates the file and upgrades its block states and block-entity
+	 * data to this game's version with vanilla's data fixers, then the helper checks, renders and installs it: fails when the
+	 * helper is not running. Entities are skipped (counted in the import's step line); biomes are ignored. {@code groundY} is
+	 * {@code -Offset.y} when that is a row of the schematic, else 1 (as a {@code .nbt} import).
+	 *
+	 * <p>Refusals ({@link ArchitectRefused}, nothing installed): {@link Reason#FORMAT} for a file that is not a Sponge
+	 * schematic, an unknown {@code Version}, a {@code DataVersion} newer than the game's, corrupt data, or blocks this game does
+	 * not know (listed; see {@link #importSchematic(Path, String, JsonObject)}); {@link Reason#TOO_LARGE} past the template
+	 * cap (96 x 64 x 96). {@code name}: the entry's name (else the file's {@code Metadata.Name}, else its file name). Completes on
+	 * the server thread with the installed entry. Since 1.20.0.
+	 */
+	default CompletableFuture<Entry> importSchematic(Path file, @Nullable String name) {
+		throw new UnsupportedOperationException("Library.importSchematic needs Architect API 1.20.0");
+	}
+
+	/**
+	 * {@link #importSchematic(Path, String)} with the request's {@code ext} (namespaced keys). {@code ext["architect_mc:unknownAs"]}
+	 * (a block id, e.g. {@code "minecraft:stone"}) replaces every block this game does not know (another mod's) instead of
+	 * refusing the file; the replaced ids are listed in {@code ext["architect_mc:schem"].replaced}. Default: none (refused).
+	 * Since 1.20.0.
+	 */
+	default CompletableFuture<Entry> importSchematic(Path file, @Nullable String name, @Nullable JsonObject ext) {
+		throw new UnsupportedOperationException("Library.importSchematic(ext) needs Architect API 1.20.0");
+	}
+
+	/**
+	 * Exports an entry (at {@code version}, null = its head) as a Sponge Schematic version 3 file, {@code <dir>/<id>.schem}
+	 * (or {@code <id>-v<version>.schem} for an older version). Cells the template does not write are
+	 * {@code minecraft:structure_void}, which an import maps back to "not written"; {@code Offset} puts the entry's
+	 * {@code groundY} row at y 0; {@code Metadata} is {@code {Name, Author: "Architect", Date}} with the date the entry (version)
+	 * was installed, so two exports of one entry are byte-identical. Fails {@link ArchitectRefused}
+	 * {@link Reason#UNKNOWN_BLUEPRINT} for an unknown entry and {@link Reason#VERSION_GONE} for an unknown version. Runs on the
+	 * server thread (no helper needed). Since 1.20.0.
+	 */
+	default CompletableFuture<Path> exportSchematic(String entryId, @Nullable Integer version, Path dir) {
+		throw new UnsupportedOperationException("Library.exportSchematic needs Architect API 1.20.0");
 	}
 
 	/**

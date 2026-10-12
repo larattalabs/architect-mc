@@ -57,6 +57,7 @@ test('every kit example: .nbt -> .schem -> structure gives the same cells (item 
     assert.equal(p.version, 3);
     assert.equal(p.dataVersion, before.v.DataVersion.v);
     assert.deepEqual(p.offset, [0, -groundYOf(e), 0], e);
+    assert.ok(p.palette.some((k) => k.includes('[')), `${e}: the palette keeps block properties`);
     const after = schemToStructure(p);
     assert.deepEqual(after.v.size.v.map((t) => t.v), before.v.size.v.map((t) => t.v), e);
     assert.deepEqual(cells(after), cells(before), e);
