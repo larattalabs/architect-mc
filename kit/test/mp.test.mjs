@@ -321,7 +321,7 @@ test('format 2: requires names mask and pattern; an older kit refuses them (PLAN
   const p = await planInline((r) => { r.part('a').fill({ kind: 'box', min: [0, 60, 0], max: [1, 61, 1] }, { mix: [{ w: 1, mat: 'rock' }] }, { mask: { height: [0, 100] } }); });
   assert.deepEqual(p.ir.requires, ['mask', 'pattern']);
   assert.equal(staleReason(p.ir), null);
-  assert.match(staleReason(p.ir, '0.18.0'), /plan needs kit 0\.19\.0/);
+  assert.match(staleReason(p.ir, '0.18.0'), new RegExp(`plan needs kit ${p.ir.kitVersion.replaceAll('.', '\\.')}`)); // (6c T1) the running kit's version, 0.19.0 or later
   assert.match(staleReason({ ...p.ir, kitVersion: '0.18.0', requires: ['mask', 'pattern', 'op:brush'] }), /kinds \[op:brush\]/);
 });
 

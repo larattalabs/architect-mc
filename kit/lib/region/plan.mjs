@@ -15,9 +15,10 @@ import { COND, DEFAULT_MACRO_ROLES, Region, blockState, region as makeRegion } f
 import { surveyApi, windowFromSurvey } from './survey.mjs';
 import { validateParams, resolveValues } from '../params.mjs';
 import { mapPatternMats, patternError } from '../pattern.mjs';
+import { PASS_NAMES } from './passes/index.mjs';
 
 /** The kit's region engine version (recorded in every IR). */
-export const KIT_VERSION = '0.19.0';
+export const KIT_VERSION = '0.20.0';
 
 export const LIMITS = Object.freeze({
   claim: 1024, claimBig: 2048, irBytes: 4 * 1024 * 1024, ops: MAX_OPS, lots: 1024, paths: 256, stages: 64,
@@ -52,6 +53,8 @@ export function assembleParts(r, claim) {
   const parts = r.parts.map((p) => {
     const si = stages.indexOf(p.stage);
     const ops = p.ops.map((op) => {
+      // (6c T1) a relief op's write condition is its `cut`; its bounds are its field's extent (y: column-dependent)
+      if (op.op === 'relief') return { ...op, cut: (op.cut ?? COND.IF_NATURAL) === COND.IF_NATURAL && (p.set === 'path' || si > 0) ? COND.ALWAYS_OURS : (op.cut ?? COND.IF_NATURAL), bounds: reliefBounds(op, r.fields) };
       const cond = op.cond === COND.IF_NATURAL && (p.set === 'path' || si > 0) ? COND.ALWAYS_OURS : op.cond;
       const b = opBounds(op, Object.keys(irBlobs).length ? blobResolver : blobs, (name) => { const e = irBlobs[name]; if (!e) throw new Error(`voxels: blob '${name}' is not in the IR's blobs`); return sideBytes.get(e.sha); });
       return { ...op, cond, bounds: b };
@@ -215,6 +218,22 @@ export function fillMissing(survey) {
 
 const tileOf = (v) => Math.floor(v / 64);
 
+/** (6c T1) A relief op's bounds: its field's x/z extent; y depends on each column's frozen ground. */
+export function reliefBounds(op, fields) {
+  const f = fields?.[op.field];
+  if (!f) throw new Error(`relief op: field '${op.field}' is not one of the region's fields`);
+  return { minX: f.minX, maxX: f.minX + f.width * f.res - 1, minZ: f.minZ, maxZ: f.minZ + f.depth * f.res - 1, minY: null, maxY: null };
+}
+
+/** (6c T1) A program's declared passes (`export const passes = [...]`): a list of kit pass names, each once. */
+export function declaredPasses(mod) {
+  if (mod.passes === undefined) return [];
+  if (!Array.isArray(mod.passes) || mod.passes.some((p) => typeof p !== 'string')) throw new Error('the program\'s passes must be an array of pass names');
+  for (const p of mod.passes) if (!PASS_NAMES.includes(p)) throw new Error(`the program declares pass '${p}', which is not a kit pass (${PASS_NAMES.join(', ')})`);
+  if (new Set(mod.passes).size !== mod.passes.length) throw new Error('the program declares a pass twice');
+  return [...mod.passes];
+}
+
 /**
  * Conservative world bounds of an IR op: {minX, maxX, minZ, maxZ, minY|null, maxY|null}. (6c F1) A voxels op needs `bytesOf(name)`,
  * its ARVB blob's bytes.
@@ -271,7 +290,7 @@ export async function planRegion(o) {
 
   // run the program: Math.random throws, Date.now returns 0, for the program's whole run (import included)
   const savedRandom = Math.random, savedNow = Date.now;
-  let mod, out, programSource, regionObj;
+  let mod, out, programSource, regionObj, passes = [];
   const ctx = {};
   try {
     Math.random = () => { throw new Error('Math.random is not allowed in a region program: use ctx.rng(label)'); };
@@ -288,6 +307,7 @@ export async function planRegion(o) {
     if (mod.roles !== undefined && (typeof mod.roles !== 'object' || mod.roles === null || Array.isArray(mod.roles))) throw new Error('the program\'s roles must be {role: blockState}');
     roles = Object.freeze(resolveRoles(o.roles ?? {}, mod.roles ?? {}));
     const patterns = resolvePatterns(o.patterns ?? {}, roles);
+    passes = declaredPasses(mod);
     const params = resolveValues(mod.params ?? {}, o.params ?? {});
     const seed = o.seed === undefined || o.seed === null || o.seed === 'default' ? defaultSeed(id, params, claim) : toDecimal64(...fromDecimal64(o.seed));
     const onKeepOut = () => { keepOutRead = true; };
@@ -295,6 +315,7 @@ export async function planRegion(o) {
       claim: Object.freeze({ ...claim }), survey: surveyApi(survey, claim, { keepOut, onKeepOut }), roles, patterns, seed, params: Object.freeze({ ...params }),
       kitVersion: o.kitVersion ?? KIT_VERSION, rng: (label) => makeRng(seed, String(label)),
       volumes: o.volumes ?? [],
+      passes: Object.freeze([...passes]), // (6c T1) the declared passes (r.pass refuses any other)
     });
     ctx.region = () => makeRegion(ctx);
     // (6c V) the owner's protected rects; a program that reads them records them in the IR (`keepOut`: the areas it honoured)
@@ -313,6 +334,9 @@ export async function planRegion(o) {
 
   // ---- validate and assemble
   for (const a of ['entrance', 'spawn']) if (!r.anchors[a]) throw new Error(`the region needs an anchor '${a}'`);
+  // (6c T1) a pad on a `blend` edge has no batter: the relief pass must have blended around it
+  const unblended = r.blendLots.filter((id) => !r.reliefLots.has(id));
+  if (unblended.length) throw new Error(`lot ${unblended.join(', ')}: pad.edge 'blend' needs the relief pass around it (r.pass('relief', {around: [...]}))`);
   const stages = r.stageList;
   if (stages.length > LIMITS.stages) throw new Error(`the region has ${stages.length} stages (at most ${LIMITS.stages})`);
   if (r.opCount > LIMITS.ops) throw new Error(`the region has ${r.opCount} ops (at most ${LIMITS.ops})`);
@@ -399,6 +423,7 @@ export async function planRegion(o) {
   // a fresh object: evalTile caches compiled IRs per object, and the claim changed after the budget pass
   stats.irFormat = ir.format;
   stats.requires = ir.requires ?? [];
-  const meta = { format: 1, paths: r.meta.paths, lots: r.meta.lots, parts: r.meta.parts, ...(r.meta.village ? { village: r.meta.village } : {}), ...(r.meta.gravity ? { gravity: r.meta.gravity } : {}), ...(r.meta.forms ? { forms: r.meta.forms } : {}) };
-  return { ir: JSON.parse(irJson), irJson, irSha: sha256Hex(irJson), notes, stats, blobs: sideBytes, meta, needVolumes: r.needVolumes };
+  stats.passes = r.passRuns.map((x) => ({ ...x }));
+  const meta = { format: 1, paths: r.meta.paths, lots: r.meta.lots, parts: r.meta.parts, ...(r.meta.village ? { village: r.meta.village } : {}), ...(r.meta.gravity ? { gravity: r.meta.gravity } : {}), ...(r.meta.forms ? { forms: r.meta.forms } : {}), ...(r.passRuns.length ? { passes: r.passRuns.map((x) => ({ ...x })) } : {}), ...(r.meta.relief ? { relief: r.meta.relief } : {}) };
+  return { ir: JSON.parse(irJson), irJson, irSha: sha256Hex(irJson), notes, stats, blobs: sideBytes, meta, needVolumes: r.needVolumes, passes };
 }

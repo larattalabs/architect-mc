@@ -29,7 +29,7 @@ public interface ArchitectApi {
 	 * 1.12.0: minLotSize and the recommended lot, partial roads, ground heights, bounded fields refused in the mod, the extend
 	 * warning, survival construction roads, protected areas, owner-tagged entities (phase 6c slice 0c).
 	 */
-	String VERSION = "1.17.0";
+	String VERSION = "1.18.0";
 
 	/** The singleton. Safe to call from any mod's initializer (it does not depend on Architect's init order). */
 	static ArchitectApi get() {
@@ -91,6 +91,10 @@ public interface ArchitectApi {
 	 * Since 1.16.0, a forms-I helper ({@code region.forms1}) adds {@code "formsIce"} (the kit's {@code iceSpike} generator and
 	 * {@code keepNatural}), {@code "formsRock"} (the {@code rockSpire} generator) and {@code "voxelsOp"} (the {@code voxels} op: a
 	 * plan that uses it requires the {@code voxels} kind, and an older game refuses it PLAN_STALE); its checker has M17 (melt).
+	 * Since 1.18.0, a T1 helper ({@code region.passes}) adds {@code "planPasses"} (plan-time passes: a program that declares
+	 * them is planned within 120 s and 2 GB, its second plan's survey is resolution 1 up to 1024x1024 columns, and the pass
+	 * timings are in {@link RegionPlan#notes} and {@code siteplan.json}) and {@code "reliefOp"} (the {@code relief} op and pass,
+	 * {@code pad.edge: 'blend'}: a plan that uses it requires the {@code relief} kind, and an older game refuses it PLAN_STALE).
 	 */
 	Set<String> features();
 }

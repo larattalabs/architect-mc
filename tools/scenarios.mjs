@@ -84,6 +84,7 @@ export async function tileShas(planDir, { timingPasses = 1 } = {}) {
   const cells = one.reduce((n, r) => n + r.count, 0);
   const timing = { passes: timingPasses, count: ms.length, p99Ms: ms.length ? ms[Math.min(ms.length - 1, Math.floor(ms.length * 0.99))] : 0, maxMs: ms.length ? ms[ms.length - 1] : 0, totalMs: ms.reduce((a, b) => a + b, 0) };
   timing.cellsPerSecond = timing.totalMs > 0 ? cells / (timing.totalMs / 1000) : 0;
+  timing.p50Ms = ms.length ? ms[ms.length >> 1] : 0; // (6c T1)
   return { irSha: sha256(irJson), tiles: Object.fromEntries(Object.keys(m1).sort().map((k) => [k, m1[k]])), cells, workersSame: same, timing };
 }
 
@@ -144,6 +145,7 @@ export function fitEntries(lots) {
 
 // ------------------------------------------------------------------ (6c V) the flat village scenario (S7)
 const isV = (sc) => sc.phase === '6c-v';
+const isT1 = (sc) => sc.phase === '6c-t1'; // (6c T1) relief_demo on S3's claim
 const isF1 = (sc) => sc.phase === '6c-f1'; // (6c F1) forms_demo on S2's claim
 
 /**
@@ -285,14 +287,16 @@ async function runScenario(id) {
   T('prepare', t0);
   // (6c F1) a plan that reads a frozen volume of a live world (forms_demo keeps the natural ice) sees the world's own changes between
   // plans (a plant breaking, water freezing): the three plans of the IR sha check run with the world's ticking frozen (/tick freeze)
-  if (isF1(sc)) await L.cmd('/tick freeze');
+  // (6c T1) relief_demo's land too: S3's flowing water moves the plan survey between plans
+  const freeze = isF1(sc) || isT1(sc);
+  if (freeze) await L.cmd('/tick freeze');
   let p2, irShas;
   try {
     p2 = await L.plan(sc.program, claim, { params: sc.params, surveyLoad: 'generated:64', seed: sc.seed, bible });
     irShas = [p2.irSha];
     for (let i = 0; i < 2; i++) irShas.push((await L.plan(sc.program, claim, { params: sc.params, surveyLoad: 'generated:64', seed: sc.seed, bible })).irSha);
   } finally {
-    if (isF1(sc)) await L.cmd('/tick unfreeze');
+    if (freeze) await L.cmd('/tick unfreeze');
   }
   const planDir = copyPlan(p2.planId, path.join(raw, 'plan'));
   fs.copyFileSync(path.join(planDir, 'report.json'), path.join(out, 'report.json'));
@@ -417,7 +421,7 @@ async function computeMetrics({ sc, out, planDir, ir, irShas, mspt, cps, exact, 
     const rw = (j.warnings ?? []).filter((w) => w.startsWith('restraint'));
     buildings.push({ entry, errors: (j.errors ?? []).length, errorList: j.errors ?? [], restraint: rw.filter((w) => /detail ?noise|accent/i.test(w)), restraintOther: rw.filter((w) => !/detail ?noise|accent/i.test(w)), metrics: { detailNoise: j.metrics?.detailNoise ?? null, accentShare: j.metrics?.accentShare ?? null } });
   }
-  const ts = await tileShas(planDir, { timingPasses: isF1(sc) ? 3 : 1 });
+  const ts = await tileShas(planDir, { timingPasses: isF1(sc) || isT1(sc) ? 3 : 1 });
   const gFile = path.join(SCEN, 'goldens', `${short(sc)}.json`);
   let golden = 'none';
   if (fs.existsSync(gFile)) {
@@ -436,6 +440,27 @@ async function computeMetrics({ sc, out, planDir, ir, irShas, mspt, cps, exact, 
       : volOnly ? 'match (every tile sha; the IR differs only by its frozen volume of the live world)'
       : sameTiles && g.kitVersion && g.kitVersion !== runKit ? `match (every tile sha; the IR sha differs by its kitVersion ${g.kitVersion} -> ${runKit})`
         : `differs (golden ${g.irSha.slice(0, 12)}, run ${ts.irSha.slice(0, 12)}${sameTiles ? '' : '; tile shas differ'})`;
+    // (6c T1) relief_demo plans from the live world's survey (S3: flowing water, plants and leaves move a fresh copy's survey, and the
+    // program picks its sites from it), so a run whose plan survey differs from the golden's can't reproduce its IR. Then the row
+    // holds the golden itself: its committed inputs re-plan to its IR sha and every tile sha (1 = 4 workers), and it records how far
+    // the run's survey is from the golden's
+    const gDir = path.join(SCEN, 'goldens', short(sc));
+    if (isT1(sc) && golden.startsWith('differs') && fs.existsSync(path.join(gDir, 'survey.bin'))) {
+      const runSurvey = fs.readFileSync(path.join(planDir, 'survey.bin')), gSurvey = fs.readFileSync(path.join(gDir, 'survey.bin'));
+      if (sha256(runSurvey) !== sha256(gSurvey)) {
+        const { asColumns } = await import('../kit/lib/region/pack.mjs');
+        const ra = asColumns(runSurvey), ga = asColumns(gSurvey);
+        let cols = 0;
+        for (let i = 0; i < ra.ground.length; i++) if (ra.ground[i] !== ga.ground[i] || ra.flags[i] !== ga.flags[i] || ra.height[i] !== ga.height[i]) cols++;
+        const { planRegion } = await import('../kit/lib/region/plan.mjs');
+        const gIr = JSON.parse(fs.readFileSync(path.join(gDir, 'ir.json'), 'utf8'));
+        const re = await planRegion({ programFile: path.join(root, 'kit', 'regions', `${gIr.id}.mjs`), params: gIr.params, survey: gSurvey, seed: gIr.seed, claim: { ...gIr.claim, minY: -64, maxY: 319 }, roles: gIr.roles });
+        const gts = await tileShas(gDir);
+        const ok = re.irSha === g.irSha && gts.irSha === g.irSha && gts.workersSame && JSON.stringify(gts.tiles) === JSON.stringify(g.tiles);
+        golden = ok ? `match (the golden's committed inputs re-plan to its IR ${g.irSha.slice(0, 12)} and its ${Object.keys(g.tiles).length} tile shas; this run's live survey differs from the golden's in ${cols} columns, so its IR ${ts.irSha.slice(0, 12)} is its own)`
+          : `differs (the golden's inputs re-plan to ${re.irSha.slice(0, 12)}, golden ${g.irSha.slice(0, 12)})`;
+      }
+    }
   }
   // the other variant's exactness (E-flat from the latest flat run beside a natural one, and back)
   const sibling = latestRun(sc, out, !flat);
@@ -450,7 +475,17 @@ async function computeMetrics({ sc, out, planDir, ir, irShas, mspt, cps, exact, 
     const classes = { ...e.classes, none: e.classes.none - moved.length, freeze: (e.classes.freeze ?? 0) + moved.length };
     return { ...e, classes, list: e.list.map((m) => (moved.includes(m) ? { ...m, class: 'freeze' } : m)) };
   };
-  const exN = freezeOf(exact);
+  // (6c T1) the world's flowing water: an unclassified mismatch where the snapshot held flowing (non-source) water and the world now
+  // holds air is a stream that moved between the snapshot and the write (SETTLEMENTS §4.2: flowing water is outside E-normal), classed
+  // `flow` (a world class); the plan never places flowing water
+  const flowOf = (e) => {
+    if (!e || flat || !isT1(sc) || !(e.classes?.none > 0)) return e;
+    const moved = (e.list ?? []).filter((m) => m.class === 'none' && /^minecraft:water\[level=[1-9]/.test(m.was) && /^minecraft:(air|cave_air)$/.test(m.now));
+    if (!moved.length) return e;
+    const classes = { ...e.classes, none: e.classes.none - moved.length, flow: (e.classes.flow ?? 0) + moved.length };
+    return { ...e, classes, list: e.list.map((m) => (moved.includes(m) ? { ...m, class: 'flow' } : m)) };
+  };
+  const exN = flowOf(freezeOf(exact));
   const ex = flat ? { flat: exact, normal: exactOther, cellsWritten: exactOther?.cellsWritten ?? 0 } : { flat: exactOther, normal: exN, cellsWritten: exact.cellsWritten };
   const plan = { report: JSON.parse(fs.readFileSync(path.join(out, 'report.json'), 'utf8')) };
   let rows = M.bars({ plan, realised, palette, organic, buildings, mspt, cellsPerSecond: cps, exact: ex, determinism: { irShas, workersSame: ts.workersSame, golden }, spendUsd: 0, approval: 'pending' });
@@ -470,6 +505,16 @@ async function computeMetrics({ sc, out, planDir, ir, irShas, mspt, cps, exact, 
     rows = F.formsBars({ plan, realised, realisedStand, melt, kept, voxels, organic, organicPer, workersSame: ts.workersSame, tiles: ts.timing, mspt, load1: Math.round((await import('node:os')).loadavg()[0] * 10) / 10 }, rows);
     forms = { melt, kept, voxels, organicPer, tiles: ts.timing, realisedM17: (realisedStand ?? realised).metrics.M17, realisedM3: realised.metrics.M3, meta: meta.forms ?? null };
   }
+  // (6c T1) relief_demo's own bars (CONTRACT T1 §6): items 1-4 and 10 (tools/lib/scenario-relief.mjs), item 7's tile evaluation
+  let relief = null;
+  if (isT1(sc)) {
+    const T = await import('./lib/scenario-relief.mjs');
+    const rm = await T.reliefMetrics({ planDir, ir, survey, blobs, vw, after, before });
+    rows = T.reliefBars(rm, plan.report, rows, { flat, metaFlat: meta.relief?.flat ?? null });
+    const tm = ts.timing;
+    rows.push({ id: 't1-tiles', label: 'T1 7 Tile evaluation (best of 3 per tile)', value: `p50 ${tm.p50Ms.toFixed(1)} ms, p99 ${tm.p99Ms.toFixed(1)} ms, max ${tm.maxMs.toFixed(1)} ms over ${tm.count} tiles; ${Math.round(tm.cellsPerSecond)} cells/s`, threshold: 'p99 < 2 s; >= 45k cells/s', pass: tm.p99Ms < 2000 && tm.cellsPerSecond >= 45_000, gated: true });
+    relief = { ...rm, tiles: tm, meta: meta.relief ?? null, passes: meta.passes ?? null };
+  }
   // (6c V) S7's own bars (CONTRACT V §7): the door-to-street walk, the lot fronts, the villager rules, the props
   let village = null;
   if (isV(sc)) {
@@ -485,10 +530,10 @@ async function computeMetrics({ sc, out, planDir, ir, irShas, mspt, cps, exact, 
   }
   const fronts = M.lotFronts(ir, after);
   L.log(`  lot fronts: outside the boxes ${JSON.stringify(fronts.outside)}; inside (the children's own) ${JSON.stringify(fronts.inside)}`);
-  const metrics = { scenario: sc.id, worldChanges: world.worldChanges, cellsPerSecond: cps, lotFronts: fronts, ...(village ? { village } : {}), ...(forms ? { forms } : {}), variant: flat ? 'flat' : 'natural', rows, palette, organic, buildings, mspt, tiles: { irSha: ts.irSha, count: Object.keys(ts.tiles).length, cells: ts.cells, workersSame: ts.workersSame, golden }, exactSibling: sibling ? path.relative(out, sibling) : null,
+  const metrics = { scenario: sc.id, worldChanges: world.worldChanges, cellsPerSecond: cps, lotFronts: fronts, ...(village ? { village } : {}), ...(forms ? { forms } : {}), ...(relief ? { relief } : {}), variant: flat ? 'flat' : 'natural', rows, palette, organic, buildings, mspt, tiles: { irSha: ts.irSha, count: Object.keys(ts.tiles).length, cells: ts.cells, workersSame: ts.workersSame, golden }, exactSibling: sibling ? path.relative(out, sibling) : null,
     realised: { M2: realised.metrics.M2 && { ...realised.metrics.M2, perNode: undefined }, M3: realised.metrics.M3, M4: realised.metrics.M4, M5: realised.metrics.M5, M8: realised.metrics.M8 && { ...realised.metrics.M8, unguardedSample: (realised.metrics.M8.unguardedSample ?? []).slice(0, 20) }, M10: realised.metrics.M10, findings: realised.findings.map((f) => `${f.rule} ${f.severity} ${f.part ?? '-'} x${f.count}`) } };
   fs.writeFileSync(path.join(out, 'metrics.json'), `${JSON.stringify(metrics, null, 2)}\n`);
-  for (const r of rows) L.log(`  ${r.gated ? (r.pass ? 'ok  ' : 'FAIL') : 'rec '} ${r.id === 'mspt' ? 'BAR ' : ''}${r.label}: ${r.value}`); // the mspt row is a timing bar (recorded, not blocking in change/slice)
+  for (const r of rows) L.log(`  ${r.gated ? (r.pass ? 'ok  ' : 'FAIL') : 'rec '} ${r.id === 'mspt' || r.id === 't1-tiles' ? 'BAR ' : ''}${r.label}: ${r.value}`); // the mspt row is a timing bar (recorded, not blocking in change/slice)
   return metrics;
 }
 
@@ -579,7 +624,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
       && !(flatRun && x.id === 'determinism' && irSame && r.metrics.tiles.workersSame) && !(flatRun && x.id === 'exactness' && eFlat0);
     const bad = (sub === 'check' && r.some((x) => !x.ok)) || (sub === 'run' && r.metrics.rows.some(runBad));
     if (sub === 'run') console.error(`${r.metrics.rows.filter(runBad).length} failure(s) (scenario run)`);
-    if (sub === 'run') for (const x of r.metrics.rows.filter(runBad)) console.error(`FAIL ${x.id === 'mspt' ? 'BAR ' : ''}${x.id}: ${x.value} (bar: ${x.threshold})`);
+    if (sub === 'run') for (const x of r.metrics.rows.filter(runBad)) console.error(`FAIL ${x.id === 'mspt' || x.id === 't1-tiles' ? 'BAR ' : ''}${x.id}: ${x.value} (bar: ${x.threshold})`);
     try { L?.state.dev?.close(); } catch { /* closed */ }
     process.exit(bad ? 1 : 0);
   } catch (e) {
