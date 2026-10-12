@@ -149,7 +149,7 @@ public final class SidecarState {
 		/** An import job (no source entry, a file path instead). */
 		public boolean isImport() {
 			return from == null && path != null || raw.has("imported") && raw.get("imported").isJsonPrimitive() && raw.get("imported").getAsBoolean()
-				|| "import".equals(str(raw, "kind", null));
+				|| "import".equals(str(raw, "kind", null)) || "import-schem".equals(str(raw, "kind", null));
 		}
 	}
 

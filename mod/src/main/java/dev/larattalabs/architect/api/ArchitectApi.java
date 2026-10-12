@@ -95,6 +95,8 @@ public interface ArchitectApi {
 	 * them is planned within 120 s and 2 GB, its second plan's survey is resolution 1 up to 1024x1024 columns, and the pass
 	 * timings are in {@link RegionPlan#notes} and {@code siteplan.json}) and {@code "reliefOp"} (the {@code relief} op and pass,
 	 * {@code pad.edge: 'blend'}: a plan that uses it requires the {@code relief} kind, and an older game refuses it PLAN_STALE).
+	 * Since 1.18.0, {@code "schematics"} is always there: Sponge schematic import ({@link Library#importSchematic}, through the
+	 * helper) and export ({@link Library#exportSchematic}, {@link Sites#exportSiteSchematic}, in the mod).
 	 */
 	Set<String> features();
 }

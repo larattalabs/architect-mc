@@ -117,6 +117,107 @@ final class LibraryImpl implements Library {
 		return ApiImpl.onServerFuture(done);
 	}
 
+	// ------------------------------------------------------------------ 6c SCH: Sponge schematics
+
+	@Override
+	public CompletableFuture<Entry> importSchematic(Path file, @Nullable String name) {
+		return importSchematic(file, name, null);
+	}
+
+	@Override
+	public CompletableFuture<Entry> importSchematic(Path file, @Nullable String name, @Nullable JsonObject ext) {
+		ClientBridge b = ApiImpl.bridge();
+		if (b == null || !b.connected()) {
+			return ApiImpl.onServerFuture(CompletableFuture.failedFuture(new IllegalStateException("the design helper is not running")));
+		}
+		if (!b.sidecarFeatures().contains("import.schem")) {
+			return ApiImpl.onServerFuture(CompletableFuture.failedFuture(new IllegalStateException(
+				"the design helper is too old to import schematics (it lacks import.schem): update it")));
+		}
+		if (file == null) {
+			return ApiImpl.onServerFuture(CompletableFuture.failedFuture(new IllegalArgumentException("no file")));
+		}
+		String fileName = file.getFileName().toString();
+		// read, upgrade and check off the server thread; every refusal comes before anything is staged
+		CompletableFuture<dev.larattalabs.architect.library.Schematics.Staged> staged = CompletableFuture.supplyAsync(() -> {
+			try {
+				var st = dev.larattalabs.architect.library.Schematics.stageImport(Blueprints.gameDataDir(), file, name, ext);
+				var prep = st.prepared();
+				Architect.LOGGER.info("API: schematic {} (v{}, DataVersion {}) read and upgraded{}", fileName, prep.parsed().version(), prep.parsed()
+					.dataVersion(), prep.notes().isEmpty() ? "" : ": " + String.join("; ", prep.notes()));
+				return st;
+			} catch (dev.larattalabs.architect.library.Schematic.Refused r) {
+				throw new java.util.concurrent.CompletionException(new dev.larattalabs.architect.api.ArchitectRefused(r.reason(), fileName + ": " + r
+					.getMessage()));
+			} catch (java.nio.file.NoSuchFileException e) {
+				throw new java.util.concurrent.CompletionException(new IllegalArgumentException("no file " + file));
+			} catch (IOException e) {
+				throw new java.util.concurrent.CompletionException(e);
+			}
+		});
+		CompletableFuture<Entry> done = new CompletableFuture<>();
+		staged.whenComplete((st, err) -> {
+			if (err != null) {
+				done.completeExceptionally(err instanceof java.util.concurrent.CompletionException && err.getCause() != null ? err.getCause() : err);
+				return;
+			}
+			b.send(st.message()).whenComplete((ack, e2) -> {
+				if (e2 == null && ack.has("ok") && ack.get("ok").getAsBoolean() && ack.has("result") && ack.getAsJsonObject("result").has("variantId")) {
+					waiting.await(ack.getAsJsonObject("result").get("variantId").getAsString(), done, System.currentTimeMillis(), ApiTimeouts.VARIANT_MS);
+				} else {
+					done.completeExceptionally(e2 != null ? e2 : new IllegalStateException("the helper refused the import: " + (ack.has("error") ? ack.get(
+						"error").getAsString() : ack)));
+				}
+			});
+		});
+		done.whenComplete((e, err) -> {
+			staged.thenAccept(st -> dev.larattalabs.architect.library.Schematics.unstage(st.file()));
+		});
+		return ApiImpl.onServerFuture(done);
+	}
+
+
+	@Override
+	public CompletableFuture<Path> exportSchematic(String entryId, @Nullable Integer version, Path dir) {
+		MinecraftServer s = ApiImpl.server();
+		if (s == null) {
+			return CompletableFuture.failedFuture(new dev.larattalabs.architect.api.ArchitectRefused(dev.larattalabs.architect.api.Reason.WORLD_STOPPED,
+				"no world is running"));
+		}
+		if (entryId == null || dir == null) {
+			return CompletableFuture.failedFuture(new IllegalArgumentException("an entry id and a folder are needed"));
+		}
+		// the template is read on the server thread (versions go through its fixers); encoded and written off it
+		CompletableFuture<Object[]> read = CompletableFuture.supplyAsync(() -> {
+			Blueprints.Entry e = Blueprints.entry(entryId);
+			if (e == null) {
+				throw new dev.larattalabs.architect.api.ArchitectRefused(dev.larattalabs.architect.api.Reason.UNKNOWN_BLUEPRINT, "no library entry " + entryId);
+			}
+			if (version != null) {
+				Blueprints.Version v = Blueprints.version(s, entryId, version);
+				if (v == null) {
+					throw new dev.larattalabs.architect.api.ArchitectRefused(dev.larattalabs.architect.api.Reason.VERSION_GONE, "version " + version + " of "
+						+ entryId + " is unknown or was garbage-collected");
+				}
+				e = v.entry();
+			}
+			var bp = e.blueprint();
+			return new Object[] {dev.larattalabs.architect.library.Schematics.templateTag(e.template()), bp.name(), bp.createdAt(), bp.groundY()};
+		}, s);
+		return ApiImpl.onServerFuture(read.thenApplyAsync(r -> {
+			byte[] bytes = dev.larattalabs.architect.library.Schematics.encode((net.minecraft.nbt.CompoundTag) r[0], (String) r[1], (Long) r[2],
+				(Integer) r[3]);
+			try {
+				Path out = dev.larattalabs.architect.library.Schematics.write(dir, dev.larattalabs.architect.library.Schematics.exportName(entryId, version),
+					bytes);
+				Architect.LOGGER.info("API: {} exported as a schematic: {} ({} bytes)", entryId, out, bytes.length);
+				return out;
+			} catch (IOException ex) {
+				throw new java.util.concurrent.CompletionException(ex);
+			}
+		}));
+	}
+
 	/** Fails the variant and re-skin futures past their timeout (any thread). */
 	void expire(long now) {
 		waiting.expire(now);

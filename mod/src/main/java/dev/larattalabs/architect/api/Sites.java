@@ -382,4 +382,19 @@ public interface Sites {
 	default Map<Item, Integer> dissolveStockpile(String owner, net.minecraft.server.level.@Nullable ServerPlayer to) {
 		throw new UnsupportedOperationException("Sites.dissolveStockpile needs Architect API 1.17.0");
 	}
+
+	// ------------------------------------------------------------------ 6c slice SCH: Sponge schematics (API 1.18.0)
+
+	/**
+	 * Exports a site's current cells as a Sponge Schematic version 3 file ({@code <dir>/<siteId>.schem}, gzipped NBT;
+	 * docs/CONTRACT.md "Phase 6c slice SCH"): every position of the site's box as the world holds it now (air included, in the
+	 * world's orientation: the site's rotation is applied), with its block entities. {@code Offset} puts the entrance feet row at
+	 * y 0; {@code Metadata} is {@code {Name, Author: "Architect", Date: now}}. Entities and biomes are not written. Fails
+	 * {@link ArchitectRefused} {@link Reason#UNKNOWN_BLUEPRINT} for an unknown site, {@link Reason#NOT_LOADED} when a chunk of
+	 * its box is not loaded and {@link Reason#WORLD_STOPPED} without a running world; an I/O error fails it as is. Completes on
+	 * the server thread with the file written. Since 1.18.0.
+	 */
+	default java.util.concurrent.CompletableFuture<java.nio.file.Path> exportSiteSchematic(String siteId, java.nio.file.Path dir) {
+		throw new UnsupportedOperationException("Sites.exportSiteSchematic needs Architect API 1.18.0");
+	}
 }

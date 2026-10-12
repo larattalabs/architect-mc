@@ -88,7 +88,7 @@ describe('import paths', () => {
   afterAll(() => rmrf(root));
 
   it('derives the roots from the library path', () => {
-    expect(importRoots(lib)).toEqual({ imports: path.join(root, 'game', 'architect', 'imports'), exports: path.join(root, 'game', 'architect', 'exports'), saves: path.join(root, 'game', 'saves') });
+    expect(importRoots(lib)).toEqual({ imports: path.join(root, 'game', 'architect', 'imports'), exports: path.join(root, 'game', 'architect', 'exports'), saves: path.join(root, 'game', 'saves'), schemStaging: path.join(root, 'game', 'architect', 'schem-staging') });
   });
 
   it('accepts .nbt files in imports/ and in a world\'s generated/<ns>/structures/', () => {
@@ -360,6 +360,25 @@ describe('import jobs (fixture kit)', () => {
     expect(h.sc.variants.get(a.id)!.error).toMatch(/modded\.nbt cannot be imported: the checker refused it:\n- unknown or non-vanilla blocks \(2\): create:shaft x4, create:cogwheel x1/);
     expect(h.sc.variants.get(b.id)!.error).toMatch(/cannot read it as a structure file/);
     expect(fs.readdirSync(h.sc.config.libraryDir)).toEqual([]);
+  });
+
+  it('(6c SCH) an import-schem job: the staged .nbt, the schematic name, groundY, the schem tag and ext', async () => {
+    const staging = path.join(h.game, 'architect', 'schem-staging', '1');
+    fs.mkdirSync(staging, { recursive: true });
+    const file = path.join(staging, 'spec_hut.nbt');
+    fs.writeFileSync(file, 'NBT');
+    const ext = { 'architect_mc:schem': { name: 'Spec Hut', author: 'spec', version: 3, dataVersion: 5023 } };
+    const v = h.sc.requestImport(file, { file: 'Spec Hut.schem', groundY: 2, ext }, 'Spec Hut');
+    expect(v).toMatchObject({ kind: 'import-schem', from: file, name: 'Spec Hut', schem: { groundY: 2 } });
+    await h.sc.variantRunner.idle();
+    const done = h.sc.variants.get(v.id)!;
+    expect(done.status, done.error).toBe('done');
+    expect(done.blueprintId).toBe('imp_spec_hut');
+    expect(readSidecar(h.sc, 'imp_spec_hut')).toMatchObject({ imported: true, groundY: 2, tags: ['imported', 'schem'], name: 'Spec Hut', ext });
+    // the staging folder only for import-schem, and import-schem only from it
+    expect(() => h.sc.requestImport(file)).toThrow(/is outside those folders/);
+    fs.writeFileSync(path.join(imports, 'x.nbt'), 'NBT');
+    expect(() => h.sc.requestImport(path.join(imports, 'x.nbt'), { file: 'x.schem', groundY: 1, ext: {} })).toThrow(/is outside that folder/);
   });
 
   it('refuses a path outside the import folders at once', () => {

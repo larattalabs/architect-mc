@@ -40,7 +40,7 @@ import org.jspecify.annotations.Nullable;
  * The Library tab's designs view (docs/CONTRACT.md "Mod: library screen"): search, filters (type, user tag, favourites)
  * and sort over a grid of cards, the detail panel of the selected card with its actions, and the two dialogs that take
  * the tab's body while open: <b>Variants…</b> (palette presets + advanced dropdowns, parameter controls, "Make variant")
- * and <b>Import…</b> (the {@code .nbt} files to import). Drawn by {@link ArchitectScreen} into its hit list; actions are
+ * and <b>Import…</b> (the {@code .nbt} and, since 6c SCH, {@code .schem} files to import). Drawn by {@link ArchitectScreen} into its hit list; actions are
  * {@link LibraryFeature}'s. Client thread.
  */
 final class LibraryTab {
@@ -572,7 +572,9 @@ final class LibraryTab {
 		row2.add(new Btn("rename", "Rename", false, true, () -> startEdit(Edit.RENAME, c)));
 		row2.add(new Btn("tags", "Tags", false, true, () -> startEdit(Edit.TAGS, c)));
 		row2.add(new Btn("favorite", c.favorite() ? "★ Starred" : "☆ Star", false, true, () -> LibraryFeature.setFavorite(c.id(), !c.favorite())));
-		row2.add(new Btn("export", "Export", false, inWorld, () -> LibraryFeature.export(c.id())));
+		row2.add(new Btn("export", "Export .nbt", false, inWorld, () -> LibraryFeature.export(c.id())));
+		// (6c SCH) a Sponge schematic (version 3) for WorldEdit and other tools
+		row2.add(new Btn("export_schem", "Export .schem", false, inWorld, () -> LibraryFeature.exportSchem(c.id())));
 		row2.add(new Btn("delete", deleteArmed(c.id()) ? "Sure?" : "Delete", false, !c.bundled(), () -> delete(c)));
 		// phase 5b: versions (Compare…, Revert entry to the previous one, Polish…)
 		Blueprints.Entry ve = Blueprints.entry(c.id());
@@ -1212,7 +1214,7 @@ final class LibraryTab {
 		g.disableScissor();
 		s.scrollbarAt(g, x + w - 7, y + 1, lh - 2);
 		if (list.isEmpty()) {
-			for (String line : TextUtil.wrapPlain(font, "No .nbt files yet. Put structure files in " + Exchange.importsDir(Blueprints.gameDataDir())
+			for (String line : TextUtil.wrapPlain(font, "No .nbt or .schem files yet. Put structure files or Sponge schematics in " + Exchange.importsDir(Blueprints.gameDataDir())
 				+ ", or save one with a structure block in this world, then Refresh.", w - 12)) {
 				g.text(font, line, x + 6, y + 6, UiBits.muted(), false);
 				y += 10;

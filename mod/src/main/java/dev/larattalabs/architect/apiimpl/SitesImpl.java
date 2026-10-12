@@ -361,6 +361,53 @@ final class SitesImpl implements dev.larattalabs.architect.api.Sites {
 		return new RemoveResult(r.removed(), r.blockers(), Views.items(r.refund()), r.restored(), r.kept(), r.handedDown(), r.cascaded());
 	}
 
+	// ------------------------------------------------------------------ 6c SCH: a site as a Sponge schematic
+
+	@Override
+	public CompletableFuture<java.nio.file.Path> exportSiteSchematic(String siteId, java.nio.file.Path dir) {
+		if (siteId == null || dir == null) {
+			return CompletableFuture.failedFuture(new IllegalArgumentException("a site id and a folder are needed"));
+		}
+		// the cells are captured on the server thread (vanilla's fillFromWorld: air and block entities included); encoded off it
+		CompletableFuture<Object[]> captured = onServer(() -> {
+			Site site = Sites.get(siteId);
+			if (site == null) {
+				throw new dev.larattalabs.architect.api.ArchitectRefused(Reason.UNKNOWN_BLUEPRINT, "no site " + siteId);
+			}
+			ServerLevel level = Sites.levelOf(server, site);
+			if (level == null) {
+				throw new dev.larattalabs.architect.api.ArchitectRefused(Reason.NOT_LOADED, "the dimension of " + siteId + " is not loaded");
+			}
+			Anchors.Bounds b = site.box();
+			for (int cx = b.minX() >> 4; cx <= b.maxX() >> 4; cx++) {
+				for (int cz = b.minZ() >> 4; cz <= b.maxZ() >> 4; cz++) {
+					if (!level.hasChunk(cx, cz)) {
+						throw new dev.larattalabs.architect.api.ArchitectRefused(Reason.NOT_LOADED, "chunk " + cx + "," + cz + " of " + siteId + " is not loaded");
+					}
+				}
+			}
+			try {
+				Blueprint bp = Blueprints.get(site.blueprint());
+				int groundY = bp == null ? 1 : bp.groundY();
+				String name = (bp == null ? site.blueprint() : bp.name()) + " (site " + siteId + ")";
+				return new Object[] {Sites.capture(level, b), name, groundY};
+			} catch (java.io.IOException e) {
+				throw new java.util.concurrent.CompletionException(e);
+			}
+		});
+		return ApiImpl.onServerFuture(captured.thenApplyAsync(c -> {
+			byte[] bytes = dev.larattalabs.architect.library.Schematics.encode((net.minecraft.nbt.CompoundTag) c[0], (String) c[1], System.currentTimeMillis(),
+				(Integer) c[2]);
+			try {
+				java.nio.file.Path out = dev.larattalabs.architect.library.Schematics.write(dir, siteId.replaceAll("[^A-Za-z0-9_.-]", "_") + ".schem", bytes);
+				dev.larattalabs.architect.Architect.LOGGER.info("API: site {} exported as a schematic: {} ({} bytes)", siteId, out, bytes.length);
+				return out;
+			} catch (java.io.IOException e) {
+				throw new java.util.concurrent.CompletionException(e);
+			}
+		}));
+	}
+
 	@Override
 	public Optional<dev.larattalabs.architect.api.SiteWait> waiting(String targetId) {
 		return dev.larattalabs.architect.site.SiteWaits.waiting(server, targetId);

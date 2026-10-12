@@ -12,7 +12,7 @@ import { BLOCKS, collisionOf, opticsOf } from './blocks.mjs';
 
 /** "my_old-house v2.nbt" -> "My Old House V2" */
 export function nameFromFile(file) {
-  const base = String(file).replace(/^.*[\\/]/, '').replace(/\.nbt$/i, '');
+  const base = String(file).replace(/^.*[\\/]/, '').replace(/\.(nbt|schem)$/i, '');
   const words = base.replace(/[^A-Za-z0-9]+/g, ' ').trim().split(/\s+/).filter(Boolean);
   const name = words.map((w) => w[0].toUpperCase() + w.slice(1)).join(' ').slice(0, 40).trim();
   return name || 'Imported Structure';
@@ -22,11 +22,12 @@ const isFull = (name) => !!BLOCKS[name] && collisionOf({ name, props: {} }) === 
 
 /**
  * @param {object} root the parsed (tagged) structure NBT
- * @param {{id:string, name?:string, file?:string}} o
+ * @param {{id:string, name?:string, file?:string, groundY?:number, tags?:string[]}} o
+ *   (6c SCH) `groundY` (default 1) sets the ground row and the anchors' y; `tags` are added after `imported`
  * @returns {{ structure: object, sidecar: object, warnings: string[], errors: string[] }}
  *   `structure` is the tagged root to write; `errors` are format problems that make the file unusable
  */
-export function prepareImport(root, { id, name, file = '' }) {
+export function prepareImport(root, { id, name, file = '', groundY = 1, tags = [] }) {
   const warnings = [];
   const errors = [];
   const v = { ...root.v };
@@ -71,16 +72,16 @@ export function prepareImport(root, { id, name, file = '' }) {
     name: name || nameFromFile(file),
     description: `Imported from ${String(file).replace(/^.*[\\/]/, '') || 'a structure file'}.`,
     type: 'custom',
-    tags: ['imported'],
+    tags: ['imported', ...tags.filter((t) => t !== 'imported')],
     size: { x: sx, y: sy, z: sz },
-    groundY: 1,
+    groundY,
     front: 'south',
     materials: byUse(count),
     foundationBlock: byUse(floorCount)[0] ?? 'minecraft:stone',
     approach: { length: 0, width: 3, block: 'minecraft:dirt_path', slab: 'minecraft:cobblestone_slab' },
     anchors: {
-      entrance: { x: cx, y: 1, z: sz + 0.5, yaw: 180, pitch: 0 },
-      spawn: { x: cx, y: 1, z: sz + 2.5, yaw: 180, pitch: 0 },
+      entrance: { x: cx, y: groundY, z: sz + 0.5, yaw: 180, pitch: 0 },
+      spawn: { x: cx, y: groundY, z: sz + 2.5, yaw: 180, pitch: 0 },
       cam_overview: camera([-6, sy + 4, sz + 8], [sx / 2, sy / 3, sz / 2]),
     },
     imported: true,

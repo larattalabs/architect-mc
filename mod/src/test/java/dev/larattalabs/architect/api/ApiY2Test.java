@@ -92,6 +92,8 @@ class ApiY2Test {
 	@Test
 	void noReasonAdded() {
 		Reason[] r = Reason.values();
-		assertEquals(Reason.FIELD_LIMIT, r[r.length - 1]);
+		// Y2 appends none; a later slice may (6c SCH: FORMAT), never before FIELD_LIMIT
+		assertEquals(Reason.PROTECTED.ordinal() + 1, Reason.FIELD_LIMIT.ordinal());
+		assertTrue(r[r.length - 1] == Reason.FIELD_LIMIT || r[r.length - 1].ordinal() > Reason.FIELD_LIMIT.ordinal());
 	}
 }

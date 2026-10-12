@@ -205,6 +205,7 @@ The list below is what `dev.help` returns (`{commands: {name: description}, scre
 | `dev.library.reskin` | {collection?: bible:<id>\|group:<id> (default: the Collection filter), bible} - Re-skin… in the collection header (`reskin.request`) -> {reskinId, error, message} |
 | `dev.library.import.list` | {} - Import…: opens the dialog and lists the .nbt files (imports/ and this world's structure-block saves) |
 | `dev.library.import.pick` | {index? \| path?} - pick a file in the Import… list and press Import (import.request) -> {jobId} |
+| `dev.library.export.schem` | {entry?} - (6c SCH) the entry's Export .schem button: `architect/exports/<id>/<id>.schem` (a Sponge schematic, version 3) -> {file, bytes, sha256}. Import… also lists `.schem` files (`dev.library.import.pick` imports them through the mod's reader and the helper's `import-schem` job) |
 | `dev.library.remix` | {entry?} - Remix…: the Design tab prefilled from the entry, remix set, notes focused |
 | `dev.library.rename` | {entry?, name} - Rename (the inline editor; "" = back to the design's own name) |
 | `dev.library.select` | {entry} - select a card |
