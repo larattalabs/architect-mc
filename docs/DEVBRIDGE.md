@@ -154,7 +154,7 @@ The list below is what `dev.help` returns (`{commands: {name: description}, scre
 | `dev.site.deconstruct` | {site, force?: false} - Deconstruct (as the crate screen / Library Remove): refunds, the player's blocks and the crate's stock drop at the crate; the terrain comes back -> the tally |
 | `dev.site.finish` | {site} - /architect site finish (dev hook: no permission check): the remaining cells, free |
 | `dev.site.mine` | {pos: [x,y,z], pickup?: true} - the player mines a block as in survival (vanilla drops), then picks up its drops |
-| `dev.site.state` | {site} - a construction site: state, queue length, built count, BOM rows, ledger, blocked cells, notes, the last deconstruct's tally |
+| `dev.site.state` | {site} - a construction site: state, queue length, built count, BOM rows, ledger, blocked cells, notes, the last deconstruct's tally; since 6c Y2 also `wait` ({gameTime, waiting, waitingSince, nextNeeded, moreUnits}: C25), `order` (the distinct items of the unbuilt cells in build order, first 12: the gate's cross-check of nextNeeded) and `nextCells` (the first 12 unbuilt cells: x, y, z, block, solid) |
 | `dev.survival.set` | {on: bool} - set the survival toggle (dev hook: bypasses the permission rule; the Status tab and /architect survival enforce it) |
 | `dev.survival.state` | {} - this world's survival toggle, blocksPerTick, and whether the player may change it |
 
