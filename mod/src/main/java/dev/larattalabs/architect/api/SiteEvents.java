@@ -47,6 +47,17 @@ public interface SiteEvents {
 			Guard.run(() -> l.onBuilt(v), "SITE_BUILT");
 		}
 	});
+	/**
+	 * A construction target started or stopped waiting for materials ({@link SiteWait#waiting()} says which edge): on the start edge
+	 * (after 100 ticks without a placed cell while a frontier cell is unaffordable) and on the stop edge (a cell placed, paused, built
+	 * or removed). Never twice for the same edge, and at most once per 20 ticks per target (an edge that comes sooner is deferred).
+	 * Server thread. Since 1.15.0.
+	 */
+	Event<SiteWaiting> SITE_WAITING = EventFactory.createArrayBacked(SiteWaiting.class, ls -> (v, w) -> {
+		for (SiteWaiting l : ls) {
+			Guard.run(() -> l.onWaiting(v, w), "SITE_WAITING");
+		}
+	});
 	/** A design changed status or step. */
 	Event<DesignUpdated> DESIGN_UPDATED = EventFactory.createArrayBacked(DesignUpdated.class, ls -> d -> {
 		for (DesignUpdated l : ls) {
@@ -309,6 +320,11 @@ public interface SiteEvents {
 	@FunctionalInterface
 	interface SiteProgress {
 		void onProgress(SiteView site);
+	}
+
+	@FunctionalInterface
+	interface SiteWaiting {
+		void onWaiting(SiteView site, SiteWait wait);
 	}
 
 	@FunctionalInterface

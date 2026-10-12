@@ -10630,3 +10630,37 @@ roads, deltas) with reservations. 4. Refund routing and the credit keys. 5. Adop
 
 - Hardcore's difference. Villager or entity hauling. Cross-dimension stockpiles. A batch BOM call (unless S-Y-4). Crash-exact
   ledgers (a write-ahead log per feed) if the recorded kill drift matters.
+
+### Slice Y2 as built (C25 waiting status, C26 full BOM; API 1.15.0 / mod 0.18.0, batched with W)
+
+- **API.** `SiteWait`/`ItemCount` exactly as §1, `Sites.waiting(String)` (default throws), `SiteEvents.SITE_WAITING`, `Verdict` trailing
+  `bomFull`, `bomExact` (the 1.12.0 constructor kept), `SiteView` trailing wait (old constructors kept), features `siteWaiting` and
+  `fullBom`. **Deviation:** the `SiteView` component is `siteWait`, because `wait` is not a legal record component name (it clashes
+  with `Object.wait()`). No Reason, no Limits constant.
+- **Waiting is a latch** (`survival/WaitCalc`, `site/SiteWaits`): it starts after 100 consecutive builder ticks with no cell placed and
+  at least one unbuilt, supported, loaded frontier cell the stock cannot pay (starved); once on it holds until a cell is placed, or the
+  target is paused, its crate is gone, built or removed. An unloaded chunk, a player in a cell or a restart never end it. The 20-tick
+  limit defers an edge, never drops it; the stop edge of a built or removed target fires at once. `waitingSince` is the world game
+  time, saved in `<world>/architect/waits.json` (written when a wait starts or ends and at world stop); after a reload the latch is
+  restored without an event. Roads use the same hooks (`RoadBuilder.step`). Seam for Y1: `SiteWaits.source(Source)` returns the
+  units available to a target (`stock - reserved`); the default reads its own or its group's crate (reserved 0).
+- **nextNeeded** walks the unbuilt cells in build order per item (an item enters at the first cell its available stock cannot pay;
+  count = its whole shortfall); the crate screen and HUD "needs" line use `nextNeeded[0]`. Cached by built count and stock hash.
+- **bomFull** (`site/FullBom`) mirrors `Builder.planConvert` from the dry-run `SitePlan`: it runs the placement's writes (template in
+  saved order, `placeInWorld`'s edge-face and final shape-update passes, unsafe beds out, foundation, terrain cut, approach) through a
+  small simulator of `Level.setBlock`'s shape-update cascades, because vanilla destroys what a write leaves unsupported (a door over a
+  hillside cell the template clears, a standing lantern on a chest, a door over a gap the foundation closes later). Each remaining
+  cell costs `Cells.cost`. `bomExact` is false on any refusal, an unloaded neighbour, a throwing `updateShape`, or a known drift
+  source (gravity block over a free cell; dirt path or farmland under a solid block when its item would differ; coral with no
+  water); the cells are listed in `Verdict.notes` ("bomFull may differ ..." / "may be off: reason"). A dirt path that turns to dirt
+  costs the same item, so is not a drift. An incomplete plan answers the template BOM with `bomExact` false.
+- **Gate** `tools/gate6cy2.mjs` (driver names differ from the contract's `gate6cy.mjs`, which Y1 owns), steps `y2-unit`, `y2-ingame`
+  (`y2-bom` alone), evidence `artifacts/gate6c-y2/`. Item 10: A starts waiting exactly 100 ticks after SITE_PLACED; nextNeeded equals the
+  independent build-order walk and counts + moreUnits = the bill; inserting nextNeeded[0] gives a stop edge within 20 ticks; a paused
+  site and a site with the player in its cell (fed everything) never wait; waitingSince is equal after a clean reload with no second
+  start event. Item 11: on the 12 lots of a varied-terrain world, every lot's bomFull equals the placed site's bill item for item
+  (11 of 12 exact, the 12th inexact with an equal bill; earlier iterations missed 4-6 lots by 1-2 doors or 2 lanterns each, which is
+  what drove the simulator). Item 14: `api-compat --gate6cy2` 4/4 (0.17.0, 0.16.0, 0.15.0 apitest jars and the 0.17.0 surface; baseline
+  built from tag v0.17.0 into `artifacts/gate6c-y2/v0170`), apijars on those jars.
+- **Not covered in game:** the road wait path (code shared with sites, covered by V's survroad regression step only); the Y1 stockpile
+  seam. Dev hooks added: `dev.site.cells`, `dev.bom.predict`, and `wait`/`order`/`nextCells` in `dev.site.state`.
