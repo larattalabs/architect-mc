@@ -184,7 +184,7 @@ Try one with `--host server --only <step>`, then mark it.
   - x-resume and 4d-all were faster or level in every round.
 - **Headless is steadier.**
   - 4d-all's own-tick CPU max spread was 3 ms headless against 26 ms on the client.
-  - The worst whole-tick wall maxima were 171 ms headless against 319 ms on the client.
+  - The worst own-tick wall maxima were 171 ms headless against 319 ms on the client.
 - **The 50 ms timing bar is borderline on both hosts under load.** Headless missed it once (50.4 ms); the client missed it
   twice. Timing bars are recorded, not judged, in slices.
 - **The second headless megaA run** crashed on the server watchdog (a 60 s hash on the server thread). The watchdog is now
