@@ -88,6 +88,9 @@ public interface ArchitectApi {
 	 * Since 1.15.0, {@code "frozenWater"} is always there (the region survey reads ice over water as water, {@link Sample#frozen}),
 	 * and a W helper ({@code region.lightCover}) adds {@code "apronLights"} ({@code flat_village} lights its lot aprons and batters
 	 * with the bible's lamp fixture; each lot's lamps on {@code LotSpec.ext["architect_mc:village"].lamps}).
+	 * Since 1.16.0, a forms-I helper ({@code region.forms1}) adds {@code "formsIce"} (the kit's {@code iceSpike} generator and
+	 * {@code keepNatural}), {@code "formsRock"} (the {@code rockSpire} generator) and {@code "voxelsOp"} (the {@code voxels} op: a
+	 * plan that uses it requires the {@code voxels} kind, and an older game refuses it PLAN_STALE); its checker has M17 (melt).
 	 */
 	Set<String> features();
 }

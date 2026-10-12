@@ -39,7 +39,8 @@ export function scenarioPath(id) {
 }
 const readSc = (id) => JSON.parse(fs.readFileSync(scenarioPath(id), 'utf8'));
 const writeSc = (sc) => fs.writeFileSync(scenarioPath(sc.id), `${JSON.stringify(sc, null, 2)}\n`);
-const short = (sc) => sc.id.split('_')[0];
+// (6c MP) a scenario may name its short id (its golden and run dirs); else the id's first word
+const short = (sc) => sc.short ?? sc.id.split('_')[0];
 const sha256 = (b) => crypto.createHash('sha256').update(b).digest('hex');
 
 /** SHA-256 over the sorted (path, sha) list of every file under dir except raw/ (CONTRACT 6b §8.2). */
@@ -58,7 +59,7 @@ export function evidenceSha(dir) {
 }
 
 /** Tile shas of a plan's IR over its own survey, with 1 worker forward and 4 workers shuffled. */
-export async function tileShas(planDir) {
+export async function tileShas(planDir, { timingPasses = 1 } = {}) {
   const irJson = fs.readFileSync(path.join(planDir, 'ir.json'), 'utf8');
   const ir = JSON.parse(irJson);
   const survey = fs.readFileSync(path.join(planDir, 'survey.bin'));
@@ -75,7 +76,15 @@ export async function tileShas(planDir) {
   const tag = (r) => `${r.stage}|${r.set}|${r.key}`;
   const m1 = Object.fromEntries(one.map((r) => [tag(r), r.sha])), m4 = Object.fromEntries(four.map((r) => [tag(r), r.sha]));
   const same = Object.keys(m1).length === Object.keys(m4).length && Object.keys(m1).every((k) => m1[k] === m4[k]);
-  return { irSha: sha256(irJson), tiles: Object.fromEntries(Object.keys(m1).sort().map((k) => [k, m1[k]])), cells: one.reduce((n, r) => n + r.count, 0), workersSame: same };
+  // (6c F1) evaluation time per tile: the single worker's forward pass, or with `timingPasses` > 1 the best of that many passes
+  // in one warm worker (a cold JIT and a loaded box inflate single samples)
+  const best = Object.fromEntries(one.map((r) => [tag(r), r.ms ?? 0]));
+  if (timingPasses > 1) for (const r of await run(Array.from({ length: timingPasses }, () => jobs).flat())) best[tag(r)] = Math.min(best[tag(r)], r.ms ?? 0);
+  const ms = Object.values(best).sort((a, b) => a - b);
+  const cells = one.reduce((n, r) => n + r.count, 0);
+  const timing = { passes: timingPasses, count: ms.length, p99Ms: ms.length ? ms[Math.min(ms.length - 1, Math.floor(ms.length * 0.99))] : 0, maxMs: ms.length ? ms[ms.length - 1] : 0, totalMs: ms.reduce((a, b) => a + b, 0) };
+  timing.cellsPerSecond = timing.totalMs > 0 ? cells / (timing.totalMs / 1000) : 0;
+  return { irSha: sha256(irJson), tiles: Object.fromEntries(Object.keys(m1).sort().map((k) => [k, m1[k]])), cells, workersSame: same, timing };
 }
 
 // ------------------------------------------------------------------ in-game steps (lazy: the offline commands need no client)
@@ -135,6 +144,7 @@ export function fitEntries(lots) {
 
 // ------------------------------------------------------------------ (6c V) the flat village scenario (S7)
 const isV = (sc) => sc.phase === '6c-v';
+const isF1 = (sc) => sc.phase === '6c-f1'; // (6c F1) forms_demo on S2's claim
 
 /**
  * (6c V) Before the world opens: the fixture bible (scenarios/<bibleFixture>, installed as the sidecar's bible `sc.bible` v1) and the
@@ -273,9 +283,17 @@ async function runScenario(id) {
   t0 = Date.now();
   const pr = await L.prepare(p1.planId);
   T('prepare', t0);
-  const p2 = await L.plan(sc.program, claim, { params: sc.params, surveyLoad: 'generated:64', seed: sc.seed, bible });
-  const irShas = [p2.irSha];
-  for (let i = 0; i < 2; i++) irShas.push((await L.plan(sc.program, claim, { params: sc.params, surveyLoad: 'generated:64', seed: sc.seed, bible })).irSha);
+  // (6c F1) a plan that reads a frozen volume of a live world (forms_demo keeps the natural ice) sees the world's own changes between
+  // plans (a plant breaking, water freezing): the three plans of the IR sha check run with the world's ticking frozen (/tick freeze)
+  if (isF1(sc)) await L.cmd('/tick freeze');
+  let p2, irShas;
+  try {
+    p2 = await L.plan(sc.program, claim, { params: sc.params, surveyLoad: 'generated:64', seed: sc.seed, bible });
+    irShas = [p2.irSha];
+    for (let i = 0; i < 2; i++) irShas.push((await L.plan(sc.program, claim, { params: sc.params, surveyLoad: 'generated:64', seed: sc.seed, bible })).irSha);
+  } finally {
+    if (isF1(sc)) await L.cmd('/tick unfreeze');
+  }
   const planDir = copyPlan(p2.planId, path.join(raw, 'plan'));
   fs.copyFileSync(path.join(planDir, 'report.json'), path.join(out, 'report.json'));
   fs.mkdirSync(path.join(out, 'previews'), { recursive: true });
@@ -336,6 +354,8 @@ async function runScenario(id) {
     t0 = Date.now();
     await L.settle(120_000);
     T('stand', t0);
+    // (6c F1) the world after the stand: M17 on the realised world and the melt across the stand
+    if (isF1(sc)) { t0 = Date.now(); await L.call('dev.region.dump', { box, file: path.join(raw, 'after-stand.arwd.gz') }, 1_800_000); T('standDump', t0); }
     t0 = Date.now();
     shots = await shoot(cams, path.join(out, 'shots'));
     T('shots', t0);
@@ -372,7 +392,7 @@ async function runScenario(id) {
 
 /** The metrics of a run directory (also `scenarios.mjs metrics <runDir>` to recompute after a kit fix). */
 async function computeMetrics({ sc, out, planDir, ir, irShas, mspt, cps, exact, flat }) {
-  const { decodeArwd, dumpWorld, buildVirtual } = await import('../kit/lib/region/vworld.mjs');
+  const { decodeArwd, dumpWorld, buildVirtual, F_WRITTEN } = await import('../kit/lib/region/vworld.mjs');
   const { checkRegion } = await import('../kit/lib/region/check.mjs');
   const M = await import('./lib/scenario-metrics.mjs');
   const raw = path.join(out, 'raw');
@@ -383,7 +403,7 @@ async function computeMetrics({ sc, out, planDir, ir, irShas, mspt, cps, exact, 
   const before = await decodeArwd(fs.readFileSync(path.join(raw, 'before.arwd.gz')));
   const after = await decodeArwd(fs.readFileSync(path.join(raw, 'after.arwd.gz')));
   const world = dumpWorld(before, after, ir.claim, { virtual: vw, lots: ir.lots });
-  const realised = checkRegion({ ir, meta, world, prefix: false });
+  const realised = checkRegion({ ir, meta, world, prefix: false, ...(isF1(sc) ? { blobs } : {}) });
   fs.writeFileSync(path.join(out, 'realised-report.json'), `${JSON.stringify(realised, null, 1)}\n`);
   const palette = M.paletteAdherence(ir, world);
   const organic = M.axisRunShare(ir, vw);
@@ -397,7 +417,7 @@ async function computeMetrics({ sc, out, planDir, ir, irShas, mspt, cps, exact, 
     const rw = (j.warnings ?? []).filter((w) => w.startsWith('restraint'));
     buildings.push({ entry, errors: (j.errors ?? []).length, errorList: j.errors ?? [], restraint: rw.filter((w) => /detail ?noise|accent/i.test(w)), restraintOther: rw.filter((w) => !/detail ?noise|accent/i.test(w)), metrics: { detailNoise: j.metrics?.detailNoise ?? null, accentShare: j.metrics?.accentShare ?? null } });
   }
-  const ts = await tileShas(planDir);
+  const ts = await tileShas(planDir, { timingPasses: isF1(sc) ? 3 : 1 });
   const gFile = path.join(SCEN, 'goldens', `${short(sc)}.json`);
   let golden = 'none';
   if (fs.existsSync(gFile)) {
@@ -406,16 +426,50 @@ async function computeMetrics({ sc, out, planDir, ir, irShas, mspt, cps, exact, 
     // matches when every tile sha does
     const runKit = JSON.parse(fs.readFileSync(path.join(planDir, 'ir.json'), 'utf8')).kitVersion;
     const sameTiles = JSON.stringify(g.tiles) === JSON.stringify(ts.tiles);
+    // (6c F1) a plan that reads a frozen volume of the live world (forms_demo's kept ice) records that volume's sha: a fresh world
+    // copy differs by a few natural cells (plants, water), so with every tile sha equal and the IR equal but for its volume blobs,
+    // the golden matches
+    const noVol = (j) => { const o = JSON.parse(JSON.stringify(j)); for (const [n, b] of Object.entries(o.blobs ?? {})) if (b.kind === 'volume') delete o.blobs[n]; delete o.volumes; return JSON.stringify(o); };
+    const gIr = fs.existsSync(path.join(SCEN, 'goldens', short(sc), 'ir.json')) ? JSON.parse(fs.readFileSync(path.join(SCEN, 'goldens', short(sc), 'ir.json'), 'utf8')) : null;
+    const volOnly = sameTiles && gIr && noVol(gIr) === noVol(JSON.parse(fs.readFileSync(path.join(planDir, 'ir.json'), 'utf8')));
     golden = sameTiles && g.irSha === ts.irSha ? 'match'
+      : volOnly ? 'match (every tile sha; the IR differs only by its frozen volume of the live world)'
       : sameTiles && g.kitVersion && g.kitVersion !== runKit ? `match (every tile sha; the IR sha differs by its kitVersion ${g.kitVersion} -> ${runKit})`
         : `differs (golden ${g.irSha.slice(0, 12)}, run ${ts.irSha.slice(0, 12)}${sameTiles ? '' : '; tile shas differ'})`;
   }
   // the other variant's exactness (E-flat from the latest flat run beside a natural one, and back)
   const sibling = latestRun(sc, out, !flat);
   const exactOther = sibling ? JSON.parse(fs.readFileSync(path.join(sibling, 'exact.json'), 'utf8')) : null;
-  const ex = flat ? { flat: exact, normal: exactOther, cellsWritten: exactOther?.cellsWritten ?? 0 } : { flat: exactOther, normal: exact, cellsWritten: exact.cellsWritten };
+  // (6c F1) the world's own freezing during the stand: an unclassified mismatch where still water became ice (or a snow layer
+  // fell) at a cell the plan never writes is the cold biome's doing, not the undo's: classed `freeze` (a world class)
+  const freezeOf = (e) => {
+    if (!e || flat || !isF1(sc) || !(e.classes?.none > 0)) return e;
+    const moved = (e.list ?? []).filter((m) => m.class === 'none' && !(vw.flags(...m.pos.split(',').map(Number)) & F_WRITTEN)
+      && ((/^minecraft:water/.test(m.was) && /^minecraft:ice$/.test(m.now)) || (/air$/.test(m.was) && /^minecraft:snow\[/.test(m.now))));
+    if (!moved.length) return e;
+    const classes = { ...e.classes, none: e.classes.none - moved.length, freeze: (e.classes.freeze ?? 0) + moved.length };
+    return { ...e, classes, list: e.list.map((m) => (moved.includes(m) ? { ...m, class: 'freeze' } : m)) };
+  };
+  const exN = freezeOf(exact);
+  const ex = flat ? { flat: exact, normal: exactOther, cellsWritten: exactOther?.cellsWritten ?? 0 } : { flat: exactOther, normal: exN, cellsWritten: exact.cellsWritten };
   const plan = { report: JSON.parse(fs.readFileSync(path.join(out, 'report.json'), 'utf8')) };
   let rows = M.bars({ plan, realised, palette, organic, buildings, mspt, cellsPerSecond: cps, exact: ex, determinism: { irShas, workersSame: ts.workersSame, golden }, spendUsd: 0, approval: 'pending' });
+  // (6c F1) forms_demo's own bars: melt across the stand, kept cells, voxels, tile evaluation
+  let forms = null;
+  if (isF1(sc)) {
+    const F = await import('./lib/scenario-forms.mjs');
+    const standFile = path.join(raw, 'after-stand.arwd.gz');
+    const stand = fs.existsSync(standFile) ? await decodeArwd(fs.readFileSync(standFile)) : null;
+    const realisedStand = stand ? checkRegion({ ir, meta, world: dumpWorld(before, stand, ir.claim, { virtual: vw, lots: ir.lots }), prefix: false, blobs }) : null;
+    if (realisedStand) fs.writeFileSync(path.join(out, 'realised-stand-report.json'), `${JSON.stringify({ ...realisedStand, _world: undefined }, null, 1)}\n`);
+    const melt = stand ? F.meltAcrossStand(after, stand, F.plannedLights(vw)) : null;
+    const kept = F.keptDiff(ir, F.planVolumes(planDir, ir), before, after);
+    const voxels = F.voxelsExact(ir, planDir, after);
+    const organicPer = {};
+    for (const gname of [...new Set((ir.forms ?? []).map((f) => f.generator))]) organicPer[gname] = M.axisRunShare({ ...ir, forms: ir.forms.filter((f) => f.generator === gname), floating: [] }, vw).share;
+    rows = F.formsBars({ plan, realised, realisedStand, melt, kept, voxels, organic, organicPer, workersSame: ts.workersSame, tiles: ts.timing, mspt, load1: Math.round((await import('node:os')).loadavg()[0] * 10) / 10 }, rows);
+    forms = { melt, kept, voxels, organicPer, tiles: ts.timing, realisedM17: (realisedStand ?? realised).metrics.M17, realisedM3: realised.metrics.M3, meta: meta.forms ?? null };
+  }
   // (6c V) S7's own bars (CONTRACT V §7): the door-to-street walk, the lot fronts, the villager rules, the props
   let village = null;
   if (isV(sc)) {
@@ -431,7 +485,7 @@ async function computeMetrics({ sc, out, planDir, ir, irShas, mspt, cps, exact, 
   }
   const fronts = M.lotFronts(ir, after);
   L.log(`  lot fronts: outside the boxes ${JSON.stringify(fronts.outside)}; inside (the children's own) ${JSON.stringify(fronts.inside)}`);
-  const metrics = { scenario: sc.id, worldChanges: world.worldChanges, cellsPerSecond: cps, lotFronts: fronts, ...(village ? { village } : {}), variant: flat ? 'flat' : 'natural', rows, palette, organic, buildings, mspt, tiles: { irSha: ts.irSha, count: Object.keys(ts.tiles).length, cells: ts.cells, workersSame: ts.workersSame, golden }, exactSibling: sibling ? path.relative(out, sibling) : null,
+  const metrics = { scenario: sc.id, worldChanges: world.worldChanges, cellsPerSecond: cps, lotFronts: fronts, ...(village ? { village } : {}), ...(forms ? { forms } : {}), variant: flat ? 'flat' : 'natural', rows, palette, organic, buildings, mspt, tiles: { irSha: ts.irSha, count: Object.keys(ts.tiles).length, cells: ts.cells, workersSame: ts.workersSame, golden }, exactSibling: sibling ? path.relative(out, sibling) : null,
     realised: { M2: realised.metrics.M2 && { ...realised.metrics.M2, perNode: undefined }, M3: realised.metrics.M3, M4: realised.metrics.M4, M5: realised.metrics.M5, M8: realised.metrics.M8 && { ...realised.metrics.M8, unguardedSample: (realised.metrics.M8.unguardedSample ?? []).slice(0, 20) }, M10: realised.metrics.M10, findings: realised.findings.map((f) => `${f.rule} ${f.severity} ${f.part ?? '-'} x${f.count}`) } };
   fs.writeFileSync(path.join(out, 'metrics.json'), `${JSON.stringify(metrics, null, 2)}\n`);
   for (const r of rows) L.log(`  ${r.gated ? (r.pass ? 'ok  ' : 'FAIL') : 'rec '} ${r.id === 'mspt' ? 'BAR ' : ''}${r.label}: ${r.value}`); // the mspt row is a timing bar (recorded, not blocking in change/slice)
