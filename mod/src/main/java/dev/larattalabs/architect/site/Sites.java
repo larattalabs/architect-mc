@@ -1107,6 +1107,9 @@ public final class Sites {
 					new Class<?>[] {net.minecraft.world.level.ServerLevelAccessor.class}, (proxy, m, args) -> {
 						if (m.getName().equals("setBlock") && args.length == 3 && args[1] instanceof BlockState ns && args[0] instanceof BlockPos bp0) {
 							BlockState old0 = level.getBlockState(bp0);
+							if (old0.getBlock() instanceof net.minecraft.world.level.block.DoorBlock || ns.getBlock() instanceof net.minecraft.world.level.block.DoorBlock) {
+								Architect.LOGGER.info("TRACE set {} {} -> {} flags {}", bp0.toShortString(), old0, ns, args[2]);
+							}
 							if (old0.getBlock() instanceof net.minecraft.world.level.block.DoorBlock && !(ns.getBlock() instanceof net.minecraft.world.level.block.DoorBlock)) {
 								Architect.LOGGER.info("TRACE door {} {} replaced by {} flags {}", bp0.toShortString(), old0, ns, args[2],
 									new Throwable("stack"));
