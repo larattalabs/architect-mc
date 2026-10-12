@@ -554,10 +554,15 @@ export function checkRegion({ ir, survey, blobs, volumes = [], meta = null, worl
       if (!ok) bad.set(where, s);
     };
     for (const [r, s] of Object.entries(ir.roles ?? {})) check(s, `role ${r}`);
+    // (6c MP) a material may be a pattern ({pattern: {mix | gradient}}), also inside a rule's clauses and default
+    const each = (m, where) => {
+      if (m && typeof m === 'object' && m.rule) { for (const c of m.rule.rule) each(c.mat, where); each(m.rule.default, where); }
+      else if (m && typeof m === 'object' && m.pattern) for (const x of m.pattern.mix ?? m.pattern.gradient?.stops ?? []) check(x.mat, where);
+      else check(m, where);
+    };
     for (const p of ir.parts) for (const o of p.ops) {
-      if (o.op === 'columns') for (const m of o.materials ?? []) check(m, `part ${p.id}`);
-      else if (o.material && typeof o.material === 'object') { for (const c of o.material.rule.rule) check(c.mat, `part ${p.id}`); check(o.material.rule.default, `part ${p.id}`); }
-      else check(o.material, `part ${p.id}`);
+      if (o.op === 'columns') for (const m of o.materials ?? []) each(m, `part ${p.id}`);
+      else each(o.material, `part ${p.id}`);
     }
     for (const [where, s] of bad) findings.push(finding('M13', where.startsWith('part ') ? where.slice(5) : null, null, 1, [], `${where}: '${s}' is not a vanilla block state`));
   });

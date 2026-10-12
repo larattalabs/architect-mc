@@ -383,3 +383,14 @@ test('item 6: the drift fixture (200 generated specs, valid and invalid) is curr
   // every generated (unbroken) spec is valid; every broken one invalid
   g.forEach((x, i) => assert.equal(x.valid, (i % 100) % 2 === 1, `spec ${i}: ${x.error}`));
 });
+
+test('the checker reads pattern materials (M13): the toolbox demo checks with 0 errors, a bad block in a pattern is an M13 error', async () => {
+  const { checkRegion } = await import('../lib/region/check.mjs');
+  const p = await crater({ toolbox: true });
+  const r = checkRegion({ ir: p.ir, meta: p.meta, survey: synthSurvey(claimOf(200), SEED), blobs: p.blobs });
+  assert.equal(r.errors, 0, JSON.stringify(r.findings.filter((f) => f.severity === 'error')));
+  const bad = structuredClone(p.ir);
+  bad.parts.find((x) => x.id === 'crater').ops[0].material.pattern.mix[1].mat = 'minecraft:not_a_block';
+  const r2 = checkRegion({ ir: bad, meta: p.meta, survey: synthSurvey(claimOf(200), SEED), blobs: p.blobs, rules: ['M13'] });
+  assert.ok(r2.findings.some((f) => f.rule === 'M13' && /not_a_block/.test(f.message)), JSON.stringify(r2.findings));
+});
