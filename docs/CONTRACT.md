@@ -9956,6 +9956,86 @@ library check (`tools/p2-library-check.mjs`), apijars. **gate-verifier** re-runs
 
 - Entities and biomes. Schematics past the cap as composites (7c). Other formats (`.litematic`) on request.
 
+### Phase 6c slice SCH as built (placeholder API 1.20.0 / mod 0.23.0; the coordinator sets the numbers at merge)
+
+Written from the public Sponge Schematic specification only (SpongePowered/Schematic-Specification@8e6be2d,
+`versions/schematic-2.md` and `schematic-3.md`, cited in both codec files). No WorldEdit source was read or used (item 7: the
+gate scans the diff for WorldEdit code, packages and imports).
+
+**What was built**
+- **Mod (the import path):** `library/Schematic.java` reads versions 2 and 3, root shape included (v3 `{Schematic: {...}}`, v2
+  fields in the root; v2 block-entity fields beside `Pos`/`Id` and in an `Extra` compound). It turns the file into a vanilla
+  structure tag at the file's own DataVersion. `library/Schematics.java` then runs vanilla's `DataFixTypes.STRUCTURE` (block
+  states and block-entity data in one pass) and checks every block id against the registry. It stages the upgraded structure
+  in `<gameDir>/architect/schem-staging/<n>/` and sends `import.request {path, name, schem}`. The helper's `import-schem` job
+  then runs the existing check, previews and install, with `--ground-y` and the tag `schem`. Every refusal comes before
+  anything is staged, and the staging folder is emptied when the job ends.
+- **Mod (export):** `Library.exportSchematic` writes the entry's template (`<id>.schem`, or `<id>-v<n>.schem` when a version is
+  given). `Sites.exportSiteSchematic` captures the site's box with vanilla's `fillFromWorld` (air and block entities included,
+  in world orientation). Both write in the mod, with no helper needed. Compound keys are written sorted, deflate level 9.
+- **Kit:** `kit/lib/schem.mjs` is the twin codec (v2/v3 read, v3 write, `structureCells`). `kit/import.mjs` takes `.schem`,
+  `--ground-y` and `--tag`. The spec fixtures in `kit/test/fixtures/schem/` are built by `make.mjs` from the spec (v3 and v2
+  huts with a chest, a sign, stairs, air, a structure_void column, an entity and biomes; a DataVersion 2586 file with
+  grass_path, grass and a Text1..4 sign; an unknown block; oversize; corrupt). `goldens.json` holds the sha256 of the kit's
+  and the mod's exports of every kit example.
+- **Sidecar:** `import.request` takes `name?` and `schem? {file, groundY 1..63, ext}`, giving the variant kind `import-schem`.
+  Such a request is accepted only from the staging folder, and the staging folder only for that kind. New feature:
+  `import.schem`.
+- **API (additive):** `Library.importSchematic(Path, String)`, `Library.importSchematic(Path, String, JsonObject ext)` (added:
+  the contract's `ext["architect_mc:unknownAs"]` had no way in), `Library.exportSchematic`, `Sites.exportSiteSchematic`, and
+  `Reason.FORMAT` appended after FIELD_LIMIT. `schematics` is always a feature. Imported entries carry the tags `imported`
+  and `schem`, and `ext["architect_mc:schem"] = {file, name?, author?, date?, version, dataVersion, offset,
+  entitiesSkipped?, replaced?, unknownAs?}`.
+- **UI and commands:** the Library card has Export .nbt and Export .schem; Import… lists `.schem` files in `imports/` and
+  `exports/`. `/architect export <entry> schem` and `/architect import <file>` need permission level 2.
+- **Tests and gate:** `SchematicTest` and `ApiSchTest` (mod), `kit/test/schem.test.mjs`, and the sidecar's import-schem test.
+  `tools/gate6csch.mjs` runs as the runner steps `sch-unit`, `sch-roundtrip`, `sch-refusals`, `sch-placement` and
+  `sch-ingame`, with the impact rule "6c SCH". api-compat runs `--gate6csch`, and apijars covers 0.18.0/0.17.0/0.16.0.
+  DevBridge gained `dev.library.export.schem`.
+
+**Conventions decided while building**
+- **Voids:** a cell the template does not write is `minecraft:structure_void` in an export and is not written on import; air
+  is air. Without this, item 1 and Remove-exact would differ on every kit example, because templates store no air.
+- **Palette format:** 26.3 structure palettes are `{id, properties}` from DataVersion 5006 (vanilla's BlockStateFieldNamesFix).
+  An older file is converted with `{Name, Properties}`, so the fixers see their own version's form.
+- **groundY:** `-Offset.y` when it is 1..height-1, else 1 (a template's floor row is under its ground row). An export writes
+  `Offset [0, -groundY, 0]`.
+- **Date:** `Metadata.Date` is the entry's `createdAt` (0 for bundled entries), so exports are byte-identical.
+- **Platform independence:** the JDK's bundled zlib gives the same bytes on macOS and Linux. The `linux` step re-gzips the
+  mod's exports in eclipse-temurin:25 on linux/amd64 (as CI) and runs the kit test in node:22 on linux/amd64.
+
+**Calls for the coordinator**
+- **KIT_VERSION** is not bumped: SCH adds no op kind or IR member, so no IR sha or tile golden moves. The batch rule says every
+  slice bumps; this reading keeps the goldens still.
+- **`architect/import/`:** the contract's folder is the existing `architect/imports/`.
+- **Permissions:** `/architect export|import` need permission level 2. They write and read files on the server's disk; the
+  contract is silent on this.
+- **The `importSchematic` ext overload** (above).
+- **`tools/p2-library-check.mjs`** (named in the contract's tier) is stale on main: it sets the bundled cabin's `floors`
+  param, which the cabin has not had since phase 2 (its params are width, depth and porch). It is not in the runner. The `ui`
+  step covers the Library's import and export instead.
+- **API tests:** `ApiSchTest`, `apitest.mjs` and the gate read the version from `ArchitectApi.java` or assert only a floor,
+  so a renumber at merge needs no other edit.
+- **N-SCH-1:** no WorldEdit-made fixture yet. Add one to `kit/test/fixtures/schem/` if Noah exports one.
+
+**Gate record**
+- **Run 1, slice tier** (`artifacts/gate-runs-SCH/20261012-174541-slice`, head 5906cb2, 2 shards, load 17-104): 22 PASS. Every
+  SCH step passed: sch-unit 5/0, sch-roundtrip 39/0 (item 2 on Linux included), sch-refusals 12/0, sch-placement 12/0,
+  sch-ingame 24/0. apijars passed (1.15.0 46/0, 1.14.0 45/0, 1.13.0 45/0). The four that didn't pass:
+  - unit-kit: TIMEOUT at 10 min under load 59-73 (`village.test.mjs` interrupted). The timeout is now 20 min, as MP's.
+  - x-ingame: a real check of mine. gate6cx's api114 check pinned the last Reasons to `PROTECTED FIELD_LIMIT`; it now accepts
+    reasons appended after FIELD_LIMIT.
+  - sim-massing: "world leave cleared every composite (keys now: 3)", a known flake.
+  - 4d-all: "group undo: every lot region ... back exactly" (lot L3), a known flake. The same line fails in the MP, W and Y2
+    slice runs and in today's main-based headless engine runs (`gate-runs-headless/20261012-173909-engine`).
+- **Run 2, change --only** (`20261012-190119-change`, head 1444904, which adds only the two tool fixes): unit-kit 261/261,
+  sim-massing 35/0, x-ingame 53/0. 4d-all failed a different known flake, "shared crate: 2/3 built sites identical to
+  instant placement", seen before in `gate-runs-integ/20261010-182744-slice` and `gate-runs-0b/20261011-000214-slice`.
+- **Run 3, change --only 4d-all** (`20261012-192147-change`, head 1444904): PASS 63/0.
+- **Evidence:** `<run>/s2/gate6c-sch/` (step JSONs, REPORT.md, spend.json $0.00). Item 2 on Linux: the mod's four exports
+  re-gzipped in eclipse-temurin:25 on linux/amd64 match macOS byte for byte, and the kit test passes in node:22 on
+  linux/amd64. Timing bars were recorded, and none missed.
+
 ## Phase 6c slice F3: forms II, trees, mushrooms, coral, roots and stalactites (DRAFT for Steward review)
 
 API 1.29.0, mod 0.32.0 (wave 5). SETTLEMENTS §9.2 (the rest of the library) and §11 (M18, M19).
