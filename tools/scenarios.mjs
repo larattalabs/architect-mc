@@ -408,7 +408,14 @@ async function computeMetrics({ sc, out, planDir, ir, irShas, mspt, cps, exact, 
     // matches when every tile sha does
     const runKit = JSON.parse(fs.readFileSync(path.join(planDir, 'ir.json'), 'utf8')).kitVersion;
     const sameTiles = JSON.stringify(g.tiles) === JSON.stringify(ts.tiles);
+    // (6c F1) a plan that reads a frozen volume of the live world (forms_demo's kept ice) records that volume's sha: a fresh world
+    // copy differs by a few natural cells (plants, water), so with every tile sha equal and the IR equal but for its volume blobs,
+    // the golden matches
+    const noVol = (j) => { const o = JSON.parse(JSON.stringify(j)); for (const [n, b] of Object.entries(o.blobs ?? {})) if (b.kind === 'volume') delete o.blobs[n]; delete o.volumes; return JSON.stringify(o); };
+    const gIr = fs.existsSync(path.join(SCEN, 'goldens', short(sc), 'ir.json')) ? JSON.parse(fs.readFileSync(path.join(SCEN, 'goldens', short(sc), 'ir.json'), 'utf8')) : null;
+    const volOnly = sameTiles && gIr && noVol(gIr) === noVol(JSON.parse(fs.readFileSync(path.join(planDir, 'ir.json'), 'utf8')));
     golden = sameTiles && g.irSha === ts.irSha ? 'match'
+      : volOnly ? 'match (every tile sha; the IR differs only by its frozen volume of the live world)'
       : sameTiles && g.kitVersion && g.kitVersion !== runKit ? `match (every tile sha; the IR sha differs by its kitVersion ${g.kitVersion} -> ${runKit})`
         : `differs (golden ${g.irSha.slice(0, 12)}, run ${ts.irSha.slice(0, 12)}${sameTiles ? '' : '; tile shas differ'})`;
   }
