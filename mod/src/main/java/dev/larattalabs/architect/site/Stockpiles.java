@@ -171,7 +171,8 @@ public final class Stockpiles {
 		}
 
 		static Pile fromJson(JsonObject o) {
-			Pile p = new Pile(o.get("id").getAsString(), o.get("owner").getAsString(), o.get("dimension").getAsString(), StockLedger.fromJson(o.has("ledger") ? o.getAsJsonObject(
+			// a file written before stockpiles had their own id (pre-release Y1 builds): one is assigned at load
+			Pile p = new Pile(o.has("id") ? o.get("id").getAsString() : "sp" + nextId++, o.get("owner").getAsString(), o.get("dimension").getAsString(), StockLedger.fromJson(o.has("ledger") ? o.getAsJsonObject(
 				"ledger") : null));
 			if (o.has("crates")) {
 				o.getAsJsonArray("crates").forEach(e -> p.crates.add(CrateRec.fromJson(e.getAsJsonObject())));
@@ -1496,6 +1497,15 @@ public final class Stockpiles {
 		try {
 			JsonObject root = JsonParser.parseString(Files.readString(f, StandardCharsets.UTF_8)).getAsJsonObject();
 			nextId = root.has("nextId") ? root.get("nextId").getAsLong() : 1;
+			// ids already taken in the file are never handed out again
+			if (root.has("stockpiles")) {
+				for (JsonElement e : root.getAsJsonArray("stockpiles")) {
+					JsonObject x = e.getAsJsonObject();
+					if (x.has("id") && x.get("id").getAsString().matches("sp\\d+")) {
+						nextId = Math.max(nextId, Long.parseLong(x.get("id").getAsString().substring(2)) + 1);
+					}
+				}
+			}
 			if (root.has("stockpiles")) {
 				for (JsonElement e : root.getAsJsonArray("stockpiles")) {
 					Pile p = Pile.fromJson(e.getAsJsonObject());
