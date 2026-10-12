@@ -36,6 +36,7 @@ const check = (ok, m, data) => {
   results[m] = { ok, ...(data === undefined ? {} : { data }) };
   return ok;
 };
+const bar = (ok, m, data) => check(ok, `BAR ${m}`, data); // a timing bar: recorded, not blocking in change/slice (docs/GATES.md)
 const cmd = async (c) => call('dev.command', { cmd: c }, 60_000);
 /** Runs /apitest <args> and parses its JSON answer. */
 const api = async (args) => {
@@ -359,7 +360,7 @@ async function equality() {
   const post = await hashLots(ctx.lots);
   const postAll = (await hash(villageRegion())).sha256;
   check(v.order.length === 12, 'queue: all 12 lots placed', { order: v.order, failed: v.done.items.filter((i) => i.status !== 'PLACED') });
-  check(ownOk(ownTick(v.stats)), `ticks: during the batch, ${tickText(ownTick(v.stats))}`, ownTick(v.stats));
+  bar(ownOk(ownTick(v.stats)), `ticks: during the batch, ${tickText(ownTick(v.stats))}`, ownTick(v.stats));
   const wall = (v.done.doneAt - v.done.createdAt) / 1000;
   // group undo: every site, last placed first, the whole region back exactly
   const group = v.done.group;
@@ -418,7 +419,7 @@ async function throughput() {
   await leaveWorld();
   runs.splice(1, 0, ctx.throughput4);
   for (const r of runs) {
-    check(ownOk(ownTick(r)), `throughput ${r.budgetMs} ms: ${Math.round(r.cellsPerSecond)} cells/s, 12-lot wall ${r.wallSeconds.toFixed(1)} s, ${tickText(ownTick(r))}`, ownTick(r));
+    bar(ownOk(ownTick(r)), `throughput ${r.budgetMs} ms: ${Math.round(r.cellsPerSecond)} cells/s, 12-lot wall ${r.wallSeconds.toFixed(1)} s, ${tickText(ownTick(r))}`, ownTick(r));
   }
   const out = { measuredAt: new Date().toISOString(), village: '12 lots (cabin, gatehouse, tavern, tower x3), LOADED_ONLY, player in the middle',
     runs: runs.map((r) => ({ budgetMs: r.budgetMs, cellsPerSecond: r.cellsPerSecond, cells: r.cells, workSeconds: r.workSeconds, wallSeconds: r.wallSeconds,
@@ -709,7 +710,7 @@ async function survival() {
   }
   const stats = await call('dev.placement.stats', {});
   check(sites.every((s) => built.includes(s)), 'shared crate: the 3 construction sites finished from one hopper chain', { built });
-  check(ownOk(ownTick(stats)), `survival: ${tickText(ownTick(stats))}`, ownTick(stats));
+  bar(ownOk(ownTick(stats)), `survival: ${tickText(ownTick(stats))}`, ownTick(stats));
   const stock1 = await api(`stock ${bv.group}`);
   check(Object.keys(stock1.outstanding).length === 0 && JSON.stringify(sortObj(stock1.delivered)) === JSON.stringify(sortObj(stock0.outstanding)),
     'stock: afterwards nothing outstanding and delivered equals the bill', { stock0, stock1 });
