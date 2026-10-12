@@ -2,9 +2,9 @@
  "scenario": "crater_toolbox",
  "version": 1,
  "note": "tile shas of the IR over its own plan survey (kit windowFromSurvey), 1 worker = 4 workers shuffled; inputs in goldens/crater_toolbox/",
- "fromRun": "20261012-002934",
- "irSha": "eec1c248b48477b028f1f0f9e0247991f0b820909d6ccc441509014431534e9c",
- "kitVersion": "0.20.0",
+ "fromRun": "20261012-051337",
+ "irSha": "65f8ffaa84dd2284bdeb6d86f02855c2867b09b9247737daf0760b7529bece4c",
+ "kitVersion": "0.19.0",
  "cells": 896809,
  "tiles": {
   "ground|terrain|-15,6": "553d35175b033dcba75c78ed90e1f76a9477bbf75e7af0a29c6fe986e0ca6886",
