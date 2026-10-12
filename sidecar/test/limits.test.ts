@@ -107,7 +107,7 @@ describe('Limits.java against the zod bounds (6c 0c §5)', () => {
 
   it('every Limits constant is used by a bound (no stale constant), but for the custom-refined ones', () => {
     const used = new Set(all.map((b) => constantOf(b.path)));
-    const custom = new Set(['EXT_MAX_BYTES', 'CRITIQUE_VIEWS_MAX', 'LOT_EXT_MAX']);
+    const custom = new Set(['EXT_MAX_BYTES', 'CRITIQUE_VIEWS_MAX', 'LOT_EXT_MAX', 'STOCKPILE_CRATES']);
     const stale = [...ints.keys()].filter((k) => !used.has(k) && !custom.has(k));
     expect(stale).toEqual([]);
   });

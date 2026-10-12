@@ -213,7 +213,8 @@ public final class Batches {
 		}
 		Batch.WaitPolicy w = spec.waitPolicy();
 		int[] crateAt = spec.crateAt() == null ? null : new int[] {spec.crateAt().getX(), spec.crateAt().getY(), spec.crateAt().getZ()};
-		if (spec.sharedCrate() && crateAt == null && (g == null || g.crate() == null && g.crateAt() == null)) {
+		boolean pileOwner = Stockpiles.has(spec.owner()); // 6c Y: the owner's stockpile feeds the batch; sharedCrate/crateAt are ignored
+		if (spec.sharedCrate() && crateAt == null && !pileOwner && (g == null || g.crate() == null && g.crateAt() == null)) {
 			crateAt = defaultCrate(server, spec, items);
 		}
 		String groupId = g != null ? g.id() : Sites.newGroupId();
@@ -236,6 +237,11 @@ public final class Batches {
 			grp = grp.withSharedCrate(true, crateAt);
 		}
 		b.generate = spec.load().generate();
+		if (pileOwner && (spec.sharedCrate() || spec.crateAt() != null)) {
+			// (BatchView has no notes; b.note is the cancel/stop message, so the note goes to the log)
+			dev.larattalabs.architect.Architect.LOGGER.info("Batch {}: sharedCrate and crateAt are ignored: its construction items draw from the stockpile of {}",
+				id, spec.owner());
+		}
 		b.opKey = key;
 		b.opHash = hash;
 		chunkBound(b);
@@ -438,14 +444,17 @@ public final class Batches {
 		BlockPos first = road ? it.road().points().get(0) : it.cells().cells().isEmpty() ? BlockPos.ZERO : it.cells().cells().get(0).pos();
 		// 6c 0c (C16): a road in CONSTRUCTION (or AUTO in survival) is a construction road, built from the batch's shared crate
 		boolean consRoad = road && InfraPlace.constructionRoad(server, it.road().mode());
+		// 6c Y: an owner with a stockpile builds its construction roads from it (sharedCrate is not needed, and ignored)
+		boolean pile = consRoad && Stockpiles.drawsFrom(spec.owner(), Sites.dimensionId(level));
+		String pileDim = consRoad ? Stockpiles.dimensionRefusal(spec.owner(), Sites.dimensionId(level)) : null;
 		QItem q = new QItem(it.itemKey(), stage, it.after(), road ? "road" : "cells", Sites.dimensionId(level), first.getX(), first.getY(), first.getZ(), 0,
 			road ? it.road().force()
-			: it.cells().force(), ext, actor == null ? null : actor.getStringUUID(), consRoad && spec.sharedCrate(), survival);
+			: it.cells().force(), ext, actor == null ? null : actor.getStringUUID(), consRoad && (spec.sharedCrate() || pile), survival);
 		q.itemKind = road ? "road" : "cells";
 		q.spec = road ? InfraSpec.road(it.road()) : InfraSpec.cells(it.cells());
 		var overlap = road ? null : it.cells().overlap() != null ? it.cells().overlap() : spec.overlap();
 		q.layer = overlap == dev.larattalabs.architect.api.OverlapPolicy.LAYER;
-		String no = consRoad ? spec.sharedCrate() ? null : "a construction road needs a batch with sharedCrate (its cells are paid from the shared crate)"
+		String no = pileDim != null ? pileDim : consRoad ? spec.sharedCrate() || pile ? null : "a construction road needs a batch with sharedCrate (its cells are paid from the shared crate)"
 			: InfraPlace.modeRefusal(server, road ? it.road().mode() : it.cells().mode(), actor, !road);
 		if (no != null) {
 			q.fail(Reason.NOT_ALLOWED.name(), no);

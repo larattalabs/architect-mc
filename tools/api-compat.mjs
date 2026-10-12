@@ -192,8 +192,15 @@ const load = (cls) => {
   const file = classDirs.map((d) => path.join(d, `${cls}.class`)).find((f) => fs.existsSync(f));
   const set = new Set();
   declared.set(cls, set);
-  if (!file) return set;
-  const out = execFileSync(javap, ['-p', '-s', file], { encoding: 'utf8' });
+  // a JDK supertype (an api exception's Throwable, say): its public and protected members, by class name from the running JDK
+  const jdk = !file && cls.startsWith('java/');
+  if (!file && !jdk) return set;
+  let out;
+  try {
+    out = jdk ? execFileSync(javap, ['-protected', '-s', cls.replace(/\//g, '.')], { encoding: 'utf8' }) : execFileSync(javap, ['-p', '-s', file], { encoding: 'utf8' });
+  } catch {
+    return set;
+  }
   const lines = out.split('\n');
   const head = lines.find((l) => /\b(class|interface|enum|record)\b/.test(l) && l.includes('{')) ?? '';
   const sup = [];
@@ -226,7 +233,8 @@ const has = (cls, member, seen = new Set()) => {
   seen.add(cls);
   if (load(cls).has(member)) return true;
   if (load(cls).size && INHERITED.has(member)) return true;
-  return (supers.get(cls) ?? []).some((s) => s.startsWith(API) && has(s, member, seen));
+  // members inherited through api supertypes, and (6c Y1) through JDK supertypes: an api exception's getMessage is Throwable's
+  return (supers.get(cls) ?? []).some((s) => (s.startsWith(API) || s.startsWith('java/')) && has(s, member, seen));
 };
 
 const missing = [];

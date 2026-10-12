@@ -64,9 +64,11 @@ public final class InfraApi {
 		if (InfraPlace.constructionRoad(r.level().getServer(), r.mode())) {
 			// 6c 0c (C16): what a batch with a shared crate would build: construction, with the road's bill of materials
 			InfraPlace.Check c = road(r);
-			Verdict v = verdict(c, List.of());
+			String dim = Stockpiles.dimensionRefusal(r.owner(), Sites.dimensionId(r.level()));
+			Verdict v = verdict(c, dim == null ? List.of() : List.of(new Refusal(Reason.NOT_ALLOWED, dim)));
 			List<String> notes = new ArrayList<>(v.notes());
-			notes.add("a construction road: placed by a batch with sharedCrate, built from its crate");
+			notes.add(Stockpiles.drawsFrom(r.owner(), Sites.dimensionId(r.level())) ? "a construction road: built from the stockpile of " + r.owner()
+				: "a construction road: placed by a batch with sharedCrate, built from its crate");
 			return new Verdict(v.refusals(), notes, true, dev.larattalabs.architect.apiimpl.Views.items(c.ok() ? RoadBuilder.bom(r.level(), c.positions(), c
 				.values()) : Map.of()), v.box(), v.restoreBox(), v.overlaps(), v.cells(), v.spans());
 		}
@@ -79,13 +81,17 @@ public final class InfraApi {
 	}
 
 	public static CompletableFuture<PlaceResult> placeRoad(RoadRequest r) {
-		String mode = InfraPlace.modeRefusal(r.level().getServer(), r.mode(), r.actor(), false);
+		// 6c Y: an owner with a stockpile places a standalone construction road (CONSTRUCTION, or AUTO in survival): built from it
+		boolean fromPile = InfraPlace.constructionRoad(r.level().getServer(), r.mode()) && Stockpiles.drawsFrom(r.owner(), Sites.dimensionId(r.level()));
+		String dim = InfraPlace.constructionRoad(r.level().getServer(), r.mode()) ? Stockpiles.dimensionRefusal(r.owner(), Sites.dimensionId(r.level()))
+			: null;
+		String mode = fromPile ? null : dim != null ? dim : InfraPlace.modeRefusal(r.level().getServer(), r.mode(), r.actor(), false);
 		if (mode != null) {
 			return CompletableFuture.completedFuture(new PlaceResult(false, Optional.empty(), List.of(new Refusal(Reason.NOT_ALLOWED, mode)), List.of()));
 		}
 		InfraPlace.Check c = road(r);
 		return start(r.level(), c, () -> {
-			InfraJob j = InfraPlace.beginRoad(r.level(), c, r.owner(), r.ext(), null);
+			InfraJob j = InfraPlace.beginRoad(r.level(), c, r.owner(), r.ext(), null, fromPile);
 			j.skipped.addAll(spans(c));
 			return j;
 		});

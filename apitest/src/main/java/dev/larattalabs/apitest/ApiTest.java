@@ -69,6 +69,7 @@ public class ApiTest implements ModInitializer {
 		net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents.SERVER_STOPPED.register(srv -> SERVER = null);
 		SiteEvents.SITE_PLACED.register(v -> event("SITE_PLACED", site(v)));
 		ApiTestDelta.register(); // phase 5b events
+		ApiTestStockpile.register(); // 6c Y1: STOCKPILE_CHANGED
 		SiteEvents.SITE_REMOVED.register((v, r) -> {
 			JsonObject o = site(v);
 			o.add("result", removeJson(r));
@@ -314,6 +315,17 @@ public class ApiTest implements ModInitializer {
 			case "volume":
 			case "api110": {
 				return ApiTest0a.step(src, a);
+			}
+			case "apiy1":
+			case "pcreate":
+			case "paddcrate":
+			case "premove":
+			case "pstate":
+			case "porder":
+			case "pwithdraw":
+			case "padopt":
+			case "pdissolve": {
+				return ApiTestStockpile.step(src, a); // 6c Y1 (API 1.17.0)
 			}
 			case "api112":
 			case "protect":

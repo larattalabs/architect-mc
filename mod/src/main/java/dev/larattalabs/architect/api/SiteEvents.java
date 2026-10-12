@@ -261,6 +261,15 @@ public interface SiteEvents {
 			Guard.run(() -> l.onPhase(id, phase), "REGION_PLAN_PROGRESS");
 		}
 	});
+	/**
+	 * An owner's stockpile changed (C24): a delivery, a consumption, a return, a withdrawal or a crate change. At most once per 20
+	 * ticks per owner (a change since the last event fires the next one). Server thread. Since 1.17.0.
+	 */
+	Event<StockpileChanged> STOCKPILE_CHANGED = EventFactory.createArrayBacked(StockpileChanged.class, ls -> owner -> {
+		for (StockpileChanged l : ls) {
+			Guard.run(() -> l.onChanged(owner), "STOCKPILE_CHANGED");
+		}
+	});
 
 	@FunctionalInterface
 	interface RegionChecked {
@@ -270,6 +279,11 @@ public interface SiteEvents {
 	@FunctionalInterface
 	interface RegionPlanProgress {
 		void onPhase(@org.jspecify.annotations.Nullable String planId, String phase);
+	}
+
+	@FunctionalInterface
+	interface StockpileChanged {
+		void onChanged(String owner);
 	}
 
 	@FunctionalInterface

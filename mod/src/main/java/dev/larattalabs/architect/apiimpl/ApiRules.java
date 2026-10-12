@@ -24,7 +24,7 @@ public final class ApiRules {
 	public static final java.util.Set<String> JAVA_FEATURES = java.util.Set.of("sites", "events", "designs", "library", "survey", "survivalInfo",
 		"compositePreview", "batchPlacement", "siteGroups", "stages", "groupCrate", "journal", "overlapLayer", "roads", "cellSites",
 		"stackQuery", "entryVersions", "blueprintDelta", "deltaApply", "siteRevert", "deltaPreview", "regionPrepare", "generatedOnly", "cellConditions",
-		"chunkBound", "surveyVolume", "regionNudge", "regionOpKeys", "lotExt", "frozenWater", "siteWaiting", "fullBom");
+		"chunkBound", "surveyVolume", "regionNudge", "regionOpKeys", "lotExt", "frozenWater", "siteWaiting", "fullBom", "stockpile");
 
 	private ApiRules() {
 	}
