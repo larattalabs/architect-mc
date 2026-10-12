@@ -462,7 +462,7 @@ async function computeMetrics({ sc, out, planDir, ir, irShas, mspt, cps, exact, 
         for (let i = 0; i < ra.ground.length; i++) if (ra.ground[i] !== ga.ground[i] || ra.flags[i] !== ga.flags[i] || ra.height[i] !== ga.height[i]) cols++;
         const { planRegion } = await import('../kit/lib/region/plan.mjs');
         const gIr = JSON.parse(fs.readFileSync(path.join(gDir, 'ir.json'), 'utf8'));
-        const re = await planRegion({ programFile: path.join(root, 'kit', 'regions', `${gIr.id}.mjs`), params: gIr.params, survey: gSurvey, seed: gIr.seed, claim: { ...gIr.claim, minY: -64, maxY: 319 }, roles: gIr.roles });
+        const re = await planRegion({ programFile: path.join(root, 'kit', 'regions', `${gIr.id}.mjs`), params: gIr.params, survey: gSurvey, seed: gIr.seed, claim: { ...gIr.claim, minY: -64, maxY: 319 }, roles: gIr.roles, kitVersion: gIr.kitVersion }); // (6c F2) the golden's own recorded kit: a later slice's KIT_VERSION bump alone moves no planner output
         const gts = await tileShas(gDir);
         const ok = re.irSha === g.irSha && gts.irSha === g.irSha && gts.workersSame && JSON.stringify(gts.tiles) === JSON.stringify(g.tiles);
         golden = ok ? `match (the golden's committed inputs re-plan to its IR ${g.irSha.slice(0, 12)} and its ${Object.keys(g.tiles).length} tile shas; this run's live survey differs from the golden's in ${cols} columns, so its IR ${ts.irSha.slice(0, 12)} is its own)`
@@ -632,11 +632,11 @@ async function irVolumesIn(ir, blobDir) {
 }
 
 /** (6c F2) Re-plan a plan dir's inputs (its survey and frozen volumes) with params `over` and no stamps: {p, ir}. */
-async function replanStampsOff(planDir, over = {}) {
+async function replanStampsOff(planDir, over = {}, keepKit = false) {
   const { planRegion } = await import('../kit/lib/region/plan.mjs');
   const ir = JSON.parse(fs.readFileSync(path.join(planDir, 'ir.json'), 'utf8'));
   const volumes = await irVolumesIn(ir, path.join(planDir, 'blobs'));
-  const p = await planRegion({ programFile: path.join(root, 'kit', 'regions', `${ir.id}.mjs`), params: { ...ir.params, ...over }, survey: fs.readFileSync(path.join(planDir, 'survey.bin')), seed: ir.seed, claim: { ...ir.claim, minY: -64, maxY: 319 }, roles: ir.roles, volumes, stamps: null });
+  const p = await planRegion({ programFile: path.join(root, 'kit', 'regions', `${ir.id}.mjs`), params: { ...ir.params, ...over }, survey: fs.readFileSync(path.join(planDir, 'survey.bin')), seed: ir.seed, claim: { ...ir.claim, minY: -64, maxY: 319 }, roles: ir.roles, volumes, stamps: null, ...(over.kitVersion ? {} : { kitVersion: keepKit ? ir.kitVersion : undefined }) });
   return { p, ir };
 }
 
@@ -645,7 +645,7 @@ async function f2Golden(sc, ts) {
   const gFile = path.join(SCEN, 'goldens', `${short(sc)}.json`), gDir = path.join(SCEN, 'goldens', short(sc));
   if (!fs.existsSync(gFile) || !fs.existsSync(path.join(gDir, 'ir.json'))) return 'none';
   const g = JSON.parse(fs.readFileSync(gFile, 'utf8'));
-  const { p } = await replanStampsOff(gDir);
+  const { p } = await replanStampsOff(gDir, {}, true);
   const gts = await tileShas(gDir);
   const ok = p.irSha === g.irSha && gts.irSha === g.irSha && gts.workersSame && JSON.stringify(gts.tiles) === JSON.stringify(g.tiles);
   return ok ? `match (the golden's committed inputs, stamps off (N-F2-1), re-plan to its IR ${g.irSha.slice(0, 12)} and its ${Object.keys(g.tiles).length} tile shas, 1 = 4 workers; this run's IR ${ts.irSha.slice(0, 12)}, with the local stamps, is its own)`
