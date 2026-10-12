@@ -922,6 +922,32 @@ public final class Groups {
 		return false;
 	}
 
+	/**
+	 * (C29 a) Whether a removal has started on this target: it is in a running removal's sites (from its start, through the wait
+	 * for a player and the planning, until its record goes pending), or the removal is a whole-group one that has not listed its
+	 * sites yet (its batches still cancelling) and the target is of that group; or a single road or cell site's removal job runs
+	 * for it. Such a target leaves its stockpile's feed at once ({@link Stockpiles}): no step, no reservation, no need. A stalled
+	 * removal's members are pending already. Server thread.
+	 */
+	static boolean leaving(String id) {
+		if (!REMOVALS.isEmpty()) {
+			for (Removal r : REMOVALS) {
+				if (r.sites.contains(id) || r.undoSites.contains(id)) {
+					return true;
+				}
+				if (r.stage == null && !r.started) {
+					Site s = Sites.get(id);
+					Infra i = s == null ? Infras.get(id) : null;
+					String g = s != null ? s.group() : i != null ? i.group() : null;
+					if (r.group.equals(g)) {
+						return true;
+					}
+				}
+			}
+		}
+		return Placement.job(id) instanceof RestoreJob rj && RestoreJob.REMOVE.equals(rj.purpose);
+	}
+
 	/** A restore job of a removal finished (Placement). */
 	static void removed(MinecraftServer server, RestoreJob job) {
 		for (Removal r : REMOVALS) {

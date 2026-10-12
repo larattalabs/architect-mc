@@ -19,6 +19,7 @@ import dev.larattalabs.architect.survival.Ledger;
 import dev.larattalabs.architect.survival.StockLedger;
 import dev.larattalabs.architect.survival.SurvivalItems;
 import dev.larattalabs.architect.survival.SurvivalWorld;
+import dev.larattalabs.architect.survival.WaitCalc;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -694,10 +695,16 @@ public final class Stockpiles {
 		return List.copyOf(p.order);
 	}
 
-	/** Per item, the unbuilt cost over every building target of the owner (paused ones too). */
+	/**
+	 * Per item, the unbuilt cost over every building target of the owner (paused ones too; C29: not a target being removed, which
+	 * needs nothing more).
+	 */
 	static Map<String, Integer> unbuiltAll(MinecraftServer srv, Pile p) {
 		Map<String, Integer> out = new TreeMap<>();
 		for (Object t : targets(srv, p)) {
+			if (Groups.leaving(idOf(t))) {
+				continue;
+			}
 			Builder.Run r = run(srv, t);
 			if (r != null) {
 				r.unbuilt.forEach((k, v) -> {
@@ -1019,6 +1026,12 @@ public final class Stockpiles {
 		int cap = capacity(srv, p);
 		BlockPos fallback = dropAt(srv, p, p.crates.isEmpty() ? BlockPos.ZERO : p.crates.get(0).pos().above());
 		for (Object t : ts) {
+			if (Groups.leaving(idOf(t))) {
+				// C29 (a): a removal started on it: it left the feed (no step, nothing consumed, no reservation); it keeps its place in
+				// the order, so a removal that ends without removing it (a player stayed, blockers) feeds it again from there
+				SiteWaits.observe(srv, level, idOf(t), WaitCalc.Outcome.ENDED);
+				continue;
+			}
 			Builder.Run r = run(srv, t);
 			if (r == null) {
 				continue;
@@ -1077,7 +1090,11 @@ public final class Stockpiles {
 			if (r == null) {
 				continue;
 			}
+			boolean leaving = Groups.leaving(idOf(t));
 			if (idOf(t).equals(targetId)) {
+				if (leaving) {
+					return Map.of(); // C29: being removed, it is fed nothing
+				}
 				Map<String, Integer> out = new TreeMap<>();
 				r.unbuilt.forEach((k, v) -> {
 					if (v > 0) {
@@ -1085,6 +1102,9 @@ public final class Stockpiles {
 					}
 				});
 				return out;
+			}
+			if (leaving) {
+				continue; // C29: its reservation was released
 			}
 			boolean paused = t instanceof Site x ? x.construction().paused() : ((Infra) t).construction().paused();
 			reserve.add(r.unbuilt, FeedOrder.reserves(true, paused, r.built.cardinality() < r.size(), level == null || r.frontierLoaded(level, ticks)));
@@ -1110,6 +1130,9 @@ public final class Stockpiles {
 		Map<String, Map<String, Integer>> byT = new LinkedHashMap<>();
 		Map<String, Integer> total = new TreeMap<>();
 		for (Object t : targets(srv, p)) {
+			if (Groups.leaving(idOf(t))) {
+				continue; // C29: being removed, it needs nothing more (it stays in feedOrder until its record goes)
+			}
 			Builder.Run r = run(srv, t);
 			Map<String, Integer> out = new TreeMap<>();
 			if (r != null) {
@@ -1209,9 +1232,11 @@ public final class Stockpiles {
 				ServerLevel lv = Sites.levelOf(srv, p.dimension);
 				boolean paused = t instanceof Site st ? st.construction().paused() : ((Infra) t).construction().paused();
 				boolean fl = lv != null && r.frontierLoaded(lv, ticks);
+				boolean leaving = Groups.leaving(idOf(t));
 				x.addProperty("paused", paused);
 				x.addProperty("frontierLoaded", fl);
-				x.addProperty("reserves", FeedOrder.reserves(true, paused, r.built.cardinality() < r.size(), fl));
+				x.addProperty("leaving", leaving); // C29: a removal started on it: out of the feed
+				x.addProperty("reserves", !leaving && FeedOrder.reserves(true, paused, r.built.cardinality() < r.size(), fl));
 			}
 			byT.add(idOf(t), x);
 		}
@@ -1284,7 +1309,7 @@ public final class Stockpiles {
 				case "audit" -> {
 					return audit(srv, player, owner, req);
 				}
-				case "pause" -> Builder.setPaused(srv, req.get("site").getAsString(), !req.has("paused") || req.get("paused").getAsBoolean());
+				case "pause" -> Builder.pauseTarget(srv, req.get("site").getAsString(), !req.has("paused") || req.get("paused").getAsBoolean()); // C29: Sites.pause's path
 				case "tickets" -> {
 					// dev: the vanilla tickets on a chunk (what keeps it loaded)
 					BlockPos at = pos(req.getAsJsonArray("pos"));

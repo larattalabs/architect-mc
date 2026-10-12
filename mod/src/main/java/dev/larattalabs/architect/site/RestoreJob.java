@@ -74,6 +74,11 @@ final class RestoreJob implements Placement.Job {
 	Sites.@Nullable Removed result;
 	/** A removal's hand-downs per site (for its RemoveResult). */
 	Map<String, Integer> handed = Map.of();
+	/**
+	 * (C29) A single stockpile road removal's refunds, tallied when the removal started (the road left the feed then), credited
+	 * into the stockpile once per key when the restore is written; never when it breaks. Saved with the job.
+	 */
+	Groups.@Nullable Credit credit;
 
 	RestoreJob(String siteId, String purpose, @Nullable String batchId, @Nullable String itemKey) {
 		this.siteId = siteId;
@@ -444,7 +449,17 @@ final class RestoreJob implements Placement.Job {
 		}
 		Journal.Stats st = work != null ? Sites.statsOf(work, siteId) : new Journal.Stats(cells.size(), 0, restore.holes());
 		infraDone = inf;
-		result = new Sites.Removed(null, Map.of(), st.restored(), st.changed(), handed, List.of(), List.of());
+		Map<String, Integer> returned = Map.of();
+		if (credit != null) {
+			// C29: the restore is written: the road's refunds go into the stockpile now (once per key; a resumed job finds it)
+			Stockpiles.Pile p = Stockpiles.get(credit.owner());
+			boolean already = p != null && p.ledger().credited(credit.key());
+			Builder.creditRefund(level, credit.owner(), credit.key(), credit.items(), BlockPos.of(credit.at()), null);
+			if (!already) {
+				returned = credit.items();
+			}
+		}
+		result = new Sites.Removed(null, returned, st.restored(), st.changed(), handed, List.of(), List.of());
 		if (!ROLLBACK.equals(purpose)) {
 			dev.larattalabs.architect.apiimpl.ApiEvents.removedInfra(server, inf, st.restored());
 		}
@@ -508,6 +523,9 @@ final class RestoreJob implements Placement.Job {
 			handed.forEach(h::addProperty);
 			o.add("handed", h);
 		}
+		if (credit != null) {
+			o.add("credit", credit.toJson());
+		}
 		return o;
 	}
 
@@ -538,6 +556,9 @@ final class RestoreJob implements Placement.Job {
 			Map<String, Integer> h = new java.util.TreeMap<>();
 			o.getAsJsonObject("handed").entrySet().forEach(e -> h.put(e.getKey(), e.getValue().getAsInt()));
 			j.handed = h;
+		}
+		if (o.has("credit")) {
+			j.credit = Groups.Credit.fromJson(o.getAsJsonObject("credit"));
 		}
 		return j;
 	}
