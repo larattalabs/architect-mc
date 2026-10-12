@@ -11,6 +11,7 @@
 //   L          block light emitted: a constant, or { by: [props], v: { 'value,..': level } } (missing = 0)
 //   d          light dampening when between 1 and 14 (leaves, water: -1 extra per step)
 //   h          top of the collision box when not 1 (carpet 0.0625, slab 0.5, chest 0.875, ...)
+//   g          a falling block (its class extends FallingBlock)
 //   i          the block's item when it differs ('' = none: air, fluids, wall torches map to the torch, ...)
 // Properties are written `name=v1|*v2` with the default starred.
 
@@ -57,7 +58,7 @@ b('andesite', 'full', 'block', '', { o: 'O', sp: 1, v: 'ROCK', R: 1 });
 b('andesite_slab', 'slab', 'slab', 'type=top|*bottom|double waterlogged=true|*false', { o: 'S', h: 0.5 });
 b('andesite_stairs', 'stairs', 'stairs', 'facing=*north|south|west|east half=top|*bottom shape=*straight|inner_left|inner_right|outer_left|outer_right waterlogged=true|*false', { o: 'S' });
 b('andesite_wall', 'thin', 'wall', 'east=*none|low|tall north=*none|low|tall south=*none|low|tall up=*true|false waterlogged=true|*false west=*none|low|tall', { o: 'C', h: 1.5 });
-b('anvil', 'partial', 'block', 'facing=*north|south|west|east', { o: 'C' });
+b('anvil', 'partial', 'block', 'facing=*north|south|west|east', { o: 'C', g: 1 });
 b('attached_melon_stem', 'none', 'plant', 'facing=*north|south|west|east', { o: 'C', v: 'PLANT', i: '' });
 b('attached_pumpkin_stem', 'none', 'plant', 'facing=*north|south|west|east', { o: 'C', v: 'PLANT', i: '' });
 b('azalea', 'partial', 'plant', '', { o: 'C', sp: 1, v: 'PLANT' });
@@ -118,7 +119,7 @@ b('black_candle', 'partial', 'candle', 'candles=*1|2|3|4 lit=true|*false waterlo
 b('black_candle_cake', 'partial', 'cake', 'lit=true|*false', { o: 'C', L: {"by":["lit"],"v":{"true":3}}, h: 0.875, i: '' });
 b('black_carpet', 'low', 'carpet', '', { o: 'C', h: 0.0625 });
 b('black_concrete', 'full', 'block', '', { o: 'O', sp: 1, R: 1 });
-b('black_concrete_powder', 'full', 'block', '', { o: 'O', sp: 1, R: 1 });
+b('black_concrete_powder', 'full', 'block', '', { o: 'O', sp: 1, R: 1, g: 1 });
 b('black_concrete_slab', 'slab', 'slab', 'type=top|*bottom|double waterlogged=true|*false', { o: 'S', h: 0.5 });
 b('black_concrete_stairs', 'stairs', 'stairs', 'facing=*north|south|west|east half=top|*bottom shape=*straight|inner_left|inner_right|outer_left|outer_right waterlogged=true|*false', { o: 'S' });
 b('black_glazed_terracotta', 'full', 'block', 'facing=*north|south|west|east', { o: 'O', sp: 1, R: 1 });
@@ -141,7 +142,7 @@ b('blue_candle', 'partial', 'candle', 'candles=*1|2|3|4 lit=true|*false waterlog
 b('blue_candle_cake', 'partial', 'cake', 'lit=true|*false', { o: 'C', L: {"by":["lit"],"v":{"true":3}}, h: 0.875, i: '' });
 b('blue_carpet', 'low', 'carpet', '', { o: 'C', h: 0.0625 });
 b('blue_concrete', 'full', 'block', '', { o: 'O', sp: 1, R: 1 });
-b('blue_concrete_powder', 'full', 'block', '', { o: 'O', sp: 1, R: 1 });
+b('blue_concrete_powder', 'full', 'block', '', { o: 'O', sp: 1, R: 1, g: 1 });
 b('blue_concrete_slab', 'slab', 'slab', 'type=top|*bottom|double waterlogged=true|*false', { o: 'S', h: 0.5 });
 b('blue_concrete_stairs', 'stairs', 'stairs', 'facing=*north|south|west|east half=top|*bottom shape=*straight|inner_left|inner_right|outer_left|outer_right waterlogged=true|*false', { o: 'S' });
 b('blue_glazed_terracotta', 'full', 'block', 'facing=*north|south|west|east', { o: 'O', sp: 1, R: 1 });
@@ -172,7 +173,7 @@ b('brown_candle', 'partial', 'candle', 'candles=*1|2|3|4 lit=true|*false waterlo
 b('brown_candle_cake', 'partial', 'cake', 'lit=true|*false', { o: 'C', L: {"by":["lit"],"v":{"true":3}}, h: 0.875, i: '' });
 b('brown_carpet', 'low', 'carpet', '', { o: 'C', h: 0.0625 });
 b('brown_concrete', 'full', 'block', '', { o: 'O', sp: 1, R: 1 });
-b('brown_concrete_powder', 'full', 'block', '', { o: 'O', sp: 1, R: 1 });
+b('brown_concrete_powder', 'full', 'block', '', { o: 'O', sp: 1, R: 1, g: 1 });
 b('brown_concrete_slab', 'slab', 'slab', 'type=top|*bottom|double waterlogged=true|*false', { o: 'S', h: 0.5 });
 b('brown_concrete_stairs', 'stairs', 'stairs', 'facing=*north|south|west|east half=top|*bottom shape=*straight|inner_left|inner_right|outer_left|outer_right waterlogged=true|*false', { o: 'S' });
 b('brown_glazed_terracotta', 'full', 'block', 'facing=*north|south|west|east', { o: 'O', sp: 1, R: 1 });
@@ -228,7 +229,7 @@ b('cherry_wall_hanging_sign', 'partial', 'wall_hanging_sign', 'facing=*north|sou
 b('cherry_wall_sign', 'none', 'wall_sign', 'facing=*north|south|west|east waterlogged=true|*false', { o: 'C', i: 'cherry_sign' });
 b('cherry_wood', 'full', 'block', 'axis=x|*y|z', { o: 'O', sp: 1, v: 'LOG', R: 1 });
 b('chest', 'partial', 'block', 'type=*single|left|right facing=*north|south|west|east waterlogged=true|*false', { o: 'C', h: 0.875 });
-b('chipped_anvil', 'partial', 'block', 'facing=*north|south|west|east', { o: 'C' });
+b('chipped_anvil', 'partial', 'block', 'facing=*north|south|west|east', { o: 'C', g: 1 });
 b('chiseled_bookshelf', 'full', 'block', 'facing=*north|south|west|east slot_0_occupied=true|*false slot_1_occupied=true|*false slot_2_occupied=true|*false slot_3_occupied=true|*false slot_4_occupied=true|*false slot_5_occupied=true|*false', { o: 'O', sp: 1, R: 1 });
 b('chiseled_cinnabar', 'full', 'block', '', { o: 'O', sp: 1, R: 1 });
 b('chiseled_copper', 'full', 'block', '', { o: 'O', sp: 1, R: 1 });
@@ -329,7 +330,7 @@ b('cyan_candle', 'partial', 'candle', 'candles=*1|2|3|4 lit=true|*false waterlog
 b('cyan_candle_cake', 'partial', 'cake', 'lit=true|*false', { o: 'C', L: {"by":["lit"],"v":{"true":3}}, h: 0.875, i: '' });
 b('cyan_carpet', 'low', 'carpet', '', { o: 'C', h: 0.0625 });
 b('cyan_concrete', 'full', 'block', '', { o: 'O', sp: 1, R: 1 });
-b('cyan_concrete_powder', 'full', 'block', '', { o: 'O', sp: 1, R: 1 });
+b('cyan_concrete_powder', 'full', 'block', '', { o: 'O', sp: 1, R: 1, g: 1 });
 b('cyan_concrete_slab', 'slab', 'slab', 'type=top|*bottom|double waterlogged=true|*false', { o: 'S', h: 0.5 });
 b('cyan_concrete_stairs', 'stairs', 'stairs', 'facing=*north|south|west|east half=top|*bottom shape=*straight|inner_left|inner_right|outer_left|outer_right waterlogged=true|*false', { o: 'S' });
 b('cyan_glazed_terracotta', 'full', 'block', 'facing=*north|south|west|east', { o: 'O', sp: 1, R: 1 });
@@ -341,7 +342,7 @@ b('cyan_wall_banner', 'none', 'wall_banner', 'facing=*north|south|west|east', { 
 b('cyan_wool', 'full', 'block', '', { o: 'O', sp: 1, R: 1 });
 b('cyan_wool_slab', 'slab', 'slab', 'type=top|*bottom|double waterlogged=true|*false', { o: 'S', h: 0.5 });
 b('cyan_wool_stairs', 'stairs', 'stairs', 'facing=*north|south|west|east half=top|*bottom shape=*straight|inner_left|inner_right|outer_left|outer_right waterlogged=true|*false', { o: 'S' });
-b('damaged_anvil', 'partial', 'block', 'facing=*north|south|west|east', { o: 'C' });
+b('damaged_anvil', 'partial', 'block', 'facing=*north|south|west|east', { o: 'C', g: 1 });
 b('dandelion', 'none', 'plant', '', { o: 'C', v: 'PLANT' });
 b('dark_oak_button', 'none', 'button', 'face=floor|*wall|ceiling facing=*north|south|west|east powered=true|*false', { o: 'C' });
 b('dark_oak_door', 'door', 'door', 'facing=*north|south|west|east half=upper|*lower hinge=*left|right open=true|*false powered=true|*false', { o: 'C' });
@@ -414,7 +415,7 @@ b('diorite_wall', 'thin', 'wall', 'east=*none|low|tall north=*none|low|tall sout
 b('dirt', 'full', 'block', '', { o: 'O', sp: 1, v: 'SOIL', R: 1 });
 b('dirt_path', 'partial', 'block', '', { o: 'C', v: 'SOIL', h: 0.9375 });
 b('dispenser', 'full', 'block', 'facing=*north|east|south|west|up|down triggered=true|*false', { o: 'O', sp: 1, R: 1 });
-b('dragon_egg', 'partial', 'block', '', { o: 'C', L: 1 });
+b('dragon_egg', 'partial', 'block', '', { o: 'C', L: 1, g: 1 });
 b('dragon_head', 'partial', 'skull', 'powered=true|*false rotation=*0|1|2|3|4|5|6|7|8|9|10|11|12|13|14|15', { o: 'C', h: 0.5 });
 b('dragon_wall_head', 'partial', 'wall_skull', 'facing=*north|south|west|east powered=true|*false', { o: 'C', h: 0.75, i: 'dragon_head' });
 b('dried_ghast', 'partial', 'block', 'facing=*north|south|west|east hydration=*0|1|2|3 waterlogged=true|*false', { o: 'C', h: 0.625 });
@@ -477,14 +478,14 @@ b('granite_slab', 'slab', 'slab', 'type=top|*bottom|double waterlogged=true|*fal
 b('granite_stairs', 'stairs', 'stairs', 'facing=*north|south|west|east half=top|*bottom shape=*straight|inner_left|inner_right|outer_left|outer_right waterlogged=true|*false', { o: 'S' });
 b('granite_wall', 'thin', 'wall', 'east=*none|low|tall north=*none|low|tall south=*none|low|tall up=*true|false waterlogged=true|*false west=*none|low|tall', { o: 'C', h: 1.5 });
 b('grass_block', 'full', 'block', 'snowy=true|*false', { o: 'O', sp: 1, v: 'SOIL', R: 1 });
-b('gravel', 'full', 'block', '', { o: 'O', sp: 1, v: 'LOOSE', R: 1 });
+b('gravel', 'full', 'block', '', { o: 'O', sp: 1, v: 'LOOSE', R: 1, g: 1 });
 b('gray_banner', 'none', 'banner', 'rotation=0|1|2|3|4|5|6|7|*8|9|10|11|12|13|14|15', { o: 'C' });
 b('gray_bed', 'partial', 'bed', 'facing=*north|south|west|east occupied=true|*false part=head|*foot', { o: 'C', h: 0.5625 });
 b('gray_candle', 'partial', 'candle', 'candles=*1|2|3|4 lit=true|*false waterlogged=true|*false', { o: 'C', L: {"by":["candles","lit"],"v":{"1,true":3,"2,true":6,"3,true":9,"4,true":12}}, h: 0.375 });
 b('gray_candle_cake', 'partial', 'cake', 'lit=true|*false', { o: 'C', L: {"by":["lit"],"v":{"true":3}}, h: 0.875, i: '' });
 b('gray_carpet', 'low', 'carpet', '', { o: 'C', h: 0.0625 });
 b('gray_concrete', 'full', 'block', '', { o: 'O', sp: 1, R: 1 });
-b('gray_concrete_powder', 'full', 'block', '', { o: 'O', sp: 1, R: 1 });
+b('gray_concrete_powder', 'full', 'block', '', { o: 'O', sp: 1, R: 1, g: 1 });
 b('gray_concrete_slab', 'slab', 'slab', 'type=top|*bottom|double waterlogged=true|*false', { o: 'S', h: 0.5 });
 b('gray_concrete_stairs', 'stairs', 'stairs', 'facing=*north|south|west|east half=top|*bottom shape=*straight|inner_left|inner_right|outer_left|outer_right waterlogged=true|*false', { o: 'S' });
 b('gray_glazed_terracotta', 'full', 'block', 'facing=*north|south|west|east', { o: 'O', sp: 1, R: 1 });
@@ -502,7 +503,7 @@ b('green_candle', 'partial', 'candle', 'candles=*1|2|3|4 lit=true|*false waterlo
 b('green_candle_cake', 'partial', 'cake', 'lit=true|*false', { o: 'C', L: {"by":["lit"],"v":{"true":3}}, h: 0.875, i: '' });
 b('green_carpet', 'low', 'carpet', '', { o: 'C', h: 0.0625 });
 b('green_concrete', 'full', 'block', '', { o: 'O', sp: 1, R: 1 });
-b('green_concrete_powder', 'full', 'block', '', { o: 'O', sp: 1, R: 1 });
+b('green_concrete_powder', 'full', 'block', '', { o: 'O', sp: 1, R: 1, g: 1 });
 b('green_concrete_slab', 'slab', 'slab', 'type=top|*bottom|double waterlogged=true|*false', { o: 'S', h: 0.5 });
 b('green_concrete_stairs', 'stairs', 'stairs', 'facing=*north|south|west|east half=top|*bottom shape=*straight|inner_left|inner_right|outer_left|outer_right waterlogged=true|*false', { o: 'S' });
 b('green_glazed_terracotta', 'full', 'block', 'facing=*north|south|west|east', { o: 'O', sp: 1, R: 1 });
@@ -581,7 +582,7 @@ b('light_blue_candle', 'partial', 'candle', 'candles=*1|2|3|4 lit=true|*false wa
 b('light_blue_candle_cake', 'partial', 'cake', 'lit=true|*false', { o: 'C', L: {"by":["lit"],"v":{"true":3}}, h: 0.875, i: '' });
 b('light_blue_carpet', 'low', 'carpet', '', { o: 'C', h: 0.0625 });
 b('light_blue_concrete', 'full', 'block', '', { o: 'O', sp: 1, R: 1 });
-b('light_blue_concrete_powder', 'full', 'block', '', { o: 'O', sp: 1, R: 1 });
+b('light_blue_concrete_powder', 'full', 'block', '', { o: 'O', sp: 1, R: 1, g: 1 });
 b('light_blue_concrete_slab', 'slab', 'slab', 'type=top|*bottom|double waterlogged=true|*false', { o: 'S', h: 0.5 });
 b('light_blue_concrete_stairs', 'stairs', 'stairs', 'facing=*north|south|west|east half=top|*bottom shape=*straight|inner_left|inner_right|outer_left|outer_right waterlogged=true|*false', { o: 'S' });
 b('light_blue_glazed_terracotta', 'full', 'block', 'facing=*north|south|west|east', { o: 'O', sp: 1, R: 1 });
@@ -599,7 +600,7 @@ b('light_gray_candle', 'partial', 'candle', 'candles=*1|2|3|4 lit=true|*false wa
 b('light_gray_candle_cake', 'partial', 'cake', 'lit=true|*false', { o: 'C', L: {"by":["lit"],"v":{"true":3}}, h: 0.875, i: '' });
 b('light_gray_carpet', 'low', 'carpet', '', { o: 'C', h: 0.0625 });
 b('light_gray_concrete', 'full', 'block', '', { o: 'O', sp: 1, R: 1 });
-b('light_gray_concrete_powder', 'full', 'block', '', { o: 'O', sp: 1, R: 1 });
+b('light_gray_concrete_powder', 'full', 'block', '', { o: 'O', sp: 1, R: 1, g: 1 });
 b('light_gray_concrete_slab', 'slab', 'slab', 'type=top|*bottom|double waterlogged=true|*false', { o: 'S', h: 0.5 });
 b('light_gray_concrete_stairs', 'stairs', 'stairs', 'facing=*north|south|west|east half=top|*bottom shape=*straight|inner_left|inner_right|outer_left|outer_right waterlogged=true|*false', { o: 'S' });
 b('light_gray_glazed_terracotta', 'full', 'block', 'facing=*north|south|west|east', { o: 'O', sp: 1, R: 1 });
@@ -622,7 +623,7 @@ b('lime_candle', 'partial', 'candle', 'candles=*1|2|3|4 lit=true|*false waterlog
 b('lime_candle_cake', 'partial', 'cake', 'lit=true|*false', { o: 'C', L: {"by":["lit"],"v":{"true":3}}, h: 0.875, i: '' });
 b('lime_carpet', 'low', 'carpet', '', { o: 'C', h: 0.0625 });
 b('lime_concrete', 'full', 'block', '', { o: 'O', sp: 1, R: 1 });
-b('lime_concrete_powder', 'full', 'block', '', { o: 'O', sp: 1, R: 1 });
+b('lime_concrete_powder', 'full', 'block', '', { o: 'O', sp: 1, R: 1, g: 1 });
 b('lime_concrete_slab', 'slab', 'slab', 'type=top|*bottom|double waterlogged=true|*false', { o: 'S', h: 0.5 });
 b('lime_concrete_stairs', 'stairs', 'stairs', 'facing=*north|south|west|east half=top|*bottom shape=*straight|inner_left|inner_right|outer_left|outer_right waterlogged=true|*false', { o: 'S' });
 b('lime_glazed_terracotta', 'full', 'block', 'facing=*north|south|west|east', { o: 'O', sp: 1, R: 1 });
@@ -642,7 +643,7 @@ b('magenta_candle', 'partial', 'candle', 'candles=*1|2|3|4 lit=true|*false water
 b('magenta_candle_cake', 'partial', 'cake', 'lit=true|*false', { o: 'C', L: {"by":["lit"],"v":{"true":3}}, h: 0.875, i: '' });
 b('magenta_carpet', 'low', 'carpet', '', { o: 'C', h: 0.0625 });
 b('magenta_concrete', 'full', 'block', '', { o: 'O', sp: 1, R: 1 });
-b('magenta_concrete_powder', 'full', 'block', '', { o: 'O', sp: 1, R: 1 });
+b('magenta_concrete_powder', 'full', 'block', '', { o: 'O', sp: 1, R: 1, g: 1 });
 b('magenta_concrete_slab', 'slab', 'slab', 'type=top|*bottom|double waterlogged=true|*false', { o: 'S', h: 0.5 });
 b('magenta_concrete_stairs', 'stairs', 'stairs', 'facing=*north|south|west|east half=top|*bottom shape=*straight|inner_left|inner_right|outer_left|outer_right waterlogged=true|*false', { o: 'S' });
 b('magenta_glazed_terracotta', 'full', 'block', 'facing=*north|south|west|east', { o: 'O', sp: 1, R: 1 });
@@ -738,7 +739,7 @@ b('orange_candle', 'partial', 'candle', 'candles=*1|2|3|4 lit=true|*false waterl
 b('orange_candle_cake', 'partial', 'cake', 'lit=true|*false', { o: 'C', L: {"by":["lit"],"v":{"true":3}}, h: 0.875, i: '' });
 b('orange_carpet', 'low', 'carpet', '', { o: 'C', h: 0.0625 });
 b('orange_concrete', 'full', 'block', '', { o: 'O', sp: 1, R: 1 });
-b('orange_concrete_powder', 'full', 'block', '', { o: 'O', sp: 1, R: 1 });
+b('orange_concrete_powder', 'full', 'block', '', { o: 'O', sp: 1, R: 1, g: 1 });
 b('orange_concrete_slab', 'slab', 'slab', 'type=top|*bottom|double waterlogged=true|*false', { o: 'S', h: 0.5 });
 b('orange_concrete_stairs', 'stairs', 'stairs', 'facing=*north|south|west|east half=top|*bottom shape=*straight|inner_left|inner_right|outer_left|outer_right waterlogged=true|*false', { o: 'S' });
 b('orange_glazed_terracotta', 'full', 'block', 'facing=*north|south|west|east', { o: 'O', sp: 1, R: 1 });
@@ -802,7 +803,7 @@ b('pink_candle', 'partial', 'candle', 'candles=*1|2|3|4 lit=true|*false waterlog
 b('pink_candle_cake', 'partial', 'cake', 'lit=true|*false', { o: 'C', L: {"by":["lit"],"v":{"true":3}}, h: 0.875, i: '' });
 b('pink_carpet', 'low', 'carpet', '', { o: 'C', h: 0.0625 });
 b('pink_concrete', 'full', 'block', '', { o: 'O', sp: 1, R: 1 });
-b('pink_concrete_powder', 'full', 'block', '', { o: 'O', sp: 1, R: 1 });
+b('pink_concrete_powder', 'full', 'block', '', { o: 'O', sp: 1, R: 1, g: 1 });
 b('pink_concrete_slab', 'slab', 'slab', 'type=top|*bottom|double waterlogged=true|*false', { o: 'S', h: 0.5 });
 b('pink_concrete_stairs', 'stairs', 'stairs', 'facing=*north|south|west|east half=top|*bottom shape=*straight|inner_left|inner_right|outer_left|outer_right waterlogged=true|*false', { o: 'S' });
 b('pink_glazed_terracotta', 'full', 'block', 'facing=*north|south|west|east', { o: 'O', sp: 1, R: 1 });
@@ -937,7 +938,7 @@ b('purple_candle', 'partial', 'candle', 'candles=*1|2|3|4 lit=true|*false waterl
 b('purple_candle_cake', 'partial', 'cake', 'lit=true|*false', { o: 'C', L: {"by":["lit"],"v":{"true":3}}, h: 0.875, i: '' });
 b('purple_carpet', 'low', 'carpet', '', { o: 'C', h: 0.0625 });
 b('purple_concrete', 'full', 'block', '', { o: 'O', sp: 1, R: 1 });
-b('purple_concrete_powder', 'full', 'block', '', { o: 'O', sp: 1, R: 1 });
+b('purple_concrete_powder', 'full', 'block', '', { o: 'O', sp: 1, R: 1, g: 1 });
 b('purple_concrete_slab', 'slab', 'slab', 'type=top|*bottom|double waterlogged=true|*false', { o: 'S', h: 0.5 });
 b('purple_concrete_stairs', 'stairs', 'stairs', 'facing=*north|south|west|east half=top|*bottom shape=*straight|inner_left|inner_right|outer_left|outer_right waterlogged=true|*false', { o: 'S' });
 b('purple_glazed_terracotta', 'full', 'block', 'facing=*north|south|west|east', { o: 'O', sp: 1, R: 1 });
@@ -968,7 +969,7 @@ b('red_candle', 'partial', 'candle', 'candles=*1|2|3|4 lit=true|*false waterlogg
 b('red_candle_cake', 'partial', 'cake', 'lit=true|*false', { o: 'C', L: {"by":["lit"],"v":{"true":3}}, h: 0.875, i: '' });
 b('red_carpet', 'low', 'carpet', '', { o: 'C', h: 0.0625 });
 b('red_concrete', 'full', 'block', '', { o: 'O', sp: 1, R: 1 });
-b('red_concrete_powder', 'full', 'block', '', { o: 'O', sp: 1, R: 1 });
+b('red_concrete_powder', 'full', 'block', '', { o: 'O', sp: 1, R: 1, g: 1 });
 b('red_concrete_slab', 'slab', 'slab', 'type=top|*bottom|double waterlogged=true|*false', { o: 'S', h: 0.5 });
 b('red_concrete_stairs', 'stairs', 'stairs', 'facing=*north|south|west|east half=top|*bottom shape=*straight|inner_left|inner_right|outer_left|outer_right waterlogged=true|*false', { o: 'S' });
 b('red_glazed_terracotta', 'full', 'block', 'facing=*north|south|west|east', { o: 'O', sp: 1, R: 1 });
@@ -979,7 +980,7 @@ b('red_nether_brick_stairs', 'stairs', 'stairs', 'facing=*north|south|west|east 
 b('red_nether_brick_wall', 'thin', 'wall', 'east=*none|low|tall north=*none|low|tall south=*none|low|tall up=*true|false waterlogged=true|*false west=*none|low|tall', { o: 'C', h: 1.5 });
 b('red_nether_bricks', 'full', 'block', '', { o: 'O', sp: 1, R: 1 });
 b('red_poplar_leaves', 'full', 'block', 'distance=1|2|3|4|5|6|*7 persistent=true|*false waterlogged=true|*false', { o: 'C', v: 'LEAVES', d: 1 });
-b('red_sand', 'full', 'block', '', { o: 'O', sp: 1, v: 'LOOSE', R: 1 });
+b('red_sand', 'full', 'block', '', { o: 'O', sp: 1, v: 'LOOSE', R: 1, g: 1 });
 b('red_sandstone', 'full', 'block', '', { o: 'O', sp: 1, v: 'ROCK', R: 1 });
 b('red_sandstone_slab', 'slab', 'slab', 'type=top|*bottom|double waterlogged=true|*false', { o: 'S', h: 0.5 });
 b('red_sandstone_stairs', 'stairs', 'stairs', 'facing=*north|south|west|east half=top|*bottom shape=*straight|inner_left|inner_right|outer_left|outer_right waterlogged=true|*false', { o: 'S' });
@@ -1012,7 +1013,7 @@ b('resin_clump', 'none', 'multiface', 'down=true|*false east=true|*false north=t
 b('respawn_anchor', 'full', 'block', 'charges=*0|1|2|3|4', { o: 'O', sp: 1, R: 1, L: {"by":["charges"],"v":{"1":3,"2":7,"3":11,"4":15}} });
 b('rooted_dirt', 'full', 'block', '', { o: 'O', sp: 1, v: 'SOIL', R: 1 });
 b('rose_bush', 'none', 'double_plant', 'half=upper|*lower', { o: 'C', v: 'PLANT' });
-b('sand', 'full', 'block', '', { o: 'O', sp: 1, v: 'LOOSE', R: 1 });
+b('sand', 'full', 'block', '', { o: 'O', sp: 1, v: 'LOOSE', R: 1, g: 1 });
 b('sandstone', 'full', 'block', '', { o: 'O', sp: 1, v: 'ROCK', R: 1 });
 b('sandstone_slab', 'slab', 'slab', 'type=top|*bottom|double waterlogged=true|*false', { o: 'S', h: 0.5 });
 b('sandstone_stairs', 'stairs', 'stairs', 'facing=*north|south|west|east half=top|*bottom shape=*straight|inner_left|inner_right|outer_left|outer_right waterlogged=true|*false', { o: 'S' });
@@ -1277,7 +1278,7 @@ b('white_candle', 'partial', 'candle', 'candles=*1|2|3|4 lit=true|*false waterlo
 b('white_candle_cake', 'partial', 'cake', 'lit=true|*false', { o: 'C', L: {"by":["lit"],"v":{"true":3}}, h: 0.875, i: '' });
 b('white_carpet', 'low', 'carpet', '', { o: 'C', h: 0.0625 });
 b('white_concrete', 'full', 'block', '', { o: 'O', sp: 1, R: 1 });
-b('white_concrete_powder', 'full', 'block', '', { o: 'O', sp: 1, R: 1 });
+b('white_concrete_powder', 'full', 'block', '', { o: 'O', sp: 1, R: 1, g: 1 });
 b('white_concrete_slab', 'slab', 'slab', 'type=top|*bottom|double waterlogged=true|*false', { o: 'S', h: 0.5 });
 b('white_concrete_stairs', 'stairs', 'stairs', 'facing=*north|south|west|east half=top|*bottom shape=*straight|inner_left|inner_right|outer_left|outer_right waterlogged=true|*false', { o: 'S' });
 b('white_glazed_terracotta', 'full', 'block', 'facing=*north|south|west|east', { o: 'O', sp: 1, R: 1 });
@@ -1300,7 +1301,7 @@ b('yellow_candle', 'partial', 'candle', 'candles=*1|2|3|4 lit=true|*false waterl
 b('yellow_candle_cake', 'partial', 'cake', 'lit=true|*false', { o: 'C', L: {"by":["lit"],"v":{"true":3}}, h: 0.875, i: '' });
 b('yellow_carpet', 'low', 'carpet', '', { o: 'C', h: 0.0625 });
 b('yellow_concrete', 'full', 'block', '', { o: 'O', sp: 1, R: 1 });
-b('yellow_concrete_powder', 'full', 'block', '', { o: 'O', sp: 1, R: 1 });
+b('yellow_concrete_powder', 'full', 'block', '', { o: 'O', sp: 1, R: 1, g: 1 });
 b('yellow_concrete_slab', 'slab', 'slab', 'type=top|*bottom|double waterlogged=true|*false', { o: 'S', h: 0.5 });
 b('yellow_concrete_stairs', 'stairs', 'stairs', 'facing=*north|south|west|east half=top|*bottom shape=*straight|inner_left|inner_right|outer_left|outer_right waterlogged=true|*false', { o: 'S' });
 b('yellow_glazed_terracotta', 'full', 'block', 'facing=*north|south|west|east', { o: 'O', sp: 1, R: 1 });
@@ -1518,6 +1519,8 @@ export function supportOf(state) {
 
 /** A vanilla bed half. */
 /** (6b) A mob can spawn on top of this block (its default state; vanilla isValidSpawn for a zombie, from the 26.3 dump). */
+/** (6c W) A falling block (its class extends FallingBlock: sand, gravel, concrete powder, anvils, the dragon egg). */
+export const isGravity = (name) => !!T[qualify(String(name).replace(/\[.*$/, ''))]?.g;
 export const isSpawnable = (name) => !!T[qualify(String(name).replace(/\[.*$/, ''))]?.sp;
 
 /** (6b) The block's voxel class for natural blocks (kit/voxel_classes.json), 'AIR' for air, else 'PLAYER'. */

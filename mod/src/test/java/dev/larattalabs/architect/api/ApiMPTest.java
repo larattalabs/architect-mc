@@ -18,15 +18,15 @@ import java.util.Set;
 import org.junit.jupiter.api.Test;
 
 /**
- * API 1.17.0 (docs/CONTRACT.md phase 6c slice MP): the {@link Mask} and {@link Pattern} records validate with the kit's own
+ * Slice MP's API (docs/CONTRACT.md phase 6c slice MP; 1.16.0, shipped with F1): the {@link Mask} and {@link Pattern} records validate with the kit's own
  * bundled schemas, a bad spec refuses FIELD_LIMIT with its path, no Reason is added, the features come from the helper, and the
  * mod knows the IR kinds {@code mask} and {@code pattern}.
  */
-class Api117Test {
+class ApiMPTest {
 	@Test
 	void version() {
 		String[] v = ArchitectApi.VERSION.split("\\.");
-		assertTrue(Integer.parseInt(v[0]) == 1 && Integer.parseInt(v[1]) >= 17, ArchitectApi.VERSION);
+		assertTrue(Integer.parseInt(v[0]) == 1 && Integer.parseInt(v[1]) >= 16, ArchitectApi.VERSION);
 	}
 
 	@Test
@@ -95,7 +95,7 @@ class Api117Test {
 	@Test
 	void irKindsAndKitVersion() {
 		assertTrue(IrStale.KINDS_FORMAT2.contains("mask") && IrStale.KINDS_FORMAT2.contains("pattern"));
-		assertEquals("0.20.0", IrStale.KIT_VERSION);
+		assertTrue(IrStale.semverCompare(IrStale.KIT_VERSION, "0.19.0") >= 0, IrStale.KIT_VERSION);
 	}
 
 	/** The bundled schemas are the kit's files, byte for byte. */

@@ -11,6 +11,7 @@
 //   L          block light emitted: a constant, or { by: [props], v: { 'value,..': level } } (missing = 0)
 //   d          light dampening when between 1 and 14 (leaves, water: -1 extra per step)
 //   h          top of the collision box when not 1 (carpet 0.0625, slab 0.5, chest 0.875, ...)
+//   g          a falling block (its class extends FallingBlock)
 //   i          the block's item when it differs ('' = none: air, fluids, wall torches map to the torch, ...)
 // Properties are written `name=v1|*v2` with the default starred.
 
@@ -232,6 +233,8 @@ export function supportOf(state) {
 
 /** A vanilla bed half. */
 /** (6b) A mob can spawn on top of this block (its default state; vanilla isValidSpawn for a zombie, from the 26.3 dump). */
+/** (6c W) A falling block (its class extends FallingBlock: sand, gravel, concrete powder, anvils, the dragon egg). */
+export const isGravity = (name) => !!T[qualify(String(name).replace(/\[.*$/, ''))]?.g;
 export const isSpawnable = (name) => !!T[qualify(String(name).replace(/\[.*$/, ''))]?.sp;
 
 /** (6b) The block's voxel class for natural blocks (kit/voxel_classes.json), 'AIR' for air, else 'PLAYER'. */

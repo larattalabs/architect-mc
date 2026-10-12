@@ -24,7 +24,7 @@ public final class ApiRules {
 	public static final java.util.Set<String> JAVA_FEATURES = java.util.Set.of("sites", "events", "designs", "library", "survey", "survivalInfo",
 		"compositePreview", "batchPlacement", "siteGroups", "stages", "groupCrate", "journal", "overlapLayer", "roads", "cellSites",
 		"stackQuery", "entryVersions", "blueprintDelta", "deltaApply", "siteRevert", "deltaPreview", "regionPrepare", "generatedOnly", "cellConditions",
-		"chunkBound", "surveyVolume", "regionNudge", "regionOpKeys", "lotExt");
+		"chunkBound", "surveyVolume", "regionNudge", "regionOpKeys", "lotExt", "frozenWater", "siteWaiting", "fullBom");
 
 	private ApiRules() {
 	}
@@ -52,6 +52,7 @@ public final class ApiRules {
 					case "region.blobs" -> "regionBlobs";
 					case "ir.format2" -> "irFormat2";
 					case "region.keepOut" -> "planKeepOut"; // 6c V
+					case "region.lightCover" -> "apronLights"; // 6c W
 					default -> Wire4b.FEATURE_NAMES.getOrDefault(f, Wire5a.FEATURE_NAMES.getOrDefault(f, f));
 				});
 			}

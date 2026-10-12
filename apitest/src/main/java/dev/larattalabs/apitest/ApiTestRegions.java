@@ -44,7 +44,7 @@ import net.minecraft.world.level.levelgen.structure.BoundingBox;
  * rnudge &lt;region&gt; &lt;action&gt;   (6b) Regions.nudge -> {done, message} ("not applicable" for an action the wait doesn't offer)
  * api114                (6c X, API 1.14.0) version, the features, the old constructors (by reflection, public API only), the two new
  *                       default methods, no new Reason
- * api117                (6c MP, API 1.17.0) version, the masks/patterns features, Mask.parse and Pattern.parse (good and bad specs)
+ * apimp                 (6c MP, API 1.16.0) version, the masks/patterns features, Mask.parse and Pattern.parse (good and bad specs)
  * rplanbykey &lt;owner|-&gt; &lt;key&gt;      (1.14.0) Regions.planByKey -> the plan or null
  * rrealisebykey &lt;owner|-&gt; &lt;key&gt;   (1.14.0) Regions.realiseByKey -> the RegionView or null
  * </pre>
@@ -262,7 +262,7 @@ final class ApiTestRegions {
 				o.addProperty("byKeyDefaults", defaults);
 				return o;
 			}
-			case "api117": {
+			case "apimp": {
 				// (6c MP) Mask / Pattern through the public API: the bundled schemas resolve in game, a bad spec refuses FIELD_LIMIT with its path
 				JsonObject o = new JsonObject();
 				o.addProperty("version", ArchitectApi.VERSION);
@@ -272,7 +272,7 @@ final class ApiTestRegions {
 						f.add(x);
 					}
 				}
-				o.add("features117", f);
+				o.add("featuresMP", f);
 				Reason[] rs = Reason.values();
 				o.addProperty("lastReasons", rs[rs.length - 2].name() + " " + rs[rs.length - 1].name());
 				String[][] cases = {

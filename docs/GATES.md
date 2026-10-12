@@ -139,6 +139,7 @@ its tags. Every matching rule counts. The main rules:
 | `kit/lib/region/**`, `kit/regions/**` (engine) | unit-kit, 6a-inv3 | 6a-staged, 6a-eflat, 6b-versions, 6b-scenario-s1, 6cv-scenario-s7 |
 | `scenarios/**` | unit-kit, 6b-scenario-s1-flat | 6b-scenario-s1, 6cv-scenario-s7 |
 | slice V: the village components, `flat_village`, `tools/gate6cv.mjs`, S7 | v-unit | v-ingame, 6cv-scenario-s7 |
+| slice W: lamps, fixtures, gravity, FROZEN, the road code, `tools/gate6cw.mjs` | w-unit | w-ingame, 6cw-scenario-s7 |
 | `tools/gate6b.mjs`, `tools/lib/run6b.mjs`, `tools/find-site.mjs` | 6b-smoke | the other sim 6b steps |
 | `tools/scenarios.mjs`, `tools/lib/scenario-*.mjs` | 6b-scenario-s1-flat | 6b-scenario-s1 |
 | a gate driver (`tools/gate4e.mjs`, ...) | that gate's cheap steps | its longer steps |

@@ -10,11 +10,11 @@
 //     unit                            items 1-6 and 8 offline: kit/test/mp.test.mjs (mix shares, gradients, masks vs the reference,
 //                                     tile independence and the kit golden, the drift fixture, crater without the toolbox), the
 //                                     tile goldens that must not move (S1, S7, mega_bench, the 6b family fixtures), the Java
-//                                     Api117Test + MaskPatternDriftTest (item 6's other half) + PlanStaleTest
-//     stale                           item 9: the v0.17.0 kit (staleReason) and the 0.17.0 mod jar (IrStale) refuse a mask/pattern IR
+//                                     ApiMPTest + MaskPatternDriftTest (item 6's other half) + PlanStaleTest
+//     stale                           item 9: the v0.18.0 kit (staleReason) and the 0.18.0 mod jar (IrStale) refuse a mask/pattern IR
 //                                     PLAN_STALE; this build accepts it
 //     apicompat                       item 11: tools/api-compat.mjs --gate6cmp (the run worktree's classes, built by unit-mod); with a
-//                                     client up, the apitest api117 check (Mask/Pattern through the public API, in game)
+//                                     client up, the apitest apimp check (Mask/Pattern through the public API, in game)
 //     judge                           items 5, 7 and 10 (timing: BAR lines) from the scenario runs (SCENARIOS_ART/mp-flat, mp): IR sha over 3 plans,
 //                                     1 vs 4 workers, the golden; E-flat 0, E-normal classified <= 0.01%; Architect's own tick
 //                                     <= 50 ms; the tile evaluation over the natural run's plan: p99 under 2 s, >= 45k cells/s
@@ -38,7 +38,7 @@ const { RUN, OUT, MAIN, bar, call, check, cmd, connect, fails, leaveWorld, log, 
 refuseKeys();
 const FLAT = 'G6B Flat Base';
 const ART = process.env.SCENARIOS_ART ? path.resolve(process.env.SCENARIOS_ART) : path.join(MAIN, 'artifacts', 'scenarios');
-const BASELINE = path.join(MAIN, 'artifacts', 'gate6c-mp', 'v0170');
+const BASELINE = path.join(MAIN, 'artifacts', 'gate6c-mp', 'v0180');
 const json = (o) => JSON.stringify(o).replaceAll(' ', '');
 const JAVA_HOME = process.env.JAVA_HOME ?? '/opt/homebrew/opt/openjdk@25';
 
@@ -120,7 +120,7 @@ steps.unit = async () => {
   out.goldens = nodeTest(['kit/test/region-golden.test.mjs', 'kit/test/region-6b.test.mjs', 'kit/test/scenario-goldens.test.mjs']);
   check(out.goldens.code === 0 && out.goldens.fail === 0, `item 8: the tile goldens hold (mega_bench, the 6b family fixtures with crater_works's tiles, S1, S7): ${out.goldens.pass} pass, ${out.goldens.fail} fail`, out.goldens.failing);
   const env = { ...process.env, JAVA_HOME, GRADLE_USER_HOME: process.env.GRADLE_USER_HOME ?? path.join(root, '.gradle-home') };
-  const g = spawnSync('./gradlew', ['test', '--offline', '--tests', '*Api117Test', '--tests', '*MaskPatternDriftTest', '--tests', '*PlanStaleTest', '--tests', '*Api114Test'],
+  const g = spawnSync('./gradlew', ['test', '--offline', '--tests', '*ApiMPTest', '--tests', '*MaskPatternDriftTest', '--tests', '*PlanStaleTest', '--tests', '*Api114Test'],
     { cwd: path.join(root, 'mod'), env, encoding: 'utf8', timeout: 3_600_000 });
   const xml = (n) => {
     const f = path.join(root, 'mod', 'build', 'test-results', 'test', `TEST-dev.larattalabs.architect.${n}.xml`);
@@ -128,10 +128,10 @@ steps.unit = async () => {
     const m = /tests="(\d+)" skipped="(\d+)" failures="(\d+)" errors="(\d+)"/.exec(t);
     return m ? { tests: +m[1], failures: +m[3] + +m[4] } : null;
   };
-  out.java = { code: g.status, api117: xml('api.Api117Test'), drift: xml('api.MaskPatternDriftTest'), stale: xml('region.PlanStaleTest') };
+  out.java = { code: g.status, apimp: xml('api.ApiMPTest'), drift: xml('api.MaskPatternDriftTest'), stale: xml('region.PlanStaleTest') };
   check(g.status === 0 && out.java.drift?.tests === 1 && out.java.drift.failures === 0, `item 6: the Java Mask/Pattern validation agrees with the kit on the 200 specs (MaskPatternDriftTest ${json(out.java.drift)})`);
-  check(g.status === 0 && out.java.api117?.tests >= 8 && out.java.api117.failures === 0 && out.java.stale?.failures === 0,
-    `item 11 (Java): Api117Test (parse, FIELD_LIMIT paths, no new Reason, features, IR kinds, bundled schemas = the kit's) ${json(out.java.api117)}; PlanStaleTest ${json(out.java.stale)}`);
+  check(g.status === 0 && out.java.apimp?.tests >= 8 && out.java.apimp.failures === 0 && out.java.stale?.failures === 0,
+    `item 11 (Java): ApiMPTest (parse, FIELD_LIMIT paths, no new Reason, features, IR kinds, bundled schemas = the kit's) ${json(out.java.apimp)}; PlanStaleTest ${json(out.java.stale)}`);
   spendZero();
   return out;
 };
@@ -146,26 +146,26 @@ steps.stale = async () => {
   const claim = { minX: -100, minZ: -100, maxX: 99, maxZ: 99, minY: -64, maxY: 319 };
   const p = await planRegion({ programFile: path.join(root, 'kit', 'regions', 'crater_works.mjs'), survey: synthSurvey(claim, 'golden'), claim, params: { toolbox: true } });
   fs.writeFileSync(path.join(tmp, 'ir.json'), p.irJson);
-  // with the kit's own kitVersion lowered to 0.16.0 (the v0.17.0 tag's kit) too: then only the kinds refuse
-  const irKinds = { ...p.ir, kitVersion: '0.16.0' };
+  // with the kit's own kitVersion lowered to 0.18.0 (the v0.18.0 tag's kit) too: then only the kinds refuse
+  const irKinds = { ...p.ir, kitVersion: '0.18.0' };
   fs.writeFileSync(path.join(tmp, 'ir-kinds.json'), JSON.stringify(irKinds));
-  // (a) the v0.17.0 kit (git archive of the tag)
-  execFileSync('sh', ['-c', `git -C '${root}' archive v0.17.0 kit | tar -x -C '${tmp}'`]);
+  // (a) the v0.18.0 kit (git archive of the tag)
+  execFileSync('sh', ['-c', `git -C '${root}' archive v0.18.0 kit | tar -x -C '${tmp}'`]);
   const old = await import(pathToFileURL(path.join(tmp, 'kit', 'lib', 'realise.mjs')).href);
   const kitA = old.staleReason(p.ir), kitB = old.staleReason(irKinds);
   let kitThrow = null;
   try { old.compileIR(irKinds); } catch (e) { kitThrow = String(e.message); }
-  check(/^plan needs kit 0\.20\.0/.test(kitA ?? '') && /kinds \[mask, pattern\]/.test(kitB ?? '') && /^PLAN_STALE/.test(kitThrow ?? ''),
-    `item 9: the v0.17.0 kit refuses the toolbox IR PLAN_STALE ("${kitA}"; at kit 0.16.0: "${kitB}"; compileIR: "${kitThrow}")`);
-  // (b) the 0.17.0 mod jar's IrStale (pure Java + Gson), and this build's
+  check(/^plan needs kit 0\.19\.0/.test(kitA ?? '') && /kinds \[mask, pattern\]/.test(kitB ?? '') && /^PLAN_STALE/.test(kitThrow ?? ''),
+    `item 9: the v0.18.0 kit refuses the toolbox IR PLAN_STALE ("${kitA}"; at kit 0.18.0: "${kitB}"; compileIR: "${kitThrow}")`);
+  // (b) the 0.18.0 mod jar's IrStale (pure Java + Gson), and this build's
   const gson = execFileSync('sh', ['-c', `find '${path.join(root, '.gradle-home')}' -name 'gson-2*.jar' -not -name '*sources*' | sort | tail -1`]).toString().trim();
   const src = path.join(tmp, 'OldStale.java');
   fs.writeFileSync(src, 'import com.google.gson.*; import java.nio.file.*;\npublic class OldStale { public static void main(String[] a) throws Exception { for (String f : a) System.out.println(String.valueOf(dev.larattalabs.architect.region.IrStale.reason(JsonParser.parseString(Files.readString(Path.of(f))).getAsJsonObject(), null))); } }\n');
   const java = path.join(JAVA_HOME, 'bin', 'java');
   const runJar = (jar) => execFileSync(java, ['-cp', `${jar}${path.delimiter}${gson}`, src, path.join(tmp, 'ir.json'), path.join(tmp, 'ir-kinds.json')], { encoding: 'utf8' }).trim().split('\n');
-  const modOld = runJar(path.join(BASELINE, 'architect_mc-0.17.0.jar'));
-  check(/^plan needs kit 0\.20\.0 \/ kinds \[mask, pattern\]; this is kit 0\.16\.0$/.test(modOld[0]) && /^plan needs kinds \[mask, pattern\]; this is kit 0\.16\.0$/.test(modOld[1]),
-    `item 9: the 0.17.0 mod (IrStale) refuses it PLAN_STALE: "${modOld[0]}"; at kit 0.16.0: "${modOld[1]}"`);
+  const modOld = runJar(path.join(BASELINE, 'architect_mc-0.18.0.jar'));
+  check(/^plan needs kit 0\.19\.0 \/ kinds \[mask, pattern\]; this is kit 0\.18\.0$/.test(modOld[0]) && /^plan needs kinds \[mask, pattern\]; this is kit 0\.18\.0$/.test(modOld[1]),
+    `item 9: the 0.18.0 mod (IrStale) refuses it PLAN_STALE: "${modOld[0]}"; at kit 0.18.0: "${modOld[1]}"`);
   const newClasses = fs.existsSync(path.join(RUN, 'mod', 'build', 'classes', 'java', 'main')) ? path.join(RUN, 'mod', 'build', 'classes', 'java', 'main') : path.join(root, 'mod', 'build', 'classes', 'java', 'main');
   const modNew = runJar(newClasses);
   check(modNew[0] === 'null', `this build's IrStale accepts it (${modNew[0]}; classes ${newClasses})`);
@@ -181,15 +181,15 @@ steps.apicompat = async () => {
   const r = spawnSync(process.execPath, [path.join(root, 'tools', 'api-compat.mjs'), '--gate6cmp', ...classes], { cwd: root, encoding: 'utf8', env: { ...process.env, JAVA_HOME } });
   const t = `${r.stdout}${r.stderr}`;
   fs.writeFileSync(path.join(OUT, 'api-compat.txt'), t);
-  check(r.status === 0 && /all 4 checks clean/.test(t), `item 11: api-compat against the 0.17.0, 0.16.0 and 0.15.0 apitest jars and the 0.17.0 surface: ${t.trim().split('\n').pop()}`);
+  check(r.status === 0 && /all 4 checks clean/.test(t), `item 11: api-compat against the 0.18.0, 0.17.0 and 0.16.0 apitest jars and the 0.18.0 surface: ${t.trim().split('\n').pop()}`);
   if (state.dev || (await connect(5_000).then(() => true).catch(() => false))) {
     if (!(await call('dev.state')).inWorld) await openWorld(FLAT);
-    const v = await api('api117');
+    const v = await api('apimp');
     const p = v.parse ?? [];
     const okParse = p.length === 6 && p[0].ok && !p[1].ok && p[1].reason === 'FIELD_LIMIT' && /mask\.slope: \[a, b\] needs a <= b/.test(p[1].message)
       && !p[2].ok && p[3].ok && !p[4].ok && /stops\[1\]\.at/.test(p[4].message) && !p[5].ok && p[5].reason === 'FIELD_LIMIT';
-    check(/^1\.(1[7-9]|[2-9]\d)\./.test(v.version) && v.features117?.length === 2 && v.lastReasons === 'PROTECTED FIELD_LIMIT' && okParse,
-      `item 11: apitest api117 in game: Mask/Pattern parse through the public API (the bundled schemas load), FIELD_LIMIT with the path, masks/patterns features, no new Reason (${json(v).slice(0, 600)})`);
+    check(/^1\.(1[6-9]|[2-9]\d)\./.test(v.version) && v.featuresMP?.length === 2 && v.lastReasons === 'PROTECTED FIELD_LIMIT' && okParse,
+      `item 11: apitest apimp in game: Mask/Pattern parse through the public API (the bundled schemas load), FIELD_LIMIT with the path, masks/patterns features, no new Reason (${json(v).slice(0, 600)})`);
   }
   spendZero();
   return { out: t };

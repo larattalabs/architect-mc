@@ -1,6 +1,6 @@
 {
- "note": "crater_works {toolbox: true} over synthSurvey(200, \"golden\"), node \"golden\", kit 0.20.0: the MP demo; tiles: stage|set|key -> sha256 of the ARTL payload (macOS and Linux CI)",
- "irSha": "bc6480807edfcd25e1e0eec3c13b8a2e6b874ccc517e5383cc7405f6005ae09d",
+ "note": "crater_works {toolbox: true} over synthSurvey(200, \"golden\"), node \"golden\", kit 0.19.0: the MP demo; tiles: stage|set|key -> sha256 of the ARTL payload (macOS and Linux CI)",
+ "irSha": "132ea7910d762f856dbb546862dee5653df47e81f9fc363d2e0d016544082253",
  "cells": 896174,
  "tiles": {
   "ground|terrain|-1,-1": "d4afa63d2dbe2c8f7f0484fae7b85e0546c9d872661bc9498ea0f2994af587d2",

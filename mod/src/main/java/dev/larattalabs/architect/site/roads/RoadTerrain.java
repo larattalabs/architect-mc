@@ -60,6 +60,11 @@ public final class RoadTerrain implements RoadPlan.World {
 		if (!fl.isEmpty()) {
 			return RoadPlan.WATER;
 		}
+		// 6c W: ice over water (a frozen river or sea) is water for the road's depth rules: a road over it is DEEP_WATER (a partial
+		// road skips that span; a 1-deep crossing gets its deck as over open water)
+		if (dev.larattalabs.architect.region.Columns.iceTop(s) && frozenBelow(level, pos)) {
+			return RoadPlan.WATER;
+		}
 		Block b = s.getBlock();
 		if (b instanceof BaseFireBlock || b instanceof LightBlock) {
 			return RoadPlan.BUILT_OPEN;
@@ -103,5 +108,20 @@ public final class RoadTerrain implements RoadPlan.World {
 			return RoadPlan.PLANT;
 		}
 		return s.getCollisionShape(level, pos).isEmpty() ? RoadPlan.BUILT_OPEN : RoadPlan.BUILT;
+	}
+
+	/** 6c W: water within {@code Columns.FROZEN_DEPTH} under the ice at {@code pos}, only ice or water between. */
+	static boolean frozenBelow(Level level, BlockPos pos) {
+		BlockPos.MutableBlockPos p = pos.mutable();
+		for (int dy = 1; dy <= dev.larattalabs.architect.region.Columns.FROZEN_DEPTH; dy++) {
+			BlockState s = level.getBlockState(p.setY(pos.getY() - dy));
+			if (s.getFluidState().is(FluidTags.WATER)) {
+				return true;
+			}
+			if (!dev.larattalabs.architect.region.Columns.iceTop(s)) {
+				return false;
+			}
+		}
+		return false;
 	}
 }

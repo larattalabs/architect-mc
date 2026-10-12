@@ -94,7 +94,7 @@ function maskedIR(mask, box, material = 'minecraft:stone') {
   const vol = encodeArvx(VBOX, volClasses);
   const blobs = new Map([[sha256Hex(fieldBytes), fieldBytes], [sha256Hex(vol), vol]]);
   const ir = {
-    format: 2, id: 'mp_mask', seed: '7', kitVersion: '0.20.0', claim: { minX: -64, minZ: -64, maxX: 191, maxZ: 191, minY: 0, maxY: 200 },
+    format: 2, id: 'mp_mask', seed: '7', kitVersion: '0.19.0', claim: { minX: -64, minZ: -64, maxX: 191, maxZ: 191, minY: 0, maxY: 200 },
     stages: ['main'], parts: [{ id: 'p', stage: 'main', set: 'terrain', ops: [{ op: 'shape', shape: { kind: 'box', min: [box[0], box[1], box[2]], max: [box[3], box[4], box[5]] }, material, cond: 0, walk: false, mask }] }],
     blobs: { field_wet: { sha: sha256Hex(fieldBytes), bytes: fieldBytes.length, kind: 'field' }, vol_1: { sha: sha256Hex(vol), bytes: vol.length, kind: 'volume' } },
     fields: { wet: { blob: 'field_wet', type: 'u8', ...FIELD, res: 1 } },
@@ -239,7 +239,7 @@ test('patterns in an IR: shape materials, columns materials and rule mats paint 
   const grad = { gradient: { by: 'depth', stops: [{ at: 0, mat: 'minecraft:grass_block' }, { at: 4, mat: 'minecraft:dirt' }, { at: 8, mat: 'minecraft:stone' }] } };
   const g = (x, z) => W.ground(x, z);
   const ir = {
-    format: 2, id: 'mp_pat', seed: '99', kitVersion: '0.20.0', claim: { minX: 0, minZ: 0, maxX: 63, maxZ: 63, minY: 0, maxY: 200 }, stages: ['main'],
+    format: 2, id: 'mp_pat', seed: '99', kitVersion: '0.19.0', claim: { minX: 0, minZ: 0, maxX: 63, maxZ: 63, minY: 0, maxY: 200 }, stages: ['main'],
     parts: [{ id: 'p', stage: 'main', set: 'terrain', ops: [
       { op: 'shape', shape: { kind: 'box', min: [0, 30, 0], max: [15, 120, 15] }, material: { pattern: mix }, cond: 0, walk: false },
       { op: 'columns', from: { surface: 0 }, to: { surface: 0 }, cols: [20, 20, -12, 0, 0, 21, 20, -12, 0, 1], materials: [{ pattern: grad }, 'minecraft:gold_block'], cond: 0, walk: false },
@@ -321,8 +321,8 @@ test('format 2: requires names mask and pattern; an older kit refuses them (PLAN
   const p = await planInline((r) => { r.part('a').fill({ kind: 'box', min: [0, 60, 0], max: [1, 61, 1] }, { mix: [{ w: 1, mat: 'rock' }] }, { mask: { height: [0, 100] } }); });
   assert.deepEqual(p.ir.requires, ['mask', 'pattern']);
   assert.equal(staleReason(p.ir), null);
-  assert.match(staleReason(p.ir, '0.17.0'), /plan needs kit 0\.20\.0/);
-  assert.match(staleReason({ ...p.ir, kitVersion: '0.17.0', requires: ['mask', 'pattern', 'op:brush'] }), /kinds \[op:brush\]/);
+  assert.match(staleReason(p.ir, '0.18.0'), /plan needs kit 0\.19\.0/);
+  assert.match(staleReason({ ...p.ir, kitVersion: '0.18.0', requires: ['mask', 'pattern', 'op:brush'] }), /kinds \[op:brush\]/);
 });
 
 // ------------------------------------------------------------------ 4, 5, 8: the crater toolbox demo
@@ -333,7 +333,7 @@ const evalIn = (irJson, jobs, blobs) => new Promise((resolve, reject) => {
   w.once('message', (m) => { resolve(m); void w.terminate(); });
   w.once('error', reject);
 });
-const crater = (params) => planRegion({ programFile: path.join(KIT, 'regions', 'crater_works.mjs'), survey: synthSurvey(claimOf(200), SEED), claim: claimOf(200), params, node: 'golden', kitVersion: '0.20.0' });
+const crater = (params) => planRegion({ programFile: path.join(KIT, 'regions', 'crater_works.mjs'), survey: synthSurvey(claimOf(200), SEED), claim: claimOf(200), params, node: 'golden', kitVersion: '0.19.0' });
 
 test('items 4 and 5: the crater toolbox demo: IR byte-identical over 3 plans; tiles equal for 1 and 4 workers, forward and shuffled; the golden', async () => {
   const a = await crater({ toolbox: true }), b = await crater({ toolbox: true }), c = await crater({ toolbox: true });
@@ -352,7 +352,7 @@ test('items 4 and 5: the crater toolbox demo: IR byte-identical over 3 plans; ti
   assert.deepEqual(m4, m1);
   const now = { irSha: a.irSha, cells: one.reduce((n, r) => n + r.count, 0), tiles: Object.fromEntries(Object.keys(m1).sort().map((k) => [k, m1[k]])) };
   const file = path.join(FIX, 'regions', 'crater-toolbox.golden.json');
-  if (UPDATE) fs.writeFileSync(file, `${JSON.stringify({ note: 'crater_works {toolbox: true} over synthSurvey(200, "golden"), node "golden", kit 0.20.0: the MP demo; tiles: stage|set|key -> sha256 of the ARTL payload (macOS and Linux CI)', ...now }, null, 1)}\n`);
+  if (UPDATE) fs.writeFileSync(file, `${JSON.stringify({ note: 'crater_works {toolbox: true} over synthSurvey(200, "golden"), node "golden", kit 0.19.0: the MP demo; tiles: stage|set|key -> sha256 of the ARTL payload (macOS and Linux CI)', ...now }, null, 1)}\n`);
   const g = JSON.parse(fs.readFileSync(file, 'utf8'));
   assert.equal(now.irSha, g.irSha, 'IR sha');
   assert.deepEqual(now.tiles, g.tiles, 'tile shas');

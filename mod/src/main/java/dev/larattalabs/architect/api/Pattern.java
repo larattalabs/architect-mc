@@ -15,7 +15,7 @@ import java.util.Objects;
  * A mix picks per cell by an integer hash of (the plan's seed, the label, x, y, z) over the weights; a gradient blends across
  * each stop interval with the ordered 4x4 Bayer dither. A {@code mat} is a role name or a block state (null: air). The spec is
  * checked by the kit's own schema ({@code kit/schemas/pattern.json}, bundled) plus its rule (stops strictly increasing), the same
- * check the kit runs. A bad spec throws {@link ArchitectRefused} ({@link Reason#FIELD_LIMIT}) with the path. Since 1.17.0.
+ * check the kit runs. A bad spec throws {@link ArchitectRefused} ({@link Reason#FIELD_LIMIT}) with the path. Since 1.16.0.
  *
  * @param spec the pattern (copied; never changed)
  */

@@ -20,7 +20,7 @@ import java.util.Objects;
  * The spec is checked by the kit's own schema ({@code kit/schemas/mask.json}, bundled) plus its rules (ranges ordered, gte under
  * lt, at most 8 deep and 64 nodes), the same check the kit runs (a test holds them equal). A bad spec throws
  * {@link ArchitectRefused} ({@link Reason#FIELD_LIMIT}) with the path ({@code mask.all[1].slope: [a, b] needs a <= b}).
- * Masks reach a plan through a program's params ({@code RegionPlanRequest.params}, as JSON) and brushes. Since 1.17.0.
+ * Masks reach a plan through a program's params ({@code RegionPlanRequest.params}, as JSON) and brushes. Since 1.16.0.
  *
  * @param spec the mask (copied; never changed)
  */

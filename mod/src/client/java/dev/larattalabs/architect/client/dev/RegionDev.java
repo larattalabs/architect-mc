@@ -232,6 +232,15 @@ public final class RegionDev {
 				o.addProperty("holding", Fields.of(req).optBool("on", true));
 				return o;
 			}));
+		DevBridge.register("dev.region.dropRemovalEnd", 10_000, "{on?: true} - C23 gate: the next end of a region's group removal leaves the region's "
+			+ "record REMOVING (as a stop between the group's save and the region's record); the next world start reconciles it", (req, mc) -> ServerTasks
+				.callOnServer(s -> {
+					boolean on = Fields.of(req).optBool("on", true);
+					RegionsImpl.dropNextRemovalEnd = on;
+					JsonObject o = new JsonObject();
+					o.addProperty("armed", on);
+					return o;
+				}));
 		DevBridge.register("dev.undo.failRestore", 10_000, "{skip?: 0} - 6c X (C22): let `skip` removal restores finish their writes, then break the next one "
 			+ "(\"injected restore failure\") before its site record is finished; -1 disarms", (req, mc) -> ServerTasks.callOnServer(s -> {
 				dev.larattalabs.architect.site.Groups.failRestore(Fields.of(req).has("skip") ? req.get("skip").getAsInt() : 0);

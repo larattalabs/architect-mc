@@ -66,7 +66,7 @@ public final class Views {
 			s.versioning().version() > 0 || server == null ? Math.max(1, s.versioning().version()) : Math.max(1,
 				dev.larattalabs.architect.site.SiteDeltas.versionOf(server, s)), Math.max(1, dev.larattalabs.architect.site.SiteDeltas.headVersion(s
 					.blueprint())), s.versioning().deviations(), s.versioning().updating() > 0 || s.versioning().reverting() > 0, regionOfGroup(m == null
-						? null : m.group()));
+						? null : m.group()), server == null || s.construction() == null ? null : dev.larattalabs.architect.site.SiteWaits.view(server, s.id()));
 	}
 
 	/** A road or cell site as the API sees it (phase 4e). */
@@ -80,7 +80,8 @@ public final class Views {
 			i.placing() ? State.PLACING : i.building() ? State.BUILDING : State.BUILT, prog[0], prog[1], m == null ? null : m.group(), m == null ? null
 				: m.batchId(), m == null ? null : m.itemKey(),
 			i.kind(), policy, dev.larattalabs.architect.site.SiteJournal.coveredSites(i.id()), dev.larattalabs.architect.site.SiteJournal.related(i.id(), true),
-			1, 1, 0, false, region);
+			1, 1, 0, false, region, i.construction() == null || dev.larattalabs.architect.site.SiteDeltas.serverOrNull() == null ? null
+				: dev.larattalabs.architect.site.SiteWaits.view(dev.larattalabs.architect.site.SiteDeltas.serverOrNull(), i.id()));
 	}
 
 	/** Phase 6a: the region of a site group (its batch ext names it), or null. */

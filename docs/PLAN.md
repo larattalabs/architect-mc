@@ -340,6 +340,16 @@ load: **load, not a v0.16.0 regression.** Coordinator verdict: v0.16.0's release
 versions. Record own-CPU p99 and `traceCpu` phases in 4d (as megaA does), judge p99 <= 25 ms with the max recorded, and keep
 the 50 ms max only under `--quiet-wait`.
 
+## 6c slice MP: coordinator rulings (2026-10-12)
+
+- **The `block` mask term is accepted in MP as kit, schema and Java only.** A realise has no block source (plan surveys hold
+  heights, frozen volumes hold voxel classes), so a plan naming `block` is refused MASK_NEEDS_VOLUME. **Making it real goes to
+  slice B** (brushes need block masks in the world): a frozen volume that records block ids (ARVX v2 or a block palette).
+- Accepted deviations: the non-Bayer ordered 4x4 dither (Bayer fails item 2 with a straight 64-cell edge); bible role patterns
+  in a separate `patterns` member (roles stay plain block ids).
+- **New candidate flake: 6b-volume** (20 cells AIR to LAVA between two samples: lava still flowing after the 90 s settle at
+  load 54-64). Re-check at the next release tier in a quiet window, against main, before calling it a flake.
+
 ## Open questions
 - Track AgentCraft fixes to the copied placement code, or treat the copy as independent from now on?
 - Cost: measure tokens and time per design in phase 1, and show an estimate in the form.
