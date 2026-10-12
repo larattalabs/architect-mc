@@ -1096,9 +1096,16 @@ steps.migrate = async () => {
     await ensure();
     // copy 1: loads unchanged; the builds finish as before (legacy crates)
     await fresh('G6B Y Mig1', MIG);
-    const stock = await api(`stock ${m.group}`);
+    // the builder derives what is built from the world once its chunks are loaded: give the first rescans a moment
+    let stock;
+    for (let i = 0; i < 30; i++) {
+      stock = await api(`stock ${m.group}`);
+      if (json(stock) === json(m.stock)) break;
+      await sleep(1000);
+    }
     const s3 = await siteState(m.ids.s3);
-    check(json(stock) === json(m.stock), `item 12: the 0.17.0 world loads unchanged: Stock of the group equal (${json(stock).slice(0, 160)})`);
+    const diffs = ['delivered', 'credit', 'outstandingBySite', 'outstanding', 'crate'].filter((k) => json(stock[k]) !== json(m.stock[k]));
+    check(json(stock) === json(m.stock), `item 12: the 0.17.0 world loads unchanged: Stock of the group equal (${diffs.length ? `differing: ${json(diffs)}` : json(stock).slice(0, 120)})`);
     check(json(s3.ledger) === json(m.s3.ledger) && s3.crate?.present === true && s3.stockpile === undefined, 'item 12: the per-site crate and its ledger unchanged');
     const saved = await pile('saved');
     check(Object.keys(saved.file ?? {}).length === 0, 'item 12: no stockpile file in an old world (no stockpile, no change)');
