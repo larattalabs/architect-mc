@@ -10028,6 +10028,8 @@ merging origin/main (v0.20.0: F1, MP, Y1) into the branch. In that merge:
   `tools/apitest.mjs`, is in `artifacts/gate6c-sch/v0200`, `v0190` and `v0180`. 0.20.0 is built from tag v0.20.0. 0.19.0 and
   0.18.0 are Y1's tag builds, copied because `gate6c-y1/` has no `tools/`.
 - ApiMPTest and gate6cmp's "no new Reason" checks now accept reasons appended after FIELD_LIMIT.
+- Post-merge run (`artifacts/gate-runs-SCH/20261012-194928-change`, head ea5ccf1): PASS 4/4. unit-mod 578/0, unit-kit
+  286/286, sch-unit 5/0, sch-roundtrip 39/0 (item 2 on Linux included).
 
 Written from the public Sponge Schematic specification only (SpongePowered/Schematic-Specification@8e6be2d,
 `versions/schematic-2.md` and `schematic-3.md`, cited in both codec files). No WorldEdit source was read or used (item 7: the
