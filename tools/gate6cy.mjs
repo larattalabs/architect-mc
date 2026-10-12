@@ -20,7 +20,7 @@
 //                                   = the counted entities; conservation 0
 //     once                          item 7: dev.undo.failRestore mid-removal, retry: every refund credited once; conservation 0
 //     restart a|b|kill|c            item 8: clean stop while hoppers feed and the builder places (a: run, stop; b: reload, compare);
-//                                   kill: kill -9 after an autosave, c: reload, the drift recorded against the units moved since that save
+//                                   kill (manual): kill -9 after an autosave; then start, c: reload, the drift recorded against the units moved since that save
 //     gone                          item 9: /setblock air on a crate: nothing lost, missingCrates, capacity drops; removeStockpileCrate
 //                                   with excess refused, with force drops exactly the excess
 //     dissolve                      Steward's addition: dissolve with reserved stock and a building target: conservation exact, crates
@@ -896,7 +896,12 @@ steps.restart = async () => {
     const built = (await siteOf(r.site)).built;
     check(built > r.built, `item 8: building resumes (${r.built} -> ${built} cells)`);
     out.after = { point: p, built };
-    // the hard kill: an autosave, more feeding and building, then kill -9
+    return out;
+  }
+  if (part === 'kill') {
+    // the hard kill (manual: the runner's client can't be killed under it): an autosave, more feeding and building, then kill -9
+    await ensure();
+    if (!(await call('dev.state')).inWorld) await openWorld(RESTART);
     await cmd('/save-all');
     await sleep(1000);
     const atSave = await cons.parts();
@@ -1227,7 +1232,7 @@ steps.apicompat = async () => {
 
 steps.report = async () => {
   const rows = [];
-  for (const s of ['unit', 'store', 'order', 'unloaded', 'refunds', 'overflow', 'once', 'restart-a', 'restart-b', 'restart-c', 'gone', 'dissolve', 'migrate-a', 'migrate-b', 'migrate-c', 'migrate-d', 'apicompat']) {
+  for (const s of ['unit', 'store', 'order', 'unloaded', 'refunds', 'overflow', 'once', 'restart-a', 'restart-b', 'restart-kill', 'restart-c', 'gone', 'dissolve', 'migrate-a', 'migrate-b', 'migrate-c', 'migrate-d', 'apicompat']) {
     const f = path.join(OUT, `${s}.json`);
     if (!fs.existsSync(f)) { rows.push(`| ${s} | not run | |`); continue; }
     const j = JSON.parse(fs.readFileSync(f, 'utf8'));
