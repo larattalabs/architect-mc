@@ -417,7 +417,7 @@ async function computeMetrics({ sc, out, planDir, ir, irShas, mspt, cps, exact, 
   const metrics = { scenario: sc.id, worldChanges: world.worldChanges, cellsPerSecond: cps, lotFronts: fronts, ...(village ? { village } : {}), variant: flat ? 'flat' : 'natural', rows, palette, organic, buildings, mspt, tiles: { irSha: ts.irSha, count: Object.keys(ts.tiles).length, cells: ts.cells, workersSame: ts.workersSame, golden }, exactSibling: sibling ? path.relative(out, sibling) : null,
     realised: { M2: realised.metrics.M2 && { ...realised.metrics.M2, perNode: undefined }, M3: realised.metrics.M3, M4: realised.metrics.M4, M5: realised.metrics.M5, M8: realised.metrics.M8 && { ...realised.metrics.M8, unguardedSample: (realised.metrics.M8.unguardedSample ?? []).slice(0, 20) }, M10: realised.metrics.M10, findings: realised.findings.map((f) => `${f.rule} ${f.severity} ${f.part ?? '-'} x${f.count}`) } };
   fs.writeFileSync(path.join(out, 'metrics.json'), `${JSON.stringify(metrics, null, 2)}\n`);
-  for (const r of rows) L.log(`  ${r.gated ? (r.pass ? 'ok  ' : 'FAIL') : 'rec '} ${r.label}: ${r.value}`);
+  for (const r of rows) L.log(`  ${r.gated ? (r.pass ? 'ok  ' : 'FAIL') : 'rec '} ${r.id === 'mspt' ? 'BAR ' : ''}${r.label}: ${r.value}`); // the mspt row is a timing bar (recorded, not blocking in change/slice)
   return metrics;
 }
 
@@ -505,7 +505,8 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     const runBad = (x) => x.gated && !x.pass && x.id !== 'gallery'
       && !(flatRun && x.id === 'determinism' && irSame && r.metrics.tiles.workersSame) && !(flatRun && x.id === 'exactness' && eFlat0);
     const bad = (sub === 'check' && r.some((x) => !x.ok)) || (sub === 'run' && r.metrics.rows.some(runBad));
-    if (sub === 'run') for (const x of r.metrics.rows.filter(runBad)) console.error(`FAIL ${x.id}: ${x.value} (bar: ${x.threshold})`);
+    if (sub === 'run') console.error(`${r.metrics.rows.filter(runBad).length} failure(s) (scenario run)`);
+    if (sub === 'run') for (const x of r.metrics.rows.filter(runBad)) console.error(`FAIL ${x.id === 'mspt' ? 'BAR ' : ''}${x.id}: ${x.value} (bar: ${x.threshold})`);
     try { L?.state.dev?.close(); } catch { /* closed */ }
     process.exit(bad ? 1 : 0);
   } catch (e) {
