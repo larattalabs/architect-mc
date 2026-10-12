@@ -1831,8 +1831,30 @@ public final class RegionsImpl implements Regions {
 		// (C23) the region's end state is set by groupEnded (Groups.GROUP_ENDED), from the removal itself, not from this future:
 		// a removal resumed after a load has no future, and every end (or early answer) of the group's removal reaches the hook
 		// on the server thread before this future completes
-		return ArchitectApi.get().sites(s).removeGroup(l.rec().groupId, o);
+		CompletableFuture<RemoveResult> f = ArchitectApi.get().sites(s).removeGroup(l.rec().groupId, o);
+		if (!dev.larattalabs.architect.site.Groups.removalRunning(l.rec().groupId)) {
+			// this call started or joined no removal: it answered at once (refused by the owner rule, no such group; an already
+			// removed group ended the region through the hook). Its own refusal ends the region PARTIAL, as before.
+			f.whenComplete((res, e) -> {
+				if (e != null || !res.removed()) {
+					Runnable end = () -> {
+						if (!dev.larattalabs.architect.site.Groups.removalRunning(l.rec().groupId)) {
+							finishRemoval(l, false, 0L);
+						}
+					};
+					if (s.isSameThread()) {
+						end.run(); // the usual case: answered at once on this (server) thread, before the caller sees it
+					} else {
+						s.execute(end);
+					}
+				}
+			});
+		}
+		return f;
 	}
+
+	/** DevBridge {@code dev.region.dropRemovalEnd} (C23 gate): the next group end leaves its region REMOVING (a stop between the group's save and the region's record). */
+	public static volatile boolean dropNextRemovalEnd;
 
 	/**
 	 * (C23) A whole-group removal ended (Groups, server thread): the REMOVING region of that group ends as an uninterrupted removal
@@ -1840,6 +1862,11 @@ public final class RegionsImpl implements Regions {
 	 * once: a removal of a region's group through the site API leaves the region's state alone, as before.
 	 */
 	private static void groupEnded(String groupId, dev.larattalabs.architect.site.Groups.Removed res) {
+		if (dropNextRemovalEnd && REGIONS.values().stream().anyMatch(l -> l.rec().state == RegionState.REMOVING && java.util.Objects.equals(l.rec().groupId, groupId))) {
+			dropNextRemovalEnd = false;
+			Architect.LOGGER.info("Group {} ended (removed={}); dev hook: its region's record is left REMOVING", groupId, res.removed());
+			return;
+		}
 		for (Live l : List.copyOf(REGIONS.values())) {
 			if (l.rec().state == RegionState.REMOVING && java.util.Objects.equals(l.rec().groupId, groupId)) {
 				SiteGroupRec g = Sites.group(groupId);

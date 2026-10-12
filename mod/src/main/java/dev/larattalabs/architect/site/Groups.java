@@ -201,7 +201,8 @@ public final class Groups {
 	 * (C23) Called on the server thread when a whole-group removal ends (not a stage undo), with the group id and the result,
 	 * before the removal's futures complete. A removal resumed after a load has no future of its own (its callers' futures failed
 	 * at the stop), so whatever depends on the end (a region's REMOVED/PARTIAL state) hangs here, keyed by the group id, not on a
-	 * future. The early answers of {@link #removeGroup} (the owner refusal, an already removed group, no such group) call it too.
+	 * future. The early answer for an already removed group calls it too; a refusal (the owner rule, no such group) does not:
+	 * it ends no removal (one may be running for another caller), so the caller handles its own refusal.
 	 */
 	public static volatile java.util.function.@Nullable BiConsumer<String, Removed> GROUP_ENDED;
 
@@ -300,14 +301,12 @@ public final class Groups {
 		Sites.Covered covered) {
 		SiteGroupRec g = Sites.group(groupId);
 		if (g == null) {
-			groupEnded(groupId, new Removed(false, List.of("no site group " + groupId), Map.of()));
 			return CompletableFuture.failedFuture(new IllegalArgumentException("no site group " + groupId));
 		}
 		String owner = ApiRules.removeRefusal(groupId, g.owner(), requester, force);
 		if (owner != null) {
-			Removed no = new Removed(false, List.of(owner), Map.of());
-			groupEnded(groupId, no);
-			return CompletableFuture.completedFuture(no);
+			// (C23) not the hook: a refused caller (another requester) must not end a removal that keeps running
+			return CompletableFuture.completedFuture(new Removed(false, List.of(owner), Map.of()));
 		}
 		// (6c X, C22) a group this world already removed: removed again, nothing written (its tombstone keeps the time)
 		if (SiteGroupRec.REMOVED.equals(g.state()) && stalled(groupId, null) == null && REMOVALS.stream().noneMatch(x -> x.group.equals(groupId))) {
