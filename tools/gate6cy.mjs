@@ -795,9 +795,12 @@ steps.once = async () => {
   const out = {};
   const W = 'G6B Y Once';
   const roadPts = await strip(X, y, Z + 70);
-  // the road first, the house after it: the removal (last placed first) credits the house, then the road's restore breaks
+  // the road, an INSTANT house, then the construction house: the removal (last placed first) credits the construction house, then
+  // the instant house's restore breaks (dev.undo.failRestore hits a site's restore job); the retry restores it and the road.
+  // The instant house stands outside the counted area: a broken restore drops its attachables, which never were the stockpile's
   const b = await batch({ owner: OWNER, autoApprove: true, items: [{ key: 'r1', road: { points: roadPts, width: 1, owner: OWNER, mode: 'AUTO' } },
-    cabin('h1', [X, y, Z], { after: ['r1'] })] });
+    cabin('i1', [X + 200, y, Z], { mode: 'INSTANT', actor: true, after: ['r1'] }), cabin('h1', [X, y, Z], { after: ['i1'] })] });
+  check(['r1', 'i1', 'h1'].every((k) => b.items[k]?.status === 'PLACED'), `once: road, instant house and construction house placed (${json(b.view.items?.map((i) => [i.key, i.status, i.message]))})`);
   const ids = { h1: b.items.h1.site, r1: b.items.r1.site };
   const cons = new Conservation(f.area);
   await cons.start();
@@ -807,14 +810,14 @@ steps.once = async () => {
   const paid = { h1: a0.paidByTarget[ids.h1], r1: a0.paidByTarget[ids.r1] };
   const L0 = (await pstate()).ledger;
   await call('dev.undo.failRestore', { skip: 0 });
-  const r1 = await later(`sgremove ${b.group} noforce`, 600_000);
+  const r1 = await later(`sgremove ${b.group} noforce ${OWNER}`, 600_000);
   await call('dev.undo.failRestore', { skip: -1 });
   await settle(2000);
   const L1 = (await pstate()).ledger;
   const dret = (A, B) => { const m = {}; for (const [k, v] of Object.entries(B.returned)) if (v - (A.returned[k] ?? 0)) m[k] = v - (A.returned[k] ?? 0); return m; };
   out.first = { removed: r1.removed, blockers: r1.blockers, returned: dret(L0, L1) };
-  check(r1.removed === false && /injected restore failure/.test(json(r1.blockers)), `item 7: the removal with an injected restore failure answers removed=false (${json(r1.blockers).slice(0, 160)})`);
-  check(same(dret(L0, L1), paid.h1), `item 7: the house (restored before the break) was credited, the road not yet (${sum(dret(L0, L1))} vs ${sum(paid.h1)})`);
+  check(r1.removed === false && /injected restore failure/.test(JSON.stringify(r1.blockers)), `item 7: the removal with an injected restore failure answers removed=false (${json(r1.blockers).slice(0, 160)})`);
+  check(same(dret(L0, L1), paid.h1), `item 7: the construction house (restored before the break) was credited, the road not yet (${sum(dret(L0, L1))} vs ${sum(paid.h1)})`);
   const pm = await cons.point('after the failure');
   // the half-done state is the failed restore's: the road's blocks still stand (paid), its refund not credited: still exact
   check(exact(pm), `item 7: conservation difference 0 after the failed removal (${json(pm.diff)})`);
@@ -822,7 +825,7 @@ steps.once = async () => {
   await cmd('/save-all flush');
   await leaveWorld();
   await openWorld(W);
-  const r2 = await later(`sgremove ${b.group} noforce`, 600_000);
+  const r2 = await later(`sgremove ${b.group} noforce ${OWNER}`, 600_000);
   await settle(3000);
   const L2 = (await pstate()).ledger;
   const tot = { ...paid.h1 };
@@ -830,7 +833,7 @@ steps.once = async () => {
   out.retry = { removed: r2.removed, returned: dret(L0, L2) };
   check(r2.removed === true, `item 7: the retry after the reload resumes and answers removed=true (${json(r2.blockers ?? [])})`);
   check(same(dret(L0, L2), tot), `item 7: every refund credited once: returned = house + road exactly (${sum(dret(L0, L2))} vs ${sum(tot)})`);
-  const again = await later(`sgremove ${b.group} noforce`, 120_000);
+  const again = await later(`sgremove ${b.group} noforce ${OWNER}`, 120_000);
   const L3 = (await pstate()).ledger;
   check(again.removed === true && same(L3.returned, L2.returned), 'item 7: a third remove answers removed=true and credits nothing');
   const p = await cons.point('once end');
@@ -984,6 +987,9 @@ steps.gone = async () => {
   const p2 = await cons.point('forced');
   check(exact(p2), `item 9: conservation difference 0 after the forced removal (${json(p2.diff)})`);
   // the last crate can't go while targets build, even with force
+  // the missing crate's record goes (it held nothing; the capacity stays), then the third is the last one
+  const gone1 = await pile('removecrate', { pos: c1 });
+  check(gone1.removed === true, `item 9: the missing crate's record is removed (${json(gone1.refusal ?? gone1.removed)})`);
   const last = await pile('removecrate', { pos: f.crates[2], force: true });
   check(last.removed === false && /last crate/.test(last.refusal ?? ''), `item 9: the last crate with targets building is refused even with force (${last.refusal})`);
   await leaveWorld();
@@ -1024,7 +1030,7 @@ steps.dissolve = async () => {
   check((a.crateBlocks ?? []).length === 0, `dissolve: every crate block restored (${json(a.crateBlocks)})`);
   const cells = [];
   for (const c of f.crates) cells.push((await cellsOf({ min: c, max: c }))[0]);
-  check(cells.every((c) => / minecraft:air$/.test(c)), `dissolve: the crate cells hold what they held before (${json(cells)})`);
+  check(cells.every((c) => /minecraft:air"\}$/.test(c)), `dissolve: the crate cells hold what they held before (${json(cells)})`);
   const s0 = await siteState(h.siteId);
   await sleep(6000);
   const s1 = await siteState(h.siteId);

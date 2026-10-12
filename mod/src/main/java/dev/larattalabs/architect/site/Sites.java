@@ -2058,6 +2058,15 @@ public final class Sites {
 	}
 
 	/** A pending site's record as it was taken down (for a restore job that resumes after the record went pending). */
+	/** 6c Y1 (the audit): the pending (removed, not settled) site records, the last one per id. */
+	static List<Site> pendingSites() {
+		Map<String, Site> m = new LinkedHashMap<>();
+		for (Site.Pending p : state.pending()) {
+			m.put(p.site().id(), p.site());
+		}
+		return List.copyOf(m.values());
+	}
+
 	static @Nullable Site pendingRecord(String id) {
 		Site.Pending found = null;
 		for (Site.Pending p : state.pending()) {

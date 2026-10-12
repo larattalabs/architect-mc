@@ -1243,7 +1243,14 @@ public final class Stockpiles {
 		Map<String, Integer> crateStock = new TreeMap<>();
 		java.util.Set<BlockPos> crates = new java.util.HashSet<>();
 		JsonObject byTarget = new JsonObject();
-		for (Site s : Sites.all()) {
+		// active and pending (removed, restore maybe unfinished: what still stands counts) records alike; a restored cell isn't built
+		List<Site> recs = new ArrayList<>(Sites.all());
+		for (Site ps : Sites.pendingSites()) {
+			if (Sites.get(ps.id()) == null) {
+				recs.add(ps);
+			}
+		}
+		for (Site s : recs) {
 			if (owner == null || !owner.equals(s.owner()) || s.construction() == null || s.placing()) {
 				continue;
 			}
@@ -1259,7 +1266,13 @@ public final class Stockpiles {
 				be.ledger().stock().forEach((k, v) -> crateStock.merge(k, v, Integer::sum));
 			}
 		}
-		for (Infra i : Infras.all()) {
+		List<Infra> infs = new ArrayList<>(Infras.all());
+		for (Infra pi : Infras.allPending()) {
+			if (Infras.get(pi.id()) == null) {
+				infs.add(pi);
+			}
+		}
+		for (Infra i : infs) {
 			if (owner == null || !owner.equals(i.owner()) || i.construction() == null || i.placing()) {
 				continue;
 			}
