@@ -29,7 +29,7 @@ export const WINDOW = 8;
 export const FLIGHT_MAX = 8;
 export const LADDER_MAX = 24;
 /** No stair flight or ladder this close (cells) to an edge's end. */
-export const NEAR_END = 4;
+export const NEAR_END = 1;
 /** Movers that never climb: an edge with one of these never gets a ladder (Steward S-T2-2). */
 export const VILLAGER = 'villager';
 /** Lot kinds whose edges are player-only (S-T2-1: lookouts, watchtowers), and the kinds a villager must reach. */

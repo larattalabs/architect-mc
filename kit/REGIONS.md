@@ -800,7 +800,7 @@ const net = r.pass('route', { nodes: { gate: { lot: 'gate', kind: 'gate' }, look
   cap). A route that crosses itself is searched again with the crossing blocked (at most 8 times).
 - **Obstacles:** the claim margin (2), lava, unknown columns, the lots and their aprons, forms, keep sets, and trees under the
   footprint; water and keep-out (`ctx.keepOut`, so the IR records it, plus the intent's `keepOut`) also one column beside it (a
-  retaining column, a 4e lantern). No stair or ladder within 4 of an edge's end. An edge that can only cross water fails
+  retaining column, a 4e lantern). No stair or ladder within 1 of an edge's end. An edge that can only cross water fails
   `ROUTE_WATER` (bridges are T3), else `NO_ROUTE`, with a note; the plan goes on.
 - **Hysteresis:** the caller's `prefer` cells (a 4e road, a region path, an earlier plan's route: 6d) and the plan's own 4e roads,
   graded paths and earlier edges cost a third.

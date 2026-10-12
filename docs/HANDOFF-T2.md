@@ -12,7 +12,7 @@ Ports 8918-8923. $0 (sim/stub only).
   by construction. Moves: walk (45-degree turns after 3 straight cells), stair flights (1..8 + 2 flat; cardinal), hairpins (a flat
   landing holding both lanes), ladders (player-only edges), walking an earlier edge's built cells (step <= 1, `shared` segments).
   Coarse corridor (16), then 48, then the whole claim; a self-crossing route is searched again with the crossing blocked (<= 8).
-  No stair or ladder within 4 of an edge's end (approaches stay walks that later edges share).
+  No stair or ladder within 1 of an edge's end (approaches stay walks that later edges share).
 - `program.mjs` `r.pass('route', ...)` -> `_route`: ends from nodes / lots (entrance, out of the front) / graph nodes; movers inferred
   (S-T2-1, `inferMovers`), ladders only without villagers (S-T2-2); obstacles lots+aprons, forms, keep sets, keep-out (ctx.keepOut);
   emission per edge column-exact (`edgeColumns`): 4e ground roads where the walk lies on the surveyed ground, `_routeRun` graded
