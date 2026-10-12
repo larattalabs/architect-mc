@@ -275,9 +275,17 @@ async function runScenario(id) {
   t0 = Date.now();
   const pr = await L.prepare(p1.planId);
   T('prepare', t0);
-  const p2 = await L.plan(sc.program, claim, { params: sc.params, surveyLoad: 'generated:64', seed: sc.seed, bible });
-  const irShas = [p2.irSha];
-  for (let i = 0; i < 2; i++) irShas.push((await L.plan(sc.program, claim, { params: sc.params, surveyLoad: 'generated:64', seed: sc.seed, bible })).irSha);
+  // (6c F1) a plan that reads a frozen volume of a live world (forms_demo keeps the natural ice) sees the world's own changes between
+  // plans (a plant breaking, water freezing): the three plans of the IR sha check run with the world's ticking frozen (/tick freeze)
+  if (isF1(sc)) await L.cmd('/tick freeze');
+  let p2, irShas;
+  try {
+    p2 = await L.plan(sc.program, claim, { params: sc.params, surveyLoad: 'generated:64', seed: sc.seed, bible });
+    irShas = [p2.irSha];
+    for (let i = 0; i < 2; i++) irShas.push((await L.plan(sc.program, claim, { params: sc.params, surveyLoad: 'generated:64', seed: sc.seed, bible })).irSha);
+  } finally {
+    if (isF1(sc)) await L.cmd('/tick unfreeze');
+  }
   const planDir = copyPlan(p2.planId, path.join(raw, 'plan'));
   fs.copyFileSync(path.join(planDir, 'report.json'), path.join(out, 'report.json'));
   fs.mkdirSync(path.join(out, 'previews'), { recursive: true });

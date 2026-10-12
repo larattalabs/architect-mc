@@ -10,6 +10,7 @@
 //     variants                          the broken variants (kit, no game): an ice spike under a lantern (M17), a 6-wide unbuttressed
 //                                       ledge (M3), a spike over a kept natural spike (M1)
 //     stale                             item 12: the v0.17.0 kit and mod refuse a voxels plan PLAN_STALE (no game: their own code)
+//     apicompat                         item 13: api-compat against the 0.17.0, 0.16.0 and 0.15.0 apitest jars and the 0.17.0 surface
 //     pin                               forms_demo's program seed and cameras on S2's claim (scenarios/forms_demo.json), once
 //     flat | natural                    items 2-5, 7-11: tools/scenarios.mjs run forms_demo (the flat variant first: E-flat)
 //     report                            REPORT.md over the step JSONs
@@ -86,6 +87,177 @@ steps.base = async () => {
   return { worlds: [BASE, FLAT], seed: SEED };
 };
 
+// ------------------------------------------------------------------ items 1, 6, 9, 12 offline
+
+function nodeTest(files) {
+  const r = spawnSync(process.execPath, ['--test', ...files], { cwd: root, encoding: 'utf8', timeout: 1_800_000 });
+  const t = `${r.stdout}${r.stderr}`;
+  const n = (k) => Number((new RegExp(`^ℹ ${k} (\\d+)`, 'm').exec(t) ?? [])[1] ?? -1);
+  return { code: r.status, pass: n('pass'), fail: n('fail'), failing: t.split('\n').filter((l) => l.startsWith('✖')).slice(0, 20), names: t.split('\n').filter((l) => /^✔|^✖/.test(l)) };
+}
+const load1 = () => Number(execFileSync('sysctl', ['-n', 'vm.loadavg']).toString().trim().replace(/[{}]/g, '').trim().split(/\s+/)[0]);
+
+/**
+ * Item 6: the evaluation cost per op. N ops of real iceSpike clusters (12-32 primitives each) whose bounds all cover one tile (the
+ * worst case: a form's ops overlapping) and the same N spread over the tile; one tile evaluated (best of 3); the baked voxels op of
+ * the same cells for comparison. The threshold holds when the overlapping case at 400 ops stays under half the 2 s tile bar.
+ */
+async function bakeCost() {
+  const { evalTile, walkKinds } = await imp('lib/realise.mjs');
+  const { makeColumns } = await imp('lib/region/pack.mjs');
+  const { iceSpike } = await imp('lib/forms/iceSpike.mjs');
+  const { bakeOps, opPrimitives, BAKE_OPS } = await imp('lib/forms/rules.mjs');
+  const w = makeColumns(-8, -8, 80, 80, 1); w.ground.fill(64); w.height.fill(64); w.floor.fill(64);
+  const opsFor = (n, spread) => {
+    const out = [];
+    for (let i = 0; i < n; i++) {
+      const at = spread ? [4 + (i * 37) % 56, 64, 4 + (i * 53) % 56] : [24 + (i % 16), 64, 24 + ((i >> 4) % 16)];
+      out.push(...iceSpike({ at, preset: 'classic', seed: `cost${i}` }).ops.filter((o) => o.op === 'shape'));
+      if (out.length >= n) break;
+    }
+    return out.slice(0, n);
+  };
+  const irOf = (ops, blobs) => { const ir = { format: 2, id: 'cost', kitVersion: '0.19.0', claim: { minX: 0, minZ: 0, maxX: 63, maxZ: 63, minY: -64, maxY: 319 }, stages: ['s'], parts: [{ id: 'p', stage: 's', set: 'terrain', ops }], ...(blobs ? { blobs } : {}) }; ir.requires = walkKinds(ir); return ir; };
+  const time = (ir, blobs) => { let best = Infinity, cells = 0; for (let k = 0; k < 3; k++) { const t0 = performance.now(); const e = evalTile(ir, '0,0', w, { blobs, countOnly: true }); best = Math.min(best, performance.now() - t0); cells = e.count; } return { ms: best, cells }; };
+  const rows = [];
+  for (const n of [25, 50, 100, 200, 400, 800]) {
+    const over = opsFor(n, false), spread = opsFor(n, true);
+    const prims = over.reduce((a, o) => a + opPrimitives(o), 0);
+    const a = time(irOf(over)), b = time(irOf(spread));
+    const baked = bakeOps(over, 'vox');
+    const sha = 'b'.repeat(64);
+    const c = time(irOf([baked.op], { vox: { sha, bytes: baked.bytes.length, kind: 'voxels' } }), { [sha]: baked.bytes });
+    rows.push({ ops: n, primitives: prims, overlapping: { ms: Math.round(a.ms), cells: a.cells, usPerOpColumn: Math.round((a.ms * 1000) / (n * 4096) * 100) / 100 }, spread: { ms: Math.round(b.ms), cells: b.cells }, baked: { ms: Math.round(c.ms), cells: c.cells, bytes: baked.bytes.length } });
+  }
+  const at400 = rows.find((r) => r.ops === 400).overlapping.ms;
+  // the largest measured N whose overlapping tile stays under 1 s (half the bar): the threshold is confirmed when that is >= 400
+  const fit = rows.filter((r) => r.overlapping.ms < 1000).map((r) => r.ops);
+  const ok = Math.max(0, ...fit);
+  return { load1: load1(), threshold: BAKE_OPS, rows, at400Ms: at400, largestUnderHalfBar: ok, verdict: ok >= BAKE_OPS ? `confirmed: 400 overlapping ops evaluate a tile in ${at400} ms (bar 2 s; half 1 s)` : `re-set: only ${ok} overlapping ops stay under 1 s` };
+}
+
+steps.unit = async () => {
+  const out = {};
+  out.forms = nodeTest(['kit/test/forms-f1.test.mjs']);
+  check(out.forms.code === 0 && out.forms.fail === 0 && out.forms.pass >= 9, `items 1, 2-4 (kit), 7, 9: the forms tests (200 seeds per generator: ops at most 32 primitives, 0 forms over 400 ops unbaked, settled; voxels exact and tile-independent; the bake; M17, M3, keep; forms_demo 3 plans identical): ${out.forms.pass} pass, ${out.forms.fail} fail`, out.forms.failing);
+  out.goldens = nodeTest(['kit/test/region-golden.test.mjs', 'kit/test/scenario-goldens.test.mjs', 'kit/test/region-6b.test.mjs', 'kit/test/forms-island.test.mjs', 'kit/test/village.test.mjs']);
+  check(out.goldens.code === 0 && out.goldens.fail === 0, `items 9, 12: goldens (mega_bench tiles, S1 and S7 tile shas, forms_demo's golden when committed, 6b fixtures, islands, villages): ${out.goldens.pass} pass, ${out.goldens.fail} fail`, out.goldens.failing);
+  out.bake = await bakeCost();
+  check(out.bake.largestUnderHalfBar >= 400, `item 6: the bake threshold (400 ops): ${out.bake.verdict} (load ${out.bake.load1})`, out.bake.rows);
+  out.goldenFiles = Object.fromEntries(['s1.json', 's7.json', 'forms_demo.json'].map((f) => [f, fs.existsSync(path.join(root, 'scenarios', 'goldens', f))]));
+  return out;
+};
+
+// ------------------------------------------------------------------ the broken variants (kit, no game)
+
+steps.variants = async () => {
+  const { planRegion } = await imp('lib/region/plan.mjs');
+  const { region } = await imp('lib/region/program.mjs');
+  const { checkRegion } = await imp('lib/region/check.mjs');
+  const { makeColumns } = await imp('lib/region/pack.mjs');
+  const { VC, decodeArvx, encodeArvx } = await imp('lib/region/volume.mjs');
+  const { iceSpike } = await imp('lib/forms/iceSpike.mjs');
+  const claim = { minX: 0, minZ: 0, maxX: 127, maxZ: 127, minY: -64, maxY: 319 };
+  const survey = makeColumns(0, 0, 128, 128, 1); survey.ground.fill(64); survey.height.fill(64); survey.floor.fill(64);
+  const variant = async (name, fn, volumes = []) => {
+    const program = { id: 'f1_variant', default: (ctx) => { const r = region(ctx); r.stages(['s']); fn(r); r.anchor('entrance', [2, 2]); r.anchor('spawn', [2, 2]); return r; } };
+    const p = await planRegion({ program, programSource: name, survey, claim, volumes, node: 'test' });
+    const rep = checkRegion({ ir: p.ir, survey, blobs: (sha) => p.blobs.get(sha), volumes: volumes.map((v) => v.decoded), meta: p.meta });
+    return rep;
+  };
+  const brief = (rep, re) => rep.findings.filter((f) => re.test(f.rule)).map((f) => ({ rule: f.rule, severity: f.severity, part: f.part, count: f.count, message: f.message }));
+  const out = {};
+  // 1. an ice spike under a lantern (M17); the same spike of packed ice is clean
+  let rep = await variant('ice under lantern', (r) => {
+    r.part('spike', { stage: 's' }).fill({ kind: 'cone', c: [40, { abs: 65 }, 40], r0: 2.5, r1: 0, h: 12 }, 'minecraft:ice', { cond: 0 });
+    r.part('lamp', { stage: 's' })._push({ op: 'columns', from: { abs: 0 }, to: { abs: 0 }, cols: [43, 40, 66, 66, 0], materials: ['minecraft:lantern'], cond: 2, walk: false });
+  });
+  out.iceUnderLantern = brief(rep, /^M17/);
+  check(out.iceUnderLantern.length === 1 && out.iceUnderLantern[0].part === 'spike', `variants: an ice spike under a lantern -> M17 on its part (${out.iceUnderLantern.map((f) => f.message).join('; ')})`);
+  rep = await variant('packed under lantern', (r) => {
+    r.part('spike', { stage: 's' }).fill({ kind: 'cone', c: [40, { abs: 65 }, 40], r0: 2.5, r1: 0, h: 12 }, 'minecraft:packed_ice', { cond: 0 });
+    r.part('lamp', { stage: 's' })._push({ op: 'columns', from: { abs: 0 }, to: { abs: 0 }, cols: [43, 40, 66, 66, 0], materials: ['minecraft:lantern'], cond: 2, walk: false });
+  });
+  out.packedControl = brief(rep, /^M17/);
+  check(out.packedControl.length === 0, 'variants: control, the same spike in packed ice -> no M17');
+  // 2. a spire with a 6-wide unbuttressed overhang (M3)
+  rep = await variant('unbuttressed ledge', (r) => r.rockSpire('spire_bad', { at: [60, 64, 60], preset: 'tower', ledge: [6, 6], ledges: [1, 1], seed: '3' }, { stage: 's', _unsafe: { noButtress: true, ledgeOut: 2 } }));
+  out.overhang = { findings: brief(rep, /^M3/), max: rep.metrics.M3.maxOverhang };
+  check(out.overhang.findings.some((f) => f.rule === 'M3:overhang' && f.part === 'spire_bad') && out.overhang.max > 4, `variants: a spire with an unbuttressed ledge overhanging ${out.overhang.max > 4 ? 'more than 4' : out.overhang.max} -> M3:overhang (${out.overhang.findings.map((f) => f.message).join('; ')})`);
+  rep = await variant('buttressed ledge', (r) => r.rockSpire('spire_ok', { at: [60, 64, 60], preset: 'tower', ledge: [6, 6], ledges: [1, 1], seed: '3' }, { stage: 's' }));
+  out.overhangControl = brief(rep, /^M3/);
+  check(out.overhangControl.length === 0, 'variants: control, the same ledge with its buttress -> no M3 finding');
+  // 3. a spike written over a kept natural spike (M1)
+  const box = { minX: 0, minY: 60, minZ: 0, maxX: 31, maxY: 80, maxZ: 31 };
+  const W = 32, H = 21, D = 32;
+  const classes = new Uint8Array(W * H * D);
+  for (let x = 0; x < W; x++) for (let z = 0; z < D; z++) for (let y = 0; y < H; y++) classes[(x * D + z) * H + y] = y + 60 <= 64 ? VC.SOIL : (x === 10 && z === 10 && y + 60 <= 72 ? VC.ICE : VC.AIR);
+  const bytes = encodeArvx(box, classes);
+  const decoded = decodeArvx(bytes);
+  const vol = { sha: decoded.sha, box, bytes, decoded };
+  rep = await variant('spike over kept', (r) => { r.keepNatural('ICE', box); r.form('ice_bad', iceSpike({ at: [10, 64, 10], preset: 'stubby', seed: '3' }), { stage: 's' }); }, [vol]);
+  out.overKept = { findings: brief(rep, /^M1/), ok: rep.ok, keep: rep.metrics.keep };
+  check(!rep.ok && out.overKept.findings.some((f) => f.part === 'ice_bad' && f.severity === 'error'), `variants: a spike over a kept natural spike -> an M1 error on its part (${out.overKept.findings.map((f) => f.message).join('; ')})`);
+  return out;
+};
+
+// ------------------------------------------------------------------ item 12: v0.17.0 refuses a voxels plan
+
+steps.stale = async () => {
+  const out = {};
+  const dir = path.join(OUT, 'v0170-src');
+  fs.rmSync(dir, { recursive: true, force: true });
+  fs.mkdirSync(dir, { recursive: true });
+  execFileSync('sh', ['-c', `git -C '${root}' archive v0.17.0 kit | tar -x -C '${dir}'`]);
+  // a voxels plan from this kit: forms_demo on a flat claim (its first spire baked)
+  const { planRegion } = await imp('lib/region/plan.mjs');
+  const { makeColumns } = await imp('lib/region/pack.mjs');
+  const fd = await imp('regions/forms_demo.mjs');
+  const claim = { minX: 0, minZ: 0, maxX: 191, maxZ: 191, minY: -64, maxY: 319 };
+  const survey = makeColumns(0, 0, 192, 192, 1); survey.ground.fill(64); survey.height.fill(64); survey.floor.fill(64);
+  const p = await planRegion({ program: fd, programSource: 'forms_demo', survey, claim, node: 'test' });
+  out.requires = p.ir.requires;
+  out.kitVersion = p.ir.kitVersion;
+  const old = await import(pathToFileURL(path.join(dir, 'kit', 'lib', 'realise.mjs')).href);
+  const asOld = { ...p.ir, kitVersion: '0.16.0' }; // the kind alone, as if a 0.16.0 kit had written it
+  out.oldKit = { version: old.EVAL_KIT_VERSION, reason: old.staleReason(p.ir), kindOnly: old.staleReason(asOld) };
+  let compiled = null;
+  try { old.compileIR(p.ir, { blobs: (sha) => p.blobs.get(sha) }); } catch (e) { compiled = e.message; }
+  out.oldKit.compile = compiled;
+  check(/^PLAN_STALE: plan needs kit 0\.19\.0 \/ kinds \[voxels\]; this is kit 0\.16\.0$/.test(compiled ?? ''), `item 12: the v0.17.0 kit (${out.oldKit.version}) refuses the plan: ${compiled}`);
+  check(out.oldKit.kindOnly === 'plan needs kinds [voxels]; this is kit 0.16.0', `item 12: the v0.17.0 kit names the kind alone: ${out.oldKit.kindOnly}`);
+  // the v0.17.0 mod jar's IrStale on the same IR (its own compiled class, run with gson)
+  const jar = path.join(MAIN_ART(), 'gate6c-f1', 'v0170', 'architect_mc-0.17.0.jar');
+  const gson = execFileSync('sh', ['-c', `ls '${path.join(root, '.gradle-home')}'/caches/modules-2/files-2.1/com.google.code.gson/gson/*/*/gson-*.jar | grep -v sources | head -1`]).toString().trim();
+  const src = path.join(dir, 'Stale.java');
+  fs.writeFileSync(src, 'import com.google.gson.*;\npublic class Stale { public static void main(String[] a) throws Exception { for (String f : a) { JsonObject ir = JsonParser.parseString(java.nio.file.Files.readString(java.nio.file.Path.of(f))).getAsJsonObject(); System.out.println(dev.larattalabs.architect.region.IrStale.reason(ir, null)); } } }\n');
+  fs.writeFileSync(path.join(dir, 'ir.json'), p.irJson);
+  fs.writeFileSync(path.join(dir, 'ir-kind-only.json'), JSON.stringify(asOld));
+  const java = path.join(process.env.JAVA_HOME ?? '/opt/homebrew/opt/openjdk@25', 'bin', 'java');
+  const lines = execFileSync(java, ['-cp', `${jar}:${gson}`, src, path.join(dir, 'ir.json'), path.join(dir, 'ir-kind-only.json')]).toString().trim().split('\n');
+  out.oldMod = { jar, lines };
+  check(lines[0] === 'plan needs kit 0.19.0 / kinds [voxels]; this is kit 0.16.0' && lines[1] === 'plan needs kinds [voxels]; this is kit 0.16.0', `item 12: the v0.17.0 mod's IrStale refuses it PLAN_STALE: ${lines.join(' | ')}`);
+  // and this build accepts it
+  const { staleReason } = await imp('lib/realise.mjs');
+  out.thisKit = staleReason(p.ir);
+  check(out.thisKit === null, 'item 12: this kit (0.19.0) accepts it');
+  return out;
+};
+const MAIN_ART = () => path.join(path.resolve(here, '..', 'architect-mc'), 'artifacts');
+
+// ------------------------------------------------------------------ item 13: api-compat
+
+steps.apicompat = async () => {
+  const classes = path.join(root, 'mod', 'build', 'classes', 'java', 'main');
+  if (!fs.existsSync(classes)) execFileSync('./gradlew', ['compileJava', 'compileClientJava', '--offline', '-q'], { cwd: path.join(root, 'mod'), env: { ...process.env, JAVA_HOME: process.env.JAVA_HOME ?? '/opt/homebrew/opt/openjdk@25', GRADLE_USER_HOME: path.join(root, '.gradle-home') }, stdio: 'ignore' });
+  const r = spawnSync(process.execPath, [path.join(root, 'tools', 'api-compat.mjs'), '--gate6cf1'], { cwd: root, encoding: 'utf8', env: { ...process.env, JAVA_HOME: process.env.JAVA_HOME ?? '/opt/homebrew/opt/openjdk@25' } });
+  const t = `${r.stdout}${r.stderr}`;
+  fs.writeFileSync(path.join(OUT, 'api-compat.txt'), t);
+  check(r.status === 0 && /all 4 checks clean/.test(t), `item 13: api-compat against the 0.17.0, 0.16.0 and 0.15.0 apitest jars and the 0.17.0 surface: ${t.trim().split('\n').pop()}`);
+  spendZero();
+  return { out: t };
+};
+
 // ------------------------------------------------------------------ the scenario runs
 
 function scenario(args) {
@@ -126,7 +298,7 @@ steps.natural = () => scenarioStep(false);
 
 steps.report = async () => {
   const rows = [];
-  for (const s of ['unit', 'variants', 'stale', 'flat', 'natural']) {
+  for (const s of ['unit', 'variants', 'stale', 'apicompat', 'flat', 'natural']) {
     const f = path.join(OUT, `${s}.json`);
     if (!fs.existsSync(f)) { rows.push(`| ${s} | not run | |`); continue; }
     const j = JSON.parse(fs.readFileSync(f, 'utf8'));
