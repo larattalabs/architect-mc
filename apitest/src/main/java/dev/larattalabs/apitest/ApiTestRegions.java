@@ -7,9 +7,11 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import dev.larattalabs.architect.api.ArchitectApi;
+import dev.larattalabs.architect.api.ArchitectRefused;
 import dev.larattalabs.architect.api.CellWrite;
 import dev.larattalabs.architect.api.CoveredPolicy;
 import dev.larattalabs.architect.api.LoadPolicy;
+import dev.larattalabs.architect.api.Mask;
 import dev.larattalabs.architect.api.Mode;
 import dev.larattalabs.architect.api.PrepareRequest;
 import dev.larattalabs.architect.api.RealiseRequest;
@@ -42,6 +44,7 @@ import net.minecraft.world.level.levelgen.structure.BoundingBox;
  * rnudge &lt;region&gt; &lt;action&gt;   (6b) Regions.nudge -> {done, message} ("not applicable" for an action the wait doesn't offer)
  * api114                (6c X, API 1.14.0) version, the features, the old constructors (by reflection, public API only), the two new
  *                       default methods, no new Reason
+ * apimp                 (6c MP, API 1.16.0) version, the masks/patterns features, Mask.parse and Pattern.parse (good and bad specs)
  * rplanbykey &lt;owner|-&gt; &lt;key&gt;      (1.14.0) Regions.planByKey -> the plan or null
  * rrealisebykey &lt;owner|-&gt; &lt;key&gt;   (1.14.0) Regions.realiseByKey -> the RegionView or null
  * </pre>
@@ -257,6 +260,44 @@ final class ApiTestRegions {
 					}
 				}
 				o.addProperty("byKeyDefaults", defaults);
+				return o;
+			}
+			case "apimp": {
+				// (6c MP) Mask / Pattern through the public API: the bundled schemas resolve in game, a bad spec refuses FIELD_LIMIT with its path
+				JsonObject o = new JsonObject();
+				o.addProperty("version", ArchitectApi.VERSION);
+				JsonArray f = new JsonArray();
+				for (String x : new String[] {"masks", "patterns"}) {
+					if (ArchitectApi.get().features().contains(x)) {
+						f.add(x);
+					}
+				}
+				o.add("featuresMP", f);
+				Reason[] rs = Reason.values();
+				o.addProperty("lastReasons", rs[rs.length - 2].name() + " " + rs[rs.length - 1].name());
+				String[][] cases = {
+					{"mask", "{\"all\":[{\"block\":[\"#minecraft:dirt\",\"minecraft:grass_block\"]},{\"height\":[60,90]},{\"slope\":[0,2]},{\"depth\":[0,3]},{\"not\":{\"class\":[\"ICE\"]}}]}"},
+					{"mask", "{\"slope\":[3,1]}"},
+					{"mask", "{\"field\":\"wet\"}"},
+					{"pattern", "{\"mix\":[{\"w\":6,\"mat\":\"stone\"},{\"w\":3,\"mat\":\"andesite\"},{\"w\":1,\"mat\":\"cobblestone\"}],\"seedLabel\":\"wall\"}"},
+					{"pattern", "{\"gradient\":{\"by\":\"y\",\"stops\":[{\"at\":64,\"mat\":\"grass_block\"},{\"at\":60,\"mat\":\"sand\"}]}}"},
+					{"pattern", "not json"}};
+				JsonArray out = new JsonArray();
+				for (String[] c : cases) {
+					JsonObject r = new JsonObject();
+					r.addProperty("kind", c[0]);
+					try {
+						String text = c[0].equals("mask") ? Mask.parse(c[1]).toText() : dev.larattalabs.architect.api.Pattern.parse(c[1]).toText();
+						r.addProperty("ok", true);
+						r.addProperty("text", text);
+					} catch (ArchitectRefused e) {
+						r.addProperty("ok", false);
+						r.addProperty("reason", e.reason().name());
+						r.addProperty("message", e.getMessage());
+					}
+					out.add(r);
+				}
+				o.add("parse", out);
 				return o;
 			}
 			case "rplanbykey":

@@ -452,13 +452,29 @@ public final class SiteJournal {
 	}
 
 	/** A new {@code crate} BOX entry for one cell (a construction crate), in the site's undo group, added to {@code t}. */
-	static void crateEntry(JournalStore.Txn t, ServerLevel level, String siteId, @Nullable String group, BlockPos at, Value crate) throws Sites.SiteException {
+	static String crateEntry(JournalStore.Txn t, ServerLevel level, String siteId, @Nullable String group, BlockPos at, Value crate) throws Sites.SiteException {
 		JournalStore s = store();
 		String id = s.newId();
 		long layer = s.newLayer();
 		Value before = WorldJournal.valueAt(level, at);
 		t.create(JournalStore.Meta.header(id, WorldJournal.CRATE, siteId, group, Sites.dimensionId(level), Policy.BOX, layer, Status.ACTIVE,
 			System.currentTimeMillis()), JournalStore.bySection(List.of(new Cell(at.asLong(), layer, before, crate))), JournalNbt.Head.EMPTY);
+		return id;
+	}
+
+	/** 6c Y: releases one entry (a stockpile crate that went: its cell is the ground again). */
+	static void releaseEntry(String entryId) {
+		JournalStore s = WorldJournal.storeOrNull();
+		if (s == null) {
+			return;
+		}
+		JournalStore.Meta m = s.meta(entryId);
+		if (m == null || !m.active()) {
+			return;
+		}
+		JournalStore.Txn t = s.begin().label("release:" + entryId);
+		t.release(entryId);
+		s.submit(t);
 	}
 
 	/** Releases a site's entries of {@code kind} (a construction crate that went: its cell is the ground again). */

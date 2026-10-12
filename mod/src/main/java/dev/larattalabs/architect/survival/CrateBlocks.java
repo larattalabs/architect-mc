@@ -31,12 +31,21 @@ public final class CrateBlocks {
 	}
 
 	public static final String USE_DECONSTRUCT = "The construction crate can't be broken while its site builds: open it and use Deconstruct";
+	/** 6c Y (C24): a stockpile crate. */
+	public static final String USE_REMOVECRATE = "A stockpile crate can't be broken: remove it with /architect stockpile removecrate or through its owner";
 
 	public static void init() {
 		// strength -1 already stops survival mining; creative players break anything instantly, so refuse it here
 		PlayerBlockBreakEvents.BEFORE.register((level, player, pos, state, be) -> {
 			if (!state.is(CRATE)) {
 				return true;
+			}
+			if (be instanceof CrateBlockEntity crate && crate.siteId().startsWith(dev.larattalabs.architect.site.Stockpiles.PREFIX)) {
+				// 6c Y: a stockpile crate is never broken by hand (the ledger is the owner's; the block goes through its owner)
+				if (!level.isClientSide()) {
+					player.sendOverlayMessage(Component.literal(USE_REMOVECRATE));
+				}
+				return false;
 			}
 			if (!level.isClientSide() && be instanceof CrateBlockEntity crate && Builder.siteBuilding(crate.siteId())) {
 				player.sendOverlayMessage(Component.literal(USE_DECONSTRUCT));
@@ -46,7 +55,8 @@ public final class CrateBlocks {
 		});
 		AttackBlockCallback.EVENT.register((player, level, hand, pos, dir) -> {
 			if (!level.isClientSide() && level.getBlockState(pos).is(CRATE)) {
-				player.sendOverlayMessage(Component.literal(USE_DECONSTRUCT));
+				boolean pile = level.getBlockEntity(pos) instanceof CrateBlockEntity c && c.siteId().startsWith(dev.larattalabs.architect.site.Stockpiles.PREFIX);
+				player.sendOverlayMessage(Component.literal(pile ? USE_REMOVECRATE : USE_DECONSTRUCT));
 			}
 			return InteractionResult.PASS;
 		});

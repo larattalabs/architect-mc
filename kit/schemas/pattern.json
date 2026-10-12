@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "architect:pattern-1",
+  "title": "Architect pattern (docs/CONTRACT.md 6c slice MP §3)",
+  "description": "A per-cell material: a weighted mix or a gradient. A mat is a role name or a block state (null: air); in an IR, a block state or null. The kit (lib/pattern.mjs) and the mod (api.Pattern) validate a spec with this schema plus the rules in x-rules.",
+  "x-rules": [
+    "a gradient's stops have strictly increasing at"
+  ],
+  "$ref": "#/$defs/pattern",
+  "$defs": {
+    "pattern": { "oneOf": [{ "$ref": "#/$defs/mix" }, { "$ref": "#/$defs/gradient" }], "oneOfMessage": "a pattern is {mix} or {gradient}" },
+    "mat": { "type": ["string", "null"], "pattern": "^[a-z0-9_:]+(\\[[a-z0-9_=,]*\\])?$" },
+    "label": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,31}$" },
+    "mix": {
+      "type": "object", "required": ["mix"], "additionalProperties": false,
+      "properties": {
+        "mix": {
+          "type": "array", "minItems": 1, "maxItems": 32,
+          "items": { "type": "object", "required": ["w", "mat"], "additionalProperties": false, "properties": { "w": { "type": "integer", "minimum": 1, "maximum": 1000 }, "mat": { "$ref": "#/$defs/mat" } } }
+        },
+        "seedLabel": { "$ref": "#/$defs/label" }
+      }
+    },
+    "gradient": {
+      "type": "object", "required": ["gradient"], "additionalProperties": false,
+      "properties": {
+        "gradient": {
+          "type": "object", "required": ["by", "stops"], "additionalProperties": false,
+          "properties": {
+            "by": { "oneOf": [{ "enum": ["y", "depth"] }, { "type": "object", "required": ["field"], "additionalProperties": false, "properties": { "field": { "$ref": "#/$defs/label" } } }], "oneOfMessage": "by is 'y', 'depth' or {field}" },
+            "stops": {
+              "type": "array", "minItems": 2, "maxItems": 16,
+              "items": { "type": "object", "required": ["at", "mat"], "additionalProperties": false, "properties": { "at": { "type": "number", "minimum": -4096, "maximum": 4096 }, "mat": { "$ref": "#/$defs/mat" } } }
+            }
+          }
+        },
+        "dither": { "enum": ["ordered4", "none"] }
+      }
+    }
+  }
+}

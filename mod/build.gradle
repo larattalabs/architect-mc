@@ -263,6 +263,11 @@ processResources {
 		include "voxel_classes.json"
 		into "architect_mc"
 	}
+	// 6c MP: the mask and pattern schemas (api.Mask / api.Pattern validate with the kit's own schema; a drift test keeps them equal)
+	from("../kit/schemas") {
+		include "mask.json", "pattern.json"
+		into "architect_mc/schemas"
+	}
 	from("../kit/examples") {
 		exclude "**/.DS_Store"
 		into "data/architect_mc/library"

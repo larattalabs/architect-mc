@@ -35,6 +35,11 @@ public final class Infras {
 		return pending.get(id);
 	}
 
+	/** 6c Y1 (the audit): the removed records not settled yet. */
+	static List<Infra> allPending() {
+		return List.copyOf(pending.values());
+	}
+
 	/** Every road and cell site, in placement order. */
 	public static List<Infra> all() {
 		return List.copyOf(byId.values());

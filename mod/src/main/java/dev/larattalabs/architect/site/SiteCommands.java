@@ -148,6 +148,12 @@ public final class SiteCommands {
 			.then(Commands.literal("road")
 				.then(Commands.argument("points", StringArgumentType.greedyString()).executes(SiteCommands::road)))
 			.then(Commands.literal("journal").executes(SiteCommands::journal))
+			.then(Commands.literal("stockpile") // 6c Y1 (C24)
+				.then(Commands.literal("list").executes(SiteCommands::stockpiles))
+				.then(Commands.literal("removecrate")
+					.then(Commands.argument("pos", net.minecraft.commands.arguments.coordinates.BlockPosArgument.blockPos())
+						.executes(ctx -> removeCrate(ctx, false))
+						.then(Commands.literal("force").executes(ctx -> removeCrate(ctx, true))))))
 			.then(Commands.literal("budget")
 				.executes(ctx -> budget(ctx, -1))
 				.then(Commands.argument("ms", com.mojang.brigadier.arguments.IntegerArgumentType.integer(1, 20))
@@ -284,6 +290,49 @@ public final class SiteCommands {
 			+ (on ? ": Place makes a construction site that builds as its crate is fed" : ": placement is instant")
 			+ ". Changing it needs cheats (permission level 2): /architect survival on|off"), false);
 		return on ? 1 : 0;
+	}
+
+	// ------------------------------------------------------------------ 6c Y1: stockpiles
+
+	private static int stockpiles(CommandContext<CommandSourceStack> ctx) {
+		var all = Stockpiles.all();
+		if (all.isEmpty()) {
+			ctx.getSource().sendSuccess(() -> Component.literal("No stockpiles in this world"), false);
+			return 0;
+		}
+		for (Stockpiles.Pile p : all) {
+			ctx.getSource().sendSuccess(() -> Component.literal(p.owner() + ": " + p.crates().size() + " crate(s) in " + p.dimension() + ", stock "
+				+ p.ledger().stock() + ", feed order " + p.order()), false);
+		}
+		return all.size();
+	}
+
+	/** {@code /architect stockpile removecrate <pos> [force]} (permission level 2). */
+	private static int removeCrate(CommandContext<CommandSourceStack> ctx, boolean force) {
+		CommandSourceStack src = ctx.getSource();
+		if (!gamemaster(src)) {
+			src.sendFailure(Component.literal("Removing a stockpile crate needs permission level 2 (cheats on, or an operator)"));
+			return 0;
+		}
+		net.minecraft.core.BlockPos pos = net.minecraft.commands.arguments.coordinates.BlockPosArgument.getBlockPos(ctx, "pos");
+		Stockpiles.Pile pile = Stockpiles.all().stream().filter(p -> p.crates().contains(pos)).findFirst().orElse(null);
+		if (pile == null) {
+			src.sendFailure(Component.literal(pos.toShortString() + " is not a stockpile crate"));
+			return 0;
+		}
+		try {
+			Stockpiles.CrateRemoval r = Stockpiles.removeCrate(src.getServer(), pile.owner(), pos, force);
+			if (!r.removed()) {
+				src.sendFailure(Component.literal("Not removed: " + r.refusal()));
+				return 0;
+			}
+			src.sendSuccess(() -> Component.literal("Removed the crate at " + pos.toShortString() + " of " + pile.owner() + (r.dropped().isEmpty() ? ""
+				: "; dropped the excess " + r.dropped()) + (r.ended() ? "; the stockpile ended" : "")), true);
+			return 1;
+		} catch (Sites.SiteException e) {
+			src.sendFailure(Component.literal(e.getMessage()));
+			return 0;
+		}
 	}
 
 	/** Permission level 2 (cheats on, or an operator): changing the toggle, finishing a site for free. */
