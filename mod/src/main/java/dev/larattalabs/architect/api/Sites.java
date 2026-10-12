@@ -1,9 +1,12 @@
 package dev.larattalabs.architect.api;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
+import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
 import org.jspecify.annotations.Nullable;
 
@@ -310,7 +313,77 @@ public interface Sites {
 		throw new UnsupportedOperationException("Sites.waiting needs Architect API 1.15.0");
 	}
 
-	// ------------------------------------------------------------------ 6c slice SCH: Sponge schematics (API 1.20.0)
+	// ------------------------------------------------------------------ 1.17.0 (docs/CONTRACT.md phase 6c slice Y, C24)
+
+	/**
+	 * Creates the owner's stockpile (C24), or adds the named crates to it: idempotent per owner. Every new construction item of
+	 * the owner then draws from it and places no crate of its own. Refuses ({@link ArchitectRefused}) NOT_ALLOWED with the
+	 * survival toggle off, for another dimension than the stockpile's, or for a crate cell that is not air or replaceable or lies
+	 * in a standing site's restore box; PROTECTED in another owner's protected area; NOT_LOADED for an unloaded cell;
+	 * FIELD_LIMIT past {@link Limits#STOCKPILE_CRATES} or for a missing owner. Server thread. Since 1.17.0.
+	 */
+	default Stockpile createStockpile(StockpileRequest r) {
+		throw new UnsupportedOperationException("Sites.createStockpile needs Architect API 1.17.0");
+	}
+
+	/** Adds one crate (the rules of {@link #createStockpile}). Since 1.17.0. */
+	default Stockpile addStockpileCrate(String owner, net.minecraft.resources.ResourceKey<net.minecraft.world.level.Level> dimension, BlockPos at) {
+		throw new UnsupportedOperationException("Sites.addStockpileCrate needs Architect API 1.17.0");
+	}
+
+	/**
+	 * Removes a crate: its cell gets its before-state back. Not removed (blockers say why) while it would leave the stock over
+	 * capacity, unless {@code force}, which drops the excess at that cell (its {@code refund}: what dropped); the last crate with
+	 * targets building is never removed. Removing the last crate with nothing building ends the stockpile. Since 1.17.0.
+	 */
+	default RemoveResult removeStockpileCrate(String owner, BlockPos at, boolean force) {
+		throw new UnsupportedOperationException("Sites.removeStockpileCrate needs Architect API 1.17.0");
+	}
+
+	/** The owner's stockpile (C24's "stock(owner)"), or empty. Server thread. Since 1.17.0. */
+	default Optional<Stockpile> stockpile(String owner) {
+		throw new UnsupportedOperationException("Sites.stockpile needs Architect API 1.17.0");
+	}
+
+	/** The owner's building targets (sites, roads, delta sites), first fed first. Since 1.17.0. */
+	default List<String> feedOrder(String owner) {
+		throw new UnsupportedOperationException("Sites.feedOrder needs Architect API 1.17.0");
+	}
+
+	/**
+	 * Moves the listed target ids to the front of the feed order, in that order (the others keep their relative order); returns
+	 * the new order. Unknown or finished ids refuse FIELD_LIMIT naming them. Since 1.17.0.
+	 */
+	default List<String> setFeedOrder(String owner, List<String> ids) {
+		throw new UnsupportedOperationException("Sites.setFeedOrder needs Architect API 1.17.0");
+	}
+
+	/**
+	 * Takes credit (stock beyond what every building target still needs) out into the player's inventory; what doesn't fit drops
+	 * at the player. Asking for more than the credit gives the credit. Returns what came out. Since 1.17.0.
+	 */
+	default Map<Item, Integer> withdraw(String owner, Map<Item, Integer> items, net.minecraft.server.level.ServerPlayer to) {
+		throw new UnsupportedOperationException("Sites.withdraw needs Architect API 1.17.0");
+	}
+
+	/**
+	 * Moves the owner's legacy crates (a site's own, a group's shared one, a delta's) into its stockpile: their stock joins it,
+	 * their cells are restored, and their targets draw from the stockpile from now on. Idempotent. Since 1.17.0.
+	 */
+	default Stockpile adoptCrates(String owner) {
+		throw new UnsupportedOperationException("Sites.adoptCrates needs Architect API 1.17.0");
+	}
+
+	/**
+	 * Ends the owner's stockpile (an abandoned settlement): every unit, reserved or not, goes to {@code to} (its inventory, the
+	 * overflow dropped at the player) or, with null, drops at a crate; every crate block is restored. Its building targets keep
+	 * their state and wait with no stockpile. Returns what went out. Since 1.17.0.
+	 */
+	default Map<Item, Integer> dissolveStockpile(String owner, net.minecraft.server.level.@Nullable ServerPlayer to) {
+		throw new UnsupportedOperationException("Sites.dissolveStockpile needs Architect API 1.17.0");
+	}
+
+	// ------------------------------------------------------------------ 6c slice SCH: Sponge schematics (API 1.18.0)
 
 	/**
 	 * Exports a site's current cells as a Sponge Schematic version 3 file ({@code <dir>/<siteId>.schem}, gzipped NBT;
@@ -319,9 +392,9 @@ public interface Sites {
 	 * y 0; {@code Metadata} is {@code {Name, Author: "Architect", Date: now}}. Entities and biomes are not written. Fails
 	 * {@link ArchitectRefused} {@link Reason#UNKNOWN_BLUEPRINT} for an unknown site, {@link Reason#NOT_LOADED} when a chunk of
 	 * its box is not loaded and {@link Reason#WORLD_STOPPED} without a running world; an I/O error fails it as is. Completes on
-	 * the server thread with the file written. Since 1.20.0.
+	 * the server thread with the file written. Since 1.18.0.
 	 */
 	default java.util.concurrent.CompletableFuture<java.nio.file.Path> exportSiteSchematic(String siteId, java.nio.file.Path dir) {
-		throw new UnsupportedOperationException("Sites.exportSiteSchematic needs Architect API 1.20.0");
+		throw new UnsupportedOperationException("Sites.exportSiteSchematic needs Architect API 1.18.0");
 	}
 }

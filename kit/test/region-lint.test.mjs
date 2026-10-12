@@ -40,7 +40,8 @@ function importsOf(file) {
 /** The realise set: the three roots plus their transitive imports under lib/region/ (and each other). */
 function realiseFiles() {
   // (6b) lib/material.mjs (material rules) is on the realise path too (CONTRACT 6b §2.3)
-  const roots = ['lib/sdf.mjs', 'lib/noise.mjs', 'lib/realise.mjs', 'lib/material.mjs'].map((f) => path.join(KIT, f));
+  // (6c MP) lib/mask.mjs, lib/pattern.mjs and lib/specschema.mjs (masks, patterns and their schema check) too
+  const roots = ['lib/sdf.mjs', 'lib/noise.mjs', 'lib/realise.mjs', 'lib/material.mjs', 'lib/mask.mjs', 'lib/pattern.mjs', 'lib/specschema.mjs'].map((f) => path.join(KIT, f));
   const seen = new Set();
   const todo = [...roots];
   while (todo.length) {

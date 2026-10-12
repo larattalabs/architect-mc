@@ -11,8 +11,10 @@ export function evalJobs({ irJson, survey, blobDir, jobs }) {
   const blobs = (sha) => { const f = path.join(blobDir, `${sha}.bin`); return fs.existsSync(f) ? fs.readFileSync(f) : null; };
   const bytes = Buffer.from(survey);
   return jobs.map(({ key, stage, set }) => {
-    const r = evalTile(ir, key, windowFromSurvey(bytes, key), { stage, set, blobs });
-    return { key, stage, set, sha: r.sha, count: r.count };
+    const w = windowFromSurvey(bytes, key);
+    const t0 = performance.now();
+    const r = evalTile(ir, key, w, { stage, set, blobs });
+    return { key, stage, set, sha: r.sha, count: r.count, ms: performance.now() - t0 };
   });
 }
 

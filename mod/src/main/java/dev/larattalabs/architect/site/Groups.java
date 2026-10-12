@@ -72,6 +72,11 @@ public final class Groups {
 		/** Construction members' deconstruct items (computed before the undo is planned, rule 7) and where they drop. */
 		final Map<String, Map<String, Integer>> decItems = new LinkedHashMap<>();
 		final Map<String, long[]> decAt = new LinkedHashMap<>();
+		/**
+		 * 6c Y: per stockpile member (a construction site or road drawing from its owner's stockpile), the refunds to credit once its
+		 * restore is written: tallied before the undo (rule 7), saved apart from the items that drop, credited once per key.
+		 */
+		final Map<String, Credit> decCredit = new LinkedHashMap<>();
 
 		Removal(String group, @Nullable String stage, @Nullable String requester, boolean force) {
 			this.group = group;
@@ -125,6 +130,11 @@ public final class Groups {
 				});
 				o.add("dec", d);
 			}
+			if (!decCredit.isEmpty()) {
+				JsonObject c = new JsonObject();
+				decCredit.forEach((site, x) -> c.add(site, x.toJson()));
+				o.add("credit", c);
+			}
 			return o;
 		}
 
@@ -153,7 +163,48 @@ public final class Groups {
 					r.decAt.put(e.getKey(), new long[] {x.get("at").getAsLong()});
 				});
 			}
+			if (o.has("credit")) {
+				o.getAsJsonObject("credit").entrySet().forEach(e -> r.decCredit.put(e.getKey(), Credit.fromJson(e.getValue().getAsJsonObject())));
+			}
 			return r;
+		}
+	}
+
+	/** 6c Y: a stockpile member's refunds, to credit into {@code owner}'s stockpile under {@code key} once its restore is written. */
+	record Credit(String owner, String key, Map<String, Integer> items, long at) {
+		JsonObject toJson() {
+			JsonObject o = new JsonObject();
+			o.addProperty("owner", owner);
+			o.addProperty("key", key);
+			JsonObject it = new JsonObject();
+			items.forEach(it::addProperty);
+			o.add("items", it);
+			o.addProperty("at", at);
+			return o;
+		}
+
+		static Credit fromJson(JsonObject o) {
+			Map<String, Integer> items = new TreeMap<>();
+			o.getAsJsonObject("items").entrySet().forEach(i -> items.put(i.getKey(), i.getValue().getAsInt()));
+			return new Credit(o.get("owner").getAsString(), o.get("key").getAsString(), items, o.get("at").getAsLong());
+		}
+	}
+
+	/** 6c Y: credits a member's stockpile refunds (once per key); what was credited joins the removal's refund. */
+	private static void credit(MinecraftServer server, Removal r, String id) {
+		Credit c = r.decCredit.get(id);
+		if (c == null) {
+			return;
+		}
+		Stockpiles.Pile p = Stockpiles.get(c.owner());
+		ServerLevel level = p != null ? Sites.levelOf(server, p.dimension()) : Sites.levelOf(server, dimensionOf(id));
+		if (level == null) {
+			return;
+		}
+		boolean already = p != null && p.ledger().credited(c.key());
+		Builder.creditRefund(level, c.owner(), c.key(), c.items(), BlockPos.of(c.at()), null);
+		if (!already) {
+			c.items().forEach((k, v) -> r.refund.merge(k, v, Integer::sum));
 		}
 	}
 
@@ -510,6 +561,7 @@ public final class Groups {
 					.size() - 1)) ? r.handed : Map.of()));
 				return;
 			}
+			credit(server, r, r.current); // 6c Y: its restore was written (before a load): credited now, once per key
 			r.sites.remove(r.current);
 			written.add(r.current);
 			r.current = null;
@@ -553,6 +605,9 @@ public final class Groups {
 		// R4: the writes, last placed first
 		while (!r.sites.isEmpty() && (!r.undoSites.contains(r.sites.get(0)) || Sites.pendingRecord(r.sites.get(0)) == null && Sites.get(r.sites.get(0)) == null
 			&& Infras.pending(r.sites.get(0)) == null)) {
+			if (r.undoSites.contains(r.sites.get(0))) {
+				credit(server, r, r.sites.get(0)); // 6c Y: written before a load (its record is gone): credited now, once per key
+			}
 			r.sites.remove(0);
 		}
 		if (r.sites.isEmpty()) {
@@ -581,6 +636,7 @@ public final class Groups {
 			try {
 				Sites.Removed done = Sites.finishGroupDeconstruct(level, s, r.undo, items, at == null ? null : BlockPos.of(at[0]), handedHere);
 				done.returned().forEach((k, v) -> r.refund.merge(k, v, Integer::sum));
+				credit(server, r, id); // 6c Y: its stockpile refunds, once its restore is written (once per key)
 			} catch (Sites.SiteException e) {
 				end(server, r, new Removed(false, List.of(e.getMessage()), Map.copyOf(r.refund)));
 				return;
@@ -794,6 +850,17 @@ public final class Groups {
 				Builder.Deconstruction d = Builder.prepareDeconstruct(level, s);
 				r.decItems.put(id, Map.copyOf(d.all()));
 				r.decAt.put(id, new long[] {d.at().asLong()});
+				if (d.stockpile() != null) {
+					r.decCredit.put(id, new Credit(d.stockpile(), d.key(), Map.copyOf(d.credit()), d.at().asLong()));
+				}
+				continue;
+			}
+			Infra inf = Infras.get(id);
+			Stockpiles.Pile pile = inf == null ? null : Stockpiles.pileOf(inf);
+			if (pile != null) {
+				// 6c Y: a stockpile's construction road: its paid cells standing, credited once its restore is written
+				r.decCredit.put(id, new Credit(pile.owner(), RoadBuilder.creditKey(inf), Map.copyOf(RoadBuilder.refundOf(level, inf)), RoadBuilder.dropAt(inf)
+					.asLong()));
 			}
 		}
 		String group = dev.larattalabs.architect.site.SiteJournal.group(r.stage == null ? "group-" + r.group : "stage-" + r.group + "-" + r.stage);
@@ -865,6 +932,7 @@ public final class Groups {
 					end(server, r, new Removed(false, List.of(job.siteId + ": " + job.broken), Map.copyOf(r.refund)));
 					return;
 				}
+				credit(server, r, job.siteId); // 6c Y: a stockpile road's refunds, once its restore is written
 				r.sites.remove(job.siteId);
 				written.add(job.siteId);
 				return;

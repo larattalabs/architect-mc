@@ -118,7 +118,7 @@ public interface Library {
 		throw new UnsupportedOperationException("Library.pinOwners needs Architect API 1.10.0");
 	}
 
-	// ------------------------------------------------------------------ 6c slice SCH: Sponge schematics (API 1.20.0)
+	// ------------------------------------------------------------------ 6c slice SCH: Sponge schematics (API 1.18.0)
 
 	/**
 	 * Imports a Sponge Schematic (version 2 or 3, gzipped NBT; docs/CONTRACT.md "Phase 6c slice SCH") as a new library entry,
@@ -134,20 +134,20 @@ public interface Library {
 	 * schematic, an unknown {@code Version}, a {@code DataVersion} newer than the game's, corrupt data, or blocks this game does
 	 * not know (listed; see {@link #importSchematic(Path, String, JsonObject)}); {@link Reason#TOO_LARGE} past the template
 	 * cap (96 x 64 x 96). {@code name}: the entry's name (else the file's {@code Metadata.Name}, else its file name). Completes on
-	 * the server thread with the installed entry. Since 1.20.0.
+	 * the server thread with the installed entry. Since 1.18.0.
 	 */
 	default CompletableFuture<Entry> importSchematic(Path file, @Nullable String name) {
-		throw new UnsupportedOperationException("Library.importSchematic needs Architect API 1.20.0");
+		throw new UnsupportedOperationException("Library.importSchematic needs Architect API 1.18.0");
 	}
 
 	/**
 	 * {@link #importSchematic(Path, String)} with the request's {@code ext} (namespaced keys). {@code ext["architect_mc:unknownAs"]}
 	 * (a block id, e.g. {@code "minecraft:stone"}) replaces every block this game does not know (another mod's) instead of
 	 * refusing the file; the replaced ids are listed in {@code ext["architect_mc:schem"].replaced}. Default: none (refused).
-	 * Since 1.20.0.
+	 * Since 1.18.0.
 	 */
 	default CompletableFuture<Entry> importSchematic(Path file, @Nullable String name, @Nullable JsonObject ext) {
-		throw new UnsupportedOperationException("Library.importSchematic(ext) needs Architect API 1.20.0");
+		throw new UnsupportedOperationException("Library.importSchematic(ext) needs Architect API 1.18.0");
 	}
 
 	/**
@@ -157,10 +157,10 @@ public interface Library {
 	 * {@code groundY} row at y 0; {@code Metadata} is {@code {Name, Author: "Architect", Date}} with the date the entry (version)
 	 * was installed, so two exports of one entry are byte-identical. Fails {@link ArchitectRefused}
 	 * {@link Reason#UNKNOWN_BLUEPRINT} for an unknown entry and {@link Reason#VERSION_GONE} for an unknown version. Runs on the
-	 * server thread (no helper needed). Since 1.20.0.
+	 * server thread (no helper needed). Since 1.18.0.
 	 */
 	default CompletableFuture<Path> exportSchematic(String entryId, @Nullable Integer version, Path dir) {
-		throw new UnsupportedOperationException("Library.exportSchematic needs Architect API 1.20.0");
+		throw new UnsupportedOperationException("Library.exportSchematic needs Architect API 1.18.0");
 	}
 
 	/**

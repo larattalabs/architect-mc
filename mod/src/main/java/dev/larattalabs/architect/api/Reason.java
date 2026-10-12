@@ -69,7 +69,7 @@ package dev.larattalabs.architect.api;
  * <li>{@code PROTECTED} (1.12.0): the op writes into a protected area of its owner ({@link Sites#protect}); {@code force}
  * doesn't override it: lift the area ({@link Sites#unprotect}).</li>
  * <li>{@code FIELD_LIMIT} (1.12.0): a bounded request field is out of range ({@code Limits}); nothing was sent.</li>
- * <li>{@code FORMAT} (1.20.0): a file to import is not in the expected format: not a Sponge schematic, an unknown version, a
+ * <li>{@code FORMAT} (1.18.0): a file to import is not in the expected format: not a Sponge schematic, an unknown version, a
  * {@code DataVersion} newer than the game's, corrupt data, or blocks the game does not know ({@link Library#importSchematic}).</li>
  * </ul>
  * New values are only ever appended.
@@ -82,6 +82,6 @@ public enum Reason {
 	COPY_REFUSED, VERSION_REFUSED,
 	// 1.12.0 (6c slice 0c), after 0a's and 0b's
 	PROTECTED, FIELD_LIMIT,
-	// 1.20.0 (6c slice SCH)
+	// 1.18.0 (6c slice SCH)
 	FORMAT
 }

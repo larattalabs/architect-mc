@@ -34,6 +34,8 @@ export function readBlockTags(serverClassesJar) {
     raw[`minecraft:${n.slice(pre.length, -5)}`] = JSON.parse(zip.read(n).toString('utf8')).values.map((v) => (typeof v === 'string' ? v : v.id));
   }
   const out = {};
+  // (6c MP) the unresolved values too (bare ids and `#tag` references, as the data pack lists them): blocks.mjs's TAGS
+  Object.defineProperty(out, 'raw', { value: Object.fromEntries(Object.keys(raw).sort().map((t) => [t, raw[t].map((v) => (v.startsWith('#') ? `#${v.slice(1).includes(':') ? v.slice(1) : `minecraft:${v.slice(1)}`}` : v.includes(':') ? v : `minecraft:${v}`))])), enumerable: false });
   const resolve = (t, seen = new Set()) => {
     if (out[t]) return out[t];
     if (seen.has(t)) throw new Error(`tag cycle at ${t}`);

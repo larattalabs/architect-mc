@@ -19,7 +19,7 @@ class Api115Test {
 	@Test
 	void version() {
 		String[] v = ArchitectApi.VERSION.split("\\.");
-		assertTrue(Integer.parseInt(v[0]) == 1 && Integer.parseInt(v[1]) >= 15, ArchitectApi.VERSION); // later slices append (6c SCH: 1.20.0)
+		assertTrue(Integer.parseInt(v[0]) == 1 && Integer.parseInt(v[1]) >= 15, ArchitectApi.VERSION); // later slices append (6c SCH: 1.18.0)
 	}
 
 	@Test

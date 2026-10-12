@@ -567,7 +567,7 @@ async function apicompat() {
   const classes = ['main', 'client'].map((s) => path.join(base, 'mod', 'build', 'classes', 'java', s)).join(path.delimiter);
   const r = spawnSync('node', [path.join(root, 'tools', 'api-compat.mjs'), '--gate6csch', classes], { encoding: 'utf8', env: { ...process.env, JAVA_HOME: process.env.JAVA_HOME ?? '/opt/homebrew/opt/openjdk@25' } });
   fs.writeFileSync(path.join(OUT, 'apicompat.log'), `${r.stdout}${r.stderr}`);
-  check(r.status === 0, `item 8: api-compat --gate6csch (0.18.0/0.17.0/0.16.0 apitest jars, the 0.18.0 surface): exit ${r.status}`, (r.stdout + r.stderr).split('\n').filter((l) => /FAIL|ok|missing/i.test(l)).slice(0, 12));
+  check(r.status === 0, `item 8: api-compat --gate6csch (0.20.0/0.19.0/0.18.0 apitest jars, the 0.20.0 surface): exit ${r.status}`, (r.stdout + r.stderr).split('\n').filter((l) => /FAIL|ok|missing/i.test(l)).slice(0, 12));
   return {};
 }
 
