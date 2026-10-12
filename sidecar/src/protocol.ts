@@ -17,7 +17,7 @@ export const PROTOCOL_VERSION = 1 as const;
 export const PROTOCOLS = [1, 2] as const;
 export type Protocol = (typeof PROTOCOLS)[number];
 /** What a protocol-2 snapshot lists in `features`. */
-export const FEATURES = ['job.run', 'job.tools', 'blobs', 'budget', 'designs.v2', 'bibles', 'design.groups', 'named.parts', 'open.types', 'estimates', 'reskin', 'massing', 'critique', 'critique.report', 'job.images', 'bible.admin', 'bible.restraint', 'entry.versions', 'entry.delta', 'design.polish', 'critique.polish', 'region.plan', 'region.tiles', 'region.check', 'region.preview', 'region.design', 'region.blobs', 'ir.format2', 'estimate.kinds', 'opKeys', 'group.breakdown', 'copies', 'smallEffort', 'versionOf', 'extendInfo', 'region.keepOut', 'region.lightCover'] as const;
+export const FEATURES = ['job.run', 'job.tools', 'blobs', 'budget', 'designs.v2', 'bibles', 'design.groups', 'named.parts', 'open.types', 'estimates', 'reskin', 'massing', 'critique', 'critique.report', 'job.images', 'bible.admin', 'bible.restraint', 'entry.versions', 'entry.delta', 'design.polish', 'critique.polish', 'region.plan', 'region.tiles', 'region.check', 'region.preview', 'region.design', 'region.blobs', 'ir.format2', 'estimate.kinds', 'opKeys', 'group.breakdown', 'copies', 'smallEffort', 'versionOf', 'extendInfo', 'region.keepOut', 'region.lightCover', 'region.passes'] as const;
 
 const Ts = z.number().int().nonnegative();
 const Id = z.string().min(1).max(64);
@@ -928,6 +928,7 @@ export const RegionPlannedMsg = z
     kitVersion: z.string().optional().describe("(6b) the IR's kitVersion"),
     blobs: z.array(PlannedBlob).optional().describe('(6b) the side blobs (each also a blob-store blob of kind region.blob)'),
     needVolumes: z.array(VolumeBox).optional().describe('(6b) boxes the program asked for with r.needVolume'),
+    passes: z.array(z.string()).optional().describe("(6c T1) the passes the program declares (the kit's word): the game samples the second plan's survey at resolution 1 for them"),
     report: z.record(z.string(), z.unknown()).optional().describe('(6b) report.json (absent with check: false or when the check failed)'),
     previews: z.record(z.string(), z.array(z.string())).optional().describe('(6b) {top: [path], section: [path...], iso: [path], siteplan: [svgPath, pngPath]} (absolute paths in the plan dir)'),
     sitePlan: z.record(z.string(), z.unknown()).optional().describe('(6b) siteplan.json'),

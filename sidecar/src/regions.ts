@@ -180,6 +180,17 @@ interface ProgramRef {
   label: string;
 }
 
+/**
+ * (6c T1) The passes a program declares, read from its source before the plan runs (the plan budget depends on it): the literal
+ * `export const passes = ['relief', ...]` (kit/REGIONS.md "Passes"). Bundled, non-catalogue and programsDir programs alike; the kit
+ * checks the declaration itself (an undeclared pass fails the plan) and reports it in plan.json.
+ */
+export function declaredPasses(source: string): string[] {
+  const m = /^[ \t]*export\s+const\s+passes\s*=\s*\[([^\]]*)\]/m.exec(source);
+  if (!m) return [];
+  return [...m[1]!.matchAll(/['"]([a-z][a-z0-9_]{0,31})['"]/g)].map((x) => x[1]!);
+}
+
 interface IrEntry {
   json: string;
   plans: Set<string>;
@@ -319,6 +330,7 @@ export class Regions {
     fs.mkdirSync(this.planDir(planId), { recursive: true });
     const dir = fs.realpathSync(this.planDir(planId));
     fs.copyFileSync(program.file, path.join(dir, 'program.mjs'));
+    const passes = declaredPasses(fs.readFileSync(program.file, 'utf8'));
     fs.writeFileSync(path.join(dir, 'survey.bin'), survey);
     fs.writeFileSync(path.join(dir, 'params.json'), JSON.stringify(msg.params));
     if (info.caps.blobsOut) fs.mkdirSync(path.join(dir, 'blobs'), { recursive: true });
@@ -342,12 +354,13 @@ export class Regions {
       check,
       ...(volumes.length ? { volumes: volumes.map((v) => ({ ...(v.name ? { name: v.name } : {}), sha: v.sha, blobId: v.blobId, box: v.box })) } : {}),
       ...(keepOut.length ? { keepOut } : {}),
+      ...(passes.length ? { passes } : {}),
       createdAt: this.host.now(),
     };
     fs.writeFileSync(path.join(dir, 'request.json'), JSON.stringify(request, null, 2));
-    this.host.log.info(`region plan ${planId}: ${program.label}, claim ${msg.claim.minX},${msg.claim.minZ}..${msg.claim.maxX},${msg.claim.maxZ} y ${msg.claim.minY}..${msg.claim.maxY}, seed ${seed}${bible ? `, bible ${bible.id} v${bible.version}` : ''}${volumes.length ? `, ${volumes.length} volume${volumes.length === 1 ? '' : 's'}` : ''}${check ? '' : ', no check'}`);
+    this.host.log.info(`region plan ${planId}: ${program.label}, claim ${msg.claim.minX},${msg.claim.minZ}..${msg.claim.maxX},${msg.claim.maxZ} y ${msg.claim.minY}..${msg.claim.maxY}, seed ${seed}${bible ? `, bible ${bible.id} v${bible.version}` : ''}${volumes.length ? `, ${volumes.length} volume${volumes.length === 1 ? '' : 's'}` : ''}${check ? '' : ', no check'}${passes.length ? `, passes ${passes.join(', ')} (${Math.round(this.cfg.passPlanMs / 1000)} s, ${this.cfg.passPlanHeapMb} MB)` : ''}`);
     this.planning.add(planId);
-    const p = this.withPlanSlot(() => this.runPlan(planId, dir, program, { seed, claim: msg.claim, hasBible, request, check, volumes: volumes.length > 0, keepOut: keepOut.length > 0 })).finally(() => this.planning.delete(planId));
+    const p = this.withPlanSlot(() => this.runPlan(planId, dir, program, { seed, claim: msg.claim, hasBible, request, check, volumes: volumes.length > 0, keepOut: keepOut.length > 0, passes })).finally(() => this.planning.delete(planId));
     this.running.add(p);
     void p.finally(() => this.running.delete(p));
     return { planId, seed };
@@ -474,11 +487,16 @@ export class Regions {
     return { ok: true, out: out ?? {}, ms: ms() };
   }
 
+  /** (6c T1) The plan run's time and heap: SETTLEMENTS §4's pass budget for a program that declares passes, else 6a's. */
+  planBudget(passes: readonly string[]): { timeoutMs: number; heapMb: number } {
+    return passes.length ? { timeoutMs: this.cfg.passPlanMs, heapMb: this.cfg.passPlanHeapMb } : { timeoutMs: this.cfg.planMs, heapMb: this.cfg.planHeapMb };
+  }
+
   private async runPlan(
     planId: string,
     dir: string,
     program: ProgramRef,
-    o: { seed: string; claim: PlanMsg['claim']; hasBible: boolean; request: Record<string, unknown>; check: boolean; volumes: boolean; keepOut?: boolean },
+    o: { seed: string; claim: PlanMsg['claim']; hasBible: boolean; request: Record<string, unknown>; check: boolean; volumes: boolean; keepOut?: boolean; passes?: string[] },
   ): Promise<void> {
     const t0 = Date.now();
     const fail = (message: string) => {
@@ -494,7 +512,7 @@ export class Regions {
       this.progress(planId, 'planning');
       // a stale ir.json from nowhere must not count
       fs.rmSync(path.join(dir, 'ir.json'), { force: true });
-      const r = await this.runKit(dir, this.planArgs(dir, program, o), { timeoutMs: this.cfg.planMs, heapMb: this.cfg.planHeapMb, extraReads: program.bundled ? [] : [fs.realpathSync(this.cfg.programsDir)], what: 'plan' });
+      const r = await this.runKit(dir, this.planArgs(dir, program, o), { ...this.planBudget(o.passes ?? []), extraReads: program.bundled ? [] : [fs.realpathSync(this.cfg.programsDir)], what: 'plan' });
       const ms = Date.now() - t0;
       if (!r.ok) return fail(r.message);
       const out = r.out;
@@ -581,6 +599,7 @@ export class Regions {
         kitVersion: typeof ir.kitVersion === 'string' ? ir.kitVersion : this.kitInfo().kitVersion,
         blobs,
         needVolumes,
+        ...(Array.isArray(out.passes) && out.passes.length ? { passes: out.passes.map(String) } : {}),
         ...(checked.report ? { report: checked.report } : {}),
         ...(checked.previews ? { previews: checked.previews } : {}),
         ...(checked.sitePlan ? { sitePlan: checked.sitePlan } : {}),

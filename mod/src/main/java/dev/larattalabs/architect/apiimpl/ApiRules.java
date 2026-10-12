@@ -53,11 +53,15 @@ public final class ApiRules {
 					case "ir.format2" -> "irFormat2";
 					case "region.keepOut" -> "planKeepOut"; // 6c V
 					case "region.lightCover" -> "apronLights"; // 6c W
+					case "region.passes" -> "planPasses"; // 6c T1 (with reliefOp, below)
 					default -> Wire4b.FEATURE_NAMES.getOrDefault(f, Wire5a.FEATURE_NAMES.getOrDefault(f, f));
 				});
 			}
 			if (sidecarFeatures.contains("region.preview")) {
 				out.add("regionGhost"); // the ghost's preview tiles come with the 6b helper's previews
+			}
+			if (sidecarFeatures.contains("region.passes")) {
+				out.add("reliefOp"); // 6c T1: a T1 helper's kit has the relief op and pass
 			}
 			if (sidecarFeatures.contains("region.keepOut")) {
 				// 6c V: a V helper's kit has the flat_village program, the IR graph and the villager mover with M22-M24
