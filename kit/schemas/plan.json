@@ -1,0 +1,526 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "architect:plan-0",
+  "title": "Architect geometric plan, plan/0 (DRAFT; docs/CONTRACT.md 6c slice P0)",
+  "description": "The geometric layer of a composed settlement plan (steward-mc docs/COMPOSITION.md §3; architect-mc docs/COMPOSITION-ANSWERS.md, its Revisions win). Claude writes it through Steward's plan writer; Regions.checkPlan answers each part. It holds no world coordinates: places are locators over features of the survey and named anchors, with an optional quantised relative sketch. Architect owns this schema, its compiler and the capability catalogue. Steward's life layer (story, stages, schedule, relations, secrets) is out of scope and points at parts through partRef and each part's ext. The file stays inside the keyword subset of kit/lib/specschema.mjs ($ref, oneOf, anyOf, type, enum, const, pattern, minimum, maximum, exclusiveMinimum, minItems, maxItems, items, required, properties, additionalProperties: false); what that subset can't say is in x-rules, x-dispatch and x-defaults, which the plan validator (kit, P0) applies after the schema. Members may be added within plan/0 (additive, optional); any change to an existing member's meaning is a new schemaVersion. DRAFT: frozen after Steward's review, before Steward writes its plan writer.",
+  "x-rules": [
+    "R1 ids: every part id (zones, connectors, forms, rules) is unique across the whole plan, not per family",
+    "R2 references: every part id named anywhere (locator targets, endpoints, relief.around, dependencies, feature {part}) names a part of this plan; an unknown id makes the referring part malformed (reason UNKNOWN_REF)",
+    "R3 dependencies: the graph of explicit dependencies plus implicit ones (a part depends on every part its where, endpoints or around name) is acyclic; a cycle makes every part on it malformed (reason CYCLE)",
+    "R4 dispatch: each family's items are checked first against the loose base ($defs/partBase); then by x-dispatch on kind: a kind whose catalogue entry is supported is checked strictly against its $defs entry, and an error there makes the part malformed; a reserved, retired or unknown kind is checked only against $defs/extension and answers unsupported {block: <block id>}, never malformed (an envelope over its bounds is malformed)",
+    "R4a kinds and one-of members: a connector, form or rule has a kind; a zone without one is kind standard. A near locator names exactly one of anchor or feature; a sketch with frame anchor names its anchor; along with side toward_anchor or away_from_anchor names its anchor",
+    "R5 block ids: <family>.<kind> for parts (zone.standard, connector.wall, form.relief, rule.palette); program.<name> for a zone's program; locator.<form>, feature.<selector>, endpoint.<form> and sketch.<form> for the place vocabulary. A namespaced kind keeps its namespace: connector.steward:moat. An unsupported answer names the exact block id",
+    "R6 extension bounds: one extension part is at most 4096 characters as canonical JSON and nests at most 6 deep; at most 32 extension parts and 32768 characters of extension JSON per plan; over a bound the part is malformed (reason EXTENSION_BOUND)",
+    "R7 ext: a part's or the plan's ext has namespace:name keys (at most 200 characters each) and is at most 4096 characters as compact JSON; keys under architect_mc: are Architect's and a caller's value is dropped (as 6c X C19). Architect never reads a caller's ext; it is echoed in the part's answer and kept in the artifact",
+    "R8 ranges: an intRange [a, b] has a <= b; a sketch in unit q64 has coordinates 0..64, in unit block -512..512; a polygon sketch has at least 3 points",
+    "R9 one plan is at most 65536 characters as canonical JSON, and at most 128 parts in all",
+    "R10 numbers: every coordinate, distance and size is an integer in blocks (cells) unless its definition says otherwise; numbers that are not integers (grades, ratios) are quantised by the compiler to 1/64",
+    "R11 required parts: a part with required true whose answer is unsupported or refused blocks approval (COMPOSITION §2.5); a required rule that can't be verified blocks readiness",
+    "R12 notes and labels are free text: kept, shown, never treated as a verified requirement"
+  ],
+  "x-defaults": {
+    "about": "Defaults the compiler applies when a member is absent. A contract promise wins over a part's tolerance where both apply (for example C27's within 4 cells for a boundary-following district, once D2 is supported).",
+    "required": false,
+    "zone.kind": "standard",
+    "tolerance.move": { "max": 16, "hard": false, "ceiling": 64 },
+    "tolerance.size": { "max": 25, "hard": false, "ceiling": 50, "unit": "percent of each side" },
+    "tolerance.rotate": { "allowed": true, "hard": false },
+    "tolerance.count": { "max": 0, "hard": false, "unit": "lots of the program left unplaced" },
+    "tolerance.grade": { "max": 0.25, "hard": true, "unit": "rise per run over any 8-cell window (T2 maxGrade)" },
+    "tolerance.detour": { "max": 2.0, "hard": false, "ceiling": 4.0, "unit": "routed length / straight length" },
+    "tolerance.sketch": { "max": 8, "hard": false, "ceiling": 32, "unit": "cells between the sketch's centroid and the fitted part's centroid" },
+    "soft": "a soft tolerance may be exceeded up to its ceiling: the part answers adjusted with the deviation and exceeds: true; past the ceiling it is refused",
+    "hard": "a hard tolerance is never exceeded: the part answers refused with reason TOLERANCE and what would fit",
+    "near.within": 32,
+    "adjacent.gap": [0, 4],
+    "adjacent.side": "any",
+    "around.ring": [4, 24],
+    "feature.pick": "largest, then nearest to the claim's centre, then the smallest min x, then the smallest min z",
+    "connector.width": { "street": 3, "road": 3, "path": 1 },
+    "connector.movers": "inferred from the end nodes' lot kinds (T2, S-T2-1); villager edges never use ladders (S-T2-2)",
+    "relief.radius": 12,
+    "relief.maxCut": 6,
+    "relief.maxFill": 6
+  },
+  "type": "object",
+  "required": ["schemaVersion"],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": { "const": "plan/0" },
+    "planId": { "$ref": "#/$defs/planId", "description": "Steward's id for the plan, kept across revisions (null or absent: Architect derives none; the check names the plan by its sha)." },
+    "revision": { "$ref": "#/$defs/revision" },
+    "style": { "$ref": "#/$defs/bibleRef", "description": "The plan's default style bible; a zone's style wins for that zone." },
+    "zones": { "type": "array", "maxItems": 16, "items": { "$ref": "#/$defs/partBase" }, "x-dispatch": { "family": "zone", "on": "kind", "default": "standard", "otherwise": "#/$defs/extension" } },
+    "connectors": { "type": "array", "maxItems": 64, "items": { "$ref": "#/$defs/partBase" }, "x-dispatch": { "family": "connector", "on": "kind", "otherwise": "#/$defs/extension" } },
+    "forms": { "type": "array", "maxItems": 32, "items": { "$ref": "#/$defs/partBase" }, "x-dispatch": { "family": "form", "on": "kind", "otherwise": "#/$defs/extension" } },
+    "rules": { "type": "array", "maxItems": 32, "items": { "$ref": "#/$defs/partBase" }, "x-dispatch": { "family": "rule", "on": "kind", "otherwise": "#/$defs/extension" } },
+    "dependencies": { "type": "array", "maxItems": 128, "items": { "$ref": "#/$defs/dependency" } },
+    "notes": { "$ref": "#/$defs/text2000" },
+    "ext": { "$ref": "#/$defs/ext" }
+  },
+
+  "x-catalogue": {
+    "about": "The capability catalogue that P0 ships (catalogueVersion 1). Each entry: a stable block id (never reused or renamed), the API version it arrived in (sinceApi; P0 is a placeholder the coordinator replaces at merge with the real minor), its own schemaVersion (bumped when its members grow, additively), its state (supported | reserved | retired) and, for reserved, the slice it waits for (until). Checks return this catalogue with every answer; a release commits it as a golden so two catalogues diff by id. Reserved entries carry their parameters through $defs/extension until supported.",
+    "catalogueVersion": 1,
+    "entries": [
+      { "id": "zone.standard", "sinceApi": "P0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/zone.standard" },
+      { "id": "zone.outpost", "sinceApi": "P0", "schemaVersion": 0, "state": "reserved", "until": "D2" },
+      { "id": "program.flat_village", "sinceApi": "P0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/program.template" },
+      { "id": "program.lots", "sinceApi": "P0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/program.lots" },
+      { "id": "program.districts", "sinceApi": "P0", "schemaVersion": 0, "state": "reserved", "until": "D1" },
+      { "id": "connector.street", "sinceApi": "P0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/connector.routed" },
+      { "id": "connector.road", "sinceApi": "P0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/connector.routed" },
+      { "id": "connector.path", "sinceApi": "P0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/connector.routed" },
+      { "id": "connector.auto", "sinceApi": "P0", "schemaVersion": 0, "state": "reserved", "until": "7a" },
+      { "id": "connector.bridge", "sinceApi": "P0", "schemaVersion": 0, "state": "reserved", "until": "T3" },
+      { "id": "connector.tunnel", "sinceApi": "P0", "schemaVersion": 0, "state": "reserved", "until": "T3" },
+      { "id": "connector.channel", "sinceApi": "P0", "schemaVersion": 0, "state": "reserved", "until": "HY" },
+      { "id": "connector.wall", "sinceApi": "P0", "schemaVersion": 0, "state": "reserved", "until": "7a" },
+      { "id": "connector.gate", "sinceApi": "P0", "schemaVersion": 0, "state": "reserved", "until": "7a" },
+      { "id": "connector.ladder", "sinceApi": "P0", "schemaVersion": 0, "state": "reserved", "until": "7a" },
+      { "id": "connector.stair", "sinceApi": "P0", "schemaVersion": 0, "state": "reserved", "until": "7a" },
+      { "id": "connector.rail", "sinceApi": "P0", "schemaVersion": 0, "state": "reserved", "until": "7a" },
+      { "id": "connector.rope_bridge", "sinceApi": "P0", "schemaVersion": 0, "state": "reserved", "until": "7a" },
+      { "id": "connector.catwalk", "sinceApi": "P0", "schemaVersion": 0, "state": "reserved", "until": "7a" },
+      { "id": "connector.rock_stair", "sinceApi": "P0", "schemaVersion": 0, "state": "reserved", "until": "7a" },
+      { "id": "connector.switchback", "sinceApi": "P0", "schemaVersion": 0, "state": "reserved", "until": "7a" },
+      { "id": "connector.lift", "sinceApi": "P0", "schemaVersion": 0, "state": "reserved", "until": "7a" },
+      { "id": "connector.branch_walk", "sinceApi": "P0", "schemaVersion": 0, "state": "reserved", "until": "7a" },
+      { "id": "connector.span_bridge", "sinceApi": "P0", "schemaVersion": 0, "state": "reserved", "until": "7a" },
+      { "id": "connector.stairs_around", "sinceApi": "P0", "schemaVersion": 0, "state": "reserved", "until": "7a" },
+      { "id": "form.relief", "sinceApi": "P0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/form.relief" },
+      { "id": "form.terrace", "sinceApi": "P0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/form.terrace" },
+      { "id": "form.ice_spike", "sinceApi": "P0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/form.spike" },
+      { "id": "form.rock_spire", "sinceApi": "P0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/form.spike" },
+      { "id": "form.floating_island", "sinceApi": "P0", "schemaVersion": 0, "state": "reserved", "until": "N-P0-1" },
+      { "id": "form.brush", "sinceApi": "P0", "schemaVersion": 0, "state": "reserved", "until": "B" },
+      { "id": "form.pond", "sinceApi": "P0", "schemaVersion": 0, "state": "reserved", "until": "H" },
+      { "id": "form.scatter", "sinceApi": "P0", "schemaVersion": 0, "state": "reserved", "until": "F2" },
+      { "id": "form.giant_tree", "sinceApi": "P0", "schemaVersion": 0, "state": "reserved", "until": "F3" },
+      { "id": "form.hidden_room", "sinceApi": "P0", "schemaVersion": 0, "state": "reserved", "until": "7b" },
+      { "id": "rule.palette", "sinceApi": "P0", "schemaVersion": 0, "state": "reserved", "until": "RC", "draft": "#/$defs/rule.palette" },
+      { "id": "rule.shape", "sinceApi": "P0", "schemaVersion": 0, "state": "reserved", "until": "RC", "draft": "#/$defs/rule.shape" },
+      { "id": "rule.variety", "sinceApi": "P0", "schemaVersion": 0, "state": "reserved", "until": "RC", "draft": "#/$defs/rule.variety" },
+      { "id": "rule.density", "sinceApi": "P0", "schemaVersion": 0, "state": "reserved", "until": "RC", "draft": "#/$defs/rule.density" },
+      { "id": "rule.height_cap", "sinceApi": "P0", "schemaVersion": 0, "state": "reserved", "until": "RC", "draft": "#/$defs/rule.height_cap" },
+      { "id": "locator.inside", "sinceApi": "P0", "schemaVersion": 1, "state": "supported" },
+      { "id": "locator.near", "sinceApi": "P0", "schemaVersion": 1, "state": "supported" },
+      { "id": "locator.adjacent", "sinceApi": "P0", "schemaVersion": 1, "state": "supported" },
+      { "id": "locator.along", "sinceApi": "P0", "schemaVersion": 0, "state": "reserved", "until": "D2" },
+      { "id": "locator.around", "sinceApi": "P0", "schemaVersion": 0, "state": "reserved", "until": "FL" },
+      { "id": "feature.water", "sinceApi": "P0", "schemaVersion": 1, "state": "supported" },
+      { "id": "feature.part", "sinceApi": "P0", "schemaVersion": 1, "state": "supported" },
+      { "id": "feature.protected", "sinceApi": "P0", "schemaVersion": 1, "state": "supported" },
+      { "id": "feature.region", "sinceApi": "P0", "schemaVersion": 0, "state": "reserved", "until": "D1" },
+      { "id": "feature.biome_edge", "sinceApi": "P0", "schemaVersion": 0, "state": "reserved", "until": "D2" },
+      { "id": "feature.ridge", "sinceApi": "P0", "schemaVersion": 0, "state": "reserved", "until": "D2" },
+      { "id": "endpoint.part", "sinceApi": "P0", "schemaVersion": 1, "state": "supported" },
+      { "id": "endpoint.anchor", "sinceApi": "P0", "schemaVersion": 1, "state": "supported" },
+      { "id": "endpoint.feature", "sinceApi": "P0", "schemaVersion": 1, "state": "supported" },
+      { "id": "endpoint.region", "sinceApi": "P0", "schemaVersion": 0, "state": "reserved", "until": "D1" },
+      { "id": "sketch.point", "sinceApi": "P0", "schemaVersion": 1, "state": "supported" },
+      { "id": "sketch.outline", "sinceApi": "P0", "schemaVersion": 0, "state": "reserved", "until": "FL" },
+      { "id": "dependency.after", "sinceApi": "P0", "schemaVersion": 1, "state": "supported" }
+    ]
+  },
+
+  "$defs": {
+    "id": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,47}$" },
+    "planId": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$" },
+    "kind": { "type": "string", "pattern": "^([a-z0-9_.-]{1,32}:)?[a-z][a-z0-9_]{0,47}$" },
+    "anchor": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,31}$", "description": "A named point: built in (claim_center, claim_n, claim_e, claim_s, claim_w) or supplied by the caller in PlanRequest.anchors (for example stone). Never a coordinate in the plan." },
+    "blockId": { "type": "string", "pattern": "^[a-z][a-z0-9_]*\\.([a-z0-9_.-]{1,32}:)?[a-z0-9_]{1,48}$" },
+    "sha": { "type": "string", "pattern": "^[0-9a-f]{12,64}$" },
+    "text500": { "type": "string", "pattern": "^[\\s\\S]{0,500}$" },
+    "text2000": { "type": "string", "pattern": "^[\\s\\S]{0,2000}$" },
+    "label": { "type": "string", "pattern": "^[\\s\\S]{1,80}$" },
+    "ext": { "type": "object", "description": "Opaque, namespaced, bounded (R7). Steward's hook on a part: Architect echoes it and keeps it in the artifact." },
+    "intRange": {
+      "oneOf": [
+        { "type": "integer" },
+        { "type": "array", "minItems": 2, "maxItems": 2, "items": { "type": "integer" } }
+      ],
+      "oneOfMessage": "an integer or [min, max]"
+    },
+    "partRef": {
+      "type": "string",
+      "pattern": "^([A-Za-z0-9][A-Za-z0-9_.:-]{0,127}@[0-9]{1,6}#)?[a-z][a-z0-9_]{0,47}$",
+      "description": "The documented hook for Steward's life layer: a part addressed as <partId> inside a plan, or <planId>@<revision>#<partId> from outside one (a stage, a schedule entry, a secret). Ids are stable across revisions: a revision that keeps a part keeps its id."
+    },
+    "revision": {
+      "type": "object", "required": ["n"], "additionalProperties": false,
+      "properties": {
+        "n": { "type": "integer", "minimum": 1, "maximum": 999999 },
+        "parent": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}@[0-9]{1,6}$", "description": "<planId>@<n> of the revision this one changes." },
+        "parentArtifact": { "$ref": "#/$defs/sha", "description": "The approved artifact this revision starts from, when there is one." },
+        "reason": { "$ref": "#/$defs/text500" }
+      }
+    },
+    "bibleRef": {
+      "type": "object", "required": ["bible"], "additionalProperties": false,
+      "properties": {
+        "bible": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:@/-]{0,99}$" },
+        "version": { "type": "integer", "minimum": 1 }
+      }
+    },
+
+    "tol": {
+      "type": "object", "additionalProperties": false,
+      "properties": { "max": { "type": "number", "minimum": 0 }, "hard": { "type": "boolean" } }
+    },
+    "tolerance": {
+      "type": "object", "additionalProperties": false,
+      "description": "Explicit per part; absent members take x-defaults. Only the members that apply to the part's family are read; others are ignored with a note.",
+      "properties": {
+        "move": { "$ref": "#/$defs/tol" },
+        "size": { "$ref": "#/$defs/tol" },
+        "rotate": { "type": "object", "additionalProperties": false, "properties": { "allowed": { "type": "boolean" }, "hard": { "type": "boolean" } } },
+        "count": { "$ref": "#/$defs/tol" },
+        "grade": { "$ref": "#/$defs/tol" },
+        "detour": { "$ref": "#/$defs/tol" },
+        "sketch": { "$ref": "#/$defs/tol" }
+      }
+    },
+
+    "size": {
+      "oneOf": [
+        { "type": "object", "required": ["w", "d"], "additionalProperties": false, "properties": { "w": { "$ref": "#/$defs/intRange" }, "d": { "$ref": "#/$defs/intRange" } } },
+        { "type": "object", "required": ["preset"], "additionalProperties": false, "properties": { "preset": { "enum": ["S", "M", "L", "XL"] } } }
+      ],
+      "oneOfMessage": "a size is {w, d} in blocks (each an integer or [min, max]) or {preset: S|M|L|XL}",
+      "description": "Presets (blocks, w x d): S 32x32, M 48x48, L 64x64, XL 96x96, each with the size tolerance. Absent: the program's own minimum for its lots."
+    },
+
+    "sketch": {
+      "type": "object", "required": ["frame", "unit", "shape", "points"], "additionalProperties": false,
+      "description": "Optional relative sketch, never world coordinates. q64: 0..64 across the claim's x and z; block: blocks relative to frame anchor (+x east, +z south). v0 uses a point or the centroid of any shape as a soft position target (sketch.point); fitting an outline is sketch.outline (reserved, FL).",
+      "properties": {
+        "frame": { "enum": ["claim", "anchor"] },
+        "anchor": { "$ref": "#/$defs/anchor" },
+        "unit": { "enum": ["q64", "block"] },
+        "shape": { "enum": ["point", "polyline", "polygon"] },
+        "points": { "type": "array", "minItems": 1, "maxItems": 64, "items": { "type": "array", "minItems": 2, "maxItems": 2, "items": { "type": "integer", "minimum": -512, "maximum": 512 } } },
+        "outline": { "type": "boolean", "description": "true: the outline itself is the requirement (sketch.outline, reserved until FL); false or absent: only its centroid and extent guide the fit." }
+      }
+    },
+
+    "feature": {
+      "description": "A deterministic selector over the survey or the plan. Where several features match, pick chooses (x-defaults feature.pick), with stable tie-breaking.",
+      "oneOf": [
+        { "type": "object", "required": ["water"], "additionalProperties": false, "properties": { "water": { "type": "object", "additionalProperties": false, "properties": {
+          "body": { "enum": ["any", "river", "lake", "ocean"] },
+          "minArea": { "type": "integer", "minimum": 1, "maximum": 1048576 },
+          "pick": { "enum": ["largest", "nearest"] }, "to": { "$ref": "#/$defs/anchor" } } } } },
+        { "type": "object", "required": ["biome_edge"], "additionalProperties": false, "properties": { "biome_edge": { "type": "object", "required": ["between"], "additionalProperties": false, "properties": {
+          "between": { "type": "array", "minItems": 2, "maxItems": 2, "items": { "type": "string", "pattern": "^[a-z][a-z_]{0,23}$" } },
+          "pick": { "enum": ["longest", "nearest"] }, "to": { "$ref": "#/$defs/anchor" } } } } },
+        { "type": "object", "required": ["ridge"], "additionalProperties": false, "properties": { "ridge": { "type": "object", "additionalProperties": false, "properties": {
+          "minRise": { "type": "integer", "minimum": 1, "maximum": 256 },
+          "pick": { "enum": ["highest", "longest", "nearest"] }, "to": { "$ref": "#/$defs/anchor" } } } } },
+        { "type": "object", "required": ["part"], "additionalProperties": false, "properties": { "part": { "$ref": "#/$defs/id" } } },
+        { "type": "object", "required": ["region"], "additionalProperties": false, "properties": { "region": { "type": "string", "pattern": "^[A-Za-z0-9_.:-]{1,200}$" } } },
+        { "type": "object", "required": ["protected"], "additionalProperties": false, "properties": { "protected": { "type": "string", "pattern": "^[A-Za-z0-9_.:-]{1,200}$" } } }
+      ],
+      "oneOfMessage": "a feature is {water}, {biome_edge}, {ridge}, {part}, {region} or {protected}"
+    },
+
+    "target": {
+      "oneOf": [
+        { "type": "object", "required": ["part"], "additionalProperties": false, "properties": { "part": { "$ref": "#/$defs/id" } } },
+        { "type": "object", "required": ["region"], "additionalProperties": false, "properties": { "region": { "type": "string", "pattern": "^[A-Za-z0-9_.:-]{1,200}$" } } },
+        { "type": "object", "required": ["claim"], "additionalProperties": false, "properties": { "claim": { "const": true } } }
+      ],
+      "oneOfMessage": "a target is {part}, {region} or {claim: true}"
+    },
+
+    "where": {
+      "description": "One locator (v0 vocabulary). Distances in blocks; the compiler quantises every resolved position to cells.",
+      "oneOf": [
+        { "type": "object", "required": ["inside"], "additionalProperties": false, "properties": { "inside": { "$ref": "#/$defs/target" } } },
+        { "type": "object", "required": ["near"], "additionalProperties": false, "properties": { "near": { "type": "object", "additionalProperties": false, "properties": {
+          "anchor": { "$ref": "#/$defs/anchor" }, "feature": { "$ref": "#/$defs/feature" },
+          "within": { "type": "integer", "minimum": 0, "maximum": 512 } } } } },
+        { "type": "object", "required": ["adjacent"], "additionalProperties": false, "properties": { "adjacent": { "type": "object", "required": ["to"], "additionalProperties": false, "properties": {
+          "to": { "$ref": "#/$defs/target" },
+          "side": { "enum": ["any", "n", "e", "s", "w"] },
+          "gap": { "$ref": "#/$defs/intRange" } } } } },
+        { "type": "object", "required": ["along"], "additionalProperties": false, "properties": { "along": { "type": "object", "required": ["feature"], "additionalProperties": false, "properties": {
+          "feature": { "$ref": "#/$defs/feature" },
+          "side": { "enum": ["either", "left", "right", "toward_anchor", "away_from_anchor"] },
+          "anchor": { "$ref": "#/$defs/anchor" },
+          "distance": { "$ref": "#/$defs/intRange" } } } } },
+        { "type": "object", "required": ["around"], "additionalProperties": false, "properties": { "around": { "type": "object", "required": ["feature"], "additionalProperties": false, "properties": {
+          "feature": { "$ref": "#/$defs/feature" },
+          "ring": { "$ref": "#/$defs/intRange" },
+          "closed": { "type": "boolean" } } } } }
+      ],
+      "oneOfMessage": "a locator is {inside}, {near}, {adjacent}, {along} or {around}"
+    },
+
+    "endpoint": {
+      "oneOf": [
+        { "type": "object", "required": ["part"], "additionalProperties": false, "properties": { "part": { "$ref": "#/$defs/id" }, "port": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,31}$" } } },
+        { "type": "object", "required": ["anchor"], "additionalProperties": false, "properties": { "anchor": { "$ref": "#/$defs/anchor" } } },
+        { "type": "object", "required": ["feature"], "additionalProperties": false, "properties": { "feature": { "$ref": "#/$defs/feature" } } },
+        { "type": "object", "required": ["region"], "additionalProperties": false, "properties": { "region": { "type": "string", "pattern": "^[A-Za-z0-9_.:-]{1,200}$" }, "port": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,31}$" } } }
+      ],
+      "oneOfMessage": "an endpoint is {part, port?}, {anchor}, {feature} or {region, port?}"
+    },
+
+    "partBase": {
+      "type": "object", "required": ["id"],
+      "description": "The loose first check every part passes (R4). Strict per-kind checks follow by dispatch.",
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "kind": { "$ref": "#/$defs/kind" },
+        "required": { "type": "boolean" },
+        "label": { "$ref": "#/$defs/label" },
+        "notes": { "$ref": "#/$defs/text500" },
+        "ext": { "$ref": "#/$defs/ext" }
+      }
+    },
+
+    "extension": {
+      "type": "object", "required": ["id", "kind"],
+      "description": "The bounded envelope (R6) for a reserved, retired or unknown kind: answered unsupported {block}, never malformed while within its bounds. Members named here are checked when present; any other member is carried as-is, so Claude may write a reserved kind in the shape of its draft def.",
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "kind": { "$ref": "#/$defs/kind" },
+        "required": { "type": "boolean" },
+        "label": { "$ref": "#/$defs/label" },
+        "notes": { "$ref": "#/$defs/text500" },
+        "ext": { "$ref": "#/$defs/ext" },
+        "where": { "$ref": "#/$defs/where" },
+        "sketch": { "$ref": "#/$defs/sketch" },
+        "size": { "$ref": "#/$defs/size" },
+        "from": { "$ref": "#/$defs/endpoint" },
+        "to": { "$ref": "#/$defs/endpoint" },
+        "style": { "$ref": "#/$defs/bibleRef" },
+        "tolerance": { "$ref": "#/$defs/tolerance" },
+        "params": { "type": "object" }
+      }
+    },
+
+    "lot": {
+      "type": "object", "required": ["id", "type", "size"], "additionalProperties": false,
+      "description": "One building of a lot set: the shape of kit/lib/params.mjs validateLots (6c V, X), which the compiler hands to the layout unchanged.",
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "type": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,31}$" },
+        "role": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,31}$" },
+        "size": { "type": "array", "minItems": 2, "maxItems": 2, "items": { "type": "integer", "minimum": 5, "maximum": 64 } },
+        "landmark": { "type": "boolean" },
+        "placement": { "enum": ["central", "edge", "near_water", "high_ground"] },
+        "villager": { "enum": ["dwelling", "job", "trading_hall", "farm", "none"] },
+        "brief": { "type": "string", "pattern": "^[\\s\\S]{0,500}$" },
+        "entry": { "type": "string", "pattern": "^[A-Za-z0-9_.:/-]{1,100}(@[0-9]{1,6})?$", "description": "A library entry (id or id@version) already designed for this lot; absent: the building is provisional (a cost range) until Steward binds one." },
+        "ext": { "$ref": "#/$defs/ext" }
+      }
+    },
+
+    "program.template": {
+      "type": "object", "required": ["template"], "additionalProperties": false,
+      "properties": {
+        "template": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,47}$", "description": "A named template from the catalogue (program.<name>). v0: flat_village." },
+        "params": { "type": "object", "description": "The template's own params, checked by the kit's validateParams against the program's declared params; an error is malformed with the param path. A template's lots param is a list of $defs/lot." }
+      }
+    },
+    "program.lots": {
+      "type": "object", "required": ["lots"], "additionalProperties": false,
+      "properties": {
+        "lots": { "type": "array", "minItems": 1, "maxItems": 40, "items": { "$ref": "#/$defs/lot" } },
+        "layout": { "enum": ["street"], "description": "v0: street (flat_village's layout with its defaults). Other layouts arrive as catalogue entries (FL)." },
+        "shared": { "enum": ["square", "well", "none"] }
+      }
+    },
+    "program.districts": {
+      "type": "object", "required": ["districts"],
+      "description": "Reserved (D1): districts on survey candidates. Here so a plan can name it; dispatch answers unsupported {block: program.districts}.",
+      "properties": { "districts": { "type": "array", "maxItems": 16 } }
+    },
+    "program": {
+      "oneOf": [ { "$ref": "#/$defs/program.template" }, { "$ref": "#/$defs/program.lots" }, { "$ref": "#/$defs/program.districts" } ],
+      "oneOfMessage": "a program is {template, params?}, {lots, layout?} or {districts}",
+      "x-dispatch": { "on": ["template", "lots", "districts"], "block": "program.<template name> | program.lots | program.districts" }
+    },
+
+    "zone.standard": {
+      "type": "object", "required": ["id", "program"], "additionalProperties": false,
+      "description": "A part of the settlement with its own purpose, style and buildings. v0 compiles it to a rect inside the claim laid out by its program.",
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "kind": { "const": "standard" },
+        "required": { "type": "boolean" },
+        "label": { "$ref": "#/$defs/label" },
+        "notes": { "$ref": "#/$defs/text500" },
+        "ext": { "$ref": "#/$defs/ext" },
+        "purpose": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,31}$", "description": "A short tag (market, farming, mining, temple). Recorded and echoed; not interpreted in v0." },
+        "style": { "$ref": "#/$defs/bibleRef" },
+        "program": { "$ref": "#/$defs/program" },
+        "where": { "$ref": "#/$defs/where" },
+        "sketch": { "$ref": "#/$defs/sketch" },
+        "size": { "$ref": "#/$defs/size" },
+        "tolerance": { "$ref": "#/$defs/tolerance" }
+      }
+    },
+
+    "connector.routed": {
+      "type": "object", "required": ["id", "kind", "from", "to"], "additionalProperties": false,
+      "description": "street, road or path, routed by T2 (A* with heading, the grade limit, switchbacks, stairs; ladders only on player-only edges). street: a road with lamps along it (lamps street by default); road: a road between places; path: a narrow walk (stairs allowed).",
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "kind": { "enum": ["street", "road", "path"] },
+        "required": { "type": "boolean" },
+        "label": { "$ref": "#/$defs/label" },
+        "notes": { "$ref": "#/$defs/text500" },
+        "ext": { "$ref": "#/$defs/ext" },
+        "from": { "$ref": "#/$defs/endpoint" },
+        "to": { "$ref": "#/$defs/endpoint" },
+        "via": { "type": "array", "maxItems": 8, "items": { "$ref": "#/$defs/endpoint" }, "description": "Waypoints in order; each leg is one T2 edge." },
+        "avoid": { "type": "array", "maxItems": 16, "items": { "$ref": "#/$defs/feature" }, "description": "Features the route keeps out of (as T2 keep-out)." },
+        "width": { "type": "integer", "minimum": 1, "maximum": 7 },
+        "movers": { "type": "array", "minItems": 1, "maxItems": 3, "items": { "enum": ["player", "villager", "steward"] }, "description": "The per-edge override S-T2-1 left room for; absent: inferred." },
+        "lamps": { "enum": ["none", "few", "street"] },
+        "style": { "$ref": "#/$defs/bibleRef" },
+        "tolerance": { "$ref": "#/$defs/tolerance" }
+      }
+    },
+
+    "form.relief": {
+      "type": "object", "required": ["id", "kind", "around"], "additionalProperties": false,
+      "description": "T1's relief pass: blends the land into the pads and corridors of the parts named (target pads stay flat).",
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "kind": { "const": "relief" },
+        "required": { "type": "boolean" },
+        "label": { "$ref": "#/$defs/label" },
+        "notes": { "$ref": "#/$defs/text500" },
+        "ext": { "$ref": "#/$defs/ext" },
+        "around": { "type": "array", "minItems": 1, "maxItems": 32, "items": { "$ref": "#/$defs/id" } },
+        "radius": { "type": "integer", "minimum": 4, "maximum": 32 },
+        "maxCut": { "type": "integer", "minimum": 0, "maximum": 16 },
+        "maxFill": { "type": "integer", "minimum": 0, "maximum": 16 },
+        "erode": { "type": "object", "additionalProperties": false, "properties": { "thermal": { "type": "integer", "minimum": 0, "maximum": 4 }, "stream": { "type": "integer", "minimum": 0, "maximum": 4 } } }
+      }
+    },
+    "form.terrace": {
+      "type": "object", "required": ["id", "kind", "where"], "additionalProperties": false,
+      "description": "Flat steps cut into a slope (6a terrace), their edges blended by T1's relief (edge blend) or 1:1 batters (edge slope).",
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "kind": { "const": "terrace" },
+        "required": { "type": "boolean" },
+        "label": { "$ref": "#/$defs/label" },
+        "notes": { "$ref": "#/$defs/text500" },
+        "ext": { "$ref": "#/$defs/ext" },
+        "where": { "$ref": "#/$defs/where" },
+        "sketch": { "$ref": "#/$defs/sketch" },
+        "size": { "$ref": "#/$defs/size" },
+        "steps": { "type": "integer", "minimum": 2, "maximum": 8 },
+        "rise": { "type": "integer", "minimum": 1, "maximum": 8 },
+        "edge": { "enum": ["blend", "slope"] },
+        "tolerance": { "$ref": "#/$defs/tolerance" }
+      }
+    },
+    "form.spike": {
+      "type": "object", "required": ["id", "kind", "where"], "additionalProperties": false,
+      "description": "F1's generators: ice_spike (packed and blue ice, snow caps; never ice or snow layers) and rock_spire.",
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "kind": { "enum": ["ice_spike", "rock_spire"] },
+        "required": { "type": "boolean" },
+        "label": { "$ref": "#/$defs/label" },
+        "notes": { "$ref": "#/$defs/text500" },
+        "ext": { "$ref": "#/$defs/ext" },
+        "where": { "$ref": "#/$defs/where" },
+        "sketch": { "$ref": "#/$defs/sketch" },
+        "count": { "type": "integer", "minimum": 1, "maximum": 32 },
+        "height": { "$ref": "#/$defs/intRange" },
+        "preset": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,31}$" },
+        "keepNatural": { "type": "boolean", "description": "ice_spike: keep the claim's natural spikes (F1 r.keepNatural)." },
+        "tolerance": { "$ref": "#/$defs/tolerance" }
+      }
+    },
+
+    "rule.common": {
+      "description": "Members every rule has. Rules are verified on the fitted output with evidence (the rule-check slice, RC); in plan/0 every rule kind is reserved and answers unsupported. The drafts below are guidance for the plan writer; RC makes them strict, widening only additively.",
+      "type": "object",
+      "properties": {
+        "id": { "$ref": "#/$defs/id" }, "kind": { "$ref": "#/$defs/kind" }, "required": { "type": "boolean" },
+        "scope": { "type": "array", "maxItems": 32, "items": { "$ref": "#/$defs/id" }, "description": "Parts the rule binds; absent: the whole plan." }
+      }
+    },
+    "rule.palette": { "type": "object", "x-state": "reserved", "description": "A block family with a share, measured over written cells, exempting terrain and support.", "properties": { "family": { "type": "string" }, "share": { "type": "array", "minItems": 2, "maxItems": 2, "items": { "type": "number", "minimum": 0, "maximum": 1 } }, "exempt": { "type": "array", "items": { "enum": ["terrain", "support"] } } } },
+    "rule.shape": { "type": "object", "x-state": "reserved", "description": "At the outline or footprint level, above voxel faces: no_right_angles, symmetric, round.", "properties": { "shape": { "enum": ["no_right_angles", "symmetric", "round"] }, "level": { "enum": ["outline", "footprint"] } } },
+    "rule.variety": { "type": "object", "x-state": "reserved", "description": "Measured on the built output (0b's lever metric), for example no two alike.", "properties": { "minDistance": { "type": "number", "minimum": 0, "maximum": 1 } } },
+    "rule.density": { "type": "object", "x-state": "reserved", "properties": { "buildingsPer1024": { "$ref": "#/$defs/intRange" } } },
+    "rule.height_cap": { "type": "object", "x-state": "reserved", "properties": { "maxHeight": { "type": "integer", "minimum": 1, "maximum": 384 } } },
+
+    "dependency": {
+      "type": "object", "required": ["part", "after"], "additionalProperties": false,
+      "description": "part stands after every part in after (stage order), and answers blocked when any of them is not fits or adjusted. Implicit dependencies (R3) need no entry.",
+      "properties": {
+        "part": { "$ref": "#/$defs/id" },
+        "after": { "type": "array", "minItems": 1, "maxItems": 16, "items": { "$ref": "#/$defs/id" } },
+        "why": { "$ref": "#/$defs/text500" }
+      }
+    },
+
+    "catalogueEntry": {
+      "type": "object", "required": ["id", "sinceApi", "schemaVersion", "state"], "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/blockId" },
+        "sinceApi": { "type": "string", "pattern": "^([0-9]{1,4}\\.[0-9]{1,5}\\.[0-9]{1,6}|P0)$" },
+        "schemaVersion": { "type": "integer", "minimum": 0 },
+        "state": { "enum": ["supported", "reserved", "retired"] },
+        "until": { "type": "string", "pattern": "^[A-Za-z0-9_.-]{1,32}$", "description": "reserved: the slice expected to bring it." },
+        "retiredInApi": { "type": "string", "pattern": "^[0-9]{1,4}\\.[0-9]{1,5}\\.[0-9]{1,6}$" },
+        "replacedBy": { "$ref": "#/$defs/blockId" },
+        "def": { "type": "string" },
+        "draft": { "type": "string" },
+        "limits": { "type": "object" }
+      }
+    },
+    "catalogue": {
+      "type": "object", "required": ["catalogueVersion", "api", "kitVersion", "schemaVersion", "entries"], "additionalProperties": false,
+      "properties": {
+        "catalogueVersion": { "type": "integer", "minimum": 1 },
+        "api": { "type": "string" },
+        "kitVersion": { "type": "string" },
+        "schemaVersion": { "const": "plan/0" },
+        "entries": { "type": "array", "items": { "$ref": "#/$defs/catalogueEntry" } }
+      }
+    },
+
+    "reason": {
+      "type": "object", "required": ["code"], "additionalProperties": false,
+      "properties": {
+        "code": { "enum": ["SCHEMA", "UNKNOWN_REF", "CYCLE", "EXTENSION_BOUND", "UNSUPPORTED", "NO_FEATURE", "NO_ROOM", "OUT_OF_CLAIM", "OVERLAP", "PROTECTED", "KEEP_OUT", "TOO_STEEP", "WATER", "UNREACHABLE", "TOLERANCE", "DEPENDENCY", "BUDGET", "CANCELLED", "LIMIT"] },
+        "message": { "type": "string" },
+        "path": { "type": "string", "description": "SCHEMA: the JSON path of the first error." },
+        "block": { "$ref": "#/$defs/blockId" },
+        "until": { "type": "string" },
+        "evidence": { "type": "object" }
+      }
+    },
+    "partAnswer": {
+      "type": "object", "required": ["part", "class"], "additionalProperties": false,
+      "description": "One part's answer from Regions.checkPlan (docs/CONTRACT.md P0 §3).",
+      "properties": {
+        "part": { "$ref": "#/$defs/id" },
+        "block": { "$ref": "#/$defs/blockId" },
+        "class": { "enum": ["fits", "adjusted", "refused", "unsupported", "blocked", "malformed", "incomplete"] },
+        "required": { "type": "boolean" },
+        "geometry": { "type": "object", "description": "Resolved, in world cells: rect or polygon, y, lots (LotSpec shape), path polylines, form bounds." },
+        "cost": { "type": "object", "description": "{cells, removed, added, tiles, chunksToGenerate, bom?} exact, or {range: {cells: [min, max], bom?}} when provisional." },
+        "provisional": { "type": "boolean" },
+        "deviations": { "type": "array", "items": { "type": "object", "required": ["what", "value"], "properties": { "what": { "enum": ["move", "size", "rotate", "count", "grade", "detour", "sketch"] }, "value": { "type": "number" }, "max": { "type": "number" }, "exceeds": { "type": "boolean" } } } },
+        "reasons": { "type": "array", "items": { "$ref": "#/$defs/reason" } },
+        "wouldFit": { "type": "array", "maxItems": 4, "items": { "type": "object", "description": "A concrete alternative as a plan fragment (for example a smaller size, another where) with its own geometry and cost." } },
+        "blockedBy": { "type": "array", "items": { "$ref": "#/$defs/id" } },
+        "ext": { "$ref": "#/$defs/ext" },
+        "cached": { "type": "boolean" }
+      }
+    }
+  }
+}
