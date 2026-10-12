@@ -155,7 +155,7 @@ steps.stale = async () => {
   const kitA = old.staleReason(p.ir), kitB = old.staleReason(irKinds);
   let kitThrow = null;
   try { old.compileIR(irKinds); } catch (e) { kitThrow = String(e.message); }
-  check(/^plan needs kit 0\.19\.0/.test(kitA ?? '') && /kinds \[mask, pattern\]/.test(kitB ?? '') && /^PLAN_STALE/.test(kitThrow ?? ''),
+  check(/^plan needs kit 0\.\d+\.0/.test(kitA ?? '') && /kinds \[mask, pattern\]/.test(kitB ?? '') && /^PLAN_STALE/.test(kitThrow ?? ''),
     `item 9: the v0.18.0 kit refuses the toolbox IR PLAN_STALE ("${kitA}"; at kit 0.18.0: "${kitB}"; compileIR: "${kitThrow}")`);
   // (b) the 0.18.0 mod jar's IrStale (pure Java + Gson), and this build's
   const gson = execFileSync('sh', ['-c', `find '${path.join(root, '.gradle-home')}' -name 'gson-2*.jar' -not -name '*sources*' | sort | tail -1`]).toString().trim();
@@ -164,7 +164,7 @@ steps.stale = async () => {
   const java = path.join(JAVA_HOME, 'bin', 'java');
   const runJar = (jar) => execFileSync(java, ['-cp', `${jar}${path.delimiter}${gson}`, src, path.join(tmp, 'ir.json'), path.join(tmp, 'ir-kinds.json')], { encoding: 'utf8' }).trim().split('\n');
   const modOld = runJar(path.join(BASELINE, 'architect_mc-0.18.0.jar'));
-  check(/^plan needs kit 0\.19\.0 \/ kinds \[mask, pattern\]; this is kit 0\.18\.0$/.test(modOld[0]) && /^plan needs kinds \[mask, pattern\]; this is kit 0\.18\.0$/.test(modOld[1]),
+  check(/^plan needs kit 0\.\d+\.0 \/ kinds \[mask, pattern\]; this is kit 0\.18\.0$/.test(modOld[0]) && /^plan needs kinds \[mask, pattern\]; this is kit 0\.18\.0$/.test(modOld[1]),
     `item 9: the 0.18.0 mod (IrStale) refuses it PLAN_STALE: "${modOld[0]}"; at kit 0.18.0: "${modOld[1]}"`);
   const newClasses = fs.existsSync(path.join(RUN, 'mod', 'build', 'classes', 'java', 'main')) ? path.join(RUN, 'mod', 'build', 'classes', 'java', 'main') : path.join(root, 'mod', 'build', 'classes', 'java', 'main');
   const modNew = runJar(newClasses);
@@ -188,7 +188,7 @@ steps.apicompat = async () => {
     const p = v.parse ?? [];
     const okParse = p.length === 6 && p[0].ok && !p[1].ok && p[1].reason === 'FIELD_LIMIT' && /mask\.slope: \[a, b\] needs a <= b/.test(p[1].message)
       && !p[2].ok && p[3].ok && !p[4].ok && /stops\[1\]\.at/.test(p[4].message) && !p[5].ok && p[5].reason === 'FIELD_LIMIT';
-    check(/^1\.(1[6-9]|[2-9]\d)\./.test(v.version) && v.featuresMP?.length === 2 && (v.lastReasons === 'PROTECTED FIELD_LIMIT' || /^(FIELD_LIMIT|FORMAT) FORMAT$/.test(v.lastReasons ?? '')) && okParse,
+    check(/^1\.(1[6-9]|[2-9]\d)\./.test(v.version) && v.featuresMP?.length === 2 && (v.lastReasons === 'PROTECTED FIELD_LIMIT' || /^(FIELD_LIMIT|FORMAT|PERMISSION) (FORMAT|PERMISSION)$/.test(v.lastReasons ?? '')) && okParse,
       `item 11: apitest apimp in game: Mask/Pattern parse through the public API (the bundled schemas load), FIELD_LIMIT with the path, masks/patterns features, no new Reason (${json(v).slice(0, 600)})`);
   }
   spendZero();

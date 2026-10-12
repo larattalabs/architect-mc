@@ -63,6 +63,9 @@ export function validateLotExt(e, where = 'ext') {
   return out;
 }
 
+/** (6c B) The longest `json` param value (characters of its JSON). */
+export const JSON_MAX = 8192;
+
 /** (6c V) The villager use a lot's type implies when the caller sends none (S-V-1: the caller's own value wins). */
 export function inferVillager(type) {
   const t = String(type);
@@ -98,7 +101,11 @@ export function validateParams(params, { region = false } = {}) {
     } else if (p.type === 'lots') {
       if (!region) throw new Error(`${where}: the 'lots' type is allowed in region programs only`);
       validateLots(p.default ?? [], `${where}.default`);
-    } else throw new Error(`${where}.type must be int, bool or enum${region ? ' (or lots)' : ''} (got '${p.type}')`);
+    } else if (p.type === 'json') {
+      // (6c B) a JSON object or null (a brush's mask and pattern specs: the program validates them), region programs only
+      if (!region) throw new Error(`${where}: the 'json' type is allowed in region programs only`);
+      if (p.default !== null) throw new Error(`${where}.default must be null`);
+    } else throw new Error(`${where}.type must be int, bool or enum${region ? ' (or lots, json)' : ''} (got '${p.type}')`);
   }
 }
 
@@ -120,7 +127,8 @@ export function resolveValues(params = {}, given = {}) {
     if (p.type === 'int' && !(Number.isInteger(v) && v >= p.min && v <= p.max)) throw new Error(`values: ${k} must be an integer ${p.min}..${p.max} (got ${JSON.stringify(v)})`);
     if (p.type === 'bool' && typeof v !== 'boolean') throw new Error(`values: ${k} must be true or false (got ${JSON.stringify(v)})`);
     if (p.type === 'enum' && !p.options.includes(v)) throw new Error(`values: ${k} must be one of ${p.options.join(', ')} (got ${JSON.stringify(v)})`);
-    out[k] = p.type === 'lots' ? validateLots(v, `values: ${k}`) : v;
+    if (p.type === 'json' && v !== null && (typeof v !== 'object' || Array.isArray(v) || JSON.stringify(v).length > JSON_MAX)) throw new Error(`values: ${k} must be a JSON object of at most ${JSON_MAX} characters, or null`);
+    out[k] = p.type === 'lots' ? validateLots(v, `values: ${k}`) : p.type === 'json' && v !== null ? JSON.parse(JSON.stringify(v)) : v;
   }
   // (6c MP) a bool param with `omitDefault: true` (an opt-in demo switch) is left out at its default, so a program that gains
   // one keeps its default seed, IR and tiles
@@ -132,7 +140,7 @@ export function resolveValues(params = {}, given = {}) {
 export function cornerValues(params = {}) {
   let combos = [{}];
   for (const [k, p] of Object.entries(params)) {
-    if (p.type === 'lots') continue; // (6c V) a lot list is the caller's data, never a variant axis
+    if (p.type === 'lots' || p.type === 'json') continue; // (6c V) a lot list is the caller's data, never a variant axis (6c B: json too)
     const vals = p.type === 'int' ? [...new Set([p.min, p.max])] : p.type === 'bool' ? [false, true] : [...p.options];
     combos = combos.flatMap((c) => vals.map((v) => ({ ...c, [k]: v })));
   }

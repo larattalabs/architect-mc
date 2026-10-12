@@ -155,6 +155,7 @@ public final class RegionsImpl implements Regions {
 			RegionHash.tick(s);
 			generatedDuringRealise(s);
 			actionsTick(s);
+			Brushes.tick(s);
 		});
 	}
 
@@ -234,6 +235,16 @@ public final class RegionsImpl implements Regions {
 		} catch (IOException e) {
 			Architect.LOGGER.warn("Region plan keys unreadable: {}", e.toString());
 		}
+	}
+
+	/** (6c B) The running server (null with no world). */
+	static @Nullable MinecraftServer server() {
+		return server;
+	}
+
+	/** (6c B) A region id's number (rg12 -> 12), for ordering. */
+	static int order(String id) {
+		return num(id);
 	}
 
 	private static int num(String id) {
@@ -331,6 +342,12 @@ public final class RegionsImpl implements Regions {
 	}
 
 	/** (6c X, C20) The plan of an owner's operation key, in any state, after a restart too; empty while it still plans. */
+	/** (6c B) One brush stroke as a region ({@link Brushes}). */
+	@Override
+	public CompletableFuture<RegionView> brush(dev.larattalabs.architect.api.BrushRequest r) {
+		return Brushes.stroke(r, false);
+	}
+
 	@Override
 	public Optional<RegionPlan> planByKey(@Nullable String owner, String opKey) {
 		String key = java.util.Objects.requireNonNull(dev.larattalabs.architect.apiimpl.Wire0a.opKey(opKey), "opKey");
@@ -440,6 +457,30 @@ public final class RegionsImpl implements Regions {
 	}
 
 	/**
+	 * (6c B) A brush stroke's plan ({@link Brushes}): one {@code region.plan} over a resolution-1 survey of the claim (the brush box
+	 * plus 8, LOADED_ONLY) with the stroke's frozen volume already given (no two-plan flow), no checker, then the plan record.
+	 */
+	CompletableFuture<RegionPlan> planStroke(RegionPlanRequest r, @Nullable JsonArray volumes) {
+		MinecraftServer s = r.level().getServer();
+		server = s;
+		TileStream.Link link = TileStream.link;
+		if (link == null || !link.connected()) {
+			return failed(Reason.SIDECAR_UNAVAILABLE, "the helper (sidecar) is not connected");
+		}
+		BoundingBox c = r.claim();
+		return RegionSurvey.sample(r.level(), c.minX(), c.minZ(), c.maxX(), c.maxZ(), 1, LoadPolicy.LOADED_ONLY).thenCompose(cols -> {
+			byte[] survey = cols.encode();
+			String surveySha = Packed.sha256(survey);
+			return BlobPut.put(link, survey, "survey").thenCompose(blobId -> planOnce(link, r, blobId, surveySha, survey, volumes, true));
+		}).thenCompose(o -> {
+			if (volumes != null) {
+				((JsonObject) o[0]).add("volumes", volumes);
+			}
+			return onServer(s, () -> finishPlan(r, (JsonObject) o[0], (JsonObject) o[1], (byte[]) o[2], null, null));
+		}).thenCompose(f -> f);
+	}
+
+	/**
 	 * (6c T1, CONTRACT T1 §3) The second plan's survey resolution: 1 for a program that declares passes on a claim up to 1024 columns
 	 * a side (its first plan's survey was resolution 4 past 256x256), else the first plan's.
 	 */
@@ -463,6 +504,15 @@ public final class RegionsImpl implements Regions {
 	/** One {@code region.plan} round: send, wait for {@code region.planned}, read the IR, PLAN_STALE gate (a). {planned, ir, survey}. */
 	private static CompletableFuture<Object[]> planOnce(TileStream.Link link, RegionPlanRequest r, String blobId, String surveySha, byte[] survey,
 		@Nullable JsonArray volumes) {
+		return planOnce(link, r, blobId, surveySha, survey, volumes, false);
+	}
+
+	/**
+	 * (6c B) {@code stroke}: a brush stroke's plan. Its claim is the brush box plus the survey margin, so the owner's protected areas
+	 * are judged by {@link Brushes} against the brush box itself (before the plan and at realise), not here, and none go as keepOut.
+	 */
+	static CompletableFuture<Object[]> planOnce(TileStream.Link link, RegionPlanRequest r, String blobId, String surveySha, byte[] survey,
+		@Nullable JsonArray volumes, boolean stroke) {
 		BoundingBox c = r.claim();
 		JsonObject m = new JsonObject();
 		m.addProperty("type", "region.plan");
@@ -493,7 +543,8 @@ public final class RegionsImpl implements Regions {
 			m.add("volumes", volumes);
 		}
 		// 6c V: the owner's protected areas that meet the claim (an older helper ignores the member)
-		JsonArray keepOut = keepOutOf(Sites.dimensionId(r.level()), r.owner(), new int[] {c.minX(), c.minY(), c.minZ(), c.maxX(), c.maxY(), c.maxZ()});
+		JsonArray keepOut = stroke ? new JsonArray() : keepOutOf(Sites.dimensionId(r.level()), r.owner(), new int[] {c.minX(), c.minY(), c.minZ(), c.maxX(),
+			c.maxY(), c.maxZ()});
 		if (!keepOut.isEmpty()) {
 			m.add("keepOut", keepOut);
 		}
@@ -520,8 +571,8 @@ public final class RegionsImpl implements Regions {
 				}
 				// 6c 0c (C17): the claim against the owner's protected areas at accept (an area marked while it planned); 6c V: except the
 				// areas the program honoured (the IR's keepOut)
-				String prot = protectedClaim(Sites.dimensionId(r.level()), r.owner(), new int[] {c.minX(), c.minY(), c.minZ(), c.maxX(), c.maxY(), c.maxZ()},
-					honoured(irJson));
+				String prot = stroke ? null : protectedClaim(Sites.dimensionId(r.level()), r.owner(), new int[] {c.minX(), c.minY(), c.minZ(), c.maxX(), c.maxY(),
+					c.maxZ()}, honoured(irJson));
 				if (prot != null) {
 					throw refusal(Reason.PROTECTED, prot);
 				}
@@ -548,11 +599,15 @@ public final class RegionsImpl implements Regions {
 		return onServer(s, () -> {
 			long cells = 0;
 			List<BoundingBox> boxes = new ArrayList<>();
+			java.util.Set<BoundingBox> withBlocks = new java.util.HashSet<>();
 			for (JsonElement e : need) {
 				JsonObject b = e.getAsJsonObject();
 				BoundingBox bb = new BoundingBox(b.get("minX").getAsInt(), b.get("minY").getAsInt(), b.get("minZ").getAsInt(), b.get("maxX").getAsInt(), b.get(
 					"maxY").getAsInt(), b.get("maxZ").getAsInt());
 				boxes.add(bb);
+				if (b.get("blocks") instanceof JsonElement bl && bl.isJsonPrimitive() && bl.getAsBoolean()) {
+					withBlocks.add(bb); // (6c B) r.needVolume(box, {blocks: true}): ARVX version 2
+				}
 				cells += dev.larattalabs.architect.region.volume.VolumeSurvey.cells(bb);
 			}
 			if (cells > dev.larattalabs.architect.region.volume.VolumeSurvey.MAX_CELLS) {
@@ -577,7 +632,7 @@ public final class RegionsImpl implements Regions {
 				CompletableFuture<JsonArray> chain = CompletableFuture.completedFuture(new JsonArray());
 				for (BoundingBox bb : boxes) {
 					chain = chain.thenCompose(arr -> dev.larattalabs.architect.region.volume.VolumeSurvey.start(level, bb,
-						dev.larattalabs.architect.api.LoadPolicy.GENERATED_ONLY(bound), null).thenCompose(
+						dev.larattalabs.architect.api.LoadPolicy.GENERATED_ONLY(bound), null, withBlocks.contains(bb)).thenCompose(
 							dev.larattalabs.architect.apiimpl.SurveyImpl::upload).thenApply(vol -> {
 								JsonObject o = new JsonObject();
 								o.addProperty("sha", vol.sha());
@@ -994,7 +1049,10 @@ public final class RegionsImpl implements Regions {
 		Ir ir = p.ir();
 		// 6c 0c (C17): an area marked after planning refuses the realise (no per-tile check); 6c V: the areas the program honoured
 		// (the IR's keepOut, the exact rects it was planned around) don't
-		String prot = protectedClaim(p.dimension(), p.owner(), ir.claim(), honoured(ir.json()));
+		// (6c B) a brush stroke: its owner's areas against the brush box (the claim's survey margin is never written)
+		JsonObject stroke = Brushes.strokeOf(p.planId());
+		String prot = stroke != null ? protectedClaim(p.dimension(), p.owner(), Brushes.box(stroke)) : protectedClaim(p.dimension(), p.owner(), ir.claim(),
+			honoured(ir.json()));
 		if (prot != null) {
 			throw refusal(Reason.PROTECTED, prot);
 		}
@@ -1015,6 +1073,9 @@ public final class RegionsImpl implements Regions {
 		String id = reserved != null ? reserved : "rg" + nextRegion++;
 		Path w = s.getWorldPath(LevelResource.ROOT);
 		RegionRec rec = new RegionRec(id, p.planId(), p.irSha(), p.owner(), r.ext(), p.dimension(), ir.claim(), System.currentTimeMillis());
+		if (stroke != null) {
+			rec.brush = stroke.deepCopy(); // (6c B) the stroke's kind and destruction rule, read by every tile check
+		}
 		if (r.opKey() != null) {
 			rec.opKey = r.opKey();
 			rec.opHash = RegionKeys.hash(RegionKeys.realiseBody(r));
@@ -1613,7 +1674,7 @@ public final class RegionsImpl implements Regions {
 		PrepareView pv = Prepare.view(r.planId);
 		List<dev.larattalabs.architect.api.WaitAction> actions = actionsOf(l, waiting, waitingItem, heldStage, pv);
 		return new RegionView(r.id, r.planId, r.irSha, r.owner, r.ext, r.groupId, new BoundingBox(c[0], c[1], c[2], c[3], c[4], c[5]), r.state, st, lots,
-			r.cellsWritten, r.skipped, waiting, pv, actions);
+			r.cellsWritten, r.skipped, waiting, pv, actions, 0L, Brushes.kindOf(r));
 	}
 
 	/** (6c X, C22) The view of a removed region: REMOVED, with the time its removal finished. */
@@ -1622,7 +1683,7 @@ public final class RegionsImpl implements Regions {
 		List<LotState> lots = new ArrayList<>();
 		r.lots.forEach((id, ls) -> lots.add(new LotState(id, ls.siteId, ls.state)));
 		return new RegionView(r.id, r.planId, r.irSha, r.owner, r.ext, r.groupId, new BoundingBox(c[0], c[1], c[2], c[3], c[4], c[5]), RegionState.REMOVED,
-			List.of(), lots, r.cellsWritten, r.skipped, null, null, List.of(), r.removedAt);
+			List.of(), lots, r.cellsWritten, r.skipped, null, null, List.of(), r.removedAt, Brushes.kindOf(r));
 	}
 
 	/** (6b) The nudge actions for what the region waits for ({@link WaitActions}). */

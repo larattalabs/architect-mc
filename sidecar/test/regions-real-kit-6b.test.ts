@@ -19,6 +19,9 @@ import { Store } from '../src/store.js';
 import { sha256 } from '../src/regions.js';
 import { arsv, rmrf, SIDECAR_ROOT, tempDir, until } from './helpers.js';
 
+// the repo kit's KIT_VERSION (later slices bump it; 6c B: 0.23.0)
+const KIT_VERSION_UNDER_TEST = /export const KIT_VERSION = '([^']+)'/.exec(fs.readFileSync(path.join(SIDECAR_ROOT, '..', 'kit', 'lib', 'region', 'plan.mjs'), 'utf8'))![1];
+
 const KIT = process.env.ARCHITECT_REGION_KIT ? path.resolve(process.env.ARCHITECT_REGION_KIT) : path.join(SIDECAR_ROOT, '..', 'kit');
 const REALISE = path.join(KIT, 'lib', 'realise.mjs');
 const hasF2 = fs.existsSync(REALISE) && /IR_FORMATS = Object\.freeze\(\[1, 2\]\)/.test(fs.readFileSync(REALISE, 'utf8')) && fs.existsSync(path.join(KIT, 'lib', 'region', 'program.mjs')) && fs.readFileSync(path.join(KIT, 'tools', 'region.mjs'), 'utf8').includes('blobs-out');
@@ -145,7 +148,7 @@ describe.skipIf(!hasF2)('format-2 IRs with the real kit: side blobs, blob_unknow
   it('plans a format-2 IR: irFormat 2, requires, the side blob registered; check/previews or a checkError', () => {
     expect(planned.irFormat).toBe(2);
     expect(planned.requires).toEqual(expect.arrayContaining(['blobs:side', 'shape:ellipsoid', 'fields', 'material:rule']));
-    expect(planned.kitVersion).toBe('0.20.0'); // (6c T1) the kit's KIT_VERSION
+    expect(planned.kitVersion).toBe(KIT_VERSION_UNDER_TEST); // (6c T1) the kit's KIT_VERSION
     expect(planned.blobs!.map((x) => x.kind).sort()).toEqual(['field', 'heightfield']);
     const b = planned.blobs!.find((x) => x.name === 'mound')!;
     expect(b).toMatchObject({ name: 'mound', kind: 'heightfield' });
@@ -154,7 +157,7 @@ describe.skipIf(!hasF2)('format-2 IRs with the real kit: side blobs, blob_unknow
     expect(sha256(sc.blobs.read(b.blobId))).toBe(b.sha);
     if (sc.regions.kitInfo().caps.check) expect(planned.report).toBeDefined();
     else expect(planned.checkError).toMatch(/no checker/);
-    expect(sc.snapshot(2)).toMatchObject({ kitVersion: '0.20.0', irFormats: [1, 2] });
+    expect(sc.snapshot(2)).toMatchObject({ kitVersion: KIT_VERSION_UNDER_TEST, irFormats: [1, 2] });
   });
 
   it('streams its tiles with the same shas as the kit evaluating them here', async () => {

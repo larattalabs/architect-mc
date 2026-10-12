@@ -53,6 +53,12 @@ final class TileCheck {
 	}
 
 	private final String regionGroup;
+	/** (6c B) A brush stroke's PLAYER_BLOCKS: unowned non-natural cells (block entities included) pass too (never unbreakable ones). */
+	private final boolean playerBlocks;
+	/** (6c B) A brush stroke's tile. */
+	private final boolean stroke;
+	/** (6c B) The groups of the stroke owner's other strokes: their tile entries are layered over as this region's own. */
+	private final java.util.Set<String> layerGroups;
 	private final String dim;
 	private final Anchors.Bounds window;
 	private final int[] claim;
@@ -86,6 +92,19 @@ final class TileCheck {
 	private @Nullable CompletableFuture<Result> assembled;
 
 	TileCheck(Packed.Tile tile, String regionGroup, String dim, int[] claim, Anchors.Bounds window) {
+		this(tile, regionGroup, dim, claim, window, false, java.util.Set.of(), false);
+	}
+
+	/** (6c B) A brush stroke's tile ({@code RegionRec.brush}): its destruction rule and the owner's other strokes. */
+	TileCheck(Packed.Tile tile, String regionGroup, String dim, int[] claim, Anchors.Bounds window, boolean playerBlocks, java.util.Set<String> layerGroups) {
+		this(tile, regionGroup, dim, claim, window, playerBlocks, layerGroups, true);
+	}
+
+	private TileCheck(Packed.Tile tile, String regionGroup, String dim, int[] claim, Anchors.Bounds window, boolean playerBlocks,
+		java.util.Set<String> layerGroups, boolean stroke) {
+		this.stroke = stroke;
+		this.playerBlocks = playerBlocks;
+		this.layerGroups = java.util.Set.copyOf(layerGroups);
 		this.regionGroup = regionGroup;
 		this.dim = dim;
 		this.claim = claim.clone();
@@ -244,7 +263,10 @@ final class TileCheck {
 				skipped.merge("owned", 1L, Long::sum);
 			} else {
 				BlockState s = chunk.getBlockState(m.set(x, BlockPos.getY(q), z));
-				if (!CellCond.passes(p.cond()[cursor], s, ours.contains(q))) {
+				if (brushRefuses(s)) {
+					ok = false;
+					skipped.merge("unbreakable", 1L, Long::sum);
+				} else if (!CellCond.passes(p.cond()[cursor], s, ours.contains(q)) && !(playerBlocks && strokeMayClear(p.cond()[cursor]))) {
 					ok = false;
 					skipped.merge("condition", 1L, Long::sum);
 				} else if (s == p.states()[cursor]) {
@@ -263,6 +285,20 @@ final class TileCheck {
 		}
 		cursor = 0;
 		return true;
+	}
+
+	/** (6c B) A stroke never writes over an unbreakable block (bedrock, barriers, portals, command and structure blocks). */
+	private boolean brushRefuses(BlockState s) {
+		return stroke && s.getBlock().defaultDestroyTime() < 0;
+	}
+
+	/**
+	 * (6c B, Noah's destruction rule) With PLAYER_BLOCKS an unowned cell passes whatever it holds (a player's or another mod's
+	 * blocks, block entities too: their data is journaled and nothing drops) for the conditions that may remove natural cells; it is
+	 * never in {@code others} here (an owned cell was skipped first).
+	 */
+	static boolean strokeMayClear(int cond) {
+		return cond == Packed.IF_NATURAL || cond == Packed.ALWAYS_OURS;
 	}
 
 	/**
@@ -486,7 +522,9 @@ final class TileCheck {
 				if (mm == null || !mm.active() || mm.kind().equals(WorldJournal.LEAVES)) {
 					continue;
 				}
-				boolean mine = (mm.kind().equals(RegionKinds.TERRAIN) || mm.kind().equals(RegionKinds.PATH)) && regionGroup.equals(mm.group());
+				// (6c B) a brush stroke layers over its owner's other strokes' tile entries as over its own
+				boolean mine = (mm.kind().equals(RegionKinds.TERRAIN) || mm.kind().equals(RegionKinds.PATH)) && (regionGroup.equals(mm.group())
+					|| layerGroups.contains(mm.group()));
 				SectionCells sc;
 				try {
 					sc = js.section(id, k);

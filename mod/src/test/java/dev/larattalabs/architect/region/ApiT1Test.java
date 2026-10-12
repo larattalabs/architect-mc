@@ -19,8 +19,9 @@ import org.junit.jupiter.api.Test;
 class ApiT1Test {
 	@Test
 	void version() {
-		assertEquals("1.18.0", ArchitectApi.VERSION);
-		assertEquals("0.20.0", IrStale.KIT_VERSION);
+		// later slices bump both (6c B: 1.21.0 / kit 0.23.0)
+		assertTrue(IrStale.semverCompare(ArchitectApi.VERSION, "1.18.0") >= 0, ArchitectApi.VERSION);
+		assertTrue(IrStale.semverCompare(IrStale.KIT_VERSION, "0.20.0") >= 0, IrStale.KIT_VERSION);
 	}
 
 	@Test
@@ -35,10 +36,10 @@ class ApiT1Test {
 
 	@Test
 	void reliefKind() {
-		assertEquals("relief", IrStale.KINDS_FORMAT2.get(IrStale.KINDS_FORMAT2.size() - 1), "appended at the end (rebase point)");
+		assertTrue(IrStale.KINDS_FORMAT2.indexOf("relief") > IrStale.KINDS_FORMAT2.indexOf("pattern"), "appended after MP's kinds (rebase point; 6c B appends after it)");
 		assertNull(IrStale.reason(PlanStaleTest.ir(2, "0.20.0", "fields", "relief"), null));
 		// a 0.19.0 game (F1 and MP's kinds, before relief) refuses the plan by its kit version and the kind
-		IrStale.Hello w = new IrStale.Hello("0.19.0", List.of(1, 2), IrStale.KINDS_FORMAT2.subList(0, IrStale.KINDS_FORMAT2.size() - 1));
+		IrStale.Hello w = new IrStale.Hello("0.19.0", List.of(1, 2), IrStale.KINDS_FORMAT2.subList(0, IrStale.KINDS_FORMAT2.indexOf("relief")));
 		String why = IrStale.reason(PlanStaleTest.ir(2, "0.20.0", "fields", "relief"), w);
 		assertTrue(why != null && why.contains("relief"), why);
 	}

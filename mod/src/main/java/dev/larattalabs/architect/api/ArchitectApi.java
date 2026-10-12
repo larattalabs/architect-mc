@@ -29,7 +29,7 @@ public interface ArchitectApi {
 	 * 1.12.0: minLotSize and the recommended lot, partial roads, ground heights, bounded fields refused in the mod, the extend
 	 * warning, survival construction roads, protected areas, owner-tagged entities (phase 6c slice 0c).
 	 */
-	String VERSION = "1.18.0";
+	String VERSION = "1.21.0";
 
 	/** The singleton. Safe to call from any mod's initializer (it does not depend on Architect's init order). */
 	static ArchitectApi get() {
@@ -97,6 +97,8 @@ public interface ArchitectApi {
 	 * {@code pad.edge: 'blend'}: a plan that uses it requires the {@code relief} kind, and an older game refuses it PLAN_STALE).
 	 * Since 1.18.0, {@code "schematics"} is always there: Sponge schematic import ({@link Library#importSchematic}, through the
 	 * helper) and export ({@link Library#exportSchematic}, {@link Sites#exportSiteSchematic}, in the mod).
+	 * Since 1.21.0, a B helper ({@code region.brush}) adds {@code "brushes"} ({@link Regions#brush}: its kit bundles the {@code brush}
+	 * program, and frozen volumes may record block ids, so a mask's {@code block} term reads the world).
 	 */
 	Set<String> features();
 }

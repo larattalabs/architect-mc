@@ -180,7 +180,9 @@ export class Region {
     this.floatingDecl = []; // {parts, anchor}
     this.utility = [];
     this.needVolumes = [];
-    this.volumesUsed = {}; // name -> {blob, box, sha}
+    this.volumesUsed = {}; // name -> {blob, box, sha, blocks?}
+    // (6c B) the block tags a `block` mask names, expanded at plan time (the IR's `blockTags`: the evaluator can't read the tables)
+    this.blockTags = {};
     this.meta = { paths: {}, lots: {}, parts: {} };
     // (6c V) the settlement graph: nodes {id, kind, ref, level, at, ports: [{name, at, facing, width}]}, edges {id, from, to, type,
     // width, stage, path, mover}
@@ -331,7 +333,9 @@ export class Region {
           if (typeof b !== 'string') return b;
           if (b.startsWith('#')) {
             const t = `#${qualify(b.slice(1))}`;
-            if (!tagBlocks(t)) throw new Error(`${what}: '${b}' is not a 26.3 block tag`);
+            const ids = tagBlocks(t);
+            if (!ids) throw new Error(`${what}: '${b}' is not a 26.3 block tag`);
+            this.blockTags[t] = [...ids];
             return t;
           }
           info(b);
@@ -431,21 +435,29 @@ export class Region {
     return this;
   }
 
-  /** (6b) Ask the planner for a frozen 3D volume over `box` (the two-plan flow); returns the decoded volume when it was given. */
-  needVolume(box) {
+  /**
+   * (6b) Ask the planner for a frozen 3D volume over `box` (the two-plan flow); returns the decoded volume when it was given.
+   * (6c B) `{blocks: true}`: a volume that also records each cell's block id (ARVX version 2), for a mask's `block` term; a
+   * version-1 volume of the same box does not answer it (null: the game samples one with blocks).
+   */
+  needVolume(box, { blocks = false } = {}) {
     const b = { minX: box.minX, minY: box.minY, minZ: box.minZ, maxX: box.maxX, maxY: box.maxY, maxZ: box.maxZ };
     if (!Object.values(b).every(isInt)) throw new Error('needVolume: box needs integer minX..maxZ');
     // (6c F1) asking again for the same box gives the same volume (keepNatural and the program may both read it)
     const same = (x) => x.minX === b.minX && x.minY === b.minY && x.minZ === b.minZ && x.maxX === b.maxX && x.maxY === b.maxY && x.maxZ === b.maxZ;
-    const had = Object.entries(this.volumesUsed).find(([, u]) => same(u.box));
+    const had = Object.entries(this.volumesUsed).find(([, u]) => same(u.box) && (!blocks || u.blocks));
     if (had) return this._volumeDecoded?.get(had[0]) ?? null;
-    if (this.needVolumes.some(same)) return null;
-    this.needVolumes.push(b);
-    const v = this.ctx.volumes?.find((x) => x.box.minX === b.minX && x.box.minY === b.minY && x.box.minZ === b.minZ && x.box.maxX === b.maxX && x.box.maxY === b.maxY && x.box.maxZ === b.maxZ);
+    const asked = this.needVolumes.find(same);
+    if (asked) {
+      if (blocks && !asked.blocks) asked.blocks = true;
+      return null;
+    }
+    this.needVolumes.push(blocks ? { ...b, blocks: true } : b);
+    const v = this.ctx.volumes?.find((x) => same(x.box) && (!blocks || x.decoded?.blocks));
     if (!v) return null;
     const name = `vol_${Object.keys(this.volumesUsed).length + 1}`;
     this._sideBlob(name, 'volume', v.bytes);
-    this.volumesUsed[name] = { blob: name, box: b, sha: v.sha };
+    this.volumesUsed[name] = v.decoded?.blocks ? { blob: name, blocks: true, box: b, sha: v.sha } : { blob: name, box: b, sha: v.sha };
     (this._volumeDecoded ??= new Map()).set(name, v.decoded ?? null);
     return v.decoded ?? null;
   }
@@ -613,6 +625,24 @@ class Part {
     if (err) throw new Error(`part ${this.id}: ${err}`);
     if (!isInt(cond) || cond < 0 || cond > 3) throw new Error(`part ${this.id}: cond must be 0..3`);
     const op = { op: 'shape', shape, material: this._paint(material, 'fill material'), cond, walk: !!walk };
+    const m = this._mask(mask);
+    if (m !== undefined) op.mask = m;
+    this._push(op);
+    return this;
+  }
+
+  /**
+   * (6c B) Low-level: a `columns` op. `cols` is a flat list of [x, z, a, b, m] entries (the cells of column (x, z) from
+   * `resolve(from) + a` to `resolve(to) + b` get `materials[m]`); `materials` are anything `fill` takes (roles, block states, null
+   * for air, patterns). `mask` keeps only the cells it selects.
+   */
+  columns(from, to, cols, materials, { cond = COND.IF_NATURAL, walk = false, mask } = {}) {
+    if (!isInt(cond) || cond < 0 || cond > 3) throw new Error(`part ${this.id}: cond must be 0..3`);
+    if (!Array.isArray(cols) || cols.length % 5 !== 0 || !cols.every(isInt)) throw new Error(`part ${this.id}: columns needs [x, z, a, b, m] integer entries`);
+    if (!Array.isArray(materials) || !materials.length) throw new Error(`part ${this.id}: columns needs materials`);
+    if (!cols.length) return this;
+    for (let i = 4; i < cols.length; i += 5) if (cols[i] < 0 || cols[i] >= materials.length) throw new Error(`part ${this.id}: columns entry ${(i - 4) / 5} names material ${cols[i]} of ${materials.length}`);
+    const op = { op: 'columns', from, to, cols: [...cols], materials: materials.map((m, i) => this._paint(m, `columns material ${i}`)), cond, walk: !!walk };
     const m = this._mask(mask);
     if (m !== undefined) op.mask = m;
     this._push(op);

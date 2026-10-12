@@ -87,6 +87,10 @@ public final class VolumeSurvey {
 		final Map<Integer, String> owners = new HashMap<>();
 		final boolean[] missingCol;
 		final List<Long> chunks = new ArrayList<>();
+		/** (6c B) With block ids (ARVX version 2): per cell its palette index (same index as {@link #cells}), the palette (air first). */
+		final int @Nullable [] blocks;
+		final List<String> palette = new ArrayList<>(List.of(Arvx.AIR));
+		final IdentityHashMap<BlockState, Integer> blockMemo = new IdentityHashMap<>();
 		int next;
 		int loaded;
 		boolean queried;
@@ -95,7 +99,7 @@ public final class VolumeSurvey {
 		int ticks;
 		long maxTick;
 
-		Task(ServerLevel level, int[] box, LoadPolicy load, Path dir) {
+		Task(ServerLevel level, int[] box, LoadPolicy load, Path dir, boolean withBlocks) {
 			this.level = level;
 			this.box = box;
 			this.load = load;
@@ -104,6 +108,7 @@ public final class VolumeSurvey {
 			d = box[5] - box[2] + 1;
 			h = box[4] - box[1] + 1;
 			cells = new byte[Math.toIntExact((long) w * d * h)];
+			blocks = withBlocks ? new int[cells.length] : null;
 			missingCol = new boolean[w * d];
 			for (int cx = box[0] >> 4; cx <= box[3] >> 4; cx++) {
 				for (int cz = box[2] >> 4; cz <= box[5] >> 4; cz++) {
@@ -140,6 +145,21 @@ public final class VolumeSurvey {
 	 * starts on the server thread.
 	 */
 	public static CompletableFuture<Result> start(ServerLevel level, BoundingBox box, LoadPolicy load, @Nullable Path dir) {
+		return start(level, box, load, dir, false);
+	}
+
+	/**
+	 * (6c B) The most cells of a volume with block ids (4 bytes a cell while sampled): a brush's volume is at most 69^3, a region's
+	 * block volume is the program's box.
+	 */
+	public static final long MAX_BLOCK_CELLS = Long.getLong("architect.volumeMaxBlockCells", 32_000_000L);
+
+	/** (6c B) {@code blocks}: also each cell's block id (ARVX version 2). */
+	public static CompletableFuture<Result> start(ServerLevel level, BoundingBox box, LoadPolicy load, @Nullable Path dir, boolean blocks) {
+		if (blocks && cells(box) > MAX_BLOCK_CELLS) {
+			return CompletableFuture.failedFuture(new dev.larattalabs.architect.api.RegionRefused(Reason.REGION_LIMIT, "the volume with block ids is "
+				+ cells(box) + " cells (at most " + MAX_BLOCK_CELLS + ")"));
+		}
 		if (cells(box) > MAX_CELLS) {
 			return CompletableFuture.failedFuture(new dev.larattalabs.architect.api.RegionRefused(Reason.REGION_LIMIT, "the volume is " + cells(box)
 				+ " cells (at most " + MAX_CELLS + ")"));
@@ -147,7 +167,7 @@ public final class VolumeSurvey {
 		MinecraftServer s = level.getServer();
 		Path out = dir != null ? dir : s.getWorldPath(LevelResource.ROOT).resolve(STANDALONE_DIR);
 		Task t = new Task(level, new int[] {box.minX(), box.minY(), box.minZ(), box.maxX(), box.maxY(), box.maxZ()}, load == null ? LoadPolicy.LOADED_ONLY
-			: load, out);
+			: load, out, blocks);
 		Runnable add = () -> TASKS.add(t);
 		if (s.isSameThread()) {
 			add.run();
@@ -252,6 +272,19 @@ public final class VolumeSurvey {
 				sec = chunk.getSection(chunk.getSectionIndexFromSectionY(sy));
 				uniform = uniformClass(sec, table, memo);
 			}
+			if (t.blocks != null) {
+				// (6c B) every cell's block id (air outside the build height and in an all-air section; the arrays start at 0 = air)
+				if (sec != null && !sec.hasOnlyAir()) {
+					for (int x = x0; x <= x1; x++) {
+						for (int z = z0; z <= z1; z++) {
+							int base = t.idx(x, ya, z);
+							for (int y = ya; y <= yb; y++) {
+								t.blocks[base + (y - ya)] = blockIndex(t, sec.getBlockState(x & 15, y & 15, z & 15));
+							}
+						}
+					}
+				}
+			}
 			if (uniform >= 0) {
 				for (int x = x0; x <= x1; x++) {
 					for (int z = z0; z <= z1; z++) {
@@ -271,6 +304,21 @@ public final class VolumeSurvey {
 			}
 		}
 		owned(t, x0, z0, x1, z1);
+	}
+
+	/** (6c B) A block state's palette index (its block's id, no properties). */
+	private static int blockIndex(Task t, BlockState s) {
+		Integer k = t.blockMemo.get(s);
+		if (k == null) {
+			String id = net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(s.getBlock()).toString();
+			k = t.palette.indexOf(id);
+			if (k < 0) {
+				k = t.palette.size();
+				t.palette.add(id);
+			}
+			t.blockMemo.put(s, k);
+		}
+		return k;
 	}
 
 	/** One class for the whole section (single-valued, all air, or every palette entry of one class), else -1. */
@@ -376,7 +424,7 @@ public final class VolumeSurvey {
 	}
 
 	private static Result encodeAndFreeze(Task t) throws IOException {
-		Encoded enc = encode(t.box, t.cells, t.owners, t.missingCol);
+		Encoded enc = encode(t.box, t.cells, t.owners, t.missingCol, t.blocks, t.palette);
 		byte[] gz = Arvx.gzip(enc.raw);
 		Path file = t.dir.resolve(enc.sha + ".bin");
 		freeze(file, gz, enc.sha);
@@ -454,10 +502,21 @@ public final class VolumeSurvey {
 
 	/** Pure: cells (index ((x * d) + z) * h + y, box-relative) -> ARVX + stats. */
 	public static Encoded encode(int[] box, byte[] cells, Map<Integer, String> owners, boolean[] missingCol) {
+		return encode(box, cells, owners, missingCol, null, List.of(Arvx.AIR));
+	}
+
+	/** (6c B) With {@code blocks} (per cell a {@code palette} index, air first): ARVX version 2. Pure. */
+	public static Encoded encode(int[] box, byte[] cells, Map<Integer, String> owners, boolean[] missingCol, int @Nullable [] blocks, List<String> palette) {
 		int w = box[3] - box[0] + 1;
 		int d = box[5] - box[2] + 1;
 		int h = box[4] - box[1] + 1;
-		Arvx.Encoder e = new Arvx.Encoder(box);
+		Arvx.Encoder e = new Arvx.Encoder(box, blocks != null);
+		if (blocks != null) {
+			for (String id : palette) {
+				e.block(id); // the encoder's indexes = the palette's (air first)
+			}
+		}
+		int[] bcol = blocks == null ? null : new int[h];
 		byte[] col = new byte[h];
 		String[] own = new String[h];
 		int missing = 0;
@@ -477,7 +536,12 @@ public final class VolumeSurvey {
 						anyOwned = true;
 					}
 				}
-				e.column(col, anyOwned ? own : null);
+				if (bcol != null) {
+					System.arraycopy(blocks, c * h, bcol, 0, h);
+					e.column(col, anyOwned ? own : null, bcol);
+				} else {
+					e.column(col, anyOwned ? own : null);
+				}
 				if (anyOwned) {
 					java.util.Arrays.fill(own, null);
 				}

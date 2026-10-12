@@ -15,6 +15,9 @@ import { SimDesigner } from '../src/sim.js';
 import { Store } from '../src/store.js';
 import { arsv, rmrf, SIDECAR_ROOT, tempDir, until } from './helpers.js';
 
+// the repo kit's KIT_VERSION (later slices bump it; 6c B: 0.23.0)
+const KIT_VERSION_UNDER_TEST = /export const KIT_VERSION = '([^']+)'/.exec(fs.readFileSync(path.join(SIDECAR_ROOT, '..', 'kit', 'lib', 'region', 'plan.mjs'), 'utf8'))![1];
+
 const KIT = process.env.ARCHITECT_REGION_KIT ? path.resolve(process.env.ARCHITECT_REGION_KIT) : path.join(SIDECAR_ROOT, '..', 'kit');
 const hasKit = fs.existsSync(path.join(KIT, 'regions', 'relief_demo.mjs'));
 const CLAIM = { minX: 0, minZ: 0, maxX: 191, maxZ: 191, minY: -64, maxY: 319 };
@@ -87,7 +90,7 @@ describe.skipIf(!hasKit)('relief_demo through the sidecar (real kit)', () => {
     const p = await plan('relief_demo');
     expect(p.passes).toEqual(['relief']);
     expect(p.requires).toContain('relief');
-    expect(p.kitVersion).toBe('0.20.0');
+    expect(p.kitVersion).toBe(KIT_VERSION_UNDER_TEST);
     expect(p.notes.some((n) => /^pass relief: \d+\.\d s, \d+ MB$/.test(n))).toBe(true);
     const dir = path.join(dataDir, 'regions', 'plans', p.planId);
     expect(JSON.parse(fs.readFileSync(path.join(dir, 'request.json'), 'utf8')).passes).toEqual(['relief']);

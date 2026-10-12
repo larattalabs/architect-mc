@@ -23,12 +23,17 @@ import java.util.zip.GZIPOutputStream;
  * columns, x-major (for x, for z): runs bottom-up from minY: (u8 class, varint length)...   (lengths sum to the height)
  * varint ownerCount, then ownerCount x (varint byteLength + UTF-8 entry id)
  * varint ownedRuns, then per OWNED run in file order: varint ownerIndex
+ * (version 2 only, 6c B) varint blockCount, then blockCount x (varint byteLength + UTF-8 block id; entry 0 is minecraft:air)
+ *                   columns, x-major: runs bottom-up of (varint blockIndex, varint length)
  * </pre>
  * The file on disk is the gzip of these bytes; the volume's sha is SHA-256 of the <b>uncompressed</b> bytes. Varints are
  * unsigned LEB128 (as {@code kit/lib/region/pack.mjs}). Pure: no Minecraft classes.
  */
 public final class Arvx {
 	public static final int VERSION = 1;
+	/** (6c B) A volume that also records each cell's block id (no properties): a mask's {@code block} term reads it. */
+	public static final int VERSION_BLOCKS = 2;
+	public static final String AIR = "minecraft:air";
 	private static final byte[] MAGIC = "ARVX".getBytes(StandardCharsets.US_ASCII);
 	private static final int OWNED = VoxelClass.OWNED.ordinal();
 
@@ -49,17 +54,30 @@ public final class Arvx {
 		final Out ownedRuns = new Out(256);
 		int ownedRunCount;
 		final long[] counts = new long[VoxelClass.values().length];
+		/** (6c B) version 2: the block palette (air first) and the block runs, written after the owners. */
+		final boolean blocks;
+		final Map<String, Integer> palette = new LinkedHashMap<>();
+		final Out blockRuns = new Out(1 << 12);
 
 		/** {@code box} = {minX, minY, minZ, maxX, maxY, maxZ}, inclusive. */
 		public Encoder(int[] box) {
+			this(box, false);
+		}
+
+		/** (6c B) {@code blocks}: version 2, every column also gives its cells' block ids ({@link #column(byte[], String[], int[])}). */
+		public Encoder(int[] box, boolean blocks) {
 			if (box[3] < box[0] || box[4] < box[1] || box[5] < box[2]) {
 				throw new IllegalArgumentException("empty box");
 			}
 			this.box = box.clone();
 			this.height = box[4] - box[1] + 1;
 			this.columnsTotal = (long) (box[3] - box[0] + 1) * (box[5] - box[2] + 1);
+			this.blocks = blocks;
+			if (blocks) {
+				palette.put(AIR, 0);
+			}
 			out.bytes(MAGIC);
-			out.u8(VERSION);
+			out.u8(blocks ? VERSION_BLOCKS : VERSION);
 			out.u8(0);
 			out.u8(0);
 			out.u8(0);
@@ -73,6 +91,44 @@ public final class Arvx {
 		 * {@code owner[i]} the owning entry id of an OWNED cell (ignored for other classes; may be null when there is none).
 		 */
 		public void column(byte[] cls, String[] owner) {
+			if (blocks) {
+				throw new IllegalStateException("a version-2 volume needs its column's blocks");
+			}
+			column0(cls, owner);
+		}
+
+		/** (6c B) A palette index for a block id (no properties), for {@link #column(byte[], String[], int[])}. */
+		public int block(String id) {
+			Integer k = palette.get(id);
+			if (k == null) {
+				k = palette.size();
+				palette.put(id, k);
+			}
+			return k;
+		}
+
+		/** (6c B) The next column of a version-2 volume: classes, owners, and per cell its {@link #block} index. */
+		public void column(byte[] cls, String[] owner, int[] block) {
+			if (!blocks) {
+				throw new IllegalStateException("a version-1 volume has no blocks");
+			}
+			if (block.length != height) {
+				throw new IllegalArgumentException("column of " + block.length + " blocks, the box is " + height + " high");
+			}
+			column0(cls, owner);
+			int i = 0;
+			while (i < height) {
+				int j = i + 1;
+				while (j < height && block[j] == block[i]) {
+					j++;
+				}
+				blockRuns.varint(block[i]);
+				blockRuns.varint(j - i);
+				i = j;
+			}
+		}
+
+		private void column0(byte[] cls, String[] owner) {
 			if (cls.length != height) {
 				throw new IllegalArgumentException("column of " + cls.length + " cells, the box is " + height + " high");
 			}
@@ -114,6 +170,10 @@ public final class Arvx {
 			out.u8(c.ordinal());
 			out.varint(height);
 			counts[c.ordinal()] += height;
+			if (blocks) {
+				blockRuns.varint(0); // air: a MISSING column has no blocks (a reader asks the class first)
+				blockRuns.varint(height);
+			}
 		}
 
 		public long[] counts() {
@@ -133,12 +193,43 @@ public final class Arvx {
 			}
 			out.varint(ownedRunCount);
 			out.bytes(ownedRuns.result());
+			if (blocks) {
+				out.varint(palette.size());
+				for (String id : palette.keySet()) {
+					byte[] b = id.getBytes(StandardCharsets.UTF_8);
+					out.varint(b.length);
+					out.bytes(b);
+				}
+				out.bytes(blockRuns.result());
+			}
 			return out.result();
 		}
 	}
 
 	/** A decoded volume: per column (x-major) its runs as {class, length} pairs, the owners, and per OWNED run its owner. */
-	public record Decoded(int[] box, List<int[][]> columns, List<String> owners, int[] ownedRuns) {
+	public record Decoded(int[] box, List<int[][]> columns, List<String> owners, int[] ownedRuns, @org.jspecify.annotations.Nullable List<String> blockPalette,
+		@org.jspecify.annotations.Nullable List<int[][]> blockColumns) {
+		/** A version-1 volume (no blocks). */
+		public Decoded(int[] box, List<int[][]> columns, List<String> owners, int[] ownedRuns) {
+			this(box, columns, owners, ownedRuns, null, null);
+		}
+
+		/** (6c B) The block id of a cell of a version-2 volume (no properties), null for version 1. */
+		public @org.jspecify.annotations.Nullable String blockAt(int x, int y, int z) {
+			if (blockColumns == null || blockPalette == null) {
+				return null;
+			}
+			int[][] runs = blockColumns.get((x - box[0]) * depth() + (z - box[2]));
+			int at = y - box[1];
+			for (int[] r : runs) {
+				if (at < r[1]) {
+					return blockPalette.get(r[0]);
+				}
+				at -= r[1];
+			}
+			throw new IllegalArgumentException("outside the box");
+		}
+
 		public int width() {
 			return box[3] - box[0] + 1;
 		}
@@ -170,7 +261,7 @@ public final class Arvx {
 			}
 		}
 		int ver = in.u8();
-		if (ver != VERSION) {
+		if (ver != VERSION && ver != VERSION_BLOCKS) {
 			throw new IllegalArgumentException("ARVX version " + ver);
 		}
 		in.p += 3;
@@ -215,10 +306,42 @@ public final class Arvx {
 		for (int i = 0; i < or; i++) {
 			ownedRuns[i] = (int) in.varint();
 		}
+		List<String> palette = null;
+		List<int[][]> bcols = null;
+		if (ver == VERSION_BLOCKS) {
+			int bc = (int) in.varint();
+			palette = new ArrayList<>();
+			for (int i = 0; i < bc; i++) {
+				int len = (int) in.varint();
+				palette.add(new String(a, in.p, len, StandardCharsets.UTF_8));
+				in.p += len;
+			}
+			if (palette.isEmpty() || !AIR.equals(palette.get(0))) {
+				throw new IllegalArgumentException("ARVX: the block palette must start with " + AIR);
+			}
+			bcols = new ArrayList<>();
+			for (long c = 0; c < n; c++) {
+				List<int[]> runs = new ArrayList<>();
+				int sum = 0;
+				while (sum < h) {
+					int k = (int) in.varint();
+					int len = (int) in.varint();
+					if (len <= 0 || k >= bc) {
+						throw new IllegalArgumentException("bad block run in column " + c);
+					}
+					runs.add(new int[] {k, len});
+					sum += len;
+				}
+				if (sum != h) {
+					throw new IllegalArgumentException("column " + c + "'s blocks sum to " + sum + ", not " + h);
+				}
+				bcols.add(runs.toArray(new int[0][]));
+			}
+		}
 		if (in.p != a.length) {
 			throw new IllegalArgumentException((a.length - in.p) + " trailing bytes");
 		}
-		return new Decoded(box, cols, owners, ownedRuns);
+		return new Decoded(box, cols, owners, ownedRuns, palette, bcols);
 	}
 
 	public static String sha256(byte[] a) {

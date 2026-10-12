@@ -12,7 +12,7 @@ import { ByteWriter, FLAG_MISSING, asColumns, sha256Hex, stateBytes, writeArtlHe
 import { ROTATIONS, decodeVoxels, turnState, turnXZ, voxelAt, voxelsBounds } from './region/voxels.mjs';
 import { compileMask, maskError, maskUses } from './mask.mjs';
 import { compilePattern, isPattern, patternError } from './pattern.mjs';
-import { VOXEL_CLASSES, classAt as volumeClassAt, decodeArvx } from './region/volume.mjs';
+import { VOXEL_CLASSES, blockAt as volumeBlockAt, classAt as volumeClassAt, decodeArvx } from './region/volume.mjs';
 
 export const AIR = 'minecraft:air';
 export const OP_KINDS = ['shape', 'columns', 'voxels', 'relief'];
@@ -22,11 +22,13 @@ export const IR_FORMATS = Object.freeze([1, 2]);
 /** (6b) Every format-2 kind an IR's `requires` may name; any of them makes the IR format 2. */
 export const KINDS_FORMAT2 = Object.freeze(['blobs:side', 'fields', 'forms', 'material:rule', 'shape:array', 'shape:capsuleChain', 'shape:ellipsoid',
   'shape:instances', 'shape:prism', 'shape:strata', 'shape:warp', 'shape:wedge', 'volumes', 'road:lamp', 'voxels',
-  'mask', 'pattern', 'relief']);
+  'mask', 'pattern', 'relief', 'volume:blocks']);
 // (6c W) 'road:lamp': a 4e road's `lamp` (the bible's lamp fixture for its lanterns; kit/lib/region/fixtures.mjs roadLamp). A mod
 // before 0.18.0 would lay its own fence and lantern, so the plan needs it (PLAN_STALE there).
 // (6c MP) `mask` (an op's mask) and `pattern` (a pattern anywhere a material goes) from kit 0.19.0
 // (6c T1) 'relief': a `relief` op (kit/REGIONS.md "The relief op"); a kit before 0.20.0 throws on the op kind.
+// (6c B) 'volume:blocks': a frozen volume with block ids (ARVX version 2, `volumes[name].blocks`), read by a mask's `block` term; a
+// kit before 0.23.0 can't decode it, so the plan needs the kind (PLAN_STALE there).
 /** Max ops in an IR (also the evaluator's buffer encoding limit). */
 export const MAX_OPS = 20000;
 const OP_SLOTS = 32768; // buffer value = (op index + 1) + material * OP_SLOTS
@@ -37,13 +39,13 @@ const CLIP_COUNT_MARGIN = 64;
 /** (6b) Op kinds reserved for later phases (they throw as unknown until then). (6c F1) `voxels` is built; (6c T1) `relief` is built. */
 export const OPS_RESERVED = ['scatter', 'stamp'];
 /** (6b) The members a format-2 IR may have (anything else throws). */
-export const MEMBERS_FORMAT2 = ['anchors', 'blobs', 'budget', 'claim', 'fields', 'floating', 'format', 'forms', 'graph', 'id', 'keepOut', 'kitVersion', 'lots', 'node', 'params',
+export const MEMBERS_FORMAT2 = ['anchors', 'blobs', 'blockTags', 'budget', 'claim', 'fields', 'floating', 'format', 'forms', 'graph', 'id', 'keepOut', 'kitVersion', 'lots', 'node', 'params',
   'parts', 'paths', 'programSha', 'requires', 'roads', 'roles', 'rules', 'seed', 'stages', 'tiles', 'utility', 'volumes'];
 // (6c V) `graph` (the settlement graph, SETTLEMENTS §8.1) and `keepOut` (the protected rects a program honoured) are known
 // members from kit 0.16.0, in format 1 and 2; the evaluator ignores them. An older kit refuses such a plan PLAN_STALE by the
 // kitVersion bump.
 /** (6b) The running kit's version (kept equal to lib/region/plan.mjs KIT_VERSION by a test). */
-export const EVAL_KIT_VERSION = '0.20.0';
+export const EVAL_KIT_VERSION = '0.23.0';
 
 /** Compare two semver strings (major.minor.patch, numeric): -1, 0, 1. */
 export function semverCompare(a, b) {
@@ -89,6 +91,7 @@ export function walkKinds(ir) {
   if (ir.blobs && Object.values(ir.blobs).some((b) => b && b.sha !== undefined)) k.add('blobs:side');
   if (ir.fields && Object.keys(ir.fields).length) k.add('fields');
   if (ir.volumes && Object.keys(ir.volumes).length) k.add('volumes');
+  if (ir.volumes && Object.values(ir.volumes).some((v) => v && v.blocks === true)) k.add('volume:blocks'); // (6c B)
   if (Array.isArray(ir.forms) && ir.forms.length) k.add('forms');
   if ((ir.roads ?? []).some((r) => r.lamp)) k.add('road:lamp');
   return [...k].sort();
@@ -200,15 +203,24 @@ export function compileIR(ir, opts = {}) {
   const fieldNames = new Set(Object.keys(ir.fields ?? {}));
   // (6c MP) a class mask reads the IR's frozen volumes (ARVX side blobs), decoded once on first use
   let classFn = null;
+  let blockFn = null;
   if (f2 && Object.keys(ir.volumes ?? {}).length) {
     const get = blobGetter(opts.blobs);
     let vols = null;
+    const decoded = () => (vols ??= Object.values(ir.volumes).map((v) => decodeArvx(get(ir.blobs?.[v.blob]?.sha ?? v.sha))));
     classFn = (x, y, z) => {
-      if (!vols) vols = Object.values(ir.volumes).map((v) => decodeArvx(get(ir.blobs?.[v.blob]?.sha ?? v.sha)));
-      for (const v of vols) { const c = volumeClassAt(v, x, y, z); if (c !== 14) return VOXEL_CLASSES[c]; }
+      for (const v of decoded()) { const c = volumeClassAt(v, x, y, z); if (c !== 14) return VOXEL_CLASSES[c]; }
       return 'MISSING';
     };
+    // (6c B) a block mask reads the volumes that carry block ids (`blocks: true`, ARVX version 2); a cell outside them has none
+    if (Object.values(ir.volumes).some((v) => v && v.blocks === true)) {
+      blockFn = (x, y, z) => {
+        for (const v of decoded()) { if (!v.blocks) continue; const b = volumeBlockAt(v, x, y, z); if (b !== null) return b; }
+        return null;
+      };
+    }
   }
+  const tagFn = (t) => (ir.blockTags && Object.prototype.hasOwnProperty.call(ir.blockTags, t) ? ir.blockTags[t] : null);
   const claim = ir.claim;
   for (const k of ['minX', 'minZ', 'maxX', 'maxZ', 'minY', 'maxY']) if (!Number.isInteger(claim?.[k])) throw new Error(`IR: claim.${k} must be an integer`);
   const mats = [];
@@ -230,7 +242,7 @@ export function compileIR(ir, opts = {}) {
       if (ops.length >= MAX_OPS) throw new Error(`IR: more than ${MAX_OPS} ops`);
       const cond = o.cond ?? 0;
       if (!(Number.isInteger(cond) && cond >= 0 && cond <= 3)) throw new Error(`${where}: cond must be 0..3`);
-      const base = { index: ops.length, part: pi, cond, walk: o.walk ? 1 : 0, mask: compileOpMask(o, where, f2, fieldNames, fieldFn, classFn) };
+      const base = { index: ops.length, part: pi, cond, walk: o.walk ? 1 : 0, mask: compileOpMask(o, where, f2, fieldNames, fieldFn, classFn, blockFn, tagFn) };
       if (o.op === 'shape') {
         for (const k of shapeKinds(o.shape)) {
           if (!f2 && SHAPES_FORMAT2.includes(k)) throw new Error(`${where}: shape '${k}' needs format 2`);
@@ -345,13 +357,16 @@ function compileOpPattern(m, where, f2, fieldNames, fieldFn, mat, seed) {
 }
 
 /** (6c MP) Compile an op's mask (format 2) to `test(x, y, z, col)`, or null when it has none. */
-function compileOpMask(o, where, f2, fieldNames, fieldFn, classFn) {
+function compileOpMask(o, where, f2, fieldNames, fieldFn, classFn, blockFn = null, tagFn = null) {
   if (o.mask === undefined) return null;
   if (!f2) throw new Error(`${where}: a mask needs format 2`);
   const err = maskError(o.mask, `${where} mask`, { fields: fieldNames });
   if (err) throw new Error(err);
   if (maskUses(o.mask, 'class') && !classFn) throw new Error(`MASK_NEEDS_VOLUME: ${where}: a mask's class term reads the frozen volumes, and the IR has none (r.needVolume(box) over the masked ops)`);
-  return compileMask(o.mask, { fields: fieldFn, classAt: classFn });
+  // (6c B) a block term needs a volume with block ids (r.needVolume(box, {blocks: true}): ARVX version 2); a version-1 volume holds
+  // classes only, so the refusal stays for it
+  if (maskUses(o.mask, 'block') && !blockFn) throw new Error(`MASK_NEEDS_VOLUME: ${where}: a mask's block term needs a frozen volume with block ids (r.needVolume(box, {blocks: true})), and the IR has none`);
+  return compileMask(o.mask, { fields: fieldFn, classAt: classFn, blockAt: blockFn, tagBlocks: tagFn });
 }
 
 /** (6c T1) A relief field's "no value here" sample: the op writes nothing in that column (also outside the field). */
