@@ -47,6 +47,7 @@ const check = (ok, m, data) => {
   results[m] = { ok, ...(data === undefined ? {} : { data }) };
   return ok;
 };
+const bar = (ok, m, data) => check(ok, `BAR ${m}`, data); // a timing bar: recorded, not blocking in change/slice (docs/GATES.md)
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const usd = (n) => Math.round(n * 1e6) / 1e6;
 
@@ -203,7 +204,7 @@ steps.stub = async () => {
     check(gd.group.cost.usd === want, `the group's notional cost is 4 massings + 3 details at the measured figures: $${gd.group.cost.usd} (want $${want})`);
     const secs = T();
     out.flowSeconds = secs;
-    check(secs < 120, `the Steward-sized flow (card, bible, 3 massings, a redirect, a restart, approval, 3 details) took ${secs} s (< 120 s at simStepMs 400)`);
+    bar(secs < 120, `the Steward-sized flow (card, bible, 3 massings, a redirect, a restart, approval, 3 details) took ${secs} s (< 120 s at simStepMs 400)`);
     const doneLog = fs.readFileSync(path.join(h.data, 'logs', 'sidecar.log'), 'utf8');
     check(new RegExp(`group ${g.groupId} done: .*\\(sim: true, notional\\)`).test(doneLog), "the log labels the group's final cost sim: true");
 
@@ -837,5 +838,5 @@ const t0 = Date.now();
 const data = await steps[step]().catch((e) => (check(false, `${step}: ${e.stack ?? e}`), {}));
 fs.writeFileSync(path.join(OUT, `${step}.json`), JSON.stringify({ step, at: new Date().toISOString(), seconds: Math.round((Date.now() - t0) / 1000), failures, results, data }, null, 2));
 fs.writeFileSync(path.join(OUT, 'spend.json'), JSON.stringify({ usd: 0, note: 'sim/stub only, no Claude calls' }, null, 2));
-console.log(`${failures ? 'FAIL' : 'PASS'} gate6c0a ${step}: ${Object.keys(results).length - failures}/${Object.keys(results).length} ok (evidence ${path.join(OUT, `${step}.json`)})`);
+console.log(`== gate6c0a ${step}: ${failures} failure(s), ${Object.keys(results).length - failures}/${Object.keys(results).length} ok (evidence ${path.join(OUT, `${step}.json`)})`);
 process.exit(failures ? 1 : 0);

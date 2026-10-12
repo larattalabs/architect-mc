@@ -8,9 +8,10 @@ and the runner refuses to start when Claude credentials are in the environment.
 node tools/gate-run.mjs --list                                   # the chains and tiers
 node tools/gate-run.mjs change --since origin/main --plan        # what a tier would run, and why; runs nothing
 node tools/gate-run.mjs change --since origin/main               # minutes: the unit suites + the steps the diff maps to
-node tools/gate-run.mjs slice  --since origin/main --shards 3 --ports 8890:8891,8896:8897,8898:8899   # ~30 min
-node tools/gate-run.mjs release --release v0.12.0 --shards 3 --ports ...   # overnight: everything, duplicates rotated
-node tools/gate-run.mjs quick                                    # a named chain (quick | regress | engine), as before
+node tools/gate-run.mjs slice  --since origin/main --ports 8896:8897   # units + apijars + the impact steps + the slice's own steps; timing bars recorded
+node tools/gate-run.mjs release --release v0.12.0 --shards 3 --ports ...   # overnight: everything, duplicates rotated; timing bars judged, --quiet-wait on
+node tools/gate-run.mjs quick                                    # a named chain (quick | regress | engine), as before (bars judged)
+node tools/gate-run.mjs change --since origin/main --slots 2     # at most 2 gate runs on the machine at once (default 3)
 node tools/gate-impact.mjs --since origin/main                   # just the change-impact report
 ```
 
@@ -21,11 +22,13 @@ X's apijars, v0.16.0's 4d-all A/B against v0.15.0); no slice gate's full regress
 from each slice's own focused items, the verifier's code review and Steward's reviews. So, **these win over the tables below**:
 
 1. **Timing bars never block a slice.** In `change` and `slice` a bench step's timing bars (MSPT, own-tick max, cells/s,
-   p99, wall) are **recorded, not judged**; its functional checks (exactness, undo, counts) still judge. Timing bars are judged
-   once per batch at `release`, with `--quiet-wait` and Noah's CI runners paused.
+   p99, wall, heap, quiet-dependent gaps such as apijars' SITE_PROGRESS gap) are **recorded, not judged**; its functional checks
+   (exactness, undo, counts) still judge. Timing bars are judged once per batch at `release`, with `--quiet-wait` (now on by
+   default there) and Noah's CI runners paused. *Implemented:* see "Timing bars" below.
 2. **`slice` = `change` + the slice's own focused steps.** The unit suites, apijars/api-compat, the impact map's steps for the
-   changed paths, and the slice's own gate steps. No `quick` regression suite per slice; the full regression runs once per
-   batch at `release` (overnight).
+   changed paths, and the slice's own gate steps (found by the impact rule of the slice's driver, e.g. `tools/gate6cw.mjs` ->
+   `w-unit`, `w-ingame`, `6cw-scenario-s7`). No `quick` regression suite per slice; the full regression runs once per
+   batch at `release` (overnight). *Implemented:* `--plan` prints, under each step, why it runs.
 3. **The gate-verifier reviews the diff and the evidence; it does not re-run.** Exception: undo, journal, removal and
    survival-accounting code, where it re-runs those specific items (that is where review found C23's defect).
 4. **Release first, Steward checks after.** A slice merges and releases without a pre-release Steward RC check; Steward checks
@@ -34,10 +37,44 @@ from each slice's own focused items, the verifier's code review and Steward's re
 5. **Batch releases.** Merge 2-3 slices, then one release tier, one tag and one publish. API and mod versions are assigned at
    merge (next free minor), so branches never renumber; builders use a placeholder until the coordinator sets it.
 6. **At most 3 gate runs on the machine at once** (a machine-wide slot lock in the runner); more only causes load failures.
+   *Implemented:* see "Slot lock" below.
 
 **Next (Noah, 2026-10-12): headless gates, as soon as possible** (moved up from "after 6c"): a server-only gate mode for the
 exactness and MSPT checks, faster and steadier than full clients, so slices and CI can run them in parallel. The client stays for
 screenshots and galleries.
+
+### Timing bars: recorded in `change` and `slice`, judged at `release`
+
+The gate drivers mark every timing bar with a `BAR` prefix on its check line: `ok   BAR ...` when it holds, `FAIL BAR ...` when it
+misses (the `bar(ok, msg, data)` helper next to each driver's `check`; `tools/scenarios.mjs` prints its `mspt` row the same way).
+A timing bar is MSPT, Architect's own tick (or CPU) max, cells/s, p99, wall time or liveness time, heap, and a quiet-dependent gap
+(apijars' SITE_PROGRESS at most 1/s). A functional check (exactness, undo, counts, status, the compat of a jar) is never a `BAR`.
+A driver whose check mixes both is split into a functional `check` and a `bar`.
+  The `apijars` step runs each *archived* tag's own `tools/apitest.mjs`, which has no `BAR` prefix: gate6a classifies its
+  `FAIL SITE_PROGRESS Nx, at most 1/s (min gap G ms)` line (N >= 2, G < 950) as the timing bar. That old line also folds in
+  `built <= queued`, so such a failure is recorded too; the current `apitest.mjs` splits them.
+
+- **`change` / `slice`:** a step whose only failures are `FAIL BAR` lines ends `PASS`, with the misses in the step's
+  `timingRecorded` list (`summary.json`, also the run-level `timingRecorded`, the runner log, and a **"Timing bars recorded, not
+  judged"** section of `SUMMARY.md` with the load average). Guards: every `FAIL` line must be a `BAR`, the driver's own
+  failure total (`N FAILURE(S)`, `FAILED (N)`, `N failure(s)`, summed over a `&&` chain) must be printed and equal its FAIL lines
+  (so a timing miss followed by an early exit still FAILs), there must be no stack trace in the log and no parsed failure count.
+  `--quiet-wait` still waits in these tiers but never turns a step NOISY, so a functional FAIL is never swallowed. Any
+  functional `FAIL` makes the step FAIL as before. `--judge-timing` judges the bars in these tiers.
+- **`release` and the named chains:** bars judge as before, and `--quiet-wait` (load < 8) is on by default (`--no-quiet-wait` to
+  turn it off).
+- A new timing check in a driver must use `bar(...)`, otherwise it blocks slices on machine load.
+
+### Slot lock: at most 3 gate runs on the machine
+
+Every gate run (not `--plan`) takes one of N slot files, `slot-1.json` .. `slot-N.json`, in `<LarattaLabs>/.gate-slots/` before
+anything else: pid, worktree, chain and start time. With none free it logs the wait (the holders, repeated every 5 minutes) and
+polls every 15 s. The slot is released on exit, on SIGINT/SIGTERM (also while waiting), and a slot whose pid is dead counts as
+free, so a SIGKILLed run does not hold one. `--slots N` / `GATE_SLOTS` overrides the limit (default 3, `slots.max` in
+`gate-chains.json`), `--slots-dir` / `GATE_SLOTS_DIR` the directory. Claims are serialised by a short `mkdir` mutex. The slot is
+separate from the run's own `--lock`, which still guards one runner's run dir and ports. The plan shows how many slots are in
+use; `SUMMARY.md` and `summary.json` (`slot`) record the slot and the wait. Runners started before this change take no slot, so
+for the first runs the count is a floor.
 
 ## The policy (Noah, 2026-10-09; PLAN.md "Process from 6c on")
 
@@ -45,9 +82,9 @@ Gates are tiered by risk. Run the cheapest tier that covers the change, and the 
 
 | tier | what runs | when | typical time |
 |---|---|---|---|
-| `change` | the three unit suites (mod `gradlew build`, kit, sidecar vitest) + the steps the impact map gives the changed paths. A docs-only diff runs nothing. | every commit or small change, while iterating | minutes (a journal change: ~16 min; a driver change: ~7 min) |
-| `slice` | `quick` (units, the 4a/4b/4c sim suites, the apitest jars, 4e mega-lite) + the change and slice steps of the impact. A docs-only diff runs nothing. | before a slice merges | about 30 min (a journal slice: ~32 min on one shard) |
-| `release` | everything, with the duplicate heavy checks rotated (below); then the full independent gate-verifier | once per release (or weekly), unattended and overnight | 2-3 h on 3 shards (a 6b-sized release: ~2h20m estimated) |
+| `change` | the three unit suites (mod `gradlew build`, kit, sidecar vitest) + the steps the impact map gives the changed paths. Timing bars recorded, not judged. A docs-only diff runs nothing. | every commit or small change, while iterating | minutes (a journal change: ~16 min; a driver change: ~7 min) |
+| `slice` | the unit suites + `apijars` (api-compat) + the change and slice steps of the impact, i.e. the slice's own gate steps. **No `quick`.** Timing bars recorded, not judged. A docs-only diff runs nothing. | before a slice merges | a journal slice: ~28 min on one shard; a driver-only slice: its own steps + ~5 min |
+| `release` | everything, with the duplicate heavy checks rotated (below); timing bars **judged**, `--quiet-wait` on by default; then the full independent gate-verifier | once per release batch (or weekly), unattended and overnight | 2-3 h on 3 shards (a 6b-sized release: ~2h20m estimated) |
 
 Pick the range with `--since <ref>` (the diff `<ref>...HEAD`, from the merge base), `--range A...B`, or `--files a,b`.
 `release` with no range uses the last tag reachable from HEAD; with no tag at all it counts as engine- and placement-touching.
@@ -108,7 +145,7 @@ its tags. Every matching rule counts. The main rules:
 | any other `mod/src/main/java/**` | unit-mod | |
 
 Ignored (nothing to run): `docs/**`, `**/*.md`, eval results and briefs, `.github/**`, images, `mod/logs/**`. A path no rule and
-no ignore glob covers is **unmapped**: `change` falls back to the unit suites, `slice` to `quick`, and the plan prints it. Extend the
+no ignore glob covers is **unmapped**: `change` and `slice` fall back to the unit suites (slice: and apijars), and the plan prints it. A changed `tools/gate*.mjs` driver no rule covers is flagged in the plan: add a rule so the slice's own steps are found. Extend the
 map when a slice adds a package or a gate step (`node tools/gate-impact.mjs <path>` shows what a path maps to).
 
 ### Faster runs
@@ -149,10 +186,10 @@ map when a slice adds a package or a gate step (`node tools/gate-impact.mjs <pat
     not a bar.
   - The CPU figure is not load-free either: on Apple's mixed P/E cores a tick descheduled to an E core costs more CPU time for
     the same work (6b's three c717804 megaA runs: realise CPU max 37.1, 42.3, 51.5 ms; accepted by the coordinator with that
-    caveat). `--quiet-wait` stays opt-in for a busy box.
+    caveat). `--quiet-wait` is on by default at release and opt-in elsewhere.
 - **Load is recorded.** Every step records the 1-minute load average at its start and end (`load1` in summary.json, SUMMARY.md);
   every tick-bar result records it too. Read a bench number together with its load.
-- **`--quiet-wait [N]`** (opt-in): before each bench step, wait until the 1-minute load average is below N (default 8), at most
+- **`--quiet-wait [N]`** (on by default at `release` with N 8, `--no-quiet-wait` turns it off; opt-in elsewhere): before each bench step, wait until the 1-minute load average is below N (default 8), at most
   `--quiet-max-min` minutes (default 30). If it never drops, the step runs marked noisy and ends **NOISY**: inconclusive, neither
   pass nor fail (its outcome and fail lines are kept, so a functional failure still shows). A run whose only non-PASS steps are
   NOISY has the verdict `INCONCLUSIVE`; re-run those steps on a quiet box.
@@ -217,7 +254,9 @@ Several agents and runners share this machine, so everything is configurable. A 
 | `--out DIR` | `GATE_RUNS_OUT` | `<main checkout>/artifacts/gate-runs` |
 | `--lock FILE` | `GATE_LOCK` | `<out>/gate-run.lock` |
 | `--seed-dir DIR` | `GATE_SEED_DIR` | `../architect-mc-6a-run` |
-| `--quiet-wait [N]`, `--quiet-max-min M` | | off (load recorded only); N 8, M 30 |
+| `--quiet-wait [N]`, `--no-quiet-wait`, `--quiet-max-min M` | | on at release (N 8), else off (load recorded only); M 30 |
+| `--slots N`, `--slots-dir DIR` | `GATE_SLOTS`, `GATE_SLOTS_DIR` | 3; `<LarattaLabs>/.gate-slots/` |
+| `--judge-timing` | | change/slice record timing bars; this judges them as at release |
 | | `GATE_SNAPSHOT_DIR` | the seed's `mod/run/saves` |
 | | `ARCHITECT_GATE_OLD_SIDECAR_PORT`/`_DEV_PORT` (gate4e/gate5b's old-version client, migration/downgrade steps only) | 8892/8893 |
 

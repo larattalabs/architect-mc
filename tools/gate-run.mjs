@@ -24,6 +24,11 @@
 //   --run-dirs A,B,C       GATE_RUN_DIRS  every shard's run worktree, explicitly
 //   --out DIR              GATE_RUNS_OUT  where runs go (<main checkout>/artifacts/gate-runs)
 //   --lock FILE            GATE_LOCK      the lock (<out>/gate-run.lock)
+//   --slots N              GATE_SLOTS     machine-wide gate-run slots (default 3): at most N runs at once, across worktrees. A run
+//                                         takes a slot file in --slots-dir (GATE_SLOTS_DIR; <LarattaLabs>/.gate-slots) and waits for a
+//                                         free one; a slot held by a dead pid counts as free. Separate from the per-run --lock.
+//   --judge-timing         in change/slice timing bars (lines `FAIL BAR ...`) are recorded, not judged; this judges them as at release
+//   --quiet-wait [load]    on by default at release (load 8); opt-in elsewhere. --no-quiet-wait turns it off
 //   --seed-dir DIR         GATE_SEED_DIR  read-only source of .gradle-home, node_modules and the gate worlds (../architect-mc-6a-run)
 //                          GATE_SNAPSHOT_DIR  prepared worlds restored by APFS clone (the seed's mod/run/saves)
 //                          GATE_NOTIFY=send|dry, GATE_NOTIFY_SCRIPT (~/Developer/_infra/discord-notify.sh); off by default
@@ -52,7 +57,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // ------------------------------------------------------------------ arguments and config
 
 const argv = process.argv.slice(2);
-const VALUED = ['--config', '--only', '--from', '--since', '--range', '--files', '--release', '--shards', '--ports', '--run-dir', '--run-dirs', '--out', '--lock', '--seed-dir', '--quiet-max-min'];
+const VALUED = ['--config', '--only', '--from', '--since', '--range', '--files', '--release', '--shards', '--ports', '--run-dir', '--run-dirs', '--out', '--lock', '--slots', '--slots-dir', '--seed-dir', '--quiet-max-min'];
 const flag = (f) => argv.includes(f);
 const opt = (f) => {
   const i = argv.indexOf(f);
@@ -73,7 +78,7 @@ const git = (dir, ...a) => execFileSync('git', ['-C', dir, ...a], { stdio: ['ign
 if (flag('--list') || !chainName) {
   for (const [n, s] of Object.entries(cfg.chains)) console.log(`${n.padEnd(8)} ${s.length} steps: ${s.join(' ')}`);
   console.log('change   tier: the impacted unit suites + the impact map\'s change steps (--since <ref>)');
-  console.log(`slice    tier: ${cfg.tiers.slice.base} + the impacted change and slice steps (--since <ref>)`);
+  console.log('slice    tier: the unit suites + apijars + the impact map\'s change and slice steps (the slice\'s own gate steps); no quick (--since <ref>)');
   console.log('release  tier: everything, the duplicates rotated (--release <tag>; default key: the ISO week)');
   if (!chainName && !flag('--list')) {
     console.error('\nusage: node tools/gate-run.mjs <chain|change|slice|release> [--since ref | --range A...B] [--release tag] [--shards N] [--plan] [--only a,b] [--from step]');
@@ -132,7 +137,7 @@ function rangeArg() {
 
 /** -> { ids, info } where info describes the tier: impact, rotation (what it ran and skipped), notes. */
 function select() {
-  if (cfg.chains[chainName]) return { ids: [...cfg.chains[chainName]], info: { kind: 'chain' } };
+  if (cfg.chains[chainName]) return { ids: [...cfg.chains[chainName]], info: { kind: 'chain', why: Object.fromEntries(cfg.chains[chainName].map((s) => [s, [`chain ${chainName}`]])) } };
   const info = { kind: 'tier', tier: chainName, notes: [] };
   const want = new Set();
   let range = rangeArg();
@@ -159,33 +164,46 @@ function select() {
   info.engine = tags.has('engine');
   info.placement = tags.has('placement');
   const t = cfg.tiers[chainName];
+  const why = (info.why = {});
+  const addW = (s, r) => {
+    want.add(s);
+    (why[s] ??= []).includes(r) || why[s].push(r);
+  };
+  const fromRules = (kinds) => {
+    for (const [name, r] of Object.entries(imp.rules)) for (const k of kinds) for (const s of r[k]) addW(s, `impact rule "${name}" (${k})`);
+  };
   if (chainName === 'change') {
     // the unit suites always (minutes), unless the diff is only ignored paths (docs): then nothing
-    if (imp.files > imp.ignored.length) for (const s of t.always ?? []) want.add(s);
-    for (const s of imp.change) want.add(s);
+    if (imp.files > imp.ignored.length) for (const s of t.always ?? []) addW(s, 'change: the unit suites always run');
+    fromRules(['change']);
     if (imp.unmapped.length) {
-      for (const s of t.fallback) want.add(s);
+      for (const s of t.fallback) addW(s, 'unmapped files: the safe default');
       info.notes.push(`unmapped files: the safe default added ${t.fallback.join(' ')}`);
     }
   } else if (chainName === 'slice') {
-    // a diff of only ignored paths (docs) runs nothing, as for change
-    if (imp.files > imp.ignored.length) for (const s of cfg.chains[t.base]) want.add(s);
-    else info.notes.push(`only ignored paths (docs etc.): ${t.base} skipped`);
-    for (const s of [...imp.change, ...imp.slice]) want.add(s);
+    // slice = the unit suites + apijars (api-compat) + the impact map's change and slice steps (the slice's own gate steps, found by
+    // the impact rule of its driver). No `quick`. A diff of only ignored paths (docs) runs nothing, as for change.
+    if (imp.files > imp.ignored.length) for (const s of t.always ?? []) addW(s, 'slice: the unit suites and apijars (api-compat) always run');
+    else info.notes.push('only ignored paths (docs etc.): nothing to run');
+    fromRules(['change', 'slice']);
+    for (const [name, r] of Object.entries(imp.rules)) {
+      const drv = r.files.filter((x) => /^tools\/gate[^/]*\.mjs$/.test(x) && !Object.entries(imp.rules).some(([n2, r2]) => n2 !== 'other tools' && r2.files.includes(x)));
+      if (name === 'other tools' && drv.length) info.notes.push(`${drv.join(', ')}: a gate driver with no impact rule, so none of its steps run; add a rule to gate-chains.json so the slice's own steps are found`);
+    }
     if (imp.unmapped.length) {
-      for (const s of t.fallback ?? []) want.add(s);
-      info.notes.push(`unmapped files: the safe default is ${t.base} (already in)`);
+      for (const s of t.fallback ?? []) addW(s, 'unmapped files: the safe default');
+      info.notes.push('unmapped files: the units and apijars (already in) are the safe default; extend the impact map');
     }
     if (info.engine && t.engineSlice?.length) {
       for (const s of t.engineSlice) want.add(s);
       info.notes.push(`engine-touching: added ${t.engineSlice.join(' ')}`);
-    } else if (info.engine) info.notes.push('engine-touching: mega-lite covers the slice; the full 1000x1000 megaA comes only with region code, megaB only at release');
+    } else if (info.engine) info.notes.push('engine-touching: the full 1000x1000 megaA comes only with region code (the impact map), megaB only at release');
   } else {
     const rk = rotationKey();
     info.rotationKey = rk.key;
     info.rotationSource = rk.source;
     info.rotation = [];
-    for (const s of t.always) want.add(s);
+    for (const s of t.always) addW(s, 'release: always');
     for (const r of t.rotate) {
       const all = [...new Set([...r.options.flat(), ...(r.when?.steps ?? [])])];
       let chosen;
@@ -198,7 +216,7 @@ function select() {
         chosen = r.options[i];
         reason = r.options.length > 1 ? `rotation option ${i + 1}/${r.options.length} (key ${rk.key})` : `not ${r.when?.tag ?? ''}-touching`;
       }
-      for (const s of chosen) want.add(s);
+      for (const s of chosen) addW(s, `release rotation "${r.name}": ${reason}`);
       const skipped = all.filter((s) => !chosen.includes(s));
       const next = {};
       for (const s of skipped) {
@@ -214,7 +232,7 @@ function select() {
   for (const s of [...want]) {
     const dep = cfg.steps[s].after;
     if (dep && !want.has(dep)) {
-      want.add(dep);
+      addW(dep, `needed by ${s}`);
       info.notes.push(`${s} needs ${dep}: added`);
     }
   }
@@ -232,11 +250,14 @@ if (opt('--only')) {
 if (opt('--from')) stepIds = stepIds.slice(Math.max(0, stepIds.indexOf(opt('--from'))));
 
 const PLAN = flag('--plan') || flag('--dry-run');
-// --quiet-wait [load] (opt-in): before a bench step, wait until the 1-minute load average is below <load> (default 8), at most
+// --quiet-wait [load] (opt-in; on by default at release): before a bench step, wait until the 1-minute load average is below <load> (default 8), at most
 // --quiet-max-min minutes (default 30); if it never gets there the step runs marked noisy and its result is NOISY (inconclusive:
 // it neither passes nor fails the bars). Without it, every step's load average is recorded, not acted on.
 const quietArg = argv[argv.indexOf('--quiet-wait') + 1];
-const QUIET = flag('--quiet-wait') ? (/^\d/.test(quietArg ?? '') ? Number(quietArg) : 8) : null;
+// Timing policy (docs/GATES.md "Policy update"): in change and slice the timing bars (driver lines `FAIL BAR ...`) are recorded, not
+// judged; at release (and in a named chain) they judge, and --quiet-wait is on by default.
+const RECORD_TIMING = (chainName === 'change' || chainName === 'slice') && !flag('--judge-timing');
+const QUIET = flag('--quiet-wait') ? (/^\d/.test(quietArg ?? '') ? Number(quietArg) : 8) : chainName === 'release' && !flag('--no-quiet-wait') ? 8 : null;
 const QUIET_MAX_MIN = Number(opt('--quiet-max-min') ?? 30);
 if (QUIET !== null && !(QUIET > 0)) die('--quiet-wait takes a load average, e.g. --quiet-wait 8');
 const load1 = () => Math.round(os.loadavg()[0] * 100) / 100;
@@ -354,6 +375,95 @@ const alive = (pid) => {
     return false;
   }
 };
+// ------------------------------------------------------------------ the machine-wide slot lock (at most N gate runs at once)
+
+const SLOTS = Number(opt('--slots') ?? process.env.GATE_SLOTS ?? cfg.slots?.max ?? 3);
+if (!(Number.isInteger(SLOTS) && SLOTS >= 1)) die('--slots takes a positive integer');
+const SLOT_DIR = path.resolve(opt('--slots-dir') ?? process.env.GATE_SLOTS_DIR ?? path.join(MAIN, '..', '.gate-slots'));
+const slotFile = (i) => path.join(SLOT_DIR, `slot-${i}.json`);
+const readSlot = (i) => {
+  try {
+    return JSON.parse(fs.readFileSync(slotFile(i), 'utf8'));
+  } catch {
+    return null; // missing or unreadable (a half-written file): treated as free; the claim below re-checks under the mutex
+  }
+};
+let mySlot = null;
+function releaseSlot() {
+  if (mySlot === null) return;
+  const i = mySlot;
+  mySlot = null;
+  try {
+    if (readSlot(i)?.pid === process.pid) fs.rmSync(slotFile(i), { force: true });
+  } catch {
+    // gone
+  }
+}
+process.on('exit', releaseSlot);
+/** One scan under a short mutex (mkdir is atomic): the first free slot (missing, or held by a dead pid) is written for this run. */
+function claimSlot() {
+  const mutex = path.join(SLOT_DIR, '.mutex');
+  for (let i = 0; i < 40; i++) {
+    try {
+      fs.mkdirSync(mutex);
+      break;
+    } catch (e) {
+      if (e.code !== 'EEXIST') throw e;
+      try {
+        if (Date.now() - fs.statSync(mutex).mtimeMs > 10_000) fs.rmdirSync(mutex); // a crashed claimer
+      } catch {
+        // raced
+      }
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 50);
+      if (i === 39) return null;
+    }
+  }
+  try {
+    for (let n = 1; n <= SLOTS; n++) {
+      const h = readSlot(n);
+      if (h && h.pid && alive(h.pid)) continue;
+      fs.writeFileSync(slotFile(n), JSON.stringify({ pid: process.pid, worktree: SRC, chain: chainName, startedAt: new Date().toISOString() }));
+      return n;
+    }
+    return null;
+  } finally {
+    try {
+      fs.rmdirSync(mutex);
+    } catch {
+      // gone
+    }
+  }
+}
+const slotHolders = () => Array.from({ length: SLOTS }, (_, k) => readSlot(k + 1)).filter((h) => h && h.pid && alive(h.pid));
+const slotNote = { waitedSeconds: 0, slot: null, limit: SLOTS, dir: SLOT_DIR };
+async function acquireSlot() {
+  fs.mkdirSync(SLOT_DIR, { recursive: true });
+  const t0s = Date.now();
+  const stamp = () => new Date().toISOString().slice(11, 19);
+  const onSig = (sig) => {
+    releaseSlot();
+    process.exit(sig === 'SIGINT' ? 130 : 143);
+  };
+  process.once('SIGINT', onSig);
+  process.once('SIGTERM', onSig);
+  let n = claimSlot();
+  let lastLog = 0;
+  while (n === null) {
+    if (Date.now() - lastLog > 300_000 || lastLog === 0) {
+      console.log(`[${stamp()}] gate-run ${chainName}: waiting for a free slot (${slotHolders().length}/${SLOTS} in use: ${slotHolders().map((h) => `pid ${h.pid} ${h.chain} ${h.worktree} since ${h.startedAt}`).join('; ') || 'none'})`);
+      lastLog = Date.now();
+    }
+    await sleep(Number(process.env.GATE_SLOT_POLL_MS ?? 15_000));
+    n = claimSlot();
+  }
+  mySlot = n;
+  slotNote.slot = n;
+  slotNote.waitedSeconds = Math.round((Date.now() - t0s) / 1000);
+  process.removeListener('SIGINT', onSig);
+  process.removeListener('SIGTERM', onSig);
+  console.log(`[${stamp()}] gate-run ${chainName}: took slot ${n}/${SLOTS} (${slotFile(n)})${slotNote.waitedSeconds ? ` after waiting ${fmtDur(slotNote.waitedSeconds)}` : ''}`);
+}
+
 const portFree = (port) => new Promise((resolve) => {
   const srv = net.createServer();
   srv.once('error', () => resolve(false));
@@ -498,6 +608,7 @@ function printPlan() {
     console.log(`shard ${sh.k}: run worktree ${sh.RUN} ${fs.existsSync(sh.RUN) ? '(exists; checked out --detach at the source HEAD)' : '(created: git worktree add --detach)'}; ports sidecar ${sh.SIDECAR_PORT}, DevBridge ${sh.DEV_PORT}; `
       + `seed ${missing.length ? `would clone ${missing.join(', ')}` : 'nothing missing'}`);
   }
+  console.log(`slots: at most ${SLOTS} gate runs on the machine (${SLOT_DIR}); in use now ${slotHolders().length}${slotHolders().length ? `: ${slotHolders().map((h) => `pid ${h.pid} ${h.chain}`).join(', ')}` : ''}; timing bars ${RECORD_TIMING ? 'RECORDED, not judged (change/slice)' : 'JUDGED'}`);
   console.log(`seed ${SEED} (read-only, APFS clones); snapshots ${SNAP}; artifacts ${RUNS_ROOT}/<timestamp>-${chainName}/; lock ${LOCK}; notify ${NOTIFY_MODE}; quiet-wait ${QUIET === null ? 'off (load recorded)' : `load < ${QUIET}, at most ${QUIET_MAX_MIN} min`}`);
   console.log('setup (each shard): sidecar npm run build (run worktree)');
   const est = estimate();
@@ -520,6 +631,7 @@ function printPlan() {
     const tags = [s.stopOnFail ? 'stopOnFail' : '', isBench(s) ? 'bench' : '', ...(s.resources ?? []).filter((r) => r !== 'bench'), s.after ? `after ${s.after}` : '',
       s.restore ? `restore ${s.restore.map((w) => `"${w}"`).join(',')}` : ''].filter(Boolean).join(', ');
     console.log(`${String(i + 1).padStart(2)}. ${s.id.padEnd(19)} ~${String(s.estMin ?? '?').padStart(4)} / ${String(s.timeoutMin).padStart(3)} min${NSHARDS > 1 ? ` s${est.assign[s.id]}` : ''}  ${clientNote}${cmd}${tags ? `  [${tags}]` : ''}`);
+    if (tierInfo.why?.[s.id]) console.log(`      why: ${tierInfo.why[s.id].join('; ')}`);
   });
   if (NSHARDS === 1 && cur) console.log(`    end: stop client ${cur}`);
   console.log(`estimate: ~${fmtDur(est.wallMin * 60)} wall on ${NSHARDS} shard(s) (serial sum of the measured step times ~${fmtDur(est.serialMin * 60)}; client starts ~40 s each)`);
@@ -565,11 +677,13 @@ function takeLock() {
   }
   die(`could not take ${LOCK}`);
 }
+await acquireSlot();
 takeLock();
 let lockHeld = true;
 const releaseLock = () => {
   if (!lockHeld) return;
   lockHeld = false;
+  releaseSlot();
   try {
     if (JSON.parse(fs.readFileSync(LOCK, 'utf8')).pid === process.pid) fs.rmSync(LOCK, { force: true });
   } catch {
@@ -601,7 +715,8 @@ const summary = {
   shards: shards.map((s) => ({ k: s.k, runDir: s.RUN, ports: { sidecar: s.SIDECAR_PORT, dev: s.DEV_PORT }, evidence: path.relative(OUT, s.ev) || '.' })),
   tier: tierInfo.kind === 'tier' ? { name: tierInfo.tier, range: tierInfo.range ?? null, engine: tierInfo.engine, placement: tierInfo.placement, impact: tierInfo.impact ?? null,
     rotationKey: tierInfo.rotationKey ?? null, rotationSource: tierInfo.rotationSource ?? null, rotation: tierInfo.rotation ?? null, notes: tierInfo.notes } : null,
-  counts: {}, setup: null, steps: steps.map((s) => ({ id: s.id, desc: s.desc, status: 'PENDING', timeoutMin: s.timeoutMin })),
+  counts: {}, setup: null, slot: slotNote, timingPolicy: RECORD_TIMING ? 'recorded' : 'judged', timingRecorded: [],
+  steps: steps.map((s) => ({ id: s.id, desc: s.desc, status: 'PENDING', timeoutMin: s.timeoutMin, ...(tierInfo.why?.[s.id] ? { why: tierInfo.why[s.id] } : {}) })),
 };
 const writeSummary = () => {
   const c = {};
@@ -611,6 +726,7 @@ const writeSummary = () => {
   fs.renameSync(path.join(OUT, 'summary.json.tmp'), path.join(OUT, 'summary.json'));
 };
 writeSummary();
+if (slotNote.slot !== null) log(`slot ${slotNote.slot}/${SLOTS} held (pid ${process.pid})${slotNote.waitedSeconds ? `, waited ${fmtDur(slotNote.waitedSeconds)} for it` : ''}; timing bars ${RECORD_TIMING ? 'recorded, not judged' : 'judged'}; quiet-wait ${QUIET === null ? 'off' : `load < ${QUIET}`}`);
 
 // ------------------------------------------------------------------ processes: kill only ours
 
@@ -826,6 +942,8 @@ async function restoreWorlds(sh, step) {
 
 const OK_RE = /^(?:\[\d\d:\d\d:\d\d\] )?ok\b/;
 const FAIL_RE = /^(?:\[\d\d:\d\d:\d\d\] )?FAIL\b/;
+/** A timing bar the driver printed (`FAIL BAR ...`, `ok   BAR ...`): MSPT, own tick, cells/s, p99, wall, heap, quiet-dependent gaps. */
+const BAR_FAIL_RE = /^(?:\[\d\d:\d\d:\d\d\] )?FAIL\s+BAR\b/;
 
 function readJsonSafe(f) {
   try {
@@ -914,6 +1032,8 @@ async function runStep(sh, step, rec) {
   rec.ok = lines.filter((l) => OK_RE.test(l)).length;
   rec.fail = lines.filter((l) => FAIL_RE.test(l)).length;
   const failLines = lines.filter((l) => FAIL_RE.test(l));
+  const barLines = failLines.filter((l) => BAR_FAIL_RE.test(l));
+  rec.barFail = barLines.length;
   if (failLines.length) rec.failLines = failLines.slice(0, 10).map((l) => l.slice(0, 300));
   // key numbers
   const metrics = {};
@@ -935,11 +1055,26 @@ async function runStep(sh, step, rec) {
   if (Object.keys(metrics).length) rec.metrics = metrics;
   const parsedFail = (metrics.fail ?? 0) + (metrics.failed ?? 0) + (metrics.failures ?? 0);
   rec.load1.end = load1();
+  // change/slice: a step whose only failures are timing bars passes, with the misses recorded. Guards against hiding a real failure:
+  // every FAIL line is a BAR line, no parsed failure count, the driver's own failure total(s) match the FAIL lines it printed,
+  // and no uncaught exception (a stack trace) in the log.
+  // the drivers' own totals (gate4d/4e/6a `N FAILURE(S)`, gate5b `FAILED (N)`, gate6b/6c*/scenarios `N failure(s)`, apitest `N FAILED ->`),
+  // summed over a `&&` chain: at least one must be printed and they must add up to the FAIL lines, so a timing miss followed by an early
+  // exit (the rest of the checks never ran) does not pass
+  const totals = [...lines.filter((l) => !l.startsWith('# ')).join('\n').matchAll(/(\d+) FAILURE\(S\)|FAILED \((\d+)\)|(\d+) failure\(s\)|(\d+) FAILED ->/g)].map((m) => Number(m[1] ?? m[2] ?? m[3] ?? m[4]));
+  const timingOnly = RECORD_TIMING && !r.timedOut && r.code !== 0 && rec.fail > 0 && barLines.length === rec.fail && parsedFail === 0
+    && totals.length > 0 && totals.reduce((a, b) => a + b, 0) === rec.fail && !/^\s+at \S.*:\d+:\d+\)?\s*$/m.test(text) && (step.okLines === false || rec.ok > 0);
   if (r.timedOut) rec.status = 'TIMEOUT';
   else if (r.code === 0 && rec.fail === 0 && parsedFail === 0 && (step.okLines === false || rec.ok > 0)) rec.status = 'PASS';
-  else rec.status = 'FAIL';
+  else if (timingOnly) {
+    rec.status = 'PASS';
+    rec.timingRecorded = barLines.map((l) => l.replace(/^\[[\d:]+\] /, '').slice(0, 300));
+    summary.timingRecorded.push(...rec.timingRecorded.map((line) => ({ step: step.id, line })));
+  } else rec.status = 'FAIL';
+  // a step with timing bars passing in record mode that also missed none still lists nothing; a recorded miss on a loaded box says so
+  if (rec.timingRecorded) rec.timingLoad1 = { start: rec.load1.start, end: rec.load1.end };
   // --quiet-wait gave up: a bench result on a loaded box is inconclusive either way (its failLines still show any functional failure)
-  if (rec.noisy && ['PASS', 'FAIL'].includes(rec.status)) {
+  if (rec.noisy && !RECORD_TIMING && ['PASS', 'FAIL'].includes(rec.status)) {
     rec.noisyOutcome = rec.status;
     rec.status = 'NOISY';
   }
@@ -952,7 +1087,7 @@ async function runStep(sh, step, rec) {
     const tail = lines.filter((l) => l.trim()).slice(-5);
     rec.tail = tail.map((l) => l.slice(0, 300));
   }
-  log(`  ${rec.status} ${step.id} in ${fmtDur(rec.seconds)} (exit ${r.code}${r.signal ? ` ${r.signal}` : ''}, ok ${rec.ok}, FAIL ${rec.fail})${rec.metrics ? ` ${JSON.stringify(rec.metrics)}` : ''}`, sh);
+  log(`  ${rec.status} ${step.id} in ${fmtDur(rec.seconds)} (exit ${r.code}${r.signal ? ` ${r.signal}` : ''}, ok ${rec.ok}, FAIL ${rec.fail}${rec.timingRecorded ? `, ${rec.timingRecorded.length} timing bar(s) RECORDED not judged` : ''})${rec.metrics ? ` ${JSON.stringify(rec.metrics)}` : ''}`, sh);
   // a killed or failed step may leave a client in any state (or one it started itself): stop it, the next step starts fresh
   if (rec.status !== 'PASS' || step.client === 'self') {
     await stopClient(sh, `${step.id} ${rec.status}`);
@@ -1013,11 +1148,12 @@ async function setupShard(sh, head) {
 function summaryMd() {
   const c = summary.counts;
   const lines = [
-    `# Gate run ${summary.chain}: ${summary.verdict}`,
+    `# Gate run ${summary.chain}: ${summary.verdict}${summary.verdict === 'PASS' && summary.timingRecorded.length ? ` (${summary.timingRecorded.length} timing bar miss(es) recorded, not judged)` : ''}`,
     '',
     `${summary.state}, ${fmtDur(summary.durationSeconds)}, head ${summary.head?.slice(0, 9) ?? '?'}${summary.sourceDirty ? ' (source dirty)' : ''}, `
       + `${shards.map((s) => `${NSHARDS > 1 ? `s${s.k} ` : ''}ports ${s.SIDECAR_PORT}/${s.DEV_PORT}`).join(', ')}.`,
-    `Steps: ${Object.entries(c).map(([k, v]) => `${v} ${k}`).join(', ')}.${summary.error ? ` Error: ${summary.error}` : ''}`,
+    `Steps: ${Object.entries(c).map(([k, v]) => `${v} ${k}`).join(', ')}.${summary.timingRecorded.length ? ` ${summary.timingRecorded.length} timing bar miss(es) recorded.` : ''}${summary.error ? ` Error: ${summary.error}` : ''}`,
+    `Slot ${summary.slot.slot}/${summary.slot.limit}${summary.slot.waitedSeconds ? ` (waited ${fmtDur(summary.slot.waitedSeconds)})` : ''}; timing bars ${summary.timingPolicy}.`,
   ];
   const t = summary.tier;
   if (t) {
@@ -1035,6 +1171,15 @@ function summaryMd() {
       s.load1 ? `load ${s.load1.start}->${s.load1.end ?? '?'}` : '', s.noisy ? `noisy (outcome ${s.noisyOutcome ?? '?'})` : ''].filter(Boolean).join('; ');
     lines.push(`| ${s.id} | ${NSHARDS > 1 ? `${s.shard ?? '-'} | ` : ''}${s.status} | ${s.seconds != null ? fmtDur(s.seconds) : '-'} | ${s.ok ?? '-'}/${s.fail ?? '-'} | ${m.replace(/\|/g, '/')} |`);
   }
+  const rec = summary.steps.filter((s) => s.timingRecorded?.length);
+  if (rec.length) {
+    lines.push('', '## Timing bars recorded, not judged (change/slice policy)', '',
+      'These steps PASS on their functional checks; the timing bars below missed and are judged only at release (with --quiet-wait and the CI runners paused).', '');
+    for (const s of rec) {
+      lines.push(`- **${s.id}** (load ${s.timingLoad1?.start ?? '?'} -> ${s.timingLoad1?.end ?? '?'}; log \`${s.log ?? '-'}\`)`);
+      for (const l of s.timingRecorded) lines.push(`  - \`${l.replace(/`/g, "'").slice(0, 220)}\``);
+    }
+  } else if (summary.timingPolicy === 'recorded') lines.push('', 'Timing bars: recorded, not judged in this tier; none missed.');
   const bad = summary.steps.filter((s) => ['FAIL', 'TIMEOUT', 'ERROR', 'SKIPPED', 'NOISY'].includes(s.status));
   if (bad.length) {
     lines.push('', '## Not passing', '');
@@ -1201,7 +1346,7 @@ async function worker(sh) {
       if (load1() >= QUIET) log(`  ${step.id}: waiting for the 1-min load average ${load1()} to drop below ${QUIET} (at most ${QUIET_MAX_MIN} min)`, sh);
       while (load1() >= QUIET && Date.now() - tq < QUIET_MAX_MIN * 60_000 && !stopped) await sleep(15_000);
       rec.quietWaitSeconds = Math.round((Date.now() - tq) / 1000);
-      if (load1() >= QUIET) {
+      if (load1() >= QUIET && !RECORD_TIMING) {
         rec.noisy = true;
         log(`  ${step.id}: load ${load1()} still >= ${QUIET} after ${QUIET_MAX_MIN} min: running it marked noisy (NOISY: neither passes nor fails)`, sh);
       }

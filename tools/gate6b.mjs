@@ -12,7 +12,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import {
-  CAP_USD, GAME_DIR, LIBRARY, SIDECAR_DATA, SIDECAR_PORT as SIDECAR_PORT_6B, MAIN, OUT, RUN, SAVES, call, check, clientPids, cmd, connect, copyWorld, fails, fresh, leaveWorld, log, logAuth,
+  CAP_USD, GAME_DIR, LIBRARY, bar, SIDECAR_DATA, SIDECAR_PORT as SIDECAR_PORT_6B, MAIN, OUT, RUN, SAVES, call, check, clientPids, cmd, connect, copyWorld, fails, fresh, leaveWorld, log, logAuth,
   openWorld, plan, prepare, realise, refuseKeys, results, root, setRules, settle, sleep, spendAdd, spendGuard, spendRead, startClient, state,
   stopClient, tp, waitRegion, write,
 } from './lib/run6b.mjs';
@@ -174,8 +174,8 @@ steps.checktime = async () => {
   const rep = readPlanJson(p.planId, 'report.json');
   const prog = await call('dev.region.progress', { planId: p.planId }).catch(() => null);
   const checkMs = rep.ms?.total ?? null;
-  check(checkMs !== null && checkMs <= 120_000, `checktime: mega_bench full-resolution check ${(checkMs / 1000).toFixed(1)} s single-threaded (bar 120 s; coarse = full: 60 s), per rule ${JSON.stringify(rep.ms?.perRule)}`);
-  check(withMs - checkMs <= 30_000, `checktime: mega_bench plan with the check ${(withMs / 1000).toFixed(1)} s = ${((withMs - checkMs) / 1000).toFixed(1)} s + the check (bar 30 s + the check; without the check ${(bareMs / 1000).toFixed(1)} s)`);
+  bar(checkMs !== null && checkMs <= 120_000, `checktime: mega_bench full-resolution check ${(checkMs / 1000).toFixed(1)} s single-threaded (bar 120 s; coarse = full: 60 s), per rule ${JSON.stringify(rep.ms?.perRule)}`);
+  bar(withMs - checkMs <= 30_000, `checktime: mega_bench plan with the check ${(withMs / 1000).toFixed(1)} s = ${((withMs - checkMs) / 1000).toFixed(1)} s + the check (bar 30 s + the check; without the check ${(bareMs / 1000).toFixed(1)} s)`);
   check(rep.errors === 0, `checktime: mega_bench's report: ${rep.errors} errors, ${rep.warnings} warnings (${[...new Set(rep.findings.map((f) => f.rule))].join(', ')})`);
   await leaveWorld();
   return { bareMs, withMs, check: rep.ms, resolution: rep.resolution, findings: rep.findings.map((f) => `${f.rule} ${f.part} x${f.count}`), progress: prog };
@@ -251,7 +251,7 @@ steps.volume = async () => {
     log(`  volume ${i + 1}: ${v.cells} cells in ${(v.sampleMs / 1000).toFixed(1)} s sampling (${Math.round(v.cellsPerSecond)} cells/s), ${v.bytes} bytes (${v.bytesPerCell.toFixed(4)} B/cell), max slice ${v.maxTickMs.toFixed(1)} ms, counts ${JSON.stringify(v.counts)}, MSPT ${JSON.stringify(m.all)}`);
   }
   const [a, b] = runs;
-  check(a.mspt.over50 === 0 && b.mspt.over50 === 0, `volume: 0 ticks over 50 ms while sampling (max ${a.mspt.max.toFixed(1)}/${b.mspt.max.toFixed(1)} ms; max sampling slice ${a.maxTickMs.toFixed(1)} ms)`);
+  bar(a.mspt.over50 === 0 && b.mspt.over50 === 0, `volume: 0 ticks over 50 ms while sampling (max ${a.mspt.max.toFixed(1)}/${b.mspt.max.toFixed(1)} ms; max sampling slice ${a.maxTickMs.toFixed(1)} ms)`);
   check(a.sha === b.sha, `volume: a second sample of the unchanged area gives the same sha (${a.sha.slice(0, 12)})`);
   check(a.fileSha === a.sha, `volume: the frozen file reads back to the sha (${String(a.fileSha).slice(0, 12)})`);
   const need = ['ROCK', 'AIR', 'WATER', 'LOG', 'LEAVES'];
