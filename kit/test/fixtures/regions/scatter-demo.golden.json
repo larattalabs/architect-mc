@@ -1,6 +1,6 @@
 {
  "note": "scatter_demo over synthSurvey(192, \"golden\") with a synthetic volume and SYNTHETIC stamps (lib/region/stamps.mjs syntheticStamp: no vanilla data, N-F2-1), seed 42, node \"golden\", kit 0.22.0; tiles: stage|set|key -> sha256 of the ARTL payload (macOS and Linux CI)",
- "irSha": "56b415e1282c9d3c6dee4634c0e93935ae73f2ef18ea48dec7a05c098d1409ec",
+ "irSha": "20637eb84517b4eb8563ea609c390f9f02a655d8d2984cd2ee6bd64609a73c61",
  "cells": 7286,
  "tiles": {
   "decor|terrain|0,0": "58a481f1f3c54e99ae7dc17fdb0e492b59599a6fd9fac819bdebb1e8c27edd9d",

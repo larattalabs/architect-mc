@@ -532,6 +532,12 @@ async function computeMetrics({ sc, out, planDir, ir, irShas, mspt, cps, exact, 
     const snow = SC.snowAcrossStand({ ir, vw, after, stand });
     const stampsMissing = (meta.stamps ?? []).filter((x) => x.missing).map((x) => x.id);
     rows = SC.scatterBars({ plan, realised, realisedStand, melt, supports, planned, snow, stampsMissing, workersSame: ts.workersSame, tiles: ts.timing, mspt, load1: Math.round((await import('node:os')).loadavg()[0] * 10) / 10 }, rows);
+    // a fixture without a flat variant (the cave): E-normal only; scatter_demo's flat run holds E-flat
+    if (!sc.flat) {
+      const en = exN, WORLD = ['growth', 'grazed', 'live', 'gravity', 'unsupported', 'freeze', 'flow'];
+      const undoOwn = en.mismatches - WORLD.reduce((a, k) => a + (en.classes?.[k] ?? 0), 0), cap = 0.0001 * (en.cellsWritten ?? 0);
+      rows = rows.map((r) => (r.id === 'exactness' ? { ...r, value: `E-flat: none (this fixture has no flat variant; scatter_demo's flat run holds E-flat); E-normal ${en.mismatches} (${JSON.stringify(en.classes ?? {})}; unclassified ${en.classes?.none ?? 0}; the undo's own ${undoOwn}, cap ${cap.toFixed(0)})`, threshold: 'E-normal all classified, <= 0.01% of written cells', pass: (en.classes?.none ?? 0) === 0 && undoOwn <= cap } : r));
+    }
     // the determinism row: identical over 3 plans and 1 vs 4 workers, and the golden held (a fixture without one: recorded)
     rows = rows.map((r) => (r.id === 'determinism' ? { ...r, pass: new Set(irShas).size === 1 && ts.workersSame && (String(golden).startsWith('match') || sc.golden === false), threshold: sc.golden === false ? 'identical (this fixture keeps no golden)' : 'identical; the committed golden scenarios/goldens/scatter_demo.json (stamps off) holds' } : r));
     scatterM = { melt, supports, planned, snow, stampsMissing, tiles: ts.timing, realisedM17: (realisedStand ?? realised).metrics.M17, realisedM3: realised.metrics.M3, meta: meta.scatterDemo ?? null, scatter: meta.scatter ?? null, stamps: meta.stamps ?? null };
@@ -571,7 +577,9 @@ async function computeMetrics({ sc, out, planDir, ir, irShas, mspt, cps, exact, 
 function latestRun(sc, out, wantFlat) {
   const dir = path.dirname(out);
   if (!fs.existsSync(dir)) return null;
-  const runs = fs.readdirSync(dir).filter((d) => d.endsWith('-flat') === wantFlat && fs.existsSync(path.join(dir, d, 'exact.json'))).sort();
+  // (6c F2) only this scenario's own runs: a gate's --out puts every scenario's runs side by side
+  const own = (d) => { try { return JSON.parse(fs.readFileSync(path.join(dir, d, 'run.json'), 'utf8')).scenario === sc.id; } catch { return true; } };
+  const runs = fs.readdirSync(dir).filter((d) => d.endsWith('-flat') === wantFlat && fs.existsSync(path.join(dir, d, 'exact.json')) && own(d)).sort();
   return runs.length ? path.join(dir, runs[runs.length - 1]) : null;
 }
 

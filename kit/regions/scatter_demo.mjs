@@ -101,8 +101,10 @@ export function build(ctx, hooks = {}) {
   }
 
   // ---- stamps: each fitted where every part of it touches solid natural ground (the frozen volume, else the survey)
+  // solid as the checker's M3 reads it: a snow-class cell counts only at or under the column's ground (a snow block: the survey's
+  // ground skips a snow layer, which is not solid)
   const solidAt = (x, y, z) => {
-    if (vol) { const c = cls(x, y, z); return c !== null && SOLID.has(c); }
+    if (vol) { const c = cls(x, y, z); return c !== null && SOLID.has(c) && (c !== VC.SNOW || (inClaim(x, z) && y <= S.groundAt(x, z))); }
     return inClaim(x, z) && y <= S.groundAt(x, z);
   };
   const stampCells = (s, k) => {
@@ -160,7 +162,8 @@ export function build(ctx, hooks = {}) {
           if (!land(x, z)) continue;
           const g = S.groundAt(x, z);
           if (mode === 'buried') cand.push([x, g - mxY, z]);
-          else cand.push([x, g + 1, z]);
+          // on the ground, or sunk 1 (the base replaces the ground cell: a cap whose rim meets the stem only at an edge rests its rim)
+          else cand.push([x, g + 1, z], [x, g, z]);
         }
       }
       // the sites nearest the claim's centre first (then north-west first): the stamps stand around the path and the lot
