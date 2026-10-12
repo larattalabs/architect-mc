@@ -374,8 +374,8 @@ An IR is `format: 2` only when it uses a format-2 member; a format-1 IR evaluate
   mega_bench's IR is unchanged.
 - **Unknown members** of a format-2 IR throw `IR: unknown member '<m>' (supported: ...)`; `graph`, `siteLots`,
   `lotEntries` and `fits` are 7a and unknown in 6b. Unknown op, shape or rule kinds throw
-  `IR: unknown <op|shape|rule> '<kind>' (supported: ...)`. `relief`, `scatter`, `voxels` and `stamp` are reserved op names
-  that throw the same way until their phase. A format-2 blob with inline `data` throws `format 2 blobs are side files`.
+  `IR: unknown <op|shape|rule> '<kind>' (supported: ...)`. `relief`, `scatter` and `stamp` are reserved op names
+  that throw the same way until their phase (`voxels` is built in kit 0.19.0, below). A format-2 blob with inline `data` throws `format 2 blobs are side files`.
 - **Stale:** `format > 2`, a `requires` kind outside `KINDS_FORMAT2`, or `kitVersion` newer than the running kit (semver
   compare) is `PLAN_STALE`: "plan needs kit X / format N / kinds [...]; this is kit Y" (`staleReason(ir, kit)` in
   `lib/realise.mjs`; `compileIR` throws it with the prefix `PLAN_STALE: `).
@@ -393,6 +393,7 @@ An IR is `format: 2` only when it uses a format-2 member; a format-1 IR evaluate
     (mask); i = x + z*width.
   - `field`: raw values, `u8` one byte or `i16` two bytes LE per sample, row-major (i + j*width); dims in `fields`.
   - `volume`: an ARVX file (below), stored as the mod froze it (gzip); `volumes[name].sha` is its ARVX sha.
+  - `voxels` (kit 0.19.0): an ARVB file, the `voxels` op's baked cells (below, "Kit 0.19.0").
 - The evaluator gets blob bytes through `evalTile(ir, key, heights, {blobs})`, `blobs` a function `sha -> Uint8Array` or a
   map; a missing sha throws `blob_unknown <sha>`.
 
@@ -615,3 +616,36 @@ VillageLayout's `Plan` maps one to one: its `Lot`s are flat_village lots (`id`, 
 [alongStreet, deep], `front` SOUTH/NORTH = the `ew` orientation's -z/+z sides, `x`/`z` = `at`), `streetZ` is the street's centre line
 (`streetV`, street 5 wide), `streetX0..streetX1` its extent. Steward's street has no square: an adopted village gets the plaza node
 at the street's middle and no square cells. `Regions.adopt` (the joint 7a/6d gate) records the standing sites without writing a cell.
+
+## Kit 0.19.0 (6c slice F1: forms I)
+
+- **The `voxels` op** (format 2, `requires: ['voxels']`; an older kit or mod refuses it `PLAN_STALE`): `{op: 'voxels', blob,
+  origin: [x, y, z], rotation: 0|90|180|270, cond, walk}`. `blob` names an ARVB side blob of kind `voxels`
+  (`lib/region/voxels.mjs`): `'ARVB'`, u8 version 1, 3 zero bytes, i32 LE sizeX, sizeY, sizeZ, varint palette count and per entry
+  varint length + UTF-8 block state, varint cell count, the cells' local indexes `((y * sizeZ + z) * sizeX + x)` as ascending
+  varint deltas (the first from -1), then one palette index per cell (u8 with at most 256 entries, else u16 LE). No gzip: the bytes
+  are the identity on every OS. A quarter turn is clockwise seen from above, local (x, z) -> (sizeZ - 1 - z, x), and turns the
+  states (facing, the four connection flags, axis, sign rotation). Realise copies the cells that fall in the tile, pointwise by
+  position, last op wins as for every op; the op's bounds are the turned box. `cond` defaults to IF_NATURAL for a baked form.
+- **Generators** (`lib/forms/`): `iceSpike` (a cluster of thin cone chains, one op, packed ice with blue ice accents and snow-block
+  caps; never ice or snow layers) and `rockSpire` (stacked warped cone segments, one op each, with clipY'd ellipsoid ledges and a
+  capsuleChain buttress under any ledge that would overhang more than 4; strata bands, a weathered skin by noise, moss by the `wet`
+  field or noise). Presets: `iceSpike` classic / needles / stubby, `rockSpire` pinnacle / tower / hoodoo. Both settle at plan time
+  (`rules.settleForm`): fragments the evaluator splits off are cancelled by an air op (IF_AIR_OR_FLUID) and any remaining overhang
+  over 4 gets a support.
+- **Generator rules** (`lib/forms/rules.mjs`, every generator): one op per cluster with at most 32 primitives; a form past 400 ops
+  (`BAKE_OPS`) is baked by `r.form` into one voxels op (`bake: 'auto'` default, `true` forces it); bases reach 6 below the plan ground.
+  `ir.forms[i].baked = {blob, cells, ops}` records a bake. A bake keeps no air writes and no per-op conds.
+- **Program API:** `r.iceSpike(id, params, {stage, bake})`, `r.rockSpire(id, params, {stage, bake})`, and
+  `r.keepNatural(cls, box, {part, stage})`: the frozen volume's cells of a natural class (e.g. `'ICE'`) in the box become a `keep`
+  entry `{volume, class, box}` on a part (default `keep_<class>`; an IR part member the evaluator ignores). It returns
+  `{volume, cells, columns, has(x, y, z), near(x, z, r)}` for the program to place around them, or null on the first plan of the
+  two-plan flow. `needVolume` is idempotent per box.
+- **Checker:** `M17` (warning) no `ice` cell at block light over 10 and no snow layer over 11 (26.3's IceBlock and SnowLayerBlock
+  random ticks: ice melts above 11 minus its light dampening, 1), written or natural (the volume's ICE and SNOW cells, when a
+  planned light reaches them); a realised world is checked against its dump's light. `M3:overhang` (warning, under M3): a solid
+  cell of a form part (not a floating group) with nothing under it, more than 4 (Chebyshev) from every solid cell one layer down.
+  `M1` (error): a written cell in any part's `keep` set. Metrics `M3.overhangCells` / `maxOverhang`, `M17`, `keep`.
+- **`forms_demo`** (`kit/regions/forms_demo.mjs`, `catalogue = false`): up to 6 ice-spike clusters and 3 spires on S2's claim
+  among its natural ice (kept), each form grown at plan time and placed only where none of its cells meets a kept cell; soul-lantern
+  posts (block light 10, melt-safe); the first spire baked.

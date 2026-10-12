@@ -117,7 +117,7 @@ export function formsBars(x, generic) {
   out.push(row('voxels', 'Voxels (item 7)', vx.length ? vx.map((v) => `${v.part}: ${v.equal}/${v.cells} equal, ${v.differ} differ, ${v.outside} outside the dump`).join('; ') + `; tiles 1 vs 4 workers ${x.workersSame ? 'identical' : 'DIFFER'}` : 'no voxels op',
     'realised cells equal the baked blob exactly; tile shas equal for 1 and 4 workers, shuffled', vx.length > 0 && vx.every((v) => v.differ === 0 && v.outside === 0) && x.workersSame));
   const t = x.tiles;
-  out.push(row('tiles', 'Tile evaluation (item 8)', t ? `p99 ${t.p99Ms.toFixed(0)} ms, max ${t.maxMs.toFixed(0)} ms over ${t.count} tiles; ${Math.round(t.cellsPerSecond)} cells/s` : 'n/a', 'p99 under 2 s per tile; at least 45k cells/s', t && t.p99Ms < 2000 && t.cellsPerSecond >= 45000));
+  out.push(row('tiles', 'Tile evaluation (item 8)', t ? `p99 ${t.p99Ms.toFixed(0)} ms, max ${t.maxMs.toFixed(0)} ms over ${t.count} tiles; ${Math.round(t.cellsPerSecond)} cells/s (best of ${t.passes ?? 1} passes per tile${x.load1 != null ? `, load ${x.load1}` : ''})` : 'n/a', 'p99 under 2 s per tile; at least 45k cells/s', t && t.p99Ms < 2000 && t.cellsPerSecond >= 45000));
   const g = Object.fromEntries((generic ?? []).map((r) => [r.id, r]));
   for (const id of ['determinism', 'exactness', 'mspt', 'spend']) if (g[id]) out.push({ ...g[id], label: `${g[id].label} (item ${{ determinism: 9, exactness: 10, mspt: 11, spend: 13 }[id]})` });
   const own = x.mspt?.ownCpu;
