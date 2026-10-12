@@ -1068,7 +1068,7 @@ steps.migrate = async () => {
     const ss = await siteState(ids.s3);
     const bom3 = Object.fromEntries((ss.rows ?? []).map((r) => [r.item, r.missing]).filter(([, n]) => n > 0));
     await call('dev.crate.insert', { site: ids.s3, items: half(bom3) }, 120_000);
-    await sleep(15_000);
+    await sleep(1500); // half built: the crates still hold stock (adoption has something to move)
     const stock = await api(`stock ${b.group}`);
     const s3state = await siteState(ids.s3);
     fs.writeFileSync(migState, JSON.stringify({ ids, group: b.group, y, stock, s3: { ledger: s3state.ledger, built: s3state.built, crate: s3state.crate } }));
@@ -1127,6 +1127,7 @@ steps.migrate = async () => {
     out.adopt = { legacyBefore: a0.legacyCrateStock, stockAfter: a1.stock, oldCrates };
     check(exact(p1) && sum(a1.legacyCrateStock) === 0 && sum(a1.stock) === sum(a0.legacyCrateStock), `item 12: adoptCrates moved the legacy stock in with difference 0 (${sum(a0.legacyCrateStock)} -> stock ${sum(a1.stock)}; ${json(p1.diff)})`);
     const left = (a1.crateBlocks ?? []).filter((x) => oldCrates.includes(x.pos));
+    check(sum(a0.legacyCrateStock) > 50, `item 12: the legacy crates hold stock to adopt (${sum(a0.legacyCrateStock)} items)`);
     check(oldCrates.length === 2 && left.length === 0, `item 12: the legacy crate cells are restored (${json(oldCrates)} -> ${json(left)})`);
     const st = ad.stockpile;
     check([m.ids.g1, m.ids.g2, m.ids.s3].every((id) => st.feedOrder.includes(id)), `item 12: their targets joined the feed order (${json(st.feedOrder)})`);
