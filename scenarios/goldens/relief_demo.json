@@ -2,16 +2,16 @@
  "scenario": "relief_demo",
  "version": 0,
  "note": "tile shas of the IR over its own plan survey (kit windowFromSurvey), 1 worker = 4 workers shuffled; inputs in goldens/relief_demo/",
- "fromRun": "20261012-055047",
- "irSha": "bea58673f570142c3d147fbee4d97ce2780f72450a1bdb23135f693654b0ad50",
+ "fromRun": "20261012-164555",
+ "irSha": "2f53a2c2037168485bc833ddd0fd2c0c5c4eed6967727d68a2b7d595495b137c",
  "kitVersion": "0.20.0",
- "cells": 16531,
+ "cells": 17725,
  "tiles": {
-  "ground|terrain|56,-15": "4b17d5505fe8be3b6f87369857858e747185c7d32ebc11cb2d1b36d561f30fc0",
-  "ground|terrain|56,-16": "75ea9087928609cf4fcabe4e7df732f799c7676af010100d90d697fcca047940",
-  "ground|terrain|57,-15": "807d760944a54b2834b169d208d912da909fac9aa597faa57d0d40c1291fa839",
-  "ground|terrain|57,-16": "1d4cf0e4ca93ae9273cc8bc3b390417a8feb7ee2267592e7c4066653f623eb64",
+  "ground|terrain|56,-15": "9bf7a21508b3b9b0fdf90ad600ac5466300a7b9f84dbaf3978e2f9c12b4101e7",
+  "ground|terrain|56,-16": "e9dcb7fd93c4c11baf1092a9b28ee2fba32cb5c1b33f735daa34fa0ba499def9",
+  "ground|terrain|57,-15": "aa5befa67014fa3bbf85da22e743c8b846d49cb9fd5ae0ca6a8364b1754fd25e",
+  "ground|terrain|57,-16": "6705489f4607a55d282d5f4740f39ca71456c08ccd9c2ace3ff9e2b665f71059",
   "ground|terrain|58,-15": "814080ae84d5a4708ba22b916929541815c86770431aed8929151f39dc46a8b2",
-  "ground|terrain|58,-16": "71caeaca2fc01ce3a75ec425920f1ff6959a32ddcc6a260973b9bc033dffc6b9"
+  "ground|terrain|58,-16": "bcaad701c9993af155ea34155f7ff57df6a070a6d1a4bf038905c72e6eb27cf9"
  }
 }

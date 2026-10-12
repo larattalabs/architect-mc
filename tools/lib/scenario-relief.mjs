@@ -100,7 +100,7 @@ export function reliefBlocks(ir) {
   return out;
 }
 
-/** The pads at their target: every pad and apron column's top block at floorY - 1 with air (or the lot's child) above. */
+/** The pads at their target: every pad and apron column's top block at floorY - 1 is solid (a plant or a gap there is a step), with air above in the plan. */
 export function padsCheck(ir, getState, { realised = false } = {}) {
   let cols = 0, off = 0;
   const offList = [];
@@ -114,8 +114,9 @@ export function padsCheck(ir, getState, { realised = false } = {}) {
       cols++;
       const apron = x < b.minX || x > b.maxX || z < b.minZ || z > b.maxZ;
       const top = solid(getState(x, t, z));
-      // above the pad's top: air on the apron (and on the footprint in the plan); the realised footprint holds the lot's child
-      const clear = apron || !realised ? !solid(getState(x, t + 1, z)) : true;
+      // above the pad's top: air in the plan; the realised world holds the lot's child and its own front path and terrain fit
+      // around the box (other writers), so there only the top block itself is judged
+      const clear = realised ? true : !solid(getState(x, t + 1, z));
       if (!top || !clear) { off++; if (offList.length < 20) offList.push([l.id, x, t, z]); }
     }
   }
