@@ -348,7 +348,18 @@ async function bom() {
     const actual = sortObj(st.bom);
     const keys = [...new Set([...Object.keys(full), ...Object.keys(actual)])];
     const diff = Object.fromEntries(keys.filter((k) => (full[k] ?? 0) !== (actual[k] ?? 0)).map((k) => [k, (full[k] ?? 0) - (actual[k] ?? 0)]));
-    const row = { key: l.key, bp: l.bp, site: id, bomExact: v.bomExact, ok: v.ok, refusals: (v.refusals ?? []).map((r) => r.reason), diff,
+    // the neighbourhood of the first few cells that differ (to see what took a support away)
+    const around = {};
+    for (const d of cellDiff.filter((x) => !/dirt_path/.test(x)).slice(0, 3)) {
+      const [x, y, z] = d.split(' ')[0].split(',').map(Number);
+      const lines = [];
+      for (let dy = -2; dy <= 1; dy++) for (const [dx, dz] of [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const k = `${x + dx},${y + dy},${z + dz}`;
+        lines.push(`${dx},${dy},${dz}: pred ${predicted.cells?.[k] ?? '-'} act ${actualCells[k] ?? '-'}`);
+      }
+      around[d.split(' ')[0]] = lines;
+    }
+    const row = { around, key: l.key, bp: l.bp, site: id, bomExact: v.bomExact, ok: v.ok, refusals: (v.refusals ?? []).map((r) => r.reason), diff,
       bomFullTotal: bomTotal(full), outstandingTotal: bomTotal(actual), templateTotal: bomTotal(v.bom), cellDiff: cellDiff.slice(0, 40), cellDiffCount: cellDiff.length, notes: (v.notes ?? []).filter((n) => /bomFull/.test(n)) };
     rows.push(row);
     log(`  ${l.key} ${l.bp}: bomFull ${row.bomFullTotal} vs outstanding ${row.outstandingTotal}, exact=${v.bomExact}, diff ${JSON.stringify(diff)}`);

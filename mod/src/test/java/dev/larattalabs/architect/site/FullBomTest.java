@@ -29,7 +29,7 @@ class FullBomTest {
 	}
 
 	private static FullBom.Inputs inputs(int[] xyz, BlockState[] states, int[] fill, int[] clear, int[] aClear, int[] aFill, int[] aPath, int[] aSlabs) {
-		return new FullBom.Inputs(xyz, states, (p, s) -> false, fill, clear, aClear, aFill, aPath, aSlabs, Blocks.STONE_BRICKS.defaultBlockState(),
+		return new FullBom.Inputs(net.minecraft.world.level.block.Rotation.NONE, xyz, states, (p, s) -> false, fill, clear, aClear, aFill, aPath, aSlabs, Blocks.STONE_BRICKS.defaultBlockState(),
 			Blocks.COBBLESTONE.defaultBlockState(), Blocks.DIRT_PATH.defaultBlockState(), Blocks.OAK_SLAB.defaultBlockState());
 	}
 
@@ -65,7 +65,7 @@ class FullBomTest {
 	@Test
 	void anUnsafeBedIsLeftOut() {
 		// the predicate is asked only for bed blocks, so an air cell is never a bed: this checks the plumbing, the bed rule itself is the level's
-		FullBom.Inputs in = new FullBom.Inputs(new int[] {0, 10, 0}, new BlockState[] {air()}, (p, s) -> true, NONE, NONE, NONE, NONE, NONE, NONE,
+		FullBom.Inputs in = new FullBom.Inputs(net.minecraft.world.level.block.Rotation.NONE, new int[] {0, 10, 0}, new BlockState[] {air()}, (p, s) -> true, NONE, NONE, NONE, NONE, NONE, NONE,
 			Blocks.STONE.defaultBlockState(), Blocks.STONE.defaultBlockState(), Blocks.DIRT_PATH.defaultBlockState(), Blocks.OAK_SLAB.defaultBlockState());
 		assertTrue(FullBom.compute(in, p -> air()).items().isEmpty());
 	}

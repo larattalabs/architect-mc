@@ -58,7 +58,7 @@ final class FullBom {
 	 * What a plan writes, in world coordinates: {@code template} is three ints per cell (x, y, z) with its states (air included),
 	 * and the other arrays are x, y, z triples as the plan holds them.
 	 */
-	record Inputs(int[] templateXyz, BlockState[] templateStates, BiPredicate<Long, BlockState> unsafeBed, int[] fill, int[] clear, int[] approachClear,
+	record Inputs(net.minecraft.world.level.block.Rotation rotation, int[] templateXyz, BlockState[] templateStates, BiPredicate<Long, BlockState> unsafeBed, int[] fill, int[] clear, int[] approachClear,
 		int[] approachFill, int[] approachPath, int[] approachSlabs, BlockState foundation, BlockState approachFillState, BlockState path,
 		BlockState slab) {
 	}
@@ -84,7 +84,7 @@ final class FullBom {
 		Approach.Plan a = plan.approach();
 		boolean any = a.rows() > 0;
 		int[] none = new int[0];
-		return new Inputs(xyz, grid.states(), unsafe, t.fill(), t.clear(), any ? a.clear() : none, any ? a.fill() : none, any ? a.path() : none,
+		return new Inputs(net.minecraft.world.level.block.Rotation.values()[Math.floorMod(plan.turns(), 4)], xyz, grid.states(), unsafe, t.fill(), t.clear(), any ? a.clear() : none, any ? a.fill() : none, any ? a.path() : none,
 			any ? a.slabs() : none, foundation, EntranceStyle.state(a.fillBlock(), foundation), any ? Sites.approachPath(bp, a) : foundation,
 			any ? Sites.approachBlock(bp, true) : foundation);
 	}
@@ -110,7 +110,7 @@ final class FullBom {
 		// 1. the template (air cells are written too: a room is cleared), 2. unsafe beds out
 		for (int i = 0; i < in.templateStates().length; i++) {
 			long p = BlockPos.asLong(in.templateXyz()[3 * i], in.templateXyz()[3 * i + 1], in.templateXyz()[3 * i + 2]);
-			BlockState s = in.templateStates()[i];
+			BlockState s = in.templateStates()[i].rotate(in.rotation()); // the placed state (a wall torch's facing, a stair's shape)
 			phase.put(p, 0);
 			if (s.getBlock() instanceof BedBlock && in.unsafeBed().test(p, s)) {
 				writes.put(p, air);
