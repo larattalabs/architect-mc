@@ -16,7 +16,9 @@
     "R9 one plan is at most 65536 characters as canonical JSON, and at most 128 parts in all",
     "R10 numbers: every coordinate, distance and size is an integer in blocks (cells) unless its definition says otherwise; numbers that are not integers (grades, ratios) are quantised by the compiler to 1/64",
     "R11 required parts: a part with required true whose answer is unsupported or refused blocks approval (COMPOSITION §2.5); a required rule that can't be verified blocks readiness",
-    "R12 notes and labels are free text: kept, shown, never treated as a verified requirement"
+    "R12 notes and labels are free text: kept, shown, never treated as a verified requirement",
+    "R13 provisional parts: a part is provisional when a lot has no library entry or its style (own or inherited from the zone or plan) is {pending}. Its cost and palette are a range; the approval artifact records each provisional part's cost range and fit box; the approval is kept while the fit stays inside the lot box and the cost inside the range, and the caller re-approves past the top of the range (rebinding when the bible exists)",
+    "R14 anchors: names are caller-supplied positions (PlanRequest.anchors) or the built-in claim_* ones; P0 never interprets a name. Steward passes stone, player, street_w, street_e, district_<id> and stockpile; an unknown anchor name used by a part is malformed (UNKNOWN_REF)"
   ],
   "x-defaults": {
     "about": "Defaults the compiler applies when a member is absent. A contract promise wins over a part's tolerance where both apply (for example C27's within 4 cells for a boundary-following district, once D2 is supported).",
@@ -128,7 +130,7 @@
     "id": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,47}$" },
     "planId": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$" },
     "kind": { "type": "string", "pattern": "^([a-z0-9_.-]{1,32}:)?[a-z][a-z0-9_]{0,47}$" },
-    "anchor": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,31}$", "description": "A named point: built in (claim_center, claim_n, claim_e, claim_s, claim_w) or supplied by the caller in PlanRequest.anchors (for example stone). Never a coordinate in the plan." },
+    "anchor": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,31}$", "description": "A named point: built in (claim_center, claim_n, claim_e, claim_s, claim_w) or supplied by the caller in PlanRequest.anchors (for example stone). Never a coordinate in the plan. Steward passes stone, player, street_w, street_e, district_<id> and stockpile; P0 does not interpret the names." },
     "blockId": { "type": "string", "pattern": "^[a-z][a-z0-9_]*\\.([a-z0-9_.-]{1,32}:)?[a-z0-9_]{1,48}$" },
     "sha": { "type": "string", "pattern": "^[0-9a-f]{12,64}$" },
     "text500": { "type": "string", "pattern": "^[\\s\\S]{0,500}$" },
@@ -156,12 +158,21 @@
         "reason": { "$ref": "#/$defs/text500" }
       }
     },
-    "bibleRef": {
+    "bibleRef.bible": {
       "type": "object", "required": ["bible"], "additionalProperties": false,
       "properties": {
         "bible": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:@/-]{0,99}$" },
         "version": { "type": "integer", "minimum": 1 }
       }
+    },
+    "bibleRef.pending": {
+      "type": "object", "required": ["pending"], "additionalProperties": false,
+      "description": "The style bible does not exist yet. A part with a pending style is checked as provisional (like an undesigned building): palette and cost are a range, and approval rebinds once the bible exists (R13).",
+      "properties": { "pending": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,39}$", "description": "A slug naming the bible-to-be (at most 40 characters)." } }
+    },
+    "bibleRef": {
+      "oneOf": [ { "$ref": "#/$defs/bibleRef.bible" }, { "$ref": "#/$defs/bibleRef.pending" } ],
+      "oneOfMessage": "a style is {bible, version?} or {pending: \"<tag>\"}"
     },
 
     "tol": {
@@ -308,6 +319,7 @@
         "id": { "$ref": "#/$defs/id" },
         "type": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,31}$" },
         "role": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,31}$" },
+        "label": { "$ref": "#/$defs/label", "description": "Free text shown with the lot (the same label as a zone's or connector's); role stays a slug. Never verified." },
         "size": { "type": "array", "minItems": 2, "maxItems": 2, "items": { "type": "integer", "minimum": 5, "maximum": 64 } },
         "landmark": { "type": "boolean" },
         "placement": { "enum": ["central", "edge", "near_water", "high_ground"] },
@@ -378,7 +390,7 @@
         "to": { "$ref": "#/$defs/endpoint" },
         "via": { "type": "array", "maxItems": 8, "items": { "$ref": "#/$defs/endpoint" }, "description": "Waypoints in order; each leg is one T2 edge." },
         "avoid": { "type": "array", "maxItems": 16, "items": { "$ref": "#/$defs/feature" }, "description": "Features the route keeps out of (as T2 keep-out)." },
-        "width": { "type": "integer", "minimum": 1, "maximum": 7 },
+        "width": { "type": "integer", "minimum": 1, "maximum": 5, "description": "Road width in cells, for street, road and path alike: 1-5, the range 4e's ground roads (and so T2's routes) support. Defaults in x-defaults (street 3, road 3, path 1)." },
         "movers": { "type": "array", "minItems": 1, "maxItems": 3, "items": { "enum": ["player", "villager", "steward"] }, "description": "The per-edge override S-T2-1 left room for; absent: inferred." },
         "lamps": { "enum": ["none", "few", "street"] },
         "style": { "$ref": "#/$defs/bibleRef" },
@@ -512,13 +524,13 @@
         "class": { "enum": ["fits", "adjusted", "refused", "unsupported", "blocked", "malformed", "incomplete"] },
         "required": { "type": "boolean" },
         "geometry": { "type": "object", "description": "Resolved, in world cells: rect or polygon, y, lots (LotSpec shape), path polylines, form bounds." },
-        "cost": { "type": "object", "description": "{cells, removed, added, tiles, chunksToGenerate, bom?} exact, or {range: {cells: [min, max], bom?}} when provisional." },
+        "cost": { "type": "object", "description": "For a provisional part (a building without a library entry, or a pending style) the range form is used and the artifact also records the part's fit box (R13). {cells, removed, added, tiles, chunksToGenerate, bom?} exact, or {range: {cells: [min, max], bom?}} when provisional." },
         "provisional": { "type": "boolean" },
         "deviations": { "type": "array", "items": { "type": "object", "required": ["what", "value"], "properties": { "what": { "enum": ["move", "size", "rotate", "count", "grade", "detour", "sketch"] }, "value": { "type": "number" }, "max": { "type": "number" }, "exceeds": { "type": "boolean" } } } },
         "reasons": { "type": "array", "items": { "$ref": "#/$defs/reason" } },
         "wouldFit": { "type": "array", "maxItems": 4, "items": { "type": "object", "description": "A concrete alternative as a plan fragment (for example a smaller size, another where) with its own geometry and cost." } },
         "blockedBy": { "type": "array", "items": { "$ref": "#/$defs/id" } },
-        "ext": { "$ref": "#/$defs/ext" },
+        "ext": { "$ref": "#/$defs/ext", "description": "The part's own ext, echoed unchanged (Steward's hook)." },
         "cached": { "type": "boolean" }
       }
     }

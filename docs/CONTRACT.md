@@ -10427,7 +10427,7 @@ and architect-mc docs/COMPOSITION-ANSWERS.md, whose "Revisions" section wins. Th
 Top level:
 
 ```
-{ schemaVersion: "plan/0", planId?, revision?: {n, parent?, parentArtifact?, reason?}, style?: {bible, version?},
+{ schemaVersion: "plan/0", planId?, revision?: {n, parent?, parentArtifact?, reason?}, style?: {bible, version?} | {pending},
   zones[] (<= 16), connectors[] (<= 64), forms[] (<= 32), rules[] (<= 32), dependencies[] (<= 128), notes?, ext? }
 ```
 
@@ -10439,15 +10439,16 @@ Top level:
 - **zones[]:**
   - `kind` (`standard`; `outpost` is reserved for D2);
   - `purpose` (a tag, echoed);
-  - `style` (a bible ref);
+  - `style` (a bible ref: `{bible, version?}`, or `{pending: "<tag>"}` while the bible doesn't exist yet, §3);
   - `program`: `{template: "flat_village", params}`, or `{lots: [...], layout: "street", shared}`, or `{districts}`, which
-    is reserved for D1;
+    is reserved for D1. A lot carries `id`, `type`, `size`, an optional slug `role` and an optional free-text `label` (at most
+    80 characters, as on zones and connectors);
   - `where`, `sketch`, `size` (`{w, d}` as integers or ranges, or a preset S/M/L/XL), and `tolerance`.
 - **connectors[]:**
   - v0 kinds `street`, `road` and `path`;
   - `from`, `to` and `via[]` endpoints: a part with an optional port, an anchor, a feature, or a region, which is reserved
     for D1;
-  - `avoid[]` features, `width`, `movers` (the per-edge override that S-T2-1 left room for), `lamps` and `style`.
+  - `avoid[]` features, `width` (1-5 cells, the range of 4e's ground roads and so of T2's routes; default street 3, road 3, path 1), `movers` (the per-edge override that S-T2-1 left room for), `lamps` and `style`.
   - 7a's catalogue kinds are reserved by name: `auto`, `wall`, `gate`, `bridge`, `tunnel`, `ladder`, `stair`, `rail`,
     `channel`, `rope_bridge`, `catwalk`, `rock_stair`, `switchback`, `lift`, `branch_walk`, `span_bridge` and
     `stairs_around`. SETTLEMENTS §8's graph (nodes with ports, typed edges with `from`/`to` as `node.port`) is what a
@@ -10480,7 +10481,9 @@ Top level:
   `region` and `protected`. Several matches are broken by `pick`: largest (or longest, highest, or nearest to an anchor),
   then nearest to the claim's centre, then the smallest min x, then the smallest min z.
 - **Anchors** are named, never coordinates. The built-in ones are `claim_center` and `claim_n`/`e`/`s`/`w`. The caller
-  supplies the others in `PlanRequest.anchors`, for example Steward's `stone`.
+  supplies the others in `PlanRequest.anchors`. Steward passes `stone`, `player`, `street_w`, `street_e`, `district_<id>` and
+  `stockpile`. They are caller-supplied positions: P0 doesn't interpret the names, and an anchor a part uses but the request
+  doesn't supply is `malformed` (`UNKNOWN_REF`).
 - **A sketch** is optional and relative: frame `claim` in q64 units (0..64 across the claim), or frame `anchor` in blocks
   (-512..512). v0 uses its point or centroid as a soft position target (`sketch.point`). An outline the plan requires
   (`outline: true`) is `sketch.outline`, reserved for FL.
@@ -10552,8 +10555,10 @@ Every part gets exactly one class:
 - **Cost:**
   - exact for what is resolved: cells, removed, added, tiles, chunks to generate, and in survival the BOM from C26's
     `bomFull`;
-  - a **range** for provisional buildings, meaning lots without a library entry: cells and a BOM band from the lot's size and
-    the library's density for its type;
+  - a **range** for provisional parts: lots without a library entry, and any part whose style is `{pending: "<tag>"}`. Cells and
+    a BOM band come from the lot's size and the library's density for its type (and, for a pending style, across the palettes
+    the bible could take). A pending style is checked exactly like an undesigned building: provisional, with approval rebound
+    once the bible exists;
   - the whole-plan cost is the sum, as a range when any part is provisional.
 - **The overall result:**
   - `MALFORMED`: the plan itself failed the schema;
@@ -10639,8 +10644,9 @@ Its sha is taken over canonical JSON and excludes ids, timestamps and paths. The
   - the kit version;
 - the compiled region plan: `planId`, `irSha`, the IR format and `requires`, the blob shas, and the tile shas per stage;
 - per part: the answer, the geometry, the lot ids, the links (graph edges with their paths) and the cost;
-- blueprint versions (`entry@version`) and their `fitToLot` fits for lots that have entries. Lots without one are
-  **provisional**, with a cost range;
+- blueprint versions (`entry@version`) and their `fitToLot` fits for lots that have entries. Lots without one, and parts with a
+  pending style, are **provisional**: the artifact records each one's **cost range** and **fit box** (the lot box the building
+  must stay inside);
 - the dropped parts (`NEEDS_REPAIR`) and their classes.
 
 **Approval binds the artifact sha.** Steward stores `artifactSha` with the player's approval.
@@ -10651,9 +10657,18 @@ Its sha is taken over canonical JSON and excludes ids, timestamps and paths. The
    over the plan's tiles, today's `DRIFTED` rule) or the protection changed, it refuses `ARTIFACT_STALE`, naming the changed
    columns or areas, and writes nothing. Steward then checks again. Unchanged parts come from the cache, so a recheck is cheap.
    If the new artifact's geometry sha equals the old one, the approval carries over; otherwise the player approves again.
-3. Binds `lotEntries` for provisional lots. A fit that stays inside its lot box and the approved cost range keeps the
-   approval. One outside them refuses `ARTIFACT_STALE`, naming the lot.
+3. Binds `lotEntries` for provisional lots (and the bible, for a pending style). A provisional building keeps its approval
+   while its fit stays inside its recorded lot box and its cost stays within the recorded range. Past the top of the range,
+   or outside the box, it refuses `ARTIFACT_STALE`, naming the lot, and the caller re-approves.
 4. Calls `Regions.realise` on the artifact's `planId` with the opKey. It **never re-plans**.
+
+**Artifact retention.** Architect keeps an artifact by its sha while it is pinned or while an owner's settlement refers to it.
+- `Regions.pinArtifact(String artifactSha, String owner)` and `unpinArtifact(String artifactSha, String owner)` (defaults throw
+  "needs Architect API <P0>"; idempotent) hold it for that owner, as does a settlement's reference to it. It is deleted only
+  when no pin and no reference remain (the cache's 24 h does not apply to artifacts).
+- A removed artifact leaves a **tombstone** (`artifact(sha)` answers a removed record with its `removedAt`), matching C22's
+  pattern for regions. `realiseApproved` on it refuses `ARTIFACT_UNAPPROVED` (the sha is known, the body is gone); an unknown
+  sha refuses the same. Tombstones are kept as long as opKey records are (0a retention).
 
 **Replay and recovery:**
 - A resume uses the saved IR; this is X's C20.
@@ -10751,6 +10766,8 @@ shas of everything it depends on, `surveySha`, the protection fingerprint, the a
 
 ### Open questions for Steward
 
+(Answered 2026-10-12; see "Changes from Steward's review of P0" below. The questions stay for the record.)
+
 - **S-P0-1. One region per plan.** v0 compiles a whole plan into one region over one claim: one undo, one opKey, one budget.
   The alternative is one region per zone. That gives separate undo, but it needs D1's `beside` to join the regions. Is one
   region per plan right until D1, with zones added later as their own regions?
@@ -10768,6 +10785,32 @@ shas of everything it depends on, `surveySha`, the protection fingerprint, the a
 - **S-P0-8. Unknown top-level members** make the whole plan `malformed`, while unknown kinds inside a family are
   `unsupported`. Does your plan writer ever need a new top-level family before the schema adds one?
 - **S-P0-9. The freeze.** Is `plan/0` ready to freeze after this review, or do you want a round with plan v0 fixtures first?
+
+### Changes from Steward's review of P0 (2026-10-12; these win)
+
+- **S-P0-1. One region per plan until D1**, compiled through `plan_v0`. Zones become their own regions only when D1's `beside`
+  can join them.
+- **S-P0-2. `required` defaults to false.** Claude marks a part required when it must stand.
+- **S-P0-3. Anchors.** Steward passes `stone`, `player`, `street_w`, `street_e`, `district_<id>` and `stockpile`, in
+  `PlanRequest.anchors`. They are caller-supplied positions; P0 doesn't interpret their names (§1).
+- **S-P0-4. `partRef` plus part `ext`**, and each part's answer echoes its `ext` unchanged (`$defs.partAnswer`). No reverse
+  index.
+- **S-P0-5. The cost range in the artifact.** The approval artifact records each provisional part's cost range and fit box. A
+  provisional building keeps its approval while its fit stays in its lot box and its cost within the range. Past the top of the
+  range, the caller re-approves (§6).
+- **S-P0-6. Retention and tombstones.** Architect keeps an artifact by sha while it is pinned (`pinArtifact(sha, owner)` /
+  `unpinArtifact`) or while the owner's settlement refers to it. After removal it leaves a tombstone, as C22 does (§6).
+- **S-P0-7. Street width.** `street` connectors (like `road` and `path`) take an optional `width`, 1-5 cells: the range 4e's
+  ground roads support, which T2's routes inherit. The default is 3.
+- **S-P0-8. An unknown top-level member makes the plan `malformed`; an unknown kind inside a part is an extension** and answers
+  `unsupported`.
+- **S-P0-9. Freeze `plan/0` after one time-boxed round of Steward's plan-v0 fixtures for the 59 asks** (gate item 11). Until that
+  round ends, additive optional members are still allowed; after it, `plan/0` is frozen.
+- **Gap: lot label.** A lot in a zone's `program.lots` takes an optional free-text `label` (at most 80 characters, as zones and
+  connectors have). `role` stays a slug.
+- **Gap: pending style.** Wherever a bible ref is accepted (the plan `style` and a part `style`), `{pending: "<tag>"}` is also
+  accepted, the tag a slug of at most 40 characters. P0 checks a part with a pending style as **provisional**, the same way as
+  an undesigned building: palette and cost as a range, and approval rebinds once the bible exists.
 
 ### Open questions for Noah
 
