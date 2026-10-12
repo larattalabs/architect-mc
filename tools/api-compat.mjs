@@ -27,6 +27,9 @@
 //   node tools/api-compat.mjs --gate6cw [--artifacts <dir>] [classesDir]
 //                     phase 6c slice W: the unchanged 0.17.0, 0.16.0 and 0.15.0 apitest jars (API 1.14.0, 1.13.0, 1.12.0) and the 0.17.0
 //                     mod jar's 1.14.0 surface (artifacts/gate6c-w/v0170/, built from the v0.17.0 tag).
+//   node tools/api-compat.mjs --gate6cf1 [--artifacts <dir>] [classesDir]
+//                     phase 6c slice F1: the unchanged 0.18.0, 0.17.0 and 0.16.0 apitest jars (API 1.15.0, 1.14.0, 1.13.0) and the 0.18.0
+//                     mod jar's 1.15.0 surface (artifacts/gate6c-f1/v0180/, built from the v0.18.0 tag; 0.17.0 and 0.16.0 from earlier gates).
 //
 //   node tools/api-compat.mjs --gate6b [--artifacts <dir>] [classesDir]
 //                     phase 6b (docs/CONTRACT.md "# Phase 6b contract" §6.1): the unchanged 1.8.0, 1.7.0 and 1.6.0 apitest jars by
@@ -46,7 +49,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-if (process.argv[2] === '--gate6b' || process.argv[2] === '--gate6c0a' || process.argv[2] === '--gate6c0b' || process.argv[2] === '--gate6cx' || process.argv[2] === '--gate6cw' || process.argv[2] === '--gate6cy2') {
+if (process.argv[2] === '--gate6b' || process.argv[2] === '--gate6c0a' || process.argv[2] === '--gate6c0b' || process.argv[2] === '--gate6cx' || process.argv[2] === '--gate6cw' || process.argv[2] === '--gate6cy2' || process.argv[2] === '--gate6cf1') {
+  const f1 = process.argv[2] === '--gate6cf1';
   const cy2 = process.argv[2] === '--gate6cy2';
   const cx = process.argv[2] === '--gate6cx';
   const cw = process.argv[2] === '--gate6cw';
@@ -61,10 +65,15 @@ if (process.argv[2] === '--gate6b' || process.argv[2] === '--gate6c0a' || proces
   }
   if (!dir) {
     const local = path.join(root, 'artifacts');
-    dir = fs.existsSync(path.join(local, (cw || cy2) ? 'gate6c-w' : cx ? 'gate6c-x' : c0a ? 'gate6c0a' : 'gate6b', (cw || cy2) ? 'v0170' : cx ? 'v0160' : c0a ? 'v0120' : 'v0110')) ? local : path.join(os.homedir(), 'Developer', 'LarattaLabs', 'architect-mc', 'artifacts');
+    dir = fs.existsSync(path.join(local, f1 ? 'gate6c-f1' : (cw || cy2) ? 'gate6c-w' : cx ? 'gate6c-x' : c0a ? 'gate6c0a' : 'gate6b', f1 ? 'v0180' : (cw || cy2) ? 'v0170' : cx ? 'v0160' : c0a ? 'v0120' : 'v0110')) ? local : path.join(os.homedir(), 'Developer', 'LarattaLabs', 'architect-mc', 'artifacts');
   }
   // (6c 0a) the unchanged 0.12.0, 0.11.0 and 0.10.0 apitest jars (API 1.9.0, 1.8.0, 1.7.0) and the 0.12.0 mod jar's 1.9.0 surface
-  const checks = (cw || cy2) ? [
+  const checks = f1 ? [
+    ['1.15.0 apitest', [path.join(dir, 'gate6c-f1', 'v0180', 'architect_apitest-0.18.0.jar')]],
+    ['1.14.0 apitest', [path.join(dir, 'gate6c-w', 'v0170', 'architect_apitest-0.17.0.jar')]],
+    ['1.13.0 apitest', [path.join(dir, 'gate6c-x', 'v0160', 'architect_apitest-0.16.0.jar')]],
+    ['1.15.0 surface', ['--surface', path.join(dir, 'gate6c-f1', 'v0180', 'architect_mc-0.18.0.jar')]],
+  ] : (cw || cy2) ? [
     ['1.14.0 apitest', [path.join(dir, 'gate6c-w', 'v0170', 'architect_apitest-0.17.0.jar')]],
     ['1.13.0 apitest', [path.join(dir, 'gate6c-x', 'v0160', 'architect_apitest-0.16.0.jar')]],
     ['1.12.0 apitest', [path.join(dir, 'gate6c-v', 'v0150', 'architect_apitest-0.15.0.jar')]],

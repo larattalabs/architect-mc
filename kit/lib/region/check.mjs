@@ -6,8 +6,10 @@ import { blockState } from './program.mjs';
 import { F_WALK, F_WRITTEN, buildVirtual } from './vworld.mjs';
 import { fillMissing } from './plan.mjs';
 import { centreCells, crossOffsets, rightOf, segmentAxis } from './geom.mjs';
+import { decodeVoxels } from './voxels.mjs';
+import { VC, classAt, decodeArvx } from './volume.mjs';
 
-export const RULES = ['M1', 'M2', 'M3', 'M4', 'M5', 'M6', 'M7', 'M8', 'M9', 'M10', 'M11', 'M12', 'M13', 'M14', 'M22', 'M23', 'M24'];
+export const RULES = ['M1', 'M2', 'M3', 'M4', 'M5', 'M6', 'M7', 'M8', 'M9', 'M10', 'M11', 'M12', 'M13', 'M14', 'M22', 'M23', 'M24', 'M17'];
 /** (6c V) The parts a flat village's components emit (the M1 lot-box rule applies to them only). */
 const VILLAGE_PARTS = /^(square|green|verges|lanes|props_[a-z]+)$/;
 const ERRORS = new Set(['M1', 'M13', 'M14']);
@@ -242,7 +244,7 @@ function supportCheck(vw, ir, stage) {
 
 /** Block light from every written emitter (and the dump's own light when the world carries it). */
 function blockLight(vw) {
-  if (vw.lightAt) return { at: vw.lightAt };
+  if (vw.lightAt) return { at: vw.lightAt, lit: null };
   const P = vw.pal;
   const L = new CellBytes();
   const buckets = Array.from({ length: 16 }, () => []);
@@ -261,8 +263,70 @@ function blockLight(vw) {
       }
     }
   }
-  return { at: (x, y, z) => L.get(x, y, z) };
+  // (6c F1) every cell lit at 11 or more (M17's reach), as x, y, z, level
+  const lit = [];
+  for (const [k, sec] of L.m) {
+    const sy = (k % 512) - 256, rest = Math.floor(k / 512), sz = (rest % 262144) - 131072, sx = Math.floor(rest / 262144) - 131072;
+    for (let o = 0; o < 4096; o++) if (sec[o] >= 11) lit.push(sx * 16 + (o & 15), sy * 16 + (o >> 8), sz * 16 + ((o >> 4) & 15), sec[o]);
+  }
+  return { at: (x, y, z) => L.get(x, y, z), lit };
 }
+
+// ------------------------------------------------------------------ (6c F1) M3 overhangs, M17 melt, kept cells
+
+/** The parts of generated forms (not floating groups: an island's underside overhangs by design). */
+function formPartIndexes(ir) {
+  const floating = new Set((ir.floating ?? []).flatMap((f) => f.parts));
+  const ids = new Set((ir.forms ?? []).map((f) => f.part ?? f.id).filter((id) => !floating.has(id)));
+  return new Set(ir.parts.map((p, i) => (ids.has(p.id) ? i : -1)).filter((i) => i >= 0));
+}
+
+/**
+ * M3 overhangs (6c F1 §4): a written solid cell of a form part with no solid cell under it that is more than OVERHANG_LIMIT
+ * horizontally (Chebyshev) from every solid cell one layer down: a ledge without a buttress.
+ */
+export const OVERHANG_LIMIT = 4;
+function overhangCheck(vw, ir) {
+  const P = vw.pal;
+  const forms = formPartIndexes(ir);
+  const solid = (x, y, z) => { const i = vw.get(x, y, z); return P.solid[i] && !P.fluid[i]; };
+  const byPart = new Map();
+  let max = 0, cells = 0;
+  vw.eachWritten((x, y, z, idx, f, pi) => {
+    if (!forms.has(pi) || !P.solid[idx] || P.fluid[idx]) return;
+    cells++;
+    if (solid(x, y - 1, z)) return;
+    let d = OVERHANG_LIMIT + 1;
+    for (let r = 1; r <= OVERHANG_LIMIT && d > OVERHANG_LIMIT; r++) {
+      for (let dx = -r; dx <= r && d > OVERHANG_LIMIT; dx++) for (let dz = -r; dz <= r; dz++) {
+        if (Math.max(Math.abs(dx), Math.abs(dz)) === r && solid(x + dx, y - 1, z + dz)) { d = r; break; }
+      }
+    }
+    if (d > max) max = d;
+    if (d > OVERHANG_LIMIT) { const l = byPart.get(pi) ?? []; l.push([x, y, z]); byPart.set(pi, l); }
+  });
+  const findings = [];
+  for (const [pi, l] of byPart) findings.push(finding('M3:overhang', ir.parts[pi]?.id ?? null, ir.parts[pi]?.stage ?? null, l.length, l, `${l.length} cell(s) overhang the layer under them by more than ${OVERHANG_LIMIT} with no buttress`));
+  return { findings, metrics: { formCells: cells, maxOverhang: Math.min(max, OVERHANG_LIMIT + 1), overhangCells: [...byPart.values()].reduce((a, l) => a + l.length, 0) } };
+}
+
+/** The decoded volumes the IR names (from `volumes`, else decoded from the IR's side blobs): Map(volume name -> decoded ARVX). */
+function irVolumes(ir, volumes, blobs) {
+  const out = new Map();
+  for (const [name, v] of Object.entries(ir.volumes ?? {})) {
+    let d = (volumes ?? []).find((x) => x.sha === v.sha) ?? null;
+    if (!d && blobs) {
+      const b = ir.blobs?.[v.blob];
+      const bytes = b ? (typeof blobs === 'function' ? blobs(b.sha) : blobs instanceof Map ? blobs.get(b.sha) : blobs[b.sha]) : null;
+      if (bytes) d = decodeArvx(bytes);
+    }
+    if (d) out.set(name, d);
+  }
+  return out;
+}
+
+/** (6c F1) The melt thresholds of 26.3 (IceBlock / SnowLayerBlock randomTick): ice melts at block light over 11 - its dampening (1). */
+export const MELT = Object.freeze({ ice: 10, snow: 11 });
 
 // ------------------------------------------------------------------ the checker
 
@@ -343,6 +407,7 @@ export function checkRegion({ ir, survey, blobs, volumes = [], meta = null, worl
     const sup = supportCheck(vw, ir, null);
     for (const f of sup.findings) { f.stage = f.part ? partStage.get(f.part) ?? null : null; findings.push(f); }
     metrics.M3 = sup.metrics;
+    if (ir.forms?.length) { const oh = overhangCheck(vw, ir); findings.push(...oh.findings); Object.assign(metrics.M3, oh.metrics); }
   });
 
   // ---- the walk area: reached cells whose floor the region wrote (or walk-marked cells)
@@ -544,6 +609,88 @@ export function checkRegion({ ir, survey, blobs, volumes = [], meta = null, worl
     if (want.has('M12') && ir.budget && removed + added > (ir.budget.cells ?? Infinity) * 1.5 + 1000) findings.push(finding('M12', null, null, removed + added, [], `the virtual world writes ${removed + added} cells, over 1.5x the plan's budget ${ir.budget.cells}`));
   });
 
+  // ---- (6c F1) M17 melt: no ice or snow layer within reach of block light that melts it (26.3: ice over 10, a snow layer over 11),
+  // written or natural (the frozen volume's ICE and SNOW cells count as ice and snow layers when a planned light reaches them)
+  const vols = irVolumes(ir, volumes, blobs);
+  if (want.has('M17')) time('M17', () => {
+    const light = blockLight(vw);
+    const isIce = (st) => st === 'minecraft:ice' || st.startsWith('minecraft:frosted_ice');
+    const isSnow = (st) => st.startsWith('minecraft:snow[') || st === 'minecraft:snow';
+    const natural = (x, y, z) => { for (const v of vols.values()) { const c = classAt(v, x, y, z); if (c !== VC.MISSING) return c; } return VC.MISSING; };
+    const byPart = new Map();
+    const seen = new CellSet();
+    const melt = (x, y, z, v, kind, pi) => {
+      if (!seen.add(x, y, z)) return;
+      const l = byPart.get(pi) ?? []; l.push([x, y, z, kind, v]); byPart.set(pi, l);
+    };
+    let checked = 0;
+    if (light.lit) {
+      // the virtual world: only cells lit at 11 or more can melt (and an unwritten snow cell beside one lit at 13 or more:
+      // the virtual world reads natural SNOW as an opaque snow block, a real snow layer is clear)
+      const L = light.lit;
+      for (let i = 0; i < L.length; i += 4) {
+        const x = L[i], y = L[i + 1], z = L[i + 2], v = L[i + 3];
+        checked++;
+        const written = (vw.flags(x, y, z) & F_WRITTEN) !== 0;
+        const st = P.states[vw.get(x, y, z)];
+        if (written) {
+          if (isIce(st) && v > MELT.ice) melt(x, y, z, v, 'ice', vw.partAt(x, y, z));
+          else if (isSnow(st) && v > MELT.snow) melt(x, y, z, v, 'snow', vw.partAt(x, y, z));
+        } else {
+          const c = natural(x, y, z);
+          if ((c === VC.ICE || isIce(st)) && v > MELT.ice) melt(x, y, z, v, 'ice', -1);
+        }
+        if (v - 1 > MELT.snow) for (const [dx, dy, dz] of DIRS6) {
+          const nx = x + dx, ny = y + dy, nz = z + dz;
+          if (vw.flags(nx, ny, nz) & F_WRITTEN) continue;
+          if (natural(nx, ny, nz) === VC.SNOW) melt(nx, ny, nz, v - 1, 'snow', -1);
+        }
+      }
+    } else {
+      // a realised world: every ice or snow-layer cell in the dump box against the dump's own block light
+      const c = vw.claim;
+      for (let x = c.minX; x <= c.maxX; x++) for (let z = c.minZ; z <= c.maxZ; z++) for (let y = c.minY; y <= c.maxY; y++) {
+        const st = P.states[vw.get(x, y, z)];
+        const ice = isIce(st), snow = !ice && isSnow(st);
+        if (!ice && !snow) continue;
+        checked++;
+        const v = light.at(x, y, z);
+        if (ice ? v > MELT.ice : v > MELT.snow) melt(x, y, z, v, ice ? 'ice' : 'snow', vw.partAt(x, y, z));
+      }
+    }
+    let n = 0;
+    for (const [pi, l] of byPart) {
+      n += l.length;
+      const ice = l.filter((c) => c[3] === 'ice').length;
+      findings.push(finding('M17', ir.parts[pi]?.id ?? null, ir.parts[pi]?.stage ?? null, l.length, l.map((c) => c.slice(0, 3)), `${l.length} ${pi < 0 ? 'natural ' : ''}cell(s) melt: ${ice} ice at block light over ${MELT.ice}, ${l.length - ice} snow layer(s) over ${MELT.snow} (e.g. light ${l[0][4]} at ${l[0].slice(0, 3).join(' ')})`));
+    }
+    metrics.M17 = { melting: n, checked, natural: byPart.get(-1)?.length ?? 0 };
+  });
+
+  // ---- (6c F1) kept cells: a part's `keep` ({volume, class, box}: the frozen volume's cells of that class in the box) is never
+  // written by any op (M1, an error)
+  const keeps = [];
+  for (const p of ir.parts) for (const k of p.keep ?? []) keeps.push({ part: p.id, ...k });
+  if (keeps.length && want.has('M1')) time('M1', () => {
+    const byPart = new Map();
+    let keptCells = 0;
+    for (const k of keeps) {
+      const v = vols.get(k.volume);
+      if (!v) { findings.push(finding('M1', k.part, partStage.get(k.part), 1, [], `keep: volume '${k.volume}' is not at hand (the checker needs the plan's volumes)`)); continue; }
+      const cls = VC[k.class];
+      const b = k.box;
+      for (let x = Math.max(b.minX, v.box.minX); x <= Math.min(b.maxX, v.box.maxX); x++) for (let z = Math.max(b.minZ, v.box.minZ); z <= Math.min(b.maxZ, v.box.maxZ); z++) for (let y = Math.max(b.minY, v.box.minY); y <= Math.min(b.maxY, v.box.maxY); y++) {
+        if (classAt(v, x, y, z) !== cls) continue;
+        keptCells++;
+        if (!(vw.flags(x, y, z) & F_WRITTEN)) continue;
+        const pi = vw.partAt(x, y, z);
+        const l = byPart.get(pi) ?? []; l.push([x, y, z]); byPart.set(pi, l);
+      }
+    }
+    for (const [pi, l] of byPart) findings.push(finding('M1', ir.parts[pi]?.id ?? null, ir.parts[pi]?.stage ?? null, l.length, l, `${l.length} kept natural cell(s) written (a keepNatural set: no op writes them)`));
+    metrics.keep = { sets: keeps.length, cells: keptCells, written: [...byPart.values()].reduce((a, l) => a + l.length, 0) };
+  });
+
   // ---- M13 palette validity (error)
   if (want.has('M13')) time('M13', () => {
     const bad = new Map();
@@ -556,6 +703,11 @@ export function checkRegion({ ir, survey, blobs, volumes = [], meta = null, worl
     for (const [r, s] of Object.entries(ir.roles ?? {})) check(s, `role ${r}`);
     for (const p of ir.parts) for (const o of p.ops) {
       if (o.op === 'columns') for (const m of o.materials ?? []) check(m, `part ${p.id}`);
+      else if (o.op === 'voxels') { // (6c F1) the baked blob's palette (when the blob is at hand)
+        const b = ir.blobs?.[o.blob];
+        const bytes = b && blobs ? (typeof blobs === 'function' ? blobs(b.sha) : blobs instanceof Map ? blobs.get(b.sha) : blobs[b.sha]) : null;
+        if (bytes) for (const st of decodeVoxels(bytes, `blob ${o.blob}`).palette) if (st !== 'minecraft:air') check(st, `part ${p.id}`);
+      }
       else if (o.material && typeof o.material === 'object') { for (const c of o.material.rule.rule) check(c.mat, `part ${p.id}`); check(o.material.rule.default, `part ${p.id}`); }
       else check(o.material, `part ${p.id}`);
     }

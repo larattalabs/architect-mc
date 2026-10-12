@@ -23,7 +23,12 @@ import { columnCells, compileShape, polygonDistance, sdAt, shapeError, staticY, 
 import { encodeArbl } from '../realise.mjs';
 import { ruleError } from '../material.mjs';
 import { sha256Hex } from './pack.mjs';
+import { voxelsSize } from './voxels.mjs';
 import { floatingIsland } from '../forms/floatingIsland.mjs';
+import { iceSpike } from '../forms/iceSpike.mjs';
+import { rockSpire } from '../forms/rockSpire.mjs';
+import { BAKE_OPS, bakeOps } from '../forms/rules.mjs';
+import { VOXEL_CLASSES, VC, classAt } from './volume.mjs';
 import { CARDINALS, cardinalOf, centreCells, circlePolygon, compassDir, crossOffsets, dominantCardinal, rightOf, segmentAxis } from './geom.mjs';
 
 export const COND = Object.freeze({ IF_NATURAL: 0, IF_SOLID_NATURAL: 1, IF_AIR_OR_FLUID: 2, ALWAYS_OURS: 3 });
@@ -331,13 +336,62 @@ export class Region {
   needVolume(box) {
     const b = { minX: box.minX, minY: box.minY, minZ: box.minZ, maxX: box.maxX, maxY: box.maxY, maxZ: box.maxZ };
     if (!Object.values(b).every(isInt)) throw new Error('needVolume: box needs integer minX..maxZ');
+    // (6c F1) asking again for the same box gives the same volume (keepNatural and the program may both read it)
+    const same = (x) => x.minX === b.minX && x.minY === b.minY && x.minZ === b.minZ && x.maxX === b.maxX && x.maxY === b.maxY && x.maxZ === b.maxZ;
+    const had = Object.entries(this.volumesUsed).find(([, u]) => same(u.box));
+    if (had) return this._volumeDecoded?.get(had[0]) ?? null;
+    if (this.needVolumes.some(same)) return null;
     this.needVolumes.push(b);
     const v = this.ctx.volumes?.find((x) => x.box.minX === b.minX && x.box.minY === b.minY && x.box.minZ === b.minZ && x.box.maxX === b.maxX && x.box.maxY === b.maxY && x.box.maxZ === b.maxZ);
     if (!v) return null;
     const name = `vol_${Object.keys(this.volumesUsed).length + 1}`;
     this._sideBlob(name, 'volume', v.bytes);
     this.volumesUsed[name] = { blob: name, box: b, sha: v.sha };
+    (this._volumeDecoded ??= new Map()).set(name, v.decoded ?? null);
     return v.decoded ?? null;
+  }
+
+  /**
+   * (6c F1 §3) Keep the frozen volume's natural cells of class `cls` (a VoxelClass name, e.g. 'ICE') inside `box`: they go into
+   * the IR as a `keep` entry `{volume, class, box}` on part `part` (default `keep_<class>`, created in `stage`), so the checker
+   * refuses (M1, an error) any op that writes one, and the program can keep its lots, routes and forms off them. Returns
+   * `{volume, cells, columns: Set("x,z"), has(x, y, z), near(x, z, r)}`, or null on the first plan (no volume yet: the two-plan
+   * flow plans again with it).
+   */
+  keepNatural(cls, box, { part = null, stage } = {}) {
+    if (!VOXEL_CLASSES.includes(cls) || ['AIR', 'MISSING', 'OWNED', 'PLAYER'].includes(cls)) throw new Error(`keepNatural: '${cls}' is not a natural voxel class`);
+    const v = this.needVolume(box);
+    if (!v) return null;
+    const name = Object.entries(this.volumesUsed).find(([, u]) => u.box.minX === box.minX && u.box.minY === box.minY && u.box.minZ === box.minZ && u.box.maxX === box.maxX && u.box.maxY === box.maxY && u.box.maxZ === box.maxZ)[0];
+    const pid = part ?? `keep_${cls.toLowerCase()}`;
+    let p = this.parts.find((q) => q.id === pid);
+    if (!p) { p = this.part(pid, { stage }); (this.meta.parts[pid] ??= {}).kind = 'keep'; }
+    p.keep = [...(p.keep ?? []), { volume: name, class: cls, box: { minX: box.minX, minY: box.minY, minZ: box.minZ, maxX: box.maxX, maxY: box.maxY, maxZ: box.maxZ } }];
+    const want = VC[cls];
+    const columns = new Set();
+    let cells = 0;
+    for (let x = box.minX; x <= box.maxX; x++) for (let z = box.minZ; z <= box.maxZ; z++) for (let y = box.minY; y <= box.maxY; y++) {
+      if (classAt(v, x, y, z) !== want) continue;
+      cells++;
+      columns.add(`${x},${z}`);
+    }
+    const has = (x, y, z) => x >= box.minX && x <= box.maxX && y >= box.minY && y <= box.maxY && z >= box.minZ && z <= box.maxZ && classAt(v, x, y, z) === want;
+    const near = (x, z, r) => { for (let dx = -r; dx <= r; dx++) for (let dz = -r; dz <= r; dz++) if (columns.has(`${x + dx},${z + dz}`)) return true; return false; };
+    return { volume: name, part: pid, cells, columns, has, near };
+  }
+
+  /** (6c F1) An `iceSpike` cluster (lib/forms/iceSpike.mjs) as form part `id`, on the plan ground. Options as `form` (`bake`). */
+  iceSpike(id, params, opts = {}) {
+    const gen = iceSpike({ ...params, seed: params.seed ?? fnv64(this.ctx.seed, 'iceSpike', id).hex }, { groundAt: (x, z) => this.survey.heightAt(x, z) });
+    this.form(id, gen, opts);
+    return gen;
+  }
+
+  /** (6c F1) A `rockSpire` (lib/forms/rockSpire.mjs) as form part `id`, on the plan ground. Options as `form` (`bake`, `_unsafe`). */
+  rockSpire(id, params, { _unsafe, ...opts } = {}) {
+    const gen = rockSpire({ ...params, seed: params.seed ?? fnv64(this.ctx.seed, 'rockSpire', id).hex }, { groundAt: (x, z) => this.survey.heightAt(x, z), _unsafe });
+    this.form(id, gen, opts);
+    return gen;
   }
 
   /**
@@ -359,18 +413,29 @@ export class Region {
    * (6b) A generated form (plan time): `gen` is a generator result `{ops, bounds, generator, version, params, seed}`; its ops
    * go into part `id` (created in `stage`) and its provenance into the IR's `forms`.
    */
-  form(id, gen, { stage, set = 'terrain' } = {}) {
+  form(id, gen, { stage, set = 'terrain', bake = 'auto' } = {}) {
+    if (![true, false, 'auto'].includes(bake)) throw new Error(`form ${id}: bake must be true, false or 'auto'`);
     const p = this.part(id, { stage, set });
     const from = p.ops.length;
+    const resolved = [];
     for (const op of gen.ops) {
       if (op.op === 'shape') { const e = shapeError(op.shape); if (e) throw new Error(`form ${id}: ${e}`); }
       const o = { ...op, cond: op.cond ?? COND.IF_AIR_OR_FLUID, walk: !!op.walk };
       // role names resolve here (the IR holds block states only)
       if (op.op === 'columns') o.materials = op.materials.map((m) => this.material(m, `form ${id} material`));
       else o.material = op.material && typeof op.material === 'object' ? this.materialRule(op.material, `form ${id} material`) : this.material(op.material, `form ${id} material`);
-      p._push(o);
+      resolved.push(o);
     }
-    this.forms.push({ id, generator: gen.generator, version: gen.version, params: gen.params, seed: gen.seed, bounds: gen.bounds, part: id, opsFrom: from, opsTo: p.ops.length });
+    // (6c F1 §2) past BAKE_OPS ops (or when asked) the form is baked: one voxels op over an ARVB side blob
+    let baked = null;
+    if (bake === true || (bake === 'auto' && resolved.length > BAKE_OPS)) {
+      const blob = `vox_${id}`.slice(0, 32);
+      const b = bakeOps(resolved, blob, { cond: COND.IF_NATURAL });
+      this._sideBlob(blob, 'voxels', b.bytes);
+      p._push(b.op);
+      baked = { blob, cells: b.cells, ops: resolved.length };
+    } else for (const o of resolved) p._push(o);
+    this.forms.push({ id, generator: gen.generator, version: gen.version, params: gen.params, seed: gen.seed, bounds: gen.bounds, part: id, opsFrom: from, opsTo: p.ops.length, ...(baked ? { baked } : {}) });
     (this.meta.parts[id] ??= {}).kind = 'form';
     return p;
   }
@@ -1505,6 +1570,11 @@ class Part {
       if (o.op === 'shape') {
         const n = compileShape(o.shape, this.region.blobs);
         x0 = Math.min(x0, n.minX); x1 = Math.max(x1, n.maxX); z0 = Math.min(z0, n.minZ); z1 = Math.max(z1, n.maxZ);
+      } else if (o.op === 'voxels') {
+        // (6c F1) the baked box
+        const [sx, , sz] = voxelsSize(this.region.sideBlobs[o.blob].bytes);
+        const odd = o.rotation === 90 || o.rotation === 270;
+        x0 = Math.min(x0, o.origin[0]); x1 = Math.max(x1, o.origin[0] + (odd ? sz : sx) - 1); z0 = Math.min(z0, o.origin[2]); z1 = Math.max(z1, o.origin[2] + (odd ? sx : sz) - 1);
       } else {
         for (let i = 0; i < o.cols.length; i += 5) { x0 = Math.min(x0, o.cols[i]); x1 = Math.max(x1, o.cols[i]); z0 = Math.min(z0, o.cols[i + 1]); z1 = Math.max(z1, o.cols[i + 1]); }
       }

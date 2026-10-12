@@ -53,11 +53,17 @@ public final class ApiRules {
 					case "ir.format2" -> "irFormat2";
 					case "region.keepOut" -> "planKeepOut"; // 6c V
 					case "region.lightCover" -> "apronLights"; // 6c W
+					case "region.forms1" -> "formsIce"; // 6c F1 (with formsRock and voxelsOp, below)
 					default -> Wire4b.FEATURE_NAMES.getOrDefault(f, Wire5a.FEATURE_NAMES.getOrDefault(f, f));
 				});
 			}
 			if (sidecarFeatures.contains("region.preview")) {
 				out.add("regionGhost"); // the ghost's preview tiles come with the 6b helper's previews
+			}
+			if (sidecarFeatures.contains("region.forms1")) {
+				// 6c F1: a forms-I helper's kit has the iceSpike and rockSpire generators and the voxels op
+				out.add("formsRock");
+				out.add("voxelsOp");
 			}
 			if (sidecarFeatures.contains("region.keepOut")) {
 				// 6c V: a V helper's kit has the flat_village program, the IR graph and the villager mover with M22-M24

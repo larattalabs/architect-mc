@@ -9,13 +9,14 @@ import { fnv64, splitmix64, fromDecimal64, toDecimal64 } from '../noise.mjs';
 import { evalTile, MAX_OPS, walkKinds } from '../realise.mjs';
 import { shapeBounds, yrefAbs } from '../sdf.mjs';
 import { FLAG_MISSING, asColumns, canonicalJson, makeColumns, sha256Hex } from './pack.mjs';
+import { voxelsSize } from './voxels.mjs';
 import { decodeArbl } from '../realise.mjs';
 import { COND, DEFAULT_MACRO_ROLES, Region, blockState, region as makeRegion } from './program.mjs';
 import { surveyApi, windowFromSurvey } from './survey.mjs';
 import { validateParams, resolveValues } from '../params.mjs';
 
 /** The kit's region engine version (recorded in every IR). */
-export const KIT_VERSION = '0.18.0';
+export const KIT_VERSION = '0.19.0';
 
 export const LIMITS = Object.freeze({
   claim: 1024, claimBig: 2048, irBytes: 4 * 1024 * 1024, ops: MAX_OPS, lots: 1024, paths: 256, stages: 64,
@@ -51,10 +52,10 @@ export function assembleParts(r, claim) {
     const si = stages.indexOf(p.stage);
     const ops = p.ops.map((op) => {
       const cond = op.cond === COND.IF_NATURAL && (p.set === 'path' || si > 0) ? COND.ALWAYS_OURS : op.cond;
-      const b = opBounds(op, Object.keys(irBlobs).length ? blobResolver : blobs);
+      const b = opBounds(op, Object.keys(irBlobs).length ? blobResolver : blobs, (name) => { const e = irBlobs[name]; if (!e) throw new Error(`voxels: blob '${name}' is not in the IR's blobs`); return sideBytes.get(e.sha); });
       return { ...op, cond, bounds: b };
     });
-    return { id: p.id, stage: p.stage, set: p.set, ops };
+    return { id: p.id, stage: p.stage, set: p.set, ops, ...(p.keep ? { keep: p.keep } : {}) };
   });
 
   const irClaim = { ...claim };
@@ -192,9 +193,19 @@ export function fillMissing(survey) {
 
 const tileOf = (v) => Math.floor(v / 64);
 
-/** Conservative world bounds of an IR op: {minX, maxX, minZ, maxZ, minY|null, maxY|null}. */
-export function opBounds(op, blobs) {
+/**
+ * Conservative world bounds of an IR op: {minX, maxX, minZ, maxZ, minY|null, maxY|null}. (6c F1) A voxels op needs `bytesOf(name)`,
+ * its ARVB blob's bytes.
+ */
+export function opBounds(op, blobs, bytesOf = null) {
   if (op.op === 'shape') return shapeBounds(op.shape, blobs);
+  if (op.op === 'voxels') {
+    if (!bytesOf) throw new Error(`voxels op: blob '${op.blob}' has no bytes here`);
+    const [sx, sy, sz] = voxelsSize(bytesOf(op.blob));
+    const odd = op.rotation === 90 || op.rotation === 270;
+    const w = odd ? sz : sx, d = odd ? sx : sz;
+    return { minX: op.origin[0], maxX: op.origin[0] + w - 1, minZ: op.origin[2], maxZ: op.origin[2] + d - 1, minY: op.origin[1], maxY: op.origin[1] + sy - 1 };
+  }
   let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity, minA = Infinity, maxB = -Infinity;
   for (let i = 0; i < op.cols.length; i += 5) {
     const [x, z, a, b] = op.cols.slice(i, i + 4);
@@ -305,7 +316,7 @@ export async function planRegion(o) {
     const base = new Map();
     let n = 0;
     for (const p of parts) { base.set(p.id, n); n += p.ops.length; }
-    ir.forms = r.forms.map((f) => ({ id: f.id, generator: f.generator, version: f.version, params: f.params, seed: f.seed, bounds: f.bounds,
+    ir.forms = r.forms.map((f) => ({ id: f.id, generator: f.generator, version: f.version, params: f.params, seed: f.seed, bounds: f.bounds, ...(f.baked ? { baked: f.baked } : {}),
       ops: Array.from({ length: f.opsTo - f.opsFrom }, (_, k) => base.get(f.part) + f.opsFrom + k) }));
   }
   if (r.floatingDecl.length) ir.floating = r.floatingDecl;
@@ -364,6 +375,6 @@ export async function planRegion(o) {
   // a fresh object: evalTile caches compiled IRs per object, and the claim changed after the budget pass
   stats.irFormat = ir.format;
   stats.requires = ir.requires ?? [];
-  const meta = { format: 1, paths: r.meta.paths, lots: r.meta.lots, parts: r.meta.parts, ...(r.meta.village ? { village: r.meta.village } : {}), ...(r.meta.gravity ? { gravity: r.meta.gravity } : {}) };
+  const meta = { format: 1, paths: r.meta.paths, lots: r.meta.lots, parts: r.meta.parts, ...(r.meta.village ? { village: r.meta.village } : {}), ...(r.meta.gravity ? { gravity: r.meta.gravity } : {}), ...(r.meta.forms ? { forms: r.meta.forms } : {}) };
   return { ir: JSON.parse(irJson), irJson, irSha: sha256Hex(irJson), notes, stats, blobs: sideBytes, meta, needVolumes: r.needVolumes };
 }
