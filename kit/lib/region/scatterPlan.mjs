@@ -11,7 +11,8 @@
 //   avoidWalk (default true), avoidWritten (default true).
 // It builds, from the plan's draft virtual world so far (the earlier ops, as lightCover does):
 //   - `<id>_avoid` (u8): walk cells (paths, roads, stair treads...), the columns other parts wrote, blocks or cuts (a relief's band
-//     excepted: decoration follows the relief), the lots' boxes and aprons and the parts' kept natural cells: no item cell lands on one;
+//     excepted: decoration follows the relief) and the lots' boxes and aprons: no item cell lands on one (kept natural cells: the
+//     evaluator, cell by cell);
 //   - `<id>_lit` (u8, when an item melts): the columns a planned light of 12 or more reaches within its snow-melt distance plus 1;
 //   - `<id>_pathd` (u8, for a `path` density): the Chebyshev distance to the nearest walk column, capped at 255.
 // stamp(r, id, at, {rotation, skirt, stage, part, cond}) places one stamp of the local library with its root at `at`.
@@ -25,7 +26,6 @@ import { decodeVoxels, encodeVoxels, voxelAt } from './voxels.mjs';
 import { SKIRT_MAX } from './scatter.mjs';
 import { bundledItem } from './scatterItems.mjs';
 import { STAMP_ID } from './stamps.mjs';
-import { VC, classAt } from './volume.mjs';
 
 const isInt = Number.isInteger;
 
@@ -159,15 +159,7 @@ export function scatter(r, id, spec, { stage, part } = {}) {
     if (!reliefParts.has(p)) written[at(x, z)] = 1; // a block or a cut (a pad's batter, a carve): the frozen ground there is not the ground
   });
   for (const l of ir.lots ?? []) for (let x = l.box.minX - 1; x <= l.box.maxX + 1; x++) for (let z = l.box.minZ - 1; z <= l.box.maxZ + 1; z++) if (inBox(x, z)) written[at(x, z)] = 1;
-  // the parts' kept natural cells (F1 keepNatural): their columns
-  for (const p of r.parts) for (const k of p.keep ?? []) {
-    const v = r._volumeDecoded?.get(k.volume);
-    if (!v) continue;
-    const want = VC[k.class], b = k.box;
-    for (let x = Math.max(b.minX, box[0]); x <= Math.min(b.maxX, box[2]); x++) for (let z = Math.max(b.minZ, box[1]); z <= Math.min(b.maxZ, box[3]); z++) {
-      for (let y = b.minY; y <= b.maxY; y++) if (classAt(v, x, y, z) === want) { written[at(x, z)] = 1; break; }
-    }
-  }
+  // (the parts' kept natural cells: the evaluator keeps every placement off them, cell by cell, with the frozen volume)
   const melts = items.some((it) => it.melts);
   if (melts) for (const [ex, , ez, L] of emitters) {
     const rr = L - 12 + 1;

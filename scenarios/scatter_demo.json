@@ -22,7 +22,8 @@
       22,
       124
     ],
-    "foundBy": "S2's pinned fixture (scenarios/s2_ice_spikes.json)"
+    "foundBy": "S2's pinned fixture (scenarios/s2_ice_spikes.json)",
+    "irShaAtPin": "2109b8504c2a800aa094b33b7431cb1474345c363725dceebe3193d03511a054"
   },
   "flat": {
     "preset": "flat",
@@ -32,5 +33,52 @@
     ],
     "gamerules": "exact"
   },
-  "lotEntries": {}
+  "lotEntries": {
+    "lot_1": "g6a_stub_9"
+  },
+  "seed": "10998667153552326722",
+  "cams": {
+    "cam_e": [
+      2699.5,
+      144,
+      1683.5,
+      90.3,
+      42
+    ],
+    "cam_ground": [
+      2633.5,
+      67,
+      1703.5,
+      123.9,
+      15.2
+    ],
+    "cam_high": [
+      2603.5,
+      184,
+      1703.5,
+      178.6,
+      80.8
+    ],
+    "cam_n": [
+      2603.5,
+      144,
+      1588.5,
+      0.3,
+      42.6
+    ],
+    "cam_s": [
+      2603.5,
+      144,
+      1779.5,
+      179.7,
+      42
+    ],
+    "cam_w": [
+      2508.5,
+      144,
+      1683.5,
+      -90.3,
+      42.6
+    ]
+  }
 }

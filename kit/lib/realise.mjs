@@ -309,7 +309,7 @@ export function compileIR(ir, opts = {}) {
       } else if (o.op === 'scatter' || o.op === 'stamp') {
         // (6c F2) evaluated per tile into column lists (lib/region/scatter.mjs), then copied like voxels
         if (!f2) throw new Error(`${where}: a ${o.op} op needs format 2`);
-        const sctx = { blobBytes, mat, fieldNames, fieldFn, seed: ir.seed, lots: ir.lots, keepOut: ir.keepOut, claim,
+        const sctx = { blobBytes, mat, fieldNames, fieldFn, seed: ir.seed, lots: ir.lots, keepOut: ir.keepOut, claim, keep: (ir.parts ?? []).flatMap((q) => q.keep ?? []),
           compileMask: (spec, w) => compileOpMask({ mask: spec }, w, f2, fieldNames, fieldFn, classFn) };
         const si = (ir.stages ?? []).indexOf(p.stage);
         // the relief ops before it in an earlier or the same stage: the ground a scatter anchor stands on
@@ -523,7 +523,8 @@ export function evalTile(ir, key, heights, opts = {}) {
       mcol.slope = () => Math.max(Math.abs((gAt(x + 1, z) ?? g) - g), Math.abs((gAt(x - 1, z) ?? g) - g), Math.abs((gAt(x, z + 1) ?? g) - g), Math.abs((gAt(x, z - 1) ?? g) - g));
       return mcol;
     };
-    tileLists.set(o.index, scatterTileCells(o, x0, z0, { groundAt: gAt, flagsAt: fAt, hasVolume: !!o.classIdx, classAt: o.classIdx, reliefTop, maskCol }));
+    // (opts.scatterStats: the placement decisions counted per op, for the tests and the plan's notes; never changes a cell)
+    tileLists.set(o.index, scatterTileCells(o, x0, z0, { groundAt: gAt, flagsAt: fAt, hasVolume: !!o.classIdx, classAt: o.classIdx, reliefTop, maskCol }, opts.scatterStats ? (opts.scatterStats[C.parts[o.part].id] ??= { cells: 0, fired: 0, excluded: 0, unsupported: 0, masked: 0, placed: 0 }) : null));
   }
   if (sel.length) try {
     for (let cx = 0; cx < 4; cx++) {

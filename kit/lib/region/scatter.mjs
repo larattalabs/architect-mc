@@ -268,10 +268,12 @@ export function compileScatter(o, where, ctx) {
   let acc = 0;
   its.forEach((c, i) => { acc += c.w; cum[i] = acc; });
   const lots = (ctx.lots ?? []).map((l) => [l.box.minX - 1, l.box.minZ - 1, l.box.maxX + 1, l.box.maxZ + 1]);
+  // (F1's keepNatural) the IR's kept natural cells: a placement that would write one is not placed (the frozen volume's class)
+  const keep = (ctx.keep ?? []).map((k) => ({ c: SCATTER_CLASSES.indexOf(k.class), b: k.box })).filter((k) => k.c >= 0);
   const keepOut = (ctx.keepOut ?? []).map((k) => [k[0], k[1], k[2], k[3]]);
   return {
     kind: 4, area: [area[0], area[1], area[2], area[3]], grid, jitter, key: scatterKey(ctx.seed, o.seedLabel), dens, mask, avoid, lit, yRange,
-    items: its, total, cum, radius, lots, keepOut, claim: ctx.claim,
+    items: its, total, cum, radius, lots, keepOut, keep, claim: ctx.claim,
     minX: area[0] - radius, maxX: area[2] + radius, minZ: area[1] - radius, maxZ: area[3] + radius,
   };
 }
@@ -296,12 +298,28 @@ export function scatterTileCells(op, x0, z0, env, stats = null) {
     if (!l) { l = []; out.set(k, l); }
     l.push(y, m);
   };
+  // the lights' melt clearing (air over natural snow layers) goes under every placement's own cells: a clearing never takes a
+  // neighbouring placement's post or plant
+  const pre = new Map();
+  const clear = (x, y, z) => {
+    if (x < x0 || x > x0 + 63 || z < z0 || z > z0 + 63) return;
+    const k = colKey(x, z);
+    let l = pre.get(k);
+    if (!l) { l = []; pre.set(k, l); }
+    l.push(y, 0);
+  };
   const R = op.radius, G = op.grid, A = op.area, C = op.claim;
   const lo = [Math.max(A[0], x0 - R), Math.max(A[1], z0 - R)], hi = [Math.min(A[2], x0 + 63 + R), Math.min(A[3], z0 + 63 + R)];
   if (lo[0] > hi[0] || lo[1] > hi[1]) return out;
   // the frozen volume's class of a cell, or null (no volume there): without it a plant never fires, anything else trusts the survey
   const cls = env.hasVolume ? env.classAt : null;
   const free = (x, y, z) => { if (!cls) return true; const c = cls(x, y, z); return c === null || ((1 << c) & FREE_BITS) !== 0; };
+  // a kept natural cell (F1's keepNatural): never written
+  const kept = (x, y, z) => {
+    if (!cls || !op.keep.length) return false;
+    for (const k of op.keep) { const b = k.b; if (x >= b.minX && x <= b.maxX && y >= b.minY && y <= b.maxY && z >= b.minZ && z <= b.maxZ && cls(x, y, z) === k.c) return true; }
+    return false;
+  };
   const stands = (it, x, g, g0, z) => {
     const plant = it.on === SOIL_BIT;
     const sc = cls && g === g0 ? cls(x, g, z) : null; // a relief-moved column stands on the relief's fill: no plant on it
@@ -374,7 +392,14 @@ export function scatterTileCells(op, x0, z0, env, stats = null) {
         if (cls && ri > 0) {
           for (let dx = -ri; dx <= ri && !bad; dx++) for (let dz = -ri; dz <= ri && !bad; dz++) {
             const rem = ri - Math.abs(dx) - Math.abs(dz);
-            for (let dy = -rem; dy <= rem; dy++) if (cls(lx + dx, ly + dy, lz + dz) === C_ICE) { bad = true; break; }
+            if (rem < 0) continue;
+            // the column's snow layer (the cell over its frozen ground) is cleared below; any other snow (a snow block, a layer on a
+            // ledge) within the snow reach is not: the checker reads natural snow as a block it can't tell from a layer (M17)
+            const gc = env.groundAt(lx + dx, lz + dz);
+            for (let dy = -rem; dy <= rem; dy++) {
+              const c = cls(lx + dx, ly + dy, lz + dz);
+              if (c === C_ICE || (c === C_SNOW && Math.abs(dx) + Math.abs(dz) + Math.abs(dy) <= rs && ly + dy !== (gc ?? -32768) + 1)) { bad = true; break; }
+            }
           }
         }
         for (let dx = -rs; dx <= rs && !bad; dx++) for (let dz = -rs; dz <= rs; dz++) {
@@ -384,6 +409,19 @@ export function scatterTileCells(op, x0, z0, env, stats = null) {
         }
         if (bad) { if (stats) stats.unsupported++; continue; }
       }
+      // a body never writes a kept cell (nor does its skirt)
+      if (it.kind === 'cells' && op.keep.length && cls) {
+        const b = it.rot[k];
+        let hit = false;
+        for (let q = 0; q < b.n && !hit; q++) hit = kept(px + b.dx[q], ay + b.dy[q], pz + b.dz[q]);
+        for (let q = 0; q < b.base.length && !hit && it.skirt; q += 3) {
+          const x = px + b.base[q], z = pz + b.base[q + 1], g = env.groundAt(x, z);
+          if (g === null) continue;
+          for (let y = ay + b.bottom - 1, n = 0; y > g && n < it.skirt && !hit; y--, n++) hit = kept(x, y, z);
+        }
+        if (hit) { if (stats) stats.excluded++; continue; }
+      }
+      if (it.kind === 'block' && kept(px, ay, pz)) { if (stats) stats.excluded++; continue; }
       if (stats) stats.placed++;
       // emit
       if (it.kind === 'block') {
@@ -398,7 +436,7 @@ export function scatterTileCells(op, x0, z0, env, stats = null) {
           if (g0 === null || (env.flagsAt(x, z) & DRY)) continue;
           const g = env.reliefTop(x, z, g0);
           if (Math.abs(g - (ay - 1)) > 2) continue;
-          if (!stands(it, x, g, g0, z) || !free(x, g + 1, z) || (e[j + 3] >= 0 && !free(x, g + 2, z))) continue;
+          if (!stands(it, x, g, g0, z) || !free(x, g + 1, z) || (e[j + 3] >= 0 && !free(x, g + 2, z)) || kept(x, g + 1, z) || (e[j + 3] >= 0 && kept(x, g + 2, z))) continue;
           push(x, g + 1, z, e[j + 2]);
           if (e[j + 3] >= 0) push(x, g + 2, z, e[j + 3]);
         }
@@ -417,16 +455,18 @@ export function scatterTileCells(op, x0, z0, env, stats = null) {
           const x = px + ldx + dx, z = pz + ldz + dz;
           const g = env.groundAt(x, z);
           if (g === null || x < x0 || x > x0 + 63 || z < z0 || z > z0 + 63) continue;
-          if (cls(x, g + 1, z) === C_SNOW && !(x === px && z === pz)) {
+          if (cls(x, g + 1, z) === C_SNOW && !(x === px && z === pz) && !kept(x, g + 1, z)) {
             // never over the item's own cells (they are pushed already: a later push would win)
             let own = false;
             if (it.kind === 'cells') { const b = it.rot[k]; for (let q = 0; q < b.n; q++) if (px + b.dx[q] === x && pz + b.dz[q] === z && ay + b.dy[q] === g + 1) { own = true; break; } }
-            if (!own) push(x, g + 1, z, 0);
+            if (!own) clear(x, g + 1, z);
           }
         }
       }
     }
   }
+  if (!pre.size) return out;
+  for (const [k, l] of pre) { const b = out.get(k); out.set(k, b ? [...l, ...b] : l); }
   return out;
 }
 

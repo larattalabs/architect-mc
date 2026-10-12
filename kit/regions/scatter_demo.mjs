@@ -23,7 +23,7 @@ export const catalogue = false;
 export const params = {
   stamps: { type: 'bool', default: true, label: 'Library stamps' },
   cave: { type: 'bool', default: false, label: 'Cave decoration (walls and ceilings)' },
-  density: { type: 'int', min: 5, max: 80, default: 35, label: 'Ground decoration density (%)' },
+  density: { type: 'int', min: 5, max: 90, default: 60, label: 'Ground decoration density (%)' },
   lanterns: { type: 'bool', default: true, label: 'Path lanterns' },
 };
 
@@ -196,7 +196,7 @@ export function build(ctx, hooks = {}) {
     }
     // ---- path lanterns (light 15) beside the path; then the ground decoration (snow layers never where a planned light melts them)
     if (P.lanterns && info.path) {
-      const res = scatter(r, 'lanterns', { grid: 6, jitter: 2, density: { path: [2, 3], p: 0.8 }, items: [{ w: 1, item: 'path_lantern', light: 'minecraft:lantern', rail: 'minecraft:spruce_fence' }] }, { stage: 'decor' });
+      const res = scatter(r, 'lanterns', { grid: 5, jitter: 2, density: { path: [2, 4], p: 0.9 }, items: [{ w: 1, item: 'path_lantern', light: 'minecraft:lantern', rail: 'minecraft:spruce_fence' }] }, { stage: 'decor' });
       info.scatter.push(res);
     }
     const items = [

@@ -25,7 +25,53 @@
       -22,
       141
     ],
-    "foundBy": "the 6b volume fixture (scenarios/sites/volume_site.json)"
+    "foundBy": "the 6b volume fixture (scenarios/sites/volume_site.json)",
+    "irShaAtPin": "ac2aa149b402771747bbd357663736ee6f75d25cef6993c35da40372ac52f7f9"
   },
-  "lotEntries": {}
+  "lotEntries": {},
+  "seed": "11784430093893346597",
+  "cams": {
+    "cam_e": [
+      1151.5,
+      145,
+      511.5,
+      90.2,
+      30.9
+    ],
+    "cam_ground": [
+      1023.5,
+      76,
+      511.5,
+      135,
+      84.9
+    ],
+    "cam_high": [
+      1023.5,
+      185,
+      531.5,
+      178.6,
+      80.1
+    ],
+    "cam_n": [
+      1023.5,
+      145,
+      384.5,
+      0.2,
+      31.3
+    ],
+    "cam_s": [
+      1023.5,
+      145,
+      639.5,
+      179.8,
+      30.9
+    ],
+    "cam_w": [
+      896.5,
+      145,
+      511.5,
+      -90.2,
+      31.3
+    ]
+  }
 }
