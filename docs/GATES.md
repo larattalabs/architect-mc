@@ -39,9 +39,9 @@ from each slice's own focused items, the verifier's code review and Steward's re
 6. **At most 3 gate runs on the machine at once** (a machine-wide slot lock in the runner); more only causes load failures.
    *Implemented:* see "Slot lock" below.
 
-**Next (Noah, 2026-10-12): headless gates, as soon as possible** (moved up from "after 6c"): a server-only gate mode for the
-exactness and MSPT checks, faster and steadier than full clients, so slices and CI can run them in parallel. The client stays for
-screenshots and galleries.
+**Headless gates (Noah, 2026-10-12): implemented**, see "Headless gates" below. Steps marked `"host": "server"` run on a
+dedicated server with the DevBridge and a bot player, not a client. The client stays for screenshots, galleries, the UI and the
+client API.
 
 ### Timing bars: recorded in `change` and `slice`, judged at `release`
 
@@ -75,6 +75,133 @@ free, so a SIGKILLed run does not hold one. `--slots N` / `GATE_SLOTS` overrides
 separate from the run's own `--lock`, which still guards one runner's run dir and ports. The plan shows how many slots are in
 use; `SUMMARY.md` and `summary.json` (`slot`) record the slot and the wait. Runners started before this change take no slot, so
 for the first runs the count is a floor.
+
+## Headless gates
+
+A gate step can run on a **headless server** instead of a dev client. The server is a dedicated Minecraft 26.3 server with
+Architect, apitest and the dev-only `devserver` mod. It serves the same DevBridge protocol on the same port and token file, so
+the drivers (`tools/gate*.mjs`, `apitest.mjs`, `scenarios.mjs`) run unchanged.
+
+```sh
+node tools/gate-run.mjs slice --since origin/main --plan            # the plan's "hosts:" line: which steps run headless
+node tools/gate-run.mjs slice --since origin/main --host client      # every step on a client, as before
+ARCHITECT_DEV_PORT=8943 ARCHITECT_PORT=8942 HEADLESS_SIDECAR=sim ARCHITECT_AUTOWORLD_NAME="G6A Flat Base" \
+  tools/run-headless-server.mjs                                    # one by hand (sim | stub sidecar)
+```
+
+### Where a step runs
+
+`--host` (`GATE_HOST`) picks the hosts; `tools/lib/hosts.mjs` holds the logic.
+
+| `--host` | effect |
+|---|---|
+| `auto` (default) | steps marked `"host": "server"` in `gate-chains.json` run headless; the rest run on clients |
+| `client` | every step runs on a client, as before |
+| `server` | every step not marked `"host": "client"` runs headless; use it to try a step out |
+
+- Each client entry of `gate-chains.json` gets a `<key>@server` twin: the same world, its own family, and the stub or sim
+  sidecar from the family.
+- A driver that starts its own client starts the headless server instead (`GATE6A_CLIENT_SCRIPT`, `GATE6B_CLIENT_SCRIPT`).
+- Headless runs take machine slots like any other run.
+
+### What the server does
+
+- **The world.** Worlds live in `mod/run/saves`, as a client's do.
+  - `dev.world.leave` saves and stops the world; the process stays up, the client's title screen. Restore worlds then.
+  - `dev.world.open` opens a world in the same process (`devserver` `ServerOpen`). A switch takes **3-5 s**; the first start
+    takes 35-60 s under load, plus `gradlew headlessLaunch` (~5-50 s), which compiles the run worktree's HEAD.
+  - A server process that dies (a crash test's halt) is started again by the next `dev.world.open`.
+  - The server takes the client's integrated-server settings:
+
+    | setting | value |
+    |---|---|
+    | view distance | 16 |
+    | simulation distance | 10 |
+    | `sync-chunk-writes` | off |
+    | `pause-when-empty-seconds` | 0 |
+    | watchdog (`max-tick-time`) | off: a long hook, such as megaA's hash, runs on the server thread |
+- **The player** is a bot: a real `ServerPlayer` joined through vanilla's spawn task.
+  - It has the client's name (`ARCHITECT_PLAYER`, else the OS user), so its UUID and site ownership match.
+  - It stands in boxes (occupancy, the PLAYER blocker), loads and tickets chunks as it moves (LOADED_ONLY, `dev.waitChunks`),
+    and runs `@s` commands.
+  - It confirms teleports at once. A server never simulates a player's gravity, so the bot does not fall.
+- **The hooks.**
+  - Most are generated at build time from the client's own hook sources; see docs/DEVBRIDGE.md "Headless".
+  - `dev.camera` moves the bot.
+  - `dev.screen {open: "pause"}` pauses the game as a singleplayer pause does: no server ticks, and the helper hears
+    `client.paused`.
+  - Screenshots, screens, the UI, the placement ghost, the region ghost and the composite preview answer
+    `client-only: ...`.
+- **The sidecar.** The server launches the stub or sim helper as a client does. It survives world switches and stays linked
+  while no world is loaded.
+- **Ports.** No game port and no TCP bridge port (a Unix socket). A headless server binds only its DevBridge and sidecar
+  ports.
+- **The EULA.** The host refuses to start without Noah's own acceptance file,
+  `~/Developer/_infra/minecraft-server/eula.txt` (`eula=true`; `ARCHITECT_SERVER_EULA` overrides), and copies it into the run
+  dir. Agents never write one.
+
+### Which steps run headless (evidence: `artifacts/gate-runs-headless/`, 2026-10-12)
+
+**Headless (`"host": "server"`):** these pass every functional check headless.
+
+| group | steps |
+|---|---|
+| sim suites | sim-jobs, sim-sets |
+| 4d, 4e, 5b | 4d-all, 4e-megalite, 4e-orders, 5b-village |
+| 6a | 6a-megaA, 6a-eflat, 6a-forest, 6a-inv3, 6a-staged |
+| 6b | 6b-smoke, 6b-volume, 6b-commands, 6b-nudges, 6b-pathstyle, 6b-versions |
+| 6c | x-ingame (removal included), x-resume (C23), v-ingame |
+
+**On the client (`"host": "client"`, `hostWhy` says why):**
+
+| step | why |
+|---|---|
+| apijars | The archived `apitest.mjs survival` scripts drive the placement UI, the Library Remove UI and `ArchitectClientApi.preview`. Headless they abort after 10 of 45 checks per jar. |
+| sim-massing | Its composite-preview check renders. |
+| 6b-ghost | Screenshots of the ghost. |
+| 6b-versionc | It runs the v0.11.0 release, which has no headless server. |
+| the scenario steps (6b-scenario-s1, -s1-flat, 6cv-scenario-s7) | The gallery's cameras and shots. |
+
+**Not tried yet (still client):** the crash suites, 6a-megaB/-heap, 4e-throughput, 5b-chains, 0a-*, 0b-* and the Y2 steps.
+Try one with `--host server --only <step>`, then mark it.
+
+### Headless against client (same commit, 3 rounds each, interleaved, other slices' runs on the box)
+
+**Functional agreement.**
+- 6a-megaA: the same 23 cell mismatches on every run, both hosts (the known value).
+- x-resume: 46/0 on all six runs.
+- 4d-all: every functional check passed on all 3 headless runs. 2 of 3 client runs failed "group undo: every lot region ...
+  back exactly". That points to a client-side flake; not investigated here.
+
+| step | wall: headless | wall: client | own-tick CPU max: headless | own-tick CPU max: client |
+|---|---|---|---|---|
+| 4d-all | 15m01, 16m10, 15m39 | 15m10, 16m41, 17m14 | 50.4, 47.4, 49.3 ms | 30.8, 57.1, 52.5 ms |
+| 6a-megaA | 11m42, 12m35*, 11m50 | 13m15, 12m59, 19m17 | 38.0, 41.3*, 41.7 ms | 46.5, 50.9, 44.4 ms |
+| x-resume | 8m18, 6m42, 6m20 | 10m08, 7m43, 6m29 | - | - |
+
+- **Headless is faster.**
+  - megaA's wall time was 11m42-12m35 headless against 12m59-19m17 on the client.
+  - x-resume and 4d-all were faster or level in every round.
+- **Headless is steadier.**
+  - 4d-all's own-tick CPU max spread was 3 ms headless against 26 ms on the client.
+  - The worst whole-tick wall maxima were 171 ms headless against 319 ms on the client.
+- **The 50 ms timing bar is borderline on both hosts under load.** Headless missed it once (50.4 ms); the client missed it
+  twice. Timing bars are recorded, not judged, in slices.
+- **The second headless megaA run** crashed on the server watchdog (a 60 s hash on the server thread). The watchdog is now
+  off (above); the re-run, marked *, passed 14/0.
+
+### Concurrency and memory
+
+- **Several servers side by side.** `--shards 3` with 3 headless servers ran 17 steps in 30m46s (serial estimate 77 min). All
+  within one slot, on ports 8946-8951.
+- **Ports.** Each server binds 2 ports, so 8942-8953 fits six. The 3-slot lock still caps runs.
+
+| peak RSS | headless | client |
+|---|---|---|
+| JVM, 4d-all and megaA (`-Xmx4G`) | 4.7 GB | 5.3 GB |
+| JVM, x-resume | 3.0 GB | 3.3 GB |
+| JVM, sweep servers | 3.3-3.8 GB each | - |
+| sidecar | 0.15-0.22 GB | 0.17-0.24 GB |
 
 ## The policy (Noah, 2026-10-09; PLAN.md "Process from 6c on")
 
@@ -218,7 +345,7 @@ The runner never calls Claude. The independent gate-verifier is launched by the 
 1. **Guards.** It refuses to start if any of these is set: `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, `CLAUDE_CODE_OAUTH_TOKEN`
    or `AWS_BEARER_TOKEN_BEDROCK`. Every child process gets an environment without any `ANTHROPIC_*` or `CLAUDE*` variable. It
    refuses steps that look paid (`*-real`, `--tier smoke|full`, `--backend claude`) and client scripts other than
-   `run-gate4d/4e/5b/6a-client.sh`, which use the stub or the sim sidecar. It refuses a run dir that is this checkout, the main
+   `run-gate4d/4e/5b/6a/6b/6c0a-client.sh` and the headless `run-headless-server.mjs`, which use the stub or the sim sidecar. It refuses a run dir that is this checkout, the main
    checkout or the seed, and a run dir whose name ends with a sibling's (the drivers find their client with an unanchored `pgrep`).
 2. **Lock.** It holds the lock (`<out>/gate-run.lock`, or `--lock`) with its pid, chain, run dirs and ports, so a second run on the
    same lock refuses to start. A lock whose pid has died is stale and is taken over.

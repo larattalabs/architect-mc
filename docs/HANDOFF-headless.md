@@ -39,6 +39,20 @@ ready to merge:** the 3x comparison is partial, `docs/GATES.md` has no headless 
 - **Steps marked so far:** only apijars, as `host: client`. No step is marked `host: server` yet: do that from the evidence
   below.
 
+## State (2026-10-12 19:35Z): resumed and finished
+
+- The comparison is done (3 rounds; the numbers are in docs/GATES.md "Headless gates"). The cut-short 6b/V steps passed
+  headless. The steps are marked (`host`/`hostWhy` in gate-chains.json). GATES.md and DEVBRIDGE.md have the headless
+  sections.
+- **Fixes since the pause:**
+  - the server watchdog is off (a megaA hash tripped it);
+  - a client script that fails to spawn now fails its step instead of aborting the run (the old ENOENT came from 6b-versionc
+    leaving the shard on v0.11.0; that step is client-only now);
+  - slice W's and Y2's hooks are headless.
+- **Left:** the slice tier run on this branch, the gate-verifier review, and the cleanup.
+
+The 2026-10-12 05:55Z results below are superseded by docs/GATES.md.
+
 ## Results (evidence in `architect-mc/artifacts/gate-runs-headless/`)
 
 ### Pass headless, all functional checks
