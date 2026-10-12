@@ -49,6 +49,8 @@ export default function routeDemo(ctx) {
   const HILL = 40;
   const hillAt = (x, z) => {
     if (!flat) return 0;
+    // never in (or beside) the owner's keep-out: the hill keeps out of it as the routes do
+    if (keepOut.some((k) => x >= k[0] - 2 && x <= k[2] + 2 && z >= k[1] - 2 && z <= k[3] + 2)) return 0;
     const z0 = claim.maxZ - 24, z1 = claim.minZ + 24 + 2 * 0; // rises northwards
     const t = Math.max(0, Math.min(z0 - z1, z0 - z));
     return Math.min(HILL, t >> 1);

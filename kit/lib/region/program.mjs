@@ -274,6 +274,8 @@ export class Region {
     // obstacles: lot footprints and aprons, forms, keep sets (x/z); keep-out (the owner's, read through ctx so the IR records it)
     const hard = [];
     for (const l of this.lots) hard.push([l.box.minX - 1, l.box.minZ - 1, l.box.maxX + 1, l.box.maxZ + 1]);
+    // a slope pad's batter clears its rings to the column's top (trees included): no tree obstacle there
+    const clearTrees = this.lots.filter((l) => l.pad?.edge === 'slope').map((l) => { const m = 1 + Math.max(l.pad.maxCut ?? 0, l.pad.maxFill ?? 0); return [l.box.minX - m, l.box.minZ - m, l.box.maxX + m, l.box.maxZ + m]; });
     for (const f of this.forms) if (f.bounds) hard.push([f.bounds.minX, f.bounds.minZ, f.bounds.maxX, f.bounds.maxZ]);
     for (const p of this.parts) for (const k of p.keep ?? []) hard.push([k.box.minX, k.box.minZ, k.box.maxX, k.box.maxZ]);
     const keepOut = [...(this.ctx.keepOut ?? []), ...(it.keepOut ?? [])].map((k) => [...k]);
@@ -286,7 +288,7 @@ export class Region {
     const out = PASSES.route(this.survey.columns, this.ctx.volumes ?? [], {
       edges: edges.map((e) => ({ id: e.id, from: { at: e.a.at, facing: e.a.facing }, to: { at: e.b.at, facing: e.b.facing }, width: e.width, movers: e.movers, ladders: e.ladders })),
       maxGrade: it.maxGrade ?? 0.25, hairpinLanding: it.hairpinLanding ?? 3, stairs: it.stairs ?? true, maxCut: it.maxCut ?? 4, maxFill: it.maxFill ?? 4, margin: it.margin ?? 2,
-      hard, keepOut, prefer, base: it.base ?? null, _unsafe: it._unsafe ?? {},
+      hard, keepOut, prefer, clearTrees, base: it.base ?? null, _unsafe: it._unsafe ?? {},
     });
     const ms = Math.round(performance.now() - t0);
     const heapMb = Math.round(process.resourceUsage().maxRSS / 1024);

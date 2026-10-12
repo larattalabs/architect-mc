@@ -502,7 +502,22 @@ async function computeMetrics({ sc, out, planDir, ir, irShas, mspt, cps, exact, 
     const classes = { ...e.classes, none: e.classes.none - moved.length, flow: (e.classes.flow ?? 0) + moved.length };
     return { ...e, classes, list: e.list.map((m) => (moved.includes(m) ? { ...m, class: 'flow' } : m)) };
   };
-  const exN = flowOf(freezeOf(exact));
+  // (6c T2) the region's lamps melting the world's snow: an unclassified mismatch where the snapshot held a snow layer and the world
+  // now holds air, at a cell the plan never writes (or writes a solid under a condition, e.g. an apron's IF_AIR_OR_FLUID that a snow
+  // layer keeps; never a cell the plan clears to air), lit over 11 (vanilla's snow melt) by a light the plan placed (block light from
+  // the plan's emitters, unoccluded: emission minus the Manhattan distance), is classed `melt` (a world class: the undo restores the
+  // cells the plan wrote; a melted layer was never one). The lamps cannot see snow at plan time (the survey has no snow layers).
+  const meltOf = (e) => {
+    if (!e || flat || !isT2(sc) || !(e.classes?.none > 0)) return e;
+    const lights = [];
+    vw.eachWritten((x, y, z, idx) => { const em = vw.pal.emit[idx]; if (em > 11) lights.push([x, y, z, em]); });
+    const lit = (x, y, z) => lights.some(([lx, ly, lz, em]) => em - (Math.abs(lx - x) + Math.abs(ly - y) + Math.abs(lz - z)) > 11);
+    const moved = (e.list ?? []).filter((m) => { if (m.class !== 'none' || !/^minecraft:snow\[/.test(m.was) || !/^minecraft:(air|cave_air)$/.test(m.now)) return false; const [x, y, z] = m.pos.split(',').map(Number); return (!(vw.flags(x, y, z) & F_WRITTEN) || !vw.pal.air[vw.get(x, y, z)]) && lit(x, y, z); });
+    if (!moved.length) return e;
+    const classes = { ...e.classes, none: e.classes.none - moved.length, melt: (e.classes.melt ?? 0) + moved.length };
+    return { ...e, classes, list: e.list.map((m) => (moved.includes(m) ? { ...m, class: 'melt' } : m)) };
+  };
+  const exN = meltOf(flowOf(freezeOf(exact)));
   const ex = flat ? { flat: exact, normal: exactOther, cellsWritten: exactOther?.cellsWritten ?? 0 } : { flat: exactOther, normal: exN, cellsWritten: exact.cellsWritten };
   const plan = { report: JSON.parse(fs.readFileSync(path.join(out, 'report.json'), 'utf8')) };
   let rows = M.bars({ plan, realised, palette, organic, buildings, mspt, cellsPerSecond: cps, exact: ex, determinism: { irShas, workersSame: ts.workersSame, golden }, spendUsd: 0, approval: 'pending' });

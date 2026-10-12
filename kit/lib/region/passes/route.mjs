@@ -367,6 +367,12 @@ function baseMasks(env, intent, { water = true, keepOut = true } = {}) {
     const j0 = Math.max(0, Math.floor((z0 - minZ) / r)), j1 = Math.min(D - 1, Math.floor((z1 - minZ) / r));
     for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) m[i + j * W] = 1;
   };
+  // (rects the program clears to the column's top before the routes, e.g. a slope pad's batter: no tree obstacle there)
+  for (const b of intent.clearTrees ?? []) {
+    const i0 = Math.max(0, Math.floor((b[0] - minX) / r)), i1 = Math.min(W - 1, Math.floor((b[2] - minX) / r));
+    const j0 = Math.max(0, Math.floor((b[1] - minZ) / r)), j1 = Math.min(D - 1, Math.floor((b[3] - minZ) / r));
+    for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) tree[i + j * W] = 0;
+  }
   for (const b of intent.hard ?? []) rect(hard, b[0], b[1], b[2], b[3]);
   if (keepOut) for (const b of intent.keepOut ?? []) rect(guard, b[0], b[1], b[2], b[3]);
   // the claim margin
