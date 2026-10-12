@@ -1254,7 +1254,7 @@ public final class Stockpiles {
 			Map<String, Integer> one = Builder.paidStanding(level, s, r);
 			one.forEach((k, v) -> paid.merge(k, v, Integer::sum));
 			byTarget.add(s.id(), Builder.counts(one));
-			CrateBlockEntity be = Builder.crate(level, s, true);
+			CrateBlockEntity be = Builder.crate(level, s, false);
 			if (be != null && crates.add(be.getBlockPos())) {
 				be.ledger().stock().forEach((k, v) -> crateStock.merge(k, v, Integer::sum));
 			}
@@ -1267,14 +1267,14 @@ public final class Stockpiles {
 			if (r == null) {
 				continue;
 			}
-			r.rescan(level, true);
+			r.rescan(level, false, true); // never loads a chunk
 			Map<String, Integer> one = new TreeMap<>();
 			for (int q = r.built.nextSetBit(0); q >= 0; q = r.built.nextSetBit(q + 1)) {
 				r.cost.get(q).forEach(x -> one.merge(x.item(), x.count(), Integer::sum));
 			}
 			one.forEach((k, v) -> paid.merge(k, v, Integer::sum));
 			byTarget.add(i.id(), Builder.counts(one));
-			CrateBlockEntity be = Builder.crate(level, RoadBuilder.probe(i), true);
+			CrateBlockEntity be = Builder.crate(level, RoadBuilder.probe(i), false);
 			if (be != null && crates.add(be.getBlockPos())) {
 				be.ledger().stock().forEach((k, v) -> crateStock.merge(k, v, Integer::sum));
 			}

@@ -2088,7 +2088,7 @@ public final class Builder {
 	 * cells still holding their old paid block (at the old block's cost; it is refunded at the swap). Rescans the site first.
 	 */
 	static Map<String, Integer> paidStanding(ServerLevel level, Site s, Run r) {
-		r.rescan(level, true);
+		r.rescan(level, false, true); // never loads a chunk (a far target's cells keep their last known state)
 		r.newlyCount = 0;
 		BitSet free = s.construction().free();
 		Map<String, Integer> out = new TreeMap<>();
