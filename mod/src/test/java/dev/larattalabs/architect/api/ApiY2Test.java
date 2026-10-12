@@ -20,10 +20,10 @@ import net.minecraft.world.level.levelgen.structure.BoundingBox;
 import org.junit.jupiter.api.Test;
 
 /**
- * API 1.19.0 (docs/CONTRACT.md phase 6c slice Y2, C25 and C26): the old constructors are kept (binary compatibility), the new record
+ * API 1.15.0 (docs/CONTRACT.md phase 6c slice Y2, C25 and C26): the old constructors are kept (binary compatibility), the new record
  * components are trailing, the new interface method is a default that throws, and no Reason is added.
  */
-class Api119Test {
+class ApiY2Test {
 	@org.junit.jupiter.api.BeforeAll
 	static void boot() {
 		net.minecraft.SharedConstants.tryDetectVersion();
@@ -33,7 +33,7 @@ class Api119Test {
 	@Test
 	void version() {
 		String[] v = ArchitectApi.VERSION.split("\\.");
-		assertTrue(Integer.parseInt(v[0]) == 1 && Integer.parseInt(v[1]) >= 19, ArchitectApi.VERSION); // later slices append
+		assertTrue(Integer.parseInt(v[0]) == 1 && Integer.parseInt(v[1]) >= 15, ArchitectApi.VERSION); // later slices append
 	}
 
 	@Test

@@ -54,7 +54,7 @@ public class ApiTest implements ModInitializer {
 	static final Logger LOG = LoggerFactory.getLogger("apitest");
 	/** Results of async steps, by key. */
 	public static final Map<String, JsonElement> RESULTS = new ConcurrentHashMap<>();
-	/** The running server (1.19.0: events carry the world's game time). */
+	/** The running server (1.15.0: events carry the world's game time). */
 	static volatile net.minecraft.server.MinecraftServer SERVER;
 	/** Every event seen, in order. */
 	static final List<JsonObject> EVENTS = java.util.Collections.synchronizedList(new ArrayList<>());
@@ -85,7 +85,7 @@ public class ApiTest implements ModInitializer {
 		});
 		SiteEvents.SITE_PROGRESS.register(v -> event("SITE_PROGRESS", site(v)));
 		SiteEvents.SITE_BUILT.register(v -> event("SITE_BUILT", site(v)));
-		SiteEvents.SITE_WAITING.register((v, w) -> { // 1.19.0
+		SiteEvents.SITE_WAITING.register((v, w) -> { // 1.15.0
 			JsonObject o = site(v);
 			o.add("wait", waitJson(w));
 			event("SITE_WAITING", o);
@@ -108,7 +108,7 @@ public class ApiTest implements ModInitializer {
 		data.addProperty("event", type);
 		data.addProperty("t", System.currentTimeMillis());
 		data.addProperty("serverThread", Thread.currentThread().getName());
-		net.minecraft.server.MinecraftServer srv = SERVER; // 1.19.0: the world's game time, so a gate can time events in ticks
+		net.minecraft.server.MinecraftServer srv = SERVER; // 1.15.0: the world's game time, so a gate can time events in ticks
 		if (srv != null && srv.overworld() != null) {
 			data.addProperty("gameTime", srv.overworld().getGameTime());
 		}
@@ -327,10 +327,10 @@ public class ApiTest implements ModInitializer {
 				return ApiTest0c.step(src, a);
 			}
 			case "waiting": {
-				// waiting <target id> (1.19.0): the SiteWait of a construction site or road, or null
+				// waiting <target id> (1.15.0): the SiteWait of a construction site or road, or null
 				return api.sites(server).waiting(a[1]).map(ApiTest::waitJson).map(x -> (JsonElement) x).orElse(com.google.gson.JsonNull.INSTANCE);
 			}
-			case "api119": {
+			case "apiy2": {
 				JsonObject o = new JsonObject();
 				o.addProperty("version", ArchitectApi.VERSION);
 				JsonArray f = new JsonArray();
@@ -339,7 +339,7 @@ public class ApiTest implements ModInitializer {
 						f.add(x);
 					}
 				}
-				o.add("features119", f);
+				o.add("featuresY2", f);
 				try {
 					// the 1.12.0 Verdict and the 1.8.0 SiteView constructors still exist and leave the new components empty
 					var vc = Verdict.class.getConstructor(java.util.List.class, java.util.List.class, boolean.class, Map.class, java.util.Optional.class,
@@ -543,11 +543,11 @@ public class ApiTest implements ModInitializer {
 		o.addProperty("headVersion", v.headVersion());
 		o.addProperty("deviations", v.deviations());
 		o.addProperty("updating", v.updating());
-		o.add("siteWait", v.siteWait() == null ? com.google.gson.JsonNull.INSTANCE : waitJson(v.siteWait())); // 1.19.0
+		o.add("siteWait", v.siteWait() == null ? com.google.gson.JsonNull.INSTANCE : waitJson(v.siteWait())); // 1.15.0
 		return o;
 	}
 
-	/** 1.19.0: a SiteWait as JSON. */
+	/** 1.15.0: a SiteWait as JSON. */
 	static JsonObject waitJson(dev.larattalabs.architect.api.SiteWait w) {
 		JsonObject o = new JsonObject();
 		o.addProperty("targetId", w.targetId());
@@ -638,7 +638,7 @@ public class ApiTest implements ModInitializer {
 		o.add("overlaps", ov);
 		o.addProperty("cells", v.cells());
 		o.add("spans", ApiTest0c.spans(v.spans())); // 1.12.0
-		o.add("bomFull", items(v.bomFull())); // 1.19.0
+		o.add("bomFull", items(v.bomFull())); // 1.15.0
 		o.addProperty("bomExact", v.bomExact());
 		return o;
 	}

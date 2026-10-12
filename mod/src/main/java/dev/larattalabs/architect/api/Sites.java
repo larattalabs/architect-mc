@@ -304,9 +304,9 @@ public interface Sites {
 
 	/**
 	 * (C25) The waiting status of a construction target: a building site or a construction road (by id). Empty when the id is not a
-	 * construction target. A built target answers {@code waiting=false} with an empty list. Server thread. Since 1.19.0.
+	 * construction target. A built target answers {@code waiting=false} with an empty list. Server thread. Since 1.15.0.
 	 */
 	default java.util.Optional<SiteWait> waiting(String targetId) {
-		throw new UnsupportedOperationException("Sites.waiting needs Architect API 1.19.0");
+		throw new UnsupportedOperationException("Sites.waiting needs Architect API 1.15.0");
 	}
 }

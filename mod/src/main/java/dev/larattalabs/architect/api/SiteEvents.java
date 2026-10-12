@@ -51,7 +51,7 @@ public interface SiteEvents {
 	 * A construction target started or stopped waiting for materials ({@link SiteWait#waiting()} says which edge): on the start edge
 	 * (after 100 ticks without a placed cell while a frontier cell is unaffordable) and on the stop edge (a cell placed, paused, built
 	 * or removed). Never twice for the same edge, and at most once per 20 ticks per target (an edge that comes sooner is deferred).
-	 * Server thread. Since 1.19.0.
+	 * Server thread. Since 1.15.0.
 	 */
 	Event<SiteWaiting> SITE_WAITING = EventFactory.createArrayBacked(SiteWaiting.class, ls -> (v, w) -> {
 		for (SiteWaiting l : ls) {

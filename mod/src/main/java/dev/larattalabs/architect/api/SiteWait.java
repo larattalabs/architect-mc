@@ -4,7 +4,7 @@ import java.util.List;
 
 /**
  * Whether a construction target (a building site or a construction road) waits for materials, and for what ({@link Sites#waiting},
- * {@link SiteView#siteWait()}, {@link SiteEvents#SITE_WAITING}); since 1.19.0.
+ * {@link SiteView#siteWait()}, {@link SiteEvents#SITE_WAITING}); since 1.15.0.
  *
  * @param targetId the site or road id
  * @param waiting building, not paused, its crate present, and for at least 100 ticks in a row it placed no cell while a frontier

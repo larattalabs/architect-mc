@@ -5,14 +5,14 @@
 // the player and switch worlds. $0: no Claude call anywhere.
 //
 //   node tools/gate6cy2.mjs <step>
-//     unit        item 1 (no game): Api119Test, SiteWaitTest, FullBomTest (gradle test), the whole mod suite is unit-mod's
+//     unit        item 1 (no game): ApiY2Test, SiteWaitTest, FullBomTest (gradle test), the whole mod suite is unit-mod's
 //     base        a creative base world with the 12 varied-terrain lots of the 4d gate (4 kit examples x 3), as gate4d base
 //     waiting     item 10 (C25): a fed-nothing site starts waiting after 100-110 ticks with nextNeeded in build order, inserting
 //                 nextNeeded[0] stops it within 20 ticks of the next placed cell; a paused site and a site with a player in its cell
 //                 never wait; waitingSince survives a reload with no duplicate event
 //     bom         item 11 (C26): the 12 lots placed as construction sites in turn: every lot with bomExact matches the placed site's
 //                 outstanding bill exactly (at least 10 of 12), the others are within 2 units per item with the cells listed
-//     apicompat   item 14: tools/api-compat.mjs --gate6cy2 and the apitest api119 check
+//     apicompat   item 14: tools/api-compat.mjs --gate6cy2 and the apitest apiy2 check
 //     report      REPORT.md over the step JSONs
 //
 // Evidence: artifacts/gate6c-y2/<step>.json in the main checkout (GATE6CY2_OUT overrides), REPORT.md, spend.json.
@@ -393,9 +393,9 @@ async function apicompat() {
   check(r.status === 0 && /all 4 checks clean/.test(t), `item 14: api-compat against the 0.17.0, 0.16.0 and 0.15.0 apitest jars and the 0.17.0 surface: ${t.trim().split('\n').pop()}`);
   if (dev) {
     if (!(await call('dev.state')).inWorld) await openWorld(BASE);
-    const v = await api('api119');
-    check(v.oldVerdict === true && /^siteWait bomFull bomExact$/.test(v.trailing) && v.waitingDefault === true && v.features119?.length === 2,
-      `item 14: apitest api119: the 1.12.0 Verdict constructor kept, trailing components, waiting is a default method (${JSON.stringify(v)})`);
+    const v = await api('apiy2');
+    check(v.oldVerdict === true && /^siteWait bomFull bomExact$/.test(v.trailing) && v.waitingDefault === true && v.featuresY2?.length === 2,
+      `item 14: apitest apiy2: the 1.12.0 Verdict constructor kept, trailing components, waiting is a default method (${JSON.stringify(v)})`);
   }
   return { out: t };
 }
@@ -404,13 +404,13 @@ async function apicompat() {
 
 async function unit() {
   const env = { ...process.env, JAVA_HOME: process.env.JAVA_HOME ?? '/opt/homebrew/opt/openjdk@25', GRADLE_USER_HOME: process.env.GRADLE_USER_HOME ?? path.join(root, '.gradle-home') };
-  const g = spawnSync('./gradlew', ['test', '--offline', '--tests', '*Api119Test', '--tests', '*SiteWaitTest', '--tests', '*FullBomTest', '--tests', '*ApiRulesTest'],
+  const g = spawnSync('./gradlew', ['test', '--offline', '--tests', '*ApiY2Test', '--tests', '*SiteWaitTest', '--tests', '*FullBomTest', '--tests', '*ApiRulesTest'],
     { cwd: path.join(root, 'mod'), encoding: 'utf8', env });
   fs.writeFileSync(path.join(OUT, 'unit-gradle.txt'), `${g.stdout}${g.stderr}`);
-  check(g.status === 0, `item 1: Api119Test, SiteWaitTest, FullBomTest, ApiRulesTest pass (gradle test exit ${g.status})`);
+  check(g.status === 0, `item 1: ApiY2Test, SiteWaitTest, FullBomTest, ApiRulesTest pass (gradle test exit ${g.status})`);
   const res = path.join(root, 'mod', 'build', 'test-results', 'test');
   const counts = {};
-  for (const c of ['Api119Test', 'SiteWaitTest', 'FullBomTest']) {
+  for (const c of ['ApiY2Test', 'SiteWaitTest', 'FullBomTest']) {
     const f = fs.readdirSync(res).find((x) => x.endsWith(`.${c}.xml`));
     const x = f ? fs.readFileSync(path.join(res, f), 'utf8') : '';
     const m = /tests="(\d+)" skipped="(\d+)" failures="(\d+)" errors="(\d+)"/.exec(x);

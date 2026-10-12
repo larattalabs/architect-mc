@@ -18,11 +18,11 @@ import net.minecraft.world.level.levelgen.structure.BoundingBox;
  * @param cells (1.5.0) a road's or cell site's cell count (0 for a building)
  * @param spans (1.12.0) {@link Sites#checkRoad}: every failing span of the road, partial or not (the first is also the
  *              refusal, unless the road is partial); empty otherwise
- * @param bomFull (1.19.0) for a construction building site, the whole bill of materials: template, foundation fill and approach,
+ * @param bomFull (1.15.0) for a construction building site, the whole bill of materials: template, foundation fill and approach,
  *                from the dry-run plan this check already builds (cells that end as air are free). Empty for an instant placement,
  *                for a road or cell site, and when the plan was incomplete (then {@code bom}, the template's bill, is the best
  *                answer and {@code bomExact} is false)
- * @param bomExact (1.19.0) true when the plan was complete and no planned cell is a known drift source (a block tick settling at
+ * @param bomExact (1.15.0) true when the plan was complete and no planned cell is a known drift source (a block tick settling at
  *                 placement: a gravity block over a gap, a dirt path under a solid block). On an unchanged world a true
  *                 {@code bomFull} equals the placed site's outstanding bill, item for item; a false one is within 2 units per
  *                 item, and the {@link #notes} list the cells that may differ

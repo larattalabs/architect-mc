@@ -27,7 +27,7 @@ import org.jspecify.annotations.Nullable;
  * @param covers (1.5.0) the sites it lies on top of (any cell)
  * @param coveredBy (1.5.0) the sites lying on top of it (any cell)
  * @param region (1.8.0) the region it belongs to (a tile, road or lot of a realised region), or null
- * @param siteWait (1.19.0) a construction site's or road's waiting status ({@link SiteWait}); null for an instant site. (The
+ * @param siteWait (1.15.0) a construction site's or road's waiting status ({@link SiteWait}); null for an instant site. (The
  *                 contract's name {@code wait} is not allowed for a record component: it clashes with {@code Object.wait()}.)
  */
 public record SiteView(String id, String blueprintId, @Nullable String owner, JsonObject ext, BoundingBox box, BoundingBox restoreBox,
