@@ -107,6 +107,11 @@ public final class ApiEvents {
 		guard("SITE_PROGRESS", () -> SiteEvents.SITE_PROGRESS.invoker().onProgress(Views.site(server, s)));
 	}
 
+	/** C25: a construction target started or stopped waiting for materials. */
+	public static void waiting(dev.larattalabs.architect.api.SiteView v, dev.larattalabs.architect.api.SiteWait w) {
+		guard("SITE_WAITING", () -> SiteEvents.SITE_WAITING.invoker().onWaiting(v, w));
+	}
+
 	/** 6c 0c (C16): a construction road's progress and completion. */
 	public static void progressInfra(MinecraftServer server, dev.larattalabs.architect.site.Infra i) {
 		guard("SITE_PROGRESS", () -> SiteEvents.SITE_PROGRESS.invoker().onProgress(Views.infra(i)));

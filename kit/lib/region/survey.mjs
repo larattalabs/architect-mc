@@ -1,7 +1,7 @@
 // The plan survey as programs see it (`ctx.survey`): nearest-sample lookups over the ARSV plan survey (resolution 1 up to
 // 256x256 columns, else 4), plus coarse helpers. Also windowFromSurvey(): a tile's 80x80 resolution-1 window
 // nearest-neighbour upsampled from the survey, which the plan's budget pass evaluates.
-import { FLAG_MISSING, FLAG_WATER, asColumns, makeColumns } from './pack.mjs';
+import { FLAG_FROZEN, FLAG_MISSING, FLAG_WATER, asColumns, makeColumns } from './pack.mjs';
 
 /** Index of the survey sample nearest to world (x, z): floor((x - minX) / res + 1/2), clamped to the grid. */
 export function sampleIndex(c, x, z) {
@@ -53,6 +53,8 @@ export function surveyApi(survey, claim, { keepOut = [], onKeepOut = () => {} } 
     /** the top of the column: max(height, ground) (trunks included, leaves not) */
     topAt: (x, z) => Math.max(c.height[at(x, z)], c.ground[at(x, z)]),
     waterAt: (x, z) => (c.flags[at(x, z)] & FLAG_WATER) !== 0,
+    /** (6c W) frozen water (ice over water): it is water everywhere (waterAt), except for a farm (M24) */
+    frozenAt: (x, z) => (c.flags[at(x, z)] & FLAG_FROZEN) !== 0,
     missingAt: (x, z) => (c.flags[at(x, z)] & FLAG_MISSING) !== 0,
     /** largest ground difference to the 4 neighbouring samples, per block */
     slopeAt: (x, z) => {

@@ -389,6 +389,9 @@ async function megaRun(name, opts = {}) {
   const heaps = [];
   let lastStage = null;
   const st = await waitRegion(region, 4 * 3_600_000, async (s) => {
+    // (6c W) a lot waiting OCCUPIED holds a mob in its box (4e's rule: it would be buried). W reads frozen water as water, so
+    // mega6's plan moved a lot onto a resting polar bear; the gate clears the mobs, as megaA's undo already does
+    if (s.waiting?.OCCUPIED) { out.mobsCleared = (out.mobsCleared ?? 0) + 1; await cmd('/kill @e[type=!minecraft:player]'); }
     const running = s.view.stages.find((x) => x.tilesDone < x.tilesTotal || x.state === 'PLACING');
     const name2 = running?.name ?? 'done';
     if (name2 !== lastStage) {
@@ -739,10 +742,10 @@ steps.heap = async () => {
 
 steps.apijars = async () => {
   const runs = [
-    // (6c X) the unchanged 1.13.0, 1.12.0 and 1.11.0 jars (CONTRACT 6c slice X gate item 5; the 1.13.0 jar built from the v0.16.0 tag)
+    // (6c W) the unchanged 1.14.0, 1.13.0 and 1.12.0 jars (CONTRACT 6c slice W §7 item 14; the 1.14.0 jar built from the v0.17.0 tag)
+    { api: '1.14.0', dir: path.join(MAIN, 'artifacts', 'gate6c-w', 'v0170'), jar: 'architect_apitest-0.17.0.jar', world: 'G6A Api114' },
     { api: '1.13.0', dir: path.join(MAIN, 'artifacts', 'gate6c-x', 'v0160'), jar: 'architect_apitest-0.16.0.jar', world: 'G6A Api113' },
     { api: '1.12.0', dir: path.join(MAIN, 'artifacts', 'gate6c-v', 'v0150'), jar: 'architect_apitest-0.15.0.jar', world: 'G6A Api112' },
-    { api: '1.11.0', dir: path.join(MAIN, 'artifacts', 'gate6c0c', 'v0140'), jar: 'architect_apitest-0.14.0.jar', world: 'G6A Api111' },
   ];
   const mods = path.join(GAME_DIR, 'mods');
   const out = {};

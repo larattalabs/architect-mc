@@ -18,10 +18,15 @@ import org.jspecify.annotations.Nullable;
  */
 public final class SurveyGrid {
 	/** One sampled column. */
-	public record Column(int height, int floor, String top, boolean water, boolean tree, boolean natural, int ground) {
+	public record Column(int height, int floor, String top, boolean water, boolean tree, boolean natural, int ground, boolean frozen) {
 		/** Without a ground height (it equals {@code height}). */
 		public Column(int height, int floor, String top, boolean water, boolean tree, boolean natural) {
-			this(height, floor, top, water, tree, natural, height);
+			this(height, floor, top, water, tree, natural, height, false);
+		}
+
+		/** Not frozen water (6c W). */
+		public Column(int height, int floor, String top, boolean water, boolean tree, boolean natural, int ground) {
+			this(height, floor, top, water, tree, natural, ground, false);
 		}
 	}
 
@@ -46,6 +51,7 @@ public final class SurveyGrid {
 	private final int[] ground;
 	private final int[] top;
 	private final BitSet water = new BitSet();
+	private final BitSet frozen = new BitSet();
 	private final BitSet tree = new BitSet();
 	private final BitSet natural = new BitSet();
 	private final BitSet missing = new BitSet();
@@ -154,6 +160,7 @@ public final class SurveyGrid {
 			ground[idx] = c.ground();
 			top[idx] = blockIds.computeIfAbsent(c.top(), x -> blockIds.size());
 			water.set(idx, c.water());
+			frozen.set(idx, c.frozen());
 			tree.set(idx, c.tree());
 			natural.set(idx, c.natural());
 			missing.clear(idx);
@@ -175,7 +182,7 @@ public final class SurveyGrid {
 	public Sample finish(int chunksLoaded) {
 		return new Sample(minX, minZ, maxX, maxZ, resolution, width, depth, height, floor, top, List.copyOf(blockIds.keySet()),
 			Sample.slopes(height, width, depth), water, tree, natural, missing, biomeWidth, biomeDepth, biome, List.copyOf(biomeIds.keySet()),
-			missingChunks, chunksLoaded, ground);
+			missingChunks, chunksLoaded, ground, frozen);
 	}
 
 	/** Reads everything at once (tests, small areas). {@code loaded}: whether a chunk can be read. */

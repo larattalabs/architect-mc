@@ -49,8 +49,7 @@ export function parseSummary(text) {
 /** Score a surveyed candidate against the needs: null = rejected, else higher is better. */
 export function score(s, needs) {
   if (s.min === undefined || s.missing > 0) return null;
-  // (6c V) frozen water is still water: a site over a frozen river or sea (the survey reads ice as dry ground) is refused
-  if (needs.noFrozen && Object.keys(s.biomes ?? {}).some((b) => /frozen|ice_spikes/.test(b))) return null;
+  // (6c W) noFrozen reads the survey's frozen columns (fineChecks), not the biome names: an ice_spikes claim on land qualifies
   const relief = s.max - s.min;
   if (needs.relief && (relief < needs.relief[0] || relief > needs.relief[1])) return null;
   if (needs.waterMax !== undefined && s.water > needs.waterMax) return null;
@@ -86,7 +85,7 @@ export function candidates(n, step) {
 /** (6c V) The fine checks on a candidate that passed the summary: flat share, water in the outer band, no structure near. */
 export async function fineChecks(io, needs, [x0, z0, x1, z1]) {
   const out = { ok: true };
-  if (needs.flat || needs.waterBand) {
+  if (needs.flat || needs.waterBand || needs.noFrozen) {
     const res = needs.flat?.res ?? 4; // (Survey.sample takes 1 or 4: 2 is sampled at 4)
     const r = await io.cmd(`/apitest heights ${x0} ${z0} ${x1} ${z1} ${res}`);
     let v = JSON.parse((r.messages ?? []).find((m) => m.startsWith('{') || m.startsWith('[')) ?? 'null');
@@ -129,11 +128,15 @@ export async function fineChecks(io, needs, [x0, z0, x1, z1]) {
         out.localShare = Math.round((1000 * flat) / sq.size) / 1000;
       }
     }
+    // (6c W) frozen water (Sample.frozen, column [6]): counted, refused with noFrozen, never the band's unfrozen water
+    const frozen = (c) => c.length > 6 && c[6] === 1;
+    out.frozen = cols.filter(frozen).length;
+    if (needs.noFrozen && out.frozen > 0) out.ok = false;
     if (needs.waterBand) {
       const b = needs.waterBand.band;
       const inBand = (x, z) => x - x0 < b || x1 - x < b || z - z0 < b || z1 - z < b;
-      out.waterBand = cols.filter((c) => c[3] && inBand(c[0], c[1])).length;
-      out.waterInner = cols.filter((c) => c[3] && !inBand(c[0], c[1])).length;
+      out.waterBand = cols.filter((c) => c[3] && !frozen(c) && inBand(c[0], c[1])).length;
+      out.waterInner = cols.filter((c) => c[3] && !frozen(c) && !inBand(c[0], c[1])).length;
       if (out.waterBand < (needs.waterBand.min ?? 1)) out.ok = false;
     }
   }
@@ -196,7 +199,7 @@ export async function findSite(id, io) {
     const sc0 = score(s, needs);
     io.log(`  ${id}: candidate ${x0},${z0} relief ${s.max - s.min}, water ${s.water}%, trees ${s.trees}%, natural ${s.natural}%, biomes ${JSON.stringify(s.biomes)} -> ${sc0}`);
     let fine = null;
-    if (sc0 !== null && (needs.flat || needs.waterBand || needs.noStructure)) {
+    if (sc0 !== null && (needs.flat || needs.waterBand || needs.noStructure || needs.noFrozen)) {
       fine = await fineChecks(io, needs, [x0, z0, x1, z1]);
       io.log(`  ${id}: candidate ${x0},${z0} fine ${JSON.stringify(fine)}`);
       if (!fine.ok) continue;

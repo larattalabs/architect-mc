@@ -15,7 +15,7 @@ import { surveyApi, windowFromSurvey } from './survey.mjs';
 import { validateParams, resolveValues } from '../params.mjs';
 
 /** The kit's region engine version (recorded in every IR). */
-export const KIT_VERSION = '0.16.0';
+export const KIT_VERSION = '0.18.0';
 
 export const LIMITS = Object.freeze({
   claim: 1024, claimBig: 2048, irBytes: 4 * 1024 * 1024, ops: MAX_OPS, lots: 1024, paths: 256, stages: 64,
@@ -23,6 +23,74 @@ export const LIMITS = Object.freeze({
 });
 /** Margin (blocks) kept around the surveyed terrain when the IR's y range is tightened inside the request's. */
 export const Y_MARGIN = 64;
+
+/**
+ * (6c W) A region's parts, side blobs and tiles as the IR carries them (the ops' conditions and bounds, the tiles each stage and
+ * set touches). planRegion assembles the IR from it; light.mjs builds a draft IR from it (draftIR) mid-program.
+ */
+export function assembleParts(r, claim) {
+  const stages = r.stageList;
+  // (6b) side blobs: name -> {sha, bytes, kind} in the IR; the bytes by sha beside it
+  const sideBytes = new Map();
+  const irBlobs = {};
+  for (const [name, b] of Object.entries(r.sideBlobs)) {
+    const sha = sha256Hex(b.bytes);
+    sideBytes.set(sha, b.bytes);
+    irBlobs[name] = { sha, bytes: b.bytes.length, kind: b.kind };
+  }
+  let total = 0;
+  for (const b of sideBytes.values()) total += b.length;
+  if (total > 64 * 1024 * 1024) throw new Error(`the plan's blobs are ${total} bytes (at most 64 MB)`);
+  const blobs = Object.keys(r.blobs).length ? r.blobs : undefined;
+  const blobResolver = (name) => {
+    const e = irBlobs[name];
+    if (!e) throw new Error(`shape: blob '${name}' is not in the IR's blobs`);
+    return decodeArbl(sideBytes.get(e.sha), `blob ${name}`);
+  };
+  const parts = r.parts.map((p) => {
+    const si = stages.indexOf(p.stage);
+    const ops = p.ops.map((op) => {
+      const cond = op.cond === COND.IF_NATURAL && (p.set === 'path' || si > 0) ? COND.ALWAYS_OURS : op.cond;
+      const b = opBounds(op, Object.keys(irBlobs).length ? blobResolver : blobs);
+      return { ...op, cond, bounds: b };
+    });
+    return { id: p.id, stage: p.stage, set: p.set, ops };
+  });
+
+  const irClaim = { ...claim };
+
+  // tiles per stage and set, from op x/z bounds clipped to the claim
+  const tiles = {};
+  for (const s of stages) tiles[s] = { terrain: new Set(), path: new Set() };
+  for (const p of parts) {
+    for (const op of p.ops) {
+      const b = op.bounds;
+      const x0 = Math.max(b.minX, irClaim.minX), x1 = Math.min(b.maxX, irClaim.maxX), z0 = Math.max(b.minZ, irClaim.minZ), z1 = Math.min(b.maxZ, irClaim.maxZ);
+      if (x0 > x1 || z0 > z1) continue;
+      for (let tx = tileOf(x0); tx <= tileOf(x1); tx++) for (let tz = tileOf(z0); tz <= tileOf(z1); tz++) tiles[p.stage][p.set].add(`${tx},${tz}`);
+    }
+  }
+  const sortKeys = (set) => [...set].sort((a, b) => { const [ax, az] = a.split(',').map(Number), [bx, bz] = b.split(',').map(Number); return ax - bx || az - bz; });
+  const tilesOut = {};
+  for (const s of stages) tilesOut[s] = { terrain: sortKeys(tiles[s].terrain), path: sortKeys(tiles[s].path) };
+  return { sideBytes, irBlobs, blobs, parts, tilesOut };
+}
+
+/**
+ * (6c W) A draft IR of a region being built (no budget pass): enough for buildVirtual and the checker's walk graph, so a program
+ * can look at its own virtual world before it returns (r.lightCover). `{ir, blobs}` (blobs: sha -> bytes).
+ */
+export function draftIR(r) {
+  const claim = r.claim;
+  const { sideBytes, irBlobs, blobs, parts, tilesOut } = assembleParts(r, claim);
+  const ir = { format: 1, id: 'draft', claim: { ...claim }, roles: r.roles, stages: r.stageList, parts, lots: r.lots, roads: r.roads, paths: r.paths, anchors: r.anchors, rules: {}, tiles: tilesOut };
+  if (blobs) ir.blobs = blobs;
+  if (Object.keys(irBlobs).length) ir.blobs = irBlobs;
+  if (Object.keys(r.fields).length) ir.fields = r.fields;
+  if (Object.keys(r.volumesUsed).length) ir.volumes = r.volumesUsed;
+  if (r.floatingDecl.length) ir.floating = r.floatingDecl;
+  return { ir, blobs: (sha) => sideBytes.get(sha) };
+}
 
 /** The roles a plan resolves: the rustic built-in's core roles and the macro defaults, under the bible's roles. */
 export function resolveRoles(bibleRoles = {}, programRoles = {}) {
@@ -218,50 +286,9 @@ export async function planRegion(o) {
   const budgetCap = r.budgetCells ?? LIMITS.budgetDefault;
   if (budgetCap > LIMITS.budgetHard) throw new Error(`budget ${budgetCap} is over the hard cap ${LIMITS.budgetHard}`);
 
-  // (6b) side blobs: name -> {sha, bytes, kind} in the IR; the bytes by sha beside it
-  const sideBytes = new Map();
-  const irBlobs = {};
-  for (const [name, b] of Object.entries(r.sideBlobs)) {
-    const sha = sha256Hex(b.bytes);
-    sideBytes.set(sha, b.bytes);
-    irBlobs[name] = { sha, bytes: b.bytes.length, kind: b.kind };
-  }
-  let total = 0;
-  for (const b of sideBytes.values()) total += b.length;
-  if (total > 64 * 1024 * 1024) throw new Error(`the plan's blobs are ${total} bytes (at most 64 MB)`);
-  const blobs = Object.keys(r.blobs).length ? r.blobs : undefined;
-  const blobResolver = (name) => {
-    const e = irBlobs[name];
-    if (!e) throw new Error(`shape: blob '${name}' is not in the IR's blobs`);
-    return decodeArbl(sideBytes.get(e.sha), `blob ${name}`);
-  };
-  const parts = r.parts.map((p) => {
-    const si = stages.indexOf(p.stage);
-    const ops = p.ops.map((op) => {
-      const cond = op.cond === COND.IF_NATURAL && (p.set === 'path' || si > 0) ? COND.ALWAYS_OURS : op.cond;
-      const b = opBounds(op, Object.keys(irBlobs).length ? blobResolver : blobs);
-      return { ...op, cond, bounds: b };
-    });
-    return { id: p.id, stage: p.stage, set: p.set, ops };
-  });
-
+  const { sideBytes, irBlobs, blobs, parts, tilesOut } = assembleParts(r, claim);
   // the IR's y range: the request's for now; tightened after the budget pass (below)
   const irClaim = { ...claim };
-
-  // tiles per stage and set, from op x/z bounds clipped to the claim
-  const tiles = {};
-  for (const s of stages) tiles[s] = { terrain: new Set(), path: new Set() };
-  for (const p of parts) {
-    for (const op of p.ops) {
-      const b = op.bounds;
-      const x0 = Math.max(b.minX, irClaim.minX), x1 = Math.min(b.maxX, irClaim.maxX), z0 = Math.max(b.minZ, irClaim.minZ), z1 = Math.min(b.maxZ, irClaim.maxZ);
-      if (x0 > x1 || z0 > z1) continue;
-      for (let tx = tileOf(x0); tx <= tileOf(x1); tx++) for (let tz = tileOf(z0); tz <= tileOf(z1); tz++) tiles[p.stage][p.set].add(`${tx},${tz}`);
-    }
-  }
-  const sortKeys = (set) => [...set].sort((a, b) => { const [ax, az] = a.split(',').map(Number), [bx, bz] = b.split(',').map(Number); return ax - bx || az - bz; });
-  const tilesOut = {};
-  for (const s of stages) tilesOut[s] = { terrain: sortKeys(tiles[s].terrain), path: sortKeys(tiles[s].path) };
 
   const ir = {
     format: 1, id: ctx.__id, programSha: sha256Hex(programSource), kitVersion: o.kitVersion ?? KIT_VERSION,
@@ -337,6 +364,6 @@ export async function planRegion(o) {
   // a fresh object: evalTile caches compiled IRs per object, and the claim changed after the budget pass
   stats.irFormat = ir.format;
   stats.requires = ir.requires ?? [];
-  const meta = { format: 1, paths: r.meta.paths, lots: r.meta.lots, parts: r.meta.parts, ...(r.meta.village ? { village: r.meta.village } : {}) };
+  const meta = { format: 1, paths: r.meta.paths, lots: r.meta.lots, parts: r.meta.parts, ...(r.meta.village ? { village: r.meta.village } : {}), ...(r.meta.gravity ? { gravity: r.meta.gravity } : {}) };
   return { ir: JSON.parse(irJson), irJson, irSha: sha256Hex(irJson), notes, stats, blobs: sideBytes, meta, needVolumes: r.needVolumes };
 }

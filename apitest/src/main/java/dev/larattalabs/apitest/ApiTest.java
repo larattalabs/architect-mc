@@ -54,6 +54,8 @@ public class ApiTest implements ModInitializer {
 	static final Logger LOG = LoggerFactory.getLogger("apitest");
 	/** Results of async steps, by key. */
 	public static final Map<String, JsonElement> RESULTS = new ConcurrentHashMap<>();
+	/** The running server (1.15.0: events carry the world's game time). */
+	static volatile net.minecraft.server.MinecraftServer SERVER;
 	/** Every event seen, in order. */
 	static final List<JsonObject> EVENTS = java.util.Collections.synchronizedList(new ArrayList<>());
 	/** A preview request for the client side: {bp, x, y, z, turns} or {"clear"}. */
@@ -63,6 +65,8 @@ public class ApiTest implements ModInitializer {
 	public void onInitialize() {
 		// registered at init, before any world: the events are static (and ArchitectApi.get() works in any init order)
 		LOG.info("apitest: Architect API {}", ArchitectApi.VERSION);
+		net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents.SERVER_STARTED.register(srv -> SERVER = srv);
+		net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents.SERVER_STOPPED.register(srv -> SERVER = null);
 		SiteEvents.SITE_PLACED.register(v -> event("SITE_PLACED", site(v)));
 		ApiTestDelta.register(); // phase 5b events
 		ApiTestStockpile.register(); // 6c Y1: STOCKPILE_CHANGED
@@ -82,6 +86,11 @@ public class ApiTest implements ModInitializer {
 		});
 		SiteEvents.SITE_PROGRESS.register(v -> event("SITE_PROGRESS", site(v)));
 		SiteEvents.SITE_BUILT.register(v -> event("SITE_BUILT", site(v)));
+		SiteEvents.SITE_WAITING.register((v, w) -> { // 1.15.0
+			JsonObject o = site(v);
+			o.add("wait", waitJson(w));
+			event("SITE_WAITING", o);
+		});
 		SiteEvents.DESIGN_UPDATED.register(d -> event("DESIGN_UPDATED", design(d)));
 		SiteEvents.DESIGN_DONE.register(d -> event("DESIGN_DONE", design(d)));
 		SiteEvents.VARIANT_DONE.register(e -> event("VARIANT_DONE", entry(e)));
@@ -100,6 +109,10 @@ public class ApiTest implements ModInitializer {
 		data.addProperty("event", type);
 		data.addProperty("t", System.currentTimeMillis());
 		data.addProperty("serverThread", Thread.currentThread().getName());
+		net.minecraft.server.MinecraftServer srv = SERVER; // 1.15.0: the world's game time, so a gate can time events in ticks
+		if (srv != null && srv.overworld() != null) {
+			data.addProperty("gameTime", srv.overworld().getGameTime());
+		}
 		EVENTS.add(data);
 		LOG.info("apitest event {}", data);
 	}
@@ -325,6 +338,40 @@ public class ApiTest implements ModInitializer {
 			case "groupcount": {
 				return ApiTest0c.step(src, a);
 			}
+			case "waiting": {
+				// waiting <target id> (1.15.0): the SiteWait of a construction site or road, or null
+				return api.sites(server).waiting(a[1]).map(ApiTest::waitJson).map(x -> (JsonElement) x).orElse(com.google.gson.JsonNull.INSTANCE);
+			}
+			case "apiy2": {
+				JsonObject o = new JsonObject();
+				o.addProperty("version", ArchitectApi.VERSION);
+				JsonArray f = new JsonArray();
+				for (String x : new String[] {"siteWaiting", "fullBom"}) {
+					if (ArchitectApi.get().features().contains(x)) {
+						f.add(x);
+					}
+				}
+				o.add("featuresY2", f);
+				try {
+					// the 1.12.0 Verdict and the 1.8.0 SiteView constructors still exist and leave the new components empty
+					var vc = Verdict.class.getConstructor(java.util.List.class, java.util.List.class, boolean.class, Map.class, java.util.Optional.class,
+						java.util.Optional.class, java.util.List.class, int.class, java.util.List.class).newInstance(java.util.List.of(), java.util.List.of(), true,
+							Map.of(), java.util.Optional.empty(), java.util.Optional.empty(), java.util.List.of(), 0, java.util.List.of());
+					o.addProperty("oldVerdict", vc.bomFull().isEmpty() && !vc.bomExact());
+				} catch (ReflectiveOperationException e) {
+					o.addProperty("oldVerdict", false);
+					o.addProperty("oldVerdictError", e.toString());
+				}
+				var rc = SiteView.class.getRecordComponents();
+				var vcs = Verdict.class.getRecordComponents();
+				o.addProperty("trailing", rc[rc.length - 1].getName() + " " + vcs[vcs.length - 2].getName() + " " + vcs[vcs.length - 1].getName());
+				try {
+					o.addProperty("waitingDefault", dev.larattalabs.architect.api.Sites.class.getMethod("waiting", String.class).isDefault());
+				} catch (NoSuchMethodException e) {
+					o.addProperty("waitingDefault", false);
+				}
+				return o;
+			}
 			case "place":
 			case "check": {
 				// place <bp> <x> <y> <z> <AUTO|INSTANT|CONSTRUCTION> <owned|unowned> <actor|noactor> [rotation 0-3] [force] [layer]
@@ -508,6 +555,25 @@ public class ApiTest implements ModInitializer {
 		o.addProperty("headVersion", v.headVersion());
 		o.addProperty("deviations", v.deviations());
 		o.addProperty("updating", v.updating());
+		o.add("siteWait", v.siteWait() == null ? com.google.gson.JsonNull.INSTANCE : waitJson(v.siteWait())); // 1.15.0
+		return o;
+	}
+
+	/** 1.15.0: a SiteWait as JSON. */
+	static JsonObject waitJson(dev.larattalabs.architect.api.SiteWait w) {
+		JsonObject o = new JsonObject();
+		o.addProperty("targetId", w.targetId());
+		o.addProperty("waiting", w.waiting());
+		o.addProperty("waitingSince", w.waitingSince());
+		JsonArray n = new JsonArray();
+		for (dev.larattalabs.architect.api.ItemCount c : w.nextNeeded()) {
+			JsonObject x = new JsonObject();
+			x.addProperty("item", BuiltInRegistries.ITEM.getKey(c.item()).toString());
+			x.addProperty("count", c.count());
+			n.add(x);
+		}
+		o.add("nextNeeded", n);
+		o.addProperty("moreUnits", w.moreUnits());
 		return o;
 	}
 
@@ -584,6 +650,8 @@ public class ApiTest implements ModInitializer {
 		o.add("overlaps", ov);
 		o.addProperty("cells", v.cells());
 		o.add("spans", ApiTest0c.spans(v.spans())); // 1.12.0
+		o.add("bomFull", items(v.bomFull())); // 1.15.0
+		o.addProperty("bomExact", v.bomExact());
 		return o;
 	}
 

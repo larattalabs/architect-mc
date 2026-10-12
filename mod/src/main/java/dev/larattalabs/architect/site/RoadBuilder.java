@@ -14,6 +14,7 @@ import dev.larattalabs.architect.survival.Ledger;
 import dev.larattalabs.architect.survival.SiteNet;
 import dev.larattalabs.architect.survival.SurvivalItems;
 import dev.larattalabs.architect.survival.SurvivalWorld;
+import dev.larattalabs.architect.survival.WaitCalc;
 import java.util.ArrayList;
 import java.util.BitSet;
 import java.util.Comparator;
@@ -377,10 +378,14 @@ public final class RoadBuilder {
 			return;
 		}
 		if (fed == null && crate == null || c.paused()) {
+			boolean pileless = fed == null && c.crate() == null && road.owner() != null && !c.paused(); // 6c Y1: a dissolved stockpile's road
+			SiteWaits.observe(srv, level, road.id(), pileless ? WaitCalc.Outcome.STARVED : c.paused() || r.crateMissing ? WaitCalc.Outcome.ENDED
+				: WaitCalc.Outcome.IDLE); // C25
 			return;
 		}
 		Builder.Purse purse = fed != null ? fed : Builder.ledgerPurse(level, crate);
 		BlockState[] before = BEFORE.get(road.id());
+		boolean starved = false;
 		int budget = SurvivalWorld.blocksPerTick();
 		int placed = 0;
 		int scanned = 0;
@@ -397,12 +402,14 @@ public final class RoadBuilder {
 				r.markBuilt(i, true);
 				continue;
 			}
-			if (!r.affordable(i, purse::stock)) {
-				continue;
-			}
 			// bottom up: the queued cell below first (a gravel surface never falls into unbuilt fill); an attachable's support first
 			int below = r.queuePos(p.below());
-			if (below >= 0 && !r.built.get(below) || r.support[i] >= 0 && !r.built.get(r.support[i])) {
+			boolean supported = !(below >= 0 && !r.built.get(below) || r.support[i] >= 0 && !r.built.get(r.support[i]));
+			if (!r.affordable(i, purse::stock)) {
+				starved |= supported; // C25: a frontier cell the stock cannot pay
+				continue;
+			}
+			if (!supported) {
 				continue;
 			}
 			// the builder replaces what the road planned to replace (its before: grass under a path), or air, a fluid, a plant
@@ -420,6 +427,7 @@ public final class RoadBuilder {
 		if (placed > 0) {
 			purse.changed();
 		}
+		SiteWaits.observe(srv, level, road.id(), placed > 0 ? WaitCalc.Outcome.PLACED : starved ? WaitCalc.Outcome.STARVED : WaitCalc.Outcome.IDLE);
 		if (r.built.cardinality() == r.size()) {
 			complete(srv, level, Infras.get(road.id()), r, crate);
 		}
@@ -449,6 +457,7 @@ public final class RoadBuilder {
 		Infras.put(srv, done);
 		Builder.sendClear(srv, r, true);
 		r.blockedSince.clear();
+		SiteWaits.ended(srv, road.id());
 		for (ServerPlayer p : level.players()) {
 			if (Builder.near(p, road.box(), Builder.RANGE)) {
 				p.sendSystemMessage(Component.literal("[Architect] road " + road.id() + " is built"));
@@ -571,6 +580,7 @@ public final class RoadBuilder {
 		RUNS.remove(road.id());
 		BEFORE.remove(road.id());
 		PROGRESS.remove(road.id());
+		SiteWaits.ended(srv, road.id());
 		Builder.dropItems(level, at, refund, null);
 		Architect.LOGGER.info("Construction road {} removed: refunds and crate stock {} at {}", road.id(), refund, at.toShortString());
 	}
@@ -620,6 +630,7 @@ public final class RoadBuilder {
 			});
 		}
 		o.add("outstanding", out);
+		o.add("wait", SiteWaits.json(SiteWaits.view(srv, id), Sites.levelOf(srv, i.dimension()))); // 6c Y2 (C25)
 		return o;
 	}
 }

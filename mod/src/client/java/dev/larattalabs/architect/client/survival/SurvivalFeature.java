@@ -90,6 +90,26 @@ public final class SurvivalFeature {
 					}
 				})).thenCompose(x -> x);
 			});
+		DevBridge.register("dev.site.cells", 30_000, "{site} - (6c Y2) every queued cell of a construction site as \"x,y,z\": block id of its target", (req, mc) -> {
+			String id = Fields.of(req).nonBlank("site");
+			return DevBridge.onClient(mc, () -> ServerTasks.callOnServer(server -> Builder.cellsJson(server, id))).thenCompose(x -> x);
+		});
+		DevBridge.register("dev.bom.predict", 60_000, "{bp, at: [x,y,z], rot?: 0-3, force?: true} - (6c Y2) the cells the full BOM predicts for a "
+			+ "construction placement (the dry-run plan), as \"x,y,z\": block id, plus the refusals", (req, mc) -> {
+				Fields f = Fields.of(req);
+				String bp = f.nonBlank("bp");
+				com.google.gson.JsonArray at = req.getAsJsonArray("at");
+				int rot = req.has("rot") ? req.get("rot").getAsInt() : 0;
+				boolean force = f.optBool("force", true);
+				return DevBridge.onClient(mc, () -> ServerTasks.callOnServer(server -> {
+					var b = dev.larattalabs.architect.placement.Blueprints.get(bp);
+					if (b == null) {
+						throw new DevBridge.DevException("no design " + bp);
+					}
+					return Sites.debugBom(server.overworld(), b, new BlockPos(at.get(0).getAsInt(), at.get(1).getAsInt(), at.get(2).getAsInt()),
+						net.minecraft.world.level.block.Rotation.values()[rot], force);
+				})).thenCompose(x -> x);
+			});
 		DevBridge.register("dev.crate.insert", 30_000, "{site, items?: {item: count}, inventory?: true, exact?: false} - book items into the crate as a "
 			+ "hopper would (counting equivalents; exact: only units taken as themselves, never converted), or move the player's needed items in "
 			+ "(Insert from inventory) -> what went in. site: a site, a road, or (6c Y1) stockpile:<owner>", (req, mc) -> {

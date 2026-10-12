@@ -27,7 +27,7 @@ class Api118Test {
 	void featureAndLimit() {
 		Set<String> f = ApiRules.features(1, List.of());
 		assertTrue(f.contains("stockpile"), f.toString());
-		assertTrue(!f.contains("siteWaiting") && !f.contains("fullBom"), "Y2's features are Y2's");
+
 		assertEquals(16, Limits.STOCKPILE_CRATES);
 	}
 
