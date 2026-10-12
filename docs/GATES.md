@@ -14,6 +14,31 @@ node tools/gate-run.mjs quick                                    # a named chain
 node tools/gate-impact.mjs --since origin/main                   # just the change-impact report
 ```
 
+## Policy update (Noah, 2026-10-12): cut what has only cost time
+
+Evidence from 0a-X: every timing-bar failure on a slice was machine load (0a's three benches, 0b's 4d-all, 0c's three,
+X's apijars, v0.16.0's 4d-all A/B against v0.15.0); no slice gate's full regression caught a real bug; the real finds came
+from each slice's own focused items, the verifier's code review and Steward's reviews. So, **these win over the tables below**:
+
+1. **Timing bars never block a slice.** In `change` and `slice` a bench step's timing bars (MSPT, own-tick max, cells/s,
+   p99, wall) are **recorded, not judged**; its functional checks (exactness, undo, counts) still judge. Timing bars are judged
+   once per batch at `release`, with `--quiet-wait` and Noah's CI runners paused.
+2. **`slice` = `change` + the slice's own focused steps.** The unit suites, apijars/api-compat, the impact map's steps for the
+   changed paths, and the slice's own gate steps. No `quick` regression suite per slice; the full regression runs once per
+   batch at `release` (overnight).
+3. **The gate-verifier reviews the diff and the evidence; it does not re-run.** Exception: undo, journal, removal and
+   survival-accounting code, where it re-runs those specific items (that is where review found C23's defect).
+4. **Release first, Steward checks after.** A slice merges and releases without a pre-release Steward RC check; Steward checks
+   the published version and anything found becomes a patch. Exception: a slice changing behaviour Steward relies on (removal,
+   world stop, accounting) gets the RC check first.
+5. **Batch releases.** Merge 2-3 slices, then one release tier, one tag and one publish. API and mod versions are assigned at
+   merge (next free minor), so branches never renumber; builders use a placeholder until the coordinator sets it.
+6. **At most 3 gate runs on the machine at once** (a machine-wide slot lock in the runner); more only causes load failures.
+
+**Next (Noah, 2026-10-12): headless gates, as soon as possible** (moved up from "after 6c"): a server-only gate mode for the
+exactness and MSPT checks, faster and steadier than full clients, so slices and CI can run them in parallel. The client stays for
+screenshots and galleries.
+
 ## The policy (Noah, 2026-10-09; PLAN.md "Process from 6c on")
 
 Gates are tiered by risk. Run the cheapest tier that covers the change, and the expensive checks once per release.
