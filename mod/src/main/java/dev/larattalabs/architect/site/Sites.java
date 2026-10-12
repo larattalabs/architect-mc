@@ -1084,6 +1084,23 @@ public final class Sites {
 					removed++;
 				}
 			}
+			if (System.getenv("ARCHITECT_TRACE_DOORS") != null) {
+				GhostModel gm0 = site.grid().ghost(site.turns());
+				BlockState[] gs0 = site.grid().states();
+				for (int i = 0; i < gm0.count(); i++) {
+					if (gs0[i].getBlock() instanceof net.minecraft.world.level.block.DoorBlock && gs0[i].getValue(net.minecraft.world.level.block.DoorBlock.HALF) == net.minecraft.world.level.block.state.properties.DoubleBlockHalf.LOWER) {
+						BlockPos dp = new BlockPos(box.minX() + gm0.x(i), box.minY() + gm0.y(i), box.minZ() + gm0.z(i));
+						StringBuilder sb = new StringBuilder();
+						for (int dy = -2; dy <= 2; dy++) {
+							for (int[] o : new int[][] {{0, 0}, {1, 0}, {-1, 0}, {0, 1}, {0, -1}}) {
+								BlockState st0 = level.getBlockState(dp.offset(o[0], dy, o[1]));
+								sb.append(dy).append(':').append(o[0]).append(',').append(o[1]).append('=').append(Cells.blockId(st0).replace("minecraft:", "")).append(' ');
+							}
+						}
+						Architect.LOGGER.info("TRACE door ORIGINAL {} {}", dp.toShortString(), sb);
+					}
+				}
+			}
 			net.minecraft.world.level.ServerLevelAccessor accessor = level;
 			if (System.getenv("ARCHITECT_TRACE_DOORS") != null) {
 				accessor = (net.minecraft.world.level.ServerLevelAccessor) java.lang.reflect.Proxy.newProxyInstance(Sites.class.getClassLoader(),
