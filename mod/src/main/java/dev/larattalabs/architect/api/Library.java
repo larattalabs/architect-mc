@@ -127,7 +127,7 @@ public interface Library {
 	 * {@code Version} and {@code DataVersion}. The mod reads and validates the file and upgrades its block states and block-entity
 	 * data to this game's version with vanilla's data fixers, then the helper checks, renders and installs it: fails when the
 	 * helper is not running. Entities are skipped (counted in the import's step line); biomes are ignored. {@code groundY} is
-	 * {@code -Offset.y} when that is a row of the schematic, else 1 (as a {@code .nbt} import).
+	 * {@code -Offset.y} when that is a row of the schematic above its bottom row, else 1 (as a {@code .nbt} import).
 	 *
 	 * <p>Refusals ({@link ArchitectRefused}, nothing installed): {@link Reason#FORMAT} for a file that is not a Sponge
 	 * schematic, an unknown {@code Version}, a {@code DataVersion} newer than the game's, corrupt data, or blocks this game does

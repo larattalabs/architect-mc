@@ -366,7 +366,7 @@ export type ParamValues = z.infer<typeof ParamValues>;
 /** (6c SCH) What the mod read from a Sponge schematic, for an import-schem job. */
 export const ImportSchem = z.object({
   file: z.string().min(1).max(255).describe("the schematic's file name"),
-  groundY: z.number().int().min(0).max(63).describe('the ground row: -Offset.y when that is a row of the schematic, else 1'),
+  groundY: z.number().int().min(1).max(63).describe('the ground row: -Offset.y when that is a row of the schematic above its bottom row, else 1'),
   ext: z.record(z.string().regex(/^[a-z0-9_.-]+:[a-zA-Z0-9_./-]+$/), z.unknown()).refine((e) => JSON.stringify(e).length <= 4096, 'ext: at most 4096 characters').describe("the entry's ext (architect_mc:schem: Name, Author, Version, DataVersion, ...)"),
 });
 export type ImportSchem = z.infer<typeof ImportSchem>;

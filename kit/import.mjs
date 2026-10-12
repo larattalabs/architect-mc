@@ -3,7 +3,7 @@
 //
 // (6c SCH) A Sponge schematic (.schem, versions 2 and 3: lib/schem.mjs) is converted to a structure first, as it is, at its own
 // DataVersion (the mod upgrades a player's file with vanilla's data fixers before it reaches here); its groundY is -Offset.y when
-// that is a row of it. --ground-y sets the ground row (default 1, or the schematic's), --tag adds a tag after `imported`.
+// that is a row of it above its bottom row (else 1). --ground-y sets the ground row (default 1, or the schematic's), --tag adds a tag after `imported`.
 //
 // Turns a vanilla structure file (a structure-block save) into a library entry (lib/importer.mjs): writes
 // <out>/<id>.nbt (gzipped, the first palette, no entities) and <out>/<id>.blueprint.json (type custom, groundY 1,
@@ -42,7 +42,7 @@ function parseArgs(argv) {
     else o.files.push(path.resolve(a));
   }
   if (o.files.length !== 1) throw new Error('needs one <file.nbt> or <file.schem>');
-  if (o.groundY !== undefined && !(Number.isInteger(o.groundY) && o.groundY >= 0 && o.groundY < 64)) throw new Error('--ground-y must be 0..63');
+  if (o.groundY !== undefined && !(Number.isInteger(o.groundY) && o.groundY >= 1 && o.groundY < 64)) throw new Error('--ground-y must be 1..63');
   if (!o.tags.every((t) => /^[a-z0-9_]{1,24}$/.test(t))) throw new Error('--tag must match [a-z0-9_]{1,24}');
   if (!/^[a-z0-9_]+$/.test(o.id ?? '')) throw new Error('--id must match [a-z0-9_]+');
   if (!o.out) throw new Error('--out <dir> is required');
@@ -78,7 +78,7 @@ function main() {
       const sc = readSchem(root);
       root = schemToStructure(sc);
       const g = -sc.offset[1];
-      if (groundY === undefined && g >= 0 && g < sc.height) groundY = g;
+      if (groundY === undefined && g >= 1 && g < sc.height) groundY = g;
       if (o.name === undefined && sc.name && sc.name.trim()) o.name = sc.name.trim().slice(0, 40);
     } catch (e) {
       return fail2(`${path.basename(file)}: ${e.reason ?? 'FORMAT'}: ${e.message}`, o.json);

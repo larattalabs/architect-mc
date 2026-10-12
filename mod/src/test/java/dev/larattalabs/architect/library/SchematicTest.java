@@ -155,6 +155,7 @@ class SchematicTest {
 		JsonObject schem = p.ext().getAsJsonObject(Schematics.EXT_KEY);
 		assertEquals(2, schem.getAsJsonArray("replaced").size());
 		assertFalse(p.ext().has(Schematics.UNKNOWN_AS), "unknownAs is a request option, not stored");
+		assertEquals(1, p.groundY(), "Offset [0,0,0]: groundY 0 is no template ground row, so 1");
 		JsonObject bad = JsonParser.parseString("{\"architect_mc:unknownAs\":\"othermod:x\"}").getAsJsonObject();
 		assertEquals(Reason.FORMAT, assertThrows(Schematic.Refused.class, () -> Schematics.prepare(fixture("unknown_block.schem"), "u.schem", null, bad))
 			.reason());

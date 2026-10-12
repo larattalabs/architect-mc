@@ -47,7 +47,8 @@ import org.jspecify.annotations.Nullable;
  *
  * <p>Architect's conventions: a template cell it does not write is {@code minecraft:structure_void} in a file it writes, and a
  * {@code structure_void} cell in a file it reads is not written; air is air. {@code Offset} puts the template's ground row
- * ({@code groundY}) at y 0, so reading takes {@code groundY = -Offset.y} when that is a row of the schematic.
+ * ({@code groundY}) at y 0, so reading takes {@code groundY = -Offset.y} when that is a row of the schematic above its bottom
+ * row (else 1, as a {@code .nbt} import).
  */
 public final class Schematic {
 	/** The template cap (docs/CONTRACT.md "Phase 2": the largest design; a schematic past it is refused TOO_LARGE). */
@@ -105,10 +106,13 @@ public final class Schematic {
 			return x + z * width + y * width * length;
 		}
 
-		/** {@code -Offset.y} when it is a row of the schematic, else {@code fallback}. */
+		/**
+		 * {@code -Offset.y} when it is a row of the schematic above its bottom row (a template's ground row has its floor row
+		 * under it: groundY at least 1), else {@code fallback}.
+		 */
 		public int groundY(int fallback) {
 			int g = -offset[1];
-			return g >= 0 && g < height ? g : fallback;
+			return g >= 1 && g < height ? g : fallback;
 		}
 	}
 

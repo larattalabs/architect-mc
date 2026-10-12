@@ -321,29 +321,39 @@ async function refusals() {
 
 async function placement() {
   await setRules();
-  const hut = await importSchem(path.join(FIX, 'v3_hut.schem'), 'Placed Hut');
-  if (!check(!hut.error, `the hut imports for placement (${hut.id ?? hut.error})`, hut)) return {};
-  const s = await spot(48, 0);
-  const box = [s.x - 8, s.y - 12, s.z - 8, s.x + 16, s.y + 16, s.z + 16];
-  const pre = await call('dev.region.hash', { box });
-  const pl = await result(await api(`place ${hut.id} ${s.x} ${s.y + 1} ${s.z} INSTANT unowned noactor 0`), 120_000);
-  if (!check(pl.placed, `item 5: ${hut.id} placed as ${pl.siteId}`, pl)) return {};
-  let v;
-  for (let i = 0; i < 40; i++) {
-    v = await call('dev.site.verify', { site: pl.siteId }, 120_000);
-    if ((v.owned ?? 0) > 0 && v.mismatches === 0) break;
-    await sleep(500);
+  const out = {};
+  // the hut (its chest holds 3 bread: a filled container blocks a removal, so it is emptied first, as a player would) and the
+  // upgraded 1.16.5 fixture (no container)
+  for (const [f, dx, dz] of [['v3_hut.schem', 48, 0], ['old_dataversion.schem', 48, 24]]) {
+    const imp = await importSchem(path.join(FIX, f), `Placed ${f.replace('.schem', '')}`);
+    if (!check(!imp.error, `${f} imports for placement (${imp.id ?? imp.error})`, imp)) continue;
+    const s = await spot(dx, dz);
+    const box = [s.x - 8, s.y - 12, s.z - 8, s.x + 16, s.y + 16, s.z + 16];
+    const pre = await call('dev.region.hash', { box });
+    const pl = await result(await api(`place ${imp.id} ${s.x} ${s.y + 1} ${s.z} INSTANT unowned noactor 0`), 120_000);
+    if (!check(pl.placed, `item 5: ${imp.id} placed as ${pl.siteId}`, pl)) continue;
+    let v;
+    for (let i = 0; i < 40; i++) {
+      v = await call('dev.site.verify', { site: pl.siteId }, 120_000);
+      if ((v.owned ?? 0) > 0 && v.mismatches === 0) break;
+      await sleep(500);
+    }
+    check(v.owned > 0 && v.mismatches === 0, `item 5: every cell of ${pl.siteId} is the template's (${v.owned} owned, ${v.mismatches} mismatches)`, v);
+    const h = (x) => x.sha256 ?? x.hash;
+    const mid = await call('dev.region.hash', { box });
+    check(h(mid) !== h(pre), `item 5: the box changed when ${pl.siteId} was placed`);
+    const site = ((await api('sites')).all ?? []).find((x) => x.id === pl.siteId);
+    const b = String(site?.box ?? '').match(/-?\d+/g)?.map(Number);
+    if (f === 'v3_hut.schem' && b) await cmd(`/data merge block ${b[0] + 1} ${b[1] + 1} ${b[2] + 1} {Items:[]}`);
+    const rm = await result(await api(`remove ${pl.siteId} - noforce`), 120_000);
+    check(rm.removed === true, `item 5: removed ${pl.siteId}`, rm);
+    await sleep(2000);
+    const post = await call('dev.region.hash', { box });
+    check(h(post) === h(pre), `item 5: Remove-exact: ${pl.siteId}'s box hash after removal equals the one before placing (${String(h(pre)).slice(0, 12)})`,
+      { pre: h(pre), post: h(post) });
+    out[f] = { entry: imp.id, site: pl.siteId, owned: v.owned };
   }
-  check(v.owned > 0 && v.mismatches === 0, `item 5: every placed cell is the template's (${v.owned} owned, ${v.mismatches} mismatches)`, v);
-  const mid = await call('dev.region.hash', { box });
-  check(mid.sha256 !== pre.sha256 || mid.hash !== pre.hash, 'item 5: the box changed when placed');
-  const rm = await result(await api(`remove ${pl.siteId} - noforce`), 120_000);
-  check(rm.removed === true, `item 5: removed ${pl.siteId}`, rm);
-  await sleep(2000);
-  const post = await call('dev.region.hash', { box });
-  const h = (x) => x.sha256 ?? x.hash;
-  check(h(post) === h(pre), `item 5: Remove-exact: the box hash after removal equals the one before placing (${String(h(pre)).slice(0, 12)})`, { pre: h(pre), post: h(post) });
-  return { site: pl.siteId };
+  return out;
 }
 
 // ------------------------------------------------------------------ item 6: sites
@@ -484,6 +494,7 @@ async function sites() {
   const k = (dx, dy, dz) => `${dx},${dy},${dz}`;
   check(fromFile[k(cx - x0, 2, cz - z0)] === 'minecraft:gold_block' && fromFile[k(0, 1, 0)] === 'minecraft:air' && /apple/.test(fromFile[k(cx + 1 - x0, 2, cz - z0)] ?? ''),
     'item 6: the three edits are in the file (gold block, removed block, chest with apples)', { gold: fromFile[k(cx - x0, 2, cz - z0)], air: fromFile[k(0, 1, 0)], chest: fromFile[k(cx + 1 - x0, 2, cz - z0)] });
+  await cmd(`/data merge block ${cx + 1} ${y0 + 2} ${cz} {Items:[]}`);
   const rm = await result(await api(`remove ${pl.siteId} - force`), 120_000);
   log('removed', JSON.stringify(rm).slice(0, 200));
   return { site: pl.siteId, file: ex.file };
