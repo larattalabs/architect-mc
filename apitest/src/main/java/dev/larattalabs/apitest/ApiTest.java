@@ -270,6 +270,7 @@ public class ApiTest implements ModInitializer {
 			case "api18":
 			case "api19":
 			case "api114":
+			case "apimp":
 			case "rplanbykey":
 			case "rrealisebykey":
 			case "rnudge":

@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "architect:mask-1",
+  "title": "Architect mask (docs/CONTRACT.md 6c slice MP §2)",
+  "description": "A pointwise cell selector: one term or a combinator. The kit (lib/mask.mjs) and the mod (api.Mask) validate a spec with this schema (the subset kit/lib/specschema.mjs and api.SpecSchema read) plus the rules in x-rules.",
+  "x-rules": [
+    "a range [a, b] has a <= b",
+    "field and noise terms: gte < lt when both are given",
+    "combinators nest at most 8 deep, and a mask has at most 64 nodes (terms and combinators)"
+  ],
+  "$ref": "#/$defs/mask",
+  "$defs": {
+    "mask": {
+      "oneOf": [
+        { "$ref": "#/$defs/all" }, { "$ref": "#/$defs/any" }, { "$ref": "#/$defs/not" }, { "$ref": "#/$defs/block" },
+        { "$ref": "#/$defs/height" }, { "$ref": "#/$defs/slope" }, { "$ref": "#/$defs/depth" }, { "$ref": "#/$defs/field" },
+        { "$ref": "#/$defs/noise" }, { "$ref": "#/$defs/class" }
+      ],
+      "oneOfMessage": "a mask is one of {all}, {any}, {not}, {block}, {height}, {slope}, {depth}, {field}, {noise}, {class}"
+    },
+    "list": { "type": "array", "minItems": 1, "maxItems": 16, "items": { "$ref": "#/$defs/mask" } },
+    "all": { "type": "object", "required": ["all"], "additionalProperties": false, "properties": { "all": { "$ref": "#/$defs/list" } } },
+    "any": { "type": "object", "required": ["any"], "additionalProperties": false, "properties": { "any": { "$ref": "#/$defs/list" } } },
+    "not": { "type": "object", "required": ["not"], "additionalProperties": false, "properties": { "not": { "$ref": "#/$defs/mask" } } },
+    "block": {
+      "type": "object", "required": ["block"], "additionalProperties": false,
+      "properties": { "block": { "type": "array", "minItems": 1, "maxItems": 64, "items": { "type": "string", "pattern": "^#?([a-z0-9_.-]+:)?[a-z0-9_./-]+$" } } }
+    },
+    "height": { "type": "object", "required": ["height"], "additionalProperties": false, "properties": { "height": { "$ref": "#/$defs/intRange" } } },
+    "slope": { "type": "object", "required": ["slope"], "additionalProperties": false, "properties": { "slope": { "$ref": "#/$defs/slopeRange" } } },
+    "depth": { "type": "object", "required": ["depth"], "additionalProperties": false, "properties": { "depth": { "$ref": "#/$defs/intRange" } } },
+    "field": {
+      "type": "object", "required": ["field"], "additionalProperties": false,
+      "properties": { "field": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,31}$" }, "gte": { "type": "number" }, "lt": { "type": "number" } },
+      "anyOf": [{ "required": ["gte"] }, { "required": ["lt"] }], "anyOfMessage": "a field term needs gte or lt"
+    },
+    "noise": {
+      "type": "object", "required": ["noise"], "additionalProperties": false,
+      "properties": { "noise": { "$ref": "#/$defs/noiseSpec" }, "gte": { "type": "number" }, "lt": { "type": "number" } },
+      "anyOf": [{ "required": ["gte"] }, { "required": ["lt"] }], "anyOfMessage": "a noise term needs gte or lt"
+    },
+    "class": {
+      "type": "object", "required": ["class"], "additionalProperties": false,
+      "properties": {
+        "class": { "type": "array", "minItems": 1, "maxItems": 15, "items": { "enum": ["AIR", "ROCK", "SOIL", "LOOSE", "ICE", "SNOW", "WATER", "LAVA", "LOG", "LEAVES", "PLANT", "OWNED", "PLAYER", "BLOCK_ENTITY", "MISSING"] } }
+      }
+    },
+    "intRange": { "type": "array", "minItems": 2, "maxItems": 2, "items": { "type": "integer", "minimum": -4096, "maximum": 4096 } },
+    "slopeRange": { "type": "array", "minItems": 2, "maxItems": 2, "items": { "type": "number", "minimum": 0, "maximum": 4096 } },
+    "noiseSpec": {
+      "type": "object", "required": ["kind", "dims", "scale", "octaves", "seed"], "additionalProperties": false,
+      "properties": {
+        "kind": { "enum": ["value", "simplex"] }, "dims": { "enum": [2, 3] }, "scale": { "type": "number", "exclusiveMinimum": 0, "maximum": 65536 },
+        "octaves": { "type": "integer", "minimum": 1, "maximum": 8 }, "seed": { "type": "string", "pattern": "^[0-9a-f]{16}$" }
+      }
+    }
+  }
+}
