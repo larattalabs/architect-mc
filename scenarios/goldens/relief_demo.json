@@ -1,0 +1,17 @@
+{
+ "scenario": "relief_demo",
+ "version": 0,
+ "note": "tile shas of the IR over its own plan survey (kit windowFromSurvey), 1 worker = 4 workers shuffled; inputs in goldens/relief_demo/",
+ "fromRun": "20261012-055047",
+ "irSha": "bea58673f570142c3d147fbee4d97ce2780f72450a1bdb23135f693654b0ad50",
+ "kitVersion": "0.20.0",
+ "cells": 16531,
+ "tiles": {
+  "ground|terrain|56,-15": "4b17d5505fe8be3b6f87369857858e747185c7d32ebc11cb2d1b36d561f30fc0",
+  "ground|terrain|56,-16": "75ea9087928609cf4fcabe4e7df732f799c7676af010100d90d697fcca047940",
+  "ground|terrain|57,-15": "807d760944a54b2834b169d208d912da909fac9aa597faa57d0d40c1291fa839",
+  "ground|terrain|57,-16": "1d4cf0e4ca93ae9273cc8bc3b390417a8feb7ee2267592e7c4066653f623eb64",
+  "ground|terrain|58,-15": "814080ae84d5a4708ba22b916929541815c86770431aed8929151f39dc46a8b2",
+  "ground|terrain|58,-16": "71caeaca2fc01ce3a75ec425920f1ff6959a32ddcc6a260973b9bc033dffc6b9"
+ }
+}
