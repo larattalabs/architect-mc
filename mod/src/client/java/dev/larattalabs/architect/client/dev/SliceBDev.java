@@ -101,6 +101,48 @@ public final class SliceBDev {
 					return o;
 				});
 			});
+		DevBridge.register("dev.brush.perm", 10_000, "{} - (6c B) whether the player has permission level 2 now (the PLAYER_BLOCKS rule)",
+			(req, mc) -> ServerTasks.callAsPlayer((level, player) -> {
+				JsonObject o = new JsonObject();
+				o.addProperty("permission2", dev.larattalabs.architect.apiimpl.ApiRules.permission2(player));
+				o.addProperty("name", player.getGameProfile().name());
+				return o;
+			}));
+		DevBridge.register("dev.site.ownedHash", 120_000, "{site, box: [x0,y0,z0,x1,y1,z1]} - (6c B) SHA-256 over the cells of the box that an active "
+			+ "journal entry of the site owns (state and block-entity data, as the journal keeps them) -> {cells, sha256}", (req, mc) -> {
+				String site = Fields.of(req).nonBlank("site");
+				JsonArray b = req.getAsJsonArray("box");
+				return ServerTasks.callAsPlayer((level, player) -> {
+					try {
+						java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-256");
+						String dim = dev.larattalabs.architect.site.Sites.dimensionId(level);
+						int n = 0;
+						for (int y = b.get(1).getAsInt(); y <= b.get(4).getAsInt(); y++) {
+							for (int z = b.get(2).getAsInt(); z <= b.get(5).getAsInt(); z++) {
+								for (int x = b.get(0).getAsInt(); x <= b.get(3).getAsInt(); x++) {
+									long pos = dev.larattalabs.architect.journal.Journal.pos(x, y, z);
+									boolean owned = false;
+									for (var l : dev.larattalabs.architect.journal.WorldJournal.stack(dim, pos)) {
+										owned |= site.equals(l.meta().site());
+									}
+									if (!owned) {
+										continue;
+									}
+									n++;
+									md.update((x + "," + y + "," + z + "=" + dev.larattalabs.architect.journal.WorldJournal.valueAt(level, new BlockPos(x, y, z))).getBytes(
+										java.nio.charset.StandardCharsets.UTF_8));
+								}
+							}
+						}
+						JsonObject o = new JsonObject();
+						o.addProperty("cells", n);
+						o.addProperty("sha256", java.util.HexFormat.of().formatHex(md.digest()));
+						return o;
+					} catch (java.io.IOException | java.security.NoSuchAlgorithmException e) {
+						throw new DevBridge.DevException(String.valueOf(e));
+					}
+				});
+			});
 		DevBridge.register("dev.brush.stats", 10_000, "{} - (6c B) every stroke's latency marks {region, requested, planned, realised} (epoch ms)",
 			(req, mc) -> {
 				JsonObject o = new JsonObject();

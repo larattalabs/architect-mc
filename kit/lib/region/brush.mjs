@@ -445,10 +445,11 @@ export function caveWorm({ cx, cy, cz, radius, shape }, strength, cls, rng, box,
         const todo = [[sx, sy, sz]];
         seen.add(k0);
         let anchored = false;
-        while (todo.length && !anchored) {
+        // the whole component is walked (a walk cut short at its anchor would leave cells a later walk can't pass)
+        while (todo.length) {
           const [qx, qy, qz] = todo.pop();
           comp.push([qx, qy, qz]);
-          if (qx <= box.minX || qx >= box.maxX || qy <= box.minY || qy >= box.maxY || qz <= box.minZ || qz >= box.maxZ) { anchored = true; break; }
+          if (qx <= box.minX || qx >= box.maxX || qy <= box.minY || qy >= box.maxY || qz <= box.minZ || qz >= box.maxZ) anchored = true;
           for (const [d, e, f] of N6) {
             const nx = qx + d, ny = qy + e, nz = qz + f, k = key(nx, ny, nz);
             if (seen.has(k) || !solid(nx, ny, nz)) continue;

@@ -193,6 +193,8 @@ async function undo(region, requester = OWNER) {
   throw new Error(`undo of ${region} did not finish`);
 }
 const boxHash = async (min, max) => call('dev.box.hash', { min, max }, 120_000);
+/** The other owner's road: the cells its journal entries own (state and block-entity data). */
+const roadHash = async (site, gy) => call('dev.site.ownedHash', { site, box: [...ROAD(gy).min, ...ROAD(gy).max] }, 120_000);
 /** The ground y at (x, z) from the region plan survey of a small claim around it. */
 async function groundAt(x, z) {
   const f = path.join(OUT, `survey-${x}-${z}.bin`);
@@ -226,7 +228,7 @@ const itemsNear = async (x, y, z, r = 40) => {
 // the flat fixture: centre (X0, gy, Z0); mounds, the player's wall with a chest, the other owner's road
 const X0 = 40, Z0 = 40;
 const WALL = (gy) => ({ min: [X0 + 12, gy + 1, Z0], max: [X0 + 18, gy + 3, Z0] });
-const ROAD = (gy) => ({ min: [X0 - 16, gy - 2, Z0 - 10], max: [X0 + 16, gy + 4, Z0 - 6] });
+const ROAD = (gy) => ({ min: [X0 - 18, gy - 4, Z0 - 12], max: [X0 + 18, gy + 6, Z0 - 4] });
 const STROKES = (gy) => [
   { kind: 'raise', shape: 'cylinder', at: [X0, gy, Z0 - 4], radius: 10, strength: 4 },
   { kind: 'smooth', shape: 'sphere', at: [X0 - 2, gy + 2, Z0 - 2], radius: 10, strength: 6 },
@@ -244,6 +246,9 @@ async function flatFixture() {
   for (const [bx, bz, h] of [[X0 - 4, Z0 - 2, 4], [X0 + 5, Z0 - 7, 3], [X0 - 8, Z0 + 4, 5], [X0 + 2, Z0 + 3, 2]]) {
     for (let k = 1; k <= h; k++) { const w = h - k + 1; await cmd(`/fill ${bx - w} ${gy + k} ${bz - w} ${bx + w} ${gy + k} ${bz + w} minecraft:dirt`); }
   }
+  // two stone spikes (natural stone: MELT rounds them off)
+  await cmd(`/fill ${X0 - 12} ${gy + 1} ${Z0 + 10} ${X0 - 12} ${gy + 6} ${Z0 + 10} minecraft:stone`);
+  await cmd(`/fill ${X0 - 9} ${gy + 1} ${Z0 + 12} ${X0 - 9} ${gy + 4} ${Z0 + 12} minecraft:stone`);
   // the player's wall: stone bricks 7 long, 3 high, a chest with items in it
   const w = WALL(gy);
   await cmd(`/fill ${w.min.join(' ')} ${w.max.join(' ')} minecraft:stone_bricks`);
@@ -252,7 +257,9 @@ async function flatFixture() {
   const road = await call('dev.road.place', { points: [[X0 - 14, gy, Z0 - 8], [X0 + 14, gy, Z0 - 8]], width: 3, lanterns: false, owner: OTHER }, 180_000);
   check(!road.refused && (road.cells ?? road.placed ?? 1) > 0, `the other owner's road placed (${json(road).slice(0, 200)})`);
   await settle(3000);
-  return { gy, wall: await boxHash(w.min, w.max), road: await boxHash(ROAD(gy).min, ROAD(gy).max), roadAnswer: road };
+  const roadCells = await roadHash(road.siteId, gy);
+  check(roadCells.cells > 0, `the road owns ${roadCells.cells} cells`);
+  return { gy, wall: await boxHash(w.min, w.max), road: roadCells, roadSite: road.siteId, roadAnswer: road };
 }
 
 // ------------------------------------------------------------------ in game: the flat items
@@ -265,17 +272,19 @@ steps['flat-owned'] = async () => {
   check(fx.wall.blockEntities === 1 && fx.wall.air === 0, `the wall: ${21 - fx.wall.air} blocks, ${fx.wall.blockEntities} chest`);
   // item 2 and 3: NATURAL_ONLY strokes over the mounds, the road and the wall
   const natural = [...STROKES(gy), { kind: 'lower', shape: 'cylinder', at: [X0 + 15, gy + 3, Z0], radius: 8, strength: 8 }, { kind: 'melt', shape: 'sphere', at: [X0 + 15, gy + 2, Z0], radius: 6, strength: 2 },
-    { kind: 'raise', shape: 'cylinder', at: [X0 + 15, gy, Z0 - 6], radius: 6, strength: 3 }];
+    { kind: 'raise', shape: 'cylinder', at: [X0 + 15, gy, Z0 - 6], radius: 6, strength: 3 }, { kind: 'melt', shape: 'sphere', at: [X0 - 10, gy + 3, Z0 + 11], radius: 5, strength: 3 }];
   const done = [];
   for (const s of natural) {
     const v = await brush(s);
     out.strokes.push(v);
     check(!v.refused && v.state === 'PLACED' && v.brush === s.kind.toUpperCase(), `stroke ${s.kind} at ${s.at}: ${v.state ?? v.refused}, brush ${v.brush}, ${v.cellsWritten} cells`);
     if (v.region) done.push(v.region);
-    const wh = await boxHash(WALL(gy).min, WALL(gy).max), rh = await boxHash(ROAD(gy).min, ROAD(gy).max);
+    const wh = await boxHash(WALL(gy).min, WALL(gy).max), rh = await roadHash(fx.roadSite, gy);
     check(wh.sha256 === fx.wall.sha256, `item 2: NATURAL_ONLY ${s.kind}: the player's wall unchanged (its blocks and the chest's contents)`);
-    check(rh.sha256 === fx.road.sha256, `item 3: ${s.kind}: 0 cells of the other owner's road written`);
+    check(rh.sha256 === fx.road.sha256 && rh.cells === fx.road.cells, `item 3: ${s.kind}: 0 cells of the other owner's road written (its ${rh.cells} cells unchanged)`);
   }
+  const meltSpikes = out.strokes[out.strokes.length - 1];
+  check(meltSpikes.cellsWritten > 0, `MELT rounds off the stone spikes (${meltSpikes.cellsWritten} cells removed)`);
   const skippedOwned = out.strokes.reduce((a, v) => a + (v.cellsSkipped?.owned ?? 0), 0);
   const skippedCond = out.strokes.reduce((a, v) => a + (v.cellsSkipped?.condition ?? 0), 0);
   check(skippedOwned > 0 && skippedCond > 0, `the strokes met the road (${skippedOwned} owned cells skipped) and the wall (${skippedCond} cells failed the natural condition)`);
@@ -288,7 +297,7 @@ steps['flat-owned'] = async () => {
   check(after.sha256 === before.sha256, 'item 3: undone, gate:b\'s strokes stand as they were');
   // PLAYER_BLOCKS over the road (the bot is an operator): the road is another owner's entry, never touched
   const pb = await brush({ kind: 'lower', shape: 'cylinder', at: [X0 - 10, gy, Z0 - 8], radius: 5, strength: 3, destruction: 'player_blocks', actor: 'me' });
-  const rh = await boxHash(ROAD(gy).min, ROAD(gy).max);
+  const rh = await roadHash(fx.roadSite, gy);
   check(!pb.refused && rh.sha256 === fx.road.sha256 && (pb.cellsSkipped?.owned ?? 0) > 0, `item 3: PLAYER_BLOCKS over the road: 0 road cells written (owned skipped ${pb.cellsSkipped?.owned})`);
   if (pb.region) await undo(pb.region);
   for (const r of done.reverse()) await undo(r);
@@ -346,8 +355,11 @@ steps['flat-permission'] = async () => {
   const list0 = (await call('dev.region.list')).regions?.length ?? 0;
   const a = await brush({ ...req, actor: 'none' });
   check(a.reason === 'PERMISSION', `item 4: PLAYER_BLOCKS without an actor refused PERMISSION (${a.refused})`);
-  await cmd('/deop @s');
+  const deop = await cmd('/deop @s');
+  const perm = await call('dev.brush.perm');
+  log(`  /deop @s: ${(deop.messages ?? []).join(' ')}; permission2 now ${perm.permission2} (${perm.name})`);
   const b = await brush({ ...req, actor: 'me' });
+  if (b.region) await undo(b.region);
   check(b.reason === 'PERMISSION', `item 4: PLAYER_BLOCKS by a player without permission level 2 refused PERMISSION (${b.refused})`);
   await cmd('/op @s');
   const list1 = (await call('dev.region.list')).regions?.length ?? 0;
@@ -478,7 +490,9 @@ steps.natural = async () => {
   await call('dev.waitChunks', { timeoutMs: 120_000 }, 150_000).catch(() => {});
   await call('dev.placement.stats', { reset: true });
   const out = { at: [X, gy, Z] };
-  const box = [X - 32, gy - 34, Z - 32, X + 32, gy + 24, Z + 32];
+  // the strokes' reach plus 4 (the world's own changes further out, a spring flowing on freshly loaded chunks, are not the strokes')
+  const box = [X - 24, gy - 34, Z - 24, X + 24, gy + 24, Z + 24];
+  await settle(20_000); // pending fluid and block ticks of the freshly loaded chunks run first
   const snap = await snapBox(box, 'natural');
   // item 6: a cave carve under the ground, judged on the realised world
   const cy = gy - 14;
@@ -551,7 +565,7 @@ function caveJudge(d0, d1, box) {
       while (todo.length) {
         const [qx, qy, qz] = todo.pop();
         comp.push([qx, qy, qz]);
-        if (qx <= box[0] || qx >= box[3] || qy <= box[1] || qy >= box[4] || qz <= box[2] || qz >= box[5]) { anchored = true; break; }
+        if (qx <= box[0] || qx >= box[3] || qy <= box[1] || qy >= box[4] || qz <= box[2] || qz >= box[5]) anchored = true; // the whole component is walked
         for (const [d, e, f] of N6) {
           const k = `${qx + d},${qy + e},${qz + f}`;
           if (!seen.has(k) && solid(d1, qx + d, qy + e, qz + f)) { seen.add(k); todo.push([qx + d, qy + e, qz + f]); }
