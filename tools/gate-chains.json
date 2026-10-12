@@ -70,6 +70,7 @@
     "regress": ["unit-mod", "unit-kit", "unit-sidecar", "sim-jobs", "sim-sets", "sim-massing", "apijars", "4e-megalite", "4e-orders", "4e-crash", "4e-throughput", "4d-all", "5b-chains", "5b-village", "6a-megaB-fast"],
     "engine": ["unit-mod", "unit-kit", "unit-sidecar", "sim-jobs", "sim-sets", "sim-massing", "apijars", "4e-megalite", "4e-orders", "4e-crash", "4e-throughput", "4d-all", "5b-chains", "5b-village", "6a-megaA", "6a-megaB", "6a-crash", "6a-eflat", "6a-forest", "6a-inv3", "6a-staged", "6a-heap"]
   },
+  "slots": { "$comment": "Machine-wide gate-run slots (docs/GATES.md): at most max runs at once; --slots N overrides.", "max": 3 },
   "shards": {
     "$comment": "--shards N (at most max). Each shard has its own run worktree (shard 1: --run-dir/GATE_RUN_DIR; shard k: <run dir>-s<k>, or --run-dirs) and port pair (--ports S:D,S:D,... / GATE_PORTS; no default for shards 2..: name them, several agents share the machine). 8892-8895 are never a shard's: the gates' old-version clients and eval sidecars use them.",
     "max": 3
@@ -79,9 +80,9 @@
     "dir": "seed:mod/run/saves"
   },
   "tiers": {
-    "$comment": "The three tiers (docs/GATES.md). change = the unit suites + the impact map's change steps (minutes; a docs-only diff runs nothing); slice = quick + the change and slice steps of the impact (about 30 min; engineSlice is added on engine-touching diffs, empty: the full mega_bench waits for release); release = everything, unattended overnight, with the duplicates rotated deterministically by the rotation key (--release <tag>: the tag's index among the version-sorted v* tags; else the ISO week), then the full independent gate-verifier.",
+    "$comment": "The three tiers (docs/GATES.md). change = the unit suites + the impact map's change steps (minutes; a docs-only diff runs nothing); slice = the unit suites + apijars + the change and slice steps of the impact, i.e. the slice's own gate steps found by its driver's impact rule, and no quick (policy 2026-10-12; engineSlice is added on engine-touching diffs, empty: the full mega_bench waits for release); release = everything, unattended overnight, with the duplicates rotated deterministically by the rotation key (--release <tag>: the tag's index among the version-sorted v* tags; else the ISO week), then the full independent gate-verifier.",
     "change": { "always": ["unit-mod", "unit-kit", "unit-sidecar"], "fallback": ["unit-mod", "unit-kit", "unit-sidecar"] },
-    "slice": { "base": "quick", "fallback": [], "engineSlice": [] },
+    "slice": { "always": ["unit-mod", "unit-kit", "unit-sidecar", "apijars"], "fallback": [], "engineSlice": [] },
     "release": {
       "always": ["unit-mod", "unit-kit", "unit-sidecar", "sim-jobs", "sim-sets", "sim-massing", "apijars", "4e-megalite", "4e-orders", "4d-all", "5b-chains", "5b-village", "6a-megaA", "6a-eflat", "6a-forest", "6a-inv3", "6a-staged", "6b-smoke", "6b-ghost", "6b-volume", "6b-commands", "6b-nudges", "6b-pathstyle", "6b-versions", "6b-versionc", "6b-scenario-s1", "6b-scenario-s1-flat"],
       "rotate": [
