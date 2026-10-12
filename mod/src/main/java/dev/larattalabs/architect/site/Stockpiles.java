@@ -1111,6 +1111,197 @@ public final class Stockpiles {
 		return o;
 	}
 
+	// ------------------------------------------------------------------ dev hooks (DevBridge dev.stockpile.*)
+
+	private static BlockPos pos(JsonArray a) {
+		return new BlockPos(a.get(0).getAsInt(), a.get(1).getAsInt(), a.get(2).getAsInt());
+	}
+
+	private static Map<String, Integer> counts(@Nullable JsonObject o) {
+		Map<String, Integer> m = new TreeMap<>();
+		if (o != null) {
+			o.entrySet().forEach(e -> m.put(e.getKey(), e.getValue().getAsInt()));
+		}
+		return m;
+	}
+
+	/**
+	 * The DevBridge's stockpile hooks (docs/DEVBRIDGE.md, 6c Y1): {@code op} is create | addcrate | removecrate | state | order |
+	 * withdraw | adopt | dissolve | audit | saved. Server thread; {@code player}: the client's player (withdraw, dissolve to the
+	 * player, the dimension of create). Refusals come back as {@code {refused: {reason, message}}}.
+	 */
+	public static JsonObject dev(MinecraftServer srv, ServerPlayer player, String op, JsonObject req) {
+		JsonObject o = new JsonObject();
+		String owner = req.has("owner") ? req.get("owner").getAsString() : null;
+		try {
+			switch (op) {
+				case "create" -> {
+					List<BlockPos> cr = new ArrayList<>();
+					if (req.has("crates")) {
+						req.getAsJsonArray("crates").forEach(e -> cr.add(pos(e.getAsJsonArray())));
+					}
+					String dim = req.has("dimension") ? req.get("dimension").getAsString() : Sites.dimensionId((ServerLevel) player.level());
+					create(srv, owner, dim, cr);
+				}
+				case "addcrate" -> addCrate(srv, owner, req.has("dimension") ? req.get("dimension").getAsString() : Sites.dimensionId((ServerLevel) player
+					.level()), pos(req.getAsJsonArray("pos")));
+				case "removecrate" -> {
+					CrateRemoval r = removeCrate(srv, owner, pos(req.getAsJsonArray("pos")), req.has("force") && req.get("force").getAsBoolean());
+					o.addProperty("removed", r.removed());
+					o.add("dropped", Builder.counts(r.dropped()));
+					if (r.refusal() != null) {
+						o.addProperty("refusal", r.refusal());
+					}
+					o.addProperty("ended", r.ended());
+				}
+				case "order" -> {
+					if (req.has("ids")) {
+						List<String> ids = new ArrayList<>();
+						req.getAsJsonArray("ids").forEach(e -> ids.add(e.getAsString()));
+						setFeedOrder(srv, owner, ids);
+					}
+				}
+				case "withdraw" -> o.add("withdrawn", Builder.counts(withdraw(srv, owner, counts(req.getAsJsonObject("items")), player)));
+				case "adopt" -> adopt(srv, owner);
+				case "dissolve" -> {
+					JsonObject last = null;
+					o.add("out", Builder.counts(dissolve(srv, owner, req.has("toPlayer") && req.get("toPlayer").getAsBoolean() ? player : null)));
+					last = LAST_DISSOLVED.get(owner);
+					if (last != null) {
+						o.add("ledgerAtEnd", last.get("ledger"));
+					}
+				}
+				case "audit" -> {
+					return audit(srv, player, owner, req);
+				}
+				case "saved" -> {
+					JsonObject f = savedJson();
+					o.add("file", f == null ? new JsonObject() : f);
+					o.addProperty("saves", saves);
+					return o;
+				}
+				case "state" -> {
+				}
+				default -> throw new IllegalArgumentException("unknown stockpile op " + op);
+			}
+		} catch (Sites.SiteException e) {
+			JsonObject r = new JsonObject();
+			r.addProperty("reason", e.reason().name());
+			r.addProperty("message", e.getMessage());
+			o.add("refused", r);
+		}
+		JsonObject st = owner == null ? null : json(srv, owner);
+		o.add("stockpile", st == null ? com.google.gson.JsonNull.INSTANCE : st);
+		return o;
+	}
+
+	/**
+	 * The gate's conservation parts (6c Y1 gate items 4-9, 12), per item: the stockpile's stock; the cost of every paid cell
+	 * standing in the owner's construction sites and roads (built, not placed free; a swap cell still holding its old paid block
+	 * at the old block's cost); the stock of the owner's legacy crates; item entities, container contents (hoppers, chests:
+	 * crates excluded) in the box {@code min..max}; the player's inventory. The driver adds the blocks it placed by hand.
+	 */
+	static JsonObject audit(MinecraftServer srv, ServerPlayer player, @Nullable String owner, JsonObject req) {
+		JsonObject o = new JsonObject();
+		ServerLevel level = (ServerLevel) player.level();
+		Pile p = owner == null ? null : PILES.get(owner);
+		o.add("stock", Builder.counts(p == null ? Map.of() : p.ledger.stock()));
+		if (p != null) {
+			JsonObject l = p.ledger.toJson();
+			l.remove("credited");
+			o.add("ledger", l);
+			o.addProperty("identity", p.ledger.identityHolds());
+		}
+		Map<String, Integer> paid = new TreeMap<>();
+		Map<String, Integer> crateStock = new TreeMap<>();
+		java.util.Set<BlockPos> crates = new java.util.HashSet<>();
+		JsonObject byTarget = new JsonObject();
+		for (Site s : Sites.all()) {
+			if (owner == null || !owner.equals(s.owner()) || s.construction() == null || s.placing()) {
+				continue;
+			}
+			Builder.Run r = Builder.run(srv, s);
+			if (r == null) {
+				continue;
+			}
+			Map<String, Integer> one = Builder.paidStanding(level, s, r);
+			one.forEach((k, v) -> paid.merge(k, v, Integer::sum));
+			byTarget.add(s.id(), Builder.counts(one));
+			CrateBlockEntity be = Builder.crate(level, s, true);
+			if (be != null && crates.add(be.getBlockPos())) {
+				be.ledger().stock().forEach((k, v) -> crateStock.merge(k, v, Integer::sum));
+			}
+		}
+		for (Infra i : Infras.all()) {
+			if (owner == null || !owner.equals(i.owner()) || i.construction() == null || i.placing()) {
+				continue;
+			}
+			Builder.Run r = RoadBuilder.run(srv, i);
+			if (r == null) {
+				continue;
+			}
+			r.rescan(level, true);
+			Map<String, Integer> one = new TreeMap<>();
+			for (int q = r.built.nextSetBit(0); q >= 0; q = r.built.nextSetBit(q + 1)) {
+				r.cost.get(q).forEach(x -> one.merge(x.item(), x.count(), Integer::sum));
+			}
+			one.forEach((k, v) -> paid.merge(k, v, Integer::sum));
+			byTarget.add(i.id(), Builder.counts(one));
+			CrateBlockEntity be = Builder.crate(level, RoadBuilder.probe(i), true);
+			if (be != null && crates.add(be.getBlockPos())) {
+				be.ledger().stock().forEach((k, v) -> crateStock.merge(k, v, Integer::sum));
+			}
+		}
+		o.add("paidStanding", Builder.counts(paid));
+		o.add("paidByTarget", byTarget);
+		o.add("legacyCrateStock", Builder.counts(crateStock));
+		Map<String, Integer> ents = new TreeMap<>();
+		Map<String, Integer> cont = new TreeMap<>();
+		if (req.has("min") && req.has("max")) {
+			BlockPos a = pos(req.getAsJsonArray("min"));
+			BlockPos b = pos(req.getAsJsonArray("max"));
+			net.minecraft.world.phys.AABB box = new net.minecraft.world.phys.AABB(a.getX(), a.getY(), a.getZ(), b.getX() + 1, b.getY() + 1, b.getZ() + 1);
+			int stacks = 0;
+			for (net.minecraft.world.entity.item.ItemEntity e : level.getEntitiesOfClass(net.minecraft.world.entity.item.ItemEntity.class, box)) {
+				stacks++;
+				ents.merge(net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(e.getItem().getItem()).toString(), e.getItem().getCount(), Integer::sum);
+			}
+			o.addProperty("entityStacks", stacks);
+			for (int cx = a.getX() >> 4; cx <= b.getX() >> 4; cx++) {
+				for (int cz = a.getZ() >> 4; cz <= b.getZ() >> 4; cz++) {
+					if (!level.hasChunk(cx, cz)) {
+						continue;
+					}
+					for (BlockEntity be : level.getChunk(cx, cz).getBlockEntities().values()) {
+						BlockPos bp = be.getBlockPos();
+						if (be instanceof net.minecraft.world.Container c && !(be instanceof CrateBlockEntity) && bp.getX() >= a.getX() && bp.getX() <= b.getX()
+							&& bp.getY() >= a.getY() && bp.getY() <= b.getY() && bp.getZ() >= a.getZ() && bp.getZ() <= b.getZ()) {
+							for (int k = 0; k < c.getContainerSize(); k++) {
+								ItemStack st = c.getItem(k);
+								if (!st.isEmpty()) {
+									cont.merge(net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(st.getItem()).toString(), st.getCount(), Integer::sum);
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+		o.add("entities", Builder.counts(ents));
+		o.add("containers", Builder.counts(cont));
+		Map<String, Integer> inv = new TreeMap<>();
+		var pi = player.getInventory();
+		for (int k = 0; k < pi.getContainerSize(); k++) {
+			ItemStack st = pi.getItem(k);
+			if (!st.isEmpty()) {
+				inv.merge(net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(st.getItem()).toString(), st.getCount(), Integer::sum);
+			}
+		}
+		o.add("inventory", Builder.counts(inv));
+		o.addProperty("gameTime", level.getGameTime());
+		return o;
+	}
+
 	// ------------------------------------------------------------------ persistence
 
 	static JsonObject toJson() {

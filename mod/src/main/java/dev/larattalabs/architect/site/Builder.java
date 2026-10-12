@@ -2014,6 +2014,28 @@ public final class Builder {
 		return List.copyOf(out);
 	}
 
+	/**
+	 * 6c Y1 audit: what a construction site's paid cells standing cost, per item: queued cells built and not placed free, and swap
+	 * cells still holding their old paid block (at the old block's cost; it is refunded at the swap). Rescans the site first.
+	 */
+	static Map<String, Integer> paidStanding(ServerLevel level, Site s, Run r) {
+		r.rescan(level, true);
+		r.newlyCount = 0;
+		BitSet free = s.construction().free();
+		Map<String, Integer> out = new TreeMap<>();
+		for (int i = 0; i < r.size(); i++) {
+			if (free.get(i)) {
+				continue;
+			}
+			if (r.built.get(i)) {
+				r.cost.get(i).forEach(c -> out.merge(c.item(), c.count(), Integer::sum));
+			} else if (r.old != null && r.swap.get(i) && r.old[i] != null && r.holdsOld(level.getBlockState(r.pos(i)), i)) {
+				Cells.cost(r.old[i]).forEach(c -> out.merge(c.item(), c.count(), Integer::sum));
+			}
+		}
+		return out;
+	}
+
 	/** Test hook: the block-entity NBT a cell holds now (the gate's cell-for-cell comparison). */
 	static String beNbt(ServerLevel level, BlockPos p) {
 		BlockEntity be = level.getBlockEntity(p);

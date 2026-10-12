@@ -93,7 +93,7 @@ public final class CrateScreen extends Screen {
 			} else {
 				error = null;
 				state = o;
-				if (!"building".equals(str(o, "state"))) {
+				if (!"building".equals(str(o, "state")) && !"stockpile".equals(str(o, "state"))) {
 					flash("The site is " + str(o, "state") + "; the crate is gone", false);
 				}
 			}
@@ -112,6 +112,24 @@ public final class CrateScreen extends Screen {
 		ServerTasks.callAsPlayer((level, player) -> {
 			try {
 				return "Moved " + Builder.insertFromInventory(player, siteId) + " item(s) into the crate";
+			} catch (Sites.SiteException e) {
+				return "!" + e.getMessage();
+			}
+		}).whenComplete((m, t) -> {
+			String msg = t != null ? "!" + t.getMessage() : m;
+			flash(msg.startsWith("!") ? msg.substring(1) : msg, msg.startsWith("!"));
+			refresh();
+		});
+	}
+
+	/** 6c Y1: a stockpile crate's "take": the item's credit into the player's inventory ({@code Sites.withdraw}). */
+	public void take(String item, int n) {
+		String owner = siteId.substring(dev.larattalabs.architect.site.Stockpiles.PREFIX.length());
+		ServerTasks.callAsPlayer((level, player) -> {
+			try {
+				var out = dev.larattalabs.architect.site.Stockpiles.withdraw(level.getServer(), owner, java.util.Map.of(item, n), player);
+				int got = out.getOrDefault(item, 0);
+				return got > 0 ? "Took " + got + " × " + Builder.itemNameClient(item) : "!Nothing of " + Builder.itemNameClient(item) + " is credit now";
 			} catch (Sites.SiteException e) {
 				return "!" + e.getMessage();
 			}
@@ -258,6 +276,10 @@ public final class CrateScreen extends Screen {
 		int bottom = py + ph - pad.bottom();
 		Panels.panel(g, px, py, pw, ph);
 		JsonObject s = state;
+		if (s != null && "stockpile".equals(str(s, "state"))) {
+			renderPile(g, s, cx, cy, cw, bottom, mouseX, mouseY);
+			return;
+		}
 		String name = s != null && s.has("name") ? s.get("name").getAsString() : siteId;
 		Panels.header(g, font, "Construction crate · " + name + " (" + siteId + ")", cx - 2, cy - 2, cw + 4);
 		int y = cy + 18;
@@ -354,6 +376,70 @@ public final class CrateScreen extends Screen {
 		bx += button(g, "pause", paused ? "Resume" : "Pause", bx, by, 60, false, building, mouseX, mouseY, this::togglePause) + 4;
 		bx += button(g, "deconstruct", confirmDeconstruct ? "Really deconstruct" : "Deconstruct", bx, by, confirmDeconstruct ? 104 : 80, false, true,
 			mouseX, mouseY, this::deconstruct) + 4;
+		button(g, "close", "Close", cx + cw - 50, by, 50, false, true, mouseX, mouseY, this::onClose);
+		if (flash != null && System.currentTimeMillis() - flashAt < 6000) {
+			Panels.text(g, font, TextUtil.ellipsize(font, flash, cw - 110), cx, listBottom + 3, flashBad ? UiBits.errorText() : UiBits.okText());
+		}
+	}
+
+	/** 6c Y1: a stockpile crate: stock, what the targets still need, credit with a Take button per item, insert, close. */
+	private void renderPile(GuiGraphicsExtractor g, JsonObject s, int cx, int cy, int cw, int bottom, int mouseX, int mouseY) {
+		Panels.header(g, font, "Stockpile · " + str(s, "owner"), cx - 2, cy - 2, cw + 4);
+		int y = cy + 18;
+		int crates = s.has("crates") ? s.getAsJsonArray("crates").size() : 0;
+		int missingCrates = s.has("missingCrates") ? s.getAsJsonArray("missingCrates").size() : 0;
+		int targets = s.has("feedOrder") ? s.getAsJsonArray("feedOrder").size() : 0;
+		String line = num(s, "usedStacks") + " of " + num(s, "capacityStacks") + " stacks · " + crates + " crate(s)" + (missingCrates > 0 ? " (" + missingCrates
+			+ " missing)" : "") + " · " + targets + " building";
+		Panels.text(g, font, line, cx, y, missingCrates > 0 ? UiBits.errorText() : UiBits.ink());
+		y += 11;
+		int cap = Math.max(1, num(s, "capacityStacks"));
+		Panels.progress(g, cx, y, cw, Math.min(1.0, (double) num(s, "usedStacks") / cap), num(s, "usedStacks") > cap ? "brass" : "sage");
+		y += 12;
+		int colItem = cx + 2;
+		int colStock = cx + cw - 200;
+		int colNeed = cx + cw - 150;
+		int colCredit = cx + cw - 100;
+		int colTake = cx + cw - 50;
+		int listTop = y + 12;
+		int listBottom = bottom - 38;
+		Panels.text(g, font, "Item", colItem + 20, y, UiBits.muted());
+		Panels.text(g, font, "Stock", colStock, y, UiBits.muted());
+		Panels.text(g, font, "Needed", colNeed, y, UiBits.muted());
+		Panels.text(g, font, "Credit", colCredit, y, UiBits.muted());
+		Panels.inset(g, cx, listTop - 1, cw, listBottom - listTop + 2);
+		JsonObject stock = s.has("stock") ? s.getAsJsonObject("stock") : new JsonObject();
+		JsonObject need = s.has("outstanding") ? s.getAsJsonObject("outstanding") : new JsonObject();
+		JsonObject credit = s.has("credit") ? s.getAsJsonObject("credit") : new JsonObject();
+		java.util.TreeSet<String> ids = new java.util.TreeSet<>(stock.keySet());
+		ids.addAll(need.keySet());
+		List<String> rows = new ArrayList<>(ids);
+		int visible = Math.max(1, (listBottom - listTop) / ROW);
+		scroll = Math.min(scroll, Math.max(0, rows.size() - visible));
+		int ry = listTop + 1;
+		for (int i = scroll; i < rows.size() && ry + ROW <= listBottom + 1; i++) {
+			String id = rows.get(i);
+			Item item = item(id);
+			if (item != null) {
+				g.item(new ItemStack(item), colItem, ry);
+			}
+			int ink = UiBits.ink();
+			Panels.text(g, font, TextUtil.ellipsize(font, Builder.itemNameClient(id), colStock - colItem - 26), colItem + 20, ry + 5, ink);
+			Panels.text(g, font, String.valueOf(num(stock, id)), colStock, ry + 5, ink);
+			Panels.text(g, font, String.valueOf(num(need, id)), colNeed, ry + 5, ink);
+			int c = num(credit, id);
+			Panels.text(g, font, c > 0 ? String.valueOf(c) : "-", colCredit, ry + 5, ink);
+			if (c > 0) {
+				button(g, "take:" + id, "Take", colTake, ry, 46, false, true, mouseX, mouseY, () -> take(id, c));
+			}
+			ry += ROW;
+		}
+		if (rows.size() > visible) {
+			String more = (scroll + 1) + "-" + Math.min(rows.size(), scroll + visible) + " of " + rows.size() + " (scroll)";
+			Panels.text(g, font, more, cx + cw - font.width(more), listBottom + 3, UiBits.muted());
+		}
+		int by = bottom - 20;
+		button(g, "insert", "Insert from inventory", cx, by, 124, true, targets > 0, mouseX, mouseY, this::insertFromInventory);
 		button(g, "close", "Close", cx + cw - 50, by, 50, false, true, mouseX, mouseY, this::onClose);
 		if (flash != null && System.currentTimeMillis() - flashAt < 6000) {
 			Panels.text(g, font, TextUtil.ellipsize(font, flash, cw - 110), cx, listBottom + 3, flashBad ? UiBits.errorText() : UiBits.okText());
