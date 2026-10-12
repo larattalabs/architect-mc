@@ -52,6 +52,8 @@ const SURV = 'G6B Y Survival';
 const OWNER = 'test:settle';
 const json = (o) => String(JSON.stringify(o)).replaceAll(' ', '');
 const sum = (m) => Object.values(m ?? {}).reduce((a, b) => a + b, 0);
+/** Two item maps equal per item (key order aside; zero counts ignored). */
+const same = (a, b) => { const k = new Set([...Object.keys(a ?? {}), ...Object.keys(b ?? {})]); for (const x of k) if ((a?.[x] ?? 0) !== (b?.[x] ?? 0)) return false; return true; };
 
 // ---- the apitest mod (public API only)
 const api = async (args) => {
@@ -721,7 +723,7 @@ steps.refunds = async () => {
   const ret1 = {};
   for (const [k, v] of Object.entries(L1.returned)) if (v - (L0.returned[k] ?? 0)) ret1[k] = v - (L0.returned[k] ?? 0);
   out.h1 = { paid: paidH1, returned: ret1, removeResult: rm.refund, hand };
-  check(rm.removed && json(ret1) === json(paidH1), `item 5: deconstruct ${ids.h1}: returned equals its Refunds tally (the paid cells standing) (${sum(ret1)} vs ${sum(paidH1)}; ${json(rm.blockers ?? [])})`);
+  check(rm.removed && same(ret1, paidH1), `item 5: deconstruct ${ids.h1}: returned equals its Refunds tally (the paid cells standing) (${sum(ret1)} vs ${sum(paidH1)}; ${json(rm.blockers ?? [])})`);
   const near = await call('dev.items.near', { pos: [X + 5, y + 2, Z + 5], radius: 16 }, 30_000);
   check((near.items?.['minecraft:stone'] ?? 0) === hand.length, `item 5: the player's ${hand.length} blocks drop at the site (${json(near.items)})`);
   const p1 = await cons.point('h1 deconstructed');
@@ -735,7 +737,7 @@ steps.refunds = async () => {
   const ret2 = {};
   for (const [k, v] of Object.entries(L3.returned)) if (v - (L2.returned[k] ?? 0)) ret2[k] = v - (L2.returned[k] ?? 0);
   out.r1 = { paid: paidR1, returned: ret2 };
-  check(rr.removed && json(ret2) === json(paidR1), `item 5: undo the road ${ids.r1}: returned equals its tally (${json(ret2)} vs ${json(paidR1)})`);
+  check(rr.removed && same(ret2, paidR1), `item 5: undo the road ${ids.r1}: returned equals its tally (${json(ret2)} vs ${json(paidR1)})`);
   const p2 = await cons.point('road undone');
   check(exact(p2), `item 5: conservation difference 0 after the road's undo (${json(p2.diff)})`);
   await leaveWorld();
@@ -774,9 +776,9 @@ steps.overflow = async () => {
     const both = { ...ret };
     for (const [k, v] of Object.entries(over)) both[k] = (both[k] ?? 0) + v;
     out.removals.push({ id, usedBefore: st0.usedStacks, usedAfter: st1.usedStacks, capacity: st1.capacityStacks, paid, returned: ret, overflow: over, entities: ents });
-    check(rm.removed && json(both) === json(paid), `item 6: ${id}: returned + refundOverflow = its tally (${sum(ret)} + ${sum(over)} = ${sum(paid)})`);
+    check(rm.removed && same(both, paid), `item 6: ${id}: returned + refundOverflow = its tally (${sum(ret)} + ${sum(over)} = ${sum(paid)})`);
     check(st1.usedStacks <= st1.capacityStacks, `item 6: ${id}: returned up to capacity (${st1.usedStacks} of ${st1.capacityStacks} stacks)`);
-    check(json(over) === json(ents), `item 6: ${id}: refundOverflow equals the item entities counted at the crate (${json(over)} vs ${json(ents)})`);
+    check(same(over, ents), `item 6: ${id}: refundOverflow equals the item entities counted at the crate (${json(over)} vs ${json(ents)})`);
     const p = await cons.point(`${id} removed`);
     check(exact(p), `item 6: ${id}: conservation difference 0 (${json(p.diff)})`);
   }
@@ -812,7 +814,7 @@ steps.once = async () => {
   const dret = (A, B) => { const m = {}; for (const [k, v] of Object.entries(B.returned)) if (v - (A.returned[k] ?? 0)) m[k] = v - (A.returned[k] ?? 0); return m; };
   out.first = { removed: r1.removed, blockers: r1.blockers, returned: dret(L0, L1) };
   check(r1.removed === false && /injected restore failure/.test(json(r1.blockers)), `item 7: the removal with an injected restore failure answers removed=false (${json(r1.blockers).slice(0, 160)})`);
-  check(json(dret(L0, L1)) === json(paid.h1), `item 7: the house (restored before the break) was credited, the road not yet (${sum(dret(L0, L1))} vs ${sum(paid.h1)})`);
+  check(same(dret(L0, L1), paid.h1), `item 7: the house (restored before the break) was credited, the road not yet (${sum(dret(L0, L1))} vs ${sum(paid.h1)})`);
   const pm = await cons.point('after the failure');
   // the half-done state is the failed restore's: the road's blocks still stand (paid), its refund not credited: still exact
   check(exact(pm), `item 7: conservation difference 0 after the failed removal (${json(pm.diff)})`);
@@ -827,10 +829,10 @@ steps.once = async () => {
   for (const [k, v] of Object.entries(paid.r1)) tot[k] = (tot[k] ?? 0) + v;
   out.retry = { removed: r2.removed, returned: dret(L0, L2) };
   check(r2.removed === true, `item 7: the retry after the reload resumes and answers removed=true (${json(r2.blockers ?? [])})`);
-  check(json(dret(L0, L2)) === json(tot), `item 7: every refund credited once: returned = house + road exactly (${sum(dret(L0, L2))} vs ${sum(tot)})`);
+  check(same(dret(L0, L2), tot), `item 7: every refund credited once: returned = house + road exactly (${sum(dret(L0, L2))} vs ${sum(tot)})`);
   const again = await later(`sgremove ${b.group} noforce`, 120_000);
   const L3 = (await pstate()).ledger;
-  check(again.removed === true && json(L3.returned) === json(L2.returned), 'item 7: a third remove answers removed=true and credits nothing');
+  check(again.removed === true && same(L3.returned, L2.returned), 'item 7: a third remove answers removed=true and credits nothing');
   const p = await cons.point('once end');
   check(exact(p), `item 7: conservation difference 0 (${json(p.diff)})`);
   await leaveWorld();
@@ -977,7 +979,7 @@ steps.gone = async () => {
   const dd = {};
   for (const [k, v] of Object.entries(after.ledger.dropped)) if (v - (before.ledger.dropped[k] ?? 0)) dd[k] = v - (before.ledger.dropped[k] ?? 0);
   out.force = { dropped: r2.dropped, ledgerDropped: dd, entities: ents, used: after.usedStacks, capacity: after.capacityStacks };
-  check(r2.removed === true && json(r2.dropped) === json(dd) && json(dd) === json(ents) && after.usedStacks <= after.capacityStacks && after.usedStacks
+  check(r2.removed === true && same(r2.dropped, dd) && same(dd, ents) && after.usedStacks <= after.capacityStacks && after.usedStacks
     >= after.capacityStacks - 1, `item 9: with force it drops exactly the excess (${sum(dd)} items; entities ${sum(ents)}; ${after.usedStacks} of ${after.capacityStacks} stacks left)`);
   const p2 = await cons.point('forced');
   check(exact(p2), `item 9: conservation difference 0 after the forced removal (${json(p2.diff)})`);
