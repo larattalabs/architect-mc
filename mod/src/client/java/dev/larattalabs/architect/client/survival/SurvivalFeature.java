@@ -90,11 +90,13 @@ public final class SurvivalFeature {
 					}
 				})).thenCompose(x -> x);
 			});
-		DevBridge.register("dev.crate.insert", 30_000, "{site, items?: {item: count}, inventory?: true} - book items into the crate as a hopper "
-			+ "would (counting equivalents), or move the player's needed items in (Insert from inventory) -> what went in", (req, mc) -> {
+		DevBridge.register("dev.crate.insert", 30_000, "{site, items?: {item: count}, inventory?: true, exact?: false} - book items into the crate as a "
+			+ "hopper would (counting equivalents; exact: only units taken as themselves, never converted), or move the player's needed items in "
+			+ "(Insert from inventory) -> what went in. site: a site, a road, or (6c Y1) stockpile:<owner>", (req, mc) -> {
 				Fields f = Fields.of(req);
 				String id = f.nonBlank("site");
 				boolean inv = f.optBool("inventory", false);
+				boolean exact = f.optBool("exact", false);
 				Map<String, Integer> items = new LinkedHashMap<>();
 				if (f.json().has("items")) {
 					f.json().getAsJsonObject("items").entrySet().forEach(e -> items.put(e.getKey(), e.getValue().getAsInt()));
@@ -106,7 +108,7 @@ public final class SurvivalFeature {
 							o.addProperty("moved", Builder.insertFromInventory(player, id));
 						} else {
 							JsonObject in = new JsonObject();
-							Builder.insertItems(level.getServer(), id, items).forEach(in::addProperty);
+							Builder.insertItems(level.getServer(), id, items, exact).forEach(in::addProperty);
 							o.add("accepted", in);
 						}
 					} catch (Sites.SiteException e) {

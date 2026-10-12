@@ -50,7 +50,7 @@ const { RUN, OUT, SAVES, GAME_DIR, MAIN, call, check, cmd, connect, fails, leave
 refuseKeys();
 const SURV = 'G6B Y Survival';
 const OWNER = 'test:settle';
-const json = (o) => JSON.stringify(o).replaceAll(' ', '');
+const json = (o) => String(JSON.stringify(o)).replaceAll(' ', '');
 const sum = (m) => Object.values(m ?? {}).reduce((a, b) => a + b, 0);
 
 // ---- the apitest mod (public API only)
@@ -164,7 +164,7 @@ class Conservation {
   }
   /** Inserts through dev.crate.insert (a hopper's rule): what went in counts as injected. */
   async insert(target, items) {
-    const r = await call('dev.crate.insert', { site: target, items }, 120_000);
+    const r = await call('dev.crate.insert', { site: target, items, exact: true }, 120_000);
     this.add(r.accepted ?? {}, this.injected);
     return r.accepted ?? {};
   }
@@ -311,6 +311,18 @@ const shift = (b, dx, dz) => ({ min: [b.min[0] + dx, b.min[1], b.min[2] + dz], m
 const hash = async (b) => (await call('dev.box.hash', { min: b.min, max: b.max }, 300_000)).sha256;
 const cellsOf = async (b) => (await call('dev.box.hash', { min: b.min, max: b.max, cells: true }, 300_000)).cells;
 const siteOf = async (id) => (await sites()).find((x) => x.id === id);
+/**
+ * Whether two boxes hold the same blocks cell for cell (block states and block-entity NBT, the NBT's own x/y/z left out: the
+ * box hash includes them, so it differs between two places). Returns the differing cells (at most 8).
+ */
+async function sameCells(a, b) {
+  const norm = (line) => line.slice(line.indexOf(' ') + 1).replace(/,x:-?\d+,y:-?\d+,z:-?\d+/g, '');
+  const ca = await cellsOf(a), cb = await cellsOf(b);
+  const diff = [];
+  if (ca.length !== cb.length) return [`sizes ${ca.length} / ${cb.length}`];
+  for (let i = 0; i < ca.length && diff.length < 8; i++) if (norm(ca[i]) !== norm(cb[i])) diff.push(`${ca[i]} || ${cb[i]}`);
+  return diff;
+}
 
 /** A paid road strip: stone under it (a gravel surface costs), one block of step at +20 (fill and slabs). */
 async function strip(x0, y, z) {
@@ -350,6 +362,21 @@ async function batch(spec, timeoutMs = 180_000) {
 }
 const cabin = (key, at, extra = {}) => ({ key, bp: 'cabin', at, mode: 'AUTO', ...extra });
 
+/** Feeds a legacy construction site (its own crate) its missing items until it is built (no stockpile: the 0.17.0 path). */
+async function feedLegacy(site, timeoutMs = 180_000) {
+  const end = Date.now() + timeoutMs;
+  while (Date.now() < end) {
+    const st = await siteState(site);
+    if (st.state !== 'building') return st.state;
+    const want = Object.fromEntries((st.rows ?? []).map((r) => [r.item, r.missing]).filter(([, n]) => n > 0));
+    if (Object.keys(want).length) await call('dev.crate.insert', { site, items: want, exact: true }, 120_000);
+    await sleep(1500);
+  }
+  return (await siteState(site)).state;
+}
+/** Cells that differ only between two soil blocks (grass_block and dirt: nature's change, Refunds.SOIL). */
+const soilOnly = (d) => /\{id:"minecraft:(grass_block|dirt)"[^|]*\|\| \S+ \{id:"minecraft:(grass_block|dirt)"/.test(d);
+
 // ------------------------------------------------------------------ item 2 + 4: one storehouse, conservation while feeding
 
 steps.store = async () => {
@@ -371,6 +398,10 @@ steps.store = async () => {
   }
   const t4 = await later(`place g5b_cabin ${X + 100} ${y} ${Z + DZ} INSTANT unowned actor 0 owner=test:twin`);
   twins.h4 = t4.siteId;
+  // and a legacy construction twin of the delta target (an owner with no stockpile: its own crate, the 0.17.0 path)
+  const DL = 210;
+  const t4l = await later(`place g5b_cabin ${X + 100} ${y} ${Z + DL} CONSTRUCTION unowned noactor 0 owner=test:legacy`);
+  twins.h4legacy = t4l.siteId;
   for (const [k, pts] of [['r1', twinPts], ['r2', twinSolo]]) {
     const t = await later(`road ${json({ points: pts, width: 1, owner: 'test:twin', mode: 'INSTANT', actor: true, tag: `twin-${k}` })}`);
     check(t.placed, `store: INSTANT twin of road ${k} (${json(t.refusals ?? t.siteId)})`);
@@ -412,15 +443,29 @@ steps.store = async () => {
   for (const k of ['h1', 'h2', 'h3', 'h4', 'r1', 'r2']) {
     const s0 = await siteOf(ids[k]);
     const bx = box(s0.restoreBox);
-    const ha = await hash(bx);
-    const hb = await hash(shift(bx, 0, DZ));
-    check(ha === hb, `store: ${k} (${ids[k]}) BUILT equals its INSTANT twin cell for cell (${ha.slice(0, 12)} / ${hb.slice(0, 12)})`);
+    const diff = await sameCells(bx, shift(bx, 0, DZ));
+    check(diff.length === 0, `store: ${k} (${ids[k]}) BUILT equals its INSTANT twin cell for cell (block-entity NBT included${diff.length ? `; ${json(diff).slice(0, 300)}` : ''})`);
   }
   // the update delta (v1 -> v2) and the survival revert (forward delta back to v1), from the stockpile; the twin by the instant path
-  const v2 = await installVersion('g5b_cabin', path.join(V5B, 'v2'), 'v2');
-  check(v2.version >= 2, `store: g5b_cabin v2 installed (${json(v2)})`);
+  // v1 -> v3 adds 140 cells, removes 16 and changes 81 (gate5b's versions): removed cells refund at the start, swaps as they happen
+  await installVersion('g5b_cabin', path.join(V5B, 'v2'), 'v2');
+  const v2 = await installVersion('g5b_cabin', path.join(V5B, 'v3'), 'v3');
+  check(v2.version >= 3, `store: g5b_cabin v3 installed (${json(v2)})`);
+  const Ps0 = await pstate();
+  const Ld0 = Ps0.ledger;
+  const Ld0Keys = Ps0.creditedKeys;
   const d = await later(`applydelta ${ids.h4} ${v2.version} ${OWNER}`, 120_000);
-  check(d.applied, `store: the construction delta v1 -> v2 of ${ids.h4} (${json(d.refusals ?? d.to)}; refund ${json(d.refund)})`);
+  check(d.applied, `store: the construction delta v1 -> v3 of ${ids.h4} (${json(d.refusals ?? d.to)}; refund ${json(d.refund)})`);
+  check(await feedLegacy(twins.h4legacy) === 'built', 'store: the legacy twin (own crate) of the delta target is built at v1');
+  const dl = await later(`applydelta ${twins.h4legacy} ${v2.version} test:legacy`, 120_000);
+  const Ps1 = await pstate();
+  const Ld1 = Ps1.ledger;
+  const dret = {};
+  for (const [k, v] of Object.entries(Ld1.returned)) if (v - (Ld0.returned[k] ?? 0)) dret[k] = v - (Ld0.returned[k] ?? 0);
+  // the builder may already have swapped cells (their old blocks return as they happen): returned >= the delta's refund
+  check(sum(d.refund) > 0 && Object.entries(d.refund).every(([k, v]) => (dret[k] ?? 0) >= v) && Ps1.creditedKeys === Ld0Keys + 1,
+    `store: the delta's removed cells were credited into the stockpile under one key (refund ${sum(d.refund)}, returned ${sum(dret)}; keys ${Ld0Keys} -> ${Ps1.creditedKeys})`);
+  out.delta = { refund: d.refund, returned: dret };
   const dt = await later(`applydelta ${twins.h4} ${v2.version} test:twin actor`, 120_000);
   check(dt.applied, `store: the twin's instant delta (${json(dt.refusals ?? dt.to)})`);
   await cons.point('delta applied');
@@ -430,17 +475,37 @@ steps.store = async () => {
   await settle(2000);
   const bx4 = box((await siteOf(ids.h4)).restoreBox);
   const big = { min: [bx4.min[0] - 4, bx4.min[1] - 2, bx4.min[2] - 4], max: [bx4.max[0] + 4, bx4.max[1] + 4, bx4.max[2] + 4] };
-  check(await hash(big) === await hash(shift(big, 0, DZ)), 'store: after the delta it equals the twin (instant delta) cell for cell');
+  check(dl.applied && await feedLegacy(twins.h4legacy) === 'built', `store: the legacy twin's construction delta is built (${json(dl.refusals ?? dl.to)})`);
+  const dd = await sameCells(big, shift(big, 0, DZ));
+  const ddl = await sameCells(big, shift(big, 0, DL));
+  out.deltaTwin = { instant: dd, legacy: ddl };
+  check(ddl.length === 0, `store: after the delta it equals the legacy construction twin (own crate) cell for cell${ddl.length ? ` (${json(ddl).slice(0, 300)})` : ''}`);
+  check(dd.every(soilOnly), `store: after the delta it equals the instant twin cell for cell but for soil cells (grass/dirt: ${dd.length}; the same on the legacy construction path, 5b's, not Y1's)${dd.filter((x) => !soilOnly(x)).length ? ` (${json(dd).slice(0, 300)})` : ''}`);
   await cons.point('delta built');
+  const Pr0 = await pstate();
+  const Lr0 = Pr0.ledger;
   const rv = await later(`srevert ${ids.h4} 1`, 120_000);
   check(rv.applied, `store: the survival revert to v1 is a paid forward delta (${json(rv.refusals ?? rv.to)}; refund ${json(rv.refund)})`);
+  const Pr1 = await pstate();
+  const Lr1 = Pr1.ledger;
+  const rret = {};
+  for (const [k, v] of Object.entries(Lr1.returned)) if (v - (Lr0.returned[k] ?? 0)) rret[k] = v - (Lr0.returned[k] ?? 0);
+  check(sum(rv.refund) > 0 && Object.entries(rv.refund).every(([k, v]) => (rret[k] ?? 0) >= v) && Pr1.creditedKeys === Pr0.creditedKeys + 1,
+    `store: the revert's removed cells were credited into the stockpile under one key (refund ${sum(rv.refund)}, returned ${sum(rret)})`);
+  out.revert = { refund: rv.refund, returned: rret };
   const rt = await later(`srevert ${twins.h4} 1 actor`, 120_000);
   check(rt.applied, `store: the twin's instant revert (${json(rt.refusals ?? rt.to)})`);
+  const rl = await later(`srevert ${twins.h4legacy} 1`, 120_000);
+  check(rl.applied && await feedLegacy(twins.h4legacy) === 'built', `store: the legacy twin's survival revert is built (${json(rl.refusals ?? rl.to)})`);
   await feedAll(cons, `stockpile:${OWNER}`, { chunk: 40, onWave: async (w) => { await cons.point(`revert wave ${w}`); } });
   const br = await waitBuilt([ids.h4]);
   check(br.length === 1, `store: the revert target BUILT from the stockpile (${json(br)})`);
   await settle(2000);
-  check(await hash(big) === await hash(shift(big, 0, DZ)), 'store: after the revert it equals the twin (instant revert) cell for cell');
+  const dr = await sameCells(big, shift(big, 0, DZ));
+  const drl = await sameCells(big, shift(big, 0, DL));
+  out.revertTwin = { instant: dr, legacy: drl };
+  check(drl.length === 0, `store: after the revert it equals the legacy construction twin cell for cell${drl.length ? ` (${json(drl).slice(0, 300)})` : ''}`);
+  check(dr.every(soilOnly), `store: after the revert it equals the instant twin (instant revert) cell for cell but for soil cells (${dr.length})${dr.filter((x) => !soilOnly(x)).length ? ` (${json(dr).slice(0, 300)})` : ''}`);
   const last = await cons.point('end');
   const bad = cons.points.filter((p) => !exact(p));
   out.points = cons.points;

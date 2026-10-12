@@ -1473,6 +1473,14 @@ public final class Builder {
 
 	/** Dev / test hook: books items into the crate as a hopper would (counting equivalents). Returns what went in per item. */
 	public static Map<String, Integer> insertItems(MinecraftServer srv, String id, Map<String, Integer> items) throws Sites.SiteException {
+		return insertItems(srv, id, items, false);
+	}
+
+	/**
+	 * {@link #insertItems}; {@code exact} (6c Y1 gate): only units taken as themselves go in (an insert that an equivalent would take
+	 * stops), so a driver counts every item in its own unit.
+	 */
+	public static Map<String, Integer> insertItems(MinecraftServer srv, String id, Map<String, Integer> items, boolean exact) throws Sites.SiteException {
 		CrateBlockEntity crate = stockpileCrate(srv, id, true); // 6c Y: "stockpile:<owner>", or a stockpile's target
 		if (crate == null && id.startsWith(Stockpiles.PREFIX)) {
 			throw new Sites.SiteException("The stockpile " + id + " has no present crate");
@@ -1493,6 +1501,19 @@ public final class Builder {
 				throw new Sites.SiteException("Unknown item " + e.getKey());
 			}
 			ItemStack st = new ItemStack(it, e.getValue());
+			if (exact) {
+				int n = 0;
+				while (!st.isEmpty()) {
+					Ledger.Accepted a = accepts(crate.siteId(), crate, e.getKey(), false);
+					if (a == null || a.converted()) {
+						break;
+					}
+					ItemStack one = st.split(1);
+					n += crate.insert(one);
+				}
+				in.put(e.getKey(), n);
+				continue;
+			}
 			in.put(e.getKey(), crate.insert(st));
 		}
 		return in;
