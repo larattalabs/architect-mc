@@ -43,8 +43,8 @@ describe('declared passes and the pass budget', () => {
     }
   });
 
-  it('lists region.passes last among the features', () => {
-    expect(FEATURES[FEATURES.length - 1]).toBe('region.passes');
+  it('lists region.passes after the 0.19.0 features (later slices append after it)', () => {
+    expect(FEATURES.indexOf('region.passes')).toBe(FEATURES.indexOf('patterns') + 1);
   });
 });
 
