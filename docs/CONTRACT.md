@@ -9667,6 +9667,25 @@ join). 5. Fixtures, gate.
 
 - Affordance candidates and site lots (7a). Typed links between regions (7a). Deltas to the standing region (6d).
 
+### Steward round 8 additions (2026-10-12; C27 and C28; part of D's frozen scope, these win)
+
+- **C27: districts that follow a boundary.** Input: the town's claim, other claims and protected areas, a size, a side or
+  anchor point, and the boundary to follow: a **biome edge** between two named biome families, a **river or shore**, or a
+  **ridge**. Output: the district's **shape** (a polygon or cell mask, not a square), its bounding claim (for overlap checks),
+  the **join** where its road meets the town, and its own **street line**. Stable across a reload (deterministic from the
+  survey and seed). Refused with named reasons: no such edge within reach, overlap, protected. The district and its join are
+  one region, undone as one operation (as V; matches S-D-2).
+- **Outposts:** a district not touching the town, reached by a road over unclaimed land; the road's corridor is reported as
+  settlement land (a corridor claim) and is undone with the outpost.
+- **C28, biome per column:** optional for Steward (it reads `Sample.biomeAt` at 4x4). D decides: if C27's biome-edge
+  tracing needs a finer edge than 4x4, add `Survey.biome` per column (resolution 1, from the plan survey); otherwise record
+  why 4x4 is enough.
+- **Gate additions:** a biome-edge district on a desert/jungle fixture (the shape follows the edge within 4 cells over its
+  length); a shore district (street parallel to the shore); a ridge district (street on the ridge line); an outpost with its
+  corridor; each reloaded (identical), refused cases named, and one undo restoring the world exactly.
+- Size: this roughly doubles D. Split it into **D1** (survey-candidate districts and `beside`, as drafted) and **D2** (C27,
+  outposts, C28) if the builder judges it over a day; D2 depends on D1 and T2's routing.
+
 ## Phase 6c slice VOC: the full block vocabulary and rarity budgets (DRAFT for Steward review)
 
 API 1.26.0, mod 0.29.0 (wave 4). PLAN toolbox "Full block vocabulary" and "Survival".
