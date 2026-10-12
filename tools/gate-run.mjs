@@ -852,6 +852,10 @@ async function startClient(sh, key) {
   child.unref();
   let exited = null;
   child.on('exit', (code) => (exited = code));
+  child.on('error', (e) => {
+    exited = -1;
+    log(`  client script ${c.script} did not start: ${e.message}`, sh);
+  });
   const end = Date.now() + cfg.clientStartMin * 60_000;
   let dev = null;
   while (Date.now() < end && exited === null) {

@@ -13,7 +13,8 @@
     "stages": { "type": "array", "items": { "type": "string" } },
     "lots": { "type": "array", "items": { "type": "object", "required": ["id", "stage", "rect", "floorY", "front", "entrance"], "additionalProperties": false, "properties": {
       "id": { "type": "string" }, "stage": { "type": "string" }, "rect": { "$ref": "#/$defs/rect" }, "floorY": { "type": "integer" },
-      "front": { "enum": ["north", "south", "east", "west"] }, "entrance": { "$ref": "#/$defs/xyz" }, "brief": { "type": "string" } } } },
+      "front": { "enum": ["north", "south", "east", "west"] }, "entrance": { "$ref": "#/$defs/xyz" }, "brief": { "type": "string" },
+      "lamps": { "type": "integer" } } } },
     "paths": { "type": "array", "items": { "type": "object", "required": ["id", "kind", "stage", "width", "points"], "additionalProperties": false, "properties": {
       "id": { "type": "string" }, "kind": { "enum": ["stair", "bridge", "graded", "road", "path"] }, "stage": { "type": "string" }, "width": { "type": "integer", "minimum": 1 },
       "points": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/xyz" } } } } },
@@ -32,7 +33,9 @@
         "id": { "type": "string" }, "from": { "type": "string" }, "to": { "type": "string" }, "type": { "enum": ["road", "stair", "bridge", "graded", "path"] }, "width": { "type": "integer", "minimum": 1 },
         "path": { "type": "string" }, "stage": { "type": "string" }, "mover": { "type": "array", "items": { "enum": ["player", "villager"] } } } } } } },
     "unplaced": { "type": "array", "items": { "type": "object", "required": ["id", "reason"], "additionalProperties": false, "properties": {
-      "id": { "type": "string" }, "reason": { "type": "string" } } } }
+      "id": { "type": "string" }, "reason": { "type": "string" } } } },
+    "props": { "type": "array", "items": { "type": "object", "required": ["kind", "id", "at"], "additionalProperties": false, "properties": {
+      "kind": { "type": "string" }, "id": { "type": "string" }, "lot": { "type": "string" }, "at": { "$ref": "#/$defs/xyz" } } } }
   },
   "$defs": {
     "xyz": { "type": "array", "minItems": 3, "maxItems": 3, "items": { "type": "integer" } },

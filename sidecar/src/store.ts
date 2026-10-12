@@ -123,6 +123,8 @@ export interface StateData {
   bibleClaims?: Record<string, string>;
   /** (6c 0a, C9) "<kind>|<owner>|<opKey>" -> the record it made (opkeys.ts) */
   opKeys?: Record<string, import('./opkeys.js').OpKeyEntry>;
+  /** (6c W) variant id -> when its job left the queue (its first non-queued status), for a copy's COPY time */
+  variantStarts?: Record<string, number>;
 }
 
 function emptyState(now: number): StateData {

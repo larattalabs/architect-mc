@@ -13,6 +13,11 @@
 import { COND } from './program.mjs';
 import { inRects } from './survey.mjs';
 import { crossOffsets } from './geom.mjs';
+import { isGravity } from '../blocks.mjs';
+import { fixtureFor, roadLamp } from './fixtures.mjs';
+
+/** (6c W) The village's lamp fixture (the bible's `light` on its `rail`): as props.mjs lampFixture (no import cycle). */
+const lampFixture = (r) => fixtureFor(r.material('light', 'lamp light'), r.material('rail', 'lamp post'));
 
 /** VillageLayout.Rules.defaults(): street 5 (road 3 plus a verge each side), lot gap 3, slope at most 3, margin 2. */
 export const STREET_RULES = Object.freeze({ streetWidth: 5, lotGap: 3, maxSlope: 3, claimMargin: 2 });
@@ -52,11 +57,11 @@ const orderOf = (s) => (s.placement === 'central' ? 0 : s.landmark ? 1 : s.place
 const squareOrder = (s) => (s.villager === 'trading_hall' ? 0 : s.landmark ? 1 : s.placement === 'central' ? 2 : 9);
 
 /** Each column's 8-neighbour step distance to the nearest surveyed water column (Steward's Grid.waterDistance), over the claim. */
-export function waterDistance(survey, claim) {
+export function waterDistance(survey, claim, { unfrozen = false } = {}) {
   const W = claim.maxX - claim.minX + 1, D = claim.maxZ - claim.minZ + 1;
   const d = new Int32Array(W * D).fill(0x7fffffff);
   const q = [];
-  for (let j = 0; j < D; j++) for (let i = 0; i < W; i++) if (survey.waterAt(claim.minX + i, claim.minZ + j)) { d[i + j * W] = 0; q.push(i + j * W); }
+  for (let j = 0; j < D; j++) for (let i = 0; i < W; i++) if (survey.waterAt(claim.minX + i, claim.minZ + j) && !(unfrozen && survey.frozenAt?.(claim.minX + i, claim.minZ + j))) { d[i + j * W] = 0; q.push(i + j * W); }
   for (let h = 0; h < q.length; h++) {
     const k = q[h], i = k % W, j = (k - i) / W;
     for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) {
@@ -68,6 +73,14 @@ export function waterDistance(survey, claim) {
   }
   const any = q.length > 0;
   return { any, at: (x, z) => (x < claim.minX || z < claim.minZ || x > claim.maxX || z > claim.maxZ ? 0x7fffffff : d[(x - claim.minX) + (z - claim.minZ) * W]) };
+}
+
+/** (6c W) Does the claim's survey hold a frozen-water column? */
+export function hasFrozen(survey, claim) {
+  if (!survey.frozenAt) return false;
+  const r = survey.resolution ?? 1;
+  for (let x = claim.minX; x <= claim.maxX; x += r) for (let z = claim.minZ; z <= claim.maxZ; z += r) if (survey.frozenAt(x, z)) return true;
+  return false;
 }
 
 /** The distance (8-neighbour steps) from a world rect to surveyed water: the least over its cells, or null without water. */
@@ -88,6 +101,8 @@ export function rectWater(wd, r) {
 export function layoutStreet({ claim, survey, specs, rules = STREET_RULES, shared = { kind: 'square', size: 11 }, keepOut = [], _unsafe = {} }) {
   const ordered = specs.map((s, i) => ({ ...s, _i: i })).sort((a, b) => orderOf(a) - orderOf(b) || a._i - b._i);
   const wd = ordered.some((s) => s.placement === 'near_water' || s.villager === 'farm') ? waterDistance(survey, claim) : null;
+  // (6c W) a farm needs unfrozen water (M24); near_water counts frozen water as water (S-W-1)
+  const wdFarm = wd && hasFrozen(survey, claim) ? waterDistance(survey, claim, { unfrozen: true }) : wd;
   let best = null;
   const fails = [];
   for (const o of ['ew', 'ns']) {
@@ -101,10 +116,10 @@ export function layoutStreet({ claim, survey, specs, rules = STREET_RULES, share
       if (sh.fail) { fails.push(sh.fail); continue; }
       for (const firstNeg of [true, false]) {
         for (const upFirst of [true, false]) {
-          const p = tryStreetSkipping({ o, F, claim, survey, specs: ordered, rules, sv, sh, firstNeg, upFirst, keepOut, wd, _unsafe });
+          const p = tryStreetSkipping({ o, F, claim, survey, specs: ordered, rules, sv, sh, firstNeg, upFirst, keepOut, wd, wdFarm, _unsafe });
           const street = streetCheck(o, p, sh, survey, rules, keepOut, claim);
           if (street.fail) { fails.push(street.fail); continue; }
-          const score = p.lots.length * 1_000_000 + hintScore(o, p, survey, claim, wd) - slopeTotal(o, p, survey) * 10 - Math.abs(dv);
+          const score = p.lots.length * 1_000_000 + hintScore(o, p, survey, claim, wd, wdFarm) - slopeTotal(o, p, survey) * 10 - Math.abs(dv);
           if (!best || p.lots.length > best.lots.length || (p.lots.length === best.lots.length && score > best.score)) {
             best = { ...p, ...street, orientation: o, streetV: sv, shared: sh, score };
           }
@@ -112,7 +127,8 @@ export function layoutStreet({ claim, survey, specs, rules = STREET_RULES, share
       }
     }
   }
-  if (!best) return { fail: fails.length ? fails.sort()[0] : 'no street fits the claim' };
+  // (6c W) a claim refused over frozen water says so, naming a frozen column
+  if (!best) { const fz = fails.filter((f) => /frozen/.test(f)).sort(); return { fail: fz.length ? fz[0] : fails.length ? fails.sort()[0] : 'no street fits the claim' }; }
   const placed = new Set(best.lots.map((l) => l.spec.id));
   const unplaced = specs.filter((s) => !placed.has(s.id)).map((s) => ({ id: s.id, reason: best.why.get(s.id) ?? 'no_room' }));
   return { orientation: best.orientation, streetV: best.streetV, streetY: best.streetY, u0: best.u0, u1: best.u1, shared: best.shared, lots: best.lots, unplaced, score: best.score, road: best.road };
@@ -137,7 +153,7 @@ function placeShared(o, F, claim, survey, sv, cu, shared, rules, keepOut) {
     const wr = rectWorld(o, u0, v0, u1, v1);
     if (keepOut.some((k) => rectsMeet(grow(wr, 1), k))) { why = 'the shared space meets keep-out'; continue; }
     const st = levelStats(survey, wr);
-    if (st.water) { why = 'water under the shared space'; continue; }
+    if (st.water) { why = st.frozen ? `frozen water under the shared space at ${st.frozen}` : 'water under the shared space'; continue; }
     const y = st.top;
     if (st.cut > PAD_MAX || st.fill > PAD_MAX) { why = `the shared space needs a cut of ${st.cut} and a fill of ${st.fill} (at most ${PAD_MAX})`; continue; }
     return { kind: shared.kind, u0, u1, v0, v1, side, cu: c, y, rect: wr };
@@ -148,11 +164,11 @@ function placeShared(o, F, claim, survey, sv, cu, shared, rules, keepOut) {
 /** A levelled area's top y (the median ground) and the cut and fill it needs; whether any column is water. */
 export function levelStats(survey, [x0, z0, x1, z1]) {
   const g = [];
-  let water = false;
-  for (let x = x0; x <= x1; x++) for (let z = z0; z <= z1; z++) { g.push(survey.heightAt(x, z)); if (survey.waterAt(x, z)) water = true; }
+  let water = false, frozen = null;
+  for (let x = x0; x <= x1; x++) for (let z = z0; z <= z1; z++) { g.push(survey.heightAt(x, z)); if (survey.waterAt(x, z)) { water = true; if (!frozen && survey.frozenAt?.(x, z)) frozen = `${x},${z}`; } }
   const s = [...g].sort((a, b) => a - b);
   const top = s[s.length >> 1];
-  return { top, cut: Math.max(0, s[s.length - 1] - top), fill: Math.max(0, top - s[0]), water };
+  return { top, cut: Math.max(0, s[s.length - 1] - top), fill: Math.max(0, top - s[0]), water, frozen };
 }
 
 /** VillageLayout.tryStreetSkipping: when a lot fits nowhere, lay the street again without it (at most 3 stale drops in a row). */
@@ -265,13 +281,15 @@ function tryStreet(a) {
  * where the claim allows it; otherwise it stays (and M24 reports it).
  */
 function nearWater(a, placed, obstacles) {
-  const { o, F, rules, sv, sh, wd } = a;
-  if (!wd?.any) return;
+  const { o, F, rules, sv, sh } = a;
+  if (!a.wd?.any) return;
   const half = Math.floor(rules.streetWidth / 2);
   const m = rules.claimMargin;
   for (const l of [...placed]) {
     const s = l.spec;
     if (l.slot !== 'street' || !(s.villager === 'farm' || s.placement === 'near_water')) continue;
+    const wd = s.villager === 'farm' ? (a.wdFarm ?? a.wd) : a.wd;
+    if (!wd.any) continue;
     const cur = rectWater(wd, l.rect);
     if (cur !== null && cur <= FARM_WATER) continue;
     const others = placed.filter((x) => x !== l);
@@ -309,7 +327,7 @@ function streetCheck(o, p, sh, survey, rules, keepOut, claim) {
   for (let u = u0; u <= u1; u++) {
     if (sh.kind === 'square' && u >= sh.u0 && u <= sh.u1) { lo = -Infinity; hi = Infinity; continue; }
     const [x, z] = toWorld(o, u, sv);
-    if (survey.waterAt(x, z)) return { fail: `the street crosses water at ${x},${z}` };
+    if (survey.waterAt(x, z)) return { fail: survey.frozenAt?.(x, z) ? `the street crosses frozen water at ${x},${z}` : `the street crosses water at ${x},${z}` };
     const g = survey.heightAt(x, z);
     lo = Math.max(g - 3, lo - 1); hi = Math.min(g + 3, hi + 1);
     if (lo > hi) return { fail: `the street is too steep for a ground road at ${x},${z}` };
@@ -318,7 +336,7 @@ function streetCheck(o, p, sh, survey, rules, keepOut, claim) {
 }
 
 /** VillageLayout.hintScore (higher is better): near_water close to water, central close to the centre, edge far, high_ground above the mean. */
-function hintScore(o, p, survey, claim, wd) {
+function hintScore(o, p, survey, claim, wd, wdFarm = wd) {
   if (!p.lots.length) return 0;
   const mean = p.lots.reduce((s, l) => s + l.groundY, 0) / p.lots.length;
   const cx = Math.floor((claim.minX + claim.maxX) / 2), cz = Math.floor((claim.minZ + claim.maxZ) / 2);
@@ -327,7 +345,7 @@ function hintScore(o, p, survey, claim, wd) {
     const r = l.rect;
     const toCentre = Math.hypot(Math.floor((r[0] + r[2]) / 2) - cx, Math.floor((r[1] + r[3]) / 2) - cz);
     const hint = l.spec.placement ?? (l.spec.villager === 'farm' ? 'near_water' : null);
-    if (hint === 'near_water') { const b = wd ? rectWater(wd, r) : null; score -= b === null ? 2000 : Math.min(b, 60) * 40; } else if (hint === 'central') score -= Math.floor(toCentre * 20);
+    if (hint === 'near_water') { const w = l.spec.villager === 'farm' ? wdFarm : wd; const b = w ? rectWater(w, r) : null; score -= b === null ? 2000 : Math.min(b, 60) * 40; } else if (hint === 'central') score -= Math.floor(toCentre * 20);
     else if (hint === 'edge') score += Math.floor(toCentre * 10);
     else if (hint === 'high_ground') score += Math.floor((l.groundY - mean) * 60);
   }
@@ -346,12 +364,38 @@ function slopeTotal(o, p, survey) {
 
 // ------------------------------------------------------------------ surface ops (columns)
 
-/** Column ops for a set of cells levelled at y (abs) or following the ground (y null): fill below, the top (role, walk), 2 clear. */
-export function surfaceOps(part, cells, role, { walk = true, subsurface = 'subsurface' } = {}) {
+/**
+ * (6c W, item 4) The gap under a surface cell written at `y` in column (x, z), on the frozen plan survey: the number of fluid
+ * cells (water, or frozen water's water) between the cell below it and the bed. 0 on dry land and over a fill.
+ */
+export function gapUnder(survey, x, y, z) {
+  if (!survey.waterAt(x, z)) return 0;
+  const u = y - 1, floor = survey.floorAt(x, z), ground = survey.heightAt(x, z);
+  return u > floor && u <= ground ? u - floor : 0;
+}
+
+/**
+ * Column ops for a set of cells levelled at y (abs) or following the ground (y null): fill below, the top (role, walk), 2 clear.
+ * (6c W, item 4) When the top block falls (sand, gravel, concrete powder: blocks.mjs `isGravity`) and the cell under it is a gap
+ * in the frozen ground, a 1-deep gap gets the `foundation` role under it and a deeper one takes the `subsurface` role as its top
+ * (never a falling block). A top that doesn't fall, or a cell with nothing under it to fill, writes exactly as before.
+ */
+export function surfaceOps(part, cells, role, { walk = true, subsurface = 'subsurface', _noGravityRule = false } = {}) {
   const r = part.region;
   const top = r.material(role, `${part.id}: surface`), sub = r.material(subsurface, `${part.id}: subsurface`);
   const lev = cells.filter((c) => c[1] !== null), fol = cells.filter((c) => c[1] === null);
   const ops = [];
+  // the gravity rule: the cells whose top would stand over a gap, by the fix they need
+  let under = [], swap = [];
+  if (!_noGravityRule && isGravity(top)) {
+    const s = r.survey;
+    const gap = (x, y, z) => gapUnder(s, x, y ?? s.heightAt(x, z), z);
+    const keep = [];
+    for (const c of lev) { const g = gap(c[0], c[1], c[2]); if (g === 1) under.push(c); else if (g > 1) swap.push(c); else keep.push(c); }
+    const keepF = [];
+    for (const c of fol) { const g = gap(c[0], null, c[2]); if (g === 1) under.push(c); else if (g > 1) swap.push(c); else keepF.push(c); }
+    if (under.length || swap.length) { lev.length = 0; lev.push(...keep, ...under.filter((c) => c[1] !== null)); fol.length = 0; fol.push(...keepF, ...under.filter((c) => c[1] === null)); }
+  }
   if (lev.length) {
     // fill from the ground up to y - 1, the top at y, cleared from y + 1 to the column's top (at least 2 above the ground)
     ops.push({ from: { surface: 0 }, to: { abs: 0 }, cols: lev.flatMap(([x, y, z]) => [x, z, 1, y - 1, 0]), materials: [sub], walk: false });
@@ -362,7 +406,28 @@ export function surfaceOps(part, cells, role, { walk = true, subsurface = 'subsu
     ops.push({ from: { surface: 0 }, to: { surface: 0 }, cols: fol.flatMap(([x, , z]) => [x, z, 0, 0, 0]), materials: [top], walk });
     ops.push({ from: { surface: 1 }, to: { max: [{ height: 0 }, { surface: 2 }] }, cols: fol.flatMap(([x, , z]) => [x, z, 0, 0, 0]), materials: [null], walk: false });
   }
+  if (under.length) {
+    // a 1-deep gap: the foundation under the top (the gap's one fluid cell)
+    const s = r.survey;
+    const fdn = r.material(isGravity(r.material('foundation', 'gravity fill')) ? 'subsurface' : 'foundation', `${part.id}: gravity fill`);
+    ops.push({ from: { abs: 0 }, to: { abs: 0 }, cols: under.flatMap(([x, y, z]) => { const yy = (y ?? s.heightAt(x, z)) - 1; return [x, z, yy, yy, 0]; }), materials: [fdn], walk: false });
+  }
+  if (swap.length) {
+    // a deeper gap: the top takes the subsurface role (never a falling block), as it was otherwise
+    const alt = isGravity(sub) ? r.material('foundation', `${part.id}: gravity swap`) : sub;
+    const sl = swap.filter((c) => c[1] !== null), sf = swap.filter((c) => c[1] === null);
+    if (sl.length) {
+      ops.push({ from: { surface: 0 }, to: { abs: 0 }, cols: sl.flatMap(([x, y, z]) => [x, z, 1, y - 1, 0]), materials: [sub], walk: false });
+      ops.push({ from: { abs: 0 }, to: { abs: 0 }, cols: sl.flatMap(([x, y, z]) => [x, z, y, y, 0]), materials: [alt], walk });
+      ops.push({ from: { abs: 0 }, to: { max: [{ height: 0 }, { surface: 2 }] }, cols: sl.flatMap(([x, y, z]) => [x, z, y + 1, 0, 0]), materials: [null], walk: false });
+    }
+    if (sf.length) {
+      ops.push({ from: { surface: 0 }, to: { surface: 0 }, cols: sf.flatMap(([x, , z]) => [x, z, 0, 0, 0]), materials: [alt], walk });
+      ops.push({ from: { surface: 1 }, to: { max: [{ height: 0 }, { surface: 2 }] }, cols: sf.flatMap(([x, , z]) => [x, z, 0, 0, 0]), materials: [null], walk: false });
+    }
+  }
   for (const op of ops) part._push({ op: 'columns', from: op.from, to: op.to, cols: op.cols, materials: op.materials, cond: COND.IF_NATURAL, walk: op.walk });
+  if (under.length || swap.length) ((r.meta.gravity ??= {})[part.id] ??= { under: 0, swap: 0 }, r.meta.gravity[part.id].under += under.length, r.meta.gravity[part.id].swap += swap.length);
   return part;
 }
 
@@ -391,15 +456,15 @@ export function reservations(o, sh) {
 }
 
 /** The square (or the green): levelled at its y and paved in the `path` role with walk cells, prop cells paved without walk. */
-export function square(r, sh, { stage = 'ground', o, noWalk = new Set() } = {}) {
+export function square(r, sh, { stage = 'ground', o, noWalk = new Set(), noGravityRule = false } = {}) {
   const p = r.part(sh.kind === 'square' ? 'square' : 'green', { stage, set: 'path' });
   const cells = [], still = [];
   for (let u = sh.u0; u <= sh.u1; u++) for (let v = sh.v0; v <= sh.v1; v++) {
     const [x, z] = toWorld(o, u, v);
     (noWalk.has(`${x},${z}`) ? still : cells).push([x, sh.y, z]);
   }
-  surfaceOps(p, cells, sh.kind === 'square' ? 'path' : 'surface');
-  if (still.length) surfaceOps(p, still, sh.kind === 'square' ? 'path' : 'surface', { walk: false });
+  surfaceOps(p, cells, sh.kind === 'square' ? 'path' : 'surface', { _noGravityRule: noGravityRule });
+  if (still.length) surfaceOps(p, still, sh.kind === 'square' ? 'path' : 'surface', { walk: false, _noGravityRule: noGravityRule });
   (r.meta.parts[p.id] ??= {}).kind = 'path';
   return p;
 }
@@ -413,7 +478,7 @@ export const green = (r, sh, o) => square(r, sh, o);
  * top). 4-connected: across the street axis first, then along it. Never inside a lot box (`_unsafe` skips that guard: the broken
  * variant the checker's M1 must catch) and never across keep-out (that refuses the plan). Returns its top cells [x, y, z].
  */
-export function lane(part, id, from, to, w, { o, boxes = [], keepOut = [], _unsafe = false }) {
+export function lane(part, id, from, to, w, { o, boxes = [], keepOut = [], _unsafe = false, noGravityRule = false }) {
   const y = from[1] - 1;
   const [fu, fv] = toLocal(o, from[0], from[2]);
   const [tu, tv] = toLocal(o, to[0], to[2]);
@@ -433,7 +498,7 @@ export function lane(part, id, from, to, w, { o, boxes = [], keepOut = [], _unsa
     if (keepOut.length && inRects(keepOut, x, z)) throw new Error(`lane ${id} crosses keep-out at ${x},${z}`);
     if (!_unsafe) for (const b of boxes) if (x >= b.minX && x <= b.maxX && z >= b.minZ && z <= b.maxZ) throw new Error(`lane ${id} enters lot ${b.id}'s box at ${x},${z}`);
   }
-  surfaceOps(part, cells, 'path');
+  surfaceOps(part, cells, 'path', { _noGravityRule: noGravityRule });
   return cells;
 }
 
@@ -457,6 +522,8 @@ export function streetLayout(r, specs, { rules = STREET_RULES, shared = { kind: 
   const sg = stages.ground ?? 'ground', ss = stages.street ?? 'street', sl = stages.lots ?? 'lots';
   const res = reservations(o, sh);
   const wd = waterDistance(r.survey, r.claim);
+  // (6c W) M24's water is unfrozen water (a farm can't use ice); the same as wd on a claim with no frozen column
+  const wdU = hasFrozen(r.survey, r.claim) ? waterDistance(r.survey, r.claim, { unfrozen: true }) : wd;
   // pads and lots (stage ground; the lots' own stage `lots`)
   const pads = r.part('pads', { stage: sg });
   const boxes = [];
@@ -475,7 +542,7 @@ export function streetLayout(r, specs, { rules = STREET_RULES, shared = { kind: 
   }
   // the shared space (the props' cells, from the caller's planProps, paved without walk)
   const propsPlan = planProps ? planProps({ o, sh, res, lots: lotOut, layout: L }) : null;
-  square(r, sh, { stage: sg, o, noWalk: propsPlan?.noWalk ?? new Set() });
+  square(r, sh, { stage: sg, o, noWalk: propsPlan?.noWalk ?? new Set(), noGravityRule: !!_unsafe.noGravityRule });
   // the verges: the street's two outer rows, outside the shared space (surface swap, walk)
   const verges = r.part('verges', { stage: sg, set: 'path' });
   const sv = L.road.sv;
@@ -484,7 +551,7 @@ export function streetLayout(r, specs, { rules = STREET_RULES, shared = { kind: 
     if (sh.kind === 'square' && u >= sh.u0 && u <= sh.u1) continue;
     for (const dv of [-half, half]) { const [x, z] = toWorld(o, u, sv + dv); vcells.push([x, null, z]); }
   }
-  if (vcells.length) surfaceOps(verges, vcells, 'path');
+  if (vcells.length) surfaceOps(verges, vcells, 'path', { _noGravityRule: !!_unsafe.noGravityRule });
   (r.meta.parts.verges ??= {}).kind = 'path';
   // the plaza and the street's junctions
   const pl = plaza(r, sh, res.bell);
@@ -505,13 +572,13 @@ export function streetLayout(r, specs, { rules = STREET_RULES, shared = { kind: 
       to = [...toWorld(o, eu, tv)];
       to = [to[0], e[1], to[1]];
       pl.ports.push({ name: id, at: to, facing: l.front, width: laneWidth });
-      laneCells[s.id] = lane(lanes, id, e, to, laneWidth, { o, boxes, keepOut, _unsafe: _unsafe.laneIntoBox === s.id });
+      laneCells[s.id] = lane(lanes, id, e, to, laneWidth, { o, boxes, keepOut, _unsafe: _unsafe.laneIntoBox === s.id, noGravityRule: !!_unsafe.noGravityRule });
       r.graphEdge({ id, from: `lot:${s.id}.entrance`, to: `plaza.${id}`, type: 'path', width: laneWidth, path: id });
     } else {
       const tv = l.side < 0 ? sv - half : sv + half;
       const t2 = toWorld(o, eu, tv);
       to = [t2[0], e[1], t2[1]];
-      laneCells[s.id] = lane(lanes, id, e, to, laneWidth, { o, boxes, keepOut, _unsafe: _unsafe.laneIntoBox === s.id });
+      laneCells[s.id] = lane(lanes, id, e, to, laneWidth, { o, boxes, keepOut, _unsafe: _unsafe.laneIntoBox === s.id, noGravityRule: !!_unsafe.noGravityRule });
       const jw = toWorld(o, eu, sv);
       junctions.push({ u: eu, side: l.side, id: s.id, at: [jw[0], L.streetY, jw[1]] });
     }
@@ -530,7 +597,7 @@ export function streetLayout(r, specs, { rules = STREET_RULES, shared = { kind: 
     const pts = [toWorld(o, ch.a, sv), toWorld(o, ch.b, sv)];
     const why = street._groundRoadProblem(pts.map((q) => [q[0], null, q[1]]));
     if (why) throw new Error(`flat village: the street (${ch.rid}) can't be a ground road: ${why}`);
-    street.road(pts, { width: rules.streetWidth - 2, surface: 'path', lanterns: true, mode: 'ground', id: ch.rid });
+    street.road(pts, { width: rules.streetWidth - 2, surface: 'path', lanterns: true, mode: 'ground', id: ch.rid, lamp: roadLamp(lampFixture(r)) });
     roads.push(ch.rid);
     if (ch.endPort) pl.ports.push({ name: ch.endPort, at: at3(ch.b), facing: facingU(-1), width: rules.streetWidth });
     if (ch.startPort) pl.ports.push({ name: ch.startPort, at: at3(ch.a), facing: facingU(1), width: rules.streetWidth });
@@ -563,8 +630,8 @@ export function streetLayout(r, specs, { rules = STREET_RULES, shared = { kind: 
   r.meta.village = {
     orientation: o, streetV: sv, shared: { kind: sh.kind, rect: sh.rect, y: sh.y }, bell: res.bell, bellArea: res.area.map(([x, z]) => [x, z]), bellY: res.y,
     golem: res.golem.map(([x, z]) => [x, z]), golemCentre: res.golemCentre, unplaced: L.unplaced, lanes: laneCells, roads, laneWidth,
-    lots: Object.fromEntries(lotOut.map((l) => [l.spec.id, { villager: l.spec.villager, slot: l.slot, entrance: l.entrance, rect: l.rect, water: rectWater(wd, l.rect) }])),
-    waterAny: wd.any, keepOut,
+    lots: Object.fromEntries(lotOut.map((l) => [l.spec.id, { villager: l.spec.villager, slot: l.slot, entrance: l.entrance, rect: l.rect, water: rectWater(wdU, l.rect) }])),
+    waterAny: wdU.any, keepOut,
   };
   return { ...L, res, lots: lotOut, boxes, laneCells, plaza: pl, propsPlan };
 }

@@ -108,7 +108,8 @@ const $ = (tag, attrs = {}, ...kids) => {
 const app = document.getElementById('app');
 document.getElementById('title').textContent = DATA.title;
 const views = { db: null, user: null, owner: false, me: null };
-const docId = (sc) => `approvals/${DATA.phase}__${sc.id}`;
+// (6c W) a section may carry its own phase (W's S7, V's earlier S7): decisions are per phase and scenario
+const docId = (sc) => `approvals/${sc.phase ?? DATA.phase}__${sc.id}`;
 
 function pill(row) {
   if (!row.gated) return $('span', { class: 'pill rec', text: 'recorded' });
@@ -124,9 +125,11 @@ function scenario(sc) {
   const s = $('section', { class: 'scenario', id: sc.short });
   const failing = sc.rows.filter((r) => r.gated && r.pass === false && r.id !== 'gallery');
   s.append($('div', { class: 'block' },
-    $('span', { class: 'eyebrow', text: `${sc.short.toUpperCase()} · version ${sc.version}` }),
-    $('h2', { text: sc.brief || sc.id }),
-    $('p', { class: 'muted', text: failing.length ? `${failing.length} bar(s) fail on this run: ${failing.map((r) => r.label).join(', ')}.` : 'Every run bar passes. Your decision is the last one.' })));
+    $('span', { class: 'eyebrow', text: sc.earlier ? `S7 · slice V · version ${sc.version}` : sc.look ? `S7 · slice W · ${sc.look} look` : `${sc.short.toUpperCase()} · version ${sc.version}` }),
+    $('h2', { text: sc.lookOnly ? `The same village in the ${sc.look} bible` : sc.earlier ? 'Slice V\'s run, as approved' : sc.look ? 'S7 with slice W: lit aprons and the bible\'s lamps' : (sc.brief || sc.id) }),
+    sc.lookOnly ? $('p', { class: 'muted', text: `A look only: the lamps come from this bible's light and rail roles${sc.bible ? ` (bible ${sc.bible})` : ''}. Its bars are recorded, not gated; the decision is on the rustic run above.` }) : null,
+    sc.earlier ? $('p', { class: 'muted', text: 'Kept for comparison: slice V\'s run before the apron lamps. Its approval stands for its own evidence sha.' }) : null,
+    sc.lookOnly ? null : $('p', { class: 'muted', text: failing.length ? `${failing.length} bar(s) fail on this run: ${failing.map((r) => r.label).join(', ')}.` : 'Every run bar passes. Your decision is the last one.' })));
   const facts = [['Scenario', sc.id], ['Run', sc.runId], ['Evidence', sc.evidenceSha.slice(0, 12)], ['IR sha', (sc.irSha || '').slice(0, 12)], ['Date', `${sc.date.slice(0, 4)}-${sc.date.slice(4, 6)}-${sc.date.slice(6, 8)}`],
     ['Versions', `mod ${sc.versions?.mod} · API ${sc.versions?.api} · kit ${sc.versions?.kit}`], ['Claim', sc.claim.join(', ')], ['Seeds', `world ${sc.worldSeed} · program ${sc.programSeed}`], ['Cells written', Number(sc.cellsWritten).toLocaleString('en-US')]];
   s.append($('dl', { class: 'facts' }, ...facts.map(([k, v]) => $('div', {}, $('dt', { text: k }), $('dd', { text: v })))));
@@ -137,6 +140,16 @@ function scenario(sc) {
   s.append($('div', { class: 'block' }, $('h3', { text: DATA.barsTitle || 'Bars (CONTRACT 6b §8.3), on the realised world' }),
     $('div', { class: 'scroll' }, $('table', {}, $('thead', {}, $('tr', {}, $('th', { text: 'Result' }), $('th', { text: 'Check' }), $('th', { text: 'Value' }), $('th', { text: 'Bar' }))), tb))));
 
+  // (6c W) the lamps: the fixture, the per-lot count beside the lots' aprons, and where to see the look
+  if (sc.lamps) {
+    const per = Object.entries(sc.lamps.perLot ?? {});
+    const total = per.reduce((a, [, n]) => a + n, 0);
+    const lb = $('tbody');
+    for (const [lot, n] of per) lb.append($('tr', {}, $('td', { text: lot }), $('td', { class: 'val', text: String(n) }), $('td', { class: 'bar', text: n ? '█'.repeat(n) : '·' })));
+    s.append($('div', { class: 'block' }, $('h3', { text: `Lamps beside the lots: ${sc.lamps.fixture?.kind?.replaceAll('_', ' ')} (light ${sc.lamps.fixture?.level}), ${total} in all, at most 4 a lot` }),
+      $('p', { class: 'muted', text: `Plan-time dark share of the aprons and batters: ${(100 * (sc.lamps.before?.share ?? 0)).toFixed(1)}% before the lamps, ${(100 * (sc.lamps.after?.share ?? 0)).toFixed(2)}% after${sc.lamps.capped ? ' (capped at 4 a lot: not fully covered at plan time)' : ''}. The square's and the street's lamps use the same fixture; cam_lamp below is a close-up of one.` }),
+      $('div', { class: 'scroll' }, $('table', {}, $('thead', {}, $('tr', {}, $('th', { text: 'Lot' }), $('th', { text: 'Lamps' }), $('th', { text: '' }))), lb))));
+  }
   // before and after
   const cams = $('div', { class: 'cams' });
   for (const c of sc.cams) cams.append($('div', { class: 'cam' }, $('span', { class: 'mono muted', text: c.name }),
@@ -156,13 +169,13 @@ function scenario(sc) {
     $('p', { text: `E-flat ${ex.flat ? `${ex.flat.mismatches} mismatches (run ${ex.flat.runId})` : 'not run'} · E-normal ${ex.normal.mismatches} mismatches of ${Number(ex.normal.cellsWritten).toLocaleString('en-US')} written cells` }),
     $('details', {}, $('summary', { text: 'Classified mismatches' }), $('pre', { class: 'summary', text: `E-normal\n${cls(ex.normal.classes)}${ex.flat ? `\n\nE-flat\n${cls(ex.flat.classes)}` : ''}` }))));
 
-  s.append(decisionPanel(sc));
+  if (!sc.lookOnly) s.append(decisionPanel(sc));
   return s;
 }
 
 const decisions = {};
 function decisionText(sc) {
-  const d = decisions[sc.id];
+  const d = decisions[docId(sc)];
   if (!d) return 'pending';
   return d.evidenceSha === sc.evidenceSha ? `${d.decision} ${d.at?.slice(0, 10) ?? ''}` : 'evidence changed, decide again';
 }
@@ -180,7 +193,7 @@ function decisionPanel(sc) {
   const status = $('p', { class: 'status', role: 'status' });
   box.append($('h3', { text: `Decision for evidence ${sc.evidenceSha.slice(0, 12)}` }), prior, radios, $('label', { for: notes.id, class: 'muted', text: 'Notes' }), notes, submit, status);
   const render = () => {
-    const d = decisions[sc.id];
+    const d = decisions[docId(sc)];
     prior.replaceChildren();
     if (d) {
       const line = `${d.decision} on ${d.at?.slice(0, 16).replace('T', ' ')} for ${d.evidenceSha.slice(0, 12)}${d.notes ? `: ${d.notes}` : ''}`;
@@ -197,11 +210,11 @@ function decisionPanel(sc) {
   submit.addEventListener('click', async () => {
     const choice = radios.querySelector('input:checked')?.value;
     if (!choice) { status.textContent = 'Choose Approve or Reject first.'; return; }
-    const prev = decisions[sc.id];
+    const prev = decisions[docId(sc)];
     const doc = { phase: DATA.phase, scenario: sc.id, runId: sc.runId, evidenceSha: sc.evidenceSha, decision: choice, notes: notes.value.trim(), at: new Date().toISOString(),
       history: prev ? [...(prev.history ?? []), { ...prev, history: undefined }].map(({ history, ...h }) => h) : [] };
     if (DATA.local) {
-      decisions[sc.id] = doc;
+      decisions[docId(sc)] = doc;
       const blob = new Blob([JSON.stringify({ page: 'local', approvals: Object.values(decisions) }, null, 2)], { type: 'application/json' });
       const a = $('a', { href: URL.createObjectURL(blob), download: 'approvals.json', text: 'Save approvals.json' });
       status.replaceChildren('Recorded. ', a, ' into artifacts/scenarios/6b/.');
@@ -271,7 +284,7 @@ renderAll();
   views.me = views.owner ? await user.id().catch(() => null) : null;
   renderAll();
   if (!db) return;
-  for (const sc of DATA.scenarios) db.doc(docId(sc)).onSnapshot((snap) => { if (snap.exists) decisions[sc.id] = snap.data(); else delete decisions[sc.id]; renderAll(); }, () => {});
+  for (const sc of DATA.scenarios) db.doc(docId(sc)).onSnapshot((snap) => { if (snap.exists) decisions[docId(sc)] = snap.data(); else delete decisions[docId(sc)]; renderAll(); }, () => {});
   if (DATA.calibration?.length) db.collection('calibration').onSnapshot((q) => { for (const d of q.docs) { const v = d.data(); if (v.phase === DATA.phase) marks[v.seed] = v.mark; } paintMarks(); }, () => {});
 })();
 </script>

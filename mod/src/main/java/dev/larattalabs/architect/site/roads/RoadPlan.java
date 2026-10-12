@@ -83,6 +83,27 @@ public final class RoadPlan {
 	}
 
 	/**
+	 * 6c W (item 2): is the built cell at (x, y, z) journal-owned by the road's own owner (a region's verge, a path the same caller
+	 * placed)? A lantern post's foot may stand on such a cell; a player's block or another owner's never counts.
+	 */
+	@FunctionalInterface
+	public interface OwnFoot {
+		boolean own(int x, int y, int z);
+	}
+
+	/**
+	 * 6c W (the coordinator's addition): the bible's lamp fixture for the road's lanterns, from the IR road's {@code lamp}: a stack
+	 * of cells {@code (along[k], dy[k])} from the post's foot cell (dy 0, the feet row), written for a road travelling east and
+	 * turned to the road's own travel; {@code light} the index of the light cell (the Plan's {@code lanterns} position);
+	 * {@code first} and {@code every} the spacing (4e's: 6 and 12). The states are the caller's ({@link Roads}).
+	 */
+	public record Lamp(int[] along, int[] dy, int light, double first, double every) {
+		public int size() {
+			return along.length;
+		}
+	}
+
+	/**
 	 * 6c 0c §3: a failing stretch of the road: waypoint segments {@code [fromPoint, toPoint]} (neighbouring failing segments
 	 * merged), the first failure's reason (an API {@code Reason} name), message and cell.
 	 */
@@ -100,6 +121,8 @@ public final class RoadPlan {
 		DECK("minecraft:oak_slab"),
 		FENCE("minecraft:oak_fence"),
 		LANTERN("minecraft:lantern"),
+		/** 6c W: a cell of the caller's lamp fixture ({@link Op#lamp}: its index * 4 + the quarter turns from east). */
+		LAMP(""),
 		FILL("minecraft:cobblestone"),
 		/** The caller's surface block. */
 		SURFACE(""),
@@ -117,8 +140,14 @@ public final class RoadPlan {
 		}
 	}
 
-	/** One changed cell: what goes there and the kind it replaces. */
-	public record Op(int x, int y, int z, Block block, int before) {
+	/**
+	 * One changed cell: what goes there and the kind it replaces; {@code lamp} (6c W) for {@link Block#LAMP}: the fixture cell's
+	 * index * 4 + its quarter turns clockwise from east, else -1.
+	 */
+	public record Op(int x, int y, int z, Block block, int before, int lamp) {
+		public Op(int x, int y, int z, Block block, int before) {
+			this(x, y, z, block, before, -1);
+		}
 	}
 
 	/** A walkway cell: its column, the feet cell, whether it is on the centre line, its role. */
@@ -367,6 +396,15 @@ public final class RoadPlan {
 	 */
 	public static Plan plan(int[] xs, int[] ys, int[] zs, int width, boolean lanterns, boolean decks, World w, Owned owned, @Nullable Protect protect,
 		boolean partial) {
+		return plan(xs, ys, zs, width, lanterns, decks, w, owned, protect, partial, null, null);
+	}
+
+	/**
+	 * {@link #plan}; 6c W: {@code ownFoot} lets a lantern post stand on a built cell the road's own owner placed (item 2), and
+	 * {@code lamp} is the bible's fixture for the lanterns (null: 4e's fence and lantern, every 12).
+	 */
+	public static Plan plan(int[] xs, int[] ys, int[] zs, int width, boolean lanterns, boolean decks, World w, Owned owned, @Nullable Protect protect,
+		boolean partial, @Nullable OwnFoot ownFoot, @Nullable Lamp lamp) {
 		Map<String, Integer> skipped = new LinkedHashMap<>();
 		Map<String, Integer> ownedBy = new LinkedHashMap<>();
 		if (xs.length < 2 || xs.length > MAX_POINTS) {
@@ -636,7 +674,7 @@ public final class RoadPlan {
 		}
 		List<Integer> lan = new ArrayList<>();
 		if (lanterns) {
-			lanterns(line, t, keep, width, accepted, w, owned, protect, ops, lan, skipped);
+			lanterns(line, t, keep, width, accepted, w, owned, protect, ownFoot, lamp, ops, lan, skipped);
 		}
 		int[] la = lan.stream().mapToInt(Integer::intValue).toArray();
 		return new Plan(List.copyOf(ops), List.copyOf(cells), null, null, skipped, ownedBy, n, la, List.copyOf(spans));
@@ -768,16 +806,22 @@ public final class RoadPlan {
 		return true;
 	}
 
-	/** AgentCraft's lanterns: a fence post with a lantern beside the walkway, the first 6 blocks out, then every 12. */
+	/**
+	 * AgentCraft's lanterns: a fence post with a lantern beside the walkway, the first 6 blocks out, then every 12. 6c W: the
+	 * post's foot may also be a built cell the road's own owner placed ({@code ownFoot}: a region's verge in packed mud, stone
+	 * bricks or planks); with a {@code lamp} the bible's fixture stands there instead, at its own spacing, every cell open, off the
+	 * walkway and unowned.
+	 */
 	private static void lanterns(List<int[]> line, int[] t, boolean[] keep, int width, Map<Long, Col> walk, World w, Owned owned, @Nullable Protect protect,
-		List<Op> ops, List<Integer> out, Map<String, Integer> skipped) {
+		@Nullable OwnFoot ownFoot, @Nullable Lamp lamp, List<Op> ops, List<Integer> out, Map<String, Integer> skipped) {
 		int[] offs = offsets(width);
 		int hi = offs[offs.length - 1];
 		int lo = offs[0];
-		double since = LANTERN_SPACING - LANTERN_FIRST;
+		double every = lamp == null ? LANTERN_SPACING : lamp.every();
+		double since = every - (lamp == null ? LANTERN_FIRST : lamp.first());
 		for (int i = 1; i < line.size() - 1; i++) {
 			since += 1;
-			if (since + 1e-9 < LANTERN_SPACING || !keep[i]) {
+			if (since + 1e-9 < every || !keep[i]) {
 				continue;
 			}
 			int[] c = line.get(i);
@@ -796,19 +840,49 @@ public final class RoadPlan {
 				for (int dy : new int[] {0, 1, -1}) {
 					int y = t[i] + dy;
 					int below = w.at(qx, y - 1, qz);
-					int f = w.at(qx, y, qz);
-					int l = w.at(qx, y + 1, qz);
-					if (!ground(below) || !open(f) || !open(l) || f == STACK || l == STACK) {
+					boolean foot = ground(below) || below == BUILT && ownFoot != null && ownFoot.own(qx, y - 1, qz);
+					if (!foot) {
 						continue;
 					}
-					if (owned.at(qx, y, qz) != null || owned.at(qx, y + 1, qz) != null || protect != null && protect.at(qx, qz) != null) {
+					if (lamp == null) {
+						int f = w.at(qx, y, qz);
+						int l = w.at(qx, y + 1, qz);
+						if (!open(f) || !open(l) || f == STACK || l == STACK) {
+							continue;
+						}
+						if (owned.at(qx, y, qz) != null || owned.at(qx, y + 1, qz) != null || protect != null && protect.at(qx, qz) != null) {
+							continue;
+						}
+						ops.add(new Op(qx, y, qz, Block.FENCE, f));
+						ops.add(new Op(qx, y + 1, qz, Block.LANTERN, l));
+						out.add(qx);
+						out.add(y + 1);
+						out.add(qz);
+						placed = true;
+						break;
+					}
+					// the fixture's cells: along the travel, turned from east
+					int rot = dx > 0 ? 0 : dz > 0 ? 1 : dx < 0 ? 2 : 3;
+					boolean ok = true;
+					int[] before = new int[lamp.size()];
+					for (int k = 0; k < lamp.size() && ok; k++) {
+						int cx = qx + lamp.along()[k] * dx;
+						int cz = qz + lamp.along()[k] * dz;
+						int cy = y + lamp.dy()[k];
+						int kind = w.at(cx, cy, cz);
+						before[k] = kind;
+						ok = open(kind) && kind != STACK && (lamp.along()[k] == 0 || !walk.containsKey(key(cx, cz))) && owned.at(cx, cy, cz) == null
+							&& (protect == null || protect.at(cx, cz) == null);
+					}
+					if (!ok) {
 						continue;
 					}
-					ops.add(new Op(qx, y, qz, Block.FENCE, f));
-					ops.add(new Op(qx, y + 1, qz, Block.LANTERN, l));
-					out.add(qx);
-					out.add(y + 1);
-					out.add(qz);
+					for (int k = 0; k < lamp.size(); k++) {
+						ops.add(new Op(qx + lamp.along()[k] * dx, y + lamp.dy()[k], qz + lamp.along()[k] * dz, Block.LAMP, before[k], k * 4 + rot));
+					}
+					out.add(qx + lamp.along()[lamp.light()] * dx);
+					out.add(y + lamp.dy()[lamp.light()]);
+					out.add(qz + lamp.along()[lamp.light()] * dz);
 					placed = true;
 					break;
 				}
@@ -820,8 +894,14 @@ public final class RoadPlan {
 				since = 0;
 			} else {
 				bump(skipped, "lantern");
-				since = LANTERN_SPACING / 2;
+				since = every / 2;
 			}
 		}
+	}
+
+	/** 6c W: a block a road's lamp is made of (fences, walls, lanterns, torches, end rods, sea lanterns...), not road surface. */
+	public static boolean isLampBlock(String name) {
+		return name.endsWith("_fence") || name.endsWith("_wall") || name.endsWith("lantern") || name.endsWith("torch") || name.equals("minecraft:end_rod")
+			|| name.equals("minecraft:glowstone") || name.equals("minecraft:shroomlight") || name.endsWith("_froglight");
 	}
 }

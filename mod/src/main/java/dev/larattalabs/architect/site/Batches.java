@@ -512,7 +512,7 @@ public final class Batches {
 		if (road) {
 			c = InfraPlace.checkRoad(level, InfraSpec.points(i.spec), i.spec.get("width").getAsInt(), InfraSpec.str(i.spec, "surface"), InfraSpec.str(i.spec,
 				"slab"), i.spec.get("lanterns").getAsBoolean(), i.spec.get("shallowDecks").getAsBoolean(), b.owner, i.force, i.spec.has("partial")
-				&& i.spec.get("partial").getAsBoolean(), RegionItems.isRegion(b) ? null : b.owner); // 6c 0c: partial (§3), protected areas (C17)
+				&& i.spec.get("partial").getAsBoolean(), RegionItems.isRegion(b) ? null : b.owner, i.spec.has("lamp") ? i.spec.getAsJsonObject("lamp") : null, b.group); // 6c 0c: partial (§3), protected areas (C17); 6c W: the lamp
 		} else {
 			cells = InfraSpec.cellsOf(i.spec);
 			tr.mark("decode");

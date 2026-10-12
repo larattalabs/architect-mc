@@ -185,6 +185,16 @@ export function villageBars(x, base) {
   const M4 = R.M4?.breaches ?? null, M5 = R.M5, wd = x.walkDark;
   out.push(row('safety', '8 Safety', `M4 ${M4}; M5 ${wd ? `${(100 * wd.share).toFixed(2)}% dark spawnable of ${wd.walkCells} walk cells (street, verges, lanes, square, and ${wd.doorPathCells} door-path cells)` : 'n/a'}; recorded: the checker's M5 ${M5 ? (100 * M5.share).toFixed(2) : '?'}% of ${M5?.walkArea ?? '?'} reached region-written floors (lot aprons and batters included)`,
     'M4 0; M5 < 1% of walk area', M4 === 0 && wd && wd.light && wd.share < 0.01));
+  // (6c W, CONTRACT W §7 items 2, 4 and 8) with a W plan (its apron lamps in the meta): the checker's full M5, the lamp clutter and
+  // the realised gravity blocks are gated
+  if (x.lamps) {
+    out.push(row('safetyFull', '8b Full M5 (W item 2)', M5 ? `${(100 * M5.share).toFixed(2)}% dark spawnable of ${M5.walkArea} reached region-written floors (aprons and batters included)` : 'n/a', '< 1%', M5 && M5.share < 0.01));
+    const per = x.lamps.perLot ?? {};
+    const mx = Math.max(0, ...Object.values(per));
+    out.push(row('lamps', '8c Lamp clutter (W item 4)', `${x.lamps.fixture?.kind} (light ${x.lamps.fixture?.level}); per lot ${Object.entries(per).map(([k, n]) => `${k} ${n}`).join(', ')}; total ${Object.values(per).reduce((a, n) => a + n, 0)}; most ${mx}${x.lamps.capped ? '; capped (not covered at plan time)' : ''}`, 'at most 4 per lot (misplaced lamp cells: bar 7)', mx <= 4));
+    const grav = (x.realised?.findings ?? []).filter((f) => f.rule === 'M3:gravity').reduce((a, f) => a + f.count, 0);
+    out.push(row('gravity', '8d Gravity (W item 8)', `${grav} unsupported gravity block(s) in written cells (M3:gravity)`, '0', grav === 0));
+  }
   for (const [id, label] of [['palette', '9 Palette'], ['exactness', '10 Exactness'], ['determinism', '11 Determinism'], ['mspt', '12 MSPT'], ['spend', '13 Spend'], ['gallery', '14 Gallery']]) {
     const r = by[id];
     if (r) out.push({ ...r, label, ...(id === 'determinism' ? { threshold: 'IR sha identical over 3 plans; tiles for 1 and 4 workers = scenarios/goldens/s7.json' } : {}) });

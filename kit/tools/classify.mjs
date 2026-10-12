@@ -159,6 +159,8 @@ export function generate(report, dump, template, tags = {}) {
     if (c.dampening > 0 && c.dampening < 15) extra.push(`d: ${c.dampening}`);
     if (c.collision !== 'full' && c.collision !== 'none' && c.top !== 1) extra.push(`h: ${c.top}`);
     if (c.item !== id) extra.push(`i: '${c.item === 'minecraft:air' ? '' : bare(c.item)}'`);
+    // (6c W) a falling block: its class extends FallingBlock (sand, gravel, concrete powder, anvils, ...)
+    if ((d.cls ?? []).includes('FallingBlock')) extra.push('g: 1');
     lines.push(`b('${bare(id)}', '${c.collision}', '${c.family}', '${encodeProps(c.props, c.defaults)}', { ${extra.join(', ')} });`);
   }
   const marker = '/*@@DATA@@*/';

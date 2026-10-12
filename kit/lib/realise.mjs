@@ -17,7 +17,9 @@ export const SETS = ['terrain', 'path'];
 export const IR_FORMATS = Object.freeze([1, 2]);
 /** (6b) Every format-2 kind an IR's `requires` may name; any of them makes the IR format 2. */
 export const KINDS_FORMAT2 = Object.freeze(['blobs:side', 'fields', 'forms', 'material:rule', 'shape:array', 'shape:capsuleChain', 'shape:ellipsoid',
-  'shape:instances', 'shape:prism', 'shape:strata', 'shape:warp', 'shape:wedge', 'volumes']);
+  'shape:instances', 'shape:prism', 'shape:strata', 'shape:warp', 'shape:wedge', 'volumes', 'road:lamp']);
+// (6c W) 'road:lamp': a 4e road's `lamp` (the bible's lamp fixture for its lanterns; kit/lib/region/fixtures.mjs roadLamp). A mod
+// before 0.18.0 would lay its own fence and lantern, so the plan needs it (PLAN_STALE there).
 /** Max ops in an IR (also the evaluator's buffer encoding limit). */
 export const MAX_OPS = 20000;
 const OP_SLOTS = 32768; // buffer value = (op index + 1) + material * OP_SLOTS
@@ -34,7 +36,7 @@ export const MEMBERS_FORMAT2 = ['anchors', 'blobs', 'budget', 'claim', 'fields',
 // members from kit 0.16.0, in format 1 and 2; the evaluator ignores them. An older kit refuses such a plan PLAN_STALE by the
 // kitVersion bump.
 /** (6b) The running kit's version (kept equal to lib/region/plan.mjs KIT_VERSION by a test). */
-export const EVAL_KIT_VERSION = '0.16.0';
+export const EVAL_KIT_VERSION = '0.18.0';
 
 /** Compare two semver strings (major.minor.patch, numeric): -1, 0, 1. */
 export function semverCompare(a, b) {
@@ -71,6 +73,7 @@ export function walkKinds(ir) {
   if (ir.fields && Object.keys(ir.fields).length) k.add('fields');
   if (ir.volumes && Object.keys(ir.volumes).length) k.add('volumes');
   if (Array.isArray(ir.forms) && ir.forms.length) k.add('forms');
+  if ((ir.roads ?? []).some((r) => r.lamp)) k.add('road:lamp');
   return [...k].sort();
 }
 

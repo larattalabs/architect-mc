@@ -7,6 +7,10 @@ import { variant } from '../kit.mjs';
 import { COND, stairsOf } from './program.mjs';
 import { CARDINALS } from './geom.mjs';
 import { toWorld, frontOf } from './village.mjs';
+import { ARM_DIRS, fixtureCells, fixtureFor } from './fixtures.mjs';
+
+/** (6c W) The village's lamp fixture: the bible's `light` role on a post of its `rail` role (fixtures.mjs). */
+export const lampFixture = (r) => fixtureFor(r.material('light', 'lamp light'), r.material('rail', 'lamp post'));
 
 export const PROP_KINDS = ['well', 'lamp', 'bench', 'planter', 'bell'];
 
@@ -15,7 +19,8 @@ export function propCells(kind, r, at, o = {}) {
   const [x, z] = at;
   const out = [];
   if (kind === 'lamp') {
-    out.push([x, 1, z, r.material('rail', 'lamp post')], [x, 2, z, r.material('light', 'lamp light')]);
+    // (6c W) the bible's fixture (fixtures.mjs): a lantern post by default, cells from the floor's first cell above (dy 1)
+    out.push(...fixtureCells(o.fixture ?? lampFixture(r), [x, 1, z], { arm: o.arm }).cells);
   } else if (kind === 'bench') {
     out.push([x, 1, z, stairsOf('minecraft:oak_planks', o.facing)]);
   } else if (kind === 'planter') {
@@ -120,11 +125,33 @@ export function planProps(r, { o, sh, res, lots, laneWidth = 2, lamps = 'street'
     for (const [u, v] of [[u0 + 1, v0 + 1], [u1 - 1, v0 + 1], [u0 + 1, v1 - 1], [u1 - 1, v1 - 1]]) tryPlace('planter', u, v, { flower: rng ? rng.pick(flowers) : flowers[0] }, 4);
   }
   if (lamps !== 'none') {
+    const fixture = lampFixture(r);
+    const arms = fixture.kind === 'hanging_lantern' ? ARM_DIRS : [undefined];
+    const edge = cells.filter(([u, v]) => u === u0 || u === u1 || v === v0 || v === v1);
+    const placeNear = (cu0, cv0) => {
+      const near = [...edge].sort((a2, b2) => (Math.abs(a2[0] - cu0) + Math.abs(a2[1] - cv0)) - (Math.abs(b2[0] - cu0) + Math.abs(b2[1] - cv0)) || a2[0] - b2[0] || a2[1] - b2[1]);
+      for (const [u, v] of near) for (const arm of arms) if (tryPlace('lamp', u, v, { fixture, arm })) return true;
+      return false;
+    };
     const corners = lamps === 'few' ? [[u0, v0], [u1, v1]] : [[u0, v0], [u1, v0], [u0, v1], [u1, v1]];
     // a corner, or the free edge cell nearest to it
-    for (const [cu0, cv0] of corners) {
-      const near = cells.filter(([u, v]) => u === u0 || u === u1 || v === v0 || v === v1).sort((a2, b2) => (Math.abs(a2[0] - cu0) + Math.abs(a2[1] - cv0)) - (Math.abs(b2[0] - cu0) + Math.abs(b2[1] - cv0)) || a2[0] - b2[0] || a2[1] - b2[1]);
-      for (const [u, v] of near) if (tryPlace('lamp', u, v)) break;
+    for (const [cu0, cv0] of corners) placeNear(cu0, cv0);
+    // (6c W) a weaker fixture (a soul lantern's 10, a torch's 14) covers less: more edge lamps, each at the free edge cell nearest
+    // the space's cell farthest from every lamp's light, until each cell is within the fixture's reach (at most 8 lamps)
+    if (lamps === 'street' && fixture.level < 15) {
+      const lightOf = (p) => p.cells.find((c) => c[3] === fixture.light) ?? p.cells[p.cells.length - 1];
+      const reach = (u, v) => {
+        const [x, z] = toWorld(o, u, v);
+        let best = Infinity;
+        for (const p of props) if (p.kind === 'lamp') { const L = lightOf(p); best = Math.min(best, Math.abs(L[0] - x) + Math.abs(L[2] - z) + Math.max(0, L[1] - (sh.y + 1))); }
+        return best;
+      };
+      for (let guard = 0; guard < 8 && (counts.lamp ?? 0) < 8; guard++) {
+        let far = null, fd = -1;
+        for (const [u, v] of cells) { const d = reach(u, v); if (d > fd) { fd = d; far = [u, v]; } }
+        if (!far || fd < fixture.level) break;
+        if (!placeNear(...far)) break;
+      }
     }
   }
   const noWalk = new Set();

@@ -29,20 +29,32 @@ import java.util.Map;
  * {@code voxel_classes.json}, as {@link Survey#volume} classifies): the soil under a tree. Built blocks count, so a roof is
  * ground (a building's own logs, leaves and plants too). On a dry column without trees it equals {@code height}; under water it
  * is the bed. The 1.9.0 constructor copies {@code height}.</li>
+ * <li>{@code frozen} (1.15.0): the top block is ice, packed ice, blue ice or frosted ice with water within 3 cells below it
+ * (frozen water: a frozen river, lake or sea). {@code water} is unchanged (the fluid at the top only), so a frozen column is
+ * in {@code frozen} and not in {@code water}; land ice (an ice spike on snow, packed ice on stone) is in neither. The older
+ * constructors give an empty set.</li>
  * </ul>
  * The arrays are the sample's own: don't change them.
  */
 public record Sample(int minX, int minZ, int maxX, int maxZ, int resolution, int width, int depth, int[] height, int[] floor, int[] top,
 	List<String> blocks, int[] slope, BitSet water, BitSet tree, BitSet natural, BitSet missing, int biomeWidth, int biomeDepth, int[] biome,
-	List<String> biomes, List<long[]> missingChunks, int chunksLoaded, int[] ground) {
+	List<String> biomes, List<long[]> missingChunks, int chunksLoaded, int[] ground, BitSet frozen) {
 	public static final int MISSING = Integer.MIN_VALUE;
+
+	/** The 1.12.0 (and 1.14.0) constructor (no {@code frozen}: an empty set). */
+	public Sample(int minX, int minZ, int maxX, int maxZ, int resolution, int width, int depth, int[] height, int[] floor, int[] top,
+		List<String> blocks, int[] slope, BitSet water, BitSet tree, BitSet natural, BitSet missing, int biomeWidth, int biomeDepth, int[] biome,
+		List<String> biomes, List<long[]> missingChunks, int chunksLoaded, int[] ground) {
+		this(minX, minZ, maxX, maxZ, resolution, width, depth, height, floor, top, blocks, slope, water, tree, natural, missing, biomeWidth, biomeDepth,
+			biome, biomes, missingChunks, chunksLoaded, ground, new BitSet());
+	}
 
 	/** The 1.0 constructor ({@code ground}: a copy of {@code height}). */
 	public Sample(int minX, int minZ, int maxX, int maxZ, int resolution, int width, int depth, int[] height, int[] floor, int[] top,
 		List<String> blocks, int[] slope, BitSet water, BitSet tree, BitSet natural, BitSet missing, int biomeWidth, int biomeDepth, int[] biome,
 		List<String> biomes, List<long[]> missingChunks, int chunksLoaded) {
 		this(minX, minZ, maxX, maxZ, resolution, width, depth, height, floor, top, blocks, slope, water, tree, natural, missing, biomeWidth, biomeDepth,
-			biome, biomes, missingChunks, chunksLoaded, height.clone());
+			biome, biomes, missingChunks, chunksLoaded, height.clone(), new BitSet());
 	}
 	/** The largest ASCII grid {@link #summary()} draws, per side. */
 	public static final int SUMMARY_GRID = 64;
@@ -221,6 +233,9 @@ public record Sample(int minX, int minZ, int maxX, int maxZ, int resolution, int
 		o.add("tree", bits(tree));
 		o.add("natural", bits(natural));
 		o.add("missing", bits(missing));
+		if (!frozen.isEmpty()) {
+			o.add("frozen", bits(frozen)); // (1.15.0) only when a column is frozen water, so other blobs are unchanged
+		}
 		JsonArray bl = new JsonArray();
 		blocks.forEach(bl::add);
 		o.add("blocks", bl);
