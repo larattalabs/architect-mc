@@ -1139,9 +1139,9 @@ steps.migrate = async () => {
     check(oldCrates.length === 2 && left.length === 0, `item 12: the legacy crate cells are restored (${json(oldCrates)} -> ${json(left)})`);
     const st = ad.stockpile;
     check([m.ids.g1, m.ids.g2, m.ids.s3].every((id) => st.feedOrder.includes(id)), `item 12: their targets joined the feed order (${json(st.feedOrder)})`);
-    for (const id of Object.values(m.ids)) await pile('pause', { site: id, paused: false });
     const again = await pile('adopt');
     check(json(again.stockpile.ledger) === json(st.ledger), 'item 12: adoptCrates is idempotent');
+    for (const id of Object.values(m.ids)) await pile('pause', { site: id, paused: false });
     await feedAll(cons, `stockpile:${OWNER}`);
     const done2 = await waitBuilt([m.ids.g1, m.ids.g2, m.ids.s3], 180_000);
     const p2 = await cons.point('adopted built');
