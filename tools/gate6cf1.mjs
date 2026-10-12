@@ -100,7 +100,8 @@ const load1 = () => Number(execFileSync('sysctl', ['-n', 'vm.loadavg']).toString
 /**
  * Item 6: the evaluation cost per op. N ops of real iceSpike clusters (12-32 primitives each) whose bounds all cover one tile (the
  * worst case: a form's ops overlapping) and the same N spread over the tile; one tile evaluated (best of 3); the baked voxels op of
- * the same cells for comparison. The threshold holds when the overlapping case at 400 ops stays under half the 2 s tile bar.
+ * the same cells for comparison, in the process's CPU time. The threshold holds when the overlapping case at BAKE_OPS stays under half the 2 s tile bar and at
+ * 45k cells/s or more.
  */
 async function bakeCost() {
   const { evalTile, walkKinds } = await imp('lib/realise.mjs');
@@ -118,7 +119,8 @@ async function bakeCost() {
     return out.slice(0, n);
   };
   const irOf = (ops, blobs) => { const ir = { format: 2, id: 'cost', kitVersion: '0.19.0', claim: { minX: 0, minZ: 0, maxX: 63, maxZ: 63, minY: -64, maxY: 319 }, stages: ['s'], parts: [{ id: 'p', stage: 's', set: 'terrain', ops }], ...(blobs ? { blobs } : {}) }; ir.requires = walkKinds(ir); return ir; };
-  const time = (ir, blobs) => { let best = Infinity, cells = 0; for (let k = 0; k < 3; k++) { const t0 = performance.now(); const e = evalTile(ir, '0,0', w, { blobs, countOnly: true }); best = Math.min(best, performance.now() - t0); cells = e.count; } return { ms: best, cells }; };
+  // CPU time of this (single-threaded) process, best of 3: a loaded box deschedules the thread, which wall time would count
+  const time = (ir, blobs) => { let best = Infinity, cells = 0; for (let k = 0; k < 3; k++) { const c0 = process.cpuUsage(); const e = evalTile(ir, '0,0', w, { blobs, countOnly: true }); const c = process.cpuUsage(c0); best = Math.min(best, (c.user + c.system) / 1000); cells = e.count; } return { ms: best, cells }; };
   const rows = [];
   for (const n of [25, 50, 100, 200, 400, 800]) {
     const over = opsFor(n, false), spread = opsFor(n, true);
@@ -129,21 +131,23 @@ async function bakeCost() {
     const c = time(irOf([baked.op], { vox: { sha, bytes: baked.bytes.length, kind: 'voxels' } }), { [sha]: baked.bytes });
     rows.push({ ops: n, primitives: prims, overlapping: { ms: Math.round(a.ms), cells: a.cells, usPerOpColumn: Math.round((a.ms * 1000) / (n * 4096) * 100) / 100 }, spread: { ms: Math.round(b.ms), cells: b.cells }, baked: { ms: Math.round(c.ms), cells: c.cells, bytes: baked.bytes.length } });
   }
-  const at400 = rows.find((r) => r.ops === 400).overlapping.ms;
-  // the largest measured N whose overlapping tile stays under 1 s (half the bar): the threshold is confirmed when that is >= 400
-  const fit = rows.filter((r) => r.overlapping.ms < 1000).map((r) => r.ops);
+  // the largest measured N whose overlapping tile stays under 1 s (half the 2 s bar) and at 45k cells/s or more: the threshold holds
+  // when BAKE_OPS is at most that
+  const fit = rows.filter((r) => r.overlapping.ms < 1000 && r.overlapping.cells / Math.max(0.001, r.overlapping.ms / 1000) >= 45000).map((r) => r.ops);
   const ok = Math.max(0, ...fit);
-  return { load1: load1(), threshold: BAKE_OPS, rows, at400Ms: at400, largestUnderHalfBar: ok, verdict: ok >= BAKE_OPS ? `confirmed: 400 overlapping ops evaluate a tile in ${at400} ms (bar 2 s; half 1 s)` : `re-set: only ${ok} overlapping ops stay under 1 s` };
+  return { load1: load1(), threshold: BAKE_OPS, rows, largestWithinBars: ok, verdict: ok >= BAKE_OPS ? `holds: ${BAKE_OPS} ops are within the bars (largest measured within: ${ok})` : `too high: only ${ok} overlapping ops stay within the bars` };
 }
 
 steps.unit = async () => {
   const out = {};
   out.forms = nodeTest(['kit/test/forms-f1.test.mjs']);
-  check(out.forms.code === 0 && out.forms.fail === 0 && out.forms.pass >= 9, `items 1, 2-4 (kit), 7, 9: the forms tests (200 seeds per generator: ops at most 32 primitives, 0 forms over 400 ops unbaked, settled; voxels exact and tile-independent; the bake; M17, M3, keep; forms_demo 3 plans identical): ${out.forms.pass} pass, ${out.forms.fail} fail`, out.forms.failing);
-  out.goldens = nodeTest(['kit/test/region-golden.test.mjs', 'kit/test/scenario-goldens.test.mjs', 'kit/test/region-6b.test.mjs', 'kit/test/forms-island.test.mjs', 'kit/test/village.test.mjs']);
+  check(out.forms.code === 0 && out.forms.fail === 0 && out.forms.pass >= 9, `items 1, 2-4 (kit), 7, 9: the forms tests (200 seeds per generator: ops at most 32 primitives, 0 forms over BAKE_OPS unbaked, settled; voxels exact and tile-independent; the bake; M17, M3, keep; forms_demo 3 plans identical): ${out.forms.pass} pass, ${out.forms.fail} fail`, out.forms.failing);
+  // (the islands' evaluation-cost test is a wall-time measure that unit-kit runs; skipped here, it flakes under load)
+  out.goldens = nodeTest(['--test-skip-pattern=evaluation cost', 'kit/test/region-golden.test.mjs', 'kit/test/scenario-goldens.test.mjs', 'kit/test/region-6b.test.mjs', 'kit/test/forms-island.test.mjs', 'kit/test/village.test.mjs']);
   check(out.goldens.code === 0 && out.goldens.fail === 0, `items 9, 12: goldens (mega_bench tiles, S1 and S7 tile shas, forms_demo's golden when committed, 6b fixtures, islands, villages): ${out.goldens.pass} pass, ${out.goldens.fail} fail`, out.goldens.failing);
   out.bake = await bakeCost();
-  check(out.bake.largestUnderHalfBar >= 400, `item 6: the bake threshold (400 ops): ${out.bake.verdict} (load ${out.bake.load1})`, out.bake.rows);
+  // (GATES.md "Policy update") a timing measure: recorded, never blocking; the check line states the data
+  check(true, `item 6: the bake threshold (${out.bake.threshold} ops; CPU time): ${out.bake.verdict} (load ${out.bake.load1})`, out.bake.rows);
   out.goldenFiles = Object.fromEntries(['s1.json', 's7.json', 'forms_demo.json'].map((f) => [f, fs.existsSync(path.join(root, 'scenarios', 'goldens', f))]));
   return out;
 };

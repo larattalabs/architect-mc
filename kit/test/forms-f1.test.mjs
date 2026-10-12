@@ -1,6 +1,6 @@
 // Phase 6c slice F1 (docs/CONTRACT.md "Phase 6c slice F1", §2-§7): the voxels op, the generator rules (200 seeds per generator:
 // every op at most 32 primitives, deterministic, settled: no unsupported cell and no overhang over 4 on a sample), the bake past
-// 400 ops, keepNatural (M1), M17 melt, M3 overhangs, and the broken variants of gate item 2-4.
+// BAKE_OPS (400, confirmed by gate item 6), keepNatural (M1), M17 melt, M3 overhangs, and the broken variants of gate item 2-4.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { planRegion } from '../lib/region/plan.mjs';
@@ -136,7 +136,7 @@ for (const [name, grow, paramsOf] of [['iceSpike', iceSpike, iceParamsOf], ['roc
   });
 }
 
-test('the bake: a form past 400 ops is one voxels op (auto); its cells equal the unbaked ops', async () => {
+test('the bake: a form past BAKE_OPS (400) ops is one voxels op (auto); its cells equal the unbaked ops', async () => {
   const claim = { minX: 0, minZ: 0, maxX: 127, maxZ: 127, minY: -64, maxY: 319 };
   // a synthetic generator with 401 small ops (a grid of stone posts)
   const many = { generator: 'test', version: 1, params: {}, seed: '1', bounds: { minX: 10, maxX: 90, minZ: 10, maxZ: 90, minY: 64, maxY: 70 }, ops: [] };
@@ -150,7 +150,7 @@ test('the bake: a form past 400 ops is one voxels op (auto); its cells equal the
   assert.ok(a.ir.requires.includes('voxels'));
   assert.equal(a.ir.forms[0].baked.ops, 401);
   assert.equal(b.ir.parts[0].ops.length, 401);
-  // every form over 400 ops is baked
+  // every form over BAKE_OPS ops is baked
   for (const f of a.ir.forms) assert.ok(f.baked || f.ops.length <= BAKE_OPS);
   const cellsOf = (p) => {
     const out = new Map();

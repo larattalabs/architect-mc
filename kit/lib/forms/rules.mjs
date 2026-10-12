@@ -2,7 +2,7 @@
 //
 // - One bounded op per cluster (a spike cluster, a spire segment with its ledges), at most MAX_PRIMITIVES (32) primitive shapes per
 //   op, so the evaluator's per-op bounds cull (it evaluates an op's whole shape tree per cell in its bounds).
-// - Bake past a cost threshold: a form whose op count would exceed BAKE_OPS (400, an estimate confirmed by gate item 6) is emitted
+// - Bake past a cost threshold: a form whose op count would exceed BAKE_OPS is emitted
 //   as one `voxels` op over an ARVB side blob instead. A bake is the ops' cells last-op-wins with air dropped, so a baked form keeps
 //   no air writes and no per-op conds: the voxels op carries one cond (IF_NATURAL by default; a form never overwrites built blocks).
 // - Absolute y: skeletons are resolved at plan time; bases reach SKIRT (6) below the plan ground, so drift up to 6 is absorbed.
@@ -13,6 +13,10 @@ import { makeColumns, unpack } from '../region/pack.mjs';
 import { encodeVoxels } from '../region/voxels.mjs';
 
 export const MAX_PRIMITIVES = 32;
+/**
+ * The bake threshold: the contract's estimate, confirmed by gate item 6 in CPU time (0.21 us per op and column, linear: 400 ice-spike
+ * cluster ops overlapping one tile take 349 ms at 68k cells/s; 800 take 714 ms at 39k cells/s, under the 45k bar).
+ */
 export const BAKE_OPS = 400;
 export const SKIRT = 6;
 const AIR = 'minecraft:air';
