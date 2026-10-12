@@ -775,3 +775,48 @@ default edge of a program that declares passes; programs without passes keep `sl
 Three pads (lots `lot_1..3`) and two corridors on S3's pinned claim (scenario `relief_demo`, phase `6c-t1`), blended with erosion;
 on a flat world a hill raised through `base`, two pads on it and one sunk 2 below the ground. `edge: 'slope'` is the same program
 with 6a's batters and no pass (the organic-read comparison); `pads` up to 64 (the 1024x1024 plan-time bench).
+
+## The `route` pass (`passes/route.mjs`, 6c T2)
+
+```js
+export const passes = ['route'];
+const net = r.pass('route', { nodes: { gate: { lot: 'gate', kind: 'gate' }, look: { at: [x, y, z], kind: 'lookout' } },
+  edges: [{ id: 'up', from: 'gate', to: 'look', width: 3, movers }], maxGrade: 0.25, hairpinLanding: 3, stairs: true, ladders: true,
+  maxCut: 4, maxFill: 4, prefer: [[x, z]], stage: 'routes', base });
+// -> {edges: [{id, ok, failed?, length, rise, segments}], data: {...}}; meta.route has every edge's path, segments, landings, ladders
+```
+
+- **Ends:** a `nodes` entry (`{at: [x, y, z]}` feet, or `{lot: id}`), a lot id (its entrance; the route leaves straight out of its
+  front) or a graph node. **Movers** (S-T2-1): an edge's own `movers` win; otherwise an end of a player-only kind (`lookout`,
+  `watchtower`, `tower`, `overlook`; the node's `kind`, else the lot's `architect_mc:village` villager/type/role) makes it `['player']`,
+  else `['player', 'villager']`. **Ladders** (S-T2-2) only on an edge without `villager` (`ladders: true` by default).
+- **Search:** A* over (cell, heading of 8, straight cells since the last turn, surface offset from the land); a walk turns 45 degrees
+  after 3 straight cells; the profile (1/16 block) moves at most `maxGrade` a cell, so every 8-cell window of a walk run is within the
+  grade, and switchbacks emerge where the land is steeper. Moves: walk (length, turn, grade, cut and fill by width), stair flights
+  (cardinal, 2..8 rising or falling 1 a cell, then 2 flat cells; `stairs`), hairpins (a flat landing `max(hairpinLanding, width)`
+  deep and two lanes wide, then back one lane over), ladders (a cliff of 2..24 climbed against its face), and an earlier edge's built
+  cells (walked at their y, a step of at most 1: `shared` segments, built by that edge). Ties by (f, g, x, z, heading, k, offset).
+  Coarse to fine: a corridor search at 4 cells, the cell search within 16 of it, then 48, then the whole claim (when it fits the state
+  cap). A route that crosses itself is searched again with the crossing blocked (at most 8 times).
+- **Obstacles:** the claim margin (2), lava, unknown columns, the lots and their aprons, forms, keep sets, and trees under the
+  footprint; water and keep-out (`ctx.keepOut`, so the IR records it, plus the intent's `keepOut`) also one column beside it (a
+  retaining column, a 4e lantern). No stair or ladder within 4 of an edge's end. An edge that can only cross water fails
+  `ROUTE_WATER` (bridges are T3), else `NO_ROUTE`, with a note; the plan goes on.
+- **Hysteresis:** the caller's `prefer` cells (a 4e road, a region path, an earlier plan's route: 6d) and the plan's own 4e roads,
+  graded paths and earlier edges cost a third.
+- **Output** (part `routes`, set `path`, in `stage`): each column written once (`edgeColumns`: the nearest centre cell's y, owned by
+  one segment). A walk on the surveyed ground is a 4e ground road (4e follows the realised ground); elsewhere graded columns
+  (`_routeRun`: fill from the floor, `retain` on a tall edge, cut to the column's top and 3 clear, the `path` surface, a retaining
+  column where the land beside stands over 2 higher); flights are `stair` with their ground; landings flat; ladders `minecraft:ladder`
+  columns (`_ladder`). Graph edges `route_<id>` carry `movers` and `segments` (V's shape plus those two). A route writing into
+  keep-out refuses the plan `KEEP_OUT`. Lamps: the program's `lightCover` with `extra` spots beside the routes (`lampSpots`).
+- **Checker** (`routeRules`, when `meta.route`): `M2` (an edge's ends don't reach each other by the player mover), `M2:villager` (a
+  villager edge's ends by the villager mover, or a ladder on one), `M2:grade` (a walk run's 8-cell window over the grade, the surface
+  read from the world); `metrics.route`, `metrics.M5route` (M5 over the routes' walk cells).
+
+## `route_demo` (`kit/regions/route_demo.mjs`, `catalogue = false`)
+
+A gate, a hall, a chapel and a lookout (9x9 lots) from a valley floor to a shoulder about 60 above; edges gate - hall and hall -
+chapel (villager), chapel - lookout (player-only). Sites from params `gateX` .. `lookoutZ` (the scenario pins them on S3's claim)
+or found; on a flat world a hill raised in stage `ground` (a ridge rising 1 in 2 to 40), routed through the pass's `base`. `edges`
+adds grid edges for the plan-time bench.
