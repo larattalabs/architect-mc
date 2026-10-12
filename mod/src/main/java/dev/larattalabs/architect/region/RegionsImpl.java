@@ -382,6 +382,36 @@ public final class RegionsImpl implements Regions {
 				JsonObject planned = (JsonObject) o[0];
 				JsonArray need = planned.has("needVolumes") && planned.get("needVolumes").isJsonArray() ? planned.getAsJsonArray("needVolumes")
 					: new JsonArray();
+				// (6c T1) a program that declares passes (the kit's word in region.planned) gets its second plan over a resolution-1
+				// survey up to 1024x1024 columns; past that the passes run coarse
+				boolean passes = planned.get("passes") instanceof JsonArray pa && !pa.isEmpty();
+				int res2 = secondSurveyRes(passes, res, c.getXSpan(), c.getZSpan());
+				if (passes && res2 == 4) {
+					addNote(planned, "the passes ran on the resolution-4 survey (coarse): the claim is over 1024 columns on a side");
+				}
+				if (res2 != res) {
+					return RegionSurvey.sample(r.level(), c.minX(), c.minZ(), c.maxX(), c.maxZ(), res2, r.surveyLoad()).thenCompose(cols2 -> {
+						byte[] survey2 = cols2.encode();
+						String sha2 = Packed.sha256(survey2);
+						return BlobPut.put(link, survey2, "survey").thenCompose(blob2 -> {
+							CompletableFuture<@Nullable JsonArray> vols = need.isEmpty() || r.ext().has(EXT_NO_VOLUMES) ? CompletableFuture.completedFuture(null)
+								: volumesFor(r.level(), need);
+							return vols.thenCompose(v -> planOnce(link, r, blob2, sha2, survey2, v).thenApply(o2 -> {
+								JsonObject p2 = (JsonObject) o2[0];
+								addNote(p2, "second plan: a resolution-1 survey for the passes (" + cols2.width + "x" + cols2.depth + " columns, "
+									+ survey2.length + " bytes)");
+								if (v != null) {
+									addNote(p2, "read " + v.size() + " frozen volume" + (v.size() == 1 ? "" : "s") + " (two-plan flow)");
+									p2.add("volumes", v);
+								} else if (!need.isEmpty() && !r.ext().has(EXT_NO_VOLUMES)) {
+									addNote(p2, "the program asked for " + need.size() + " volume" + (need.size() == 1 ? "" : "s")
+										+ " over chunks not generated yet: prepare, then plan again to read them");
+								}
+								return o2;
+							}));
+						});
+					});
+				}
 				if (need.isEmpty() || r.ext().has(EXT_NO_VOLUMES)) {
 					return CompletableFuture.completedFuture(o);
 				}
@@ -407,6 +437,14 @@ public final class RegionsImpl implements Regions {
 			}
 		});
 		return out;
+	}
+
+	/**
+	 * (6c T1, CONTRACT T1 §3) The second plan's survey resolution: 1 for a program that declares passes on a claim up to 1024 columns
+	 * a side (its first plan's survey was resolution 4 past 256x256), else the first plan's.
+	 */
+	static int secondSurveyRes(boolean passes, int firstRes, int xSpan, int zSpan) {
+		return passes && firstRes != 1 && xSpan <= 1024 && zSpan <= 1024 ? 1 : firstRes;
 	}
 
 	/** DevBridge test hook (gate item 10(b)): members merged into the next accepted plan's IR before the PLAN_STALE gate. */
@@ -467,7 +505,8 @@ public final class RegionsImpl implements Regions {
 			String planId = ack.getAsJsonObject("result").get("planId").getAsString();
 			PLAN_SERVER.put(planId, s);
 			CompletableFuture<JsonObject> done = PLANNING.computeIfAbsent(planId, k -> new CompletableFuture<>());
-			long timeout = checkOf(r) ? 600 : 120; // the checker and the renders: mega_bench full resolution up to 120 s + 30 s
+			// the checker and the renders: mega_bench full resolution up to 120 s + 30 s; (6c T1) a plan with passes may take 120 s alone
+			long timeout = checkOf(r) ? 600 : 300;
 			return done.orTimeout(timeout, java.util.concurrent.TimeUnit.SECONDS).thenCompose(planned -> irOf(link, planned).thenApply(irJson -> {
 				JsonObject doctor = DOCTOR_NEXT_PLAN;
 				if (doctor != null) {

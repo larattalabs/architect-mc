@@ -36,7 +36,7 @@
 //                                   removal credited when its restore is written (in its RemoveResult)
 //     c29pause                      C29 item 3: Sites.pause (house and road): a paused target reserves nothing, others are fed past it;
 //                                   the state and order survive a reload; resumed, it is fed from its old position; refusals
-//     apicompat                     item 14: tools/api-compat.mjs against the 0.20.0, 0.19.0, 0.18.0 apitest jars (each built from its tag) and the 0.20.0 surface
+//     apicompat                     item 14: tools/api-compat.mjs against the 0.21.0, 0.20.0, 0.19.0 apitest jars (each built from its tag) and the 0.21.0 surface
 //     report                        REPORT.md over the step JSONs
 //
 // Evidence: artifacts/gate6c-y1/<step>.json in the main checkout (GATE6CY_OUT overrides), all.log, REPORT.md, spend.json ($0.00).
@@ -1588,10 +1588,11 @@ steps.c29unit = async () => {
 };
 
 steps.apicompat = async () => {
-  // (C29) the 0.20.0, 0.19.0 and 0.18.0 apitest jars, each built from its tag (SCH's complete sets, with tools/), and the 0.20.0 surface
+  // (C29) the 0.21.0 (built from tag v0.21.0 by C29), 0.20.0 and 0.19.0 (SCH's sets) apitest jars, and the 0.21.0 surface
   const sch = path.join(MAIN_ART, 'gate6c-sch');
-  const jars = [['1.17.0 apitest', [path.join(sch, 'v0200', 'architect_apitest-0.20.0.jar')]], ['1.16.0 apitest', [path.join(sch, 'v0190', 'architect_apitest-0.19.0.jar')]],
-    ['1.15.0 apitest', [path.join(sch, 'v0180', 'architect_apitest-0.18.0.jar')]], ['1.17.0 surface', ['--surface', path.join(sch, 'v0200', 'architect_mc-0.20.0.jar')]]];
+  const c29 = path.join(MAIN_ART, 'gate6c-c29', 'v0210');
+  const jars = [['1.18.0 apitest', [path.join(c29, 'architect_apitest-0.21.0.jar')]], ['1.17.0 apitest', [path.join(sch, 'v0200', 'architect_apitest-0.20.0.jar')]],
+    ['1.16.0 apitest', [path.join(sch, 'v0190', 'architect_apitest-0.19.0.jar')]], ['1.18.0 surface', ['--surface', path.join(c29, 'architect_mc-0.21.0.jar')]]];
   const lines = [];
   let ok = 0;
   for (const [label, args] of jars) {

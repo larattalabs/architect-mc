@@ -20,7 +20,8 @@ import org.jspecify.annotations.Nullable;
  * {@code architect_mc:<id>}. Minecraft 26.3 keeps structure-block saves in {@code generated/<namespace>/structure/}
  * (singular: {@code StructureTemplateManager.WORLD_STRUCTURE_LISTER}); older versions used {@code structures/}.</li>
  * <li>Import: the {@code .nbt} files in {@code <gameDir>/architect/imports/} and in the world's {@code generated/<ns>/structure/}
- * (and the legacy {@code structures/}), walked recursively.</li>
+ * (and the legacy {@code structures/}), walked recursively; (6c SCH) also the Sponge schematics ({@code .schem}) in
+ * {@code imports/} and {@code exports/}.</li>
  * </ul>
  */
 public final class Exchange {
@@ -74,7 +75,7 @@ public final class Exchange {
 		Path imports = importsDir(gameData);
 		if (Files.isDirectory(imports)) {
 			List<Candidate> group = new ArrayList<>();
-			for (Path p : nbtFiles(imports)) {
+			for (Path p : files(imports, true)) {
 				group.add(candidate(p, "imports", imports.relativize(p).toString().replace('\\', '/'), null));
 			}
 			group.sort(Comparator.comparingLong(Candidate::modified).reversed());
@@ -84,7 +85,7 @@ public final class Exchange {
 		Path exports = gameData.resolve("exports");
 		if (Files.isDirectory(exports)) {
 			List<Candidate> group = new ArrayList<>();
-			for (Path p : nbtFiles(exports)) {
+			for (Path p : files(exports, true)) {
 				group.add(candidate(p, "exports", exports.relativize(p).toString().replace('\\', '/'), null));
 			}
 			group.sort(Comparator.comparingLong(Candidate::modified).reversed());
@@ -103,7 +104,7 @@ public final class Exchange {
 					if (!Files.isDirectory(root)) {
 						continue;
 					}
-					for (Path p : nbtFiles(root)) {
+					for (Path p : files(root, false)) {
 						String rel = root.relativize(p).toString().replace('\\', '/');
 						String sid = ns.getFileName() + ":" + rel.substring(0, rel.length() - ".nbt".length());
 						group.add(candidate(p, "world", sid, sid));
@@ -116,10 +117,19 @@ public final class Exchange {
 		return out.size() > MAX_IMPORT_LIST ? List.copyOf(out.subList(0, MAX_IMPORT_LIST)) : out;
 	}
 
-	private static List<Path> nbtFiles(Path root) throws IOException {
+	/** The {@code .nbt} files (and with {@code schem} the {@code .schem} files) under {@code root}, sorted. */
+	private static List<Path> files(Path root, boolean schem) throws IOException {
 		try (Stream<Path> s = Files.walk(root, 8)) {
-			return s.filter(p -> Files.isRegularFile(p) && p.getFileName().toString().toLowerCase(Locale.ROOT).endsWith(".nbt")).sorted().toList();
+			return s.filter(p -> {
+				String n = p.getFileName().toString().toLowerCase(Locale.ROOT);
+				return Files.isRegularFile(p) && (n.endsWith(".nbt") || schem && n.endsWith(".schem"));
+			}).sorted().toList();
 		}
+	}
+
+	/** (6c SCH) A Sponge schematic file (by its extension). */
+	public static boolean isSchematic(Path p) {
+		return p.getFileName().toString().toLowerCase(Locale.ROOT).endsWith(".schem");
 	}
 
 	private static Candidate candidate(Path p, String where, String label, @Nullable String sid) throws IOException {
@@ -128,7 +138,7 @@ public final class Exchange {
 
 	/** A library id suggested for a file name ({@code "My House.nbt"} -> {@code my_house}). */
 	public static String suggestId(String fileName) {
-		String base = fileName.replaceAll("(?i)\\.nbt$", "");
+		String base = fileName.replaceAll("(?i)\\.(nbt|schem)$", "");
 		int slash = Math.max(base.lastIndexOf('/'), base.lastIndexOf(':'));
 		base = base.substring(slash + 1);
 		String s = base.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]+", "_").replaceAll("^_+|_+$", "");

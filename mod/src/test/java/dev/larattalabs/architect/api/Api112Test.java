@@ -32,8 +32,9 @@ class Api112Test {
 	@Test
 	void reasonsAppendedLast() {
 		Reason[] r = Reason.values();
-		assertEquals(Reason.FIELD_LIMIT, r[r.length - 1]);
-		assertEquals(Reason.PROTECTED, r[r.length - 2]);
+		// 1.12.0 appended PROTECTED, FIELD_LIMIT; later slices append after them (6c SCH: FORMAT)
+		assertEquals(Reason.PROTECTED.ordinal() + 1, Reason.FIELD_LIMIT.ordinal());
+		assertTrue(Reason.FIELD_LIMIT.ordinal() <= r.length - 1);
 		assertTrue(Reason.PROTECTED.ordinal() > Reason.PLAYER_BLOCKS.ordinal());
 	}
 

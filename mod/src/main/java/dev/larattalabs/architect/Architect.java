@@ -27,6 +27,7 @@ public class Architect implements ModInitializer {
 		dev.larattalabs.architect.region.RegionsMod.init(); // phase 6a: regions, prepare, the generation counters
 		dev.larattalabs.architect.apiimpl.ApiImpl.init(); // the public API (docs/CONTRACT.md phase 4a)
 		SiteCommands.init();
+		dev.larattalabs.architect.library.SchematicCommands.init(); // 6c SCH: /architect export <entry> schem, /architect import <file>
 		LOGGER.info("Architect common init done");
 	}
 

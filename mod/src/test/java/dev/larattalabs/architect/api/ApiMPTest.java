@@ -80,8 +80,9 @@ class ApiMPTest {
 
 	@Test
 	void noNewReason() {
-		Reason[] r = Reason.values();
-		assertEquals(Reason.FIELD_LIMIT, r[r.length - 1]);
+		// MP appends none; a later slice may, after FIELD_LIMIT (6c SCH: FORMAT)
+		assertEquals(Reason.PROTECTED.ordinal() + 1, Reason.FIELD_LIMIT.ordinal());
+		org.junit.jupiter.api.Assertions.assertTrue(Reason.values().length - 1 >= Reason.FIELD_LIMIT.ordinal());
 	}
 
 	@Test

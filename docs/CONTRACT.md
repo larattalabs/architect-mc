@@ -8658,6 +8658,25 @@ never moves a pin.
 
 - Erosion as a regeneration (never: touch-ups only). Relief under standing lots (6d). Brush use of `relief` (B).
 
+### Phase 6c slice T1 as built (API 1.18.0, mod 0.21.0, kit 0.20.0; recorded 2026-10-12)
+
+Branch `slice/T1` (worktree `../architect-mc-T1`, from `origin/slice/W`, then origin/main v0.18.0 merged). $0: sim and stub only
+(`artifacts/gate6c-t1/spend.json`). Ports 8918/8919 (ad hoc), 8922/8923 (the slice tier). Evidence: `artifacts/gate6c-t1/` (one JSON
+per `tools/gate6ct1.mjs` step, api-compat.txt, plantime/), the scenario runs under `artifacts/scenarios/6c-t1/relief_demo/`, the slice
+tier under `artifacts/gate-runs-T1/`. The version numbers stand as placeholders (GATES.md "Policy update").
+
+| § | As built |
+|---|---|
+| §1 API | `VERSION` 1.18.0, mod 0.21.0 (coordinator, after v0.19.0 F1+MP and v0.20.0 Y1 merged first; kit 0.20.0 stays, F1+MP being kit 0.19.0); no new records or methods. A T1 helper (sidecar feature `region.passes`) gives `planPasses` and `reliefOp`. `KIT_VERSION` = `EVAL_KIT_VERSION` = `IrStale.KIT_VERSION` = 0.20.0; `KINDS_FORMAT2` (kit and mod) gains `relief`, appended. Config `regionPassPlanMs` 120,000 and `regionPassPlanHeapMb` 2,048. `region.planned` gains `passes` (the kit's word). The no-check plan wait in the mod went from 120 s to 300 s for every program (a pass plan may take 120 s alone; the wait is the mod's, the sidecar's limits are unchanged). `Api115Test`'s version check now allows later minors, as `Api114Test` does. |
+| §2 framework | `kit/lib/region/passes/` (`PASSES` registry, `relief.mjs`), under the realise lint (`relief-t1.test.mjs` scans `passes/**`). `export const passes = [...]` is read by the kit (`declaredPasses`: unknown or doubled names fail the plan) and, as a literal, by the sidecar from the program source (`declaredPasses` in `regions.ts`) to pick the budget before it spawns the plan: bundled, non-catalogue (`relief_demo` is `catalogue = false`) and programsDir programs alike; the catalogue lists `passes` too. `r.pass` refuses an undeclared pass `PASS_UNDECLARED`, resolves the materials, runs the pass with `minY` = the claim's bottom + 2, registers its fields as side blobs and pushes its ops into a part in the **stage of the first lot it names** (its pad's stage: the relief reads the same frozen ground as the pad; a column is frozen once, before any write of a tile that needs it). Timing: the note `pass relief: <s> s, <MB> MB` (wall time; the process's peak RSS after the pass: an in-process heap sample is not a peak), `stats.passes`, `meta.passes`, `siteplan.json` `passes` (schema widened), `plan.json` `passes`/`passRuns`. |
+| §3 survey | `RegionsImpl.secondSurveyRes`: when `region.planned` names passes and the first survey was resolution 4, the mod samples the claim again at resolution 1 (up to 1024 a side), uploads it and plans again (with the volumes the program asked for); note `second plan: a resolution-1 survey for the passes (WxD columns, N bytes)`. Past 1024 a side: the passes ran coarse (noted); the pass works on the survey grid at its resolution. A claim up to 256x256 is resolution 1 already (one plan, as before). |
+| §4 relief op | `{op: 'relief', field, mode, cut, fill, maxCut, maxFill}` as the contract. `cut` is the condition of every cell of the op (the per-cell condition is per op), rewritten IF_NATURAL to ALWAYS_OURS in later stages and the path set like `cond`. Cells `min(g, top) .. max(top, g + 2)`: those at or below `top` take the fill (a rule's `depth` is `top - y`), those above are air (**deviation**: the cut and a shallow fill clear 2 above the old ground, so plants never float). A `delta` sample of 0, a sample of -32768 (`RELIEF_NONE`) and a column outside the field write nothing. Bounds: the field's extent. The checker's M13 reads the fill. |
+| §5 pass | Pins: lot footprints (the lot's own), **the lots' aprons** (written by the pass at the pad's top: a plant kept on an apron left a step at the entrance on a fresh S3 copy, realised M2 3/5; fixed, and the realised pad check catches it), corridor centre lines widened (integer-interpolated profile), rects. Fixed columns: water and lava and 2 around water, trees, missing. Band: free columns within `radius` (Chebyshev) of a pin; start: the nearest pin's y fading linearly to the land at `radius + 1`; `radius * 4` Jacobi iterations in 1/16 fixed point, each clamped (projected) to the land's `-maxCut .. +maxFill` and never under `minY`. Erosion: thermal sweeps (a drop over 2 slides one block to the lowest 4-neighbour) and stream sweeps (D8 accumulation, highest first, cuts one block at `streamAt` 24), never on a pin or outside the band, at most 4 extra, clamps kept. **Deviation (ops)**: one pass call gives up to three ops in the pads' stage: `delta` over the band, `target` over the corridors (`corridorFill`: the path role on top), `target` over the aprons (the lots' own pad limits); not "one op per stage". `pad.edge: 'blend'` (no batter; the pass must name the lot) is the default only for a program that declares passes (N-T1-1); programs without passes keep `slope` (their IRs are unchanged but for `kitVersion`). |
+| §6 fixtures | `kit/regions/relief_demo.mjs` (`catalogue = false`, `passes = ['relief']`): on S3's claim it picks pad sites with at most 4 of cut or fill, away from water, on gentle land (no neighbour step over 3 within the radius), and a tree of straight corridors (grade at most 1 in 2, within 4 of the land, dry, treeless): 3 pads, 2 corridors. **Deviation (flat variant)**: the hill is raised through the pass's `base` (heights the blend meets, written as raised columns), not an `add` op: the relief reads the frozen pre-region ground, which an earlier op can't change. On flat: two pads on the hill, one sunk 2 (cut), the hill (fill), the blend. Scenario `scenarios/relief_demo.json` (phase `6c-t1`, `short: relief_demo`), pinned seed and cameras. The synthetic 1024x1024 survey is `kit/lib/region/synth.mjs` seeded `t1-bench` (64 pads, radius 24). |
+| Harness | `tools/lib/scenario-relief.mjs` (items 1-4, 10) and a `t1-tiles` BAR row (item 7) in `scenarios.mjs`; the tile timing and `sc.short` lines are F1's, verbatim. The three IR-sha plans run under `/tick freeze` (F1's rule; S3's flowing water moved the survey between plans). **Deviation (exactness class `flow`)**: an unclassified E-normal mismatch where the snapshot held flowing (non-source, level 1-9) water and the world now holds air is classed `flow`, a world class (SETTLEMENTS §4.2: flowing water is outside E-normal). Unlike F1's `freeze`, these are cells the plan writes: a falling-water column whose feed cell above the relief fill covered; the orphaned column drains (the world's fluid physics), the undo restores the feed cell exactly (it is in no mismatch list), and a restored flowing cell would drain again. The filter only reclassifies mismatches already `none`, never source water and never a cell left as anything but air (gate-verifier, 2026-10-12). Caveat: it doesn't require the cell to be unwritten. **Deviation (golden row)**: relief_demo picks its sites from the live world's survey, which differs between fresh copies of S3 (flowing water, plants, leaves: 35 ground and 2,009 flag differences between two runs), so a run whose plan survey differs from the golden's holds the golden itself: its committed inputs re-plan to its IR sha and tile shas. The realised smoothness and clamp rows leave out band columns topped by another writer (a lot's approach stair or front path); the realised pad row judges the pad's top block only. The 6b safety row (M5 dark, M8 guards) is recorded for this terrain fixture (as F1's forms rows). The flat run must read a flat world (`t1-flatworld`; an autoworld-created base is a normal world: the driver's client starts in a lobby world). |
+| Items | Post-merge record `artifacts/gate-runs-T1/20261012-193826-change` (head c0efb2d; natural evidence `037717393c0b`, flat `3410afb4c848`). **1** smoothness: natural 98.5% of 2,796 band steps at most 1, 0 over 3 (realised 98.4% of 2,777, 9 columns topped by a lot's approach left out); flat 99.9% of 17,741, 0 over 3. **2** pads: 0 of 672 pad and apron columns off (virtual and realised; flat 0 of 616). **3** clamps: 2,109/2,109 plan and 2,100/2,100 realised columns within maxCut/maxFill; erosion extra max 1 over 8 columns, 0 pins moved (flat 9,440/9,440). **4** organic (recorded): axis-run share 0.227 of 1,245 relief boundary cells vs 0.757 of 206 with `pad.edge: 'slope'` (flat 0.294 vs 0.988). **5** (BAR) 1024x1024 synthetic in the sandbox, median of 3: relief pass 593 ms, whole plan 5.0 s wall, peak 216 MB RSS (load 45). **6** IR sha identical over 3 plans (tick freeze), field blob shas identical over the 3 synthetic plans, tile shas 1 = 4 workers forward and shuffled; golden `scenarios/goldens/relief_demo*` (from `artifacts/scenarios/6c-t1/relief_demo/20261012-164555`; the kit test `scenario-goldens` holds it on Linux CI at merge): the run's live survey differs in 1,905 columns, the golden's inputs re-plan to its IR `2f53a2c20371` and 6 tile shas. **7** (BAR) tiles p50 0.5 ms, p99 3.2 ms, 3.4M cells/s. **8** E-flat 0; E-normal 164, all classified (159 growth, 3 live, 2 flow), the undo's own 0. **9** (BAR) own CPU max 10.8 ms natural, 48.8 ms flat at load 45. **10** checker: 0 errors, no M1-M4. **11** the v0.20.0 kit (0.19.0) and the 0.20.0 mod jar's IrStale refuse a relief plan `PLAN_STALE: plan needs kit 0.20.0 / kinds [relief]` and the old evaluator writes nothing; format-1 goldens, S1, S7 and mega_bench unchanged (37 pass). **12** api-compat `--gate6ct1` 4/4 clean (0.20.0 from tag v0.20.0 into `artifacts/gate6c-t1/v0200/`, 0.19.0 and 0.18.0 from Y1's); apijars pass (`20261012-201324-change`, 46 ok each). **13** $0.00. §3 in game (`t1-ingame`): relief_demo on a 320x320 claim gets a resolution-1 second survey (320x320 columns); region_small keeps resolution 4. |
+| Gate | Slice tier before the v0.19.0/v0.20.0 merge: `artifacts/gate-runs-T1/20261012-165316-slice` (1 shard, 8922/8923, head ea29ec8 at its later steps): 24 of 27 PASS, among them unit-mod, unit-kit, unit-sidecar, apijars (0.17.0/0.16.0/0.15.0), t1-unit, t1-ingame, 6ct1-scenario-relief, 6cw-scenario-s7, 6cv-scenario-s7, x-ingame, x-resume, 4d-all, 4e-megalite, 6a-megaA, 6a-eflat, 6a-inv3, 6a-staged, the 6b steps and S1 (timing bars recorded: S7 own tick 53.2 ms, megalite 63.5 ms, both at load 38-63). Not passing: sim-jobs and sim-sets on the `tools/apitest.mjs` API_VERSION pin only (fixed), sim-massing the known composite-keys flake. After merging origin/main (v0.19.0 F1+MP, v0.20.0 Y1; renumbered 1.18.0 / 0.21.0 / kit 0.20.0) the coordinator's re-run set: `20261012-193826-change` (head c0efb2d): unit-mod, unit-kit (289), unit-sidecar, sim-jobs, sim-sets, sim-massing, t1-unit, 6ct1-scenario-relief PASS; apijars failed only because the archived 0.20.0/0.19.0/0.18.0 dirs lacked their tags' `tools/apitest.mjs` (added from each tag) and passed in `20261012-201324-change`. Rebase points resolved: `KINDS_FORMAT2` `... road:lamp, voxels, mask, pattern, relief`; `OP_KINDS` `shape, columns, voxels, relief` (evaluator kinds 2 and 3); `OPS_RESERVED` `scatter, stamp`; FEATURES `... masks, patterns, region.passes`; E-normal world classes `freeze, flow`; the checker's RULES unchanged by T1. Then origin/main 5ce3ea3 (headless gates) merged and apijars and api-compat moved to SCH's complete 0.20.0/0.19.0/0.18.0 sets (`artifacts/gate6c-sch/`; T1 ships batched with SCH as v0.21.0): `artifacts/gate-runs-T1/20261012-203739-change` (head 4dfb6c0) unit-mod, unit-kit, unit-sidecar, apijars (SCH's 3 jars) and t1-ingame (the resolution-1 second survey, after the merges) PASS. **gate-verifier: PASS** (review plus its own re-run of item 8, `artifacts/gate-runs-T1-verify/20261012-202226-change` at 11a321b: E-flat 0 over 73,503 restored, E-normal 105 all classified (102 growth, 3 live), item 1 98.4%/98.4% with 0 over 3, pads 0 off, clamps 100%, checker clean). Its verdicts: `flow` sound (wording fixed above); the golden row now guards the planner and evaluator over the golden's committed inputs, not a fresh live survey (accepted); the apron change safe. Caveats it recorded: the 300 s plan wait applies to every program; 7 of 26 written falling-water cells (level 8) were not the planned block at the post-build dump in the mod, cause not in T1's diff (no tile-write code changed): a follow-up, not a blocker; the Linux CI half of item 6 comes at merge (kit `scenario-goldens`); overlapping lots' aprons take the first pin and the largest pad limits. HANDOFF-T1 retired. |
+
 ## Phase 6c slice F1: forms I, ice spikes and rock spires (DRAFT for Steward review)
 
 API 1.16.0, mod 0.19.0 (wave 1, parallel with T1 and MP). SETTLEMENTS §9.1, §9.2 and §11 (M17).
@@ -10018,6 +10037,101 @@ library check (`tools/p2-library-check.mjs`), apijars. **gate-verifier** re-runs
 ### Deferred
 
 - Entities and biomes. Schematics past the cap as composites (7c). Other formats (`.litematic`) on request.
+
+### Phase 6c slice SCH as built (API 1.18.0 / mod 0.21.0, batched with T1 as v0.21.0; recorded 2026-10-12)
+
+Built as the placeholder API 1.20.0 / mod 0.23.0. The coordinator accepted all eight calls below and set the numbers after
+merging origin/main (v0.20.0: F1, MP, Y1) into the branch. In that merge:
+- `Reason.FORMAT` stays the one constant after FIELD_LIMIT (main appended none).
+- apijars and api-compat now run against 0.20.0, 0.19.0 and 0.18.0, with the 0.20.0 surface. Each set, with its tag's
+  `tools/apitest.mjs`, is in `artifacts/gate6c-sch/v0200`, `v0190` and `v0180`. 0.20.0 is built from tag v0.20.0. 0.19.0 and
+  0.18.0 are Y1's tag builds, copied because `gate6c-y1/` has no `tools/`.
+- ApiMPTest and gate6cmp's "no new Reason" checks now accept reasons appended after FIELD_LIMIT.
+- Post-merge run (`artifacts/gate-runs-SCH/20261012-194928-change`, head ea5ccf1): PASS 4/4. unit-mod 578/0, unit-kit
+  286/286, sch-unit 5/0, sch-roundtrip 39/0 (item 2 on Linux included).
+
+Written from the public Sponge Schematic specification only (SpongePowered/Schematic-Specification@8e6be2d,
+`versions/schematic-2.md` and `schematic-3.md`, cited in both codec files). No WorldEdit source was read or used (item 7: the
+gate scans the diff for WorldEdit code, packages and imports).
+
+**What was built**
+- **Mod (the import path):** `library/Schematic.java` reads versions 2 and 3, root shape included (v3 `{Schematic: {...}}`, v2
+  fields in the root; v2 block-entity fields beside `Pos`/`Id` and in an `Extra` compound). It turns the file into a vanilla
+  structure tag at the file's own DataVersion. `library/Schematics.java` then runs vanilla's `DataFixTypes.STRUCTURE` (block
+  states and block-entity data in one pass) and checks every block id against the registry. It stages the upgraded structure
+  in `<gameDir>/architect/schem-staging/<n>/` and sends `import.request {path, name, schem}`. The helper's `import-schem` job
+  then runs the existing check, previews and install, with `--ground-y` and the tag `schem`. Every refusal comes before
+  anything is staged, and the staging folder is emptied when the job ends.
+- **Mod (export):** `Library.exportSchematic` writes the entry's template (`<id>.schem`, or `<id>-v<n>.schem` when a version is
+  given). `Sites.exportSiteSchematic` captures the site's box with vanilla's `fillFromWorld` (air and block entities included,
+  in world orientation). Both write in the mod, with no helper needed. Compound keys are written sorted, deflate level 9.
+- **Kit:** `kit/lib/schem.mjs` is the twin codec (v2/v3 read, v3 write, `structureCells`). `kit/import.mjs` takes `.schem`,
+  `--ground-y` and `--tag`. The spec fixtures in `kit/test/fixtures/schem/` are built by `make.mjs` from the spec (v3 and v2
+  huts with a chest, a sign, stairs, air, a structure_void column, an entity and biomes; a DataVersion 2586 file with
+  grass_path, grass and a Text1..4 sign; an unknown block; oversize; corrupt). `goldens.json` holds the sha256 of the kit's
+  and the mod's exports of every kit example.
+- **Sidecar:** `import.request` takes `name?` and `schem? {file, groundY 1..63, ext}`, giving the variant kind `import-schem`.
+  Such a request is accepted only from the staging folder, and the staging folder only for that kind. New feature:
+  `import.schem`.
+- **API (additive):** `Library.importSchematic(Path, String)`, `Library.importSchematic(Path, String, JsonObject ext)` (added:
+  the contract's `ext["architect_mc:unknownAs"]` had no way in), `Library.exportSchematic`, `Sites.exportSiteSchematic`, and
+  `Reason.FORMAT` appended after FIELD_LIMIT. `schematics` is always a feature. Imported entries carry the tags `imported`
+  and `schem`, and `ext["architect_mc:schem"] = {file, name?, author?, date?, version, dataVersion, offset,
+  entitiesSkipped?, replaced?, unknownAs?}`.
+- **UI and commands:** the Library card has Export .nbt and Export .schem; Import… lists `.schem` files in `imports/` and
+  `exports/`. `/architect export <entry> schem` and `/architect import <file>` need permission level 2.
+- **Tests and gate:** `SchematicTest` and `ApiSchTest` (mod), `kit/test/schem.test.mjs`, and the sidecar's import-schem test.
+  `tools/gate6csch.mjs` runs as the runner steps `sch-unit`, `sch-roundtrip`, `sch-refusals`, `sch-placement` and
+  `sch-ingame`, with the impact rule "6c SCH". api-compat runs `--gate6csch`, and apijars covers 0.18.0/0.17.0/0.16.0.
+  DevBridge gained `dev.library.export.schem`.
+
+**Conventions decided while building**
+- **Voids:** a cell the template does not write is `minecraft:structure_void` in an export and is not written on import; air
+  is air. Without this, item 1 and Remove-exact would differ on every kit example, because templates store no air.
+- **Palette format:** 26.3 structure palettes are `{id, properties}` from DataVersion 5006 (vanilla's BlockStateFieldNamesFix).
+  An older file is converted with `{Name, Properties}`, so the fixers see their own version's form.
+- **groundY:** `-Offset.y` when it is 1..height-1, else 1 (a template's floor row is under its ground row). An export writes
+  `Offset [0, -groundY, 0]`.
+- **Date:** `Metadata.Date` is the entry's `createdAt` (0 for bundled entries), so exports are byte-identical.
+- **Platform independence:** the JDK's bundled zlib gives the same bytes on macOS and Linux. The `linux` step re-gzips the
+  mod's exports in eclipse-temurin:25 on linux/amd64 (as CI) and runs the kit test in node:22 on linux/amd64.
+
+**Calls for the coordinator**
+- **KIT_VERSION** is not bumped: SCH adds no op kind or IR member, so no IR sha or tile golden moves. The batch rule says every
+  slice bumps; this reading keeps the goldens still.
+- **`architect/import/`:** the contract's folder is the existing `architect/imports/`.
+- **Permissions:** `/architect export|import` need permission level 2. They write and read files on the server's disk; the
+  contract is silent on this.
+- **The `importSchematic` ext overload** (above).
+- **`tools/p2-library-check.mjs`** (named in the contract's tier) is stale on main: it sets the bundled cabin's `floors`
+  param, which the cabin has not had since phase 2 (its params are width, depth and porch). It is not in the runner. The `ui`
+  step covers the Library's import and export instead.
+- **API tests:** `ApiSchTest`, `apitest.mjs` and the gate read the version from `ArchitectApi.java` or assert only a floor,
+  so a renumber at merge needs no other edit.
+- **N-SCH-1:** no WorldEdit-made fixture yet. Add one to `kit/test/fixtures/schem/` if Noah exports one.
+
+**Gate record**
+- **Run 1, slice tier** (`artifacts/gate-runs-SCH/20261012-174541-slice`, head 5906cb2, 2 shards, load 17-104): 22 PASS. Every
+  SCH step passed: sch-unit 5/0, sch-roundtrip 39/0 (item 2 on Linux included), sch-refusals 12/0, sch-placement 12/0,
+  sch-ingame 24/0. apijars passed (1.15.0 46/0, 1.14.0 45/0, 1.13.0 45/0). The four that didn't pass:
+  - unit-kit: TIMEOUT at 10 min under load 59-73 (`village.test.mjs` interrupted). The timeout is now 20 min, as MP's.
+  - x-ingame: a real check of mine. gate6cx's api114 check pinned the last Reasons to `PROTECTED FIELD_LIMIT`; it now accepts
+    reasons appended after FIELD_LIMIT.
+  - sim-massing: "world leave cleared every composite (keys now: 3)", a known flake.
+  - 4d-all: "group undo: every lot region ... back exactly" (lot L3), a known flake. The same line fails in the MP, W and Y2
+    slice runs and in today's main-based headless engine runs (`gate-runs-headless/20261012-173909-engine`).
+- **Run 2, change --only** (`20261012-190119-change`, head 1444904, which adds only the two tool fixes): unit-kit 261/261,
+  sim-massing 35/0, x-ingame 53/0. 4d-all failed a different known flake, "shared crate: 2/3 built sites identical to
+  instant placement", seen before in `gate-runs-integ/20261010-182744-slice` and `gate-runs-0b/20261011-000214-slice`.
+- **Run 3, change --only 4d-all** (`20261012-192147-change`, head 1444904): PASS 63/0.
+- **Evidence:** `<run>/s2/gate6c-sch/` (step JSONs, REPORT.md, spend.json $0.00). Item 2 on Linux: the mod's four exports
+  re-gzipped in eclipse-temurin:25 on linux/amd64 match macOS byte for byte, and the kit test passes in node:22 on
+  linux/amd64. Timing bars were recorded, and none missed.
+- **gate-verifier: PASS** (2026-10-12). It reviewed the diff and the evidence and re-ran items 1, 4 and 5
+  (`artifacts/gate-runs-SCH-verify/20261012-193750-change`, head f1e7e69: sch-roundtrip 39/0, sch-refusals 12/0,
+  sch-placement 12/0). It accepted every coordinator call above.
+  - Minor notes, none blocking: `/architect import` checks the path after `normalize()` without resolving symlinks (it is
+    op-only, and the helper re-checks its staging); a site export's `Date` is the time of export, as documented.
 
 ## Phase 6c slice F3: forms II, trees, mushrooms, coral, roots and stalactites (DRAFT for Steward review)
 

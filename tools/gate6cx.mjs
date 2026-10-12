@@ -721,12 +721,19 @@ steps.apicompat = async () => {
   const t = `${r.stdout}${r.stderr}`;
   fs.writeFileSync(path.join(OUT, 'api-compat.txt'), t);
   check(r.status === 0 && /all 4 checks clean/.test(t), `item 5: api-compat against the 0.16.0, 0.15.0 and 0.14.0 apitest jars and the 0.16.0 surface: ${t.trim().split('\n').pop()}`);
+  // X appended no Reason: the last two are 1.12.0's PROTECTED FIELD_LIMIT, or later slices' appends after FIELD_LIMIT (6c SCH: FORMAT)
+  const x114Reasons = (last) => {
+    const [a, b] = String(last ?? '').split(' ');
+    const reason = fs.readFileSync(path.join(root, 'mod', 'src', 'main', 'java', 'dev', 'larattalabs', 'architect', 'api', 'Reason.java'), 'utf8').replace(/\/\/.*$/gm, '');
+    const order = /PROTECTED, FIELD_LIMIT([\s\S]*?)\n\}/.exec(reason)?.[1].match(/[A-Z_]{3,}/g) ?? [];
+    return last === 'PROTECTED FIELD_LIMIT' || (a === 'FIELD_LIMIT' || order.includes(a)) && order.includes(b);
+  };
   // the apitest mod's own reflection check, in game, when a client is up
   if (state.dev || (await connect(5_000).then(() => true).catch(() => false))) {
     if (!(await call('dev.state')).inWorld) await openWorld(FLAT);
     const v = await api('api114');
-    check(v.oldCtors === true && /^opKey opKey$/.test(v.trailing) && v.byKeyDefaults === true && v.features114?.length === 2 && v.lastReasons === 'PROTECTED FIELD_LIMIT',
-      `item 5: apitest api114: old constructors kept, trailing opKey, default methods, no new Reason (${json(v)})`);
+    check(v.oldCtors === true && /^opKey opKey$/.test(v.trailing) && v.byKeyDefaults === true && v.features114?.length === 2 && x114Reasons(v.lastReasons),
+      `item 5: apitest api114: old constructors kept, trailing opKey, default methods, no new Reason from X (later slices append after FIELD_LIMIT) (${json(v)})`);
   }
   return { out: t };
 };

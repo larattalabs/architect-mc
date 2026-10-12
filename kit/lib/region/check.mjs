@@ -714,6 +714,7 @@ export function checkRegion({ ir, survey, blobs, volumes = [], meta = null, worl
         const bytes = b && blobs ? (typeof blobs === 'function' ? blobs(b.sha) : blobs instanceof Map ? blobs.get(b.sha) : blobs[b.sha]) : null;
         if (bytes) for (const st of decodeVoxels(bytes, `blob ${o.blob}`).palette) if (st !== 'minecraft:air') check(st, `part ${p.id}`);
       }
+      else if (o.op === 'relief') each(o.fill, `part ${p.id}`); // (6c T1)
       else each(o.material, `part ${p.id}`);
     }
     for (const [where, s] of bad) findings.push(finding('M13', where.startsWith('part ') ? where.slice(5) : null, null, 1, [], `${where}: '${s}' is not a vanilla block state`));

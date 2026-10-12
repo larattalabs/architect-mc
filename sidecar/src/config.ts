@@ -91,6 +91,10 @@ export interface RegionsConfig {
   planMs: number;
   /** a plan run's heap (--max-old-space-size, config regionPlanHeapMb, default 1024) */
   planHeapMb: number;
+  /** (6c T1) a plan run's time limit when the program declares passes (config regionPassPlanMs, default 120000; SETTLEMENTS §4) */
+  passPlanMs: number;
+  /** (6c T1) a plan run's heap when the program declares passes (config regionPassPlanHeapMb, default 2048) */
+  passPlanHeapMb: number;
   /** the largest IR (config regionIrMaxBytes, default 4 MB) */
   irMaxBytes: number;
   /** one tile's evaluation limit in ms (config regionTileMs, default 2000) */
@@ -131,6 +135,8 @@ function regionsConfig(file: Record<string, unknown>, libraryDir: string, env: N
     window: int(file.regionWindow, 4, 1, 16),
     planMs: int(file.regionPlanMs, 30_000, 100, 600_000),
     planHeapMb: int(file.regionPlanHeapMb, 1024, 64, 8192),
+    passPlanMs: int(file.regionPassPlanMs, 120_000, 100, 600_000),
+    passPlanHeapMb: int(file.regionPassPlanHeapMb, 2048, 64, 8192),
     irMaxBytes: int(file.regionIrMaxBytes, 4 * 1024 * 1024, 1024, 4 * 1024 * 1024),
     tileMs: int(file.regionTileMs, 2000, 50, 60_000),
     tileHeapMb: int(file.regionTileHeapMb, 256, 16, 4096),

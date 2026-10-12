@@ -35,7 +35,9 @@
     "unplaced": { "type": "array", "items": { "type": "object", "required": ["id", "reason"], "additionalProperties": false, "properties": {
       "id": { "type": "string" }, "reason": { "type": "string" } } } },
     "props": { "type": "array", "items": { "type": "object", "required": ["kind", "id", "at"], "additionalProperties": false, "properties": {
-      "kind": { "type": "string" }, "id": { "type": "string" }, "lot": { "type": "string" }, "at": { "$ref": "#/$defs/xyz" } } } }
+      "kind": { "type": "string" }, "id": { "type": "string" }, "lot": { "type": "string" }, "at": { "$ref": "#/$defs/xyz" } } } },
+    "passes": { "type": "array", "items": { "type": "object", "required": ["name", "ms", "heapMb"], "additionalProperties": false, "properties": {
+      "name": { "type": "string" }, "ms": { "type": "integer", "minimum": 0 }, "heapMb": { "type": "integer", "minimum": 0 } } } }
   },
   "$defs": {
     "xyz": { "type": "array", "minItems": 3, "maxItems": 3, "items": { "type": "integer" } },
