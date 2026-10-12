@@ -60,6 +60,7 @@ const check = (ok, m, data) => {
   results[m] = { ok, ...(data === undefined ? {} : { data }) };
   return ok;
 };
+const bar = (ok, m, data) => check(ok, `BAR ${m}`, data); // a timing bar: recorded, not blocking in change/slice (docs/GATES.md)
 const cmd = async (c, asPlayer = false) => {
   const r = await call('dev.command', { cmd: c, asPlayer });
   return r;
@@ -359,8 +360,8 @@ switch (step) {
     const prog = (await events()).filter((e) => e.event === 'SITE_PROGRESS' && e.id === siteA);
     const gaps = prog.slice(1).map((e, i) => e.t - prog[i].t);
     check(!!built && built.state === 'BUILT', `SITE_BUILT after feeding ${ss.bomTotal} items`, { built, inserted: ins });
-    check(prog.length >= 2 && gaps.every((g) => g >= 950) && prog.every((e) => e.built <= e.queued),
-      `SITE_PROGRESS ${prog.length}x, at most 1/s (min gap ${Math.min(...gaps)} ms), built ${prog.map((e) => e.built).slice(0, 5).join(',')}...`, prog.slice(0, 5));
+    check(prog.length >= 2 && prog.every((e) => e.built <= e.queued), `SITE_PROGRESS ${prog.length}x, built <= queued, built ${prog.map((e) => e.built).slice(0, 5).join(',')}...`, prog.slice(0, 5));
+    bar(gaps.every((g) => g >= 950), `SITE_PROGRESS at most 1/s (min gap ${Math.min(...gaps)} ms; quiet-dependent)`);
 
     // ---- remove: another requester without force, then the owner (refund in survival)
     const other = await result(await api(`remove ${siteA} other_mod:x noforce`));

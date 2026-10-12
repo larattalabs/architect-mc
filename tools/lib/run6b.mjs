@@ -250,4 +250,6 @@ export function check(ok, m, data) {
   results[m] = { ok, ...(data === undefined ? {} : { data }) };
   return ok;
 }
+/** A timing bar: recorded, not blocking in change/slice (docs/GATES.md). */
+export const bar = (ok, m, data) => check(ok, `BAR ${m}`, data);
 export const write = (name, data) => fs.writeFileSync(path.join(OUT, name), JSON.stringify(data, null, 2));
