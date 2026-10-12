@@ -1063,12 +1063,19 @@ steps.migrate = async () => {
     const s3 = await later(`place cabin ${X + 60} ${y} ${Z} CONSTRUCTION unowned noactor 0 owner=${OWNER}`);
     const ids = { g1: b.items.g1.site, g2: b.items.g2.site, s3: s3.siteId };
     const half = (m) => Object.fromEntries(Object.entries(m).map(([k, n]) => [k, Math.ceil(n / 2)]));
+    // half built: a quarter fed and built, then paused (the 0.17.0 crate screen's Pause) and another quarter fed: the crates hold stock
+    const pauseOld = async (id) => { await call('dev.crate.open', { site: id }); await call('dev.crate.press', { control: 'pause' }); await call('dev.crate.press', { control: 'close' }).catch(() => {}); };
     const sg = await api(`stock ${b.group}`);
-    await call('dev.crate.insert', { site: ids.g1, items: half(sg.outstanding) }, 120_000);
     const ss = await siteState(ids.s3);
     const bom3 = Object.fromEntries((ss.rows ?? []).map((r) => [r.item, r.missing]).filter(([, n]) => n > 0));
-    await call('dev.crate.insert', { site: ids.s3, items: half(bom3) }, 120_000);
-    await sleep(1500); // half built: the crates still hold stock (adoption has something to move)
+    const quarter = (m) => half(half(m));
+    await call('dev.crate.insert', { site: ids.g1, items: quarter(sg.outstanding) }, 120_000);
+    await call('dev.crate.insert', { site: ids.s3, items: quarter(bom3) }, 120_000);
+    await sleep(10_000);
+    for (const id of Object.values(ids)) await pauseOld(id);
+    await call('dev.crate.insert', { site: ids.g1, items: quarter(sg.outstanding) }, 120_000);
+    await call('dev.crate.insert', { site: ids.s3, items: quarter(bom3) }, 120_000);
+    await sleep(2000);
     const stock = await api(`stock ${b.group}`);
     const s3state = await siteState(ids.s3);
     fs.writeFileSync(migState, JSON.stringify({ ids, group: b.group, y, stock, s3: { ledger: s3state.ledger, built: s3state.built, crate: s3state.crate } }));
@@ -1090,6 +1097,7 @@ steps.migrate = async () => {
     check(json(s3.ledger) === json(m.s3.ledger) && s3.crate?.present === true && s3.stockpile === undefined, 'item 12: the per-site crate and its ledger unchanged');
     const saved = await pile('saved');
     check(Object.keys(saved.file ?? {}).length === 0, 'item 12: no stockpile file in an old world (no stockpile, no change)');
+    for (const id of Object.values(m.ids)) await pile('pause', { site: id, paused: false });
     const gneed = {};
     for (const [k, v] of Object.entries(stock.outstanding)) { const n = v - (stock.delivered?.[k] ?? 0); if (n > 0) gneed[k] = n; }
     for (let i = 0; i < 20; i++) {
@@ -1131,6 +1139,7 @@ steps.migrate = async () => {
     check(oldCrates.length === 2 && left.length === 0, `item 12: the legacy crate cells are restored (${json(oldCrates)} -> ${json(left)})`);
     const st = ad.stockpile;
     check([m.ids.g1, m.ids.g2, m.ids.s3].every((id) => st.feedOrder.includes(id)), `item 12: their targets joined the feed order (${json(st.feedOrder)})`);
+    for (const id of Object.values(m.ids)) await pile('pause', { site: id, paused: false });
     const again = await pile('adopt');
     check(json(again.stockpile.ledger) === json(st.ledger), 'item 12: adoptCrates is idempotent');
     await feedAll(cons, `stockpile:${OWNER}`);
