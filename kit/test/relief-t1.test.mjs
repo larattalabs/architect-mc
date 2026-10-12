@@ -156,12 +156,13 @@ test('the relief pass: pins (lots, corridors), the fields (NONE off the band), t
   const cor = { path: [[52, lot.floorY - 1, 45], [90, lot.floorY - 1, 45]], width: 3 };
   const { pin, kind } = pinsOf(c, [lot, cor]);
   assert.equal(pin[39 + 39 * 128], lot.floorY - 1, 'the apron is pinned');
-  assert.equal(kind[39 + 39 * 128], 1);
+  assert.equal(kind[39 + 39 * 128], 3, 'an apron column');
+  assert.equal(kind[45 + 45 * 128], 1, 'a footprint column');
   assert.equal(kind[70 + 45 * 128], 2, 'the corridor is pinned');
   assert.equal(kind[70 + 47 * 128], 0, 'a 3-wide corridor');
   const intent = { around: [lot, cor], radius: 12, maxCut: 6, maxFill: 6, erode: { thermal: 2, stream: 1 }, fill: 'minecraft:dirt' };
   const a = reliefPass(c, [], intent), b = reliefPass(c, [], intent);
-  assert.deepEqual(a.ops.map((o) => o.mode), ['delta', 'target']);
+  assert.deepEqual(a.ops.map((o) => [o.field, o.mode]), [['relief', 'delta'], ['relief_target', 'target'], ['relief_apron', 'target']]);
   assert.deepEqual(Buffer.from(a.fields.relief.values.buffer), Buffer.from(b.fields.relief.values.buffer), 'deterministic');
   const f = a.fields.relief;
   const at = (x, z) => f.values[(x - f.minX) + (z - f.minZ) * f.width];
@@ -169,6 +170,9 @@ test('the relief pass: pins (lots, corridors), the fields (NONE off the band), t
   assert.notEqual(at(30, 45), NONE, 'in the band');
   assert.ok(f.minX >= 40 - 1 - 12 && f.minX <= 40 - 1, 'the field is the band\'s bounding box');
   assert.equal(a.fields.relief_target.values[(70 - f.minX) + (45 - f.minZ) * f.width], lot.floorY - 1);
+  const ap = a.fields.relief_apron;
+  assert.equal(ap.values[(39 - ap.minX) + (39 - ap.minZ) * ap.width], lot.floorY - 1, 'the apron at the pad\'s top');
+  assert.equal(ap.values[(45 - ap.minX) + (45 - ap.minZ) * ap.width], NONE, 'the footprint is the lot\'s own');
   assert.ok(a.data.band > 0 && a.data.pinned > 0);
   assert.throws(() => reliefPass(c, [], { ...intent, around: [] }), /around/);
   assert.throws(() => reliefPass(c, [], { ...intent, radius: 0 }), /radius/);

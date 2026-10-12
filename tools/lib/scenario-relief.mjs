@@ -189,6 +189,8 @@ export async function reliefMetrics({ planDir, ir, survey, blobs, vw, after = nu
   let within = 0;
   for (const c of cols.values()) if (c.raw >= -c.maxCut && c.raw <= c.maxFill) within++;
   const pads = padsCheck(ir, (x, y, z) => vw.pal.states[vw.get(x, y, z)]);
+  // and on the realised world (a plant left on an apron is a step at the entrance)
+  const padsRealised = after ? padsCheck(ir, (x, y, z) => (x < after.box.minX || x > after.box.maxX || z < after.box.minZ || z > after.box.maxZ || y < after.box.minY || y > after.box.maxY ? 'minecraft:air' : after.palette[after.cells[after.at(x, y, z)]]), { realised: true }) : null;
   // erosion: the same plan without the touch-up; the extra |dh| per column and the pins
   const noErode = await replan(ir, survey, { erode: false });
   const c0 = reliefColumns(noErode.ir, survey, noErode.blobs);
@@ -209,7 +211,7 @@ export async function reliefMetrics({ planDir, ir, survey, blobs, vw, after = nu
     smoothVirtual: sVirtual, smoothRealised: sRealised,
     clamps: { columns: cols.size, within, share: cols.size ? within / cols.size : 1 }, clampsRealised,
     erosion: { maxExtra, erodedCols, pinMoved },
-    pads,
+    pads, padsRealised,
     organic, organicSlope,
     otherWriters: other ? { columns: other.length, sample: other.slice(0, 10) } : null,
   };
@@ -226,7 +228,7 @@ export function reliefBars(m, report, rows, { flat = false, metaFlat = null } = 
   const s = (x) => (x ? `${(100 * x.share).toFixed(1)}% of ${x.pairs} steps <= 1, ${x.over3} over 3 (max ${x.max})` : 'n/a');
   const smooth = (x) => !x || (x.share >= 0.95 && x.over3 === 0);
   out.push(row('t1-smooth', 'T1 1 Blend smoothness (virtual; realised)', `${s(m.smoothVirtual)}; ${s(m.smoothRealised)}${m.otherWriters?.columns ? ` (${m.otherWriters.columns} band columns topped by another writer, left out)` : ''}`, '>= 95% of steps <= 1; 0 over 3', smooth(m.smoothVirtual) && smooth(m.smoothRealised)));
-  out.push(row('t1-pads', 'T1 2 Pads at their target', `${m.pads.off} of ${m.pads.cols} pad and apron columns off`, '0 off', m.pads.off === 0));
+  out.push(row('t1-pads', 'T1 2 Pads at their target (virtual; realised)', `${m.pads.off} of ${m.pads.cols} pad and apron columns off${m.padsRealised ? `; realised ${m.padsRealised.off} of ${m.padsRealised.cols}${m.padsRealised.off ? ` (${m.padsRealised.offList.slice(0, 4).map((x) => x.join(' ')).join(', ')})` : ''}` : ''}`, '0 off', m.pads.off === 0 && (!m.padsRealised || m.padsRealised.off === 0)));
   const cr = m.clampsRealised;
   out.push(row('t1-clamps', 'T1 3 Clamps; erosion extra', `plan ${m.clamps.within}/${m.clamps.columns}${cr ? `, realised ${cr.within}/${cr.columns}` : ''} within maxCut/maxFill; erosion extra max ${m.erosion.maxExtra} over ${m.erosion.erodedCols} columns, pins moved ${m.erosion.pinMoved}`,
     '100% within; erosion extra <= 4; no pin moved', m.clamps.within === m.clamps.columns && (!cr || cr.within === cr.columns) && m.erosion.maxExtra <= 4 && m.erosion.pinMoved === 0));

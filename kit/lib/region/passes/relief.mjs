@@ -21,7 +21,7 @@ const isInt = Number.isInteger;
  * The pins of `around` on the survey grid: lot results (`{at, size, floorY}`: the footprint and its 1-column apron at the pad's
  * top y, floorY - 1), corridors (`{path: [[x, y, z], ...], width}`: the centre line at its own profile y, integer-interpolated,
  * widened to `width`) and rects (`{rect: [x0, z0, x1, z1], y}`). Returns `{pin: Int16Array (NONE = free), kind: Uint8Array
- * (1 pad, 2 corridor)}`. The first pin of a cell wins.
+ * (1 a pad's footprint or a rect, 2 corridor, 3 a lot's apron)}`. The first pin of a cell wins.
  */
 export function pinsOf(c, around) {
   const n = c.width * c.depth, r = c.resolution;
@@ -35,7 +35,10 @@ export function pinsOf(c, around) {
   const rect = (x0, z0, x1, z1, y, k) => { for (let z = z0; z <= z1; z++) for (let x = x0; x <= x1; x++) put(x, z, y, k); };
   for (const a of around ?? []) {
     if (a && Array.isArray(a.at) && Array.isArray(a.size) && isInt(a.floorY)) {
-      rect(a.at[0] - 1, a.at[1] - 1, a.at[0] + a.size[0], a.at[1] + a.size[1], a.floorY - 1, 1);
+      // the footprint (kind 1: the lot's own) first, then its apron ring (kind 3: the pass writes it at the pad's top, so a plant or
+      // a dip on the apron never leaves a step at the entrance)
+      rect(a.at[0], a.at[1], a.at[0] + a.size[0] - 1, a.at[1] + a.size[1] - 1, a.floorY - 1, 1);
+      rect(a.at[0] - 1, a.at[1] - 1, a.at[0] + a.size[0], a.at[1] + a.size[1], a.floorY - 1, 3);
     } else if (a && Array.isArray(a.rect) && isInt(a.y)) {
       rect(a.rect[0], a.rect[1], a.rect[2], a.rect[3], a.y, 1);
     } else if (a && Array.isArray(a.path)) {
@@ -188,8 +191,8 @@ export function relax({ ground, base = null, pin, fixed, W, D, R, iterations, ma
  * The pass. `survey`: the plan's columns (resolution 1 or 4; missing columns filled). `intent`: `{around, radius = 12, maxCut = 6,
  * maxFill = 6, erode: {thermal, stream, streamAt}, base: {minX, minZ, width, depth, values} (added to the land the blend meets,
  * e.g. a hill the program raises with the same op), fill, corridorFill, cut = 0, name = 'relief'}`. Returns `{fields: {<name>,
- * <name>_target?}, ops, data}`: one `delta` op over the blended band and, when there are corridors, one `target` op over their
- * pinned columns (pads are their lots' own).
+ * <name>_target?, <name>_apron?}, ops, data}`: one `delta` op over the blended band, when there are corridors one `target` op over
+ * their pinned columns, and one `target` op over the lots' aprons at their pad's top (the footprints are their lots' own).
  */
 export function reliefPass(survey, volumes, intent) {
   const c = survey;
@@ -240,17 +243,17 @@ export function reliefPass(survey, volumes, intent) {
   // the fields over the bounding box of the band and the corridor pins (dh against the survey's own ground; NONE elsewhere)
   let i0 = W, i1 = -1, j0 = D, j1 = -1;
   for (let k = 0; k < n; k++) {
-    if (!res.band[k] && !raised[k] && kind[k] !== 2) continue;
+    if (!res.band[k] && !raised[k] && kind[k] !== 2 && kind[k] !== 3) continue;
     const x = k % W, z = (k - x) / W;
     if (x < i0) i0 = x; if (x > i1) i1 = x; if (z < j0) j0 = z; if (z > j1) j1 = z;
   }
   const fields = {}, ops = [];
   const data = { pinned: 0, pads: 0, corridors: 0, band: 0, raised: 0, changed: 0, iterations, radius, resolution: r, clamped: res.clamped, eroded: res.eroded, maxErodeExtra: res.maxExtra, cut: 0, fill: 0, maxCutUsed: 0, maxFillUsed: 0 };
-  for (let k = 0; k < n; k++) { if (pin[k] !== NONE) { data.pinned++; if (kind[k] === 1) data.pads++; else data.corridors++; } if (res.band[k]) data.band++; if (raised[k]) data.raised++; }
+  for (let k = 0; k < n; k++) { if (pin[k] !== NONE) { data.pinned++; if (kind[k] === 2) data.corridors++; else data.pads++; } if (res.band[k]) data.band++; if (raised[k]) data.raised++; }
   if (i1 < 0) return { fields, ops, data };
   const fw = i1 - i0 + 1, fd = j1 - j0 + 1;
-  const dv = new Int16Array(fw * fd).fill(NONE), tv = new Int16Array(fw * fd).fill(NONE);
-  let corr = 0;
+  const dv = new Int16Array(fw * fd).fill(NONE), tv = new Int16Array(fw * fd).fill(NONE), av = new Int16Array(fw * fd).fill(NONE);
+  let corr = 0, aprons = 0;
   for (let j = 0; j < fd; j++) for (let i = 0; i < fw; i++) {
     const k = (i0 + i) + (j0 + j) * W, o = i + j * fw;
     if (res.band[k] || raised[k]) {
@@ -259,6 +262,7 @@ export function reliefPass(survey, volumes, intent) {
       if (dh) { data.changed++; if (dh < 0) { data.cut++; if (-dh > data.maxCutUsed) data.maxCutUsed = -dh; } else { data.fill++; if (dh > data.maxFillUsed) data.maxFillUsed = dh; } }
     }
     if (kind[k] === 2) { tv[o] = pin[k]; corr++; }
+    if (kind[k] === 3) { av[o] = pin[k]; aprons++; }
   }
   const geo = { type: 'i16', minX: c.minX + i0 * r, minZ: c.minZ + j0 * r, width: fw, depth: fd, res: r };
   fields[name] = { ...geo, values: dv };
@@ -266,6 +270,13 @@ export function reliefPass(survey, volumes, intent) {
   if (corr) {
     fields[`${name}_target`] = { ...geo, values: tv };
     ops.push({ op: 'relief', field: `${name}_target`, mode: 'target', cut, fill: corridorFill, maxCut, maxFill });
+  }
+  if (aprons) {
+    // the lots' aprons at their pad's top, within the lots' own pad limits (the plan already refused a pad past them)
+    const lots = around.filter((a) => a && Array.isArray(a.at) && Array.isArray(a.size) && isInt(a.floorY));
+    const aCut = Math.max(0, ...lots.map((l) => l.pad?.maxCut ?? maxCut)), aFill = Math.max(0, ...lots.map((l) => l.pad?.maxFill ?? maxFill));
+    fields[`${name}_apron`] = { ...geo, values: av };
+    ops.push({ op: 'relief', field: `${name}_apron`, mode: 'target', cut, fill, maxCut: Math.min(64, aCut), maxFill: Math.min(64, aFill) });
   }
   return { fields, ops, data };
 }

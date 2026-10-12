@@ -429,6 +429,27 @@ async function computeMetrics({ sc, out, planDir, ir, irShas, mspt, cps, exact, 
     golden = sameTiles && g.irSha === ts.irSha ? 'match'
       : sameTiles && g.kitVersion && g.kitVersion !== runKit ? `match (every tile sha; the IR sha differs by its kitVersion ${g.kitVersion} -> ${runKit})`
         : `differs (golden ${g.irSha.slice(0, 12)}, run ${ts.irSha.slice(0, 12)}${sameTiles ? '' : '; tile shas differ'})`;
+    // (6c T1) relief_demo plans from the live world's survey (S3: flowing water, plants and leaves move a fresh copy's survey, and the
+    // program picks its sites from it), so a run whose plan survey differs from the golden's can't reproduce its IR. Then the row
+    // holds the golden itself: its committed inputs re-plan to its IR sha and every tile sha (1 = 4 workers), and it records how far
+    // the run's survey is from the golden's
+    const gDir = path.join(SCEN, 'goldens', short(sc));
+    if (isT1(sc) && golden.startsWith('differs') && fs.existsSync(path.join(gDir, 'survey.bin'))) {
+      const runSurvey = fs.readFileSync(path.join(planDir, 'survey.bin')), gSurvey = fs.readFileSync(path.join(gDir, 'survey.bin'));
+      if (sha256(runSurvey) !== sha256(gSurvey)) {
+        const { asColumns } = await import('../kit/lib/region/pack.mjs');
+        const ra = asColumns(runSurvey), ga = asColumns(gSurvey);
+        let cols = 0;
+        for (let i = 0; i < ra.ground.length; i++) if (ra.ground[i] !== ga.ground[i] || ra.flags[i] !== ga.flags[i] || ra.height[i] !== ga.height[i]) cols++;
+        const { planRegion } = await import('../kit/lib/region/plan.mjs');
+        const gIr = JSON.parse(fs.readFileSync(path.join(gDir, 'ir.json'), 'utf8'));
+        const re = await planRegion({ programFile: path.join(root, 'kit', 'regions', `${gIr.id}.mjs`), params: gIr.params, survey: gSurvey, seed: gIr.seed, claim: { ...gIr.claim, minY: -64, maxY: 319 }, roles: gIr.roles });
+        const gts = await tileShas(gDir);
+        const ok = re.irSha === g.irSha && gts.irSha === g.irSha && gts.workersSame && JSON.stringify(gts.tiles) === JSON.stringify(g.tiles);
+        golden = ok ? `match (the golden's committed inputs re-plan to its IR ${g.irSha.slice(0, 12)} and its ${Object.keys(g.tiles).length} tile shas; this run's live survey differs from the golden's in ${cols} columns, so its IR ${ts.irSha.slice(0, 12)} is its own)`
+          : `differs (the golden's inputs re-plan to ${re.irSha.slice(0, 12)}, golden ${g.irSha.slice(0, 12)})`;
+      }
+    }
   }
   // the other variant's exactness (E-flat from the latest flat run beside a natural one, and back)
   const sibling = latestRun(sc, out, !flat);
