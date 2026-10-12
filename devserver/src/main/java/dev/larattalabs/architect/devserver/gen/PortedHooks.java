@@ -231,6 +231,27 @@ public final class PortedHooks {
 				}
 			});
 		});
+		DevBridge.register("dev.site.cells", 30_000, "{site} - (6c Y2) every queued cell of a construction site as \"x,y,z\": block id of its target",
+			(req, mc) -> {
+				String id = Fields.of(req).nonBlank("site");
+				return ServerTasks.callOnServer(server -> Builder.cellsJson(server, id));
+			});
+		DevBridge.register("dev.bom.predict", 60_000, "{bp, at: [x,y,z], rot?: 0-3, force?: true} - (6c Y2) the cells the full BOM predicts for a "
+			+ "construction placement (the dry-run plan), plus the refusals", (req, mc) -> {
+				Fields f = Fields.of(req);
+				String bp = f.nonBlank("bp");
+				JsonArray at = req.getAsJsonArray("at");
+				int rot = req.has("rot") ? req.get("rot").getAsInt() : 0;
+				boolean force = f.optBool("force", true);
+				return ServerTasks.callOnServer(server -> {
+					var b = dev.larattalabs.architect.placement.Blueprints.get(bp);
+					if (b == null) {
+						throw new DevBridge.DevException("no design " + bp);
+					}
+					return Sites.debugBom(server.overworld(), b, new BlockPos(at.get(0).getAsInt(), at.get(1).getAsInt(), at.get(2).getAsInt()),
+						net.minecraft.world.level.block.Rotation.values()[rot], force);
+				});
+			});
 		DevBridge.register("dev.crate.insert", 30_000, "{site, items?: {item: count}, inventory?: true} - book items into the crate", (req, mc) -> {
 			Fields f = Fields.of(req);
 			String id = f.nonBlank("site");
