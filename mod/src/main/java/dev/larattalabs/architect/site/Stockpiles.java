@@ -178,6 +178,13 @@ public final class Stockpiles {
 		ServerLifecycleEvents.SERVER_STARTED.register(Stockpiles::load);
 		// the world-save callback that saves the chunks (autosave and stop): the ledger and the chunks are saved together
 		ServerLifecycleEvents.BEFORE_SAVE.register((server, flush, force) -> save());
+		// a clean stop: the ticks have ended; saved again here in case the stop's chunk save doesn't run BEFORE_SAVE (logged with the trace)
+		ServerLifecycleEvents.SERVER_STOPPING.register(server -> {
+			if (TRACE_SAVES) {
+				Architect.LOGGER.info("Stockpiles: world stopping, saving");
+			}
+			save();
+		});
 		ServerLifecycleEvents.SERVER_STOPPED.register(s -> {
 			PILES.clear();
 			dir = null;
@@ -1102,6 +1109,12 @@ public final class Stockpiles {
 				x.add("outstanding", Builder.counts(out));
 				x.addProperty("built", r.built.cardinality());
 				x.addProperty("queued", r.size());
+				ServerLevel lv = Sites.levelOf(srv, p.dimension);
+				boolean paused = t instanceof Site st ? st.construction().paused() : ((Infra) t).construction().paused();
+				boolean fl = lv != null && r.frontierLoaded(lv, ticks);
+				x.addProperty("paused", paused);
+				x.addProperty("frontierLoaded", fl);
+				x.addProperty("reserves", FeedOrder.reserves(true, paused, r.built.cardinality() < r.size(), fl));
 			}
 			byT.add(idOf(t), x);
 		}
@@ -1174,9 +1187,11 @@ public final class Stockpiles {
 				case "audit" -> {
 					return audit(srv, player, owner, req);
 				}
+				case "pause" -> Builder.setPaused(srv, req.get("site").getAsString(), !req.has("paused") || req.get("paused").getAsBoolean());
 				case "saved" -> {
 					JsonObject f = savedJson();
 					o.add("file", f == null ? new JsonObject() : f);
+					o.add("loaded", LOADED == null ? new JsonObject() : LOADED);
 					o.addProperty("saves", saves);
 					return o;
 				}
@@ -1257,6 +1272,7 @@ public final class Stockpiles {
 		o.add("legacyCrateStock", Builder.counts(crateStock));
 		Map<String, Integer> ents = new TreeMap<>();
 		Map<String, Integer> cont = new TreeMap<>();
+		JsonArray crateBlocks = new JsonArray();
 		if (req.has("min") && req.has("max")) {
 			BlockPos a = pos(req.getAsJsonArray("min"));
 			BlockPos b = pos(req.getAsJsonArray("max"));
@@ -1267,6 +1283,7 @@ public final class Stockpiles {
 				ents.merge(net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(e.getItem().getItem()).toString(), e.getItem().getCount(), Integer::sum);
 			}
 			o.addProperty("entityStacks", stacks);
+			o.add("crateBlocks", crateBlocks);
 			for (int cx = a.getX() >> 4; cx <= b.getX() >> 4; cx++) {
 				for (int cz = a.getZ() >> 4; cz <= b.getZ() >> 4; cz++) {
 					if (!level.hasChunk(cx, cz)) {
@@ -1274,8 +1291,15 @@ public final class Stockpiles {
 					}
 					for (BlockEntity be : level.getChunk(cx, cz).getBlockEntities().values()) {
 						BlockPos bp = be.getBlockPos();
-						if (be instanceof net.minecraft.world.Container c && !(be instanceof CrateBlockEntity) && bp.getX() >= a.getX() && bp.getX() <= b.getX()
-							&& bp.getY() >= a.getY() && bp.getY() <= b.getY() && bp.getZ() >= a.getZ() && bp.getZ() <= b.getZ()) {
+						boolean in = bp.getX() >= a.getX() && bp.getX() <= b.getX() && bp.getY() >= a.getY() && bp.getY() <= b.getY() && bp.getZ() >= a.getZ() && bp
+							.getZ() <= b.getZ();
+						if (in && be instanceof CrateBlockEntity crate) {
+							JsonObject cb = new JsonObject();
+							cb.addProperty("pos", bp.getX() + "," + bp.getY() + "," + bp.getZ());
+							cb.addProperty("owner", crate.siteId());
+							crateBlocks.add(cb);
+						}
+						if (be instanceof net.minecraft.world.Container c && !(be instanceof CrateBlockEntity) && in) {
 							for (int k = 0; k < c.getContainerSize(); k++) {
 								ItemStack st = c.getItem(k);
 								if (!st.isEmpty()) {
@@ -1355,11 +1379,15 @@ public final class Stockpiles {
 					PILES.put(p.owner, p);
 				}
 			}
+			LOADED = root.deepCopy();
 			Architect.LOGGER.info("Stockpiles: {} loaded", PILES.size());
 		} catch (IOException | RuntimeException e) {
 			Architect.LOGGER.warn("Could not read {}; no stockpiles loaded", f, e);
 		}
 	}
+
+	/** Dev: the file as this world session loaded it (the restart check compares it with the file the stop wrote). */
+	static @Nullable JsonObject LOADED;
 
 	/** Dev: the stockpile file as saved (the restart checks compare it). */
 	static @Nullable JsonObject savedJson() {
