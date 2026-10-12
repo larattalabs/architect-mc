@@ -186,6 +186,6 @@ export default function routeDemo(ctx) {
   }
   r.note(`route_demo: ${lots.length} lots ${sites.map((s) => `${s.x},${s.z}@${s.top}`).join(' ')}; ${net.edges.filter((e) => e.ok).length}/${edges.length} edges routed${flat ? ', on a flat world: a hill raised in stage ground' : ''}`);
 
-  r.meta.routeDemo = { flat, sites: sites.map((s, i) => ({ name: NAMES[i], kind: KINDS[i], at: [s.x, s.z], top: s.top })), hill: flat ? { height: HILL } : null };
+  r.meta.route.demo = { flat, sites: sites.map((s, i) => ({ name: NAMES[i], kind: KINDS[i], at: [s.x, s.z], top: s.top })), hill: flat ? { height: HILL } : null };
   return r;
 }

@@ -267,7 +267,8 @@ export class Region {
       if (typeof id !== 'string' || !PART_ID.test(id)) throw new Error(`${what}: edge id '${id}' must match ${PART_ID}`);
       const a = resolve(e.from), b = resolve(e.to);
       const movers = inferMovers(a.kind, b.kind, e.movers);
-      return { id, a, b, width: e.width ?? 3, type: e.type ?? ((e.width ?? 3) >= 5 ? 'road' : 'path'), movers, ladders: ladders && !movers.includes(VILLAGER) };
+      // (`_unsafe.villagerLadders`: the broken variant, a ladder on a villager edge for the checker to catch)
+      return { id, a, b, width: e.width ?? 3, type: e.type ?? ((e.width ?? 3) >= 5 ? 'road' : 'path'), movers, ladders: ladders && (!movers.includes(VILLAGER) || !!it._unsafe?.villagerLadders) };
     });
     if (new Set(edges.map((e) => e.id)).size !== edges.length) throw new Error(`${what}: edge ids must be unique`);
     // obstacles: lot footprints and aprons, forms, keep sets (x/z); keep-out (the owner's, read through ctx so the IR records it)
