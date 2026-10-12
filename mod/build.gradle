@@ -358,3 +358,45 @@ tasks.register("mcSources", Sync) {
 	into(layout.buildDirectory.dir("mcsrc"))
 	duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 }
+
+// Headless gates (docs/GATES.md "Headless gates"): the dev-only devserver mod (../devserver: the DevBridge on a dedicated
+// server, with a bot player and the sidecar link) joins runServer's classpath only when asked for (ARCHITECT_HEADLESS=1 or
+// -Pheadless). It is never a dependency of the published jar. `headlessLaunch` writes runServer's resolved java command to
+// build/headless-launch[-noapitest].json, so tools/run-headless-server.mjs restarts the server per world without Gradle.
+if (System.getenv("ARCHITECT_HEADLESS") == "1" || project.hasProperty("headless")) {
+	loom {
+		mods {
+			"architect_devserver" {
+				sourceSet("main", ":devserver")
+			}
+		}
+	}
+	dependencies {
+		localRuntime(project(":devserver")) {
+			transitive = false
+		}
+	}
+	def launchName = (System.getenv("ARCHITECT_APITEST") == "1" || project.hasProperty("apitest")) ? "headless-launch.json" : "headless-launch-noapitest.json"
+	def headlessLaunch = tasks.register("headlessLaunch") {
+		group = "architect"
+		description = "Resolve runServer's java command (dev-only headless gates)"
+		notCompatibleWithConfigurationCache("reads runServer's resolved launch configuration")
+		def out = layout.buildDirectory.file(launchName)
+		outputs.file(out)
+		outputs.upToDateWhen { false }
+		doLast {
+			def rs = tasks.getByName("runServer")
+			def json = [
+				java: rs.javaLauncher.get().executablePath.asFile.absolutePath,
+				jvmArgs: rs.allJvmArgs,
+				mainClass: rs.mainClass.get(),
+				classpath: rs.classpath.files.collect { it.absolutePath },
+				writtenAt: java.time.Instant.now().toString()
+			]
+			out.get().asFile.text = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(json)) + "\n"
+		}
+	}
+	afterEvaluate {
+		headlessLaunch.configure { dependsOn(tasks.getByName("runServer").taskDependencies) }
+	}
+}

@@ -1,0 +1,89 @@
+// devserver: a dev-only Fabric mod for the headless gates (docs/GATES.md "Headless gates"). On a dedicated server it runs the
+// DevBridge's server side: a line-JSON bridge that tools/run-headless-server.mjs fronts with the DevBridge's WebSocket, a bot
+// player (a real ServerPlayer, so occupancy, the PLAYER blocker and LOADED_ONLY behave as with a client), the sidecar
+// launcher and link, and the server-meaningful DevBridge hooks. It is never part of the shipped jar: the root project puts it
+// on runServer's classpath only when ARCHITECT_HEADLESS=1 (or -Pheadless) is set.
+//
+// The hooks that are pure server work are not copied by hand: `genHooks` derives them from the client's own sources
+// (mod/src/client/java/.../client/dev/{JournalDev,RegionDev,DeltaDev,SliceVDev,Fields}.java), changing only the package and
+// the ServerTasks import, so a hook a slice adds or changes there is the same headless. A client-only reference in one of
+// those files fails this build (the filter below names it).
+plugins {
+	id 'net.fabricmc.fabric-loom'
+}
+
+version = rootProject.version
+group = 'dev.larattalabs.devserver'
+
+base {
+	archivesName = 'architect_devserver'
+}
+
+dependencies {
+	minecraft "com.mojang:minecraft:${rootProject.minecraft_version}"
+	implementation "net.fabricmc:fabric-loader:${rootProject.loader_version}"
+	implementation "net.fabricmc.fabric-api:fabric-api:${rootProject.fabric_api_version}"
+	// Architect's internals (main source set; the sidecar link classes are compiled in here from the client sources: genHooks)
+	compileOnly(project(':')) {
+		exclude group: 'dev.larattalabs', module: 'lab_ui'
+	}
+}
+
+def generatedHooks = layout.buildDirectory.dir("generated/hooks")
+def clientDev = rootProject.file("src/client/java/dev/larattalabs/architect/client/dev")
+def clientSidecar = rootProject.file("src/client/java/dev/larattalabs/architect/client/sidecar")
+def genHooks = tasks.register("genHooks", Sync) {
+	into(generatedHooks)
+	from(clientDev) {
+		include "JournalDev.java", "RegionDev.java", "RegionDev6b.java", "DeltaDev.java", "SliceVDev.java", "SliceWDev.java", "StockpileDev.java", "Fields.java"
+		into("dev/larattalabs/architect/devserver/gen")
+		filter { String line ->
+			if (line.startsWith("package dev.larattalabs.architect.client.dev;")) {
+				return "package dev.larattalabs.architect.devserver.gen;"
+			}
+			if (line.startsWith("import dev.larattalabs.architect.client.world.ServerTasks;")
+				|| line.startsWith("import dev.larattalabs.architect.client.dev.DevBridge.DevException;")) {
+				return line.replace("dev.larattalabs.architect.client.world.", "dev.larattalabs.architect.devserver.gen.")
+					.replace("dev.larattalabs.architect.client.dev.", "dev.larattalabs.architect.devserver.gen.")
+			}
+			// RegionDev6b: the ghost, the sidecar and the camera come from the headless stand-ins of the same names in the gen package
+			// (RegionGhost answers client-only; Sidecar is the devserver's link; DevCommands.camera moves the bot)
+			if (line.startsWith("import dev.larattalabs.architect.client.placement.RegionGhost;")
+				|| line.startsWith("import dev.larattalabs.architect.client.sidecar.Sidecar;") || line.startsWith("import net.minecraft.client.Minecraft;")) {
+				return ""
+			}
+			line = line.replace("static Minecraft mc()", "static Mc mc()").replace("Minecraft.getInstance()", "Mc.INSTANCE")
+			// the handler's game parameter (unused by these hooks but passed along) is the headless host's stand-in
+			line = line.replace("net.minecraft.client.Minecraft ", "dev.larattalabs.architect.devserver.gen.Mc ")
+			// the delta ghost renders on the client: headless, dev.site.delta.preview answers that it is client-only
+			line = line.replace("dev.larattalabs.architect.client.placement.DeltaGhost.request(", "ClientOnly.deltaGhost(")
+			if (line.contains("dev.larattalabs.architect.client.") || line.contains("net.minecraft.client.")) {
+				throw new GradleException("devserver genHooks: a client-only reference in a generated hook file (move that hook out of the list, "
+					+ "or port it by hand in devserver/): " + line.trim())
+			}
+			return line
+		}
+	}
+	// the sidecar link and state, as they are (no Minecraft client code; the client source set is not on a server's classpath)
+	from(clientSidecar) {
+		include "SidecarLink.java", "SidecarState.java", "LinkStatus.java"
+		into("dev/larattalabs/architect/client/sidecar")
+	}
+}
+sourceSets.main.java.srcDir(genHooks)
+
+processResources {
+	def version = project.version
+	inputs.property "version", version
+	filesMatching("fabric.mod.json") {
+		expand "version": version
+	}
+}
+
+tasks.withType(JavaCompile).configureEach {
+	it.options.release = 25
+	it.options.encoding = "UTF-8"
+}
+
+// devserver never runs on its own: the root project's runServer loads it (ARCHITECT_HEADLESS=1)
+tasks.matching { it.name == "runClient" || it.name == "runServer" }.configureEach { enabled = false }

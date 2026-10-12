@@ -204,7 +204,7 @@ steps.stale = async () => {
   out.oldKit.evalTile = wrote;
   check(typeof wrote === 'string' && wrote.startsWith('refused: PLAN_STALE'), `item 11: the v0.20.0 evaluator writes nothing (${wrote})`);
   // the v0.20.0 mod jar's IrStale on the same IR (its own compiled class, run with gson)
-  const jar = path.join(MAIN_ART(), 'gate6c-t1', 'v0200', 'architect_mc-0.20.0.jar');
+  const jar = path.join(MAIN_ART(), 'gate6c-sch', 'v0200', 'architect_mc-0.20.0.jar');
   const gson = execFileSync('sh', ['-c', `ls '${path.join(root, '.gradle-home')}'/caches/modules-2/files-2.1/com.google.code.gson/gson/*/*/gson-*.jar | grep -v sources | head -1`]).toString().trim();
   const src = path.join(dir, 'Stale.java');
   fs.writeFileSync(src, 'import com.google.gson.*;\npublic class Stale { public static void main(String[] a) throws Exception { for (String f : a) { JsonObject ir = JsonParser.parseString(java.nio.file.Files.readString(java.nio.file.Path.of(f))).getAsJsonObject(); System.out.println(dev.larattalabs.architect.region.IrStale.reason(ir, null)); } } }\n');

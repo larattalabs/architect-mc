@@ -81,7 +81,8 @@ async function startClient(world, env = {}) {
   if (fs.existsSync(opts)) fs.writeFileSync(opts, fs.readFileSync(opts, 'utf8').replace(/^enableVsync:true$/m, 'enableVsync:false'));
   fs.rmSync(path.join(GAME_DIR, 'architect', 'devbridge.token'), { force: true });
   const out = fs.openSync(path.join(OUT, 'client.log'), 'a');
-  const p = spawn(path.join(RUN, 'tools', 'run-gate6a-client.sh'), [], { cwd: RUN, detached: true, stdio: ['ignore', out, out],
+  // GATE6A_CLIENT_SCRIPT: another launch script in the run worktree (headless gates: tools/run-headless-server.mjs, HEADLESS_SIDECAR=sim)
+  const p = spawn(path.join(RUN, process.env.GATE6A_CLIENT_SCRIPT || 'tools/run-gate6a-client.sh'), [], { cwd: RUN, detached: true, stdio: ['ignore', out, out],
     env: { ...process.env, ARCHITECT_PORT: String(SIDECAR_PORT), ARCHITECT_DEV_PORT: String(PORT), ARCHITECT_AUTOWORLD_NAME: world, ...env } });
   p.unref();
   await connect(900_000);
@@ -742,10 +743,10 @@ steps.heap = async () => {
 
 steps.apijars = async () => {
   const runs = [
-    // (6c T1) the unchanged 1.17.0, 1.16.0 and 1.15.0 jars, each built from its tag (v0.20.0 by T1; v0.19.0 and v0.18.0 by Y1)
-    { api: '1.17.0', dir: path.join(MAIN, 'artifacts', 'gate6c-t1', 'v0200'), jar: 'architect_apitest-0.20.0.jar', world: 'G6A Api117' },
-    { api: '1.16.0', dir: path.join(MAIN, 'artifacts', 'gate6c-y1', 'v0190'), jar: 'architect_apitest-0.19.0.jar', world: 'G6A Api116' },
-    { api: '1.15.0', dir: path.join(MAIN, 'artifacts', 'gate6c-y1', 'v0180'), jar: 'architect_apitest-0.18.0.jar', world: 'G6A Api115' },
+    // (v0.21.0, T1 and SCH) the unchanged 1.17.0, 1.16.0 and 1.15.0 jars: SCH's complete sets (each built from its tag, with its tools/)
+    { api: '1.17.0', dir: path.join(MAIN, 'artifacts', 'gate6c-sch', 'v0200'), jar: 'architect_apitest-0.20.0.jar', world: 'G6A Api117' },
+    { api: '1.16.0', dir: path.join(MAIN, 'artifacts', 'gate6c-sch', 'v0190'), jar: 'architect_apitest-0.19.0.jar', world: 'G6A Api116' },
+    { api: '1.15.0', dir: path.join(MAIN, 'artifacts', 'gate6c-sch', 'v0180'), jar: 'architect_apitest-0.18.0.jar', world: 'G6A Api115' },
   ];
   const mods = path.join(GAME_DIR, 'mods');
   const out = {};

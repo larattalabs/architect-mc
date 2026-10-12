@@ -29,6 +29,8 @@
 //                                         free one; a slot held by a dead pid counts as free. Separate from the per-run --lock.
 //   --judge-timing         in change/slice timing bars (lines `FAIL BAR ...`) are recorded, not judged; this judges them as at release
 //   --quiet-wait [load]    on by default at release (load 8); opt-in elsewhere. --no-quiet-wait turns it off
+//   --host auto|client|server  GATE_HOST  where steps run (tools/lib/hosts.mjs): auto (default) runs the steps marked
+//                                         "host": "server" on a headless server, the rest on clients; client runs all on clients
 //   --seed-dir DIR         GATE_SEED_DIR  read-only source of .gradle-home, node_modules and the gate worlds (../architect-mc-6a-run)
 //                          GATE_SNAPSHOT_DIR  prepared worlds restored by APFS clone (the seed's mod/run/saves)
 //                          GATE_NOTIFY=send|dry, GATE_NOTIFY_SCRIPT (~/Developer/_infra/discord-notify.sh); off by default
@@ -49,6 +51,7 @@ import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { DevClient } from './lib/devclient.mjs';
 import { changedFiles, describeImpact, impactOf, validateImpact } from './gate-impact.mjs';
+import { HEADLESS_SCRIPT, applyHosts } from './lib/hosts.mjs';
 
 const SRC = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const MAIN = path.resolve(SRC, '..', 'architect-mc');
@@ -57,7 +60,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // ------------------------------------------------------------------ arguments and config
 
 const argv = process.argv.slice(2);
-const VALUED = ['--config', '--only', '--from', '--since', '--range', '--files', '--release', '--shards', '--ports', '--run-dir', '--run-dirs', '--out', '--lock', '--slots', '--slots-dir', '--seed-dir', '--quiet-max-min'];
+const VALUED = ['--config', '--only', '--from', '--since', '--range', '--files', '--release', '--shards', '--ports', '--run-dir', '--run-dirs', '--out', '--lock', '--slots', '--slots-dir', '--seed-dir', '--quiet-max-min', '--host'];
 const flag = (f) => argv.includes(f);
 const opt = (f) => {
   const i = argv.indexOf(f);
@@ -66,6 +69,14 @@ const opt = (f) => {
 const CONFIG_PATH = path.resolve(opt('--config') ?? path.join(SRC, 'tools', 'gate-chains.json'));
 const cfg = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));
 const TIERS = ['change', 'slice', 'release'];
+// where each step runs: a dev client or a headless server (tools/lib/hosts.mjs; docs/GATES.md "Headless gates")
+let HOSTS;
+try {
+  HOSTS = applyHosts(cfg, opt('--host') ?? process.env.GATE_HOST ?? 'auto');
+} catch (e) {
+  console.error(`gate-run: ${e.message}`);
+  process.exit(2);
+}
 const chainName = argv.find((a, i) => !a.startsWith('--') && !VALUED.includes(argv[i - 1]) && !(argv[i - 1] === '--quiet-wait' && /^\d/.test(a)));
 const ORDER = Object.keys(cfg.steps); // the canonical step order: chains and tiers run in it
 
@@ -336,7 +347,7 @@ for (const sh of shards) {
 // steps: only $0 commands; clients: only the stub/sim scripts
 const PAID = /(-real\b|--tier\s+(smoke|full)\b|--backend\s+claude\b|--use-claude-login\b|\bpaid\b)/;
 const SAFE_CLIENTS = new Set(['tools/run-gate4d-client.sh', 'tools/run-gate4e-client.sh', 'tools/run-gate5b-client.sh', 'tools/run-gate6a-client.sh',
-  'tools/run-gate6b-client.sh', 'tools/run-gate6c0a-client.sh']);
+  'tools/run-gate6b-client.sh', 'tools/run-gate6c0a-client.sh', HEADLESS_SCRIPT]);
 for (const id of stepIds) {
   const s = cfg.steps[id];
   if (!s) die(`chain ${chainName}: unknown step ${id}`);
@@ -599,6 +610,7 @@ function printSelection() {
 }
 
 function printPlan() {
+  { const hs = HOSTS.server.filter((id) => stepIds.includes(id)); console.log(`hosts: --host ${HOSTS.mode}; headless: ${hs.length ? hs.join(' ') : 'none'}`); }
   const head = git(SRC, 'rev-parse', '--short', 'HEAD');
   printSelection();
   console.log(`${tierInfo.kind === 'tier' ? 'tier' : 'chain'} ${chainName}: ${steps.length} steps, worst case ${fmtDur(totalTimeout * 60)} of step timeouts (+ client starts, ${cfg.clientStartMin} min cap each)`);
@@ -715,7 +727,7 @@ const summary = {
   shards: shards.map((s) => ({ k: s.k, runDir: s.RUN, ports: { sidecar: s.SIDECAR_PORT, dev: s.DEV_PORT }, evidence: path.relative(OUT, s.ev) || '.' })),
   tier: tierInfo.kind === 'tier' ? { name: tierInfo.tier, range: tierInfo.range ?? null, engine: tierInfo.engine, placement: tierInfo.placement, impact: tierInfo.impact ?? null,
     rotationKey: tierInfo.rotationKey ?? null, rotationSource: tierInfo.rotationSource ?? null, rotation: tierInfo.rotation ?? null, notes: tierInfo.notes } : null,
-  counts: {}, setup: null, slot: slotNote, timingPolicy: RECORD_TIMING ? 'recorded' : 'judged', timingRecorded: [],
+  counts: {}, setup: null, slot: slotNote, hosts: { mode: HOSTS.mode, server: HOSTS.server.filter((id) => stepIds.includes(id)) }, timingPolicy: RECORD_TIMING ? 'recorded' : 'judged', timingRecorded: [],
   steps: steps.map((s) => ({ id: s.id, desc: s.desc, status: 'PENDING', timeoutMin: s.timeoutMin, ...(tierInfo.why?.[s.id] ? { why: tierInfo.why[s.id] } : {}) })),
 };
 const writeSummary = () => {
@@ -840,6 +852,10 @@ async function startClient(sh, key) {
   child.unref();
   let exited = null;
   child.on('exit', (code) => (exited = code));
+  child.on('error', (e) => {
+    exited = -1;
+    log(`  client script ${c.script} did not start: ${e.message}`, sh);
+  });
   const end = Date.now() + cfg.clientStartMin * 60_000;
   let dev = null;
   while (Date.now() < end && exited === null) {
