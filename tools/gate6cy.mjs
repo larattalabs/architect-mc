@@ -621,11 +621,17 @@ steps.unloaded = async () => {
   check(json(o) === json([ids.A, ids.B, ids.C]), `unloaded: feed order A, B, C (${json(o)})`);
   // wait until A's chunks are unloaded (its frontier unloaded: it doesn't reserve)
   let st;
-  for (let i = 0; i < 90; i++) {
+  const abox = box((await siteOf(ids.A)).restoreBox);
+  const chunkBox = [abox.min[0], abox.min[2], abox.max[0], abox.max[2]];
+  out.chunks = [];
+  for (let i = 0; i < 120; i++) {
     st = await pstate();
+    const cs = await call('dev.chunks.status', { box: chunkBox }, 60_000);
+    if (i % 10 === 0) out.chunks.push([i, cs.loaded, st.targets[ids.A]?.frontierLoaded]);
     if (st.targets[ids.A]?.frontierLoaded === false) break;
     await sleep(1000);
   }
+  log(`  A's chunks while waiting: ${json(out.chunks)}`);
   check(st.targets[ids.A]?.frontierLoaded === false && st.targets[ids.A]?.reserves === false, `unloaded: A's whole frontier is in unloaded chunks: it doesn't reserve (${json(st.targets[ids.A])})`);
   const cons = new Conservation(f.area);
   await cons.start();
@@ -675,7 +681,7 @@ async function airCells(twinBox, dz, n) {
   for (const line of cells) {
     const sp = line.indexOf(' ');
     const [x, y, z] = line.slice(0, sp).split(',').map(Number);
-    if (/^minecraft:air$/.test(line.slice(sp + 1)) && y > twinBox.min[1] + 1 && y < twinBox.max[1] - 1) air.push([x, y, z - dz, Math.abs(x - cx) + Math.abs(z - cz)]);
+    if (/^\{id:"minecraft:air"\}/.test(line.slice(sp + 1)) && y > twinBox.min[1] + 1 && y < twinBox.max[1] - 1) air.push([x, y, z - dz, Math.abs(x - cx) + Math.abs(z - cz)]);
   }
   air.sort((p, q) => p[3] - q[3] || p[1] - q[1]);
   return air.slice(0, n).map((c) => c.slice(0, 3));
@@ -697,6 +703,7 @@ steps.refunds = async () => {
   check((await waitBuilt(Object.values(ids))).length === 3, 'refunds: two houses and the road BUILT');
   // the player's blocks: 3 stone in air cells of house 1 (not queued)
   const hand = await airCells(box((await siteOf(tw.siteId)).restoreBox), DZ, 3);
+  check(hand.length === 3, `refunds: three air cells of house 1 for the player's blocks (${json(hand)})`);
   for (const c of hand) await cmd(`/setblock ${c[0]} ${c[1]} ${c[2]} minecraft:stone`);
   cons.add({ 'minecraft:stone': hand.length }, cons.injected);
   cons.add({ 'minecraft:stone': hand.length }, cons.hand);

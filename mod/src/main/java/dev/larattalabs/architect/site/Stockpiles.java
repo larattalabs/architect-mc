@@ -1188,6 +1188,17 @@ public final class Stockpiles {
 					return audit(srv, player, owner, req);
 				}
 				case "pause" -> Builder.setPaused(srv, req.get("site").getAsString(), !req.has("paused") || req.get("paused").getAsBoolean());
+				case "tickets" -> {
+					// dev: the vanilla tickets on a chunk (what keeps it loaded)
+					BlockPos at = pos(req.getAsJsonArray("pos"));
+					ServerLevel lv = (ServerLevel) player.level();
+					net.minecraft.world.level.TicketStorage ts = lv.getDataStorage().computeIfAbsent(net.minecraft.world.level.TicketStorage.TYPE);
+					long key = net.minecraft.world.level.ChunkPos.pack(at.getX() >> 4, at.getZ() >> 4);
+					o.addProperty("loaded", lv.isLoaded(at));
+					o.addProperty("loading", ts.getTicketDebugString(key, false));
+					o.addProperty("simulation", ts.getTicketDebugString(key, true));
+					return o;
+				}
 				case "saved" -> {
 					JsonObject f = savedJson();
 					o.add("file", f == null ? new JsonObject() : f);
