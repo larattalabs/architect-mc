@@ -1496,27 +1496,38 @@ public final class Stockpiles {
 		}
 		try {
 			JsonObject root = JsonParser.parseString(Files.readString(f, StandardCharsets.UTF_8)).getAsJsonObject();
-			nextId = root.has("nextId") ? root.get("nextId").getAsLong() : 1;
-			// ids already taken in the file are never handed out again
-			if (root.has("stockpiles")) {
-				for (JsonElement e : root.getAsJsonArray("stockpiles")) {
-					JsonObject x = e.getAsJsonObject();
-					if (x.has("id") && x.get("id").getAsString().matches("sp\\d+")) {
-						nextId = Math.max(nextId, Long.parseLong(x.get("id").getAsString().substring(2)) + 1);
-					}
-				}
-			}
-			if (root.has("stockpiles")) {
-				for (JsonElement e : root.getAsJsonArray("stockpiles")) {
-					Pile p = Pile.fromJson(e.getAsJsonObject());
-					PILES.put(p.id, p);
-				}
-			}
+			readInto(root);
 			LOADED = root.deepCopy();
 			Architect.LOGGER.info("Stockpiles: {} loaded", PILES.size());
 		} catch (IOException | RuntimeException e) {
 			Architect.LOGGER.warn("Could not read {}; no stockpiles loaded", f, e);
 		}
+	}
+
+	/**
+	 * Reads a parsed {@code stockpiles.json} into the registry (replacing it). Ids already in the file are never handed out again; a
+	 * stockpile without an id (a file of a pre-release Y1 build) gets the next free one. Pure apart from the registry.
+	 */
+	static void readInto(JsonObject root) {
+		PILES.clear();
+		nextId = root.has("nextId") ? root.get("nextId").getAsLong() : 1;
+		if (root.has("stockpiles")) {
+			for (JsonElement e : root.getAsJsonArray("stockpiles")) {
+				JsonObject x = e.getAsJsonObject();
+				if (x.has("id") && x.get("id").getAsString().matches("sp\\d+")) {
+					nextId = Math.max(nextId, Long.parseLong(x.get("id").getAsString().substring(2)) + 1);
+				}
+			}
+			for (JsonElement e : root.getAsJsonArray("stockpiles")) {
+				Pile p = Pile.fromJson(e.getAsJsonObject());
+				PILES.put(p.id, p);
+			}
+		}
+	}
+
+	/** The id the next new stockpile gets (tests). */
+	static String peekNextId() {
+		return "sp" + nextId;
 	}
 
 	/** Dev: the file as this world session loaded it (the restart check compares it with the file the stop wrote). */

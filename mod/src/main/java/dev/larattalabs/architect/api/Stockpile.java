@@ -10,7 +10,7 @@ import net.minecraft.world.level.Level;
 /**
  * An owner's settlement stockpile (C24, docs/CONTRACT.md phase 6c slice Y): a ledger with block inlets. Every new construction
  * item of the owner draws from it. Per item, {@code stock = delivered + returned - consumed - withdrawn - dropped}; refunds that
- * did not fit are in {@code refundOverflow}, outside that identity. Since 1.18.0.
+ * did not fit are in {@code refundOverflow}, outside that identity. Since 1.17.0.
  *
  * @param crates the crate cells (missing ones included, see {@code missingCrates})
  * @param capacityStacks 27 stacks per present crate
@@ -20,7 +20,7 @@ import net.minecraft.world.level.Level;
  * @param outstandingByTarget per building target, what its unbuilt cells cost
  * @param outstanding the sum of {@code outstandingByTarget}
  * @param feedOrder the building targets, first fed first
- * @param waiting C25's waits per target (slice Y2; empty in 1.18.0)
+ * @param waiting C25's waits per target (slice Y2; empty in 1.17.0)
  * @param missingCrates crate cells whose block is gone (they hold nothing: capacity drops by 27 stacks each)
  */
 public record Stockpile(String owner, ResourceKey<Level> dimension, List<BlockPos> crates, int capacityStacks, int usedStacks,

@@ -8,7 +8,7 @@ import net.minecraft.world.level.Level;
 /**
  * {@link Sites#createStockpile} (C24): the owner's stockpile in one dimension, with the cells its crates go on (each into air or
  * a replaceable block, outside every standing site's restore box and every protected area of another owner; at most
- * {@link Limits#STOCKPILE_CRATES}). Since 1.18.0.
+ * {@link Limits#STOCKPILE_CRATES}). Since 1.17.0.
  *
  * @param owner {@code <modid>:<thing>} (required)
  * @param dimension the stockpile's one dimension (S-Y-6)

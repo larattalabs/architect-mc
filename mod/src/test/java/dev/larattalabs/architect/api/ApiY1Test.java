@@ -12,15 +12,15 @@ import java.util.Set;
 import org.junit.jupiter.api.Test;
 
 /**
- * API 1.18.0 (docs/CONTRACT.md phase 6c slice Y1, C24): the stockpile methods are defaults that throw on an older implementation,
+ * API 1.17.0 (docs/CONTRACT.md phase 6c slice Y1, C24): the stockpile methods are defaults that throw on an older implementation,
  * the records have the frozen shapes (Y2's SiteWait and ItemCount included), STOCKPILE_CHANGED is a new static field, and no
  * Reason is added.
  */
-class Api118Test {
+class ApiY1Test {
 	@Test
 	void version() {
 		String[] v = ArchitectApi.VERSION.split("\\.");
-		assertTrue(Integer.parseInt(v[0]) == 1 && Integer.parseInt(v[1]) >= 18, ArchitectApi.VERSION);
+		assertTrue(Integer.parseInt(v[0]) == 1 && Integer.parseInt(v[1]) >= 17, ArchitectApi.VERSION);
 	}
 
 	@Test
@@ -33,7 +33,7 @@ class Api118Test {
 
 	@Test
 	void newMethodsAreDefaultsThatThrow() throws Exception {
-		// an implementation written before 1.18.0: only the default methods run
+		// an implementation written before 1.17.0: only the default methods run
 		Sites old = (Sites) java.lang.reflect.Proxy.newProxyInstance(Sites.class.getClassLoader(), new Class<?>[] {Sites.class}, (p, m, args) -> m.isDefault()
 			? java.lang.reflect.InvocationHandler.invokeDefault(p, m, args) : null);
 		for (Method m : Sites.class.getMethods()) {
@@ -43,7 +43,7 @@ class Api118Test {
 			}
 		}
 		UnsupportedOperationException e = assertThrows(UnsupportedOperationException.class, () -> old.stockpile("test:x"));
-		assertTrue(e.getMessage().contains("1.18.0"), e.getMessage());
+		assertTrue(e.getMessage().contains("1.17.0"), e.getMessage());
 		assertThrows(UnsupportedOperationException.class, () -> old.feedOrder("test:x"));
 		assertThrows(UnsupportedOperationException.class, () -> old.adoptCrates("test:x"));
 		assertThrows(UnsupportedOperationException.class, () -> old.dissolveStockpile("test:x", null));

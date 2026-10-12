@@ -263,7 +263,7 @@ public interface SiteEvents {
 	});
 	/**
 	 * An owner's stockpile changed (C24): a delivery, a consumption, a return, a withdrawal or a crate change. At most once per 20
-	 * ticks per owner (a change since the last event fires the next one). Server thread. Since 1.18.0.
+	 * ticks per owner (a change since the last event fires the next one). Server thread. Since 1.17.0.
 	 */
 	Event<StockpileChanged> STOCKPILE_CHANGED = EventFactory.createArrayBacked(StockpileChanged.class, ls -> owner -> {
 		for (StockpileChanged l : ls) {

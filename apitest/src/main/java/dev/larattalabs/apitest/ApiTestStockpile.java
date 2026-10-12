@@ -23,9 +23,9 @@ import net.minecraft.resources.Identifier;
 import net.minecraft.world.item.Item;
 
 /**
- * The 6c slice Y1 API checks (docs/CONTRACT.md "Phase 6c slice Y", C24, API 1.18.0), through dev.larattalabs.architect.api only:
+ * The 6c slice Y1 API checks (docs/CONTRACT.md "Phase 6c slice Y", C24, API 1.17.0), through dev.larattalabs.architect.api only:
  * <pre>
- * api118                                  version, the features, Limits.STOCKPILE_CRATES
+ * apiy1                                  version, the features, Limits.STOCKPILE_CRATES
  * pcreate {owner, crates: [[x,y,z]...]}    Sites.createStockpile (the player's dimension)
  * paddcrate &lt;owner&gt; &lt;x&gt; &lt;y&gt; &lt;z&gt;           Sites.addStockpileCrate
  * premove &lt;owner&gt; &lt;x&gt; &lt;y&gt; &lt;z&gt; [force]     Sites.removeStockpileCrate
@@ -54,7 +54,7 @@ final class ApiTestStockpile {
 		Sites sites = api.sites(src.getServer());
 		try {
 			switch (a[0]) {
-				case "api118": {
+				case "apiy1": {
 					JsonObject o = new JsonObject();
 					o.addProperty("version", ArchitectApi.VERSION);
 					JsonArray f = new JsonArray();

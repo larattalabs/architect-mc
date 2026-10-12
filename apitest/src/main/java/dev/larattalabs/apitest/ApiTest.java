@@ -315,7 +315,7 @@ public class ApiTest implements ModInitializer {
 			case "api110": {
 				return ApiTest0a.step(src, a);
 			}
-			case "api118":
+			case "apiy1":
 			case "pcreate":
 			case "paddcrate":
 			case "premove":
@@ -324,7 +324,7 @@ public class ApiTest implements ModInitializer {
 			case "pwithdraw":
 			case "padopt":
 			case "pdissolve": {
-				return ApiTestStockpile.step(src, a); // 6c Y1 (API 1.18.0)
+				return ApiTestStockpile.step(src, a); // 6c Y1 (API 1.17.0)
 			}
 			case "api112":
 			case "protect":

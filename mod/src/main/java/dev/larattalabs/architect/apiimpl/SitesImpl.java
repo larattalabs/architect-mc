@@ -632,7 +632,7 @@ final class SitesImpl implements dev.larattalabs.architect.api.Sites {
 	public List<dev.larattalabs.architect.api.ProtectedArea> protectedAreas(@Nullable String owner) {
 		return dev.larattalabs.architect.site.Protected.list(owner);
 	}
-	// ------------------------------------------------------------------ 1.18.0 (6c Y, C24): stockpiles
+	// ------------------------------------------------------------------ 1.17.0 (6c Y, C24): stockpiles
 
 	private static ArchitectRefused refused(Sites.SiteException e) {
 		return new ArchitectRefused(e.reason(), e.getMessage());

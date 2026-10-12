@@ -6,7 +6,7 @@
 //
 //   node tools/gate6cy.mjs <step>
 //     start [world] | stop | base   the client (GATE6CY_REF: another build, e.g. v0.17.0 for the migration) and the survival base world
-//     unit                          item 1 (Y1's part, no game): StockpileTest, FeedOrderTest, Api118Test
+//     unit                          item 1 (Y1's part, no game): StockpileTest, FeedOrderTest, ApiY1Test
 //     store                         item 2 + 4: one storehouse (3 crates) feeds 3 houses, a batch road, a standalone construction road,
 //                                   an update delta and a survival revert; 0 other crates; each BUILT target equals its INSTANT twin;
 //                                   the conservation sum at 10+ checkpoints
@@ -1216,7 +1216,7 @@ steps.migrate = async () => {
 
 steps.unit = async () => {
   const env = { ...process.env, JAVA_HOME: process.env.JAVA_HOME ?? '/opt/homebrew/opt/openjdk@25', GRADLE_USER_HOME: process.env.GRADLE_USER_HOME ?? path.join(root, '.gradle-home') };
-  const g = spawnSync('./gradlew', ['test', '--offline', '--tests', '*StockpileTest', '--tests', '*FeedOrderTest', '--tests', '*Api118Test', '--tests', '*LedgerTest'],
+  const g = spawnSync('./gradlew', ['test', '--offline', '--tests', '*StockpileTest', '--tests', '*FeedOrderTest', '--tests', '*ApiY1Test', '--tests', '*StockpileFileTest', '--tests', '*LedgerTest'],
     { cwd: path.join(root, 'mod'), env, encoding: 'utf8', timeout: 1_800_000 });
   const xml = (n) => {
     const f = path.join(root, 'mod', 'build', 'test-results', 'test', `TEST-dev.larattalabs.architect.${n}.xml`);
@@ -1224,9 +1224,9 @@ steps.unit = async () => {
     const m = /tests="(\d+)" skipped="(\d+)" failures="(\d+)" errors="(\d+)"/.exec(t);
     return m ? { tests: +m[1], failures: +m[3] + +m[4] } : null;
   };
-  const out = { code: g.status, stockpile: xml('survival.StockpileTest'), feedOrder: xml('site.FeedOrderTest'), api118: xml('api.Api118Test') };
-  check(g.status === 0 && out.stockpile?.tests >= 9 && !out.stockpile.failures && out.feedOrder?.tests >= 6 && !out.feedOrder.failures && out.api118?.tests >= 5
-    && !out.api118.failures, `item 1 (Y1): StockpileTest ${json(out.stockpile)} (identity, capacity in stacks, credit once, overflow, adoption, bucket), FeedOrderTest ${json(out.feedOrder)} (default order, setFront, reservations), Api118Test ${json(out.api118)}`);
+  const out = { code: g.status, stockpile: xml('survival.StockpileTest'), feedOrder: xml('site.FeedOrderTest'), apiy1: xml('api.ApiY1Test'), file: xml('site.StockpileFileTest') };
+  check(g.status === 0 && out.stockpile?.tests >= 9 && !out.stockpile.failures && out.feedOrder?.tests >= 6 && !out.feedOrder.failures && out.apiy1?.tests >= 5
+    && !out.apiy1.failures && out.file?.tests >= 2 && !out.file.failures, `item 1 (Y1): StockpileFileTest ${json(out.file)} (an id-less file loads, ids never reused), StockpileTest ${json(out.stockpile)} (identity, capacity in stacks, credit once, overflow, adoption, bucket), FeedOrderTest ${json(out.feedOrder)} (default order, setFront, reservations), ApiY1Test ${json(out.apiy1)}`);
   spendZero();
   return out;
 };
@@ -1247,8 +1247,8 @@ steps.apicompat = async () => {
   fs.writeFileSync(path.join(OUT, 'api-compat.txt'), `${lines.join('\n\n')}\n\n${ok}/${jars.length} clean\n`);
   if (state.dev || (await connect(5_000).then(() => true).catch(() => false))) {
     if (!(await call('dev.state')).inWorld) await openWorld(SURV);
-    const v = await api('api118');
-    check(v.version === '1.18.0' && v.features.includes('stockpile') && v.stockpileCrates === 16, `item 14: apitest api118 (${json(v)})`);
+    const v = await api('apiy1');
+    check(v.version === '1.17.0' && v.features.includes('stockpile') && v.stockpileCrates === 16, `item 14: apitest apiy1 (${json(v)})`);
   }
   spendZero();
   return { ok, of: jars.length };
