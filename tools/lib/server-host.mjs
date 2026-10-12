@@ -62,7 +62,9 @@ function serverProperties(spec, o) {
     difficulty: spec.mode === 'hardcore' ? 'hard' : 'peaceful',
     // the dev client's integrated server: render distance 16 (view distance), simulation distance 10, no sync writes on macOS
     'view-distance': String(o.viewDistance), 'simulation-distance': String(o.simulationDistance), 'sync-chunk-writes': 'false',
-    'pause-when-empty-seconds': '0', 'spawn-protection': '0', 'max-players': '4', 'enable-command-block': 'true', 'allow-flight': 'true',
+    'pause-when-empty-seconds': '0',
+    // no watchdog: an integrated server has none, and a long hook (a 1000x1000 dev.region.hash) runs on the server thread
+    'max-tick-time': '-1', 'spawn-protection': '0', 'max-players': '4', 'enable-command-block': 'true', 'allow-flight': 'true',
     'enable-query': 'false', 'enable-rcon': 'false', 'enable-status': 'false', 'white-list': 'false', 'enforce-secure-profile': 'false',
     motd: 'Architect headless gate server', 'op-permission-level': '4', 'function-permission-level': '2', 'log-ips': 'false',
   };
