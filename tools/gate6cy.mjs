@@ -51,6 +51,8 @@ refuseKeys();
 const SURV = 'G6B Y Survival';
 const OWNER = 'test:settle';
 const json = (o) => String(JSON.stringify(o)).replaceAll(' ', '');
+/** JSON with every object's keys sorted (API maps are unordered). */
+const canon = (o) => JSON.stringify(o, (k, v) => (v && typeof v === 'object' && !Array.isArray(v) ? Object.fromEntries(Object.entries(v).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) : v));
 const sum = (m) => Object.values(m ?? {}).reduce((a, b) => a + b, 0);
 /** Two item maps equal per item (key order aside; zero counts ignored). */
 const same = (a, b) => { const k = new Set([...Object.keys(a ?? {}), ...Object.keys(b ?? {})]); for (const x of k) if ((a?.[x] ?? 0) !== (b?.[x] ?? 0)) return false; return true; };
@@ -1100,12 +1102,12 @@ steps.migrate = async () => {
     let stock;
     for (let i = 0; i < 30; i++) {
       stock = await api(`stock ${m.group}`);
-      if (json(stock) === json(m.stock)) break;
+      if (canon(stock) === canon(m.stock)) break;
       await sleep(1000);
     }
     const s3 = await siteState(m.ids.s3);
-    const diffs = ['delivered', 'credit', 'outstandingBySite', 'outstanding', 'crate'].filter((k) => json(stock[k]) !== json(m.stock[k]));
-    check(json(stock) === json(m.stock), `item 12: the 0.17.0 world loads unchanged: Stock of the group equal (${diffs.length ? `differing: ${json(diffs)}` : json(stock).slice(0, 120)})`);
+    const diffs = ['delivered', 'credit', 'outstandingBySite', 'outstanding', 'crate'].filter((k) => canon(stock[k]) !== canon(m.stock[k]));
+    check(canon(stock) === canon(m.stock), `item 12: the 0.17.0 world loads unchanged: Stock of the group equal (${diffs.length ? `differing: ${json(diffs)}` : json(stock).slice(0, 120)})`);
     check(json(s3.ledger) === json(m.s3.ledger) && s3.crate?.present === true && s3.stockpile === undefined, 'item 12: the per-site crate and its ledger unchanged');
     const saved = await pile('saved');
     check(Object.keys(saved.file ?? {}).length === 0, 'item 12: no stockpile file in an old world (no stockpile, no change)');
