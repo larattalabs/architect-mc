@@ -23,6 +23,10 @@ Steward (`../steward-mc`) is the main consumer of the API.
 - **Scope is frozen per slice.** New ideas go into the next slice unless they block the current one.
 - **Branches:** work on `slice/<x>` (or `phase/<x>`) in a worktree (`../architect-mc-<x>`). Never commit to main directly.
   Slices may run **in parallel** on separate worktrees and ports; merge `origin/main` into your branch when another slice lands.
+- **Gate policy (Noah, 2026-10-12; docs/GATES.md "Policy update"):** timing bars never block a slice (recorded; judged once
+  per batch at release); `slice` is the units, api-compat, the impact steps and the slice's own items, not the full regression;
+  the verifier reviews and re-runs only undo, journal, removal or accounting items; at most 3 gate runs at once.
+- **Versions:** assigned by the coordinator at merge (next free minor). Use a placeholder; never renumber a branch yourself.
 - **Merging:** when the `slice` tier and a gate-verifier review of the diff plus evidence pass, the builder pushes its branch
   and reports "ready to merge". The coordinator merges into main, tags and publishes; tag `vX.Y.Z` must equal `mod_version`, and
   CI publishes to GitHub Packages. Agents can't push to main: the permission classifier refuses it. If two slices claim the
