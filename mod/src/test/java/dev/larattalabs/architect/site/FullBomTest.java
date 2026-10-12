@@ -120,12 +120,23 @@ class FullBomTest {
 	}
 
 	@Test
-	void aDoorWrittenAfterItsFloorWasChangedIsNotRechecked() {
-		// the path is written under the cell first (fill phase), the door comes with the template: nothing later touches it
+	void aDoorOverAGapTheFoundationFillsLaterIsGoneAtTheTemplatesOwnFinalPass() {
+		// the template puts a door where the ground has a gap; the fill writes the stone under it only afterwards: at the pass the door has no floor
 		int[] xyz = {0, 11, 0, 0, 12, 0};
 		BlockState[] st = {door("LOWER"), door("UPPER")};
-		FullBom.Result r = FullBom.compute(inputs(xyz, st, NONE, NONE, NONE, NONE, NONE, NONE), p -> p == net.minecraft.core.BlockPos.asLong(0, 10, 0)
-			? Blocks.DIRT_PATH.defaultBlockState() : air());
-		assertEquals(Map.of("minecraft:spruce_door", 1), r.items());
+		FullBom.Result r = FullBom.compute(inputs(xyz, st, new int[] {0, 10, 0}, NONE, NONE, NONE, NONE, NONE), p -> air());
+		assertEquals(Map.of("minecraft:stone_bricks", 1), r.items(), r.items().toString());
+		// over solid ground it stays
+		FullBom.Result ground = FullBom.compute(inputs(xyz, st, NONE, NONE, NONE, NONE, NONE, NONE), p -> p == net.minecraft.core.BlockPos.asLong(0, 10, 0)
+			? Blocks.DIRT.defaultBlockState() : air());
+		assertEquals(Map.of("minecraft:spruce_door", 1), ground.items());
+	}
+
+	@Test
+	void aStandingLanternOnAChestIsGoneAtTheFinalPass() {
+		int[] xyz = {0, 10, 0, 0, 11, 0};
+		BlockState[] st = {Blocks.CHEST.defaultBlockState(), Blocks.LANTERN.defaultBlockState()};
+		FullBom.Result r = FullBom.compute(inputs(xyz, st, NONE, NONE, NONE, NONE, NONE, NONE), p -> air());
+		assertEquals(Map.of("minecraft:chest", 1), r.items(), r.items().toString());
 	}
 }

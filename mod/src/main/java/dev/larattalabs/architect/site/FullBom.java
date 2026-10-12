@@ -103,6 +103,7 @@ final class FullBom {
 	 * the state at a cell the plan does not write (null = unknown, which makes the bill inexact);
 	 */
 	static Result compute(Inputs in, LongFunction<@Nullable BlockState> world) {
+		boolean[] unknownT = {false};
 		Map<Long, BlockState> writes = new HashMap<>();
 		Map<Long, Integer> phase = new HashMap<>(); // the build step of a cell's last write: 0 template, 1 fill, 2 cut, 3 approach cut, 4 approach fill, 5 path, 6 slabs
 		Set<Long> queued = new LinkedHashSet<>();
@@ -122,6 +123,50 @@ final class FullBom {
 				queued.add(p);
 			}
 		}
+		// the template's own final pass (StructureTemplate.placeInWorld, flags without UPDATE_KNOWN_SHAPE): once every block is written, each is
+		// shape-updated against all six neighbours as the world is THEN (the template over the original terrain, before the foundation
+		// and the approach), bottom up. A door over a gap the foundation fills later, a lantern on a chest, goes (drops suppressed).
+		net.minecraft.world.level.ScheduledTickAccess ticks0 = noTicks();
+		net.minecraft.util.RandomSource random0 = net.minecraft.util.RandomSource.create(0L);
+		LongFunction<@Nullable BlockState> at0 = p -> {
+			BlockState w = writes.get(p);
+			return w != null ? w : world.apply(p);
+		};
+		net.minecraft.world.level.LevelReader reader0 = reader(at0, unknownT);
+		net.minecraft.core.Direction[] order = {net.minecraft.core.Direction.WEST, net.minecraft.core.Direction.EAST, net.minecraft.core.Direction.NORTH,
+			net.minecraft.core.Direction.SOUTH, net.minecraft.core.Direction.DOWN, net.minecraft.core.Direction.UP};
+		List<Long> bottomUp = new ArrayList<>();
+		for (int i = 0; i < in.templateStates().length; i++) {
+			bottomUp.add(BlockPos.asLong(in.templateXyz()[3 * i], in.templateXyz()[3 * i + 1], in.templateXyz()[3 * i + 2]));
+		}
+		bottomUp.sort(java.util.Comparator.comparingInt(BlockPos::getY));
+		for (long p : bottomUp) {
+			BlockState s = writes.get(p);
+			if (s == null || s.isAir()) {
+				continue;
+			}
+			BlockPos cell = BlockPos.of(p);
+			BlockState now = s;
+			for (net.minecraft.core.Direction d : order) {
+				BlockPos np = cell.relative(d);
+				BlockState nb = at0.apply(np.asLong());
+				if (nb == null) {
+					unknownT[0] = true;
+					continue;
+				}
+				try {
+					now = now.updateShape(reader0, ticks0, cell, d, np, nb, random0);
+				} catch (RuntimeException e) {
+					unknownT[0] = true;
+				}
+				if (now.isAir()) {
+					break;
+				}
+			}
+			if (now != s) {
+				writes.put(p, now);
+			}
+		}
 		cells(in.fill(), in.foundation(), writes, queued, phase, 1);
 		cells(in.clear(), air, writes, null, phase, 2);
 		cells(in.approachClear(), air, writes, null, phase, 3);
@@ -130,7 +175,7 @@ final class FullBom {
 		cells(in.approachSlabs(), in.slab(), writes, queued, phase, 6);
 		Map<String, Integer> items = new TreeMap<>();
 		List<String> drift = new ArrayList<>();
-		boolean[] unknown = {false};
+		boolean[] unknown = {unknownT[0]};
 		int n = 0;
 		Map<Long, BlockState> finalStates = new java.util.LinkedHashMap<>();
 		LongFunction<@Nullable BlockState> at = p -> {
@@ -141,19 +186,7 @@ final class FullBom {
 		// and a block whose updateShape answers air (a door over a floor the approach then replaced, what hung on it) is destroyed with
 		// its drops suppressed. A block written after its neighbours, or beside neighbours no later step wrote, is never re-checked.
 		net.minecraft.world.level.LevelReader reader = reader(at, unknown);
-		net.minecraft.world.level.ScheduledTickAccess ticks = (net.minecraft.world.level.ScheduledTickAccess) java.lang.reflect.Proxy.newProxyInstance(
-			FullBom.class.getClassLoader(), new Class<?>[] {net.minecraft.world.level.ScheduledTickAccess.class}, (proxy, m, args) -> {
-				if (m.getName().equals("scheduleTick")) {
-					return null;
-				}
-				if (m.getName().equals("hashCode")) {
-					return System.identityHashCode(proxy);
-				}
-				if (m.getName().equals("equals")) {
-					return proxy == args[0];
-				}
-				throw new UnsupportedOperationException(m.getName());
-			});
+		net.minecraft.world.level.ScheduledTickAccess ticks = noTicks();
 		net.minecraft.util.RandomSource random = net.minecraft.util.RandomSource.create(0L);
 		net.minecraft.core.Direction[] dirs = net.minecraft.core.Direction.values();
 		for (int round = 0; round < 8; round++) {
@@ -226,6 +259,25 @@ final class FullBom {
 				queued.add(p);
 			}
 		}
+	}
+
+	/** A {@link net.minecraft.world.level.ScheduledTickAccess} that drops what is scheduled (a shape update only asks to schedule). */
+	static net.minecraft.world.level.ScheduledTickAccess noTicks() {
+		return (net.minecraft.world.level.ScheduledTickAccess) java.lang.reflect.Proxy.newProxyInstance(FullBom.class.getClassLoader(),
+			new Class<?>[] {net.minecraft.world.level.ScheduledTickAccess.class}, (proxy, m, args) -> {
+				switch (m.getName()) {
+					case "scheduleTick" -> {
+						return null;
+					}
+					case "hashCode" -> {
+						return System.identityHashCode(proxy);
+					}
+					case "equals" -> {
+						return proxy == args[0];
+					}
+					default -> throw new UnsupportedOperationException(m.getName());
+				}
+			});
 	}
 
 	/** A {@link net.minecraft.world.level.LevelReader} over the planned cells: {@code getBlockState} and {@code getFluidState}, nothing else. */
