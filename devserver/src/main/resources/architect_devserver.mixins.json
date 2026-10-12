@@ -1,0 +1,13 @@
+{
+	"required": true,
+	"package": "dev.larattalabs.architect.devserver.mixin",
+	"compatibilityLevel": "JAVA_25",
+	"server": [
+		"NoTcpListenerMixin",
+		"KeepExecutorsMixin",
+		"PauseMixin"
+	],
+	"injectors": {
+		"defaultRequire": 1
+	}
+}

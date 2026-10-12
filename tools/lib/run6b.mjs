@@ -76,7 +76,8 @@ export async function startClient(world, { backend = 'sim', env = {} } = {}) {
   fs.rmSync(path.join(GAME_DIR, 'architect', 'devbridge.token'), { force: true });
   setClaudeLogin(backend === 'claude');
   const out = fs.openSync(path.join(OUT, 'client.log'), 'a');
-  const p = spawn(path.join(RUN, 'tools', 'run-gate6b-client.sh'), [], { cwd: RUN, detached: true, stdio: ['ignore', out, out],
+  // GATE6B_CLIENT_SCRIPT: another launch script in the run worktree (headless gates: tools/run-headless-server.mjs, HEADLESS_SIDECAR=sim)
+  const p = spawn(path.join(RUN, process.env.GATE6B_CLIENT_SCRIPT || 'tools/run-gate6b-client.sh'), [], { cwd: RUN, detached: true, stdio: ['ignore', out, out],
     env: cleanEnv({ ARCHITECT_PORT: String(SIDECAR_PORT), ARCHITECT_DEV_PORT: String(PORT), ARCHITECT_AUTOWORLD_NAME: world, ARCHITECT_GATE6B_BACKEND: backend, ...env }) });
   p.unref();
   await connect(900_000);

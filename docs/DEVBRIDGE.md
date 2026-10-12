@@ -24,6 +24,33 @@ two-tier mega_bench policy and how agents should wait for a run are in docs/GATE
   argument named `id` (they use `site`, `entry`, `control`, ...).
 - **Hardcore:** hooks that would cheat refuse in a Hardcore world unless the client runs with `ARCHITECT_DEV_HARDCORE=1`.
 
+## Headless
+
+A headless gate server (docs/GATES.md "Headless gates") serves the same protocol, port and token file from a dedicated server.
+`tools/run-headless-server.mjs` owns the WebSocket and forwards to the `devserver` mod. `dev.hello` and `dev.state` carry
+`headless: true`.
+
+- **Generated hooks.** The hooks in the client's `client/dev/` files `JournalDev`, `RegionDev`, `RegionDev6b`, `DeltaDev`,
+  `SliceVDev`, `SliceWDev` and `StockpileDev` (and `Fields`) run headless as they are: `devserver/build.gradle` `genHooks` compiles copies with
+  only the package and imports changed.
+  - **Rule for those files:** no reference to client classes (`net.minecraft.client.*`, `dev.larattalabs.architect.client.*`)
+    besides `ServerTasks`, `DevBridge` and the handler's `mc` parameter. A new one fails the build, `unit-mod` included.
+  - A hook that needs the client goes into a client feature class.
+  - A new hook file of that kind goes into `genHooks`'s list.
+- **Hand ports.** The server-side hooks of the client feature classes are hand ports in `devserver/.../gen/PortedHooks.java`:
+  - PlacementFeature: sites, placement stats, jobs, slow, box hash, capture;
+  - SurvivalFeature: survival, site state, crate insert (`exact`, `stockpile:<owner>`), finish, deconstruct, mine, items near, site cells, BOM predict;
+  - Slice0aDev;
+  - ScreenFeature: launcher and sidecar state.
+
+  When you change one of those hooks on the client, change its port too.
+- **The core hooks** are `CoreHooks`: state, command, wait (frames are server ticks), waitChunks (FULL chunks around the bot),
+  time, weather, camera (moves the bot), release, and screen (only `pause` and `null`).
+- **Client-only hooks** answer `ok: false, error: "client-only: ..."`: screenshots, screens other than pause, keys, typing,
+  the HUD, the Architect screen, the placement ghost, the region ghost, the composite preview and the crate screen.
+- **Host hooks** (the host's own): `dev.world.open` / `dev.world.leave` switch worlds in one server process; `dev.quit` stops
+  it. `dev.host.*` are internal.
+
 ## Using it from another mod's tooling
 
 `tools/lib/devclient.mjs` has no dependencies (Node 22+ has `WebSocket`) and is importable by path from any checkout:
@@ -314,6 +341,8 @@ region. Previews print as file links (with a [copy] link).
 
 Semi-stable: a hook may change or go, and every such change is listed here, newest first.
 
+- **2026-10-12 (headless gates):** the DevBridge also runs headless on a dedicated server (section "Headless"); `dev.hello`
+  and `dev.state` there carry `headless: true`, and client-only hooks answer `client-only: ...`. No hook changed on the client.
 - **2026-10-11 (6c slice W):** new `dev.region.survey {claim: [x0,z0,x1,z1], surveyLoad?: bounded:256, file?}`: the region plan
   survey (ARSV) a plan of the claim would send -> `{sha, resolution, columns, missing, water, frozen, frozenSample}` (`file`: the
   bytes written there). apitest `heights` adds a 7th column per sample, `frozen` (`Sample.frozen`).
