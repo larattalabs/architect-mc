@@ -41,6 +41,9 @@ export function applyHosts(cfg, mode) {
       s.env = { ...(s.env ?? {}), ...(s.headlessEnv ?? {}) };
     } else if (cfg.clients[s.client]) {
       s.client = `${s.client}@server`;
+      // a driver that (re)starts its own client starts the headless server instead (gate6a, run6b)
+      s.env = { ...(s.env ?? {}), GATE6A_CLIENT_SCRIPT: HEADLESS_SCRIPT, GATE6B_CLIENT_SCRIPT: HEADLESS_SCRIPT,
+        HEADLESS_SIDECAR: cfg.clients[s.client].env.HEADLESS_SIDECAR };
     }
     s.headless = true;
     out.server.push(id);
