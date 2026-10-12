@@ -22,7 +22,8 @@
       22,
       220
     ],
-    "foundBy": "S3's pinned fixture (scenarios/s3_monastery.json)"
+    "foundBy": "S3's pinned fixture (scenarios/s3_monastery.json)",
+    "irShaAtPin": "e065d34873f30365d44f7dbc8890f30ebe7a2dae91649143f5aaa1f031dc7040"
   },
   "flat": {
     "preset": "flat",
@@ -31,5 +32,55 @@
       0
     ],
     "gamerules": "exact"
+  },
+  "seed": "587381402800299482",
+  "cams": {
+    "cam_e": [
+      3727.5,
+      180,
+      -947.5,
+      90.5,
+      47.1
+    ],
+    "cam_ground": [
+      3691.5,
+      124,
+      -917.5,
+      141.2,
+      13
+    ],
+    "cam_high": [
+      3675.5,
+      191,
+      -939.5,
+      135,
+      81
+    ],
+    "cam_n": [
+      3667.5,
+      171,
+      -1007.5,
+      0.5,
+      43.3
+    ],
+    "cam_s": [
+      3667.5,
+      151,
+      -887.5,
+      179.5,
+      30.8
+    ],
+    "cam_w": [
+      3607.5,
+      151,
+      -947.5,
+      -90.5,
+      31.2
+    ]
+  },
+  "lotEntries": {
+    "lot_1": "g6a_stub_9",
+    "lot_2": "g6a_stub_14",
+    "lot_3": "g6a_stub_9"
   }
 }
