@@ -15,7 +15,7 @@
 //                                     PLAN_STALE; this build accepts it
 //     apicompat                       item 11: tools/api-compat.mjs --gate6cmp (the run worktree's classes, built by unit-mod); with a
 //                                     client up, the apitest api117 check (Mask/Pattern through the public API, in game)
-//     judge                           items 5, 7 and 10 from the scenario runs (SCENARIOS_ART/mp-flat, mp): IR sha over 3 plans,
+//     judge                           items 5, 7 and 10 (timing: BAR lines) from the scenario runs (SCENARIOS_ART/mp-flat, mp): IR sha over 3 plans,
 //                                     1 vs 4 workers, the golden; E-flat 0, E-normal classified <= 0.01%; Architect's own tick
 //                                     <= 50 ms; the tile evaluation over the natural run's plan: p99 under 2 s, >= 45k cells/s
 //     report                          REPORT.md over the step JSONs
@@ -33,7 +33,7 @@ process.env.GATE6B_OUT = process.env.GATE6CMP_OUT ?? process.env.GATE6B_OUT ?? p
 process.env.GATE6B_SIDECAR_PORT ??= '8924';
 process.env.GATE6B_DEV_PORT ??= '8925';
 const L = await import('./lib/run6b.mjs');
-const { RUN, OUT, MAIN, call, check, cmd, connect, fails, leaveWorld, log, openWorld, refuseKeys, results, root, startClient, state, stopClient, write } = L;
+const { RUN, OUT, MAIN, bar, call, check, cmd, connect, fails, leaveWorld, log, openWorld, refuseKeys, results, root, startClient, state, stopClient, write } = L;
 
 refuseKeys();
 const FLAT = 'G6B Flat Base';
@@ -238,6 +238,11 @@ steps.judge = async () => {
     out[k] = { dir: d, head: r.versions?.head, irShas: r.irShas, workersSame: m.tiles.workersSame, golden: m.tiles.golden, exact: { kind: e.kind, mismatches: e.mismatches, classes: e.classes, cellsWritten: e.cellsWritten },
       mspt: m.mspt?.architect ?? null, cps: m.cellsPerSecond, state: r.state, rows: Object.fromEntries(m.rows.map((x) => [x.id, { pass: x.pass, value: x.value }])) };
   }
+  // the flat variant must be flat: its plan survey holds one or two ground heights (a world named G6B Flat Base made by the
+  // client's autoworld before gate6b base would be a normal world)
+  const { decodeColumns } = await import(pathToFileURL(path.join(root, 'kit', 'lib', 'region', 'pack.mjs')).href);
+  const heights = new Set(decodeColumns(fs.readFileSync(path.join(flat, 'raw', 'plan', 'survey.bin'))).ground).size;
+  check(heights <= 2, `the flat run's survey is flat (${heights} distinct ground heights)`);
   const head = execFileSync('git', ['-C', root, 'rev-parse', 'HEAD']).toString().trim();
   check(out.flat.head === head && out.natural.head === head, `the runs are of this head ${head.slice(0, 10)} (flat ${out.flat.head?.slice(0, 10)}, natural ${out.natural.head?.slice(0, 10)})`);
   const same = (x) => new Set(x.irShas).size === 1 && x.irShas.length === 3;
@@ -251,11 +256,11 @@ steps.judge = async () => {
   check((en.classes?.none ?? 0) === 0 && undoOwn <= 0.0001 * en.cellsWritten, `item 7: E-normal ${en.mismatches} (${json(en.classes ?? {})}), every one classified; the undo's own ${undoOwn} <= 0.01% of ${en.cellsWritten} (${(0.0001 * en.cellsWritten).toFixed(0)})`);
   for (const k of ['flat', 'natural']) {
     const a = out[k].mspt;
-    check(a && (a.placementCpuMsMax ?? a.placementMsMax) <= 50, `item 10 (${k}): Architect's own tick max ${(a?.placementCpuMsMax ?? a?.placementMsMax)?.toFixed?.(1)} ms CPU <= 50 (wall ${a?.placementMsMax?.toFixed?.(1)}, vanilla ${a?.serverMsptMax?.toFixed?.(1)} recorded)`);
+    bar(a && (a.placementCpuMsMax ?? a.placementMsMax) <= 50, `item 10 (${k}): Architect's own tick max ${(a?.placementCpuMsMax ?? a?.placementMsMax)?.toFixed?.(1)} ms CPU <= 50 (wall ${a?.placementMsMax?.toFixed?.(1)}, vanilla ${a?.serverMsptMax?.toFixed?.(1)} recorded)`);
   }
   out.evalPerf = await evalPerf(path.join(nat, 'raw', 'plan'));
   const ep = out.evalPerf;
-  check(ep.p99Ms < 2000 && ep.cellsPerSecond >= 45_000, `item 10: the natural plan's ${ep.tiles} tiles evaluated in full: p50 ${ep.p50Ms} ms, p99 ${ep.p99Ms} ms (< 2 s), ${ep.cellsPerSecond} cells/s (>= 45k), load ${ep.load1.toFixed(1)}`);
+  bar(ep.p99Ms < 2000 && ep.cellsPerSecond >= 45_000, `item 10: the natural plan's ${ep.tiles} tiles evaluated in full: p50 ${ep.p50Ms} ms, p99 ${ep.p99Ms} ms (< 2 s), ${ep.cellsPerSecond} cells/s (>= 45k), load ${ep.load1.toFixed(1)}`);
   // the other scenario rows, recorded (the 6b scenario bars are S1's; MP judges its own items)
   out.recorded = Object.fromEntries(Object.entries(out.natural.rows).filter(([k]) => !['exactness', 'determinism', 'mspt', 'spend', 'gallery'].includes(k)));
   spendZero();
