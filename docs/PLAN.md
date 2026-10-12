@@ -367,6 +367,14 @@ without a format change. **Rule for every slice:** no id derived from an owner s
 persisted formats. Candidate later asks: `Survey.biome` per column (T1's fields could carry it), boundary-following districts
 (D), zone walls (7a).
 
+## Queued from Y1 (coordinator, 2026-10-12)
+
+- **Construction sites keep their chunks loaded forever:** the builder's per-tick `getBlockState` renews a chunk ticket. Y1
+  changed it only for stockpile targets (its unloaded-frontier exception needs it); legacy per-build crate sites are unchanged.
+  Decide and fix for all construction in a later slice (server load, LOADED_ONLY semantics).
+- Y1 verifier follow-ups: a credit skipped when both dimensions are unloaded; a single road's refund credited before its
+  restore (retry-safe by key); a road credited before removal missing from the group's `RemoveResult.refund`.
+
 ## Open questions
 - Track AgentCraft fixes to the copied placement code, or treat the copy as independent from now on?
 - Cost: measure tokens and time per design in phase 1, and show an estimate in the form.
