@@ -374,7 +374,7 @@ async function runScenario(id) {
 
 /** The metrics of a run directory (also `scenarios.mjs metrics <runDir>` to recompute after a kit fix). */
 async function computeMetrics({ sc, out, planDir, ir, irShas, mspt, cps, exact, flat }) {
-  const { decodeArwd, dumpWorld, buildVirtual } = await import('../kit/lib/region/vworld.mjs');
+  const { decodeArwd, dumpWorld, buildVirtual, F_WRITTEN } = await import('../kit/lib/region/vworld.mjs');
   const { checkRegion } = await import('../kit/lib/region/check.mjs');
   const M = await import('./lib/scenario-metrics.mjs');
   const raw = path.join(out, 'raw');
@@ -422,7 +422,18 @@ async function computeMetrics({ sc, out, planDir, ir, irShas, mspt, cps, exact, 
   // the other variant's exactness (E-flat from the latest flat run beside a natural one, and back)
   const sibling = latestRun(sc, out, !flat);
   const exactOther = sibling ? JSON.parse(fs.readFileSync(path.join(sibling, 'exact.json'), 'utf8')) : null;
-  const ex = flat ? { flat: exact, normal: exactOther, cellsWritten: exactOther?.cellsWritten ?? 0 } : { flat: exactOther, normal: exact, cellsWritten: exact.cellsWritten };
+  // (6c F1) the world's own freezing during the stand: an unclassified mismatch where still water became ice (or a snow layer
+  // fell) at a cell the plan never writes is the cold biome's doing, not the undo's: classed `freeze` (a world class)
+  const freezeOf = (e) => {
+    if (!e || flat || !isF1(sc) || !(e.classes?.none > 0)) return e;
+    const moved = (e.list ?? []).filter((m) => m.class === 'none' && !(vw.flags(...m.pos.split(',').map(Number)) & F_WRITTEN)
+      && ((/^minecraft:water/.test(m.was) && /^minecraft:ice$/.test(m.now)) || (/air$/.test(m.was) && /^minecraft:snow\[/.test(m.now))));
+    if (!moved.length) return e;
+    const classes = { ...e.classes, none: e.classes.none - moved.length, freeze: (e.classes.freeze ?? 0) + moved.length };
+    return { ...e, classes, list: e.list.map((m) => (moved.includes(m) ? { ...m, class: 'freeze' } : m)) };
+  };
+  const exN = freezeOf(exact);
+  const ex = flat ? { flat: exact, normal: exactOther, cellsWritten: exactOther?.cellsWritten ?? 0 } : { flat: exactOther, normal: exN, cellsWritten: exact.cellsWritten };
   const plan = { report: JSON.parse(fs.readFileSync(path.join(out, 'report.json'), 'utf8')) };
   let rows = M.bars({ plan, realised, palette, organic, buildings, mspt, cellsPerSecond: cps, exact: ex, determinism: { irShas, workersSame: ts.workersSame, golden }, spendUsd: 0, approval: 'pending' });
   // (6c F1) forms_demo's own bars: melt across the stand, kept cells, voxels, tile evaluation
