@@ -350,6 +350,23 @@ the 50 ms max only under `--quiet-wait`.
 - **New candidate flake: 6b-volume** (20 cells AIR to LAVA between two samples: lava still flowing after the 90 s settle at
   load 54-64). Re-check at the next release tier in a quiet window, against main, before calling it a flake.
 
+## Keep open: zones and the long-term direction (Steward, from Noah, 2026-10-12)
+
+Not asks yet (Steward docs/PLAN.md "Zones", "Long-term direction"). Designs frozen now must not close these off.
+- **Zones (after Steward's phase 4):** e.g. a settlement on a desert/jungle edge, a wall between the sides, each side
+  specialising. Likely needs: biomes per column in the survey; districts laid along a biome edge, river or ridge (D's
+  survey-candidate districts are the start); walls with gates along a zone boundary (7a typed connectors, bible-styled); several
+  related bibles in one settlement.
+- **Long term (not planned):** factions as owners; sites changing owner on conquest; claims that shrink, are contested and
+  change hands; damage and repair as ordinary operations.
+
+**Audit (coordinator, 2026-10-12):** owners are free strings on records (Site, groups, regions), never part of an id, so a
+later `transferOwner` is additive. Owner-scoped state to move on a transfer: opKeys, tombstones, protected areas (C17) and Y1's
+stockpile and ledger. Y1 keys its stockpile by its own id with the owner as an attribute, so a transfer or merge re-keys it
+without a format change. **Rule for every slice:** no id derived from an owner string, no "owner never changes" assumption in
+persisted formats. Candidate later asks: `Survey.biome` per column (T1's fields could carry it), boundary-following districts
+(D), zone walls (7a).
+
 ## Open questions
 - Track AgentCraft fixes to the copied placement code, or treat the copy as independent from now on?
 - Cost: measure tokens and time per design in phase 1, and show an estimate in the form.
