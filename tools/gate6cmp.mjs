@@ -146,8 +146,8 @@ steps.stale = async () => {
   const claim = { minX: -100, minZ: -100, maxX: 99, maxZ: 99, minY: -64, maxY: 319 };
   const p = await planRegion({ programFile: path.join(root, 'kit', 'regions', 'crater_works.mjs'), survey: synthSurvey(claim, 'golden'), claim, params: { toolbox: true } });
   fs.writeFileSync(path.join(tmp, 'ir.json'), p.irJson);
-  // with the kit's own kitVersion lowered to 0.17.0 too: then only the kinds refuse
-  const irKinds = { ...p.ir, kitVersion: '0.17.0' };
+  // with the kit's own kitVersion lowered to 0.16.0 (the v0.17.0 tag's kit) too: then only the kinds refuse
+  const irKinds = { ...p.ir, kitVersion: '0.16.0' };
   fs.writeFileSync(path.join(tmp, 'ir-kinds.json'), JSON.stringify(irKinds));
   // (a) the v0.17.0 kit (git archive of the tag)
   execFileSync('sh', ['-c', `git -C '${root}' archive v0.17.0 kit | tar -x -C '${tmp}'`]);
@@ -156,7 +156,7 @@ steps.stale = async () => {
   let kitThrow = null;
   try { old.compileIR(irKinds); } catch (e) { kitThrow = String(e.message); }
   check(/^plan needs kit 0\.20\.0/.test(kitA ?? '') && /kinds \[mask, pattern\]/.test(kitB ?? '') && /^PLAN_STALE/.test(kitThrow ?? ''),
-    `item 9: the v0.17.0 kit refuses the toolbox IR PLAN_STALE ("${kitA}"; at kit 0.17.0: "${kitB}"; compileIR: "${kitThrow}")`);
+    `item 9: the v0.17.0 kit refuses the toolbox IR PLAN_STALE ("${kitA}"; at kit 0.16.0: "${kitB}"; compileIR: "${kitThrow}")`);
   // (b) the 0.17.0 mod jar's IrStale (pure Java + Gson), and this build's
   const gson = execFileSync('sh', ['-c', `find '${path.join(root, '.gradle-home')}' -name 'gson-2*.jar' -not -name '*sources*' | sort | tail -1`]).toString().trim();
   const src = path.join(tmp, 'OldStale.java');
@@ -165,7 +165,7 @@ steps.stale = async () => {
   const runJar = (jar) => execFileSync(java, ['-cp', `${jar}${path.delimiter}${gson}`, src, path.join(tmp, 'ir.json'), path.join(tmp, 'ir-kinds.json')], { encoding: 'utf8' }).trim().split('\n');
   const modOld = runJar(path.join(BASELINE, 'architect_mc-0.17.0.jar'));
   check(/^plan needs kit 0\.20\.0 \/ kinds \[mask, pattern\]; this is kit 0\.16\.0$/.test(modOld[0]) && /^plan needs kinds \[mask, pattern\]; this is kit 0\.16\.0$/.test(modOld[1]),
-    `item 9: the 0.17.0 mod (IrStale) refuses it PLAN_STALE: "${modOld[0]}"; at kit 0.17.0: "${modOld[1]}"`);
+    `item 9: the 0.17.0 mod (IrStale) refuses it PLAN_STALE: "${modOld[0]}"; at kit 0.16.0: "${modOld[1]}"`);
   const newClasses = fs.existsSync(path.join(RUN, 'mod', 'build', 'classes', 'java', 'main')) ? path.join(RUN, 'mod', 'build', 'classes', 'java', 'main') : path.join(root, 'mod', 'build', 'classes', 'java', 'main');
   const modNew = runJar(newClasses);
   check(modNew[0] === 'null', `this build's IrStale accepts it (${modNew[0]}; classes ${newClasses})`);
