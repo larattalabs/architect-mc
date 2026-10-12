@@ -113,7 +113,7 @@ export class VariantBook {
     return [...extra, ...tail].sort((a, b) => a.createdAt - b.createdAt).map((v) => structuredClone(v));
   }
 
-  create(fields: Pick<Variant, 'kind' | 'from'> & Partial<Pick<Variant, 'palette' | 'values' | 'name' | 'bible' | 'reskin' | 'copy'>>): Variant {
+  create(fields: Pick<Variant, 'kind' | 'from'> & Partial<Pick<Variant, 'palette' | 'values' | 'name' | 'bible' | 'reskin' | 'copy' | 'schem'>>): Variant {
     const now = this.ctx.now();
     const v: Variant = {
       id: this.ctx.store.nextId('v'),
@@ -127,6 +127,7 @@ export class VariantBook {
       ...(fields.bible !== undefined ? { bible: { ...fields.bible } } : {}),
       ...(fields.reskin !== undefined ? { reskin: fields.reskin } : {}),
       ...(fields.copy !== undefined ? { copy: structuredClone(fields.copy) } : {}),
+      ...(fields.schem !== undefined ? { schem: structuredClone(fields.schem) } : {}),
       createdAt: now,
       updatedAt: now,
     };
@@ -294,9 +295,9 @@ export function variantDisplayName(base: string, opts: { palette?: PaletteSpec |
  * Where imports may come from, derived from the library path (<gameDir>/architect/library):
  * <gameDir>/architect/imports/ and <gameDir>/saves/<world>/generated/<namespace>/structures/.
  */
-export function importRoots(libraryDir: string): { imports: string; exports: string; saves: string } {
+export function importRoots(libraryDir: string): { imports: string; exports: string; saves: string; schemStaging: string } {
   const architect = path.dirname(libraryDir);
-  return { imports: path.join(architect, 'imports'), exports: path.join(architect, 'exports'), saves: path.join(path.dirname(architect), 'saves') };
+  return { imports: path.join(architect, 'imports'), exports: path.join(architect, 'exports'), saves: path.join(path.dirname(architect), 'saves'), schemStaging: path.join(architect, 'schem-staging') };
 }
 
 const real = (p: string): string | undefined => {
@@ -312,9 +313,9 @@ const real = (p: string): string | undefined => {
  * be an existing .nbt whose real path (links resolved) is under <gameDir>/architect/imports/ or in
  * a world's generated/<namespace>/structures/.
  */
-export function checkImportPath(p: string, libraryDir: string): string {
+export function checkImportPath(p: string, libraryDir: string, kind: 'import' | 'import-schem' = 'import'): string {
   const roots = importRoots(libraryDir);
-  const allowed = `an .nbt file in ${roots.imports}${path.sep}, in ${roots.exports}${path.sep} or in a world's ${path.join('saves', '<world>', 'generated', '<namespace>', 'structure')}${path.sep} (or structures${path.sep})`;
+  const allowed = kind === 'import-schem' ? `(6c SCH, a schematic the mod converted) an .nbt file in ${roots.schemStaging}${path.sep}` : `an .nbt file in ${roots.imports}${path.sep}, in ${roots.exports}${path.sep} or in a world's ${path.join('saves', '<world>', 'generated', '<namespace>', 'structure')}${path.sep} (or structures${path.sep})`;
   const refuse = (why: string): never => {
     throw new VariantRefused(`import refused: ${why}. Architect imports only ${allowed}`);
   };
@@ -332,6 +333,7 @@ export function checkImportPath(p: string, libraryDir: string): string {
     const rel = path.relative(root, file);
     return rel && !rel.startsWith('..') && !path.isAbsolute(rel) ? rel.split(path.sep) : undefined;
   };
+  if (kind === 'import-schem') return inside(real(roots.schemStaging)) ? file : refuse(`${p} is outside that folder`);
   if (inside(real(roots.imports)) || inside(real(roots.exports))) return file;
   const parts = inside(real(roots.saves));
   // <world>/generated/<namespace>/structure/<...>.nbt (26.3 structure-block saves; `structures` as older versions had)
@@ -411,7 +413,7 @@ export class VariantRunner {
           try {
             const v = this.host.variants.get(id);
             if (!v || isFinalVariant(v)) continue;
-            if (v.kind === 'import') await this.runImport(v);
+            if (v.kind === 'import' || v.kind === 'import-schem') await this.runImport(v);
             else if (v.copy) await this.runCopy(v);
             else await this.runVariant(v);
             const done = this.host.variants.get(id);
@@ -652,29 +654,33 @@ export class VariantRunner {
   private async runImport(v: Variant): Promise<void> {
     const cfg = this.host.config;
     this.step(v.id, 'reading the structure file');
-    const file = checkImportPath(v.from, cfg.libraryDir);
+    const schem = v.kind === 'import-schem' ? v.schem : undefined;
+    if (v.kind === 'import-schem' && !schem) throw new Error('an import-schem job without its schematic data');
+    const file = checkImportPath(v.from, cfg.libraryDir, v.kind === 'import-schem' ? 'import-schem' : 'import');
     const scratch = this.scratch(v.id);
     const importer = path.join(scratch, KIT, 'import.mjs');
     if (!fs.existsSync(importer)) throw new Error('this kit has no import.mjs');
     const copy = path.join(scratch, 'in', path.basename(file));
     fs.mkdirSync(path.dirname(copy), { recursive: true });
     fs.copyFileSync(file, copy);
-    const base = `imp_${slugify(path.basename(file).replace(/\.nbt$/i, ''), 32) || 'structure'}`;
+    const shown = schem ? schem.file : path.basename(file);
+    const base = `imp_${slugify(shown.replace(/\.(nbt|schem)$/i, ''), 32) || 'structure'}`;
     const bp = freeLibraryId(cfg.libraryDir, base, this.taken);
     this.taken.add(bp);
     try {
-      this.step(v.id, `checking ${path.basename(file)}`);
+      this.step(v.id, `checking ${shown}`);
       const out = path.join(scratch, CHECK_DIR);
       fs.rmSync(out, { recursive: true, force: true });
-      const args = [copy, '--id', bp, '--out', out, ...(v.name ? ['--name', v.name] : []), '--json'];
+      const args = [copy, '--id', bp, '--out', out, ...(v.name ? ['--name', v.name] : []), ...(schem ? ['--ground-y', String(schem.groundY), '--tag', 'schem'] : []), '--json'];
       const r = await runNode(path.join(KIT, 'import.mjs'), args, scratch, KIT_TIMEOUT_MS);
       const res = finishCheck(r, out, bp, { type: 'custom' }, KIT_TIMEOUT_MS);
-      if (!res.ok) throw new Error(`${path.basename(file)} cannot be imported: ${(res.problem ?? 'the check failed').replace(/^the checker refused the design/, 'the checker refused it')}`);
+      if (!res.ok) throw new Error(`${shown} cannot be imported: ${(res.problem ?? 'the check failed').replace(/^the checker refused the design/, 'the checker refused it')}`);
       this.step(v.id, 'rendering previews');
       const rp = await renderPreviews(scratch, res.nbt!, KIT_TIMEOUT_MS);
       const sc = res.sidecar!;
       // an exported entry (<id>.nbt next to <id>.blueprint.json) brings its ext along
-      const ext = readJsonFile(file.replace(/\.nbt$/i, '.blueprint.json'))?.ext;
+      // (6c SCH) an import-schem job: the ext the mod read from the schematic
+      const ext = schem ? schem.ext : readJsonFile(file.replace(/\.nbt$/i, '.blueprint.json'))?.ext;
       const installed = installDesign({
         library: cfg.libraryDir,
         baseId: bp,

@@ -17,7 +17,7 @@ export const PROTOCOL_VERSION = 1 as const;
 export const PROTOCOLS = [1, 2] as const;
 export type Protocol = (typeof PROTOCOLS)[number];
 /** What a protocol-2 snapshot lists in `features`. */
-export const FEATURES = ['job.run', 'job.tools', 'blobs', 'budget', 'designs.v2', 'bibles', 'design.groups', 'named.parts', 'open.types', 'estimates', 'reskin', 'massing', 'critique', 'critique.report', 'job.images', 'bible.admin', 'bible.restraint', 'entry.versions', 'entry.delta', 'design.polish', 'critique.polish', 'region.plan', 'region.tiles', 'region.check', 'region.preview', 'region.design', 'region.blobs', 'ir.format2', 'estimate.kinds', 'opKeys', 'group.breakdown', 'copies', 'smallEffort', 'versionOf', 'extendInfo', 'region.keepOut', 'region.lightCover'] as const;
+export const FEATURES = ['job.run', 'job.tools', 'blobs', 'budget', 'designs.v2', 'bibles', 'design.groups', 'named.parts', 'open.types', 'estimates', 'reskin', 'massing', 'critique', 'critique.report', 'job.images', 'bible.admin', 'bible.restraint', 'entry.versions', 'entry.delta', 'design.polish', 'critique.polish', 'region.plan', 'region.tiles', 'region.check', 'region.preview', 'region.design', 'region.blobs', 'ir.format2', 'estimate.kinds', 'opKeys', 'group.breakdown', 'copies', 'smallEffort', 'versionOf', 'extendInfo', 'region.keepOut', 'region.lightCover', 'import.schem'] as const;
 
 const Ts = z.number().int().nonnegative();
 const Id = z.string().min(1).max(64);
@@ -363,10 +363,19 @@ export const ParamValues = z
   .refine((v) => Object.keys(v).length <= 16, 'at most 16 values');
 export type ParamValues = z.infer<typeof ParamValues>;
 
+/** (6c SCH) What the mod read from a Sponge schematic, for an import-schem job. */
+export const ImportSchem = z.object({
+  file: z.string().min(1).max(255).describe("the schematic's file name"),
+  groundY: z.number().int().min(0).max(63).describe('the ground row: -Offset.y when that is a row of the schematic, else 1'),
+  ext: z.record(z.string().regex(/^[a-z0-9_.-]+:[a-zA-Z0-9_./-]+$/), z.unknown()).refine((e) => JSON.stringify(e).length <= 4096, 'ext: at most 4096 characters').describe("the entry's ext (architect_mc:schem: Name, Author, Version, DataVersion, ...)"),
+});
+export type ImportSchem = z.infer<typeof ImportSchem>;
+
 export const Variant = z.object({
   id: Id.describe('"v<n>"'),
-  kind: z.enum(['variant', 'import']).describe('(addition) a variant of a library entry, or an imported .nbt'),
-  from: z.string().min(1).max(4096).describe('variant: the library id it is made from; import: the absolute .nbt path'),
+  kind: z.enum(['variant', 'import', 'import-schem']).describe("(addition) a variant of a library entry, an imported .nbt, or (6c SCH) an imported Sponge schematic (the mod's upgraded .nbt of it)"),
+  from: z.string().min(1).max(4096).describe('variant: the library id it is made from; import, import-schem: the absolute .nbt path'),
+  schem: ImportSchem.optional().describe('(6c SCH) import-schem: what the mod read from the schematic'),
   status: VariantStatus,
   step: z.string().describe('one line of progress'),
   palette: PaletteSpec.optional().describe('(addition) variant: the palette asked for'),
@@ -998,7 +1007,9 @@ export const VariantRequestMsg = z.object({
 });
 export const ImportRequestMsg = z.object({
   ...envelope('import.request'),
-  path: z.string().min(1).max(4096).describe("an absolute .nbt path in <gameDir>/architect/imports/, <gameDir>/architect/exports/ or a world's generated/<namespace>/structure(s)/"),
+  path: z.string().min(1).max(4096).describe("an absolute .nbt path in <gameDir>/architect/imports/, <gameDir>/architect/exports/ or a world's generated/<namespace>/structure(s)/; (6c SCH) with `schem`, in <gameDir>/architect/schem-staging/"),
+  name: z.string().trim().min(1).max(40).optional().describe("(6c SCH) the new entry's name (default: from the file name)"),
+  schem: ImportSchem.optional().describe('(6c SCH) an import-schem job: the structure the mod made from a Sponge schematic, with what it read'),
 });
 export const JobRunMsg = z.object({ ...envelope('job.run'), job: JobSpec });
 export const JobCancelMsg = z.object({ ...envelope('job.cancel'), jobId: Id });

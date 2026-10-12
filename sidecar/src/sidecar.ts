@@ -20,7 +20,7 @@ import type { JobDriver } from './jobs/driver.js';
 import { JobRunner } from './jobs/runner.js';
 import { SimJobDriver } from './jobs/sim.js';
 import { Pool } from './pool.js';
-import { FEATURES, KitPalettes, type BibleRef, type ClientMessage, type Cost, type PaletteInfo, type Design, type DesignRequest, type Group, type Massing, type Outbound, type PaletteSpec, type ParamValues, type Protocol, type Status, type Variant, type GroupItem } from './protocol.js';
+import { FEATURES, KitPalettes, type BibleRef, type ImportSchem, type ClientMessage, type Cost, type PaletteInfo, type Design, type DesignRequest, type Group, type Massing, type Outbound, type PaletteSpec, type ParamValues, type Protocol, type Status, type Variant, type GroupItem } from './protocol.js';
 import { DesignScheduler, designKey } from './scheduler.js';
 import { addCost } from './jobs/cost.js';
 import { readSecrets, updateSecrets, type Secrets } from './secrets.js';
@@ -488,7 +488,7 @@ export class Sidecar {
       case 'variant.request':
         return { variantId: this.requestVariant(msg.from, msg.palette, msg.values, msg.name, msg.bible).id };
       case 'import.request':
-        return { variantId: this.requestImport(msg.path).id };
+        return { variantId: this.requestImport(msg.path, msg.schem, msg.name).id };
       // ---- 4b
       case 'design.group': {
         const ack = (g: Group, adopted: boolean) => ({ groupId: g.id, designIds: g.items.map((it) => it.designId), itemKeys: g.items.map((it) => it.itemKey), bible: g.bible, adopted });
@@ -716,15 +716,18 @@ export class Sidecar {
     return v;
   }
 
-  /** import.request: refused at once unless the path is an .nbt in the import folders. */
-  requestImport(file: string): Variant {
+  /**
+   * import.request: refused at once unless the path is an .nbt in the import folders. (6c SCH) With `schem`, an import-schem
+   * job: the .nbt the mod made from a Sponge schematic, in <gameDir>/architect/schem-staging/ only.
+   */
+  requestImport(file: string, schem?: ImportSchem, name?: string): Variant {
     try {
-      checkImportPath(file, this.config.libraryDir);
+      checkImportPath(file, this.config.libraryDir, schem ? 'import-schem' : 'import');
     } catch (e) {
       if (e instanceof VariantRefused) throw new ClientError(e.message);
       throw e;
     }
-    const v = this.variants.create({ kind: 'import', from: file });
+    const v = this.variants.create({ kind: schem ? 'import-schem' : 'import', from: file, ...(name ? { name } : {}), ...(schem ? { schem } : {}) });
     this.log.info(`import ${v.id} requested: ${file}`);
     this.variantRunner.enqueue(v.id);
     return v;

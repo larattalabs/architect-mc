@@ -1,4 +1,4 @@
-// Test fixture: `node kit/import.mjs <file.nbt> --id <id> --out <dir> [--name <n>] [--json]` (docs: kit/README.md).
+// Test fixture: `node kit/import.mjs <file.nbt> --id <id> --out <dir> [--name <n>] [--ground-y N] [--tag T] [--json]` (docs: kit/README.md).
 // A file whose text contains "MODDED" fails the check with the list of its non-vanilla blocks; "JUNK" is not a
 // structure file (exit 2); anything else imports as a 5x4x5 custom structure.
 import fs from 'node:fs';
@@ -21,10 +21,12 @@ fs.mkdirSync(out, { recursive: true });
 const nbt = path.join(out, `${id}.nbt`);
 const sidecar = path.join(out, `${id}.blueprint.json`);
 fs.writeFileSync(nbt, `FAKE-NBT ${id} imported`);
+const groundY = opt('ground-y') !== undefined ? Number(opt('ground-y')) : 1;
+const tags = ['imported', ...args.flatMap((a, i) => (a === '--tag' ? [args[i + 1]] : []))];
 const name = opt('name') ?? path.basename(file, '.nbt').replace(/[_-]+/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 fs.writeFileSync(sidecar, JSON.stringify({
-  id, name, description: `Imported from ${path.basename(file)}.`, type: 'custom', tags: ['imported'], size: { x: 5, y: 4, z: 5 }, groundY: 1, front: 'south',
-  anchors: { entrance: { x: 2.5, y: 1, z: 5.5, yaw: 180, pitch: 0 }, spawn: { x: 2.5, y: 1, z: 7.5, yaw: 180, pitch: 0 } }, imported: true,
+  id, name, description: `Imported from ${path.basename(file)}.`, type: 'custom', tags, size: { x: 5, y: 4, z: 5 }, groundY, front: 'south',
+  anchors: { entrance: { x: 2.5, y: groundY, z: 5.5, yaw: 180, pitch: 0 }, spawn: { x: 2.5, y: groundY, z: 7.5, yaw: 180, pitch: 0 } }, imported: true,
 }, null, 2));
 const errors = text.includes('MODDED') ? ['unknown or non-vanilla blocks (2): create:shaft x4, create:cogwheel x1 (Architect places vanilla 26.3 blocks only)'] : [];
 console.log(JSON.stringify({ ok: !errors.length, errors, warnings: ['imported: no outside door'], nbt, sidecar }));
