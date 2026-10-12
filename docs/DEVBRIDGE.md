@@ -342,6 +342,11 @@ region. Previews print as file links (with a [copy] link).
 
 Semi-stable: a hook may change or go, and every such change is listed here, newest first.
 
+- **2026-10-12 (6c slice B):** new `dev.brush {kind, at: [x,y,z], radius?, strength?, shape?, mask?, pattern?, destruction?, owner?,
+  actor?: me|none|<uuid>, console?, seed?, dimension?}`: one brush stroke (`Regions.brush`; `console: true` takes the command's
+  console path) -> the region's view once realised `{region, planId, irSha, state, brush, cellsWritten, cellsSkipped, claim, ms}` or
+  `{refused, reason}`; `dev.brush.stats {}`: every stroke's latency marks. Both run headless (SliceBDev is generated). apitest
+  `apib`, `brush`, `brushundo`.
 - **2026-10-12 (headless gates):** the DevBridge also runs headless on a dedicated server (section "Headless"); `dev.hello`
   and `dev.state` there carry `headless: true`, and client-only hooks answer `client-only: ...`. No hook changed on the client.
 - **2026-10-11 (6c slice W):** new `dev.region.survey {claim: [x0,z0,x1,z1], surveyLoad?: bounded:256, file?}`: the region plan
