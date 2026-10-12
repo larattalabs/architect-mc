@@ -9956,7 +9956,7 @@ library check (`tools/p2-library-check.mjs`), apijars. **gate-verifier** re-runs
 
 - Entities and biomes. Schematics past the cap as composites (7c). Other formats (`.litematic`) on request.
 
-### Phase 6c slice SCH as built (placeholder API 1.20.0 / mod 0.23.0; the coordinator sets the numbers at merge)
+### Phase 6c slice SCH as built (placeholder API 1.20.0 / mod 0.23.0; the coordinator sets the numbers at merge; recorded 2026-10-12)
 
 Written from the public Sponge Schematic specification only (SpongePowered/Schematic-Specification@8e6be2d,
 `versions/schematic-2.md` and `schematic-3.md`, cited in both codec files). No WorldEdit source was read or used (item 7: the
@@ -10035,6 +10035,11 @@ gate scans the diff for WorldEdit code, packages and imports).
 - **Evidence:** `<run>/s2/gate6c-sch/` (step JSONs, REPORT.md, spend.json $0.00). Item 2 on Linux: the mod's four exports
   re-gzipped in eclipse-temurin:25 on linux/amd64 match macOS byte for byte, and the kit test passes in node:22 on
   linux/amd64. Timing bars were recorded, and none missed.
+- **gate-verifier: PASS** (2026-10-12). It reviewed the diff and the evidence and re-ran items 1, 4 and 5
+  (`artifacts/gate-runs-SCH-verify/20261012-193750-change`, head f1e7e69: sch-roundtrip 39/0, sch-refusals 12/0,
+  sch-placement 12/0). It accepted every coordinator call above.
+  - Minor notes, none blocking: `/architect import` checks the path after `normalize()` without resolving symlinks (it is
+    op-only, and the helper re-checks its staging); a site export's `Date` is the time of export, as documented.
 
 ## Phase 6c slice F3: forms II, trees, mushrooms, coral, roots and stalactites (DRAFT for Steward review)
 
