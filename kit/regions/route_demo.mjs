@@ -93,10 +93,10 @@ export default function routeDemo(ctx) {
   const margin = 14;
   let sites;
   const given = NAMES.map((n) => [P[`${n}X`], P[`${n}Z`]]);
-  if (given.some(([x, z]) => x !== 0 || z !== 0)) {
+  if (!flat && given.some(([x, z]) => x !== 0 || z !== 0)) {
     sites = given.map(([x, z]) => ({ x, z, top: padOn(x, z).top }));
   } else if (flat) {
-    // on the hill: the gate below its foot, the hall on the slope, the chapel near the top, the lookout on the top
+    // (the flat variant always lays its own sites) on the hill: the gate below its foot, the hall on the slope, the chapel near the top, the lookout on the top
     const at = (x, z) => ({ x, z, top: padOn(x, z).top });
     sites = [at(cx - 4, claim.maxZ - margin - LOT), at(cx + 30, cz + 20), at(cx - 34, cz - 22), at(cx + 4, claim.minZ + margin)];
   } else {
