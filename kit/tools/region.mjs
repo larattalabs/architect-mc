@@ -81,11 +81,11 @@ async function plan(argv) {
     fs.writeFileSync(path.join(opts.out, 'meta.json'), `${JSON.stringify(res.meta)}\n`);
     const ir = res.ir;
     const planJson = { ok: true, irSha: res.irSha, id: ir.id, seed: ir.seed, claim: ir.claim, stages: ir.stages, lots: ir.lots.length, roads: ir.roads.length, paths: ir.paths.length, anchors: ir.anchors, budget: ir.budget, notes: res.notes, stats: res.stats,
-      irFormat: ir.format, requires: ir.requires ?? [], needVolumes: res.needVolumes, blobs: Object.entries(ir.blobs ?? {}).filter(([, b]) => b.sha).map(([name, b]) => ({ name, ...b })) };
+      irFormat: ir.format, requires: ir.requires ?? [], needVolumes: res.needVolumes, passes: res.passes, passRuns: res.stats.passes, blobs: Object.entries(ir.blobs ?? {}).filter(([, b]) => b.sha).map(([name, b]) => ({ name, ...b })) };
     fs.writeFileSync(path.join(opts.out, 'plan.json'), `${JSON.stringify(planJson, null, 2)}\n`);
   }
   const ir = res.ir;
-  const summary = { ok: true, irSha: res.irSha, irFormat: ir.format, requires: ir.requires ?? [], needVolumes: res.needVolumes, stages: ir.stages, lots: ir.lots.length, anchors: ir.anchors, budget: ir.budget, tiles: res.stats.tiles, notes: res.notes, ms: res.stats.ms };
+  const summary = { ok: true, irSha: res.irSha, irFormat: ir.format, requires: ir.requires ?? [], needVolumes: res.needVolumes, passes: res.passes, passRuns: res.stats.passes, stages: ir.stages, lots: ir.lots.length, anchors: ir.anchors, budget: ir.budget, tiles: res.stats.tiles, notes: res.notes, ms: res.stats.ms };
   if (opts.json) console.log(JSON.stringify(summary));
   else {
     console.log(`plan ${ir.id}: irSha ${res.irSha}`);
@@ -175,7 +175,7 @@ async function catalogue(argv) {
     if (!m.catalogue || typeof m.catalogue !== 'object') continue;
     const params = {};
     for (const [k, v] of Object.entries(m.params ?? {})) params[k] = { type: v.type, ...(v.min !== undefined ? { min: v.min } : {}), ...(v.max !== undefined ? { max: v.max } : {}), ...(v.default !== undefined ? { default: v.default } : {}), ...(v.values ? { values: v.values } : {}) };
-    programs.push({ id: m.id, description: m.catalogue.description, params, needs: m.catalogue.needs, claim: m.catalogue.claim });
+    programs.push({ id: m.id, description: m.catalogue.description, params, needs: m.catalogue.needs, claim: m.catalogue.claim, ...(Array.isArray(m.passes) && m.passes.length ? { passes: [...m.passes] } : {}) });
   }
   const out = { programs };
   if (opts.json) console.log(JSON.stringify(out));

@@ -30,7 +30,7 @@ export function partKinds(ir, meta) {
       if (p.set === 'path') kind = 'path';
       else if (lotParts.has(p.id)) kind = 'pad';
       else if (formParts.has(p.id)) kind = 'form';
-      else kind = p.ops.every((o) => (o.op === 'shape' ? o.material === null : (o.materials ?? []).every((m) => m === null))) ? 'carve' : 'add';
+      else kind = p.ops.every((o) => (o.op === 'shape' ? o.material === null : o.op === 'relief' ? false : (o.materials ?? []).every((m) => m === null))) ? 'carve' : 'add'; // (6c T1) a relief op fills and cuts
     }
     return { id: p.id, stage: p.stage, kind: kind === 'path' || kind === 'pad' || kind === 'form' || kind === 'carve' ? kind : 'add', floating: floating.has(p.id) };
   });
@@ -125,6 +125,8 @@ export function sitePlan({ ir, meta, planId = null, irSha = null, vw = null }) {
     out.props = (meta.village.props ?? []).map((p) => ({ kind: p.kind, id: p.id, ...(p.lot ? { lot: p.lot } : {}), at: [...p.cells[0].slice(0, 3)] }));
     for (const l of out.lots) l.lamps = meta.village.apronLamps.perLot?.[l.id] ?? 0;
   }
+  // (6c T1) the plan-time passes the program ran, with their wall time and the plan's peak memory after each (the plan meta)
+  if (meta?.passes?.length) out.passes = meta.passes.map((p) => ({ name: p.name, ms: p.ms, heapMb: p.heapMb }));
   return out;
 }
 

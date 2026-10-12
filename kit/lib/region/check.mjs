@@ -556,6 +556,7 @@ export function checkRegion({ ir, survey, blobs, volumes = [], meta = null, worl
     for (const [r, s] of Object.entries(ir.roles ?? {})) check(s, `role ${r}`);
     for (const p of ir.parts) for (const o of p.ops) {
       if (o.op === 'columns') for (const m of o.materials ?? []) check(m, `part ${p.id}`);
+      else if (o.op === 'relief') { if (o.fill && typeof o.fill === 'object') { for (const c of o.fill.rule.rule) check(c.mat, `part ${p.id}`); check(o.fill.rule.default, `part ${p.id}`); } else check(o.fill, `part ${p.id}`); } // (6c T1)
       else if (o.material && typeof o.material === 'object') { for (const c of o.material.rule.rule) check(c.mat, `part ${p.id}`); check(o.material.rule.default, `part ${p.id}`); }
       else check(o.material, `part ${p.id}`);
     }

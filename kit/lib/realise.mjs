@@ -11,15 +11,16 @@ import { compileRule, decodeField, FACING_MAX_PRIMITIVES, ruleError, ruleUsesFac
 import { ByteWriter, FLAG_MISSING, asColumns, sha256Hex, stateBytes, writeArtlHeader } from './region/pack.mjs';
 
 export const AIR = 'minecraft:air';
-export const OP_KINDS = ['shape', 'columns'];
+export const OP_KINDS = ['shape', 'columns', 'relief'];
 export const SETS = ['terrain', 'path'];
 /** (6b) The IR formats this evaluator reads (kit/REGIONS.md "IR format 2"). */
 export const IR_FORMATS = Object.freeze([1, 2]);
 /** (6b) Every format-2 kind an IR's `requires` may name; any of them makes the IR format 2. */
 export const KINDS_FORMAT2 = Object.freeze(['blobs:side', 'fields', 'forms', 'material:rule', 'shape:array', 'shape:capsuleChain', 'shape:ellipsoid',
-  'shape:instances', 'shape:prism', 'shape:strata', 'shape:warp', 'shape:wedge', 'volumes', 'road:lamp']);
+  'shape:instances', 'shape:prism', 'shape:strata', 'shape:warp', 'shape:wedge', 'volumes', 'road:lamp', 'relief']);
 // (6c W) 'road:lamp': a 4e road's `lamp` (the bible's lamp fixture for its lanterns; kit/lib/region/fixtures.mjs roadLamp). A mod
 // before 0.18.0 would lay its own fence and lantern, so the plan needs it (PLAN_STALE there).
+// (6c T1) 'relief': a `relief` op (kit/REGIONS.md "The relief op"); a kit before 0.20.0 throws on the op kind.
 /** Max ops in an IR (also the evaluator's buffer encoding limit). */
 export const MAX_OPS = 20000;
 const OP_SLOTS = 32768; // buffer value = (op index + 1) + material * OP_SLOTS
@@ -28,7 +29,7 @@ const EPS = 1e-6;
 const CLIP_COUNT_MARGIN = 64;
 
 /** (6b) Op kinds reserved for later phases (they throw as unknown until then). */
-export const OPS_RESERVED = ['relief', 'scatter', 'voxels', 'stamp'];
+export const OPS_RESERVED = ['scatter', 'voxels', 'stamp']; // (6c T1) relief is built
 /** (6b) The members a format-2 IR may have (anything else throws). */
 export const MEMBERS_FORMAT2 = ['anchors', 'blobs', 'budget', 'claim', 'fields', 'floating', 'format', 'forms', 'graph', 'id', 'keepOut', 'kitVersion', 'lots', 'node', 'params',
   'parts', 'paths', 'programSha', 'requires', 'roads', 'roles', 'rules', 'seed', 'stages', 'tiles', 'utility', 'volumes'];
@@ -36,7 +37,7 @@ export const MEMBERS_FORMAT2 = ['anchors', 'blobs', 'budget', 'claim', 'fields',
 // members from kit 0.16.0, in format 1 and 2; the evaluator ignores them. An older kit refuses such a plan PLAN_STALE by the
 // kitVersion bump.
 /** (6b) The running kit's version (kept equal to lib/region/plan.mjs KIT_VERSION by a test). */
-export const EVAL_KIT_VERSION = '0.18.0';
+export const EVAL_KIT_VERSION = '0.20.0';
 
 /** Compare two semver strings (major.minor.patch, numeric): -1, 0, 1. */
 export function semverCompare(a, b) {
@@ -68,6 +69,7 @@ export function walkKinds(ir) {
   for (const p of ir.parts ?? []) for (const o of p.ops ?? []) {
     if (o.op === 'shape') for (const s of shapeKinds(o.shape)) if (SHAPES_FORMAT2.includes(s)) k.add(`shape:${s}`);
     if (o.material && typeof o.material === 'object') k.add('material:rule');
+    if (o.op === 'relief') { k.add('relief'); if (o.fill && typeof o.fill === 'object') k.add('material:rule'); }
   }
   if (ir.blobs && Object.values(ir.blobs).some((b) => b && b.sha !== undefined)) k.add('blobs:side');
   if (ir.fields && Object.keys(ir.fields).length) k.add('fields');
@@ -229,6 +231,8 @@ export function compileIR(ir, opts = {}) {
         const idx = new Map();
         for (const [k, l] of index) idx.set(k, Int32Array.from(l));
         ops.push({ ...base, kind: 1, rule, from: yrefFn(o.from ?? { abs: 0 }), to: yrefFn(o.to ?? { abs: 0 }), entries: e, colIndex: idx, minX, maxX, minZ, maxZ });
+      } else if (o.op === 'relief') {
+        ops.push({ ...base, ...compileRelief(o, where, f2, fieldNames, fieldFn, mat) });
       } else throw new Error(`IR: unknown op '${o.op}' (supported: ${OP_KINDS.join(', ')})`);
     }
   }
@@ -260,6 +264,45 @@ function compileOpRule(o, where, f2, fieldNames, fieldFn, mat, second, shape) {
   if (ruleUsesFacing(r) && shape && primitiveCount(shape) > FACING_MAX_PRIMITIVES) throw new Error(`${where}: a rule with facing allows at most ${FACING_MAX_PRIMITIVES} primitive shapes (this op has ${primitiveCount(shape)})`);
   const pick = compileRule(r, { mat, fields: fieldFn, bands: shape ? strataOf(shape) : null });
   return { pick, facing: ruleUsesFacing(r), node2: ruleUsesFacing(r) && second ? second() : null };
+}
+
+/** (6c T1) A relief field's "no value here" sample: the op writes nothing in that column (also outside the field). */
+export const RELIEF_NONE = -32768;
+/** (6c T1) The relief op's modes and its clamp limit. */
+export const RELIEF_MODES = ['delta', 'target'];
+export const RELIEF_MAX_CLAMP = 64;
+/** (6c T1) How far above the old ground a relief column clears (short and tall plants on a cut or a shallow fill). */
+export const RELIEF_CLEAR = 2;
+
+/**
+ * (6c T1) Compile a `relief` op: `{op: 'relief', field, mode: 'delta'|'target', cut: cond, fill: blockState|{rule}, maxCut, maxFill}`
+ * (SETTLEMENTS §4.1, kit/REGIONS.md "The relief op"). An i16 field over the op's columns: in `delta` mode the new ground is
+ * `g + dh`, in `target` mode exactly `dh` (an absolute y), both clamped per column to `g - maxCut .. g + maxFill`. `cut` is the
+ * op's write condition (default IF_NATURAL).
+ */
+function compileRelief(o, where, f2, fieldNames, fieldFn, mat) {
+  if (!f2) throw new Error(`${where}: a relief op needs format 2`);
+  if (typeof o.field !== 'string' || !fieldNames.has(o.field)) throw new Error(`${where}: relief field '${o.field}' is not one of the IR's fields`);
+  const mode = o.mode ?? 'delta';
+  if (!RELIEF_MODES.includes(mode)) throw new Error(`${where}: relief mode must be ${RELIEF_MODES.join(' or ')}`);
+  const cut = o.cut ?? 0;
+  if (!(Number.isInteger(cut) && cut >= 0 && cut <= 3)) throw new Error(`${where}: relief cut must be a cond 0..3`);
+  for (const k of ['maxCut', 'maxFill']) if (!(Number.isInteger(o[k]) && o[k] >= 0 && o[k] <= RELIEF_MAX_CLAMP)) throw new Error(`${where}: relief ${k} must be 0..${RELIEF_MAX_CLAMP}`);
+  if (o.fill === undefined || o.fill === null || (typeof o.fill !== 'string' && typeof o.fill !== 'object')) throw new Error(`${where}: relief fill must be a block state or a material rule`);
+  const f = fieldFn(o.field);
+  if (f.type !== 'i16') throw new Error(`${where}: relief field '${o.field}' must be i16`);
+  const rule = typeof o.fill === 'object' ? compileOpRule({ material: o.fill }, `${where} fill`, f2, fieldNames, fieldFn, mat, null, null) : null;
+  return {
+    kind: 2, cond: cut, field: f, target: mode === 'target', rule, mat: rule ? 0 : mat(o.fill), maxCut: o.maxCut, maxFill: o.maxFill,
+    minX: f.minX, maxX: f.minX + f.width * f.res - 1, minZ: f.minZ, maxZ: f.minZ + f.depth * f.res - 1,
+  };
+}
+
+/** (6c T1) A relief field's sample at (x, z): nearest at res 1, the covering sample at res 4; RELIEF_NONE outside. */
+function reliefAt(f, x, z) {
+  const i = Math.floor((x - f.minX) / f.res), j = Math.floor((z - f.minZ) / f.res);
+  if (i < 0 || j < 0 || i >= f.width || j >= f.depth) return RELIEF_NONE;
+  return f.values[i + j * f.width];
 }
 
 // one evaluation buffer per thread, grown as needed
@@ -397,6 +440,31 @@ export function evalTile(ir, key, heights, opts = {}) {
                   }
                 }
                 if (any) { if (a - yBase < wLo) wLo = a - yBase; if (b - yBase > wHi) wHi = b - yBase; }
+              } else if (o.kind === 2) {
+                // (6c T1) relief: the column's new ground `top` from the frozen ground and the field; cut above it (air up to
+                // RELIEF_CLEAR over the old ground), fill from the old ground up to it with the fill rule (depth = top - y)
+                const v = reliefAt(o.field, wx, wz);
+                if (v === RELIEF_NONE) continue;
+                const g = col.g;
+                let dh = o.target ? v - g : v;
+                if (dh < -o.maxCut) dh = -o.maxCut; else if (dh > o.maxFill) dh = o.maxFill;
+                if (dh === 0 && !o.target) continue;
+                const top = g + dh;
+                let a = dh > 0 ? g : top, b = top > g + RELIEF_CLEAR ? top : g + RELIEF_CLEAR;
+                if (!inClaimXZ) { clipped += span(Math.max(a, cMinY - CLIP_COUNT_MARGIN), Math.min(b, cMaxY + CLIP_COUNT_MARGIN)); continue; }
+                if (a < cMinY) { clipped += span(Math.max(a, cMinY - CLIP_COUNT_MARGIN), Math.min(b, cMinY - 1)); a = cMinY; }
+                if (b > cMaxY) { clipped += span(Math.max(a, cMaxY + 1), Math.min(b, cMaxY + CLIP_COUNT_MARGIN)); b = cMaxY; }
+                if (a > b) continue;
+                const pick = o.rule ? o.rule.pick : null;
+                if (pick) { R.x = wx; R.z = wz; R.a = a; R.b = top; R.cols = true; }
+                const val = tag + o.mat * OP_SLOTS;
+                for (let y = a, row = a - yBase; y <= b; y++, row++) {
+                  if (y > top) buf[row * 256 + cell] = tag; // air (material 0)
+                  else if (pick) { R.y = y; buf[row * 256 + cell] = tag + pick(wx, y, wz, y - top, env) * OP_SLOTS; }
+                  else buf[row * 256 + cell] = val;
+                }
+                if (a - yBase < wLo) wLo = a - yBase;
+                if (b - yBase > wHi) wHi = b - yBase;
               } else {
                 const list = o.colIndex.get(colKey(wx, wz));
                 if (!list) continue;

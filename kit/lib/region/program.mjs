@@ -24,6 +24,7 @@ import { encodeArbl } from '../realise.mjs';
 import { ruleError } from '../material.mjs';
 import { sha256Hex } from './pack.mjs';
 import { floatingIsland } from '../forms/floatingIsland.mjs';
+import { PASSES, PASS_NAMES } from './passes/index.mjs';
 import { CARDINALS, cardinalOf, centreCells, circlePolygon, compassDir, crossOffsets, dominantCardinal, rightOf, segmentAxis } from './geom.mjs';
 
 export const COND = Object.freeze({ IF_NATURAL: 0, IF_SOLID_NATURAL: 1, IF_AIR_OR_FLUID: 2, ALWAYS_OURS: 3 });
@@ -176,6 +177,45 @@ export class Region {
     // width, stage, path, mover}
     this.graph = { nodes: [], edges: [] };
     this.graphIds = new Set();
+    // (6c T1) the passes run ({name, ms, heapMb}), the lots on a `blend` edge and the lots a relief pass blended around
+    this.passRuns = [];
+    this.blendLots = [];
+    this.reliefLots = new Set();
+  }
+
+  /**
+   * (6c T1) Run a plan-time pass (kit/lib/region/passes/, SETTLEMENTS §4): `relief` blends the land around pads and corridors
+   * (`{around: [lots and {path, width} corridors], radius, maxCut, maxFill, erode: {thermal, stream}, fill, corridorFill, stage,
+   * part}`). The program must declare it (`export const passes = ['relief']`). Its fields become side blobs (`r.field`), its ops a
+   * part (`part`, default the pass's name, in the stage of the first lot it blends around: its pad's, so the pass reads the same
+   * frozen ground as the pad). Returns `{fields: {name: fieldName}, ops: n, data: {...the pass's data, ms}}`.
+   */
+  pass(name, intent = {}) {
+    if (!Object.hasOwn(PASSES, name)) throw new Error(`pass '${name}' is not a kit pass (${PASS_NAMES.join(', ')})`);
+    const declared = this.ctx.passes ?? [];
+    if (!declared.includes(name)) throw new Error(`PASS_UNDECLARED: the program calls pass '${name}' but does not declare it (export const passes = ['${name}'])`);
+    const it = { ...intent };
+    const firstLot = (it.around ?? []).find((a) => a && Array.isArray(a.at) && Array.isArray(a.size));
+    const stage = it.stage ?? (firstLot ? this.parts.find((p) => p.id === firstLot.part)?.stage : undefined);
+    const fillDefault = (skin) => ({ rule: [{ when: { depth: [0, 0] }, mat: skin }, { when: { depth: [1, 3] }, mat: 'subsurface' }], default: 'rock' });
+    it.fill = this.material(it.fill ?? fillDefault('surface'), `pass ${name} fill`);
+    it.corridorFill = this.material(it.corridorFill ?? fillDefault('path'), `pass ${name} corridorFill`);
+    const fname = it.name ?? name;
+    const t0 = performance.now();
+    // (never below the claim's bottom 2 rows, as terraces: bedrock on a flat world)
+    const out = PASSES[name](this.survey.columns, this.ctx.volumes ?? [], { ...it, name: fname, minY: Math.max(it.minY ?? -32768, this.claim.minY + 2) });
+    const ms = Math.round(performance.now() - t0);
+    const heapMb = Math.round(process.resourceUsage().maxRSS / 1024);
+    const res = { fields: {}, ops: out.ops.length, data: { ...out.data, ms } };
+    for (const [fn, f] of Object.entries(out.fields)) res.fields[fn] = this.field(fn, f);
+    if (out.ops.length) {
+      const p = this.part(it.part ?? fname, { stage });
+      for (const op of out.ops) p._push(op);
+    }
+    for (const a of it.around ?? []) if (a && typeof a.id === 'string' && Array.isArray(a.at)) this.reliefLots.add(a.id);
+    this.passRuns.push({ name, ms, heapMb });
+    this.note(`pass ${name}: ${(ms / 1000).toFixed(1)} s, ${heapMb} MB${out.data?.resolution > 1 ? ` (coarse: resolution ${out.data.resolution})` : ''}`);
+    return res;
   }
 
   /** (6c V) A graph node (SETTLEMENTS §8.1): `{id, kind: lot|plaza|junction, ref, at, ports}`; ids unique. */
@@ -1423,10 +1463,12 @@ class Part {
     const [w, d] = size;
     const mx = max ?? [w, 16, d];
     if (!Array.isArray(mx) || mx.length !== 3 || !mx.every((v) => isInt(v) && v >= 1) || mx[0] > 96 || mx[1] > 64 || mx[2] > 96) throw new Error(`${what}: max must be [x, y, z] within 96x64x96`);
-    const { maxCut = 6, maxFill = 6, edge = 'slope', fill: padFill = 'foundation' } = pad;
+    // (6c T1, N-T1-1) `blend` (the relief pass meets the pad) is the default edge of a program that declares passes
+    const { maxCut = 6, maxFill = 6, edge = (this.region.ctx.passes?.length ? 'blend' : 'slope'), fill: padFill = 'foundation' } = pad;
     if (padFill !== 'foundation' && padFill !== 'none') throw new Error(`${what}: pad fill must be 'foundation' or 'none'`);
     if (!(isInt(maxCut) && maxCut >= 0 && maxCut <= 64 && isInt(maxFill) && maxFill >= 0 && maxFill <= 64)) throw new Error(`${what}: pad maxCut / maxFill must be 0..64`);
-    if (edge !== 'slope' && edge !== 'wall') throw new Error(`${what}: pad edge must be slope or wall`);
+    if (edge !== 'slope' && edge !== 'wall' && edge !== 'blend') throw new Error(`${what}: pad edge must be slope, wall or blend`);
+    if (edge === 'blend') this.region.blendLots.push(id);
     const s = this.region.survey;
     const ps = s.padStats(at[0], at[1], w, d, { floorY: floor === 'auto' ? null : floor });
     if (floor !== 'auto' && !isInt(floor)) throw new Error(`${what}: floor must be 'auto' or an integer y`);
@@ -1505,6 +1547,9 @@ class Part {
       if (o.op === 'shape') {
         const n = compileShape(o.shape, this.region.blobs);
         x0 = Math.min(x0, n.minX); x1 = Math.max(x1, n.maxX); z0 = Math.min(z0, n.minZ); z1 = Math.max(z1, n.maxZ);
+      } else if (o.op === 'relief') { // (6c T1) the field's extent
+        const f = this.region.fields[o.field];
+        if (f) { x0 = Math.min(x0, f.minX); x1 = Math.max(x1, f.minX + f.width * f.res - 1); z0 = Math.min(z0, f.minZ); z1 = Math.max(z1, f.minZ + f.depth * f.res - 1); }
       } else {
         for (let i = 0; i < o.cols.length; i += 5) { x0 = Math.min(x0, o.cols[i]); x1 = Math.max(x1, o.cols[i]); z0 = Math.min(z0, o.cols[i + 1]); z1 = Math.max(z1, o.cols[i + 1]); }
       }
