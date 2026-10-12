@@ -392,6 +392,7 @@ async function apicompat() {
   fs.writeFileSync(path.join(OUT, 'api-compat.txt'), t);
   check(r.status === 0 && /all 4 checks clean/.test(t), `item 14: api-compat against the 0.17.0, 0.16.0 and 0.15.0 apitest jars and the 0.17.0 surface: ${t.trim().split('\n').pop()}`);
   if (dev) {
+    if (!(await call('dev.state')).inWorld) await openWorld(BASE);
     const v = await api('api119');
     check(v.oldVerdict === true && /^siteWait bomFull bomExact$/.test(v.trailing) && v.waitingDefault === true && v.features119?.length === 2,
       `item 14: apitest api119: the 1.12.0 Verdict constructor kept, trailing components, waiting is a default method (${JSON.stringify(v)})`);
