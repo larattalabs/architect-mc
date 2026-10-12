@@ -1,5 +1,9 @@
 #!/usr/bin/env node
-// node kit/import.mjs <file.nbt> --id <id> --out <dir> [--name <name>] [--max x,y,z] [--json]
+// node kit/import.mjs <file.nbt|file.schem> --id <id> --out <dir> [--name <name>] [--max x,y,z] [--ground-y N] [--tag T]... [--json]
+//
+// (6c SCH) A Sponge schematic (.schem, versions 2 and 3: lib/schem.mjs) is converted to a structure first, as it is, at its own
+// DataVersion (the mod upgrades a player's file with vanilla's data fixers before it reaches here); its groundY is -Offset.y when
+// that is a row of it. --ground-y sets the ground row (default 1, or the schematic's), --tag adds a tag after `imported`.
 //
 // Turns a vanilla structure file (a structure-block save) into a library entry (lib/importer.mjs): writes
 // <out>/<id>.nbt (gzipped, the first palette, no entities) and <out>/<id>.blueprint.json (type custom, groundY 1,
@@ -14,15 +18,16 @@ import { fileURLToPath } from 'node:url';
 import { checkFiles, parseMax } from './lib/check.mjs';
 import { prepareImport } from './lib/importer.mjs';
 import { encodeGzip, parse } from './lib/nbt.mjs';
+import { readSchem, schemToStructure } from './lib/schem.mjs';
 import { report } from './check.mjs';
 
-const USAGE = 'usage: node kit/import.mjs <file.nbt> --id <id> --out <dir> [--name <name>] [--max x,y,z] [--json]';
+const USAGE = 'usage: node kit/import.mjs <file.nbt|file.schem> --id <id> --out <dir> [--name <name>] [--max x,y,z] [--ground-y N] [--tag T] [--json]';
 export const IMPORT_MAX = { x: 96, y: 64, z: 96 };
 /** a structure file bigger than this is refused before parsing */
 const MAX_BYTES = 32 * 1024 * 1024;
 
 function parseArgs(argv) {
-  const o = { files: [], max: IMPORT_MAX };
+  const o = { files: [], max: IMPORT_MAX, tags: [] };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     const val = () => { if (i + 1 >= argv.length) throw new Error(`${a} needs a value`); return argv[++i]; };
@@ -31,10 +36,14 @@ function parseArgs(argv) {
     else if (a === '--name') o.name = val();
     else if (a === '--max') o.max = parseMax(val());
     else if (a === '--json') o.json = true;
+    else if (a === '--ground-y') o.groundY = Number(val());
+    else if (a === '--tag') o.tags.push(val());
     else if (a.startsWith('-')) throw new Error(`unknown option ${a}`);
     else o.files.push(path.resolve(a));
   }
-  if (o.files.length !== 1) throw new Error('needs one <file.nbt>');
+  if (o.files.length !== 1) throw new Error('needs one <file.nbt> or <file.schem>');
+  if (o.groundY !== undefined && !(Number.isInteger(o.groundY) && o.groundY >= 0 && o.groundY < 64)) throw new Error('--ground-y must be 0..63');
+  if (!o.tags.every((t) => /^[a-z0-9_]{1,24}$/.test(t))) throw new Error('--tag must match [a-z0-9_]{1,24}');
   if (!/^[a-z0-9_]+$/.test(o.id ?? '')) throw new Error('--id must match [a-z0-9_]+');
   if (!o.out) throw new Error('--out <dir> is required');
   if (o.name !== undefined && (o.name.trim() === '' || o.name.length > 40)) throw new Error('--name must be 1..40 characters');
@@ -63,7 +72,19 @@ function main() {
   } catch (e) {
     return fail2(`${path.basename(file)}: cannot read it as a structure file (${e.message})`, o.json);
   }
-  const prep = prepareImport(root, { id: o.id, name: o.name, file });
+  let groundY = o.groundY;
+  if (/\.schem$/i.test(file)) {
+    try {
+      const sc = readSchem(root);
+      root = schemToStructure(sc);
+      const g = -sc.offset[1];
+      if (groundY === undefined && g >= 0 && g < sc.height) groundY = g;
+      if (o.name === undefined && sc.name && sc.name.trim()) o.name = sc.name.trim().slice(0, 40);
+    } catch (e) {
+      return fail2(`${path.basename(file)}: ${e.reason ?? 'FORMAT'}: ${e.message}`, o.json);
+    }
+  }
+  const prep = prepareImport(root, { id: o.id, name: o.name, file, groundY: groundY ?? 1, tags: o.tags });
   if (prep.errors.length) return fail2(`${path.basename(file)}: ${prep.errors.join('; ')}`, o.json);
   fs.mkdirSync(o.out, { recursive: true });
   const nbt = path.join(o.out, `${o.id}.nbt`);
