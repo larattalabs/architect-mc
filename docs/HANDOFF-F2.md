@@ -23,10 +23,26 @@ Run dir `../architect-mc-F2-run`, gate out `artifacts/gate-runs-F2`, evidence `a
 
 ## Status
 
-- [ ] harvester spike (each library feature twice, byte-compared)
-- [ ] kit: scatter op (evaluator), anchors, supports, bundled items, property tests
-- [ ] kit: stamp op, skirt, rotation; synthetic stamps in tests
-- [ ] sidecar: --stamps, FEATURES; mod: versions, IrStale, features, ApiF2 test, jar exclusion
-- [ ] scatter_demo (S2 claim, flat variant, cave box), scenario rows, golden (stamps off)
-- [ ] gate: tools/gate6cf2.mjs, gate-chains steps + impact rule, apijars/api-compat on 0.21.0/0.20.0/0.19.0
+- [x] harvester spike: 9 features x 8 seeds, every stamp byte-identical on a re-harvest (headless; `gate6cf2 harvest`)
+- [x] kit: scatter op (evaluator), anchors, supports, bundled items, property tests (`kit/test/scatter-f2.test.mjs`)
+- [x] kit: stamp op, skirt, rotation; synthetic stamps in tests; kit golden `scatter-demo.golden.json` (synthetic stamps)
+- [x] sidecar `--stamps` (+ sandbox read), FEATURES `region.scatter`; mod versions, IrStale, features, ApiF2Test, jar exclusion
+- [x] scatter_demo / scatter_cave scenarios pinned (dev run `../architect-mc-F2-run`, headless on 8926/8927)
+- [x] gate: tools/gate6cf2.mjs (unit, stale, apicompat, harvest, pin), gate-chains f2-unit / f2-harvest / 6cf2-scenario-scatter,
+      impact rule; apijars + api-compat on 0.21.0 (built from the tag: artifacts/gate6c-f2/v0210), 0.20.0, 0.19.0
+- [ ] scenario runs green (flat, natural, cave); scatter_demo golden (stamps off) committed
 - [ ] slice tier run, gate-verifier, CONTRACT as-built, retire this file
+
+## Decisions made while building (for the as-built)
+
+- A scatter item stays inside its own grid cell (the point is clamped; reach r needs grid >= 2r + 1), so placements of one op
+  never overlap (a later placement took an earlier one's support in the property test). Reach at most 4, not 8: a placement's
+  decision reads its whole footprint, so K2's 8 is footprint (4) + reach (4).
+- Kept natural cells (F1 keepNatural) are kept cell by cell in the evaluator (the volume's class in the kept box), not by avoiding
+  whole columns (S2's land is dense with kept spikes).
+- Lantern melt safety on S2: no ice within level - 11, no snow other than the columns' own snow layers within level - 12 (the
+  checker reads natural snow as a block), no tree or frozen column within level - 12; the snow layers there are cleared (air),
+  written under every placement's own cells.
+- Stamp fluids dropped (dripstone_cluster/2 holds 9 water cells): F2 places no fluid (H's M25).
+- The committed scenario golden is the stamps-off re-plan of a run's own survey and volume; the run's own IR (with the local
+  stamps) shows its determinism over 3 plans and 1 vs 4 workers.
