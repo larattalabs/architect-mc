@@ -669,3 +669,75 @@ on `ext["architect_mc:village"].lamps`, `meta.village.apronLamps` (fixture, per-
 ## `siteplan.json` (format 1, widened)
 
 A village with apron lamps adds `props: [{kind, id, lot?, at}]` (the shared space's props and the apron lamps) and `lots[].lamps`.
+
+# Phase 6c slice T1 additions (passes, fields and relief; CONTRACT "Phase 6c slice T1")
+
+## Kit 0.20.0
+
+`KIT_VERSION` = `EVAL_KIT_VERSION` = `IrStale.KIT_VERSION` = 0.20.0 (a placeholder: the coordinator renumbers at merge). Every IR sha
+moves by its `kitVersion`; a program without passes plans the same parts, ops and tiles as before (format-1 tiles, S1's and S7's tile
+goldens and `mega_bench` don't move). `KINDS_FORMAT2` (kit and mod) gains `relief`, appended; `OP_KINDS` is `shape, columns, relief`;
+`OPS_RESERVED` keeps `scatter, voxels, stamp`.
+
+## Passes (`lib/region/passes/`, `r.pass`)
+
+A pass is a bundled, deterministic function `(survey, volumes, intent) -> {fields, ops, data}` (`PASSES` in `passes/index.mjs`) run
+at plan time in the plan's sandbox, never at realise. Its code is under the realise lint (integer math, `Math.floor/sqrt/abs/min/max/
+imul`, no clock, no `Date`, no `**`; `kit/test/relief-t1.test.mjs` scans `passes/**`).
+
+- A program declares the passes it calls: `export const passes = ['relief']` (a **literal** array: the helper reads it from the
+  source to pick the plan budget, `regionPassPlanMs` 120 s and `regionPassPlanHeapMb` 2 GB, else 6a's 30 s and 1 GB). The kit
+  checks it: a declared name that is not a kit pass, or a name twice, fails the plan; `r.pass(name)` of an undeclared pass fails
+  `PASS_UNDECLARED`.
+- `r.pass(name, intent)` resolves the intent's materials (roles), runs the pass with `minY` = the claim's bottom + 2, registers its
+  fields as side blobs (`r.field`), and pushes its ops into a part (`intent.part`, default the pass's name) in the stage of the first
+  lot it names (that lot's pad part: the pass reads the same frozen ground as the pad). It returns `{fields, ops, data: {..., ms}}`
+  and adds a note `pass <name>: <s> s, <MB> MB` (wall time; the process's peak RSS after the pass).
+- The plan's `stats.passes`, `meta.passes` (then `siteplan.json` `passes: [{name, ms, heapMb}]`), and the CLI's `plan.json` and
+  summary (`passes`: the declared list; `passRuns`: the timings). `region.planned` carries `passes` (the kit's word): the game then
+  samples the second plan's survey at resolution 1 up to 1024x1024 columns (past 1024 a side the pass runs coarse, on the
+  resolution-4 survey, noted).
+
+## The `relief` op (format 2, kind `relief`)
+
+```
+{ op: 'relief', field, mode: 'delta'|'target', cut: cond, fill: blockState | {rule}, maxCut, maxFill }
+```
+
+`field` names an i16 IR field; a sample of `-32768` (`RELIEF_NONE`), or a column outside the field, writes nothing. For a column with
+frozen ground `g` and sample `v`: `dh = v` (`delta`) or `v - g` (`target`), clamped to `[-maxCut, maxFill]` (0..64); the new ground is
+`top = g + dh`. A `delta` column with `dh` 0 writes nothing. Cells `min(g, top) .. max(top, g + 2)`: those at or below `top` take the
+fill (a material rule's `depth` is `top - y`, so the skin is the surface role), those above are air (a cut, and the plants on a
+shallow fill). Every cell's condition is `cut` (default `IF_NATURAL`; like `cond`, `ALWAYS_OURS` in a later stage or the path set).
+Pointwise: one sample per column; its tile bounds are the field's extent. Drift: a column whose frozen ground moved still gets `g +
+dh` (`delta`) or exactly `v` (`target`).
+
+## The `relief` pass (`passes/relief.mjs`)
+
+`r.pass('relief', {around, radius = 12, maxCut = 6, maxFill = 6, erode: {thermal, stream, streamAt}, fill, corridorFill, base})`:
+
+- **Pins**: each lot from `r.lot` (its footprint and 1-column apron at its top y, `floorY - 1`), corridors `{path: [[x, y, z], ...],
+  width}` (the centre line at its integer-interpolated profile y, widened), rects `{rect, y}`. The first pin of a column wins.
+- **Fixed columns** keep their ground: water and lava (and 2 columns around water), trees, missing columns.
+- **The band**: the free, unfixed columns within `radius` (Chebyshev, survey cells) of a pin. Start: the nearest pin's y fading
+  linearly to the land at `radius + 1`; then `radius * 4` Jacobi iterations in 1/16 fixed point (the 4-neighbour mean, rounded),
+  each clamped to the land's `-maxCut .. +maxFill` and never under `minY`.
+- **Erosion touch-up** (`erode`): `thermal` sweeps move a block from a column to its lowest 4-neighbour while the drop is over 2;
+  `stream` sweeps cut a block where the D8 accumulation (highest first, ties by index) reaches `streamAt` (24). Never on a pin or
+  outside the band; at most 4 extra |dh| a column; the clamps hold.
+- `base` (`{minX, minZ, width, depth, values}`, i16): heights added to the land the blend meets (relief_demo's flat-world hill); its
+  columns outside the band are written as raised, within the clamps.
+- **Output**: field `<name>` (dh over the band and the raised columns, `RELIEF_NONE` elsewhere: the pads are their lots' own) and, with
+  corridors, `<name>_target` (their absolute y); one `delta` op and one `target` op (`corridorFill`, default: the path role on top).
+  Both fields cover the bounding box of what they write, at the survey's resolution.
+
+## `pad.edge: 'blend'` (N-T1-1)
+
+`r.lot`'s `pad.edge` takes `blend`: no batter; the relief pass must name the lot in `around` (else the plan fails). `blend` is the
+default edge of a program that declares passes; programs without passes keep `slope`.
+
+## `relief_demo` (`kit/regions/relief_demo.mjs`, `catalogue = false`)
+
+Three pads (lots `lot_1..3`) and two corridors on S3's pinned claim (scenario `relief_demo`, phase `6c-t1`), blended with erosion;
+on a flat world a hill raised through `base`, two pads on it and one sunk 2 below the ground. `edge: 'slope'` is the same program
+with 6a's batters and no pass (the organic-read comparison); `pads` up to 64 (the 1024x1024 plan-time bench).
