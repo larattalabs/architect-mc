@@ -10247,6 +10247,50 @@ Branch `slice/X` (worktree `../architect-mc-X`). $0: sim and stub only (`artifac
 | Hook (C22) | `dev.undo.failRestore {skip}`: let `skip` removal restores finish, then break the next one before its site record is finished (-1 disarms). |
 | Gate | Slice tier `artifacts/gate-runs-X/20261011-182748-slice` (2 shards, 8912-8915, old-version clients 8916/8917, `--quiet-wait`, head fbb8ed2): 27 PASS, including unit-mod 498, unit-kit 246, apijars on the 0.16.0/0.15.0/0.14.0 jars (45 ok each), x-unit, **x-ingame** (53 ok: lotext, keys, removal, apicompat), v-ingame, 5b-chains, 4d-all, 4e-orders, 6a-megaA (own CPU max 24.6 ms, 50.7k cells/s), 6a-eflat, 6a-staged, 6a-inv3, the 6b steps and S1. Three steps did not pass and were fixed or re-run: unit-sidecar (the Limits drift guard did not know `LOT_EXT_MAX`: fixed in the guard) and v-unit (the X checkout lacked `sidecar/node_modules`: environment), re-run PASS at 524df06 with 6cv-scenario-s7 (NOISY at load 37 in the slice run, PASS on a quiet box: `20261011-204414-change`). `api-compat --gate6cx` 4/4 clean (0.16.0, 0.15.0, 0.14.0 apitest jars, 0.16.0 surface; baseline built from tag v0.16.0, `artifacts/gate6c-x/v0160`). Items: 1 unit (Api114Test 6, RegionKeysTest 5, the kit's C19 tests), 2 `lotext` (14 checks: 10/10 S7 flat lot sites carry the ext, 4097 refuses FIELD_LIMIT `params.lots[1].ext`, save/reload and undo/redo byte equal), 3 `keys` (plan idempotence, conflict, in-flight twin, owner scope, planByKey after the reload; a realise held pending fails WORLD_STOPPED, `realiseByKey` finds rg1 PLACING after the reload, it completes, a second realise returns it, another body OP_KEY_CONFLICT, removal ends the key), 5 api-compat, C22 `removal` (injected restore failure: removed=false and PARTIAL, the retry resumes and the world hash equals the pre-placement one; remove, reload, remove again: removed=true, world unchanged, REMOVED with the same removedAt for the region and the group). Evidence of the manual dev-client runs: `artifacts/gate6c-x/` (the contract says `gateX/`; named like the other slices). Known flakes in the box's tier (4d-all group undo on G4D Base gravity gravel, sim-massing, the apijars SITE_PROGRESS gap, 6b-nudges under load) did not occur in this run. |
 
+#### C23 as built (v0.17.1, API 1.14.0 unchanged; recorded 2026-10-12)
+
+Steward's review: a region removal resumed after a restart could stay REMOVING forever. `Groups.load` restores the removal
+without its future, and the region's end state was set only in that future's callback. Branch `fix/c23-resumed-removal`
+(worktree `../architect-mc-c23`, ports 8912-8917).
+
+- **Fix.** `Groups.end` calls an internal hook, `Groups.GROUP_ENDED(groupId, Removed)`, when a whole-group removal ends (not a
+  stage undo). It runs on the server thread before the futures complete. `removeGroup`'s answer for an already removed group calls it too. A refusal
+  (the owner rule, no such group) does not, because it ends no removal: another caller's removal may be running. The region's own
+  refused call ends it PARTIAL in `RegionsImpl.removeGroup`, and only when that call started or joined no removal (verifier
+  finding: a foreign `removeGroup` used to flip a REMOVING region to PARTIAL while its removal kept running).
+- **Region end.** `RegionsImpl` ends the REMOVING region of that group from the hook, once:
+  - removed: REMOVED, with the group's `removedAt`, the tombstone, and the key ended;
+  - failed: PARTIAL, as an uninterrupted failure gives.
+
+  The remove future no longer touches the state. A site-API removal of a region's group still leaves the region's state alone.
+- **Restart safety.** On a world's first tick, a region still REMOVING whose group has no removal running ends from the group's
+  saved state: REMOVED if the group is removed, else PARTIAL. This closes the window between the group's save and the
+  region's record. The dev hook `dev.region.dropRemovalEnd {on}` leaves the next group end's region REMOVING, to simulate that
+  stop.
+- **Groups.** A resumed group removal already ended its group from the persisted removal; gate (d) shows this.
+- **Gate.** `tools/gate6cx.mjs resume`, runner step `x-resume`, mapped under `change` for `Groups.java`, `RegionsImpl.java`
+  and `gate6cx.mjs`. Each case stops the world mid-removal under `dev.placement.slow`, after at least two members' restores
+  have been seen.
+  - (a) The removal resumes and finishes with no retry: REMOVED with `removedAt`, the group's time equal, the world hash equal
+    to the pre-placement one, the key ended, omitted from the list, and a second remove answers removed=true.
+  - (b) A restore failure injected after the reload: PARTIAL (never REMOVING), the group ACTIVE, PARTIAL across a reload (X's
+    noted gap), then the retry gives REMOVED with an exact world.
+  - (c) Two restarts mid-removal.
+  - (d) The same for a plain site group.
+  - (e) Another requester's `removeGroup` of the REMOVING region's group, without force: refused; the region stays REMOVING,
+    then ends REMOVED with an exact world.
+  - (f) The reconcile. (f1) The group REMOVED, the region record left REMOVING: after a restart, REMOVED with the group's
+    `removedAt`, an exact world, and removed=true again. (f2) The group ACTIVE after a failed restore, the region record left
+    REMOVING: after a restart, PARTIAL; the retry gives REMOVED with an exact world.
+- **Evidence.** `artifacts/gate-runs-c23/`, all at head 5136579:
+  - `20261011-230813-change`: x-resume 30/0;
+  - `20261011-231631-change`: the change tier. unit-mod 498, unit-kit 246, unit-sidecar 705, sim-jobs, x-unit, x-resume 30/0
+    and 6a-staged PASS. 4e-megalite was NOISY at load 40-48, with every bar ok;
+  - `20261012-003204-change`: x-ingame 53/0;
+  - `20261012-005926-change` (head f3f63c8, after the verifier fix): x-unit 3/0, x-resume 46/0 including (e) and (f).
+- **Verification.** A gate-verifier reviewed 5136579 and re-ran (a)-(d): PASS, with the refusal defect above. Its negative
+  control (the new gate on unfixed v0.17.0) hangs in REMOVING in case (a). Its review of the delta (f3f63c8) passed with no defects: x-resume 46/0 at 8e6d2bb (`artifacts/gate-runs-c23-verify2/20261012-033453-change`), (e), (f1) and (f2) included.
+
 ## Phase 6c slice Y: settlement stockpile (C24-C26) (FROZEN 2026-10-11 after Steward's review; built as Y1 and Y2)
 
 Next free API minor at merge (the house rule applies; main is at 1.14.0), mod to match. Steward round 7 (steward-mc
