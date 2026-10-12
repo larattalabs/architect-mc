@@ -10780,6 +10780,15 @@ shas of everything it depends on, `surveySha`, the protection fingerprint, the a
 **Decided (Noah, 2026-10-12, via Steward):** Claude picks a shortcut or a full composition per ask, and composing plus repair
 is capped at about $1 per plan. P0 itself stays $0.
 
+
+### Coordinator decisions on P0's Noah questions (2026-10-12)
+
+- **N-P0-1:** the existing bundled region programs (`crater_works`, `rift_city`, `floating_islands`) are exposed in v0 as
+  **named templates** (`program.template`), alongside `flat_village`: they exist and cost nothing. `form.floating_island` as a
+  free-standing form stays reserved.
+- **N-P0-2:** C28 is already D's builder's call (per-column biomes only if edge tracing needs it); not a Noah question.
+
+
 ### Deferred
 
 - Rule checks (RC), free layouts (FL), districts (D1, D2), typed connectors (7a), crossings (T3), brushes (B), and deltas to
