@@ -15,6 +15,10 @@ rootProject.name = 'architect_mc'
 include ':apitest'
 project(':apitest').projectDir = file('../apitest')
 
+// dev-only headless gate server (docs/GATES.md "Headless gates"): the DevBridge on a dedicated server; never in the shipped jar
+include ':devserver'
+project(':devserver').projectDir = file('../devserver')
+
 // lab-ui (dev.larattalabs:lab_ui, the shared client UI library), resolved in this order:
 //  1. A forced lab-ui checkout: LAB_UI_DIR=<dir> or -Plab_ui.dir=<dir>, as a composite build, whatever its state (it may be
 //     unreleased code: the build warns UNRELEASED, and the nested jar is still labelled lab_ui_version).

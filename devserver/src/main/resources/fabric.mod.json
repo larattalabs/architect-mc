@@ -1,0 +1,18 @@
+{
+	"schemaVersion": 1,
+	"id": "architect_devserver",
+	"version": "${version}",
+	"name": "Architect headless gate server (dev only)",
+	"description": "The DevBridge on a dedicated server, with a bot player, for Architect's headless gates. Never shipped.",
+	"license": "MIT",
+	"environment": "server",
+	"entrypoints": {
+		"main": ["dev.larattalabs.architect.devserver.DevServer"]
+	},
+	"depends": {
+		"fabricloader": ">=0.19.5",
+		"minecraft": "~26.3",
+		"fabric-api": "*",
+		"architect_mc": "*"
+	}
+}
