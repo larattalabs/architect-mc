@@ -38,6 +38,17 @@
       "trees": 6,
       "natural": 100,
       "missing": 0
+    },
+    "planSurvey": {
+      "sha": "c375efa864f9465ab144284f39872097b4cc5c3970822c03b1253f42fe83ced3",
+      "kitVersion": "0.18.0",
+      "resolution": 1,
+      "columns": 36864,
+      "water": 3907,
+      "frozen": 3,
+      "previousSha": "9da130dfdc9ba4f5f48329c9615343dac23c295f091c98530b01b05301a819fd",
+      "reason": "6c W (CONTRACT W §5, gate item 7): frozen water reads as water (ARSV FROZEN with WATER, floor at the bed), so a survey with frozen columns gets new bytes; re-pinned at the same claim",
+      "note": "the bytes vary between surveys of the live world (flowing water: 3890-3934 water columns over 6 repeat surveys, each a different sha, with or without W); the FROZEN count (3) is stable and is the pin"
     }
   },
   "flat": {

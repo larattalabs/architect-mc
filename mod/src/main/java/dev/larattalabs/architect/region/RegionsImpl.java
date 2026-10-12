@@ -1134,12 +1134,21 @@ public final class RegionsImpl implements Regions {
 		return x0 <= b[3] && b[0] <= x0 + Heights.TILE - 1 && z0 <= b[5] && b[2] <= z0 + Heights.TILE - 1;
 	}
 
+	/** 6c W (DevBridge dev.region.survey): the plan survey a region plan of this claim would send (resolution 1 up to 256x256, else 4). */
+	public static CompletableFuture<Columns> planSurvey(ServerLevel level, int x0, int z0, int x1, int z1, LoadPolicy load) {
+		return RegionSurvey.planSurvey(level, x0, z0, x1, z1, load);
+	}
+
 	private static QItem roadItem(ServerLevel level, RegionRec rec, Ir.Road road, List<String> after) {
 		List<BlockPos> pts = new ArrayList<>();
 		road.points().forEach(pt -> pts.add(new BlockPos(pt[0], pt[1], pt[2])));
 		var rr = new dev.larattalabs.architect.api.RoadRequest(level, pts, road.width(), road.surface(), null, road.lanterns(), false, Mode.INSTANT, rec.owner,
 			new JsonObject(), null, true);
-		return dev.larattalabs.architect.site.RegionQueue.roadItem(level, rec.id, "road:" + road.id(), road.stage(), after, rr);
+		QItem q = dev.larattalabs.architect.site.RegionQueue.roadItem(level, rec.id, "road:" + road.id(), road.stage(), after, rr);
+		if (road.lamp() != null) {
+			q.spec.add("lamp", road.lamp().deepCopy()); // 6c W: the bible's lamp fixture for the street's lanterns
+		}
+		return q;
 	}
 
 	/**

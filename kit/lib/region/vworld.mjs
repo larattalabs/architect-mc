@@ -3,7 +3,7 @@
 // stage with the cell conditions resolved against the world as it stands, as the mod does at P1. The checker (check.mjs)
 // and the previews read it. A dump-backed world (two ARWD dumps of the realised claim, before and after) gives the same
 // interface for the scenario metrics.
-import { BLOCKS, collisionOf, emissionOf, isClimbable, isFloor, isPassable, isSpawnable, lightCost, opticsOf, topOf, voxelClassOf } from '../blocks.mjs';
+import { BLOCKS, collisionOf, emissionOf, isClimbable, isFloor, isPassable, isSpawnable, lightCost, opticsOf, topOf, voxelClassOf, isGravity } from '../blocks.mjs';
 import { compileIR, evalTile } from '../realise.mjs';
 import { FLAG_MISSING, FLAG_TREE, FLAG_WATER, asColumns, makeColumns, unpack } from './pack.mjs';
 import { sampleIndex } from './survey.mjs';
@@ -60,7 +60,8 @@ export class Palette {
     this.barrier.push(!air && known && (coll === 'thin' || (BLOCKS[st.name].family === 'fence_gate' && st.props.open !== 'true')));
     const vc = air ? 'AIR' : voxelClassOf(st.name);
     this.natural.push(NATURAL_CLASSES.has(vc));
-    this.gravity.push(GRAVITY.test(st.name));
+    // (6c W) the generated FallingBlock flag, plus the other blocks that fall (Fallable: brushable sand and gravel, dripstone, scaffolding)
+    this.gravity.push(GRAVITY.test(st.name) || (known && isGravity(st.name)));
     this.stairs.push(known && BLOCKS[st.name].family === 'stairs');
     this.emit.push(known ? emissionOf(st) : 0);
     this.opaque.push(known ? opticsOf(st) === 'opaque' : true);
@@ -207,6 +208,9 @@ export function windowOf(survey, key) {
   return w;
 }
 
+/** (6c W) a water column of the plan survey (frozen water included: FROZEN columns carry WATER) */
+const waterCol = (c, x, z) => (c.flags[sampleIndex(c, x, z)] & FLAG_WATER) !== 0;
+
 /**
  * Build the virtual world of an IR over a survey, stage by stage (terrain, then paths, then the stage's ground roads; then
  * the stage's lots become boxes). Each written cell passes its condition against the world as it stands (CellCond).
@@ -270,6 +274,9 @@ export function buildVirtual({ ir, survey, blobs, volumes = [], onStage, filled 
         for (const k of offs) {
           const x = c.x + rr[0] * k, z = c.z + rr[1] * k;
           if (!vw.inClaim(x, z)) continue;
+          // (6c W) 4e leaves a water column out (a 1-deep one gets a deck only with shallow decks on; deeper refuses): no road
+          // surface over it here either (a gravity surface over the water would read as unsupported)
+          if (vw.survey && waterCol(vw.survey, x, z)) continue;
           const g = sb.colTop(x, z);
           vw.set(x, g, z, surf, F_WALK, pi);
           for (const dy of [1, 2]) if (!pal.air[vw.get(x, g + dy, z)]) vw.set(x, g + dy, z, air, 0, pi);

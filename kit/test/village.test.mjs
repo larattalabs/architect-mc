@@ -80,7 +80,7 @@ test('layout: 500 seeded synthetic flat claims (no overlap, margin, gaps, fronti
     const lots = Array.from({ length: R.int(1, 24) }, (_, i) => ({ id: `lot_${i}`, type: R.pick(['cottage', 'smithy', 'farm', 'hall', 'shop']), size: R.pick(sizes),
       villager: R.pick(villagers), ...(R() < 0.2 ? { placement: R.pick(['central', 'edge', 'near_water', 'high_ground']) } : {}), ...(R() < 0.1 ? { landmark: true } : {}) }));
     const survey = flatSurvey(claim, { water, bumps: R() < 0.5 ? (x, z) => ((x * 7 + z * 13) % 11 === 0 ? 1 : 0) : null });
-    const params = { lots, squareSize: R.pick([9, 11, 13, 15]), laneWidth: R.int(1, 3), lamps: R.pick(['none', 'few', 'street']) };
+    const params = { lots, squareSize: R.pick([9, 11, 13, 15]), laneWidth: R.int(1, 3), lamps: R.pick(['none', 'few', 'street']), apronLamps: R() < 0.1 };
     let p;
     try {
       p = await plan({ params, survey, claim, keepOut, seed: String(n + 1) });
@@ -225,8 +225,8 @@ test('props: supported (M3 clean), beside walk cells and never on them, never in
       // never on a walk cell: the column's paving under a prop has no walk bit
       assert.equal(vw.flags(x, v.shared.y, z) & 2, 0, `${pr.id} stands on a walk cell at ${x},${z}`);
     }
-    // beside walk cells: every prop's footprint touches a walk cell
-    for (const pr of v.props) {
+    // beside walk cells: every shared-space prop's footprint touches a walk cell ((6c W) the apron lamps stand beside the lots)
+    for (const pr of v.props.filter((q) => q.kind !== 'apron_lamp')) {
       const foot = new Set(pr.cells.map(([x, , z]) => `${x},${z}`));
       const touches = [...foot].some((k) => { const [x, z] = k.split(',').map(Number); return [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dz]) => vw.flags(x + dx, v.shared.y, z + dz) & 2); });
       assert.ok(touches, `${pr.id} beside a walk cell`);

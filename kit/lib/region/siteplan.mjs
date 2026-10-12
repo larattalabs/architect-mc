@@ -120,6 +120,11 @@ export function sitePlan({ ir, meta, planId = null, irSha = null, vw = null }) {
     graph: ir.graph ? irGraph(ir, meta, vw) : { derived: true, nodes, edges },
   };
   if (meta?.village) out.unplaced = (meta.village.unplaced ?? []).map((u) => ({ id: u.id, reason: u.reason }));
+  // (6c W) a village's props (the shared space's and the apron lamps, each apron lamp with its lot) and each lot's lamp count
+  if (meta?.village?.apronLamps) {
+    out.props = (meta.village.props ?? []).map((p) => ({ kind: p.kind, id: p.id, ...(p.lot ? { lot: p.lot } : {}), at: [...p.cells[0].slice(0, 3)] }));
+    for (const l of out.lots) l.lamps = meta.village.apronLamps.perLot?.[l.id] ?? 0;
+  }
   return out;
 }
 

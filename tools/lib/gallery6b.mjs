@@ -16,50 +16,79 @@ function latest(dir, flat) {
   return runs.length ? path.join(dir, runs[runs.length - 1]) : null;
 }
 
+/** One scenario section of the gallery from its natural run `nat` (and flat run `flat`), its images under img/<key>/. */
+function section({ sc, nat, flat, key, img, evidenceSha, extra = {} }) {
+  const run = JSON.parse(fs.readFileSync(path.join(nat, 'run.json'), 'utf8'));
+  const metrics = JSON.parse(fs.readFileSync(path.join(nat, 'metrics.json'), 'utf8'));
+  const exact = JSON.parse(fs.readFileSync(path.join(nat, 'exact.json'), 'utf8'));
+  const exactFlat = flat ? JSON.parse(fs.readFileSync(path.join(flat, 'exact.json'), 'utf8')) : null;
+  const ev = evidenceSha(nat).sha;
+  if (fs.readFileSync(path.join(nat, 'evidence.sha'), 'utf8').trim() !== ev) throw new Error(`${nat}: evidence.sha is stale (recompute with scenarios.mjs metrics)`);
+  const dst = path.join(img, key);
+  fs.mkdirSync(dst, { recursive: true });
+  const cp = (from, name) => { if (!fs.existsSync(from)) return null; fs.copyFileSync(from, path.join(dst, name)); return `img/${key}/${name}`; };
+  // (6c W) plus any camera the run added (cam_lamp: the apron lamp close-up)
+  const extraCams = fs.existsSync(path.join(nat, 'shots')) ? fs.readdirSync(path.join(nat, 'shots')).filter((n) => n.endsWith('.png')).map((n) => n.slice(0, -4)).filter((n) => !(n in sc.cams)).sort() : [];
+  const cams = [...Object.keys(sc.cams), ...extraCams].map((c) => ({ name: c, before: cp(path.join(nat, 'before', `${c}.png`), `before_${c}.png`), after: cp(path.join(nat, 'shots', `${c}.png`), `after_${c}.png`) }));
+  const pv = path.join(nat, 'previews');
+  const previews = fs.readdirSync(pv).filter((n) => /\.(png|svg)$/.test(n) && n !== 'siteplan.png').sort().map((n) => ({ name: n.replace(/\.(png|svg)$/, ''), src: cp(path.join(pv, n), `preview_${n}`) }));
+  return {
+    id: sc.id, short: key, version: sc.version, brief: sc.brief, runId: run.runId, evidenceSha: ev, irSha: run.irSha, date: run.runId.slice(0, 8), versions: run.versions,
+    claim: run.claim, worldSeed: run.worldSeed, programSeed: run.programSeed, cellsWritten: run.cellsWritten, bible: run.bible ?? null, lamps: metrics.village?.lamps ?? null,
+    rows: metrics.rows, summary: fs.existsSync(path.join(nat, 'summary.txt')) ? fs.readFileSync(path.join(nat, 'summary.txt'), 'utf8').trim() : '',
+    realisedFindings: metrics.realised?.findings ?? [], cams, previews,
+    exact: { normal: { mismatches: exact.mismatches, classes: exact.classes ?? {}, cellsWritten: exact.cellsWritten, sample: exact.sample ?? [] }, flat: exactFlat && { mismatches: exactFlat.mismatches, classes: exactFlat.classes ?? {}, runId: path.basename(flat) } },
+    ...extra,
+  };
+}
+
 export async function build({ phase, local, ART, SCEN, evidenceSha }) {
   const out = path.join(ART, phase, 'gallery');
   const img = path.join(out, 'img');
   fs.mkdirSync(img, { recursive: true });
   const scenarios = [];
-  for (const f of fs.readdirSync(SCEN).filter((n) => n.endsWith('.json')).sort()) {
-    const sc = JSON.parse(fs.readFileSync(path.join(SCEN, f), 'utf8'));
-    if (sc.phase !== phase) continue;
-    const short = sc.id.split('_')[0];
-    const nat = latest(path.join(ART, phase, short), false);
-    if (!nat) continue;
-    const flat = latest(path.join(ART, phase, short), true);
-    const run = JSON.parse(fs.readFileSync(path.join(nat, 'run.json'), 'utf8'));
-    const metrics = JSON.parse(fs.readFileSync(path.join(nat, 'metrics.json'), 'utf8'));
-    const exact = JSON.parse(fs.readFileSync(path.join(nat, 'exact.json'), 'utf8'));
-    const exactFlat = flat ? JSON.parse(fs.readFileSync(path.join(flat, 'exact.json'), 'utf8')) : null;
-    const ev = evidenceSha(nat).sha;
-    if (fs.readFileSync(path.join(nat, 'evidence.sha'), 'utf8').trim() !== ev) throw new Error(`${nat}: evidence.sha is stale (recompute with scenarios.mjs metrics)`);
-    const dst = path.join(img, short);
-    fs.mkdirSync(dst, { recursive: true });
-    const cp = (from, name) => { if (!fs.existsSync(from)) return null; fs.copyFileSync(from, path.join(dst, name)); return `img/${short}/${name}`; };
-    const cams = Object.keys(sc.cams).map((c) => ({ name: c, before: cp(path.join(nat, 'before', `${c}.png`), `before_${c}.png`), after: cp(path.join(nat, 'shots', `${c}.png`), `after_${c}.png`) }));
-    const pv = path.join(nat, 'previews');
-    const previews = fs.readdirSync(pv).filter((n) => /\.(png|svg)$/.test(n) && n !== 'siteplan.png').sort().map((n) => ({ name: n.replace(/\.(png|svg)$/, ''), src: cp(path.join(pv, n), `preview_${n}`) }));
-    scenarios.push({
-      id: sc.id, short, version: sc.version, brief: sc.brief, runId: run.runId, evidenceSha: ev, irSha: run.irSha, date: run.runId.slice(0, 8), versions: run.versions,
-      claim: run.claim, worldSeed: run.worldSeed, programSeed: run.programSeed, cellsWritten: run.cellsWritten,
-      rows: metrics.rows, summary: fs.existsSync(path.join(nat, 'summary.txt')) ? fs.readFileSync(path.join(nat, 'summary.txt'), 'utf8').trim() : '',
-      realisedFindings: metrics.realised?.findings ?? [], cams, previews,
-      exact: { normal: { mismatches: exact.mismatches, classes: exact.classes ?? {}, cellsWritten: exact.cellsWritten, sample: exact.sample ?? [] }, flat: exactFlat && { mismatches: exactFlat.mismatches, classes: exactFlat.classes ?? {}, runId: path.basename(flat) } },
-    });
+  if (phase === '6c-w') {
+    // (6c W) S7 with W (Noah's decision), its looks in two more bibles (recorded), then V's approved section as it was
+    const sc = JSON.parse(fs.readFileSync(path.join(SCEN, 's7_flat_village.json'), 'utf8'));
+    const base = path.join(ART, '6c-w');
+    const nat = latest(path.join(base, 's7'), false);
+    if (nat) scenarios.push(section({ sc, nat, flat: latest(path.join(base, 's7'), true), key: 's7w', img, evidenceSha, extra: { phase: '6c-w', look: 'rustic' } }));
+    for (const [b, look] of [['g6cw_infernal', 'infernal'], ['g6cw_coastal', 'coastal']]) {
+      const n = latest(path.join(base, `s7-${b}`), false);
+      if (n) scenarios.push(section({ sc, nat: n, flat: null, key: `s7_${look}`, img, evidenceSha, extra: { phase: '6c-w', look, lookOnly: true } }));
+    }
+    const vData = path.join(ART, '6c-v', 'gallery', 'data.json');
+    if (fs.existsSync(vData)) {
+      for (const v of JSON.parse(fs.readFileSync(vData, 'utf8')).scenarios) {
+        const vk = `${v.short}v`;
+        const vImg = path.join(img, vk);
+        fs.mkdirSync(vImg, { recursive: true });
+        const re = (src) => { if (!src) return src; const f = path.join(ART, '6c-v', 'gallery', src); const name = path.basename(src); if (fs.existsSync(f)) fs.copyFileSync(f, path.join(vImg, name)); return `img/${vk}/${name}`; };
+        scenarios.push({ ...v, short: vk, phase: '6c-v', earlier: true, cams: v.cams.map((c) => ({ ...c, before: re(c.before), after: re(c.after) })), previews: v.previews.map((q) => ({ ...q, src: re(q.src) })) });
+      }
+    }
+  } else {
+    for (const f of fs.readdirSync(SCEN).filter((n) => n.endsWith('.json')).sort()) {
+      const sc = JSON.parse(fs.readFileSync(path.join(SCEN, f), 'utf8'));
+      if (sc.phase !== phase) continue;
+      const short = sc.id.split('_')[0];
+      const nat = latest(path.join(ART, phase, short), false);
+      if (!nat) continue;
+      scenarios.push(section({ sc, nat, flat: latest(path.join(ART, phase, short), true), key: short, img, evidenceSha }));
+    }
   }
   let calibration = [];
   const calFile = path.join(out, 'calibration', 'calibration.json');
   if (fs.existsSync(calFile)) calibration = JSON.parse(fs.readFileSync(calFile, 'utf8')).renders;
-  // (6c V) the slice's own page title and bar reference
-  const title = phase === '6c-v' ? 'Architect 6c-V gallery' : `Architect ${phase} gallery`;
-  const barsTitle = phase === '6c-v' ? 'Bars (CONTRACT 6c slice V §7), on the realised world' : 'Bars (CONTRACT 6b §8.3), on the realised world';
+  // (6c V, W) the slice's own page title and bar reference; W republishes V's page (the same title, a new section)
+  const title = phase === '6c-v' || phase === '6c-w' ? 'Architect 6c-V gallery' : `Architect ${phase} gallery`;
+  const barsTitle = phase === '6c-w' ? 'Bars (CONTRACT 6c slice V §7 and W §7), on the realised world' : phase === '6c-v' ? 'Bars (CONTRACT 6c slice V §7), on the realised world' : 'Bars (CONTRACT 6b §8.3), on the realised world';
   const data = { phase, title, barsTitle, built: new Date().toISOString(), local: !!local, scenarios, calibration };
   if (!local) fs.writeFileSync(path.join(out, 'data.json'), `${JSON.stringify(data, null, 1)}\n`);
   const tpl = fs.readFileSync(path.join(HERE, 'gallery6b.html'), 'utf8');
   const html = tpl.replace('<title>Architect 6b Gallery</title>', `<title>${title}</title>`).replace('/*__GALLERY_DATA__*/null', JSON.stringify(data).replace(/</g, '\\u003c'));
   fs.writeFileSync(path.join(out, local ? 'local.html' : 'index.html'), html);
-  return { out, scenarios: scenarios.map((s) => ({ id: s.id, runId: s.runId, evidence: s.evidenceSha.slice(0, 12), failing: s.rows.filter((r) => r.gated && r.pass === false && r.id !== 'gallery').map((r) => r.id) })), calibration: calibration.length };
+  return { out, scenarios: scenarios.map((s) => ({ id: s.id, key: s.short, runId: s.runId, evidence: s.evidenceSha.slice(0, 12), failing: s.rows.filter((r) => r.gated && r.pass === false && r.id !== 'gallery').map((r) => r.id) })), calibration: calibration.length };
 }
 
 /** 10 held-out island seeds (not S1's): a lone floatingIsland each, rendered iso by the kit's preview. */

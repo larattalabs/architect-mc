@@ -134,7 +134,8 @@ export class VariantBook {
     while (this.all.length > VARIANT_KEEP) {
       const i = this.all.findIndex((x) => isFinalVariant(x));
       if (i < 0) break;
-      this.all.splice(i, 1);
+      const [gone] = this.all.splice(i, 1);
+      if (gone) delete this.ctx.store.data.variantStarts?.[gone.id];
     }
     this.ctx.store.markDirty();
     this.ctx.emit({ type: 'variant.upsert', variant: structuredClone(v) });
@@ -156,6 +157,8 @@ export class VariantBook {
     }
     if (changed) {
       v.updatedAt = this.ctx.now();
+      // (6c W) when the job left the queue: a copy's COPY time runs from here to its done (breakdown.ts)
+      if (v.status !== 'queued' && v.copy) (this.ctx.store.data.variantStarts ??= {})[v.id] ??= v.updatedAt;
       // a variant that just became final is on disk before any client hears of it (as DesignBook.update): after a crash
       // between the emit and a later flush the restart would build it again and install a second library entry under
       // a new id, next to the one the client was told about

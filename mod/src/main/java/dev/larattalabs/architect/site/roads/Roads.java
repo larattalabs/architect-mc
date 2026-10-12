@@ -67,6 +67,18 @@ public final class Roads {
 	public static Planned plan(ServerLevel level, int[] xs, int[] ys, int[] zs, int width, @Nullable String surface, @Nullable String slab, boolean lanterns,
 		boolean decks, @Nullable String owner, boolean force, java.util.function.Function<String, @Nullable String> ownerOf,
 		java.util.function.BiFunction<String, Journal.Status, @Nullable String> busy, @Nullable String protectOwner, boolean partial) {
+		return plan(level, xs, ys, zs, width, surface, slab, lanterns, decks, owner, force, ownerOf, busy, protectOwner, partial, null, null);
+	}
+
+	/**
+	 * {@link #plan}; 6c W: a lantern post may stand on a built cell the road's {@code owner} placed (its verge), and {@code lamp}
+	 * (a region road's IR {@code lamp}: {@code {cells: [[along, dy, state]...], light, first, every}}, for a road travelling east)
+	 * is the bible's fixture for the lanterns. Null: 4e's fence and lantern.
+	 */
+	public static Planned plan(ServerLevel level, int[] xs, int[] ys, int[] zs, int width, @Nullable String surface, @Nullable String slab, boolean lanterns,
+		boolean decks, @Nullable String owner, boolean force, java.util.function.Function<String, @Nullable String> ownerOf,
+		java.util.function.BiFunction<String, Journal.Status, @Nullable String> busy, @Nullable String protectOwner, boolean partial,
+		@Nullable JsonObject lampSpec, @Nullable String ownGroup) {
 		String dim = level.dimension().identifier().toString();
 		JournalStore js = WorldJournal.storeOrNull();
 		Map<Long, String> ownedCache = new HashMap<>();
@@ -85,7 +97,37 @@ public final class Roads {
 			dev.larattalabs.architect.api.ProtectedArea a = pc.at(x, z);
 			return a == null ? null : dev.larattalabs.architect.site.Protected.message("The road", a);
 		};
-		RoadPlan.Plan plan = RoadPlan.plan(xs, ys, zs, width, lanterns, decks, new RoadTerrain(level), owned, protect, partial);
+		// 6c W (item 2): the post's foot on a built cell whose top journal entry is the road owner's own (never the player's or another owner's)
+		// (the owner's own: the same owner, or for a region's road, which may have none, the same region group: its verge)
+		RoadPlan.OwnFoot ownFoot = (owner == null && ownGroup == null) || js == null ? null : (x, y, z) -> {
+			String[] top = topSite(js, dim, Journal.pos(x, y, z));
+			if (top == null) {
+				return false;
+			}
+			// the block there now is the one the entry wrote (a player's block on top of the verge never counts)
+			String now = BuiltInRegistries.BLOCK.getKey(level.getBlockState(new net.minecraft.core.BlockPos(x, y, z)).getBlock()).toString();
+			if (top[1] != null && !top[1].equals(now)) {
+				return false;
+			}
+			return owner != null && owner.equals(ownerOf.apply(top[0])) || ownGroup != null && ownGroup.equals(groupOf(top[0]));
+		};
+		RoadPlan.Lamp lamp = null;
+		BlockState[] lampStates = null;
+		if (lampSpec != null && lampSpec.has("cells")) {
+			JsonArray cs = lampSpec.getAsJsonArray("cells");
+			int[] along = new int[cs.size()];
+			int[] dy = new int[cs.size()];
+			lampStates = new BlockState[cs.size()];
+			for (int k = 0; k < cs.size(); k++) {
+				JsonArray c = cs.get(k).getAsJsonArray();
+				along[k] = c.get(0).getAsInt();
+				dy[k] = c.get(1).getAsInt();
+				lampStates[k] = fullState(c.get(2).getAsString());
+			}
+			lamp = new RoadPlan.Lamp(along, dy, lampSpec.has("light") ? lampSpec.get("light").getAsInt() : cs.size() - 1, lampSpec.has("first") ? lampSpec.get(
+				"first").getAsDouble() : RoadPlan.LANTERN_FIRST, lampSpec.has("every") ? lampSpec.get("every").getAsDouble() : RoadPlan.LANTERN_SPACING);
+		}
+		RoadPlan.Plan plan = RoadPlan.plan(xs, ys, zs, width, lanterns, decks, new RoadTerrain(level), owned, protect, partial, ownFoot, lamp);
 		if (plan.refused()) {
 			Reason r = Reason.OTHER;
 			try {
@@ -107,6 +149,8 @@ public final class Roads {
 				case DIRT_PATH, GRAVEL, PACKED_MUD -> surf != null ? surf : blockOf(o.block().id);
 				case PATH_SLAB, STONE_SLAB -> sl != null ? sl : blockOf(o.block().id).setValue(SlabBlock.TYPE, SlabType.BOTTOM);
 				case DECK -> blockOf(o.block().id).setValue(SlabBlock.TYPE, SlabType.BOTTOM);
+				// 6c W: the fixture's cell, turned from east to the road's travel
+				case LAMP -> lampStates[o.lamp() / 4].rotate(ROTATIONS[o.lamp() % 4]);
 				default -> blockOf(o.block().id);
 			};
 			cells.put(Journal.pos(o.x(), o.y(), o.z()), WorldJournal.value(s));
@@ -187,6 +231,61 @@ public final class Roads {
 		}
 		layered.merge(top, 1, Integer::sum);
 		return null;
+	}
+
+	/** Quarter turns clockwise from east (a lamp op's rotation). */
+	private static final net.minecraft.world.level.block.Rotation[] ROTATIONS = {net.minecraft.world.level.block.Rotation.NONE,
+		net.minecraft.world.level.block.Rotation.CLOCKWISE_90, net.minecraft.world.level.block.Rotation.CLOCKWISE_180,
+		net.minecraft.world.level.block.Rotation.COUNTERCLOCKWISE_90};
+
+	/** 6c W: a full block state string ({@code minecraft:lantern[hanging=true]}). */
+	static BlockState fullState(String s) {
+		try {
+			return net.minecraft.commands.arguments.blocks.BlockStateParser.parseForBlock(BuiltInRegistries.BLOCK, s, false).blockState();
+		} catch (com.mojang.brigadier.exceptions.CommandSyntaxException e) {
+			throw new IllegalArgumentException("not a block state: " + s);
+		}
+	}
+
+	/** 6c W: the site group a site or cell site (a region tile) belongs to, or null. */
+	private static @Nullable String groupOf(String site) {
+		dev.larattalabs.architect.site.Infra in = dev.larattalabs.architect.site.Infras.get(site);
+		if (in != null) {
+			return in.member() == null ? null : in.member().group();
+		}
+		dev.larattalabs.architect.site.Site s = dev.larattalabs.architect.site.Sites.get(site);
+		return s == null ? null : s.group();
+	}
+
+	/**
+	 * 6c W: the site of the topmost active journal entry at {@code pos} (any kind but held leaves) and the block it wrote there
+	 * ({@code [site, block id or null]}), or null.
+	 */
+	private static String @Nullable [] topSite(JournalStore js, String dim, long pos) {
+		long key = Sections.key(pos);
+		int idx = Sections.index(pos);
+		String top = null;
+		String wrote = null;
+		long topLayer = Long.MIN_VALUE;
+		for (String id : js.inSection(dim, key)) {
+			JournalStore.Meta m = js.meta(id);
+			if (m == null || !m.active() || m.kind().equals(WorldJournal.LEAVES)) {
+				continue;
+			}
+			try {
+				SectionCells sc = js.section(id, key);
+				int k = sc == null ? -1 : sc.find(idx);
+				if (k >= 0 && sc.layer(k) >= topLayer) {
+					topLayer = sc.layer(k);
+					top = m.site();
+					Value a = sc.after(k);
+					wrote = a == null ? null : a.name();
+				}
+			} catch (IOException e) {
+				return null;
+			}
+		}
+		return top == null ? null : new String[] {top, wrote};
 	}
 
 	private static @Nullable BlockState state(@Nullable String id) {
@@ -329,7 +428,7 @@ public final class Roads {
 							continue;
 						}
 						String n = a.name();
-						if (!n.equals("minecraft:air") && !n.equals("minecraft:oak_fence") && !n.equals("minecraft:lantern")) {
+						if (!n.equals("minecraft:air") && !RoadPlan.isLampBlock(n)) { // 6c W: any lamp fixture's blocks (4e's oak fence and lantern among them)
 							out.add(sc.pos(i));
 						}
 					}

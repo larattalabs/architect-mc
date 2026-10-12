@@ -23,6 +23,13 @@ public final class Columns {
 	public static final int MISSING = 2;
 	public static final int TREE = 4;
 	public static final int LAVA = 8;
+	/**
+	 * 6c W: frozen water. The column's top block is ice, packed ice, blue ice or frosted ice and a water cell lies within 3 below
+	 * it ({@link #frozenWater}). Such a column also carries {@link #WATER}, and its {@code floor} is the bed under the water.
+	 */
+	public static final int FROZEN = 16;
+	/** How far under an ice top a water cell makes the column frozen water. */
+	public static final int FROZEN_DEPTH = 3;
 	static final int HEADER = 28;
 	private static final byte[] MAGIC = "ARSV".getBytes(StandardCharsets.US_ASCII);
 
@@ -123,11 +130,47 @@ public final class Columns {
 			while (fl > minY && !c.getBlockState(p.setY(fl)).getFluidState().isEmpty()) {
 				fl--;
 			}
+		} else if (frozenWater(c, x, g, z)) {
+			// 6c W: ice over water reads as water; the floor is the bed under the ice and the water
+			f |= WATER | FROZEN;
+			while (fl > minY) {
+				BlockState s = c.getBlockState(p.setY(fl));
+				if (!iceTop(s) && s.getFluidState().isEmpty()) {
+					break;
+				}
+				fl--;
+			}
 		}
 		if (tree) {
 			f |= TREE;
 		}
 		set(k, g, h, fl, f);
+	}
+
+	/** 6c W: the ice blocks that freeze over water. */
+	public static boolean iceTop(BlockState s) {
+		return s.is(Blocks.ICE) || s.is(Blocks.PACKED_ICE) || s.is(Blocks.BLUE_ICE) || s.is(Blocks.FROSTED_ICE);
+	}
+
+	/**
+	 * 6c W: is the block at {@code (x, g, z)} ice with water within {@link #FROZEN_DEPTH} below it (only ice or water between)?
+	 * Land ice (an ice spike on snow, packed ice on stone) is not.
+	 */
+	public static boolean frozenWater(LevelChunk c, int x, int g, int z) {
+		BlockPos.MutableBlockPos p = new BlockPos.MutableBlockPos(x, g, z);
+		if (!iceTop(c.getBlockState(p))) {
+			return false;
+		}
+		for (int dy = 1; dy <= FROZEN_DEPTH && g - dy >= c.getMinY(); dy++) {
+			BlockState s = c.getBlockState(p.setY(g - dy));
+			if (s.getFluidState().is(FluidTags.WATER)) {
+				return true;
+			}
+			if (!iceTop(s)) {
+				return false;
+			}
+		}
+		return false;
 	}
 
 	/** Logs, leaves and the plants that stand on the ground like trees (the region's ground is below them). */
