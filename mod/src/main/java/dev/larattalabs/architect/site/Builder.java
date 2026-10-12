@@ -1456,7 +1456,7 @@ public final class Builder {
 	public static void openCrate(ServerLevel level, ServerPlayer player, CrateBlockEntity crate) {
 		if (crate.siteId().startsWith(Stockpiles.PREFIX)) {
 			// 6c Y: a stockpile crate opens its stockpile's screen; one whose stockpile is gone stays (never taken away here)
-			Stockpiles.Pile p = Stockpiles.get(crate.siteId().substring(Stockpiles.PREFIX.length()));
+			Stockpiles.Pile p = Stockpiles.byId(crate.siteId().substring(Stockpiles.PREFIX.length()));
 			if (p != null && p.crates().contains(crate.getBlockPos())) {
 				send(player, new SiteNet.CrateOpen(crate.siteId()));
 			} else {
@@ -1582,7 +1582,7 @@ public final class Builder {
 	/** 6c Y: the owner of the stockpile {@code id} names ({@code stockpile:<owner>}, or a target drawing from it), or null. */
 	static Stockpiles.@Nullable Pile pileNamed(String id) {
 		if (id.startsWith(Stockpiles.PREFIX)) {
-			return Stockpiles.get(id.substring(Stockpiles.PREFIX.length()));
+			return Stockpiles.named(id);
 		}
 		Site s = Sites.get(id);
 		if (s != null) {
@@ -1600,7 +1600,7 @@ public final class Builder {
 			return null;
 		}
 		for (BlockPos c : p.crates()) {
-			if ((load || level.isLoaded(c)) && level.getBlockEntity(c) instanceof CrateBlockEntity be && be.siteId().equals(Stockpiles.PREFIX + p.owner())) {
+			if ((load || level.isLoaded(c)) && level.getBlockEntity(c) instanceof CrateBlockEntity be && be.siteId().equals(Stockpiles.PREFIX + p.id())) {
 				return be;
 			}
 		}
@@ -1616,7 +1616,7 @@ public final class Builder {
 		double bd = 16 * 16;
 		for (BlockPos c : p.crates()) {
 			double d = player.blockPosition().distSqr(c);
-			if (d <= bd && level.isLoaded(c) && level.getBlockEntity(c) instanceof CrateBlockEntity be && be.siteId().equals(Stockpiles.PREFIX + p.owner())) {
+			if (d <= bd && level.isLoaded(c) && level.getBlockEntity(c) instanceof CrateBlockEntity be && be.siteId().equals(Stockpiles.PREFIX + p.id())) {
 				best = be;
 				bd = d;
 			}
@@ -1920,7 +1920,8 @@ public final class Builder {
 	public static JsonObject state(MinecraftServer srv, String id) throws Sites.SiteException {
 		if (id.startsWith(Stockpiles.PREFIX)) {
 			// 6c Y: a stockpile's crate screen and DevBridge view
-			JsonObject o = Stockpiles.json(srv, id.substring(Stockpiles.PREFIX.length()));
+			Stockpiles.Pile named = Stockpiles.named(id);
+			JsonObject o = named == null ? null : Stockpiles.json(srv, named.owner());
 			if (o == null) {
 				throw new Sites.SiteException("No stockpile " + id.substring(Stockpiles.PREFIX.length()));
 			}

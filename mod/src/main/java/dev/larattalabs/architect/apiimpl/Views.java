@@ -145,7 +145,7 @@ public final class Views {
 		return new dev.larattalabs.architect.api.Stockpile(v.owner(), net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.DIMENSION,
 			dim == null ? Identifier.fromNamespaceAndPath("minecraft", "overworld") : dim), v.crates(), v.capacityStacks(), v.usedStacks(), items(v.stock()), items(v
 				.reserved()), items(v.credit()), items(v.delivered()), items(v.consumed()), items(v.returned()), items(v.withdrawn()), items(v.dropped()),
-			items(v.refundOverflow()), byT, items(v.outstanding()), v.feedOrder(), Map.of(), v.missingCrates());
+			items(v.refundOverflow()), byT, items(v.outstanding()), v.feedOrder(), v.waiting(), v.missingCrates());
 	}
 
 	/** Items -> item ids (the API's maps going in). */

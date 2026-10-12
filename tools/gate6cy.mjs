@@ -28,7 +28,7 @@
 //     migrate a|b                   item 12: a: on 0.17.0 (GATE6CY_REF=v0.17.0 start) a half-built sharedCrate group and a per-site crate;
 //                                   b: this build: loads unchanged, builds finish as before (copy 1); adoptCrates moves the stock in with
 //                                   difference 0, cells restored (copy 2); downgrade (c/d) recorded
-//     apicompat                     item 14: tools/api-compat.mjs against the 0.17.0, 0.16.0, 0.15.0 apitest jars and the 0.17.0 surface
+//     apicompat                     item 14: tools/api-compat.mjs against the 0.18.0, 0.17.0, 0.16.0 apitest jars (0.18.0 and 0.17.0 built from their tags) and the 0.18.0 surface
 //     report                        REPORT.md over the step JSONs
 //
 // Evidence: artifacts/gate6c-y1/<step>.json in the main checkout (GATE6CY_OUT overrides), all.log, REPORT.md, spend.json ($0.00).
@@ -427,8 +427,9 @@ steps.store = async () => {
   const cons = new Conservation(f.area);
   const a0 = await cons.start();
   const named = f.crates.map((c) => c.join(','));
+  const pid = (await pstate()).id; // crates carry the stockpile's own id, never the owner
   const blocks = (a0.crateBlocks ?? []).map((c) => c.pos);
-  check(blocks.length === 3 && blocks.every((p) => named.includes(p)) && a0.crateBlocks.every((c) => c.owner === `stockpile:${OWNER}`),
+  check(blocks.length === 3 && blocks.every((p) => named.includes(p)) && a0.crateBlocks.every((c) => c.owner === `stockpile:${pid}`),
     `store: 0 crates placed besides the 3 named (crate blocks in the area: ${json(a0.crateBlocks)})`);
   const g = await api(`sgroup ${b.group}`);
   check(!g?.crate, `store: the batch's group has no shared crate (sharedCrate ignored; ${json(g?.crate)})`);
@@ -590,6 +591,14 @@ steps.order = async () => {
   const used = {};
   for (const id of [id2.h4, id2.h5]) for (const [k, v] of Object.entries(mid.paidByTarget[id] ?? {})) used[k] = (used[k] ?? 0) + v - (before[id]?.[k] ?? 0);
   out.blocked = { outstanding6: out6, usedByOthers: used, stock: st2.stock, reserved: st2.reserved };
+  // C25 (Y2) through the stockpile: house 4 waits, and its nextNeeded sees the stock house 6 reserves as unavailable
+  const w4 = await api(`waiting ${id2.h4}`);
+  const need4 = sum(st2.targets[id2.h4]?.outstanding);
+  const shown = sum(Object.fromEntries((w4?.nextNeeded ?? []).map((x) => [x.item, x.count]))) + (w4?.moreUnits ?? 0);
+  out.blocked.wait4 = w4;
+  check(w4?.waiting === true && shown === need4, `item 3 + C25: house 4 waits and its nextNeeded counts the reserved stock as unavailable (counts + moreUnits ${shown} = outstanding ${need4})`);
+  const pw = await api(`pstate ${OWNER}`);
+  check(pw?.waiting >= 1, `C25: Stockpile.waiting carries the targets' waits (${pw?.waiting})`);
   const surplusOnly = Object.entries(used).every(([k, v]) => v <= (E[k] ?? 0));
   check(surplusOnly && sum(used) > 0, `item 3: with house 6 blocked (a player in ${cell.slice(0, 3)}), the others used only the surplus (${json(used)} of ${json(E)})`);
   const held = Object.entries(out6).every(([k, v]) => (st2.stock[k] ?? 0) >= v);
@@ -1040,11 +1049,17 @@ steps.dissolve = async () => {
   for (const c of f.crates) cells.push((await cellsOf({ min: c, max: c }))[0]);
   check(cells.every((c) => /minecraft:air"\}$/.test(c)), `dissolve: the crate cells hold what they held before (${json(cells)})`);
   const s0 = await siteState(h.siteId);
-  await sleep(6000);
+  await sleep(8000);
   const s1 = await siteState(h.siteId);
   out.target = { state: s1.state, paused: s1.paused, noStockpile: s1.noStockpile, built: [s0.built, s1.built] };
   check(s1.state === 'building' && !s1.paused && s1.noStockpile === true && s1.built === s0.built,
-    `dissolve: the target keeps building with no stockpile: not paused, nothing placed in 120 ticks (waits; C25's waiting flag is Y2's) (${json(out.target)})`);
+    `dissolve: the target keeps building with no stockpile: not paused, nothing placed in 120 ticks (${json(out.target)})`);
+  const w = await api(`waiting ${h.siteId}`);
+  const outst = sum(Object.fromEntries((s1.rows ?? []).map((r) => [r.item, r.needed - r.placed]).filter(([, n]) => n > 0)));
+  const shownD = sum(Object.fromEntries((w?.nextNeeded ?? []).map((x) => [x.item, x.count]))) + (w?.moreUnits ?? 0);
+  out.target.wait = w;
+  check(w?.waiting === true && shownD > 0, `dissolve: the target reports waiting (C25) with no stockpile: nextNeeded ${shownD} units (${json(w).slice(0, 160)})`);
+  void outst;
   await leaveWorld();
   return out;
 };
@@ -1217,9 +1232,9 @@ steps.unit = async () => {
 };
 
 steps.apicompat = async () => {
-  const dir = process.env.GATE6CY_V0170 ?? path.join(MAIN_ART, 'gate6c-y1', 'v0170');
-  const jars = [['1.14.0 apitest', [path.join(dir, 'architect_apitest-0.17.0.jar')]], ['1.13.0 apitest', [path.join(MAIN_ART, 'gate6c-x', 'v0160', 'architect_apitest-0.16.0.jar')]],
-    ['1.12.0 apitest', [path.join(MAIN_ART, 'gate6c-v', 'v0150', 'architect_apitest-0.15.0.jar')]], ['1.14.0 surface', ['--surface', path.join(dir, 'architect_mc-0.17.0.jar')]]];
+  const y1 = path.join(MAIN_ART, 'gate6c-y1');
+  const jars = [['1.15.0 apitest', [path.join(y1, 'v0180', 'architect_apitest-0.18.0.jar')]], ['1.14.0 apitest', [path.join(y1, 'v0170', 'architect_apitest-0.17.0.jar')]],
+    ['1.13.0 apitest', [path.join(MAIN_ART, 'gate6c-x', 'v0160', 'architect_apitest-0.16.0.jar')]], ['1.15.0 surface', ['--surface', path.join(y1, 'v0180', 'architect_mc-0.18.0.jar')]]];
   const lines = [];
   let ok = 0;
   for (const [label, args] of jars) {

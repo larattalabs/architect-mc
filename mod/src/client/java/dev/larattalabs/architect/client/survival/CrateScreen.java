@@ -124,10 +124,13 @@ public final class CrateScreen extends Screen {
 
 	/** 6c Y1: a stockpile crate's "take": the item's credit into the player's inventory ({@code Sites.withdraw}). */
 	public void take(String item, int n) {
-		String owner = siteId.substring(dev.larattalabs.architect.site.Stockpiles.PREFIX.length());
 		ServerTasks.callAsPlayer((level, player) -> {
 			try {
-				var out = dev.larattalabs.architect.site.Stockpiles.withdraw(level.getServer(), owner, java.util.Map.of(item, n), player);
+				var pile = dev.larattalabs.architect.site.Stockpiles.named(siteId);
+				if (pile == null) {
+					return "!The stockpile is gone";
+				}
+				var out = dev.larattalabs.architect.site.Stockpiles.withdraw(level.getServer(), pile.owner(), java.util.Map.of(item, n), player);
 				int got = out.getOrDefault(item, 0);
 				return got > 0 ? "Took " + got + " × " + Builder.itemNameClient(item) : "!Nothing of " + Builder.itemNameClient(item) + " is credit now";
 			} catch (Sites.SiteException e) {

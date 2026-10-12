@@ -66,7 +66,10 @@ public final class Stockpiles {
 	static final int EVENT_TICKS = 20;
 	private static final Gson GSON = new GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create();
 
+	/** By stockpile id. */
 	private static final Map<String, Pile> PILES = new LinkedHashMap<>();
+	/** The next stockpile id's number (saved with the file). */
+	private static long nextId = 1;
 	private static @Nullable Path dir;
 	private static long ticks;
 	private static final Map<String, Integer> MAX_STACK = new ConcurrentHashMap<>();
@@ -102,6 +105,9 @@ public final class Stockpiles {
 
 	/** One owner's stockpile. */
 	public static final class Pile {
+		/** The stockpile's own id ({@code sp<n>}): its key in the file, its crates' and journal entries' owner id ({@code stockpile:<id>}). */
+		final String id;
+		/** Who owns it: an attribute, never part of a key (owners may change hands later: a re-key changes no format). */
 		final String owner;
 		final String dimension;
 		final List<CrateRec> crates = new ArrayList<>();
@@ -113,10 +119,15 @@ public final class Stockpiles {
 		boolean dirty;
 		long lastEvent = Long.MIN_VALUE / 2;
 
-		Pile(String owner, String dimension, StockLedger ledger) {
+		Pile(String id, String owner, String dimension, StockLedger ledger) {
+			this.id = id;
 			this.owner = owner;
 			this.dimension = dimension;
 			this.ledger = ledger;
+		}
+
+		public String id() {
+			return id;
 		}
 
 		public String owner() {
@@ -140,11 +151,12 @@ public final class Stockpiles {
 		}
 
 		String crateOwner() {
-			return PREFIX + owner;
+			return PREFIX + id;
 		}
 
 		JsonObject toJson() {
 			JsonObject o = new JsonObject();
+			o.addProperty("id", id);
 			o.addProperty("owner", owner);
 			o.addProperty("dimension", dimension);
 			JsonArray c = new JsonArray();
@@ -159,7 +171,7 @@ public final class Stockpiles {
 		}
 
 		static Pile fromJson(JsonObject o) {
-			Pile p = new Pile(o.get("owner").getAsString(), o.get("dimension").getAsString(), StockLedger.fromJson(o.has("ledger") ? o.getAsJsonObject(
+			Pile p = new Pile(o.get("id").getAsString(), o.get("owner").getAsString(), o.get("dimension").getAsString(), StockLedger.fromJson(o.has("ledger") ? o.getAsJsonObject(
 				"ledger") : null));
 			if (o.has("crates")) {
 				o.getAsJsonArray("crates").forEach(e -> p.crates.add(CrateRec.fromJson(e.getAsJsonObject())));
@@ -176,6 +188,59 @@ public final class Stockpiles {
 
 	static void init() {
 		ServerLifecycleEvents.SERVER_STARTED.register(Stockpiles::load);
+		// C25 (Y2's seam): a stockpile's target waits on what its place in the feed order leaves it (stock - reserved); a crate-less
+		// target of an owner with no stockpile (dissolved) has nothing; any other target reads its own or its group's crate
+		SiteWaits.source((srv, level, target) -> {
+			Pile p = pileOf(target);
+			if (p != null) {
+				return new SiteWaits.Supply() {
+					Map<String, Integer> avail;
+
+					@Override
+					public int available(String item) {
+						if (avail == null) {
+							avail = availableTo(srv, target.id());
+						}
+						return avail.getOrDefault(item, 0);
+					}
+
+					@Override
+					public long version() {
+						return 31L * p.ledger.stock().hashCode() + 17L * p.order.hashCode() + LAST_RESERVED.getOrDefault(p.id, Map.of()).hashCode();
+					}
+				};
+			}
+			Construction c = target.construction();
+			if (c != null && c.crate() == null && target.owner() != null) {
+				return new SiteWaits.Supply() {
+					@Override
+					public int available(String item) {
+						return 0;
+					}
+
+					@Override
+					public long version() {
+						return 0;
+					}
+				};
+			}
+			CrateBlockEntity crate = Builder.crate(level, target, false);
+			if (crate == null) {
+				return null;
+			}
+			Ledger ledger = crate.ledger();
+			return new SiteWaits.Supply() {
+				@Override
+				public int available(String item) {
+					return ledger.stock(item);
+				}
+
+				@Override
+				public long version() {
+					return ledger.stock().hashCode();
+				}
+			};
+		});
 		// the world-save callback that saves the chunks (autosave and stop): the ledger and the chunks are saved together
 		ServerLifecycleEvents.BEFORE_SAVE.register((server, flush, force) -> save());
 		// a clean stop: the ticks have ended; saved again here in case the stop's chunk save doesn't run BEFORE_SAVE (logged with the trace)
@@ -195,7 +260,27 @@ public final class Stockpiles {
 	// ------------------------------------------------------------------ lookups
 
 	public static @Nullable Pile get(@Nullable String owner) {
-		return owner == null ? null : PILES.get(owner);
+		if (owner == null) {
+			return null;
+		}
+		for (Pile p : PILES.values()) {
+			if (owner.equals(p.owner)) {
+				return p;
+			}
+		}
+		return null;
+	}
+
+	/** A stockpile by its own id. */
+	public static @Nullable Pile byId(@Nullable String id) {
+		return id == null ? null : PILES.get(id);
+	}
+
+	/** {@code stockpile:<id>} (a crate's owner id), or (dev hooks) {@code stockpile:<owner>}: the stockpile it names. */
+	public static @Nullable Pile named(String ref) {
+		String x = ref.startsWith(PREFIX) ? ref.substring(PREFIX.length()) : ref;
+		Pile p = byId(x);
+		return p != null ? p : get(x);
 	}
 
 	public static boolean has(@Nullable String owner) {
@@ -303,7 +388,7 @@ public final class Stockpiles {
 		if (!SurvivalWorld.on()) {
 			throw new Sites.SiteException(Reason.NOT_ALLOWED, "a stockpile needs the survival toggle on (instant placements use none)");
 		}
-		Pile p = PILES.get(owner);
+		Pile p = get(owner);
 		if (p != null && !p.dimension.equals(dimension)) {
 			throw new Sites.SiteException(Reason.NOT_ALLOWED, "the stockpile of " + owner + " is in " + p.dimension + " (one dimension per stockpile)");
 		}
@@ -330,8 +415,8 @@ public final class Stockpiles {
 		}
 		boolean created = p == null;
 		if (p == null) {
-			p = new Pile(owner, dimension, new StockLedger());
-			PILES.put(owner, p);
+			p = new Pile("sp" + nextId++, owner, dimension, new StockLedger());
+			PILES.put(p.id, p);
 		}
 		for (BlockPos c : add) {
 			p.crates.add(putCrate(level, p, c));
@@ -345,7 +430,7 @@ public final class Stockpiles {
 
 	/** {@code addStockpileCrate}. */
 	public static Pile addCrate(MinecraftServer srv, String owner, String dimension, BlockPos at) throws Sites.SiteException {
-		Pile p = PILES.get(owner);
+		Pile p = get(owner);
 		if (p == null) {
 			throw new Sites.SiteException(Reason.NOT_ALLOWED, owner + " has no stockpile (createStockpile first)");
 		}
@@ -431,7 +516,7 @@ public final class Stockpiles {
 	 * with nothing building ends the stockpile.
 	 */
 	public static CrateRemoval removeCrate(MinecraftServer srv, String owner, BlockPos at, boolean force) throws Sites.SiteException {
-		Pile p = PILES.get(owner);
+		Pile p = get(owner);
 		if (p == null) {
 			throw new Sites.SiteException(Reason.NOT_ALLOWED, owner + " has no stockpile");
 		}
@@ -465,7 +550,7 @@ public final class Stockpiles {
 		Builder.dropItems(level, at, drop, null);
 		boolean ended = p.crates.isEmpty();
 		if (ended) {
-			PILES.remove(owner);
+			PILES.remove(p.id);
 		}
 		p.dirty = true;
 		save();
@@ -503,7 +588,7 @@ public final class Stockpiles {
 	 * inventory) or dropped. Returns what went out per item.
 	 */
 	public static Map<String, Integer> dissolve(MinecraftServer srv, String owner, @Nullable ServerPlayer to) throws Sites.SiteException {
-		Pile p = PILES.get(owner);
+		Pile p = get(owner);
 		if (p == null) {
 			throw new Sites.SiteException(Reason.NOT_ALLOWED, owner + " has no stockpile");
 		}
@@ -546,11 +631,11 @@ public final class Stockpiles {
 			takeCrate(level, c);
 		}
 		JsonObject last = p.toJson();
-		PILES.remove(owner);
+		PILES.remove(p.id);
 		save();
 		Architect.LOGGER.info("Stockpile {} dissolved: to the player {}, dropped {}; ledger at the end {}", owner, toPlayer, toGround, last.get("ledger"));
 		dev.larattalabs.architect.apiimpl.ApiEvents.stockpileChanged(srv, owner);
-		LAST_DISSOLVED.put(owner, last);
+		LAST_DISSOLVED.put(p.id, last);
 		return out;
 	}
 
@@ -582,7 +667,7 @@ public final class Stockpiles {
 	// ------------------------------------------------------------------ API: feed order, withdraw, adopt
 
 	public static List<String> feedOrder(MinecraftServer srv, String owner) throws Sites.SiteException {
-		Pile p = PILES.get(owner);
+		Pile p = get(owner);
 		if (p == null) {
 			throw new Sites.SiteException(Reason.NOT_ALLOWED, owner + " has no stockpile");
 		}
@@ -591,7 +676,7 @@ public final class Stockpiles {
 	}
 
 	public static List<String> setFeedOrder(MinecraftServer srv, String owner, List<String> ids) throws Sites.SiteException {
-		Pile p = PILES.get(owner);
+		Pile p = get(owner);
 		if (p == null) {
 			throw new Sites.SiteException(Reason.NOT_ALLOWED, owner + " has no stockpile");
 		}
@@ -639,7 +724,7 @@ public final class Stockpiles {
 
 	/** {@code withdraw}: credit only, into the player's inventory (what doesn't fit drops at the player). Returns what came out. */
 	public static Map<String, Integer> withdraw(MinecraftServer srv, String owner, Map<String, Integer> items, ServerPlayer to) throws Sites.SiteException {
-		Pile p = PILES.get(owner);
+		Pile p = get(owner);
 		if (p == null) {
 			throw new Sites.SiteException(Reason.NOT_ALLOWED, owner + " has no stockpile");
 		}
@@ -675,7 +760,7 @@ public final class Stockpiles {
 	 * their crate (they draw from the stockpile, joining the feed order at the end in placement order). Idempotent.
 	 */
 	public static Pile adopt(MinecraftServer srv, String owner) throws Sites.SiteException {
-		Pile p = PILES.get(owner);
+		Pile p = get(owner);
 		if (p == null) {
 			throw new Sites.SiteException(Reason.NOT_ALLOWED, owner + " has no stockpile (createStockpile first)");
 		}
@@ -761,7 +846,7 @@ public final class Stockpiles {
 	 * targets, pooled, still miss) and whether it fits; booked when {@code commit}. Null when nothing needs it or it doesn't fit.
 	 */
 	public static Ledger.@Nullable Accepted accept(MinecraftServer srv, String crateOwner, String item, boolean commit) {
-		Pile p = PILES.get(crateOwner.substring(PREFIX.length()));
+		Pile p = byId(crateOwner.substring(PREFIX.length()));
 		if (p == null) {
 			return null;
 		}
@@ -817,7 +902,7 @@ public final class Stockpiles {
 		ServerLevel level = Sites.levelOf(srv, p.dimension);
 		if (level != null) {
 			Builder.dropItems(level, dropAt(srv, p, fallback), over, null);
-			OVERFLOW_DROPPED.merge(p.owner, sumOf(over), Integer::sum);
+			OVERFLOW_DROPPED.merge(p.id, sumOf(over), Integer::sum);
 		}
 	}
 
@@ -973,7 +1058,7 @@ public final class Stockpiles {
 			boolean reserves = FeedOrder.reserves(building, paused, r.built.cardinality() < r.size(), r.frontierLoaded(level, ticks));
 			reserve.add(r.unbuilt, reserves);
 		}
-		LAST_RESERVED.put(p.owner, reserve.reserved());
+		LAST_RESERVED.put(p.id, reserve.reserved());
 	}
 
 	/** What a target may use now of each item its unbuilt cells need: {@code stock - reserved} at its position in the order. */
@@ -1012,11 +1097,12 @@ public final class Stockpiles {
 	public record View(String owner, String dimension, List<BlockPos> crates, int capacityStacks, int usedStacks, Map<String, Integer> stock,
 		Map<String, Integer> reserved, Map<String, Integer> credit, Map<String, Integer> delivered, Map<String, Integer> consumed,
 		Map<String, Integer> returned, Map<String, Integer> withdrawn, Map<String, Integer> dropped, Map<String, Integer> refundOverflow,
-		Map<String, Map<String, Integer>> outstandingByTarget, Map<String, Integer> outstanding, List<String> feedOrder, List<BlockPos> missingCrates) {
+		Map<String, Map<String, Integer>> outstandingByTarget, Map<String, Integer> outstanding, List<String> feedOrder, List<BlockPos> missingCrates,
+		Map<String, dev.larattalabs.architect.api.SiteWait> waiting) {
 	}
 
 	public static @Nullable View view(MinecraftServer srv, String owner) {
-		Pile p = PILES.get(owner);
+		Pile p = get(owner);
 		if (p == null) {
 			return null;
 		}
@@ -1035,9 +1121,17 @@ public final class Stockpiles {
 			}
 			byT.put(idOf(t), out);
 		}
+		// C25 per target (Y2's SiteWaits, fed by this stockpile's supply)
+		Map<String, dev.larattalabs.architect.api.SiteWait> waits = new LinkedHashMap<>();
+		for (String id : byT.keySet()) {
+			dev.larattalabs.architect.api.SiteWait w = SiteWaits.view(srv, id);
+			if (w != null) {
+				waits.put(id, w);
+			}
+		}
 		Map<String, Integer> stock = p.ledger.stock();
 		Map<String, Integer> reserved = new TreeMap<>();
-		LAST_RESERVED.getOrDefault(owner, Map.of()).forEach((k, v) -> {
+		LAST_RESERVED.getOrDefault(p.id, Map.of()).forEach((k, v) -> {
 			int r = Math.min(v, stock.getOrDefault(k, 0));
 			if (r > 0) {
 				reserved.put(k, r);
@@ -1052,12 +1146,12 @@ public final class Stockpiles {
 		});
 		return new View(owner, p.dimension, p.crates(), capacity(srv, p), p.ledger.usedStacks(Stockpiles::maxStack), stock, reserved, credit,
 			p.ledger.delivered(), p.ledger.consumed(), p.ledger.returned(), p.ledger.withdrawn(), p.ledger.dropped(), p.ledger.refundOverflow(), byT, total,
-			List.copyOf(p.order), missing(srv, p));
+			List.copyOf(p.order), missing(srv, p), waits);
 	}
 
 	/** The DevBridge's and the crate screen's view of a stockpile (also the API's source). */
 	public static @Nullable JsonObject json(MinecraftServer srv, String owner) {
-		Pile p = PILES.get(owner);
+		Pile p = get(owner);
 		if (p == null) {
 			return null;
 		}
@@ -1088,7 +1182,8 @@ public final class Stockpiles {
 		Map<String, Integer> need = unbuiltAll(srv, p);
 		o.add("outstanding", Builder.counts(need));
 		o.add("credit", Builder.counts(credit(srv, p)));
-		o.add("reserved", Builder.counts(LAST_RESERVED.getOrDefault(owner, Map.of())));
+		o.addProperty("id", p.id);
+		o.add("reserved", Builder.counts(LAST_RESERVED.getOrDefault(p.id, Map.of())));
 		JsonObject l = p.ledger.toJson();
 		l.remove("credited");
 		o.add("ledger", l);
@@ -1121,7 +1216,7 @@ public final class Stockpiles {
 		}
 		o.add("feedOrder", f);
 		o.add("targets", byT);
-		o.addProperty("overflowDroppedThisSession", OVERFLOW_DROPPED.getOrDefault(owner, 0));
+		o.addProperty("overflowDroppedThisSession", OVERFLOW_DROPPED.getOrDefault(p.id, 0));
 		return o;
 	}
 
@@ -1180,7 +1275,7 @@ public final class Stockpiles {
 				case "dissolve" -> {
 					JsonObject last = null;
 					o.add("out", Builder.counts(dissolve(srv, owner, req.has("toPlayer") && req.get("toPlayer").getAsBoolean() ? player : null)));
-					last = LAST_DISSOLVED.get(owner);
+					last = LAST_DISSOLVED.values().stream().filter(x -> owner.equals(x.get("owner").getAsString())).reduce((a, b) -> b).orElse(null);
 					if (last != null) {
 						o.add("ledgerAtEnd", last.get("ledger"));
 					}
@@ -1231,7 +1326,7 @@ public final class Stockpiles {
 	static JsonObject audit(MinecraftServer srv, ServerPlayer player, @Nullable String owner, JsonObject req) {
 		JsonObject o = new JsonObject();
 		ServerLevel level = (ServerLevel) player.level();
-		Pile p = owner == null ? null : PILES.get(owner);
+		Pile p = owner == null ? null : get(owner);
 		o.add("stock", Builder.counts(p == null ? Map.of() : p.ledger.stock()));
 		if (p != null) {
 			JsonObject l = p.ledger.toJson();
@@ -1356,6 +1451,7 @@ public final class Stockpiles {
 	static JsonObject toJson() {
 		JsonObject root = new JsonObject();
 		root.addProperty("format", 1);
+		root.addProperty("nextId", nextId);
 		JsonArray a = new JsonArray();
 		PILES.values().forEach(p -> a.add(p.toJson()));
 		root.add("stockpiles", a);
@@ -1392,16 +1488,18 @@ public final class Stockpiles {
 	private static void load(MinecraftServer server) {
 		dir = server.getWorldPath(LevelResource.ROOT).resolve("architect");
 		PILES.clear();
+		nextId = 1;
 		Path f = dir.resolve(FILE);
 		if (!Files.isRegularFile(f)) {
 			return;
 		}
 		try {
 			JsonObject root = JsonParser.parseString(Files.readString(f, StandardCharsets.UTF_8)).getAsJsonObject();
+			nextId = root.has("nextId") ? root.get("nextId").getAsLong() : 1;
 			if (root.has("stockpiles")) {
 				for (JsonElement e : root.getAsJsonArray("stockpiles")) {
 					Pile p = Pile.fromJson(e.getAsJsonObject());
-					PILES.put(p.owner, p);
+					PILES.put(p.id, p);
 				}
 			}
 			LOADED = root.deepCopy();
