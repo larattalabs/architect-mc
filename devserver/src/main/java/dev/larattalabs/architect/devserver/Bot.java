@@ -16,6 +16,7 @@ import net.minecraft.server.level.ClientInformation;
 import net.minecraft.server.level.ParticleStatus;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.network.CommonListenerCookie;
+import net.minecraft.server.network.config.PrepareSpawnTask;
 import net.minecraft.server.network.ServerCommonPacketListenerImpl;
 import net.minecraft.server.players.NameAndId;
 import net.minecraft.world.entity.HumanoidArm;
@@ -35,10 +36,14 @@ public final class Bot {
 	static final int VIEW_DISTANCE = intEnv("ARCHITECT_BOT_VIEW_DISTANCE", 16);
 	private static volatile @Nullable UUID uuid;
 
+	public static int viewDistance() {
+		return VIEW_DISTANCE;
+	}
+
 	private Bot() {
 	}
 
-	static int intEnv(String k, int def) {
+	public static int intEnv(String k, int def) {
 		try {
 			String v = System.getenv(k);
 			return v == null || v.isBlank() ? def : Integer.parseInt(v.strip());
@@ -66,19 +71,31 @@ public final class Bot {
 		return u == null ? null : server.getPlayerList().getPlayer(u);
 	}
 
-	/** Joins the bot (server thread). */
-	static ServerPlayer spawn(MinecraftServer server) {
+	/**
+	 * Joins the bot the way a client's login does (server thread): vanilla's PrepareSpawnTask finds its saved position (or the
+	 * world spawn), loads the chunks there, and then constructs, positions and places the player. Ticked from the server's
+	 * end-of-tick until it is ready.
+	 */
+	static void spawn(MinecraftServer server) {
 		String name = name();
 		GameProfile profile = new GameProfile(UUIDUtil.createOfflinePlayerUUID(name), name);
 		ClientInformation info = new ClientInformation("en_us", VIEW_DISTANCE, ChatVisiblity.FULL, true, 0x7f, HumanoidArm.RIGHT, false, true,
 			ParticleStatus.MINIMAL);
-		server.getPlayerList().op(new NameAndId(profile));
-		ServerPlayer p = new ServerPlayer(server, server.overworld(), profile, info);
-		server.getPlayerList().placeNewPlayer(new NoConnection(), p, new CommonListenerCookie(profile, 0, info, false));
-		uuid = profile.id();
-		Architect.LOGGER.info("devserver: bot {} ({}) joined at {} {} {} in {}", name, profile.id(), p.getX(), p.getY(), p.getZ(),
-			p.level().dimension().identifier());
-		return p;
+		NameAndId id = new NameAndId(profile);
+		server.getPlayerList().op(id);
+		PrepareSpawnTask task = new PrepareSpawnTask(server, id);
+		task.start(packet -> {
+		});
+		DevServer.everyTick(s -> {
+			if (!task.tick()) {
+				return false;
+			}
+			ServerPlayer p = task.spawnPlayer(new NoConnection(), new CommonListenerCookie(profile, 0, info, false));
+			uuid = profile.id();
+			Architect.LOGGER.info("devserver: bot {} ({}) joined at {} {} {} in {}", name, profile.id(), p.getX(), p.getY(), p.getZ(),
+				p.level().dimension().identifier());
+			return true;
+		});
 	}
 
 	private static Field keepAlivePending;

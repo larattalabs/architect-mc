@@ -9,7 +9,7 @@ final class ClientOnly {
 
 	static final String WHY = "client-only: this hook renders on a client; the headless server has none (run the step with host client)";
 
-	static <T> CompletableFuture<T> deltaGhost(String key, String siteId, int toVersion) {
+	static CompletableFuture<dev.larattalabs.architect.site.SiteDeltas.Check> deltaGhost(String key, String siteId, int toVersion) {
 		return CompletableFuture.failedFuture(new DevBridge.DevException(WHY));
 	}
 }

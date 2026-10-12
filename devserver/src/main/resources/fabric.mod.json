@@ -9,6 +9,7 @@
 	"entrypoints": {
 		"main": ["dev.larattalabs.architect.devserver.DevServer"]
 	},
+	"mixins": ["architect_devserver.mixins.json"],
 	"depends": {
 		"fabricloader": ">=0.19.5",
 		"minecraft": "~26.3",
