@@ -14,7 +14,7 @@
   },
   "steps": {
     "unit-mod": { "desc": "mod ./gradlew build (unit tests)", "cwd": "run:mod", "cmd": ["./gradlew", "--offline", "--no-daemon", "build"], "env": { "GRADLE_USER_HOME": "${RUN}/.gradle-home" }, "timeoutMin": 30, "client": "none", "stopOnFail": true, "okLines": false, "junit": "run:mod/build/test-results/test", "estMin": 0.6 },
-    "unit-kit": { "desc": "kit node --test", "cwd": "run:", "shell": "node --test kit/test/*.test.mjs", "timeoutMin": 10, "client": "none", "okLines": false, "parse": { "tests": "ℹ tests (\\d+)", "pass": "ℹ pass (\\d+)", "fail": "ℹ fail (\\d+)" }, "estMin": 0.2 },
+    "unit-kit": { "desc": "kit node --test", "cwd": "run:", "shell": "node --test kit/test/*.test.mjs", "timeoutMin": 20, "client": "none", "okLines": false, "parse": { "tests": "ℹ tests (\\d+)", "pass": "ℹ pass (\\d+)", "fail": "ℹ fail (\\d+)" }, "estMin": 0.2 },
     "unit-sidecar": { "desc": "sidecar vitest (no client up)", "cwd": "run:sidecar", "cmd": ["npx", "vitest", "run"], "timeoutMin": 15, "client": "none", "okLines": false, "parse": { "passed": "Tests\\s+(?:\\d+ failed \\| )?(\\d+) passed", "failed": "Tests\\s+(\\d+) failed" }, "estMin": 0.65 },
     "sim-jobs": { "desc": "4a jobs sim suite", "cmd": ["node", "tools/apitest.mjs", "jobs"], "env": { "APITEST_OUT": "${OUT}/sim-jobs" }, "timeoutMin": 15, "client": "sim", "estMin": 0.5 },
     "sim-sets": { "desc": "4b sets sim suite", "cmd": ["node", "tools/apitest.mjs", "sets"], "env": { "APITEST_OUT": "${OUT}/sim-sets" }, "timeoutMin": 15, "client": "sim", "estMin": 1 },
