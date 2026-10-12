@@ -321,7 +321,9 @@ export async function runHost(opts) {
         case 'dev.world.open': {
           let spec;
           try {
-            spec = worldSpec(req);
+            // fields left out keep the host's world (a client's AutoWorld falls back to ARCHITECT_AUTOWORLD_*)
+            const given = Object.fromEntries(['name', 'mode', 'preset', 'seed', 'cheats'].filter((k) => req[k] !== undefined && req[k] !== null).map((k) => [k, req[k]]));
+            spec = worldSpec({ ...(opts.world ?? {}), ...given });
           } catch (e) {
             fail(e);
             return;

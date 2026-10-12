@@ -221,12 +221,8 @@ public final class ServerSidecar implements ClientBridge {
 		});
 	}
 
-	/** The world stops: the link pauses (the helper keeps running for the next world, as with a dev client). */
+	/** The world stops: the link stays up, as a dev client's does on its title screen (jobs and designs go on finishing). */
 	static void worldStopped() {
-		SidecarLink l = link;
-		if (l != null) {
-			l.pause();
-		}
 	}
 
 	private static long hostPid() {
@@ -449,9 +445,8 @@ public final class ServerSidecar implements ClientBridge {
 
 	// ------------------------------------------------------------------ the pause emulation (dev.screen pause)
 
-	/** A paused singleplayer game, headless: the server's ticks freeze, and a protocol-2 helper hears client.paused. */
+	/** A paused singleplayer game, headless: the server skips its ticks (PauseMixin), and a protocol-2 helper hears client.paused. */
 	public static void setPaused(MinecraftServer server, boolean on) {
-		server.tickRateManager().setFrozen(on);
 		boolean changed = !Boolean.valueOf(on).equals(paused);
 		paused = on;
 		if (changed) {
