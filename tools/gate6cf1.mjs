@@ -146,8 +146,8 @@ steps.unit = async () => {
   out.goldens = nodeTest(['--test-skip-pattern=evaluation cost', 'kit/test/region-golden.test.mjs', 'kit/test/scenario-goldens.test.mjs', 'kit/test/region-6b.test.mjs', 'kit/test/forms-island.test.mjs', 'kit/test/village.test.mjs']);
   check(out.goldens.code === 0 && out.goldens.fail === 0, `items 9, 12: goldens (mega_bench tiles, S1 and S7 tile shas, forms_demo's golden when committed, 6b fixtures, islands, villages): ${out.goldens.pass} pass, ${out.goldens.fail} fail`, out.goldens.failing);
   out.bake = await bakeCost();
-  // (GATES.md "Policy update") a timing measure: recorded, never blocking; the check line states the data
-  check(true, `item 6: the bake threshold (${out.bake.threshold} ops; CPU time): ${out.bake.verdict} (load ${out.bake.load1})`, out.bake.rows);
+  // (GATES.md "Timing bars") a timing bar: recorded in change and slice, judged at release
+  L.bar(out.bake.largestWithinBars >= out.bake.threshold, `item 6: the bake threshold (${out.bake.threshold} ops; CPU time): ${out.bake.verdict} (load ${out.bake.load1})`, out.bake.rows);
   out.goldenFiles = Object.fromEntries(['s1.json', 's7.json', 'forms_demo.json'].map((f) => [f, fs.existsSync(path.join(root, 'scenarios', 'goldens', f))]));
   return out;
 };
