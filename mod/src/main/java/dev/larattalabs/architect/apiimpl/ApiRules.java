@@ -56,6 +56,7 @@ public final class ApiRules {
 					case "region.lightCover" -> "apronLights"; // 6c W
 					case "region.forms1" -> "formsIce"; // 6c F1 (with formsRock and voxelsOp, below)
 					case "region.passes" -> "planPasses"; // 6c T1 (with reliefOp, below)
+					case "region.route" -> "routePass"; // 6c T2
 					default -> Wire4b.FEATURE_NAMES.getOrDefault(f, Wire5a.FEATURE_NAMES.getOrDefault(f, f));
 				});
 			}

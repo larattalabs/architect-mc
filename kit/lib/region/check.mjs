@@ -8,6 +8,7 @@ import { fillMissing } from './plan.mjs';
 import { centreCells, crossOffsets, rightOf, segmentAxis } from './geom.mjs';
 import { decodeVoxels } from './voxels.mjs';
 import { VC, classAt, decodeArvx } from './volume.mjs';
+import { windowGrade } from './passes/route.mjs';
 
 export const RULES = ['M1', 'M2', 'M3', 'M4', 'M5', 'M6', 'M7', 'M8', 'M9', 'M10', 'M11', 'M12', 'M13', 'M14', 'M22', 'M23', 'M24', 'M17'];
 /** (6c V) The parts a flat village's components emit (the M1 lot-box rule applies to them only). */
@@ -401,6 +402,8 @@ export function checkRegion({ ir, survey, blobs, volumes = [], meta = null, worl
   // ---- (6c V) the villager rules and the graph, when the plan is a village (meta.village)
   const village = meta?.village;
   if (village) time('M22', () => villageRules({ ir, vw, village, want, findings, metrics, partStage }));
+  // ---- (6c T2) the routed edges: each edge's ends reach each other by its movers, no ladder on a villager edge, the grade
+  if (meta?.route) time('M2', () => routeRules({ ir, vw, route: meta.route, want, findings, metrics, partStage, graph }));
 
   // ---- M3 support
   if (want.has('M3')) time('M3', () => {
@@ -449,6 +452,17 @@ export function checkRegion({ ir, survey, blobs, volumes = [], meta = null, worl
     }
     const area = walkArea.length / 3;
     metrics.M5 = { darkSpawnable: dark, walkArea: area, share: area ? dark / area : 0 };
+    // (6c T2) the share over the routes' own walk cells (their floor in the routes part)
+    if (meta?.route) {
+      let rd = 0, ra = 0;
+      for (let i = 0; i < walkArea.length; i += 3) {
+        const x = walkArea[i], y = walkArea[i + 1], z = walkArea[i + 2];
+        if (ir.parts[vw.partAt(x, y - 1, z)]?.id !== meta.route.part) continue;
+        ra++;
+        if (P.spawn[vw.get(x, y - 1, z)] && !(light.at(x, y, z) > 0)) rd++;
+      }
+      metrics.M5route = { darkSpawnable: rd, walkCells: ra, share: ra ? rd / ra : 0 };
+    }
     if (dark) findings.push(finding('M5', null, null, dark, sample, `${dark} of ${area} walk cell(s) are dark (block light 0) and spawnable (${(100 * dark / Math.max(1, area)).toFixed(1)}%)`));
     // caverns: no dark spawnable floor cell inside
     for (const [pid, m] of Object.entries(meta?.parts ?? {})) for (const cv of m.caverns ?? []) {
@@ -825,6 +839,63 @@ function villageRules({ ir, vw, village, want, findings, metrics, partStage }) {
     });
     for (const [pid, cells] of byPart) findings.push(finding('M1', pid, partStage.get(pid) ?? null, cells.length, cells, `${cells.length} cell(s) of ${pid} fall inside a lot box (no region op writes inside a lot box)`));
   }
+}
+
+/**
+ * (6c T2, CONTRACT T2 §3) The routed edges (meta.route): `M2` when an edge's ends don't reach each other by the player mover,
+ * `M2:villager` when a villager edge's ends don't by the villager mover or it has a ladder, `M2:grade` when a walk run rises or
+ * falls more than maxGrade over an 8-cell window (its surface read from the world: the standable feet nearest the plan's).
+ */
+export function routeRules({ ir, vw, route, want, findings, metrics, partStage, graph = null }) {
+  const part = route.part, stage = partStage.get(part) ?? null;
+  const graphs = new Map();
+  const reach = (start, mover) => {
+    const k = `${mover}|${start.join(',')}`;
+    let g = graphs.get(k);
+    if (!g) { g = walkGraph(vw, [start], { mover }); graphs.set(k, g); }
+    return g;
+  };
+  const per = [];
+  let unP = [], unV = [], ladV = [], gradeBad = [], windows = 0, bad = 0, maxRise = 0;
+  const stands = (graph ?? reach(ir.anchors?.entrance ?? [0, 0, 0], 'player')).stands;
+  for (const e of route.edges ?? []) {
+    if (!e.ok) { per.push({ id: e.id, ok: false, failed: e.failed }); continue; }
+    const a = e.path[0], b = e.path[e.path.length - 1];
+    const fa = [a[0], a[1] + 1, a[2]], fb = [b[0], b[1] + 1, b[2]];
+    const player = nodeReached(reach(fa, 'player'), fb) && nodeReached(reach(fb, 'player'), fa);
+    const villagerEdge = (e.movers ?? []).includes('villager');
+    const villager = villagerEdge ? nodeReached(reach(fa, 'villager'), fb) && nodeReached(reach(fb, 'villager'), fa) : null;
+    const ladders = (e.segments ?? []).filter((g) => g.kind === 'ladder').length;
+    if (!player) unP.push(e);
+    if (villagerEdge && !villager) unV.push(e);
+    if (villagerEdge && ladders) ladV.push(e);
+    // the grade over each walk run, on the world's surface
+    let eb = 0, ew = 0, er = 0;
+    for (const g of e.segments ?? []) {
+      if (g.kind !== 'walk' || g.shared) continue; // (a shared run is the earlier edge's: graded there)
+      const ys = [];
+      for (let i = g.from; i <= g.to; i++) {
+        const [x, y, z] = e.path[i];
+        const l = stands(x, z);
+        let best = null;
+        for (const f of l) if (best === null || Math.abs(f - 1 - y) < Math.abs(best - 1 - y)) best = f;
+        ys.push(best === null ? y : best - 1);
+      }
+      const w = windowGrade(ys, route.maxGrade);
+      ew += w.windows; eb += w.bad; if (w.maxRise > er) er = w.maxRise;
+    }
+    windows += ew; bad += eb; if (er > maxRise) maxRise = er;
+    if (eb) gradeBad.push({ e, n: eb });
+    per.push({ id: e.id, ok: true, movers: e.movers, player, villager, ladders, grade: { windows: ew, bad: eb, maxRise: er } });
+  }
+  metrics.route = { edges: per, routed: per.filter((x) => x.ok).length, playerReached: per.filter((x) => x.player).length, villagerEdges: per.filter((x) => x.villager !== null && x.villager !== undefined).length,
+    villagerReached: per.filter((x) => x.villager === true).length, ladderOnVillager: ladV.length, grade: { windows, bad, maxRise, maxGrade: route.maxGrade }, hairpins: route.hairpins ?? 0 };
+  if (!want.has('M2')) return;
+  const at = (e) => [e.path[0][0], e.path[0][1] + 1, e.path[0][2]];
+  if (unP.length) findings.push(finding('M2', part, stage, unP.length, unP.map(at), `route: ${unP.length} edge(s) whose ends don't reach each other by the player mover: ${unP.map((e) => e.id).join(', ')}`));
+  if (unV.length) findings.push(finding('M2:villager', part, stage, unV.length, unV.map(at), `route: ${unV.length} villager edge(s) whose ends don't reach each other by the villager mover: ${unV.map((e) => e.id).join(', ')}`));
+  if (ladV.length) findings.push(finding('M2:villager', part, stage, ladV.length, ladV.map(at), `route: ${ladV.length} villager edge(s) with a ladder (villagers don't climb): ${ladV.map((e) => e.id).join(', ')}`));
+  if (gradeBad.length) findings.push(finding('M2:grade', part, stage, bad, gradeBad.map((x) => at(x.e)), `route: ${bad} 8-cell window(s) of walk runs steeper than ${route.maxGrade} (max rise ${maxRise}): ${gradeBad.map((x) => `${x.e.id} ${x.n}`).join(', ')}`));
 }
 
 /** One line per finding plus the totals (summary.txt). */

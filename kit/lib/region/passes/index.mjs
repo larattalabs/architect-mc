@@ -2,7 +2,8 @@
 // {fields, ops, data}, called from a program through r.pass(name, intent). A program declares the passes it calls
 // (`export const passes = ['relief']`, a literal array: the helper reads it to pick the plan budget). Under the realise lint.
 import { reliefPass } from './relief.mjs';
+import { routePass } from './route.mjs';
 
-/** name -> the pass function. Later slices add `route` (T2), `hydrology` (HY), `districts` (D). */
-export const PASSES = Object.freeze({ relief: reliefPass });
+/** name -> the pass function. (6c T2) `route`; later slices add `hydrology` (HY), `districts` (D). */
+export const PASSES = Object.freeze({ relief: reliefPass, route: routePass });
 export const PASS_NAMES = Object.freeze(Object.keys(PASSES));

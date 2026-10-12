@@ -19,8 +19,10 @@ import org.junit.jupiter.api.Test;
 class ApiT1Test {
 	@Test
 	void version() {
-		assertEquals("1.18.0", ArchitectApi.VERSION);
-		assertEquals("0.20.0", IrStale.KIT_VERSION);
+		// later slices bump both (T2: 1.19.0 / 0.21.0); T1's own numbers are the floor
+		String[] v = ArchitectApi.VERSION.split("\\."), k = IrStale.KIT_VERSION.split("\\.");
+		assertTrue(Integer.parseInt(v[0]) == 1 && Integer.parseInt(v[1]) >= 18, ArchitectApi.VERSION);
+		assertTrue(Integer.parseInt(k[0]) == 0 && Integer.parseInt(k[1]) >= 20, IrStale.KIT_VERSION);
 	}
 
 	@Test

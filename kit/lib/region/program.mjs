@@ -32,6 +32,7 @@ import { rockSpire } from '../forms/rockSpire.mjs';
 import { BAKE_OPS, bakeOps } from '../forms/rules.mjs';
 import { VOXEL_CLASSES, VC, classAt } from './volume.mjs';
 import { PASSES, PASS_NAMES } from './passes/index.mjs';
+import { edgeColumns, inferMovers, footprintOf, polylineOf, VILLAGER } from './passes/route.mjs';
 import { CARDINALS, cardinalOf, centreCells, circlePolygon, compassDir, crossOffsets, dominantCardinal, rightOf, segmentAxis } from './geom.mjs';
 
 export const COND = Object.freeze({ IF_NATURAL: 0, IF_SOLID_NATURAL: 1, IF_AIR_OR_FLUID: 2, ALWAYS_OURS: 3 });
@@ -203,6 +204,7 @@ export class Region {
     if (!Object.hasOwn(PASSES, name)) throw new Error(`pass '${name}' is not a kit pass (${PASS_NAMES.join(', ')})`);
     const declared = this.ctx.passes ?? [];
     if (!declared.includes(name)) throw new Error(`PASS_UNDECLARED: the program calls pass '${name}' but does not declare it (export const passes = ['${name}'])`);
+    if (name === 'route') return this._route(intent);
     const it = { ...intent };
     const firstLot = (it.around ?? []).find((a) => a && Array.isArray(a.at) && Array.isArray(a.size));
     const stage = it.stage ?? (firstLot ? this.parts.find((p) => p.id === firstLot.part)?.stage : undefined);
@@ -227,6 +229,149 @@ export class Region {
     return res;
   }
 
+  /**
+   * (6c T2) The `route` pass (r.pass('route', intent); kit/lib/region/passes/route.mjs): `{edges: [{id?, from, to, width = 3, movers?,
+   * type?}], nodes: {name: {at: [x, y, z] (feet) | lot: id, kind, facing}}, maxGrade = 0.25, hairpinLanding = 3, stairs = true,
+   * ladders = true, maxCut = 4, maxFill = 4, prefer: [[x, z]], base, stage, part = 'routes', surface = 'path', foundation =
+   * 'foundation', retain = 'structure', stairMaterial = 'structure', keepOut: [[x0, z0, x1, z1]]}`. An end names a node, a lot (its
+   * entrance; out of its front) or a graph node. Movers come from the ends' lot kinds unless the edge sets them (S-T2-1); ladders
+   * only on an edge without villagers (S-T2-2). Obstacles: the lots and their aprons, the forms, the keep sets, the owner's keep-out
+   * (`ctx.keepOut`, so the IR records it) and the intent's own `keepOut`. Each routed edge becomes ordinary primitives in the
+   * path part `part`: 4e ground roads where the route lies on the surveyed ground, graded columns where it cuts or fills, stair
+   * flights, hairpin landings and ladder columns; plus a graph edge (`movers`, `segments`). A route writing into keep-out refuses
+   * the plan (KEEP_OUT). Returns `{edges, data}` (the pass's data, with `ms`).
+   */
+  _route(intent = {}) {
+    const it = { ...intent };
+    const what = 'pass route';
+    const nodesIn = it.nodes ?? {};
+    const lotKind = (l) => { const v = l?.ext?.['architect_mc:village']; return v?.villager ?? v?.type ?? v?.role ?? null; };
+    const vec = (f) => (f === null || f === undefined ? null : Array.isArray(f) ? [...f] : CARDINALS[f] ? [...CARDINALS[f]] : null);
+    const resolve = (name) => {
+      const n = Object.hasOwn(nodesIn, name) ? nodesIn[name] : null;
+      const lotId = n?.lot ?? (n ? null : name);
+      const lot = lotId ? this.lots.find((l) => l.id === lotId) : null;
+      if (lot) return { name, at: [...this.meta.lots[lot.id].entrance], kind: n?.kind ?? lotKind(lot), facing: vec(lot.front), lot: lot.id };
+      if (n) {
+        if (!Array.isArray(n.at) || n.at.length !== 3 || !n.at.every(isInt)) throw new Error(`${what}: node '${name}' needs at: [x, y, z] (feet) or lot: id`);
+        return { name, at: [...n.at], kind: n.kind ?? null, facing: vec(n.facing), lot: null };
+      }
+      const g = this.graph.nodes.find((x) => x.id === name);
+      if (g) return { name, at: [...g.at], kind: g.kind, facing: null, lot: null, graph: true };
+      throw new Error(`${what}: no node, lot or graph node '${name}'`);
+    };
+    if (!Array.isArray(it.edges) || !it.edges.length) throw new Error(`${what}: edges must list [{from, to}]`);
+    const ladders = it.ladders ?? true;
+    const edges = it.edges.map((e, i) => {
+      const id = e.id ?? `e${i + 1}`;
+      if (typeof id !== 'string' || !PART_ID.test(id)) throw new Error(`${what}: edge id '${id}' must match ${PART_ID}`);
+      const a = resolve(e.from), b = resolve(e.to);
+      const movers = inferMovers(a.kind, b.kind, e.movers);
+      return { id, a, b, width: e.width ?? 3, type: e.type ?? ((e.width ?? 3) >= 5 ? 'road' : 'path'), movers, ladders: ladders && !movers.includes(VILLAGER) };
+    });
+    if (new Set(edges.map((e) => e.id)).size !== edges.length) throw new Error(`${what}: edge ids must be unique`);
+    // obstacles: lot footprints and aprons, forms, keep sets (x/z); keep-out (the owner's, read through ctx so the IR records it)
+    const hard = [];
+    for (const l of this.lots) hard.push([l.box.minX - 1, l.box.minZ - 1, l.box.maxX + 1, l.box.maxZ + 1]);
+    for (const f of this.forms) if (f.bounds) hard.push([f.bounds.minX, f.bounds.minZ, f.bounds.maxX, f.bounds.maxZ]);
+    for (const p of this.parts) for (const k of p.keep ?? []) hard.push([k.box.minX, k.box.minZ, k.box.maxX, k.box.maxZ]);
+    const keepOut = [...(this.ctx.keepOut ?? []), ...(it.keepOut ?? [])].map((k) => [...k]);
+    // hysteresis: the caller's cells, 4e roads and graded paths already in the plan
+    const prefer = (it.prefer ?? []).map((p) => [p[0], p[p.length - 1]]);
+    for (const rd of this.roads) { const { cells } = centreCells(rd.points.map((q) => [q[0], q[2]])); for (const c of cells) prefer.push([c.x, c.z]); }
+    for (const m of Object.values(this.meta.paths)) if (m.kind === 'graded' && Array.isArray(m.cells)) for (const q of m.cells) prefer.push([q[0], q[2]]);
+    const stage = it.stage ?? this.stageList[this.stageList.length - 1];
+    const t0 = performance.now();
+    const out = PASSES.route(this.survey.columns, this.ctx.volumes ?? [], {
+      edges: edges.map((e) => ({ id: e.id, from: { at: e.a.at, facing: e.a.facing }, to: { at: e.b.at, facing: e.b.facing }, width: e.width, movers: e.movers, ladders: e.ladders })),
+      maxGrade: it.maxGrade ?? 0.25, hairpinLanding: it.hairpinLanding ?? 3, stairs: it.stairs ?? true, maxCut: it.maxCut ?? 4, maxFill: it.maxFill ?? 4, margin: it.margin ?? 2,
+      hard, keepOut, prefer, base: it.base ?? null, _unsafe: it._unsafe ?? {},
+    });
+    const ms = Math.round(performance.now() - t0);
+    const heapMb = Math.round(process.resourceUsage().maxRSS / 1024);
+    // ---- emit
+    const p = this.part(it.part ?? 'routes', { stage, set: 'path' });
+    (this.meta.parts[p.id] ??= {}).kind = 'path';
+    const s = this.survey;
+    const baseAt = (x, z) => {
+      const b = it.base;
+      if (!b) return 0;
+      const i = x - b.minX, j = z - b.minZ;
+      return i >= 0 && j >= 0 && i < b.width && j < b.depth ? b.values[i + j * b.width] : 0;
+    };
+    const mats = { surface: it.surface ?? 'path', foundation: it.foundation ?? 'foundation', retain: it.retain ?? 'structure', stair: it.stairMaterial ?? 'structure' };
+    const res = [];
+    const written = new Map(); // "x,z" -> edge id (the keep-out guard)
+    const mark = (x, z, id) => { const k = `${x},${z}`; if (!written.has(k)) written.set(k, id); };
+    const metaEdges = [];
+    // no retaining column on another route cell, nor on a lot's pad, apron or batter (the pad shapes that land)
+    const routeCols = new Set();
+    for (const d of out.data.edges) if (d.ok) {
+      for (const g of d.segments) for (const q of footprintOf(d.path.slice(g.from, g.to + 1), d.width)) routeCols.add(`${q[0]},${q[1]}`);
+      for (const l of d.landings) for (const [x, z] of l.cells) routeCols.add(`${x},${z}`);
+    }
+    const nearLot = (x, z) => this.lots.some((l) => { const m = 1 + Math.max(l.pad?.maxCut ?? 0, l.pad?.maxFill ?? 0); return x >= l.box.minX - m && x <= l.box.maxX + m && z >= l.box.minZ - m && z <= l.box.maxZ + m; });
+    const noRetain = (x, z) => routeCols.has(`${x},${z}`) || nearLot(x, z);
+    for (let i = 0; i < edges.length; i++) {
+      const e = edges[i], d = out.data.edges[i];
+      const rid = `route_${e.id}`;
+      const rec = { id: e.id, from: e.a.name, to: e.b.name, movers: e.movers, ladders: e.ladders, width: e.width, ok: d.ok, failed: d.failed ?? null, length: d.length, rise: d.rise, cost: d.cost, search: d.search, expanded: d.expanded, roads: [], paths: [] };
+      metaEdges.push(rec);
+      if (!d.ok) { this.note(`route ${e.id} (${e.a.name} -> ${e.b.name}): ${d.failed} (${d.note})`); res.push({ id: e.id, ok: false, failed: d.failed }); continue; }
+      rec.path = d.path; rec.segments = d.segments; rec.landings = d.landings; rec.ladderCols = d.ladderCols;
+      let n = 0;
+      const ladderSegs = [];
+      const ec = edgeColumns({ path: d.path, segments: d.segments, landings: d.landings, width: e.width });
+      const fpOf = (si) => ec.bySeg[si].map((o) => [o.x, o.z, o.y, o.edge]);
+      d.segments.forEach((g, si) => {
+        const cells = d.path.slice(g.from, g.to + 1);
+        n++;
+        if (g.shared) return; // an earlier edge's cells: built by it
+        if (g.kind === 'walk' || g.kind === 'landing') {
+          // 4e's ground road where a walk lies on the surveyed ground (4e follows the realised ground at realise), else graded columns
+          const onGround = g.kind === 'walk' && !it.base && e.width <= 5 && cells.length >= 4 && cells.every(([x, y, z]) => y === s.groundAt(x, z) && !s.waterAt(x, z));
+          if (onGround) {
+            const idx = polylineOf(cells);
+            const id = `${rid}_${n}`;
+            const r = p.road(idx.map((k) => [cells[k][0], cells[k][1], cells[k][2]]), { mode: 'ground', width: e.width, id, lanterns: it.lanterns ?? true, lamp: it.lamp ?? null });
+            (r.mode === 'ground' ? rec.roads : rec.paths).push(...r.ids);
+            for (const q of footprintOf(cells, e.width + 2)) mark(q[0], q[1], e.id);
+            return;
+          }
+          rec.paths.push(p._routeRun(`${rid}_${n}`, fpOf(si), mats, { baseAt, mark: (x, z) => mark(x, z, e.id), cells, noRetain }));
+        } else if (g.kind === 'stair') {
+          // the flight's ground (cut above, fill below), then the treads
+          p._routeRun(`${rid}_${n}g`, fpOf(si), mats, { baseAt, mark: (x, z) => mark(x, z, e.id), cells, noSurface: true, register: false, noRetain });
+          const st = p.stair([cells[0], cells[cells.length - 1]], { width: e.width, landingEvery: 8, carve: true, material: mats.stair, id: `${rid}_${n}` });
+          rec.paths.push(st.id);
+        } else if (g.kind === 'ladder') {
+          ladderSegs.push(n);
+        }
+      });
+      // the ladders last (after the walk runs' cuts and fills at their feet)
+      d.ladderCols.forEach((lc, k) => { rec.paths.push(p._ladder(`${rid}_${ladderSegs[k]}`, lc)); mark(lc.x, lc.z, e.id); });
+      // the graph: the ends' nodes (made when missing) and the edge with its movers and segments
+      const port = (end) => {
+        let g = this.graph.nodes.find((x) => x.id === end.name);
+        if (!g) g = this.graphNode({ id: end.name, kind: end.lot ? 'lot' : 'junction', ref: end.lot ?? end.name, at: end.at, ports: [{ name: 'route', at: end.at, facing: end.facing ? cardinalOf(end.facing[0], end.facing[1]) : 'up', width: e.width }] });
+        return `${g.id}.${g.ports[0].name}`;
+      };
+      this.graphEdge({ id: rid, from: port(e.a), to: port(e.b), type: e.type, width: e.width, path: rid, stage, movers: e.movers, segments: d.segments.map((g) => ({ kind: g.kind, from: g.from, to: g.to })) });
+      res.push({ id: e.id, ok: true, length: d.length, rise: d.rise, segments: d.segments.length });
+    }
+    // keep-out: a route never writes into it (with the obstacle off, the plan is refused here)
+    for (const [k, id] of written) {
+      const [x, z] = k.split(',').map(Number);
+      const b = keepOut.find((q) => x >= q[0] && x <= q[2] && z >= q[1] && z <= q[3]);
+      if (b) throw new Error(`KEEP_OUT: route ${id} writes into the keep-out rect [${b.join(', ')}] (at ${x}, ${z})`);
+    }
+    const hairpins = metaEdges.reduce((a, x) => a + (x.landings?.length ?? 0), 0);
+    this.meta.route = { maxGrade: it.maxGrade ?? 0.25, hairpinLanding: it.hairpinLanding ?? 3, stairs: it.stairs ?? true, part: p.id, stage, edges: metaEdges, hairpins, keepOut };
+    this.passRuns.push({ name: 'route', ms, heapMb });
+    this.note(`pass route: ${(ms / 1000).toFixed(1)} s, ${heapMb} MB${out.data.coarse ? ` (coarse: resolution ${out.data.resolution})` : ''}; ${out.data.routed}/${edges.length} edges routed, ${hairpins} hairpin(s)`);
+    return { edges: res, data: { ...out.data, ms } };
+  }
+
   /** (6c V) A graph node (SETTLEMENTS §8.1): `{id, kind: lot|plaza|junction, ref, at, ports}`; ids unique. */
   graphNode({ id, kind, ref = null, at, ports = [] }) {
     if (typeof id !== 'string' || !/^[a-z][a-z0-9_:.-]{0,63}$/.test(id)) throw new Error(`graph node id '${id}' is not valid`);
@@ -239,7 +384,7 @@ export class Region {
   }
 
   /** (6c V) A graph edge `{id, from: 'node.port', to: 'node.port', type: road|path, width, path}` in stage `ground`. */
-  graphEdge({ id, from, to, type, width, path }) {
+  graphEdge({ id, from, to, type, width, path, stage = 'ground', movers, segments }) {
     if (this.graphIds.has(id)) throw new Error(`graph id '${id}' is used twice`);
     if (type !== 'road' && type !== 'path') throw new Error(`graph edge ${id}: type must be road or path`);
     for (const end of [from, to]) {
@@ -248,7 +393,10 @@ export class Region {
       if (!node || !node.ports.some((q) => q.name === p)) throw new Error(`graph edge ${id}: no port '${end}'`);
     }
     this.graphIds.add(id);
-    const e = { id, from, to, type, width, stage: 'ground', path };
+    const e = { id, from, to, type, width, stage, path };
+    // (6c T2) a routed edge carries its movers and its segments (only when set, so V's graphs are unchanged)
+    if (movers !== undefined) e.movers = [...movers];
+    if (segments !== undefined) e.segments = segments.map((g) => ({ ...g }));
     this.graph.edges.push(e);
     return e;
   }
@@ -1438,6 +1586,74 @@ class Part {
    * where given), width 1-9, cut/fill at most 12, retaining edges where a cut or fill exceeds 2. `optional: true` drops a
    * road that cannot be built (with a note) instead of failing the plan. Returns `{mode, ids}` or null when dropped.
    */
+  /**
+   * (6c T2) A routed run's columns, as the graded road writes them: `fp` = [[x, z, y, edge]] (footprintOf), each column filled from
+   * its frozen floor to y - 1 (foundation; `retain` on an edge more than 2 above the floor), cut from y + 1 to the column's top
+   * (and over the program's `baseAt` raise), the surface at y (a walk cell); a retaining column outside an edge where the land
+   * stands more than 2 above the surface. Registered as a `graded` path with its centre `cells` unless `register: false`.
+   */
+  _routeRun(id, fp, mats, { baseAt = () => 0, mark = () => {}, cells = [], noSurface = false, register = true, noRetain = () => false } = {}) {
+    this._requirePath('route');
+    const s = this.region.survey;
+    const surfM = this._mat(mats.surface, 'route surface'), fM = this._mat(mats.foundation, 'route foundation'), rM = this._mat(mats.retain, 'route retain');
+    if (surfM === null) throw new Error(`part ${this.id}: route surface must not be air`);
+    const fillC = new Cols({ floor: 1 }, { abs: 0 });
+    const cutC = new Cols({ abs: 0 }, { height: 0 });
+    const cutB = new Cols({ abs: 0 }, { abs: 0 });
+    const surfC = new Cols({ abs: 0 }, { abs: 0 });
+    const retC = new Cols({ abs: 0 }, { abs: 0 });
+    const inFp = new Set(fp.map(([x, z]) => `${x},${z}`));
+    const box = { minX: Infinity, minY: Infinity, minZ: Infinity, maxX: -Infinity, maxY: -Infinity, maxZ: -Infinity };
+    const grow = (x, y, z) => { box.minX = Math.min(box.minX, x); box.maxX = Math.max(box.maxX, x); box.minY = Math.min(box.minY, y); box.maxY = Math.max(box.maxY, y); box.minZ = Math.min(box.minZ, z); box.maxZ = Math.max(box.maxZ, z); };
+    for (const [x, z, y, edge] of fp) {
+      const g = s.groundAt(x, z), top = Math.max(s.topAt(x, z), g + baseAt(x, z));
+      fillC.add(x, z, 0, y - 1, edge && y - s.floorAt(x, z) > 2 ? rM : fM);
+      cutC.add(x, z, y + 1, 0, null);
+      // over the program's raise, and 3 cells of head room whatever the survey's top says (a canopy's leaves over the walk)
+      const clear = Math.max(top, y + 3);
+      if (clear > s.topAt(x, z)) cutB.add(x, z, y + 1, clear, null);
+      if (!noSurface) surfC.add(x, z, y, y, surfM);
+      mark(x, z);
+      grow(x, Math.min(y, s.floorAt(x, z) + 1), z); grow(x, Math.max(y, top), z);
+      if (edge) {
+        for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const ox = x + dx, oz = z + dz;
+          if (inFp.has(`${ox},${oz}`) || noRetain(ox, oz)) continue;
+          const land = s.groundAt(ox, oz) + baseAt(ox, oz);
+          if (land - y > 2) { retC.addOnce(`${ox},${oz}`, ox, oz, y + 1, land, rM); mark(ox, oz); grow(ox, land, oz); }
+        }
+      }
+    }
+    this._colsOp(fillC, COND.IF_NATURAL);
+    this._colsOp(cutC, COND.IF_NATURAL);
+    this._colsOp(cutB, COND.IF_NATURAL);
+    this._colsOp(surfC, COND.IF_NATURAL, true);
+    this._colsOp(retC, COND.IF_NATURAL);
+    if (register) {
+      if (!PART_ID.test(id)) throw new Error(`part ${this.id}: route id '${id}' must match ${PART_ID}`);
+      this.region.paths.push({ id, stage: this.stage, part: this.id, kind: 'graded', box });
+      this.region.meta.paths[id] = { kind: 'graded', part: this.id, stage: this.stage, width: null, cells: cells.map((c) => [...c]), route: true };
+      (this.region.meta.parts[this.id] ??= {}).kind ??= 'path';
+    }
+    return id;
+  }
+
+  /** (6c T2) A ladder column `{x, z, y0, y1, facing}` (the ladder's feet cells, facing away from its wall); a `ladder` path. */
+  _ladder(id, { x, z, y0, y1, facing }) {
+    this._requirePath('ladder');
+    const m = this._mat(`minecraft:ladder[facing=${facing}]`, 'ladder');
+    const c = new Cols({ abs: 0 }, { abs: 0 });
+    c.add(x, z, y0, y1, m);
+    // head room over the top rung (the climber's head as it steps off)
+    const h = new Cols({ abs: 0 }, { abs: 0 });
+    h.add(x, z, y1 + 1, y1 + 2, null);
+    this._colsOp(h, COND.IF_NATURAL);
+    this._colsOp(c, COND.IF_NATURAL);
+    this.region.paths.push({ id, stage: this.stage, part: this.id, kind: 'ladder', box: { minX: x, minY: y0, minZ: z, maxX: x, maxY: y1 + 2, maxZ: z } });
+    this.region.meta.paths[id] = { kind: 'ladder', part: this.id, stage: this.stage, cells: [[x, y0, z], [x, y1, z]], facing };
+    return id;
+  }
+
   road(path, { width = 3, surface = null, lanterns = true, mode = 'ground', optional = false, id, foundation = 'foundation', retain = 'structure', lamp = null } = {}) {
     this._requirePath('road');
     const what = `part ${this.id}: road`;

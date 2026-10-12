@@ -87,7 +87,7 @@ describe.skipIf(!hasKit)('relief_demo through the sidecar (real kit)', () => {
     const p = await plan('relief_demo');
     expect(p.passes).toEqual(['relief']);
     expect(p.requires).toContain('relief');
-    expect(p.kitVersion).toBe('0.20.0');
+    expect(p.kitVersion).toBe('0.21.0');
     expect(p.notes.some((n) => /^pass relief: \d+\.\d s, \d+ MB$/.test(n))).toBe(true);
     const dir = path.join(dataDir, 'regions', 'plans', p.planId);
     expect(JSON.parse(fs.readFileSync(path.join(dir, 'request.json'), 'utf8')).passes).toEqual(['relief']);

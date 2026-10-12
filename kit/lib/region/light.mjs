@@ -103,7 +103,7 @@ function roadLights(vw, ir, fixtureOf) {
  * `reserved`: "x,z" columns no lamp may take (the bell area, golem space, the props' own); `laneCells`: the lanes' cells
  * (door paths). Returns `{lamps: [{lot, at, cells}], perLot, before, after, targets, capped}`.
  */
-export function lightCover(r, { fixture, stage = 'props', keepOut = [], reserved = new Set(), laneCells = [], maxPerLot = LAMPS_PER_LOT, share = COVER_SHARE, _drop = null } = {}) {
+export function lightCover(r, { fixture, stage = 'props', keepOut = [], reserved = new Set(), laneCells = [], maxPerLot = LAMPS_PER_LOT, share = COVER_SHARE, extra = [], extraCap = {}, part = 'props_apron', _drop = null } = {}) {
   const { ir, blobs } = draftIR(r);
   const meta = { lots: r.meta.lots, parts: r.meta.parts };
   const surveyCols = r.ctx.survey.columns;
@@ -168,6 +168,8 @@ export function lightCover(r, { fixture, stage = 'props', keepOut = [], reserved
       for (const z of [mz, ...qz]) for (const x of [x0 - 1 - d, x1 + 1 + d]) groups[2].push({ lot: l.id, x, z });
     }
   }
+  // (6c T2) a caller's extra candidates (beside a route: `{lot: key, x, z}`), after the lots' own, each key capped by extraCap
+  if (extra.length) groups.push([...extra]);
   const seen = new Set();
   for (const g of groups) {
     g.sort((a, b) => (a.lot < b.lot ? -1 : a.lot > b.lot ? 1 : 0) || a.x - b.x || a.z - b.z);
@@ -198,12 +200,14 @@ export function lightCover(r, { fixture, stage = 'props', keepOut = [], reserved
   // ---- greedy
   const chosen = [];
   const perLot = Object.fromEntries(ir.lots.map((l) => [l.id, 0]));
+  for (const c of extra) perLot[c.lot] ??= 0;
+  const capOf = (k) => extraCap[k] ?? maxPerLot;
   const goal = () => targets.length === 0 || dark.size / targets.length < share;
   const taken = new Set();
   while (!goal()) {
     let best = null, gain = 0;
     for (const c of cands) {
-      if (taken.has(c) || perLot[c.lot] >= maxPerLot) continue;
+      if (taken.has(c) || perLot[c.lot] >= capOf(c.lot)) continue;
       if (c.foot.some(([x, z]) => chosen.some((o) => o.foot.some(([ox, oz]) => Math.abs(ox - x) + Math.abs(oz - z) <= 1)))) continue; // never side by side
       let g = 0;
       for (const i of c.reach) if (dark.has(i)) g++;
@@ -228,7 +232,7 @@ export function lightCover(r, { fixture, stage = 'props', keepOut = [], reserved
         for (const c of chosen) { const d = Math.abs(c.x - n.at[0]) + Math.abs(c.z - n.at[2]); if (d < nd) { nd = d; near = c; } }
         if (near) drop.add(`${near.x},${near.z}`);
       }
-      if (drop.size > (_drop?.size ?? 0)) return lightCover(r, { fixture, stage, keepOut, reserved, laneCells, maxPerLot, share, _drop: drop });
+      if (drop.size > (_drop?.size ?? 0)) return lightCover(r, { fixture, stage, keepOut, reserved, laneCells, maxPerLot, share, extra, extraCap, part, _drop: drop });
     }
   }
   const after = { targets: targets.length, dark: dark.size, share: targets.length ? dark.size / targets.length : 0 };
@@ -237,7 +241,7 @@ export function lightCover(r, { fixture, stage = 'props', keepOut = [], reserved
   const lamps = chosen.map((c) => ({ lot: c.lot, at: [c.x, c.y, c.z], cells: c.cells }));
   lamps.sort((a, b) => (a.lot < b.lot ? -1 : a.lot > b.lot ? 1 : 0) || a.at[0] - b.at[0] || a.at[2] - b.at[2]);
   if (lamps.length) {
-    const part = r.part('props_apron', { stage });
+    const lp = r.part(part, { stage });
     const mats = [], mi = new Map(), cols = [];
     for (const l of lamps) for (const [x, y, z, s] of l.cells) {
       let i = mi.get(s);
@@ -246,8 +250,8 @@ export function lightCover(r, { fixture, stage = 'props', keepOut = [], reserved
     }
     // natural cells only (not into air only): the plan survey has no plants, so a lamp's post cell may hold short grass or a
     // flower the plan reads as air; IF_AIR_OR_FLUID would skip it and leave the light floating (S7's first W run: 2 of 7)
-    part._push({ op: 'columns', from: { abs: 0 }, to: { abs: 0 }, cols, materials: mats, cond: COND.IF_NATURAL, walk: false });
-    (r.meta.parts[part.id] ??= {}).kind = 'add';
+    lp._push({ op: 'columns', from: { abs: 0 }, to: { abs: 0 }, cols, materials: mats, cond: COND.IF_NATURAL, walk: false });
+    (r.meta.parts[lp.id] ??= {}).kind = 'add';
   }
   // each lot's lamp positions on its ext (Steward's panels; later additions keep clear of them)
   for (const l of r.lots) {
