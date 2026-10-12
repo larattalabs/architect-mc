@@ -375,6 +375,13 @@ persisted formats. Candidate later asks: `Survey.biome` per column (T1's fields 
 - Y1 verifier follow-ups: a credit skipped when both dimensions are unloaded; a single road's refund credited before its
   restore (retry-safe by key); a road credited before removal missing from the group's `RemoveResult.refund`.
 
+## Queued (coordinator, 2026-10-12)
+
+- `tools/p2-library-check.mjs` is stale on main (sets a `floors` param the bundled cabin no longer has); fix or retire it.
+- T1 follow-up: in game, 7 of 26 written falling-water cells were not the planned block after the build (verifier note);
+  T1 changes no tile-write code. Investigate with H (fluids).
+- The mod's no-check plan wait went from 120 s to 300 s for every program (T1), not only pass programs.
+
 ## Open questions
 - Track AgentCraft fixes to the copied placement code, or treat the copy as independent from now on?
 - Cost: measure tokens and time per design in phase 1, and show an estimate in the form.
