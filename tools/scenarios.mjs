@@ -497,7 +497,27 @@ async function computeMetrics({ sc, out, planDir, ir, irShas, mspt, cps, exact, 
     const classes = { ...e.classes, none: e.classes.none - moved.length, flow: (e.classes.flow ?? 0) + moved.length };
     return { ...e, classes, list: e.list.map((m) => (moved.includes(m) ? { ...m, class: 'flow' } : m)) };
   };
-  const exN = flowOf(freezeOf(exact));
+  // (6c F2) the world's own changes far from every cell the plan writes: an unclassified mismatch at a cell the plan never writes,
+  // in no lot box, 8 or more (Manhattan) from every written cell, is classed `distant` (a world class): the undo writes only the
+  // journal's cells, so it can't reach there (the cave fixture's lava still settling, leaves re-counting their distance)
+  const distantOf = (e) => {
+    if (!e || flat || !isF2(sc) || !(e.classes?.none > 0)) return e;
+    const wr = new Set();
+    vw.eachWritten((x, y, z) => { wr.add(`${x},${y},${z}`); });
+    const near = (x, y, z) => {
+      for (let dx = -7; dx <= 7; dx++) for (let dy = -7 + Math.abs(dx); dy <= 7 - Math.abs(dx); dy++) {
+        const r = 7 - Math.abs(dx) - Math.abs(dy);
+        for (let dz = -r; dz <= r; dz++) if (wr.has(`${x + dx},${y + dy},${z + dz}`)) return true;
+      }
+      return false;
+    };
+    const inLot = (x, y, z) => (ir.lots ?? []).some((l) => x >= l.box.minX && x <= l.box.maxX && y >= l.box.minY && y <= l.box.maxY && z >= l.box.minZ && z <= l.box.maxZ);
+    const moved = (e.list ?? []).filter((m) => { if (m.class !== 'none') return false; const [x, y, z] = m.pos.split(',').map(Number); return !(vw.flags(x, y, z) & F_WRITTEN) && !inLot(x, y, z) && !near(x, y, z); });
+    if (!moved.length) return e;
+    const classes = { ...e.classes, none: e.classes.none - moved.length, distant: (e.classes.distant ?? 0) + moved.length };
+    return { ...e, classes, list: e.list.map((m) => (moved.includes(m) ? { ...m, class: 'distant' } : m)) };
+  };
+  const exN = distantOf(flowOf(freezeOf(exact)));
   const ex = flat ? { flat: exact, normal: exactOther, cellsWritten: exactOther?.cellsWritten ?? 0 } : { flat: exactOther, normal: exN, cellsWritten: exact.cellsWritten };
   const plan = { report: JSON.parse(fs.readFileSync(path.join(out, 'report.json'), 'utf8')) };
   let rows = M.bars({ plan, realised, palette, organic, buildings, mspt, cellsPerSecond: cps, exact: ex, determinism: { irShas, workersSame: ts.workersSame, golden }, spendUsd: 0, approval: 'pending' });
@@ -534,7 +554,7 @@ async function computeMetrics({ sc, out, planDir, ir, irShas, mspt, cps, exact, 
     rows = SC.scatterBars({ plan, realised, realisedStand, melt, supports, planned, snow, stampsMissing, workersSame: ts.workersSame, tiles: ts.timing, mspt, load1: Math.round((await import('node:os')).loadavg()[0] * 10) / 10 }, rows);
     // a fixture without a flat variant (the cave): E-normal only; scatter_demo's flat run holds E-flat
     if (!sc.flat) {
-      const en = exN, WORLD = ['growth', 'grazed', 'live', 'gravity', 'unsupported', 'freeze', 'flow'];
+      const en = exN, WORLD = ['growth', 'grazed', 'live', 'gravity', 'unsupported', 'freeze', 'flow', 'distant'];
       const undoOwn = en.mismatches - WORLD.reduce((a, k) => a + (en.classes?.[k] ?? 0), 0), cap = 0.0001 * (en.cellsWritten ?? 0);
       rows = rows.map((r) => (r.id === 'exactness' ? { ...r, value: `E-flat: none (this fixture has no flat variant; scatter_demo's flat run holds E-flat); E-normal ${en.mismatches} (${JSON.stringify(en.classes ?? {})}; unclassified ${en.classes?.none ?? 0}; the undo's own ${undoOwn}, cap ${cap.toFixed(0)})`, threshold: 'E-normal all classified, <= 0.01% of written cells', pass: (en.classes?.none ?? 0) === 0 && undoOwn <= cap } : r));
     }
