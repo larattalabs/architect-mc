@@ -135,7 +135,8 @@ steps.stale = async () => {
   const jar = path.join(MAIN, 'artifacts', 'gate6c-b', 'v0210', 'architect_mc-0.21.0.jar');
   out.oldMod = runJar(jar);
   check(/^plan needs kit 0\.\d+\.0; this is kit /.test(out.oldMod[0]) && /kinds \[volume:blocks\]/.test(out.oldMod[1]) && /^plan needs kinds \[volume:blocks\]/.test(out.oldMod[2]), `the 0.21.0 mod's IrStale refuses them PLAN_STALE: ${out.oldMod.join(' | ')}`);
-  const classes2 = fs.existsSync(path.join(RUN, 'mod', 'build', 'classes', 'java', 'main')) ? path.join(RUN, 'mod', 'build', 'classes', 'java', 'main') : path.join(root, 'mod', 'build', 'classes', 'java', 'main');
+  // this checkout's classes (the unit step's gradle test compiled them at this head)
+  const classes2 = path.join(root, 'mod', 'build', 'classes', 'java', 'main');
   out.thisMod = runJar(classes2);
   const { staleReason } = await imp('lib/realise.mjs');
   check(out.thisMod[0] === 'null' && out.thisMod[1] === 'null' && staleReason(masked.ir) === null, `this build accepts them (mod ${out.thisMod.slice(0, 2).join(', ')}; kit ${staleReason(masked.ir)})`);
@@ -144,8 +145,8 @@ steps.stale = async () => {
 };
 
 steps.apicompat = async () => {
-  const classes = fs.existsSync(path.join(RUN, 'mod', 'build', 'classes', 'java', 'main')) ? [['main', 'client'].map((d) => path.join(RUN, 'mod', 'build', 'classes', 'java', d)).join(path.delimiter)]
-    : [['main', 'client'].map((d) => path.join(root, 'mod', 'build', 'classes', 'java', d)).join(path.delimiter)];
+  // this checkout's classes (the unit step compiled them at this head; run it first)
+  const classes = [['main', 'client'].map((d) => path.join(root, 'mod', 'build', 'classes', 'java', d)).join(path.delimiter)];
   const r = spawnSync(process.execPath, [path.join(root, 'tools', 'api-compat.mjs'), '--gate6cb', ...classes], { cwd: root, encoding: 'utf8', env: { ...process.env, JAVA_HOME } });
   const t = `${r.stdout}${r.stderr}`;
   fs.writeFileSync(path.join(OUT, 'api-compat.txt'), t);
