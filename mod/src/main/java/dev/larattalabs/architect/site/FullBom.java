@@ -9,6 +9,7 @@ import dev.larattalabs.architect.placement.TerrainFit;
 import dev.larattalabs.architect.survival.SurvivalItems;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -100,144 +101,103 @@ final class FullBom {
 
 	/**
 	 * The bill of {@code in}: every cell the build queues at the state of its last write, costed with {@link Cells#cost}. {@code world}:
-	 * the state at a cell the plan does not write (null = unknown, which makes the bill inexact);
+	 * the state at a cell the plan does not write (null = unknown, which makes the bill inexact).
+	 *
+	 * <p>The writes run through {@link Sim}, which repeats what {@code Level.setBlock} does without UPDATE_KNOWN_SHAPE: every changed cell
+	 * tells its six neighbours (a door loses its upper half's cell, a torch its wall) and a neighbour whose shape update answers air is
+	 * destroyed. {@code StructureTemplate.placeInWorld} adds its own passes (the shape's edge faces, then every placed block against its
+	 * neighbours). So a door written over a hillside, whose upper cell the template clears next, is gone before the first block is built.
 	 */
 	static Result compute(Inputs in, LongFunction<@Nullable BlockState> world) {
-		boolean[] unknownT = {false};
-		Map<Long, BlockState> writes = new HashMap<>();
-		Map<Long, Integer> phase = new HashMap<>(); // the build step of a cell's last write: 0 template, 1 fill, 2 cut, 3 approach cut, 4 approach fill, 5 path, 6 slabs
+		boolean[] unknown = {false};
+		Sim sim = new Sim(world, unknown);
 		Set<Long> queued = new LinkedHashSet<>();
 		BlockState air = Blocks.AIR.defaultBlockState();
-		// 1. the template (air cells are written too: a room is cleared), 2. unsafe beds out
-		for (int i = 0; i < in.templateStates().length; i++) {
+		int n = in.templateStates().length;
+		long[] tp = new long[n];
+		Set<Long> shape = new HashSet<>();
+		List<Long> unsafeBeds = new ArrayList<>();
+		// 1. the template, block by block in its saved order (air cells are written too: a room is cleared)
+		for (int i = 0; i < n; i++) {
 			long p = BlockPos.asLong(in.templateXyz()[3 * i], in.templateXyz()[3 * i + 1], in.templateXyz()[3 * i + 2]);
+			tp[i] = p;
+			shape.add(p);
 			BlockState s = in.templateStates()[i].rotate(in.rotation()); // the placed state (a wall torch's facing, a stair's shape)
-			phase.put(p, 0);
-			if (s.getBlock() instanceof BedBlock && in.unsafeBed().test(p, s)) {
-				writes.put(p, air);
-				queued.add(p);
-				continue;
-			}
-			writes.put(p, s);
+			sim.set(p, s, true);
 			if (!s.isAir()) {
 				queued.add(p);
 			}
+			if (s.getBlock() instanceof BedBlock && in.unsafeBed().test(p, s)) {
+				unsafeBeds.add(p);
+			}
 		}
-		// the template's own final pass (StructureTemplate.placeInWorld, flags without UPDATE_KNOWN_SHAPE): once every block is written, each is
-		// shape-updated against all six neighbours as the world is THEN (the template over the original terrain, before the foundation
-		// and the approach), bottom up. A door over a gap the foundation fills later, a lantern on a chest, goes (drops suppressed).
-		net.minecraft.world.level.ScheduledTickAccess ticks0 = noTicks();
-		net.minecraft.util.RandomSource random0 = net.minecraft.util.RandomSource.create(0L);
-		LongFunction<@Nullable BlockState> at0 = p -> {
-			BlockState w = writes.get(p);
-			return w != null ? w : world.apply(p);
-		};
-		net.minecraft.world.level.LevelReader reader0 = reader(at0, unknownT);
-		net.minecraft.core.Direction[] order = {net.minecraft.core.Direction.WEST, net.minecraft.core.Direction.EAST, net.minecraft.core.Direction.NORTH,
-			net.minecraft.core.Direction.SOUTH, net.minecraft.core.Direction.DOWN, net.minecraft.core.Direction.UP};
-		List<Long> bottomUp = new ArrayList<>();
-		for (int i = 0; i < in.templateStates().length; i++) {
-			bottomUp.add(BlockPos.asLong(in.templateXyz()[3 * i], in.templateXyz()[3 * i + 1], in.templateXyz()[3 * i + 2]));
+		// 2. updateShapeAtEdge: the faces of the placed shape, the cell and its outside neighbour told about each other
+		net.minecraft.core.Direction[] all = net.minecraft.core.Direction.values();
+		for (long p : tp) {
+			BlockPos cell = BlockPos.of(p);
+			for (net.minecraft.core.Direction d : all) {
+				BlockPos np = cell.relative(d);
+				if (shape.contains(np.asLong())) {
+					continue;
+				}
+				BlockState st = sim.at(p);
+				BlockState nst = sim.at(np.asLong());
+				if (st == null || nst == null) {
+					unknown[0] = true;
+					continue;
+				}
+				BlockState updated = sim.shape(st, cell, d, np, nst);
+				if (updated != st) {
+					sim.set(p, updated, true);
+				}
+				BlockState nUpdated = sim.shape(nst, np, d.getOpposite(), cell, updated);
+				if (nUpdated != nst) {
+					sim.set(np.asLong(), nUpdated, true);
+				}
+			}
 		}
-		bottomUp.sort(java.util.Comparator.comparingInt(BlockPos::getY));
-		for (long p : bottomUp) {
-			BlockState s = writes.get(p);
-			if (s == null || s.isAir()) {
+		// 3. every placed block against its six neighbours (no cascade: UPDATE_KNOWN_SHAPE)
+		for (long p : tp) {
+			BlockState st = sim.at(p);
+			if (st == null || st.isAir()) {
 				continue;
 			}
 			BlockPos cell = BlockPos.of(p);
-			BlockState now = s;
-			for (net.minecraft.core.Direction d : order) {
+			BlockState u = st;
+			for (net.minecraft.core.Direction d : SHAPE_ORDER) {
 				BlockPos np = cell.relative(d);
-				BlockState nb = at0.apply(np.asLong());
+				BlockState nb = sim.at(np.asLong());
 				if (nb == null) {
-					unknownT[0] = true;
+					unknown[0] = true;
 					continue;
 				}
-				try {
-					now = now.updateShape(reader0, ticks0, cell, d, np, nb, random0);
-				} catch (RuntimeException e) {
-					unknownT[0] = true;
-				}
-				if (now.isAir()) {
-					break;
-				}
+				u = sim.shape(u, cell, d, np, nb);
 			}
-			if (now != s) {
-				writes.put(p, now);
+			if (u != st) {
+				sim.set(p, u, false);
 			}
 		}
-		cells(in.fill(), in.foundation(), writes, queued, phase, 1);
-		cells(in.clear(), air, writes, null, phase, 2);
-		cells(in.approachClear(), air, writes, null, phase, 3);
-		cells(in.approachFill(), in.approachFillState(), writes, queued, phase, 4);
-		cells(in.approachPath(), in.path(), writes, queued, phase, 5);
-		cells(in.approachSlabs(), in.slab(), writes, queued, phase, 6);
+		// 4. the unsafe beds out, 5. the foundation, the terrain cut, the approach (each write with its cascade)
+		for (long p : unsafeBeds) {
+			sim.set(p, air, true);
+		}
+		sim.cells(in.fill(), in.foundation(), queued);
+		sim.cells(in.clear(), air, null);
+		sim.cells(in.approachClear(), air, null);
+		sim.cells(in.approachFill(), in.approachFillState(), queued);
+		sim.cells(in.approachPath(), in.path(), queued);
+		sim.cells(in.approachSlabs(), in.slab(), queued);
 		Map<String, Integer> items = new TreeMap<>();
 		List<String> drift = new ArrayList<>();
-		boolean[] unknown = {unknownT[0]};
-		int n = 0;
+		int count = 0;
 		Map<Long, BlockState> finalStates = new java.util.LinkedHashMap<>();
-		LongFunction<@Nullable BlockState> at = p -> {
-			BlockState w = writes.get(p);
-			return w != null ? w : world.apply(p);
-		};
-		// the shape updates of the writes (Level.setBlock without UPDATE_KNOWN_SHAPE): a cell is told about each neighbour written AFTER it,
-		// and a block whose updateShape answers air (a door over a floor the approach then replaced, what hung on it) is destroyed with
-		// its drops suppressed. A block written after its neighbours, or beside neighbours no later step wrote, is never re-checked.
-		net.minecraft.world.level.LevelReader reader = reader(at, unknown);
-		net.minecraft.world.level.ScheduledTickAccess ticks = noTicks();
-		net.minecraft.util.RandomSource random = net.minecraft.util.RandomSource.create(0L);
-		net.minecraft.core.Direction[] dirs = net.minecraft.core.Direction.values();
-		for (int round = 0; round < 8; round++) {
-			boolean changed = false;
-			for (long p : queued) {
-				BlockState s = writes.get(p);
-				if (s == null || s.isAir()) {
-					continue;
-				}
-				int pc = phase.getOrDefault(p, 0);
-				BlockPos cell = BlockPos.of(p);
-				for (net.minecraft.core.Direction d : dirs) {
-					BlockPos np = cell.relative(d);
-					if (phase.getOrDefault(np.asLong(), -1) <= pc) {
-						continue;
-					}
-					BlockState nb = at.apply(np.asLong());
-					if (nb == null) {
-						unknown[0] = true;
-						continue;
-					}
-					BlockState now = writes.get(p);
-					BlockState after;
-					try {
-						after = now.updateShape(reader, ticks, cell, d, np, nb, random);
-					} catch (RuntimeException e) {
-						unknown[0] = true;
-						continue;
-					}
-					if (after != now) {
-						writes.put(p, after);
-						if (after.isAir()) {
-							phase.put(p, 99);
-						}
-						changed = true;
-						if (after.isAir()) {
-							break;
-						}
-					}
-				}
-			}
-			if (!changed) {
-				break;
-			}
-		}
+		LongFunction<@Nullable BlockState> at = sim::at;
 		for (long p : queued) {
-			BlockState s = writes.get(p);
+			BlockState s = sim.writes.get(p);
 			if (s == null || s.isAir()) {
 				continue;
 			}
-			n++;
+			count++;
 			finalStates.put(p, s);
 			for (SurvivalItems.Cost c : Cells.cost(s)) {
 				items.merge(c.item(), c.count(), Integer::sum);
@@ -247,16 +207,111 @@ final class FullBom {
 				drift.add(BlockPos.getX(p) + "," + BlockPos.getY(p) + "," + BlockPos.getZ(p) + " " + Cells.blockId(s) + " (" + why + ")");
 			}
 		}
-		return new Result(items, drift.isEmpty() && !unknown[0], drift, n, finalStates);
+		return new Result(items, drift.isEmpty() && !unknown[0] && !sim.runaway, drift, count, finalStates);
 	}
 
-	private static void cells(int[] xyz, BlockState s, Map<Long, BlockState> writes, @Nullable Set<Long> queued, Map<Long, Integer> phase, int step) {
-		for (int i = 0; i + 2 < xyz.length; i += 3) {
-			long p = BlockPos.asLong(xyz[i], xyz[i + 1], xyz[i + 2]);
+	/** {@code Block.UPDATE_SHAPE_ORDER}: the order a block is told about its neighbours. */
+	static final net.minecraft.core.Direction[] SHAPE_ORDER = {net.minecraft.core.Direction.WEST, net.minecraft.core.Direction.EAST,
+		net.minecraft.core.Direction.NORTH, net.minecraft.core.Direction.SOUTH, net.minecraft.core.Direction.DOWN, net.minecraft.core.Direction.UP};
+
+	/** A small world over the plan's writes that repeats {@code Level.setBlock}'s shape updates. */
+	static final class Sim {
+		final Map<Long, BlockState> writes = new HashMap<>();
+		private final LongFunction<@Nullable BlockState> world;
+		private final boolean[] unknown;
+		private final net.minecraft.world.level.LevelReader reader;
+		private final net.minecraft.world.level.ScheduledTickAccess ticks = noTicks();
+		private final net.minecraft.util.RandomSource random = net.minecraft.util.RandomSource.create(0L);
+		private final java.util.ArrayDeque<long[]> queue = new java.util.ArrayDeque<>();
+		private final java.util.ArrayDeque<BlockState> queueStates = new java.util.ArrayDeque<>();
+		private boolean running;
+		private int steps;
+		boolean runaway;
+
+		Sim(LongFunction<@Nullable BlockState> world, boolean[] unknown) {
+			this.world = world;
+			this.unknown = unknown;
+			this.reader = reader(this::at, unknown);
+		}
+
+		@Nullable BlockState at(long p) {
+			BlockState w = writes.get(p);
+			return w != null ? w : world.apply(p);
+		}
+
+		BlockState shape(BlockState st, BlockPos pos, net.minecraft.core.Direction toNeighbour, BlockPos neighbour, BlockState neighbourState) {
+			if (st.isAir()) {
+				return st;
+			}
+			try {
+				return st.updateShape(reader, ticks, pos, toNeighbour, neighbour, neighbourState, random);
+			} catch (RuntimeException e) {
+				unknown[0] = true;
+				return st;
+			}
+		}
+
+		/** {@code Level.setBlock(p, s, flags)}: nothing when the cell already holds {@code s}; with {@code cascade} the six neighbours are told. */
+		void set(long p, BlockState s, boolean cascade) {
+			BlockState old = at(p);
+			if (old == null) {
+				unknown[0] = true;
+			}
+			if (old == s) {
+				return;
+			}
 			writes.put(p, s);
-			phase.put(p, step);
-			if (queued != null) {
-				queued.add(p);
+			if (!cascade) {
+				return;
+			}
+			tell(p, s);
+			if (running) {
+				return;
+			}
+			running = true;
+			try {
+				while (!queue.isEmpty()) {
+					if (++steps > 4_000_000) {
+						runaway = true;
+						queue.clear();
+						queueStates.clear();
+						break;
+					}
+					long[] u = queue.poll();
+					BlockState changedState = queueStates.poll();
+					BlockState cur = at(u[0]);
+					if (cur == null) {
+						unknown[0] = true;
+						continue;
+					}
+					BlockState next = shape(cur, BlockPos.of(u[0]), net.minecraft.core.Direction.values()[(int) u[1]], BlockPos.of(u[2]), changedState);
+					if (next != cur) {
+						// Block.updateOrDestroy: air destroys (drops suppressed), anything else is written; both tell the neighbours in turn
+						writes.put(u[0], next);
+						tell(u[0], next);
+					}
+				}
+			} finally {
+				running = false;
+			}
+		}
+
+		/** {@code updateNeighbourShapes}: queues the six neighbours of {@code p}, told that it now holds {@code s}. */
+		private void tell(long p, BlockState s) {
+			BlockPos cell = BlockPos.of(p);
+			for (net.minecraft.core.Direction d : SHAPE_ORDER) {
+				queue.add(new long[] {cell.relative(d).asLong(), d.getOpposite().ordinal(), p});
+				queueStates.add(s);
+			}
+		}
+
+		void cells(int[] xyz, BlockState s, @Nullable Set<Long> queued) {
+			for (int i = 0; i + 2 < xyz.length; i += 3) {
+				long p = BlockPos.asLong(xyz[i], xyz[i + 1], xyz[i + 2]);
+				set(p, s, true);
+				if (queued != null) {
+					queued.add(p);
+				}
 			}
 		}
 	}

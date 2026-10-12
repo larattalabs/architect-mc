@@ -7,7 +7,6 @@
 		"ChunkGenCountMixin",
 		"LevelChunkMixin",
 		"LevelTicksMixin",
-		"TraceDoorMixin",
 		"StructureTemplateAccessor"
 	],
 	"injectors": {

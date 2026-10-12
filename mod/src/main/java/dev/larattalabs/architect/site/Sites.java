@@ -1084,58 +1084,8 @@ public final class Sites {
 					removed++;
 				}
 			}
-			if (System.getenv("ARCHITECT_TRACE_DOORS") != null) {
-				GhostModel gm0 = site.grid().ghost(site.turns());
-				BlockState[] gs0 = site.grid().states();
-				for (int i = 0; i < gm0.count(); i++) {
-					if (gs0[i].getBlock() instanceof net.minecraft.world.level.block.DoorBlock && gs0[i].getValue(net.minecraft.world.level.block.DoorBlock.HALF) == net.minecraft.world.level.block.state.properties.DoubleBlockHalf.LOWER) {
-						BlockPos dp = new BlockPos(box.minX() + gm0.x(i), box.minY() + gm0.y(i), box.minZ() + gm0.z(i));
-						StringBuilder sb = new StringBuilder();
-						for (int dy = -2; dy <= 2; dy++) {
-							for (int[] o : new int[][] {{0, 0}, {1, 0}, {-1, 0}, {0, 1}, {0, -1}}) {
-								BlockState st0 = level.getBlockState(dp.offset(o[0], dy, o[1]));
-								sb.append(dy).append(':').append(o[0]).append(',').append(o[1]).append('=').append(Cells.blockId(st0).replace("minecraft:", "")).append(' ');
-							}
-						}
-						Architect.LOGGER.info("TRACE door ORIGINAL {} {}", dp.toShortString(), sb);
-					}
-				}
-			}
-			net.minecraft.world.level.ServerLevelAccessor accessor = level;
-			if (System.getenv("ARCHITECT_TRACE_DOORS") != null) {
-				accessor = (net.minecraft.world.level.ServerLevelAccessor) java.lang.reflect.Proxy.newProxyInstance(Sites.class.getClassLoader(),
-					new Class<?>[] {net.minecraft.world.level.ServerLevelAccessor.class}, (proxy, m, args) -> {
-						if (m.getName().equals("setBlock") && args.length == 3 && args[1] instanceof BlockState ns && args[0] instanceof BlockPos bp0) {
-							BlockState old0 = level.getBlockState(bp0);
-							if (old0.getBlock() instanceof net.minecraft.world.level.block.DoorBlock || ns.getBlock() instanceof net.minecraft.world.level.block.DoorBlock) {
-								Architect.LOGGER.info("TRACE set {} {} -> {} flags {}", bp0.toShortString(), old0, ns, args[2]);
-							}
-							if (old0.getBlock() instanceof net.minecraft.world.level.block.DoorBlock && !(ns.getBlock() instanceof net.minecraft.world.level.block.DoorBlock)) {
-								Architect.LOGGER.info("TRACE door {} {} replaced by {} flags {}", bp0.toShortString(), old0, ns, args[2],
-									new Throwable("stack"));
-							}
-						}
-						try {
-							return m.invoke(level, args);
-						} catch (java.lang.reflect.InvocationTargetException e) {
-							throw e.getCause();
-						}
-					});
-			}
-			if (!site.template().placeInWorld(accessor, site.placePos(), site.placePos(), site.settings(), level.getRandom(), System.getenv("ARCHITECT_TRACE_FLAG16") != null ? FLAGS | 16 : FLAGS)) {
+			if (!site.template().placeInWorld(level, site.placePos(), site.placePos(), site.settings(), level.getRandom(), FLAGS)) {
 				throw new IllegalStateException("template " + bp.id() + " placed nothing (empty template?)");
-			}
-			traceDoors(level, snapBox, "template");
-			if (System.getenv("ARCHITECT_TRACE_DOORS") != null) {
-				GhostModel gm = site.grid().ghost(site.turns());
-				BlockState[] gs = site.grid().states();
-				for (int i = 0; i < gm.count(); i++) {
-					if (gs[i].getBlock() instanceof net.minecraft.world.level.block.DoorBlock && gs[i].getValue(net.minecraft.world.level.block.DoorBlock.HALF) == net.minecraft.world.level.block.state.properties.DoubleBlockHalf.LOWER) {
-						BlockPos dp = new BlockPos(box.minX() + gm.x(i), box.minY() + gm.y(i), box.minZ() + gm.z(i));
-						Architect.LOGGER.info("TRACE door cell {} now {} below {} (template cell below: {}) above {}", dp.toShortString(), level.getBlockState(dp), level.getBlockState(dp.below()),
-							gm.count() > 0 ? "?" : "", level.getBlockState(dp.above()));
-					}
-				}
 			}
 			BedsOut beds = removeUnsafeBeds(level, site.grid(), site.turns(), box);
 			BlockState foundation = foundationState(bp);
@@ -1143,13 +1093,10 @@ public final class Sites {
 			for (int i = 0; i < plan.fill().length; i += 3) {
 				level.setBlock(m.set(plan.fill()[i], plan.fill()[i + 1], plan.fill()[i + 2]), foundation, FLAGS);
 			}
-			traceDoors(level, snapBox, "fill");
 			for (int i = 0; i < plan.clear().length; i += 3) {
 				level.setBlock(m.set(plan.clear()[i], plan.clear()[i + 1], plan.clear()[i + 2]), Blocks.AIR.defaultBlockState(), FLAGS);
 			}
-			traceDoors(level, snapBox, "clear");
 			applyApproach(level, bp, approach, foundation);
-			traceDoors(level, snapBox, "approach");
 			// a tall plant whose other half was inside the box (now gone) would float: take its outside half too
 			for (BlockPos half : plants) {
 				BlockState outside = level.getBlockState(half);
@@ -1251,25 +1198,6 @@ public final class Sites {
 		// one row more below the lowest written cell: the ground under the foundation changes while the site stands (grass
 		// under a solid block turns to dirt), and Remove must put that back too
 		return new Anchors.Bounds(u.minX(), Math.min(u.minY(), plan.minY()) - 1, u.minZ(), u.maxX(), u.maxY(), u.maxZ());
-	}
-
-	private static void traceDoors(ServerLevel level, Anchors.Bounds b, String step) {
-		if (System.getenv("ARCHITECT_TRACE_DOORS") == null) {
-			return;
-		}
-		StringBuilder sb = new StringBuilder();
-		BlockPos.MutableBlockPos mp = new BlockPos.MutableBlockPos();
-		for (int x = b.minX(); x <= b.maxX(); x++) {
-			for (int y = b.minY(); y <= b.maxY(); y++) {
-				for (int z = b.minZ(); z <= b.maxZ(); z++) {
-					BlockState st = level.getBlockState(mp.set(x, y, z));
-					if (st.getBlock() instanceof net.minecraft.world.level.block.DoorBlock) {
-						sb.append(' ').append(x).append(',').append(y).append(',').append(z).append(st.getValue(net.minecraft.world.level.block.DoorBlock.HALF).toString().charAt(0));
-					}
-				}
-			}
-		}
-		Architect.LOGGER.info("TRACE doors after {}:{}", step, sb);
 	}
 
 	private static void applyApproach(ServerLevel level, Blueprint bp, Approach.Plan a, BlockState foundation) {
