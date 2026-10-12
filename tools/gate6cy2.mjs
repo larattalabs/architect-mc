@@ -337,6 +337,15 @@ async function bom() {
   for (const l of ctx.lots) {
     const v = await verdict(l);
     const predicted = await call('dev.bom.predict', { bp: l.bp, at: l.at, rot: l.rot, force: true }, 60_000);
+    // the original world under each predicted door (to see why a door the plan keeps goes)
+    const underDoors = {};
+    for (const [k, b] of Object.entries(predicted.cells ?? {})) {
+      if (!/_door$/.test(b)) continue;
+      const [x, y, z] = k.split(',').map(Number);
+      if (/_door$/.test(predicted.cells[`${x},${y - 1},${z}`] ?? '')) continue;
+      const h = await call('dev.box.hash', { min: [x - 1, y - 3, z - 1], max: [x + 1, y, z + 1], cells: true }, 60_000);
+      underDoors[k] = h.cells;
+    }
     const id = await place(l);
     const st = await siteState(id);
     const actualCells = await call('dev.site.cells', { site: id }, 60_000);
@@ -359,7 +368,7 @@ async function bom() {
       }
       around[d.split(' ')[0]] = lines;
     }
-    const row = { around, key: l.key, bp: l.bp, site: id, bomExact: v.bomExact, ok: v.ok, refusals: (v.refusals ?? []).map((r) => r.reason), diff,
+    const row = { around, underDoors: Object.fromEntries(Object.entries(underDoors).filter(([k]) => cellDiff.some((c) => c.startsWith(k + ' ')))), key: l.key, bp: l.bp, site: id, bomExact: v.bomExact, ok: v.ok, refusals: (v.refusals ?? []).map((r) => r.reason), diff,
       bomFullTotal: bomTotal(full), outstandingTotal: bomTotal(actual), templateTotal: bomTotal(v.bom), cellDiff: cellDiff.slice(0, 40), cellDiffCount: cellDiff.length, notes: (v.notes ?? []).filter((n) => /bomFull/.test(n)) };
     rows.push(row);
     log(`  ${l.key} ${l.bp}: bomFull ${row.bomFullTotal} vs outstanding ${row.outstandingTotal}, exact=${v.bomExact}, diff ${JSON.stringify(diff)}`);
