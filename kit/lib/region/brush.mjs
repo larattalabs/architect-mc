@@ -69,15 +69,18 @@ export function surfaceGrid({ cx, cy, cz, radius, shape }, ground, wet) {
   return { minX, minZ, W, D, g, inside, d2, cx, cz, radius };
 }
 
-/** The largest step between 4-neighbours where at least one is inside (the brush's own steps). */
+/**
+ * The largest step between 4-neighbours that are both inside (the brush's own steps; a step to a column outside is the land's
+ * edge, pinned).
+ */
 export function maxStep(grid, h = grid.g) {
   const { W, D, inside } = grid;
   let m = 0;
   for (let j = 0; j < D; j++) {
     for (let i = 0; i < W; i++) {
       const k = i + j * W;
-      if (i + 1 < W && (inside[k] || inside[k + 1])) m = Math.max(m, Math.abs(h[k] - h[k + 1]));
-      if (j + 1 < D && (inside[k] || inside[k + W])) m = Math.max(m, Math.abs(h[k] - h[k + W]));
+      if (i + 1 < W && inside[k] && inside[k + 1]) m = Math.max(m, Math.abs(h[k] - h[k + 1]));
+      if (j + 1 < D && inside[k] && inside[k + W]) m = Math.max(m, Math.abs(h[k] - h[k + W]));
     }
   }
   return m;
@@ -99,8 +102,9 @@ function stepEnergy(grid, h) {
 
 /**
  * SMOOTH: the inside columns move toward their local integer mean (Jacobi over the 4-neighbourhood in 1/16 fixed point; the
- * columns outside the shape pin the edge), `2 * strength` sweeps. A sweep is kept only when it lowers neither the largest
- * adjacent step nor the step energy goes up (so the stroke never roughens the land). Returns the new heights (Int32Array).
+ * columns outside the shape pin the edge), `2 * strength` sweeps. A sweep is kept only when neither the largest step between
+ * inside columns nor the step energy (every step touching the inside) goes up, so the stroke never roughens the land. Returns the
+ * new heights (Int32Array).
  */
 export function smooth(grid, strength) {
   const { W, D, inside, g } = grid;
@@ -123,6 +127,43 @@ export function smooth(grid, strength) {
     const m = maxStep(grid, h2), en = stepEnergy(grid, h2);
     if (m > best || en > energy) break;
     best = m; energy = en; f = f2; h = h2;
+  }
+  return stepDescent(grid, h, 4 * strength);
+}
+
+/**
+ * SMOOTH's finish: up to `rounds` rounds, every pair of inside columns at the largest step M moves one block closer (the higher
+ * down, else the lower up), when no step touching the moved column grows to M or past its old size. The largest inside step never
+ * grows and drops where the pins allow. Mutates and returns `h`.
+ */
+export function stepDescent(grid, h, rounds) {
+  const { W, D, inside } = grid;
+  const nb = (k) => { const i = k % W, j = (k - i) / W, o = []; if (i > 0) o.push(k - 1); if (i + 1 < W) o.push(k + 1); if (j > 0) o.push(k - W); if (j + 1 < D) o.push(k + W); return o; };
+  const can = (k, v, M) => {
+    if (!inside[k]) return false;
+    for (const n of nb(k)) {
+      if (!inside[k] && !inside[n]) continue;
+      const now = Math.abs(v - h[n]), was = Math.abs(h[k] - h[n]);
+      if (now >= M && now > was) return false;
+    }
+    return true;
+  };
+  for (let r = 0; r < rounds; r++) {
+    const M = maxStep(grid, h);
+    if (M <= 1) break;
+    let moved = 0;
+    for (let j = 0; j < D; j++) {
+      for (let i = 0; i < W; i++) {
+        const k = i + j * W;
+        if (!inside[k]) continue;
+        for (const n of [i + 1 < W ? k + 1 : -1, j + 1 < D ? k + W : -1]) {
+          if (n < 0 || !inside[n] || Math.abs(h[k] - h[n]) < M) continue;
+          const hi = h[k] > h[n] ? k : n, lo = hi === k ? n : k;
+          if (can(hi, h[hi] - 1, M)) { h[hi]--; moved++; } else if (can(lo, h[lo] + 1, M)) { h[lo]++; moved++; }
+        }
+      }
+    }
+    if (!moved) break;
   }
   return h;
 }

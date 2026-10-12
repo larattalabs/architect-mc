@@ -54,7 +54,7 @@ public final class SliceBDev {
 
 	public static void init() {
 		DevBridge.register("dev.brush", 600_000, "{kind, at: [x,y,z], radius?: 6, strength?: 3, shape?: sphere|cylinder, mask?: {..}, pattern?: {..}, "
-			+ "destruction?: natural_only|player_blocks, owner?: architect:player, actor?: me|none|<uuid>, console?: false, seed?: 0} - (6c B) one "
+			+ "destruction?: natural_only|player_blocks, owner?: architect:player, actor?: me|none|<uuid>, console?: false, seed?: 0, dimension?: overworld|nether|end} - (6c B) one "
 			+ "brush stroke (Regions.brush; console: the command's console path) -> the region's view once realised {region, planId, irSha, state, "
 			+ "brush, cellsWritten, cellsSkipped, claim, ms} or {refused, reason}", (req, mc) -> {
 				Fields f = Fields.of(req);
@@ -69,6 +69,11 @@ public final class SliceBDev {
 				String actor = f.optStr("actor", "me");
 				boolean console = f.optBool("console", false);
 				long seed = f.optLong("seed", 0, Long.MIN_VALUE, Long.MAX_VALUE);
+				var dimension = switch (f.optStr("dimension", "overworld")) {
+					case "nether", "the_nether" -> Level.NETHER;
+					case "end", "the_end" -> Level.END;
+					default -> Level.OVERWORLD;
+				};
 				Mask mask = req.get("mask") instanceof JsonObject m ? new Mask(m) : null;
 				Pattern pattern = req.get("pattern") instanceof JsonObject p ? new Pattern(p) : null;
 				long t0 = System.nanoTime();
@@ -78,7 +83,7 @@ public final class SliceBDev {
 						case "none" -> null;
 						default -> UUID.fromString(actor);
 					};
-					return Brushes.stroke(new BrushRequest(owner, Level.OVERWORLD, kind, shape, at, radius, strength, mask, pattern, d, who, seed), console);
+					return Brushes.stroke(new BrushRequest(owner, dimension, kind, shape, at, radius, strength, mask, pattern, d, who, seed), console);
 				}).thenCompose(x -> x).handle((v, e) -> {
 					if (e != null) {
 						Throwable c = e instanceof java.util.concurrent.CompletionException && e.getCause() != null ? e.getCause() : e;
