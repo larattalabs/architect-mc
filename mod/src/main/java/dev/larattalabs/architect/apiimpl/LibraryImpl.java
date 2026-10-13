@@ -321,6 +321,9 @@ final class LibraryImpl implements Library {
 
 	@Override
 	public CompletableFuture<Boolean> delete(String entryId) {
+		if (dev.larattalabs.architect.site.Adopt.deleteRefusal(entryId) != null) {
+			return CompletableFuture.completedFuture(false); // (6c PT2) an adopted entry whose site stands: the site pins it
+		}
 		ClientBridge b = ApiImpl.bridge();
 		if (b == null) {
 			return CompletableFuture.completedFuture(false);

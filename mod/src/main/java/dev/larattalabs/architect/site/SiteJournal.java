@@ -1158,7 +1158,8 @@ public final class SiteJournal {
 		}
 		JournalStore.Meta m = null;
 		for (JournalStore.Meta x : entries(siteId)) {
-			if (x.kind().equals(WorldJournal.SITE) && (undone ? x.status() == Status.UNDONE : x.active())) {
+			// (6c PT2) an adopted site's base is its adopt entry (its before: the house as captured)
+			if ((x.kind().equals(WorldJournal.SITE) || x.kind().equals(WorldJournal.ADOPT)) && (undone ? x.status() == Status.UNDONE : x.active())) {
 				m = x;
 			}
 		}

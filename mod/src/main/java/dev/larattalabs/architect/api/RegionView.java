@@ -27,7 +27,7 @@ public record RegionView(String id, String planId, String irSha, @Nullable Strin
 	}
 
 	/**
-	 * The 1.24.0 constructor: no beside (since 1.26.0: the standing region this region was planned beside, {@link RegionPlanRequest#beside};
+	 * The 1.24.0 constructor: no beside (since 1.27.0: the standing region this region was planned beside, {@link RegionPlanRequest#beside};
 	 * null for any other region; its join's end is reported as dangling in this region's ext {@code architect_mc:beside} once the
 	 * standing region is removed).
 	 */

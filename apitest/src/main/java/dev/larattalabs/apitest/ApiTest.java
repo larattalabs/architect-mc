@@ -264,6 +264,12 @@ public class ApiTest implements ModInitializer {
 			case "ptcheck": {
 				return ApiTestPT.step(src, a);
 			}
+			case "apipt2":
+			case "adopt":
+			case "adoptedsite":
+			case "pt2checkdelta": {
+				return ApiTestPT2.step(src, a);
+			}
 			case "schemimport":
 			case "schemexport":
 			case "schemsite":

@@ -25,7 +25,7 @@ public final class RegionKeys {
 	public static JsonObject planBody(RegionPlanRequest r) {
 		JsonObject o = BatchKeys.json(r, true).getAsJsonObject();
 		o.add("claim", columns(r.claim()));
-		// (6c D1) beside only when set: a key recorded before 1.26.0 keeps its body
+		// (6c D1) beside only when set: a key recorded before 1.27.0 keeps its body
 		if (r.beside() == null) {
 			o.remove("beside");
 		}

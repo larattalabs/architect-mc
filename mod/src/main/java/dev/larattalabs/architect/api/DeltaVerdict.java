@@ -12,9 +12,13 @@ import net.minecraft.world.level.levelgen.structure.BoundingBox;
  * player changed ({@code kept} under KEEP, or the ones that refuse under REFUSE); growth into other sites; in survival the bill
  * of materials of the delta and the refunds; the box of the cells it writes (null: nothing to write); the mode it would run in;
  * notes. The client ghost and Architect's UI render from this same object. Since 1.7.0.
+ *
+ * <p>(PT2, SQ-PT2-3) {@code capturedChanged}: for a site adopted from a build, how many of version 1's captured cells the target
+ * version changes or removes; {@code capturedTotal}: version 1's captured cells. Both 0 for any other site.
  */
 public record DeltaVerdict(boolean ok, List<Refusal> refusals, int added, int removed, int changed, Map<String, PartDelta> parts, List<KeptCell> kept,
-	List<Overlap> overlaps, Map<Item, Integer> bom, Map<Item, Integer> refund, BoundingBox box, Mode mode, List<String> notes) {
+	List<Overlap> overlaps, Map<Item, Integer> bom, Map<Item, Integer> refund, BoundingBox box, Mode mode, List<String> notes, int capturedChanged,
+	int capturedTotal) {
 	public DeltaVerdict {
 		refusals = List.copyOf(refusals);
 		parts = Map.copyOf(parts);
@@ -23,5 +27,11 @@ public record DeltaVerdict(boolean ok, List<Refusal> refusals, int added, int re
 		bom = Map.copyOf(bom);
 		refund = Map.copyOf(refund);
 		notes = List.copyOf(notes);
+	}
+
+	/** The 1.7.0 shape (capturedChanged and capturedTotal 0). */
+	public DeltaVerdict(boolean ok, List<Refusal> refusals, int added, int removed, int changed, Map<String, PartDelta> parts, List<KeptCell> kept,
+		List<Overlap> overlaps, Map<Item, Integer> bom, Map<Item, Integer> refund, BoundingBox box, Mode mode, List<String> notes) {
+		this(ok, refusals, added, removed, changed, parts, kept, overlaps, bom, refund, box, mode, notes, 0, 0);
 	}
 }

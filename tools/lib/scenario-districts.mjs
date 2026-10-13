@@ -37,9 +37,8 @@ export function districtsMetrics({ ir, meta, report, realised, nav }) {
 }
 
 export function districtsBars(m, report, rows, { flat = false } = {}) {
-  // the 6b safety row and the 6b checker row are recorded: D's own checker row judges errors and M1, M2, M4 (V's street layout on a
-  // slope can leave a verge cell over a slope pad's batter: M3 warnings, recorded there; queued for V)
-  const out = rows.map((r) => (r.id === 'safety' || r.id === 'checker' ? { ...r, gated: false, pass: null, label: `${r.label} (recorded: D's checker row below)` } : r));
+  // the 6b safety row is recorded (M5 over the routes is D's checker row's; T2 likewise)
+  const out = rows.map((r) => (r.id === 'safety' ? { ...r, gated: false, pass: null, label: `${r.label} (recorded: D's checker row below)` } : r));
   const d = m.districts;
   if (!d) { out.push(row('d-pass', 'D The districts pass ran', 'no meta.districts', 'ran', false)); return out; }
   const bands = Object.entries(d.bandOf ?? {});

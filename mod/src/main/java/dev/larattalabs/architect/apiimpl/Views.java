@@ -214,9 +214,13 @@ public final class Views {
 		// (6c 0a) or a caller pins it
 		pinned.addAll(CallerPins.pinned().getOrDefault(id, java.util.Set.of()));
 		List<dev.larattalabs.architect.api.EntryVersion> out = new ArrayList<>();
+		boolean adopted = dev.larattalabs.architect.site.Adopt.isAdoptedEntry(j);
 		for (var l : dev.larattalabs.architect.library.EntryVersions.lineage(j, null)) {
+			// (6c PT2, SQ-PT2-3) an adopted entry's versions: how many of v1's captured cells each changes or removes
+			int[] cap = adopted ? dev.larattalabs.architect.site.Adopt.captured(dev.larattalabs.architect.site.SiteDeltas.serverOrNull(), id, l.n())
+				: new int[2];
 			out.add(new dev.larattalabs.architect.api.EntryVersion(l.n(), l.createdAt(), l.by(), l.parent(), l.designId(), l.summary(), l.nbtSha256(),
-				pinned.contains(l.n())));
+				pinned.contains(l.n()), cap[0], cap[1]));
 		}
 		return out;
 	}
@@ -328,8 +332,12 @@ public final class Views {
 		c.overlaps().forEach((sid, n) -> ov.add(new dev.larattalabs.architect.api.Overlap(sid, dev.larattalabs.architect.site.Sites.ownerOf(sid), n,
 			false)));
 		BoundingBox box = c.box() != null ? box(c.box()) : new BoundingBox(0, 0, 0, 0, 0, 0);
+		// (6c PT2, SQ-PT2-3) an adopted site: how many of v1's captured cells the target version changes or removes
+		dev.larattalabs.architect.site.Site site = dev.larattalabs.architect.site.Sites.get(c.siteId());
+		int[] cap = site != null && dev.larattalabs.architect.site.Adopt.isAdopted(site) && c.to() > 0 ? dev.larattalabs.architect.site.Adopt.captured(
+			dev.larattalabs.architect.site.SiteDeltas.serverOrNull(), site.blueprint(), c.to()) : new int[2];
 		return new dev.larattalabs.architect.api.DeltaVerdict(rs.isEmpty(), rs, c.added(), c.removed(), c.changed(), parts, kept(c.kept()), ov, items(c
-			.bom()), items(c.refund()), box, mode, c.notes());
+			.bom()), items(c.refund()), box, mode, c.notes(), cap[0], cap[1]);
 	}
 
 	public static dev.larattalabs.architect.api.PartDelta partDelta(dev.larattalabs.architect.delta.TemplateDelta.Part p) {

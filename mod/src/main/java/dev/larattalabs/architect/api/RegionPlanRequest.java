@@ -17,7 +17,7 @@ import org.jspecify.annotations.Nullable;
  *     planning); with a different body the future fails {@link ArchitectRefused} {@link Reason#OP_KEY_CONFLICT}. The body is the program,
  *     params, dimension, the claim's x/z columns, seed, bible and version, surveyLoad and ext (a claim's y range is ignored). Found after
  *     a restart by {@link Regions#planByKey}; kept as long as the plan exists (plans are not pruned).
- * @param beside (since 1.26.0) a standing region's id: the plan is laid out beside it (docs/CONTRACT.md "Phase 6c slice D" §3). The
+ * @param beside (since 1.27.0) a standing region's id: the plan is laid out beside it (docs/CONTRACT.md "Phase 6c slice D" §3). The
  *     program reads the standing region's lots, footprint and graph (a program that joins it, {@code districts}, routes one join from
  *     its own street end to the standing region's nearest street end inside this claim). The new claim may overlap the standing one only
  *     in a seam of at most 16 columns and never over its lots, roads or paths; otherwise {@link Reason#OVERLAP}, nothing planned. The

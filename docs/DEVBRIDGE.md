@@ -31,7 +31,7 @@ A headless gate server (docs/GATES.md "Headless gates") serves the same protocol
 `headless: true`.
 
 - **Generated hooks.** The hooks in the client's `client/dev/` files `JournalDev`, `RegionDev`, `RegionDev6b`, `DeltaDev`,
-  `SliceVDev`, `SliceWDev`, `SliceF2Dev`, `SliceBDev`, `SliceP0Dev`, `SlicePTDev` and `StockpileDev` (and `Fields`) run headless as they are: `devserver/build.gradle` `genHooks` compiles copies with
+  `SliceVDev`, `SliceWDev`, `SliceF2Dev`, `SliceBDev`, `SliceP0Dev`, `SlicePTDev`, `SlicePT2Dev` and `StockpileDev` (and `Fields`) run headless as they are: `devserver/build.gradle` `genHooks` compiles copies with
   only the package and imports changed.
   - **Rule for those files:** no reference to client classes (`net.minecraft.client.*`, `dev.larattalabs.architect.client.*`)
     besides `ServerTasks`, `DevBridge` and the handler's `mc` parameter. A new one fails the build, `unit-mod` included.
@@ -483,3 +483,13 @@ Semi-stable: a hook may change or go, and every such change is listed here, newe
 - **Phase 2:** the `dev.library.*` hooks (filters, rename, tags, favourite, delete, export, import, variants, remix, wait).
 - **Phase 1:** the world/view hooks, `dev.build.*`, `dev.plot.*`, `dev.design.*`, `dev.ui.*`, `dev.sites.*`,
   `dev.box.hash`, `dev.capture`, `dev.launcher.*`, `dev.sidecar.state`.
+- **2026-10-13 (6c slice PT2):** new `dev.pt2.*` hooks (SlicePT2Dev, generated headless too). `dev.pt2.entry {entry}`: an entry read
+  back (its blueprint JSON, folder, head version and version folders, template cells, block entities and the inventory items they
+  hold, whether its `.mjs` is there); `dev.pt2.compare {site, version?: 1}`: the site's entry version against the world over its box
+  (rotation none): matched and mismatched cells (state, block-entity data without inventories or position), the void cells of the box,
+  the world's containers with their items and what the entry holds there; `dev.pt2.journal {site}`: the site's journal entries (any
+  status: id, kind, status, policy, cells) with each file's version on disk. `dev.pt.builds` and apitest `ptbuild` carry `siteId` for
+  an adopted build. apitest (`ApiTestPT2`): `apipt2` (the surface), `adopt <key> <build> <owner|-> <b64 consent|-> [b64 ext]`
+  (`Sites.adopt`, pending `adopt:<key>`; consent `{builds, actor: <uuid>|player}`), `adoptedsite <build>`, `pt2checkdelta <site>
+  <version> <owner|-> <b64 consent|->` (checkDelta KEEP with a consent); `checkdelta` and `eversions` print `capturedChanged` and
+  `capturedTotal`.
