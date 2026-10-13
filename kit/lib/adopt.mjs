@@ -10,7 +10,8 @@
 //   { format: 1, build, size: [x, y, z], groundY, front, frameGuessed, palette: ['minecraft:oak_log[axis=y]', ...],
 //     runs: [y, z, x0, x1, p, ...]  (runs along x, one palette index each; every captured cell is in exactly one run),
 //     nbt: { 'x,y,z': <tagged compound> } (lib/nbt.mjs's {t, v} shape; a long's v is a decimal string),
-//     wall: '<state>' (the most used non-air captured state: what an added storey is built of) }
+//     wall: '<state>' (the most used non-air captured state: what an added storey is built of),
+//     anchors: { entrance?: {x, y, z, yaw, pitch}, spawn?: ... } (outside the door; none for a guessed front) }
 //
 // One part, `adopted` (v0, SQ-PT2-3). The param `floors` (default 0) adds storeys on top: the sim's versionOf ("an int param's
 // default up by one") then adds a floor, and a designer may do the same. Each storey stands on the old top layer's footprint: a
@@ -76,6 +77,7 @@ export function adopted(id, cap, { floors = 0, name, description } = {}) {
       b.setRaw(x, y, z, states[p], nb ? tagOf(nb) : null);
     }
   });
+  for (const [name, a] of Object.entries(cap.anchors ?? {})) bp.anchor(name, a.x, a.y, a.z, a.yaw ?? 0, a.pitch ?? 0);
   if (n > 0) addStoreys(bp, cap, cells, states, n);
   return bp;
 }

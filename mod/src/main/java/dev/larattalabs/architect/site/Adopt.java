@@ -112,6 +112,8 @@ public final class Adopt {
 	}
 
 	public static void init() {
+		// registered after Sites' and the build index's own SERVER_STARTED listeners (Placed.init and Sites.init run first): both are loaded
+		ServerLifecycleEvents.SERVER_STARTED.register(Adopt::repair);
 		ServerTickEvents.END_SERVER_TICK.register(Adopt::tick);
 		ServerLifecycleEvents.SERVER_STOPPING.register(s -> {
 			for (Job j : JOBS) {
@@ -1025,7 +1027,7 @@ public final class Adopt {
 	}
 
 	/** A tag as lib/nbt.mjs's tagged JSON ({t, v}; a long's v as a decimal string; a list's element type as {@code of}). */
-	static JsonObject tagJson(Tag tag) {
+	public static JsonObject tagJson(Tag tag) {
 		JsonObject o = new JsonObject();
 		switch (tag) {
 			case CompoundTag c -> {

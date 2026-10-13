@@ -91,7 +91,7 @@ class JournalPtTest {
 		int v = t.getIntOr("version", 0);
 		assertFalse(v == 1 || v == 2, "a v3 file is refused by a reader that knows 1 and 2");
 		CompoundTag bad = t.copy();
-		bad.putInt("version", 4);
+		bad.putInt("version", 5); // (PT2: 4 is an adopt entry's file version)
 		assertThrows(IllegalArgumentException.class, () -> JournalNbt.decode(bad, 5));
 	}
 
