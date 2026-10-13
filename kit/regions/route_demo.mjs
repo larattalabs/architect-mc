@@ -8,7 +8,7 @@
 //   ground: the hill (flat variant), the pads;  routes: the routes and their lamps;  lots-1: the lots.
 // `stairs` / `ladders` / `maxGrade` pass through; `grid` adds a synthetic node grid for the plan-time bench (item 7).
 import { region } from '../lib/region/program.mjs';
-import { lampFixture } from '../lib/region/props.mjs';
+import { fixtureFor } from '../lib/region/fixtures.mjs';
 import { lightCover } from '../lib/region/light.mjs';
 import { lampSpots } from '../lib/region/passes/route.mjs';
 
@@ -184,11 +184,13 @@ export default function routeDemo(ctx) {
   const cam = (n, x, z, up) => r.anchor(n, [clampX(x), camY(clampX(x), clampZ(z), up), clampZ(z)]);
   cam('cam_n', hx, hz - 70, 30); cam('cam_s', hx, hz + 70, 30); cam('cam_e', hx + 70, hz, 30); cam('cam_w', hx - 70, hz, 30);
   cam('cam_high', hx + 8, hz + 8, 80); cam('cam_ground', hx + 20, hz + 24, 3);
-  // ---- lamps along the routes (W's lightCover, the bible's fixture; beside the lots too)
+  // ---- lamps along the routes (W's lightCover; beside the lots too)
   if (P.lamps) {
     const extra = [], extraCap = {};
     for (const e of r.meta.route.edges) { const l = lampSpots(e); extra.push(...l.spots); if (l.spots.length) extraCap[`route:${e.id}`] = l.cap; }
-    const cover = lightCover(r, { fixture: lampFixture(r), stage: 'routes', keepOut, extra, extraCap, part: 'route_lamps' });
+    // soul lanterns (light 10): under vanilla's melt (ice over 10, snow over 11), so the lamps never melt S3's snow and ice (the plan
+    // survey has no snow layers to keep them off)
+    const cover = lightCover(r, { fixture: fixtureFor('minecraft:soul_lantern', r.material('rail', 'lamp post')), stage: 'routes', keepOut, extra, extraCap, part: 'route_lamps' });
     r.meta.route.lamps = { perKey: cover.perLot, before: cover.before, after: cover.after, capped: cover.capped, count: cover.lamps.length };
   }
   r.note(`route_demo: ${lots.length} lots ${sites.map((s) => `${s.x},${s.z}@${s.top}`).join(' ')}; ${net.edges.filter((e) => e.ok).length}/${edges.length} edges routed${flat ? ', on a flat world: a hill raised in stage ground' : ''}`);

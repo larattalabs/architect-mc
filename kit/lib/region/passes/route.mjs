@@ -320,7 +320,11 @@ function search(env, ctx) {
               last = lk;
             }
             if (!ok) continue;
-            relax(s, last, hf, 2, yn * FP, COST.flight + COST.stair * n + COST.step * 2 + COST.cutFill * (cf + cf2) * w + (hf !== h ? COST.turn : 0), 1, n * 2 + (sg > 0 ? 1 : 0));
+            // (hysteresis: a flight over preferred cells costs a third, as a walk does)
+            let pref = 1;
+            for (let t = 1; t <= n + 2 && pref; t++) { const pi = i + di * t, pj = j + dj * t; if (!prefer[pi + pj * W]) pref = 0; }
+            const fc = COST.flight + COST.stair * n + COST.step * 2 + COST.cutFill * (cf + cf2) * w;
+            relax(s, last, hf, 2, yn * FP, (pref ? Math.floor(fc / 3) : fc) + (hf !== h ? COST.turn : 0), 1, n * 2 + (sg > 0 ? 1 : 0));
           }
         }
       }
@@ -530,7 +534,13 @@ export function routePass(survey, volumes, intent) {
       }
       return { blockedW, blocked1 };
     };
-    const sctx = { G, builtY, prefer: preferM, start: ends[0], goal: ends[1], Gq, w, laneW: Math.floor((w + r - 1) / r), Ld: Math.floor((Math.max(hairpinLanding, w) + r - 1) / r),
+    // the edge's own earlier route (6d replanning: `prefer` on the edge) costs a third too, for this edge only
+    let preferE = preferM;
+    if (Array.isArray(e.prefer) && e.prefer.length) {
+      preferE = Uint8Array.from(preferM);
+      for (const p of e.prefer) { const k = cellAt(p[0], p[1]); if (k >= 0) preferE[k] = 1; }
+    }
+    const sctx = { G, builtY, prefer: preferE, start: ends[0], goal: ends[1], Gq, w, laneW: Math.floor((w + r - 1) / r), Ld: Math.floor((Math.max(hairpinLanding, w) + r - 1) / r),
       latLo: Math.floor(lo / r), latHi: Math.floor((hi + r - 1) / r), maxCut, maxFill, stairs: stairs && !coarse, ladders, nearEnd };
     // ---- the moves as 4-connected centre cells with their surface y, and segments
     const toPath = (res) => {

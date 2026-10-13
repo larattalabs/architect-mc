@@ -280,13 +280,16 @@ export class Region {
     for (const p of this.parts) for (const k of p.keep ?? []) hard.push([k.box.minX, k.box.minZ, k.box.maxX, k.box.maxZ]);
     const keepOut = [...(this.ctx.keepOut ?? []), ...(it.keepOut ?? [])].map((k) => [...k]);
     // hysteresis: the caller's cells, 4e roads and graded paths already in the plan
-    const prefer = [...(it.prefer ?? []), ...(this.ctx.routePrefer ?? [])].map((p) => [p[0], p[p.length - 1]]);
+    // (ctx.routePrefer: an earlier plan's routes, [[x, z]] for every edge or {edgeId: [[x, z]]} each edge its own)
+    const rp = this.ctx.routePrefer ?? [];
+    const prefer = [...(it.prefer ?? []), ...(Array.isArray(rp) ? rp : [])].map((p) => [p[0], p[p.length - 1]]);
+    const preferOf = (id) => (Array.isArray(rp) ? [] : (rp[id] ?? []).map((p) => [p[0], p[p.length - 1]]));
     for (const rd of this.roads) { const { cells } = centreCells(rd.points.map((q) => [q[0], q[2]])); for (const c of cells) prefer.push([c.x, c.z]); }
     for (const m of Object.values(this.meta.paths)) if (m.kind === 'graded' && Array.isArray(m.cells)) for (const q of m.cells) prefer.push([q[0], q[2]]);
     const stage = it.stage ?? this.stageList[this.stageList.length - 1];
     const t0 = performance.now();
     const out = PASSES.route(this.survey.columns, this.ctx.volumes ?? [], {
-      edges: edges.map((e) => ({ id: e.id, from: { at: e.a.at, facing: e.a.facing }, to: { at: e.b.at, facing: e.b.facing }, width: e.width, movers: e.movers, ladders: e.ladders })),
+      edges: edges.map((e) => ({ id: e.id, from: { at: e.a.at, facing: e.a.facing }, to: { at: e.b.at, facing: e.b.facing }, width: e.width, movers: e.movers, ladders: e.ladders, prefer: preferOf(e.id) })),
       maxGrade: it.maxGrade ?? 0.25, hairpinLanding: it.hairpinLanding ?? 3, stairs: it.stairs ?? true, maxCut: it.maxCut ?? 4, maxFill: it.maxFill ?? 4, margin: it.margin ?? 2,
       hard, keepOut, prefer, clearTrees, base: it.base ?? null, _unsafe: it._unsafe ?? {},
     });

@@ -278,7 +278,7 @@ steps.hyst = async () => {
   const cells = (e) => new Set((e?.path ?? []).map(([x, , z]) => `${x},${z}`));
   const out = { moves: [] };
   // the re-plan prefers the first plan's routes (hysteresis: an earlier plan's routes cost a third, as 6d's replanning passes them)
-  const routePrefer = p1.meta.route.edges.flatMap((e) => (e.path ?? []).map(([x, , z]) => [x, z]));
+  const routePrefer = Object.fromEntries(p1.meta.route.edges.map((e) => [e.id, (e.path ?? []).map(([x, , z]) => [x, z])]));
   for (const n of ['gate', 'hall', 'chapel', 'lookout']) for (const [ax, d] of [['X', 4], ['Z', 4], ['X', -4], ['Z', -4]]) {
     const p2 = await planRegion({ ...opts, params: { ...sc.params, [`${n}${ax}`]: sc.params[`${n}${ax}`] + d }, routePrefer });
     let kept = 0, total = 0;
