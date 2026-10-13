@@ -1,6 +1,7 @@
 // ARVX: frozen 3D site volumes (docs/CONTRACT.md 6b §5, kit/REGIONS.md "ARVX"). The mod writes them (Survey.volume); the
 // kit decodes them for the virtual world (the checker) and `r.needVolume`. The file is gzip(ARVX bytes) and the volume's
-// sha is SHA-256 of the uncompressed bytes.
+// sha is SHA-256 of the uncompressed bytes. (6c B) Version 2 adds the cells' block ids (a palette and per-column runs after the
+// owner table), so a `block` mask term reads the frozen world; version 1 is unchanged.
 import zlib from 'node:zlib';
 import { sha256Hex } from './pack.mjs';
 
@@ -21,7 +22,7 @@ export function arvxBytes(file) {
 export function decodeArvx(file) {
   const b = arvxBytes(file);
   if (b.length < 32 || b[0] !== 0x41 || b[1] !== 0x52 || b[2] !== 0x56 || b[3] !== 0x58) throw new Error('ARVX: bad magic');
-  if (b[4] !== 1) throw new Error(`ARVX: version ${b[4]} (this kit reads 1)`);
+  if (b[4] !== 1 && b[4] !== 2) throw new Error(`ARVX: version ${b[4]} (this kit reads 1 and 2)`);
   const dv = new DataView(b.buffer, b.byteOffset, b.byteLength);
   const box = { minX: dv.getInt32(8, true), minY: dv.getInt32(12, true), minZ: dv.getInt32(16, true), maxX: dv.getInt32(20, true), maxY: dv.getInt32(24, true), maxZ: dv.getInt32(28, true) };
   const W = box.maxX - box.minX + 1, H = box.maxY - box.minY + 1, D = box.maxZ - box.minZ + 1;
@@ -58,8 +59,40 @@ export function decodeArvx(file) {
   if (nRuns !== ownedRuns.length) throw new Error(`ARVX: ${nRuns} owner entries for ${ownedRuns.length} OWNED runs`);
   const ownerOf = new Map();
   for (const [start, len] of ownedRuns) { const k = varint(); for (let i = 0; i < len; i++) ownerOf.set(start + i, k); }
+  // (6c B) version 2: the block palette (ids without properties; entry 0 is minecraft:air), then per column (x-major) runs
+  // bottom-up of (varint palette index, varint length)
+  let blocks = null, blockPalette = null;
+  if (b[4] === 2) {
+    const n = varint();
+    if (n < 1) throw new Error('ARVX: an empty block palette');
+    blockPalette = [];
+    for (let i = 0; i < n; i++) { const k = varint(); blockPalette.push(new TextDecoder().decode(b.subarray(o, o + k))); o += k; }
+    if (blockPalette[0] !== 'minecraft:air') throw new Error('ARVX: the block palette must start with minecraft:air');
+    blocks = n <= 65536 ? new Uint16Array(W * H * D) : new Uint32Array(W * H * D);
+    for (let col = 0; col < W * D; col++) {
+      let y = 0;
+      while (y < H) {
+        const k = varint(), len = varint();
+        if (k >= n) throw new Error(`ARVX: block ${k} out of the palette`);
+        if (len < 1 || y + len > H) throw new Error(`ARVX: column ${col}'s blocks run past the box`);
+        blocks.fill(k, col * H + y, col * H + y + len);
+        y += len;
+      }
+    }
+  }
   if (o !== b.length) throw new Error(`ARVX: ${b.length - o} trailing bytes`);
-  return { sha: sha256Hex(b), box, width: W, height: H, depth: D, classes, owners, ownerOf, counts };
+  return { sha: sha256Hex(b), version: b[4], box, width: W, height: H, depth: D, classes, owners, ownerOf, counts, blocks, blockPalette };
+}
+
+/**
+ * (6c B) The block id at a world cell from a version-2 volume (no properties, e.g. 'minecraft:stone'), or null outside the box, in
+ * a MISSING column or for a version-1 volume.
+ */
+export function blockAt(v, x, y, z) {
+  if (!v.blocks || x < v.box.minX || x > v.box.maxX || y < v.box.minY || y > v.box.maxY || z < v.box.minZ || z > v.box.maxZ) return null;
+  const i = ((x - v.box.minX) * v.depth + (z - v.box.minZ)) * v.height + (y - v.box.minY);
+  if (v.classes[i] === 14) return null;
+  return v.blockPalette[v.blocks[i]];
 }
 
 /** The class at a world cell (MISSING outside the box). */
@@ -68,12 +101,15 @@ export function classAt(v, x, y, z) {
   return v.classes[((x - v.box.minX) * v.depth + (z - v.box.minZ)) * v.height + (y - v.box.minY)];
 }
 
-/** Encode (tests and fixtures; the mod is the real writer): `classes` as decodeArvx returns them. Returns the raw bytes. */
-export function encodeArvx(box, classes, owners = [], ownerOf = new Map()) {
+/**
+ * Encode (tests and fixtures; the mod is the real writer): `classes` as decodeArvx returns them. Returns the raw bytes. (6c B)
+ * `blocks` = {palette: [ids, 'minecraft:air' first], index: per cell palette index}: a version-2 volume.
+ */
+export function encodeArvx(box, classes, owners = [], ownerOf = new Map(), blocks = null) {
   const W = box.maxX - box.minX + 1, H = box.maxY - box.minY + 1, D = box.maxZ - box.minZ + 1;
   const out = [];
   const head = new Uint8Array(32);
-  head.set([0x41, 0x52, 0x56, 0x58, 1, 0, 0, 0]);
+  head.set([0x41, 0x52, 0x56, 0x58, blocks ? 2 : 1, 0, 0, 0]);
   const dv = new DataView(head.buffer);
   [box.minX, box.minY, box.minZ, box.maxX, box.maxY, box.maxZ].forEach((v, i) => dv.setInt32(8 + 4 * i, v, true));
   out.push(...head);
@@ -95,5 +131,19 @@ export function encodeArvx(box, classes, owners = [], ownerOf = new Map()) {
   for (const s of owners) { const bs = new TextEncoder().encode(s); varint(bs.length); out.push(...bs); }
   varint(ownedRunOwners.length);
   for (const k of ownedRunOwners) varint(k);
+  if (blocks) {
+    varint(blocks.palette.length);
+    for (const s of blocks.palette) { const bs = new TextEncoder().encode(s); varint(bs.length); out.push(...bs); }
+    for (let col = 0; col < W * D; col++) {
+      let y = 0;
+      while (y < H) {
+        const k = blocks.index[col * H + y];
+        let n = 1;
+        while (y + n < H && blocks.index[col * H + y + n] === k) n++;
+        varint(k); varint(n);
+        y += n;
+      }
+    }
+  }
   return Uint8Array.from(out);
 }

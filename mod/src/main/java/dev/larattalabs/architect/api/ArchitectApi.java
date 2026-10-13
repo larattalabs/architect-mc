@@ -29,7 +29,7 @@ public interface ArchitectApi {
 	 * 1.12.0: minLotSize and the recommended lot, partial roads, ground heights, bounded fields refused in the mod, the extend
 	 * warning, survival construction roads, protected areas, owner-tagged entities (phase 6c slice 0c).
 	 */
-	String VERSION = "1.21.0";
+	String VERSION = "1.22.0";
 
 	/** The singleton. Safe to call from any mod's initializer (it does not depend on Architect's init order). */
 	static ArchitectApi get() {
@@ -101,7 +101,9 @@ public interface ArchitectApi {
 	 * jittered grid, on ground, walls and ceilings, by density, field or mask, with the bundled items) and {@code "stampOp"} (the
 	 * {@code stamp} op: a vanilla feature captured in the player's own game as a stamp, local-only). A plan that uses them requires the
 	 * {@code scatter} / {@code stamp} kinds, and an older game refuses it PLAN_STALE.
-	 * Since 1.21.0, a T2 helper ({@code region.route}) adds {@code "routePass"} (the {@code route} pass: slope-aware routing with
+	 * Since 1.21.0, a B helper ({@code region.brush}) adds {@code "brushes"} ({@link Regions#brush}: its kit bundles the {@code brush}
+	 * program, and frozen volumes may record block ids, so a mask's {@code block} term reads the world).
+	 * Since 1.22.0, a T2 helper ({@code region.route}) adds {@code "routePass"} (the {@code route} pass: slope-aware routing with
 	 * switchbacks, stairs, ladders on player-only edges and keep-out avoidance; routes are ordinary roads, stairs and columns,
 	 * so a routed plan needs no new kind, and the IR graph's edges carry {@code movers} and {@code segments}).
 	 */

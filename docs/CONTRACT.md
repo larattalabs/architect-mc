@@ -9274,6 +9274,23 @@ rule. 4. Commands. 5. Fixtures, gate.
 - Fill, drain, recursive fill (H). Brushes in survival (RS). A brush tool item and a preview ghost for strokes (later, with a UI).
 - Areas binding every owner (0c's deferral), unless S-B-2 asks for them in B.
 
+### Phase 6c slice B as built (API 1.21.0, mod 0.24.0, kit 0.23.0: placeholders, over v0.23.1; recorded 2026-10-13)
+
+Branch `slice/B` (worktree `../architect-mc-B`). $0: sim and stub only (`artifacts/gate6c-b/spend.json`). Ports 8930-8935. Evidence:
+`artifacts/gate6c-b/` (one JSON per `tools/gate6cb.mjs` step, REPORT.md, api-compat.txt, the dumps and snaps), the gate runs under
+`artifacts/gate-runs-B/`. Frozen by the batch review: S-B-1 (one region per stroke), S-B-2 (owner `*` areas deferred), N-B-1
+(PLAYER_BLOCKS at permission 2); the MP ruling (the `block` mask term made real here).
+
+| § | As built |
+|---|---|
+| §1 API | `VERSION` 1.21.0. `Regions.brush(BrushRequest)` (a default that throws "needs Architect API 1.21.0"; completes with the region's view once it is PLACED, PARTIAL or FAILED); `record BrushRequest(owner, dimension, kind, shape, center, radius, strength, mask, pattern, destruction, actor, seed)` as drafted (null shape SPHERE, null destruction NATURAL_ONLY); `enum BrushKind`, `BrushShape`, `Destruction` as drafted; `RegionView` gains trailing `@Nullable String brush` (the kind's name for a stroke), the 1.14.0 constructor kept; `Reason.PERMISSION` appended after FORMAT; `Limits.BRUSH_RADIUS_MIN/MAX` 1/32, `BRUSH_STRENGTH_MIN/MAX` 1/16 (FIELD_LIMIT with the path). Feature `brushes` from a B helper (sidecar feature `region.brush`). `KIT_VERSION` = `EVAL_KIT_VERSION` = `IrStale.KIT_VERSION` 0.23.0; `KINDS_FORMAT2` (kit and mod) gains `volume:blocks`, appended after F2's `scatter` and `stamp`. apitest `apib`, `brush`, `brushundo` (`ApiTestBrush`). |
+| §2 the stroke | `region/Brushes.java`. On the server thread: the field rules (owner `<modid>:<thing>`, radius, strength: FIELD_LIMIT), the Overworld and no survival toggle (NOT_ALLOWED), PLAYER_BLOCKS's permission (PERMISSION), the owner's protected areas against the **brush box** (PROTECTED), every chunk of the brush box plus 2 loaded (NOT_LOADED: a stroke never prepares), the helper (SIDECAR_UNAVAILABLE). Then the claim (the brush box plus 8) is surveyed at resolution 1 (LOADED_ONLY) and, for MELT, CAVE_CARVE or a mask with a `block` or `class` term, the brush box plus 2 frozen as an ARVX v2 volume with block ids; one `region.plan` of the bundled `brush` program with both (no two-plan flow, `check: false`: no checker, no previews); the plan realised at once (INSTANT, auto-approved, `force` so another owner's region over the claim is judged per cell, not refused whole). The stroke's record (kind, shape, destruction, playerBlocks, actor, box) is the mod's own (`RegionRec.brush`, kept in `region.json`), never taken from a request's ext. Request to realised (dev.brush, item 7): p50 about 0.5 s for radius 8-10, 1.0-2.3 s for radius 16 under load 12-23. |
+| §3 the kinds | `kit/lib/region/brush.mjs` (plan time, integer arithmetic) and `kit/regions/brush.mjs` (`catalogue = false`); kit/REGIONS.md "Phase 6c slice B additions". **Deviation (ops):** every kind lands as `columns` ops (masks and patterns apply to every stroke), not `relief` ops (the relief op refuses masks); the surface kinds write fills and cuts from `{surface: 0}`, MELT and CAVE_CARVE absolute cell runs. **Deviation (the surface):** a surface kind moves the columns whose ground lies inside the shape (a sphere's y extent counts); water and lava columns keep theirs. A fill takes the pattern, else the subsurface role under the surface role, the old top included (so no grass is left buried); a cut leaves the exposed block. **Deviation (CAVE_CARVE):** the worm is resolved against the frozen volume into a cell list, not a `capsuleChain` with `warp`: it stops before a segment that comes within one cell of water, lava or an unknown cell, and the solid cells it cuts off from the volume's faces are carved too. BLEND: the inside columns within a third of the radius keep their ground and the ring relaxes to the land, each column within `strength`. |
+| §4 destruction | A flag on the stroke's record read by `site/TileCheck` (not a cell condition: ARTL's two cond bits are full). Every brush op is `ALWAYS_OURS`; the tile check counts the **same owner's earlier strokes'** tile entries as its own (layered over: they pass ALWAYS_OURS and are not skipped as owned), every other owned cell (sites, roads, deltas, crates, other regions, other owners' strokes) is skipped as `owned` as before (K5). **Decision (narrow layering):** the owner's ordinary regions are not layered over by its strokes (no removal behaviour Steward relies on changes). With PLAYER_BLOCKS an unowned cell passes whatever it holds, block entities included (their data is journaled by the capture, nothing drops: the write skips side effects and the tile's new drops are cleared; the undo reloads the data). A stroke never writes an unbreakable block (bedrock, barriers, portals, command and structure blocks; `unbreakable` in the skip counts). **Decision (the actor):** PLAYER_BLOCKS needs an online player with permission level 2 as the actor; null or an offline UUID refuses PERMISSION. The server console reaches it only through `/architect brush` (an internal flag), so no API caller can claim to be the console. |
+| §5 commands | `region/BrushCommands.java`: `/architect brush <kind> [radius] [strength] [options]`, options in any order: `sphere`/`cylinder`, `mask {json}`, `pattern {json}`, `player_blocks`, `seed n`, `at x y z` (the console names the block; a player aims within 64). Owner `architect:player`, the player as actor. `/architect brush undo`: the actor's last standing stroke (found by the actor recorded on the stroke, never by an id built from the owner). Creative or permission 2. |
+| ARVX v2, the block mask | ARVX version 2 = version 1 plus a block-id palette (air first) and per-column runs after the owner table (kit/REGIONS.md). Java `Arvx` and `VolumeSurvey` (with blocks, at most 32M cells) and the kit's `decodeArvx`/`encodeArvx`/`blockAt`; a cross-language fixture `mod/src/test/resources/arvx/blocks.{bin,json}`. `r.needVolume(box, {blocks: true})` (the `needVolumes` entry carries `blocks`; the mod's two-plan flow samples it); the IR's volume carries `blocks: true` and the IR requires `volume:blocks`; tags are expanded at plan time into the IR member `blockTags`. A `block` term over a version-1 volume or none still refuses MASK_NEEDS_VOLUME. Params gain the region-only `json` type; programs gain `Part.columns`. |
+| Gate | Under the 2026-10-12 policy (timing bars recorded; slice = units + apijars/api-compat + the impact steps + B's own). Final slice tier after merging origin/main v0.23.1 (F2, C30) and v0.22.0 (C29): `artifacts/gate-runs-B/20261013-024839-slice` (3 shards, 8930-8935, head e39954a): **PASS 41/41**, among them unit-mod 603, unit-kit 317, unit-sidecar 715, apijars (the 0.23.0, 0.22.0 and 0.21.0 jars, each built from its tag into `artifacts/gate6c-b/v0230`, `v0220`, `v0210`: 46 ok each), b-unit 11/0, b-ingame 74/0 (headless), 4e-crash 48/0, x-ingame, x-resume, 4d-all, 6a-megaA, 6a-eflat, 6a-staged, 6b-volume, mp-ingame, the S1/S7/relief/forms scenarios; no timing bar missed. Earlier rounds: `20261012-221442-slice` (37/38 before the C29 merge; relief_demo's golden re-plan now runs at the golden's own kitVersion, as F2 also did), `20261013-003614-slice` (36/38 after the C29 merge: unit-sidecar's known load timeouts at load 42, and 6b-volume's candidate flake: 3155 vs 3165 lava cells between two samples of the unchanged area; both passed in the final run). **Items:** **1** (kit, 100 seeds each) SMOOTH: the largest step between inside columns never rises, lowered on 88 seeds, held by the pinned edge on 5, already at most 1 on 7, the roughness falls on 99 (**deviation**: strict lowering is impossible where outside columns pin both sides of an inside column); RAISE/LOWER exactly +/-strength at the centre, 0 at and past the edge, monotone falloff; ERODE and BLEND within strength; OVERLAY depth exact on masked columns (evaluated); MELT only removes removable cells. **2** NATURAL_ONLY strokes (raise, smooth, lower, overlay, erode, a lower and a melt over the wall, a raise, a melt of stone spikes: 10 cells) leave the player's wall and its chest unchanged (21 cells failed the natural condition). **3** 0 of the other owner's road's 87 owned cells written by any stroke, PLAYER_BLOCKS included (owned skipped 18); another owner's stroke skips gate:b's strokes (owned 120). **4** PLAYER_BLOCKS refused PERMISSION without an actor and for the player after /deop (nothing written); with op the wall cleared (21/21 air), 0 item entities, one undo restores it with the chest's NBT (hash with NBT equal); the console's command path reaches it. **5** 5 overlapping strokes (journal stacks of 2+ strokes on 42 sampled cells) undone in the orders 5-4-3-2-1, 1-2-3-4-5 and 3-1-5-2-4: E-flat 0 each; on S3's corner 7 strokes (a cave, five surface strokes, a melt) undone: E-normal 0 mismatches (the diff box is the strokes' reach plus 4, after a 20 s settle: a first run's 236 unclassified cells were a spring flowing on freshly loaded chunks 30 blocks out). **6** a radius-14 cave carve under S3's corner: 485 cells, M3 0 floating, M4 0 breaches (judged on the realised ARWD dumps; the kit's 100-seed test too). **7** (BAR) radius 16: p50 1.0 s, p95 1.06 s (load 12; 2.3 s p50 at load 23 in another run). **8** the same request and seed: the same IR sha twice in game, tile shas twice in the kit. **9** (BAR) own CPU max 4.7 ms flat, 5.0 ms natural (no own-time p99 in dev.placement.stats). **10** NOT_ALLOWED in a survival-toggle world and the Nether; FIELD_LIMIT for radius 33, strength 17, no owner; NOT_LOADED over unloaded chunks. **11** S1, S7, mega_bench and the 6b goldens unchanged (16 pass); the 0.23.1 kit and the 0.23.0 mod refuse a brush plan PLAN_STALE (kit version; a block-masked one by `volume:blocks`). **12** api-compat 4/4 clean (0.23.0, 0.22.0, 0.21.0 jars, the 0.23.0 surface); apitest `apib` and a stroke through the public API; $0.00. `/architect brush raise 5 3 cylinder at ...` and `/architect brush undo` exact. **gate-verifier: PASS** (review of the diff and the merges, plus its own re-run of items 3, 4 and 5 and 6b-volume at e39954a: `artifacts/gate-runs-B-verify/20261013-045740-change`, b-ingame 74/0, 6b-volume 4/0). Its caveats: owners are stored as strings and only compared; it relied on the builder's slice run for the rest. HANDOFF-B retired. |
+
 ## Phase 6c slice S2: the ice-spike outpost goes green (DRAFT for Steward review)
 
 API 1.21.0, mod 0.24.0 (wave 3). SETTLEMENTS §16.2 (S2), §16.3 (bars), §17.2 (6c gate).
@@ -10397,11 +10414,16 @@ SETTLEMENTS §17.2's 6c gate, run once when the last 6c slice merges (whichever 
 - per-tile evaluation p50/p99 on S2, S3 and the forest-heavy variant (F3): p99 under 2 s, at least 45k cells/s;
 - the full `release` tier and the full gate-verifier; 6b's gate items as regressions.
 
-## Phase 6c slice P0: plan check v0 (DRAFT for Steward review)
+## Phase 6c slice P0: plan check v0 (DRAFT for Steward review; `plan/0` FROZEN 2026-10-12)
+
+**`plan/0` is frozen (2026-10-12, after Steward's 59-ask fixtures round).** From now on a change within `plan/0` is additive
+only: a new optional member, a new reserved kind or block id, a new catalogue entry. Anything else (removing or renaming a
+member, narrowing a value, changing a meaning, making an optional member required) needs `plan/1`. The same sentence is in the
+schema's `description`. See "Freeze of plan/0" below for what the round changed and the counts that order the reserved kinds.
 
 Next free API minor at merge (the house rule; a placeholder until then), mod to match. steward-mc docs/COMPOSITION.md v2 §2-§7,
 and architect-mc docs/COMPOSITION-ANSWERS.md, whose "Revisions" section wins. The geometric plan schema is
-`kit/schemas/plan.json` (`plan/0`, DRAFT on this branch).
+`kit/schemas/plan.json` (`plan/0`, frozen 2026-10-12).
 
 - **Branch:** `slice/P0`, worktree `../architect-mc-P0`. **Spend:** $0. The check makes no Claude calls, and repair costs are
   Steward's.
@@ -10456,11 +10478,11 @@ Top level:
 - **Steward's hook into the plan** is `partRef`: `<partId>`, or `<planId>@<n>#<partId>` from outside the plan. A stage,
   schedule entry or secret points at parts with it. Architect never reads the life layer.
 - **zones[]:**
-  - `kind` (`standard`; `outpost` is reserved for D2);
+  - `kind` (`standard`; `outpost` is reserved for D2; `district` is a reserved alias of the `{districts}` program, see below);
   - `purpose` (a tag, echoed);
   - `style` (a bible ref: `{bible, version?}`, or `{pending: "<tag>"}` while the bible doesn't exist yet, §3);
-  - `program`: `{template: "flat_village", params}`, or `{lots: [...], layout: "street", shared}`, or `{districts}`, which
-    is reserved for D1. A lot carries `id`, `type`, `size`, an optional slug `role` and an optional free-text `label` (at most
+  - `program`: `{template: "flat_village", params}`, or `{lots: [...], layout, shared}` with `layout` one of `street` (supported) or `ring`, `spiral`, `grid`,
+    `organic` (reserved for FL; see "Free layouts"), or `{districts}`, which is reserved for D1 (see "Districts"). A lot carries `id`, `type`, `size`, an optional slug `role` and an optional free-text `label` (at most
     80 characters, as on zones and connectors);
   - `where`, `sketch`, `size` (`{w, d}` as integers or ranges, or a preset S/M/L/XL), and `tolerance`.
 - **connectors[]:**
@@ -10478,9 +10500,11 @@ Top level:
   - `terrace`: 6a's terrace plus relief edges;
   - `ice_spike` and `rock_spire`: F1, with `count`, `height`, `preset` and `keepNatural`;
   - reserved: `floating_island` (N-P0-1), `brush` (B), `pond` (H), `scatter` (F2), `giant_tree` (F3) and `hidden_room`
-    (7b).
+    (7b), and, added at the freeze, `crater` (7c), `hollow_mountain` (7c), `waterfall` (H), `seabed_site` (a later slice),
+    `ship_hull` and `mast` (unscheduled).
 - **rules[]:** the vocabulary `palette`, `shape`, `variety`, `density` and `height_cap`. Each has a draft def in the schema,
-  and all are reserved until RC. A required rule that can't be verified blocks readiness.
+  and all are reserved until RC; added at the freeze, `stacked_floors` (RC, or 7b) and `suspended` (7b) are reserved too. A
+  required rule that can't be verified blocks readiness.
 - **dependencies[]:** `{part, after[], why?}`. The part stands after those parts (stage order), and answers `blocked` when
   any of them doesn't fit. Implicit dependencies come from locator targets, endpoints and `relief.around`. The whole graph
   must be acyclic.
@@ -10850,6 +10874,54 @@ is capped at about $1 per plan. P0 itself stays $0.
   free-standing form stays reserved.
 - **N-P0-2:** C28 is already D's builder's call (per-column biomes only if edge tracing needs it); not a Noah question.
 
+
+### Freeze of plan/0 (2026-10-12)
+
+`plan/0` is **frozen** as of 2026-10-12, the reason being the end of S-P0-9's round: Steward wrote plans for all 59 strange asks
+against it, all 59 are valid, and 34 carry waiting parts in the extension envelope. **The rule from now on: changes are
+additive-only within `plan/0`** (new optional members, new reserved kinds and block ids, new catalogue entries); anything else
+needs `plan/1`. The aim of the last edits: an `unsupported` answer names **one** block id per idea, so a pending part maps onto
+a future block.
+
+**Free layouts.** `program.lots.layout` is the enum `street | ring | spiral | grid | organic`.
+- `street` is supported (block id `layout.street`).
+- `ring`, `spiral`, `grid` and `organic` are reserved, state `reserved`, arriving in slice FL, with block ids `layout.ring`,
+  `layout.spiral`, `layout.grid` and `layout.organic`. A lots program that names one is checked as a normal lots program and
+  answers `unsupported {block: "layout.<name>"}`.
+- A layout is written **there**, never as a connector kind (`connector.ring_street`, `connector.grid`) or a rule kind
+  (`rule.ring_layout`, `rule.layout_ring`): the fixtures show Claude doing exactly that when the layout had no home.
+
+**Districts.** `zone.kind: district` is a **reserved alias** of the `{districts}` program: the part answers
+`unsupported {block: "program.districts"}`, not `zone.district`, until D1. The catalogue lists `zone.district` with
+`aliasOf: "program.districts"` (a new optional catalogue-entry member, with an optional `note`). The schema's description of
+`program.districts` says how to write districts.
+
+**New reserved kinds** (each has a block id, state `reserved` and its planned slice):
+
+| Block id | Slice | Note |
+|---|---|---|
+| `form.crater` | 7c | the `crater_works` template already covers a whole-region crater (N-P0-1) |
+| `form.hollow_mountain` | 7c | |
+| `form.waterfall` | H | |
+| `form.seabed_site` | later | under water; a later slice, not yet named |
+| `form.ship_hull` | unscheduled | "structures that move or float" |
+| `form.mast` | unscheduled | "structures that move or float" |
+| `rule.stacked_floors` | RC | arcology; or 7b if it needs interior work |
+| `rule.suspended` | 7b | upside-down or hanging builds; 7b's other surfaces |
+
+**Already-wanted reserved kinds, ranked by Steward's counts** (parts across the 59 plans; input to ordering the slices). Each
+was confirmed reserved, with a block id and a planned slice:
+
+| Block id | Parts | Slice |
+|---|---|---|
+| `connector.rope_bridge` | 11 | 7a |
+| `connector.wall` | 8 | 7a |
+| `rule.palette` | 8 | RC |
+| `rule.shape` | 4 | RC |
+| `connector.tunnel` | 4 | T3 |
+
+The catalogue grew by 14 entries at the freeze: `zone.district`, the five `layout.*` ids, six forms and two rules. A catalogue
+diff against the draft lists them as added.
 
 ### Deferred
 

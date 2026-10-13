@@ -8,6 +8,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { compileIR, evalTile, KINDS_FORMAT2, OP_KINDS, OPS_RESERVED, RELIEF_NONE, semverCompare, staleReason, walkKinds, EVAL_KIT_VERSION } from '../lib/realise.mjs';
 import { KIT_VERSION, planRegion } from '../lib/region/plan.mjs';
+
+const semverAtLeast = (a, b) => { const p = (v) => v.split('.').map(Number); const [x, y] = [p(a), p(b)]; for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] > y[i]; return true; };
 import { makeColumns, unpack } from '../lib/region/pack.mjs';
 import { NONE, pinsOf, relax, reliefPass, ERODE_MAX } from '../lib/region/passes/relief.mjs';
 import { PASS_NAMES } from '../lib/region/passes/index.mjs';

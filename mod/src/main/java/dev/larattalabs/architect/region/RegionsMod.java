@@ -14,6 +14,7 @@ public final class RegionsMod {
 		GenCounter.init();
 		RegionsImpl.init();
 		RegionCommands.init(); // phase 6b: /architect region ... (N7: commands, no Terrain tab)
+		BrushCommands.init(); // 6c B: /architect brush ...
 		ServerLifecycleEvents.SERVER_STARTING.register(s -> {
 			ChunkGen.reset();
 			GenCounter.reset();

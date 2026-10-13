@@ -43,6 +43,12 @@ public final class RegionRec {
 	public long removedAt;
 	public @Nullable String opKey;
 	public @Nullable String opHash;
+	/**
+	 * (6c B) A brush stroke's record ({@link Brushes}): {@code kind}, {@code shape}, {@code destruction}, {@code playerBlocks} (the
+	 * permission was checked), {@code actor} (a player's UUID, or {@code console}), {@code box} (the brush box); null for any other
+	 * region. Written by the mod only (never from a request's ext).
+	 */
+	public @Nullable JsonObject brush;
 
 	public static final class Stage {
 		public int tilesTotal;
@@ -157,6 +163,9 @@ public final class RegionRec {
 			o.addProperty("opKey", opKey);
 			o.addProperty("opHash", opHash);
 		}
+		if (brush != null) {
+			o.add("brush", brush.deepCopy());
+		}
 		return o;
 	}
 
@@ -211,6 +220,7 @@ public final class RegionRec {
 		r.removedAt = o.has("removedAt") ? o.get("removedAt").getAsLong() : 0L;
 		r.opKey = o.has("opKey") ? o.get("opKey").getAsString() : null;
 		r.opHash = o.has("opHash") ? o.get("opHash").getAsString() : null;
+		r.brush = o.get("brush") instanceof JsonObject b ? b.deepCopy() : null;
 		return r;
 	}
 

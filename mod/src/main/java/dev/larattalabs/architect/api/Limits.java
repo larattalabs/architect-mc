@@ -94,6 +94,14 @@ public final class Limits {
 	public static final int POLISH_SITES_MAX = 256;
 	public static final int POLISH_SITE_MAX = 200;
 
+	// ---- BrushRequest (6c slice B, 1.21.0)
+	/** {@code radius}: 1-32. */
+	public static final int BRUSH_RADIUS_MIN = 1;
+	public static final int BRUSH_RADIUS_MAX = 32;
+	/** {@code strength}: 1-16. */
+	public static final int BRUSH_STRENGTH_MIN = 1;
+	public static final int BRUSH_STRENGTH_MAX = 16;
+
 	// ---- massing redirects
 	/** Redirect notes, trimmed: 1-2000. */
 	public static final int REDIRECT_NOTES_MAX = 2000;

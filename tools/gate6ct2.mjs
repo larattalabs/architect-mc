@@ -16,7 +16,7 @@
 //                                       edges, through the plan CLI in the helper's sandbox with the pass budget, median of 3; item 8 offline: the
 //                                       IR sha over the 3 plans, tile shas 1 = 4 workers, forward and shuffled
 //     hyst                              item 6 offline over S3's survey: each lot moved by 4 keeps >= 80% of the other edges' cells
-//     apicompat                         item 13: tools/api-compat.mjs --gate6ct2 (the 0.23.0, 0.22.0, 0.21.0 apitest jars, the 0.23.0 surface)
+//     apicompat                         item 13: tools/api-compat.mjs --gate6ct2 (the 0.24.0, 0.23.0, 0.22.0 apitest jars, the 0.24.0 surface)
 //     ingame                            items 4, 5, 10 in game (headless-capable): route_demo on a flat world with a protected area across its
 //                                       gate-hall line: the plan honours it, 0 cells written in it (ARWD diff), vanilla villager paths along the
 //                                       villager edges, the removal by its owner exact (E-flat 0)
@@ -300,7 +300,7 @@ steps.apicompat = async () => {
   const r = spawnSync(process.execPath, [path.join(root, 'tools', 'api-compat.mjs'), '--gate6ct2'], { cwd: root, encoding: 'utf8', env: { ...process.env, JAVA_HOME } });
   const t = `${r.stdout}${r.stderr}`;
   fs.writeFileSync(path.join(OUT, 'api-compat.txt'), t);
-  check(r.status === 0 && /all 4 checks clean/.test(t), `item 13: api-compat against the 0.23.0, 0.22.0 and 0.21.0 apitest jars and the 0.23.0 surface: ${t.trim().split('\n').pop()}`);
+  check(r.status === 0 && /all 4 checks clean/.test(t), `item 13: api-compat against the 0.24.0, 0.23.0 and 0.22.0 apitest jars and the 0.24.0 surface: ${t.trim().split('\n').pop()}`);
   spendZero();
   return { out: t };
 };

@@ -3,7 +3,7 @@
 Resume notes for `slice/T2` (worktree `../architect-mc-T2`, from origin/main 31f1b56 = v0.21.0). Delete when the gate passes.
 
 ## Placeholders
-API 1.21.0, mod 0.24.0, kit 0.23.0 (coordinator: after C29 v0.22.0 and F2 v0.23.0 / C30 v0.23.1; origin/main 14c607b merged). Feature `routePass` (sidecar `region.route`, appended).
+API 1.22.0, mod 0.25.0, kit 0.24.0 (coordinator: after C29 v0.22.0, F2 v0.23.0, C30 v0.23.1 and B v0.24.0; origin/main 1840942 merged). Feature `routePass` (sidecar `region.route`, appended).
 Ports 8918-8923. $0 (sim/stub only).
 
 ## Done

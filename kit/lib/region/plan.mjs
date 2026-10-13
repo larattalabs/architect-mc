@@ -17,10 +17,11 @@ import { COND, DEFAULT_MACRO_ROLES, Region, blockState, region as makeRegion } f
 import { surveyApi, windowFromSurvey } from './survey.mjs';
 import { validateParams, resolveValues } from '../params.mjs';
 import { mapPatternMats, patternError } from '../pattern.mjs';
+import { maskTerms } from '../mask.mjs';
 import { PASS_NAMES } from './passes/index.mjs';
 
 /** The kit's region engine version (recorded in every IR). */
-export const KIT_VERSION = '0.23.0';
+export const KIT_VERSION = '0.24.0';
 
 export const LIMITS = Object.freeze({
   claim: 1024, claimBig: 2048, irBytes: 4 * 1024 * 1024, ops: MAX_OPS, lots: 1024, paths: 256, stages: 64,
@@ -95,6 +96,7 @@ export function draftIR(r) {
   if (Object.keys(irBlobs).length) ir.blobs = irBlobs;
   if (Object.keys(r.fields).length) ir.fields = r.fields;
   if (Object.keys(r.volumesUsed).length) ir.volumes = r.volumesUsed;
+  if (Object.keys(r.blockTags).length) ir.blockTags = r.blockTags;
   if (r.floatingDecl.length) ir.floating = r.floatingDecl;
   return { ir, blobs: (sha) => sideBytes.get(sha) };
 }
@@ -372,6 +374,10 @@ export async function planRegion(o) {
   if (Object.keys(irBlobs).length) ir.blobs = irBlobs;
   if (Object.keys(r.fields).length) ir.fields = r.fields;
   if (Object.keys(r.volumesUsed).length) ir.volumes = r.volumesUsed;
+  // (6c B) the block tags the masks name, expanded (only when an op's mask uses one)
+  const usedTags = new Set();
+  for (const p of parts) for (const op of p.ops) if (op.mask !== undefined) for (const t of maskTerms(op.mask, 'block')) if (t.startsWith('#')) usedTags.add(t);
+  if (usedTags.size) ir.blockTags = Object.fromEntries([...usedTags].sort().map((t) => [t, r.blockTags[t]]));
   if (r.forms.length) {
     const base = new Map();
     let n = 0;

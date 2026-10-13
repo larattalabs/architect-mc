@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "architect:plan-0",
-  "title": "Architect geometric plan, plan/0 (DRAFT; docs/CONTRACT.md 6c slice P0)",
-  "description": "The geometric layer of a composed settlement plan (steward-mc docs/COMPOSITION.md §3; architect-mc docs/COMPOSITION-ANSWERS.md, its Revisions win). Claude writes it through Steward's plan writer; Regions.checkPlan answers each part. It holds no world coordinates: places are locators over features of the survey and named anchors, with an optional quantised relative sketch. Architect owns this schema, its compiler and the capability catalogue. Steward's life layer (story, stages, schedule, relations, secrets) is out of scope and points at parts through partRef and each part's ext. The file stays inside the keyword subset of kit/lib/specschema.mjs ($ref, oneOf, anyOf, type, enum, const, pattern, minimum, maximum, exclusiveMinimum, minItems, maxItems, items, required, properties, additionalProperties: false); what that subset can't say is in x-rules, x-dispatch and x-defaults, which the plan validator (kit, P0) applies after the schema. Members may be added within plan/0 (additive, optional); any change to an existing member's meaning is a new schemaVersion. DRAFT: frozen after Steward's review, before Steward writes its plan writer.",
+  "title": "Architect geometric plan, plan/0 (FROZEN 2026-10-12; docs/CONTRACT.md 6c slice P0)",
+  "description": "The geometric layer of a composed settlement plan (steward-mc docs/COMPOSITION.md §3; architect-mc docs/COMPOSITION-ANSWERS.md, its Revisions win). Claude writes it through Steward's plan writer; Regions.checkPlan answers each part. It holds no world coordinates: places are locators over features of the survey and named anchors, with an optional quantised relative sketch. Architect owns this schema, its compiler and the capability catalogue. Steward's life layer (story, stages, schedule, relations, secrets) is out of scope and points at parts through partRef and each part's ext. The file stays inside the keyword subset of kit/lib/specschema.mjs ($ref, oneOf, anyOf, type, enum, const, pattern, minimum, maximum, exclusiveMinimum, minItems, maxItems, items, required, properties, additionalProperties: false); what that subset can't say is in x-rules, x-dispatch and x-defaults, which the plan validator (kit, P0) applies after the schema. Members may be added within plan/0 (additive, optional); any change to an existing member's meaning is a new schemaVersion. FROZEN 2026-10-12, after Steward's 59-ask fixtures round. From now on a change within plan/0 is additive only: a new optional member, a new reserved kind or block id, a new catalogue entry. Anything else (removing or renaming a member, narrowing a value, changing a meaning, making an optional member required) needs plan/1.",
   "x-rules": [
     "R1 ids: every part id (zones, connectors, forms, rules) is unique across the whole plan, not per family",
     "R2 references: every part id named anywhere (locator targets, endpoints, relief.around, dependencies, feature {part}) names a part of this plan; an unknown id makes the referring part malformed (reason UNKNOWN_REF)",
@@ -18,6 +18,8 @@
     "R11 required parts: a part with required true whose answer is unsupported or refused blocks approval (COMPOSITION §2.5); a required rule that can't be verified blocks readiness",
     "R12 notes and labels are free text: kept, shown, never treated as a verified requirement",
     "R13 provisional parts: a part is provisional when a lot has no library entry or its style (own or inherited from the zone or plan) is {pending}. Its cost and palette are a range; the approval artifact records each provisional part's cost range and fit box; the approval is kept while the fit stays inside the lot box and the cost inside the range, and the caller re-approves past the top of the range (rebinding when the bible exists)",
+    "R4b layout: program.lots.layout is one of street (supported), or ring, spiral, grid, organic (reserved, arriving in slice FL). A reserved layout is checked like any supported lots program and the part answers unsupported {block: layout.<name>}, never malformed. A layout is written only there: not as a connector kind (connector.ring_street, connector.grid) nor as a rule kind (rule.ring_layout, rule.layout_ring)",
+    "R4c aliases: zone kind district is a reserved alias of the program form {districts}: the part answers unsupported {block: program.districts} (never zone.district) until D1, so one idea has one block id",
     "R14 anchors: names are caller-supplied positions (PlanRequest.anchors) or the built-in claim_* ones; P0 never interprets a name. Steward passes stone, player, street_w, street_e, district_<id> and stockpile; an unknown anchor name used by a part is malformed (UNKNOWN_REF)"
   ],
   "x-defaults": {
@@ -67,9 +69,15 @@
     "entries": [
       { "id": "zone.standard", "sinceApi": "P0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/zone.standard" },
       { "id": "zone.outpost", "sinceApi": "P0", "schemaVersion": 0, "state": "reserved", "until": "D2" },
+      { "id": "zone.district", "sinceApi": "P0", "schemaVersion": 0, "state": "reserved", "until": "D1", "aliasOf": "program.districts", "note": "Reserved alias of the districts program form; the answer names program.districts (R4c)." },
       { "id": "program.flat_village", "sinceApi": "P0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/program.template" },
       { "id": "program.lots", "sinceApi": "P0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/program.lots" },
       { "id": "program.districts", "sinceApi": "P0", "schemaVersion": 0, "state": "reserved", "until": "D1" },
+      { "id": "layout.street", "sinceApi": "P0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/program.lots" },
+      { "id": "layout.ring", "sinceApi": "P0", "schemaVersion": 0, "state": "reserved", "until": "FL" },
+      { "id": "layout.spiral", "sinceApi": "P0", "schemaVersion": 0, "state": "reserved", "until": "FL" },
+      { "id": "layout.grid", "sinceApi": "P0", "schemaVersion": 0, "state": "reserved", "until": "FL" },
+      { "id": "layout.organic", "sinceApi": "P0", "schemaVersion": 0, "state": "reserved", "until": "FL" },
       { "id": "connector.street", "sinceApi": "P0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/connector.routed" },
       { "id": "connector.road", "sinceApi": "P0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/connector.routed" },
       { "id": "connector.path", "sinceApi": "P0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/connector.routed" },
@@ -100,11 +108,19 @@
       { "id": "form.scatter", "sinceApi": "P0", "schemaVersion": 0, "state": "reserved", "until": "F2" },
       { "id": "form.giant_tree", "sinceApi": "P0", "schemaVersion": 0, "state": "reserved", "until": "F3" },
       { "id": "form.hidden_room", "sinceApi": "P0", "schemaVersion": 0, "state": "reserved", "until": "7b" },
+      { "id": "form.crater", "sinceApi": "P0", "schemaVersion": 0, "state": "reserved", "until": "7c", "note": "A free-standing crater form. A whole-region crater is already the crater_works template (program.crater_works)." },
+      { "id": "form.hollow_mountain", "sinceApi": "P0", "schemaVersion": 0, "state": "reserved", "until": "7c" },
+      { "id": "form.waterfall", "sinceApi": "P0", "schemaVersion": 0, "state": "reserved", "until": "H" },
+      { "id": "form.seabed_site", "sinceApi": "P0", "schemaVersion": 0, "state": "reserved", "until": "later", "note": "Building under water; a later slice, not yet named." },
+      { "id": "form.ship_hull", "sinceApi": "P0", "schemaVersion": 0, "state": "reserved", "until": "unscheduled", "note": "Structures that move or float; not yet scheduled." },
+      { "id": "form.mast", "sinceApi": "P0", "schemaVersion": 0, "state": "reserved", "until": "unscheduled", "note": "Structures that move or float; not yet scheduled." },
       { "id": "rule.palette", "sinceApi": "P0", "schemaVersion": 0, "state": "reserved", "until": "RC", "draft": "#/$defs/rule.palette" },
       { "id": "rule.shape", "sinceApi": "P0", "schemaVersion": 0, "state": "reserved", "until": "RC", "draft": "#/$defs/rule.shape" },
       { "id": "rule.variety", "sinceApi": "P0", "schemaVersion": 0, "state": "reserved", "until": "RC", "draft": "#/$defs/rule.variety" },
       { "id": "rule.density", "sinceApi": "P0", "schemaVersion": 0, "state": "reserved", "until": "RC", "draft": "#/$defs/rule.density" },
       { "id": "rule.height_cap", "sinceApi": "P0", "schemaVersion": 0, "state": "reserved", "until": "RC", "draft": "#/$defs/rule.height_cap" },
+      { "id": "rule.stacked_floors", "sinceApi": "P0", "schemaVersion": 0, "state": "reserved", "until": "RC", "note": "Arcology: floors stacked in one volume. RC, or 7b if it needs the interior work." },
+      { "id": "rule.suspended", "sinceApi": "P0", "schemaVersion": 0, "state": "reserved", "until": "7b", "note": "Upside-down or hanging builds; 7b's other surfaces." },
       { "id": "locator.inside", "sinceApi": "P0", "schemaVersion": 1, "state": "supported" },
       { "id": "locator.near", "sinceApi": "P0", "schemaVersion": 1, "state": "supported" },
       { "id": "locator.adjacent", "sinceApi": "P0", "schemaVersion": 1, "state": "supported" },
@@ -341,19 +357,19 @@
       "type": "object", "required": ["lots"], "additionalProperties": false,
       "properties": {
         "lots": { "type": "array", "minItems": 1, "maxItems": 40, "items": { "$ref": "#/$defs/lot" } },
-        "layout": { "enum": ["street"], "description": "v0: street (flat_village's layout with its defaults). Other layouts arrive as catalogue entries (FL)." },
+        "layout": { "enum": ["street", "ring", "spiral", "grid", "organic"], "description": "How the lots are laid out. street: supported (flat_village's layout with its defaults). ring, spiral, grid and organic: reserved for slice FL, block ids layout.ring, layout.spiral, layout.grid and layout.organic; a lots program that names one answers unsupported {block: layout.<name>}. Write a free layout here, never as a connector kind (connector.ring_street, connector.grid) or a rule kind (rule.ring_layout)." },
         "shared": { "enum": ["square", "well", "none"] }
       }
     },
     "program.districts": {
       "type": "object", "required": ["districts"],
-      "description": "Reserved (D1): districts on survey candidates. Here so a plan can name it; dispatch answers unsupported {block: program.districts}.",
+      "description": "Districts: reserved program form (D1), block id program.districts. Write a settlement of several districts as a zone with program {districts: [...]}, or as zone kind district, a reserved alias that answers the same block. Here so a plan can name it; dispatch answers unsupported {block: program.districts} until D1 ships.",
       "properties": { "districts": { "type": "array", "maxItems": 16 } }
     },
     "program": {
       "oneOf": [ { "$ref": "#/$defs/program.template" }, { "$ref": "#/$defs/program.lots" }, { "$ref": "#/$defs/program.districts" } ],
       "oneOfMessage": "a program is {template, params?}, {lots, layout?} or {districts}",
-      "x-dispatch": { "on": ["template", "lots", "districts"], "block": "program.<template name> | program.lots | program.districts" }
+      "x-dispatch": { "on": ["template", "lots", "districts"], "block": "program.<template name> | program.lots | program.districts", "layout": "a lots program whose layout is reserved answers layout.<name> (R4b)" }
     },
 
     "zone.standard": {
@@ -490,7 +506,9 @@
         "replacedBy": { "$ref": "#/$defs/blockId" },
         "def": { "type": "string" },
         "draft": { "type": "string" },
-        "limits": { "type": "object" }
+        "limits": { "type": "object" },
+        "aliasOf": { "$ref": "#/$defs/blockId", "description": "A reserved alias: the answer names this block id instead of the entry's own, so one idea has one block id." },
+        "note": { "$ref": "#/$defs/text500" }
       }
     },
     "catalogue": {
