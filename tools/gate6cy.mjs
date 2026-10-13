@@ -28,7 +28,15 @@
 //     migrate a|b                   item 12: a: on 0.17.0 (GATE6CY_REF=v0.17.0 start) a half-built sharedCrate group and a per-site crate;
 //                                   b: this build: loads unchanged, builds finish as before (copy 1); adoptCrates moves the stock in with
 //                                   difference 0, cells restored (copy 2); downgrade (c/d) recorded
-//     apicompat                     item 14: tools/api-compat.mjs against the 0.19.0, 0.18.0, 0.17.0 apitest jars (each built from its tag) and the 0.19.0 surface
+//     c29unit                       C29's units: ApiC29Test (Sites.pause a default that throws, the features), C29CreditTest
+//     c29wait                       C29 item 1: a group removal waiting for a player in the site: the target left the feed at once
+//                                   (consumes nothing, reserves nothing, the next target is fed), the refund = what stood, credited once
+//     c29restart                    C29 item 2: the same with a save, leave and reopen mid-wait
+//     c29stage                      C29 item 4: undoStage waiting for a player (the other stage fed past it); a single stockpile road
+//                                   removal credited when its restore is written (in its RemoveResult)
+//     c29pause                      C29 item 3: Sites.pause (house and road): a paused target reserves nothing, others are fed past it;
+//                                   the state and order survive a reload; resumed, it is fed from its old position; refusals
+//     apicompat                     item 14: tools/api-compat.mjs against the 0.21.0, 0.20.0, 0.19.0 apitest jars (each built from its tag) and the 0.21.0 surface
 //     report                        REPORT.md over the step JSONs
 //
 // Evidence: artifacts/gate6c-y1/<step>.json in the main checkout (GATE6CY_OUT overrides), all.log, REPORT.md, spend.json ($0.00).
@@ -1212,6 +1220,334 @@ steps.migrate = async () => {
   throw new Error(`migrate part ${part}?`);
 };
 
+// ------------------------------------------------------------------ C29 (Steward round 9): removal leaves the feed; Sites.pause
+
+/** Item map minus item map (zero entries dropped). */
+const minus = (a, b) => { const m = {}; for (const k of new Set([...Object.keys(a ?? {}), ...Object.keys(b ?? {})])) { const d = (a?.[k] ?? 0) - (b?.[k] ?? 0); if (d) m[k] = d; } return m; };
+/** Half (rounded up) of every count. */
+const half = (m) => Object.fromEntries(Object.entries(m ?? {}).map(([k, v]) => [k, Math.ceil(v / 2)]));
+/** The player (creative, no gravity) in the middle of a box, one block above its floor. */
+async function standIn(bx) {
+  await cmd('/gamemode creative');
+  await cmd('/attribute @s minecraft:gravity base set 0');
+  const cx = Math.floor((bx.min[0] + bx.max[0]) / 2), cz = Math.floor((bx.min[2] + bx.max[2]) / 2);
+  await cmd(`/tp @s ${cx + 0.5} ${bx.min[1] + 2} ${cz + 0.5}`);
+  await sleep(1000);
+  return [cx, bx.min[1] + 2, cz];
+}
+async function standOut(f) {
+  await cmd('/attribute @s minecraft:gravity base set 0.08');
+  await stand(f.X + 40.5, f.y + 30, f.Z + 20.5, 'spectator');
+}
+/** Waits until a target's paid cells stop changing (it placed what its stock allows). */
+async function quiet(cons, id, ms = 4000, timeoutMs = 120_000) {
+  const end = Date.now() + timeoutMs;
+  let last = null;
+  while (Date.now() < end) {
+    const p = json((await cons.parts()).paidByTarget[id] ?? {});
+    if (p === last) return;
+    last = p;
+    await sleep(ms);
+  }
+}
+const paidOf = async (cons, id) => (await cons.parts()).paidByTarget[id] ?? {};
+const groupState = async (g) => (await api(`sgroup ${g}`))?.state;
+
+/**
+ * A (a one-house batch, first in the feed) half built from the stockpile; C (a standalone house of the owner, after A, needing the
+ * same items) starved behind A's reservation; the player stands in A's box. Returns the ids, the group and the conservation.
+ */
+async function c29Fixture(world) {
+  const f = await fixture(world);
+  const { X, Z, y } = f;
+  const b = await batch({ owner: OWNER, autoApprove: true, items: [cabin('A', [X, y, Z])] });
+  const A = b.items.A?.site;
+  const c = await later(`place cabin ${X + 30} ${y} ${Z} CONSTRUCTION unowned noactor 0 owner=${OWNER}`);
+  check(Boolean(A) && c.placed, `c29: A (a one-house batch) and C (a standalone house after it) placed (${json([A, c.siteId])})`);
+  const C = c.siteId;
+  const o = await api(`porder ${OWNER} ${A} ${C}`);
+  check(json(o) === json([A, C]), `c29: feed order A, C (${json(o)})`);
+  const cons = new Conservation(f.area);
+  await cons.start();
+  const st = await pstate();
+  const billA = st.targets[A].outstanding;
+  for (const [k, v] of Object.entries(half(billA))) await cons.insert(`stockpile:${OWNER}`, { [k]: v });
+  await quiet(cons, A);
+  await quiet(cons, C, 3000, 20_000);
+  const st1 = await pstate();
+  const paidA = await paidOf(cons, A);
+  check(sum(paidA) > 0 && sum(st1.targets[A].outstanding) > 0, `c29: A is half built from the stockpile (paid ${sum(paidA)}, outstanding ${sum(st1.targets[A].outstanding)})`);
+  check(st1.targets[A].reserves === true, `c29: A (building, first) reserves (${json(st1.targets[A])})`);
+  const bx = box((await siteOf(A)).restoreBox);
+  const at = await standIn(bx);
+  return { f, A, C, group: b.group, cons, billA, bx, at };
+}
+
+/**
+ * Item 1: a removal waiting for a player in the site. A leaves the feed at once: it consumes nothing during the wait, its
+ * reservation is released (C, behind it, is fed the units A needed), its outstanding leaves the stockpile's; the final refund is what
+ * actually stood; conservation exact.
+ */
+steps.c29wait = async () => {
+  const x = await c29Fixture('G6B Y C29 Wait');
+  const { f, A, C, group, cons } = x;
+  const out = { ids: { A, C, group }, standAt: x.at };
+  const L0 = (await pstate()).ledger;
+  const keys0 = (await pstate()).creditedKeys;
+  const paidA0 = await paidOf(cons, A);
+  const paidC0 = await paidOf(cons, C);
+  const builtA0 = (await siteOf(A)).built;
+  const pend = await api(`sgremove ${group} noforce ${OWNER}`);
+  await sleep(2000);
+  const g1 = await groupState(group);
+  const s1 = await pstate();
+  out.leaving = s1.targets[A];
+  check(g1 === 'REMOVING' && s1.targets[A]?.leaving === true && s1.targets[A]?.reserves === false,
+    `item 1: the removal waits for the player (group ${g1}); A left the feed at once: leaving, reserves nothing (${json(s1.targets[A])})`);
+  check(sum(s1.outstanding) === sum(s1.targets[C].outstanding), `item 1: A's outstanding left the stockpile's (outstanding ${sum(s1.outstanding)} = C's ${sum(s1.targets[C].outstanding)})`);
+  const api1 = await api(`pstate ${OWNER}`);
+  check(!(A in (api1?.outstandingByTarget ?? {})) && (C in (api1?.outstandingByTarget ?? {})), `item 1: the API's Stockpile.outstandingByTarget drops A, keeps C (${json(Object.keys(api1?.outstandingByTarget ?? {}))})`);
+  const pause = await api(`ppause ${A} true`);
+  check(pause?.refused?.reason === 'NOT_ALLOWED', `c29: Sites.pause of a target being removed refuses NOT_ALLOWED (${json(pause)})`);
+  // units A still needs, inserted while the removal waits: A must take none (before C29 it built on), C takes them
+  const needA = s1.targets[A].outstanding;
+  for (const [k, v] of Object.entries(needA)) await cons.insert(`stockpile:${OWNER}`, { [k]: v });
+  out.inserted = needA;
+  const p1 = await cons.point('waiting, fed');
+  await sleep(20_000);
+  const paidA1 = await paidOf(cons, A);
+  const paidC1 = await paidOf(cons, C);
+  const builtA1 = (await siteOf(A)).built;
+  const L1 = (await pstate()).ledger;
+  out.wait = { paidA: [sum(paidA0), sum(paidA1)], builtA: [builtA0, builtA1], paidC: [sum(paidC0), sum(paidC1)], consumed: minus(L1.consumed, L0.consumed) };
+  check(same(paidA0, paidA1) && builtA0 === builtA1, `item 1: A consumed nothing during the wait (paid ${sum(paidA0)} -> ${sum(paidA1)}, built ${builtA0} -> ${builtA1})`);
+  check(sum(paidC1) > sum(paidC0) && same(minus(L1.consumed, L0.consumed), minus(paidC1, paidC0)),
+    `item 1: A's reservation was released: C (behind it) was fed the units A needed, and every unit consumed in the wait is C's (C ${sum(paidC0)} -> ${sum(paidC1)}; consumed ${sum(minus(L1.consumed, L0.consumed))})`);
+  const s2 = await pstate();
+  check(await groupState(group) === 'REMOVING' && s2.targets[A]?.leaving === true, `item 1: still waiting after 20 s, A still out of the feed (${json(s2.targets[A])})`);
+  const p2 = await cons.point('waited 20 s');
+  check(exact(p1) && exact(p2), `item 1: conservation exact during the wait (${json(p1.diff)} ${json(p2.diff)})`);
+  // the player steps out: the removal goes on; A's refund is what stood
+  await standOut(f);
+  const r = await result(pend, 300_000);
+  await settle(2000);
+  const L2 = (await pstate()).ledger;
+  const ret = minus(L2.returned, L1.returned);
+  out.removal = { removed: r.removed, blockers: r.blockers, refund: r.refund, returned: ret, paidAtRemoval: paidA1 };
+  check(r.removed === true, `item 1: the removal ends removed=true once the player left (${json(r.blockers)})`);
+  check(same(ret, paidA1) && sum(ret) > 0, `item 1: the refund equals what was actually placed (returned ${sum(ret)} = A's paid standing ${sum(paidA1)})`);
+  check((await pstate()).creditedKeys === keys0 + 1, 'item 1: credited once (one key)');
+  const p3 = await cons.point('removed');
+  check(exact(p3), `item 1: conservation exact after the removal (${json(p3.diff)})`);
+  out.points = cons.points;
+  await leaveWorld();
+  return out;
+};
+
+/** Item 2: the same with a restart mid-wait: after the reload A is still out of the feed, the removal resumes and credits once. */
+steps.c29restart = async () => {
+  const W = 'G6B Y C29 Restart';
+  const x = await c29Fixture(W);
+  const { f, A, C, group, cons } = x;
+  const out = { ids: { A, C, group } };
+  const L0 = (await pstate()).ledger;
+  const keys0 = (await pstate()).creditedKeys;
+  await api(`sgremove ${group} noforce ${OWNER}`); // its future fails at the stop; the removal is saved and resumes
+  await sleep(2000);
+  check(await groupState(group) === 'REMOVING' && (await pstate()).targets[A]?.leaving === true, 'item 2: the removal waits for the player; A out of the feed');
+  const paidA0 = await paidOf(cons, A);
+  await cmd('/save-all flush');
+  await leaveWorld();
+  await openWorld(W);
+  await call('dev.survival.set', { on: true });
+  await sleep(3000);
+  const s1 = await pstate();
+  const g1 = await groupState(group);
+  out.afterReload = { group: g1, A: s1.targets[A] };
+  check(g1 === 'REMOVING' && s1.targets[A]?.leaving === true && s1.targets[A]?.reserves === false,
+    `item 2: after the reload the removal still waits and A is still out of the feed (group ${g1}, ${json(s1.targets[A])})`);
+  const needA = s1.targets[A].outstanding;
+  for (const [k, v] of Object.entries(needA)) await cons.insert(`stockpile:${OWNER}`, { [k]: v });
+  const paidC0 = await paidOf(cons, C);
+  await sleep(15_000);
+  const paidA1 = await paidOf(cons, A);
+  const paidC1 = await paidOf(cons, C);
+  out.wait = { paidA: [sum(paidA0), sum(paidA1)], paidC: [sum(paidC0), sum(paidC1)] };
+  check(same(paidA0, paidA1), `item 2: A consumed nothing across the restart and the wait (paid ${sum(paidA0)} -> ${sum(paidA1)})`);
+  check(sum(paidC1) > sum(paidC0), `item 2: C was fed past A (C ${sum(paidC0)} -> ${sum(paidC1)})`);
+  const p1 = await cons.point('reloaded, waiting');
+  check(exact(p1), `item 2: conservation exact after the reload (${json(p1.diff)})`);
+  const L1 = (await pstate()).ledger;
+  await standOut(f);
+  let g2;
+  for (let i = 0; i < 120 && (g2 = await groupState(group)) !== 'REMOVED'; i++) await sleep(1000);
+  await settle(2000);
+  const L2 = (await pstate()).ledger;
+  const ret = minus(L2.returned, L1.returned);
+  out.removal = { group: g2, returned: ret, paidAtRemoval: paidA1, returnedBeforeEnd: minus(L1.returned, L0.returned) };
+  check(g2 === 'REMOVED', `item 2: the resumed removal ends REMOVED once the player left (${g2})`);
+  check(same(ret, paidA1) && sum(ret) > 0 && sum(minus(L1.returned, L0.returned)) === 0,
+    `item 2: the refund (credited at the restore, not before) equals what was placed (returned ${sum(ret)} = paid ${sum(paidA1)})`);
+  check((await pstate()).creditedKeys === keys0 + 1, 'item 2: credited once (one key) across the restart');
+  const again = await later(`sgremove ${group} noforce ${OWNER}`, 120_000);
+  const L3 = (await pstate()).ledger;
+  check(again.removed === true && same(L3.returned, L2.returned), 'item 2: removing again answers removed=true and credits nothing');
+  const p2 = await cons.point('removed');
+  check(exact(p2), `item 2: conservation exact (${json(p2.diff)})`);
+  out.points = cons.points;
+  await leaveWorld();
+  return out;
+};
+
+/**
+ * Item 4: undoStage (the top stage's house waits for the player in it, the other stage's house is fed past it) and a single
+ * stockpile road removal (credited when its restore is written, in its RemoveResult). Region removal is removeGroup's path (item 1):
+ * regions are INSTANT only in this version, so no region has a stockpile member.
+ */
+steps.c29stage = async () => {
+  const f = await fixture('G6B Y C29 Stage');
+  const { X, Z, y } = f;
+  const out = {};
+  const roadPts = await strip(X, y, Z + 70);
+  const b = await batch({ owner: OWNER, autoApprove: true, stages: [{ name: 's1', items: ['h1'] }, { name: 's2', items: ['h2'] }],
+    items: [cabin('h1', [X, y, Z], { stage: 's1' }), cabin('h2', [X + 30, y, Z], { stage: 's2' })] });
+  const h1 = b.items.h1?.site, h2 = b.items.h2?.site;
+  check(Boolean(h1 && h2), `stage: two stages of one house each placed (${json(b.view.items?.map((i) => [i.key, i.status, i.message]))})`);
+  const road = await later(`road ${json({ points: roadPts, width: 1, owner: OWNER, mode: 'CONSTRUCTION', tag: 'c29road' })}`);
+  check(road.placed, `stage: a standalone construction road (${json(road.refusals ?? road.siteId)})`);
+  const R = road.siteId;
+  await api(`porder ${OWNER} ${R} ${h2} ${h1}`);
+  const cons = new Conservation(f.area);
+  await cons.start();
+  const st = await pstate();
+  for (const [k, v] of Object.entries(half(st.targets[h2].outstanding))) await cons.insert(`stockpile:${OWNER}`, { [k]: v });
+  for (const [k, v] of Object.entries(st.targets[R].outstanding)) await cons.insert(`stockpile:${OWNER}`, { [k]: v });
+  await quiet(cons, h2);
+  check((await waitBuilt([R], 120_000)).length === 1, 'stage: the road BUILT from the stockpile');
+  const keys0 = (await pstate()).creditedKeys;
+  // ---- undoStage s2 with the player in h2
+  const bx = box((await siteOf(h2)).restoreBox);
+  await standIn(bx);
+  const L0 = (await pstate()).ledger;
+  const pend = await api(`sundo ${b.group} s2 force`);
+  await sleep(2000);
+  const s1 = await pstate();
+  check(s1.targets[h2]?.leaving === true && s1.targets[h2]?.reserves === false, `item 4: undoStage s2 waits for the player; h2 left the feed (${json(s1.targets[h2])})`);
+  const paid0 = await paidOf(cons, h2);
+  const p1h1 = await paidOf(cons, h1);
+  for (const [k, v] of Object.entries(s1.targets[h2].outstanding)) await cons.insert(`stockpile:${OWNER}`, { [k]: v });
+  await sleep(15_000);
+  const paid1 = await paidOf(cons, h2);
+  const p2h1 = await paidOf(cons, h1);
+  out.stage = { paidH2: [sum(paid0), sum(paid1)], paidH1: [sum(p1h1), sum(p2h1)] };
+  check(same(paid0, paid1), `item 4: h2 consumed nothing while its stage undo waited (${sum(paid0)} -> ${sum(paid1)})`);
+  check(sum(p2h1) > sum(p1h1), `item 4: h1 (the other stage, behind h2) was fed past it (${sum(p1h1)} -> ${sum(p2h1)})`);
+  const pw = await cons.point('stage undo waiting');
+  check(exact(pw), `item 4: conservation exact during the wait (${json(pw.diff)})`);
+  const L1 = (await pstate()).ledger;
+  await standOut(f);
+  const r = await result(pend, 300_000);
+  await settle(2000);
+  const L2 = (await pstate()).ledger;
+  const ret = minus(L2.returned, L1.returned);
+  out.stage.removal = { removed: r.removed, returned: ret, before: minus(L1.returned, L0.returned) };
+  check(r.removed === true && same(ret, paid1) && sum(ret) > 0, `item 4: undoStage ends removed; its refund equals what h2 had placed (${sum(ret)} = ${sum(paid1)}; ${json(r.blockers ?? r.error ?? [])})`);
+  const p2 = await cons.point('stage undone');
+  check(exact(p2), `item 4: conservation exact after the stage undo (${json(p2.diff)})`);
+  // ---- a single road removal: credited when its restore is written, reported in its RemoveResult
+  const paidR = await paidOf(cons, R);
+  const L3 = (await pstate()).ledger;
+  const rr = await later(`remove ${R} ${OWNER} noforce`, 300_000);
+  await settle(3000);
+  const L4 = (await pstate()).ledger;
+  const retR = minus(L4.returned, L3.returned);
+  out.road = { paid: paidR, returned: retR, refund: rr.refund };
+  check(rr.removed && same(retR, paidR) && sum(retR) > 0, `item 4: the single road removal credits its paid cells once restored (${sum(retR)} = ${sum(paidR)})`);
+  check(same(rr.refund, paidR), `c29: the road's RemoveResult.refund holds the credited refunds (${json(rr.refund)})`);
+  check((await pstate()).creditedKeys === keys0 + 2, 'item 4: one key each (the stage house, the road)');
+  const p3 = await cons.point('road removed');
+  check(exact(p3), `item 4: conservation exact after the road removal (${json(p3.diff)})`);
+  out.points = cons.points;
+  await leaveWorld();
+  return out;
+};
+
+/**
+ * Item 3: Sites.pause. A, B, C, D (standalone houses, placement order) and a road R; B paused: it reserves nothing, keeps its state;
+ * feeding exactly A's and C's bills builds A and C (C fed past B), B places nothing; after a reload B is still paused at its place;
+ * resumed, B is fed before D (its old position). Refusals: an unknown id, a built target.
+ */
+steps.c29pause = async () => {
+  const W = 'G6B Y C29 Pause';
+  const f = await fixture(W);
+  const { X, Z, y } = f;
+  const out = {};
+  const ids = {};
+  for (const [k, dx] of [['A', 0], ['B', 30], ['C', 60], ['D', 90]]) {
+    const p = await later(`place cabin ${X + dx} ${y} ${Z} CONSTRUCTION unowned noactor 0 owner=${OWNER}`);
+    ids[k] = p.siteId;
+  }
+  const roadPts = await strip(X, y, Z + 70);
+  const road = await later(`road ${json({ points: roadPts, width: 1, owner: OWNER, mode: 'CONSTRUCTION', tag: 'c29pause' })}`);
+  ids.R = road.siteId;
+  out.ids = ids;
+  check(Object.values(ids).every(Boolean), `pause: four houses and a road placed (${json(ids)})`);
+  const order0 = await api(`porder ${OWNER}`);
+  check(['A', 'B', 'C', 'D'].map((k) => order0.indexOf(ids[k])).every((v, i, a) => v >= 0 && (i === 0 || v > a[i - 1])), `pause: default order A, B, C, D (${json(order0)})`);
+  const pb = await api(`ppause ${ids.B} true`);
+  const pr = await api(`ppause ${ids.R} true`);
+  check(pb?.paused === true && pr?.paused === true, `item 3: Sites.pause of a house and of a road (${json([pb, pr])})`);
+  const again = await api(`ppause ${ids.B} true`);
+  check(again?.paused === true, 'item 3: pausing a paused target is a no-op');
+  const unk = await api('ppause s99999 true');
+  check(unk?.refused?.reason === 'FIELD_LIMIT' && /s99999/.test(unk.refused.message), `item 3: an unknown id refuses FIELD_LIMIT naming it (${json(unk)})`);
+  const s0 = await pstate();
+  check(s0.targets[ids.B]?.paused === true && s0.targets[ids.B]?.reserves === false && s0.targets[ids.R]?.paused === true,
+    `item 3: B is paused and reserves nothing; R paused (${json([s0.targets[ids.B], s0.targets[ids.R]])})`);
+  check(json(s0.feedOrder) === json(order0), `item 3: pausing keeps the order (${json(s0.feedOrder)})`);
+  const cons = new Conservation(f.area);
+  await cons.start();
+  const bill = s0.targets[ids.A].outstanding; // every house is a cabin: the same bill
+  for (const [k, v] of Object.entries(bill)) await cons.insert(`stockpile:${OWNER}`, { [k]: 2 * v });
+  const done = await waitBuilt([ids.A, ids.C], 240_000);
+  await settle(3000);
+  const s1 = await pstate();
+  const paid1 = (await cons.parts()).paidByTarget;
+  out.fed = { done, B: paid1[ids.B], D: paid1[ids.D], stock: s1.stock };
+  check(done.length === 2, `item 3: A and C BUILT: C was fed past the paused B (${json(done)})`);
+  check(sum(paid1[ids.B]) === 0 && sum(paid1[ids.D]) === 0 && sum(s1.stock) === 0, `item 3: B (paused) placed nothing; D got nothing; the stock is spent (B ${sum(paid1[ids.B])}, D ${sum(paid1[ids.D])})`);
+  const built = await api(`ppause ${ids.A} true`);
+  check(built?.refused?.reason === 'FIELD_LIMIT', `item 3: pausing a BUILT target refuses FIELD_LIMIT (${json(built)})`);
+  const p1 = await cons.point('fed past B');
+  check(exact(p1), `item 3: conservation exact (${json(p1.diff)})`);
+  // the state survives a reload
+  const orderBefore = (await pstate()).feedOrder;
+  await cmd('/save-all flush');
+  await leaveWorld();
+  await openWorld(W);
+  await call('dev.survival.set', { on: true });
+  await sleep(3000);
+  const s2 = await pstate();
+  out.reload = { order: [orderBefore, s2.feedOrder], B: s2.targets[ids.B], R: s2.targets[ids.R] };
+  check(s2.targets[ids.B]?.paused === true && s2.targets[ids.R]?.paused === true && json(s2.feedOrder) === json(orderBefore)
+    && s2.feedOrder.indexOf(ids.B) < s2.feedOrder.indexOf(ids.D), `item 3: after a reload B and R are still paused, the order unchanged (${json(s2.feedOrder)})`);
+  // resume: B re-enters at its old position, before D
+  const rs = await api(`ppause ${ids.B} false`);
+  check(rs?.paused === false && (await pstate()).targets[ids.B]?.reserves === true, `item 3: B resumed reserves again (${json(rs)})`);
+  for (const [k, v] of Object.entries(bill)) await cons.insert(`stockpile:${OWNER}`, { [k]: v });
+  const db = await waitBuilt([ids.B], 240_000);
+  await settle(3000);
+  const paid2 = (await cons.parts()).paidByTarget;
+  out.resumed = { built: db, D: paid2[ids.D] };
+  check(db.length === 1 && sum(paid2[ids.D]) === 0, `item 3: resumed, B is fed first (BUILT) and D, after it, got nothing (D ${sum(paid2[ids.D])})`);
+  await api(`ppause ${ids.R} false`);
+  const p2 = await cons.point('resumed');
+  check(exact(p2), `item 3: conservation exact (${json(p2.diff)})`);
+  out.points = cons.points;
+  await leaveWorld();
+  return out;
+};
+
 // ------------------------------------------------------------------ item 1 (Y1's part) and item 14
 
 steps.unit = async () => {
@@ -1231,10 +1567,32 @@ steps.unit = async () => {
   return out;
 };
 
+/** This checkout's ArchitectApi.VERSION (a placeholder on a slice branch; the coordinator sets it at merge). */
+const API_NOW = /String VERSION = "([0-9.]+)"/.exec(fs.readFileSync(path.join(root, 'mod', 'src', 'main', 'java', 'dev', 'larattalabs', 'architect', 'api', 'ArchitectApi.java'), 'utf8'))[1];
+
+/** C29's unit part: ApiC29Test (Sites.pause a default that throws, the features), C29CreditTest (a road removal's credit saved with its job). */
+steps.c29unit = async () => {
+  const env = { ...process.env, JAVA_HOME: process.env.JAVA_HOME ?? '/opt/homebrew/opt/openjdk@25', GRADLE_USER_HOME: process.env.GRADLE_USER_HOME ?? path.join(root, '.gradle-home') };
+  const g = spawnSync('./gradlew', ['test', '--offline', '--tests', '*ApiC29Test', '--tests', '*C29CreditTest', '--tests', '*ApiRulesTest'], { cwd: path.join(root, 'mod'), env, encoding: 'utf8', timeout: 1_800_000 });
+  const xml = (n) => {
+    const f = path.join(root, 'mod', 'build', 'test-results', 'test', `TEST-dev.larattalabs.architect.${n}.xml`);
+    const t = fs.existsSync(f) ? fs.readFileSync(f, 'utf8') : '';
+    const m = /tests="(\d+)" skipped="(\d+)" failures="(\d+)" errors="(\d+)"/.exec(t);
+    return m ? { tests: +m[1], failures: +m[3] + +m[4] } : null;
+  };
+  const out = { code: g.status, api: xml('api.ApiC29Test'), credit: xml('site.C29CreditTest'), rules: xml('apiimpl.ApiRulesTest') };
+  check(g.status === 0 && out.api?.tests >= 3 && !out.api.failures && out.credit?.tests >= 3 && !out.credit.failures && out.rules?.tests >= 1 && !out.rules.failures,
+    `C29 unit: ApiC29Test ${json(out.api)}, C29CreditTest ${json(out.credit)}, ApiRulesTest ${json(out.rules)}`);
+  spendZero();
+  return out;
+};
+
 steps.apicompat = async () => {
-  const y1 = path.join(MAIN_ART, 'gate6c-y1');
-  const jars = [['1.16.0 apitest', [path.join(y1, 'v0190', 'architect_apitest-0.19.0.jar')]], ['1.15.0 apitest', [path.join(y1, 'v0180', 'architect_apitest-0.18.0.jar')]],
-    ['1.14.0 apitest', [path.join(y1, 'v0170', 'architect_apitest-0.17.0.jar')]], ['1.16.0 surface', ['--surface', path.join(y1, 'v0190', 'architect_mc-0.19.0.jar')]]];
+  // (C29) the 0.21.0 (built from tag v0.21.0 by C29), 0.20.0 and 0.19.0 (SCH's sets) apitest jars, and the 0.21.0 surface
+  const sch = path.join(MAIN_ART, 'gate6c-sch');
+  const c29 = path.join(MAIN_ART, 'gate6c-c29', 'v0210');
+  const jars = [['1.18.0 apitest', [path.join(c29, 'architect_apitest-0.21.0.jar')]], ['1.17.0 apitest', [path.join(sch, 'v0200', 'architect_apitest-0.20.0.jar')]],
+    ['1.16.0 apitest', [path.join(sch, 'v0190', 'architect_apitest-0.19.0.jar')]], ['1.18.0 surface', ['--surface', path.join(c29, 'architect_mc-0.21.0.jar')]]];
   const lines = [];
   let ok = 0;
   for (const [label, args] of jars) {
@@ -1248,7 +1606,9 @@ steps.apicompat = async () => {
   if (state.dev || (await connect(5_000).then(() => true).catch(() => false))) {
     if (!(await call('dev.state')).inWorld) await openWorld(SURV);
     const v = await api('apiy1');
-    check(v.version === '1.17.0' && v.features.includes('stockpile') && v.stockpileCrates === 16, `item 14: apitest apiy1 (${json(v)})`);
+    check(v.version === API_NOW && v.features.includes('stockpile') && v.stockpileCrates === 16, `item 14: apitest apiy1 (${json(v)})`);
+    const c = await api('apic29');
+    check(c.version === API_NOW && c.features.includes('targetPause') && c.features.includes('removalLeavesFeed'), `C29: apitest apic29 (${json(c)})`);
   }
   spendZero();
   return { ok, of: jars.length };
@@ -1256,7 +1616,8 @@ steps.apicompat = async () => {
 
 steps.report = async () => {
   const rows = [];
-  for (const s of ['unit', 'store', 'order', 'unloaded', 'refunds', 'overflow', 'once', 'restart-a', 'restart-b', 'restart-kill', 'restart-c', 'gone', 'dissolve', 'migrate-a', 'migrate-b', 'migrate-c', 'migrate-d', 'apicompat']) {
+  for (const s of ['unit', 'store', 'order', 'unloaded', 'refunds', 'overflow', 'once', 'restart-a', 'restart-b', 'restart-kill', 'restart-c', 'gone', 'dissolve', 'migrate-a', 'migrate-b', 'migrate-c', 'migrate-d',
+    'c29unit', 'c29wait', 'c29restart', 'c29stage', 'c29pause', 'apicompat']) {
     const f = path.join(OUT, `${s}.json`);
     if (!fs.existsSync(f)) { rows.push(`| ${s} | not run | |`); continue; }
     const j = JSON.parse(fs.readFileSync(f, 'utf8'));

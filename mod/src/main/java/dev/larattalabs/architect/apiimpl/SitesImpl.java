@@ -775,4 +775,15 @@ final class SitesImpl implements dev.larattalabs.architect.api.Sites {
 			throw refused(e);
 		}
 	}
+
+	// ------------------------------------------------------------------ 1.19.0 (C29)
+
+	@Override
+	public void pause(String targetId, boolean paused) {
+		try {
+			dev.larattalabs.architect.site.Builder.pauseTarget(server, targetId, paused);
+		} catch (Sites.SiteException e) {
+			throw refused(e);
+		}
+	}
 }

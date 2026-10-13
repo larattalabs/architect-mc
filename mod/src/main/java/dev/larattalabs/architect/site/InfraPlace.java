@@ -469,7 +469,7 @@ public final class InfraPlace {
 		if (!cover.isEmpty() && covered == Sites.Covered.REFUSE) {
 			throw new Sites.SiteException(Reason.COVERED, cover.size() + " site(s) cover cells of " + id + " (" + String.join(", ", cover) + ")");
 		}
-		RoadBuilder.beforeRemove(level, i); // 6c 0c (C16): a construction road's refunds and the group's crate
+		Groups.Credit credit = RoadBuilder.beforeRemove(level, i); // 6c 0c (C16): a construction road's refunds and the group's crate
 		List<String> cascaded = new ArrayList<>();
 		List<String> infraCover = new ArrayList<>();
 		if (!cover.isEmpty() && covered == Sites.Covered.CASCADE) {
@@ -516,6 +516,7 @@ public final class InfraPlace {
 			notes.addAll(handover(level, i));
 		}
 		RestoreJob job = new RestoreJob(id, RestoreJob.REMOVE, null, null);
+		job.credit = credit; // C29: a stockpile road's refunds, credited once its restore is written
 		CompletableFuture<Sites.Removed> f = new CompletableFuture<>();
 		job.futures.add(f);
 		Placement.add(level.getServer(), job);
