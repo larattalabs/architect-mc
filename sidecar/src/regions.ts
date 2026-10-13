@@ -56,6 +56,9 @@ type TilesMsg = z.infer<typeof RegionTilesRequestMsg>;
 
 /** Tiles one connection may have queued or in flight per plan (the mod keeps W outstanding; this only stops a runaway client). */
 export const MAX_PENDING_TILES = 256;
+/** (6c P0) A plan-check cache keeps an owner's last 256 checks, each at most 24 h. */
+export const PLAN_CACHE_CHECKS = 256;
+export const PLAN_CACHE_MS = 24 * 3600_000;
 /** IRs kept in memory (each at most 4 MB of JSON). */
 export const IR_CACHE_SIZE = 8;
 /** (6b) The blob store kind of a region side blob (kit/REGIONS.md "Protocol (2, additive)"). */
@@ -118,7 +121,7 @@ export interface KitInfo {
   /** KINDS_FORMAT2, [] without one */
   irKinds: string[];
   /** the plan CLI takes --blobs-out / --volumes; the kit has check, preview, catalogue (tools/region.mjs and the modules) */
-  caps: { blobsOut: boolean; volumes: boolean; check: boolean; preview: boolean; catalogue: boolean; keepOut: boolean; stamps: boolean };
+  caps: { blobsOut: boolean; volumes: boolean; check: boolean; preview: boolean; catalogue: boolean; keepOut: boolean; stamps: boolean; planCache?: boolean };
 }
 
 /** (6b) The side blob shas a format-2 IR names (`blobs: {name: {sha, bytes, kind}}`); format-1 blobs are inline: none. */
@@ -265,6 +268,7 @@ export class Regions {
       catalogue: /['"]catalogue['"]/.test(tool),
       keepOut: tool.includes("'keep-out'"),
       stamps: /['"]?stamps['"]?\s*:\s*1/.test(tool), // (6c F2) the local stamp library
+      planCache: tool.includes("'plan-cache'"), // (6c P0) the plan check's per-part cache
     };
     const perm = permissionFlag();
     try {
@@ -340,6 +344,8 @@ export class Regions {
     const dir = fs.realpathSync(this.planDir(planId));
     fs.copyFileSync(program.file, path.join(dir, 'program.mjs'));
     const passes = declaredPasses(fs.readFileSync(program.file, 'utf8'));
+    // (6c P0) a plan check: the owner's per-part cache (read by the kit), filled after the check
+    const planCache = msg.planCache !== undefined ? this.planCacheDir(msg.planCache) : undefined;
     fs.writeFileSync(path.join(dir, 'survey.bin'), survey);
     fs.writeFileSync(path.join(dir, 'params.json'), JSON.stringify(msg.params));
     if (info.caps.blobsOut) fs.mkdirSync(path.join(dir, 'blobs'), { recursive: true });
@@ -364,12 +370,13 @@ export class Regions {
       ...(volumes.length ? { volumes: volumes.map((v) => ({ ...(v.name ? { name: v.name } : {}), sha: v.sha, blobId: v.blobId, box: v.box })) } : {}),
       ...(keepOut.length ? { keepOut } : {}),
       ...(passes.length ? { passes } : {}),
+      ...(planCache ? { planCheck: true } : {}),
       createdAt: this.host.now(),
     };
     fs.writeFileSync(path.join(dir, 'request.json'), JSON.stringify(request, null, 2));
     this.host.log.info(`region plan ${planId}: ${program.label}, claim ${msg.claim.minX},${msg.claim.minZ}..${msg.claim.maxX},${msg.claim.maxZ} y ${msg.claim.minY}..${msg.claim.maxY}, seed ${seed}${bible ? `, bible ${bible.id} v${bible.version}` : ''}${volumes.length ? `, ${volumes.length} volume${volumes.length === 1 ? '' : 's'}` : ''}${check ? '' : ', no check'}${passes.length ? `, passes ${passes.join(', ')} (${Math.round(this.cfg.passPlanMs / 1000)} s, ${this.cfg.passPlanHeapMb} MB)` : ''}`);
     this.planning.add(planId);
-    const p = this.withPlanSlot(() => this.runPlan(planId, dir, program, { seed, claim: msg.claim, hasBible, request, check, volumes: volumes.length > 0, keepOut: keepOut.length > 0, passes })).finally(() => this.planning.delete(planId));
+    const p = this.withPlanSlot(() => this.runPlan(planId, dir, program, { seed, claim: msg.claim, hasBible, request, check, volumes: volumes.length > 0, keepOut: keepOut.length > 0, passes, planCache, previewViews: msg.previewViews, timeoutMs: msg.timeoutMs, heapMb: msg.heapMb })).finally(() => this.planning.delete(planId));
     this.running.add(p);
     void p.finally(() => this.running.delete(p));
     return { planId, seed };
@@ -438,7 +445,41 @@ export class Regions {
     }
   }
 
-  planArgs(dir: string, program: ProgramRef, o: { seed: string; claim: PlanMsg['claim']; hasBible: boolean; volumes?: boolean; keepOut?: boolean }): string[] {
+  /**
+   * (6c P0) An owner's plan-check cache dir, <data>/regions/plancache/<sha256(owner) 32 hex>/ (made on first use): `<key>.json` entries
+   * the kit reads (`--plan-cache`), and `checks/<planId>.json` manifests (which keys a check wrote, and when) that prune it.
+   */
+  planCacheDir(owner: string): string {
+    const d = path.join(this.host.config.dataDir, 'regions', 'plancache', sha256(owner).slice(0, 32));
+    fs.mkdirSync(path.join(d, 'checks'), { recursive: true });
+    return fs.realpathSync(d);
+  }
+
+  /**
+   * (6c P0) After a check: its cache entries (the plan dir's plancache/) into the owner's dir, then the prune: checks older than 24 h
+   * or past the newest 256 are dropped, and every entry no kept check names.
+   */
+  storePlanCache(dir: string, cacheDir: string, planId: string): number {
+    const src = path.join(dir, 'plancache');
+    const keys = fs.existsSync(src) ? fs.readdirSync(src).filter((f) => /^[0-9a-f]{64}\.json$/.test(f)).sort() : [];
+    for (const f of keys) {
+      const tmp = path.join(cacheDir, `${f}.${process.pid}.tmp`);
+      fs.copyFileSync(path.join(src, f), tmp);
+      fs.renameSync(tmp, path.join(cacheDir, f));
+    }
+    fs.writeFileSync(path.join(cacheDir, 'checks', `${planId}.json`), JSON.stringify({ at: this.host.now(), keys: keys.map((f) => f.slice(0, 64)) }));
+    const now = this.host.now();
+    const checks = fs.readdirSync(path.join(cacheDir, 'checks')).filter((f) => f.endsWith('.json')).map((f) => {
+      try { return { f, ...(JSON.parse(fs.readFileSync(path.join(cacheDir, 'checks', f), 'utf8')) as { at: number; keys: string[] }) }; } catch { return { f, at: 0, keys: [] as string[] }; }
+    }).sort((a, b) => b.at - a.at || (a.f < b.f ? -1 : 1));
+    const keep = checks.filter((c, i) => i < PLAN_CACHE_CHECKS && now - c.at <= PLAN_CACHE_MS);
+    for (const c of checks) if (!keep.includes(c)) fs.rmSync(path.join(cacheDir, 'checks', c.f), { force: true });
+    const live = new Set(keep.flatMap((c) => c.keys));
+    for (const f of fs.readdirSync(cacheDir)) if (/^[0-9a-f]{64}\.json$/.test(f) && !live.has(f.slice(0, 64))) fs.rmSync(path.join(cacheDir, f), { force: true });
+    return keys.length;
+  }
+
+  planArgs(dir: string, program: ProgramRef, o: { seed: string; claim: PlanMsg['claim']; hasBible: boolean; volumes?: boolean; keepOut?: boolean; planCache?: string }): string[] {
     const c = o.claim;
     const caps = this.kitInfo().caps;
     return [
@@ -456,6 +497,7 @@ export class Regions {
       ...(o.volumes ? ['--volumes', path.join(dir, 'volumes')] : []),
       ...(o.keepOut ? ['--keep-out', path.join(dir, 'keepout.json')] : []),
       ...(this.stampsDir() ? ['--stamps', this.stampsDir()!] : []),
+      ...(o.planCache && caps.planCache ? ['--plan-cache', o.planCache] : []),
       '--out',
       dir,
       '--json',
@@ -518,7 +560,7 @@ export class Regions {
     planId: string,
     dir: string,
     program: ProgramRef,
-    o: { seed: string; claim: PlanMsg['claim']; hasBible: boolean; request: Record<string, unknown>; check: boolean; volumes: boolean; keepOut?: boolean; passes?: string[] },
+    o: { seed: string; claim: PlanMsg['claim']; hasBible: boolean; request: Record<string, unknown>; check: boolean; volumes: boolean; keepOut?: boolean; passes?: string[]; planCache?: string; previewViews?: readonly string[]; timeoutMs?: number; heapMb?: number },
   ): Promise<void> {
     const t0 = Date.now();
     const fail = (message: string) => {
@@ -535,7 +577,10 @@ export class Regions {
       // a stale ir.json from nowhere must not count
       fs.rmSync(path.join(dir, 'ir.json'), { force: true });
       const stamps = this.stampsDir();
-      const r = await this.runKit(dir, this.planArgs(dir, program, o), { ...this.planBudget(o.passes ?? []), extraReads: [...(program.bundled ? [] : [fs.realpathSync(this.cfg.programsDir)]), ...(stamps ? [stamps] : [])], what: 'plan' });
+      // (6c P0) a check may only lower the program's budget (maxMs plus its grace, maxHeapMb)
+      const b = this.planBudget(o.passes ?? []);
+      const budget = { timeoutMs: Math.min(b.timeoutMs, o.timeoutMs ?? b.timeoutMs), heapMb: Math.min(b.heapMb, o.heapMb ?? b.heapMb) };
+      const r = await this.runKit(dir, this.planArgs(dir, program, o), { ...budget, extraReads: [...(program.bundled ? [] : [fs.realpathSync(this.cfg.programsDir)]), ...(stamps ? [stamps] : []), ...(o.planCache ? [o.planCache] : [])], what: 'plan' });
       const ms = Date.now() - t0;
       if (!r.ok) return fail(r.message);
       const out = r.out;
@@ -596,7 +641,22 @@ export class Regions {
       const needVolumes = Array.isArray(kitPlan.needVolumes) ? kitPlan.needVolumes : Array.isArray(out.needVolumes) ? out.needVolumes : [];
       this.host.log.info(`region plan ${planId} planned in ${ms} ms: IR format ${irFormat}, ${bytes.length} bytes, sha ${irSha.slice(0, 12)}${irBlobId ? `, blob ${irBlobId}` : ''}${blobs.length ? `, ${blobs.length} side blob${blobs.length === 1 ? '' : 's'}` : ''}`);
       // (6b) the checker, then the previews: their own limit, together
-      const checked = o.check ? await this.checkAndRender(planId, dir) : {};
+      const checked = o.check ? await this.checkAndRender(planId, dir, o.previewViews) : {};
+      // (6c P0) a plan check's answer and artifact (the kit wrote plancheck.json, artifact.json, classmap.png), its cache entries
+      let planCheck: Record<string, unknown> | undefined;
+      if (o.planCache && fs.existsSync(path.join(dir, 'plancheck.json'))) {
+        try {
+          planCheck = obj(JSON.parse(fs.readFileSync(path.join(dir, 'plancheck.json'), 'utf8')));
+          const pv = obj(planCheck.preview);
+          const cm = obj(pv.classMap);
+          if (typeof cm.file === 'string' && fs.existsSync(path.join(dir, cm.file))) pv.classMap = { ...cm, path: path.join(dir, cm.file) };
+          if (fs.existsSync(path.join(dir, 'artifact.json'))) planCheck.artifact = fs.readFileSync(path.join(dir, 'artifact.json'), 'utf8');
+          const n = this.storePlanCache(dir, o.planCache, planId);
+          this.host.log.info(`region plan ${planId}: plan check ${String(planCheck.overall)}${planCheck.artifactSha ? `, artifact ${String(planCheck.artifactSha).slice(0, 12)}` : ''}, ${n} cache entr${n === 1 ? 'y' : 'ies'}`);
+        } catch (e) {
+          return fail(`the plan check's answer is unreadable: ${(e as Error).message}`);
+        }
+      }
       fs.writeFileSync(
         path.join(dir, 'plan.json'),
         JSON.stringify(
@@ -629,6 +689,7 @@ export class Regions {
         ...(checked.checkMs !== undefined ? { checkMs: checked.checkMs } : {}),
         ...(checked.renderMs !== undefined ? { renderMs: checked.renderMs } : {}),
         ...(checked.checkError ? { checkError: truncate(checked.checkError, 4000) } : {}),
+        ...(planCheck ? { planCheck } : {}),
       } as Outbound);
     } catch (e) {
       this.host.log.error(`region plan ${planId}: ${(e as Error).stack ?? e}`);
@@ -644,7 +705,7 @@ export class Regions {
    * (6b) After a good plan: the kit's check, then every preview, in the plan sandbox, within regionCheckMs together. A
    * failure is reported (`checkError`), not a failed plan: the IR is good.
    */
-  private async checkAndRender(planId: string, dir: string): Promise<{ report?: Record<string, unknown>; previews?: Record<string, string[]>; sitePlan?: Record<string, unknown>; checkMs?: number; renderMs?: number; checkError?: string }> {
+  private async checkAndRender(planId: string, dir: string, views: readonly string[] = PREVIEW_VIEWS): Promise<{ report?: Record<string, unknown>; previews?: Record<string, string[]>; sitePlan?: Record<string, unknown>; checkMs?: number; renderMs?: number; checkError?: string }> {
     const caps = this.kitInfo().caps;
     if (!caps.check && !caps.preview) return { checkError: `the kit (${this.kitInfo().kitVersion}) has no checker or previews yet` };
     const end = Date.now() + this.cfg.checkMs;
@@ -659,7 +720,7 @@ export class Regions {
     } else errors.push('check: the kit has no checker yet');
     if (caps.preview) {
       this.progress(planId, 'rendering');
-      const p = await this.runPreview(dir, PREVIEW_VIEWS, undefined, end - Date.now());
+      const p = await this.runPreview(dir, views, undefined, end - Date.now());
       out.renderMs = p.ms;
       if (p.ok) {
         out.previews = p.paths;
