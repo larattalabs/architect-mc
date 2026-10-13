@@ -16,6 +16,8 @@
 //                 flat-misc (7, 8, 10, 12, commands)
 //     natural     items 5 (E-normal) and 6 on a corner of S3's pinned claim (6b's seed world): five overlapping strokes, a cave carve
 //                 (M3 0 floating, M4 0 breaches, judged on the realised dumps) and a melt, all undone; item 9 (own CPU, BAR)
+//     felling     (v0.24.1, C31) felling stays within the region's bounds: a tree straddling the cutter's protected area, one resting
+//                 on another owner's region, one wholly inside the claim; no forbidden cell changes, each undo exact (headless)
 //     report      REPORT.md over the step JSONs
 //
 // Evidence: artifacts/gate6c-b/<step>.json in the main checkout (GATE6CB_OUT overrides), all.log, REPORT.md, spend.json.
@@ -469,6 +471,114 @@ steps.ingame = async () => {
   return parts;
 };
 
+// ------------------------------------------------------------------ in game: C31, felling stays within the region's bounds
+
+// (v0.24.1, CONTRACT "C31 as built") A raise over a trunk's base removes one log: the trunk is felled (6a's tree rule), but never
+// into the cutter's protected area, never over another owner's cells, and undo is exact. Three trees on the flat world, each
+// built with /fill (oak logs, a horizontal branch, non-persistent leaves), random ticks off ('exact' rules).
+const C31 = 'gate:c31';
+const C31_FLAT = 'G6B C31 Felling';
+const c31Box = (x, gy, z) => [x - 15, gy - 4, z - 15, x + 20, gy + 14, z + 15];
+const logsIn = async (b) => call('dev.region.logs', { box: b }, 300_000);
+async function c31Tree(tx, gy, tz, { h, branchY, branchTo, leaves }) {
+  await cmd(`/fill ${tx} ${gy + 1} ${tz} ${tx} ${gy + h} ${tz} minecraft:oak_log`);
+  await cmd(`/fill ${tx + 1} ${branchY} ${tz} ${branchTo} ${branchY} ${tz} minecraft:oak_log[axis=x]`);
+  if (leaves) {
+    await cmd(`/fill ${tx + 1} ${branchY + 1} ${tz} ${branchTo} ${branchY + 1} ${tz} minecraft:oak_leaves[persistent=false,distance=1]`);
+    await cmd(`/setblock ${tx} ${gy + h + 1} ${tz} minecraft:oak_leaves[persistent=false,distance=1]`);
+  }
+}
+const c31Kept = (v) => ({ all: v.cellsSkipped?.['M3:tree_kept'] ?? 0, protected: v.cellsSkipped?.['tree_kept.protected'] ?? 0, owned: v.cellsSkipped?.['tree_kept.owned'] ?? 0,
+  felled: v.cellsSkipped?.treeCells ?? 0 });
+
+steps.felling = async () => {
+  await ensure();
+  await freshWorld(C31_FLAT, FLAT_BASE, 'exact');
+  await tp(40.5, 0, 40.5);
+  const gy = await groundAt(40, 40);
+  const out = { gy, cases: {} };
+
+  // (1) a protected area of the cutter: the branch runs from the trunk (outside) into it. The area keeps out of the brush box
+  // (x 38..42), so the stroke is not refused; it lies in the claim's margin (the box plus 8), where felling reaches.
+  {
+    const [X, Z] = [40, 40];
+    await tp(X + 0.5, gy + 25, Z + 0.5);
+    await c31Tree(X, gy, Z, { h: 6, branchY: gy + 5, branchTo: X + 7, leaves: true });
+    const area = { owner: C31, id: 'c31-area', x0: X + 4, z0: Z - 6, x1: X + 16, z1: Z + 6, label: 'C31 felling area' };
+    await api(`protect ${json(area)}`);
+    const areaBox = [area.x0, gy - 3, area.z0, area.x1, gy + 14, area.z1];
+    await settle(2000);
+    const areaBefore = await boxHash(areaBox.slice(0, 3), areaBox.slice(3));
+    const logsOut0 = await logsIn([X - 2, gy + 1, Z - 2, X + 3, gy + 8, Z + 2]);
+    const logsArea0 = await logsIn(areaBox);
+    const snap = await snapBox(c31Box(X, gy, Z), 'c31-protected');
+    const v = await brush({ kind: 'raise', shape: 'cylinder', at: [X, gy, Z], radius: 2, strength: 2, owner: C31 });
+    const k = c31Kept(v);
+    check(!v.refused && v.state === 'PLACED', `C31 (1) protected: the raise over the trunk's base realised (${v.state ?? v.refused}; ${v.cellsWritten} cells, skipped ${json(v.cellsSkipped)})`);
+    const areaAfter = await boxHash(areaBox.slice(0, 3), areaBox.slice(3));
+    const logsOut1 = await logsIn([X - 2, gy + 1, Z - 2, X + 3, gy + 8, Z + 2]);
+    const logsArea1 = await logsIn(areaBox);
+    check(logsOut0.logs === 9 && logsOut1.logs === 0, `C31 (1) protected: the trunk and the branch outside the area felled (logs ${logsOut0.logs} -> ${logsOut1.logs})`);
+    check(areaAfter.sha256 === areaBefore.sha256, `C31 (1) protected: no cell inside the protected area changed (logs ${logsArea0.logs} -> ${logsArea1.logs}, natural leaves ${logsArea0.leavesNatural} -> ${logsArea1.leavesNatural}, persistent ${logsArea0.leavesPersistent} -> ${logsArea1.leavesPersistent})`);
+    check(k.protected > 0 && k.all >= k.protected, `C31 (1) protected: the kept part recorded as a finding (M3:tree_kept ${k.all}, protected ${k.protected}; felled ${k.felled})`);
+    if (v.region) await undo(v.region, C31);
+    const d = await diffBox(c31Box(X, gy, Z), snap);
+    check(d.mismatches === 0, `C31 (1) protected: one undo restores the world exactly (${d.mismatches} mismatches ${json(d.classes)})`, d.sample);
+    out.cases.protected = { stroke: v, kept: k, logsOut: [logsOut0, logsOut1], logsArea: [logsArea0, logsArea1], diff: d };
+  }
+
+  // (2) another owner's region: gate:other's raise lays a mound of oak logs (its own tile cells); the tree's branch rests on it.
+  // The cutter's claim covers the mound (brush strokes realise with force: judged per cell).
+  {
+    const [X, Z] = [40, 100];
+    const [OX, OZ] = [X + 6, Z];
+    await tp(X + 0.5, gy + 25, Z + 0.5);
+    const o = await brush({ kind: 'raise', shape: 'cylinder', at: [OX, gy, OZ], radius: 3, strength: 3, owner: OTHER, pattern: { mix: [{ w: 1, mat: 'minecraft:oak_log' }] } });
+    check(!o.refused && o.state === 'PLACED' && o.cellsWritten > 0, `C31 (2) owned: the other owner's raise laid its log mound (${o.cellsWritten} cells)`);
+    const mound = [OX - 3, gy - 1, OZ - 3, OX + 3, gy + 3, OZ + 3];
+    const moundLogs = await logsIn(mound);
+    await c31Tree(X, gy, Z, { h: 6, branchY: gy + 4, branchTo: OX, leaves: false });
+    await settle(2000);
+    const moundBefore = await boxHash(mound.slice(0, 3), mound.slice(3));
+    const snap = await snapBox(c31Box(X, gy, Z), 'c31-owned');
+    const v = await brush({ kind: 'raise', shape: 'cylinder', at: [X, gy, Z], radius: 2, strength: 2, owner: C31 });
+    const k = c31Kept(v);
+    check(!v.refused && v.state === 'PLACED', `C31 (2) owned: the raise over the trunk's base realised (${v.state ?? v.refused}; ${v.cellsWritten} cells, skipped ${json(v.cellsSkipped)})`);
+    const moundAfter = await boxHash(mound.slice(0, 3), mound.slice(3));
+    const branch = await logsIn([X, gy + 1, Z, OX, gy + 6, Z]);
+    check(moundLogs.logs > 0 && moundAfter.sha256 === moundBefore.sha256, `C31 (2) owned: no cell of the other owner's mound changed (${moundLogs.logs} logs)`);
+    check(branch.logs === 0, `C31 (2) owned: the unowned trunk and branch felled (${branch.logs} logs left above the mound)`);
+    check(k.owned > 0, `C31 (2) owned: the kept part recorded as a finding (M3:tree_kept ${k.all}, owned ${k.owned}; felled ${k.felled})`);
+    if (v.region) await undo(v.region, C31);
+    const d = await diffBox(c31Box(X, gy, Z), snap);
+    check(d.mismatches === 0, `C31 (2) owned: one undo restores the world exactly (${d.mismatches} mismatches ${json(d.classes)})`, d.sample);
+    if (o.region) await undo(o.region, OTHER);
+    out.cases.owned = { other: o, stroke: v, kept: k, moundLogs, diff: d };
+  }
+
+  // (3) a tree wholly inside the claim, no area: felled whole as before, undo exact
+  {
+    const [X, Z] = [40, 160];
+    await tp(X + 0.5, gy + 25, Z + 0.5);
+    await c31Tree(X, gy, Z, { h: 5, branchY: gy + 4, branchTo: X + 2, leaves: true });
+    await settle(2000);
+    const tb = [X - 3, gy + 1, Z - 3, X + 4, gy + 9, Z + 3];
+    const l0 = await logsIn(tb);
+    const snap = await snapBox(c31Box(X, gy, Z), 'c31-inside');
+    const v = await brush({ kind: 'raise', shape: 'cylinder', at: [X, gy, Z], radius: 2, strength: 2, owner: C31 });
+    const k = c31Kept(v);
+    check(!v.refused && v.state === 'PLACED', `C31 (3) inside: the raise realised (${v.state ?? v.refused}; ${v.cellsWritten} cells, skipped ${json(v.cellsSkipped)})`);
+    const l1 = await logsIn(tb);
+    check(l0.logs === 7 && l1.logs === 0 && k.all === 0, `C31 (3) inside: the whole tree felled (logs ${l0.logs} -> ${l1.logs}; felled ${k.felled}, kept ${k.all}; held leaves ${l1.leavesPersistent})`);
+    if (v.region) await undo(v.region, C31);
+    const d = await diffBox(c31Box(X, gy, Z), snap);
+    check(d.mismatches === 0, `C31 (3) inside: one undo restores the world exactly (${d.mismatches} mismatches ${json(d.classes)})`, d.sample);
+    out.cases.inside = { stroke: v, kept: k, logs: [l0, l1], diff: d };
+  }
+  spendZero();
+  return out;
+};
+
 // ------------------------------------------------------------------ in game: S3's corner
 
 /** Cells of an ARWD dump as a lookup: (x, y, z) -> block name (no properties). */
@@ -581,7 +691,7 @@ function caveJudge(d0, d1, box) {
 
 steps.report = async () => {
   const rows = [];
-  for (const s of ['unit', 'stale', 'apicompat', 'ingame', 'flat-owned', 'flat-undo', 'flat-permission', 'flat-misc', 'natural']) {
+  for (const s of ['unit', 'stale', 'apicompat', 'ingame', 'flat-owned', 'flat-undo', 'flat-permission', 'flat-misc', 'natural', 'felling']) {
     const f = path.join(OUT, `${s}.json`);
     if (!fs.existsSync(f)) continue;
     const j = JSON.parse(fs.readFileSync(f, 'utf8'));
