@@ -24,6 +24,7 @@ import net.minecraft.commands.CommandSourceStack;
  * apipt2                                  the surface: version, the adopt feature, ADOPT_REFUSED and ADOPTED appended
  * adopt &lt;key&gt; &lt;build&gt; &lt;owner|-&gt; &lt;b64 consent|-&gt; [b64 ext]   Sites.adopt -> pending "adopt:&lt;key&gt;" (consent: {builds: [...], actor: uuid|player})
  * adoptedsite &lt;build&gt;                    Sites.adoptedSite
+ * pt2checkdelta &lt;site&gt; &lt;version&gt; &lt;owner|-&gt; &lt;b64 consent|-&gt;   Sites.checkDelta (KEEP) with a consent
  * </pre>
  */
 public final class ApiTestPT2 {
@@ -91,6 +92,19 @@ public final class ApiTestPT2 {
 						}
 						return o;
 					}));
+				}
+				case "pt2checkdelta": {
+					// pt2checkdelta <site> <version> <owner|-> <b64 consent|->: Sites.checkDelta (KEEP) with a consent
+					dev.larattalabs.architect.api.DeltaRequest r = new dev.larattalabs.architect.api.DeltaRequest(a[1], Integer.parseInt(a[2]),
+						dev.larattalabs.architect.api.PlayerEdits.KEEP, null, null, false, new JsonObject(), a[3].equals("-") ? null : a[3]);
+					if (!a[4].equals("-")) {
+						JsonObject c = json(a[4]);
+						Set<String> ids = new HashSet<>();
+						c.getAsJsonArray("builds").forEach(e -> ids.add(e.getAsString()));
+						String act = c.has("actor") ? c.get("actor").getAsString() : null;
+						r = r.withConsent(new BuildConsent(ids, act == null ? null : act.equals("player") ? src.getPlayer().getUUID() : UUID.fromString(act)));
+					}
+					return ApiTestDelta.verdict(api.sites(src.getServer()).checkDelta(r));
 				}
 				case "adoptedsite": {
 					return new JsonPrimitive(api.sites(src.getServer()).adoptedSite(a[1]).orElse("none"));

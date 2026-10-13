@@ -311,7 +311,8 @@ export function checkStructure(sidecar, structure, opts = {}) {
   if (sidecar.profile !== undefined) {
     try { parseProfile(sidecar.profile); } catch (e) { err(`sidecar: ${e.message}`); }
   }
-  if (opts.profile !== undefined && opts.profile !== 'massing' && open) {
+  // (6c PT2) a captured source keeps its own (empty) profile: a request's profile (the default door, lit, no_floating) is not its
+  if (opts.profile !== undefined && opts.profile !== 'massing' && open && sidecar.sourceKind !== 'captured') {
     const want = parseProfile(opts.profile).list;
     if (JSON.stringify(sidecar.profile ?? null) !== JSON.stringify(want)) err(`sidecar: profile ${JSON.stringify(sidecar.profile ?? null)} but the request asked for ${JSON.stringify(want)} (set \`profile\` on the Blueprint)`);
   }

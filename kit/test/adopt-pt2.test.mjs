@@ -130,3 +130,9 @@ test('the generated source shape: an int param `floors` the sim bumps (default 0
   assert.match(m[2], /default:\s*0/);
   assert.match(m[2], /max:\s*4/);
 });
+
+test("a captured source is checked with its own empty profile, whatever profile the request names", async () => {
+  const w = writeBlueprint(adopted('adopted_0a1b2c3d', capture(), { floors: 1 }), tmp());
+  const r = await checkFiles(w.nbtPath, w.jsonPath, { type: 'adopted', profile: ['door', 'lit', 'no_floating'] });
+  assert.deepEqual(r.errors, []);
+});
