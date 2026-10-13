@@ -136,3 +136,58 @@ test("a captured source is checked with its own empty profile, whatever profile 
   const r = await checkFiles(w.nbtPath, w.jsonPath, { type: 'adopted', profile: ['door', 'lit', 'no_floating'] });
   assert.deepEqual(r.errors, []);
 });
+
+// C35 (docs/CONTRACT.md "C35 as built"): a captured source opts out of the palette. Steward's stub e2e sent the settlement's bible
+// with an "add a floor" versionOf of an adopted hut and the kit threw "ignores the palette it is given". The player's house as built
+// is theirs: a supplied palette or bible is ignored (no error), the captured cells keep their blocks, and the build says so
+// (`paletteIgnored` in its sidecar, a warning in the check). A design that is not captured and drops its palette still throws.
+const KIT_LIB = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..', 'lib');
+/** A designs dir holding the source Adopt.source() generates (floors default `def`: the sim's versionOf bumps it to 1). */
+function generated(id, def = 0) {
+  const root = tmp();
+  fs.symlinkSync(KIT_LIB, path.join(root, 'lib'));
+  fs.mkdirSync(path.join(root, 'designs'));
+  fs.writeFileSync(path.join(root, 'designs', `${id}.mjs`), `// Captured by Architect (6c slice PT2)\nimport { adopted } from '../lib/adopt.mjs';\n\n`
+    + `export const id = '${id}';\nexport const params = {\n  floors: { type: 'int', min: 0, max: 4, default: ${def}, label: 'Storeys added on top' },\n};\n\n`
+    + `export const CAPTURE = ${JSON.stringify(capture())};\n\nexport default function build({ floors = 0 } = {}) {\n  return adopted(id, CAPTURE, { floors });\n}\n`);
+  return path.join(root, 'designs');
+}
+
+test('C35: a captured source given a bible (Steward\'s versionOf with withBible) builds, ignores it and says so', async () => {
+  const { buildDesign } = await import('../build.mjs');
+  const { builtinBible, restraintOf } = await import('../lib/bible.mjs');
+  const id = 'adopted_d04f0165';
+  for (const floors of [0, 1]) {
+    const dir = generated(id, floors);
+    const bible = builtinBible('birch');
+    // what the sidecar runs for a design with a bible: --bible bible/bible.json --restraint bible/bible.json
+    const withB = await buildDesign(id, { dir, out: tmp(), palette: { bible }, restraint: restraintOf(bible), type: 'adopted', profile: ['door', 'lit', 'no_floating'] });
+    const plain0 = await buildDesign(id, { dir, out: tmp(), type: 'adopted' });
+    assert.deepEqual(withB.result.errors, [], `floors ${floors}: ${JSON.stringify(withB.result.errors)}`);
+    // the captured cells (and an added storey) are the same blocks with or without the bible: byte-equal templates
+    assert.ok(fs.readFileSync(withB.written.nbtPath).equals(fs.readFileSync(plain0.written.nbtPath)), `floors ${floors}: the bible changed blocks`);
+    const side = JSON.parse(fs.readFileSync(withB.written.jsonPath, 'utf8'));
+    assert.equal(side.sourceKind, 'captured');
+    assert.deepEqual(side.paletteIgnored, { bible: { id: bible.id, version: bible.version } });
+    // the entry does not read as bible- or palette-driven
+    assert.equal(side.bible, undefined);
+    assert.equal(side.palette, undefined);
+    assert.ok(withB.result.warnings.some((w) => /^palette ignored: /.test(w)), JSON.stringify(withB.result.warnings));
+    const side0 = JSON.parse(fs.readFileSync(plain0.written.jsonPath, 'utf8'));
+    assert.equal(side0.paletteIgnored, undefined);
+    assert.ok(!plain0.result.warnings.some((w) => /^palette ignored: /.test(w)));
+  }
+  // a preset palette too
+  const p = await buildDesign(id, { dir: generated(id), out: tmp(), palette: 'dark' });
+  assert.deepEqual(JSON.parse(fs.readFileSync(p.written.jsonPath, 'utf8')).paletteIgnored, { preset: 'dark' });
+});
+
+test('C35: a design that is not captured and drops its palette still throws', async () => {
+  const { loadDesign } = await import('../build.mjs');
+  const root = tmp();
+  fs.symlinkSync(KIT_LIB, path.join(root, 'lib'));
+  fs.mkdirSync(path.join(root, 'designs'));
+  fs.writeFileSync(path.join(root, 'designs', 'deaf_hut.mjs'), "import { Blueprint } from '../lib/kit.mjs';\nexport const id = 'deaf_hut';\n"
+    + "export default function build() {\n  const bp = new Blueprint({ id, name: 'Deaf hut', type: 'cabin', size: [3, 3, 3], groundY: 1, front: 'south' });\n  bp.set(1, 0, 1, 'minecraft:stone');\n  return bp;\n}\n");
+  await assert.rejects(loadDesign('deaf_hut', { dir: path.join(root, 'designs'), palette: 'dark' }), /ignores the palette it is given/);
+});

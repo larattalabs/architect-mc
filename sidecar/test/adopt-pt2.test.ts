@@ -101,4 +101,31 @@ describe.skipIf(!hasKit)('an adopted entry (sim backend, real kit)', () => {
     }
     expect(detail).toBe('adopted_polish');
   });
+
+  // C35: Steward's stub e2e sent the settlement's bible with the change (withBible); the kit threw "ignores the palette it is given".
+  // A captured source opts out: v2 installs with the captured cells as they were, the bible is not recorded as the entry's, and the
+  // design's notes say it was ignored.
+  it('C35: versionOf "add a floor" with a bible installs v2; the bible is ignored and noted', async () => {
+    const root = tempDir('arch-pt2-c35-');
+    const cfg = loadConfig(['--data', path.join(root, 'data'), '--library', path.join(root, 'library'), '--kit', KIT, '--backend', 'sim'], {});
+    cfg.simStepMs = 15;
+    fs.mkdirSync(cfg.dataDir, { recursive: true });
+    await adoptedEntry(cfg.libraryDir);
+    const sc = new Sidecar(cfg, new Store(cfg.dataDir, { debounceMs: 5 }), memoryLogger());
+    await sc.start(new SimDesigner(sc, cfg.simStepMs));
+    close = async () => { await sc.close(); rmrf(root); };
+    const d = sc.requestDesign(DesignRequest.parse(request({ type: 'adopted', notes: 'add a floor', bible: 'birch', maxSize: { x: 16, y: 20, z: 16 }, versionOf: { entryId: ID, siteId: 's1' } })));
+    await until(() => ['done', 'failed', 'cancelled'].includes(sc.designs.get(d.id)!.status), 60_000);
+    const done = sc.designs.get(d.id)!;
+    expect(done.status, done.error).toBe('done');
+    expect(done.step).toMatch(/the bible birch v\d+ was ignored: a captured source keeps the player's blocks as built/);
+    const j = JSON.parse(fs.readFileSync(path.join(cfg.libraryDir, ID, `${ID}.blueprint.json`), 'utf8')) as Record<string, unknown>;
+    expect(j.version).toBe(2);
+    expect(j.sourceKind).toBe('captured');
+    expect(j.adopted).toMatchObject({ build: 'build-3' });
+    expect((j.size as { y: number }).y).toBe(9);
+    expect(j.bible).toBeUndefined();
+    expect(j.palette).toBeUndefined();
+    expect(j.paletteIgnored).toMatchObject({ bible: { id: 'birch' } });
+  });
 });
