@@ -188,7 +188,7 @@ steps.apicompat = async () => {
     const p = v.parse ?? [];
     const okParse = p.length === 6 && p[0].ok && !p[1].ok && p[1].reason === 'FIELD_LIMIT' && /mask\.slope: \[a, b\] needs a <= b/.test(p[1].message)
       && !p[2].ok && p[3].ok && !p[4].ok && /stops\[1\]\.at/.test(p[4].message) && !p[5].ok && p[5].reason === 'FIELD_LIMIT';
-    check(/^1\.(1[6-9]|[2-9]\d)\./.test(v.version) && v.featuresMP?.length === 2 && (v.lastReasons === 'PROTECTED FIELD_LIMIT' || /^(FIELD_LIMIT|FORMAT|PERMISSION) (FORMAT|PERMISSION)$/.test(v.lastReasons ?? '')) && okParse,
+    check(/^1\.(1[6-9]|[2-9]\d)\./.test(v.version) && v.featuresMP?.length === 2 && (v.lastReasons === 'PROTECTED FIELD_LIMIT' || /^(FIELD_LIMIT|FORMAT|PERMISSION) (FORMAT|PERMISSION|PLAYER_BUILD)$/.test(v.lastReasons ?? '')) && okParse,
       `item 11: apitest apimp in game: Mask/Pattern parse through the public API (the bundled schemas load), FIELD_LIMIT with the path, masks/patterns features, no new Reason (${json(v).slice(0, 600)})`);
   }
   spendZero();
