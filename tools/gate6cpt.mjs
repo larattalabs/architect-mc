@@ -1147,11 +1147,14 @@ steps.apitest = async () => {
 
 // ------------------------------------------------------------------ C34: a claimed hut built with commands
 
-/** A hollow plank hut (floor, walls, roof) 7 wide, 5 high, 7 deep at (X, Y, Z); the door in its south wall (z + 6) at doorY. */
-async function commandHut(X, Y, Z, doorY, state = 'minecraft:oak_door') {
-  await cmd(`/fill ${X} ${Y} ${Z} ${X + 6} ${Y + 4} ${Z + 6} minecraft:oak_planks hollow`);
-  await cmd(`/setblock ${X + 3} ${doorY + 1} ${Z + 6} ${state}[facing=south,half=upper]`);
-  await cmd(`/setblock ${X + 3} ${doorY} ${Z + 6} ${state}[facing=south,half=lower]`);
+/** A hollow plank hut w x h x d at (X, Y, Z); the door in its south wall (z + d - 1) at doorY, both halves unless lowerOnly. */
+async function commandHut(X, Y, Z, doorY, { w = 7, h = 5, d = 7, lowerOnly = false } = {}) {
+  const door = 'minecraft:oak_door';
+  await cmd(`/fill ${X} ${Y} ${Z} ${X + w - 1} ${Y + h - 1} ${Z + d - 1} minecraft:oak_planks hollow`);
+  const dx = X + (w >> 1), dz = Z + d - 1;
+  if (!lowerOnly) await cmd(`/setblock ${dx} ${doorY + 1} ${dz} ${door}[facing=south,half=upper]`);
+  await cmd(`/setblock ${dx} ${doorY} ${dz} ${door}[facing=south,half=lower]`);
+  return [dx, doorY, dz];
 }
 
 steps.claimhut = async () => {
@@ -1159,23 +1162,36 @@ steps.claimhut = async () => {
   const gy = await flatWorld('G6B PT ClaimHut', X, Z);
   const y = gy + 1;
   const huts = [
-    { name: 'door above the floor row', at: [X, Z], doorY: y + 1 },
-    { name: 'door in the floor row', at: [X + 12, Z], doorY: y },
+    { name: 'door above the floor row', doorY: y + 1 },
+    { name: 'door in the floor row', doorY: y },
+    { name: 'small 5x4x5', doorY: y + 1, o: { w: 5, h: 4, d: 5 } },
+    { name: 'small 5x4x5, door in the floor row', doorY: y, o: { w: 5, h: 4, d: 5 } },
+    { name: 'low 5x3x5, door in the floor row', doorY: y, o: { w: 5, h: 3, d: 5 } },
+    { name: 'margin claim (2 around, 2 under)', doorY: y + 1, margin: 2, under: 2 },
+    { name: 'floor in the ground', doorY: y, base: gy, margin: 1 },
+    { name: 'door lower half only', doorY: y + 1, o: { lowerOnly: true } },
+    { name: 'console claim', doorY: y + 1, actor: 'console' },
   ];
   const out = {};
+  let n = 0;
   for (const h of huts) {
-    await commandHut(h.at[0], y, h.at[1], h.doorY);
-    const box = [h.at[0], y, h.at[1], h.at[0] + 6, y + 4, h.at[1] + 6];
-    const door = await ptAt([h.at[0] + 3, h.doorY, h.at[1] + 6]);
-    check(String(door.state).includes('oak_door'), `C34: ${h.name}: the door stands at y ${h.doorY - gy} over the ground (${door.state})`, door);
-    const cl = await call('dev.pt.claim', { box, actor: 'bot' });
-    await settle(3000);
-    const b = (await call('dev.pt.build', { build: cl.buildId })) ?? cl;
-    check(!cl.refused && cl.state === 'CLAIMED' && cl.kind === 'HOUSE' && (cl.entrances?.length ?? 0) === 1, `C34: ${h.name}: the claimed hut ${cl.buildId} is ${cl.kind} (${cl.state}) with ${cl.entrances?.length ?? 0} entrance(s)`, { cl, b });
+    const at = [X + (n % 4) * 14, Z + Math.floor(n / 4) * 14];
+    n++;
+    const o = { w: 7, h: 5, d: 7, ...(h.o ?? {}) };
+    const base = h.base ?? y;
+    const dpos = await commandHut(at[0], base, at[1], h.doorY, o);
+    const m = h.margin ?? 0, u = h.under ?? 0;
+    const box = [at[0] - m, base - u, at[1] - m, at[0] + o.w - 1 + m, base + o.h - 1 + m, at[1] + o.d - 1 + m];
+    const door = await ptAt(dpos);
+    const cl = await call('dev.pt.claim', { box, actor: h.actor ?? 'bot' });
+    await settle(2000);
+    const b = await call('dev.pt.build', { build: cl.buildId });
+    log(`  hut ${h.name}: door ${door.state}; claim ${cl.refused ? `refused ${cl.refused}` : `${cl.buildId} ${cl.kind} ${cl.state} ${cl.cells} cells ${cl.entrances?.length ?? 0} entrance(s)`}; later ${b.kind} ${b.entrances?.length ?? 0}`);
+    check(!cl.refused && cl.state === 'CLAIMED' && cl.kind === 'HOUSE' && (cl.entrances?.length ?? 0) === 1 && b.kind === 'HOUSE', `C34: ${h.name}: the claimed hut ${cl.buildId} is ${cl.kind} (${cl.state}) with ${cl.entrances?.length ?? 0} entrance(s), later ${b.kind}`, { cl, b, door });
     out[h.name] = cl;
   }
   // the same hut placed by player use (floor, walls, roof, the door), left ACTIVE: the same kind and entrance
-  const U = [X + 24, Z];
+  const U = [X + 24, Z + 40];
   const ops = [];
   for (let yy = y; yy <= y + 4; yy++) for (let x = U[0]; x <= U[0] + 6; x++) for (let z = U[1]; z <= U[1] + 6; z++) {
     const shell = yy === y || yy === y + 4 || x === U[0] || x === U[0] + 6 || z === U[1] || z === U[1] + 6;
