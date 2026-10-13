@@ -1,0 +1,30 @@
+{
+ "scenario": "scatter_demo",
+ "version": 0,
+ "note": "the stamps-off plan (params.stamps false; N-F2-1: no vanilla stamp in the repo) of run 20261012-220512's own survey and frozen volume: IR sha and tile shas over its own plan survey (kit windowFromSurvey), 1 worker = 4 workers shuffled; inputs in goldens/scatter_demo/",
+ "fromRun": "20261012-220512",
+ "irSha": "e1c09f7af3ad1e3b2d5a4ac46fd831145a10b51a0d0afc731810d162d31236e8",
+ "kitVersion": "0.22.0",
+ "cells": 1518,
+ "tiles": {
+  "decor|terrain|39,24": "553d35175b033dcba75c78ed90e1f76a9477bbf75e7af0a29c6fe986e0ca6886",
+  "decor|terrain|39,25": "6e31db9f37d0edcd0e5763f8c4163efd80504ae29278a376bfec7f8f788991b9",
+  "decor|terrain|39,26": "ebe1926a22e70bc42efdfa0cfa6e13c23144d3e1a28be939c403cdc99ef1dfaa",
+  "decor|terrain|39,27": "553d35175b033dcba75c78ed90e1f76a9477bbf75e7af0a29c6fe986e0ca6886",
+  "decor|terrain|40,24": "553d35175b033dcba75c78ed90e1f76a9477bbf75e7af0a29c6fe986e0ca6886",
+  "decor|terrain|40,25": "553d35175b033dcba75c78ed90e1f76a9477bbf75e7af0a29c6fe986e0ca6886",
+  "decor|terrain|40,26": "8399983ddd256a0677a51aacad0915d714448d69c59607465be47e0d84fe30c1",
+  "decor|terrain|40,27": "162739ce0c85a366649870dd474001b2019af8c6c1cbe9dfaafb212d173d7e55",
+  "decor|terrain|41,24": "553d35175b033dcba75c78ed90e1f76a9477bbf75e7af0a29c6fe986e0ca6886",
+  "decor|terrain|41,25": "30ec28002e8313acf52433bc9173a222ad0e9837e10fa756d493682250c4f096",
+  "decor|terrain|41,26": "b6c034e47bf489071474817381ff9f1ca59ca91dba06c1c06af98a9b20ddb300",
+  "decor|terrain|41,27": "5f88ac78183ec57687bf7a6ddd67c77d0ec3eb1c57b7cca7d9c42e47d675b157",
+  "decor|terrain|42,24": "553d35175b033dcba75c78ed90e1f76a9477bbf75e7af0a29c6fe986e0ca6886",
+  "decor|terrain|42,25": "0a97e55602481e2d2c5e4bea4d1a886474c281240090f9e891d1867e6278571f",
+  "decor|terrain|42,26": "fb1a879bb0c4019b922dee0d42733f98c0dfb56544b31064be57aa03b27b126f",
+  "decor|terrain|42,27": "a678cad882c7e49adf8eac9f088a3dc81f355b8dc301fc6977f1ffe7e4ef2e67",
+  "ground|path|41,26": "a632a41bff29d50dd46bf49ee02ac81f4d13752c7b3942f2ff95247e6fc1efa7",
+  "ground|path|42,26": "4b40d187b3468782c38a0eef03275455b5b106178985a933cda298de54dab377",
+  "ground|terrain|40,27": "1cf9c14a171d1713f7dbf782a912863bc19d8bc126acbf74dbb6c7343a0b5f26"
+ }
+}

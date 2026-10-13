@@ -272,8 +272,9 @@ processResources {
 		exclude "**/.DS_Store"
 		into "data/architect_mc/library"
 	}
+	// 6c F2 (Noah, N-F2-1): stamps harvested from vanilla features are local-only, never in the jar (kit/stamps/ is gitignored too)
 	from("../kit") {
-		exclude "node_modules/**", "out/**", "**/.DS_Store"
+		exclude "node_modules/**", "out/**", "**/.DS_Store", "stamps/**"
 		into "architect-sidecar/kit"
 	}
 }

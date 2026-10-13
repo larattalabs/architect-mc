@@ -19,13 +19,13 @@ import org.jspecify.annotations.Nullable;
  */
 public final class IrStale {
 	/** The kit version this mod bundles ({@code KIT_VERSION} in kit/lib/region/plan.mjs). */
-	public static final String KIT_VERSION = "0.20.0";
+	public static final String KIT_VERSION = "0.22.0";
 	/** {@code IR_FORMATS} in kit/lib/realise.mjs. */
 	public static final List<Integer> IR_FORMATS = List.of(1, 2);
 	/** {@code KINDS_FORMAT2} in kit/lib/realise.mjs (the closed list of kinds a format-2 IR's {@code requires} may name). */
 	public static final List<String> KINDS_FORMAT2 = List.of("blobs:side", "fields", "forms", "material:rule", "shape:array", "shape:capsuleChain",
 		"shape:ellipsoid", "shape:instances", "shape:prism", "shape:strata", "shape:warp", "shape:wedge", "volumes", "road:lamp", "voxels",
-		"mask", "pattern", "relief");
+		"mask", "pattern", "relief", "scatter", "stamp");
 
 	private IrStale() {
 	}

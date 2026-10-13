@@ -10,6 +10,8 @@ import { evalTile, MAX_OPS, walkKinds } from '../realise.mjs';
 import { shapeBounds, yrefAbs } from '../sdf.mjs';
 import { FLAG_MISSING, asColumns, canonicalJson, makeColumns, sha256Hex } from './pack.mjs';
 import { voxelsSize } from './voxels.mjs';
+import { scatterBounds, stampBounds } from './scatter.mjs';
+import { stampLibrary } from './stamps.mjs';
 import { decodeArbl } from '../realise.mjs';
 import { COND, DEFAULT_MACRO_ROLES, Region, blockState, region as makeRegion } from './program.mjs';
 import { surveyApi, windowFromSurvey } from './survey.mjs';
@@ -18,7 +20,7 @@ import { mapPatternMats, patternError } from '../pattern.mjs';
 import { PASS_NAMES } from './passes/index.mjs';
 
 /** The kit's region engine version (recorded in every IR). */
-export const KIT_VERSION = '0.20.0';
+export const KIT_VERSION = '0.22.0';
 
 export const LIMITS = Object.freeze({
   claim: 1024, claimBig: 2048, irBytes: 4 * 1024 * 1024, ops: MAX_OPS, lots: 1024, paths: 256, stages: 64,
@@ -240,6 +242,11 @@ export function declaredPasses(mod) {
  */
 export function opBounds(op, blobs, bytesOf = null) {
   if (op.op === 'shape') return shapeBounds(op.shape, blobs);
+  // (6c F2) scatter: its area plus its items' reach; stamp: its turned body at `at`
+  if (op.op === 'scatter' || op.op === 'stamp') {
+    if (!bytesOf) throw new Error(`${op.op} op: its blobs have no bytes here`);
+    return op.op === 'scatter' ? scatterBounds(op, bytesOf) : stampBounds(op, bytesOf);
+  }
   if (op.op === 'voxels') {
     if (!bytesOf) throw new Error(`voxels op: blob '${op.blob}' has no bytes here`);
     const [sx, sy, sz] = voxelsSize(bytesOf(op.blob));
@@ -315,6 +322,8 @@ export async function planRegion(o) {
       claim: Object.freeze({ ...claim }), survey: surveyApi(survey, claim, { keepOut, onKeepOut }), roles, patterns, seed, params: Object.freeze({ ...params }),
       kitVersion: o.kitVersion ?? KIT_VERSION, rng: (label) => makeRng(seed, String(label)),
       volumes: o.volumes ?? [],
+      // (6c F2) the local stamp library (lib/region/stamps.mjs stampLibrary: a dir or an id -> bytes map; local-only, N-F2-1)
+      stamps: o.stamps ? (typeof o.stamps.get === 'function' && typeof o.stamps.has === 'function' && typeof o.stamps.ids === 'function' ? o.stamps : stampLibrary(o.stamps)) : null,
       passes: Object.freeze([...passes]), // (6c T1) the declared passes (r.pass refuses any other)
     });
     ctx.region = () => makeRegion(ctx);
@@ -424,6 +433,6 @@ export async function planRegion(o) {
   stats.irFormat = ir.format;
   stats.requires = ir.requires ?? [];
   stats.passes = r.passRuns.map((x) => ({ ...x }));
-  const meta = { format: 1, paths: r.meta.paths, lots: r.meta.lots, parts: r.meta.parts, ...(r.meta.village ? { village: r.meta.village } : {}), ...(r.meta.gravity ? { gravity: r.meta.gravity } : {}), ...(r.meta.forms ? { forms: r.meta.forms } : {}), ...(r.passRuns.length ? { passes: r.passRuns.map((x) => ({ ...x })) } : {}), ...(r.meta.relief ? { relief: r.meta.relief } : {}) };
+  const meta = { format: 1, paths: r.meta.paths, lots: r.meta.lots, parts: r.meta.parts, ...(r.meta.village ? { village: r.meta.village } : {}), ...(r.meta.gravity ? { gravity: r.meta.gravity } : {}), ...(r.meta.forms ? { forms: r.meta.forms } : {}), ...(r.passRuns.length ? { passes: r.passRuns.map((x) => ({ ...x })) } : {}), ...(r.meta.relief ? { relief: r.meta.relief } : {}), ...(r.meta.scatter ? { scatter: r.meta.scatter } : {}), ...(r.meta.stamps ? { stamps: r.meta.stamps } : {}), ...(r.meta.scatterDemo ? { scatterDemo: r.meta.scatterDemo } : {}) };
   return { ir: JSON.parse(irJson), irJson, irSha: sha256Hex(irJson), notes, stats, blobs: sideBytes, meta, needVolumes: r.needVolumes, passes };
 }
