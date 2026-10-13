@@ -463,6 +463,24 @@ public final class BuildViews {
 			this.z = box.minZ();
 		}
 
+		/** Marks one cell of the claim (never another placer's, never a journal-owned cell) and adds it to the component. */
+		private void take(LevelChunk c, int x, int y, int z, BlockState s) {
+			long p = BlockPos.asLong(x, y, z);
+			Placed.Rec cur = Placed.record(c, x, y, z);
+			if (cur != null && !cur.placer().equals(placer)) {
+				return; // another placer's cell stays theirs
+			}
+			if (dev.larattalabs.architect.site.SiteJournal.owned(dim, p)) {
+				return; // journal-owned cells are never marked
+			}
+			if (comp.set.contains(p)) {
+				return; // a partner half already taken
+			}
+			Placed.mark(c, new BlockPos(x, y, z), placer, id);
+			PlacedChunk pc = c.getAttached(Placed.TYPE);
+			comp.add(p, pc == null ? 0 : pc.get(x, y, z), id, s);
+		}
+
 		boolean step(long deadline) {
 			BlockPos.MutableBlockPos m = new BlockPos.MutableBlockPos();
 			int n = 0;
@@ -477,17 +495,16 @@ public final class BuildViews {
 						if (PlacedRules.empty(s)) {
 							continue;
 						}
-						long p = m.asLong();
-						Placed.Rec cur = Placed.record(c, x, y, z);
-						if (cur != null && !cur.placer().equals(placer)) {
-							continue; // another placer's cell stays theirs
+						take(c, x, y, z, s);
+						// (C34) the other half of a door or bed that the box cuts through is the build's too
+						BlockPos o = PlacedRules.partner(s, new BlockPos(x, y, z));
+						if (o != null && !box.isInside(o)) {
+							LevelChunk oc = level.getChunkSource().getChunkNow(o.getX() >> 4, o.getZ() >> 4);
+							BlockState os = oc == null ? null : oc.getBlockState(o);
+							if (os != null && !PlacedRules.empty(os) && os.getBlock() == s.getBlock()) {
+								take(oc, o.getX(), o.getY(), o.getZ(), os);
+							}
 						}
-						if (dev.larattalabs.architect.site.SiteJournal.owned(dim, p)) {
-							continue; // journal-owned cells are never marked
-						}
-						Placed.mark(c, m.immutable(), placer, id);
-						PlacedChunk pc = c.getAttached(Placed.TYPE);
-						comp.add(p, pc == null ? 0 : pc.get(x, y, z), id, s);
 					}
 				}
 				if (++x > box.maxX()) {
