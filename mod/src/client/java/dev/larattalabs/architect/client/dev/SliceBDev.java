@@ -38,6 +38,7 @@ public final class SliceBDev {
 		JsonObject sk = new JsonObject();
 		v.cellsSkipped().forEach(sk::addProperty);
 		o.add("cellsSkipped", sk);
+		o.add("buildHits", SlicePTDev.hits(v.buildHits())); // (6c PT) the builds the region kept out
 		JsonArray c = new JsonArray();
 		c.add(v.claim().minX());
 		c.add(v.claim().minY());
@@ -54,7 +55,8 @@ public final class SliceBDev {
 
 	public static void init() {
 		DevBridge.register("dev.brush", 600_000, "{kind, at: [x,y,z], radius?: 6, strength?: 3, shape?: sphere|cylinder, mask?: {..}, pattern?: {..}, "
-			+ "destruction?: natural_only|player_blocks, owner?: architect:player, actor?: me|none|<uuid>, console?: false, seed?: 0, dimension?: overworld|nether|end} - (6c B) one "
+			+ "destruction?: natural_only|player_blocks, owner?: architect:player, actor?: me|none|<uuid>, console?: false, seed?: 0, dimension?: overworld|nether|end, "
+			+ "consent?: [build ids], consentActor?: me|none|<uuid>} - (6c B; PT: consent) one "
 			+ "brush stroke (Regions.brush; console: the command's console path) -> the region's view once realised {region, planId, irSha, state, "
 			+ "brush, cellsWritten, cellsSkipped, claim, ms} or {refused, reason}", (req, mc) -> {
 				Fields f = Fields.of(req);
@@ -83,7 +85,20 @@ public final class SliceBDev {
 						case "none" -> null;
 						default -> UUID.fromString(actor);
 					};
-					return Brushes.stroke(new BrushRequest(owner, dimension, kind, shape, at, radius, strength, mask, pattern, d, who, seed), console);
+					BrushRequest br = new BrushRequest(owner, dimension, kind, shape, at, radius, strength, mask, pattern, d, who, seed);
+					if (req.get("consent") instanceof JsonArray cs) {
+						// (6c PT) the builds the stroke may clear: {consent: [ids], consentActor?: me|none|<uuid>}
+						java.util.Set<String> ids = new java.util.LinkedHashSet<>();
+						cs.forEach(e -> ids.add(e.getAsString()));
+						String ca = req.has("consentActor") ? req.get("consentActor").getAsString() : "me";
+						UUID cu = switch (ca) {
+							case "me" -> player.getUUID();
+							case "none" -> null;
+							default -> UUID.fromString(ca);
+						};
+						br = br.withConsent(new dev.larattalabs.architect.api.BuildConsent(ids, cu));
+					}
+					return Brushes.stroke(br, console);
 				}).thenCompose(x -> x).handle((v, e) -> {
 					if (e != null) {
 						Throwable c = e instanceof java.util.concurrent.CompletionException && e.getCause() != null ? e.getCause() : e;

@@ -107,7 +107,11 @@ public final class Builds {
 		return rules;
 	}
 
-	/** A rule changed (the command): tracking on/off takes effect at once, and the index is saved with it. */
+	/** A rule changed (the command, a dev hook): tracking on/off takes effect at once, and the index is saved with it. */
+	public static void applyRules() {
+		rulesChanged();
+	}
+
 	static void rulesChanged() {
 		Placed.on = rules.playerTracking;
 		indexDirty = true;
@@ -874,7 +878,7 @@ public final class Builds {
 			BlockPos.MutableBlockPos m = new BlockPos.MutableBlockPos();
 			int n = 0;
 			while (true) {
-				if ((++n & 63) == 0 && System.nanoTime() >= deadline) {
+				if ((++n & 3) == 0 && System.nanoTime() >= deadline) {
 					return false;
 				}
 				if (queue == null || queue.isEmpty()) {

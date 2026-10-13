@@ -285,6 +285,49 @@ public final class BuildViews {
 		return out;
 	}
 
+	/**
+	 * §10: the builds meeting a claim {minX, minY, minZ, maxX, maxY, maxZ} as the kit's plan helpers read them
+	 * ({@code kit/lib/region/builds.mjs}: id, kind, state, cells, revision, bounds, footprint, entrances {pos, facing}); kept and
+	 * released (the helpers skip released ones). For the plan check (P0's compiler) to answer feature.build and endpoint.build.
+	 */
+	public static com.google.gson.JsonArray planJson(String dimension, int[] claim) {
+		com.google.gson.JsonArray out = new com.google.gson.JsonArray();
+		BoundingBox c = new BoundingBox(claim[0], claim[1], claim[2], claim[3], claim[4], claim[5]);
+		for (Builds.Rec r : Builds.list(dimension, c)) {
+			com.google.gson.JsonObject o = new com.google.gson.JsonObject();
+			o.addProperty("id", r.id);
+			o.addProperty("kind", r.kind.name());
+			o.addProperty("state", r.state.name());
+			o.addProperty("cells", r.cells);
+			o.addProperty("revision", r.revision);
+			com.google.gson.JsonArray b = new com.google.gson.JsonArray();
+			for (int v : r.bounds) {
+				b.add(v);
+			}
+			o.add("bounds", b);
+			com.google.gson.JsonArray f = new com.google.gson.JsonArray();
+			for (int v : r.footprint) {
+				f.add(v);
+			}
+			o.add("footprint", f);
+			com.google.gson.JsonArray en = new com.google.gson.JsonArray();
+			for (Builds.Ent e : r.entrances) {
+				com.google.gson.JsonObject x = new com.google.gson.JsonObject();
+				com.google.gson.JsonArray p = new com.google.gson.JsonArray();
+				BlockPos bp = BlockPos.of(e.pos());
+				p.add(bp.getX());
+				p.add(bp.getY());
+				p.add(bp.getZ());
+				x.add("pos", p);
+				x.addProperty("facing", e.facing().getSerializedName());
+				en.add(x);
+			}
+			o.add("entrances", en);
+			out.add(o);
+		}
+		return out;
+	}
+
 	// ------------------------------------------------------------------ consent (§6)
 
 	/**
