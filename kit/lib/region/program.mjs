@@ -307,6 +307,7 @@ export class Region {
     const written = new Map(); // "x,z" -> edge id (the keep-out guard)
     const mark = (x, z, id) => { const k = `${x},${z}`; if (!written.has(k)) written.set(k, id); };
     const metaEdges = [];
+    const taken = new Set(); // "x,z" columns an earlier edge wrote
     // no retaining column on another route cell, nor on a lot's pad, apron or batter (the pad shapes that land)
     const routeCols = new Set();
     for (const d of out.data.edges) if (d.ok) {
@@ -315,6 +316,16 @@ export class Region {
     }
     const nearLot = (x, z) => this.lots.some((l) => { const m = 1 + Math.max(l.pad?.maxCut ?? 0, l.pad?.maxFill ?? 0); return x >= l.box.minX - m && x <= l.box.maxX + m && z >= l.box.minZ - m && z <= l.box.maxZ + m; });
     const noRetain = (x, z) => routeCols.has(`${x},${z}`) || nearLot(x, z);
+    // a slope pad's batter fill (stage before the routes): ring k (1..maxFill) out from the apron is filled to the pad's top - 1 - k
+    const fillTop = (x, z) => {
+      let top = -Infinity;
+      for (const l of this.lots) {
+        if (l.pad?.edge !== 'slope' || l.pad.fill === 'none') continue;
+        const k = Math.max(l.box.minX - 1 - x, x - l.box.maxX - 1, l.box.minZ - 1 - z, z - l.box.maxZ - 1);
+        if (k >= 1 && k <= (l.pad.maxFill ?? 0)) top = Math.max(top, l.floorY - 2 - k);
+      }
+      return top;
+    };
     for (let i = 0; i < edges.length; i++) {
       const e = edges[i], d = out.data.edges[i];
       const rid = `route_${e.id}`;
@@ -325,7 +336,8 @@ export class Region {
       let n = 0;
       const ladderSegs = [];
       const ec = edgeColumns({ path: d.path, segments: d.segments, landings: d.landings, width: e.width });
-      const fpOf = (si) => ec.bySeg[si].map((o) => [o.x, o.z, o.y, o.edge]);
+      // (a column an earlier edge wrote stays that edge's: the search kept this edge within a step of it)
+      const fpOf = (si) => ec.bySeg[si].filter((o) => !taken.has(`${o.x},${o.z}`)).map((o) => [o.x, o.z, o.y, o.edge]);
       d.segments.forEach((g, si) => {
         const cells = d.path.slice(g.from, g.to + 1);
         n++;
@@ -341,10 +353,10 @@ export class Region {
             for (const q of footprintOf(cells, e.width + 2)) mark(q[0], q[1], e.id);
             return;
           }
-          rec.paths.push(p._routeRun(`${rid}_${n}`, fpOf(si), mats, { baseAt, mark: (x, z) => mark(x, z, e.id), cells, noRetain }));
+          rec.paths.push(p._routeRun(`${rid}_${n}`, fpOf(si), mats, { baseAt, mark: (x, z) => mark(x, z, e.id), cells, noRetain, fillTop }));
         } else if (g.kind === 'stair') {
           // the flight's ground (cut above, fill below), then the treads
-          p._routeRun(`${rid}_${n}g`, fpOf(si), mats, { baseAt, mark: (x, z) => mark(x, z, e.id), cells, noSurface: true, register: false, noRetain });
+          p._routeRun(`${rid}_${n}g`, fpOf(si), mats, { baseAt, mark: (x, z) => mark(x, z, e.id), cells, noSurface: true, register: false, noRetain, fillTop });
           const st = p.stair([cells[0], cells[cells.length - 1]], { width: e.width, landingEvery: 8, carve: true, material: mats.stair, id: `${rid}_${n}` });
           rec.paths.push(st.id);
         } else if (g.kind === 'ladder') {
@@ -353,6 +365,7 @@ export class Region {
       });
       // the ladders last (after the walk runs' cuts and fills at their feet)
       d.ladderCols.forEach((lc, k) => { rec.paths.push(p._ladder(`${rid}_${ladderSegs[k]}`, lc)); mark(lc.x, lc.z, e.id); });
+      for (const o of ec.cols) if (!d.segments[o.seg].shared) taken.add(`${o.x},${o.z}`);
       // the graph: the ends' nodes (made when missing) and the edge with its movers and segments
       const port = (end) => {
         let g = this.graph.nodes.find((x) => x.id === end.name);
@@ -1595,12 +1608,13 @@ class Part {
    * (and over the program's `baseAt` raise), the surface at y (a walk cell); a retaining column outside an edge where the land
    * stands more than 2 above the surface. Registered as a `graded` path with its centre `cells` unless `register: false`.
    */
-  _routeRun(id, fp, mats, { baseAt = () => 0, mark = () => {}, cells = [], noSurface = false, register = true, noRetain = () => false } = {}) {
+  _routeRun(id, fp, mats, { baseAt = () => 0, mark = () => {}, cells = [], noSurface = false, register = true, noRetain = () => false, fillTop = () => -Infinity } = {}) {
     this._requirePath('route');
     const s = this.region.survey;
     const surfM = this._mat(mats.surface, 'route surface'), fM = this._mat(mats.foundation, 'route foundation'), rM = this._mat(mats.retain, 'route retain');
     if (surfM === null) throw new Error(`part ${this.id}: route surface must not be air`);
     const fillC = new Cols({ floor: 1 }, { abs: 0 });
+    const fillB = new Cols({ abs: 0 }, { abs: 0 });
     const cutC = new Cols({ abs: 0 }, { height: 0 });
     const cutB = new Cols({ abs: 0 }, { abs: 0 });
     const surfC = new Cols({ abs: 0 }, { abs: 0 });
@@ -1611,9 +1625,11 @@ class Part {
     for (const [x, z, y, edge] of fp) {
       const g = s.groundAt(x, z), top = Math.max(s.topAt(x, z), g + baseAt(x, z));
       fillC.add(x, z, 0, y - 1, edge && y - s.floorAt(x, z) > 2 ? rM : fM);
+      // (and 3 below the surface from the surface down, whatever the frozen floor: a pad's batter may cut below the route first)
+      fillB.add(x, z, y - 3, y - 1, edge && y - s.floorAt(x, z) > 2 ? rM : fM);
       cutC.add(x, z, y + 1, 0, null);
       // over the program's raise, and 3 cells of head room whatever the survey's top says (a canopy's leaves over the walk)
-      const clear = Math.max(top, y + 3);
+      const clear = Math.max(top, y + 3, fillTop(x, z)); // (and a slope pad's batter fill over the route, which an earlier stage made)
       if (clear > s.topAt(x, z)) cutB.add(x, z, y + 1, clear, null);
       if (!noSurface) surfC.add(x, z, y, y, surfM);
       mark(x, z);
@@ -1628,6 +1644,7 @@ class Part {
       }
     }
     this._colsOp(fillC, COND.IF_NATURAL);
+    this._colsOp(fillB, COND.IF_NATURAL);
     this._colsOp(cutC, COND.IF_NATURAL);
     this._colsOp(cutB, COND.IF_NATURAL);
     this._colsOp(surfC, COND.IF_NATURAL, true);
@@ -1793,6 +1810,7 @@ class Part {
       }
     });
     this._colsOp(fillC, COND.IF_NATURAL);
+    this._colsOp(fillB, COND.IF_NATURAL);
     this._colsOp(cutC, COND.IF_NATURAL);
     this._colsOp(surfC, COND.IF_NATURAL, true);
     this._colsOp(retC, COND.IF_NATURAL);

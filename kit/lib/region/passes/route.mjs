@@ -192,6 +192,19 @@ function search(env, ctx) {
   const { W, D } = env;
   const { G, corridor, blockedW, blocked1, builtY, prefer, start, goal, Gq, w, laneW, Ld, latLo, latHi, maxCut, maxFill, stairs, ladders, nearEnd, maxStates = 24_000_000 } = ctx;
   const ND = maxCut + maxFill + 1, SPC = 32 * ND;
+  // the footprint square around a centre cell: an own move may lie beside an earlier edge's built cells only within a step of
+  // their y (its writes skip them), and a stair flight never over them (its treads would stack)
+  const fLo = latLo, fHi = latHi;
+  const fpBuilt = (k, y, strict) => {
+    const i0 = k % W, j0 = (k - i0) / W;
+    for (let dj = fLo; dj <= fHi; dj++) for (let di = fLo; di <= fHi; di++) {
+      const i = i0 + di, j = j0 + dj;
+      if (i < 0 || j < 0 || i >= W || j >= D) continue;
+      const b = builtY[i + j * W];
+      if (b !== NONE && (strict || Math.abs(b - y) > 1)) return true;
+    }
+    return false;
+  };
   // dense ids over the searchable cells
   const cid = new Int32Array(W * D).fill(-1);
   const cells = [];
@@ -279,6 +292,7 @@ function search(env, ctx) {
           if ((builtY[ck] === NONE && dOf(y2, ck) < 0) || (builtY[ck] !== NONE && Math.abs(builtY[ck] - y2) > 1)) continue;
           cf += Math.abs(y2 - G[ck]);
         }
+        if (fpBuilt(nk, y2, false)) continue;
         relax(s, nk, h2, dh ? 0 : Math.min(kk + 1, TURN_COOLDOWN), q2, len + (dh ? COST.turn : 0) + COST.grade * Math.abs(y2 - y) + COST.cutFill * cf * w, 0, 0);
       }
     }
@@ -292,7 +306,7 @@ function search(env, ctx) {
             const ci = i + di * n, cj = j + dj * n;
             if (ci < 0 || cj < 0 || ci >= W || cj >= D) break;
             const ck = ci + cj * W, yn = y + sg * n;
-            if (!inS(ck) || builtY[ck] !== NONE || nearEnd[ck] || dOf(yn, ck) < 0) break;
+            if (!inS(ck) || builtY[ck] !== NONE || nearEnd[ck] || dOf(yn, ck) < 0 || fpBuilt(ck, yn, true)) break;
             cf += Math.abs(yn - G[ck]);
             if (n < 2) continue;
             // the 2 landing cells
