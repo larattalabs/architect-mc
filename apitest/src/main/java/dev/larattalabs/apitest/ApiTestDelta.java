@@ -132,6 +132,8 @@ final class ApiTestDelta {
 					x.addProperty("parent", v.parent());
 					x.addProperty("summary", v.summary());
 					x.addProperty("pinned", v.pinned());
+					x.addProperty("capturedChanged", v.capturedChanged()); // (PT2)
+					x.addProperty("capturedTotal", v.capturedTotal());
 					vs.add(x);
 				}
 				o.add("versions", vs);
@@ -235,6 +237,8 @@ final class ApiTestDelta {
 		JsonArray n = new JsonArray();
 		v.notes().forEach(n::add);
 		o.add("notes", n);
+		o.addProperty("capturedChanged", v.capturedChanged()); // (PT2)
+		o.addProperty("capturedTotal", v.capturedTotal());
 		return o;
 	}
 

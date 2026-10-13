@@ -149,11 +149,15 @@ public final class Builds {
 		boolean gone;
 		/** A claim's claimer (the nil UUID for the console), or null. */
 		@Nullable UUID claimedBy;
+		/** (PT2) The site an ADOPTED build stands as, and the state it had before (ACTIVE or CLAIMED: an un-adopt returns to it). */
+		@Nullable String siteId;
+		@Nullable BuildState prior;
 		/** The revision BUILD_CHANGED last fired for (not saved). */
 		transient long lastFired = -1;
 
 		boolean kept() {
-			return !gone && mergedInto == null && (state == BuildState.ACTIVE || state == BuildState.CLAIMED || state == BuildState.PROVISIONAL);
+			return !gone && mergedInto == null && (state == BuildState.ACTIVE || state == BuildState.CLAIMED || state == BuildState.PROVISIONAL
+				|| state == BuildState.ADOPTED);
 		}
 
 		BoundingBox box() {
@@ -312,7 +316,18 @@ public final class Builds {
 		JsonObject pl = new JsonObject();
 		r.placers.forEach((u, c) -> pl.addProperty(u.toString(), c));
 		o.add("placers", pl);
-		o.addProperty("state", r.state.name());
+		if (r.state == BuildState.ADOPTED) {
+			// (PT2) an older reader (0.27.0) throws on an unknown state name and drops the rest of the index: it reads the state the build
+			// had before (ACTIVE or CLAIMED) and ignores the link, which the contract accepts (SQ-PT2-6: the house is still a build there)
+			BuildState pr = r.prior == null ? BuildState.ACTIVE : r.prior;
+			o.addProperty("state", pr.name());
+			JsonObject ad = new JsonObject();
+			ad.addProperty("site", r.siteId == null ? "" : r.siteId);
+			ad.addProperty("prior", pr.name());
+			o.add("adopted", ad);
+		} else {
+			o.addProperty("state", r.state.name());
+		}
 		JsonArray al = new JsonArray();
 		r.aliases.forEach(al::add);
 		o.add("aliases", al);
@@ -351,6 +366,11 @@ public final class Builds {
 			r.placers.put(UUID.fromString(e.getKey()), e.getValue().getAsInt());
 		}
 		r.state = BuildState.valueOf(o.get("state").getAsString());
+		if (o.get("adopted") instanceof JsonObject ad) {
+			r.prior = r.state;
+			r.state = BuildState.ADOPTED;
+			r.siteId = ad.has("site") && !ad.get("site").getAsString().isEmpty() ? ad.get("site").getAsString() : null;
+		}
 		for (JsonElement e : o.getAsJsonArray("aliases")) {
 			r.aliases.add(e.getAsString());
 		}
@@ -421,7 +441,7 @@ public final class Builds {
 		return cur;
 	}
 
-	/** The id when that build (after aliases) is kept: ACTIVE, CLAIMED or PROVISIONAL; else null (incidental, released, gone). */
+	/** The id when that build (after aliases) is kept: ACTIVE, CLAIMED, PROVISIONAL or ADOPTED; else null (incidental, released, gone). */
 	static @Nullable String kept(String id) {
 		String s = resolve(id);
 		Rec r = RECS.get(s);
@@ -885,6 +905,12 @@ public final class Builds {
 			return pc == null ? null : resolve(pc.build(PlacedChunk.buildOf(v)));
 		}
 
+		/** (PT2) The label when it is an adopted build's (live, not merged away), else null. */
+		@Nullable String adoptedLabel(@Nullable String label) {
+			Rec r = label == null ? null : RECS.get(label);
+			return r != null && r.state == BuildState.ADOPTED && !r.gone && r.mergedInto == null ? label : null;
+		}
+
 		/** A claimed build's cells are never re-classified: they are the claim's, whatever they look like. */
 		boolean claimedLabel(@Nullable String label) {
 			Rec r = label == null ? null : RECS.get(label);
@@ -1017,6 +1043,7 @@ public final class Builds {
 					}
 					cur = new Comp();
 					cur.add(seed, v, label, s);
+					cur.adopted = adoptedLabel(label);
 					queue = new java.util.ArrayDeque<>();
 					queue.add(seed);
 					continue;
@@ -1045,9 +1072,15 @@ public final class Builds {
 								}
 								continue;
 							}
+							String label = labelOf(nx, ny, nz, v);
+							// (PT2) two adopted builds are never merged: a cell of another adopted build stays out of this component (not
+							// visited, so it seeds its own)
+							String ad = adoptedLabel(label);
+							if (ad != null && cur.adopted != null && !ad.equals(cur.adopted)) {
+								continue;
+							}
 							visited.add(np);
 							sectionsSeen.add(Sections.key(nx >> 4, ny >> 4, nz >> 4));
-							String label = labelOf(nx, ny, nz, v);
 							if (claimedLabel(label)) {
 								continue;
 							}
@@ -1061,6 +1094,9 @@ public final class Builds {
 								continue;
 							}
 							cur.add(np, v, label, s);
+							if (ad != null) {
+								cur.adopted = ad;
+							}
 							queue.add(np);
 						}
 					}
@@ -1085,7 +1121,8 @@ public final class Builds {
 					}
 				}
 				if (ids.size() > 1) {
-					ids.sort(Comparator.comparingLong(Builds::idNumber));
+					// the oldest id survives; (PT2) an adopted build survives a merge with an active or provisional one (it keeps its id)
+					ids.sort(Comparator.comparing((String x) -> RECS.get(x).state != BuildState.ADOPTED).thenComparingLong(Builds::idNumber));
 					String survivor = ids.get(0);
 					for (String other : ids.subList(1, ids.size())) {
 						mergedInto.put(other, survivor);
@@ -1161,8 +1198,8 @@ public final class Builds {
 				if (r == null || r.gone || r.mergedInto != null || stillOwned.contains(id) || mergedInto.containsKey(id)) {
 					continue;
 				}
-				if (r.state == BuildState.CLAIMED) {
-					recountClaimed(r);
+				if (r.state == BuildState.CLAIMED || r.state == BuildState.ADOPTED) {
+					recountClaimed(r); // (PT2) an adopted build is never demoted or gone (as a claimed one)
 					continue;
 				}
 				if (r.state == BuildState.RELEASED) {
@@ -1221,6 +1258,14 @@ public final class Builds {
 					}
 					changed(r, c.splitFrom != null ? "split" : "found");
 				}
+				return;
+			}
+			// (PT2) an adopted build never demotes (as a claimed one): its record follows the component
+			if (r.state == BuildState.ADOPTED) {
+				r.demoteSince = 0;
+				fill(r, c, now);
+				c.finalId = r.id;
+				changed(r, "changed");
 				return;
 			}
 			// an existing build
@@ -1334,6 +1379,8 @@ public final class Builds {
 		final List<Integer> placerIdx = new ArrayList<>();
 		final List<BlockState> states = new ArrayList<>();
 		boolean partial;
+		/** (PT2) the adopted build whose cells this component holds (at most one), or null */
+		@Nullable String adopted;
 		@Nullable String chosen;
 		@Nullable String splitFrom;
 		@Nullable String released;
@@ -1620,6 +1667,99 @@ public final class Builds {
 		r.demoteSince = 0;
 		changed(r, "claimed");
 		save(true);
+	}
+
+	/** (PT2) Marks a build ADOPTED by a site (its prior state kept for the un-adopt); BUILD_CHANGED "adopted". Saved now. */
+	static void adopt(Rec r, String siteId) {
+		r.prior = r.state == BuildState.CLAIMED ? BuildState.CLAIMED : BuildState.ACTIVE;
+		r.state = BuildState.ADOPTED;
+		r.siteId = siteId;
+		r.demoteSince = 0;
+		r.revision++;
+		r.lastChange = System.currentTimeMillis();
+		indexDirty = true;
+		changed(r, "adopted");
+		save(true);
+	}
+
+	/** (PT2) An un-adopt: the build returns to its prior state, the site link goes; BUILD_CHANGED "unadopted". Saved now. */
+	static void unadopt(Rec r) {
+		r.state = r.prior == null ? BuildState.ACTIVE : r.prior;
+		r.prior = null;
+		r.siteId = null;
+		r.demoteSince = 0;
+		r.revision++;
+		r.lastChange = System.currentTimeMillis();
+		indexDirty = true;
+		changed(r, "unadopted");
+		save(true);
+	}
+
+	/**
+	 * (PT2) What adoption needs of a build (an alias resolves to its survivor): its id, dimension, state, bounds, entrances (lower
+	 * half, facing, block), placers and site link. Null when unknown or gone.
+	 */
+	public record Info(String id, String dimension, BuildState state, int[] bounds, List<long[]> entrances, Map<UUID, Integer> placers, int cells,
+		@Nullable String siteId, BuildKind kind) {
+	}
+
+	/** (PT2) The build behind an id (aliases resolved), or null when unknown or gone. Server thread. */
+	public static @Nullable Info info(String id) {
+		Rec r = rec(id);
+		if (r == null || r.gone) {
+			return null;
+		}
+		List<long[]> en = new ArrayList<>();
+		for (Ent e : r.entrances) {
+			en.add(new long[] {e.pos(), e.facing().get3DDataValue()});
+		}
+		return new Info(r.id, r.dimension, r.state, r.bounds.clone(), en, Map.copyOf(r.placers), r.cells, r.siteId, r.kind);
+	}
+
+	/** (PT2) Marks a build adopted by a site. False when it is unknown, gone or not ACTIVE/CLAIMED. Server thread. */
+	public static boolean markAdopted(String id, String siteId) {
+		Rec r = rec(id);
+		if (r == null || r.gone || r.mergedInto != null || r.state != BuildState.ACTIVE && r.state != BuildState.CLAIMED) {
+			return false;
+		}
+		adopt(r, siteId);
+		return true;
+	}
+
+	/** (PT2) Un-adopts a build (its prior state back, the link gone). False when it is not adopted by {@code siteId}. Server thread. */
+	public static boolean markUnadopted(String id, @Nullable String siteId) {
+		Rec r = rec(id);
+		if (r == null || r.state != BuildState.ADOPTED || siteId != null && !siteId.equals(r.siteId)) {
+			return false;
+		}
+		unadopt(r);
+		return true;
+	}
+
+	/** (PT2) The site an adopted build stands as, or null. */
+	public static @Nullable String adoptedSite(String id) {
+		Rec r = rec(id);
+		return r != null && !r.gone && r.state == BuildState.ADOPTED ? r.siteId : null;
+	}
+
+	/** (PT2) Every live adopted build: id -> its site (the load-time repair). */
+	public static Map<String, String> adoptedLinks() {
+		Map<String, String> out = new LinkedHashMap<>();
+		for (Rec r : adoptedRecs()) {
+			out.put(r.id, r.siteId == null ? "" : r.siteId);
+		}
+		return out;
+	}
+
+	/** (PT2) The live adopted build records (load-time repair). */
+	static List<Rec> adoptedRecs() {
+		List<Rec> out = new ArrayList<>();
+		for (Rec r : RECS.values()) {
+			if (!r.gone && r.mergedInto == null && r.state == BuildState.ADOPTED) {
+				out.add(r);
+			}
+		}
+		return out;
 	}
 
 	static void release(Rec r) {

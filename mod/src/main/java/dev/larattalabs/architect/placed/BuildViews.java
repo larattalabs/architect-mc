@@ -55,7 +55,8 @@ public final class BuildViews {
 		for (Builds.Ent e : r.entrances) {
 			en.add(new Entrance(BlockPos.of(e.pos()), e.facing(), e.block()));
 		}
-		return new Build(r.id, dimKey(r.dimension), r.box(), r.footprint, en, r.kind, r.confidence, r.cells, r.placers, r.state, r.revision);
+		return new Build(r.id, dimKey(r.dimension), r.box(), r.footprint, en, r.kind, r.confidence, r.cells, r.placers, r.state, r.revision,
+			r.state == BuildState.ADOPTED ? r.siteId : null);
 	}
 
 	static void fire(Builds.Rec r, String what) {
@@ -511,6 +512,11 @@ public final class BuildViews {
 		boolean op = console || dev.larattalabs.architect.apiimpl.ApiRules.permission2(actor);
 		if (!op && (actor == null || placerShare(r, actor.getUUID()) == 0 && !actor.getUUID().equals(r.claimedBy))) {
 			throw new ArchitectRefused(Reason.PERMISSION, "only a placer of " + r.id + " or an op may release it");
+		}
+		if (r.state == BuildState.ADOPTED) {
+			// (PT2 §4) remove (or undo) the site first: the un-adopt returns the build to its prior state
+			throw new ArchitectRefused(Reason.ADOPT_REFUSED, r.id + " is adopted as " + r.siteId + ": remove that site first (an un-adopt keeps the house)",
+				"adopted");
 		}
 		Builds.release(r);
 		return view(r);

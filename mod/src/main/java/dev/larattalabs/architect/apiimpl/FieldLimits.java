@@ -100,6 +100,11 @@ public final class FieldLimits {
 		return null;
 	}
 
+	/** (6c PT2) An adoption's ext: as a lot's ({@link #lotExtOne}) at the path {@code ext}; null: fine. Pure. */
+	public static @Nullable String adoptExt(JsonObject ext) {
+		return lotExtOne("ext", ext);
+	}
+
 	/** One lot's ext (see {@link #lotExt}). */
 	static @Nullable String lotExtOne(String path, JsonObject e) {
 		int n = e.toString().length();

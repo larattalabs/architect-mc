@@ -461,4 +461,31 @@ public interface Sites {
 	default Build releaseBuild(String id, net.minecraft.server.level.@Nullable ServerPlayer actor) {
 		throw new UnsupportedOperationException("Sites.releaseBuild needs Architect API 1.24.0");
 	}
+
+	// ------------------------------------------------------------------ 6c slice PT2: adopt a build as a site (API 1.28.0 placeholder)
+
+	/**
+	 * Adopts a standing player build as a site (docs/CONTRACT.md "Phase 6c slice PT2"): its cells (and the air in its columns) are
+	 * captured as version 1 of a new library entry ({@code adopted_<8 hex>}, a captured source so {@code versionOf} works) and a new
+	 * site stands on them, <b>without writing a block</b>. Updates, {@code versionOf}, {@code revert}, {@code outdated} and remove then
+	 * work as on any site; a remove (or undo) of the adoption only un-adopts: the house stays. The build stays a build, state
+	 * {@link BuildState#ADOPTED} with {@link Build#siteId()}, and keeps its protection; its site's own operations are implicitly
+	 * consented for the site's own cells. Needs no mode, no items and no INSTANT permission.
+	 *
+	 * <p>{@code consent} must name the build and carry an actor who placed at least 10% of its cells or holds permission 2.
+	 * {@code ext}: the caller's namespaced keys (at most 4096 characters as JSON), on the site; the mod then sets
+	 * {@code architect_mc:adopted = {build, entry, at}}. {@code owner}: the site's owner (stockpile and {@code outdated} key on it).
+	 * Completes exceptionally with {@link ArchitectRefused}: ADOPT_REFUSED ({@code not_a_build}, {@code provisional},
+	 * {@code consent}, {@code already_adopted}, {@code tracking_off}), NOT_LOADED, OVERLAP (a tracked cell of the build is
+	 * journal-owned), TOO_LARGE (over 96x64x96 or 262,144 captured cells), FIELD_LIMIT ({@code ext}), JOURNAL_UNAVAILABLE,
+	 * WORLD_STOPPED, SITE_BUSY (a large capture that could not settle in 3 passes: retry). Since PT2.
+	 */
+	default CompletableFuture<AdoptResult> adopt(String buildId, @Nullable String owner, BuildConsent consent, com.google.gson.JsonObject ext) {
+		throw new UnsupportedOperationException("Sites.adopt needs Architect API 1.28.0");
+	}
+
+	/** The site standing on a build (an alias resolves to its survivor), if it is adopted. Server thread. Since PT2. */
+	default Optional<String> adoptedSite(String buildId) {
+		throw new UnsupportedOperationException("Sites.adoptedSite needs Architect API 1.28.0");
+	}
 }

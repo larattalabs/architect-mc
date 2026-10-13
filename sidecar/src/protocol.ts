@@ -889,7 +889,7 @@ export const AckMsg = z.object({
   ok: z.boolean(),
   error: z.string().optional(),
   code: z.string().optional().describe('(0b) a typed refusal: COPY_REFUSED | VERSION_REFUSED (the mod maps it to Reason)'),
-  detail: z.string().optional().describe('(0b) the refusal sub-code (landmark, unknown, self, cap; bundled, no_source, massing, copy, busy, site_mismatch, group, base_moved)'),
+  detail: z.string().optional().describe('(0b) the refusal sub-code (landmark, unknown, self, cap; bundled, no_source, massing, copy, busy, site_mismatch, group, base_moved; (6c PT2) adopted_polish)'),
   result: z.record(z.string(), z.unknown()).optional().describe('design.request: {designId}; variant.request / import.request: {variantId}; job.run: {jobId}; blob.put: {blobId, size, complete}'),
 });
 export const ErrorMsg = z.object({ ...envelope('error'), message: z.string(), re: z.string().optional() });

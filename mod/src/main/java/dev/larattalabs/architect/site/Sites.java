@@ -184,6 +184,7 @@ public final class Sites {
 		});
 		Placement.init();
 		Builder.init();
+		Adopt.init(); // 6c PT2: adopted builds (its start-time repair runs after the sites and the build index are loaded)
 		ServerTickEvents.END_SERVER_TICK.register(server -> Drops.tick());
 		ServerLifecycleEvents.SERVER_STOPPED.register(server -> {
 			SiteDeltas.server = null;
@@ -576,6 +577,11 @@ public final class Sites {
 		Blueprints.Entry entry = given != null ? given : Blueprints.entry(bp.id());
 		if (entry == null) {
 			out.add(Reason.UNKNOWN_BLUEPRINT, "Design " + bp.id() + " has no loaded template");
+			return null;
+		}
+		if (Adopt.isAdoptedEntry(entry.json())) {
+			// 6c PT2 (N-PT2-2): an adopted entry is the player's house, not a template: never placed or checked anywhere
+			out.add(Reason.ADOPT_REFUSED, Adopt.PLACED_ELSEWHERE + ": " + bp.id() + " is a player's adopted build, not a template; it can't be placed");
 			return null;
 		}
 		StructureTemplate template = entry.template();
@@ -1372,6 +1378,9 @@ public final class Sites {
 			throw new SiteException(id + " is in " + b.dimension() + ", not in " + dimensionId(level) + ": remove it from there");
 		}
 		SiteJournal.requireAvailable();
+		if (Adopt.isAdopted(b) && !b.placing()) {
+			return Adopt.remove(level, b, force, tagOwner); // 6c PT2: un-adopt (the house stays)
+		}
 		Trace tr = new Trace("remove " + id);
 		MinecraftServer server = level.getServer();
 		if (SiteJournal.active(id).isEmpty()) {
@@ -1496,8 +1505,8 @@ public final class Sites {
 	public static java.util.concurrent.@Nullable CompletableFuture<Removed> removeLarge(ServerLevel level, String id, boolean force, Covered covered,
 		@Nullable String tagOwner) throws SiteException {
 		Site b = get(id);
-		if (b == null || b.placing() || b.construction() != null || b.restoreBox().volume() <= SiteJournal.SYNC_CELLS) {
-			return null;
+		if (b == null || b.placing() || b.construction() != null || b.restoreBox().volume() <= SiteJournal.SYNC_CELLS || Adopt.isAdopted(b)) {
+			return null; // (6c PT2: an adopted site's removal writes only its deltas: at once)
 		}
 		Placement.Job running = Placement.job(id);
 		if (running instanceof RestoreJob rj && RestoreJob.REMOVE.equals(rj.purpose)) {
@@ -1653,7 +1662,7 @@ public final class Sites {
 	 * deconstruct's items dropped), the leaves near it held again by standing sites, the leaf ring given back. {@code event}:
 	 * fire SITE_REMOVED.
 	 */
-	private static Removed afterRestore(ServerLevel level, Site b, Builder.@Nullable Deconstruction dec, Drops drops, boolean force, boolean event,
+	static Removed afterRestore(ServerLevel level, Site b, Builder.@Nullable Deconstruction dec, Drops drops, boolean force, boolean event,
 		int[] ring, Journal.Stats stats, Map<String, Integer> handed, List<String> cascaded, List<String> notes) {
 		MinecraftServer server = level.getServer();
 		String id = b.id();
@@ -2545,7 +2554,7 @@ public final class Sites {
 					report(sid, true, "journal entry " + main.id() + " of " + sid + " has no record to rebuild it from; it stays in the journal");
 					continue;
 				}
-				if (main.kind().equals(WorldJournal.SITE)) {
+				if (main.kind().equals(WorldJournal.SITE) || main.kind().equals(WorldJournal.ADOPT)) {
 					Site rec = Site.fromJson(meta).withPlacing(false);
 					map.put(sid, rec);
 					changed = true;
