@@ -337,7 +337,10 @@ steps.refusals = async () => {
   out.ownedStroke = st;
   await want('an owned tracked cell', await adopt('o', owb.id), 'OVERLAP', null);
   // an unloaded chunk: a cabin 300 east, the player 900 away
+  await tp(X + 300.5, gy + 25, Z + 0.5);
+  await call('dev.waitChunks', { timeoutMs: 60_000 }, 90_000).catch(() => {});
   const far = await buildCabin(X + 300, y, Z, { contents: false });
+  check(far?.id, `item 1: a cabin 300 east: ${far?.id}`);
   await tp(X + 1200.5, gy + 25, Z + 0.5);
   await settle(15000);
   await want('an unloaded chunk', await adopt('n', far.id), 'NOT_LOADED', null);
@@ -681,10 +684,18 @@ steps.survival = async () => {
   const built2 = await waitBuilt(r.siteId);
   const p3 = await ledger.point('reverted');
   check(rv.applied !== false && built2 && exact(p3), `item 6: revert to v1 in survival (a forward delta: the floor's paid blocks refunded into the stockpile, the hatch's log built from it): items in = out (${json(p3.diff)})`, rv);
+  // un-adopt: the paid cells its removal leaves standing are handed to the player with the house (the revert's hatch log: the undo
+  // writes the same block back, so it is neither refunded nor taken away); the ledger counts them as handed over
+  const paidBefore = (await ledger.parts()).paidStanding ?? {};
   const rm = await remove(r.siteId);
+  const handed = {};
+  for (const [k, v] of Object.entries(paidBefore)) { const n = v - (rm?.refund?.[k] ?? 0); if (n > 0) handed[k] = n; }
+  ledger.add(handed, ledger.cleared);
   const p4 = await ledger.point('unadopted');
   const post = await boxHash(cabinBox(X, y, Z));
-  check(rm?.removed && exact(p4) && sumOf(rm.refund) === 0, `item 6: un-adopt (remove): refund ${json(rm?.refund)}, items in = out (${json(p4.diff)}); the cabin stands (${post === pre ? 'hash equal to before the adoption' : 'hash differs'})`, rm);
+  out.handed = handed;
+  check(rm?.removed && exact(p4) && sumOf(rm.refund) === 0 && sumOf(handed) === 1, `item 6: un-adopt (remove): refund ${json(rm?.refund)} (no refund for an adopted block), ${json(handed)} handed over with the house (the revert's hatch log stays); items in = out (${json(p4.diff)}); the cabin stands (${post === pre ? 'hash equal to before the adoption' : 'hash differs'})`, rm);
+  check(post === pre, 'item 6: after adopt, update, revert and un-adopt the cabin is block for block what it was before the adoption');
   out.points = ledger.points;
   await leaveWorld();
   spendZero();
@@ -707,23 +718,26 @@ steps.protect = async () => {
   check(r?.siteId, `item 10: the cabin adopted as ${r?.siteId}`);
   const cb = cabinBox(X, y, Z);
   const h0 = await khash(cb);
-  const hw0 = await boxHash(cb);
+  /** The adopted cabin kept: its kept build cells unchanged and its site's cells as captured (the room's open air is not the site's). */
+  const kept = async () => (await khash(cb)).sha256 === h0.sha256 && (await compare(r.siteId, 1)).mismatched === 0;
   for (const s of [{ kind: 'raise', at: [X + 4, gy, Z + 4], radius: 7, strength: 3 }, { kind: 'lower', at: [X + 4, gy, Z + 4], radius: 7, strength: 3 },
     { kind: 'smooth', at: [X + 4, gy, Z + 4], radius: 7, strength: 3 }, { kind: 'melt', at: [X + 4, gy, Z + 4], radius: 7, strength: 3 }]) {
     const v = await call('dev.brush', { owner: OWNER, shape: 'cylinder', ...s }, 600_000);
     out[s.kind] = v.cellsSkipped;
-    check(!v.refused && await boxHash(cb) === hw0, `item 10: a ${s.kind} stroke over the adopted cabin keeps it (hash equal; skipped ${json(v.cellsSkipped ?? v.refused)})`);
+    check(!v.refused && await kept(), `item 10: a ${s.kind} stroke over the adopted cabin keeps it (its build cells and the site's cells unchanged; skipped ${json(v.cellsSkipped ?? v.refused)})`);
     if (v.region) await call('dev.region.remove', { region: v.region, requester: OWNER }, 600_000).catch(() => null);
     await settle(1500);
   }
   const fell = await call('dev.brush', { owner: OWNER, kind: 'raise', shape: 'cylinder', at: [TX, gy, TZ], radius: 2, strength: 2 }, 600_000);
-  check(!fell.refused && (fell.cellsSkipped?.['tree_kept.build'] ?? 0) >= 1 && await boxHash(cb) === hw0, `item 10: felling at its wall stops at its logs (tree_kept.build ${fell.cellsSkipped?.['tree_kept.build'] ?? 0}), the cabin unchanged`);
+  const trunk = await call('dev.region.logs', { box: [TX, y, TZ, TX, y + 6, TZ] }, 300_000);
+  const tk = Object.entries(fell.cellsSkipped ?? {}).filter(([k]) => k.startsWith('tree_kept')).reduce((a, [, v]) => a + v, 0);
+  check(!fell.refused && tk >= 1 && trunk.logs === 0 && await kept(), `item 10: felling at its wall stops at its logs (${json(Object.fromEntries(Object.entries(fell.cellsSkipped ?? {}).filter(([k]) => /tree|owned|build/.test(k))))}), the tree felled (${trunk.logs} trunk logs left), the cabin kept`);
   if (fell.region) await call('dev.region.remove', { region: fell.region, requester: OWNER }, 600_000).catch(() => null);
   const road = await call('dev.road.place', { points: [[X - 10, gy, Z + 4], [X + 20, gy, Z + 4]], width: 3, owner: OWNER }, 300_000);
   const rref = (road.refusals ?? []).find((x) => x.reason === 'PLAYER_BUILD');
   check(!road.placed && rref?.message?.includes(cab.id), `item 10: a road across it is refused PLAYER_BUILD naming ${cab.id}`, road);
   const pc = await call('dev.region.checkPlan', { owner: OWNER, claim: [X - 40, Z - 40, X + 48, Z + 48], plan: { schemaVersion: 'plan/0',
-    zones: [{ id: 'town', program: { lots: [{ id: 'h1', type: 'cottage', size: [9, 9] }] }, where: { near: { feature: { build: { id: cab.id } } }, within: 20 } }] } }, 900_000);
+    zones: [{ id: 'town', program: { lots: [{ id: 'h1', type: 'cottage', size: [9, 9] }, { id: 'h2', type: 'house', size: [9, 9] }] }, where: { near: { feature: { build: { id: cab.id } }, within: 24 } } }] } }, 900_000);
   const town = (pc.check?.parts ?? []).find((p) => p.part === 'town');
   const B = cb;
   const rect = town?.geometry?.rect;
@@ -759,15 +773,21 @@ steps.states = async () => {
   await rule('graceMs', 0);
   const out = {};
   // never demotes: an adopted cabin cut below 20 structural cells
+  await rule('demoteGapMs', 2000);
   const A = await buildCabin(X, y, Z, { contents: false });
+  const K = await buildCabin(X, y, Z - 20, { contents: false });
   const ra = await adopt('d', A.id);
-  const cut = cabinOps(X, y, Z).map((o) => o.at).filter((p, i) => i >= 15 && !(p[0] === X + 4 && p[2] === Z));
-  await breaks(cut);
-  await settle(7000);
-  await call('dev.pt.builds', { drain: true });
-  await sleep(1000);
+  const cutOf = (z0) => cabinOps(X, y, z0).map((o) => o.at).filter((p, i) => i >= 10 && !(p[0] === X + 4 && p[2] === z0));
+  await breaks([...cutOf(Z), ...cutOf(Z - 20)]);
+  for (let i = 0; i < 3; i++) {
+    await settle(4000);
+    await call('dev.pt.builds', { drain: true });
+  }
   const a1 = await buildOf(A.id);
-  check(a1.state === 'ADOPTED' && a1.siteId === ra.siteId && a1.cells < 20, `item 11: the adopted ${A.id} cut to ${a1.cells} structural cells stays ${a1.state} (${a1.siteId})`);
+  const k1 = await buildOf(K.id);
+  check(a1.state === 'ADOPTED' && a1.siteId === ra.siteId && a1.cells < 20 && (k1 === 'none' || k1.state !== 'ACTIVE'),
+    `item 11: the adopted ${A.id} cut to ${a1.cells} structural cells stays ${a1.state} (${a1.siteId}); the same cut demotes the ACTIVE ${K.id} (${k1?.state ?? k1})`);
+  await rule('demoteGapMs', 60000);
   // a merge with an ACTIVE build keeps the adopted id (even when the other is older)
   const old = await buildCabin(X + 30, y, Z, { contents: false });
   const B = await buildCabin(X + 42, y, Z, { contents: false });
