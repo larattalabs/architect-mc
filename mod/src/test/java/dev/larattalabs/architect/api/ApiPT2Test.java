@@ -16,8 +16,8 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 /**
- * API PT2 placeholder 1.28.0 (docs/CONTRACT.md "Phase 6c slice PT2" §1): adopt and adoptedSite are defaults that throw "needs
- * Architect API 1.28.0"; ADOPT_REFUSED and ADOPTED are appended; Build, DeltaVerdict and EntryVersion keep their old constructors
+ * API PT2 placeholder 1.26.0 (docs/CONTRACT.md "Phase 6c slice PT2" §1): adopt and adoptedSite are defaults that throw "needs
+ * Architect API 1.26.0"; ADOPT_REFUSED and ADOPTED are appended; Build, DeltaVerdict and EntryVersion keep their old constructors
  * (siteId null, capturedChanged and capturedTotal 0).
  */
 class ApiPT2Test {
@@ -29,7 +29,7 @@ class ApiPT2Test {
 
 	@Test
 	void versionAndEnums() {
-		assertTrue(IrStale.semverCompare(ArchitectApi.VERSION, "1.28.0") >= 0, ArchitectApi.VERSION);
+		assertTrue(IrStale.semverCompare(ArchitectApi.VERSION, "1.26.0") >= 0, ArchitectApi.VERSION);
 		assertEquals(Reason.PLAYER_BUILD.ordinal() + 1, Reason.ADOPT_REFUSED.ordinal());
 		assertEquals(BuildState.PROVISIONAL.ordinal() + 1, BuildState.ADOPTED.ordinal());
 	}
@@ -46,7 +46,7 @@ class ApiPT2Test {
 			() -> old.adoptedSite("build-1"));
 		for (Runnable r : calls) {
 			var e = assertThrows(UnsupportedOperationException.class, r::run);
-			assertTrue(e.getMessage().contains("1.28.0"), e.getMessage());
+			assertTrue(e.getMessage().contains("1.26.0"), e.getMessage());
 		}
 	}
 

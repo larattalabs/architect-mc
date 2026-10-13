@@ -11010,7 +11010,7 @@ and gate.
 - **N-PT2-6:** accepted: entities (item frames, paintings, armour stands) are not captured in v0; listed as a known gap.
 - **N-PT2-7:** next free minor at merge.
 
-### Phase 6c slice PT2 as built (placeholders API 1.28.0, mod 0.31.0, kit 0.29.0, over v0.27.0, origin/main v0.28.0 (C33) merged; recorded 2026-10-13)
+### Phase 6c slice PT2 as built (API 1.26.0, mod 0.29.0, kit 0.27.0 (renumbered at merge from placeholders 1.28.0 / 0.31.0 / 0.29.0), over v0.27.0, origin/main v0.28.0 (C33) merged; recorded 2026-10-13)
 
 Branch `slice/PT2` (worktree `../architect-mc-PT2`, from origin/main b8a8908 = v0.27.0). $0: sim and stub only
 (`artifacts/gate6c-pt2/spend.json`). Ports 8924-8929. Evidence: `artifacts/gate6c-pt2/` (one JSON per `tools/gate6cpt2.mjs` step,

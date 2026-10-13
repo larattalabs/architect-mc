@@ -462,7 +462,7 @@ public interface Sites {
 		throw new UnsupportedOperationException("Sites.releaseBuild needs Architect API 1.24.0");
 	}
 
-	// ------------------------------------------------------------------ 6c slice PT2: adopt a build as a site (API 1.28.0 placeholder)
+	// ------------------------------------------------------------------ 6c slice PT2: adopt a build as a site (API 1.26.0 placeholder)
 
 	/**
 	 * Adopts a standing player build as a site (docs/CONTRACT.md "Phase 6c slice PT2"): its cells (and the air in its columns) are
@@ -481,11 +481,11 @@ public interface Sites {
 	 * WORLD_STOPPED, SITE_BUSY (a large capture that could not settle in 3 passes: retry). Since PT2.
 	 */
 	default CompletableFuture<AdoptResult> adopt(String buildId, @Nullable String owner, BuildConsent consent, com.google.gson.JsonObject ext) {
-		throw new UnsupportedOperationException("Sites.adopt needs Architect API 1.28.0");
+		throw new UnsupportedOperationException("Sites.adopt needs Architect API 1.26.0");
 	}
 
 	/** The site standing on a build (an alias resolves to its survivor), if it is adopted. Server thread. Since PT2. */
 	default Optional<String> adoptedSite(String buildId) {
-		throw new UnsupportedOperationException("Sites.adoptedSite needs Architect API 1.28.0");
+		throw new UnsupportedOperationException("Sites.adoptedSite needs Architect API 1.26.0");
 	}
 }
