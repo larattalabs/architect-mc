@@ -10397,11 +10397,16 @@ SETTLEMENTS §17.2's 6c gate, run once when the last 6c slice merges (whichever 
 - per-tile evaluation p50/p99 on S2, S3 and the forest-heavy variant (F3): p99 under 2 s, at least 45k cells/s;
 - the full `release` tier and the full gate-verifier; 6b's gate items as regressions.
 
-## Phase 6c slice P0: plan check v0 (DRAFT for Steward review)
+## Phase 6c slice P0: plan check v0 (DRAFT for Steward review; `plan/0` FROZEN 2026-10-12)
+
+**`plan/0` is frozen (2026-10-12, after Steward's 59-ask fixtures round).** From now on a change within `plan/0` is additive
+only: a new optional member, a new reserved kind or block id, a new catalogue entry. Anything else (removing or renaming a
+member, narrowing a value, changing a meaning, making an optional member required) needs `plan/1`. The same sentence is in the
+schema's `description`. See "Freeze of plan/0" below for what the round changed and the counts that order the reserved kinds.
 
 Next free API minor at merge (the house rule; a placeholder until then), mod to match. steward-mc docs/COMPOSITION.md v2 §2-§7,
 and architect-mc docs/COMPOSITION-ANSWERS.md, whose "Revisions" section wins. The geometric plan schema is
-`kit/schemas/plan.json` (`plan/0`, DRAFT on this branch).
+`kit/schemas/plan.json` (`plan/0`, frozen 2026-10-12).
 
 - **Branch:** `slice/P0`, worktree `../architect-mc-P0`. **Spend:** $0. The check makes no Claude calls, and repair costs are
   Steward's.
@@ -10456,11 +10461,11 @@ Top level:
 - **Steward's hook into the plan** is `partRef`: `<partId>`, or `<planId>@<n>#<partId>` from outside the plan. A stage,
   schedule entry or secret points at parts with it. Architect never reads the life layer.
 - **zones[]:**
-  - `kind` (`standard`; `outpost` is reserved for D2);
+  - `kind` (`standard`; `outpost` is reserved for D2; `district` is a reserved alias of the `{districts}` program, see below);
   - `purpose` (a tag, echoed);
   - `style` (a bible ref: `{bible, version?}`, or `{pending: "<tag>"}` while the bible doesn't exist yet, §3);
-  - `program`: `{template: "flat_village", params}`, or `{lots: [...], layout: "street", shared}`, or `{districts}`, which
-    is reserved for D1. A lot carries `id`, `type`, `size`, an optional slug `role` and an optional free-text `label` (at most
+  - `program`: `{template: "flat_village", params}`, or `{lots: [...], layout, shared}` with `layout` one of `street` (supported) or `ring`, `spiral`, `grid`,
+    `organic` (reserved for FL; see "Free layouts"), or `{districts}`, which is reserved for D1 (see "Districts"). A lot carries `id`, `type`, `size`, an optional slug `role` and an optional free-text `label` (at most
     80 characters, as on zones and connectors);
   - `where`, `sketch`, `size` (`{w, d}` as integers or ranges, or a preset S/M/L/XL), and `tolerance`.
 - **connectors[]:**
@@ -10478,9 +10483,11 @@ Top level:
   - `terrace`: 6a's terrace plus relief edges;
   - `ice_spike` and `rock_spire`: F1, with `count`, `height`, `preset` and `keepNatural`;
   - reserved: `floating_island` (N-P0-1), `brush` (B), `pond` (H), `scatter` (F2), `giant_tree` (F3) and `hidden_room`
-    (7b).
+    (7b), and, added at the freeze, `crater` (7c), `hollow_mountain` (7c), `waterfall` (H), `seabed_site` (a later slice),
+    `ship_hull` and `mast` (unscheduled).
 - **rules[]:** the vocabulary `palette`, `shape`, `variety`, `density` and `height_cap`. Each has a draft def in the schema,
-  and all are reserved until RC. A required rule that can't be verified blocks readiness.
+  and all are reserved until RC; added at the freeze, `stacked_floors` (RC, or 7b) and `suspended` (7b) are reserved too. A
+  required rule that can't be verified blocks readiness.
 - **dependencies[]:** `{part, after[], why?}`. The part stands after those parts (stage order), and answers `blocked` when
   any of them doesn't fit. Implicit dependencies come from locator targets, endpoints and `relief.around`. The whole graph
   must be acyclic.
@@ -10850,6 +10857,54 @@ is capped at about $1 per plan. P0 itself stays $0.
   free-standing form stays reserved.
 - **N-P0-2:** C28 is already D's builder's call (per-column biomes only if edge tracing needs it); not a Noah question.
 
+
+### Freeze of plan/0 (2026-10-12)
+
+`plan/0` is **frozen** as of 2026-10-12, the reason being the end of S-P0-9's round: Steward wrote plans for all 59 strange asks
+against it, all 59 are valid, and 34 carry waiting parts in the extension envelope. **The rule from now on: changes are
+additive-only within `plan/0`** (new optional members, new reserved kinds and block ids, new catalogue entries); anything else
+needs `plan/1`. The aim of the last edits: an `unsupported` answer names **one** block id per idea, so a pending part maps onto
+a future block.
+
+**Free layouts.** `program.lots.layout` is the enum `street | ring | spiral | grid | organic`.
+- `street` is supported (block id `layout.street`).
+- `ring`, `spiral`, `grid` and `organic` are reserved, state `reserved`, arriving in slice FL, with block ids `layout.ring`,
+  `layout.spiral`, `layout.grid` and `layout.organic`. A lots program that names one is checked as a normal lots program and
+  answers `unsupported {block: "layout.<name>"}`.
+- A layout is written **there**, never as a connector kind (`connector.ring_street`, `connector.grid`) or a rule kind
+  (`rule.ring_layout`, `rule.layout_ring`): the fixtures show Claude doing exactly that when the layout had no home.
+
+**Districts.** `zone.kind: district` is a **reserved alias** of the `{districts}` program: the part answers
+`unsupported {block: "program.districts"}`, not `zone.district`, until D1. The catalogue lists `zone.district` with
+`aliasOf: "program.districts"` (a new optional catalogue-entry member, with an optional `note`). The schema's description of
+`program.districts` says how to write districts.
+
+**New reserved kinds** (each has a block id, state `reserved` and its planned slice):
+
+| Block id | Slice | Note |
+|---|---|---|
+| `form.crater` | 7c | the `crater_works` template already covers a whole-region crater (N-P0-1) |
+| `form.hollow_mountain` | 7c | |
+| `form.waterfall` | H | |
+| `form.seabed_site` | later | under water; a later slice, not yet named |
+| `form.ship_hull` | unscheduled | "structures that move or float" |
+| `form.mast` | unscheduled | "structures that move or float" |
+| `rule.stacked_floors` | RC | arcology; or 7b if it needs interior work |
+| `rule.suspended` | 7b | upside-down or hanging builds; 7b's other surfaces |
+
+**Already-wanted reserved kinds, ranked by Steward's counts** (parts across the 59 plans; input to ordering the slices). Each
+was confirmed reserved, with a block id and a planned slice:
+
+| Block id | Parts | Slice |
+|---|---|---|
+| `connector.rope_bridge` | 11 | 7a |
+| `connector.wall` | 8 | 7a |
+| `rule.palette` | 8 | RC |
+| `rule.shape` | 4 | RC |
+| `connector.tunnel` | 4 | T3 |
+
+The catalogue grew by 14 entries at the freeze: `zone.district`, the five `layout.*` ids, six forms and two rules. A catalogue
+diff against the draft lists them as added.
 
 ### Deferred
 
