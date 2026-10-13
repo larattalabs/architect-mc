@@ -10397,16 +10397,16 @@ SETTLEMENTS §17.2's 6c gate, run once when the last 6c slice merges (whichever 
 - per-tile evaluation p50/p99 on S2, S3 and the forest-heavy variant (F3): p99 under 2 s, at least 45k cells/s;
 - the full `release` tier and the full gate-verifier; 6b's gate items as regressions.
 
-## Phase 6c slice P0: plan check v0 (DRAFT for Steward review; `plan/0` FROZEN 2026-10-13)
+## Phase 6c slice P0: plan check v0 (DRAFT for Steward review; `plan/0` FROZEN 2026-10-12)
 
-**`plan/0` is frozen (2026-10-13, after Steward's 59-ask fixtures round).** From now on a change within `plan/0` is additive
+**`plan/0` is frozen (2026-10-12, after Steward's 59-ask fixtures round).** From now on a change within `plan/0` is additive
 only: a new optional member, a new reserved kind or block id, a new catalogue entry. Anything else (removing or renaming a
 member, narrowing a value, changing a meaning, making an optional member required) needs `plan/1`. The same sentence is in the
 schema's `description`. See "Freeze of plan/0" below for what the round changed and the counts that order the reserved kinds.
 
 Next free API minor at merge (the house rule; a placeholder until then), mod to match. steward-mc docs/COMPOSITION.md v2 §2-§7,
 and architect-mc docs/COMPOSITION-ANSWERS.md, whose "Revisions" section wins. The geometric plan schema is
-`kit/schemas/plan.json` (`plan/0`, frozen 2026-10-13).
+`kit/schemas/plan.json` (`plan/0`, frozen 2026-10-12).
 
 - **Branch:** `slice/P0`, worktree `../architect-mc-P0`. **Spend:** $0. The check makes no Claude calls, and repair costs are
   Steward's.
@@ -10858,9 +10858,9 @@ is capped at about $1 per plan. P0 itself stays $0.
 - **N-P0-2:** C28 is already D's builder's call (per-column biomes only if edge tracing needs it); not a Noah question.
 
 
-### Freeze of plan/0 (2026-10-13)
+### Freeze of plan/0 (2026-10-12)
 
-`plan/0` is **frozen** as of 2026-10-13, the reason being the end of S-P0-9's round: Steward wrote plans for all 59 strange asks
+`plan/0` is **frozen** as of 2026-10-12, the reason being the end of S-P0-9's round: Steward wrote plans for all 59 strange asks
 against it, all 59 are valid, and 34 carry waiting parts in the extension envelope. **The rule from now on: changes are
 additive-only within `plan/0`** (new optional members, new reserved kinds and block ids, new catalogue entries); anything else
 needs `plan/1`. The aim of the last edits: an `unsupported` answer names **one** block id per idea, so a pending part maps onto
