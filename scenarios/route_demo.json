@@ -32,7 +32,7 @@
       220
     ],
     "foundBy": "S3's pinned fixture (scenarios/s3_monastery.json); the sites pinned against relief_demo's golden survey of it",
-    "irShaAtPin": "656cc0425299e13624b84831e8e7edd3330f8fcd102fb80d385db93275e7953c"
+    "irShaAtPin": "c172fd9b457a97babfea4e195e18f53e58709be45b319ca8a2e6518c1f4afd2a"
   },
   "flat": {
     "preset": "flat",
@@ -46,10 +46,10 @@
   "protect": [
     {
       "id": "t2_keepout",
-      "x0": 3630,
-      "z0": -913,
-      "x1": 3648,
-      "z1": -907,
+      "x0": 3628,
+      "z0": -905,
+      "x1": 3650,
+      "z1": -900,
       "label": "T2 keep-out across the gate-hall line"
     }
   ],
@@ -57,43 +57,43 @@
   "cams": {
     "cam_e": [
       3712.5,
-      172,
-      -930.5,
+      164,
+      -920.5,
       90.4,
-      46
+      42.7
     ],
     "cam_ground": [
       3662.5,
       108,
-      -906.5,
+      -896.5,
       140.1,
       15.7
     ],
     "cam_high": [
       3650.5,
-      187,
-      -922.5,
+      185,
+      -912.5,
       135,
-      82.2
+      82
     ],
     "cam_n": [
       3642.5,
-      164,
-      -1000.5,
+      156,
+      -990.5,
       0.4,
-      43.1
+      39.4
     ],
     "cam_s": [
       3642.5,
       135,
-      -860.5,
+      -850.5,
       179.6,
       27.1
     ],
     "cam_w": [
       3604.5,
       135,
-      -930.5,
+      -920.5,
       -90.8,
       43.8
     ]

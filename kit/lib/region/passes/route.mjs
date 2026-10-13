@@ -30,6 +30,8 @@ export const FLIGHT_MAX = 8;
 export const LADDER_MAX = 24;
 /** No stair flight or ladder this close (cells) to an edge's end. */
 export const NEAR_END = 1;
+/** How far a tree's logs may reach from its surveyed column (a felled trunk goes whole). */
+export const TREE_REACH = 6;
 /** Movers that never climb: an edge with one of these never gets a ladder (Steward S-T2-2). */
 export const VILLAGER = 'villager';
 /** Lot kinds whose edges are player-only (S-T2-1: lookouts, watchtowers), and the kinds a villager must reach. */
@@ -374,7 +376,17 @@ function baseMasks(env, intent, { water = true, keepOut = true } = {}) {
     for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) tree[i + j * W] = 0;
   }
   for (const b of intent.hard ?? []) rect(hard, b[0], b[1], b[2], b[3]);
-  if (keepOut) for (const b of intent.keepOut ?? []) rect(guard, b[0], b[1], b[2], b[3]);
+  if (keepOut) {
+    const ko = new Uint8Array(n);
+    for (const b of intent.keepOut ?? []) rect(ko, b[0], b[1], b[2], b[3]);
+    // a tree near keep-out: the realise fells a whole trunk whose log a write removes (6a's tree rule), and a tree within 6 of the
+    // rect may reach into it, so the routes keep 6 clear of such trees (their branches are not in the survey)
+    const near = dilate(ko, W, D, Math.floor((TREE_REACH + r - 1) / r));
+    const treeNear = new Uint8Array(n);
+    for (let k = 0; k < n; k++) if (near[k] && tree[k]) treeNear[k] = 1;
+    const reach = dilate(treeNear, W, D, Math.floor((TREE_REACH + r - 1) / r));
+    for (let k = 0; k < n; k++) if (ko[k] || reach[k]) guard[k] = 1;
+  }
   // the claim margin
   const m = Math.max(0, Math.floor(((intent.margin ?? 2) + r - 1) / r));
   for (let j = 0; j < D; j++) for (let i = 0; i < W; i++) if (i < m || j < m || i >= W - m || j >= D - m) hard[i + j * W] = 1;
