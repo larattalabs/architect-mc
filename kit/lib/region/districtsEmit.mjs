@@ -125,31 +125,16 @@ export function besidePorts(beside) {
 }
 
 /**
- * `r.pass('districts', intent)`: `{districts: [...], loopiness = 0.15, candidates = 'survey', step = 4, limit = 64, exact = true,
- * stage: {ground, street, routes, lots, props}, maxGrade = 0.25, routeLamps = true, lampFixture, keepOut, hard}`. Returns
- * `{data}` (also `r.meta.districts`): `{assign: {districtId: candidateId}, rects, lots, unplaced, edges, treeCost, loopCost,
- * loopiness, bands, candidates, exact, method, join, ms}`.
+ * The placement (pure): candidates per district, each with V's street layout in its rect, and the assignment in phases by `near`.
+ * `{S (ctx.survey), claim, keepOut, blocked, ds (parseDistricts), step, limit, exact}` -> `{bands, cands, pick: Map(id -> candidate),
+ * unplaced, phases, methods, exact, bnbNodes, totalCost}`. The plan check (plan_v0) places a districts zone with it at resolve time
+ * and hands the result to emitDistricts (`_placed`).
  */
-export function emitDistricts(r, intent = {}) {
-  const t0 = performance.now();
-  const it = { ...intent };
-  const what = 'pass districts';
-  const ctx = r.ctx, claim = r.claim, S = r.survey, cols = S.columns;
-  if ((it.candidates ?? 'survey') !== 'survey') throw new Error(`${what}: candidates must be 'survey' (7a's affordances come later)`);
-  const ds = parseDistricts(it.districts, `${what}: districts`);
-  const loopiness = it.loopiness ?? 0.15;
-  if (typeof loopiness !== 'number' || !(loopiness >= 0 && loopiness <= 1)) throw new Error(`${what}: loopiness must be 0..1`);
-  const stages = { ground: 'ground', street: 'street', routes: 'routes', lots: 'lots', props: 'props', ...(it.stage ?? {}) };
-  for (const s of Object.values(stages)) if (!r.stageList.includes(s)) throw new Error(`${what}: stage '${s}' is not one of the region's stages (${r.stageList.join(', ')})`);
-  // ---- obstacles: keep-out (the owner's areas and builds), the caller's hard rects, a standing region's cells, this region's lots and forms
-  const keepOut = [...(ctx.keepOut ?? []), ...(it.keepOut ?? [])].map((k) => [...k]);
-  const beside = ctx.beside ?? null;
-  const standing = beside ? [...(beside.lots ?? []).map((b) => [b[0] - 1, b[1] - 1, b[2] + 1, b[3] + 1]), ...(beside.keep ?? [])] : [];
-  const own = r._routeObstacles({}).hard;
-  const blocked = [...keepOut, ...(it.hard ?? []), ...standing, ...own];
+export function placeDistricts({ S, claim, keepOut = [], blocked = [], ds, step = 4, limit = EXACT_MAX, exact: wantExact = true }) {
+  const cols = S.columns;
+  step ??= 4; limit ??= EXACT_MAX;
   const bands = levelBands(cols, claim);
   // ---- candidates, each with its street layout
-  const step = it.step ?? 4, limit = it.limit ?? EXACT_MAX;
   const rectOf = (c) => ({ ...claim, minX: c.rect.minX, minZ: c.rect.minZ, maxX: c.rect.maxX, maxZ: c.rect.maxZ });
   const cands = ds.map((d) => {
     const cs = districtCandidates(cols, claim, d.size, { bands, blocked, step, limit, band: d.levelBand, gap: 1 });
@@ -174,12 +159,41 @@ export function emitDistricts(r, intent = {}) {
       const near = d.near.filter((t) => pick.has(t)).map((t) => { const q = pick.get(t).rect; return [(q.minX + q.maxX) >> 1, (q.minZ + q.maxZ) >> 1]; });
       return cands[i].filter((c) => !taken.some((q) => rectsMeet(q, c.rect, DISTRICT_GAP))).map((c) => ({ ...c, cost: candidateCost(d, c, { unplacedLots: c.unplacedLots, near }) })).filter((c) => c.cost < DISTRICT_INF);
     });
-    const a = assignDistricts(idx.map((i) => ds[i]), pc, { gap: DISTRICT_GAP, exact: it.exact !== false });
+    const a = assignDistricts(idx.map((i) => ds[i]), pc, { gap: DISTRICT_GAP, exact: wantExact !== false });
     exact &&= a.exact; bnbNodes += a.nodes; totalCost += a.cost; methods.add(a.method);
     idx.forEach((i, n) => { if (a.pick[n] >= 0) pick.set(ds[i].id, pc[n][a.pick[n]]); });
   }
   const unplaced = [];
   for (const [i, d] of ds.entries()) if (!pick.has(d.id)) unplaced.push({ id: d.id, reason: cands[i].length ? 'no_room' : 'no_candidate', candidates: cands[i].length });
+  return { bands, cands, pick, unplaced, phases, methods, exact, bnbNodes, totalCost };
+}
+
+/**
+ * `r.pass('districts', intent)`: `{districts: [...], loopiness = 0.15, candidates = 'survey', step = 4, limit = 64, exact = true,
+ * stage: {ground, street, routes, lots, props}, maxGrade = 0.25, routeLamps = true, lampFixture, keepOut, hard}`. Returns
+ * `{data}` (also `r.meta.districts`): `{assign: {districtId: candidateId}, rects, lots, unplaced, edges, treeCost, loopCost,
+ * loopiness, bands, candidates, exact, method, join, ms}`.
+ */
+export function emitDistricts(r, intent = {}) {
+  const t0 = performance.now();
+  const it = { ...intent };
+  const what = 'pass districts';
+  const ctx = r.ctx, claim = r.claim, S = r.survey, cols = S.columns;
+  if ((it.candidates ?? 'survey') !== 'survey') throw new Error(`${what}: candidates must be 'survey' (7a's affordances come later)`);
+  const ds = parseDistricts(it.districts, `${what}: districts`);
+  const loopiness = it.loopiness ?? 0.15;
+  if (typeof loopiness !== 'number' || !(loopiness >= 0 && loopiness <= 1)) throw new Error(`${what}: loopiness must be 0..1`);
+  const stages = { ground: 'ground', street: 'street', routes: 'routes', lots: 'lots', props: 'props', ...(it.stage ?? {}) };
+  for (const s of Object.values(stages)) if (!r.stageList.includes(s)) throw new Error(`${what}: stage '${s}' is not one of the region's stages (${r.stageList.join(', ')})`);
+  // ---- obstacles: keep-out (the owner's areas and builds), the caller's hard rects, a standing region's cells, this region's lots and forms
+  const keepOut = [...(ctx.keepOut ?? []), ...(it.keepOut ?? [])].map((k) => [...k]);
+  const beside = ctx.beside ?? null;
+  const standing = beside ? [...(beside.lots ?? []).map((b) => [b[0] - 1, b[1] - 1, b[2] + 1, b[3] + 1]), ...(beside.keep ?? [])] : [];
+  const own = r._routeObstacles({}).hard;
+  const blocked = [...keepOut, ...(it.hard ?? []), ...standing, ...own];
+  const P = it._placed ?? placeDistricts({ S, claim, keepOut, blocked, ds, step: it.step, limit: it.limit, exact: it.exact });
+  const { bands, cands, pick, unplaced, phases, methods } = P;
+  let { exact, bnbNodes, totalCost } = P;
   // ---- route costs between the placed districts' street ends (dry runs, each pair alone)
   const placed = ds.filter((d) => pick.has(d.id));
   const ends = new Map(placed.map((d) => [d.id, streetEnds(pick.get(d.id).L)]));
@@ -275,7 +289,7 @@ export function emitDistricts(r, intent = {}) {
   for (const p of chosen) { addNode(p.na); addNode(p.nb); edges.push({ id: `d_${p.a}__${p.b}`.slice(0, 48), from: p.na.name, to: p.nb.name, width: DISTRICT_ROUTE_WIDTH }); }
   if (join) { addNode(join.a); addNode(join.b); edges.push({ id: 'join', from: join.a.name, to: join.b.name, width: DISTRICT_ROUTE_WIDTH }); }
   let routed = null;
-  if (edges.length) routed = r._route({ nodes, edges, maxGrade, stage: stages.routes, part: 'routes', hard: [...districtHard, ...standing], keepOut: it.keepOut ?? [], lanterns: true, clearTrees: endClear });
+  if (edges.length) routed = r._route({ nodes, edges, maxGrade, stage: stages.routes, part: it.routePart ?? 'routes', hard: [...districtHard, ...standing], keepOut: it.keepOut ?? [], lanterns: true, clearTrees: endClear });
   const byId = new Map((routed?.edges ?? []).map((e) => [e.id, e]));
   // the route ends join their streets: a link edge from each end node to the street's terminal junction
   const linked = new Set();
@@ -302,9 +316,11 @@ export function emitDistricts(r, intent = {}) {
   // ---- anchors (the first district's bell), lamps
   const first = placedNow[0];
   const bell = layouts[first.id].res.bell;
-  if (!r.anchors.entrance) r.anchor('entrance', bell);
-  if (!r.anchors.spawn) r.anchor('spawn', bell);
-  for (const d of placedNow) r.anchor(`bell_${d.id}`.slice(0, 32), layouts[d.id].res.bell);
+  if (it.anchors !== false) {
+    if (!r.anchors.entrance) r.anchor('entrance', bell);
+    if (!r.anchors.spawn) r.anchor('spawn', bell);
+    for (const d of placedNow) r.anchor(`bell_${d.id}`.slice(0, 32), layouts[d.id].res.bell);
+  }
   let lamps = null;
   if (it.lamps !== false) {
     const extra = [], extraCap = {};
@@ -329,11 +345,12 @@ export function emitDistricts(r, intent = {}) {
       ...(join ? [{ id: 'join', a: join.a.d.id, b: `${beside.id}:${join.q.node}`, kind: 'join', dryCost: join.dry.cost, ok: !!byId.get('join')?.ok, failed: byId.get('join')?.failed ?? null }] : [])],
     treeCost: span.treeCost, loopCost: span.loopCost, failedEdges: failed.map((e) => e.id),
     join: join ? { region: beside.id, node: join.q.node, port: join.q.port, at: join.b.at, from: join.a.name, district: join.a.d.id } : null,
+    bells: Object.fromEntries(placedNow.map((d) => [d.id, layouts[d.id].res.bell])),
     lamps, ms: Math.round(performance.now() - t0),
   };
-  r.meta.districts = data;
+  if (it.meta !== false) r.meta.districts = data;
   r.note(`pass districts: ${placedNow.length}/${ds.length} placed (${data.method}${exact ? '' : ', not exact'}), ${chosen.length} edge(s) (${span.tree.length} tree, ${span.loops.length} loop), loop cost ${span.loopCost} of tree ${span.treeCost}${join ? `, joined to ${beside.id} at ${join.q.node}` : ''}${unplaced.length ? `; unplaced: ${unplaced.map((u) => `${u.id} (${u.reason})`).join(', ')}` : ''}`);
-  return { data };
+  return { data, layouts, ends: Object.fromEntries(placedNow.map((d) => [d.id, ends.get(d.id)])) };
 }
 
 export { LOT_UNPLACED, UNPLACED };
