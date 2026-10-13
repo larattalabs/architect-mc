@@ -3,7 +3,7 @@
 Resume notes for `slice/T2` (worktree `../architect-mc-T2`, from origin/main 31f1b56 = v0.21.0). Delete when the gate passes.
 
 ## Placeholders
-API 1.19.0, mod 0.22.0, kit 0.21.0 (coordinator renumbers at merge). Feature `routePass` (sidecar `region.route`, appended).
+API 1.20.0, mod 0.23.0, kit 0.21.0 (coordinator, after C29 took 1.19.0 / v0.22.0; origin/main 60d2f1f merged). Feature `routePass` (sidecar `region.route`, appended).
 Ports 8918-8923. $0 (sim/stub only).
 
 ## Done
@@ -24,7 +24,7 @@ Ports 8918-8923. $0 (sim/stub only).
 ## Next
 Unit tests (kit/test/route-t2.test.mjs), ladder/keep-out/broken variants, hysteresis, plan time 1024x1024 x 20 edges, scenario
 (protect a rect across gate-hall in-game), tools/gate6ct2.mjs, tools/lib/scenario-route.mjs, gate-chains steps + impact rule,
-api-compat --gate6ct2 (0.21.0 from tag; SCH's 0.20.0/0.19.0), golden, slice tier, verifier, as-built.
+api-compat --gate6ct2 and apijars on 0.22.0 + 0.21.0 (T2's tag builds) + SCH's 0.20.0, golden, slice tier, verifier, as-built.
 
 ## Notes
 - S3 needs stairs at maxGrade 0.25 (stairs:false finds no route); the synthetic 1:2 slope (stairs off) gives ~1 hairpin per 7 rise.

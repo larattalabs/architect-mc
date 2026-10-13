@@ -29,7 +29,7 @@ public interface ArchitectApi {
 	 * 1.12.0: minLotSize and the recommended lot, partial roads, ground heights, bounded fields refused in the mod, the extend
 	 * warning, survival construction roads, protected areas, owner-tagged entities (phase 6c slice 0c).
 	 */
-	String VERSION = "1.19.0";
+	String VERSION = "1.20.0";
 
 	/** The singleton. Safe to call from any mod's initializer (it does not depend on Architect's init order). */
 	static ArchitectApi get() {
@@ -97,7 +97,7 @@ public interface ArchitectApi {
 	 * {@code pad.edge: 'blend'}: a plan that uses it requires the {@code relief} kind, and an older game refuses it PLAN_STALE).
 	 * Since 1.18.0, {@code "schematics"} is always there: Sponge schematic import ({@link Library#importSchematic}, through the
 	 * helper) and export ({@link Library#exportSchematic}, {@link Sites#exportSiteSchematic}, in the mod).
-	 * Since 1.19.0, a T2 helper ({@code region.route}) adds {@code "routePass"} (the {@code route} pass: slope-aware routing with
+	 * Since 1.20.0, a T2 helper ({@code region.route}) adds {@code "routePass"} (the {@code route} pass: slope-aware routing with
 	 * switchbacks, stairs, ladders on player-only edges and keep-out avoidance; routes are ordinary roads, stairs and columns,
 	 * so a routed plan needs no new kind, and the IR graph's edges carry {@code movers} and {@code segments}).
 	 */
