@@ -327,6 +327,8 @@ export async function planRegion(o) {
       // (6c F2) the local stamp library (lib/region/stamps.mjs stampLibrary: a dir or an id -> bytes map; local-only, N-F2-1)
       stamps: o.stamps ? (typeof o.stamps.get === 'function' && typeof o.stamps.has === 'function' && typeof o.stamps.ids === 'function' ? o.stamps : stampLibrary(o.stamps)) : null,
       passes: Object.freeze([...passes]), // (6c T1) the declared passes (r.pass refuses any other)
+      // (6c P0) the plan check's per-part cache (key -> entry | null; read only, never part of the params or the IR)
+      planCache: typeof o.planCache === 'function' ? o.planCache : null,
       // (6c T2) cells the route pass prefers (hysteresis: an earlier plan's routes, 6d replanning; [[x, z]])
       routePrefer: Array.isArray(o.routePrefer ?? []) ? Object.freeze((o.routePrefer ?? []).map((q) => Object.freeze([q[0], q[1]])))
         : Object.freeze(Object.fromEntries(Object.entries(o.routePrefer).map(([k, v]) => [k, Object.freeze(v.map((q) => Object.freeze([q[0], q[1]])))]))),
@@ -442,6 +444,6 @@ export async function planRegion(o) {
   stats.irFormat = ir.format;
   stats.requires = ir.requires ?? [];
   stats.passes = r.passRuns.map((x) => ({ ...x }));
-  const meta = { format: 1, paths: r.meta.paths, lots: r.meta.lots, parts: r.meta.parts, ...(r.meta.village ? { village: r.meta.village } : {}), ...(r.meta.gravity ? { gravity: r.meta.gravity } : {}), ...(r.meta.forms ? { forms: r.meta.forms } : {}), ...(r.passRuns.length ? { passes: r.passRuns.map((x) => ({ ...x })) } : {}), ...(r.meta.relief ? { relief: r.meta.relief } : {}), ...(r.meta.scatter ? { scatter: r.meta.scatter } : {}), ...(r.meta.stamps ? { stamps: r.meta.stamps } : {}), ...(r.meta.scatterDemo ? { scatterDemo: r.meta.scatterDemo } : {}), ...(r.meta.route ? { route: r.meta.route } : {}) };
+  const meta = { format: 1, paths: r.meta.paths, lots: r.meta.lots, parts: r.meta.parts, ...(r.meta.village ? { village: r.meta.village } : {}), ...(r.meta.gravity ? { gravity: r.meta.gravity } : {}), ...(r.meta.forms ? { forms: r.meta.forms } : {}), ...(r.passRuns.length ? { passes: r.passRuns.map((x) => ({ ...x })) } : {}), ...(r.meta.relief ? { relief: r.meta.relief } : {}), ...(r.meta.scatter ? { scatter: r.meta.scatter } : {}), ...(r.meta.stamps ? { stamps: r.meta.stamps } : {}), ...(r.meta.scatterDemo ? { scatterDemo: r.meta.scatterDemo } : {}), ...(r.meta.route ? { route: r.meta.route } : {}), ...(r.meta.planCheck ? { planCheck: r.meta.planCheck } : {}), ...(r.meta.villageZones ? { villageZones: r.meta.villageZones } : {}) };
   return { ir: JSON.parse(irJson), irJson, irSha: sha256Hex(irJson), notes, stats, blobs: sideBytes, meta, needVolumes: r.needVolumes, passes };
 }

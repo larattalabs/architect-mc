@@ -160,13 +160,14 @@ export function planProps(r, { o, sh, res, lots, laneWidth = 2, lamps = 'street'
 }
 
 /** Emit planned props: one part per kind in `stage`, `columns` ops at absolute y, IF_AIR_OR_FLUID (into air only). */
-export function emitProps(r, plan, { stage = 'props' } = {}) {
+export function emitProps(r, plan, { stage = 'props', prefix = '' } = {}) {
+  // (6c P0) `prefix`: a plan's second zone on (its part ids and its meta under r.meta.villageZones[prefix])
   const byKind = new Map();
   for (const p of plan.props) { const l = byKind.get(p.kind) ?? []; l.push(p); byKind.set(p.kind, l); }
   for (const kind of PROP_KINDS) {
     const list = byKind.get(kind);
     if (!list) continue;
-    const part = r.part(`props_${kind}`, { stage });
+    const part = r.part(`${prefix}props_${kind}`, { stage });
     const mats = [], mi = new Map(), cols = [];
     for (const p of list) for (const [x, y, z, s] of p.cells) {
       let i = mi.get(s);
@@ -176,6 +177,7 @@ export function emitProps(r, plan, { stage = 'props' } = {}) {
     part._push({ op: 'columns', from: { abs: 0 }, to: { abs: 0 }, cols, materials: mats, cond: COND.IF_AIR_OR_FLUID, walk: false });
     (r.meta.parts[part.id] ??= {}).kind = 'add';
   }
-  (r.meta.village ??= {}).props = plan.props.map((p) => ({ kind: p.kind, id: p.id, cells: p.cells }));
-  r.meta.village.propCounts = { ...plan.counts };
+  const vm = prefix ? ((r.meta.villageZones ??= {})[prefix] ??= {}) : (r.meta.village ??= {});
+  vm.props = plan.props.map((p) => ({ kind: p.kind, id: p.id, cells: p.cells }));
+  vm.propCounts = { ...plan.counts };
 }

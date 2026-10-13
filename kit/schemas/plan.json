@@ -73,6 +73,9 @@
       { "id": "program.flat_village", "sinceApi": "P0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/program.template" },
       { "id": "program.lots", "sinceApi": "P0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/program.lots" },
       { "id": "program.districts", "sinceApi": "P0", "schemaVersion": 0, "state": "reserved", "until": "D1" },
+      { "id": "program.crater_works", "sinceApi": "P0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/program.template", "note": "N-P0-1: the bundled crater_works program as a named template. A whole-claim program: it compiles only as the plan's sole zone, over the whole claim." },
+      { "id": "program.rift_city", "sinceApi": "P0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/program.template", "note": "N-P0-1: the bundled rift_city program as a named template. A whole-claim program: it compiles only as the plan's sole zone, over the whole claim." },
+      { "id": "program.floating_islands", "sinceApi": "P0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/program.template", "note": "N-P0-1: the bundled floating_islands program as a named template. A whole-claim program: it compiles only as the plan's sole zone, over the whole claim." },
       { "id": "layout.street", "sinceApi": "P0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/program.lots" },
       { "id": "layout.ring", "sinceApi": "P0", "schemaVersion": 0, "state": "reserved", "until": "FL" },
       { "id": "layout.spiral", "sinceApi": "P0", "schemaVersion": 0, "state": "reserved", "until": "FL" },
@@ -103,7 +106,7 @@
       { "id": "form.ice_spike", "sinceApi": "P0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/form.spike" },
       { "id": "form.rock_spire", "sinceApi": "P0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/form.spike" },
       { "id": "form.floating_island", "sinceApi": "P0", "schemaVersion": 0, "state": "reserved", "until": "N-P0-1" },
-      { "id": "form.brush", "sinceApi": "P0", "schemaVersion": 0, "state": "reserved", "until": "B" },
+      { "id": "form.brush", "sinceApi": "P0", "schemaVersion": 0, "state": "reserved", "until": "P1", "note": "B shipped brush strokes as their own regions (Regions.brush, one region per stroke, S-B-1); a stroke's destruction rule lives on its region's record, so a brush part inside a plan's single region waits for a later plan slice." },
       { "id": "form.pond", "sinceApi": "P0", "schemaVersion": 0, "state": "reserved", "until": "H" },
       { "id": "form.scatter", "sinceApi": "P0", "schemaVersion": 0, "state": "reserved", "until": "F2" },
       { "id": "form.giant_tree", "sinceApi": "P0", "schemaVersion": 0, "state": "reserved", "until": "F3" },
@@ -349,7 +352,7 @@
     "program.template": {
       "type": "object", "required": ["template"], "additionalProperties": false,
       "properties": {
-        "template": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,47}$", "description": "A named template from the catalogue (program.<name>). v0: flat_village." },
+        "template": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,47}$", "description": "A named template from the catalogue (program.<name>). v0: flat_village (laid out in the zone's rect), and crater_works, rift_city and floating_islands (N-P0-1; whole-claim programs: only as the plan's sole zone)." },
         "params": { "type": "object", "description": "The template's own params, checked by the kit's validateParams against the program's declared params; an error is malformed with the param path. A template's lots param is a list of $defs/lot." }
       }
     },
@@ -549,7 +552,8 @@
         "wouldFit": { "type": "array", "maxItems": 4, "items": { "type": "object", "description": "A concrete alternative as a plan fragment (for example a smaller size, another where) with its own geometry and cost." } },
         "blockedBy": { "type": "array", "items": { "$ref": "#/$defs/id" } },
         "ext": { "$ref": "#/$defs/ext", "description": "The part's own ext, echoed unchanged (Steward's hook)." },
-        "cached": { "type": "boolean" }
+        "cached": { "type": "boolean" },
+        "notes": { "type": "array", "maxItems": 16, "items": { "type": "string" }, "description": "What the check did with the part that is not a deviation or a reason (for example a member v0 reads but does not act on). Never a verified requirement." }
       }
     }
   }
