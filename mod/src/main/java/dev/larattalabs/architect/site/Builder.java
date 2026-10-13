@@ -1627,6 +1627,42 @@ public final class Builder {
 	public static void setPaused(MinecraftServer srv, String id, boolean paused) throws Sites.SiteException {
 		Site s = requireBuilding(id);
 		Sites.replace(srv, s.withConstruction(s.construction().withPaused(paused)));
+		Stockpiles.Pile p = Stockpiles.pileOf(s);
+		if (p != null) {
+			Stockpiles.changed(p);
+		}
+	}
+
+	/**
+	 * (C29 b) {@code Sites.pause}: pauses or resumes a building construction target, a site (as the crate screen's Pause) or a road.
+	 * A paused target places nothing, so it consumes and reserves nothing (Y1's rule), keeps its state and keeps its place in its
+	 * stockpile's feed order: resumed, it is fed from there again. Saved with the target's record. Idempotent. Refuses FIELD_LIMIT
+	 * for an id that is no construction target building, NOT_ALLOWED for one being removed (C29 a: it left the feed). Server thread.
+	 */
+	public static void pauseTarget(MinecraftServer srv, String id, boolean paused) throws Sites.SiteException {
+		Site s = id == null ? null : Sites.get(id);
+		Infra i = s == null && id != null ? Infras.get(id) : null;
+		Construction c = s != null ? s.construction() : i != null ? i.construction() : null;
+		if (c == null || !c.building() || (s != null ? s.placing() : i.placing())) {
+			throw new Sites.SiteException(dev.larattalabs.architect.api.Reason.FIELD_LIMIT, "targetId: " + id
+				+ " is not a construction site or road that is building");
+		}
+		if (Groups.leaving(id)) {
+			throw new Sites.SiteException(dev.larattalabs.architect.api.Reason.NOT_ALLOWED, id + " is being removed");
+		}
+		if (c.paused() == paused) {
+			return;
+		}
+		if (s != null) {
+			setPaused(srv, id, paused);
+		} else {
+			Infras.put(srv, i.withConstruction(c.withPaused(paused)));
+			Stockpiles.Pile p = Stockpiles.pileOf(i);
+			if (p != null) {
+				Stockpiles.changed(p);
+			}
+		}
+		Architect.LOGGER.info("{} {}", paused ? "Paused" : "Resumed", id);
 	}
 
 	private static Site requireBuilding(String id) throws Sites.SiteException {

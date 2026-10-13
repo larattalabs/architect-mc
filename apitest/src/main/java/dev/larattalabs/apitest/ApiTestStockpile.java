@@ -34,6 +34,8 @@ import net.minecraft.world.item.Item;
  * pwithdraw &lt;owner&gt; {item: n}              Sites.withdraw to the player
  * padopt &lt;owner&gt;                          Sites.adoptCrates
  * pdissolve &lt;owner&gt; [player]               Sites.dissolveStockpile (to the player, else dropped)
+ * apic29                                 (C29) version and features
+ * ppause &lt;targetId&gt; &lt;true|false&gt;           (C29) Sites.pause; answers {paused}
  * </pre>
  * Refusals answer {@code {refused: {reason, message}}}. STOCKPILE_CHANGED is recorded in {@code /apitest events}.
  */
@@ -103,6 +105,21 @@ final class ApiTestStockpile {
 					return pile(sites.adoptCrates(a[1]));
 				case "pdissolve":
 					return items(sites.dissolveStockpile(a[1], a.length > 2 && a[2].equals("player") ? src.getPlayerOrException() : null));
+				case "apic29": {
+					JsonObject o = new JsonObject();
+					o.addProperty("version", ArchitectApi.VERSION);
+					JsonArray f = new JsonArray();
+					api.features().stream().sorted().forEach(f::add);
+					o.add("features", f);
+					return o;
+				}
+				case "ppause": {
+					boolean on = a.length < 3 || !a[2].equals("false");
+					sites.pause(a[1], on);
+					JsonObject o = new JsonObject();
+					o.addProperty("paused", on);
+					return o;
+				}
 				default:
 					throw new IllegalArgumentException("unknown stockpile step " + a[0]);
 			}

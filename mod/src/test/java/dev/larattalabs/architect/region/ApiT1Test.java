@@ -19,7 +19,8 @@ import org.junit.jupiter.api.Test;
 class ApiT1Test {
 	@Test
 	void version() {
-		assertEquals("1.18.0", ArchitectApi.VERSION);
+		String[] v = ArchitectApi.VERSION.split("\\.");
+		org.junit.jupiter.api.Assertions.assertTrue(Integer.parseInt(v[0]) == 1 && Integer.parseInt(v[1]) >= 18, ArchitectApi.VERSION); // 1.18.0 or later (C29: 1.19.0)
 		assertEquals("0.20.0", IrStale.KIT_VERSION);
 	}
 

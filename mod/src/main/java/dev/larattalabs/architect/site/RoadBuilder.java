@@ -530,17 +530,18 @@ public final class RoadBuilder {
 	 * Before a construction road's undo: refunds for the paid cells standing as built drop at the crate's cell, and when nothing
 	 * else of the group builds from the shared crate its stock drops and the crate goes. The undo restores the ground exactly.
 	 */
-	static void beforeRemove(ServerLevel level, Infra road) {
+	static Groups.@Nullable Credit beforeRemove(ServerLevel level, Infra road) {
 		Construction c = road.construction();
 		if (c == null) {
-			return;
+			return null;
 		}
 		MinecraftServer srv = level.getServer();
 		Stockpiles.Pile pile = Stockpiles.pileOf(road);
 		if (pile != null) {
-			// 6c Y: a stockpile's road: its paid cells standing are credited into the stockpile (once per placement); no crate here
+			// 6c Y: a stockpile's road: its paid cells standing are refunded into the stockpile (once per placement); no crate here.
+			// C29: tallied now (the road left the feed with its removal job, so nothing is placed after this) and credited by the job
+			// once its restore is written (RestoreJob.credit), not before: a restore that breaks credits nothing
 			Map<String, Integer> refund = refundOf(level, road);
-			Builder.creditRefund(level, pile.owner(), creditKey(road), refund, dropAt(road), null);
 			Builder.Run r = RUNS.get(road.id());
 			if (r != null) {
 				Builder.sendClear(srv, r, false);
@@ -548,8 +549,8 @@ public final class RoadBuilder {
 			RUNS.remove(road.id());
 			BEFORE.remove(road.id());
 			PROGRESS.remove(road.id());
-			Architect.LOGGER.info("Construction road {} removed: refunds {} credited to the stockpile of {}", road.id(), refund, pile.owner());
-			return;
+			Architect.LOGGER.info("Construction road {} removing: refunds {} to credit to the stockpile of {} once restored", road.id(), refund, pile.owner());
+			return new Groups.Credit(pile.owner(), creditKey(road), Map.copyOf(refund), dropAt(road).asLong());
 		}
 		Map<String, Integer> refund = new LinkedHashMap<>();
 		BlockPos at = c.crate() == null ? new BlockPos((road.box().minX() + road.box().maxX()) / 2, road.box().maxY() + 1, (road.box().minZ()
@@ -583,6 +584,7 @@ public final class RoadBuilder {
 		SiteWaits.ended(srv, road.id());
 		Builder.dropItems(level, at, refund, null);
 		Architect.LOGGER.info("Construction road {} removed: refunds and crate stock {} at {}", road.id(), refund, at.toShortString());
+		return null;
 	}
 
 	/** 6c Y: the credit key of a road's removal (this placement of the road). */
