@@ -852,7 +852,9 @@ steps.report = async () => {
 };
 
 steps.ingame = async () => {
-  for (const s of ['adopt', 'refusals', 'flow', 'undoA', 'protect', 'states', 'elsewhere']) await run(s);
+  // GATE6CPT2_STEPS: a subset while iterating (comma-separated)
+  const pick = process.env.GATE6CPT2_STEPS ? process.env.GATE6CPT2_STEPS.split(',') : ['adopt', 'refusals', 'flow', 'undoA', 'protect', 'states', 'elsewhere'];
+  for (const s of pick) await run(s);
 };
 
 const name = process.argv[2];
