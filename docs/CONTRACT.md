@@ -10984,6 +10984,18 @@ and gate.
   polish of an adopted entry; `transferOwner` of an adopted site; copies of an adopted entry (6d).
 
 
+
+### Coordinator decisions on PT2's Noah questions (2026-10-13; from Noah's direction, he may override)
+
+- **N-PT2-1:** no refund in survival for demolished adopted blocks (no dupe risk); the ledger balances as drafted.
+- **N-PT2-2:** refuse placing an adopted entry elsewhere in v0 (it is the player's house, not a template). A "use my house as
+  a template" copy can come later as its own ask.
+- **N-PT2-3:** accepted: container contents are never captured; an update touching a chest cell refuses `BLOCK_ENTITIES`.
+- **N-PT2-4:** accepted: a placer with at least 10% of the build's cells, or an op.
+- **N-PT2-5:** the drafted caps are accepted.
+- **N-PT2-6:** accepted: entities (item frames, paintings, armour stands) are not captured in v0; listed as a known gap.
+- **N-PT2-7:** next free minor at merge.
+
 ## 6c close-out (release tier, at the last 6c slice's merge)
 
 SETTLEMENTS §17.2's 6c gate, run once when the last 6c slice merges (whichever it is), on top of that slice's own gate:
