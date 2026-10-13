@@ -1169,7 +1169,9 @@ steps.claimhut = async () => {
     { name: 'low 5x3x5, door in the floor row', doorY: y, o: { w: 5, h: 3, d: 5 } },
     { name: 'margin claim (2 around, 2 under)', doorY: y + 1, margin: 2, under: 2 },
     { name: 'floor in the ground', doorY: y, base: gy, margin: 1 },
-    { name: 'door lower half only', doorY: y + 1, o: { lowerOnly: true } },
+    { name: "Steward's box: from the player's feet (floor + 1) up, door in the floor row", doorY: y, feet: 1, margin: 2 },
+    { name: "Steward's box, door above the floor row", doorY: y + 1, feet: 1, margin: 2 },
+    { name: "Steward's box, small 5x4x5, door in the floor row", doorY: y, feet: 1, margin: 1, o: { w: 5, h: 4, d: 5 } },
     { name: 'console claim', doorY: y + 1, actor: 'console' },
   ];
   const out = {};
@@ -1181,7 +1183,8 @@ steps.claimhut = async () => {
     const base = h.base ?? y;
     const dpos = await commandHut(at[0], base, at[1], h.doorY, o);
     const m = h.margin ?? 0, u = h.under ?? 0;
-    const box = [at[0] - m, base - u, at[1] - m, at[0] + o.w - 1 + m, base + o.h - 1 + m, at[1] + o.d - 1 + m];
+    // feet: the box starts that many rows above the floor row (Steward claims from the player's feet up, standing on the floor)
+    const box = [at[0] - m, base - u + (h.feet ?? 0), at[1] - m, at[0] + o.w - 1 + m, base + o.h - 1 + m, at[1] + o.d - 1 + m];
     const door = await ptAt(dpos);
     const cl = await call('dev.pt.claim', { box, actor: h.actor ?? 'bot' });
     await settle(2000);
