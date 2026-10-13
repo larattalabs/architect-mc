@@ -399,6 +399,12 @@ persisted formats. Candidate later asks: `Survey.biome` per column (T1's fields 
   natural-only write, can spare cells a player placed. It picks up the dropped slice PT ("Phase 6c slice PT: player-changed
   cells", S-PT-1: dropped from 6c, to 6d with replanning on land change).
 
+## C32 (Steward, 2026-10-13): slice PT drafted
+
+- Player-placed tracking, refined by Noah to **builds**: CONTRACT "Phase 6c slice PT: player-placed tracking (C32)" (DRAFT for
+  Steward review). It supersedes the dropped PT draft; S-PT-1 is withdrawn for this case. Adopting a build as a site is a later
+  slice, PT2 (outlined there). API: the next free minor at merge.
+
 ## Open questions
 - Track AgentCraft fixes to the copied placement code, or treat the copy as independent from now on?
 - Cost: measure tokens and time per design in phase 1, and show an estimate in the form.
