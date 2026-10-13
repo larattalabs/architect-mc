@@ -1147,14 +1147,28 @@ steps.apitest = async () => {
 
 // ------------------------------------------------------------------ C34: a claimed hut built with commands
 
-/** A hollow plank hut w x h x d at (X, Y, Z); the door in its south wall (z + d - 1) at doorY, both halves unless lowerOnly. */
-async function commandHut(X, Y, Z, doorY, { w = 7, h = 5, d = 7, lowerOnly = false } = {}) {
+/**
+ * A hollow plank hut w x h x d at (X, Y, Z); the door in its south wall (z + d - 1) at doorY, both halves unless lowerOnly.
+ * lowerFirst: Steward's order (steward-mc tools/e2e.mjs playerBuilds): the lower half's /setblock, then the upper's.
+ */
+async function commandHut(X, Y, Z, doorY, { w = 7, h = 5, d = 7, lowerOnly = false, lowerFirst = false } = {}) {
   const door = 'minecraft:oak_door';
   await cmd(`/fill ${X} ${Y} ${Z} ${X + w - 1} ${Y + h - 1} ${Z + d - 1} minecraft:oak_planks hollow`);
   const dx = X + (w >> 1), dz = Z + d - 1;
+  if (lowerFirst) {
+    await cmd(`/setblock ${dx} ${doorY} ${dz} ${door}[half=lower,facing=south]`);
+    if (!lowerOnly) await cmd(`/setblock ${dx} ${doorY + 1} ${dz} ${door}[half=upper,facing=south]`);
+    return [dx, doorY, dz];
+  }
   if (!lowerOnly) await cmd(`/setblock ${dx} ${doorY + 1} ${dz} ${door}[facing=south,half=upper]`);
   await cmd(`/setblock ${dx} ${doorY} ${dz} ${door}[facing=south,half=lower]`);
   return [dx, doorY, dz];
+}
+
+/** Whether the block at (x, y, z) is exactly `state` (an /execute if block test). */
+async function isBlock(x, y, z, state) {
+  const r = await cmd(`/execute if block ${x} ${y} ${z} ${state}`);
+  return /passed/i.test(JSON.stringify(r.messages ?? r));
 }
 
 steps.claimhut = async () => {
@@ -1208,6 +1222,35 @@ steps.claimhut = async () => {
   const ub = (await buildsIn([U[0], y, U[1], U[0] + 6, y + 4, U[1] + 6])).builds;
   check(ub.length === 1 && ub[0].kind === 'HOUSE' && ub[0].entrances.length === 1, `C34: the same hut placed by player use: ${ub.map((b) => `${b.id} ${b.kind} ${b.state} ${b.entrances.length} entrance(s)`)}`, ub);
   out.byUse = ub;
+  // C34b: Steward's exact repro (steward-mc tools/e2e.mjs playerBuilds). A 7x7x5 hollow plank hut whose bottom row is its floor, the
+  // door's lower half /setblock-ed first and then its upper half, the claim box (x0-1, y, z0-1)..(x0+7, y+8, z0+7) from the player's
+  // feet in the floor row, read straight from the claim's return and from Sites.builds right after it (no drain, no settle), then again
+  // after the 5 s debounce. Steward's fixture takes y from the player's Pos after /tp ... 100 ...: its player flies (a spectator ->
+  // creative switch keeps flight), so its huts stand at y 100 (build-1..11 in its world's builds.json: bounds y 100), not on the ground.
+  // Both: on the ground (y = gy + 1) and lifted (y 100, Steward's height; gy + 40 too).
+  out.steward = {};
+  const sx0 = X + 60;
+  let si = 0;
+  for (const [name, sy] of [['on the ground', y], ['lifted to y 100 (Steward\'s fixture)', 100], ['lifted 40 above the ground', gy + 40]]) {
+    const x0 = sx0, z0 = Z + si * 14;
+    si++;
+    await tp(x0 + 3.5, sy + 25, z0 + 3.5);
+    await commandHut(x0, sy, z0, sy + 1, { lowerFirst: true });
+    const lower = await isBlock(x0 + 3, sy + 1, z0 + 6, 'minecraft:oak_door[half=lower,facing=south]');
+    const upper = await isBlock(x0 + 3, sy + 2, z0 + 6, 'minecraft:oak_door[half=upper,facing=south]');
+    const box = [x0 - 1, sy, z0 - 1, x0 + 7, sy + 8, z0 + 7];
+    const cl = await call('dev.pt.claim', { box, actor: 'bot' });
+    const now = (await buildsIn(box, false)).builds.find((b) => b.id === cl.buildId);
+    await settle(6000);
+    const later = (await buildsIn(box, false)).builds.find((b) => b.id === cl.buildId);
+    log(`  C34b ${name}: ground ${gy}, hut floor y ${sy}; door cells lower ${lower} upper ${upper}; claim ${cl.refused ? `refused ${cl.refused}` : `${cl.buildId} ${cl.kind} ${cl.state} ${cl.cells} cells ${cl.entrances?.length ?? 0} entrance(s)`}; builds() at once ${now?.kind} ${now?.entrances?.length ?? 0}; after 6 s ${later?.kind} ${later?.entrances?.length ?? 0}`);
+    check(lower && upper, `C34b: ${name}: both door halves stand after Steward's two /setblocks (lower first)`, { lower, upper });
+    check(!cl.refused && cl.state === 'CLAIMED' && cl.cells === 170 && cl.kind === 'HOUSE' && (cl.entrances?.length ?? 0) === 1
+      && now?.kind === 'HOUSE' && (now?.entrances?.length ?? 0) === 1 && later?.kind === 'HOUSE' && (later?.entrances?.length ?? 0) === 1,
+      `C34b: ${name} (floor y ${sy}, ground ${gy}): Steward's claim returns ${cl.buildId} ${cl.kind} ${cl.state} ${cl.cells} cells with ${cl.entrances?.length ?? 0} entrance(s); builds() at once ${now?.kind}/${now?.entrances?.length ?? 0}, after the debounce ${later?.kind}/${later?.entrances?.length ?? 0}`,
+      { cl, now, later });
+    out.steward[name] = { sy, gy, lower, upper, cl, now, later };
+  }
   await leaveWorld();
   spendZero();
   return out;
