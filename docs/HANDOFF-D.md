@@ -1,6 +1,6 @@
 # HANDOFF: slice D (districts), D1 then D2
 
-Builder's resume notes (AGENTS.md: keep current; delete when the gate passes). Placeholders: API 1.26.0, mod 0.29.0, kit 0.28.0
+Builder's resume notes (AGENTS.md: keep current; delete when the gate passes). Placeholders: API 1.27.0, mod 0.30.0, kit 0.28.0
 (the coordinator assigns at merge). Ports 8912-8917. Worktree `../architect-mc-D`, branch `slice/D1` (then `slice/D2`).
 Tag build for apijars/api-compat: `~/Developer/LarattaLabs/architect-mc/artifacts/gate6c-d/v0270` (built from tag v0.27.0 with its
 tools/, in the throwaway worktree `../architect-mc-D-v0270`).
@@ -25,11 +25,17 @@ tools/, in the throwaway worktree `../architect-mc-D-v0270`).
       edges routed, checker 0 errors, graph connected (~15 s)
 - [x] kit tests (kit/test/districts-d.test.mjs: property 300 claims, bands, connectivity, loopiness, determinism, beside, plan/0)
 - [x] plan/0 catalogue flip + compile (program.districts, endpoint.region)
-- [x] mod API 1.26.0 + beside (BesideCheck), dangling note
+- [x] mod API (placeholder) + beside (BesideCheck), dangling note
 - [x] sidecar plumbing (beside)
 - [x] gate driver tools/gate6cd.mjs, scenario districts_demo + golden; focused change run green but for 2 driver bugs (fixed)
 - [x] origin/main v0.28.0 (C33) merged at 266eea2
-- [ ] slice run (artifacts/gate-runs-D/*-slice, 3 shards) -> verifier -> as-built -> push slice/D1
+- [x] origin/main v0.29.0 (PT2) merged at 6217d73, v0.29.1 (C34) at 86f8d0e (renumbered: API 1.27.0, mod 0.30.0)
+- [x] slice run 20261013-213856-slice at 6217d73: 30 PASS before the Mac restart killed it (22:40); 4d-all failed once
+      (one leaf_litter cell in L2 not restored, load ~50); 6a-eflat realise timed out
+- [ ] rerun of the unfinished/failed steps with --only (20261013-224536-slice, fresh run dir ../architect-mc-D-run3)
+- [ ] verifier -> as-built gate row (CONTRACT, inserted, uncommitted) -> push slice/D1
+- D2: slice run 20261013-215418-slice at e1631ba killed by the restart (21 PASS; w-ingame's DevBridge closed at 22:38);
+      rerun with --only on ports 8898-8903, run dir ../architect-mc-D2-run3
 
 D2 is on `slice/D2` in `../architect-mc-D2` (from D1): C27 boundary districts, outposts, the biome grid (C28: 4x4 is enough),
 plan/0 flips (zone.outpost, locator.along, feature.biome_edge, feature.ridge). The desert/jungle site must be found and pinned

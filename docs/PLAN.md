@@ -427,6 +427,15 @@ persisted formats. Candidate later asks: `Survey.biome` per column (T1's fields 
 - PT verifier notes: `PredicatePathsTest` matches only the literal `level.setBlock(`; comment or lock the off-thread clear in
   `Placed.changed`.
 
+## Queued from D1 (builder, 2026-10-13)
+
+- **The beside join needs a standing street end in the seam.** A village whose streets end deeper than 16 columns inside its
+  claim can't be joined (`NO_JOIN`). Steward's "add a district to a village" works when the village leaves a street end near
+  its edge; a later slice could extend a standing street (a write into the standing region's footprint, so its undo story is
+  needed first).
+- **A districts zone in a plan/0 plan ignores its own `where` and size in v0** (placed around the zones and forms before it).
+- **`near` is exact per phase, not jointly.** A district near another is placed after it.
+
 ## Open questions
 - Track AgentCraft fixes to the copied placement code, or treat the copy as independent from now on?
 - Cost: measure tokens and time per design in phase 1, and show an estimate in the form.
