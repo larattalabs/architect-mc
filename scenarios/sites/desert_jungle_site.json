@@ -62,5 +62,20 @@
       "lots": 1,
       "clean": []
     }
+  },
+  "fixture": {
+    "claim": [
+      704,
+      272,
+      895,
+      463
+    ],
+    "yRange": [
+      40,
+      200
+    ],
+    "foundBy": "find-site desert_jungle_site @ seed 2026100906 (gate-runs-D2/20261013-205705-change: 81 candidates round 672,304, step 32; the districts program following the desert/jungle edge planned there)",
+    "surveySha": "c4e1c4c9dfe8970656bdba1e0381a2a1d4a68e5c17ad50f479ae165c404d58ff",
+    "score": 26
   }
 }
