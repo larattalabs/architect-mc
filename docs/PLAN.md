@@ -418,6 +418,15 @@ persisted formats. Candidate later asks: `Survey.biome` per column (T1's fields 
 - **Realised M5 over the routes was 5.25%** on S3 (virtual 0.41%, flat 0.24%; 0.61% on the fresh-world re-run `20261013-064639-slice`): soul lanterns, live snow and plants.
   Recorded, not judged. Revisit with the lamp and melt fix.
 
+## Queued from PT (coordinator, 2026-10-13)
+
+- **Stale base worlds in reused run dirs (gate infra).** A reused run dir's `G6B Seed Base` level.dat (older creation path:
+  data packs recorded, allowCommands 0) generated magma and bubble columns where the golden has water, moving S1's pinned
+  survey sha. Fresh run dirs pass. Have gate-run detect and rebuild stale base worlds (or stamp base worlds with the creating
+  tool version).
+- PT verifier notes: `PredicatePathsTest` matches only the literal `level.setBlock(`; comment or lock the off-thread clear in
+  `Placed.changed`.
+
 ## Open questions
 - Track AgentCraft fixes to the copied placement code, or treat the copy as independent from now on?
 - Cost: measure tokens and time per design in phase 1, and show an estimate in the form.
