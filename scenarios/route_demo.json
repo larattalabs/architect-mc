@@ -3,7 +3,7 @@
   "short": "route_demo",
   "phase": "6c-t2",
   "version": 0,
-  "brief": "route fixture: a gate, a hall, a chapel and a lookout from the valley floor to a shoulder about 60 above on S3's pinned claim, routed by the route pass (two villager edges, a player-only edge with ladders allowed), round a protected area across the gate-hall line (docs/CONTRACT.md 6c T2 §3); on the flat variant a hill raised in stage ground",
+  "brief": "route fixture: a gate, a hall, a chapel and a lookout from the valley floor to a shoulder about 60 above on S3's pinned claim, routed by the route pass (two villager edges, a player-only edge with ladders allowed), round a protected area across the chapel-lookout line in open land (docs/CONTRACT.md 6c T2 §3); on the flat variant a hill raised in stage ground",
   "program": "route_demo",
   "params": {
     "gateX": 3634,

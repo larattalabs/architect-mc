@@ -353,12 +353,22 @@ async function runScenario(id) {
   const snap = await L.call('dev.region.hash', { box, mode: 'snap', file: path.join(raw, 'snap.gz') }, 4 * 3_600_000);
   T('beforeDump', t0);
   if (d0.refused) throw new Error(`dump refused: ${d0.refused}`);
+  // (6c T2) a lot waiting OCCUPIED holds a mob in its box (4e's rule: it would be buried) and waits for it to leave; on S3 a rabbit
+  // in lot:hall stalled a fresh world's run for 33 minutes. Clear the mobs just before placing and whenever an item waits OCCUPIED,
+  // as gate6a's megaA driver does (entities only: no block changes, so the snapshot and the exactness are untouched); run.json
+  // records `mobs` (the pre-place clear, the OCCUPIED clears and their waits)
+  const clearMobs = isT2(sc);
+  const mobs = clearMobs ? { beforePlace: true, occupiedClears: 0, waits: [] } : null;
+  if (clearMobs) await L.cmd('/kill @e[type=!minecraft:player]');
   // realise
   await L.call('dev.mspt.trace', { start: true });
   await L.call('dev.placement.stats', { reset: true });
   t0 = Date.now();
   const region = await L.realise(p2.planId, { lots: sc.lotEntries });
-  const st = await L.waitRegion(region, 3 * 3_600_000);
+  const st = await L.waitRegion(region, 3 * 3_600_000, clearMobs ? async (s) => {
+    if (s.waiting?.OCCUPIED) { mobs.occupiedClears++; if (mobs.waits.length < 20) mobs.waits.push(s.waiting); L.log(`  ${region}: an item waits OCCUPIED (${JSON.stringify(s.waiting)}): clearing the mobs`); await L.cmd('/kill @e[type=!minecraft:player]'); }
+  } : null);
+  if (mobs?.occupiedClears) L.log(`  mobs cleared ${mobs.occupiedClears}x while placing`);
   T('realise', t0);
   const mspt = await L.call('dev.mspt.trace', { stop: true });
   // (6b, coordinator 2026-10-10) the judged bar is Architect's own per-tick time; the whole tick, the vanilla tick and GC are recorded
@@ -410,7 +420,7 @@ async function runScenario(id) {
     planId: p2.planId, region, state: st.view.state, cellsWritten: rec.cellsWritten, lots: sc.lotEntries,
     versions: { mod: /mod_version\s*=\s*(\S+)/.exec(gp)?.[1], api, kit: ir.kitVersion, sidecar: hello.sidecar?.version ?? hello.sidecarVersion ?? null, minecraft: /minecraft_version\s*=\s*(\S+)/.exec(gp)?.[1], node: process.versions.node.split('.')[0], head: execFileSync('git', ['-C', root, 'rev-parse', 'HEAD']).toString().trim() },
     wallSeconds: t, prepare: pr.stats ?? null, dumps: { before: { sha: d0.sha, cells: d0.cells }, after: { sha: d1.sha, cells: d1.cells } }, snap: { cells: snap.cells }, before, shots,
-    spendUsd: 0,
+    spendUsd: 0, ...(mobs ? { mobs } : {}),
   };
   fs.writeFileSync(path.join(out, 'run.json'), `${JSON.stringify(run, null, 2)}\n`);
   const ev = evidenceSha(out);
@@ -560,30 +570,21 @@ async function computeMetrics({ sc, out, planDir, ir, irShas, mspt, cps, exact, 
     return { ...e, classes, list: e.list.map((m) => (moved.includes(m) ? { ...m, class: 'amethyst' } : m)) };
   };
   // (6c T2) the region's lamps melting the world's snow: an unclassified mismatch where the snapshot held a snow layer and the world
-  // now holds air, at a cell the plan never writes (or writes a solid under a condition, e.g. an apron's IF_AIR_OR_FLUID that a snow
-  // layer keeps; never a cell the plan clears to air), lit over 11 (vanilla's snow melt) by a light the plan placed (block light from
-  // the plan's emitters, unoccluded: emission minus the Manhattan distance), is classed `melt` (a world class: the undo restores the
-  // cells the plan wrote; a melted layer was never one). The lamps cannot see snow at plan time (the survey has no snow layers).
+  // now holds air, at a cell the plan never writes (any written cell stays unclassified: snow in the snapshot, a write there and air
+  // after the undo is exactly the shape of an undo error), lit over 11 (vanilla's snow melt) by a light the plan placed (block light
+  // from the plan's emitters, unoccluded: emission minus the Manhattan distance), is classed `melt` (a world class: the undo restores
+  // the cells the plan wrote; a melted layer was never one). The lamps cannot see snow at plan time (the survey has no snow layers).
   const meltOf = (e) => {
     if (!e || flat || !isT2(sc) || !(e.classes?.none > 0)) return e;
     const lights = [];
     vw.eachWritten((x, y, z, idx) => { const em = vw.pal.emit[idx]; if (em > 11) lights.push([x, y, z, em]); });
     const lit = (x, y, z) => lights.some(([lx, ly, lz, em]) => em - (Math.abs(lx - x) + Math.abs(ly - y) + Math.abs(lz - z)) > 11);
-    const moved = (e.list ?? []).filter((m) => { if (m.class !== 'none' || !/^minecraft:snow\[/.test(m.was) || !/^minecraft:(air|cave_air)$/.test(m.now)) return false; const [x, y, z] = m.pos.split(',').map(Number); return (!(vw.flags(x, y, z) & F_WRITTEN) || !vw.pal.air[vw.get(x, y, z)]) && lit(x, y, z); });
+    const moved = (e.list ?? []).filter((m) => { if (m.class !== 'none' || !/^minecraft:snow\[/.test(m.was) || !/^minecraft:(air|cave_air)$/.test(m.now)) return false; const [x, y, z] = m.pos.split(',').map(Number); return !(vw.flags(x, y, z) & F_WRITTEN) && lit(x, y, z); });
     if (!moved.length) return e;
     const classes = { ...e.classes, none: e.classes.none - moved.length, melt: (e.classes.melt ?? 0) + moved.length };
     return { ...e, classes, list: e.list.map((m) => (moved.includes(m) ? { ...m, class: 'melt' } : m)) };
   };
-  // (6c T2) leaves already decaying in the snapshot: non-persistent leaves at distance 7 (vanilla decays them on a random tick, whatever
-  // the region does) gone to air at a cell the plan never writes: classed `decay` (a world class)
-  const decayOf = (e) => {
-    if (!e || flat || !isT2(sc) || !(e.classes?.none > 0)) return e;
-    const moved = (e.list ?? []).filter((m) => m.class === 'none' && /_leaves\[.*distance=7.*persistent=false/.test(m.was) && /^minecraft:(air|cave_air)$/.test(m.now) && !(vw.flags(...m.pos.split(',').map(Number)) & F_WRITTEN));
-    if (!moved.length) return e;
-    const classes = { ...e.classes, none: e.classes.none - moved.length, decay: (e.classes.decay ?? 0) + moved.length };
-    return { ...e, classes, list: e.list.map((m) => (moved.includes(m) ? { ...m, class: 'decay' } : m)) };
-  };
-  const exN = decayOf(meltOf(distantOf(amethystOf(flowOf(freezeOf(exact))))));
+  const exN = meltOf(distantOf(amethystOf(flowOf(freezeOf(exact)))));
   const ex = flat ? { flat: exact, normal: exactOther, cellsWritten: exactOther?.cellsWritten ?? 0 } : { flat: exactOther, normal: exN, cellsWritten: exact.cellsWritten };
   const plan = { report: JSON.parse(fs.readFileSync(path.join(out, 'report.json'), 'utf8')) };
   let rows = M.bars({ plan, realised, palette, organic, buildings, mspt, cellsPerSecond: cps, exact: ex, determinism: { irShas, workersSame: ts.workersSame, golden }, spendUsd: 0, approval: 'pending' });

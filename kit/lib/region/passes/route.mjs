@@ -398,10 +398,11 @@ function baseMasks(env, intent, { water = true, keepOut = true } = {}) {
     const ko = new Uint8Array(n);
     for (const b of intent.keepOut ?? []) rect(ko, b[0], b[1], b[2], b[3]);
     // a tree near keep-out: the realise fells a whole trunk whose log a write removes (6a's tree rule), and a tree within 6 of the
-    // rect may reach into it, so the routes keep 6 clear of such trees (their branches are not in the survey)
+    // rect may reach into it, so the routes keep 6 clear of such trees (their branches are not in the survey); `_unsafe.noTreeReach`
+    // turns this guard off (the unit test's broken variant)
     const near = dilate(ko, W, D, Math.floor((TREE_REACH + r - 1) / r));
     const treeNear = new Uint8Array(n);
-    for (let k = 0; k < n; k++) if (near[k] && tree[k]) treeNear[k] = 1;
+    if (!intent._unsafe?.noTreeReach) for (let k = 0; k < n; k++) if (near[k] && tree[k]) treeNear[k] = 1;
     const reach = dilate(treeNear, W, D, Math.floor((TREE_REACH + r - 1) / r));
     for (let k = 0; k < n; k++) if (ko[k] || reach[k]) guard[k] = 1;
   }
@@ -441,7 +442,7 @@ export function selfClash(P, width) {
  * The pass. `survey`: the plan's columns. `intent` (resolved by the program's `r.pass('route', ...)`): `{edges: [{id, from: {at:
  * [x, y, z] (feet), facing: [dx, dz]?}, to, width, movers, ladders}], maxGrade = 0.25, hairpinLanding = 3, stairs = true, maxCut =
  * 4, maxFill = 4, margin = 2, hard: [[x0, z0, x1, z1]], keepOut: [[x0, z0, x1, z1]], prefer: [[x, z]], base: {minX, minZ, width,
- * depth, values} | null, _unsafe: {noKeepOut, noGrade, villagerLadders}}`. Returns `{fields: {}, ops: [], data: {edges: [...]}}`:
+ * depth, values} | null, _unsafe: {noKeepOut, noGrade, villagerLadders, noTreeReach}}`. Returns `{fields: {}, ops: [], data: {edges: [...]}}`:
  * each edge `{id, ok, failed?, movers, ladders, width, path: [[x, y, z]] (4-connected centre cells, y the surface), segments:
  * [{kind: walk|stair|landing|ladder, from, to}] (path indices, inclusive), landings: [{cells: [[x, z]], y}], ladderCols: [{x, z,
  * y0, y1, facing}], cost, length, rise, expanded, search: 'corridor'|'claim'}`. The program turns them into primitives.

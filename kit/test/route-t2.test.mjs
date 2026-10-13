@@ -6,12 +6,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { planRegion } from '../lib/region/plan.mjs';
-import { makeColumns, encodeColumns } from '../lib/region/pack.mjs';
+import { FLAG_TREE, makeColumns, encodeColumns } from '../lib/region/pack.mjs';
 import { region } from '../lib/region/program.mjs';
 import { checkRegion } from '../lib/region/check.mjs';
 import { buildVirtual } from '../lib/region/vworld.mjs';
 import { PASS_NAMES } from '../lib/region/passes/index.mjs';
-import { DIRS, dilate, edgeColumns, footprintOf, inferMovers, polylineOf, routePass, selfClash, windowGrade } from '../lib/region/passes/route.mjs';
+import { DIRS, TREE_REACH, dilate, edgeColumns, footprintOf, inferMovers, polylineOf, routePass, selfClash, windowGrade } from '../lib/region/passes/route.mjs';
 
 const KIT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const ROOT = path.resolve(KIT, '..');
@@ -147,6 +147,30 @@ test('keep-out: the route goes round the owner\'s rect (0 columns in it, retaini
   // the obstacle off: the route runs through and the emission guard refuses the plan
   const off = { ...prog((ctx) => ({ ...intent(ctx), _unsafe: { noKeepOut: true } }), [10, 32]) };
   await assert.rejects(plan(off, s, { keepOut: ko }), /KEEP_OUT: route k writes into the keep-out rect \[44, 10, 52, 54\]/);
+});
+
+test('a tree within 6 of keep-out: no route footprint comes within 6 of it (TREE_REACH); with the guard off the route enters that zone', async () => {
+  // keep-out across the north half; a tree 4 south of it; the straight line between the ends runs 6 south of the tree
+  const T = [48, 34];
+  const s = surveyOf(96, 64, () => 64, { flags: (x, z) => (x === T[0] && z === T[1] ? FLAG_TREE : 0) });
+  const ko = [[44, 2, 52, 30]];
+  assert.ok(T[1] - ko[0][3] <= TREE_REACH && T[1] > ko[0][3], 'the tree is outside the rect and within TREE_REACH of it');
+  const intent = (unsafe) => () => ({ nodes: { a: { at: [10, 65, 40] }, b: { at: [86, 65, 40] } }, edges: [{ id: 't', from: 'a', to: 'b' }], keepOut: [], _unsafe: unsafe });
+  const near = (e) => footprintOf(e.path, e.width).filter(([x, z]) => Math.max(Math.abs(x - T[0]), Math.abs(z - T[1])) <= TREE_REACH);
+  const p = await plan(prog(intent({}), [10, 40]), s, { keepOut: ko });
+  const e = p.meta.route.edges[0];
+  assert.ok(e.ok);
+  assert.deepEqual(near(e), [], 'no footprint column within 6 of the tree');
+  const vw = buildVirtual({ ir: p.ir, survey: encodeColumns(s), blobs: (sha) => p.blobs.get(sha) }).vw;
+  let written = 0;
+  vw.eachWritten((x, y, z) => { if (Math.max(Math.abs(x - T[0]), Math.abs(z - T[1])) <= TREE_REACH) written++; });
+  assert.equal(written, 0, 'nothing written within 6 of the tree (retaining and lantern sides included)');
+  // the guard off: the same edge runs straight through the tree's reach (and still not into the rect)
+  const off = await plan(prog(intent({ noTreeReach: true }), [10, 40]), s, { keepOut: ko });
+  const eo = off.meta.route.edges[0];
+  assert.ok(eo.ok);
+  assert.ok(near(eo).length > 0, 'with the guard off the footprint enters the zone');
+  assert.ok(eo.length < e.length);
 });
 
 test('water: an edge that can\'t avoid it fails with a typed note (bridges are T3); the plan goes on', async () => {
