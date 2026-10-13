@@ -555,6 +555,7 @@ function checkpoint(r) {
     parts: r.parts.length, partIds: new Set(r.partIds), lots: r.lots.length, lotIds: new Set(r.lotIds), roads: r.roads.length, roadIds: new Set(r.roadIds),
     paths: r.paths.length, nodes: r.graph.nodes.length, edges: r.graph.edges.length, graphIds: new Set(r.graphIds), forms: r.forms.length, opCount: r.opCount,
     notes: r.notes.length, passRuns: r.passRuns.length, blend: r.blendLots.length, relief: new Set(r.reliefLots), fields: { ...r.fields }, sideBlobs: { ...r.sideBlobs },
+    pathIds: Object.keys(r.meta.paths), nodeIds: r.graph.nodes.length, edgeIds: r.graph.edges.length,
     meta: JSON.stringify({ paths: r.meta.paths, lots: r.meta.lots, parts: r.meta.parts, route: r.meta.route ?? null, gravity: r.meta.gravity ?? null, forms: r.meta.forms ?? null, village: r.meta.village ?? null, villageZones: r.meta.villageZones ?? null }),
     anchors: { ...r.anchors },
   };
@@ -569,7 +570,8 @@ function rollback(r, c) {
   r.anchors = c.anchors;
 }
 /** The region parts (and lots) added since a checkpoint. */
-const addedSince = (r, c) => ({ parts: r.parts.slice(c.parts).map((p) => p.id), lots: r.lots.slice(c.lots).map((l) => l.id), roads: r.roads.slice(c.roads).map((x) => x.id) });
+const addedSince = (r, c) => ({ parts: r.parts.slice(c.parts).map((p) => p.id), lots: r.lots.slice(c.lots).map((l) => l.id), roads: r.roads.slice(c.roads).map((x) => x.id),
+  paths: Object.keys(r.meta.paths).filter((k) => !(c.pathIds ?? []).includes(k)), nodes: r.graph.nodes.slice(c.nodes ?? 0).map((n) => n.id), edges: r.graph.edges.slice(c.edges ?? 0).map((e) => e.id) });
 
 // ------------------------------------------------------------------ the check
 
@@ -683,7 +685,7 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
   const whole = order.find((p) => p.family === 'zone' && res.get(p.id)?.whole && okClass(p.id));
   let r;
   const partOf = {}; // region part / lot / road id -> plan part id
-  const mark = (pid, added) => { for (const id of [...added.parts, ...added.lots.map((l) => `lot:${l}`), ...added.roads.map((x) => `road:${x}`)]) partOf[id] = pid; };
+  const mark = (pid, added) => { for (const id of [...added.parts, ...added.lots.map((l) => `lot:${l}`), ...added.roads.map((x) => `road:${x}`), ...(added.paths ?? []).map((x) => `path:${x}`), ...(added.nodes ?? []).map((x) => `node:${x}`), ...(added.edges ?? []).map((x) => `edge:${x}`)]) partOf[id] = pid; };
   if (whole) {
     // N-P0-1: the template runs first over the whole claim with its own params; the region is its
     const t = WHOLE_CLAIM.get(whole.part.program.template);
@@ -697,7 +699,7 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
       ans(whole, { class: 'refused', reasons: [{ code: 'NO_ROOM', message: `${whole.part.program.template}: ${e.message}` }] });
     }
     if (r) {
-      const c0 = { parts: 0, lots: 0, roads: 0 };
+      const c0 = { parts: 0, lots: 0, roads: 0, pathIds: [], nodes: 0, edges: 0 };
       mark(whole.id, addedSince(r, c0));
       const ent = r.anchors.entrance;
       geom.set(whole.id, { rect: res.get(whole.id).rect, entrance: ent });
@@ -855,6 +857,12 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
         }
         // a route pass's part is shared by its connectors (their legs' cells are told apart in finish.mjs by the edge's roads and paths)
         for (const x of r.parts.slice(cp.parts)) partOf[x.id] = `routes:${group.map((l) => l.conn.id).filter((v, i, a) => a.indexOf(v) === i).join(',')}`;
+        // each leg's roads, paths and graph edge are its connector's (route_<edge>, route_<edge>_<n>)
+        const ad = addedSince(r, cp);
+        for (let i = 0; i < group.length; i++) {
+          const pre = `route_${edges[i].id}`;
+          for (const id of [...ad.roads.map((x) => `road:${x}`), ...ad.paths.map((x) => `path:${x}`), ...ad.edges.map((x) => `edge:${x}`)]) if (id.slice(id.indexOf(':') + 1) === pre || id.slice(id.indexOf(':') + 1).startsWith(`${pre}_`)) partOf[id] = group[i].conn.id;
+        }
         group = [];
         break;
       }
