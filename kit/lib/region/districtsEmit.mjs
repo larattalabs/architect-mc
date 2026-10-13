@@ -7,7 +7,7 @@
 //      the cheapest loops within `loopiness` of the tree's cost; a district that no route reaches is unplaced (`unreachable`);
 //   5. a district beside a standing region (ctx.beside, Regions.plan's `beside`): one routed join from a district's street end to
 //      the standing region's nearest compatible port (a street end) inside this claim's seam, written by this region;
-//   6. emission: V's streetLayout per district (prefix `<id>_`, slope pads), props, then one route pass with every edge, the link
+//   6. emission: V's streetLayout per district (prefix `<id>_`, wall pads: `padEdge`, default wall; a slope pad's batter undercut V's verges on S3), props, then one route pass with every edge, the link
 //      edges from each route end to its street, the external join edge, lamps over the lot aprons and along the routes.
 // Plan time only, deterministic (integer costs; ties by id).
 import { validateLots } from '../params.mjs';
@@ -345,7 +345,7 @@ export function emitDistricts(r, intent = {}) {
     const c = pick.get(d.id);
     let props = null;
     const L = streetLayout(r, d.specs, {
-      rules: STREET_RULES, shared: d.shared, laneWidth: 2, maxHeight: 32, rect: c.rect, prefix: `${d.id}_`, layout: c.L, padEdge: 'slope',
+      rules: STREET_RULES, shared: d.shared, laneWidth: 2, maxHeight: 32, rect: c.rect, prefix: `${d.id}_`, layout: c.L, padEdge: it.padEdge ?? 'wall',
       stages: { ground: stages.ground, street: stages.street, lots: stages.lots },
       planProps: ({ o, sh, res, lots }) => (props = planProps(r, { o, sh, res, lots, laneWidth: 2, lamps: 'street', bell: false, keepOut, rng: ctx.rng(`props:${d.id}`) })),
     });

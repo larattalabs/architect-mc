@@ -997,7 +997,7 @@ const d = r.pass('districts', { districts: [
   past-end cell lies in this claim; the cheapest dry route from a district's street end to one becomes the routed edge `join`,
   written by this region; the graph gets `join_external` to `<region>:<node>.<port>` (`external: true`, in siteplan.json too).
   No such street end in the claim, or no route: `NO_JOIN` (the plan fails, named).
-- Lots by V's `streetLayout` (prefix `<districtId>_`, slope pads), props per district, W's lamps over every lot apron and along
+- Lots by V's `streetLayout` (prefix `<districtId>_`, wall pads: a slope pad's batter undercuts V's verge cells on a slope), props per district, W's lamps over every lot apron and along
   the routes (`lampFixture` for a snowy claim: soul lanterns). Anchors `entrance`/`spawn` (the first district's bell) and
   `bell_<district>`.
 

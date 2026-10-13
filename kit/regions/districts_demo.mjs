@@ -1,6 +1,6 @@
 // districts_demo (6c D1, docs/CONTRACT.md "Phase 6c slice D" §4): the districts pass's fixture on S3's pinned claim: three districts
 // at the claim's three level bands (a cloister high, a village in the middle, fields low), loopiness 0.15, soul-lantern route lamps
-// (S3's snow: T2's melt note). Any claim works; on a flat claim every candidate is one band, so the bands are `any` there.
+// (S3's snow: T2's melt note; the bible's lamp on a flat claim). Any claim works; on a flat claim every candidate is one band, so the bands are `any` there.
 import { build } from './districts.mjs';
 
 export const id = 'districts_demo';
@@ -29,5 +29,6 @@ export default function (ctx) {
   const c = ctx.claim, st = ctx.survey.stats(c.minX, c.minZ, c.maxX, c.maxZ);
   const flat = st.maxGround - st.minGround <= 2;
   const ds = DISTRICTS.map((d) => ({ ...d, ...(ctx.params.bands && !flat ? {} : { levelBand: 'any' }) }));
-  return build(ctx, ds);
+  // (soul lanterns only where there is snow to keep: on a flat claim the bible's lamp)
+  return build(ctx, ds, { soul: !flat });
 }
