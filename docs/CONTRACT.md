@@ -10738,6 +10738,264 @@ runs under `artifacts/gate-runs-PT/`. The version numbers are the coordinator's 
 | §10 plans | `plan.json` (additive, `plan/0` frozen): `feature.build` (`{id}` or `{kind, pick?}`), `target {build}`, `endpoint {build, port: door \| door_<n>}`; catalogue entries `feature.build` and `endpoint.build` supported (sinceApi the placeholder); `locator.around` stays reserved. `kit/lib/region/builds.mjs`: `pickBuild` (feature.pick ties), `targetRect`, `buildEndpoint` (the 3-cell apron outside the footprint), `buildKeepOut`, `buildsUsed` (id and revision for the plan artifact); `BuildViews.planJson` gives P0's compiler the claim's builds. **On P0's checker (merged):** `Regions.checkPlan` hands the compiler the claim's builds (param `builds`); `kit/lib/plan/compile.mjs` answers `feature.build` (near, avoid), `target {build}` (inside, adjacent; `targetBlock` maps it to `feature.build`) and `endpoint.build` (the apron's outer cell), keeps every kept build grown by 1 and its door aprons out of zones and the build rects out of routes, and keys the plan cache on the builds (id, revision, state, bounds). A plan_v0 check gets no build rects in its `keepOut` (the compiler has the builds and lets a road end on an apron). **Deviation (trees):** the survey reads a log build's columns as trees, whose 6-cell reach kept routes off a door; a build's rect is passed as `clearTrees` (program.mjs gains the caller's `clearTrees`). The plan request carries no consent, so every kept build is a keep-out at plan time. Catalogue: `feature.build` and `endpoint.build` **added** as supported (sinceApi 1.24.0); P0's catalogue never held them as reserved, so the catalogue diff lists them as added, not flipped; `target {build}` answers under `feature.build` (no `target.*` family). Golden regenerated (PLAN_API 1.24.0, kit 0.26.0); valid fixture `v16_near_build_road_to_door`. |
 | Gate | Under the 2026-10-12 policy (timing bars recorded; slice = units + apijars/api-compat + the impact steps + PT's own; headless: every placement goes through a fake ServerPlayer's `useItemOn`/`useItem`, never `setBlock`). Slice tier `artifacts/gate-runs-PT/20261013-092811-slice` (3 shards, 8912-8917, head 48380d1): **51 PASS, 3 FAIL**: unit-mod 628, unit-kit 336, unit-sidecar 715, apijars (the 0.25.0, 0.24.0 and 0.23.0 jars; 0.25.0 built from its tag into `artifacts/gate6c-pt/v0250`: 46 ok each), pt-unit 4/0, pt-ingame 84/0 plus the recorded bar, b-ingame, c31-felling, 4d-all, 4e-*, 5b-*, 6a-*, 6b-*, the S1/S7/relief/forms/scatter scenarios. The FAILs: mp-ingame and x-ingame were apitest pins that did not accept PT's appended `Reason.PLAYER_BUILD` and `RealiseRequest.consent` (tools-only fix b19094f; rerun `20261013-120006-slice`: both PASS); pt-nomod was item 12's no-mod half (ruled below). After merging origin/main v0.26.0 (P0): `20261013-124341-slice` (head 4293d19): **54 PASS, 3 FAIL**: item 16's pin of PLAYER_BUILD after PERMISSION (now read from Reason.java: after ARTIFACT_UNAPPROVED), pt-nomod (ruled), and w-ingame item 7 (S1's plan survey sha 572271bd vs golden 3e5bd5b7: 269 water-floor columns raised in 11 sea-bed chunks, magma blocks and bubble columns where the golden has water). **Not PT's code:** the same head passes it in a fresh run dir (`artifacts/gate-runs-PT-bisect2/20261013-153649-slice`, sha = golden), as do 48380d1 (`gate-runs-PT-bisect/20261013-152229-slice`) and origin/main (`gate-runs-PT-mainw`); it fails only in the reused run dirs whose `G6B Seed Base` was made by an older host path (its level.dat records the data packs vanilla, architect_mc, fabric-convention-tags-v2, fabric-gametest-api-v1 and allowCommands 0; a fresh base records none), deterministically. No golden moved. Flagged to the coordinator as a gate-infra issue (a reused run dir's base world). **Final rerun** of the failed steps after the fixes (head 5ef0694, a fresh run dir): `artifacts/gate-runs-PT/20261013-155123-slice`: **PASS 3/3**: w-ingame 18/0 (S1's survey sha = golden), pt-ingame 85/0 plus the recorded item 15 bar, pt-nomod 8/0. **Items:** **1** 200 placements (blocks, a door, a bed, water, lava, powder snow, seeds, a hoe, a shovel, an axe): exactly the expected 202 cells (0 missing, 0 extra), each with its placer's UUID; 20 bone meal uses and region strokes writing 61,494 cells record 0. **2** 50 breaks, 4 TNT, water over 10 torches: 51 blocks left, 51 tracked, 0 records on air or water; grass spread onto 6 placed dirt and up to 6 weathered copper keep theirs (counted with random ticks stopped: the verifier caught a race in an earlier count). **3** 12 blocks pushed and pulled: destinations recorded, sources cleared, placers kept; a save mid-move (the record on the moving block entity) keeps all 12. **4** /save and a restart, and chunk unload (0 records readable 600 blocks away) and reload: the set's hash (303 cells) and the index equal. **5** the cabin HOUSE ACTIVE 273 cells with 1 entrance; both 16x3x1 walls WALL **PROVISIONAL** (N-PT-2); the 9x9 farm FARM 162; torches, the filled hole and the patch 0 builds (the hole's 50 dirt incidental); a 30-cell fresh component provisional, gone when the grace ends. **6** (graceMs 0) 40 cut to 21 stays; 19 incidental after the debounce and the 60 s gap; regrown to 30 stays incidental; the id survives +50 blocks, a merge (oldest wins, the newer id an alias) and a reload. **7** **Deviation (fixture):** run on S7's `flat_village` (lots and streets), not an S3 copy: `route_demo` on a flat copy with builds present planned 5,668 cells and wrote 0, so it could not show a keep-out. The cabin and a cobble wall 2 cells from lots hall_1 and trading_hall_1: the IR's keepOut holds both rects and 2 door aprons, no lot or street point meets them; realised (329 terrain cells, 10 of 10 lots): 0 of 273 + 36 blocks lost (hash equal); the region's removal restores the world hash. **Finding:** the terrain tiles still reached the builds' cells and were stopped at realise (`player_build` 102 skipped, buildHits 2): keep-outs cover lots and streets, not tile fill. **8** raise, lower, smooth, melt, NATURAL_ONLY and PLAYER_BLOCKS without consent: 0 of 273 lost each (128 build cells skipped); every stroke undone E-flat 0, records unchanged. **9** felling stops at the cabin's logs (`tree_kept.build` 9), the cabin's hash unchanged, the rest felled, one undo exact. **10** with consent a stroke cleared 93 build cells and 20 incidental ones; one undo: E-flat 0 and the tracked set, placers and build ids 0 mismatches (229 records). **11** a building over the cabin refused PLAYER_BUILD naming build-1 (HOUSE, 192 blocks, first 8 with ids, 8/8 equal to the world); a partial road's skipped span and the strict road's refusal name it; a road across the player's PATH build joins it with 0 path cells changed. **12** a realise over 20 torches and the patch writes them with no refusal, its undo restores blocks (E-flat 0) and records (0 of 69 mismatched); a building (`g6a_stub_9`) placed over 8 incidental cells and removed (template restore): E-flat 0, 0 of 8 records mismatched. **No-mod half (a documented limit, the coordinator's ruling 2026-10-13):** with the mod the chunk NBT holds `fabric:attachments/architect_mc:placed`; a start without the mod that never loads the chunk keeps it; a start that **loads** it drops it (Fabric API logs "Skipping invalid attachments" and saves the chunk again without it). Accepted: nobody places tracked blocks without the mod, and a side-file mirror would go stale while the mod is absent. After the reinstall the world loads cleanly, the cabin's blocks stand (hash equal) untracked (0 records: the pre-tracking rule, natural by class), and "claim my build" restores it (build-2 CLAIMED, 273 cells; a stroke at its wall's base leaves it unchanged). **13** a pre-PT log cabin claimed (CLAIMED 371, OTHER) is kept by a stroke; released, the next stroke clears all 371 (felled 364: the LOG rule); a torch beside a lowered column stays (`player_build.support`). **14** through the kit helpers on the live index (`near {build kind house}` picks build-1, `adjacent {to {build}}` its rect, `endpoint {build, port door}` the apron; a road to it ends on the apron, the cabin untouched) and through `Regions.checkPlan` in game: a zone near the house fits off it, a zone adjacent to it fits off it, the road to its door fits, `around` unsupported `locator.around`. **15** (recorded) sparse 3.62 B/block on disk (361 B/section), heap 9.2 B/block; dense 2.85 B/block, 4,864 B heap a section; `setBlockState` +1.8 ns tracked and untracked (median of 1M); classifier own CPU max 1.02-1.05 ms after warm-up (budget 1 ms; BAR recorded), 3-7 ms for the first classification after a start. **16** api-compat 4/4 clean (after the P0 merge: the 0.26.0, 0.25.0 and 0.24.0 jars, the 0.26.0 surface; before it 0.25.0, 0.24.0, 0.23.0); apitest `apipt`, `ptbuilds`, `ptat`, `ptbox`, `ptplace` through the public API; $0.00. **gate-verifier:** PASS at b19094f (diff review plus its own re-run of items 7, 8 and 10: `artifacts/gate-runs-PT-verify/20261013-120050-slice`, 0 lost, E-flat 0, 0 record mismatches of 229); after the P0 merge it re-ran w-ingame, pt-ingame and pt-nomod at 95e3cd5 (`gate-runs-PT-verify/20261013-150751-slice`: items 7, 8, 10, 12, 14, 16 pass) and held FAIL on S1's survey sha and the item 2 race, both resolved above; its final word on 5ef0694 is in the slice's report. Its low notes: `PredicatePathsTest`'s raw-write scan matches `level.setBlock(` text only; the off-thread clear in `Placed.changed` (PlacedChunk's methods are synchronized). HANDOFF-PT retired. | |
 
+## Phase 6c slice PT2: adopt a build as a site (DRAFT for Steward review)
+
+API: the next free minor at merge (house rule; placeholder `PT2` below), mod to match, `KIT_VERSION` next minor. Outlined at
+the end of PT and shaped by Steward's S-PT-6: the adopted site carries the caller's `ext`, and a player's later hand edits on
+an adopted build stay player edits, kept by updates as today. The PLAN "Keep open: zones" rule holds: records hold UUIDs and
+the ids below, and no id is built from an owner string, so a later `transferOwner` moves nothing new here.
+
+- **Branch:** `slice/PT2`, worktree `../architect-mc-PT2`. **Spend:** $0 (the `versionOf` step runs on the sim).
+- **Scope:** `Sites.adopt`: a standing player build becomes a site with a library entry at version 1, **without writing a
+  block**, so updates (5b), `versionOf` (C13), `revert`, undo and `outdated` work on a player's house.
+- **Not in scope:** several builds in one site; adopting a box that is not a build (claim it first, PT §8); entities (item
+  frames, paintings, armour stands, pets: not captured); placing an adopted entry elsewhere (refused, N-PT2-2); polish of an
+  adopted entry; `transferOwner`; Hardcore's difference; the `.schem` export of an adopted site (SCH's `exportSiteSchematic`
+  works on it unchanged).
+- **Depends on:** PT (v0.27.0), 0b C13 `versionOf`, 5b deltas, Y (stockpile). No kit plan changes (`plan/0` untouched).
+
+### 0. Facts (v0.27.0)
+
+- A site is a library entry at a pinned version plus a journal `site` entry whose `after` is the cells it wrote; `checkDelta`
+  and `applyDelta` compare the world with the site's top `after` (StillOurs, with the volatile list of Steward's S2) to find
+  kept cells, and a revert undoes the suffix of delta entries (5b).
+- `versionOf` needs a parametric source: polish's `bundled`, `no_source` and `massing` refusals are inherited (0b §5). An
+  imported `.nbt` entry has none, so an adopted entry needs a **captured source** (§3).
+- PT builds are index records plus per-cell placer and build ids in the chunk attachment. Architect's writes clear a cell's
+  record; undo restores it exactly (PT §5). `Build` has no site link. `BuildState` is `ACTIVE, CLAIMED, RELEASED, PROVISIONAL`.
+- Survival deltas are construction deltas: added and changed cells are queued and built from the owner's stockpile (Y); a
+  removed or changed cell refunds only when it is paid and still ours; a revert in survival is a forward delta (5b).
+- The template cap is 96x64x96. `Reason.FIELD_LIMIT` and `FieldLimits` bound `ext` (4096 characters as JSON, namespaced keys).
+
+### 1. API (additive and binary compatible)
+
+```java
+// Sites; the default throws "needs Architect API PT2"
+CompletableFuture<AdoptResult> adopt(String buildId, @Nullable String owner, BuildConsent consent, JsonObject ext);
+Optional<String> adoptedSite(String buildId);                       // the site standing on a build, if any
+record AdoptResult(String siteId, String entryId, int version /* 1 */, String buildId, BoundingBox box, int cells,
+                   int airCells, int blockEntities, int skipped, Direction front, boolean frameGuessed) {}
+// appended: BuildState.ADOPTED; Reason.ADOPT_REFUSED (detail below); SiteEvents.ADOPTED (siteId, buildId, entryId)
+// Build gains trailing @Nullable String siteId (old constructor kept: null); SiteView gains no field (its ext carries the link)
+```
+
+- **Features:** `adopt`. A client without it sees the default throw. `adopt` needs no mode and no `INSTANT` permission: it writes
+  nothing, so it cannot be a free build (§7).
+- **Ids.** The alias of a merged build resolves to the survivor. The **site id** is new (the house counter, as any site); the
+  **entry id** is `adopted-<8 hex of a random UUID>` (the library is per game folder, not per world, so no world counter);
+  neither uses the owner, the build number or a player name. The entry name reads "Adopted <kind> <buildId>".
+- **`ext`.** Validated like a lot list's (`FieldLimits.lotExt`): over 4096 characters or a key without `namespace:name` refuses
+  `FIELD_LIMIT` with the path (`ext`). The site carries the caller's keys; the mod then sets `architect_mc:adopted =
+  {build, entry, at}` last, and it wins. The entry's own `ext` stays `Library.setExt`'s: the caller's keys are not copied there.
+  Survives save, reload, `versionOf`, undo and redo as the lot ext does (C19).
+- **Owner.** Free string on the site, nullable as in `place`; stockpile and `outdated(owner)` key on it as for any site.
+
+### 2. What adoption does (one atomic step, no world writes)
+
+1. **Check** (server thread, loaded chunks only), in this order, first refusal wins (§5): the build and its state, the consent,
+   the chunks, the cells' owners, the size, `ext`.
+2. **Capture** the build's cells (§3). Up to 50,000 cells in one tick; above that sliced with change tracking (4e's capture): a
+   cell that changes before the commit is re-read, and a capture that cannot settle in 3 passes fails `SITE_BUSY` (temporary).
+3. **Create** the library entry (version 1: structure `.nbt`, blueprint JSON with `frame`, captured source, `ext`) and the
+   site (state BUILT, `kind` building, rotation NONE, `box` = the cells' bounds, no approach, no crate, every cell **unpaid**).
+4. **Journal** one entry `kind: "adopt"`, `site: S`, BOX policy, cells = the captured cells with **`before` == `after`** (the
+   world as captured), `meta {build, priorState, entry}`. No `pt` member: nothing is written, so no record changes.
+5. **Mark** the build `ADOPTED` with `siteId`; revision +1; `BUILD_CHANGED` and `SiteEvents.ADOPTED` fire.
+
+If any step fails, nothing remains: the entry is trashed, no site, no journal entry, the build unchanged.
+
+### 3. The capture: what becomes version 1
+
+- **Cells.** Every tracked cell of the build (all its structural cells and the incidental ones inside it), plus **column fill**:
+  for each footprint column, the air cells between the column's lowest and highest build cell (rooms under roofs, stairwells).
+  Natural cells, fluids, other players' incidental blocks and open courtyard columns (no build cell) are `structure_void`: not
+  the site's, never written, never refunded. This is the PT footprint, not a bounding box.
+- **Block entities** keep their id and non-inventory NBT (sign text, banner patterns, bed colour). Inventories (`Items`,
+  `Item`, `RecordItem`, a lectern's book) are **dropped from the blueprint** so a copy can never duplicate items; the world's
+  chest keeps its items. A delta that would write a container cell refuses `BLOCK_ENTITIES` as today (5b).
+- **Frame.** `front` = the facing of the **main entrance**: of the build's `entrances`, the one lowest in the build and nearest
+  its footprint edge (ties by position). The entrance feet row is that door's lower half. With no entrance the front is the
+  longest footprint side facing the open side, `frameGuessed: true` (SQ-PT2-1: refuse instead?).
+- **Captured source.** The kit gets `kit/lib/adopt.mjs`: the structure as a generated blueprint of run-length boxes per layer,
+  one part `adopted` (v0; SQ-PT2-3), with `front`/`frame` set. It reads as a normal `.mjs` blueprint, so `versionOf`'s
+  designer, renders and the frame guard work unchanged; `source: "captured"` lifts `no_source` for these entries only.
+- **Limits.** Bounds at most 96x64x96 (`TOO_LARGE`) and at most 262,144 captured cells (`TOO_LARGE`, N-PT2-5). A PT build is
+  bounded at 65,536 structural cells, so the second cap bites only on huge column fills.
+- **Skipped** cells (void by the rules above) are counted in `AdoptResult.skipped`.
+
+### 4. The build stays a PT build: `ADOPTED`
+
+**Decision: the build stays in the PT index, state `ADOPTED`, linked to its site, and keeps the `PLAYER_BUILD` protection.**
+
+- **Why.** (1) The cells are still the player's: their records, placers and the build id are what Steward shows ("Alex's
+  house"), and hand edits after adoption must keep being recorded and kept (S-PT-6) by the same hook. (2) Every write path
+  already asks the one predicate `Placed.build`; leaving the build in place means roads, strokes, felling, region plans, fits
+  and approaches keep the house without a new rule, where a plain site would protect it only where a path honours journal
+  ownership. (3) S-PT-4 already says a build named in the request's consent is the one exception, so "replace my shed" works
+  on an adopted build with no new concept. (4) Un-adopting is a state change, nothing is rebuilt.
+- **Never demotes** (as CLAIMED). **Merges:** an `ADOPTED` build is the survivor of a merge with an `ACTIVE` or `PROVISIONAL`
+  one (and keeps its id); two `ADOPTED` builds, or `ADOPTED` and `CLAIMED`, are **not** merged (cells within 2 stay assigned to
+  their own build). **Split:** the largest part keeps the id, `ADOPTED` and `siteId`; the others are new `ACTIVE` builds.
+- **Growth.** Blocks the player adds beside the house within 2 of its cells join the build (same id). They are outside the
+  site's cells: PT protects them, the site does not own them.
+- **Release** of an `ADOPTED` build refuses `ADOPT_REFUSED` (`adopted`); remove or undo the site first.
+- **The site's own operations are implicitly consented** for cells **inside its own cell set**: `applyDelta`, `revert`,
+  `checkDelta` and `remove` on site S need no `BuildConsent` to touch S's cells, `OVERWRITE` of a player edit included (the
+  caller already chose it). **Growth cells outside S's cells** that hold tracked cells of the adopted build refuse
+  `PLAYER_BUILD` as any build's, unless the request's consent names the build. Every other caller still needs consent.
+- **Records under Architect's writes.** A delta's written cell loses its record (PT §3) and is the site's; the build's tracked
+  count falls. Undo and revert give the records back exactly (PT §5). A cell the player later edits is recorded again and is
+  the player's, inside the build.
+
+### 5. Refusals
+
+`Reason.ADOPT_REFUSED` (appended), `ArchitectRefused.detail()`; reused reasons keep their meaning.
+
+| Condition | Refusal |
+|---|---|
+| unknown id, or a `RELEASED` build | `ADOPT_REFUSED` `not_a_build` (the message says "claim it first" for a box) |
+| `PROVISIONAL` | `ADOPT_REFUSED` `provisional` (SQ-PT2-4: a half-built house is a moving target; wait for the promotion, or `claim` it, which makes it CLAIMED) |
+| consent null, not naming the build, `actor` null, or the actor neither a placer (10% of its cells) nor permission 2 | `ADOPT_REFUSED` `consent` (names what is missing) |
+| `ADOPTED` already | `ADOPT_REFUSED` `already_adopted`, message "adopted as site-N": a caller that lost the response recovers from it or `adoptedSite` |
+| a chunk of the build unloaded | `NOT_LOADED` naming the chunks |
+| a tracked cell of the build is owned by a journal entry (a site, region or road) | `OVERLAP` listing the sites and counts; an owned **air or fill** cell is void, not a refusal |
+| bounds or cell cap | `TOO_LARGE` (the dimensions and count) |
+| `ext` out of limits | `FIELD_LIMIT` |
+| journal unreadable, world stopping | `JOURNAL_UNAVAILABLE`, `WORLD_STOPPED` |
+| the placement toggle (`architect.playerTracking`) off | `ADOPT_REFUSED` `tracking_off` |
+
+Also: **`place`/`check` of an adopted entry anywhere** refuses `ADOPT_REFUSED` `placed_elsewhere` (N-PT2-2); `polish` of an
+adopted entry refuses `VERSION_REFUSED` `adopted_polish` (`versionOf` works, §3). A stand-alone `remove` of the entry's
+library file while the site stands is the existing pinned-version refusal.
+
+### 6. What works afterwards
+
+- **Updates (delta).** `checkDelta`/`applyDelta` from v1 to a later version, per 5b: growth cells meet the world under the
+  usual refusals (`OVERLAP`, `PLAYER_BUILD` as §4), `FRAME_CHANGED` if `front` or the entrance row moves.
+- **`versionOf`** (C13): `DesignRequest.versionOf(entryId, siteId)` on the adopted entry installs v2 (`by: design`). Its
+  context has the head's captured source and renders, `site-now.nbt` (the restore box as it stands) and `site-edits.json`
+  (the KEEP set), so "add a floor" is told which cells the player has changed. The sim changes the head as it does for C13.
+- **`outdated(owner)`** lists the site once v2 exists (`version` 1, `headVersion` 2); `ENTRY_VERSIONED` fires.
+- **`revert(siteId, 1, actor)`** returns to v1 as 5b's revert: creative by journal undo of the delta suffix, survival as a
+  forward construction delta. Reverting to v1 is a normal revert; there is no v0.
+- **Undo, and `remove`, of the adoption un-adopt only.** The journal `adopt` entry has `before == after`, so undoing it writes
+  nothing: the site record goes, the build returns to its `priorState` (`ACTIVE` or `CLAIMED`) with `siteId` null and its
+  records untouched, `BUILD_CHANGED` and `SITE_REMOVED` fire, **the house stays**. `remove(siteId)` on an updated site first
+  undoes its delta group (5b: back to the adopted state), then un-adopts. The entry goes to the library trash when it has one
+  version; it **stays** when it has two or more (a paid design history, SQ-PT2-5). The slice never removes the house.
+- **Redo.** `adopt` again after an un-adopt makes a new site and, if the old entry stayed, a new entry (no reuse in v0).
+
+### 7. Player hand edits after adoption
+
+- Edits are ordinary player edits: recorded by PT (the cell is the player's, in the build), and **kept** by `applyDelta` and
+  `revert` under 5b's rules: a Δ cell whose world value is not the site's top `after` is `KEEP` (not written, in
+  `kept {pos, found, planned}`, counted in `deviations`), `OVERWRITE` writes it (the entry's `before` records the player's
+  block), `REFUSE` refuses `PLAYER_EDITS`. Cells outside Δ are never written. Opening a door, copper weathering and other
+  volatile changes are not edits (S2's list).
+- **A block the player puts into a cell the delta wants** stays until they remove it or `OVERWRITE` runs; the next delta
+  compares plan against plan, as 5b's "later deltas" rule says.
+- **Survival:** a mined adopted block is a player edit: kept, not refunded (phase 3's no-dupe rule).
+
+### 8. Survival: adoption is free
+
+- Adopting needs no items, no crate, no stockpile, no `INSTANT` permission. No block is written, so there is nothing to refund.
+  Every adopted cell is **unpaid** (the `free` bitset is full): a later delta that removes or swaps an adopted block gives **no
+  refund** (N-PT2-1: the safe default), and a `remove` of the site refunds nothing for them, so adopt then remove gains and
+  loses 0 items (gate item 6).
+- **Later changes construct from the stockpile** (Y): `applyDelta` of an update is a construction delta; the owner's
+  stockpile feeds the added and changed cells (credit key `delta:<entry>:<site>`); cells it adds are paid and refund on
+  revert and remove as 5b says. An owner with no stockpile gets a delta crate as today.
+- The identity "items in = items out" holds across adopt, update, revert and un-adopt (checked by the gate's ledger).
+
+### 9. Saved state and compatibility
+
+- The site record is the ordinary one plus `ext["architect_mc:adopted"]`; the journal entry kind `adopt` is a free string
+  (`kind` is a free string, 5b's kind-compatibility note). Whether a 0.27.0 reader keeps or refuses an `adopt` entry is
+  unmeasured: the gate (item 13) records it, and if it would drop the entry the file version is bumped as 4e's downgrade rule
+  requires, only for files that hold one.
+- `builds.json` gains `siteId` and the `ADOPTED` state; an older reader drops the unknown state to `ACTIVE` and the site link,
+  which the plan accepts: the house is still a build there (SQ-PT2-6).
+- The library entry's blueprint JSON gains `source: "captured"` and `adopted {build, at}`; an older mod shows it as a plain
+  imported entry (no `versionOf`).
+
+### 10. Gate (slice tier, $0)
+
+Headless steps place every block through a **fake ServerPlayer's `useItemOn`** (never `setBlock`), as PT. Driver
+`tools/gate6cpt2.mjs`, evidence `artifacts/gate6c-pt2/`. The cabin is PT's 9x7x9 log cabin with a door, a chest (with items), a
+bed and a sign, built by the fake player, `HOUSE`.
+
+| # | Check | Bar |
+|---|---|---|
+| 1 | Refusals | each §5 row: unknown, released, provisional, no consent, a stranger actor, an op actor (passes), already adopted (the message names the site), an unloaded chunk, an owned tracked cell, 97 wide, 300k column fill, a bad `ext`, tracking off; every one leaves the world, the index and the library unchanged |
+| 2 | Adopt | the cabin is adopted: `AdoptResult` (version 1, frame from the door), world hash **equal** before and after, 0 blocks written (the change counter), `BuildState.ADOPTED` and `siteId`, the tracked set and each record **unchanged**, `ext` carries the caller's keys and `architect_mc:adopted` |
+| 3 | Capture | the entry's structure equals the world's footprint cells (and the column-filled air), the chest's `Items` are absent from the entry while the world's chest keeps them, the chest cell is a block entity; `skipped` counts the void |
+| 4 | A floor | `versionOf` (sim) "add a floor" installs v2 (`by: design`), `outdated` lists the site 1 -> 2, `checkDelta` reports the growth, 0 kept; the frame guard passes |
+| 5 | Hand edits kept | the player breaks a wall block, places a block in a cell the delta changes and another outside it; `checkDelta`/`applyDelta` (KEEP): the changed-cell edit is kept and reported (`found`, `planned`), the outside edit is untouched, `deviations` counts the kept cell; the floor is built; the edits stay the player's (records), the build's placers are unchanged |
+| 6 | Survival | a survival world, the same flow with a stockpile: adopt costs 0 and writes 0; the update builds from the stockpile; the ledger, the crate and the player's inventory balance (items in = out) across adopt, update, revert and un-adopt; no refund for an adopted block |
+| 7 | Revert to v1 | `revert(site, 1)`: the floor is gone, the hand edits outside Δ stand, the cabin's hash equals the adopted state plus the edits; `history` shows it |
+| 8 | Undo of the adoption | **run A** (adopt, undo): the cabin's hash equals the pre-adoption hash, the tracked set, placers and build ids **0 mismatches**, the build `ACTIVE` with `siteId` null, the entry trashed. **Run B** (items 4-7 first, then `remove`): the deltas go, the cabin stands with the hand edits, its hash equals the hash taken just before the removal, the PT records equal the ones then (0 mismatches), the entry stays (two versions) |
+| 9 | Save and reload | after `/save` and a restart (and a chunk unload and reload): the site, its version and `ext`, the entry, the `ADOPTED` state and `siteId`, the records, `kept` cells and `outdated` are identical; `applyDelta` and `revert` still work; undo after the reload still only un-adopts |
+| 10 | Protection stays | with the cabin adopted: a stroke, a road across it, felling at its wall and a region plan keep it (`PLAYER_BUILD`), a consent naming the build lets a `PLAYER_BLOCKS` stroke clear it; growth cells over the player's lean-to refuse `PLAYER_BUILD` unless consent names the build |
+| 11 | Build states | adopted builds do not demote under 20 cells; a merge with an `ACTIVE` build keeps the id; two adopted builds do not merge; a split keeps the id on the largest part; `releaseBuild` refuses |
+| 12 | Elsewhere | `place` of the adopted entry refuses `placed_elsewhere`; `polish` refuses; the entry's library delete while the site stands refuses |
+| 13 | API, spend | api-compat clean against the archived 0.27.0 jars, apitest through the public API, an old reader opens a world without `adopt` entries, and what a 0.27.0 jar does with one that has them is recorded; $0.00 |
+
+**Tier:** slice: units, apijars and api-compat, the impact steps (`site/**`, `delta/**`, `journal/**`, `placed/**`,
+`library/**`), PT2's own items. **gate-verifier** re-runs items 5, 6, 7 and 8 (undo, journal, removal, accounting) per the
+2026-10-12 policy.
+
+### 11. Build order
+
+1. Archive the 0.27.0 apitest jar. 2. `Build.siteId`, `BuildState.ADOPTED`, the classifier rules (§4). 3. The capture and
+`kit/lib/adopt.mjs`. 4. The `adopt` journal entry, the site and entry creation, un-adopt on undo and remove. 5. The implicit
+consent in `applyDelta`/`revert`/`checkDelta`. 6. Refusals and `placed_elsewhere`. 7. `versionOf` for captured sources. 8. Fixtures
+and gate.
+
+### Open questions for Steward
+
+- **SQ-PT2-1.** A build with no entrance (a wall, a farm, an open barn): adopt with a guessed `front` (`frameGuessed`, the
+  draft), or refuse `no_entrance`? A wrong frame only matters to the frame guard and an approach.
+- **SQ-PT2-2.** Do you need `adopt` to take a name for the entry, or a box beyond the build (a garden, a fence), or is
+  "claim first, then adopt" enough?
+- **SQ-PT2-3.** The captured blueprint has one part. Do your change requests need parts (walls, roof) for the scoped
+  `versionOf` ("local edits within 3 existing plus 2 new parts")? One part makes any edit a whole-house edit for the scoping call.
+- **SQ-PT2-4.** `PROVISIONAL` refused (the draft), or allowed once its cells have not changed for some minutes?
+- **SQ-PT2-5.** Un-adopt keeps the entry when it has two or more versions: right, or always trash it?
+- **SQ-PT2-6.** The `ADOPTED` build stays a keep-out in your plans (the draft). Do you also want `builds()` to flag
+  `siteId` so the settlement view shows "Alex's house (site-14)"? (It does in this draft.)
+- **SQ-PT2-7.** A site's own cells are implicitly consented; growth over the player's extension needs your consent. Right?
+
+### Open questions for Noah
+
+- **N-PT2-1.** In survival, demolishing a player's adopted block through an update gives **no refund** (the block was never
+  paid to Architect, and an item back would risk a dupe on revert). Or refund the item to the crate and charge it back on revert?
+- **N-PT2-2.** An adopted entry cannot be placed anywhere else (it would copy a player's house as a design). Allow it as a
+  copy for the owner or an op?
+- **N-PT2-3.** Containers' contents are never captured, and a chest in a cell an update changes refuses `BLOCK_ENTITIES`.
+  Fine, or may an update move a chest's items?
+- **N-PT2-4.** A player may adopt only a build they placed (10% of its cells) or an op may adopt any. Same rule as consent (PT §6).
+- **N-PT2-5.** The caps: 96x64x96 and 262,144 captured cells.
+- **N-PT2-6.** Entities (item frames, paintings, armour stands) are not captured; a wall change may pop a painting as an item (vanilla).
+- **N-PT2-7.** API version: the next free minor at merge (the house rule).
+
+### Deferred
+
+- Several builds in one site; adopting a plain box; adopting into an existing entry (a variant of a catalogue design);
+  polish of an adopted entry; `transferOwner` of an adopted site; copies of an adopted entry (6d).
+
+
+
+### Coordinator decisions on PT2's Noah questions (2026-10-13; from Noah's direction, he may override)
+
+- **N-PT2-1:** no refund in survival for demolished adopted blocks (no dupe risk); the ledger balances as drafted.
+- **N-PT2-2:** refuse placing an adopted entry elsewhere in v0 (it is the player's house, not a template). A "use my house as
+  a template" copy can come later as its own ask.
+- **N-PT2-3:** accepted: container contents are never captured; an update touching a chest cell refuses `BLOCK_ENTITIES`.
+- **N-PT2-4:** accepted: a placer with at least 10% of the build's cells, or an op.
+- **N-PT2-5:** the drafted caps are accepted.
+- **N-PT2-6:** accepted: entities (item frames, paintings, armour stands) are not captured in v0; listed as a known gap.
+- **N-PT2-7:** next free minor at merge.
+
 ## 6c close-out (release tier, at the last 6c slice's merge)
 
 SETTLEMENTS §17.2's 6c gate, run once when the last 6c slice merges (whichever it is), on top of that slice's own gate:
