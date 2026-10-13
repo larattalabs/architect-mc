@@ -15,6 +15,16 @@ public final class Limits {
 	private Limits() {
 	}
 
+	// ---- JobSpec (C33, 1.27.0)
+	/** {@code system} of a structured job (zod {@code JobSpec.system}; an agent job's is {@link #JOB_SYSTEM_AGENT_MAX}); UTF-16 units, not trimmed. */
+	public static final int JOB_SYSTEM_MAX = 120000;
+	/** {@code system} of an agent job (the cap every job had before 1.27.0). */
+	public static final int JOB_SYSTEM_AGENT_MAX = 50000;
+	/** {@code systemRefs}: at most 8, each at most 64 characters and {@link #SYSTEM_REF_RE}. */
+	public static final int JOB_SYSTEM_REFS_MAX = 8;
+	public static final int JOB_SYSTEM_REF_MAX = 64;
+	public static final Pattern SYSTEM_REF_RE = Pattern.compile("^[a-z][a-z0-9_-]*\\/[A-Za-z0-9._-]+(#[a-z]+)?$");
+
 	// ---- DesignRequest (and a group item's request)
 	/** {@code style}, trimmed: 1-40. */
 	public static final int STYLE_MAX = 40;

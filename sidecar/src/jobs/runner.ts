@@ -28,6 +28,7 @@ import { isFinalJob, JobBook } from './book.js';
 import { costFromResult, CostMeter } from './cost.js';
 import type { DriverTool, JobDriver, ResumeAnswer, ToolAnswer } from './driver.js';
 import { validateJson } from './schema.js';
+import { composeSystem } from './systemrefs.js';
 
 export const DEFAULT_TOOL_TIMEOUT_MS = 60_000;
 export const DEFAULT_STRUCTURED_MAX_TURNS = 4;
@@ -614,6 +615,9 @@ export class JobRunner {
       }
       const resume = w.sessionId;
       const prompt = answers && resume ? continuationPrompt(answers) : retryPrompt ?? (resume ? RESUME_PROMPT : spec.prompt);
+      // (C33) the refs lead, then the caller's system text (or the kind's default); expanded from the running kit on every query
+      const system = await composeSystem(this.sc.config.kitDir, spec.systemRefs, spec.system ?? (spec.kind === 'structured' ? STRUCTURED_SYSTEM : AGENT_SYSTEM)).catch((e: Error) => e);
+      if (system instanceof Error) return this.fail(id, `system prompt: ${system.message}`);
       const tools = spec.kind === 'agent' ? [...(spec.tools ?? []).map((t) => this.modTool(id, t, r)), this.statusTool(id)] : [];
       w.queries++;
       this.sc.store.markDirty();
@@ -629,7 +633,7 @@ export class JobRunner {
           jobId: id,
           kind: spec.kind,
           prompt,
-          system: spec.system ?? (spec.kind === 'structured' ? STRUCTURED_SYSTEM : AGENT_SYSTEM),
+          system,
           model: spec.model ?? this.sc.config.jobs.model,
           effort: spec.effort,
           maxTurns: spec.maxTurns ?? (spec.kind === 'structured' ? DEFAULT_STRUCTURED_MAX_TURNS : DEFAULT_AGENT_MAX_TURNS),
