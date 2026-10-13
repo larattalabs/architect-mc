@@ -112,6 +112,10 @@ steps.unit = async () => {
   const out = {};
   out.kit = nodeTest(['kit/test/adopt-pt2.test.mjs']);
   check(out.kit.code === 0 && out.kit.fail === 0 && out.kit.pass >= 6, `item 3 (kit): the captured source gives back v1 exactly (raw states, tagged block-entity data, one part), checks as a captured source, and floors 1 changes exactly one of v1's cells (${out.kit.pass} pass, ${out.kit.fail} fail)`, out.kit.failing);
+  const sc = spawnSync('npx', ['vitest', 'run', 'test/adopt-pt2.test.ts'], { cwd: path.join(root, 'sidecar'), encoding: 'utf8', timeout: 600_000 });
+  const st = `${sc.stdout}${sc.stderr}`;
+  out.sidecar = { code: sc.status, tail: st.split('\n').slice(-6) };
+  check(sc.status === 0 && /Tests\s+2 passed/.test(st), 'items 4 and 12 (sidecar, real kit): versionOf of an adopted entry ("add a floor": the sim bumps floors 0 -> 1) installs v2 by design, still adopted and captured; polish refuses adopted_polish', out.sidecar.tail);
   const tests = ['site.AdoptTest', 'journal.JournalAdoptTest', 'placed.BuildsAdoptTest', 'api.ApiPT2Test', 'api.ApiPTTest', 'journal.JournalPtTest', 'region.ApiP0Test', 'apiimpl.ApiRulesTest'];
   out.java = javaTests(tests);
   const ok = (v) => v && v.tests > 0 && v.failures === 0;
@@ -405,8 +409,8 @@ steps.adopt = async () => {
   check(chest && chest.worldItems === 8 && chest.entryItems === 0, `item 3: the chest's Items are absent from the entry (${chest?.entryItems}) while the world's chest keeps them (${chest?.worldItems})`, cmp.containers);
   const en = await entryOf(r.entryId);
   out.entry = { ...en, json: undefined };
-  check(en.found && en.blockEntities >= 4 && en.inventoryItems === 0 && en.mjs && en.json.sourceKind === 'captured' && en.json.adopted?.build === cab.id && en.json.source === `${r.entryId}.mjs`,
-    `item 3: the entry ${r.entryId}: ${en.cells} cells, ${en.blockEntities} block entities (chest, bed, sign), 0 inventory items, a captured source (${en.json?.source}, sourceKind ${en.json?.sourceKind}), adopted ${json(en.json?.adopted)}`, en);
+  check(en.found && en.blockEntities >= 2 && en.inventoryItems === 0 && en.mjs && en.json.sourceKind === 'captured' && en.json.adopted?.build === cab.id && en.json.source === `${r.entryId}.mjs`,
+    `item 3: the entry ${r.entryId}: ${en.cells} cells, ${en.blockEntities} block entities (the chest and the sign; a bed has none), 0 inventory items, a captured source (${en.json?.source}, sourceKind ${en.json?.sourceKind}), adopted ${json(en.json?.adopted)}`, en);
   const dirt = await ptAt([X + 2, y + 1, Z + 2]);
   check(r.skipped >= 1 && !dirt.tracked, `item 3: skipped counts the void (${r.skipped}: the natural dirt in the chest's column among them)`);
   // the captured source rebuilds v1 exactly (the kit, as versionOf's designer builds it)
@@ -420,6 +424,9 @@ steps.adopt = async () => {
   const built = writeBlueprint(mod.default({}), path.join(tmp, 'out'));
   const d = diffFiles(path.join(en.dir, `${r.entryId}.nbt`), built.nbtPath, { cells: true });
   check(d.added === 0 && d.removed === 0 && d.changed === 0 && d.frameKept, `item 3: the entry's captured source (kit/lib/adopt.mjs) rebuilds v1 exactly (added ${d.added}, removed ${d.removed}, changed ${d.changed}, ${d.unchanged} equal)`, d.cells);
+  // a placed site beside it: the journal then holds an ordinary site entry too (item 13's old reader reads both kinds)
+  const ps = await apiResult(await api(`ptplace g6a_stub_9 ${X + 40} ${y} ${Z} s1`));
+  check(ps.placed, `a placed site ${ps.site} beside it (an ordinary journal entry for item 13's old reader)`, ps);
   // the journal: one adopt entry, before == after (compare: 0 mismatches), its files version 4
   const j = await journalOf(r.siteId);
   out.journal = j;
