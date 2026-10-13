@@ -1713,6 +1713,14 @@ public final class Sites {
 
 	/** {@link #removalBlockers}; {@code tagOwner} (6c 0c, C18): entities tagged {@code architect:owner=<tagOwner>} don't block. */
 	public static List<String> removalBlockers(ServerLevel level, Site b, @Nullable String tagOwner) {
+		if (Adopt.isAdopted(b)) {
+			return Adopt.blockers(level, b, tagOwner); // 6c PT2: only over the cells its removal writes (its deltas'); the house is never written
+		}
+		return removalBlockersOf(level, b, tagOwner);
+	}
+
+	/** {@link #removalBlockers} over the site's whole restore box. */
+	static List<String> removalBlockersOf(ServerLevel level, Site b, @Nullable String tagOwner) {
 		List<String> out = new ArrayList<>();
 		Set<BlockPos> own = ownBlockEntities(b);
 		Anchors.Bounds box = b.restoreBox();

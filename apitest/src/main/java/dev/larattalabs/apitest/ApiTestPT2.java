@@ -104,7 +104,18 @@ public final class ApiTestPT2 {
 						String act = c.has("actor") ? c.get("actor").getAsString() : null;
 						r = r.withConsent(new BuildConsent(ids, act == null ? null : act.equals("player") ? src.getPlayer().getUUID() : UUID.fromString(act)));
 					}
-					return ApiTestDelta.verdict(api.sites(src.getServer()).checkDelta(r));
+					dev.larattalabs.architect.api.DeltaVerdict v = api.sites(src.getServer()).checkDelta(r);
+					JsonObject o = ApiTestDelta.verdict(v);
+					com.google.gson.JsonArray kc = new com.google.gson.JsonArray();
+					for (dev.larattalabs.architect.api.KeptCell k : v.kept()) {
+						JsonObject x = new JsonObject();
+						x.addProperty("pos", k.pos().getX() + "," + k.pos().getY() + "," + k.pos().getZ());
+						x.addProperty("found", net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(k.found().getBlock()).toString());
+						x.addProperty("planned", net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(k.planned().getBlock()).toString());
+						kc.add(x);
+					}
+					o.add("keptCells", kc); // (PT2) found and planned per kept cell
+					return o;
 				}
 				case "adoptedsite": {
 					return new JsonPrimitive(api.sites(src.getServer()).adoptedSite(a[1]).orElse("none"));

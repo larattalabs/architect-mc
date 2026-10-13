@@ -151,7 +151,17 @@ const apiResult = async (pending, timeoutMs = 300_000) => {
 };
 const later = async (args, t) => apiResult(await api(args), t);
 const uses = async (ops) => (await call('dev.pt.uses', { ops }, 900_000)).results;
-const breaks = async (at, placer = ALEX) => call('dev.pt.breaks', { at, placer }, 600_000);
+/** Breaks through the fake player's destroyBlock; the drops are cleared (an item entity in a site's cells makes a delta wait OCCUPIED). */
+const breaks = async (at, placer = ALEX) => {
+  const r = await call('dev.pt.breaks', { at, placer }, 600_000);
+  await cmd('/kill @e[type=minecraft:item]');
+  return r;
+};
+/** The non-air cells of a box. */
+const nonAir = async (b) => {
+  const h = await call('dev.box.hash', { min: b.slice(0, 3), max: b.slice(3) }, 300_000);
+  return (b[3] - b[0] + 1) * (b[4] - b[1] + 1) * (b[5] - b[2] + 1) - h.air;
+};
 const cellsOf = async (box, list = false) => call('dev.pt.cells', { box, list }, 900_000);
 const buildsIn = async (box, drain = true) => call('dev.pt.builds', { box, drain }, 600_000);
 const ptAt = (at) => call('dev.pt.at', { at });
@@ -482,14 +492,14 @@ steps.flow = async () => {
   await settle(6000);
   const placers0 = json((await buildOf(A.id)).primaryPlacer);
   const hEdits = await boxHash(v2box(X));
-  const ka = await api(`checkdelta ${ra.siteId} 2 keep ${OWNER}`);
+  const ka = await api(`pt2checkdelta ${ra.siteId} 2 ${OWNER} -`);
   const ap = await later(`applydelta ${ra.siteId} 2 keep ${OWNER}`);
   out.applyA = ap;
-  const kept = (ap.kept ?? []).find((k) => k.pos.replaceAll(' ', '') === hatch.join(','));
-  check(ka.kept?.length === 1 && ap.applied && ap.kept?.length === 1 && kept && /cobblestone/.test(kept.found) && /air/.test(kept.planned), `item 5: checkDelta/applyDelta (KEEP): the hatch edit is kept and reported (found ${kept?.found}, planned ${kept?.planned})`, ap);
-  const top = await call('dev.box.hash', { min: [X, y + 7, Z], max: [X + 8, y + 11, Z + 8], cells: true }, 120_000);
-  const storey = (top.cells ?? []).filter((c) => !/air/.test(c.state ?? c[3] ?? JSON.stringify(c))).length;
-  check(storey >= 100, `item 5: the floor is built (${storey} non-air cells above the roof)`);
+  const kept = (ka.keptCells ?? []).find((k) => k.pos === hatch.join(','));
+  check(ka.keptCells?.length === 1 && kept && /cobblestone/.test(kept.found) && /air/.test(kept.planned) && ap.applied && ap.kept?.length === 1 && ap.kept[0] === hatch.join(','),
+    `item 5: checkDelta/applyDelta (KEEP): the hatch edit is kept and reported (found ${kept?.found}, planned ${kept?.planned}); applied, kept ${json(ap.kept)}`, { ka, ap });
+  const storey = await nonAir([X, y + 7, Z, X + 8, y + 11, Z + 8]);
+  check(storey === 32 * 4 + 81, `item 5: the floor is built (${storey} non-air cells above the roof: a ring 4 high and a roof)`);
   const sh = await call('dev.site.history', { site: ra.siteId }).catch(() => null);
   const w1 = await ptAt(wall);
   const e1 = await ptAt(hatch);
@@ -538,8 +548,7 @@ steps.flow = async () => {
   const rmA = await remove(ra.siteId);
   const hB1 = await boxHash(cabinBox(X, y, Z));
   const rB1 = await cellMap(cabinBox(X, y, Z));
-  const above = await call('dev.box.hash', { min: [X, y + 7, Z], max: [X + 8, y + 11, Z + 8], cells: true }, 120_000);
-  const left = (above.cells ?? []).filter((c) => !/air/.test(JSON.stringify(c))).length;
+  const left = await nonAir([X, y + 7, Z, X + 8, y + 11, Z + 8]);
   const eA = await entryOf(ra.entryId);
   const bA = await buildOf(A.id);
   check(rmA?.removed && left === 0 && hB1 === hB && diffMaps(rB.map, rB1.map).length === 0, `item 8 (run B): remove of ${ra.siteId} with its delta: the deltas go (${left} storey cells left), the cabin stands with the hand edits (hash equal ${hB1 === hB}), the PT records equal (${diffMaps(rB.map, rB1.map).length} mismatches)`, rmA);

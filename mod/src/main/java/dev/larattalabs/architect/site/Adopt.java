@@ -1220,14 +1220,30 @@ public final class Adopt {
 			throw new Sites.SiteException(Reason.COVERED, cover.size() + " site(s) stand on cells of " + b.id() + " (" + String.join(", ", cover.stream().map(
 				Sites::describe).toList()) + "); remove them first");
 		}
-		List<String> others = new ArrayList<>();
 		LongOpenHashSet cells = new LongOpenHashSet();
+		List<String> others = nonAdopt(b, cells);
+		Sites.Removed removed;
+		if (others.isEmpty()) {
+			// adopted, never changed: nothing is written; the entry is released with the record
+			Sites.forget(server, b.id());
+			removed = new Sites.Removed(b, Map.of());
+		} else {
+			removed = undoDeltas(level, b, others, cells, force, tagOwner);
+		}
+		unadopted(server, b);
+		dev.larattalabs.architect.apiimpl.ApiEvents.removed(server, removed);
+		return removed;
+	}
+
+	/** The active entries of an adopted site other than its adopt entry (deltas, their crates and held leaves) and their cells. */
+	static List<String> nonAdopt(Site b, LongOpenHashSet cells) throws Sites.SiteException {
+		List<String> out = new ArrayList<>();
 		JournalStore js = WorldJournal.storeOrNull();
 		for (JournalStore.Meta m : SiteJournal.active(b.id())) {
 			if (m.kind().equals(KIND)) {
 				continue;
 			}
-			others.add(m.id());
+			out.add(m.id());
 			if (js != null) {
 				try {
 					for (long k : m.sections()) {
@@ -1243,17 +1259,26 @@ public final class Adopt {
 				}
 			}
 		}
-		Sites.Removed removed;
-		if (others.isEmpty()) {
-			// adopted, never changed: nothing is written; the entry is released with the record
-			Sites.forget(server, b.id());
-			removed = new Sites.Removed(b, Map.of());
-		} else {
-			removed = undoDeltas(level, b, others, cells, force, tagOwner);
+		return out;
+	}
+
+	/**
+	 * What an adopted site's removal would destroy that the site did not bring: only over the cells it writes (its deltas'); the house
+	 * itself is never written, so its chest, its bed and the player's things in it never block. Empty without deltas.
+	 */
+	static List<String> blockers(ServerLevel level, Site b, @Nullable String tagOwner) {
+		LongOpenHashSet cells = new LongOpenHashSet();
+		try {
+			nonAdopt(b, cells);
+		} catch (Sites.SiteException e) {
+			return List.of(e.getMessage());
 		}
-		unadopted(server, b);
-		dev.larattalabs.architect.apiimpl.ApiEvents.removed(server, removed);
-		return removed;
+		Anchors.Bounds wb = SiteDeltas.boundsOf(cells);
+		if (wb == null) {
+			return List.of();
+		}
+		Site view = b.withGeometry(b.box(), b.interior(), b.anchors(), wb, b.pin());
+		return Sites.removalBlockersOf(level, view, tagOwner).stream().filter(s -> inCells(s, cells)).toList();
 	}
 
 	/** The deltas' undo of an adopted site's removal, then its adopt entry released (the record pending, as a removal's). */
@@ -1264,10 +1289,8 @@ public final class Adopt {
 		if (wb != null) {
 			Sites.refusePlayerIn(level, wb, b.id(), "removing it");
 		}
-		if (!force && wb != null) {
-			// what the undo would destroy that the site did not bring, over the cells it writes only (the house is never written)
-			Site view = b.withGeometry(b.box(), b.interior(), b.anchors(), wb, b.pin());
-			List<String> blockers = Sites.removalBlockers(level, view, tagOwner).stream().filter(s -> !s.contains(" at ") || inCells(s, cells)).toList();
+		if (!force) {
+			List<String> blockers = blockers(level, b, tagOwner);
 			if (!blockers.isEmpty()) {
 				throw new Sites.SiteException(Sites.blockersMessage(b.id(), blockers));
 			}
