@@ -73,6 +73,9 @@ package dev.larattalabs.architect.api;
  * {@code DataVersion} newer than the game's, corrupt data, or blocks the game does not know ({@link Library#importSchematic}).</li>
  * <li>{@code PERMISSION} (1.21.0): the caller lacks the permission the request needs: a brush stroke with
  * {@link Destruction#PLAYER_BLOCKS} needs an online player with permission level 2 as its actor ({@link Regions#brush}).</li>
+ * <li>{@code PLAYER_BUILD} (PT): the op would write over a player's build (docs/CONTRACT.md "Phase 6c slice PT" §7) that its
+ * {@link BuildConsent} does not name; {@link Refusal#builds()} / {@link ArchitectRefused#builds()} name each blocking build (id,
+ * kind, count, the first 8 cells with their block ids). {@code force} never overrides it (N-PT-6). Not a widened PLAYER_BLOCKS.</li>
  * </ul>
  * New values are only ever appended.
  */
@@ -87,5 +90,7 @@ public enum Reason {
 	// 1.18.0 (6c slice SCH)
 	FORMAT,
 	// 1.21.0 (6c slice B)
-	PERMISSION
+	PERMISSION,
+	// PT (6c slice PT, C32)
+	PLAYER_BUILD
 }

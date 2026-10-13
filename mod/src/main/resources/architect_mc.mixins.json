@@ -5,8 +5,13 @@
 	"mixins": [
 		"BlockStateUpdateMixin",
 		"ChunkGenCountMixin",
+		"FallingBlockEntityMixin",
 		"LevelChunkMixin",
 		"LevelTicksMixin",
+		"MovingPistonBlockMixin",
+		"PistonBaseBlockMixin",
+		"PistonMovingBlockEntityMixin",
+		"ServerPlayerGameModeMixin",
 		"StructureTemplateAccessor"
 	],
 	"injectors": {

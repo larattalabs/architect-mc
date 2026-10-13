@@ -484,7 +484,7 @@ public final class Sites {
 			heads.add(head.asLong());
 		}
 		for (long c : cells) {
-			level.setBlock(BlockPos.of(c), Blocks.AIR.defaultBlockState(), FLAGS);
+			dev.larattalabs.architect.placed.Placed.set(level, BlockPos.of(c), Blocks.AIR.defaultBlockState(), FLAGS);
 		}
 		if (!cells.isEmpty()) {
 			Architect.LOGGER.info("Left out {} bed(s) of {} in {}: beds are not safe there", heads.size(), grid.blueprint().id(), dimensionId(level));
@@ -1088,17 +1088,26 @@ public final class Sites {
 					removed++;
 				}
 			}
-			if (!site.template().placeInWorld(level, site.placePos(), site.placePos(), site.settings(), level.getRandom(), FLAGS)) {
+			// (6c PT) Architect writes the box (a structure template placed by vanilla code): the records there are cleared
+			Anchors.Bounds wb = box;
+			dev.larattalabs.architect.placed.Placed.beginWrites(p -> wb.contains(BlockPos.getX(p), BlockPos.getY(p), BlockPos.getZ(p)));
+			boolean placedAny;
+			try {
+				placedAny = site.template().placeInWorld(level, site.placePos(), site.placePos(), site.settings(), level.getRandom(), FLAGS);
+			} finally {
+				dev.larattalabs.architect.placed.Placed.endWrites();
+			}
+			if (!placedAny) {
 				throw new IllegalStateException("template " + bp.id() + " placed nothing (empty template?)");
 			}
 			BedsOut beds = removeUnsafeBeds(level, site.grid(), site.turns(), box);
 			BlockState foundation = foundationState(bp);
 			BlockPos.MutableBlockPos m = new BlockPos.MutableBlockPos();
 			for (int i = 0; i < plan.fill().length; i += 3) {
-				level.setBlock(m.set(plan.fill()[i], plan.fill()[i + 1], plan.fill()[i + 2]), foundation, FLAGS);
+				dev.larattalabs.architect.placed.Placed.set(level, m.set(plan.fill()[i], plan.fill()[i + 1], plan.fill()[i + 2]), foundation, FLAGS);
 			}
 			for (int i = 0; i < plan.clear().length; i += 3) {
-				level.setBlock(m.set(plan.clear()[i], plan.clear()[i + 1], plan.clear()[i + 2]), Blocks.AIR.defaultBlockState(), FLAGS);
+				dev.larattalabs.architect.placed.Placed.set(level, m.set(plan.clear()[i], plan.clear()[i + 1], plan.clear()[i + 2]), Blocks.AIR.defaultBlockState(), FLAGS);
 			}
 			applyApproach(level, bp, approach, foundation);
 			// a tall plant whose other half was inside the box (now gone) would float: take its outside half too
@@ -1106,7 +1115,7 @@ public final class Sites {
 				BlockState outside = level.getBlockState(half);
 				BlockPos inside = half.getY() < snapBox.minY() ? half.above() : half.below();
 				if (!level.getBlockState(inside).is(outside.getBlock())) {
-					level.setBlock(half, Blocks.AIR.defaultBlockState(), FLAGS);
+					dev.larattalabs.architect.placed.Placed.set(level, half, Blocks.AIR.defaultBlockState(), FLAGS);
 				}
 			}
 			drops.clearNew(level);
@@ -1214,16 +1223,16 @@ public final class Sites {
 		BlockPos.MutableBlockPos m = new BlockPos.MutableBlockPos();
 		BlockState air = Blocks.AIR.defaultBlockState();
 		for (int i = 0; i < a.clear().length; i += 3) {
-			level.setBlock(m.set(a.clear()[i], a.clear()[i + 1], a.clear()[i + 2]), air, FLAGS);
+			dev.larattalabs.architect.placed.Placed.set(level, m.set(a.clear()[i], a.clear()[i + 1], a.clear()[i + 2]), air, FLAGS);
 		}
 		for (int i = 0; i < a.fill().length; i += 3) {
-			level.setBlock(m.set(a.fill()[i], a.fill()[i + 1], a.fill()[i + 2]), foundation, FLAGS);
+			dev.larattalabs.architect.placed.Placed.set(level, m.set(a.fill()[i], a.fill()[i + 1], a.fill()[i + 2]), foundation, FLAGS);
 		}
 		for (int i = 0; i < a.path().length; i += 3) {
-			level.setBlock(m.set(a.path()[i], a.path()[i + 1], a.path()[i + 2]), path, FLAGS);
+			dev.larattalabs.architect.placed.Placed.set(level, m.set(a.path()[i], a.path()[i + 1], a.path()[i + 2]), path, FLAGS);
 		}
 		for (int i = 0; i < a.slabs().length; i += 3) {
-			level.setBlock(m.set(a.slabs()[i], a.slabs()[i + 1], a.slabs()[i + 2]), slab, FLAGS);
+			dev.larattalabs.architect.placed.Placed.set(level, m.set(a.slabs()[i], a.slabs()[i + 1], a.slabs()[i + 2]), slab, FLAGS);
 		}
 	}
 
@@ -2751,7 +2760,13 @@ public final class Sites {
 		StructureTemplate t = new StructureTemplate();
 		t.load(level.registryAccess().lookupOrThrow(Registries.BLOCK), tpl);
 		BlockPos min = new BlockPos(box.minX(), box.minY(), box.minZ());
-		t.placeInWorld(level, min, min, settings(Rotation.NONE), level.getRandom(), FLAGS);
+		// (6c PT) Architect writes the box: records cleared, or restored by an undo's records (SiteJournal.Restore.writing)
+		dev.larattalabs.architect.placed.Placed.beginWrites(p -> box.contains(BlockPos.getX(p), BlockPos.getY(p), BlockPos.getZ(p)));
+		try {
+			t.placeInWorld(level, min, min, settings(Rotation.NONE), level.getRandom(), FLAGS);
+		} finally {
+			dev.larattalabs.architect.placed.Placed.endWrites();
+		}
 	}
 
 	/** A legacy snapshot (4d) by name, from {@code architect-sites/}. */

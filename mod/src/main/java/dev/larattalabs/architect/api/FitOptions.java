@@ -19,13 +19,24 @@ import org.jspecify.annotations.Nullable;
  *              player's (no areas)
  */
 public record FitOptions(CentreOn centreOn, @Nullable Integer setback, boolean approachIntoStreet, @Nullable ServerLevel level, Mode mode, boolean force,
-	@Nullable ServerPlayer actor, @Nullable String owner) {
-	public static final FitOptions DEFAULT = new FitOptions(CentreOn.ENTRANCE, null, false, null, Mode.AUTO, false, null, null);
+	@Nullable ServerPlayer actor, @Nullable String owner, @Nullable BuildConsent consent) {
+	public static final FitOptions DEFAULT = new FitOptions(CentreOn.ENTRANCE, null, false, null, Mode.AUTO, false, null, null, null);
+
+	/** (PT) Without a consent (the 1.14.0+ shape). */
+	public FitOptions(CentreOn centreOn, @Nullable Integer setback, boolean approachIntoStreet, @Nullable ServerLevel level, Mode mode, boolean force,
+		@Nullable ServerPlayer actor, @Nullable String owner) {
+		this(centreOn, setback, approachIntoStreet, level, mode, force, actor, owner, null);
+	}
+
+	/** (PT) The same options with this consent (a lot holding a named build may fit). */
+	public FitOptions withConsent(@Nullable BuildConsent c) {
+		return new FitOptions(centreOn, setback, approachIntoStreet, level, mode, force, actor, owner, c);
+	}
 
 	/** The 1.4.0 constructor (no owner). */
 	public FitOptions(CentreOn centreOn, @Nullable Integer setback, boolean approachIntoStreet, @Nullable ServerLevel level, Mode mode, boolean force,
 		@Nullable ServerPlayer actor) {
-		this(centreOn, setback, approachIntoStreet, level, mode, force, actor, null);
+		this(centreOn, setback, approachIntoStreet, level, mode, force, actor, null, null);
 	}
 
 	public FitOptions {
@@ -37,24 +48,24 @@ public record FitOptions(CentreOn centreOn, @Nullable Integer setback, boolean a
 	}
 
 	public FitOptions withLevel(@Nullable ServerLevel l) {
-		return new FitOptions(centreOn, setback, approachIntoStreet, l, mode, force, actor, owner);
+		return new FitOptions(centreOn, setback, approachIntoStreet, l, mode, force, actor, owner, consent);
 	}
 
 	public FitOptions withApproachIntoStreet(boolean into) {
-		return new FitOptions(centreOn, setback, into, level, mode, force, actor, owner);
+		return new FitOptions(centreOn, setback, into, level, mode, force, actor, owner, consent);
 	}
 
 	public FitOptions withCentreOn(CentreOn c) {
-		return new FitOptions(c, setback, approachIntoStreet, level, mode, force, actor, owner);
+		return new FitOptions(c, setback, approachIntoStreet, level, mode, force, actor, owner, consent);
 	}
 
 	public FitOptions withSetback(@Nullable Integer s) {
-		return new FitOptions(centreOn, s, approachIntoStreet, level, mode, force, actor, owner);
+		return new FitOptions(centreOn, s, approachIntoStreet, level, mode, force, actor, owner, consent);
 	}
 
 	/** The same options with an owner (1.12.0). */
 	public FitOptions withOwner(@Nullable String o) {
-		return new FitOptions(centreOn, setback, approachIntoStreet, level, mode, force, actor, o);
+		return new FitOptions(centreOn, setback, approachIntoStreet, level, mode, force, actor, o, consent);
 	}
 
 	/** What is centred on the lot's street-side span. */

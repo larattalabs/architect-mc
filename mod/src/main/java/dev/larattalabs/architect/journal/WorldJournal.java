@@ -377,7 +377,7 @@ public final class WorldJournal {
 				Value v = after.at(s.pos(k));
 				av[k] = v != null ? v : s.after(k);
 			}
-			out.add(new SectionCells(s.key, s.idx, s.before, av, s.layer, s.written));
+			out.add(new SectionCells(s.key, s.idx, s.before, av, s.layer, s.written, s.pt));
 		}
 		return out;
 	}

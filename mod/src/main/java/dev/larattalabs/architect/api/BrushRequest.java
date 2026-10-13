@@ -28,9 +28,23 @@ import org.jspecify.annotations.Nullable;
  * @param seed the stroke's seed (CAVE_CARVE's worm): the same request and seed plan the same IR
  */
 public record BrushRequest(String owner, ResourceKey<Level> dimension, BrushKind kind, BrushShape shape, BlockPos center, int radius, int strength,
-	@Nullable Mask mask, @Nullable Pattern pattern, Destruction destruction, @Nullable UUID actor, long seed) {
+	@Nullable Mask mask, @Nullable Pattern pattern, Destruction destruction, @Nullable UUID actor, long seed, @Nullable BuildConsent consent) {
 	public BrushRequest {
 		shape = shape == null ? BrushShape.SPHERE : shape;
 		destruction = destruction == null ? Destruction.NATURAL_ONLY : destruction;
+	}
+
+	/** The 1.21.0 constructor (no consent). */
+	public BrushRequest(String owner, ResourceKey<Level> dimension, BrushKind kind, BrushShape shape, BlockPos center, int radius, int strength,
+		@Nullable Mask mask, @Nullable Pattern pattern, Destruction destruction, @Nullable UUID actor, long seed) {
+		this(owner, dimension, kind, shape, center, radius, strength, mask, pattern, destruction, actor, seed, null);
+	}
+
+	/**
+	 * (PT) The same stroke with this consent: {@link Destruction#PLAYER_BLOCKS} clears only the builds it names, by one of their
+	 * placers or an op (N-PT-5); a non-op placer's consented stroke clears their named builds and keeps every other player block.
+	 */
+	public BrushRequest withConsent(@Nullable BuildConsent c) {
+		return new BrushRequest(owner, dimension, kind, shape, center, radius, strength, mask, pattern, destruction, actor, seed, c);
 	}
 }

@@ -161,7 +161,7 @@ public final class RoadBuilder {
 		java.util.Arrays.sort(topDown);
 		for (int i = topDown.length - 1; i >= 0; i--) {
 			int[] o = Construction.offsets(topDown[i], dx, dz);
-			level.setBlock(m.set(box.minX() + o[0], box.minY() + o[1], box.minZ() + o[2]), before.states[topDown[i]], Builder.CLEAR_FLAGS);
+			dev.larattalabs.architect.placed.Placed.set(level, m.set(box.minX() + o[0], box.minY() + o[1], box.minZ() + o[2]), before.states[topDown[i]], Builder.CLEAR_FLAGS);
 		}
 		Construction c = new Construction(Construction.BUILDING, queue, Builder.JOURNAL_TARGET, crate, new BitSet(), false, null);
 		Architect.LOGGER.info("Construction road {}: {} cells queued, {}", road.id(), queue.length, crate == null ? "from the stockpile of " + road.owner()
@@ -197,7 +197,7 @@ public final class RoadBuilder {
 		JournalStore.Txn t = s.begin().label("crate:" + g.id());
 		SiteJournal.crateEntry(t, level, g.crateOwner(), g.id(), at, WorldJournal.value(CrateBlocks.CRATE.defaultBlockState()));
 		SiteJournal.await(s.submit(t), "the crate of group " + g.id());
-		level.setBlock(at, CrateBlocks.CRATE.defaultBlockState(), Sites.FLAGS);
+		dev.larattalabs.architect.placed.Placed.set(level, at, CrateBlocks.CRATE.defaultBlockState(), Sites.FLAGS);
 		if (level.getBlockEntity(at) instanceof CrateBlockEntity be) {
 			be.setSiteId(g.crateOwner());
 		}

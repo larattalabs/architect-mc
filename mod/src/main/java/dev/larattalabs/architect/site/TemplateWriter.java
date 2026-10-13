@@ -282,9 +282,9 @@ final class TemplateWriter {
 		BlockState state = cells.states[i];
 		CompoundTag nbt = cells.nbt[i];
 		if (nbt != null) {
-			level.setBlock(p, Blocks.BARRIER.defaultBlockState(), 820);
+			dev.larattalabs.architect.placed.Placed.set(level, p, Blocks.BARRIER.defaultBlockState(), 820);
 		}
-		if (level.setBlock(p, state, flags)) {
+		if (dev.larattalabs.architect.placed.Placed.set(level, p, state, flags)) {
 			minX = Math.min(minX, p.getX());
 			minY = Math.min(minY, p.getY());
 			minZ = Math.min(minZ, p.getZ());

@@ -270,6 +270,22 @@ public interface SiteEvents {
 			Guard.run(() -> l.onChanged(owner), "STOCKPILE_CHANGED");
 		}
 	});
+	/**
+	 * (PT) A player build was found, changed (a new revision), merged (the view is the build merged away; {@link Sites#build}
+	 * resolves its id to the survivor), split (the view is the new part), claimed, released or gone ({@code change} names which).
+	 * Server thread. Since PT.
+	 */
+	Event<BuildChanged> BUILD_CHANGED = EventFactory.createArrayBacked(BuildChanged.class, ls -> (b, change) -> {
+		for (BuildChanged l : ls) {
+			Guard.run(() -> l.onChanged(b, change), "BUILD_CHANGED");
+		}
+	});
+
+	@FunctionalInterface
+	interface BuildChanged {
+		/** {@code change}: found, changed, merged, split, claimed, released or gone. */
+		void onChanged(Build build, String change);
+	}
 
 	@FunctionalInterface
 	interface RegionChecked {

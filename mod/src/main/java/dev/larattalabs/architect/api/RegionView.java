@@ -16,13 +16,21 @@ import org.jspecify.annotations.Nullable;
  */
 public record RegionView(String id, String planId, String irSha, @Nullable String owner, JsonObject ext, String groupId, BoundingBox claim,
 	RegionState state, List<StageProgress> stages, List<LotState> lots, long cellsWritten, Map<String, Long> cellsSkipped, @Nullable Refusal waiting,
-	@Nullable PrepareView prepare, List<WaitAction> actions, long removedAt, @Nullable String brush) {
+	@Nullable PrepareView prepare, List<WaitAction> actions, long removedAt, @Nullable String brush, List<BuildHit> buildHits) {
 	public RegionView {
 		ext = ext == null ? new JsonObject() : ext;
 		stages = List.copyOf(stages);
 		lots = List.copyOf(lots);
 		cellsSkipped = Map.copyOf(cellsSkipped);
 		actions = actions == null ? List.of() : List.copyOf(actions);
+		buildHits = buildHits == null ? List.of() : List.copyOf(buildHits);
+	}
+
+	/** The 1.21.0 constructor (no build findings). */
+	public RegionView(String id, String planId, String irSha, @Nullable String owner, JsonObject ext, String groupId, BoundingBox claim,
+		RegionState state, List<StageProgress> stages, List<LotState> lots, long cellsWritten, Map<String, Long> cellsSkipped, @Nullable Refusal waiting,
+		@Nullable PrepareView prepare, List<WaitAction> actions, long removedAt, @Nullable String brush) {
+		this(id, planId, irSha, owner, ext, groupId, claim, state, stages, lots, cellsWritten, cellsSkipped, waiting, prepare, actions, removedAt, brush, List.of());
 	}
 
 	/**

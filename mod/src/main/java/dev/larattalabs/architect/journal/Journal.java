@@ -134,14 +134,26 @@ public final class Journal {
 	public static final Value AIR = Value.of("minecraft:air");
 
 	/** One changed cell: its position ({@code BlockPos.asLong}), its layer, the block before, the block after (null: unknown, an imported snapshot). */
-	public record Cell(long pos, long layer, Value before, @Nullable Value after) {
+	public record Cell(long pos, long layer, Value before, @Nullable Value after, @Nullable Pt pt) {
+		public Cell(long pos, long layer, Value before, @Nullable Value after) {
+			this(pos, layer, before, after, null);
+		}
+
 		public Cell withBefore(Value b) {
-			return new Cell(pos, layer, b, after);
+			return new Cell(pos, layer, b, after, pt);
+		}
+
+		/** (6c PT) The before and its player-placed record, handed down together. */
+		public Cell withBefore(Value b, @Nullable Pt p) {
+			return new Cell(pos, layer, b, after, p);
 		}
 	}
 
 	/** A hand-down an undo made: {@code to}'s cell at {@code pos} had {@code was} as its before and got {@code now}. {@code order}: the plan's order. */
-	public record HandDown(int order, String to, long pos, Value was, Value now) {
+	public record HandDown(int order, String to, long pos, Value was, Value now, @Nullable Pt wasPt, @Nullable Pt nowPt) {
+		public HandDown(int order, String to, long pos, Value was, Value now) {
+			this(order, to, pos, was, now, null, null);
+		}
 	}
 
 	/**
@@ -222,7 +234,10 @@ public final class Journal {
 	}
 
 	/** One block an undo puts into the world: {@code by} the entry whose cell wrote it last, with that entry's policy. */
-	public record Write(long pos, Value value, String by, Policy policy) {
+	public record Write(long pos, Value value, String by, Policy policy, @Nullable Pt pt) {
+		public Write(long pos, Value value, String by, Policy policy) {
+			this(pos, value, by, policy, null);
+		}
 	}
 
 	/** Per undone entry: cells restored (on top, written), changed (on top, the player changed them: left), covered (under a newer cell: handed down). */
@@ -272,6 +287,7 @@ public final class Journal {
 			cellsOf.put(e.id(), m);
 		}
 		Map<String, Map<Long, Value>> newBefore = new HashMap<>(); // hand-down targets: entry -> pos -> before
+		Map<String, Map<Long, Pt>> newPt = new HashMap<>(); // (6c PT) and its player-placed record (absent: none)
 		Map<String, List<HandDown>> handed = new HashMap<>();
 		Map<String, Map<Long, Value>> written = new HashMap<>();
 		Map<String, int[]> stats = new HashMap<>();
@@ -323,23 +339,29 @@ public final class Journal {
 				} else {
 					// under a cell that stays: ownership passes down
 					Map<Long, Value> nb = newBefore.computeIfAbsent(above, x -> new it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap<>());
+					Map<Long, Pt> np = newPt.computeIfAbsent(above, x -> new it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap<>());
 					Value v = nb.containsKey(pos) ? nb.get(pos) : cellsOf.get(above).get(pos).before();
+					Pt vp = nb.containsKey(pos) ? np.get(pos) : cellsOf.get(above).get(pos).pt();
 					Value r;
-					if (e.policy() == Policy.BOX) {
+					Pt rp;
+					if (e.policy() == Policy.BOX || cell.after() != null && match.same(v, cell.after())) {
 						r = cell.before();
+						rp = cell.pt();
 					} else {
-						r = cell.after() != null && match.same(v, cell.after()) ? cell.before() : v;
+						r = v;
+						rp = vp;
 					}
-					if (!r.equals(v)) {
+					if (!r.equals(v) || !java.util.Objects.equals(rp, vp)) {
 						nb.put(pos, r);
-						handed.get(eid).add(new HandDown(order++, above, pos, v, r));
+						np.put(pos, rp);
+						handed.get(eid).add(new HandDown(order++, above, pos, v, r, vp, rp));
 					}
 					stats.get(eid)[2]++;
 				}
 				stack.remove(k);
 			}
 			if (wrote) {
-				writes.add(new Write(pos, world0, writer, byId.get(writer).policy()));
+				writes.add(new Write(pos, world0, writer, byId.get(writer).policy(), cellsOf.get(writer).get(pos).pt()));
 				for (String[] s : stacks.get(pos)) {
 					if (undo.contains(s[0])) {
 						written.get(s[0]).put(pos, world0);
@@ -350,10 +372,11 @@ public final class Journal {
 		Map<String, Entry> updated = new LinkedHashMap<>();
 		for (var t : newBefore.entrySet()) {
 			Entry e = byId.get(t.getKey());
+			Map<Long, Pt> np = newPt.get(t.getKey());
 			List<Cell> cs = new ArrayList<>(e.cells().size());
 			for (Cell c : e.cells()) {
 				Value b = t.getValue().get(c.pos());
-				cs.add(b == null ? c : c.withBefore(b));
+				cs.add(b == null ? c : c.withBefore(b, np.get(c.pos())));
 			}
 			updated.put(e.id(), e.withCells(cs));
 		}
@@ -387,25 +410,29 @@ public final class Journal {
 		}
 		all.sort(Comparator.comparingInt(HandDown::order).reversed());
 		Map<String, Map<Long, Value>> before = new HashMap<>();
+		Map<String, Map<Long, Pt>> beforePt = new HashMap<>(); // (6c PT) the receiving cell's record, given back with its before
 		for (HandDown h : all) {
 			Entry to = byId.get(h.to());
 			if (to == null || !to.active()) {
 				continue; // the receiving entry is gone (released or undone itself): nothing to give back
 			}
 			Map<Long, Value> m = before.computeIfAbsent(h.to(), x -> new HashMap<>());
+			Map<Long, Pt> mp = beforePt.computeIfAbsent(h.to(), x -> new HashMap<>());
 			Cell c = to.cell(h.pos());
 			Value cur = m.containsKey(h.pos()) ? m.get(h.pos()) : c == null ? null : c.before();
 			if (cur != null && cur.equals(h.now())) {
 				m.put(h.pos(), h.was());
+				mp.put(h.pos(), h.wasPt());
 			}
 		}
 		Map<String, Entry> out = new LinkedHashMap<>();
 		for (var t : before.entrySet()) {
 			Entry e = byId.get(t.getKey());
+			Map<Long, Pt> mp = beforePt.get(t.getKey());
 			List<Cell> cs = new ArrayList<>(e.cells().size());
 			for (Cell c : e.cells()) {
 				Value b = t.getValue().get(c.pos());
-				cs.add(b == null ? c : c.withBefore(b));
+				cs.add(b == null ? c : c.withBefore(b, mp.get(c.pos())));
 			}
 			out.put(e.id(), e.withCells(cs));
 		}

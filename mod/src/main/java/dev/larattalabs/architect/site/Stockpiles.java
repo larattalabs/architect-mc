@@ -478,7 +478,7 @@ public final class Stockpiles {
 		JournalStore.Txn t = s.begin().label("crate:" + p.crateOwner());
 		String entry = SiteJournal.crateEntry(t, level, p.crateOwner(), null, at, WorldJournal.value(CrateBlocks.CRATE.defaultBlockState()));
 		SiteJournal.await(s.submit(t), "the stockpile crate of " + p.owner);
-		level.setBlock(at, CrateBlocks.CRATE.defaultBlockState(), Sites.FLAGS);
+		dev.larattalabs.architect.placed.Placed.set(level, at, CrateBlocks.CRATE.defaultBlockState(), Sites.FLAGS);
 		if (level.getBlockEntity(at) instanceof CrateBlockEntity be) {
 			be.setSiteId(p.crateOwner());
 		}

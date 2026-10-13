@@ -28,7 +28,8 @@ import org.jspecify.annotations.Nullable;
  *     region ends its key). The plan's lot {@code ext} needs no request member: the realise copies it onto each lot's site.
  */
 public record RealiseRequest(String planId, Mode mode, @Nullable ServerPlayer actor, Map<String, String> lotEntries, @Nullable LoadPolicy load,
-	boolean autoApprove, @Nullable List<String> stages, boolean force, JsonObject ext, int maxWaitSeconds, @Nullable String opKey) {
+	boolean autoApprove, @Nullable List<String> stages, boolean force, JsonObject ext, int maxWaitSeconds, @Nullable String opKey,
+	@Nullable BuildConsent consent) {
 	public RealiseRequest {
 		mode = mode == null ? Mode.AUTO : mode;
 		lotEntries = lotEntries == null ? Map.of() : Map.copyOf(lotEntries);
@@ -37,15 +38,26 @@ public record RealiseRequest(String planId, Mode mode, @Nullable ServerPlayer ac
 		maxWaitSeconds = Math.max(0, maxWaitSeconds);
 	}
 
+	/** (PT) Without a consent (the 1.14.0+ shape). */
+	public RealiseRequest(String planId, Mode mode, @Nullable ServerPlayer actor, Map<String, String> lotEntries, @Nullable LoadPolicy load,
+		boolean autoApprove, @Nullable List<String> stages, boolean force, JsonObject ext, int maxWaitSeconds, @Nullable String opKey) {
+		this(planId, mode, actor, lotEntries, load, autoApprove, stages, force, ext, maxWaitSeconds, opKey, null);
+	}
+
+	/** (PT) The same request with this consent (a build it names is no keep-out, S-PT-4). */
+	public RealiseRequest withConsent(@Nullable BuildConsent c) {
+		return new RealiseRequest(planId, mode, actor, lotEntries, load, autoApprove, stages, force, ext, maxWaitSeconds, opKey, c);
+	}
+
 	/** The 1.13.0 constructor (no opKey). */
 	public RealiseRequest(String planId, Mode mode, @Nullable ServerPlayer actor, Map<String, String> lotEntries, @Nullable LoadPolicy load,
 		boolean autoApprove, @Nullable List<String> stages, boolean force, JsonObject ext, int maxWaitSeconds) {
-		this(planId, mode, actor, lotEntries, load, autoApprove, stages, force, ext, maxWaitSeconds, null);
+		this(planId, mode, actor, lotEntries, load, autoApprove, stages, force, ext, maxWaitSeconds, null, null);
 	}
 
 	/** Without a wait limit (S8's default) or an opKey. */
 	public RealiseRequest(String planId, Mode mode, @Nullable ServerPlayer actor, Map<String, String> lotEntries, @Nullable LoadPolicy load,
 		boolean autoApprove, @Nullable List<String> stages, boolean force, JsonObject ext) {
-		this(planId, mode, actor, lotEntries, load, autoApprove, stages, force, ext, 0, null);
+		this(planId, mode, actor, lotEntries, load, autoApprove, stages, force, ext, 0, null, null);
 	}
 }

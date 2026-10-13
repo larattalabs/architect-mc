@@ -125,7 +125,7 @@ public final class SiteJournal {
 	}
 
 	/** Whether {@code pos} is a cell of an active entry (owned by a standing site); guard kinds count. Server thread. */
-	static boolean owned(String dimension, long pos) {
+	public static boolean owned(String dimension, long pos) {
 		JournalStore s = WorldJournal.storeOrNull();
 		if (s == null) {
 			return false;
@@ -390,7 +390,7 @@ public final class SiteJournal {
 		List<SectionCells> secs = new ArrayList<>();
 		for (SectionCells sc : WorldJournal.sections(p.before, null, m.layer(), null)) {
 			if (keys.contains(sc.key)) {
-				secs.add(sc);
+				secs.add(dev.larattalabs.architect.placed.Placed.annotate(level, sc)); // (6c PT) the records as they are now, with the befores
 			}
 		}
 		if (secs.isEmpty()) {
@@ -757,7 +757,20 @@ public final class SiteJournal {
 	/** What an undo does to one site (R4): its BOX template and mask, its other cells, its ring. */
 	record Restore(String site, Anchors.@Nullable Bounds box, @Nullable CompoundTag template, @Nullable LongPredicate mask, List<CellWrite> cells, List<CellWrite> pre,
 		List<CellWrite> halves, int[] ring,
-		int holes) {
+		int holes, it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap<dev.larattalabs.architect.placed.Placed.Expect> pts) {
+		/** (6c PT) Runs {@code writes} (some of this restore's) with its records restored as its blocks come back (§5). */
+		void writing(Runnable writes) {
+			if (pts.isEmpty()) {
+				writes.run();
+				return;
+			}
+			dev.larattalabs.architect.placed.Placed.beginRestore(pts);
+			try {
+				writes.run();
+			} finally {
+				dev.larattalabs.architect.placed.Placed.endRestore();
+			}
+		}
 	}
 
 	/** One cell an undo writes outside the BOX template: lowest first, with its kind's flags. */
@@ -799,6 +812,9 @@ public final class SiteJournal {
 		List<CellWrite> halves = new ArrayList<>();
 		Map<Long, Value> boxWritten = new LinkedHashMap<>();
 		Set<Long> boxUnwritten = new LinkedHashSet<>();
+		// (6c PT §5) the records of the befores the undo wrote: the writer is the lowest undone cell whose before it wrote
+		it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap<dev.larattalabs.architect.placed.Placed.Expect> pts = new it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap<>();
+		it.unimi.dsi.fastutil.longs.Long2LongOpenHashMap ptLayer = new it.unimi.dsi.fastutil.longs.Long2LongOpenHashMap();
 		try {
 			for (JournalStore.Meta m : undone(siteId, group)) {
 				Map<Long, Value> written = new LinkedHashMap<>();
@@ -810,6 +826,18 @@ public final class SiteJournal {
 					}
 					for (int i = 0; i < sc.size(); i++) {
 						Value v = sc.written(i);
+						if (v != null && v.equals(sc.before(i))) {
+							long p = sc.pos(i);
+							if (!ptLayer.containsKey(p) || sc.layer(i) < ptLayer.get(p)) {
+								ptLayer.put(p, sc.layer(i));
+								dev.larattalabs.architect.journal.Pt pt = sc.pt(i);
+								if (pt == null) {
+									pts.remove(p);
+								} else {
+									pts.put(p, new dev.larattalabs.architect.placed.Placed.Expect(WorldJournal.state(v).getBlock(), pt));
+								}
+							}
+						}
 						if (v != null) {
 							written.put(sc.pos(i), v);
 						} else {
@@ -867,7 +895,7 @@ public final class SiteJournal {
 			throw new Sites.SiteException(Reason.JOURNAL_UNAVAILABLE, "The journal of " + siteId + " can't be read (" + e.getMessage() + ")");
 		}
 		cells.sort(Comparator.comparingInt(c -> Journal.y(c.pos())));
-		return new Restore(siteId, box, tpl, mask, cells, pre, halves, ring, holes);
+		return new Restore(siteId, box, tpl, mask, cells, pre, halves, ring, holes, pts);
 	}
 
 	/** The dimension of a site's entries (its first entry's). */
@@ -922,19 +950,21 @@ public final class SiteJournal {
 	 */
 	static Restore writeNow(ServerLevel level, String siteId, String group) throws Sites.SiteException {
 		Restore r = restore(level, siteId, group);
-		writeCells(level, r.pre());
-		if (r.template() != null && r.box() != null) {
-			if (r.mask() != null) {
-				UpdateMask.begin(r.mask());
+		r.writing(() -> {
+			writeCells(level, r.pre());
+			if (r.template() != null && r.box() != null) {
+				if (r.mask() != null) {
+					UpdateMask.begin(r.mask());
+				}
+				try {
+					Sites.restoreQuietly(level, r.box(), r.template());
+				} finally {
+					UpdateMask.end();
+				}
 			}
-			try {
-				Sites.restoreQuietly(level, r.box(), r.template());
-			} finally {
-				UpdateMask.end();
-			}
-		}
-		writeCells(level, r.cells());
-		fixHalves(level, r.halves());
+			writeCells(level, r.cells());
+			fixHalves(level, r.halves());
+		});
 		return r;
 	}
 
@@ -945,7 +975,7 @@ public final class SiteJournal {
 			m.set(Journal.x(c.pos()), Journal.y(c.pos()), Journal.z(c.pos()));
 			BlockState want = WorldJournal.state(c.value());
 			if (level.getBlockState(m) != want) {
-				level.setBlock(m, want, c.flags());
+				dev.larattalabs.architect.placed.Placed.set(level, m, want, c.flags());
 			}
 		}
 	}
@@ -955,7 +985,7 @@ public final class SiteJournal {
 		BlockPos.MutableBlockPos m = new BlockPos.MutableBlockPos();
 		for (CellWrite c : cells) {
 			m.set(Journal.x(c.pos()), Journal.y(c.pos()), Journal.z(c.pos()));
-			level.setBlock(m, WorldJournal.state(c.value()), c.flags());
+			dev.larattalabs.architect.placed.Placed.set(level, m, WorldJournal.state(c.value()), c.flags());
 			if (c.value().nbt() != null) {
 				BlockEntity be = level.getBlockEntity(m);
 				if (be != null) {

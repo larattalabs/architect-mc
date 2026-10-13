@@ -409,7 +409,7 @@ final class InfraJob implements Placement.Job {
 						long p = positions[cursor];
 						Value v = afters[cursor];
 						m.set(Journal.x(p), Journal.y(p), Journal.z(p));
-						level.setBlock(m, WorldJournal.state(v), Sites.CELL_FLAGS);
+						dev.larattalabs.architect.placed.Placed.set(level, m, WorldJournal.state(v), Sites.CELL_FLAGS);
 						if (v.nbt() != null) {
 							BlockEntity be = level.getBlockEntity(m);
 							if (be != null) {
