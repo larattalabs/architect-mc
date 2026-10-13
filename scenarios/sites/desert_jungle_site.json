@@ -1,0 +1,8 @@
+{
+  "id": "desert_jungle_site",
+  "phase": "6c-d",
+  "version": 0,
+  "brief": "a desert/jungle biome edge for a district following it (6c D2, C27): both families on the claim, land",
+  "world": { "seed": "2026100906", "preset": "normal", "gamerules": "gallery" },
+  "needs": { "size": [192, 192], "biomesAll": [{ "any": ["desert"], "share": 0.2 }, { "any": ["jungle"], "share": 0.2 }], "waterMax": 15, "candidates": 60, "step": 192 }
+}
