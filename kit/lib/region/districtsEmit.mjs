@@ -14,7 +14,7 @@ import { validateLots } from '../params.mjs';
 import { layoutStreet, streetLayout, STREET_RULES, toWorld } from './village.mjs';
 import { emitProps, lampFixture, planProps } from './props.mjs';
 import { lightCover } from './light.mjs';
-import { fixtureFor } from './fixtures.mjs';
+import { fixtureFor, roadLamp } from './fixtures.mjs';
 import { PASSES } from './passes/index.mjs';
 import { lampSpots } from './passes/route.mjs';
 import { placeFollow, followLots, emitFollowLots, maskRuns } from './followEmit.mjs';
@@ -369,7 +369,7 @@ export function emitDistricts(r, intent = {}) {
   if (join) { addNode(join.a); addNode(join.b); edges.push({ id: 'join', from: join.a.name, to: join.b.name, width: DISTRICT_ROUTE_WIDTH }); }
   let routed = null;
   const streetHard = placedNow.filter((d) => !follows.has(d.id)).flatMap((d) => streetRects(pick.get(d.id).L));
-  if (edges.length) routed = r._route({ nodes, edges, maxGrade, stage: stages.routes, part: it.routePart ?? 'routes', hard: [...streetHard, ...standing], keepOut: it.keepOut ?? [], lanterns: true, clearTrees: endClear });
+  if (edges.length) routed = r._route({ nodes, edges, maxGrade, stage: stages.routes, part: it.routePart ?? 'routes', hard: [...streetHard, ...standing], keepOut: it.keepOut ?? [], lanterns: true, clearTrees: endClear, roadSurface: 'path', lamp: roadLamp(lampFixture(r)) });
   const byId = new Map((routed?.edges ?? []).map((e) => [e.id, e]));
   // a following street that does not route refuses the plan, named
   for (const d of placedNow) if (follows.has(d.id) && !byId.get(`st_${d.id}`)?.ok) throw new Error(`NO_EDGE: the street of district ${d.id} along the ${follows.get(d.id).pf.kind.replace('_', ' ')} did not route (${byId.get(`st_${d.id}`)?.failed ?? 'not routed'})`);

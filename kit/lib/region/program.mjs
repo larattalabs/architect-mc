@@ -376,7 +376,8 @@ export class Region {
           if (onGround) {
             const idx = polylineOf(cells);
             const id = `${rid}_${n}`;
-            const r = p.road(idx.map((k) => [cells[k][0], cells[k][1], cells[k][2]]), { mode: 'ground', width: e.width, id, lanterns: it.lanterns ?? true, lamp: it.lamp ?? null });
+            // (6c D1) `roadSurface`: the 4e road's surface role (absent: 4e's default, as before)
+            const r = p.road(idx.map((k) => [cells[k][0], cells[k][1], cells[k][2]]), { mode: 'ground', width: e.width, id, lanterns: it.lanterns ?? true, lamp: it.lamp ?? null, ...(it.roadSurface ? { surface: it.roadSurface } : {}) });
             (r.mode === 'ground' ? rec.roads : rec.paths).push(...r.ids);
             for (const q of footprintOf(cells, e.width + 2)) mark(q[0], q[1], e.id);
             return;
