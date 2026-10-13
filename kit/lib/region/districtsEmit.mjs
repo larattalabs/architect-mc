@@ -219,11 +219,11 @@ export function emitDistricts(r, intent = {}) {
   const blocked = [...keepOut, ...(it.hard ?? []), ...standing, ...own];
   const maxGrade = it.maxGrade ?? 0.25;
   const feet = (x, z) => [x, S.groundAt(x, z) + 1, z];
-  const dryRoute = (a, b, hardRects, clearTrees, prefer = []) => {
+  const dryRoute = (a, b, hardRects, clearTrees, prefer = [], cap = DRY_EXPANDED) => {
     const out = PASSES.route(cols, ctx.volumes ?? [], {
       edges: [{ id: 'dry', from: { at: a.at, facing: a.facing }, to: { at: b.at, facing: b.facing }, width: DISTRICT_ROUTE_WIDTH, movers: ['player', 'villager'], ladders: false, ...(prefer.length ? { prefer } : {}) }],
       maxGrade, hairpinLanding: 3, stairs: true, maxCut: 4, maxFill: 4, margin: 2, hard: hardRects, keepOut, prefer: [], clearTrees,
-      maxExpanded: DRY_EXPANDED,
+      maxExpanded: cap,
     });
     return out.data.edges[0];
   };
@@ -239,7 +239,8 @@ export function emitDistricts(r, intent = {}) {
     const na = { at: feet(pf.ends[0].x, pf.ends[0].z), facing: pf.ends[0].facing }, nb = { at: feet(pf.ends[1].x, pf.ends[1].z), facing: pf.ends[1].facing };
     const endClearF = pf.ends.map((e) => [e.x - END_CLEAR, e.z - END_CLEAR, e.x + END_CLEAR, e.z + END_CLEAR]);
     const baseF = r._routeObstacles({ hard: [...standing, ...taken], clearTrees: endClearF });
-    const st = dryRoute(na, nb, baseF.hard, baseF.clearTrees, pf.line);
+    // (a following street is long and winds with its boundary: four times a pair's expansions)
+    const st = dryRoute(na, nb, baseF.hard, baseF.clearTrees, pf.line, 4 * DRY_EXPANDED);
     if (!st.ok) throw new Error(`NO_EDGE: the street along the ${pf.kind.replace('_', ' ')} does not route (${st.failed}; district ${d.id})`);
     const fl = followLots(S, pf, st.path, d.specs, { blocked: [...standing, ...taken], keepOut, taken: [...follows.values()].flatMap((f) => f.lots.map((l) => l.rect)) });
     const foot = footprintOf(st.path, DISTRICT_ROUTE_WIDTH);
@@ -301,6 +302,7 @@ export function emitDistricts(r, intent = {}) {
   for (const d of placed) if (!main.has(d.id)) { unplaced.push({ id: d.id, reason: 'unreachable', candidates: cands[ds.indexOf(d)].length }); pick.delete(d.id); follows.delete(d.id); }
   const isPlaced = (id) => pick.has(id) || follows.has(id);
   const chosen = [...span.tree.map((p) => ({ ...p, kind: 'tree' })), ...span.loops.map((p) => ({ ...p, kind: 'loop' }))].filter((p) => isPlaced(p.a) && isPlaced(p.b));
+  if (!ds.some((x) => isPlaced(x.id))) throw new Error(`NO_ROOM: no district could be placed (${unplaced.map((u) => `${u.id}: ${u.reason}`).join(', ')})`);
   // ---- the join to a standing region: the cheapest dry route from a district end to a standing street end in the seam
   let join = null;
   if (beside) {
