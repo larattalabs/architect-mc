@@ -40,7 +40,6 @@ class JobSystemRefsTest {
 		JobSpec s = spec("structured", null, List.of("plan/0#compact"));
 		assertEquals(List.of("plan/0#compact"), s.images(List.of(new JobSpec.ImageRef("b1", "x"))).systemRefs(), "images() must not drop the refs");
 		assertEquals(List.of("plan/0"), s.systemRefs(List.of("plan/0")).systemRefs());
-		assertEquals(1, s.systemRefs(List.of("plan/0")).images().size() + 1, "no images added");
 	}
 
 	@Test

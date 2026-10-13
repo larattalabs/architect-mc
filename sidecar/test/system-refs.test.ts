@@ -3,7 +3,7 @@
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { RefusedError } from '../src/errors.js';
-import { composeSystem, expandSystemRefs, knownSystemRefs, parseSystemRefs, SYSTEM_REF_DOCS } from '../src/jobs/systemrefs.js';
+import { composeSystem, expandSystemRefs, inlineTrivialRefs, knownSystemRefs, parseSystemRefs, SYSTEM_REF_DOCS } from '../src/jobs/systemrefs.js';
 import * as P from '../src/protocol.js';
 import { SIDECAR_ROOT } from './helpers.js';
 
@@ -96,6 +96,13 @@ describe('systemRefs: expansion from the kit', () => {
   it('the compact plan/0 is much shorter than the full one a caller sent (about 45 KB)', async () => {
     const compact = await expandSystemRefs(KIT, ['plan/0#compact']);
     expect(compact.length).toBeLessThan(60_000);
+  });
+});
+
+describe('compact: trivial $ref defs', () => {
+  it('a def that is only a $ref is inlined at its uses (also through a chain) and removed; others stay', () => {
+    const out = inlineTrivialRefs({ properties: { a: { $ref: '#/$defs/x' }, b: { $ref: '#/$defs/real' } }, $defs: { x: { $ref: '#/$defs/y', description: 'alias' }, y: { $ref: '#/$defs/real' }, real: { type: 'string' } } });
+    expect(out).toEqual({ properties: { a: { $ref: '#/$defs/real' }, b: { $ref: '#/$defs/real' } }, $defs: { real: { type: 'string' } } });
   });
 });
 

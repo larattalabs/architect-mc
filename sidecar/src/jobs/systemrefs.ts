@@ -84,7 +84,7 @@ type Json = unknown;
 const isObj = (v: Json): v is Record<string, Json> => !!v && typeof v === 'object' && !Array.isArray(v);
 
 /** `$defs` that are exactly `{"$ref": "#/$defs/x"}` (a description alongside is dropped with them), inlined at their uses. */
-function inlineTrivialRefs(schema: Record<string, Json>): Record<string, Json> {
+export function inlineTrivialRefs(schema: Record<string, Json>): Record<string, Json> {
   const defs = isObj(schema.$defs) ? schema.$defs : {};
   const alias = new Map<string, string>();
   for (const [name, d] of Object.entries(defs)) {
@@ -133,7 +133,7 @@ function compactCatalogue(cat: Record<string, Json>): Record<string, Json> {
   return o;
 }
 
-/** One ref's block (read and rendered each time: about a millisecond, and a rebuilt kit is never stale). */
+/** One ref's block (the schema file is read and rendered each time: about a millisecond; the catalogue module is imported once per sidecar process, the kit being fixed for it). */
 async function renderBlock(kitDir: string, p: ParsedRef): Promise<string> {
   const file = path.join(kitDir, 'schemas', p.doc.file);
   let text: string;
