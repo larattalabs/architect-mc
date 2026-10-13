@@ -19,7 +19,7 @@ import org.jspecify.annotations.Nullable;
  */
 public final class IrStale {
 	/** The kit version this mod bundles ({@code KIT_VERSION} in kit/lib/region/plan.mjs). */
-	public static final String KIT_VERSION = "0.26.0";
+	public static final String KIT_VERSION = "0.28.0";
 	/** {@code IR_FORMATS} in kit/lib/realise.mjs. */
 	public static final List<Integer> IR_FORMATS = List.of(1, 2);
 	/** {@code KINDS_FORMAT2} in kit/lib/realise.mjs (the closed list of kinds a format-2 IR's {@code requires} may name). */

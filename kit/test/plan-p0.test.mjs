@@ -21,7 +21,7 @@ import { planCatalogue, diffCatalogues } from '../lib/plan/catalogue.mjs';
 
 const SV = { s7: goldenSurvey('s7'), s3: goldenSurvey('s3'), asks: asksSurvey() };
 const read = (dir) => fs.readdirSync(path.join(FIX, dir)).filter((f) => f.endsWith('.json') && f !== 'SOURCE.json').sort().map((f) => ({ name: f, ...JSON.parse(fs.readFileSync(path.join(FIX, dir, f), 'utf8')) }));
-const run = (fx, extra = {}) => { const s = SV[fx.on]; return checkPlanLocal(fx.plan, { survey: s.bytes, claim: s.claim, anchors: stewardAnchors(s.claim), protected: fx.protected ?? [], builds: fx.builds ?? [], ...extra }); };
+const run = (fx, extra = {}) => { const s = SV[fx.on]; return checkPlanLocal(fx.plan, { survey: s.bytes, claim: s.claim, anchors: stewardAnchors(s.claim), protected: fx.protected ?? [], builds: fx.builds ?? [], ...(fx.standing ? { standing: fx.standing } : {}), ...extra }); };
 const lots = (n, p = 'h') => Array.from({ length: n }, (_, i) => ({ id: `${p}${i + 1}`, type: 'house', size: [9, 9] }));
 const A = SV.asks;
 const asks = (plan, o = {}) => checkPlanLocal(plan, { survey: A.bytes, claim: A.claim, anchors: stewardAnchors(A.claim), ...o });
@@ -232,18 +232,28 @@ test('item 9: the catalogue golden; every supported entry has a valid/ fixture t
   const covered = new Set(read('valid').flatMap((f) => f.covers ?? []));
   for (const e of entries.filter((x) => x.state === 'supported')) assert.ok(covered.has(e.id), `supported ${e.id} has a valid/ fixture`);
   const ext = new Set(read('extension').flatMap((f) => (f.expect.all ?? [f.expect]).map((x) => x.block)).filter(Boolean));
-  for (const e of entries.filter((x) => x.state === 'reserved')) assert.ok(ext.has(e.aliasOf ?? e.id), `reserved ${e.id} has an extension/ fixture`);
+  // (D1) an alias whose target is supported follows its target (zone kind district: its program decides), so it has no extension fixture
+  const supportedIds = new Set(entries.filter((x) => x.state === 'supported').map((x) => x.id));
+  for (const e of entries.filter((x) => x.state === 'reserved' && !(x.aliasOf && supportedIds.has(x.aliasOf)))) assert.ok(ext.has(e.aliasOf ?? e.id), `reserved ${e.id} has an extension/ fixture`);
 });
 
 test('item 9: the catalogue diff (D1 flips program.districts and endpoint.region) and a pending part flagged for a recheck', () => {
+  // (D1) P0's golden is archived as fixtures/plan/catalogue-p0.json; P0's committed catalogue-next.json is what D1 ships
+  const p0 = JSON.parse(fs.readFileSync(path.join(FIX, 'catalogue-p0.json'), 'utf8'));
   const golden = JSON.parse(fs.readFileSync(path.join(ROOT, 'kit', 'schemas', 'plan-catalogue.golden.json'), 'utf8'));
   const next = JSON.parse(fs.readFileSync(path.join(FIX, 'catalogue-next.json'), 'utf8'));
-  const d = diffCatalogues(golden, next, { pending: [{ part: 'craftsmen_district', block: 'program.districts' }, { part: 'wall', block: 'connector.wall' }] });
-  assert.deepEqual(d.reservedToSupported, ['endpoint.region', 'program.districts']);
-  assert.deepEqual(d.added, []);
-  assert.deepEqual(d.removed, []);
-  assert.deepEqual(d.retired, []);
-  assert.deepEqual(d.recheck, [{ part: 'craftsmen_district', block: 'program.districts' }]);
+  for (const [to, what] of [[next, 'catalogue-next.json'], [golden, 'the D1 golden']]) {
+    const d = diffCatalogues(p0, to, { pending: [{ part: 'craftsmen_district', block: 'program.districts' }, { part: 'wall', block: 'connector.wall' }] });
+    assert.deepEqual(d.reservedToSupported, ['endpoint.region', 'program.districts'], what);
+    assert.deepEqual(d.added, [], what);
+    assert.deepEqual(d.removed, [], what);
+    assert.deepEqual(d.retired, [], what);
+    assert.deepEqual(d.otherStateChanges, [], what);
+    assert.deepEqual(d.recheck, [{ part: 'craftsmen_district', block: 'program.districts' }], what);
+  }
+  // the golden D1 ships is catalogue-next.json, entry for entry (its api and kit versions aside)
+  assert.deepEqual(golden.entries, next.entries);
+  assert.equal(golden.catalogueVersion, next.catalogueVersion);
 });
 
 // ------------------------------------------------------------------ 11

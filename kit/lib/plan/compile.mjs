@@ -22,6 +22,8 @@ import { PRESETS as ROCK_PRESETS } from '../forms/rockSpire.mjs';
 import { KIT_VERSION } from '../region/plan.mjs';
 import { CATALOGUE_VERSION } from './schema.mjs';
 import { keptBuilds, pickBuild, buildEndpoint, buildKeepOut } from '../region/builds.mjs';
+import { besidePorts, emitDistricts, parseDistricts, placeDistricts } from '../region/districtsEmit.mjs';
+import { zoneDistricts } from './schema.mjs';
 
 /** §7's caps (each a request may only lower). */
 export const BUDGET_DEFAULTS = Object.freeze({ maxNodes: 2_000_000, maxEdges: 128, maxCells: 20_000_000, maxMs: 120_000, maxHeapMb: 2048 });
@@ -121,13 +123,16 @@ export function makeEnv(ctx, P, t0 = performance.now()) {
   const keepOut = (ctx.keepOut ?? []).map(arrRect);
   const protectedAreas = (P.protected ?? []).map((a) => ({ id: a.id, rect: arrRect(a.rect) }));
   const regions = (P.regions ?? []).map((a) => ({ id: a.id, rect: arrRect(a.rect) }));
+  // (D1) the owner's standing regions beside the claim (endpoint.region): their footprint (lots grown by 1, roads, paths, ways) is hard
+  const standing = (P.standing ?? []).filter((a) => a && typeof a.id === 'string').map((a) => ({ ...a, lots: a.lots ?? [], keep: a.keep ?? [], graph: a.graph ?? { nodes: [], edges: [] } }));
+  const standingHard = standing.flatMap((a) => [...a.lots.map((q) => [q[0] - 1, q[1] - 1, q[2] + 1, q[3] + 1]), ...a.keep]);
   // 6c PT: the players' kept builds; each build (grown by 1) and its door aprons are keep-out for zones (S-PT-4; the plan request
   // names no consent, so every kept build), the builds' own rects for routes (a road may run on a door's apron)
   const builds = keptBuilds(P.builds ?? []).filter((b) => Array.isArray(b.bounds) && b.bounds.length === 6);
   const buildRects = builds.map((b) => ({ id: b.id, rect: { minX: b.bounds[0], minZ: b.bounds[2], maxX: b.bounds[3], maxZ: b.bounds[5] } }));
   const buildKeep = buildKeepOut(builds, { claim }).map(arrRect);
   // columns no zone may take: keep-out (the owner's areas), every protected area, other owners' regions (grown by 1), builds
-  const hard = [...keepOut, ...protectedAreas.map((a) => a.rect), ...regions.map((a) => a.rect)].map((q) => grow(q, 1)).concat(buildKeep);
+  const hard = [...keepOut, ...protectedAreas.map((a) => a.rect), ...regions.map((a) => a.rect)].map((q) => grow(q, 1)).concat(buildKeep).concat(standingHard.map(arrRect));
   const blocked = new Uint8Array(W * D), water = new Uint8Array(W * D);
   for (let j = 0; j < D; j++) for (let i = 0; i < W; i++) {
     const x = cols.minX + i * r, z = cols.minZ + j * r, k = i + j * W;
@@ -139,7 +144,7 @@ export function makeEnv(ctx, P, t0 = performance.now()) {
   const wb = waterBodies(cols);
   const surveySha = sha256Hex(encodeColumns(cols));
   return {
-    ctx, claim, S, cols, r, W, D, budget, keepOut, protectedAreas, regions, builds, buildRects, sumG, sumG2, sumW, sumB, water: wb,
+    ctx, claim, S, cols, r, W, D, budget, keepOut, protectedAreas, regions, standing, standingHard, hard, builds, buildRects, sumG, sumG2, sumW, sumB, water: wb,
     anchors: anchorPoints(claim, P.anchors ?? {}), anchorsGiven: P.anchors ?? {}, surveySha, fingerprint: P.fingerprint ?? null, bible: P.bible ?? null,
     t0, deadline: t0 + budget.maxMs, hitTime: false,
     cacheIn: ctx.planCache ?? null, cacheOut: {},
@@ -571,6 +576,51 @@ function resolveSpikes(env, f, geomOf, taken = []) {
   return { klass: j.klass, sites: sites.map((s) => centre(s.rect)), footprints: sites.map((s) => rectArr(s.rect)), rect: sites.reduce((a, s) => ({ minX: Math.min(a.minX, s.rect.minX), minZ: Math.min(a.minZ, s.rect.minZ), maxX: Math.max(a.maxX, s.rect.maxX), maxZ: Math.max(a.maxZ, s.rect.maxZ) }), sites[0].rect), deviations: j.deviations, reasons: j.klass === 'refused' ? [{ code: 'TOLERANCE', message: `${j.failed.what} ${j.failed.value} past its limit`, evidence: { what: j.failed.what, value: j.failed.value } }] : [], notes };
 }
 
+// ------------------------------------------------------------------ (D1) districts zones
+
+/** A plan size ({w, d} with ints or ranges, or a preset) as one [w, d]: a range's largest, a preset's side. */
+function sideOf(size) {
+  if (!size) return null;
+  if (size.preset) return [PRESET_SIZES[size.preset], PRESET_SIZES[size.preset]];
+  const one = (v) => (Array.isArray(v) ? v[1] : v);
+  return [one(size.w), one(size.d)];
+}
+
+/** A districts program's districts in the pass's shape (lots without the plan's label and entry). */
+export function planDistricts(part) {
+  return (part.program.districts ?? []).map((d) => ({
+    id: d.id, size: sideOf(d.size), lots: d.lots.map((l) => { const { label, entry, ...rest } = l; void label; void entry; return rest; }),
+    ...(d.levelBand ? { levelBand: d.levelBand } : {}), ...(d.prefer ? { prefer: d.prefer } : {}), ...(d.near ? { near: d.near } : {}), ...(d.shared ? { shared: d.shared } : {}),
+  }));
+}
+
+/**
+ * Resolve a districts zone (D1): the districts placed on survey candidates (kit/lib/region/districtsEmit.mjs placeDistricts) clear of
+ * the claim's protected areas, other owners' regions, builds and standing regions (env.hard) and of `taken` (the zones and forms
+ * resolved before it). fits when every district and lot is placed; adjusted (count) when some are not; refused NO_ROOM when none is.
+ */
+export function resolveDistrictsZone(env, p, taken) {
+  let dsRaw, ds;
+  try { dsRaw = planDistricts(p.part); ds = parseDistricts(dsRaw, 'program.districts'); } catch (e) { return { klass: 'malformed', reasons: [{ code: 'SCHEMA', path: `${p.path}.program.districts`, message: e.message }] }; }
+  const notes = [];
+  if (p.part.where || p.part.size) notes.push('a districts zone is placed over the claim: its where and size are not read in v0');
+  const blocked = [...env.hard.map(rectArr), ...taken.map((q) => rectArr(grow(q, 1)))];
+  const placement = placeDistricts({ S: env.S, claim: env.claim, keepOut: env.keepOut.map(rectArr), blocked, ds });
+  const placed = ds.filter((d) => placement.pick.has(d.id));
+  if (!placed.length) return { klass: 'refused', reasons: [{ code: 'NO_ROOM', message: `no district has a candidate area (${placement.unplaced.map((u) => `${u.id}: ${u.reason}`).join(', ')})`, evidence: { unplaced: placement.unplaced } }] };
+  const unplacedLots = ds.filter((d) => !placement.pick.has(d.id)).reduce((a, d) => a + d.specs.length, 0) + placed.reduce((a, d) => a + placement.pick.get(d.id).L.unplaced.length, 0);
+  const t = tolOf(p.part, 'count');
+  const j = judge([{ what: 'count', value: unplacedLots, max: t.max, hard: t.hard, ceiling: t.ceiling }]);
+  const rects = placed.map((d) => placement.pick.get(d.id).rect);
+  const rect = rects.reduce((a, q) => ({ minX: Math.min(a.minX, q.minX), minZ: Math.min(a.minZ, q.minZ), maxX: Math.max(a.maxX, q.maxX), maxZ: Math.max(a.maxZ, q.maxZ) }));
+  if (placement.unplaced.length) notes.push(`unplaced: ${placement.unplaced.map((u) => `${u.id} (${u.reason})`).join(', ')}`);
+  return {
+    klass: j.klass, deviations: j.deviations, notes,
+    reasons: j.klass === 'refused' ? [{ code: 'TOLERANCE', message: `${unplacedLots} lot(s) unplaced, past the count tolerance`, evidence: { unplaced: unplacedLots } }] : [],
+    rect, rects, ds, dsRaw, placement, unplacedLots, districts: true,
+  };
+}
+
 // ------------------------------------------------------------------ the region: checkpoints
 
 /** A snapshot of the region's growable state; rollback() restores it (a part whose emission throws writes nothing). */
@@ -663,6 +713,14 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
     const dep = depState(p);
     if (dep) { ans(p, dep); continue; }
     if (timeUp()) { ans(p, budgetHit('maxMs')); continue; }
+    if (p.family === 'zone' && Array.isArray(p.part.program?.districts)) {
+      // (D1) a districts zone: its districts placed on survey candidates around the zones and forms before it (never cached)
+      const z = resolveDistrictsZone(env, p, [...zonesAccepted.map((o) => o.rect), ...formsAccepted]);
+      res.set(p.id, z);
+      if (z.klass === 'fits' || z.klass === 'adjusted') { geom.set(p.id, { rect: z.rect }); for (const q of z.rects) zonesAccepted.push({ id: p.id, rect: q }); }
+      ans(p, { class: z.klass, reasons: z.reasons, deviations: z.deviations, notes: z.notes });
+      continue;
+    }
     if (p.family === 'zone') {
       const key = cacheKey(env, p, geom);
       const hit = env.cacheIn?.(key);
@@ -757,6 +815,39 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
   for (const p of order) {
     if (p.family !== 'zone' || !okClass(p.id) || res.get(p.id).whole) continue;
     const z = res.get(p.id);
+    if (z.districts) {
+      // (D1) the districts zone: its street layouts, then its own routes (a spanning tree plus loops), lamps once at the end
+      const cp = checkpoint(r);
+      try {
+        const others = [...geom.entries()].filter(([id, g]) => id !== p.id && g?.rect && byId.get(id)?.family === 'zone').map(([, g]) => rectArr(g.rect));
+        const out = emitDistricts(r, {
+          districts: z.dsRaw, _placed: z.placement, loopiness: p.part.program.loopiness ?? 0.15, lamps: false, anchors: false, meta: false,
+          stage: { ground: stageOf('ground'), street: stageOf('street'), routes: stageOf('routes'), lots: stageOf('lots'), props: stageOf('props') },
+          routePart: `routes_${p.id}`.slice(0, 48), hard: [...env.hard.map(rectArr), ...others],
+        });
+        for (const k of out.reserved) reserved.add(k);
+        laneCells.push(...out.laneCells);
+        const layouts = Object.values(out.layouts);
+        zoneEmit.set(p.id, { L: { lots: layouts.flatMap((L) => L.lots), res: { bell: layouts[0].res.bell } }, districts: out, prefix: '' });
+        geom.set(p.id, { rect: z.rect, bell: layouts[0].res.bell });
+        villages++;
+        mark(p.id, addedSince(r, cp));
+        // a district no route reached went unplaced at emission: its lots count against count
+        const late = out.data.unplaced.filter((u) => u.reason === 'unreachable');
+        if (late.length) {
+          const lost = late.reduce((a, u) => a + (z.ds.find((d) => d.id === u.id)?.specs.length ?? 0), 0);
+          const t = tolOf(p.part, 'count');
+          const j = judge([{ what: 'count', value: z.unplacedLots + lost, max: t.max, hard: t.hard, ceiling: t.ceiling }]);
+          ans(p, { class: j.klass, deviations: j.deviations, notes: [...(z.notes ?? []), `unreachable: ${late.map((u) => u.id).join(', ')} (no route reaches ${late.length === 1 ? 'it' : 'them'})`],
+            reasons: j.klass === 'refused' ? [{ code: 'TOLERANCE', message: `${z.unplacedLots + lost} lot(s) unplaced, past the count tolerance`, evidence: { unplaced: z.unplacedLots + lost } }] : [] });
+        }
+      } catch (e) {
+        rollback(r, cp);
+        ans(p, { class: 'refused', reasons: [{ code: /NO_ROOM/.test(e.message) ? 'NO_ROOM' : 'UNREACHABLE', message: `the districts' layout failed: ${e.message}` }] });
+        geom.delete(p.id);
+      }
+      continue;
+    }
     const prefix = villages === 0 ? '' : `z${villages + 1}_`;
     const cp = checkpoint(r);
     try {
@@ -787,7 +878,7 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
     if (p.family !== 'form' || p.kind !== 'relief' || !okClass(p.id)) continue;
     const dep = depState(p);
     if (dep) { ans(p, dep); continue; }
-    const lots = res.get(p.id).zones.flatMap((zid) => (zoneEmit.get(zid)?.L.lots ?? []).map((l) => l.lot));
+    const lots = res.get(p.id).zones.flatMap((zid) => (zoneEmit.get(zid)?.L?.lots ?? []).map((l) => l.lot));
     if (!lots.length) continue;
     const cp = checkpoint(r);
     const name = `relief_${p.id}`.slice(0, 40);
@@ -886,7 +977,7 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
       try {
         // every protected area and other owner's region meeting the claim is keep-out for the routes (nothing is written there), plus avoid[]
         const ko = [...env.protectedAreas.map((a) => rectArr(a.rect)), ...env.regions.map((a) => rectArr(a.rect)), ...env.buildRects.map((a) => rectArr(a.rect)), ...avoidRects(env, group, geom)];
-        out = r.pass('route', { nodes, edges: edges.map(({ _i, ...e }) => e), maxGrade: g, stage: stageOf('routes'), part, maxExpanded: env.budget.maxNodes, lanterns: true, ...(ko.length ? { keepOut: ko } : {}), ...(env.buildRects.length ? { clearTrees: env.buildRects.map((a) => rectArr(a.rect)) } : {}) });
+        out = r.pass('route', { nodes, edges: edges.map(({ _i, ...e }) => e), maxGrade: g, stage: stageOf('routes'), part, maxExpanded: env.budget.maxNodes, lanterns: true, ...(ko.length ? { keepOut: ko } : {}), ...(env.buildRects.length ? { clearTrees: env.buildRects.map((a) => rectArr(a.rect)) } : {}), ...(env.standingHard.length ? { hard: env.standingHard } : {}) });
       } catch (e) {
         rollback(r, cp);
         for (const l of group) if (!answers.has(l.conn.id)) ans(l.conn, { class: 'refused', reasons: [{ code: /KEEP_OUT/.test(e.message) ? 'KEEP_OUT' : 'UNREACHABLE', message: e.message }] });
@@ -902,6 +993,13 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
           const l = group[i], m = metaEdges.get(edges[i].id);
           if (!connOk.has(l.conn.id)) connOk.set(l.conn.id, []);
           connOk.get(l.conn.id).push({ leg: l, meta: m, edge: edges[i].id });
+        }
+        // (D1) a leg ending on a standing region: the external graph edge to its port (7a types it, S-D-2)
+        for (const l of group) for (const en of [l.from, l.to]) {
+          if (!en.external) continue;
+          const n = r.graph.nodes.find((x) => x.id === en.name);
+          const id = `x_${en.name}`.slice(0, 64);
+          if (n && !r.graphIds.has(id)) r.graphEdge({ id, from: `${n.id}.${n.ports[0].name}`, to: `${en.external.region}:${en.external.node}.${en.external.port}`, type: 'road', width: l.width, path: part, stage: stageOf('routes'), external: true });
         }
         // a route pass's part is shared by its connectors (their legs' cells are told apart in finish.mjs by the edge's roads and paths)
         for (const x of r.parts.slice(cp.parts)) partOf[x.id] = `routes:${group.map((l) => l.conn.id).filter((v, i, a) => a.indexOf(v) === i).join(',')}`;
@@ -969,6 +1067,14 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
     if (!a || !['fits', 'adjusted'].includes(a.class)) continue;
     if (p.family === 'zone') {
       const z = res.get(p.id), e = zoneEmit.get(p.id);
+      if (e?.districts) {
+        const d = e.districts.data;
+        const lots = e.L.lots.map((l) => ({ id: l.spec.id, box: [l.lot.box.minX, l.lot.box.minY, l.lot.box.minZ, l.lot.box.maxX, l.lot.box.maxY, l.lot.box.maxZ], entrance: l.lot.entrance, front: l.lot.front, size: [l.rect[2] - l.rect[0] + 1, l.rect[3] - l.rect[1] + 1] }));
+        a.geometry = { rect: rectArr(z.rect), districts: Object.fromEntries(Object.entries(d.rects).map(([id, q]) => [id, { rect: q, band: d.bandOf[id].got, bell: d.bells[id], lots: d.lots[id], unplaced: d.unplacedLots[id] }])), unplaced: d.unplaced.map((u) => u.id), edges: d.edges.map((x) => ({ id: x.id, a: x.a, b: x.b, kind: x.kind, ok: x.ok })), treeCost: d.treeCost, loopCost: d.loopCost, lots };
+        const entries = new Map(zoneLots(p.part).map((l) => [l.id, l.lot?.entry ?? null]));
+        a.provisional = styleOf(P.plan, p.part)?.pending !== undefined || lots.some((l) => !entries.get(l.id));
+        continue;
+      }
       const lots = e ? e.L.lots.map((l) => ({ id: l.spec.id, box: [l.lot.box.minX, l.lot.box.minY, l.lot.box.minZ, l.lot.box.maxX, l.lot.box.maxY, l.lot.box.maxZ], entrance: l.lot.entrance, front: l.lot.front, size: [l.rect[2] - l.rect[0] + 1, l.rect[3] - l.rect[1] + 1] }))
         : r.lots.map((l) => ({ id: l.id, box: [l.box.minX, l.box.minY, l.box.minZ, l.box.maxX, l.box.maxY, l.box.maxZ], entrance: r.meta.lots[l.id]?.entrance, front: l.front }));
       a.geometry = { rect: rectArr(z.rect), ...(e ? { bell: e.L.res.bell, shared: e.L.shared?.kind, orientation: e.L.orientation, unplaced: e.L.unplaced.map((u) => u.id) } : { whole: true }), lots };
@@ -1066,6 +1172,21 @@ function endpointNode(env, e, other, geom, zoneEmit, lotZone, r, conn, where) {
     }
     const g = geom.get(e.part);
     const z = zoneEmit.get(e.part);
+    if (z?.districts) {
+      // (D1) a districts zone: the named district (port), else the district nearest the other end; its street end nearest that end
+      const out = z.districts, op = posOf(other);
+      const port = e.port ?? null;
+      const ids = Object.keys(out.ends);
+      if (port && !ZONE_PORTS.includes(port) && !ids.includes(port)) { const n = lotNode(port); return n ? { ...n, at: r.meta.lots[port].entrance } : { error: { code: 'NO_ROOM', message: `port ${port}: not placed (unplaced in its zone)`, path: where } }; }
+      const d0 = Object.keys(out.data.bells)[0];
+      if (port === 'bell') { const b = out.data.bells[d0]; return feet(b[0], b[2], `b_${tag}`); }
+      const dist = (q) => Math.max(Math.abs(q[0] - op[0]), Math.abs(q[1] - op[1]));
+      const did = ids.includes(port ?? '') ? port : port === 'start' || port === 'end' ? d0 : [...ids].sort((p1, p2) => dist([out.data.bells[p1][0], out.data.bells[p1][2]]) - dist([out.data.bells[p2][0], out.data.bells[p2][2]]) || cmp(p1, p2))[0];
+      if (!out.ends[did]) return { error: { code: 'NO_ROOM', message: `district ${port} was not placed`, path: where } };
+      const en = out.ends[did];
+      const pick = port === 'start' ? en[0] : port === 'end' ? en[1] : dist([en[1].x, en[1].z]) < dist([en[0].x, en[0].z]) ? en[1] : en[0];
+      return feet(pick.x, pick.z, `s_${tag}`, pick.facing);
+    }
     if (z) {
       const port = e.port ?? null;
       if (port && !ZONE_PORTS.includes(port)) { const n = lotNode(port); return n ? { ...n, at: r.meta.lots[port].entrance } : { error: { code: 'NO_ROOM', message: `port ${port}: the lot was not placed`, path: where } }; }
@@ -1088,6 +1209,17 @@ function endpointNode(env, e, other, geom, zoneEmit, lotZone, r, conn, where) {
       return feet(px, pz, `f_${tag}`);
     }
     return { error: { code: 'NO_FEATURE', message: `${e.part} is not a place a route can end at in v0 (a connector's end)`, path: where } };
+  }
+  if (e.region !== undefined) {
+    // (D1) endpoint.region: the cell past a standing region's street end inside the claim (its port: the street end's node id)
+    const st = env.standing.find((a) => a.id === e.region);
+    if (!st) return { error: { code: 'NO_FEATURE', message: `region ${e.region} is not a standing region of this owner beside the claim`, path: where } };
+    const c = env.claim;
+    const ports = besidePorts(st).filter((q) => q.end[0] >= c.minX && q.end[0] <= c.maxX && q.end[1] >= c.minZ && q.end[1] <= c.maxZ && (!e.port || q.node === e.port));
+    if (!ports.length) return { error: { code: 'NO_FEATURE', message: `region ${e.region} has no street end${e.port ? ` ${e.port}` : ''} inside the claim (the seam must hold the cell past it)`, path: where } };
+    const op = posOf(other);
+    const q = [...ports].sort((a, b) => Math.max(Math.abs(a.end[0] - op[0]), Math.abs(a.end[1] - op[1])) - Math.max(Math.abs(b.end[0] - op[0]), Math.abs(b.end[1] - op[1])) || cmp(a.node, b.node))[0];
+    return { ...feet(q.end[0], q.end[1], `r_${tag}`, q.dir), external: { region: st.id, node: q.node, port: q.port } };
   }
   if (e.build !== undefined) {
     // 6c PT endpoint.build: the road ends on the door's apron (its outer cell, outside the footprint)

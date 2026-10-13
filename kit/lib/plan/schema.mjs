@@ -219,9 +219,17 @@ function refsOf(family, part) {
 export function zoneLots(zone) {
   const p = zone?.program;
   if (!p || typeof p !== 'object') return [];
+  // (D1) a districts program: every district's lots
+  if (Array.isArray(p.districts)) return p.districts.flatMap((d, i) => (Array.isArray(d?.lots) ? d.lots : []).map((l, k) => ({ id: l?.id, path: `$.program.districts[${i}].lots[${k}].id`, lot: l, district: d?.id })));
   const lots = Array.isArray(p.lots) ? p.lots : Array.isArray(p.params?.lots) ? p.params.lots : [];
   const base = Array.isArray(p.lots) ? '$.program.lots' : '$.program.params.lots';
   return lots.map((l, i) => ({ id: l?.id, path: `${base}[${i}].id`, lot: l }));
+}
+
+/** (D1) The districts a zone declares (a districts program), each `{id, path}`. */
+export function zoneDistricts(zone) {
+  const p = zone?.program;
+  return p && Array.isArray(p.districts) ? p.districts.map((d, i) => ({ id: d?.id, path: `$.program.districts[${i}].id`, district: d })) : [];
 }
 
 // ------------------------------------------------------------------ kind-level checks of supported parts
@@ -240,6 +248,18 @@ function kindError(family, kind, part) {
       if (t?.check) {
         const e = t.check(p.params ?? {});
         if (e) return { path: `$.program.params${e.path ? `.${e.path}` : ''}`, message: e.message };
+      }
+    }
+    if (Array.isArray(p.districts)) {
+      // (D1) district ids unique within the program, near naming another district of it, sides 24..256
+      const ids = p.districts.map((d) => d.id);
+      for (const [i, d] of p.districts.entries()) {
+        if (ids.indexOf(d.id) !== i) return { path: `$.program.districts[${i}].id`, message: `district id "${d.id}" is used twice` };
+        for (const [k, t] of (d.near ?? []).entries()) if (t === d.id || !ids.includes(t)) return { path: `$.program.districts[${i}].near[${k}]`, message: `"${t}" is not another district of this program` };
+        if (d.size?.w !== undefined) for (const k of ['w', 'd']) {
+          const v = d.size[k], lo = Array.isArray(v) ? v[0] : v, hi = Array.isArray(v) ? v[1] : v;
+          if (lo < 24 || hi > 256) return { path: `$.program.districts[${i}].size.${k}`, message: `${JSON.stringify(v)}: a district side is 24..256 blocks` };
+        }
       }
     }
     if (part.size?.w !== undefined) for (const k of ['w', 'd']) {
@@ -309,9 +329,19 @@ export function validatePlan(plan, { anchors = [] } = {}) {
     if (p.family !== 'zone' && p.kind === undefined) { partMalformed(p, 'SCHEMA', '$', `a ${p.family} has a kind (R4a)`); continue; }
     const ee = extError(p.part.ext);
     if (ee) { partMalformed(p, 'SCHEMA', '$.ext', ee); continue; }
-    const entry = entryOf(p.block);
+    let entry = entryOf(p.block);
+    // (D1) an alias whose target is supported follows it: zone kind district is a zone whose program decides (zone.standard's
+    // strict shape, its kind aside); its block stays the alias's own (zone.district)
+    let checked = p.part, aliasNote = null;
+    if (entry?.aliasOf && entryOf(entry.aliasOf)?.state === 'supported' && p.family === 'zone') {
+      // only a part in a zone's shape follows its target; one written to the old envelope (a recorded pending part) stays the
+      // alias: unsupported under its target's id, which tells the writer to write it as that target now (P0's recheck)
+      const { kind: _k, ...rest } = p.part;
+      void _k;
+      if (!validateSpec(DEFS['zone.standard'], rest, '$', PLAN_SCHEMA).length) { checked = rest; entry = entryOf('zone.standard'); } else aliasNote = `zone kind ${p.kind} is an alias of ${entry.aliasOf}, supported now: write this part as a zone with program {districts: [...]} (its shape is the reserved envelope's)`;
+    }
     if (entry?.state === 'supported') {
-      const strict = validateSpec(DEFS[defName(entry)], p.part, '$', PLAN_SCHEMA);
+      const strict = validateSpec(DEFS[defName(entry)], checked, '$', PLAN_SCHEMA);
       if (strict.length) { const f = firstError(strict); partMalformed(p, 'SCHEMA', f.path, f.message); continue; }
       const re = rangeError(p.part, '$');
       if (re) { partMalformed(p, 'SCHEMA', re.path, re.message); continue; }
@@ -335,18 +365,26 @@ export function validatePlan(plan, { anchors = [] } = {}) {
       const block = entry?.aliasOf ?? p.block;
       const until = entryOf(block)?.until ?? entry?.until ?? null;
       p.verdict = 'unsupported'; p.block = block;
-      p.reason = reason('UNSUPPORTED', p.path, `${block} is ${entry ? (entry.state === 'retired' ? `retired${entry.replacedBy ? ` (use ${entry.replacedBy})` : ''}` : 'reserved') : 'not in the catalogue'}${until ? ` (until ${until})` : ''}`, { block, until });
+      p.reason = reason('UNSUPPORTED', p.path, aliasNote ?? `${block} is ${entry ? (entry.state === 'retired' ? `retired${entry.replacedBy ? ` (use ${entry.replacedBy})` : ''}` : 'reserved') : 'not in the catalogue'}${until ? ` (until ${until})` : ''}`, { block, until: aliasNote ? null : until });
     }
   }
 
-  // ---- lots: unique across the plan (one region's lots; P0 decision 6), their zone
+  // ---- lots: unique across the plan (one region's lots; P0 decision 6), their zone; (D1) district ids share the namespace
+  out.districtZone = new Map();
   for (const p of out.parts) {
     if (p.family !== 'zone' || p.verdict === 'malformed') continue;
+    for (const d of zoneDistricts(p.part)) {
+      if (typeof d.id !== 'string') continue;
+      if (out.byId.has(d.id) || out.districtZone.has(d.id)) { partMalformed(p, 'SCHEMA', d.path, `district id "${d.id}" is also ${out.byId.has(d.id) ? 'a part id' : `a district of zone ${out.districtZone.get(d.id)}`} (ids are unique across the plan)`); break; }
+      out.districtZone.set(d.id, p.id);
+    }
+    if (p.verdict === 'malformed') continue;
     for (const l of zoneLots(p.part)) {
       if (typeof l.id !== 'string') continue;
       if (out.byId.has(l.id) && out.byId.get(l.id) !== p) { partMalformed(p, 'SCHEMA', l.path, `lot id "${l.id}" is also a part id (lot ids and part ids share one namespace in a plan)`); break; }
       if (out.lotZone.has(l.id) && out.lotZone.get(l.id) !== p.id) { partMalformed(p, 'SCHEMA', l.path, `lot id "${l.id}" is also a lot of zone ${out.lotZone.get(l.id)} (lot ids are unique across the plan: one region's lots)`); break; }
       if (out.lotZone.has(l.id)) { partMalformed(p, 'SCHEMA', l.path, `lot id "${l.id}" is used twice`); break; }
+      if (out.districtZone.has(l.id)) { partMalformed(p, 'SCHEMA', l.path, `lot id "${l.id}" is also a district id`); break; }
       out.lotZone.set(l.id, p.id);
     }
   }
@@ -365,8 +403,8 @@ export function validatePlan(plan, { anchors = [] } = {}) {
         if (ref.as === 'endpoint' && ref.port !== null) {
           const z = out.byId.get(ref.id);
           if (z.family !== 'zone') { partMalformed(p, 'UNKNOWN_REF', ref.path.replace(/\.part$/, '.port'), `port "${ref.port}": only a zone has ports`); break; }
-          const lots = zoneLots(z.part).map((l) => l.id);
-          if (!ZONE_PORTS.includes(ref.port) && !lots.includes(ref.port)) { partMalformed(p, 'UNKNOWN_REF', ref.path.replace(/\.part$/, '.port'), `port "${ref.port}" is not a port of zone ${ref.id} (its lots, or ${ZONE_PORTS.join(', ')})`); break; }
+          const lots = [...zoneLots(z.part).map((l) => l.id), ...zoneDistricts(z.part).map((d) => d.id)];
+          if (!ZONE_PORTS.includes(ref.port) && !lots.includes(ref.port)) { partMalformed(p, 'UNKNOWN_REF', ref.path.replace(/\.part$/, '.port'), `port "${ref.port}" is not a port of zone ${ref.id} (its lots${zoneDistricts(z.part).length ? ', its districts' : ''}, or ${ZONE_PORTS.join(', ')})`); break; }
         }
       } else if (out.lotZone.has(ref.id) && ref.as !== 'around' && ref.as !== 'scope') {
         // a lot named where a place is expected (Steward's plans name lots as endpoints): the lot, through its zone

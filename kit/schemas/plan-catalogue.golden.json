@@ -1,7 +1,7 @@
 {
- "catalogueVersion": 1,
- "api": "1.24.0",
- "kitVersion": "0.26.0",
+ "catalogueVersion": 2,
+ "api": "1.26.0",
+ "kitVersion": "0.28.0",
  "schemaVersion": "plan/0",
  "entries": [
   {
@@ -41,9 +41,8 @@
   {
    "id": "program.districts",
    "sinceApi": "P0",
-   "schemaVersion": 0,
-   "state": "reserved",
-   "until": "D1"
+   "schemaVersion": 1,
+   "state": "supported"
   },
   {
    "id": "program.crater_works",
@@ -500,9 +499,8 @@
   {
    "id": "endpoint.region",
    "sinceApi": "P0",
-   "schemaVersion": 0,
-   "state": "reserved",
-   "until": "D1"
+   "schemaVersion": 1,
+   "state": "supported"
   },
   {
    "id": "endpoint.build",

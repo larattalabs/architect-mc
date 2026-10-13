@@ -1,586 +1,542 @@
 {
- "about": "every reserved catalogue entry answers unsupported with its block id (generated from x-catalogue; first half)",
- "on": "s7",
- "expect": {
-  "all": [
-   {
-    "part": "zk_outpost",
-    "block": "zone.outpost"
-   },
-   {
-    "part": "zk_district",
-    "block": "program.districts"
-   },
-   {
-    "part": "z1",
-    "block": "program.districts"
-   },
-   {
-    "part": "z2",
-    "block": "layout.ring"
-   },
-   {
-    "part": "z3",
-    "block": "layout.spiral"
-   },
-   {
-    "part": "z4",
-    "block": "layout.grid"
-   },
-   {
-    "part": "z5",
-    "block": "layout.organic"
-   },
-   {
-    "part": "c_auto",
-    "block": "connector.auto"
-   },
-   {
-    "part": "c_bridge",
-    "block": "connector.bridge"
-   },
-   {
-    "part": "c_tunnel",
-    "block": "connector.tunnel"
-   },
-   {
-    "part": "c_channel",
-    "block": "connector.channel"
-   },
-   {
-    "part": "c_wall",
-    "block": "connector.wall"
-   },
-   {
-    "part": "c_gate",
-    "block": "connector.gate"
-   },
-   {
-    "part": "c_ladder",
-    "block": "connector.ladder"
-   },
-   {
-    "part": "c_stair",
-    "block": "connector.stair"
-   },
-   {
-    "part": "c_rail",
-    "block": "connector.rail"
-   },
-   {
-    "part": "c_rope_bridge",
-    "block": "connector.rope_bridge"
-   },
-   {
-    "part": "c_catwalk",
-    "block": "connector.catwalk"
-   },
-   {
-    "part": "c_rock_stair",
-    "block": "connector.rock_stair"
-   },
-   {
-    "part": "c_switchback",
-    "block": "connector.switchback"
-   },
-   {
-    "part": "c_lift",
-    "block": "connector.lift"
-   },
-   {
-    "part": "c_branch_walk",
-    "block": "connector.branch_walk"
-   },
-   {
-    "part": "c_span_bridge",
-    "block": "connector.span_bridge"
-   },
-   {
-    "part": "c_stairs_around",
-    "block": "connector.stairs_around"
-   },
-   {
-    "part": "f_floating_island",
-    "block": "form.floating_island"
-   },
-   {
-    "part": "z6",
-    "block": "locator.along"
-   },
-   {
-    "part": "z7",
-    "block": "locator.around"
-   },
-   {
-    "part": "z8",
-    "block": "feature.region"
-   },
-   {
-    "part": "z9",
-    "block": "feature.biome_edge"
-   },
-   {
-    "part": "z10",
-    "block": "feature.ridge"
-   },
-   {
-    "part": "c_ep_region",
-    "block": "endpoint.region"
-   },
-   {
-    "part": "z11",
-    "block": "sketch.outline"
-   }
-  ]
- },
- "plan": {
-  "schemaVersion": "plan/0",
-  "zones": [
-   {
-    "id": "zk_outpost",
-    "kind": "outpost",
-    "program": {
-     "lots": [
+  "about": "every reserved catalogue entry answers unsupported with its block id (generated from x-catalogue; first half) (D1: program.districts, its alias zone kind district and endpoint.region left the list when they shipped)",
+  "on": "s7",
+  "expect": {
+    "all": [
       {
-       "id": "zk_outpost_lot",
-       "type": "house",
-       "size": [
-        9,
-        9
-       ]
-      }
-     ]
-    }
-   },
-   {
-    "id": "zk_district",
-    "kind": "district",
-    "program": {
-     "lots": [
+        "part": "zk_outpost",
+        "block": "zone.outpost"
+      },
       {
-       "id": "zk_district_lot",
-       "type": "house",
-       "size": [
-        9,
-        9
-       ]
-      }
-     ]
-    }
-   },
-   {
-    "id": "z1",
-    "program": {
-     "districts": []
-    }
-   },
-   {
-    "id": "z2",
-    "program": {
-     "lots": [
+        "part": "z2",
+        "block": "layout.ring"
+      },
       {
-       "id": "z2_lot",
-       "type": "house",
-       "size": [
-        9,
-        9
-       ]
-      }
-     ],
-     "layout": "ring"
-    }
-   },
-   {
-    "id": "z3",
-    "program": {
-     "lots": [
+        "part": "z3",
+        "block": "layout.spiral"
+      },
       {
-       "id": "z3_lot",
-       "type": "house",
-       "size": [
-        9,
-        9
-       ]
-      }
-     ],
-     "layout": "spiral"
-    }
-   },
-   {
-    "id": "z4",
-    "program": {
-     "lots": [
+        "part": "z4",
+        "block": "layout.grid"
+      },
       {
-       "id": "z4_lot",
-       "type": "house",
-       "size": [
-        9,
-        9
-       ]
-      }
-     ],
-     "layout": "grid"
-    }
-   },
-   {
-    "id": "z5",
-    "program": {
-     "lots": [
+        "part": "z5",
+        "block": "layout.organic"
+      },
       {
-       "id": "z5_lot",
-       "type": "house",
-       "size": [
-        9,
-        9
-       ]
-      }
-     ],
-     "layout": "organic"
-    }
-   },
-   {
-    "id": "z6",
-    "program": {
-     "lots": [
+        "part": "c_auto",
+        "block": "connector.auto"
+      },
       {
-       "id": "z6_lot",
-       "type": "house",
-       "size": [
-        9,
-        9
-       ]
-      }
-     ]
-    },
-    "where": {
-     "along": {
-      "feature": {
-       "water": {}
-      }
-     }
-    }
-   },
-   {
-    "id": "z7",
-    "program": {
-     "lots": [
+        "part": "c_bridge",
+        "block": "connector.bridge"
+      },
       {
-       "id": "z7_lot",
-       "type": "house",
-       "size": [
-        9,
-        9
-       ]
-      }
-     ]
-    },
-    "where": {
-     "around": {
-      "feature": {
-       "water": {}
-      }
-     }
-    }
-   },
-   {
-    "id": "z8",
-    "program": {
-     "lots": [
+        "part": "c_tunnel",
+        "block": "connector.tunnel"
+      },
       {
-       "id": "z8_lot",
-       "type": "house",
-       "size": [
-        9,
-        9
-       ]
-      }
-     ]
-    },
-    "where": {
-     "near": {
-      "feature": {
-       "region": "rg9"
-      }
-     }
-    }
-   },
-   {
-    "id": "z9",
-    "program": {
-     "lots": [
+        "part": "c_channel",
+        "block": "connector.channel"
+      },
       {
-       "id": "z9_lot",
-       "type": "house",
-       "size": [
-        9,
-        9
-       ]
-      }
-     ]
-    },
-    "where": {
-     "near": {
-      "feature": {
-       "biome_edge": {
-        "between": [
-         "desert",
-         "jungle"
-        ]
-       }
-      }
-     }
-    }
-   },
-   {
-    "id": "z10",
-    "program": {
-     "lots": [
+        "part": "c_wall",
+        "block": "connector.wall"
+      },
       {
-       "id": "z10_lot",
-       "type": "house",
-       "size": [
-        9,
-        9
-       ]
-      }
-     ]
-    },
-    "where": {
-     "near": {
-      "feature": {
-       "ridge": {}
-      }
-     }
-    }
-   },
-   {
-    "id": "z11",
-    "program": {
-     "lots": [
+        "part": "c_gate",
+        "block": "connector.gate"
+      },
       {
-       "id": "z11_lot",
-       "type": "house",
-       "size": [
-        9,
-        9
-       ]
+        "part": "c_ladder",
+        "block": "connector.ladder"
+      },
+      {
+        "part": "c_stair",
+        "block": "connector.stair"
+      },
+      {
+        "part": "c_rail",
+        "block": "connector.rail"
+      },
+      {
+        "part": "c_rope_bridge",
+        "block": "connector.rope_bridge"
+      },
+      {
+        "part": "c_catwalk",
+        "block": "connector.catwalk"
+      },
+      {
+        "part": "c_rock_stair",
+        "block": "connector.rock_stair"
+      },
+      {
+        "part": "c_switchback",
+        "block": "connector.switchback"
+      },
+      {
+        "part": "c_lift",
+        "block": "connector.lift"
+      },
+      {
+        "part": "c_branch_walk",
+        "block": "connector.branch_walk"
+      },
+      {
+        "part": "c_span_bridge",
+        "block": "connector.span_bridge"
+      },
+      {
+        "part": "c_stairs_around",
+        "block": "connector.stairs_around"
+      },
+      {
+        "part": "f_floating_island",
+        "block": "form.floating_island"
+      },
+      {
+        "part": "z6",
+        "block": "locator.along"
+      },
+      {
+        "part": "z7",
+        "block": "locator.around"
+      },
+      {
+        "part": "z8",
+        "block": "feature.region"
+      },
+      {
+        "part": "z9",
+        "block": "feature.biome_edge"
+      },
+      {
+        "part": "z10",
+        "block": "feature.ridge"
+      },
+      {
+        "part": "z11",
+        "block": "sketch.outline"
       }
-     ]
-    },
-    "sketch": {
-     "frame": "claim",
-     "unit": "q64",
-     "shape": "polygon",
-     "points": [
-      [
-       1,
-       1
-      ],
-      [
-       20,
-       1
-      ],
-      [
-       10,
-       20
-      ]
-     ],
-     "outline": true
-    }
-   }
-  ],
-  "connectors": [
-   {
-    "id": "c_auto",
-    "kind": "auto",
-    "from": {
-     "anchor": "claim_n"
-    },
-    "to": {
-     "anchor": "claim_s"
-    }
-   },
-   {
-    "id": "c_bridge",
-    "kind": "bridge",
-    "from": {
-     "anchor": "claim_n"
-    },
-    "to": {
-     "anchor": "claim_s"
-    }
-   },
-   {
-    "id": "c_tunnel",
-    "kind": "tunnel",
-    "from": {
-     "anchor": "claim_n"
-    },
-    "to": {
-     "anchor": "claim_s"
-    }
-   },
-   {
-    "id": "c_channel",
-    "kind": "channel",
-    "from": {
-     "anchor": "claim_n"
-    },
-    "to": {
-     "anchor": "claim_s"
-    }
-   },
-   {
-    "id": "c_wall",
-    "kind": "wall",
-    "from": {
-     "anchor": "claim_n"
-    },
-    "to": {
-     "anchor": "claim_s"
-    }
-   },
-   {
-    "id": "c_gate",
-    "kind": "gate",
-    "from": {
-     "anchor": "claim_n"
-    },
-    "to": {
-     "anchor": "claim_s"
-    }
-   },
-   {
-    "id": "c_ladder",
-    "kind": "ladder",
-    "from": {
-     "anchor": "claim_n"
-    },
-    "to": {
-     "anchor": "claim_s"
-    }
-   },
-   {
-    "id": "c_stair",
-    "kind": "stair",
-    "from": {
-     "anchor": "claim_n"
-    },
-    "to": {
-     "anchor": "claim_s"
-    }
-   },
-   {
-    "id": "c_rail",
-    "kind": "rail",
-    "from": {
-     "anchor": "claim_n"
-    },
-    "to": {
-     "anchor": "claim_s"
-    }
-   },
-   {
-    "id": "c_rope_bridge",
-    "kind": "rope_bridge",
-    "from": {
-     "anchor": "claim_n"
-    },
-    "to": {
-     "anchor": "claim_s"
-    }
-   },
-   {
-    "id": "c_catwalk",
-    "kind": "catwalk",
-    "from": {
-     "anchor": "claim_n"
-    },
-    "to": {
-     "anchor": "claim_s"
-    }
-   },
-   {
-    "id": "c_rock_stair",
-    "kind": "rock_stair",
-    "from": {
-     "anchor": "claim_n"
-    },
-    "to": {
-     "anchor": "claim_s"
-    }
-   },
-   {
-    "id": "c_switchback",
-    "kind": "switchback",
-    "from": {
-     "anchor": "claim_n"
-    },
-    "to": {
-     "anchor": "claim_s"
-    }
-   },
-   {
-    "id": "c_lift",
-    "kind": "lift",
-    "from": {
-     "anchor": "claim_n"
-    },
-    "to": {
-     "anchor": "claim_s"
-    }
-   },
-   {
-    "id": "c_branch_walk",
-    "kind": "branch_walk",
-    "from": {
-     "anchor": "claim_n"
-    },
-    "to": {
-     "anchor": "claim_s"
-    }
-   },
-   {
-    "id": "c_span_bridge",
-    "kind": "span_bridge",
-    "from": {
-     "anchor": "claim_n"
-    },
-    "to": {
-     "anchor": "claim_s"
-    }
-   },
-   {
-    "id": "c_stairs_around",
-    "kind": "stairs_around",
-    "from": {
-     "anchor": "claim_n"
-    },
-    "to": {
-     "anchor": "claim_s"
-    }
-   },
-   {
-    "id": "c_ep_region",
-    "kind": "road",
-    "from": {
-     "anchor": "claim_n"
-    },
-    "to": {
-     "region": "rg9"
-    }
-   }
-  ],
-  "forms": [
-   {
-    "id": "f_floating_island",
-    "kind": "floating_island",
-    "where": {
-     "near": {
-      "anchor": "stone"
-     }
-    }
-   }
-  ]
- }
+    ]
+  },
+  "plan": {
+    "schemaVersion": "plan/0",
+    "zones": [
+      {
+        "id": "zk_outpost",
+        "kind": "outpost",
+        "program": {
+          "lots": [
+            {
+              "id": "zk_outpost_lot",
+              "type": "house",
+              "size": [
+                9,
+                9
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "id": "z2",
+        "program": {
+          "lots": [
+            {
+              "id": "z2_lot",
+              "type": "house",
+              "size": [
+                9,
+                9
+              ]
+            }
+          ],
+          "layout": "ring"
+        }
+      },
+      {
+        "id": "z3",
+        "program": {
+          "lots": [
+            {
+              "id": "z3_lot",
+              "type": "house",
+              "size": [
+                9,
+                9
+              ]
+            }
+          ],
+          "layout": "spiral"
+        }
+      },
+      {
+        "id": "z4",
+        "program": {
+          "lots": [
+            {
+              "id": "z4_lot",
+              "type": "house",
+              "size": [
+                9,
+                9
+              ]
+            }
+          ],
+          "layout": "grid"
+        }
+      },
+      {
+        "id": "z5",
+        "program": {
+          "lots": [
+            {
+              "id": "z5_lot",
+              "type": "house",
+              "size": [
+                9,
+                9
+              ]
+            }
+          ],
+          "layout": "organic"
+        }
+      },
+      {
+        "id": "z6",
+        "program": {
+          "lots": [
+            {
+              "id": "z6_lot",
+              "type": "house",
+              "size": [
+                9,
+                9
+              ]
+            }
+          ]
+        },
+        "where": {
+          "along": {
+            "feature": {
+              "water": {}
+            }
+          }
+        }
+      },
+      {
+        "id": "z7",
+        "program": {
+          "lots": [
+            {
+              "id": "z7_lot",
+              "type": "house",
+              "size": [
+                9,
+                9
+              ]
+            }
+          ]
+        },
+        "where": {
+          "around": {
+            "feature": {
+              "water": {}
+            }
+          }
+        }
+      },
+      {
+        "id": "z8",
+        "program": {
+          "lots": [
+            {
+              "id": "z8_lot",
+              "type": "house",
+              "size": [
+                9,
+                9
+              ]
+            }
+          ]
+        },
+        "where": {
+          "near": {
+            "feature": {
+              "region": "rg9"
+            }
+          }
+        }
+      },
+      {
+        "id": "z9",
+        "program": {
+          "lots": [
+            {
+              "id": "z9_lot",
+              "type": "house",
+              "size": [
+                9,
+                9
+              ]
+            }
+          ]
+        },
+        "where": {
+          "near": {
+            "feature": {
+              "biome_edge": {
+                "between": [
+                  "desert",
+                  "jungle"
+                ]
+              }
+            }
+          }
+        }
+      },
+      {
+        "id": "z10",
+        "program": {
+          "lots": [
+            {
+              "id": "z10_lot",
+              "type": "house",
+              "size": [
+                9,
+                9
+              ]
+            }
+          ]
+        },
+        "where": {
+          "near": {
+            "feature": {
+              "ridge": {}
+            }
+          }
+        }
+      },
+      {
+        "id": "z11",
+        "program": {
+          "lots": [
+            {
+              "id": "z11_lot",
+              "type": "house",
+              "size": [
+                9,
+                9
+              ]
+            }
+          ]
+        },
+        "sketch": {
+          "frame": "claim",
+          "unit": "q64",
+          "shape": "polygon",
+          "points": [
+            [
+              1,
+              1
+            ],
+            [
+              20,
+              1
+            ],
+            [
+              10,
+              20
+            ]
+          ],
+          "outline": true
+        }
+      }
+    ],
+    "connectors": [
+      {
+        "id": "c_auto",
+        "kind": "auto",
+        "from": {
+          "anchor": "claim_n"
+        },
+        "to": {
+          "anchor": "claim_s"
+        }
+      },
+      {
+        "id": "c_bridge",
+        "kind": "bridge",
+        "from": {
+          "anchor": "claim_n"
+        },
+        "to": {
+          "anchor": "claim_s"
+        }
+      },
+      {
+        "id": "c_tunnel",
+        "kind": "tunnel",
+        "from": {
+          "anchor": "claim_n"
+        },
+        "to": {
+          "anchor": "claim_s"
+        }
+      },
+      {
+        "id": "c_channel",
+        "kind": "channel",
+        "from": {
+          "anchor": "claim_n"
+        },
+        "to": {
+          "anchor": "claim_s"
+        }
+      },
+      {
+        "id": "c_wall",
+        "kind": "wall",
+        "from": {
+          "anchor": "claim_n"
+        },
+        "to": {
+          "anchor": "claim_s"
+        }
+      },
+      {
+        "id": "c_gate",
+        "kind": "gate",
+        "from": {
+          "anchor": "claim_n"
+        },
+        "to": {
+          "anchor": "claim_s"
+        }
+      },
+      {
+        "id": "c_ladder",
+        "kind": "ladder",
+        "from": {
+          "anchor": "claim_n"
+        },
+        "to": {
+          "anchor": "claim_s"
+        }
+      },
+      {
+        "id": "c_stair",
+        "kind": "stair",
+        "from": {
+          "anchor": "claim_n"
+        },
+        "to": {
+          "anchor": "claim_s"
+        }
+      },
+      {
+        "id": "c_rail",
+        "kind": "rail",
+        "from": {
+          "anchor": "claim_n"
+        },
+        "to": {
+          "anchor": "claim_s"
+        }
+      },
+      {
+        "id": "c_rope_bridge",
+        "kind": "rope_bridge",
+        "from": {
+          "anchor": "claim_n"
+        },
+        "to": {
+          "anchor": "claim_s"
+        }
+      },
+      {
+        "id": "c_catwalk",
+        "kind": "catwalk",
+        "from": {
+          "anchor": "claim_n"
+        },
+        "to": {
+          "anchor": "claim_s"
+        }
+      },
+      {
+        "id": "c_rock_stair",
+        "kind": "rock_stair",
+        "from": {
+          "anchor": "claim_n"
+        },
+        "to": {
+          "anchor": "claim_s"
+        }
+      },
+      {
+        "id": "c_switchback",
+        "kind": "switchback",
+        "from": {
+          "anchor": "claim_n"
+        },
+        "to": {
+          "anchor": "claim_s"
+        }
+      },
+      {
+        "id": "c_lift",
+        "kind": "lift",
+        "from": {
+          "anchor": "claim_n"
+        },
+        "to": {
+          "anchor": "claim_s"
+        }
+      },
+      {
+        "id": "c_branch_walk",
+        "kind": "branch_walk",
+        "from": {
+          "anchor": "claim_n"
+        },
+        "to": {
+          "anchor": "claim_s"
+        }
+      },
+      {
+        "id": "c_span_bridge",
+        "kind": "span_bridge",
+        "from": {
+          "anchor": "claim_n"
+        },
+        "to": {
+          "anchor": "claim_s"
+        }
+      },
+      {
+        "id": "c_stairs_around",
+        "kind": "stairs_around",
+        "from": {
+          "anchor": "claim_n"
+        },
+        "to": {
+          "anchor": "claim_s"
+        }
+      }
+    ],
+    "forms": [
+      {
+        "id": "f_floating_island",
+        "kind": "floating_island",
+        "where": {
+          "near": {
+            "anchor": "stone"
+          }
+        }
+      }
+    ]
+  }
 }

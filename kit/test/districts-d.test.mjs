@@ -240,3 +240,41 @@ test('beside §3: a district beside a standing village: the join routed from a d
   const far = [-200, 13, -120, 93];
   await assert.rejects(planRegion({ programFile: path.join(KIT, 'regions', 'districts.mjs'), params: { spec: { districts: [{ id: 'east', size: [48, 48], lots: 4 }] } }, survey: columnsOf(world, far[0], far[1], 81, 81), claim: { minX: far[0], minZ: far[1], maxX: far[2], maxZ: far[3], minY: -64, maxY: 319 }, seed: '1', beside: besideData('rg1', claim, p.ir, far) }), /NO_JOIN/);
 });
+
+// ------------------------------------------------------------------ plan/0 (P0's catalogue flip: program.districts, endpoint.region)
+
+test('plan/0: program.districts and endpoint.region compile; named refusals and malformed members', async () => {
+  const { asksSurvey, checkPlanLocal, stewardAnchors, FIX } = await import('./plan-helpers.mjs');
+  const A = asksSurvey();
+  const chk = (plan, o = {}) => checkPlanLocal(plan, { survey: A.bytes, claim: A.claim, anchors: stewardAnchors(A.claim), ...o });
+  const v18 = JSON.parse(fs.readFileSync(path.join(FIX, 'valid', 'v18_districts.json'), 'utf8'));
+  const r = await chk(v18.plan);
+  const z = r.check.parts.find((a) => a.part === 'quarters');
+  assert.equal(z.class, 'fits');
+  assert.deepEqual(Object.keys(z.geometry.districts).sort(), ['crafts', 'homes', 'market']);
+  assert.ok(z.geometry.edges.every((e) => e.ok) && z.geometry.edges.filter((e) => e.kind === 'tree').length === 2);
+  assert.equal(r.check.parts.find((a) => a.part === 'to_stone').class, 'fits');
+  // a near naming no district, a duplicate district id, a district id clashing with a part id: malformed with the path
+  const bad = (mut) => { const p = JSON.parse(JSON.stringify(v18.plan)); mut(p); return p; };
+  const m1 = await chk(bad((p) => { p.zones[0].program.districts[1].near = ['nowhere']; }));
+  assert.deepEqual([m1.check.parts[0].class, m1.check.parts[0].reasons[0].path], ['malformed', '$.zones[0].program.districts[1].near[0]']);
+  const m2 = await chk(bad((p) => { p.zones[0].program.districts[1].id = 'market'; }));
+  assert.equal(m2.check.parts[0].class, 'malformed');
+  const m3 = await chk(bad((p) => { p.zones[0].program.districts[2].id = 'to_stone'; }));
+  assert.match(m3.check.parts[0].reasons[0].message, /also a part id/);
+  const m4 = await chk(bad((p) => { p.zones[0].program.districts[0].colour = 'red'; }));
+  assert.equal(m4.check.parts[0].class, 'malformed');
+  // endpoint.region without a standing region beside the claim: refused NO_FEATURE (no longer unsupported)
+  const v19 = JSON.parse(fs.readFileSync(path.join(FIX, 'valid', 'v19_endpoint_region.json'), 'utf8'));
+  const n = await chk(v19.plan);
+  assert.deepEqual([n.check.parts[0].class, n.check.parts[0].reasons[0].code], ['refused', 'NO_FEATURE']);
+  const y = await chk(v19.plan, { standing: v19.standing });
+  assert.equal(y.check.parts[0].class, 'fits');
+  const ext = y.res.ir.graph.edges.filter((e) => e.external);
+  assert.deepEqual(ext.map((e) => e.to), ['rg7:street_e_end.street']);
+  // a standing region whose street end lies outside the claim: NO_FEATURE naming the seam
+  const far = JSON.parse(JSON.stringify(v19.standing));
+  far[0].graph.nodes[1].at = [-5, 64, 160];
+  const f = await chk(v19.plan, { standing: far });
+  assert.match(f.check.parts[0].reasons[0].message, /no street end/);
+});
