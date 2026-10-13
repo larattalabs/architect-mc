@@ -193,7 +193,7 @@ public final class RegionItems {
 			}
 			return;
 		}
-		RegionsImpl.tileChecked(t[0], t[1], res.skipped());
+		RegionsImpl.tileChecked(t[0], t[1], res.skipped(), res.builds());
 		if (c.cells() == 0) {
 			// nothing to write here (every cell skipped or already so): done without an entry
 			TileStream.release(t[0], t[1], t[2], t[3]);
@@ -226,11 +226,14 @@ public final class RegionItems {
 	/** A tile's check; (6c B) a brush stroke's carries its destruction rule and the owner's other strokes (layered over). */
 	private static TileCheck tileCheck(dev.larattalabs.architect.region.Packed.Tile cells, RegionsImpl.Live r, Anchors.Bounds win) {
 		var rec = r.rec();
+		// (6c PT) the consented builds (validated at the realise or stroke): their cells pass as natural
+		dev.larattalabs.architect.placed.Placed.Consent consent = new dev.larattalabs.architect.placed.Placed.Consent(java.util.Set.copyOf(rec.consented));
 		if (rec.brush == null) {
-			return new TileCheck(cells, rec.groupId, rec.owner, rec.dimension, rec.claim, win); // (C31) the owner's protected areas bound felling
+			return new TileCheck(cells, rec.groupId, rec.owner, rec.dimension, rec.claim, win).consent(consent); // (C31) the owner's areas bound felling
 		}
 		boolean pb = rec.brush.has("playerBlocks") && rec.brush.get("playerBlocks").getAsBoolean();
-		return new TileCheck(cells, rec.groupId, rec.owner, rec.dimension, rec.claim, win, pb, dev.larattalabs.architect.region.Brushes.layerGroups(rec.owner));
+		return new TileCheck(cells, rec.groupId, rec.owner, rec.dimension, rec.claim, win, pb, dev.larattalabs.architect.region.Brushes.layerGroups(rec.owner))
+			.consent(consent);
 	}
 
 	/** Liveness (gate item 4): when a tile item holding its tickets first waited for its (all generated) chunks to load. */

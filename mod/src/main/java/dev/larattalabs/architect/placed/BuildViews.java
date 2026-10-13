@@ -129,6 +129,48 @@ public final class BuildViews {
 		return new PlacedBox(tracked, incidental, by, hits.list());
 	}
 
+	/** The kept build cells of a box a write would take, but those {@code consent} names (tracked cells only: touched sections). */
+	public static Hits scan(ServerLevel level, dev.larattalabs.architect.placement.Anchors.Bounds b, Placed.Consent consent) {
+		return scan(level, new BoundingBox(b.minX(), b.minY(), b.minZ(), b.maxX(), b.maxY(), b.maxZ()), consent);
+	}
+
+	public static Hits scan(ServerLevel level, BoundingBox box, Placed.Consent consent) {
+		Hits hits = new Hits();
+		if (!Placed.on()) {
+			return hits;
+		}
+		for (int cx = box.minX() >> 4; cx <= box.maxX() >> 4; cx++) {
+			for (int cz = box.minZ() >> 4; cz <= box.maxZ() >> 4; cz++) {
+				LevelChunk c = level.getChunkSource().getChunkNow(cx, cz);
+				PlacedChunk pc = c == null ? null : c.getAttached(Placed.TYPE);
+				if (pc == null) {
+					continue;
+				}
+				for (int sy : pc.sectionYs()) {
+					if ((sy << 4) + 15 < box.minY() || sy << 4 > box.maxY()) {
+						continue;
+					}
+					int[] cells = pc.cells(sy);
+					for (int i = 0; i < cells.length; i += 2) {
+						int idx = cells[i];
+						int x = (cx << 4) + (idx & 15);
+						int y = (sy << 4) + (idx >> 8);
+						int z = (cz << 4) + (idx >> 4 & 15);
+						if (!box.isInside(x, y, z)) {
+							continue;
+						}
+						String bd = pc.build(PlacedChunk.buildOf(cells[i + 1]));
+						String kept = bd == null ? null : Builds.kept(bd);
+						if (kept != null && !consent.allows(kept)) {
+							hits.add(level, kept, x, y, z);
+						}
+					}
+				}
+			}
+		}
+		return hits;
+	}
+
 	// ------------------------------------------------------------------ the named refusal (C32 question 3)
 
 	/** Builds in the way, collected cell by cell: per build its blocking count and first 8 cells with their block ids. */
@@ -212,6 +254,35 @@ public final class BuildViews {
 			List<BuildHit> l = list();
 			return new ArchitectRefused(Reason.PLAYER_BUILD, prefix + message(l), "", l);
 		}
+	}
+
+	/**
+	 * §7 "Region plan (kit)": the kept builds meeting a claim {minX, minY, minZ, maxX, maxY, maxZ} as keep-out rects
+	 * {@code [x0, z0, x1, z1]}: each build's bounds grown by 1, and each entrance's apron (the 3 cells outside it).
+	 */
+	public static List<int[]> keepOut(String dimension, int[] claim) {
+		List<int[]> out = new ArrayList<>();
+		if (!Placed.on()) {
+			return out;
+		}
+		BoundingBox c = new BoundingBox(claim[0] - 1, claim[1], claim[2] - 1, claim[3] + 1, claim[4], claim[5] + 1);
+		for (Builds.Rec r : Builds.list(dimension, c)) {
+			if (!r.kept()) {
+				continue;
+			}
+			out.add(new int[] {r.bounds[0] - 1, r.bounds[2] - 1, r.bounds[3] + 1, r.bounds[5] + 1});
+			for (Builds.Ent e : r.entrances) {
+				BlockPos p = BlockPos.of(e.pos());
+				net.minecraft.core.Direction f = e.facing();
+				// a door faces into its room or out of it: the apron is on both sides of the opening
+				for (net.minecraft.core.Direction d : new net.minecraft.core.Direction[] {f, f.getOpposite()}) {
+					BlockPos a = p.relative(d, 1);
+					BlockPos b = p.relative(d, 3);
+					out.add(new int[] {Math.min(a.getX(), b.getX()), Math.min(a.getZ(), b.getZ()), Math.max(a.getX(), b.getX()), Math.max(a.getZ(), b.getZ())});
+				}
+			}
+		}
+		return out;
 	}
 
 	// ------------------------------------------------------------------ consent (§6)

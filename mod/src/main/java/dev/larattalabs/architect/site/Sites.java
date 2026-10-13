@@ -127,14 +127,26 @@ public final class Sites {
 	/** Thrown by {@link #place} / {@link #remove} / {@link #move} with a message meant for the player. */
 	public static final class SiteException extends Exception {
 		private final Reason reason;
+		private final List<dev.larattalabs.architect.api.BuildHit> builds;
 
 		public SiteException(String message) {
 			this(Reason.OTHER, message);
 		}
 
 		public SiteException(Reason reason, String message) {
+			this(reason, message, List.of());
+		}
+
+		/** (6c PT) A PLAYER_BUILD refusal with the builds in the way. */
+		public SiteException(Reason reason, String message, List<dev.larattalabs.architect.api.BuildHit> builds) {
 			super(message);
 			this.reason = reason == null ? Reason.OTHER : reason;
+			this.builds = builds == null ? List.of() : List.copyOf(builds);
+		}
+
+		/** (6c PT) The builds in the way (PLAYER_BUILD), else empty. */
+		public List<dev.larattalabs.architect.api.BuildHit> builds() {
+			return builds;
 		}
 
 		/** The refusal's type (docs/CONTRACT.md phase 4a {@code Reason}), set where the refusal is made. */
@@ -143,8 +155,15 @@ public final class Sites {
 		}
 	}
 
-	/** A refusal with its type. */
-	public record Refusal(Reason reason, String message) {
+	/** A refusal with its type; (6c PT) a PLAYER_BUILD one with the builds in the way. */
+	public record Refusal(Reason reason, String message, List<dev.larattalabs.architect.api.BuildHit> builds) {
+		public Refusal {
+			builds = builds == null ? List.of() : List.copyOf(builds);
+		}
+
+		public Refusal(Reason reason, String message) {
+			this(reason, message, List.of());
+		}
 	}
 
 	private Sites() {
@@ -275,7 +294,7 @@ public final class Sites {
 			placed = placeInternal(level, bp, origin, rotation, force, placer, construction, siteOwner, ext, member, layer, style);
 		} catch (SiteException e) {
 			ApiEvents.placeFailed(level, bp.id(), origin, rotation, force, construction, siteOwner, ext, actor,
-				List.of(new Refusal(e.reason(), e.getMessage())));
+				List.of(new Refusal(e.reason(), e.getMessage(), e.builds())));
 			throw e;
 		}
 		ApiEvents.placed(level.getServer(), placed);
@@ -504,10 +523,23 @@ public final class Sites {
 	@FunctionalInterface
 	private interface Refusals {
 		void add(Reason reason, String message) throws SiteException;
+
+		/** (6c PT) A PLAYER_BUILD refusal with its builds. */
+		default void add(Reason reason, String message, List<dev.larattalabs.architect.api.BuildHit> builds) throws SiteException {
+			add(reason, message);
+		}
 	}
 
-	private static final Refusals THROW = (r, m) -> {
-		throw new SiteException(r, m);
+	private static final Refusals THROW = new Refusals() {
+		@Override
+		public void add(Reason r, String m) throws SiteException {
+			throw new SiteException(r, m);
+		}
+
+		@Override
+		public void add(Reason r, String m, List<dev.larattalabs.architect.api.BuildHit> b) throws SiteException {
+			throw new SiteException(r, m, b);
+		}
 	};
 
 	/** A site that passed {@link #checkSite}: everything {@link #build} needs, so it never looks at the world twice. */
@@ -568,6 +600,7 @@ public final class Sites {
 		int reach = bp.approach().length() + Approach.EXTEND + 2;
 		it.unimi.dsi.fastutil.longs.LongOpenHashSet roads = dev.larattalabs.architect.site.roads.Roads.roadCells(dimensionId(level), box.grow(reach));
 		BlockPos.MutableBlockPos mp = new BlockPos.MutableBlockPos();
+		dev.larattalabs.architect.placed.Placed.Consent consent = dev.larattalabs.architect.placed.Placed.consentNow();
 		// the chunk of the last column read (a size-cap box reads 600k cells: no per-cell chunk lookup)
 		net.minecraft.world.level.chunk.LevelChunk[] chunk = {null};
 		long[] chunkAt = {Long.MIN_VALUE};
@@ -582,6 +615,13 @@ public final class Sites {
 				return 0;
 			}
 			int fl = y < level.getMinY() || y > level.getMaxY() ? TerrainFit.FILLABLE : TerrainFit.flags(chunk[0].getBlockState(mp.set(x, y, z)));
+			// 6c PT: a player's build cell (the consent's aside) stops an approach as a road does
+			if (y >= level.getMinY() && y <= level.getMaxY()) {
+				String bd = dev.larattalabs.architect.placed.Placed.build(level, chunk[0], x, y, z);
+				if (bd != null && !consent.allows(bd)) {
+					fl |= TerrainFit.BUILD;
+				}
+			}
 			return !roads.isEmpty() && roads.contains(BlockPos.asLong(x, y, z)) ? fl | TerrainFit.ROAD : fl;
 		};
 		TerrainFit.Plan plan = TerrainFit.plan(model, box.minX(), box.minY(), box.minZ(), world);
@@ -612,6 +652,14 @@ public final class Sites {
 		}
 		List<SiteJournal.Hit> hits = overlapCheck(level, snapBox, moving, layer, owner, force, out, layerNotes);
 		tr.mark("overlap");
+		// (6c PT §7) the snapshot box (approach, foundation) holding a player's build cells refuses PLAYER_BUILD for every caller, LAYER
+		// or not, force or not; only the request's consent names a build it may write over
+		dev.larattalabs.architect.placed.BuildViews.Hits builds = dev.larattalabs.architect.placed.BuildViews.scan(level, snapBox,
+			dev.larattalabs.architect.placed.Placed.consentNow());
+		tr.mark("builds");
+		if (!builds.isEmpty()) {
+			out.add(Reason.PLAYER_BUILD, (moving != null ? "Not moved: " : "Not placed: ") + builds.message(), builds.list(8));
+		}
 		if (moving == null && PlayerBlocks.scoped(layer, force, hits.stream().map(SiteJournal.Hit::kind).toList())) {
 			// (6b, API 1.9.0) a lot on a region's pad: the player's own blocks in its box refuse it (they stay)
 			PlayerBlocks.Found pb = PlayerBlocks.scan(level, snapBox);
@@ -940,7 +988,17 @@ public final class Sites {
 		boolean dryRun, @Nullable Boolean construction, boolean layer, @Nullable String owner, @Nullable EntranceStyle style,
 		Blueprints.@Nullable Entry given, boolean protect) {
 		List<Refusal> typed = new ArrayList<>();
-		Refusals out = (r, m) -> typed.add(new Refusal(r, m));
+		Refusals out = new Refusals() {
+			@Override
+			public void add(Reason r, String m) {
+				typed.add(new Refusal(r, m));
+			}
+
+			@Override
+			public void add(Reason r, String m, List<dev.larattalabs.architect.api.BuildHit> b) {
+				typed.add(new Refusal(r, m, b));
+			}
+		};
 		boolean survival = construction != null ? construction : SurvivalWorld.on();
 		Site moving = null;
 		SitePlan site = null;
@@ -992,7 +1050,8 @@ public final class Sites {
 			}
 			return verdictOf(typed, notes, site, survival);
 		} catch (SiteException | RuntimeException e) {
-			typed.add(new Refusal(e instanceof SiteException se ? se.reason() : Reason.OTHER, e.getMessage() == null ? e.toString() : e.getMessage()));
+			typed.add(new Refusal(e instanceof SiteException se ? se.reason() : Reason.OTHER, e.getMessage() == null ? e.toString() : e.getMessage(),
+				e instanceof SiteException se2 ? se2.builds() : List.of()));
 			return verdictOf(typed, List.of(), site, survival);
 		}
 	}

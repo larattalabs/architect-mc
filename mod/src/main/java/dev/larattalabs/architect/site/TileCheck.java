@@ -55,8 +55,12 @@ final class TileCheck {
 	private record Prep(long[] pos, Value[] values, BlockState[] states, byte[] cond, boolean[] walk, int clipped) {
 	}
 
-	/** The check's result: a 4e check plus the tile's extras. */
-	record Result(InfraPlace.Check check, long[] leafPos, Value[] leafBefore, Value[] leafAfter, long[] walk, Map<String, Long> skipped) {
+	/** The check's result: a 4e check plus the tile's extras; (6c PT) the builds whose cells it kept, for the region's findings. */
+	record Result(InfraPlace.Check check, long[] leafPos, Value[] leafBefore, Value[] leafAfter, long[] walk, Map<String, Long> skipped,
+		List<dev.larattalabs.architect.api.BuildHit> builds) {
+		Result(InfraPlace.Check check, long[] leafPos, Value[] leafBefore, Value[] leafAfter, long[] walk, Map<String, Long> skipped) {
+			this(check, leafPos, leafBefore, leafAfter, walk, skipped, List.of());
+		}
 	}
 
 	private final String regionGroup;
@@ -72,6 +76,12 @@ final class TileCheck {
 	/** (6c B) The groups of the stroke owner's other strokes: their tile entries are layered over as this region's own. */
 	private final java.util.Set<String> layerGroups;
 	private final String dim;
+	/** (6c PT) The builds the request's consent names (validated at realise or stroke time): their cells pass as natural. */
+	private dev.larattalabs.architect.placed.Placed.Consent consent = dev.larattalabs.architect.placed.Placed.Consent.NONE;
+	/** (6c PT) The kept builds' cells this tile skipped (the region's findings, at most 8 builds). */
+	private final dev.larattalabs.architect.placed.BuildViews.Hits buildHits = new dev.larattalabs.architect.placed.BuildViews.Hits();
+	/** (6c PT) Target cells kept because they hold up a build cell (a torch, door, ladder, rail, crop, sign or a gravity block). */
+	private final LongOpenHashSet supportKept = new LongOpenHashSet();
 	private final Anchors.Bounds window;
 	private final int[] claim;
 	private final CompletableFuture<Prep> prep;
@@ -134,6 +144,12 @@ final class TileCheck {
 		this.claim = claim.clone();
 		this.window = window;
 		this.prep = CompletableFuture.supplyAsync(() -> prepare(tile, claim));
+	}
+
+	/** (6c PT) With the consented builds (a region realise's, or a PLAYER_BLOCKS stroke's). */
+	TileCheck consent(dev.larattalabs.architect.placed.Placed.@Nullable Consent c) {
+		this.consent = c == null ? dev.larattalabs.architect.placed.Placed.Consent.NONE : c;
+		return this;
 	}
 
 	private static Prep prepare(Packed.Tile t, int[] claim) {
@@ -234,6 +250,7 @@ final class TileCheck {
 			if (!trees(level, deadline)) {
 				return null;
 			}
+			supports(level);
 			stage = 3;
 		}
 		if (stage == 3) {
@@ -282,15 +299,24 @@ final class TileCheck {
 				return false;
 			}
 			boolean ok;
+			String bd = others.contains(q) ? null : dev.larattalabs.architect.placed.Placed.build(level, chunk, x, BlockPos.getY(q), z);
 			if (others.contains(q)) {
 				ok = false;
 				skipped.merge("owned", 1L, Long::sum);
+			} else if (bd != null && !consent.allows(bd)) {
+				// (6c PT §7) a player's build cell: skipped as `build`, whatever the condition, the stroke or force
+				ok = false;
+				skipped.merge("player_build", 1L, Long::sum);
+				skipped.merge("player_build." + bd, 1L, Long::sum);
+				buildHits.add(level, bd, q);
 			} else {
 				BlockState s = chunk.getBlockState(m.set(x, BlockPos.getY(q), z));
+				boolean incidental = dev.larattalabs.architect.placed.Placed.naturalForWrites(level, chunk, x, BlockPos.getY(q), z, consent);
 				if (brushRefuses(s)) {
 					ok = false;
 					skipped.merge("unbreakable", 1L, Long::sum);
-				} else if (!CellCond.passes(p.cond()[cursor], s, ours.contains(q)) && !(playerBlocks && strokeMayClear(p.cond()[cursor]))) {
+				} else if (!CellCond.passes(p.cond()[cursor], s, ours.contains(q)) && !(playerBlocks && strokeMayClear(p.cond()[cursor])) && !(incidental
+					&& CellCond.passesIncidental(p.cond()[cursor], s))) {
 					ok = false;
 					skipped.merge("condition", 1L, Long::sum);
 				} else if (s == p.states()[cursor]) {
@@ -423,8 +449,11 @@ final class TileCheck {
 						if (!s.is(BlockTags.LOGS)) {
 							continue;
 						}
-						// (C31) never another owner's cell, a protected cell, or a log the voxel table calls a player's block
-						String why = others.contains(np) ? "owned" : inArea(nx, nz) ? "protected" : !treeLog(s) ? "player" : null;
+						// (C31) never another owner's cell, a protected cell, or a log the voxel table calls a player's block; (6c PT) never a
+						// player's build cell (an incidental log may be felled)
+						String bdn = dev.larattalabs.architect.placed.Placed.build(level, null, nx, ny, nz);
+						String why = others.contains(np) ? "owned" : bdn != null && !consent.allows(bdn) ? "build" : inArea(nx, nz) ? "protected" : !treeLog(s)
+							? "player" : null;
 						if (why != null) {
 							kept(why);
 							continue;
@@ -505,6 +534,10 @@ final class TileCheck {
 				if (!dependent(us)) {
 					break;
 				}
+				String bdu = dev.larattalabs.architect.placed.Placed.build(level, null, x, y, z);
+				if (bdu != null && !consent.allows(bdu)) {
+					break; // (6c PT) a build's cell is never a dependent written away (its support was kept: supports)
+				}
 				boolean wet = !us.getFluidState().isEmpty();
 				added.add(u);
 				addedVals.add(wet ? water : air);
@@ -541,8 +574,9 @@ final class TileCheck {
 						int ny = y + dy;
 						int nz = z + dz;
 						long np = BlockPos.asLong(nx, ny, nz);
-						// (C31) a hold is a write: never on another owner's cell or inside a protected area
-						if (held.contains(np) || target.containsKey(np) || others.contains(np) || inArea(nx, nz) || !level.hasChunk(nx >> 4, nz >> 4)) {
+						// (C31) a hold is a write: never on another owner's cell or inside a protected area; (6c PT) never a build's leaf
+						if (held.contains(np) || target.containsKey(np) || others.contains(np) || inArea(nx, nz) || !level.hasChunk(nx >> 4, nz >> 4)
+							|| dev.larattalabs.architect.placed.Placed.build(level, null, nx, ny, nz) != null) {
 							continue;
 						}
 						BlockState s = level.getBlockState(m.set(nx, ny, nz));
@@ -558,6 +592,83 @@ final class TileCheck {
 		}
 		cursor = 0;
 		return true;
+	}
+
+	/**
+	 * (6c PT §7) A changed cell that holds up a player's build cell stays as it is (counted {@code player_build.support}): the build
+	 * cell above it when that one is not a full block or falls (a torch, door, rail, crop, sign, carpet, sand), or a build cell beside
+	 * it attached to it (a wall torch, ladder, wall sign, button or lever facing away from it).
+	 */
+	private void supports(ServerLevel level) {
+		BlockPos.MutableBlockPos m = new BlockPos.MutableBlockPos();
+		LongArrayList drop = new LongArrayList();
+		for (var e : target.long2ObjectEntrySet()) {
+			long q = e.getLongKey();
+			int x = BlockPos.getX(q);
+			int y = BlockPos.getY(q);
+			int z = BlockPos.getZ(q);
+			if (holdsBuild(level, m, x, y, z)) {
+				drop.add(q);
+			}
+		}
+		if (drop.isEmpty()) {
+			return;
+		}
+		for (int i = 0; i < drop.size(); i++) {
+			long q = drop.getLong(i);
+			target.remove(q);
+			supportKept.add(q);
+		}
+		skipped.merge("player_build.support", (long) drop.size(), Long::sum);
+		logs.removeIf(q -> supportKept.contains(q));
+		removedLogs.removeIf(q -> supportKept.contains(q));
+		// the kept cells leave the entry: the planned ones, and the tree cells added
+		Prep p = prep.join();
+		for (int c = 0; c < p.pos().length; c++) {
+			if (keep[c] && supportKept.contains(p.pos()[c])) {
+				keep[c] = false;
+			}
+		}
+		LongArrayList a2 = new LongArrayList();
+		List<Value> v2 = new ArrayList<>();
+		for (int i = 0; i < added.size(); i++) {
+			if (!supportKept.contains(added.getLong(i))) {
+				a2.add(added.getLong(i));
+				v2.add(addedVals.get(i));
+			}
+		}
+		added.clear();
+		added.addAll(a2);
+		addedVals.clear();
+		addedVals.addAll(v2);
+	}
+
+	private boolean holdsBuild(ServerLevel level, BlockPos.MutableBlockPos m, int x, int y, int z) {
+		String up = dev.larattalabs.architect.placed.Placed.build(level, null, x, y + 1, z);
+		if (up != null && !consent.allows(up)) {
+			BlockState a = level.getBlockState(m.set(x, y + 1, z));
+			if (a.getBlock() instanceof net.minecraft.world.level.block.FallingBlock || !a.isCollisionShapeFullBlock(level, m)) {
+				return true;
+			}
+		}
+		for (net.minecraft.core.Direction d : net.minecraft.core.Direction.Plane.HORIZONTAL) {
+			int nx = x + d.getStepX();
+			int nz = z + d.getStepZ();
+			String side = dev.larattalabs.architect.placed.Placed.build(level, null, nx, y, nz);
+			if (side == null || consent.allows(side)) {
+				continue;
+			}
+			BlockState s = level.getBlockState(m.set(nx, y, nz));
+			net.minecraft.core.Direction f = s.hasProperty(net.minecraft.world.level.block.state.properties.BlockStateProperties.HORIZONTAL_FACING) ? s.getValue(
+				net.minecraft.world.level.block.state.properties.BlockStateProperties.HORIZONTAL_FACING) : s.hasProperty(
+					net.minecraft.world.level.block.state.properties.BlockStateProperties.FACING) ? s.getValue(
+						net.minecraft.world.level.block.state.properties.BlockStateProperties.FACING) : null;
+			// attached to (x, y, z): it faces away from it (its back is on it), and it is no full block of its own
+			if (f == d && !s.isCollisionShapeFullBlock(level, m)) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/** The cells of this window owned by this region's own tile entries (ours) and by anything else (others). */
@@ -677,7 +788,8 @@ final class TileCheck {
 			spec.addProperty("walk", walkB64(w));
 		}
 		InfraPlace.Check c = new InfraPlace.Check(List.of(), notes, ps, vs, box, hits, spec);
-		return new Result(c, leafPos.toLongArray(), leafBefore.toArray(new Value[0]), leafAfter.toArray(new Value[0]), w, Map.copyOf(skipped));
+		return new Result(c, leafPos.toLongArray(), leafBefore.toArray(new Value[0]), leafAfter.toArray(new Value[0]), w, Map.copyOf(skipped),
+			buildHits.list(8));
 	}
 
 	/** A block that stands on the one under it and breaks or falls without it. */

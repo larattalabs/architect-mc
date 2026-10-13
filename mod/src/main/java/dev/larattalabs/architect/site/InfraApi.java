@@ -29,7 +29,7 @@ public final class InfraApi {
 
 	private static Verdict verdict(InfraPlace.Check c, List<Refusal> extra) {
 		List<Refusal> refusals = new ArrayList<>(extra);
-		c.refusals().forEach(r -> refusals.add(new Refusal(r.reason(), r.message())));
+		c.refusals().forEach(r -> refusals.add(new Refusal(r.reason(), r.message(), r.builds())));
 		var box = Optional.ofNullable(c.box()).map(dev.larattalabs.architect.apiimpl.Views::box);
 		List<dev.larattalabs.architect.api.Overlap> overlaps = new ArrayList<>();
 		java.util.Map<String, Integer> by = new java.util.LinkedHashMap<>();
@@ -104,7 +104,7 @@ public final class InfraApi {
 	private static CompletableFuture<PlaceResult> start(ServerLevel level, InfraPlace.Check c, Begin b) {
 		if (!c.ok()) {
 			return CompletableFuture.completedFuture(new PlaceResult(false, Optional.empty(), c.refusals().stream().map(x -> new Refusal(x.reason(),
-				x.message())).toList(), c.notes(), spans(c)));
+				x.message(), x.builds())).toList(), c.notes(), spans(c)));
 		}
 		try {
 			InfraJob job = b.begin();

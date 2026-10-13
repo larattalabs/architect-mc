@@ -294,6 +294,15 @@ public final class Approach {
 			// no ground within reach: a deep drop, keep going down (the fill holds the path up)
 			int target = TerrainFit.medianSurface(ground, feet[i - 1] - TerrainFit.MAX_FILL);
 			int f = feet[i - 1] + Integer.signum(target - feet[i - 1]);
+			// (6c PT) the approach stops before the first row whose path or feet cell is a player's build cell (as at a road, no road met)
+			boolean build = false;
+			for (int c = lo; c <= hi && !build; c++) {
+				int[] xz = cell(face, centre, i, c, dx, dz, alongX);
+				build = (w.flags(xz[0], f - 1, xz[1]) & TerrainFit.BUILD) != 0 || (w.flags(xz[0], f, xz[1]) & TerrainFit.BUILD) != 0;
+			}
+			if (build) {
+				break;
+			}
 			// phase 4e: the approach stops before the first row whose path or feet cell is a road's: the path has met the ground
 			for (int c = lo; c <= hi && road == null; c++) {
 				int[] xz = cell(face, centre, i, c, dx, dz, alongX);

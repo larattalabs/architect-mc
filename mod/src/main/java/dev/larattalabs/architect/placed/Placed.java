@@ -89,7 +89,7 @@ public final class Placed {
 		return on;
 	}
 
-	static @Nullable MinecraftServer server() {
+	public static @Nullable MinecraftServer server() {
 		return server;
 	}
 
@@ -519,6 +519,28 @@ public final class Placed {
 		return id == null ? null : Builds.kept(id);
 	}
 
+	/**
+	 * §7 "incidental cells are natural": the cell is tracked and in no kept build, or in a build {@code consent} names: a write may
+	 * take it as natural terrain (IF_NATURAL, fits, naturalOnly), whatever its voxel class. Its block entity keeps its own rules.
+	 */
+	public static boolean naturalForWrites(Level level, @Nullable LevelChunk chunk, int x, int y, int z, Consent consent) {
+		if (!on) {
+			return false;
+		}
+		LevelChunk c = chunk != null && chunk.getPos().x() == x >> 4 && chunk.getPos().z() == z >> 4 ? chunk : loadedChunk(level, x, z);
+		PlacedChunk pc = c == null ? null : c.getAttached(TYPE);
+		if (pc == null) {
+			return false;
+		}
+		int v = pc.get(x, y, z);
+		if (v < 0) {
+			return false;
+		}
+		String id = pc.build(PlacedChunk.buildOf(v));
+		String kept = id == null ? null : Builds.kept(id);
+		return kept == null || consent.allows(kept);
+	}
+
 	/** {@link #build} by packed position (no chunk at hand). */
 	public static @Nullable String build(Level level, long pos) {
 		return build(level, null, BlockPos.getX(pos), BlockPos.getY(pos), BlockPos.getZ(pos));
@@ -540,6 +562,39 @@ public final class Placed {
 		}
 
 		public static final Consent NONE = new Consent(java.util.Set.of());
+	}
+
+	// a request's consent while its checks run (server thread): the API entry points and batch items set it around their checks
+	private static final Deque<Consent> CONSENTS = new ArrayDeque<>();
+
+	/** Runs {@code r} with {@code c} as the consent its checks see ({@link #consentNow}). */
+	public static <T> T withConsent(@Nullable Consent c, java.util.function.Supplier<T> r) {
+		CONSENTS.push(c == null ? Consent.NONE : c);
+		try {
+			return r.get();
+		} finally {
+			CONSENTS.pop();
+		}
+	}
+
+	/** {@link #withConsent} for code that throws a checked exception. */
+	public interface Body<T, E extends Exception> {
+		T run() throws E;
+	}
+
+	public static <T, E extends Exception> T withConsentE(@Nullable Consent c, Body<T, E> r) throws E {
+		CONSENTS.push(c == null ? Consent.NONE : c);
+		try {
+			return r.run();
+		} finally {
+			CONSENTS.pop();
+		}
+	}
+
+	/** The consent of the request whose checks run now (none outside a request). */
+	public static Consent consentNow() {
+		Consent c = CONSENTS.peek();
+		return c == null ? Consent.NONE : c;
 	}
 
 	// ------------------------------------------------------------------ the journal (§5)

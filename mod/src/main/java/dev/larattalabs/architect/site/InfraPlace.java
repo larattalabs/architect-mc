@@ -229,6 +229,10 @@ public final class InfraPlace {
 		List<String> notes = new ArrayList<>();
 		List<Long> keep = new ArrayList<>();
 		int skipped = 0;
+		// 6c PT (§7): a kept build's cell is skipped (naturalOnly, a condition) or refuses PLAYER_BUILD; an incidental one is natural
+		dev.larattalabs.architect.placed.Placed.Consent consent = dev.larattalabs.architect.placed.Placed.consentNow();
+		dev.larattalabs.architect.placed.BuildViews.Hits builds = new dev.larattalabs.architect.placed.BuildViews.Hits();
+		int buildSkipped = 0;
 		BlockPos.MutableBlockPos m = new BlockPos.MutableBlockPos();
 		for (long p : at.keySet()) {
 			int x = Journal.x(p);
@@ -243,9 +247,20 @@ public final class InfraPlace {
 				}
 			}
 			int cond = conds == null ? -1 : conds[at.get(p)];
+			String bd = level.hasChunk(x >> 4, z >> 4) ? dev.larattalabs.architect.placed.Placed.build(level, null, x, y, z) : null;
+			if (bd != null && !consent.allows(bd)) {
+				if (cond >= 0 || naturalOnly) {
+					buildSkipped++;
+					continue;
+				}
+				builds.add(level, bd, x, y, z);
+				continue;
+			}
+			boolean incidental = level.hasChunk(x >> 4, z >> 4) && dev.larattalabs.architect.placed.Placed.naturalForWrites(level, null, x, y, z, consent);
 			if (cond >= 0) {
 				BlockState s = level.getBlockState(m.set(x, y, z));
-				if (!dev.larattalabs.architect.region.CellCond.passes(cond, s, cond == 3 && ownedBySameOwner(level, p, owner))) {
+				if (!dev.larattalabs.architect.region.CellCond.passes(cond, s, cond == 3 && ownedBySameOwner(level, p, owner)) && !(incidental
+					&& dev.larattalabs.architect.region.CellCond.passesIncidental(cond, s))) {
 					skipped++;
 					continue;
 				}
@@ -253,7 +268,7 @@ public final class InfraPlace {
 				int f = TerrainFit.flags(level, m.set(x, y, z));
 				BlockState s = level.getBlockState(m);
 				boolean natural = (f & TerrainFit.BLOCK_ENTITY) == 0 && (s.isAir() || (f & TerrainFit.NATURAL) != 0 || (f & TerrainFit.WATER) != 0
-					|| (f & TerrainFit.TREE) != 0);
+					|| (f & TerrainFit.TREE) != 0 || incidental);
 				if (!natural) {
 					skipped++;
 					continue;
@@ -261,8 +276,15 @@ public final class InfraPlace {
 			}
 			keep.add(p);
 		}
+		if (!builds.isEmpty()) {
+			return new Check(List.of(new Sites.Refusal(Reason.PLAYER_BUILD, "The cells would write over " + builds.message(), builds.list(8))), notes,
+				new long[0], new Value[0], null, List.of(), null);
+		}
 		if (skipped > 0) {
 			notes.add(skipped + " cell" + (skipped == 1 ? "" : "s") + " not natural terrain left as they are (naturalOnly)");
+		}
+		if (buildSkipped > 0) {
+			notes.add(buildSkipped + " cell" + (buildSkipped == 1 ? "" : "s") + " of a player's build left as they are (player_build)");
 		}
 		if (keep.isEmpty()) {
 			return new Check(List.of(new Sites.Refusal(Reason.OTHER, "every cell was skipped (naturalOnly)")), notes, new long[0], new Value[0], null, List.of(),

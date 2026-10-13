@@ -31,6 +31,21 @@ public final class CellCond {
 		};
 	}
 
+	/**
+	 * 6c PT (§7): a write condition over an incidental player-placed cell (natural, whatever its voxel class): every condition but
+	 * IF_AIR_OR_FLUID passes it (IF_SOLID_NATURAL a solid one); never a block entity.
+	 */
+	public static boolean passesIncidental(int cond, BlockState s) {
+		if (s.hasBlockEntity()) {
+			return false;
+		}
+		return switch (cond) {
+			case Packed.IF_SOLID_NATURAL -> s.isSolid();
+			case Packed.IF_AIR_OR_FLUID -> false;
+			default -> true;
+		};
+	}
+
 	/** 4e's {@code naturalOnly}: natural terrain, plants, trees, air or water. */
 	public static boolean natural(BlockState s, int f) {
 		return s.isAir() || (f & TerrainFit.NATURAL) != 0 || (f & TerrainFit.WATER) != 0 || (f & TerrainFit.TREE) != 0;

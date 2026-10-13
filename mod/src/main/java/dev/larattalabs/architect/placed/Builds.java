@@ -383,6 +383,12 @@ public final class Builds {
 		return r != null && r.kept() ? s : null;
 	}
 
+	/** The kind of a build (OTHER when unknown). */
+	public static BuildKind kindOf(String id) {
+		Rec r = rec(id);
+		return r == null ? BuildKind.OTHER : r.kind;
+	}
+
 	static @Nullable Rec rec(@Nullable String id) {
 		String s = resolve(id);
 		return s == null ? null : RECS.get(s);

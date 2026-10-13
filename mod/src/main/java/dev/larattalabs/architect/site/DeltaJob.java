@@ -268,6 +268,14 @@ final class DeltaJob implements Placement.Job {
 						fail(f.message());
 						return true;
 					}
+					// (6c PT §7) the writes against the players' builds (server thread: the plan above ran on a worker)
+					SiteDeltas.Refusal pt = check.plan() == null ? null : SiteDeltas.buildRefusal(level, request, check.plan().outcome().write().keySet());
+					if (pt != null) {
+						tracker.stop();
+						tracker = null;
+						fail(pt.message());
+						return true;
+					}
 					// occupancy (server thread)
 					Anchors.Bounds wb = SiteDeltas.boundsOf(check.plan().outcome().entryCells());
 					if (wb != null) {

@@ -1076,6 +1076,10 @@ public final class RegionsImpl implements Regions {
 		if (stroke != null) {
 			rec.brush = stroke.deepCopy(); // (6c B) the stroke's kind and destruction rule, read by every tile check
 		}
+		// (6c PT §6) the consent, checked once: the builds named whose actor placed at least 10% or holds permission level 2; (a stroke's
+		// was checked at the stroke: only a PLAYER_BLOCKS stroke's counts, Brushes)
+		rec.consented.addAll(stroke != null ? Brushes.consented(stroke) : dev.larattalabs.architect.placed.BuildViews.consent(s, r.consent(), false)
+			.allowed());
 		if (r.opKey() != null) {
 			rec.opKey = r.opKey();
 			rec.opHash = RegionKeys.hash(RegionKeys.realiseBody(r));
@@ -1286,6 +1290,7 @@ public final class RegionsImpl implements Regions {
 		q = new QItem("lot:" + lot.id(), lot.stage(), after, bpId, rec.dimension, f.ox(), f.oy(), f.oz(), f.turns(), false, ext, r.actor() == null ? null
 			: r.actor().getStringUUID(), false, false);
 		q.layer = true;
+		q.consented.addAll(rec.consented); // (6c PT) the realise's consented builds
 		if (!f.fits()) {
 			q.fail(Reason.LOT_TOO_SMALL.name(), "The lot is too small for " + bpId + ": " + f.why());
 		}
@@ -1523,9 +1528,15 @@ public final class RegionsImpl implements Regions {
 
 	/** A tile's check counted its skipped cells. */
 	public static void tileChecked(String region, String stage, Map<String, Long> skipped) {
+		tileChecked(region, stage, skipped, List.of());
+	}
+
+	/** (6c PT) With the builds the tile kept out (the region's findings, {@link RegionView#buildHits}). */
+	public static void tileChecked(String region, String stage, Map<String, Long> skipped, List<dev.larattalabs.architect.api.BuildHit> builds) {
 		Live l = REGIONS.get(region);
 		if (l != null) {
 			skipped.forEach((k, v) -> l.rec().skip(k, v));
+			l.rec().builds(builds);
 		}
 	}
 
@@ -1674,7 +1685,7 @@ public final class RegionsImpl implements Regions {
 		PrepareView pv = Prepare.view(r.planId);
 		List<dev.larattalabs.architect.api.WaitAction> actions = actionsOf(l, waiting, waitingItem, heldStage, pv);
 		return new RegionView(r.id, r.planId, r.irSha, r.owner, r.ext, r.groupId, new BoundingBox(c[0], c[1], c[2], c[3], c[4], c[5]), r.state, st, lots,
-			r.cellsWritten, r.skipped, waiting, pv, actions, 0L, Brushes.kindOf(r));
+			r.cellsWritten, r.skipped, waiting, pv, actions, 0L, Brushes.kindOf(r), r.buildHitList());
 	}
 
 	/** (6c X, C22) The view of a removed region: REMOVED, with the time its removal finished. */
@@ -1683,7 +1694,7 @@ public final class RegionsImpl implements Regions {
 		List<LotState> lots = new ArrayList<>();
 		r.lots.forEach((id, ls) -> lots.add(new LotState(id, ls.siteId, ls.state)));
 		return new RegionView(r.id, r.planId, r.irSha, r.owner, r.ext, r.groupId, new BoundingBox(c[0], c[1], c[2], c[3], c[4], c[5]), RegionState.REMOVED,
-			List.of(), lots, r.cellsWritten, r.skipped, null, null, List.of(), r.removedAt, Brushes.kindOf(r));
+			List.of(), lots, r.cellsWritten, r.skipped, null, null, List.of(), r.removedAt, Brushes.kindOf(r), r.buildHitList());
 	}
 
 	/** (6b) The nudge actions for what the region waits for ({@link WaitActions}). */
@@ -2290,6 +2301,9 @@ public final class RegionsImpl implements Regions {
 				rects.add(new int[] {a.x0(), a.z0(), a.x1(), a.z1()});
 			}
 		}
+		// (6c PT §7, S-PT-4) the players' builds in the claim are hard keep-outs: each build's bounds with a 1-cell margin, and each
+		// door's apron (the 3 cells outside it)
+		rects.addAll(dev.larattalabs.architect.placed.BuildViews.keepOut(dimension, claim));
 		rects.sort(java.util.Comparator.<int[]>comparingInt(q -> q[0]).thenComparingInt(q -> q[1]).thenComparingInt(q -> q[2]).thenComparingInt(q -> q[3]));
 		JsonArray out = new JsonArray();
 		String last = null;

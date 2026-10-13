@@ -128,11 +128,47 @@ public final class SiteDeltas {
 	}
 
 	/** An apply's request (the API's {@code DeltaRequest} without its ext). {@code toVersion} 0 = the head. */
-	public record Request(String siteId, int toVersion, DeltaPlanner.Edits edits, boolean layer, @Nullable String owner, boolean force) {
+	public record Request(String siteId, int toVersion, DeltaPlanner.Edits edits, boolean layer, @Nullable String owner, boolean force,
+		java.util.Set<String> consented) {
+		public Request {
+			consented = consented == null ? java.util.Set.of() : java.util.Set.copyOf(consented);
+		}
+
+		public Request(String siteId, int toVersion, DeltaPlanner.Edits edits, boolean layer, @Nullable String owner, boolean force) {
+			this(siteId, toVersion, edits, layer, owner, force, java.util.Set.of());
+		}
 	}
 
-	/** One refusal or wait. */
-	public record Refusal(Reason reason, String message, boolean waits) {
+	/** One refusal or wait; (6c PT) a PLAYER_BUILD one with the builds in the way. */
+	public record Refusal(Reason reason, String message, boolean waits, List<dev.larattalabs.architect.api.BuildHit> builds) {
+		public Refusal {
+			builds = builds == null ? List.of() : List.copyOf(builds);
+		}
+
+		public Refusal(Reason reason, String message, boolean waits) {
+			this(reason, message, waits, List.of());
+		}
+	}
+
+	/**
+	 * (6c PT §7) The delta's writes against the players' builds: OVERWRITE writes incidental player edits as today, but a kept build's
+	 * cell needs the request's consent, else PLAYER_BUILD ({@code force} never overrides it). Server thread (null elsewhere: the delta
+	 * job checks it there).
+	 */
+	public static @Nullable Refusal buildRefusal(ServerLevel level, Request r, java.util.Collection<Long> writes) {
+		if (!level.getServer().isSameThread()) {
+			return null;
+		}
+		dev.larattalabs.architect.placed.Placed.Consent consent = new dev.larattalabs.architect.placed.Placed.Consent(r.consented());
+		dev.larattalabs.architect.placed.BuildViews.Hits hits = new dev.larattalabs.architect.placed.BuildViews.Hits();
+		for (long p : writes) {
+			String bd = dev.larattalabs.architect.placed.Placed.build(level, p);
+			if (bd != null && !consent.allows(bd)) {
+				hits.add(level, bd, p);
+			}
+		}
+		return hits.isEmpty() ? null : new Refusal(Reason.PLAYER_BUILD, "The update of " + r.siteId() + " would write over " + hits.message(), false, hits.list(
+			8));
 	}
 
 	/**
@@ -685,6 +721,10 @@ public final class SiteDeltas {
 		dev.larattalabs.architect.api.ProtectedArea prot = Protected.hitCells(b.dimension(), r.owner(), o.write().keySet());
 		if (prot != null) {
 			out.add(new Refusal(Reason.PROTECTED, Protected.message("The update of " + r.siteId(), prot), false));
+		}
+		Refusal pt = buildRefusal(level, r, o.write().keySet()); // 6c PT: a player's build cell needs consent
+		if (pt != null) {
+			out.add(pt);
 		}
 		if (unloaded[0]) {
 			out.add(new Refusal(Reason.NOT_LOADED, "the site is not loaded on the server (walk closer)", true));

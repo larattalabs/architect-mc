@@ -75,7 +75,8 @@ public final class PlayerBlocks {
 								cand = !s.isAir() && playerBlock(table.of(s.getBlock()), s.hasBlockEntity(), false);
 								memo.put(s, cand);
 							}
-							if (cand && !SiteJournal.owned(dim, BlockPos.asLong(x, y, z))) {
+							// (6c PT) a tracked cell is a build's (PLAYER_BUILD refuses it) or incidental (natural): never counted here
+							if (cand && dev.larattalabs.architect.placed.Placed.record(c, x, y, z) == null && !SiteJournal.owned(dim, BlockPos.asLong(x, y, z))) {
 								total++;
 								if (first.size() < NAMED) {
 									first.add(new BlockPos(x, y, z));

@@ -83,6 +83,16 @@ public final class RoadPlan {
 	}
 
 	/**
+	 * 6c PT (§7): a player's build cell the road's column would have to cut, fill or clear: the message naming the build, or null
+	 * (no build, a consented one, or a PATH build, which a road joins without changing its cells). It fails its waypoint segment
+	 * ({@code PLAYER_BUILD}).
+	 */
+	@FunctionalInterface
+	public interface BuildAt {
+		@Nullable String at(int x, int y, int z);
+	}
+
+	/**
 	 * 6c W (item 2): is the built cell at (x, y, z) journal-owned by the road's own owner (a region's verge, a path the same caller
 	 * placed)? A lantern post's foot may stand on such a cell; a player's block or another owner's never counts.
 	 */
@@ -405,6 +415,12 @@ public final class RoadPlan {
 	 */
 	public static Plan plan(int[] xs, int[] ys, int[] zs, int width, boolean lanterns, boolean decks, World w, Owned owned, @Nullable Protect protect,
 		boolean partial, @Nullable OwnFoot ownFoot, @Nullable Lamp lamp) {
+		return plan(xs, ys, zs, width, lanterns, decks, w, owned, protect, partial, ownFoot, lamp, null);
+	}
+
+	/** {@link #plan}; 6c PT: {@code builds} the player's builds a column may not cut, fill or clear (a failing segment, PLAYER_BUILD). */
+	public static Plan plan(int[] xs, int[] ys, int[] zs, int width, boolean lanterns, boolean decks, World w, Owned owned, @Nullable Protect protect,
+		boolean partial, @Nullable OwnFoot ownFoot, @Nullable Lamp lamp, @Nullable BuildAt builds) {
 		Map<String, Integer> skipped = new LinkedHashMap<>();
 		Map<String, Integer> ownedBy = new LinkedHashMap<>();
 		if (xs.length < 2 || xs.length > MAX_POINTS) {
@@ -464,6 +480,21 @@ public final class RoadPlan {
 						why = pm;
 						reason = "PROTECTED";
 						break;
+					}
+				}
+			}
+			if (why == null && builds != null && f != Integer.MIN_VALUE) {
+				// 6c PT: a build cell within the column's cut, fill and headroom range fails the segment
+				int[] r = right(line, i);
+				search:
+				for (int k : offs) {
+					for (int y = f - 1 - MAX_CUT_FILL; y <= f + HEADROOM; y++) {
+						String bm = builds.at(c[0] + k * r[0], y, c[2] + k * r[1]);
+						if (bm != null) {
+							why = bm;
+							reason = "PLAYER_BUILD";
+							break search;
+						}
 					}
 				}
 			}

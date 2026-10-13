@@ -203,6 +203,7 @@ public final class Batches {
 			}
 			q.layer = (r.overlap() != null ? r.overlap() : spec.overlap()) == dev.larattalabs.architect.api.OverlapPolicy.LAYER;
 			q.pathStyle = r.pathStyle();
+			q.consented.addAll(dev.larattalabs.architect.placed.BuildViews.consent(server, r.consent(), false).allowed()); // (6c PT)
 			if (q.status != QItem.Status.FAILED) {
 				String bad = EntranceStyle.refusal(r.pathStyle());
 				if (bad != null) {
@@ -770,7 +771,11 @@ public final class Batches {
 		Placement.lap("next", t0);
 		if (item != null) {
 			t0 = System.nanoTime();
-			tryStart(server, b, item);
+			// (6c PT) the item's consented builds are what its checks may write over
+			dev.larattalabs.architect.placed.Placed.withConsent(new dev.larattalabs.architect.placed.Placed.Consent(java.util.Set.copyOf(item.consented)), () -> {
+				tryStart(server, b, item);
+				return null;
+			});
 			if (Placement.TRACE) {
 				Placement.lap("tryStart:" + item.key, t0);
 			}

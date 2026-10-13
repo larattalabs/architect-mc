@@ -49,6 +49,69 @@ public final class RegionRec {
 	 * region. Written by the mod only (never from a request's ext).
 	 */
 	public @Nullable JsonObject brush;
+	/**
+	 * (6c PT §6) The builds the realise's (or stroke's) consent named and the check accepted (an actor placed at least 10% or holds
+	 * permission level 2): their cells may be written. Validated once at the request; kept so a resumed region keeps it.
+	 */
+	public final java.util.Set<String> consented = new java.util.LinkedHashSet<>();
+	/** (6c PT) The region's findings: per build kept out, its blocking count and first 8 cells ({@code BuildHit}), merged per tile. */
+	public final Map<String, JsonObject> buildHits = new LinkedHashMap<>();
+
+	/** (6c PT) Merges a tile's kept builds into the findings (counts summed, the first 8 cells kept). */
+	public void builds(java.util.List<dev.larattalabs.architect.api.BuildHit> hits) {
+		for (dev.larattalabs.architect.api.BuildHit h : hits) {
+			JsonObject j = buildHits.computeIfAbsent(h.buildId(), k -> {
+				JsonObject n = new JsonObject();
+				n.addProperty("id", k);
+				n.addProperty("kind", h.kind().name());
+				n.addProperty("blocking", 0);
+				n.add("first", new JsonArray());
+				return n;
+			});
+			j.addProperty("kind", h.kind().name());
+			j.addProperty("blocking", j.get("blocking").getAsInt() + h.blocking());
+			JsonArray f = j.getAsJsonArray("first");
+			for (dev.larattalabs.architect.api.BlockHit b : h.first()) {
+				if (f.size() >= 8) {
+					break;
+				}
+				JsonArray c = new JsonArray();
+				c.add(b.pos().getX());
+				c.add(b.pos().getY());
+				c.add(b.pos().getZ());
+				c.add(b.blockId());
+				f.add(c);
+			}
+		}
+	}
+
+	/** (6c PT) The findings as API records (at most 8 builds, by id number). */
+	public java.util.List<dev.larattalabs.architect.api.BuildHit> buildHitList() {
+		java.util.List<dev.larattalabs.architect.api.BuildHit> out = new java.util.ArrayList<>();
+		java.util.List<String> ids = new java.util.ArrayList<>(buildHits.keySet());
+		ids.sort(java.util.Comparator.comparingLong(id -> {
+			try {
+				return Long.parseLong(id.substring(id.lastIndexOf('-') + 1));
+			} catch (RuntimeException e) {
+				return Long.MAX_VALUE;
+			}
+		}));
+		for (String id : ids) {
+			if (out.size() >= 8) {
+				break;
+			}
+			JsonObject j = buildHits.get(id);
+			java.util.List<dev.larattalabs.architect.api.BlockHit> first = new java.util.ArrayList<>();
+			for (JsonElement e : j.getAsJsonArray("first")) {
+				JsonArray c = e.getAsJsonArray();
+				first.add(new dev.larattalabs.architect.api.BlockHit(new net.minecraft.core.BlockPos(c.get(0).getAsInt(), c.get(1).getAsInt(), c.get(2).getAsInt()),
+					c.get(3).getAsString()));
+			}
+			out.add(new dev.larattalabs.architect.api.BuildHit(id, dev.larattalabs.architect.api.BuildKind.valueOf(j.get("kind").getAsString()), j.get(
+				"blocking").getAsInt(), first));
+		}
+		return out;
+	}
 
 	public static final class Stage {
 		public int tilesTotal;
@@ -166,6 +229,16 @@ public final class RegionRec {
 		if (brush != null) {
 			o.add("brush", brush.deepCopy());
 		}
+		if (!consented.isEmpty()) {
+			JsonArray cs = new JsonArray();
+			consented.forEach(cs::add);
+			o.add("consented", cs);
+		}
+		if (!buildHits.isEmpty()) {
+			JsonObject bh = new JsonObject();
+			buildHits.forEach((k, v) -> bh.add(k, v.deepCopy()));
+			o.add("buildHits", bh);
+		}
 		return o;
 	}
 
@@ -218,6 +291,12 @@ public final class RegionRec {
 			o.getAsJsonObject("stats").entrySet().forEach(e -> r.stats.add(e.getKey(), e.getValue()));
 		}
 		r.removedAt = o.has("removedAt") ? o.get("removedAt").getAsLong() : 0L;
+		if (o.get("consented") instanceof JsonArray cs) {
+			cs.forEach(e -> r.consented.add(e.getAsString()));
+		}
+		if (o.get("buildHits") instanceof JsonObject bh) {
+			bh.entrySet().forEach(e -> r.buildHits.put(e.getKey(), e.getValue().getAsJsonObject().deepCopy()));
+		}
 		r.opKey = o.has("opKey") ? o.get("opKey").getAsString() : null;
 		r.opHash = o.has("opHash") ? o.get("opHash").getAsString() : null;
 		r.brush = o.get("brush") instanceof JsonObject b ? b.deepCopy() : null;

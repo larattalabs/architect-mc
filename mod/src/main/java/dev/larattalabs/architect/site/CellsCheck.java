@@ -55,6 +55,10 @@ final class CellsCheck {
 	private boolean[] keep;
 	private int cursor;
 	private int skipped;
+	/** 6c PT: the request's consent at the check's start, kept builds' cells skipped (naturalOnly, conditions) or refused. */
+	private final dev.larattalabs.architect.placed.Placed.Consent consent = dev.larattalabs.architect.placed.Placed.consentNow();
+	private final dev.larattalabs.architect.placed.BuildViews.Hits builds = new dev.larattalabs.architect.placed.BuildViews.Hits();
+	private int buildSkipped;
 	private InfraPlace.@Nullable Check result;
 
 	CellsCheck(JsonObject spec, String kind, Journal.Policy policy, boolean naturalOnly, boolean layer, @Nullable String owner, boolean force, int minY,
@@ -188,14 +192,28 @@ final class CellsCheck {
 			}
 			boolean ok = true;
 			int cond = p.cond() == null ? -1 : p.cond()[cursor];
+			int y = Journal.y(q);
+			String bd = dev.larattalabs.architect.placed.Placed.build(level, chunk, x, y, z);
+			if (bd != null && !consent.allows(bd)) {
+				keep[cursor] = false;
+				if (cond >= 0 || naturalOnly) {
+					buildSkipped++;
+				} else {
+					builds.add(level, bd, x, y, z);
+				}
+				cursor++;
+				continue;
+			}
+			boolean incidental = dev.larattalabs.architect.placed.Placed.naturalForWrites(level, chunk, x, y, z, consent);
 			if (cond >= 0) {
-				BlockState s = chunk.getBlockState(m.set(x, Journal.y(q), z));
-				ok = dev.larattalabs.architect.region.CellCond.passes(cond, s, cond == 3 && InfraPlace.ownedBySameOwner(level, q, owner));
+				BlockState s = chunk.getBlockState(m.set(x, y, z));
+				ok = dev.larattalabs.architect.region.CellCond.passes(cond, s, cond == 3 && InfraPlace.ownedBySameOwner(level, q, owner)) || incidental
+					&& dev.larattalabs.architect.region.CellCond.passesIncidental(cond, s);
 			} else if (naturalOnly) {
-				BlockState s = chunk.getBlockState(m.set(x, Journal.y(q), z));
+				BlockState s = chunk.getBlockState(m.set(x, y, z));
 				int f = TerrainFit.flags(s);
 				ok = (f & TerrainFit.BLOCK_ENTITY) == 0 && (s.isAir() || (f & TerrainFit.NATURAL) != 0 || (f & TerrainFit.WATER) != 0
-					|| (f & TerrainFit.TREE) != 0);
+					|| (f & TerrainFit.TREE) != 0 || incidental);
 			}
 			keep[cursor] = ok;
 			if (!ok) {
@@ -208,10 +226,17 @@ final class CellsCheck {
 
 	private InfraPlace.Check finish(ServerLevel level, Prep p) {
 		List<String> notes = new ArrayList<>();
+		if (!builds.isEmpty()) {
+			return new InfraPlace.Check(List.of(new Sites.Refusal(Reason.PLAYER_BUILD, "The cells would write over " + builds.message(), builds.list(8))),
+				notes, new long[0], new Value[0], null, List.of(), null);
+		}
 		if (skipped > 0) {
 			notes.add(skipped + " cell" + (skipped == 1 ? "" : "s") + " not natural terrain left as they are (naturalOnly)");
 		}
-		int kept = p.pos().length - skipped;
+		if (buildSkipped > 0) {
+			notes.add(buildSkipped + " cell" + (buildSkipped == 1 ? "" : "s") + " of a player's build left as they are (player_build)");
+		}
+		int kept = p.pos().length - skipped - buildSkipped;
 		if (kept == 0) {
 			return new InfraPlace.Check(List.of(new Sites.Refusal(Reason.OTHER, "every cell was skipped (naturalOnly)")), notes, new long[0], new Value[0], null,
 				List.of(), null);
