@@ -512,12 +512,37 @@ async function computeMetrics({ sc, out, planDir, ir, irShas, mspt, cps, exact, 
       return false;
     };
     const inLot = (x, y, z) => (ir.lots ?? []).some((l) => x >= l.box.minX && x <= l.box.maxX && y >= l.box.minY && y <= l.box.maxY && z >= l.box.minZ && z <= l.box.maxZ);
-    const moved = (e.list ?? []).filter((m) => { if (m.class !== 'none') return false; const [x, y, z] = m.pos.split(',').map(Number); return !(vw.flags(x, y, z) & F_WRITTEN) && !inLot(x, y, z) && !near(x, y, z); });
+    // only the kinds the world does on its own far away: fluids settling (water or lava on either side), cobblestone, stone or
+    // obsidian a fluid made, and leaves re-counting their distance (the same leaves, only `distance` differs) or decaying (distance 7,
+    // not persistent, to air); anything else stays
+    // unclassified, so a far change of another kind can never hide an undo error
+    const name = (st) => String(st).replace(/\[.*$/, '');
+    const fluid = (st) => /^minecraft:(water|lava|flowing_water|flowing_lava)$/.test(name(st));
+    const leafDistance = (a, b) => {
+      if (name(a) !== name(b) || !/_leaves$/.test(name(a))) return false;
+      const strip = (st) => String(st).replace(/distance=\d+,?/, '');
+      return strip(a) === strip(b);
+    };
+    // (leaf decay is the end of a distance change: non-persistent leaves at distance 7 turning to air)
+    const leafDecay = (a, b) => /_leaves\[/.test(String(a)) && /distance=7/.test(String(a)) && /persistent=false/.test(String(a)) && name(b) === 'minecraft:air';
+    const worldKind = (m) => fluid(m.was) || fluid(m.now) || (/^minecraft:(cobblestone|stone|obsidian)$/.test(name(m.now)) && /^minecraft:(air|cave_air|water|lava)$/.test(name(m.was))) || leafDistance(m.was, m.now) || leafDecay(m.was, m.now);
+    const moved = (e.list ?? []).filter((m) => { if (m.class !== 'none') return false; const [x, y, z] = m.pos.split(',').map(Number); return worldKind(m) && !(vw.flags(x, y, z) & F_WRITTEN) && !inLot(x, y, z) && !near(x, y, z); });
     if (!moved.length) return e;
     const classes = { ...e.classes, none: e.classes.none - moved.length, distant: (e.classes.distant ?? 0) + moved.length };
     return { ...e, classes, list: e.list.map((m) => (moved.includes(m) ? { ...m, class: 'distant' } : m)) };
   };
-  const exN = distantOf(flowOf(freezeOf(exact)));
+  // (6c F2) amethyst growth (the world's own random ticks on a budding block): an unclassified mismatch where air or cave air
+  // became a small, medium or large amethyst bud or a cluster, at a cell the plan never writes, is classed `amethyst` (a world
+  // class, by what the change is)
+  const amethystOf = (e) => {
+    if (!e || flat || !isF2(sc) || !(e.classes?.none > 0)) return e;
+    const moved = (e.list ?? []).filter((m) => { if (m.class !== 'none') return false; const [x, y, z] = m.pos.split(',').map(Number);
+      return /^minecraft:(air|cave_air)$/.test(m.was) && /^minecraft:(small_amethyst_bud|medium_amethyst_bud|large_amethyst_bud|amethyst_cluster)(\[|$)/.test(m.now) && !(vw.flags(x, y, z) & F_WRITTEN); });
+    if (!moved.length) return e;
+    const classes = { ...e.classes, none: e.classes.none - moved.length, amethyst: (e.classes.amethyst ?? 0) + moved.length };
+    return { ...e, classes, list: e.list.map((m) => (moved.includes(m) ? { ...m, class: 'amethyst' } : m)) };
+  };
+  const exN = distantOf(amethystOf(flowOf(freezeOf(exact))));
   const ex = flat ? { flat: exact, normal: exactOther, cellsWritten: exactOther?.cellsWritten ?? 0 } : { flat: exactOther, normal: exN, cellsWritten: exact.cellsWritten };
   const plan = { report: JSON.parse(fs.readFileSync(path.join(out, 'report.json'), 'utf8')) };
   let rows = M.bars({ plan, realised, palette, organic, buildings, mspt, cellsPerSecond: cps, exact: ex, determinism: { irShas, workersSame: ts.workersSame, golden }, spendUsd: 0, approval: 'pending' });
@@ -552,9 +577,11 @@ async function computeMetrics({ sc, out, planDir, ir, irShas, mspt, cps, exact, 
     const snow = SC.snowAcrossStand({ ir, vw, after, stand });
     const stampsMissing = (meta.stamps ?? []).filter((x) => x.missing).map((x) => x.id);
     rows = SC.scatterBars({ plan, realised, realisedStand, melt, supports, planned, snow, stampsMissing, workersSame: ts.workersSame, tiles: ts.timing, mspt, load1: Math.round((await import('node:os')).loadavg()[0] * 10) / 10 }, rows);
+    // the flat run records E-flat; the natural run judges both (with this run's E-flat): here the row is recorded, never a FAIL
+    if (flat) rows = rows.map((r) => (r.id === 'exactness' ? { ...r, gated: false, pass: null, threshold: `recorded here (E-flat ${exact.mismatches === 0 ? '0' : exact.mismatches}); the natural run judges E-flat and E-normal together` } : r));
     // a fixture without a flat variant (the cave): E-normal only; scatter_demo's flat run holds E-flat
     if (!sc.flat) {
-      const en = exN, WORLD = ['growth', 'grazed', 'live', 'gravity', 'unsupported', 'freeze', 'flow', 'distant'];
+      const en = exN, WORLD = ['growth', 'grazed', 'live', 'gravity', 'unsupported', 'freeze', 'flow', 'distant', 'amethyst'];
       const undoOwn = en.mismatches - WORLD.reduce((a, k) => a + (en.classes?.[k] ?? 0), 0), cap = 0.0001 * (en.cellsWritten ?? 0);
       rows = rows.map((r) => (r.id === 'exactness' ? { ...r, value: `E-flat: none (this fixture has no flat variant; scatter_demo's flat run holds E-flat); E-normal ${en.mismatches} (${JSON.stringify(en.classes ?? {})}; unclassified ${en.classes?.none ?? 0}; the undo's own ${undoOwn}, cap ${cap.toFixed(0)})`, threshold: 'E-normal all classified, <= 0.01% of written cells', pass: (en.classes?.none ?? 0) === 0 && undoOwn <= cap } : r));
     }
