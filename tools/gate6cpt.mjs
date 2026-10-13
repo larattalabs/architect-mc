@@ -1144,9 +1144,59 @@ steps.apitest = async () => {
   return { surface: s, builds: b };
 };
 
+
+// ------------------------------------------------------------------ C34: a claimed hut built with commands
+
+/** A hollow plank hut (floor, walls, roof) 7 wide, 5 high, 7 deep at (X, Y, Z); the door in its south wall (z + 6) at doorY. */
+async function commandHut(X, Y, Z, doorY, state = 'minecraft:oak_door') {
+  await cmd(`/fill ${X} ${Y} ${Z} ${X + 6} ${Y + 4} ${Z + 6} minecraft:oak_planks hollow`);
+  await cmd(`/setblock ${X + 3} ${doorY + 1} ${Z + 6} ${state}[facing=south,half=upper]`);
+  await cmd(`/setblock ${X + 3} ${doorY} ${Z + 6} ${state}[facing=south,half=lower]`);
+}
+
+steps.claimhut = async () => {
+  const X = 40, Z = 40;
+  const gy = await flatWorld('G6B PT ClaimHut', X, Z);
+  const y = gy + 1;
+  const huts = [
+    { name: 'door above the floor row', at: [X, Z], doorY: y + 1 },
+    { name: 'door in the floor row', at: [X + 12, Z], doorY: y },
+  ];
+  const out = {};
+  for (const h of huts) {
+    await commandHut(h.at[0], y, h.at[1], h.doorY);
+    const box = [h.at[0], y, h.at[1], h.at[0] + 6, y + 4, h.at[1] + 6];
+    const door = await ptAt([h.at[0] + 3, h.doorY, h.at[1] + 6]);
+    check(String(door.state).includes('oak_door'), `C34: ${h.name}: the door stands at y ${h.doorY - gy} over the ground (${door.state})`, door);
+    const cl = await call('dev.pt.claim', { box, actor: 'bot' });
+    await settle(3000);
+    const b = (await call('dev.pt.build', { build: cl.buildId })) ?? cl;
+    check(!cl.refused && cl.state === 'CLAIMED' && cl.kind === 'HOUSE' && (cl.entrances?.length ?? 0) === 1, `C34: ${h.name}: the claimed hut ${cl.buildId} is ${cl.kind} (${cl.state}) with ${cl.entrances?.length ?? 0} entrance(s)`, { cl, b });
+    out[h.name] = cl;
+  }
+  // the same hut placed by player use (floor, walls, roof, the door), left ACTIVE: the same kind and entrance
+  const U = [X + 24, Z];
+  const ops = [];
+  for (let yy = y; yy <= y + 4; yy++) for (let x = U[0]; x <= U[0] + 6; x++) for (let z = U[1]; z <= U[1] + 6; z++) {
+    const shell = yy === y || yy === y + 4 || x === U[0] || x === U[0] + 6 || z === U[1] || z === U[1] + 6;
+    if (!shell) continue;
+    if (x === U[0] + 3 && z === U[1] + 6 && (yy === y + 1 || yy === y + 2)) continue;
+    ops.push({ item: 'minecraft:oak_planks', at: [x, yy, z], placer: 'PTAlex' });
+  }
+  ops.push({ item: 'minecraft:oak_door', at: [U[0] + 3, y + 1, U[1] + 6], placer: 'PTAlex', yaw: 0 });
+  await uses(ops);
+  await settle(6000);
+  const ub = (await buildsIn([U[0], y, U[1], U[0] + 6, y + 4, U[1] + 6])).builds;
+  check(ub.length === 1 && ub[0].kind === 'HOUSE' && ub[0].entrances.length === 1, `C34: the same hut placed by player use: ${ub.map((b) => `${b.id} ${b.kind} ${b.state} ${b.entrances.length} entrance(s)`)}`, ub);
+  out.byUse = ub;
+  await leaveWorld();
+  spendZero();
+  return out;
+};
+
 steps.ingame = async () => {
   const parts = {};
-  for (const s of ['record', 'clear', 'pistons', 'reload', 'builds', 'hyst', 'village', 'brush', 'felling', 'undo', 'refusals', 'incidental', 'claim', 'plan', 'cost', 'apitest']) {
+  for (const s of ['record', 'clear', 'pistons', 'reload', 'builds', 'hyst', 'village', 'brush', 'felling', 'undo', 'refusals', 'incidental', 'claim', 'claimhut', 'plan', 'cost', 'apitest']) {
     log(`-- ${s}`);
     try { parts[s] = await steps[s](); } catch (e) { log(String(e?.stack ?? e)); check(false, `${s}: ${String(e?.message ?? e).slice(0, 300)}`); }
   }
@@ -1155,7 +1205,7 @@ steps.ingame = async () => {
 
 steps.report = async () => {
   const rows = [];
-  for (const s of ['unit', 'ingame', 'nomod', 'record', 'clear', 'pistons', 'reload', 'builds', 'hyst', 'village', 'brush', 'felling', 'undo', 'refusals', 'incidental', 'claim', 'plan', 'cost', 'apitest']) {
+  for (const s of ['unit', 'ingame', 'nomod', 'record', 'clear', 'pistons', 'reload', 'builds', 'hyst', 'village', 'brush', 'felling', 'undo', 'refusals', 'incidental', 'claim', 'claimhut', 'plan', 'cost', 'apitest']) {
     const f = path.join(OUT, `${s}.json`);
     if (!fs.existsSync(f)) continue;
     const j = JSON.parse(fs.readFileSync(f, 'utf8'));
