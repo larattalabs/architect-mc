@@ -1144,9 +1144,80 @@ steps.apitest = async () => {
   return { surface: s, builds: b };
 };
 
+
+// ------------------------------------------------------------------ C34: a claimed hut built with commands
+
+/** A hollow plank hut w x h x d at (X, Y, Z); the door in its south wall (z + d - 1) at doorY, both halves unless lowerOnly. */
+async function commandHut(X, Y, Z, doorY, { w = 7, h = 5, d = 7, lowerOnly = false } = {}) {
+  const door = 'minecraft:oak_door';
+  await cmd(`/fill ${X} ${Y} ${Z} ${X + w - 1} ${Y + h - 1} ${Z + d - 1} minecraft:oak_planks hollow`);
+  const dx = X + (w >> 1), dz = Z + d - 1;
+  if (!lowerOnly) await cmd(`/setblock ${dx} ${doorY + 1} ${dz} ${door}[facing=south,half=upper]`);
+  await cmd(`/setblock ${dx} ${doorY} ${dz} ${door}[facing=south,half=lower]`);
+  return [dx, doorY, dz];
+}
+
+steps.claimhut = async () => {
+  const X = 40, Z = 40;
+  const gy = await flatWorld('G6B PT ClaimHut', X, Z);
+  const y = gy + 1;
+  const huts = [
+    { name: 'door above the floor row', doorY: y + 1 },
+    { name: 'door in the floor row', doorY: y },
+    { name: 'small 5x4x5', doorY: y + 1, o: { w: 5, h: 4, d: 5 } },
+    { name: 'small 5x4x5, door in the floor row', doorY: y, o: { w: 5, h: 4, d: 5 } },
+    { name: 'low 5x3x5, door in the floor row', doorY: y, o: { w: 5, h: 3, d: 5 } },
+    { name: 'margin claim (2 around, 2 under)', doorY: y + 1, margin: 2, under: 2 },
+    { name: 'floor in the ground', doorY: y, base: gy, margin: 1 },
+    { name: "Steward's box: from the player's feet (floor + 1) up, door in the floor row", doorY: y, feet: 1, margin: 2 },
+    { name: "Steward's box, door above the floor row", doorY: y + 1, feet: 1, margin: 2 },
+    { name: "Steward's box, small 5x4x5, door in the floor row", doorY: y, feet: 1, margin: 1, o: { w: 5, h: 4, d: 5 } },
+    { name: 'console claim', doorY: y + 1, actor: 'console' },
+  ];
+  const out = {};
+  let n = 0;
+  for (const h of huts) {
+    const at = [X + (n % 4) * 14, Z + Math.floor(n / 4) * 14];
+    n++;
+    const o = { w: 7, h: 5, d: 7, ...(h.o ?? {}) };
+    const base = h.base ?? y;
+    const dpos = await commandHut(at[0], base, at[1], h.doorY, o);
+    const m = h.margin ?? 0, u = h.under ?? 0;
+    // feet: the box starts that many rows above the floor row (Steward claims from the player's feet up, standing on the floor)
+    const box = [at[0] - m, base - u + (h.feet ?? 0), at[1] - m, at[0] + o.w - 1 + m, base + o.h - 1 + m, at[1] + o.d - 1 + m];
+    const door = await ptAt(dpos);
+    const cl = await call('dev.pt.claim', { box, actor: h.actor ?? 'bot' });
+    await settle(2000);
+    const b = await call('dev.pt.build', { build: cl.buildId });
+    log(`  hut ${h.name}: door ${door.state}; claim ${cl.refused ? `refused ${cl.refused}` : `${cl.buildId} ${cl.kind} ${cl.state} ${cl.cells} cells ${cl.entrances?.length ?? 0} entrance(s)`}; later ${b.kind} ${b.entrances?.length ?? 0}`);
+    check(!cl.refused && cl.state === 'CLAIMED' && cl.kind === 'HOUSE' && (cl.entrances?.length ?? 0) === 1 && b.kind === 'HOUSE', `C34: ${h.name}: the claimed hut ${cl.buildId} is ${cl.kind} (${cl.state}) with ${cl.entrances?.length ?? 0} entrance(s), later ${b.kind}`, { cl, b, door });
+    out[h.name] = cl;
+  }
+  // the same hut placed by player use (floor, walls, roof, the door), left ACTIVE: the same kind and entrance
+  const U = [X + 24, Z + 40];
+  const ops = [];
+  for (let yy = y; yy <= y + 4; yy++) for (let x = U[0]; x <= U[0] + 6; x++) for (let z = U[1]; z <= U[1] + 6; z++) {
+    const shell = yy === y || yy === y + 4 || x === U[0] || x === U[0] + 6 || z === U[1] || z === U[1] + 6;
+    if (!shell) continue;
+    if (x === U[0] + 3 && z === U[1] + 6 && (yy === y + 1 || yy === y + 2)) continue;
+    ops.push({ item: 'minecraft:oak_planks', at: [x, yy, z], placer: 'PTAlex' });
+  }
+  ops.push({ item: 'minecraft:oak_door', at: [U[0] + 3, y + 1, U[1] + 6], placer: 'PTAlex', yaw: 0 });
+  await uses(ops);
+  await settle(6000);
+  const ub = (await buildsIn([U[0], y, U[1], U[0] + 6, y + 4, U[1] + 6])).builds;
+  check(ub.length === 1 && ub[0].kind === 'HOUSE' && ub[0].entrances.length === 1, `C34: the same hut placed by player use: ${ub.map((b) => `${b.id} ${b.kind} ${b.state} ${b.entrances.length} entrance(s)`)}`, ub);
+  out.byUse = ub;
+  await leaveWorld();
+  spendZero();
+  return out;
+};
+
 steps.ingame = async () => {
   const parts = {};
-  for (const s of ['record', 'clear', 'pistons', 'reload', 'builds', 'hyst', 'village', 'brush', 'felling', 'undo', 'refusals', 'incidental', 'claim', 'plan', 'cost', 'apitest']) {
+  const all = ['record', 'clear', 'pistons', 'reload', 'builds', 'hyst', 'village', 'brush', 'felling', 'undo', 'refusals', 'incidental', 'claim', 'claimhut', 'plan', 'cost', 'apitest'];
+  // GATE6CPT_STEPS=a,b runs only those (iterating on one item); unset, every step
+  for (const s of process.env.GATE6CPT_STEPS ? process.env.GATE6CPT_STEPS.split(',') : all) {
     log(`-- ${s}`);
     try { parts[s] = await steps[s](); } catch (e) { log(String(e?.stack ?? e)); check(false, `${s}: ${String(e?.message ?? e).slice(0, 300)}`); }
   }
@@ -1155,7 +1226,7 @@ steps.ingame = async () => {
 
 steps.report = async () => {
   const rows = [];
-  for (const s of ['unit', 'ingame', 'nomod', 'record', 'clear', 'pistons', 'reload', 'builds', 'hyst', 'village', 'brush', 'felling', 'undo', 'refusals', 'incidental', 'claim', 'plan', 'cost', 'apitest']) {
+  for (const s of ['unit', 'ingame', 'nomod', 'record', 'clear', 'pistons', 'reload', 'builds', 'hyst', 'village', 'brush', 'felling', 'undo', 'refusals', 'incidental', 'claim', 'claimhut', 'plan', 'cost', 'apitest']) {
     const f = path.join(OUT, `${s}.json`);
     if (!fs.existsSync(f)) continue;
     const j = JSON.parse(fs.readFileSync(f, 'utf8'));

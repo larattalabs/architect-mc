@@ -37,6 +37,23 @@ public final class PlacedRules {
 		return s.isAir() || s.getBlock() instanceof LiquidBlock;
 	}
 
+	/**
+	 * (C34) The other half of a two-part block at {@code p}: a door's lower or upper half, a bed's head or foot. Null for anything else.
+	 * A claim takes the partner of a half it holds when the partner falls outside the box, so a door whose lower half sits in the
+	 * floor row below a box that starts at the player's feet is still the build's entrance.
+	 */
+	public static @org.jspecify.annotations.Nullable BlockPos partner(BlockState s, BlockPos p) {
+		net.minecraft.world.level.block.Block b = s.getBlock();
+		if (b instanceof net.minecraft.world.level.block.DoorBlock) {
+			return s.getValue(net.minecraft.world.level.block.DoorBlock.HALF) == net.minecraft.world.level.block.state.properties.DoubleBlockHalf.LOWER
+				? p.above() : p.below();
+		}
+		if (b instanceof net.minecraft.world.level.block.BedBlock) {
+			return p.relative(net.minecraft.world.level.block.BedBlock.getConnectedDirection(s));
+		}
+		return null;
+	}
+
 	/** Whether a player's use records this change (§2). */
 	public static boolean records(Use u, BlockPos pos, BlockState old, BlockState now) {
 		BlockPos c = u.click;
