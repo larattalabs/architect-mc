@@ -2,12 +2,12 @@
 export class ClientError extends Error {}
 
 /**
- * (0b) A typed refusal: the ack carries `code` (the API's Reason name: COPY_REFUSED, VERSION_REFUSED) and `detail` (the
+ * (0b) A typed refusal: the ack carries `code` (the API's Reason name: COPY_REFUSED, VERSION_REFUSED, and since C33 FIELD_LIMIT) and `detail` (the
  * sub-code the mod passes on as ArchitectRefused.detail()).
  */
 export class RefusedError extends ClientError {
   constructor(
-    readonly code: 'COPY_REFUSED' | 'VERSION_REFUSED',
+    readonly code: 'COPY_REFUSED' | 'VERSION_REFUSED' | 'FIELD_LIMIT',
     readonly detail: string,
     message: string,
   ) {

@@ -25,10 +25,12 @@ export interface JobBookCtx {
   dir: string;
 }
 
-/** The spec as the Job record carries it (prompt cut at 2000 chars). */
+/** The spec as the Job record carries it (prompt and system cut at 2000 chars). */
 export function specView(spec: JobSpec): Record<string, unknown> {
   const v: Record<string, unknown> = { ...structuredClone(spec) };
   if (spec.prompt.length > SPEC_PROMPT_CHARS) v.prompt = `${spec.prompt.slice(0, SPEC_PROMPT_CHARS - 1)}…`;
+  // (C33) the system prompt may be 120,000 characters: the record carries the same cut as the prompt (the work keeps it whole)
+  if (spec.system && spec.system.length > SPEC_PROMPT_CHARS) v.system = `${spec.system.slice(0, SPEC_PROMPT_CHARS - 1)}…`;
   return v;
 }
 

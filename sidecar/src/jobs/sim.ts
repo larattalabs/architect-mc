@@ -7,6 +7,8 @@
 //     inputSchema, and ends with a result whose text is `{"results":[{tool, result | error}]}`
 //   - every step adds `simJobStepUsd` (default $0.01) and some tokens to the reported cost, and the
 //     sim honours maxBudgetUsd like the SDK (error_max_budget_usd once this query spent more)
+//   - (C33) every query is recorded as a line of <scratch>/sim-queries.jsonl ({system, prompt, kind}): what the model would have
+//     been sent, so a test can assert the system prompt a job's systemRefs expanded to
 //   - a session (its next tool, results and cost) is kept in <scratch>/sim-sessions.json, so a
 //     resumed session continues from its saved total, as the SDK's do
 import crypto from 'node:crypto';
@@ -54,6 +56,7 @@ export class SimJobDriver implements JobDriver {
     const sessionId = q.resume && sessions[q.resume] ? q.resume : crypto.randomUUID();
     const st: SimSession = (sessions[sessionId] ??= { next: 0, results: [], usd: 0, steps: 0 });
     const save = () => fs.writeFileSync(file, JSON.stringify(sessions));
+    fs.appendFileSync(path.join(q.cwd, 'sim-queries.jsonl'), `${JSON.stringify({ kind: q.kind, system: q.system, prompt: q.prompt })}\n`);
     const startUsd = st.usd;
     const stepUsd = q.simStepUsd ?? this.stepUsd;
     const step = () => {
