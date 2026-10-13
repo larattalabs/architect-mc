@@ -301,6 +301,11 @@ public final class PlanChecks {
 			}
 			JsonObject planned = (JsonObject) o[0];
 			return RegionsImpl.INSTANCE.finishPlan(rp, planned, (JsonObject) o[1], (byte[]) o[2], null, null).thenApply(plan -> {
+				// the whole plan's chunks to generate (§3's cost; the kit can't see the world's generated chunks)
+				if (planned.get("planCheck") instanceof JsonObject k && k.get("cost") instanceof JsonObject cost) {
+					cost.addProperty("chunksToGenerate", plan.budget().chunksToGenerate());
+					cost.addProperty("chunks", plan.budget().chunks());
+				}
 				PlanCheck pc = fromPlanned(plan.planId(), planned);
 				if (!out.isCancelled()) {
 					keep(s, pc, planned, r, key, hash);

@@ -34,8 +34,8 @@ export const PRESET_SIZES = Object.freeze({ S: 32, M: 48, L: 64, XL: 96 });
 const WIDTH_DEFAULT = { street: 3, road: 3, path: 1 };
 /** The claim margin a zone keeps (the street layout's own margin is inside the zone's rect). */
 const MARGIN = 2;
-/** Zones keep this many cells apart (lot aprons and batters). */
-const ZONE_GAP = 2;
+/** Zones (and terraces) keep this many cells apart: none beyond not overlapping (a zone's rect holds its street layout's own margin). */
+const ZONE_GAP = 0;
 /** A provisional building's cells per column of its lot, low and high (the cost band of a lot with no library entry). */
 export const PROVISIONAL_BAND = Object.freeze([4, 16]);
 /** The top-ranked candidate rects whose street layout is evaluated, per size. */
@@ -245,12 +245,12 @@ export function locatorOf(env, where, geomOf, { within0 = 32 } = {}) {
 export function featureGeom(env, f, geomOf, from) {
   if (f.part !== undefined) {
     const t = geomOf(f.part);
-    if (!t) return { error: { code: 'NO_FEATURE', message: `${f.part} has no geometry in v0` } };
+    if (!t) return { error: { code: 'NO_FEATURE', message: `${f.part} has no geometry in v0`, evidence: { feature: { part: f.part } } } };
     return { rect: t.rect, aim: centre(t.rect), avoid: t.rect, what: `part ${f.part}` };
   }
   if (f.protected !== undefined) {
     const a = env.protectedAreas.find((p) => p.id === f.protected);
-    if (!a) return { error: { code: 'NO_FEATURE', message: `no protected area "${f.protected}" meets the claim` } };
+    if (!a) return { error: { code: 'NO_FEATURE', message: `no protected area "${f.protected}" meets the claim`, evidence: { feature: { protected: f.protected }, areas: env.protectedAreas.map((x) => x.id) } } };
     return { rect: a.rect, aim: centre(a.rect), avoid: a.rect, what: `protected ${a.id}` };
   }
   if (f.water !== undefined) {
@@ -258,7 +258,7 @@ export function featureGeom(env, f, geomOf, from) {
     const body = w.body ?? 'any', minArea = w.minArea ?? 1;
     const to = w.to ? env.anchors.get(w.to) : from ?? centre(env.claim);
     const cands = env.water.bodies.filter((b) => (body === 'any' || b.kind === body) && b.area >= minArea);
-    if (!cands.length) return { error: { code: 'NO_FEATURE', message: `no ${body === 'any' ? '' : `${body} `}water of at least ${minArea} columns in the claim` } };
+    if (!cands.length) return { error: { code: 'NO_FEATURE', message: `no ${body === 'any' ? '' : `${body} `}water of at least ${minArea} columns in the claim`, evidence: { feature: { water: w }, bodies: env.water.bodies.map((b) => ({ kind: b.kind, area: b.area })) } } };
     const near = (b) => nearestCell(env, b, to);
     // pick: largest (then nearest to the claim's centre), or nearest (to `to`); then the smallest min x, then min z
     const cc = centre(env.claim);
@@ -401,7 +401,7 @@ export function resolveZone(env, z, geomOf, { obstacles = [] } = {}) {
   if (!specs.length) return { klass: 'refused', reasons: [{ code: 'NO_ROOM', message: 'the zone lists no lots: nothing to lay out', evidence: { lots: 0 } }] };
   const shared = sharedOf(zone);
   const loc = locatorOf(env, zone.where, geomOf);
-  if (loc.error) return { klass: loc.error.code === 'DEPENDENCY' ? 'blocked' : 'refused', reasons: [{ code: loc.error.code, message: loc.error.message }] };
+  if (loc.error) return { klass: loc.error.code === 'DEPENDENCY' ? 'blocked' : 'refused', reasons: [{ code: loc.error.code, message: loc.error.message, evidence: { locator: Object.keys(zone.where ?? {})[0] ?? null, ...(loc.error.evidence ?? {}) } }] };
   const tMove = tolOf(zone, 'move'), tSize = tolOf(zone, 'size'), tCount = tolOf(zone, 'count'), tSketch = tolOf(zone, 'sketch'), tRot = tolOf(zone, 'rotate');
   const sk = sketchPoint(env, zone.sketch);
   const { sizes, asked } = zoneSizes(env, zone, specs, shared);
@@ -467,18 +467,25 @@ export function resolveZone(env, z, geomOf, { obstacles = [] } = {}) {
   const res = { klass: j.klass, rect, layout: best.L, specs, shared, deviations: j.deviations, unplaced: best.L.unplaced, reasons: [] };
   if (j.klass === 'refused') {
     res.reasons.push({ code: 'TOLERANCE', message: `${j.failed.what} ${j.failed.value} is past its ${j.failed.hard ? 'hard limit' : 'ceiling'} (${j.failed.hard ? j.failed.max : j.failed.ceiling})`, evidence: { what: j.failed.what, value: j.failed.value } });
-    res.wouldFit = j.failed.what === 'count' ? [{ part: zone.id, fragment: { program: { ...zone.program, ...(zone.program.lots ? { lots: zone.program.lots.filter((l) => !best.L.unplaced.some((u) => u.id === l.id)) } : { params: { ...zone.program.params, lots: zone.program.params.lots.filter((l) => !best.L.unplaced.some((u) => u.id === l.id)) } }) } }, geometry: { rect: rectArr(rect) } }]
+    res.wouldFit = j.failed.what === 'count' ? [{ part: zone.id, fragment: { program: { ...zone.program, ...(zone.program.lots ? { lots: zone.program.lots.filter((l) => !best.L.unplaced.some((u) => u.id === l.id)) } : { params: { ...zone.program.params, lots: zone.program.params.lots.filter((l) => !best.L.unplaced.some((u) => u.id === l.id)) } }) } }, geometry: { rect: rectArr(rect) }, cost: layoutCost(best.L) }]
       : j.failed.what === 'move' ? wouldFitMove(zone, loc, best) : [];
   }
   return res;
 }
 
-/** wouldFit for a zone that would fit further out: the same locator, widened to the place found. */
+/** A layout's cost band: its placed lots' provisional range (PROVISIONAL_BAND cells per column of each lot), the plan's own cells aside. */
+function layoutCost(L) {
+  const cols = (L?.lots ?? []).reduce((n, l) => n + (l.rect[2] - l.rect[0] + 1) * (l.rect[3] - l.rect[1] + 1), 0);
+  return { range: { cells: [cols * PROVISIONAL_BAND[0], cols * PROVISIONAL_BAND[1]] }, lots: (L?.lots ?? []).length, unplaced: (L?.unplaced ?? []).length };
+}
+
+/** wouldFit for a zone that would fit further out: the same locator, widened to the place found, with its geometry and cost. */
 function wouldFitMove(zone, loc, c) {
   const w = zone.where;
-  if (w?.near) return [{ part: zone.id, fragment: { where: { near: { ...w.near, within: Math.min(512, (loc.W ?? 32) + c.move) } } }, geometry: { rect: rectArr(c.rect) } }];
-  if (w?.adjacent) return [{ part: zone.id, fragment: { where: { adjacent: { ...w.adjacent, gap: [loc.adjacent.g0, Math.min(512, loc.adjacent.g1 + c.move)] } } }, geometry: { rect: rectArr(c.rect) } }];
-  return [{ part: zone.id, fragment: { tolerance: { ...(zone.tolerance ?? {}), move: { max: c.move, hard: false } } }, geometry: { rect: rectArr(c.rect) } }];
+  const g = { rect: rectArr(c.rect) }, cost = layoutCost(c.L);
+  if (w?.near) return [{ part: zone.id, fragment: { where: { near: { ...w.near, within: Math.min(512, (loc.W ?? 32) + c.move) } } }, geometry: g, cost }];
+  if (w?.adjacent) return [{ part: zone.id, fragment: { where: { adjacent: { ...w.adjacent, gap: [loc.adjacent.g0, Math.min(512, loc.adjacent.g1 + c.move)] } } }, geometry: g, cost }];
+  return [{ part: zone.id, fragment: { tolerance: { ...(zone.tolerance ?? {}), move: { max: c.move, hard: false } } }, geometry: g, cost }];
 }
 
 /** The whole-claim templates' claim ranges (their catalogue `claim`). */
@@ -498,30 +505,30 @@ function resolveWholeClaim(env, z, obstacles) {
 // ------------------------------------------------------------------ forms
 
 /** Terrace: a rect from its locator and size (default M), beside every zone; steps and rise checked against the land. */
-function resolveTerrace(env, f, geomOf, zones) {
+function resolveTerrace(env, f, geomOf, zoneIds, obstacles) {
   const part = f.part;
   const loc = locatorOf(env, part.where, geomOf);
-  if (loc.error) return { klass: loc.error.code === 'DEPENDENCY' ? 'blocked' : 'refused', reasons: [{ code: loc.error.code, message: loc.error.message }] };
+  if (loc.error) return { klass: loc.error.code === 'DEPENDENCY' ? 'blocked' : 'refused', reasons: [{ code: loc.error.code, message: loc.error.message, evidence: { locator: Object.keys(part.where ?? {})[0] ?? null, ...(loc.error.evidence ?? {}) } }] };
   const P = part.size?.preset ? PRESET_SIZES[part.size.preset] : null;
   const side = (v) => (Array.isArray(v) ? v[1] : v);
   const w = P ?? side(part.size?.w) ?? PRESET_SIZES.M, d = P ?? side(part.size?.d) ?? PRESET_SIZES.M;
   // a terrace inside a zone would sit under its lots: v0 compiles terraces beside zones (S3's terraced program builds on them)
-  if (part.where?.inside?.part && zones.some((zr) => zr.id === part.where.inside.part)) return { klass: 'refused', reasons: [{ code: 'OVERLAP', message: `a terrace under zone ${part.where.inside.part}'s lots is not compiled in v0 (terraces stand beside zones)`, evidence: { zone: part.where.inside.part } }] };
+  if (part.where?.inside?.part && zoneIds.has(part.where.inside.part)) return { klass: 'refused', reasons: [{ code: 'OVERLAP', message: `a terrace under zone ${part.where.inside.part}'s lots is not compiled in v0 (terraces stand beside zones)`, evidence: { zone: part.where.inside.part } }] };
   const tMove = tolOf(part, 'move');
   const sk = sketchPoint(env, part.sketch);
-  const obs = zones.map((zr) => grow(zr.rect, ZONE_GAP));
+  const obs = obstacles.map((o) => grow(o, ZONE_GAP));
   const cands = scan(env, w, d, loc, { sketch: sk, obstacles: obs, maxMove: tMove.ceiling, limit: 1 });
-  if (!cands.length) return { klass: 'refused', reasons: [{ code: zones.length ? 'OVERLAP' : 'NO_ROOM', message: `no ${w}x${d} rect for the terrace within its locator, clear of the zones and keep-out` }] };
+  if (!cands.length) return { klass: 'refused', reasons: [{ code: obstacles.length ? 'OVERLAP' : 'NO_ROOM', message: `no ${w}x${d} rect for the terrace within its locator, clear of the zones and keep-out`, evidence: { size: [w, d], obstacles: obstacles.length } }] };
   const c = cands[0];
   const j = judge([{ what: 'move', value: c.move, ...tMove }, ...(sk ? [{ what: 'sketch', value: c.sketch, ...tolOf(part, 'sketch') }] : [])]);
-  return { klass: j.klass, rect: c.rect, deviations: j.deviations, reasons: j.klass === 'refused' ? [{ code: 'TOLERANCE', message: `${j.failed.what} ${j.failed.value} past its limit` }] : [], notes: part.edge === 'blend' ? ['edge blend: v0 builds the terrace\'s 1:1 batters (edge slope); blending its edges by relief is not compiled'] : [] };
+  return { klass: j.klass, rect: c.rect, footprints: [rectArr(c.rect)], deviations: j.deviations, reasons: j.klass === 'refused' ? [{ code: 'TOLERANCE', message: `${j.failed.what} ${j.failed.value} past its limit`, evidence: { what: j.failed.what, value: j.failed.value } }] : [], notes: part.edge === 'blend' ? ['edge blend: v0 builds the terrace\'s 1:1 batters (edge slope); blending its edges by relief is not compiled'] : [] };
 }
 
 /** Spikes: `count` sites (dry, off zones, forms and keep-out, 8 apart) within the locator's area, best first. */
-function resolveSpikes(env, f, geomOf, taken) {
+function resolveSpikes(env, f, geomOf, taken = []) {
   const part = f.part, p = f;
   const loc = locatorOf(env, part.where, geomOf, { within0: 24 });
-  if (loc.error) return { klass: loc.error.code === 'DEPENDENCY' ? 'blocked' : 'refused', reasons: [{ code: loc.error.code, message: loc.error.message }] };
+  if (loc.error) return { klass: loc.error.code === 'DEPENDENCY' ? 'blocked' : 'refused', reasons: [{ code: loc.error.code, message: loc.error.message, evidence: { locator: Object.keys(part.where ?? {})[0] ?? null, ...(loc.error.evidence ?? {}) } }] };
   const want = part.count ?? 1;
   const tMove = tolOf(part, 'move'), tCount = tolOf(part, 'count');
   // a site's footprint: the preset's reach (a spire's radius plus its ledges; a cluster's spread plus a spike's radius), both sides
@@ -540,11 +547,11 @@ function resolveSpikes(env, f, geomOf, taken) {
     if (env.S.frozenAt(x, zz)) continue;
     sites.push(c);
   }
-  if (!sites.length) return { klass: 'refused', reasons: [{ code: 'NO_ROOM', message: 'no dry, level site for the form within its locator' }] };
+  if (!sites.length) return { klass: 'refused', reasons: [{ code: taken.length ? 'OVERLAP' : 'NO_ROOM', message: 'no dry, level site for the form within its locator', evidence: { footprint: foot, obstacles: taken.length } }] };
   const move = Math.max(...sites.map((s) => s.move));
   const j = judge([{ what: 'move', value: move, ...tMove }, { what: 'count', value: want - sites.length, ...tCount }]);
   const notes = part.keepNatural ? ['keepNatural: v0 keeps the spikes off water and frozen columns of the survey (no frozen volume is read)'] : [];
-  return { klass: j.klass, sites: sites.map((s) => centre(s.rect)), rect: sites.reduce((a, s) => ({ minX: Math.min(a.minX, s.rect.minX), minZ: Math.min(a.minZ, s.rect.minZ), maxX: Math.max(a.maxX, s.rect.maxX), maxZ: Math.max(a.maxZ, s.rect.maxZ) }), sites[0].rect), deviations: j.deviations, reasons: j.klass === 'refused' ? [{ code: 'TOLERANCE', message: `${j.failed.what} ${j.failed.value} past its limit` }] : [], notes };
+  return { klass: j.klass, sites: sites.map((s) => centre(s.rect)), footprints: sites.map((s) => rectArr(s.rect)), rect: sites.reduce((a, s) => ({ minX: Math.min(a.minX, s.rect.minX), minZ: Math.min(a.minZ, s.rect.minZ), maxX: Math.max(a.maxX, s.rect.maxX), maxZ: Math.max(a.maxZ, s.rect.maxZ) }), sites[0].rect), deviations: j.deviations, reasons: j.klass === 'refused' ? [{ code: 'TOLERANCE', message: `${j.failed.what} ${j.failed.value} past its limit`, evidence: { what: j.failed.what, value: j.failed.value } }] : [], notes };
 }
 
 // ------------------------------------------------------------------ the region: checkpoints
@@ -601,7 +608,10 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
     if (lotZone.has(id)) { const z = res.get(lotZone.get(id)); const l = z?.layout?.lots?.find((x) => x.spec.id === id); return l ? { rect: arrRect(l.rect) } : null; }
     return null;
   };
+  // every reason carries evidence (§3): its own, else what the reason names (the path, the block and its slice, the parts)
+  const withEvidence = (r) => (r.evidence ? r : { ...r, evidence: Object.fromEntries(Object.entries({ path: r.path, block: r.block, until: r.until, blockedBy: r.blockedBy }).filter(([, v]) => v !== undefined && v !== null)) });
   const ans = (p, o) => {
+    if (Array.isArray(o.reasons)) o = { ...o, reasons: o.reasons.map(withEvidence) };
     const a = { part: p.id, block: p.block, class: o.class, required: p.required };
     for (const k of ['geometry', 'cost', 'provisional', 'deviations', 'reasons', 'wouldFit', 'blockedBy', 'cached', 'notes']) if (o[k] !== undefined && !(Array.isArray(o[k]) && !o[k].length)) a[k] = o[k];
     if (p.ext) a.ext = p.ext;
@@ -615,7 +625,7 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
     if (!bad.length) return null;
     const inc = bad.filter((d) => answers.get(d)?.class === 'incomplete');
     if (inc.length) return { class: 'incomplete', reasons: [{ code: 'BUDGET', message: `depends on ${inc.join(', ')}, which ran out of budget`, evidence: { cap: answers.get(inc[0]).reasons?.[0]?.evidence?.cap ?? null } }] };
-    return { class: 'blocked', blockedBy: bad, reasons: [{ code: 'DEPENDENCY', message: `depends on ${bad.join(', ')}, which ${bad.length === 1 ? 'is' : 'are'} not fits or adjusted` }] };
+    return { class: 'blocked', blockedBy: bad, reasons: [{ code: 'DEPENDENCY', message: `depends on ${bad.join(', ')}, which ${bad.length === 1 ? 'is' : 'are'} not fits or adjusted`, evidence: { blockedBy: bad, classes: Object.fromEntries(bad.map((d) => [d, answers.get(d)?.class ?? null])) } }] };
   };
   const timeUp = () => { if (performance.now() > env.deadline) env.hitTime = true; return env.hitTime; };
 
@@ -627,6 +637,7 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
   const byId = V.byId;
   const order = V.order.map((id) => byId.get(id));
   const zonesAccepted = []; // {id, rect}
+  const formsAccepted = []; // footprint rects of the forms placed so far
   // ---- 2. resolve zones and forms in order; connectors after
   const reliefOf = new Map(); // zone id -> relief form ids naming it
   for (const p of order) {
@@ -652,7 +663,10 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
           z.deviations = [...(z.deviations ?? [])];
           z.notes = [...(z.notes ?? []), 'placed again around the zones resolved before it (zones never overlap)'];
           if (z.klass === 'fits') z.klass = 'adjusted';
-        } else if (z.reasons?.[0]?.code === 'NO_ROOM') z.reasons[0] = { ...z.reasons[0], code: 'OVERLAP' };
+        } else if (z.reasons?.[0]?.code === 'NO_ROOM' || z.reasons?.[0]?.code === 'TOLERANCE') {
+          // the zones placed before it hold its place: OVERLAP, naming them (what would fit stays)
+          z.reasons[0] = { ...z.reasons[0], code: 'OVERLAP', evidence: { ...(z.reasons[0].evidence ?? {}), zones: zonesAccepted.map((o) => o.id) } };
+        }
       } else if ((z.klass === 'fits' || z.klass === 'adjusted') && !z.cached) env.cacheOut[key] = cacheEntry(z);
       res.set(p.id, z);
       if (z.klass === 'fits' || z.klass === 'adjusted') { geom.set(p.id, { rect: z.rect }); zonesAccepted.push({ id: p.id, rect: z.rect }); }
@@ -671,11 +685,25 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
         ans(p, { class: 'fits', notes: n });
         continue;
       }
-      const taken = [...zonesAccepted.map((o) => o.rect), ...[...geom.entries()].filter(([id]) => byId.get(id)?.family === 'form').map(([, g]) => g.rect)];
-      const f = p.kind === 'terrace' ? resolveTerrace(env, p, geomOf, zonesAccepted) : resolveSpikes(env, p, geomOf, taken);
+      // placed from its own locator (cacheable), then, meeting a zone or a form placed before it, placed again around them (never
+      // cached), as zones are
+      const taken = [...zonesAccepted.map((o) => o.rect), ...formsAccepted];
+      const zoneIds = new Set(V.parts.filter((q) => q.family === 'zone').map((q) => q.id));
+      const resolveForm = (obs) => (p.kind === 'terrace' ? resolveTerrace(env, p, geomOf, zoneIds, obs) : resolveSpikes(env, p, geomOf, obs));
+      const ok = (x) => x.klass === 'fits' || x.klass === 'adjusted';
+      const gapOf = p.kind === 'terrace' ? ZONE_GAP : 2;
+      const clashes = (x) => (x.footprints ?? []).some((fp) => taken.some((o) => meets(grow(arrRect(fp), gapOf), o)));
+      const key = cacheKey(env, p, geom);
+      const hit = env.cacheIn?.(key);
+      let f = hit && hit.footprints ? { klass: hit.klass, rect: arrRect(hit.rect), footprints: hit.footprints, sites: hit.sites ?? undefined, deviations: hit.deviations, reasons: hit.reasons, notes: hit.notes, cached: true } : resolveForm([]);
+      if (ok(f) && clashes(f)) {
+        f = resolveForm(taken);
+        if (ok(f)) { f.notes = [...(f.notes ?? []), 'placed again around the zones and forms resolved before it']; if (f.klass === 'fits') f.klass = 'adjusted'; }
+      } else if (ok(f) && !f.cached) env.cacheOut[key] = { rect: rectArr(f.rect), footprints: f.footprints, ...(f.sites ? { sites: f.sites } : {}), klass: f.klass, deviations: f.deviations ?? [], reasons: f.reasons ?? [], notes: f.notes ?? [] };
+      if (ok(f)) formsAccepted.push(...f.footprints.map(arrRect));
       res.set(p.id, f);
       if (f.klass === 'fits' || f.klass === 'adjusted') geom.set(p.id, { rect: f.rect });
-      ans(p, { class: f.klass, reasons: f.reasons, deviations: f.deviations, notes: f.notes });
+      ans(p, { class: f.klass, reasons: f.reasons, deviations: f.deviations, notes: f.notes, cached: f.cached || undefined });
       continue;
     }
   }
@@ -801,6 +829,7 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
   // ---- 4. connectors: legs, one route pass per grade limit (a dry run, then only the connectors whose every leg routed)
   const conns = order.filter((p) => p.family === 'connector' && !answers.has(p.id));
   const legs = []; // {conn, k, from, to, width, movers, grade}
+  const connNotes = new Map(); // conn id -> notes
   for (const p of conns) {
     const dep = depState(p);
     if (dep) { ans(p, dep); continue; }
@@ -813,9 +842,11 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
       const e = endpointNode(env, ends[k], other, geom, zoneEmit, lotZone, r, p, `${k === 0 ? 'from' : k === ends.length - 1 ? 'to' : `via[${k - 1}]`}`);
       if (e.error) err = e.error; else pts.push(e);
     }
+    const snapNotes = pts.filter((q) => q.snapped).map((q) => `anchor ${q.snapped.anchor} lies inside zone ${q.snapped.zone}: the route ends at the zone's street end`);
     if (err) { ans(p, { class: 'refused', reasons: [err] }); continue; }
     const tGrade = tolOf(p.part, 'grade');
     const grade = Math.max(1 / 64, Math.min(1, q64(tGrade.max)));
+    if (snapNotes.length) connNotes.set(p.id, snapNotes);
     for (let k = 0; k + 1 < pts.length; k++) legs.push({ conn: p, k, from: pts[k], to: pts[k + 1], width: p.part.width ?? WIDTH_DEFAULT[p.kind], movers: p.part.movers, grade });
   }
   // maxEdges: legs past the cap (in order) are incomplete
@@ -899,7 +930,7 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
     const dv = worst > tDet.max ? [{ what: 'detour', value: worst, max: tDet.max, exceeds: true }] : [];
     const klass = worst > tDet.ceiling ? 'refused' : dv.length ? 'adjusted' : 'fits';
     geom.set(p.id, { legs: legsOut });
-    ans(p, { class: klass, deviations: dv, geometry: { legs: legsOut }, reasons: klass === 'refused' ? [{ code: 'TOLERANCE', message: `detour ${worst} is past its ceiling ${tDet.ceiling}`, evidence: { detour: worst } }] : [], ...(p.kind === 'street' && p.part.lamps === undefined ? {} : {}) });
+    ans(p, { class: klass, deviations: dv, geometry: { legs: legsOut }, notes: connNotes.get(p.id), reasons: klass === 'refused' ? [{ code: 'TOLERANCE', message: `detour ${worst} is past its ceiling ${tDet.ceiling}`, evidence: { detour: worst } }] : [], ...(p.kind === 'street' && p.part.lamps === undefined ? {} : {}) });
   }
 
   // ---- 5. apron lamps over every village lot; anchors
@@ -998,7 +1029,15 @@ function endpointNode(env, e, other, geom, zoneEmit, lotZone, r, conn, where) {
     return centre(env.claim);
   };
   const tag = `${conn.id}:${where}`.replace(/[^a-z0-9_]/g, '_');
-  if (e.anchor) { const p = env.anchors.get(e.anchor); return feet(p[0], p[1], `a_${tag}`); }
+  if (e.anchor) {
+    const p = env.anchors.get(e.anchor);
+    // an anchor inside a zone laid out over it (Steward's stone under the town): the route ends at that zone's street end
+    for (const [zid] of zoneEmit) {
+      const g = geom.get(zid)?.rect;
+      if (g && p[0] >= g.minX && p[0] <= g.maxX && p[1] >= g.minZ && p[1] <= g.maxZ) return { ...endpointNode(env, { part: zid }, other, geom, zoneEmit, lotZone, r, conn, where), snapped: { anchor: e.anchor, zone: zid } };
+    }
+    return feet(p[0], p[1], `a_${tag}`);
+  }
   const lotNode = (id) => (r.lots.some((l) => l.id === id) ? { name: id } : null);
   if (e.part !== undefined) {
     if (lotZone.has(e.part)) {

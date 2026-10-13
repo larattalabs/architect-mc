@@ -101,6 +101,7 @@ test('item 2: the seven classes, with their reasons, deviations, blockedBy and u
   assert.equal(z.class, 'refused');
   assert.equal(z.reasons[0].code, 'TOLERANCE');
   assert.ok(z.wouldFit?.length >= 1 && z.wouldFit.length <= 4);
+  assert.ok(z.wouldFit.every((w) => Array.isArray(w.geometry?.rect) && Array.isArray(w.cost?.range?.cells)), 'each alternative carries its own geometry and cost');
   const up = part(ref, 'up');
   assert.equal(up.class, 'blocked');
   assert.deepEqual(up.blockedBy, ['town']);
@@ -138,19 +139,25 @@ test('item 2: the seven classes, with their reasons, deviations, blockedBy and u
     { id: 'b', program: { lots: lots(3, 'b') }, where: { near: { anchor: 'stone', within: 0 } }, tolerance: { move: { max: 0, hard: true } } }] });
   assert.equal(part(two, 'a').class, 'fits');
   assert.equal(part(two, 'b').class, 'refused');
-  assert.ok(['OVERLAP', 'TOLERANCE'].includes(part(two, 'b').reasons[0].code), JSON.stringify(part(two, 'b').reasons));
+  assert.equal(part(two, 'b').reasons[0].code, 'OVERLAP', JSON.stringify(part(two, 'b').reasons));
+  assert.deepEqual(part(two, 'b').reasons[0].evidence.zones, ['a']);
+  assert.ok(part(two, 'b').wouldFit?.length >= 1 && part(two, 'b').wouldFit.every((w) => w.geometry?.rect && w.cost?.range), 'what would fit, with its geometry and cost');
+  // every reason carries evidence (§3)
+  for (const r of [fit, adj, ref, rb, mal, inc, two]) for (const a of r.check.parts) for (const x of a.reasons ?? []) assert.ok(x.evidence && typeof x.evidence === 'object', `${a.part} ${x.code}: evidence`);
 });
 
 // ------------------------------------------------------------------ 3
 
 test('item 3: three checks of each crafted plan give identical answers and artifact shas; 1 and 4 tile workers give equal tile shas', async () => {
   const { tileShas } = await import('../../tools/scenarios.mjs');
-  for (const f of read('valid').filter((x) => ['v01', 'v03', 'v07', 'v08', 'v12'].some((p) => x.name.startsWith(p)))) {
+  const perClass = [NEAR_CENTRE(), NEAR_CENTRE({ move: { max: 2, hard: true } }), WALLED].map((plan, i) => ({ name: `per-class ${i}`, on: 'asks', plan, protected: i < 2 ? GROVE : WALL }));
+  for (const f of [...read('valid'), ...perClass]) {
     const rs = [await run(f), await run(f), await run(f)];
     const j = rs.map((r) => JSON.stringify(r.check));
     assert.equal(j[1], j[0], `${f.name}: answers`);
     assert.equal(j[2], j[0], `${f.name}: answers`);
-    assert.ok(rs[0].artifactSha && rs.every((r) => r.artifactSha === rs[0].artifactSha), `${f.name}: artifact sha`);
+    assert.ok(rs.every((r) => r.artifactSha === rs[0].artifactSha), `${f.name}: artifact sha`);
+    if (!rs[0].artifact) continue;
     // the artifact's tile shas are the plan's own tiles (as scenario goldens compute them), 1 worker = 4 workers
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'p0-det-'));
     try {
@@ -207,6 +214,8 @@ test('item 8: a second check with one zone changed: every independent part cache
   const warm = await asks(changed, { planCache: cache.get });
   const cold = await asks(changed);
   assert.equal(part(warm, 'east').cached, true, 'the unchanged zone comes from the cache');
+  assert.equal(part(warm, 'spire').cached, true, 'the independent form comes from the cache');
+  assert.equal(part(warm, 'road').cached, undefined, 'the route (it depends on the changed zone; routes are always re-run) is resolved again');
   assert.equal(part(warm, 'west').cached, undefined, 'the changed zone is resolved again');
   const strip = (r) => JSON.stringify(r.check.parts.map(({ cached, ...a }) => a));
   assert.equal(strip(warm), strip(cold), 'answers equal to a cold check');
