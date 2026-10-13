@@ -15,7 +15,7 @@ import dev.larattalabs.architect.region.IrStale;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
-/** C33 (API 1.27.0 placeholder): JobSpec.systemRefs, the raised system cap, FIELD_LIMIT, the wire shape and binary compatibility. */
+/** C33 (API 1.25.0 placeholder): JobSpec.systemRefs, the raised system cap, FIELD_LIMIT, the wire shape and binary compatibility. */
 class JobSystemRefsTest {
 	private static JobSpec spec(String kind, String system, List<String> refs) {
 		return new JobSpec(kind, "go", system, null, null, null, List.of(), null, null, "t:o", null, null, new JsonObject(), List.of(), List.of(), refs);
@@ -23,7 +23,7 @@ class JobSystemRefsTest {
 
 	@Test
 	void version() {
-		assertTrue(IrStale.semverCompare(ArchitectApi.VERSION, "1.27.0") >= 0, ArchitectApi.VERSION);
+		assertTrue(IrStale.semverCompare(ArchitectApi.VERSION, "1.25.0") >= 0, ArchitectApi.VERSION);
 	}
 
 	@Test

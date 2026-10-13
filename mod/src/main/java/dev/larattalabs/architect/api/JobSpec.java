@@ -16,7 +16,7 @@ import org.jspecify.annotations.Nullable;
  * @param blobs blob ids copied into the job's scratch dir
  * @param images (since 1.6.0, a helper with {@code "jobImages"}) PNG or JPEG blobs ({@link Jobs#putBlob}, at most 5 MB each) sent
  *     to the model as image content blocks before the prompt text, each after its label; at most {@link #MAX_IMAGES}
- * @param systemRefs (since 1.27.0, a helper with {@code "job.systemRefs"}) ids of schemas and documents Architect holds, such as
+ * @param systemRefs (since 1.25.0, a helper with {@code "job.systemRefs"}) ids of schemas and documents Architect holds, such as
  *     {@code "plan/0"} or {@code "plan/0#compact"}. The helper expands each into the system prompt from its own bundled copy
  *     (the schema plus the live capability catalogue), refs first in a fixed order, then {@link #system}: the prompt prefix is
  *     the same across calls, so the provider's cache hits, and the caller stops sending the schema. An unknown ref is refused
@@ -59,7 +59,7 @@ public record JobSpec(String kind, String prompt, @Nullable String system, @Null
 		return new JobSpec(kind, prompt, system, model, effort, schema, tools, budgetUsd, maxTurns, owner, tag, group, ext, blobs, refs, systemRefs);
 	}
 
-	/** A copy with these system refs (see {@link #systemRefs}). Since 1.27.0. */
+	/** A copy with these system refs (see {@link #systemRefs}). Since 1.25.0. */
 	public JobSpec systemRefs(List<String> refs) {
 		return new JobSpec(kind, prompt, system, model, effort, schema, tools, budgetUsd, maxTurns, owner, tag, group, ext, blobs, images, refs);
 	}

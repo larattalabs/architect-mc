@@ -15,10 +15,10 @@ public final class Limits {
 	private Limits() {
 	}
 
-	// ---- JobSpec (C33, 1.27.0)
+	// ---- JobSpec (C33, 1.25.0)
 	/** {@code system} of a structured job (zod {@code JobSpec.system}; an agent job's is {@link #JOB_SYSTEM_AGENT_MAX}); UTF-16 units, not trimmed. */
 	public static final int JOB_SYSTEM_MAX = 120000;
-	/** {@code system} of an agent job (the cap every job had before 1.27.0). */
+	/** {@code system} of an agent job (the cap every job had before 1.25.0). */
 	public static final int JOB_SYSTEM_AGENT_MAX = 50000;
 	/** {@code systemRefs}: at most 8, each at most 64 characters and {@link #SYSTEM_REF_RE}. */
 	public static final int JOB_SYSTEM_REFS_MAX = 8;
