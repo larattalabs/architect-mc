@@ -153,6 +153,11 @@ export default function routeDemo(ctx) {
     pad: flat ? { edge: 'wall', maxCut: 64, maxFill: 64 } : { edge: 'slope', maxCut: 6, maxFill: 6 },
   }));
 
+  // the pads (their boxes, aprons and batters) keep out of the owner's keep-out, as the routes do
+  for (const l of lots) {
+    const m = 1 + (l.pad.edge === 'slope' ? Math.max(l.pad.maxCut, l.pad.maxFill) : 0);
+    if (kept(l.box.minX - m, l.box.minZ - m, l.box.maxX + m, l.box.maxZ + m)) throw new Error(`KEEP_OUT: lot ${l.id}'s pad (with its apron and batter) meets the keep-out`);
+  }
   // ---- the routes
   const nodes = Object.fromEntries(NAMES.map((n, i) => [n, { lot: n, kind: KINDS[i] }]));
   const edges = [{ id: 'gate_hall', from: 'gate', to: 'hall' }, { id: 'hall_chapel', from: 'hall', to: 'chapel' }, { id: 'chapel_lookout', from: 'chapel', to: 'lookout' }];
