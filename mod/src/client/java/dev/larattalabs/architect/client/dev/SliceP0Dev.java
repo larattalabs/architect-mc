@@ -230,6 +230,23 @@ public final class SliceP0Dev {
 					return o;
 				}));
 			});
+		DevBridge.register("dev.region.realiseByKey", 10_000, "{owner?, opKey} - (6c X C20 / P0 item 6) Regions.realiseByKey -> {region: {id, state, irSha, planId}} "
+			+ "(null when none)", (req, mc) -> {
+				Fields f = Fields.of(req);
+				String owner = f.optStr("owner", null), key = f.nonBlank("opKey");
+				return ServerTasks.callAsPlayer((level, player) -> {
+					JsonObject o = new JsonObject();
+					ArchitectApi.get().regions().realiseByKey(owner, key).ifPresentOrElse(v -> {
+						JsonObject r = new JsonObject();
+						r.addProperty("id", v.id());
+						r.addProperty("state", v.state().name());
+						r.addProperty("irSha", v.irSha());
+						r.addProperty("planId", v.planId());
+						o.add("region", r);
+					}, () -> o.add("region", null));
+					return o;
+				});
+			});
 		DevBridge.register("dev.region.tileShas", 10_000, "{region} - (6c P0) the sha of every tile a realise of the region received -> {tiles: {stage|set|key: sha}}",
 			(req, mc) -> {
 				String region = Fields.of(req).nonBlank("region");
