@@ -10664,6 +10664,22 @@ Not small, so a separate slice: it needs a site with no blueprint behind it.
 
 - PT2 (adoption). Builds across zones and owner transfers (Keep open). A standing settlement-to-placer rule if S-PT-3 asks.
 
+
+### Coordinator decisions on PT's Noah questions (2026-10-13; from Noah's stated intent, he may override)
+
+- **N-PT-1:** yes, incidental non-natural blocks (a torch, a few scattered blocks) count as natural.
+- **N-PT-2:** yes, a grace period: a component of 24+ structural cells changed by a player within the last 10 minutes is a
+  **provisional build** (kept like a build, shown as provisional) so a half-built house isn't cleared mid-build.
+- **N-PT-3:** the drafted promote/demote numbers are accepted as defaults (world-rule tunable); revisit with play data.
+- **N-PT-4:** no inferred scan by default (it would mark generated villages as builds). "Claim my build" is the tool; an
+  op-only scan command may come later.
+- **N-PT-5:** yes: a build's own placer (or an op) may consent to `PLAYER_BLOCKS` on that build. Noah's rule is "unless its
+  owner asks", so B's op-only rule (N-B-1) stays for everyone else's blocks.
+- **N-PT-6:** yes, `force` never overrides a build.
+- **N-PT-7:** accepted: commands, WorldEdit and other mods' tools are not recorded; claim covers them.
+- **N-PT-8:** the drafted non-op claim limits are accepted.
+- **N-PT-9:** next free minor at merge.
+
 ## 6c close-out (release tier, at the last 6c slice's merge)
 
 SETTLEMENTS §17.2's 6c gate, run once when the last 6c slice merges (whichever it is), on top of that slice's own gate:
