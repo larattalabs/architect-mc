@@ -103,4 +103,22 @@ public interface Regions {
 	default Optional<RegionView> realiseByKey(@Nullable String owner, String opKey) {
 		throw new UnsupportedOperationException("Regions.realiseByKey needs Architect API 1.14.0");
 	}
+
+	/**
+	 * (6c slice B) One terrain brush stroke ({@link BrushRequest}): the brush's box plus 8 is surveyed (and, for MELT, CAVE_CARVE or a
+	 * mask with a block or class term, frozen as a volume with block ids), the bundled {@code brush} program plans it (no Claude
+	 * call, no checker), and the plan is realised at once as one region ({@link RegionView#brush} names the kind). Completes, on the
+	 * server thread, with the region's view once it is realised ({@link RegionState#PLACED}, or PARTIAL with what was skipped and
+	 * why). {@link #remove} undoes it exactly, in any order with other strokes and sites.
+	 * <p>Every cell is written only when it is natural, or one of the owner's own earlier strokes (layered over); with
+	 * {@link Destruction#PLAYER_BLOCKS} also unowned non-natural cells. A cell any other journal entry owns (a site, road or delta, a
+	 * crate, another region, another owner's stroke) is skipped and counted. Refusals ({@link ArchitectRefused}):
+	 * {@link Reason#FIELD_LIMIT} (radius, strength, a missing or malformed owner), {@link Reason#NOT_ALLOWED} (outside the
+	 * Overworld, or a survival-toggle world), {@link Reason#PERMISSION} (PLAYER_BLOCKS without an online actor at permission level 2),
+	 * {@link Reason#PROTECTED} (an area of the owner), {@link Reason#NOT_LOADED} (a chunk of the box is not loaded: a stroke never
+	 * prepares), {@link Reason#SIDECAR_UNAVAILABLE}. Since 1.21.0.
+	 */
+	default CompletableFuture<RegionView> brush(BrushRequest r) {
+		throw new UnsupportedOperationException("Regions.brush needs Architect API 1.21.0");
+	}
 }

@@ -854,3 +854,72 @@ acacia, dark oak, the two huge mushrooms) and a buried fossil, each fitted so ev
 lanterns (light 15) by distance to the path; ground decoration (boulders, stumps, shrubs, fern patches, moss carpets, snow layers,
 small library trees). `stamps: false` is the committed golden's variant (N-F2-1). Cave (`cave: true`, the 6b volume fixture): glow
 lichen on cave walls and ceilings at least 2 under the ground, and the dripstone clusters fitted into the cave.
+
+# Phase 6c slice B additions (terrain brushes; CONTRACT "Phase 6c slice B")
+
+## Kit 0.23.0
+
+`KIT_VERSION` = `EVAL_KIT_VERSION` = `IrStale.KIT_VERSION` = 0.23.0 (a placeholder: the coordinator renumbers at merge). Every IR
+sha moves by its `kitVersion`; no program but `brush` changes its parts, ops or tiles (S1, S7, `mega_bench` and the 6b goldens hold).
+`KINDS_FORMAT2` (kit and mod) gains `volume:blocks`, appended after F2's `scatter` and `stamp`.
+
+## ARVX version 2 (block ids)
+
+Version 2 is version 1 plus, after the owner table:
+
+```
+varint blockCount, then blockCount x (varint byteLength + UTF-8 block id, no properties; entry 0 is minecraft:air)
+columns, x-major: runs bottom-up of (varint blockIndex, varint length)        (lengths sum to the height)
+```
+
+The classes are version 1's, so every v1 reader of classes reads a v2 file's classes the same (the kit's `decodeArvx` and the mod's
+`Arvx.decode` read both; a kit before 0.23.0 refuses version 2). A MISSING column's block run is air (a reader asks the class
+first: `blockAt` answers null there). The mod writes v2 only when asked: `r.needVolume(box, {blocks: true})` (the `needVolumes`
+entry carries `blocks: true`; at most 32M cells, `VolumeSurvey.MAX_BLOCK_CELLS`) and a brush stroke's volume. Fixture:
+`mod/src/test/resources/arvx/blocks.{bin,json}` (written by `ArvxBlocksTest`, read by `kit/test/brush-b.test.mjs`).
+
+## The `block` mask term (MP's ruling made real)
+
+An IR volume with block ids carries `volumes[name].blocks: true`, and the IR then requires `volume:blocks`. A mask's `block` term
+reads the cell's block id from those volumes (outside them: no block, the term is false). Tags are expanded at plan time into the
+IR member `blockTags: {"#minecraft:tag": [ids]}` (the evaluator can't read the 26.3 tables); `blockTags` is a format-2 member. A
+`block` term over a version-1 volume or no volume still refuses `MASK_NEEDS_VOLUME`.
+
+## The `json` param type
+
+Region programs only: `{type: 'json', default: null}`, a JSON object (at most 8,192 characters) or null; the program validates it
+(the brush's `mask` and `pattern`). Never a variant axis.
+
+## `Part.columns(from, to, cols, materials, {cond, walk, mask})`
+
+The low-level `columns` op for programs (as `fill` is for `shape`): `cols` is a flat `[x, z, a, b, m]...` list, `materials` anything
+`fill` takes (roles, block states, null for air, patterns).
+
+## `brush` (`kit/regions/brush.mjs`, `catalogue = false`) and `lib/region/brush.mjs`
+
+Params: `kind` (smooth, erode, melt, blend, raise, lower, overlay, cave_carve), `shape` (sphere, cylinder), `cx`, `cy`, `cz`, `radius`
+(1-32), `strength` (1-16), `mask`, `pattern` (json), `destruction` (natural_only, player_blocks). One stage `stroke`, one part
+`stroke` (the mask on every op), every op `ALWAYS_OURS` (natural cells and the owner's earlier strokes; the mod decides the rest).
+
+- **The box:** x/z within `radius` of the centre, y within `radius` (a cylinder is `2r + 1` high), clamped to the world. The
+  claim is the box plus 8 (the survey margin); the frozen volume the box plus 2 (`VOLUME_PAD`), with block ids, for MELT,
+  CAVE_CARVE and a mask with a `block` or `class` term. The mod's `Brushes` computes the same boxes (a test holds them equal).
+- **Surface kinds** (smooth, erode, blend, raise, lower) move the columns whose ground lies inside the shape (not water or lava) to
+  a new ground `h`; one `columns` op from/to `{surface: 0}`: a fill writes the old top and the new cells (the subsurface role under
+  the surface role, or the pattern), a cut writes air from `h + 1` to the old top.
+  - SMOOTH: Jacobi toward the 4-neighbour mean (1/16 fixed point, `2 * strength` sweeps, a sweep kept only when neither the
+    largest step between inside columns nor the step energy rises), then a step descent (pairs at the largest step move one block
+    closer when no step touching the column grows to it). The columns outside pin the edge.
+  - RAISE / LOWER: `+/-strength` at the centre; a cylinder falls off by `(1 - d^2/r^2)^2`, a sphere by `sqrt(1 - d^2/r^2)`, rounded.
+  - ERODE: thermal (a drop over 2 slides a block) and stream (D8 accumulation at 24) sweeps, at most `strength` per column.
+  - BLEND: the inside columns within a third of the radius keep their ground; the ring relaxes (Jacobi, `4 * radius` sweeps) to
+    the land outside, each column within `strength` of its ground.
+- **OVERLAY:** the top `strength` cells of each inside column (`{surface: 1 - strength}` to `{surface: 0}`): the pattern, else
+  the subsurface role under the surface role.
+- **MELT:** `strength` rounds over the frozen volume; a round removes every removable cell inside the shape with at least 4 air
+  (or plant) neighbours of 6, against the world the earlier rounds left. Removable: ROCK, SOIL, LOOSE, ICE, SNOW; with
+  `player_blocks` also PLAYER and BLOCK_ENTITY. Air writes only (absolute `columns` runs).
+- **CAVE_CARVE:** a seeded worm from the centre (`ctx.rng('cave')`, compass headings, a gentle pitch), `radius / 2` steps of 2,
+  tube radius `1.5 + strength / 4` (at most 4.5), its floor levelled (no cell below the centre line's y minus half the tube). The
+  worm stops before a segment any of whose cells is within one cell (26-neighbourhood) of water, lava or a MISSING cell (M4), and
+  the solid cells the carve cuts off from the volume's faces are carved too (M3). Only removable cells; air writes only.

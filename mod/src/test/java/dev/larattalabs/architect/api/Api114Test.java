@@ -143,7 +143,9 @@ class Api114Test {
 		assertEquals(RegionState.REMOVED, rs[rs.length - 1]);
 		assertEquals(RegionState.REMOVING, rs[rs.length - 2]);
 		var vc = RegionView.class.getRecordComponents();
-		assertEquals("removedAt", vc[vc.length - 1].getName());
+		// removedAt follows 1.9.0's actions; later slices append after it (6c B: brush)
+		assertEquals("actions", vc[15 - 1].getName());
+		assertEquals("removedAt", vc[16 - 1].getName());
 		RegionView.class.getConstructor(String.class, String.class, String.class, String.class, JsonObject.class, String.class, BoundingBox.class, RegionState.class,
 			List.class, List.class, long.class, Map.class, Refusal.class, PrepareView.class, List.class); // 1.9.0
 		RegionView.class.getConstructor(String.class, String.class, String.class, String.class, JsonObject.class, String.class, BoundingBox.class, RegionState.class,

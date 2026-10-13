@@ -19,6 +19,7 @@ import { Store } from '../src/store.js';
 import { sha256 } from '../src/regions.js';
 import { arsv, rmrf, SIDECAR_ROOT, tempDir, until } from './helpers.js';
 
+
 const KIT = process.env.ARCHITECT_REGION_KIT ? path.resolve(process.env.ARCHITECT_REGION_KIT) : path.join(SIDECAR_ROOT, '..', 'kit');
 const REALISE = path.join(KIT, 'lib', 'realise.mjs');
 const KIT_VERSION = /export const KIT_VERSION = '([^']+)'/.exec((fs.existsSync(path.join(KIT, 'lib', 'region', 'plan.mjs')) ? fs.readFileSync(path.join(KIT, 'lib', 'region', 'plan.mjs'), 'utf8') : ''))?.[1]; // (6c F2) the kit's own, not a pinned number

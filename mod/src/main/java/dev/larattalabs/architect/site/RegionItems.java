@@ -176,7 +176,7 @@ public final class RegionItems {
 			i.reason = null;
 		}
 		if (p.check == null) {
-			p.check = new TileCheck(tile.cells(), r.rec().groupId, r.rec().dimension, r.rec().claim, win);
+			p.check = tileCheck(tile.cells(), r, win);
 		}
 		TileCheck.Result res = p.check.step(level, deadline);
 		if (res == null) {
@@ -221,6 +221,16 @@ public final class RegionItems {
 				Batches.fail(b, i, e.reason(), e.getMessage());
 			}
 		}
+	}
+
+	/** A tile's check; (6c B) a brush stroke's carries its destruction rule and the owner's other strokes (layered over). */
+	private static TileCheck tileCheck(dev.larattalabs.architect.region.Packed.Tile cells, RegionsImpl.Live r, Anchors.Bounds win) {
+		var rec = r.rec();
+		if (rec.brush == null) {
+			return new TileCheck(cells, rec.groupId, rec.dimension, rec.claim, win);
+		}
+		boolean pb = rec.brush.has("playerBlocks") && rec.brush.get("playerBlocks").getAsBoolean();
+		return new TileCheck(cells, rec.groupId, rec.dimension, rec.claim, win, pb, dev.larattalabs.architect.region.Brushes.layerGroups(rec.owner));
 	}
 
 	/** Liveness (gate item 4): when a tile item holding its tickets first waited for its (all generated) chunks to load. */
@@ -350,7 +360,7 @@ public final class RegionItems {
 					request(r, t);
 				} else if (tile != null && tile.phase == TileStream.Phase.DECODED && p.check == null) {
 					// its cells sorted and turned into journal values off the server thread now; the world checks run when it is next
-					p.check = new TileCheck(tile.cells(), r.rec().groupId, r.rec().dimension, r.rec().claim, window(t[3], r.rec().claim));
+					p.check = tileCheck(tile.cells(), r, window(t[3], r.rec().claim));
 				}
 				continue;
 			}

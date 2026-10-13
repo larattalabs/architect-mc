@@ -71,6 +71,8 @@ package dev.larattalabs.architect.api;
  * <li>{@code FIELD_LIMIT} (1.12.0): a bounded request field is out of range ({@code Limits}); nothing was sent.</li>
  * <li>{@code FORMAT} (1.18.0): a file to import is not in the expected format: not a Sponge schematic, an unknown version, a
  * {@code DataVersion} newer than the game's, corrupt data, or blocks the game does not know ({@link Library#importSchematic}).</li>
+ * <li>{@code PERMISSION} (1.21.0): the caller lacks the permission the request needs: a brush stroke with
+ * {@link Destruction#PLAYER_BLOCKS} needs an online player with permission level 2 as its actor ({@link Regions#brush}).</li>
  * </ul>
  * New values are only ever appended.
  */
@@ -83,5 +85,7 @@ public enum Reason {
 	// 1.12.0 (6c slice 0c), after 0a's and 0b's
 	PROTECTED, FIELD_LIMIT,
 	// 1.18.0 (6c slice SCH)
-	FORMAT
+	FORMAT,
+	// 1.21.0 (6c slice B)
+	PERMISSION
 }
