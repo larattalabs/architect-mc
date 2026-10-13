@@ -422,7 +422,22 @@ export function build(ctx, hooks = {}) {
   // lot on a 5-cell grid, last
   for (let z = claim.minZ + 4; z <= claim.maxZ - 4; z += 5) for (let x = claim.minX + 4; x <= claim.maxX - 4; x += 5) if (onBand(x, z) && near6[idx(x, z)]) extra.push({ lot: 'field', x, z });
   extraCap.field = 48;
-  const cover = lightCover(r, { fixture, stage: 'decor', reserved, extra, extraCap, maxPerLot: 12, share: 0.001, part: 'outpost_lamps' });
+  // the cover plans each lamp's reach at 2 under its light (the realised world's terrain and natural snow shade more than the plan's
+  // virtual world: S2's first natural run read 1.5% dark against 0.4% planned); the lamps written are the fixture's own
+  const cover = lightCover(r, { fixture: { ...fixture, level: fixture.level - 2 }, stage: 'decor', reserved, extra, extraCap, maxPerLot: 12, share: 0.001, part: 'outpost_lamps' });
+  cover.fixture.level = fixture.level;
+  // a lamp's foot on a natural snow layer (the frozen volume reads it as SNOW above the survey's ground) goes down into it: the post
+  // replaces the layer (IF_NATURAL), never stands on it (a snow layer holds nothing up: M3)
+  const sunk = new Set();
+  for (const l of cover.lamps) {
+    const [x, y, z] = l.at;
+    if (classAt(vol, x, y - 1, z) === VC.SNOW && y - 1 > S.groundAt(x, z)) { for (const [cx2, , cz2] of l.cells) sunk.add(`${cx2},${cz2}`); l.at = [x, y - 1, z]; }
+  }
+  if (sunk.size) {
+    const lp = r.parts.find((q) => q.id === 'outpost_lamps');
+    for (const op of lp.ops) for (let i = 0; i < op.cols.length; i += 5) if (sunk.has(`${op.cols[i]},${op.cols[i + 1]}`)) { op.cols[i + 2]--; op.cols[i + 3]--; }
+  }
+  info.lampsSunk = sunk.size;
   info.lamps = { fixture: cover.fixture, count: cover.lamps.length, perKey: cover.perLot, before: cover.before, after: cover.after, capped: cover.capped };
 
   // ---- the gallery's cameras: the hub between the gate and the lots' centroid

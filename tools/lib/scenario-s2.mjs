@@ -46,7 +46,7 @@ export function standCounts(ir, vols, after, stand) {
 export function lotRows(meta, view) {
   const planned = meta.outpost?.lots ?? [];
   const states = Object.fromEntries((view?.lots ?? []).map((l) => [l.id, l.state]));
-  return { planned: planned.length, unplaced: meta.outpost?.unplaced ?? [], states, placed: Object.values(states).filter((s) => s === 'PLACED').length };
+  return { planned: planned.length, unplaced: meta.outpost?.unplaced ?? [], states, placed: Object.values(states).filter((s) => String(s).toUpperCase() === 'PLACED').length };
 }
 
 /**
@@ -93,5 +93,7 @@ export function s2Bars(x, generic, routeRows) {
   out.push({ ...g.determinism, label: 'S2 14 Determinism', threshold: 'IR sha identical over 3 plans; tiles 1 = 4 workers; the committed golden scenarios/goldens/s2.json holds' });
   out.push({ ...g.spend, label: 'S2 15 Spend', threshold: '$0.00' });
   out.push({ ...g.gallery, label: 'S2 16 Gallery' });
+  // the flat variant shows bar 13 (E-flat) and its own determinism (CONTRACT S2 §4 item 2); its other rows are recorded
+  if (x.flat) return out.map((r) => (['exactness', 'determinism', 'spend', 'gallery'].includes(r.id) || !r.gated ? r : { ...r, gated: false, pass: null, threshold: `recorded on the flat variant (${r.threshold})` }));
   return out;
 }
