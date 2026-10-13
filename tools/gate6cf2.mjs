@@ -12,7 +12,7 @@
 //                                       mega_bench, the 6b fixtures, forms_demo, relief_demo), the Java ApiF2Test; N-F2-1: no stamp in the
 //                                       repo, none in the built jar
 //     stale                             item 10: the v0.21.0 kit and mod jar refuse a scatter/stamp plan PLAN_STALE (no game: their own code)
-//     apicompat                         item 11: api-compat against the 0.21.0, 0.20.0 and 0.19.0 apitest jars and the 0.21.0 surface
+//     apicompat                         item 11: api-compat against the 0.22.0, 0.21.0 and 0.20.0 apitest jars and the 0.22.0 surface
 //     harvest                           item 6 in game: the stamp library harvested in a scratch superflat world into the game's
 //                                       architect/stamps (local-only, N-F2-1), then again into a temp dir: every stamp byte-identical
 //     pin                               scatter_demo's and scatter_cave's program seeds and cameras (scenarios/*.json), once
@@ -165,7 +165,7 @@ steps.apicompat = async () => {
   const r = spawnSync(process.execPath, [path.join(root, 'tools', 'api-compat.mjs'), '--gate6cf2'], { cwd: root, encoding: 'utf8', env: { ...process.env, JAVA_HOME: process.env.JAVA_HOME ?? '/opt/homebrew/opt/openjdk@25' } });
   const t = `${r.stdout}${r.stderr}`;
   fs.writeFileSync(path.join(OUT, 'api-compat.txt'), t);
-  check(r.status === 0 && /all 4 checks clean/.test(t), `item 11: api-compat against the 0.21.0, 0.20.0 and 0.19.0 apitest jars and the 0.21.0 surface: ${t.trim().split('\n').pop()}`);
+  check(r.status === 0 && /all 4 checks clean/.test(t), `item 11: api-compat against the 0.22.0, 0.21.0 and 0.20.0 apitest jars and the 0.22.0 surface: ${t.trim().split('\n').pop()}`);
   spendZero();
   return { out: t };
 };
