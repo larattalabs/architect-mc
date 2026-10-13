@@ -341,13 +341,13 @@ public final class RegionsImpl implements Regions {
 		return mine;
 	}
 
-	/** (6c X, C20) The plan of an owner's operation key, in any state, after a restart too; empty while it still plans. */
 	/** (6c B) One brush stroke as a region ({@link Brushes}). */
 	@Override
 	public CompletableFuture<RegionView> brush(dev.larattalabs.architect.api.BrushRequest r) {
 		return Brushes.stroke(r, false);
 	}
 
+	/** (6c X, C20) The plan of an owner's operation key, in any state, after a restart too; empty while it still plans. */
 	@Override
 	public Optional<RegionPlan> planByKey(@Nullable String owner, String opKey) {
 		String key = java.util.Objects.requireNonNull(dev.larattalabs.architect.apiimpl.Wire0a.opKey(opKey), "opKey");
