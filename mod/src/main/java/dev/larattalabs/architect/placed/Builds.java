@@ -113,7 +113,7 @@ public final class Builds {
 	}
 
 	static void rulesChanged() {
-		Placed.on = rules.playerTracking;
+		TrackingRule.on = rules.playerTracking;
 		indexDirty = true;
 		save(true);
 	}
@@ -219,7 +219,7 @@ public final class Builds {
 				Architect.LOGGER.error("PT: the build index {} can't be read ({}); builds are re-found as chunks are classified", file, e.toString());
 			}
 		}
-		Placed.on = rules.playerTracking;
+		TrackingRule.on = rules.playerTracking;
 	}
 
 	/** Writes the index when it changed (at most once a second unless {@code now}): a temp file, then an atomic rename. */
@@ -518,7 +518,7 @@ public final class Builds {
 
 	private static void tick(MinecraftServer s) {
 		Placed.tickEnd();
-		if (!Placed.on) {
+		if (!TrackingRule.on) {
 			save(false);
 			return;
 		}
@@ -808,7 +808,7 @@ public final class Builds {
 			if (alwaysStructural(s)) {
 				return true;
 			}
-			if (Placed.empty(s)) {
+			if (PlacedRules.empty(s)) {
 				return false;
 			}
 			if (!naturalLooking(s)) {

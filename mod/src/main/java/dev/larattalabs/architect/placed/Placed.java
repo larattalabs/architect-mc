@@ -1,5 +1,11 @@
 package dev.larattalabs.architect.placed;
 
+import static dev.larattalabs.architect.placed.PlacedRules.empty;
+import static dev.larattalabs.architect.placed.PlacedRules.records;
+
+import dev.larattalabs.architect.placed.PlacedRules.Kind;
+import dev.larattalabs.architect.placed.PlacedRules.Use;
+
 import com.mojang.serialization.Codec;
 import dev.larattalabs.architect.Architect;
 import dev.larattalabs.architect.journal.Pt;
@@ -61,8 +67,6 @@ public final class Placed {
 	public static final AttachmentType<PlacedChunk> TYPE = AttachmentRegistry.<PlacedChunk>builder().persistent(CODEC).buildAndRegister(Architect.id(
 		"placed"));
 
-	/** World rule {@code architect.playerTracking} (default on): off, nothing is recorded and nothing enforced; the data is kept. */
-	static volatile boolean on = true;
 	private static volatile @Nullable Thread serverThread;
 	private static volatile @Nullable MinecraftServer server;
 
@@ -86,7 +90,7 @@ public final class Placed {
 	}
 
 	public static boolean on() {
-		return on;
+		return TrackingRule.on;
 	}
 
 	public static @Nullable MinecraftServer server() {
@@ -99,28 +103,13 @@ public final class Placed {
 
 	// ------------------------------------------------------------------ scopes
 
-	/** A player's use of an item (§2): who, where they clicked, what kind of use records. */
-	record Use(ServerLevel level, UUID placer, Kind kind, @Nullable BlockPos click, @Nullable Direction face) {
-	}
-
-	enum Kind {
-		/** A block item (seeds, lily pads and powder snow included): every cell going from empty or replaceable to a block. */
-		BLOCK,
-		/** A fluid bucket: the placed source. */
-		BUCKET,
-		/** A hoe, shovel or axe: the converted cell within 1 of the click. */
-		TOOL,
-		/** Anything else (bone meal, fire, spawn eggs): nothing records. */
-		NONE
-	}
-
 	private static final Deque<@Nullable Use> USES = new ArrayDeque<>();
 	private static @Nullable Use use;
 
 	/** {@code ServerPlayerGameMode.useItemOn}/{@code useItem} HEAD; always paired with {@link #endUse}. {@code hit}: null for useItem. */
 	public static void beginUse(ServerPlayer p, Level level, ItemStack stack, @Nullable BlockHitResult hit) {
 		USES.push(use == null ? NONE_USE : use);
-		if (!(level instanceof ServerLevel sl) || !on) {
+		if (!(level instanceof ServerLevel sl) || !TrackingRule.on) {
 			use = null;
 			return;
 		}
@@ -303,14 +292,9 @@ public final class Placed {
 
 	// ------------------------------------------------------------------ the hook
 
-	/** Fluid blocks and air: a cell holding one is never tracked (a placed bucket source is the exception, recorded by its use). */
-	static boolean empty(BlockState s) {
-		return s.isAir() || s.getBlock() instanceof LiquidBlock;
-	}
-
 	/** {@code LevelChunk.setBlockState} RETURN: a block changed from {@code old} to {@code now}. */
 	public static void changed(LevelChunk chunk, BlockPos pos, BlockState old, BlockState now) {
-		if (!on || old == now || !(chunk.getLevel() instanceof ServerLevel level)) {
+		if (!TrackingRule.on || old == now || !(chunk.getLevel() instanceof ServerLevel level)) {
 			return;
 		}
 		if (!onServerThread()) {
@@ -346,61 +330,14 @@ public final class Placed {
 			return;
 		}
 		Use u = use;
-		if (u != null && u.level == level && u.kind != Kind.NONE && records(u, pos, old, now)) {
-			put(chunk, pos, u.placer, null, true);
+		if (u != null && u.level() == level && u.kind() != Kind.NONE && records(u, pos, old, now)) {
+			put(chunk, pos, u.placer(), null, true);
 			return;
 		}
 		if (empty(now)) {
 			clear(chunk, pos);
 		}
 		// a cell that stays a block keeps its record (§3: weathering, grass on placed dirt, crops growing, waterlogging)
-	}
-
-	/** Whether a player's use records this change (§2). */
-	static boolean records(Use u, BlockPos pos, BlockState old, BlockState now) {
-		BlockPos c = u.click;
-		if (c == null) {
-			return false;
-		}
-		int d = Math.max(Math.abs(pos.getX() - c.getX()), Math.max(Math.abs(pos.getY() - c.getY()), Math.abs(pos.getZ() - c.getZ())));
-		switch (u.kind) {
-			case BLOCK -> {
-				if (d > 2 || empty(now)) {
-					return false;
-				}
-				if (empty(old) || old.canBeReplaced()) {
-					return true;
-				}
-				// a block added into its own cell: a slab made double, a candle, pickle, egg or petal more, a snow layer more
-				BlockPos target = u.face == null ? c : c.relative(u.face);
-				return (pos.equals(c) || pos.equals(target)) && old.getBlock() == now.getBlock() && stacked(old, now);
-			}
-			case BUCKET -> {
-				return d <= 2 && now.getBlock() instanceof LiquidBlock && now.getFluidState().isSource() && !(old.getBlock() instanceof LiquidBlock
-					&& old.getFluidState().isSource());
-			}
-			case TOOL -> {
-				return d <= 1 && !empty(old) && !empty(now) && old.getBlock() != now.getBlock();
-			}
-			default -> {
-				return false;
-			}
-		}
-	}
-
-	private static final IntegerProperty[] COUNTS = {BlockStateProperties.CANDLES, BlockStateProperties.PICKLES, BlockStateProperties.EGGS,
-		BlockStateProperties.FLOWER_AMOUNT, BlockStateProperties.SEGMENT_AMOUNT, BlockStateProperties.LAYERS};
-
-	private static boolean stacked(BlockState old, BlockState now) {
-		if (now.hasProperty(BlockStateProperties.SLAB_TYPE)) {
-			return now.getValue(BlockStateProperties.SLAB_TYPE) == SlabType.DOUBLE && old.getValue(BlockStateProperties.SLAB_TYPE) != SlabType.DOUBLE;
-		}
-		for (IntegerProperty q : COUNTS) {
-			if (now.hasProperty(q) && old.hasProperty(q)) {
-				return now.getValue(q) > old.getValue(q);
-			}
-		}
-		return false;
 	}
 
 	// ------------------------------------------------------------------ the set
@@ -500,7 +437,7 @@ public final class Placed {
 	}
 
 	public static @Nullable String build(Level level, @Nullable LevelChunk chunk, int x, int y, int z) {
-		if (!on) {
+		if (!TrackingRule.on) {
 			return null;
 		}
 		LevelChunk c = chunk != null && chunk.getPos().x() == x >> 4 && chunk.getPos().z() == z >> 4 ? chunk : loadedChunk(level, x, z);
@@ -524,7 +461,7 @@ public final class Placed {
 	 * take it as natural terrain (IF_NATURAL, fits, naturalOnly), whatever its voxel class. Its block entity keeps its own rules.
 	 */
 	public static boolean naturalForWrites(Level level, @Nullable LevelChunk chunk, int x, int y, int z, Consent consent) {
-		if (!on) {
+		if (!TrackingRule.on) {
 			return false;
 		}
 		LevelChunk c = chunk != null && chunk.getPos().x() == x >> 4 && chunk.getPos().z() == z >> 4 ? chunk : loadedChunk(level, x, z);
@@ -605,7 +542,7 @@ public final class Placed {
 	 */
 	static List<SectionCells> annotate(String dimension, Collection<SectionCells> cells) {
 		MinecraftServer s = server;
-		if (s == null || !on || !onServerThread()) {
+		if (s == null || !TrackingRule.on || !onServerThread()) {
 			return cells instanceof List<SectionCells> l ? l : new ArrayList<>(cells);
 		}
 		ServerLevel level = dev.larattalabs.architect.site.Sites.levelOf(s, dimension);

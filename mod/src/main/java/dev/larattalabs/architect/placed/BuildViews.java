@@ -473,7 +473,7 @@ public final class BuildViews {
 				if (c != null) {
 					for (int y = box.minY(); y <= box.maxY(); y++) {
 						BlockState s = c.getBlockState(m.set(x, y, z));
-						if (Placed.empty(s)) {
+						if (PlacedRules.empty(s)) {
 							continue;
 						}
 						long p = m.asLong();

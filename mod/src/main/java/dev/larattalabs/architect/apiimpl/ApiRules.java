@@ -37,7 +37,7 @@ public final class ApiRules {
 	 */
 	public static java.util.Set<String> features(int protocol, java.util.Collection<String> sidecarFeatures) {
 		java.util.Set<String> out = new java.util.TreeSet<>(JAVA_FEATURES);
-		if (dev.larattalabs.architect.placed.Placed.on()) {
+		if (dev.larattalabs.architect.placed.TrackingRule.on) {
 			out.add("playerPlaced"); // 6c PT: player-placed tracking is on (the world rule architect.playerTracking)
 		}
 		if (protocol >= 2) {
