@@ -35,8 +35,9 @@
 //       cost      15  (recorded) bytes per tracked block and per section on disk and in heap; the hook's added ns; the classifier's
 //                     own CPU per tick max (budget 1 ms)
 //       apitest   16  through the public API: /apitest apipt, ptbuilds, ptat, ptbox, ptplace
-//     nomod      12 (second half) the chunk NBT keeps architect_mc:placed after a start without the mod: a server of the same game
-//                     and Fabric API without Architect loads the chunk, saves and stops; the region file read back
+//     nomod      12 (second half, the coordinator's ruling: a documented limit) a server of the same game and Fabric API
+//                     without Architect: a never-loaded chunk keeps architect_mc:placed, a loaded one drops it (Fabric API); after the
+//                     reinstall the world loads, the build's blocks stand untracked, and a claim restores its protection
 //     report     REPORT.md over the step JSONs
 //
 // Evidence: artifacts/gate6c-pt/<step>.json in the main checkout (GATE6CPT_OUT overrides), all.log, REPORT.md, spend.json.
@@ -915,19 +916,27 @@ steps.incidental = async () => {
 };
 
 steps.nomod = async () => {
+  // Coordinator ruling (2026-10-13): accept and document. Fabric API drops an unknown attachment when a world starts WITHOUT the
+  // mod and loads the chunk (the chunk is saved again without it); players cannot place tracked blocks without the mod, so the
+  // set is forgotten there, not mirrored to a side file (it would go stale while the mod is absent). The bar: the drop is the
+  // documented one, a never-loaded chunk keeps its records, and after the reinstall the world loads cleanly, the build's blocks
+  // stand untracked (the pre-tracking rule: natural by class), and "claim my build" restores its protection.
   const X = 400, Z = 400;
   const gy = await flatWorld('G6B PT NoMod', X, Z);
   const y = gy + 1;
-  const ops = [];
-  for (let i = 0; i < 16; i++) ops.push({ item: 'minecraft:stone_bricks', at: [X + i, y, Z] });
-  await uses(ops);
-  const c0 = await cellsOf([X - 1, y - 1, Z - 1, X + 17, y + 1, Z + 1]);
+  await uses(cabinOps(X, y, Z));
+  await settle(6000);
+  const box = cabinBox(X, y, Z);
+  const c0 = await cellsOf(box);
+  const b0 = (await buildsIn(box)).builds;
+  const bh0 = await bhash(box);
+  check(c0.tracked > 200 && b0.length === 1, `item 12: with the mod the cabin is ${b0[0]?.id} (${b0[0]?.kind}, ${c0.tracked} tracked cells)`);
   await cmd('/save-all flush');
   await leaveWorld();
   const { startNoMod, readChunk, attachmentKeys } = await import('./lib/nomod-server.mjs');
   const W = path.join(SAVES, 'G6B PT NoMod');
   const ch0 = await readChunk(W, X >> 4, Z >> 4);
-  check(attachmentKeys(ch0).includes('architect_mc:placed'), `item 12: with the mod the chunk's NBT holds fabric:attachments/architect_mc:placed (${c0.tracked} records)`);
+  check(attachmentKeys(ch0).includes('architect_mc:placed'), `item 12: with the mod the chunk's NBT holds fabric:attachments/architect_mc:placed`);
   // a server of the same game and Fabric API without Architect: the chunk loaded (forceload), saved, unloaded, the server stopped
   const G = path.join(os.tmpdir(), `gate6cpt-nomod-${process.pid}`);
   fs.rmSync(G, { recursive: true, force: true });
@@ -951,10 +960,30 @@ steps.nomod = async () => {
   }
   check(!out['loaded'].architectOnClasspath && !out['never loaded'].architectOnClasspath, 'item 12: the second server runs without Architect (no Architect init in its log)');
   check(out['never loaded'].keys.includes('architect_mc:placed'), `item 12: a start without the mod that never loads the chunk leaves architect_mc:placed in its NBT (${json(out['never loaded'].keys)})`);
-  check(out['loaded'].keys.includes('architect_mc:placed'), `item 12: the chunk NBT keeps architect_mc:placed after a start without the mod that loads it (measured: ${json(out['loaded'].keys)}; Fabric API logs "Skipping invalid attachments" ${out['loaded'].skipped} and the chunk is saved again without it)`);
+  check(!out['loaded'].keys.includes('architect_mc:placed') && out['loaded'].skipped, `item 12 (documented limit): a start without the mod that loads the chunk drops architect_mc:placed (Fabric API logs "Skipping invalid attachments"; the chunk saved again with ${json(out['loaded'].keys)})`);
+  // the reinstall: the world the mod-less server saved, opened with the mod again
+  const back = 'G6B PT NoMod Back';
+  fs.rmSync(path.join(SAVES, back), { recursive: true, force: true });
+  execFileSync('cp', ['-c', '-R', path.join(G, 'saves', 'NoMod'), path.join(SAVES, back)]);
+  fs.rmSync(path.join(SAVES, back, 'session.lock'), { force: true });
+  await openWorld(back);
+  await tp(X + 0.5, gy + 25, Z + 0.5);
+  await settle(3000);
+  const bh1 = await bhash(box);
+  const c1 = await cellsOf(box);
+  const door = await ptAt([X + 4, y, Z]);
+  check(bh1.sha256 === bh0.sha256 && c1.tracked === 0 && !door.tracked, `item 12: after the reinstall the world loads cleanly: the cabin's blocks stand (hash equal), untracked (${c1.tracked} records; the pre-tracking rule)`);
+  const cl = await call('dev.pt.claim', { box, actor: 'bot' });
+  check(!cl.refused && cl.state === 'CLAIMED' && cl.cells > 200, `item 12: "claim my build" restores it: ${cl.buildId} ${cl.state} ${cl.cells} cells (${cl.kind})`, cl);
+  const h0 = await khash(box);
+  const v = await brush({ kind: 'raise', shape: 'cylinder', at: [X, gy, Z + 4], radius: 2, strength: 2 });
+  const h1 = await khash(box);
+  check(!v.refused && h1.sha256 === h0.sha256 && (v.cellsSkipped?.player_build ?? 0) > 0, `item 12: and its protection: a stroke at its wall's base leaves its ${h0.cells} cells unchanged (${v.cellsSkipped?.player_build} build cells skipped)`);
+  if (v.region) await undo(v.region);
+  await leaveWorld();
   fs.rmSync(G, { recursive: true, force: true });
   spendZero();
-  return out;
+  return { ...out, claimed: cl.buildId, trackedAfter: c1.tracked };
 };
 
 // ------------------------------------------------------------------ item 13: claim, release, supports
@@ -1092,7 +1121,11 @@ steps.apitest = async () => {
   await settle(6000);
   await call('dev.pt.builds', { drain: true });
   const s = await api('apipt');
-  check(s.builds && s.playerPlaced && s.playerBuildAppended && s.kinds === 7 && s.states === 4, `item 16: /apitest apipt through the public API: ${json(s)}`);
+  // PLAYER_BUILD's place in Reason.java's declared order (appended after the values before it at the merge: P0's ARTIFACT_*)
+  const reasonSrc = fs.readFileSync(path.join(root, 'mod', 'src', 'main', 'java', 'dev', 'larattalabs', 'architect', 'api', 'Reason.java'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+  const order = /enum Reason\s*\{([\s\S]*?)\}/.exec(reasonSrc)?.[1].match(/[A-Z_]{3,}/g) ?? [];
+  const before = order[order.indexOf('PLAYER_BUILD') - 1];
+  check(s.builds && s.playerPlaced && s.playerBuildAppended && s.playerBuildAfter === before && s.kinds === 7 && s.states === 4, `item 16: /apitest apipt through the public API (PLAYER_BUILD after ${before} as in Reason.java): ${json(s)}`);
   const b = await api(`ptbuilds ${cabinBox(X, y, Z).join(' ')}`);
   check(Array.isArray(b) && b.length === 1 && b[0].kind === 'HOUSE', `item 16: Sites.builds(dim, box): ${json(b)}`);
   const a = await api(`ptat ${X} ${y} ${Z}`);

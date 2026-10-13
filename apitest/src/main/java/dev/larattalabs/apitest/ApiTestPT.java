@@ -78,7 +78,9 @@ public final class ApiTestPT {
 					o.addProperty("version", ArchitectApi.VERSION);
 					o.addProperty("builds", api.features().contains("builds"));
 					o.addProperty("playerPlaced", api.features().contains("playerPlaced"));
-					o.addProperty("playerBuildAppended", Reason.PLAYER_BUILD.ordinal() == Reason.PERMISSION.ordinal() + 1);
+					// the value PLAYER_BUILD follows (the gate reads the order from Reason.java: P0's ARTIFACT_* came first at the merge)
+					o.addProperty("playerBuildAfter", Reason.values()[Reason.PLAYER_BUILD.ordinal() - 1].name());
+					o.addProperty("playerBuildAppended", Reason.PLAYER_BUILD.ordinal() > Reason.PERMISSION.ordinal());
 					o.addProperty("kinds", BuildKind.values().length);
 					o.addProperty("states", BuildState.values().length);
 					return o;
