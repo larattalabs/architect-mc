@@ -6,7 +6,7 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import Ajv2020 from 'ajv/dist/2020.js';
+import Ajv2020Module from 'ajv/dist/2020.js';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { loadConfig } from '../src/config.js';
 import { memoryLogger } from '../src/context.js';
@@ -27,6 +27,8 @@ const lots = (n: number, p = 'h') => Array.from({ length: n }, (_, i) => ({ id: 
 describe('plan/0 under ajv 2020-12 (gate item 1)', () => {
   it.skipIf(!hasKit)('compiles kit/schemas/plan.json and accepts every valid/ fixture', () => {
     const schema = JSON.parse(fs.readFileSync(path.join(KIT, 'schemas', 'plan.json'), 'utf8')) as Record<string, unknown>;
+    // ajv's CommonJS default export, under NodeNext's interop
+    const Ajv2020 = ((Ajv2020Module as unknown as { default?: unknown }).default ?? Ajv2020Module) as unknown as new (o: Record<string, unknown>) => { compile: (s: unknown) => ((v: unknown) => boolean) & { errors?: unknown } };
     const ajv = new Ajv2020({ strict: false, allErrors: true });
     const validate = ajv.compile(schema);
     const dir = path.join(KIT, 'test', 'fixtures', 'plan', 'valid');
