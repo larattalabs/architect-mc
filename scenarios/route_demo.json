@@ -1,0 +1,107 @@
+{
+  "id": "route_demo",
+  "short": "route_demo",
+  "phase": "6c-t2",
+  "version": 0,
+  "brief": "route fixture: a gate, a hall, a chapel and a lookout from the valley floor to a shoulder about 60 above on S3's pinned claim, routed by the route pass (two villager edges, a player-only edge with ladders allowed), round a protected area across the chapel-lookout line in open land (docs/CONTRACT.md 6c T2 §3); on the flat variant a hill raised in stage ground",
+  "program": "route_demo",
+  "params": {
+    "gateX": 3634,
+    "gateZ": -894,
+    "hallX": 3638,
+    "hallZ": -930,
+    "chapelX": 3670,
+    "chapelZ": -966,
+    "lookoutX": 3690,
+    "lookoutZ": -1002
+  },
+  "world": {
+    "seed": "2026100906",
+    "preset": "normal",
+    "gamerules": "gallery"
+  },
+  "fixture": {
+    "claim": [
+      3604,
+      -1036,
+      3795,
+      -845
+    ],
+    "yRange": [
+      22,
+      220
+    ],
+    "foundBy": "S3's pinned fixture (scenarios/s3_monastery.json); the sites pinned against relief_demo's golden survey of it",
+    "irShaAtPin": "2558920bf777aaeb5d529130dfc1dcdeb9c0d647bb1a160fe83db066ccc15ea6"
+  },
+  "flat": {
+    "preset": "flat",
+    "claimOffset": [
+      0,
+      0
+    ],
+    "gamerules": "exact"
+  },
+  "owner": "test:t2",
+  "protect": [
+    {
+      "id": "t2_keepout",
+      "x0": 3682,
+      "z0": -982,
+      "x1": 3698,
+      "z1": -979,
+      "label": "T2 keep-out across the chapel-lookout line"
+    }
+  ],
+  "seed": "7501351687357992338",
+  "cams": {
+    "cam_e": [
+      3712.5,
+      164,
+      -920.5,
+      90.4,
+      42.7
+    ],
+    "cam_ground": [
+      3662.5,
+      108,
+      -896.5,
+      140.1,
+      15.7
+    ],
+    "cam_high": [
+      3650.5,
+      185,
+      -912.5,
+      135,
+      82
+    ],
+    "cam_n": [
+      3642.5,
+      156,
+      -990.5,
+      0.4,
+      39.4
+    ],
+    "cam_s": [
+      3642.5,
+      135,
+      -850.5,
+      179.6,
+      27.1
+    ],
+    "cam_w": [
+      3604.5,
+      135,
+      -920.5,
+      -90.8,
+      43.8
+    ]
+  },
+  "lotEntries": {
+    "gate": "g6a_stub_9",
+    "hall": "g6a_stub_9",
+    "chapel": "g6a_stub_9",
+    "lookout": "g6a_stub_9"
+  }
+}

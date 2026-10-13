@@ -187,7 +187,7 @@ test('passes are declared: an undeclared pass fails the plan; an unknown declare
   const plan = (program) => planRegion({ program, programSource: 'x', survey, claim, seed: '7' });
   const lotAt = (r, edge) => r.part('pads', { stage: 'ground' }).lot('a', { at: [40, 40], size: [10, 10], stage: 'lots', pad: { maxCut: 12, maxFill: 12, ...(edge ? { edge } : {}) } });
   await assert.rejects(plan(prog(null, (r) => r.pass('relief', { around: [lotAt(r)] }))), /PASS_UNDECLARED: the program calls pass 'relief'/);
-  await assert.rejects(plan(prog(['route'], () => {})), /declares pass 'route', which is not a kit pass/);
+  await assert.rejects(plan(prog(['hydrology'], () => {})), /declares pass 'hydrology', which is not a kit pass/); // (T2 made route one)
   await assert.rejects(plan(prog(['relief', 'relief'], () => {})), /declares a pass twice/);
   // N-T1-1: blend is the default edge of a program with passes, and then needs the pass
   await assert.rejects(plan(prog(['relief'], (r) => lotAt(r))), /lot a: pad.edge 'blend' needs the relief pass/);
@@ -206,7 +206,7 @@ test('passes are declared: an undeclared pass fails the plan; an unknown declare
   // an explicit slope edge in a program with passes needs no pass
   const s = await plan(prog(['relief'], (r) => lotAt(r, 'slope')));
   assert.equal(s.ir.lots[0].pad.edge, 'slope');
-  assert.deepEqual(PASS_NAMES, ['relief']);
+  assert.deepEqual(PASS_NAMES.slice(0, 1), ['relief']); // later slices append (T2: route)
 });
 
 test('relief_demo plans the same IR twice on a synthetic hilly claim; its relief ops read the pads\' frozen ground', async () => {

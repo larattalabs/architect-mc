@@ -50,3 +50,18 @@ export function synthTileWindow(key, seed = 'synth', world = null) {
 }
 
 export const synthBytes = (o) => encodeColumns(synthColumns(o));
+
+/**
+ * (6c T2) A seeded 1:2 slope (the switchback fixture, CONTRACT T2 §3): the land falls 1 in `run` (default 2) from the north edge to
+ * the south, with seeded bumps of 1 (about one column in 7), dry and treeless. `top`: the ground at the north edge.
+ */
+export function synthSlope({ minX = 0, minZ = 0, width, depth, run = 2, top = 64 + 80, seed = 't2-slope' }) {
+  const t = fnv64('synth', seed, 'slope');
+  const c = makeColumns(minX, minZ, width, depth, 1);
+  for (let j = 0; j < depth; j++) for (let i = 0; i < width; i++) {
+    const g = top - Math.floor(j / run) + (hash3(t.hi, t.lo, minX + i, 0, minZ + j) % 7 === 0 ? 1 : 0);
+    const k = i + j * width;
+    c.ground[k] = g; c.height[k] = g; c.floor[k] = g;
+  }
+  return c;
+}

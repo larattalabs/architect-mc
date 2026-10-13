@@ -297,7 +297,9 @@ test('the block mask term (MP ruling): real over a volume with block ids; refuse
   const v1 = { ...p.ir, volumes: Object.fromEntries(Object.entries(p.ir.volumes).map(([k, x]) => [k, { ...x, blocks: undefined }])) };
   assert.throws(() => compileIR(JSON.parse(JSON.stringify(v1)), { blobs: (s) => p.blobs.get(s) }), /MASK_NEEDS_VOLUME/);
   // a kit before 0.23.0 lacks the kind: PLAN_STALE
-  assert.match(staleReason(p.ir, '0.21.0') ?? '', /plan needs kit 0\.23\.0/);
+  // (the plan's own kit: 0.23.0 or later, as later slices bump it; T2 made it 0.24.0)
+  const need = /plan needs kit (\d+\.\d+\.\d+)/.exec(staleReason(p.ir, '0.21.0') ?? '');
+  assert.ok(need && need[1].localeCompare('0.23.0', undefined, { numeric: true }) >= 0, staleReason(p.ir, '0.21.0'));
   assert.equal(KINDS_FORMAT2[KINDS_FORMAT2.length - 1], 'volume:blocks', 'appended (rebase point)');
 });
 

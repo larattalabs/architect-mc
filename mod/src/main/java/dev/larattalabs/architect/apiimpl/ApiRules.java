@@ -58,6 +58,7 @@ public final class ApiRules {
 					case "region.passes" -> "planPasses"; // 6c T1 (with reliefOp, below)
 					case "region.scatter" -> "scatterOp"; // 6c F2 (with stampOp, below)
 					case "region.brush" -> "brushes"; // 6c B: the helper's kit has the bundled brush program
+					case "region.route" -> "routePass"; // 6c T2
 					default -> Wire4b.FEATURE_NAMES.getOrDefault(f, Wire5a.FEATURE_NAMES.getOrDefault(f, f));
 				});
 			}

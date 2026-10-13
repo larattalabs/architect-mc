@@ -404,6 +404,18 @@ persisted formats. Candidate later asks: `Survey.biome` per column (T1's fields 
 - Player-placed tracking, refined by Noah to **builds**: CONTRACT "Phase 6c slice PT: player-placed tracking (C32)" (DRAFT for
   Steward review). It supersedes the dropped PT draft; S-PT-1 is withdrawn for this case. Adopting a build as a site is a later
   slice, PT2 (outlined there). API: the next free minor at merge.
+## Queued from T2 (gate-verifier, 2026-10-13)
+
+- **Melt water into keep-out (a defect).** Default route lamps (a bible's lanterns, light 15) melt natural snow and ice beside
+  the routes, and the melt water can run into a keep-out area. The survey records no snow, so the plan can't see it. route_demo
+  uses soul lanterns (light 10, under vanilla's melt at 11) as a workaround; the scenario's E-normal class `melt` (unwritten
+  cells only) is accounting, not a fix. Fix it in the survey (record snow and ice) or in `lightCover` (keep lamps whose light
+  reaches over 11 away from snow near keep-out).
+- **4e output-shape change: flag for S2, D and 6d.** A routed edge lays a 4e ground road only where a walk lies exactly on the
+  surveyed ground. Most walk runs on real terrain are `_routeRun` columns (cut, fill, retaining), not 4e roads. A consumer that
+  reads `ir.roads` for a region's paths sees only a fraction of them; read the graph edges' `segments` (or `meta.route`).
+- **Realised M5 over the routes was 5.25%** on S3 (virtual 0.41%, flat 0.24%; 0.61% on the fresh-world re-run `20261013-064639-slice`): soul lanterns, live snow and plants.
+  Recorded, not judged. Revisit with the lamp and melt fix.
 
 ## Open questions
 - Track AgentCraft fixes to the copied placement code, or treat the copy as independent from now on?
