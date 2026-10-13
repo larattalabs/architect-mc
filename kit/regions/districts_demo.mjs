@@ -1,19 +1,20 @@
 // districts_demo (6c D1, docs/CONTRACT.md "Phase 6c slice D" §4): the districts pass's fixture on S3's pinned claim: three districts
-// at the claim's three level bands (a cloister high, a village in the middle, fields low), loopiness 0.15, soul-lantern route lamps
-// (S3's snow: T2's melt note; the bible's lamp on a flat claim). Any claim works; on a flat claim every candidate is one band, so the bands are `any` there.
+// at the claim's three level bands (a cloister high, a village in the middle, fields low), loopiness 0.15, soul lanterns for every lamp (its
+// light role: S3's snow, T2's melt note). Any claim works; on a flat claim every candidate is one band, so the bands are `any` there.
 import { build } from './districts.mjs';
 
 export const id = 'districts_demo';
 export const description = 'Three districts at three level bands, joined by routes (6c D1 fixture).';
 export const catalogue = false;
 export const passes = ['districts', 'route'];
-export const roles = { path: 'minecraft:coarse_dirt', foundation: 'minecraft:stone_bricks', light: 'minecraft:lantern' };
+// soul lanterns (light 10, under vanilla's snow melt at 11) for every lamp: S3's high band holds snow (T2's melt note)
+export const roles = { path: 'minecraft:coarse_dirt', foundation: 'minecraft:stone_bricks', light: 'minecraft:soul_lantern' };
 
 export const params = {
   loopiness: { type: 'int', min: 0, max: 100, default: 15, label: 'Loopiness (%)' },
   gradePct: { type: 'int', min: 5, max: 100, default: 25, label: 'Grade limit (%)' },
   lamps: { type: 'bool', default: true, label: 'Lamps' },
-  routeLamp: { type: 'enum', options: ['bible', 'soul'], default: 'soul', label: 'Route lamps' },
+  routeLamp: { type: 'enum', options: ['bible', 'soul'], default: 'bible', label: 'Route lamps' },
   bands: { type: 'bool', default: true, label: 'Level bands (off: any)' },
 };
 
@@ -29,6 +30,5 @@ export default function (ctx) {
   const c = ctx.claim, st = ctx.survey.stats(c.minX, c.minZ, c.maxX, c.maxZ);
   const flat = st.maxGround - st.minGround <= 2;
   const ds = DISTRICTS.map((d) => ({ ...d, ...(ctx.params.bands && !flat ? {} : { levelBand: 'any' }) }));
-  // (soul lanterns only where there is snow to keep: on a flat claim the bible's lamp)
-  return build(ctx, ds, { soul: !flat });
+  return build(ctx, ds);
 }

@@ -14,7 +14,7 @@ import { validateLots } from '../params.mjs';
 import { layoutStreet, streetLayout, STREET_RULES, toWorld } from './village.mjs';
 import { emitProps, lampFixture, planProps } from './props.mjs';
 import { lightCover } from './light.mjs';
-import { fixtureFor } from './fixtures.mjs';
+import { fixtureFor, roadLamp } from './fixtures.mjs';
 import { PASSES } from './passes/index.mjs';
 import { lampSpots } from './passes/route.mjs';
 import { BANDS, DISTRICTS_MAX, DISTRICT_GAP, DISTRICT_INF, EXACT_MAX, LOT_UNPLACED, PREFER_TAGS, UNPLACED, assignDistricts, bandOf, candidateCost, districtCandidates, levelBands, rectsMeet, spanningEdges } from './passes/districts.mjs';
@@ -289,7 +289,7 @@ export function emitDistricts(r, intent = {}) {
   for (const p of chosen) { addNode(p.na); addNode(p.nb); edges.push({ id: `d_${p.a}__${p.b}`.slice(0, 48), from: p.na.name, to: p.nb.name, width: DISTRICT_ROUTE_WIDTH }); }
   if (join) { addNode(join.a); addNode(join.b); edges.push({ id: 'join', from: join.a.name, to: join.b.name, width: DISTRICT_ROUTE_WIDTH }); }
   let routed = null;
-  if (edges.length) routed = r._route({ nodes, edges, maxGrade, stage: stages.routes, part: it.routePart ?? 'routes', hard: [...districtHard, ...standing], keepOut: it.keepOut ?? [], lanterns: true, clearTrees: endClear });
+  if (edges.length) routed = r._route({ nodes, edges, maxGrade, stage: stages.routes, part: it.routePart ?? 'routes', hard: [...districtHard, ...standing], keepOut: it.keepOut ?? [], lanterns: true, clearTrees: endClear, roadSurface: 'path', lamp: roadLamp(lampFixture(r)) });
   const byId = new Map((routed?.edges ?? []).map((e) => [e.id, e]));
   // the route ends join their streets: a link edge from each end node to the street's terminal junction
   const linked = new Set();
