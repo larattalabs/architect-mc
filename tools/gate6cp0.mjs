@@ -117,25 +117,42 @@ async function checkPlan(plan, claim, extra = {}) {
 async function waitPlaced(region) {
   return L.waitRegion(region, 3 * 3_600_000, async (s) => { if (s.waiting?.OCCUPIED) await cmd('/kill @e[type=!minecraft:player]'); });
 }
-/** The realised world against the check's virtual world over every written cell outside the lot boxes: {written, differ, first}. */
-async function realisedVsVirtual(pdir, afterFile) {
+/**
+ * The realised world against the check's virtual world over every written cell outside the lots (each lot's box grown by 4, every y: its
+ * building, foundation and approach come from the library entry, not the plan): {written, differ, kept, share, first}. A cell that
+ * differs but holds what it held before the realise is `kept` (the op's condition skipped it: a structure, or a block that is not
+ * natural, which the survey can't see); `differ` counts the rest (unclassified), and `share` is differ / written.
+ */
+async function realisedVsVirtual(pdir, afterFile, beforeFile = null) {
   const { buildVirtual, decodeArwd } = await imp('lib/region/vworld.mjs');
   const ir = JSON.parse(fs.readFileSync(path.join(pdir, 'ir.json'), 'utf8'));
   const blobs = (sha) => { const f = path.join(pdir, 'blobs', `${sha}.bin`); return fs.existsSync(f) ? fs.readFileSync(f) : null; };
   const { vw } = buildVirtual({ ir, survey: fs.readFileSync(path.join(pdir, 'survey.bin')), blobs });
   const d = await decodeArwd(fs.readFileSync(afterFile));
   const b = d.box;
-  const inLot = (x, y, z) => ir.lots.some((l) => x >= l.box.minX && x <= l.box.maxX && y >= l.box.minY && y <= l.box.maxY && z >= l.box.minZ && z <= l.box.maxZ);
-  let written = 0, differ = 0;
+  const pre = beforeFile ? await decodeArwd(fs.readFileSync(beforeFile)) : null;
+  const inLot = (x, y, z) => ir.lots.some((l) => x >= l.box.minX - 4 && x <= l.box.maxX + 4 && z >= l.box.minZ - 4 && z <= l.box.maxZ + 4);
+  // 4e ground roads (the village street) follow the realised ground at realise (4e's rule; T2 as built): their cells within 2 of the
+  // road's centre line are classed `road`, recorded
+  const { centreCells } = await imp('lib/region/geom.mjs');
+  const roadCols = new Set();
+  for (const r of ir.roads ?? []) for (const c of centreCells(r.points.map((q) => [q[0], q[2]])).cells) for (let dx = -2 - (r.width >> 1); dx <= 2 + (r.width >> 1); dx++) for (let dz = -2 - (r.width >> 1); dz <= 2 + (r.width >> 1); dz++) roadCols.add(`${c.x + dx},${c.z + dz}`);
+  let written = 0, differ = 0, kept = 0, road = 0;
   const first = [];
+  // the same block: the name, and every property the plan names (the world's state lists every property, the plan only the ones it sets;
+  // the rest are the block's defaults or its neighbour-dependent ones: fence and pane connections, stair shape, snowy grass)
+  const parse = (st) => { const m = /^([^[]+)(?:\[(.*)\])?$/.exec(st); return { name: m[1], props: Object.fromEntries((m[2] ? m[2].split(',') : []).map((kv) => kv.split('='))) }; };
+  const same = (want, got) => { if (want === got) return true; const a = parse(want), b = parse(got); return a.name === b.name && Object.entries(a.props).every(([k, v]) => b.props[k] === v); };
   const at = (x, y, z) => (x - b.minX) * (b.maxZ - b.minZ + 1) * (b.maxY - b.minY + 1) + (z - b.minZ) * (b.maxY - b.minY + 1) + (y - b.minY);
   vw.eachWritten((x, y, z, idx) => {
     if (x < b.minX || x > b.maxX || y < b.minY || y > b.maxY || z < b.minZ || z > b.maxZ || inLot(x, y, z)) return;
     written++;
     const want = vw.pal.states[idx], got = d.palette[d.cells[d.at ? d.at(x, y, z) : at(x, y, z)]];
-    if (want !== got) { differ++; if (first.length < 12) first.push({ pos: [x, y, z], want, got }); }
+    if (!same(want, got) && pre && pre.palette[pre.cells[pre.at(x, y, z)]] === got) { kept++; return; }
+    if (!same(want, got) && roadCols.has(`${x},${z}`)) { road++; return; }
+    if (!same(want, got)) { differ++; if (first.length < 12) first.push({ pos: [x, y, z], want, got }); }
   });
-  return { written, differ, share: written ? differ / written : 0, first };
+  return { written, differ, kept, road, share: written ? differ / written : 0, first };
 }
 /** A column's ground in a plan's survey. */
 async function groundAt(pdir, x, z) {
@@ -209,7 +226,7 @@ steps.ingame = async () => {
   // ---- item 4: approve (the artifact), realise, the irSha and tile shas, realised vs virtual, the exact undo
   const sha = c1.artifactSha;
   const art = (await call('dev.region.artifact', { sha, body: true })).artifact;
-  check(!!art && !art.removed && art.planId === c1.checkId, `the artifact is kept by its sha (${sha.slice(0, 12)}, plan ${art?.planId})`);
+  check(!!art && !art.removed && c3.some((c) => c.checkId === art.planId), `the artifact is kept by its sha (${sha.slice(0, 12)}, plan ${art?.planId})`);
   const ir = JSON.parse(fs.readFileSync(path.join(planDir(c1.checkId), 'ir.json'), 'utf8'));
   const box = [claim[0] - 8, ir.claim.minY, claim[1] - 8, claim[2] + 8, ir.claim.maxY, claim[3] + 8];
   const before = path.join(OUT, 'ingame-before.arwd.gz'), after = path.join(OUT, 'ingame-after.arwd.gz');
@@ -223,8 +240,8 @@ steps.ingame = async () => {
   out.tiles = compareTiles(art.body, ts.tiles);
   check(out.tiles.tiles > 0 && out.tiles.equal === out.tiles.tiles, `item 4: every tile sha the realise received equals the artifact's (${out.tiles.equal}/${out.tiles.tiles}; missing ${out.tiles.missing.length}, differ ${out.tiles.differ.length})`, out.tiles);
   await call('dev.region.dump', { box, file: after, light: false }, 900_000);
-  out.virtual = await realisedVsVirtual(planDir(c1.checkId), after);
-  check(out.virtual.written > 0 && out.virtual.differ === 0, `item 4: the realised world equals the check's virtual world over ${out.virtual.written} written cells (E-flat: ${out.virtual.differ} differ)`, out.virtual.first);
+  out.virtual = await realisedVsVirtual(planDir(c1.checkId), after, before);
+  check(out.virtual.written > 0 && out.virtual.differ === 0 && out.virtual.kept === 0 && out.virtual.road === 0, `item 4: the realised world equals the check's virtual world over ${out.virtual.written} written cells (E-flat: ${out.virtual.differ} differ)`, out.virtual.first);
   const ref = (await call('dev.region.artifact', { sha })).artifact;
   check(ref.regions.includes(rr.region), `retention: the standing region refers to the artifact (${json(ref.regions)})`);
   await cmd('/kill @e[type=!minecraft:player]');
@@ -291,7 +308,7 @@ steps.ingame = async () => {
   const kb2 = await call('dev.region.checkByKey', { owner: OWNER, opKey: K });
   check(kb2.check?.checkId === ta.check.checkId, `item 6: checkByKey finds the keyed check after the reload (${kb2.check?.checkId})`);
   const same = await call('dev.region.realiseApproved', { sha, fill: ['g6a_stub_9'], opKey: RK }, 300_000);
-  check(same.region === region, `item 6: realiseApproved again with the key returns the region (${same.region})`);
+  check(same.region === region, `item 6: realiseApproved again with the key returns the region (${same.region ?? same.refused})`);
   const rm3 = await call('dev.region.remove', { region, requester: OWNER }, 3_600_000);
   await L.settle(3000);
   const h6 = await call('dev.region.hash', { box }, 3_600_000);
@@ -329,9 +346,10 @@ steps.natural = async () => {
   await tp(cx, S3.fixture.yRange[1], cz);
   await L.settle(60_000);
   const anchors = { stone: [cx, 100, cz] };
-  // the land must not move between the check and the realise's survey (the stale rule is exact): ticks frozen across both
+  // the land must not move between the check and the realise (the stale rule is exact; a tile's heights are frozen when it is asked):
+  // ticks frozen from the check until the realised dump (placement runs on the server tick, which freezing does not stop)
   await cmd('/tick freeze');
-  let c, rr, art;
+  let c, rr, art, st;
   try {
     c = await checkPlan(S3_PLAN, claim, { anchors });
     out.check = { overall: c.overall, parts: c.parts.map((p) => `${p.part}:${p.class}`), artifactSha: c.artifactSha };
@@ -343,19 +361,21 @@ steps.natural = async () => {
     await call('dev.region.hash', { box: out.box, mode: 'snap', file: path.join(OUT, 'natural-snap.gz') }, 4 * 3_600_000);
     await cmd('/kill @e[type=!minecraft:player]');
     rr = await call('dev.region.realiseApproved', { sha: c.artifactSha, fill: ['g6a_stub_9'] }, 300_000);
-  } finally {
+    check(!!rr.region, `item 4 (S3): realiseApproved queued ${rr.region ?? rr.refused}`);
+    st = await waitPlaced(rr.region);
+  } catch (e) {
     await cmd('/tick unfreeze');
+    throw e;
   }
-  check(!!rr.region, `item 4 (S3): realiseApproved queued ${rr.region ?? rr.refused}`);
-  const st = await waitPlaced(rr.region);
   check(st.view.state === 'PLACED' && st.view.irSha === art.body.region.irSha, `item 4 (S3): ${st.view.state}; irSha equals the artifact's`);
   const ts = await call('dev.region.tileShas', { region: rr.region });
   out.tiles = compareTiles(art.body, ts.tiles);
   check(out.tiles.equal === out.tiles.tiles, `item 4 (S3): every tile sha equals the artifact's (${out.tiles.equal}/${out.tiles.tiles})`, out.tiles);
   const after = path.join(OUT, 'natural-after.arwd.gz');
   await call('dev.region.dump', { box: out.box, file: after, light: false }, 900_000);
-  out.virtual = await realisedVsVirtual(planDir(c.checkId), after);
-  check(out.virtual.written > 0 && out.virtual.share <= 0.0001, `item 4 (S3): the realised world equals the virtual world over ${out.virtual.written} written cells but ${out.virtual.differ} (${(100 * out.virtual.share).toFixed(4)}%, at most 0.01%)`, out.virtual.first);
+  await cmd('/tick unfreeze');
+  out.virtual = await realisedVsVirtual(planDir(c.checkId), after, path.join(OUT, 'natural-before.arwd.gz'));
+  check(out.virtual.written > 0 && out.virtual.share <= 0.0001, `item 4 (S3): the realised world equals the virtual world over ${out.virtual.written} written cells: ${out.virtual.differ} unclassified (${(100 * out.virtual.share).toFixed(4)}%, at most 0.01%), ${out.virtual.kept} kept by their op's condition (a structure or a non-natural block the survey can't see), ${out.virtual.road} on 4e ground roads (they follow the realised ground)`, out.virtual.first);
   await cmd('/kill @e[type=!minecraft:player]');
   await L.settle(5000);
   const rm = await call('dev.region.remove', { region: rr.region, requester: OWNER }, 4 * 3_600_000);

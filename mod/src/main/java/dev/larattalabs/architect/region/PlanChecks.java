@@ -682,6 +682,24 @@ public final class PlanChecks {
 			return refused(Reason.NOT_LOADED, p.dimension() + " is not loaded");
 		}
 		JsonObject inputs = body.getAsJsonObject("inputs");
+		Map<String, String> lots = new LinkedHashMap<>();
+		if (body.get("lots") instanceof JsonArray la) {
+			for (JsonElement e : la) {
+				JsonObject l = e.getAsJsonObject();
+				if (l.get("entry") instanceof JsonElement en && en.isJsonPrimitive()) {
+					lots.put(l.get("id").getAsString(), en.getAsString());
+				}
+			}
+		}
+		lots.putAll(r.lotEntries());
+		JsonObject ext = r.ext().deepCopy();
+		ext.addProperty(EXT_ARTIFACT, sha);
+		RealiseRequest rr = new RealiseRequest(planId, r.mode(), r.actor(), lots, null, true, null, false, ext, 0, r.opKey());
+		// a keyed realise that already exists (C20): the realise's own key rule answers (the region, or OP_KEY_CONFLICT); its land has
+		// changed by its own writes, so the stale checks below are for a new realise only
+		if (r.opKey() != null && RegionsImpl.INSTANCE.realiseByKey(p.owner(), r.opKey()).isPresent()) {
+			return RegionsImpl.INSTANCE.realise(rr);
+		}
 		JsonObject cl = inputs.getAsJsonObject("claim");
 		int x0 = cl.get("minX").getAsInt(), z0 = cl.get("minZ").getAsInt(), x1 = cl.get("maxX").getAsInt(), z1 = cl.get("maxZ").getAsInt();
 		int res = inputs.has("surveyRes") ? inputs.get("surveyRes").getAsInt() : 1;
@@ -705,19 +723,7 @@ public final class PlanChecks {
 			if (drift != null) {
 				throw RegionsImpl.refusal(Reason.ARTIFACT_STALE, "the land under the plan's tiles changed since the check: " + drift);
 			}
-			Map<String, String> lots = new LinkedHashMap<>();
-			if (body.get("lots") instanceof JsonArray la) {
-				for (JsonElement e : la) {
-					JsonObject l = e.getAsJsonObject();
-					if (l.get("entry") instanceof JsonElement en && en.isJsonPrimitive()) {
-						lots.put(l.get("id").getAsString(), en.getAsString());
-					}
-				}
-			}
-			lots.putAll(r.lotEntries());
-			JsonObject ext = r.ext().deepCopy();
-			ext.addProperty(EXT_ARTIFACT, sha);
-			return RegionsImpl.INSTANCE.realise(new RealiseRequest(planId, r.mode(), r.actor(), lots, null, true, null, false, ext, 0, r.opKey()));
+			return RegionsImpl.INSTANCE.realise(rr);
 		})).thenCompose(f -> f);
 	}
 

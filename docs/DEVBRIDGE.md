@@ -348,6 +348,12 @@ region. Previews print as file links (with a [copy] link).
 
 Semi-stable: a hook may change or go, and every such change is listed here, newest first.
 
+- **2026-10-13 (6c slice P0):** new (`SliceP0Dev`, generated headless too) `dev.region.checkPlan {plan, claim: [x0,z0,x1,z1], anchors?:
+  {name: [x,y,z]}, owner?, bible?, bibleVersion?, budget?, opKey?, cancelAfterMs?}` (Regions.checkPlan -> `{check, ms}` or `{refused,
+  reason}`), `dev.region.cancelCheck {owner?, opKey}`, `dev.region.checkByKey {owner?, opKey}`, `dev.region.planImages {checkId, views?}`,
+  `dev.region.artifact {sha, body?}`, `dev.region.pinArtifact {sha, owner, on?}`, `dev.region.realiseApproved {sha, lotEntries?, fill?,
+  opKey?}`, `dev.region.realiseByKey {owner?, opKey}` and `dev.region.tileShas {region}` (the sha of every tile a realise received, from
+  `TileStream.TILE_SHAS`).
 - **2026-10-12 (6c slice B):** new `dev.brush {kind, at: [x,y,z], radius?, strength?, shape?, mask?, pattern?, destruction?, owner?,
   actor?: me|none|<uuid>, console?, seed?, dimension?}`: one brush stroke (`Regions.brush`; `console: true` takes the command's
   console path) -> the region's view once realised `{region, planId, irSha, state, brush, cellsWritten, cellsSkipped, claim, ms}` or
