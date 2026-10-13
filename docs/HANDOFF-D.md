@@ -23,11 +23,17 @@ tools/, in the throwaway worktree `../architect-mc-D-v0270`).
 - [x] tag build v0.27.0 archived
 - [x] kit pure pass + emitter + programs; districts_demo plans on S3's golden survey: 3/3 districts in their bands, 2 tree
       edges routed, checker 0 errors, graph connected (~15 s)
-- [ ] kit tests (property, bands, connectivity, loopiness, determinism, beside join)
-- [ ] plan/0 catalogue flip + compile
-- [ ] mod API + beside
-- [ ] sidecar plumbing
-- [ ] gate driver, scenario, golden; slice run; verifier; as-built; push
+- [x] kit tests (kit/test/districts-d.test.mjs: property 300 claims, bands, connectivity, loopiness, determinism, beside, plan/0)
+- [x] plan/0 catalogue flip + compile (program.districts, endpoint.region)
+- [x] mod API 1.26.0 + beside (BesideCheck), dangling note
+- [x] sidecar plumbing (beside)
+- [x] gate driver tools/gate6cd.mjs, scenario districts_demo + golden; focused change run green but for 2 driver bugs (fixed)
+- [x] origin/main v0.28.0 (C33) merged at 266eea2
+- [ ] slice run (artifacts/gate-runs-D/*-slice, 3 shards) -> verifier -> as-built -> push slice/D1
+
+D2 is on `slice/D2` in `../architect-mc-D2` (from D1): C27 boundary districts, outposts, the biome grid (C28: 4x4 is enough),
+plan/0 flips (zone.outpost, locator.along, feature.biome_edge, feature.ridge). The desert/jungle site must be found and pinned
+(`tools/find-site.mjs desert_jungle_site`, a server of seed 2026100906 up) before `gate6cd.mjs boundary`.
 
 ## Decisions so far
 
