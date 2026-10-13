@@ -52,6 +52,9 @@ public final class ApiTestPT {
 		o.addProperty("primaryPlacer", String.valueOf(b.primaryPlacer()));
 		o.addProperty("entrances", b.entrances().size());
 		o.addProperty("bounds", b.bounds().toString());
+		if (b.siteId() != null) {
+			o.addProperty("siteId", b.siteId()); // (PT2)
+		}
 		return o;
 	}
 

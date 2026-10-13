@@ -21,7 +21,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 /**
- * API 1.26.0 placeholder (docs/CONTRACT.md "Phase 6c slice D" §1, §3): RegionPlanRequest and RegionView gain a trailing beside (their old
+ * API 1.27.0 placeholder (docs/CONTRACT.md "Phase 6c slice D" §1, §3): RegionPlanRequest and RegionView gain a trailing beside (their old
  * constructors leave it null), the plan opKey body names beside only when it is set, the features districtsPass and besideRegion, and
  * the seam rule (BesideCheck, the kit's kit/lib/region/beside.mjs in Java) on S7's golden IR.
  */
@@ -34,7 +34,7 @@ class ApiDTest {
 
 	@Test
 	void versionsAndRecords() throws Exception {
-		assertTrue(IrStale.semverCompare(ArchitectApi.VERSION, "1.26.0") >= 0, ArchitectApi.VERSION);
+		assertTrue(IrStale.semverCompare(ArchitectApi.VERSION, "1.27.0") >= 0, ArchitectApi.VERSION);
 		assertTrue(IrStale.semverCompare(IrStale.KIT_VERSION, "0.28.0") >= 0, IrStale.KIT_VERSION);
 		var pc = RegionPlanRequest.class.getRecordComponents();
 		assertEquals("beside", pc[pc.length - 1].getName());
@@ -57,7 +57,7 @@ class ApiDTest {
 	@Test
 	void opKeyBodyNamesBesideOnlyWhenSet() {
 		RegionPlanRequest a = new RegionPlanRequest("districts", null, null, new BoundingBox(0, 0, 0, 1, 1, 1), null, null, null, null, "o", null, "k");
-		assertFalse(RegionKeys.planBody(a).has("beside"), "a key recorded before 1.26.0 keeps its body");
+		assertFalse(RegionKeys.planBody(a).has("beside"), "a key recorded before 1.27.0 keeps its body");
 		RegionPlanRequest b = new RegionPlanRequest("districts", null, null, new BoundingBox(0, 0, 0, 1, 1, 1), null, null, null, null, "o", null, "k", "rg1");
 		assertEquals("rg1", RegionKeys.planBody(b).get("beside").getAsString());
 		assertFalse(RegionKeys.hash(RegionKeys.planBody(a)).equals(RegionKeys.hash(RegionKeys.planBody(b))));

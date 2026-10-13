@@ -20,13 +20,20 @@ import net.minecraft.world.level.levelgen.structure.BoundingBox;
  * @param placers each placer's cell count (S-PT-5: the placer UUIDs on the view); the primary placer has the most
  * @param state ACTIVE, CLAIMED, RELEASED or PROVISIONAL (a component a player is still building, N-PT-2)
  * @param revision bumped on every change (a plan records the revision it used)
+ * @param siteId (PT2, SQ-PT2-6) the site an {@link BuildState#ADOPTED} build stands as ({@link Sites#adopt}), else null
  */
 public record Build(String id, ResourceKey<Level> dimension, BoundingBox bounds, int[] footprint, List<Entrance> entrances, BuildKind kind,
-	float confidence, int cells, Map<UUID, Integer> placers, BuildState state, long revision) {
+	float confidence, int cells, Map<UUID, Integer> placers, BuildState state, long revision, @org.jspecify.annotations.Nullable String siteId) {
 	public Build {
 		footprint = footprint.clone();
 		entrances = List.copyOf(entrances);
 		placers = Map.copyOf(placers);
+	}
+
+	/** PT's shape: no site (siteId null). */
+	public Build(String id, ResourceKey<Level> dimension, BoundingBox bounds, int[] footprint, List<Entrance> entrances, BuildKind kind,
+		float confidence, int cells, Map<UUID, Integer> placers, BuildState state, long revision) {
+		this(id, dimension, bounds, footprint, entrances, kind, confidence, cells, placers, state, revision, null);
 	}
 
 	@Override
@@ -51,12 +58,12 @@ public record Build(String id, ResourceKey<Level> dimension, BoundingBox bounds,
 	public boolean equals(Object o) {
 		return o instanceof Build b && id.equals(b.id) && dimension.equals(b.dimension) && bounds.equals(b.bounds) && java.util.Arrays.equals(footprint,
 			b.footprint) && entrances.equals(b.entrances) && kind == b.kind && Float.compare(confidence, b.confidence) == 0 && cells == b.cells && placers
-				.equals(b.placers) && state == b.state && revision == b.revision;
+				.equals(b.placers) && state == b.state && revision == b.revision && java.util.Objects.equals(siteId, b.siteId);
 	}
 
 	@Override
 	public int hashCode() {
 		return java.util.Objects.hash(id, dimension, bounds, java.util.Arrays.hashCode(footprint), entrances, kind, confidence, cells, placers, state,
-			revision);
+			revision, siteId);
 	}
 }

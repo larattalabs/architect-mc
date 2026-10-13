@@ -281,6 +281,22 @@ public interface SiteEvents {
 		}
 	});
 
+	/**
+	 * (PT2) A player build was adopted as a site ({@link Sites#adopt}): the new site, the build, the library entry (version 1). Fired
+	 * after {@link #BUILD_CHANGED} ("adopted"). Its un-adoption fires {@link #SITE_REMOVED} and BUILD_CHANGED ("unadopted"). Server
+	 * thread. Since PT2.
+	 */
+	Event<Adopted> ADOPTED = EventFactory.createArrayBacked(Adopted.class, ls -> (siteId, buildId, entryId) -> {
+		for (Adopted l : ls) {
+			Guard.run(() -> l.onAdopted(siteId, buildId, entryId), "ADOPTED");
+		}
+	});
+
+	@FunctionalInterface
+	interface Adopted {
+		void onAdopted(String siteId, String buildId, String entryId);
+	}
+
 	@FunctionalInterface
 	interface BuildChanged {
 		/** {@code change}: found, changed, merged, split, claimed, released or gone. */

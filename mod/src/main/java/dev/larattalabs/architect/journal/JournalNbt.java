@@ -46,8 +46,16 @@ public final class JournalNbt {
 	 */
 	public static final int VERSION_PT = 3;
 
+	/**
+	 * 4 (6c PT2): the files (region and head) of an {@code adopt} entry (a player's build adopted as a site: before == after). A 0.27.0
+	 * reader would keep the entry but misread it (a lost record rebuilt as a road, a remove that writes every before over the player's
+	 * later edits and clears their records), so it must refuse those files (4e's downgrade rule, as PT's v3). Every other file is
+	 * unchanged. Reads of v1-v3 are unchanged.
+	 */
+	public static final int VERSION_ADOPT = 4;
+
 	static boolean known(int v) {
-		return v == 1 || v == 2 || v == VERSION_PT;
+		return v == 1 || v == 2 || v == VERSION_PT || v == VERSION_ADOPT;
 	}
 
 	private JournalNbt() {
@@ -127,6 +135,19 @@ public final class JournalNbt {
 	}
 
 	public static CompoundTag encode(String id, Region r, long entryLayer) {
+		return encode(id, r, entryLayer, false);
+	}
+
+	/** {@link #encode}; {@code adopt}: an {@code adopt} entry's file, written as {@link #VERSION_ADOPT}. */
+	public static CompoundTag encode(String id, Region r, long entryLayer, boolean adopt) {
+		CompoundTag t = encode0(id, r, entryLayer);
+		if (adopt) {
+			t.putInt("version", VERSION_ADOPT);
+		}
+		return t;
+	}
+
+	private static CompoundTag encode0(String id, Region r, long entryLayer) {
 		CompoundTag t = new CompoundTag();
 		t.putInt("version", VERSION);
 		t.putString("id", id);
@@ -406,8 +427,13 @@ public final class JournalNbt {
 	}
 
 	public static CompoundTag encodeHead(String id, Head h) {
+		return encodeHead(id, h, false);
+	}
+
+	/** {@link #encodeHead}; {@code adopt}: an {@code adopt} entry's head, written as {@link #VERSION_ADOPT}. */
+	public static CompoundTag encodeHead(String id, Head h, boolean adopt) {
 		CompoundTag t = new CompoundTag();
-		t.putInt("version", VERSION);
+		t.putInt("version", adopt ? VERSION_ADOPT : VERSION);
 		t.putString("id", id);
 		if (h.meta() != null) {
 			t.putString("meta", h.meta().toString());

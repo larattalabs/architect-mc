@@ -50,7 +50,7 @@ export type VersionRefusal = 'bundled' | 'no_source' | 'massing';
 
 export class VersionRefused extends RefusedError {
   constructor(
-    readonly refusal: VersionRefusal | 'no_entry' | 'no_version' | 'copy' | 'busy' | 'site_mismatch' | 'group' | 'base_moved',
+    readonly refusal: VersionRefusal | 'no_entry' | 'no_version' | 'copy' | 'busy' | 'site_mismatch' | 'group' | 'base_moved' | 'adopted_polish',
     message: string,
   ) {
     // (0b) a typed refusal: VERSION_REFUSED with the sub-code (no_entry / no_version stay plain errors on the wire too)
