@@ -87,8 +87,9 @@
       "water": 26101,
       "frozen": 9516,
       "previousSha": "064c0e5e2c87db6c07a731e10f03ba2a26a4cfed28b59df0f819c0d2ca613e35",
-      "reason": "6c W (CONTRACT W \u00a75, gate item 7): frozen water reads as water (ARSV FROZEN with WATER, floor at the bed), so a survey with frozen columns gets new bytes; re-pinned at the same claim"
-    }
+      "reason": "6c W (CONTRACT W §5, gate item 7): frozen water reads as water (ARSV FROZEN with WATER, floor at the bed), so a survey with frozen columns gets new bytes; re-pinned at the same claim"
+    },
+    "irShaAtPin": "e3c6c83c0300c27337492834d9c6e907120c1421d3f96ef66b01df3f57620b6e"
   },
   "flat": {
     "preset": "flat",
@@ -130,5 +131,59 @@
       "iceFreeBand": 5136,
       "keptIceColumns": 15196
     }
+  },
+  "seed": "12231649468885445469",
+  "cams": {
+    "cam_e": [
+      2699.5,
+      108,
+      1749.5,
+      90.4,
+      36.5
+    ],
+    "cam_ground": [
+      2642.5,
+      69,
+      1755.5,
+      121.8,
+      41.7
+    ],
+    "cam_high": [
+      2640.5,
+      161,
+      1757.5,
+      135,
+      83.3
+    ],
+    "cam_n": [
+      2632.5,
+      104,
+      1679.5,
+      0.4,
+      33.5
+    ],
+    "cam_s": [
+      2632.5,
+      104,
+      1779.5,
+      179.1,
+      56.5
+    ],
+    "cam_w": [
+      2562.5,
+      104,
+      1749.5,
+      -90.4,
+      33.5
+    ]
+  },
+  "lotEntries": {
+    "longhouse_1": "g6cs2_longhouse_l12@1",
+    "tower_1": "g6cs2_tower_w5f5@1",
+    "smithy_1": "g6cs2_cabin_w7d6@1",
+    "store_1": "g6cs2_cabin_w7d6@1",
+    "farm_1": "g6cs2_cabin_w7d6@1",
+    "hut_1": "g6cs2_cabin_w7d6@1",
+    "hut_2": "g6cs2_cabin_w7d6@1"
   }
 }
