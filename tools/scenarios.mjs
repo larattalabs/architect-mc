@@ -454,7 +454,8 @@ async function computeMetrics({ sc, out, planDir, ir, irShas, mspt, cps, exact, 
         for (let i = 0; i < ra.ground.length; i++) if (ra.ground[i] !== ga.ground[i] || ra.flags[i] !== ga.flags[i] || ra.height[i] !== ga.height[i]) cols++;
         const { planRegion } = await import('../kit/lib/region/plan.mjs');
         const gIr = JSON.parse(fs.readFileSync(path.join(gDir, 'ir.json'), 'utf8'));
-        const re = await planRegion({ programFile: path.join(root, 'kit', 'regions', `${gIr.id}.mjs`), params: gIr.params, survey: gSurvey, seed: gIr.seed, claim: { ...gIr.claim, minY: -64, maxY: 319 }, roles: gIr.roles });
+        // (6c B) re-planned at the golden's own kitVersion: a later kit's version bump moves every IR sha, never its tiles
+        const re = await planRegion({ programFile: path.join(root, 'kit', 'regions', `${gIr.id}.mjs`), params: gIr.params, survey: gSurvey, seed: gIr.seed, claim: { ...gIr.claim, minY: -64, maxY: 319 }, roles: gIr.roles, kitVersion: gIr.kitVersion });
         const gts = await tileShas(gDir);
         const ok = re.irSha === g.irSha && gts.irSha === g.irSha && gts.workersSame && JSON.stringify(gts.tiles) === JSON.stringify(g.tiles);
         golden = ok ? `match (the golden's committed inputs re-plan to its IR ${g.irSha.slice(0, 12)} and its ${Object.keys(g.tiles).length} tile shas; this run's live survey differs from the golden's in ${cols} columns, so its IR ${ts.irSha.slice(0, 12)} is its own)`
