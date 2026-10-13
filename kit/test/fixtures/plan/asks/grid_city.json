@@ -1,0 +1,223 @@
+{
+  "prompt": "A planned grid city with numbered avenues.",
+  "answer": {
+    "plan": {
+      "schemaVersion": "plan/0",
+      "planId": "grid-city-numbered-avenues",
+      "style": {
+        "pending": "grid_city_numbered_avenues"
+      },
+      "zones": [
+        {
+          "id": "grid_city",
+          "kind": "standard",
+          "required": true,
+          "label": "Grid city of numbered avenues",
+          "purpose": "market",
+          "notes": "Planned city of regular blocks on level ground; avenues numbered by signs at every corner; uniform materials. Avenue 1 meets the city edge at the gatehouse.",
+          "style": {
+            "pending": "grid_city_numbered_avenues"
+          },
+          "program": {
+            "layout": "grid",
+            "lots": [
+              {
+                "id": "town_hall_1",
+                "type": "town_hall",
+                "role": "city_hall",
+                "label": "city hall",
+                "size": [
+                  23,
+                  19
+                ],
+                "landmark": true,
+                "placement": "central",
+                "brief": "Civic centrepiece at the middle of the grid, facing the main plaza."
+              },
+              {
+                "id": "shop_1",
+                "type": "shop",
+                "role": "market_hall",
+                "label": "grand market hall",
+                "size": [
+                  17,
+                  15
+                ],
+                "landmark": true,
+                "placement": "central",
+                "brief": "Covered market on the central plaza."
+              },
+              {
+                "id": "house_1",
+                "type": "house",
+                "role": "townhouse",
+                "label": "townhouse",
+                "size": [
+                  9,
+                  9
+                ],
+                "brief": "Uniform terraced home lining a numbered avenue."
+              },
+              {
+                "id": "house_2",
+                "type": "house",
+                "role": "townhouse",
+                "label": "townhouse",
+                "size": [
+                  9,
+                  9
+                ],
+                "brief": "Uniform terraced home lining a numbered avenue."
+              },
+              {
+                "id": "house_3",
+                "type": "house",
+                "role": "townhouse",
+                "label": "townhouse",
+                "size": [
+                  9,
+                  9
+                ],
+                "brief": "Uniform terraced home lining a numbered avenue."
+              },
+              {
+                "id": "house_4",
+                "type": "house",
+                "role": "townhouse",
+                "label": "townhouse",
+                "size": [
+                  9,
+                  9
+                ],
+                "brief": "Uniform terraced home lining a numbered avenue."
+              },
+              {
+                "id": "house_5",
+                "type": "house",
+                "role": "apartment",
+                "label": "apartment block",
+                "size": [
+                  13,
+                  11
+                ],
+                "brief": "Taller multi-storey homes near the centre."
+              },
+              {
+                "id": "house_6",
+                "type": "house",
+                "role": "apartment",
+                "label": "apartment block",
+                "size": [
+                  13,
+                  11
+                ],
+                "brief": "Taller multi-storey homes near the centre."
+              },
+              {
+                "id": "shop_2",
+                "type": "shop",
+                "role": "corner_shop",
+                "label": "corner shop",
+                "size": [
+                  9,
+                  9
+                ],
+                "brief": "Street-corner store at an avenue crossing."
+              },
+              {
+                "id": "shop_3",
+                "type": "shop",
+                "role": "corner_shop",
+                "label": "corner shop",
+                "size": [
+                  9,
+                  9
+                ],
+                "brief": "Street-corner store at an avenue crossing."
+              },
+              {
+                "id": "shop_4",
+                "type": "shop",
+                "role": "corner_shop",
+                "label": "corner shop",
+                "size": [
+                  9,
+                  9
+                ],
+                "brief": "Street-corner store at an avenue crossing."
+              },
+              {
+                "id": "tavern_1",
+                "type": "tavern",
+                "role": "tavern",
+                "label": "tavern",
+                "size": [
+                  13,
+                  11
+                ],
+                "brief": "Public house on a busy crossing."
+              },
+              {
+                "id": "smithy_1",
+                "type": "smithy",
+                "role": "smithy",
+                "label": "smithy",
+                "size": [
+                  13,
+                  11
+                ],
+                "placement": "edge",
+                "brief": "Workshop district on the edge."
+              },
+              {
+                "id": "barn_1",
+                "type": "barn",
+                "role": "granary",
+                "label": "granary",
+                "size": [
+                  17,
+                  15
+                ],
+                "placement": "edge",
+                "brief": "Food store at the city edge."
+              },
+              {
+                "id": "chapel_1",
+                "type": "chapel",
+                "role": "chapel",
+                "label": "chapel",
+                "size": [
+                  13,
+                  11
+                ],
+                "brief": "Small chapel on a quiet block."
+              },
+              {
+                "id": "gatehouse_1",
+                "type": "gatehouse",
+                "role": "gatehouse",
+                "label": "gatehouse",
+                "size": [
+                  13,
+                  11
+                ],
+                "placement": "edge",
+                "brief": "Entry where Avenue 1 meets the city edge."
+              }
+            ]
+          }
+        }
+      ],
+      "notes": "The grid layout is reserved (layout.grid, slice FL). Numbered avenue signs at every corner are a style detail for the bible, carried here in notes."
+    },
+    "waits": [
+      {
+        "part": "grid_city",
+        "words": "The regular grid of numbered avenues: grid layouts come with a later Architect release (slice FL). The city's buildings are planned, and the grid is built when that block exists."
+      }
+    ],
+    "summary": "A large, orderly market-town city on level ground: city hall and grand market hall at the centre, townhouses, apartment blocks, corner shops and a tavern around them, and smithy, granary and gatehouse at the edge. The grid of numbered avenues is written as a grid layout, which Architect can't build yet, so it waits until that arrives; the avenue signs are left to the style."
+  },
+  "usd": 0.034084,
+  "errors": []
+}

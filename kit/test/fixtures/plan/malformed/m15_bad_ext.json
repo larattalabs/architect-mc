@@ -1,0 +1,40 @@
+{
+  "about": "an ext key that is not namespace:name",
+  "on": "s7",
+  "expect": {
+    "path": "$.zones[0].ext",
+    "code": "SCHEMA",
+    "part": "town"
+  },
+  "plan": {
+    "schemaVersion": "plan/0",
+    "zones": [
+      {
+        "id": "town",
+        "program": {
+          "lots": [
+            {
+              "id": "h1",
+              "type": "cottage",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "h2",
+              "type": "house",
+              "size": [
+                9,
+                9
+              ]
+            }
+          ]
+        },
+        "ext": {
+          "plain": 1
+        }
+      }
+    ]
+  }
+}

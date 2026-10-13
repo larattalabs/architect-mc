@@ -1,0 +1,73 @@
+{
+  "prompt": "Just a hermit's hut and a garden.",
+  "answer": {
+    "plan": {
+      "schemaVersion": "plan/0",
+      "planId": "hermits_hut_and_garden",
+      "style": {
+        "pending": "hermits_hut_and_garden"
+      },
+      "zones": [
+        {
+          "id": "hermitage",
+          "purpose": "home",
+          "label": "Hermit's clearing",
+          "required": true,
+          "program": {
+            "lots": [
+              {
+                "id": "cabin_1",
+                "type": "cabin",
+                "role": "hermits_hut",
+                "label": "hermit's hut",
+                "size": [
+                  9,
+                  9
+                ],
+                "landmark": true,
+                "placement": "central",
+                "brief": "One-room dwelling with a bed, hearth, small table, bookshelf and a lantern by the door. Modest and a little weathered."
+              },
+              {
+                "id": "garden_1",
+                "type": "garden",
+                "role": "garden_plot",
+                "label": "garden plot",
+                "size": [
+                  13,
+                  11
+                ],
+                "landmark": false,
+                "brief": "Fenced vegetable and herb beds with a water source, a composter and a few flowers, tended beside the hut."
+              },
+              {
+                "id": "shed_1",
+                "type": "shed",
+                "role": "woodshed",
+                "label": "woodshed",
+                "size": [
+                  9,
+                  9
+                ],
+                "landmark": false,
+                "placement": "edge",
+                "brief": "Small open-sided lean-to for firewood and tools, kept against the hut's wall or nearby."
+              }
+            ],
+            "shared": "none"
+          },
+          "where": {
+            "near": {
+              "anchor": "stone",
+              "within": 16
+            }
+          }
+        }
+      ]
+    },
+    "waits": [],
+    "summary": "A tiny, quiet hermitage in a flat clearing near the founding stone: a central hermit's hut, a fenced garden plot beside it, and a small woodshed at the edge. Style is pending a rustic, weathered timber-and-stone bible. Nothing in it is waiting on unsupported parts."
+  },
+  "usd": 0.016639,
+  "errors": []
+}

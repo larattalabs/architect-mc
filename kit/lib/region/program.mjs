@@ -294,6 +294,8 @@ export class Region {
       edges: edges.map((e) => ({ id: e.id, from: { at: e.a.at, facing: e.a.facing }, to: { at: e.b.at, facing: e.b.facing }, width: e.width, movers: e.movers, ladders: e.ladders, prefer: preferOf(e.id) })),
       maxGrade: it.maxGrade ?? 0.25, hairpinLanding: it.hairpinLanding ?? 3, stairs: it.stairs ?? true, maxCut: it.maxCut ?? 4, maxFill: it.maxFill ?? 4, margin: it.margin ?? 2,
       hard, keepOut, prefer, clearTrees, base: it.base ?? null, _unsafe: it._unsafe ?? {},
+      // (6c P0) the plan check's node budget over all edges (absent: none)
+      ...(it.maxExpanded !== undefined ? { maxExpanded: it.maxExpanded } : {}),
     });
     const ms = Math.round(performance.now() - t0);
     const heapMb = Math.round(process.resourceUsage().maxRSS / 1024);

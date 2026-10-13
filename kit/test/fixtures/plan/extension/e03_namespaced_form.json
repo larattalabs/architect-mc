@@ -1,0 +1,20 @@
+{
+  "about": "a namespaced form kind",
+  "on": "s7",
+  "expect": {
+    "part": "moat",
+    "block": "form.steward:moat"
+  },
+  "plan": {
+    "schemaVersion": "plan/0",
+    "forms": [
+      {
+        "id": "moat",
+        "kind": "steward:moat",
+        "params": {
+          "width": 3
+        }
+      }
+    ]
+  }
+}

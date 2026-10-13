@@ -16,6 +16,9 @@ import { decodeArvx } from '../lib/region/volume.mjs';
 import { checkRegion, summaryText } from '../lib/region/check.mjs';
 import { renderPreviews, VIEWS } from '../lib/region/preview.mjs';
 import { synthColumns } from '../lib/region/synth.mjs';
+import { finishCheck } from '../lib/plan/finish.mjs';
+import { fillMissing } from '../lib/region/plan.mjs';
+import { asColumns, canonicalJson as canonicalJsonOf } from '../lib/region/pack.mjs';
 
 class Usage extends Error {}
 
@@ -38,7 +41,7 @@ const readJson = (f, what) => {
 };
 
 async function plan(argv) {
-  const { pos, opts } = parseArgs(argv, { params: 1, survey: 1, seed: 1, claim: 1, bible: 1, roles: 1, out: 1, json: 'flag', 'blobs-out': 1, volumes: 1, 'keep-out': 1, stamps: 1 });
+  const { pos, opts } = parseArgs(argv, { params: 1, survey: 1, seed: 1, claim: 1, bible: 1, roles: 1, out: 1, json: 'flag', 'blobs-out': 1, volumes: 1, 'keep-out': 1, stamps: 1, 'plan-cache': 1 });
   if (pos.length !== 1) throw new Usage('plan <program.mjs> --survey s.bin --claim minX,minZ,maxX,maxZ[,minY,maxY] [...]');
   if (!opts.survey || !opts.claim) throw new Usage('plan needs --survey and --claim');
   const params = opts.params ? readJson(opts.params, '--params') : {};
@@ -75,7 +78,12 @@ async function plan(argv) {
   }
   // (6c F2) the local stamp library (<dir>/<feature>/<seed>.bin; local-only, N-F2-1)
   if (opts.stamps && !fs.existsSync(opts.stamps)) throw new Usage(`--stamps: no dir ${opts.stamps}`);
-  const res = await planRegion({ programFile: pos[0], params, survey, seed: opts.seed ?? null, claim: opts.claim, roles, patterns, volumes, keepOut, stamps: opts.stamps ?? null });
+  // (6c P0) the plan check's cache: <dir>/<key>.json, read only (the sidecar keeps it per owner)
+  const planCache = opts['plan-cache'] ? (key) => {
+    if (!/^[0-9a-f]{64}$/.test(key)) return null;
+    try { return JSON.parse(fs.readFileSync(path.join(opts['plan-cache'], `${key}.json`), 'utf8')); } catch { return null; }
+  } : null;
+  const res = await planRegion({ programFile: pos[0], params, survey, seed: opts.seed ?? null, claim: opts.claim, roles, patterns, volumes, keepOut, stamps: opts.stamps ?? null, planCache });
   if (opts['blobs-out'] && res.blobs.size) {
     fs.mkdirSync(opts['blobs-out'], { recursive: true });
     for (const [sha, bytes] of res.blobs) fs.writeFileSync(path.join(opts['blobs-out'], `${sha}.bin`), bytes);
@@ -89,8 +97,25 @@ async function plan(argv) {
       irFormat: ir.format, requires: ir.requires ?? [], needVolumes: res.needVolumes, passes: res.passes, passRuns: res.stats.passes, blobs: Object.entries(ir.blobs ?? {}).filter(([, b]) => b.sha).map(([name, b]) => ({ name, ...b })) };
     fs.writeFileSync(path.join(opts.out, 'plan.json'), `${JSON.stringify(planJson, null, 2)}\n`);
   }
+  // (6c P0) a plan check (plan_v0): the cost, the overall result, the light preview and the artifact
+  let checked = null;
+  if (res.meta.planCheck) {
+    const cols = fillMissing(asColumns(survey)).columns;
+    const f = finishCheck({ res, survey: cols, blobs: (sha) => res.blobs.get(sha) ?? null, surveyBytesSha: createHash('sha256').update(survey).digest('hex'), inputs: { surveyRes: cols.resolution } });
+    checked = { overall: f.check.overall, artifactSha: f.artifactSha };
+    if (opts.out) {
+      fs.writeFileSync(path.join(opts.out, 'plancheck.json'), `${JSON.stringify(f.check)}\n`);
+      if (f.artifact) fs.writeFileSync(path.join(opts.out, 'artifact.json'), canonicalJsonOf(f.artifact));
+      if (f.classMap) fs.writeFileSync(path.join(opts.out, 'classmap.png'), f.classMap);
+      const keys = Object.keys(f.cacheOut ?? {});
+      if (keys.length) {
+        fs.mkdirSync(path.join(opts.out, 'plancache'), { recursive: true });
+        for (const k of keys) fs.writeFileSync(path.join(opts.out, 'plancache', `${k}.json`), JSON.stringify(f.cacheOut[k]));
+      }
+    }
+  }
   const ir = res.ir;
-  const summary = { ok: true, irSha: res.irSha, irFormat: ir.format, requires: ir.requires ?? [], needVolumes: res.needVolumes, passes: res.passes, passRuns: res.stats.passes, stages: ir.stages, lots: ir.lots.length, anchors: ir.anchors, budget: ir.budget, tiles: res.stats.tiles, notes: res.notes, ms: res.stats.ms };
+  const summary = { ok: true, ...(checked ? { planCheck: checked } : {}), irSha: res.irSha, irFormat: ir.format, requires: ir.requires ?? [], needVolumes: res.needVolumes, passes: res.passes, passRuns: res.stats.passes, stages: ir.stages, lots: ir.lots.length, anchors: ir.anchors, budget: ir.budget, tiles: res.stats.tiles, notes: res.notes, ms: res.stats.ms };
   if (opts.json) console.log(JSON.stringify(summary));
   else {
     console.log(`plan ${ir.id}: irSha ${res.irSha}`);

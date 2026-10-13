@@ -1,0 +1,222 @@
+{
+  "prompt": "A town on a giant ship.",
+  "answer": {
+    "plan": {
+      "schemaVersion": "plan/0",
+      "planId": "ship_town",
+      "style": {
+        "pending": "ship_town"
+      },
+      "zones": [
+        {
+          "id": "ship_deck",
+          "kind": "standard",
+          "required": true,
+          "label": "Ship town",
+          "purpose": "harbour",
+          "style": {
+            "pending": "ship_town"
+          },
+          "program": {
+            "layout": "street",
+            "lots": [
+              {
+                "id": "tavern_1",
+                "type": "tavern",
+                "role": "captains_hall",
+                "label": "captain's hall",
+                "size": [
+                  17,
+                  15
+                ],
+                "landmark": true,
+                "placement": "high_ground",
+                "brief": "Stern castle command hall with big windows, chart room and lantern-lit deck"
+              },
+              {
+                "id": "house_1",
+                "type": "house",
+                "role": "crew_quarters",
+                "label": "crew quarters",
+                "size": [
+                  13,
+                  11
+                ],
+                "brief": "Bunk-filled dwelling built into the hull and upper deck"
+              },
+              {
+                "id": "house_2",
+                "type": "house",
+                "role": "crew_quarters",
+                "label": "crew quarters",
+                "size": [
+                  13,
+                  11
+                ],
+                "brief": "Bunk-filled dwelling built into the hull and upper deck"
+              },
+              {
+                "id": "house_3",
+                "type": "house",
+                "role": "crew_quarters",
+                "label": "crew quarters",
+                "size": [
+                  13,
+                  11
+                ],
+                "brief": "Bunk-filled dwelling built into the hull and upper deck"
+              },
+              {
+                "id": "cabin_1",
+                "type": "cabin",
+                "role": "cabins",
+                "label": "cabin",
+                "size": [
+                  9,
+                  9
+                ],
+                "brief": "Small family cabin along the main deck"
+              },
+              {
+                "id": "cabin_2",
+                "type": "cabin",
+                "role": "cabins",
+                "label": "cabin",
+                "size": [
+                  9,
+                  9
+                ],
+                "brief": "Small family cabin along the main deck"
+              },
+              {
+                "id": "shop_1",
+                "type": "shop",
+                "role": "deck_market",
+                "label": "deck market",
+                "size": [
+                  13,
+                  11
+                ],
+                "placement": "central",
+                "brief": "Stalls and shops for trade goods, near the mast"
+              },
+              {
+                "id": "shop_2",
+                "type": "shop",
+                "role": "deck_market",
+                "label": "deck market",
+                "size": [
+                  13,
+                  11
+                ],
+                "placement": "central",
+                "brief": "Stalls and shops for trade goods, near the mast"
+              },
+              {
+                "id": "tavern_2",
+                "type": "tavern",
+                "role": "galley_tavern",
+                "label": "galley tavern",
+                "size": [
+                  13,
+                  11
+                ],
+                "brief": "Mess hall and kitchen below deck with barrels and hanging lanterns"
+              },
+              {
+                "id": "smithy_1",
+                "type": "smithy",
+                "role": "shipwrights_smithy",
+                "label": "shipwright's smithy",
+                "size": [
+                  13,
+                  11
+                ],
+                "brief": "Repairs, anchors and chains"
+              },
+              {
+                "id": "tower_1",
+                "type": "tower",
+                "role": "crows_nest_lookout",
+                "label": "crow's nest lookout",
+                "size": [
+                  9,
+                  9
+                ],
+                "placement": "high_ground",
+                "brief": "Atop the main mast"
+              },
+              {
+                "id": "barn_1",
+                "type": "barn",
+                "role": "cargo_hold_storehouse",
+                "label": "cargo hold storehouse",
+                "size": [
+                  17,
+                  15
+                ],
+                "placement": "edge",
+                "brief": "Crates, barrels and stores deep in the hull"
+              }
+            ]
+          },
+          "where": {
+            "inside": {
+              "claim": true
+            }
+          }
+        }
+      ],
+      "forms": [
+        {
+          "id": "ship_hull",
+          "kind": "ship_hull",
+          "required": true,
+          "label": "Giant ship hull",
+          "where": {
+            "inside": {
+              "claim": true
+            }
+          },
+          "params": {
+            "decks": 3,
+            "sternCastle": true,
+            "rests": "water_or_land",
+            "material": "dark_oak"
+          },
+          "notes": "Huge hull with decks and a raised stern castle, the town sits on and in it."
+        },
+        {
+          "id": "ship_masts",
+          "kind": "mast",
+          "required": false,
+          "label": "Masts and sails",
+          "where": {
+            "inside": {
+              "part": "ship_hull"
+            }
+          },
+          "params": {
+            "count": 2,
+            "sails": "wool"
+          },
+          "notes": "Masts with wool sails, rope rigging and lanterns; crow's nest on the main mast."
+        }
+      ],
+      "notes": "Land not surveyed. The ship hull is a sculpted form no supported kind covers yet."
+    },
+    "waits": [
+      {
+        "part": "ship_hull",
+        "words": "The giant ship hull with its decks and stern castle: a ship-shaped form isn't a supported block yet. The buildings are laid out first and the hull is added when it can be built."
+      },
+      {
+        "part": "ship_masts",
+        "words": "The masts, wool sails and rigging: they need the ship form and aren't buildable yet."
+      }
+    ],
+    "summary": "Your Ship Town is a single street-laid zone of twelve buildings in a weathered seafaring style: a captain's hall at the high stern, three crew houses, two cabins, two deck-market shops, a galley tavern, a smithy, a crow's nest lookout and a cargo storehouse at the edge. The hull and masts are written as parts but wait for a later Architect release, so the town is built first."
+  },
+  "usd": 0.032871,
+  "errors": []
+}

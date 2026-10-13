@@ -1,0 +1,5 @@
+{
+  "family": "relief",
+  "cutFrom": "scenarios/goldens/relief_demo/ir.json",
+  "survey": "scenarios/goldens/relief_demo/survey.bin"
+}

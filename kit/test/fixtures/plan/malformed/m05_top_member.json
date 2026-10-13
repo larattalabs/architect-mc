@@ -1,0 +1,38 @@
+{
+  "about": "an unknown top-level member",
+  "on": "s7",
+  "expect": {
+    "path": "$",
+    "code": "SCHEMA",
+    "plan": true
+  },
+  "plan": {
+    "schemaVersion": "plan/0",
+    "zones": [
+      {
+        "id": "town",
+        "program": {
+          "lots": [
+            {
+              "id": "h1",
+              "type": "cottage",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "h2",
+              "type": "house",
+              "size": [
+                9,
+                9
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "districts": []
+  }
+}

@@ -1,0 +1,252 @@
+{
+  "prompt": "A town that spirals up a hill to a temple at the top.",
+  "answer": {
+    "plan": {
+      "schemaVersion": "plan/0",
+      "planId": "spiral_hill_town",
+      "style": {
+        "pending": "spiral_hill_town"
+      },
+      "zones": [
+        {
+          "id": "hill_town",
+          "kind": "standard",
+          "required": true,
+          "label": "Spiral hill town",
+          "purpose": "pilgrimage",
+          "style": {
+            "pending": "spiral_hill_town"
+          },
+          "where": {
+            "near": {
+              "anchor": "stone",
+              "within": 32
+            }
+          },
+          "program": {
+            "layout": "street",
+            "lots": [
+              {
+                "id": "temple_1",
+                "type": "temple",
+                "role": "summit_temple",
+                "label": "summit temple",
+                "size": [
+                  17,
+                  15
+                ],
+                "landmark": true,
+                "placement": "high_ground",
+                "brief": "Crowns the hill, visible from every turn of the spiral; broad steps and a terrace overlooking the town."
+              },
+              {
+                "id": "gatehouse_1",
+                "type": "gatehouse",
+                "role": "spiral_gatehouse",
+                "label": "spiral road gatehouse",
+                "size": [
+                  9,
+                  9
+                ],
+                "placement": "edge",
+                "brief": "Marks the start of the spiral road at the foot of the hill."
+              },
+              {
+                "id": "house_1",
+                "type": "house",
+                "role": "townhouse",
+                "label": "townhouse",
+                "size": [
+                  9,
+                  9
+                ],
+                "brief": "Stepped along the spiral road, facing uphill toward the temple."
+              },
+              {
+                "id": "house_2",
+                "type": "house",
+                "role": "townhouse",
+                "label": "townhouse",
+                "size": [
+                  9,
+                  9
+                ],
+                "brief": "Stepped along the spiral road, facing uphill toward the temple."
+              },
+              {
+                "id": "house_3",
+                "type": "house",
+                "role": "townhouse",
+                "label": "townhouse",
+                "size": [
+                  9,
+                  9
+                ],
+                "brief": "Stepped along the spiral road, facing uphill toward the temple."
+              },
+              {
+                "id": "house_4",
+                "type": "house",
+                "role": "townhouse",
+                "label": "townhouse",
+                "size": [
+                  9,
+                  9
+                ],
+                "brief": "Stepped along the spiral road, facing uphill toward the temple."
+              },
+              {
+                "id": "cottage_1",
+                "type": "cottage",
+                "role": "cottage",
+                "label": "cottage",
+                "size": [
+                  9,
+                  9
+                ],
+                "brief": "Small home tucked between the turns of the road."
+              },
+              {
+                "id": "cottage_2",
+                "type": "cottage",
+                "role": "cottage",
+                "label": "cottage",
+                "size": [
+                  9,
+                  9
+                ],
+                "brief": "Small home tucked between the turns of the road."
+              },
+              {
+                "id": "tavern_1",
+                "type": "tavern",
+                "role": "pilgrims_inn",
+                "label": "pilgrim's inn",
+                "size": [
+                  13,
+                  11
+                ],
+                "brief": "Rest stop at the lower third of the climb."
+              },
+              {
+                "id": "shop_1",
+                "type": "shop",
+                "role": "market_shop",
+                "label": "market shop",
+                "size": [
+                  9,
+                  9
+                ],
+                "placement": "central",
+                "brief": "Along the road, selling offerings and goods."
+              },
+              {
+                "id": "shop_2",
+                "type": "shop",
+                "role": "market_shop",
+                "label": "market shop",
+                "size": [
+                  9,
+                  9
+                ],
+                "placement": "central",
+                "brief": "Along the road, selling offerings and goods."
+              },
+              {
+                "id": "chapel_1",
+                "type": "chapel",
+                "role": "wayside_shrine",
+                "label": "wayside shrine",
+                "size": [
+                  9,
+                  9
+                ],
+                "brief": "Small shrine at the midpoint of the climb."
+              },
+              {
+                "id": "tower_1",
+                "type": "tower",
+                "role": "watchtower",
+                "label": "watchtower",
+                "size": [
+                  9,
+                  9
+                ],
+                "placement": "high_ground",
+                "brief": "Just below the temple, overlooking the spiral."
+              }
+            ]
+          }
+        }
+      ],
+      "connectors": [
+        {
+          "id": "spiral_road",
+          "kind": "street",
+          "required": true,
+          "label": "spiral road",
+          "from": {
+            "part": "hill_town",
+            "port": "gatehouse_1"
+          },
+          "via": [
+            {
+              "part": "hill_town",
+              "port": "tavern_1"
+            },
+            {
+              "part": "hill_town",
+              "port": "chapel_1"
+            }
+          ],
+          "to": {
+            "part": "hill_town",
+            "port": "temple_1"
+          },
+          "width": 3,
+          "lamps": "street",
+          "notes": "Main road climbs from the gatehouse at the foot, past the inn and shrine, to the temple, winding around the slope in a rising spiral."
+        }
+      ],
+      "forms": [
+        {
+          "id": "hill_relief",
+          "kind": "relief",
+          "required": false,
+          "around": [
+            "hill_town",
+            "spiral_road"
+          ],
+          "notes": "Blend the slope into the lots and the road so the climb is smooth."
+        }
+      ],
+      "rules": [
+        {
+          "id": "spiral_shape",
+          "kind": "shape",
+          "required": true,
+          "label": "spiral road shape",
+          "scope": [
+            "spiral_road"
+          ],
+          "params": {
+            "shape": "spiral",
+            "turns": "about 1.5 to 2 around the hill",
+            "direction": "rising to the summit"
+          },
+          "notes": "The road should wind around the hill in a rising spiral; no shape rule can enforce this yet."
+        }
+      ],
+      "notes": "Existing hill to be found near the stone; the temple takes the summit."
+    },
+    "waits": [
+      {
+        "part": "spiral_shape",
+        "words": "The spiral shape of the road: shape rules come with a later Architect release. The road is built climbing from the gatehouse to the temple by the best route; the true spiral is offered when it can be checked."
+      }
+    ],
+    "summary": "A medium pilgrimage hill town: one street zone with a summit temple, gatehouse at the foot, four townhouses, two cottages, a pilgrim's inn, two market shops, a wayside shrine and a watchtower below the temple. A street climbs from the gatehouse past the inn and shrine to the temple, with relief blending the slope. The strict spiral shape waits for a later release."
+  },
+  "usd": 0.036704,
+  "errors": []
+}

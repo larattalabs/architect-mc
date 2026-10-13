@@ -1,0 +1,221 @@
+{
+  "prompt": "A border fort guarding the pass against the settlement to the north.",
+  "answer": {
+    "plan": {
+      "schemaVersion": "plan/0",
+      "planId": "pass_border_fort",
+      "style": {
+        "pending": "pass_border_fort"
+      },
+      "zones": [
+        {
+          "id": "fort",
+          "purpose": "fortress",
+          "label": "Pass border fort",
+          "required": true,
+          "style": {
+            "pending": "pass_border_fort"
+          },
+          "where": {
+            "near": {
+              "anchor": "stone",
+              "within": 24
+            }
+          },
+          "program": {
+            "layout": "street",
+            "lots": [
+              {
+                "id": "tower_1",
+                "type": "tower",
+                "role": "commanders_keep",
+                "label": "commander's keep",
+                "size": [
+                  17,
+                  15
+                ],
+                "landmark": true,
+                "placement": "high_ground",
+                "brief": "Fortified stone keep on the south side of the pass, overlooking the wall and the northern approach."
+              },
+              {
+                "id": "gatehouse_1",
+                "type": "gatehouse",
+                "role": "north_gatehouse",
+                "label": "north gatehouse",
+                "size": [
+                  13,
+                  11
+                ],
+                "placement": "edge",
+                "brief": "Portcullis gate closing the pass road, facing north."
+              },
+              {
+                "id": "tower_2",
+                "type": "tower",
+                "role": "wall_watchtower",
+                "label": "wall watchtower",
+                "size": [
+                  9,
+                  9
+                ],
+                "placement": "high_ground",
+                "brief": "Flanks the wall on one side of the pass with an archer platform."
+              },
+              {
+                "id": "tower_3",
+                "type": "tower",
+                "role": "wall_watchtower",
+                "label": "wall watchtower",
+                "size": [
+                  9,
+                  9
+                ],
+                "placement": "high_ground",
+                "brief": "Flanks the wall on the other side of the pass with an archer platform."
+              },
+              {
+                "id": "house_1",
+                "type": "house",
+                "role": "garrison_barracks",
+                "label": "garrison barracks",
+                "size": [
+                  13,
+                  11
+                ],
+                "brief": "Bunks and chests for gear, behind the wall."
+              },
+              {
+                "id": "house_2",
+                "type": "house",
+                "role": "garrison_barracks",
+                "label": "garrison barracks",
+                "size": [
+                  13,
+                  11
+                ],
+                "brief": "Bunks and chests for gear, behind the wall."
+              },
+              {
+                "id": "smithy_1",
+                "type": "smithy",
+                "role": "armoury_smithy",
+                "label": "armoury smithy",
+                "size": [
+                  13,
+                  11
+                ],
+                "brief": "Repairs weapons and armour; anvil and grindstone."
+              },
+              {
+                "id": "tavern_1",
+                "type": "tavern",
+                "role": "mess_hall",
+                "label": "mess hall",
+                "size": [
+                  13,
+                  11
+                ],
+                "placement": "central",
+                "brief": "Soldiers' canteen with long tables and a hearth."
+              },
+              {
+                "id": "barn_1",
+                "type": "barn",
+                "role": "granary_stores",
+                "label": "granary and stores",
+                "size": [
+                  13,
+                  11
+                ],
+                "placement": "edge",
+                "brief": "Food, arrows and supplies."
+              },
+              {
+                "id": "barn_2",
+                "type": "barn",
+                "role": "stables",
+                "label": "stables",
+                "size": [
+                  13,
+                  11
+                ],
+                "placement": "edge",
+                "brief": "Horses for patrols and messengers."
+              }
+            ]
+          }
+        }
+      ],
+      "connectors": [
+        {
+          "id": "pass_road",
+          "kind": "road",
+          "label": "pass road",
+          "required": false,
+          "from": {
+            "anchor": "claim_s"
+          },
+          "to": {
+            "anchor": "claim_n"
+          },
+          "lamps": "few",
+          "notes": "The route through the pass, running north through the gatehouse."
+        },
+        {
+          "id": "fort_wall",
+          "kind": "wall",
+          "label": "pass wall",
+          "required": true,
+          "where": {
+            "inside": {
+              "part": "fort"
+            }
+          },
+          "notes": "Stone brick curtain wall across the full width of the pass, joining the two watchtowers to the north gatehouse, with the keep behind it on the south side.",
+          "params": {
+            "material": "stone_brick",
+            "across": "pass",
+            "facing": "north",
+            "anchors": [
+              "tower_2",
+              "gatehouse_1",
+              "tower_3"
+            ]
+          }
+        }
+      ],
+      "forms": [
+        {
+          "id": "fort_relief",
+          "kind": "relief",
+          "around": [
+            "fort"
+          ],
+          "required": false,
+          "radius": 12,
+          "label": "Ground leveled for the fort"
+        }
+      ],
+      "dependencies": [
+        {
+          "part": "fort_wall",
+          "after": [
+            "fort"
+          ],
+          "why": "The wall joins the towers and gatehouse once they are placed."
+        }
+      ],
+      "notes": "Fort faces north across a mountain pass; terrain not yet surveyed. Torch, lantern and banner lighting come with the style bible."
+    },
+    "waits": [
+      {
+        "part": "fort_wall",
+        "words": "The curtain wall across the pass, joining the watchtowers and gatehouse: walls come with a later Architect release; the fort buildings are built first and the wall is offered when it can be."
+      }
+    ],
+    "summary": "A medium stone border fort across the pass, facing north: a commander's keep on high ground, a north gatehouse on the pass road, two flanking watchtowers, two barracks, a smithy, a mess hall, a granary and stables. The ground is leveled around it and a road runs through the pass. The connecting wall can't be built yet and waits for a later release."
+  },
+  "usd": 0.034128,
+  "errors": []
+}

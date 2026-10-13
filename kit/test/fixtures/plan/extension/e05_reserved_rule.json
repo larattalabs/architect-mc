@@ -1,0 +1,25 @@
+{
+  "about": "a reserved rule in its draft shape",
+  "on": "s7",
+  "expect": {
+    "part": "stone_only",
+    "block": "rule.palette"
+  },
+  "plan": {
+    "schemaVersion": "plan/0",
+    "rules": [
+      {
+        "id": "stone_only",
+        "kind": "palette",
+        "family": "stone",
+        "share": [
+          0.6,
+          1
+        ],
+        "exempt": [
+          "terrain"
+        ]
+      }
+    ]
+  }
+}

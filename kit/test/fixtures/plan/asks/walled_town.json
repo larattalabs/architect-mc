@@ -1,0 +1,252 @@
+{
+  "prompt": "A walled market town with a gatehouse on each road.",
+  "answer": {
+    "plan": {
+      "schemaVersion": "plan/0",
+      "planId": "marketwall",
+      "style": {
+        "pending": "marketwall"
+      },
+      "zones": [
+        {
+          "id": "town",
+          "kind": "standard",
+          "required": true,
+          "label": "Marketwall town",
+          "purpose": "market",
+          "program": {
+            "layout": "street",
+            "shared": "square",
+            "lots": [
+              {
+                "id": "gatehouse_1",
+                "type": "gatehouse",
+                "role": "road_gatehouse",
+                "label": "road gatehouse",
+                "size": [
+                  13,
+                  11
+                ],
+                "placement": "edge",
+                "villager": "none",
+                "brief": "Arched passage, portcullis, guard room above; one at a road entrance through the wall."
+              },
+              {
+                "id": "gatehouse_2",
+                "type": "gatehouse",
+                "role": "road_gatehouse",
+                "label": "road gatehouse",
+                "size": [
+                  13,
+                  11
+                ],
+                "placement": "edge",
+                "villager": "none",
+                "brief": "Arched passage, portcullis, guard room above; one at a road entrance through the wall."
+              },
+              {
+                "id": "gatehouse_3",
+                "type": "gatehouse",
+                "role": "road_gatehouse",
+                "label": "road gatehouse",
+                "size": [
+                  13,
+                  11
+                ],
+                "placement": "edge",
+                "villager": "none",
+                "brief": "Arched passage, portcullis, guard room above; one at a road entrance through the wall."
+              },
+              {
+                "id": "gatehouse_4",
+                "type": "gatehouse",
+                "role": "road_gatehouse",
+                "label": "road gatehouse",
+                "size": [
+                  13,
+                  11
+                ],
+                "placement": "edge",
+                "villager": "none",
+                "brief": "Arched passage, portcullis, guard room above; one at a road entrance through the wall."
+              },
+              {
+                "id": "shop_1",
+                "type": "shop",
+                "role": "market_hall",
+                "label": "market hall",
+                "size": [
+                  17,
+                  15
+                ],
+                "landmark": true,
+                "placement": "central",
+                "villager": "trading_hall",
+                "brief": "Covered trading hall facing the market square, the heart of the town."
+              },
+              {
+                "id": "shop_2",
+                "type": "shop",
+                "role": "merchant_stalls",
+                "label": "merchant stalls",
+                "size": [
+                  9,
+                  9
+                ],
+                "placement": "central",
+                "villager": "job",
+                "brief": "Open-fronted stalls around the square."
+              },
+              {
+                "id": "shop_3",
+                "type": "shop",
+                "role": "merchant_stalls",
+                "label": "merchant stalls",
+                "size": [
+                  9,
+                  9
+                ],
+                "placement": "central",
+                "villager": "job",
+                "brief": "Open-fronted stalls around the square."
+              },
+              {
+                "id": "shop_4",
+                "type": "shop",
+                "role": "merchant_stalls",
+                "label": "merchant stalls",
+                "size": [
+                  9,
+                  9
+                ],
+                "placement": "central",
+                "villager": "job",
+                "brief": "Open-fronted stalls around the square."
+              },
+              {
+                "id": "tavern_1",
+                "type": "tavern",
+                "role": "tavern_inn",
+                "label": "tavern and inn",
+                "size": [
+                  13,
+                  11
+                ],
+                "brief": "Lodging for travelling traders, near the main road."
+              },
+              {
+                "id": "house_1",
+                "type": "house",
+                "role": "townhouse",
+                "label": "townhouse",
+                "size": [
+                  9,
+                  9
+                ],
+                "villager": "dwelling",
+                "brief": "Home of merchants and townsfolk with shopfront below."
+              },
+              {
+                "id": "house_2",
+                "type": "house",
+                "role": "townhouse",
+                "label": "townhouse",
+                "size": [
+                  9,
+                  9
+                ],
+                "villager": "dwelling",
+                "brief": "Home of merchants and townsfolk with shopfront below."
+              },
+              {
+                "id": "house_3",
+                "type": "house",
+                "role": "townhouse",
+                "label": "townhouse",
+                "size": [
+                  9,
+                  9
+                ],
+                "villager": "dwelling",
+                "brief": "Home of merchants and townsfolk with shopfront below."
+              },
+              {
+                "id": "house_4",
+                "type": "house",
+                "role": "townhouse",
+                "label": "townhouse",
+                "size": [
+                  9,
+                  9
+                ],
+                "villager": "dwelling",
+                "brief": "Home of merchants and townsfolk with shopfront below."
+              },
+              {
+                "id": "smithy_1",
+                "type": "smithy",
+                "role": "smithy",
+                "label": "smithy",
+                "size": [
+                  13,
+                  11
+                ],
+                "villager": "job",
+                "brief": "Tools and horseshoes for market goers."
+              },
+              {
+                "id": "chapel_1",
+                "type": "chapel",
+                "role": "chapel",
+                "label": "chapel",
+                "size": [
+                  13,
+                  11
+                ],
+                "brief": "Small town chapel off the square."
+              }
+            ]
+          }
+        }
+      ],
+      "connectors": [
+        {
+          "id": "town_wall",
+          "kind": "wall",
+          "required": true,
+          "label": "town wall",
+          "notes": "Closed ring of stone brick enclosing the town, on level ground, with a wall gap at each gatehouse.",
+          "where": {
+            "around": {
+              "feature": {
+                "part": "town"
+              },
+              "closed": true
+            }
+          },
+          "params": {
+            "template": "ring_wall",
+            "material": "stone_brick",
+            "gates": 4,
+            "gateLots": [
+              "gatehouse_1",
+              "gatehouse_2",
+              "gatehouse_3",
+              "gatehouse_4"
+            ]
+          }
+        }
+      ],
+      "notes": "Walled medieval market town; four gatehouses assumed, one per road. Wall is reserved until walls are supported; the town is built first."
+    },
+    "waits": [
+      {
+        "part": "town_wall",
+        "words": "The stone brick town wall enclosing the town, joined to the four gatehouses: walls come with a later Architect release; the town is built first and the wall is offered when it can be."
+      }
+    ],
+    "summary": "Marketwall is a plain medieval market town on level ground: a market hall and three stalls around a central square, four townhouses, an inn, a smithy and a chapel, with four gatehouses at the edge for the four roads. The stone brick wall that joins the gatehouses can't be built yet, so it waits and the town is built first."
+  },
+  "usd": 0.036746,
+  "errors": []
+}

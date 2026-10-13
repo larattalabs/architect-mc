@@ -17,7 +17,7 @@ export const PROTOCOL_VERSION = 1 as const;
 export const PROTOCOLS = [1, 2] as const;
 export type Protocol = (typeof PROTOCOLS)[number];
 /** What a protocol-2 snapshot lists in `features`. */
-export const FEATURES = ['job.run', 'job.tools', 'blobs', 'budget', 'designs.v2', 'bibles', 'design.groups', 'named.parts', 'open.types', 'estimates', 'reskin', 'massing', 'critique', 'critique.report', 'job.images', 'bible.admin', 'bible.restraint', 'entry.versions', 'entry.delta', 'design.polish', 'critique.polish', 'region.plan', 'region.tiles', 'region.check', 'region.preview', 'region.design', 'region.blobs', 'ir.format2', 'estimate.kinds', 'opKeys', 'group.breakdown', 'copies', 'smallEffort', 'versionOf', 'extendInfo', 'region.keepOut', 'region.lightCover', 'region.forms1', 'masks', 'patterns', 'region.passes', 'import.schem', 'region.scatter', 'region.brush', 'region.route'] as const;
+export const FEATURES = ['job.run', 'job.tools', 'blobs', 'budget', 'designs.v2', 'bibles', 'design.groups', 'named.parts', 'open.types', 'estimates', 'reskin', 'massing', 'critique', 'critique.report', 'job.images', 'bible.admin', 'bible.restraint', 'entry.versions', 'entry.delta', 'design.polish', 'critique.polish', 'region.plan', 'region.tiles', 'region.check', 'region.preview', 'region.design', 'region.blobs', 'ir.format2', 'estimate.kinds', 'opKeys', 'group.breakdown', 'copies', 'smallEffort', 'versionOf', 'extendInfo', 'region.keepOut', 'region.lightCover', 'region.forms1', 'masks', 'patterns', 'region.passes', 'import.schem', 'region.scatter', 'region.brush', 'region.route', 'region.planCheck'] as const;
 
 const Ts = z.number().int().nonnegative();
 const Id = z.string().min(1).max(64);
@@ -944,6 +944,7 @@ export const RegionPlannedMsg = z
     checkMs: z.number().int().nonnegative().optional().describe('(6b) the check run\'s wall time'),
     renderMs: z.number().int().nonnegative().optional().describe('(6b) the preview run\'s wall time'),
     checkError: z.string().optional().describe('(6b addition) the check or the previews failed (the plan itself is good): why'),
+    planCheck: z.record(z.string(), z.unknown()).optional().describe("(6c P0) a plan check's answer (the kit's plancheck.json: overall, parts, cost, catalogue, preview with the class map's absolute path), with `artifact` (its canonical JSON) when it made one"),
   })
   .refine((m) => (m.ir === undefined) !== (m.irBlobId === undefined), 'exactly one of ir and irBlobId');
 export const RegionProgressMsg = z.object({ ...envelope('region.progress'), planId: PlanId, phase: z.enum(['planning', 'checking', 'rendering']) });
@@ -1098,7 +1099,7 @@ export const DesignPolishMsg = z.object({ ...envelope('design.polish'), entryId:
 export const RegionPlanMsg = z.object({
   ...envelope('region.plan'),
   program: z.string().min(1).max(4096).describe('a bundled program id (kit/regions/<id>.mjs, [a-z][a-z0-9_]{0,47}) or a .mjs path under <gameDir>/architect/regions/programs'),
-  params: z.record(z.string().max(64), z.unknown()).refine((v) => JSON.stringify(v).length <= 64 * 1024, 'params are larger than 64 KB').describe("the program's params (JSON)"),
+  params: z.record(z.string().max(64), z.unknown()).refine((v) => JSON.stringify(v).length <= 256 * 1024, 'params are larger than 256 KB').describe("the program's params (JSON; at most 256 KB: (6c P0) plan_v0's plan, up to 64 KB, plus its frozen inputs)"),
   seed: z.union([z.string().regex(/^\d{1,20}$/), z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER)]).optional().describe('a u64 as a decimal string (a safe integer is accepted); absent: the sidecar picks one'),
   claim: RegionClaim,
   surveyBlobId: BlobId.describe('the plan survey: an ARSV columns blob'),
@@ -1116,6 +1117,10 @@ export const RegionPlanMsg = z.object({
     .max(1024)
     .optional()
     .describe("(6c V) the request owner's protected areas that meet the claim, [[x0, z0, x1, z1]] (all heights): a program reads them as ctx.keepOut"),
+  planCache: z.string().min(1).max(256).optional().describe('(6c P0) a plan check: the owner whose per-part cache the kit reads (<data>/regions/plancache/<sha(owner)>/; 24 h or 256 checks per owner), and region.planned carries planCheck'),
+  previewViews: z.array(z.enum(['top', 'section', 'iso', 'siteplan'])).min(1).max(4).optional().describe('(6c P0) the previews to render after the check (default all four; a plan check renders siteplan only: images on request)'),
+  timeoutMs: z.number().int().min(1).max(600_000).optional().describe("(6c P0) at most this plan time (a check's maxMs plus its grace; never more than the program's budget)"),
+  heapMb: z.number().int().min(64).max(8192).optional().describe("(6c P0) at most this heap (a check's maxHeapMb; never more than the program's budget)"),
 });
 export const RegionTileReq = z.object({
   key: TileKey,

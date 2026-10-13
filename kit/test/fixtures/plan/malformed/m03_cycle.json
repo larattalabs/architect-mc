@@ -1,0 +1,74 @@
+{
+  "about": "two zones adjacent to each other",
+  "on": "s7",
+  "expect": {
+    "path": "$.zones[0]",
+    "code": "CYCLE",
+    "part": "a"
+  },
+  "plan": {
+    "schemaVersion": "plan/0",
+    "zones": [
+      {
+        "id": "a",
+        "program": {
+          "lots": [
+            {
+              "id": "h1",
+              "type": "cottage",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "h2",
+              "type": "house",
+              "size": [
+                9,
+                9
+              ]
+            }
+          ]
+        },
+        "where": {
+          "adjacent": {
+            "to": {
+              "part": "b"
+            }
+          }
+        }
+      },
+      {
+        "id": "b",
+        "program": {
+          "lots": [
+            {
+              "id": "b1",
+              "type": "cottage",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "b2",
+              "type": "house",
+              "size": [
+                9,
+                9
+              ]
+            }
+          ]
+        },
+        "where": {
+          "adjacent": {
+            "to": {
+              "part": "a"
+            }
+          }
+        }
+      }
+    ]
+  }
+}

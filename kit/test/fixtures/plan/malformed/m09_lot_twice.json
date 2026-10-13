@@ -1,0 +1,60 @@
+{
+  "about": "a lot id in two zones",
+  "on": "s7",
+  "expect": {
+    "path": "$.zones[1].program.lots[0].id",
+    "code": "SCHEMA",
+    "part": "b"
+  },
+  "plan": {
+    "schemaVersion": "plan/0",
+    "zones": [
+      {
+        "id": "a",
+        "program": {
+          "lots": [
+            {
+              "id": "h1",
+              "type": "cottage",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "h2",
+              "type": "house",
+              "size": [
+                9,
+                9
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "id": "b",
+        "program": {
+          "lots": [
+            {
+              "id": "h1",
+              "type": "cottage",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "h2",
+              "type": "house",
+              "size": [
+                9,
+                9
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

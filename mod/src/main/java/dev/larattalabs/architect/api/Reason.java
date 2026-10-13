@@ -73,6 +73,10 @@ package dev.larattalabs.architect.api;
  * {@code DataVersion} newer than the game's, corrupt data, or blocks the game does not know ({@link Library#importSchematic}).</li>
  * <li>{@code PERMISSION} (1.21.0): the caller lacks the permission the request needs: a brush stroke with
  * {@link Destruction#PLAYER_BLOCKS} needs an online player with permission level 2 as its actor ({@link Regions#brush}).</li>
+ * <li>{@code ARTIFACT_STALE} (1.23.0): {@link Regions#realiseApproved}: the terrain under the plan's tiles, the protection over the
+ * claim, or a provisional lot's entry (past its fit box or the top of its cost range) changed since the check; the message names
+ * the columns, areas or lot. Nothing was written: check again and approve the new artifact.</li>
+ * <li>{@code ARTIFACT_UNAPPROVED} (1.23.0): no artifact has that sha (unknown, or removed: a tombstone).</li>
  * </ul>
  * New values are only ever appended.
  */
@@ -87,5 +91,7 @@ public enum Reason {
 	// 1.18.0 (6c slice SCH)
 	FORMAT,
 	// 1.21.0 (6c slice B)
-	PERMISSION
+	PERMISSION,
+	// 1.23.0 (6c slice P0)
+	ARTIFACT_STALE, ARTIFACT_UNAPPROVED
 }

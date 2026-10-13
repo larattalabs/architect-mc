@@ -434,8 +434,8 @@ export function surfaceOps(part, cells, role, { walk = true, subsurface = 'subsu
 // ------------------------------------------------------------------ builders (emit parts, register graph nodes)
 
 /** The plaza node's ports: `bell` (the bell anchor) plus the street ends and the square lots' lanes (added as they are made). */
-function plaza(r, sh, bell) {
-  return r.graphNode({ id: 'plaza', kind: 'plaza', ref: sh.kind, at: bell, ports: [{ name: 'bell', at: bell, facing: 'up', width: BELL_AREA }] });
+function plaza(r, sh, bell, prefix = '') {
+  return r.graphNode({ id: `${prefix}plaza`, kind: 'plaza', ref: sh.kind, at: bell, ports: [{ name: 'bell', at: bell, facing: 'up', width: BELL_AREA }] });
 }
 
 /**
@@ -456,8 +456,8 @@ export function reservations(o, sh) {
 }
 
 /** The square (or the green): levelled at its y and paved in the `path` role with walk cells, prop cells paved without walk. */
-export function square(r, sh, { stage = 'ground', o, noWalk = new Set(), noGravityRule = false } = {}) {
-  const p = r.part(sh.kind === 'square' ? 'square' : 'green', { stage, set: 'path' });
+export function square(r, sh, { stage = 'ground', o, noWalk = new Set(), noGravityRule = false, prefix = '' } = {}) {
+  const p = r.part(`${prefix}${sh.kind === 'square' ? 'square' : 'green'}`, { stage, set: 'path' });
   const cells = [], still = [];
   for (let u = sh.u0; u <= sh.u1; u++) for (let v = sh.v0; v <= sh.v1; v++) {
     const [x, z] = toWorld(o, u, v);
@@ -511,10 +511,14 @@ export function lane(part, id, from, to, w, { o, boxes = [], keepOut = [], _unsa
  * node per lot (port `entrance`), the plaza (ports `bell`, `street_<end>`, `lane_<lot>`), a junction per street lane, road
  * edges along the street and path edges for the lanes. Returns the layout plus `{bell, reserve, lanes, entrances}`.
  */
-export function streetLayout(r, specs, { rules = STREET_RULES, shared = { kind: 'square', size: 11 }, laneWidth = 2, stages = {}, maxHeight = 32, requireAll = false, planProps = null, _unsafe = {} } = {}) {
+export function streetLayout(r, specs, { rules = STREET_RULES, shared = { kind: 'square', size: 11 }, laneWidth = 2, stages = {}, maxHeight = 32, requireAll = false, planProps = null, _unsafe = {}, rect = null, prefix = '', padEdge = null, layout = null } = {}) {
+  // (6c P0) `rect`: lay the street out inside this {minX, minZ, maxX, maxZ} (a plan zone's rect), not the claim; `prefix`: before
+  // every part, road and graph id the layout makes (a plan's second zone on); `padEdge`: the lot pads' edge (a plan program
+  // declares passes, so its default would be blend); `layout`: a layoutStreet result already computed for the same inputs. All
+  // absent: exactly as before (flat_village, S7).
   const ctx = r.ctx;
   const keepOut = ctx.keepOut ?? [];
-  const L = layoutStreet({ claim: r.claim, survey: r.survey, specs, rules, shared, keepOut, _unsafe });
+  const L = layout ?? layoutStreet({ claim: rect ? { ...r.claim, minX: rect.minX, minZ: rect.minZ, maxX: rect.maxX, maxZ: rect.maxZ } : r.claim, survey: r.survey, specs, rules, shared, keepOut, _unsafe });
   if (L.fail) throw new Error(`flat village: ${L.fail}`);
   if (requireAll && L.unplaced.length) throw new Error(`flat village: requireAll, and ${L.unplaced.length} lot(s) are unplaced: ${L.unplaced.map((u) => `${u.id} (${u.reason})`).join(', ')}`);
   const o = L.orientation, sh = L.shared;
@@ -525,7 +529,7 @@ export function streetLayout(r, specs, { rules = STREET_RULES, shared = { kind: 
   // (6c W) M24's water is unfrozen water (a farm can't use ice); the same as wd on a claim with no frozen column
   const wdU = hasFrozen(r.survey, r.claim) ? waterDistance(r.survey, r.claim, { unfrozen: true }) : wd;
   // pads and lots (stage ground; the lots' own stage `lots`)
-  const pads = r.part('pads', { stage: sg });
+  const pads = r.part(`${prefix}pads`, { stage: sg });
   const boxes = [];
   const lotOut = [];
   for (const l of [...L.lots].sort((a, b) => a.spec._i - b.spec._i)) {
@@ -534,7 +538,7 @@ export function streetLayout(r, specs, { rules = STREET_RULES, shared = { kind: 
     const bellDistance = Math.round(Math.hypot(l.entrance[0] - res.bell[0], l.entrance[2] - res.bell[2]) * 10) / 10;
     const lot = pads.lot(s.id, {
       at: [l.rect[0], l.rect[1]], size: [l.rect[2] - l.rect[0] + 1, l.rect[3] - l.rect[1] + 1], floor: l.floorY, front: l.front,
-      max: [l.rect[2] - l.rect[0] + 1, maxHeight, l.rect[3] - l.rect[1] + 1], brief: s.brief, pad: { maxCut: PAD_MAX, maxFill: PAD_MAX }, stage: sl,
+      max: [l.rect[2] - l.rect[0] + 1, maxHeight, l.rect[3] - l.rect[1] + 1], brief: s.brief, pad: { maxCut: PAD_MAX, maxFill: PAD_MAX, ...(padEdge ? { edge: padEdge } : {}) }, stage: sl,
       ext: { ...s.ext, 'architect_mc:village': { role: s.role, type: s.type, villager: s.villager, entrance: l.entrance, lane: `lane_${s.id}`, water, bellDistance, slot: l.slot, landmark: s.landmark, placement: s.placement } },
     });
     boxes.push({ id: s.id, ...lot.box });
@@ -542,9 +546,9 @@ export function streetLayout(r, specs, { rules = STREET_RULES, shared = { kind: 
   }
   // the shared space (the props' cells, from the caller's planProps, paved without walk)
   const propsPlan = planProps ? planProps({ o, sh, res, lots: lotOut, layout: L }) : null;
-  square(r, sh, { stage: sg, o, noWalk: propsPlan?.noWalk ?? new Set(), noGravityRule: !!_unsafe.noGravityRule });
+  square(r, sh, { stage: sg, o, noWalk: propsPlan?.noWalk ?? new Set(), noGravityRule: !!_unsafe.noGravityRule, prefix });
   // the verges: the street's two outer rows, outside the shared space (surface swap, walk)
-  const verges = r.part('verges', { stage: sg, set: 'path' });
+  const verges = r.part(`${prefix}verges`, { stage: sg, set: 'path' });
   const sv = L.road.sv;
   const vcells = [];
   for (let u = L.u0; u <= L.u1; u++) {
@@ -552,11 +556,11 @@ export function streetLayout(r, specs, { rules = STREET_RULES, shared = { kind: 
     for (const dv of [-half, half]) { const [x, z] = toWorld(o, u, sv + dv); vcells.push([x, null, z]); }
   }
   if (vcells.length) surfaceOps(verges, vcells, 'path', { _noGravityRule: !!_unsafe.noGravityRule });
-  (r.meta.parts.verges ??= {}).kind = 'path';
+  (r.meta.parts[verges.id] ??= {}).kind = 'path';
   // the plaza and the street's junctions
-  const pl = plaza(r, sh, res.bell);
-  const lanes = r.part('lanes', { stage: sg, set: 'path' });
-  (r.meta.parts.lanes ??= {}).kind = 'path';
+  const pl = plaza(r, sh, res.bell, prefix);
+  const lanes = r.part(`${prefix}lanes`, { stage: sg, set: 'path' });
+  (r.meta.parts[lanes.id] ??= {}).kind = 'path';
   const laneCells = {};
   const junctions = []; // street lanes: {u, side, node}
   for (const l of lotOut) {
@@ -573,7 +577,7 @@ export function streetLayout(r, specs, { rules = STREET_RULES, shared = { kind: 
       to = [to[0], e[1], to[1]];
       pl.ports.push({ name: id, at: to, facing: l.front, width: laneWidth });
       laneCells[s.id] = lane(lanes, id, e, to, laneWidth, { o, boxes, keepOut, _unsafe: _unsafe.laneIntoBox === s.id, noGravityRule: !!_unsafe.noGravityRule });
-      r.graphEdge({ id, from: `lot:${s.id}.entrance`, to: `plaza.${id}`, type: 'path', width: laneWidth, path: id });
+      r.graphEdge({ id, from: `lot:${s.id}.entrance`, to: `${pl.id}.${id}`, type: 'path', width: laneWidth, path: id });
     } else {
       const tv = l.side < 0 ? sv - half : sv + half;
       const t2 = toWorld(o, eu, tv);
@@ -585,11 +589,11 @@ export function streetLayout(r, specs, { rules = STREET_RULES, shared = { kind: 
   }
   // the street (§2): for a square, two ground road items ending at its edges; for a green, one along it. Junctions where lanes
   // meet the street, road edges between them, the plaza's street ports at the square's edges (or the green's front).
-  const street = r.part('street', { stage: ss, set: 'path' });
+  const street = r.part(`${prefix}street`, { stage: ss, set: 'path' });
   const roads = [];
   const chains = sh.kind === 'square'
-    ? [{ rid: 'street_w', a: L.u0, b: sh.u0 - 1, endPort: 'street_w' }, { rid: 'street_e', a: sh.u1 + 1, b: L.u1, startPort: 'street_e' }]
-    : [{ rid: 'street', a: L.u0, b: L.u1, attach: sh.cu }];
+    ? [{ rid: `${prefix}street_w`, a: L.u0, b: sh.u0 - 1, endPort: 'street_w' }, { rid: `${prefix}street_e`, a: sh.u1 + 1, b: L.u1, startPort: 'street_e' }]
+    : [{ rid: `${prefix}street`, a: L.u0, b: L.u1, attach: sh.cu }];
   const facingU = (dir) => (o === 'ew' ? (dir < 0 ? 'west' : 'east') : dir < 0 ? 'north' : 'south');
   const at3 = (u) => { const w = toWorld(o, u, sv); return [w[0], L.streetY, w[1]]; };
   for (const ch of chains) {
@@ -602,7 +606,7 @@ export function streetLayout(r, specs, { rules = STREET_RULES, shared = { kind: 
     if (ch.endPort) pl.ports.push({ name: ch.endPort, at: at3(ch.b), facing: facingU(-1), width: rules.streetWidth });
     if (ch.startPort) pl.ports.push({ name: ch.startPort, at: at3(ch.a), facing: facingU(1), width: rules.streetWidth });
     const stops = [...new Set([...junctions.filter((j) => j.u >= ch.a && j.u <= ch.b).map((j) => j.u), ...(ch.attach !== undefined ? [ch.attach] : [])])].sort((p, q) => p - q);
-    let prev = ch.startPort ? `plaza.${ch.startPort}` : null, k = 0;
+    let prev = ch.startPort ? `${pl.id}.${ch.startPort}` : null, k = 0;
     if (!prev && stops[0] !== ch.a) { const n = r.graphNode({ id: `${ch.rid}_start`, kind: 'junction', ref: ch.rid, at: at3(ch.a), ports: [{ name: 'street', at: at3(ch.a), facing: 'up', width: rules.streetWidth }] }); prev = `${n.id}.street`; }
     for (const u of stops) {
       const n = r.graphNode({ id: `${ch.rid}_j${++k}`, kind: 'junction', ref: ch.rid, at: at3(u), ports: [{ name: 'street', at: at3(u), facing: 'up', width: rules.streetWidth }] });
@@ -617,21 +621,22 @@ export function streetLayout(r, specs, { rules = STREET_RULES, shared = { kind: 
         const gat = toWorld(o, u, sh.v1);
         pl.ports.push({ name: 'street', at: [gat[0], sh.y + 1, gat[1]], facing: frontOf(o, 1), width: 7 });
         n.ports.push({ name: 'green', at: at3(u), facing: frontOf(o, -1), width: 7 });
-        r.graphEdge({ id: 'green_link', from: `${n.id}.green`, to: 'plaza.street', type: 'path', width: 7, path: 'green' });
+        r.graphEdge({ id: `${prefix}green_link`, from: `${n.id}.green`, to: `${pl.id}.street`, type: 'path', width: 7, path: `${prefix}green` });
       }
     }
-    if (ch.endPort) r.graphEdge({ id: `${ch.rid}#end`, from: prev, to: `plaza.${ch.endPort}`, type: 'road', width: rules.streetWidth, path: ch.rid });
+    if (ch.endPort) r.graphEdge({ id: `${ch.rid}#end`, from: prev, to: `${pl.id}.${ch.endPort}`, type: 'road', width: rules.streetWidth, path: ch.rid });
     else if (stops[stops.length - 1] !== ch.b) {
       const n = r.graphNode({ id: `${ch.rid}_end`, kind: 'junction', ref: ch.rid, at: at3(ch.b), ports: [{ name: 'street', at: at3(ch.b), facing: 'up', width: rules.streetWidth }] });
       r.graphEdge({ id: `${ch.rid}#end`, from: prev, to: `${n.id}.street`, type: 'road', width: rules.streetWidth, path: ch.rid });
     }
   }
   if (L.unplaced.length) r.note(`unplaced: ${L.unplaced.map((u) => u.id).join(', ')}`);
-  r.meta.village = {
+  const village = {
     orientation: o, streetV: sv, shared: { kind: sh.kind, rect: sh.rect, y: sh.y }, bell: res.bell, bellArea: res.area.map(([x, z]) => [x, z]), bellY: res.y,
     golem: res.golem.map(([x, z]) => [x, z]), golemCentre: res.golemCentre, unplaced: L.unplaced, lanes: laneCells, roads, laneWidth,
     lots: Object.fromEntries(lotOut.map((l) => [l.spec.id, { villager: l.spec.villager, slot: l.slot, entrance: l.entrance, rect: l.rect, water: rectWater(wdU, l.rect) }])),
     waterAny: wdU.any, keepOut,
   };
+  if (prefix) (r.meta.villageZones ??= {})[prefix] = village; else r.meta.village = village;
   return { ...L, res, lots: lotOut, boxes, laneCells, plaza: pl, propsPlan };
 }

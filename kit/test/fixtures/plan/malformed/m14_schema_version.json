@@ -1,0 +1,37 @@
+{
+  "about": "plan/1 is not this schema",
+  "on": "s7",
+  "expect": {
+    "path": "$.schemaVersion",
+    "code": "SCHEMA",
+    "plan": true
+  },
+  "plan": {
+    "schemaVersion": "plan/1",
+    "zones": [
+      {
+        "id": "town",
+        "program": {
+          "lots": [
+            {
+              "id": "h1",
+              "type": "cottage",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "h2",
+              "type": "house",
+              "size": [
+                9,
+                9
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

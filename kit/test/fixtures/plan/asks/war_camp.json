@@ -1,0 +1,198 @@
+{
+  "prompt": "A war camp besieging the castle on the next hill.",
+  "answer": {
+    "plan": {
+      "schemaVersion": "plan/0",
+      "planId": "siege_camp_below_castle_hill",
+      "style": {
+        "pending": "siege_camp_below_castle_hill"
+      },
+      "zones": [
+        {
+          "id": "camp",
+          "kind": "standard",
+          "required": true,
+          "label": "Siege camp",
+          "purpose": "military",
+          "notes": "Sits on existing high ground, loosely spread, oriented toward the castle on the neighbouring hill; nothing is built on the castle itself.",
+          "where": {
+            "near": {
+              "anchor": "stone",
+              "within": 32
+            }
+          },
+          "program": {
+            "layout": "street",
+            "lots": [
+              {
+                "id": "war_pavilion_1",
+                "type": "war_pavilion",
+                "role": "commander_pavilion",
+                "label": "commander's pavilion",
+                "size": [
+                  17,
+                  15
+                ],
+                "landmark": true,
+                "placement": "central",
+                "brief": "Large striped tent-hall with a war table, maps and banners; faces the castle."
+              },
+              {
+                "id": "tent_1",
+                "type": "tent",
+                "role": "soldier_tent",
+                "label": "soldiers' tent",
+                "size": [
+                  9,
+                  9
+                ],
+                "brief": "Wool tent with bedrolls, weapon racks and a campfire between tents."
+              },
+              {
+                "id": "tent_2",
+                "type": "tent",
+                "role": "soldier_tent",
+                "label": "soldiers' tent",
+                "size": [
+                  9,
+                  9
+                ],
+                "brief": "Wool tent with bedrolls, weapon racks and a campfire between tents."
+              },
+              {
+                "id": "tent_3",
+                "type": "tent",
+                "role": "soldier_tent",
+                "label": "soldiers' tent",
+                "size": [
+                  9,
+                  9
+                ],
+                "brief": "Wool tent with bedrolls, weapon racks and a campfire between tents."
+              },
+              {
+                "id": "tent_4",
+                "type": "tent",
+                "role": "soldier_tent",
+                "label": "soldiers' tent",
+                "size": [
+                  9,
+                  9
+                ],
+                "brief": "Wool tent with bedrolls, weapon racks and a campfire between tents."
+              },
+              {
+                "id": "siege_workshop_1",
+                "type": "siege_workshop",
+                "role": "siege_workshop",
+                "label": "siege workshop",
+                "size": [
+                  13,
+                  11
+                ],
+                "placement": "edge",
+                "brief": "Open-sided shed where catapults and rams are built; unfinished engines outside on the castle-facing side."
+              },
+              {
+                "id": "tower_1",
+                "type": "tower",
+                "role": "watch_lookout",
+                "label": "watch lookout",
+                "size": [
+                  9,
+                  9
+                ],
+                "placement": "high_ground",
+                "brief": "Timber tower with a view of the castle walls."
+              },
+              {
+                "id": "smithy_1",
+                "type": "smithy",
+                "role": "field_forge",
+                "label": "field forge",
+                "size": [
+                  9,
+                  9
+                ],
+                "brief": "Repairs weapons and armor; anvil, grindstone, barrels of arrows."
+              },
+              {
+                "id": "barn_1",
+                "type": "barn",
+                "role": "supply_stables",
+                "label": "supply tent and stables",
+                "size": [
+                  13,
+                  11
+                ],
+                "placement": "edge",
+                "brief": "Food crates, hay and horses at the rear, away from the castle."
+              },
+              {
+                "id": "tent_5",
+                "type": "tent",
+                "role": "field_hospital",
+                "label": "field hospital",
+                "size": [
+                  9,
+                  9
+                ],
+                "brief": "Beds, cauldrons and bandage chests."
+              }
+            ]
+          }
+        }
+      ],
+      "connectors": [
+        {
+          "id": "camp_palisade",
+          "kind": "wall",
+          "required": false,
+          "label": "Wood palisade",
+          "notes": "Rough wooden palisade round the camp, with torches; open toward the castle slope.",
+          "where": {
+            "around": {
+              "feature": {
+                "part": "camp"
+              },
+              "closed": false
+            }
+          },
+          "params": {
+            "material": "wood_palisade",
+            "torches": true
+          }
+        }
+      ],
+      "forms": [
+        {
+          "id": "camp_relief",
+          "kind": "relief",
+          "required": false,
+          "label": "Trodden ground",
+          "around": [
+            "camp"
+          ],
+          "radius": 12
+        }
+      ],
+      "dependencies": [
+        {
+          "part": "camp_relief",
+          "after": [
+            "camp"
+          ]
+        }
+      ]
+    },
+    "waits": [
+      {
+        "part": "camp_palisade",
+        "words": "The wooden palisade round the camp: walls come with a later Architect release; the camp is built first and the palisade is offered when it can be."
+      }
+    ],
+    "summary": "A loose, rough siege camp of ten buildings on high ground near the founding stone: a large commander's pavilion in the middle, four soldiers' tents, a field hospital, a forge, a lookout tower on the highest ground, and a siege workshop and supply stable at the edges. The land is blended to trodden ground. The palisade is noted but waits for walls to be supported."
+  },
+  "usd": 0.031449,
+  "errors": []
+}

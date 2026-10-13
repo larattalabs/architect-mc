@@ -1,0 +1,77 @@
+{
+  "about": "a lots zone near the stone anchor (S7)",
+  "on": "s7",
+  "covers": [
+    "zone.standard",
+    "program.lots",
+    "layout.street",
+    "locator.near",
+    "endpoint.anchor",
+    "connector.path",
+    "endpoint.part"
+  ],
+  "plan": {
+    "schemaVersion": "plan/0",
+    "planId": "v01",
+    "zones": [
+      {
+        "id": "town",
+        "program": {
+          "lots": [
+            {
+              "id": "h1",
+              "type": "cottage",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "h2",
+              "type": "house",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "h3",
+              "type": "smithy",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "h4",
+              "type": "cottage",
+              "size": [
+                9,
+                9
+              ]
+            }
+          ],
+          "layout": "street"
+        },
+        "where": {
+          "near": {
+            "anchor": "stone",
+            "within": 24
+          }
+        }
+      }
+    ],
+    "connectors": [
+      {
+        "id": "walk",
+        "kind": "path",
+        "from": {
+          "anchor": "claim_s"
+        },
+        "to": {
+          "part": "town"
+        }
+      }
+    ]
+  }
+}

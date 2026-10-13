@@ -1,0 +1,5 @@
+{
+  "family": "shape",
+  "cutFrom": "scenarios/goldens/s7/ir.json",
+  "survey": "scenarios/goldens/s7/survey.bin"
+}

@@ -1,0 +1,17 @@
+{
+  "about": "a free-standing floating island form",
+  "on": "s7",
+  "expect": {
+    "part": "isle",
+    "block": "form.floating_island"
+  },
+  "plan": {
+    "schemaVersion": "plan/0",
+    "forms": [
+      {
+        "id": "isle",
+        "kind": "floating_island"
+      }
+    ]
+  }
+}

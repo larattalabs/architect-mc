@@ -1,0 +1,22 @@
+{
+  "about": "N-P0-1: crater_works as the sole zone over S3",
+  "on": "s3",
+  "covers": [
+    "program.crater_works"
+  ],
+  "plan": {
+    "schemaVersion": "plan/0",
+    "zones": [
+      {
+        "id": "pit",
+        "program": {
+          "template": "crater_works",
+          "params": {
+            "radius": 50,
+            "lots": 4
+          }
+        }
+      }
+    ]
+  }
+}
