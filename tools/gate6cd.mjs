@@ -112,6 +112,9 @@ function nodeTest(files) {
 steps.unit = async () => {
   const out = {};
   out.d = nodeTest(['kit/test/districts-d.test.mjs']);
+  // (6c D2) C27 (biome edge, shore, ridge), C28, outposts, refusals: the kit half
+  out.d2 = nodeTest(['kit/test/districts-d2.test.mjs']);
+  check(out.d2.code === 0 && out.d2.fail === 0 && out.d2.pass >= 8, `D2 (kit): C28's 4x4 biome grid, a biome-edge district's shape within 4 cells of the edge over its length, a shore street parallel to the shore, a ridge street on the crest, stable re-plans, named refusals (NO_EDGE, PROTECTED), an outpost's corridor, plan/0's D2 flips: ${out.d2.pass} pass, ${out.d2.fail} fail`, out.d2.failing);
   check(out.d.code === 0 && out.d.fail === 0 && out.d.pass >= 13, `items 1-4, 8 (kit): the assignment on 300 seeded claims (exact <= greedy, no overlap, none in keep-out or C17 areas, unplaced exact), full plans with keep-out (0 lots in it), districts_demo's bands and connectivity on S3's survey, loopiness on 8 districts, the IR sha, the beside seam rule and join, plan/0's program.districts and endpoint.region: ${out.d.pass} pass, ${out.d.fail} fail`, out.d.failing);
   out.p0 = nodeTest(['kit/test/plan-p0.test.mjs', 'kit/test/plan-ops.test.mjs']);
   check(out.p0.code === 0 && out.p0.fail === 0, `P0 item 9 (the catalogue flip: program.districts and endpoint.region reserved -> supported, exactly, against P0's archived golden and catalogue-next.json), P0's items 1-11 with D1's fixtures (Steward's 59 plans: none malformed): ${out.p0.pass} pass, ${out.p0.fail} fail`, out.p0.failing);
@@ -549,7 +552,7 @@ steps.districts = async () => scenarioStep(false);
 
 steps.report = async () => {
   const rows = [];
-  for (const s of ['unit', 'plantime', 'apicompat', 'ingame', 'districtsflat', 'districts']) {
+  for (const s of ['unit', 'plantime', 'apicompat', 'ingame', 'districtsflat', 'districts', 'outpost', 'boundary']) {
     const f = path.join(OUT, `${s}.json`);
     if (!fs.existsSync(f)) { rows.push(`| ${s} | not run | |`); continue; }
     const j = JSON.parse(fs.readFileSync(f, 'utf8'));
