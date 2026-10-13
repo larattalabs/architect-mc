@@ -1813,7 +1813,6 @@ class Part {
       }
     });
     this._colsOp(fillC, COND.IF_NATURAL);
-    this._colsOp(fillB, COND.IF_NATURAL);
     this._colsOp(cutC, COND.IF_NATURAL);
     this._colsOp(surfC, COND.IF_NATURAL, true);
     this._colsOp(retC, COND.IF_NATURAL);
