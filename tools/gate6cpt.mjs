@@ -912,7 +912,7 @@ steps.nomod = async () => {
   const out = {};
   for (const mode of ['never loaded', 'loaded']) {
     const w = path.join(G, 'saves', 'NoMod');
-    const s = await startNoMod({ root, gameDir: G, world: 'NoMod', port: Number(process.env.GATE6CPT_NOMOD_PORT ?? 8915), eula, logFile: path.join(OUT, `nomod-${mode.replace(' ', '-')}.log`) });
+    const s = await startNoMod({ root, gameDir: G, world: 'NoMod', port: Number(process.env.GATE6CPT_NOMOD_PORT ?? 0), eula, logFile: path.join(OUT, `nomod-${mode.replace(' ', '-')}.log`) });
     await s.waitFor(/Done \(/, 600_000);
     if (mode === 'loaded') {
       s.send(`forceload add ${X} ${Z}`);

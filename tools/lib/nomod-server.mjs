@@ -1,7 +1,7 @@
 // 6c PT gate item 12: a dedicated server of the same Minecraft and Fabric API but WITHOUT Architect (nor devserver, apitest or lab-ui),
 // started on a copy of a world to see what becomes of the chunks' `architect_mc:placed` attachment. Built from the headless launch
 // (mod/build/headless-launch*.json): the mod's own class dirs and jars leave the classpath, and the dev launch config loses its class
-// path groups. Commands go to the server's console (stdin). No game port is used for anything (a free port of PT's range is bound).
+// path groups. Commands go to the server's console (stdin). Its game port is used for nothing (port 0: the system picks a free one).
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
