@@ -753,12 +753,21 @@ steps.protect = async () => {
   out.leanTo = { n0, n1 };
   const pbr = (n0.refusals ?? []).find((x) => x.reason === 'PLAYER_BUILD');
   check(fl.design?.status === 'DONE' && pbr && pbr.message.includes(cab.id) && n1.applicable, `item 10: growth over the player's lean-to refuses PLAYER_BUILD (${pbr ? 'refused' : json(n0.refusals)}); with consent naming the build: ${n1.applicable ? 'allowed' : json(n1.refusals)}`);
-  // a PLAYER_BLOCKS stroke with a consent naming the build clears it (an op's, the site's own owner); then its undo
-  const pb = await call('dev.brush', { owner: OWNER, kind: 'lower', shape: 'cylinder', at: [X + 4, gy + 3, Z + 4], radius: 7, strength: 9, destruction: 'player_blocks', consent: [cab.id] }, 600_000);
-  const left = await call('dev.pt.cells', { box: cb }, 120_000);
-  out.playerBlocks = pb.cellsSkipped ?? pb;
-  check(!pb.refused && (pb.cellsWritten ?? 0) > 0, `item 10: a PLAYER_BLOCKS stroke with a consent naming ${cab.id} clears it (${pb.cellsWritten} cells written; ${left.tracked} records left; skipped ${json(pb.cellsSkipped)})`, pb);
+  // a PLAYER_BLOCKS stroke with a consent naming the build: while it is adopted the site's own cells stay (a region never writes a
+  // site's cells, 6a); once the site is removed (un-adopted), the same consented stroke clears the build
+  const stroke = { owner: OWNER, kind: 'lower', shape: 'cylinder', at: [X + 4, gy + 3, Z + 4], radius: 7, strength: 10, destruction: 'player_blocks', consent: [cab.id] };
+  const r0 = (await cellsOf(cb)).tracked;
+  const pb = await call('dev.brush', stroke, 600_000);
+  const siteKept = (await compare(r.siteId, 1)).mismatched === 0;
+  out.playerBlocksAdopted = pb.cellsSkipped ?? pb;
+  check(!pb.refused && siteKept && (pb.cellsSkipped?.owned ?? 0) > 0, `item 10: a consented PLAYER_BLOCKS stroke while adopted keeps the site's own cells (skipped ${json(pb.cellsSkipped)}): a region never writes a site's cells`);
   if (pb.region) await call('dev.region.remove', { region: pb.region, requester: OWNER }, 600_000).catch(() => null);
+  const rm = await remove(r.siteId);
+  const pb2 = await call('dev.brush', stroke, 600_000);
+  const r1 = (await cellsOf(cb)).tracked;
+  out.playerBlocksUnadopted = pb2.cellsSkipped ?? pb2;
+  check(rm?.removed && !pb2.refused && r0 - r1 >= 40, `item 10: un-adopted, the same consented PLAYER_BLOCKS stroke clears ${cab.id} (${r0 - r1} of its ${r0} tracked cells cleared)`, pb2);
+  if (pb2.region) await call('dev.region.remove', { region: pb2.region, requester: OWNER }, 600_000).catch(() => null);
   await leaveWorld();
   spendZero();
   return out;
