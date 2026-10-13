@@ -150,7 +150,7 @@ ARCHITECT_DEV_PORT=8943 ARCHITECT_PORT=8942 HEADLESS_SIDECAR=sim ARCHITECT_AUTOW
 | 4d, 4e, 5b | 4d-all, 4e-megalite, 4e-orders, 5b-village |
 | 6a | 6a-megaA, 6a-eflat, 6a-forest, 6a-inv3, 6a-staged |
 | 6b | 6b-smoke, 6b-volume, 6b-commands, 6b-nudges, 6b-pathstyle, 6b-versions |
-| 6c | x-ingame (removal included), x-resume (C23), v-ingame, b-ingame (6c B) |
+| 6c | x-ingame (removal included), x-resume (C23), v-ingame, b-ingame (6c B), pt-ingame and pt-nomod (6c PT) |
 
 **On the client (`"host": "client"`, `hostWhy` says why):**
 
@@ -268,6 +268,7 @@ its tags. Every matching rule counts. The main rules:
 | slice V: the village components, `flat_village`, `tools/gate6cv.mjs`, S7 | v-unit | v-ingame, 6cv-scenario-s7 |
 | slice W: lamps, fixtures, gravity, FROZEN, the road code, `tools/gate6cw.mjs` | w-unit | w-ingame, 6cw-scenario-s7 |
 | slice B: the brush kernels and program, ARVX v2, `Brushes`/`BrushCommands`, TileCheck, the brush API, `tools/gate6cb.mjs` | b-unit | b-ingame (headless), 4e-crash |
+| slice PT: `placed/**`, the tracking mixins, the journal's `pt`, TileCheck, SiteJournal, roads, the build API, the kit's build helpers, `tools/gate6cpt.mjs` | pt-unit | pt-ingame and pt-nomod (headless) |
 | `tools/gate6b.mjs`, `tools/lib/run6b.mjs`, `tools/find-site.mjs` | 6b-smoke | the other sim 6b steps |
 | `tools/scenarios.mjs`, `tools/lib/scenario-*.mjs` | 6b-scenario-s1-flat | 6b-scenario-s1 |
 | a gate driver (`tools/gate4e.mjs`, ...) | that gate's cheap steps | its longer steps |
