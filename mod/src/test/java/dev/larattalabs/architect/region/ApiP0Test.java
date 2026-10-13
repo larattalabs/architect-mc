@@ -50,8 +50,8 @@ class ApiP0Test {
 	@Test
 	void reasonsAppended() {
 		Reason[] v = Reason.values();
-		assertEquals(Reason.ARTIFACT_STALE, v[v.length - 2]);
-		assertEquals(Reason.ARTIFACT_UNAPPROVED, v[v.length - 1]);
+		// later slices append after P0's two (PT: PLAYER_BUILD)
+		assertEquals(Reason.ARTIFACT_STALE.ordinal() + 1, Reason.ARTIFACT_UNAPPROVED.ordinal());
 		assertEquals(Reason.PERMISSION.ordinal() + 1, Reason.ARTIFACT_STALE.ordinal(), "after B's PERMISSION");
 	}
 

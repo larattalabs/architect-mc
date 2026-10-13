@@ -13,20 +13,31 @@ import org.jspecify.annotations.Nullable;
  * another owner refuses {@link Reason#OVERLAP_OWNED} unless {@code force} (Steward SHOULD 4). Since 1.7.0.
  */
 public record DeltaRequest(String siteId, int toVersion, @Nullable PlayerEdits playerEdits, @Nullable OverlapPolicy overlap,
-	@Nullable ServerPlayer actor, boolean force, JsonObject ext, @Nullable String owner) {
+	@Nullable ServerPlayer actor, boolean force, JsonObject ext, @Nullable String owner, @Nullable BuildConsent consent) {
 	public DeltaRequest {
 		ext = ext == null ? new JsonObject() : ext.deepCopy();
+	}
+
+	/** (PT) Without a consent (the 1.7.0+ shape). */
+	public DeltaRequest(String siteId, int toVersion, @Nullable PlayerEdits playerEdits, @Nullable OverlapPolicy overlap,
+		@Nullable ServerPlayer actor, boolean force, JsonObject ext, @Nullable String owner) {
+		this(siteId, toVersion, playerEdits, overlap, actor, force, ext, owner, null);
 	}
 
 	/** Without a caller owner (the player's own sites; others need force). */
 	public DeltaRequest(String siteId, int toVersion, @Nullable PlayerEdits playerEdits, @Nullable OverlapPolicy overlap,
 		@Nullable ServerPlayer actor, boolean force, JsonObject ext) {
-		this(siteId, toVersion, playerEdits, overlap, actor, force, ext, null);
+		this(siteId, toVersion, playerEdits, overlap, actor, force, ext, null, null);
 	}
 
 	/** To the head, KEEP, REFUSE overlap, no actor, no force. */
 	public DeltaRequest(String siteId) {
-		this(siteId, 0, null, null, null, false, new JsonObject(), null);
+		this(siteId, 0, null, null, null, false, new JsonObject(), null, null);
+	}
+
+	/** (PT) The same request with this consent (OVERWRITE over a build's cells needs it, §7). */
+	public DeltaRequest withConsent(@Nullable BuildConsent c) {
+		return new DeltaRequest(siteId, toVersion, playerEdits, overlap, actor, force, ext, owner, c);
 	}
 
 	@Override

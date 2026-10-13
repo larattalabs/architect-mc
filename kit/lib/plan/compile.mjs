@@ -21,6 +21,7 @@ import { PRESETS as ICE_PRESETS } from '../forms/iceSpike.mjs';
 import { PRESETS as ROCK_PRESETS } from '../forms/rockSpire.mjs';
 import { KIT_VERSION } from '../region/plan.mjs';
 import { CATALOGUE_VERSION } from './schema.mjs';
+import { keptBuilds, pickBuild, buildEndpoint, buildKeepOut } from '../region/builds.mjs';
 
 /** §7's caps (each a request may only lower). */
 export const BUDGET_DEFAULTS = Object.freeze({ maxNodes: 2_000_000, maxEdges: 128, maxCells: 20_000_000, maxMs: 120_000, maxHeapMb: 2048 });
@@ -120,8 +121,13 @@ export function makeEnv(ctx, P, t0 = performance.now()) {
   const keepOut = (ctx.keepOut ?? []).map(arrRect);
   const protectedAreas = (P.protected ?? []).map((a) => ({ id: a.id, rect: arrRect(a.rect) }));
   const regions = (P.regions ?? []).map((a) => ({ id: a.id, rect: arrRect(a.rect) }));
-  // columns no zone may take: keep-out (the owner's areas), every protected area, other owners' regions (grown by 1)
-  const hard = [...keepOut, ...protectedAreas.map((a) => a.rect), ...regions.map((a) => a.rect)].map((q) => grow(q, 1));
+  // 6c PT: the players' kept builds; each build (grown by 1) and its door aprons are keep-out for zones (S-PT-4; the plan request
+  // names no consent, so every kept build), the builds' own rects for routes (a road may run on a door's apron)
+  const builds = keptBuilds(P.builds ?? []).filter((b) => Array.isArray(b.bounds) && b.bounds.length === 6);
+  const buildRects = builds.map((b) => ({ id: b.id, rect: { minX: b.bounds[0], minZ: b.bounds[2], maxX: b.bounds[3], maxZ: b.bounds[5] } }));
+  const buildKeep = buildKeepOut(builds, { claim }).map(arrRect);
+  // columns no zone may take: keep-out (the owner's areas), every protected area, other owners' regions (grown by 1), builds
+  const hard = [...keepOut, ...protectedAreas.map((a) => a.rect), ...regions.map((a) => a.rect)].map((q) => grow(q, 1)).concat(buildKeep);
   const blocked = new Uint8Array(W * D), water = new Uint8Array(W * D);
   for (let j = 0; j < D; j++) for (let i = 0; i < W; i++) {
     const x = cols.minX + i * r, z = cols.minZ + j * r, k = i + j * W;
@@ -133,7 +139,7 @@ export function makeEnv(ctx, P, t0 = performance.now()) {
   const wb = waterBodies(cols);
   const surveySha = sha256Hex(encodeColumns(cols));
   return {
-    ctx, claim, S, cols, r, W, D, budget, keepOut, protectedAreas, regions, sumG, sumG2, sumW, sumB, water: wb,
+    ctx, claim, S, cols, r, W, D, budget, keepOut, protectedAreas, regions, builds, buildRects, sumG, sumG2, sumW, sumB, water: wb,
     anchors: anchorPoints(claim, P.anchors ?? {}), anchorsGiven: P.anchors ?? {}, surveySha, fingerprint: P.fingerprint ?? null, bible: P.bible ?? null,
     t0, deadline: t0 + budget.maxMs, hitTime: false,
     cacheIn: ctx.planCache ?? null, cacheOut: {},
@@ -194,9 +200,12 @@ export function locatorOf(env, where, geomOf, { within0 = 32 } = {}) {
   // no locator (or inside the claim): anywhere, nearest the claim's centre
   if (!where) return { valid: anyOk, move: () => 0, aim: centre(env.claim) };
   const lk = Object.keys(where)[0], b = where[lk];
+  // 6c PT: target {build: id}: the build's rect
+  const targetOf = (t) => (t?.build !== undefined ? (env.buildRects.find((x) => x.id === t.build) ?? null) : geomOf(t?.part));
   if (lk === 'inside') {
     if (b.claim) return { valid: anyOk, move: () => 0, aim: centre(env.claim) };
-    const t = geomOf(b.part);
+    if (b.build !== undefined && !targetOf(b)) return { error: { code: 'NO_FEATURE', message: `no build ${b.build} in the claim` } };
+    const t = targetOf(b);
     if (!t) return { error: { code: 'DEPENDENCY', message: `${b.part} has no geometry` } };
     return { valid: (a) => inside(a, t.rect), move: () => 0, aim: centre(t.rect), areaFor: () => t.rect };
   }
@@ -215,7 +224,8 @@ export function locatorOf(env, where, geomOf, { within0 = 32 } = {}) {
     return { valid: (a) => !avoid || !meets(a, avoid), move: (a) => Math.max(0, gap(a, target) - W), aim, areaFor: (w, d, mm) => grow(target, W + Math.min(mm, 1024) + Math.max(w, d)), W, target };
   }
   if (lk === 'adjacent') {
-    const t = geomOf(b.to.part);
+    const t = targetOf(b.to);
+    if (!t && b.to.build !== undefined) return { error: { code: 'NO_FEATURE', message: `no build ${b.to.build} in the claim` } };
     if (!t) return { error: { code: 'DEPENDENCY', message: `${b.to.part} has no geometry` } };
     const T = t.rect;
     const [g0, g1] = Array.isArray(b.gap) ? b.gap : isInt(b.gap) ? [b.gap, b.gap] : [0, 4];
@@ -231,7 +241,7 @@ export function locatorOf(env, where, geomOf, { within0 = 32 } = {}) {
     };
     const sides = side === 'any' ? ['n', 'e', 's', 'w'] : [side];
     const mv = (a) => Math.min(...sides.map((s) => sideMove(a, s)));
-    return { valid: (a) => !meets(a, T) && mv(a) < Infinity, move: mv, aim: centre(T), areaFor: (w, d, mm) => grow(T, g1 + Math.min(mm, 1024) + Math.max(w, d)), adjacent: { to: b.to.part, g0, g1 } };
+    return { valid: (a) => !meets(a, T) && mv(a) < Infinity, move: mv, aim: centre(T), areaFor: (w, d, mm) => grow(T, g1 + Math.min(mm, 1024) + Math.max(w, d)), adjacent: { to: b.to.part ?? b.to.build, g0, g1 } };
   }
   // along, around: unsupported (validation answered them)
   return { error: { code: 'NO_FEATURE', message: `locator ${lk} is not compiled in v0` } };
@@ -252,6 +262,13 @@ export function featureGeom(env, f, geomOf, from) {
     const a = env.protectedAreas.find((p) => p.id === f.protected);
     if (!a) return { error: { code: 'NO_FEATURE', message: `no protected area "${f.protected}" meets the claim`, evidence: { feature: { protected: f.protected }, areas: env.protectedAreas.map((x) => x.id) } } };
     return { rect: a.rect, aim: centre(a.rect), avoid: a.rect, what: `protected ${a.id}` };
+  }
+  if (f.build !== undefined) {
+    // 6c PT: a player's build by id or by kind (feature.pick ties); its rect is its bounds, kept out (grown by 1)
+    const b = pickBuild(env.builds, f.build, { claim: env.claim, to: from ?? undefined });
+    if (b.none) return { error: { code: 'NO_FEATURE', message: b.none, evidence: { feature: { build: f.build }, builds: env.builds.map((x) => x.id) } } };
+    const rect = env.buildRects.find((x) => x.id === b.build.id).rect;
+    return { rect, aim: centre(rect), avoid: grow(rect, 1), what: `build ${b.build.id} (${String(b.build.kind).toLowerCase()})` };
   }
   if (f.water !== undefined) {
     const w = f.water ?? {};
@@ -868,8 +885,8 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
       let out;
       try {
         // every protected area and other owner's region meeting the claim is keep-out for the routes (nothing is written there), plus avoid[]
-        const ko = [...env.protectedAreas.map((a) => rectArr(a.rect)), ...env.regions.map((a) => rectArr(a.rect)), ...avoidRects(env, group, geom)];
-        out = r.pass('route', { nodes, edges: edges.map(({ _i, ...e }) => e), maxGrade: g, stage: stageOf('routes'), part, maxExpanded: env.budget.maxNodes, lanterns: true, ...(ko.length ? { keepOut: ko } : {}) });
+        const ko = [...env.protectedAreas.map((a) => rectArr(a.rect)), ...env.regions.map((a) => rectArr(a.rect)), ...env.buildRects.map((a) => rectArr(a.rect)), ...avoidRects(env, group, geom)];
+        out = r.pass('route', { nodes, edges: edges.map(({ _i, ...e }) => e), maxGrade: g, stage: stageOf('routes'), part, maxExpanded: env.budget.maxNodes, lanterns: true, ...(ko.length ? { keepOut: ko } : {}), ...(env.buildRects.length ? { clearTrees: env.buildRects.map((a) => rectArr(a.rect)) } : {}) });
       } catch (e) {
         rollback(r, cp);
         for (const l of group) if (!answers.has(l.conn.id)) ans(l.conn, { class: 'refused', reasons: [{ code: /KEEP_OUT/.test(e.message) ? 'KEEP_OUT' : 'UNREACHABLE', message: e.message }] });
@@ -1024,6 +1041,7 @@ function endpointNode(env, e, other, geom, zoneEmit, lotZone, r, conn, where) {
   const posOf = (q) => {
     if (!q) return centre(env.claim);
     if (q.anchor) return env.anchors.get(q.anchor);
+    if (q.build !== undefined) { const b = env.buildRects.find((x) => x.id === q.build); if (b) return centre(b.rect); }
     if (q.part && geom.get(q.part)?.rect) return centre(geom.get(q.part).rect);
     if (q.part && lotZone.has(q.part)) { const z = zoneEmit.get(lotZone.get(q.part)); const l = z?.L.lots.find((x) => x.spec.id === q.part); if (l) return [l.lot.entrance[0], l.lot.entrance[2]]; }
     return centre(env.claim);
@@ -1070,6 +1088,12 @@ function endpointNode(env, e, other, geom, zoneEmit, lotZone, r, conn, where) {
       return feet(px, pz, `f_${tag}`);
     }
     return { error: { code: 'NO_FEATURE', message: `${e.part} is not a place a route can end at in v0 (a connector's end)`, path: where } };
+  }
+  if (e.build !== undefined) {
+    // 6c PT endpoint.build: the road ends on the door's apron (its outer cell, outside the footprint)
+    const q = buildEndpoint(env.builds, e.build, e.port ?? 'door');
+    if (q.none) return { error: { code: 'NO_FEATURE', message: q.none, path: where } };
+    return feet(q.end[0], q.end[2], `d_${tag}`);
   }
   if (e.feature) {
     const f = featureGeom(env, e.feature, (id) => geom.get(id) ?? null, posOf(other));
@@ -1118,7 +1142,9 @@ function endpointNode(env, e, other, geom, zoneEmit, lotZone, r, conn, where) {
 /** A part's cache key: kit and catalogue versions, its canonical JSON, its dependencies' geometry, the survey, protection, anchors, bible. */
 export function cacheKey(env, p, geom) {
   const deps = p.deps.map((d) => [d, geom.get(d)?.rect ? rectArr(geom.get(d).rect) : null]);
-  return sha256Hex(canonicalJson({ kit: KIT_VERSION, cat: CATALOGUE_VERSION, part: p.part, deps, survey: env.surveySha, prot: env.fingerprint, anchors: env.anchorsGiven, bible: env.bible, claim: rectArr(env.claim) }));
+  return sha256Hex(canonicalJson({ kit: KIT_VERSION, cat: CATALOGUE_VERSION, part: p.part, deps, survey: env.surveySha, prot: env.fingerprint, anchors: env.anchorsGiven, bible: env.bible, claim: rectArr(env.claim),
+    // (6c PT) the builds a part sees (absent when none, so pre-PT keys are unchanged)
+    ...(env.builds.length ? { builds: env.builds.map((b) => [b.id, b.revision ?? 0, b.state, ...b.bounds]) } : {}) }));
 }
 function cacheEntry(z) {
   return { rect: rectArr(z.rect), klass: z.klass, deviations: z.deviations ?? [], reasons: z.reasons ?? [], wouldFit: z.wouldFit ?? null, notes: z.notes ?? [] };

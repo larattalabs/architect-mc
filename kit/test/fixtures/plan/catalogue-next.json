@@ -472,6 +472,13 @@
    "until": "D2"
   },
   {
+   "id": "feature.build",
+   "sinceApi": "1.24.0",
+   "schemaVersion": 1,
+   "state": "supported",
+   "note": "PT (C32): a player's build as a plan feature {build: {id | kind, pick?, to?}}; also target {build: id} (inside, adjacent) and near {feature: {build}}. sinceApi is PT's placeholder, set at merge."
+  },
+  {
    "id": "endpoint.part",
    "sinceApi": "P0",
    "schemaVersion": 1,
@@ -494,6 +501,13 @@
    "sinceApi": "P0",
    "schemaVersion": 1,
    "state": "supported"
+  },
+  {
+   "id": "endpoint.build",
+   "sinceApi": "1.24.0",
+   "schemaVersion": 1,
+   "state": "supported",
+   "note": "PT (C32): {build: id, port?: door | door_<n>}: a road ends on the door's apron (the cells outside it)."
   },
   {
    "id": "sketch.point",

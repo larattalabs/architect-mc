@@ -915,7 +915,7 @@ public final class Builder {
 		}
 		BlockPos cratePos = new BlockPos(c.x(), c.y(), c.z());
 		SiteGroupRec grp = p.sharedGroup() == null ? null : Sites.group(p.sharedGroup());
-		level.setBlock(cratePos, CrateBlocks.CRATE.defaultBlockState(), Sites.FLAGS);
+		dev.larattalabs.architect.placed.Placed.set(level, cratePos, CrateBlocks.CRATE.defaultBlockState(), Sites.FLAGS);
 		if (level.getBlockEntity(cratePos) instanceof CrateBlockEntity be) {
 			be.setSiteId(grp != null ? grp.crateOwner() : p.id());
 		}
@@ -953,7 +953,7 @@ public final class Builder {
 			}
 			int k = topDown[topDown.length - 1 - i];
 			int[] o = Construction.offsets(k, dx, dz);
-			level.setBlock(mp.set(sb.minX() + o[0], sb.minY() + o[1], sb.minZ() + o[2]), air, CLEAR_FLAGS);
+			dev.larattalabs.architect.placed.Placed.set(level, mp.set(sb.minX() + o[0], sb.minY() + o[1], sb.minZ() + o[2]), air, CLEAR_FLAGS);
 		}
 		return i;
 	}
@@ -1029,7 +1029,7 @@ public final class Builder {
 		} catch (Exception e) {
 			st = Blocks.AIR.defaultBlockState();
 		}
-		level.setBlock(p, st, Sites.FLAGS);
+		dev.larattalabs.architect.placed.Placed.set(level, p, st, Sites.FLAGS);
 		if (c.snapshotNbt() != null) {
 			try {
 				CompoundTag tag = TagParser.parseCompoundFully(c.snapshotNbt());
@@ -1268,7 +1268,7 @@ public final class Builder {
 	/** Writes queue cell {@code i} exactly as the instant placement did (state, block-entity NBT without inventories). */
 	static void put(ServerLevel level, Run r, int i, BlockPos p, boolean sound) {
 		BlockState t = r.target[i];
-		level.setBlock(p, t, Sites.FLAGS);
+		dev.larattalabs.architect.placed.Placed.set(level, p, t, Sites.FLAGS);
 		CompoundTag tag = r.nbt[i];
 		if (tag != null) {
 			BlockEntity be = level.getBlockEntity(p);
@@ -1474,7 +1474,7 @@ public final class Builder {
 			c.crate().z()))) {
 			BlockPos p = crate.getBlockPos();
 			Map<String, Integer> left = crate.ledger().takeStock();
-			level.setBlock(p, Blocks.AIR.defaultBlockState(), net.minecraft.world.level.block.Block.UPDATE_ALL);
+			dev.larattalabs.architect.placed.Placed.set(level, p, Blocks.AIR.defaultBlockState(), net.minecraft.world.level.block.Block.UPDATE_ALL);
 			dropItems(level, p, left, null);
 			player.sendSystemMessage(Component.literal("[Architect] This crate belongs to no construction site; it was taken away"
 				+ (left.isEmpty() ? "" : " and gave back what it held")));
@@ -2378,7 +2378,7 @@ public final class Builder {
 			}
 			if (kind == SiteDeltas.CHANGED && old != null && !old.isAir()) {
 				// a swap: the old block goes back now, the new one when its item is in the crate
-				level.setBlock(mp.set(p), old, Sites.FLAGS);
+				dev.larattalabs.architect.placed.Placed.set(level, mp.set(p), old, Sites.FLAGS);
 				freeOf.put(k, !wasPaid);
 				swapIdx.add(k);
 			} else {
@@ -2389,7 +2389,7 @@ public final class Builder {
 		// added cells: cleared to air (free, no drops), top down
 		clearAir.sort((a, b) -> Integer.compare(b.getY(), a.getY()));
 		for (BlockPos p : clearAir) {
-			level.setBlock(p, Blocks.AIR.defaultBlockState(), CLEAR_FLAGS);
+			dev.larattalabs.architect.placed.Placed.set(level, p, Blocks.AIR.defaultBlockState(), CLEAR_FLAGS);
 		}
 		// the queue in build order (bottom up, supports first, pairs together), as a construction placement orders it
 		int[] boxIdx = freeOf.keySet().stream().mapToInt(Integer::intValue).toArray();
@@ -2429,7 +2429,7 @@ public final class Builder {
 			dev.larattalabs.architect.journal.JournalStore.Txn txn = js.begin().label("crate:" + s.id());
 			SiteJournal.crateEntry(txn, level, s.id(), s.group(), cp, WorldJournal.value(CrateBlocks.CRATE.defaultBlockState()));
 			SiteJournal.await(js.submit(txn), "the crate of " + s.id());
-			level.setBlock(cp, CrateBlocks.CRATE.defaultBlockState(), Sites.FLAGS);
+			dev.larattalabs.architect.placed.Placed.set(level, cp, CrateBlocks.CRATE.defaultBlockState(), Sites.FLAGS);
 			if (level.getBlockEntity(cp) instanceof CrateBlockEntity be) {
 				be.setSiteId(s.id());
 			}

@@ -22,16 +22,23 @@ public final class SectionCells {
 	final Value[] after;
 	final long[] layer;
 	final Value @Nullable [] written;
+	/** (6c PT) Per cell, the player-placed record of its {@code before} (null: none); null when no cell has one. */
+	final Pt @Nullable [] pt;
 	/** 4096 bits: which positions of the section have a cell. */
 	private final long[] mask;
 
 	SectionCells(long key, short[] idx, Value[] before, Value[] after, long[] layer, Value @Nullable [] written) {
+		this(key, idx, before, after, layer, written, null);
+	}
+
+	SectionCells(long key, short[] idx, Value[] before, Value[] after, long[] layer, Value @Nullable [] written, Pt @Nullable [] pt) {
 		this.key = key;
 		this.idx = idx;
 		this.before = before;
 		this.after = after;
 		this.layer = layer;
 		this.written = written;
+		this.pt = pt == null || allNull(pt) ? null : pt;
 		this.mask = new long[64];
 		for (short s : idx) {
 			mask[s >> 6] |= 1L << (s & 63);
@@ -48,6 +55,7 @@ public final class SectionCells {
 		Value[] a = new Value[n];
 		long[] l = new long[n];
 		Value[] w = written == null ? null : new Value[n];
+		Pt[] pt = new Pt[n];
 		for (int i = 0; i < n; i++) {
 			Cell c = cs[i];
 			if (Sections.key(c.pos()) != key) {
@@ -60,11 +68,12 @@ public final class SectionCells {
 			b[i] = c.before();
 			a[i] = c.after();
 			l[i] = c.layer();
+			pt[i] = c.pt();
 			if (w != null) {
 				w[i] = written.get(c.pos());
 			}
 		}
-		return new SectionCells(key, idx, b, a, l, w);
+		return new SectionCells(key, idx, b, a, l, w, pt);
 	}
 
 	public int size() {
@@ -125,7 +134,30 @@ public final class SectionCells {
 	}
 
 	public Cell cell(int k) {
-		return new Cell(pos(k), layer[k], before[k], after[k]);
+		return new Cell(pos(k), layer[k], before[k], after[k], pt == null ? null : pt[k]);
+	}
+
+	/** (6c PT) The player-placed record of cell {@code k}'s {@code before}, or null. */
+	public @Nullable Pt pt(int k) {
+		return pt == null ? null : pt[k];
+	}
+
+	public boolean hasPt() {
+		return pt != null;
+	}
+
+	/** (6c PT) The same cells with {@code p} as the records of their befores (by array slot; null: none). */
+	public SectionCells withPt(Pt @Nullable [] p) {
+		return new SectionCells(key, idx, before, after, layer, written, p);
+	}
+
+	private static boolean allNull(Pt[] p) {
+		for (Pt x : p) {
+			if (x != null) {
+				return false;
+			}
+		}
+		return true;
 	}
 
 	/** The cells as journal cells (ascending index). */
@@ -159,7 +191,7 @@ public final class SectionCells {
 				ws[k] = w.get(pos(k));
 			}
 		}
-		return new SectionCells(key, idx, before, after, layer, ws);
+		return new SectionCells(key, idx, before, after, layer, ws, pt);
 	}
 
 	/** The same cells with every {@code after} from {@code a} (by position; absent: kept). */
@@ -171,11 +203,11 @@ public final class SectionCells {
 				as[k] = v;
 			}
 		}
-		return new SectionCells(key, idx, before, as, layer, written);
+		return new SectionCells(key, idx, before, as, layer, written, pt);
 	}
 
 	/** Bytes this takes in memory, roughly (the cache's size estimate; values are shared). */
 	long weight() {
-		return 96L + idx.length * (2L + 8 + 8 + 8 + (written == null ? 0 : 8)) + 512;
+		return 96L + idx.length * (2L + 8 + 8 + 8 + (written == null ? 0 : 8) + (pt == null ? 0 : 8)) + 512;
 	}
 }

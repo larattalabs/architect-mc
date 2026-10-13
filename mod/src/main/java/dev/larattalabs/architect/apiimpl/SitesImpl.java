@@ -123,12 +123,17 @@ final class SitesImpl implements dev.larattalabs.architect.api.Sites {
 		Sites.Verdict v = Sites.verdict(r.level(), bp, r.origin(), r.rotation(), r.force(), null, true, construction, layer(r), r.owner(),
 			dev.larattalabs.architect.site.EntranceStyle.plain(r.pathStyle()));
 		out[0] = v;
-		return v.typed().stream().map(x -> new Refusal(x.reason(), x.message())).toList();
+		return v.typed().stream().map(x -> new Refusal(x.reason(), x.message(), x.builds())).toList();
+	}
+
+	/** (6c PT) A request's consent as the checks see it (§6). */
+	private dev.larattalabs.architect.placed.Placed.Consent consentOf(dev.larattalabs.architect.api.@Nullable BuildConsent c) {
+		return dev.larattalabs.architect.placed.BuildViews.consent(server, c, false);
 	}
 
 	@Override
 	public CompletableFuture<PlaceResult> place(PlaceRequest r) {
-		return onServer(() -> {
+		return onServer(() -> dev.larattalabs.architect.placed.Placed.withConsent(consentOf(r.consent()), () -> {
 			boolean construction = ApiRules.construction(r.mode(), SurvivalWorld.on());
 			Blueprint bp = Blueprints.get(r.blueprintId());
 			List<Refusal> refused = precheck(r, construction, bp, new Sites.Verdict[1]);
@@ -142,9 +147,9 @@ final class SitesImpl implements dev.larattalabs.architect.api.Sites {
 				String note = Sites.lastNote();
 				return new PlaceResult(true, Optional.of(s.id()), List.of(), note == null ? List.of() : Arrays.asList(note.split("; ")));
 			} catch (Sites.SiteException e) {
-				return new PlaceResult(false, Optional.empty(), List.of(new Refusal(e.reason(), e.getMessage())), List.of());
+				return new PlaceResult(false, Optional.empty(), List.of(new Refusal(e.reason(), e.getMessage(), e.builds())), List.of());
 			}
-		});
+		}));
 	}
 
 	@Override
@@ -152,7 +157,7 @@ final class SitesImpl implements dev.larattalabs.architect.api.Sites {
 		boolean construction = ApiRules.construction(r.mode(), SurvivalWorld.on());
 		Blueprint bp = Blueprints.get(r.blueprintId());
 		Sites.Verdict[] v = new Sites.Verdict[1];
-		List<Refusal> refused = precheck(r, construction, bp, v);
+		List<Refusal> refused = dev.larattalabs.architect.placed.Placed.withConsent(consentOf(r.consent()), () -> precheck(r, construction, bp, v));
 		Map<String, Integer> bom = Map.of();
 		if (construction && bp != null) {
 			TemplateGrid grid = TemplateGrid.of(bp.id());
@@ -441,9 +446,33 @@ final class SitesImpl implements dev.larattalabs.architect.api.Sites {
 			v = new Verdict(List.of(new Refusal(Reason.LOT_TOO_SMALL, "The lot is too small for " + blueprintId + ": " + f.why())), List.of(), construction,
 				Map.of(), Optional.of(Views.box(f.box())), Optional.empty());
 		} else {
-			v = check(new PlaceRequest(blueprintId, level, origin, rot, opt.mode(), opt.owner(), new JsonObject(), opt.force(), opt.actor()));
+			v = check(new PlaceRequest(blueprintId, level, origin, rot, opt.mode(), opt.owner(), new JsonObject(), opt.force(), opt.actor(), null, null,
+				opt.consent()));
 		}
-		return new LotFit(origin, rot, Views.box(f.box()), v.restoreBox(), v, Views.box(LotFitting.recommended(f, lb, streetSide.getName())));
+		return new LotFit(origin, rot, Views.box(f.box()), v.restoreBox(), v, Views.box(avoidBuilds(level, LotFitting.recommended(f, lb, streetSide
+			.getName()), streetSide, consentOf(opt.consent()))));
+	}
+
+	/**
+	 * (6c PT §7) A recommended lot holding a player's build is moved along the street (up to 32 cells either way) to the nearest
+	 * place that holds none; unchanged when there is none or no build is in it.
+	 */
+	static Anchors.Bounds avoidBuilds(ServerLevel level, Anchors.Bounds rec, Direction streetSide, dev.larattalabs.architect.placed.Placed.Consent consent) {
+		if (dev.larattalabs.architect.placed.BuildViews.scan(level, rec, consent).isEmpty()) {
+			return rec;
+		}
+		boolean alongX = streetSide.getAxis() == Direction.Axis.Z;
+		for (int d = 1; d <= 32; d++) {
+			for (int sgn : new int[] {1, -1}) {
+				int dx = alongX ? d * sgn : 0;
+				int dz = alongX ? 0 : d * sgn;
+				Anchors.Bounds b = new Anchors.Bounds(rec.minX() + dx, rec.minY(), rec.minZ() + dz, rec.maxX() + dx, rec.maxY(), rec.maxZ() + dz);
+				if (dev.larattalabs.architect.placed.BuildViews.scan(level, b, consent).isEmpty()) {
+					return b;
+				}
+			}
+		}
+		return rec;
 	}
 
 	@Override
@@ -498,8 +527,10 @@ final class SitesImpl implements dev.larattalabs.architect.api.Sites {
 			if (no != null) {
 				v = new Verdict(List.of(new Refusal(Reason.NOT_ALLOWED, no)), List.of(), construction, Map.of(), Optional.empty(), Optional.empty());
 			} else {
-				Sites.Verdict sv = Sites.entryVerdict(level, entry, origin, rot, opt.force(), construction, opt.owner()); // 6c 0c: the owner's areas
-				List<Refusal> refused = sv.typed().stream().map(x -> new Refusal(x.reason(), x.message())).toList();
+				Blueprints.Entry en = entry;
+				Sites.Verdict sv = dev.larattalabs.architect.placed.Placed.withConsent(consentOf(opt.consent()), () -> Sites.entryVerdict(level, en, origin, rot, opt.force(), construction,
+					opt.owner())); // 6c 0c: the owner's areas; 6c PT: the consent's builds
+				List<Refusal> refused = sv.typed().stream().map(x -> new Refusal(x.reason(), x.message(), x.builds())).toList();
 				v = new Verdict(refused, sv.notes(), construction, Map.of(), Optional.ofNullable(sv.box()).map(Views::box),
 					Optional.ofNullable(sv.snapshotBox()).map(Views::box), overlaps(sv.overlaps(), refused), 0);
 			}
@@ -538,22 +569,22 @@ final class SitesImpl implements dev.larattalabs.architect.api.Sites {
 
 	@Override
 	public CompletableFuture<PlaceResult> placeRoad(dev.larattalabs.architect.api.RoadRequest r) {
-		return onServer(() -> dev.larattalabs.architect.site.InfraApi.placeRoad(r)).thenCompose(f -> f);
+		return onServer(() -> dev.larattalabs.architect.placed.Placed.withConsent(consentOf(r.consent()), () -> dev.larattalabs.architect.site.InfraApi.placeRoad(r))).thenCompose(f -> f);
 	}
 
 	@Override
 	public Verdict checkRoad(dev.larattalabs.architect.api.RoadRequest r) {
-		return dev.larattalabs.architect.site.InfraApi.checkRoad(r);
+		return dev.larattalabs.architect.placed.Placed.withConsent(consentOf(r.consent()), () -> dev.larattalabs.architect.site.InfraApi.checkRoad(r));
 	}
 
 	@Override
 	public CompletableFuture<PlaceResult> placeCells(dev.larattalabs.architect.api.CellsRequest r) {
-		return onServer(() -> dev.larattalabs.architect.site.InfraApi.placeCells(r)).thenCompose(f -> f);
+		return onServer(() -> dev.larattalabs.architect.placed.Placed.withConsent(consentOf(r.consent()), () -> dev.larattalabs.architect.site.InfraApi.placeCells(r))).thenCompose(f -> f);
 	}
 
 	@Override
 	public Verdict checkCells(dev.larattalabs.architect.api.CellsRequest r) {
-		return dev.larattalabs.architect.site.InfraApi.checkCells(r);
+		return dev.larattalabs.architect.placed.Placed.withConsent(consentOf(r.consent()), () -> dev.larattalabs.architect.site.InfraApi.checkCells(r));
 	}
 
 	@Override
@@ -572,7 +603,8 @@ final class SitesImpl implements dev.larattalabs.architect.api.Sites {
 		dev.larattalabs.architect.delta.DeltaPlanner.Edits e = r.playerEdits() == null ? dev.larattalabs.architect.delta.DeltaPlanner.Edits.KEEP
 			: dev.larattalabs.architect.delta.DeltaPlanner.Edits.valueOf(r.playerEdits().name());
 		return new dev.larattalabs.architect.site.SiteDeltas.Request(r.siteId(), r.toVersion(), e, r.overlap()
-			== dev.larattalabs.architect.api.OverlapPolicy.LAYER, r.owner(), r.force());
+			== dev.larattalabs.architect.api.OverlapPolicy.LAYER, r.owner(), r.force(), dev.larattalabs.architect.placed.BuildViews.consent(
+				dev.larattalabs.architect.placed.Placed.server(), r.consent(), false).allowed());
 	}
 
 	@Override
@@ -584,8 +616,8 @@ final class SitesImpl implements dev.larattalabs.architect.api.Sites {
 				+ "loaded")), instantDelta(r.actor()));
 		}
 		boolean instant = instantDelta(r.actor());
-		dev.larattalabs.architect.site.SiteDeltas.Check c = instant ? dev.larattalabs.architect.site.SiteDeltas.check(level, deltaRequest(r))
-			: Builder.checkConstructionDelta(level, deltaRequest(r));
+		dev.larattalabs.architect.site.SiteDeltas.Check c = dev.larattalabs.architect.placed.Placed.withConsent(consentOf(r.consent()), () -> instant ? dev.larattalabs.architect.site
+			.SiteDeltas.check(level, deltaRequest(r)) : Builder.checkConstructionDelta(level, deltaRequest(r)));
 		return Views.deltaVerdict(c, List.of(), instant);
 	}
 
@@ -599,13 +631,15 @@ final class SitesImpl implements dev.larattalabs.architect.api.Sites {
 					+ "'s dimension is not loaded")));
 			}
 			try {
-				if (instantDelta(r.actor())) {
-					return dev.larattalabs.architect.site.SiteDeltas.applyAsync(level, deltaRequest(r)).handle((res, err) -> res != null ? Views.deltaResult(res)
-						: Views.deltaFailed(r.siteId(), refusalOf(err)));
-				}
-				return CompletableFuture.completedFuture(Views.deltaResult(Builder.applyConstructionDelta(level, deltaRequest(r), r.actor())));
+				return dev.larattalabs.architect.placed.Placed.withConsentE(consentOf(r.consent()), () -> {
+					if (instantDelta(r.actor())) {
+						return dev.larattalabs.architect.site.SiteDeltas.applyAsync(level, deltaRequest(r)).handle((res, err) -> res != null ? Views.deltaResult(
+							res) : Views.deltaFailed(r.siteId(), refusalOf(err)));
+					}
+					return CompletableFuture.completedFuture(Views.deltaResult(Builder.applyConstructionDelta(level, deltaRequest(r), r.actor())));
+				});
 			} catch (Sites.SiteException e) {
-				return CompletableFuture.completedFuture(Views.deltaFailed(r.siteId(), new Refusal(e.reason(), e.getMessage())));
+				return CompletableFuture.completedFuture(Views.deltaFailed(r.siteId(), new Refusal(e.reason(), e.getMessage(), e.builds())));
 			}
 		});
 		return f.thenCompose(x -> x);
@@ -682,7 +716,7 @@ final class SitesImpl implements dev.larattalabs.architect.api.Sites {
 	// ------------------------------------------------------------------ 1.17.0 (6c Y, C24): stockpiles
 
 	private static ArchitectRefused refused(Sites.SiteException e) {
-		return new ArchitectRefused(e.reason(), e.getMessage());
+		return new ArchitectRefused(e.reason(), e.getMessage(), "", e.builds());
 	}
 
 	private dev.larattalabs.architect.api.Stockpile pileView(String owner) {
@@ -785,5 +819,47 @@ final class SitesImpl implements dev.larattalabs.architect.api.Sites {
 		} catch (Sites.SiteException e) {
 			throw refused(e);
 		}
+	}
+
+	// ------------------------------------------------------------------ 6c slice PT (API 1.24.0)
+
+	private @Nullable ServerLevel levelOfKey(net.minecraft.resources.ResourceKey<net.minecraft.world.level.Level> dim) {
+		return dim == null ? null : server.getLevel(dim);
+	}
+
+	@Override
+	public Optional<dev.larattalabs.architect.api.PlacedBy> playerPlaced(net.minecraft.resources.ResourceKey<net.minecraft.world.level.Level> dim, BlockPos pos) {
+		return dev.larattalabs.architect.placed.BuildViews.placedBy(levelOfKey(dim), pos);
+	}
+
+	@Override
+	public dev.larattalabs.architect.api.PlacedBox playerPlaced(net.minecraft.resources.ResourceKey<net.minecraft.world.level.Level> dim, BoundingBox box) {
+		return dev.larattalabs.architect.placed.BuildViews.box(levelOfKey(dim), box);
+	}
+
+	@Override
+	public List<dev.larattalabs.architect.api.Build> builds(net.minecraft.resources.@Nullable ResourceKey<net.minecraft.world.level.Level> dim,
+		@Nullable BoundingBox within) {
+		return dev.larattalabs.architect.placed.BuildViews.builds(dim, within);
+	}
+
+	@Override
+	public Optional<dev.larattalabs.architect.api.Build> build(String id) {
+		return dev.larattalabs.architect.placed.BuildViews.build(id);
+	}
+
+	@Override
+	public dev.larattalabs.architect.api.Build claimBuild(net.minecraft.resources.ResourceKey<net.minecraft.world.level.Level> dim, BoundingBox box,
+		@Nullable ServerPlayer actor) {
+		ServerLevel level = levelOfKey(dim);
+		if (level == null) {
+			throw new ArchitectRefused(Reason.NOT_LOADED, dim + " is not loaded");
+		}
+		return dev.larattalabs.architect.placed.BuildViews.claim(level, box, actor, false);
+	}
+
+	@Override
+	public dev.larattalabs.architect.api.Build releaseBuild(String id, @Nullable ServerPlayer actor) {
+		return dev.larattalabs.architect.placed.BuildViews.release(id, actor, false);
 	}
 }

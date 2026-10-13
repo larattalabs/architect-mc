@@ -320,7 +320,7 @@ public final class Views {
 		}
 		List<dev.larattalabs.architect.api.Refusal> rs = new ArrayList<>(extra);
 		for (dev.larattalabs.architect.site.SiteDeltas.Refusal r : c.refusals()) {
-			rs.add(new dev.larattalabs.architect.api.Refusal(r.reason(), r.message()));
+			rs.add(new dev.larattalabs.architect.api.Refusal(r.reason(), r.message(), r.builds()));
 		}
 		java.util.Map<String, dev.larattalabs.architect.api.PartDelta> parts = new java.util.LinkedHashMap<>();
 		c.parts().forEach((n, p) -> parts.put(n, partDelta(p)));
@@ -353,7 +353,7 @@ public final class Views {
 	public static dev.larattalabs.architect.api.DeltaResult deltaResult(dev.larattalabs.architect.site.SiteDeltas.Result r) {
 		List<dev.larattalabs.architect.api.Refusal> rs = new ArrayList<>();
 		for (dev.larattalabs.architect.site.SiteDeltas.Refusal x : r.refusals()) {
-			rs.add(new dev.larattalabs.architect.api.Refusal(x.reason(), x.message()));
+			rs.add(new dev.larattalabs.architect.api.Refusal(x.reason(), x.message(), x.builds()));
 		}
 		return new dev.larattalabs.architect.api.DeltaResult(r.applied(), r.siteId(), r.from(), r.to(), r.written(), kept(r.kept()), items(r.refund()),
 			r.reshaped(), rs, r.notes());

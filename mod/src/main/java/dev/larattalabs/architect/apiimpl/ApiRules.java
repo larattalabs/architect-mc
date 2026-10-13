@@ -25,7 +25,7 @@ public final class ApiRules {
 		"compositePreview", "batchPlacement", "siteGroups", "stages", "groupCrate", "journal", "overlapLayer", "roads", "cellSites",
 		"stackQuery", "entryVersions", "blueprintDelta", "deltaApply", "siteRevert", "deltaPreview", "regionPrepare", "generatedOnly", "cellConditions",
 		"chunkBound", "surveyVolume", "regionNudge", "regionOpKeys", "lotExt", "frozenWater", "siteWaiting", "fullBom", "stockpile",
-		"schematics", "targetPause", "removalLeavesFeed");
+		"schematics", "targetPause", "removalLeavesFeed", "builds");
 
 	private ApiRules() {
 	}
@@ -37,6 +37,9 @@ public final class ApiRules {
 	 */
 	public static java.util.Set<String> features(int protocol, java.util.Collection<String> sidecarFeatures) {
 		java.util.Set<String> out = new java.util.TreeSet<>(JAVA_FEATURES);
+		if (dev.larattalabs.architect.placed.TrackingRule.on) {
+			out.add("playerPlaced"); // 6c PT: player-placed tracking is on (the world rule architect.playerTracking)
+		}
 		if (protocol >= 2) {
 			out.add("protocol2");
 			for (String f : sidecarFeatures) {

@@ -268,6 +268,14 @@ final class DeltaJob implements Placement.Job {
 						fail(f.message());
 						return true;
 					}
+					// (6c PT §7) the writes against the players' builds (server thread: the plan above ran on a worker)
+					SiteDeltas.Refusal pt = check.plan() == null ? null : SiteDeltas.buildRefusal(level, request, check.plan().outcome().write().keySet());
+					if (pt != null) {
+						tracker.stop();
+						tracker = null;
+						fail(pt.message());
+						return true;
+					}
 					// occupancy (server thread)
 					Anchors.Bounds wb = SiteDeltas.boundsOf(check.plan().outcome().entryCells());
 					if (wb != null) {
@@ -634,7 +642,7 @@ final class DeltaJob implements Placement.Job {
 						prepared = null;
 						restore = (SiteJournal.Restore) ready[0];
 						long tw = System.nanoTime();
-						SiteJournal.writeCells(level, restore.pre());
+						restore.writing(() -> SiteJournal.writeCells(level, restore.pre()));
 						if ((System.nanoTime() - tw) / 1_000_000 > 10) {
 							Architect.LOGGER.warn("Delta job of {}: {} pre cells written in {} ms", siteId, restore.pre().size(), (System.nanoTime() - tw) / 1_000_000);
 						}
@@ -647,9 +655,11 @@ final class DeltaJob implements Placement.Job {
 					if (restore.mask() != null) {
 						UpdateMask.begin(restore.mask());
 					}
+					dev.larattalabs.architect.placed.Placed.beginRestore(restore.pts());
 					try {
 						writer.step(level, deadline);
 					} finally {
+						dev.larattalabs.architect.placed.Placed.endRestore();
 						UpdateMask.end();
 						TickDeferral.end();
 					}
@@ -661,8 +671,10 @@ final class DeltaJob implements Placement.Job {
 					TickDeferral.release(level, TickDeferral.withoutLeaves(held));
 					held.clear();
 					long q1 = System.nanoTime();
-					SiteJournal.writeCells(level, restore.cells());
-					SiteJournal.fixHalves(level, restore.halves());
+					restore.writing(() -> {
+						SiteJournal.writeCells(level, restore.cells());
+						SiteJournal.fixHalves(level, restore.halves());
+					});
 					SiteJournal.restoreRing(level, restore.ring());
 					long q2 = System.nanoTime();
 					WorldJournal.kill("K7");

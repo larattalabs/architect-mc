@@ -515,6 +515,12 @@ public final class JournalStore {
 
 	// ------------------------------------------------------------------ commits
 
+	/**
+	 * (6c PT §5) Where a new entry's cells get the player-placed records of their befores ({@code Placed.annotate}: the world's
+	 * records now, as an entry is committed before its blocks are written). Null in pure tests: no records.
+	 */
+	public static volatile java.util.function.@Nullable BiFunction<String, Collection<SectionCells>, ? extends Collection<SectionCells>> ptSource;
+
 	/** Changes to commit together (one index write). Built on the server thread, then {@link #submit}ted. */
 	public final class Txn {
 		private final Map<String, Meta> creates = new LinkedHashMap<>();
@@ -530,6 +536,10 @@ public final class JournalStore {
 
 		/** A new entry with these cells (and its head file). */
 		public Txn create(Meta header, Collection<SectionCells> cells, JournalNbt.Head h) {
+			var pt = ptSource;
+			if (pt != null) {
+				cells = pt.apply(header.dimension(), cells);
+			}
 			creates.put(header.id(), header);
 			Map<Long, SectionCells> m = sections.computeIfAbsent(header.id(), k -> new TreeMap<>());
 			for (SectionCells s : cells) {

@@ -60,6 +60,8 @@ public final class QItem {
 	public @Nullable JsonObject spec;
 	/** (6b, API 1.9.0) The request's {@code pathStyle} (the entrance approach's road-surface block), or null. */
 	public @Nullable String pathStyle;
+	/** (6c PT §6) The builds its request's consent names and the check accepted (validated when queued): its checks may take them. */
+	public final java.util.Set<String> consented = new java.util.LinkedHashSet<>();
 
 	public Status status = Status.QUEUED;
 	public @Nullable String siteId;
@@ -142,6 +144,11 @@ public final class QItem {
 		if (spec != null) {
 			o.add("spec", spec.deepCopy());
 		}
+		if (!consented.isEmpty()) {
+			com.google.gson.JsonArray cs = new com.google.gson.JsonArray();
+			consented.forEach(cs::add);
+			o.add("consented", cs);
+		}
 		if (pathStyle != null) {
 			o.addProperty("pathStyle", pathStyle);
 		}
@@ -170,6 +177,9 @@ public final class QItem {
 		i.itemKind = o.has("itemKind") ? o.get("itemKind").getAsString() : "building";
 		i.spec = o.has("spec") && o.get("spec").isJsonObject() ? o.getAsJsonObject("spec") : null;
 		i.pathStyle = o.has("pathStyle") ? o.get("pathStyle").getAsString() : null;
+		if (o.get("consented") instanceof com.google.gson.JsonArray cs) {
+			cs.forEach(e -> i.consented.add(e.getAsString()));
+		}
 		return i;
 	}
 }

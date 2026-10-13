@@ -31,7 +31,7 @@ A headless gate server (docs/GATES.md "Headless gates") serves the same protocol
 `headless: true`.
 
 - **Generated hooks.** The hooks in the client's `client/dev/` files `JournalDev`, `RegionDev`, `RegionDev6b`, `DeltaDev`,
-  `SliceVDev`, `SliceWDev`, `SliceF2Dev`, `SliceBDev`, `SliceP0Dev` and `StockpileDev` (and `Fields`) run headless as they are: `devserver/build.gradle` `genHooks` compiles copies with
+  `SliceVDev`, `SliceWDev`, `SliceF2Dev`, `SliceBDev`, `SliceP0Dev`, `SlicePTDev` and `StockpileDev` (and `Fields`) run headless as they are: `devserver/build.gradle` `genHooks` compiles copies with
   only the package and imports changed.
   - **Rule for those files:** no reference to client classes (`net.minecraft.client.*`, `dev.larattalabs.architect.client.*`)
     besides `ServerTasks`, `DevBridge` and the handler's `mc` parameter. A new one fails the build, `unit-mod` included.
@@ -354,6 +354,20 @@ Semi-stable: a hook may change or go, and every such change is listed here, newe
   `dev.region.artifact {sha, body?}`, `dev.region.pinArtifact {sha, owner, on?}`, `dev.region.realiseApproved {sha, lotEntries?, fill?,
   opKey?}`, `dev.region.realiseByKey {owner?, opKey}` and `dev.region.tileShas {region}` (the sha of every tile a realise received, from
   `TileStream.TILE_SHAS`).
+- **2026-10-13 (6c slice PT):** new `dev.pt.*` hooks (SlicePTDev, generated headless too). `dev.pt.uses {ops: [{item, at, on?, face?,
+  use?: on|item, placer?: <name>|bot, yaw?, pitch?}]}`: item uses through a named fake player's (Fabric `FakePlayer`, an offline
+  UUID per name) or the bot's `ServerPlayerGameMode.useItemOn` / `useItem`, never `setBlock` -> per op `{tracked, placer, build,
+  state, result}`; `dev.pt.breaks {at: [[x,y,z]...], placer?}` (`destroyBlock`); `dev.pt.cells {box, list?}` (the tracked cells:
+  count, incidental, a SHA-256 over position, placer and build, the list); `dev.pt.keptHash {box}` (a SHA-256 over the kept build
+  cells' position, state and record); `dev.pt.at {at}`; `dev.pt.builds {box?, drain?}` (`Sites.builds`, after running every
+  classifier job due; `drain` ignores the debounce); `dev.pt.build {build}` (an alias resolves; answers `buildId`, never `id`);
+  `dev.pt.box {box}` (`Sites.playerPlaced(dim, box)`); `dev.pt.claim {box, actor?: bot|console|<name>}`; `dev.pt.release {build,
+  actor?}`; `dev.pt.uuid {name}`; `dev.pt.rule {name?, value?}` (the world rules: `playerTracking`, `promote`, `graceMs`, ...);
+  `dev.pt.stats {box?, bench?, reset?}` (item 15's cost: NBT and heap bytes, the hook's ns, the classifier's tick and phase maxima);
+  `dev.pt.expecting {}`. `dev.brush` gains `consent: [build ids]` and `consentActor`, and its view `buildHits`; `dev.road.place`
+  gains `partial` and answers the skipped spans; road and cell refusals carry their `builds`. apitest `apipt`, `ptat`, `ptbox`,
+  `ptbuilds`, `ptbuild`, `ptclaim`, `ptrelease`, `ptplace` (a pending result), `ptcheck` (`ApiTestPT`).
+
 - **2026-10-12 (6c slice B):** new `dev.brush {kind, at: [x,y,z], radius?, strength?, shape?, mask?, pattern?, destruction?, owner?,
   actor?: me|none|<uuid>, console?, seed?, dimension?}`: one brush stroke (`Regions.brush`; `console: true` takes the command's
   console path) -> the region's view once realised `{region, planId, irSha, state, brush, cellsWritten, cellsSkipped, claim, ms}` or

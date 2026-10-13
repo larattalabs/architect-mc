@@ -29,8 +29,16 @@ public final class RoadTerrain implements RoadPlan.World {
 	private final Level level;
 	private final BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
 
+	/** 6c PT: a kept build's cell (one the request's consent doesn't name) reads as built: a road never cuts, fills or clears it. */
+	private final dev.larattalabs.architect.placed.Placed.@org.jspecify.annotations.Nullable Consent consent;
+
 	public RoadTerrain(Level level) {
+		this(level, dev.larattalabs.architect.placed.Placed.consentNow());
+	}
+
+	public RoadTerrain(Level level, dev.larattalabs.architect.placed.Placed.@org.jspecify.annotations.Nullable Consent consent) {
 		this.level = level;
+		this.consent = consent;
 	}
 
 	@Override
@@ -42,6 +50,12 @@ public final class RoadTerrain implements RoadPlan.World {
 			return y < level.getMinY() ? RoadPlan.BUILT : RoadPlan.AIR;
 		}
 		pos.set(x, y, z);
+		if (consent != null) {
+			String b = dev.larattalabs.architect.placed.Placed.build(level, null, x, y, z);
+			if (b != null && !consent.allows(b)) {
+				return RoadPlan.BUILT;
+			}
+		}
 		return kind(level, pos, level.getBlockState(pos));
 	}
 

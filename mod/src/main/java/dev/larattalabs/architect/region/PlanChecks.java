@@ -268,6 +268,10 @@ public final class PlanChecks {
 		JsonObject rg = new JsonObject();
 		rg.add("regions", prot.regions());
 		params.add("regions", rg);
+		// 6c PT: the players' builds meeting the claim (feature.build, target {build}, endpoint.build; kept out, S-PT-4)
+		JsonObject bs = new JsonObject();
+		bs.add("builds", dev.larattalabs.architect.placed.BuildViews.planJson(dim, new int[] {c.minX(), c.minY(), c.minZ(), c.maxX(), c.maxY(), c.maxZ()}));
+		params.add("builds", bs);
 		params.add("budget", budgetJson(budget));
 		if (r.bible() != null) {
 			JsonObject b = new JsonObject();

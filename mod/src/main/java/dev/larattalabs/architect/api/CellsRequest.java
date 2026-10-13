@@ -18,9 +18,12 @@ import org.jspecify.annotations.Nullable;
  * @param overlap per cell against standing sites; LAYER over BOX sites is allowed
  * @param mode INSTANT only in 4e: CONSTRUCTION is refused {@link Reason#NOT_ALLOWED}, as is INSTANT where it is not allowed
  *             (a survival-toggle world that is not creative)
+ * @param consent (PT) the player builds this request may write over (docs/CONTRACT.md "Phase 6c slice PT" §6): only builds it names,
+ *        each with an actor who placed at least 10% of it or holds permission level 2. Null (every older constructor) = none: a
+ *        build in the way refuses {@link Reason#PLAYER_BUILD} (or is skipped), and {@code force} never overrides a build.
  */
 public record CellsRequest(ServerLevel level, String kind, Policy policy, List<CellWrite> cells, boolean naturalOnly, @Nullable OverlapPolicy overlap,
-	Mode mode, @Nullable String owner, JsonObject ext, @Nullable ServerPlayer actor, boolean force) {
+	Mode mode, @Nullable String owner, JsonObject ext, @Nullable ServerPlayer actor, boolean force, @Nullable BuildConsent consent) {
 	public CellsRequest {
 		cells = List.copyOf(cells);
 		policy = policy == null ? Policy.CELL : policy;
@@ -29,7 +32,17 @@ public record CellsRequest(ServerLevel level, String kind, Policy policy, List<C
 	}
 
 	/** A CELL-policy, natural-only, REFUSE request with no owner or actor. */
+	public CellsRequest(ServerLevel level, String kind, Policy policy, List<CellWrite> cells, boolean naturalOnly, @Nullable OverlapPolicy overlap,
+		Mode mode, @Nullable String owner, JsonObject ext, @Nullable ServerPlayer actor, boolean force) {
+		this(level, kind, policy, cells, naturalOnly, overlap, mode, owner, ext, actor, force, null);
+	}
+
 	public static CellsRequest of(ServerLevel level, String kind, List<CellWrite> cells) {
-		return new CellsRequest(level, kind, Policy.CELL, cells, true, null, Mode.AUTO, null, new JsonObject(), null, false);
+		return new CellsRequest(level, kind, Policy.CELL, cells, true, null, Mode.AUTO, null, new JsonObject(), null, false, null);
+	}
+
+	/** (PT) The same request with this consent. */
+	public CellsRequest withConsent(@Nullable BuildConsent c) {
+		return new CellsRequest(level, kind, policy, cells, naturalOnly, overlap, mode, owner, ext, actor, force, c);
 	}
 }

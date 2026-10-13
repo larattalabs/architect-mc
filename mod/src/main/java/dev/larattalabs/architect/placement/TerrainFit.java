@@ -49,6 +49,11 @@ public final class TerrainFit {
 	 * entrance approach stops before the first row that meets one.
 	 */
 	public static final int ROAD = 128;
+	/**
+	 * (6c PT §7) A player's build cell (one the request's consent doesn't name): an entrance approach stops before the first row
+	 * that meets one, as at a road; the placement's snapshot box holding one refuses PLAYER_BUILD.
+	 */
+	public static final int BUILD = 256;
 
 	/** The world under a placement: {@link #flags} bits of a world cell. */
 	@FunctionalInterface

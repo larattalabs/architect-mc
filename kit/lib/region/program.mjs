@@ -278,6 +278,8 @@ export class Region {
     for (const l of this.lots) hard.push([l.box.minX - 1, l.box.minZ - 1, l.box.maxX + 1, l.box.maxZ + 1]);
     // a slope pad's batter clears its rings to the column's top (trees included): no tree obstacle there
     const clearTrees = this.lots.filter((l) => l.pad?.edge === 'slope').map((l) => { const m = 1 + Math.max(l.pad.maxCut ?? 0, l.pad.maxFill ?? 0); return [l.box.minX - m, l.box.minZ - m, l.box.maxX + m, l.box.maxZ + m]; });
+    // (6c PT) the caller's rects whose logs are no trees (a player's log build: kept out, never felled, so no tree reach)
+    for (const b of it.clearTrees ?? []) clearTrees.push([...b]);
     for (const f of this.forms) if (f.bounds) hard.push([f.bounds.minX, f.bounds.minZ, f.bounds.maxX, f.bounds.maxZ]);
     for (const p of this.parts) for (const k of p.keep ?? []) hard.push([k.box.minX, k.box.minZ, k.box.maxX, k.box.maxZ]);
     const keepOut = [...(this.ctx.keepOut ?? []), ...(it.keepOut ?? [])].map((k) => [...k]);

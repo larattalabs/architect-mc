@@ -8,6 +8,7 @@ package dev.larattalabs.architect.api;
 public class ArchitectRefused extends RuntimeException {
 	private final Reason reason;
 	private final String detail;
+	private final java.util.List<BuildHit> builds;
 
 	public ArchitectRefused(Reason reason, String message) {
 		this(reason, message, "");
@@ -15,9 +16,15 @@ public class ArchitectRefused extends RuntimeException {
 
 	/** With a sub-code ({@link #detail()}). Since 1.11.0. */
 	public ArchitectRefused(Reason reason, String message, String detail) {
+		this(reason, message, detail, java.util.List.of());
+	}
+
+	/** (PT) With the builds in the way ({@link Reason#PLAYER_BUILD}). */
+	public ArchitectRefused(Reason reason, String message, String detail, java.util.List<BuildHit> builds) {
 		super(message);
 		this.reason = reason;
 		this.detail = detail == null ? "" : detail;
+		this.builds = builds == null ? java.util.List.of() : java.util.List.copyOf(builds);
 	}
 
 	public Reason reason() {
@@ -30,5 +37,13 @@ public class ArchitectRefused extends RuntimeException {
 	 */
 	public String detail() {
 		return detail;
+	}
+
+	/**
+	 * (PT) For {@link Reason#PLAYER_BUILD}: the builds in the way, each with its blocking count and first 8 cells; empty
+	 * otherwise.
+	 */
+	public java.util.List<BuildHit> builds() {
+		return builds;
 	}
 }

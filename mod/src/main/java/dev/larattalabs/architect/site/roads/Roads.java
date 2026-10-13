@@ -127,7 +127,18 @@ public final class Roads {
 			lamp = new RoadPlan.Lamp(along, dy, lampSpec.has("light") ? lampSpec.get("light").getAsInt() : cs.size() - 1, lampSpec.has("first") ? lampSpec.get(
 				"first").getAsDouble() : RoadPlan.LANTERN_FIRST, lampSpec.has("every") ? lampSpec.get("every").getAsDouble() : RoadPlan.LANTERN_SPACING);
 		}
-		RoadPlan.Plan plan = RoadPlan.plan(xs, ys, zs, width, lanterns, decks, new RoadTerrain(level), owned, protect, partial, ownFoot, lamp);
+		// 6c PT (§7): a build cell in a column's cut, fill or headroom fails its segment (PLAYER_BUILD; with partial a skipped span naming
+		// the build); a PATH build is joined (its cells read as built: kept, never changed); the request's consent names builds it may take
+		dev.larattalabs.architect.placed.Placed.Consent consent = dev.larattalabs.architect.placed.Placed.consentNow();
+		RoadPlan.BuildAt builds = (x, y, z) -> {
+			String b = dev.larattalabs.architect.placed.Placed.build(level, null, x, y, z);
+			if (b == null || consent.allows(b) || dev.larattalabs.architect.placed.Builds.kindOf(b) == dev.larattalabs.architect.api.BuildKind.PATH) {
+				return null;
+			}
+			return "the player's build " + b + " (" + dev.larattalabs.architect.placed.Builds.kindOf(b).name().toLowerCase(java.util.Locale.ROOT) + ") at " + x
+				+ " " + y + " " + z;
+		};
+		RoadPlan.Plan plan = RoadPlan.plan(xs, ys, zs, width, lanterns, decks, new RoadTerrain(level, consent), owned, protect, partial, ownFoot, lamp, builds);
 		if (plan.refused()) {
 			Reason r = Reason.OTHER;
 			try {

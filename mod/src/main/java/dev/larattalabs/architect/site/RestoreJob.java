@@ -258,7 +258,7 @@ final class RestoreJob implements Placement.Job {
 				prepared = null;
 			}
 			restore = (SiteJournal.Restore) ready[0];
-			SiteJournal.writeCells(level, restore.pre()); // cut plants' outside halves before the box
+			restore.writing(() -> SiteJournal.writeCells(level, restore.pre())); // cut plants' outside halves before the box
 			if (ready[1] != null) {
 				BlockPos min = new BlockPos(restore.box().minX(), restore.box().minY(), restore.box().minZ());
 				writer = new TemplateWriter((TemplateWriter.Cells) ready[1], min, Sites.FLAGS);
@@ -274,6 +274,9 @@ final class RestoreJob implements Placement.Job {
 		if (restore != null && restore.mask() != null) {
 			UpdateMask.begin(restore.mask());
 		}
+		if (restore != null) {
+			dev.larattalabs.architect.placed.Placed.beginRestore(restore.pts());
+		}
 		try {
 			writer.step(level, deadline);
 			if (writer.progress() > 0) {
@@ -283,6 +286,9 @@ final class RestoreJob implements Placement.Job {
 				}
 			}
 		} finally {
+			if (restore != null) {
+				dev.larattalabs.architect.placed.Placed.endRestore();
+			}
 			UpdateMask.end();
 			TickDeferral.end();
 		}
@@ -303,8 +309,10 @@ final class RestoreJob implements Placement.Job {
 		// as Sites.restoreQuietly: the leaf ticks the restore scheduled are dropped
 		TickDeferral.release(level, TickDeferral.withoutLeaves(held));
 		held.clear();
-		SiteJournal.writeCells(level, restore.cells());
-		SiteJournal.fixHalves(level, restore.halves());
+		restore.writing(() -> {
+			SiteJournal.writeCells(level, restore.cells());
+			SiteJournal.fixHalves(level, restore.halves());
+		});
 		Sites.Drops drops = Sites.Drops.of(level, s.restoreBox(), dropsBefore);
 		Journal.Stats st = work != null ? Sites.statsOf(work, siteId) : new Journal.Stats(restore.cells().size(), 0, restore.holes());
 		result = ROLLBACK.equals(purpose) ? Sites.finishRollback(server, level, s, drops, restore.ring(), st)
@@ -438,7 +446,8 @@ final class RestoreJob implements Placement.Job {
 		int from = cellCursor;
 		while (cellCursor < cells.size()) {
 			int to = Math.min(cells.size(), cellCursor + 64);
-			SiteJournal.writeCells(level, cells.subList(cellCursor, to));
+			List<SiteJournal.CellWrite> part = cells.subList(cellCursor, to);
+			restore.writing(() -> SiteJournal.writeCells(level, part));
 			cellCursor = to;
 			if (cellCursor > from) {
 				WorldJournal.kill("K7");

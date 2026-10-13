@@ -38,9 +38,16 @@ public final class JournalNbt {
 	 * are still read; 0.10.0 refuses the version 2 index (4e's downgrade rule).
 	 */
 	public static final int VERSION = 2;
+	/**
+	 * 3 (6c PT): a region file whose sections carry {@code pt} (the player-placed records of the befores, with the file-level
+	 * {@code ptu} UUIDs and {@code ptb} build ids). Only a file that holds {@code pt} is written as version 3, every other file stays
+	 * {@link #VERSION} 2 (head files too), so an older mod refuses a v3 file (4e's downgrade rule) instead of rewriting it without
+	 * the records. Reads of v1 and v2 are unchanged.
+	 */
+	public static final int VERSION_PT = 3;
 
 	static boolean known(int v) {
-		return v == 1 || v == 2;
+		return v == 1 || v == 2 || v == VERSION_PT;
 	}
 
 	private JournalNbt() {
@@ -90,6 +97,35 @@ public final class JournalNbt {
 		}
 	}
 
+	/** (6c PT) The file-level palettes of the {@code pt} members: placer UUIDs and build ids. */
+	private static final class PtPalette {
+		final ListTag u = new ListTag();
+		final ListTag b = new ListTag();
+		final Map<java.util.UUID, Integer> us = new HashMap<>();
+		final Map<String, Integer> bs = new HashMap<>();
+
+		int u(java.util.UUID id) {
+			return us.computeIfAbsent(id, k -> {
+				u.add(new net.minecraft.nbt.IntArrayTag(net.minecraft.core.UUIDUtil.uuidToIntArray(k)));
+				return u.size() - 1;
+			});
+		}
+
+		int b(@Nullable String id) {
+			if (id == null) {
+				return -1;
+			}
+			return bs.computeIfAbsent(id, k -> {
+				b.add(net.minecraft.nbt.StringTag.valueOf(k));
+				return b.size() - 1;
+			});
+		}
+
+		boolean used() {
+			return !us.isEmpty();
+		}
+	}
+
 	public static CompoundTag encode(String id, Region r, long entryLayer) {
 		CompoundTag t = new CompoundTag();
 		t.putInt("version", VERSION);
@@ -97,8 +133,9 @@ public final class JournalNbt {
 		t.putInt("rx", Sections.rx(r.region()));
 		t.putInt("rz", Sections.rz(r.region()));
 		ListTag secs = new ListTag();
+		PtPalette pp = new PtPalette();
 		for (SectionCells s : r.sections().values()) {
-			secs.add(encodeSection(s, entryLayer));
+			secs.add(encodeSection(s, entryLayer, pp));
 		}
 		t.put("sections", secs);
 		if (!r.handed().isEmpty()) {
@@ -116,14 +153,25 @@ public final class JournalNbt {
 				if (h.now().nbt() != null) {
 					ht.put("nowN", h.now().nbt());
 				}
+				if (h.wasPt() != null) {
+					ht.putIntArray("wasPu", new int[] {pp.u(h.wasPt().placer()), pp.b(h.wasPt().build())});
+				}
+				if (h.nowPt() != null) {
+					ht.putIntArray("nowPu", new int[] {pp.u(h.nowPt().placer()), pp.b(h.nowPt().build())});
+				}
 				hs.add(ht);
 			}
 			t.put("handed", hs);
 		}
+		if (pp.used()) {
+			t.putInt("version", VERSION_PT);
+			t.put("ptu", pp.u);
+			t.put("ptb", pp.b);
+		}
 		return t;
 	}
 
-	private static CompoundTag encodeSection(SectionCells s, long entryLayer) {
+	private static CompoundTag encodeSection(SectionCells s, long entryLayer, PtPalette pp) {
 		CompoundTag t = new CompoundTag();
 		t.putLong("key", s.key);
 		Palette pal = new Palette();
@@ -196,6 +244,33 @@ public final class JournalNbt {
 			}
 		}
 		t.put("palette", pal.list);
+		if (s.pt != null) {
+			// (6c PT) the cells whose before was tracked: their slot in the section's cell order, the placer and build palette indexes
+			int m = 0;
+			for (Pt p : s.pt) {
+				if (p != null) {
+					m++;
+				}
+			}
+			int[] pk = new int[m];
+			int[] pu = new int[m];
+			int[] pb = new int[m];
+			int j = 0;
+			for (int q = 0; q < s.pt.length; q++) {
+				Pt p = s.pt[q];
+				if (p != null) {
+					pk[j] = q;
+					pu[j] = pp.u(p.placer());
+					pb[j] = pp.b(p.build());
+					j++;
+				}
+			}
+			CompoundTag pt = new CompoundTag();
+			pt.putIntArray("k", pk);
+			pt.putIntArray("u", pu);
+			pt.putIntArray("b", pb);
+			t.put("pt", pt);
+		}
 		return t;
 	}
 
@@ -204,9 +279,22 @@ public final class JournalNbt {
 		if (!known(t.getIntOr("version", 0))) {
 			throw new IllegalArgumentException("not a journal region file (version " + t.getIntOr("version", 0) + ")");
 		}
+		// (6c PT) the file-level palettes of the pt members (version 3)
+		List<java.util.UUID> ptu = new ArrayList<>();
+		for (Tag x : t.getListOrEmpty("ptu")) {
+			if (x instanceof net.minecraft.nbt.IntArrayTag a && a.getAsIntArray().length == 4) {
+				ptu.add(net.minecraft.core.UUIDUtil.uuidFromIntArray(a.getAsIntArray()));
+			} else {
+				throw new IllegalArgumentException("ptu: not a UUID");
+			}
+		}
+		List<String> ptb = new ArrayList<>();
+		for (Tag x : t.getListOrEmpty("ptb")) {
+			ptb.add(x.asString().orElse(""));
+		}
 		TreeMap<Long, SectionCells> sections = new TreeMap<>();
 		for (Tag x : t.getListOrEmpty("sections")) {
-			SectionCells s = decodeSection((CompoundTag) x, entryLayer);
+			SectionCells s = decodeSection((CompoundTag) x, entryLayer, ptu, ptb);
 			sections.put(s.key, s);
 		}
 		List<HandDown> handed = new ArrayList<>();
@@ -214,12 +302,23 @@ public final class JournalNbt {
 			CompoundTag h = (CompoundTag) x;
 			handed.add(new HandDown(h.getIntOr("order", 0), h.getStringOr("to", ""), h.getLongOr("pos", 0L),
 				Value.of(h.getCompoundOrEmpty("was"), h.getCompound("wasN").orElse(null)), Value.of(h.getCompoundOrEmpty("now"),
-					h.getCompound("nowN").orElse(null))));
+					h.getCompound("nowN").orElse(null)), pt(h.getIntArray("wasPu").orElse(null), ptu, ptb), pt(h.getIntArray("nowPu").orElse(null), ptu,
+						ptb)));
 		}
 		return new Region(Sections.region(t.getIntOr("rx", 0), t.getIntOr("rz", 0)), sections, handed);
 	}
 
-	private static SectionCells decodeSection(CompoundTag t, long entryLayer) {
+	private static @Nullable Pt pt(int @Nullable [] a, List<java.util.UUID> ptu, List<String> ptb) {
+		if (a == null) {
+			return null;
+		}
+		if (a.length != 2 || a[0] < 0 || a[0] >= ptu.size() || a[1] >= ptb.size()) {
+			throw new IllegalArgumentException("a hand-down's pt is out of its palette");
+		}
+		return new Pt(ptu.get(a[0]), a[1] < 0 ? null : ptb.get(a[1]));
+	}
+
+	private static SectionCells decodeSection(CompoundTag t, long entryLayer, List<java.util.UUID> ptu, List<String> ptb) {
 		long key = t.getLongOr("key", 0L);
 		ListTag palList = t.getListOrEmpty("palette");
 		CompoundTag[] pal = new CompoundTag[palList.size()];
@@ -286,7 +385,24 @@ public final class JournalNbt {
 				}
 			}
 		}
-		return new SectionCells(key, idx, before, after, layer, written);
+		Pt[] pts = null;
+		CompoundTag ptt = t.getCompound("pt").orElse(null);
+		if (ptt != null) {
+			int[] pk = ptt.getIntArray("k").orElse(new int[0]);
+			int[] pu = ptt.getIntArray("u").orElse(new int[0]);
+			int[] pb = ptt.getIntArray("b").orElse(new int[0]);
+			if (pu.length != pk.length || pb.length != pk.length) {
+				throw new IllegalArgumentException("section " + key + ": pt arrays differ in length");
+			}
+			pts = new Pt[n];
+			for (int j = 0; j < pk.length; j++) {
+				if (pk[j] < 0 || pk[j] >= n || pu[j] < 0 || pu[j] >= ptu.size() || pb[j] >= ptb.size()) {
+					throw new IllegalArgumentException("section " + key + ": pt out of range");
+				}
+				pts[pk[j]] = new Pt(ptu.get(pu[j]), pb[j] < 0 ? null : ptb.get(pb[j]));
+			}
+		}
+		return new SectionCells(key, idx, before, after, layer, written, pts);
 	}
 
 	public static CompoundTag encodeHead(String id, Head h) {

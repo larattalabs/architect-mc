@@ -46,8 +46,10 @@ class Api114Test {
 		var pc = RegionPlanRequest.class.getRecordComponents();
 		assertEquals("opKey", pc[pc.length - 1].getName());
 		var rc = RealiseRequest.class.getRecordComponents();
-		assertEquals("opKey", rc[rc.length - 1].getName());
-		assertEquals("maxWaitSeconds", rc[rc.length - 2].getName());
+		// (6c PT) consent appended after opKey
+		assertEquals("consent", rc[rc.length - 1].getName());
+		assertEquals("opKey", rc[rc.length - 2].getName());
+		assertEquals("maxWaitSeconds", rc[rc.length - 3].getName());
 		RealiseRequest r = new RealiseRequest("p1", null, null, null, null, false, null, false, null);
 		assertNull(r.opKey());
 		assertEquals(0, r.maxWaitSeconds());

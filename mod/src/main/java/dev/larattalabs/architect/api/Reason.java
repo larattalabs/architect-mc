@@ -77,6 +77,9 @@ package dev.larattalabs.architect.api;
  * claim, or a provisional lot's entry (past its fit box or the top of its cost range) changed since the check; the message names
  * the columns, areas or lot. Nothing was written: check again and approve the new artifact.</li>
  * <li>{@code ARTIFACT_UNAPPROVED} (1.23.0): no artifact has that sha (unknown, or removed: a tombstone).</li>
+ * <li>{@code PLAYER_BUILD} (PT): the op would write over a player's build (docs/CONTRACT.md "Phase 6c slice PT" §7) that its
+ * {@link BuildConsent} does not name; {@link Refusal#builds()} / {@link ArchitectRefused#builds()} name each blocking build (id,
+ * kind, count, the first 8 cells with their block ids). {@code force} never overrides it (N-PT-6). Not a widened PLAYER_BLOCKS.</li>
  * </ul>
  * New values are only ever appended.
  */
@@ -93,5 +96,7 @@ public enum Reason {
 	// 1.21.0 (6c slice B)
 	PERMISSION,
 	// 1.23.0 (6c slice P0)
-	ARTIFACT_STALE, ARTIFACT_UNAPPROVED
+	ARTIFACT_STALE, ARTIFACT_UNAPPROVED,
+	// PT (6c slice PT, C32)
+	PLAYER_BUILD
 }

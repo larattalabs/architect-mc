@@ -203,6 +203,7 @@ public final class Batches {
 			}
 			q.layer = (r.overlap() != null ? r.overlap() : spec.overlap()) == dev.larattalabs.architect.api.OverlapPolicy.LAYER;
 			q.pathStyle = r.pathStyle();
+			q.consented.addAll(dev.larattalabs.architect.placed.BuildViews.consent(server, r.consent(), false).allowed()); // (6c PT)
 			if (q.status != QItem.Status.FAILED) {
 				String bad = EntranceStyle.refusal(r.pathStyle());
 				if (bad != null) {
@@ -318,6 +319,7 @@ public final class Batches {
 			.minX(), site == null ? 0 : site.box().minY(), site == null ? 0 : site.box().minZ(), 0, d.force(), ext, actor == null ? null : actor
 				.getStringUUID(), construction, survival);
 		q.itemKind = "delta";
+		q.consented.addAll(dev.larattalabs.architect.placed.BuildViews.consent(server, d.consent(), false).allowed()); // (6c PT)
 		JsonObject sp = new JsonObject();
 		sp.addProperty("siteId", d.siteId());
 		sp.addProperty("toVersion", d.toVersion());
@@ -337,7 +339,8 @@ public final class Batches {
 	static SiteDeltas.Request deltaOf(QItem i) {
 		JsonObject sp = i.spec;
 		return new SiteDeltas.Request(sp.get("siteId").getAsString(), sp.get("toVersion").getAsInt(), dev.larattalabs.architect.delta.DeltaPlanner.Edits
-			.valueOf(sp.get("playerEdits").getAsString()), sp.get("layer").getAsBoolean(), sp.has("owner") ? sp.get("owner").getAsString() : null, i.force);
+			.valueOf(sp.get("playerEdits").getAsString()), sp.get("layer").getAsBoolean(), sp.has("owner") ? sp.get("owner").getAsString() : null, i.force,
+			i.consented); // (6c PT) the item's consented builds
 	}
 
 	/**
@@ -451,6 +454,7 @@ public final class Batches {
 			road ? it.road().force()
 			: it.cells().force(), ext, actor == null ? null : actor.getStringUUID(), consRoad && (spec.sharedCrate() || pile), survival);
 		q.itemKind = road ? "road" : "cells";
+		q.consented.addAll(dev.larattalabs.architect.placed.BuildViews.consent(server, road ? it.road().consent() : it.cells().consent(), false).allowed()); // (6c PT)
 		q.spec = road ? InfraSpec.road(it.road()) : InfraSpec.cells(it.cells());
 		var overlap = road ? null : it.cells().overlap() != null ? it.cells().overlap() : spec.overlap();
 		q.layer = overlap == dev.larattalabs.architect.api.OverlapPolicy.LAYER;
@@ -770,7 +774,11 @@ public final class Batches {
 		Placement.lap("next", t0);
 		if (item != null) {
 			t0 = System.nanoTime();
-			tryStart(server, b, item);
+			// (6c PT) the item's consented builds are what its checks may write over
+			dev.larattalabs.architect.placed.Placed.withConsent(new dev.larattalabs.architect.placed.Placed.Consent(java.util.Set.copyOf(item.consented)), () -> {
+				tryStart(server, b, item);
+				return null;
+			});
 			if (Placement.TRACE) {
 				Placement.lap("tryStart:" + item.key, t0);
 			}

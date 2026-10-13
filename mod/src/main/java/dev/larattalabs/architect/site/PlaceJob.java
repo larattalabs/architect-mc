@@ -573,7 +573,7 @@ final class PlaceJob implements Placement.Job {
 				BlockState outside = level.getBlockState(half);
 				BlockPos inside = half.getY() < snapBox.minY() ? half.above() : half.below();
 				if (!level.getBlockState(inside).is(outside.getBlock())) {
-					level.setBlock(half, Blocks.AIR.defaultBlockState(), Sites.FLAGS);
+					dev.larattalabs.architect.placed.Placed.set(level, half, Blocks.AIR.defaultBlockState(), Sites.FLAGS);
 				}
 				return 1;
 			}
@@ -598,7 +598,7 @@ final class PlaceJob implements Placement.Job {
 			return 0;
 		}
 		int i = cursor * 3;
-		level.setBlock(new BlockPos.MutableBlockPos(xyz[i], xyz[i + 1], xyz[i + 2]), state, Sites.FLAGS);
+		dev.larattalabs.architect.placed.Placed.set(level, new BlockPos.MutableBlockPos(xyz[i], xyz[i + 1], xyz[i + 2]), state, Sites.FLAGS);
 		cursor++;
 		return 1;
 	}

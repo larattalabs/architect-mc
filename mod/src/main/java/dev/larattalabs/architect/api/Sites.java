@@ -6,7 +6,9 @@ import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.item.Item;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
 import org.jspecify.annotations.Nullable;
 
@@ -409,5 +411,54 @@ public interface Sites {
 	 */
 	default void pause(String targetId, boolean paused) {
 		throw new UnsupportedOperationException("Sites.pause needs Architect API 1.19.0");
+	}
+
+	// ------------------------------------------------------------------ 6c slice PT: player-placed tracking and builds (API 1.24.0)
+
+	/**
+	 * Who placed the block at {@code pos} and the build it is in (docs/CONTRACT.md "Phase 6c slice PT" §9). Empty when the cell is
+	 * not tracked, or its chunk is not loaded. Blocks placed before tracking, by commands, dispensers or other mods' tools are
+	 * never guessed as a player's. Server thread. Since 1.24.0.
+	 */
+	default Optional<PlacedBy> playerPlaced(ResourceKey<Level> dim, BlockPos pos) {
+		throw new UnsupportedOperationException("Sites.playerPlaced needs Architect API 1.24.0");
+	}
+
+	/** The tracked cells of a box (loaded chunks only): counts, per placer, and the builds it meets. Server thread. Since 1.24.0. */
+	default PlacedBox playerPlaced(ResourceKey<Level> dim, BoundingBox box) {
+		throw new UnsupportedOperationException("Sites.playerPlaced needs Architect API 1.24.0");
+	}
+
+	/**
+	 * The builds of a dimension (null: every dimension) meeting {@code within} (null: anywhere), by id; merged and gone builds are
+	 * left out (S-PT-5's {@code builds(box)}). Server thread. Since 1.24.0.
+	 */
+	default List<Build> builds(@Nullable ResourceKey<Level> dim, @Nullable BoundingBox within) {
+		throw new UnsupportedOperationException("Sites.builds needs Architect API 1.24.0");
+	}
+
+	/** One build by id; an alias of a merged build resolves to the survivor. Empty when unknown or gone. Since 1.24.0. */
+	default Optional<Build> build(String id) {
+		throw new UnsupportedOperationException("Sites.build needs Architect API 1.24.0");
+	}
+
+	/**
+	 * "Claim my build" (§8): every non-air cell of {@code box} owned by no journal entry and not another placer's is marked as
+	 * {@code actor}'s (null: the console, the nil placer) and the cells are one build in state CLAIMED (no promote bar, never
+	 * demoted). For builds placed before tracking. A non-op actor: a box of at most 32x32x32 within 64 blocks of them, at most 8
+	 * claims; ops: up to 4,096x4,096 columns. Refuses {@link ArchitectRefused} FIELD_LIMIT (the box), PERMISSION (the limits),
+	 * NOT_LOADED. Server thread. Since 1.24.0.
+	 */
+	default Build claimBuild(ResourceKey<Level> dim, BoundingBox box, net.minecraft.server.level.@Nullable ServerPlayer actor) {
+		throw new UnsupportedOperationException("Sites.claimBuild needs Architect API 1.24.0");
+	}
+
+	/**
+	 * Releases a build (§8), by one of its placers or an op (null: the console): it becomes RELEASED; its cells stay tracked but
+	 * incidental, and are not promoted again unless claimed or grown by 25% since. Refuses FIELD_LIMIT for an unknown id,
+	 * PERMISSION for another player. Server thread. Since 1.24.0.
+	 */
+	default Build releaseBuild(String id, net.minecraft.server.level.@Nullable ServerPlayer actor) {
+		throw new UnsupportedOperationException("Sites.releaseBuild needs Architect API 1.24.0");
 	}
 }

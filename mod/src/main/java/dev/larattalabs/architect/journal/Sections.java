@@ -181,7 +181,7 @@ public final class Sections {
 					Undo u = e.undo();
 					written.get(t.getKey()).putAll(u.written());
 					for (HandDown h : u.handed()) {
-						handed.get(t.getKey()).add(new HandDown(h.order() + offset, h.to(), h.pos(), h.was(), h.now()));
+						handed.get(t.getKey()).add(new HandDown(h.order() + offset, h.to(), h.pos(), h.was(), h.now(), h.wasPt(), h.nowPt()));
 						top = Math.max(top, h.order());
 					}
 				} else {

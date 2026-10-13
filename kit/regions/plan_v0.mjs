@@ -7,6 +7,8 @@
 //   anchors     {name: [x, y, z]} the caller's named positions (PlanRequest.anchors)
 //   protected   [{id, rect: [x0, z0, x1, z1]}] the protected areas meeting the claim (any owner: features and obstacles)
 //   regions     [{id, rect}] other owners' standing regions meeting the claim (obstacles)
+//   builds      [{id, kind, state, bounds, footprint, entrances, cells, revision}] the players' builds meeting the claim (6c PT:
+//               feature.build, target {build}, endpoint.build; each kept build and its door aprons are keep-out, S-PT-4)
 //   budget      {maxNodes, maxEdges, maxCells, maxMs, maxHeapMb} (each at most §7's default)
 //   bible       {id, version} | null, and fingerprint: {sha} the protection fingerprint (recorded in the artifact and the cache key)
 // The answers, geometry and the IR parts each plan part wrote go to meta.planCheck; tools/region.mjs then adds the cost, the tile
@@ -29,6 +31,7 @@ export const params = {
   anchors: { ...J(16384), label: 'Named anchors' },
   protected: { ...J(65536), label: 'Protected areas' },
   regions: { ...J(65536), label: 'Other regions' },
+  builds: { ...J(262144), label: 'Player builds' },
   budget: { ...J(), label: 'Check budget' },
   bible: { ...J(), label: 'Bible' },
   fingerprint: { ...J(), label: 'Protection fingerprint' },
@@ -41,7 +44,7 @@ export default function planV0(ctx) {
   const P = ctx.params;
   const list = (v, k) => (v && Array.isArray(v[k]) ? v[k] : []);
   const inputs = {
-    plan: P.plan ?? {}, anchors: P.anchors?.anchors ?? {}, protected: list(P.protected, 'areas'), regions: list(P.regions, 'regions'),
+    plan: P.plan ?? {}, anchors: P.anchors?.anchors ?? {}, protected: list(P.protected, 'areas'), regions: list(P.regions, 'regions'), builds: list(P.builds, 'builds'),
     budget: P.budget ?? {}, bible: P.bible ?? null, fingerprint: P.fingerprint?.sha ?? null,
   };
   const { region: r, record } = runCheck(ctx, inputs, { makeRegion: () => region(ctx), templates: TEMPLATES });

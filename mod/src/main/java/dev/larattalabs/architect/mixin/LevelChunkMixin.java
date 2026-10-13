@@ -17,6 +17,8 @@ public abstract class LevelChunkMixin {
 		if (cir.getReturnValue() != null) {
 			ChangeTracker.changed(((LevelChunk) (Object) this).getLevel(), pos);
 			dev.larattalabs.architect.journal.WriteCounter.changed(((LevelChunk) (Object) this).getLevel(), pos);
+			// 6c PT: player-placed tracking records and clears here (one attachment lookup when the chunk has none)
+			dev.larattalabs.architect.placed.Placed.changed((LevelChunk) (Object) this, pos, cir.getReturnValue(), state);
 		}
 	}
 }

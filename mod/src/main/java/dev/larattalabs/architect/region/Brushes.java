@@ -133,12 +133,24 @@ public final class Brushes {
 		if (dev.larattalabs.architect.survival.SurvivalWorld.on()) {
 			return new ArchitectRefused(Reason.NOT_ALLOWED, "brush strokes are refused in a survival-toggle world (until regions in survival)");
 		}
-		if (r.destruction() == Destruction.PLAYER_BLOCKS && !console && !dev.larattalabs.architect.apiimpl.ApiRules.permission2(actor)) {
+		// (6c PT, N-PT-5) a build's own placer may consent to PLAYER_BLOCKS on that build (it then clears only the builds the consent
+		// names; every other player block stays); B's op-only rule (N-B-1) stays for everyone else's blocks
+		if (r.destruction() == Destruction.PLAYER_BLOCKS && !console && !dev.larattalabs.architect.apiimpl.ApiRules.permission2(actor) && (actor == null
+			|| dev.larattalabs.architect.placed.BuildViews.consent(actor.level().getServer(), r.consent(), false).allowed().isEmpty())) {
 			return new ArchitectRefused(Reason.PERMISSION, r.actor() == null ? "PLAYER_BLOCKS needs an actor: an online player with permission level 2"
 				: actor == null ? "PLAYER_BLOCKS needs an online player with permission level 2 as the actor (" + r.actor() + " is not online)"
 					: "PLAYER_BLOCKS needs permission level 2 (op); " + actor.getGameProfile().name() + " does not have it");
 		}
 		return null;
+	}
+
+	/** (6c PT) The builds a stroke may clear: its PLAYER_BLOCKS consent, checked at the stroke (a NATURAL_ONLY stroke skips every build). */
+	public static java.util.Set<String> consented(JsonObject stroke) {
+		java.util.Set<String> out = new java.util.LinkedHashSet<>();
+		if (stroke.get("consented") instanceof JsonArray a) {
+			a.forEach(e -> out.add(e.getAsString()));
+		}
+		return out;
 	}
 
 	/** The request as the program's params. Pure. */
@@ -207,7 +219,17 @@ public final class Brushes {
 			rec.addProperty("kind", r.kind().name().toLowerCase(Locale.ROOT));
 			rec.addProperty("shape", r.shape().name().toLowerCase(Locale.ROOT));
 			rec.addProperty("destruction", r.destruction().name().toLowerCase(Locale.ROOT));
-			rec.addProperty("playerBlocks", r.destruction() == Destruction.PLAYER_BLOCKS); // checked above
+			boolean op = console || dev.larattalabs.architect.apiimpl.ApiRules.permission2(actor);
+			// checked above; (6c PT) B's rule (every unowned non-natural cell) only for an op or the console: a placer's consented stroke
+			// clears just the builds its consent names
+			rec.addProperty("playerBlocks", r.destruction() == Destruction.PLAYER_BLOCKS && op);
+			if (r.destruction() == Destruction.PLAYER_BLOCKS) {
+				JsonArray cs = new JsonArray();
+				dev.larattalabs.architect.placed.BuildViews.consent(s, r.consent(), console).allowed().stream().sorted().forEach(cs::add);
+				if (!cs.isEmpty()) {
+					rec.add("consented", cs);
+				}
+			}
 			rec.addProperty("actor", console ? CONSOLE : r.actor() == null ? "" : r.actor().toString());
 			JsonArray ba = new JsonArray();
 			for (int v : box) {

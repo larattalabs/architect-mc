@@ -113,6 +113,7 @@ export function featureBlock(f) {
 }
 export function targetBlock(t) {
   if (t.region !== undefined) return 'feature.region'; // a standing region (one idea, one block id: D1's beside)
+  if (t.build !== undefined) return 'feature.build'; // a player's build (6c PT: target {build} answers under feature.build)
   return null; // part, claim: inside the plan
 }
 export const endpointBlock = (e) => `endpoint.${Object.keys(e)[0]}`;
@@ -132,8 +133,8 @@ function nestedUnsupported(family, part) {
     const r0 = reserved(`locator.${lk}`, path);
     if (r0) return r0;
     const body = w[lk];
-    if (lk === 'inside') return body.region !== undefined ? reserved('feature.region', `${path}.inside.region`) : null;
-    if (lk === 'adjacent') return body.to?.region !== undefined ? reserved('feature.region', `${path}.adjacent.to.region`) : null;
+    if (lk === 'inside') return body.region !== undefined ? reserved('feature.region', `${path}.inside.region`) : body.build !== undefined ? reserved('feature.build', `${path}.inside.build`) : null;
+    if (lk === 'adjacent') return body.to?.region !== undefined ? reserved('feature.region', `${path}.adjacent.to.region`) : body.to?.build !== undefined ? reserved('feature.build', `${path}.adjacent.to.build`) : null;
     if (lk === 'near') return featureCheck(body.feature, `${path}.near.feature`);
     return featureCheck(body.feature, `${path}.${lk}.feature`);
   };
