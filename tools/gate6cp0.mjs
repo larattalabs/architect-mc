@@ -226,7 +226,7 @@ steps.ingame = async () => {
   // ---- item 4: approve (the artifact), realise, the irSha and tile shas, realised vs virtual, the exact undo
   const sha = c1.artifactSha;
   const art = (await call('dev.region.artifact', { sha, body: true })).artifact;
-  check(!!art && !art.removed && c3.some((c) => c.checkId === art.planId), `the artifact is kept by its sha (${sha.slice(0, 12)}, plan ${art?.planId})`);
+  check(!!art && !art.removed && art.body.region.irSha === irs[0] && fs.existsSync(path.join(planDir(art.planId), 'ir.json')), `the artifact is kept by its sha (${sha.slice(0, 12)}, plan ${art?.planId})`);
   const ir = JSON.parse(fs.readFileSync(path.join(planDir(c1.checkId), 'ir.json'), 'utf8'));
   const box = [claim[0] - 8, ir.claim.minY, claim[1] - 8, claim[2] + 8, ir.claim.maxY, claim[3] + 8];
   const before = path.join(OUT, 'ingame-before.arwd.gz'), after = path.join(OUT, 'ingame-after.arwd.gz');
@@ -381,7 +381,25 @@ steps.natural = async () => {
   const rm = await call('dev.region.remove', { region: rr.region, requester: OWNER }, 4 * 3_600_000);
   await L.settle(10_000);
   const diff = await call('dev.region.hash', { box: out.box, mode: 'diff', file: path.join(OUT, 'natural-snap.gz') }, 4 * 3_600_000);
-  out.exact = { removed: rm.removed, restored: rm.restored, mismatches: diff.mismatches, classes: diff.classes, list: (diff.list ?? []).filter((m) => m.class === 'none').slice(0, 40) };
+  // T2's `melt` world class (scenarios.mjs meltOf, as built): a snow layer gone to air at a cell the plan never writes, lit over 11 by
+  // a light the plan placed (emission minus the Manhattan distance); any written cell stays unclassified
+  const { buildVirtual, F_WRITTEN } = await imp('lib/region/vworld.mjs');
+  const pdir = planDir(c.checkId);
+  const irN = JSON.parse(fs.readFileSync(path.join(pdir, 'ir.json'), 'utf8'));
+  const { vw } = buildVirtual({ ir: irN, survey: fs.readFileSync(path.join(pdir, 'survey.bin')), blobs: (s) => { const f = path.join(pdir, 'blobs', `${s}.bin`); return fs.existsSync(f) ? fs.readFileSync(f) : null; } });
+  const lights = [];
+  vw.eachWritten((x, y, z, idx) => { const em = vw.pal.emit[idx]; if (em > 11) lights.push([x, y, z, em]); });
+  const lit = (x, y, z) => lights.some(([lx, ly, lz, em]) => em - (Math.abs(lx - x) + Math.abs(ly - y) + Math.abs(lz - z)) > 11);
+  const list = (diff.list ?? []).map((m) => {
+    if (m.class !== 'none' || !/^minecraft:snow\[/.test(m.was) || !/^minecraft:(air|cave_air)$/.test(m.now)) return m;
+    const [x, y, z] = m.pos.split(',').map(Number);
+    return !(vw.flags(x, y, z) & F_WRITTEN) && lit(x, y, z) ? { ...m, class: 'melt' } : m;
+  });
+  const melted = list.filter((m) => m.class === 'melt').length;
+  const classes = { ...(diff.classes ?? {}) };
+  if (melted) { classes.none -= melted; classes.melt = (classes.melt ?? 0) + melted; }
+  diff.classes = classes;
+  out.exact = { removed: rm.removed, restored: rm.restored, mismatches: diff.mismatches, classes, list: list.filter((m) => m.class === 'none' || m.class === 'melt').slice(0, 40) };
   check(rm.removed && (diff.classes?.none ?? 0) === 0, `item 4 (S3): Regions.remove: E-normal ${diff.mismatches} mismatches, all classified (${json(diff.classes)})`, out.exact.list);
   await leaveWorld();
   spendZero();
