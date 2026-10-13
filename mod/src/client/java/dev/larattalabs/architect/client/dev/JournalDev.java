@@ -101,7 +101,7 @@ public final class JournalDev {
 				return DevBridge.onClient(mc, () -> ServerTasks.callAsPlayer((level, player) -> verdictJson(InfraApi.checkRoad(road(level, f)))))
 					.thenCompose(r -> r);
 			});
-		DevBridge.register("dev.road.place", 180_000, "{points, width?, surface?, slab?, lanterns?, shallowDecks?, owner?, force?} - phase 4e: "
+		DevBridge.register("dev.road.place", 180_000, "{points, width?, surface?, slab?, lanterns?, shallowDecks?, owner?, force?, partial?} - phase 4e: "
 			+ "Sites.placeRoad (written over ticks) -> {placed, siteId, refusals, notes} when it is placed", (req, mc) -> {
 				Fields f = Fields.of(req);
 				return DevBridge.onClient(mc, () -> ServerTasks.callAsPlayer((level, player) -> InfraApi.placeRoad(road(level, f))))
@@ -228,7 +228,7 @@ public final class JournalDev {
 			pts.add(new BlockPos(a.get(0).getAsInt(), a.get(1).getAsInt(), a.get(2).getAsInt()));
 		}
 		return new RoadRequest(level, pts, f.optInt("width", 3, 1, 5), f.optStr("surface", null), f.optStr("slab", null), f.optBool("lanterns", false),
-			f.optBool("shallowDecks", false), Mode.INSTANT, f.optStr("owner", null), new JsonObject(), null, f.optBool("force", false));
+			f.optBool("shallowDecks", false), Mode.INSTANT, f.optStr("owner", null), new JsonObject(), null, f.optBool("force", false), f.optBool("partial", false));
 	}
 
 	private static BlockState state(String s) {
@@ -297,6 +297,7 @@ public final class JournalDev {
 			JsonObject j = new JsonObject();
 			j.addProperty("reason", x.reason().name());
 			j.addProperty("message", x.message());
+			j.add("builds", SlicePTDev.hits(x.builds())); // (6c PT)
 			r.add(j);
 		});
 		o.add("refusals", r);
@@ -327,9 +328,21 @@ public final class JournalDev {
 			JsonObject j = new JsonObject();
 			j.addProperty("reason", x.reason().name());
 			j.addProperty("message", x.message());
+			j.add("builds", SlicePTDev.hits(x.builds())); // (6c PT) a PLAYER_BUILD refusal's builds
 			r.add(j);
 		});
 		o.add("refusals", r);
+		JsonArray sk = new JsonArray(); // (6c 0c) a partial road's skipped spans; (6c PT) a PLAYER_BUILD span names the build
+		p.skipped().forEach(x -> {
+			JsonObject j = new JsonObject();
+			j.addProperty("from", x.fromPoint());
+			j.addProperty("to", x.toPoint());
+			j.addProperty("reason", x.reason().name());
+			j.addProperty("message", x.message());
+			j.addProperty("at", x.at().getX() + " " + x.at().getY() + " " + x.at().getZ());
+			sk.add(j);
+		});
+		o.add("skipped", sk);
 		JsonArray n = new JsonArray();
 		p.notes().forEach(n::add);
 		o.add("notes", n);

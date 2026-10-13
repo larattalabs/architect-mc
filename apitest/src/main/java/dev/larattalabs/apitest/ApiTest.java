@@ -260,7 +260,8 @@ public class ApiTest implements ModInitializer {
 			case "ptbuild":
 			case "ptclaim":
 			case "ptrelease":
-			case "ptplace": {
+			case "ptplace":
+			case "ptcheck": {
 				return ApiTestPT.step(src, a);
 			}
 			case "schemimport":

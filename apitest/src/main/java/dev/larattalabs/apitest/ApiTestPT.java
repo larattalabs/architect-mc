@@ -29,7 +29,8 @@ import net.minecraft.world.level.levelgen.structure.BoundingBox;
  * ptbuild &lt;id&gt;                            Sites.build(id)
  * ptclaim &lt;x0 y0 z0 x1 y1 z1&gt;              Sites.claimBuild (the player as actor)
  * ptrelease &lt;id&gt;                          Sites.releaseBuild (the player as actor)
- * ptplace &lt;design&gt; &lt;x y z&gt;                 Sites.check of a placement: its refusals with their builds (PLAYER_BUILD)
+ * ptplace &lt;design&gt; &lt;x y z&gt; &lt;key&gt;           Sites.place: refused PLAYER_BUILD over a build, with its builds -> pending "ptplace:&lt;key&gt;"
+ * ptcheck &lt;design&gt; &lt;x y z&gt;                 Sites.check of a placement: its refusals with their builds (PLAYER_BUILD)
  * </pre>
  */
 public final class ApiTestPT {
@@ -119,6 +120,28 @@ public final class ApiTestPT {
 					return build(api.sites(src.getServer()).releaseBuild(a[1], src.getPlayer()));
 				}
 				case "ptplace": {
+					// Sites.place: refused PLAYER_BUILD over a build (its refusals and builds), else placed
+					PlaceRequest req = PlaceRequest.of(a[1], level, new BlockPos(Integer.parseInt(a[2]), Integer.parseInt(a[3]), Integer.parseInt(a[4])), Rotation.NONE);
+					return ApiTest.later("ptplace:" + a[5], api.sites(src.getServer()).place(req).handle((r, e) -> {
+						JsonObject o = new JsonObject();
+						if (e != null) {
+							o.addProperty("error", String.valueOf(e));
+							return o;
+						}
+						o.addProperty("placed", r.placed());
+						JsonArray rs = new JsonArray();
+						for (Refusal x : r.refusals()) {
+							JsonObject j = new JsonObject();
+							j.addProperty("reason", x.reason().name());
+							j.addProperty("message", x.message());
+							j.add("builds", hits(x.builds()));
+							rs.add(j);
+						}
+						o.add("refusals", rs);
+						return o;
+					}));
+				}
+				case "ptcheck": {
 					var v = api.sites(src.getServer()).check(PlaceRequest.of(a[1], level, new BlockPos(Integer.parseInt(a[2]), Integer.parseInt(a[3]), Integer.parseInt(a[4])),
 						Rotation.NONE));
 					JsonObject o = new JsonObject();
