@@ -253,6 +253,16 @@ public class ApiTest implements ModInitializer {
 			case "brushundo": {
 				return ApiTestBrush.step(src, a);
 			}
+			case "apipt":
+			case "ptat":
+			case "ptbox":
+			case "ptbuilds":
+			case "ptbuild":
+			case "ptclaim":
+			case "ptrelease":
+			case "ptplace": {
+				return ApiTestPT.step(src, a);
+			}
 			case "schemimport":
 			case "schemexport":
 			case "schemsite":
