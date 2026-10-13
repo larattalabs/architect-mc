@@ -116,6 +116,9 @@ public final class Builds {
 		TrackingRule.on = rules.playerTracking;
 		indexDirty = true;
 		save(true);
+		if (server != null) {
+			reschedule(server);
+		}
 	}
 
 	// ------------------------------------------------------------------ the index
@@ -220,7 +223,11 @@ public final class Builds {
 			}
 		}
 		TrackingRule.on = rules.playerTracking;
-		// re-evaluations the in-memory queue lost with the restart: a provisional build's grace end, a demotion's second look
+		reschedule(s);
+	}
+
+	/** The timed re-evaluations (a provisional build's grace end, a demotion's second look) from the records: a restart, a rule change. */
+	static void reschedule(MinecraftServer s) {
 		for (Rec r : RECS.values()) {
 			if (r.gone || r.mergedInto != null) {
 				continue;
@@ -585,14 +592,18 @@ public final class Builds {
 		save(false);
 	}
 
-	/** Runs the classifier until it is idle (the gate and the claim; ignores the debounce of sections not yet due). */
+	/**
+	 * Runs the classifier until nothing is due (the gate). {@code ignoreDebounce}: sections waiting out their debounce are due now;
+	 * a scheduled re-evaluation further out (a demotion's second look, a grace's end) keeps its time.
+	 */
 	public static void drain(MinecraftServer s, boolean ignoreDebounce) {
-		for (int guard = 0; guard < 100_000; guard++) {
+		long horizon = System.currentTimeMillis() + rules.debounceMs + 1000;
+		for (int guard = 0; guard < 10_000; guard++) {
 			if (ignoreDebounce) {
 				long now = System.currentTimeMillis();
 				for (LevelState ls : LEVELS.values()) {
 					for (var e : ls.due.long2LongEntrySet()) {
-						if (e.getLongValue() > now) {
+						if (e.getLongValue() > now && e.getLongValue() <= horizon) {
 							e.setValue(now);
 						}
 					}
@@ -832,33 +843,41 @@ public final class Builds {
 			return m == Integer.MIN_VALUE || y > m;
 		}
 
-		/** The median of the untracked ground surface of the 7x7 columns around (x, z) (loaded columns only). */
+		/**
+		 * The median ground surface of the untracked columns around (x, z): within 3 (§4), else within 6, then 12 when every column
+		 * that near is tracked (a patch or a floor wider than 7). Loaded columns only; MIN_VALUE when none is found.
+		 */
 		int medianSurface(int x, int z) {
 			long k = BlockPos.asLong(x, 0, z);
 			int m = median.get(k);
 			if (m != Integer.MIN_VALUE) {
 				return m;
 			}
-			int[] s = new int[49];
-			int n = 0;
-			for (int dx = -3; dx <= 3; dx++) {
-				for (int dz = -3; dz <= 3; dz++) {
-					int v = surface(x + dx, z + dz);
-					if (v != Integer.MIN_VALUE) {
-						s[n++] = v;
+			for (int r : new int[] {3, 6, 12}) {
+				int[] s = new int[(2 * r + 1) * (2 * r + 1)];
+				int n = 0;
+				for (int dx = -r; dx <= r; dx++) {
+					for (int dz = -r; dz <= r; dz++) {
+						int v = surface(x + dx, z + dz);
+						if (v != Integer.MIN_VALUE) {
+							s[n++] = v;
+						}
 					}
 				}
+				if (n > 0) {
+					java.util.Arrays.sort(s, 0, n);
+					m = s[n / 2];
+					median.put(k, m);
+					return m;
+				}
 			}
-			if (n == 0) {
-				return Integer.MIN_VALUE;
-			}
-			java.util.Arrays.sort(s, 0, n);
-			m = s[n / 2];
-			median.put(k, m);
-			return m;
+			return Integer.MIN_VALUE;
 		}
 
-		/** The top untracked natural ground block of a column (64 below the motion-blocking top at most), or MIN_VALUE when unloaded. */
+		/**
+		 * An untracked column's ground: its top natural ground block (64 below the motion-blocking top at most). MIN_VALUE when the column
+		 * is not loaded, or its top solid block is tracked (a player's: not the surrounding untracked ground, §4).
+		 */
 		int surface(int x, int z) {
 			long k = BlockPos.asLong(x, 0, z);
 			int v = surface.get(k);
@@ -872,6 +891,10 @@ public final class Builds {
 			}
 			PlacedChunk pc = c.getAttached(Placed.TYPE);
 			int top = c.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, x & 15, z & 15);
+			if (pc != null && pc.get(x, top, z) >= 0) {
+				surface.put(k, Integer.MIN_VALUE);
+				return Integer.MIN_VALUE; // a tracked column
+			}
 			BlockPos.MutableBlockPos m = new BlockPos.MutableBlockPos();
 			int out = top;
 			for (int y = top; y >= Math.max(level.getMinY(), top - 64); y--) {

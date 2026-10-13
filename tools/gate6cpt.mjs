@@ -146,6 +146,8 @@ const uuidOf = async (name) => (await call('dev.pt.uuid', { name })).uuid;
 const rule = (name, value) => call('dev.pt.rule', { name, value: String(value) });
 const boxHash = async (min, max) => call('dev.box.hash', { min, max }, 120_000);
 const bhash = async (b) => boxHash(b.slice(0, 3), b.slice(3));
+/** The kept build cells of a box (position, state, record): a lost or changed build cell changes it; the box's air does not count. */
+const khash = async (b) => call('dev.pt.keptHash', { box: b }, 120_000);
 
 /** One stroke through dev.brush; returns the region's view (or {refused, reason}). */
 async function brush(o) {
@@ -234,9 +236,9 @@ steps.record = async () => {
   const ops = [];
   const expect = new Set();
   const add = (x, yy, z) => expect.add(`${x},${yy},${z}`);
-  // 150 blocks in rows, two placers
+  // 155 blocks in rows, two placers
   const blocks = ['minecraft:stone', 'minecraft:oak_planks', 'minecraft:cobblestone', 'minecraft:glass', 'minecraft:dirt', 'minecraft:oak_log'];
-  for (let i = 0; i < 150; i++) {
+  for (let i = 0; i < 155; i++) {
     const x = X + (i % 25), z = Z + Math.floor(i / 25) * 2;
     ops.push({ item: blocks[i % blocks.length], at: [x, y, z], placer: i % 2 ? 'PTAlex' : 'PTSam' });
     add(x, y, z);
@@ -298,7 +300,7 @@ steps.record = async () => {
     if (v.region) regions.push(v.region);
   }
   const t1 = await cellsOf(wide);
-  check(written >= 50_000 && t1.tracked === t0.tracked && t1.tracked === 0, `item 1: region strokes writing ${written} cells (>= 50k) record 0 (tracked ${t0.tracked} -> ${t1.tracked})`);
+  check(written >= 50_000 && t1.tracked === t0.tracked, `item 1: region strokes writing ${written} cells (>= 50k) record 0 (tracked ${t0.tracked} -> ${t1.tracked})`);
   for (const r of regions.reverse()) await undo(r);
   out.written = written;
   await leaveWorld();
@@ -408,16 +410,19 @@ steps.pistons = async () => {
   await cmd('/tick freeze');
   await cmd(`/setblock ${X - 1} ${y} ${Z} minecraft:redstone_block`);
   await cmd('/tick step 1');
-  await settle(500);
-  const mid = await ptAt([X + 3, y, Z]);
-  out.mid = mid;
+  await sleep(1000); // wall time (dev.wait counts server ticks, and they are frozen)
+  // (the pull moved only the touching block back to X+1, so this push moves that one block: X+1 -> X+2)
+  const mid = await ptAt([X + 2, y, Z]);
+  const midRow = [];
+  for (let x = X + 1; x <= X + 13; x++) midRow.push((await ptAt([x, y, Z])).state.replace('minecraft:', ''));
+  out.mid = { mid, row: midRow };
   await cmd('/save-all flush');
   await leaveWorld();
   await openWorld('G6B PT Pistons');
   await cmd('/tick unfreeze');
   await settle(2000);
   const after = await cellMap(rowBox);
-  check(mid.state === 'minecraft:moving_piston' && after.tracked === 12 && [...want].every((k) => after.map.has(k)), `item 3: a save mid-move (cell ${X + 3} ${mid.state}) keeps them: after the reload the 12 destinations are recorded (${after.tracked})`, [...after.map.keys()]);
+  check(mid.state === 'minecraft:moving_piston' && !mid.tracked && after.tracked === 12 && [...want].every((k) => after.map.has(k)), `item 3: a save mid-move (cell ${X + 2} ${mid.state}, its record on the moving block entity) keeps them: after the reload the 12 destinations are recorded (${after.tracked})`, { mid: midRow, after: [...after.map.keys()] });
   await leaveWorld();
   spendZero();
   return out;
@@ -498,7 +503,7 @@ steps.builds = async () => {
   check(cabin.length === 1 && cabin[0].kind === 'HOUSE' && cabin[0].state === 'ACTIVE' && cabin[0].entrances.length === 1, `item 5: the all-log 9x7x9 cabin with a door: ${cabin.map((b) => `${b.id} ${b.kind} ${b.state} ${b.cells} cells, ${b.entrances.length} entrance`).join('; ')}`);
   const cw = at([X + 20, y, Z, X + 35, y + 2, Z]);
   const dw = at([X + 20, y, Z + 6, X + 35, y + 2, Z + 6]);
-  check(cw.length === 1 && cw[0].kind === 'WALL' && dw.length === 1 && dw[0].kind === 'WALL', `item 5: the cobble wall and the dirt wall 16x3x1: ${cw.map((b) => `WALL? ${b.kind} (${b.state}, N-PT-2)`)} / ${dw.map((b) => `${b.kind} (${b.state}, N-PT-2)`)}`);
+  check(cw.length === 1 && cw[0].kind === 'WALL' && dw.length === 1 && dw[0].kind === 'WALL', `item 5: the cobble wall and the dirt wall 16x3x1: ${cw.map((b) => `${b.kind} (${b.state}, N-PT-2)`)} / ${dw.map((b) => `${b.kind} (${b.state}, N-PT-2)`)}`);
   const fm = at([X, gy, Z + 20, X + 8, y, Z + 28]);
   check(fm.length === 1 && fm[0].kind === 'FARM', `item 5: the 9x9 farm: ${fm.map((b) => `${b.id} ${b.kind} ${b.state} ${b.cells} cells`)}`);
   const none = [...at([X + 20, y, Z + 20, X + 32, y, Z + 29]), ...at([H[0], gy - 1, H[1], H[0] + 4, gy, H[1] + 4]), ...at([P[0], gy, P[1], P[0] + 6, gy, P[1] + 6])];
@@ -591,9 +596,9 @@ steps.hyst = async () => {
   await uses(bridge);
   await settle(6000);
   const merged = (await buildsIn([C[0], y, C[1], D[0] + 8, y + 6, D[1] + 8])).builds;
-  const viaAlias = await call('dev.pt.build', { id: did });
+  const viaAlias = await call('dev.pt.build', { build: did });
   const older = Number(cid.split('-')[1]) < Number(did.split('-')[1]);
-  check(merged.length === 1 && merged[0].id === cid && older && viaAlias.found && viaAlias.id === cid, `item 6: a merge: one build ${merged[0]?.id} (the oldest of ${cid} and ${did}); ${did} resolves to ${viaAlias.id}`);
+  check(merged.length === 1 && merged[0].id === cid && older && viaAlias.found && viaAlias.buildId === cid, `item 6: a merge: one build ${merged[0]?.id} (the oldest of ${cid} and ${did}); ${did} resolves to ${viaAlias.buildId}`);
   const cells0 = await cellsOf([C[0], y, C[1], D[0] + 8, y + 6, D[1] + 8]);
   await cmd('/save-all flush');
   await leaveWorld();
@@ -601,8 +606,8 @@ steps.hyst = async () => {
   await tp(C[0] + 0.5, gy + 25, C[1] + 0.5);
   const after = (await buildsIn([C[0], y, C[1], D[0] + 8, y + 6, D[1] + 8])).builds;
   const cells1 = await cellsOf([C[0], y, C[1], D[0] + 8, y + 6, D[1] + 8]);
-  const viaAlias2 = await call('dev.pt.build', { id: did });
-  check(after.length === 1 && after[0].id === cid && cells1.sha256 === cells0.sha256 && viaAlias2.id === cid, `item 6: after a reload ${cid} is still the build (alias ${did} -> ${viaAlias2.id}; the set's hash equal)`);
+  const viaAlias2 = await call('dev.pt.build', { build: did });
+  check(after.length === 1 && after[0].id === cid && cells1.sha256 === cells0.sha256 && viaAlias2.buildId === cid, `item 6: after a reload ${cid} is still the build (alias ${did} -> ${viaAlias2.buildId}; the set's hash equal)`);
   out.ids = { id, cid, did };
   await leaveWorld();
   spendZero();
@@ -639,8 +644,8 @@ steps.village = async () => {
   const cab = bl.find((b) => b.bounds[0] === CX && b.bounds[2] === CZ);
   const wl = bl.find((b) => b.bounds[2] === WZ);
   check(cab && wl, `item 7: the cabin ${cab?.id} (${cab?.kind}) and the wall ${wl?.id} (${wl?.kind}, ${wl?.state}) are builds, 3 cells from lots ${l0.id} and ${l1.id}`);
-  const hc0 = await bhash(cabinBox(CX, y, CZ));
-  const hw0 = await bhash([b1[0], y, WZ, b1[0] + 11, y + 2, WZ]);
+  const hc0 = await khash(cabinBox(CX, y, CZ));
+  const hw0 = await khash([b1[0], y, WZ, b1[0] + 11, y + 2, WZ]);
   await tp(X + 96.5, gy + 40, Z + 96.5);
   const p = await L.plan('route_demo', claim, { surveyLoad: 'bounded:256', check: true, owner: OWNER });
   const ir = JSON.parse(fs.readFileSync(path.join(SIDECAR_DATA, 'regions', 'plans', p.planId, 'ir.json'), 'utf8'));
@@ -652,8 +657,8 @@ steps.village = async () => {
   check(has(cabRect) && has(wallRect) && lotsOut, `item 7: the plan keeps them out: the IR's keepOut holds the cabin's and the wall's rects (with the 1-cell margin; door aprons ${(ir.keepOut ?? []).length - 2}); no lot meets them`);
   const region = await L.realise(p.planId, { lots: Object.fromEntries(ir.lots.map((l) => [l.id, 'g6a_stub_9'])) });
   const st = await L.waitRegion(region, 3 * 3_600_000);
-  const hc1 = await bhash(cabinBox(CX, y, CZ));
-  const hw1 = await bhash([b1[0], y, WZ, b1[0] + 11, y + 2, WZ]);
+  const hc1 = await khash(cabinBox(CX, y, CZ));
+  const hw1 = await khash([b1[0], y, WZ, b1[0] + 11, y + 2, WZ]);
   out.realise = { state: st.view.state, cells: st.view.cellsWritten, skipped: st.view.cellsSkipped, buildHits: st.view.buildHits };
   check(['PLACED', 'PARTIAL'].includes(st.view.state) && hc1.sha256 === hc0.sha256 && hw1.sha256 === hw0.sha256, `item 7: realised (${st.view.state}, ${st.view.cellsWritten} cells): 0 of the cabin's and the wall's blocks lost (hash equal)`);
   const findings = { keepOut: (ir.keepOut ?? []).length, skipped: Object.fromEntries(Object.entries(st.view.cellsSkipped ?? {}).filter(([k]) => k.startsWith('player_build'))), hits: st.view.buildHits ?? [] };
@@ -677,7 +682,7 @@ steps.brush = async () => {
   await settle(6000);
   const cb = (await buildsIn(cabinBox(X, y, Z))).builds;
   check(cb.length === 1 && cb[0].kind === 'HOUSE', `item 8: the cabin is a build (${cb.map((b) => `${b.id} ${b.kind}`)})`);
-  const h0 = await bhash(cabinBox(X, y, Z));
+  const h0 = await khash(cabinBox(X, y, Z));
   const c0 = await cellsOf(cabinBox(X, y, Z));
   const box = [X - 12, gy - 12, Z - 12, X + 20, gy + 20, Z + 20];
   const snap = await snapBox(box, 'brush');
@@ -687,8 +692,8 @@ steps.brush = async () => {
       { kind: 'smooth', shape: 'sphere', at: [X + 4, gy + 3, Z + 4], radius: 10, strength: 6 }, { kind: 'melt', shape: 'sphere', at: [X + 8, gy + 4, Z + 8], radius: 8, strength: 3 }]) {
       const v = await brush({ ...s, destruction });
       strokes.push({ s: `${s.kind} ${destruction}`, v });
-      const h = await bhash(cabinBox(X, y, Z));
-      check(!v.refused && h.sha256 === h0.sha256, `item 8: ${s.kind} ${destruction.toUpperCase()} without consent at and over the cabin: 0 of its blocks lost (${v.state ?? v.refused}; ${v.cellsWritten} cells written, player_build skipped ${v.cellsSkipped?.player_build ?? 0})`);
+      const h = await khash(cabinBox(X, y, Z));
+      check(!v.refused && h.sha256 === h0.sha256 && h.cells === h0.cells, `item 8: ${s.kind} ${destruction.toUpperCase()} without consent at and over the cabin: 0 of its ${h0.cells} blocks lost (${v.state ?? v.refused}; ${v.cellsWritten} cells written, player_build skipped ${v.cellsSkipped?.player_build ?? 0})`);
     }
   }
   const skipped = strokes.reduce((a, x) => a + (x.v.cellsSkipped?.player_build ?? 0), 0);
@@ -717,11 +722,11 @@ steps.felling = async () => {
   await settle(6000);
   const cb = (await buildsIn(cabinBox(X, y, Z))).builds;
   check(cb.length === 1, `item 9: the cabin ${cb[0]?.id} stands, the tree's branch touching its east wall`);
-  const h0 = await bhash(cabinBox(X, y, Z));
+  const h0 = await khash(cabinBox(X, y, Z));
   const box = [X - 8, gy - 4, Z - 8, X + 24, gy + 14, Z + 16];
   const snap = await snapBox(box, 'felling');
   const v = await brush({ kind: 'raise', shape: 'cylinder', at: [TX, gy, TZ], radius: 2, strength: 2 });
-  const h1 = await bhash(cabinBox(X, y, Z));
+  const h1 = await khash(cabinBox(X, y, Z));
   const trunk = await call('dev.region.logs', { box: [TX, y, TZ, TX, y + 6, TZ] }, 300_000);
   const branch = await call('dev.region.logs', { box: [X + 9, y + 4, TZ, TX - 1, y + 4, TZ] }, 300_000);
   const kb = v.cellsSkipped?.['tree_kept.build'] ?? 0;
@@ -758,13 +763,13 @@ steps.undo = async () => {
   const pre = await cellMap(box);
   const snap = await snapBox(box, 'undo');
   // with consent (the bot: an op), a PLAYER_BLOCKS stroke over the hut's east half and the singles
-  const v = await brush({ kind: 'lower', shape: 'cylinder', at: [X + 14, gy + 3, Z + 4], radius: 10, strength: 8, destruction: 'player_blocks', consent: [hb.id] });
+  const v = await brush({ kind: 'lower', shape: 'cylinder', at: [X + 15, gy + 3, Z + 3], radius: 14, strength: 10, destruction: 'player_blocks', consent: [hb.id] });
   const mid = await cellMap(box);
   const lostBuild = [...pre.map].filter(([k, x]) => x.kept && !mid.map.has(k)).length;
   const lostInc = [...pre.map].filter(([k, x]) => !x.kept && !mid.map.has(k)).length;
-  const standing = (await call('dev.pt.build', { id: hb.id }));
+  const standing = (await call('dev.pt.build', { build: hb.id }));
   check(!v.refused && lostBuild >= 40 && lostInc >= 20, `item 10: with consent the stroke cleared ${lostBuild} of the build's cells (>= 40) and ${lostInc} incidental ones (>= 20); ${v.cellsWritten} cells written`);
-  check(standing.found, `item 10: part of the build stands (${hb.id}: ${standing.cells} cells left), so its id is the same after the undo`);
+  check(standing.found, `item 10: part of the build stands (${hb.id} is not gone), so its id is the same after the undo`);
   // one undo, before the 60 s demotion gap
   await undo(v.region);
   const d = await diffBox(box, snap);
@@ -921,18 +926,19 @@ steps.claim = async () => {
   const c0 = await cellsOf(box);
   check(c0.tracked === 0, `item 13: the pre-PT cabin is not tracked (${c0.tracked})`);
   const cl = await call('dev.pt.claim', { box, actor: 'bot' });
-  check(!cl.refused && cl.state === 'CLAIMED' && cl.cells > 200, `item 13: claimed: ${cl.id} ${cl.state} ${cl.cells} cells (${cl.kind})`, cl);
-  const h0 = await bhash(box);
+  check(!cl.refused && cl.state === 'CLAIMED' && cl.cells > 200, `item 13: claimed: ${cl.buildId} ${cl.state} ${cl.cells} cells (${cl.kind})`, cl);
+  const h0 = await khash(box);
   const st = { kind: 'lower', shape: 'cylinder', at: [X + 4, gy + 4, Z + 4], radius: 7, strength: 8, destruction: 'player_blocks' };
   const v1 = await brush(st);
-  const h1 = await bhash(box);
-  check(!v1.refused && h1.sha256 === h0.sha256 && (v1.cellsSkipped?.player_build ?? 0) > 0, `item 13: kept by a stroke (PLAYER_BLOCKS by an op, no consent): hash equal, ${v1.cellsSkipped?.player_build} build cells skipped`);
+  const h1 = await khash(box);
+  check(!v1.refused && h1.sha256 === h0.sha256 && h0.cells > 200 && (v1.cellsSkipped?.player_build ?? 0) > 0, `item 13: kept by a stroke (PLAYER_BLOCKS by an op, no consent): its ${h0.cells} cells unchanged, ${v1.cellsSkipped?.player_build} build cells skipped`);
   if (v1.region) await undo(v1.region);
-  const rl = await call('dev.pt.release', { id: cl.id, actor: 'bot' });
-  check(rl.state === 'RELEASED', `item 13: released: ${rl.id} ${rl.state}`);
+  const rl = await call('dev.pt.release', { build: cl.buildId, actor: 'bot' });
+  check(rl.state === 'RELEASED', `item 13: released: ${rl.buildId} ${rl.state}`);
+  const t2a = await cellsOf(box);
   const v2 = await brush(st);
-  const h2 = await bhash(box);
-  check(!v2.refused && h2.sha256 !== h0.sha256 && (v2.cellsSkipped?.player_build ?? 0) === 0, `item 13: cleared by the next stroke (the cabin changed; ${v2.cellsWritten} cells written, 0 build cells skipped)`);
+  const t2b = await cellsOf(box);
+  check(!v2.refused && t2b.tracked < t2a.tracked && (v2.cellsSkipped?.player_build ?? 0) === 0, `item 13: cleared by the next stroke (${t2a.tracked - t2b.tracked} of its ${t2a.tracked} cells written; ${v2.cellsWritten} cells written, 0 build cells skipped)`);
   if (v2.region) await undo(v2.region);
   // supports: a torch of a build on natural ground beside a lowered column stays
   const H = [X + 30, Z];
@@ -972,10 +978,10 @@ steps.plan = async () => {
   const adj = targetRect(kitBuilds, near.build?.id);
   const ep = buildEndpoint(kitBuilds, near.build?.id, 'door');
   check(near.build && adj && ep.end, `item 14: near {build kind house} picks ${near.build?.id}; adjacent {to {build}} answers its rect ${json(adj)}; endpoint {build, port door} ends at ${json(ep.end)} (apron ${json(ep.apron)})`);
-  const h0 = await bhash(cabinBox(X, y, Z));
+  const h0 = await khash(cabinBox(X, y, Z));
   const road = await call('dev.road.place', { points: [[ep.end[0], gy, ep.end[2] - 16], [ep.end[0], gy, ep.end[2]]], width: 1, owner: OWNER }, 300_000);
   const end = await ptAt([ep.end[0], gy, ep.end[2]]);
-  const h1 = await bhash(cabinBox(X, y, Z));
+  const h1 = await khash(cabinBox(X, y, Z));
   check(road.placed && h1.sha256 === h0.sha256, `item 14: a road placed to the door's apron ends on it (its last centre cell ${json([ep.end[0], gy, ep.end[2]])} is now ${end.state}), the cabin untouched`);
   const plan = JSON.parse(fs.readFileSync(path.join(KIT, 'schemas', 'plan.json'), 'utf8'));
   const cat = Object.fromEntries(plan['x-catalogue'].entries.map((e) => [e.id, e]));

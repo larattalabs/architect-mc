@@ -160,7 +160,7 @@ public final class SlicePTDev {
 
 	static JsonObject build(Build b) {
 		JsonObject o = new JsonObject();
-		o.addProperty("id", b.id());
+		o.addProperty("buildId", b.id()); // never "id": a top-level answer's "id" is the request's (DevBridge routes answers by it)
 		o.addProperty("dimension", b.dimension().identifier().toString());
 		JsonArray bb = new JsonArray();
 		bb.add(b.bounds().minX());
@@ -268,6 +268,36 @@ public final class SlicePTDev {
 					}
 				});
 			});
+		DevBridge.register("dev.pt.keptHash", 120_000, "{box} - (6c PT) SHA-256 over the kept build cells of a box: position, block state and record "
+			+ "(a lost or changed build cell changes it) -> {cells, sha256}", (req, mc) -> {
+				int[] b = ints(req.get("box"));
+				return ServerTasks.callAsPlayer((level, bot) -> {
+					try {
+						MessageDigest md = MessageDigest.getInstance("SHA-256");
+						int n = 0;
+						for (int y = b[1]; y <= b[4]; y++) {
+							for (int z = b[2]; z <= b[5]; z++) {
+								for (int x = b[0]; x <= b[3]; x++) {
+									BlockPos p = new BlockPos(x, y, z);
+									String k = Placed.build(level, null, p);
+									if (k == null) {
+										continue;
+									}
+									n++;
+									Placed.Rec r = Placed.record(level, p);
+									md.update((x + "," + y + "," + z + "=" + level.getBlockState(p) + "/" + r.placer() + "/" + k).getBytes(StandardCharsets.UTF_8));
+								}
+							}
+						}
+						JsonObject o = new JsonObject();
+						o.addProperty("cells", n);
+						o.addProperty("sha256", HexFormat.of().formatHex(md.digest()));
+						return o;
+					} catch (Exception e) {
+						throw new RuntimeException(e);
+					}
+				});
+			});
 		DevBridge.register("dev.pt.at", 10_000, "{at: [x,y,z]} - (6c PT) one cell's record (placer, build, kept build)", (req, mc) -> {
 			int[] a = ints(req.get("at"));
 			return ServerTasks.callAsPlayer((level, bot) -> {
@@ -292,7 +322,9 @@ public final class SlicePTDev {
 					}
 					JsonArray a = new JsonArray();
 					for (Build x : BuildViews.builds(level.dimension(), b == null ? null : new BoundingBox(b[0], b[1], b[2], b[3], b[4], b[5]))) {
-						a.add(build(x));
+						JsonObject j = build(x);
+						j.addProperty("id", x.id()); // in a list: no clash with the request id
+						a.add(j);
 					}
 					JsonObject o = new JsonObject();
 					o.add("builds", a);
@@ -301,8 +333,8 @@ public final class SlicePTDev {
 					return o;
 				});
 			});
-		DevBridge.register("dev.pt.build", 10_000, "{id} - (6c PT) one build (Sites.build: an alias resolves to its survivor)", (req, mc) -> {
-			String id = Fields.of(req).nonBlank("id");
+		DevBridge.register("dev.pt.build", 10_000, "{build} - (6c PT) one build (Sites.build: an alias resolves to its survivor) -> {found, buildId, ...}", (req, mc) -> {
+			String id = Fields.of(req).nonBlank("build");
 			return ServerTasks.callAsPlayer((level, bot) -> {
 				var b = BuildViews.build(id);
 				JsonObject o = b.isPresent() ? build(b.get()) : new JsonObject();
@@ -338,8 +370,8 @@ public final class SlicePTDev {
 					}
 				});
 			});
-		DevBridge.register("dev.pt.release", 30_000, "{id, actor?: bot|console|<fake name>} - (6c PT) Sites.releaseBuild", (req, mc) -> {
-			String id = Fields.of(req).nonBlank("id");
+		DevBridge.register("dev.pt.release", 30_000, "{build, actor?: bot|console|<fake name>} - (6c PT) Sites.releaseBuild -> {buildId, state, ...}", (req, mc) -> {
+			String id = Fields.of(req).nonBlank("build");
 			String actor = Fields.of(req).optStr("actor", "bot");
 			return ServerTasks.callAsPlayer((level, bot) -> {
 				try {
