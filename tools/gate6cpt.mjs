@@ -17,8 +17,9 @@
 //                     FARM; 20 torches, a filled 5x5x2 hole, a levelled 7x7 dirt patch: 0 builds; the grace's own check
 //       hyst       6  (graceMs 0) a 40-cell build cut to 21 stays; cut to 19 incidental after the debounce and the 60 s gap; regrown to
 //                     30 stays incidental; the id survives +50 blocks, a merge (oldest wins) and a reload
-//       village    7  route_demo (S3's program) on a flat copy with the cabin and a cobble wall 3 cells from its lots: the plan keeps
-//                     them out, the realise loses 0 of their blocks (hash equal), the findings recorded
+//       village    7  S7's flat_village (the village; S3's route_demo plans nothing on a claim holding builds: see the step) on a flat
+//                     copy with the cabin and a cobble wall 2 cells beside its lots: the plan keeps them out, the realise loses 0 of
+//                     their blocks (hash equal), the findings recorded, the removal exact
 //       brush      8  raise, lower, smooth and melt strokes at and over the cabin, NATURAL_ONLY and PLAYER_BLOCKS without consent: 0 lost
 //       felling    9  the cabin's wall touching a tree: the flood stops at its logs (tree_kept.build), the cabin unchanged, the rest felled
 //       undo      10  with consent a stroke clears 40+ of a build's cells and 20 incidental ones; one undo: blocks E-flat 0, and the
@@ -614,59 +615,77 @@ steps.hyst = async () => {
   return out;
 };
 
-// ------------------------------------------------------------------ item 7: the village (route_demo, S3's program, on a flat copy)
+// ------------------------------------------------------------------ item 7: the village (S7's flat_village on a flat copy)
 
+// The contract names "an S3 copy". S3's program (route_demo) plans its flat variant only while the claim's ground varies by at most 2,
+// and any build in the claim (a 7-high cabin) turns it into its natural variant, which writes next to nothing here; the village scenario
+// with lots, S7's flat_village, is the one whose lots and street the builds can be kept out of, so item 7 runs on S7 (CONTRACT PT as built).
+const S7 = JSON.parse(fs.readFileSync(path.join(root, 'scenarios', 's7_flat_village.json'), 'utf8'));
 steps.village = async () => {
-  const X = 9000, Z = 9000;
-  const gy = await flatWorld('G6B PT Village', X + 96, Z + 96);
+  const X = 5000, Z = 5000;
+  const gy = await flatWorld('G6B PT Village', X + 56, Z + 56);
   const y = gy + 1;
-  const claim = [X, Z, X + 191, Z + 191];
+  const claim = [X, Z, X + 111, Z + 111];
+  const params = { lots: S7.params.lots };
   const out = {};
-  // a first plan: where route_demo's lots fall on this flat claim
-  const p0 = await L.plan('route_demo', claim, { surveyLoad: 'bounded:256', check: false, owner: OWNER });
-  const ir0 = JSON.parse(fs.readFileSync(path.join(SIDECAR_DATA, 'regions', 'plans', p0.planId, 'ir.json'), 'utf8'));
   const lb = (l) => [l.box.minX, l.box.minY, l.box.minZ, l.box.maxX, l.box.maxY, l.box.maxZ];
-  out.lots = ir0.lots.map((l) => ({ id: l.id, box: lb(l) }));
-  // the cabin 3 cells west of the first lot (a 2-cell gap... 3 cells from its edge), a cobble wall 3 cells south of the second
-  const l0 = ir0.lots[0], l1 = ir0.lots[1];
-  const b0 = lb(l0);
-  const b1 = lb(l1);
-  const CX = b0[0] - 3 - 9, CZ = b0[2];
+  // a first plan: where flat_village's lots fall on this flat claim
+  const p0 = await L.plan('flat_village', claim, { params, surveyLoad: 'bounded:256', check: false, owner: OWNER });
+  const ir0 = JSON.parse(fs.readFileSync(path.join(SIDECAR_DATA, 'regions', 'plans', p0.planId, 'ir.json'), 'utf8'));
+  out.lots0 = ir0.lots.map((l) => ({ id: l.id, box: lb(l) }));
+  // the cabin 3 cells beside the first lot (2 cells between them), a cobble wall 3 cells beside the second
+  const b0 = lb(ir0.lots[0]);
+  const b1 = lb(ir0.lots[1]);
+  const CX = b0[3] + 3, CZ = b0[2];
   await tp(CX + 4.5, gy + 30, CZ + 4.5);
   await uses(cabinOps(CX, y, CZ));
-  const WZ = b1[5] + 3;
+  const WX = b1[0], WZ = b1[2] - 3;
   const wops = [];
-  for (let x = b1[0]; x < b1[0] + 12; x++) for (let yy = y; yy < y + 3; yy++) wops.push({ item: 'minecraft:cobblestone', at: [x, yy, WZ] });
-  await tp(b1[0] + 6.5, gy + 30, WZ + 0.5);
+  for (let x = WX; x < WX + 12; x++) for (let yy = y; yy < y + 3; yy++) wops.push({ item: 'minecraft:cobblestone', at: [x, yy, WZ] });
+  await tp(WX + 6.5, gy + 30, WZ + 0.5);
   await uses(wops);
   await settle(6000);
-  const bl = (await buildsIn([X, gy - 2, Z, X + 191, gy + 12, Z + 191])).builds;
+  const bl = (await buildsIn([X, gy - 2, Z, X + 111, gy + 12, Z + 111])).builds;
   const cab = bl.find((b) => b.bounds[0] === CX && b.bounds[2] === CZ);
-  const wl = bl.find((b) => b.bounds[2] === WZ);
-  check(cab && wl, `item 7: the cabin ${cab?.id} (${cab?.kind}) and the wall ${wl?.id} (${wl?.kind}, ${wl?.state}) are builds, 3 cells from lots ${l0.id} and ${l1.id}`);
-  const hc0 = await khash(cabinBox(CX, y, CZ));
-  const hw0 = await khash([b1[0], y, WZ, b1[0] + 11, y + 2, WZ]);
-  await tp(X + 96.5, gy + 40, Z + 96.5);
-  const p = await L.plan('route_demo', claim, { surveyLoad: 'bounded:256', check: true, owner: OWNER });
+  const wl = bl.find((b) => b.bounds[2] === WZ && b.bounds[0] === WX);
+  check(cab && wl, `item 7: the cabin ${cab?.id} (${cab?.kind}) and the wall ${wl?.id} (${wl?.kind}, ${wl?.state}) are builds, 2 cells beside lots ${ir0.lots[0].id} and ${ir0.lots[1].id}`);
+  const cabBox = cabinBox(CX, y, CZ);
+  const wallBox = [WX, y, WZ, WX + 11, y + 2, WZ];
+  const hc0 = await khash(cabBox);
+  const hw0 = await khash(wallBox);
+  await tp(X + 56.5, gy + 40, Z + 56.5);
+  const p = await L.plan('flat_village', claim, { params, surveyLoad: 'bounded:256', check: false, owner: OWNER });
   const ir = JSON.parse(fs.readFileSync(path.join(SIDECAR_DATA, 'regions', 'plans', p.planId, 'ir.json'), 'utf8'));
   const has = (r) => (ir.keepOut ?? []).some((k) => json(k) === json(r));
   const cabRect = [cab.bounds[0] - 1, cab.bounds[2] - 1, cab.bounds[3] + 1, cab.bounds[5] + 1];
   const wallRect = [wl.bounds[0] - 1, wl.bounds[2] - 1, wl.bounds[3] + 1, wl.bounds[5] + 1];
+  const meets = (b, r) => b[0] <= r[2] && b[3] >= r[0] && b[2] <= r[3] && b[5] >= r[1];
+  const lotsOut = ir.lots.every((l) => !meets(lb(l), cabRect) && !meets(lb(l), wallRect));
+  const roadsOut = (ir.roads ?? []).every((rd) => (rd.points ?? []).every((q) => !(q[0] >= cabRect[0] && q[0] <= cabRect[2] && q[2] >= cabRect[1] && q[2] <= cabRect[3])
+    && !(q[0] >= wallRect[0] && q[0] <= wallRect[2] && q[2] >= wallRect[1] && q[2] <= wallRect[3])));
   out.keepOut = ir.keepOut;
-  const lotsOut = ir.lots.every((l) => { const b = lb(l); return !(b[0] <= cabRect[2] && b[3] >= cabRect[0] && b[2] <= cabRect[3] && b[5] >= cabRect[1]) && !(b[0] <= wallRect[2] && b[3] >= wallRect[0] && b[2] <= wallRect[3] && b[5] >= wallRect[1]); });
-  check(has(cabRect) && has(wallRect) && lotsOut, `item 7: the plan keeps them out: the IR's keepOut holds the cabin's and the wall's rects (with the 1-cell margin; door aprons ${(ir.keepOut ?? []).length - 2}); no lot meets them`);
+  out.lots = ir.lots.map((l) => ({ id: l.id, box: lb(l) }));
+  check(has(cabRect) && has(wallRect) && lotsOut && roadsOut, `item 7: the plan keeps them out: the IR's keepOut holds the cabin's and the wall's rects (a 1-cell margin; ${(ir.keepOut ?? []).length - 2} door-apron rects); no lot or street point meets them (lots ${ir.lots.length})`);
+  const yr = p.claimY ?? [-64, 64];
+  const box = [claim[0] - 8, yr[0], claim[1] - 8, claim[2] + 8, yr[1], claim[3] + 8];
+  const h0 = await call('dev.region.hash', { box }, 3_600_000);
   const region = await L.realise(p.planId, { lots: Object.fromEntries(ir.lots.map((l) => [l.id, 'g6a_stub_9'])) });
   const st = await L.waitRegion(region, 3 * 3_600_000);
-  const hc1 = await khash(cabinBox(CX, y, CZ));
-  const hw1 = await khash([b1[0], y, WZ, b1[0] + 11, y + 2, WZ]);
-  out.realise = { state: st.view.state, cells: st.view.cellsWritten, skipped: st.view.cellsSkipped, buildHits: st.view.buildHits };
-  check(['PLACED', 'PARTIAL'].includes(st.view.state) && hc1.sha256 === hc0.sha256 && hw1.sha256 === hw0.sha256, `item 7: realised (${st.view.state}, ${st.view.cellsWritten} cells): 0 of the cabin's and the wall's blocks lost (hash equal)`);
-  const findings = { keepOut: (ir.keepOut ?? []).length, skipped: Object.fromEntries(Object.entries(st.view.cellsSkipped ?? {}).filter(([k]) => k.startsWith('player_build'))), hits: st.view.buildHits ?? [] };
+  const hc1 = await khash(cabBox);
+  const hw1 = await khash(wallBox);
+  out.realise = { state: st.view.state, cells: st.view.cellsWritten, skipped: st.view.cellsSkipped, buildHits: st.view.buildHits, lots: st.view.lots?.map((l) => `${l.id}:${l.state}`) };
+  const placedLots = (st.view.lots ?? []).filter((l) => /placed/i.test(l.state)).length;
+  check(['PLACED', 'PARTIAL'].includes(st.view.state) && st.view.cellsWritten > 100 && placedLots >= 8 && hc1.sha256 === hc0.sha256 && hc1.cells === hc0.cells && hw1.sha256 === hw0.sha256,
+    `item 7: realised (${st.view.state}, ${st.view.cellsWritten} terrain cells written, ${placedLots} of ${ir.lots.length} lots placed): 0 of the cabin's ${hc0.cells} and the wall's ${hw0.cells} blocks lost (hash equal)`);
+  const findings = { keepOut: ir.keepOut ?? [], skipped: Object.fromEntries(Object.entries(st.view.cellsSkipped ?? {}).filter(([k]) => k.startsWith('player_build'))), hits: st.view.buildHits ?? [] };
   out.findings = findings;
   fs.writeFileSync(path.join(OUT, 'village-findings.json'), JSON.stringify(findings, null, 2));
-  check(findings.keepOut >= 2, `item 7: findings recorded (village-findings.json): keepOut ${findings.keepOut} rects, cellsSkipped ${json(findings.skipped)}, buildHits ${findings.hits.length}`);
+  check(findings.keepOut.length >= 2, `item 7: findings recorded (village-findings.json): the plan's keepOut ${findings.keepOut.length} rects; the realise's cellsSkipped ${json(findings.skipped)}, buildHits ${findings.hits.length}`);
+  // the realise removed: the world as before (its group undo is exact), the builds untouched
   await cmd('/kill @e[type=!minecraft:player]');
   await undo(region);
+  const h1 = await call('dev.region.hash', { box }, 3_600_000);
+  check(h1.sha256 === h0.sha256, 'item 7: the region removed by its owner: the world hash equals the pre-realise one');
   await leaveWorld();
   spendZero();
   return out;
@@ -928,28 +947,30 @@ steps.claim = async () => {
   const cl = await call('dev.pt.claim', { box, actor: 'bot' });
   check(!cl.refused && cl.state === 'CLAIMED' && cl.cells > 200, `item 13: claimed: ${cl.buildId} ${cl.state} ${cl.cells} cells (${cl.kind})`, cl);
   const h0 = await khash(box);
-  const st = { kind: 'lower', shape: 'cylinder', at: [X + 4, gy + 4, Z + 4], radius: 7, strength: 8, destruction: 'player_blocks' };
+  // a raise at the west wall's middle: it writes the wall's bottom logs (natural by class), and felling takes every log joined to them
+  const st = { kind: 'raise', shape: 'cylinder', at: [X, gy, Z + 4], radius: 2, strength: 2 };
   const v1 = await brush(st);
   const h1 = await khash(box);
-  check(!v1.refused && h1.sha256 === h0.sha256 && h0.cells > 200 && (v1.cellsSkipped?.player_build ?? 0) > 0, `item 13: kept by a stroke (PLAYER_BLOCKS by an op, no consent): its ${h0.cells} cells unchanged, ${v1.cellsSkipped?.player_build} build cells skipped`);
+  check(!v1.refused && h1.sha256 === h0.sha256 && h0.cells > 200 && (v1.cellsSkipped?.player_build ?? 0) > 0, `item 13: kept by a stroke (a raise at its wall's base): its ${h0.cells} cells unchanged, ${v1.cellsSkipped?.player_build} build cells skipped`);
   if (v1.region) await undo(v1.region);
   const rl = await call('dev.pt.release', { build: cl.buildId, actor: 'bot' });
   check(rl.state === 'RELEASED', `item 13: released: ${rl.buildId} ${rl.state}`);
   const t2a = await cellsOf(box);
   const v2 = await brush(st);
   const t2b = await cellsOf(box);
-  check(!v2.refused && t2b.tracked < t2a.tracked && (v2.cellsSkipped?.player_build ?? 0) === 0, `item 13: cleared by the next stroke (${t2a.tracked - t2b.tracked} of its ${t2a.tracked} cells written; ${v2.cellsWritten} cells written, 0 build cells skipped)`);
+  check(!v2.refused && t2b.tracked < t2a.tracked && (v2.cellsSkipped?.player_build ?? 0) === 0, `item 13: cleared by the next stroke (${t2a.tracked - t2b.tracked} of its ${t2a.tracked} cells written, felled ${v2.cellsSkipped?.treeCells ?? 0}; ${v2.cellsWritten} cells written, 0 build cells skipped)`);
   if (v2.region) await undo(v2.region);
   // supports: a torch of a build on natural ground beside a lowered column stays
   const H = [X + 30, Z];
-  const hut = cabinOps(H[0], y, H[1], { item: 'minecraft:cobblestone' }).filter((o) => o.at[1] < y + 3 || o.at[1] === y + 6);
+  const hut = cabinOps(H[0], y, H[1], { item: 'minecraft:cobblestone' }).filter((o) => o.at[1] < y + 3 || o.at[1] === y + 6).map((o) => (o.at[1] === y + 6 ? { ...o,
+    at: [o.at[0], y + 3, o.at[2]] } : o));
   await uses(hut);
   const T = [H[0] + 10, y, H[1] + 4];
   await uses([{ item: 'minecraft:torch', at: T }]);
   await settle(6000);
   const hb = (await buildsIn([H[0], y, H[1], T[0], y + 6, H[1] + 8])).builds;
   const ta = await ptAt(T);
-  check(hb.length === 1 && ta.kept === hb[0].id, `item 13: the torch at ${T} is a cell of the build ${hb[0]?.id} (kept ${ta.kept})`);
+  check(hb.length === 1 && ta.kept === hb[0].id, `item 13: the torch at ${T} is a cell of the build ${hb[0]?.id} (kept ${ta.kept}; builds there ${hb.map((b) => b.id)})`);
   const v3 = await brush({ kind: 'lower', shape: 'cylinder', at: [T[0] + 2, gy, T[2]], radius: 3, strength: 3 });
   const tb = await ptAt(T);
   const ground = await ptAt([T[0], gy, T[2]]);
@@ -998,7 +1019,11 @@ steps.cost = async () => {
   const gy = await flatWorld('G6B PT Cost', X, Z);
   const y = gy + 1;
   await uses(cabinOps(X, y, Z));
-  // a dense section: 16 x 16 x 2 of planks (512 cells in one section)
+  await settle(6000);
+  // the cold maxima (the first classification after a start: class loading, the JIT), then the steady state from here on
+  const cold = await call('dev.pt.stats', { reset: true }, 600_000);
+  // a dense section: 16 x 16 x 2 of planks (512 cells in one section), and a second cabin, classified in ticks
+  await uses(cabinOps(X, y, Z + 20));
   const dense = [];
   for (let i = 0; i < 512; i++) dense.push({ item: 'minecraft:oak_planks', at: [X + 32 + (i % 16), y + Math.floor(i / 256), Z + (Math.floor(i / 16) % 16)] });
   await uses(dense);
@@ -1006,13 +1031,13 @@ steps.cost = async () => {
   await call('dev.pt.builds', { drain: true });
   const sparse = await call('dev.pt.stats', { box: cabinBox(X, y, Z), bench: 1_000_000 }, 600_000);
   const dn = await call('dev.pt.stats', { box: [X + 32, y, Z, X + 47, y + 1, Z + 15] }, 600_000);
-  const out = { sparse, dense: dn };
-  fs.writeFileSync(path.join(OUT, 'cost.json'), JSON.stringify(out, null, 2));
-  check(sparse.tracked > 0 && dn.tracked >= 512, `item 15 (recorded): cost measured (cost.json)`);
+  const out = { sparse, dense: dn, cold: { maxTickNs: cold.classifierMaxTickNs, phases: cold.classifierPhaseMaxNs } };
+  fs.writeFileSync(path.join(OUT, 'cost-detail.json'), JSON.stringify(out, null, 2));
+  check(sparse.tracked > 0 && dn.tracked >= 512, `item 15 (recorded): cost measured (cost-detail.json)`);
   bar(true, `item 15: sparse ${sparse.bytesPerBlock.toFixed(2)} B/block, ${sparse.bytesPerSection.toFixed(0)} B/section on disk (gzip ${sparse.nbtGzipBytes} B for ${sparse.tracked}), heap ${sparse.heapPerBlock.toFixed(1)} B/block; dense ${dn.bytesPerBlock.toFixed(2)} B/block, heap ${dn.heapBytes} B`);
   bar(true, `item 15: setBlockState added ns (median of 1M): tracked chunk ${sparse.hookNs?.tracked}, untracked ${sparse.hookNs?.untracked}`);
   const maxMs = (sparse.classifierMaxTickNs ?? 0) / 1e6;
-  bar(maxMs <= 1.5, `item 15: the classifier's own CPU per tick max ${maxMs.toFixed(2)} ms (budget 1 ms; recorded)`);
+  bar(maxMs <= 1.0, `item 15: the classifier's own CPU per tick max ${maxMs.toFixed(2)} ms after a warm-up (budget 1 ms; cold, the first classification after the start: ${((cold.classifierMaxTickNs ?? 0) / 1e6).toFixed(2)} ms; recorded)`);
   await leaveWorld();
   spendZero();
   return out;

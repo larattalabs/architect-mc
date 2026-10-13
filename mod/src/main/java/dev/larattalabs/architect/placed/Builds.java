@@ -243,7 +243,17 @@ public final class Builds {
 		}
 	}
 
-	/** Writes the index when it changed (at most once a second unless {@code now}): a temp file, then an atomic rename. */
+	/** One writer thread for the index (writes stay in order; the server thread only snapshots the JSON). */
+	private static final java.util.concurrent.ExecutorService WRITER = java.util.concurrent.Executors.newSingleThreadExecutor(r -> {
+		Thread t = new Thread(r, "Architect-builds-index");
+		t.setDaemon(true);
+		return t;
+	});
+
+	/**
+	 * Writes the index when it changed (at most once a second unless {@code now}): a temp file, then an atomic rename. The JSON is
+	 * made on the server thread; the write runs on the index writer ({@code now}: waited for, the world stop's save).
+	 */
 	static void save(boolean now) {
 		Path f = file;
 		if (f == null || !indexDirty || !now && System.currentTimeMillis() - lastWrite < 1000) {
@@ -258,15 +268,25 @@ public final class Builds {
 			a.add(toJson(r));
 		}
 		o.add("builds", a);
-		try {
-			Files.createDirectories(f.getParent());
-			Path tmp = f.resolveSibling("builds.json.tmp");
-			Files.writeString(tmp, GSON.toJson(o) + "\n", StandardCharsets.UTF_8);
-			Files.move(tmp, f, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
-			indexDirty = false;
-			lastWrite = System.currentTimeMillis();
-		} catch (IOException e) {
-			Architect.LOGGER.error("PT: could not write the build index {}: {}", f, e.toString());
+		String text = GSON.toJson(o) + "\n";
+		indexDirty = false;
+		lastWrite = System.currentTimeMillis();
+		java.util.concurrent.Future<?> w = WRITER.submit(() -> {
+			try {
+				Files.createDirectories(f.getParent());
+				Path tmp = f.resolveSibling("builds.json.tmp");
+				Files.writeString(tmp, text, StandardCharsets.UTF_8);
+				Files.move(tmp, f, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+			} catch (IOException e) {
+				Architect.LOGGER.error("PT: could not write the build index {}: {}", f, e.toString());
+			}
+		});
+		if (now) {
+			try {
+				w.get(30, java.util.concurrent.TimeUnit.SECONDS);
+			} catch (Exception e) {
+				Architect.LOGGER.error("PT: the build index {} was not written in time: {}", f, e.toString());
+			}
 		}
 	}
 
@@ -506,8 +526,16 @@ public final class Builds {
 		return maxTickNs;
 	}
 
+	/** The classifier's own CPU per job phase, max ns (recorded with item 15). */
+	static final Map<String, Long> PHASE_MAX = new java.util.concurrent.ConcurrentHashMap<>();
+
+	public static Map<String, Long> phaseMax() {
+		return Map.copyOf(PHASE_MAX);
+	}
+
 	public static void resetMax() {
 		maxTickNs = 0;
+		PHASE_MAX.clear();
 	}
 
 	public static long jobsRun() {
@@ -706,6 +734,7 @@ public final class Builds {
 		final Long2IntOpenHashMap surface = new Long2IntOpenHashMap();
 		final Long2IntOpenHashMap median = new Long2IntOpenHashMap();
 		boolean partialHit;
+		int statsCursor;
 
 		Job(ServerLevel level, long section, long now) {
 			this.level = level;
@@ -718,8 +747,19 @@ public final class Builds {
 
 		/** Works until the deadline; true when done. */
 		boolean step(long deadline) {
+			long t = System.nanoTime();
+			try {
+				return step0(deadline);
+			} finally {
+				PHASE_MAX.merge("phase" + phase, System.nanoTime() - t, Math::max);
+			}
+		}
+
+		private boolean step0(long deadline) {
 			if (phase == 0) {
+				long t = System.nanoTime();
 				init();
+				PHASE_MAX.merge("init", System.nanoTime() - t, Math::max);
 				phase = 1;
 			}
 			if (phase == 1) {
@@ -727,6 +767,26 @@ public final class Builds {
 					return false;
 				}
 				phase = 2;
+			}
+			if (phase == 2) {
+				// each component's stats, sliced: one component's cells, then its enclosure layer by layer
+				LevelState ls0 = state(level);
+				while (statsCursor < comps.size()) {
+					if (System.nanoTime() >= deadline) {
+						return false;
+					}
+					Comp c = comps.get(statsCursor);
+					if (!c.statsDone) {
+						c.stats(this, ls0);
+						c.statsDone = true;
+						continue;
+					}
+					if (!c.enclosureStep(this, deadline)) {
+						return false;
+					}
+					statsCursor++;
+				}
+				phase = 3;
 			}
 			// a change while it ran: start again after the debounce
 			LevelState ls = state(level);
@@ -736,7 +796,9 @@ public final class Builds {
 					return true;
 				}
 			}
+			long tr = System.nanoTime();
 			resolveAll();
+			PHASE_MAX.merge("resolve", System.nanoTime() - tr, Math::max);
 			return true;
 		}
 
@@ -915,7 +977,7 @@ public final class Builds {
 			BlockPos.MutableBlockPos m = new BlockPos.MutableBlockPos();
 			int n = 0;
 			while (true) {
-				if ((++n & 3) == 0 && System.nanoTime() >= deadline) {
+				if (System.nanoTime() >= deadline) {
 					return false;
 				}
 				if (queue == null || queue.isEmpty()) {
@@ -1011,10 +1073,7 @@ public final class Builds {
 		private void resolveAll() {
 			long now = System.currentTimeMillis();
 			LevelState ls = state(level);
-			// 1. per component: its stats and the ids its cells carry
-			for (Comp c : comps) {
-				c.stats(this, ls);
-			}
+			// 1. per component: its stats and the ids its cells carry (phase 2 computed them)
 			// 2. merges: a component holding cells of several kept builds keeps the oldest id; the others become its aliases
 			Map<String, String> mergedInto = new HashMap<>();
 			for (Comp c : comps) {
@@ -1395,18 +1454,31 @@ public final class Builds {
 				}
 			}
 			footprint = fp.stream().mapToInt(Integer::intValue).toArray();
-			enclosure(j);
 		}
 
-		/** Air cells with a structural cell above within 6 and walls on 3 of 4 sides within 8 (bounded volume). */
-		void enclosure(Job j) {
+		boolean statsDone;
+		private int encY = Integer.MIN_VALUE;
+		private @Nullable LongOpenHashSet encFloor;
+
+		/**
+		 * Air cells with a structural cell above within 6 and walls on 3 of 4 sides within 8 (§4), one y layer at a time until the
+		 * deadline; true when done. A component over 262,144 cells of volume skips it (its 96+ cells qualify it anyway).
+		 */
+		boolean enclosureStep(Job j, long deadline) {
 			long vol = (long) (maxX - minX + 1) * (maxY - minY + 1) * (maxZ - minZ + 1);
-			if (vol > 262_144) {
-				return;
+			if (vol > 262_144 || cells.isEmpty()) {
+				return true;
+			}
+			if (encY == Integer.MIN_VALUE) {
+				encY = minY;
+				encFloor = new LongOpenHashSet();
 			}
 			BlockPos.MutableBlockPos m = new BlockPos.MutableBlockPos();
-			LongOpenHashSet floor = new LongOpenHashSet();
-			for (int y = minY; y <= maxY; y++) {
+			while (encY <= maxY) {
+				if (System.nanoTime() >= deadline) {
+					return false;
+				}
+				int y = encY++;
 				for (int z = minZ; z <= maxZ; z++) {
 					for (int x = minX; x <= maxX; x++) {
 						long p = BlockPos.asLong(x, y, z);
@@ -1431,13 +1503,15 @@ public final class Builds {
 						}
 						if (walls >= 3) {
 							enclosed++;
-							floor.add(BlockPos.asLong(x, 0, z));
+							encFloor.add(BlockPos.asLong(x, 0, z));
 						}
 					}
 				}
 			}
-			enclosedFloor = floor.size();
+			enclosedFloor = encFloor.size();
+			return true;
 		}
+
 	}
 
 	/** §4 promote: enough structural cells (fewer when half are non-natural), spanning 3 in two axes, and a qualifier. */
@@ -1539,6 +1613,7 @@ public final class Builds {
 		} else {
 			Job j = new Job(level, Long.MIN_VALUE, now);
 			comp.stats(j, state(level));
+			comp.enclosureStep(j, Long.MAX_VALUE);
 			fill(r, comp, now);
 		}
 		r.state = BuildState.CLAIMED;

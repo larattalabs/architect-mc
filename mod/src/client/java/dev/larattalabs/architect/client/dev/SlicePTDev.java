@@ -416,15 +416,20 @@ public final class SlicePTDev {
 				}
 			});
 		});
-		DevBridge.register("dev.pt.stats", 600_000, "{box?, bench?: 0} - (6c PT §11 item 15, recorded) the set's cost: chunks with a set, tracked cells, "
+		DevBridge.register("dev.pt.stats", 600_000, "{box?, bench?: 0, reset?: false} - (6c PT §11 item 15, recorded) the set's cost: chunks with a set, tracked cells, "
 			+ "NBT bytes (the attachment, uncompressed and gzip), heap bytes, sections; the classifier's own CPU per tick max; with bench n the hook's "
 			+ "added ns per call (median of 20 rounds of n/20, a tracked and an untracked chunk)", (req, mc) -> {
 				Fields f = Fields.of(req);
 				int bench = f.optInt("bench", 0, 0, 10_000_000);
+				boolean reset = f.optBool("reset", false);
 				int[] b = req.has("box") ? ints(req.get("box")) : null;
 				return ServerTasks.callAsPlayer((level, bot) -> {
 					try {
-						return stats(level, b, bench);
+						JsonObject o = stats(level, b, bench);
+						if (reset) {
+							Builds.resetMax(); // the classifier's maxima start again (after a warm-up)
+						}
+						return o;
 					} catch (Exception e) {
 						throw new RuntimeException(e);
 					}
@@ -480,6 +485,9 @@ public final class SlicePTDev {
 		o.addProperty("bytesPerSection", sections == 0 ? 0 : (double) raw / sections);
 		o.addProperty("heapPerBlock", tracked == 0 ? 0 : (double) heap / tracked);
 		o.addProperty("classifierMaxTickNs", Builds.maxTickNs());
+		JsonObject ph = new JsonObject();
+		Builds.phaseMax().forEach(ph::addProperty);
+		o.add("classifierPhaseMaxNs", ph);
 		if (bench > 0) {
 			o.add("hookNs", bench(level, b, bench));
 		}
