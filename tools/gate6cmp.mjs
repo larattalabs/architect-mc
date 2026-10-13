@@ -188,7 +188,13 @@ steps.apicompat = async () => {
     const p = v.parse ?? [];
     const okParse = p.length === 6 && p[0].ok && !p[1].ok && p[1].reason === 'FIELD_LIMIT' && /mask\.slope: \[a, b\] needs a <= b/.test(p[1].message)
       && !p[2].ok && p[3].ok && !p[4].ok && /stops\[1\]\.at/.test(p[4].message) && !p[5].ok && p[5].reason === 'FIELD_LIMIT';
-    check(/^1\.(1[6-9]|[2-9]\d)\./.test(v.version) && v.featuresMP?.length === 2 && (v.lastReasons === 'PROTECTED FIELD_LIMIT' || /^(FIELD_LIMIT|FORMAT|PERMISSION) (FORMAT|PERMISSION)$/.test(v.lastReasons ?? '')) && okParse,
+    // no new Reason from MP: the last two are 0c's, or any later slice's appended after FIELD_LIMIT (SCH's FORMAT, B's PERMISSION, P0's
+    // ARTIFACT_*), read from Reason.java's order as X's check does
+    const reasonSrc = fs.readFileSync(path.join(root, 'mod', 'src', 'main', 'java', 'dev', 'larattalabs', 'architect', 'api', 'Reason.java'), 'utf8').replace(/\/\/.*$/gm, '');
+    const later = /PROTECTED, FIELD_LIMIT([\s\S]*?)\n\}/.exec(reasonSrc)?.[1].match(/[A-Z_]{3,}/g) ?? [];
+    const [ra, rb] = String(v.lastReasons ?? '').split(' ');
+    const reasonsOk = v.lastReasons === 'PROTECTED FIELD_LIMIT' || ((ra === 'FIELD_LIMIT' || later.includes(ra)) && later.includes(rb));
+    check(/^1\.(1[6-9]|[2-9]\d)\./.test(v.version) && v.featuresMP?.length === 2 && reasonsOk && okParse,
       `item 11: apitest apimp in game: Mask/Pattern parse through the public API (the bundled schemas load), FIELD_LIMIT with the path, masks/patterns features, no new Reason (${json(v).slice(0, 600)})`);
   }
   spendZero();
