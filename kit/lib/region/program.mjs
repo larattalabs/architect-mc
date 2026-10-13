@@ -32,6 +32,7 @@ import { rockSpire } from '../forms/rockSpire.mjs';
 import { BAKE_OPS, bakeOps } from '../forms/rules.mjs';
 import { VOXEL_CLASSES, VC, classAt } from './volume.mjs';
 import { PASSES, PASS_NAMES } from './passes/index.mjs';
+import { emitDistricts } from './districtsEmit.mjs';
 import { edgeColumns, inferMovers, footprintOf, polylineOf, VILLAGER } from './passes/route.mjs';
 import { CARDINALS, cardinalOf, centreCells, circlePolygon, compassDir, crossOffsets, dominantCardinal, rightOf, segmentAxis } from './geom.mjs';
 
@@ -207,6 +208,7 @@ export class Region {
     const declared = this.ctx.passes ?? [];
     if (!declared.includes(name)) throw new Error(`PASS_UNDECLARED: the program calls pass '${name}' but does not declare it (export const passes = ['${name}'])`);
     if (name === 'route') return this._route(intent);
+    if (name === 'districts') return this._districts(intent);
     const it = { ...intent };
     const firstLot = (it.around ?? []).find((a) => a && Array.isArray(a.at) && Array.isArray(a.size));
     const stage = it.stage ?? (firstLot ? this.parts.find((p) => p.id === firstLot.part)?.stage : undefined);
@@ -229,6 +231,29 @@ export class Region {
     this.passRuns.push({ name, ms, heapMb });
     this.note(`pass ${name}: ${(ms / 1000).toFixed(1)} s, ${heapMb} MB${out.data?.resolution > 1 ? ` (coarse: resolution ${out.data.resolution})` : ''}`);
     return res;
+  }
+
+  /** (6c D1) The `districts` pass (r.pass('districts', intent); kit/lib/region/districtsEmit.mjs). */
+  _districts(intent = {}) {
+    return emitDistricts(this, intent);
+  }
+
+  /**
+   * (6c T2) The route pass's obstacles from the region so far: `hard` (the lots and their aprons, the forms, the keep sets, plus the
+   * intent's own `hard` rects, 6c D1) and `clearTrees` (a slope pad's batter rings, plus the intent's). [[x0, z0, x1, z1]].
+   */
+  _routeObstacles(it = {}) {
+    const hard = [];
+    for (const l of this.lots) hard.push([l.box.minX - 1, l.box.minZ - 1, l.box.maxX + 1, l.box.maxZ + 1]);
+    // a slope pad's batter clears its rings to the column's top (trees included): no tree obstacle there
+    const clearTrees = this.lots.filter((l) => l.pad?.edge === 'slope').map((l) => { const m = 1 + Math.max(l.pad.maxCut ?? 0, l.pad.maxFill ?? 0); return [l.box.minX - m, l.box.minZ - m, l.box.maxX + m, l.box.maxZ + m]; });
+    // (6c PT) the caller's rects whose logs are no trees (a player's log build: kept out, never felled, so no tree reach)
+    for (const b of it.clearTrees ?? []) clearTrees.push([...b]);
+    for (const f of this.forms) if (f.bounds) hard.push([f.bounds.minX, f.bounds.minZ, f.bounds.maxX, f.bounds.maxZ]);
+    for (const p of this.parts) for (const k of p.keep ?? []) hard.push([k.box.minX, k.box.minZ, k.box.maxX, k.box.maxZ]);
+    // (6c D1) the caller's own hard rects (a district's street and square, a standing region's cells)
+    for (const b of it.hard ?? []) hard.push([...b]);
+    return { hard, clearTrees };
   }
 
   /**
@@ -274,14 +299,7 @@ export class Region {
     });
     if (new Set(edges.map((e) => e.id)).size !== edges.length) throw new Error(`${what}: edge ids must be unique`);
     // obstacles: lot footprints and aprons, forms, keep sets (x/z); keep-out (the owner's, read through ctx so the IR records it)
-    const hard = [];
-    for (const l of this.lots) hard.push([l.box.minX - 1, l.box.minZ - 1, l.box.maxX + 1, l.box.maxZ + 1]);
-    // a slope pad's batter clears its rings to the column's top (trees included): no tree obstacle there
-    const clearTrees = this.lots.filter((l) => l.pad?.edge === 'slope').map((l) => { const m = 1 + Math.max(l.pad.maxCut ?? 0, l.pad.maxFill ?? 0); return [l.box.minX - m, l.box.minZ - m, l.box.maxX + m, l.box.maxZ + m]; });
-    // (6c PT) the caller's rects whose logs are no trees (a player's log build: kept out, never felled, so no tree reach)
-    for (const b of it.clearTrees ?? []) clearTrees.push([...b]);
-    for (const f of this.forms) if (f.bounds) hard.push([f.bounds.minX, f.bounds.minZ, f.bounds.maxX, f.bounds.maxZ]);
-    for (const p of this.parts) for (const k of p.keep ?? []) hard.push([k.box.minX, k.box.minZ, k.box.maxX, k.box.maxZ]);
+    const { hard, clearTrees } = this._routeObstacles(it);
     const keepOut = [...(this.ctx.keepOut ?? []), ...(it.keepOut ?? [])].map((k) => [...k]);
     // hysteresis: the caller's cells, 4e roads and graded paths already in the plan
     // (ctx.routePrefer: an earlier plan's routes, [[x, z]] for every edge or {edgeId: [[x, z]]} each edge its own)
@@ -409,10 +427,12 @@ export class Region {
   }
 
   /** (6c V) A graph edge `{id, from: 'node.port', to: 'node.port', type: road|path, width, path}` in stage `ground`. */
-  graphEdge({ id, from, to, type, width, path, stage = 'ground', movers, segments }) {
+  graphEdge({ id, from, to, type, width, path, stage = 'ground', movers, segments, external = false }) {
     if (this.graphIds.has(id)) throw new Error(`graph id '${id}' is used twice`);
     if (type !== 'road' && type !== 'path') throw new Error(`graph edge ${id}: type must be road or path`);
-    for (const end of [from, to]) {
+    // (6c D1) an external edge's `to` is another region's port, `<regionId>:<node>.<port>` (CONTRACT D §3; 7a types it)
+    if (external && !/^[A-Za-z0-9_.-]{1,64}:[a-z][a-z0-9_:.-]{0,63}\.[a-z][a-z0-9_]{0,63}$/.test(String(to))) throw new Error(`graph edge ${id}: an external edge's to must be <region>:<node>.<port>`);
+    for (const end of external ? [from] : [from, to]) {
       const [n, p] = String(end).split('.');
       const node = this.graph.nodes.find((x) => x.id === n);
       if (!node || !node.ports.some((q) => q.name === p)) throw new Error(`graph edge ${id}: no port '${end}'`);
@@ -422,6 +442,7 @@ export class Region {
     // (6c T2) a routed edge carries its movers and its segments (only when set, so V's graphs are unchanged)
     if (movers !== undefined) e.movers = [...movers];
     if (segments !== undefined) e.segments = segments.map((g) => ({ ...g }));
+    if (external) e.external = true;
     this.graph.edges.push(e);
     return e;
   }
