@@ -409,7 +409,7 @@ persisted formats. Candidate later asks: `Survey.biome` per column (T1's fields 
 - **4e output-shape change: flag for S2, D and 6d.** A routed edge lays a 4e ground road only where a walk lies exactly on the
   surveyed ground. Most walk runs on real terrain are `_routeRun` columns (cut, fill, retaining), not 4e roads. A consumer that
   reads `ir.roads` for a region's paths sees only a fraction of them; read the graph edges' `segments` (or `meta.route`).
-- **Realised M5 over the routes was 5.25%** on S3 (virtual 0.41%, flat 0.24%): soul lanterns, live snow and plants.
+- **Realised M5 over the routes was 5.25%** on S3 (virtual 0.41%, flat 0.24%; 0.61% on the fresh-world re-run `20261013-064639-slice`): soul lanterns, live snow and plants.
   Recorded, not judged. Revisit with the lamp and melt fix.
 
 ## Open questions
