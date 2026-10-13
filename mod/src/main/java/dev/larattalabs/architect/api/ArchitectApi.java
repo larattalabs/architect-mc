@@ -106,6 +106,8 @@ public interface ArchitectApi {
 	 * Since 1.22.0, a T2 helper ({@code region.route}) adds {@code "routePass"} (the {@code route} pass: slope-aware routing with
 	 * switchbacks, stairs, ladders on player-only edges and keep-out avoidance; routes are ordinary roads, stairs and columns,
 	 * so a routed plan needs no new kind, and the IR graph's edges carry {@code movers} and {@code segments}).
+	 * Since 1.25.0 (C33), a helper with {@code job.systemRefs} adds {@code "job.systemRefs"}: {@link JobSpec#systemRefs} is
+	 * expanded by the helper, and a structured job's {@code system} may be {@link Limits#JOB_SYSTEM_MAX} characters.
 	 */
 	Set<String> features();
 }

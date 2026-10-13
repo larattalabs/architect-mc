@@ -41,6 +41,11 @@ function bounds(s: unknown, p: string, out: Bound[], regexes: Map<string, string
 /** The Limits constant of a bounded path (null: not a request field the mod sends, e.g. the envelope's id). */
 function constantOf(p: string): string | null {
   const rules: [RegExp, string | null][] = [
+    // (C33) the job's system prompt and refs; every other JobSpec bound is the sidecar's own (the mod sends it unchecked)
+    [/^JobSpec\.system$/, 'JOB_SYSTEM_MAX'],
+    [/^JobSpec\.systemRefs$/, 'JOB_SYSTEM_REFS_MAX'],
+    [/^JobSpec\.systemRefs\[\]$/, 'JOB_SYSTEM_REF_MAX'],
+    [/^JobSpec\./, null],
     [/^MassingRedirectMsg\.id$/, null],
     [/\.redirect\.notes$|^MassingRedirectMsg\.notes$/, 'REDIRECT_NOTES_MAX'],
     [/^PolishSpec\.target\.notes$/, 'POLISH_NOTES_MAX'],
@@ -81,7 +86,7 @@ function constantOf(p: string): string | null {
   return 'UNMAPPED';
 }
 
-const SCHEMAS = { DesignRequest: P.DesignRequest, GroupRequest: P.GroupRequest, BibleRequest: P.BibleRequest, CritiqueSpec: P.CritiqueSpec, PolishSpec: P.PolishSpec, MassingRedirectMsg: P.MassingRedirectMsg } as const;
+const SCHEMAS = { DesignRequest: P.DesignRequest, GroupRequest: P.GroupRequest, BibleRequest: P.BibleRequest, CritiqueSpec: P.CritiqueSpec, PolishSpec: P.PolishSpec, MassingRedirectMsg: P.MassingRedirectMsg, JobSpec: P.JobSpec } as const;
 
 describe('Limits.java against the zod bounds (6c 0c §5)', () => {
   const { ints, patterns } = javaLimits();
@@ -108,13 +113,15 @@ describe('Limits.java against the zod bounds (6c 0c §5)', () => {
   it('every Limits constant is used by a bound (no stale constant), but for the custom-refined ones', () => {
     const used = new Set(all.map((b) => constantOf(b.path)));
     // (6c B) the brush's radius and strength are the mod's own bounds (no sidecar message carries them; kit/lib/region/brush.mjs BRUSH_LIMITS, held equal by kit/test/brush-b.test.mjs)
-    const custom = new Set(['EXT_MAX_BYTES', 'CRITIQUE_VIEWS_MAX', 'LOT_EXT_MAX', 'STOCKPILE_CRATES', 'BRUSH_RADIUS_MIN', 'BRUSH_RADIUS_MAX', 'BRUSH_STRENGTH_MIN', 'BRUSH_STRENGTH_MAX']);
+    const custom = new Set(['EXT_MAX_BYTES', 'CRITIQUE_VIEWS_MAX', 'LOT_EXT_MAX', 'STOCKPILE_CRATES', 'JOB_SYSTEM_AGENT_MAX', 'BRUSH_RADIUS_MIN', 'BRUSH_RADIUS_MAX', 'BRUSH_STRENGTH_MIN', 'BRUSH_STRENGTH_MAX']);
     const stale = [...ints.keys()].filter((k) => !used.has(k) && !custom.has(k));
     expect(stale).toEqual([]);
   });
 
   it('the patterns are zod\'s', () => {
     expect(patterns.get('FEATURE_RE')).toBe(P.FEATURE_RE.source);
+    expect(patterns.get('SYSTEM_REF_RE')).toBe(P.SYSTEM_REF_RE.source); // (C33)
+    expect(ints.get('JOB_SYSTEM_AGENT_MAX')).toBe(P.JOB_SYSTEM_AGENT_MAX);
     // Java escapes the '[' inside the class (an unescaped one opens a nested class there); JS takes it literally
     expect(patterns.get('MODEL_ID_RE')!.replace('\\[', '[')).toBe(regexes.get('DesignRequest.model'));
     expect(patterns.get('ITEM_KEY_RE')).toBe(regexes.get('GroupRequest.items[].itemKey'));

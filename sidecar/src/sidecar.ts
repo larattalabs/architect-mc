@@ -75,6 +75,7 @@ const DURABLE_COMMANDS: ReadonlySet<ClientMessage['type']> = new Set<ClientMessa
 /** A message the client caused that cannot be done (answered with ack ok:false). */
 export { ClientError, RefusedError } from './errors.js';
 import { ClientError, RefusedError } from './errors.js';
+import { checkSystemRefs } from './jobs/systemrefs.js';
 import { frameProblem, prepareVersionOf, writeVersionContext } from './versionof.js';
 
 /**
@@ -450,7 +451,8 @@ export class Sidecar {
         }
         return undefined;
       case 'job.run':
-        return { jobId: this.jobs.run(msg.job, client).id };
+        // (C33) systemRefs are checked first: an unknown ref is refused (FIELD_LIMIT) before a job exists
+        return msg.job.systemRefs?.length ? checkSystemRefs(this.config.kitDir, msg.job.systemRefs).then(() => ({ jobId: this.jobs.run(msg.job, client).id })) : { jobId: this.jobs.run(msg.job, client).id };
       case 'job.cancel':
         this.jobs.cancel(msg.jobId);
         return { jobId: msg.jobId };
