@@ -121,4 +121,66 @@ public interface Regions {
 	default CompletableFuture<RegionView> brush(BrushRequest r) {
 		throw new UnsupportedOperationException("Regions.brush needs Architect API 1.21.0");
 	}
+
+	// ------------------------------------------------------------------ (6c P0) plan check v0
+
+	/**
+	 * (6c P0) A $0 dry run of a geometric plan ({@code plan/0}) over one survey of the claim (docs/CONTRACT.md "Phase 6c slice P0"): the
+	 * plan compiles through the bundled {@code plan_v0} program into one region plan (zones, relief, terraces, spikes, T2 routes), the
+	 * macro checker runs, nothing is realised. Completes with a {@link PlanCheck}: one answer per part (fits, adjusted, refused,
+	 * unsupported with its block id, blocked, malformed, incomplete), the cost, the capability catalogue, the light preview and, when
+	 * READY or NEEDS_REPAIR, the artifact sha approval binds. Asynchronous and cancellable ({@code future.cancel(true)} or
+	 * {@link #cancelCheck}: the future is cancelled, nothing persists but the per-owner cache). A malformed plan is an answer; only
+	 * a plan over 64 KB as JSON, a bad anchor name or claim refuses ({@link Reason#FIELD_LIMIT}, {@link Reason#REGION_LIMIT},
+	 * {@link Reason#NOT_ALLOWED} outside the Overworld, {@link Reason#SIDECAR_UNAVAILABLE}). An {@code opKey} returns the same check
+	 * for the same body (in flight too) and refuses {@link Reason#OP_KEY_CONFLICT} for another. Since 1.23.0.
+	 */
+	default CompletableFuture<PlanCheck> checkPlan(PlanRequest r) {
+		throw new UnsupportedOperationException("Regions.checkPlan needs Architect API 1.23.0");
+	}
+
+	/** (6c P0) Cancels a running check by its key; true when one was running (its future is cancelled). Since 1.23.0. */
+	default boolean cancelCheck(@Nullable String owner, String opKey) {
+		throw new UnsupportedOperationException("Regions.cancelCheck needs Architect API 1.23.0");
+	}
+
+	/** (6c P0) The finished check an owner made with this key, after a restart too; empty while it runs, or when none. Since 1.23.0. */
+	default Optional<PlanCheck> checkByKey(@Nullable String owner, String opKey) {
+		throw new UnsupportedOperationException("Regions.checkByKey needs Architect API 1.23.0");
+	}
+
+	/** (6c P0) The images of a check on request: 6b's views over the check's virtual world ({@link #previews} of its plan). Since 1.23.0. */
+	default CompletableFuture<RegionPreviews> planImages(String checkId, Set<PreviewView> views) {
+		throw new UnsupportedOperationException("Regions.planImages needs Architect API 1.23.0");
+	}
+
+	/** (6c P0) An artifact by its sha: its body, or a tombstone once removed; empty for an unknown sha. Since 1.23.0. */
+	default Optional<PlanArtifact> artifact(String artifactSha) {
+		throw new UnsupportedOperationException("Regions.artifact needs Architect API 1.23.0");
+	}
+
+	/**
+	 * (6c P0) Realises an approved artifact ({@link ApprovedRealise}): no artifact with that sha (or a removed one) refuses
+	 * {@link Reason#ARTIFACT_UNAPPROVED}; the claim is surveyed again at the artifact's resolution and the protection fingerprint
+	 * recomputed: any changed column inside the plan's tiles, a changed protected area or region, or a provisional lot's entry past
+	 * its fit box or cost range refuses {@link Reason#ARTIFACT_STALE} (naming them) and writes nothing. Then
+	 * {@link #realise} of the artifact's own plan (its IR: never planned again), with the key. Completes with the region id once
+	 * queued. {@link #remove} undoes it. Since 1.23.0.
+	 */
+	default CompletableFuture<String> realiseApproved(ApprovedRealise r) {
+		throw new UnsupportedOperationException("Regions.realiseApproved needs Architect API 1.23.0");
+	}
+
+	/**
+	 * (6c P0) Keeps an artifact for an owner (idempotent). An artifact is kept while an owner pins it or a standing region was realised
+	 * from it; unpinning the last pin of an unreferenced one removes it, leaving a tombstone. Since 1.23.0.
+	 */
+	default void pinArtifact(String artifactSha, String owner) {
+		throw new UnsupportedOperationException("Regions.pinArtifact needs Architect API 1.23.0");
+	}
+
+	/** (6c P0) Drops an owner's pin (idempotent); see {@link #pinArtifact}. Since 1.23.0. */
+	default void unpinArtifact(String artifactSha, String owner) {
+		throw new UnsupportedOperationException("Regions.unpinArtifact needs Architect API 1.23.0");
+	}
 }

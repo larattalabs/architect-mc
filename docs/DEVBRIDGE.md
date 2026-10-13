@@ -31,7 +31,7 @@ A headless gate server (docs/GATES.md "Headless gates") serves the same protocol
 `headless: true`.
 
 - **Generated hooks.** The hooks in the client's `client/dev/` files `JournalDev`, `RegionDev`, `RegionDev6b`, `DeltaDev`,
-  `SliceVDev`, `SliceWDev`, `SliceF2Dev`, `SliceBDev` and `StockpileDev` (and `Fields`) run headless as they are: `devserver/build.gradle` `genHooks` compiles copies with
+  `SliceVDev`, `SliceWDev`, `SliceF2Dev`, `SliceBDev`, `SliceP0Dev` and `StockpileDev` (and `Fields`) run headless as they are: `devserver/build.gradle` `genHooks` compiles copies with
   only the package and imports changed.
   - **Rule for those files:** no reference to client classes (`net.minecraft.client.*`, `dev.larattalabs.architect.client.*`)
     besides `ServerTasks`, `DevBridge` and the handler's `mc` parameter. A new one fails the build, `unit-mod` included.

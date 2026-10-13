@@ -53,7 +53,8 @@ export function finishCheck({ res, survey, blobs = null, surveyBytesSha = null, 
   const answers = pc.answers.map((a) => JSON.parse(JSON.stringify(a)));
   const notes = [...(pc.notes ?? [])];
   const surveySha = surveyBytesSha ?? pc.surveySha;
-  const base = { format: CHECK_FORMAT, schemaVersion: 'plan/0', kitVersion: ir.kitVersion, api: PLAN_API, catalogueVersion: catalogue.catalogueVersion, surveySha, irSha: res.irSha };
+  const base = { format: CHECK_FORMAT, schemaVersion: 'plan/0', kitVersion: ir.kitVersion, api: PLAN_API, catalogueVersion: catalogue.catalogueVersion, surveySha, irSha: res.irSha,
+    planSha: sha256Hex(canonicalJson(inputs.plan ?? ir.params.plan ?? {})), budget: pc.budget ?? null };
   if (pc.malformed) {
     return { check: { ...base, overall: 'MALFORMED', malformed: pc.malformed, parts: [], cost: null, catalogue, preview: null, artifactSha: null, notes }, artifact: null, artifactSha: null, classMap: null, cacheOut: {} };
   }

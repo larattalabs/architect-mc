@@ -22,6 +22,9 @@ import org.jspecify.annotations.Nullable;
  * queue file). When the link drops, requests in flight are dropped and asked again on reconnect.
  */
 public final class TileStream {
+	/** (6c P0) "region|stage|set|key" -> the sha of the tile the helper sent (the last one, for a retried tile). Test evidence only. */
+	public static final java.util.Map<String, String> TILE_SHAS = new java.util.concurrent.ConcurrentHashMap<>();
+
 	/**
 	 * REQUESTED .. DECODED as 6a; FAILED: the tile failed (the item fails); WAITING (6b): the helper keeps answering
 	 * {@code ir_unknown} / {@code blob_unknown} after {@link #MAX_RESENDS} re-sends, so the item waits SIDECAR_UNAVAILABLE until the
@@ -518,6 +521,11 @@ public final class TileStream {
 		String sha = m.get("sha").getAsString();
 		int count = m.get("count").getAsInt();
 		t.count = count;
+		// (6c P0) the sha of every realise tile, per region (dev.region.tileShas: a realised region's tiles against its artifact's)
+		if (TILE_SHAS.size() > 200_000) {
+			TILE_SHAS.clear();
+		}
+		TILE_SHAS.put(t.region + "|" + t.stage + "|" + t.set + "|" + t.key, sha);
 		t.receivedAt = System.nanoTime();
 		t.phase = Phase.RECEIVED;
 		RECEIVED.incrementAndGet();
