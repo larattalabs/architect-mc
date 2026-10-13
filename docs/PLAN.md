@@ -404,6 +404,7 @@ persisted formats. Candidate later asks: `Survey.biome` per column (T1's fields 
 - Player-placed tracking, refined by Noah to **builds**: CONTRACT "Phase 6c slice PT: player-placed tracking (C32)" (DRAFT for
   Steward review). It supersedes the dropped PT draft; S-PT-1 is withdrawn for this case. Adopting a build as a site is a later
   slice, PT2 (outlined there). API: the next free minor at merge.
+
 ## Queued from T2 (gate-verifier, 2026-10-13)
 
 - **Melt water into keep-out (a defect).** Default route lamps (a bible's lanterns, light 15) melt natural snow and ice beside
