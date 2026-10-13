@@ -389,6 +389,16 @@ persisted formats. Candidate later asks: `Survey.biome` per column (T1's fields 
 - For Steward: it queues items its own fit refused as temporarily blocked (OCCUPIED, PLAYER_IN_BOX), and its e2e gives up at the same 600 s as the wait
   limit. Clear animals before every build and keep the player off the lots, or surface `ITEM_WAITING` in chat as it does material waits.
 
+## C31 (T2's builder, 2026-10-13): patch v0.24.1
+
+- Felling (6a's whole-trunk rule) now stops at the region owner's C17 areas, other owners' cells, the claim and non-LOG blocks.
+  The kept part is recorded as `M3:tree_kept`. Undo was already exact before the fix (CONTRACT "C31 as built", under C17).
+- Accepted limits (coordinator, 2026-10-13): a player-placed log can't be told from a grown one; an in-area leaf that hung only
+  on felled logs may decay; a stroke fells into the claim's +8 margin.
+- **Candidate item: player-placed tracking.** This covers the player-log limit: block-change tracking so that felling, and any
+  natural-only write, can spare cells a player placed. It picks up the dropped slice PT ("Phase 6c slice PT: player-changed
+  cells", S-PT-1: dropped from 6c, to 6d with replanning on land change).
+
 ## Open questions
 - Track AgentCraft fixes to the copied placement code, or treat the copy as independent from now on?
 - Cost: measure tokens and time per design in phase 1, and show an estimate in the form.
