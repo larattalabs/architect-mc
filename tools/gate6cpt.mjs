@@ -1196,7 +1196,9 @@ steps.claimhut = async () => {
 
 steps.ingame = async () => {
   const parts = {};
-  for (const s of ['record', 'clear', 'pistons', 'reload', 'builds', 'hyst', 'village', 'brush', 'felling', 'undo', 'refusals', 'incidental', 'claim', 'claimhut', 'plan', 'cost', 'apitest']) {
+  const all = ['record', 'clear', 'pistons', 'reload', 'builds', 'hyst', 'village', 'brush', 'felling', 'undo', 'refusals', 'incidental', 'claim', 'claimhut', 'plan', 'cost', 'apitest'];
+  // GATE6CPT_STEPS=a,b runs only those (iterating on one item); unset, every step
+  for (const s of process.env.GATE6CPT_STEPS ? process.env.GATE6CPT_STEPS.split(',') : all) {
     log(`-- ${s}`);
     try { parts[s] = await steps[s](); } catch (e) { log(String(e?.stack ?? e)); check(false, `${s}: ${String(e?.message ?? e).slice(0, 300)}`); }
   }
