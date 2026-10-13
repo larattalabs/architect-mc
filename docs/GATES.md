@@ -150,7 +150,7 @@ ARCHITECT_DEV_PORT=8943 ARCHITECT_PORT=8942 HEADLESS_SIDECAR=sim ARCHITECT_AUTOW
 | 4d, 4e, 5b | 4d-all, 4e-megalite, 4e-orders, 5b-village |
 | 6a | 6a-megaA, 6a-eflat, 6a-forest, 6a-inv3, 6a-staged |
 | 6b | 6b-smoke, 6b-volume, 6b-commands, 6b-nudges, 6b-pathstyle, 6b-versions |
-| 6c | x-ingame (removal included), x-resume (C23), v-ingame, b-ingame (6c B), pt-ingame and pt-nomod (6c PT) |
+| 6c | x-ingame (removal included), x-resume (C23), v-ingame, b-ingame (6c B), pt-ingame and pt-nomod (6c PT), pt2-ingame and pt2-survival (6c PT2) |
 
 **On the client (`"host": "client"`, `hostWhy` says why):**
 

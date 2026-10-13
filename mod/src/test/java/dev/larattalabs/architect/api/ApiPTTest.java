@@ -37,9 +37,10 @@ class ApiPTTest {
 		assertTrue(IrStale.semverCompare(ArchitectApi.VERSION, "1.24.0") >= 0, ArchitectApi.VERSION);
 		assertTrue(IrStale.semverCompare(IrStale.KIT_VERSION, "0.26.0") >= 0, IrStale.KIT_VERSION);
 		assertEquals(Reason.ARTIFACT_UNAPPROVED.ordinal() + 1, Reason.PLAYER_BUILD.ordinal(), "appended after P0's ARTIFACT_*");
-		assertEquals(Reason.values().length - 1, Reason.PLAYER_BUILD.ordinal());
+		assertEquals(Reason.PLAYER_BUILD.ordinal() + 1, Reason.ADOPT_REFUSED.ordinal(), "PT2 appends ADOPT_REFUSED after PLAYER_BUILD");
 		assertEquals(List.of("HOUSE", "BARN", "FARM", "WALL", "TOWER", "PATH", "OTHER"), java.util.Arrays.stream(BuildKind.values()).map(Enum::name).toList());
-		assertEquals(List.of("ACTIVE", "CLAIMED", "RELEASED", "PROVISIONAL"), java.util.Arrays.stream(BuildState.values()).map(Enum::name).toList());
+		assertEquals(List.of("ACTIVE", "CLAIMED", "RELEASED", "PROVISIONAL", "ADOPTED"), java.util.Arrays.stream(BuildState.values()).map(Enum::name)
+			.toList()); // PT2 appends ADOPTED
 	}
 
 	@Test

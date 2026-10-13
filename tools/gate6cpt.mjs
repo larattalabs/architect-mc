@@ -1130,7 +1130,7 @@ steps.apitest = async () => {
   const reasonSrc = fs.readFileSync(path.join(root, 'mod', 'src', 'main', 'java', 'dev', 'larattalabs', 'architect', 'api', 'Reason.java'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
   const order = /enum Reason\s*\{([\s\S]*?)\}/.exec(reasonSrc)?.[1].match(/[A-Z_]{3,}/g) ?? [];
   const before = order[order.indexOf('PLAYER_BUILD') - 1];
-  check(s.builds && s.playerPlaced && s.playerBuildAppended && s.playerBuildAfter === before && s.kinds === 7 && s.states === 4, `item 16: /apitest apipt through the public API (PLAYER_BUILD after ${before} as in Reason.java): ${json(s)}`);
+  check(s.builds && s.playerPlaced && s.playerBuildAppended && s.playerBuildAfter === before && s.kinds === 7 && s.states >= 4, `item 16: /apitest apipt through the public API (PLAYER_BUILD after ${before} as in Reason.java): ${json(s)}`);
   const b = await api(`ptbuilds ${cabinBox(X, y, Z).join(' ')}`);
   check(Array.isArray(b) && b.length === 1 && b[0].kind === 'HOUSE', `item 16: Sites.builds(dim, box): ${json(b)}`);
   const a = await api(`ptat ${X} ${y} ${Z}`);

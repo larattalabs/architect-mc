@@ -161,9 +161,12 @@ public final class SiteDeltas {
 		}
 		dev.larattalabs.architect.placed.Placed.Consent consent = new dev.larattalabs.architect.placed.Placed.Consent(r.consented());
 		dev.larattalabs.architect.placed.BuildViews.Hits hits = new dev.larattalabs.architect.placed.BuildViews.Hits();
+		// (PT2 §4) an adopted site's own operations are implicitly consented for the site's own cells; its growth cells still need consent
+		Site site = Sites.get(r.siteId());
+		boolean adopted = site != null && Adopt.isAdopted(site);
 		for (long p : writes) {
 			String bd = dev.larattalabs.architect.placed.Placed.build(level, p);
-			if (bd != null && !consent.allows(bd)) {
+			if (bd != null && !consent.allows(bd) && !(adopted && SiteJournal.isOwnedBy(site.dimension(), p, site.id()))) {
 				hits.add(level, bd, p);
 			}
 		}
@@ -366,6 +369,7 @@ public final class SiteDeltas {
 		} catch (IOException e) {
 			throw new Sites.SiteException(Reason.JOURNAL_UNAVAILABLE, "The journal of " + b.id() + " can't be read (" + e.getMessage() + ")");
 		}
+		boolean adopted = Adopt.isAdopted(b);
 		// the template cells at their world positions (as the site's plan puts them), with their design part
 		SitePlanner.VersionCells cells = cells(va);
 		int turns = BlueprintTransform.parseTurns(b.rotation());
@@ -391,7 +395,8 @@ public final class SiteDeltas {
 				continue;
 			}
 			Value now = WorldJournal.valueAt(level, bp);
-			if (now.equals(top.after())) {
+			// (6c PT2) an adopted site's journal keeps block states only (inventories stay the world's): compared as still ours
+			if (now.equals(top.after()) || adopted && WorldJournal.holds(level, p, top.after())) {
 				continue;
 			}
 			total++;
@@ -468,7 +473,8 @@ public final class SiteDeltas {
 			this.dim = dim;
 			for (JournalStore.Meta m : SiteJournal.active(site)) {
 				boolean d = m.kind().equals(WorldJournal.DELTA);
-				if (!m.kind().equals(WorldJournal.SITE) && !d) {
+				// (6c PT2) an adopted site's base is its adopt entry
+				if (!m.kind().equals(WorldJournal.SITE) && !m.kind().equals(WorldJournal.ADOPT) && !d) {
 					continue;
 				}
 				if (d) {

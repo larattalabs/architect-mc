@@ -862,4 +862,17 @@ final class SitesImpl implements dev.larattalabs.architect.api.Sites {
 	public dev.larattalabs.architect.api.Build releaseBuild(String id, @Nullable ServerPlayer actor) {
 		return dev.larattalabs.architect.placed.BuildViews.release(id, actor, false);
 	}
+
+	// ------------------------------------------------------------------ 6c slice PT2: adopt a build as a site
+
+	@Override
+	public CompletableFuture<dev.larattalabs.architect.api.AdoptResult> adopt(String buildId, @Nullable String owner,
+		dev.larattalabs.architect.api.BuildConsent consent, com.google.gson.JsonObject ext) {
+		return onServer(() -> dev.larattalabs.architect.site.Adopt.adopt(server, buildId, owner, consent, ext)).thenCompose(f -> f);
+	}
+
+	@Override
+	public Optional<String> adoptedSite(String buildId) {
+		return Optional.ofNullable(dev.larattalabs.architect.placed.Builds.adoptedSite(buildId));
+	}
 }

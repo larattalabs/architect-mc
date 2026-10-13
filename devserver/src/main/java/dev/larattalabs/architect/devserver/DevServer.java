@@ -180,6 +180,7 @@ public final class DevServer implements ModInitializer {
 		dev.larattalabs.architect.devserver.gen.SliceBDev.init(); // 6c B: dev.brush
 		dev.larattalabs.architect.devserver.gen.SliceP0Dev.init(); // 6c P0: plan checks
 		dev.larattalabs.architect.devserver.gen.SlicePTDev.init(); // 6c PT: dev.pt.*
+		dev.larattalabs.architect.devserver.gen.SlicePT2Dev.init(); // 6c PT2: dev.pt2.*
 		dev.larattalabs.architect.devserver.gen.StockpileDev.init();
 		ServerSidecar.init();
 		ServerLifecycleEvents.SERVER_STARTING.register(s -> {

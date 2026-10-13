@@ -994,7 +994,8 @@ export class Sidecar {
     const res = input.res;
     const baseJson = this.versions.top(v.entryId) ?? {};
     const json: Record<string, unknown> = { ...(res.sidecar as Record<string, unknown>) };
-    for (const k of ['name', 'description', 'createdAt', 'request', 'ext', 'bible', 'group', 'groupItem', 'profile', 'variantOf', 'variantOfVersion', 'derivation', 'fromMassing']) if (baseJson[k] !== undefined) json[k] = baseJson[k];
+    // (6c PT2) `adopted`: an adopted entry stays one at every version (never placed elsewhere, never polished, capturedChanged)
+    for (const k of ['name', 'description', 'createdAt', 'request', 'ext', 'bible', 'group', 'groupItem', 'profile', 'variantOf', 'variantOfVersion', 'derivation', 'fromMassing', 'adopted']) if (baseJson[k] !== undefined) json[k] = baseJson[k];
     const parts = res.nbt!.replace(/\.nbt$/, '.parts.nbt');
     const version = this.versions.install(
       v.entryId,

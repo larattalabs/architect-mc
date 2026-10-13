@@ -607,8 +607,8 @@ public final class ServerSidecar implements ClientBridge {
 	@Override
 	public CompletableFuture<Boolean> deleteEntry(String id) {
 		Blueprints.Entry e = Blueprints.entry(id);
-		if (e == null || e.dir() == null) {
-			return CompletableFuture.completedFuture(false);
+		if (e == null || e.dir() == null || dev.larattalabs.architect.site.Adopt.deleteRefusal(id) != null) {
+			return CompletableFuture.completedFuture(false); // (6c PT2: an adopted entry whose site stands, as on a client)
 		}
 		try {
 			Path trash = Blueprints.gameDataDir().resolve("library-trash");

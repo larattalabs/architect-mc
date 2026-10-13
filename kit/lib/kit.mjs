@@ -609,6 +609,20 @@ export class Blueprint {
     return this;
   }
 
+  /**
+   * (6c PT2) One captured cell as the world held it (lib/adopt.mjs): the state's properties are taken as given (no validation, no
+   * defaults) and kept as they are ({@link finalize} never reconnects it), `tag` is a tagged NBT compound (lib/nbt.mjs) or null.
+   */
+  setRaw(x, y, z, state, tag = null) {
+    if (!this.inBounds(x, y, z)) throw new Error(`${this.id}: setRaw(${x},${y},${z}) outside size ${this.size.x}x${this.size.y}x${this.size.z}`);
+    const k = key(x + this.ox, y + this.oy, z + this.oz);
+    this.cells.set(k, { state: { name: qualify(state.name), props: { ...(state.props ?? {}) } }, nbt: tag, raw: true });
+    const part = this.partStack[this.partStack.length - 1];
+    if (part) this.cellPart.set(k, part);
+    else this.cellPart.delete(k);
+    return this;
+  }
+
   air(x, y, z) { return this.set(x, y, z, 'minecraft:air'); }
 
   get(x, y, z) { return this.cells.get(key(x + this.ox, y + this.oy, z + this.oz)) ?? null; }
@@ -1027,6 +1041,7 @@ export class Blueprint {
       return false;
     };
     for (const [k, c] of this.cells) {
+      if (c.raw) continue; // (PT2) a captured cell keeps the world's connections
       const fam = BLOCKS[c.state.name]?.family;
       if (fam !== 'pane' && fam !== 'fence' && fam !== 'wall') continue;
       const [x, y, z] = k.split(',').map(Number);
@@ -1090,7 +1105,8 @@ export class Blueprint {
         palette.push(nbt.compound(entry));
       }
       const b = { pos: nbt.list('int', [nbt.int(e.x), nbt.int(e.y), nbt.int(e.z)]), state: nbt.int(index.get(pk)) };
-      if (e.nbt) b.nbt = nbt.compound(Object.fromEntries(Object.entries(e.nbt).map(([k, v]) => [k, typeof v === 'number' ? nbt.int(v) : nbt.str(v)])));
+      // (PT2) a captured cell's nbt is a tagged compound already (lib/adopt.mjs); a design's is a flat object of ints and strings
+      if (e.nbt) b.nbt = e.nbt.t === 'compound' && typeof e.nbt.v === 'object' ? e.nbt : nbt.compound(Object.fromEntries(Object.entries(e.nbt).map(([k, v]) => [k, typeof v === 'number' ? nbt.int(v) : nbt.str(v)])));
       blocks.push(nbt.compound(b));
     }
     return nbt.compound({
@@ -1149,6 +1165,8 @@ export class Blueprint {
     if (this.massing) s.massing = true;
     // (0b) a mirrored build (lib/mirror.mjs): the axis that flipped
     if (this.mirrored) s.mirrored = this.mirrored;
+    // (6c PT2) a captured source (lib/adopt.mjs): an adopted build's cells as the world held them
+    if (this.captured) s.sourceKind = 'captured';
     return s;
   }
 }

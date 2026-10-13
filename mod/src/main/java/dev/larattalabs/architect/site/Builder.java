@@ -1797,6 +1797,15 @@ public final class Builder {
 	 * the box, then calls {@link #dropDeconstruction}.
 	 */
 	static Deconstruction prepareDeconstruct(ServerLevel level, Site s) {
+		return prepareDeconstruct(level, s, null);
+	}
+
+	/**
+	 * {@link #prepareDeconstruct}; {@code only} (6c PT2, an adopted site): the cells its removal writes (its deltas'): every other cell
+	 * of the restore box is the player's house, never refunded or dropped, and a paid cell the undo writes back with the same block
+	 * (a forward delta that rebuilt an adopted block) is not refunded either: it stays in the world.
+	 */
+	static Deconstruction prepareDeconstruct(ServerLevel level, Site s, java.util.function.@org.jspecify.annotations.Nullable LongPredicate only) {
 		MinecraftServer srv = level.getServer();
 		Run r = run(srv, s);
 		Map<Long, dev.larattalabs.architect.journal.Journal.Value> known = SiteJournal.beforeMap(s.id(), false);
@@ -1815,6 +1824,9 @@ public final class Builder {
 			for (int z = b.minZ(); z <= b.maxZ(); z++) {
 				for (int x = b.minX(); x <= b.maxX(); x++) {
 					m.set(x, y, z);
+					if (only != null && !only.test(m.asLong())) {
+						continue;
+					}
 					if (!cover.isEmpty()) {
 						var over = cover.get(m.asLong());
 						if (over != null) {
@@ -1839,6 +1851,9 @@ public final class Builder {
 					boolean asPlaced = qi >= 0 && r.matches(now, qi);
 					Refunds.Outcome o = Refunds.classify(qi >= 0, asPlaced, qi >= 0 && free.get(qi), now.isAir(), was.is(now.getBlock()),
 						Refunds.natural(Cells.blockId(was), Cells.blockId(now)));
+					if (only != null && o == Refunds.Outcome.REFUND && was.is(now.getBlock())) {
+						o = Refunds.Outcome.NONE; // (6c PT2) the undo writes the same block back: it stays, so no refund
+					}
 					if (o == Refunds.Outcome.REFUND) {
 						tally.add(o, r.cost.get(qi));
 						if (TRACE_REFUNDS) {
