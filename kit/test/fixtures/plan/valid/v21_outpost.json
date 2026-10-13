@@ -1,0 +1,78 @@
+{
+  "about": "an outpost zone (zone.outpost, D2): a town by the stone and a camp at least 40 from it, joined by its road (the corridor)",
+  "on": "asks",
+  "covers": [
+    "zone.outpost"
+  ],
+  "plan": {
+    "schemaVersion": "plan/0",
+    "zones": [
+      {
+        "id": "town",
+        "where": {
+          "near": {
+            "anchor": "stone",
+            "within": 16
+          }
+        },
+        "program": {
+          "lots": [
+            {
+              "id": "t1",
+              "type": "cottage",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "t2",
+              "type": "house",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "t3",
+              "type": "smithy",
+              "size": [
+                9,
+                9
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "id": "camp",
+        "kind": "outpost",
+        "gap": 40,
+        "size": {
+          "w": 40,
+          "d": 40
+        },
+        "program": {
+          "lots": [
+            {
+              "id": "c1",
+              "type": "cottage",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "c2",
+              "type": "house",
+              "size": [
+                9,
+                9
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

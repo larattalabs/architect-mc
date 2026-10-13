@@ -453,6 +453,8 @@ public final class RegionsImpl implements Regions {
 			}
 			BESIDE.put(r, BesideCheck.besideData(r.beside(), standing, st.ir().json(), mine));
 		}
+		// (6c D2) the claim's biome grid (4x4, loaded chunks): a program following a biome edge reads it (ctx.biomes)
+		BIOMES.put(r, BiomeGrid.sample(r.level(), c.minX(), c.minZ(), c.maxX(), c.maxZ()));
 		warnKitMismatch();
 		int res = (long) c.getXSpan() * c.getZSpan() <= 256L * 256 ? 1 : 4;
 		progress(s, null, "planning");
@@ -514,6 +516,7 @@ public final class RegionsImpl implements Regions {
 		}).thenCompose(o -> onServer(s, () -> finishPlan(r, (JsonObject) o[0], (JsonObject) o[1], (byte[]) o[2], opKey, opHash))).thenCompose(f -> f);
 		out.whenComplete((p, e) -> {
 			BESIDE.remove(r);
+			BIOMES.remove(r);
 			if (e != null) {
 				progress(s, null, "failed");
 			}
@@ -523,6 +526,8 @@ public final class RegionsImpl implements Regions {
 
 	/** (6c D1) The beside data of a plan in flight (by request identity), read by planOnce for its region.plan message. */
 	private static final Map<RegionPlanRequest, JsonObject> BESIDE = java.util.Collections.synchronizedMap(new java.util.IdentityHashMap<>());
+	/** (6c D2) The biome grid of a plan in flight (by request identity), read by planOnce. */
+	private static final Map<RegionPlanRequest, JsonObject> BIOMES = java.util.Collections.synchronizedMap(new java.util.IdentityHashMap<>());
 
 	/**
 	 * (6c B) A brush stroke's plan ({@link Brushes}): one {@code region.plan} over a resolution-1 survey of the claim (the brush box
@@ -631,6 +636,10 @@ public final class RegionsImpl implements Regions {
 		JsonObject bd = r.beside() != null ? BESIDE.get(r) : null;
 		if (bd != null) {
 			m.add("beside", bd.deepCopy());
+		}
+		JsonObject bg = BIOMES.get(r);
+		if (bg != null) {
+			m.add("biomes", bg); // (6c D2) read-only after sampling
 		}
 		MinecraftServer s = r.level().getServer();
 		return link.send(m).thenCompose(ack -> {
@@ -1164,6 +1173,34 @@ public final class RegionsImpl implements Regions {
 			note.addProperty("region", rec.beside);
 			note.addProperty("dangling", REGIONS.get(rec.beside) == null);
 			rec.ext.add(EXT_BESIDE, note);
+		}
+		// (6c D2) an outpost's corridor: the settlement land its road crosses (row runs [x0, z, x1, z] per outpost district and their
+		// bounding rect), this region's: undone with it
+		if (ir.json().get("corridor") instanceof JsonObject cor && !cor.isEmpty()) {
+			JsonObject o = new JsonObject();
+			for (var en : cor.entrySet()) {
+				int x0 = Integer.MAX_VALUE, z0 = Integer.MAX_VALUE, x1 = Integer.MIN_VALUE, z1 = Integer.MIN_VALUE;
+				long cells = 0;
+				for (JsonElement run : en.getValue().getAsJsonArray()) {
+					JsonArray q = run.getAsJsonArray();
+					x0 = Math.min(x0, q.get(0).getAsInt());
+					z0 = Math.min(z0, q.get(1).getAsInt());
+					x1 = Math.max(x1, q.get(2).getAsInt());
+					z1 = Math.max(z1, q.get(3).getAsInt());
+					cells += q.get(2).getAsInt() - q.get(0).getAsInt() + 1;
+				}
+				JsonObject one = new JsonObject();
+				one.add("runs", en.getValue().deepCopy());
+				one.addProperty("cells", cells);
+				JsonArray b = new JsonArray();
+				b.add(x0);
+				b.add(z0);
+				b.add(x1);
+				b.add(z1);
+				one.add("rect", b);
+				o.add(en.getKey(), one);
+			}
+			rec.ext.add(EXT_CORRIDOR, o);
 		}
 		if (stroke != null) {
 			rec.brush = stroke.deepCopy(); // (6c B) the stroke's kind and destruction rule, read by every tile check
@@ -2117,6 +2154,8 @@ public final class RegionsImpl implements Regions {
 
 	/** RegionView ext key (Architect's): {@code {region, dangling, since?}} on a region planned beside another (6c D1). */
 	public static final String EXT_BESIDE = "architect_mc:beside";
+	/** RegionView ext key (Architect's): an outpost's corridor, {@code {district: {runs, cells, rect}}} (6c D2). */
+	public static final String EXT_CORRIDOR = "architect_mc:corridor";
 
 	/**
 	 * (6c D1, CONTRACT D §3) The standing region {@code id} was removed first (allowed: journal layering): every region planned beside

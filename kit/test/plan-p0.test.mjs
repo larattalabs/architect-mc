@@ -21,7 +21,7 @@ import { planCatalogue, diffCatalogues } from '../lib/plan/catalogue.mjs';
 
 const SV = { s7: goldenSurvey('s7'), s3: goldenSurvey('s3'), asks: asksSurvey() };
 const read = (dir) => fs.readdirSync(path.join(FIX, dir)).filter((f) => f.endsWith('.json') && f !== 'SOURCE.json').sort().map((f) => ({ name: f, ...JSON.parse(fs.readFileSync(path.join(FIX, dir, f), 'utf8')) }));
-const run = (fx, extra = {}) => { const s = SV[fx.on]; return checkPlanLocal(fx.plan, { survey: s.bytes, claim: s.claim, anchors: stewardAnchors(s.claim), protected: fx.protected ?? [], builds: fx.builds ?? [], ...(fx.standing ? { standing: fx.standing } : {}), ...extra }); };
+const run = (fx, extra = {}) => { const s = SV[fx.on]; return checkPlanLocal(fx.plan, { survey: s.bytes, claim: s.claim, anchors: stewardAnchors(s.claim), protected: fx.protected ?? [], builds: fx.builds ?? [], ...(fx.standing ? { standing: fx.standing } : {}), ...(fx.biomes ? { biomes: fx.biomes } : {}), ...extra }); };
 const lots = (n, p = 'h') => Array.from({ length: n }, (_, i) => ({ id: `${p}${i + 1}`, type: 'house', size: [9, 9] }));
 const A = SV.asks;
 const asks = (plan, o = {}) => checkPlanLocal(plan, { survey: A.bytes, claim: A.claim, anchors: stewardAnchors(A.claim), ...o });
@@ -242,18 +242,24 @@ test('item 9: the catalogue diff (D1 flips program.districts and endpoint.region
   const p0 = JSON.parse(fs.readFileSync(path.join(FIX, 'catalogue-p0.json'), 'utf8'));
   const golden = JSON.parse(fs.readFileSync(path.join(ROOT, 'kit', 'schemas', 'plan-catalogue.golden.json'), 'utf8'));
   const next = JSON.parse(fs.readFileSync(path.join(FIX, 'catalogue-next.json'), 'utf8'));
-  for (const [to, what] of [[next, 'catalogue-next.json'], [golden, 'the D1 golden']]) {
+  // (D2) the current golden adds D2's four flips (zone.outpost, locator.along, feature.biome_edge, feature.ridge) over D1's, archived as
+  // fixtures/plan/catalogue-d1.json
+  const d1 = JSON.parse(fs.readFileSync(path.join(FIX, 'catalogue-d1.json'), 'utf8'));
+  const d2 = diffCatalogues(d1, golden);
+  assert.deepEqual(d2.reservedToSupported.sort(), ['feature.biome_edge', 'feature.ridge', 'locator.along', 'zone.outpost']);
+  assert.deepEqual([d2.added, d2.removed, d2.retired, d2.otherStateChanges], [[], [], [], []]);
+  for (const [to, what, flips] of [[next, 'catalogue-next.json', ['endpoint.region', 'program.districts']], [d1, 'the D1 golden', ['endpoint.region', 'program.districts']]]) {
     const d = diffCatalogues(p0, to, { pending: [{ part: 'craftsmen_district', block: 'program.districts' }, { part: 'wall', block: 'connector.wall' }] });
-    assert.deepEqual(d.reservedToSupported, ['endpoint.region', 'program.districts'], what);
+    assert.deepEqual(d.reservedToSupported, flips, what);
     assert.deepEqual(d.added, [], what);
     assert.deepEqual(d.removed, [], what);
     assert.deepEqual(d.retired, [], what);
     assert.deepEqual(d.otherStateChanges, [], what);
     assert.deepEqual(d.recheck, [{ part: 'craftsmen_district', block: 'program.districts' }], what);
   }
-  // the golden D1 ships is catalogue-next.json, entry for entry (its api and kit versions aside)
-  assert.deepEqual(golden.entries, next.entries);
-  assert.equal(golden.catalogueVersion, next.catalogueVersion);
+  // the golden D1 shipped is catalogue-next.json, entry for entry (its api and kit versions aside)
+  assert.deepEqual(d1.entries, next.entries);
+  assert.equal(d1.catalogueVersion, next.catalogueVersion);
 });
 
 // ------------------------------------------------------------------ 11

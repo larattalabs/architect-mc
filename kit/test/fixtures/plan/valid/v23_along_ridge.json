@@ -1,0 +1,40 @@
+{
+  "about": "a zone along a ridge (feature.ridge, D2) on S3's pinned claim (one lot: the crest is steep, the slope pads hold at most 6 of cut or fill)",
+  "on": "s3",
+  "covers": [
+    "feature.ridge"
+  ],
+  "plan": {
+    "schemaVersion": "plan/0",
+    "zones": [
+      {
+        "id": "crest",
+        "where": {
+          "along": {
+            "feature": {
+              "ridge": {
+                "minRise": 8
+              }
+            }
+          }
+        },
+        "size": {
+          "w": 96,
+          "d": 24
+        },
+        "program": {
+          "lots": [
+            {
+              "id": "r1",
+              "type": "cottage",
+              "size": [
+                7,
+                7
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

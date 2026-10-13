@@ -1,12 +1,8 @@
 {
-  "about": "every reserved catalogue entry answers unsupported with its block id (generated from x-catalogue; first half) (D1: program.districts, its alias zone kind district and endpoint.region left the list when they shipped)",
+  "about": "every reserved catalogue entry answers unsupported with its block id (generated from x-catalogue; first half) (D1: program.districts, its alias zone kind district and endpoint.region left the list when they shipped; D2: zone.outpost, locator.along, feature.biome_edge and feature.ridge)",
   "on": "s7",
   "expect": {
     "all": [
-      {
-        "part": "zk_outpost",
-        "block": "zone.outpost"
-      },
       {
         "part": "z2",
         "block": "layout.ring"
@@ -96,24 +92,12 @@
         "block": "form.floating_island"
       },
       {
-        "part": "z6",
-        "block": "locator.along"
-      },
-      {
         "part": "z7",
         "block": "locator.around"
       },
       {
         "part": "z8",
         "block": "feature.region"
-      },
-      {
-        "part": "z9",
-        "block": "feature.biome_edge"
-      },
-      {
-        "part": "z10",
-        "block": "feature.ridge"
       },
       {
         "part": "z11",
@@ -124,22 +108,6 @@
   "plan": {
     "schemaVersion": "plan/0",
     "zones": [
-      {
-        "id": "zk_outpost",
-        "kind": "outpost",
-        "program": {
-          "lots": [
-            {
-              "id": "zk_outpost_lot",
-              "type": "house",
-              "size": [
-                9,
-                9
-              ]
-            }
-          ]
-        }
-      },
       {
         "id": "z2",
         "program": {
@@ -205,28 +173,6 @@
         }
       },
       {
-        "id": "z6",
-        "program": {
-          "lots": [
-            {
-              "id": "z6_lot",
-              "type": "house",
-              "size": [
-                9,
-                9
-              ]
-            }
-          ]
-        },
-        "where": {
-          "along": {
-            "feature": {
-              "water": {}
-            }
-          }
-        }
-      },
-      {
         "id": "z7",
         "program": {
           "lots": [
@@ -266,55 +212,6 @@
           "near": {
             "feature": {
               "region": "rg9"
-            }
-          }
-        }
-      },
-      {
-        "id": "z9",
-        "program": {
-          "lots": [
-            {
-              "id": "z9_lot",
-              "type": "house",
-              "size": [
-                9,
-                9
-              ]
-            }
-          ]
-        },
-        "where": {
-          "near": {
-            "feature": {
-              "biome_edge": {
-                "between": [
-                  "desert",
-                  "jungle"
-                ]
-              }
-            }
-          }
-        }
-      },
-      {
-        "id": "z10",
-        "program": {
-          "lots": [
-            {
-              "id": "z10_lot",
-              "type": "house",
-              "size": [
-                9,
-                9
-              ]
-            }
-          ]
-        },
-        "where": {
-          "near": {
-            "feature": {
-              "ridge": {}
             }
           }
         }

@@ -65,6 +65,7 @@ public final class ApiRules {
 					case "region.planCheck" -> "planCheck"; // 6c P0 (with planCatalogue, below)
 					case "region.districts" -> "districtsPass"; // 6c D1: the helper's kit has the districts pass and program
 					case "region.beside" -> "besideRegion"; // 6c D1: the helper passes a standing region to the plan (region.plan beside)
+					case "region.boundary" -> "boundaryDistricts"; // 6c D2: districts following a biome edge, shore or ridge (with outposts, below)
 					default -> Wire4b.FEATURE_NAMES.getOrDefault(f, Wire5a.FEATURE_NAMES.getOrDefault(f, f));
 				});
 			}
@@ -78,6 +79,9 @@ public final class ApiRules {
 			}
 			if (sidecarFeatures.contains("region.passes")) {
 				out.add("reliefOp"); // 6c T1: a T1 helper's kit has the relief op and pass
+			}
+			if (sidecarFeatures.contains("region.boundary")) {
+				out.add("outposts"); // 6c D2: an outpost district and its corridor
 			}
 			if (sidecarFeatures.contains("region.planCheck")) {
 				out.add("planCatalogue"); // 6c P0: a P0 helper's kit returns the capability catalogue with every check
