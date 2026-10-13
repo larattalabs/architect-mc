@@ -11,6 +11,13 @@ const name = (s) => String(s).replace(/\[.*$/, '');
 const PLANTS = new Set(['minecraft:fern', 'minecraft:large_fern', 'minecraft:bush', 'minecraft:short_grass', 'minecraft:tall_grass']);
 const isSnowLayer = (s) => s === 'minecraft:snow' || String(s).startsWith('minecraft:snow[');
 
+/** A planned state with only some properties (`glow_lichen[up=true]`: the rest are the block's defaults) against the dump's full one. */
+function sameState(want, got) {
+  const p = (x) => { const i = x.indexOf('['); return [i < 0 ? x : x.slice(0, i), i < 0 ? [] : x.slice(i + 1, -1).split(',')]; };
+  const [wn, wp] = p(want), [gn, gp] = p(got);
+  return wn === gn && wp.every((kv) => gp.includes(kv));
+}
+
 /** The parts that hold scatter and stamp ops (by IR part index) and their kinds. */
 export function f2Parts(ir) {
   const scatter = new Set(), stamp = new Set();
@@ -70,7 +77,7 @@ export function asPlanned({ ir, vw, after }) {
     e.cells++;
     const want = vw.pal.states[idx], got = stateAt(after, x, y, z);
     if (got === null) e.outside++;
-    else if (got === want) e.equal++;
+    else if (got === want || sameState(want, got)) e.equal++;
     else { e.differ++; if (e.sample.length < 10) e.sample.push([x, y, z, want, got]); }
   });
   return [...out.values()];
