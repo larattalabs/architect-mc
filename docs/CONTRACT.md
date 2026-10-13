@@ -10880,7 +10880,7 @@ library file while the site stands is the existing pinned-version refusal.
   forward construction delta. Reverting to v1 is a normal revert; there is no v0.
 - **Undo, and `remove`, of the adoption un-adopt only.** The journal `adopt` entry has `before == after`, so undoing it writes
   nothing: the site record goes, the build returns to its `priorState` (`ACTIVE` or `CLAIMED`) with `siteId` null and its
-  records untouched, `BUILD_CHANGED` and the site-removed event fire, **the house stays**. `remove(siteId)` on an updated site first
+  records untouched, `BUILD_CHANGED` and `SITE_REMOVED` fire, **the house stays**. `remove(siteId)` on an updated site first
   undoes its delta group (5b: back to the adopted state), then un-adopts. The entry goes to the library trash when it has one
   version; it **stays** when it has two or more (a paid design history, SQ-PT2-5). The slice never removes the house.
 - **Redo.** `adopt` again after an un-adopt makes a new site and, if the old entry stayed, a new entry (no reuse in v0).
@@ -10938,7 +10938,7 @@ bed and a sign, built by the fake player, `HOUSE`.
 | 10 | Protection stays | with the cabin adopted: a stroke, a road across it, felling at its wall and a region plan keep it (`PLAYER_BUILD`), a consent naming the build lets a `PLAYER_BLOCKS` stroke clear it; growth cells over the player's lean-to refuse `PLAYER_BUILD` unless consent names the build |
 | 11 | Build states | adopted builds do not demote under 20 cells; a merge with an `ACTIVE` build keeps the id; two adopted builds do not merge; a split keeps the id on the largest part; `releaseBuild` refuses |
 | 12 | Elsewhere | `place` of the adopted entry refuses `placed_elsewhere`; `polish` refuses; the entry's library delete while the site stands refuses |
-| 13 | API, spend | api-compat clean against the archived 0.27.0 jars, apitest through the public API, an old reader opens a world without `adopt` entries, a 0.27.0 jar refuses one with them; $0.00 |
+| 13 | API, spend | api-compat clean against the archived 0.27.0 jars, apitest through the public API, an old reader opens a world without `adopt` entries, and what a 0.27.0 jar does with one that has them is recorded; $0.00 |
 
 **Tier:** slice: units, apijars and api-compat, the impact steps (`site/**`, `delta/**`, `journal/**`, `placed/**`,
 `library/**`), PT2's own items. **gate-verifier** re-runs items 5, 6, 7 and 8 (undo, journal, removal, accounting) per the
