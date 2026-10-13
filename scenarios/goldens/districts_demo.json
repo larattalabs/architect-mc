@@ -1,0 +1,31 @@
+{
+ "scenario": "districts_demo",
+ "version": 0,
+ "note": "tile shas of the IR over its own plan survey (kit windowFromSurvey), 1 worker = 4 workers shuffled; inputs in goldens/districts_demo/ (planned offline over route_demo's golden survey of S3's pinned claim, the scenario's seed)",
+ "fromRun": "kit (D1 builder, offline)",
+ "irSha": "7fda72bb33e7cb672cf691d420af35b85ce4505ab3b8cb4ca285232e96203feb",
+ "kitVersion": "0.28.0",
+ "cells": 19237,
+ "tiles": {
+  "ground|path|56,-14": "a6f2c4578ba94996d23f9ec7c684dd5d67190905a6249e740baaab55d012b42f",
+  "ground|path|56,-15": "61fae8a24f0db7545c6e1ff41efeb25553f2d25e0e2c68f6adf12d3b36aed9a4",
+  "ground|path|57,-15": "27cfeb122207fd16aa623338b1c187e1281d7fe59abf76f479b243a3be3e188c",
+  "ground|path|57,-16": "65a2d1783361b7fb11e520f53a1082f3c41dfbed996146e7436702ec8b92250f",
+  "ground|path|57,-17": "bb64ae6621faad69c57290b59c6662048177a4ebb57196d3ac1a77c40330a3ff",
+  "ground|terrain|56,-14": "04e6ab35f343f517245044c1e94fd89ccbc90b87be8eb5a2d97f8d9aa2fef9d2",
+  "ground|terrain|56,-15": "0271a1e004e1c35592fae51b7c2ca19700206adf901a31a8affbed81e588b4c8",
+  "ground|terrain|57,-15": "39af0d5f6a33cd60284c3b34bd5ad69f2a23c7c4611a32fdb4b44b68f401fe24",
+  "ground|terrain|57,-16": "4f48f00466241e6b31075b359acb299957f7950916b964b647e861d5ffa92f99",
+  "ground|terrain|57,-17": "60eddf9d4cd1d0fce367ca10369193899d88a168d3ae4f6070803685555b96fc",
+  "props|terrain|56,-14": "1e0ec96192771df9aee5686fcf3e383a033f4fd4239d3f95532f2b97f319d6f3",
+  "props|terrain|56,-15": "67f92f383884e15f89f01ce7bda4757202d42290549933ba668b17f3e647d34e",
+  "props|terrain|56,-16": "553d35175b033dcba75c78ed90e1f76a9477bbf75e7af0a29c6fe986e0ca6886",
+  "props|terrain|57,-14": "553d35175b033dcba75c78ed90e1f76a9477bbf75e7af0a29c6fe986e0ca6886",
+  "props|terrain|57,-15": "3ddf8914a704a178546bdefac1762b36fa8c02fa1dae7ac18e3e65c732958da7",
+  "props|terrain|57,-16": "87499cb26408d7701b83b8bdcf490816482af294140391f5f48a7089f249dcd5",
+  "props|terrain|57,-17": "81449523b33fbe39743f12e74f26fb90b03bf0861942671d2a6288846f1fad21",
+  "routes|path|56,-15": "cb96caf2f37c2d0d26af0bf647fb4edd2349914bf1c661882b2d06c55de0a301",
+  "routes|path|57,-15": "4559d8baec1152da33c2daf7aa1d7d212e972ab17ab2c572f3d1bff3f751e39e",
+  "routes|path|57,-16": "5488e0831db4949cb9a9d90ed41d8ddfe19ccea791cbe9afcab16ac0904dd9f9"
+ }
+}

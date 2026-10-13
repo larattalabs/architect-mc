@@ -17,7 +17,7 @@ export const PROTOCOL_VERSION = 1 as const;
 export const PROTOCOLS = [1, 2] as const;
 export type Protocol = (typeof PROTOCOLS)[number];
 /** What a protocol-2 snapshot lists in `features`. */
-export const FEATURES = ['job.run', 'job.tools', 'blobs', 'budget', 'designs.v2', 'bibles', 'design.groups', 'named.parts', 'open.types', 'estimates', 'reskin', 'massing', 'critique', 'critique.report', 'job.images', 'bible.admin', 'bible.restraint', 'entry.versions', 'entry.delta', 'design.polish', 'critique.polish', 'region.plan', 'region.tiles', 'region.check', 'region.preview', 'region.design', 'region.blobs', 'ir.format2', 'estimate.kinds', 'opKeys', 'group.breakdown', 'copies', 'smallEffort', 'versionOf', 'extendInfo', 'region.keepOut', 'region.lightCover', 'region.forms1', 'masks', 'patterns', 'region.passes', 'import.schem', 'region.scatter', 'region.brush', 'region.route', 'region.planCheck', 'plan.feature.build'] as const;
+export const FEATURES = ['job.run', 'job.tools', 'blobs', 'budget', 'designs.v2', 'bibles', 'design.groups', 'named.parts', 'open.types', 'estimates', 'reskin', 'massing', 'critique', 'critique.report', 'job.images', 'bible.admin', 'bible.restraint', 'entry.versions', 'entry.delta', 'design.polish', 'critique.polish', 'region.plan', 'region.tiles', 'region.check', 'region.preview', 'region.design', 'region.blobs', 'ir.format2', 'estimate.kinds', 'opKeys', 'group.breakdown', 'copies', 'smallEffort', 'versionOf', 'extendInfo', 'region.keepOut', 'region.lightCover', 'region.forms1', 'masks', 'patterns', 'region.passes', 'import.schem', 'region.scatter', 'region.brush', 'region.route', 'region.planCheck', 'plan.feature.build', 'region.districts', 'region.beside'] as const;
 
 const Ts = z.number().int().nonnegative();
 const Id = z.string().min(1).max(64);
@@ -1117,6 +1117,16 @@ export const RegionPlanMsg = z.object({
     .max(1024)
     .optional()
     .describe("(6c V) the request owner's protected areas that meet the claim, [[x0, z0, x1, z1]] (all heights): a program reads them as ctx.keepOut"),
+  beside: z
+    .object({
+      id: z.string().regex(/^[A-Za-z0-9_.-]{1,64}$/),
+      claim: z.tuple([z.number().int(), z.number().int(), z.number().int(), z.number().int()]),
+      lots: z.array(z.tuple([z.number().int(), z.number().int(), z.number().int(), z.number().int()])).max(8192).optional(),
+      keep: z.array(z.tuple([z.number().int(), z.number().int(), z.number().int(), z.number().int()])).max(8192).optional(),
+      graph: z.object({ nodes: z.array(z.unknown()).max(4096), edges: z.array(z.unknown()).max(8192) }).passthrough().optional(),
+    })
+    .optional()
+    .describe("(6c D1) the standing region the plan is laid out beside (Regions.plan's beside): its id, claim, lot boxes, footprint near this claim and graph; a program reads it as ctx.beside"),
   planCache: z.string().min(1).max(256).optional().describe('(6c P0) a plan check: the owner whose per-part cache the kit reads (<data>/regions/plancache/<sha(owner)>/; 24 h or 256 checks per owner), and region.planned carries planCheck'),
   previewViews: z.array(z.enum(['top', 'section', 'iso', 'siteplan'])).min(1).max(4).optional().describe('(6c P0) the previews to render after the check (default all four; a plan check renders siteplan only: images on request)'),
   timeoutMs: z.number().int().min(1).max(600_000).optional().describe("(6c P0) at most this plan time (a check's maxMs plus its grace; never more than the program's budget)"),

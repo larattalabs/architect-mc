@@ -7,7 +7,7 @@ export const id = 'districts_demo';
 export const description = 'Three districts at three level bands, joined by routes (6c D1 fixture).';
 export const catalogue = false;
 export const passes = ['districts', 'route'];
-export const roles = { path: 'minecraft:gravel', foundation: 'minecraft:stone_bricks', light: 'minecraft:lantern' };
+export const roles = { path: 'minecraft:coarse_dirt', foundation: 'minecraft:stone_bricks', light: 'minecraft:lantern' };
 
 export const params = {
   loopiness: { type: 'int', min: 0, max: 100, default: 15, label: 'Loopiness (%)' },

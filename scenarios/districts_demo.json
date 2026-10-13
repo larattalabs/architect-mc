@@ -1,0 +1,90 @@
+{
+  "id": "districts_demo",
+  "short": "districts_demo",
+  "phase": "6c-d",
+  "version": 0,
+  "brief": "districts fixture: a cloister (high band), a village (mid band) and fields (low band) placed by the districts pass on survey candidates of S3's pinned claim, each a V street of its lots with its shared space, joined by T2 routes (a minimum spanning tree by route cost plus loops within 0.15 of it), soul-lantern route lamps (docs/CONTRACT.md 6c D \u00a72, \u00a74)",
+  "program": "districts_demo",
+  "params": {},
+  "world": {
+    "seed": "2026100906",
+    "preset": "normal",
+    "gamerules": "gallery"
+  },
+  "fixture": {
+    "claim": [
+      3604,
+      -1036,
+      3795,
+      -845
+    ],
+    "yRange": [
+      22,
+      220
+    ],
+    "foundBy": "S3's pinned fixture (scenarios/s3_monastery.json); the districts placed by the pass on the claim's own survey"
+  },
+  "flat": {
+    "preset": "flat",
+    "claimOffset": [
+      0,
+      0
+    ],
+    "gamerules": "exact"
+  },
+  "seed": "2026101301",
+  "cams": {
+    "cam_e": [
+      3712.5,
+      164,
+      -920.5,
+      90.4,
+      42.7
+    ],
+    "cam_ground": [
+      3662.5,
+      108,
+      -896.5,
+      140.1,
+      15.7
+    ],
+    "cam_high": [
+      3650.5,
+      185,
+      -912.5,
+      135,
+      82
+    ],
+    "cam_n": [
+      3642.5,
+      156,
+      -990.5,
+      0.4,
+      39.4
+    ],
+    "cam_s": [
+      3642.5,
+      135,
+      -850.5,
+      179.6,
+      27.1
+    ],
+    "cam_w": [
+      3604.5,
+      135,
+      -920.5,
+      -90.8,
+      43.8
+    ]
+  },
+  "lotEntries": {
+    "chapel_1": "g6a_stub_9",
+    "cell_1": "g6a_stub_9",
+    "house_1": "g6a_stub_9",
+    "house_2": "g6a_stub_9",
+    "smithy_1": "g6a_stub_9",
+    "barn_1": "g6a_stub_9",
+    "cottage_1": "g6a_stub_9",
+    "mill_1": "g6a_stub_9"
+  }
+}

@@ -31,7 +31,7 @@
           "name": { "type": "string" }, "at": { "$ref": "#/$defs/xyz" }, "facing": { "enum": ["north", "south", "east", "west", "up"] }, "width": { "type": "integer", "minimum": 1 } } } } } } },
       "edges": { "type": "array", "items": { "type": "object", "required": ["id", "from", "to", "type", "path", "stage", "mover"], "additionalProperties": false, "properties": {
         "id": { "type": "string" }, "from": { "type": "string" }, "to": { "type": "string" }, "type": { "enum": ["road", "stair", "bridge", "graded", "path"] }, "width": { "type": "integer", "minimum": 1 },
-        "path": { "type": "string" }, "stage": { "type": "string" }, "mover": { "type": "array", "items": { "enum": ["player", "villager"] } }, "part": { "type": "string" } } } } } },
+        "path": { "type": "string" }, "stage": { "type": "string" }, "mover": { "type": "array", "items": { "enum": ["player", "villager"] } }, "part": { "type": "string" }, "external": { "type": "boolean", "description": "(6c D1) to is another region's port, <region>:<node>.<port> (a district's join to the standing region it was planned beside; 7a types it)" } } } } } },
     "unplaced": { "type": "array", "items": { "type": "object", "required": ["id", "reason"], "additionalProperties": false, "properties": {
       "id": { "type": "string" }, "reason": { "type": "string" } } } },
     "props": { "type": "array", "items": { "type": "object", "required": ["kind", "id", "at"], "additionalProperties": false, "properties": {

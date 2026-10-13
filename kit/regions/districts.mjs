@@ -13,7 +13,7 @@ export const description = 'Districts on survey candidates, joined by routes (6c
 /** Not in Regions.design's pick (a paid re-run of the pick, deferred, as V). */
 export const catalogue = false;
 export const passes = ['districts', 'route'];
-export const roles = { path: 'minecraft:gravel', foundation: 'minecraft:stone_bricks', light: 'minecraft:lantern' };
+export const roles = { path: 'minecraft:coarse_dirt', foundation: 'minecraft:stone_bricks', light: 'minecraft:lantern' };
 
 export const params = {
   spec: { type: 'json', default: null, maxChars: 32768, label: 'Districts' },
