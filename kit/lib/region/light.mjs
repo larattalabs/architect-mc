@@ -22,6 +22,7 @@ import { nodeReached, walkGraph, walkNodes } from './check.mjs';
 import { centreCells, crossOffsets, rightOf, segmentAxis } from './geom.mjs';
 import { ARM_DIRS, DEFAULT_FIXTURE, fixtureCells } from './fixtures.mjs';
 import { COND } from './program.mjs';
+import { walkKinds } from '../realise.mjs';
 
 const DIRS6 = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]];
 export const COVER_SHARE = 0.005;
@@ -105,9 +106,18 @@ function roadLights(vw, ir, fixtureOf) {
  */
 export function lightCover(r, { fixture, stage = 'props', keepOut = [], reserved = new Set(), laneCells = [], maxPerLot = LAMPS_PER_LOT, share = COVER_SHARE, extra = [], extraCap = {}, part = 'props_apron', _drop = null } = {}) {
   const { ir, blobs } = draftIR(r);
+  // (6c S2) a draft with side blobs (a relief pass's fields, a frozen volume, a baked form) is a format-2 IR (the kinds it walks),
+  // and its virtual world reads the volumes the plan used (the kept natural cells are there, not air); a draft without side blobs
+  // (S7, route_demo) stays as it was
+  let volumes = [];
+  if (ir.blobs && Object.values(ir.blobs).some((b) => b && b.sha !== undefined)) {
+    ir.format = 2;
+    ir.requires = walkKinds(ir);
+    volumes = (r.ctx.volumes ?? []).filter((v) => Object.values(r.volumesUsed).some((u) => u.sha === v.sha)).map((v) => v.decoded).filter(Boolean);
+  }
   const meta = { lots: r.meta.lots, parts: r.meta.parts };
   const surveyCols = r.ctx.survey.columns;
-  const vw = buildVirtual({ ir, survey: surveyCols, blobs }).vw;
+  const vw = buildVirtual({ ir, survey: surveyCols, blobs, volumes }).vw;
   const P = vw.pal;
   const start = ir.anchors?.entrance;
   const opaque = (x, y, z) => P.opaque[vw.get(x, y, z)] || !!vw.lotAt(x, y, z);

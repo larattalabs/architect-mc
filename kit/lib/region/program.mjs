@@ -216,7 +216,9 @@ export class Region {
     const fname = it.name ?? name;
     const t0 = performance.now();
     // (never below the claim's bottom 2 rows, as terraces: bedrock on a flat world)
-    const out = PASSES[name](this.survey.columns, this.ctx.volumes ?? [], { ...it, name: fname, minY: Math.max(it.minY ?? -32768, this.claim.minY + 2) });
+    // (6c S2) the plan's kept natural cells (r.keepNatural): the relief never writes their columns
+    const kept = this._keptColumns();
+    const out = PASSES[name](this.survey.columns, this.ctx.volumes ?? [], { ...it, name: fname, minY: Math.max(it.minY ?? -32768, this.claim.minY + 2), ...(kept.length ? { keep: kept } : {}) });
     const ms = Math.round(performance.now() - t0);
     const heapMb = Math.round(process.resourceUsage().maxRSS / 1024);
     const res = { fields: {}, ops: out.ops.length, data: { ...out.data, ms } };
@@ -281,7 +283,9 @@ export class Region {
     // (6c PT) the caller's rects whose logs are no trees (a player's log build: kept out, never felled, so no tree reach)
     for (const b of it.clearTrees ?? []) clearTrees.push([...b]);
     for (const f of this.forms) if (f.bounds) hard.push([f.bounds.minX, f.bounds.minZ, f.bounds.maxX, f.bounds.maxZ]);
-    for (const p of this.parts) for (const k of p.keep ?? []) hard.push([k.box.minX, k.box.minZ, k.box.maxX, k.box.maxZ]);
+    // (6c S2) a keep set is an obstacle where it keeps a cell: its kept columns, not its whole box (F1's keepNatural over a claim's
+    // volume would otherwise block every column of the claim)
+    for (const [x, z] of this._keptColumns()) hard.push([x, z, x, z]);
     const keepOut = [...(this.ctx.keepOut ?? []), ...(it.keepOut ?? [])].map((k) => [...k]);
     // hysteresis: the caller's cells, 4e roads and graded paths already in the plan
     // (ctx.routePrefer: an earlier plan's routes, [[x, z]] for every edge or {edgeId: [[x, z]]} each edge its own)
@@ -324,7 +328,9 @@ export class Region {
       for (const l of d.landings) for (const [x, z] of l.cells) routeCols.add(`${x},${z}`);
     }
     const nearLot = (x, z) => this.lots.some((l) => { const m = 1 + Math.max(l.pad?.maxCut ?? 0, l.pad?.maxFill ?? 0); return x >= l.box.minX - m && x <= l.box.maxX + m && z >= l.box.minZ - m && z <= l.box.maxZ + m; });
-    const noRetain = (x, z) => routeCols.has(`${x},${z}`) || nearLot(x, z);
+    // (6c S2) nor on a kept natural cell's column (r.keepNatural: a natural ice spike beside the walk stands over it as land)
+    const keptCols = new Set(this._keptColumns().map(([x, z]) => `${x},${z}`));
+    const noRetain = (x, z) => routeCols.has(`${x},${z}`) || nearLot(x, z) || keptCols.has(`${x},${z}`);
     // a slope pad's batter fill (stage before the routes): ring k (1..maxFill) out from the apron is filled to the pad's top - 1 - k
     const fillTop = (x, z) => {
       let top = -Infinity;
@@ -660,6 +666,28 @@ export class Region {
     const has = (x, y, z) => x >= box.minX && x <= box.maxX && y >= box.minY && y <= box.maxY && z >= box.minZ && z <= box.maxZ && classAt(v, x, y, z) === want;
     const near = (x, z, r) => { for (let dx = -r; dx <= r; dx++) for (let dz = -r; dz <= r; dz++) if (columns.has(`${x + dx},${z + dz}`)) return true; return false; };
     return { volume: name, part: pid, cells, columns, has, near };
+  }
+
+  /**
+   * (6c S2) The [x, z] columns holding a cell of any part's keep set (r.keepNatural), sorted (z, then x), from the decoded volumes.
+   * Empty without keep sets (or before the volume arrives). Cached until the next keepNatural.
+   */
+  _keptColumns() {
+    const sets = this.parts.flatMap((p) => p.keep ?? []);
+    if (!sets.length) return [];
+    if (this._keptCache && this._keptCache.n === sets.length) return this._keptCache.cols;
+    const cols = new Set();
+    for (const k of sets) {
+      const v = this._volumeDecoded?.get(k.volume);
+      if (!v) continue;
+      const want = VC[k.class], b = k.box;
+      for (let z = b.minZ; z <= b.maxZ; z++) for (let x = b.minX; x <= b.maxX; x++) for (let y = b.minY; y <= b.maxY; y++) {
+        if (classAt(v, x, y, z) === want) { cols.add(`${x},${z}`); break; }
+      }
+    }
+    const out = [...cols].map((s) => s.split(',').map(Number)).sort((a, b) => a[1] - b[1] || a[0] - b[0]);
+    this._keptCache = { n: sets.length, cols: out };
+    return out;
   }
 
   /** (6c F1) An `iceSpike` cluster (lib/forms/iceSpike.mjs) as form part `id`, on the plan ground. Options as `form` (`bake`). */
