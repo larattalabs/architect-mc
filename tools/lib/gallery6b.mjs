@@ -47,7 +47,21 @@ export async function build({ phase, local, ART, SCEN, evidenceSha }) {
   const img = path.join(out, 'img');
   fs.mkdirSync(img, { recursive: true });
   const scenarios = [];
-  if (phase === '6c-w') {
+  if (phase === '6c') {
+    // (6c S2) the 6c gallery: S2 (bar 16: Noah's approval of its evidence sha), then the page's earlier sections as published (W's S7
+    // and its looks, V's S7), their images already on the page (jpg) and their decisions keyed to their own phases
+    const sc = JSON.parse(fs.readFileSync(path.join(SCEN, 's2_ice_spikes.json'), 'utf8'));
+    const dir = path.join(ART, '6c', 's2');
+    const nat = latest(dir, false);
+    if (nat) scenarios.push(section({ sc, nat, flat: latest(dir, true), key: 's2', img, evidenceSha, extra: { phase: '6c', note: 'The outpost stands on the land only (N-S2-1): 7 lots on the ice-free band between the natural spikes (a longhouse, the watch tower, a smithy, a store, the farm Steward asked for, and 2 huts; a third hut has no site), each pad blended into the snow, 1-wide plank boardwalks from the gate to every door, 6 generated spike clusters in the gaps, boulders, spruce stumps and snow layers, and soul lanterns (light 10: no ice or snow melts). The frozen sea and every natural spike are untouched.' } }));
+    const wData = path.join(ART, '6c-w', 'gallery', 'data.json');
+    if (fs.existsSync(wData)) {
+      const jpg = (src) => (src && /\.png$/.test(src) ? src.replace(/\.png$/, '.jpg') : src);
+      for (const v of JSON.parse(fs.readFileSync(wData, 'utf8')).scenarios) {
+        scenarios.push({ ...v, earlier: v.earlier ?? false, cams: v.cams.map((c) => ({ ...c, before: jpg(c.before), after: jpg(c.after) })), previews: v.previews.map((q) => ({ ...q, src: jpg(q.src) })) });
+      }
+    }
+  } else if (phase === '6c-w') {
     // (6c W) S7 with W (Noah's decision), its looks in two more bibles (recorded), then V's approved section as it was
     const sc = JSON.parse(fs.readFileSync(path.join(SCEN, 's7_flat_village.json'), 'utf8'));
     const base = path.join(ART, '6c-w');
@@ -81,8 +95,8 @@ export async function build({ phase, local, ART, SCEN, evidenceSha }) {
   const calFile = path.join(out, 'calibration', 'calibration.json');
   if (fs.existsSync(calFile)) calibration = JSON.parse(fs.readFileSync(calFile, 'utf8')).renders;
   // (6c V, W) the slice's own page title and bar reference; W republishes V's page (the same title, a new section)
-  const title = phase === '6c-v' || phase === '6c-w' ? 'Architect 6c-V gallery' : `Architect ${phase} gallery`;
-  const barsTitle = phase === '6c-w' ? 'Bars (CONTRACT 6c slice V §7 and W §7), on the realised world' : phase === '6c-v' ? 'Bars (CONTRACT 6c slice V §7), on the realised world' : 'Bars (CONTRACT 6b §8.3), on the realised world';
+  const title = phase === '6c-v' || phase === '6c-w' ? 'Architect 6c-V gallery' : `Architect ${phase} gallery`; // (6c S2: 'Architect 6c gallery', the same page)
+  const barsTitle = phase === '6c' ? 'Bars (CONTRACT 6c slice S2 §3; earlier sections: V §7 and W §7), on the realised world' : phase === '6c-w' ? 'Bars (CONTRACT 6c slice V §7 and W §7), on the realised world' : phase === '6c-v' ? 'Bars (CONTRACT 6c slice V §7), on the realised world' : 'Bars (CONTRACT 6b §8.3), on the realised world';
   const data = { phase, title, barsTitle, built: new Date().toISOString(), local: !!local, scenarios, calibration };
   if (!local) fs.writeFileSync(path.join(out, 'data.json'), `${JSON.stringify(data, null, 1)}\n`);
   const tpl = fs.readFileSync(path.join(HERE, 'gallery6b.html'), 'utf8');
