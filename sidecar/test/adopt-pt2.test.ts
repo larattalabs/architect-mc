@@ -118,7 +118,7 @@ describe.skipIf(!hasKit)('an adopted entry (sim backend, real kit)', () => {
     await until(() => ['done', 'failed', 'cancelled'].includes(sc.designs.get(d.id)!.status), 60_000);
     const done = sc.designs.get(d.id)!;
     expect(done.status, done.error).toBe('done');
-    expect(done.step).toMatch(/the bible birch v\d+ was ignored: a captured source keeps the player's blocks as built/);
+    expect(done.step).toMatch(/; bible birch v\d+ ignored \(captured: the player's blocks kept\)/);
     const j = JSON.parse(fs.readFileSync(path.join(cfg.libraryDir, ID, `${ID}.blueprint.json`), 'utf8')) as Record<string, unknown>;
     expect(j.version).toBe(2);
     expect(j.sourceKind).toBe('captured');

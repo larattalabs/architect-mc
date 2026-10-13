@@ -10,13 +10,14 @@
 //   { format: 1, build, size: [x, y, z], groundY, front, frameGuessed, palette: ['minecraft:oak_log[axis=y]', ...],
 //     runs: [y, z, x0, x1, p, ...]  (runs along x, one palette index each; every captured cell is in exactly one run),
 //     nbt: { 'x,y,z': <tagged compound> } (lib/nbt.mjs's {t, v} shape; a long's v is a decimal string),
-//     wall: '<state>' (the most used non-air captured state: what an added storey is built of),
+//     wall: '<state>' (the most used non-air captured state: an added storey's walls; C35: its frame and roof come from the mix too),
 //     anchors: { entrance?: {x, y, z, yaw, pitch}, spawn?: ... } (outside the door; none for a guessed front) }
 //
 // One part, `adopted` (v0, SQ-PT2-3). The param `floors` (default 0) adds storeys on top: the sim's versionOf ("an int param's
 // default up by one") then adds a floor, and a designer may do the same. Each storey stands on the old top layer's footprint: a
 // ring of walls 4 high, a roof layer, and one hatch cut into the layer below (the first storey's hatch is one of v1's cells).
 import { Blueprint } from './kit.mjs';
+import { isCube } from './blocks.mjs';
 
 export const ADOPT_FORMAT = 1;
 /** Rows one added storey takes: 4 of walls, 1 of roof. */
@@ -68,6 +69,9 @@ export function adopted(id, cap, { floors = 0, name, description } = {}) {
     id, name: name ?? cap.name ?? id, description: description ?? cap.description ?? '', type: 'adopted', profile: [], tags: ['adopted'],
     size: [sx, sy + n * STOREY_H, sz], origin: [0, 0, 0], groundY: cap.groundY, front: cap.front, approach: false,
   });
+  // the source kind (sidecar `sourceKind: "captured"`), and (C35) the palette opt-out: the player's house as built is theirs, so the
+  // kit's palette guard (build.mjs loadDesign) lets this source ignore a palette or bible it is given and records it (`paletteIgnored`).
+  // An added storey is built of the house's own blocks by role (storeyMaterials), never a palette's.
   bp.captured = true;
   const states = cap.palette.map(parseState);
   const cells = cellsOf(cap);
@@ -82,16 +86,41 @@ export function adopted(id, cap, { floors = 0, name, description } = {}) {
   return bp;
 }
 
-/** The storeys: on the top captured layer's footprint, a ring of walls, a roof, a hatch into the layer below. */
+/**
+ * (C35) What an added storey is built of: the captured blocks by role, never a palette (a bible sent with the change is ignored).
+ *   wall   `cap.wall` (the mod's most used non-air captured state), else the most used full block
+ *   frame  the most used full block in the footprint's corner columns below the top layer (a log hut's corner posts), else wall
+ *   roof   the most used full block of the top captured layer, else wall
+ * The floor is the old top layer, which stays. Ties: the capture palette's lower index. `corners`: "x,z" keys.
+ */
+export function storeyMaterials(cap, cells, states, corners) {
+  const sy = cap.size[1];
+  const mostUsed = (pick) => {
+    const n = new Map();
+    for (const [x, y, z, p] of cells) if (states[p].name !== 'minecraft:air' && isCube(states[p]) && pick(x, y, z)) n.set(p, (n.get(p) ?? 0) + 1);
+    let best;
+    for (const [p, c] of n) if (best === undefined || c > n.get(best) || (c === n.get(best) && p < best)) best = p;
+    return best === undefined ? undefined : states[best];
+  };
+  const wall = cap.wall ? parseState(cap.wall) : mostUsed(() => true) ?? { name: 'minecraft:oak_planks', props: {} };
+  return {
+    wall,
+    frame: mostUsed((x, y, z) => y < sy - 1 && corners.has(`${x},${z}`)) ?? wall,
+    roof: mostUsed((x, y) => y === sy - 1) ?? wall,
+  };
+}
+
+/** The storeys: on the top captured layer's footprint, a ring of walls (frame at its corners), a roof, a hatch into the layer below. */
 function addStoreys(bp, cap, cells, states, n) {
   const sy = cap.size[1];
   const top = new Set();
   for (const [x, y, z, p] of cells) if (y === sy - 1 && states[p].name !== 'minecraft:air') top.add(`${x},${z}`);
   if (!top.size) return;
-  const wall = parseState(cap.wall ?? 'minecraft:oak_planks');
   const inF = (x, z) => top.has(`${x},${z}`);
   const ring = (x, z) => !inF(x + 1, z) || !inF(x - 1, z) || !inF(x, z + 1) || !inF(x, z - 1);
+  const corner = (x, z) => (!inF(x + 1, z) || !inF(x - 1, z)) && (!inF(x, z + 1) || !inF(x, z - 1));
   const cols = [...top].map((k) => k.split(',').map(Number)).sort((a, b) => a[1] - b[1] || a[0] - b[0]);
+  const m = storeyMaterials(cap, cells, states, new Set(cols.filter(([x, z]) => corner(x, z)).map(([x, z]) => `${x},${z}`)));
   // the hatch: the inner column nearest the footprint's centre (ties: lowest z, then x)
   const cx = cols.reduce((s, c) => s + c[0], 0) / cols.length;
   const cz = cols.reduce((s, c) => s + c[1], 0) / cols.length;
@@ -104,10 +133,10 @@ function addStoreys(bp, cap, cells, states, n) {
       if (hatch) b.setRaw(hatch[0], y0 - 1, hatch[1], { name: 'minecraft:air', props: {} });
       for (const [x, z] of cols) {
         for (let y = y0; y < y0 + STOREY_H - 1; y++) {
-          if (ring(x, z)) b.setRaw(x, y, z, wall);
+          if (ring(x, z)) b.setRaw(x, y, z, corner(x, z) ? m.frame : m.wall);
           else b.setRaw(x, y, z, { name: 'minecraft:air', props: {} });
         }
-        b.setRaw(x, y0 + STOREY_H - 1, z, wall);
+        b.setRaw(x, y0 + STOREY_H - 1, z, m.roof);
       }
     });
   }

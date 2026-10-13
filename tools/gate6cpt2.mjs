@@ -876,7 +876,7 @@ steps.c35bible = async () => {
   const fd = await addFloor('fd', rd.entryId, rd.siteId, { bible: 'birch' });
   const step = String(fd.design?.step ?? '');
   check(fd.design?.status === 'DONE', `C35: versionOf(${rd.entryId}, ${rd.siteId}) "add a floor" with the bible birch: ${fd.design?.status} (${String(fd.design?.step ?? fd.design?.error ?? json(fd)).slice(0, 220)})`, fd);
-  check(/the bible birch v\d+ was ignored: a captured source keeps the player's blocks as built/.test(step), `C35: the design's notes record the bible ignored (${step.slice(0, 220)})`);
+  check(/bible birch v\d+ ignored \(captured: the player's blocks kept\)/.test(step), `C35: the design's notes record the bible ignored (${step.slice(0, 220)})`);
   const ev = await api(`eversions ${rd.entryId}`);
   const v2 = (ev.versions ?? []).find((v) => v.n === 2);
   check(ev.version === 2 && v2 && /design/i.test(v2.by) && v2.capturedChanged === 1 && v2.capturedTotal === rd.cells, `C35: v2 installed by design (head ${ev.version}); capturedChanged ${v2?.capturedChanged} of capturedTotal ${v2?.capturedTotal} (cells ${rd.cells})`, ev);
