@@ -1032,9 +1032,11 @@ function endpointNode(env, e, other, geom, zoneEmit, lotZone, r, conn, where) {
   if (e.anchor) {
     const p = env.anchors.get(e.anchor);
     // an anchor inside a zone laid out over it (Steward's stone under the town): the route ends at that zone's street end
+    // (not when the leg's other end is that zone or one of its lots: the route then runs inside the zone, from the anchor itself)
+    const sameZone = (zid) => other?.part !== undefined && (other.part === zid || lotZone.get(other.part) === zid);
     for (const [zid] of zoneEmit) {
       const g = geom.get(zid)?.rect;
-      if (g && p[0] >= g.minX && p[0] <= g.maxX && p[1] >= g.minZ && p[1] <= g.maxZ) return { ...endpointNode(env, { part: zid }, other, geom, zoneEmit, lotZone, r, conn, where), snapped: { anchor: e.anchor, zone: zid } };
+      if (g && !sameZone(zid) && p[0] >= g.minX && p[0] <= g.maxX && p[1] >= g.minZ && p[1] <= g.maxZ) return { ...endpointNode(env, { part: zid }, other, geom, zoneEmit, lotZone, r, conn, where), snapped: { anchor: e.anchor, zone: zid } };
     }
     return feet(p[0], p[1], `a_${tag}`);
   }
