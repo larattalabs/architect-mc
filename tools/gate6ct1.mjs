@@ -196,7 +196,7 @@ steps.stale = async () => {
   let compiled = null;
   try { old.compileIR(p.ir, { blobs: (sha) => p.blobs.get(sha) }); } catch (e) { compiled = e.message; }
   out.oldKit.compile = compiled;
-  check(/^PLAN_STALE: plan needs kit 0\.\d+\.0 \/ kinds \[relief\]; this is kit /.test(compiled ?? ''), `item 11: the v0.20.0 kit (${out.oldKit.version}) refuses the plan: ${compiled}`);
+  check(/^PLAN_STALE: plan needs kit \d+\.\d+\.\d+ \/ kinds \[relief\]; this is kit /.test(compiled ?? ''), `item 11: the v0.20.0 kit (${out.oldKit.version}) refuses the plan: ${compiled}`);
   check(/^plan needs kinds \[relief\]; this is kit /.test(out.oldKit.kindOnly ?? ''), `item 11: the v0.20.0 kit names the kind alone: ${out.oldKit.kindOnly}`);
   // nothing written: a stale plan never reaches a tile (the old evaluator throws before any cell)
   let wrote = null;
@@ -212,7 +212,7 @@ steps.stale = async () => {
   fs.writeFileSync(path.join(dir, 'ir-kind-only.json'), JSON.stringify(asOld));
   const lines = execFileSync(path.join(JAVA_HOME, 'bin', 'java'), ['-cp', `${jar}:${gson}`, src, path.join(dir, 'ir.json'), path.join(dir, 'ir-kind-only.json')]).toString().trim().split('\n');
   out.oldMod = { jar, lines };
-  check(/^plan needs kit 0\.\d+\.0 \/ kinds \[relief\]; this is kit /.test(lines[0]) && /^plan needs kinds \[relief\]; this is kit /.test(lines[1] ?? ''), `item 11: the v0.20.0 mod's IrStale refuses it PLAN_STALE: ${lines.join(' | ')}`);
+  check(/^plan needs kit \d+\.\d+\.\d+ \/ kinds \[relief\]; this is kit /.test(lines[0]) && /^plan needs kinds \[relief\]; this is kit /.test(lines[1] ?? ''), `item 11: the v0.20.0 mod's IrStale refuses it PLAN_STALE: ${lines.join(' | ')}`);
   const { staleReason } = await imp('lib/realise.mjs');
   out.thisKit = staleReason(p.ir);
   check(out.thisKit === null, 'item 11: this kit (0.20.0) accepts it');

@@ -383,6 +383,12 @@ persisted formats. Candidate later asks: `Survey.biome` per column (T1's fields 
   T1 changes no tile-write code. Investigate with H (fluids).
 - The mod's no-check plan wait went from 120 s to 300 s for every program (T1), not only pass programs.
 
+## C30 (Steward, 2026-10-12): patch v0.22.1
+
+- No stage race was found. Steward's stalls were items waiting on a chicken and on the player, unlogged; 0.22.1 logs waits (CONTRACT "C30 as built").
+- For Steward: it queues items its own fit refused as temporarily blocked (OCCUPIED, PLAYER_IN_BOX), and its e2e gives up at the same 600 s as the wait
+  limit. Clear animals before every build and keep the player off the lots, or surface `ITEM_WAITING` in chat as it does material waits.
+
 ## Open questions
 - Track AgentCraft fixes to the copied placement code, or treat the copy as independent from now on?
 - Cost: measure tokens and time per design in phase 1, and show an estimate in the form.

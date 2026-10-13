@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { compileIR, evalTile, KINDS_FORMAT2, OP_KINDS, OPS_RESERVED, RELIEF_NONE, staleReason, walkKinds, EVAL_KIT_VERSION } from '../lib/realise.mjs';
+import { compileIR, evalTile, KINDS_FORMAT2, OP_KINDS, OPS_RESERVED, RELIEF_NONE, semverCompare, staleReason, walkKinds, EVAL_KIT_VERSION } from '../lib/realise.mjs';
 import { KIT_VERSION, planRegion } from '../lib/region/plan.mjs';
 
 const semverAtLeast = (a, b) => { const p = (v) => v.split('.').map(Number); const [x, y] = [p(a), p(b)]; for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] > y[i]; return true; };
@@ -56,11 +56,11 @@ function reliefIR(values, opExtra = {}, fieldExtra = {}) {
 }
 const column = (cells, x, z) => cells.filter((c) => c.x === x && c.z === z).map((c) => [c.y, c.state]).sort((a, b) => a[0] - b[0]);
 
-test('relief is a built op kind and a format-2 kind; the kit and the evaluator agree on 0.20.0', () => {
+test('relief is a built op kind and a format-2 kind; the kit and the evaluator agree (0.20.0 or later)', () => {
   assert.ok(OP_KINDS.includes('relief'));
   assert.ok(!OPS_RESERVED.includes('relief'));
-  assert.ok(KINDS_FORMAT2.indexOf('relief') > KINDS_FORMAT2.indexOf('pattern'), 'appended after MP\'s kinds (rebase point; 6c B appends volume:blocks after it)');
-  assert.ok(semverAtLeast(KIT_VERSION, '0.20.0'), KIT_VERSION); // later slices bump it (6c B: 0.23.0)
+  assert.equal(KINDS_FORMAT2.indexOf('relief'), KINDS_FORMAT2.indexOf('pattern') + 1, 'appended after MP\'s kinds (rebase point; later slices append after it)');
+  assert.ok(semverCompare(KIT_VERSION, '0.20.0') >= 0, KIT_VERSION); // (6c F2) later slices bump it
   assert.equal(EVAL_KIT_VERSION, KIT_VERSION);
   const { ir } = reliefIR([1]);
   assert.deepEqual(ir.requires, ['blobs:side', 'fields', 'material:rule', 'relief']);

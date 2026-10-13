@@ -97,6 +97,10 @@ public interface ArchitectApi {
 	 * {@code pad.edge: 'blend'}: a plan that uses it requires the {@code relief} kind, and an older game refuses it PLAN_STALE).
 	 * Since 1.18.0, {@code "schematics"} is always there: Sponge schematic import ({@link Library#importSchematic}, through the
 	 * helper) and export ({@link Library#exportSchematic}, {@link Sites#exportSiteSchematic}, in the mod).
+	 * Since 1.20.0, an F2 helper ({@code region.scatter}) adds {@code "scatterOp"} (the {@code scatter} op: decoration on a hashed
+	 * jittered grid, on ground, walls and ceilings, by density, field or mask, with the bundled items) and {@code "stampOp"} (the
+	 * {@code stamp} op: a vanilla feature captured in the player's own game as a stamp, local-only). A plan that uses them requires the
+	 * {@code scatter} / {@code stamp} kinds, and an older game refuses it PLAN_STALE.
 	 * Since 1.21.0, a B helper ({@code region.brush}) adds {@code "brushes"} ({@link Regions#brush}: its kit bundles the {@code brush}
 	 * program, and frozen volumes may record block ids, so a mask's {@code block} term reads the world).
 	 */

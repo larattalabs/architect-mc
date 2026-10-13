@@ -228,7 +228,7 @@ steps.stale = async () => {
   let compiled = null;
   try { old.compileIR(p.ir, { blobs: (sha) => p.blobs.get(sha) }); } catch (e) { compiled = e.message; }
   out.oldKit.compile = compiled;
-  check(/^PLAN_STALE: plan needs kit 0\.\d+\.0 \/ kinds \[voxels\]; this is kit 0\.18\.0$/.test(compiled ?? ''), `item 12: the v0.18.0 kit (${out.oldKit.version}) refuses the plan: ${compiled}`);
+  check(/^PLAN_STALE: plan needs kit \d+\.\d+\.\d+ \/ kinds \[voxels\]; this is kit 0\.18\.0$/.test(compiled ?? ''), `item 12: the v0.18.0 kit (${out.oldKit.version}) refuses the plan: ${compiled}`);
   check(out.oldKit.kindOnly === 'plan needs kinds [voxels]; this is kit 0.18.0', `item 12: the v0.18.0 kit names the kind alone: ${out.oldKit.kindOnly}`);
   // the v0.18.0 mod jar's IrStale on the same IR (its own compiled class, run with gson)
   const jar = path.join(MAIN_ART(), 'gate6c-f1', 'v0180', 'architect_mc-0.18.0.jar');
@@ -240,7 +240,7 @@ steps.stale = async () => {
   const java = path.join(process.env.JAVA_HOME ?? '/opt/homebrew/opt/openjdk@25', 'bin', 'java');
   const lines = execFileSync(java, ['-cp', `${jar}:${gson}`, src, path.join(dir, 'ir.json'), path.join(dir, 'ir-kind-only.json')]).toString().trim().split('\n');
   out.oldMod = { jar, lines };
-  check(/^plan needs kit 0\.\d+\.0 \/ kinds \[voxels\]; this is kit 0\.18\.0$/.test(lines[0]) && lines[1] === 'plan needs kinds [voxels]; this is kit 0.18.0', `item 12: the v0.18.0 mod's IrStale refuses it PLAN_STALE: ${lines.join(' | ')}`);
+  check(/^plan needs kit \d+\.\d+\.\d+ \/ kinds \[voxels\]; this is kit 0\.18\.0$/.test(lines[0]) && lines[1] === 'plan needs kinds [voxels]; this is kit 0.18.0', `item 12: the v0.18.0 mod's IrStale refuses it PLAN_STALE: ${lines.join(' | ')}`);
   // and this build accepts it
   const { staleReason } = await imp('lib/realise.mjs');
   out.thisKit = staleReason(p.ir);

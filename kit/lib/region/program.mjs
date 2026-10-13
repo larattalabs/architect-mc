@@ -1720,6 +1720,10 @@ class Part {
       } else if (o.op === 'relief') { // (6c T1) the field's extent
         const f = this.region.fields[o.field];
         if (f) { x0 = Math.min(x0, f.minX); x1 = Math.max(x1, f.minX + f.width * f.res - 1); z0 = Math.min(z0, f.minZ); z1 = Math.max(z1, f.minZ + f.depth * f.res - 1); }
+      } else if (o.op === 'scatter') { // (6c F2) the area
+        x0 = Math.min(x0, o.area[0]); x1 = Math.max(x1, o.area[2]); z0 = Math.min(z0, o.area[1]); z1 = Math.max(z1, o.area[3]);
+      } else if (o.op === 'stamp') { // (6c F2) the root
+        x0 = Math.min(x0, o.at[0]); x1 = Math.max(x1, o.at[0]); z0 = Math.min(z0, o.at[2]); z1 = Math.max(z1, o.at[2]);
       } else if (o.op === 'voxels') {
         // (6c F1) the baked box
         const [sx, , sz] = voxelsSize(this.region.sideBlobs[o.blob].bytes);

@@ -8,9 +8,9 @@
 //     unit        items 1, 6 (kit half), 8 (kit half) and 11 offline: kit/test/brush-b.test.mjs (the kernels' properties over 100 seeds,
 //                 every kind plans, IR and tile shas over two plans, ARVX version 2 and the block mask), the goldens that must not
 //                 move (S1, S7, mega_bench, the 6b families), the Java ApiBTest, BrushesTest, ArvxBlocksTest and ArvxTest
-//     stale       the v0.22.0 kit and the 0.22.0 mod jar refuse a brush plan PLAN_STALE (its kit version; with a block volume, the
+//     stale       the v0.23.1 kit and the 0.23.0 mod jar refuse a brush plan PLAN_STALE (its kit version; with a block volume, the
 //                 volume:blocks kind); this build accepts it
-//     apicompat   item 12: tools/api-compat.mjs --gate6cb (the 0.22.0, 0.21.0 and 0.20.0 apitest jars, the 0.22.0 surface)
+//     apicompat   item 12: tools/api-compat.mjs --gate6cb (the 0.23.0, 0.22.0 and 0.21.0 apitest jars, the 0.23.0 surface)
 //     ingame      items 2-5 and 7-10 on the flat world (a bump field, a player wall with a chest, another owner's road), item 12's
 //                 apitest apib and the command path; each part also runs alone: flat-owned (2, 3), flat-undo (5), flat-permission (4),
 //                 flat-misc (7, 8, 10, 12, commands)
@@ -123,18 +123,18 @@ steps.stale = async () => {
   fs.writeFileSync(path.join(tmp, 'masked.json'), masked.irJson);
   const asOld = (ir) => ({ ...ir, kitVersion: '0.20.0' });
   fs.writeFileSync(path.join(tmp, 'masked-kind.json'), JSON.stringify(asOld(masked.ir)));
-  execFileSync('sh', ['-c', `git -C '${root}' archive v0.22.0 kit | tar -x -C '${tmp}'`]);
+  execFileSync('sh', ['-c', `git -C '${root}' archive v0.23.1 kit | tar -x -C '${tmp}'`]);
   const old = await import(pathToFileURL(path.join(tmp, 'kit', 'lib', 'realise.mjs')).href);
   const out = { requires: masked.ir.requires, kitVersion: plain.ir.kitVersion, oldKit: { version: old.EVAL_KIT_VERSION, plain: old.staleReason(plain.ir), masked: old.staleReason(masked.ir), kind: old.staleReason(asOld(masked.ir)) } };
   check(/^plan needs kit 0\.\d+\.0; this is kit/.test(out.oldKit.plain ?? '') && /kinds \[volume:blocks\]/.test(out.oldKit.masked ?? '') && /^plan needs kinds \[volume:blocks\]/.test(out.oldKit.kind ?? ''),
-    `the v0.22.0 kit (${out.oldKit.version}) refuses a brush plan PLAN_STALE ("${out.oldKit.plain}"), a block-masked one by the kind too ("${out.oldKit.kind}")`);
+    `the v0.23.1 kit (${out.oldKit.version}) refuses a brush plan PLAN_STALE ("${out.oldKit.plain}"), a block-masked one by the kind too ("${out.oldKit.kind}")`);
   const gson = execFileSync('sh', ['-c', `ls '${path.join(root, '.gradle-home')}'/caches/modules-2/files-2.1/com.google.code.gson/gson/*/*/gson-*.jar | grep -v sources | head -1`]).toString().trim();
   const src = path.join(tmp, 'Stale.java');
   fs.writeFileSync(src, 'import com.google.gson.*;\npublic class Stale { public static void main(String[] a) throws Exception { for (String f : a) { JsonObject ir = JsonParser.parseString(java.nio.file.Files.readString(java.nio.file.Path.of(f))).getAsJsonObject(); System.out.println(dev.larattalabs.architect.region.IrStale.reason(ir, null)); } } }\n');
   const runJar = (cp) => execFileSync(path.join(JAVA_HOME, 'bin', 'java'), ['-cp', `${cp}:${gson}`, src, path.join(tmp, 'plain.json'), path.join(tmp, 'masked.json'), path.join(tmp, 'masked-kind.json')]).toString().trim().split('\n');
-  const jar = path.join(MAIN, 'artifacts', 'gate6c-b', 'v0220', 'architect_mc-0.22.0.jar');
+  const jar = path.join(MAIN, 'artifacts', 'gate6c-b', 'v0230', 'architect_mc-0.23.0.jar');
   out.oldMod = runJar(jar);
-  check(/^plan needs kit 0\.\d+\.0; this is kit /.test(out.oldMod[0]) && /kinds \[volume:blocks\]/.test(out.oldMod[1]) && /^plan needs kinds \[volume:blocks\]/.test(out.oldMod[2]), `the 0.22.0 mod's IrStale refuses them PLAN_STALE: ${out.oldMod.join(' | ')}`);
+  check(/^plan needs kit 0\.\d+\.0; this is kit /.test(out.oldMod[0]) && /kinds \[volume:blocks\]/.test(out.oldMod[1]) && /^plan needs kinds \[volume:blocks\]/.test(out.oldMod[2]), `the 0.23.0 mod's IrStale refuses them PLAN_STALE: ${out.oldMod.join(' | ')}`);
   // this checkout's classes (the unit step's gradle test compiled them at this head)
   const classes2 = path.join(root, 'mod', 'build', 'classes', 'java', 'main');
   out.thisMod = runJar(classes2);
@@ -150,7 +150,7 @@ steps.apicompat = async () => {
   const r = spawnSync(process.execPath, [path.join(root, 'tools', 'api-compat.mjs'), '--gate6cb', ...classes], { cwd: root, encoding: 'utf8', env: { ...process.env, JAVA_HOME } });
   const t = `${r.stdout}${r.stderr}`;
   fs.writeFileSync(path.join(OUT, 'api-compat.txt'), t);
-  check(r.status === 0 && /all 4 checks clean/.test(t), `item 12: api-compat against the 0.22.0, 0.21.0 and 0.20.0 apitest jars and the 0.22.0 surface: ${t.trim().split('\n').pop()}`);
+  check(r.status === 0 && /all 4 checks clean/.test(t), `item 12: api-compat against the 0.23.0, 0.22.0 and 0.21.0 apitest jars and the 0.23.0 surface: ${t.trim().split('\n').pop()}`);
   spendZero();
   return { out: t };
 };

@@ -118,7 +118,7 @@ export interface KitInfo {
   /** KINDS_FORMAT2, [] without one */
   irKinds: string[];
   /** the plan CLI takes --blobs-out / --volumes; the kit has check, preview, catalogue (tools/region.mjs and the modules) */
-  caps: { blobsOut: boolean; volumes: boolean; check: boolean; preview: boolean; catalogue: boolean; keepOut: boolean };
+  caps: { blobsOut: boolean; volumes: boolean; check: boolean; preview: boolean; catalogue: boolean; keepOut: boolean; stamps: boolean };
 }
 
 /** (6b) The side blob shas a format-2 IR names (`blobs: {name: {sha, bytes, kind}}`); format-1 blobs are inline: none. */
@@ -249,7 +249,7 @@ export class Regions {
   kitInfo(): KitInfo {
     if (this.info) return this.info;
     const kit = this.host.config.kitDir;
-    const info: KitInfo = { kitVersion: 'unknown', irFormats: [1], irKinds: [], caps: { blobsOut: false, volumes: false, check: false, preview: false, catalogue: false, keepOut: false } };
+    const info: KitInfo = { kitVersion: 'unknown', irFormats: [1], irKinds: [], caps: { blobsOut: false, volumes: false, check: false, preview: false, catalogue: false, keepOut: false, stamps: false } };
     let tool = '';
     try {
       tool = fs.readFileSync(path.join(kit, 'tools', 'region.mjs'), 'utf8');
@@ -264,6 +264,7 @@ export class Regions {
       preview: fs.existsSync(path.join(kit, 'lib', 'region', 'preview.mjs')) && /['"]preview['"]/.test(tool),
       catalogue: /['"]catalogue['"]/.test(tool),
       keepOut: tool.includes("'keep-out'"),
+      stamps: /['"]?stamps['"]?\s*:\s*1/.test(tool), // (6c F2) the local stamp library
     };
     const perm = permissionFlag();
     try {
@@ -424,7 +425,19 @@ export class Regions {
    * The kit CLI's arguments (kit/REGIONS.md "Plan CLI"). The one place that knows the CLI's shape:
    *   plan <program.mjs> --params <f> --survey <f> --seed <u64> --claim minX,minZ,maxX,maxZ,minY,maxY [--bible <f>] --out <planDir> --json
    *   (6b) [--blobs-out <planDir>/blobs] [--volumes <planDir>/volumes]   (6c V) [--keep-out <planDir>/keepout.json]
+   *   (6c F2) [--stamps <the local stamp library>] (only when the dir exists)
    */
+  /** (6c F2) the local stamp library's real path when the kit takes `--stamps` and the dir exists, else null. */
+  stampsDir(): string | null {
+    const d = this.cfg.stampsDir;
+    if (!d || !this.kitInfo().caps.stamps || !fs.existsSync(d)) return null;
+    try {
+      return fs.realpathSync(d);
+    } catch {
+      return null;
+    }
+  }
+
   planArgs(dir: string, program: ProgramRef, o: { seed: string; claim: PlanMsg['claim']; hasBible: boolean; volumes?: boolean; keepOut?: boolean }): string[] {
     const c = o.claim;
     const caps = this.kitInfo().caps;
@@ -442,6 +455,7 @@ export class Regions {
       ...(caps.blobsOut ? ['--blobs-out', path.join(dir, 'blobs')] : []),
       ...(o.volumes ? ['--volumes', path.join(dir, 'volumes')] : []),
       ...(o.keepOut ? ['--keep-out', path.join(dir, 'keepout.json')] : []),
+      ...(this.stampsDir() ? ['--stamps', this.stampsDir()!] : []),
       '--out',
       dir,
       '--json',
@@ -520,7 +534,8 @@ export class Regions {
       this.progress(planId, 'planning');
       // a stale ir.json from nowhere must not count
       fs.rmSync(path.join(dir, 'ir.json'), { force: true });
-      const r = await this.runKit(dir, this.planArgs(dir, program, o), { ...this.planBudget(o.passes ?? []), extraReads: program.bundled ? [] : [fs.realpathSync(this.cfg.programsDir)], what: 'plan' });
+      const stamps = this.stampsDir();
+      const r = await this.runKit(dir, this.planArgs(dir, program, o), { ...this.planBudget(o.passes ?? []), extraReads: [...(program.bundled ? [] : [fs.realpathSync(this.cfg.programsDir)]), ...(stamps ? [stamps] : [])], what: 'plan' });
       const ms = Date.now() - t0;
       if (!r.ok) return fail(r.message);
       const out = r.out;

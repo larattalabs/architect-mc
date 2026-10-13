@@ -864,6 +864,180 @@ async function undodebug() {
   return { rm, out, events };
 }
 
+// ------------------------------------------------------------------ C30 (v0.22.1): stage completion with sites placed over ticks
+
+/** The game's log (a client's or the headless server's, both in GAME_DIR), from byte {@code from}; '' when there is none. */
+function gameLog(from = 0) {
+  const f = path.join(GAME_DIR, 'logs', 'latest.log');
+  if (!fs.existsSync(f)) return '';
+  const buf = fs.readFileSync(f);
+  return buf.subarray(Math.min(from, buf.length)).toString('utf8');
+}
+const logSize = () => {
+  const f = path.join(GAME_DIR, 'logs', 'latest.log');
+  return fs.existsSync(f) ? fs.statSync(f).size : 0;
+};
+const stageEvents = (evs, g) => evs.filter((e) => e.event === 'STAGE_STATE' && e.group === g).map((e) => `${e.name}:${e.state}`);
+const groupStages = async (g) => (await api(`sgroup ${g}`)).stages.map((s) => `${s.name}:${s.state}`).join(' ');
+
+/** Every stage of {@code names} went PLACING then PLACED, each only after the one before it was PLACED. */
+function stagesInOrder(seq, names) {
+  let at = -1;
+  for (const n of names) {
+    const p = seq.indexOf(`${n}:PLACING`);
+    const d = seq.indexOf(`${n}:PLACED`);
+    if (p < 0 || d < p || p < at) return false;
+    at = d;
+  }
+  return true;
+}
+
+/**
+ * C30: Steward's two stalls on v0.22.0 (a last stage "placing" for ten minutes; a survival stage starting only ten minutes after
+ * the one before it) were items waiting on a temporary blocker (a chicken in a lot, the player next to a lot), up to the batch's
+ * wait limit, with nothing in the log. This item proves the stage machine (1: many staged batches whose sites place over ticks,
+ * at three budgets, every stage reaching placed in order), pins the waits (2: a chicken holds the last stage PLACING and the log
+ * says why, once; it places when the chicken goes; 3: a wait that runs out fails TIMED_OUT and the stage ends PARTIAL) and the
+ * survival rule (4: a stage starts once the stage before it is placed, not built: a construction site waiting for materials
+ * never holds the next stage; the player next to the next stage's lot does, and says so).
+ */
+async function c30() {
+  await fresh('G4D C30');
+  await cmd('/kill @e[type=!minecraft:player]');
+  const L = ctx.lots;
+  const n = Number(process.env.C30_N || 12);
+  const budgets = [2, 4, 20];
+  const names = ['street', 'landmarks', 'district_1', 'district_2'];
+  const plan = [['street', L[0]], ['landmarks', L[2]], ['district_1', L[5]], ['district_1', L[7]], ['district_2', L[9]], ['district_2', L[11]]];
+  const all = plan.map(([, l]) => l);
+  const preCells = await hashLotsCells(all);
+  const pre = Object.fromEntries(Object.entries(preCells).map(([k, v]) => [k, v.sha256]));
+  let firstDrift = null;
+  // 1. the stage machine, n times
+  const runs = [];
+  let bad = 0;
+  for (let k = 0; k < n; k++) {
+    const budget = budgets[k % budgets.length];
+    const manual = k % 2 === 1; // Steward approves each stage; the others autoApprove
+    await cmd(`/architect budget ${budget}`);
+    await mark();
+    const t0 = Date.now();
+    const id = await queue({ id: `c30run${k}`, proximity: true, autoApprove: !manual, items: plan.map(([s, l]) => item(l, { stage: s })) });
+    const g = (await batchView(id)).group;
+    if (manual) for (const s of names) await api(`sapprove ${g} ${s}`);
+    let done = null;
+    try {
+      done = await waitBatch(id, 180_000);
+    } catch (e) {
+      done = { error: String(e), stages: await groupStages(g), batch: await batchView(id) };
+    }
+    const seq = stageEvents(await since(), g);
+    const ok = !done.error && done.placed === plan.length && stagesInOrder(seq, names);
+    if (!ok) bad++;
+    runs.push({ k, budget, manual, ms: Date.now() - t0, ok, placed: done.placed, seq, error: done.error, stages: done.stages });
+    const rm = await result(await api(`sgremove ${g}`), 180_000);
+    if (!rm.removed) {
+      bad++;
+      runs.at(-1).removal = rm;
+    }
+    if (!firstDrift) {
+      const now = await hashLots(all);
+      const off = all.filter((l) => now[l.key] !== pre[l.key]).map((l) => l.key);
+      if (off.length) {
+        const cells = await hashLotsCells(all.filter((l) => off.includes(l.key)));
+        firstDrift = { run: k, budget, lots: off, diff: cellDiff(Object.fromEntries(off.map((x) => [x, preCells[x]])), cells) };
+      }
+    }
+  }
+  await cmd('/architect budget 4');
+  check(bad === 0, `C30 1: ${n} staged batches (4 stages, 6 sites over ticks, budgets ${budgets.join('/')} ms, autoApprove and approved stage by stage): `
+    + `every stage reached placed in order and every batch finished (${runs.filter((r) => r.ok).length}/${n})`, runs);
+  check(!firstDrift, `C30 1: after each run's group removal the lots are exactly as before (box + 7)${firstDrift ? `: run ${firstDrift.run} left ${firstDrift.lots.join(',')} changed` : ''}`,
+    { firstDrift });
+
+  // 2. a chicken in a lot of the last stage (set_193's cabin_2): the stage stays PLACING, the log says why once, then it places
+  const [a, b, c] = [L[0], L[2], L[5]];
+  const cb = c.box;
+  const ccx = Math.floor((cb[0] + cb[3]) / 2);
+  const ccz = Math.floor((cb[2] + cb[5]) / 2);
+  const chickenAt = [ccx + 0.5, (await groundAt(ccx, ccz)) + 1, ccz + 0.5];
+  await cmd(`/summon minecraft:chicken ${chickenAt.join(' ')} {NoAI:1b,PersistenceRequired:1b}`);
+  await mark();
+  const log0 = logSize();
+  const id2 = await queue({ id: 'c30chicken', proximity: true, autoApprove: true, items: [item(a, { stage: 'street' }), item(b, { stage: 'district_2' }),
+    item(c, { stage: 'district_2' })] });
+  const w = await waitEvent((e) => e.event === 'ITEM_WAITING' && e.batch === id2 && e.key === c.key, 60_000, `${c.key} waiting`);
+  await waitEvent((e) => e.event === 'ITEM_PLACED' && e.batch === id2 && e.key === b.key, 60_000, `${b.key} placed`);
+  await sleep(6000); // several 1 s re-checks
+  const g2 = (await batchView(id2)).group;
+  const held = await groupStages(g2);
+  const evs2 = await since();
+  const waits = evs2.filter((e) => e.event === 'ITEM_WAITING' && e.batch === id2 && e.key === c.key);
+  check(w.reason === 'OCCUPIED' && /chicken/.test(w.message) && /district_2:PLACING/.test(held) && !evs2.some((e) => e.event === 'BATCH_DONE' && e.batch === id2),
+    `C30 2: a chicken in a last-stage lot holds that stage PLACING (${held}), its sibling placed, ${c.key} waiting ${w.reason}: ${w.message}`, { w, held });
+  const lines = gameLog(log0).split('\n').filter((x) => x.includes(`Batch ${id2}: item ${c.key} (stage district_2) waits (OCCUPIED)`));
+  const haveLog = logSize() > 0;
+  check(haveLog && lines.length === 1 && waits.length === 1, `C30 2: the wait is in the game log once over 6 s of re-checks (${lines.length} line(s), ${waits.length} ITEM_WAITING): `
+    + (lines[0] ?? '').replace(/^.*\(architect\) /, '').slice(0, 220), { lines, log: path.join(GAME_DIR, 'logs', 'latest.log') });
+  await cmd('/tp @e[type=minecraft:chicken] ~ -100 ~'); // gone without loot (a killed chicken drops items into the lot: OCCUPIED again)
+  await cmd('/kill @e[type=minecraft:chicken]');
+  const d2 = await waitBatch(id2, 60_000);
+  const seq2 = stageEvents(await since(), g2);
+  check(d2.placed === 3 && seq2.includes('district_2:PLACED'), `C30 2: the chicken gone, ${c.key} placed and the stage reached placed (${seq2.join(' ')})`, { d2, seq2 });
+  const rm2 = await result(await api(`sgremove ${g2}`), 180_000);
+  // 3. a wait that runs out: TIMED_OUT, the stage ends PARTIAL and the batch finishes
+  await cmd(`/summon minecraft:chicken ${chickenAt.join(' ')} {NoAI:1b,PersistenceRequired:1b}`);
+  await mark();
+  const id3 = await queue({ id: 'c30timeout', proximity: true, autoApprove: true, waitSeconds: 3, items: [item(b, { stage: 'street' }), item(c, { stage: 'district_2' })] });
+  const d3 = await waitBatch(id3, 60_000);
+  const g3 = d3.group;
+  const seq3 = stageEvents(await since(), g3);
+  const it3 = d3.items.find((i) => i.key === c.key);
+  check(it3?.status === 'FAILED' && it3.reason === 'TIMED_OUT' && seq3.includes('district_2:PARTIAL'),
+    `C30 3: a wait limit of 3 s runs out: ${c.key} ${it3?.status} ${it3?.reason}, the stage ends partial and the batch finishes (${seq3.join(' ')})`, { d3, seq3 });
+  await cmd('/tp @e[type=minecraft:chicken] ~ -100 ~');
+  await cmd('/kill @e[type=minecraft:chicken]');
+  const rm3 = await result(await api(`sgremove ${g3}`), 180_000);
+  check(rm2.removed && rm3.removed, 'C30 2-3: their groups removed', { rm2, rm3 });
+
+  // 4. survival (set_195): the street's construction site waits for materials; the next stage starts once the street is placed
+  const [s, d] = [L[0], L[2]];
+  await call('dev.survival.set', { on: true });
+  try {
+    const db = d.box;
+    await cmd(`/tp @s ${(db[0] + db[3]) / 2} ${d.lot[1] + 1} ${(db[2] + db[5]) / 2}`); // the player next to the landmark's lot
+    await sleep(1500);
+    await mark();
+    const log4 = logSize();
+    const id4 = await queue({ id: 'c30surv', proximity: true, autoApprove: true, items: [{ ...item(s, { stage: 'street' }), mode: 'CONSTRUCTION' },
+      { ...item(d, { stage: 'landmarks' }), mode: 'CONSTRUCTION' }] });
+    const g4 = (await batchView(id4)).group;
+    const sPlaced = await waitEvent((e) => e.event === 'ITEM_PLACED' && e.batch === id4 && e.key === s.key, 60_000, 'street site placed');
+    const w4 = await waitEvent((e) => e.event === 'ITEM_WAITING' && e.batch === id4 && e.key === d.key, 60_000, 'landmark waiting');
+    await sleep(5000);
+    const held4 = await groupStages(g4);
+    const st0 = await call('dev.site.state', { site: sPlaced.site });
+    const lines4 = gameLog(log4).split('\n').filter((x) => x.includes(`Batch ${id4}: item ${d.key} (stage landmarks) waits (PLAYER_IN_BOX)`));
+    check(w4.reason === 'PLAYER_IN_BOX' && held4 === 'street:PLACED landmarks:APPROVED' && lines4.length === 1,
+      `C30 4: the player next to the landmark's lot holds that stage APPROVED (${held4}) and the log says why (${lines4.length} line)`, { w4, held4, lines4 });
+    await tpCenter();
+    const d4 = await waitBatch(id4, 60_000);
+    const st1 = await call('dev.site.state', { site: sPlaced.site });
+    const seq4 = stageEvents(await since(), g4);
+    const built = (await since()).some((e) => e.event === 'SITE_BUILT' && e.id === sPlaced.site);
+    check(d4.placed === 2 && stagesInOrder(seq4, ['street', 'landmarks']) && !built && String(st1.state).toLowerCase() !== 'built',
+      `C30 4: the player gone, the landmarks stage placed while the street's construction site is not built (street ${st0.state} -> ${st1.state}, `
+      + `${st1.built ?? '?'} cells built): a stage waits for the one before it to be placed, not built (${seq4.join(' ')})`, { d4, seq4, st0: { state: st0.state,
+      built: st0.built }, st1: { state: st1.state, built: st1.built } });
+    const rm4 = await result(await api(`sgremove ${g4}`), 180_000);
+    check(rm4.removed, 'C30 4: its group removed', rm4);
+  } finally {
+    await call('dev.survival.set', { on: false });
+  }
+  await leaveWorld();
+  return { n, runs: runs.map((r) => ({ k: r.k, budget: r.budget, manual: r.manual, ms: r.ms, ok: r.ok })) };
+}
+
 async function all() {
   for (const s of ['base', 'equality', 'relog', 'waiting', 'stages', 'lotfit', 'gap0', 'survival', 'patron', 'toggle', 'throughput']) {
     log(`== ${s}`);
@@ -871,7 +1045,7 @@ async function all() {
   }
 }
 
-const steps = { probe, undodebug, base, equality, relog, waiting, stages, lotfit, gap0, survival, patron, toggle, throughput, all };
+const steps = { probe, undodebug, base, equality, relog, waiting, stages, lotfit, gap0, survival, patron, toggle, throughput, c30, all };
 
 async function run(name) {
   for (const k of Object.keys(results)) delete results[k];

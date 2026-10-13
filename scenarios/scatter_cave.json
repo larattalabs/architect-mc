@@ -1,0 +1,77 @@
+{
+  "id": "scatter_cave",
+  "short": "scatter_cave",
+  "phase": "6c-f2",
+  "version": 0,
+  "brief": "scatter on cave walls and ceilings and dripstone-cluster stamps fitted into a natural cave, on the 6b volume fixture's cliff-and-cave claim (docs/CONTRACT.md 6c F2 §5)",
+  "program": "scatter_demo",
+  "params": {
+    "cave": true
+  },
+  "golden": false,
+  "world": {
+    "seed": "2026100906",
+    "preset": "normal",
+    "gamerules": "gallery"
+  },
+  "fixture": {
+    "claim": [
+      896,
+      384,
+      1151,
+      639
+    ],
+    "yRange": [
+      -22,
+      141
+    ],
+    "foundBy": "the 6b volume fixture (scenarios/sites/volume_site.json)",
+    "irShaAtPin": "ac2aa149b402771747bbd357663736ee6f75d25cef6993c35da40372ac52f7f9"
+  },
+  "lotEntries": {},
+  "seed": "11784430093893346597",
+  "cams": {
+    "cam_e": [
+      1151.5,
+      145,
+      511.5,
+      90.2,
+      30.9
+    ],
+    "cam_ground": [
+      1023.5,
+      76,
+      511.5,
+      135,
+      84.9
+    ],
+    "cam_high": [
+      1023.5,
+      185,
+      531.5,
+      178.6,
+      80.1
+    ],
+    "cam_n": [
+      1023.5,
+      145,
+      384.5,
+      0.2,
+      31.3
+    ],
+    "cam_s": [
+      1023.5,
+      145,
+      639.5,
+      179.8,
+      30.9
+    ],
+    "cam_w": [
+      896.5,
+      145,
+      511.5,
+      -90.2,
+      31.3
+    ]
+  }
+}

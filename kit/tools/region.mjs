@@ -38,7 +38,7 @@ const readJson = (f, what) => {
 };
 
 async function plan(argv) {
-  const { pos, opts } = parseArgs(argv, { params: 1, survey: 1, seed: 1, claim: 1, bible: 1, roles: 1, out: 1, json: 'flag', 'blobs-out': 1, volumes: 1, 'keep-out': 1 });
+  const { pos, opts } = parseArgs(argv, { params: 1, survey: 1, seed: 1, claim: 1, bible: 1, roles: 1, out: 1, json: 'flag', 'blobs-out': 1, volumes: 1, 'keep-out': 1, stamps: 1 });
   if (pos.length !== 1) throw new Usage('plan <program.mjs> --survey s.bin --claim minX,minZ,maxX,maxZ[,minY,maxY] [...]');
   if (!opts.survey || !opts.claim) throw new Usage('plan needs --survey and --claim');
   const params = opts.params ? readJson(opts.params, '--params') : {};
@@ -73,7 +73,9 @@ async function plan(argv) {
     const v = String(opts['keep-out']).trim();
     try { keepOut = JSON.parse(v.startsWith('[') ? v : fs.readFileSync(v, 'utf8')); } catch (e) { throw new Usage(`--keep-out: ${e.message}`); }
   }
-  const res = await planRegion({ programFile: pos[0], params, survey, seed: opts.seed ?? null, claim: opts.claim, roles, patterns, volumes, keepOut });
+  // (6c F2) the local stamp library (<dir>/<feature>/<seed>.bin; local-only, N-F2-1)
+  if (opts.stamps && !fs.existsSync(opts.stamps)) throw new Usage(`--stamps: no dir ${opts.stamps}`);
+  const res = await planRegion({ programFile: pos[0], params, survey, seed: opts.seed ?? null, claim: opts.claim, roles, patterns, volumes, keepOut, stamps: opts.stamps ?? null });
   if (opts['blobs-out'] && res.blobs.size) {
     fs.mkdirSync(opts['blobs-out'], { recursive: true });
     for (const [sha, bytes] of res.blobs) fs.writeFileSync(path.join(opts['blobs-out'], `${sha}.bin`), bytes);

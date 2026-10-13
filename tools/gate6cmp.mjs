@@ -155,7 +155,7 @@ steps.stale = async () => {
   const kitA = old.staleReason(p.ir), kitB = old.staleReason(irKinds);
   let kitThrow = null;
   try { old.compileIR(irKinds); } catch (e) { kitThrow = String(e.message); }
-  check(/^plan needs kit 0\.\d+\.0/.test(kitA ?? '') && /kinds \[mask, pattern\]/.test(kitB ?? '') && /^PLAN_STALE/.test(kitThrow ?? ''),
+  check(/^plan needs kit \d+\.\d+\.\d+/.test(kitA ?? '') && /kinds \[mask, pattern\]/.test(kitB ?? '') && /^PLAN_STALE/.test(kitThrow ?? ''),
     `item 9: the v0.18.0 kit refuses the toolbox IR PLAN_STALE ("${kitA}"; at kit 0.18.0: "${kitB}"; compileIR: "${kitThrow}")`);
   // (b) the 0.18.0 mod jar's IrStale (pure Java + Gson), and this build's
   const gson = execFileSync('sh', ['-c', `find '${path.join(root, '.gradle-home')}' -name 'gson-2*.jar' -not -name '*sources*' | sort | tail -1`]).toString().trim();
@@ -164,7 +164,7 @@ steps.stale = async () => {
   const java = path.join(JAVA_HOME, 'bin', 'java');
   const runJar = (jar) => execFileSync(java, ['-cp', `${jar}${path.delimiter}${gson}`, src, path.join(tmp, 'ir.json'), path.join(tmp, 'ir-kinds.json')], { encoding: 'utf8' }).trim().split('\n');
   const modOld = runJar(path.join(BASELINE, 'architect_mc-0.18.0.jar'));
-  check(/^plan needs kit 0\.\d+\.0 \/ kinds \[mask, pattern\]; this is kit 0\.18\.0$/.test(modOld[0]) && /^plan needs kinds \[mask, pattern\]; this is kit 0\.18\.0$/.test(modOld[1]),
+  check(/^plan needs kit \d+\.\d+\.\d+ \/ kinds \[mask, pattern\]; this is kit 0\.18\.0$/.test(modOld[0]) && /^plan needs kinds \[mask, pattern\]; this is kit 0\.18\.0$/.test(modOld[1]),
     `item 9: the 0.18.0 mod (IrStale) refuses it PLAN_STALE: "${modOld[0]}"; at kit 0.18.0: "${modOld[1]}"`);
   const newClasses = fs.existsSync(path.join(RUN, 'mod', 'build', 'classes', 'java', 'main')) ? path.join(RUN, 'mod', 'build', 'classes', 'java', 'main') : path.join(root, 'mod', 'build', 'classes', 'java', 'main');
   const modNew = runJar(newClasses);

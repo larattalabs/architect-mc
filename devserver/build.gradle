@@ -5,7 +5,7 @@
 // on runServer's classpath only when ARCHITECT_HEADLESS=1 (or -Pheadless) is set.
 //
 // The hooks that are pure server work are not copied by hand: `genHooks` derives them from the client's own sources
-// (mod/src/client/java/.../client/dev/{JournalDev,RegionDev,DeltaDev,SliceVDev,Fields}.java), changing only the package and
+// (mod/src/client/java/.../client/dev/{JournalDev,RegionDev,DeltaDev,SliceVDev,SliceF2Dev,Fields}.java), changing only the package and
 // the ServerTasks import, so a hook a slice adds or changes there is the same headless. A client-only reference in one of
 // those files fails this build (the filter below names it).
 plugins {
@@ -35,7 +35,7 @@ def clientSidecar = rootProject.file("src/client/java/dev/larattalabs/architect/
 def genHooks = tasks.register("genHooks", Sync) {
 	into(generatedHooks)
 	from(clientDev) {
-		include "JournalDev.java", "RegionDev.java", "RegionDev6b.java", "DeltaDev.java", "SliceVDev.java", "SliceWDev.java", "SliceBDev.java", "StockpileDev.java", "Fields.java"
+		include "JournalDev.java", "RegionDev.java", "RegionDev6b.java", "DeltaDev.java", "SliceVDev.java", "SliceWDev.java", "SliceF2Dev.java", "SliceBDev.java", "StockpileDev.java", "Fields.java"
 		into("dev/larattalabs/architect/devserver/gen")
 		filter { String line ->
 			if (line.startsWith("package dev.larattalabs.architect.client.dev;")) {

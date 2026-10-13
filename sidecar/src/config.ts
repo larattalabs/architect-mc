@@ -95,6 +95,12 @@ export interface RegionsConfig {
   passPlanMs: number;
   /** (6c T1) a plan run's heap when the program declares passes (config regionPassPlanHeapMb, default 2048) */
   passPlanHeapMb: number;
+  /**
+   * (6c F2) the local stamp library (`<game>/architect/stamps/<feature>/<seed>.bin`, harvested in the player's own game by
+   * `dev.feature.stamp`; never in the repo or the jar, N-F2-1): passed to the plan CLI as `--stamps` when it exists.
+   * ARCHITECT_STAMPS_DIR overrides it.
+   */
+  stampsDir: string;
   /** the largest IR (config regionIrMaxBytes, default 4 MB) */
   irMaxBytes: number;
   /** one tile's evaluation limit in ms (config regionTileMs, default 2000) */
@@ -137,6 +143,7 @@ function regionsConfig(file: Record<string, unknown>, libraryDir: string, env: N
     planHeapMb: int(file.regionPlanHeapMb, 1024, 64, 8192),
     passPlanMs: int(file.regionPassPlanMs, 120_000, 100, 600_000),
     passPlanHeapMb: int(file.regionPassPlanHeapMb, 2048, 64, 8192),
+    stampsDir: env.ARCHITECT_STAMPS_DIR ? path.resolve(env.ARCHITECT_STAMPS_DIR) : path.join(path.dirname(libraryDir), 'stamps'),
     irMaxBytes: int(file.regionIrMaxBytes, 4 * 1024 * 1024, 1024, 4 * 1024 * 1024),
     tileMs: int(file.regionTileMs, 2000, 50, 60_000),
     tileHeapMb: int(file.regionTileHeapMb, 256, 16, 4096),
