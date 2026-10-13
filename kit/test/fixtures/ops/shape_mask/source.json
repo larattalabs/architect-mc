@@ -1,0 +1,5 @@
+{
+  "family": "shape_mask",
+  "cutFrom": "scenarios/goldens/crater_toolbox/ir.json",
+  "survey": "scenarios/goldens/crater_toolbox/survey.bin"
+}

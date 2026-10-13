@@ -1,0 +1,23 @@
+{
+  "about": "an unknown connector kind",
+  "on": "s7",
+  "expect": {
+    "part": "zip",
+    "block": "connector.zipline"
+  },
+  "plan": {
+    "schemaVersion": "plan/0",
+    "connectors": [
+      {
+        "id": "zip",
+        "kind": "zipline",
+        "from": {
+          "anchor": "claim_n"
+        },
+        "to": {
+          "anchor": "claim_s"
+        }
+      }
+    ]
+  }
+}

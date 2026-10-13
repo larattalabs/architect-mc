@@ -1,0 +1,104 @@
+{
+  "about": "two zones, the second adjacent to the first (asks claim)",
+  "on": "asks",
+  "covers": [
+    "locator.adjacent"
+  ],
+  "plan": {
+    "schemaVersion": "plan/0",
+    "zones": [
+      {
+        "id": "old",
+        "program": {
+          "lots": [
+            {
+              "id": "o1",
+              "type": "cottage",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "o2",
+              "type": "house",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "o3",
+              "type": "smithy",
+              "size": [
+                9,
+                9
+              ]
+            }
+          ]
+        },
+        "where": {
+          "near": {
+            "anchor": "stone",
+            "within": 8
+          }
+        }
+      },
+      {
+        "id": "new",
+        "program": {
+          "lots": [
+            {
+              "id": "n1",
+              "type": "cottage",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "n2",
+              "type": "house",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "n3",
+              "type": "smithy",
+              "size": [
+                9,
+                9
+              ]
+            }
+          ]
+        },
+        "where": {
+          "adjacent": {
+            "to": {
+              "part": "old"
+            },
+            "side": "e",
+            "gap": [
+              2,
+              12
+            ]
+          }
+        }
+      }
+    ],
+    "connectors": [
+      {
+        "id": "link",
+        "kind": "road",
+        "from": {
+          "part": "old"
+        },
+        "to": {
+          "part": "new"
+        }
+      }
+    ]
+  }
+}

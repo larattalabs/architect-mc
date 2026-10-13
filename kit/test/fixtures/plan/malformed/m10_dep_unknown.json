@@ -1,0 +1,45 @@
+{
+  "about": "a dependency after a part that does not exist",
+  "on": "s7",
+  "expect": {
+    "path": "$.dependencies[0].after[0]",
+    "code": "UNKNOWN_REF",
+    "part": "town"
+  },
+  "plan": {
+    "schemaVersion": "plan/0",
+    "zones": [
+      {
+        "id": "town",
+        "program": {
+          "lots": [
+            {
+              "id": "h1",
+              "type": "cottage",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "h2",
+              "type": "house",
+              "size": [
+                9,
+                9
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "dependencies": [
+      {
+        "part": "town",
+        "after": [
+          "ghost"
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,71 @@
+{
+  "about": "a street between two lots of a zone (ports), asks claim",
+  "on": "asks",
+  "covers": [
+    "connector.street"
+  ],
+  "plan": {
+    "schemaVersion": "plan/0",
+    "zones": [
+      {
+        "id": "town",
+        "program": {
+          "lots": [
+            {
+              "id": "h1",
+              "type": "cottage",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "h2",
+              "type": "house",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "h3",
+              "type": "smithy",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "h4",
+              "type": "cottage",
+              "size": [
+                9,
+                9
+              ]
+            }
+          ]
+        },
+        "where": {
+          "near": {
+            "anchor": "stone",
+            "within": 16
+          }
+        }
+      }
+    ],
+    "connectors": [
+      {
+        "id": "main",
+        "kind": "street",
+        "width": 1,
+        "from": {
+          "anchor": "claim_w"
+        },
+        "to": {
+          "part": "town",
+          "port": "h1"
+        }
+      }
+    ]
+  }
+}

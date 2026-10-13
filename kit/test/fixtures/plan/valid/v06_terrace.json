@@ -1,0 +1,78 @@
+{
+  "about": "6a terrace beside a zone (asks claim)",
+  "on": "asks",
+  "covers": [
+    "form.terrace",
+    "feature.part"
+  ],
+  "plan": {
+    "schemaVersion": "plan/0",
+    "zones": [
+      {
+        "id": "town",
+        "program": {
+          "lots": [
+            {
+              "id": "h1",
+              "type": "cottage",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "h2",
+              "type": "house",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "h3",
+              "type": "smithy",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "h4",
+              "type": "cottage",
+              "size": [
+                9,
+                9
+              ]
+            }
+          ]
+        },
+        "where": {
+          "near": {
+            "anchor": "stone",
+            "within": 16
+          }
+        }
+      }
+    ],
+    "forms": [
+      {
+        "id": "steps",
+        "kind": "terrace",
+        "steps": 3,
+        "rise": 2,
+        "edge": "slope",
+        "size": {
+          "preset": "S"
+        },
+        "where": {
+          "near": {
+            "feature": {
+              "part": "town"
+            },
+            "within": 24
+          }
+        }
+      }
+    ]
+  }
+}

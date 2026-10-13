@@ -1,0 +1,11 @@
+{
+ "irSha": "84b65fe3d913b46817b977303650f78d6fe11b81ffca896b6ceede84107795e3",
+ "tiles": {
+  "ground|terrain|56,-16": "333204d9e379a1c30980bbe0428fcc5ac062b57eb32aaa9f0a6f42219ca45300",
+  "ground|terrain|56,-15": "d5c56e7a668bdde0c9ef99e992600ad9f5a9b5c4f382618cca2e1cf45efd7ee1",
+  "ground|terrain|57,-16": "17aaeb9d070d8b33afe270d7fe7c1927f55de43921660289adcb99cb0a886917",
+  "ground|terrain|57,-15": "b510dc3a549ad86b5c54ae52c562485c4f6a1f3fbd934ae7a352c9dde7c5f6ea",
+  "ground|terrain|58,-16": "7cb55902d34a3438a5e3cba53594a9b3a16078e54a519cf078b34f8b3a9f5adf",
+  "ground|terrain|58,-15": "814080ae84d5a4708ba22b916929541815c86770431aed8929151f39dc46a8b2"
+ }
+}

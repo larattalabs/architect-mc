@@ -1,0 +1,173 @@
+{
+  "prompt": "A harbour town with docks and a lighthouse.",
+  "answer": {
+    "plan": {
+      "schemaVersion": "plan/0",
+      "planId": "lighthouse_harbour",
+      "style": {
+        "pending": "lighthouse_harbour"
+      },
+      "zones": [
+        {
+          "id": "harbour",
+          "kind": "standard",
+          "required": true,
+          "label": "Harbour town",
+          "purpose": "port",
+          "where": {
+            "near": {
+              "feature": {
+                "water": {
+                  "body": "any",
+                  "pick": "largest"
+                }
+              },
+              "within": 24
+            }
+          },
+          "program": {
+            "layout": "street",
+            "shared": "none",
+            "lots": [
+              {
+                "id": "tower_1",
+                "type": "tower",
+                "role": "lighthouse",
+                "label": "lighthouse",
+                "size": [
+                  13,
+                  11
+                ],
+                "landmark": true,
+                "placement": "high_ground",
+                "brief": "Tall stone tower on the headland with a lantern room at the top that shines over the water."
+              },
+              {
+                "id": "dock_1",
+                "type": "dock",
+                "role": "main_dock",
+                "label": "main dock and pier",
+                "size": [
+                  17,
+                  15
+                ],
+                "placement": "near_water",
+                "brief": "Long plank pier with moorings, crates and lamp posts; boats tied alongside."
+              },
+              {
+                "id": "cottage_1",
+                "type": "cottage",
+                "role": "fishermens_cottage",
+                "label": "fishermen's cottage",
+                "size": [
+                  9,
+                  9
+                ],
+                "placement": "near_water",
+                "brief": "Small home with drying racks and nets by the quay."
+              },
+              {
+                "id": "cottage_2",
+                "type": "cottage",
+                "role": "fishermens_cottage",
+                "label": "fishermen's cottage",
+                "size": [
+                  9,
+                  9
+                ],
+                "placement": "near_water",
+                "brief": "Small home with drying racks and nets by the quay."
+              },
+              {
+                "id": "cottage_3",
+                "type": "cottage",
+                "role": "fishermens_cottage",
+                "label": "fishermen's cottage",
+                "size": [
+                  9,
+                  9
+                ],
+                "placement": "near_water",
+                "brief": "Small home with drying racks and nets by the quay."
+              },
+              {
+                "id": "boathouse_1",
+                "type": "boathouse",
+                "role": "boathouse",
+                "label": "boathouse",
+                "size": [
+                  13,
+                  11
+                ],
+                "placement": "near_water",
+                "brief": "Covered slip for boats and tackle."
+              },
+              {
+                "id": "shop_1",
+                "type": "shop",
+                "role": "harbourmasters_office",
+                "label": "harbourmaster's office",
+                "size": [
+                  13,
+                  11
+                ],
+                "placement": "central",
+                "brief": "Overlooks the docks; ledgers and a notice board."
+              },
+              {
+                "id": "barn_1",
+                "type": "barn",
+                "role": "warehouse",
+                "label": "warehouse",
+                "size": [
+                  13,
+                  11
+                ],
+                "placement": "near_water",
+                "brief": "Stores cargo near the pier; barrels and crates."
+              },
+              {
+                "id": "tavern_1",
+                "type": "tavern",
+                "role": "harbour_tavern",
+                "label": "harbour tavern",
+                "size": [
+                  13,
+                  11
+                ],
+                "placement": "central",
+                "brief": "Sailors' inn with rooms upstairs."
+              },
+              {
+                "id": "house_1",
+                "type": "house",
+                "role": "townsfolk_house",
+                "label": "townsfolk house",
+                "size": [
+                  9,
+                  9
+                ],
+                "brief": "Home set back from the shore."
+              },
+              {
+                "id": "house_2",
+                "type": "house",
+                "role": "townsfolk_house",
+                "label": "townsfolk house",
+                "size": [
+                  9,
+                  9
+                ],
+                "brief": "Home set back from the shore."
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "waits": [],
+    "summary": "A single harbour zone laid out along a street, set by the nearest sizeable water. It holds the lighthouse on high ground, the main dock, a boathouse and warehouse by the water, three fishermen's cottages, the harbourmaster's office and tavern in the centre, and two townsfolk houses set back. Everything can be built now; the weathered coastal style is settled later."
+  },
+  "usd": 0.028271,
+  "errors": []
+}

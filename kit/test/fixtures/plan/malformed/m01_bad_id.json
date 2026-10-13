@@ -1,0 +1,37 @@
+{
+  "about": "a part id with capitals",
+  "on": "s7",
+  "expect": {
+    "path": "$.zones[0].id",
+    "code": "SCHEMA",
+    "plan": true
+  },
+  "plan": {
+    "schemaVersion": "plan/0",
+    "zones": [
+      {
+        "id": "Town",
+        "program": {
+          "lots": [
+            {
+              "id": "h1",
+              "type": "cottage",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "h2",
+              "type": "house",
+              "size": [
+                9,
+                9
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

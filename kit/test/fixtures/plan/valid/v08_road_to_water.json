@@ -1,0 +1,67 @@
+{
+  "about": "a road from a zone to the water (S7)",
+  "on": "s7",
+  "covers": [
+    "connector.road",
+    "endpoint.feature",
+    "feature.water"
+  ],
+  "plan": {
+    "schemaVersion": "plan/0",
+    "zones": [
+      {
+        "id": "town",
+        "program": {
+          "lots": [
+            {
+              "id": "h1",
+              "type": "cottage",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "h2",
+              "type": "house",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "h3",
+              "type": "smithy",
+              "size": [
+                9,
+                9
+              ]
+            }
+          ]
+        },
+        "where": {
+          "near": {
+            "anchor": "stone",
+            "within": 16
+          }
+        }
+      }
+    ],
+    "connectors": [
+      {
+        "id": "quay",
+        "kind": "road",
+        "from": {
+          "part": "town"
+        },
+        "to": {
+          "feature": {
+            "water": {
+              "body": "any"
+            }
+          }
+        }
+      }
+    ]
+  }
+}

@@ -1,0 +1,172 @@
+{
+  "prompt": "A hamlet that looks like it grew over centuries, crooked lanes and all.",
+  "answer": {
+    "plan": {
+      "schemaVersion": "plan/0",
+      "planId": "centuries_hamlet",
+      "style": {
+        "pending": "centuries_hamlet"
+      },
+      "zones": [
+        {
+          "id": "hamlet",
+          "kind": "standard",
+          "required": true,
+          "label": "Centuries hamlet",
+          "purpose": "hamlet",
+          "style": {
+            "pending": "centuries_hamlet"
+          },
+          "where": {
+            "inside": {
+              "claim": true
+            }
+          },
+          "notes": "Organic layout: crooked lanes and irregular lots, hall and green where the lanes meet.",
+          "program": {
+            "layout": "organic",
+            "shared": "well",
+            "lots": [
+              {
+                "id": "tavern_1",
+                "type": "tavern",
+                "role": "old_hall",
+                "label": "old village hall",
+                "size": [
+                  17,
+                  15
+                ],
+                "landmark": true,
+                "placement": "central",
+                "brief": "Oldest building, stone base with timber additions of later ages, stands where the lanes meet."
+              },
+              {
+                "id": "cottage_1",
+                "type": "cottage",
+                "role": "cottage",
+                "label": "cottage",
+                "size": [
+                  9,
+                  9
+                ],
+                "placement": "edge",
+                "brief": "Different in age and shape, leaning, patched roof, added lean-to."
+              },
+              {
+                "id": "cottage_2",
+                "type": "cottage",
+                "role": "cottage",
+                "label": "cottage",
+                "size": [
+                  9,
+                  9
+                ],
+                "brief": "Different in age and shape, leaning, patched roof, added lean-to."
+              },
+              {
+                "id": "cottage_3",
+                "type": "cottage",
+                "role": "cottage",
+                "label": "cottage",
+                "size": [
+                  9,
+                  9
+                ],
+                "brief": "Different in age and shape, leaning, patched roof, added lean-to."
+              },
+              {
+                "id": "cottage_4",
+                "type": "cottage",
+                "role": "cottage",
+                "label": "cottage",
+                "size": [
+                  9,
+                  9
+                ],
+                "brief": "Different in age and shape, leaning, patched roof, added lean-to."
+              },
+              {
+                "id": "house_1",
+                "type": "house",
+                "role": "farmhouse",
+                "label": "farmhouse",
+                "size": [
+                  13,
+                  11
+                ],
+                "brief": "Rambling, extended over generations, with a small garden."
+              },
+              {
+                "id": "house_2",
+                "type": "house",
+                "role": "farmhouse",
+                "label": "farmhouse",
+                "size": [
+                  13,
+                  11
+                ],
+                "brief": "Rambling, extended over generations, with a small garden."
+              },
+              {
+                "id": "chapel_1",
+                "type": "chapel",
+                "role": "chapel",
+                "label": "old chapel",
+                "size": [
+                  13,
+                  11
+                ],
+                "brief": "Stone, small, with a mismatched later tower or porch."
+              },
+              {
+                "id": "smithy_1",
+                "type": "smithy",
+                "role": "smithy",
+                "label": "smithy",
+                "size": [
+                  9,
+                  9
+                ],
+                "brief": "Soot-stained, open forge on a lane corner."
+              },
+              {
+                "id": "barn_1",
+                "type": "barn",
+                "role": "barn",
+                "label": "barn",
+                "size": [
+                  13,
+                  11
+                ],
+                "placement": "edge",
+                "brief": "Weathered, patched with different timber."
+              },
+              {
+                "id": "well_1",
+                "type": "well",
+                "role": "well_green",
+                "label": "well and green",
+                "size": [
+                  9,
+                  9
+                ],
+                "placement": "central",
+                "brief": "Small irregular green with a well where lanes bend."
+              }
+            ]
+          }
+        }
+      ],
+      "notes": "Aged medieval look is carried by the style bible made after this plan."
+    },
+    "waits": [
+      {
+        "part": "hamlet",
+        "words": "The organically grown layout with crooked lanes and irregular lots: organic layouts come with a later Architect release (FL); the hamlet's ten buildings are planned and offered when it can be built."
+      }
+    ],
+    "summary": "A small hamlet of about ten buildings: an old hall at the centre, a well and green, four cottages, two farmhouses, a chapel, a smithy and a barn at the edge. I wrote it with the organic layout you asked for, which Architect can't build yet, so it waits for that release. The aged medieval style comes with the style bible."
+  },
+  "usd": 0.028125,
+  "errors": []
+}

@@ -1,0 +1,48 @@
+{
+  "about": "a q64 sketch outside 0..64 (R8)",
+  "on": "s7",
+  "expect": {
+    "path": "$.zones[0].sketch.points[0]",
+    "code": "SCHEMA",
+    "part": "town"
+  },
+  "plan": {
+    "schemaVersion": "plan/0",
+    "zones": [
+      {
+        "id": "town",
+        "program": {
+          "lots": [
+            {
+              "id": "h1",
+              "type": "cottage",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "h2",
+              "type": "house",
+              "size": [
+                9,
+                9
+              ]
+            }
+          ]
+        },
+        "sketch": {
+          "frame": "claim",
+          "unit": "q64",
+          "shape": "point",
+          "points": [
+            [
+              70,
+              10
+            ]
+          ]
+        }
+      }
+    ]
+  }
+}

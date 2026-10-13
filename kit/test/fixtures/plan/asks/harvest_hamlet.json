@@ -1,0 +1,111 @@
+{
+  "prompt": "A harvest hamlet with a big barn and a windmill.",
+  "answer": {
+    "plan": {
+      "schemaVersion": "plan/0",
+      "planId": "harvest_hamlet",
+      "style": {
+        "pending": "harvest_hamlet"
+      },
+      "zones": [
+        {
+          "id": "hamlet",
+          "kind": "standard",
+          "required": true,
+          "label": "Harvest Hamlet",
+          "purpose": "farming",
+          "style": {
+            "pending": "harvest_hamlet"
+          },
+          "program": {
+            "template": "flat_village",
+            "params": {
+              "lots": [
+                {
+                  "id": "barn_1",
+                  "type": "barn",
+                  "role": "great_barn",
+                  "label": "great harvest barn",
+                  "size": [
+                    17,
+                    15
+                  ],
+                  "landmark": true,
+                  "placement": "edge",
+                  "brief": "Big hayloft barn with wide doors, stacked hay and grain bins; the hamlet's centrepiece, facing the fields."
+                },
+                {
+                  "id": "windmill_1",
+                  "type": "windmill",
+                  "role": "windmill",
+                  "label": "windmill",
+                  "size": [
+                    13,
+                    11
+                  ],
+                  "landmark": false,
+                  "placement": "high_ground",
+                  "brief": "Tall tower with large sails on a rise, to catch the wind; grinds the harvest, with a flour store at the base."
+                },
+                {
+                  "id": "cottage_1",
+                  "type": "cottage",
+                  "role": "farmhouse",
+                  "label": "farmhouse",
+                  "size": [
+                    9,
+                    9
+                  ],
+                  "landmark": false,
+                  "brief": "Small home with thatch roof, kitchen garden and a well."
+                },
+                {
+                  "id": "cottage_2",
+                  "type": "cottage",
+                  "role": "farmhouse",
+                  "label": "farmhouse",
+                  "size": [
+                    9,
+                    9
+                  ],
+                  "landmark": false,
+                  "brief": "Small home with thatch roof, kitchen garden and a well."
+                },
+                {
+                  "id": "granary_1",
+                  "type": "granary",
+                  "role": "granary",
+                  "label": "granary",
+                  "size": [
+                    9,
+                    9
+                  ],
+                  "landmark": false,
+                  "brief": "Raised storehouse for sacks of grain, close to the windmill and barn."
+                },
+                {
+                  "id": "tavern_1",
+                  "type": "tavern",
+                  "role": "farmers_hall",
+                  "label": "farmers' hall",
+                  "size": [
+                    13,
+                    11
+                  ],
+                  "landmark": false,
+                  "placement": "central",
+                  "brief": "Harvest feast hall and gathering place at the heart of the hamlet."
+                }
+              ]
+            }
+          },
+          "notes": "Low density; open flat farmland with room for fields."
+        }
+      ]
+    },
+    "waits": [],
+    "summary": "A small, low-density harvest hamlet on open farmland: a big hayloft barn on the edge as the centrepiece, a windmill on the highest ground, two thatched farmhouses, a granary near the mill and barn, and a farmers' hall at the heart. The style will be rustic, set after this plan."
+  },
+  "usd": 0.0198,
+  "errors": []
+}

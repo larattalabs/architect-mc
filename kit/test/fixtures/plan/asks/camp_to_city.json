@@ -1,0 +1,247 @@
+{
+  "prompt": "Start as a survivors' camp and grow into a walled city.",
+  "answer": {
+    "plan": {
+      "schemaVersion": "plan/0",
+      "planId": "survivors_camp_walled_city",
+      "style": {
+        "pending": "survivors_camp_walled_city"
+      },
+      "zones": [
+        {
+          "id": "camp_city",
+          "kind": "standard",
+          "required": true,
+          "label": "Survivors' camp and city",
+          "purpose": "refuge",
+          "program": {
+            "layout": "street",
+            "lots": [
+              {
+                "id": "tavern_1",
+                "type": "tavern",
+                "role": "foundershall",
+                "label": "founders' hall",
+                "size": [
+                  17,
+                  15
+                ],
+                "landmark": true,
+                "placement": "central",
+                "brief": "Oldest, patched-together gathering hall at the camp's heart; communal hearth, bunks, notice board. Improvised timber and scrap."
+              },
+              {
+                "id": "cabin_1",
+                "type": "cabin",
+                "role": "shelter",
+                "label": "survivor shelter",
+                "size": [
+                  9,
+                  9
+                ],
+                "placement": "central",
+                "brief": "Crude lean-to style cabin ringed around the old campfire, patched with scrap."
+              },
+              {
+                "id": "cabin_2",
+                "type": "cabin",
+                "role": "shelter",
+                "label": "survivor shelter",
+                "size": [
+                  9,
+                  9
+                ],
+                "placement": "central",
+                "brief": "Crude lean-to style cabin ringed around the old campfire, patched with scrap."
+              },
+              {
+                "id": "cabin_3",
+                "type": "cabin",
+                "role": "shelter",
+                "label": "survivor shelter",
+                "size": [
+                  9,
+                  9
+                ],
+                "placement": "central",
+                "brief": "Crude lean-to style cabin ringed around the old campfire, patched with scrap."
+              },
+              {
+                "id": "cabin_4",
+                "type": "cabin",
+                "role": "shelter",
+                "label": "survivor shelter",
+                "size": [
+                  9,
+                  9
+                ],
+                "placement": "central",
+                "brief": "Crude lean-to style cabin ringed around the old campfire, patched with scrap."
+              },
+              {
+                "id": "house_1",
+                "type": "house",
+                "role": "townhouse",
+                "label": "townhouse",
+                "size": [
+                  13,
+                  11
+                ],
+                "brief": "Newer sturdier home built as the city grew, stone footings and timber upper floor."
+              },
+              {
+                "id": "house_2",
+                "type": "house",
+                "role": "townhouse",
+                "label": "townhouse",
+                "size": [
+                  13,
+                  11
+                ],
+                "brief": "Newer sturdier home built as the city grew, stone footings and timber upper floor."
+              },
+              {
+                "id": "house_3",
+                "type": "house",
+                "role": "townhouse",
+                "label": "townhouse",
+                "size": [
+                  13,
+                  11
+                ],
+                "brief": "Newer sturdier home built as the city grew, stone footings and timber upper floor."
+              },
+              {
+                "id": "market_square_1",
+                "type": "market_square",
+                "role": "plaza",
+                "label": "campfire plaza",
+                "size": [
+                  13,
+                  11
+                ],
+                "placement": "central",
+                "brief": "Original camp fire pit, now an open square with stalls."
+              },
+              {
+                "id": "gatehouse_1",
+                "type": "gatehouse",
+                "role": "gatehouse",
+                "label": "gatehouse",
+                "size": [
+                  13,
+                  11
+                ],
+                "placement": "edge",
+                "brief": "Main gate in the city wall, with portcullis and guard room."
+              },
+              {
+                "id": "tower_1",
+                "type": "tower",
+                "role": "watchtower",
+                "label": "watchtower",
+                "size": [
+                  9,
+                  9
+                ],
+                "placement": "high_ground",
+                "brief": "Wall tower overlooking approaches."
+              },
+              {
+                "id": "tower_2",
+                "type": "tower",
+                "role": "watchtower",
+                "label": "watchtower",
+                "size": [
+                  9,
+                  9
+                ],
+                "placement": "high_ground",
+                "brief": "Wall tower overlooking approaches."
+              },
+              {
+                "id": "smithy_1",
+                "type": "smithy",
+                "role": "smithy",
+                "label": "smithy",
+                "size": [
+                  13,
+                  11
+                ],
+                "brief": "Forge for tools and wall repairs."
+              },
+              {
+                "id": "barn_1",
+                "type": "barn",
+                "role": "granary",
+                "label": "granary and farm barn",
+                "size": [
+                  17,
+                  15
+                ],
+                "placement": "edge",
+                "brief": "Food stores and crop plots just inside the wall."
+              },
+              {
+                "id": "chapel_1",
+                "type": "chapel",
+                "role": "infirmary",
+                "label": "infirmary chapel",
+                "size": [
+                  13,
+                  11
+                ],
+                "brief": "Place of healing and quiet."
+              }
+            ]
+          },
+          "where": {
+            "inside": {
+              "claim": true
+            }
+          },
+          "notes": "Camp core is improvised; buildings harden to stone-and-timber toward the outside."
+        }
+      ],
+      "connectors": [
+        {
+          "id": "city_wall",
+          "kind": "wall",
+          "required": true,
+          "label": "city wall",
+          "where": {
+            "around": {
+              "feature": {
+                "part": "camp_city"
+              },
+              "ring": [
+                24,
+                30
+              ],
+              "closed": true
+            }
+          },
+          "params": {
+            "material": "stone and timber",
+            "gate": "gatehouse_1",
+            "towers": [
+              "tower_1",
+              "tower_2"
+            ]
+          },
+          "notes": "Closed ring wall enclosing the camp, with the gatehouse as main gate and towers on the wall."
+        }
+      ],
+      "notes": "Camp and city shown at once: ragged core, solid city ring outside, wall around it."
+    },
+    "waits": [
+      {
+        "part": "city_wall",
+        "words": "The ring wall around the city, with the gatehouse as its main gate and the towers on it: walls come with a later Architect release; the camp and city buildings are built first and the wall is offered when it can be."
+      }
+    ],
+    "summary": "A survivors' camp at the centre of the claim: a founders' hall, four patched cabins and a campfire plaza, with three townhouses, smithy, chapel, granary barn, gatehouse and two watchtowers around it, all in one street-laid zone in a pending rustic style. The ring wall can't be built yet, so it is kept as a required pending part and offered when walls are available."
+  },
+  "usd": 0.035761,
+  "errors": []
+}

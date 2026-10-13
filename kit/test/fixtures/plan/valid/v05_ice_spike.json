@@ -1,0 +1,24 @@
+{
+  "about": "F1 ice spikes, two of them (S3)",
+  "on": "s3",
+  "covers": [
+    "form.ice_spike"
+  ],
+  "plan": {
+    "schemaVersion": "plan/0",
+    "forms": [
+      {
+        "id": "ice",
+        "kind": "ice_spike",
+        "preset": "stubby",
+        "count": 2,
+        "where": {
+          "near": {
+            "anchor": "claim_center",
+            "within": 48
+          }
+        }
+      }
+    ]
+  }
+}

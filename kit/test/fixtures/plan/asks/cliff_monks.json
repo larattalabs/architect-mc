@@ -1,0 +1,190 @@
+{
+  "prompt": "Monks' cells built into the cliff face above the sea.",
+  "answer": {
+    "plan": {
+      "schemaVersion": "plan/0",
+      "planId": "cliffside_monastery",
+      "style": {
+        "pending": "cliffside_monastery"
+      },
+      "zones": [
+        {
+          "id": "monastery",
+          "kind": "standard",
+          "required": true,
+          "label": "Cliffside monastery",
+          "purpose": "temple",
+          "program": {
+            "layout": "street",
+            "lots": [
+              {
+                "id": "chapel_1",
+                "type": "chapel",
+                "role": "chapel",
+                "label": "cliff chapel",
+                "size": [
+                  17,
+                  15
+                ],
+                "landmark": true,
+                "placement": "central",
+                "villager": "none",
+                "brief": "Largest hall, carved into the cliff at its heart with a window facing the sea."
+              },
+              {
+                "id": "cell_1",
+                "type": "cell",
+                "role": "cell",
+                "label": "monks' cell",
+                "size": [
+                  9,
+                  9
+                ],
+                "villager": "dwelling",
+                "brief": "Small room cut into the rock face on a ledge, with a bed, lectern and sea window."
+              },
+              {
+                "id": "cell_2",
+                "type": "cell",
+                "role": "cell",
+                "label": "monks' cell",
+                "size": [
+                  9,
+                  9
+                ],
+                "villager": "dwelling",
+                "brief": "Small room cut into the rock face on a ledge, with a bed, lectern and sea window."
+              },
+              {
+                "id": "cell_3",
+                "type": "cell",
+                "role": "cell",
+                "label": "monks' cell",
+                "size": [
+                  9,
+                  9
+                ],
+                "villager": "dwelling",
+                "brief": "Small room cut into the rock face on a ledge, with a bed, lectern and sea window."
+              },
+              {
+                "id": "cell_4",
+                "type": "cell",
+                "role": "cell",
+                "label": "monks' cell",
+                "size": [
+                  9,
+                  9
+                ],
+                "villager": "dwelling",
+                "brief": "Small room cut into the rock face on a ledge, with a bed, lectern and sea window."
+              },
+              {
+                "id": "cell_5",
+                "type": "cell",
+                "role": "cell",
+                "label": "monks' cell",
+                "size": [
+                  9,
+                  9
+                ],
+                "villager": "dwelling",
+                "brief": "Small room cut into the rock face on a ledge, with a bed, lectern and sea window."
+              },
+              {
+                "id": "hall_1",
+                "type": "hall",
+                "role": "refectory",
+                "label": "refectory",
+                "size": [
+                  13,
+                  11
+                ],
+                "villager": "none",
+                "brief": "Shared dining hall with kitchen, near the chapel."
+              },
+              {
+                "id": "library_1",
+                "type": "library",
+                "role": "scriptorium",
+                "label": "scriptorium and library",
+                "size": [
+                  13,
+                  11
+                ],
+                "villager": "none",
+                "brief": "Bookshelves, lecterns and lanterns for copying manuscripts."
+              },
+              {
+                "id": "tower_1",
+                "type": "tower",
+                "role": "bell_tower",
+                "label": "bell tower",
+                "size": [
+                  9,
+                  9
+                ],
+                "placement": "high_ground",
+                "villager": "none",
+                "brief": "Atop the cliff, overlooking the sea."
+              },
+              {
+                "id": "dock_1",
+                "type": "dock",
+                "role": "landing",
+                "label": "sea stair landing",
+                "size": [
+                  9,
+                  9
+                ],
+                "placement": "near_water",
+                "villager": "none",
+                "brief": "Small landing at the cliff foot reached by a carved stair."
+              }
+            ]
+          },
+          "where": {
+            "near": {
+              "anchor": "stone",
+              "within": 32
+            }
+          },
+          "notes": "Compact, sparse set on a cliff face over water; existing cliff terrain used, not sculpted."
+        }
+      ],
+      "connectors": [
+        {
+          "id": "sea_stair",
+          "kind": "path",
+          "required": true,
+          "label": "carved sea stair",
+          "from": {
+            "part": "dock_1"
+          },
+          "to": {
+            "part": "chapel_1"
+          },
+          "notes": "Carved stair climbing from the landing at the cliff foot to the chapel."
+        },
+        {
+          "id": "ledge_path",
+          "kind": "path",
+          "required": false,
+          "label": "ledge walk",
+          "from": {
+            "part": "chapel_1"
+          },
+          "to": {
+            "part": "tower_1"
+          },
+          "notes": "Narrow walk along the ledges up to the bell tower."
+        }
+      ],
+      "notes": "Cliff-face site not yet surveyed; cells sit on ledges around the chapel."
+    },
+    "waits": [],
+    "summary": "A small, sparse cliffside monastery: a large chapel at the heart, five monks' cells on ledges, a refectory, a scriptorium, a bell tower on the clifftop and a landing at the foot, joined by carved stairs and a ledge walk. Everything here can be built now; the land isn't surveyed yet, so the fit will be checked when it is."
+  },
+  "usd": 0.029382,
+  "errors": []
+}

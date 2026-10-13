@@ -113,7 +113,7 @@ function prefix(W, D, f) {
 }
 
 /** Everything the resolver reads, built once per check. */
-export function makeEnv(ctx, P) {
+export function makeEnv(ctx, P, t0 = performance.now()) {
   const claim = ctx.claim, S = ctx.survey, cols = S.columns, r = cols.resolution, W = cols.width, D = cols.depth;
   const budget = { ...BUDGET_DEFAULTS };
   for (const k of Object.keys(BUDGET_DEFAULTS)) { const v = P.budget?.[k]; if (isInt(v) && v > 0 && v < BUDGET_DEFAULTS[k]) budget[k] = v; }
@@ -135,7 +135,7 @@ export function makeEnv(ctx, P) {
   return {
     ctx, claim, S, cols, r, W, D, budget, keepOut, protectedAreas, regions, sumG, sumG2, sumW, sumB, water: wb,
     anchors: anchorPoints(claim, P.anchors ?? {}), anchorsGiven: P.anchors ?? {}, surveySha, fingerprint: P.fingerprint ?? null, bible: P.bible ?? null,
-    t0: performance.now(), deadline: performance.now() + budget.maxMs, hitTime: false,
+    t0, deadline: t0 + budget.maxMs, hitTime: false,
     cacheIn: ctx.planCache ?? null, cacheOut: {},
   };
 }
@@ -191,10 +191,11 @@ function judge(devs) {
 export function locatorOf(env, where, geomOf, { within0 = 32 } = {}) {
   const claimIn = grow(env.claim, -MARGIN);
   const anyOk = () => true;
-  if (!where) return { valid: anyOk, move: () => 0, aim: null };
+  // no locator (or inside the claim): anywhere, nearest the claim's centre
+  if (!where) return { valid: anyOk, move: () => 0, aim: centre(env.claim) };
   const lk = Object.keys(where)[0], b = where[lk];
   if (lk === 'inside') {
-    if (b.claim) return { valid: anyOk, move: () => 0, aim: null };
+    if (b.claim) return { valid: anyOk, move: () => 0, aim: centre(env.claim) };
     const t = geomOf(b.part);
     if (!t) return { error: { code: 'DEPENDENCY', message: `${b.part} has no geometry` } };
     return { valid: (a) => inside(a, t.rect), move: () => 0, aim: centre(t.rect), areaFor: () => t.rect };
@@ -297,7 +298,7 @@ export function sketchPoint(env, s) {
 
 /**
  * Scan positions of a w x d rect (x then z; step 1 up to 256 a side, else ceil(side / 256)) over `area` (default the claim less
- * its margin) for the valid ones, each scored (an integer): 64 x move + 8 x sketch deviation + 4 x roughness + water share + the
+ * its margin) for the valid ones, each scored (an integer): 4096 x move + 8 x sketch deviation + 4 x roughness + water share + the
  * distance from the aim. Returns them best first (ties: scan order), at most `limit`.
  */
 function scan(env, w, d, loc, { sketch = null, obstacles = [], limit = 64, maxMove = Infinity, area = null } = {}) {
@@ -307,7 +308,9 @@ function scan(env, w, d, loc, { sketch = null, obstacles = [], limit = 64, maxMo
   const step = Math.max(1, Math.ceil(Math.max(env.claim.maxX - env.claim.minX + 1, env.claim.maxZ - env.claim.minZ + 1) / 256));
   const out = [];
   const aim = sketch ?? loc.aim;
-  for (let x0 = A.minX; x0 + w - 1 <= A.maxX; x0 += step) for (let z0 = A.minZ; z0 + d - 1 <= A.maxZ; z0 += step) {
+  // one lattice for every scan of a claim (its origin the claim's corner), so a recheck scans the same rects
+  const up = (v, o) => o + Math.ceil((v - o) / step) * step;
+  for (let x0 = up(A.minX, c.minX); x0 + w - 1 <= A.maxX; x0 += step) for (let z0 = up(A.minZ, c.minZ); z0 + d - 1 <= A.maxZ; z0 += step) {
     const a = rectOf(x0, z0, w, d);
     if (!inside(a, c)) continue;
     if (!loc.valid(a)) continue;
@@ -319,7 +322,7 @@ function scan(env, w, d, loc, { sketch = null, obstacles = [], limit = 64, maxMo
     const [cx, cz] = centre(a);
     const sk = sketch ? Math.max(Math.abs(cx - sketch[0]), Math.abs(cz - sketch[1])) : 0;
     const ad = aim ? Math.max(Math.abs(cx - aim[0]), Math.abs(cz - aim[1])) : 0;
-    const score = 64 * move + 8 * sk + 4 * st.rough + st.water + ad;
+    const score = 4096 * move + 8 * sk + 4 * st.rough + st.water + ad;
     out.push({ rect: a, move, sketch: sk, score, rough: st.rough, water: st.water });
   }
   out.sort((p, q) => p.score - q.score); // stable: scan order on ties
@@ -415,34 +418,36 @@ export function resolveZone(env, z, geomOf, { obstacles = [] } = {}) {
     const L = layoutStreet({ claim: { ...env.claim, ...cand.rect }, survey: env.S, specs, rules: STREET_RULES, shared, keepOut });
     return L.fail ? null : L;
   };
-  let best = null, beyond = null;
-  for (const t of tries) {
-    const orient = asked && tRot.allowed && t.w !== t.d ? [[t.w, t.d, false], [t.d, t.w, true]] : [[t.w, t.d, false]];
-    for (const [w, d, rot] of orient) {
-      if (w > env.claim.maxX - env.claim.minX + 1 - 2 * MARGIN || d > env.claim.maxZ - env.claim.minZ + 1 - 2 * MARGIN) continue;
-      const cands = scan(env, w, d, loc, { sketch: sk, obstacles: obs, maxMove: tMove.ceiling, limit: EVAL_K * 4 });
-      let evals = 0;
-      for (const c of cands) {
-        if (evals++ >= EVAL_K) break;
-        const L = evalAt(c);
-        if (!L) continue;
-        const unplaced = L.unplaced.length;
-        const cand = { ...c, w, d, rot, L, unplaced, sizeDev: t.shrunk ?? sizeDev(asked, rot ? d : w, rot ? w : d) };
-        const better = !best || cand.unplaced < best.unplaced || (cand.unplaced === best.unplaced && (cand.sizeDev < best.sizeDev || (cand.sizeDev === best.sizeDev && (cand.rot < best.rot || (cand.rot === best.rot && cand.score < best.score)))));
-        if (better) best = cand;
-        if (unplaced === 0) break;
+  // the search: every size (and orientation), the top-ranked rects' layouts; most lots placed, then the least size change, then
+  // unrotated, then the best score. `maxMove`: the move ceiling (Infinity: the wouldFit search, the same ranking past it)
+  const searchAll = (maxMove) => {
+    let best = null;
+    for (const t of tries) {
+      const orient = asked && tRot.allowed && t.w !== t.d ? [[t.w, t.d, false], [t.d, t.w, true]] : [[t.w, t.d, false]];
+      for (const [w, d, rot] of orient) {
+        if (w > env.claim.maxX - env.claim.minX + 1 - 2 * MARGIN || d > env.claim.maxZ - env.claim.minZ + 1 - 2 * MARGIN) continue;
+        const cands = scan(env, w, d, loc, { sketch: sk, obstacles: obs, maxMove, limit: EVAL_K * 4 });
+        let evals = 0;
+        for (const c of cands) {
+          if (evals++ >= EVAL_K) break;
+          const L = evalAt(c);
+          if (!L) continue;
+          const unplaced = L.unplaced.length;
+          const cand = { ...c, w, d, rot, L, unplaced, sizeDev: t.shrunk ?? sizeDev(asked, rot ? d : w, rot ? w : d) };
+          const better = !best || cand.unplaced < best.unplaced || (cand.unplaced === best.unplaced && (cand.sizeDev < best.sizeDev || (cand.sizeDev === best.sizeDev && (cand.rot < best.rot || (cand.rot === best.rot && cand.score < best.score)))));
+          if (better) best = cand;
+          if (unplaced === 0) break;
+        }
+        if (best && best.unplaced === 0 && best.sizeDev === 0 && !best.rot) break;
       }
-      if (best && best.unplaced === 0 && best.sizeDev === 0 && !best.rot) break;
+      if (best && best.unplaced === 0) break;
     }
-    if (best && best.unplaced === 0) break;
-  }
+    return best;
+  };
+  const best = searchAll(tMove.ceiling);
   if (!best) {
-    // nothing within the move ceiling: what would fit anywhere (the wouldFit fragment), else no room
-    for (const t of tries.slice(0, 3)) {
-      const cands = scan(env, t.w, t.d, loc, { sketch: sk, obstacles: obs, limit: EVAL_K, area: null });
-      for (const c of cands) { const L = evalAt(c); if (L) { beyond = { ...c, w: t.w, d: t.d, L }; break; } }
-      if (beyond) break;
-    }
+    // nothing within the move ceiling: what would fit past it (the wouldFit fragment), else no room
+    const beyond = tMove.ceiling < Infinity ? searchAll(Infinity) : null;
     if (beyond && beyond.move > tMove.ceiling) {
       return { klass: 'refused', reasons: [{ code: 'TOLERANCE', message: `the nearest place for the zone is ${beyond.move} cells past its locator (move at most ${tMove.ceiling})`, evidence: { move: beyond.move, max: tMove.max, ceiling: tMove.ceiling } }],
         wouldFit: wouldFitMove(zone, loc, beyond) };
@@ -574,7 +579,7 @@ const addedSince = (r, c) => ({ parts: r.parts.slice(c.parts).map((p) => p.id), 
  * `whole: {zone, region}`).
  */
 export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
-  const env = makeEnv(ctx, P);
+  const env = makeEnv(ctx, P, performance.now());
   for (const [name, t] of templates) WHOLE_CLAIM.set(name, { claim: t.catalogue?.claim ?? { min: [64, 64], max: [1024, 1024] }, module: t });
   const V = validatePlan(P.plan, { anchors: Object.keys(env.anchorsGiven) });
   const answers = new Map();
@@ -829,7 +834,9 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
       for (const l of group) for (const e of [l.from, l.to]) if (e.node) nodes[e.name] = e.node;
       let out;
       try {
-        out = r.pass('route', { nodes, edges: edges.map(({ _i, ...e }) => e), maxGrade: g, stage: stageOf('routes'), part, maxExpanded: env.budget.maxNodes, lanterns: true, ...(avoidRects(env, group, geom).length ? { keepOut: avoidRects(env, group, geom) } : {}) });
+        // every protected area and other owner's region meeting the claim is keep-out for the routes (nothing is written there), plus avoid[]
+        const ko = [...env.protectedAreas.map((a) => rectArr(a.rect)), ...env.regions.map((a) => rectArr(a.rect)), ...avoidRects(env, group, geom)];
+        out = r.pass('route', { nodes, edges: edges.map(({ _i, ...e }) => e), maxGrade: g, stage: stageOf('routes'), part, maxExpanded: env.budget.maxNodes, lanterns: true, ...(ko.length ? { keepOut: ko } : {}) });
       } catch (e) {
         rollback(r, cp);
         for (const l of group) if (!answers.has(l.conn.id)) ans(l.conn, { class: 'refused', reasons: [{ code: /KEEP_OUT/.test(e.message) ? 'KEEP_OUT' : 'UNREACHABLE', message: e.message }] });
@@ -1019,21 +1026,33 @@ function endpointNode(env, e, other, geom, zoneEmit, lotZone, r, conn, where) {
     const f = featureGeom(env, e.feature, (id) => geom.get(id) ?? null, posOf(other));
     if (f.error) return { error: { ...f.error, path: where } };
     if (f.body) {
-      // the dry column beside the water nearest the other end
+      // a dry column 3 from the water (the route keeps one column off water, plus its half width), nearest the other end
       const op = posOf(other);
-      let best = null;
-      const { cols, r: rr, W } = env;
-      for (const k of f.body.cells) {
-        const i = k % W, j = (k - i) / W;
-        for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-          const a = i + di, b = j + dj;
-          if (a < 0 || b < 0 || a >= W || b >= env.D) continue;
-          const t = a + b * W;
-          if (cols.flags[t] & (FLAG_WATER | FLAG_LAVA | FLAG_FROZEN)) continue;
-          const x = cols.minX + a * rr, z = cols.minZ + b * rr;
-          const d = Math.max(Math.abs(x - op[0]), Math.abs(z - op[1]));
-          if (!best || d < best.d) best = { x, z, d };
+      const { cols, r: rr, W } = env, Dd = env.D;
+      const dist = new Map();
+      let front = [...f.body.cells];
+      for (const k of front) dist.set(k, 0);
+      for (let d = 1; d <= 3; d++) {
+        const next = [];
+        for (const k of front) {
+          const i = k % W, j = (k - i) / W;
+          for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) {
+            const a = i + di, b = j + dj;
+            if (a < 0 || b < 0 || a >= W || b >= Dd) continue;
+            const t = a + b * W;
+            if (dist.has(t)) continue;
+            dist.set(t, d); next.push(t);
+          }
         }
+        front = next;
+      }
+      let best = null;
+      for (const t of front) {
+        if (cols.flags[t] & (FLAG_WATER | FLAG_LAVA | FLAG_FROZEN)) continue;
+        const i = t % W, j = (t - i) / W, x = cols.minX + i * rr, z = cols.minZ + j * rr;
+        if (x < env.claim.minX + 4 || x > env.claim.maxX - 4 || z < env.claim.minZ + 4 || z > env.claim.maxZ - 4) continue;
+        const d = Math.max(Math.abs(x - op[0]), Math.abs(z - op[1]));
+        if (!best || d < best.d || (d === best.d && (x < best.x || (x === best.x && z < best.z)))) best = { x, z, d };
       }
       if (!best) return { error: { code: 'NO_FEATURE', message: 'no dry column beside the water', path: where } };
       return feet(best.x, best.z, `w_${tag}`);

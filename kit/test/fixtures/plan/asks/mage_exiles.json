@@ -1,0 +1,211 @@
+{
+  "prompt": "A town of exiled mages, every tower a different school of magic.",
+  "answer": {
+    "plan": {
+      "schemaVersion": "plan/0",
+      "planId": "enclave_exiled_mages",
+      "style": {
+        "pending": "enclave_exiled_mages"
+      },
+      "zones": [
+        {
+          "id": "enclave",
+          "kind": "standard",
+          "required": true,
+          "label": "Enclave of the Exiled Mages",
+          "purpose": "home_base",
+          "style": {
+            "pending": "enclave_exiled_mages"
+          },
+          "program": {
+            "template": "flat_village",
+            "params": {
+              "lots": [
+                {
+                  "id": "hall_1",
+                  "type": "hall",
+                  "role": "conclave_hall",
+                  "label": "Conclave hall",
+                  "size": [
+                    17,
+                    15
+                  ],
+                  "landmark": true,
+                  "placement": "central",
+                  "brief": "Where the exiled schools meet; round council chamber with a ring of seats and a floor sigil."
+                },
+                {
+                  "id": "tower_1",
+                  "type": "tower",
+                  "role": "pyromancy_tower",
+                  "label": "Pyromancy tower",
+                  "size": [
+                    9,
+                    9
+                  ],
+                  "brief": "Fire school: red nether brick, blackstone, lava-lit braziers, open flame top."
+                },
+                {
+                  "id": "tower_2",
+                  "type": "tower",
+                  "role": "hydromancy_tower",
+                  "label": "Hydromancy tower",
+                  "size": [
+                    9,
+                    9
+                  ],
+                  "placement": "near_water",
+                  "brief": "Water school: prismarine, dark oak, glass, pools and drip channels."
+                },
+                {
+                  "id": "tower_3",
+                  "type": "tower",
+                  "role": "necromancy_tower",
+                  "label": "Necromancy tower",
+                  "size": [
+                    9,
+                    9
+                  ],
+                  "placement": "edge",
+                  "brief": "Death school: deepslate, bone, soul lanterns, crypt cellar."
+                },
+                {
+                  "id": "tower_4",
+                  "type": "tower",
+                  "role": "enchantment_tower",
+                  "label": "Enchantment tower",
+                  "size": [
+                    9,
+                    9
+                  ],
+                  "placement": "high_ground",
+                  "brief": "Enchanting school: purple and gold, bookshelves, enchanting tables, amethyst crown."
+                },
+                {
+                  "id": "tower_5",
+                  "type": "tower",
+                  "role": "naturalist_tower",
+                  "label": "Naturalist tower",
+                  "size": [
+                    9,
+                    9
+                  ],
+                  "brief": "Nature school: moss, oak, vines, azalea, a tree growing through the middle."
+                },
+                {
+                  "id": "tower_6",
+                  "type": "tower",
+                  "role": "alchemy_tower",
+                  "label": "Alchemy tower",
+                  "size": [
+                    9,
+                    9
+                  ],
+                  "brief": "Potion school: brewing stands, copper, cauldrons, green glass."
+                },
+                {
+                  "id": "tower_7",
+                  "type": "tower",
+                  "role": "astral_tower",
+                  "label": "Astral observatory tower",
+                  "size": [
+                    9,
+                    9
+                  ],
+                  "placement": "high_ground",
+                  "brief": "Sky school: quartz, dark blue, glass dome, telescope and star charts."
+                },
+                {
+                  "id": "library_1",
+                  "type": "house",
+                  "role": "library_archive",
+                  "label": "Library archive",
+                  "size": [
+                    13,
+                    11
+                  ],
+                  "brief": "Shared salvaged books and tomes from lost academies."
+                },
+                {
+                  "id": "cottage_1",
+                  "type": "cottage",
+                  "role": "apprentice_dwelling",
+                  "label": "Apprentice dwelling",
+                  "size": [
+                    9,
+                    9
+                  ],
+                  "villager": "dwelling",
+                  "brief": "Modest home for students and servants, clustered near the towers."
+                },
+                {
+                  "id": "cottage_2",
+                  "type": "cottage",
+                  "role": "apprentice_dwelling",
+                  "label": "Apprentice dwelling",
+                  "size": [
+                    9,
+                    9
+                  ],
+                  "villager": "dwelling",
+                  "brief": "Modest home for students and servants, clustered near the towers."
+                },
+                {
+                  "id": "cottage_3",
+                  "type": "cottage",
+                  "role": "apprentice_dwelling",
+                  "label": "Apprentice dwelling",
+                  "size": [
+                    9,
+                    9
+                  ],
+                  "villager": "dwelling",
+                  "brief": "Modest home for students and servants, clustered near the towers."
+                },
+                {
+                  "id": "tavern_1",
+                  "type": "tavern",
+                  "role": "exiles_inn",
+                  "label": "Exile's inn",
+                  "size": [
+                    13,
+                    11
+                  ],
+                  "placement": "central",
+                  "brief": "Common gathering place for mages of rival schools."
+                }
+              ]
+            }
+          },
+          "notes": "Towers should ring the central hall; ring layout is not a supported kind, so the template's own layout places them."
+        }
+      ],
+      "rules": [
+        {
+          "id": "shared_stone_base",
+          "kind": "palette",
+          "required": false,
+          "label": "Shared stone base",
+          "notes": "Every tower keeps its own school palette but shares a common stone base, tying the enclave together.",
+          "params": {
+            "family": "stone",
+            "exempt": [
+              "terrain",
+              "support"
+            ]
+          }
+        }
+      ],
+      "notes": "Flat ground, 64-block claim, medium density. Seven school towers around the conclave hall, with library, inn and three dwellings."
+    },
+    "waits": [
+      {
+        "part": "shared_stone_base",
+        "words": "The shared stone base that ties the differently styled towers together: palette rules come with a later Architect release; each tower's own palette is carried in its brief meanwhile."
+      }
+    ],
+    "summary": "A medium enclave on flat ground inside your 64-block claim: a central conclave hall, seven school towers (fire, water, death, enchantment, nature, alchemy, astral) around it, plus a library, the Exile's inn and three apprentice dwellings. Each tower's palette and motifs are in its brief. The shared stone base rule waits for a later release."
+  },
+  "usd": 0.034927,
+  "errors": []
+}

@@ -1,0 +1,211 @@
+{
+  "prompt": "An upside-down village hanging from a cliff overhang.",
+  "answer": {
+    "plan": {
+      "schemaVersion": "plan/0",
+      "planId": "overhang_hanging_village",
+      "style": {
+        "pending": "overhang_hanging_village"
+      },
+      "notes": "Needs a cliff overhang found by survey; every building should hang from the rock ceiling, roofs against the stone, floors toward the drop.",
+      "zones": [
+        {
+          "id": "village",
+          "kind": "standard",
+          "required": true,
+          "label": "Hanging village",
+          "purpose": "home_base",
+          "style": {
+            "pending": "overhang_hanging_village"
+          },
+          "where": {
+            "near": {
+              "anchor": "stone",
+              "within": 32
+            }
+          },
+          "program": {
+            "layout": "street",
+            "shared": "none",
+            "lots": [
+              {
+                "id": "tavern_1",
+                "type": "tavern",
+                "role": "overhang_hall",
+                "label": "overhang hall",
+                "size": [
+                  17,
+                  15
+                ],
+                "landmark": true,
+                "placement": "central",
+                "brief": "Largest hanging building, chained to the overhang ceiling; the communal heart with lantern-lit windows."
+              },
+              {
+                "id": "cabin_1",
+                "type": "cabin",
+                "role": "hanging_home",
+                "label": "hanging home",
+                "size": [
+                  9,
+                  9
+                ],
+                "brief": "Small cabin inverted from the rock ceiling, roof against the stone, floor facing the drop."
+              },
+              {
+                "id": "cabin_2",
+                "type": "cabin",
+                "role": "hanging_home",
+                "label": "hanging home",
+                "size": [
+                  9,
+                  9
+                ],
+                "brief": "Small cabin inverted from the rock ceiling, roof against the stone, floor facing the drop."
+              },
+              {
+                "id": "cabin_3",
+                "type": "cabin",
+                "role": "hanging_home",
+                "label": "hanging home",
+                "size": [
+                  9,
+                  9
+                ],
+                "brief": "Small cabin inverted from the rock ceiling, roof against the stone, floor facing the drop."
+              },
+              {
+                "id": "cabin_4",
+                "type": "cabin",
+                "role": "hanging_home",
+                "label": "hanging home",
+                "size": [
+                  9,
+                  9
+                ],
+                "brief": "Small cabin inverted from the rock ceiling, roof against the stone, floor facing the drop."
+              },
+              {
+                "id": "shop_1",
+                "type": "shop",
+                "role": "winch_house",
+                "label": "winch house",
+                "size": [
+                  13,
+                  11
+                ],
+                "placement": "edge",
+                "brief": "Lift and rope station linking the village to the cliff top and ground."
+              },
+              {
+                "id": "tower_1",
+                "type": "tower",
+                "role": "lookout_tower",
+                "label": "lookout tower",
+                "size": [
+                  9,
+                  9
+                ],
+                "placement": "edge",
+                "brief": "Slim tower hanging down from the overhang edge for watching the valley."
+              },
+              {
+                "id": "smithy_1",
+                "type": "smithy",
+                "role": "chain_workshop",
+                "label": "chain-bridge workshop",
+                "size": [
+                  13,
+                  11
+                ],
+                "brief": "Forges chains and fittings that keep the village hanging; connects homes via bridges."
+              },
+              {
+                "id": "barn_1",
+                "type": "barn",
+                "role": "hanging_garden",
+                "label": "hanging garden",
+                "size": [
+                  13,
+                  11
+                ],
+                "brief": "Glow berries and vines grown from the ceiling as a food source."
+              }
+            ]
+          }
+        }
+      ],
+      "connectors": [
+        {
+          "id": "main_street",
+          "kind": "street",
+          "required": false,
+          "label": "Main walk",
+          "from": {
+            "anchor": "stone"
+          },
+          "to": {
+            "part": "village"
+          },
+          "lamps": "street",
+          "notes": "Walkway linking the hall and buildings."
+        },
+        {
+          "id": "chain_bridges",
+          "kind": "rope_bridge",
+          "required": true,
+          "label": "Chain bridges between homes",
+          "from": {
+            "part": "village"
+          },
+          "to": {
+            "part": "village"
+          },
+          "notes": "Chain bridges linking the hanging homes, hall and workshop to each other."
+        },
+        {
+          "id": "winch_lift",
+          "kind": "lift",
+          "required": true,
+          "label": "Winch lift",
+          "from": {
+            "part": "village"
+          },
+          "to": {
+            "anchor": "stone"
+          },
+          "notes": "Rope lift from the winch house to the cliff top and the ground."
+        }
+      ],
+      "rules": [
+        {
+          "id": "hang_from_ceiling",
+          "kind": "suspended",
+          "required": true,
+          "label": "Everything hangs from the overhang",
+          "scope": [
+            "village"
+          ],
+          "notes": "Buildings are suspended beneath the rock ceiling by chains, not standing on the ground."
+        }
+      ]
+    },
+    "waits": [
+      {
+        "part": "chain_bridges",
+        "words": "The chain bridges between the hanging buildings: rope bridges come with a later Architect release."
+      },
+      {
+        "part": "winch_lift",
+        "words": "The winch lift to the cliff top and ground: lifts come with a later Architect release."
+      },
+      {
+        "part": "hang_from_ceiling",
+        "words": "Buildings truly suspended from the overhang ceiling: there is no hanging-from-above rule or form yet; the village is laid out first and the hanging is offered when it can be built."
+      }
+    ],
+    "summary": "A secluded home-base village of nine buildings in one zone near the founding stone: an overhang hall at the centre, four hanging cabins, a winch house and a lookout tower at the edge, a chain workshop and a hanging garden, joined by a lamp-lit street. The chain bridges, the winch lift and the true hanging-from-the-ceiling rule can't be built yet and wait for a later Architect release; the village needs a cliff overhang found at the site."
+  },
+  "usd": 0.035611,
+  "errors": []
+}

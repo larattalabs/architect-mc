@@ -1,0 +1,241 @@
+{
+  "prompt": "An old medieval quarter by the river and a newer art deco quarter on the hill.",
+  "answer": {
+    "plan": {
+      "schemaVersion": "plan/0",
+      "planId": "two_quarters",
+      "style": {
+        "pending": "two_quarters"
+      },
+      "zones": [
+        {
+          "id": "town",
+          "kind": "standard",
+          "required": true,
+          "label": "Two Quarters town",
+          "purpose": "market",
+          "program": {
+            "layout": "street",
+            "lots": [
+              {
+                "id": "tavern_1",
+                "type": "tavern",
+                "role": "old_town_hall",
+                "label": "old town hall",
+                "size": [
+                  17,
+                  15
+                ],
+                "landmark": true,
+                "placement": "central",
+                "brief": "Medieval timber-framed guild hall at the heart of the old quarter, facing the river."
+              },
+              {
+                "id": "tower_1",
+                "type": "tower",
+                "role": "deco_civic_tower",
+                "label": "art deco civic tower",
+                "size": [
+                  17,
+                  15
+                ],
+                "landmark": true,
+                "placement": "high_ground",
+                "brief": "Stepped setback tower with gold trim and quartz, crowning the hill and visible from the old quarter."
+              },
+              {
+                "id": "house_1",
+                "type": "house",
+                "role": "medieval_townhouse",
+                "label": "medieval townhouse",
+                "size": [
+                  9,
+                  9
+                ],
+                "brief": "Timber and thatch home in the old quarter, closely packed along lanes."
+              },
+              {
+                "id": "house_2",
+                "type": "house",
+                "role": "medieval_townhouse",
+                "label": "medieval townhouse",
+                "size": [
+                  9,
+                  9
+                ],
+                "brief": "Timber and thatch home in the old quarter, closely packed along lanes."
+              },
+              {
+                "id": "house_3",
+                "type": "house",
+                "role": "medieval_townhouse",
+                "label": "medieval townhouse",
+                "size": [
+                  9,
+                  9
+                ],
+                "brief": "Timber and thatch home in the old quarter, closely packed along lanes."
+              },
+              {
+                "id": "tavern_2",
+                "type": "tavern",
+                "role": "riverside_tavern",
+                "label": "riverside tavern",
+                "size": [
+                  13,
+                  11
+                ],
+                "placement": "near_water",
+                "brief": "Old quarter inn with a terrace over the water."
+              },
+              {
+                "id": "barn_1",
+                "type": "barn",
+                "role": "quayside_warehouse",
+                "label": "quayside warehouse",
+                "size": [
+                  13,
+                  11
+                ],
+                "placement": "near_water",
+                "brief": "Stone and timber store by the river for goods."
+              },
+              {
+                "id": "smithy_1",
+                "type": "smithy",
+                "role": "old_smithy",
+                "label": "old smithy",
+                "size": [
+                  9,
+                  9
+                ],
+                "placement": "edge",
+                "brief": "Medieval forge in the old quarter."
+              },
+              {
+                "id": "chapel_1",
+                "type": "chapel",
+                "role": "old_chapel",
+                "label": "old chapel",
+                "size": [
+                  13,
+                  11
+                ],
+                "brief": "Small medieval stone chapel with bell turret."
+              },
+              {
+                "id": "house_4",
+                "type": "house",
+                "role": "deco_apartment_block",
+                "label": "art deco apartment block",
+                "size": [
+                  13,
+                  11
+                ],
+                "brief": "Symmetrical multi-storey flats with setbacks, black and gold accents, on the hill."
+              },
+              {
+                "id": "house_5",
+                "type": "house",
+                "role": "deco_apartment_block",
+                "label": "art deco apartment block",
+                "size": [
+                  13,
+                  11
+                ],
+                "brief": "Symmetrical multi-storey flats with setbacks, black and gold accents, on the hill."
+              },
+              {
+                "id": "shop_1",
+                "type": "shop",
+                "role": "deco_shop_arcade",
+                "label": "deco shop arcade",
+                "size": [
+                  9,
+                  9
+                ],
+                "placement": "central",
+                "brief": "Stylish storefronts with geometric facades and glowing signage on the hill street."
+              },
+              {
+                "id": "shop_2",
+                "type": "shop",
+                "role": "deco_shop_arcade",
+                "label": "deco shop arcade",
+                "size": [
+                  9,
+                  9
+                ],
+                "placement": "central",
+                "brief": "Stylish storefronts with geometric facades and glowing signage on the hill street."
+              },
+              {
+                "id": "theatre_1",
+                "type": "art_deco_theatre",
+                "role": "deco_theatre",
+                "label": "deco cinema or theatre",
+                "size": [
+                  13,
+                  11
+                ],
+                "brief": "Marquee-fronted entertainment hall with vertical fins and sea lantern lighting."
+              }
+            ]
+          },
+          "notes": "All ten building kinds sit in one zone for now; the old quarter belongs by the river and the deco quarter on the hill."
+        }
+      ],
+      "connectors": [
+        {
+          "id": "hill_street",
+          "kind": "street",
+          "required": false,
+          "label": "street between quarters",
+          "from": {
+            "anchor": "stone"
+          },
+          "to": {
+            "anchor": "claim_n"
+          },
+          "lamps": "street"
+        },
+        {
+          "id": "quarter_stair",
+          "kind": "stair",
+          "required": true,
+          "label": "stairs linking river and hill quarters",
+          "from": {
+            "anchor": "stone"
+          },
+          "to": {
+            "anchor": "claim_n"
+          },
+          "notes": "Stairs climbing from the old quarter to the hill quarter."
+        }
+      ],
+      "rules": [
+        {
+          "id": "two_styles",
+          "kind": "palette",
+          "required": true,
+          "label": "medieval below, art deco above",
+          "notes": "Medieval timber, stone and thatch in the old quarter; art deco with gold, black, quartz and sea lanterns in the hill quarter."
+        }
+      ],
+      "notes": "Second district is written as hill_district; lots are in one zone until districts are supported. No terrain is sculpted."
+    },
+    "waits": [
+      {
+        "part": "quarter_stair",
+        "words": "The stairs between the river and hill quarters: stairs come with a later Architect release; the street is built first."
+      },
+      {
+        "part": "two_styles",
+        "words": "The two looks, medieval below and art deco above: per-quarter palette rules come later; both styles are kept in the style bible notes."
+      }
+    ],
+    "summary": "A mixed market town of 14 buildings on one street layout, with a town hall and an art deco tower as landmarks. The old quarter sits by the river and the deco quarter on the hill. A lamp-lit street links them; the stairs and the strict two-style split wait for later Architect releases."
+  },
+  "usd": 0.042309,
+  "errors": []
+}

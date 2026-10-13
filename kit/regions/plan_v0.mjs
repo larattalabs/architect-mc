@@ -25,7 +25,7 @@ export const passes = ['relief', 'route'];
 
 const J = (maxChars) => ({ type: 'json', default: null, ...(maxChars ? { maxChars } : {}) });
 export const params = {
-  plan: { ...J(65536), label: 'The plan (plan/0)' },
+  plan: { ...J(262144), label: 'The plan (plan/0)' },
   anchors: { ...J(16384), label: 'Named anchors' },
   protected: { ...J(65536), label: 'Protected areas' },
   regions: { ...J(65536), label: 'Other regions' },

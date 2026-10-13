@@ -1,0 +1,176 @@
+{
+  "prompt": "Take over the abandoned village nearby and rebuild it in our style.",
+  "answer": {
+    "plan": {
+      "schemaVersion": "plan/0",
+      "planId": "reclaimed_village",
+      "style": {
+        "pending": "reclaimed_village"
+      },
+      "zones": [
+        {
+          "id": "village",
+          "required": true,
+          "label": "Reclaimed village",
+          "purpose": "home_base",
+          "where": {
+            "inside": {
+              "claim": true
+            }
+          },
+          "program": {
+            "template": "flat_village",
+            "params": {
+              "lots": [
+                {
+                  "id": "tavern_1",
+                  "type": "tavern",
+                  "role": "village_hall",
+                  "label": "village hall",
+                  "size": [
+                    17,
+                    15
+                  ],
+                  "landmark": true,
+                  "placement": "central",
+                  "brief": "Gathering hall at the heart, restored from the old central building; hearth, long tables"
+                },
+                {
+                  "id": "house_1",
+                  "type": "house",
+                  "role": "home",
+                  "label": "home",
+                  "size": [
+                    9,
+                    9
+                  ],
+                  "brief": "Rebuilt on the old house plots, one per member"
+                },
+                {
+                  "id": "house_2",
+                  "type": "house",
+                  "role": "home",
+                  "label": "home",
+                  "size": [
+                    9,
+                    9
+                  ],
+                  "brief": "Rebuilt on the old house plots, one per member"
+                },
+                {
+                  "id": "house_3",
+                  "type": "house",
+                  "role": "home",
+                  "label": "home",
+                  "size": [
+                    9,
+                    9
+                  ],
+                  "brief": "Rebuilt on the old house plots, one per member"
+                },
+                {
+                  "id": "house_4",
+                  "type": "house",
+                  "role": "home",
+                  "label": "home",
+                  "size": [
+                    9,
+                    9
+                  ],
+                  "brief": "Rebuilt on the old house plots, one per member"
+                },
+                {
+                  "id": "cottage_1",
+                  "type": "cottage",
+                  "role": "cottage",
+                  "label": "cottage",
+                  "size": [
+                    9,
+                    9
+                  ],
+                  "brief": "Smaller dwelling with a garden"
+                },
+                {
+                  "id": "cottage_2",
+                  "type": "cottage",
+                  "role": "cottage",
+                  "label": "cottage",
+                  "size": [
+                    9,
+                    9
+                  ],
+                  "brief": "Smaller dwelling with a garden"
+                },
+                {
+                  "id": "smithy_1",
+                  "type": "smithy",
+                  "role": "smithy",
+                  "label": "smithy",
+                  "size": [
+                    13,
+                    11
+                  ],
+                  "brief": "Forge and anvil for tools and repairs"
+                },
+                {
+                  "id": "shop_1",
+                  "type": "shop",
+                  "role": "market_stall",
+                  "label": "market stall",
+                  "size": [
+                    9,
+                    9
+                  ],
+                  "placement": "central",
+                  "brief": "Trading and storage near the square"
+                },
+                {
+                  "id": "barn_1",
+                  "type": "barn",
+                  "role": "barn",
+                  "label": "barn and fields",
+                  "size": [
+                    13,
+                    11
+                  ],
+                  "placement": "edge",
+                  "brief": "Crops and animals"
+                },
+                {
+                  "id": "tower_1",
+                  "type": "tower",
+                  "role": "watchtower",
+                  "label": "watchtower",
+                  "size": [
+                    9,
+                    9
+                  ],
+                  "placement": "high_ground",
+                  "brief": "Lookout over the approaches"
+                },
+                {
+                  "id": "gatehouse_1",
+                  "type": "gatehouse",
+                  "role": "gatehouse",
+                  "label": "gatehouse",
+                  "size": [
+                    9,
+                    9
+                  ],
+                  "placement": "edge",
+                  "brief": "Entrance on the road in"
+                }
+              ]
+            }
+          },
+          "notes": "The abandoned village's own ground is searched for within the claim; lots are rebuilt on it."
+        }
+      ],
+      "notes": "Existing village site is not surveyed; the village is laid out inside the claim and rebuilt in a warm medieval look in wood, stone and thatch."
+    },
+    "waits": [],
+    "summary": "A single reclaimed village of twelve buildings inside your claim: a central village hall, four homes, two cottages, a smithy, a market stall, a barn on the edge, a watchtower on high ground and a gatehouse at the entrance. Its style is pending a warm medieval bible in wood, stone and thatch. The land isn't surveyed yet, so the old village's exact ground is fitted when Architect checks the plan."
+  },
+  "usd": 0.02673,
+  "errors": []
+}

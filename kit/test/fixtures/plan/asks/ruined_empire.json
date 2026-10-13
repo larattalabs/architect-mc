@@ -1,0 +1,167 @@
+{
+  "prompt": "The ruins of an old empire, with survivors living among them.",
+  "answer": {
+    "plan": {
+      "schemaVersion": "plan/0",
+      "planId": "ashes_of_the_empire",
+      "style": {
+        "pending": "ashes_of_the_empire"
+      },
+      "zones": [
+        {
+          "id": "survivors_camp",
+          "kind": "standard",
+          "required": true,
+          "label": "Survivors' camp among the ruins",
+          "purpose": "home_base",
+          "style": {
+            "pending": "ashes_of_the_empire"
+          },
+          "program": {
+            "layout": "street",
+            "lots": [
+              {
+                "id": "imperial_hall_ruin_1",
+                "type": "imperial_hall_ruin",
+                "role": "collapsed_hall",
+                "label": "collapsed imperial hall",
+                "size": [
+                  23,
+                  19
+                ],
+                "landmark": true,
+                "placement": "central",
+                "brief": "Great broken hall with half a dome, fallen columns and a partly roofed corner the survivors use as a gathering place."
+              },
+              {
+                "id": "cabin_1",
+                "type": "cabin",
+                "role": "survivor_shelter",
+                "label": "survivor shelter",
+                "size": [
+                  9,
+                  9
+                ],
+                "brief": "Timber and cloth lean-to built into ruined walls."
+              },
+              {
+                "id": "cabin_2",
+                "type": "cabin",
+                "role": "survivor_shelter",
+                "label": "survivor shelter",
+                "size": [
+                  9,
+                  9
+                ],
+                "brief": "Timber and cloth lean-to built into ruined walls."
+              },
+              {
+                "id": "cabin_3",
+                "type": "cabin",
+                "role": "survivor_shelter",
+                "label": "survivor shelter",
+                "size": [
+                  9,
+                  9
+                ],
+                "brief": "Timber and cloth lean-to built into ruined walls."
+              },
+              {
+                "id": "cabin_4",
+                "type": "cabin",
+                "role": "survivor_shelter",
+                "label": "survivor shelter",
+                "size": [
+                  9,
+                  9
+                ],
+                "brief": "Timber and cloth lean-to built into ruined walls."
+              },
+              {
+                "id": "tower_1",
+                "type": "tower",
+                "role": "watchtower",
+                "label": "ruined watchtower",
+                "size": [
+                  13,
+                  11
+                ],
+                "placement": "high_ground",
+                "brief": "Cracked imperial tower, repaired at the top as a lookout."
+              },
+              {
+                "id": "smithy_1",
+                "type": "smithy",
+                "role": "workshop",
+                "label": "scavengers' workshop",
+                "size": [
+                  13,
+                  11
+                ],
+                "brief": "Forge set in a vaulted ruin, reworking salvaged metal."
+              },
+              {
+                "id": "tavern_1",
+                "type": "tavern",
+                "role": "kitchen",
+                "label": "communal kitchen and hearth",
+                "size": [
+                  13,
+                  11
+                ],
+                "placement": "central",
+                "brief": "Open fire under a surviving arch with long tables."
+              },
+              {
+                "id": "barn_1",
+                "type": "barn",
+                "role": "garden_store",
+                "label": "garden plots and storehouse",
+                "size": [
+                  13,
+                  11
+                ],
+                "placement": "edge",
+                "brief": "Crops grown in a collapsed courtyard, store in a patched cellar."
+              },
+              {
+                "id": "monument_ruin_1",
+                "type": "monument_ruin",
+                "role": "monument",
+                "label": "toppled monument",
+                "size": [
+                  13,
+                  11
+                ],
+                "brief": "Broken statue of an emperor, a place of memory with vines."
+              },
+              {
+                "id": "gatehouse_1",
+                "type": "gatehouse",
+                "role": "gatehouse",
+                "label": "gatehouse remnant",
+                "size": [
+                  13,
+                  11
+                ],
+                "placement": "edge",
+                "brief": "Broken arch gate, barricaded with timber."
+              }
+            ]
+          },
+          "where": {
+            "near": {
+              "anchor": "stone",
+              "within": 32
+            }
+          }
+        }
+      ],
+      "notes": "Land not surveyed; existing terrain is used as is, no sculpting. Ruined imperial stone with timber and cloth survivor patches."
+    },
+    "waits": [],
+    "summary": "Ashes of the Empire is one survivors' camp laid out along a street among imperial ruins: a collapsed great hall at the centre, four timber-and-cloth shelters, a repaired watchtower on high ground, a scavengers' forge, a communal hearth, a garden and storehouse, a toppled emperor's monument and a barricaded gatehouse at the edge. It is built on the land as it is, with no sculpting, near the founding stone."
+  },
+  "usd": 0.028037,
+  "errors": []
+}

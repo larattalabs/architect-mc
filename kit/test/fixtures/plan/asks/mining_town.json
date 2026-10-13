@@ -1,0 +1,200 @@
+{
+  "prompt": "A working mining town with minecarts down to the mine.",
+  "answer": {
+    "plan": {
+      "schemaVersion": "plan/0",
+      "planId": "minecart_mining_town",
+      "style": {
+        "pending": "minecart_mining_town"
+      },
+      "zones": [
+        {
+          "id": "mining_town",
+          "kind": "standard",
+          "required": true,
+          "label": "Mining town",
+          "purpose": "mining",
+          "program": {
+            "layout": "street",
+            "lots": [
+              {
+                "id": "mine_head_1",
+                "type": "mine_head",
+                "role": "mine_head",
+                "label": "mine head and lift house",
+                "size": [
+                  17,
+                  15
+                ],
+                "landmark": true,
+                "placement": "edge",
+                "brief": "Timber headframe over the main shaft where the minecart rails descend into the mine; the town's centrepiece, at the bottom of the slope."
+              },
+              {
+                "id": "rail_station_1",
+                "type": "rail_station",
+                "role": "rail_station",
+                "label": "minecart station",
+                "size": [
+                  13,
+                  11
+                ],
+                "placement": "central",
+                "brief": "Loading platform and rail yard where carts leave for the mine and ore comes up."
+              },
+              {
+                "id": "cottage_1",
+                "type": "cottage",
+                "role": "miner_home",
+                "label": "miners' cottage",
+                "size": [
+                  9,
+                  9
+                ],
+                "brief": "Small home for a miner, set along the cart track."
+              },
+              {
+                "id": "cottage_2",
+                "type": "cottage",
+                "role": "miner_home",
+                "label": "miners' cottage",
+                "size": [
+                  9,
+                  9
+                ],
+                "brief": "Small home for a miner, set along the cart track."
+              },
+              {
+                "id": "cottage_3",
+                "type": "cottage",
+                "role": "miner_home",
+                "label": "miners' cottage",
+                "size": [
+                  9,
+                  9
+                ],
+                "brief": "Small home for a miner, set along the cart track."
+              },
+              {
+                "id": "cottage_4",
+                "type": "cottage",
+                "role": "miner_home",
+                "label": "miners' cottage",
+                "size": [
+                  9,
+                  9
+                ],
+                "brief": "Small home for a miner, set along the cart track."
+              },
+              {
+                "id": "smithy_1",
+                "type": "smithy",
+                "role": "smelter",
+                "label": "smelter and smithy",
+                "size": [
+                  13,
+                  11
+                ],
+                "brief": "Smelts ore and repairs tools and rails."
+              },
+              {
+                "id": "shop_1",
+                "type": "shop",
+                "role": "assay_office",
+                "label": "assay office and ore store",
+                "size": [
+                  13,
+                  11
+                ],
+                "brief": "Weighs and stores ore, buys and sells goods."
+              },
+              {
+                "id": "tavern_1",
+                "type": "tavern",
+                "role": "tavern",
+                "label": "miners' tavern",
+                "size": [
+                  13,
+                  11
+                ],
+                "placement": "central",
+                "brief": "Gathering place for shift workers."
+              },
+              {
+                "id": "house_1",
+                "type": "house",
+                "role": "foreman_house",
+                "label": "foreman's house",
+                "size": [
+                  13,
+                  11
+                ],
+                "placement": "high_ground",
+                "brief": "Overlooks the mine head and the rails."
+              },
+              {
+                "id": "barn_1",
+                "type": "barn",
+                "role": "storehouse",
+                "label": "tool shed and storehouse",
+                "size": [
+                  13,
+                  11
+                ],
+                "placement": "edge",
+                "brief": "Stores timber, tools and spare rails."
+              }
+            ]
+          },
+          "where": {
+            "near": {
+              "anchor": "stone",
+              "within": 32
+            }
+          },
+          "notes": "Medium density rustic working town on a slope; use the existing terrain without sculpting."
+        }
+      ],
+      "connectors": [
+        {
+          "id": "street_1",
+          "kind": "street",
+          "required": false,
+          "label": "Town street",
+          "from": {
+            "anchor": "stone"
+          },
+          "to": {
+            "part": "rail_station_1"
+          },
+          "lamps": "street"
+        },
+        {
+          "id": "rail_1",
+          "kind": "rail",
+          "required": true,
+          "label": "Minecart rails to the mine",
+          "from": {
+            "part": "rail_station_1"
+          },
+          "to": {
+            "part": "mine_head_1"
+          },
+          "params": {
+            "lamps": "lanterns"
+          },
+          "notes": "Minecart rails running downhill from the cart station to the mine entrance at the mine head, with lanterns along them."
+        }
+      ]
+    },
+    "waits": [
+      {
+        "part": "rail_1",
+        "words": "The minecart rails down to the mine, with lanterns along them: rails are not a supported connector yet; the town is built first and the rails are offered when Architect can build them."
+      }
+    ],
+    "summary": "A medium rustic mining town on a slope near the founding stone: a mine head with headframe at the bottom edge, a cart station at the centre, four miners' cottages, a smelter, assay office, tavern, foreman's house on high ground and a storehouse, joined by a lamp-lit street. The minecart rails down to the mine can't be built yet, so they wait while the town goes up."
+  },
+  "usd": 0.031057,
+  "errors": []
+}

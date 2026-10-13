@@ -1,0 +1,178 @@
+{
+  "prompt": "A cosy market town with a tavern, a smithy and a bakery.",
+  "answer": {
+    "plan": {
+      "schemaVersion": "plan/0",
+      "planId": "cosy_market_town",
+      "style": {
+        "pending": "cosy_market_town"
+      },
+      "zones": [
+        {
+          "id": "town",
+          "kind": "standard",
+          "required": true,
+          "label": "Market town",
+          "purpose": "market",
+          "program": {
+            "layout": "street",
+            "shared": "square",
+            "lots": [
+              {
+                "id": "shop_1",
+                "type": "shop",
+                "role": "market_hall",
+                "label": "market hall",
+                "size": [
+                  17,
+                  15
+                ],
+                "landmark": true,
+                "placement": "central",
+                "brief": "Open-fronted trading hall with stalls facing the market square; the heart of the town."
+              },
+              {
+                "id": "tavern_1",
+                "type": "tavern",
+                "role": "tavern",
+                "label": "tavern",
+                "size": [
+                  13,
+                  11
+                ],
+                "placement": "central",
+                "brief": "Warm hearth, lantern-lit common room, rooms upstairs, sign over the door."
+              },
+              {
+                "id": "smithy_1",
+                "type": "smithy",
+                "role": "smithy",
+                "label": "smithy",
+                "size": [
+                  13,
+                  11
+                ],
+                "brief": "Forge, anvil and open work yard; stands slightly off the square."
+              },
+              {
+                "id": "shop_2",
+                "type": "shop",
+                "role": "bakery",
+                "label": "bakery",
+                "size": [
+                  13,
+                  11
+                ],
+                "placement": "central",
+                "brief": "Brick oven, bread display in the window, hay sacks and barrels."
+              },
+              {
+                "id": "shop_3",
+                "type": "shop",
+                "role": "market_stall",
+                "label": "market stall",
+                "size": [
+                  9,
+                  9
+                ],
+                "placement": "central",
+                "brief": "Small stall for produce, cloth and tools around the square."
+              },
+              {
+                "id": "shop_4",
+                "type": "shop",
+                "role": "market_stall",
+                "label": "market stall",
+                "size": [
+                  9,
+                  9
+                ],
+                "placement": "central",
+                "brief": "Small stall for produce, cloth and tools around the square."
+              },
+              {
+                "id": "shop_5",
+                "type": "shop",
+                "role": "market_stall",
+                "label": "market stall",
+                "size": [
+                  9,
+                  9
+                ],
+                "placement": "central",
+                "brief": "Small stall for produce, cloth and tools around the square."
+              },
+              {
+                "id": "cottage_1",
+                "type": "cottage",
+                "role": "townsfolk_cottage",
+                "label": "townsfolk cottage",
+                "size": [
+                  9,
+                  9
+                ],
+                "brief": "Small home with garden and flower boxes along the lanes."
+              },
+              {
+                "id": "cottage_2",
+                "type": "cottage",
+                "role": "townsfolk_cottage",
+                "label": "townsfolk cottage",
+                "size": [
+                  9,
+                  9
+                ],
+                "brief": "Small home with garden and flower boxes along the lanes."
+              },
+              {
+                "id": "cottage_3",
+                "type": "cottage",
+                "role": "townsfolk_cottage",
+                "label": "townsfolk cottage",
+                "size": [
+                  9,
+                  9
+                ],
+                "brief": "Small home with garden and flower boxes along the lanes."
+              },
+              {
+                "id": "cottage_4",
+                "type": "cottage",
+                "role": "townsfolk_cottage",
+                "label": "townsfolk cottage",
+                "size": [
+                  9,
+                  9
+                ],
+                "brief": "Small home with garden and flower boxes along the lanes."
+              },
+              {
+                "id": "barn_1",
+                "type": "barn",
+                "role": "granary_barn",
+                "label": "granary barn",
+                "size": [
+                  13,
+                  11
+                ],
+                "placement": "edge",
+                "brief": "Stores grain for the bakery and market goods."
+              }
+            ]
+          },
+          "where": {
+            "near": {
+              "anchor": "stone",
+              "within": 32
+            }
+          }
+        }
+      ],
+      "notes": "Medium-density cosy market town on flat ground, centred on a market square."
+    },
+    "waits": [],
+    "summary": "A medium, cosy market town on level ground, built around a central market square near the founding stone. It has a market hall, tavern, smithy, bakery, three stalls, four cottages and a granary barn at the edge, all in warm rustic timber with lantern light."
+  },
+  "usd": 0.024961,
+  "errors": []
+}

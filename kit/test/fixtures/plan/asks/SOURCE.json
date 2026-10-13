@@ -1,0 +1,8 @@
+{
+  "about": "Steward's recorded plans for the 59 strange asks (docs/CONTRACT.md P0 gate item 11), copied whole (prompt, answer.plan, answer.waits, answer.summary, usd, errors) and never edited. answer.waits is the oracle the gate reads: a part it names answers unsupported (or blocked); every other part is never malformed.",
+  "repo": "larattalabs/steward-mc",
+  "commit": "8703dbd0cadf02fba08d6f4497e058f0eebcb563",
+  "path": "fixtures/strange-asks/plans/",
+  "copied": "2026-10-13",
+  "count": 59
+}

@@ -1,0 +1,214 @@
+{
+ "about": "every reserved catalogue entry answers unsupported with its block id (generated from x-catalogue; second half)",
+ "on": "s7",
+ "expect": {
+  "all": [
+   {
+    "part": "f_brush",
+    "block": "form.brush"
+   },
+   {
+    "part": "f_pond",
+    "block": "form.pond"
+   },
+   {
+    "part": "f_scatter",
+    "block": "form.scatter"
+   },
+   {
+    "part": "f_giant_tree",
+    "block": "form.giant_tree"
+   },
+   {
+    "part": "f_hidden_room",
+    "block": "form.hidden_room"
+   },
+   {
+    "part": "f_crater",
+    "block": "form.crater"
+   },
+   {
+    "part": "f_hollow_mountain",
+    "block": "form.hollow_mountain"
+   },
+   {
+    "part": "f_waterfall",
+    "block": "form.waterfall"
+   },
+   {
+    "part": "f_seabed_site",
+    "block": "form.seabed_site"
+   },
+   {
+    "part": "f_ship_hull",
+    "block": "form.ship_hull"
+   },
+   {
+    "part": "f_mast",
+    "block": "form.mast"
+   },
+   {
+    "part": "r_palette",
+    "block": "rule.palette"
+   },
+   {
+    "part": "r_shape",
+    "block": "rule.shape"
+   },
+   {
+    "part": "r_variety",
+    "block": "rule.variety"
+   },
+   {
+    "part": "r_density",
+    "block": "rule.density"
+   },
+   {
+    "part": "r_height_cap",
+    "block": "rule.height_cap"
+   },
+   {
+    "part": "r_stacked_floors",
+    "block": "rule.stacked_floors"
+   },
+   {
+    "part": "r_suspended",
+    "block": "rule.suspended"
+   }
+  ]
+ },
+ "plan": {
+  "schemaVersion": "plan/0",
+  "forms": [
+   {
+    "id": "f_brush",
+    "kind": "brush",
+    "where": {
+     "near": {
+      "anchor": "stone"
+     }
+    }
+   },
+   {
+    "id": "f_pond",
+    "kind": "pond",
+    "where": {
+     "near": {
+      "anchor": "stone"
+     }
+    }
+   },
+   {
+    "id": "f_scatter",
+    "kind": "scatter",
+    "where": {
+     "near": {
+      "anchor": "stone"
+     }
+    }
+   },
+   {
+    "id": "f_giant_tree",
+    "kind": "giant_tree",
+    "where": {
+     "near": {
+      "anchor": "stone"
+     }
+    }
+   },
+   {
+    "id": "f_hidden_room",
+    "kind": "hidden_room",
+    "where": {
+     "near": {
+      "anchor": "stone"
+     }
+    }
+   },
+   {
+    "id": "f_crater",
+    "kind": "crater",
+    "where": {
+     "near": {
+      "anchor": "stone"
+     }
+    }
+   },
+   {
+    "id": "f_hollow_mountain",
+    "kind": "hollow_mountain",
+    "where": {
+     "near": {
+      "anchor": "stone"
+     }
+    }
+   },
+   {
+    "id": "f_waterfall",
+    "kind": "waterfall",
+    "where": {
+     "near": {
+      "anchor": "stone"
+     }
+    }
+   },
+   {
+    "id": "f_seabed_site",
+    "kind": "seabed_site",
+    "where": {
+     "near": {
+      "anchor": "stone"
+     }
+    }
+   },
+   {
+    "id": "f_ship_hull",
+    "kind": "ship_hull",
+    "where": {
+     "near": {
+      "anchor": "stone"
+     }
+    }
+   },
+   {
+    "id": "f_mast",
+    "kind": "mast",
+    "where": {
+     "near": {
+      "anchor": "stone"
+     }
+    }
+   }
+  ],
+  "rules": [
+   {
+    "id": "r_palette",
+    "kind": "palette"
+   },
+   {
+    "id": "r_shape",
+    "kind": "shape"
+   },
+   {
+    "id": "r_variety",
+    "kind": "variety"
+   },
+   {
+    "id": "r_density",
+    "kind": "density"
+   },
+   {
+    "id": "r_height_cap",
+    "kind": "height_cap"
+   },
+   {
+    "id": "r_stacked_floors",
+    "kind": "stacked_floors"
+   },
+   {
+    "id": "r_suspended",
+    "kind": "suspended"
+   }
+  ]
+ }
+}

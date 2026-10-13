@@ -1,0 +1,21 @@
+{
+ "irSha": "dde0aa8a3c9c658a3c5f0ced4fda5058b73453f5a8f44a183d531502e7398cad",
+ "tiles": {
+  "ground|terrain|-18,6": "553d35175b033dcba75c78ed90e1f76a9477bbf75e7af0a29c6fe986e0ca6886",
+  "ground|terrain|-18,7": "e69da40154f982adb0e301d83f09ee3919682e5a8504718e76081ba8a06cb86f",
+  "ground|terrain|-18,8": "f5e8c828750f04b2fff9f729b4c983631f6f785ffe937292c4b747dbcada1327",
+  "ground|terrain|-18,9": "553d35175b033dcba75c78ed90e1f76a9477bbf75e7af0a29c6fe986e0ca6886",
+  "ground|terrain|-17,6": "ce62755192823965a97bd702d42602cbd97366e9c92251fc746441feabb7906f",
+  "ground|terrain|-17,7": "bb5fdc4a6a8a8f002134ba4ea35111716e803d5b67a47d17eb8cb1d9fed3f977",
+  "ground|terrain|-17,8": "dda4da1b16374cff22fd1ad3c7e78d1ad64f16711b014b872ac6a04bbffc5f6d",
+  "ground|terrain|-17,9": "15ed7317ec60e3805142844038483fab2f7f19e4b946d0ad10d3079aa0c91055",
+  "ground|terrain|-16,6": "8c673a6a91e6e736c47eb03dedb758c5ea5704933fe9d12482204bf1347a6549",
+  "ground|terrain|-16,7": "717db4b2b3a216a8573d0970b3a373a3db435953f95082c4134f017a3849a474",
+  "ground|terrain|-16,8": "004fc0c9f58ea034de3a7939079cffc68dec49f0abaefa388544d4681134b595",
+  "ground|terrain|-16,9": "c5a2cfda9197675dcb1de20e87b4c2c41ecdfaf075a35a90d6c14dbd5c25a2a0",
+  "ground|terrain|-15,6": "553d35175b033dcba75c78ed90e1f76a9477bbf75e7af0a29c6fe986e0ca6886",
+  "ground|terrain|-15,7": "f020cb07d93a8d9b84411a9e32d02650ab884e24da4ef8027b8b2b6159479688",
+  "ground|terrain|-15,8": "93b208af8d1facbd41361fae8a8208b027acaf1706b11d4339041429448829fd",
+  "ground|terrain|-15,9": "553d35175b033dcba75c78ed90e1f76a9477bbf75e7af0a29c6fe986e0ca6886"
+ }
+}
