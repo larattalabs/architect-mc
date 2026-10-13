@@ -10,7 +10,7 @@
 //     feasibility  item 1: ice_outpost planned offline on the re-pinned plan survey (scenarios/s2_ice_spikes.json planSurvey.sha, the
 //                  committed S2 golden's survey and frozen volume, else forms_demo's): at least 6 lots on the land band, every lot routed
 //                  from the gate, the checker 0 errors and no M1-M4; the first plan (no volume yet) asks for the volume the second reads
-//     apicompat    tools/api-compat.mjs --gate6cs2 (the 0.27.0, 0.26.0 and 0.25.0 apitest jars, the 0.27.0 surface)
+//     apicompat    tools/api-compat.mjs --gate6cs2 (the 0.28.0, 0.27.0 and 0.26.0 apitest jars, the 0.28.0 surface)
 //     report       REPORT.md over the step JSONs and S2's latest natural and flat runs
 //
 // Evidence: artifacts/gate6c-s2/<step>.json in the main checkout (GATE6CS2_OUT overrides), REPORT.md, spend.json.
@@ -103,7 +103,7 @@ steps.apicompat = async () => {
   const r = spawnSync(process.execPath, [path.join(root, 'tools', 'api-compat.mjs'), '--gate6cs2'], { cwd: root, encoding: 'utf8', env: { ...process.env, JAVA_HOME } });
   const t = `${r.stdout}${r.stderr}`;
   fs.writeFileSync(path.join(OUT, 'api-compat.txt'), t);
-  check(r.status === 0 && /all 4 checks clean/.test(t), `api-compat against the 0.27.0, 0.26.0 and 0.25.0 apitest jars and the 0.27.0 surface: ${t.trim().split('\n').pop()}`);
+  check(r.status === 0 && /all 4 checks clean/.test(t), `api-compat against the 0.28.0, 0.27.0 and 0.26.0 apitest jars and the 0.28.0 surface: ${t.trim().split('\n').pop()}`);
   spendZero();
   return { out: t };
 };

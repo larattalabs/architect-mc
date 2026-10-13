@@ -29,7 +29,7 @@ public interface ArchitectApi {
 	 * 1.12.0: minLotSize and the recommended lot, partial roads, ground heights, bounded fields refused in the mod, the extend
 	 * warning, survival construction roads, protected areas, owner-tagged entities (phase 6c slice 0c).
 	 */
-	String VERSION = "1.25.0";
+	String VERSION = "1.26.0";
 
 	/** The singleton. Safe to call from any mod's initializer (it does not depend on Architect's init order). */
 	static ArchitectApi get() {
@@ -106,7 +106,9 @@ public interface ArchitectApi {
 	 * Since 1.22.0, a T2 helper ({@code region.route}) adds {@code "routePass"} (the {@code route} pass: slope-aware routing with
 	 * switchbacks, stairs, ladders on player-only edges and keep-out avoidance; routes are ordinary roads, stairs and columns,
 	 * so a routed plan needs no new kind, and the IR graph's edges carry {@code movers} and {@code segments}).
-	 * Since 1.25.0, an S2 helper ({@code region.outpost}) adds {@code "scenarioS2"} (the bundled {@code ice_outpost} program, S2's
+	 * Since 1.25.0 (C33), a helper with {@code job.systemRefs} adds {@code "job.systemRefs"}: {@link JobSpec#systemRefs} is
+	 * expanded by the helper, and a structured job's {@code system} may be {@link Limits#JOB_SYSTEM_MAX} characters.
+	 * Since 1.26.0, an S2 helper ({@code region.outpost}) adds {@code "scenarioS2"} (the bundled {@code ice_outpost} program, S2's
 	 * ice-spike outpost: lots on the dry land among kept natural ice spikes, blended pads, routes from a gate, generated spikes,
 	 * scatter and melt-safe light; with it, a keep set is a route obstacle at its kept columns and the relief keeps them).
 	 */

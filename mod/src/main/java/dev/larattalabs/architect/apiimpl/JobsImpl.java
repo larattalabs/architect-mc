@@ -8,10 +8,12 @@ import com.google.gson.JsonNull;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import dev.larattalabs.architect.Architect;
+import dev.larattalabs.architect.api.ArchitectRefused;
 import dev.larattalabs.architect.api.Cost;
 import dev.larattalabs.architect.api.Job;
 import dev.larattalabs.architect.api.JobSpec;
 import dev.larattalabs.architect.api.Jobs;
+import dev.larattalabs.architect.api.Limits;
 import dev.larattalabs.architect.api.SiteEvents;
 import dev.larattalabs.architect.api.ToolHandler;
 import dev.larattalabs.architect.placement.Blueprints;
@@ -76,8 +78,17 @@ final class JobsImpl implements Jobs {
 
 	@Override
 	public CompletableFuture<String> run(JobSpec spec) {
+		CompletableFuture<String> limit = FieldLimits.refuse(FieldLimits.job(spec)); // C33: FIELD_LIMIT, nothing sent
+		if (limit != null) {
+			return limit;
+		}
 		ClientBridge b = ApiImpl.bridge();
 		String why = unavailable(b);
+		if (why == null && (!spec.systemRefs().isEmpty() || spec.system() != null && spec.system().length() > Limits.JOB_SYSTEM_AGENT_MAX)
+			&& !b.sidecarFeatures().contains("job.systemRefs")) {
+			// an older helper would drop systemRefs (zod strips unknown keys) and run the job without the schema, or refuse a long system
+			why = "systemRefs and a system prompt over " + Limits.JOB_SYSTEM_AGENT_MAX + " characters need a helper with C33 (job.systemRefs); this one does not have it";
+		}
 		if (why == null && !spec.images().isEmpty() && !b.sidecarFeatures().contains("job.images")) {
 			why = "images in jobs need a helper with phase 5a (job.images); this one does not have it";
 		}
@@ -88,6 +99,13 @@ final class JobsImpl implements Jobs {
 		m.addProperty("type", "job.run");
 		m.add("job", wire(spec));
 		CompletableFuture<String> id = b.send(m).thenApply(ack -> {
+			if (!ack.has("ok") || !ack.get("ok").getAsBoolean()) {
+				// C33: a typed refusal (FIELD_LIMIT: an unknown system ref, named in the message)
+				ArchitectRefused typed = Wire0b.refusal(ack);
+				if (typed != null) {
+					throw new CompletionException(typed);
+				}
+			}
 			String jobId = ackString(ack, "jobId");
 			Architect.LOGGER.info("API: job {} ({}{}) started", jobId, spec.kind(), spec.owner() == null ? "" : ", " + spec.owner());
 			return jobId;
@@ -628,6 +646,12 @@ final class JobsImpl implements Jobs {
 		// 5a (only when set)
 		if (!s.images().isEmpty()) {
 			o.add("images", Wire5a.images(s.images()));
+		}
+		// C33 (only when set: an older helper sees the 1.26 shape)
+		if (!s.systemRefs().isEmpty()) {
+			JsonArray rs = new JsonArray();
+			s.systemRefs().forEach(rs::add);
+			o.add("systemRefs", rs);
 		}
 		return o;
 	}

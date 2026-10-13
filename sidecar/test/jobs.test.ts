@@ -127,7 +127,7 @@ describe('protocol 2 over a WebSocket (sim backend)', () => {
     const c = await hello(env.port, { protocols: [1, 2] });
     const snap = c.msgs.find((m) => m.type === 'snapshot')!;
     expect(snap).toMatchObject({ protocol: 2, features: [...FEATURES], jobs: [] });
-    expect(FEATURES).toEqual(['job.run', 'job.tools', 'blobs', 'budget', 'designs.v2', 'bibles', 'design.groups', 'named.parts', 'open.types', 'estimates', 'reskin', 'massing', 'critique', 'critique.report', 'job.images', 'bible.admin', 'bible.restraint', 'entry.versions', 'entry.delta', 'design.polish', 'critique.polish', 'region.plan', 'region.tiles', 'region.check', 'region.preview', 'region.design', 'region.blobs', 'ir.format2', 'estimate.kinds', 'opKeys', 'group.breakdown', 'copies', 'smallEffort', 'versionOf', 'extendInfo', 'region.keepOut', 'region.lightCover', 'region.forms1', 'masks', 'patterns', 'region.passes', 'import.schem', 'region.scatter', 'region.brush', 'region.route', 'region.planCheck', 'plan.feature.build', 'region.outpost']);
+    expect(FEATURES).toEqual(['job.run', 'job.tools', 'blobs', 'budget', 'designs.v2', 'bibles', 'design.groups', 'named.parts', 'open.types', 'estimates', 'reskin', 'massing', 'critique', 'critique.report', 'job.images', 'bible.admin', 'bible.restraint', 'entry.versions', 'entry.delta', 'design.polish', 'critique.polish', 'region.plan', 'region.tiles', 'region.check', 'region.preview', 'region.design', 'region.blobs', 'ir.format2', 'estimate.kinds', 'opKeys', 'group.breakdown', 'copies', 'smallEffort', 'versionOf', 'extendInfo', 'region.keepOut', 'region.lightCover', 'region.forms1', 'masks', 'patterns', 'region.passes', 'import.schem', 'region.scatter', 'region.brush', 'region.route', 'region.planCheck', 'plan.feature.build', 'job.systemRefs', 'region.outpost']);
     c.ws.close();
     const bad = await connect(env.port);
     bad.send({ type: 'hello', id: 'h', token: TOKEN, protocols: [3, 4] });
@@ -498,6 +498,80 @@ describe('resume after a sidecar restart (sim backend)', () => {
     const j = await jobDone(c, jobId);
     expect(j).toMatchObject({ status: 'failed', error: 'budget' });
     expect(j.cost.usd).toBe(0.04);
+    c.ws.close();
+  });
+});
+
+describe('C33: systemRefs and the raised system cap (sim backend, the real kit)', () => {
+  let env: Env;
+  const REAL_KIT = path.join(SIDECAR_ROOT, '..', 'kit');
+  const queries = (jobId: string) =>
+    fs
+      .readFileSync(path.join(env.sc.config.dataDir, 'jobs', jobId, 'sim-queries.jsonl'), 'utf8')
+      .trim()
+      .split('\n')
+      .map((l) => JSON.parse(l) as { kind: string; system: string; prompt: string });
+  beforeAll(async () => {
+    const root = tempDir('arch-c33-');
+    fs.symlinkSync(REAL_KIT, path.join(root, 'kit'), 'dir'); // startEnv takes <root>/kit as the kit
+    env = await startEnv(root);
+  });
+  afterAll(async () => {
+    await env.stop();
+    rmrf(env.root);
+  });
+
+  it('a job with systemRefs ["plan/0"] sees the schema and the catalogue in its system prompt, then its own system text', async () => {
+    const c = await hello(env.port, { protocols: [1, 2] });
+    const jobId = await runJob(c, 'r', { kind: 'structured', prompt: 'write a plan', system: 'You write plans.', systemRefs: ['plan/0'], schema, owner: 'steward_mc:plan' });
+    const j = await jobDone(c, jobId);
+    expect(j.status).toBe('done');
+    const [q] = queries(jobId);
+    expect(q!.system.startsWith("## Architect's plan schema (plan/0)\n\n")).toBe(true);
+    expect(q!.system).toContain('"$id":"architect:plan-0"');
+    expect(q!.system).toContain('## Capability catalogue of plan/0');
+    expect(q!.system).toContain('"id":"zone.standard"');
+    expect(q!.system.endsWith('\n\nYou write plans.')).toBe(true);
+    expect(q!.prompt).toBe('write a plan');
+    // the record the clients see carries the refs, and no 40 KB expansion
+    expect(j.spec.systemRefs).toEqual(['plan/0']);
+    expect(JSON.stringify(j.spec).length).toBeLessThan(4000);
+    c.ws.close();
+  });
+
+  it('plan/0#compact is the shorter form; a job without refs keeps its system as given', async () => {
+    const c = await hello(env.port, { protocols: [1, 2] });
+    const a = await runJob(c, 'a', { kind: 'structured', prompt: 'p', systemRefs: ['plan/0#compact'], schema });
+    const b = await runJob(c, 'b', { kind: 'structured', prompt: 'p', system: 'plain', schema });
+    await jobDone(c, a);
+    await jobDone(c, b);
+    expect(queries(a)[0]!.system).toContain('## Capability catalogue of plan/0, compact');
+    expect(queries(a)[0]!.system.split('## Capability catalogue of plan/0, compact')[1]).not.toContain('"sinceApi":');
+    expect(queries(a)[0]!.system.endsWith('\n\n' + 'You work inside the Architect Minecraft mod. Answer the request with your structured output, exactly as its schema asks. You have no other tools.')).toBe(true);
+    expect(queries(b)[0]!.system).toBe('plain');
+    c.ws.close();
+  });
+
+  it('an unknown ref is refused at once (FIELD_LIMIT, the ref named) and no job is made', async () => {
+    const c = await hello(env.port, { protocols: [1, 2] });
+    const before = env.sc.jobs.book.recent().length;
+    c.send({ type: 'job.run', id: 'u', job: { kind: 'structured', prompt: 'p', systemRefs: ['plan/0', 'plan/7'], schema } });
+    const a = await c.ack('u');
+    expect(a).toMatchObject({ ok: false, code: 'FIELD_LIMIT', detail: 'system_ref' });
+    expect(a.error).toContain('"plan/7"');
+    expect(env.sc.jobs.book.recent().length).toBe(before);
+    c.ws.close();
+  });
+
+  it('a 120,000-character system on a structured job runs; one more is refused, and an agent job is held to 50,000', async () => {
+    const c = await hello(env.port, { protocols: [1, 2] });
+    const id = await runJob(c, 'big', { kind: 'structured', prompt: 'p', system: 'a'.repeat(120_000), schema });
+    expect((await jobDone(c, id)).status).toBe('done');
+    expect(queries(id)[0]!.system.length).toBe(120_000);
+    c.send({ type: 'job.run', id: 'over', job: { kind: 'structured', prompt: 'p', system: 'a'.repeat(120_001), schema } });
+    expect(await c.ack('over')).toMatchObject({ ok: false });
+    c.send({ type: 'job.run', id: 'agent', job: { kind: 'agent', prompt: 'p', system: 'a'.repeat(50_001), tools: [tool('t')] } });
+    expect(await c.ack('agent')).toMatchObject({ ok: false });
     c.ws.close();
   });
 });
