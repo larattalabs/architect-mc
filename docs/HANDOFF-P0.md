@@ -38,8 +38,19 @@ version tests (`Api*Test`), `IrStale.KIT_VERSION`/`KIT_VERSION`/`EVAL_KIT_VERSIO
    `blocked`; any other part never `malformed`. Anchors used: stone, player, claim_* (all supplied by the harness).
 
 ## Done
-- Worktree, `.gradle-home` cloned, decisions above.
+- Kit: `kit/lib/plan/` (schema.mjs validator + dispatch + x-rules; compile.mjs resolver/compiler run inside `kit/regions/plan_v0.mjs`;
+  finish.mjs cost, overall, artifact, class map; catalogue.mjs), `tools/plan-catalogue-diff.mjs`, `kit/schemas/plan-catalogue.golden.json`,
+  fixtures (valid 15, malformed 16, extension 16 incl. every reserved id, asks 59 + SOURCE.json, catalogue-next.json), tests
+  `kit/test/plan-p0.test.mjs` (items 1-3, 7-9, 11) and `plan-ops.test.mjs` (item 10, `fixtures/ops/` 9 families). Additive engine edits:
+  streetLayout `rect`/`prefix`/`padEdge`/`layout`, emitProps `prefix`, route pass `maxExpanded`, json param `maxChars`, planRegion
+  `planCache`, siteplan `part`/`planParts`, partAnswer `notes`, plan.json catalogue: 3 N-P0-1 templates, form.brush until P1. KIT 0.25.0.
+- Sidecar: region.plan `planCache`/`previewViews`/`timeoutMs`/`heapMb`, planCheck in region.planned, per-owner cache, feature
+  `region.planCheck`; `sidecar/test/plan-check.test.ts`.
+- Mod: API 1.23.0 records/methods/Reasons, `region/PlanChecks.java`, `TileStream.TILE_SHAS`, `client/dev/SliceP0Dev.java` (genHooks),
+  `ApiP0Test`. apijars + api-compat `--gate6cp0` on 0.25.0 (built from tag: `artifacts/gate6c-p0/v0250`), 0.24.0, 0.23.0 (clean).
+- Gate: `tools/gate6cp0.mjs` (unit, ingame, natural, report), gate-chains `p0-unit`, `p0-ingame`, `p0-natural`, impact rule.
+- Unit suites green locally: kit 352+, mod 617, sidecar plan-check.
 
 ## Next
-Kit (offline): `kit/lib/plan/` validator, resolver, answers, catalogue, artifact; `kit/regions/plan_v0.mjs`; fixtures; tests;
-`tools/plan-catalogue-diff.mjs`. Then sidecar, API 1.23.0, mod impl, DevBridge hooks, `tools/gate6cp0.mjs`, gate-chains, tier.
+Run `p0-unit`, `p0-ingame`, `p0-natural` (change tier, ports 8906:8907, run dir ../architect-mc-P0-run, out
+../architect-mc/artifacts/gate-runs-P0), fix, then the slice tier (3 shards 8906-8911), gate-verifier, as-built, retire HANDOFF.
