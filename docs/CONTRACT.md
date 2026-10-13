@@ -10378,6 +10378,466 @@ SETTLEMENTS §17.2's 6c gate, run once when the last 6c slice merges (whichever 
 - per-tile evaluation p50/p99 on S2, S3 and the forest-heavy variant (F3): p99 under 2 s, at least 45k cells/s;
 - the full `release` tier and the full gate-verifier; 6b's gate items as regressions.
 
+## Phase 6c slice P0: plan check v0 (DRAFT for Steward review)
+
+Next free API minor at merge (the house rule; a placeholder until then), mod to match. steward-mc docs/COMPOSITION.md v2 §2-§7,
+and architect-mc docs/COMPOSITION-ANSWERS.md, whose "Revisions" section wins. The geometric plan schema is
+`kit/schemas/plan.json` (`plan/0`, DRAFT on this branch).
+
+- **Branch:** `slice/P0`, worktree `../architect-mc-P0`. **Spend:** $0. The check makes no Claude calls, and repair costs are
+  Steward's.
+- **Scope:**
+  - the geometric plan schema `plan/0`, frozen after Steward's review and before Steward writes its plan writer;
+  - its compiler for the blocks that exist (§5);
+  - `Regions.checkPlan`, a $0 dry run of the whole plan against one survey snapshot, with per-part answers, the capability
+    catalogue and a light preview;
+  - the resolved artifact that approval binds, and `realiseApproved`.
+- **Not in scope:**
+  - the life layer (story, stages, schedule, relations, secrets), which is Steward's;
+  - districts (D1, D2), free layouts (FL), rule checks (RC, after VOC), brushes (B), crossings (T3), 7a's typed connectors,
+    and 6d's deltas to a realised region. Each answers `unsupported` with its block id until it ships.
+- **Depends on:** T2 (routing; its frozen text plus S-T2-1 and S-T2-2), T1 (passes, relief), V (`flat_village`), X (lot ext,
+  opKeys), F1 (forms) and 0c (C17 protected areas).
+- **Parallel with:** S2, T3, D1. Each of those adds its plan part and check when it lands, as a catalogue entry that moves from
+  `reserved` to `supported`.
+
+### 0. Facts
+
+- `Regions.plan` surveys a claim, runs one program in the sidecar's pristine-kit child process and returns a `RegionPlan`
+  (`irSha`, `surveySha`, lots, stages, budget, the macro checker's report and previews). With
+  `ext["architect_mc:check"] = false` it skips the checker and previews. One region is one claim (at most 1024 a side) and one
+  program. `Regions.remove` undoes all of it.
+- Today's region programs that matter here:
+  - `flat_village` (V) lays out lots on one street, with params `lots`, `shared`, `squareSize`, `laneWidth`, `lamps`, `bell`,
+    `apronLamps` and `requireAll`. Its lot list has the shape of `validateLots`, at most 40 lots.
+  - T2's `route` pass routes edges inside a program, with A* with heading, the grade limit, stairs and ladders on player-only
+    edges.
+  - T1's `relief` pass blends pads and corridors into the land, under the pass budget of 120 s and 2 GB.
+  - F1's `iceSpike` and `rockSpire` are form generators.
+  - Nothing routes between two regions yet. D1's `beside` is not built.
+- `kit/lib/specschema.mjs` (and the mod's `SpecSchema`) validate the toolbox specs with a small JSON Schema subset. `plan.json`
+  stays inside that subset. What the subset can't say is in `x-rules`, `x-dispatch` and `x-defaults`. The schema also compiles
+  under a standard 2020-12 validator (checked with the sidecar's ajv while drafting).
+- The macro checker, `checkRoad`, `fitToLot` and `bomFull` (C26) already answer fit and cost questions part by part.
+- **Shipped op kinds:** `shape`, `columns`, `voxels` and `relief`; `scatter` and `stamp` arrive with F2. Tile goldens hold S1,
+  S7, `mega_bench`, `relief_demo` and `route_demo`.
+
+### 1. The plan (`kit/schemas/plan.json`, `plan/0`)
+
+Top level:
+
+```
+{ schemaVersion: "plan/0", planId?, revision?: {n, parent?, parentArtifact?, reason?}, style?: {bible, version?} | {pending},
+  zones[] (<= 16), connectors[] (<= 64), forms[] (<= 32), rules[] (<= 32), dependencies[] (<= 128), notes?, ext? }
+```
+
+- **Parts** have stable `id`s, unique across the plan. A revision that keeps a part keeps its id. Every part carries
+  `required` (default false), `label`, `notes` (never verified), and `ext` (namespaced, at most 4 KB, echoed in its answer and
+  kept in the artifact: Steward's hook).
+- **Steward's hook into the plan** is `partRef`: `<partId>`, or `<planId>@<n>#<partId>` from outside the plan. A stage,
+  schedule entry or secret points at parts with it. Architect never reads the life layer.
+- **zones[]:**
+  - `kind` (`standard`; `outpost` is reserved for D2);
+  - `purpose` (a tag, echoed);
+  - `style` (a bible ref: `{bible, version?}`, or `{pending: "<tag>"}` while the bible doesn't exist yet, §3);
+  - `program`: `{template: "flat_village", params}`, or `{lots: [...], layout: "street", shared}`, or `{districts}`, which
+    is reserved for D1. A lot carries `id`, `type`, `size`, an optional slug `role` and an optional free-text `label` (at most
+    80 characters, as on zones and connectors);
+  - `where`, `sketch`, `size` (`{w, d}` as integers or ranges, or a preset S/M/L/XL), and `tolerance`.
+- **connectors[]:**
+  - v0 kinds `street`, `road` and `path`;
+  - `from`, `to` and `via[]` endpoints: a part with an optional port, an anchor, a feature, or a region, which is reserved
+    for D1;
+  - `avoid[]` features, `width` (1-5 cells, the range of 4e's ground roads and so of T2's routes; default street 3, road 3, path 1), `movers` (the per-edge override that S-T2-1 left room for), `lamps` and `style`.
+  - 7a's catalogue kinds are reserved by name: `auto`, `wall`, `gate`, `bridge`, `tunnel`, `ladder`, `stair`, `rail`,
+    `channel`, `rope_bridge`, `catwalk`, `rock_stair`, `switchback`, `lift`, `branch_walk`, `span_bridge` and
+    `stairs_around`. SETTLEMENTS §8's graph (nodes with ports, typed edges with `from`/`to` as `node.port`) is what a
+    connector compiles to. So 7a's edge `type` is the connector `kind`, and its ports are endpoint `port`s, with no change to
+    `plan/0`.
+- **forms[]:**
+  - `relief`: T1's pass around named parts, with `radius`, `maxCut`, `maxFill` and `erode`;
+  - `terrace`: 6a's terrace plus relief edges;
+  - `ice_spike` and `rock_spire`: F1, with `count`, `height`, `preset` and `keepNatural`;
+  - reserved: `floating_island` (N-P0-1), `brush` (B), `pond` (H), `scatter` (F2), `giant_tree` (F3) and `hidden_room`
+    (7b).
+- **rules[]:** the vocabulary `palette`, `shape`, `variety`, `density` and `height_cap`. Each has a draft def in the schema,
+  and all are reserved until RC. A required rule that can't be verified blocks readiness.
+- **dependencies[]:** `{part, after[], why?}`. The part stands after those parts (stage order), and answers `blocked` when
+  any of them doesn't fit. Implicit dependencies come from locator targets, endpoints and `relief.around`. The whole graph
+  must be acyclic.
+- **The extension envelope:**
+  - Each family's items are checked loosely, then dispatched on `kind`.
+  - A supported kind is checked strictly; an error there is `malformed`, with the JSON path.
+  - A reserved, retired or unknown kind (namespaced ones too, for example `steward:moat`) is checked only against the
+    bounded envelope, and answers `unsupported {block}`.
+  - Bounds: 4 KB and 6 levels deep per part; 32 parts and 32 KB per plan. Over a bound, the part is `malformed`.
+  - An unknown **top-level** member makes the whole plan `malformed`. New vocabulary goes inside a family, not beside them.
+
+**Locators (v0 vocabulary).** No world coordinates appear in a plan.
+
+- The five locators are `inside {part | region | claim}`, `near {anchor | feature, within}`,
+  `adjacent {to, side, gap}`, `along {feature, side, distance}` and `around {feature, ring, closed}`.
+- **Features** are deterministic selectors: `water {body, minArea}`, `biome_edge {between}`, `ridge {minRise}`, `part`,
+  `region` and `protected`. Several matches are broken by `pick`: largest (or longest, highest, or nearest to an anchor),
+  then nearest to the claim's centre, then the smallest min x, then the smallest min z.
+- **Anchors** are named, never coordinates. The built-in ones are `claim_center` and `claim_n`/`e`/`s`/`w`. The caller
+  supplies the others in `PlanRequest.anchors`. Steward passes `stone`, `player`, `street_w`, `street_e`, `district_<id>` and
+  `stockpile`. They are caller-supplied positions: P0 doesn't interpret the names, and an anchor a part uses but the request
+  doesn't supply is `malformed` (`UNKNOWN_REF`).
+- **A sketch** is optional and relative: frame `claim` in q64 units (0..64 across the claim), or frame `anchor` in blocks
+  (-512..512). v0 uses its point or centroid as a soft position target (`sketch.point`). An outline the plan requires
+  (`outline: true`) is `sketch.outline`, reserved for FL.
+
+**Tolerances** are explicit per part, each one `{max, hard}`. The defaults are stated in the schema's `x-defaults`:
+
+| Tolerance | Default |
+|---|---|
+| move | soft, 16 (ceiling 64) |
+| size | soft, 25% of each side (ceiling 50%) |
+| rotate | allowed |
+| count (lots unplaced) | soft, 0 |
+| grade | hard, 0.25 (T2) |
+| detour | soft, 2.0 (ceiling 4.0) |
+| sketch | soft, 8 (ceiling 32) |
+
+- A **soft** tolerance may be exceeded up to its ceiling. The answer is `adjusted`, with the deviation and `exceeds: true`.
+- Past the ceiling, or past any **hard** tolerance, the answer is `refused`, with reason `TOLERANCE` and what would fit.
+- A contract promise wins over a part's tolerance (C27's "within 4 cells", once D2 is supported).
+
+### 2. API
+
+```java
+// Regions (defaults that throw "needs Architect API <P0>")
+CompletableFuture<PlanCheck> checkPlan(PlanRequest r);              // async; future.cancel(true) or cancelCheck stops it
+boolean cancelCheck(@Nullable String owner, String opKey);          // true when a running check was cancelled
+Optional<PlanCheck> checkByKey(@Nullable String owner, String opKey);
+CompletableFuture<RegionPreviews> planImages(String checkId, Set<PreviewView> views);   // images on request (§4)
+Optional<PlanArtifact> artifact(String artifactSha);
+CompletableFuture<String> realiseApproved(ApprovedRealise r);       // the region id once queued (§6)
+
+record PlanRequest(JsonObject plan, ServerLevel level, BoundingBox claim, Map<String, BlockPos> anchors, @Nullable String owner,
+    @Nullable String bible, @Nullable Integer bibleVersion, @Nullable PlanBudget budget, @Nullable String opKey, JsonObject ext)
+record PlanBudget(int maxNodes, int maxEdges, long maxCells, int maxMs, int maxHeapMb)   // each <= the default; 0 = default
+record PlanCheck(String checkId, String planSha, String surveySha, String kitVersion, String schemaVersion, Overall overall,
+    List<JsonObject> parts, JsonObject cost, JsonObject catalogue, JsonObject preview, @Nullable String artifactSha,
+    List<String> notes)
+enum Overall { READY, NEEDS_REPAIR, REQUIRED_BLOCKED, INCOMPLETE, MALFORMED }   // appended to, never reordered
+record ApprovedRealise(String artifactSha, Mode mode, @Nullable ServerPlayer actor, Map<String, String> lotEntries,
+    @Nullable String opKey, JsonObject ext)
+```
+
+- **The opKey** is scoped as `(owner, "region.checkPlan", key)`, with the body being the plan's canonical JSON plus the
+  claim's x/z, the anchors, the bible and the budget. Otherwise it behaves as X's C20: the same body returns the same check,
+  in flight too; another body refuses `OP_KEY_CONFLICT`.
+- **Records** take the house rules: trailing components and appended enum values.
+- **New `Reason` values** (appended): `ARTIFACT_STALE` and `ARTIFACT_UNAPPROVED`. A malformed plan is an answer, not a
+  refusal; only an unparseable or oversize plan JSON refuses, as `FIELD_LIMIT`.
+- **Features:** `planCheck`, `planCatalogue`. **Config:** none new. The check runs under T1's pass budget (120 s, 2 GB).
+- Part answers travel as JSON in the shape of `plan.json`'s `$defs/partAnswer`, so new answer members need no API change.
+
+### 3. Answers
+
+Every part gets exactly one class:
+
+| Class | Meaning | Carries |
+|---|---|---|
+| `fits` | resolved within its tolerances, with no move beyond snapping | geometry, cost |
+| `adjusted` | resolved, but moved, resized, rotated or rerouted within tolerance (or past a soft one, up to its ceiling) | geometry, cost, deviations |
+| `refused` | infeasible: no room, steep, water (until T3), protected, overlap, a hard tolerance | typed reasons, `wouldFit` (up to 4 concrete alternatives, each a plan fragment with its own geometry and cost) |
+| `unsupported` | no such block in this catalogue | `block` (the exact block id), `until` (the slice) |
+| `blocked` | depends, explicitly or implicitly, on a part that is not `fits` or `adjusted` | `blockedBy` |
+| `malformed` | a schema error in a supported part, an unknown ref, a cycle, or an envelope over its bounds | reason `SCHEMA` with its path |
+| `incomplete` | the check ran out of budget, time or memory before this part had an answer; **never treated as fits** | reason `BUDGET`, and which cap |
+
+- **Reason codes:** `SCHEMA`, `UNKNOWN_REF`, `CYCLE`, `EXTENSION_BOUND`, `UNSUPPORTED`, `NO_FEATURE`, `NO_ROOM`,
+  `OUT_OF_CLAIM`, `OVERLAP`, `PROTECTED`, `KEEP_OUT`, `TOO_STEEP`, `WATER`, `UNREACHABLE`, `TOLERANCE`, `DEPENDENCY`,
+  `BUDGET`, `CANCELLED` and `LIMIT`. Each carries `evidence`, for example the columns, the grade or the feature found.
+- **Cost:**
+  - exact for what is resolved: cells, removed, added, tiles, chunks to generate, and in survival the BOM from C26's
+    `bomFull`;
+  - a **range** for provisional parts: lots without a library entry, and any part whose style is `{pending: "<tag>"}`. Cells and
+    a BOM band come from the lot's size and the library's density for its type (and, for a pending style, across the palettes
+    the bible could take). A pending style is checked exactly like an undesigned building: provisional, with approval rebound
+    once the bible exists;
+  - the whole-plan cost is the sum, as a range when any part is provisional.
+- **The overall result:**
+  - `MALFORMED`: the plan itself failed the schema;
+  - `INCOMPLETE`: any part is `incomplete`;
+  - `REQUIRED_BLOCKED`: a required part is `unsupported`, `refused` or `blocked` (COMPOSITION §2.5; it blocks approval until
+    the player approves a concrete reduced revision);
+  - `NEEDS_REPAIR`: any other part is not `fits` or `adjusted`;
+  - `READY` otherwise.
+  - Only `READY` and `NEEDS_REPAIR` produce an artifact. Under `NEEDS_REPAIR`, the parts that didn't fit are listed in it as
+    **dropped**, so approval shows them.
+
+### 4. Capability catalogue, and the preview
+
+The catalogue is returned with every answer, and committed as a golden per release (`kit/schemas/plan-catalogue.golden.json`).
+
+- **Entries** are `{id, sinceApi, schemaVersion, state: supported|reserved|retired, until?, retiredInApi?, replacedBy?,
+  limits?}`. The P0 entries are seeded in `plan.json`'s `x-catalogue`; `sinceApi: "P0"` is replaced at merge.
+- **Block ids** are `<family>.<kind>` (`connector.wall`, `form.relief`, `rule.palette`, `zone.outpost`), `program.<name>`,
+  `locator.<form>`, `feature.<selector>`, `endpoint.<form>` and `sketch.<form>`.
+- **Ids are never reused or renamed.** Retiring one is an explicit state that names `retiredInApi` and, optionally,
+  `replacedBy`. An entry's `schemaVersion` grows only additively; a breaking change is a new block id.
+- **Pending parts (Noah, via Steward):** a required part that needs a block that doesn't exist yet is kept pending in the
+  settlement's plan, and the town is built without it.
+  - Its `unsupported` answer names the exact block id.
+  - A newer catalogue that lists that id as `supported` tells Steward to recheck the part and propose adding it.
+  - `tools/plan-catalogue-diff.mjs <old> <new>` lists added ids, `reserved → supported` changes, retirements and
+    schemaVersion bumps.
+  - A reserved kind's parameters, written earlier into the envelope, may fail strict checks once it ships. Steward rechecks
+    them, and Claude repairs them.
+
+**The light preview comes first.** Each check returns, inline:
+- the siteplan (`siteplan/1`, widened additively with a `part` member on lots, paths, nodes and edges, and the part rects);
+- per-part bounds;
+- a 1:4 top-down class map, at most 256x256 and about 64 KB, as a PNG blob path.
+
+**Images come on request.** `planImages(checkId, views)` renders 6b's four views over the check's virtual world, as
+`Regions.previews` does.
+
+### 5. What v0 compiles
+
+A plan compiles to **one region plan over the request's claim** (see S-P0-1). It runs through a bundled, `catalogue = false`
+composite program, `plan_v0`, whose params are the resolved plan:
+- zone rects laid out with V's `streetLayout`, as `flat_village` does, inside each rect;
+- connectors as one T2 `route` pass, with the zone rects as obstacles and their ports as nodes;
+- relief as T1's pass, and F1's generators.
+
+So `checkPlan` is today's survey, then plan, then checker, with no realise. The 1024 claim cap and T1's pass budget apply to
+the whole plan.
+
+| Block | P0 answer |
+|---|---|
+| `zone.standard` with `program.flat_village` or `program.lots` | compiled: a rect inside the claim from its locator and size (integer scores, candidates scanned in x-then-z order), then the street layout. Lots left unplaced count against `count` |
+| `locator.inside` (claim, part), `locator.near` (anchor, water, part, protected), `locator.adjacent` (a part in this plan) | compiled |
+| `locator.along`, `feature.biome_edge`, `feature.ridge` | `unsupported` until D2 (C27; C28 decides biome resolution) |
+| `locator.around`, `sketch.outline` | `unsupported` until FL |
+| `program.districts`, `feature.region`, `endpoint.region` (a standing region; `beside`) | `unsupported` until D1 |
+| `zone.outpost` | `unsupported` until D2 |
+| `connector.street`, `road`, `path` | compiled: T2 edges; a route forced across water is `refused` `WATER` with `until: T3` |
+| `connector.bridge`, `tunnel` | `unsupported` until T3; `channel` until HY; the other 7a kinds until 7a |
+| `form.relief`, `form.terrace`, `form.ice_spike`, `form.rock_spire` | compiled (T1, 6a, F1) |
+| `form.brush` | `unsupported` until B (brushes join after B) |
+| `rule.*` | `unsupported` until RC |
+| `dependency.after` | compiled: stage order and `blocked` propagation |
+| a revision of a realised plan | unchanged parts stay as built. New parts beside the region are D1 (`unsupported`), and changes to built parts are 6d (`unsupported`) |
+
+**Overlap and protection:**
+- Zones may not overlap one another.
+- Nothing is written in C17 protected areas, `keepOut`, or another owner's region: reason `PROTECTED` or `OVERLAP`.
+- A protected area or a region given as a feature is avoided by the route as T2 keep-out.
+
+### 6. The artifact, approval and realise
+
+**A check that answers `READY` or `NEEDS_REPAIR` writes a resolved artifact** to `<planDir>/artifacts/<artifactSha>.json`.
+Its sha is taken over canonical JSON and excludes ids, timestamps and paths. The artifact holds:
+- the frozen plan (canonical) and its sha, the schema version and the catalogue version;
+- the frozen inputs:
+  - the claim's x/z;
+  - the anchors' positions;
+  - `surveySha`;
+  - a protection fingerprint (the C17 areas, `keepOut` and other regions intersecting the claim);
+  - the bible and its version;
+  - the seed;
+  - the kit version;
+- the compiled region plan: `planId`, `irSha`, the IR format and `requires`, the blob shas, and the tile shas per stage;
+- per part: the answer, the geometry, the lot ids, the links (graph edges with their paths) and the cost;
+- blueprint versions (`entry@version`) and their `fitToLot` fits for lots that have entries. Lots without one, and parts with a
+  pending style, are **provisional**: the artifact records each one's **cost range** and **fit box** (the lot box the building
+  must stay inside);
+- the dropped parts (`NEEDS_REPAIR`) and their classes.
+
+**Approval binds the artifact sha.** Steward stores `artifactSha` with the player's approval.
+
+`realiseApproved(r)`:
+1. Refuses `ARTIFACT_UNAPPROVED` when no artifact has that sha.
+2. Re-surveys the claim at the IR's resolution and recomputes the protection fingerprint. When the terrain (the drift check
+   over the plan's tiles, today's `DRIFTED` rule) or the protection changed, it refuses `ARTIFACT_STALE`, naming the changed
+   columns or areas, and writes nothing. Steward then checks again. Unchanged parts come from the cache, so a recheck is cheap.
+   If the new artifact's geometry sha equals the old one, the approval carries over; otherwise the player approves again.
+3. Binds `lotEntries` for provisional lots (and the bible, for a pending style). A provisional building keeps its approval
+   while its fit stays inside its recorded lot box and its cost stays within the recorded range. Past the top of the range,
+   or outside the box, it refuses `ARTIFACT_STALE`, naming the lot, and the caller re-approves.
+4. Calls `Regions.realise` on the artifact's `planId` with the opKey. It **never re-plans**.
+
+**Artifact retention.** Architect keeps an artifact by its sha while it is pinned or while an owner's settlement refers to it.
+- `Regions.pinArtifact(String artifactSha, String owner)` and `unpinArtifact(String artifactSha, String owner)` (defaults throw
+  "needs Architect API <P0>"; idempotent) hold it for that owner, as does a settlement's reference to it. It is deleted only
+  when no pin and no reference remain (the cache's 24 h does not apply to artifacts).
+- A removed artifact leaves a **tombstone** (`artifact(sha)` answers a removed record with its `removedAt`), matching C22's
+  pattern for regions. `realiseApproved` on it refuses `ARTIFACT_UNAPPROVED` (the sha is known, the body is gone); an unknown
+  sha refuses the same. Tombstones are kept as long as opKey records are (0a retention).
+
+**Replay and recovery:**
+- A resume uses the saved IR; this is X's C20.
+- `realiseByKey(owner, key)` finds the realise after a restart, including one interrupted mid-realise.
+- Undo is `Regions.remove` of the region, exactly as today.
+
+**Rule: a shipped op's semantics never change.**
+- From P0 on, every op kind, every op member and every shipped `plan_v0` compile path keeps its meaning forever. New behaviour
+  is a new op kind, or a new member whose absence means the old behaviour.
+- **Goldens** enforce it. `kit/test/fixtures/ops/` holds one frozen IR per op kind and member family, with its tile shas, and
+  every later kit re-evaluates them in CI (macOS and Linux). A moved sha fails the build.
+- A newer kit evaluates an older artifact's IR to the same tiles. Rechecking the *plan* on a newer kit may compile
+  differently. That makes a new artifact, which is a new revision to approve, never a silent change.
+
+### 7. Budgets, caps, cache and determinism
+
+**Caps on the plan:** 128 parts, 64 KB of JSON, and §1's family caps.
+
+**Caps on the check:**
+
+| Cap | Default |
+|---|---|
+| `maxNodes` (A* expansions over all T2 edges) | 2,000,000 |
+| `maxEdges` (routed legs) | 128 |
+| `maxCells` (cells evaluated) | 20,000,000 (`LIMITS.budgetDefault`) |
+| `maxMs` | 120,000 |
+| `maxHeapMb` | 2,048 |
+
+- A request may only lower a cap.
+- **Running out** leaves the parts without an answer as `incomplete`, and the check's overall result is `INCOMPLETE`, with no
+  artifact. Parts answered before the cap keep their answers.
+- **Count caps are deterministic. Time and memory caps are not:** a check that hit `maxMs` or `maxHeapMb` is never cached and
+  never makes an artifact.
+- **Cancel** (by future or key): `CANCELLED`, nothing persisted but the cache.
+
+**The cache** is per part, keyed by the kit version, the catalogue version, the part's canonical JSON, the resolved geometry
+shas of everything it depends on, `surveySha`, the protection fingerprint, the anchors, and the bible.
+- A repair round that changes one part re-resolves only that part and its dependants, then re-runs the whole-plan overlap and
+  route checks. Answers say `cached: true`.
+- The cache is kept for 24 h, or 256 checks per owner.
+
+**Determinism:**
+- Every coordinate is an integer cell. Sketches are quantised (q64), and grades and ratios to 1/64.
+- Costs are integers.
+- Parts are resolved in topological order of their dependencies, with ties broken by id (code point).
+- Candidate scans run in x-then-z order. Feature picks use §1's order. Every pass already breaks ties by `(f, g, x, z,
+  heading)` (T2).
+- **The same canonical plan, survey blob, anchors, protection fingerprint, kit version and budget give a byte-identical
+  answer and artifact sha.**
+- Live worlds drift between fresh copies (T1 as built), so the determinism gate runs over committed inputs: a plan JSON plus
+  a survey blob, or under `/tick freeze`.
+
+### 8. Gate (slice tier, $0)
+
+**Fixtures:**
+- `kit/test/fixtures/plan/`:
+  - `valid/` (at least 12, covering every supported block id);
+  - `malformed/` (at least 12: a bad id, a bad ref, a cycle, a known kind with a bad member, an unknown top-level member,
+    oversize);
+  - `extension/` (at least 6: an unknown connector kind, a reserved 7a kind written to its draft shape, a namespaced form
+    kind, an unknown template, a reserved rule kind, an envelope over its bounds giving `malformed`).
+- The crafted plans run on S7's flat claim and S3's pinned claim.
+
+**Evidence:** `artifacts/gate6c-p0/`, driver `tools/gate6cp0.mjs`. `spend.json` $0.00.
+
+| # | Check | Bar |
+|---|---|---|
+| 1 | Schema fixtures | every `valid/` plan valid under the kit validator and ajv 2020-12; every `malformed/` plan answers `malformed` with the expected path; every `extension/` plan answers `unsupported {block}` with the exact block id (and the oversize one `malformed` `EXTENSION_BOUND`) |
+| 2 | Per-class answers | crafted plans give each of the 7 classes at least once, with the expected reason codes, `blockedBy`, `until` and deviations; a required `unsupported` part gives `REQUIRED_BLOCKED` and no artifact; `wouldFit` alternatives re-checked alone answer `fits` |
+| 3 | Determinism | 3 checks of each crafted plan over committed inputs give identical answers and artifact shas; the kit half on macOS and Linux CI; 1 and 4 tile workers give equal tile shas |
+| 4 | Approve, realise, undo | for the S7 flat crafted plan and the S3 one: `realiseApproved` gives a region whose `irSha` and tile shas equal the artifact's; the realised world equals the check's virtual world over written cells (E-flat 0; natural E-normal classified, at most 0.01%); `Regions.remove` restores E-flat 0 |
+| 5 | Stale | a block changed in a planned tile, then `realiseApproved`: `ARTIFACT_STALE`, nothing written; the same after adding a C17 area over a zone; recheck, then approve, then realise works |
+| 6 | Keys | `checkPlan` key idempotence and conflict; `realiseApproved` with a key, the world stopped mid-realise, reload: `realiseByKey` finds it and it completes |
+| 7 | Incomplete | a forced `maxNodes` of 1,000 gives the route parts `incomplete`, overall `INCOMPLETE`, no artifact, nothing cached as fits; `maxMs` 1 the same, and that check is not cached |
+| 8 | Cache | a second check with one zone changed: every independent part `cached: true`, with answers equal to a cold check's |
+| 9 | Catalogue | every `supported` entry has a `valid/` fixture that fits, and every `reserved` one an `extension/` fixture answering `unsupported` with its id; **catalogue diff:** the committed `kit/test/fixtures/plan/catalogue-next.json` (D1 flipping `program.districts` and `endpoint.region` to supported) diffed against P0's golden lists exactly those ids as `reserved → supported`, and a pending part recorded as `unsupported {program.districts}` is flagged for a recheck |
+| 10 | Op semantics | the `fixtures/ops/` goldens re-evaluate unchanged; a deliberately changed op member fails the test (negative control) |
+| 11 | Recorded plans | Steward's recorded plans for the 59 strange asks, under `kit/test/fixtures/plan/asks/` as they arrive, run in kit CI at $0 and print the per-block gap table; no plan crashes the check. Zero fixtures pass until Steward's plan v0 lands |
+| 12 | Unchanged | S1, S7, `mega_bench`, `relief_demo` and `route_demo` tile goldens |
+| 13 | API, spend | api-compat clean against the previous three apitest jars; $0.00 |
+
+**Tier:** slice: quick, the kit region rows, `region/**` and `api/**`, the sim suites, apijars, and the scenario steps.
+**gate-verifier** re-runs items 4, 5 and 6 (realise, undo and keys).
+
+### 9. Build order
+
+1. Archive the previous apitest jar.
+2. The schema validator: the subset plus dispatch and `x-rules`, with fixtures.
+3. The resolver: locators, features, anchors, tolerances, dependencies.
+4. `plan_v0`, compiling zones, routes, relief and forms.
+5. Answers, cost and catalogue.
+6. The artifact, cache and budgets.
+7. The API: `checkPlan`, keys, `realiseApproved`, `planImages`.
+8. The catalogue diff tool, then the gate.
+
+### Open questions for Steward
+
+(Answered 2026-10-12; see "Changes from Steward's review of P0" below. The questions stay for the record.)
+
+- **S-P0-1. One region per plan.** v0 compiles a whole plan into one region over one claim: one undo, one opKey, one budget.
+  The alternative is one region per zone. That gives separate undo, but it needs D1's `beside` to join the regions. Is one
+  region per plan right until D1, with zones added later as their own regions?
+- **S-P0-2. `required` defaults to false.** Should it be true instead, so that Claude must mark a part optional?
+- **S-P0-3. Anchors.** Which named anchors will you pass (`stone`, the player's home, a protected build)? Are the built-in
+  claim anchors enough for the rest?
+- **S-P0-4. The ref hook.** `partRef` plus part `ext` (echoed and kept). Enough for stages, schedules and secrets to point at
+  parts, or do you want Architect to keep a reverse index?
+- **S-P0-5. Provisional buildings.** Approval carries over when each building's fit stays in its lot box and the approved
+  cost range. Is that the rule you want on the card?
+- **S-P0-6. Artifact custody.** Architect stores artifacts by sha in the plan dir; Steward stores the sha with the approval.
+  Do you also need the artifact exported to your save?
+- **S-P0-7. Street, road and path.** Is v0's split (a street is a road with lamps; a path is narrow, with stairs) right for
+  your plan writer? Or should `street` mean frontage for lots only, which is reserved for FL?
+- **S-P0-8. Unknown top-level members** make the whole plan `malformed`, while unknown kinds inside a family are
+  `unsupported`. Does your plan writer ever need a new top-level family before the schema adds one?
+- **S-P0-9. The freeze.** Is `plan/0` ready to freeze after this review, or do you want a round with plan v0 fixtures first?
+
+### Changes from Steward's review of P0 (2026-10-12; these win)
+
+- **S-P0-1. One region per plan until D1**, compiled through `plan_v0`. Zones become their own regions only when D1's `beside`
+  can join them.
+- **S-P0-2. `required` defaults to false.** Claude marks a part required when it must stand.
+- **S-P0-3. Anchors.** Steward passes `stone`, `player`, `street_w`, `street_e`, `district_<id>` and `stockpile`, in
+  `PlanRequest.anchors`. They are caller-supplied positions; P0 doesn't interpret their names (§1).
+- **S-P0-4. `partRef` plus part `ext`**, and each part's answer echoes its `ext` unchanged (`$defs.partAnswer`). No reverse
+  index.
+- **S-P0-5. The cost range in the artifact.** The approval artifact records each provisional part's cost range and fit box. A
+  provisional building keeps its approval while its fit stays in its lot box and its cost within the range. Past the top of the
+  range, the caller re-approves (§6).
+- **S-P0-6. Retention and tombstones.** Architect keeps an artifact by sha while it is pinned (`pinArtifact(sha, owner)` /
+  `unpinArtifact`) or while the owner's settlement refers to it. After removal it leaves a tombstone, as C22 does (§6).
+- **S-P0-7. Street width.** `street` connectors (like `road` and `path`) take an optional `width`, 1-5 cells: the range 4e's
+  ground roads support, which T2's routes inherit. The default is 3.
+- **S-P0-8. An unknown top-level member makes the plan `malformed`; an unknown kind inside a part is an extension** and answers
+  `unsupported`.
+- **S-P0-9. Freeze `plan/0` after one time-boxed round of Steward's plan-v0 fixtures for the 59 asks** (gate item 11). Until that
+  round ends, additive optional members are still allowed; after it, `plan/0` is frozen.
+- **Gap: lot label.** A lot in a zone's `program.lots` takes an optional free-text `label` (at most 80 characters, as zones and
+  connectors have). `role` stays a slug.
+- **Gap: pending style.** Wherever a bible ref is accepted (the plan `style` and a part `style`), `{pending: "<tag>"}` is also
+  accepted, the tag a slug of at most 40 characters. P0 checks a part with a pending style as **provisional**, the same way as
+  an undesigned building: palette and cost as a range, and approval rebinds once the bible exists.
+
+### Open questions for Noah
+
+- **N-P0-1. Other bundled programs as named templates.** Should `crater_works`, `rift_city` and `floating_islands` (and the
+  6b `floatingIsland` generator as `form.floating_island`) be catalogue entries in v0? Today only `flat_village` and lot sets
+  are.
+- **N-P0-2. Biomes per column (C28).** `feature.biome_edge` waits for D2. Should D2 add `Survey.biome` at resolution 1, or
+  stay at 4x4?
+
+**Decided (Noah, 2026-10-12, via Steward):** Claude picks a shortcut or a full composition per ask, and composing plus repair
+is capped at about $1 per plan. P0 itself stays $0.
+
+
+### Coordinator decisions on P0's Noah questions (2026-10-12)
+
+- **N-P0-1:** the existing bundled region programs (`crater_works`, `rift_city`, `floating_islands`) are exposed in v0 as
+  **named templates** (`program.template`), alongside `flat_village`: they exist and cost nothing. `form.floating_island` as a
+  free-standing form stays reserved.
+- **N-P0-2:** C28 is already D's builder's call (per-column biomes only if edge tracing needs it); not a Noah question.
+
+
+### Deferred
+
+- Rule checks (RC), free layouts (FL), districts (D1, D2), typed connectors (7a), crossings (T3), brushes (B), and deltas to
+  realised plans (6d). Each is a catalogue flip plus its compiler path.
+- A Java-side schema check. The mod checks only the byte cap, and the kit validates.
+
 ## Phase 6c slice X: region consumer asks C19 and C20 (FROZEN 2026-10-11 after Steward's review)
 
 Next free API minor at merge (expected 1.15.0 if it merges before T1; the house rule applies), mod to match. Wave 1, parallel
@@ -10863,3 +11323,17 @@ Branch `slice/Y1` (worktree `../architect-mc-Y1`). $0: sim and stub only (`artif
 | Final (post-merge, v0.18.0 base) | Head 5d6e816 / 72b8b80. Slice tier `artifacts/gate-runs-Y1/20261012-051529-slice` at 2128f6c (stopped at Noah's pause): unit-mod, unit-kit, sim-jobs/-sets/-massing, apijars (0.17.0/0.16.0/0.15.0 jars), x-ingame 53/0, y-unit, **y-ingame 103/0** (with the C25 checks), x-resume 46/0, 4d-all (2 timing bars recorded), 4e-orders, 5b-village, 6b-pathstyle PASS; then `20261012-163336-change` at 5d6e816: unit-sidecar, y2-unit, **y2-ingame 46/0** (C25 now fed by the stockpile), 4e-megalite, 5b-chains 329/0 PASS. The earlier 5b-chains failure (DevBridge closed at seed 4) did not reproduce: its client stopped cleanly ("Stopping!", then the save) mid-way through an instant delta of a site with no owner and no stockpile; an external stop, not a crash, not on a Y1 path. The two earlier unit-sidecar failures were vitest timeouts under load (no sidecar code changed). api-compat 4/4 against the 0.18.0 and 0.17.0 apitest jars (built from their tags, `v0180/`, `v0170/`), the 0.16.0 jar and the 0.18.0 surface. gate-verifier PASS twice: at 49cdcd2, and at 5d6e816 after the merge (reviewed the merge resolutions, the id keying and the C25 seam; re-ran items 4, 5, 7 and 8 itself, all exact, kill drift recorded: `artifacts/gate6c-y1-verify2/`). Its note that a stockpiles.json without ids would not load is fixed (ids are assigned at load, never reusing one: `StockpileFileTest`; verifier review PASS). Only the file migrates: a pre-release Y1 world's crate blocks would still carry `stockpile:<owner>` and count as missing until re-added; no such world was released. |
 | Slice tier (pre-merge) | `artifacts/gate-runs-Y1/20261012-034544-slice` (2 shards, 8930-8933, head 49cdcd2, the 2026-10-12 slim slice tier): 13 PASS, including unit-mod 518, unit-kit 246, unit-sidecar 705, apijars (0.16.0/0.15.0/0.14.0 jars, 45 ok each), x-ingame 53/0 (C22 removal), **y-ingame 100/0**, 4d-all 61 (two timing bars recorded at load 35-51, not judged), 4e-orders, 5b-chains 329/0, 5b-village, 6b-pathstyle, 4e-megalite. sim-jobs/-sets/-massing failed only on `tools/apitest.mjs`'s pinned API version (now the 1.17.0 placeholder; the coordinator's number replaces it at merge): PASS at 9b4f1eb in `20261012-045143-change`. gate-verifier: PASS; it re-ran items 4, 5, 7 and 8 itself (`artifacts/gate6c-y1-verify/`, all exact; kill drift recorded). Its minor notes, **known follow-ups** (queued in PLAN): `Groups.credit` skips a credit when both dimensions are unloaded; a single road removal credits before its restore (a retry is keyed); a road credited by `beforeRemove` is missing from a group's `RemoveResult.refund`. |
 | Gate | Items (`artifacts/gate6c-y1/REPORT.md`): 1 `unit` (StockpileTest 9, FeedOrderTest 6, ApiY1Test 5); 2+4 `store` (3 crates, 0 others; 3 houses, a batch road, a standalone road, a v1->v3 delta and a survival revert all BUILT from the stockpile; houses and roads cell-identical to INSTANT twins; the delta target cell-identical to a legacy construction twin, and to the instant twin but for one soil cell (grass/dirt) that the legacy construction delta shows too: 5b's, not Y1's; the delta's and revert's removed cells credited under one key each; conservation 0 at 19+ checkpoints); 3 `order` (house 3 BUILT first then in order; house 6 blocked by a player: the others used only the surplus); S-Y-1 `unloaded`; 5 `refunds`; 6 `overflow`; 7 `once` (failRestore breaks an instant member after the construction house was credited; save, reload, retry: every refund once); 8 `restart a/b` (the loaded ledger equals the file the clean stop wrote; conservation 0; building resumes) and `restart kill/c` (manual: drift recorded within the units moved since the autosave); 9 `gone`; Steward's `dissolve` (the restart, kill and migration parts re-run at head 49cdcd2); 12 `migrate a-d` (0.17.0 world: Stock and the per-site ledger equal, builds finish through their crates; adoptCrates moved 400 items with difference 0, cells restored, idempotent; downgrade recorded: 0.17.0 shows crate missing, nothing builds, remove exact); 13 0c `survroad` on this build (`c0c/`), gate3 survival and hardcore (`gate3/`), 4d-all in the slice tier; 14 api-compat 4/4 against the 0.17.0 (built from tag v0.17.0, `v0170/`), 0.16.0 and 0.15.0 apitest jars and the 0.17.0 surface. |
+
+### C29 as built (Steward round 9; API 1.19.0 / mod 0.22.0, assigned by the coordinator; recorded 2026-10-12)
+
+Branch `slice/C29` (worktree `../architect-mc-C29`), merged with v0.21.0. $0: sim and stub only. Ports 8936-8941. Evidence:
+`artifacts/gate-runs-C29/` (slice and change tiers; the step evidence under each run's `gate6c-c29/`), the 0.21.0 jar set built from
+tag v0.21.0 with its `tools/` in `artifacts/gate6c-c29/v0210/`.
+
+| § | As built |
+|---|---|
+| (a) leaving the feed | `Groups.leaving(id)`: the target is in a running removal's sites (a group removal, `undoStage`, a region removal through `removeGroup`; from the removal's start through its wait for a player and its planning, until the record goes pending), or a whole-group removal not yet started (its batches cancelling) is of its group, or a single road removal's job runs for it. `Stockpiles.feed`, `availableTo` (C25's seam), `unbuiltAll` (credit, insert acceptance, `outstanding`) and the API view skip such a target: no step, no reservation, no need. It keeps its place in the feed order, so a removal that ends without removing it (a player stayed 10 min, blockers) feeds it again from there; its C25 wait ends. Nothing new is saved: the removals are already in `placement.json`, so a restart mid-wait keeps the target out. Legacy (own-crate) targets are unchanged. |
+| (a) the refund | The tally stays where rule 7 needs it (before the undo is planned: `beforeMap` reads the active entries), but the target has been out of the feed since the removal started, so what it tallies is what stands when the restore writes; it is credited when the restore is written, once per key (`site:<id>@<placedAt>`, `road:<id>@<placedAt>`), as Y1 built it, across C22/C23 resumes. **A single road removal** now carries its tally on its `RestoreJob` (saved with the job as `credit`) and credits it when the restore is written, never when the restore breaks; the credited items are its `RemoveResult.refund` (closes Y1's follow-up "a single road's refund credited before its restore"). A single site `remove` is synchronous and refuses a player in the box, so it has no wait. Regions are INSTANT only in this version (`RegionsImpl`, the survival refusal), so a region has no stockpile member until RS; its removal is `removeGroup`'s path. A delta stage's undo is a forward delta, not a removal: it stays in the feed. |
+| (b) `Sites.pause` | `void pause(String targetId, boolean paused)`, a default that throws "needs Architect API 1.19.0". `Builder.pauseTarget`: a building construction site or road (stockpile or own crate), as the crate screen's Pause (`Construction.paused`, saved with the site or road record); idempotent; FIELD_LIMIT for an id that is no construction target building (unknown, built), NOT_ALLOWED while it is being removed; STOCKPILE_CHANGED. A paused target places nothing and reserves nothing (Y1's rule) and keeps its order position. `dev.stockpile.pause` takes the same path. Features `targetPause`, `removalLeavesFeed`. No new Reason, no record change. apitest `apic29`, `ppause`. |
+| Gate | Step `c29-unit` (ApiC29Test 3, C29CreditTest 3, ApiRulesTest) and `c29-ingame` (`tools/gate6cy.mjs c29wait c29restart c29stage c29pause apicompat`, the 6b client), impact rule "C29 removal leaves the feed, Sites.pause". Items: **1** `c29wait`: A half built and first in the order, C behind it starved; the player in A's box, `removeGroup`: A leaving and reserving nothing at once, its outstanding gone from the stockpile's and from `outstandingByTarget`, `pause` refused NOT_ALLOWED; A's remaining bill inserted: over 20 s A placed nothing (paid 263 -> 263) and every unit consumed was C's (244); the player out: removed, returned = A's paid standing (263), one key, conservation exact at every checkpoint. **2** `c29restart`: the same with save, leave and reopen mid-wait: still REMOVING and A still out after the reload, A placed nothing, C fed past it; the resumed removal ends REMOVED with nothing credited before the restore and returned = paid, one key, removing again credits nothing, conservation exact. **4** `c29stage`: `undoStage` of the top stage waiting for the player in its house: that house placed nothing, the other stage's house was fed past it, refund = paid; a single road removal credits 40 = 40 once restored, in its `RemoveResult.refund`; one key each; conservation exact. **3** `c29pause`: A-D and a road; B and the road paused (no-op twice, unknown id FIELD_LIMIT); feeding exactly two bills builds A and C (C fed past B), B and D placed nothing; a BUILT target refuses FIELD_LIMIT; after a reload B and the road still paused, the order unchanged; resumed, B reserves again and is BUILT first while D gets nothing; conservation exact. api-compat 4/4 against the 0.21.0 (built from tag v0.21.0), 0.20.0 and 0.19.0 apitest jars and the 0.21.0 surface; apijars on those three jars. |
+| Runs | Slice tier `artifacts/gate-runs-C29/20261012-211122-slice` (2 shards, 8936-8939, head d290fe1, merged with v0.21.0): 23 PASS, including unit-mod 588, unit-kit 296, apijars (0.21.0/0.20.0/0.19.0 jars; one timing bar recorded on the 1.17.0 jar at load 67), **c29-ingame 64/0**, c29-unit, **y-ingame 103/0**, y-unit, x-ingame 53/0, **x-resume 46/0**, 4d-all, 4e-orders, 5b-chains 329/0, 5b-village, t1-ingame, the 6a and 6b impact steps. Two did not pass, neither on C29's code (no sidecar file changed): unit-sidecar (the eval e2e compare read "regressed, mean time +34%" at load 63; PASS in `20261012-233027-change`, 713) and t1-unit's sidecar part (this checkout had no `sidecar/node_modules`, so its vitest could not start: environment; PASS 17/0 in `20261012-235107-change`). Pre-merge change run `20261012-205331-change`: c29-ingame 64/0. **gate-verifier: PASS**: it reviewed the diff and the evidence and re-ran the accounting items itself (`artifacts/gate-runs-C29-verify/20261012-225204-change`: c29-ingame 64/0, y-ingame 103/0); two low notes, no defect (a `Placement.job` lookup per target per tick in `Groups.leaving`; the dev pause hook now refuses a leaving target). No negative control was run (the box was at load 25-115). |

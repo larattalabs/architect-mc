@@ -397,4 +397,17 @@ public interface Sites {
 	default java.util.concurrent.CompletableFuture<java.nio.file.Path> exportSiteSchematic(String siteId, java.nio.file.Path dir) {
 		throw new UnsupportedOperationException("Sites.exportSiteSchematic needs Architect API 1.18.0");
 	}
+
+	// ------------------------------------------------------------------ 1.19.0 (docs/CONTRACT.md C29)
+
+	/**
+	 * Pauses ({@code paused} true) or resumes a building construction target (a site or a road; a stockpile's or one with its own
+	 * crate), as the crate screen's Pause button does. A paused target places nothing, so it consumes nothing and reserves nothing
+	 * in its stockpile's feed (others are fed past it), and keeps its state; resumed, it re-enters the feed at its old position in
+	 * the order. The state is saved with the target. Idempotent. Refuses {@link ArchitectRefused} FIELD_LIMIT for an id that is no
+	 * construction target building, NOT_ALLOWED for a target being removed. Server thread. Since 1.19.0.
+	 */
+	default void pause(String targetId, boolean paused) {
+		throw new UnsupportedOperationException("Sites.pause needs Architect API 1.19.0");
+	}
 }

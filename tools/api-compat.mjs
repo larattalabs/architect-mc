@@ -29,8 +29,8 @@
 //                     0.20.0 mod jar's 1.17.0 surface (artifacts/gate6c-sch/v0200/, built from the v0.20.0 tag; v0190/ and v0180/ hold Y1's tag builds).
 //
 //   node tools/api-compat.mjs --gate6cb [--artifacts <dir>] [classesDir]
-//                     phase 6c slice B: the unchanged 0.21.0, 0.20.0 and 0.19.0 apitest jars (API 1.18.0, 1.17.0, 1.16.0) and the 0.21.0 mod
-//                     jar's 1.18.0 surface (artifacts/gate6c-b/v0210/, built from the v0.21.0 tag; SCH's v0200 and v0190 sets).
+//                     phase 6c slice B (over v0.22.0): the unchanged 0.22.0, 0.21.0 and 0.20.0 apitest jars (API 1.19.0, 1.18.0, 1.17.0) and
+//                     the 0.22.0 mod jar's 1.19.0 surface (artifacts/gate6c-b/v0220/ and v0210/, built from their tags; SCH's v0200 set).
 //
 //   node tools/api-compat.mjs --gate6cmp [--artifacts <dir>] [classesDir]
 //                     phase 6c slice MP: the unchanged 0.18.0, 0.17.0 and 0.16.0 apitest jars (API 1.15.0, 1.14.0, 1.13.0) and the 0.18.0
@@ -89,11 +89,11 @@ if (process.argv[2] === '--gate6b' || process.argv[2] === '--gate6c0a' || proces
       : (ct1 || csch) ? (fs.existsSync(path.join(local, 'gate6c-sch', 'v0200')) ? local : path.join(os.homedir(), 'Developer', 'LarattaLabs', 'architect-mc', 'artifacts')) : fs.existsSync(path.join(local, (f1 || cmp) ? 'gate6c-f1' : (cw || cy2) ? 'gate6c-w' : cx ? 'gate6c-x' : c0a ? 'gate6c0a' : 'gate6b', (f1 || cmp) ? 'v0180' : (cw || cy2) ? 'v0170' : cx ? 'v0160' : c0a ? 'v0120' : 'v0110')) ? local : path.join(os.homedir(), 'Developer', 'LarattaLabs', 'architect-mc', 'artifacts');
   }
   // (6c 0a) the unchanged 0.12.0, 0.11.0 and 0.10.0 apitest jars (API 1.9.0, 1.8.0, 1.7.0) and the 0.12.0 mod jar's 1.9.0 surface
-  const checks = cb ? [ // (6c B) 0.21.0 built from its tag by B; 0.20.0 and 0.19.0 SCH's sets
+  const checks = cb ? [ // (6c B, over v0.22.0) 0.22.0 and 0.21.0 built from their tags by B; 0.20.0 SCH's set
+    ['1.19.0 apitest', [path.join(dir, 'gate6c-b', 'v0220', 'architect_apitest-0.22.0.jar')]],
     ['1.18.0 apitest', [path.join(dir, 'gate6c-b', 'v0210', 'architect_apitest-0.21.0.jar')]],
     ['1.17.0 apitest', [path.join(dir, 'gate6c-sch', 'v0200', 'architect_apitest-0.20.0.jar')]],
-    ['1.16.0 apitest', [path.join(dir, 'gate6c-sch', 'v0190', 'architect_apitest-0.19.0.jar')]],
-    ['1.18.0 surface', ['--surface', path.join(dir, 'gate6c-b', 'v0210', 'architect_mc-0.21.0.jar')]],
+    ['1.19.0 surface', ['--surface', path.join(dir, 'gate6c-b', 'v0220', 'architect_mc-0.22.0.jar')]],
   ] : (ct1 || csch) ? [ // (v0.21.0, T1 and SCH) SCH's complete jar sets, each built from its tag
     ['1.17.0 apitest', [path.join(dir, 'gate6c-sch', 'v0200', 'architect_apitest-0.20.0.jar')]],
     ['1.16.0 apitest', [path.join(dir, 'gate6c-sch', 'v0190', 'architect_apitest-0.19.0.jar')]],

@@ -373,7 +373,8 @@ persisted formats. Candidate later asks: `Survey.biome` per column (T1's fields 
   changed it only for stockpile targets (its unloaded-frontier exception needs it); legacy per-build crate sites are unchanged.
   Decide and fix for all construction in a later slice (server load, LOADED_ONLY semantics).
 - Y1 verifier follow-ups: a credit skipped when both dimensions are unloaded; a single road's refund credited before its
-  restore (retry-safe by key); a road credited before removal missing from the group's `RemoveResult.refund`.
+  restore (retry-safe by key); a road credited before removal missing from the group's `RemoveResult.refund`. (C29 closed the
+  second: a single road removal credits when its restore is written.)
 
 ## Queued (coordinator, 2026-10-12)
 

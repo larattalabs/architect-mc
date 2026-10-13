@@ -335,8 +335,10 @@ public class ApiTest implements ModInitializer {
 			case "porder":
 			case "pwithdraw":
 			case "padopt":
-			case "pdissolve": {
-				return ApiTestStockpile.step(src, a); // 6c Y1 (API 1.17.0)
+			case "pdissolve":
+			case "apic29":
+			case "ppause": {
+				return ApiTestStockpile.step(src, a); // 6c Y1 (API 1.17.0); C29
 			}
 			case "api112":
 			case "protect":
