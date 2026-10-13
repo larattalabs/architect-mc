@@ -3,7 +3,7 @@
   "short": "districts_demo",
   "phase": "6c-d",
   "version": 0,
-  "brief": "districts fixture: a cloister (high band), a village (mid band) and fields (low band) placed by the districts pass on survey candidates of S3's pinned claim, each a V street of its lots with its shared space, joined by T2 routes (a minimum spanning tree by route cost plus loops within 0.15 of it), soul-lantern route lamps (docs/CONTRACT.md 6c D \u00a72, \u00a74)",
+  "brief": "districts fixture: a cloister (high band), a village (mid band) and fields (two lots each) (low band) placed by the districts pass on survey candidates of S3's pinned claim, each a V street of its lots with its shared space, joined by T2 routes (a minimum spanning tree by route cost plus loops within 0.15 of it), soul-lantern route lamps (docs/CONTRACT.md 6c D \u00a72, \u00a74); the cloister's two 7x7 lots (the high band's steep ground) are realised as pads, the others with g6a_stub_9",
   "program": "districts_demo",
   "params": {},
   "world": {
@@ -78,13 +78,9 @@
     ]
   },
   "lotEntries": {
-    "chapel_1": "g6a_stub_9",
-    "cell_1": "g6a_stub_9",
     "house_1": "g6a_stub_9",
     "house_2": "g6a_stub_9",
-    "smithy_1": "g6a_stub_9",
     "barn_1": "g6a_stub_9",
-    "cottage_1": "g6a_stub_9",
-    "mill_1": "g6a_stub_9"
+    "cottage_1": "g6a_stub_9"
   }
 }

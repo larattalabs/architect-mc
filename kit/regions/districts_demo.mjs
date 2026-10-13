@@ -20,11 +20,14 @@ export const params = {
 /** The three districts (cottages and workshops from V's lot types). */
 export const DISTRICTS = Object.freeze([
   { id: 'cloister', size: [32, 32], levelBand: 'high', shared: 'well', lots: [{ id: 'chapel_1', type: 'chapel', size: [7, 7] }, { id: 'cell_1', type: 'cottage', size: [7, 7] }] },
-  { id: 'village', size: [40, 40], levelBand: 'mid', shared: 'square', lots: [{ id: 'house_1', type: 'house', size: [7, 7] }, { id: 'house_2', type: 'house', size: [7, 7] }, { id: 'smithy_1', type: 'smithy', size: [7, 7] }] },
-  { id: 'fields', size: [40, 40], levelBand: 'low', shared: 'square', prefer: ['open'], lots: [{ id: 'barn_1', type: 'barn', size: [7, 7] }, { id: 'cottage_1', type: 'cottage', size: [7, 7] }, { id: 'mill_1', type: 'mill', size: [7, 7] }] },
+  { id: 'village', size: [40, 40], levelBand: 'mid', shared: 'square', lots: [{ id: 'house_1', type: 'house', size: [9, 9] }, { id: 'house_2', type: 'house', size: [9, 9] }] },
+  { id: 'fields', size: [40, 40], levelBand: 'low', shared: 'square', prefer: ['open'], lots: [{ id: 'barn_1', type: 'barn', size: [9, 9] }, { id: 'cottage_1', type: 'cottage', size: [9, 9] }] },
 ]);
 
 export default function (ctx) {
-  const ds = DISTRICTS.map((d) => ({ ...d, ...(ctx.params.bands ? {} : { levelBand: 'any' }) }));
+  // a flat claim (the scenario's flat variant) has one level: every band is `any` there
+  const c = ctx.claim, st = ctx.survey.stats(c.minX, c.minZ, c.maxX, c.maxZ);
+  const flat = st.maxGround - st.minGround <= 2;
+  const ds = DISTRICTS.map((d) => ({ ...d, ...(ctx.params.bands && !flat ? {} : { levelBand: 'any' }) }));
   return build(ctx, ds);
 }
