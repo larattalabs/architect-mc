@@ -298,8 +298,9 @@ public final class Placed {
 			return;
 		}
 		if (!onServerThread()) {
+			// off the server thread a change only clears, and the classifier hears of it at the chunk's next change or load
 			if (empty(now) && chunk.getAttached(TYPE) != null) {
-				clear(chunk, pos);
+				clearQuietly(chunk, pos);
 			}
 			return;
 		}
@@ -374,6 +375,14 @@ public final class Placed {
 			}
 			chunk.markUnsaved();
 			Builds.touched((ServerLevel) chunk.getLevel(), pos, false);
+		}
+	}
+
+	/** {@link #clear} without telling the classifier (off the server thread: its maps are the server thread's). */
+	private static void clearQuietly(LevelChunk chunk, BlockPos pos) {
+		PlacedChunk pc = chunk.getAttached(TYPE);
+		if (pc != null && pc.remove(pos.getX(), pos.getY(), pos.getZ()) >= 0) {
+			chunk.markUnsaved();
 		}
 	}
 
@@ -542,6 +551,11 @@ public final class Placed {
 	 */
 	static List<SectionCells> annotate(String dimension, Collection<SectionCells> cells) {
 		MinecraftServer s = server;
+		if (s != null && TrackingRule.on && !onServerThread() && !warnedOffThread) {
+			warnedOffThread = true;
+			Architect.LOGGER.warn("PT: a journal entry was created off the server thread; its cells carry no player-placed records", new Throwable(
+				"where"));
+		}
 		if (s == null || !TrackingRule.on || !onServerThread()) {
 			return cells instanceof List<SectionCells> l ? l : new ArrayList<>(cells);
 		}
@@ -552,6 +566,8 @@ public final class Placed {
 		}
 		return out;
 	}
+
+	private static volatile boolean warnedOffThread;
 
 	/** One section's cells with the current records of their positions (the cells' befores are the world now). */
 	public static SectionCells annotate(ServerLevel level, SectionCells sc) {

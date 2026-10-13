@@ -220,6 +220,20 @@ public final class Builds {
 			}
 		}
 		TrackingRule.on = rules.playerTracking;
+		// re-evaluations the in-memory queue lost with the restart: a provisional build's grace end, a demotion's second look
+		for (Rec r : RECS.values()) {
+			if (r.gone || r.mergedInto != null) {
+				continue;
+			}
+			long at = r.state == BuildState.PROVISIONAL ? r.lastPlayerChange + rules.graceMs + 1000 : r.demoteSince > 0 ? r.demoteSince + rules.demoteGapMs : 0;
+			if (at == 0) {
+				continue;
+			}
+			ServerLevel level = dev.larattalabs.architect.site.Sites.levelOf(s, r.dimension);
+			if (level != null) {
+				schedule(level, Sections.key(r.bounds[0] >> 4, r.bounds[1] >> 4, r.bounds[2] >> 4), Math.max(at, System.currentTimeMillis()));
+			}
+		}
 	}
 
 	/** Writes the index when it changed (at most once a second unless {@code now}): a temp file, then an atomic rename. */
@@ -1325,6 +1339,13 @@ public final class Builds {
 				long k = Sections.key(x >> 4, y >> 4, z >> 4);
 				lastPlayer = Math.max(lastPlayer, ls.byPlayer.getOrDefault(k, 0L));
 				cols.merge(BlockPos.asLong(x, 0, z), 1, Integer::sum);
+			}
+			// the saved last player change of the builds its cells carry (the section times are not saved: a restart keeps the grace)
+			for (String id : labels.keySet()) {
+				Rec r = RECS.get(id);
+				if (r != null) {
+					lastPlayer = Math.max(lastPlayer, r.lastPlayerChange);
+				}
 			}
 			// placers
 			for (int i = 0; i < cells.size(); i++) {
