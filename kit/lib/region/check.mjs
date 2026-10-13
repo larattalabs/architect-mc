@@ -729,6 +729,20 @@ export function checkRegion({ ir, survey, blobs, volumes = [], meta = null, worl
         if (bytes) for (const st of decodeVoxels(bytes, `blob ${o.blob}`).palette) if (st !== 'minecraft:air') check(st, `part ${p.id}`);
       }
       else if (o.op === 'relief') each(o.fill, `part ${p.id}`); // (6c T1)
+      else if (o.op === 'stamp' || o.op === 'scatter') { // (6c F2) a stamp's blob palette; a scatter's item blocks, patches and bodies
+        const pal = (name) => {
+          const b = ir.blobs?.[name];
+          const bytes = b && blobs ? (typeof blobs === 'function' ? blobs(b.sha) : blobs instanceof Map ? blobs.get(b.sha) : blobs[b.sha]) : null;
+          if (bytes) for (const st of decodeVoxels(bytes, `blob ${name}`).palette) if (st !== 'minecraft:air') check(st, `part ${p.id}`);
+        };
+        if (o.op === 'stamp') pal(o.blob);
+        else for (const it of o.items ?? []) {
+          if (typeof it.block === 'string') check(it.block, `part ${p.id}`);
+          else if (it.block && typeof it.block === 'object') for (const v of Object.values(it.block)) check(v, `part ${p.id}`);
+          for (const e of it.patch ?? []) { check(e[2], `part ${p.id}`); if (e[3]) check(e[3], `part ${p.id}`); }
+          if (typeof it.cells === 'string') pal(it.cells);
+        }
+      }
       else each(o.material, `part ${p.id}`);
     }
     for (const [where, s] of bad) findings.push(finding('M13', where.startsWith('part ') ? where.slice(5) : null, null, 1, [], `${where}: '${s}' is not a vanilla block state`));

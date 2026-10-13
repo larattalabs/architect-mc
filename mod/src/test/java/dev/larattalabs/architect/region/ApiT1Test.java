@@ -19,10 +19,9 @@ import org.junit.jupiter.api.Test;
 class ApiT1Test {
 	@Test
 	void version() {
-		// later slices bump both (T2: 1.19.0 / 0.21.0); T1's own numbers are the floor
-		String[] v = ArchitectApi.VERSION.split("\\."), k = IrStale.KIT_VERSION.split("\\.");
-		assertTrue(Integer.parseInt(v[0]) == 1 && Integer.parseInt(v[1]) >= 18, ArchitectApi.VERSION);
-		assertTrue(Integer.parseInt(k[0]) == 0 && Integer.parseInt(k[1]) >= 20, IrStale.KIT_VERSION);
+		// later slices bump them (6c F2): at least T1's
+		assertTrue(IrStale.semverCompare(ArchitectApi.VERSION, "1.18.0") >= 0, ArchitectApi.VERSION);
+		assertTrue(IrStale.semverCompare(IrStale.KIT_VERSION, "0.20.0") >= 0, IrStale.KIT_VERSION);
 	}
 
 	@Test
@@ -37,10 +36,11 @@ class ApiT1Test {
 
 	@Test
 	void reliefKind() {
-		assertEquals("relief", IrStale.KINDS_FORMAT2.get(IrStale.KINDS_FORMAT2.size() - 1), "appended at the end (rebase point)");
+		int ri = IrStale.KINDS_FORMAT2.indexOf("relief");
+		assertEquals(IrStale.KINDS_FORMAT2.indexOf("pattern") + 1, ri, "appended after MP's kinds (rebase point; later slices append after it)");
 		assertNull(IrStale.reason(PlanStaleTest.ir(2, "0.20.0", "fields", "relief"), null));
 		// a 0.19.0 game (F1 and MP's kinds, before relief) refuses the plan by its kit version and the kind
-		IrStale.Hello w = new IrStale.Hello("0.19.0", List.of(1, 2), IrStale.KINDS_FORMAT2.subList(0, IrStale.KINDS_FORMAT2.size() - 1));
+		IrStale.Hello w = new IrStale.Hello("0.19.0", List.of(1, 2), IrStale.KINDS_FORMAT2.subList(0, ri));
 		String why = IrStale.reason(PlanStaleTest.ir(2, "0.20.0", "fields", "relief"), w);
 		assertTrue(why != null && why.contains("relief"), why);
 	}

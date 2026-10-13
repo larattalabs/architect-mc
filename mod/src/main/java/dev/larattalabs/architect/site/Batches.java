@@ -1071,7 +1071,21 @@ public final class Batches {
 		CHANGED.add(b.id);
 		if (changed) {
 			ApiEvents.itemWaiting(b, i);
+			if (!"tile".equals(i.itemKind)) {
+				// C30 (v0.22.1): a wait is said in the log, once per reason (a region's tiles say theirs in its status instead).
+				// Before, only ITEM_WAITING said it, so a stage held for ten minutes by a chicken in a lot looked like a stall.
+				Architect.LOGGER.info("Batch {}: item {} (stage {}) waits ({}): {}; checked again every {} s{}", b.id, i.key, i.stage, why.name(), msg,
+					RECHECK / 20, waitLimit(b, i));
+			}
 		}
+	}
+
+	/** The rest of {@link #waitFor}'s log line: how long the item may still wait. */
+	static String waitLimit(QBatch b, QItem i) {
+		if (b.maxWaitTicks == Long.MAX_VALUE) {
+			return ", no time limit";
+		}
+		return ", fails TIMED_OUT after " + b.maxWaitTicks / 20 + " s" + (i.waited > 0 ? " (waited " + i.waited / 20 + " s so far)" : "");
 	}
 
 	static void fail(QBatch b, QItem i, Reason why, String msg) {

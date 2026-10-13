@@ -16,6 +16,7 @@ import { Store } from '../src/store.js';
 import { arsv, rmrf, SIDECAR_ROOT, tempDir, until } from './helpers.js';
 
 const KIT = process.env.ARCHITECT_REGION_KIT ? path.resolve(process.env.ARCHITECT_REGION_KIT) : path.join(SIDECAR_ROOT, '..', 'kit');
+const KIT_VERSION = /export const KIT_VERSION = '([^']+)'/.exec((fs.existsSync(path.join(KIT, 'lib', 'region', 'plan.mjs')) ? fs.readFileSync(path.join(KIT, 'lib', 'region', 'plan.mjs'), 'utf8') : ''))?.[1]; // (6c F2) the kit's own, not a pinned number
 const hasKit = fs.existsSync(path.join(KIT, 'regions', 'relief_demo.mjs'));
 const CLAIM = { minX: 0, minZ: 0, maxX: 191, maxZ: 191, minY: -64, maxY: 319 };
 type Planned = Extract<Outbound, { type: 'region.planned' }>;
@@ -87,7 +88,7 @@ describe.skipIf(!hasKit)('relief_demo through the sidecar (real kit)', () => {
     const p = await plan('relief_demo');
     expect(p.passes).toEqual(['relief']);
     expect(p.requires).toContain('relief');
-    expect(p.kitVersion).toBe('0.21.0');
+    expect(p.kitVersion).toBe(KIT_VERSION);
     expect(p.notes.some((n) => /^pass relief: \d+\.\d s, \d+ MB$/.test(n))).toBe(true);
     const dir = path.join(dataDir, 'regions', 'plans', p.planId);
     expect(JSON.parse(fs.readFileSync(path.join(dir, 'request.json'), 'utf8')).passes).toEqual(['relief']);

@@ -31,7 +31,7 @@ A headless gate server (docs/GATES.md "Headless gates") serves the same protocol
 `headless: true`.
 
 - **Generated hooks.** The hooks in the client's `client/dev/` files `JournalDev`, `RegionDev`, `RegionDev6b`, `DeltaDev`,
-  `SliceVDev`, `SliceWDev` and `StockpileDev` (and `Fields`) run headless as they are: `devserver/build.gradle` `genHooks` compiles copies with
+  `SliceVDev`, `SliceWDev`, `SliceF2Dev` and `StockpileDev` (and `Fields`) run headless as they are: `devserver/build.gradle` `genHooks` compiles copies with
   only the package and imports changed.
   - **Rule for those files:** no reference to client classes (`net.minecraft.client.*`, `dev.larattalabs.architect.client.*`)
     besides `ServerTasks`, `DevBridge` and the handler's `mc` parameter. A new one fails the build, `unit-mod` included.
@@ -333,6 +333,12 @@ there is no DevBridge hook to make layers, so tests go through the API as anothe
 | `dev.region.dump` | {box: [x0,y0,z0,x1,y1,z1], light?: true, file (absolute, or relative to the game dir)} - the ARWD dump (kit/REGIONS.md "Realised-world dumps"), one chunk column per 3 ms slice, written off the server thread -> {file, cells, bytes, rawBytes, sha (of the uncompressed bytes), palette, light, unloadedChunks (read as air), ms, ticks, maxTickMs}. At most 64M cells |
 | `dev.region.planStale` | {at: accept\|realise\|resume, planId? (realise), region? (resume), format?, kitVersion?, requires?: [kind]} (default `format: 3`) - gate 10(b): doctors an IR so the PLAN_STALE gate fires. `accept`: the next accepted plan's IR (then `dev.region.plan` must answer `refused: PLAN_STALE`); `realise`: the held plan's IR, memory and plan file (then `dev.region.realise` must refuse); `resume`: the region's IR in memory and its `ir.json` (its items wait PLAN_STALE at once and after a relog; `dev.region.state` shows `stale`; `dev.region.hash` must not change) -> {doctored, stale} |
 
+### Stamps (phase 6c slice F2)
+
+| hook | arguments, result |
+|---|---|
+| `dev.feature.stamp` | {feature: `minecraft:oak` (a configured feature of `Registries.FEATURE`), seeds: [1..64 integers], ground?: `grass_block` (any block: the template's top) \| `stone` \| `cave`, dir?} - harvest stamps (CONTRACT F2 §4): in a **superflat** world only (it rewrites a 41x41 box at the fixed spot (8, 8); any other world is refused), per seed: reset the box to the ground template, snapshot it, place the feature with `RandomSource.create(seed)` at the spot, diff, reset again, all in one server task (no tick between, so a re-harvest gives the same bytes). Writes `<dir>/<feature path>/<seed>.bin` (gzip, pinned header, of ARSP: kit/lib/region/stamps.mjs); `dir` defaults to the game's `architect/stamps` (**local-only**, Noah's N-F2-1: never the repo or the jar). Block-entity cells (a bee nest) and the feature's own air writes are left out -> {feature, ground, dir, minecraft, stamps: [{seed, placed, cells, size, root (the spot in the stamp's local cells), palette, sha (of the ARSP bytes), file, blockEntities, edge (cells on the box's edge: the box was too small)}]}. `tools/harvest-stamps.mjs` harvests the first library (huge mushrooms, dripstone clusters, fossils, 5 tree species; 8 seeds each) |
+
 Chat commands (6b, N7: no Terrain tab): `/architect region plan <program> <x0> <z0> <x1> <z1> [JSON | k=v ... | nocheck]`,
 `check [planId]`, `preview [planId]`, `prepare [planId]`, `realise [planId] [fill]`, `remove [regionId]`, `state [regionId]`,
 `design <brief>` (a 200x200 claim around the player), `nudge <action> [regionId]`. Ids default to the player's last plan and
@@ -341,6 +347,9 @@ region. Previews print as file links (with a [copy] link).
 ## Changelog
 
 Semi-stable: a hook may change or go, and every such change is listed here, newest first.
+
+- **2026-10-12 (6c slice F2):** new `dev.feature.stamp` (the stamp harvester, section "Stamps"), generated headless too
+  (`SliceF2Dev` joins `genHooks`).
 
 - **2026-10-12 (headless gates):** the DevBridge also runs headless on a dedicated server (section "Headless"); `dev.hello`
   and `dev.state` there carry `headless: true`, and client-only hooks answer `client-only: ...`. No hook changed on the client.

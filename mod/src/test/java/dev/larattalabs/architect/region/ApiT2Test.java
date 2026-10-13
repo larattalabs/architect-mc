@@ -10,7 +10,7 @@ import java.util.Set;
 import org.junit.jupiter.api.Test;
 
 /**
- * Phase 6c slice T2 (docs/CONTRACT.md "Phase 6c slice T2" §1): API 1.20.0 with no new records or methods; the feature
+ * Phase 6c slice T2 (docs/CONTRACT.md "Phase 6c slice T2" §1): API 1.21.0 with no new records or methods; the feature
  * {@code routePass} with a T2 helper ({@code region.route}); no new IR kind (routes are roads, stairs and columns).
  */
 class ApiT2Test {
@@ -18,8 +18,8 @@ class ApiT2Test {
 	void version() {
 		// later slices bump both; T2's placeholders are the floor
 		String[] v = ArchitectApi.VERSION.split("\\."), k = IrStale.KIT_VERSION.split("\\.");
-		assertTrue(Integer.parseInt(v[0]) == 1 && Integer.parseInt(v[1]) >= 20, ArchitectApi.VERSION);
-		assertTrue(Integer.parseInt(k[0]) == 0 && Integer.parseInt(k[1]) >= 21, IrStale.KIT_VERSION);
+		assertTrue(Integer.parseInt(v[0]) == 1 && Integer.parseInt(v[1]) >= 21, ArchitectApi.VERSION);
+		assertTrue(Integer.parseInt(k[0]) == 0 && Integer.parseInt(k[1]) >= 23, IrStale.KIT_VERSION);
 	}
 
 	@Test
@@ -34,6 +34,6 @@ class ApiT2Test {
 	@Test
 	void noNewKind() {
 		assertFalse(IrStale.KINDS_FORMAT2.contains("route"), "routes need no format-2 kind");
-		assertTrue(IrStale.KINDS_FORMAT2.get(IrStale.KINDS_FORMAT2.size() - 1).equals("relief"), "T1's relief stays the last kind");
+		assertTrue(IrStale.KINDS_FORMAT2.contains("relief"), "T1's relief kind is kept");
 	}
 }

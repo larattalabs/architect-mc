@@ -776,6 +776,84 @@ Three pads (lots `lot_1..3`) and two corridors on S3's pinned claim (scenario `r
 on a flat world a hill raised through `base`, two pads on it and one sunk 2 below the ground. `edge: 'slope'` is the same program
 with 6a's batters and no pass (the organic-read comparison); `pads` up to 64 (the 1024x1024 plan-time bench).
 
+# Phase 6c slice F2 additions (scatter and stamps; CONTRACT "Phase 6c slice F2")
+
+## Kit 0.22.0
+
+`KIT_VERSION` = `EVAL_KIT_VERSION` = `IrStale.KIT_VERSION` = 0.22.0 (a placeholder: the coordinator renumbers at merge). `KINDS_FORMAT2`
+(kit and mod) gains `scatter` and `stamp`, appended after T1's `relief`; `OP_KINDS` is `shape, columns, voxels, relief, scatter, stamp`;
+`OPS_RESERVED` is empty. A program without them plans the same parts, ops and tiles as before.
+
+## The `scatter` op (format 2, kind `scatter`; `lib/region/scatter.mjs`, under the realise lint)
+
+```
+{ op: 'scatter', area: [x0, z0, x1, z1], grid, jitter, seedLabel, cond, walk: false,
+  density: p | {field, scale: [lo, hi]} | {mask, p},  mask?, avoid?: field, lit?: field, y?: [lo, hi],
+  items: [{ w, anchor: 'ground'|'ceiling'|'wall', on?: [class...], melts?, rotate?, light?: [dx, dy, dz, level],
+            block: state | {down|up|north|east|south|west: state}  |  patch: [[dx, dz, state, upper?]...]  |  cells: blob, root, skirt? }] }
+```
+
+- **The grid.** Grid cell `(gx, gz)` covers `x = gx*grid .. gx*grid + grid - 1` (world-aligned). Its 32-bit hashes (`hash3` under the key
+  `mix64(fnv64(seed, 'scatter', seedLabel))`; lattice y 0..4) give the jittered point (the cell's middle +- `jitter`), the fire value
+  (fires when `hash >>> 16` < density * 65536), the item (multiply-shift over the weights) and the quarter turn. The point is then kept
+  so the item's own cells stay inside its grid cell (an item of reach r needs `grid >= 2r + 1`): placements of one op never overlap.
+- **Density:** a number; `{field, scale: [lo, hi]}` (the field's sample at the point mapped linearly to 0..1); `{mask, p}` (p where an MP
+  mask holds at the anchor cell). The op's own `mask` (MP) is tested at the anchor cell too.
+- **Exclusions (hard, in the evaluator):** the item's reach must stay in the claim, off the IR's lots (box and apron) and `keepOut`
+  rects; its cells' columns must have 0 in the `avoid` field and, for an item that `melts`, in the `lit` field. A body never writes
+  a cell of a part's `keep` (F1's keepNatural: the frozen volume's class in the kept box).
+- **Anchors.** `ground`: the point column's frozen ground (or the top a `relief` op of an earlier or the same stage gives it), the
+  anchor cell is the one above; the column must be dry ARSV ground (no water, frozen water, lava, tree or missing flag). With a frozen
+  volume (`classAt`), the ground cell's class must be in `on` (default `ROCK, SOIL, LOOSE, ICE, SNOW`) and the anchor cell air, a
+  plant or a snow layer; an item whose `on` is `SOIL` alone is a plant (its vanilla soils, `#minecraft:supports_vegetation`, are
+  that class but for clay and dirt paths) and fires only where the volume reads it (never on a relief-moved column). `ceiling` and
+  `wall` read the volume only: the lowest air cell in `y` with a solid cell above (ceiling: face `up`) or beside it (wall: the first
+  of N, E, S, W from the turn's start; face toward it). Without a volume they never fire.
+- **Items.** `block` (one cell; per face for ceiling and wall); `patch` (each entry at its own column's ground + 1, turned; a column
+  that fails its own support is skipped); `cells` (an ARVB body, kind `voxels`, root at the anchor cell, turned, plus a `skirt` of
+  each base column's block down to the frozen ground, at most 6). Reach (Chebyshev, columns) at most `SCATTER_MAX_RADIUS` = 4: a
+  placement's decision reads its footprint's columns (within 4 of the point), so every cell it writes depends only on columns within
+  8 of it (K2).
+- **Lights** (`light: [dx, dy, dz, level]`): no ice within `level - 11` (Manhattan) and no snow other than the columns' own snow
+  layers within `level - 12` (the volume), no tree or frozen column within `level - 12`; the natural snow layers there (the cell over
+  each column's frozen ground, class SNOW) are written as air first, under every placement's cells.
+- **Order.** Grid cells by z then x; within a column the clearing first, then the bodies; the last op wins as for every op.
+
+## The `stamp` op (format 2, kind `stamp`)
+
+`{op: 'stamp', id: '<feature>/<seed>', blob, root: [x, y, z], at: [x, y, z], rotation: 0|90|180|270, skirt: 0..6 (6), cond, walk}`:
+the ARVB blob's cells (kind `voxels`), turned as voxels turn, with the root cell at `at`; each base column (its lowest cell on the
+body's bottom layer) gets a skirt of that cell's block down to the frozen ground (at most `skirt`). Bounds: the turned body at `at`.
+
+## Stamps (`lib/region/stamps.mjs`; local-only, Noah's N-F2-1)
+
+A stamp file is `gzip(ARSP)` (pinned header): `'ARSP'`, u8 1, 3 zero bytes; the feature id, the seed, the game version and the ground
+template (varint length + UTF-8 each); the root cell in the ARVB's local cells (3 zigzag varints); the block-entity cells left out
+(varint); then the ARVB bytes. The harvester (`dev.feature.stamp`, `tools/harvest-stamps.mjs`) writes `<game>/architect/stamps/
+<feature>/<seed>.bin`; the helper passes that dir to the plan CLI (`plan ... --stamps <dir>`, read in the plan sandbox; config
+`regions.stampsDir`, `ARCHITECT_STAMPS_DIR`). The library is never in the repo (`kit/stamps/` is gitignored) or the jar (the mod's
+kit copy excludes `stamps/**`). A plan embeds each stamp it uses as a side blob `stamp_<feature>_<seed>` (its fluids dropped and
+waterlogged states dry: F2 places no fluid). `syntheticStamp(kind, seed)` builds test stamps (no vanilla data).
+
+## Program side (`lib/region/scatterPlan.mjs`, `lib/region/scatterItems.mjs`)
+
+- `stamp(r, id, at, {rotation, skirt, stage, part, cond})` places one library stamp (part `stamp_<id>`); a missing one is a plan note
+  and returns null.
+- `scatter(r, id, spec, {stage, part})` emits one scatter op in part `id`: `spec.items` take bundled items (`{item: 'boulder'|'stump'|
+  'shrub'|'fern_patch'|'moss_carpet'|'snow_layer'|'glow_lichen'|'path_lantern', w, ...params}`), library stamps (`{stamp: id | [ids],
+  w, skirt}`; missing ones fall back to `fallback`, a boulder by default, noted) or raw IR items. From the plan's draft virtual world
+  so far it builds `<id>_avoid` (walk cells, the columns other parts wrote, blocks or cuts, a relief's band excepted, the lots' boxes
+  and aprons), `<id>_lit` (columns within a planned light's snow reach plus 1, when an item melts) and, for `density: {path: [a, b],
+  p}`, `<id>_pathd` (Chebyshev distance to the nearest walk column). It reads `ctx.keepOut`, so the IR records the honoured rects.
+- `meta.scatter` (per op: items, fields, notes) and `meta.stamps` go to the plan's meta.
+
+## `scatter_demo` (`kit/regions/scatter_demo.mjs`, `catalogue = false`)
+
+Surface (S2's claim and its flat variant): a boardwalk path, one lot, a stamp of each surface library feature (oak, birch, spruce,
+acacia, dark oak, the two huge mushrooms) and a buried fossil, each fitted so every part of it touches solid natural ground; path
+lanterns (light 15) by distance to the path; ground decoration (boulders, stumps, shrubs, fern patches, moss carpets, snow layers,
+small library trees). `stamps: false` is the committed golden's variant (N-F2-1). Cave (`cave: true`, the 6b volume fixture): glow
+lichen on cave walls and ceilings at least 2 under the ground, and the dripstone clusters fitted into the cave.
 ## The `route` pass (`passes/route.mjs`, 6c T2)
 
 ```js
