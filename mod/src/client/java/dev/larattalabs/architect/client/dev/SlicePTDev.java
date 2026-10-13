@@ -175,6 +175,9 @@ public final class SlicePTDev {
 		o.addProperty("cells", b.cells());
 		o.addProperty("state", b.state().name());
 		o.addProperty("revision", b.revision());
+		if (b.siteId() != null) {
+			o.addProperty("siteId", b.siteId()); // (6c PT2)
+		}
 		JsonObject pl = new JsonObject();
 		b.placers().forEach((u, n) -> pl.addProperty(u.toString(), n));
 		o.add("placers", pl);

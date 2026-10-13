@@ -282,6 +282,8 @@ export class Polishes {
   /** design.polish: refused at once (bundled, no_source, massing, a polish already running), else queued. */
   request(entryId: string, spec: PolishSpec, opts: { owner?: string; ext?: Ext; parentDesign?: string } = {}): Design {
     const sc = this.sc;
+    // (6c PT2) an adopted entry (a player's build) gets versions by versionOf only: polish is refused (before the login check)
+    if (sc.versions.top(entryId)?.adopted !== undefined) throw new VersionRefused('adopted_polish', `${entryId} is a player's adopted build: change it with versionOf, not polish`);
     sc.ensureClaudeAvailable();
     const json = sc.versions.checkChangeable(entryId);
     const r = this.resolve(entryId, spec, json);

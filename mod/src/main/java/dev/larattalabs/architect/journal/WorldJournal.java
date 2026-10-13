@@ -60,6 +60,11 @@ public final class WorldJournal {
 	public static final String LEAVES = "leaves";
 	/** A delta of a placed site to another version of its entry (BOX, phase 5b), in the site's undo group. */
 	public static final String DELTA = "delta";
+	/**
+	 * (6c PT2) A player's build adopted as a site (BOX, before == after: nothing was written). Never undone: a remove of the site
+	 * undoes its deltas and releases this entry. Its files are written as {@link JournalNbt#VERSION_ADOPT}.
+	 */
+	public static final String ADOPT = "adopt";
 
 	private static volatile @Nullable JournalStore store;
 	private static volatile @Nullable String unavailable;

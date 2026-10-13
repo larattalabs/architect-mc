@@ -218,7 +218,9 @@ export function checkStructure(sidecar, structure, opts = {}) {
   const warnings = [];
   const err = (m) => errors.push(m);
   const warn = (m) => warnings.push(m);
-  const imported = !!opts.imported;
+  // (6c PT2) a captured source (an adopted build: the world's blocks as they stand) is checked as an import: the design rules
+  // (doors, anchors, light) are warnings, never errors
+  const imported = !!opts.imported || sidecar?.sourceKind === 'captured';
   /** an inherited "does the building work" rule: an error, or a warning for an imported structure */
   const inherited = imported ? (m) => warn(`imported: ${m}`) : err;
   /** imported: unknown block id -> palette indexes (reported once, with block counts) */
@@ -309,7 +311,8 @@ export function checkStructure(sidecar, structure, opts = {}) {
   if (sidecar.profile !== undefined) {
     try { parseProfile(sidecar.profile); } catch (e) { err(`sidecar: ${e.message}`); }
   }
-  if (opts.profile !== undefined && opts.profile !== 'massing' && open) {
+  // (6c PT2) a captured source keeps its own (empty) profile: a request's profile (the default door, lit, no_floating) is not its
+  if (opts.profile !== undefined && opts.profile !== 'massing' && open && sidecar.sourceKind !== 'captured') {
     const want = parseProfile(opts.profile).list;
     if (JSON.stringify(sidecar.profile ?? null) !== JSON.stringify(want)) err(`sidecar: profile ${JSON.stringify(sidecar.profile ?? null)} but the request asked for ${JSON.stringify(want)} (set \`profile\` on the Blueprint)`);
   }
@@ -323,7 +326,9 @@ export function checkStructure(sidecar, structure, opts = {}) {
   if (sidecar.size && (sidecar.size.x !== size[0] || sidecar.size.y !== size[1] || sidecar.size.z !== size[2])) {
     err(`sidecar size ${sidecar.size?.x}x${sidecar.size?.y}x${sidecar.size?.z} != structure size ${size.join('x')}`);
   }
-  if (!(Number.isInteger(sidecar.groundY) && sidecar.groundY >= 1 && sidecar.groundY < size[1])) err('sidecar: groundY must be an int inside the template (>= 1: the floor row is groundY-1)');
+  // (6c PT2) a captured source (an adopted build) may stand on the ground itself: its floor row is the ground under it (groundY 0)
+  const minGround = sidecar.sourceKind === 'captured' ? 0 : 1;
+  if (!(Number.isInteger(sidecar.groundY) && sidecar.groundY >= minGround && sidecar.groundY < size[1])) err(`sidecar: groundY must be an int inside the template (>= ${minGround}: the floor row is groundY-1)`);
   for (const m of checkPorts(sidecar.ports, size)) err(m);
   if (sidecar.ext !== undefined && !(sidecar.ext && typeof sidecar.ext === 'object' && !Array.isArray(sidecar.ext))) err('sidecar: ext must be an object');
   if (sidecar.tags !== undefined && !(Array.isArray(sidecar.tags) && sidecar.tags.every((t) => typeof t === 'string'))) err('sidecar: tags must be a list of strings');
@@ -363,7 +368,7 @@ export function checkStructure(sidecar, structure, opts = {}) {
 
   // ---- anchors: entrance + spawn, standable
   const anchors = sidecar.anchors ?? {};
-  for (const n of ['entrance', 'spawn']) if (!anchors[n]) err(`missing required anchor '${n}'`);
+  for (const n of ['entrance', 'spawn']) if (!anchors[n]) inherited(`missing required anchor '${n}'`);
   for (const [n, a] of Object.entries(anchors)) {
     for (const f of ['x', 'y', 'z', 'yaw', 'pitch']) if (typeof a[f] !== 'number' || !Number.isFinite(a[f])) err(`anchor ${n}: '${f}' must be a finite number`);
   }
@@ -374,7 +379,7 @@ export function checkStructure(sidecar, structure, opts = {}) {
     const [x, y, z] = cellOf(a);
     // outside the template is fine near it (e.g. spawn on the approach strip): there, rows below groundY are terrain
     const [sx, sy, sz] = size;
-    if (y < 1 || y >= sy || x < -16 || z < -16 || x >= sx + 16 || z >= sz + 16) { err(`anchor ${n} (${a.x},${a.y},${a.z}) is too far outside the template`); continue; }
+    if (y < 1 || y >= sy || x < -16 || z < -16 || x >= sx + 16 || z >= sz + 16) { inherited(`anchor ${n} (${a.x},${a.y},${a.z}) is too far outside the template`); continue; }
     if (!Number.isInteger(a.y)) warn(`anchor ${n}: y ${a.y} is not on a block boundary`);
     const below = g.at(x, y - 1, z);
     if (!g.floor(x, y - 1, z)) inherited(`anchor ${n}: no solid block to stand on (${below ? below.name : 'nothing written'} at ${fmt(x, y - 1, z)})`);

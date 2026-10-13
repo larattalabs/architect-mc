@@ -255,6 +255,11 @@ public final class LibraryFeature {
 			say(e == null ? "No entry " + id : "A bundled design cannot be deleted", true);
 			return CompletableFuture.completedFuture(false);
 		}
+		String adopted = dev.larattalabs.architect.site.Adopt.deleteRefusal(id); // (6c PT2) its site stands on it
+		if (adopted != null) {
+			say(adopted, true);
+			return CompletableFuture.completedFuture(false);
+		}
 		try {
 			Path to = trash(e);
 			EDITS.remove(id);

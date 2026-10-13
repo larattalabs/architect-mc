@@ -10,7 +10,7 @@ import java.util.Set;
 import org.junit.jupiter.api.Test;
 
 /**
- * Phase 6c slice S2 (docs/CONTRACT.md "Phase 6c slice S2" §1): API 1.26.0 (placeholder) with no new records or methods; the feature
+ * Phase 6c slice S2 (docs/CONTRACT.md "Phase 6c slice S2" §1): API 1.27.0 (placeholder) with no new records or methods; the feature
  * {@code scenarioS2} with an S2 helper ({@code region.outpost}: its kit bundles the {@code ice_outpost} program); no new IR kind.
  */
 class ApiS2Test {
@@ -18,8 +18,8 @@ class ApiS2Test {
 	void version() {
 		// later slices bump both; S2's placeholders are the floor
 		String[] v = ArchitectApi.VERSION.split("\\."), k = IrStale.KIT_VERSION.split("\\.");
-		assertTrue(Integer.parseInt(v[0]) == 1 && Integer.parseInt(v[1]) >= 26, ArchitectApi.VERSION);
-		assertTrue(Integer.parseInt(k[0]) == 0 && Integer.parseInt(k[1]) >= 27, IrStale.KIT_VERSION);
+		assertTrue(Integer.parseInt(v[0]) == 1 && Integer.parseInt(v[1]) >= 27, ArchitectApi.VERSION);
+		assertTrue(Integer.parseInt(k[0]) == 0 && Integer.parseInt(k[1]) >= 28, IrStale.KIT_VERSION);
 	}
 
 	@Test

@@ -849,8 +849,10 @@ public final class JournalStore {
 			step("write " + w.path().getFileName());
 			Files.createDirectories(w.path().getParent());
 			Path tmp = w.path().resolveSibling(w.path().getFileName() + ".tmp");
-			CompoundTag tag = w.data() instanceof JournalNbt.Region r ? JournalNbt.encode(w.id(), r, w.layer()) : JournalNbt.encodeHead(w.id(),
-				(JournalNbt.Head) w.data());
+			Meta wm = next.entries().get(w.id());
+			boolean adopt = wm != null && WorldJournal.ADOPT.equals(wm.kind()); // (6c PT2) an adopt entry's files: version 4
+			CompoundTag tag = w.data() instanceof JournalNbt.Region r ? JournalNbt.encode(w.id(), r, w.layer(), adopt) : JournalNbt.encodeHead(w.id(),
+				(JournalNbt.Head) w.data(), adopt);
 			NbtIo.writeCompressed(tag, tmp);
 			step("move " + w.path().getFileName());
 			Files.move(tmp, w.path(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);

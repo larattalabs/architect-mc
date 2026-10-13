@@ -65,7 +65,7 @@ package dev.larattalabs.architect.api;
  * <li>{@code VERSION_REFUSED} (1.11.0): a {@code versionOf} (or a polish) can't make the entry's next version. Detail:
  * {@code bundled}, {@code no_source}, {@code massing}, {@code copy} (a group copy follows its source by its recipe), {@code busy}
  * (a polish or versionOf of the entry is unfinished), {@code site_mismatch} (the site is not of that entry), {@code group}
- * (single designs only).</li>
+ * (single designs only); (PT2) {@code adopted_polish} (an adopted build's entry is changed by versionOf, never polished).</li>
  * <li>{@code PROTECTED} (1.12.0): the op writes into a protected area of its owner ({@link Sites#protect}); {@code force}
  * doesn't override it: lift the area ({@link Sites#unprotect}).</li>
  * <li>{@code FIELD_LIMIT} (1.12.0): a bounded request field is out of range ({@code Limits}); nothing was sent.</li>
@@ -80,6 +80,13 @@ package dev.larattalabs.architect.api;
  * <li>{@code PLAYER_BUILD} (PT): the op would write over a player's build (docs/CONTRACT.md "Phase 6c slice PT" §7) that its
  * {@link BuildConsent} does not name; {@link Refusal#builds()} / {@link ArchitectRefused#builds()} name each blocking build (id,
  * kind, count, the first 8 cells with their block ids). {@code force} never overrides it (N-PT-6). Not a widened PLAYER_BLOCKS.</li>
+ * <li>{@code ADOPT_REFUSED} (PT2): a build can't be adopted as a site, or an adopted entry can't be used that way
+ * (docs/CONTRACT.md "Phase 6c slice PT2" §5). {@link ArchitectRefused#detail()}: {@code not_a_build} (unknown or released: claim
+ * a box first), {@code provisional} (wait for the promoting {@link SiteEvents#BUILD_CHANGED}), {@code consent} (the consent
+ * does not name the build, has no actor, or the actor is neither a placer of 10% of its cells nor an op), {@code already_adopted}
+ * (the message names the site; {@link Sites#adoptedSite}), {@code tracking_off} (the world rule {@code architect.playerTracking}),
+ * {@code adopted} ({@link Sites#releaseBuild} of an adopted build: remove the site first), {@code placed_elsewhere} (an
+ * adopted entry is the player's house, not a template: it is never placed or checked anywhere).</li>
  * </ul>
  * New values are only ever appended.
  */
@@ -98,5 +105,7 @@ public enum Reason {
 	// 1.23.0 (6c slice P0)
 	ARTIFACT_STALE, ARTIFACT_UNAPPROVED,
 	// PT (6c slice PT, C32)
-	PLAYER_BUILD
+	PLAYER_BUILD,
+	// PT2 (6c slice PT2)
+	ADOPT_REFUSED
 }
