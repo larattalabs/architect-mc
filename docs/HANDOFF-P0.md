@@ -52,5 +52,5 @@ version tests (`Api*Test`), `IrStale.KIT_VERSION`/`KIT_VERSION`/`EVAL_KIT_VERSIO
 - Unit suites green locally: kit 352+, mod 617, sidecar plan-check.
 
 ## Next
-Run `p0-unit`, `p0-ingame`, `p0-natural` (change tier, ports 8906:8907, run dir ../architect-mc-P0-run, out
+P0 steps green in change runs (latest `gate-runs-P0/20261013-085728-change`). Run `p0-unit`, `p0-ingame`, `p0-natural` (change tier, ports 8906:8907, run dir ../architect-mc-P0-run, out
 ../architect-mc/artifacts/gate-runs-P0), fix, then the slice tier (3 shards 8906-8911), gate-verifier, as-built, retire HANDOFF.
