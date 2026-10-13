@@ -211,6 +211,7 @@ public final class RegionsImpl implements Regions {
 			Architect.LOGGER.warn("Regions unreadable: {}", e.toString());
 		}
 		Prepare.resumeAll(s);
+		PlanChecks.started(s); // (6c P0) check keys, artifacts, pins and tombstones
 		reconcilePending = true;
 		Architect.LOGGER.info("Regions: {} loaded", REGIONS.size());
 	}
@@ -339,6 +340,48 @@ public final class RegionsImpl implements Regions {
 			}
 		});
 		return mine;
+	}
+
+	// ------------------------------------------------------------------ (6c P0) plan check v0 ({@link PlanChecks})
+
+	@Override
+	public CompletableFuture<dev.larattalabs.architect.api.PlanCheck> checkPlan(dev.larattalabs.architect.api.PlanRequest r) {
+		return PlanChecks.check(r);
+	}
+
+	@Override
+	public boolean cancelCheck(@Nullable String owner, String opKey) {
+		return PlanChecks.cancel(owner, opKey);
+	}
+
+	@Override
+	public Optional<dev.larattalabs.architect.api.PlanCheck> checkByKey(@Nullable String owner, String opKey) {
+		return PlanChecks.byKey(owner, opKey);
+	}
+
+	@Override
+	public CompletableFuture<dev.larattalabs.architect.api.RegionPreviews> planImages(String checkId, java.util.Set<dev.larattalabs.architect.api.PreviewView> views) {
+		return PlanChecks.images(checkId, views);
+	}
+
+	@Override
+	public Optional<dev.larattalabs.architect.api.PlanArtifact> artifact(String artifactSha) {
+		return PlanChecks.artifact(artifactSha);
+	}
+
+	@Override
+	public CompletableFuture<String> realiseApproved(dev.larattalabs.architect.api.ApprovedRealise r) {
+		return PlanChecks.realiseApproved(r);
+	}
+
+	@Override
+	public void pinArtifact(String artifactSha, String owner) {
+		PlanChecks.pin(artifactSha, owner, true);
+	}
+
+	@Override
+	public void unpinArtifact(String artifactSha, String owner) {
+		PlanChecks.pin(artifactSha, owner, false);
 	}
 
 	/** (6c B) One brush stroke as a region ({@link Brushes}). */
@@ -513,8 +556,17 @@ public final class RegionsImpl implements Regions {
 	 */
 	static CompletableFuture<Object[]> planOnce(TileStream.Link link, RegionPlanRequest r, String blobId, String surveySha, byte[] survey,
 		@Nullable JsonArray volumes, boolean stroke) {
+		return planOnce(link, r, blobId, surveySha, survey, volumes, stroke, null);
+	}
+
+	/** (6c P0) {@code extra}: members added to the {@code region.plan} message (a plan check's planCache, previewViews, timeoutMs, heapMb). */
+	static CompletableFuture<Object[]> planOnce(TileStream.Link link, RegionPlanRequest r, String blobId, String surveySha, byte[] survey,
+		@Nullable JsonArray volumes, boolean stroke, @Nullable JsonObject extra) {
 		BoundingBox c = r.claim();
 		JsonObject m = new JsonObject();
+		if (extra != null) {
+			extra.entrySet().forEach(e -> m.add(e.getKey(), e.getValue().deepCopy()));
+		}
 		m.addProperty("type", "region.plan");
 		m.addProperty("program", r.program());
 		m.add("params", r.params().deepCopy());
@@ -543,8 +595,10 @@ public final class RegionsImpl implements Regions {
 			m.add("volumes", volumes);
 		}
 		// 6c V: the owner's protected areas that meet the claim (an older helper ignores the member)
+		// (6c PT) a plan check (plan_v0) gets the builds themselves in its params (its compiler keeps them out of zones and routes and
+		// lets a road end on a door's apron), so its keepOut holds only the protected areas
 		JsonArray keepOut = stroke ? new JsonArray() : keepOutOf(Sites.dimensionId(r.level()), r.owner(), new int[] {c.minX(), c.minY(), c.minZ(), c.maxX(),
-			c.maxY(), c.maxZ()});
+			c.maxY(), c.maxZ()}, !PlanChecks.PROGRAM.equals(r.program()));
 		if (!keepOut.isEmpty()) {
 			m.add("keepOut", keepOut);
 		}
@@ -670,7 +724,7 @@ public final class RegionsImpl implements Regions {
 	}
 
 	/** Server thread: the chunks of claim + 2 chunks and which were never generated (the prepare estimate), then the plan. */
-	private CompletableFuture<RegionPlan> finishPlan(RegionPlanRequest r, JsonObject planned, JsonObject irJson, byte[] survey, @Nullable String opKey,
+	CompletableFuture<RegionPlan> finishPlan(RegionPlanRequest r, JsonObject planned, JsonObject irJson, byte[] survey, @Nullable String opKey,
 		@Nullable String opHash) {
 		Ir ir = Ir.of(irJson);
 		String planId = planned.get("planId").getAsString();
@@ -2295,6 +2349,10 @@ public final class RegionsImpl implements Regions {
 
 	/** 6c V: {@code region.plan}'s keepOut: the owner's areas that meet the claim, [[x0, z0, x1, z1]] sorted (as the kit sorts them). */
 	static JsonArray keepOutOf(String dimension, @Nullable String owner, int[] claim) {
+		return keepOutOf(dimension, owner, claim, true);
+	}
+
+	static JsonArray keepOutOf(String dimension, @Nullable String owner, int[] claim, boolean builds) {
 		List<int[]> rects = new ArrayList<>();
 		for (dev.larattalabs.architect.api.ProtectedArea a : dev.larattalabs.architect.site.Protected.of(dimension, owner)) {
 			if (a.intersects(claim[0], claim[2], claim[3], claim[5])) {
@@ -2303,7 +2361,9 @@ public final class RegionsImpl implements Regions {
 		}
 		// (6c PT §7, S-PT-4) the players' builds in the claim are hard keep-outs: each build's bounds with a 1-cell margin, and each
 		// door's apron (the 3 cells outside it)
-		rects.addAll(dev.larattalabs.architect.placed.BuildViews.keepOut(dimension, claim));
+		if (builds) {
+			rects.addAll(dev.larattalabs.architect.placed.BuildViews.keepOut(dimension, claim));
+		}
 		rects.sort(java.util.Comparator.<int[]>comparingInt(q -> q[0]).thenComparingInt(q -> q[1]).thenComparingInt(q -> q[2]).thenComparingInt(q -> q[3]));
 		JsonArray out = new JsonArray();
 		String last = null;

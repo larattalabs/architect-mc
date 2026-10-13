@@ -1,0 +1,5 @@
+{
+  "family": "scatter",
+  "cutFrom": "scenarios/goldens/scatter_demo/ir.json",
+  "survey": "scenarios/goldens/scatter_demo/survey.bin"
+}

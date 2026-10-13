@@ -1,0 +1,23 @@
+{
+  "about": "F1 rock spire near a corner anchor (S7)",
+  "on": "s7",
+  "covers": [
+    "form.rock_spire"
+  ],
+  "plan": {
+    "schemaVersion": "plan/0",
+    "forms": [
+      {
+        "id": "spire",
+        "kind": "rock_spire",
+        "preset": "hoodoo",
+        "where": {
+          "near": {
+            "anchor": "claim_n",
+            "within": 16
+          }
+        }
+      }
+    ]
+  }
+}

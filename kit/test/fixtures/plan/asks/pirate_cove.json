@@ -1,0 +1,169 @@
+{
+  "prompt": "A pirate cove: docks on stilts over the lagoon and a hidden cave for the treasure.",
+  "answer": {
+    "plan": {
+      "schemaVersion": "plan/0",
+      "planId": "pirate_cove",
+      "style": {
+        "pending": "pirate_cove"
+      },
+      "zones": [
+        {
+          "id": "cove",
+          "kind": "standard",
+          "required": true,
+          "label": "Pirate Cove",
+          "purpose": "port",
+          "style": {
+            "pending": "pirate_cove"
+          },
+          "program": {
+            "lots": [
+              {
+                "id": "dock_1",
+                "type": "dock",
+                "role": "stilt_docks",
+                "label": "stilt docks",
+                "size": [
+                  17,
+                  15
+                ],
+                "landmark": false,
+                "placement": "near_water",
+                "brief": "Plank piers on stilts over the lagoon with moored ships, barrels and crates."
+              },
+              {
+                "id": "dock_2",
+                "type": "dock",
+                "role": "stilt_docks",
+                "label": "stilt docks",
+                "size": [
+                  17,
+                  15
+                ],
+                "landmark": false,
+                "placement": "near_water",
+                "brief": "Plank piers on stilts over the lagoon with moored ships, barrels and crates."
+              },
+              {
+                "id": "tavern_1",
+                "type": "tavern",
+                "role": "captains_hall",
+                "label": "captain's hall",
+                "size": [
+                  17,
+                  15
+                ],
+                "landmark": true,
+                "placement": "central",
+                "brief": "Large stilt hall at the head of the docks; the captain's quarters and a rowdy common room."
+              },
+              {
+                "id": "treasure_cave_1",
+                "type": "treasure_cave",
+                "role": "treasure_cave",
+                "label": "treasure cave",
+                "size": [
+                  17,
+                  15
+                ],
+                "landmark": false,
+                "placement": "edge",
+                "brief": "Hidden cave in the cliff with a concealed entrance, chests, and traps. Mossy stone inside."
+              },
+              {
+                "id": "cabin_1",
+                "type": "cabin",
+                "role": "pirate_shacks",
+                "label": "pirate shacks",
+                "size": [
+                  9,
+                  9
+                ],
+                "landmark": false,
+                "placement": "near_water",
+                "brief": "Small stilt shack with hammocks and sea chests."
+              },
+              {
+                "id": "cabin_2",
+                "type": "cabin",
+                "role": "pirate_shacks",
+                "label": "pirate shacks",
+                "size": [
+                  9,
+                  9
+                ],
+                "landmark": false,
+                "placement": "near_water",
+                "brief": "Small stilt shack with hammocks and sea chests."
+              },
+              {
+                "id": "cabin_3",
+                "type": "cabin",
+                "role": "pirate_shacks",
+                "label": "pirate shacks",
+                "size": [
+                  9,
+                  9
+                ],
+                "landmark": false,
+                "placement": "near_water",
+                "brief": "Small stilt shack with hammocks and sea chests."
+              },
+              {
+                "id": "boathouse_1",
+                "type": "boathouse",
+                "role": "boathouse",
+                "label": "boathouse",
+                "size": [
+                  13,
+                  11
+                ],
+                "landmark": false,
+                "placement": "near_water",
+                "brief": "Covered slip for small boats and ship repairs."
+              },
+              {
+                "id": "tower_1",
+                "type": "tower",
+                "role": "lookout_tower",
+                "label": "lookout tower",
+                "size": [
+                  9,
+                  9
+                ],
+                "landmark": false,
+                "placement": "high_ground",
+                "brief": "Crow's-nest watch over the lagoon mouth."
+              },
+              {
+                "id": "shop_1",
+                "type": "shop",
+                "role": "smugglers_store",
+                "label": "smuggler's store",
+                "size": [
+                  13,
+                  11
+                ],
+                "landmark": false,
+                "brief": "Stash of supplies, rum and plunder for trade."
+              }
+            ],
+            "layout": "street"
+          },
+          "where": {
+            "near": {
+              "anchor": "stone",
+              "within": 32
+            }
+          }
+        }
+      ],
+      "notes": "Medium density cove. Lagoon, cliffs and the cave are expected from the site search; no terrain sculpting."
+    },
+    "waits": [],
+    "summary": "A medium pirate cove built near the founding stone: two stilt docks and three stilt shacks by the lagoon, a boathouse, a captain's hall as the centrepiece, a smuggler's store, a lookout tower on high ground and a hidden treasure cave at the cliff edge. Styled weathered rustic pirate wood once the style bible is made."
+  },
+  "usd": 0.024471,
+  "errors": []
+}

@@ -1,0 +1,18 @@
+{
+  "about": "N-P0-1: floating_islands as the sole zone over the asks claim",
+  "on": "asks",
+  "covers": [
+    "program.floating_islands"
+  ],
+  "plan": {
+    "schemaVersion": "plan/0",
+    "zones": [
+      {
+        "id": "isles",
+        "program": {
+          "template": "floating_islands"
+        }
+      }
+    ]
+  }
+}

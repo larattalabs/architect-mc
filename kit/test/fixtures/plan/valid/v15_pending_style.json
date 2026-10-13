@@ -1,0 +1,47 @@
+{
+  "about": "a pending style: provisional cost range (S7)",
+  "on": "s7",
+  "covers": [
+    "zone.standard"
+  ],
+  "plan": {
+    "schemaVersion": "plan/0",
+    "style": {
+      "pending": "riverside"
+    },
+    "zones": [
+      {
+        "id": "town",
+        "program": {
+          "lots": [
+            {
+              "id": "h1",
+              "type": "cottage",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "h2",
+              "type": "house",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "inn",
+              "type": "tavern",
+              "size": [
+                11,
+                9
+              ],
+              "entry": "inn_v1@2"
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

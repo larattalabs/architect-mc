@@ -1,0 +1,21 @@
+{
+  "about": "a brush form (B shipped strokes as regions; plans wait for P1)",
+  "on": "s7",
+  "expect": {
+    "part": "b1",
+    "block": "form.brush"
+  },
+  "plan": {
+    "schemaVersion": "plan/0",
+    "forms": [
+      {
+        "id": "b1",
+        "kind": "brush",
+        "params": {
+          "kind": "raise",
+          "radius": 8
+        }
+      }
+    ]
+  }
+}

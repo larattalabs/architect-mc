@@ -1,0 +1,182 @@
+{
+  "prompt": "Identical row houses for the workers.",
+  "answer": {
+    "plan": {
+      "schemaVersion": "plan/0",
+      "planId": "workers_row",
+      "style": {
+        "pending": "workers_row"
+      },
+      "zones": [
+        {
+          "id": "row",
+          "kind": "standard",
+          "required": true,
+          "label": "Workers' row",
+          "purpose": "housing",
+          "program": {
+            "layout": "street",
+            "shared": "well",
+            "lots": [
+              {
+                "id": "house_1",
+                "type": "house",
+                "role": "row_house",
+                "label": "worker row house",
+                "size": [
+                  9,
+                  9
+                ],
+                "landmark": false,
+                "villager": "dwelling",
+                "brief": "Identical terraced worker house: same plan, facade and roof as every other, plain simple materials."
+              },
+              {
+                "id": "house_2",
+                "type": "house",
+                "role": "row_house",
+                "label": "worker row house",
+                "size": [
+                  9,
+                  9
+                ],
+                "landmark": false,
+                "villager": "dwelling",
+                "brief": "Identical terraced worker house: same plan, facade and roof as every other, plain simple materials."
+              },
+              {
+                "id": "house_3",
+                "type": "house",
+                "role": "row_house",
+                "label": "worker row house",
+                "size": [
+                  9,
+                  9
+                ],
+                "landmark": false,
+                "villager": "dwelling",
+                "brief": "Identical terraced worker house: same plan, facade and roof as every other, plain simple materials."
+              },
+              {
+                "id": "house_4",
+                "type": "house",
+                "role": "row_house",
+                "label": "worker row house",
+                "size": [
+                  9,
+                  9
+                ],
+                "landmark": false,
+                "villager": "dwelling",
+                "brief": "Identical terraced worker house: same plan, facade and roof as every other, plain simple materials."
+              },
+              {
+                "id": "house_5",
+                "type": "house",
+                "role": "row_house",
+                "label": "worker row house",
+                "size": [
+                  9,
+                  9
+                ],
+                "landmark": false,
+                "villager": "dwelling",
+                "brief": "Identical terraced worker house: same plan, facade and roof as every other, plain simple materials."
+              },
+              {
+                "id": "house_6",
+                "type": "house",
+                "role": "row_house",
+                "label": "worker row house",
+                "size": [
+                  9,
+                  9
+                ],
+                "landmark": false,
+                "villager": "dwelling",
+                "brief": "Identical terraced worker house: same plan, facade and roof as every other, plain simple materials."
+              },
+              {
+                "id": "house_7",
+                "type": "house",
+                "role": "row_house",
+                "label": "worker row house",
+                "size": [
+                  9,
+                  9
+                ],
+                "landmark": false,
+                "villager": "dwelling",
+                "brief": "Identical terraced worker house: same plan, facade and roof as every other, plain simple materials."
+              },
+              {
+                "id": "house_8",
+                "type": "house",
+                "role": "row_house",
+                "label": "worker row house",
+                "size": [
+                  9,
+                  9
+                ],
+                "landmark": false,
+                "villager": "dwelling",
+                "brief": "Identical terraced worker house: same plan, facade and roof as every other, plain simple materials."
+              },
+              {
+                "id": "well_1",
+                "type": "well",
+                "role": "communal_well",
+                "label": "communal well",
+                "size": [
+                  9,
+                  9
+                ],
+                "landmark": true,
+                "placement": "central",
+                "villager": "none",
+                "brief": "Shared well and small square at the end of the street."
+              }
+            ]
+          }
+        }
+      ],
+      "rules": [
+        {
+          "id": "identical_houses",
+          "kind": "variety",
+          "required": true,
+          "scope": [
+            "row"
+          ],
+          "notes": "All eight row houses must share the same plan, facade and roof: no variation between them.",
+          "params": {
+            "minDistance": 0
+          }
+        },
+        {
+          "id": "plain_palette",
+          "kind": "palette",
+          "required": false,
+          "scope": [
+            "row"
+          ],
+          "notes": "Plain, simple, utilitarian materials only."
+        }
+      ],
+      "notes": "One straight street lined with eight identical row houses, with a communal well and small square at its end."
+    },
+    "waits": [
+      {
+        "part": "identical_houses",
+        "words": "The rule that all eight houses stay identical: rules are checked in a later Architect release. The houses are written with the same brief so they come out alike."
+      },
+      {
+        "part": "plain_palette",
+        "words": "The plain, simple materials rule: palette rules come with a later release; the style is set by the settlement's style bible meanwhile."
+      }
+    ],
+    "summary": "Workers' Row is one street zone with eight identical 9x9 row houses lined along a straight street and a communal well with a small square at its end. The identical-houses and plain-materials rules can't be checked yet, so they wait, and the houses carry the same brief so they come out alike."
+  },
+  "usd": 0.022828,
+  "errors": []
+}

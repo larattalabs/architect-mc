@@ -1,0 +1,315 @@
+{
+  "prompt": "One giant castle that is the whole settlement, the shops and homes inside its walls.",
+  "answer": {
+    "plan": {
+      "schemaVersion": "plan/0",
+      "planId": "castle_town",
+      "style": {
+        "pending": "castle_town"
+      },
+      "zones": [
+        {
+          "id": "castle",
+          "kind": "standard",
+          "required": true,
+          "label": "Castle Town",
+          "purpose": "home_base",
+          "program": {
+            "layout": "street",
+            "shared": "square",
+            "lots": [
+              {
+                "id": "keep_1",
+                "type": "tower",
+                "role": "great_keep",
+                "label": "Great keep",
+                "size": [
+                  23,
+                  19
+                ],
+                "landmark": true,
+                "placement": "central",
+                "brief": "Tallest building, the castle's heart with a great hall, throne room and battlements."
+              },
+              {
+                "id": "gatehouse_1",
+                "type": "gatehouse",
+                "role": "main_gatehouse",
+                "label": "Main gatehouse",
+                "size": [
+                  17,
+                  15
+                ],
+                "landmark": true,
+                "brief": "Barbican with portcullis and murder holes; the only way in through the curtain wall."
+              },
+              {
+                "id": "tower_1",
+                "type": "tower",
+                "role": "corner_tower",
+                "label": "Corner wall tower",
+                "size": [
+                  13,
+                  11
+                ],
+                "placement": "edge",
+                "brief": "Round tower at a corner of the curtain wall."
+              },
+              {
+                "id": "tower_2",
+                "type": "tower",
+                "role": "corner_tower",
+                "label": "Corner wall tower",
+                "size": [
+                  13,
+                  11
+                ],
+                "placement": "edge",
+                "brief": "Round tower at a corner of the curtain wall."
+              },
+              {
+                "id": "tower_3",
+                "type": "tower",
+                "role": "corner_tower",
+                "label": "Corner wall tower",
+                "size": [
+                  13,
+                  11
+                ],
+                "placement": "edge",
+                "brief": "Round tower at a corner of the curtain wall."
+              },
+              {
+                "id": "tower_4",
+                "type": "tower",
+                "role": "corner_tower",
+                "label": "Corner wall tower",
+                "size": [
+                  13,
+                  11
+                ],
+                "placement": "edge",
+                "brief": "Round tower at a corner of the curtain wall."
+              },
+              {
+                "id": "house_1",
+                "type": "house",
+                "role": "townsfolk_house",
+                "label": "Townsfolk house",
+                "size": [
+                  9,
+                  9
+                ],
+                "villager": "dwelling",
+                "brief": "Timber and stone home packed along the inner lanes against the walls."
+              },
+              {
+                "id": "house_2",
+                "type": "house",
+                "role": "townsfolk_house",
+                "label": "Townsfolk house",
+                "size": [
+                  9,
+                  9
+                ],
+                "villager": "dwelling",
+                "brief": "Timber and stone home packed along the inner lanes against the walls."
+              },
+              {
+                "id": "house_3",
+                "type": "house",
+                "role": "townsfolk_house",
+                "label": "Townsfolk house",
+                "size": [
+                  9,
+                  9
+                ],
+                "villager": "dwelling",
+                "brief": "Timber and stone home packed along the inner lanes against the walls."
+              },
+              {
+                "id": "house_4",
+                "type": "house",
+                "role": "townsfolk_house",
+                "label": "Townsfolk house",
+                "size": [
+                  9,
+                  9
+                ],
+                "villager": "dwelling",
+                "brief": "Timber and stone home packed along the inner lanes against the walls."
+              },
+              {
+                "id": "cottage_1",
+                "type": "cottage",
+                "role": "cottage",
+                "label": "Cottage",
+                "size": [
+                  9,
+                  9
+                ],
+                "villager": "dwelling",
+                "brief": "Small home for servants and craftsmen near the walls."
+              },
+              {
+                "id": "cottage_2",
+                "type": "cottage",
+                "role": "cottage",
+                "label": "Cottage",
+                "size": [
+                  9,
+                  9
+                ],
+                "villager": "dwelling",
+                "brief": "Small home for servants and craftsmen near the walls."
+              },
+              {
+                "id": "shop_1",
+                "type": "shop",
+                "role": "market_shop",
+                "label": "General goods shop",
+                "size": [
+                  13,
+                  11
+                ],
+                "placement": "central",
+                "villager": "job",
+                "brief": "Shopfront around the courtyard square: general goods."
+              },
+              {
+                "id": "shop_2",
+                "type": "shop",
+                "role": "market_shop",
+                "label": "Baker",
+                "size": [
+                  13,
+                  11
+                ],
+                "placement": "central",
+                "villager": "job",
+                "brief": "Shopfront around the courtyard square: baker."
+              },
+              {
+                "id": "shop_3",
+                "type": "shop",
+                "role": "market_shop",
+                "label": "Tailor",
+                "size": [
+                  13,
+                  11
+                ],
+                "placement": "central",
+                "villager": "job",
+                "brief": "Shopfront around the courtyard square: tailor."
+              },
+              {
+                "id": "tavern_1",
+                "type": "tavern",
+                "role": "castle_tavern",
+                "label": "Castle tavern",
+                "size": [
+                  13,
+                  11
+                ],
+                "placement": "central",
+                "brief": "Gathering place off the courtyard with rooms upstairs."
+              },
+              {
+                "id": "smithy_1",
+                "type": "smithy",
+                "role": "smithy_armoury",
+                "label": "Smithy and armoury",
+                "size": [
+                  13,
+                  11
+                ],
+                "villager": "job",
+                "brief": "Forge for weapons and armour, set by the barracks."
+              },
+              {
+                "id": "barracks_1",
+                "type": "house",
+                "role": "garrison_barracks",
+                "label": "Garrison barracks",
+                "size": [
+                  17,
+                  15
+                ],
+                "brief": "Bunks and training yard for the castle guard."
+              },
+              {
+                "id": "chapel_1",
+                "type": "chapel",
+                "role": "castle_chapel",
+                "label": "Castle chapel",
+                "size": [
+                  13,
+                  11
+                ],
+                "brief": "Small stone chapel with stained glass in a quiet corner."
+              },
+              {
+                "id": "stables_1",
+                "type": "barn",
+                "role": "stables_storehouse",
+                "label": "Stables and storehouse",
+                "size": [
+                  13,
+                  11
+                ],
+                "placement": "edge",
+                "brief": "Horses, hay and stores kept near the gate."
+              }
+            ]
+          },
+          "where": {
+            "inside": {
+              "claim": true
+            }
+          },
+          "size": {
+            "preset": "XL"
+          },
+          "notes": "Packed densely inside the curtain wall around a central courtyard square."
+        }
+      ],
+      "connectors": [
+        {
+          "id": "curtain_wall",
+          "kind": "wall",
+          "required": true,
+          "label": "Curtain wall",
+          "where": {
+            "around": {
+              "feature": {
+                "part": "castle"
+              },
+              "closed": true
+            }
+          },
+          "params": {
+            "height": 8,
+            "wall_walk": true,
+            "gate_lot": "gatehouse_1",
+            "corner_lots": [
+              "tower_1",
+              "tower_2",
+              "tower_3",
+              "tower_4"
+            ]
+          },
+          "notes": "Closed curtain wall with a wall walk linking the four corner towers; the gatehouse is the only entrance."
+        }
+      ]
+    },
+    "waits": [
+      {
+        "part": "curtain_wall",
+        "words": "The curtain wall with its wall walk, linked to the four corner towers and the gatehouse: walls come with a later Architect release; the buildings are built first and the wall is offered when it can be."
+      }
+    ],
+    "summary": "Castle Town is one zone of 20 buildings packed around a central courtyard square: a great keep, a main gatehouse, four corner towers, four houses, two cottages, three market shops, a tavern, a smithy, barracks, a chapel and stables. The enclosing curtain wall with its wall walk is part of the plan but can't be built yet, so the buildings come first and the wall is offered once walls are supported."
+  },
+  "usd": 0.040293,
+  "errors": []
+}

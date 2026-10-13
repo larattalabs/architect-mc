@@ -1,0 +1,265 @@
+{
+  "prompt": "Two villages, one of fishermen on the coast and one of shepherds inland, joined by a road.",
+  "answer": {
+    "plan": {
+      "schemaVersion": "plan/0",
+      "planId": "fishermen_and_shepherds",
+      "style": {
+        "pending": "fishermen_and_shepherds"
+      },
+      "notes": "One settlement in two clusters: coastal fishing lots (near_water) and inland shepherd lots, joined by a road with the wayside inn midway. Terrain not surveyed; clusters are placed by lot placement hints.",
+      "zones": [
+        {
+          "id": "villages",
+          "kind": "standard",
+          "required": true,
+          "label": "Fishing and shepherding villages",
+          "purpose": "farming",
+          "style": {
+            "pending": "fishermen_and_shepherds"
+          },
+          "notes": "Coastal cluster near water, inland cluster away from it; the inn sits between them.",
+          "program": {
+            "lots": [
+              {
+                "id": "tavern_1",
+                "type": "tavern",
+                "role": "harbour_master",
+                "label": "harbour master's hall",
+                "size": [
+                  17,
+                  15
+                ],
+                "landmark": true,
+                "placement": "near_water",
+                "brief": "Coastal village hub with a lantern-lit pier view; where catches are tallied and the fishermen gather."
+              },
+              {
+                "id": "cottage_1",
+                "type": "cottage",
+                "role": "fisher_home",
+                "label": "fishermen's cottage",
+                "size": [
+                  9,
+                  9
+                ],
+                "placement": "near_water",
+                "villager": "dwelling",
+                "brief": "Small timber home with nets, barrels and drying racks outside."
+              },
+              {
+                "id": "cottage_2",
+                "type": "cottage",
+                "role": "fisher_home",
+                "label": "fishermen's cottage",
+                "size": [
+                  9,
+                  9
+                ],
+                "placement": "near_water",
+                "villager": "dwelling",
+                "brief": "Small timber home with nets, barrels and drying racks outside."
+              },
+              {
+                "id": "cottage_3",
+                "type": "cottage",
+                "role": "fisher_home",
+                "label": "fishermen's cottage",
+                "size": [
+                  9,
+                  9
+                ],
+                "placement": "near_water",
+                "villager": "dwelling",
+                "brief": "Small timber home with nets, barrels and drying racks outside."
+              },
+              {
+                "id": "cottage_4",
+                "type": "cottage",
+                "role": "fisher_home",
+                "label": "fishermen's cottage",
+                "size": [
+                  9,
+                  9
+                ],
+                "placement": "near_water",
+                "villager": "dwelling",
+                "brief": "Small timber home with nets, barrels and drying racks outside."
+              },
+              {
+                "id": "cabin_1",
+                "type": "cabin",
+                "role": "boathouse",
+                "label": "boathouse",
+                "size": [
+                  13,
+                  11
+                ],
+                "placement": "near_water",
+                "brief": "Boats and gear stored at the water's edge with a short jetty."
+              },
+              {
+                "id": "cabin_2",
+                "type": "cabin",
+                "role": "boathouse",
+                "label": "boathouse",
+                "size": [
+                  13,
+                  11
+                ],
+                "placement": "near_water",
+                "brief": "Boats and gear stored at the water's edge with a short jetty."
+              },
+              {
+                "id": "shop_1",
+                "type": "shop",
+                "role": "fish_market",
+                "label": "smokehouse and fish market",
+                "size": [
+                  13,
+                  11
+                ],
+                "placement": "central",
+                "brief": "Smoked and salted fish sold from stalls."
+              },
+              {
+                "id": "cottage_5",
+                "type": "cottage",
+                "role": "shepherd_home",
+                "label": "shepherds' cottage",
+                "size": [
+                  9,
+                  9
+                ],
+                "villager": "dwelling",
+                "brief": "Low thatched home with small pens beside it."
+              },
+              {
+                "id": "cottage_6",
+                "type": "cottage",
+                "role": "shepherd_home",
+                "label": "shepherds' cottage",
+                "size": [
+                  9,
+                  9
+                ],
+                "villager": "dwelling",
+                "brief": "Low thatched home with small pens beside it."
+              },
+              {
+                "id": "cottage_7",
+                "type": "cottage",
+                "role": "shepherd_home",
+                "label": "shepherds' cottage",
+                "size": [
+                  9,
+                  9
+                ],
+                "villager": "dwelling",
+                "brief": "Low thatched home with small pens beside it."
+              },
+              {
+                "id": "cottage_8",
+                "type": "cottage",
+                "role": "shepherd_home",
+                "label": "shepherds' cottage",
+                "size": [
+                  9,
+                  9
+                ],
+                "villager": "dwelling",
+                "brief": "Low thatched home with small pens beside it."
+              },
+              {
+                "id": "barn_1",
+                "type": "barn",
+                "role": "sheepfold",
+                "label": "sheepfold and shearing barn",
+                "size": [
+                  17,
+                  15
+                ],
+                "placement": "edge",
+                "brief": "Fenced fold and barn for shearing and wool storage."
+              },
+              {
+                "id": "barn_2",
+                "type": "barn",
+                "role": "sheepfold",
+                "label": "sheepfold and shearing barn",
+                "size": [
+                  17,
+                  15
+                ],
+                "placement": "edge",
+                "brief": "Fenced fold and barn for shearing and wool storage."
+              },
+              {
+                "id": "shop_2",
+                "type": "shop",
+                "role": "weaver",
+                "label": "weaver's workshop",
+                "size": [
+                  13,
+                  11
+                ],
+                "placement": "central",
+                "brief": "Looms and wool dyed in bright colours."
+              },
+              {
+                "id": "tower_1",
+                "type": "tower",
+                "role": "lookout",
+                "label": "hilltop lookout",
+                "size": [
+                  9,
+                  9
+                ],
+                "placement": "high_ground",
+                "brief": "Shepherds watch the flocks from here."
+              },
+              {
+                "id": "tavern_2",
+                "type": "tavern",
+                "role": "wayside_inn",
+                "label": "wayside inn",
+                "size": [
+                  13,
+                  11
+                ],
+                "brief": "Midway along the road between the two villages; a resting place for travellers carrying fish and wool."
+              }
+            ],
+            "layout": "street"
+          }
+        }
+      ],
+      "connectors": [
+        {
+          "id": "village_road",
+          "kind": "road",
+          "required": true,
+          "label": "road between the villages",
+          "notes": "Links the coastal cluster to the inland cluster, passing the wayside inn midway.",
+          "from": {
+            "feature": {
+              "water": {
+                "body": "any",
+                "pick": "nearest",
+                "to": "stone"
+              }
+            }
+          },
+          "to": {
+            "anchor": "claim_e"
+          },
+          "lamps": "few"
+        }
+      ]
+    },
+    "waits": [],
+    "summary": "One settlement in two clusters: a fishing village by the water (harbour master's hall, cottages, boathouses, fish market) and a shepherds' village inland (cottages, sheepfolds, weaver, hilltop lookout). A road links them with a wayside inn midway. The land isn't surveyed, so placement follows the water and edge hints."
+  },
+  "usd": 0.036887,
+  "errors": []
+}

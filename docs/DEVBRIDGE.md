@@ -31,7 +31,7 @@ A headless gate server (docs/GATES.md "Headless gates") serves the same protocol
 `headless: true`.
 
 - **Generated hooks.** The hooks in the client's `client/dev/` files `JournalDev`, `RegionDev`, `RegionDev6b`, `DeltaDev`,
-  `SliceVDev`, `SliceWDev`, `SliceF2Dev`, `SliceBDev`, `SlicePTDev` and `StockpileDev` (and `Fields`) run headless as they are: `devserver/build.gradle` `genHooks` compiles copies with
+  `SliceVDev`, `SliceWDev`, `SliceF2Dev`, `SliceBDev`, `SliceP0Dev`, `SlicePTDev` and `StockpileDev` (and `Fields`) run headless as they are: `devserver/build.gradle` `genHooks` compiles copies with
   only the package and imports changed.
   - **Rule for those files:** no reference to client classes (`net.minecraft.client.*`, `dev.larattalabs.architect.client.*`)
     besides `ServerTasks`, `DevBridge` and the handler's `mc` parameter. A new one fails the build, `unit-mod` included.
@@ -348,6 +348,12 @@ region. Previews print as file links (with a [copy] link).
 
 Semi-stable: a hook may change or go, and every such change is listed here, newest first.
 
+- **2026-10-13 (6c slice P0):** new (`SliceP0Dev`, generated headless too) `dev.region.checkPlan {plan, claim: [x0,z0,x1,z1], anchors?:
+  {name: [x,y,z]}, owner?, bible?, bibleVersion?, budget?, opKey?, cancelAfterMs?}` (Regions.checkPlan -> `{check, ms}` or `{refused,
+  reason}`), `dev.region.cancelCheck {owner?, opKey}`, `dev.region.checkByKey {owner?, opKey}`, `dev.region.planImages {checkId, views?}`,
+  `dev.region.artifact {sha, body?}`, `dev.region.pinArtifact {sha, owner, on?}`, `dev.region.realiseApproved {sha, lotEntries?, fill?,
+  opKey?}`, `dev.region.realiseByKey {owner?, opKey}` and `dev.region.tileShas {region}` (the sha of every tile a realise received, from
+  `TileStream.TILE_SHAS`).
 - **2026-10-13 (6c slice PT):** new `dev.pt.*` hooks (SlicePTDev, generated headless too). `dev.pt.uses {ops: [{item, at, on?, face?,
   use?: on|item, placer?: <name>|bot, yaw?, pitch?}]}`: item uses through a named fake player's (Fabric `FakePlayer`, an offline
   UUID per name) or the bot's `ServerPlayerGameMode.useItemOn` / `useItem`, never `setBlock` -> per op `{tracked, placer, build,

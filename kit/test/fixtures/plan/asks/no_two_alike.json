@@ -1,0 +1,183 @@
+{
+  "prompt": "No two houses alike.",
+  "answer": {
+    "plan": {
+      "schemaVersion": "plan/0",
+      "planId": "unique_houses_village",
+      "style": {
+        "pending": "unique_houses_village"
+      },
+      "zones": [
+        {
+          "id": "village",
+          "kind": "standard",
+          "required": true,
+          "label": "Village of unique homes",
+          "purpose": "housing",
+          "program": {
+            "template": "flat_village",
+            "params": {
+              "lots": [
+                {
+                  "id": "house_1",
+                  "type": "house",
+                  "role": "unique_home",
+                  "label": "unique home",
+                  "size": [
+                    9,
+                    9
+                  ],
+                  "landmark": false,
+                  "villager": "dwelling",
+                  "brief": "No two alike: its own footprint shape, roof form, wall materials and details such as a porch, chimney or upper floor."
+                },
+                {
+                  "id": "house_2",
+                  "type": "house",
+                  "role": "unique_home",
+                  "label": "unique home",
+                  "size": [
+                    10,
+                    9
+                  ],
+                  "landmark": false,
+                  "villager": "dwelling",
+                  "brief": "No two alike: its own footprint shape, roof form, wall materials and details such as a porch, chimney or upper floor."
+                },
+                {
+                  "id": "house_3",
+                  "type": "house",
+                  "role": "unique_home",
+                  "label": "unique home",
+                  "size": [
+                    9,
+                    10
+                  ],
+                  "landmark": false,
+                  "villager": "dwelling",
+                  "brief": "No two alike: its own footprint shape, roof form, wall materials and details such as a porch, chimney or upper floor."
+                },
+                {
+                  "id": "house_4",
+                  "type": "house",
+                  "role": "unique_home",
+                  "label": "unique home",
+                  "size": [
+                    8,
+                    9
+                  ],
+                  "landmark": false,
+                  "villager": "dwelling",
+                  "brief": "No two alike: its own footprint shape, roof form, wall materials and details such as a porch, chimney or upper floor."
+                },
+                {
+                  "id": "house_5",
+                  "type": "house",
+                  "role": "unique_home",
+                  "label": "unique home",
+                  "size": [
+                    9,
+                    8
+                  ],
+                  "landmark": false,
+                  "villager": "dwelling",
+                  "brief": "No two alike: its own footprint shape, roof form, wall materials and details such as a porch, chimney or upper floor."
+                },
+                {
+                  "id": "house_6",
+                  "type": "house",
+                  "role": "unique_home",
+                  "label": "unique home",
+                  "size": [
+                    10,
+                    10
+                  ],
+                  "landmark": false,
+                  "villager": "dwelling",
+                  "brief": "No two alike: its own footprint shape, roof form, wall materials and details such as a porch, chimney or upper floor."
+                },
+                {
+                  "id": "cottage_1",
+                  "type": "cottage",
+                  "role": "family_house",
+                  "label": "larger family house",
+                  "size": [
+                    13,
+                    11
+                  ],
+                  "landmark": false,
+                  "villager": "dwelling",
+                  "brief": "Distinct from every other house in massing, roof pitch and palette."
+                },
+                {
+                  "id": "cottage_2",
+                  "type": "cottage",
+                  "role": "family_house",
+                  "label": "larger family house",
+                  "size": [
+                    12,
+                    12
+                  ],
+                  "landmark": false,
+                  "villager": "dwelling",
+                  "brief": "Distinct from every other house in massing, roof pitch and palette."
+                },
+                {
+                  "id": "tavern_1",
+                  "type": "tavern",
+                  "role": "village_hall",
+                  "label": "village hall",
+                  "size": [
+                    17,
+                    15
+                  ],
+                  "landmark": true,
+                  "placement": "central",
+                  "villager": "trading_hall",
+                  "brief": "Gathering place at the heart of the village, with its own character."
+                },
+                {
+                  "id": "smithy_1",
+                  "type": "smithy",
+                  "role": "workshop",
+                  "label": "workshop",
+                  "size": [
+                    13,
+                    11
+                  ],
+                  "landmark": false,
+                  "placement": "edge",
+                  "villager": "job",
+                  "brief": "Small working smithy that serves the homes."
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "rules": [
+        {
+          "id": "no_two_alike",
+          "kind": "variety",
+          "required": true,
+          "label": "No two houses alike",
+          "scope": [
+            "village"
+          ],
+          "minDistance": 0.5,
+          "notes": "Every house differs in footprint shape, roof form and wall materials; no repeated designs."
+        }
+      ],
+      "notes": "Ordinary flat village; site not surveyed, so claim is searched. The variety rule is the player's one explicit ask."
+    },
+    "waits": [
+      {
+        "part": "no_two_alike",
+        "words": "The rule that no two houses are alike: variety rules are checked by a later Architect release. Each house is still given its own size and a brief asking for a different shape, roof and materials, but the rule can't be verified yet."
+      }
+    ],
+    "summary": "A medium village of ten buildings on level ground: six small homes, two larger family cottages, a central village hall tavern as the landmark, and a smithy at the edge. Each house gets slightly different dimensions and a brief asking for its own shape, roof and materials. The \"no two alike\" rule is written down but can't be verified until variety rules are supported."
+  },
+  "usd": 0.028858,
+  "errors": []
+}

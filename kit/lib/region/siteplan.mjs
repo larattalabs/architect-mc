@@ -119,6 +119,16 @@ export function sitePlan({ ir, meta, planId = null, irSha = null, vw = null }) {
     parts: partKinds(ir, meta),
     graph: ir.graph ? irGraph(ir, meta, vw) : { derived: true, nodes, edges },
   };
+  // (6c P0) a plan check's site plan: each lot, path, node and edge names the plan part it came from (`part`), and the parts' rects
+  const pc = meta?.planCheck;
+  if (pc && !pc.malformed) {
+    const of = (k) => pc.partOf?.[k] ?? null;
+    for (const l of out.lots) { const z = pc.lotZone?.[l.id] ?? of(`lot:${l.id}`); if (z) l.part = z; }
+    for (const p of out.paths) { const z = of(`road:${p.id}`) ?? of(`path:${p.id}`) ?? (p.id.startsWith('lane_') ? pc.lotZone?.[p.id.slice(5)] ?? null : null); if (z && !z.startsWith('__') && !z.startsWith('routes:')) p.part = z; }
+    for (const n of out.graph.nodes) { const z = of(`node:${n.id}`) ?? (n.kind === 'lot' ? pc.lotZone?.[n.ref] ?? null : null); if (z && !z.startsWith('__')) n.part = z; }
+    for (const e of out.graph.edges) { const z = of(`edge:${e.id}`) ?? of(`road:${e.path}`) ?? of(`path:${e.path}`); if (z && !z.startsWith('__') && !z.startsWith('routes:')) e.part = z; }
+    out.planParts = (pc.answers ?? []).filter((a) => a.geometry?.rect).map((a) => ({ part: a.part, class: a.class, rect: [...a.geometry.rect] }));
+  }
   if (meta?.village) out.unplaced = (meta.village.unplaced ?? []).map((u) => ({ id: u.id, reason: u.reason }));
   // (6c W) a village's props (the shared space's and the apron lamps, each apron lamp with its lot) and each lot's lamp count
   if (meta?.village?.apronLamps) {

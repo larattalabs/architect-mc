@@ -1,0 +1,130 @@
+{
+  "prompt": "A Nether outpost with a portal to its twin village in the overworld.",
+  "answer": {
+    "plan": {
+      "schemaVersion": "plan/0",
+      "planId": "nether_outpost_twin_portal",
+      "style": {
+        "pending": "nether_outpost_twin_portal"
+      },
+      "zones": [
+        {
+          "id": "outpost",
+          "kind": "standard",
+          "required": true,
+          "label": "Nether outpost",
+          "purpose": "outpost",
+          "program": {
+            "layout": "street",
+            "shared": "none",
+            "lots": [
+              {
+                "id": "gatehouse_1",
+                "type": "gatehouse",
+                "role": "portal_gatehouse",
+                "label": "portal gatehouse",
+                "size": [
+                  17,
+                  15
+                ],
+                "landmark": true,
+                "placement": "central",
+                "brief": "Frames the obsidian portal to the overworld twin village; the heart of the outpost, with a lit approach."
+              },
+              {
+                "id": "tower_1",
+                "type": "tower",
+                "role": "watchtower",
+                "label": "watchtower",
+                "size": [
+                  9,
+                  9
+                ],
+                "placement": "high_ground",
+                "brief": "Lookout over the portal and surroundings, glowstone beacon."
+              },
+              {
+                "id": "house_1",
+                "type": "house",
+                "role": "barracks",
+                "label": "outpost barracks",
+                "size": [
+                  13,
+                  11
+                ],
+                "brief": "Sleeping quarters for guards and travellers, blackstone and crimson planks."
+              },
+              {
+                "id": "house_2",
+                "type": "house",
+                "role": "barracks",
+                "label": "outpost barracks",
+                "size": [
+                  13,
+                  11
+                ],
+                "brief": "Sleeping quarters for guards and travellers, blackstone and crimson planks."
+              },
+              {
+                "id": "shop_1",
+                "type": "shop",
+                "role": "depot",
+                "label": "trader's depot",
+                "size": [
+                  13,
+                  11
+                ],
+                "brief": "Stores and trades goods carried between the Nether and the overworld."
+              },
+              {
+                "id": "smithy_1",
+                "type": "smithy",
+                "role": "forge",
+                "label": "forge",
+                "size": [
+                  13,
+                  11
+                ],
+                "brief": "Lava-fed forge for tools and gear, nether brick."
+              },
+              {
+                "id": "barn_1",
+                "type": "barn",
+                "role": "fungus_farm",
+                "label": "crimson fungus farm",
+                "size": [
+                  13,
+                  11
+                ],
+                "placement": "edge",
+                "brief": "Fungus and wart growing for food and fuel."
+              },
+              {
+                "id": "tavern_1",
+                "type": "tavern",
+                "role": "hall",
+                "label": "traveller's hall",
+                "size": [
+                  13,
+                  11
+                ],
+                "placement": "central",
+                "brief": "Rest stop for those passing through the portal."
+              }
+            ]
+          },
+          "where": {
+            "inside": {
+              "claim": true
+            }
+          }
+        }
+      ],
+      "notes": "Only the Nether side is built; the overworld twin village is a separate settlement."
+    },
+    "waits": [],
+    "summary": "A medium Nether outpost on level ground, laid out along a street around a large portal gatehouse at the centre. Around it sit a high-ground watchtower, two barracks, a trader's depot, a forge, a traveller's hall and a crimson fungus farm at the edge. The infernal style bible is made after this plan. The overworld twin village is not part of this build."
+  },
+  "usd": 0.023686,
+  "errors": []
+}

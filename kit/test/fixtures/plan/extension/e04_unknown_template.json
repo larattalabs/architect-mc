@@ -1,0 +1,20 @@
+{
+  "about": "an unknown template",
+  "on": "s7",
+  "expect": {
+    "part": "port",
+    "block": "program.space_port"
+  },
+  "plan": {
+    "schemaVersion": "plan/0",
+    "zones": [
+      {
+        "id": "port",
+        "program": {
+          "template": "space_port",
+          "params": {}
+        }
+      }
+    ]
+  }
+}

@@ -1,0 +1,49 @@
+{
+  "about": "a zone and a connector with one id",
+  "on": "s7",
+  "expect": {
+    "path": "$.connectors[0].id",
+    "code": "SCHEMA",
+    "plan": true
+  },
+  "plan": {
+    "schemaVersion": "plan/0",
+    "zones": [
+      {
+        "id": "town",
+        "program": {
+          "lots": [
+            {
+              "id": "h1",
+              "type": "cottage",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "h2",
+              "type": "house",
+              "size": [
+                9,
+                9
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "connectors": [
+      {
+        "id": "town",
+        "kind": "path",
+        "from": {
+          "anchor": "claim_n"
+        },
+        "to": {
+          "anchor": "claim_s"
+        }
+      }
+    ]
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "about": "a road 9 wide (width is 1-5)",
+  "on": "s7",
+  "expect": {
+    "path": "$.connectors[0].width",
+    "code": "SCHEMA",
+    "part": "r"
+  },
+  "plan": {
+    "schemaVersion": "plan/0",
+    "connectors": [
+      {
+        "id": "r",
+        "kind": "road",
+        "from": {
+          "anchor": "claim_n"
+        },
+        "to": {
+          "anchor": "claim_s"
+        },
+        "width": 9
+      }
+    ]
+  }
+}

@@ -21,7 +21,7 @@ import org.junit.jupiter.api.Test;
 
 /**
  * API 1.24.0 placeholder (docs/CONTRACT.md "Phase 6c slice PT" §9): the new Sites methods are defaults that throw "needs Architect
- * API 1.24.0"; PLAYER_BUILD is appended after PERMISSION; BuildKind and BuildState are in contract order (PROVISIONAL appended);
+ * API 1.24.0"; PLAYER_BUILD is appended after P0's ARTIFACT_STALE, ARTIFACT_UNAPPROVED; BuildKind and BuildState are in contract order (PROVISIONAL appended);
  * Refusal, ArchitectRefused and RegionView keep their old constructors with no builds; every request record keeps its old
  * constructors (consent null) and its with* methods carry the consent; the features are builds and playerPlaced.
  */
@@ -36,7 +36,7 @@ class ApiPTTest {
 	void versionsAndEnums() {
 		assertTrue(IrStale.semverCompare(ArchitectApi.VERSION, "1.24.0") >= 0, ArchitectApi.VERSION);
 		assertTrue(IrStale.semverCompare(IrStale.KIT_VERSION, "0.26.0") >= 0, IrStale.KIT_VERSION);
-		assertEquals(Reason.PERMISSION.ordinal() + 1, Reason.PLAYER_BUILD.ordinal(), "appended");
+		assertEquals(Reason.ARTIFACT_UNAPPROVED.ordinal() + 1, Reason.PLAYER_BUILD.ordinal(), "appended after P0's ARTIFACT_*");
 		assertEquals(Reason.values().length - 1, Reason.PLAYER_BUILD.ordinal());
 		assertEquals(List.of("HOUSE", "BARN", "FARM", "WALL", "TOWER", "PATH", "OTHER"), java.util.Arrays.stream(BuildKind.values()).map(Enum::name).toList());
 		assertEquals(List.of("ACTIVE", "CLAIMED", "RELEASED", "PROVISIONAL"), java.util.Arrays.stream(BuildState.values()).map(Enum::name).toList());

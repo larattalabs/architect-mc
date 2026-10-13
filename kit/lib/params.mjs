@@ -105,6 +105,8 @@ export function validateParams(params, { region = false } = {}) {
       // (6c B) a JSON object or null (a brush's mask and pattern specs: the program validates them), region programs only
       if (!region) throw new Error(`${where}: the 'json' type is allowed in region programs only`);
       if (p.default !== null) throw new Error(`${where}.default must be null`);
+      // (6c P0) `maxChars`: a longer limit than JSON_MAX (plan_v0's plan, at most 64 KB); absent: JSON_MAX
+      if (p.maxChars !== undefined && !(Number.isInteger(p.maxChars) && p.maxChars >= 1 && p.maxChars <= 262144)) throw new Error(`${where}.maxChars must be 1..262144`);
     } else throw new Error(`${where}.type must be int, bool or enum${region ? ' (or lots, json)' : ''} (got '${p.type}')`);
   }
 }
@@ -127,7 +129,7 @@ export function resolveValues(params = {}, given = {}) {
     if (p.type === 'int' && !(Number.isInteger(v) && v >= p.min && v <= p.max)) throw new Error(`values: ${k} must be an integer ${p.min}..${p.max} (got ${JSON.stringify(v)})`);
     if (p.type === 'bool' && typeof v !== 'boolean') throw new Error(`values: ${k} must be true or false (got ${JSON.stringify(v)})`);
     if (p.type === 'enum' && !p.options.includes(v)) throw new Error(`values: ${k} must be one of ${p.options.join(', ')} (got ${JSON.stringify(v)})`);
-    if (p.type === 'json' && v !== null && (typeof v !== 'object' || Array.isArray(v) || JSON.stringify(v).length > JSON_MAX)) throw new Error(`values: ${k} must be a JSON object of at most ${JSON_MAX} characters, or null`);
+    if (p.type === 'json' && v !== null && (typeof v !== 'object' || Array.isArray(v) || JSON.stringify(v).length > (p.maxChars ?? JSON_MAX))) throw new Error(`values: ${k} must be a JSON object of at most ${p.maxChars ?? JSON_MAX} characters, or null`);
     out[k] = p.type === 'lots' ? validateLots(v, `values: ${k}`) : p.type === 'json' && v !== null ? JSON.parse(JSON.stringify(v)) : v;
   }
   // (6c MP) a bool param with `omitDefault: true` (an opt-in demo switch) is left out at its default, so a program that gains

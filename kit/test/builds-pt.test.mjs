@@ -81,3 +81,26 @@ test('PT §7: keep-outs are each build grown by 1 and its door aprons; a consent
   assert.ok(!buildKeepOut(builds, { claim, consented: ['build-12'] }).some((r) => r[0] === -1 && r[1] === -1), 'the consented cabin is no keep-out');
   assert.deepEqual(buildsUsed(builds, ['build-20', 'build-12']), [{ id: 'build-12', revision: 3 }, { id: 'build-20', revision: 1 }]);
 });
+
+test('PT §10 through the plan check (P0 compiler): adjacent {to {build}}, a road to the door, an unknown build NO_FEATURE, keep-outs', async () => {
+  const { checkPlanLocal, asksSurvey, stewardAnchors } = await import('./plan-helpers.mjs');
+  const A = asksSurvey();
+  const fx = JSON.parse(fs.readFileSync(path.join(KIT, 'test', 'fixtures', 'plan', 'valid', 'v16_near_build_road_to_door.json'), 'utf8'));
+  const lots = [{ id: 'h1', type: 'cottage', size: [9, 9] }, { id: 'h2', type: 'house', size: [9, 9] }];
+  const run = (plan, builds = fx.builds) => checkPlanLocal(plan, { survey: A.bytes, claim: A.claim, anchors: stewardAnchors(A.claim), builds });
+  const adj = await run({ schemaVersion: 'plan/0', zones: [{ id: 'yard', program: { lots }, where: { adjacent: { to: { build: 'build-12' }, gap: [1, 8] } } }] });
+  const yard = adj.check.parts.find((p) => p.part === 'yard');
+  assert.ok(['fits', 'adjusted'].includes(yard.class), JSON.stringify(yard));
+  const b = fx.builds[0].bounds;
+  const r = yard.geometry.rect;
+  assert.ok(r[2] < b[0] - 1 || r[0] > b[3] + 1 || r[3] < b[2] - 1 || r[1] > b[5] + 1, `the zone ${r} stays off the build and its 1-cell margin`);
+  const none = await run({ schemaVersion: 'plan/0', zones: [{ id: 'yard', program: { lots }, where: { near: { feature: { build: { id: 'build-99' } } } } }] });
+  assert.equal(none.check.parts[0].reasons?.[0]?.code, 'NO_FEATURE', JSON.stringify(none.check.parts[0]));
+  const near = await run(fx.plan);
+  assert.equal(near.check.overall, 'READY');
+  const town = near.check.parts.find((p) => p.part === 'town').geometry.rect;
+  assert.ok(town[2] < b[0] - 1 || town[0] > b[3] + 1 || town[3] < b[2] - 1 || town[1] > b[5] + 1, 'near a build: the zone stays off it');
+  // a released build is no feature
+  const rel = await run(fx.plan, [{ ...fx.builds[0], state: 'RELEASED' }]);
+  assert.equal(rel.check.parts.find((p) => p.part === 'town').reasons?.[0]?.code, 'NO_FEATURE');
+});

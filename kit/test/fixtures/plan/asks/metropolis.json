@@ -1,0 +1,477 @@
+{
+  "prompt": "A sprawling capital city of two hundred buildings.",
+  "answer": {
+    "plan": {
+      "schemaVersion": "plan/0",
+      "planId": "sprawling_capital",
+      "style": {
+        "pending": "sprawling_capital"
+      },
+      "notes": "Two hundred buildings cannot fit the claim at normal sizes; the program holds the main building types with high density, so the total will fall short of 200.",
+      "zones": [
+        {
+          "id": "capital",
+          "kind": "standard",
+          "required": true,
+          "label": "The Sprawling Capital",
+          "purpose": "capital",
+          "style": {
+            "pending": "sprawling_capital"
+          },
+          "program": {
+            "layout": "street",
+            "shared": "square",
+            "lots": [
+              {
+                "id": "palace_1",
+                "type": "palace",
+                "role": "royal_palace",
+                "label": "royal palace",
+                "size": [
+                  23,
+                  19
+                ],
+                "landmark": true,
+                "placement": "central",
+                "brief": "Seat of government at the heart of the city; towers, throne hall, courtyard."
+              },
+              {
+                "id": "chapel_1",
+                "type": "chapel",
+                "role": "grand_cathedral",
+                "label": "grand cathedral",
+                "size": [
+                  23,
+                  19
+                ],
+                "landmark": true,
+                "placement": "high_ground",
+                "brief": "Tall spire, visible across the city."
+              },
+              {
+                "id": "gatehouse_1",
+                "type": "gatehouse",
+                "role": "city_gatehouse",
+                "label": "city gatehouse",
+                "size": [
+                  17,
+                  15
+                ],
+                "placement": "edge",
+                "brief": "Main entrance on the outer edge."
+              },
+              {
+                "id": "gatehouse_2",
+                "type": "gatehouse",
+                "role": "city_gatehouse",
+                "label": "city gatehouse",
+                "size": [
+                  17,
+                  15
+                ],
+                "placement": "edge",
+                "brief": "Main entrance on the outer edge."
+              },
+              {
+                "id": "shop_1",
+                "type": "shop",
+                "role": "market_hall",
+                "label": "market hall",
+                "size": [
+                  17,
+                  15
+                ],
+                "placement": "central",
+                "brief": "Covered trade hall around the central square."
+              },
+              {
+                "id": "shop_2",
+                "type": "shop",
+                "role": "market_hall",
+                "label": "market hall",
+                "size": [
+                  17,
+                  15
+                ],
+                "placement": "central",
+                "brief": "Covered trade hall around the central square."
+              },
+              {
+                "id": "house_1",
+                "type": "house",
+                "role": "townhouse",
+                "label": "townhouse",
+                "size": [
+                  13,
+                  11
+                ],
+                "brief": "Dense rows of citizens' homes."
+              },
+              {
+                "id": "house_2",
+                "type": "house",
+                "role": "townhouse",
+                "label": "townhouse",
+                "size": [
+                  13,
+                  11
+                ],
+                "brief": "Dense rows of citizens' homes."
+              },
+              {
+                "id": "house_3",
+                "type": "house",
+                "role": "townhouse",
+                "label": "townhouse",
+                "size": [
+                  13,
+                  11
+                ],
+                "brief": "Dense rows of citizens' homes."
+              },
+              {
+                "id": "house_4",
+                "type": "house",
+                "role": "townhouse",
+                "label": "townhouse",
+                "size": [
+                  13,
+                  11
+                ],
+                "brief": "Dense rows of citizens' homes."
+              },
+              {
+                "id": "house_5",
+                "type": "house",
+                "role": "townhouse",
+                "label": "townhouse",
+                "size": [
+                  13,
+                  11
+                ],
+                "brief": "Dense rows of citizens' homes."
+              },
+              {
+                "id": "house_6",
+                "type": "house",
+                "role": "townhouse",
+                "label": "townhouse",
+                "size": [
+                  13,
+                  11
+                ],
+                "brief": "Dense rows of citizens' homes."
+              },
+              {
+                "id": "house_7",
+                "type": "house",
+                "role": "townhouse",
+                "label": "townhouse",
+                "size": [
+                  13,
+                  11
+                ],
+                "brief": "Dense rows of citizens' homes."
+              },
+              {
+                "id": "house_8",
+                "type": "house",
+                "role": "townhouse",
+                "label": "townhouse",
+                "size": [
+                  13,
+                  11
+                ],
+                "brief": "Dense rows of citizens' homes."
+              },
+              {
+                "id": "cottage_1",
+                "type": "cottage",
+                "role": "cottage",
+                "label": "cottage",
+                "size": [
+                  9,
+                  9
+                ],
+                "brief": "Smaller dwelling of the poorer quarters."
+              },
+              {
+                "id": "cottage_2",
+                "type": "cottage",
+                "role": "cottage",
+                "label": "cottage",
+                "size": [
+                  9,
+                  9
+                ],
+                "brief": "Smaller dwelling of the poorer quarters."
+              },
+              {
+                "id": "cottage_3",
+                "type": "cottage",
+                "role": "cottage",
+                "label": "cottage",
+                "size": [
+                  9,
+                  9
+                ],
+                "brief": "Smaller dwelling of the poorer quarters."
+              },
+              {
+                "id": "cottage_4",
+                "type": "cottage",
+                "role": "cottage",
+                "label": "cottage",
+                "size": [
+                  9,
+                  9
+                ],
+                "brief": "Smaller dwelling of the poorer quarters."
+              },
+              {
+                "id": "cottage_5",
+                "type": "cottage",
+                "role": "cottage",
+                "label": "cottage",
+                "size": [
+                  9,
+                  9
+                ],
+                "brief": "Smaller dwelling of the poorer quarters."
+              },
+              {
+                "id": "cottage_6",
+                "type": "cottage",
+                "role": "cottage",
+                "label": "cottage",
+                "size": [
+                  9,
+                  9
+                ],
+                "brief": "Smaller dwelling of the poorer quarters."
+              },
+              {
+                "id": "guild_hall_1",
+                "type": "guild_hall",
+                "role": "guild_hall",
+                "label": "guild hall",
+                "size": [
+                  17,
+                  15
+                ],
+                "brief": "Merchant guild."
+              },
+              {
+                "id": "guild_hall_2",
+                "type": "guild_hall",
+                "role": "guild_hall",
+                "label": "guild hall",
+                "size": [
+                  17,
+                  15
+                ],
+                "brief": "Craft guild."
+              },
+              {
+                "id": "guild_hall_3",
+                "type": "guild_hall",
+                "role": "guild_hall",
+                "label": "guild hall",
+                "size": [
+                  17,
+                  15
+                ],
+                "brief": "Scholar guild."
+              },
+              {
+                "id": "tavern_1",
+                "type": "tavern",
+                "role": "tavern",
+                "label": "tavern",
+                "size": [
+                  13,
+                  11
+                ],
+                "brief": "Inn for travelers and locals."
+              },
+              {
+                "id": "tavern_2",
+                "type": "tavern",
+                "role": "tavern",
+                "label": "tavern",
+                "size": [
+                  13,
+                  11
+                ],
+                "brief": "Inn for travelers and locals."
+              },
+              {
+                "id": "tavern_3",
+                "type": "tavern",
+                "role": "tavern",
+                "label": "tavern",
+                "size": [
+                  13,
+                  11
+                ],
+                "brief": "Inn for travelers and locals."
+              },
+              {
+                "id": "smithy_1",
+                "type": "smithy",
+                "role": "smithy",
+                "label": "smithy",
+                "size": [
+                  13,
+                  11
+                ],
+                "brief": "Armorers."
+              },
+              {
+                "id": "smithy_2",
+                "type": "smithy",
+                "role": "smithy",
+                "label": "smithy",
+                "size": [
+                  13,
+                  11
+                ],
+                "brief": "Toolsmiths."
+              },
+              {
+                "id": "barracks_1",
+                "type": "barracks",
+                "role": "barracks",
+                "label": "barracks",
+                "size": [
+                  17,
+                  15
+                ],
+                "placement": "edge",
+                "brief": "City guard."
+              },
+              {
+                "id": "barracks_2",
+                "type": "barracks",
+                "role": "barracks",
+                "label": "barracks",
+                "size": [
+                  17,
+                  15
+                ],
+                "placement": "edge",
+                "brief": "City guard."
+              },
+              {
+                "id": "tower_1",
+                "type": "tower",
+                "role": "watchtower",
+                "label": "watchtower",
+                "size": [
+                  9,
+                  9
+                ],
+                "placement": "high_ground",
+                "brief": "Stands along the city's outer edge."
+              },
+              {
+                "id": "tower_2",
+                "type": "tower",
+                "role": "watchtower",
+                "label": "watchtower",
+                "size": [
+                  9,
+                  9
+                ],
+                "placement": "high_ground",
+                "brief": "Stands along the city's outer edge."
+              },
+              {
+                "id": "tower_3",
+                "type": "tower",
+                "role": "watchtower",
+                "label": "watchtower",
+                "size": [
+                  9,
+                  9
+                ],
+                "placement": "high_ground",
+                "brief": "Stands along the city's outer edge."
+              },
+              {
+                "id": "barn_1",
+                "type": "barn",
+                "role": "granary_barn",
+                "label": "granary and barn",
+                "size": [
+                  17,
+                  15
+                ],
+                "placement": "edge",
+                "brief": "Food stores for the population."
+              },
+              {
+                "id": "barn_2",
+                "type": "barn",
+                "role": "granary_barn",
+                "label": "granary and barn",
+                "size": [
+                  17,
+                  15
+                ],
+                "placement": "edge",
+                "brief": "Food stores for the population."
+              }
+            ]
+          },
+          "where": {
+            "inside": {
+              "claim": true
+            }
+          },
+          "size": {
+            "preset": "XL"
+          }
+        }
+      ],
+      "connectors": [
+        {
+          "id": "city_wall",
+          "kind": "wall",
+          "required": false,
+          "label": "city wall",
+          "notes": "A defensive wall ringing the city, joining the gatehouses and watchtowers.",
+          "where": {
+            "around": {
+              "feature": {
+                "part": "capital"
+              },
+              "closed": true
+            }
+          },
+          "params": {
+            "closed": true,
+            "gates": [
+              "gatehouse_1",
+              "gatehouse_2"
+            ],
+            "towers": [
+              "tower_1",
+              "tower_2",
+              "tower_3"
+            ]
+          }
+        }
+      ]
+    },
+    "waits": [
+      {
+        "part": "city_wall",
+        "words": "The city wall ringing the capital: walls come with a later Architect release; the city, gatehouses and watchtowers are built first and the wall is offered when it can be."
+      }
+    ],
+    "summary": "A dense, level-ground medieval capital in one zone of 35 buildings: a royal palace at the centre, a cathedral on high ground, two gatehouses and barracks at the edge, market halls, guild halls, taverns, smithies, townhouses and cottages, with watchtowers and granaries. The 200-building target won't fit the claim, so the main types stand in for the districts. The city wall waits for a later release."
+  },
+  "usd": 0.047882,
+  "errors": []
+}

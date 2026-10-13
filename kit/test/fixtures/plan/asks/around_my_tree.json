@@ -1,0 +1,150 @@
+{
+  "prompt": "A grove village around the big oak I planted.",
+  "answer": {
+    "plan": {
+      "schemaVersion": "plan/0",
+      "planId": "oakheart_grove",
+      "style": {
+        "pending": "oakheart_grove"
+      },
+      "zones": [
+        {
+          "id": "grove",
+          "kind": "standard",
+          "required": true,
+          "label": "Oakheart Grove",
+          "purpose": "home_base",
+          "notes": "Ring of buildings around the planted oak at the claim centre; the hall faces the oak.",
+          "style": {
+            "pending": "oakheart_grove"
+          },
+          "where": {
+            "inside": {
+              "claim": true
+            }
+          },
+          "program": {
+            "layout": "ring",
+            "shared": "none",
+            "lots": [
+              {
+                "id": "tavern_1",
+                "type": "tavern",
+                "role": "oak_wardens_hall",
+                "label": "oak warden's hall",
+                "size": [
+                  17,
+                  15
+                ],
+                "landmark": true,
+                "placement": "central",
+                "brief": "Gathering hall facing the big oak, open timber frame, lanterns hung from branches."
+              },
+              {
+                "id": "cottage_1",
+                "type": "cottage",
+                "role": "grove_cottage",
+                "label": "grove cottage",
+                "size": [
+                  9,
+                  9
+                ],
+                "brief": "Small home among the trees, mossy roof, ringed around the oak."
+              },
+              {
+                "id": "cottage_2",
+                "type": "cottage",
+                "role": "grove_cottage",
+                "label": "grove cottage",
+                "size": [
+                  9,
+                  9
+                ],
+                "brief": "Small home among the trees, mossy roof, ringed around the oak."
+              },
+              {
+                "id": "cottage_3",
+                "type": "cottage",
+                "role": "grove_cottage",
+                "label": "grove cottage",
+                "size": [
+                  9,
+                  9
+                ],
+                "brief": "Small home among the trees, mossy roof, ringed around the oak."
+              },
+              {
+                "id": "cottage_4",
+                "type": "cottage",
+                "role": "grove_cottage",
+                "label": "grove cottage",
+                "size": [
+                  9,
+                  9
+                ],
+                "brief": "Small home among the trees, mossy roof, ringed around the oak."
+              },
+              {
+                "id": "cabin_1",
+                "type": "cabin",
+                "role": "woodcutter",
+                "label": "woodcutter's cabin",
+                "size": [
+                  9,
+                  9
+                ],
+                "placement": "edge",
+                "brief": "Sapling beds and log stacks."
+              },
+              {
+                "id": "shop_1",
+                "type": "shop",
+                "role": "herb_shop",
+                "label": "herb garden shop",
+                "size": [
+                  9,
+                  9
+                ],
+                "brief": "Sells flowers, saplings and herbs."
+              },
+              {
+                "id": "chapel_1",
+                "type": "chapel",
+                "role": "grove_shrine",
+                "label": "grove shrine",
+                "size": [
+                  9,
+                  9
+                ],
+                "placement": "high_ground",
+                "brief": "Small open shrine of leaves and stone."
+              },
+              {
+                "id": "barn_1",
+                "type": "barn",
+                "role": "orchard_barn",
+                "label": "orchard barn",
+                "size": [
+                  13,
+                  11
+                ],
+                "placement": "edge",
+                "brief": "Storage and animal pens."
+              }
+            ]
+          }
+        }
+      ],
+      "notes": "Woodland grove, rustic style; oak at claim centre, ring layout reserved until FL."
+    },
+    "waits": [
+      {
+        "part": "grove",
+        "words": "The ring layout around the oak: ring layouts come with a later Architect release (FL); the grove's nine buildings are planned and are built once the ring layout exists."
+      }
+    ],
+    "summary": "Oakheart Grove is one zone of nine buildings ringed around your planted oak at the claim centre: a large oak warden's hall facing the tree, four grove cottages, a woodcutter's cabin and an orchard barn on the edge, an herb shop, and a shrine on high ground. The ring layout isn't buildable yet, so the plan waits for it. The style is a rustic woodland look, with its bible made next."
+  },
+  "usd": 0.027075,
+  "errors": []
+}

@@ -58,7 +58,7 @@ refuseKeys();
 fs.mkdirSync(OUT, { recursive: true });
 const FLAT_BASE = 'G6B Flat Base';
 const OWNER = 'gate:pt';
-const json = (o) => JSON.stringify(o).replaceAll(' ', '');
+const json = (o) => String(JSON.stringify(o)).replaceAll(' ', '');
 const JAVA_HOME = process.env.JAVA_HOME ?? '/opt/homebrew/opt/openjdk@25';
 const KIT = path.join(root, 'kit');
 const imp = (rel) => import(pathToFileURL(path.join(KIT, rel)).href);
@@ -1024,6 +1024,22 @@ steps.plan = async () => {
   const adj = targetRect(kitBuilds, near.build?.id);
   const ep = buildEndpoint(kitBuilds, near.build?.id, 'door');
   check(near.build && adj && ep.end, `item 14: near {build kind house} picks ${near.build?.id}; adjacent {to {build}} answers its rect ${json(adj)}; endpoint {build, port door} ends at ${json(ep.end)} (apron ${json(ep.apron)})`);
+  // through P0's plan check in game (Regions.checkPlan: the mod hands the claim's builds to the compiler): a zone near the house
+  // build, a road to its door (checked before the placed road below takes the apron), a zone adjacent to it, and `around` answering unsupported locator.around
+  const pclaim = [X - 40, Z - 40, X + 48, Z + 48];
+  const lots3 = [{ id: 'h1', type: 'cottage', size: [9, 9] }, { id: 'h2', type: 'house', size: [9, 9] }, { id: 'h3', type: 'smithy', size: [9, 9] }];
+  const bid = near.build?.id;
+  const pc = await call('dev.region.checkPlan', { owner: OWNER, claim: pclaim, plan: { schemaVersion: 'plan/0',
+    zones: [{ id: 'town', program: { lots: lots3 }, where: { near: { feature: { build: { kind: 'house' } }, within: 24 } } },
+      { id: 'yard', program: { lots: [{ id: 'y1', type: 'cottage', size: [9, 9] }] }, where: { adjacent: { to: { build: bid }, gap: [1, 8] } } },
+      { id: 'ring', program: { lots: [{ id: 'r1', type: 'cottage', size: [9, 9] }] }, where: { around: { feature: { build: { id: bid } } } } }],
+    connectors: [{ id: 'lane', kind: 'road', from: { part: 'town' }, to: { build: bid, port: 'door' } }] } }, 900_000);
+  const parts = Object.fromEntries((pc.check?.parts ?? []).map((p) => [p.part, p]));
+  const B = live.find((b) => b.id === bid)?.bounds;
+  const off = (r) => B && r && (r[2] < B[0] - 1 || r[0] > B[3] + 1 || r[3] < B[2] - 1 || r[1] > B[5] + 1);
+  const ok2 = (p) => ['fits', 'adjusted'].includes(p?.class);
+  check(ok2(parts.town) && ok2(parts.yard) && ok2(parts.lane) && off(parts.town?.geometry?.rect) && off(parts.yard?.geometry?.rect) && parts.ring?.class === 'unsupported' && parts.ring?.block === 'locator.around',
+    `item 14: Regions.checkPlan in game: near {build kind house} ${parts.town?.class} ${json(parts.town?.geometry?.rect)}, adjacent {to {build ${bid}}} ${parts.yard?.class} ${json(parts.yard?.geometry?.rect)} (both off the build), the road to its door ${parts.lane?.class}, around ${parts.ring?.class} ${parts.ring?.block}`, pc.check ?? pc);
   const h0 = await khash(cabinBox(X, y, Z));
   const road = await call('dev.road.place', { points: [[ep.end[0], gy, ep.end[2] - 16], [ep.end[0], gy, ep.end[2]]], width: 1, owner: OWNER }, 300_000);
   const end = await ptAt([ep.end[0], gy, ep.end[2]]);

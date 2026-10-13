@@ -1,0 +1,189 @@
+{
+  "prompt": "A gold-rush boom town that grows fast around the mine.",
+  "answer": {
+    "plan": {
+      "schemaVersion": "plan/0",
+      "planId": "goldvein_boomtown",
+      "style": {
+        "pending": "goldvein_boomtown"
+      },
+      "zones": [
+        {
+          "id": "boomtown",
+          "required": true,
+          "label": "Goldvein Boomtown",
+          "purpose": "mining",
+          "style": {
+            "pending": "goldvein_boomtown"
+          },
+          "notes": "Dense, hasty frontier town on a hillside, streets spreading outward from the mine head at the centre; existing terrain is used as is.",
+          "where": {
+            "inside": {
+              "claim": true
+            }
+          },
+          "program": {
+            "layout": "street",
+            "shared": "none",
+            "lots": [
+              {
+                "id": "mine_head_1",
+                "type": "mine_head",
+                "role": "mine_head",
+                "label": "mine head and winch house",
+                "size": [
+                  17,
+                  15
+                ],
+                "landmark": true,
+                "placement": "central",
+                "villager": "none",
+                "brief": "Timber headframe over the main shaft with ore carts and a winch; the town grows around it."
+              },
+              {
+                "id": "shop_1",
+                "type": "shop",
+                "role": "assay_bank",
+                "label": "assay office and bank",
+                "size": [
+                  13,
+                  11
+                ],
+                "placement": "central",
+                "villager": "job",
+                "brief": "Sturdy stone-and-plank building with gold scales and a vault."
+              },
+              {
+                "id": "tavern_1",
+                "type": "tavern",
+                "role": "saloon",
+                "label": "saloon",
+                "size": [
+                  17,
+                  15
+                ],
+                "placement": "central",
+                "villager": "trading_hall",
+                "brief": "Big false-front saloon with balcony and piano, busiest building in town."
+              },
+              {
+                "id": "shop_2",
+                "type": "shop",
+                "role": "general_store",
+                "label": "general store",
+                "size": [
+                  13,
+                  11
+                ],
+                "villager": "trading_hall",
+                "brief": "Supplies, picks, barrels and crates out front."
+              },
+              {
+                "id": "cabin_1",
+                "type": "cabin",
+                "role": "miners_shack",
+                "label": "miners' shack",
+                "size": [
+                  9,
+                  9
+                ],
+                "villager": "dwelling",
+                "brief": "Hasty, mismatched small cabin or tent-like lean-to, clustered near the mine."
+              },
+              {
+                "id": "cabin_2",
+                "type": "cabin",
+                "role": "miners_shack",
+                "label": "miners' shack",
+                "size": [
+                  9,
+                  9
+                ],
+                "villager": "dwelling",
+                "brief": "Hasty, mismatched small cabin or tent-like lean-to, clustered near the mine."
+              },
+              {
+                "id": "cabin_3",
+                "type": "cabin",
+                "role": "miners_shack",
+                "label": "miners' shack",
+                "size": [
+                  9,
+                  9
+                ],
+                "villager": "dwelling",
+                "brief": "Hasty, mismatched small cabin or tent-like lean-to, clustered near the mine."
+              },
+              {
+                "id": "cabin_4",
+                "type": "cabin",
+                "role": "miners_shack",
+                "label": "miners' shack",
+                "size": [
+                  9,
+                  9
+                ],
+                "villager": "dwelling",
+                "brief": "Hasty, mismatched small cabin or tent-like lean-to, clustered near the mine."
+              },
+              {
+                "id": "house_1",
+                "type": "house",
+                "role": "boarding_house",
+                "label": "boarding house",
+                "size": [
+                  13,
+                  11
+                ],
+                "villager": "dwelling",
+                "brief": "Two-storey rooms for rent, newly built."
+              },
+              {
+                "id": "smithy_1",
+                "type": "smithy",
+                "role": "smithy",
+                "label": "smithy",
+                "size": [
+                  13,
+                  11
+                ],
+                "villager": "job",
+                "brief": "Repairs picks and cart rails."
+              },
+              {
+                "id": "house_2",
+                "type": "house",
+                "role": "sheriff_jail",
+                "label": "sheriff's office and jail",
+                "size": [
+                  9,
+                  9
+                ],
+                "villager": "job",
+                "brief": "Small office with barred cells."
+              },
+              {
+                "id": "mill_1",
+                "type": "mill",
+                "role": "stamp_mill",
+                "label": "stamp mill and sluice",
+                "size": [
+                  13,
+                  11
+                ],
+                "placement": "edge",
+                "villager": "job",
+                "brief": "Crushes ore, runs sluice troughs for gold washing."
+              }
+            ]
+          }
+        }
+      ],
+      "notes": "One dense street-layout zone; the mine head is the central landmark and the other buildings gather around it."
+    },
+    "waits": [],
+    "summary": "Goldvein Boomtown is one dense frontier town on the hillside, laid out on a street with the mine head and winch house as the central landmark. Around it sit the saloon, assay office and bank, general store, four miners' shacks, a boarding house, a smithy, the sheriff's office, and a stamp mill at the town's edge. It uses the land as found, with no sculpting, and its wild-west look comes when the style bible is made."
+  },
+  "usd": 0.032016,
+  "errors": []
+}

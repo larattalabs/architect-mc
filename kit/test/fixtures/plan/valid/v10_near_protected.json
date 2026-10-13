@@ -1,0 +1,62 @@
+{
+  "about": "a zone near a protected area (asks claim, the area given)",
+  "on": "asks",
+  "covers": [
+    "feature.protected"
+  ],
+  "protected": [
+    {
+      "id": "shrine",
+      "rect": [
+        140,
+        140,
+        150,
+        150
+      ]
+    }
+  ],
+  "plan": {
+    "schemaVersion": "plan/0",
+    "zones": [
+      {
+        "id": "town",
+        "program": {
+          "lots": [
+            {
+              "id": "h1",
+              "type": "cottage",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "h2",
+              "type": "house",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "h3",
+              "type": "smithy",
+              "size": [
+                9,
+                9
+              ]
+            }
+          ]
+        },
+        "where": {
+          "near": {
+            "feature": {
+              "protected": "shrine"
+            },
+            "within": 16
+          }
+        }
+      }
+    ]
+  }
+}

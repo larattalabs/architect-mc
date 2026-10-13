@@ -1,0 +1,5 @@
+{
+  "family": "columns_route",
+  "cutFrom": "scenarios/goldens/route_demo/ir.json",
+  "survey": "scenarios/goldens/route_demo/survey.bin"
+}

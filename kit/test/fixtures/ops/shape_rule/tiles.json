@@ -1,0 +1,9 @@
+{
+ "irSha": "df3073e42feccf4810a80a029f7c106b167d071a358c96500521fc1da4bf42ad",
+ "tiles": {
+  "islands|terrain|27,13": "e1d6a4dc1d27f72b2c6db83ab5742c16c7ccb8af3eb6f266e58b2bbb22793910",
+  "islands|terrain|27,14": "630e0f04e2df62cd5889eb476b50b9ce3c2d88be67ae64ee179f5cb377cbba28",
+  "islands|terrain|28,13": "ef555cacb808cf15beee179b6cfe24c75b0c8c4c39a26e452984698b40d9fa72",
+  "islands|terrain|28,14": "4d23e3e1f5b6aa1101d204fa66908afcf0af5a3827e496cdef9d7f61243e990e"
+ }
+}

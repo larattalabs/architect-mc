@@ -1,0 +1,37 @@
+{
+  "about": "a reserved zone kind",
+  "on": "s7",
+  "expect": {
+    "part": "camp",
+    "block": "zone.outpost"
+  },
+  "plan": {
+    "schemaVersion": "plan/0",
+    "zones": [
+      {
+        "id": "camp",
+        "kind": "outpost",
+        "program": {
+          "lots": [
+            {
+              "id": "h1",
+              "type": "cottage",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "h2",
+              "type": "house",
+              "size": [
+                9,
+                9
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

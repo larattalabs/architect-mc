@@ -1,0 +1,208 @@
+{
+  "prompt": "A town with no right angles anywhere.",
+  "answer": {
+    "plan": {
+      "schemaVersion": "plan/0",
+      "planId": "the_curving_town",
+      "style": {
+        "pending": "the_curving_town"
+      },
+      "zones": [
+        {
+          "id": "town",
+          "kind": "standard",
+          "required": true,
+          "label": "The Curving Town",
+          "purpose": "town",
+          "style": {
+            "pending": "the_curving_town"
+          },
+          "program": {
+            "layout": "street",
+            "lots": [
+              {
+                "id": "town_hall_1",
+                "type": "open_hall",
+                "role": "town_hall",
+                "label": "town hall",
+                "size": [
+                  17,
+                  15
+                ],
+                "landmark": true,
+                "placement": "central",
+                "villager": "trading_hall",
+                "brief": "Round or oval hall with a domed roof, at the heart of the curving lanes."
+              },
+              {
+                "id": "house_1",
+                "type": "house",
+                "role": "round_house",
+                "label": "round house",
+                "size": [
+                  9,
+                  9
+                ],
+                "villager": "dwelling",
+                "brief": "Circular or oval plan with a conical or domed roof, set at a varied angle."
+              },
+              {
+                "id": "house_2",
+                "type": "house",
+                "role": "round_house",
+                "label": "round house",
+                "size": [
+                  9,
+                  9
+                ],
+                "villager": "dwelling",
+                "brief": "Circular or oval plan with a conical or domed roof, set at a varied angle."
+              },
+              {
+                "id": "house_3",
+                "type": "house",
+                "role": "round_house",
+                "label": "round house",
+                "size": [
+                  9,
+                  9
+                ],
+                "villager": "dwelling",
+                "brief": "Circular or oval plan with a conical or domed roof, set at a varied angle."
+              },
+              {
+                "id": "house_4",
+                "type": "house",
+                "role": "round_house",
+                "label": "round house",
+                "size": [
+                  9,
+                  9
+                ],
+                "villager": "dwelling",
+                "brief": "Circular or oval plan with a conical or domed roof, set at a varied angle."
+              },
+              {
+                "id": "cottage_1",
+                "type": "cottage",
+                "role": "curved_cottage",
+                "label": "curved cottage",
+                "size": [
+                  9,
+                  9
+                ],
+                "villager": "dwelling",
+                "brief": "Kidney-shaped or crescent plan hugging the lane."
+              },
+              {
+                "id": "cottage_2",
+                "type": "cottage",
+                "role": "curved_cottage",
+                "label": "curved cottage",
+                "size": [
+                  9,
+                  9
+                ],
+                "villager": "dwelling",
+                "brief": "Kidney-shaped or crescent plan hugging the lane."
+              },
+              {
+                "id": "shop_1",
+                "type": "shop",
+                "role": "market_shop",
+                "label": "marketplace shop",
+                "size": [
+                  13,
+                  11
+                ],
+                "placement": "central",
+                "villager": "job",
+                "brief": "Crescent-shaped stall facing a round plaza."
+              },
+              {
+                "id": "shop_2",
+                "type": "shop",
+                "role": "market_shop",
+                "label": "marketplace shop",
+                "size": [
+                  13,
+                  11
+                ],
+                "placement": "central",
+                "villager": "job",
+                "brief": "Crescent-shaped stall facing a round plaza."
+              },
+              {
+                "id": "tavern_1",
+                "type": "tavern",
+                "role": "tavern",
+                "label": "round tavern",
+                "size": [
+                  13,
+                  11
+                ],
+                "villager": "job",
+                "brief": "Circular common room with a curved bar."
+              },
+              {
+                "id": "smithy_1",
+                "type": "smithy",
+                "role": "smithy",
+                "label": "smithy",
+                "size": [
+                  13,
+                  11
+                ],
+                "placement": "edge",
+                "villager": "job",
+                "brief": "Oval forge with a rounded chimney."
+              },
+              {
+                "id": "barn_1",
+                "type": "barn",
+                "role": "barn",
+                "label": "barn",
+                "size": [
+                  13,
+                  11
+                ],
+                "placement": "edge",
+                "villager": "farm",
+                "brief": "Oval barn with a barrel-vaulted roof."
+              }
+            ]
+          },
+          "where": {
+            "inside": {
+              "claim": true
+            }
+          },
+          "notes": "Flat ground; no sculpting. Lanes and plots should flow in curves, not a grid."
+        }
+      ],
+      "rules": [
+        {
+          "id": "no_right_angles",
+          "kind": "shape",
+          "required": true,
+          "label": "No right angles",
+          "notes": "No square corners in footprints, rooflines or lane layout; use circles, ovals, diagonals and stepped arcs.",
+          "params": {
+            "shape": "no_right_angles",
+            "level": "footprint"
+          }
+        }
+      ],
+      "notes": "The street layout is the closest supported form; curving lanes and round plaza are stylistic intent carried in lot briefs and the no_right_angles rule."
+    },
+    "waits": [
+      {
+        "part": "no_right_angles",
+        "words": "The no-right-angles rule for the whole layout and every building: shape rules come with a later Architect release. The town is built first, with round forms asked for in each brief, and the rule is checked when it can be."
+      }
+    ],
+    "summary": "A medium home town of 12 buildings on flat ground: a round domed town hall at the centre, two crescent market shops, a round tavern, four round houses, two curved cottages, an oval smithy and an oval barn at the edge. Curves are asked for in every building's brief. The strict \"no right angles\" rule can't be verified yet, so it waits, and the street layout may still come out straighter than you want."
+  },
+  "usd": 0.060455,
+  "errors": []
+}

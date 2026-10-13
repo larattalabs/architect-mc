@@ -1,0 +1,37 @@
+{
+  "about": "zone kind district: the districts program's block",
+  "on": "s7",
+  "expect": {
+    "part": "east",
+    "block": "program.districts"
+  },
+  "plan": {
+    "schemaVersion": "plan/0",
+    "zones": [
+      {
+        "id": "east",
+        "kind": "district",
+        "program": {
+          "lots": [
+            {
+              "id": "h1",
+              "type": "cottage",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "h2",
+              "type": "house",
+              "size": [
+                9,
+                9
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

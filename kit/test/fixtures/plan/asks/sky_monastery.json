@@ -1,0 +1,183 @@
+{
+  "prompt": "A monastery on a floating island, reached by a long stair.",
+  "answer": {
+    "plan": {
+      "schemaVersion": "plan/0",
+      "planId": "stair_monastery",
+      "style": {
+        "pending": "stair_monastery"
+      },
+      "zones": [
+        {
+          "id": "cloister",
+          "kind": "standard",
+          "required": true,
+          "label": "Monastery cloister",
+          "purpose": "temple",
+          "program": {
+            "layout": "street",
+            "shared": "square",
+            "lots": [
+              {
+                "id": "chapel_1",
+                "type": "chapel",
+                "role": "chapel",
+                "label": "abbey chapel",
+                "size": [
+                  17,
+                  15
+                ],
+                "landmark": true,
+                "placement": "central",
+                "brief": "Main church at the island's heart with a bell tower and tall windows open to the sky."
+              },
+              {
+                "id": "gatehouse_1",
+                "type": "gatehouse",
+                "role": "gatehouse",
+                "label": "stair gatehouse",
+                "size": [
+                  9,
+                  9
+                ],
+                "landmark": false,
+                "placement": "edge",
+                "brief": "Where the long stair arrives on the island; the monastery's only entrance."
+              },
+              {
+                "id": "cabin_1",
+                "type": "cabin",
+                "role": "cell",
+                "label": "monks' cell",
+                "size": [
+                  9,
+                  9
+                ],
+                "villager": "dwelling",
+                "brief": "Small plain sleeping cell arranged around the cloister."
+              },
+              {
+                "id": "cabin_2",
+                "type": "cabin",
+                "role": "cell",
+                "label": "monks' cell",
+                "size": [
+                  9,
+                  9
+                ],
+                "villager": "dwelling",
+                "brief": "Small plain sleeping cell arranged around the cloister."
+              },
+              {
+                "id": "cabin_3",
+                "type": "cabin",
+                "role": "cell",
+                "label": "monks' cell",
+                "size": [
+                  9,
+                  9
+                ],
+                "villager": "dwelling",
+                "brief": "Small plain sleeping cell arranged around the cloister."
+              },
+              {
+                "id": "house_1",
+                "type": "house",
+                "role": "refectory",
+                "label": "refectory",
+                "size": [
+                  13,
+                  11
+                ],
+                "placement": "central",
+                "brief": "Dining hall and kitchen with a long table."
+              },
+              {
+                "id": "house_2",
+                "type": "house",
+                "role": "scriptorium",
+                "label": "scriptorium library",
+                "size": [
+                  13,
+                  11
+                ],
+                "brief": "Bookshelves, lecterns, lantern-lit writing room."
+              },
+              {
+                "id": "cottage_1",
+                "type": "cottage",
+                "role": "garden",
+                "label": "herb garden and greenhouse",
+                "size": [
+                  9,
+                  9
+                ],
+                "placement": "edge",
+                "villager": "farm",
+                "brief": "Walled garden with crops and flowers, tended by the monks."
+              },
+              {
+                "id": "tower_1",
+                "type": "tower",
+                "role": "observatory",
+                "label": "stargazing observatory",
+                "size": [
+                  9,
+                  9
+                ],
+                "placement": "high_ground",
+                "brief": "Open-topped lookout on the highest point of the island."
+              }
+            ]
+          }
+        }
+      ],
+      "connectors": [
+        {
+          "id": "long_stair",
+          "kind": "stair",
+          "required": true,
+          "label": "the long stair",
+          "from": {
+            "anchor": "stone"
+          },
+          "to": {
+            "part": "gatehouse_1"
+          },
+          "notes": "A long stair rising from the ground below to the gatehouse at the island's edge."
+        }
+      ],
+      "forms": [
+        {
+          "id": "sky_island",
+          "kind": "floating_island",
+          "required": true,
+          "label": "floating island",
+          "where": {
+            "inside": {
+              "claim": true
+            }
+          },
+          "size": {
+            "preset": "M"
+          },
+          "notes": "Custom-shaped sculpted sky island carrying the whole cloister."
+        }
+      ],
+      "notes": "Low density, quiet cloister. Pale stone, weathered wood, lanterns and hanging greenery come from the style bible."
+    },
+    "waits": [
+      {
+        "part": "sky_island",
+        "words": "The floating island itself: floating islands come with a later Architect release; the monastery buildings are laid out first and the island is offered when it can be built."
+      },
+      {
+        "part": "long_stair",
+        "words": "The long stair from the ground up to the gatehouse: stairs of this kind come with a later Architect release; it is offered when it can be built."
+      }
+    ],
+    "summary": "A quiet pale-stone monastery of nine buildings: an abbey chapel at the heart, a gatehouse at the edge, three monks' cells, a refectory, a scriptorium, a herb garden and an observatory on the highest point. The floating island and the long stair up to the gatehouse are in the plan but wait for a later Architect release; the buildings are laid out first."
+  },
+  "usd": 0.030411,
+  "errors": []
+}

@@ -1,0 +1,122 @@
+{
+  "prompt": "A small fishing village by the lake.",
+  "answer": {
+    "plan": {
+      "schemaVersion": "plan/0",
+      "planId": "lakeside_fishing_village",
+      "style": {
+        "pending": "lakeside_fishing_village"
+      },
+      "zones": [
+        {
+          "id": "village",
+          "label": "Lakeside fishing village",
+          "required": true,
+          "purpose": "port",
+          "where": {
+            "near": {
+              "feature": {
+                "water": {
+                  "body": "lake",
+                  "pick": "nearest",
+                  "to": "stone"
+                }
+              },
+              "within": 16
+            }
+          },
+          "program": {
+            "layout": "street",
+            "lots": [
+              {
+                "id": "boathouse_1",
+                "type": "boathouse",
+                "role": "fishing_pier",
+                "label": "fishing pier and boathouse",
+                "size": [
+                  13,
+                  11
+                ],
+                "landmark": true,
+                "placement": "near_water",
+                "brief": "Long wooden pier reaching out over the lake with moored boats and a covered boat shed; the village's centrepiece."
+              },
+              {
+                "id": "cottage_1",
+                "type": "cottage",
+                "role": "fishers_cottage",
+                "label": "fishers' cottage",
+                "size": [
+                  9,
+                  9
+                ],
+                "landmark": false,
+                "villager": "dwelling",
+                "brief": "Small home with drying racks and nets by the door."
+              },
+              {
+                "id": "cottage_2",
+                "type": "cottage",
+                "role": "fishers_cottage",
+                "label": "fishers' cottage",
+                "size": [
+                  9,
+                  9
+                ],
+                "landmark": false,
+                "villager": "dwelling",
+                "brief": "Small home with drying racks and nets by the door."
+              },
+              {
+                "id": "cottage_3",
+                "type": "cottage",
+                "role": "fishers_cottage",
+                "label": "fishers' cottage",
+                "size": [
+                  9,
+                  9
+                ],
+                "landmark": false,
+                "villager": "dwelling",
+                "brief": "Small home with drying racks and nets by the door."
+              },
+              {
+                "id": "shop_1",
+                "type": "shop",
+                "role": "smokehouse_market",
+                "label": "smokehouse and fish market",
+                "size": [
+                  9,
+                  9
+                ],
+                "landmark": false,
+                "placement": "central",
+                "villager": "job",
+                "brief": "Smokes and sells the catch; barrels and hanging fish."
+              },
+              {
+                "id": "cabin_1",
+                "type": "cabin",
+                "role": "net_mender",
+                "label": "net-mender's workshop",
+                "size": [
+                  9,
+                  9
+                ],
+                "landmark": false,
+                "placement": "near_water",
+                "villager": "job",
+                "brief": "Nets, rope and floats stacked outside."
+              }
+            ]
+          }
+        }
+      ],
+      "notes": "Existing lakeshore is used without reshaping terrain; low density."
+    },
+    "waits": [],
+    "summary": "A small lakeside fishing village in one zone on the lake shore: a pier and boathouse as the centrepiece, three fishers' cottages, a central smokehouse and fish market, and a net-mender's workshop by the water. It sits along a single street in a rustic style that will be settled afterwards, with the land left as it is."
+  },
+  "usd": 0.022541,
+  "errors": []
+}

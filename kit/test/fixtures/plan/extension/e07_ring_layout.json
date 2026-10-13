@@ -1,0 +1,45 @@
+{
+  "about": "a reserved layout",
+  "on": "s7",
+  "expect": {
+    "part": "ring",
+    "block": "layout.ring"
+  },
+  "plan": {
+    "schemaVersion": "plan/0",
+    "zones": [
+      {
+        "id": "ring",
+        "program": {
+          "lots": [
+            {
+              "id": "h1",
+              "type": "cottage",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "h2",
+              "type": "house",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "h3",
+              "type": "smithy",
+              "size": [
+                9,
+                9
+              ]
+            }
+          ],
+          "layout": "ring"
+        }
+      }
+    ]
+  }
+}

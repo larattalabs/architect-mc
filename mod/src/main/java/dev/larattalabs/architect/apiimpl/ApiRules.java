@@ -62,6 +62,7 @@ public final class ApiRules {
 					case "region.scatter" -> "scatterOp"; // 6c F2 (with stampOp, below)
 					case "region.brush" -> "brushes"; // 6c B: the helper's kit has the bundled brush program
 					case "region.route" -> "routePass"; // 6c T2
+					case "region.planCheck" -> "planCheck"; // 6c P0 (with planCatalogue, below)
 					default -> Wire4b.FEATURE_NAMES.getOrDefault(f, Wire5a.FEATURE_NAMES.getOrDefault(f, f));
 				});
 			}
@@ -75,6 +76,9 @@ public final class ApiRules {
 			}
 			if (sidecarFeatures.contains("region.passes")) {
 				out.add("reliefOp"); // 6c T1: a T1 helper's kit has the relief op and pass
+			}
+			if (sidecarFeatures.contains("region.planCheck")) {
+				out.add("planCatalogue"); // 6c P0: a P0 helper's kit returns the capability catalogue with every check
 			}
 			if (sidecarFeatures.contains("region.scatter")) {
 				out.add("stampOp"); // 6c F2: an F2 helper's kit has the scatter and stamp ops (and reads the local stamp library)

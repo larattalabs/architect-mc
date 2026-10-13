@@ -1,0 +1,5 @@
+{
+  "family": "voxels",
+  "cutFrom": "scenarios/goldens/forms_demo/ir.json",
+  "survey": "scenarios/goldens/forms_demo/survey.bin"
+}

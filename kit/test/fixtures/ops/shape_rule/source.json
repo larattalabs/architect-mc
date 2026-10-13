@@ -1,0 +1,5 @@
+{
+  "family": "shape_rule",
+  "cutFrom": "scenarios/goldens/s1/ir.json",
+  "survey": "scenarios/goldens/s1/survey.bin"
+}

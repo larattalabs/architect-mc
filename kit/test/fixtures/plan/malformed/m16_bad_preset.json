@@ -1,0 +1,24 @@
+{
+  "about": "a rock spire preset that does not exist",
+  "on": "s7",
+  "expect": {
+    "path": "$.forms[0].preset",
+    "code": "SCHEMA",
+    "part": "s"
+  },
+  "plan": {
+    "schemaVersion": "plan/0",
+    "forms": [
+      {
+        "id": "s",
+        "kind": "rock_spire",
+        "preset": "obelisk",
+        "where": {
+          "near": {
+            "anchor": "stone"
+          }
+        }
+      }
+    ]
+  }
+}

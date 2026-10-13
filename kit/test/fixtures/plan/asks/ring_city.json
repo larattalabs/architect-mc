@@ -1,0 +1,288 @@
+{
+  "prompt": "A ring city around a crater lake, every house facing the water.",
+  "answer": {
+    "plan": {
+      "schemaVersion": "plan/0",
+      "planId": "crater-lake-ring-city",
+      "style": {
+        "pending": "crater_lake_ring_city"
+      },
+      "zones": [
+        {
+          "id": "ring_town",
+          "kind": "standard",
+          "required": true,
+          "label": "Ring town on the crater rim",
+          "purpose": "residential",
+          "style": {
+            "pending": "crater_lake_ring_city"
+          },
+          "where": {
+            "inside": {
+              "claim": true
+            }
+          },
+          "notes": "Every house faces the lake in the middle; buildings sit in an unbroken ring on the crater rim.",
+          "program": {
+            "layout": "ring",
+            "shared": "none",
+            "lots": [
+              {
+                "id": "house_1",
+                "type": "house",
+                "role": "lakeside_house",
+                "label": "lakeside house",
+                "size": [
+                  13,
+                  11
+                ],
+                "placement": "near_water",
+                "villager": "dwelling",
+                "brief": "Set in the ring on the crater rim, door and windows facing the lake."
+              },
+              {
+                "id": "house_2",
+                "type": "house",
+                "role": "lakeside_house",
+                "label": "lakeside house",
+                "size": [
+                  13,
+                  11
+                ],
+                "placement": "near_water",
+                "villager": "dwelling",
+                "brief": "Set in the ring on the crater rim, door and windows facing the lake."
+              },
+              {
+                "id": "house_3",
+                "type": "house",
+                "role": "lakeside_house",
+                "label": "lakeside house",
+                "size": [
+                  13,
+                  11
+                ],
+                "placement": "near_water",
+                "villager": "dwelling",
+                "brief": "Set in the ring on the crater rim, door and windows facing the lake."
+              },
+              {
+                "id": "house_4",
+                "type": "house",
+                "role": "lakeside_house",
+                "label": "lakeside house",
+                "size": [
+                  13,
+                  11
+                ],
+                "placement": "near_water",
+                "villager": "dwelling",
+                "brief": "Set in the ring on the crater rim, door and windows facing the lake."
+              },
+              {
+                "id": "house_5",
+                "type": "house",
+                "role": "lakeside_house",
+                "label": "lakeside house",
+                "size": [
+                  13,
+                  11
+                ],
+                "placement": "near_water",
+                "villager": "dwelling",
+                "brief": "Set in the ring on the crater rim, door and windows facing the lake."
+              },
+              {
+                "id": "house_6",
+                "type": "house",
+                "role": "lakeside_house",
+                "label": "lakeside house",
+                "size": [
+                  13,
+                  11
+                ],
+                "placement": "near_water",
+                "villager": "dwelling",
+                "brief": "Set in the ring on the crater rim, door and windows facing the lake."
+              },
+              {
+                "id": "house_7",
+                "type": "house",
+                "role": "lakeside_house",
+                "label": "lakeside house",
+                "size": [
+                  13,
+                  11
+                ],
+                "placement": "near_water",
+                "villager": "dwelling",
+                "brief": "Set in the ring on the crater rim, door and windows facing the lake."
+              },
+              {
+                "id": "house_8",
+                "type": "house",
+                "role": "lakeside_house",
+                "label": "lakeside house",
+                "size": [
+                  13,
+                  11
+                ],
+                "placement": "near_water",
+                "villager": "dwelling",
+                "brief": "Set in the ring on the crater rim, door and windows facing the lake."
+              },
+              {
+                "id": "cottage_1",
+                "type": "cottage",
+                "role": "ring_cottage",
+                "label": "ring cottage",
+                "size": [
+                  9,
+                  9
+                ],
+                "placement": "near_water",
+                "villager": "dwelling",
+                "brief": "Smaller home filling a gap in the ring, facing the water."
+              },
+              {
+                "id": "cottage_2",
+                "type": "cottage",
+                "role": "ring_cottage",
+                "label": "ring cottage",
+                "size": [
+                  9,
+                  9
+                ],
+                "placement": "near_water",
+                "villager": "dwelling",
+                "brief": "Smaller home filling a gap in the ring, facing the water."
+              },
+              {
+                "id": "cottage_3",
+                "type": "cottage",
+                "role": "ring_cottage",
+                "label": "ring cottage",
+                "size": [
+                  9,
+                  9
+                ],
+                "placement": "near_water",
+                "villager": "dwelling",
+                "brief": "Smaller home filling a gap in the ring, facing the water."
+              },
+              {
+                "id": "tavern_1",
+                "type": "tavern",
+                "role": "lake_hall",
+                "label": "lake hall",
+                "size": [
+                  17,
+                  15
+                ],
+                "landmark": true,
+                "placement": "central",
+                "villager": "trading_hall",
+                "brief": "Grand hall on the ring with a terrace overlooking the lake; the town's gathering place."
+              },
+              {
+                "id": "boathouse_1",
+                "type": "boathouse",
+                "role": "boathouse",
+                "label": "boathouse and jetty",
+                "size": [
+                  13,
+                  11
+                ],
+                "placement": "near_water",
+                "villager": "job",
+                "brief": "Wooden jetty reaching into the crater lake with boats."
+              },
+              {
+                "id": "shop_1",
+                "type": "shop",
+                "role": "market_shop",
+                "label": "market shop",
+                "size": [
+                  9,
+                  9
+                ],
+                "placement": "central",
+                "villager": "trading_hall",
+                "brief": "Stall along the ring street near the hall."
+              },
+              {
+                "id": "shop_2",
+                "type": "shop",
+                "role": "market_shop",
+                "label": "market shop",
+                "size": [
+                  9,
+                  9
+                ],
+                "placement": "central",
+                "villager": "trading_hall",
+                "brief": "Stall along the ring street near the hall."
+              },
+              {
+                "id": "gatehouse_1",
+                "type": "gatehouse",
+                "role": "gatehouse",
+                "label": "gatehouse",
+                "size": [
+                  13,
+                  11
+                ],
+                "placement": "edge",
+                "villager": "none",
+                "brief": "Outer entrance through the ring on the outward side."
+              }
+            ]
+          }
+        }
+      ],
+      "forms": [
+        {
+          "id": "crater_lake",
+          "kind": "crater",
+          "required": true,
+          "label": "crater lake",
+          "where": {
+            "inside": {
+              "claim": true
+            }
+          },
+          "size": {
+            "preset": "M"
+          },
+          "notes": "A sculpted crater with a lake filling its floor, the rim carrying the town; the lake is the shared centre.",
+          "params": {
+            "lake": true,
+            "rim": "ring_town"
+          }
+        }
+      ],
+      "dependencies": [
+        {
+          "part": "ring_town",
+          "after": [
+            "crater_lake"
+          ],
+          "why": "The town sits on the rim of the sculpted crater."
+        }
+      ]
+    },
+    "waits": [
+      {
+        "part": "ring_town",
+        "words": "The ring layout around the lake, with every house facing the water: ring layouts come with a later Architect release (FL). The buildings are listed, but the ring itself can't be laid out yet."
+      },
+      {
+        "part": "crater_lake",
+        "words": "The sculpted crater with its lake: free-standing crater forms come with a later Architect release (7c). The land stays as found until then."
+      }
+    ],
+    "summary": "A medieval residential ring town of 16 buildings: 8 lakeside houses, 3 cottages, a landmark lake hall, a boathouse with a jetty, 2 market shops and a gatehouse. They are meant to circle a sculpted crater lake with every door facing the water. The ring layout and the crater with its lake are not buildable yet, so both are kept pending and the town is offered when they can be built."
+  },
+  "usd": 0.112632,
+  "errors": []
+}

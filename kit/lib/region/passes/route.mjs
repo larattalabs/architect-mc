@@ -190,7 +190,7 @@ function corridorOf(env, blockedW, si, sj, ti, tj, maxGrade, radius = CORRIDOR) 
  */
 function search(env, ctx) {
   const { W, D } = env;
-  const { G, corridor, blockedW, blocked1, builtY, prefer, start, goal, Gq, w, laneW, Ld, latLo, latHi, maxCut, maxFill, stairs, ladders, nearEnd, maxStates = 24_000_000 } = ctx;
+  const { G, corridor, blockedW, blocked1, builtY, prefer, start, goal, Gq, w, laneW, Ld, latLo, latHi, maxCut, maxFill, stairs, ladders, nearEnd, maxStates = 24_000_000, maxExpand = Infinity } = ctx;
   const ND = maxCut + maxFill + 1, SPC = 32 * ND;
   // the footprint square around a centre cell: an own move may lie beside an earlier edge's built cells only within a step of
   // their y (its writes skip them), and a stair flight never over them (its treads would stack)
@@ -255,6 +255,8 @@ function search(env, ctx) {
     const [, gv, s] = heap.pop();
     if (closed[s] || gv !== gArr[s]) continue;
     closed[s] = 1;
+    // (6c P0) the check's node budget (maxNodes over all edges): out of budget, no route and `budget`
+    if (expanded >= maxExpand) return { moves: null, expanded, budget: true };
     expanded++;
     const k = cellOf(s), h = hOfS(s), kk = kOfS(s), q = qArr[s], y = yOf(q);
     if (k === goal.k && y === goal.y) { found = s; break; }
@@ -486,6 +488,10 @@ export function routePass(survey, volumes, intent) {
   const coarse = r > 1;
   const Gq = _unsafe.noGrade ? FP * 16 : Math.max(1, Math.floor(maxGrade * FP * r + 1e-9));
   const out = { edges: [], resolution: r, maxGrade, hairpinLanding, stairs, coarse };
+  // (6c P0) `maxExpanded`: A* expansions over all edges (the plan check's maxNodes); absent, no cap. An edge the budget stops, and
+  // every edge after it, fails `BUDGET` (never searched again for a reason)
+  const cap = isInt(it.maxExpanded) && it.maxExpanded >= 0 ? it.maxExpanded : Infinity;
+  let spent = 0, broke = false;
   for (const e of edges) {
     const w = e.width ?? 3;
     if (!(isInt(w) && w >= 1 && w <= 9)) throw new Error(`route ${e.id}: width must be 1..9`);
@@ -501,6 +507,7 @@ export function routePass(survey, volumes, intent) {
       return { k: cellAt(p.at[0], p.at[2]), y: p.at[1] - 1, facing: p.facing ?? null, at: p.at };
     });
     if (ends.some((x) => x.k < 0)) { edgeOut.failed = 'NO_ROUTE'; edgeOut.note = 'an end is outside the survey'; continue; }
+    if (broke || spent >= cap) { broke = true; edgeOut.failed = 'BUDGET'; edgeOut.note = `the node budget (${cap} expansions over all edges) ran out before this edge`; continue; }
     // the land near each end ramps to its y (a pad's top is not the natural ground)
     const G = Int16Array.from(G0);
     for (const en of ends) {
@@ -635,11 +642,13 @@ export function routePass(survey, volumes, intent) {
         const corridor = radius ? corridorOf(env, b.blockedW, si, sj, ti, tj, maxGrade, radius) : null;
         if (radius && !corridor) continue;
         edgeOut.search = name;
-        res = search(env, { ...sctx, ...b, corridor });
+        res = search(env, { ...sctx, ...b, corridor, maxExpand: cap - spent });
         edgeOut.expanded += res?.expanded ?? 0;
+        spent += res?.expanded ?? 0;
+        if (res?.budget) { broke = true; break; }
         if (res?.moves) break;
       }
-      if (!res?.moves) break;
+      if (!res?.moves || broke) break;
       const tp = toPath(res);
       const clash = selfClash(tp.P, w);
       edgeOut.retries = attempt;
@@ -647,11 +656,13 @@ export function routePass(survey, volumes, intent) {
       for (const q of clash) { const kk = cellAt(tp.P[q][0], tp.P[q][2]); if (kk >= 0) selfBlock[kk] = 1; }
       res = null;
     }
+    if (!built && broke) { edgeOut.failed = 'BUDGET'; edgeOut.note = `the node budget (${cap} expansions over all edges) ran out on this edge`; continue; }
     if (!built) {
       // why: would it route through water (T3's bridges)?
       const bw = build(false);
       const cw = corridorOf(env, bw.blockedW, si, sj, ti, tj, maxGrade, 3 * CORRIDOR);
-      const rw = search(env, { ...sctx, ...bw, corridor: cw });
+      const rw = search(env, { ...sctx, ...bw, corridor: cw, maxExpand: cap === Infinity ? Infinity : Math.max(0, cap - spent) });
+      spent += rw?.expanded ?? 0;
       edgeOut.failed = rw?.moves ? 'ROUTE_WATER' : 'NO_ROUTE';
       edgeOut.note = rw?.moves ? 'every route crosses water (bridges come with T3)' : edgeOut.retries ? 'no route that does not cross itself within the grade, the limits and the obstacles' : 'no route within the grade, the cut and fill limits and the obstacles';
       continue;

@@ -1,0 +1,221 @@
+{
+  "prompt": "A trading hub where every villager buys and sells something different.",
+  "answer": {
+    "plan": {
+      "schemaVersion": "plan/0",
+      "planId": "many-stalls-market",
+      "style": {
+        "pending": "many_stalls_market"
+      },
+      "zones": [
+        {
+          "id": "market_town",
+          "purpose": "market",
+          "label": "Market town",
+          "required": true,
+          "style": {
+            "pending": "many_stalls_market"
+          },
+          "program": {
+            "template": "flat_village",
+            "params": {
+              "lots": [
+                {
+                  "id": "shop_1",
+                  "type": "shop",
+                  "role": "trading_hall",
+                  "label": "trading hall",
+                  "size": [
+                    17,
+                    15
+                  ],
+                  "landmark": true,
+                  "placement": "central",
+                  "villager": "trading_hall",
+                  "brief": "Large covered market hall at the square's heart; the exchange where merchants gather, with a bell and notice boards."
+                },
+                {
+                  "id": "shop_2",
+                  "type": "shop",
+                  "role": "farmer_stall",
+                  "label": "farmer's produce stall",
+                  "size": [
+                    9,
+                    9
+                  ],
+                  "villager": "job",
+                  "brief": "Crops, bread and seeds; crates and barrels out front."
+                },
+                {
+                  "id": "shop_3",
+                  "type": "shop",
+                  "role": "butcher_fishmonger",
+                  "label": "butcher and fishmonger",
+                  "size": [
+                    9,
+                    9
+                  ],
+                  "placement": "near_water",
+                  "villager": "job",
+                  "brief": "Meat, fish and smoked goods; smoker and hanging racks."
+                },
+                {
+                  "id": "smithy_1",
+                  "type": "smithy",
+                  "role": "weapon_armorer",
+                  "label": "weaponsmith and armorer",
+                  "size": [
+                    13,
+                    11
+                  ],
+                  "villager": "job",
+                  "brief": "Forge, anvil, and weapons and armor on display."
+                },
+                {
+                  "id": "smithy_2",
+                  "type": "smithy",
+                  "role": "toolsmith",
+                  "label": "toolsmith",
+                  "size": [
+                    9,
+                    9
+                  ],
+                  "villager": "job",
+                  "brief": "Tools and iron goods; grindstone and smithing table."
+                },
+                {
+                  "id": "shop_4",
+                  "type": "shop",
+                  "role": "bookshop",
+                  "label": "librarian's bookshop",
+                  "size": [
+                    13,
+                    11
+                  ],
+                  "villager": "job",
+                  "brief": "Enchanted books and maps; lecterns and bookshelves."
+                },
+                {
+                  "id": "shop_5",
+                  "type": "shop",
+                  "role": "map_house",
+                  "label": "cartographer's map house",
+                  "size": [
+                    9,
+                    9
+                  ],
+                  "villager": "job",
+                  "brief": "Maps and compasses; cartography table, wall maps."
+                },
+                {
+                  "id": "shop_6",
+                  "type": "shop",
+                  "role": "apothecary",
+                  "label": "cleric's apothecary",
+                  "size": [
+                    9,
+                    9
+                  ],
+                  "villager": "job",
+                  "brief": "Potions and brewing goods; brewing stands, herb bundles."
+                },
+                {
+                  "id": "shop_7",
+                  "type": "shop",
+                  "role": "wool_dye_shop",
+                  "label": "shepherd's wool and dye shop",
+                  "size": [
+                    9,
+                    9
+                  ],
+                  "villager": "job",
+                  "brief": "Wool, dyes and banners; colorful cloth hung out."
+                },
+                {
+                  "id": "shop_8",
+                  "type": "shop",
+                  "role": "fletcher",
+                  "label": "fletcher's workshop",
+                  "size": [
+                    9,
+                    9
+                  ],
+                  "villager": "job",
+                  "brief": "Bows, arrows and sticks; fletching table."
+                },
+                {
+                  "id": "tavern_1",
+                  "type": "tavern",
+                  "role": "tavern",
+                  "label": "tavern",
+                  "size": [
+                    13,
+                    11
+                  ],
+                  "placement": "central",
+                  "villager": "none",
+                  "brief": "Traders rest and swap news near the square."
+                },
+                {
+                  "id": "house_1",
+                  "type": "house",
+                  "role": "lodging",
+                  "label": "merchants' lodging",
+                  "size": [
+                    9,
+                    9
+                  ],
+                  "villager": "dwelling",
+                  "brief": "Home for a shopkeeper above or beside their stall."
+                },
+                {
+                  "id": "house_2",
+                  "type": "house",
+                  "role": "lodging",
+                  "label": "merchants' lodging",
+                  "size": [
+                    9,
+                    9
+                  ],
+                  "villager": "dwelling",
+                  "brief": "Home for a shopkeeper above or beside their stall."
+                },
+                {
+                  "id": "house_3",
+                  "type": "house",
+                  "role": "lodging",
+                  "label": "merchants' lodging",
+                  "size": [
+                    9,
+                    9
+                  ],
+                  "villager": "dwelling",
+                  "brief": "Home for a shopkeeper above or beside their stall."
+                },
+                {
+                  "id": "barn_1",
+                  "type": "barn",
+                  "role": "warehouse",
+                  "label": "warehouse",
+                  "size": [
+                    13,
+                    11
+                  ],
+                  "placement": "edge",
+                  "villager": "none",
+                  "brief": "Storage for goods and carts at the outskirts."
+                }
+              ]
+            }
+          },
+          "notes": "Central market square with shops radiating out along lanes; trading hall and tavern at the centre, warehouse at the edge."
+        }
+      ],
+      "notes": "Medium-density medieval market town on flat ground."
+    },
+    "waits": [],
+    "summary": "Many Stalls Market is a medium-density, medieval-style market town on flat ground: one village zone with a large trading hall and a tavern at the central square, ten specialist shops and smithies around it, three merchants' lodgings, and a warehouse at the edge. Everything in the plan can be built now; the style bible is made afterwards."
+  },
+  "usd": 0.032627,
+  "errors": []
+}

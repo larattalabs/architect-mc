@@ -1,0 +1,123 @@
+{
+  "about": "a zone near a player's house build and a road to its door (6c PT: feature.build, endpoint.build; the build given as Sites.builds gives it)",
+  "on": "asks",
+  "covers": [
+    "feature.build",
+    "endpoint.build"
+  ],
+  "builds": [
+    {
+      "id": "build-12",
+      "kind": "HOUSE",
+      "state": "ACTIVE",
+      "cells": 273,
+      "revision": 1,
+      "bounds": [
+        60,
+        65,
+        60,
+        68,
+        71,
+        68
+      ],
+      "footprint": [
+        60,
+        60,
+        68,
+        61,
+        60,
+        68,
+        62,
+        60,
+        68,
+        63,
+        60,
+        68,
+        64,
+        60,
+        68,
+        65,
+        60,
+        68,
+        66,
+        60,
+        68,
+        67,
+        60,
+        68,
+        68,
+        60,
+        68
+      ],
+      "entrances": [
+        {
+          "pos": [
+            64,
+            65,
+            60
+          ],
+          "facing": "north"
+        }
+      ]
+    }
+  ],
+  "plan": {
+    "schemaVersion": "plan/0",
+    "zones": [
+      {
+        "id": "town",
+        "program": {
+          "lots": [
+            {
+              "id": "h1",
+              "type": "cottage",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "h2",
+              "type": "house",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "h3",
+              "type": "smithy",
+              "size": [
+                9,
+                9
+              ]
+            }
+          ]
+        },
+        "where": {
+          "near": {
+            "feature": {
+              "build": {
+                "kind": "house"
+              }
+            },
+            "within": 24
+          }
+        }
+      }
+    ],
+    "connectors": [
+      {
+        "id": "lane",
+        "kind": "road",
+        "from": {
+          "part": "town"
+        },
+        "to": {
+          "build": "build-12",
+          "port": "door"
+        }
+      }
+    ]
+  }
+}

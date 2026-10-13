@@ -14,10 +14,10 @@
     "lots": { "type": "array", "items": { "type": "object", "required": ["id", "stage", "rect", "floorY", "front", "entrance"], "additionalProperties": false, "properties": {
       "id": { "type": "string" }, "stage": { "type": "string" }, "rect": { "$ref": "#/$defs/rect" }, "floorY": { "type": "integer" },
       "front": { "enum": ["north", "south", "east", "west"] }, "entrance": { "$ref": "#/$defs/xyz" }, "brief": { "type": "string" },
-      "lamps": { "type": "integer" } } } },
+      "lamps": { "type": "integer" }, "part": { "type": "string" } } } },
     "paths": { "type": "array", "items": { "type": "object", "required": ["id", "kind", "stage", "width", "points"], "additionalProperties": false, "properties": {
       "id": { "type": "string" }, "kind": { "enum": ["stair", "bridge", "graded", "road", "path"] }, "stage": { "type": "string" }, "width": { "type": "integer", "minimum": 1 },
-      "points": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/xyz" } } } } },
+      "points": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/xyz" } }, "part": { "type": "string" } } } },
     "utility": { "type": "array", "items": { "type": "object", "required": ["id", "kind", "width", "height", "points"], "additionalProperties": false, "properties": {
       "id": { "type": "string" }, "kind": { "type": "string" }, "width": { "type": "integer" }, "height": { "type": "integer" }, "points": { "type": "array", "items": { "$ref": "#/$defs/xyz" } } } } },
     "anchors": { "type": "object", "additionalProperties": { "$ref": "#/$defs/xyz" } },
@@ -26,18 +26,20 @@
     "graph": { "type": "object", "required": ["derived", "nodes", "edges"], "additionalProperties": false, "properties": {
       "derived": { "type": "boolean" },
       "nodes": { "type": "array", "items": { "type": "object", "required": ["id", "kind", "ref", "at", "level"], "additionalProperties": false, "properties": {
-        "id": { "type": "string" }, "kind": { "enum": ["lot", "anchor", "junction", "plaza"] }, "ref": { "type": ["string", "null"] }, "at": { "$ref": "#/$defs/xyz" }, "level": { "type": "integer" },
+        "id": { "type": "string" }, "kind": { "enum": ["lot", "anchor", "junction", "plaza"] }, "ref": { "type": ["string", "null"] }, "at": { "$ref": "#/$defs/xyz" }, "level": { "type": "integer" }, "part": { "type": "string" },
         "ports": { "type": "array", "items": { "type": "object", "required": ["name", "at", "facing", "width"], "additionalProperties": false, "properties": {
           "name": { "type": "string" }, "at": { "$ref": "#/$defs/xyz" }, "facing": { "enum": ["north", "south", "east", "west", "up"] }, "width": { "type": "integer", "minimum": 1 } } } } } } },
       "edges": { "type": "array", "items": { "type": "object", "required": ["id", "from", "to", "type", "path", "stage", "mover"], "additionalProperties": false, "properties": {
         "id": { "type": "string" }, "from": { "type": "string" }, "to": { "type": "string" }, "type": { "enum": ["road", "stair", "bridge", "graded", "path"] }, "width": { "type": "integer", "minimum": 1 },
-        "path": { "type": "string" }, "stage": { "type": "string" }, "mover": { "type": "array", "items": { "enum": ["player", "villager"] } } } } } } },
+        "path": { "type": "string" }, "stage": { "type": "string" }, "mover": { "type": "array", "items": { "enum": ["player", "villager"] } }, "part": { "type": "string" } } } } } },
     "unplaced": { "type": "array", "items": { "type": "object", "required": ["id", "reason"], "additionalProperties": false, "properties": {
       "id": { "type": "string" }, "reason": { "type": "string" } } } },
     "props": { "type": "array", "items": { "type": "object", "required": ["kind", "id", "at"], "additionalProperties": false, "properties": {
       "kind": { "type": "string" }, "id": { "type": "string" }, "lot": { "type": "string" }, "at": { "$ref": "#/$defs/xyz" } } } },
     "passes": { "type": "array", "items": { "type": "object", "required": ["name", "ms", "heapMb"], "additionalProperties": false, "properties": {
-      "name": { "type": "string" }, "ms": { "type": "integer", "minimum": 0 }, "heapMb": { "type": "integer", "minimum": 0 } } } }
+      "name": { "type": "string" }, "ms": { "type": "integer", "minimum": 0 }, "heapMb": { "type": "integer", "minimum": 0 } } } },
+    "planParts": { "type": "array", "description": "(6c P0) a plan check's part rects (plan/0 ids, with their class); lots, paths, nodes and edges then name their plan part in `part`", "items": { "type": "object", "required": ["part", "class", "rect"], "additionalProperties": false, "properties": {
+      "part": { "type": "string" }, "class": { "type": "string" }, "rect": { "$ref": "#/$defs/rect" } } } }
   },
   "$defs": {
     "xyz": { "type": "array", "minItems": 3, "maxItems": 3, "items": { "type": "integer" } },
