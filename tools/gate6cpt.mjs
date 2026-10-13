@@ -371,8 +371,13 @@ steps.clear = async () => {
     for (const o of cops) if ((await ptAt(o.at)).state !== 'minecraft:copper_block') oxidized++;
   }
   await cmd('/gamerule random_tick_speed 0');
-  const keptGrass = (await Promise.all(dops.map((o) => ptAt(o.at)))).filter((r) => r.tracked && r.state === 'minecraft:grass_block').length;
-  const keptCopper = (await Promise.all(cops.map((o) => ptAt(o.at)))).filter((r) => r.tracked && r.state !== 'minecraft:copper_block').length;
+  // one snapshot with random ticks stopped (weathering went on between the loop's count and the gamerule: count again)
+  const gs = await Promise.all(dops.map((o) => ptAt(o.at)));
+  const cs = await Promise.all(cops.map((o) => ptAt(o.at)));
+  grass = gs.filter((r) => r.state === 'minecraft:grass_block').length;
+  oxidized = cs.filter((r) => r.state !== 'minecraft:copper_block').length;
+  const keptGrass = gs.filter((r) => r.tracked && r.state === 'minecraft:grass_block').length;
+  const keptCopper = cs.filter((r) => r.tracked && r.state !== 'minecraft:copper_block').length;
   check(grass > 0 && keptGrass === grass, `item 2: grass spread onto ${grass} placed dirt cells; all ${keptGrass} keep their records`);
   check(oxidized > 0 && keptCopper === oxidized, `item 2: ${oxidized} placed copper blocks weathered; all ${keptCopper} keep their records`);
   out.grass = grass; out.oxidized = oxidized;
