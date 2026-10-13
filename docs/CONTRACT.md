@@ -10359,59 +10359,326 @@ roads through C16. 5. Strokes. 6. Fixtures, gate.
 
 - Path, structure and prop parts as construction (7a). Fluids in survival (N-H-1). Region survival in Hardcore beyond phase 3.
 
-## Phase 6c slice PT: player-changed cells (optional; DRAFT for Steward review)
+## Phase 6c slice PT: player-changed cells (DROPPED; superseded)
 
-API 1.31.0, mod 0.34.0 (wave 6). 0c's Deferred "to the 6c terrain slices: automatic detection of player-changed cells
-(block-change tracking) as protection". **Optional:** it ships only if Steward says it needs it in 6c (S-PT-1); otherwise it
-moves to 6d, where replanning on land change (SETTLEMENTS §14) needs the same data.
+Dropped from 6c by S-PT-1 (2026-10-12). Steward withdrew S-PT-1 for C32 (2026-10-13), and the slice below supersedes this
+draft: the per-section bitset in side files, the `respectPlayerChanges` flag and its 1.31.0/0.34.0 placeholders no longer apply.
 
-- **Branch:** `slice/PT`, worktree `../architect-mc-PT`. **Spend:** $0.
-- **Scope:** record which cells players changed (placed or broke) in loaded chunks; let region plans, brush strokes and route
-  passes treat those cells as the player's (not natural) when the request asks for it.
-- **Not in scope:** changes by other mods or by natural processes (growth, fluids, explosions); rolling back player changes.
-- **Depends on:** 0c (C17). Independent of the other terrain slices.
+## Phase 6c slice PT: player-placed tracking (C32) (DRAFT for Steward review)
 
-### 0. Facts
+API: the next free minor at merge (house rule; placeholder `PT` below), mod to match, `KIT_VERSION` next minor. Steward ask
+C32 (steward-mc docs/ARCHITECT-ASKS.md), approved by Noah 2026-10-13 and refined by him the same day: PT is about **builds**,
+not every block. It replaces the dropped draft above. The PLAN "Keep open: zones" rule holds: no id is built from an owner
+string, and nothing persisted assumes an owner never changes.
 
-- "Natural" today is a block's voxel class. A player's dirt path or a dug hole is natural to Architect, so C17's areas are the
-  only protection (0c's note: "protection is by area").
-- The journal records Architect's own writes; nothing records players'.
+- **Branch:** `slice/PT`, worktree `../architect-mc-PT`. **Spend:** $0. Builds after T2, in parallel with P0.
+- **Scope:** record every block a player places (the foundation), group those blocks into **builds**, keep builds from every
+  Architect write path unless the caller explicitly names them, and offer builds to plans as features. Claim and release.
+- **Not in scope:** adopting a build as a site (slice **PT2**, outlined at the end); blocks placed by commands, dispensers or
+  other mods' tools (§2); zones and transfers (Keep open).
+- **Depends on:** C31 (v0.24.1), B (`Destruction`), P0 (`plan/0`, frozen 2026-10-12: changes here are additive only).
 
-### 1. API 1.31.0
+### Answers to Steward's three questions (C32), in the light of builds
 
-- `VERSION = "1.31.0"`. `RegionPlanRequest` and `BrushRequest` gain trailing `boolean respectPlayerChanges` (old constructors:
-  false). `Survey.volume` classes a tracked cell `PLAYER` when the request asks.
-- **Features:** `playerChanges`.
+1. **Cost.** On disk, about **3 bytes per tracked block** while a section holds at most 256 (2-byte position, 1-byte palette
+   index) and a 512-byte mask plus at most 2 bytes per block above that; about **24 bytes per touched section** and **16 bytes
+   per distinct placer per chunk**, saved inside the chunk itself (chunk NBT is compressed on top). In memory, O(1) lookups:
+   sparse sections about 8 bytes per block, dense ones 4.6 KB. The hot path (every block change) adds one attachment lookup.
+   Builds add one index record per build (about 200 bytes plus its footprint).
+2. **Blocks placed before PT.** Unknown, and never guessed as a player's. They are treated as natural unless the voxel table
+   classes them non-natural (planks, glass, doors: today's cell-level protection, unchanged), they are journal-owned, or they lie
+   in a C17 area. **The gap:** natural-looking blocks (logs, dirt, stone, sand) a player placed before PT, and builds made
+   only of them, are not builds. Mitigation: "claim my build" (§8) marks a box as a build; an inferred scan is an open question.
+3. **Named refusals.** Yes, by build: a refusal names each blocking build (id, kind, blocking count) and its first 8 blocking
+   cells with their block ids, plus the total; region and stroke findings carry the same list. Incidental blocks never refuse.
 
-### 2. Tracking
+### 0. Facts (v0.24.1)
 
-- A mixin on the server's block-change paths for player actions (break, place, bucket, use-on with a shovel/hoe/axe) marks the
-  cell in a per-section bitset (512 bytes per touched section), saved per dimension in `<world>/architect/changes/` (temp file,
-  then rename), loaded lazily per region file.
-- Architect's own writes don't mark; undo doesn't clear marks.
-- `/architect changes clear <box>` (permission 2) clears marks.
+- "Natural" has two readers: the kit's voxel table (`VoxelTable`, a block not listed is `PLAYER`; every vanilla log is `LOG`)
+  and 4e's `TerrainFit.flags` / `CellCond.natural` (natural ground, plants, trees, air, water). Neither knows who placed a block.
+- `site/TileCheck` (regions and strokes): stage 0 skips `others` (another owner's journal cells) and failed conditions; C31's
+  `trees()` flood stops at the claim, `others`, the owner's C17 areas and non-LOG logs, as `tree_kept.<reason>`.
+- `PlayerBlocks.scan` (1.9.0, `Reason.PLAYER_BLOCKS`) refuses a LAYER lot on a region pad over non-natural, non-BE, unowned
+  blocks. Every other placement overwrites such blocks (journaled, given back on remove).
+- B's `Destruction.PLAYER_BLOCKS` clears unowned non-natural cells for an online actor at permission 2 (N-B-1).
+- Undo and remove restore only cells still holding the entry's `after` (StillOurs), so a player's later block is kept.
+- `LevelChunkMixin` already hooks `LevelChunk.setBlockState` (ChangeTracker, WriteCounter). `placement/Occupancy` is entities
+  only and is unchanged by PT.
+- Fabric API 0.161.0+26.3 bundles `fabric-data-attachment-api-v1` 2.2.30 with chunk targets (`SerializableChunkDataMixin`).
 
-### 3. Use
+### 1. Data: the per-chunk set
 
-- With `respectPlayerChanges`, the plan survey and volumes class marked cells `PLAYER`, so `IF_NATURAL` ops, routes and strokes
-  leave them (routes treat them as obstacles).
+- **Where.** A Fabric data attachment `architect_mc:placed` on `LevelChunk`, persistent (a Codec), never synced to clients.
+  It is written into the chunk's own NBT, so the set and the blocks it describes save together; a side file under
+  `<world>/architect/` could disagree with the blocks after a crash. Every change calls `markUnsaved` on the chunk.
+- **Per chunk:** `placers`: a palette of UUIDs (at most 254; the 255th distinct placer in one chunk records as unknown, 0xFF);
+  `builds`: a palette of build ids (§4); `sections`: the touched sections by Y.
+- **Per section, on disk (JournalNbt v2's own rule):** at most 256 cells: `p` (2 bytes per cell, the 12-bit local position,
+  ascending); more: `m` (a 4096-bit mask, 64 longs). Then, in the same order, `o` (1 byte per cell, the placer index; omitted
+  when the chunk has one placer) and `b` (1 byte per cell, the build index, 0 = incidental; omitted when uniform).
+- **Cost.** Sparse 2-4 bytes per block; dense 512 bytes plus 0-2 per block; about 24 bytes of NBT per section and 16 per placer.
+  A 9x7x9 log cabin (about 330 blocks, two sections, one placer): about 1.1 KB before the region file's compression.
+- **In memory.** Sparse sections: an open-addressed `short -> short` map (placer, build), about 8 bytes per block at its load
+  factor; at 257 cells a section turns dense: a `long[64]` bitset plus a `short[4096]` (4.6 KB). Lookup: the chunk (callers
+  hold it), the section by Y, a bit or map probe: O(1). Chunks with no attachment cost nothing.
+- **Mod removed.** Unknown attachments should stay in the chunk NBT untouched; a gate item checks it (§11 item 12) instead of
+  this draft asserting it.
 
-### 4. Gate (slice tier, $0)
+### 2. Events: what records a block
+
+- **A player places it.** Hooks on `ServerPlayerGameMode.useItemOn` and `useItem` open a scope (the acting player, the clicked
+  position); inside it the chunk hook records every cell that goes from air, a fluid or a replaceable block to a block:
+  - `BlockItem` placements, every cell they set (both halves of a door, bed or tall plant; signs; seeds and crops; lily pads);
+  - buckets: the placed fluid source (water, lava) and powder snow; flowing fluid is never recorded;
+  - tool conversions on a cell within 1 of the click: hoe (farmland), shovel (path), axe (stripped log, scraped copper) record
+    the converted cell (a farm's farmland and a path count);
+  - **not recorded:** bone meal growth, fire, spawn eggs, and anything farther than 2 cells from the click.
+- **Survival and creative alike.** Commands (`/setblock`, `/fill`, `/clone`) are not recorded (N-PT-7).
+- **Pistons.** `PistonBaseBlock.moveBlocks` reads each moved cell's record into the `MovingPistonBlockEntity` (an NBT key
+  `architect_mc:placed` with the placer UUID and build id, so a chunk saved mid-move keeps it); when the moving block settles,
+  the destination is recorded with it. A block the piston destroys is cleared. A falling block (sand, gravel, concrete powder)
+  carries its record on the `FallingBlockEntity` the same way.
+- **Ownerless placements are not recorded:** dispensers, endermen, snow golems, other mods' machines. A mod's fake player that
+  goes through `useItemOn` is recorded under its UUID. Claims by the console record the nil UUID ("unknown placer", §8).
+- **Architect's writes never record**, even inside a player scope (an Architect tool used by a player): the writer's scope
+  (UpdateMask's style) turns recording off.
+
+### 3. Events: what clears a block
+
+- **The rule:** a record is cleared when its cell becomes **air or a fluid**, when **another placement replaces** it (then
+  re-recorded for the new placer), or when **Architect writes** the cell. Breaking (any tool, any player), explosions, fire,
+  fluids washing a torch away and pistons all reach the first case through the same `setBlockState` hook.
+- **Kept through in-place changes:** a cell that stays a block keeps its record: copper weathering and waxing, grass spreading
+  onto placed dirt and farmland drying back, concrete powder setting, crops growing, a log stripped, waterlogging. A rule of
+  "the block changed, so clear" would untrack every copper roof and dirt-floored cabin.
+- **Architect's journaled writes.** A write (region tile, stroke, site, road, cells, delta) captures each cell's record into
+  the journal before it writes (§5) and clears the record with the write. Remove and undo restore the record exactly.
+
+### 4. Builds
+
+The raw set is the foundation; **enforcement applies to builds**. A tracked cell that is not in a build is **incidental**.
+
+- **Structural cells.** Voxel class can't decide builds (C32's case is an all-log cabin: natural by class). A tracked cell
+  is **fill** when it is natural-looking and lies at or below the surrounding untracked ground (the median surface of the
+  untracked columns within 3); every other tracked cell is **structural**. Farmland, crops and bucket sources count as
+  structural even when flush (farms). A patched hole or a levelled patch of dirt is fill, so it stays incidental.
+- **Components.** Structural cells joined when within 2 of each other (Chebyshev; a one-block gap, a door, a fence line).
+  The flood is bounded at 65,536 cells and runs over loaded chunks only; a build reaching unloaded chunks keeps its stored ids
+  there and is merged when they load.
+- **Promote** a component to a build when it has at least **40 structural cells** (**24** when at least half of them are
+  non-natural by class) and spans at least 3 in two axes, and one of: an entrance (a door, fence gate or trapdoor at its
+  ground); an enclosure (at least 8 air cells with a structural cell above within 6 and walls on 3 of 4 sides within 8); at least
+  16 farmland or crop cells; or at least 96 structural cells.
+- **Demote** (hysteresis) only when it falls below **20** structural cells, or below 48 with no qualifier left, on two
+  evaluations 60 s apart. A claimed build (§8) never demotes. Classification runs 5 s after the last change in a component
+  (debounce), so a house under construction or a creeper hole doesn't flicker.
+- **Ids.** `build-<n>` from a per-world counter in `<world>/architect/builds.json` (temp file, then rename), never from
+  geometry or an owner string. A component takes the id of the build it shares most cells with. **Merge:** the oldest id
+  survives, the others are kept as aliases (`mergedInto`). **Split:** the largest part keeps the id, the others take new ids.
+- **The index** (`builds.json`, per dimension): id, dimension, bounds, footprint (column runs per z), entrances, kind and
+  confidence, structural count, placers (UUID and cell count), state (`ACTIVE`, `CLAIMED`, `RELEASED`), aliases, first and last
+  change times, and a revision bumped on every change. The per-cell build index (§1 `b`) makes "which build is this cell in" O(1).
+- **Entrances:** each door, fence gate and ground trapdoor in the build, with its position (lower half) and facing; the
+  apron is the 3 cells outside it.
+- **Kind guess** (append-only enum): `HOUSE` (an entrance and an enclosure, or a bed), `BARN` (an enclosure over 200 floor
+  cells), `FARM` (farmland and crops are the majority of the footprint), `WALL` (at most 2 thick, at least 8 long, no roof),
+  `TOWER` (height at least twice the footprint's longer side), `PATH` (path blocks are the majority), `OTHER`; plus a
+  confidence 0-1. The share of non-natural blocks feeds the guess and the lower promote bar, not a hard rule.
+
+### 5. Undo restores tracking exactly
+
+- `JournalNbt` sections gain an optional `pt` member: the indexes (into the section's cell order) of cells that were tracked
+  before the write, with their placer and build index into file-level `ptu` (UUIDs) and `ptb` (build ids) lists.
+- **A file that holds `pt` is written as `JournalNbt.VERSION` 3; every other file stays 2.** An older mod refuses a v3 file
+  (4e's downgrade rule) instead of rewriting it without `pt` and losing the flags silently. Reads of v1 and v2 are unchanged.
+- Undo and remove write `before`, then restore its record (placer, build id; an alias resolves to its survivor; a build gone
+  meanwhile leaves the cell incidental and the component is re-classified). Cells StillOurs keeps (the player changed them
+  since) keep their current record. Exact means: the tracked set, each placer and each build id equal the pre-write state.
+- Cost: only cells tracked before the write carry `pt` (about 2 bytes each), so terrain-only writes add nothing.
+
+### 6. Placers and owners
+
+- Records hold placer UUIDs only. Settlement owners (`<modid>:<thing>`) never enter the set, the index or an id, so a later
+  `transferOwner` (Keep open) moves nothing here.
+- **The caller-supplied rule.** Steward decides which builds belong to which settlement. A request that should touch a build
+  carries `BuildConsent(Set<String> buildIds, @Nullable UUID actor)`: only builds it names explicitly, and for each named build
+  the actor must be one of its placers (at least 10% of its cells) or hold permission level 2. Unnamed builds still refuse.
+- A build's **primary placer** (most cells) is what Steward shows ("Alex's house"); per-placer counts are in the index.
+
+### 7. Enforcement: every write path consults it
+
+| Path | Rule (a build cell = tracked and in a build; incidental cells are natural) |
+|---|---|
+| `TileCheck` stage 0 (regions, strokes) | a build cell is skipped as `build` (beside `owned`), counted `player_build` and `player_build.<id>` |
+| `TileCheck.trees()` (felling) | the flood stops at a build cell: `why = "build"`, counted `tree_kept.build`; an incidental log may be felled |
+| `TileCheck.leaves()` | a leaf in a build is never held or written |
+| `TileCheck.dependents()` and supports | a natural cell that holds up a build cell (a torch, door, ladder, rail, crop, sign, or a gravity block above) is kept as `player_build.support` |
+| Region plan (kit) | builds in the claim are hard keep-outs for lots, forms and connectors, with a 1-cell margin and each door's apron |
+| Brush strokes | `NATURAL_ONLY` skips build cells; `PLAYER_BLOCKS` clears only builds named in its consent, by a placer or an op (N-PT-5) |
+| `Sites` place/check, batch building and move | the snapshot box (approach, foundation) holding build cells refuses `PLAYER_BUILD` for every caller, LAYER or not |
+| `placeRoad` / `checkRoad` | a road cell on a build refuses; with `partial` it is a skipped span naming the build |
+| `placeCells` / `checkCells` (`naturalOnly`, `CellsCheck`, `InfraPlace`) | build cells are skipped (`naturalOnly`) or refuse `PLAYER_BUILD` |
+| `fitToLot`, `minLotSize` | a lot holding build cells is not a fit (`PLAYER_BUILD`, the builds named); the recommended rect avoids them |
+| Approaches | an approach stops before the first row on a build cell, as at a road (4e) |
+| `applyDelta` / `checkDelta` | `KEEP` as today; `OVERWRITE` writes incidental player edits as today, but build cells need consent, else `PLAYER_BUILD` |
+| Remove, undo, `undoStage` | unchanged (StillOurs), plus §5's restore |
+
+- **Incidental cells are natural**, whatever their voxel class (a torch, a cobble block, a filled hole): `IF_NATURAL`, fits
+  and `naturalOnly` may write them without refusal; they are journaled and come back, with their records, on undo. Block
+  entities keep their own rules (BLOCK_ENTITIES, B's journaled NBT); an incidental chest is never cleared silently.
+- **Untracked non-natural blocks** (pre-PT, other mods) keep today's cell-level rules; 1.9.0's `PLAYER_BLOCKS` keeps its meaning.
+- **`force` does not override a build.** Only consent does. A behaviour change, listed (N-PT-6).
+- **One predicate.** `Placed.build(level, chunk, pos)` is the single test every row above calls; a JVM test lists the paths.
+
+### 8. Claim and release
+
+- **Claim:** `/architect build claim <x0 y0 z0 x1 y1 z1>` and `Sites.claimBuild(...)`: marks every non-air, unowned cell in the
+  box that isn't another placer's (journal-owned cells are never marked) as the claimer's, and makes them one build in state
+  `CLAIMED` (no promote bar, no demotion). For builds placed before PT, made of logs, dirt or stone.
+  - Non-op players: a box of at most 32x32x32, within 64 blocks of them, at most 8 claims each; ops: any box up to 4,096x4,096
+    columns (C17's bound), sliced at 2 ms a tick. Console claims record the nil placer.
+- **Release:** `/architect build release <id>` and `Sites.releaseBuild(id, actor)`, by a placer or an op: the build becomes
+  `RELEASED`; its cells stay tracked but incidental, and they are not promoted again unless claimed or grown by 25% since.
+
+### 9. API (next free minor; additive and binary compatible)
+
+```java
+// Sites; each default throws "needs Architect API <PT>"
+Optional<PlacedBy> playerPlaced(ResourceKey<Level> dim, BlockPos pos);           // empty: not tracked (or not loaded)
+PlacedBox playerPlaced(ResourceKey<Level> dim, BoundingBox box);                  // loaded chunks only; counts, builds hit
+List<Build> builds(@Nullable ResourceKey<Level> dim, @Nullable BoundingBox within);
+Optional<Build> build(String id);                                                  // aliases resolve to the survivor
+Build claimBuild(ResourceKey<Level> dim, BoundingBox box, @Nullable ServerPlayer actor);
+Build releaseBuild(String id, @Nullable ServerPlayer actor);
+record PlacedBy(UUID placer, @Nullable String buildId) {}                        // placer nil: unknown (a console claim)
+record PlacedBox(int tracked, int incidental, Map<UUID, Integer> byPlacer, List<BuildHit> builds) {}
+record Build(String id, ResourceKey<Level> dimension, BoundingBox bounds, int[] footprint, List<Entrance> entrances,
+             BuildKind kind, float confidence, int cells, Map<UUID, Integer> placers, BuildState state, long revision) {}
+record Entrance(BlockPos pos, Direction facing, String blockId) {}
+record BuildHit(String buildId, BuildKind kind, int blocking, List<BlockHit> first) {}  // first: at most 8
+record BlockHit(BlockPos pos, String blockId) {}
+record BuildConsent(Set<String> buildIds, @Nullable UUID actor) {}
+enum BuildKind { HOUSE, BARN, FARM, WALL, TOWER, PATH, OTHER }    // append-only
+enum BuildState { ACTIVE, CLAIMED, RELEASED }                     // append-only; PT2 appends ADOPTED
+```
+
+- **Reason** (appended): `PLAYER_BUILD`. Not a widened `PLAYER_BLOCKS` (S-PT-2).
+- **Refusal** gains trailing `List<BuildHit> builds` (old constructor: empty); `ArchitectRefused.builds()` defaults to empty.
+  The message reads "the player's build build-12 (house, 41 blocks in the way: -120 64 33 minecraft:oak_log; ...; and 33 more)".
+- **Consent:** trailing `@Nullable BuildConsent consent` on `PlaceRequest`, `RoadRequest`, `CellsRequest`, `DeltaRequest`,
+  `RealiseRequest`, `BrushRequest` and `FitOptions` (old constructors: null). Batch items carry their request's.
+- **Findings:** `RegionView` gains trailing `List<BuildHit> buildHits` (at most 8 builds); `cellsSkipped` gains `player_build`,
+  `player_build.<id>`, `player_build.support` and `tree_kept.build`.
+- **Events:** `SiteEvents.BUILD_CHANGED` (appended): a build found, changed (revision), merged, split, claimed, released or gone.
+- **Features:** `playerPlaced` (tracking on), `builds` (classification and enforcement), `plan.feature.build` (the kit's).
+  A world rule `architect.playerTracking` (default on); off: nothing is recorded, enforcement off, the data kept.
+
+### 10. Builds in plans (`plan/0`, additive)
+
+- `$defs/feature` gains `{build: {id?, kind?, pick?: largest|nearest, to?: anchor}}` (id or kind; `feature.pick`'s ties).
+  Catalogue entry **`feature.build`** (supported, sinceApi PT). `near {feature: {build}}` works with it.
+- `$defs/target` gains `{build: id}`, so `inside` and `adjacent {to: {build}}` work. R5 has no `target.*` family: a `{build}`
+  target answers under `feature.build` (one idea, one block id, as R4c), so no new family.
+- `$defs/endpoint` gains `{build: id, port?: door | door_<n>}`: a road ends on the door's apron. Catalogue **`endpoint.build`**.
+- **Around a build** uses `locator.around`, reserved until FL: it answers unsupported `{block: locator.around}` until then.
+  A district round a build waits for `program.districts` (D1).
+- **Ids in plans are the persisted build ids.** The plan check reads the index for the claim; the plan artifact records each
+  build it used with its revision. A build that changes after planning is still kept at realise (§7); its cells are skipped
+  and reported, never a DRIFTED refusal.
+
+### 11. Gate (slice tier, $0)
+
+Headless steps place blocks through a **fake ServerPlayer's `useItemOn` / `useItem`** (never `setBlock`, which would skip the
+recording hook). Driver `tools/gate6cpt.mjs`, evidence `artifacts/gate6c-pt/`. Timing and memory bars are recorded, not judged.
 
 | # | Check | Bar |
 |---|---|---|
-| 1 | Marks | a scripted player places 50 and breaks 50 blocks: 100 marks, 0 others; marks survive save and reload |
-| 2 | Respect | a `relief_demo` plan with `respectPlayerChanges` over a player's dirt path: 0 marked cells written |
-| 3 | Off by default | without the flag, tile shas equal the untracked run |
-| 4 | Cost | the mixin adds at most 2 µs per player block change (median over 10k); memory recorded |
-| 5 | API, spend | api-compat clean; jars pass; $0.00 |
+| 1 | Recording | 200 placements (blocks, a door, a bed, buckets, seeds, a hoe, a shovel, an axe): exactly the expected cells; 20 bone meal uses and a region realise of 50k cells record 0 |
+| 2 | Clearing | 50 breaks, 4 TNT at a wall, water over 10 torches: the records equal the remaining blocks; grass spread on placed dirt and copper weathering keep theirs |
+| 3 | Pistons | 12 tracked blocks pushed and pulled: destinations recorded, sources cleared; a save mid-move keeps them |
+| 4 | Save and reload | the set's hash and the index equal after `/save` and a restart, and after chunk unload and reload |
+| 5 | Builds | an all-log 9x7x9 cabin with a door: `HOUSE`; a cobble wall and a dirt wall 16x3x1: `WALL`; a 9x9 farm: `FARM`; 20 torches, a filled 5x5x2 hole and a levelled 7x7 dirt patch: 0 builds |
+| 6 | Hysteresis and ids | a 40-cell build cut to 21 stays; cut to 19, incidental after the debounce; regrown to 30 stays incidental; the id survives +50 blocks, a merge (oldest wins) and a reload |
+| 7 | Village | an S3 copy with the cabin and a cobble wall 2 cells from its lots: plan keeps out, realise loses **0** of their blocks (hash equal), findings recorded |
+| 8 | Brush | raise, lower, smooth and melt strokes at and over the cabin, `NATURAL_ONLY` and `PLAYER_BLOCKS` without consent: **0** lost |
+| 9 | Felling | the cabin's wall touching a tree: the flood stops at its logs (`tree_kept.build` at least 1), the cabin's hash unchanged, the rest felled |
+| 10 | Undo exact | with consent, a stroke clears 40 of a build's cells and 20 incidental ones; one undo: blocks E-flat 0, and the tracked set, placers and build ids 0 mismatches |
+| 11 | Named refusals | a building placed over the cabin: `PLAYER_BUILD` naming build id, kind, count and the first 8 positions with block ids, all equal to the world; a `partial` road names its skipped span's build |
+| 12 | Incidental and removal | a realise over the 20 torches and the dirt patch writes them with no refusal and its undo restores them and their records; the chunk NBT keeps `architect_mc:placed` after a start without the mod |
+| 13 | Claim, release, supports | a pre-PT log cabin claimed: a build, kept by a stroke; released: cleared by the next stroke; a torch on natural ground beside a lowered column stays |
+| 14 | Plan features | `near {build kind house}`, `adjacent {to {build}}`, `endpoint {build, port door}`: supported answers, the road ends on the apron; `around`: unsupported `locator.around` |
+| 15 | Cost (recorded) | bytes per tracked block and per section on disk and in heap; `setBlockState` added ns (median of 1M, tracked and untracked chunks); classification own CPU per tick max (budget 1 ms) |
+| 16 | API, spend | api-compat clean against the archived jars; apitest through the public API; $0.00 |
 
-Evidence `artifacts/gate6c-pt/`, driver `tools/gate6cpt.mjs`. **Tier:** slice: quick, `mod: any server code`, `region/**`,
-apijars. **gate-verifier** re-runs items 1 and 2.
+**Tier:** slice: units, apijars and api-compat, the impact steps (`site/**`, `region/**`, `journal/**`, mixins), PT's own
+items. **gate-verifier** re-runs items 7, 8 and 10 (undo, journal, removal) per the 2026-10-12 policy.
+
+### 12. Performance
+
+- **Hot path:** every block change pays one attachment lookup when the chunk has none, plus a scope check. Recording is O(1)
+  plus a dirty mark; no per-tick work except the classifier.
+- **Classifier:** debounced 5 s, sliced at 1 ms own CPU a tick, 65,536 cells per flood; dirty components queue by age.
+- **Queries:** every enforcement check is O(1) per cell; box queries walk only touched sections.
+
+### 13. Build order
+
+1. Archive the apitest jar. 2. The attachment, recording and clearing hooks, pistons and falling blocks. 3. The journal `pt`
+member and v3. 4. The classifier and the index. 5. Enforcement path by path behind the single predicate. 6. Claim and release,
+commands. 7. plan/0 additions and the kit's keep-outs. 8. Fixtures and gate.
+
+### Slice PT2 outline: adopting a build as a site (later, after PT)
+
+Not small, so a separate slice: it needs a site with no blueprint behind it.
+- `Sites.adopt(buildId, owner, BuildConsent)`: the build stays standing; its cells (and the air inside its outline) are
+  captured as **version 1** of a new site under the settlement's owner, with a blueprint taken from the world (block entities
+  included) and a frame (front, entrance) guessed from its main door. `BuildState` appends `ADOPTED`; the site id is new.
+- **The adoption entry's before equals its after.** Undoing or removing the adoption only un-adopts (the site record goes, the
+  build returns to `ACTIVE` with its records): it never removes the house.
+- Then updates, `versionOf`, change requests, `revert` (to v1 works as on any site) and undo work as on any building; the
+  cells Architect writes in later versions are its own, and the player's later blocks are tracked again (KEEP as today).
+- Open for PT2: a build spanning unloaded chunks; a build with another owner's journal cells in it.
 
 ### Open questions for Steward
 
-- **S-PT-1.** Do you need automatic protection of player changes in 6c, or are C17 areas enough until 6d's replanning?
+- **S-PT-2.** A new `Reason.PLAYER_BUILD` (recommended) or `PLAYER_BLOCKS` widened beyond 1.9.0's LAYER lots?
+- **S-PT-3.** Consent per request by build ids plus an actor who placed it (§6): enough, or do you need a standing rule?
+- **S-PT-4.** Builds as hard keep-outs in every plan, with a 1-cell margin and door aprons: right, or per plan?
+- **S-PT-5.** `BUILD_CHANGED` events and `builds(dim, box)` for the settlement view and survey mode: enough?
+- **S-PT-6.** PT2's adoption shape (v1 captured, undo un-adopts).
+
+### Open questions for Noah
+
+- **N-PT-1.** Incidental blocks count as natural even when non-natural by class (a torch, a lone cobble block): confirm.
+- **N-PT-2.** A house under construction below the bar is incidental. Add a grace: 12+ structural cells a player changed in
+  the last 10 minutes are kept as a pending build?
+- **N-PT-3.** The promote and demote numbers (40/24 and 20/48) and the kind guesses.
+- **N-PT-4.** Pre-PT worlds: an optional one-time inferred scan (non-natural clusters become ownerless builds) besides claim?
+  It would also mark generated villages as builds.
+- **N-PT-5.** May a non-op placer clear their own build with `PLAYER_BLOCKS`? It changes B's op-only rule (N-B-1).
+- **N-PT-6.** `force` no longer overwrites a build; only consent does. A behaviour change.
+- **N-PT-7.** Commands, WorldEdit and other mods' tools are not recorded; claims cover them. Right?
+- **N-PT-8.** Non-op claim limits (32x32x32, 8 claims, within 64 blocks).
+- **N-PT-9.** API version: the next free minor at merge (the house rule).
+
+### Deferred
+
+- PT2 (adoption). Builds across zones and owner transfers (Keep open). A standing settlement-to-placer rule if S-PT-3 asks.
+
+
+### Coordinator decisions on PT's Noah questions (2026-10-13; from Noah's stated intent, he may override)
+
+- **N-PT-1:** yes, incidental non-natural blocks (a torch, a few scattered blocks) count as natural.
+- **N-PT-2:** yes, a grace period: a component of 24+ structural cells changed by a player within the last 10 minutes is a
+  **provisional build** (kept like a build, shown as provisional) so a half-built house isn't cleared mid-build.
+- **N-PT-3:** the drafted promote/demote numbers are accepted as defaults (world-rule tunable); revisit with play data.
+- **N-PT-4:** no inferred scan by default (it would mark generated villages as builds). "Claim my build" is the tool; an
+  op-only scan command may come later.
+- **N-PT-5:** yes: a build's own placer (or an op) may consent to `PLAYER_BLOCKS` on that build. Noah's rule is "unless its
+  owner asks", so B's op-only rule (N-B-1) stays for everyone else's blocks.
+- **N-PT-6:** yes, `force` never overrides a build.
+- **N-PT-7:** accepted: commands, WorldEdit and other mods' tools are not recorded; claim covers them.
+- **N-PT-8:** the drafted non-op claim limits are accepted.
+- **N-PT-9:** next free minor at merge.
 
 ## 6c close-out (release tier, at the last 6c slice's merge)
 
