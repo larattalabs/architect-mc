@@ -63,6 +63,7 @@ public final class ApiRules {
 					case "region.brush" -> "brushes"; // 6c B: the helper's kit has the bundled brush program
 					case "region.route" -> "routePass"; // 6c T2
 					case "region.planCheck" -> "planCheck"; // 6c P0 (with planCatalogue, below)
+					case "region.outpost" -> "scenarioS2"; // 6c S2: the helper's kit bundles the ice_outpost program
 					default -> Wire4b.FEATURE_NAMES.getOrDefault(f, Wire5a.FEATURE_NAMES.getOrDefault(f, f));
 				});
 			}

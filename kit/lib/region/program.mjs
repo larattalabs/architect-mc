@@ -217,7 +217,7 @@ export class Region {
     const t0 = performance.now();
     // (never below the claim's bottom 2 rows, as terraces: bedrock on a flat world)
     // (6c S2) the plan's kept natural cells (r.keepNatural): the relief never writes their columns
-    const kept = this._keptColumns();
+    const kept = it._unsafe?.ignoreKeep ? [] : this._keptColumns(); // (`_unsafe.ignoreKeep`: the broken variant)
     const out = PASSES[name](this.survey.columns, this.ctx.volumes ?? [], { ...it, name: fname, minY: Math.max(it.minY ?? -32768, this.claim.minY + 2), ...(kept.length ? { keep: kept } : {}) });
     const ms = Math.round(performance.now() - t0);
     const heapMb = Math.round(process.resourceUsage().maxRSS / 1024);
@@ -285,7 +285,9 @@ export class Region {
     for (const f of this.forms) if (f.bounds) hard.push([f.bounds.minX, f.bounds.minZ, f.bounds.maxX, f.bounds.maxZ]);
     // (6c S2) a keep set is an obstacle where it keeps a cell: its kept columns, not its whole box (F1's keepNatural over a claim's
     // volume would otherwise block every column of the claim)
-    for (const [x, z] of this._keptColumns()) hard.push([x, z, x, z]);
+    // (`_unsafe.keepBoxes`: the broken variant, T2's whole-box rule)
+    if (it._unsafe?.keepBoxes) for (const q of this.parts) for (const k of q.keep ?? []) hard.push([k.box.minX, k.box.minZ, k.box.maxX, k.box.maxZ]);
+    else for (const [x, z] of this._keptColumns()) hard.push([x, z, x, z]);
     const keepOut = [...(this.ctx.keepOut ?? []), ...(it.keepOut ?? [])].map((k) => [...k]);
     // hysteresis: the caller's cells, 4e roads and graded paths already in the plan
     // (ctx.routePrefer: an earlier plan's routes, [[x, z]] for every edge or {edgeId: [[x, z]]} each edge its own)
@@ -329,7 +331,7 @@ export class Region {
     }
     const nearLot = (x, z) => this.lots.some((l) => { const m = 1 + Math.max(l.pad?.maxCut ?? 0, l.pad?.maxFill ?? 0); return x >= l.box.minX - m && x <= l.box.maxX + m && z >= l.box.minZ - m && z <= l.box.maxZ + m; });
     // (6c S2) nor on a kept natural cell's column (r.keepNatural: a natural ice spike beside the walk stands over it as land)
-    const keptCols = new Set(this._keptColumns().map(([x, z]) => `${x},${z}`));
+    const keptCols = new Set(it._unsafe?.retainOnKept ? [] : this._keptColumns().map(([x, z]) => `${x},${z}`)); // (`_unsafe.retainOnKept`: the broken variant)
     const noRetain = (x, z) => routeCols.has(`${x},${z}`) || nearLot(x, z) || keptCols.has(`${x},${z}`);
     // a slope pad's batter fill (stage before the routes): ring k (1..maxFill) out from the apron is filled to the pad's top - 1 - k
     const fillTop = (x, z) => {

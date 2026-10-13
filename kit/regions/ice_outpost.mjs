@@ -35,12 +35,13 @@ export const roles = { surface: 'minecraft:snow_block', path: 'minecraft:spruce_
 export const params = {
   huts: { type: 'int', min: 0, max: 4, default: 3, label: 'Huts' },
   farm: { type: 'bool', default: true, label: 'A farm lot' },
+  routeWidth: { type: 'int', min: 1, max: 3, default: 1, label: 'Route width' },
   gradePct: { type: 'int', min: 5, max: 50, default: 20, label: 'Route grade limit (%)' },
   spikes: { type: 'int', min: 0, max: 12, default: 6, label: 'Generated ice-spike clusters' },
   scatter: { type: 'bool', default: true, label: 'Ground scatter' },
   scatterPct: { type: 'int', min: 5, max: 90, default: 35, label: 'Scatter density (%)' },
   stairs: { type: 'bool', default: true, label: 'Stair flights on the routes' },
-  minLots: { type: 'int', min: 1, max: 12, default: 6, label: 'Fail the plan below this many lots' },
+  minLots: { type: 'int', min: 1, max: 12, default: 6, label: 'Least lots (else the plan fails)' },
 };
 
 /** The lots, largest first (the order they are placed in): [id, type, villager kind, along the front, deep, landmark]. */
@@ -60,6 +61,8 @@ export function lotList(P) {
  *  PAD_MAX: a pad's cut and fill; GAP: cells between two lots' aprons; FRONT: the entrance and that many cells out (5 wide) on the
  *  land band; CLEAR: the approach room (5 wide) no other lot may take (a route leaves straight out of a front, then turns). */
 const PAD_MAX = 4, GAP = 2, FRONT = 4, CLEAR = 6;
+/** Candidate sites kept per lot (S2's land band gives a few hundred; open land many thousands). */
+const MAX_CANDS = 2400;
 const LAND_TOP = new Set([VC.ROCK, VC.SOIL, VC.LOOSE, VC.SNOW]);
 const FRONTS = ['north', 'east', 'south', 'west'];
 
@@ -154,12 +157,12 @@ export function build(ctx, hooks = {}) {
         const [fx, fz] = CARD[front];
         const ex = front === 'east' ? x1 + 1 : front === 'west' ? x0 - 1 : x0 + Math.floor((w - 1) / 2);
         const ez = front === 'south' ? z1 + 1 : front === 'north' ? z0 - 1 : z0 + Math.floor((d - 1) / 2);
-        const frontCells = [];
-        for (let t = 0; t <= FRONT; t++) for (let v = -2; v <= 2; v++) frontCells.push([ex + fx * t + fz * v, ez + fz * t + fx * v]);
-        if (!frontCells.every(([x, z]) => onBand(x, z) && x - claim.minX >= 4 && claim.maxX - x >= 4 && z - claim.minZ >= 4 && claim.maxZ - z >= 4)) continue;
-        // the approach room no other lot may take (a route leaves straight out of the front, then turns: 3 straight cells a turn)
-        const clearCells = [];
-        for (let t = 0; t <= CLEAR; t++) for (let v = -2; v <= 2; v++) clearCells.push([ex + fx * t + fz * v, ez + fz * t + fx * v]);
+        let open = true;
+        for (let t = 0; t <= FRONT && open; t++) for (let v = -2; v <= 2; v++) {
+          const x = ex + fx * t + fz * v, z = ez + fz * t + fx * v;
+          if (!(onBand(x, z) && x - claim.minX >= 4 && claim.maxX - x >= 4 && z - claim.minZ >= 4 && claim.maxZ - z >= 4)) { open = false; break; }
+        }
+        if (!open) continue;
         const ps = S.padStats(x0, z0, w, d);
         if (ps.cut > PAD_MAX || ps.fill > PAD_MAX || ps.water) continue;
         // M8: the relief can't raise a column it keeps (kept ice, water and the 2 beside water), so no such column within 2 of the
@@ -173,16 +176,30 @@ export function build(ctx, hooks = {}) {
         }
         if (drop) continue;
         const mx = (x0 + x1) / 2, mz = (z0 + z1) / 2;
-        out.push({ x0, z0, x1, z1, w, d, front, floorY: ps.floorY, cut: ps.cut, fill: ps.fill, mid: [mx, mz], frontCells, clearCells,
+        out.push({ x0, z0, x1, z1, w, d, front, floorY: ps.floorY, cut: ps.cut, fill: ps.fill, mid: [mx, mz], ex, ez, fx, fz,
           dist: Math.abs(mx - centre[0]) + Math.abs(mz - centre[1]), away: fx * (centre[0] - mx) + fz * (centre[1] - mz) < 0 ? 1 : 0 });
       }
+    }
+    // at most about MAX_CANDS a lot (open land, such as the flat variant, has tens of thousands): a coarser lattice of corners
+    if (out.length > MAX_CANDS) {
+      const k = Math.ceil(Math.sqrt(out.length / MAX_CANDS));
+      return out.filter((o) => (o.x0 - claim.minX) % k === 0 && (o.z0 - claim.minZ) % k === 0);
     }
     return out;
   });
   // two sites clash when their aprons come within `gap`, or one's front cells fall in the other's footprint or apron
   const inRect = (x, z, a) => x >= a.x0 - 2 && x <= a.x1 + 2 && z >= a.z0 - 2 && z <= a.z1 + 2;
-  const clash = (a, b) => !(a.x1 + 1 + GAP < b.x0 - 1 || b.x1 + 1 + GAP < a.x0 - 1 || a.z1 + 1 + GAP < b.z0 - 1 || b.z1 + 1 + GAP < a.z0 - 1)
-    || a.clearCells.some(([x, z]) => inRect(x, z, b)) || b.clearCells.some(([x, z]) => inRect(x, z, a));
+  // a's approach room (the entrance and CLEAR cells out, 5 wide) meets b's footprint or apron (with a ring)
+  const clearIn = (a, b) => {
+    for (let t = 0; t <= CLEAR; t++) for (let v = -2; v <= 2; v++) if (inRect(a.ex + a.fx * t + a.fz * v, a.ez + a.fz * t + a.fx * v, b)) return true;
+    return false;
+  };
+  const R = CLEAR + 4; // (a quick reject: two sites farther apart than their approach room never clash)
+  const clash = (a, b) => {
+    if (a.x1 + R < b.x0 || b.x1 + R < a.x0 || a.z1 + R < b.z0 || b.z1 + R < a.z0) return false;
+    return !(a.x1 + 1 + GAP < b.x0 - 1 || b.x1 + 1 + GAP < a.x0 - 1 || a.z1 + 1 + GAP < b.z0 - 1 || b.z1 + 1 + GAP < a.z0 - 1)
+      || clearIn(a, b) || clearIn(b, a);
+  };
   // place every lot in the list's order on the candidates not banned (`banned`: per lot index, the "x0,z0,front" keys)
   const place = (banned) => {
     const lots = [], unplaced = [];
@@ -221,50 +238,22 @@ export function build(ctx, hooks = {}) {
     }
     return gate;
   };
-  // each edge's width: 3 where the gate reaches the lot's approach through the land 3 wide (the route pass's own obstacles: kept
-  // columns dilated by 1, water by 2, the claim's margin, the lots' aprons), else a 1-wide path between the spikes
-  const reachOf = (lots, gate) => {
-    const half = 1, blocked = new Uint8Array(W * D);
-    for (let z = claim.minZ; z <= claim.maxZ; z++) for (let x = claim.minX; x <= claim.maxX; x++) {
-      const i = idx(x, z);
-      const edge = x - claim.minX < 2 || z - claim.minZ < 2 || claim.maxX - x < 2 || claim.maxZ - z < 2;
-      if (!(iceCol[i] || edge || S.waterAt(x, z))) continue;
-      const R = S.waterAt(x, z) && !iceCol[i] && !edge ? half + 1 : half;
-      for (let dz = -R; dz <= R; dz++) for (let dx = -R; dx <= R; dx++) { const X = x + dx, Z = z + dz; if (X >= claim.minX && X <= claim.maxX && Z >= claim.minZ && Z <= claim.maxZ) blocked[idx(X, Z)] = 1; }
-    }
-    for (const l of lots) for (let z = l.z0 - 1 - half; z <= l.z1 + 1 + half; z++) for (let x = l.x0 - 1 - half; x <= l.x1 + 1 + half; x++) if (x >= claim.minX && x <= claim.maxX && z >= claim.minZ && z <= claim.maxZ) blocked[idx(x, z)] = 1;
-    const seen = new Uint8Array(W * D), q = [idx(gate[0], gate[2])];
-    seen[q[0]] = 1;
-    for (let t = 0; t < q.length; t++) {
-      const i = q[t], x = i % W, z = (i - x) / W;
-      for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-        const X = x + dx, Z = z + dz;
-        if (X < 0 || Z < 0 || X >= W || Z >= D) continue;
-        const j = X + Z * W;
-        if (seen[j] || blocked[j]) continue;
-        seen[j] = 1; q.push(j);
-      }
-    }
-    return seen;
-  };
   const lotSpec = (l) => ({
     at: [l.x0, l.z0], size: [l.w, l.d], floor: l.floorY, front: l.front, stage: 'lots-1', max: [l.w, l.spec.height ?? 24, l.d],
     pad: { edge: 'blend', maxCut: PAD_MAX, maxFill: PAD_MAX },
     ext: { 'architect_mc:village': { role: l.spec.role, type: l.spec.type, villager: l.spec.villager, ...(l.spec.landmark ? { landmark: true } : {}) } },
   });
   const routeIntent = (lots, gate) => {
-    const wide = reachOf(lots, gate);
     const order = lots.map((l) => ({ l, d: Math.abs(l.entrance[0] - gate[0]) + Math.abs(l.entrance[1] - gate[2]) })).sort((a, b) => a.d - b.d || a.l.k - b.l.k);
     const nodes = { gate: { at: gate, kind: 'gate' } };
     for (const { l } of order) nodes[l.spec.id] = { lot: l.spec.id };
-    const widthOf = (l) => { const [x, z] = l.approach; return wide[idx(x, z)] ? 3 : 1; };
-    const edges = order.map(({ l }) => ({ id: `gate_${l.spec.id}`, from: 'gate', to: l.spec.id, width: widthOf(l) }));
+    const edges = order.map(({ l }) => ({ id: `gate_${l.spec.id}`, from: 'gate', to: l.spec.id, width: P.routeWidth }));
     return { nodes, edges, maxGrade: P.gradePct / 100, stairs: P.stairs, ladders: true, stage: 'routes', lanterns: false };
   };
   // the layout: place, route on a scratch region, and ban the site of every lot whose route fails; again until every placed lot
   // is routed (at most 8 rounds). A lot that runs out of sites is unplaced: every placed lot is reachable from the gate.
   const banned = specs.map(() => new Set());
-  let lay = null, gate = null, rounds = 0;
+  let lay = null, gate = null, rounds = 0, failedLast = [];
   for (; rounds < 8; rounds++) {
     lay = place(banned);
     if (lay.lots.length < P.minLots) break;
@@ -274,25 +263,36 @@ export function build(ctx, hooks = {}) {
     r2.stages(['ground', 'routes', 'forms', 'decor', 'lots-1']);
     r2.keepNatural('ICE', box, { stage: 'ground' });
     const p2 = r2.part('pads', { stage: 'ground' });
-    for (const l of lay.lots) { const res = p2.lot(l.spec.id, lotSpec(l)); l.entrance = [res.entrance[0], res.entrance[2]]; const [fx, fz] = CARD[l.front]; l.approach = [res.entrance[0] + fx * (FRONT + 1), res.entrance[2] + fz * (FRONT + 1)]; }
+    for (const l of lay.lots) { const res = p2.lot(l.spec.id, lotSpec(l)); l.entrance = [res.entrance[0], res.entrance[2]]; }
     const net2 = r2.pass('route', routeIntent(lay.lots, gate));
     const failed = net2.edges.filter((e) => !e.ok).map((e) => e.id.slice(5));
+    failedLast = failed;
     if (!failed.length) break;
     // ban the failed site and its neighbours (the same front, within 2): a site 1 over meets the same obstacle
     for (const l of lay.lots) if (failed.includes(l.spec.id)) for (let dz = -2; dz <= 2; dz++) for (let dx = -2; dx <= 2; dx++) banned[l.k].add(`${l.x0 + dx},${l.z0 + dz},${l.front}`);
   }
-  const lots = lay.lots;
-  info.unplaced = lay.unplaced;
+  // a lot still unrouted after the last round is left out (every placed lot is reachable from the gate)
+  const lots = lay.lots.filter((l) => !failedLast.includes(l.spec.id));
+  info.unplaced = [...lay.unplaced, ...lay.lots.filter((l) => failedLast.includes(l.spec.id)).map((l) => ({ id: l.spec.id, reason: 'no route from the gate within the grade and the obstacles' }))];
   info.layoutRounds = rounds + 1;
   r.note(`ice_outpost: ${lots.length} lots on the land band (${bestN} columns of ${W * D}; ${keep.columns.size} kept ice columns; ${rounds + 1} layout round(s))${info.unplaced.length ? `; unplaced: ${info.unplaced.map((u) => u.id).join(', ')}` : ''}`);
   if (lots.length < P.minLots) throw new Error(`ice_outpost: only ${lots.length} lots fit on the land band (at least ${P.minLots}); unplaced ${info.unplaced.map((u) => u.id).join(', ')}`);
   if (!gate) throw new Error('ice_outpost: no gate site on the land band');
   const pads = r.part('pads', { stage: 'ground' });
   const placed = lots.map((l) => pads.lot(l.spec.id, lotSpec(l)));
-  r.pass('relief', { around: placed, radius: 6, maxCut: PAD_MAX, maxFill: PAD_MAX });
+  const rel = r.pass('relief', { around: placed, radius: 6, maxCut: PAD_MAX, maxFill: PAD_MAX });
+  // the blend as the routes' base: they meet the land the relief leaves (its retaining columns and grades against that land, not the
+  // frozen survey's), and graded columns throughout (a 4e ground road would refit to the survey's ground at realise)
+  const relBase = (() => {
+    const f = r.fields[rel.fields.relief];
+    if (!f) return null;
+    const b = r.sideBlobs[f.blob].bytes, n = f.width * f.depth, values = new Int16Array(n);
+    for (let i = 0; i < n; i++) { const v = (b[2 * i] | (b[2 * i + 1] << 8)) << 16 >> 16; values[i] = v === -32768 ? 0 : v; }
+    return { minX: f.minX, minZ: f.minZ, width: f.width, depth: f.depth, values };
+  })();
   info.lots = lots.map((l) => ({ id: l.spec.id, at: [l.x0, l.z0], size: [l.w, l.d], front: l.front, floorY: l.floorY, cut: l.cut, fill: l.fill }));
   info.gate = gate;
-  const net = r.pass('route', routeIntent(lots, gate));
+  const net = r.pass('route', { ...routeIntent(lots, gate), ...(relBase ? { base: relBase } : {}) });
   info.routes = net.edges.map((e) => ({ id: e.id, ok: e.ok, length: e.length ?? null, movers: e.movers ?? null, why: e.ok ? null : (e.reason ?? e.note ?? null) }));
 
   // ---- the walk: the routes' cells (with their width) and the lots' boxes and aprons, for the forms' 6-cell clearance
@@ -312,7 +312,7 @@ export function build(ctx, hooks = {}) {
     for (const [k, st2] of cells) {
       if (st2 === AIR) continue;
       const [x, y, z] = k.split(',').map(Number);
-      if (x < claim.minX || x > claim.maxX || z < claim.minZ || z > claim.maxZ) return null;
+      if (x < claim.minX || x > claim.maxX || z < claim.minZ || z > claim.maxZ || y < claim.minY + 2 || y > claim.maxY) return null; // (the skirt reaches 6 under the ground: not into a superflat world's bedrock)
       if (keep.has(x, y, z)) return null;
       if (near6[idx(x, z)]) return null;
       cols.add(`${x},${z}`);
@@ -328,9 +328,10 @@ export function build(ctx, hooks = {}) {
     if (!ok || hi - lo > 2) continue;
     // the distance to the nearest natural ice column (Chebyshev, up to 16): a gap among the natural spikes, the widest first (a
     // cluster spreads up to about 8 from its centre)
+    // (land with no natural ice, the flat variant: anywhere on the band, so E-flat exercises the forms too)
     let dIce = 17;
     for (let rr = 2; rr <= 16 && dIce > 16; rr++) if (keep.near(x, z, rr)) dIce = rr;
-    if (dIce > 16) continue;
+    if (dIce > 16 && keep.columns.size) continue;
     spikeSites.push({ x, z, y: S.groundAt(x, z), dIce });
   }
   spikeSites.sort((a, b) => b.dIce - a.dIce || a.z - b.z || a.x - b.x);
@@ -365,8 +366,22 @@ export function build(ctx, hooks = {}) {
   // ---- ground scatter (F2): boulders, spruce stumps and snow layers on the band, never on walk cells (the op's own avoid), never
   // on a kept cell; before the lamps, so the light cover sees the boulders' tops (a soul lantern's 10 melts no snow layer)
   if (P.scatter) {
+    // the scatter's own ground: band land at least 3 from water and 2 from kept ice (a boulder's top is a walk cell: never beside the
+    // sea's drop or in the ice's lee), a u8 field the op masks by
+    const dry = new Uint8Array(W * D);
+    for (let z = claim.minZ; z <= claim.maxZ; z++) for (let x = claim.minX; x <= claim.maxX; x++) {
+      if (!onBand(x, z)) continue;
+      let ok = true;
+      for (let dz = -3; dz <= 3 && ok; dz++) for (let dx = -3; dx <= 3; dx++) {
+        const X = x + dx, Z = z + dz;
+        if (X < claim.minX || X > claim.maxX || Z < claim.minZ || Z > claim.maxZ) continue;
+        if (S.waterAt(X, Z) || (Math.max(Math.abs(dx), Math.abs(dz)) <= 2 && iceCol[idx(X, Z)])) { ok = false; break; }
+      }
+      dry[idx(x, z)] = ok ? 1 : 0;
+    }
+    r.field('outpost_dry', { type: 'u8', minX: claim.minX, minZ: claim.minZ, width: W, depth: D, res: 1, values: dry });
     const res = scatter(r, 'outpost_scatter', {
-      grid: 7, jitter: 2, density: { path: [2, 9], p: P.scatterPct / 100 },
+      grid: 7, jitter: 2, density: { path: [2, 9], p: P.scatterPct / 100 }, mask: { field: 'outpost_dry', gte: 1 },
       items: [{ w: 3, item: 'boulder', maxRadius: 2, mix: [[6, 'rock'], [3, 'rubble']] }, { w: 2, item: 'stump', log: 'frame' }, { w: 6, item: 'snow_layer' }],
     }, { stage: 'decor' });
     info.scatter = { placements: res?.placements ?? null };
@@ -382,7 +397,13 @@ export function build(ctx, hooks = {}) {
   const extra = [], extraCap = {};
   // (light 10 reaches about half as far as a lantern's 15: twice W's caps, a lamp every 3 route cells as a candidate)
   for (const e of r.meta.route.edges) { const l = lampSpots(e, { every: 2 }); extra.push(...l.spots); if (l.spots.length) extraCap[`route:${e.id}`] = 4 * l.cap; }
-  // and the relief's blend around each pad (written floors out to its radius): spots on the rings 5 and 7 out, every 3 cells
+  // and around each pad: every cell of the rings 2 to 4 out (W's corners and batter feet may all stand on the natural ice), then the
+  // relief's blend (written floors out to its radius) on the rings 5 and 7, every 3 cells
+  for (const l of lots) {
+    const key = `ring:${l.spec.id}`;
+    for (let x = l.x0 - 4; x <= l.x1 + 4; x++) for (let z = l.z0 - 4; z <= l.z1 + 4; z++) if (Math.max(l.x0 - x, x - l.x1, l.z0 - z, z - l.z1) >= 2) extra.push({ lot: key, x, z });
+    extraCap[key] = 4;
+  }
   for (const l of lots) {
     const key = `band:${l.spec.id}`;
     for (const k of [5, 7]) for (let x = l.x0 - k; x <= l.x1 + k; x += 3) for (let z = l.z0 - k; z <= l.z1 + k; z += 3) {
@@ -397,10 +418,11 @@ export function build(ctx, hooks = {}) {
     for (let x = b.minX - 4; x <= b.maxX + 4; x++) for (let z = b.minZ - 4; z <= b.maxZ + 4; z++) if (Math.max(b.minX - x, x - b.maxX, b.minZ - z, z - b.maxZ) >= 1) extra.push({ lot: key, x, z });
     extraCap[key] = 3;
   }
-  // and the open land (the boulders' tops are written floors a mob spawns on): band cells on a 5-cell grid, last
-  for (let z = claim.minZ + 4; z <= claim.maxZ - 4; z += 5) for (let x = claim.minX + 4; x <= claim.maxX - 4; x += 5) if (onBand(x, z)) extra.push({ lot: 'field', x, z });
+  // and the open land near the walk (the boulders' tops are written floors a mob spawns on): band cells within 6 of a route or a
+  // lot on a 5-cell grid, last
+  for (let z = claim.minZ + 4; z <= claim.maxZ - 4; z += 5) for (let x = claim.minX + 4; x <= claim.maxX - 4; x += 5) if (onBand(x, z) && near6[idx(x, z)]) extra.push({ lot: 'field', x, z });
   extraCap.field = 48;
-  const cover = lightCover(r, { fixture, stage: 'decor', reserved, extra, extraCap, maxPerLot: 8, share: 0.001, part: 'outpost_lamps' });
+  const cover = lightCover(r, { fixture, stage: 'decor', reserved, extra, extraCap, maxPerLot: 12, share: 0.001, part: 'outpost_lamps' });
   info.lamps = { fixture: cover.fixture, count: cover.lamps.length, perKey: cover.perLot, before: cover.before, after: cover.after, capped: cover.capped };
 
   // ---- the gallery's cameras: the hub between the gate and the lots' centroid
