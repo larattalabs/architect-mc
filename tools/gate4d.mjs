@@ -910,7 +910,9 @@ async function c30() {
   const names = ['street', 'landmarks', 'district_1', 'district_2'];
   const plan = [['street', L[0]], ['landmarks', L[2]], ['district_1', L[5]], ['district_1', L[7]], ['district_2', L[9]], ['district_2', L[11]]];
   const all = plan.map(([, l]) => l);
-  const pre = await hashLots(all);
+  const preCells = await hashLotsCells(all);
+  const pre = Object.fromEntries(Object.entries(preCells).map(([k, v]) => [k, v.sha256]));
+  let firstDrift = null;
   // 1. the stage machine, n times
   const runs = [];
   let bad = 0;
@@ -938,12 +940,20 @@ async function c30() {
       bad++;
       runs.at(-1).removal = rm;
     }
+    if (!firstDrift) {
+      const now = await hashLots(all);
+      const off = all.filter((l) => now[l.key] !== pre[l.key]).map((l) => l.key);
+      if (off.length) {
+        const cells = await hashLotsCells(all.filter((l) => off.includes(l.key)));
+        firstDrift = { run: k, budget, lots: off, diff: cellDiff(Object.fromEntries(off.map((x) => [x, preCells[x]])), cells) };
+      }
+    }
   }
   await cmd('/architect budget 4');
   check(bad === 0, `C30 1: ${n} staged batches (4 stages, 6 sites over ticks, budgets ${budgets.join('/')} ms, autoApprove and approved stage by stage): `
     + `every stage reached placed in order and every batch finished (${runs.filter((r) => r.ok).length}/${n})`, runs);
-  const back = await hashLots(all);
-  check(all.every((l) => back[l.key] === pre[l.key]), 'C30 1: after each run\'s group removal the lots are exactly as before (box + 7)', { pre, back });
+  check(!firstDrift, `C30 1: after each run's group removal the lots are exactly as before (box + 7)${firstDrift ? `: run ${firstDrift.run} left ${firstDrift.lots.join(',')} changed` : ''}`,
+    { firstDrift });
 
   // 2. a chicken in a lot of the last stage (set_193's cabin_2): the stage stays PLACING, the log says why once, then it places
   const [a, b, c] = [L[0], L[2], L[5]];
@@ -969,6 +979,7 @@ async function c30() {
   const haveLog = logSize() > 0;
   check(haveLog && lines.length === 1 && waits.length === 1, `C30 2: the wait is in the game log once over 6 s of re-checks (${lines.length} line(s), ${waits.length} ITEM_WAITING): `
     + (lines[0] ?? '').replace(/^.*\(architect\) /, '').slice(0, 220), { lines, log: path.join(GAME_DIR, 'logs', 'latest.log') });
+  await cmd('/tp @e[type=minecraft:chicken] ~ -100 ~'); // gone without loot (a killed chicken drops items into the lot: OCCUPIED again)
   await cmd('/kill @e[type=minecraft:chicken]');
   const d2 = await waitBatch(id2, 60_000);
   const seq2 = stageEvents(await since(), g2);
@@ -984,6 +995,7 @@ async function c30() {
   const it3 = d3.items.find((i) => i.key === c.key);
   check(it3?.status === 'FAILED' && it3.reason === 'TIMED_OUT' && seq3.includes('district_2:PARTIAL'),
     `C30 3: a wait limit of 3 s runs out: ${c.key} ${it3?.status} ${it3?.reason}, the stage ends partial and the batch finishes (${seq3.join(' ')})`, { d3, seq3 });
+  await cmd('/tp @e[type=minecraft:chicken] ~ -100 ~');
   await cmd('/kill @e[type=minecraft:chicken]');
   const rm3 = await result(await api(`sgremove ${g3}`), 180_000);
   check(rm2.removed && rm3.removed, 'C30 2-3: their groups removed', { rm2, rm3 });
