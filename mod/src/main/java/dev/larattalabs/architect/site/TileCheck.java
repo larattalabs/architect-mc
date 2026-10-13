@@ -39,6 +39,13 @@ import org.jspecify.annotations.Nullable;
  * writes CELL over BOX; its own earlier tile entries are layered over), no-op cells (the world already holds the state) and
  * the claim; worldgen trees an op cuts are removed whole (within the window) and the leaves that hung on them are held. The
  * PLACING entry then holds only the cells that passed, so its planned {@code after} is exact.
+ *
+ * <p>(C31, v0.24.1) Felling never writes a cell the region may not: outside the window or the claim, owned by anything else
+ * (another owner's region, site, road or cell site), inside a C17 protected area of the region's owner, or a log the voxel
+ * table does not class LOG (a block it does not list is a player's block). It stops at that cell and the part of the tree
+ * past it stays, possibly floating: counted as {@code M3:tree_kept} (and per reason, {@code tree_kept.<reason>}). A leaf held
+ * persistent is a write too: never inside a protected area or on another owner's cell. Every cell felling does change is a
+ * cell of the tile entry, so its undo restores it.
  */
 final class TileCheck {
 	/** At most this many logs flood-filled per tile (a giant tree is still removed whole within the window). */
@@ -53,6 +60,11 @@ final class TileCheck {
 	}
 
 	private final String regionGroup;
+	/** (C31) The region owner's protected areas in this dimension at the check (felling and held leaves never enter them). */
+	private final List<dev.larattalabs.architect.api.ProtectedArea> areas;
+	/** (C31) Logs the flood reached but kept (past the window or the claim), and the count per reason. */
+	private final LongOpenHashSet keptSeen = new LongOpenHashSet();
+	private final Map<String, Long> keptBy = new LinkedHashMap<>();
 	/** (6c B) A brush stroke's PLAYER_BLOCKS: unowned non-natural cells (block entities included) pass too (never unbreakable ones). */
 	private final boolean playerBlocks;
 	/** (6c B) A brush stroke's tile. */
@@ -92,16 +104,28 @@ final class TileCheck {
 	private @Nullable CompletableFuture<Result> assembled;
 
 	TileCheck(Packed.Tile tile, String regionGroup, String dim, int[] claim, Anchors.Bounds window) {
-		this(tile, regionGroup, dim, claim, window, false, java.util.Set.of(), false);
+		this(tile, regionGroup, null, dim, claim, window);
+	}
+
+	/** (C31) With the region's owner: felling and held leaves stop at its protected areas. */
+	TileCheck(Packed.Tile tile, String regionGroup, @Nullable String owner, String dim, int[] claim, Anchors.Bounds window) {
+		this(tile, regionGroup, owner, dim, claim, window, false, java.util.Set.of(), false);
 	}
 
 	/** (6c B) A brush stroke's tile ({@code RegionRec.brush}): its destruction rule and the owner's other strokes. */
 	TileCheck(Packed.Tile tile, String regionGroup, String dim, int[] claim, Anchors.Bounds window, boolean playerBlocks, java.util.Set<String> layerGroups) {
-		this(tile, regionGroup, dim, claim, window, playerBlocks, layerGroups, true);
+		this(tile, regionGroup, null, dim, claim, window, playerBlocks, layerGroups, true);
 	}
 
-	private TileCheck(Packed.Tile tile, String regionGroup, String dim, int[] claim, Anchors.Bounds window, boolean playerBlocks,
+	/** (C31) A brush stroke's tile with its owner (the stroke owner's protected areas bound felling and held leaves). */
+	TileCheck(Packed.Tile tile, String regionGroup, @Nullable String owner, String dim, int[] claim, Anchors.Bounds window, boolean playerBlocks,
+		java.util.Set<String> layerGroups) {
+		this(tile, regionGroup, owner, dim, claim, window, playerBlocks, layerGroups, true);
+	}
+
+	private TileCheck(Packed.Tile tile, String regionGroup, @Nullable String owner, String dim, int[] claim, Anchors.Bounds window, boolean playerBlocks,
 		java.util.Set<String> layerGroups, boolean stroke) {
+		this.areas = List.copyOf(Protected.of(dim, owner));
 		this.stroke = stroke;
 		this.playerBlocks = playerBlocks;
 		this.layerGroups = java.util.Set.copyOf(layerGroups);
@@ -274,7 +298,7 @@ final class TileCheck {
 					skipped.merge("same", 1L, Long::sum);
 				} else {
 					ok = true;
-					if (s.is(BlockTags.LOGS)) {
+					if (treeLog(s)) {
 						logs.add(q);
 					}
 					target.put(q, p.states()[cursor]);
@@ -383,16 +407,26 @@ final class TileCheck {
 						int nx = x + dx;
 						int ny = y + dy;
 						int nz = z + dz;
+						long np = BlockPos.asLong(nx, ny, nz);
 						if (nx < window.minX() || nx > window.maxX() || nz < window.minZ() || nz > window.maxZ() || nx < claim[0] || nx > claim[3]
 							|| nz < claim[2] || nz > claim[5] || ny < claim[1] || ny > claim[4]) {
+							// (C31) the tree goes on past the window or the claim: that part stays
+							if (keptSeen.add(np) && level.hasChunk(nx >> 4, nz >> 4) && level.getBlockState(m.set(nx, ny, nz)).is(BlockTags.LOGS)) {
+								kept("claim");
+							}
 							continue;
 						}
-						long np = BlockPos.asLong(nx, ny, nz);
 						if (!floodSeen.add(np) || !level.hasChunk(nx >> 4, nz >> 4)) {
 							continue;
 						}
 						BlockState s = level.getBlockState(m.set(nx, ny, nz));
-						if (!s.is(BlockTags.LOGS) || others.contains(np)) {
+						if (!s.is(BlockTags.LOGS)) {
+							continue;
+						}
+						// (C31) never another owner's cell, a protected cell, or a log the voxel table calls a player's block
+						String why = others.contains(np) ? "owned" : inArea(nx, nz) ? "protected" : !treeLog(s) ? "player" : null;
+						if (why != null) {
+							kept(why);
 							continue;
 						}
 						flood.add(np);
@@ -411,7 +445,35 @@ final class TileCheck {
 		if (treeCount > 0) {
 			skipped.merge("treeCells", (long) treeCount, Long::sum);
 		}
+		long keptAll = keptBy.values().stream().mapToLong(Long::longValue).sum();
+		if (keptAll > 0) {
+			skipped.merge("M3:tree_kept", keptAll, Long::sum);
+			keptBy.forEach((k, v) -> skipped.merge("tree_kept." + k, v, Long::sum));
+		}
 		return true;
+	}
+
+	private void kept(String why) {
+		keptBy.merge(why, 1L, Long::sum);
+	}
+
+	/** (C31) Whether the column lies in one of the region owner's protected areas. */
+	private boolean inArea(int x, int z) {
+		for (dev.larattalabs.architect.api.ProtectedArea a : areas) {
+			if (a.contains(x, z)) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * (C31) A log felling may take: in {@code #logs} and classed LOG by the voxel table (the kit's natural/player split: a block it
+	 * does not list, a modded log for one, is a player's block). The table cannot tell a log a player placed from a grown one.
+	 */
+	static boolean treeLog(BlockState s) {
+		return s.is(BlockTags.LOGS) && !s.hasBlockEntity() && dev.larattalabs.architect.region.volume.VoxelTable.get().of(s.getBlock())
+			== dev.larattalabs.architect.api.VoxelClass.LOG;
 	}
 
 	/**
@@ -479,7 +541,8 @@ final class TileCheck {
 						int ny = y + dy;
 						int nz = z + dz;
 						long np = BlockPos.asLong(nx, ny, nz);
-						if (held.contains(np) || target.containsKey(np) || others.contains(np) || !level.hasChunk(nx >> 4, nz >> 4)) {
+						// (C31) a hold is a write: never on another owner's cell or inside a protected area
+						if (held.contains(np) || target.containsKey(np) || others.contains(np) || inArea(nx, nz) || !level.hasChunk(nx >> 4, nz >> 4)) {
 							continue;
 						}
 						BlockState s = level.getBlockState(m.set(nx, ny, nz));

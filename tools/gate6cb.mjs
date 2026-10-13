@@ -545,9 +545,10 @@ steps.felling = async () => {
     const k = c31Kept(v);
     check(!v.refused && v.state === 'PLACED', `C31 (2) owned: the raise over the trunk's base realised (${v.state ?? v.refused}; ${v.cellsWritten} cells, skipped ${json(v.cellsSkipped)})`);
     const moundAfter = await boxHash(mound.slice(0, 3), mound.slice(3));
-    const branch = await logsIn([X, gy + 1, Z, OX, gy + 6, Z]);
+    const trunk = await logsIn([X, gy + 1, Z, X, gy + 6, Z]);
+    const branch = await logsIn([X + 1, gy + 4, Z, OX, gy + 4, Z]);
     check(moundLogs.logs > 0 && moundAfter.sha256 === moundBefore.sha256, `C31 (2) owned: no cell of the other owner's mound changed (${moundLogs.logs} logs)`);
-    check(branch.logs === 0, `C31 (2) owned: the unowned trunk and branch felled (${branch.logs} logs left above the mound)`);
+    check(trunk.logs === 0 && branch.logs === 0, `C31 (2) owned: the unowned trunk and branch felled (${trunk.logs} trunk and ${branch.logs} branch logs left)`);
     check(k.owned > 0, `C31 (2) owned: the kept part recorded as a finding (M3:tree_kept ${k.all}, owned ${k.owned}; felled ${k.felled})`);
     if (v.region) await undo(v.region, C31);
     const d = await diffBox(c31Box(X, gy, Z), snap);
