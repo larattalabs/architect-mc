@@ -365,6 +365,155 @@ steps.ingame = async () => {
   return out;
 };
 
+// ------------------------------------------------------------------ D2 (C27, C28, outposts): in game
+
+/** Plan (the districts program, one district), realise without entries, then: the plan again after the world is saved and reopened
+ * (stable: the same IR sha, ticks frozen across), the removal restoring the box exactly (ticks frozen from the snapshot to the
+ * check). Returns {plan, files, region, view, again, exact}. */
+async function d2Round(name, world, claim, district, { beside = null, owner = OWNER, natural = false } = {}) {
+  const spec = { spec: { districts: [district] }, lamps: false };
+  const yr = [-64, 320];
+  const box = [claim[0] - 8, yr[0], claim[1] - 8, claim[2] + 8, yr[1], claim[3] + 8];
+  if (natural) await cmd('/tick freeze');
+  try {
+    await cmd('/kill @e[type=!minecraft:player]');
+    const h0 = await hash(box);
+    const p = await planReq({ program: 'districts', params: spec, claim, owner, ...(beside ? { beside } : {}), check: true });
+    if (p.refused) throw new Error(`${name}: plan refused: ${p.refused}`);
+    const files = planFiles(p.planId);
+    const region = await L.realise(p.planId, { lots: {} });
+    const st = await L.waitRegion(region, 3_600_000);
+    // reload: save, leave, reopen; plan again (ticks frozen again in the reopened world)
+    await cmd('/save-all flush');
+    await leaveWorld();
+    await openWorld(world);
+    if (natural) await cmd('/tick freeze');
+    await tp(Math.floor((claim[0] + claim[2]) / 2), 0, Math.floor((claim[1] + claim[3]) / 2));
+    // stable: after the reload and the removal (the land as it was planned), the same request plans to the same IR sha
+    await cmd('/kill @e[type=!minecraft:player]');
+    const rm = await undo(region);
+    await L.settle(3000);
+    const h1 = await hash(box);
+    const q = await planReq({ program: 'districts', params: spec, claim, owner, ...(beside ? { beside } : {}), check: false });
+    const view = (await call('dev.region.state', { region }, 60_000).catch(() => ({}))).view ?? null;
+    return { plan: p, files, region, state: st.view.state, viewAtPlace: st.view, again: q.irSha ?? q.refused, sameIr: q.irSha === p.irSha, exact: h0 === h1, restored: rm.restored, view };
+  } finally {
+    if (natural) await cmd('/tick unfreeze').catch(() => null);
+  }
+}
+
+steps.outpost = async () => {
+  await ensure();
+  const out = {};
+  const { besideData } = await imp('lib/region/beside.mjs');
+  const { besidePorts } = await imp('lib/region/districtsEmit.mjs');
+  await L.fresh('G6B D2 Outpost', FLAT);
+  await L.setRules('exact');
+  const X = 9000, Z = 9000, A = [X, Z, X + 111, Z + 111];
+  await tp(X + 56, 40, Z + 56);
+  const s7 = JSON.parse(fs.readFileSync(path.join(root, 'scenarios', 's7_flat_village.json'), 'utf8'));
+  const pa = await planReq({ program: 'flat_village', params: s7.params, claim: A, check: false });
+  const fa = planFiles(pa.planId);
+  const ra = await L.realise(pa.planId, { lots: {} });
+  await L.waitRegion(ra, 3_600_000);
+  // the outpost's claim: from the village's street end outward 150, 60 either side (the seam holds the cell past the end)
+  const q = besidePorts(besideData(ra, A, fa.ir, A))[0];
+  const [ex, ez] = q.end, [dx, dz] = q.dir;
+  const B = dx !== 0 ? [dx < 0 ? ex - 150 : ex, ez - 60, dx < 0 ? ex : ex + 150, ez + 60] : [ex - 60, dz < 0 ? ez - 150 : ez, ex + 60, dz < 0 ? ez : ez + 150];
+  await tp(Math.floor((B[0] + B[2]) / 2), 40, Math.floor((B[1] + B[3]) / 2));
+  const r = await d2Round('outpost', 'G6B D2 Outpost', B, { id: 'camp', size: [40, 40], lots: 2, outpost: { gap: 40 } }, { beside: ra });
+  const d = r.files.meta.districts;
+  const rc = d.rects.camp;
+  const gapTo = Math.max(A[0] - rc[2], rc[0] - A[2], A[1] - rc[3], rc[1] - A[3]);
+  const cor = r.viewAtPlace.ext?.['architect_mc:corridor']?.camp ?? null;
+  out.outpost = { claim: B, rect: rc, gapTo, join: d.join, corridor: cor ? { cells: cor.cells, rect: cor.rect } : null, sameIr: r.sameIr, exact: r.exact, restored: r.restored };
+  check(r.state === 'PLACED' && gapTo >= 40 && d.edges.some((e) => e.kind === 'join' && e.ok), `outpost: placed ${gapTo} from the village (gap 40), its road joined to ${d.join?.node}`);
+  check(cor && cor.cells > 100 && Array.isArray(cor.rect), `outpost: its corridor reported as settlement land on the region's view (architect_mc:corridor: ${cor?.cells} cells in ${json(cor?.rect)}), the IR's corridor ${Object.keys(r.files.ir.corridor ?? {})}`);
+  check(r.sameIr, `outpost: stable across a reload (the same request planned after the world was saved and reopened: IR ${r.plan.irSha?.slice(0, 12)} = ${String(r.again).slice(0, 12)})`);
+  check(r.exact, `outpost: one undo (Regions.remove) restores the world over its claim exactly, its corridor included (${r.restored} cells)`);
+  // refused, named: an outpost that can't keep its gap
+  const nr = await planReq({ program: 'districts', params: { spec: { districts: [{ id: 'camp', size: [40, 40], lots: 2, outpost: { gap: 400 } }] } }, claim: B, beside: ra, check: false });
+  out.refused = nr.refused ?? null;
+  check(/NO_ROOM/.test(nr.refused ?? ''), `outpost: a gap no candidate keeps refuses, named (${nr.refused})`);
+  await undo(ra);
+  await leaveWorld();
+  spendZero();
+  return out;
+};
+
+/** The pinned desert/jungle site (scenarios/sites/desert_jungle_site.json `fixture.claim`). */
+const SITE = () => JSON.parse(fs.readFileSync(path.join(root, 'scenarios', 'sites', 'desert_jungle_site.json'), 'utf8'));
+
+steps.boundary = async () => {
+  await ensure();
+  const out = {};
+  const B = await imp('lib/region/boundary.mjs');
+  const { decodeColumns } = await imp('lib/region/pack.mjs');
+  const S3 = JSON.parse(fs.readFileSync(path.join(root, 'scenarios', 's3_monastery.json'), 'utf8')).fixture.claim;
+  const world = 'G6B D2 Boundary';
+  await L.fresh(world, await L.seedBase(SEED));
+  await L.setRules('gallery');
+  const near = (p, cells) => { let b = Infinity; for (const q of cells) b = Math.min(b, Math.max(Math.abs(p[0] - q[0]), Math.abs(p[1] - q[1]))); return b; };
+  const mask = (runs) => runs.flatMap(([x0, z, x1]) => Array.from({ length: x1 - x0 + 1 }, (_, i) => [x0 + i, z]));
+  // ---- the shore (S3's river) and the ridge (S3's crest), on S3's pinned claim
+  await tp(Math.floor((S3[0] + S3[2]) / 2), 200, Math.floor((S3[1] + S3[3]) / 2));
+  for (const [id, follow, size, lots] of [['quay', { shore: { minArea: 64 } }, [64, 24], 2], ['crest', { ridge: { minRise: 8 } }, [64, 20], 1]]) {
+    const r = await d2Round(id, world, S3, { id, size, follow, lots: Array.from({ length: lots }, (_, i) => ({ id: `${id}_${i + 1}`, type: 'cottage', size: [7, 7] })) }, { natural: true });
+    const f = r.files.meta.districts.follow[id];
+    const cols = decodeColumns(fs.readFileSync(path.join(L.SIDECAR_DATA, 'regions', 'plans', r.plan.planId, 'survey.bin')));
+    let geo;
+    if (id === 'quay') {
+      const water = [];
+      for (let j = 0; j < cols.depth; j++) for (let i = 0; i < cols.width; i++) if (cols.flags[i + j * cols.width] & 1) water.push([cols.minX + i * cols.resolution, cols.minZ + j * cols.resolution]);
+      const ds = f.street.map(([x, , z]) => near([x, z], water));
+      const off = 12;
+      geo = { parallel: ds.filter((v) => v >= off - 4 && v <= off + 4).length, of: ds.length, min: Math.min(...ds), max: Math.max(...ds) };
+      check(geo.parallel >= geo.of * 0.8, `shore: the street parallel to the shore (${geo.parallel}/${geo.of} street cells within ${off - 4}..${off + 4} of the water; ${geo.min}..${geo.max})`);
+    } else {
+      const ds = f.street.map(([x, , z]) => near([x, z], f.boundary));
+      geo = { on: ds.filter((v) => v <= 4).length, of: ds.length };
+      check(geo.on >= geo.of * 0.8, `ridge: the street on the ridge line (${geo.on}/${geo.of} street cells within 4 of the crest)`);
+    }
+    out[id] = { state: r.state, rect: f.rect, mask: f.maskCells, geo, lots: r.files.meta.districts.lots[id], sameIr: r.sameIr, exact: r.exact };
+    check(r.state === 'PLACED' && r.files.meta.districts.lots[id].length >= 1, `${id}: placed (${r.files.meta.districts.lots[id].length} lot(s)), its shape a ${f.maskCells}-cell mask in ${json(f.rect)}`);
+    check(r.sameIr, `${id}: stable across a reload (the same IR sha planned again after the world was saved and reopened)`);
+    check(r.exact, `${id}: one undo restores the claim exactly (ticks frozen; ${r.restored} cells)`);
+  }
+  // ---- the biome edge: the pinned desert/jungle site
+  const site = SITE();
+  if (!site.fixture?.claim) { check(false, 'biome edge: the desert/jungle site is not pinned (tools/find-site.mjs desert_jungle_site)'); return out; }
+  const C = site.fixture.claim;
+  await tp(Math.floor((C[0] + C[2]) / 2), 200, Math.floor((C[1] + C[3]) / 2));
+  const r = await d2Round('oasis', world, C, { id: 'oasis', size: [96, 24], follow: { biome_edge: { between: ['desert', 'jungle'] } }, lots: 3 }, { natural: true });
+  const f = r.files.meta.districts.follow.oasis;
+  const g = B.parseBiomes(JSON.parse(fs.readFileSync(path.join(L.SIDECAR_DATA, 'regions', 'plans', r.plan.planId, 'biomes.json'), 'utf8')));
+  const cols = decodeColumns(fs.readFileSync(path.join(L.SIDECAR_DATA, 'regions', 'plans', r.plan.planId, 'survey.bin')));
+  const claim = { minX: C[0], minZ: C[1], maxX: C[2], maxZ: C[3] };
+  const edge = [...B.biomeEdgeCells(cols, claim, g, ['desert', 'jungle']).cells].map((k) => k.split(',').map(Number));
+  const m = mask(f.mask);
+  // the shape follows the edge within 4 cells over its length: every boundary cell of its window within 4 of the mask, every mask
+  // cell in the jungle within 4 of the edge
+  const far1 = f.boundary.filter((q) => near(q, m) > 4).length;
+  const jungle = m.filter(([x, z]) => B.familyOf(B.biomeAt(g, x, z)) === 'jungle');
+  const far2 = jungle.filter((q) => near(q, edge) > 4).length;
+  out.oasis = { state: r.state, rect: f.rect, mask: f.maskCells, boundary: f.boundary.length, far1, jungleCells: jungle.length, far2, sameIr: r.sameIr, exact: r.exact, biomes: r.files.ir.biomes };
+  check(r.state === 'PLACED' && far1 === 0 && far2 === 0, `biome edge: the district's shape follows the desert/jungle edge within 4 cells over its ${f.boundary.length}-cell length (${far1} boundary cells and ${far2} jungle cells past 4)`);
+  check(r.sameIr && r.exact, `biome edge: stable across a reload, one undo exact (${r.restored} cells)`);
+  // refused, named: no such edge; protected over the band
+  const nr = await planReq({ program: 'districts', params: { spec: { districts: [{ id: 'oasis', size: [96, 24], follow: { biome_edge: { between: ['desert', 'mushroom'] } }, lots: 2 }] } }, claim: C, check: false });
+  check(/NO_EDGE: no mushroom/.test(nr.refused ?? ''), `biome edge: no such edge refused, named (${nr.refused})`);
+  const api = async (a) => { const x = await cmd(`/apitest ${a}`); return (x.messages ?? []).find((mm) => mm.startsWith('{')) ?? null; };
+  await api(`unprotect ${OWNER} d2band`).catch(() => null);
+  await api(`protect ${json({ owner: OWNER, id: 'd2band', x0: C[0], z0: C[1], x1: C[2], z1: C[3], label: 'D2_band' })}`);
+  const pr = await planReq({ program: 'districts', params: { spec: { districts: [{ id: 'oasis', size: [96, 24], follow: { biome_edge: { between: ['desert', 'jungle'] } }, lots: 2 }] } }, claim: C, check: false });
+  await api(`unprotect ${OWNER} d2band`).catch(() => null);
+  out.refusals = { noEdge: nr.refused ?? null, protected: pr.refused ?? null };
+  check(/PROTECTED/.test(pr.refused ?? ''), `biome edge: a protected area over its band refused, named (${pr.refused})`);
+  await leaveWorld();
+  spendZero();
+  return out;
+};
+
 // ------------------------------------------------------------------ the scenario runs (districts_demo on S3's pinned claim)
 
 function scenario(args) {
