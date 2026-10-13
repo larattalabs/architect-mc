@@ -28,12 +28,14 @@ sidecar 8912, DevBridge 8913). $0.
 - a consented PLAYER_BLOCKS stroke over a cobble hut cleared 90 build cells; its undo restored every record (tracked-set hash equal).
 
 ## Next
-- gate-chains: pt-unit, pt-ingame, impact rule, apijars link; `gate-run.mjs slice --plan`.
-- Fix: provisional expiry after a restart (lastPlayerChange floor, reschedule in load()); off-thread annotate warning / touched.
-- tools/gate6cpt.mjs items 1-16; item 12 no-mod start (load-only and modified chunk, both measured).
-- docs: CONTRACT as-built, DEVBRIDGE hooks, GATES chain notes; retire this file.
+- Slice tier run (ports 8912-8917, run dir ../architect-mc-PT-run, out artifacts/gate-runs-PT) on the head after the item 4/12
+  additions; then the gate-verifier (items 7, 8, 10 re-run) on one port pair once the tier is done.
+- CONTRACT "Phase 6c slice PT as built"; retire this file; push; report.
 
 ## Findings so far
-- Item 12: Fabric's attachment deserializer drops unknown ids ("Skipping invalid attachments"): expected to survive a load-only start
-  and be lost when the chunk is re-saved without the mod. To be measured.
+- Item 12 (no-mod half), measured: a chunk LOADED by a server without the mod loses `fabric:attachments/architect_mc:placed`
+  (Fabric logs "Skipping invalid attachments"; the chunk is re-saved without it); a never-loaded chunk keeps it. pt-nomod
+  reports FAIL honestly. Blocker for the coordinator: accept as a documented limitation, or a side-file mirror (a §1 change).
+- Item 7 runs on S7's flat_village (lots >= 8): route_demo on a flat copy with builds present planned 5,668 cells and wrote 0.
 - Items 5/6 vs N-PT-2's grace: item 5 runs with the grace (walls PROVISIONAL), item 6 with graceMs 0 (rules are world-tunable).
+- Item 4 proves the unload (0 tracked readable 600 blocks away); item 12 also covers a building's removal (template restore).

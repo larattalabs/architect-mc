@@ -454,6 +454,9 @@ steps.reload = async () => {
   // chunk unload and reload: the player goes 600 blocks away (beyond the view distance) and back
   await tp(X + 600.5, gy + 25, Z + 600.5);
   await settle(15000);
+  // the box's chunks are unloaded now (dev.pt.cells reads loaded chunks only): 0 tracked proves the unload happened
+  const away = await cellsOf(box);
+  check(away.tracked === 0, `item 4: 600 blocks away the box's chunks are unloaded (${away.tracked} tracked cells readable)`);
   await tp(X + 0.5, gy + 25, Z + 0.5);
   await settle(3000);
   const c2 = await cellsOf(box);
@@ -884,9 +887,31 @@ steps.incidental = async () => {
   const post = await cellMap(box);
   const mism = diffMaps(pre.map, post.map);
   check(d.mismatches === 0 && mism.length === 0, `item 12: its undo restores them (E-flat ${d.mismatches}) and their records (${mism.length} mismatches of ${pre.tracked})`, mism.slice(0, 8));
+  // §5's building path: a building placed (public API) over 4 incidental torches and 4 cobblestones, then removed: its template
+  // restore writes them back with their records (Sites.restoreTemplate under the writer scope)
+  const S = [X, Z + 40];
+  const under = [];
+  for (let i = 0; i < 4; i++) under.push({ item: 'minecraft:torch', at: [S[0] + 2 + i * 2, y, S[1] + 2] });
+  for (let i = 0; i < 4; i++) under.push({ item: 'minecraft:cobblestone', at: [S[0] + 2 + i * 2, y, S[1] + 6] });
+  await uses(under);
+  await settle(6000);
+  const sbox = [S[0] - 3, gy - 6, S[1] - 3, S[0] + 12, gy + 10, S[1] + 12];
+  const spre = await cellMap(sbox);
+  const sbl = (await buildsIn(sbox)).builds;
+  const ssnap = await snapBox(sbox, 'incidental-site');
+  const sp = await apiResult(await api(`ptplace g6a_stub_9 ${S[0]} ${y} ${S[1]} i1`));
+  const smid = await cellMap(sbox);
+  const covered = under.filter((t) => !smid.map.has(t.at.join(','))).length;
+  check(sp.placed && sp.site && sbl.length === 0 && spre.tracked === 8 && spre.incidental === 8 && covered > 0, `item 12: a building (g6a_stub_9, site ${sp.site}) placed over 8 incidental cells with no refusal (${covered} of them written over; ${json(sp.refusals ?? [])})`, sp);
+  const rm = sp.site ? await call('dev.sites.remove', { site: sp.site }, 60_000) : { removed: false };
+  await settle(3000);
+  const sd = await diffBox(sbox, ssnap);
+  const spost = await cellMap(sbox);
+  const smism = diffMaps(spre.map, spost.map);
+  check(rm.removed && sd.mismatches === 0 && smism.length === 0, `item 12: its removal (template restore) restores them (E-flat ${sd.mismatches}) and their records (${smism.length} mismatches of ${spre.tracked})`, { rm, mism: smism.slice(0, 8) });
   await leaveWorld();
   spendZero();
-  return { torchesWritten: tw, patchWritten: pw };
+  return { torchesWritten: tw, patchWritten: pw, siteCovered: covered };
 };
 
 steps.nomod = async () => {

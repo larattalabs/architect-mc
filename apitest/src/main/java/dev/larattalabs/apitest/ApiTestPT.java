@@ -129,6 +129,7 @@ public final class ApiTestPT {
 							return o;
 						}
 						o.addProperty("placed", r.placed());
+						r.siteId().ifPresent(id -> o.addProperty("site", id));
 						JsonArray rs = new JsonArray();
 						for (Refusal x : r.refusals()) {
 							JsonObject j = new JsonObject();
