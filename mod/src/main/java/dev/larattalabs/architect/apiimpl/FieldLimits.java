@@ -7,6 +7,7 @@ import dev.larattalabs.architect.api.BibleRequest;
 import dev.larattalabs.architect.api.CritiqueSpec;
 import dev.larattalabs.architect.api.DesignRequest;
 import dev.larattalabs.architect.api.GroupRequest;
+import dev.larattalabs.architect.api.JobSpec;
 import dev.larattalabs.architect.api.Limits;
 import dev.larattalabs.architect.api.PolishRequest;
 import dev.larattalabs.architect.api.Reason;
@@ -130,6 +131,35 @@ public final class FieldLimits {
 
 	static @Nullable String model(String path, @Nullable String m) {
 		return first(len(path, m, Limits.MODEL_ID_MAX, true), pattern(path, m, Limits.MODEL_ID_RE, true));
+	}
+
+	/**
+	 * (C33, 1.25.0) A job's {@code system} (not trimmed; at most {@link Limits#JOB_SYSTEM_MAX} for a structured job,
+	 * {@link Limits#JOB_SYSTEM_AGENT_MAX} for an agent job) and {@code systemRefs} (at most {@link Limits#JOB_SYSTEM_REFS_MAX}, each
+	 * {@link Limits#JOB_SYSTEM_REF_MAX} characters and {@link Limits#SYSTEM_REF_RE}, no duplicates). Null: fine. Pure.
+	 */
+	public static @Nullable String job(JobSpec s) {
+		int max = "structured".equals(s.kind()) ? Limits.JOB_SYSTEM_MAX : Limits.JOB_SYSTEM_AGENT_MAX;
+		String why = len("system", s.system(), max, false);
+		if (why != null) {
+			return why;
+		}
+		why = count("systemRefs", s.systemRefs(), Limits.JOB_SYSTEM_REFS_MAX);
+		if (why != null) {
+			return why;
+		}
+		for (int i = 0; i < s.systemRefs().size(); i++) {
+			String r = s.systemRefs().get(i);
+			String p = "systemRefs[" + i + "]";
+			why = first(r == null ? p + ": null" : null, len(p, r, Limits.JOB_SYSTEM_REF_MAX, false), pattern(p, r, Limits.SYSTEM_REF_RE, false));
+			if (why != null) {
+				return why;
+			}
+			if (s.systemRefs().indexOf(r) != i) {
+				return p + ": \"" + r + "\" is listed twice";
+			}
+		}
+		return null;
 	}
 
 	public static @Nullable String critique(String path, @Nullable CritiqueSpec c) {

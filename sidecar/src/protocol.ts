@@ -17,7 +17,7 @@ export const PROTOCOL_VERSION = 1 as const;
 export const PROTOCOLS = [1, 2] as const;
 export type Protocol = (typeof PROTOCOLS)[number];
 /** What a protocol-2 snapshot lists in `features`. */
-export const FEATURES = ['job.run', 'job.tools', 'blobs', 'budget', 'designs.v2', 'bibles', 'design.groups', 'named.parts', 'open.types', 'estimates', 'reskin', 'massing', 'critique', 'critique.report', 'job.images', 'bible.admin', 'bible.restraint', 'entry.versions', 'entry.delta', 'design.polish', 'critique.polish', 'region.plan', 'region.tiles', 'region.check', 'region.preview', 'region.design', 'region.blobs', 'ir.format2', 'estimate.kinds', 'opKeys', 'group.breakdown', 'copies', 'smallEffort', 'versionOf', 'extendInfo', 'region.keepOut', 'region.lightCover', 'region.forms1', 'masks', 'patterns', 'region.passes', 'import.schem', 'region.scatter', 'region.brush', 'region.route', 'region.planCheck', 'plan.feature.build'] as const;
+export const FEATURES = ['job.run', 'job.tools', 'blobs', 'budget', 'designs.v2', 'bibles', 'design.groups', 'named.parts', 'open.types', 'estimates', 'reskin', 'massing', 'critique', 'critique.report', 'job.images', 'bible.admin', 'bible.restraint', 'entry.versions', 'entry.delta', 'design.polish', 'critique.polish', 'region.plan', 'region.tiles', 'region.check', 'region.preview', 'region.design', 'region.blobs', 'ir.format2', 'estimate.kinds', 'opKeys', 'group.breakdown', 'copies', 'smallEffort', 'versionOf', 'extendInfo', 'region.keepOut', 'region.lightCover', 'region.forms1', 'masks', 'patterns', 'region.passes', 'import.schem', 'region.scatter', 'region.brush', 'region.route', 'region.planCheck', 'plan.feature.build', 'job.systemRefs'] as const;
 
 const Ts = z.number().int().nonnegative();
 const Id = z.string().min(1).max(64);
@@ -749,11 +749,24 @@ export const MAX_JOB_IMAGES = 8;
 export const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 export type JobKind = z.infer<typeof JobKind>;
 
+/** (C33) `system` for a structured job (it was 50,000 for every job); an agent job keeps `JOB_SYSTEM_AGENT_MAX`. */
+export const JOB_SYSTEM_MAX = 120_000;
+export const JOB_SYSTEM_AGENT_MAX = 50_000;
+/** (C33) `systemRefs`: at most this many ids, each matching `SYSTEM_REF_RE` (at most `JOB_SYSTEM_REF_MAX` characters). */
+export const JOB_SYSTEM_REFS_MAX = 8;
+export const JOB_SYSTEM_REF_MAX = 64;
+export const SYSTEM_REF_RE = /^[a-z][a-z0-9_-]*\/[A-Za-z0-9._-]+(#[a-z]+)?$/;
+
 export const JobSpec = z
   .object({
     kind: JobKind,
     prompt: z.string().min(1).max(200_000),
-    system: z.string().max(50_000).optional(),
+    system: z.string().max(JOB_SYSTEM_MAX).optional().describe(`${JOB_SYSTEM_MAX} characters for a structured job, ${JOB_SYSTEM_AGENT_MAX} for an agent job`),
+    systemRefs: z
+      .array(z.string().max(JOB_SYSTEM_REF_MAX).regex(SYSTEM_REF_RE, 'a system ref is "<family>/<id>" with an optional "#<form>", e.g. "plan/0#compact"'))
+      .max(JOB_SYSTEM_REFS_MAX)
+      .optional()
+      .describe('(C33, feature job.systemRefs) ids of schemas the sidecar expands into the system prompt, before `system` (jobs/systemrefs.ts)'),
     model: ModelId.optional().describe('default config jobModel ("claude-sonnet-5-5")'),
     effort: z.enum(['low', 'medium', 'high', 'xhigh']).optional(),
     schema: JsonSchema.optional().describe('structured: required, the answer must validate; agent: optional, asks for a final JSON answer'),
@@ -776,6 +789,8 @@ export const JobSpec = z
     if (s.kind === 'structured' && s.tools?.length) ctx.addIssue({ code: 'custom', path: ['tools'], message: 'a structured job has no tools (use an agent job)' });
     const names = (s.tools ?? []).map((t) => t.name);
     if (new Set(names).size !== names.length) ctx.addIssue({ code: 'custom', path: ['tools'], message: 'duplicate tool name' });
+    if (s.kind !== 'structured' && (s.system?.length ?? 0) > JOB_SYSTEM_AGENT_MAX) ctx.addIssue({ code: 'custom', path: ['system'], message: `an agent job's system prompt is at most ${JOB_SYSTEM_AGENT_MAX} characters (a structured job's: ${JOB_SYSTEM_MAX})` });
+    if (s.systemRefs && new Set(s.systemRefs).size !== s.systemRefs.length) ctx.addIssue({ code: 'custom', path: ['systemRefs'], message: 'duplicate system ref' });
     if (s.blobs && new Set(s.blobs).size !== s.blobs.length) ctx.addIssue({ code: 'custom', path: ['blobs'], message: 'duplicate blob id' });
     if (s.images?.length && s.kind !== 'structured' && s.kind !== 'agent') ctx.addIssue({ code: 'custom', path: ['images'], message: 'images need a job kind' });
   });
