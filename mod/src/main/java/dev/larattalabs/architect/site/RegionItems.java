@@ -227,10 +227,10 @@ public final class RegionItems {
 	private static TileCheck tileCheck(dev.larattalabs.architect.region.Packed.Tile cells, RegionsImpl.Live r, Anchors.Bounds win) {
 		var rec = r.rec();
 		if (rec.brush == null) {
-			return new TileCheck(cells, rec.groupId, rec.dimension, rec.claim, win);
+			return new TileCheck(cells, rec.groupId, rec.owner, rec.dimension, rec.claim, win); // (C31) the owner's protected areas bound felling
 		}
 		boolean pb = rec.brush.has("playerBlocks") && rec.brush.get("playerBlocks").getAsBoolean();
-		return new TileCheck(cells, rec.groupId, rec.dimension, rec.claim, win, pb, dev.larattalabs.architect.region.Brushes.layerGroups(rec.owner));
+		return new TileCheck(cells, rec.groupId, rec.owner, rec.dimension, rec.claim, win, pb, dev.larattalabs.architect.region.Brushes.layerGroups(rec.owner));
 	}
 
 	/** Liveness (gate item 4): when a tile item holding its tickets first waited for its (all generated) chunks to load. */
