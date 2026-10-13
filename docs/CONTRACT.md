@@ -10364,7 +10364,7 @@ roads through C16. 5. Strokes. 6. Fixtures, gate.
 Dropped from 6c by S-PT-1 (2026-10-12). Steward withdrew S-PT-1 for C32 (2026-10-13), and the slice below supersedes this
 draft: the per-section bitset in side files, the `respectPlayerChanges` flag and its 1.31.0/0.34.0 placeholders no longer apply.
 
-## Phase 6c slice PT: player-placed tracking (C32) (DRAFT for Steward review)
+## Phase 6c slice PT: player-placed tracking (C32) (FROZEN 2026-10-13 after Steward's review)
 
 API: the next free minor at merge (house rule; placeholder `PT` below), mod to match, `KIT_VERSION` next minor. Steward ask
 C32 (steward-mc docs/ARCHITECT-ASKS.md), approved by Noah 2026-10-13 and refined by him the same day: PT is about **builds**,
@@ -10664,6 +10664,20 @@ Not small, so a separate slice: it needs a site with no blueprint behind it.
 
 - PT2 (adoption). Builds across zones and owner transfers (Keep open). A standing settlement-to-placer rule if S-PT-3 asks.
 
+
+### Changes from Steward's review of PT (2026-10-13; these win)
+
+- **S-PT-2:** a new `Reason.PLAYER_BUILD` (its meaning differs from PLAYER_BLOCKS).
+- **S-PT-3:** per-request consent by build ids is enough for v0; Steward's change requests carry the asking player as actor.
+- **S-PT-4:** builds are hard keep-outs in every plan by default, door clearance included, **except** a build named in the
+  request's consent (an adopted build, "replace my shed").
+- **S-PT-5:** `builds()` and `BUILD_CHANGED`, plus **`builds(box)`** (query by area) and the build's **placer UUID(s)** on
+  its view.
+- **S-PT-6 (PT2):** the adopted site carries the caller's `ext`; a player's later hand edits on an adopted build stay player
+  edits (kept by updates as today).
+- **Addition: PATH builds don't block roads.** A road may cross or join a `PATH` build without consent, provided it removes
+  none of the path's cells (it may only write cells the path does not occupy, and may treat path cells as walk surface).
+  Gate item: a road routed across a player's path joins it with 0 path cells changed.
 
 ### Coordinator decisions on PT's Noah questions (2026-10-13; from Noah's stated intent, he may override)
 
