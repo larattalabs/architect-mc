@@ -142,11 +142,11 @@
       36.5
     ],
     "cam_ground": [
-      2642.5,
-      69,
-      1755.5,
-      121.8,
-      41.7
+      2636.5,
+      68,
+      1745.5,
+      67.8,
+      8
     ],
     "cam_high": [
       2640.5,
@@ -188,5 +188,6 @@
     "hut_3": "g6cs2_cabin_w7d6@1",
     "hut_4": "g6cs2_cabin_w7d6@1"
   },
-  "lotEntriesNote": "hut_3 and hut_4 have no site on the natural claim; their entries serve the flat variant, which places every listed lot"
+  "lotEntriesNote": "hut_3 and hut_4 have no site on the natural claim; their entries serve the flat variant, which places every listed lot",
+  "camsNote": "cam_ground re-aimed by hand after the first natural run (the pinned anchor stood inside a natural spike): east of the gate, clear of ice within 3, looking west over the boardwalks to the lots on the beach"
 }

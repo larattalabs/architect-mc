@@ -95,7 +95,7 @@ export async function build({ phase, local, ART, SCEN, evidenceSha }) {
   const calFile = path.join(out, 'calibration', 'calibration.json');
   if (fs.existsSync(calFile)) calibration = JSON.parse(fs.readFileSync(calFile, 'utf8')).renders;
   // (6c V, W) the slice's own page title and bar reference; W republishes V's page (the same title, a new section)
-  const title = phase === '6c-v' || phase === '6c-w' ? 'Architect 6c-V gallery' : `Architect ${phase} gallery`; // (6c S2: 'Architect 6c gallery', the same page)
+  const title = phase === '6c-v' || phase === '6c-w' || phase === '6c' ? 'Architect 6c-V gallery' : `Architect ${phase} gallery`; // (6c S2: 'Architect 6c gallery', the same page)
   const barsTitle = phase === '6c' ? 'Bars (CONTRACT 6c slice S2 §3; earlier sections: V §7 and W §7), on the realised world' : phase === '6c-w' ? 'Bars (CONTRACT 6c slice V §7 and W §7), on the realised world' : phase === '6c-v' ? 'Bars (CONTRACT 6c slice V §7), on the realised world' : 'Bars (CONTRACT 6b §8.3), on the realised world';
   const data = { phase, title, barsTitle, built: new Date().toISOString(), local: !!local, scenarios, calibration };
   if (!local) fs.writeFileSync(path.join(out, 'data.json'), `${JSON.stringify(data, null, 1)}\n`);
