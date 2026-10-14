@@ -720,6 +720,11 @@ function emitWall(K, W) {
       for (const q of fixtureCells(fixture, [c.x, capCells.get(key(c.x, c.z)).y + 1, c.z]).cells) lampCells.push(q);
     }
   }
+  // ---- the graph: a node per gate (kind gate, its wall the ref; §8's additive wire shape)
+  for (const g of W.gates) {
+    const c0 = W.cells.find((c) => c.pos === ((g.a + g.b) >> 1)) ?? W.cells[0];
+    r.graphNode({ id: `gate:${g.id}`.slice(0, 64), kind: 'gate', ref: W.id, at: g.at, ports: [{ name: 'gate', at: g.at, facing: facingOut(W, c0), width: g.width }] });
+  }
   // ---- the ops: one part per wall in the links stage, absolute y
   const part = r.part(`w_${W.id}`.slice(0, 48), { stage: K.stageOf('links') });
   (r.meta.parts[part.id] ??= {}).kind = 'add';
@@ -800,4 +805,79 @@ function lampSpot(K, W, g, side, opening, walkSet) {
     return [x, K.stand(x, z) + 1, z];
   }
   return null;
+}
+
+// ------------------------------------------------------------------ the primitive (r.wall, r.gate): any program
+
+/**
+ * (§3) `r.wall(line, opts)` (kit/lib/region/program.mjs): a wall on a polyline (`[[x, z], ...]` corners, each leg a 4-connected line)
+ * or a ring (`{ring: [x0, z0, x1, z1]}`: the inner line's rect, the thickness outward), emitted as plan_v0 emits its walls (the top
+ * from the standable ground within 2 plus the height, the crenels, the gates' openings, jambs, lintels, doors and lamps), in
+ * `opts.stage`. `opts.gates` ([{at: [x, z], width, door, frame, height}]) opens gates on the free straight runs nearest each point;
+ * `defer: true` returns the handle ({gate(at, o), done()}) instead of building it now. Returns {id, gates, geometry, bom}.
+ */
+export function wallPrimitive(r, line, opts = {}) {
+  const id = opts.id ?? `wall${(r.meta.walls?.length ?? 0) + 1}`;
+  if (typeof id !== 'string' || !/^[a-z][a-z0-9_]{0,40}$/.test(id)) throw new Error(`r.wall: id '${id}' must match ^[a-z][a-z0-9_]{0,40}$`);
+  const height = opts.height ?? WALL_DEFAULTS.height, t = opts.thickness ?? WALL_DEFAULTS.thickness;
+  if (!(Number.isInteger(height) && height >= 3 && height <= 16)) throw new Error('r.wall: height must be 3..16');
+  if (!(Number.isInteger(t) && t >= 1 && t <= 3)) throw new Error('r.wall: thickness must be 1..3');
+  let L, form;
+  if (line && Array.isArray(line.ring)) {
+    const [x0, z0, x1, z1] = line.ring;
+    if (![x0, z0, x1, z1].every(Number.isInteger) || x1 - x0 < 4 || z1 - z0 < 4) throw new Error('r.wall: ring must be [x0, z0, x1, z1] at least 5 a side');
+    L = ringCells({ minX: x0, minZ: z0, maxX: x1, maxZ: z1 }, t, opts.closed === false ? (opts.omit ?? 'n') : null);
+    L.I = { minX: x0, minZ: z0, maxX: x1, maxZ: z1 };
+    form = 'around';
+  } else if (Array.isArray(line) && line.length >= 2 && line.every((q) => Array.isArray(q) && Number.isInteger(q[0]) && Number.isInteger(q[1]))) {
+    const cells = [];
+    for (let i = 0; i + 1 < line.length; i++) {
+      const [ax, az] = line[i], [bx, bz] = line[i + 1];
+      const dx = Math.abs(bx - ax), dz = Math.abs(bz - az), sx = bx > ax ? 1 : -1, sz = bz > az ? 1 : -1;
+      let x = ax, z = az, ix = 0, iz = 0;
+      if (!cells.length) cells.push([x, z, null]);
+      while (ix < dx || iz < dz) {
+        const tx = (1 + 2 * ix) * dz, tz = (1 + 2 * iz) * dx;
+        let h;
+        if (iz >= dz || (ix < dx && tx <= tz)) { x += sx; ix++; h = sx > 0 ? 0 : 2; } else { z += sz; iz++; h = sz > 0 ? 1 : 3; }
+        cells.push([x, z, h]);
+      }
+    }
+    if (cells.length < 2) throw new Error('r.wall: a line needs two distinct points');
+    cells[0][2] = cells[1][2];
+    L = lineCells(cells, t);
+    form = 'line';
+  } else throw new Error('r.wall: line must be [[x, z], ...] (at least 2 points) or {ring: [x0, z0, x1, z1]}');
+  const st = { form, P: { notes: [], read: {}, joins: [], unread: [] }, closed: !!L.closed, sealed: false, gatesMin: 0, gatesMax: WALL_DEFAULTS.gatesMax, height, thickness: t,
+    crenels: opts.crenels ?? WALL_DEFAULTS.crenels, corners: opts.corners ?? WALL_DEFAULTS.corners, lamps: opts.lamps ?? 'gates' };
+  const S = r.survey;
+  const K = { r, env: { S, claim: r.claim, cols: S.columns, protectedAreas: [], keepOut: [], regions: [], buildRects: [], standingHard: [] }, ctx: r.ctx, routed: [], stageOf: () => r._stage(opts.stage), record: {} };
+  K.walk = networkWalk(r, S);
+  K.stand = standMap(K, K.walk);
+  const W = { id, p: { part: { ext: opts._unsafe ? { 'architect_mc:unsafe': opts._unsafe } : {} } }, st, form, positions: L.positions, cells: L.cells, ends: L.ends ?? [], closed: L.closed, I: L.I ?? null, target: null, joined: [], gates: [], devs: [], notes: [], opened: 0,
+    G: obstacleGrid({ claim: r.claim, cols: S.columns, walkCells: K.walk }) };
+  W.cellAt = new Map(W.cells.map((c) => [key(c.x, c.z), c]));
+  let built = null;
+  const handle = {
+    id,
+    gate(at, o = {}) {
+      if (built) throw new Error(`r.gate: wall ${id} is built already`);
+      const door = o.door ?? WALL_DEFAULTS.door, width = o.width ?? (door === 'door' ? 2 : WALL_DEFAULTS.gateWidth);
+      const run = nearestRun(W, at, width);
+      if (!run) throw new Error(`r.gate: wall ${id} has no free straight run for a ${width}-wide gate`);
+      const mid = W.positions[(run.a + run.b) >> 1];
+      const g = makeGate(W, { a: run.a, b: run.b, y: S.groundAt(mid.x, mid.z), h: o.height ?? WALL_DEFAULTS.gateHeight, auto: false, kind: 'at', part: o.id ?? null, door, frame: o.frame ?? WALL_DEFAULTS.frame });
+      W.gates.push(g);
+      return { id: g.id, at: g.at, width: g.width, moved: run.d };
+    },
+    done() {
+      if (built) return built;
+      const out = emitWall(K, W);
+      r.meta.walls = [...(r.meta.walls ?? []), out.meta];
+      built = { id, gates: out.meta.gates.map((g) => ({ id: g.id, at: g.at, width: g.width, door: g.door })), geometry: out.geometry, bom: out.bom };
+      return built;
+    },
+  };
+  for (const g of opts.gates ?? []) handle.gate(g.at, g);
+  return opts.defer ? handle : handle.done();
 }

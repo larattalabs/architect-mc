@@ -33,6 +33,8 @@ import { BAKE_OPS, bakeOps } from '../forms/rules.mjs';
 import { VOXEL_CLASSES, VC, classAt } from './volume.mjs';
 import { PASSES, PASS_NAMES } from './passes/index.mjs';
 import { emitDistricts } from './districtsEmit.mjs';
+import * as CONNECTOR_WALL from '../connectors/wall.mjs';
+import * as CONNECTOR_ROPE from '../connectors/rope.mjs';
 import { edgeColumns, inferMovers, footprintOf, polylineOf, VILLAGER } from './passes/route.mjs';
 import { CARDINALS, cardinalOf, centreCells, circlePolygon, compassDir, crossOffsets, dominantCardinal, rightOf, segmentAxis } from './geom.mjs';
 
@@ -759,6 +761,23 @@ export class Region {
    * (6b) A generated form (plan time): `gen` is a generator result `{ops, bounds, generator, version, params, seed}`; its ops
    * go into part `id` (created in `stage`) and its provenance into the IR's `forms`.
    */
+  /**
+   * (7a K1) Connector primitives, usable by any program (docs/CONTRACT.md "Phase 7a slice K1" §3; kit/lib/connectors/):
+   * `r.wall(line, opts)` a wall on a polyline ([[x, z], ...] corners) or a ring ({ring: [x0, z0, x1, z1]}, the line's inner rect),
+   * `opts` {id, stage, height, thickness, crenels, corners, closed, lamps, gates: [{at: [x, z], width, door, frame, height}]}: built
+   * now, or with `defer: true` a handle whose `.gate(at, o)` adds gates and `.done()` builds it; `r.gate(handle, at, opts)` is
+   * `handle.gate(at, opts)`; `r.ropeBridge(a, b, opts)` a rope span between two landing cells (K1b's rope.mjs ropePrimitive).
+   */
+  wall(line, opts = {}) { return CONNECTOR_WALL.wallPrimitive(this, line, opts); }
+  gate(wall, at, opts = {}) {
+    if (!wall || typeof wall.gate !== 'function') throw new Error('r.gate: the wall must be a deferred r.wall(line, {defer: true}) handle');
+    return wall.gate(at, opts);
+  }
+  ropeBridge(a, b, opts = {}) {
+    if (typeof CONNECTOR_ROPE.ropePrimitive !== 'function') throw new Error('r.ropeBridge: rope bridges come with slice K1b');
+    return CONNECTOR_ROPE.ropePrimitive(this, a, b, opts);
+  }
+
   form(id, gen, { stage, set = 'terrain', bake = 'auto' } = {}) {
     if (![true, false, 'auto'].includes(bake)) throw new Error(`form ${id}: bake must be true, false or 'auto'`);
     const p = this.part(id, { stage, set });
