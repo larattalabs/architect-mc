@@ -95,3 +95,13 @@ test('C37: the Regions flat_village program takes params.orientation; omitting i
   assert.ok(roads(ns).every((p) => dz(p) >= dx(p)), 'ns: the street runs along z');
   await assert.rejects(run({ orientation: 'diagonal' }), /orientation must be one of/);
 });
+
+test('C37: a bad orientation value is malformed SCHEMA at its path, in both program forms', async () => {
+  const lots = cottages(2, 9, 9);
+  for (const [plan, at] of [[lotsPlan(lots, { orientation: 'diagonal' }), '$.zones[0].program.orientation'], [tplPlan(lots, { orientation: 'diagonal' }), '$.zones[0].program.params.orientation']]) {
+    const p = part(await check(plan));
+    assert.equal(p.class, 'malformed');
+    assert.equal(p.reasons[0].code, 'SCHEMA');
+    assert.equal(p.reasons[0].path, at);
+  }
+});

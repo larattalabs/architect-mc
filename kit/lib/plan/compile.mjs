@@ -430,6 +430,7 @@ export function resolveZone(env, z, geomOf, { obstacles = [] } = {}) {
   try { specs = lotSpecs(zone); } catch (e) { return { klass: 'malformed', reasons: [{ code: 'SCHEMA', path: `${z.path}.program`, message: e.message }] }; }
   if (!specs.length) return { klass: 'refused', reasons: [{ code: 'NO_ROOM', message: 'the zone lists no lots: nothing to lay out', evidence: { lots: 0 } }] };
   const shared = sharedOf(zone);
+  if (!['auto', 'ew', 'ns'].includes(orientationOf(zone))) return { klass: 'malformed', reasons: [{ code: 'SCHEMA', path: `${z.path}.program${zone.program.template !== undefined ? '.params' : ''}.orientation`, message: 'must be one of "ew", "ns", "auto"' }] };
   const loc = locatorOf(env, zone.where, geomOf);
   if (loc.error) return { klass: loc.error.code === 'DEPENDENCY' ? 'blocked' : 'refused', reasons: [{ code: loc.error.code, message: loc.error.message, evidence: { locator: Object.keys(zone.where ?? {})[0] ?? null, ...(loc.error.evidence ?? {}) } }] };
   const tMove = tolOf(zone, 'move'), tSize = tolOf(zone, 'size'), tCount = tolOf(zone, 'count'), tSketch = tolOf(zone, 'sketch'), tRot = tolOf(zone, 'rotate');
