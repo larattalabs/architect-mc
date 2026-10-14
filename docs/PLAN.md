@@ -427,6 +427,14 @@ persisted formats. Candidate later asks: `Survey.biome` per column (T1's fields 
 - PT verifier notes: `PredicatePathsTest` matches only the literal `level.setBlock(`; comment or lock the off-thread clear in
   `Placed.changed`.
 
+## Queued from C35 (coordinator, 2026-10-14)
+
+- PT2 gate item 13 (`old027`, a 0.27.0 reader refuses adopt journal files) reads `../architect-mc-PT2-v0270`, a tag checkout that
+  no longer has a `mod/` tree. Make the driver build or fetch the 0.27.0 reader into `artifacts/` (like the apijars baselines)
+  instead of depending on a sibling worktree.
+- C35 limit: an adopted build's change never uses a bible for new cells, even if asked (new cells come from the captured
+  blocks by role: wall, frame, roof). Forwarding a bible needs `Adopt.source()` to change; revisit if players ask.
+
 ## Open questions
 - Track AgentCraft fixes to the copied placement code, or treat the copy as independent from now on?
 - Cost: measure tokens and time per design in phase 1, and show an estimate in the form.
