@@ -176,7 +176,13 @@ steps.plantime = async () => {
   const g = JSON.parse(fs.readFileSync(path.join(root, 'scenarios', 'goldens', 'districts_demo.json'), 'utf8'));
   out.tiles = { count: Object.keys(ts.tiles).length, cells: ts.cells, workersSame: ts.workersSame, golden: JSON.stringify(ts.tiles) === JSON.stringify(g.tiles) };
   check(ts.workersSame, `item 8: ${out.tiles.count} tile shas equal for 1 and 4 workers, forward and shuffled (S3)`);
-  check(out.tiles.golden && ts.irSha === g.irSha, `item 8: the sandboxed plan equals the committed golden scenarios/goldens/districts_demo.json (IR ${ts.irSha.slice(0, 12)}, ${out.tiles.count} tile shas)`);
+  // (as the scenarios' golden row) an IR that differs from the golden's only by its recorded kitVersion (a later kit's placeholder)
+  // matches when every tile sha does
+  const noKit = (j) => JSON.stringify({ ...j, kitVersion: null });
+  const runIr = JSON.parse(fs.readFileSync(path.join(dir, 'last-s3', 'ir.json'), 'utf8'));
+  const gIr = JSON.parse(fs.readFileSync(path.join(root, 'scenarios', 'goldens', 'districts_demo', 'ir.json'), 'utf8'));
+  out.tiles.kitOnly = ts.irSha !== g.irSha && noKit(runIr) === noKit(gIr) ? `${gIr.kitVersion} -> ${runIr.kitVersion}` : null;
+  check(out.tiles.golden && (ts.irSha === g.irSha || out.tiles.kitOnly), `item 8: the sandboxed plan equals the committed golden scenarios/goldens/districts_demo.json (IR ${ts.irSha.slice(0, 12)}${out.tiles.kitOnly ? `, differing from the golden's only by its kitVersion ${out.tiles.kitOnly}` : ''}, ${out.tiles.count} tile shas)`);
   spendZero();
   return out;
 };
@@ -424,7 +430,10 @@ async function d2Round(name, world, claim, district, { beside = null, owner = OW
         if (m.class !== 'none') continue;
         const [x, y, z] = m.pos.split(',').map(Number);
         const anywhere = (flowing(m.now) && !/^minecraft:water\[level=0/.test(m.was)) || (flowing(m.was) && /^minecraft:(air|cave_air)$/.test(m.now)) ? 'flow'
-          : /_leaves\[distance=7,persistent=false/.test(m.was) && /^minecraft:air$/.test(m.now) ? 'decay' : null;
+          : /_leaves\[distance=7,persistent=false/.test(m.was) && /^minecraft:air$/.test(m.now) ? 'decay'
+          // a leaf whose distance the game recomputed on a neighbour update (the same leaf, only `distance` differs: worldgen leaves
+          // carry stale distances until something beside them changes): `live`
+          : /_leaves\[/.test(m.was) && m.was.replace(/distance=\d/, '') === m.now.replace(/distance=\d/, '') ? 'live' : null;
         if (anywhere) { m.class = anywhere; diff.classes.none -= 1; diff.classes[anywhere] = (diff.classes[anywhere] ?? 0) + 1; continue; }
         if (written(x, y, z)) continue;
         const fluid = /^minecraft:(water|lava)\b/.test(m.now) || /^minecraft:(water|lava)\b/.test(m.was) || (/lava/.test(m.was) && /^minecraft:(obsidian|cobblestone|stone)$/.test(m.now));
