@@ -46,6 +46,10 @@
 //                     phase 6c slice D1 (over v0.27.0): the unchanged 0.27.0, 0.26.0 and 0.25.0 apitest jars (API 1.24.0, 1.23.0, 1.22.0) and
 //                     the 0.27.0 mod jar's 1.24.0 surface (artifacts/gate6c-d/v0270, built from the v0.27.0 tag with its tools/; PT's
 //                     gate6c-pt/v0260 and v0250).
+//   node tools/api-compat.mjs --gate6cs2 [--artifacts <dir>] [classesDir]
+//                     phase 6c slice S2 (integrated over v0.30.0): the unchanged 0.30.0, 0.29.0 and 0.28.0 apitest jars (API 1.27.0, 1.26.0,
+//                     1.25.0) and the 0.30.0 mod jar's 1.27.0 surface (artifacts/gate6c-s2/v0300, v0290, v0280, each built from its tag with
+//                     its tools/).
 //   node tools/api-compat.mjs --gate6cpt [--artifacts <dir>] [classesDir]
 //                     phase 6c slice PT (over v0.25.0): the unchanged 0.25.0, 0.24.0 and 0.23.0 apitest jars (API 1.22.0, 1.21.0, 1.20.0) and
 //                     the 0.25.0 mod jar's 1.22.0 surface (artifacts/gate6c-pt/v0250, built from the v0.25.0 tag with its tools/; T2's
@@ -93,8 +97,9 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-if (process.argv[2] === '--gate6b' || process.argv[2] === '--gate6c0a' || process.argv[2] === '--gate6c0b' || process.argv[2] === '--gate6cx' || process.argv[2] === '--gate6cw' || process.argv[2] === '--gate6cmp' || process.argv[2] === '--gate6cy2' || process.argv[2] === '--gate6cf1' || process.argv[2] === '--gate6ct1' || process.argv[2] === '--gate6csch' || process.argv[2] === '--gate6cf2' || process.argv[2] === '--gate6cb' || process.argv[2] === '--gate6ct2' || process.argv[2] === '--gate6cpt' || process.argv[2] === '--gate6cpt2' || process.argv[2] === '--gate6cp0' || process.argv[2] === '--gate6cc33' || process.argv[2] === '--gate6cd') {
+if (process.argv[2] === '--gate6b' || process.argv[2] === '--gate6c0a' || process.argv[2] === '--gate6c0b' || process.argv[2] === '--gate6cx' || process.argv[2] === '--gate6cw' || process.argv[2] === '--gate6cmp' || process.argv[2] === '--gate6cy2' || process.argv[2] === '--gate6cf1' || process.argv[2] === '--gate6ct1' || process.argv[2] === '--gate6csch' || process.argv[2] === '--gate6cf2' || process.argv[2] === '--gate6cb' || process.argv[2] === '--gate6ct2' || process.argv[2] === '--gate6cpt' || process.argv[2] === '--gate6cpt2' || process.argv[2] === '--gate6cp0' || process.argv[2] === '--gate6cc33' || process.argv[2] === '--gate6cd' || process.argv[2] === '--gate6cs2') {
   const cd = process.argv[2] === '--gate6cd';
+  const cs2 = process.argv[2] === '--gate6cs2';
   const cpt2 = process.argv[2] === '--gate6cpt2';
   const cc33 = process.argv[2] === '--gate6cc33';
   const cpt = process.argv[2] === '--gate6cpt';
@@ -120,7 +125,8 @@ if (process.argv[2] === '--gate6b' || process.argv[2] === '--gate6c0a' || proces
   }
   if (!dir) {
     const local = path.join(root, 'artifacts');
-    dir = cd ? (fs.existsSync(path.join(local, 'gate6c-d', 'v0270')) && fs.existsSync(path.join(local, 'gate6c-pt', 'v0260')) ? local : path.join(os.homedir(), 'Developer', 'LarattaLabs', 'architect-mc', 'artifacts'))
+    dir = cs2 ? (fs.existsSync(path.join(local, 'gate6c-s2', 'v0300')) && fs.existsSync(path.join(local, 'gate6c-s2', 'v0290')) && fs.existsSync(path.join(local, 'gate6c-s2', 'v0280')) ? local : path.join(os.homedir(), 'Developer', 'LarattaLabs', 'architect-mc', 'artifacts'))
+      : cd ? (fs.existsSync(path.join(local, 'gate6c-d', 'v0270')) && fs.existsSync(path.join(local, 'gate6c-pt', 'v0260')) ? local : path.join(os.homedir(), 'Developer', 'LarattaLabs', 'architect-mc', 'artifacts'))
       : cpt2 ? (fs.existsSync(path.join(local, 'gate6c-pt2', 'v0270')) && fs.existsSync(path.join(local, 'gate6c-pt', 'v0260')) ? local : path.join(os.homedir(), 'Developer', 'LarattaLabs', 'architect-mc', 'artifacts'))
       : cc33 ? (fs.existsSync(path.join(local, 'gate6c-c33', 'v0270')) && fs.existsSync(path.join(local, 'gate6c-pt', 'v0260')) ? local : path.join(os.homedir(), 'Developer', 'LarattaLabs', 'architect-mc', 'artifacts'))
       : cpt ? (fs.existsSync(path.join(local, 'gate6c-pt', 'v0260')) && fs.existsSync(path.join(local, 'gate6c-pt', 'v0250')) ? local : path.join(os.homedir(), 'Developer', 'LarattaLabs', 'architect-mc', 'artifacts'))
@@ -130,7 +136,12 @@ if (process.argv[2] === '--gate6b' || process.argv[2] === '--gate6c0a' || proces
       : cf2 ? (fs.existsSync(path.join(local, 'gate6c-f2', 'v0220')) && fs.existsSync(path.join(local, 'gate6c-sch', 'v0200')) ? local : path.join(os.homedir(), 'Developer', 'LarattaLabs', 'architect-mc', 'artifacts')) : (ct1 || csch) ? (fs.existsSync(path.join(local, 'gate6c-sch', 'v0200')) ? local : path.join(os.homedir(), 'Developer', 'LarattaLabs', 'architect-mc', 'artifacts')) : fs.existsSync(path.join(local, (f1 || cmp) ? 'gate6c-f1' : (cw || cy2) ? 'gate6c-w' : cx ? 'gate6c-x' : c0a ? 'gate6c0a' : 'gate6b', (f1 || cmp) ? 'v0180' : (cw || cy2) ? 'v0170' : cx ? 'v0160' : c0a ? 'v0120' : 'v0110')) ? local : path.join(os.homedir(), 'Developer', 'LarattaLabs', 'architect-mc', 'artifacts');
   }
   // (6c 0a) the unchanged 0.12.0, 0.11.0 and 0.10.0 apitest jars (API 1.9.0, 1.8.0, 1.7.0) and the 0.12.0 mod jar's 1.9.0 surface
-  const checks = cd ? [ // (6c D1, over v0.27.0) 0.27.0 built from its tag by D (with its tools/); PT's 0.26.0 and 0.25.0 tag builds
+  const checks = cs2 ? [ // (S2, integrated over v0.30.0) 0.30.0, 0.29.0 and 0.28.0, each built from its tag (with its tag's tools/)
+    ['1.27.0 apitest', [path.join(dir, 'gate6c-s2', 'v0300', 'architect_apitest-0.30.0.jar')]],
+    ['1.26.0 apitest', [path.join(dir, 'gate6c-s2', 'v0290', 'architect_apitest-0.29.0.jar')]],
+    ['1.25.0 apitest', [path.join(dir, 'gate6c-s2', 'v0280', 'architect_apitest-0.28.0.jar')]],
+    ['1.27.0 surface', ['--surface', path.join(dir, 'gate6c-s2', 'v0300', 'architect_mc-0.30.0.jar')]],
+  ] : cd ? [ // (6c D1, over v0.27.0) 0.27.0 built from its tag by D (with its tools/); PT's 0.26.0 and 0.25.0 tag builds
     ['1.24.0 apitest', [path.join(dir, 'gate6c-d', 'v0270', 'architect_apitest-0.27.0.jar')]],
     ['1.23.0 apitest', [path.join(dir, 'gate6c-pt', 'v0260', 'architect_apitest-0.26.0.jar')]],
     ['1.22.0 apitest', [path.join(dir, 'gate6c-pt', 'v0250', 'architect_apitest-0.25.0.jar')]],

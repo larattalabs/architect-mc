@@ -108,6 +108,9 @@ public interface ArchitectApi {
 	 * so a routed plan needs no new kind, and the IR graph's edges carry {@code movers} and {@code segments}).
 	 * Since 1.25.0 (C33), a helper with {@code job.systemRefs} adds {@code "job.systemRefs"}: {@link JobSpec#systemRefs} is
 	 * expanded by the helper, and a structured job's {@code system} may be {@link Limits#JOB_SYSTEM_MAX} characters.
+	 * Since 1.28.0, an S2 helper ({@code region.outpost}) adds {@code "scenarioS2"} (the bundled {@code ice_outpost} program, S2's
+	 * ice-spike outpost: lots on the dry land among kept natural ice spikes, blended pads, routes from a gate, generated spikes,
+	 * scatter and melt-safe light; with it, a keep set is a route obstacle at its kept columns and the relief keeps them).
 	 */
 	Set<String> features();
 }

@@ -1,8 +1,48 @@
 {
   "id": "s2_ice_spikes",
+  "short": "s2",
   "phase": "6c",
-  "version": 0,
+  "version": 1,
   "brief": "a frontier outpost among the ice spikes",
+  "program": "ice_outpost",
+  "params": {},
+  "bible": "g6c_s2_outpost",
+  "bibleFixture": "bibles/g6c_s2_outpost.json",
+  "entries": {
+    "g6cs2_tower_w5f5": {
+      "design": "tower",
+      "values": {
+        "width": 5,
+        "floors": 5
+      }
+    },
+    "g6cs2_longhouse_l12": {
+      "design": "tavern",
+      "values": {
+        "length": 12
+      }
+    },
+    "g6cs2_cabin_w7d6": {
+      "design": "cabin",
+      "values": {
+        "width": 7,
+        "depth": 6,
+        "porch": false
+      }
+    }
+  },
+  "entryFor": {
+    "tower_1": "g6cs2_tower_w5f5@1",
+    "longhouse_1": "g6cs2_longhouse_l12@1",
+    "smithy_1": "g6cs2_cabin_w7d6@1",
+    "store_1": "g6cs2_cabin_w7d6@1",
+    "farm_1": "g6cs2_cabin_w7d6@1",
+    "hut_1": "g6cs2_cabin_w7d6@1",
+    "hut_2": "g6cs2_cabin_w7d6@1",
+    "hut_3": "g6cs2_cabin_w7d6@1",
+    "hut_4": "g6cs2_cabin_w7d6@1"
+  },
+  "restraint": "rustic",
   "world": {
     "seed": "2026100906",
     "preset": "normal",
@@ -47,8 +87,9 @@
       "water": 26101,
       "frozen": 9516,
       "previousSha": "064c0e5e2c87db6c07a731e10f03ba2a26a4cfed28b59df0f819c0d2ca613e35",
-      "reason": "6c W (CONTRACT W §5, gate item 7): frozen water reads as water (ARSV FROZEN with WATER, floor at the bed), so a survey with frozen columns gets new bytes; re-pinned at the same claim"
-    }
+      "reason": "6c W (CONTRACT W \u00a75, gate item 7): frozen water reads as water (ARSV FROZEN with WATER, floor at the bed), so a survey with frozen columns gets new bytes; re-pinned at the same claim"
+    },
+    "irShaAtPin": "e3c6c83c0300c27337492834d9c6e907120c1421d3f96ef66b01df3f57620b6e"
   },
   "flat": {
     "preset": "flat",
@@ -80,5 +121,73 @@
       2700,
       1780
     ]
-  }
+  },
+  "feasibility": {
+    "rule": "CONTRACT S2 gate item 1: at least 6 lots on the land band of the re-pinned plan survey (planSurvey.sha), every lot routed from the gate",
+    "result": "7 lots (longhouse_1, tower_1, smithy_1, store_1, farm_1, hut_1, hut_2; hut_3 has no site), every edge routed, checker 0 errors (offline plan of ice_outpost on goldens/forms_demo survey.bin = planSurvey.sha and its frozen volume; the same layout on goldens/scatter_demo, a fresh copy differing in 1 column flag)",
+    "land": {
+      "columns": 36864,
+      "notWater": 10763,
+      "iceFreeBand": 5136,
+      "keptIceColumns": 15196
+    }
+  },
+  "seed": "12231649468885445469",
+  "cams": {
+    "cam_e": [
+      2699.5,
+      108,
+      1749.5,
+      90.4,
+      36.5
+    ],
+    "cam_ground": [
+      2636.5,
+      68,
+      1745.5,
+      67.8,
+      8
+    ],
+    "cam_high": [
+      2640.5,
+      161,
+      1757.5,
+      135,
+      83.3
+    ],
+    "cam_n": [
+      2632.5,
+      104,
+      1679.5,
+      0.4,
+      33.5
+    ],
+    "cam_s": [
+      2632.5,
+      104,
+      1779.5,
+      179.1,
+      56.5
+    ],
+    "cam_w": [
+      2562.5,
+      104,
+      1749.5,
+      -90.4,
+      33.5
+    ]
+  },
+  "lotEntries": {
+    "longhouse_1": "g6cs2_longhouse_l12@1",
+    "tower_1": "g6cs2_tower_w5f5@1",
+    "smithy_1": "g6cs2_cabin_w7d6@1",
+    "store_1": "g6cs2_cabin_w7d6@1",
+    "farm_1": "g6cs2_cabin_w7d6@1",
+    "hut_1": "g6cs2_cabin_w7d6@1",
+    "hut_2": "g6cs2_cabin_w7d6@1",
+    "hut_3": "g6cs2_cabin_w7d6@1",
+    "hut_4": "g6cs2_cabin_w7d6@1"
+  },
+  "lotEntriesNote": "hut_3 and hut_4 have no site on the natural claim; their entries serve the flat variant, which places every listed lot",
+  "camsNote": "cam_ground re-aimed by hand after the first natural run (the pinned anchor stood inside a natural spike): east of the gate, clear of ice within 3, looking west over the boardwalks to the lots on the beach"
 }

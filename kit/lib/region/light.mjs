@@ -22,6 +22,7 @@ import { nodeReached, walkGraph, walkNodes } from './check.mjs';
 import { centreCells, crossOffsets, rightOf, segmentAxis } from './geom.mjs';
 import { ARM_DIRS, DEFAULT_FIXTURE, fixtureCells } from './fixtures.mjs';
 import { COND } from './program.mjs';
+import { walkKinds } from '../realise.mjs';
 
 const DIRS6 = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]];
 export const COVER_SHARE = 0.005;
@@ -103,11 +104,23 @@ function roadLights(vw, ir, fixtureOf) {
  * `reserved`: "x,z" columns no lamp may take (the bell area, golem space, the props' own); `laneCells`: the lanes' cells
  * (door paths). Returns `{lamps: [{lot, at, cells}], perLot, before, after, targets, capped}`.
  */
-export function lightCover(r, { fixture, stage = 'props', keepOut = [], reserved = new Set(), laneCells = [], maxPerLot = LAMPS_PER_LOT, share = COVER_SHARE, extra = [], extraCap = {}, part = 'props_apron', _drop = null } = {}) {
+export function lightCover(r, { fixture, stage = 'props', keepOut = [], reserved = new Set(), laneCells = [], maxPerLot = LAMPS_PER_LOT, share = COVER_SHARE, extra = [], extraCap = {}, part = 'props_apron', _drop = null, _format1 = false } = {}) {
   const { ir, blobs } = draftIR(r);
+  // (6c S2) a draft with side blobs (a relief pass's fields, a frozen volume, a baked form) is a format-2 IR (the kinds it walks, the
+  // plan's seed and keep-out, as scatterPlan's draft), and its virtual world reads the volumes the plan used (the kept natural cells are there, not air); a draft without side blobs
+  // (S7, route_demo) stays as it was
+  let volumes = [];
+  if (!_format1 && ir.blobs && Object.values(ir.blobs).some((b) => b && b.sha !== undefined)) { // (`_format1`: the broken variant)
+    ir.format = 2;
+    ir.requires = walkKinds(ir);
+    ir.seed = r.ctx.seed; // (the plan's seed: a scatter op places as it will, so its boulders' tops are lit)
+    const ko = r.ctx.keepOut;
+    if (Array.isArray(ko)) ir.keepOut = ko;
+    volumes = (r.ctx.volumes ?? []).filter((v) => Object.values(r.volumesUsed).some((u) => u.sha === v.sha)).map((v) => v.decoded).filter(Boolean);
+  }
   const meta = { lots: r.meta.lots, parts: r.meta.parts };
   const surveyCols = r.ctx.survey.columns;
-  const vw = buildVirtual({ ir, survey: surveyCols, blobs }).vw;
+  const vw = buildVirtual({ ir, survey: surveyCols, blobs, volumes }).vw;
   const P = vw.pal;
   const start = ir.anchors?.entrance;
   const opaque = (x, y, z) => P.opaque[vw.get(x, y, z)] || !!vw.lotAt(x, y, z);
@@ -232,7 +245,7 @@ export function lightCover(r, { fixture, stage = 'props', keepOut = [], reserved
         for (const c of chosen) { const d = Math.abs(c.x - n.at[0]) + Math.abs(c.z - n.at[2]); if (d < nd) { nd = d; near = c; } }
         if (near) drop.add(`${near.x},${near.z}`);
       }
-      if (drop.size > (_drop?.size ?? 0)) return lightCover(r, { fixture, stage, keepOut, reserved, laneCells, maxPerLot, share, extra, extraCap, part, _drop: drop });
+      if (drop.size > (_drop?.size ?? 0)) return lightCover(r, { fixture, stage, keepOut, reserved, laneCells, maxPerLot, share, extra, extraCap, part, _drop: drop, _format1 });
     }
   }
   const after = { targets: targets.length, dark: dark.size, share: targets.length ? dark.size / targets.length : 0 };
