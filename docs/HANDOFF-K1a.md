@@ -55,6 +55,11 @@ the as-built).
 - **Foundation round 4 (interface addition):** a special-move row may define `prune(state, from, to) -> note | null`, called
   before an edge's search: a note fails the edge NO_ROUTE at once (the gate row prunes an edge across a sealed wall instead of
   spending the node budget). `blockLight` is exported from `kit/lib/region/check.mjs` (the wall and rope rules' M5).
+- **Foundation round 5 (over v0.33.0):** origin/main (C37) merged; C37's catalogue archived as
+  `fixtures/plan/catalogue-c37.json` and P0's item 9 diffs C37 -> K1 (the coordinator renumbers K1 to catalogue 5, API
+  1.31.0, kit 0.32.0 at merge). Region primitives `r.wall(line, opts)` / `r.gate(handle, at, opts)` (K1a's `wallPrimitive`)
+  and `r.ropeBridge(a, b, opts)`, which calls `ropePrimitive(r, a, b, opts)` when K1b's `kit/lib/connectors/rope.mjs` exports
+  it (a namespace import: K1b adds the export, no edit to program.mjs).
 
 ## K1a: state
 

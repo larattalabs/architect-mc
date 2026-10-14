@@ -265,8 +265,11 @@ test('item 9: the catalogue diff (D1 flips program.districts and endpoint.region
   // (7a K1, item 8) D2 to K1: exactly the four flips, the five added ids and locator.around's new note; the recorded pending
   // connector.wall part flagged to recheck
   const pending = JSON.parse(fs.readFileSync(path.join(FIX, 'pending-two-districts.json'), 'utf8'));
-  const k1 = diffCatalogues(d2g, golden, { pending });
-  assert.equal(golden.catalogueVersion, 4);
+  // (C37 shipped between D2 and K1: its catalogue, v0.33.0's, is archived as fixtures/plan/catalogue-c37.json and K1 diffs from it;
+  // the catalogueVersion is the coordinator's to renumber at merge)
+  const c37 = JSON.parse(fs.readFileSync(path.join(FIX, 'catalogue-c37.json'), 'utf8'));
+  const k1 = diffCatalogues(c37, golden, { pending });
+  assert.deepEqual(diffCatalogues(d2g, c37).reservedToSupported, [], 'C37 flipped nothing');
   assert.deepEqual(k1.reservedToSupported, ['connector.auto', 'connector.gate', 'connector.rope_bridge', 'connector.wall']);
   assert.deepEqual(k1.added, [{ id: 'layout.elevated', state: 'reserved' }, { id: 'wall.along', state: 'reserved' }, { id: 'wall.around', state: 'supported' }, { id: 'wall.edge', state: 'supported' }, { id: 'wall.line', state: 'supported' }]);
   assert.deepEqual([k1.removed, k1.retired, k1.otherStateChanges, k1.untilChanged], [[], [], [], []]);

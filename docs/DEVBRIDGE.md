@@ -358,6 +358,7 @@ Semi-stable: a hook may change or go, and every such change is listed here, newe
   `dev.region.artifact {sha, body?}`, `dev.region.pinArtifact {sha, owner, on?}`, `dev.region.realiseApproved {sha, lotEntries?, fill?,
   opKey?}`, `dev.region.realiseByKey {owner?, opKey}` and `dev.region.tileShas {region}` (the sha of every tile a realise received, from
   `TileStream.TILE_SHAS`).
+- **2026-10-14 (C37b):** new `dev.library.cells {ids?}` (SliceP0Dev, generated headless too): per library entry `{id, entryCells (Library.Entry.cells()), planCells (PlanChecks.cells), partSum, parts, size}`.
 - **2026-10-13 (6c slice PT):** new `dev.pt.*` hooks (SlicePTDev, generated headless too). `dev.pt.uses {ops: [{item, at, on?, face?,
   use?: on|item, placer?: <name>|bot, yaw?, pitch?}]}`: item uses through a named fake player's (Fabric `FakePlayer`, an offline
   UUID per name) or the bot's `ServerPlayerGameMode.useItemOn` / `useItem`, never `setBlock` -> per op `{tracked, placer, build,
