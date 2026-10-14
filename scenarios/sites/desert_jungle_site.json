@@ -1,0 +1,81 @@
+{
+  "id": "desert_jungle_site",
+  "phase": "6c-d",
+  "version": 0,
+  "brief": "a desert/jungle biome edge for a district following it (6c D2, C27): the two families meeting on the claim (the districts program following their edge plans there), land; searched round 672,304 where a first spiral saw both with wooded badlands between",
+  "world": {
+    "seed": "2026100906",
+    "preset": "normal",
+    "gamerules": "gallery"
+  },
+  "needs": {
+    "size": [
+      192,
+      192
+    ],
+    "biomesAll": [
+      {
+        "any": [
+          "desert"
+        ],
+        "share": 0.08
+      },
+      {
+        "any": [
+          "jungle"
+        ],
+        "share": 0.08
+      }
+    ],
+    "waterMax": 40,
+    "candidates": 81,
+    "step": 32,
+    "center": [
+      672,
+      304
+    ],
+    "planCheck": {
+      "program": "districts",
+      "params": {
+        "spec": {
+          "districts": [
+            {
+              "id": "oasis",
+              "size": [
+                64,
+                24
+              ],
+              "follow": {
+                "biome_edge": {
+                  "between": [
+                    "desert",
+                    "jungle"
+                  ]
+                }
+              },
+              "lots": 1
+            }
+          ]
+        },
+        "lamps": false
+      },
+      "lots": 1,
+      "clean": []
+    }
+  },
+  "fixture": {
+    "claim": [
+      704,
+      272,
+      895,
+      463
+    ],
+    "yRange": [
+      40,
+      200
+    ],
+    "foundBy": "find-site desert_jungle_site @ seed 2026100906 (gate-runs-D2/20261013-205705-change: 81 candidates round 672,304, step 32; the districts program following the desert/jungle edge planned there)",
+    "surveySha": "c4e1c4c9dfe8970656bdba1e0381a2a1d4a68e5c17ad50f479ae165c404d58ff",
+    "score": 26
+  }
+}

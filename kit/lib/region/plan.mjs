@@ -12,6 +12,7 @@ import { FLAG_MISSING, asColumns, canonicalJson, makeColumns, sha256Hex } from '
 import { voxelsSize } from './voxels.mjs';
 import { scatterBounds, stampBounds } from './scatter.mjs';
 import { stampLibrary } from './stamps.mjs';
+import { parseBiomes } from './boundary.mjs';
 import { decodeArbl } from '../realise.mjs';
 import { COND, DEFAULT_MACRO_ROLES, Region, blockState, region as makeRegion } from './program.mjs';
 import { surveyApi, windowFromSurvey } from './survey.mjs';
@@ -312,6 +313,9 @@ export async function planRegion(o) {
   // (6c D1) a standing region the plan lays out beside (Regions.plan's `beside`): read through ctx.beside, recorded in the IR when read
   const beside = o.beside ? parseBeside(o.beside) : null;
   let besideRead = false;
+  // (6c D2) the plan's biome grid (one biome per 4x4 columns: the game's storage, C28): read through ctx.biomes, recorded when read
+  const biomes = o.biomes ? parseBiomes(o.biomes) : null;
+  let biomesRead = false;
   const raw = asColumns(o.survey);
   const { columns: survey, missing } = fillMissing(raw);
   let roles;
@@ -358,6 +362,7 @@ export async function planRegion(o) {
     // (6c V) the owner's protected rects; a program that reads them records them in the IR (`keepOut`: the areas it honoured)
     Object.defineProperty(ctx, 'keepOut', { enumerable: true, get: () => { keepOutRead = true; return keepOut.map((k) => [...k]); } });
     // (6c D1) the standing region beside this claim (null without one; a program that reads it records it in the IR)
+    Object.defineProperty(ctx, 'biomes', { enumerable: true, get: () => { if (!biomes) return null; biomesRead = true; return biomes; } });
     Object.defineProperty(ctx, 'beside', { enumerable: true, get: () => { if (!beside) return null; besideRead = true; return JSON.parse(JSON.stringify(beside)); } });
     out = await mod.default(ctx);
     regionObj = out;
@@ -417,6 +422,9 @@ export async function planRegion(o) {
   if (keepOutRead) ir.keepOut = keepOut.map((k) => [...k]);
   // (6c D1) the standing region the plan read (its id and the sha of what it read: the join and the obstacles came from it)
   if (besideRead) ir.beside = { id: beside.id, sha: sha256Hex(canonicalJson(beside)) };
+  // (6c D2) the biome grid the plan read (its sha), and an outpost's corridor (settlement land its road crosses: row runs per outpost)
+  if (biomesRead) ir.biomes = { sha: sha256Hex(canonicalJson({ minX: biomes.minX, minZ: biomes.minZ, res: biomes.res, width: biomes.width, depth: biomes.depth, palette: biomes.palette, ids: [...biomes.ids] })) };
+  if (r.meta.corridor) ir.corridor = r.meta.corridor;
   const kinds = walkKinds(ir);
   if (kinds.length) { ir.format = 2; ir.requires = kinds; }
   const evalBlobs = (sha) => sideBytes.get(sha);

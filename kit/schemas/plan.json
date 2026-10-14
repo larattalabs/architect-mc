@@ -66,10 +66,10 @@
 
   "x-catalogue": {
     "about": "The capability catalogue that P0 ships (catalogueVersion 1). Each entry: a stable block id (never reused or renamed), the API version it arrived in (sinceApi; P0 is a placeholder the coordinator replaces at merge with the real minor), its own schemaVersion (bumped when its members grow, additively), its state (supported | reserved | retired) and, for reserved, the slice it waits for (until). Checks return this catalogue with every answer; a release commits it as a golden so two catalogues diff by id. Reserved entries carry their parameters through $defs/extension until supported.",
-    "catalogueVersion": 2,
+    "catalogueVersion": 3,
     "entries": [
       { "id": "zone.standard", "sinceApi": "P0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/zone.standard" },
-      { "id": "zone.outpost", "sinceApi": "P0", "schemaVersion": 0, "state": "reserved", "until": "D2" },
+      { "id": "zone.outpost", "sinceApi": "P0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/zone.outpost" },
       { "id": "zone.district", "sinceApi": "P0", "schemaVersion": 0, "state": "reserved", "until": "D1", "aliasOf": "program.districts", "note": "Reserved alias of the districts program form; the answer names program.districts (R4c)." },
       { "id": "program.flat_village", "sinceApi": "P0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/program.template" },
       { "id": "program.lots", "sinceApi": "P0", "schemaVersion": 1, "state": "supported", "def": "#/$defs/program.lots" },
@@ -128,14 +128,14 @@
       { "id": "locator.inside", "sinceApi": "P0", "schemaVersion": 1, "state": "supported" },
       { "id": "locator.near", "sinceApi": "P0", "schemaVersion": 1, "state": "supported" },
       { "id": "locator.adjacent", "sinceApi": "P0", "schemaVersion": 1, "state": "supported" },
-      { "id": "locator.along", "sinceApi": "P0", "schemaVersion": 0, "state": "reserved", "until": "D2" },
+      { "id": "locator.along", "sinceApi": "P0", "schemaVersion": 1, "state": "supported" },
       { "id": "locator.around", "sinceApi": "P0", "schemaVersion": 0, "state": "reserved", "until": "FL" },
       { "id": "feature.water", "sinceApi": "P0", "schemaVersion": 1, "state": "supported" },
       { "id": "feature.part", "sinceApi": "P0", "schemaVersion": 1, "state": "supported" },
       { "id": "feature.protected", "sinceApi": "P0", "schemaVersion": 1, "state": "supported" },
       { "id": "feature.region", "sinceApi": "P0", "schemaVersion": 0, "state": "reserved", "until": "D1" },
-      { "id": "feature.biome_edge", "sinceApi": "P0", "schemaVersion": 0, "state": "reserved", "until": "D2" },
-      { "id": "feature.ridge", "sinceApi": "P0", "schemaVersion": 0, "state": "reserved", "until": "D2" },
+      { "id": "feature.biome_edge", "sinceApi": "P0", "schemaVersion": 1, "state": "supported" },
+      { "id": "feature.ridge", "sinceApi": "P0", "schemaVersion": 1, "state": "supported" },
       { "id": "feature.build", "sinceApi": "1.24.0", "schemaVersion": 1, "state": "supported", "note": "PT (C32): a player's build as a plan feature {build: {id | kind, pick?, to?}}; also target {build: id} (inside, adjacent) and near {feature: {build}}. sinceApi is PT's placeholder, set at merge." },
       { "id": "endpoint.part", "sinceApi": "P0", "schemaVersion": 1, "state": "supported" },
       { "id": "endpoint.anchor", "sinceApi": "P0", "schemaVersion": 1, "state": "supported" },
@@ -417,6 +417,25 @@
         "sketch": { "$ref": "#/$defs/sketch" },
         "size": { "$ref": "#/$defs/size" },
         "tolerance": { "$ref": "#/$defs/tolerance" }
+      }
+    },
+    "zone.outpost": {
+      "type": "object", "required": ["id", "program"], "additionalProperties": false,
+      "description": "(D2, zone.outpost) An outpost: a district not touching the town, placed on a survey candidate at least gap (default 24) from every zone and form before it and joined by a road to the nearest other zone's street end; the road's corridor is reported as settlement land and undone with the outpost (one region). Otherwise as zone.standard: a part of the settlement with its own purpose, style and buildings. v0 compiles it to a rect inside the claim laid out by its program.",
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "kind": { "const": "outpost" },
+        "required": { "type": "boolean" },
+        "label": { "$ref": "#/$defs/label" },
+        "notes": { "$ref": "#/$defs/text500" },
+        "ext": { "$ref": "#/$defs/ext" },
+        "purpose": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,31}$", "description": "A short tag (market, farming, mining, temple). Recorded and echoed; not interpreted in v0." },
+        "style": { "$ref": "#/$defs/bibleRef" },
+        "program": { "$ref": "#/$defs/program" },
+        "where": { "$ref": "#/$defs/where" },
+        "sketch": { "$ref": "#/$defs/sketch" },
+        "size": { "$ref": "#/$defs/size" },
+        "tolerance": { "$ref": "#/$defs/tolerance" }, "gap": { "type": "integer", "minimum": 8, "maximum": 512, "description": "Columns kept from the zones and forms resolved before it (default 24)." }
       }
     },
 

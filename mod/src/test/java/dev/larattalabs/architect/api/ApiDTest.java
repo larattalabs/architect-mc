@@ -67,6 +67,8 @@ class ApiDTest {
 	void features() {
 		assertTrue(ApiRules.features(2, List.of("region.districts", "region.beside")).containsAll(List.of("districtsPass", "besideRegion")));
 		assertFalse(ApiRules.features(2, List.of("region.route")).contains("districtsPass"));
+		// (6c D2) boundary-following districts and outposts
+		assertTrue(ApiRules.features(2, List.of("region.boundary")).containsAll(List.of("boundaryDistricts", "outposts")));
 	}
 
 	/** S7's golden IR (scenarios/goldens/s7): its street runs north-south at x 1557 from z -3122; its claim is [1480, -3128, 1591, -3017]. */

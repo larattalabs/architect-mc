@@ -62,6 +62,12 @@ export function score(s, needs) {
     share = Object.entries(s.biomes).filter(([b]) => needs.biomes.any.some((k) => b.includes(k))).reduce((a, [, v]) => a + v, 0) / 100;
     if (share < needs.biomes.share) return null;
   }
+  // (6c D2) every group of biomesAll present at its share (a biome edge between two families: a desert/jungle site)
+  for (const g of needs.biomesAll ?? []) {
+    const sh = Object.entries(s.biomes).filter(([b]) => g.any.some((k) => b.includes(k))).reduce((a, [, v]) => a + v, 0) / 100;
+    if (sh < g.share) return null;
+    share = Math.min(share, sh);
+  }
   // prefer the target relief's middle, the biome share, and natural land
   const mid = needs.relief ? (needs.relief[0] + needs.relief[1]) / 2 : relief;
   return Math.round((share * 100 - Math.abs(relief - mid) + (s.natural ?? 100) / 10) * 100) / 100;

@@ -1001,6 +1001,35 @@ const d = r.pass('districts', { districts: [
   the routes (`lampFixture` for a snowy claim: soul lanterns). Anchors `entrance`/`spawn` (the first district's bell) and
   `bell_<district>`.
 
+### Districts that follow a boundary, and outposts (6c D2: C27, C28; `boundary.mjs`, `followEmit.mjs`)
+
+```js
+{ id: 'oasis', size: [96, 24], follow: { biome_edge: { between: ['desert', 'jungle'] } }, side: 'a', lots: 3 }   // [length, depth]
+{ id: 'quay',  size: [64, 24], follow: { shore: { minArea: 64 } }, lots: 2 }
+{ id: 'crest', size: [64, 20], follow: { ridge: { minRise: 8 } }, lots: 1 }
+{ id: 'camp',  size: [40, 40], outpost: { gap: 40 }, lots: 2 }
+```
+
+- **Boundaries** (`traceBoundary`): a biome edge (the first family's columns beside the second's, over `ctx.biomes`: the plan's
+  biome grid, one biome per 4x4 columns, the game's own storage, so a per-column survey adds nothing: C28), a shore (land beside
+  water of at least `minArea` columns), a ridge (a crest of the 5 x 5 smoothed ground in one of four directions, `minRise` above both
+  sides within 12). The longest piece (or the one nearest the standing region) is ordered into a 4-connected spine.
+- **The district** (`placeFollow`): a window of `length` cells of the spine (half a length at a time when one meets keep-out or
+  another region); its **shape** a mask, the band `depth` deep on one side (a biome edge: the first family's, `side: 'b'` the
+  other; a shore: the land) or centred (a ridge), measured along the boundary's normal by the grid's own (Chebyshev) distance, so a
+  diagonal boundary's band is as deep as a straight one's; its **bounding claim** the mask's rect; its **street line** the band's
+  middle (the crest itself on a ridge), smoothed over 7 points and joined into one 8-connected run, routed as the edge `st_<id>` that
+  prefers the line and keeps within 2 cells of it (the route pass's per-edge `within`, `withinRadius`; additive); a window whose street
+  does not route gives way to the next along the boundary (at most 4, each with 2M expansions); its lots slope pads (cut and fill up
+  to 6) on both sides, 3 off the street (up to 4 more, a longer lane, where a diagonal street runs on across a lot's front), facing it,
+  each with a lane to the street. Its ends join the other districts and the standing region as any district's. A plan/0 `along` zone
+  places its window at resolve time and does not try the next window.
+- **Refusals** (the plan fails, named): `NO_EDGE` (no such boundary within the claim, too short, or its street does not route),
+  `PROTECTED` (keep-out over its band), `OVERLAP` (another region or district over it).
+- **Outposts**: a district on a survey candidate at least `gap` from the standing region and the following districts; its join (and
+  any tree edge to it) is its road. The road's footprint grown by 2 is its **corridor** (`meta.districts.corridor`, the IR's
+  `corridor`, the region view's ext `architect_mc:corridor` `{runs, cells, rect}`): settlement land, undone with the outpost.
+
 ## `districts` and `districts_demo` (`kit/regions/`, `catalogue = false`)
 
 `districts`: the pass over `params.spec.districts` (a JSON param), with `loopiness` (percent), `gradePct`, `lamps` and `routeLamp`

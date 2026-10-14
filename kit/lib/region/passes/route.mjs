@@ -444,7 +444,8 @@ export function selfClash(P, width) {
  * The pass. `survey`: the plan's columns. `intent` (resolved by the program's `r.pass('route', ...)`): `{edges: [{id, from: {at:
  * [x, y, z] (feet), facing: [dx, dz]?}, to, width, movers, ladders}], maxGrade = 0.25, hairpinLanding = 3, stairs = true, maxCut =
  * 4, maxFill = 4, margin = 2, hard: [[x0, z0, x1, z1]], keepOut: [[x0, z0, x1, z1]], prefer: [[x, z]], base: {minX, minZ, width,
- * depth, values} | null, _unsafe: {noKeepOut, noGrade, villagerLadders, noTreeReach}}`. Returns `{fields: {}, ops: [], data: {edges: [...]}}`:
+ * depth, values} | null, _unsafe: {noKeepOut, noGrade, villagerLadders, noTreeReach}}`; an edge may carry `prefer: [[x, z]]` (its own
+ * preferred cells) and `within: [[x, z]], withinRadius = 3` (6c D2: the search keeps to those cells grown by the radius). Returns `{fields: {}, ops: [], data: {edges: [...]}}`:
  * each edge `{id, ok, failed?, movers, ladders, width, path: [[x, y, z]] (4-connected centre cells, y the surface), segments:
  * [{kind: walk|stair|landing|ladder, from, to}] (path indices, inclusive), landings: [{cells: [[x, z]], y}], ladderCols: [{x, z,
  * y0, y1, facing}], cost, length, rise, expanded, search: 'corridor'|'claim'}`. The program turns them into primitives.
@@ -553,6 +554,15 @@ export function routePass(survey, volumes, intent) {
       preferE = Uint8Array.from(preferM);
       for (const p of e.prefer) { const k = cellAt(p[0], p[1]); if (k >= 0) preferE[k] = 1; }
     }
+    // (6c D2) `within: [[x, z]]` on the edge (a following district's street line): the search keeps to those cells grown by
+    // `withinRadius` (default 3), one search in that corridor instead of the corridor, corridor48, claim sequence
+    let withinM = null;
+    if (Array.isArray(e.within) && e.within.length) {
+      const seed = new Uint8Array(n);
+      for (const p of e.within) { const k = cellAt(p[0], p[1]); if (k >= 0) seed[k] = 1; }
+      const wr = isInt(e.withinRadius) && e.withinRadius >= 0 && e.withinRadius <= 16 ? e.withinRadius : 3;
+      withinM = dilate(seed, W, D, Math.floor((wr + r - 1) / r));
+    }
     const sctx = { G, builtY, prefer: preferE, start: ends[0], goal: ends[1], Gq, w, laneW: Math.floor((w + r - 1) / r), Ld: Math.floor((Math.max(hairpinLanding, w) + r - 1) / r),
       latLo: Math.floor(lo / r), latHi: Math.floor((hi + r - 1) / r), maxCut, maxFill, stairs: stairs && !coarse, ladders, nearEnd };
     // ---- the moves as 4-connected centre cells with their surface y, and segments
@@ -643,8 +653,8 @@ export function routePass(survey, volumes, intent) {
       if (attempt) { const sb = dilate(selfBlock, W, D, Rt); for (let k = 0; k < n; k++) b.blockedW[k] |= sb[k]; }
       res = null;
       // coarse to fine: the corridor (16), then a wider one (48), then the whole claim when it is small enough
-      for (const [radius, name] of [[CORRIDOR, 'corridor'], [3 * CORRIDOR, 'corridor48'], [0, 'claim']]) {
-        const corridor = radius ? corridorOf(env, b.blockedW, si, sj, ti, tj, maxGrade, radius) : null;
+      for (const [radius, name] of withinM ? [[-1, 'within']] : [[CORRIDOR, 'corridor'], [3 * CORRIDOR, 'corridor48'], [0, 'claim']]) {
+        const corridor = radius < 0 ? withinM : radius ? corridorOf(env, b.blockedW, si, sj, ti, tj, maxGrade, radius) : null;
         if (radius && !corridor) continue;
         edgeOut.search = name;
         res = search(env, { ...sctx, ...b, corridor, maxExpand: cap - spent });

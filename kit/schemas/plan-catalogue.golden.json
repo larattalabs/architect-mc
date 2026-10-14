@@ -1,5 +1,5 @@
 {
- "catalogueVersion": 2,
+ "catalogueVersion": 3,
  "api": "1.28.0",
  "kitVersion": "0.29.0",
  "schemaVersion": "plan/0",
@@ -13,9 +13,8 @@
   {
    "id": "zone.outpost",
    "sinceApi": "P0",
-   "schemaVersion": 0,
-   "state": "reserved",
-   "until": "D2"
+   "schemaVersion": 1,
+   "state": "supported"
   },
   {
    "id": "zone.district",
@@ -421,9 +420,8 @@
   {
    "id": "locator.along",
    "sinceApi": "P0",
-   "schemaVersion": 0,
-   "state": "reserved",
-   "until": "D2"
+   "schemaVersion": 1,
+   "state": "supported"
   },
   {
    "id": "locator.around",
@@ -460,16 +458,14 @@
   {
    "id": "feature.biome_edge",
    "sinceApi": "P0",
-   "schemaVersion": 0,
-   "state": "reserved",
-   "until": "D2"
+   "schemaVersion": 1,
+   "state": "supported"
   },
   {
    "id": "feature.ridge",
    "sinceApi": "P0",
-   "schemaVersion": 0,
-   "state": "reserved",
-   "until": "D2"
+   "schemaVersion": 1,
+   "state": "supported"
   },
   {
    "id": "feature.build",

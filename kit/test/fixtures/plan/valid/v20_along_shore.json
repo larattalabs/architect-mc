@@ -1,0 +1,56 @@
+{
+  "about": "a zone along a shore (locator.along with a water feature, D2): its lots on a street following the lake and stream of the asks claim",
+  "on": "asks",
+  "covers": [
+    "locator.along"
+  ],
+  "plan": {
+    "schemaVersion": "plan/0",
+    "zones": [
+      {
+        "id": "quay",
+        "where": {
+          "along": {
+            "feature": {
+              "water": {
+                "minArea": 64
+              }
+            }
+          }
+        },
+        "size": {
+          "w": 64,
+          "d": 24
+        },
+        "program": {
+          "lots": [
+            {
+              "id": "q1",
+              "type": "cottage",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "q2",
+              "type": "house",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "q3",
+              "type": "smithy",
+              "size": [
+                9,
+                9
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

@@ -121,7 +121,7 @@ export interface KitInfo {
   /** KINDS_FORMAT2, [] without one */
   irKinds: string[];
   /** the plan CLI takes --blobs-out / --volumes; the kit has check, preview, catalogue (tools/region.mjs and the modules) */
-  caps: { blobsOut: boolean; volumes: boolean; check: boolean; preview: boolean; catalogue: boolean; keepOut: boolean; stamps: boolean; planCache?: boolean; beside?: boolean };
+  caps: { blobsOut: boolean; volumes: boolean; check: boolean; preview: boolean; catalogue: boolean; keepOut: boolean; stamps: boolean; planCache?: boolean; beside?: boolean; biomes?: boolean };
 }
 
 /** (6b) The side blob shas a format-2 IR names (`blobs: {name: {sha, bytes, kind}}`); format-1 blobs are inline: none. */
@@ -270,6 +270,7 @@ export class Regions {
       stamps: /['"]?stamps['"]?\s*:\s*1/.test(tool), // (6c F2) the local stamp library
       planCache: tool.includes("'plan-cache'"), // (6c P0) the plan check's per-part cache
       beside: /['"]?beside['"]?\s*:\s*1/.test(tool), // (6c D1) a standing region beside the claim (--beside)
+      biomes: /['"]?biomes['"]?\s*:\s*1/.test(tool), // (6c D2) the claim's biome grid (--biomes)
     };
     const perm = permissionFlag();
     try {
@@ -342,6 +343,8 @@ export class Regions {
     const keepOut = info.caps.keepOut ? (msg.keepOut ?? []) : [];
     // (6c D1) the standing region beside the claim: to the plan CLI as a file (an older kit has no --beside: its plan reads none)
     const beside = info.caps.beside && msg.beside ? msg.beside : null;
+    // (6c D2) the claim's biome grid: a file for the plan CLI (an older kit has no --biomes)
+    const biomes = info.caps.biomes && msg.biomes ? msg.biomes : null;
     const planId = `p${this.host.now().toString(36)}${crypto.randomBytes(3).toString('hex')}`;
     fs.mkdirSync(this.planDir(planId), { recursive: true });
     const dir = fs.realpathSync(this.planDir(planId));
@@ -360,6 +363,7 @@ export class Regions {
     if (hasBible) fs.writeFileSync(path.join(dir, 'bible.json'), JSON.stringify({ ...(bible ? { id: bible.id, version: bible.version } : {}), roles, ...(patterns ? { patterns } : {}) }));
     if (keepOut.length) fs.writeFileSync(path.join(dir, 'keepout.json'), JSON.stringify(keepOut));
     if (beside) fs.writeFileSync(path.join(dir, 'beside.json'), JSON.stringify(beside));
+    if (biomes) fs.writeFileSync(path.join(dir, 'biomes.json'), JSON.stringify(biomes));
     const request = {
       planId,
       program: program.label,
@@ -381,7 +385,7 @@ export class Regions {
     fs.writeFileSync(path.join(dir, 'request.json'), JSON.stringify(request, null, 2));
     this.host.log.info(`region plan ${planId}: ${program.label}, claim ${msg.claim.minX},${msg.claim.minZ}..${msg.claim.maxX},${msg.claim.maxZ} y ${msg.claim.minY}..${msg.claim.maxY}, seed ${seed}${bible ? `, bible ${bible.id} v${bible.version}` : ''}${volumes.length ? `, ${volumes.length} volume${volumes.length === 1 ? '' : 's'}` : ''}${check ? '' : ', no check'}${passes.length ? `, passes ${passes.join(', ')} (${Math.round(this.cfg.passPlanMs / 1000)} s, ${this.cfg.passPlanHeapMb} MB)` : ''}`);
     this.planning.add(planId);
-    const p = this.withPlanSlot(() => this.runPlan(planId, dir, program, { seed, claim: msg.claim, hasBible, request, check, volumes: volumes.length > 0, keepOut: keepOut.length > 0, beside: !!beside, passes, planCache, previewViews: msg.previewViews, timeoutMs: msg.timeoutMs, heapMb: msg.heapMb })).finally(() => this.planning.delete(planId));
+    const p = this.withPlanSlot(() => this.runPlan(planId, dir, program, { seed, claim: msg.claim, hasBible, request, check, volumes: volumes.length > 0, keepOut: keepOut.length > 0, beside: !!beside, biomes: !!biomes, passes, planCache, previewViews: msg.previewViews, timeoutMs: msg.timeoutMs, heapMb: msg.heapMb })).finally(() => this.planning.delete(planId));
     this.running.add(p);
     void p.finally(() => this.running.delete(p));
     return { planId, seed };
@@ -484,7 +488,7 @@ export class Regions {
     return keys.length;
   }
 
-  planArgs(dir: string, program: ProgramRef, o: { seed: string; claim: PlanMsg['claim']; hasBible: boolean; volumes?: boolean; keepOut?: boolean; beside?: boolean; planCache?: string }): string[] {
+  planArgs(dir: string, program: ProgramRef, o: { seed: string; claim: PlanMsg['claim']; hasBible: boolean; volumes?: boolean; keepOut?: boolean; beside?: boolean; biomes?: boolean; planCache?: string }): string[] {
     const c = o.claim;
     const caps = this.kitInfo().caps;
     return [
@@ -502,6 +506,7 @@ export class Regions {
       ...(o.volumes ? ['--volumes', path.join(dir, 'volumes')] : []),
       ...(o.keepOut ? ['--keep-out', path.join(dir, 'keepout.json')] : []),
       ...(o.beside ? ['--beside', path.join(dir, 'beside.json')] : []),
+      ...(o.biomes ? ['--biomes', path.join(dir, 'biomes.json')] : []),
       ...(this.stampsDir() ? ['--stamps', this.stampsDir()!] : []),
       ...(o.planCache && caps.planCache ? ['--plan-cache', o.planCache] : []),
       '--out',
@@ -566,7 +571,7 @@ export class Regions {
     planId: string,
     dir: string,
     program: ProgramRef,
-    o: { seed: string; claim: PlanMsg['claim']; hasBible: boolean; request: Record<string, unknown>; check: boolean; volumes: boolean; keepOut?: boolean; beside?: boolean; passes?: string[]; planCache?: string; previewViews?: readonly string[]; timeoutMs?: number; heapMb?: number },
+    o: { seed: string; claim: PlanMsg['claim']; hasBible: boolean; request: Record<string, unknown>; check: boolean; volumes: boolean; keepOut?: boolean; beside?: boolean; biomes?: boolean; passes?: string[]; planCache?: string; previewViews?: readonly string[]; timeoutMs?: number; heapMb?: number },
   ): Promise<void> {
     const t0 = Date.now();
     const fail = (message: string) => {

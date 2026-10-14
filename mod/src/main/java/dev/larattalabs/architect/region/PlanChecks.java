@@ -301,6 +301,8 @@ public final class PlanChecks {
 		extra.add("previewViews", views);
 		extra.addProperty("timeoutMs", Math.min(600_000, budget.maxMs() + GRACE_MS));
 		extra.addProperty("heapMb", Math.max(64, budget.maxHeapMb()));
+		// (6c D2) the claim's biome grid (4x4, loaded chunks): a zone along a biome edge reads it
+		extra.add("biomes", BiomeGrid.sample(level, c.minX(), c.minZ(), c.maxX(), c.maxZ()));
 		CompletableFuture<PlanCheck> out = new CompletableFuture<>();
 		RegionsImpl.progress(s, null, "planning");
 		RegionSurvey.sample(level, c.minX(), c.minZ(), c.maxX(), c.maxZ(), 1, LoadPolicy.LOADED_ONLY).thenCompose(cols -> {

@@ -112,6 +112,9 @@ function nodeTest(files) {
 steps.unit = async () => {
   const out = {};
   out.d = nodeTest(['kit/test/districts-d.test.mjs']);
+  // (6c D2) C27 (biome edge, shore, ridge), C28, outposts, refusals: the kit half
+  out.d2 = nodeTest(['kit/test/districts-d2.test.mjs']);
+  check(out.d2.code === 0 && out.d2.fail === 0 && out.d2.pass >= 8, `D2 (kit): C28's 4x4 biome grid, a biome-edge district's shape within 4 cells of the edge over its length, a shore street parallel to the shore, a ridge street on the crest, stable re-plans, named refusals (NO_EDGE, PROTECTED), an outpost's corridor, plan/0's D2 flips: ${out.d2.pass} pass, ${out.d2.fail} fail`, out.d2.failing);
   check(out.d.code === 0 && out.d.fail === 0 && out.d.pass >= 13, `items 1-4, 8 (kit): the assignment on 300 seeded claims (exact <= greedy, no overlap, none in keep-out or C17 areas, unplaced exact), full plans with keep-out (0 lots in it), districts_demo's bands and connectivity on S3's survey, loopiness on 8 districts, the IR sha, the beside seam rule and join, plan/0's program.districts and endpoint.region: ${out.d.pass} pass, ${out.d.fail} fail`, out.d.failing);
   out.p0 = nodeTest(['kit/test/plan-p0.test.mjs', 'kit/test/plan-ops.test.mjs']);
   check(out.p0.code === 0 && out.p0.fail === 0, `P0 item 9 (the catalogue flip: program.districts and endpoint.region reserved -> supported, exactly, against P0's archived golden and catalogue-next.json), P0's items 1-11 with D1's fixtures (Steward's 59 plans: none malformed): ${out.p0.pass} pass, ${out.p0.fail} fail`, out.p0.failing);
@@ -372,6 +375,241 @@ steps.ingame = async () => {
   return out;
 };
 
+// ------------------------------------------------------------------ D2 (C27, C28, outposts): in game
+
+/** Plan (the districts program, one district), realise without entries, then: the plan again after the world is saved and reopened
+ * (stable: the same IR sha, ticks frozen across), the removal restoring the box exactly (ticks frozen from the snapshot to the
+ * check). Returns {plan, files, region, view, again, exact}. */
+async function d2Round(name, world, claim, district, { beside = null, owner = OWNER, natural = false } = {}) {
+  const spec = { spec: { districts: [district] }, lamps: false };
+  const yr = [-64, 320];
+  const box = [claim[0] - 8, yr[0], claim[1] - 8, claim[2] + 8, yr[1], claim[3] + 8];
+  if (natural) await cmd('/tick freeze');
+  try {
+    await cmd('/kill @e[type=!minecraft:player]');
+    // (natural) the snapshot for the E-normal diff: the live world's own changes across the save and reload are classed by the mod
+    // (growth, grazed, live, gravity, unsupported); flat: the hash, E-flat 0
+    const snapFile = path.join(OUT, `${name}-snap.gz`);
+    const h0 = natural ? (await call('dev.region.hash', { box, mode: 'snap', file: snapFile }, 3_600_000)).sha256 : await hash(box);
+    const p = await planReq({ program: 'districts', params: spec, claim, owner, ...(beside ? { beside } : {}), check: true });
+    if (p.refused) throw new Error(`${name}: plan refused: ${p.refused}`);
+    const files = planFiles(p.planId);
+    const region = await L.realise(p.planId, { lots: {} });
+    const st = await L.waitRegion(region, 3_600_000);
+    // reload: save, leave, reopen; plan again (ticks frozen again in the reopened world)
+    await cmd('/save-all flush');
+    await leaveWorld();
+    await openWorld(world);
+    if (natural) await cmd('/tick freeze');
+    await tp(Math.floor((claim[0] + claim[2]) / 2), 0, Math.floor((claim[1] + claim[3]) / 2));
+    // stable: after the reload and the removal (the land as it was planned), the same request plans to the same IR sha
+    await cmd('/kill @e[type=!minecraft:player]');
+    const rm = await undo(region);
+    await L.settle(3000);
+    let h1, enormal = null;
+    if (natural) {
+      const diff = await call('dev.region.hash', { box, mode: 'diff', file: snapFile }, 3_600_000);
+      // Three gate-side world classes (as the scenarios' `flow` and `freeze`), narrowed so that none can hide an undo error: an
+      // unclassified mismatch is classed by its kind ONLY at a cell the plan never writes (its virtual world's written flag, or a
+      // lot's box) and, but for a doomed leaf, away from the district: more than 6 columns from every written column (the virtual
+      // world's, the lots' boxes) and route cell (`far`), or more than 8 below both the surveyed ground and every written cell
+      // within 6 columns (`deep`). There: water or lava appearing, receding or moving (or what lava makes: obsidian, cobblestone,
+      // stone) `flow`; a natural (non-persistent) leaf turned air `decay`; the same block in another state (a leaf whose only change
+      // is `distance` included) `live`. A non-persistent leaf already at distance 7 (it decays on its own random tick) turned air is
+      // `decay` at any unwritten cell (`d7`). Any other change at or near a written cell stays unclassified, whatever its kind
+      const { decodeColumns } = await imp('lib/region/pack.mjs');
+      const { buildVirtual, F_WRITTEN } = await imp('lib/region/vworld.mjs');
+      const pdir = path.join(L.SIDECAR_DATA, 'regions', 'plans', p.planId);
+      const survey = fs.readFileSync(path.join(pdir, 'survey.bin'));
+      const cols = decodeColumns(survey);
+      const groundAt = (x, z) => { const i = Math.floor((x - cols.minX) / cols.resolution), j = Math.floor((z - cols.minZ) / cols.resolution); return i < 0 || j < 0 || i >= cols.width || j >= cols.depth ? null : cols.ground[i + j * cols.width]; };
+      const { vw } = buildVirtual({ ir: files.ir, survey, blobs: (s) => { const f = path.join(pdir, 'blobs', `${s}.bin`); return fs.existsSync(f) ? fs.readFileSync(f) : null; } });
+      // the plan's written columns (each with its lowest written y) and the lots' boxes
+      const wcol = new Map();
+      const wlow = (x, z, y) => { const k = `${x},${z}`, v = wcol.get(k); if (v === undefined || y < v) wcol.set(k, y); };
+      vw.eachWritten((x, y, z) => wlow(x, z, y));
+      const lotBoxes = files.ir.lots.map((l) => l.box);
+      for (const b of lotBoxes) for (let x = b.minX; x <= b.maxX; x++) for (let z = b.minZ; z <= b.maxZ; z++) wlow(x, z, b.minY);
+      const G = 6, near = new Set();
+      const add = (x0, z0, x1, z1) => { for (let x = x0 - G; x <= x1 + G; x++) for (let z = z0 - G; z <= z1 + G; z++) near.add(`${x},${z}`); };
+      const routeCols = new Set();
+      for (const e of files.meta.route?.edges ?? []) for (const [x, , z] of e.path ?? []) { add(x, z, x, z); routeCols.add(`${x},${z}`); }
+      // for the record: a cell's Chebyshev distance (columns) to the nearest written column or route cell, up to 32 (33: further)
+      const distOf = (x, z) => {
+        for (let r = 0; r <= 32; r++) for (let i = -r; i <= r; i++) for (let j = -r; j <= r; j++) {
+          if (Math.max(Math.abs(i), Math.abs(j)) !== r) continue;
+          const k = `${x + i},${z + j}`;
+          if (wcol.has(k) || routeCols.has(k)) return r;
+        }
+        return 33;
+      };
+      const isWritten = (x, y, z) => (vw.flags(x, y, z) & F_WRITTEN) !== 0 || lotBoxes.some((b) => x >= b.minX && x <= b.maxX && y >= b.minY && y <= b.maxY && z >= b.minZ && z <= b.maxZ);
+      /** 'far' | 'deep' | null (near the district: never classed). */
+      const away = (x, y, z) => {
+        let lowNear = Infinity, nearW = false;
+        for (let i = -G; i <= G; i++) for (let j = -G; j <= G; j++) { const v = wcol.get(`${x + i},${z + j}`); if (v !== undefined) { nearW = true; if (v < lowNear) lowNear = v; } }
+        if (!nearW && !near.has(`${x},${z}`)) return 'far';
+        const gy = groundAt(x, z);
+        return gy !== null && y < gy - 8 && y < lowNear - 8 ? 'deep' : null;
+      };
+      const idOf = (b) => b.split(/[[{]/)[0];
+      const fluidRe = /^minecraft:(water|lava)\b/;
+      const kindOf = (m) => fluidRe.test(m.now) || fluidRe.test(m.was) ? 'flow'
+        : /_leaves\[.*persistent=false/.test(m.was) && /^minecraft:air$/.test(m.now) ? 'decay'
+          : idOf(m.was) === idOf(m.now) ? 'live' : null;
+      const by = {};
+      for (const m of diff.list ?? []) {
+        if (m.class !== 'none') continue;
+        const cls = kindOf(m);
+        if (!cls) continue;
+        const [x, y, z] = m.pos.split(',').map(Number);
+        if (isWritten(x, y, z)) continue;
+        const where = cls === 'decay' && /_leaves\[distance=7,persistent=false/.test(m.was) ? 'd7' : away(x, y, z);
+        if (!where) continue;
+        m.class = cls; m.where = where; m.dist = distOf(x, z);
+        by[`${cls}:${where}`] = (by[`${cls}:${where}`] ?? 0) + 1;
+        const band = m.dist > G ? 'beyond6' : 'within6';
+        by[`${cls}:${band}`] = (by[`${cls}:${band}`] ?? 0) + 1;
+        diff.classes.none -= 1;
+        diff.classes[cls] = (diff.classes[cls] ?? 0) + 1;
+      }
+      const WORLD = ['growth', 'grazed', 'live', 'gravity', 'unsupported', 'flow', 'decay'];
+      const undoOwn = diff.mismatches - WORLD.reduce((a, k) => a + (diff.classes?.[k] ?? 0), 0);
+      enormal = { mismatches: diff.mismatches, classes: diff.classes ?? {}, worldBy: by, undoOwn, cap: Math.floor(0.0001 * (rm.restored ?? 0)), list: (diff.list ?? []).filter((m) => m.class === 'none').slice(0, 40), world: (diff.list ?? []).filter((m) => m.where).map((m) => ({ pos: m.pos, was: m.was, now: m.now, class: m.class, where: m.where, dist: m.dist })) };
+      h1 = enormal.mismatches === 0 ? h0 : null;
+    } else h1 = await hash(box);
+    const q = await planReq({ program: 'districts', params: spec, claim, owner, ...(beside ? { beside } : {}), check: false });
+    // stable means deterministic from the plan's inputs (the survey, the biome grid, the seed: C27). A natural world's own changes
+    // across the save and reload (a spring's water: the claim's surveyed heights and so its IR) can move the second survey; then
+    // the first plan's own inputs are planned again offline (as the scenarios' golden row) and must give its IR, and the columns
+    // the live survey moved are recorded
+    const dA = path.join(L.SIDECAR_DATA, 'regions', 'plans', p.planId), dB = q.planId ? path.join(L.SIDECAR_DATA, 'regions', 'plans', q.planId) : null;
+    const bio = path.join(dA, 'biomes.json');
+    const { replayStable } = await import('./lib/d2-replay.mjs');
+    const stab = await replayStable({ kitDir: KIT, irA: files.ir, irShaA: p.irSha, surveyA: fs.readFileSync(path.join(dA, 'survey.bin')), biomesA: fs.existsSync(bio) ? JSON.parse(fs.readFileSync(bio, 'utf8')) : null,
+      irShaB: q.irSha ?? null, surveyB: dB && fs.existsSync(path.join(dB, 'survey.bin')) ? fs.readFileSync(path.join(dB, 'survey.bin')) : null });
+    const replay = stab.replay;
+    const view = (await call('dev.region.state', { region }, 60_000).catch(() => ({}))).view ?? null;
+    return { plan: p, files, region, state: st.view.state, viewAtPlace: st.view, again: q.irSha ?? q.refused, sameIr: stab.stable, replay, exact: natural ? (enormal.classes?.none ?? 0) === 0 && enormal.undoOwn <= enormal.cap : h0 === h1, enormal, restored: rm.restored, view };
+  } finally {
+    if (natural) await cmd('/tick unfreeze').catch(() => null);
+  }
+}
+
+steps.outpost = async () => {
+  await ensure();
+  const out = {};
+  const { besideData } = await imp('lib/region/beside.mjs');
+  const { besidePorts } = await imp('lib/region/districtsEmit.mjs');
+  await L.fresh('G6B D2 Outpost', FLAT);
+  await L.setRules('exact');
+  const X = 9000, Z = 9000, A = [X, Z, X + 111, Z + 111];
+  await tp(X + 56, 40, Z + 56);
+  const s7 = JSON.parse(fs.readFileSync(path.join(root, 'scenarios', 's7_flat_village.json'), 'utf8'));
+  const pa = await planReq({ program: 'flat_village', params: s7.params, claim: A, check: false });
+  const fa = planFiles(pa.planId);
+  const ra = await L.realise(pa.planId, { lots: {} });
+  await L.waitRegion(ra, 3_600_000);
+  // the outpost's claim: from the village's street end outward 150, 60 either side (the seam holds the cell past the end)
+  const q = besidePorts(besideData(ra, A, fa.ir, A))[0];
+  const [ex, ez] = q.end, [dx, dz] = q.dir;
+  const B = dx !== 0 ? [dx < 0 ? ex - 150 : ex, ez - 60, dx < 0 ? ex : ex + 150, ez + 60] : [ex - 60, dz < 0 ? ez - 150 : ez, ex + 60, dz < 0 ? ez : ez + 150];
+  await tp(Math.floor((B[0] + B[2]) / 2), 40, Math.floor((B[1] + B[3]) / 2));
+  const r = await d2Round('outpost', 'G6B D2 Outpost', B, { id: 'camp', size: [40, 40], lots: 2, outpost: { gap: 40 } }, { beside: ra });
+  const d = r.files.meta.districts;
+  const rc = d.rects.camp;
+  const gapTo = Math.max(A[0] - rc[2], rc[0] - A[2], A[1] - rc[3], rc[1] - A[3]);
+  const cor = r.viewAtPlace.ext?.['architect_mc:corridor']?.camp ?? null;
+  out.outpost = { claim: B, rect: rc, gapTo, join: d.join, corridor: cor ? { cells: cor.cells, rect: cor.rect } : null, sameIr: r.sameIr, exact: r.exact, restored: r.restored };
+  check(r.state === 'PLACED' && gapTo >= 40 && d.edges.some((e) => e.kind === 'join' && e.ok), `outpost: placed ${gapTo} from the village (gap 40), its road joined to ${d.join?.node}`);
+  check(cor && cor.cells > 100 && Array.isArray(cor.rect), `outpost: its corridor reported as settlement land on the region's view (architect_mc:corridor: ${cor?.cells} cells in ${json(cor?.rect)}), the IR's corridor ${Object.keys(r.files.ir.corridor ?? {})}`);
+  check(r.sameIr, `outpost: stable across a reload (the same request planned after the world was saved and reopened: IR ${r.plan.irSha?.slice(0, 12)} = ${String(r.again).slice(0, 12)})`);
+  check(r.exact, `outpost: one undo (Regions.remove) restores the world over its claim exactly, its corridor included (${r.restored} cells)`);
+  // refused, named: an outpost that can't keep its gap
+  const nr = await planReq({ program: 'districts', params: { spec: { districts: [{ id: 'camp', size: [40, 40], lots: 2, outpost: { gap: 400 } }] } }, claim: B, beside: ra, check: false });
+  out.refused = nr.refused ?? null;
+  check(/NO_ROOM/.test(nr.refused ?? ''), `outpost: a gap no candidate keeps refuses, named (${nr.refused})`);
+  await undo(ra);
+  await leaveWorld();
+  spendZero();
+  return out;
+};
+
+/** The pinned desert/jungle site (scenarios/sites/desert_jungle_site.json `fixture.claim`). */
+const SITE = () => JSON.parse(fs.readFileSync(path.join(root, 'scenarios', 'sites', 'desert_jungle_site.json'), 'utf8'));
+
+steps.boundary = async () => {
+  await ensure();
+  const out = {};
+  const B = await imp('lib/region/boundary.mjs');
+  const { decodeColumns } = await imp('lib/region/pack.mjs');
+  const S3 = JSON.parse(fs.readFileSync(path.join(root, 'scenarios', 's3_monastery.json'), 'utf8')).fixture.claim;
+  const world = 'G6B D2 Boundary';
+  await L.fresh(world, await L.seedBase(SEED));
+  await L.setRules('gallery');
+  const near = (p, cells) => { let b = Infinity; for (const q of cells) b = Math.min(b, Math.max(Math.abs(p[0] - q[0]), Math.abs(p[1] - q[1]))); return b; };
+  const mask = (runs) => runs.flatMap(([x0, z, x1]) => Array.from({ length: x1 - x0 + 1 }, (_, i) => [x0 + i, z]));
+  // ---- the shore (S3's river) and the ridge (S3's crest), on S3's pinned claim
+  await tp(Math.floor((S3[0] + S3[2]) / 2), 200, Math.floor((S3[1] + S3[3]) / 2));
+  for (const [id, follow, size, lots] of [['quay', { shore: { minArea: 64 } }, [64, 24], 2], ['crest', { ridge: { minRise: 8 } }, [64, 20], 1]]) {
+    const r = await d2Round(id, world, S3, { id, size, follow, lots: Array.from({ length: lots }, (_, i) => ({ id: `${id}_${i + 1}`, type: 'cottage', size: [7, 7] })) }, { natural: true });
+    const f = r.files.meta.districts.follow[id];
+    const cols = decodeColumns(fs.readFileSync(path.join(L.SIDECAR_DATA, 'regions', 'plans', r.plan.planId, 'survey.bin')));
+    let geo;
+    if (id === 'quay') {
+      const water = [];
+      for (let j = 0; j < cols.depth; j++) for (let i = 0; i < cols.width; i++) if (cols.flags[i + j * cols.width] & 1) water.push([cols.minX + i * cols.resolution, cols.minZ + j * cols.resolution]);
+      const ds = f.street.map(([x, , z]) => near([x, z], water));
+      const off = 12;
+      geo = { parallel: ds.filter((v) => v >= off - 4 && v <= off + 4).length, of: ds.length, min: Math.min(...ds), max: Math.max(...ds) };
+      check(geo.parallel >= geo.of * 0.8, `shore: the street parallel to the shore (${geo.parallel}/${geo.of} street cells within ${off - 4}..${off + 4} of the water; ${geo.min}..${geo.max})`);
+    } else {
+      const ds = f.street.map(([x, , z]) => near([x, z], f.boundary));
+      geo = { on: ds.filter((v) => v <= 4).length, of: ds.length };
+      check(geo.on >= geo.of * 0.8, `ridge: the street on the ridge line (${geo.on}/${geo.of} street cells within 4 of the crest)`);
+    }
+    out[id] = { state: r.state, rect: f.rect, mask: f.maskCells, geo, lots: r.files.meta.districts.lots[id], sameIr: r.sameIr, replay: r.replay, exact: r.exact, enormal: r.enormal };
+    check(r.state === 'PLACED' && r.files.meta.districts.lots[id].length >= 1, `${id}: placed (${r.files.meta.districts.lots[id].length} lot(s)), its shape a ${f.maskCells}-cell mask in ${json(f.rect)}`);
+    check(r.sameIr, `${id}: stable across a reload (the same IR sha planned again after the world was saved and reopened${r.replay ? `; the live survey moved in ${r.replay.surveyColumnsMoved} columns, so the first plan's inputs planned again: ${r.replay.replayIr?.slice(0, 12)} = ${r.plan.irSha?.slice(0, 12)}` : ''})`);
+    check(r.exact, `${id}: one undo restores the claim (ticks frozen; ${r.restored} cells; E-normal ${r.enormal?.mismatches} ${json(r.enormal?.classes ?? {})}, unclassified ${r.enormal?.classes?.none ?? 0}, world classes by rule ${json(r.enormal?.worldBy ?? {})}, the undo's own ${r.enormal?.undoOwn} (cap ${r.enormal?.cap}))`);
+  }
+  // ---- the biome edge: the pinned desert/jungle site
+  const site = SITE();
+  if (!site.fixture?.claim) { check(false, 'biome edge: the desert/jungle site is not pinned (tools/find-site.mjs desert_jungle_site)'); return out; }
+  const C = site.fixture.claim;
+  await tp(Math.floor((C[0] + C[2]) / 2), 200, Math.floor((C[1] + C[3]) / 2));
+  // the jungle side (`side: 'b'`): on the pinned site the desert side is a narrow strip between the edge and water, so a band 24 deep
+  // there leaves dry land
+  const r = await d2Round('oasis', world, C, { id: 'oasis', size: [96, 24], follow: { biome_edge: { between: ['desert', 'jungle'] } }, side: 'b', lots: 3 }, { natural: true });
+  const f = r.files.meta.districts.follow.oasis;
+  const g = B.parseBiomes(JSON.parse(fs.readFileSync(path.join(L.SIDECAR_DATA, 'regions', 'plans', r.plan.planId, 'biomes.json'), 'utf8')));
+  const cols = decodeColumns(fs.readFileSync(path.join(L.SIDECAR_DATA, 'regions', 'plans', r.plan.planId, 'survey.bin')));
+  const claim = { minX: C[0], minZ: C[1], maxX: C[2], maxZ: C[3] };
+  const edge = [...B.biomeEdgeCells(cols, claim, g, ['desert', 'jungle']).cells].map((k) => k.split(',').map(Number));
+  const m = mask(f.mask);
+  // the shape follows the edge within 4 cells over its length: every boundary cell of its window within 4 of the mask, every mask
+  // cell on the other side (the desert) within 4 of the edge
+  const far1 = f.boundary.filter((q) => near(q, m) > 4).length;
+  const desert = m.filter(([x, z]) => B.familyOf(B.biomeAt(g, x, z)) === 'desert');
+  const far2 = desert.filter((q) => near(q, edge) > 4).length;
+  out.oasis = { state: r.state, rect: f.rect, mask: f.maskCells, boundary: f.boundary.length, far1, desertCells: desert.length, far2, lots: r.files.meta.districts.lots.oasis, sameIr: r.sameIr, replay: r.replay, exact: r.exact, enormal: r.enormal, biomes: r.files.ir.biomes };
+  check(r.state === 'PLACED' && far1 === 0 && far2 === 0, `biome edge: the district's shape follows the desert/jungle edge within 4 cells over its ${f.boundary.length}-cell length (${far1} boundary cells and ${far2} desert cells past 4; ${r.files.meta.districts.lots.oasis.length} lot(s))`);
+  check(r.sameIr && r.exact, `biome edge: stable across a reload, one undo restores the claim (${r.restored} cells; E-normal ${r.enormal?.mismatches} ${json(r.enormal?.classes ?? {})}, unclassified ${r.enormal?.classes?.none ?? 0}, world classes by rule ${json(r.enormal?.worldBy ?? {})}, the undo's own ${r.enormal?.undoOwn} (cap ${r.enormal?.cap}))`);
+  // refused, named: no such edge; protected over the band
+  const nr = await planReq({ program: 'districts', params: { spec: { districts: [{ id: 'oasis', size: [96, 24], follow: { biome_edge: { between: ['desert', 'mushroom'] } }, lots: 2 }] } }, claim: C, check: false });
+  check(/NO_EDGE: no mushroom/.test(nr.refused ?? ''), `biome edge: no such edge refused, named (${nr.refused})`);
+  const api = async (a) => { const x = await cmd(`/apitest ${a}`); return (x.messages ?? []).find((mm) => mm.startsWith('{')) ?? null; };
+  await api(`unprotect ${OWNER} d2band`).catch(() => null);
+  await api(`protect ${json({ owner: OWNER, id: 'd2band', x0: C[0], z0: C[1], x1: C[2], z1: C[3], label: 'D2_band' })}`);
+  const pr = await planReq({ program: 'districts', params: { spec: { districts: [{ id: 'oasis', size: [96, 24], follow: { biome_edge: { between: ['desert', 'jungle'] } }, side: 'b', lots: 2 }] } }, claim: C, check: false });
+  await api(`unprotect ${OWNER} d2band`).catch(() => null);
+  out.refusals = { noEdge: nr.refused ?? null, protected: pr.refused ?? null };
+  check(/PROTECTED/.test(pr.refused ?? ''), `biome edge: a protected area over its band refused, named (${pr.refused})`);
+  await leaveWorld();
+  spendZero();
+  return out;
+};
+
 // ------------------------------------------------------------------ the scenario runs (districts_demo on S3's pinned claim)
 
 function scenario(args) {
@@ -407,7 +645,7 @@ steps.districts = async () => scenarioStep(false);
 
 steps.report = async () => {
   const rows = [];
-  for (const s of ['unit', 'plantime', 'apicompat', 'ingame', 'districtsflat', 'districts']) {
+  for (const s of ['unit', 'plantime', 'apicompat', 'ingame', 'districtsflat', 'districts', 'outpost', 'boundary']) {
     const f = path.join(OUT, `${s}.json`);
     if (!fs.existsSync(f)) { rows.push(`| ${s} | not run | |`); continue; }
     const j = JSON.parse(fs.readFileSync(f, 'utf8'));
