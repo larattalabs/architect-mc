@@ -12278,43 +12278,26 @@ API: the next free minor at merge (placeholder 1.30.0 over v0.32.0), mod to matc
 
 ### 0. Facts (v0.32.0)
 
-- **plan/0 is frozen and additive** (P0 "Freeze of plan/0"): new optional members, reserved kinds, block ids and catalogue
-  entries only.
-  - The 7a kinds are reserved by name with state `reserved`, `until: 7a`, `schemaVersion: 0`.
-  - Reserved parts go through the bounded envelope (`$defs/extension`: `where`, `from`, `to`, `size`, `style`, `params` and
-    any other member, carried as-is) and answer `unsupported {block}`.
-  - **A nested reserved block answers for its part:** a part whose `where` uses `locator.around` (reserved until FL) answers
-    `unsupported {locator.around}`.
-- **Catalogue 3** (D2): `api` 1.29.0, kit 0.30.0, 77 entries. The archived goldens are
-  `fixtures/plan/catalogue-p0.json` and `catalogue-d1.json`; `tools/plan-catalogue-diff.mjs` lists flips and pending parts to
-  recheck.
-- **Answers:**
-  - Part reasons are a JSON enum in `plan.json` (`$defs/reason.code`), not a Java `Reason`.
-  - `partAnswer` already has `provisional`, `notes`, `deviations` and `wouldFit`.
-  - A part's cost carries no BOM: regions are INSTANT only, P0 §3 as built.
-- **Steward's recorded plans** (`kit/test/fixtures/plan/asks/`, steward-mc 8703dbd; no drift on origin/main): 20 K1 parts,
-  listed in §9.
-  - Six walls are written `where: {around: {feature: {part: <zone>}, ring?, closed?}}`, one `where: {inside: {part}}` and one
-    `from`/`via`/`to` through a lot (R2a).
-  - Every wall carries free-form `params` (`material`, `height`, `gates`, `gateLots`, `gate_lot`, `gate`, `towers`,
-    `corner_lots`, `joins`, `anchors`, `wall_walk`, `closed`, `across`, `facing`, `template`, `torches`).
-  - The one gate is written `from: {part: fortress, port: gatehouse_1}, to: {anchor: claim_center}`.
-- **Steward's plan v1** (COMPOSITION §10.2): parts answered `unsupported` or `blocked` are dropped and kept pending, but a
-  `refused` or `malformed` part **stops the build**. So a reserved part that ships must not turn malformed on its recorded
-  shape, and a refusal must be one Steward can act on (§9, S-K1-6).
-- **Existing geometry:**
-  - 6a's `ring(c, r0, r1, {height, gates, towers, crenels, material})` (`program.mjs`; used by `walled_hill`) writes a
-    circular ring wall with towers and crenels, `IF_NATURAL`.
-  - T2's route pass gives walk, stair, hairpin and ladder moves, keep-out, kept columns (S2) and hysteresis.
-  - W gives `lightCover` and the fixture catalogue.
-  - M3 checks support, M5 light, M6 path clearance, M8 edge protection, M10 bridge spans (`'ends'` bearing), M1 writes in lot
-    boxes (an error), M2 and `M2:villager` reachability.
-- **Vanilla 26.3:**
-  - Villagers open wooden doors, but not fence gates, iron doors or trapdoors.
-  - Walk height: player 1.8, villager 1.95.
-  - Step-up is 0.6 (a half slab walks; a full block needs a jump).
-  - Mobs don't spawn on bottom slabs or on wall blocks.
-  - `open`, `powered` and `in_wall` are already volatile under `StillOurs`.
+- **plan/0** is frozen and additive. The 7a kinds are `reserved` (`until: 7a`, schemaVersion 0); a reserved part goes through
+  the envelope (`$defs/extension`, any member carried as-is) and answers `unsupported {block}`. A nested reserved block
+  answers for its part: a wall written `where: {around}` answers `unsupported {locator.around}` (FL).
+- **Catalogue 3** (D2): `api` 1.29.0, kit 0.30.0, 77 entries; archived goldens `catalogue-p0.json`, `catalogue-d1.json`.
+  Part reasons are a JSON enum (`$defs/reason.code`), not a Java `Reason`; `partAnswer` has `provisional`, `notes`,
+  `deviations` and `wouldFit`; cost has no BOM (regions are INSTANT only).
+- **Steward's recorded plans** (`fixtures/plan/asks/`, steward-mc 8703dbd, no drift on origin/main): 20 K1 parts (§9). Six
+  walls use `where: {around: {feature: {part: <zone>}, ring?, closed?}}`, one `where: {inside: {part}}`, one
+  `from`/`via`/`to` through a lot. All carry free-form `params` (`material`, `height`, `gates`, `gateLots`, `gate_lot`,
+  `towers`, `corner_lots`, `joins`, `anchors`, `wall_walk`, `closed`, `across`, `facing`, `template`, `torches`). The gate is
+  written `from: {part: fortress, port: gatehouse_1}, to: {anchor: claim_center}`.
+- **Steward's plan v1** (COMPOSITION §10.2) drops `unsupported` and `blocked` parts as pending, but a `refused` or `malformed`
+  part **stops the build**. So a shipped kind must not turn its recorded shape malformed, and a refusal must be actionable
+  (S-K1-6).
+- **Existing pieces:** 6a's `ring(c, r0, r1, {height, gates, towers, crenels})` (circular, `walled_hill`); T2's route pass
+  (walk, stair, hairpin and ladder moves, keep-out, S2's kept columns, hysteresis); W's `lightCover` and fixtures; checker M1
+  (lot boxes, error), M2/`M2:villager`, M3, M5, M6 (path clearance), M8 (edge protection), M10 (spans).
+- **Vanilla 26.3:** villagers open wooden doors, not fence gates or iron doors; walk heights 1.8 (player) and 1.95
+  (villager); step-up 0.6 (a half slab walks, a full block needs a jump); no spawns on bottom slabs or wall blocks; `open`,
+  `powered` and `in_wall` are volatile under `StillOurs`.
 
 ### 1. The plan: defs, block ids and reading the recorded shapes
 
@@ -12342,40 +12325,22 @@ connector.rope_bridge, connector.auto: connector.routed's members, plus
   | `wall.edge` | `where.inside` | supported |
   | `wall.along` | `where.along` | reserved (`until: K2`) |
 
-- **`where.around` on a wall is the wall's own member**, so the validator doesn't consult `locator.around` for it.
-  - `locator.around` stays reserved for zones and forms, where it means a zone laid out as a ring (FL). Those are different
-    ideas, so they get different ids.
-  - The `locator.around` catalogue entry gains a `note` ("on a wall: `wall.around`, K1").
-- **`params` is accepted and read leniently, never `malformed`** (it was the envelope's member):
-  - Known keys are read when no first-class member says otherwise:
-    - `height`;
-    - `closed`;
-    - `gates`: a number, read as `gates.min`;
-    - `torches: true`, read as `lamps: every`.
-  - The rest go to the answer's `notes` as "`params.<key>` not read":
-    - `material` (style comes from the bible);
-    - `towers`, `corner_lots`, `joins`, `anchors`, `gate_lot` and `gateLots` (lots on the wall line, S-K1-2);
-    - `wall_walk`, `across`, `facing` and `template`.
-- **A gate written `from`/`to`** (the envelope shape) is read as `at: from`, with `to` as the side the gate faces (noted).
-  - `wall` may be left out when the plan has exactly one wall.
-  - If the plan has none, or several, the gate is refused with `NO_FEATURE`.
-- **x-rules** (additive):
-  - **R15:** a wall has exactly one path form.
-  - **R16:** a gate's `crossing` names a routed connector.
-  - **R17:** `door: door` makes the opening 2 wide (a double door), or 1 wide on a 1-wide path. `fence_gate` is
-    player-only (§4).
-- **Implicit dependencies:**
-  - a wall depends on its `around`/`inside` target and its endpoints;
-  - a gate depends on its wall, and on its `crossing` connector;
-  - a routed connector does **not** depend on a wall it crosses. If the wall is refused, the route is simply unobstructed.
-- **Reason codes** appended to `$defs/reason.code` (additive output; no Java `Reason`):
-  - `NO_GAP`: a rope bridge with nothing to span;
-  - `SPAN`: a span outside its limits;
-  - `ANCHOR`: no site-solid for the posts or landing;
-  - `HEADROOM`: the deck's clear envelope is obstructed;
-  - `MOVER`: a fence gate, a 1-wide deck or a whole-block deck on a villager edge.
-
-  Each carries `evidence`.
+- **`where.around` on a wall is the wall's own member**; the validator doesn't consult `locator.around` for it. That id stays
+  reserved for zones and forms, where it means a zone laid out as a ring (FL): a different idea, so a different id. Its
+  catalogue entry gains a `note` ("on a wall: `wall.around`, K1").
+- **`params` is read leniently, never `malformed`** (it was the envelope's member). Read when no first-class member says
+  otherwise: `height`, `closed`, `gates` (a number, as `gates.min`) and `torches: true` (as `lamps: every`). Every other key
+  is noted in the answer as "`params.<key>` not read": `material` (style is the bible's); `towers`, `corner_lots`, `joins`,
+  `anchors`, `gate_lot`, `gateLots` (lots on the wall line, S-K1-2); `wall_walk`, `across`, `facing`, `template`.
+- **A gate written `from`/`to`** (the envelope shape) is read as `at: from`, `to` noted as the side it faces. `wall` may be
+  left out when the plan has exactly one wall; with none or several, `refused NO_FEATURE`.
+- **x-rules** (additive): **R15** a wall has exactly one path form; **R16** a gate's `crossing` names a routed connector;
+  **R17** `door: door` makes the opening 2 wide (a double door), 1 on a 1-wide path; `fence_gate` is player-only (§4).
+- **Implicit dependencies:** a wall on its `around`/`inside` target and endpoints; a gate on its wall and its `crossing`
+  connector. A routed connector does **not** depend on a wall it crosses: if the wall is refused, the route is unobstructed.
+- **Reason codes** appended to `$defs/reason.code` (additive output; no Java `Reason`), each with `evidence`: `NO_GAP` (nothing
+  to span), `SPAN` (outside its limits), `ANCHOR` (no site-solid for posts or landing), `HEADROOM` (the deck's clear envelope
+  obstructed), `MOVER` (a fence gate, a 1-wide deck or a whole-block deck on a villager edge).
 
 ### 2. Catalogue 4
 
@@ -12393,7 +12358,7 @@ connector.rope_bridge, connector.auto: connector.routed's members, plus
 | `connector.ladder`, `stair`, `rail`, `catwalk`, `rock_stair`, `switchback`, `lift`, `branch_walk`, `span_bridge`, `stairs_around` | reserved (7a) | unchanged | |
 
 - **Archive and diff.** Catalogue 3's golden is archived as `fixtures/plan/catalogue-d2.json`. The D2 to K1 diff is exactly
-  the four flips plus the four added ids.
+  the four flips and the four added ids (and `locator.around`'s new note).
 - **Ladders, stairs and switchbacks stay reserved as explicit kinds.** T2 already emits them as moves inside routed
   connectors.
 - **`connector.auto`'s move set grows** as slices ship (T3 adds `bridge` and `tunnel`). Each addition is a `limits.moves`
@@ -12428,37 +12393,30 @@ clock or random draw except `ctx.rng(label)`.
   the same line code. This is also Steward's "zone walls with gates along zone boundaries" (PLAN "Keep open: zones").
 
 **The wall** (bible roles, §6) stands on every line cell:
-- **Footing:** from the ground down to 2 below it, or to the first site-solid cell, written `IF_NATURAL`.
-- **Body:** up to the top.
+- **Footing and body:** from 2 below the ground (or the first site-solid cell) up to the top, written `IF_NATURAL`.
 - **Top:** the highest standable surface within 2 of the column on either side, plus `height` (default 6, N-K1-1), smoothed
   along the line to runs of at least 3. So the wall is never under `height` at its foot, and never under 2 above any ground
   beside it (no terrain bypass, a jump is 1.25).
-- **Thickness** 1-3 (default 2), on the outside of a ring.
-- **Crenels:** merlons every other cell on the outer course.
-- **Top course:** in the cap role's wall-block variant, or else its bottom-slab variant. The top surface is then not
-  spawnable. A cap with neither gets lamps along the top.
+- **Thickness** 1-3 (default 2), on the outside of a ring. **Crenels:** merlons every other cell on the outer course. The top
+  course is the cap role's wall-block variant, else its bottom-slab variant, so the top is not spawnable; a cap with neither
+  gets lamps along the top.
 - **Corners:** `corners: tower` raises a 3x3 stub 3 above the wall at each corner of a ring, reusing 6a `ring`'s tower code;
   default `plain`. A free end of an open wall ends in a post 1 higher.
 - **Never written:** a walk cell of any network, a lot box (K5), a kept column, keep-out, a build, another region, or water.
 
 **Gates** are openings in a straight run of at least `width + 2` cells (jambs on both sides):
-- **Shape:**
-  - the walk surface runs through the wall's depth at the crossing's y (ground fill under it as needed);
-  - a clear opening of `width` x `height` (default: the crossing walk's width, and height 3);
-  - jambs and a lintel in the frame role; `frame: arch` steps the lintel with upside-down stairs.
+- **Shape:** the walk surface runs through the wall's depth at the crossing's y (filled under as needed); a clear opening of
+  `width` x `height` (default the crossing walk's width, and 3); jambs and a lintel in the frame role (`frame: arch` steps
+  the lintel with upside-down stairs).
 - **Doors:** `door: door` is a wooden double door of the bible's wood (the frame role's wood family, else oak); `fence_gate`
   is the rail role's gate.
 - **Lamps:** one lamp a side, inside and outside (W's fixture, from the bible's `light`).
-- **Auto gates:**
-  - Every crossing of an existing walk network gets one: V streets, lanes and squares, D1/D2 district routes and joins, and
-    standing regions' roads (`beside`).
-  - Every crossing a plan connector's route makes gets one (§5).
-  - A closed wall with fewer than `gates.min` (default 1) gets more: first where a zone street end faces the ring, then
-    evenly along the ring, ties by perimeter position.
-- **An explicit gate:**
-  - `at` places it on the run nearest the endpoint; `crossing` places it where that connector crosses.
-  - Moved past `tolerance.move` (soft 16, ceiling 64), it answers `adjusted`; past the ceiling, or with no straight run in
-    reach, `refused NO_ROOM`.
+- **Auto gates:** at every crossing of an existing walk network (V streets, lanes and squares, D1/D2 district routes and
+  joins, standing regions' roads) and of a plan connector's route (§4). A closed wall with fewer than `gates.min` (default 1)
+  gets more: first where a zone street end faces the ring, then evenly along it, ties by perimeter position.
+- **An explicit gate:** `at` places it on the run nearest the endpoint (before routing); `crossing` names the gate that
+  connector's route opens (after routing, §4). Moved past `tolerance.move` (soft 16, ceiling 64) it is `adjusted`; past the
+  ceiling, or with no straight run in reach, `refused NO_ROOM`.
 
 **Rope bridges** (§8.2, refined to half blocks):
 - **Span:** a straight, axis-aligned run of `n` deck cells between two landing cells, `8 <= n <= 40`. Width 1-3: default 1 on
@@ -12466,34 +12424,32 @@ clock or random draw except `ctx.rng(label)`.
 - **Gap:** at least one interior column whose ground is more than 4 below the deck line, or is water (any depth, frozen
   included). Else `NO_GAP`.
 - **Profile:** the walk surface in half blocks.
-  - `s2(i) = floor(8 * d * i * (n - i) / n^2)`, with `d = floor(n / 12)`, is §8.2's sag at double resolution (spans 8-11 have
-    `d = 0` and are flat). The surface is `y2(i) = y2lin(i) - s2(i)`.
+  - One floor over the whole expression: `y2(i) = floor((2 * y0 * n^2 + 2 * rise * i * n - 8 * d * i * (n - i)) / n^2)`,
+    with `y0` the near landing's surface, `rise` the far landing's minus it, and `d = floor(n / 12)`: §8.2's sag at double
+    resolution (spans 8-11 have `d = 0` and are flat). Flooring the line and the sag separately could step 2 half blocks.
   - Even `y2` is a full deck block; odd is a bottom slab.
-  - The end-to-end rise is at most `floor(n / 8)`, so adjacent cells differ by at most one half block (walkable without a
-    jump). Else `TOO_STEEP`.
+  - `|rise|` is at most `floor(n / 8)` (else `TOO_STEEP`). The expression's slope is then under 1 half block a cell (at most
+    0.25 from the rise plus 8d/n <= 0.67 from the sag), so adjacent cells differ by at most one half block: walkable without
+    a jump.
   - A deck role without a slab variant falls back to §8.2's whole-block profile, which is player-only.
 - **Rails:** the rail role continuous along both edges at surface + 1 (M8's 1.5 barrier). Optional `rope` (chains) on tall
   posts every 4, as decoration only.
 - **Headroom:** the clear envelope must be air or replaceable plants and snow layers in the virtual world, else `HEADROOM`.
   The envelope is the deck, the rails, and 2 cells above the surface over the width plus the rails.
-- **Anchors:** two posts at each landing, beside the deck, in the post role.
-  - Each runs from 2 below the landing to the surface + 2.
-  - The 2 cells under each post and under the landing must be **site-solid**: survey `ROCK` or `SOIL` (not `LOOSE`, `ICE`,
-    logs, leaves or plants), or a full block this plan writes that M3 grounds (a pad, terrace or foundation fill).
-  - Else `ANCHOR`, naming the columns and the classes found.
+- **Anchors:** two posts at each landing, beside the deck, in the post role, from 2 below the landing to the surface + 2. The
+  2 cells under each post and under the landing must be **site-solid**: survey `ROCK` or `SOIL` (not `LOOSE`, `ICE`, logs,
+  leaves or plants), or a full block this plan writes that M3 grounds (a pad, terrace or foundation fill). Else `ANCHOR`,
+  naming the columns and the classes found.
 - **Lamps:** a fixture on a post at least every `floor(12 * level / 15)` deck cells (W's spacing; soul lanterns closer), plus
   one at each landing.
 - **Ends:** a landing on a lot port is the cell just outside the box at the port's feet y (§8.4).
 
 ### 4. Routing (T2), and what walls may not cut
 
-- **The gate move** (always on when the plan has walls; absent otherwise, so no golden moves):
-  - Wall cells are obstacles to every route.
-  - A route crosses a wall only by a gate move: straight, perpendicular, through the wall's depth, on a straight run.
-  - The cost is 0 through an open gate, or `gateCost` (60) to open a new one, while the wall's `gates.max` (default 16)
-    allows.
-  - Hysteresis makes later routes share gates.
-  - A route that cannot reach is `refused UNREACHABLE`, with `evidence.walls`.
+- **The gate move** (on only when the plan has walls, so no golden moves): wall cells are obstacles to every route, which
+  crosses a wall only by a gate move (straight, perpendicular, through the wall's depth, on a straight run). It costs 0
+  through an open gate, or `gateCost` (60) to open one while the wall's `gates.max` (default 16) allows; hysteresis makes
+  later routes share gates. A route that can't reach is `refused UNREACHABLE` with `evidence.walls`.
 - **The rope move** is opt-in per edge (`spans: ['rope']`), set only by `rope_bridge` and `auto` connectors. Street, road and
   path keep T2's moves, so every committed golden re-plans byte-identical.
   - From a walk cell, on a cardinal heading, it is a span of §3's geometry landing on a walk cell.
@@ -12501,18 +12457,16 @@ clock or random draw except `ctx.rng(label)`.
   - A `rope_bridge` connector must use exactly one: the A* state carries a `spanned` bit, and the goal needs it set. It may
     walk at most `approach` cells (default 16) at each end.
   - An `auto` connector uses any number.
-- **Movers:**
-  - Inferred as in T2 (S-T2-1) unless given.
-  - A villager rope bridge needs width at least 2 and a slab deck; else `MOVER`.
-  - A fence gate on a crossing used by a villager edge is `MOVER`.
-- **Builds, protected areas and kept columns:** never written (keep-out, PT's `buildRects`, S2's `_keptColumns`).
-  - A deck may not pass over a protected area's columns: areas are columns at every height.
-  - A deck may pass over a kept column without writing it.
+- **Movers:** inferred as in T2 (S-T2-1) unless given. A villager rope bridge needs width at least 2 and a slab deck, and a
+  crossing used by a villager edge can't have a fence gate; else `MOVER`.
+- **Builds, protected areas and kept columns** are never written (keep-out, PT's `buildRects`, S2's `_keptColumns`). A deck
+  can't pass over a protected area (areas are columns at every height); it may pass over a kept column without writing it.
 - **Compile order in `plan_v0`:**
   1. zones and forms;
-  2. wall lines and explicit gates;
+  2. wall lines, and gates placed `at` an endpoint (open before routing);
   3. connectors (T2, with the gate and rope moves);
-  4. auto gates and `gates.min`;
+  4. gates by `crossing` (the gate that connector's route opened; none: `refused UNREACHABLE` naming the connector), auto
+     gates, and `gates.min`;
   5. wall, gate and rope emission in a new `links` stage, after `routes` and before `props`;
   6. W's apron lamps, which see the walls.
 
@@ -12548,18 +12502,9 @@ ids, §8.3), so a re-skin restyles connectors without replanning:
 connectors?: { wall?: {body?, cap?, frame?}, gate?: {frame?, door?}, rope_bridge?: {deck?, rail?, post?, rope?} }
 ```
 
-- **Defaults** (S2's and S7's bibles style connectors unchanged):
-
-  | Role | Default |
-  |---|---|
-  | wall body | `structure`, then `foundation`, then `wall` |
-  | cap, frame | `trim` |
-  | door | the frame's wood family |
-  | deck | `floor`, then `path` |
-  | rail | `rail` |
-  | post | `frame` |
-  | rope | none |
-  | lamps | the `light` role through W's fixtures |
+- **Defaults** (so S2's and S7's bibles style connectors unchanged): wall body `structure`, then `foundation`, then `wall`;
+  cap and frame `trim`; door the frame's wood family; deck `floor`, then `path`; rail `rail`; post `frame`; rope none; lamps
+  the `light` role through W's fixtures.
 
 - **Shape variants:** slab, stairs, wall block, fence, fence gate and door come from a variant table generated into
   `blocks.mjs` from the 26.3 data. A missing variant has a stated fallback (§3).
@@ -12567,34 +12512,26 @@ connectors?: { wall?: {body?, cap?, frame?}, gate?: {frame?, door?}, rope_bridge
 
 ### 7. Undo, exactness, survival
 
-- **Ordinary tiles.** K1's parts are ordinary region tile cells in the `links` stage. `Regions.remove` undoes them with the
-  region:
-  - E-flat 0;
-  - natural E-normal classified;
-  - trees felled by a wall restored, as C31.
+- **Ordinary tiles.** K1's parts are region tile cells in the `links` stage; `Regions.remove` undoes them with the region
+  (E-flat 0, natural E-normal classified, trees a wall felled restored as C31).
 - **Doors** that villagers open (`open`, `powered`) are volatile, so they don't block removal.
 - **Plan check and artifact:** K1's parts join the artifact's tiles and the stale rule unchanged (P0 §6).
-- **Survival:**
-  - Regions stay INSTANT-only until RS. In a survival-toggle world a plan with K1 parts is refused as any region is today.
-  - **K1 adds a BOM to its parts' answers:** `cost.bom`, the exact items of the emitted cells, by C26's `bomFull` block-to-item
-    table. Steward can then show what a wall would cost.
-  - Building them from the stockpile is the connector half of N-RS-1 (7a), which follows the existing rules: construction
-    cells from the owner's stockpile (Y1), C26's full BOM before placing, and refunds on removal as phase 3.
-  - Whether K1 or RS carries that half is N-K1-3.
+- **Survival.** Regions stay INSTANT-only until RS, so a survival-toggle world refuses a plan with K1 parts as it refuses any
+  region today. **K1 adds `cost.bom` to its parts' answers**: the exact items of the emitted cells, by C26's `bomFull`
+  block-to-item table, so Steward can show what a wall costs. Building them from the stockpile is N-RS-1's connector half
+  (7a) under the existing rules: construction cells from the owner's stockpile (Y1), C26's full BOM before placing, refunds
+  on removal as phase 3. Whether K1 or RS carries it is N-K1-3.
 
 ### 8. API (additive)
 
-- **Versions:**
-  - `VERSION`: the next free minor at merge (placeholder 1.30.0); mod to match.
-  - `KIT_VERSION` = `EVAL_KIT_VERSION` = `IrStale.KIT_VERSION`: next. Every IR sha moves; no committed tile golden does.
-  - `PLAN_API` and the catalogue golden's `api` match `VERSION`.
+- **Versions:** `VERSION` the next free minor at merge (placeholder 1.30.0), mod to match; `PLAN_API` and the catalogue's
+  `api` with it; `KIT_VERSION` = `EVAL_KIT_VERSION` = `IrStale.KIT_VERSION` next (every IR sha moves, no tile golden does).
 - **No new records, methods or IR kinds.** Walls, gates and decks are `columns` and `voxels` ops; the IR format is unchanged.
 - **Features:** `wallConnectors`, `ropeBridges` and `autoConnector`. The sidecar features `region.walls` and `region.rope` are
   appended.
-- **Additive wire shapes:**
-  - `siteplan/1` gains `walls: [{id, part, line, closed, gates: [{id, at, width, door, auto}]}]`;
-  - graph nodes `kind: gate`; edges `type: rope_bridge` with `crossing: {type: "rope_bridge", over: "gap" | "water", depth}`
-    (S-T3-1's addition).
+- **Additive wire shapes:** `siteplan/1` gains `walls: [{id, part, line, closed, gates: [{id, at, width, door, auto}]}]`;
+  graph nodes `kind: gate`; edges `type: rope_bridge` with `crossing: {type: "rope_bridge", over: "gap" | "water", depth}`
+  (S-T3-1's addition).
 - **api-compat:** clean against the previous three apitest jars.
 
 ### 9. Steward's recorded K1 parts: expected answers as recorded (the asks claim)
@@ -12613,6 +12550,9 @@ connectors?: { wall?: {body?, cap?, frame?}, gate?: {frame?, door?}, rope_bridge
 | treetop_village / 9 rope bridges | lot to lot, ground lots of one street | refused `NO_GAP` | `wouldFit`: a `path` connector between the same lots (fits alone); canopy huts need elevated lots (S-K1-6) |
 | swamp_stilts / rope_bridges (optional) | anchor `stone` to zone `hollow` | refused `NO_GAP` unless water lies across the approach | the asks claim's stream is the only gap |
 | upside_down / chain_bridges | `village` to `village` | refused `NO_GAP` | both ends are one place |
+
+The asks claim's only water is the lake at x 240-279, z 240-267 and the stream at x >= 280, z 252-255 (`plan-helpers.mjs`), so
+a ring round a zone near the centre clears it; a zone placed against the lake can answer `refused WATER` instead.
 
 **Bar (item 7):** of the 20 parts, 0 `malformed` and 0 `unsupported`, and at least 7 of the 9 wall and gate parts `fits` or
 `adjusted`. Every refusal names its code, with evidence. treetop's 9 refusals each carry a `path` `wouldFit` that answers
@@ -12645,7 +12585,7 @@ connectors?: { wall?: {body?, cap?, frame?}, gate?: {frame?, door?}, rope_bridge
 | 2 | Villagers through the gates only | vanilla `dev.nav.villager` both ways from every inside lot to the outside node at each gate: 100% found; every path's cells meet the wall line only at gate cells; doors toggled by villagers leave the removal exact |
 | 3 | No route cut | 0 route or network walk cells under wall cells; every crossing is a gate; the auto gates are exactly the crossings plus `gates.min` |
 | 4 | Wall geometry | 100% of wall columns at least `height` at the foot and 2 over standable ground within 2; the line is 4-connected; the top is non-spawnable; M5 0 dark gate walk cells; M3 0; M1 0 |
-| 5 | Rope bridge | each span: the profile equals the formula per cell; adjacent steps at most one half block; rails both sides on 100% of deck cells (M8); 2 headroom on 100% (M6); M5 0 dark deck cells (and with a soul-lantern bible); 4 posts, each 2 deep in site-solid in the realised world; M3 0; `player` across 100% (kit); `villager` across the width-2 slab bridge, kit and vanilla `dev.nav.villager` 100% (else the bridge is recorded and `limits.villagerMinWidth` becomes `null`, with villager bridges refused `MOVER`) |
+| 5 | Rope bridge | each span: the profile equals the formula per cell; adjacent steps at most one half block; rails both sides on 100% of deck cells (M8); 2 headroom on 100% (M6); M5 0 dark deck cells (and with a soul-lantern bible); 4 posts, each 2 deep in site-solid in the realised world; M3 0; `player` across 100% (kit); `villager` across the width-2 slab bridge, kit and vanilla `dev.nav.villager` 100% (a hard bar: K1b doesn't pass without it) |
 | 6 | P0 answers | every K1 `valid/` fixture `fits` (or `adjusted` as expected); every refusal fixture answers its code with evidence and `wouldFit` where stated, each alternative `fits` re-checked alone; no plan without K1 parts changes its answers or IR (every existing `valid/` fixture byte-identical) |
 | 7 | Recorded plans | §9's bar on the 59 asks in kit CI |
 | 8 | Catalogue | the golden equals catalogue 4; the diff against `catalogue-d2.json` lists exactly `connector.wall`, `connector.gate`, `connector.rope_bridge` and `connector.auto` reserved to supported, and `wall.line`, `wall.around`, `wall.edge` and `wall.along` added; the recorded pending parts naming those four ids flagged to recheck |
@@ -12655,6 +12595,7 @@ connectors?: { wall?: {body?, cap?, frame?}, gate?: {frame?, door?}, rope_bridge
 | 12 | Unchanged | S1, S7, S2, mega_bench, relief_demo, route_demo, forms_demo, scatter_demo and districts_demo tile goldens |
 | 13 | Timing (recorded) | check time of `v30` and `v33`; own CPU, tile p99 |
 | 14 | API, spend | api-compat clean; apijars; $0.00 |
+| 15 | P0 unbroken | P0's kit tests and gate items 1, 2, 9 and 11 pass after step 3's moves: the same counts of classes, with `connector.catwalk` as the reserved example |
 
 **Tier:** slice: quick, the kit region rows, `region/**` and `api/**` rows, sim suites, apijars, p0-unit/ingame/natural, the
 scenario steps. **gate-verifier** re-runs items 1, 2, 5 and 9.
@@ -12663,25 +12604,21 @@ scenario steps. **gate-verifier** re-runs items 1, 2, 5 and 9.
 
 1. Archive the previous apitest jar and catalogue 3.
 2. Schema defs, x-rules, lenient `params`, reason codes, catalogue 4.
-3. **K1a, walls and gates:**
-   1. lines (around, edge, line);
-   2. wall emission;
-   3. the gate move in T2;
-   4. auto gates;
-   5. `M2:wall` and `M8:wall`;
-   6. items 1-4.
-4. **K1b, rope bridges and auto:**
-   1. profile and anchors;
-   2. the rope move;
-   3. explicit and `auto` connectors;
-   4. `M10:rope` and half-slab villager steps;
-   5. item 5.
-5. Bible `connectors`, BOM, siteplan, items 6-14.
+3. **P0's own tests move off the flipped ids** (item 15). P0 item 2's "required unsupported -> REQUIRED_BLOCKED" example and
+   `extension/e02_wall_draft` move to `connector.catwalk`, which stays reserved; `e15_every_reserved_a` drops the four
+   flipped ids; item 11's oracle (`answer.waits` must answer `unsupported` or `blocked`) skips parts whose block is
+   supported in the current catalogue, and §9's table judges those. `pending-two-districts.json` stays: against catalogue 4
+   its `connector.wall` is correctly flagged.
+4. **K1a, walls and gates:** lines (around, edge, line), wall emission, the gate move in T2, auto gates, `M2:wall` and
+   `M8:wall`, items 1-4.
+5. **K1b, rope bridges and auto:** profile and anchors, the rope move, explicit and `auto` connectors, `M10:rope` and the
+   half-slab villager steps, item 5.
+6. Bible `connectors`, BOM, siteplan, items 6-15.
 
 **Recommendation: split.**
 - **K1a** (walls and gates) is about 1.5 days: closure, the T2 gate move and the lenient reading.
 - **K1b** (rope bridges, `auto`) is about 1 day.
-- Each has its own items 1-4 or item 5, plus the shared 6-14.
+- Each has its own items 1-4 or item 5, plus the shared 6-15.
 - They touch the same two files (T2's `route.mjs`, `compile.mjs`'s connector section). Run them in parallel against one
   agreed move interface (a table of special moves in the route pass), with the coordinator merging and one batched release.
 - K1a first if serial: walls give Steward fits, while the recorded rope bridges mostly refuse until elevated lots exist.
@@ -12698,21 +12635,20 @@ scenario steps. **gate-verifier** re-runs items 1, 2, 5 and 9.
 - **S-K1-4. Rope bridge movers.** Inferred as for T2 (villager bridges 2 wide on slab decks), or player-only by default?
 - **S-K1-5. `auto` grows.** Its moves grow as T3 and later slices ship, so a recheck can re-route an auto connector. Accept,
   or pin the move set per plan with a `moves` member?
-- **S-K1-6. Pending parts that now refuse.** treetop's 9 bridges and upside_down's are `required` and go from `unsupported` to
-  `refused NO_GAP`. Will your recheck after a catalogue flip treat a newly refused pending part as "offer a repair" rather
-  than stopping a build? Canopy huts need lots with a level (7b). Should Architect reserve an id for that now?
+- **S-K1-6. Pending parts that now refuse.** Any required pending part can go from `unsupported` to `refused` once its block
+  ships: treetop's 9 bridges and upside_down's (`NO_GAP`), and a wall whose ring leaves the claim (`OUT_OF_CLAIM`) or meets
+  water (`WATER`). Will your recheck after a catalogue flip treat a newly refused pending part as "offer a repair" rather than
+  stopping a build? Canopy huts need lots with a level (7b): should Architect reserve an id for that now?
 - **S-K1-7. New reason codes.** `NO_GAP`, `SPAN`, `ANCHOR`, `HEADROOM` and `MOVER` are appended to `reason.code`. Does your
   parser keep an unknown code?
 
 ### Open questions for Noah
 
-- **N-K1-1. How walls look.**
-  - Default height 6 (5 body plus the crenel course), thickness 2, crenels on, plain corners or 3x3 corner towers.
-  - Body in `structure`, cap and frame in `trim`, an open arch by default (no door).
-  - Gallery step: S7 walled in three bibles.
-- **N-K1-2. How rope bridges look.**
-  - A slab deck in `floor`, fence rails in `rail`, posts in `frame`, lamps every 12 or closer.
-  - Chains as rope decoration: on or off?
+- **N-K1-1. How walls look, and the default height.** Proposed: height 6 (5 body plus the crenel course), thickness 2,
+  crenels on, plain corners (or 3x3 corner towers by default?), body in `structure`, cap and frame in `trim`, an open arch by
+  default (no door). The look step shows S7 walled in three bibles for your call.
+- **N-K1-2. How rope bridges look.** A slab deck in `floor`, fence rails in `rail`, posts in `frame`, lamps every 12 or
+  closer. Chains as rope decoration: on or off?
 - **N-K1-3. Survival.** K1 reports each part's BOM but realises INSTANT only. Should K1 also build walls and bridges from the
   stockpile (the connector half of N-RS-1, which needs RS), or leave that to RS?
 - **N-K1-4. The split.** K1a and K1b in parallel, batched into one release, or K1a first?
