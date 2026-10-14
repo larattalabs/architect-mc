@@ -191,18 +191,35 @@ public interface Library {
 	 *     group copy (COPY, with the recipe that rebuilds it from any later source version); empty for designs and remixes.
 	 *     Kept by new versions
 	 * @param variantOfVersion (since 1.11.0) the version of {@link #variantOf} it was made from
+	 * @param cells (since 1.30.0, C37b) the non-air blocks of the template's first palette: exactly the number
+	 *     {@code Regions.realiseApproved} compares with the top of a lot's approved {@code costRange} (one shared function with
+	 *     the plan-check's own count, so the two cannot diverge). <b>Not</b> the sum of {@link Part#cells()} (parts overlap and
+	 *     count air-bounded boxes: a hollow room was 1,140 non-air blocks but 3,120 part cells). <b>0 means "unknown or
+	 *     empty"</b>: a template that cannot be read, has no palette, or holds only air counts 0 (a lot then never fails the
+	 *     cost-range check on this entry). Counted for this exact entry (version) when the view is made; 0 from the pre-1.30.0
+	 *     constructors
 	 */
 	record Entry(String id, String name, String type, BlockSize size, List<String> tags, Optional<String> source, Map<String, JsonElement> params,
 		Map<String, JsonElement> values, Optional<JsonObject> palette, Map<String, Port> ports, JsonObject ext, boolean bundled, boolean imported,
 		Optional<String> variantOf, Optional<BiblePin> bible, Optional<String> group, Optional<String> groupItem, Map<String, Part> parts,
 		Direction front, Map<String, BlockPos> anchors, int groundY, Approach approach, Optional<Critique> critique, int version,
-		List<EntryVersion> versions, Optional<Derivation> derivation, OptionalInt variantOfVersion) {
+		List<EntryVersion> versions, Optional<Derivation> derivation, OptionalInt variantOfVersion, long cells) {
 		public Entry {
 			critique = critique == null ? Optional.empty() : critique;
 			version = version <= 0 ? 1 : version;
 			versions = versions == null ? List.of() : List.copyOf(versions);
 			derivation = derivation == null ? Optional.empty() : derivation;
 			variantOfVersion = variantOfVersion == null ? OptionalInt.empty() : variantOfVersion;
+		}
+
+		/** The 1.11.0 constructor (no cell count: {@link #cells} 0). */
+		public Entry(String id, String name, String type, BlockSize size, List<String> tags, Optional<String> source, Map<String, JsonElement> params,
+			Map<String, JsonElement> values, Optional<JsonObject> palette, Map<String, Port> ports, JsonObject ext, boolean bundled, boolean imported,
+			Optional<String> variantOf, Optional<BiblePin> bible, Optional<String> group, Optional<String> groupItem, Map<String, Part> parts,
+			Direction front, Map<String, BlockPos> anchors, int groundY, Approach approach, Optional<Critique> critique, int version,
+			List<EntryVersion> versions, Optional<Derivation> derivation, OptionalInt variantOfVersion) {
+			this(id, name, type, size, tags, source, params, values, palette, ports, ext, bundled, imported, variantOf, bible, group, groupItem, parts,
+				front, anchors, groundY, approach, critique, version, versions, derivation, variantOfVersion, 0L);
 		}
 
 		/** The 1.5.0 constructor (no derivation). */
