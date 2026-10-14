@@ -676,17 +676,58 @@ public final class PlanChecks {
 				o.add("owners", a);
 				RegionStore.writeJson(dir.resolve(sha + ".pins.json"), o);
 			}
-			if (!on && pins.isEmpty() && regionsOf(sha).isEmpty()) {
-				// no pin and no standing region refers to it: removed, a tombstone left (C22's pattern)
-				JsonObject t = new JsonObject();
-				t.addProperty("removedAt", System.currentTimeMillis());
-				RegionStore.writeJson(dir.resolve(sha + ".removed.json"), t);
-				Files.deleteIfExists(dir.resolve(sha + ".json"));
-				Files.deleteIfExists(dir.resolve(sha + ".pins.json"));
-				Architect.LOGGER.info("Artifact {} removed (no pin, no region)", sha.substring(0, 12));
+			if (!on) {
+				sweep(dir, sha, pins);
 			}
 		} catch (IOException e) {
 			Architect.LOGGER.warn("Artifact {} pins: {}", sha, e.toString());
+		}
+	}
+
+	/**
+	 * (C36) The retention sweep for one artifact: with no pin and no non-REMOVED region holding it, the body goes and a tombstone
+	 * ({@code <sha>.removed.json}) stays (C22's pattern). Idempotent: nothing to do when the body is already gone.
+	 */
+	private static void sweep(Path dir, String sha, Set<String> pins) throws IOException {
+		if (!pins.isEmpty() || !regionsOf(sha).isEmpty() || !Files.isRegularFile(dir.resolve(sha + ".json"))) {
+			return;
+		}
+		JsonObject t = new JsonObject();
+		t.addProperty("removedAt", System.currentTimeMillis());
+		RegionStore.writeJson(dir.resolve(sha + ".removed.json"), t);
+		Files.deleteIfExists(dir.resolve(sha + ".json"));
+		Files.deleteIfExists(dir.resolve(sha + ".pins.json"));
+		Architect.LOGGER.info("Artifact {} removed (no pin, no region)", sha.substring(0, 12));
+	}
+
+	/** The artifact sha a region record was realised from (its ext's {@link #EXT_ARTIFACT}), or null. */
+	private static @Nullable String artifactOf(RegionRec rec) {
+		return rec.ext != null && rec.ext.get(EXT_ARTIFACT) instanceof JsonElement e && e.isJsonPrimitive() && SHA.matcher(e.getAsString()).matches()
+			? e.getAsString() : null;
+	}
+
+	/**
+	 * (C36) A region reached REMOVED (a removal finished, live or resumed after C22/C23): sweep its artifact. Safe to repeat.
+	 * {@code atLoad}: the world just loaded, so an artifact checked again after the removal (its meta is newer than the removal) is
+	 * left, as it may await its realise.
+	 */
+	static void regionRemoved(RegionRec rec, boolean atLoad) {
+		MinecraftServer s = server;
+		String sha = artifactOf(rec);
+		if (s == null || sha == null) {
+			return;
+		}
+		Path dir = artifacts(s.getWorldPath(LevelResource.ROOT));
+		try {
+			if (atLoad) {
+				JsonObject meta = RegionStore.readJson(dir.resolve(sha + ".meta.json"));
+				if (meta != null && meta.has("createdAt") && meta.get("createdAt").getAsLong() > rec.removedAt) {
+					return;
+				}
+			}
+			sweep(dir, sha, pins(dir, sha));
+		} catch (IOException | RuntimeException e) {
+			Architect.LOGGER.warn("Artifact {} sweep: {}", sha, e.toString());
 		}
 	}
 

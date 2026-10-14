@@ -212,6 +212,7 @@ public final class RegionsImpl implements Regions {
 		}
 		Prepare.resumeAll(s);
 		PlanChecks.started(s); // (6c P0) check keys, artifacts, pins and tombstones
+		TOMBS.values().forEach(t -> PlanChecks.regionRemoved(t, true)); // (C36) a REMOVED region whose artifact is still held, unpinned
 		reconcilePending = true;
 		Architect.LOGGER.info("Regions: {} loaded", REGIONS.size());
 	}
@@ -2111,6 +2112,7 @@ public final class RegionsImpl implements Regions {
 		Architect.LOGGER.info("Region {}: removal {} ({})", l.rec().id, removed ? "done: REMOVED" : "stopped: PARTIAL", l.rec().groupId);
 		SiteEvents.REGION_STATE.invoker().onState(view(l));
 		if (removed) {
+			PlanChecks.regionRemoved(l.rec(), false); // (C36) its artifact, if nothing else holds it
 			danglingJoins(l.rec().id, at);
 		}
 	}
