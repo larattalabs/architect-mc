@@ -1,0 +1,16 @@
+{
+  "name": "G7A-K1a infernal walls",
+  "scope": "settlement",
+  "format": 2,
+  "prompt": "K1a look (CONTRACT 7a K1 N-K1-1): W's infernal village walled: a polished-blackstone-brick curtain capped in blackstone, crimson gate frames, soul lanterns at the gates",
+  "roles": {
+    "path": "minecraft:blackstone",
+    "foundation": "minecraft:nether_bricks",
+    "light": "minecraft:soul_lantern",
+    "rail": "minecraft:crimson_fence",
+    "structure": "minecraft:polished_blackstone_bricks",
+    "trim": "minecraft:blackstone",
+    "frame": "minecraft:crimson_stem"
+  },
+  "connectors": { "wall": { "body": "structure", "cap": "trim", "frame": "frame" }, "gate": { "frame": "frame" } }
+}

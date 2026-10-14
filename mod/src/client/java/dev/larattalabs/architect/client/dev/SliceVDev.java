@@ -24,13 +24,14 @@ public final class SliceVDev {
 
 	public static void init() {
 		initAnchors();
-		DevBridge.register("dev.nav.villager", 120_000, "{from: [x,y,z] (feet), to: [x,y,z] (feet), range?: 256, accuracy?: 0} - (6c V) a no-AI "
-			+ "villager at from, FOLLOW_RANGE = range, vanilla PathNavigation.createPath(to, accuracy) -> {canReach, nodes, end: [x,y,z], "
-			+ "path: bool, ms}; the villager is discarded", (req, mc) -> {
+		DevBridge.register("dev.nav.villager", 120_000, "{from: [x,y,z] (feet), to: [x,y,z] (feet), range?: 256, accuracy?: 0, cells?: false} - (6c V) a "
+			+ "no-AI villager at from, FOLLOW_RANGE = range, vanilla PathNavigation.createPath(to, accuracy) -> {canReach, nodes, end: [x,y,z], "
+			+ "path: bool, ms, cells?: [[x,y,z]] (7a K1: the path's nodes, with cells: true)}; the villager is discarded", (req, mc) -> {
 				int[] from = ints(req.getAsJsonArray("from"));
 				int[] to = ints(req.getAsJsonArray("to"));
 				int range = req.has("range") ? req.get("range").getAsInt() : 256;
 				int accuracy = req.has("accuracy") ? req.get("accuracy").getAsInt() : 0;
+				boolean cells = req.has("cells") && req.get("cells").getAsBoolean();
 				return ServerTasks.callAsPlayer((level, player) -> {
 					long t0 = System.nanoTime();
 					Villager v = EntityTypes.VILLAGER.create(level, EntitySpawnReason.COMMAND);
@@ -62,6 +63,19 @@ public final class SliceVDev {
 							o.add("end", e);
 						}
 						o.addProperty("followRange", fr == null ? -1 : fr.getValue());
+						if (cells && p != null) {
+							// (7a K1) the path's nodes: a gate's villager paths meet the wall only at its gate cells
+							JsonArray c = new JsonArray();
+							for (int i = 0; i < p.getNodeCount(); i++) {
+								Node n = p.getNode(i);
+								JsonArray q = new JsonArray();
+								q.add(n.x);
+								q.add(n.y);
+								q.add(n.z);
+								c.add(q);
+							}
+							o.add("cells", c);
+						}
 					} finally {
 						v.discard();
 					}
