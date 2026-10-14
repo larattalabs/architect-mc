@@ -367,7 +367,7 @@ steps.look = async () => {
   await cmd('/time set 6000');
   await cmd('/weather clear');
   // the ravine: links_demo on the flat claim
-  await tp((FLAT_CLAIM[0] + FLAT_CLAIM[2]) / 2, -20, (FLAT_CLAIM[1] + FLAT_CLAIM[3]) / 2);
+  await tp((FLAT_CLAIM[0] + FLAT_CLAIM[2]) / 2, 100, (FLAT_CLAIM[1] + FLAT_CLAIM[3]) / 2);
   const p = await L.plan('links_demo', FLAT_CLAIM, { surveyLoad: 'bounded:256', check: true, owner: OWNER });
   const meta = JSON.parse(fs.readFileSync(path.join(L.SIDECAR_DATA, 'regions', 'plans', p.planId, 'meta.json'), 'utf8'));
   const region = await L.realise(p.planId, {});
@@ -383,13 +383,14 @@ steps.look = async () => {
   }
   // over water: a stone basin with a water channel (built by commands: the world's own), and a rope bridge checked through
   // Regions.checkPlan between anchors on its banks, then realised from the approved artifact
-  const W0 = [6400, 6000], top = -46;
-  await tp(W0[0] + 32, -20, W0[1] + 32);
+  // (the flat base's surface is y 64: the basin's banks rise 15 over it, the water stands 4 under their rim)
+  const W0 = [6400, 6000], G = 64, top = G + 15;
+  await tp(W0[0] + 32, top + 20, W0[1] + 32);
   await call('dev.waitChunks', { timeoutMs: 60_000 }, 90_000).catch(() => null);
-  await cmd(`/fill ${W0[0]} -60 ${W0[1]} ${W0[0] + 63} ${top} ${W0[1] + 63} minecraft:stone`);
+  await cmd(`/fill ${W0[0]} ${G + 1} ${W0[1]} ${W0[0] + 63} ${top} ${W0[1] + 63} minecraft:stone`);
   await cmd(`/fill ${W0[0]} ${top} ${W0[1]} ${W0[0] + 63} ${top} ${W0[1] + 63} minecraft:grass_block`);
-  await cmd(`/fill ${W0[0] + 2} -59 ${W0[1] + 22} ${W0[0] + 61} ${top} ${W0[1] + 41} minecraft:air`);
-  await cmd(`/fill ${W0[0] + 2} -59 ${W0[1] + 22} ${W0[0] + 61} -50 ${W0[1] + 41} minecraft:water`);
+  await cmd(`/fill ${W0[0] + 2} ${G + 1} ${W0[1] + 22} ${W0[0] + 61} ${top} ${W0[1] + 41} minecraft:air`);
+  await cmd(`/fill ${W0[0] + 2} ${G + 1} ${W0[1] + 22} ${W0[0] + 61} ${top - 4} ${W0[1] + 41} minecraft:water`);
   await L.settle(5000);
   const anchors = { w_n: [W0[0] + 32, top + 1, W0[1] + 21], w_s: [W0[0] + 32, top + 1, W0[1] + 42] };
   const plan = { schemaVersion: 'plan/0', planId: 'k1b_water', connectors: [{ id: 'over_water', kind: 'rope_bridge', from: { anchor: 'w_n' }, to: { anchor: 'w_s' } }] };
