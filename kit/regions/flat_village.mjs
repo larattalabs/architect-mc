@@ -5,7 +5,7 @@
 // swaps only. Nothing is forced: a lot that needs more goes to `unplaced`; a street that can't be a ground road fails the plan.
 //
 // Stages: ground (pads, the shared space, verges, lanes), street (the two road items), lots, props (into air only).
-// Params: lots (the caller's lot list, region programs only), shared, squareSize, laneWidth, lamps, bell, requireAll,
+// Params: lots (the caller's lot list, region programs only), shared, squareSize, laneWidth, lamps, bell, orientation (C37), requireAll,
 // (6c W) apronLamps (r.lightCover: the lot aprons and batters lit with the bible's fixture; on by default).
 import { region } from '../lib/region/program.mjs';
 import { STREET_RULES, streetLayout } from '../lib/region/village.mjs';
@@ -27,6 +27,8 @@ export const params = {
   lamps: { type: 'enum', options: ['none', 'few', 'street'], default: 'street', label: 'Lamps' },
   bell: { type: 'bool', default: false, label: 'Place a bell' },
   apronLamps: { type: 'bool', default: true, label: 'Light the lot aprons' },
+  // (C37) 'ew' / 'ns' force the street's axis (ew: it runs east-west, along x); auto (default, left out of the resolved params) is the old choice
+  orientation: { type: 'enum', options: ['auto', 'ew', 'ns'], default: 'auto', omitDefault: true, label: 'Street orientation' },
   requireAll: { type: 'bool', default: false, label: 'Every lot or fail' },
 };
 
@@ -44,7 +46,7 @@ export function build(ctx, { _unsafe = {}, after } = {}) {
   const keepOut = ctx.keepOut;
   let props = null;
   const L = streetLayout(r, p.lots, {
-    rules: STREET_RULES, shared, laneWidth: p.laneWidth, requireAll: p.requireAll, maxHeight: 32, _unsafe,
+    rules: STREET_RULES, shared, laneWidth: p.laneWidth, requireAll: p.requireAll, orientation: p.orientation ?? 'auto', maxHeight: 32, _unsafe,
     planProps: ({ o, sh, res, lots }) => (props = planProps(r, { o, sh, res, lots, laneWidth: p.laneWidth, lamps: p.lamps, bell: p.bell, keepOut, rng: ctx.rng('props') })),
   });
   emitProps(r, props, { stage: 'props' });

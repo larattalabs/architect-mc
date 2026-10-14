@@ -1,7 +1,7 @@
 {
- "catalogueVersion": 3,
- "api": "1.29.0",
- "kitVersion": "0.30.0",
+ "catalogueVersion": 4,
+ "api": "1.30.0",
+ "kitVersion": "0.31.0",
  "schemaVersion": "plan/0",
  "entries": [
   {
@@ -28,14 +28,16 @@
   {
    "id": "program.flat_village",
    "sinceApi": "P0",
-   "schemaVersion": 1,
-   "state": "supported"
+   "schemaVersion": 2,
+   "state": "supported",
+   "note": "C37 (sinceApi 1.30.0, a placeholder set at merge): additive orientation member (ew | ns | auto) of street layouts."
   },
   {
    "id": "program.lots",
    "sinceApi": "P0",
-   "schemaVersion": 1,
-   "state": "supported"
+   "schemaVersion": 2,
+   "state": "supported",
+   "note": "C37 (sinceApi 1.30.0, a placeholder set at merge): additive orientation member (ew | ns | auto) of street layouts."
   },
   {
    "id": "program.districts",
@@ -67,8 +69,9 @@
   {
    "id": "layout.street",
    "sinceApi": "P0",
-   "schemaVersion": 1,
-   "state": "supported"
+   "schemaVersion": 2,
+   "state": "supported",
+   "note": "C37 (sinceApi 1.30.0, a placeholder set at merge): additive orientation member (ew | ns | auto) of street layouts."
   },
   {
    "id": "layout.ring",
