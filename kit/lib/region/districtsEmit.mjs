@@ -33,6 +33,10 @@ export const PAIR_NEIGHBOURS = 6;
 export const END_CLEAR = 2;
 /** A dry route (a pair's cost) gives up after this many A* expansions (a dead end otherwise searches the whole claim). */
 export const DRY_EXPANDED = 1_000_000;
+/** (6c D2) Windows of a following district's boundary tried for its street before the plan refuses NO_EDGE. */
+export const FOLLOW_WINDOWS = 4;
+/** (6c D2) A following street keeps within this many cells of its line (the route pass's per-edge `within`). */
+export const FOLLOW_WITHIN = 2;
 
 /**
  * Validate and normalise a districts list: `[{id, size: [w, d], lots: n | [lot], levelBand?: low|mid|high|any, prefer?: [tag],
@@ -219,9 +223,9 @@ export function emitDistricts(r, intent = {}) {
   const blocked = [...keepOut, ...(it.hard ?? []), ...standing, ...own];
   const maxGrade = it.maxGrade ?? 0.25;
   const feet = (x, z) => [x, S.groundAt(x, z) + 1, z];
-  const dryRoute = (a, b, hardRects, clearTrees, prefer = [], cap = DRY_EXPANDED) => {
+  const dryRoute = (a, b, hardRects, clearTrees, prefer = [], cap = DRY_EXPANDED, extra = {}) => {
     const out = PASSES.route(cols, ctx.volumes ?? [], {
-      edges: [{ id: 'dry', from: { at: a.at, facing: a.facing }, to: { at: b.at, facing: b.facing }, width: DISTRICT_ROUTE_WIDTH, movers: ['player', 'villager'], ladders: false, ...(prefer.length ? { prefer } : {}) }],
+      edges: [{ id: 'dry', from: { at: a.at, facing: a.facing }, to: { at: b.at, facing: b.facing }, width: DISTRICT_ROUTE_WIDTH, movers: ['player', 'villager'], ladders: false, ...(prefer.length ? { prefer } : {}), ...extra }],
       maxGrade, hairpinLanding: 3, stairs: true, maxCut: 4, maxFill: 4, margin: 2, hard: hardRects, keepOut, prefer: [], clearTrees,
       maxExpanded: cap,
     });
@@ -233,15 +237,23 @@ export function emitDistricts(r, intent = {}) {
   const anchorNear = (d) => (it.near?.[d.id] ? it.near[d.id] : beside ? [(beside.claim[0] + beside.claim[2]) >> 1, (beside.claim[1] + beside.claim[3]) >> 1] : null);
   for (const d of ds.filter((x) => x.follow)) {
     const taken = [...follows.values()].map((f) => [f.pf.rect.minX, f.pf.rect.minZ, f.pf.rect.maxX, f.pf.rect.maxZ]);
-    const pf = it._follow?.[d.id] ?? placeFollow({ cols, claim, d, biomes, blocked: [...blocked.filter((q) => !keepOut.includes(q)), ...taken], keepOut, near: anchorNear(d) });
-    if (pf.none) throw new Error(`${pf.none} (district ${d.id})`);
-    // its street: a dry route between the line's ends that prefers the line, then its lots beside that path
-    const na = { at: feet(pf.ends[0].x, pf.ends[0].z), facing: pf.ends[0].facing }, nb = { at: feet(pf.ends[1].x, pf.ends[1].z), facing: pf.ends[1].facing };
-    const endClearF = pf.ends.map((e) => [e.x - END_CLEAR, e.z - END_CLEAR, e.x + END_CLEAR, e.z + END_CLEAR]);
-    const baseF = r._routeObstacles({ hard: [...standing, ...taken], clearTrees: endClearF });
-    // (a following street is long and winds with its boundary: four times a pair's expansions)
-    const st = dryRoute(na, nb, baseF.hard, baseF.clearTrees, pf.line, 4 * DRY_EXPANDED);
-    if (!st.ok) throw new Error(`NO_EDGE: the street along the ${pf.kind.replace('_', ' ')} does not route (${st.failed}; district ${d.id})`);
+    // its street: a dry route between the window's line ends that prefers the line, then its lots beside that path. A window whose
+    // street does not route (too steep beside the water, say) gives way to the next window along the boundary: at most
+    // FOLLOW_WINDOWS windows, each with twice a pair's expansions (a following street is long and winds with its boundary)
+    const tried = [];
+    let pf = null, st = null, failed = null;
+    for (let w = 0; w < (it._follow?.[d.id] ? 1 : FOLLOW_WINDOWS); w++) {
+      const p = it._follow?.[d.id] ?? placeFollow({ cols, claim, d, biomes, blocked: [...blocked.filter((q) => !keepOut.includes(q)), ...taken], keepOut, near: anchorNear(d), exclude: tried });
+      if (p.none) { if (!w) throw new Error(`${p.none} (district ${d.id})`); break; }
+      tried.push(p.start);
+      const na = { at: feet(p.ends[0].x, p.ends[0].z), facing: p.ends[0].facing }, nb = { at: feet(p.ends[1].x, p.ends[1].z), facing: p.ends[1].facing };
+      const endClearF = p.ends.map((e) => [e.x - END_CLEAR, e.z - END_CLEAR, e.x + END_CLEAR, e.z + END_CLEAR]);
+      const baseF = r._routeObstacles({ hard: [...standing, ...taken], clearTrees: endClearF });
+      const s = dryRoute(na, nb, baseF.hard, baseF.clearTrees, p.line, 2 * DRY_EXPANDED, { within: p.line, withinRadius: FOLLOW_WITHIN });
+      if (s.ok) { pf = p; st = s; break; }
+      failed = failed ?? s.failed;
+    }
+    if (!pf) throw new Error(`NO_EDGE: the street along the ${(it._follow?.[d.id]?.kind ?? Object.keys(d.follow)[0]).replace('_', ' ')} does not route (${failed}; ${tried.length} window(s); district ${d.id})`);
     const fl = followLots(S, pf, st.path, d.specs, { blocked: [...standing, ...taken], keepOut, taken: [...follows.values()].flatMap((f) => f.lots.map((l) => l.rect)) });
     const foot = footprintOf(st.path, DISTRICT_ROUTE_WIDTH);
     follows.set(d.id, { pf, path: st.path, lots: fl.lots, unplacedLots: fl.unplaced, hard: maskRuns(new Set(foot.map((q) => `${q[0]},${q[1]}`))) });
@@ -365,7 +377,7 @@ export function emitDistricts(r, intent = {}) {
     const f = follows.get(d.id);
     const na = endNode(d, f.pf.ends[0]), nb = endNode(d, f.pf.ends[1]);
     addNode(na); addNode(nb);
-    edges.push({ id: `st_${d.id}`, from: na.name, to: nb.name, width: DISTRICT_ROUTE_WIDTH, prefer: f.path.map(([x, , z]) => [x, z]) });
+    edges.push({ id: `st_${d.id}`, from: na.name, to: nb.name, width: DISTRICT_ROUTE_WIDTH, prefer: f.path.map(([x, , z]) => [x, z]), within: f.pf.line, withinRadius: FOLLOW_WITHIN });
   }
   for (const p of chosen) { addNode(p.na); addNode(p.nb); edges.push({ id: `d_${p.a}__${p.b}`.slice(0, 48), from: p.na.name, to: p.nb.name, width: DISTRICT_ROUTE_WIDTH }); }
   if (join) { addNode(join.a); addNode(join.b); edges.push({ id: 'join', from: join.a.name, to: join.b.name, width: DISTRICT_ROUTE_WIDTH }); }

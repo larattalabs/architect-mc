@@ -90,6 +90,20 @@ test('C27 shore: the street parallel to the shore (every street cell 8..16 from 
   await assert.rejects(plan({ id: 'quay', size: [96, 24], follow: { shore: {} }, lots: 2 }, FLAT()), /NO_EDGE: no shore within the claim/);
 });
 
+test('C27 shore, diagonal and sloped: the street keeps to its line (8..16 from the water); a window whose street does not route gives way', async () => {
+  // a diagonal lake (i + j < 150) on land rising 1 in 4 away from it: an axis-snapped offset put the line about half as far out,
+  // and a free route ran down to the water's edge
+  const lake = (i, j) => i + j < 150;
+  const s = surf((i, j) => [64 + Math.max(0, Math.floor((i + j - 150) / 4)), lake(i, j)]);
+  const p = await plan({ id: 'quay', size: [64, 24], follow: { shore: {} }, lots: 2 }, s);
+  const f = p.meta.districts.follow.quay;
+  const ds = f.street.map(([x, , z]) => { let b = Infinity; for (let t = 0; t < 150; t++) b = Math.min(b, cheb([x, z], [t, 149 - t])); return b; });
+  const parallel = ds.filter((d) => d >= 8 && d <= 16).length;
+  assert.ok(parallel >= ds.length * 0.8, `${parallel}/${ds.length} street cells 8..16 from the lake (${[Math.min(...ds), Math.max(...ds)]})`);
+  for (const [x, z] of f.street.map(([x, , z]) => [x, z])) assert.ok(nearest([x, z], f.line) <= 2, `street ${x},${z} within 2 of its line`);
+  assert.ok(p.meta.districts.lots.quay.length >= 1);
+});
+
 test('C27 ridge: the street on the ridge line (every street cell within 4 of the crest); shallow lots on its flanks', async () => {
   const s = surf((i) => [64 + Math.max(0, 40 - Math.abs(i - 96)), false]);
   const { cells } = ridgeCells(s, CLAIM, { minRise: 8 });

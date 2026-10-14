@@ -10,6 +10,8 @@ import { surfaceOps } from './village.mjs';
 export const FOLLOW_PAD = 6;
 /** Columns between the street's centre and a lot's front edge. */
 export const FOLLOW_SETBACK = 3;
+/** How much further out a following district's lot may sit (a longer lane) where a diagonal street runs on across its front. */
+export const FOLLOW_PUSH = 4;
 
 const meets = (a, b) => a[0] <= b[2] && a[2] >= b[0] && a[1] <= b[3] && a[3] >= b[1];
 const grow = (a, n) => [a[0] - n, a[1] - n, a[2] + n, a[3] + n];
@@ -22,7 +24,7 @@ const grow = (a, n) => [a[0] - n, a[1] - n, a[2] + n, a[3] + n];
  * length at a time. Returns `{rect, mask: Set<"x,z">, line: [[x, z]], window: [[x, z]], side, kind, ends}` or `{none: 'NO_EDGE: ...' |
  * 'PROTECTED: ...' | 'OVERLAP: ...'}`.
  */
-export function placeFollow({ cols, claim, d, biomes = null, blocked = [], keepOut = [], near = null }) {
+export function placeFollow({ cols, claim, d, biomes = null, blocked = [], keepOut = [], near = null, exclude = [] }) {
   const [length, depth] = d.size;
   const t = traceBoundary(cols, claim, d.follow, { biomes, near, minLength: Math.min(length, 24) });
   if (t.none) return { none: t.none };
@@ -44,6 +46,7 @@ export function placeFollow({ cols, claim, d, biomes = null, blocked = [], keepO
   for (let k = 1; k <= 8; k++) for (const s of [s0 - k * (L >> 1), s0 + k * (L >> 1)]) if (s >= 0 && s + L <= spine.length && !starts.includes(s)) starts.push(s);
   let why = null;
   for (const s of starts) {
+    if (exclude.includes(s)) continue; // (a window whose street did not route: the caller asks for the next)
     const win = spine.slice(s, s + L);
     // the side: the first family's (biome edge), the land (shore), none (ridge)
     let sign = 0;
@@ -53,9 +56,9 @@ export function placeFollow({ cols, claim, d, biomes = null, blocked = [], keepO
         const [nx, nz] = normalAt(win, i);
         if (kind === 'biome_edge') {
           const want = d.side === 'b' ? d.follow.biome_edge.between[1] : d.follow.biome_edge.between[0];
-          const f = familyOf(biomeAt(biomes, p[0] + nx * 3, p[1] + nz * 3));
+          const f = familyOf(biomeAt(biomes, Math.round(p[0] + nx * 3), Math.round(p[1] + nz * 3)));
           votes += f === want ? 1 : -1;
-        } else votes += flagsAt(p[0] + nx * 2, p[1] + nz * 2) & FLAG_WATER ? -1 : 1;
+        } else votes += flagsAt(Math.round(p[0] + nx * 2), Math.round(p[1] + nz * 2)) & FLAG_WATER ? -1 : 1;
       });
       sign = votes >= 0 ? 1 : -1;
     }
@@ -64,11 +67,11 @@ export function placeFollow({ cols, claim, d, biomes = null, blocked = [], keepO
     const line = [], seen = new Set(), mask = new Set();
     win.forEach((p, i) => {
       const [nx, nz] = normalAt(win, i);
-      const q = [p[0] + nx * off * sign, p[1] + nz * off * sign];
+      const q = [Math.round(p[0] + nx * off * sign), Math.round(p[1] + nz * off * sign)];
       const k = `${q[0]},${q[1]}`;
       if (!seen.has(k)) { seen.add(k); line.push(q); }
       for (let tt = lo; tt <= hi; tt++) {
-        const x = p[0] + nx * tt * (sign || 1), z = p[1] + nz * tt * (sign || 1);
+        const x = Math.round(p[0] + nx * tt * (sign || 1)), z = Math.round(p[1] + nz * tt * (sign || 1));
         for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) mask.add(`${x + dx},${z + dz}`);
       }
     });
@@ -82,7 +85,8 @@ export function placeFollow({ cols, claim, d, biomes = null, blocked = [], keepO
       continue;
     }
     // the street line, trimmed of its blocked points at the ends; 4-connected gaps are the route's to bridge
-    const ok = line.filter(([x, z]) => !(flagsAt(x, z) & (FLAG_WATER | FLAG_LAVA | FLAG_MISSING)) && !isBlocked(x, z) && !inKeep(x, z) && inClaim(x, z));
+    const okAt = ([x, z]) => !(flagsAt(x, z) & (FLAG_WATER | FLAG_LAVA | FLAG_MISSING)) && !isBlocked(x, z) && !inKeep(x, z) && inClaim(x, z);
+    const ok = smoothLine(line).filter(okAt);
     let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity;
     for (const k of mask) { const [x, z] = k.split(',').map(Number); if (x < x0) x0 = x; if (x > x1) x1 = x; if (z < z0) z0 = z; if (z > z1) z1 = z; }
     const dirOut = (a, b) => { const dx = a[0] - b[0], dz = a[1] - b[1]; return Math.abs(dx) >= Math.abs(dz) ? [Math.sign(dx) || 1, 0] : [0, Math.sign(dz) || 1]; };
@@ -94,6 +98,27 @@ export function placeFollow({ cols, claim, d, biomes = null, blocked = [], keepO
     return { kind, side: kind === 'ridge' ? 'both' : sign > 0 ? '+' : '-', rect: { minX: x0, minZ: z0, maxX: x1, maxZ: z1 }, mask, line: ok, window: win, ends, spineLength: spine.length, start: s };
   }
   return { none: why ?? `NO_EDGE: no window of the ${kind.replace('_', ' ')} fits` };
+}
+
+/** A street line made walkable: each point the mean of its 7 neighbours along the line (an offset line folds on a boundary's
+ * inner bends), then joined into one 8-connected run of cells (the route's preferred cells, none skipped). */
+export function smoothLine(line, k = 3) {
+  const avg = [];
+  for (let i = 0; i < line.length; i++) {
+    let sx = 0, sz = 0, n = 0;
+    for (let t = Math.max(0, i - k); t <= Math.min(line.length - 1, i + k); t++) { sx += line[t][0]; sz += line[t][1]; n++; }
+    const q = [Math.round(sx / n), Math.round(sz / n)];
+    const l = avg[avg.length - 1];
+    if (!l || l[0] !== q[0] || l[1] !== q[1]) avg.push(q);
+  }
+  const out = [];
+  for (let i = 0; i < avg.length; i++) {
+    if (!i) { out.push(avg[0]); continue; }
+    const [ax, az] = avg[i - 1], [bx, bz] = avg[i];
+    const n = Math.max(Math.abs(bx - ax), Math.abs(bz - az));
+    for (let t = 1; t <= n; t++) out.push([Math.round(ax + ((bx - ax) * t) / n), Math.round(az + ((bz - az) * t) / n)]);
+  }
+  return out;
 }
 
 /** The mask as row runs [[x0, z, x1, z]] (z, then x). */
@@ -133,28 +158,35 @@ export function followLots(S, pf, P, specs, { blocked = [], keepOut = [], taken 
         const n = along[0] ? [0, sd] : [sd, 0];
         const [w, dp] = s.size; // along the street, deep
         const [cx, cy, cz] = P[i];
-        const near = FOLLOW_SETBACK, far = FOLLOW_SETBACK + dp - 1;
         const half = Math.floor((w - 1) / 2);
-        let r;
-        if (along[0]) { const zA = cz + n[1] * near, zB = cz + n[1] * far; r = [cx - half, Math.min(zA, zB), cx - half + w - 1, Math.max(zA, zB)]; } else { const xA = cx + n[0] * near, xB = cx + n[0] * far; r = [Math.min(xA, xB), cz - half, Math.max(xA, xB), cz - half + w - 1]; }
-        if (hit(r)) continue;
-        let inMask = 0, total = 0, onPath = false;
-        for (let x = r[0] - 1; x <= r[2] + 1; x++) for (let z = r[1] - 1; z <= r[3] + 1; z++) {
-          if (pathCells.has(`${x},${z}`)) onPath = true;
-          if (x < r[0] || x > r[2] || z < r[1] || z > r[3]) continue;
-          total++;
-          if (pf.mask.has(`${x},${z}`)) inMask++;
+        // the setback: 3 off the street's centre, pushed out (up to FOLLOW_PUSH more, a longer lane) where a diagonal street runs
+        // on across the lot's front
+        let r = null, near = 0;
+        for (let push = 0; push <= FOLLOW_PUSH && !r; push++) {
+          near = FOLLOW_SETBACK + push;
+          const far = near + dp - 1;
+          let q;
+          if (along[0]) { const zA = cz + n[1] * near, zB = cz + n[1] * far; q = [cx - half, Math.min(zA, zB), cx - half + w - 1, Math.max(zA, zB)]; } else { const xA = cx + n[0] * near, xB = cx + n[0] * far; q = [Math.min(xA, xB), cz - half, Math.max(xA, xB), cz - half + w - 1]; }
+          let onPath = false;
+          for (let x = q[0] - 1; x <= q[2] + 1 && !onPath; x++) for (let z = q[1] - 1; z <= q[3] + 1; z++) if (pathCells.has(`${x},${z}`)) { onPath = true; break; }
+          // the lane from the street to the front must not cross the street again either
+          for (let t = 2; t < near && !onPath; t++) if (pathCells.has(`${cx + n[0] * t},${cz + n[1] * t}`)) onPath = true;
+          if (!onPath) r = q;
         }
-        if (onPath || inMask * 5 < total * 4) continue;
+        if (!r || hit(r)) continue;
+        let inMask = 0, total = 0;
+        for (let x = r[0]; x <= r[2]; x++) for (let z = r[1]; z <= r[3]; z++) { total++; if (pf.mask.has(`${x},${z}`)) inMask++; }
+        if (inMask * 5 < total * 4) continue;
         const floorY = cy + 1;
         const ps = S.padStats(r[0], r[1], r[2] - r[0] + 1, r[3] - r[1] + 1, { floorY });
         if (ps.water || ps.cut > FOLLOW_PAD || ps.fill > FOLLOW_PAD) continue;
         const front = n[0] === 1 ? 'west' : n[0] === -1 ? 'east' : n[1] === 1 ? 'north' : 'south';
-        const entrance = [cx + n[0] * (near - 1), floorY, cz + n[1] * (near - 1)];
-        // the entrance is the cell outside the front edge's middle (the lot rule): along the street at the lot's middle
+        // the entrance is the cell outside the front edge's middle (the lot rule): along the street at the lot's middle; the lane
+        // the cells from the street's edge to it, level with the street
         const mid = along[0] ? [r[0] + half, cz + n[1] * (near - 1)] : [cx + n[0] * (near - 1), r[1] + half];
-        placed = { spec: s, rect: r, front, floorY, entrance: [mid[0], floorY, mid[1]], lane: [mid[0], cy, mid[1]], at: i, street: [along[0] ? mid[0] : cx, cy, along[0] ? cz : mid[1]] };
-        void entrance;
+        const lane = [];
+        for (let t = 2; t <= near - 1; t++) lane.push([cx + n[0] * t, cy, cz + n[1] * t]);
+        placed = { spec: s, rect: r, front, floorY, entrance: [mid[0], floorY, mid[1]], lane: lane[lane.length - 1], laneCells: lane, at: i, street: [along[0] ? mid[0] : cx, cy, along[0] ? cz : mid[1]] };
         side = -sd;
         break;
       }
@@ -181,8 +213,9 @@ export function emitFollowLots(r, d, lots, stages) {
       brief: s.brief, pad: { edge: 'slope', maxCut: FOLLOW_PAD, maxFill: FOLLOW_PAD }, stage: stages.lots,
       ext: { ...s.ext, 'architect_mc:village': { role: s.role, type: s.type, villager: s.villager, entrance: l.entrance, district: d.id, follow: true } },
     });
-    surfaceOps(lanes, [[l.lane[0], l.lane[1], l.lane[2]]], 'path');
-    laneCells.push([l.lane[0], l.lane[1], l.lane[2]]);
+    const lc = (l.laneCells ?? [l.lane]).map((c) => [c[0], c[1], c[2]]);
+    surfaceOps(lanes, lc, 'path');
+    laneCells.push(...lc);
     const e = l.entrance;
     r.graphNode({ id: `lot:${s.id}`, kind: 'lot', ref: s.id, at: e, ports: [{ name: 'entrance', at: e, facing: l.front, width: 1 }] });
     const j = r.graphNode({ id: `${d.id}_j${k + 1}`, kind: 'junction', ref: `${d.id}_street`, at: [l.street[0], l.street[1] + 1, l.street[2]], ports: [{ name: 'street', at: [l.street[0], l.street[1] + 1, l.street[2]], facing: 'up', width: 3 }, { name: `lane_${s.id}`, at: [l.street[0], l.street[1] + 1, l.street[2]], facing: 'up', width: 1 }] });

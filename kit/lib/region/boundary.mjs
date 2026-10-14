@@ -282,7 +282,8 @@ export function traceBoundary(cols, claim, follow, { biomes = null, near = null,
 export function normalAt(spine, i, k = 4) {
   const a = spine[Math.max(0, i - k)], b = spine[Math.min(spine.length - 1, i + k)];
   const dx = b[0] - a[0], dz = b[1] - a[1];
-  // left of travel (x east, z south): (dz, -dx)
-  const nx = dz, nz = -dx;
-  return Math.abs(nx) >= Math.abs(nz) ? [Math.sign(nx) || 1, 0] : [0, Math.sign(nz) || 1];
+  // left of travel (x east, z south): (dz, -dx), scaled to a Chebyshev length of 1 (a step of t along it is t cells out by the
+  // grid's own distance, on a diagonal boundary too: an axis-snapped normal put a diagonal boundary's offset line at half its distance)
+  const m = Math.max(Math.abs(dx), Math.abs(dz));
+  return m ? [dz / m, -dx / m] : [1, 0];
 }
