@@ -444,6 +444,12 @@ persisted formats. Candidate later asks: `Survey.biome` per column (T1's fields 
 - **A districts zone in a plan/0 plan ignores its own `where` and size in v0** (placed around the zones and forms before it).
 - **`near` is exact per phase, not jointly.** A district near another is placed after it.
 
+## Queued (coordinator, 2026-10-14)
+
+- **Catalogue `sinceApi` placeholders.** 75 plan-catalogue entries still say `sinceApi: "P0"` and the D1/D2 flips did not
+  record a real version. `state` is what Steward compares across releases, so this isn't blocking, but stamp real API
+  versions (P0 = 1.23.0; D1 = 1.27.0; D2 = 1.29.0; PT = 1.24.0) and make the merge-time renumber stamp new ones.
+
 ## Open questions
 - Track AgentCraft fixes to the copied placement code, or treat the copy as independent from now on?
 - Cost: measure tokens and time per design in phase 1, and show an estimate in the form.
