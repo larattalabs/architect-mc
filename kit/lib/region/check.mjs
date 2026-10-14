@@ -9,6 +9,9 @@ import { centreCells, crossOffsets, rightOf, segmentAxis } from './geom.mjs';
 import { decodeVoxels } from './voxels.mjs';
 import { VC, classAt, decodeArvx } from './volume.mjs';
 import { windowGrade } from './passes/route.mjs';
+import { wallRules } from './checkWalls.mjs';
+import { ropeRules } from './checkRopes.mjs';
+
 
 export const RULES = ['M1', 'M2', 'M3', 'M4', 'M5', 'M6', 'M7', 'M8', 'M9', 'M10', 'M11', 'M12', 'M13', 'M14', 'M22', 'M23', 'M24', 'M17'];
 /** (6c V) The parts a flat village's components emit (the M1 lot-box rule applies to them only). */
@@ -404,6 +407,10 @@ export function checkRegion({ ir, survey, blobs, volumes = [], meta = null, worl
   if (village) time('M22', () => villageRules({ ir, vw, village, want, findings, metrics, partStage }));
   // ---- (6c T2) the routed edges: each edge's ends reach each other by its movers, no ladder on a villager edge, the grade
   if (meta?.route) time('M2', () => routeRules({ ir, vw, route: meta.route, want, findings, metrics, partStage, graph }));
+  // (7a K1) walls and gates (M2:wall, M8:wall: checkWalls.mjs, K1a) and rope bridges (M10:rope: checkRopes.mjs, K1b); each leaves vw
+  // as it found it
+  if (Array.isArray(meta?.walls) && meta.walls.length) time('M2', () => wallRules({ ir, vw, walls: meta.walls, meta, want, findings, metrics, partStage, finding }));
+  if (Array.isArray(meta?.ropes) && meta.ropes.length) time('M10', () => ropeRules({ ir, vw, ropes: meta.ropes, meta, want, findings, metrics, partStage, finding }));
 
   // ---- M3 support
   if (want.has('M3')) time('M3', () => {

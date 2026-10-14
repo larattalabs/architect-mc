@@ -743,11 +743,11 @@ steps.heap = async () => {
 
 steps.apijars = async () => {
   const runs = [
-    // (6c S2, integrated over v0.30.0) the unchanged 1.27.0, 1.26.0 and 1.25.0 jars, each with its tag's tools/apitest.mjs, each built
-    // from its tag (0.30.0 by the S2 integration, 0.29.0 and 0.28.0 by S2)
-    { api: '1.27.0', dir: path.join(MAIN, 'artifacts', 'gate6c-s2', 'v0300'), jar: 'architect_apitest-0.30.0.jar', world: 'G6A Api127' },
-    { api: '1.26.0', dir: path.join(MAIN, 'artifacts', 'gate6c-s2', 'v0290'), jar: 'architect_apitest-0.29.0.jar', world: 'G6A Api126' },
-    { api: '1.25.0', dir: path.join(MAIN, 'artifacts', 'gate6c-s2', 'v0280'), jar: 'architect_apitest-0.28.0.jar', world: 'G6A Api125' },
+    // (7a K1, over v0.32.0) the unchanged 0.32.0, 0.31.1 and 0.31.0 jars (API 1.29.0, 1.28.0, 1.28.0), each with its tag's
+    // tools/apitest.mjs, each built from its tag (artifacts/gate7a-k1/); keyed by the jar's version, since two share an API
+    { api: '1.29.0', key: '0320', dir: path.join(MAIN, 'artifacts', 'gate7a-k1', 'v0320'), jar: 'architect_apitest-0.32.0.jar', world: 'G6A Jar0320' },
+    { api: '1.28.0', key: '0311', dir: path.join(MAIN, 'artifacts', 'gate7a-k1', 'v0311'), jar: 'architect_apitest-0.31.1.jar', world: 'G6A Jar0311' },
+    { api: '1.28.0', key: '0310', dir: path.join(MAIN, 'artifacts', 'gate7a-k1', 'v0310'), jar: 'architect_apitest-0.31.0.jar', world: 'G6A Jar0310' },
   ];
   const mods = path.join(GAME_DIR, 'mods');
   const out = {};
@@ -758,7 +758,8 @@ steps.apijars = async () => {
     }
     fs.mkdirSync(mods, { recursive: true });
     fs.copyFileSync(path.join(r.dir, r.jar), path.join(mods, r.jar));
-    const outDir = path.join(OUT, `api${r.api.replace(/\./g, '')}jar`);
+    const tag = r.key ?? r.api.replace(/\./g, '');
+    const outDir = path.join(OUT, `api${tag}jar`);
     let code = 0;
     let text = '';
     try {
@@ -776,7 +777,7 @@ steps.apijars = async () => {
       await stopClient();
       fs.rmSync(path.join(mods, r.jar), { force: true });
     }
-    fs.writeFileSync(path.join(OUT, `api${r.api.replace(/\./g, '')}jar.log`), text);
+    fs.writeFileSync(path.join(OUT, `api${tag}jar.log`), text);
     const fails = text.split('\n').filter((l) => l.startsWith('FAIL'));
     const oks = text.split('\n').filter((l) => l.startsWith('ok')).length;
     // apitest prints its timing bars as `FAIL BAR ...`: those are recorded here (a BAR line), the rest judge
@@ -786,9 +787,10 @@ steps.apijars = async () => {
     const isTiming = (l) => l.startsWith('FAIL BAR') || /^FAIL SITE_PROGRESS (\d+)x, at most 1\/s \(min gap (\d+) ms\)/.test(l) && Number(RegExp.$1) >= 2 && Number(RegExp.$2) < 950;
     const hard = fails.filter((l) => !isTiming(l));
     const total = Number(text.match(/(\d+) FAILED ->/)?.[1] ?? -1); // apitest's own total must account for every FAIL line
-    check(hard.length === 0 && (code === 0 || (total === fails.length && fails.length > hard.length)) && oks > 0, `apijars: the ${r.api} apitest jar (unchanged) passes its tools/apitest.mjs survival against this build (${oks} ok, ${hard.length} FAIL)`, hard);
-    bar(fails.length === hard.length, `apijars: the ${r.api} jar's timing bars (${fails.length - hard.length} missed)`, fails.filter(isTiming));
-    out[r.api] = { code, oks, fails: fails.length };
+    const name = r.key ? `${r.jar.replace(/^architect_apitest-|\.jar$/g, '')} (API ${r.api})` : r.api;
+    check(hard.length === 0 && (code === 0 || (total === fails.length && fails.length > hard.length)) && oks > 0, `apijars: the ${name} apitest jar (unchanged) passes its tools/apitest.mjs survival against this build (${oks} ok, ${hard.length} FAIL)`, hard);
+    bar(fails.length === hard.length, `apijars: the ${name} jar's timing bars (${fails.length - hard.length} missed)`, fails.filter(isTiming));
+    out[r.key ?? r.api] = { api: r.api, code, oks, fails: fails.length };
   }
   await startClient('G6A Flat Base');
   return out;

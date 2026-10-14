@@ -24,6 +24,12 @@ export function wallsRouted(K, edges) {
   void K; void edges;
 }
 
+/** A failed leg's UNREACHABLE evidence: `{walls: [...]}` (the walls between its ends, sealed or at gates.max), or {}. */
+export function wallsEvidence(K, leg) {
+  void K; void leg;
+  return {};
+}
+
 /** Compile order step 4: gates by crossing, auto gates and gates.min, from the routed edges (K.routed). */
 export function finishGates(K) {
   void K;

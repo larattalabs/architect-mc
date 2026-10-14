@@ -42,6 +42,13 @@ the as-built).
   parts whose block is supported now; item 9 diffs D2 -> K1. `fixtures/plan/k1-pending-a.json` / `-b.json` stand in for each
   half's valid/ fixtures in item 9's coverage check: each half deletes its own file when its fixtures land.
 - **Features:** mod `wallConnectors` (sidecar `region.walls`), `ropeBridges` and `autoConnector` (`region.rope`).
+- **Foundation round 2** (same branch, fast-forward): the plan meta carries `walls` (K1a) and `ropes` (K1b) and the compiler's
+  checkpoint/rollback restores them; the checker calls `wallRules` (`kit/lib/region/checkWalls.mjs`, K1a) and `ropeRules`
+  (`checkRopes.mjs`, K1b, a stub) when the meta has them; graph nodes may be `kind: gate` and edges `type: rope_bridge` with a
+  `crossing` (`graphEdge({..., crossing})`); siteplan/1 gains `walls`, node kind `gate`, edge type `rope_bridge` and `crossing`;
+  a gate without `wall` depends on the plan's one wall (validator); a failed leg's UNREACHABLE evidence merges
+  `wallsEvidence(K, leg)`; apijars and `api-compat --gate7ak1` run the 0.32.0, 0.31.1 and 0.31.0 tag jars
+  (`<main>/artifacts/gate7a-k1/`, keyed by jar version: two share API 1.28.0).
 
 ## K1a: state
 

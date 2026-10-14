@@ -26,7 +26,7 @@ import { besidePorts, emitDistricts, parseDistricts, placeDistricts } from '../r
 import { placeFollow } from '../region/followEmit.mjs';
 import { zoneDistricts } from './schema.mjs';
 // (7a K1) walls and gates (K1a), rope bridges and auto connectors (K1b): the compiler's hooks for the four connector kinds
-import { WALL_KINDS, emitWalls, finishGates, planWalls, wallsPassInput, wallsRouted } from '../connectors/wall.mjs';
+import { WALL_KINDS, emitWalls, finishGates, planWalls, wallsEvidence, wallsPassInput, wallsRouted } from '../connectors/wall.mjs';
 import { ROPE_KINDS, emitRopes, ropeAnswer, ropeLeg, ropePassInput, ropeResolve } from '../connectors/rope.mjs';
 /** (7a K1) The connector kinds K1 compiles (each a supported block in catalogue 4). */
 export const K1_KINDS = Object.freeze([...WALL_KINDS, ...ROPE_KINDS]);
@@ -694,7 +694,7 @@ function checkpoint(r) {
     paths: r.paths.length, nodes: r.graph.nodes.length, edges: r.graph.edges.length, graphIds: new Set(r.graphIds), forms: r.forms.length, opCount: r.opCount,
     notes: r.notes.length, passRuns: r.passRuns.length, blend: r.blendLots.length, relief: new Set(r.reliefLots), fields: { ...r.fields }, sideBlobs: { ...r.sideBlobs },
     pathIds: Object.keys(r.meta.paths), nodeIds: r.graph.nodes.length, edgeIds: r.graph.edges.length,
-    meta: JSON.stringify({ paths: r.meta.paths, lots: r.meta.lots, parts: r.meta.parts, route: r.meta.route ?? null, gravity: r.meta.gravity ?? null, forms: r.meta.forms ?? null, village: r.meta.village ?? null, villageZones: r.meta.villageZones ?? null }),
+    meta: JSON.stringify({ paths: r.meta.paths, lots: r.meta.lots, parts: r.meta.parts, route: r.meta.route ?? null, gravity: r.meta.gravity ?? null, forms: r.meta.forms ?? null, village: r.meta.village ?? null, villageZones: r.meta.villageZones ?? null, walls: r.meta.walls ?? null, ropes: r.meta.ropes ?? null }),
     anchors: { ...r.anchors },
   };
 }
@@ -704,7 +704,7 @@ function rollback(r, c) {
   r.notes.length = c.notes; r.passRuns.length = c.passRuns; r.blendLots.length = c.blend; r.reliefLots = c.relief; r.fields = c.fields; r.sideBlobs = c.sideBlobs;
   const m = JSON.parse(c.meta);
   r.meta.paths = m.paths; r.meta.lots = m.lots; r.meta.parts = m.parts;
-  for (const k of ['route', 'gravity', 'forms', 'village', 'villageZones']) { if (m[k] === null) delete r.meta[k]; else r.meta[k] = m[k]; }
+  for (const k of ['route', 'gravity', 'forms', 'village', 'villageZones', 'walls', 'ropes']) { if (m[k] === null) delete r.meta[k]; else r.meta[k] = m[k]; }
   r.anchors = c.anchors;
 }
 /** The region parts (and lots) added since a checkpoint. */
@@ -1148,7 +1148,7 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
         const why = m?.failed ?? e?.failed ?? 'NO_ROUTE';
         ans(l.conn, why === 'BUDGET' ? budgetHit('maxNodes') : why === 'ROUTE_WATER'
           ? { class: 'refused', reasons: [{ code: 'WATER', message: `leg ${l.k + 1}: every route crosses water`, until: 'T3', evidence: { leg: l.k + 1, from: l.from.at, to: l.to.at } }] }
-          : { class: 'refused', reasons: [{ code: 'UNREACHABLE', message: `leg ${l.k + 1}: no route within the grade (${g}), the cut and fill limits and the obstacles`, evidence: { leg: l.k + 1, from: l.from.at, to: l.to.at, grade: g } }] });
+          : { class: 'refused', reasons: [{ code: 'UNREACHABLE', message: `leg ${l.k + 1}: no route within the grade (${g}), the cut and fill limits and the obstacles`, evidence: { leg: l.k + 1, from: l.from.at, to: l.to.at, grade: g, ...(K ? wallsEvidence(K, l) : {}) } }] });
       }
       group = group.filter((l) => !bad.has(l.conn.id));
     }
