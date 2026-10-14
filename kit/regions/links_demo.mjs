@@ -101,7 +101,7 @@ function riftVariant(ctx, P) {
   const land = riftLand(claim, S, rp);
   if (!land) throw new Error('links_demo (natural): rift_city has no rift on this claim');
   const { cz, half, x0, x1 } = land.layout;
-  const zn = cz - half - 3, zs = cz + half + 3, n = zs - zn - 1; // the lips 17 from the centre line (the warp carves at most 16)
+  const zn = cz - half - 4, zs = cz + half + 4, n = zs - zn - 1; // the lips 18 from the centre line (the warp carves up to 17)
   // the template's lots (with aprons) and ways are obstacles; a bridge needs its deck, rails and posts clear (a southward deck's
   // right-hand side is west: x - 2 .. x + 1)
   const hard = [...r.lots.map((l) => [l.box.minX - 1, l.box.minZ - 1, l.box.maxX + 1, l.box.maxZ + 1]), ...r.paths.filter((q) => q.box).map((q) => [q.box.minX, q.box.minZ, q.box.maxX, q.box.maxZ])];

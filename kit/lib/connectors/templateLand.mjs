@@ -40,9 +40,9 @@ export function riftLayout(claim, survey, P) {
 
 /**
  * rift_city's route land: the rift down to its floor, the ledges at theirs (mid depth, 9 wide on both walls, the north one broken
- * round the hall), over the channel's box widened by the warp: 2 columns either side counted carved (the warp of 3 carves at most 2
- * past the channel at the rim, measured on a flat claim: 15 and 16 from the centre line in part, 17 never), so the lip is the
- * column 17 out and a deck from it cuts through a bulge rather than stopping short of it. `rails`: the rim rail round the rift (5
+ * round the hall), over the channel's box widened by the warp: 3 columns either side counted carved (the warp of 3 carves up to 3
+ * past the channel: on the flat claim 15 and 16 from the centre line in part and 17 never, on the natural rift site 17 in places),
+ * so the lip is the column 18 out and a deck from it cuts through a bulge rather than stopping short of it. `rails`: the rim rail round the rift (5
  * past the channel: a fence on the surface, a lantern over every 10th post), which a K1b route opens where it crosses (the links
  * stage writes air there). `{base: {minX, minZ, width, depth, values}, rails: [[x0, z0, x1, z1]]}` or null.
  */
@@ -50,7 +50,7 @@ export function riftLand(claim, survey, P) {
   const g = riftLayout(claim, survey, P);
   if (!g) return null;
   const { cz, half, x0, x1, floorY, yl, LW, cx } = g;
-  const minX = x0 - half - 2, maxX = x1 + half + 2, minZ = cz - half - 2, maxZ = cz + half + 2;
+  const minX = x0 - half - 3, maxX = x1 + half + 3, minZ = cz - half - 3, maxZ = cz + half + 3;
   const width = maxX - minX + 1, dep = maxZ - minZ + 1, values = new Array(width * dep).fill(0);
   const ledge = [];
   for (const side of [-1, 1]) {
