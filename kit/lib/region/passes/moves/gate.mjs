@@ -12,26 +12,42 @@ const MAX_MOVE = 16;
 const DIRS4 = [[1, 0], [0, 1], [-1, 0], [0, -1]];
 
 /**
- * The pass-level state from `intent.walls` ([{id, max, cells: [[x, z, axis]], open: [[x, z]], opened}]: `axis` 1 a run along x, 2
- * along z, 3 a corner or bend; `open` the cells already open, `opened` the gates already counted against `max`). Null without walls.
+ * The pass-level state from `intent.walls` ([{id, max, cells: [[x, z, axis]], open: [[x, z, y?]], opened}]: `axis` 1 a run along x,
+ * 2 along z, 3 a corner or bend; `open` the cells already open (with their walk surface's y when it is set), `opened` the gates
+ * already counted against `max`). Null without walls.
  */
 export function gateInit(env, intent) {
   const walls = Array.isArray(intent.walls) ? intent.walls.filter((w) => w && Array.isArray(w.cells) && w.cells.length) : [];
   if (!walls.length) return null;
   const { W, D, r, minX, minZ } = env;
   const n = W * D;
-  const wid = new Int16Array(n).fill(-1), axis = new Uint8Array(n), open = new Uint8Array(n);
+  const wid = new Int16Array(n).fill(-1), axis = new Uint8Array(n), open = new Uint8Array(n), openY = new Int16Array(n).fill(-32768);
   const at = (x, z) => {
     const i = Math.floor((x - minX) / r), j = Math.floor((z - minZ) / r);
     return i < 0 || j < 0 || i >= W || j >= D ? -1 : i + j * W;
   };
   walls.forEach((w, wi) => {
     for (const c of w.cells) { const k = at(c[0], c[1]); if (k >= 0) { wid[k] = wi; axis[k] = c[2] ?? 3; } }
-    for (const c of w.open ?? []) { const k = at(c[0], c[1]); if (k >= 0) open[k] = 1; }
+    // an open cell's walk surface y (a gate placed at an endpoint, an existing network's crossing): a route through it holds that y
+    for (const c of w.open ?? []) { const k = at(c[0], c[1]); if (k >= 0) { open[k] = 1; if (Number.isInteger(c[2])) openY[k] = c[2]; } }
   });
   const mask = new Uint8Array(n);
   for (let k = 0; k < n; k++) if (wid[k] >= 0) mask[k] = 1;
-  return { walls: walls.map((w) => ({ id: w.id, max: Number.isInteger(w.max) ? w.max : 16, opened: Number.isInteger(w.opened) ? w.opened : 0 })), wid, axis, open, mask, gates: [] };
+  return { walls: walls.map((w) => ({ id: w.id, max: Number.isInteger(w.max) ? w.max : 16, opened: Number.isInteger(w.opened) ? w.opened : 0, inside: Array.isArray(w.inside) ? w.inside : null, open: (w.open ?? []).length })), wid, axis, open, openY, mask, gates: [] };
+}
+
+/**
+ * Before an edge's search: a closed wall between its ends that can never open a gate (sealed, or at its gates.max with none open)
+ * leaves no route; the note names it. `from`, `to`: the ends' feet [x, y, z].
+ */
+export function gatePrune(state, from, to) {
+  for (const w of state.walls) {
+    if (!w.inside || w.open > 0 || w.opened < w.max) continue;
+    const [x0, z0, x1, z1] = w.inside;
+    const isIn = (p) => p[0] > x0 && p[0] < x1 && p[2] > z0 && p[2] < z1;
+    if (isIn(from) !== isIn(to)) return `wall ${w.id} stands between its ends with no gate (${w.max ? 'at its gates.max' : 'sealed'})`;
+  }
+  return null;
 }
 
 /** Every edge searches with the gate move when the pass has walls. */
@@ -70,6 +86,7 @@ export function gateExpand(state, S) {
       rowWall++;
       opening.push(ak);
       if (!state.open[ak]) newCells++;
+      else if (state.openY[ak] !== -32768 && state.openY[ak] !== y) return; // an open gate's surface is at its own y
     }
     if (rowWall) {
       if (crossed || rowWall !== latHi - latLo + 1) return; // a second band, or a footprint half in the wall
@@ -128,7 +145,7 @@ export function gateCommit(state, env, edgeOut, moves, lat) {
       }
     }
     if (wall < 0) continue;
-    for (const ak of cells) state.open[ak] = 1;
+    for (const ak of cells) { state.open[ak] = 1; if (state.openY[ak] === -32768) state.openY[ak] = mv.y0; }
     if (isNew) state.walls[wall].opened++;
     gates.push({ wall: state.walls[wall].id, at: mid, heading: [di, dj], width: lat.hi - lat.lo + 1, depth: mv.arg, new: isNew, cells: cells.map((ak) => [minX + (ak % W) * r, minZ + Math.floor(ak / W) * r]) });
   }

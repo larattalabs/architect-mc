@@ -12,7 +12,7 @@
 // a corridor search at 4 cells, then the cell search within `corridor` of it (the whole claim if that fails). Ties by (f, g, x,
 // z, heading, k). Plan time only, pure, under the realise lint (integer math; Math.floor/abs/min/max only).
 import { FLAG_LAVA, FLAG_MISSING, FLAG_TREE, FLAG_WATER } from '../pack.mjs';
-import { gateActive, gateCells, gateCommit, gateExpand, gateInit } from './moves/gate.mjs';
+import { gateActive, gateCells, gateCommit, gateExpand, gateInit, gatePrune } from './moves/gate.mjs';
 import { ropeActive, ropeCells, ropeCommit, ropeExpand, ropeInit, ropeNeedsFlag } from './moves/rope.mjs';
 
 /** The 8 headings (x east, z south): E, SE, S, SW, W, NW, N, NE. Even headings are cardinal. */
@@ -56,6 +56,8 @@ const isInt = Number.isInteger;
  *   expand(state, S)                        relaxes the move's candidates from an expanded state (S below)
  *   cells(state, m) -> {cells, data}        the path cells of a move after its start cell ([[x, y, z]]), and the segment's data
  *   commit(state, env, edgeOut, moves, lat) after an edge routes (the gate move opens its gates for the later edges)
+ *   prune(state, from, to) -> note | null   (optional) before an edge's search: a reason no route can exist (a sealed wall between its
+ *                                           ends: the edge fails NO_ROUTE at once, instead of spending the node budget)
  * Order and ties: a state's moves are relaxed walk, stair, hairpin, ladder, then each active special row in table order; a row
  * relaxes its candidates in its own fixed order (the gate move: at most one, straight ahead; the rope move: K1b's, by span length
  * ascending). The heap breaks ties by (f, g, x, z, heading, k, d, flag), the flag last, so an unflagged state wins a tie.
@@ -63,7 +65,7 @@ const isInt = Number.isInteger;
  * w, nearEnd, relax(k, h, kk, q, cost, arg, f?)} (`relax` records the row's code; f defaults to the state's flag).
  */
 export const SPECIAL_MOVES = Object.freeze([
-  Object.freeze({ name: 'gate', code: 5, segment: 'gate', flag: false, init: gateInit, active: gateActive, needsFlag: () => false, blocks: (st) => st.mask, expand: gateExpand, cells: gateCells, commit: gateCommit }),
+  Object.freeze({ name: 'gate', code: 5, segment: 'gate', flag: false, init: gateInit, active: gateActive, needsFlag: () => false, blocks: (st) => st.mask, expand: gateExpand, cells: gateCells, commit: gateCommit, prune: gatePrune }),
   Object.freeze({ name: 'rope', code: 6, segment: 'rope', flag: true, init: ropeInit, active: ropeActive, needsFlag: ropeNeedsFlag, blocks: () => null, expand: ropeExpand, cells: ropeCells, commit: ropeCommit }),
 ]);
 
@@ -569,6 +571,8 @@ export function routePass(survey, volumes, intent) {
     env.G = G;
     const sp = special.filter((x) => x.m.active(x.st, e));
     const needFlag = sp.some((x) => x.m.needsFlag(x.st, e));
+    const pruned = sp.map((x) => x.m.prune?.(x.st, ends[0].at, ends[1].at) ?? null).find((v) => v);
+    if (pruned) { edgeOut.failed = 'NO_ROUTE'; edgeOut.note = pruned; continue; }
     const build = (water) => {
       const mk = water ? masks : baseMasks(env, it, { water: false, keepOut: !_unsafe.noKeepOut });
       const hardW = dilate(mk.hard, W, D, Rt), guardW = dilate(mk.guard, W, D, Rw), treeW = dilate(mk.tree, W, D, Rt), earlyW = dilate(earlier, W, D, Rt);
