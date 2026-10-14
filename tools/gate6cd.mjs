@@ -380,7 +380,10 @@ async function d2Round(name, world, claim, district, { beside = null, owner = OW
   if (natural) await cmd('/tick freeze');
   try {
     await cmd('/kill @e[type=!minecraft:player]');
-    const h0 = await hash(box);
+    // (natural) the snapshot for the E-normal diff: the live world's own changes across the save and reload are classed by the mod
+    // (growth, grazed, live, gravity, unsupported); flat: the hash, E-flat 0
+    const snapFile = path.join(OUT, `${name}-snap.gz`);
+    const h0 = natural ? (await call('dev.region.hash', { box, mode: 'snap', file: snapFile }, 3_600_000)).sha256 : await hash(box);
     const p = await planReq({ program: 'districts', params: spec, claim, owner, ...(beside ? { beside } : {}), check: true });
     if (p.refused) throw new Error(`${name}: plan refused: ${p.refused}`);
     const files = planFiles(p.planId);
@@ -396,10 +399,17 @@ async function d2Round(name, world, claim, district, { beside = null, owner = OW
     await cmd('/kill @e[type=!minecraft:player]');
     const rm = await undo(region);
     await L.settle(3000);
-    const h1 = await hash(box);
+    let h1, enormal = null;
+    if (natural) {
+      const diff = await call('dev.region.hash', { box, mode: 'diff', file: snapFile }, 3_600_000);
+      const WORLD = ['growth', 'grazed', 'live', 'gravity', 'unsupported'];
+      const undoOwn = diff.mismatches - WORLD.reduce((a, k) => a + (diff.classes?.[k] ?? 0), 0);
+      enormal = { mismatches: diff.mismatches, classes: diff.classes ?? {}, undoOwn, cap: Math.floor(0.0001 * (rm.restored ?? 0)), list: (diff.list ?? []).filter((m) => m.class !== 'growth').slice(0, 40) };
+      h1 = enormal.mismatches === 0 ? h0 : null;
+    } else h1 = await hash(box);
     const q = await planReq({ program: 'districts', params: spec, claim, owner, ...(beside ? { beside } : {}), check: false });
     const view = (await call('dev.region.state', { region }, 60_000).catch(() => ({}))).view ?? null;
-    return { plan: p, files, region, state: st.view.state, viewAtPlace: st.view, again: q.irSha ?? q.refused, sameIr: q.irSha === p.irSha, exact: h0 === h1, restored: rm.restored, view };
+    return { plan: p, files, region, state: st.view.state, viewAtPlace: st.view, again: q.irSha ?? q.refused, sameIr: q.irSha === p.irSha, exact: natural ? (enormal.classes?.none ?? 0) === 0 && enormal.undoOwn <= enormal.cap : h0 === h1, enormal, restored: rm.restored, view };
   } finally {
     if (natural) await cmd('/tick unfreeze').catch(() => null);
   }
@@ -477,17 +487,19 @@ steps.boundary = async () => {
       geo = { on: ds.filter((v) => v <= 4).length, of: ds.length };
       check(geo.on >= geo.of * 0.8, `ridge: the street on the ridge line (${geo.on}/${geo.of} street cells within 4 of the crest)`);
     }
-    out[id] = { state: r.state, rect: f.rect, mask: f.maskCells, geo, lots: r.files.meta.districts.lots[id], sameIr: r.sameIr, exact: r.exact };
+    out[id] = { state: r.state, rect: f.rect, mask: f.maskCells, geo, lots: r.files.meta.districts.lots[id], sameIr: r.sameIr, exact: r.exact, enormal: r.enormal };
     check(r.state === 'PLACED' && r.files.meta.districts.lots[id].length >= 1, `${id}: placed (${r.files.meta.districts.lots[id].length} lot(s)), its shape a ${f.maskCells}-cell mask in ${json(f.rect)}`);
     check(r.sameIr, `${id}: stable across a reload (the same IR sha planned again after the world was saved and reopened)`);
-    check(r.exact, `${id}: one undo restores the claim exactly (ticks frozen; ${r.restored} cells)`);
+    check(r.exact, `${id}: one undo restores the claim (ticks frozen; ${r.restored} cells; E-normal ${r.enormal?.mismatches} ${json(r.enormal?.classes ?? {})}, unclassified ${r.enormal?.classes?.none ?? 0}, the undo's own ${r.enormal?.undoOwn} (cap ${r.enormal?.cap}))`);
   }
   // ---- the biome edge: the pinned desert/jungle site
   const site = SITE();
   if (!site.fixture?.claim) { check(false, 'biome edge: the desert/jungle site is not pinned (tools/find-site.mjs desert_jungle_site)'); return out; }
   const C = site.fixture.claim;
   await tp(Math.floor((C[0] + C[2]) / 2), 200, Math.floor((C[1] + C[3]) / 2));
-  const r = await d2Round('oasis', world, C, { id: 'oasis', size: [96, 24], follow: { biome_edge: { between: ['desert', 'jungle'] } }, lots: 3 }, { natural: true });
+  // the jungle side (`side: 'b'`): on the pinned site the desert side is a narrow strip between the edge and water, so a band 24 deep
+  // there leaves dry land
+  const r = await d2Round('oasis', world, C, { id: 'oasis', size: [96, 24], follow: { biome_edge: { between: ['desert', 'jungle'] } }, side: 'b', lots: 3 }, { natural: true });
   const f = r.files.meta.districts.follow.oasis;
   const g = B.parseBiomes(JSON.parse(fs.readFileSync(path.join(L.SIDECAR_DATA, 'regions', 'plans', r.plan.planId, 'biomes.json'), 'utf8')));
   const cols = decodeColumns(fs.readFileSync(path.join(L.SIDECAR_DATA, 'regions', 'plans', r.plan.planId, 'survey.bin')));
@@ -495,20 +507,20 @@ steps.boundary = async () => {
   const edge = [...B.biomeEdgeCells(cols, claim, g, ['desert', 'jungle']).cells].map((k) => k.split(',').map(Number));
   const m = mask(f.mask);
   // the shape follows the edge within 4 cells over its length: every boundary cell of its window within 4 of the mask, every mask
-  // cell in the jungle within 4 of the edge
+  // cell on the other side (the desert) within 4 of the edge
   const far1 = f.boundary.filter((q) => near(q, m) > 4).length;
-  const jungle = m.filter(([x, z]) => B.familyOf(B.biomeAt(g, x, z)) === 'jungle');
-  const far2 = jungle.filter((q) => near(q, edge) > 4).length;
-  out.oasis = { state: r.state, rect: f.rect, mask: f.maskCells, boundary: f.boundary.length, far1, jungleCells: jungle.length, far2, sameIr: r.sameIr, exact: r.exact, biomes: r.files.ir.biomes };
-  check(r.state === 'PLACED' && far1 === 0 && far2 === 0, `biome edge: the district's shape follows the desert/jungle edge within 4 cells over its ${f.boundary.length}-cell length (${far1} boundary cells and ${far2} jungle cells past 4)`);
-  check(r.sameIr && r.exact, `biome edge: stable across a reload, one undo exact (${r.restored} cells)`);
+  const desert = m.filter(([x, z]) => B.familyOf(B.biomeAt(g, x, z)) === 'desert');
+  const far2 = desert.filter((q) => near(q, edge) > 4).length;
+  out.oasis = { state: r.state, rect: f.rect, mask: f.maskCells, boundary: f.boundary.length, far1, desertCells: desert.length, far2, lots: r.files.meta.districts.lots.oasis, sameIr: r.sameIr, exact: r.exact, enormal: r.enormal, biomes: r.files.ir.biomes };
+  check(r.state === 'PLACED' && far1 === 0 && far2 === 0, `biome edge: the district's shape follows the desert/jungle edge within 4 cells over its ${f.boundary.length}-cell length (${far1} boundary cells and ${far2} desert cells past 4; ${r.files.meta.districts.lots.oasis.length} lot(s))`);
+  check(r.sameIr && r.exact, `biome edge: stable across a reload, one undo restores the claim (${r.restored} cells; E-normal ${r.enormal?.mismatches} ${json(r.enormal?.classes ?? {})}, unclassified ${r.enormal?.classes?.none ?? 0}, the undo's own ${r.enormal?.undoOwn} (cap ${r.enormal?.cap}))`);
   // refused, named: no such edge; protected over the band
   const nr = await planReq({ program: 'districts', params: { spec: { districts: [{ id: 'oasis', size: [96, 24], follow: { biome_edge: { between: ['desert', 'mushroom'] } }, lots: 2 }] } }, claim: C, check: false });
   check(/NO_EDGE: no mushroom/.test(nr.refused ?? ''), `biome edge: no such edge refused, named (${nr.refused})`);
   const api = async (a) => { const x = await cmd(`/apitest ${a}`); return (x.messages ?? []).find((mm) => mm.startsWith('{')) ?? null; };
   await api(`unprotect ${OWNER} d2band`).catch(() => null);
   await api(`protect ${json({ owner: OWNER, id: 'd2band', x0: C[0], z0: C[1], x1: C[2], z1: C[3], label: 'D2_band' })}`);
-  const pr = await planReq({ program: 'districts', params: { spec: { districts: [{ id: 'oasis', size: [96, 24], follow: { biome_edge: { between: ['desert', 'jungle'] } }, lots: 2 }] } }, claim: C, check: false });
+  const pr = await planReq({ program: 'districts', params: { spec: { districts: [{ id: 'oasis', size: [96, 24], follow: { biome_edge: { between: ['desert', 'jungle'] } }, side: 'b', lots: 2 }] } }, claim: C, check: false });
   await api(`unprotect ${OWNER} d2band`).catch(() => null);
   out.refusals = { noEdge: nr.refused ?? null, protected: pr.refused ?? null };
   check(/PROTECTED/.test(pr.refused ?? ''), `biome edge: a protected area over its band refused, named (${pr.refused})`);

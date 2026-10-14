@@ -38,6 +38,23 @@ export const FOLLOW_WINDOWS = 4;
 /** (6c D2) A following street keeps within this many cells of its line (the route pass's per-edge `within`). */
 export const FOLLOW_WITHIN = 2;
 
+/** A following street's corridor (its line grown by FOLLOW_WITHIN + 1) as one-row rects [x0, z, x1, z]. */
+function lineClear(line) {
+  const g = FOLLOW_WITHIN + 1, rows = new Map();
+  for (const [x, z] of line) for (let dz = -g; dz <= g; dz++) {
+    const k = z + dz, o = rows.get(k);
+    rows.set(k, o ? [Math.min(o[0], x - g), Math.max(o[1], x + g), [...o[2], [x - g, x + g]]] : [x - g, x + g, [[x - g, x + g]]]);
+  }
+  const out = [];
+  for (const [z, [, , spans]] of [...rows].sort((a, b) => a[0] - b[0])) {
+    spans.sort((a, b) => a[0] - b[0]);
+    let cur = null;
+    for (const sp of spans) { if (cur && sp[0] <= cur[1] + 1) cur[1] = Math.max(cur[1], sp[1]); else { if (cur) out.push([cur[0], z, cur[1], z]); cur = [...sp]; } }
+    if (cur) out.push([cur[0], z, cur[1], z]);
+  }
+  return out;
+}
+
 /**
  * Validate and normalise a districts list: `[{id, size: [w, d], lots: n | [lot], levelBand?: low|mid|high|any, prefer?: [tag],
  * near?: [districtId], shared?: square|well, squareSize?, label?}]`. Throws with the path. Lot ids unique across every district.
@@ -247,7 +264,8 @@ export function emitDistricts(r, intent = {}) {
       if (p.none) { if (!w) throw new Error(`${p.none} (district ${d.id})`); break; }
       tried.push(p.start);
       const na = { at: feet(p.ends[0].x, p.ends[0].z), facing: p.ends[0].facing }, nb = { at: feet(p.ends[1].x, p.ends[1].z), facing: p.ends[1].facing };
-      const endClearF = p.ends.map((e) => [e.x - END_CLEAR, e.z - END_CLEAR, e.x + END_CLEAR, e.z + END_CLEAR]);
+      // the street's corridor is the street's to clear (its run fells what stands there): no tree obstacle within it (a jungle edge)
+      const endClearF = [...p.ends.map((e) => [e.x - END_CLEAR, e.z - END_CLEAR, e.x + END_CLEAR, e.z + END_CLEAR]), ...lineClear(p.line)];
       const baseF = r._routeObstacles({ hard: [...standing, ...taken], clearTrees: endClearF });
       const s = dryRoute(na, nb, baseF.hard, baseF.clearTrees, p.line, 2 * DRY_EXPANDED, { within: p.line, withinRadius: FOLLOW_WITHIN });
       if (s.ok) { pf = p; st = s; break; }
@@ -256,7 +274,7 @@ export function emitDistricts(r, intent = {}) {
     if (!pf) throw new Error(`NO_EDGE: the street along the ${(it._follow?.[d.id]?.kind ?? Object.keys(d.follow)[0]).replace('_', ' ')} does not route (${failed}; ${tried.length} window(s); district ${d.id})`);
     const fl = followLots(S, pf, st.path, d.specs, { blocked: [...standing, ...taken], keepOut, taken: [...follows.values()].flatMap((f) => f.lots.map((l) => l.rect)) });
     const foot = footprintOf(st.path, DISTRICT_ROUTE_WIDTH);
-    follows.set(d.id, { pf, path: st.path, lots: fl.lots, unplacedLots: fl.unplaced, hard: maskRuns(new Set(foot.map((q) => `${q[0]},${q[1]}`))) });
+    follows.set(d.id, { pf, path: st.path, lots: fl.lots, unplacedLots: fl.unplaced, hard: maskRuns(new Set(foot.map((q) => `${q[0]},${q[1]}`))), clear: lineClear(pf.line) });
   }
   const followRects = [...follows.values()].map((f) => [f.pf.rect.minX - 1, f.pf.rect.minZ - 1, f.pf.rect.maxX + 1, f.pf.rect.maxZ + 1]);
   const farFrom = [...(beside ? [beside.claim] : []), ...followRects];
@@ -383,7 +401,7 @@ export function emitDistricts(r, intent = {}) {
   if (join) { addNode(join.a); addNode(join.b); edges.push({ id: 'join', from: join.a.name, to: join.b.name, width: DISTRICT_ROUTE_WIDTH }); }
   let routed = null;
   const streetHard = placedNow.filter((d) => !follows.has(d.id)).flatMap((d) => streetRects(pick.get(d.id).L));
-  if (edges.length) routed = r._route({ nodes, edges, maxGrade, stage: stages.routes, part: it.routePart ?? 'routes', hard: [...streetHard, ...standing], keepOut: it.keepOut ?? [], lanterns: true, clearTrees: endClear, roadSurface: 'path', lamp: roadLamp(lampFixture(r)) });
+  if (edges.length) routed = r._route({ nodes, edges, maxGrade, stage: stages.routes, part: it.routePart ?? 'routes', hard: [...streetHard, ...standing], keepOut: it.keepOut ?? [], lanterns: true, clearTrees: [...endClear, ...[...follows.values()].flatMap((f) => f.clear)], roadSurface: 'path', lamp: roadLamp(lampFixture(r)) });
   const byId = new Map((routed?.edges ?? []).map((e) => [e.id, e]));
   // a following street that does not route refuses the plan, named
   for (const d of placedNow) if (follows.has(d.id) && !byId.get(`st_${d.id}`)?.ok) throw new Error(`NO_EDGE: the street of district ${d.id} along the ${follows.get(d.id).pf.kind.replace('_', ' ')} did not route (${byId.get(`st_${d.id}`)?.failed ?? 'not routed'})`);
