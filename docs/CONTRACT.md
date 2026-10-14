@@ -12653,6 +12653,18 @@ scenario steps. **gate-verifier** re-runs items 1, 2, 5 and 9.
   stockpile (the connector half of N-RS-1, which needs RS), or leave that to RS?
 - **N-K1-4. The split.** K1a and K1b in parallel, batched into one release, or K1a first?
 
+### Coordinator decisions (2026-10-14, on Noah's behalf; Noah can overrule at the look step)
+
+- **N-K1-1:** as proposed. Height 6 (5 body plus the crenel course), thickness 2, crenels on, plain corners by default
+  (corner towers wait for towers as lots on the line), body in `structure`, cap and frame in `trim`, an open arch by default.
+  The look step's three bibles are Noah's call on taste; anything he changes there is a style default, not a contract change.
+- **N-K1-2:** slab deck in `floor`, fence rails in `rail`, posts in `frame`, lamps every 12 or closer, chains on as rope
+  decoration (they are what makes it read as a rope bridge; style-only, so the bible can turn them off).
+- **N-K1-3:** leave survival to RS. K1 reports an exact `cost.bom` and realises INSTANT only.
+- **N-K1-4:** parallel. Before either starts, §4's table of special route moves (the gate move, the rope-bridge move, their
+  order and their tie-breaks) is frozen as the shared interface for `route.mjs` and `compile.mjs`'s connector section.
+  K1a and K1b each own their own rows; the coordinator merges and releases them as one batch.
+
 ### Deferred
 
 - `wall.along` (K2: D2's spine plus an offset), wall walks, towers and gatehouses as lots on the line (FL or later 7a),
