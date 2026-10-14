@@ -1,0 +1,339 @@
+{
+  "step": "ingame",
+  "seconds": 67.812,
+  "head": "e45f021f75eeca037bc89d98749b054ef5414d8c",
+  "load1": 11.1162109375,
+  "results": {
+    "flat: links_demo planned 3 rope bridge(s) (8, 24, 40 deck cells; 0 sites)": {
+      "ok": true
+    },
+    "item 10 (flat): the plan's IR sha and every tile sha equal the golden links_demo_flat (1 = 4 workers)": {
+      "ok": false
+    },
+    "flat: realised (PLACED, 38095 cells)": {
+      "ok": true
+    },
+    "item 5 (flat): 3 rope bridge(s) re-read from the realised world (8, 24, 40 deck cells)": {
+      "ok": true
+    },
+    "item 5 (flat): every deck cell's half-block surface equals the formula (16/16, 48/48, 80/80)": {
+      "ok": true
+    },
+    "item 5 (flat): adjacent steps at most one half block, landings included (max 1)": {
+      "ok": true
+    },
+    "item 5 (flat): rails both sides on 100% of deck cells (8/8, 24/24, 40/40)": {
+      "ok": true
+    },
+    "item 5 (flat): 2 head room over 100% of deck cells (8/8, 24/24, 40/40)": {
+      "ok": true
+    },
+    "item 5 (flat): 0 dark spawnable deck cells (M5 over the realised light: {\"darkSpawnable\":0,\"deckCells\":144,\"sample\":[]})": {
+      "ok": true
+    },
+    "item 5 (flat): 4 posts per bridge, each 2 deep on solid ground in the realised world (4, 4, 4)": {
+      "ok": true
+    },
+    "item 5 (flat): M3 0 floating cells in the rope parts (none)": {
+      "ok": true
+    },
+    "item 5 (flat): player across 100% (kit mover, both ways)": {
+      "ok": true
+    },
+    "item 5 (flat): villager across 100% on the width-2 slab bridges (kit mover, both ways)": {
+      "ok": true
+    },
+    "item 5 (flat, the hard bar): vanilla dev.nav.villager across every width-2 slab bridge, both ways ({\"rope_span_8_0\":[true,true],\"rope_span_24_0\":[true,true],\"rope_span_40_0\":[true,true]})": {
+      "ok": true
+    },
+    "item 9 (flat): Regions.remove by its owner restores the box exactly: E-flat 0 (38095 cells restored)": {
+      "ok": true
+    }
+  },
+  "data": {
+    "claim": [
+      6000,
+      6000,
+      6191,
+      6111
+    ],
+    "plan": {
+      "planId": "pmv7umspm843ce6",
+      "irSha": "1298eee1f75147f4c07f6bf67026f7ff345410c72b23962a78738fdc499bc953",
+      "notes": [
+        "pass route: 0.0 s, 81 MB; 3/3 edges routed, 0 hairpin(s)",
+        "links_demo (flat): banks 16 high; 3/3 bridges routed (8, 24, 40 deck cells)",
+        "progress: planning, checking, rendering",
+        "checked in 195 ms",
+        "previews rendered in 139 ms"
+      ]
+    },
+    "tiles": {
+      "irSha": "1298eee1f75147f4c07f6bf67026f7ff345410c72b23962a78738fdc499bc953",
+      "workersSame": true,
+      "count": 6
+    },
+    "golden": {
+      "match": false
+    },
+    "realise": {
+      "state": "PLACED",
+      "cells": 38095
+    },
+    "item5": {
+      "bridges": [
+        {
+          "n": 8,
+          "rise": 0,
+          "cells": 16,
+          "wrong": 0,
+          "missing": 0,
+          "maxStep": 0,
+          "railed": 8,
+          "headroom": 8,
+          "postsOk": 4,
+          "posts": [
+            {
+              "x": 6032,
+              "z": 6051,
+              "landing": 80,
+              "deep": true,
+              "up": true,
+              "ground": true,
+              "ok": true
+            },
+            {
+              "x": 6029,
+              "z": 6051,
+              "landing": 80,
+              "deep": true,
+              "up": true,
+              "ground": true,
+              "ok": true
+            },
+            {
+              "x": 6032,
+              "z": 6060,
+              "landing": 80,
+              "deep": true,
+              "up": true,
+              "ground": true,
+              "ok": true
+            },
+            {
+              "x": 6029,
+              "z": 6060,
+              "landing": 80,
+              "deep": true,
+              "up": true,
+              "ground": true,
+              "ok": true
+            }
+          ]
+        },
+        {
+          "n": 24,
+          "rise": 0,
+          "cells": 48,
+          "wrong": 0,
+          "missing": 0,
+          "maxStep": 1,
+          "railed": 24,
+          "headroom": 24,
+          "postsOk": 4,
+          "posts": [
+            {
+              "x": 6080,
+              "z": 6043,
+              "landing": 80,
+              "deep": true,
+              "up": true,
+              "ground": true,
+              "ok": true
+            },
+            {
+              "x": 6077,
+              "z": 6043,
+              "landing": 80,
+              "deep": true,
+              "up": true,
+              "ground": true,
+              "ok": true
+            },
+            {
+              "x": 6080,
+              "z": 6068,
+              "landing": 80,
+              "deep": true,
+              "up": true,
+              "ground": true,
+              "ok": true
+            },
+            {
+              "x": 6077,
+              "z": 6068,
+              "landing": 80,
+              "deep": true,
+              "up": true,
+              "ground": true,
+              "ok": true
+            }
+          ]
+        },
+        {
+          "n": 40,
+          "rise": 0,
+          "cells": 80,
+          "wrong": 0,
+          "missing": 0,
+          "maxStep": 1,
+          "railed": 40,
+          "headroom": 40,
+          "postsOk": 4,
+          "posts": [
+            {
+              "x": 6128,
+              "z": 6035,
+              "landing": 80,
+              "deep": true,
+              "up": true,
+              "ground": true,
+              "ok": true
+            },
+            {
+              "x": 6125,
+              "z": 6035,
+              "landing": 80,
+              "deep": true,
+              "up": true,
+              "ground": true,
+              "ok": true
+            },
+            {
+              "x": 6128,
+              "z": 6076,
+              "landing": 80,
+              "deep": true,
+              "up": true,
+              "ground": true,
+              "ok": true
+            },
+            {
+              "x": 6125,
+              "z": 6076,
+              "landing": 80,
+              "deep": true,
+              "up": true,
+              "ground": true,
+              "ok": true
+            }
+          ]
+        }
+      ],
+      "M5rope": {
+        "darkSpawnable": 0,
+        "deckCells": 144,
+        "sample": []
+      },
+      "M3": {
+        "floatingCells": 0,
+        "groups": [],
+        "gravity": 0
+      },
+      "movers": {
+        "rope_span_8_0": {
+          "player": true,
+          "villager": true
+        },
+        "rope_span_24_0": {
+          "player": true,
+          "villager": true
+        },
+        "rope_span_40_0": {
+          "player": true,
+          "villager": true
+        }
+      }
+    },
+    "nav": {
+      "rope_span_8_0": {
+        "there": true,
+        "back": true,
+        "nodes": [
+          10,
+          10
+        ],
+        "end": [
+          [
+            6031,
+            81,
+            6060
+          ],
+          [
+            6031,
+            81,
+            6051
+          ]
+        ]
+      },
+      "rope_span_24_0": {
+        "there": true,
+        "back": true,
+        "nodes": [
+          26,
+          26
+        ],
+        "end": [
+          [
+            6079,
+            81,
+            6068
+          ],
+          [
+            6079,
+            81,
+            6043
+          ]
+        ]
+      },
+      "rope_span_40_0": {
+        "there": true,
+        "back": true,
+        "nodes": [
+          42,
+          42
+        ],
+        "end": [
+          [
+            6127,
+            81,
+            6076
+          ],
+          [
+            6127,
+            81,
+            6035
+          ]
+        ]
+      }
+    },
+    "exact": {
+      "kind": "E-flat",
+      "box": [
+        5992,
+        57,
+        5992,
+        6199,
+        91,
+        6119
+      ],
+      "cells": 931840,
+      "snapCells": 931840,
+      "removed": true,
+      "restored": 38095,
+      "mismatches": 0,
+      "classes": {},
+      "list": []
+    }
+  }
+}

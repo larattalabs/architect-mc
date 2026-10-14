@@ -1,0 +1,132 @@
+{
+  "step": "unchanged",
+  "seconds": 22.004,
+  "head": "e45f021f75eeca037bc89d98749b054ef5414d8c",
+  "load1": 24.76806640625,
+  "results": {
+    "item 6: 23 of 23 valid/ fixtures without a K1 part answer as on origin/main 4103f709a3 and plan the same IR but its kitVersion (2 K1 fixtures skipped)": {
+      "ok": true,
+      "data": []
+    }
+  },
+  "data": {
+    "mainHead": "4103f709a30e72dcf31dadc084eabc8baebd2b93",
+    "fixtures": {
+      "v01_lots_near_stone.json": {
+        "answers": true,
+        "ir": true,
+        "overall": true
+      },
+      "v02_flat_village_template.json": {
+        "answers": true,
+        "ir": true,
+        "overall": true
+      },
+      "v03_relief_around_zone.json": {
+        "answers": true,
+        "ir": true,
+        "overall": true
+      },
+      "v04_rock_spire.json": {
+        "answers": true,
+        "ir": true,
+        "overall": true
+      },
+      "v05_ice_spike.json": {
+        "answers": true,
+        "ir": true,
+        "overall": true
+      },
+      "v06_terrace.json": {
+        "answers": true,
+        "ir": true,
+        "overall": true
+      },
+      "v07_adjacent_zones.json": {
+        "answers": true,
+        "ir": true,
+        "overall": true
+      },
+      "v08_road_to_water.json": {
+        "answers": true,
+        "ir": true,
+        "overall": true
+      },
+      "v09_street_lots_ports.json": {
+        "answers": true,
+        "ir": true,
+        "overall": true
+      },
+      "v10_near_protected.json": {
+        "answers": true,
+        "ir": true,
+        "overall": true
+      },
+      "v11_sketch_point.json": {
+        "answers": true,
+        "ir": true,
+        "overall": true
+      },
+      "v12_crater_works.json": {
+        "answers": true,
+        "ir": true,
+        "overall": true
+      },
+      "v13_rift_city.json": {
+        "answers": true,
+        "ir": true,
+        "overall": true
+      },
+      "v14_floating_islands.json": {
+        "answers": true,
+        "ir": true,
+        "overall": true
+      },
+      "v15_pending_style.json": {
+        "answers": true,
+        "ir": true,
+        "overall": true
+      },
+      "v16_near_build_road_to_door.json": {
+        "answers": true,
+        "ir": true,
+        "overall": true
+      },
+      "v17_district_alias.json": {
+        "answers": true,
+        "ir": true,
+        "overall": true
+      },
+      "v18_districts.json": {
+        "answers": true,
+        "ir": true,
+        "overall": true
+      },
+      "v19_endpoint_region.json": {
+        "answers": true,
+        "ir": true,
+        "overall": true
+      },
+      "v20_along_shore.json": {
+        "answers": true,
+        "ir": true,
+        "overall": true
+      },
+      "v21_outpost.json": {
+        "answers": true,
+        "ir": true,
+        "overall": true
+      },
+      "v22_along_biome_edge.json": {
+        "answers": true,
+        "ir": true,
+        "overall": true
+      },
+      "v23_along_ridge.json": {
+        "answers": true,
+        "ir": true,
+        "overall": true
+      }
+    }
+  }
+}

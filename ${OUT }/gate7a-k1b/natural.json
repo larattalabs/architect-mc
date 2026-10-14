@@ -1,0 +1,475 @@
+{
+  "step": "natural",
+  "seconds": 132.907,
+  "head": "e45f021f75eeca037bc89d98749b054ef5414d8c",
+  "load1": 6.154296875,
+  "results": {
+    "natural: links_demo planned 3 rope bridge(s) (35, 35, 35 deck cells; 0 sites)": {
+      "ok": true
+    },
+    "item 10 (natural): the plan's IR sha and every tile sha equal the golden links_demo (1 = 4 workers)": {
+      "ok": true
+    },
+    "natural: realised (PLACED, 110079 cells)": {
+      "ok": true
+    },
+    "item 5 (natural): 3 rope bridge(s) re-read from the realised world (35, 35, 35 deck cells)": {
+      "ok": true
+    },
+    "item 5 (natural): every deck cell's half-block surface equals the formula (70/70, 70/70, 70/70)": {
+      "ok": true
+    },
+    "item 5 (natural): adjacent steps at most one half block, landings included (max 1)": {
+      "ok": true
+    },
+    "item 5 (natural): rails both sides on 100% of deck cells (35/35, 35/35, 35/35)": {
+      "ok": true
+    },
+    "item 5 (natural): 2 head room over 100% of deck cells (35/35, 35/35, 35/35)": {
+      "ok": true
+    },
+    "item 5 (natural): 0 dark spawnable deck cells (M5 over the realised light: {\"darkSpawnable\":0,\"deckCells\":210,\"sample\":[]})": {
+      "ok": true
+    },
+    "item 5 (natural): 4 posts per bridge, each 2 deep on solid ground in the realised world (4, 4, 4)": {
+      "ok": true
+    },
+    "item 5 (natural): M3 0 floating cells in the rope parts (none)": {
+      "ok": true
+    },
+    "item 5 (natural): player across 100% (kit mover, both ways)": {
+      "ok": true
+    },
+    "item 5 (natural): villager across 100% on the width-2 slab bridges (kit mover, both ways)": {
+      "ok": true
+    },
+    "item 5 (natural, the hard bar): vanilla dev.nav.villager across every width-2 slab bridge, both ways ({\"rope_span_1_0\":[true,true],\"rope_span_2_0\":[true,true],\"rope_span_3_0\":[true,true]})": {
+      "ok": true
+    },
+    "item 9 (natural): the removal's E-normal classified: 22 mismatches ({\"growth\":22}), unclassified 0 <= 0.01% of 3015936": {
+      "ok": true
+    }
+  },
+  "data": {
+    "claim": [
+      -1152,
+      -80,
+      -897,
+      79
+    ],
+    "plan": {
+      "planId": "pmv7unryt48f2f6",
+      "irSha": "e65475cbacbc44d8fc661758b330b31920566b983ad89950039cbe0464b99876",
+      "notes": [
+        "rift: kept to the dry stretch x -1048..-927 (surface water across the band elsewhere)",
+        "pass route: 0.0 s, 88 MB; 3/3 edges routed, 0 hairpin(s)",
+        "links_demo (natural): rift_city's rift, 3 level lip pair(s) at x -1024, -1001, -983; 3/3 bridges routed",
+        "progress: planning, checking, rendering",
+        "checked in 389 ms",
+        "previews rendered in 266 ms"
+      ]
+    },
+    "tiles": {
+      "irSha": "e65475cbacbc44d8fc661758b330b31920566b983ad89950039cbe0464b99876",
+      "workersSame": true,
+      "count": 16
+    },
+    "golden": {
+      "match": true
+    },
+    "realise": {
+      "state": "PLACED",
+      "cells": 110079
+    },
+    "item5": {
+      "bridges": [
+        {
+          "n": 35,
+          "rise": -4,
+          "cells": 70,
+          "wrong": 0,
+          "missing": 0,
+          "maxStep": 1,
+          "railed": 35,
+          "headroom": 35,
+          "postsOk": 4,
+          "posts": [
+            {
+              "x": -1023,
+              "z": -18,
+              "landing": 69,
+              "deep": true,
+              "up": true,
+              "ground": true,
+              "ok": true
+            },
+            {
+              "x": -1026,
+              "z": -18,
+              "landing": 69,
+              "deep": true,
+              "up": true,
+              "ground": true,
+              "ok": true
+            },
+            {
+              "x": -1023,
+              "z": 18,
+              "landing": 65,
+              "deep": true,
+              "up": true,
+              "ground": true,
+              "ok": true
+            },
+            {
+              "x": -1026,
+              "z": 18,
+              "landing": 65,
+              "deep": true,
+              "up": true,
+              "ground": true,
+              "ok": true
+            }
+          ]
+        },
+        {
+          "n": 35,
+          "rise": -1,
+          "cells": 70,
+          "wrong": 0,
+          "missing": 0,
+          "maxStep": 1,
+          "railed": 35,
+          "headroom": 35,
+          "postsOk": 4,
+          "posts": [
+            {
+              "x": -1000,
+              "z": -18,
+              "landing": 69,
+              "deep": true,
+              "up": true,
+              "ground": true,
+              "ok": true
+            },
+            {
+              "x": -1003,
+              "z": -18,
+              "landing": 69,
+              "deep": true,
+              "up": true,
+              "ground": true,
+              "ok": true
+            },
+            {
+              "x": -1000,
+              "z": 18,
+              "landing": 68,
+              "deep": true,
+              "up": true,
+              "ground": true,
+              "ok": true
+            },
+            {
+              "x": -1003,
+              "z": 18,
+              "landing": 68,
+              "deep": true,
+              "up": true,
+              "ground": true,
+              "ok": true
+            }
+          ]
+        },
+        {
+          "n": 35,
+          "rise": 1,
+          "cells": 70,
+          "wrong": 0,
+          "missing": 0,
+          "maxStep": 1,
+          "railed": 35,
+          "headroom": 35,
+          "postsOk": 4,
+          "posts": [
+            {
+              "x": -982,
+              "z": -18,
+              "landing": 68,
+              "deep": true,
+              "up": true,
+              "ground": true,
+              "ok": true
+            },
+            {
+              "x": -985,
+              "z": -18,
+              "landing": 68,
+              "deep": true,
+              "up": true,
+              "ground": true,
+              "ok": true
+            },
+            {
+              "x": -982,
+              "z": 18,
+              "landing": 69,
+              "deep": true,
+              "up": true,
+              "ground": true,
+              "ok": true
+            },
+            {
+              "x": -985,
+              "z": 18,
+              "landing": 69,
+              "deep": true,
+              "up": true,
+              "ground": true,
+              "ok": true
+            }
+          ]
+        }
+      ],
+      "M5rope": {
+        "darkSpawnable": 0,
+        "deckCells": 210,
+        "sample": []
+      },
+      "M3": {
+        "floatingCells": 1,
+        "groups": [],
+        "gravity": 0
+      },
+      "movers": {
+        "rope_span_1_0": {
+          "player": true,
+          "villager": true
+        },
+        "rope_span_2_0": {
+          "player": true,
+          "villager": true
+        },
+        "rope_span_3_0": {
+          "player": true,
+          "villager": true
+        }
+      }
+    },
+    "nav": {
+      "rope_span_1_0": {
+        "there": true,
+        "back": true,
+        "nodes": [
+          37,
+          37
+        ],
+        "end": [
+          [
+            -1024,
+            66,
+            18
+          ],
+          [
+            -1024,
+            70,
+            -18
+          ]
+        ]
+      },
+      "rope_span_2_0": {
+        "there": true,
+        "back": true,
+        "nodes": [
+          37,
+          37
+        ],
+        "end": [
+          [
+            -1001,
+            69,
+            18
+          ],
+          [
+            -1001,
+            70,
+            -18
+          ]
+        ]
+      },
+      "rope_span_3_0": {
+        "there": true,
+        "back": true,
+        "nodes": [
+          37,
+          37
+        ],
+        "end": [
+          [
+            -983,
+            70,
+            18
+          ],
+          [
+            -983,
+            69,
+            -18
+          ]
+        ]
+      }
+    },
+    "exact": {
+      "kind": "E-normal",
+      "box": [
+        -1160,
+        36,
+        -88,
+        -889,
+        98,
+        87
+      ],
+      "cells": 3015936,
+      "snapCells": 3015936,
+      "removed": true,
+      "restored": 110079,
+      "mismatches": 22,
+      "classes": {
+        "growth": 22
+      },
+      "list": [
+        {
+          "pos": "-1100,64,-10",
+          "was": "minecraft:sugar_cane[age=1]",
+          "now": "minecraft:sugar_cane[age=2]",
+          "class": "growth"
+        },
+        {
+          "pos": "-1139,64,80",
+          "was": "minecraft:sugar_cane[age=1]",
+          "now": "minecraft:sugar_cane[age=2]",
+          "class": "growth"
+        },
+        {
+          "pos": "-1041,73,-29",
+          "was": "minecraft:cactus[age=0]",
+          "now": "minecraft:cactus[age=1]",
+          "class": "growth"
+        },
+        {
+          "pos": "-1085,67,33",
+          "was": "minecraft:cactus[age=1]",
+          "now": "minecraft:cactus[age=4]",
+          "class": "growth"
+        },
+        {
+          "pos": "-1069,64,83",
+          "was": "minecraft:cactus[age=0]",
+          "now": "minecraft:cactus[age=1]",
+          "class": "growth"
+        },
+        {
+          "pos": "-1063,64,84",
+          "was": "minecraft:cactus[age=2]",
+          "now": "minecraft:cactus[age=4]",
+          "class": "growth"
+        },
+        {
+          "pos": "-1052,66,78",
+          "was": "minecraft:cactus[age=0]",
+          "now": "minecraft:cactus[age=1]",
+          "class": "growth"
+        },
+        {
+          "pos": "-1048,67,79",
+          "was": "minecraft:cactus[age=0]",
+          "now": "minecraft:cactus[age=1]",
+          "class": "growth"
+        },
+        {
+          "pos": "-967,76,-70",
+          "was": "minecraft:cactus[age=0]",
+          "now": "minecraft:cactus[age=1]",
+          "class": "growth"
+        },
+        {
+          "pos": "-971,72,-63",
+          "was": "minecraft:cactus[age=1]",
+          "now": "minecraft:cactus[age=3]",
+          "class": "growth"
+        },
+        {
+          "pos": "-961,73,-53",
+          "was": "minecraft:cactus[age=0]",
+          "now": "minecraft:cactus[age=1]",
+          "class": "growth"
+        },
+        {
+          "pos": "-1010,69,0",
+          "was": "minecraft:cactus[age=1]",
+          "now": "minecraft:cactus[age=2]",
+          "class": "growth"
+        },
+        {
+          "pos": "-948,75,-70",
+          "was": "minecraft:cactus[age=1]",
+          "now": "minecraft:cactus[age=2]",
+          "class": "growth"
+        },
+        {
+          "pos": "-953,76,-77",
+          "was": "minecraft:cactus[age=2]",
+          "now": "minecraft:cactus[age=4]",
+          "class": "growth"
+        },
+        {
+          "pos": "-949,76,-68",
+          "was": "minecraft:cactus[age=2]",
+          "now": "minecraft:cactus[age=3]",
+          "class": "growth"
+        },
+        {
+          "pos": "-929,76,-54",
+          "was": "minecraft:cactus[age=1]",
+          "now": "minecraft:cactus[age=3]",
+          "class": "growth"
+        },
+        {
+          "pos": "-897,69,48",
+          "was": "minecraft:cactus[age=1]",
+          "now": "minecraft:cactus[age=3]",
+          "class": "growth"
+        },
+        {
+          "pos": "-950,72,47",
+          "was": "minecraft:cactus[age=0]",
+          "now": "minecraft:cactus[age=1]",
+          "class": "growth"
+        },
+        {
+          "pos": "-929,72,84",
+          "was": "minecraft:cactus[age=0]",
+          "now": "minecraft:cactus[age=1]",
+          "class": "growth"
+        },
+        {
+          "pos": "-931,72,85",
+          "was": "minecraft:cactus[age=2]",
+          "now": "minecraft:cactus[age=3]",
+          "class": "growth"
+        },
+        {
+          "pos": "-895,69,51",
+          "was": "minecraft:cactus[age=1]",
+          "now": "minecraft:cactus[age=2]",
+          "class": "growth"
+        },
+        {
+          "pos": "-889,70,52",
+          "was": "minecraft:cactus[age=1]",
+          "now": "minecraft:cactus[age=3]",
+          "class": "growth"
+        }
+      ]
+    }
+  }
+}
