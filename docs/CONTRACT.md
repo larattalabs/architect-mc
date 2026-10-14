@@ -12247,7 +12247,7 @@ instructions plus the whole plan/0 schema in `job.system` (45-48 KB against the 
 | Gate | Step `c33-unit` (`api-compat --gate6cc33`: the unchanged 0.27.0, 0.26.0 and 0.25.0 apitest jars and the 0.27.0 surface; `artifacts/gate6c-c33/v0270` is the v0.27.0 tag build with its `tools/`, 0.26.0 and 0.25.0 are PT's), impact rule "C33 system refs". `apijars` now runs those three jars. Slice tier by `--only`: `artifacts/gate-runs-C33/20261013-170223-slice` (head dd393f9 + the PLAN_API commit; 8918-8919): unit-mod, unit-kit 358, unit-sidecar 738, sim-jobs, sim-sets, sim-massing, apijars (1.24.0, 1.23.0, 1.22.0: 46 ok, 0 FAIL each, 0 timing bars missed), x-unit, b-unit (the two steps the `Limits`/`FieldLimits` path globs map to), c33-unit: all 10 PASS. Not run, by the slice policy: x-ingame, b-ingame, 4d-all, 4e-crash (the impact map's path globs reach them through `Limits.java`/`FieldLimits.java`/`ArchitectApi.java`; the change adds job-only constants and a check). |
 | Not done | No Steward change (it keeps its own `system` until it adopts `systemRefs`). Refs for documents other than the four schemas (e.g. a bible or a kit program's docs) are not offered. `#compact` for `siteplan/1`, `mask/1`, `pattern/1` drops nothing (they have no catalogue or trivial `$ref` defs). |
 
-## Phase 7a slice K1: walls, gates and rope bridges (DRAFT for Steward review)
+## Phase 7a slice K1: walls, gates and rope bridges (FROZEN 2026-10-14, Steward reviewed)
 
 The first typed connectors, pulled forward from 7a because Steward's composition loop ranks them as the most-wanted missing
 blocks: `connector.rope_bridge` (11 parts across the 59 recorded plans) and `connector.wall` (8 parts), plus the one
@@ -12353,12 +12353,13 @@ connector.rope_bridge, connector.auto: connector.routed's members, plus
 | `wall.line`, `wall.around`, `wall.edge` | (new) | supported | |
 | `wall.along` | (new) | reserved, `until: K2` | D2's boundary spine plus an offset: same member, no format change (§3) |
 | `locator.around` | reserved (FL) | unchanged | `note` added |
+| `layout.elevated` | (new) | reserved, `until: 7b` | lots carried at a level above the ground (canopy huts in trees, cliff ledges); Claude can write them now and they wait as `unsupported` (S-K1-6) |
 | `connector.bridge`, `connector.tunnel` | reserved (T3) | unchanged | |
 | `connector.channel` | reserved (HY) | unchanged | |
 | `connector.ladder`, `stair`, `rail`, `catwalk`, `rock_stair`, `switchback`, `lift`, `branch_walk`, `span_bridge`, `stairs_around` | reserved (7a) | unchanged | |
 
 - **Archive and diff.** Catalogue 3's golden is archived as `fixtures/plan/catalogue-d2.json`. The D2 to K1 diff is exactly
-  the four flips and the four added ids (and `locator.around`'s new note).
+  the four flips and the five added ids (`wall.line`, `wall.around`, `wall.edge`, `wall.along`, `layout.elevated`), and `locator.around`'s new note.
 - **Ladders, stairs and switchbacks stay reserved as explicit kinds.** T2 already emits them as moves inside routed
   connectors.
 - **`connector.auto`'s move set grows** as slices ship (T3 adds `bridge` and `tunnel`). Each addition is a `limits.moves`
@@ -12652,6 +12653,24 @@ scenario steps. **gate-verifier** re-runs items 1, 2, 5 and 9.
 - **N-K1-3. Survival.** K1 reports each part's BOM but realises INSTANT only. Should K1 also build walls and bridges from the
   stockpile (the connector half of N-RS-1, which needs RS), or leave that to RS?
 - **N-K1-4. The split.** K1a and K1b in parallel, batched into one release, or K1a first?
+
+### Steward's review (2026-10-14, at 35cb86a8): binding, and it overrides the sections above where they differ
+
+- **S-K1-1. Auto gates, with sealed walls.** Every crossing gets a gate, except on a wall that is sealed on purpose: `gates: 0`,
+  or `closed: true` with no gate part (a vault or a prison yard). A sealed wall gets no gates. Routes go round it, or refuse
+  with `M2:wall`'s route-cut evidence. Gate item: one sealed-wall fixture, where a route that must cross it refuses and a route
+  that can go round does.
+- **S-K1-2. A missed join is a deviation.** Gatehouse, tower and corner lots (`towers`, `gate_lot`, `joins`, `corner_lots`)
+  that K1 leaves beside the wall instead of in it make the part `adjusted`. Each gets a `deviations[]` entry (`kind: "join"`,
+  the lot id, and where it stands), not only a note. Gate item: the recorded plan with a `gate_lot` answers `adjusted` with
+  that deviation.
+- **S-K1-3. Lenient, with every member that isn't read listed.** Each recorded member that isn't read appears by name in that
+  part's `notes`. Gate item: a fixture with three unread keys lists all three.
+- **S-K1-4.** Movers are inferred as in T2. Slab-deck bridges two wide are villager-walkable.
+- **S-K1-5.** `auto` grows, with no `moves` member.
+- **S-K1-6.** Steward offers a pending part that is newly refused as a repair, and never stops a build on it.
+  `layout.elevated` is reserved for 7b (§2).
+- **S-K1-7.** Steward passes unknown codes through verbatim.
 
 ### Coordinator decisions (2026-10-14, on Noah's behalf; Noah can overrule at the look step)
 
