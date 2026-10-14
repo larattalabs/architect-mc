@@ -88,7 +88,7 @@ export function checkSpan(land, a, dir, n, rise, width, { gapDepth = ROPE.gapDep
     for (let v = lo - 1; v <= hi + 1; v++) {
       const x = x0 + dx * i + rx * v, z = z0 + dz * i + rz * v;
       if (land.blocked(x, z)) hits.push({ at: [x, z], why: 'keep-out' });
-      else if (Math.max(land.topAt(x, z), land.groundAt(x, z)) >= lowest && !land.waterAt(x, z)) hits.push({ at: [x, lowest, z], why: 'terrain', top: Math.max(land.topAt(x, z), land.groundAt(x, z)) });
+      else if (Math.max(land.topAt(x, z), land.groundAt(x, z)) >= lowest) hits.push({ at: [x, lowest, z], why: 'terrain', top: Math.max(land.topAt(x, z), land.groundAt(x, z)) });
     }
   }
   if (hits.length) return { ok: false, code: 'HEADROOM', evidence: { span: n, cells: hits.length, sample: hits.slice(0, 8) }, gap, ys };

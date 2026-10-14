@@ -11,7 +11,9 @@
 // (a 4e road, a region path, an earlier plan's route) costs a third, and an earlier edge's walk cell keeps its y. Coarse to fine:
 // a corridor search at 4 cells, then the cell search within `corridor` of it (the whole claim if that fails). Ties by (f, g, x,
 // z, heading, k). Plan time only, pure, under the realise lint (integer math; Math.floor/abs/min/max only).
-import { FLAG_LAVA, FLAG_MISSING, FLAG_TREE, FLAG_WATER } from '../pack.mjs';
+import { FLAG_FROZEN, FLAG_LAVA, FLAG_MISSING, FLAG_TREE, FLAG_WATER } from '../pack.mjs';
+import { profile as ropeProfile, deckY as ropeDeckY, ROPE } from '../../connectors/rope.mjs';
+import { ropeRow, NEAR_BASE } from '../../connectors/ropeMove.mjs';
 
 /** The 8 headings (x east, z south): E, SE, S, SW, W, NW, N, NE. Even headings are cardinal. */
 export const DIRS = Object.freeze([[1, 0], [1, 1], [0, 1], [-1, 1], [-1, 0], [-1, -1], [0, -1], [1, -1]]);
@@ -191,7 +193,10 @@ function corridorOf(env, blockedW, si, sj, ti, tj, maxGrade, radius = CORRIDOR) 
 function search(env, ctx) {
   const { W, D } = env;
   const { G, corridor, blockedW, blocked1, builtY, prefer, start, goal, Gq, w, laneW, Ld, latLo, latHi, maxCut, maxFill, stairs, ladders, nearEnd, maxStates = 24_000_000, maxExpand = Infinity } = ctx;
-  const ND = maxCut + maxFill + 1, SPC = 32 * ND;
+  // (7a K1b) the rope row (ctx.rope: lib/connectors/ropeMove.mjs): `once` adds the spanned bit to the state (SB 2); without a rope
+  // row the state layout, ids and tie order are T2's exactly
+  const rope = ctx.rope ?? null, once = !!rope?.once, SB = once ? 2 : 1;
+  const ND = maxCut + maxFill + 1, SPC = 32 * ND * SB;
   // the footprint square around a centre cell: an own move may lie beside an earlier edge's built cells only within a step of
   // their y (its writes skip them), and a stair flight never over them (its treads would stack)
   const fLo = latLo, fHi = latHi;
@@ -213,9 +218,9 @@ function search(env, ctx) {
   const S = cells.length * SPC;
   if (S > maxStates) return { moves: null, expanded: 0, tooBig: true };
   const gArr = new Int32Array(S).fill(INF), par = new Int32Array(S).fill(-1), qArr = new Int32Array(S), mv = new Uint8Array(S), arg = new Uint8Array(S), closed = new Uint8Array(S);
-  const st = (k, h, kk, d) => ((cid[k] * 8 + h) * 4 + kk) * ND + d;
+  const st = (k, h, kk, d, b = 0) => (((cid[k] * 8 + h) * 4 + kk) * ND + d) * SB + b;
   const cellOf = (s) => cells[Math.floor(s / SPC)];
-  const hOfS = (s) => Math.floor(s / (4 * ND)) & 7, kOfS = (s) => Math.floor(s / ND) & 3;
+  const hOfS = (s) => Math.floor(s / (4 * ND * SB)) & 7, kOfS = (s) => Math.floor(s / (ND * SB)) & 3, bOfS = (s) => s % SB;
   const tie = (a, b) => {
     const ka = cellOf(a), kb = cellOf(b);
     const xa = ka % W, xb = kb % W;
@@ -231,12 +236,16 @@ function search(env, ctx) {
   const dOf = (y, k) => { const d = y - G[k]; return d <= maxFill && -d <= maxCut ? d + maxCut : -1; };
   const inS = (k) => k >= 0 && cid[k] >= 0;
   const open1 = (k) => (!corridor || corridor[k]) && !blocked1[k] && builtY[k] === NONE;
-  const relax = (s0, k, h, kk, q, cost, kind, a, built = false) => {
+  // (7a K1b) a rope_bridge edge walks at most `approach` cells at each end: unspanned states near the start, spanned near the goal
+  const near = once ? (k, b) => { const a = b ? goal.k : start.k, i = k % W, ai = a % W; return Math.max(Math.abs(i - ai), Math.abs((k - i) / W - (a - ai) / W)) <= rope.approach; } : null;
+  let bit = 0;
+  const relax = (s0, k, h, kk, q, cost, kind, a, built = false, b = bit) => {
     // (a cell an earlier edge built keeps its y whatever this edge's land says: its offset only keys the state)
     let d = dOf(yOf(q), k);
     if (d < 0 && built) d = Math.max(0, Math.min(ND - 1, yOf(q) - G[k] + maxCut));
     if (d < 0) return;
-    const s = st(k, h, kk, d);
+    if (near && !near(k, b)) return;
+    const s = st(k, h, kk, d, b);
     if (closed[s]) return;
     const ng = gArr[s0] + cost;
     if (ng < gArr[s]) { gArr[s] = ng; par[s] = s0; qArr[s] = q; mv[s] = kind; arg[s] = a; heap.push(ng + hOf(k), ng, s); }
@@ -259,7 +268,9 @@ function search(env, ctx) {
     if (expanded >= maxExpand) return { moves: null, expanded, budget: true };
     expanded++;
     const k = cellOf(s), h = hOfS(s), kk = kOfS(s), q = qArr[s], y = yOf(q);
-    if (k === goal.k && y === goal.y) { found = s; break; }
+    bit = bOfS(s);
+    if (rope?.reached && !bit && !rope.reached[k]) rope.reached[k] = y - rope.nearBase + 1;
+    if (k === goal.k && y === goal.y && (!once || bit)) { found = s; break; }
     const i = k % W, j = (k - i) / W;
     // walk: straight, or 45 degrees after the cooldown; the profile follows the land, or holds, rises or falls by Gq
     for (const dh of kk >= TURN_COOLDOWN ? [0, -1, 1] : [0]) {
@@ -331,6 +342,8 @@ function search(env, ctx) {
         }
       }
     }
+    // (7a K1b) rope spans (rope_bridge and auto edges): kind 5, arg the span n; a rope_bridge edge takes exactly one
+    if (rope && !(once && bit)) for (const m of rope.moves(k, y, h, inS, builtY)) relax(s, m.k, m.h, 2, m.y * FP, m.cost, 5, m.n, false, once ? 1 : bit);
     if ((h & 1) === 0) {
       const di = DIRS[h][0], dj = DIRS[h][1], ri = -dj, rj = di;
       // hairpins: a flat landing ahead that holds both lanes, then back the other way one lane over
@@ -473,6 +486,27 @@ export function routePass(survey, volumes, intent) {
     return i < 0 || j < 0 || i >= W || j >= D ? -1 : i + j * W;
   };
   const masks = baseMasks(env, it, { keepOut: !_unsafe.noKeepOut });
+  // (7a K1b) the rope row's land, built once when an edge opts in (`spans: ['rope']`, full resolution only): the land with the
+  // program's base, the columns' tops, water, and what a deck can't pass over (the hard rects, keep-out, the claim margin)
+  let ropeEnv = null;
+  if (r === 1 && edges.some((e) => Array.isArray(e.spans) && e.spans.includes('rope'))) {
+    const top = new Int16Array(n), water = new Uint8Array(n), blockedR = Uint8Array.from(masks.hard);
+    for (let k = 0; k < n; k++) { top[k] = Math.max(G0[k], c.height[k] + G0[k] - c.ground[k]); water[k] = c.flags[k] & FLAG_WATER ? 1 : 0; }
+    if (!_unsafe.noKeepOut) for (const b of it.keepOut ?? []) {
+      for (let z = Math.max(c.minZ, b[1]); z <= Math.min(c.minZ + D - 1, b[3]); z++) for (let x = Math.max(c.minX, b[0]); x <= Math.min(c.minX + W - 1, b[2]); x++) blockedR[(x - c.minX) + (z - c.minZ) * W] = 1;
+    }
+    // the pre-region classes the anchors stand in (the virtual world's 2.5D base: soil to 3 under the ground, rock below, water
+    // to the floor, the bed under water loose, a frozen top ice)
+    const classAt = (x, y, z) => {
+      const k = cellAt(x, z);
+      if (k < 0 || (c.flags[k] & FLAG_MISSING)) return 'MISSING';
+      const g = G0[k], f = c.floor[k] + G0[k] - c.ground[k];
+      if (y > g) return 'AIR';
+      if (c.flags[k] & FLAG_WATER) { if (y > f) return (c.flags[k] & FLAG_FROZEN) && y === g ? 'ICE' : 'WATER'; if (y === f) return 'LOOSE'; }
+      return y >= g - 3 ? 'SOIL' : 'ROCK';
+    };
+    ropeEnv = { W, D, minX: c.minX, minZ: c.minZ, G: G0, top, water, blocked: blockedR, classAt, DIRS };
+  }
   const builtY = new Int16Array(n).fill(NONE); // an earlier edge's footprint: its surface (or tread) y
   const preferM = new Uint8Array(n);
   for (const p of it.prefer ?? []) { const k = cellAt(p[0], p[1]); if (k >= 0) preferM[k] = 1; }
@@ -565,6 +599,14 @@ export function routePass(survey, volumes, intent) {
     }
     const sctx = { G, builtY, prefer: preferE, start: ends[0], goal: ends[1], Gq, w, laneW: Math.floor((w + r - 1) / r), Ld: Math.floor((Math.max(hairpinLanding, w) + r - 1) / r),
       latLo: Math.floor(lo / r), latHi: Math.floor((hi + r - 1) / r), maxCut, maxFill, stairs: stairs && !coarse, ladders, nearEnd };
+    // (7a K1b) the rope row: `spanOnce` (a rope_bridge connector: exactly one span, `approach` cells of walk at each end) or any
+    // number (an auto connector); off without `spans: ['rope']`, so every other edge searches as before
+    const ropeOn = !!ropeEnv && Array.isArray(e.spans) && e.spans.includes('rope');
+    const once = ropeOn && !!e.spanOnce;
+    const approach = isInt(e.approach) && e.approach >= 0 && e.approach <= ROPE.approachMax ? e.approach : ROPE.approach;
+    const row = ropeOn ? ropeRow(ropeEnv, { once, approach, width: w, startK: ends[0].k, goalK: ends[1].k }) : null;
+    if (row) sctx.rope = { once, approach, moves: row.moves, reached: once ? new Int16Array(n) : null, nearBase: NEAR_BASE };
+    if (ropeOn) { edgeOut.spans = ['rope']; if (once) { edgeOut.spanOnce = true; edgeOut.approach = approach; } }
     // ---- the moves as 4-connected centre cells with their surface y, and segments
     const toPath = (res) => {
     const P = [], landings = [], ladderCols = [];
@@ -628,6 +670,14 @@ export function routePass(survey, volumes, intent) {
         const to = lineTo(wx(curK), wz(curK), wx(k), wz(k), curY, y);
         const l = segs[segs.length - 1];
         if (l && l.kind === 'walk' && l.shared && l.to === from) l.to = to; else segs.push({ kind: 'walk', from, to, shared: true });
+      } else if (kind === 5) {
+        // (7a K1b) a rope span: its deck cells (the deck block's y: a slab's own cell) then the far landing, a walk cell
+        const n = a, di = Math.sign(wx(k) - wx(curK)), dj = Math.sign(wz(k) - wz(curK)), ys = ropeProfile(n, curY, y - curY);
+        let idx = from;
+        for (let t = 1; t < n; t++) idx = push(wx(curK) + di * t, ropeDeckY(ys[t]), wz(curK) + dj * t);
+        segs.push({ kind: 'rope', from, to: idx, n, rise: y - curY, dir: [di, dj] });
+        const l = push(wx(k), y, wz(k));
+        segs.push({ kind: 'walk', from: idx, to: l });
       } else if (kind === 3) {
         const up = a === 1;
         const nx = wx(k), nz = wz(k);
@@ -653,7 +703,7 @@ export function routePass(survey, volumes, intent) {
       if (attempt) { const sb = dilate(selfBlock, W, D, Rt); for (let k = 0; k < n; k++) b.blockedW[k] |= sb[k]; }
       res = null;
       // coarse to fine: the corridor (16), then a wider one (48), then the whole claim when it is small enough
-      for (const [radius, name] of withinM ? [[-1, 'within']] : [[CORRIDOR, 'corridor'], [3 * CORRIDOR, 'corridor48'], [0, 'claim']]) {
+      for (const [radius, name] of withinM ? [[-1, 'within']] : once ? [[0, 'claim']] : [[CORRIDOR, 'corridor'], [3 * CORRIDOR, 'corridor48'], [0, 'claim']]) {
         const corridor = radius < 0 ? withinM : radius ? corridorOf(env, b.blockedW, si, sj, ti, tj, maxGrade, radius) : null;
         if (radius && !corridor) continue;
         edgeOut.search = name;
@@ -672,6 +722,15 @@ export function routePass(survey, volumes, intent) {
       res = null;
     }
     if (!built && broke) { edgeOut.failed = 'BUDGET'; edgeOut.note = `the node budget (${cap} expansions over all edges) ran out on this edge`; continue; }
+    if (!built && once) {
+      // (7a K1b) why no span served: NO_GAP, SPAN, TOO_STEEP, HEADROOM, ANCHOR, or UNREACHABLE (a span passes, its far side doesn't)
+      const bl = build(true).blockedW;
+      const why = row.diag(sctx.rope.reached, (k) => !bl[k]);
+      edgeOut.failed = 'ROPE';
+      edgeOut.rope = why;
+      edgeOut.note = `no rope bridge: ${why.code}`;
+      continue;
+    }
     if (!built) {
       // why: would it route through water (T3's bridges)?
       const bw = build(false);
