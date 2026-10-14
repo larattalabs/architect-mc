@@ -770,6 +770,8 @@ public class ApiTest implements ModInitializer {
 		JsonObject parts = new JsonObject();
 		e.parts().forEach((n, p) -> parts.addProperty(n, p.cells()));
 		o.add("parts", parts);
+		// 1.30.0 (C37b)
+		o.addProperty("cells", e.cells());
 		// 1.11.0
 		o.addProperty("version", e.version());
 		e.variantOfVersion().ifPresent(v -> o.addProperty("variantOfVersion", v));

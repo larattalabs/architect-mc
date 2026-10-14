@@ -913,14 +913,9 @@ public final class PlanChecks {
 		return null;
 	}
 
-	/** The non-air blocks of an entry's template (0 when it can't be read). */
-	static long cells(String id) {
-		var t = Blueprints.template(id);
-		if (t == null) {
-			return 0;
-		}
-		var pals = ((dev.larattalabs.architect.mixin.StructureTemplateAccessor) t).architect$palettes();
-		return pals.isEmpty() ? 0 : pals.get(0).blocks().stream().filter(b -> !b.state().isAir()).count();
+	/** The non-air blocks of an entry's template (0 when it can't be read): the one function {@code Library.Entry.cells()} shares ({@link Blueprints#nonAirCells}). */
+	public static long cells(String id) {
+		return Blueprints.nonAirCells(Blueprints.template(id));
 	}
 
 	// ------------------------------------------------------------------ small

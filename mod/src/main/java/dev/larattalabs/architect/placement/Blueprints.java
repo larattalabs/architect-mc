@@ -91,6 +91,19 @@ public final class Blueprints {
 		return e == null ? null : e.template();
 	}
 
+	/**
+	 * (C37b) The non-air blocks of a template's first palette; 0 when the template is null or has no palette. The single
+	 * implementation behind {@code Library.Entry.cells()} and the plan check's {@code realiseApproved} cost-range test
+	 * ({@code PlanChecks.cells}).
+	 */
+	public static long nonAirCells(@Nullable StructureTemplate t) {
+		if (t == null) {
+			return 0;
+		}
+		var pals = ((dev.larattalabs.architect.mixin.StructureTemplateAccessor) t).architect$palettes();
+		return pals.isEmpty() ? 0 : pals.get(0).blocks().stream().filter(b -> !b.state().isAir()).count();
+	}
+
 	/** All designs, sorted by id. */
 	public static Collection<Blueprint> all() {
 		return entries.values().stream().map(Entry::blueprint).toList();

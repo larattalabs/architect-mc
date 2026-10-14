@@ -271,7 +271,8 @@ test('item 9: the catalogue diff (D1 flips program.districts and endpoint.region
   assert.deepEqual(k1.reservedToSupported, ['connector.auto', 'connector.gate', 'connector.rope_bridge', 'connector.wall']);
   assert.deepEqual(k1.added, [{ id: 'layout.elevated', state: 'reserved' }, { id: 'wall.along', state: 'reserved' }, { id: 'wall.around', state: 'supported' }, { id: 'wall.edge', state: 'supported' }, { id: 'wall.line', state: 'supported' }]);
   assert.deepEqual([k1.removed, k1.retired, k1.otherStateChanges, k1.untilChanged], [[], [], [], []]);
-  assert.deepEqual(k1.notesChanged.map((x) => x.id), ['locator.around']);
+  // (C37, v0.33.0, merged under K1: its street orientation notes on program.flat_village, program.lots and layout.street)
+  assert.deepEqual(k1.notesChanged.map((x) => x.id).sort(), ['layout.street', 'locator.around', 'program.flat_village', 'program.lots']);
   assert.deepEqual(k1.recheck, [{ part: 'wall', block: 'connector.wall' }]);
   for (const [to, what, flips] of [[next, 'catalogue-next.json', ['endpoint.region', 'program.districts']], [d1, 'the D1 golden', ['endpoint.region', 'program.districts']]]) {
     const d = diffCatalogues(p0, to, { pending: [{ part: 'craftsmen_district', block: 'program.districts' }, { part: 'wall', block: 'connector.wall' }] });

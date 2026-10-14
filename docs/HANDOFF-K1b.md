@@ -49,4 +49,6 @@ gates and the shared foundation) builds in parallel on `slice/K1a`; its foundati
 
 ## Asks for the coordinator
 
-(none yet)
+- Merging v0.33.0 (C37) under the foundation: `kit/schemas/plan.json` lots program took both `layout` (with `elevated`) and
+  C37's `orientation`; P0 item 9's D2-to-K1 diff now also lists C37's changed notes (program.flat_village, program.lots,
+  layout.street). K1a will meet the same two; the renumber to catalogue 5 may archive C37's catalogue instead of D2's.
