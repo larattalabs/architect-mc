@@ -7,7 +7,7 @@
 //   node tools/gate7ak1.mjs <step>
 //     start [world] | stop | base      the client (or server) and the base worlds (G6B Seed Base, G6B Flat Base)
 //     unit       offline: the kit's K1a and foundation tests (items 1-4 in the virtual world, 6, 7, 10, 11), P0's moved tests (item
-//                15), the goldens that must not move (item 12), the whole kit suite, the catalogue diff tool against catalogue-d2
+//                15), the goldens that must not move (item 12), the whole kit suite, the catalogue diff tool against catalogue-c37 (v0.33.0)
 //                (item 8), the sidecar's plan-check and features tests, api-compat --gate7ak1 (item 14)
 //     ingame     items 1-4 and 9 on S7's flat claim (headless): v30 checked 3 times under /tick freeze (one artifact), realised:
 //                the irSha and every tile sha equal the artifact's, the realised world equals the virtual world over every written
@@ -125,12 +125,12 @@ steps.unit = async () => {
   check(out.goldens.code === 0 && out.goldens.fail === 0, `item 12: S1, S7, S2, mega_bench, relief_demo, route_demo, forms_demo, scatter_demo and districts_demo goldens unchanged (every committed scenario golden), T2's and D's tests, the realise lint: ${out.goldens.pass} pass, ${out.goldens.fail} fail`, out.goldens.failing);
   out.kit = nodeTest(fs.readdirSync(path.join(root, 'kit', 'test')).filter((f) => f.endsWith('.test.mjs')).map((f) => `kit/test/${f}`));
   check(out.kit.code === 0 && out.kit.fail === 0, `the whole kit suite: ${out.kit.pass} pass, ${out.kit.fail} fail`, out.kit.failing);
-  const d = sh('node tools/plan-catalogue-diff.mjs kit/test/fixtures/plan/catalogue-d2.json kit/schemas/plan-catalogue.golden.json --pending kit/test/fixtures/plan/pending-two-districts.json');
+  const d = sh('node tools/plan-catalogue-diff.mjs kit/test/fixtures/plan/catalogue-c37.json kit/schemas/plan-catalogue.golden.json --pending kit/test/fixtures/plan/pending-two-districts.json');
   fs.writeFileSync(path.join(OUT, 'catalogue-diff.txt'), d.out);
   out.catalogueDiff = d.out;
   check(d.code === 0 && /^reserved -> supported: connector\.auto, connector\.gate, connector\.rope_bridge, connector\.wall$/m.test(d.out) && /^added: layout\.elevated \(reserved\), wall\.along \(reserved\), wall\.around \(supported\), wall\.edge \(supported\), wall\.line \(supported\)$/m.test(d.out)
     && /^notes changed: locator\.around: /m.test(d.out) && /recheck \(pending parts now supported\): wall \{connector\.wall\}/.test(d.out) && /^other state changes: none$/m.test(d.out),
-  'item 8: tools/plan-catalogue-diff.mjs D2 -> K1 lists exactly the four flips, the five added ids and locator.around\'s note, and flags the pending connector.wall part');
+  'item 8: tools/plan-catalogue-diff.mjs C37 (v0.33.0, after D2) -> K1 lists exactly the four flips, the five added ids and locator.around\'s note, and flags the pending connector.wall part');
   const s = sh('cd sidecar && npx vitest run test/plan-check.test.ts test/jobs.test.ts');
   out.sidecar = s.out.split('\n').filter((l) => /Tests|Test Files/.test(l)).join(' | ');
   check(s.code === 0, `the sidecar's plan check (ajv 2020-12 over the fixtures, K1's included) and features (region.walls, region.rope appended): ${out.sidecar}`);
