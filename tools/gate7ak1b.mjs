@@ -160,7 +160,7 @@ steps.unchanged = async () => {
 
 steps.probe = async () => {
   await ensure();
-  await L.fresh('G7A K1b Probe', FLAT);
+  await L.fresh('G6B K1b Probe', FLAT);
   await L.setRules('exact');
   const { profile } = await imp('lib/connectors/ropeGeom.mjs');
   const GROUND = -61, Y0 = -40;
@@ -326,7 +326,7 @@ async function linksRun(tag, claim, { flat, golden }) {
 
 steps.ingame = async () => {
   await ensure();
-  await L.fresh('G7A K1b Links Flat', FLAT);
+  await L.fresh('G6B K1b Links Flat', FLAT);
   await L.setRules('exact');
   const out = await linksRun('flat', FLAT_CLAIM, { flat: true, golden: 'links_demo_flat' });
   await leaveWorld();
@@ -336,7 +336,7 @@ steps.ingame = async () => {
 
 steps.natural = async () => {
   await ensure();
-  await L.fresh('G7A K1b Links Rift', BASE);
+  await L.fresh('G6B K1b Links Rift', BASE);
   await L.setRules('default');
   const out = await linksRun('natural', RIFT_SITE, { flat: false, golden: 'links_demo' });
   await leaveWorld();
