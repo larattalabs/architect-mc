@@ -4,7 +4,7 @@
 // most one half block, the span is 8..40, and the four posts stand from 2 below the landing to 2 above it on solid ground. The same
 // rule reads the virtual world (plan time) and a realised dump world (the gate), so the plan's own numbers are only the inputs
 // (n, the landings, the width), never the answer. A warning, as M10.
-import { profile, y2Of, ROPE, sagOf, maxRiseOf, rightOf } from './rope.mjs';
+import { profile, y2Of, ROPE, sagOf, maxRiseOf, rightOf } from './ropeGeom.mjs';
 
 const nameOf = (s) => String(s ?? '').replace(/\[.*$/, '');
 

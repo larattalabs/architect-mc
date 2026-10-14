@@ -34,7 +34,7 @@ import { VOXEL_CLASSES, VC, classAt } from './volume.mjs';
 import { PASSES, PASS_NAMES } from './passes/index.mjs';
 import { emitDistricts } from './districtsEmit.mjs';
 import { edgeColumns, inferMovers, footprintOf, polylineOf, VILLAGER } from './passes/route.mjs';
-import { ropeBridge } from '../connectors/rope.mjs';
+import { ropeBridge } from '../connectors/ropeGeom.mjs';
 import { CARDINALS, cardinalOf, centreCells, circlePolygon, compassDir, crossOffsets, dominantCardinal, rightOf, segmentAxis } from './geom.mjs';
 
 export const COND = Object.freeze({ IF_NATURAL: 0, IF_SOLID_NATURAL: 1, IF_AIR_OR_FLUID: 2, ALWAYS_OURS: 3 });
@@ -303,9 +303,7 @@ export class Region {
       const movers = inferMovers(a.kind, b.kind, e.movers);
       // (`_unsafe.villagerLadders`: the broken variant, a ladder on a villager edge for the checker to catch)
       // (6c D2) an edge's own preferred cells (a following district's street along its line)
-      return { id, a, b, width: e.width ?? 3, type: e.type ?? ((e.width ?? 3) >= 5 ? 'road' : 'path'), movers, ladders: ladders && (!movers.includes(VILLAGER) || !!it._unsafe?.villagerLadders), ...(Array.isArray(e.prefer) && e.prefer.length ? { prefer: e.prefer.map((q) => [q[0], q[q.length - 1]]) } : {}),
-        // (7a K1b) the rope move, opt-in per edge: spans ['rope'], spanOnce (a rope_bridge: exactly one), approach
-        ...(Array.isArray(e.spans) && e.spans.length ? { spans: [...e.spans], spanOnce: !!e.spanOnce, ...(e.approach !== undefined ? { approach: e.approach } : {}) } : {}) };
+      return { id, a, b, width: e.width ?? 3, type: e.type ?? ((e.width ?? 3) >= 5 ? 'road' : 'path'), movers, ladders: ladders && (!movers.includes(VILLAGER) || !!it._unsafe?.villagerLadders), ...(Array.isArray(e.prefer) && e.prefer.length ? { prefer: e.prefer.map((q) => [q[0], q[q.length - 1]]) } : {}) };
     });
     if (new Set(edges.map((e) => e.id)).size !== edges.length) throw new Error(`${what}: edge ids must be unique`);
     // obstacles: lot footprints and aprons, forms, keep sets (x/z); keep-out (the owner's, read through ctx so the IR records it)
@@ -321,7 +319,7 @@ export class Region {
     const stage = it.stage ?? this.stageList[this.stageList.length - 1];
     const t0 = performance.now();
     const out = PASSES.route(this.survey.columns, this.ctx.volumes ?? [], {
-      edges: edges.map((e) => ({ id: e.id, from: { at: e.a.at, facing: e.a.facing }, to: { at: e.b.at, facing: e.b.facing }, width: e.width, movers: e.movers, ladders: e.ladders, prefer: [...preferOf(e.id), ...(e.prefer ?? [])], ...(e.spans ? { spans: e.spans, spanOnce: e.spanOnce, approach: e.approach } : {}) })),
+      edges: edges.map((e) => ({ id: e.id, from: { at: e.a.at, facing: e.a.facing }, to: { at: e.b.at, facing: e.b.facing }, width: e.width, movers: e.movers, ladders: e.ladders, prefer: [...preferOf(e.id), ...(e.prefer ?? [])] })),
       maxGrade: it.maxGrade ?? 0.25, hairpinLanding: it.hairpinLanding ?? 3, stairs: it.stairs ?? true, maxCut: it.maxCut ?? 4, maxFill: it.maxFill ?? 4, margin: it.margin ?? 2,
       hard, keepOut, prefer, clearTrees, base: it.base ?? null, _unsafe: it._unsafe ?? {},
       // (6c P0) the plan check's node budget over all edges (absent: none)
@@ -368,12 +366,12 @@ export class Region {
     for (let i = 0; i < edges.length; i++) {
       const e = edges[i], d = out.data.edges[i];
       const rid = `route_${e.id}`;
-      const rec = { id: e.id, from: e.a.name, to: e.b.name, movers: e.movers, ladders: e.ladders, width: e.width, ok: d.ok, failed: d.failed ?? null, length: d.length, rise: d.rise, cost: d.cost, search: d.search, expanded: d.expanded, roads: [], paths: [], ...(d.rope ? { rope: d.rope } : {}), ...(d.spans ? { spans: d.spans } : {}) };
+      const rec = { id: e.id, from: e.a.name, to: e.b.name, movers: e.movers, ladders: e.ladders, width: e.width, ok: d.ok, failed: d.failed ?? null, length: d.length, rise: d.rise, cost: d.cost, search: d.search, expanded: d.expanded, roads: [], paths: [] };
       metaEdges.push(rec);
-      if (!d.ok) { this.note(`route ${e.id} (${e.a.name} -> ${e.b.name}): ${d.failed} (${d.note})`); res.push({ id: e.id, ok: false, failed: d.failed, ...(d.rope ? { rope: d.rope } : {}) }); continue; }
+      if (!d.ok) { this.note(`route ${e.id} (${e.a.name} -> ${e.b.name}): ${d.failed} (${d.note})`); res.push({ id: e.id, ok: false, failed: d.failed }); continue; }
       rec.path = d.path; rec.segments = d.segments; rec.landings = d.landings; rec.ladderCols = d.ladderCols;
       let n = 0;
-      const ladderSegs = [], ropeSegs = [];
+      const ladderSegs = [];
       const ec = edgeColumns({ path: d.path, segments: d.segments, landings: d.landings, width: e.width });
       // (a column an earlier edge wrote stays that edge's: the search kept this edge within a step of it)
       const fpOf = (si) => ec.bySeg[si].filter((o) => !taken.has(`${o.x},${o.z}`)).map((o) => [o.x, o.z, o.y, o.edge]);
@@ -401,13 +399,8 @@ export class Region {
           rec.paths.push(st.id);
         } else if (g.kind === 'ladder') {
           ladderSegs.push(n);
-        } else if (g.kind === 'rope') {
-          // (7a K1b) a rope span: written by ropeBridge after the walks (in `ropeStage`, the plan's `links` stage), from the near
-          // landing (the cell before the deck) to the far one (the cell after it)
-          ropeSegs.push({ n, from: d.path[g.from], to: d.path[g.to + 1] });
         }
       });
-      for (const q of ropeSegs) rec.paths.push(ropeBridge(this, q.from, q.to, { ...(it.ropeStyle ?? {}), width: e.width, stage: it.ropeStage ?? stage, part: it.ropePart ?? 'links', id: `${rid}_${q.n}`, movers: e.movers, ...(it._unsafe?.rope ? { _unsafe: it._unsafe.rope } : {}), ...(it._unsafe?.wholeBlockDeck ? { whole: true } : {}) }).id);
       // the ladders last (after the walk runs' cuts and fills at their feet)
       d.ladderCols.forEach((lc, k) => { rec.paths.push(p._ladder(`${rid}_${ladderSegs[k]}`, lc)); mark(lc.x, lc.z, e.id); });
       for (const o of ec.cols) if (!d.segments[o.seg].shared) taken.add(`${o.x},${o.z}`);
@@ -433,7 +426,7 @@ export class Region {
     return { edges: res, data: { ...out.data, ms } };
   }
 
-  /** (7a K1b) A rope bridge between two landings on one axis (lib/connectors/rope.mjs, CONTRACT K1 §3); returns its path record. */
+  /** (7a K1b) A rope bridge between two landings on one axis (lib/connectors/ropeGeom.mjs, CONTRACT K1 §3); returns its path record. */
   ropeBridge(a, b, opts = {}) {
     return ropeBridge(this, a, b, opts);
   }

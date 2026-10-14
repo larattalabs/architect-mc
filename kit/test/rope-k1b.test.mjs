@@ -2,12 +2,12 @@
 // half slabs, M10:rope and the broken variants (docs/CONTRACT.md "Phase 7a slice K1" §3, §5, §10 items 5 and 11).
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { profile, maxStep, maxRiseOf, sagOf, deckY, isSlab, checkSpan, ropeCells, slabOf, ROPE, surveyLand } from '../lib/connectors/rope.mjs';
+import { profile, maxStep, maxRiseOf, sagOf, deckY, isSlab, checkSpan, ropeCells, slabOf, ROPE, surveyLand } from '../lib/connectors/ropeGeom.mjs';
 import { planRegion } from '../lib/region/plan.mjs';
 import { checkRegion, walkGraph, nodeReached } from '../lib/region/check.mjs';
 import { makeColumns, encodeColumns, FLAG_WATER } from '../lib/region/pack.mjs';
 import { region } from '../lib/region/program.mjs';
-import { ropeBridge } from '../lib/connectors/rope.mjs';
+import { ropeBridge } from '../lib/connectors/ropeGeom.mjs';
 
 test('the profile: y2(0) = 2 y0 and y2(n) = 2 (y0 + rise) exactly, adjacent cells within one half block, for every span 8-40 and every allowed rise', () => {
   let cases = 0;
@@ -142,50 +142,3 @@ test('the whole-block profile (no slab variant): M10:rope sees the deck off the 
   assert.ok(rep.findings.some((f) => f.rule === 'M10:rope' && /off the profile/.test(f.message)));
 });
 
-/** An inline program routing `edges` (one route pass), entrance at `at`. */
-function routeProgram(intent, at, stages = ['ground', 'routes', 'links']) {
-  return { id: 'rope_route', passes: ['route'], default: (ctx) => { const r = region(ctx); r.stages(stages); r.pass('route', { stage: 'routes', ropeStage: 'links', ...intent }); r.anchor('entrance', at); r.anchor('spawn', at); return r; } };
-}
-async function routePlan(c, intent, at = [26, 65, 32]) {
-  const claim = { minX: 0, minZ: 0, maxX: c.width - 1, maxZ: c.depth - 1, minY: -64, maxY: 319 };
-  const survey = encodeColumns(c);
-  const p = await planRegion({ program: routeProgram(intent, at), programSource: 'rope_route', survey, claim, seed: '1' });
-  const rep = checkRegion({ ir: p.ir, survey, blobs: p.blobs, meta: p.meta });
-  return { p, rep };
-}
-
-test('the rope move: a rope_bridge edge spans the ravine exactly once (spanned bit), walks within its approach, and both movers cross', async () => {
-  const nodes = { a: { at: [26, 65, 32] }, b: { at: [74, 65, 32] } };
-  const { p, rep } = await routePlan(ravine(), { nodes, edges: [{ id: 'rb', from: 'a', to: 'b', width: 2, spans: ['rope'], spanOnce: true, movers: ['player', 'villager'] }] });
-  const e = p.meta.route.edges[0];
-  assert.ok(e.ok, JSON.stringify(e).slice(0, 400));
-  const ropes = e.segments.filter((g) => g.kind === 'rope');
-  assert.equal(ropes.length, 1);
-  assert.ok(ropes[0].n >= 8 && ropes[0].n <= 40);
-  const m = rep.metrics.M10rope;
-  assert.equal(m.length, 1);
-  assert.ok(m[0].ok, JSON.stringify(m[0]));
-  assert.ok(rep.metrics.route.edges[0].player && rep.metrics.route.edges[0].villager, JSON.stringify(rep.metrics.route.edges[0]));
-  assert.ok(!rep.findings.some((f) => /^M(1|3|6|10)/.test(f.rule)), rep.findings.map((f) => `${f.rule} ${f.message}`).join('; '));
-});
-
-test('the rope move is off without spans: the same edge walks round or fails as T2 did (no golden moves)', async () => {
-  const nodes = { a: { at: [26, 65, 32] }, b: { at: [74, 65, 32] } };
-  const { p } = await routePlan(ravine(), { nodes, edges: [{ id: 'w', from: 'a', to: 'b', width: 2 }] });
-  assert.ok(!(p.meta.route.edges[0].segments ?? []).some((g) => g.kind === 'rope'));
-});
-
-test('a rope_bridge edge on flat ground refuses NO_GAP with evidence; over a short ditch with no approach, SPAN', async () => {
-  const flat = ravine({ deep: 64 });
-  const nodes = { a: { at: [26, 65, 32] }, b: { at: [74, 65, 32] } };
-  const { p } = await routePlan(flat, { nodes, edges: [{ id: 'rb', from: 'a', to: 'b', width: 2, spans: ['rope'], spanOnce: true }] });
-  const e = p.meta.route.edges[0];
-  assert.equal(e.ok, false);
-  assert.equal(e.failed, 'ROPE');
-  assert.equal(e.rope.code, 'NO_GAP');
-  // a 6-wide ditch between the two ends, approach 0: the only span is 7
-  const ditch = ravine({ x0: 41, x1: 46 });
-  const short = await routePlan(ditch, { nodes: { a: { at: [40, 65, 32] }, b: { at: [47, 65, 32] } }, edges: [{ id: 'rb', from: 'a', to: 'b', width: 2, spans: ['rope'], spanOnce: true, approach: 0 }] }, [40, 65, 32]);
-  assert.equal(short.p.meta.route.edges[0].rope?.code, 'SPAN', JSON.stringify(short.p.meta.route.edges[0]));
-  assert.equal(short.p.meta.route.edges[0].rope.evidence.span, 7);
-});
