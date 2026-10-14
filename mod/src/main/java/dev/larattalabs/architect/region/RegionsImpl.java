@@ -351,6 +351,11 @@ public final class RegionsImpl implements Regions {
 	}
 
 	@Override
+	public com.google.gson.JsonObject planCatalogue() {
+		return PlanCatalogue.get(); // (C38) the mod jar's own catalogue: synchronous, no helper
+	}
+
+	@Override
 	public boolean cancelCheck(@Nullable String owner, String opKey) {
 		return PlanChecks.cancel(owner, opKey);
 	}
