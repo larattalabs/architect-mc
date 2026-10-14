@@ -139,6 +139,21 @@ public interface Regions {
 		throw new UnsupportedOperationException("Regions.checkPlan needs Architect API 1.23.0");
 	}
 
+	/**
+	 * (C38) The live capability catalogue, the one every {@link #checkPlan} answer carries ({@link PlanCheck#catalogue}), without a
+	 * check: {@code catalogueVersion}, {@code api}, {@code kitVersion}, {@code schemaVersion} and {@code entries}, one
+	 * {@code {id, state, sinceApi, schemaVersion, until?, retiredInApi?, replacedBy?, aliasOf?, limits?, note?}} per block id (docs/CONTRACT.md
+	 * "Phase 6c slice P0" §4; new members need no API change). It is this build's own catalogue, read from the mod jar: it equals,
+	 * entry for entry, the catalogue of a {@link #checkPlan} answer of the same build. Use it at world start to notice that a block
+	 * has become {@code supported} (compare with the entries recorded earlier) without running a check over unloaded land.
+	 * Synchronous and free of side effects: no sidecar, no survey, no claim, no loaded chunk is needed, and it works before any
+	 * region exists and while the helper is unavailable. Any thread. Each call returns a fresh copy; changing it changes nothing.
+	 * Since 1.31.0, feature {@code "planCatalogueView"}.
+	 */
+	default com.google.gson.JsonObject planCatalogue() {
+		throw new UnsupportedOperationException("Regions.planCatalogue needs Architect API 1.31.0");
+	}
+
 	/** (6c P0) Cancels a running check by its key; true when one was running (its future is cancelled). Since 1.23.0. */
 	default boolean cancelCheck(@Nullable String owner, String opKey) {
 		throw new UnsupportedOperationException("Regions.cancelCheck needs Architect API 1.23.0");

@@ -62,6 +62,10 @@ public final class SliceP0Dev {
 	}
 
 	static JsonObject checkJson(PlanCheck pc) {
+		return checkJson(pc, false);
+	}
+
+	static JsonObject checkJson(PlanCheck pc, boolean withCatalogue) {
 		JsonObject o = new JsonObject();
 		o.addProperty("checkId", pc.checkId());
 		o.addProperty("planSha", pc.planSha());
@@ -75,6 +79,9 @@ public final class SliceP0Dev {
 		o.add("cost", pc.cost());
 		o.add("preview", pc.preview());
 		o.addProperty("catalogueEntries", pc.catalogue().get("entries") instanceof JsonArray a ? a.size() : 0);
+		if (withCatalogue) {
+			o.add("catalogue", pc.catalogue()); // (C38) the answer's own catalogue, whole
+		}
 		if (pc.artifactSha() != null) {
 			o.addProperty("artifactSha", pc.artifactSha());
 		}
@@ -104,7 +111,7 @@ public final class SliceP0Dev {
 
 	public static void init() {
 		DevBridge.register("dev.region.checkPlan", 900_000, "{plan, claim: [x0,z0,x1,z1], anchors?: {name: [x,y,z]}, owner?, bible?, bibleVersion?, budget?: {maxNodes, maxEdges, "
-			+ "maxCells, maxMs, maxHeapMb}, opKey?, cancelAfterMs?} - (6c P0) Regions.checkPlan -> {check: {checkId, overall, parts, cost, preview, artifactSha, ...}, ms} "
+			+ "maxCells, maxMs, maxHeapMb}, opKey?, cancelAfterMs?, withCatalogue?} (C38: withCatalogue adds check.catalogue, the answer's whole catalogue) - (6c P0) Regions.checkPlan -> {check: {checkId, overall, parts, cost, preview, artifactSha, ...}, ms} "
 			+ "or {refused, reason}; cancelAfterMs cancels the future that long after the call (the answer is then CANCELLED)", (req, mc) -> {
 				Fields f = Fields.of(req);
 				JsonObject plan = req.getAsJsonObject("plan");
@@ -138,10 +145,32 @@ public final class SliceP0Dev {
 					return fut;
 				}).thenCompose(x -> wrap(x, pc -> {
 					JsonObject o = new JsonObject();
-					o.add("check", checkJson(pc));
+					o.add("check", checkJson(pc, req.has("withCatalogue") && req.get("withCatalogue").getAsBoolean()));
 					o.addProperty("ms", (System.nanoTime() - t0) / 1e6);
 					return o;
 				}));
+			});
+		// (C38) Regions.planCatalogue(): read on the bridge thread (not the server thread), so it shows the call needs no server tick, claim or chunk
+		DevBridge.register("dev.plan.catalogue", 30_000, "{} - (C38) Regions.planCatalogue() -> {catalogue, hasFeature (\"planCatalogueView\"), ms, thread, copy (a second call is equal and not the "
+			+ "same object, and changing the first changes nothing), regions (Regions.list(null).size() on the server thread, after the read: 0 at world start)}", (req, mc) -> {
+				long t0 = System.nanoTime();
+				JsonObject cat = ArchitectApi.get().regions().planCatalogue();
+				double ms = (System.nanoTime() - t0) / 1e6;
+				JsonObject o = new JsonObject();
+				JsonObject again = ArchitectApi.get().regions().planCatalogue();
+				boolean equal = again.equals(cat) && again != cat;
+				cat.addProperty("scribble", true); // changing a returned copy must not change the next call
+				boolean isolated = !ArchitectApi.get().regions().planCatalogue().has("scribble");
+				cat.remove("scribble");
+				o.add("catalogue", cat);
+				o.addProperty("hasFeature", ArchitectApi.get().features().contains("planCatalogueView"));
+				o.addProperty("ms", ms);
+				o.addProperty("thread", Thread.currentThread().getName());
+				o.addProperty("copy", equal && isolated);
+				return ServerTasks.callAsPlayer((level, player) -> {
+					o.addProperty("regions", ArchitectApi.get().regions().list(null).size());
+					return o;
+				});
 			});
 		DevBridge.register("dev.region.cancelCheck", 10_000, "{owner?, opKey} - (6c P0) Regions.cancelCheck -> {cancelled}", (req, mc) -> {
 			Fields f = Fields.of(req);
