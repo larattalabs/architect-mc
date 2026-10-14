@@ -475,16 +475,14 @@ export function checkRegion({ ir, survey, blobs, volumes = [], meta = null, worl
       }
       metrics.M5route = { darkSpawnable: rd, walkCells: ra, share: ra ? rd / ra : 0 };
     }
-    // (7a K1b) the share over the rope bridges' own deck cells (their floor in a rope part: CONTRACT K1 item 5, 0 dark)
+    // (7a K1b) the rope bridges' own deck cells (the plan meta's ropes: each walk cell of every deck, reached from the entrance or
+    // not): dark and spawnable ones (CONTRACT K1 item 5: 0)
     if (Array.isArray(meta?.ropes) && meta.ropes.length) {
-      const rp = new Set(meta.ropes.map((q) => q.part));
       let rd = 0, ra = 0;
       const rs = [];
-      for (let i = 0; i < walkArea.length; i += 3) {
-        const x = walkArea[i], y = walkArea[i + 1], z = walkArea[i + 2];
-        if (!rp.has(ir.parts[vw.partAt(x, y - 1, z)]?.id)) continue;
+      for (const q of meta.ropes) for (const [x, y, z] of q.cells ?? []) {
         ra++;
-        if (P.spawn[vw.get(x, y - 1, z)] && !(light.at(x, y, z) > 0)) { rd++; if (rs.length < 20) rs.push([x, y, z]); }
+        if (P.spawn[vw.get(x, y, z)] && P.passable[vw.get(x, y + 1, z)] && !(light.at(x, y + 1, z) > 0)) { rd++; if (rs.length < 20) rs.push([x, y + 1, z]); }
       }
       metrics.M5rope = { darkSpawnable: rd, deckCells: ra, sample: rs };
     }

@@ -57,7 +57,7 @@ test('v33 and v34 on rift_city: every part fits; the deck follows the profile, r
     }
     assert.equal(rep.metrics.M5rope.darkSpawnable, 0, `${f.name}: dark deck cells ${JSON.stringify(rep.metrics.M5rope)}`);
     assert.ok(rep.metrics.M5rope.deckCells > 0, `${f.name}: the deck is reached from the entrance`);
-    assert.ok(!rep.findings.some((f2) => /^M(1|3|6|10)/.test(f2.rule) || f2.rule === 'M8'), `${f.name}: ${rep.findings.map((x) => `${x.rule} ${x.message}`).join('; ')}`);
+    assert.ok(!rep.findings.some((f2) => /^M(1|3|6|10)(:|$)/.test(f2.rule) || f2.rule === 'M8'), `${f.name}: ${rep.findings.map((x) => `${x.rule} ${x.message}`).join('; ')}`);
     for (const e of rep.metrics.route.edges) assert.ok(e.player && e.villager !== false, `${f.name}: ${e.id} ${JSON.stringify(e)}`);
     const span = r.check.parts.find((a) => (a.geometry?.spans ?? []).length);
     assert.ok(span.cost.bom['minecraft:iron_chain'] > 0 && Object.keys(span.cost.bom).some((k) => /_slab$/.test(k)), `${f.name}: the BOM ${JSON.stringify(span.cost.bom)}`);

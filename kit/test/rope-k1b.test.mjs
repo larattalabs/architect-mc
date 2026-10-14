@@ -169,7 +169,7 @@ test('the rope move: a rope_bridge edge spans the ravine exactly once (spanned b
   assert.equal(m.length, 1);
   assert.ok(m[0].ok, JSON.stringify(m[0]));
   assert.ok(rep.metrics.route.edges[0].player && rep.metrics.route.edges[0].villager, JSON.stringify(rep.metrics.route.edges[0]));
-  assert.ok(!rep.findings.some((f) => /^M(1|3|6|10)/.test(f.rule)), rep.findings.map((f) => `${f.rule} ${f.message}`).join('; '));
+  assert.ok(!rep.findings.some((f) => /^M(1|3|6|10)(:|$)/.test(f.rule)), rep.findings.map((f) => `${f.rule} ${f.message}`).join('; '));
 });
 
 test('the rope move is off without spans: the same edge walks round or fails as T2 did (no golden moves)', async () => {
@@ -191,4 +191,25 @@ test('a rope_bridge edge on flat ground refuses NO_GAP with evidence; over a sho
   const short = await routePlan(ditch, { nodes: { a: { at: [40, 65, 32] }, b: { at: [47, 65, 32] } }, edges: [{ id: 'rb', from: 'a', to: 'b', width: 2, spans: ['rope'], spanOnce: true, approach: 0 }] }, [40, 65, 32]);
   assert.equal(short.p.meta.route.edges[0].rope?.code, 'SPAN', JSON.stringify(short.p.meta.route.edges[0]));
   assert.equal(short.p.meta.route.edges[0].rope.evidence.span, 6);
+});
+
+test('links_demo (flat): bridges of 8, 24 and 40 deck cells over the raised banks; M10:rope, rails, head room, 0 dark deck cells (also under soul lanterns), both movers across, no M3/M6/M8', async () => {
+  const { flatSurvey } = await import('./plan-helpers.mjs');
+  const s = flatSurvey({ W: 192, D: 112, x0: 6000, z0: 6000, y: -61 });
+  const programFile = new URL('../regions/links_demo.mjs', import.meta.url).pathname;
+  for (const roles of [{}, { light: 'minecraft:soul_lantern' }]) {
+    const p = await planRegion({ programFile, survey: s.bytes, claim: s.claim, seed: '1', roles });
+    const rep = checkRegion({ ir: p.ir, survey: s.bytes, blobs: p.blobs, meta: p.meta });
+    const per = rep.metrics.ropes.per;
+    assert.deepEqual(per.map((q) => q.n), [8, 24, 40]);
+    for (const q of per) { assert.ok(q.ok, JSON.stringify(q)); assert.equal(q.railed, q.n); assert.equal(q.headroom, q.n); }
+    assert.equal(rep.metrics.M5rope.darkSpawnable, 0, `${JSON.stringify(roles)}: ${JSON.stringify(rep.metrics.M5rope)}`);
+    assert.equal(rep.metrics.M5rope.deckCells, 2 * (8 + 24 + 40));
+    assert.ok(!rep.findings.some((f) => /^M(1|3|6|10)(:|$)/.test(f.rule) || f.rule === 'M8'), rep.findings.map((f) => `${f.rule} ${f.message}`).join('; '));
+    for (const q of p.meta.ropes) for (const mover of ['player', 'villager']) {
+      const a = [q.from[0], q.from[1] + 1, q.from[2]], b = [q.to[0], q.to[1] + 1, q.to[2]];
+      assert.ok(nodeReached(walkGraph(rep._world, [a], { mover }), b), `${q.id}: ${mover} across`);
+    }
+    if (roles.light) assert.ok(p.meta.ropes.every((q) => q.lampEvery === 8 && /soul_lantern/.test(q.light)));
+  }
 });
