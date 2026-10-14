@@ -130,6 +130,14 @@ test('item 2: the seven classes, with their reasons, deviations, blockedBy and u
   assert.equal(part(mal, 'r').class, 'malformed');
   assert.equal(part(mal, 'r').reasons[0].path, '$.connectors[0].width');
   assert.equal(part(mal, 'town').class, 'fits');
+  // (C36) a required malformed part blocks like a required unsupported one: REQUIRED_BLOCKED, no artifact; an optional one stays NEEDS_REPAIR
+  const malReq = await asks({ schemaVersion: 'plan/0', zones: [{ id: 'town', program: { lots: lots(2) } }], connectors: [{ id: 'r', kind: 'road', required: true, from: { anchor: 'claim_n' }, to: { part: 'town' }, width: 9 }] });
+  assert.equal(part(malReq, 'r').class, 'malformed');
+  assert.equal(part(malReq, 'r').required, true);
+  assert.equal(malReq.check.overall, 'REQUIRED_BLOCKED');
+  assert.equal(malReq.artifactSha, null);
+  assert.equal(mal.check.overall, 'NEEDS_REPAIR');
+  assert.ok(mal.artifactSha, 'an optional malformed part still makes the artifact');
   // incomplete: item 7
   const inc = await asks(WALLED, { protected: WALL, budget: { maxNodes: 1000 } });
   assert.equal(part(inc, 'long').class, 'incomplete');
@@ -281,4 +289,23 @@ test('item 11: Steward\'s 59 recorded plans (whole files, fixtures/plan/asks): n
   for (const [k, v] of rows) console.log(`#   ${k.padEnd(24)} ${v}`);
   console.log(`# parts outside answer.waits that did not fit (${other.length}): ${other.join('; ')}`);
   assert.ok(tally.unsupported > 0 && tally.fits > 0);
+});
+
+test('C36: body.lots[] carries role, label, ext (as given), front and entrance in one hop', async () => {
+  const plan = { schemaVersion: 'plan/0', zones: [{ id: 'town', program: { lots: [
+    { id: 'h1', type: 'house', role: 'home', label: 'Ada\'s house', size: [9, 9], ext: { 'st:tag': 7 } },
+    { id: 'h2', type: 'house', size: [9, 9] }] } }] };
+  const r = await asks(plan);
+  assert.ok(r.artifact, 'an artifact');
+  const l1 = r.artifact.lots.find((l) => l.id === 'h1'), l2 = r.artifact.lots.find((l) => l.id === 'h2');
+  assert.equal(l1.role, 'home');
+  assert.equal(l1.label, "Ada's house");
+  assert.deepEqual(l1.ext, { 'st:tag': 7 });
+  assert.equal(l2.role, null); assert.equal(l2.label, null); assert.equal(l2.ext, null);
+  for (const l of [l1, l2]) {
+    assert.ok(Array.isArray(l.entrance) && l.entrance.length === 3, `${l.id} entrance`);
+    assert.ok(l.front !== null && l.front !== undefined, `${l.id} front`);
+    const g = r.artifact.parts.find((x) => x.part === 'town').geometry.lots.find((x) => x.id === l.id);
+    assert.deepEqual(l.entrance, g.entrance); assert.deepEqual(l.front, g.front);
+  }
 });

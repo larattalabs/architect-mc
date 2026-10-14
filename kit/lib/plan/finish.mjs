@@ -37,7 +37,7 @@ export function evalAll(ir, survey, blobs) {
 export function overallOf(answers, { malformed = false } = {}) {
   if (malformed) return 'MALFORMED';
   if (answers.some((a) => a.class === 'incomplete')) return 'INCOMPLETE';
-  if (answers.some((a) => a.required && ['unsupported', 'refused', 'blocked'].includes(a.class))) return 'REQUIRED_BLOCKED';
+  if (answers.some((a) => a.required && ['unsupported', 'refused', 'blocked', 'malformed'].includes(a.class))) return 'REQUIRED_BLOCKED';
   if (answers.some((a) => !OK.has(a.class))) return 'NEEDS_REPAIR';
   return 'READY';
 }
@@ -115,7 +115,8 @@ export function finishCheck({ res, survey, blobs = null, surveyBytesSha = null, 
       const [x0, y0, z0, x1, y1, z1] = l.box;
       const cols = (x1 - x0 + 1) * (z1 - z0 + 1);
       const band = [cols * PROVISIONAL_BAND[0], cols * PROVISIONAL_BAND[1]];
-      lots.push({ id: l.id, zone: a.part, box: l.box, entry, provisional: prov, ...(prov ? { costRange: band, fitBox: l.box } : {}), ...(pending ? { pendingStyle: style.pending } : {}) });
+      const m = pc.lotMeta?.[l.id] ?? {};
+      lots.push({ id: l.id, zone: a.part, box: l.box, role: m.role ?? null, label: m.label ?? null, ext: m.ext ?? null, front: l.front ?? null, entrance: l.entrance ?? null, entry, provisional: prov, ...(prov ? { costRange: band, fitBox: l.box } : {}), ...(pending ? { pendingStyle: style.pending } : {}) });
       if (prov) { lo += band[0]; hi += band[1]; }
     }
     if (a.provisional) a.cost = { ...(a.cost ?? {}), range: { cells: [(a.cost?.cells ?? 0) + lo, (a.cost?.cells ?? 0) + hi] } };

@@ -245,12 +245,16 @@ steps.ingame = async () => {
   check(out.virtual.written > 0 && out.virtual.differ === 0 && out.virtual.kept === 0 && out.virtual.road === 0, `item 4: the realised world equals the check's virtual world over ${out.virtual.written} written cells (E-flat: ${out.virtual.differ} differ)`, out.virtual.first);
   const ref = (await call('dev.region.artifact', { sha })).artifact;
   check(ref.regions.includes(rr.region), `retention: the standing region refers to the artifact (${json(ref.regions)})`);
+  // (C36) a removed region tombstones its artifact unless it is pinned: pin it now so items 5 and 6 and the pin items below can reuse it
+  await call('dev.region.pinArtifact', { sha, owner: OWNER, on: true });
   await cmd('/kill @e[type=!minecraft:player]');
   const rm = await call('dev.region.remove', { region: rr.region, requester: OWNER }, 3_600_000);
   await L.settle(3000);
   const h1 = await call('dev.region.hash', { box }, 3_600_000);
   out.undo = { removed: rm.removed, restored: rm.restored, same: h0.sha256 === h1.sha256 };
   check(rm.removed && h0.sha256 === h1.sha256, `item 4: Regions.remove restores the world hash (E-flat 0; ${rm.restored} cells restored)`);
+  const kept = (await call('dev.region.artifact', { sha })).artifact;
+  check(kept && !kept.removed && !(kept.regions ?? []).includes(rr.region) && json(kept.pinnedBy) === json([OWNER]), `C36: a pinned artifact survives its region's removal (removed ${kept?.removed}, regions ${json(kept?.regions)}, pinned ${json(kept?.pinnedBy)})`);
   // ---- item 5: a block changed in a planned tile, then a protected area over the zone: ARTIFACT_STALE and nothing written
   const town = c1.parts.find((p) => p.part === 'town').geometry;
   const [zx, zz] = [(town.rect[0] + town.rect[2]) >> 1, (town.rect[1] + town.rect[3]) >> 1];
@@ -322,6 +326,25 @@ steps.ingame = async () => {
   check(u1.removed === true && u1.removedAt > 0, `pins: unpinning the last pin of an unreferenced artifact removes it, leaving a tombstone (removedAt ${u1.removedAt})`);
   const gone = await call('dev.region.realiseApproved', { sha }, 300_000);
   check(gone.reason === 'ARTIFACT_UNAPPROVED' && /removed/.test(gone.refused), `pins: realiseApproved on the tombstone refuses ARTIFACT_UNAPPROVED (${gone.refused?.slice(0, 100)})`);
+  // ---- (C36) removing a region tombstones its artifact: check again (the tombstone clears), approve, realise, remove, then ARTIFACT_UNAPPROVED
+  const c36 = await checkPlan(S7_PLAN, claim, { anchors });
+  check(c36.artifactSha === sha, `C36: the recheck answers the same artifact (${c36.artifactSha?.slice(0, 12)})`);
+  const a36 = (await call('dev.region.artifact', { sha })).artifact;
+  check(a36 && !a36.removed && (a36.pinnedBy ?? []).length === 0, `C36: checked again, the artifact is back, unpinned (removed ${a36?.removed})`);
+  const r36 = await call('dev.region.realiseApproved', { sha }, 300_000);
+  check(!!r36.region, `C36: realiseApproved queued region ${r36.region ?? r36.refused}`);
+  const st36 = r36.region ? await waitPlaced(r36.region) : null;
+  check(st36?.view.state === 'PLACED', `C36: the region is ${st36?.view.state}`);
+  const held36 = (await call('dev.region.artifact', { sha })).artifact;
+  check(!held36.removed && held36.regions.includes(r36.region), `C36: while the region stands the artifact is held (${json(held36.regions)})`);
+  await cmd('/kill @e[type=!minecraft:player]');
+  const rm36 = await call('dev.region.remove', { region: r36.region, requester: OWNER }, 3_600_000);
+  await L.settle(3000);
+  check(rm36.removed, 'C36: Regions.remove finished (the region is REMOVED)');
+  const t36 = (await call('dev.region.artifact', { sha })).artifact;
+  check(t36?.removed === true && t36.removedAt > 0, `C36: removing the region tombstoned its artifact (removedAt ${t36?.removedAt})`);
+  const g36 = await call('dev.region.realiseApproved', { sha }, 300_000);
+  check(g36.reason === 'ARTIFACT_UNAPPROVED' && /removed/.test(g36.refused), `C36: realiseApproved after the removal refuses ARTIFACT_UNAPPROVED (${g36.refused?.slice(0, 100)})`);
   const unk = await call('dev.region.realiseApproved', { sha: 'f'.repeat(64) }, 300_000);
   check(unk.reason === 'ARTIFACT_UNAPPROVED', 'pins: an unknown sha refuses ARTIFACT_UNAPPROVED');
   const big = await call('dev.region.checkPlan', { plan: { schemaVersion: 'plan/0', notes: 'x'.repeat(2000), ext: { 'steward_mc:pad': 'y'.repeat(70000) } }, claim, owner: OWNER, anchors }, 300_000);

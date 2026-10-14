@@ -11305,7 +11305,7 @@ Every part gets exactly one class:
 - **The overall result:**
   - `MALFORMED`: the plan itself failed the schema;
   - `INCOMPLETE`: any part is `incomplete`;
-  - `REQUIRED_BLOCKED`: a required part is `unsupported`, `refused` or `blocked` (COMPOSITION §2.5; it blocks approval until
+  - `REQUIRED_BLOCKED`: a required part is `unsupported`, `refused`, `blocked` or `malformed` (C36) (COMPOSITION §2.5; it blocks approval until
     the player approves a concrete reduced revision);
   - `NEEDS_REPAIR`: any other part is not `fits` or `adjusted`;
   - `READY` otherwise.

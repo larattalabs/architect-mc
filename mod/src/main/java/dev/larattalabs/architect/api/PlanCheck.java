@@ -25,7 +25,7 @@ public record PlanCheck(String checkId, String planSha, String surveySha, String
 
 	/**
 	 * The overall result (§3): MALFORMED (the plan itself failed the schema), INCOMPLETE (a part ran out of budget, time or memory),
-	 * REQUIRED_BLOCKED (a required part is unsupported, refused or blocked), NEEDS_REPAIR (another part is not fits or adjusted),
+	 * REQUIRED_BLOCKED (a required part is unsupported, refused, blocked or malformed), NEEDS_REPAIR (another part is not fits or adjusted),
 	 * READY. Only READY and NEEDS_REPAIR make an artifact. New values are only ever appended.
 	 */
 	public enum Overall { READY, NEEDS_REPAIR, REQUIRED_BLOCKED, INCOMPLETE, MALFORMED }
