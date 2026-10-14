@@ -17,8 +17,10 @@ Ports 8906/8907 (ad-hoc client, run worktree `../architect-mc-runS2`, fresh from
 - Harness: `tools/scenarios.mjs` S2 branch (`isS2`), `tools/lib/scenario-s2.mjs`, `tools/gate6cs2.mjs`, chain steps
   `s2-unit` and `6c-scenario-s2`, impact rule "6c S2".
 
-## Next
+## Next (2026-10-14)
 
-1. Pin (`scenarios.mjs pin s2`), commit; S2 flat + natural runs; golden (`scenarios.mjs golden s2 <run>`), commit.
-2. Gallery: republish https://claude.ai/artifact/AHUxAGLT42pfRy5YUHdojG with an S2 section (Noah approves; never write one).
-3. Slice tier, gate-verifier, as-built in CONTRACT, retire this file.
+- Slice tier done: `gate-runs-S2/20261013-224523-slice` (17 PASS; 6cf2-scenario-scatter FAIL on 1 cell, re-run alone PASS in
+  `20261014-005332-slice`) over the interrupted `20261013-213015-slice`. As-built written in CONTRACT (S2 as built).
+- A gate-verifier was launched (review + its own 6c-scenario-s2 re-run on ports 8912/8913, out `artifacts/gate-runs-S2-verify`);
+  its verdict is not recorded yet. When it passes: add its line to the as-built Gate row, delete this file, push, report ready.
+- Noah's gallery approval pending: https://claude.ai/artifact/AHUxAGLT42pfRy5YUHdojG (S2 evidence 932dafe971f1).
