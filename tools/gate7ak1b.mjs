@@ -318,7 +318,7 @@ async function linksRun(tag, claim, { flat, golden }) {
   fs.writeFileSync(path.join(OUT, `${tag}-exact.json`), `${JSON.stringify(out.exact, null, 2)}\n`);
   if (flat) check(rm.removed && diff.mismatches === 0, `item 9 (${tag}): Regions.remove by its owner restores the box exactly: E-flat ${diff.mismatches} (${rm.restored} cells restored)`);
   else {
-    const none = diff.classes?.none ?? diff.mismatches;
+    const none = diff.classes ? diff.classes.none ?? 0 : diff.mismatches;
     check(rm.removed && none <= Math.floor(cells * 0.0001), `item 9 (${tag}): the removal's E-normal classified: ${diff.mismatches} mismatches (${json(diff.classes ?? {})}), unclassified ${none} <= 0.01% of ${cells}`);
   }
   return out;
