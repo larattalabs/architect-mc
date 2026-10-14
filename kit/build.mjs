@@ -78,7 +78,13 @@ export async function loadDesign(id, { palette, values, dir, mirror } = {}) {
   const bp = await mod.default({ ...(p ? { palette: p } : {}), ...v });
   if (!bp || typeof bp.toStructure !== 'function') throw new Error(`kit/designs/${id}.mjs: the default export must return a Blueprint`);
   if (bp.id !== id) throw new Error(`kit/designs/${id}.mjs builds id '${bp.id}' (must match the file name)`);
-  if (p && bp.p !== p) throw new Error(`kit/designs/${id}.mjs ignores the palette it is given (pass \`palette\` to the Blueprint)`);
+  if (p && bp.p !== p) {
+    // (C35) a captured source (lib/adopt.mjs: an adopted player build) declares itself exempt: the player's house as built is
+    // theirs, so a palette or bible asked for (a settlement's bible on a change request) is ignored, never an error, and recorded
+    // (`paletteIgnored` in its sidecar JSON, a `palette ignored:` warning). Any other design that drops its palette still throws.
+    if (bp.captured !== true) throw new Error(`kit/designs/${id}.mjs ignores the palette it is given (pass \`palette\` to the Blueprint)`);
+    bp.paletteIgnored = typeof palette === 'string' ? { preset: palette } : p.bible ? { bible: { ...p.bible } } : structuredClone(palette);
+  }
   if (mod.params && Object.keys(mod.params).length) {
     bp.params = mod.params;
     bp.values = v;
@@ -95,7 +101,16 @@ export async function buildDesign(id, { out = DEFAULT_OUT, max, type, profile, p
   if (mirror && massing) massing = mirrorSidecar(massing, mirrorAxisOf(bp.front));
   const written = writeBlueprint(bp, out);
   const result = checkFiles(written.nbtPath, written.jsonPath, { max, type, ...(profile !== undefined ? { profile } : {}), ...(massing !== undefined ? { massing } : {}), ...(restraint ? { restraint } : {}) });
+  // (C35) said where a caller reads it: the check's warnings
+  if (bp.paletteIgnored) result.warnings.unshift(`palette ignored: ${id} is a captured source (the player's build as built); it keeps its blocks, the ${ignoredLabel(bp.paletteIgnored)} was not applied`);
   return { bp, written, result };
+}
+
+/** (C35) "bible birch v1", "palette dark", "palette {...}": what a captured source ignored. */
+export function ignoredLabel(x) {
+  if (x?.bible) return `bible ${x.bible.id}${x.bible.version !== undefined ? ` v${x.bible.version}` : ''}`;
+  if (x?.preset && Object.keys(x).length === 1) return `palette ${x.preset}`;
+  return `palette ${JSON.stringify(x)}`;
 }
 
 function parseArgs(argv) {
