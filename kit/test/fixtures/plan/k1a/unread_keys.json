@@ -1,0 +1,74 @@
+{
+  "about": "(7a K1a, S-K1-3) a wall with three recorded keys it doesn't read: each listed by name in its notes (towers names a lot: a join deviation too)",
+  "on": "asks",
+  "expect": {
+    "w": "adjusted",
+    "notes": [
+      "params.material not read",
+      "params.towers not read",
+      "params.wall_walk not read"
+    ]
+  },
+  "plan": {
+    "schemaVersion": "plan/0",
+    "zones": [
+      {
+        "id": "town",
+        "program": {
+          "lots": [
+            {
+              "id": "h1",
+              "type": "house",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "h2",
+              "type": "cottage",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "h3",
+              "type": "house",
+              "size": [
+                9,
+                9
+              ]
+            }
+          ]
+        },
+        "where": {
+          "near": {
+            "anchor": "stone",
+            "within": 0
+          }
+        }
+      }
+    ],
+    "connectors": [
+      {
+        "id": "w",
+        "kind": "wall",
+        "where": {
+          "around": {
+            "feature": {
+              "part": "town"
+            }
+          }
+        },
+        "params": {
+          "material": "stone",
+          "wall_walk": true,
+          "towers": [
+            "h1"
+          ]
+        }
+      }
+    ]
+  }
+}

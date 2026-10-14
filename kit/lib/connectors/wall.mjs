@@ -420,7 +420,7 @@ export function wallsPassInput(K) {
     // every column the wall writes is an obstacle: its cells and the corner stubs (axis 3)
     const cells = W.cells.map((c) => [c.x, c.z, c.axis]);
     for (const [x, z] of stubCells(W)) if (!W.cellAt.has(key(x, z))) cells.push([x, z, 3]);
-    return { id: W.id, max: W.st.gatesMax, opened: W.opened, cells, open };
+    return { id: W.id, max: W.st.gatesMax, opened: W.opened, cells, open, ...(W.closed && W.I ? { inside: [W.I.minX, W.I.minZ, W.I.maxX, W.I.maxZ] } : {}) };
   });
 }
 
@@ -626,9 +626,15 @@ function emitWall(K, W) {
   const walkSet = new Set(K.walk.map(([x, z]) => key(x, z)));
   const capCells = new Map(); // "x,z" -> {y, merlon}
   const posEnd = new Set(W.ends);
+  // the broken variants (kit tests and the gate only, through the part's own ext under Architect's namespace): `noGates` writes the
+  // wall over its openings (M2:wall), `gap: n` leaves n positions of its first free straight run unwritten (closure fails)
+  const unsafe = W.p.part.ext?.['architect_mc:unsafe'] ?? {};
+  let gapRun = null;
+  if (Number.isInteger(unsafe.gap) && unsafe.gap > 0) for (let a = 2; a + unsafe.gap < n - 2 && !gapRun; a++) if (runFree(W, a, a + unsafe.gap - 1)) gapRun = [a, a + unsafe.gap - 1];
   for (const c of W.cells) {
-    const g = opening.get(key(c.x, c.z));
-    if (!g && walkSet.has(key(c.x, c.z))) continue; // never on a walk cell (a network's crossing is a gate)
+    if (gapRun && c.pos >= gapRun[0] && c.pos <= gapRun[1]) continue;
+    const g = unsafe.noGates ? null : opening.get(key(c.x, c.z));
+    if (!g && walkSet.has(key(c.x, c.z)) && !unsafe.noGates) continue; // never on a walk cell (a network's crossing is a gate)
     const foot = S.groundAt(c.x, c.z) - 2;
     const top = T[c.pos];
     if (g) {
@@ -743,7 +749,7 @@ function emitWall(K, W) {
     id: W.id, part: W.id, form: W.form, closed: W.closed, sealed: st.sealed, height: st.height, thickness: t, crenels: st.crenels, line,
     inside: W.closed && W.I ? arr(W.I) : null, joined: W.joined, ends: W.ends,
     cells: W.cells.filter((c) => opening.has(key(c.x, c.z)) || !walkSet.has(key(c.x, c.z))).map((c) => [c.x, c.z, T[c.pos], c.pos, c.depth]),
-    gates: gatesOut,
+    gates: unsafe.noGates ? [] : gatesOut,
   };
   const record = { id: W.id, form: W.form, closed: W.closed, sealed: st.sealed, line, cells: W.cells.length, top: [Math.min(...T), Math.max(...T)], gates: gatesOut.map(({ cells, ...g }) => { void cells; return g; }) };
   const geometry = { form: W.form, line, closed: W.closed, height: st.height, thickness: t, cells: W.cells.length, top: [Math.min(...T), Math.max(...T)], gates: gatesOut.map((g) => ({ id: g.id, at: g.at, width: g.width, door: g.door, auto: g.auto, kind: g.kind })), ...(W.I ? { ring: arr(W.I) } : {}), ...(W.joined.length ? { joined: W.joined } : {}), ...(st.sealed ? { sealed: true } : {}) };

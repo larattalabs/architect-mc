@@ -247,7 +247,7 @@ function supportCheck(vw, ir, stage) {
 // ------------------------------------------------------------------ block light (M5)
 
 /** Block light from every written emitter (and the dump's own light when the world carries it). */
-function blockLight(vw) {
+export function blockLight(vw) {
   if (vw.lightAt) return { at: vw.lightAt, lit: null };
   const P = vw.pal;
   const L = new CellBytes();

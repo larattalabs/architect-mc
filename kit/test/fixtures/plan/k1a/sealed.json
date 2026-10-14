@@ -1,0 +1,85 @@
+{
+  "about": "(7a K1a, S-K1-1) a sealed wall (closed: true, no gate part): no gate; a road that must cross it refuses UNREACHABLE with the wall in its evidence, a road that can go round fits",
+  "on": "asks",
+  "expect": {
+    "w": "fits",
+    "in": "refused",
+    "round": "fits"
+  },
+  "plan": {
+    "schemaVersion": "plan/0",
+    "zones": [
+      {
+        "id": "town",
+        "program": {
+          "lots": [
+            {
+              "id": "h1",
+              "type": "house",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "h2",
+              "type": "cottage",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "h3",
+              "type": "house",
+              "size": [
+                9,
+                9
+              ]
+            }
+          ]
+        },
+        "where": {
+          "near": {
+            "anchor": "stone",
+            "within": 0
+          }
+        }
+      }
+    ],
+    "connectors": [
+      {
+        "id": "w",
+        "kind": "wall",
+        "where": {
+          "around": {
+            "feature": {
+              "part": "town"
+            },
+            "closed": true
+          }
+        }
+      },
+      {
+        "id": "in",
+        "kind": "road",
+        "from": {
+          "anchor": "claim_e"
+        },
+        "to": {
+          "part": "town"
+        }
+      },
+      {
+        "id": "round",
+        "kind": "road",
+        "from": {
+          "anchor": "claim_n"
+        },
+        "to": {
+          "anchor": "claim_s"
+        }
+      }
+    ]
+  }
+}

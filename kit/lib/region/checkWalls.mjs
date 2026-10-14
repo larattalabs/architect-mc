@@ -8,7 +8,7 @@
 //   M6       each gate's opening `h` clear (doors and fence gates are passable) over a floor, the walk cell at its y
 // A joined lot's box is an obstacle to the movers, so a wall that joins one is `provisional` (the answer's). Called by checkRegion
 // (check.mjs), which passes `finding`; the virtual world is left as it was found.
-import { nodeReached, walkGraph, walkNodes } from './check.mjs';
+import { blockLight, nodeReached, walkGraph, walkNodes } from './check.mjs';
 import { F_WALK } from './vworld.mjs';
 
 const key = (x, z) => `${x},${z}`;
@@ -24,6 +24,7 @@ export function wallRules({ ir, vw, walls, meta, want, findings, metrics, partSt
   const P = vw.pal;
   const out = {};
   const claim = vw.claim;
+  const light = want.has('M5') ? blockLight(vw) : null;
   for (const w of walls) {
     const part = `w_${w.id}`.slice(0, 48);
     const stage = partStage.get(part) ?? null;
@@ -47,18 +48,35 @@ export function wallRules({ ir, vw, walls, meta, want, findings, metrics, partSt
     }
     m.gateClearance = { cells: w.gates.reduce((n, g) => n + g.cells.length, 0), bad: tight.length };
     if (tight.length && want.has('M6')) findings.push(finding('M6', part, stage, tight.length, tight, `wall ${w.id}: ${tight.length} gate cell(s) without their clear height over a floor`));
+    // ---- M5 over the gates' walk cells and the wall's top: 0 dark spawnable cells
+    if (light) {
+      const dark = [];
+      let cells = 0, tops = 0;
+      for (const g of w.gates) for (const [x, z] of g.cells) { cells++; if (P.spawn[vw.get(x, g.y, z)] && !(light.at(x, g.y + 1, z) > 0)) dark.push([x, g.y + 1, z]); }
+      for (const [x, z, T] of w.cells) {
+        if (gateCell.has(key(x, z))) continue;
+        const y = highest(vw, x, z, T - 4, T + 8, (i) => !P.air[i]);
+        if (y === null || !P.spawn[vw.get(x, y, z)] || !P.passable[vw.get(x, y + 1, z)] || !P.passable[vw.get(x, y + 2, z)]) continue;
+        tops++;
+        if (!(light.at(x, y + 1, z) > 0)) dark.push([x, y + 1, z]);
+      }
+      m.M5 = { gateCells: cells, spawnableTops: tops, dark: dark.length };
+      if (dark.length) findings.push(finding('M5', part, stage, dark.length, dark, `wall ${w.id}: ${dark.length} dark spawnable cell(s) on its gates' walks or its top`));
+    }
     // ---- M8:wall: the top over the foot and over the standable ground within 2
     const low = [], bypass = [];
     let footMin = Infinity, overMin = Infinity;
     // the ground a mover stands on (the wall's own lamps aside: a post beside a gate is not ground)
     const pi = ir.parts.findIndex((p) => p.id === part);
-    const standY = (x, z, yMax) => highest(vw, x, z, yMax - 24, yMax, (i, y) => P.floor[i] && P.passable[vw.get(x, y + 1, z)] && P.passable[vw.get(x, y + 2, z)] && !(vw.partAt(x, y, z) === pi && !(vw.flags(x, y, z) & F_WALK)));
+    const TREE = /_(log|wood|leaves|stem|hyphae)$|mushroom_block$/;
+    const standY = (x, z, yMax, ground = false) => highest(vw, x, z, yMax - 24, yMax, (i, y) => P.floor[i] && P.passable[vw.get(x, y + 1, z)] && P.passable[vw.get(x, y + 2, z)] && !(vw.partAt(x, y, z) === pi && !(vw.flags(x, y, z) & F_WALK)) && !(ground && TREE.test(P.states[i].replace(/\[.*$/, ''))));
     for (const [x, z, T] of w.cells) {
       if (gateCell.has(key(x, z))) continue;
       const top = highest(vw, x, z, T - 32, T + 8, (i) => P.solid[i] || P.barrier[i]);
       if (top === null) { low.push([x, T, z]); continue; }
       const topH2 = 2 * top + Math.round(2 * (P.top[vw.get(x, top, z)] ?? 1));
       let foot = -Infinity, near = -Infinity;
+      // the foot is the ground beside the column (a tree's trunk or leaves is no ground: it counts only for the 2-over rule)
       for (let dz = -2; dz <= 2; dz++) for (let dx = -2; dx <= 2; dx++) {
         const nx = x + dx, nz = z + dz;
         if (wallCell.has(key(nx, nz)) && !gateCell.has(key(nx, nz))) continue;
@@ -66,7 +84,7 @@ export function wallRules({ ir, vw, walls, meta, want, findings, metrics, partSt
         const s = standY(nx, nz, top + 2);
         if (s === null) continue;
         const sH2 = 2 * s + Math.round(2 * (P.top[vw.get(nx, s, nz)] ?? 1));
-        if (Math.abs(dx) + Math.abs(dz) === 1) foot = Math.max(foot, s);
+        if (Math.abs(dx) + Math.abs(dz) === 1) { const g = standY(nx, nz, top + 2, true); if (g !== null) foot = Math.max(foot, g); }
         near = Math.max(near, sH2);
       }
       if (foot > -Infinity) { footMin = Math.min(footMin, top - foot); if (top - foot < w.height) low.push([x, top, z]); }

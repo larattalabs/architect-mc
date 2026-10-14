@@ -33,7 +33,21 @@ export function gateInit(env, intent) {
   });
   const mask = new Uint8Array(n);
   for (let k = 0; k < n; k++) if (wid[k] >= 0) mask[k] = 1;
-  return { walls: walls.map((w) => ({ id: w.id, max: Number.isInteger(w.max) ? w.max : 16, opened: Number.isInteger(w.opened) ? w.opened : 0 })), wid, axis, open, openY, mask, gates: [] };
+  return { walls: walls.map((w) => ({ id: w.id, max: Number.isInteger(w.max) ? w.max : 16, opened: Number.isInteger(w.opened) ? w.opened : 0, inside: Array.isArray(w.inside) ? w.inside : null, open: (w.open ?? []).length })), wid, axis, open, openY, mask, gates: [] };
+}
+
+/**
+ * Before an edge's search: a closed wall between its ends that can never open a gate (sealed, or at its gates.max with none open)
+ * leaves no route; the note names it. `from`, `to`: the ends' feet [x, y, z].
+ */
+export function gatePrune(state, from, to) {
+  for (const w of state.walls) {
+    if (!w.inside || w.open > 0 || w.opened < w.max) continue;
+    const [x0, z0, x1, z1] = w.inside;
+    const isIn = (p) => p[0] > x0 && p[0] < x1 && p[2] > z0 && p[2] < z1;
+    if (isIn(from) !== isIn(to)) return `wall ${w.id} stands between its ends with no gate (${w.max ? 'at its gates.max' : 'sealed'})`;
+  }
+  return null;
 }
 
 /** Every edge searches with the gate move when the pass has walls. */

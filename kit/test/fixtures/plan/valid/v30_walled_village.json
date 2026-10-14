@@ -1,0 +1,95 @@
+{
+  "about": "(7a K1, \u00a710) a flat_village zone walled round (ring [4, 8], height 6), a road from claim_e into the zone (its auto gate), and a gate at claim_w with a double door, where a path from claim_w enters (two gates in all). The same plan runs on S3's pinned claim in kit/test/plan-k1a.test.mjs (its zone sketched clear of the river).",
+  "on": "s7",
+  "covers": [
+    "connector.wall",
+    "connector.gate",
+    "wall.around"
+  ],
+  "plan": {
+    "schemaVersion": "plan/0",
+    "planId": "k1_v30",
+    "zones": [
+      {
+        "id": "town",
+        "program": {
+          "template": "flat_village",
+          "params": {
+            "lots": [
+              {
+                "id": "h1",
+                "type": "house",
+                "size": [
+                  9,
+                  9
+                ]
+              },
+              {
+                "id": "h2",
+                "type": "cottage",
+                "size": [
+                  9,
+                  9
+                ]
+              },
+              {
+                "id": "h3",
+                "type": "house",
+                "size": [
+                  9,
+                  9
+                ]
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "connectors": [
+      {
+        "id": "town_wall",
+        "kind": "wall",
+        "where": {
+          "around": {
+            "feature": {
+              "part": "town"
+            },
+            "ring": [
+              4,
+              8
+            ]
+          }
+        },
+        "height": 6
+      },
+      {
+        "id": "in",
+        "kind": "road",
+        "from": {
+          "anchor": "claim_e"
+        },
+        "to": {
+          "part": "town"
+        }
+      },
+      {
+        "id": "west_gate",
+        "kind": "gate",
+        "at": {
+          "anchor": "claim_w"
+        },
+        "door": "door"
+      },
+      {
+        "id": "west_path",
+        "kind": "path",
+        "from": {
+          "anchor": "claim_w"
+        },
+        "to": {
+          "part": "town"
+        }
+      }
+    ]
+  }
+}

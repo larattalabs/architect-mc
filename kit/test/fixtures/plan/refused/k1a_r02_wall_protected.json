@@ -1,0 +1,74 @@
+{
+  "about": "(7a K1a, \u00a710) a protected orchard over the zone's north ring at every offset 4..12: refused PROTECTED",
+  "on": "asks",
+  "protected": [
+    {
+      "id": "orchard",
+      "rect": [
+        130,
+        128,
+        186,
+        139
+      ]
+    }
+  ],
+  "expect": {
+    "part": "w",
+    "code": "PROTECTED"
+  },
+  "plan": {
+    "schemaVersion": "plan/0",
+    "zones": [
+      {
+        "id": "town",
+        "program": {
+          "lots": [
+            {
+              "id": "h1",
+              "type": "house",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "h2",
+              "type": "cottage",
+              "size": [
+                9,
+                9
+              ]
+            },
+            {
+              "id": "h3",
+              "type": "house",
+              "size": [
+                9,
+                9
+              ]
+            }
+          ]
+        },
+        "where": {
+          "near": {
+            "anchor": "stone",
+            "within": 0
+          }
+        }
+      }
+    ],
+    "connectors": [
+      {
+        "id": "w",
+        "kind": "wall",
+        "where": {
+          "around": {
+            "feature": {
+              "part": "town"
+            }
+          }
+        }
+      }
+    ]
+  }
+}
