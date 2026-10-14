@@ -27,7 +27,7 @@ import { placeFollow } from '../region/followEmit.mjs';
 import { zoneDistricts } from './schema.mjs';
 // (7a K1) walls and gates (K1a), rope bridges and auto connectors (K1b): the compiler's hooks for the four connector kinds
 import { WALL_KINDS, emitWalls, finishGates, planWalls, wallsPassInput, wallsRouted } from '../connectors/wall.mjs';
-import { ROPE_KINDS, emitRopes, ropeAnswer, ropeLeg, ropePassInput, ropeResolve } from '../connectors/rope.mjs';
+import { ROPE_KINDS, emitRopes, ropeAnswer, ropeFailAnswer, ropeLeg, ropePassInput, ropeResolve } from '../connectors/rope.mjs';
 /** (7a K1) The connector kinds K1 compiles (each a supported block in catalogue 4). */
 export const K1_KINDS = Object.freeze([...WALL_KINDS, ...ROPE_KINDS]);
 
@@ -1100,7 +1100,7 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
         const ko = [...env.protectedAreas.map((a) => rectArr(a.rect)), ...env.regions.map((a) => rectArr(a.rect)), ...env.buildRects.map((a) => rectArr(a.rect)), ...avoidRects(env, group, geom)];
         // (7a K1) the walls (the gate move) and the rope move's inputs, only when the plan has them (else T2's pass, byte for byte)
         const walls = K ? wallsPassInput(K) : null, rope = K ? ropePassInput(K) : null;
-        out = r.pass('route', { nodes, edges: edges.map(({ _i, ...e }) => e), maxGrade: g, stage: stageOf('routes'), part, maxExpanded: env.budget.maxNodes, lanterns: true, ...(ko.length ? { keepOut: ko } : {}), ...(env.buildRects.length ? { clearTrees: env.buildRects.map((a) => rectArr(a.rect)) } : {}), ...(env.standingHard.length ? { hard: env.standingHard } : {}), ...(walls ? { walls } : {}), ...(rope ? { rope } : {}) });
+        out = r.pass('route', { nodes, edges: edges.map(({ _i, ...e }) => e), maxGrade: g, stage: stageOf('routes'), part, maxExpanded: env.budget.maxNodes, lanterns: true, ...(ko.length ? { keepOut: ko } : {}), ...(env.buildRects.length ? { clearTrees: env.buildRects.map((a) => rectArr(a.rect)) } : {}), ...(env.standingHard.length || rope?.hard?.length ? { hard: [...env.standingHard, ...(rope?.hard ?? [])] } : {}), ...(rope?.base ? { base: rope.base } : {}), ...(walls ? { walls } : {}), ...(rope ? { rope } : {}) });
       } catch (e) {
         rollback(r, cp);
         for (const l of group) if (!answers.has(l.conn.id)) ans(l.conn, { class: 'refused', reasons: [{ code: /KEEP_OUT/.test(e.message) ? 'KEEP_OUT' : 'UNREACHABLE', message: e.message }] });
@@ -1146,7 +1146,8 @@ export function runCheck(ctx, P, { makeRegion, templates = new Map() }) {
         if (e && e.ok) continue;
         const m = metaEdges.get(edges[i].id);
         const why = m?.failed ?? e?.failed ?? 'NO_ROUTE';
-        ans(l.conn, why === 'BUDGET' ? budgetHit('maxNodes') : why === 'ROUTE_WATER'
+        // ((7a K1b) a rope_bridge leg the route pass could not span answers its typed reason: NO_GAP, SPAN, ...)
+        ans(l.conn, why === 'ROPE' && K ? ropeFailAnswer(K, l, m) : why === 'BUDGET' ? budgetHit('maxNodes') : why === 'ROUTE_WATER'
           ? { class: 'refused', reasons: [{ code: 'WATER', message: `leg ${l.k + 1}: every route crosses water`, until: 'T3', evidence: { leg: l.k + 1, from: l.from.at, to: l.to.at } }] }
           : { class: 'refused', reasons: [{ code: 'UNREACHABLE', message: `leg ${l.k + 1}: no route within the grade (${g}), the cut and fill limits and the obstacles`, evidence: { leg: l.k + 1, from: l.from.at, to: l.to.at, grade: g } }] });
       }

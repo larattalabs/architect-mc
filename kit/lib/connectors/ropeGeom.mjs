@@ -10,7 +10,7 @@
 // over a full block at m (the hanger that keeps the deck face-connected through each half step, so M3 grounds it through the
 // posts and landings). The feet stand at deckY(y2) + 1 whatever the parity.
 import { shapeOf } from './style.mjs';
-import { voxelClassOf } from '../blocks.mjs';
+import { itemOf, voxelClassOf } from '../blocks.mjs';
 import { fixtureFor } from '../region/fixtures.mjs';
 
 /** The limits (catalogue 4: `connector.rope_bridge` limits; §4's move). Costs are in T2's units (a straight walk cell is 10). */
@@ -200,7 +200,9 @@ export function ropeBridge(r, a, b, opts = {}) {
   const whole = !slab;
   const rail = r.material(opts.rail ?? cr.rail ?? role('rail', 'minecraft:oak_fence'), `${what} rail`);
   const post = r.material(opts.post ?? cr.post ?? role('frame', 'minecraft:spruce_log'), `${what} post`);
-  const lightBlock = r.material(opts.light ?? role('light', 'minecraft:lantern'), `${what} light`);
+  // (a part's `lamps: none`: no lamps, light null)
+  const noLamps = opts.light === null;
+  const lightBlock = r.material(noLamps ? 'minecraft:lantern' : opts.light ?? role('light', 'minecraft:lantern'), `${what} light`);
   const fx = fixtureLight(lightBlock, rail);
   const lampEvery = Math.max(4, Math.floor((12 * fx.level) / 15));
   const ropeRole = opts.rope !== undefined ? opts.rope : cr.rope === 'none' ? null : cr.rope ?? 'minecraft:iron_chain';
@@ -226,9 +228,16 @@ export function ropeBridge(r, a, b, opts = {}) {
   if (!u.noRails) for (const [x, y, z] of g.rails) solidCols.push(x, z, y, y, M.rail);
   if (!u.noRails) for (const [x, y, z] of g.ropes) solidCols.push(x, z, y, y, M.rope);
   for (const q of g.posts) solidCols.push(q.x, q.z, q.y0, q.y1, M.post);
-  for (const [x, y, z] of g.lamps) solidCols.push(x, z, y, y, M.lamp);
+  if (!noLamps) for (const [x, y, z] of g.lamps) solidCols.push(x, z, y, y, M.lamp);
   p.columns({ abs: 0 }, { abs: 0 }, solidCols, mats);
   p.columns({ abs: 0 }, { abs: 0 }, walkCols, mats, { walk: true });
+  // (§7) the bridge's bill of materials: the items of the cells it writes (C26's block-to-item table: blocks.mjs itemOf)
+  const bomM = new Map();
+  for (const cols of [solidCols, walkCols]) for (let t = 0; t < cols.length; t += 5) {
+    const item = itemOf(String(mats[cols[t + 4]]).replace(/\[.*$/, ''));
+    if (item) bomM.set(item, (bomM.get(item) ?? 0) + cols[t + 3] - cols[t + 2] + 1);
+  }
+  const bom = Object.fromEntries([...bomM.entries()].sort(([a1], [b1]) => (a1 < b1 ? -1 : a1 > b1 ? 1 : 0)));
   const id = opts.id ?? `${p.id}_rope_${r.paths.length + 1}`;
   const xs = [...g.deck, ...g.beds].map((c) => c[0]).concat(g.posts.map((q) => q.x)), zs = [...g.deck, ...g.beds].map((c) => c[2]).concat(g.posts.map((q) => q.z));
   const ysAll = [...g.deck, ...g.beds].map((c) => c[1]).concat(g.posts.flatMap((q) => [q.y0, q.y1 + 1]));
@@ -239,7 +248,7 @@ export function ropeBridge(r, a, b, opts = {}) {
     whole, deck: deckBlock, slab: slabState, rail, post, rope: chainState, light: fx.light, lampEvery, y2: g.ys,
     cells: g.deck.filter((c) => c[4]).map((c) => [c[0], c[1], c[2]]),
     posts: g.posts.map((q) => ({ x: q.x, z: q.z, y0: q.y0, y1: q.y1, landing: q.landing, end: q.end, side: q.side })),
-    lamps: g.lamps.map((c) => [c[0], c[1], c[2]]),
+    lamps: g.lamps.map((c) => [c[0], c[1], c[2]]), bom,
     ...(opts.movers ? { movers: [...opts.movers] } : {}),
     ...(u.postDepth !== undefined || u.noRails ? { _unsafe: { ...u } } : {}),
   };
